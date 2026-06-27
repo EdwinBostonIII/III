@@ -1,0 +1,190 @@
+/* STDLIB/iii/aether/mandel_run.iii -- run the data-is-geometry / fractal-dimension faculty over THE MANDELBROT SET.
+ * The Mandelbrot boundary has Minkowski/Hausdorff dimension EXACTLY 2 (Shishikura 1991) -- a ground truth I cannot
+ * rig.  The correct measurement is the boundary-pixel count's SCALING with resolution: count(R) ~ R^d, so
+ * d = log2(count(R2)/count(R1)) / log2(R2/R1).  A smooth circle gives d~1; the Mandelbrot must climb toward 2.
+ * Renders the set, then measures the scaling for Mandelbrot vs the circle control. */
+module mandel_run
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn log2_q10(m: u64) -> u64 from "ui_field.iii"
+
+var ITER : [u8; 262144]      /* up to 512x512 */
+var BND  : [u8; 262144]
+var DIG  : [u8; 24]
+
+fn pstr(s: *u8) -> i32 {
+    let mut i : u64 = 0u64   let mut go : u8 = 1u8
+    while go == 1u8 { let c : u8 = s[i]   if c == 126u8 { go = 0u8 }   if go == 1u8 { putchar(c as i32)   i = i + 1u64 } }
+    return 0i32
+}
+fn pnl() -> i32 { return putchar(10i32) }
+fn pint(n: i64) -> i32 {
+    let mut x : i64 = n
+    if x < 0i64 { putchar(45i32)   x = 0i64 - x }
+    if x == 0i64 { putchar(48i32)   return 0i32 }
+    let mut k : i64 = 0i64
+    while x > 0i64 { let q : i64 = x / 10i64   DIG[k] = ((x - (q * 10i64)) + 48i64) as u8   x = q   k = k + 1i64 }
+    while k > 0i64 { k = k - 1i64   putchar(DIG[k] as i32) }
+    return 0i32
+}
+
+/* Mandelbrot into ITER, fixed-point S=16384, view c in [-2.5,1.0]x[-1.25,1.25], parameterised by resolution */
+fn mandel_compute(w: i64, h: i64, maxiter: i64) -> i32 {
+    let s : i64 = 16384i64
+    let cxstep : i64 = 57344i64 / w
+    let cystep : i64 = 40960i64 / h
+    let mut py : i64 = 0i64
+    while py < h {
+        let cy : i64 = (py * cystep) - 20480i64
+        let mut px : i64 = 0i64
+        while px < w {
+            let cx : i64 = (px * cxstep) - 40960i64
+            let mut zr : i64 = 0i64   let mut zi : i64 = 0i64
+            let mut it : i64 = 0i64   let mut escit : i64 = maxiter
+            while it < maxiter {
+                let zr2 : i64 = (zr * zr) / s
+                let zi2 : i64 = (zi * zi) / s
+                if (zr2 + zi2) > (4i64 * s) { escit = it   it = maxiter }
+                if it < maxiter {
+                    let nzi : i64 = ((2i64 * zr * zi) / s) + cy
+                    let nzr : i64 = (zr2 - zi2) + cx
+                    zr = nzr   zi = nzi
+                    it = it + 1i64
+                }
+            }
+            ITER[(py * w) + px] = escit as u8                   /* maxiter <= 250 so "inside" fits the byte exactly */
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}
+fn circle_compute(w: i64, h: i64, inside_val: i64) -> i32 {
+    let cx : i64 = w / 2i64   let cy : i64 = h / 2i64   let r2 : i64 = (w * w) / 9i64
+    let mut y : i64 = 0i64
+    while y < h {
+        let mut x : i64 = 0i64
+        while x < w {
+            let dx : i64 = x - cx   let dy : i64 = y - cy
+            if ((dx * dx) + (dy * dy)) < r2 { ITER[(y * w) + x] = inside_val as u8 }
+            if ((dx * dx) + (dy * dy)) >= r2 { ITER[(y * w) + x] = 0u8 }
+            x = x + 1i64
+        }
+        y = y + 1i64
+    }
+    return 0i32
+}
+/* Mandelbrot inside/outside MASK (1=inside, 0=outside) for a ZOOMED square view centred at (cx0_s, cy0_s) with
+ * side span_s (all fixed-point * S).  Storing 1/0 decouples "inside" from maxiter, so maxiter can be large enough to
+ * resolve the deep boundary of a fractal region. */
+fn mandel_mask(w: i64, h: i64, maxiter: i64, cx0_s: i64, cy0_s: i64, span_s: i64) -> i32 {
+    let s : i64 = 16384i64
+    let mut py : i64 = 0i64
+    while py < h {
+        let cy : i64 = cy0_s + (((py - (h / 2i64)) * span_s) / h)
+        let mut px : i64 = 0i64
+        while px < w {
+            let cx : i64 = cx0_s + (((px - (w / 2i64)) * span_s) / w)
+            let mut zr : i64 = 0i64   let mut zi : i64 = 0i64
+            let mut it : i64 = 0i64   let mut inside : i64 = 1i64
+            while it < maxiter {
+                let zr2 : i64 = (zr * zr) / s
+                let zi2 : i64 = (zi * zi) / s
+                if (zr2 + zi2) > (4i64 * s) { inside = 0i64   it = maxiter }
+                if it < maxiter {
+                    let nzi : i64 = ((2i64 * zr * zi) / s) + cy
+                    let nzr : i64 = (zr2 - zi2) + cx
+                    zr = nzr   zi = nzi
+                    it = it + 1i64
+                }
+            }
+            ITER[(py * w) + px] = inside as u8
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}
+
+/* boundary pixel count: an "inside" pixel (ITER==inside_val) with at least one non-inside 4-neighbour */
+fn boundary_count(w: i64, h: i64, inside_val: i64) -> i64 {
+    let mut cnt : i64 = 0i64
+    let mut y : i64 = 1i64
+    while y < (h - 1i64) {
+        let mut x : i64 = 1i64
+        while x < (w - 1i64) {
+            let idx : i64 = (y * w) + x
+            if (ITER[idx] as i64) == inside_val {
+                let mut edge : i64 = 0i64
+                if (ITER[idx - 1i64] as i64) != inside_val { edge = 1i64 }
+                if (ITER[idx + 1i64] as i64) != inside_val { edge = 1i64 }
+                if (ITER[idx - w] as i64) != inside_val { edge = 1i64 }
+                if (ITER[idx + w] as i64) != inside_val { edge = 1i64 }
+                if edge == 1i64 { cnt = cnt + 1i64 }
+            }
+            x = x + 1i64
+        }
+        y = y + 1i64
+    }
+    return cnt
+}
+fn render(w: i64, h: i64, maxiter: i64) -> i32 {
+    let mut ry : i64 = 0i64
+    while ry < h {
+        putchar(32i32) putchar(32i32)
+        let mut rx : i64 = 0i64
+        while rx < w {
+            let v : i64 = ITER[(ry * w) + rx] as i64
+            if v == maxiter { putchar(64i32) }
+            if v != maxiter {
+                if v > 12i64 { putchar(35i32) }
+                if v > 6i64 { if v <= 12i64 { putchar(43i32) } }
+                if v > 3i64 { if v <= 6i64 { putchar(58i32) } }
+                if v > 1i64 { if v <= 3i64 { putchar(46i32) } }
+                if v <= 1i64 { putchar(32i32) }
+            }
+            rx = rx + 4i64
+        }
+        pnl()
+        ry = ry + 8i64
+    }
+    return 0i32
+}
+/* d * 1000 from two boundary counts at resolutions whose ratio's log2 is scale_log2 */
+fn scaling_dim(n_fine: i64, n_coarse: i64, scale_log2: i64) -> i64 {
+    return (1000i64 * ((log2_q10(n_fine as u64) as i64) - (log2_q10(n_coarse as u64) as i64))) / (scale_log2 * 1024i64)
+}
+
+fn main() -> i32 {
+    let mi : i64 = 250i64
+    pstr("=== THE MANDELBROT SET ===~")   pnl()
+    mandel_compute(256i64, 256i64, 200i64)
+    render(256i64, 256i64, 200i64)
+
+    pnl()   pstr("[fractal dimension by boundary-scaling: count(R) ~ R^d ; Mandelbrot boundary is known to be d=2]~")   pnl()
+    mandel_compute(128i64, 128i64, mi)   let m1 : i64 = boundary_count(128i64, 128i64, mi)
+    mandel_compute(256i64, 256i64, mi)   let m2 : i64 = boundary_count(256i64, 256i64, mi)
+    mandel_compute(512i64, 512i64, mi)   let m3 : i64 = boundary_count(512i64, 512i64, mi)
+    pstr("  MANDELBROT  boundary count  R=128:~")   pint(m1)   pstr("   R=256:~")   pint(m2)   pstr("   R=512:~")   pint(m3)   pnl()
+    pstr("    d(128->256) = ~")   pint(scaling_dim(m2, m1, 1i64))   pstr("/1000    d(256->512) = ~")   pint(scaling_dim(m3, m2, 1i64))   pstr("/1000    d(128->512) = ~")   pint(scaling_dim(m3, m1, 2i64))   pstr("/1000~")   pnl()
+
+    pnl()   pstr("[CONTROL: a smooth circle -- d must stay ~1]~")   pnl()
+    circle_compute(128i64, 128i64, 99i64)   let c1 : i64 = boundary_count(128i64, 128i64, 99i64)
+    circle_compute(256i64, 256i64, 99i64)   let c2 : i64 = boundary_count(256i64, 256i64, 99i64)
+    circle_compute(512i64, 512i64, 99i64)   let c3 : i64 = boundary_count(512i64, 512i64, 99i64)
+    pstr("  CIRCLE      boundary count  R=128:~")   pint(c1)   pstr("   R=256:~")   pint(c2)   pstr("   R=512:~")   pint(c3)   pnl()
+    pstr("    d(128->256) = ~")   pint(scaling_dim(c2, c1, 1i64))   pstr("/1000    d(256->512) = ~")   pint(scaling_dim(c3, c2, 1i64))   pstr("/1000    d(128->512) = ~")   pint(scaling_dim(c3, c1, 2i64))   pstr("/1000~")   pnl()
+
+    /* ZOOM into the SEAHORSE VALLEY (c ~ -0.75 + 0.1i, span 0.3) where the boundary is densely fractal -> d -> 2.
+     * deep maxiter (1=inside mask decouples it from byte storage). */
+    pnl()   pstr("[ZOOM into the seahorse valley (densely fractal) -- here the dimension must climb toward 2]~")   pnl()
+    let zx : i64 = 0i64 - 12288i64    /* -0.75 * S */
+    let zy : i64 = 1638i64            /*  0.10 * S */
+    let zs : i64 = 4915i64            /*  0.30 * S (square side) */
+    mandel_mask(128i64, 128i64, 1000i64, zx, zy, zs)   let z1 : i64 = boundary_count(128i64, 128i64, 1i64)
+    mandel_mask(256i64, 256i64, 1000i64, zx, zy, zs)   let z2 : i64 = boundary_count(256i64, 256i64, 1i64)
+    mandel_mask(512i64, 512i64, 1000i64, zx, zy, zs)   let z3 : i64 = boundary_count(512i64, 512i64, 1i64)
+    pstr("  SEAHORSE    boundary count  R=128:~")   pint(z1)   pstr("   R=256:~")   pint(z2)   pstr("   R=512:~")   pint(z3)   pnl()
+    pstr("    d(128->256) = ~")   pint(scaling_dim(z2, z1, 1i64))   pstr("/1000    d(256->512) = ~")   pint(scaling_dim(z3, z2, 1i64))   pstr("/1000    d(128->512) = ~")   pint(scaling_dim(z3, z1, 2i64))   pstr("/1000~")   pnl()
+    return 0i32
+}

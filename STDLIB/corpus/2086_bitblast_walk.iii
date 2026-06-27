@@ -1,0 +1,40 @@
+/* STDLIB/corpus/2086_bitblast_walk.iii -- falsifier for the bv_bits netlist introspection the III-GLASS bit-blast
+ * view rides on.  Builds the gate netlist (x & 15) ^ (x << 1), then WALKS it via the new read-accessors and
+ * demands the REAL structure: the XOR's operands are exactly the AND and SHL nodes, there is exactly one AND gate
+ * (the cost the adoption gate reads), and the netlist actually computes (5&15)^(5<<1) = 5^10 = 15.  If the
+ * accessors lied or the netlist were hollow, the walk returns 2..7.  99 = the bit-blast netlist is real+walkable. */
+module corpus_2086_bitblast_walk
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_kind(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_a(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_b(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+fn main() -> u64 {
+    bb_reset(8u64)
+    let x   : u32 = bb_var(0u32)
+    let c15 : u32 = bb_const(15u64)
+    let a   : u32 = bb_and(x, c15)      /* EK_AND  = 2 */
+    let s   : u32 = bb_shl(x, 1u64)     /* EK_SHL  = 6 */
+    let r   : u32 = bb_xor(a, s)        /* EK_XOR  = 4 */
+
+    if bb_node_count() < 5u32 { return 1u64 }
+    if bb_node_kind(a as u64) != 2u32 { return 2u64 }   /* AND */
+    if bb_node_kind(r as u64) != 4u32 { return 3u64 }   /* XOR */
+    if bb_node_a(r as u64) != a { return 4u64 }          /* XOR's operand-a IS the AND node */
+    if bb_node_b(r as u64) != s { return 5u64 }          /* XOR's operand-b IS the SHL node */
+    if bb_count_and() != 1u64 { return 6u64 }            /* exactly one AND gate -- the cost */
+
+    bb_set_input(0u32, 5u64)
+    if bb_eval(r) != 15u64 { return 7u64 }               /* (5&15)^(5<<1) = 5 ^ 10 = 15 */
+    return 99u64
+}

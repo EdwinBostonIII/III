@@ -1,0 +1,52 @@
+/* STDLIB/corpus/2068_kinduct_extensions.iii -- the boundless-k-induction EXTENSIONS: non-pow2 modular invariants
+ * (closed-form, sound over all 2^64), the CEGAR refinement driver (retry a refused candidate as the stronger
+ * template, not a bare reject), and counterexample extraction (the concrete breaking state via the SAT witness).
+ * 99 = modular proofs correct for non-powers-of-two, the refinement proves where a single template would fail,
+ * and the witness is a genuine counterexample. */
+module corpus_2068_kinduct_extensions
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_mod_step_linear(m: u64, c: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_mod_base(m: u64, r: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_mod_prove_linear(m: u64, r: u64, c: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_cegar_linear(mask: u64, mval: u64, m: u64, r: u64, c: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_counterexample(p_x: u32, p_tx: u32, statevar: u32) -> u64 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    /* NON-POW2 MODULAR (the extension the bit-mask path could not express): "x%3==0" inductive under x+6 (3|6),
+     * NOT under x+4 (3 does not divide 4); "x%7==2" inductive under x+7 from init 2.  m = 3 and 7 are NOT pow2. */
+    if sks_mod_prove_linear(3u64, 0u64, 6u64, 0u64) != 1u8 { return 1u64 }
+    if sks_mod_prove_linear(3u64, 0u64, 4u64, 0u64) != 0u8 { return 2u64 }
+    if sks_mod_prove_linear(7u64, 2u64, 7u64, 2u64) != 1u8 { return 3u64 }
+    /* step and base separately (closed form). */
+    if sks_mod_step_linear(10u64, 20u64) != 1u8 { return 4u64 }
+    if sks_mod_step_linear(10u64, 15u64) != 0u8 { return 5u64 }
+    if sks_mod_base(10u64, 3u64, 23u64) != 1u8 { return 6u64 }
+    if sks_mod_base(10u64, 3u64, 24u64) != 0u8 { return 7u64 }
+
+    /* CEGAR REFINEMENT: a counter x+4 -- the over-fit bit-mask would bound x by its high-zero bits; the driver
+     * retries the MODULAR law (x%4==0), which survives growth, and PROVES it. */
+    if sks_cegar_linear(0u64, 0u64, 4u64, 0u64, 4u64, 0u64) != 1u8 { return 8u64 }
+    /* neither template can save this (x+3 breaks m=2, the mask's base fails at init 0) -> correctly REFUSED. */
+    if sks_cegar_linear(1u64, 1u64, 2u64, 0u64, 3u64, 0u64) != 0u8 { return 9u64 }
+
+    /* COUNTEREXAMPLE EXTRACTION: "x%4==0" (mask 3,val 0) is NOT inductive under x+2; the witness is a concrete
+     * state with P(x) AND ~P(x+2) -- (cex&3)==0 and ((cex+2)&3)!=0 -- a real breaking state, not a bare reject. */
+    bb_reset(64u64)
+    let x  : u32 = bb_var(0u32)
+    let tx : u32 = bb_add(x, bb_const(2u64))
+    let cex : u64 = sks_counterexample(sks_mask_eq(x, 3u64, 0u64), sks_mask_eq(tx, 3u64, 0u64), 0u32)
+    if (cex & 3u64) != 0u64 { return 10u64 }
+    if ((cex + 2u64) & 3u64) == 0u64 { return 11u64 }
+    /* an INDUCTIVE invariant (x%4==0 under x+4) yields NO counterexample (0). */
+    bb_reset(64u64)
+    let x2 : u32 = bb_var(0u32)
+    let t2 : u32 = bb_add(x2, bb_const(4u64))
+    if sks_counterexample(sks_mask_eq(x2, 3u64, 0u64), sks_mask_eq(t2, 3u64, 0u64), 0u32) != 0u64 { return 12u64 }
+
+    return 99u64
+}

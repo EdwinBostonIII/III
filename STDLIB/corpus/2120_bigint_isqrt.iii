@@ -1,0 +1,44 @@
+/* STDLIB/corpus/2120_bigint_isqrt.iii -- standalone falsifier for bigint_isqrt (verify BEFORE the predicate uses it).
+ * For each k: isqrt(k^2)=k, isqrt(k^2-1)=k-1, isqrt(k^2+2k)=k  (since k^2+2k = (k+1)^2 - 1).  k spans 1, 2, and 3-limb
+ * magnitudes so the bit-length / initial-bit computation is exercised at limb boundaries.  99 = all exact. */
+module corpus_2120_bigint_isqrt
+
+extern @abi(c-msvc-x64) fn bigint_isqrt(ar: u64, N: u64) -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+fn check(k: u64) -> i32 {
+    let ar : u64 = arena_new(4194304u64)
+    let kb : u64 = bigint_from_u64(ar, k)
+    let one : u64 = bigint_from_u64(ar, 1u64)
+    let k2 : u64 = bigint_mul(ar, kb, kb)
+    let e1 : i32 = bigint_cmp(bigint_isqrt(ar, k2), kb)                         /* isqrt(k^2) == k */
+    let k2m1 : u64 = bigint_sub(ar, k2, one)
+    let km1 : u64 = bigint_sub(ar, kb, one)
+    let e2 : i32 = bigint_cmp(bigint_isqrt(ar, k2m1), km1)                      /* isqrt(k^2-1) == k-1 */
+    let k2p : u64 = bigint_add(ar, k2, bigint_add(ar, kb, kb))
+    let e3 : i32 = bigint_cmp(bigint_isqrt(ar, k2p), kb)                        /* isqrt(k^2+2k) == k */
+    bigint_drop_arena(ar)
+    if e1 != 0i32 { return 1i32 }
+    if e2 != 0i32 { return 2i32 }
+    if e3 != 0i32 { return 3i32 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    if check(1u64) != 0i32 { return 1u64 }
+    if check(7u64) != 0i32 { return 2u64 }
+    if check(1000u64) != 0i32 { return 3u64 }
+    if check(65535u64) != 0i32 { return 4u64 }                 /* near 2^16 */
+    if check(4294967296u64) != 0i32 { return 5u64 }            /* 2^32  -> k^2 = 2^64 (2 limbs) */
+    if check(1099511627776u64) != 0i32 { return 6u64 }         /* 2^40 */
+    if check(1125899906842624u64) != 0i32 { return 7u64 }      /* 2^50  -> k^2 = 2^100 (2 limbs) */
+    if check(3037000499u64) != 0i32 { return 8u64 }            /* ~sqrt(2^63), the 1-limb edge */
+    if check(18446744073u64) != 0i32 { return 9u64 }           /* ~1.8e10 */
+    return 99u64
+}

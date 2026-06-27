@@ -45,15 +45,15 @@ deterministic (`SOURCES.mhash=ae5431e2`).
 *Four measurement bugs were caught and fixed en route (commented-out extern; basename collision;
 mixed path separators; CRLF line endings) — "suspect the measurement first." The underlying finding held.*
 
-## 4. The evergreen gate (`STDLIB/scripts/gate_dead_imports.py`)
+## 4. Enforcement — an III organ, NOT a Python script
 
-So the invariant cannot silently rot, the diff is a **standing gate** that **re-derives from the live tree**
-every run (no committed data to go stale, no hand-maintenance — the `gen_self_atlas.py` / carto-gate
-pattern). `exit 0` = clean; `exit 1` = dead imports found (each printed: *wire the call, or drop the decl*).
-
-Teeth proven (prove-the-negative): clean → PASS/0; one injected dead extern → FAIL/1 (names the symbol);
-reverted → PASS/0. **Recommended next step:** wire it into the build gate suite alongside the carto gate so
-the build itself enforces it.
+A Python enforcer was prototyped and **deliberately removed**: III is sovereign and self-hosting, and a
+Python gate living in the tree violates that ethos (no third-party-language enforcers). The honest,
+sovereign enforcement path is **in III itself** — `sanctus/corpus_coverage` already lexes the whole tree and
+builds the call graph in `.iii`; extending it (or a sibling `.iii` organ) to also flag a declared-but-never-
+called extern is the in-language form of this invariant, and is the way it should be enforced. Until that
+organ is built, the invariant is held by **manual review** of extern declarations against their call sites.
+No Python lives in the tree for it.
 
 ## 5. FLAGGED — a latent bug surfaced, NOT auto-fixed (needs sign-off)
 

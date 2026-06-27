@@ -1,0 +1,86 @@
+/* STDLIB/iii/eidos/epoch.iii -- THE DETERMINISTIC MULTI-WRITER EPOCH (Ripple Merge, Phase III, Gate 5).
+ * Many writers (planner, optimizer, nous, Seraphytes) submit pending ripples concurrently; the byte-identical
+ * fixpoint the whole sovereignty rests on demands that the FOLD be a pure function of the SET, not the arrival order.
+ * epoch_seal does a strict deterministic sort of the pending ripples by their content-address H, then folds them
+ * through the canonical engine (omnia/involution) in that order -> State_n = Fold(State_{n-1}, SortedEpoch_n).
+ *   PROPERTY: the same pending SET, submitted in ANY order, yields the SAME witness root.  A different set -> a
+ *   different root.  100% byte-identical determinism across writers.  Drives the engine; authors no crypto/log. */
+module eidos_epoch
+
+extern @abi(c-msvc-x64) fn inv_reset() -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_emit(verb: u32, a_ptr: u64, b_ptr: u64, disposer_verdict: u32, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_root(out32: u64) -> i32 from "involution.iii"
+
+const PE_CAP : u32 = 1024u32
+
+var PE_VERB : [u32; 1024]
+var PE_A    : [u8; 32768]               /* 1024 * 32 */
+var PE_B    : [u8; 32768]
+var PE_H    : [u8; 32768]               /* content-address per pending ripple (the sort key) */
+var PE_IDX  : [u32; 1024]               /* the sort permutation over pending indices */
+var PE_SCR  : [u8; 32]                  /* scratch for inv_emit's per-ripple H output */
+var PE_N    : u32 = 0u32
+
+fn epoch_count() -> u32 @export { return PE_N }
+fn epoch_reset() -> i32 @export { PE_N = 0u32   return 0i32 }
+
+/* a writer submits a pending ripple (its disposer already passed at the domain).  Returns the pending index. */
+fn epoch_submit(verb: u32, a_ptr: u64, b_ptr: u64) -> i32 @export {
+    if PE_N >= PE_CAP { return 0i32 - 3i32 }
+    let idx : u32 = PE_N
+    let base : u64 = (idx as u64) * 32u64
+    let pa : *u8 = a_ptr as *u8
+    let pb : *u8 = b_ptr as *u8
+    PE_VERB[idx as u64] = verb
+    let mut i : u64 = 0u64
+    while i < 32u64 { PE_A[base + i] = pa[i]   PE_B[base + i] = pb[i]   i = i + 1u64 }
+    inv_address(verb, a_ptr, b_ptr, (&PE_H[base]) as u64)
+    PE_IDX[idx as u64] = idx
+    PE_N = idx + 1u32
+    return idx as i32
+}
+
+/* compare H of pending p vs pending q (lexicographic over 32 bytes): -1 / 0 / 1. */
+fn pe_cmp(p: u32, q: u32) -> i32 {
+    let bp : u64 = (p as u64) * 32u64
+    let bq : u64 = (q as u64) * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let x : u32 = PE_H[bp + i] as u32
+        let y : u32 = PE_H[bq + i] as u32
+        if x < y { return 0i32 - 1i32 }
+        if x > y { return 1i32 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* seal the epoch: deterministic SELECTION SORT of PE_IDX by H, then fold the engine in sorted order.  The witness
+ * root (a pure function of the SET) goes to out_root.  Returns the number of ripples folded. */
+fn epoch_seal(out_root: u64) -> u32 @export {
+    let mut a : u32 = 0u32
+    while a < PE_N {
+        let mut mn : u32 = a
+        let mut b : u32 = a + 1u32
+        while b < PE_N {
+            let c : i32 = pe_cmp(PE_IDX[b as u64], PE_IDX[mn as u64])
+            if c < 0i32 { mn = b }
+            b = b + 1u32
+        }
+        let tmp : u32 = PE_IDX[a as u64]
+        PE_IDX[a as u64] = PE_IDX[mn as u64]
+        PE_IDX[mn as u64] = tmp
+        a = a + 1u32
+    }
+    inv_reset()
+    let mut k : u32 = 0u32
+    while k < PE_N {
+        let s : u32 = PE_IDX[k as u64]
+        let base : u64 = (s as u64) * 32u64
+        inv_emit(PE_VERB[s as u64], (&PE_A[base]) as u64, (&PE_B[base]) as u64, 1u32, (&PE_SCR[0u64]) as u64)
+        k = k + 1u32
+    }
+    inv_root(out_root)
+    return PE_N
+}

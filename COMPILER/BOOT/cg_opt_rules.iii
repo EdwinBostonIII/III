@@ -47,6 +47,21 @@ fn cgopt_div_shift_k(v: u64) -> u32 @export {
     return k
 }
 
+/* mod_admit: is UNSIGNED `x % v` a width-faithful pow2 strength reduction (umod -> AND mask)?  1 iff v is an exact
+ * power of two >= 2 (then x % v == x & (v-1) for unsigned: the remainder mod 2^k IS the low k bits).  Signed % is NOT
+ * reduced here (signed remainder rounds toward zero, != the low bits) -- cg_r3 gates emission on unsignedness.  The
+ * SYMMETRIC PARTNER of cgopt_div_admit; cg_r3 had NO modulo strength reduction at all (it emitted divumod for x%8). */
+fn cgopt_mod_admit(v: u64) -> u32 @export {
+    if v < 2u64 { return 0u32 }
+    if (v & (v - 1u64)) != 0u64 { return 0u32 }
+    return 1u32
+}
+/* mod_mask for the umod reduction: the AND mask v-1 = 2^k-1 (the low k bits).  Caller guarantees
+ * cgopt_mod_admit(v)==1, so v is a power of two in 2^1..2^63 and v-1 is the k-bit low mask (>= 1). */
+fn cgopt_mod_mask(v: u64) -> u64 @export {
+    return v - 1u64
+}
+
 /* shladd_admit: is `x * v` a WIDTH-FAITHFUL shift-and-add strength reduction (mul -> shl+add)?  1 iff
  * v == 2^k + 1 for k in 1..63, i.e. v >= 3 and (v-1) is an exact power of two.  Then
  * x*v == x*(2^k+1) == (x<<k) + x mod 2^64 (proven over bv_ring: (2^k+1)x = 2^k x + x).  Disjoint from

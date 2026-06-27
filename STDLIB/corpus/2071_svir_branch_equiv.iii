@@ -1,0 +1,32 @@
+/* STDLIB/corpus/2071_svir_branch_equiv.iii -- Amputation 1: SVIR control flow (IF/ELSE/END) proven by a branch-
+ * free bitwise-select MUX, never by SAT path-forking.  sd_denote now lifts a value-if to (Cm&T)|(~Cm&F).  99 =
+ * two differently-structured branchy functions are proven equal over ALL 2^64, a one-value-off variant is
+ * refuted with a counterexample, and the algebraic identity MUX(c,x,x)=x holds.
+ * SVIR opcodes: 0x10 LOCAL_GET+idx, 0x01 CONST+8LE, 0x30 EQ, 0x42 IF, 0x43 ELSE, 0x44 END, 0x60 RETURN.
+ * Module layout: [u8 nfunc][per-fn: u8 params, u8 nresults, u16 LE blen, body]. */
+module corpus_2071_svir_branch_equiv
+
+extern @abi(c-msvc-x64) fn seq_equiv_mod(ma: u64, la: u64, fa: u32, mb: u64, lb: u64, fb: u32) -> u32 from "ser_kinduct_sym.iii"
+
+/* f(c) = if c { 10 } else { 20 }                       (params=1, blen=24) */
+var MODA : [u8; 29] = [1u8,1u8,1u8,24u8,0u8, 16u8,0u8, 66u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 67u8, 1u8,20u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 68u8, 96u8]
+/* g(c) = if c==0 { 20 } else { 10 }  (swapped == f)    (params=1, blen=34) */
+var MODB : [u8; 39] = [1u8,1u8,1u8,34u8,0u8, 16u8,0u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 66u8, 1u8,20u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 67u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 68u8, 96u8]
+/* h(c) = if c { 10 } else { 21 }   (else differs)      (params=1, blen=24) */
+var MODD : [u8; 29] = [1u8,1u8,1u8,24u8,0u8, 16u8,0u8, 66u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 67u8, 1u8,21u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 68u8, 96u8]
+/* p(c,x) = if c { x } else { x }                       (params=2, blen=10) */
+var MODG : [u8; 15] = [1u8,2u8,1u8,10u8,0u8, 16u8,0u8, 66u8, 16u8,1u8, 67u8, 16u8,1u8, 68u8, 96u8]
+/* q(c,x) = x                                           (params=2, blen=3)  */
+var MODH : [u8; 8]  = [1u8,2u8,1u8,3u8,0u8, 16u8,1u8, 96u8]
+
+fn main() -> u64 {
+    /* symbolic-condition MUX equivalence: two different branch structures, same function, PROVEN equal. */
+    if seq_equiv_mod(&MODA as u64, 29u64, 0u32, &MODB as u64, 39u64, 0u32) != 1u32 { return 1u64 }
+    /* a one-value-off else arm: REFUTED (counterexample at c=0: 20 vs 21). */
+    if seq_equiv_mod(&MODA as u64, 29u64, 0u32, &MODD as u64, 29u64, 0u32) != 0u32 { return 2u64 }
+    /* reflexive. */
+    if seq_equiv_mod(&MODA as u64, 29u64, 0u32, &MODA as u64, 29u64, 0u32) != 1u32 { return 3u64 }
+    /* the MUX algebraic identity MUX(c,x,x)=x: if c {x} else {x} == x for all c. */
+    if seq_equiv_mod(&MODG as u64, 15u64, 0u32, &MODH as u64, 8u64, 0u32) != 1u32 { return 4u64 }
+    return 99u64
+}

@@ -1,0 +1,128 @@
+/* STDLIB/iii/aether/verb_geom.iii -- the EQUIVALENCE SUBSTRATE of the verb-geometry engine: the e-graph RESTORED as
+ * the persistent memory of exact-value identity.  An exact algebraic value (sum a_i sqrt b_i) is canonicalized to its
+ * surd normal form (sqrt8 -> 2sqrt2), packed EXACTLY (no hash collision) as a 32-byte e-graph symbol, and interned
+ * via eg_add -- so equal-but-differently-written geometry hash-conses to ONE e-class, and a decided sign is cached
+ * per class.  The graph is the living memory between the logs: ever-stronger as it runs.  Sound by construction --
+ * the canonical form is packed byte-exact for up to 4 distinct surds; larger forms simply skip the cache. */
+module verb_geom
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: u64, children: u64, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+var SYM : [u8; 32]
+var Dd : [u64; 16]   var Cc : [i64; 16]
+var SIGNC : [i32; 16384]
+var VGHIT : u64 = 0u64   var VGMISS : u64 = 0u64
+var SFS_v : u64   var SFD_v : u64
+
+fn iabs_v(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+
+fn vg_reset() -> i32 @export {
+    eg_init()
+    VGHIT = 0u64   VGMISS = 0u64
+    let mut i : u64 = 0u64
+    while i < 16384u64 { SIGNC[i] = 0i32   i = i + 1u64 }
+    return 0i32
+}
+fn vg_hit() -> u64 @export { return VGHIT }
+fn vg_miss() -> u64 @export { return VGMISS }
+
+fn vg_sqfree(b: u64) -> i32 {
+    let mut d : u64 = b   let mut s : u64 = 1u64   let mut k : u64 = 2u64
+    while (k * k) <= d {
+        let kk : u64 = k * k   let qd : u64 = d / kk
+        let mut divides : u8 = 0u8
+        if (d - (qd * kk)) == 0u64 { divides = 1u8 }
+        if divides == 1u8 { d = qd   s = s * k }
+        if divides == 0u8 { k = k + 1u64 }
+    }
+    SFS_v = s   SFD_v = d
+    return 0i32
+}
+
+/* canonicalize + pack into SYM; returns 1 if packable (<=4 distinct surds, coeffs fit i32), 0 if not (skip cache). */
+fn vg_pack(a_ptr: u64, b_ptr: u64, n: u64) -> i32 {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bu : u64 = pb[i] as u64
+        if ai != 0i64 {
+            if bu != 0u64 {
+                vg_sqfree(bu)
+                let d : u64 = SFD_v
+                let coeff : i64 = ai * (SFS_v as i64)
+                let mut hit : u8 = 0u8   let mut fj : u64 = 0u64   let mut j : u64 = 0u64
+                while j < m { if Dd[j] == d { fj = j   hit = 1u8 }   j = j + 1u64 }
+                if hit == 1u8 { Cc[fj] = Cc[fj] + coeff }
+                if hit == 0u8 { Dd[m] = d   Cc[m] = coeff   m = m + 1u64 }
+            }
+        }
+        i = i + 1u64
+    }
+    /* compact nonzero coefficients to the front */
+    let mut nz : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < m {
+        if Cc[j] != 0i64 { Dd[nz] = Dd[j]   Cc[nz] = Cc[j]   nz = nz + 1u64 }
+        j = j + 1u64
+    }
+    let mut z : u64 = 0u64
+    while z < 32u64 { SYM[z] = 0u8   z = z + 1u64 }
+    if nz == 0u64 { return 1i32 }                       /* structural zero -> all-zero key (the zero class) */
+    if nz > 4u64 { return 0i32 }                        /* too many surds -> not packable, skip cache */
+    /* insertion-sort the nz pairs by surd d for a canonical byte order */
+    let mut p : u64 = 1u64
+    while p < nz {
+        let dv : u64 = Dd[p]   let cv : i64 = Cc[p]
+        let mut q : u64 = p   let mut going : u8 = 1u8
+        while going == 1u8 {
+            if q == 0u64 { going = 0u8 }
+            if going == 1u8 { if Dd[q - 1u64] <= dv { going = 0u8 } }
+            if going == 1u8 { Dd[q] = Dd[q - 1u64]   Cc[q] = Cc[q - 1u64]   q = q - 1u64 }
+        }
+        Dd[q] = dv   Cc[q] = cv
+        p = p + 1u64
+    }
+    let mut j2 : u64 = 0u64
+    while j2 < nz {
+        if Dd[j2] >= (1u64 << 32u64) { return 0i32 }
+        if iabs_v(Cc[j2]) >= (1u64 << 31u64) { return 0i32 }
+        let base : u64 = j2 * 8u64
+        let dl : u64 = Dd[j2]
+        SYM[base + 0u64] = (dl & 255u64) as u8
+        SYM[base + 1u64] = ((dl >> 8u64) & 255u64) as u8
+        SYM[base + 2u64] = ((dl >> 16u64) & 255u64) as u8
+        SYM[base + 3u64] = ((dl >> 24u64) & 255u64) as u8
+        let cu : u64 = (Cc[j2]) as u64
+        SYM[base + 4u64] = (cu & 255u64) as u8
+        SYM[base + 5u64] = ((cu >> 8u64) & 255u64) as u8
+        SYM[base + 6u64] = ((cu >> 16u64) & 255u64) as u8
+        SYM[base + 7u64] = ((cu >> 24u64) & 255u64) as u8
+        j2 = j2 + 1u64
+    }
+    return 1i32
+}
+
+/* the e-class id of an exact value -- equal values share it (the graph remembers the identity).  SENT if unpackable. */
+fn vg_eclass(a_ptr: u64, b_ptr: u64, n: u64) -> u32 @export {
+    if vg_pack(a_ptr, b_ptr, n) == 0i32 { return 4294967295u32 }
+    return eg_add((&SYM) as u64, 0u64, 0u32)
+}
+
+/* sign of an exact value, cached per e-class -- decided once, then O(1) for that class AND every value equal to it. */
+fn vg_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let ec : u32 = vg_eclass(a_ptr, b_ptr, n)
+    if ec != 4294967295u32 {
+        let cached : i32 = SIGNC[ec as u64]
+        if cached != 0i32 { VGHIT = VGHIT + 1u64   return cached - 2i32 }
+    }
+    let s : i32 = sqrtsum_lazy3(a_ptr, b_ptr, n)
+    VGMISS = VGMISS + 1u64
+    if ec != 4294967295u32 { SIGNC[ec as u64] = s + 2i32 }
+    return s
+}

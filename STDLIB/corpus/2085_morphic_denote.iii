@@ -1,0 +1,36 @@
+/* STDLIB/corpus/2085_morphic_denote.iii -- falsifier for the III-GLASS MORPHIC view's load-bearing claim: that
+ * writing a constant into the SVIR source bytes and re-denoting genuinely changes the function sd_denote yields
+ * (this is what the slider drag does -- put_c into FF, then sd_denote + seq_equiv).  Here we write C into f(x)=x+C
+ * and read the EXACT value back via bb_eval: C=10 -> f(5)=15; rewrite C=100 -> f(5)=105 (the rewrite took); C=0 ->
+ * f(7)=7.  If the byte-write didn't reach the denotation, the values mismatch and this returns 1/2/3.  99 = the
+ * morphic edit really rewrites the source the compiler reads. */
+module corpus_2085_morphic_denote
+
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+/* f(x) = x + C : LOCAL_GET 0, CONST C(@byte 8), ADD, RETURN -- the exact layout the morphic view edits. */
+var FF : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 16u8,0u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 96u8]
+
+fn put_c(c: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 { FF[8u64 + k] = (((c >> (k * 8u64)) & 255u64) as u8)  k = k + 1u64 }
+    return 0i32
+}
+
+fn eval_at(c: u64, x: u64) -> u64 {
+    put_c(c)                                          /* the drag: rewrite the SVIR const bytes */
+    bb_reset(64u64)
+    let node : u32 = sd_denote(&FF as u64, 5u64, 13u64, 1u32)   /* the compiler re-lifts the edited source */
+    bb_set_input(0u32, x)
+    return bb_eval(node)
+}
+
+fn main() -> u64 {
+    if eval_at(10u64, 5u64) != 15u64 { return 1u64 }     /* f(x)=x+10 -> f(5)=15 */
+    if eval_at(100u64, 5u64) != 105u64 { return 2u64 }   /* rewrite C=100 -> f(5)=105 (the edit took) */
+    if eval_at(0u64, 7u64) != 7u64 { return 3u64 }       /* C=0 -> f(7)=7 */
+    return 99u64
+}

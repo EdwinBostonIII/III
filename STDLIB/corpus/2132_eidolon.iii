@@ -1,0 +1,70 @@
+/* STDLIB/corpus/2132_eidolon.iii -- THE EIDOLON tested against what arithmetic cannot represent.
+ * (1) sqrt2 is held EXACTLY as an identity -- no finite number can.
+ * (2) sqrt8 and 2sqrt2 are ONE identity (exact, incl. one content-address) -- a float compare of 2.828... is lossy.
+ * (3) identities are order-free and distinct by nature (sqrt2+sqrt3 == sqrt3+sqrt2 ; sqrt2 != sqrt3).
+ * (4) THE COLLAPSE arithmetic can't see: sqrt2*sqrt8 = EXACTLY 4 ; (sqrt3+sqrt2)(sqrt3-sqrt2) = EXACTLY 1.
+ * (5) the SAME product in fixed-point arithmetic CANNOT hit exactly 4 -- it undershoots (the lossy contrast).
+ * (6) SAME VALUE, DIFFERENT IDENTITY: 2-apples != 2-spaceships though both are 2 (a number can't tell; an eidolon can).
+ * 99 = exact truth flows from identity where arithmetic only approximates. */
+module corpus_2132_eidolon
+
+extern @abi(c-msvc-x64) fn eid_reset() -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_mul(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_same(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_is_rational(a: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_rat_value(a: u32) -> i64 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_addr(a: u32, out32: u64) -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_isqrt(N: u64) -> u64 from "eidolon.iii"
+
+var AD1 : [u8; 32]   var AD2 : [u8; 32]
+fn eq32(p: u64, q: u64) -> u32 { let pp : *u8 = p as *u8   let qq : *u8 = q as *u8   let mut i : u64 = 0u64   while i < 32u64 { if pp[i] != qq[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+
+fn main() -> u64 {
+    eid_reset()
+
+    /* (1) sqrt2: an exact identity of a value no finite number holds */
+    let s2 : u32 = eid_make(1i64, 2u64, 0u32)
+    if eid_is_rational(s2) != 0u32 { return 1u64 }
+
+    /* (2) sqrt8 IS 2sqrt2 -- one identity, one content-address */
+    let s8 : u32 = eid_make(1i64, 8u64, 0u32)
+    let two_s2 : u32 = eid_make(2i64, 2u64, 0u32)
+    if eid_same(s8, two_s2) != 1u32 { return 2u64 }
+    eid_addr(s8, (&AD1[0u64]) as u64)
+    eid_addr(two_s2, (&AD2[0u64]) as u64)
+    if eq32((&AD1[0u64]) as u64, (&AD2[0u64]) as u64) != 1u32 { return 3u64 }
+
+    /* (3) distinct by nature; identity is order-free */
+    let s3 : u32 = eid_make(1i64, 3u64, 0u32)
+    if eid_same(s2, s3) == 1u32 { return 4u64 }
+    let ab : u32 = eid_add(s2, s3)
+    let ba : u32 = eid_add(s3, s2)
+    if eid_same(ab, ba) != 1u32 { return 5u64 }
+
+    /* (4) irrational * irrational = EXACT integer -- the collapse arithmetic cannot see */
+    let m : u32 = eid_mul(s2, s8)                                  /* sqrt2 * sqrt8 */
+    if eid_is_rational(m) != 1u32 { return 6u64 }
+    if eid_rat_value(m) != 4i64 { return 7u64 }                    /* EXACTLY 4 */
+    let neg_s2 : u32 = eid_make(0i64 - 1i64, 2u64, 0u32)
+    let conj : u32 = eid_mul(eid_add(s3, s2), eid_add(s3, neg_s2)) /* (sqrt3+sqrt2)(sqrt3-sqrt2) */
+    if eid_is_rational(conj) != 1u32 { return 8u64 }
+    if eid_rat_value(conj) != 1i64 { return 9u64 }                 /* EXACTLY 1 */
+
+    /* (5) the SAME product in arithmetic CANNOT hit exactly 4 -- it undershoots */
+    let p2 : u64 = eid_isqrt(2u64 << 40u64)
+    let p8 : u64 = eid_isqrt(8u64 << 40u64)
+    let prod : u64 = p2 * p8
+    let exact4 : u64 = 4u64 << 40u64
+    if prod == exact4 { return 10u64 }                            /* arithmetic misses; the identity hit it exactly */
+
+    /* (6) same value, different identity */
+    let apples : u32 = eid_make(2i64, 1u64, 1u32)
+    let ships : u32 = eid_make(2i64, 1u64, 2u32)
+    if eid_rat_value(apples) != 2i64 { return 11u64 }
+    if eid_rat_value(ships) != 2i64 { return 12u64 }
+    if eid_same(apples, ships) == 1u32 { return 13u64 }
+
+    return 99u64
+}

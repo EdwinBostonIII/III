@@ -1,0 +1,51 @@
+/* verify_each.iii -- the RELIABLE per-function SVIR verify instrument (Phi1, R1).
+ *
+ * Walks the linked `gen_svir` module EXACTLY as svir_verify's outer loop does (svir_verify.iii:60-71) and
+ * runs the trust-anchor `verify_body` on EACH function -- passing the REAL module `nfunc` so CALL targets
+ * verify against the whole module (isolating a function into a 1-fn module would FALSELY trip code 9).
+ *
+ * Output: one line per function  "<idx> <rc>"   (rc = verify_body code: 0 ok, else 2/4/5/6/7/8/9)
+ * then a summary line          "# <nfunc> <fail> <firstnz> <whole>"
+ *   <firstnz> = the first in-order nonzero per-function rc
+ *   <whole>   = the real whole-module svir_verify(base,len) rc
+ * INSTRUMENT SELF-CHECK (the reliability the prior grind lacked): firstnz MUST equal whole whenever
+ * firstnz != 0.  A mismatch means THIS walk's arithmetic is wrong, not ccsv -- it is an instrument bug.
+ *
+ * gcc links this with svir_verify.o + the module-under-test's .o (harness/oracle path; the artifact path
+ * ccsv->SVIR->sovas->sovld stays gcc-free).  Reuses the trust anchor's verify_body -- no forked logic. */
+module verify_each
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 from "svir_verify.iii"
+extern @abi(c-msvc-x64) fn svir_verify(src: u64, len: u64) -> u64 from "svir_verify.iii"
+
+var DB : [u8; 32]                                   /* module-scope: fn-local runtime-indexed arrays segfault */
+fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
+fn pdec(v0: u64) { if v0==0u64 { pc(48u32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { DB[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  pc(DB[n as u64] as u32) } }
+fn vb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64] as u32 }
+
+fn main() -> u64 {
+    let base : u64 = svir_ptr()
+    let len  : u64 = svir_len()
+    if len < 1u64 { pc(35u32) pc(10u32)  return 1u64 }
+    let nfunc : u32 = vb(base, 0u64)
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    let mut fail : u32 = 0u32
+    let mut firstnz : u64 = 0u64
+    while i < nfunc {
+        let blen : u64 = (vb(base, off + 2u64) as u64) | ((vb(base, off + 3u64) as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        let rc : u64 = verify_body(base, boff, blen, nfunc)
+        pdec(i as u64)  pc(32u32)  pdec(rc)  pc(10u32)
+        if rc != 0u64 { fail = fail + 1u32  if firstnz == 0u64 { firstnz = rc } }
+        off = boff + blen
+        i = i + 1u32
+    }
+    let whole : u64 = svir_verify(base, len)
+    pc(35u32) pc(32u32) pdec(nfunc as u64) pc(32u32) pdec(fail as u64) pc(32u32) pdec(firstnz) pc(32u32) pdec(whole) pc(10u32)
+    let mut ec : u64 = fail as u64
+    if ec > 200u64 { ec = 200u64 }
+    return ec
+}

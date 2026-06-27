@@ -1,0 +1,59 @@
+/* STDLIB/iii/aether/ui_curve_render.iii -- render an actual curved (quadratic Bezier) region with EXACT algebraic
+ * coverage: the curve's height at each column is an exact algebraic number (P + Q sqrt D)/DEN, the inside test and
+ * the anti-aliased alpha are PROVEN-SIGN integer computations -- no float, no flattening.  The same control points
+ * render at any device scale (resolution-independent: the crossing is scale-invariant). */
+module ui_curve_render
+
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_blend(buf: u64, w: u32, x: u32, y: u32, argb: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_arc_valpha(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact.iii"
+
+var FB : [u32; 79200]   /* 360 x 220 */
+var TITLE : [u8; 8] = [73u8,73u8,73u8,67u8,85u8,82u8,0u8,0u8]   /* "IIICUR\0" */
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+
+/* fill the region below a quadratic-Bezier "dome" arc (40,180)->(120,40)->(340,180), down to the baseline y=180.
+ * monomial: ax = 40,160,140 ; ay = 180,-280,280.  scale = pixels per unit (resolution independence). */
+fn render(scale: i64) -> i32 {
+    let b : u64 = &FB as u64
+    ui_clear(b, 360u32, 220u32, rgb(12u32, 14u32, 20u32))
+    let orc : u32 = rgb(255u32, 170u32, 40u32) & 16777215u32
+    /* control points scaled; x range [40*scale, 340*scale] but clipped to the 360-wide FB */
+    let ax0 : i64 = 40i64 * scale     let ax1 : i64 = 160i64 * scale    let ax2 : i64 = 140i64 * scale
+    let ay0 : i64 = 180i64 * scale    let ay1 : i64 = (0i64 - 280i64) * scale   let ay2 : i64 = 280i64 * scale
+    let xlo : i64 = 40i64 * scale     let xhi : i64 = 340i64 * scale
+    let base : i64 = 180i64 * scale
+    let mut py : i64 = 0i64
+    while py < 220i64 {
+        if py < base {
+            let mut px : i64 = xlo
+            while px < xhi {
+                if px < 360i64 {
+                    let al : i64 = ui_arc_valpha(ax0, ax1, ax2, ay0, ay1, ay2, px, py, 255i64)
+                    if al > 0i64 { ui_blend(b, 360u32, px as u32, py as u32, ((al as u32) << 24u32) | orc) }
+                }
+                px = px + 1i64
+            }
+        }
+        py = py + 1i64
+    }
+    ui_text_n(b, 360u32, 220u32, 8u32, 6u32, "exact quadratic Bezier -- algebraic inside test, no float" as u64, 57u32, rgb(0u32, 229u32, 255u32))
+    return 0i32
+}
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 360u32, 220u32)
+    render(1i64)
+    let b : u64 = &FB as u64
+    while ui_win_pump() == 0u32 {
+        ui_win_present(b, 360u32, 220u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

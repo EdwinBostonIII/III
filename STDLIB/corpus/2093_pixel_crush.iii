@@ -1,0 +1,31 @@
+/* STDLIB/corpus/2093_pixel_crush.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 5b: the machine crushes a REAL 2-D
+ * PIXEL loop -- actual per-pixel work, not a constant sum.
+ *
+ * OUTER is the per-row body of a rectangle fill: `for x in 0..N_x: acc += 1` (one increment PER PIXEL) then y++.
+ * au_crush_nested EXECUTES the inner pixel loop to completion via the bounded structured interpreter (so the
+ * per-pixel `acc += 1` actually runs N_x times), measures its net effect, SPLICES `acc += net` in place of the
+ * loop, PROVES the flattened outer affine over 2^64 (au_topo_amputate), and runs differential TEETH that DEFER if
+ * the inner trip count were not constant.  It returns net = N_x = the proven pixels-per-row.  The full fill is then
+ * the O(1) closed form acc = N_y * N_x -- the rectangle's exact pixel count, machine-crushed and proven.
+ *
+ * HONEST SCOPE: constant-width fill only (a rectangle).  A varying-width shape (e.g. a triangle) has a non-constant
+ * inner trip count -> the teeth DETECT it and au_crush_nested DEFERS (returns AU_NONE64) -- no false crush.  This
+ * is real per-pixel work crushed (vs 2092's constant-per-row), within the affine fragment the prover certifies.
+ *
+ * SVIR OUTER body (slots acc=0,y=1,x=2; N_x=4): CONST 0/SET x | BLOCK LOOP (GET x,CONST 4,EQ,BR_IF 1 | GET acc,
+ * CONST 1,ADD,SET acc | GET x,CONST 1,ADD,SET x | BR 0) END END | GET y,CONST 1,ADD,SET y.
+ * 99 = the machine crushed the 2-D pixel loop: net = 4 pixels/row, outer proven affine. */
+module corpus_2093_pixel_crush
+
+extern @abi(c-msvc-x64) fn au_crush_nested(base: u64, boff: u64, blen: u64, accum: u32) -> u64 from "ser_antiunify.iii"
+
+var OUTER : [u8; 73] = [1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 17u8,2u8, 64u8, 65u8, 16u8,2u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,2u8, 80u8,0u8, 68u8, 68u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+fn main() -> u64 {
+    /* the MACHINE crushes the 2-D pixel loop's inner; returns the proven pixels-per-row, or AU_NONE64 if not. */
+    let net : u64 = au_crush_nested(&OUTER as u64, 0u64, 73u64, 0u32)
+    if net != 4u64 { return 1u64 }            /* inner pixel loop crushed to N_x=4, outer PROVEN affine over 2^64 */
+    /* the rectangle's pixel count is the O(1) closed form N_y * N_x = 3 * 4 = 12 -- machine-crushed, no per-pixel loop */
+    if (3u64 * net) != 12u64 { return 2u64 }
+    return 99u64
+}

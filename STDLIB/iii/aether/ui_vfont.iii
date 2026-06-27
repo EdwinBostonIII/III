@@ -1,0 +1,55 @@
+/* STDLIB/iii/aether/ui_vfont.iii -- III-GLASS exact-VECTOR text: the resolution-independence applied to the
+ * thing an IDE is made of.  A glyph is a closed outline (ui_vfont_data, a 64-unit em); ui_vchar scales its edges
+ * to ANY pixel size and fills them through the exact-integer even-odd engine (ui_fill_poly_aa).  Razor-sharp at
+ * 12px and at 1200px -- no bitmap blocking, no float jitter.  This is what makes Infinite Semantic Zoom evergreen
+ * rather than scaffolding: text that stays crisp through unbounded magnification. */
+module aether_ui_vfont
+
+extern @abi(c-msvc-x64) fn ui_vfont_edges() -> u64 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn ui_vfont_off(c: u32) -> u32 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn ui_vfont_cnt(c: u32) -> u32 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn ui_fill_poly_aa(buf: u64, w: u32, h: u32, ex: u64, ne: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+
+var EDGEBUF : [i64; 1024]   /* scaled edges of ONE glyph: up to 256 edges * 4 */
+
+/* fill glyph c with its top-left near (x,y), em scaled to `size` pixels. */
+fn ui_vchar(buf: u64, w: u32, h: u32, x: i64, y: i64, c: u32, size: i64, color: u32, n: i64) -> i32 @export {
+    let cnt : u32 = ui_vfont_cnt(c)
+    if cnt == 0u32 { return 0i32 }
+    if cnt > 256u32 { return 0i32 }
+    let off  : u32 = ui_vfont_off(c)
+    let base : u64 = ui_vfont_edges()
+    let mut minx : i64 = 1000000i64  let mut miny : i64 = 1000000i64
+    let mut maxx : i64 = 0i64 - 1000000i64  let mut maxy : i64 = 0i64 - 1000000i64
+    let mut e : u32 = 0u32
+    while e < cnt {
+        let p   : *i32 = (base + (((off + e) as u64) * 16u64)) as *i32
+        let ex0 : i64 = ((((p[0u64] as i64) * size) / 64i64)) + x
+        let ey0 : i64 = ((((p[1u64] as i64) * size) / 64i64)) + y
+        let ex1 : i64 = ((((p[2u64] as i64) * size) / 64i64)) + x
+        let ey1 : i64 = ((((p[3u64] as i64) * size) / 64i64)) + y
+        EDGEBUF[((e * 4u32)) as u64] = ex0  EDGEBUF[((e * 4u32) + 1u32) as u64] = ey0
+        EDGEBUF[((e * 4u32) + 2u32) as u64] = ex1  EDGEBUF[((e * 4u32) + 3u32) as u64] = ey1
+        if ex0 < minx { minx = ex0 }  if ex1 < minx { minx = ex1 }
+        if ex0 > maxx { maxx = ex0 }  if ex1 > maxx { maxx = ex1 }
+        if ey0 < miny { miny = ey0 }  if ey1 < miny { miny = ey1 }
+        if ey0 > maxy { maxy = ey0 }  if ey1 > maxy { maxy = ey1 }
+        e = e + 1u32
+    }
+    ui_fill_poly_aa(buf, w, h, &EDGEBUF as u64, cnt, minx, miny, maxx + 1i64, maxy + 1i64, color, n)
+    return 0i32
+}
+
+/* draw `len` bytes at (x,y), em size `size`; monospace advance.  Returns the pen x. */
+fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 @export {
+    let adv : i64 = (size * 38i64) / 64i64
+    let mut cx : i64 = x
+    let mut i : u32 = 0u32
+    while i < len {
+        let p : *u8 = (str + (i as u64)) as *u8
+        ui_vchar(buf, w, h, cx, y, p[0u64] as u32, size, color, n)
+        cx = cx + adv
+        i = i + 1u32
+    }
+    return cx
+}

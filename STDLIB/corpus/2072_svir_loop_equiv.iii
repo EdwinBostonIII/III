@@ -1,0 +1,44 @@
+/* STDLIB/corpus/2072_svir_loop_equiv.iii -- Amputation 2: structured while-loops collapsed to a PROVEN closed-
+ * form recurrence, never unrolled.  f(N) = { sum=0; i=0; while i<N { sum+=4; i+=1 } return sum } denotes to
+ * sum = MUX(0<N, N, 0) << 2.  99 = the closed form is CONCRETELY correct (incl. the N<=0 termination guard),
+ * two counters with different per-step deltas are refuted over ALL 2^64, and a non-unit stride is DEFERRED
+ * (SD_TOP -> SEQ_TOP) rather than given a false finite verdict.
+ * SVIR: BLOCK=0x40 LOOP=0x41 LOCAL_GET=0x10 LT_S=0x32 CONST=0x01 EQ=0x30 BR_IF=0x51 ADD=0x20 LOCAL_SET=0x11
+ * BR=0x50 END=0x44 RETURN=0x60.  Layout: [u8 nfunc][u8 params,u8 nres,u16 LE blen, body].  locals: 0=N,1=sum,2=i. */
+module corpus_2072_svir_loop_equiv
+
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn seq_equiv_mod(ma: u64, la: u64, fa: u32, mb: u64, lb: u64, fb: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+/* f(N): while i<N { sum+=4; i+=1 } return sum       (blen 54) */
+var MODF1 : [u8; 59] = [1u8,1u8,1u8,54u8,0u8, 64u8,65u8, 16u8,2u8, 16u8,0u8, 50u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,2u8, 80u8,0u8, 68u8, 68u8, 16u8,1u8, 96u8]
+/* g(N): while i<N { sum+=8; i+=1 } return sum       (delta 8 != 4 -> not equal) */
+var MODF3 : [u8; 59] = [1u8,1u8,1u8,54u8,0u8, 64u8,65u8, 16u8,2u8, 16u8,0u8, 50u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,1u8, 1u8,8u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,2u8, 80u8,0u8, 68u8, 68u8, 16u8,1u8, 96u8]
+/* h(N): while i<N { sum+=4; i+=2 } return sum       (non-unit stride -> termination gate defers) */
+var MODF4 : [u8; 59] = [1u8,1u8,1u8,54u8,0u8, 64u8,65u8, 16u8,2u8, 16u8,0u8, 50u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8, 16u8,2u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,2u8, 80u8,0u8, 68u8, 68u8, 16u8,1u8, 96u8]
+
+/* evaluate f1's denotation at a concrete N (the closed form actually equals the loop's run). */
+fn evalf1(n: u64) -> u64 {
+    bb_reset(64u64)
+    let node : u32 = sd_denote(&MODF1 as u64, 5u64, 54u64, 1u32)
+    if node == 4294967295u32 { return 18446744073709551615u64 }   /* SD_TOP: loop not recognised -> sentinel */
+    bb_set_input(0u32, n)
+    return bb_eval(node)
+}
+
+fn main() -> u64 {
+    /* CONCRETE CORRECTNESS: 3 iters -> 12, 0 iters -> 0, 5 iters -> 20, N<0 -> 0 (the termination guard). */
+    if evalf1(3u64) != 12u64 { return 1u64 }
+    if evalf1(0u64) != 0u64 { return 2u64 }
+    if evalf1(5u64) != 20u64 { return 3u64 }
+    if evalf1(18446744073709551615u64) != 0u64 { return 4u64 }
+    /* SYMBOLIC equivalence/refutation over ALL 2^64 N. */
+    if seq_equiv_mod(&MODF1 as u64, 59u64, 0u32, &MODF1 as u64, 59u64, 0u32) != 1u32 { return 5u64 }
+    if seq_equiv_mod(&MODF1 as u64, 59u64, 0u32, &MODF3 as u64, 59u64, 0u32) != 0u32 { return 6u64 }
+    /* TERMINATION GATE: non-unit stride is DEFERRED (SEQ_TOP=2), never a false equal or refute. */
+    if seq_equiv_mod(&MODF4 as u64, 59u64, 0u32, &MODF4 as u64, 59u64, 0u32) != 2u32 { return 7u64 }
+    return 99u64
+}

@@ -1,0 +1,106 @@
+/* STDLIB/iii/aether/ui_zoom.iii -- III-GLASS feature #1: Infinite Semantic Zoom.  An exact-integer camera
+ * (scale Sn/32, world-centre pan) maps a world of REAL content -- the III-GLASS architecture: the four features
+ * and the faculties each attaches to -- onto the screen.  Geometry is exact integers and text is exact vector
+ * outlines, so zooming in stays razor-sharp to any magnification (no float jitter, no bitmap blocking).  Crossing
+ * a scale threshold resolves a node into its detail (level-of-detail = semantic depth).  [+]/[-] or up/down zoom
+ * toward centre; drag pans.  No float anywhere in the transform. */
+module ui_zoom
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mx() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_my() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mdown() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_key() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn eg_render(buf: u64, mult: u64) -> u32 from "ui_egraph.iii"   /* host the real e-graph at deep zoom */
+extern @abi(c-msvc-x64) fn bb_render(buf: u64) -> i32 from "ui_egraph.iii"              /* deeper still: the bit-blast netlist */
+
+var FB    : [u32; 480000]   /* 800 x 600 -- matches eg_render so the zoom can host the e-graph in place */
+var TITLE : [u8; 10] = [73u8,73u8,73u8,45u8,71u8,76u8,65u8,83u8,83u8,0u8]
+
+/* camera: Sn/32 px per world-unit; (PCX,PCY) = world point at screen centre. */
+var SN  : i64 = 32i64
+var PCX : i64 = 500i64
+var PCY : i64 = 350i64
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+fn w2sx(wx: i64) -> i64 { return (((wx - PCX) * SN) / 32i64) + 400i64 }
+fn w2sy(wy: i64) -> i64 { return (((wy - PCY) * SN) / 32i64) + 300i64 }
+
+/* a node: a box centred at world (wx,wy) of world half-size hw,hh, a title and a detail line. */
+fn node(b: u64, w: u32, h: u32, wx: i64, wy: i64, hw: i64, hh: i64, col: u32, title: u64, tl: u32, detail: u64, dl: u32) -> i32 {
+    let sx0 : i64 = w2sx(wx - hw)  let sy0 : i64 = w2sy(wy - hh)
+    let sx1 : i64 = w2sx(wx + hw)  let sy1 : i64 = w2sy(wy + hh)
+    /* off-screen cull */
+    if sx1 < 0i64 { return 0i32 }
+    if sy1 < 0i64 { return 0i32 }
+    if sx0 > (w as i64) { return 0i32 }
+    if sy0 > (h as i64) { return 0i32 }
+    let bw : i64 = sx1 - sx0  let bh : i64 = sy1 - sy0
+    if bw < 2i64 { return 0i32 }
+    ui_rect(b, w, h, sx0 as u32, sy0 as u32, bw as u32, bh as u32, col)
+    /* label size scales with the box; LOD: show detail only once the box is large enough to read it. */
+    let ts : i64 = (28i64 * SN) / 32i64
+    if ts >= 7i64 { ui_vtext(b, w, h, sx0 + (8i64 * SN) / 32i64, sy0 + (10i64 * SN) / 32i64, title, tl, ts, col, 4i64) }
+    if bw > 260i64 { let ds : i64 = (16i64 * SN) / 32i64  ui_vtext(b, w, h, sx0 + (8i64 * SN) / 32i64, sy0 + (52i64 * SN) / 32i64, detail, dl, ds, rgb(150u32,165u32,190u32), 4i64) }
+    return 0i32
+}
+
+fn render(b: u64, w: u32, h: u32) -> i32 {
+    ui_clear(b, w, h, rgb(9u32, 10u32, 15u32))
+    /* connectors from the root to the four features (drawn in screen space). */
+    let lc : u32 = rgb(40u32, 60u32, 80u32)
+    ui_line(b, w, h, w2sx(500i64) as i32, w2sy(350i64) as i32, w2sx(220i64) as i32, w2sy(180i64) as i32, lc)
+    ui_line(b, w, h, w2sx(500i64) as i32, w2sy(350i64) as i32, w2sx(780i64) as i32, w2sy(180i64) as i32, lc)
+    ui_line(b, w, h, w2sx(500i64) as i32, w2sy(350i64) as i32, w2sx(220i64) as i32, w2sy(540i64) as i32, lc)
+    ui_line(b, w, h, w2sx(500i64) as i32, w2sy(350i64) as i32, w2sx(780i64) as i32, w2sy(540i64) as i32, lc)
+    /* the four features + their real attach-points, and the root. */
+    node(b, w, h, 220i64, 180i64, 150i64, 60i64, rgb(0u32,229u32,255u32),  "sculptor" as u64, 8u32, "-> sks_prove" as u64, 12u32)
+    node(b, w, h, 780i64, 180i64, 150i64, 60i64, rgb(0u32,229u32,255u32),  "destiny" as u64, 7u32,  "-> sd_denote" as u64, 12u32)
+    node(b, w, h, 220i64, 540i64, 150i64, 60i64, rgb(0u32,229u32,255u32),  "morphic" as u64, 7u32,  "-> seq_equiv" as u64, 12u32)
+    node(b, w, h, 780i64, 540i64, 150i64, 60i64, rgb(0u32,229u32,255u32),  "zoom" as u64, 4u32,     "-> ui_exact vec" as u64, 15u32)
+    node(b, w, h, 500i64, 350i64, 130i64, 55i64, rgb(255u32,200u32,80u32), "III-GLASS" as u64, 9u32, "exact membrane" as u64, 14u32)
+    /* HUD (fixed, screen space). */
+    ui_fill_rect(b, w, h, 0u32, 452u32, w, 28u32, rgb(16u32,18u32,28u32))
+    let mut hx : i64 = ui_vtext(b, w, h, 10i64, 456i64, "scale Sn/32 =" as u64, 13u32, 16i64, rgb(120u32,135u32,165u32), 4i64)
+    ui_vtext(b, w, h, hx + 8i64, 456i64, "[+/-] zoom  drag = pan  exact-integer, crisp at any depth" as u64, 57u32, 16i64, rgb(95u32,105u32,130u32), 4i64)
+    return 0i32
+}
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 800u32, 600u32)
+    let mut lastmx : i64 = 0i64  let mut lastmy : i64 = 0i64  let mut dragging : u32 = 0u32
+    while ui_win_pump() == 0u32 {
+        let k : u32 = ui_key()
+        if k == 187u32 { SN = (SN * 5i64) / 4i64 }   /* '=' / '+' : zoom in */
+        if k == 38u32  { SN = (SN * 5i64) / 4i64 }   /* up */
+        if k == 189u32 { SN = (SN * 4i64) / 5i64 }   /* '-' : zoom out */
+        if k == 40u32  { SN = (SN * 4i64) / 5i64 }   /* down */
+        if SN < 2i64 { SN = 2i64 }
+        /* drag to pan: convert the screen delta back to world units via the exact inverse scale. */
+        let mx : i64 = ui_mx() as i64  let my : i64 = ui_my() as i64
+        if ui_mdown() == 1u32 {
+            if dragging == 1u32 {
+                PCX = PCX - (((mx - lastmx) * 32i64) / SN)
+                PCY = PCY - (((my - lastmy) * 32i64) / SN)
+            }
+            dragging = 1u32  lastmx = mx  lastmy = my
+        }
+        if ui_mdown() != 1u32 { dragging = 0u32 }
+        /* semantic zoom: the map dissolves into III's REAL math, level by level, in this same buffer --
+         * architecture -> the saturated e-graph -> the bit-blast netlist III lowers to SAT. */
+        if SN <= 130i64 { render(&FB as u64, 800u32, 600u32) }
+        if SN > 130i64 { if SN <= 400i64 { eg_render(&FB as u64, 7u64) } }
+        if SN > 400i64 { bb_render(&FB as u64) }
+        ui_win_present(&FB as u64, 800u32, 600u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

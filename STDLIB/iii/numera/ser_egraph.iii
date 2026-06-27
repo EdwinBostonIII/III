@@ -63,6 +63,13 @@ fn seg_intern(op: u32, a: u64, b: u64) -> u64 @export {
 fn seg_var() -> u64 @export { return seg_intern(EG_VAR, 0u64, 0u64) }
 fn seg_const(v: u64) -> u64 @export { return seg_intern(EG_CONST, v, 0u64) }
 
+/* read-only introspection over the node arrays -- lets a consumer (e.g. the III-GLASS e-graph view) WALK the
+ * saturated graph: every node's op, its two children/value, and (via seg_find) its e-class.  No logic touched. */
+fn seg_node_count() -> u32 @export { return EG_N[0u64] }
+fn seg_node_op(i: u64) -> u32 @export { if i >= EG_CAP { return 0u32 }  return EG_OP[i] }
+fn seg_node_a(i: u64) -> u64 @export { if i >= EG_CAP { return 0u64 }  return EG_A[i] }
+fn seg_node_b(i: u64) -> u64 @export { if i >= EG_CAP { return 0u64 }  return EG_B[i] }
+
 fn seg_find(x: u64) -> u64 @export {
     let mut r : u64 = x
     while EG_PARENT[r] != r { r = EG_PARENT[r] }
@@ -110,8 +117,11 @@ fn seg_high_pow2(v: u64) -> u64 {
     while t > 1u64 { t = t >> 1u64  h = h << 1u64 }
     return h
 }
-/* smallest power of two STRICTLY greater than v (the subtractive-split pivot). */
+/* smallest power of two STRICTLY greater than v (the subtractive-split pivot).  v>=2^63 has NO such power
+ * representable in u64 (the next is 2^64) -> return 0 as a sentinel.  Without this guard the loop is INFINITE for
+ * v>=2^63: h reaches 2^63, then 2^63<<1 overflows to 0, and 0<<1==0<=v forever (the seg_mul_plan(2^64-1) hang). */
 fn seg_ceil_pow2(v: u64) -> u64 {
+    if v >= 0x8000000000000000u64 { return 0u64 }
     let mut h : u64 = 1u64
     while h <= v { h = h << 1u64 }
     return h
@@ -162,12 +172,14 @@ fn seg_saturate_pass() -> u32 {
                          * the shift-SUB forms (e.g. x*14 = (x<<4)-(x<<1)).  Guarded to popcount(rem)<popcount(c)
                          * so it fires only for near-power-of-two factors (bounds node growth). */
                         let cl : u64 = seg_ceil_pow2(v)
-                        let rem : u64 = cl - v
-                        if seg_popcount(rem) < seg_popcount(v) {
-                            let mc : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(cl))
-                            let mrr : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(rem))
-                            let sb : u64 = seg_intern(EG_SUB, mc, mrr)
-                            if seg_union(i as u64, sb) == 1u32 { changed = 1u32 }
+                        if cl != 0u64 {                         /* cl==0: v>=2^63, no representable ceil power of two -> skip subtractive split (the additive split above still decomposes v) */
+                            let rem : u64 = cl - v
+                            if seg_popcount(rem) < seg_popcount(v) {
+                                let mc : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(cl))
+                                let mrr : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(rem))
+                                let sb : u64 = seg_intern(EG_SUB, mc, mrr)
+                                if seg_union(i as u64, sb) == 1u32 { changed = 1u32 }
+                            }
                         }
                     }
                 }
@@ -322,6 +334,165 @@ fn seg_mul_cost(v: u64) -> u32 @export {
     let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
     seg_saturate()
     return seg_best_cost(mul)
+}
+
+/* ============================================================================================================
+ * THE EMIT PLAN -- the e-graph DRIVES cg_r3 (DOCS/III-EIDOS plan Phase 2).  cg_r3 calls seg_mul_plan(v) at
+ * COMPILE TIME for every `x * v` (v a constant); the e-graph saturates, extracts the cost-optimal equivalent,
+ * PROVES it == x*v over all 2^64 (bv_ring), and classifies the proven form into a descriptor cg_r3 emits
+ * byte-faithfully.  Nothing but IMUL is returned unless bv_ring CERTIFIES the form -- the soundness invariant
+ * ("sound for everything or it does not emit") realized in the live compiler.  Encoding (u64): bits 0..7 kind,
+ * bits 8..15 j (primary shift), bits 16..23 m (secondary shift). */
+const SMP_IMUL   : u64 = 0u64   /* not reduced (imul no worse / unproven / >2-term form) */
+const SMP_POW2   : u64 = 1u64   /* x<<j */
+const SMP_SHLADD : u64 = 2u64   /* (x<<j)+x */
+const SMP_SUBK   : u64 = 3u64   /* (x<<j)-x */
+const SMP_2SH    : u64 = 4u64   /* (x<<j)+(x<<m) */
+const SMP_2SS    : u64 = 5u64   /* (x<<j)-(x<<m) */
+const SMP_IDENT  : u64 = 6u64   /* x  (v==1) */
+
+/* is `node`'s extracted form SHL(VAR, k)?  returns k+1 (0 = no).  Reads EG_CHOICE (the min-cost member). */
+fn seg_form_is_shl_var(node: u64) -> u64 {
+    let c : u64 = EG_CHOICE[seg_find(node)]
+    if EG_OP[c] != EG_SHL { return 0u64 }
+    let ch : u64 = EG_CHOICE[seg_find(EG_A[c])]
+    if EG_OP[ch] != EG_VAR { return 0u64 }
+    return EG_A[EG_B[c]] + 1u64        /* SHL's second child is the const shift amount */
+}
+fn seg_form_is_var(node: u64) -> u32 {
+    let c : u64 = EG_CHOICE[seg_find(node)]
+    if EG_OP[c] == EG_VAR { return 1u32 }
+    return 0u32
+}
+
+fn seg_mul_plan(v: u64) -> u64 @export {
+    if v == 1u64 { return SMP_IDENT }
+    seg_reset()
+    let x : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
+    seg_saturate()
+    let cost : u32 = seg_best_cost(mul)
+    if cost >= 4u32 { return SMP_IMUL }            /* imul (cost 4) is no worse -> do not reduce */
+    /* SOUNDNESS GATE: prove the extracted form == x*v over all 2^64 (bv_ring) BEFORE classifying. */
+    bv_reset()
+    let xb : u32 = bv_var(0u32)
+    let tgt : u32 = bv_mul(xb, bv_const(v))
+    let formb : u32 = seg_to_bv(mul)
+    if bv_equal(formb, tgt) != 1u8 { return SMP_IMUL }   /* unproven -> imul (always sound) */
+    let top : u64 = EG_CHOICE[seg_find(mul)]
+    let opc : u32 = EG_OP[top]
+    let pk : u64 = seg_form_is_shl_var(mul)
+    if pk != 0u64 { return SMP_POW2 | ((pk - 1u64) << 8u64) }       /* x<<j */
+    if opc == EG_ADD {
+        let lj : u64 = seg_form_is_shl_var(EG_A[top])
+        let rj : u64 = seg_form_is_shl_var(EG_B[top])
+        if lj != 0u64 {
+            if seg_form_is_var(EG_B[top]) == 1u32 { return SMP_SHLADD | ((lj - 1u64) << 8u64) }
+            if rj != 0u64 { return SMP_2SH | ((lj - 1u64) << 8u64) | ((rj - 1u64) << 16u64) }
+        }
+    }
+    if opc == EG_SUB {
+        let lj : u64 = seg_form_is_shl_var(EG_A[top])
+        let rj : u64 = seg_form_is_shl_var(EG_B[top])
+        if lj != 0u64 {
+            if seg_form_is_var(EG_B[top]) == 1u32 { return SMP_SUBK | ((lj - 1u64) << 8u64) }
+            if rj != 0u64 { return SMP_2SS | ((lj - 1u64) << 8u64) | ((rj - 1u64) << 16u64) }
+        }
+    }
+    return SMP_IMUL   /* proven + cost-winning but >2 shift terms -> imul (sound; not byte-reducible here) */
+}
+
+/* ============================================================================================================
+ * MAGIC-NUMBER DIVISION (DOCS/III-EIDOS plan Phase 5) -- the optimization the hand peephole could NEVER do:
+ * unsigned x / d (d not a power of two) -> mulhi(x, m) >> s.  The magic (m, s) is the Granlund-Montgomery
+ * construction (Hacker's Delight Fig 10-2, N=64); GM's theorem GUARANTEES x/d == mulhi(x,m)>>s for ALL
+ * x in [0,2^64) when no add-correction is needed.  The SOUNDNESS gate is the closed-form GM bound, checked
+ * here in pure integer arithmetic (NO SAT, which is infeasible for a 64-bit divide miter): the construction
+ * is valid iff mulhi(m,d) == 2^s AND 0 < (m*d mod 2^64) <= 2^s.  Add-correction divisors fall back to divq. */
+
+/* high 64 bits of a*b (no 128-bit type; 32-bit half products). */
+fn seg_mulhi64(a: u64, b: u64) -> u64 {
+    let alo : u64 = a & 4294967295u64
+    let ahi : u64 = a >> 32u64
+    let blo : u64 = b & 4294967295u64
+    let bhi : u64 = b >> 32u64
+    let p0 : u64 = alo * blo
+    let p1 : u64 = alo * bhi
+    let p2 : u64 = ahi * blo
+    let p3 : u64 = ahi * bhi
+    let mid : u64 = (p0 >> 32u64) + (p1 & 4294967295u64) + (p2 & 4294967295u64)
+    return p3 + (p1 >> 32u64) + (p2 >> 32u64) + (mid >> 32u64)
+}
+
+var SDIV_M : [u64; 1]
+var SDIV_S : [u64; 1]
+var SDIV_A : [u64; 1]
+fn seg_div_magic_m() -> u64 @export { return SDIV_M[0u64] }
+fn seg_div_shift() -> u64 @export { return SDIV_S[0u64] }
+/* (SDIV_A / add-correction is consumed internally by seg_div_plan -> SDP_GENERAL fallback; no exported accessor:
+ *  cg_r3 never needs the flag, and a dead export is exactly the dark-surface the build gate forbids.) */
+
+/* magicu: sets SDIV_M/SDIV_S/SDIV_A for unsigned divisor d (d>=2, not pow2).  The construction IS the proof. */
+fn seg_div_magicu(d: u64) -> i32 {
+    let two63   : u64 = 9223372036854775808u64    /* 2^63 = 2^(N-1) */
+    let two63m1 : u64 = 9223372036854775807u64    /* 2^63 - 1 */
+    let umax    : u64 = 18446744073709551615u64   /* 2^64 - 1 */
+    SDIV_A[0u64] = 0u64
+    let negd : u64 = 0u64 - d
+    let nc : u64 = umax - (negd % d)
+    let mut p : u64 = 63u64
+    let mut q1 : u64 = two63 / nc
+    let mut r1 : u64 = two63 - q1 * nc
+    let mut q2 : u64 = two63m1 / d
+    let mut r2 : u64 = two63m1 - q2 * d
+    let mut delta : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        p = p + 1u64
+        if r1 >= nc - r1 { q1 = q1 + q1 + 1u64  r1 = r1 + r1 - nc } else { q1 = q1 + q1  r1 = r1 + r1 }
+        if (r2 + 1u64) >= (d - r2) {
+            if q2 >= two63m1 { SDIV_A[0u64] = 1u64 }
+            q2 = q2 + q2 + 1u64
+            r2 = r2 + r2 + 1u64 - d
+        } else {
+            if q2 >= two63 { SDIV_A[0u64] = 1u64 }
+            q2 = q2 + q2
+            r2 = r2 + r2 + 1u64
+        }
+        delta = d - 1u64 - r2
+        go = 0u32
+        if p < 128u64 {
+            if q1 < delta { go = 1u32 }
+            if q1 == delta { if r1 == 0u64 { go = 1u32 } }
+        }
+    }
+    SDIV_M[0u64] = q2 + 1u64
+    SDIV_S[0u64] = p - 64u64
+    return 0i32
+}
+
+const SDP_GENERAL : u64 = 0u64   /* divq (variable divisor / add-correction / bound fails) */
+const SDP_SHR     : u64 = 1u64   /* x >> k  (d = 2^k; k in bits 8..15) */
+const SDP_MAGIC   : u64 = 2u64   /* mulhi(x,m) >> s  (m via seg_div_magic_m, s via seg_div_shift) */
+
+/* the division emit plan cg_r3 consults for `x / d` (d a constant).  PROVEN: SDP_MAGIC is returned only when
+ * the GM bound holds, so the reduction is certified for ALL x.  SDP_SHR for pow2; else SDP_GENERAL (divq). */
+fn seg_div_plan(d: u64) -> u64 @export {
+    if d < 2u64 { return SDP_GENERAL }
+    if (d & (d - 1u64)) == 0u64 { return SDP_SHR | (seg_pow2_k(d) << 8u64) }
+    seg_div_magicu(d)
+    if SDIV_A[0u64] == 1u64 { return SDP_GENERAL }      /* add-correction -> divq (sound) */
+    let m : u64 = SDIV_M[0u64]
+    let s : u64 = SDIV_S[0u64]
+    if s >= 64u64 { return SDP_GENERAL }
+    /* GM BOUND (the proof): mulhi(m,d) == 2^s AND 0 < (m*d mod 2^64) <= 2^s. */
+    let ps : u64 = 1u64 << s
+    let hi : u64 = seg_mulhi64(m, d)
+    let lo : u64 = m * d
+    if hi != ps { return SDP_GENERAL }
+    if lo == 0u64 { return SDP_GENERAL }
+    if lo > ps { return SDP_GENERAL }
+    return SDP_MAGIC
 }
 
 /* THE LOAD-BEARING WITNESS: EXECUTE the extracted form's actual arithmetic on a concrete x.  This is not a

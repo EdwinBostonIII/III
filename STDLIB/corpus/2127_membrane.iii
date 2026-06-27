@@ -1,0 +1,57 @@
+/* STDLIB/corpus/2127_membrane.iii -- the Ripple-Merge Phase II: the orbiting Ω satellite + the LAZY MEMBRANE.
+ * Proves: the proof lives at map[H] (keyed by the real engine's content-address), NOT in the hash; a VACUOUS event
+ * verifies FREE; a CRYSTAL event verifies via the EXISTING forge-resistant crystal_verify (a real minted crystal
+ * passes; crystal_verify(0) fails -> the membrane rejects an unverifiable proof); an absent obligation rejects.
+ * 99 = lazy proof (Gate 2) + satellite (Gate 3), encapsulating omnia::crystal, no new MAC. */
+module corpus_2127_membrane
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn mbr_reset() -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_vacuous(h_ptr: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_crystal(h_ptr: u64, crystal_id: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_tag(h_ptr: u64) -> u32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_verify(h_ptr: u64) -> u32 from "membrane.iii"
+
+var AA : [u8; 32]   var BB : [u8; 32]   var SITE : [u8; 32]
+var H1 : [u8; 32]   var H2 : [u8; 32]   var H3 : [u8; 32]   var H4 : [u8; 32]
+
+fn fill(p: u64, seed: u32) -> i32 { let pp : *u8 = p as *u8   let mut i : u64 = 0u64   while i < 32u64 { pp[i] = ((seed + (i as u32)) & 255u32) as u8   i = i + 1u64 }   return 0i32 }
+
+fn main() -> u64 {
+    mbr_reset()
+    fill((&AA[0u64]) as u64, 1u32)   fill((&BB[0u64]) as u64, 200u32)   fill((&SITE[0u64]) as u64, 77u32)
+    /* distinct content-addresses from the real engine */
+    inv_address(0u32, (&AA[0u64]) as u64, (&BB[0u64]) as u64, (&H1[0u64]) as u64)   /* will be VACUOUS */
+    inv_address(1u32, (&BB[0u64]) as u64, (&AA[0u64]) as u64, (&H2[0u64]) as u64)   /* will be CRYSTAL (valid) */
+    inv_address(0u32, (&AA[0u64]) as u64, (&AA[0u64]) as u64, (&H3[0u64]) as u64)   /* will be CRYSTAL (invalid) */
+    inv_address(1u32, (&AA[0u64]) as u64, (&BB[0u64]) as u64, (&H4[0u64]) as u64)   /* never set -> absent */
+
+    /* (1) VACUOUS verifies free */
+    mbr_set_vacuous((&H1[0u64]) as u64)
+    if mbr_tag((&H1[0u64]) as u64) != 1u32 { return 1u64 }
+    let v1 : u32 = mbr_verify((&H1[0u64]) as u64)
+    if v1 != 1u32 { return 2u64 }
+
+    /* (2) CRYSTAL with a REAL minted crystal verifies via crystal_verify */
+    let cid : u64 = crystal_mint(5u32, (&SITE[0u64]) as u64, 1u64, 0u64)
+    let cok : u8 = crystal_verify(cid)
+    if cok != 1u8 { return 3u64 }                                    /* sanity: the mint is valid */
+    mbr_set_crystal((&H2[0u64]) as u64, cid)
+    if mbr_tag((&H2[0u64]) as u64) != 2u32 { return 4u64 }
+    let v2 : u32 = mbr_verify((&H2[0u64]) as u64)
+    if v2 != 1u32 { return 5u64 }                                    /* crystal admit */
+
+    /* (3) CRYSTAL with an unverifiable id (0 = CRYSTAL_INVALID) -> membrane rejects */
+    mbr_set_crystal((&H3[0u64]) as u64, 0u64)
+    let v3 : u32 = mbr_verify((&H3[0u64]) as u64)
+    if v3 != 0u32 { return 6u64 }                                    /* forged proof rejected */
+
+    /* (4) absent obligation -> reject */
+    if mbr_tag((&H4[0u64]) as u64) != 0u32 { return 7u64 }
+    let v4 : u32 = mbr_verify((&H4[0u64]) as u64)
+    if v4 != 0u32 { return 8u64 }
+
+    return 99u64
+}

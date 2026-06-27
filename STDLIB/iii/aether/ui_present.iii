@@ -1,0 +1,56 @@
+/* STDLIB/iii/aether/ui_present.iii -- III-GLASS present layer.  Gets a III framebuffer onto something you can
+ * SEE, NIH.  ui_save_bmp writes a 32-bit top-down BMP: because a 0xAARRGGBB u32 stored little-endian is the byte
+ * order B,G,R,A -- exactly a 32bpp Windows DIB -- the framebuffer bytes ARE the BMP pixel array, written raw with
+ * no per-pixel conversion.  (The real-time window layer reuses these same bytes via a gdi32 blit.)  Only the OS
+ * file ABI (kernel32) is touched -- no imported library. */
+module aether_ui_present
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+var BMP_HDR     : [u8; 54]
+var BMP_WRITTEN : [u32; 1]
+
+fn ui_wr8(buf: u64, off: u64, v: u32) -> i32 { let p : *u8 = (buf + off) as *u8  p[0u64] = (v & 255u32) as u8  return 0i32 }
+fn ui_wr16(buf: u64, off: u64, v: u32) -> i32 { ui_wr8(buf, off, v)  ui_wr8(buf, off + 1u64, v >> 8u32)  return 0i32 }
+fn ui_wr32(buf: u64, off: u64, v: u32) -> i32 {
+    ui_wr8(buf, off, v)
+    ui_wr8(buf, off + 1u64, v >> 8u32)
+    ui_wr8(buf, off + 2u64, v >> 16u32)
+    ui_wr8(buf, off + 3u64, v >> 24u32)
+    return 0i32
+}
+
+/* write the framebuffer (w*h ARGB) to `path` (a NUL-terminated C string) as a 32-bit BMP.  Returns 0 on success. */
+fn ui_save_bmp(fb: u64, w: u32, h: u32, path: u64) -> i32 @export {
+    let hb : u64 = &BMP_HDR as u64
+    let imgsize  : u32 = (w * h) * 4u32
+    let filesize : u32 = 54u32 + imgsize
+    /* BITMAPFILEHEADER (14) */
+    ui_wr8(hb, 0u64, 66u32)            /* 'B' */
+    ui_wr8(hb, 1u64, 77u32)            /* 'M' */
+    ui_wr32(hb, 2u64, filesize)
+    ui_wr32(hb, 6u64, 0u32)            /* reserved */
+    ui_wr32(hb, 10u64, 54u32)          /* offset to pixels */
+    /* BITMAPINFOHEADER (40) */
+    ui_wr32(hb, 14u64, 40u32)          /* header size */
+    ui_wr32(hb, 18u64, w)              /* width */
+    ui_wr32(hb, 22u64, 0u32 - h)       /* negative height = top-down rows */
+    ui_wr16(hb, 26u64, 1u32)           /* planes */
+    ui_wr16(hb, 28u64, 32u32)          /* bpp */
+    ui_wr32(hb, 30u64, 0u32)           /* BI_RGB */
+    ui_wr32(hb, 34u64, imgsize)
+    ui_wr32(hb, 38u64, 2835u32)        /* x pixels/metre (~72 dpi) */
+    ui_wr32(hb, 42u64, 2835u32)        /* y pixels/metre */
+    ui_wr32(hb, 46u64, 0u32)           /* palette colours */
+    ui_wr32(hb, 50u64, 0u32)           /* important colours */
+    /* GENERIC_WRITE=0x40000000, CREATE_ALWAYS=2, FILE_ATTRIBUTE_NORMAL=0x80 */
+    let hf : u64 = CreateFileA(path, 1073741824u32, 0u32, 0u64, 2u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 15i32 }   /* INVALID_HANDLE_VALUE */
+    let wp : u64 = &BMP_WRITTEN as u64
+    WriteFile(hf, hb, 54u32, wp, 0u64)
+    WriteFile(hf, fb, imgsize, wp, 0u64)
+    CloseHandle(hf)
+    return 0i32
+}

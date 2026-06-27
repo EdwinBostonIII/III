@@ -1,0 +1,82 @@
+/* STDLIB/corpus/2067_kinduct_coverage.iii -- exercises the rest of the boundless-k-induction public API (the
+ * predicate algebra ser_kinduct_sym exposes for building custom invariants, plus the seeded fuzzer and the
+ * modular-pow2 test).  Each export is checked by CONCRETE evaluation (sks_base) or count.  99 = every public
+ * entry point computes correctly. */
+module corpus_2067_kinduct_coverage
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_eq(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_bit(x: u32, k: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_nonzero(y: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_iszero(y: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_and2(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_or2(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_not1(a: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_base(p_root: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sp_obs_reset() -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_push(v: u64) -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_count() -> u32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn au_modulus_is_pow2() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_modulus() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn sp_fuzz_seeded(t_root: u32, statevar: u32, inputvar: u32, init: u64, nsteps: u32, seed: u64) -> u32 from "ser_petri.iii"
+
+/* evaluate a predicate (built over var 0) at a concrete state. */
+fn at(p: u32, v: u64) -> u8 { return sks_base(p, 0u32, v) }
+
+fn main() -> u64 {
+    /* sks_eq: "x == 5" true at 5, false at 4. */
+    bb_reset(64u64)
+    let x : u32 = bb_var(0u32)
+    if at(sks_eq(x, bb_const(5u64)), 5u64) != 1u8 { return 1u64 }
+    bb_reset(64u64)
+    let x2 : u32 = bb_var(0u32)
+    if at(sks_eq(x2, bb_const(5u64)), 4u64) != 0u8 { return 2u64 }
+    /* sks_bit: "bit 3 set" true at 8, false at 0. */
+    bb_reset(64u64)
+    let x3 : u32 = bb_var(0u32)
+    if at(sks_bit(x3, 3u64), 8u64) != 1u8 { return 3u64 }
+    bb_reset(64u64)
+    let x4 : u32 = bb_var(0u32)
+    if at(sks_bit(x4, 3u64), 0u64) != 0u8 { return 4u64 }
+    /* sks_nonzero / sks_iszero. */
+    bb_reset(64u64)
+    let x5 : u32 = bb_var(0u32)
+    if at(sks_nonzero(x5), 7u64) != 1u8 { return 5u64 }
+    if at(sks_iszero(x5), 0u64) != 1u8 { return 6u64 }
+    /* sks_and2 / sks_or2 / sks_not1 on bit predicates: (bit0 & bit1) at 3 -> 1, at 1 -> 0; (bit0 | bit1) at 1
+     * -> 1, at 0 -> 0; ~bit0 at 0 -> 1, at 1 -> 0. */
+    bb_reset(64u64)
+    let x6 : u32 = bb_var(0u32)
+    if at(sks_and2(sks_bit(x6, 0u64), sks_bit(x6, 1u64)), 3u64) != 1u8 { return 7u64 }
+    bb_reset(64u64)
+    let x7 : u32 = bb_var(0u32)
+    if at(sks_and2(sks_bit(x7, 0u64), sks_bit(x7, 1u64)), 1u64) != 0u8 { return 8u64 }
+    bb_reset(64u64)
+    let x8 : u32 = bb_var(0u32)
+    if at(sks_or2(sks_bit(x8, 0u64), sks_bit(x8, 1u64)), 1u64) != 1u8 { return 9u64 }
+    bb_reset(64u64)
+    let x9 : u32 = bb_var(0u32)
+    if at(sks_not1(sks_bit(x9, 0u64)), 0u64) != 1u8 { return 10u64 }
+
+    /* sp_obs_count + au_modulus_is_pow2: {0,4,8} -> count 3, modulus 4 (pow2); {0,3,6} -> modulus 3 (not pow2). */
+    sp_obs_reset()
+    sp_obs_push(0u64)  sp_obs_push(4u64)  sp_obs_push(8u64)
+    if sp_obs_count() != 3u32 { return 11u64 }
+    if au_modulus_is_pow2() != 1u32 { return 12u64 }
+    sp_obs_reset()
+    sp_obs_push(0u64)  sp_obs_push(3u64)  sp_obs_push(6u64)
+    if au_modulus() != 3u64 { return 13u64 }
+    if au_modulus_is_pow2() != 0u32 { return 14u64 }
+
+    /* sp_fuzz_seeded: T = x + input over (statevar 0, inputvar 1); a seeded walk records nsteps observations. */
+    bb_reset(64u64)
+    let sx : u32 = bb_var(0u32)
+    let si : u32 = bb_var(1u32)
+    let st : u32 = bb_add(sx, si)
+    if sp_fuzz_seeded(st, 0u32, 1u32, 0u64, 10u32, 12345u64) != 10u32 { return 15u64 }
+
+    return 99u64
+}

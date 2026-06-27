@@ -1,0 +1,128 @@
+/* STDLIB/iii/aether/ui_raster.iii -- III-GLASS L2: the NIH rasterizer.  III pushes pixels into an ARGB
+ * framebuffer with ZERO imported libraries -- every primitive is pure III, bounds-clamped, and KAT-verifiable,
+ * so the drawing layer is itself a proven organ, not trusted glue.  A framebuffer is a flat u32[w*h] of
+ * 0xAARRGGBB; pixel (x,y) lives at element y*w + x.  Higher layers (text, widgets, the III self-view) and the
+ * thin OS present (gdi32 blit) stand on exactly these calls. */
+module aether_ui_raster
+
+/* raw write/read -- caller guarantees x<w, y<h (the hot path; clipped variants below for unchecked coords). */
+fn ui_put(buf: u64, w: u32, x: u32, y: u32, color: u32) -> i32 @export {
+    let p : *u32 = buf as *u32
+    p[(((y * w) + x)) as u64] = color
+    return 0i32
+}
+fn ui_get(buf: u64, w: u32, x: u32, y: u32) -> u32 @export {
+    let p : *u32 = buf as *u32
+    return p[(((y * w) + x)) as u64]
+}
+
+/* clear the whole surface to one colour. */
+fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 @export {
+    let p : *u32 = buf as *u32
+    let n : u64 = (w as u64) * (h as u64)
+    let mut i : u64 = 0u64
+    while i < n { p[i] = color  i = i + 1u64 }
+    return 0i32
+}
+
+/* filled rectangle, clamped to the surface (a rect partly off-screen draws only its visible part). */
+fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 @export {
+    let p  : *u32 = buf as *u32
+    let xe : u32 = x + rw
+    let ye : u32 = y + rh
+    let mut yy : u32 = y
+    while yy < ye {
+        if yy < h {
+            let row : u32 = yy * w
+            let mut xx : u32 = x
+            while xx < xe {
+                if xx < w { p[((row + xx)) as u64] = color }
+                xx = xx + 1u32
+            }
+        }
+        yy = yy + 1u32
+    }
+    return 0i32
+}
+fn ui_hline(buf: u64, w: u32, h: u32, x: u32, y: u32, len: u32, color: u32) -> i32 @export { return ui_fill_rect(buf, w, h, x, y, len, 1u32, color) }
+fn ui_vline(buf: u64, w: u32, h: u32, x: u32, y: u32, len: u32, color: u32) -> i32 @export { return ui_fill_rect(buf, w, h, x, y, 1u32, len, color) }
+
+/* one-pixel outline rectangle (four edges). */
+fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 @export {
+    ui_hline(buf, w, h, x, y, rw, color)
+    ui_hline(buf, w, h, x, (y + rh) - 1u32, rw, color)
+    ui_vline(buf, w, h, x, y, rh, color)
+    ui_vline(buf, w, h, (x + rw) - 1u32, y, rh, color)
+    return 0i32
+}
+
+/* alpha-OVER composite: src 0xAARRGGBB onto the dst pixel, result opaque (out = src*a + dst*(255-a) per channel). */
+fn ui_blend(buf: u64, w: u32, x: u32, y: u32, argb: u32) -> i32 @export {
+    let p   : *u32 = buf as *u32
+    let idx : u64 = (((y * w) + x)) as u64
+    let dst : u32 = p[idx]
+    let a   : u32 = (argb >> 24u32) & 255u32
+    let na  : u32 = 255u32 - a
+    let sr  : u32 = (argb >> 16u32) & 255u32
+    let sg  : u32 = (argb >> 8u32) & 255u32
+    let sb  : u32 = argb & 255u32
+    let dr  : u32 = (dst >> 16u32) & 255u32
+    let dg  : u32 = (dst >> 8u32) & 255u32
+    let db  : u32 = dst & 255u32
+    let orr : u32 = ((sr * a) + (dr * na)) / 255u32
+    let og  : u32 = ((sg * a) + (dg * na)) / 255u32
+    let ob  : u32 = ((sb * a) + (db * na)) / 255u32
+    p[idx] = (255u32 << 24u32) | (orr << 16u32) | (og << 8u32) | ob
+    return 0i32
+}
+
+/* clipped signed-coordinate pixel (the line primitive draws through this) -- internal. */
+fn ui_put_c(buf: u64, w: u32, h: u32, x: i32, y: i32, color: u32) -> i32 {
+    let xv : i32 = x
+    let yv : i32 = y
+    if xv < 0i32 { return 0i32 }
+    if yv < 0i32 { return 0i32 }
+    let xu : u32 = xv as u32
+    let yu : u32 = yv as u32
+    if xu >= w { return 0i32 }
+    if yu >= h { return 0i32 }
+    let p : *u32 = buf as *u32
+    p[(((yu * w) + xu)) as u64] = color
+    return 0i32
+}
+fn ui_iabs(v: i32) -> i32 { let vv : i32 = v  if vv < 0i32 { return 0i32 - vv }  return vv }
+
+/* Bresenham line (x0,y0)->(x1,y1), all-octant, clipped.  guard bounds the loop so a bad input can never spin. */
+fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 @export {
+    let mut x : i32 = x0
+    let mut y : i32 = y0
+    let dx : i32 = ui_iabs(x1 - x0)
+    let dy : i32 = 0i32 - ui_iabs(y1 - y0)
+    let mut sx : i32 = 1i32
+    let ax0 : i32 = x0
+    let ax1 : i32 = x1
+    if ax0 >= ax1 { sx = 0i32 - 1i32 }
+    let mut sy : i32 = 1i32
+    let ay0 : i32 = y0
+    let ay1 : i32 = y1
+    if ay0 >= ay1 { sy = 0i32 - 1i32 }
+    let mut err : i32 = dx + dy
+    let mut done : u32 = 0u32
+    let mut guard : u32 = 0u32
+    while done == 0u32 {
+        ui_put_c(buf, w, h, x, y, color)
+        let cx : i32 = x
+        let cy : i32 = y
+        if cx == x1 { if cy == y1 { done = 1u32 } }
+        if done == 0u32 {
+            let e2 : i32 = err + err
+            let g1 : i32 = e2
+            if g1 >= dy { err = err + dy  x = x + sx }
+            let g2 : i32 = e2
+            if g2 <= dx { err = err + dx  y = y + sy }
+        }
+        guard = guard + 1u32
+        if guard > 200000u32 { done = 1u32 }
+    }
+    return 0i32
+}

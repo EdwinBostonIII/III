@@ -1187,8 +1187,18 @@ static int mul_2ss_m(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
 }
 static int mul_2ss_j(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
 {
+    /* GUARDS (twin of cg_r3.iii's r3_mul_2ss_j + sibling mul_2sh_j): WITHOUT this op/EXPR_INT/admit gate
+     * the BINARY entry calls mul_2ss_j unconditionally on EVERY binary node, reads rhs as a constant, and
+     * the trailing-zero loop `while ((s & 1) == 0)` SPINS FOREVER on a constant-0 operand -- the iiis-0
+     * hang on any `x*0 / x+0 / x>0 / ...` (and wrong codegen / a UB garbage read for non-MUL operands).
+     * The sibling mul_2sh_j gated; this rule (2-shift-subtract, commit 8f726177) shipped without it, so a
+     * fresh iiis-0 hung on the first compare-with-0 -- masked only because the prebuilt iiis-0 predates it.
+     * Restoring the gate makes mul_2ss_j byte-identical to r3_mul_2ss_j (iiis-0 == iiis-2). */
+    if (n->u.binary.op != III_BIN_MUL) return 0;
     const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
     uint64_t v = rhs->u.int_.value;
+    if (!mul_2ss_admit_c(v)) return 0;
     int c = 0; uint64_t t = v;
     while (t != 0) { if ((t & 1) != 0) c++; t >>= 1; }
     int m = 0; uint64_t s = v;
@@ -1618,8 +1628,23 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                     if (expr_is_u32(cg, n->u.binary.lhs))
                         emit_line(cg, "    movl %%eax, %%eax");
                     break;
-                case III_BIN_DIV: emit_line(cg, "    cqto\n    idivq %%rcx"); break;
-                case III_BIN_MOD: emit_line(cg, "    cqto\n    idivq %%rcx\n    movq %%rdx, %%rax"); break;
+                case III_BIN_DIV:
+                    /* u64-division signedness FIX (twin of cg_r3.iii op==4 IDIV/DIVU split, byte-identical):
+                     * an UNSIGNED div must zero RDX then `divq`, NOT cqto+idivq (which reads a high-bit u64
+                     * dividend as negative, e.g. 0xFFFF..FE/2 wrongly -> MAX).  Branch on either-operand-signed,
+                     * emitting the exact strings cg_r3.iii's R3_STR_IDIV / R3_STR_DIVU carry. */
+                    if (expr_is_signed(cg, n->u.binary.lhs) || expr_is_signed(cg, n->u.binary.rhs))
+                        emit_line(cg, "    cqto\n    idivq %%rcx");
+                    else
+                        emit_line(cg, "    xorl %%edx, %%edx\n    divq %%rcx");
+                    break;
+                case III_BIN_MOD:
+                    /* twin of cg_r3.iii op==5 IDIVMOD / DIVUMOD split (byte-identical). */
+                    if (expr_is_signed(cg, n->u.binary.lhs) || expr_is_signed(cg, n->u.binary.rhs))
+                        emit_line(cg, "    cqto\n    idivq %%rcx\n    movq %%rdx, %%rax");
+                    else
+                        emit_line(cg, "    xorl %%edx, %%edx\n    divq %%rcx\n    movq %%rdx, %%rax");
+                    break;
                 case III_BIN_AND: emit_line(cg, "    andq %%rcx, %%rax"); break;
                 case III_BIN_OR:  emit_line(cg, "    orq %%rcx, %%rax");  break;
                 case III_BIN_XOR: emit_line(cg, "    xorq %%rcx, %%rax"); break;

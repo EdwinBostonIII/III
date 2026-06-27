@@ -1,0 +1,62 @@
+/* STDLIB/corpus/2126_involution.iii -- the Ripple-Merge Phase I core engine, falsified.
+ * Proves omnia/involution is: content-addressed (deterministic + distinct), a PROVABLE involution (flip self-inverse,
+ * non-trivial), DISPOSER-GATED (verdict 0 refuses, 1 admits; a name in the verb slot is rejected), and a
+ * DETERMINISTIC witness fold (identical history -> identical root; distinct history -> distinct root).
+ * 99 = the canonical {BELOW,REFLECT} engine holds at the metal. */
+module corpus_2126_involution
+
+extern @abi(c-msvc-x64) fn inv_reset() -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_emit(verb: u32, a_ptr: u64, b_ptr: u64, disposer_verdict: u32, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_flip(verb: u32) -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_root(out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_count() -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_verb_at(idx: u32) -> u32 from "involution.iii"
+
+var A1 : [u8; 32]   var B1 : [u8; 32]
+var H1 : [u8; 32]   var H2 : [u8; 32]
+var R1 : [u8; 32]   var R2 : [u8; 32]   var R3 : [u8; 32]
+
+fn fill(p: u64, seed: u32) -> i32 { let pp : *u8 = p as *u8   let mut i : u64 = 0u64   while i < 32u64 { pp[i] = ((seed + (i as u32)) & 255u32) as u8   i = i + 1u64 }   return 0i32 }
+fn eq32(p: u64, q: u64) -> u32 { let pp : *u8 = p as *u8   let qq : *u8 = q as *u8   let mut i : u64 = 0u64   while i < 32u64 { if pp[i] != qq[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+
+fn main() -> u64 {
+    inv_reset()
+    fill((&A1[0u64]) as u64, 10u32)
+    fill((&B1[0u64]) as u64, 200u32)
+
+    /* (1) content-address: deterministic, and distinct under any field change */
+    inv_address(0u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, (&H1[0u64]) as u64)
+    inv_address(0u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, (&H2[0u64]) as u64)
+    if eq32((&H1[0u64]) as u64, (&H2[0u64]) as u64) != 1u32 { return 1u64 }      /* same input -> same H */
+    inv_address(1u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, (&H2[0u64]) as u64)
+    if eq32((&H1[0u64]) as u64, (&H2[0u64]) as u64) == 1u32 { return 2u64 }      /* verb change -> different H */
+
+    /* (2) the involution: flip self-inverse AND non-trivial */
+    if inv_flip(inv_flip(0u32)) != 0u32 { return 3u64 }
+    if inv_flip(0u32) != 1u32 { return 4u64 }
+
+    /* (3) the disposer gate + the name-gate */
+    if inv_count() != 0u32 { return 5u64 }
+    if inv_emit(0u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, 0u32, (&H1[0u64]) as u64) != (0i32 - 2i32) { return 6u64 }  /* refused */
+    if inv_count() != 0u32 { return 7u64 }                                       /* refusal records nothing */
+    if inv_emit(0u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, 1u32, (&H1[0u64]) as u64) != 0i32 { return 8u64 }          /* admitted -> idx 0 */
+    if inv_count() != 1u32 { return 9u64 }
+    if inv_verb_at(0u32) != 0u32 { return 10u64 }
+    if inv_emit(99u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, 1u32, (&H1[0u64]) as u64) != (0i32 - 1i32) { return 11u64 } /* name -> rejected */
+
+    /* (4) the witness fold: append the INVOLUTION (REFLECT,b,a); identical history -> identical root */
+    inv_emit(1u32, (&B1[0u64]) as u64, (&A1[0u64]) as u64, 1u32, (&H2[0u64]) as u64)   /* the inverse ripple, appended */
+    inv_root((&R1[0u64]) as u64)
+    inv_reset()
+    inv_emit(0u32, (&A1[0u64]) as u64, (&B1[0u64]) as u64, 1u32, (&H1[0u64]) as u64)
+    inv_emit(1u32, (&B1[0u64]) as u64, (&A1[0u64]) as u64, 1u32, (&H2[0u64]) as u64)
+    inv_root((&R2[0u64]) as u64)
+    if eq32((&R1[0u64]) as u64, (&R2[0u64]) as u64) != 1u32 { return 12u64 }     /* deterministic fold */
+    inv_reset()
+    inv_emit(0u32, (&A1[0u64]) as u64, (&A1[0u64]) as u64, 1u32, (&H1[0u64]) as u64)   /* a different history */
+    inv_root((&R3[0u64]) as u64)
+    if eq32((&R3[0u64]) as u64, (&R2[0u64]) as u64) == 1u32 { return 13u64 }     /* distinct history -> distinct witness */
+
+    return 99u64
+}

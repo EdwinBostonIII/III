@@ -1,0 +1,56 @@
+/* STDLIB/corpus/2089_constraint_layout.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 2: bb_equal VERIFIES a
+ * parametric affine layout over all screen widths.
+ *
+ * SCOPE (honest, conscience): this is a VERIFICATION, not a constraint SOLVER.  w_flex=W-L-R is HAND-derived, and
+ * bb_equal checks the (trivial) residual L+(W-L-R)+R==W over all W.  Cassowary's hard part -- SOLVING an inequality
+ * system and detecting genuine conflicts within it -- is NOT done here; the "conflict" case is a single hand-pinned
+ * value.  What it honestly shows: bb_equal gives an ALL-W proof of a GIVEN affine layout (not an opaque single-W
+ * fit), and an unsatisfiable equation is caught as bb_equal=0 (a witness exists), never a guessed layout.
+ *
+ * The two failures the industry hit:
+ *   (a) PERFORMANCE CLIFFS -- the solver degraded to O(n^3) when re-solving on every resize.
+ *   (b) OPAQUE FAILURE     -- conflicting constraints produced an arbitrary layout no human could debug.
+ * III's antidote is the bit-blast membrane.  The parametric solution is a CLOSED FORM of the width W (so a resize
+ * is O(1) -- evaluate, never re-solve: no cliff), and bb_equal PROVES the solution satisfies the constraints over
+ * ALL 2^64 widths (so the layout is KNOWN correct, never opaque).  A conflict makes the disequality SAT -> caught.
+ *
+ * Layout: [ left=L ][ flex ][ right=R ], flex fills the slack: w_flex(W) = W - L - R.  The fill constraint is
+ * x_right + w_right == W where x_right = L + w_flex, w_right = R.  L=200, R=150.
+ * 99 = the layout is PROVEN to fill for every W, the conflict is CAUGHT, and re-eval is O(1). */
+module corpus_2089_constraint_layout
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+/* the closed-form layout solution -- O(1), evaluated on resize, never re-solved. */
+fn w_flex(w: u64) -> u64 { return w - 200u64 - 150u64 }   /* L=200, R=150 */
+fn x_right(w: u64) -> u64 { return 200u64 + w_flex(w) }
+fn fills(w: u64) -> u32 { if (x_right(w) + 150u64) == w { return 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    /* === the SOUND layout: prove x_right + w_right == W for ALL W (no opaque failure) === */
+    bb_reset(64u64)
+    let w  : u32 = bb_var(0u32)                                  /* the screen width, symbolic */
+    let wf : u32 = bb_sub(bb_sub(w, bb_const(200u64)), bb_const(150u64))   /* w_flex = W - L - R */
+    let xr : u32 = bb_add(bb_const(200u64), wf)                  /* x_right = L + w_flex */
+    let lhs: u32 = bb_add(xr, bb_const(150u64))                  /* x_right + w_right */
+    if bb_equal(lhs, w) != 1u8 { return 1u64 }                  /* PROVEN: fills for every screen width */
+
+    /* === the CONFLICT: pin the flex to a fixed 400 (ignore the slack) -> cannot fill for all W -> CAUGHT === */
+    bb_reset(64u64)
+    let w2 : u32 = bb_var(0u32)
+    let xr2: u32 = bb_add(bb_const(200u64), bb_const(400u64))    /* x_right = L + FIXED flex */
+    let lhs2: u32 = bb_add(xr2, bb_const(150u64))               /* = 750, independent of W */
+    if bb_equal(lhs2, w2) != 0u8 { return 2u64 }               /* 750 == W only at one W -> NOT proven -> witness */
+
+    /* === O(1) resize: evaluate the closed form at three real screen sizes -- no re-solve, exact fill === */
+    if fills(800u64)  != 1u32 { return 3u64 }
+    if fills(1280u64) != 1u32 { return 4u64 }
+    if fills(1920u64) != 1u32 { return 5u64 }
+
+    return 99u64
+}

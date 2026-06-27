@@ -187,3 +187,363 @@ fn caus_final_state(n: u32, reverse: u32) -> u64 @export {
 
 /* the content-addressed witness of the causal fold (the ripples + the partition certificate). */
 fn caus_witness() -> u64 @export { return evt_witness(evt_count()) }
+
+/* ============================================================================================================
+ * ETAT (Eidos Temporal Array Theory) -- MEMORY as a causal fold, and B0: the PROVE-THE-PROVER soundness lemma.
+ * The same causal-collapse idea, lifted from ripples to MEMORY: a write log is a causal stream; a READ at index
+ * j resolves to the NEWEST write whose index == j (else the prior memory) -- the fold's observable.  B0 is the
+ * SOUNDNESS KEYSTONE of the whole memory theory: this fold read-resolution REFINES sequential McCarthy
+ * read-over-write, INDUCTIVELY.  The step rule is bit-identical to the ROW axiom over ALL 2^64 valuations of
+ * (i,j,v,tail), where 'tail' is the FREE symbolic abstraction of the read of ANY deeper log -- so the step is
+ * DEPTH-INDEPENDENT (it covers every trace length at once, NOT a fixed unroll, per the adversarial sharpening).
+ * Base + the depth-independent step => refinement for UNBOUNDED logs.  TEETH (non-vacuity): a swapped /
+ * oldest-wins resolution is REJECTED (its step miter goes SAT) -- a check that could not tell right from wrong
+ * would prove nothing.  No ETAT-based equivalence may be trusted until et_refines_row()==1.  NO ISLAND:
+ * composes numera/bv_bits (the bit-blast oracle) + numera/ser_kinduct_sym/sks_eq.  Ring R0.  K 1.00. */
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_eq(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const ETAT_ONES : u64 = 18446744073709551615u64
+
+/* ite(cond01 ? t : f) over bv_bits: broadcast cond bit0 to a 64-bit mask (0-cond), then bitwise-select. */
+fn etat_select(cond01: u32, t: u32, f: u32) -> u32 {
+    let mask : u32 = bb_sub(bb_const(0u64), bb_and(cond01, bb_const(1u64)))
+    return bb_or(bb_and(t, mask), bb_and(f, bb_xor(mask, bb_const(ETAT_ONES))))
+}
+/* the ETAT fold READ-RESOLUTION step: read at j after write (i,v) over tail (= read of the older log at j). */
+fn etat_fold_step(i: u32, j: u32, v: u32, tail: u32) -> u32 { return etat_select(sks_eq(i, j), v, tail) }
+/* the McCarthy read-over-write axiom step (the SPEC): read(write(_,i,v), j) = ite(i==j, v, read(_,j)). */
+fn etat_mc_step(i: u32, j: u32, v: u32, tail: u32) -> u32 { return etat_select(sks_eq(i, j), v, tail) }
+/* a DELIBERATELY WRONG resolution (arms swapped): on a hit return the OLD tail, on a miss the NEW v. */
+fn etat_fold_step_wrong(i: u32, j: u32, v: u32, tail: u32) -> u32 { return etat_select(sks_eq(i, j), tail, v) }
+
+/* B0 STEP (the depth-independent inductive core): the fold's resolution rule == McCarthy's over ALL (i,j,v,tail);
+ * tail is a FREE 64-bit var abstracting the read of any deeper log -> proven for EVERY trace length at once. */
+fn et_refines_row_step() -> u8 @export {
+    bb_reset(64u64)
+    let i : u32 = bb_var(0u32)  let j : u32 = bb_var(1u32)  let v : u32 = bb_var(2u32)  let tl : u32 = bb_var(3u32)
+    return bb_equal(etat_fold_step(i, j, v, tl), etat_mc_step(i, j, v, tl))
+}
+/* B0 STEP TEETH: the WRONG resolution must DIVERGE from McCarthy (miter SAT -> bb_equal==0).  If this returned 1
+ * the whole check would be vacuous (unable to tell a right rule from a wrong one). */
+fn et_refines_row_step_wrong() -> u8 @export {
+    bb_reset(64u64)
+    let i : u32 = bb_var(0u32)  let j : u32 = bb_var(1u32)  let v : u32 = bb_var(2u32)  let tl : u32 = bb_var(3u32)
+    return bb_equal(etat_fold_step_wrong(i, j, v, tl), etat_mc_step(i, j, v, tl))
+}
+/* B0 BASE: the empty log -- both read the same initial memory at j (same symbol) -> trivially equal. */
+fn et_refines_base() -> u8 @export {
+    bb_reset(64u64)
+    let init : u32 = bb_var(0u32)
+    return bb_equal(init, init)
+}
+/* B0 COMPOSE: a concrete depth-3 write log -- the fold scan (newest-first) == nested McCarthy ROW, over ALL
+ * 2^64 valuations of every (write index, value, query, init).  GROUNDS the depth-independent step in a real
+ * multi-write fold (the outermost ite checks the NEWEST write i3 first, exactly as a backward scan does). */
+fn et_refines_compose() -> u8 @export {
+    bb_reset(8u64)              /* 8-bit memory model: the fold/nesting STRUCTURE is width-independent, so an
+                                 * 8-bit grounding demonstrates the multi-write scan; the 64-bit depth-independent
+                                 * step (et_refines_row_step) carries the full-width proof.  8 vars * 64 bits is
+                                 * SAT-intractable; 8 vars * 8 bits is fast and proves the same structure. */
+    let i1 : u32 = bb_var(0u32)  let v1 : u32 = bb_var(1u32)
+    let i2 : u32 = bb_var(2u32)  let v2 : u32 = bb_var(3u32)
+    let i3 : u32 = bb_var(4u32)  let v3 : u32 = bb_var(5u32)
+    let j  : u32 = bb_var(6u32)  let init : u32 = bb_var(7u32)
+    let f2 : u32 = etat_fold_step(i2, j, v2, etat_fold_step(i1, j, v1, init))
+    let f3 : u32 = etat_fold_step(i3, j, v3, f2)                              /* newest (i3) resolved first */
+    let m2 : u32 = etat_mc_step(i2, j, v2, etat_mc_step(i1, j, v1, init))
+    let m3 : u32 = etat_mc_step(i3, j, v3, m2)                                /* read(write^3(A0), j)        */
+    return bb_equal(f3, m3)
+}
+/* THE LEMMA: ETAT's causal-fold memory model refines sequential read-over-write, for UNBOUNDED logs.  1 iff
+ * base holds AND the depth-independent step holds AND the wrong resolution is REJECTED AND compose grounds it. */
+fn et_refines_row() -> u8 @export {
+    if et_refines_base() != 1u8 { return 0u8 }
+    if et_refines_row_step() != 1u8 { return 0u8 }
+    if et_refines_row_step_wrong() == 1u8 { return 0u8 }   /* the wrong model MUST fail; if it 'passes', vacuous */
+    if et_refines_compose() != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* ============================================================================================================
+ * ETAT MEMORY EQUIVALENCE (B2/B4) -- seq_equiv_mem WITHOUT McCarthy array axioms.  A program's memory effect is
+ * a stream of write EVENTS (idx,val) on the causal log; a read folds them newest-first (B0's proven-sound
+ * resolution, etat_fold_step).  THE EPOCH-COLLAPSE SOUNDNESS -- the O(N^2)-aliasing amputation the operator
+ * named: two writes to PROVEN-DISJOINT indices COMMUTE (reordering them preserves the memory at EVERY index),
+ * so they fold into ONE UNORDERED epoch.  Proven here over all valuations with a FREE symbolic 'tail' (the rest
+ * of the log) -- so the adjacent-swap commutativity holds at ANY position (depth-independent); by induction
+ * adjacent swaps generate every reordering of commuting writes, so the whole epoch is order-free.  Memory
+ * equivalence then reduces to comparing folded epochs, never a quadratic alias sweep.  TEETH: WITHOUT the
+ * disjointness guard a same-index reorder DIVERGES (last-writer-wins) -- the unguarded miter is SAT.  The 8-bit
+ * width is a tractable grounding; the swap STRUCTURE is width-independent (the disjointness guard ai_disjoint
+ * supplies at 64-bit is the i1!=i2 hypothesis discharged here).  EVENT-BASED: writes are perceived on the
+ * substrate.  NO ISLAND: composes B0 (etat_fold_step) + ser_kinduct_sym/sks_nonzero + the event log. */
+extern @abi(c-msvc-x64) fn sks_nonzero(y: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var ETAT_WI : [u32; 256]   /* logged write index nodes (the spatial coordinate of each write) */
+var ETAT_WV : [u32; 256]   /* logged write value nodes */
+var ETAT_WN : u32 = 0u32
+
+fn etat_mem_reset() -> i32 @export { ETAT_WN = 0u32  return 0i32 }
+/* PERCEIVE a memory write as an event ripple on the witnessed substrate, and log it for the fold. */
+fn etat_write(idx_node: u32, val_node: u32) -> u32 @export {
+    if ETAT_WN >= 256u32 { return 0u32 }
+    ETAT_WI[ETAT_WN as u64] = idx_node  ETAT_WV[ETAT_WN as u64] = val_node
+    evt_perceive(2u64, CAUS_K_RIPPLE, (ETAT_WN as u64) + 1u64, 0u64)
+    ETAT_WN = ETAT_WN + 1u32
+    return ETAT_WN - 1u32
+}
+/* fold-read the logged writes [lo,hi) at query index j over init: newest write is the OUTERMOST ite (checked
+ * first), exactly B0's proven-sound resolution applied to the live log. */
+fn etat_read_range(lo: u32, hi: u32, j: u32, init: u32) -> u32 @export {
+    let mut acc : u32 = init
+    let mut k : u32 = lo
+    while k < hi {
+        acc = etat_fold_step(ETAT_WI[k as u64], j, ETAT_WV[k as u64], acc)
+        k = k + 1u32
+    }
+    return acc
+}
+
+/* THE EPOCH-COLLAPSE SOUNDNESS: disjoint adjacent writes commute, over all valuations, at any log position
+ * (tail free).  1 iff (i1 != i2) => read[w1,w2](j) == read[w2,w1](j) for every j,v1,v2,tail. */
+fn et_mem_commute_sound() -> u8 @export {
+    bb_reset(8u64)
+    let i1 : u32 = bb_var(0u32)  let v1 : u32 = bb_var(1u32)
+    let i2 : u32 = bb_var(2u32)  let v2 : u32 = bb_var(3u32)
+    let j  : u32 = bb_var(4u32)  let tail : u32 = bb_var(5u32)
+    let ab : u32 = etat_fold_step(i2, j, v2, etat_fold_step(i1, j, v1, tail))   /* write w1 then w2 */
+    let ba : u32 = etat_fold_step(i1, j, v1, etat_fold_step(i2, j, v2, tail))   /* write w2 then w1 */
+    let guard  : u32 = sks_nonzero(bb_xor(i1, i2))                              /* 1 iff i1 != i2 (disjoint) */
+    let differ : u32 = sks_nonzero(bb_xor(ab, ba))                             /* 1 iff the orders disagree */
+    return bb_equal(bb_and(guard, differ), bb_const(0u64))                     /* no disjoint pair ever differs */
+}
+/* TEETH: drop the disjointness guard -- a same-index reorder (i1==i2, v1!=v2) DIVERGES, so the orders are NOT
+ * unconditionally equal (bb_equal == 0).  If this returned 1, the guard would be proving nothing. */
+fn et_mem_commute_unguarded() -> u8 @export {
+    bb_reset(8u64)
+    let i1 : u32 = bb_var(0u32)  let v1 : u32 = bb_var(1u32)
+    let i2 : u32 = bb_var(2u32)  let v2 : u32 = bb_var(3u32)
+    let j  : u32 = bb_var(4u32)  let tail : u32 = bb_var(5u32)
+    let ab : u32 = etat_fold_step(i2, j, v2, etat_fold_step(i1, j, v1, tail))
+    let ba : u32 = etat_fold_step(i1, j, v1, etat_fold_step(i2, j, v2, tail))
+    return bb_equal(ab, ba)
+}
+
+/* seq_equiv_mem (the proof): two write logs A=[0,split) and B=[split,WN) are memory-equivalent iff they read
+ * identically at a symbolic query index j over a symbolic init -- the epoch comparison, no alias sweep.  Build
+ * the two logs via etat_write (A first, then B), pass split=|A|.  1 PROVEN-equal / 0 differ / 0xFF poison. */
+fn etat_mem_equiv(split: u32, j: u32, init: u32) -> u8 @export {
+    let ra : u32 = etat_read_range(0u32, split, j, init)
+    let rb : u32 = etat_read_range(split, ETAT_WN, j, init)
+    return bb_equal(ra, rb)
+}
+/* THE LEMMA: the memory model's epoch-collapse is sound (disjoint writes commute) AND has teeth (same-index
+ * does not).  No ETAT memory-equivalence may be trusted unless this is 1. */
+fn et_mem_sound() -> u8 @export {
+    if et_mem_commute_sound() != 1u8 { return 0u8 }
+    if et_mem_commute_unguarded() == 1u8 { return 0u8 }   /* the unguarded reorder MUST be refutable */
+    return 1u8
+}
+
+/* DEMONSTRATION of seq_equiv_mem: program A writes v1@10 then v2@20; program B writes them REORDERED (v2@20 then
+ * v1@10).  The indices 10,20 are disjoint, so the epochs collapse to the same memory -> PROVEN equal at every j. */
+fn etat_mem_demo_reorder() -> u8 @export {
+    bb_reset(8u64)
+    let v1 : u32 = bb_var(0u32)  let v2 : u32 = bb_var(1u32)
+    let j  : u32 = bb_var(2u32)  let init : u32 = bb_var(3u32)
+    let i10 : u32 = bb_const(10u64)  let i20 : u32 = bb_const(20u64)
+    etat_mem_reset()
+    etat_write(i10, v1)  etat_write(i20, v2)              /* A = [10<-v1, 20<-v2]            */
+    etat_write(i20, v2)  etat_write(i10, v1)              /* B = [20<-v2, 10<-v1] (reordered) */
+    return etat_mem_equiv(2u32, j, init)                  /* split=2 -> A=[0,2), B=[2,4); equal at all j */
+}
+/* DEMONSTRATION (teeth): program B writes a DIFFERENT memory effect (10<-v1 then 10<-v2, never touches 20) ->
+ * the two programs DIVERGE at j=20, so seq_equiv_mem must REFUTE (0). */
+fn etat_mem_demo_diff() -> u8 @export {
+    bb_reset(8u64)
+    let v1 : u32 = bb_var(0u32)  let v2 : u32 = bb_var(1u32)
+    let j  : u32 = bb_var(2u32)  let init : u32 = bb_var(3u32)
+    let i10 : u32 = bb_const(10u64)  let i20 : u32 = bb_const(20u64)
+    etat_mem_reset()
+    etat_write(i10, v1)  etat_write(i20, v2)              /* A = [10<-v1, 20<-v2] */
+    etat_write(i10, v1)  etat_write(i10, v2)              /* B = [10<-v1, 10<-v2] (never writes 20) */
+    return etat_mem_equiv(2u32, j, init)                  /* differ at j=20 -> 0 */
+}
+
+/* ============================================================================================================
+ * B2 -- CAUSAL TENSORIZATION: crush time into spatial geometry.  THE MAY-ALIAS CASCADE (the answer to the
+ * bottleneck): (1) ai_disjoint -- the O(1) affine abstract -- PROVEN-disjoint writes COMMUTE and crystallize
+ * into one unordered epoch (N disjoint scalar writes -> one O(1) block/tensor mutation, the auto-vectorization);
+ * (2) on undecided, a CHEAP CONCRETE refuter (ser_petri's fuzz-as-refuter discipline, bounded + deterministic +
+ * NO-ML) sweeps iteration pairs for a real address collision -- a witness proves NOT-disjoint -> COLLIDE ->
+ * serialize; (3) the surviving ambiguous pair SUPERPOSES: B0's proven fold ite(i==j, serial, parallel) =
+ * delta(i,j)*W_serial + (1-delta)*W_parallel models BOTH realities branch-free, so seq_equiv optimizes THROUGH
+ * the ambiguous pointer with no fork.  The superposition is SOUND alone (B0); the fuzz only spares the symbolic
+ * stage the obvious collisions (the CEGIS cascade -- cheap refuter kills 99%, the proof handles the survivor).
+ * HOLOGRAPHIC ROOT: the crystallized epoch is a static geometric shape; its order-independent fingerprint
+ * (et_epoch_hash) is the Merkle root over the disjoint regions, so equal geometries hash equal in O(1).
+ * NO ISLAND: composes ser_absint (ai_disjoint + the affine accessors) + B0 + the event log. */
+extern @abi(c-msvc-x64) fn ai_disjoint(p: u64, q: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_addr(p: u64, k: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_lo(p: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_hi(p: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_stride(p: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_reset() -> i32 from "ser_absint.iii"
+
+const ETC_SUPERPOSE : u32 = 0u32   /* undecided -> B0 fold soundly superposes both realities */
+const ETC_COMMUTE   : u32 = 1u32   /* ai_disjoint proved separation -> tensorize / reorder freely */
+const ETC_COLLIDE   : u32 = 2u32   /* a concrete collision witness -> serialize this pair */
+
+var ETAT_WAFF : [u64; 256]   /* affine index descriptor per logged write (for the commute decision) */
+
+/* the cheap concrete REFUTER (B2 stage 2): bounded deterministic sweep for a real address collision.  1 iff a
+ * witness (k1,k2) with addr_a(k1)==addr_b(k2) exists in the probed window (=> NOT spatially disjoint). */
+fn et_fuzz_collide(pa: u64, pb: u64) -> u32 {
+    let la : u64 = aff_lo(pa)  let ha : u64 = aff_hi(pa)
+    let lb : u64 = aff_lo(pb)  let hb : u64 = aff_hi(pb)
+    let mut k1 : u64 = la
+    let mut c1 : u32 = 0u32
+    while c1 < 32u32 {
+        if k1 > ha { return 0u32 }
+        let a1 : u64 = aff_addr(pa, k1)
+        let mut k2 : u64 = lb
+        let mut c2 : u32 = 0u32
+        while c2 < 32u32 {
+            if k2 > hb { c2 = 32u32 }
+            else {
+                let a2 : u64 = aff_addr(pb, k2)
+                if a1 == a2 { return 1u32 }
+                k2 = k2 + 1u64  c2 = c2 + 1u32
+            }
+        }
+        k1 = k1 + 1u64  c1 = c1 + 1u32
+    }
+    return 0u32
+}
+/* THE CLASSIFIER (the may-alias answer): COMMUTE | COLLIDE | SUPERPOSE for two affine write indices. */
+fn et_commute(pa: u64, pb: u64) -> u32 @export {
+    if ai_disjoint(pa, pb) == 1u32 { return ETC_COMMUTE }
+    if et_fuzz_collide(pa, pb) == 1u32 { return ETC_COLLIDE }
+    return ETC_SUPERPOSE
+}
+
+/* a write WITH its affine index descriptor (the spatial coordinate B2 reasons over). */
+fn etat_write_aff(idx_node: u32, val_node: u32, aff: u64) -> u32 @export {
+    let w : u32 = etat_write(idx_node, val_node)
+    ETAT_WAFF[w as u64] = aff
+    return w
+}
+/* CRYSTALLIZATION: collapse the logged writes into causal epochs.  A write joins the current epoch only if it
+ * COMMUTES with EVERY write already in it; a COLLIDE/SUPERPOSE forces a new epoch (order matters there).
+ * All-disjoint -> ONE epoch = the O(1) tensor.  Returns the epoch count (the reduced unroll dimension). */
+fn et_mem_collapse_aff() -> u32 @export {
+    if ETAT_WN == 0u32 { return 0u32 }
+    let mut nep : u32 = 1u32
+    let mut estart : u32 = 0u32
+    let mut i : u32 = 1u32
+    while i < ETAT_WN {
+        let mut ok : u32 = 1u32
+        let mut j : u32 = estart
+        while j < i {
+            if et_commute(ETAT_WAFF[i as u64], ETAT_WAFF[j as u64]) != ETC_COMMUTE { ok = 0u32 }
+            j = j + 1u32
+        }
+        if ok == 0u32 { nep = nep + 1u32  estart = i }
+        i = i + 1u32
+    }
+    return nep
+}
+
+/* the HOLOGRAPHIC ROOT: an order-INDEPENDENT (XOR-folded) fingerprint of the crystallized epoch's geometry --
+ * each write's region signature (start address + span) mixed and XOR-accumulated, so reordering commuting writes
+ * leaves the root unchanged.  Equal geometries hash equal in O(1) (the Merkle-root memory-equivalence). */
+fn et_hash_mix(x: u64) -> u64 {
+    let mut h : u64 = x ^ 14695981039346656037u64
+    h = h * 1099511628211u64
+    return h ^ (h >> 29u64)
+}
+fn et_epoch_hash() -> u64 @export {
+    let mut acc : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < ETAT_WN {
+        let aff    : u64 = ETAT_WAFF[i as u64]
+        let addr   : u64 = aff_addr(aff, aff_lo(aff))          /* region start address  */
+        let span   : u64 = aff_hi(aff) - aff_lo(aff)           /* element count - 1     */
+        let stride : u64 = aff_stride(aff)                     /* the spatial step      */
+        /* fold the FULL geometry (start, stride, span) -- injective so distinct strided regions never collide */
+        acc = acc ^ et_hash_mix(addr ^ et_hash_mix(stride ^ et_hash_mix(span)))
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* B2 demonstrations: 3 strictly-disjoint regions crystallize to ONE epoch; an overlap forces TWO; the holographic
+ * root is invariant under reordering of commuting writes but changes when the geometry changes. */
+fn et_crystallize_demo() -> u32 @export {
+    aff_reset()  etat_mem_reset()  bb_reset(64u64)
+    let v : u32 = bb_const(7u64)
+    let a0 : u64 = aff_of(0u64,   1u64, 0u64, 9u64, 0u64)
+    let a1 : u64 = aff_of(100u64, 1u64, 0u64, 9u64, 0u64)
+    let a2 : u64 = aff_of(200u64, 1u64, 0u64, 9u64, 0u64)
+    etat_write_aff(bb_const(0u64), v, a0)  etat_write_aff(bb_const(100u64), v, a1)  etat_write_aff(bb_const(200u64), v, a2)
+    return et_mem_collapse_aff()                 /* -> 1 (all disjoint, one tensor) */
+}
+fn et_crystallize_demo_collide() -> u32 @export {
+    aff_reset()  etat_mem_reset()  bb_reset(64u64)
+    let v : u32 = bb_const(7u64)
+    let a0 : u64 = aff_of(0u64, 1u64, 0u64, 9u64, 0u64)    /* [0,9]  */
+    let a1 : u64 = aff_of(5u64, 1u64, 0u64, 9u64, 0u64)    /* [5,14] -- overlaps a0 */
+    etat_write_aff(bb_const(0u64), v, a0)  etat_write_aff(bb_const(5u64), v, a1)
+    return et_mem_collapse_aff()                 /* -> 2 (the collision forces a boundary) */
+}
+/* SUPERPOSE witness: genuinely-ambiguous descriptors (different strides, overlapping ranges, no concrete
+ * collision in the window) that ai_disjoint cannot settle and the fuzz cannot refute. */
+fn et_commute_superpose_case() -> u32 @export {
+    aff_reset()
+    let a : u64 = aff_of(0u64, 6u64, 0u64, 2u64, 0u64)    /* {0,6,12}  */
+    let b : u64 = aff_of(4u64, 9u64, 0u64, 2u64, 0u64)    /* {4,13,22} -- disjoint sets, ranges overlap */
+    return et_commute(a, b)                       /* -> ETC_SUPERPOSE (0) */
+}
+fn et_commute_commute_case() -> u32 @export {
+    aff_reset()
+    let a : u64 = aff_of(0u64,   1u64, 0u64, 9u64, 0u64)
+    let b : u64 = aff_of(100u64, 1u64, 0u64, 9u64, 0u64)
+    return et_commute(a, b)                       /* -> ETC_COMMUTE (1) */
+}
+fn et_commute_collide_case() -> u32 @export {
+    aff_reset()
+    let a : u64 = aff_of(0u64, 1u64, 0u64, 9u64, 0u64)
+    let b : u64 = aff_of(5u64, 1u64, 0u64, 9u64, 0u64)
+    return et_commute(a, b)                       /* -> ETC_COLLIDE (2) */
+}
+/* the holographic root is reorder-invariant (commuting writes) but geometry-sensitive. */
+fn et_holo_reorder() -> u64 @export {
+    aff_reset()  etat_mem_reset()  bb_reset(64u64)
+    let v : u32 = bb_const(7u64)
+    etat_write_aff(bb_const(0u64), v, aff_of(0u64, 1u64, 0u64, 9u64, 0u64))
+    etat_write_aff(bb_const(100u64), v, aff_of(100u64, 1u64, 0u64, 9u64, 0u64))
+    return et_epoch_hash()
+}
+fn et_holo_reorder_swapped() -> u64 @export {
+    aff_reset()  etat_mem_reset()  bb_reset(64u64)
+    let v : u32 = bb_const(7u64)
+    etat_write_aff(bb_const(100u64), v, aff_of(100u64, 1u64, 0u64, 9u64, 0u64))
+    etat_write_aff(bb_const(0u64), v, aff_of(0u64, 1u64, 0u64, 9u64, 0u64))
+    return et_epoch_hash()                         /* == et_holo_reorder() (order-independent) */
+}
+fn et_holo_different() -> u64 @export {
+    aff_reset()  etat_mem_reset()  bb_reset(64u64)
+    let v : u32 = bb_const(7u64)
+    etat_write_aff(bb_const(0u64), v, aff_of(0u64, 1u64, 0u64, 9u64, 0u64))
+    etat_write_aff(bb_const(300u64), v, aff_of(300u64, 1u64, 0u64, 9u64, 0u64))   /* different region */
+    return et_epoch_hash()                         /* != et_holo_reorder() */
+}

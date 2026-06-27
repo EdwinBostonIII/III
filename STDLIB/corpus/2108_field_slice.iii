@@ -1,0 +1,33 @@
+/* STDLIB/corpus/2108_field_slice.iii -- THE UNIFIED FIELD, faculty 3: N-DIMENSIONAL ALGEBRAIC SLICING.
+ * The 2D screen is a constraint plane cutting an N-dim quadric.  Rotating/translating the viewport through the higher
+ * dimensions is an exact integer change to the cross-section: a hypersphere's slice is a circle whose radius^2
+ * shrinks to a point and vanishes, all aliasing-free.  99 = the cross-section tracks the viewport exactly through N-D.
+ * BASELINE: the Euclidean cross-section (a circle of radius^2 = bp) is the reference the slice is compared against. */
+module corpus_2108_field_slice
+
+extern @abi(c-msvc-x64) fn ui_slice_quadric(b: i64, fixed_sum: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_slice_nature(a1: i64, a2: i64, bp: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_slice_axes(a1: i64, a2: i64, bp: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_ax2_n() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_ay2_n() -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* a 5-D hypersphere of radius^2 = 100, sliced by the screen plane as it translates through dims 3..5.
+     * fixed_sum = sum of the fixed coords^2 ; the cross-section circle has radius^2 = 100 - fixed_sum. */
+    if ui_slice_quadric(100i64, 0i64) != 100i64 { return 1u64 }      /* through the centre: radius^2 = 100 (r=10) */
+    if ui_slice_nature(1i64, 1i64, 100i64) != 2i32 { return 2u64 }   /* a circle */
+    if ui_slice_quadric(100i64, 36i64) != 64i64 { return 3u64 }      /* translated out: radius^2 = 64 (r=8) */
+    if ui_slice_quadric(100i64, 64i64) != 36i64 { return 4u64 }      /* further: radius^2 = 36 (r=6) */
+    if ui_slice_nature(1i64, 1i64, 0i64) != 1i32 { return 5u64 }     /* tangent: a single point */
+    if ui_slice_quadric(100i64, 100i64) != 0i64 { return 6u64 }      /* at the pole: bp = 0 (point) */
+    if ui_slice_nature(1i64, 1i64, ui_slice_quadric(100i64, 200i64)) != 0i32 { return 7u64 }  /* outside: empty */
+
+    /* an ELLIPSOID  x1^2 + 4 x2^2 + ... = 100, sliced -> an ELLIPSE with exact squared semi-axes 64 and 16 */
+    let bp : i64 = ui_slice_quadric(100i64, 36i64)
+    if ui_slice_nature(1i64, 4i64, bp) != 3i32 { return 8u64 }       /* ellipse (a1 != a2) */
+    ui_slice_axes(1i64, 4i64, bp)
+    if ui_ax2_n() != 64i64 { return 9u64 }                           /* semi-axis_x^2 = 64/1 */
+    if ui_ay2_n() != 16i64 { return 10u64 }                          /* semi-axis_y^2 = 64/4 = 16 */
+
+    return 99u64
+}

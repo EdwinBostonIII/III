@@ -1,0 +1,39 @@
+/* STDLIB/iii/aether/ui_demo_exact.iii -- the fidelity proof.  The SAME exact-coverage circle function rendered
+ * at n=1 (one subsample -> hard/blocky, what I shipped before) beside n=8 (64 exact coverage levels -> smooth),
+ * plus anti-aliased triangles and translucent blended disks.  Every edge here is integer-exact and would render
+ * identically at any resolution.  Saves glass_exact.bmp. */
+module ui_demo_exact
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_tri_aa(buf: u64, w: u32, h: u32, x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_save_bmp(fb: u64, w: u32, h: u32, path: u64) -> i32 from "ui_present.iii"
+
+var FB   : [u32; 230400]   /* 640 x 360 */
+var PATH : [u8; 16] = [103u8,108u8,97u8,115u8,115u8,95u8,101u8,120u8,97u8,99u8,116u8,46u8,98u8,109u8,112u8,0u8]  /* "glass_exact.bmp\0" */
+
+fn argb(a: u32, r: u32, g: u32, b: u32) -> u32 { return (a << 24u32) | (r << 16u32) | (g << 8u32) | b }
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return argb(255u32, r, g, b) }
+
+fn main() -> u64 {
+    let b : u64 = &FB as u64
+    let w : u32 = 640u32
+    let h : u32 = 360u32
+    ui_clear(b, w, h, rgb(12u32, 12u32, 20u32))
+
+    let cy : u32 = rgb(0u32, 229u32, 255u32)
+    /* left: the OLD way -- n=1, one sample per pixel, hard jagged edge. */
+    ui_fill_circle_aa(b, w, h, 150i64, 165i64, 95i64, cy, 1i64)
+    /* right: exact coverage at n=8 -- 64 levels, smooth, provably exact. */
+    ui_fill_circle_aa(b, w, h, 470i64, 165i64, 95i64, cy, 8i64)
+
+    /* an anti-aliased triangle -- straight-edge AA. */
+    ui_fill_tri_aa(b, w, h, 250i64, 330i64, 390i64, 330i64, 320i64, 235i64, rgb(255u32, 150u32, 30u32), 8i64)
+
+    /* two translucent blended disks -- alpha * coverage fidelity. */
+    ui_fill_circle_aa(b, w, h, 300i64, 95i64, 55i64, argb(150u32, 34u32, 204u32, 85u32), 8i64)
+    ui_fill_circle_aa(b, w, h, 348i64, 95i64, 55i64, argb(150u32, 204u32, 51u32, 68u32), 8i64)
+
+    ui_save_bmp(b, w, h, &PATH as u64)
+    return 0u64
+}

@@ -1,0 +1,33 @@
+/* STDLIB/corpus/2115_field_wave.iii -- THE UNIFIED FIELD, faculty W: ALGEBRAIC WAVE OPTICS.
+ * Two source wavefronts interfere.  The path difference is a sum of square roots, yet "P lies on the m-th
+ * constructive fringe" is decided EXACTLY by a pure-integer identity (no grid, no aliasing).  III outputs the exact
+ * nodes of constructive and destructive interference.  99 = bright and dark fringes decided exactly via integer math.
+ * BASELINE: the central fringe (equidistant, Delta=0) is the m=0 reference all other orders are measured from. */
+module corpus_2115_field_wave
+
+extern @abi(c-msvc-x64) fn ui_interfere(s1x: i64, s1y: i64, s2x: i64, s2y: i64, px: i64, py: i64, lam: i64, m: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_interfere_dark(s1x: i64, s1y: i64, s2x: i64, s2y: i64, px: i64, py: i64, lam: i64, m: i64) -> i32 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* S1=(0,0), S2=(0,4), P=(3,4): |P-S1|=5, |P-S2|=3 -> path difference Delta = 2.
+     * with wavelength 2, that is the m=1 BRIGHT fringe -- decided exactly (5-3 = 1*2). */
+    if ui_interfere(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 2i64, 1i64) != 1i32 { return 1u64 }
+
+    /* same point, wavelength 3 -> m=1 would need Delta=3, but Delta=2 -> OFF the fringe (exact rejection) */
+    if ui_interfere(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 3i64, 1i64) != 0i32 { return 2u64 }
+
+    /* the CENTRAL fringe: S1=(0,0), S2=(4,0), P=(2,3) is equidistant -> Delta=0 -> m=0 bright for ANY wavelength */
+    if ui_interfere(0i64, 0i64, 4i64, 0i64, 2i64, 3i64, 5i64, 0i64) != 1i32 { return 3u64 }
+
+    /* a NON-equidistant point is NOT on the central fringe (exact) */
+    if ui_interfere(0i64, 0i64, 4i64, 0i64, 1i64, 3i64, 5i64, 0i64) != 0i32 { return 4u64 }
+
+    /* the SAME 3-4-5 point (Delta=2) is a DARK fringe when the full wavelength is 4 (Delta = lambda/2);
+     * ui_interfere_dark takes the half-wavelength (2) and order 0 -> 2*Delta = 1*lambda -> destructive, exact. */
+    if ui_interfere_dark(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 2i64, 0i64) != 1i32 { return 5u64 }
+
+    /* and it is NOT dark at half-wavelength 3 (would need Delta=3) */
+    if ui_interfere_dark(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 3i64, 0i64) != 0i32 { return 6u64 }
+
+    return 99u64
+}

@@ -1,0 +1,28 @@
+/* STDLIB/corpus/2084_disjoint.iii -- falsifier for ai_disjoint (ser_absint), the prover the III-GLASS sculptor's
+ * `disj` command projects.  Three real cases: (A) even vs odd addresses -- SAME stride 2, offsets incongruent ->
+ * PROVEN disjoint though the intervals fully overlap (the case interval-checkers miss); (B) separated spans ->
+ * disjoint; (C) overlapping same-stride -> MAY_ALIAS (must NOT falsely claim disjoint -- soundness).  99 = the
+ * alias prover is real and sound. */
+module corpus_2084_disjoint
+
+extern @abi(c-msvc-x64) fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_disjoint(p: u64, q: u64) -> u32 from "ser_absint.iii"
+
+fn main() -> u64 {
+    /* (A) even {0,2,..,64} vs odd {1,3,..,65}: stride 2, c incongruent -> PROVEN DISJOINT (lattices never meet). */
+    let a : u64 = aff_of(0u64, 2u64, 0u64, 32u64, 0u64)
+    let b : u64 = aff_of(0u64, 2u64, 0u64, 32u64, 1u64)
+    if ai_disjoint(a, b) != 1u32 { return 1u64 }
+
+    /* (B) [0..10] vs [100..110]: separated spans -> DISJOINT. */
+    let c : u64 = aff_of(0u64, 1u64, 0u64, 10u64, 0u64)
+    let d : u64 = aff_of(100u64, 1u64, 0u64, 10u64, 0u64)
+    if ai_disjoint(c, d) != 1u32 { return 2u64 }
+
+    /* (C) [0..20] vs [5..25]: overlap, same stride 1 -> MAY_ALIAS; a SOUND prover must not claim disjoint. */
+    let e : u64 = aff_of(0u64, 1u64, 0u64, 20u64, 0u64)
+    let f : u64 = aff_of(5u64, 1u64, 0u64, 20u64, 0u64)
+    if ai_disjoint(e, f) != 0u32 { return 3u64 }
+
+    return 99u64
+}

@@ -96,3 +96,99 @@ fn ai_route_refuted(r: u64) -> u32 @export { return ((r >> 16u64) & 65535u64) as
 fn ai_route_deferred(r: u64) -> u32 @export { return (r & 65535u64) as u32 }
 /* the replayable fold root over the whole event log (candidates + obligations) -- EIDOS witness. */
 fn ai_witness() -> u64 @export { return evt_witness(evt_count()) }
+
+/* ============================================================================================================
+ * ETAT MECHANISM 1 -- the AFFINE SPATIAL INDEX DOMAIN (Eidos Temporal Array Theory, mechanism 1).
+ * An array access index is modelled as the affine form  addr(k) = base + c + stride*k  for the loop counter
+ * k in [lo, hi].  ai_disjoint decides, in O(1) and WITHOUT the SAT solver, whether two such access sets are
+ * provably non-intersecting -- pruning the McCarthy aliasing branches ABOVE the solver (the residue the
+ * abstract cannot settle DEFERS to the bv_bits array miter).  SOUND ONE-SIDED: ai_disjoint returns 1 ONLY
+ * when it has PROVED non-intersection (stride-congruence incompatibility -- the "i even / j odd" case -- or
+ * overflow-guarded interval separation); for anything it cannot settle it returns 0 (MAY_ALIAS), NEVER a false
+ * "disjoint".  A false disjoint is the single bug that would make all of ETAT unsound, so the conservative
+ * default is load-bearing.  Ring R0.  K 1.00.  NO-ML: closed-form integer reasoning, no statistics. */
+const AFF_MAX  : u64 = 256u64
+const AFF_NONE : u64 = 18446744073709551615u64
+var AFF_BASE   : [u64; 256]
+var AFF_STRIDE : [u64; 256]
+var AFF_LO     : [u64; 256]
+var AFF_HI     : [u64; 256]
+var AFF_C      : [u64; 256]
+var AFF_N      : u32 = 0u32
+var AFF_RMIN   : u64 = 0u64
+var AFF_RMAX   : u64 = 0u64
+
+fn aff_reset() -> i32 @export { AFF_N = 0u32  return 0i32 }
+
+/* intern an affine index descriptor base+c+stride*k, k in [lo,hi]; returns a handle, or AFF_NONE if full. */
+fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 @export {
+    let h : u32 = AFF_N
+    if (h as u64) >= AFF_MAX { return AFF_NONE }
+    AFF_BASE[h as u64] = base  AFF_STRIDE[h as u64] = stride
+    AFF_LO[h as u64] = lo  AFF_HI[h as u64] = hi  AFF_C[h as u64] = c
+    AFF_N = AFF_N + 1u32
+    return h as u64
+}
+
+/* compute the contiguous address span [AFF_RMIN, AFF_RMAX] of descriptor h, returning 1 iff it does NOT wrap
+ * 2^64 (so the interval is a usable sound bound); 0 if degenerate or any overflow/wrap (=> caller must defer). */
+fn aff_range(h: u64) -> u32 {
+    let a  : u64 = AFF_BASE[h] + AFF_C[h]
+    let s  : u64 = AFF_STRIDE[h]
+    let lo : u64 = AFF_LO[h]
+    let hi : u64 = AFF_HI[h]
+    if s == 0u64 { return 0u32 }
+    if lo > hi { return 0u32 }
+    let phi : u64 = s * hi
+    if (phi / s) != hi { return 0u32 }       /* s*hi overflowed -> cannot bound soundly */
+    let plo : u64 = s * lo
+    if (plo / s) != lo { return 0u32 }
+    let amax : u64 = a + phi
+    if amax < a { return 0u32 }              /* a + s*hi wrapped */
+    let amin : u64 = a + plo
+    if amin < a { return 0u32 }
+    AFF_RMIN = amin  AFF_RMAX = amax
+    return 1u32
+}
+
+/* THE O(1) ALIAS DECISION: 1 = PROVEN_DISJOINT, 0 = MAY_ALIAS (defer to the solver). Sound one-sided. */
+fn ai_disjoint(p: u64, q: u64) -> u32 @export {
+    if p >= (AFF_N as u64) { return 0u32 }
+    if q >= (AFF_N as u64) { return 0u32 }
+    let sp : u64 = AFF_STRIDE[p]
+    let sq : u64 = AFF_STRIDE[q]
+    let ap : u64 = AFF_BASE[p] + AFF_C[p]
+    let aq : u64 = AFF_BASE[q] + AFF_C[q]
+    /* RULE A -- stride-congruence incompatibility: equal stride s>1 and base offsets incongruent mod s means the
+     * two address lattices NEVER coincide (the i-even / j-odd case), regardless of the iteration ranges. */
+    if sp == sq { if sp > 1u64 {
+        let diff : u64 = ap - aq
+        let m : u64 = diff % sp
+        if m != 0u64 { return 1u32 }
+    } }
+    /* RULE B -- interval separation: if the two contiguous address spans don't overlap (and neither wraps),
+     * the access sets (subsets of those spans) cannot intersect. */
+    let okp : u32 = aff_range(p)
+    if okp == 1u32 {
+        let pmin : u64 = AFF_RMIN
+        let pmax : u64 = AFF_RMAX
+        let okq : u32 = aff_range(q)
+        if okq == 1u32 {
+            let qmin : u64 = AFF_RMIN
+            let qmax : u64 = AFF_RMAX
+            if pmax < qmin { return 1u32 }
+            if qmax < pmin { return 1u32 }
+        }
+    }
+    return 0u32
+}
+
+/* accessors for the concrete refuter (B2's fuzz stage): the address of descriptor p at iteration k, and its
+ * iteration bounds.  addr(k) = base + c + stride*k mod 2^64. */
+fn aff_addr(p: u64, k: u64) -> u64 @export {
+    if p >= (AFF_N as u64) { return 0u64 }
+    return AFF_BASE[p] + AFF_C[p] + AFF_STRIDE[p] * k
+}
+fn aff_lo(p: u64) -> u64 @export { if p >= (AFF_N as u64) { return 0u64 }  return AFF_LO[p] }
+fn aff_hi(p: u64) -> u64 @export { if p >= (AFF_N as u64) { return 0u64 }  return AFF_HI[p] }
+fn aff_stride(p: u64) -> u64 @export { if p >= (AFF_N as u64) { return 0u64 }  return AFF_STRIDE[p] }

@@ -1,0 +1,31 @@
+/* STDLIB/corpus/2081_ui_exact.iii -- proves III-GLASS exact coverage is EXACT, not sampled-approximate.  The
+ * edge determinant returns the exact integer; a triangle's full pixel = n^2, empty = 0, and the hypotenuse
+ * pixel = the exact lattice count {i+j <= n-2}; the circle is full at centre, empty far, and genuinely partial
+ * (anti-aliased) on the boundary.  No float appears anywhere -- 99 = every count is exact to the unit. */
+module corpus_2081_ui_exact
+
+extern @abi(c-msvc-x64) fn ui_edge(ax: i64, ay: i64, bx: i64, by: i64, px: i64, py: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_tri_cov(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_circle_cov(cx: i64, cy: i64, r: i64, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+
+fn main() -> u64 {
+    /* exact signed-area determinant: (5,3) is left of (0,0)->(10,0) [=+30], (5,-3) is right [=-30]. */
+    if ui_edge(0i64, 0i64, 10i64, 0i64, 5i64, 3i64) != 30i64 { return 1u64 }
+    if ui_edge(0i64, 0i64, 10i64, 0i64, 5i64, 0i64 - 3i64) != 0i64 - 30i64 { return 2u64 }
+
+    /* triangle (0,0),(100,0),(0,100) -- the region 0<x, 0<y, x+y<100 -- at n=4 (16 subsamples). */
+    if ui_tri_cov(0i64, 0i64, 100i64, 0i64, 0i64, 100i64, 10i64, 10i64, 4i64) != 16i64 { return 3u64 }   /* fully inside */
+    if ui_tri_cov(0i64, 0i64, 100i64, 0i64, 0i64, 100i64, 95i64, 95i64, 4i64) != 0i64 { return 4u64 }    /* fully outside */
+    if ui_tri_cov(0i64, 0i64, 100i64, 0i64, 0i64, 100i64, 50i64, 49i64, 4i64) != 10i64 { return 5u64 }   /* exact partial: subsample (sx+sy<=800) => |{i+j<=3}| = 10 */
+    /* resolution-independent: same geometry at n=8 -> a full pixel is exactly 64. */
+    if ui_tri_cov(0i64, 0i64, 200i64, 0i64, 0i64, 200i64, 20i64, 20i64, 8i64) != 64i64 { return 6u64 }
+
+    /* circle centre (50,50) r=20: full at centre, empty far, genuinely anti-aliased on the boundary. */
+    if ui_circle_cov(50i64, 50i64, 20i64, 50i64, 50i64, 4i64) != 16i64 { return 7u64 }
+    if ui_circle_cov(50i64, 50i64, 20i64, 90i64, 90i64, 4i64) != 0i64 { return 8u64 }
+    let edge_cov : i64 = ui_circle_cov(50i64, 50i64, 20i64, 64i64, 64i64, 4i64)   /* on the diagonal rim */
+    if edge_cov <= 0i64 { return 9u64 }
+    if edge_cov >= 16i64 { return 10u64 }
+
+    return 99u64
+}

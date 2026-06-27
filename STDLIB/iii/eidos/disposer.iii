@@ -1,0 +1,72 @@
+/* STDLIB/iii/eidos/disposer.iii -- THE DISPOSER FUNCTORS (Ripple Merge, Phase I completion; §9 routing).
+ * The canonical engine omnia/involution is semantic-free and admits a ripple only if the domain's DISPOSER yields 1.
+ * These functors are the adapters: each DRIVES its domain's REAL gate (no reimplementation) and routes the verdict +
+ * the {BELOW,REFLECT} verb through inv_emit, with a/b promoted to DOMAIN-TAGGED 32-byte content-addresses so the log
+ * is unified but the graphs stay distinct (Gate 6).
+ *   RIPPLE  : the corpus-1931 flat-boundary -- rf_rank(hexad) gives the dominance; equal rank = FLAT = no ripple
+ *             (verdict 0); else verb = (rank climbs) ? BELOW : REFLECT.  Drives omnia::ripple_field.
+ *   MASTER  : the assimilation order -- a<=b iff l6_and(a,b)==a (BELOW); b==l6_not(a) (REFLECT); else refuse.
+ *             Drives omnia::logic6's behaviour exactly as omnia::master_logic derives it.
+ *   ISUB    : the witness/name gate -- the engine already subsumes it (verb in {0,1}, hash-chain witness); the
+ *             functor is the passthrough that proves isub IS the canonical engine. */
+module eidos_disposer
+
+extern @abi(c-msvc-x64) fn inv_emit(verb: u32, a_ptr: u64, b_ptr: u64, disposer_verdict: u32, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+
+var DZA : [u8; 32]   var DZB : [u8; 32]
+
+/* a domain-tagged 32-byte content-address: [tag(1), prim(4 LE), 0...] -- distinct per domain (Gate 6). */
+fn disp_addr(tag: u32, prim: u32, out: u64) -> i32 {
+    let p : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = 0u8   i = i + 1u64 }
+    p[0u64] = (tag & 255u32) as u8
+    p[1u64] = (prim & 255u32) as u8
+    p[2u64] = ((prim >> 8u32) & 255u32) as u8
+    p[3u64] = ((prim >> 16u32) & 255u32) as u8
+    p[4u64] = ((prim >> 24u32) & 255u32) as u8
+    return 0i32
+}
+
+/* RIPPLE functor: drive rf_rank; FLAT (equal rank) -> verdict 0 (engine refuses); else verb from the climb. */
+fn disp_ripple_emit(prim_a: u32, hexad_a: u32, prim_b: u32, hexad_b: u32, out32: u64) -> i32 @export {
+    let ra : u32 = rf_rank((hexad_a & 255u32) as u8)
+    let rb : u32 = rf_rank((hexad_b & 255u32) as u8)
+    let mut verb : u32 = 1u32                              /* REFLECT (rb < ra) */
+    let mut verdict : u32 = 1u32
+    if ra == rb { verdict = 0u32 }                        /* FLAT -> V_NONE -> the gate refuses */
+    if rb > ra { verb = 0u32 }                            /* BELOW (a climbs to b) */
+    disp_addr(1u32, prim_a, (&DZA[0u64]) as u64)
+    disp_addr(1u32, prim_b, (&DZB[0u64]) as u64)
+    return inv_emit(verb, (&DZA[0u64]) as u64, (&DZB[0u64]) as u64, verdict, out32)
+}
+
+/* MASTER functor: drive logic6; BELOW iff l6_and(a,b)==a; REFLECT iff b==l6_not(a); else verdict 0. */
+fn disp_master_emit(a: u32, b: u32, out32: u64) -> i32 @export {
+    let mut verb : u32 = 0u32
+    let mut verdict : u32 = 0u32
+    let m : u32 = l6_and(a, b)
+    if m == a { verb = 0u32   verdict = 1u32 }            /* a <= b -> BELOW */
+    if verdict == 0u32 {
+        let nb : u32 = l6_not(a)
+        if b == nb { verb = 1u32   verdict = 1u32 }       /* b is the complement of a -> REFLECT */
+    }
+    disp_addr(2u32, a, (&DZA[0u64]) as u64)
+    disp_addr(2u32, b, (&DZB[0u64]) as u64)
+    return inv_emit(verb, (&DZA[0u64]) as u64, (&DZB[0u64]) as u64, verdict, out32)
+}
+
+/* ISUB functor: the engine subsumes isub (name-gate verb in {0,1}, hash-chain witness).  Passthrough -- a name in
+ * the verb slot is rejected BY THE ENGINE (inv_emit returns INV_E_NAME), proving isub IS the canonical engine. */
+fn disp_isub_emit(verb: u32, a: u32, b: u32, out32: u64) -> i32 @export {
+    disp_addr(3u32, a, (&DZA[0u64]) as u64)
+    disp_addr(3u32, b, (&DZB[0u64]) as u64)
+    return inv_emit(verb, (&DZA[0u64]) as u64, (&DZB[0u64]) as u64, 1u32, out32)
+}
+
+/* convenience: initialise logic6 once before MASTER routing. */
+fn disp_master_init() -> i32 @export { return l6_init() }

@@ -1,0 +1,24 @@
+/* STDLIB/corpus/2110_field_acoustic.iii -- THE UNIFIED FIELD, faculty 10: ACOUSTIC TOPOLOGY.
+ * Every UI element sounds out its shape: a 1-D resonator of length L rings the harmonic series f_n = n*v/(2L).
+ * A large/heavy element rings low; "in tune" is the exact predicate f_n = n*f_1, so a constraint violation that
+ * distorts the geometry is AUDIBLE before it is visible.  99 = the overtone series and the in-tune test are exact. */
+module corpus_2110_field_acoustic
+
+extern @abi(c-msvc-x64) fn ui_acoustic_freq(length: i64, n_harm: i64, speed: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_is_harmonic(f1: i64, fq: i64, n: i64) -> u32 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* a unit resonator at wave speed 880 -> fundamental 440 Hz (A4) and its exact overtone series */
+    if ui_acoustic_freq(1i64, 1i64, 880i64) != 440i64 { return 1u64 }    /* f_1 = 440 (A4) */
+    if ui_acoustic_freq(1i64, 2i64, 880i64) != 880i64 { return 2u64 }    /* f_2 = 880 (octave) */
+    if ui_acoustic_freq(1i64, 3i64, 880i64) != 1320i64 { return 3u64 }   /* f_3 = 1320 (perfect 5th above) */
+
+    /* a HEAVY element twice as large rings an octave LOWER -- the shape determines the pitch */
+    if ui_acoustic_freq(2i64, 1i64, 880i64) != 220i64 { return 4u64 }    /* f_1 = 220 (A3) */
+
+    /* "in tune": f_2 = 2*f_1 is an exact harmonic; a shifted frequency is inharmonic (the violation is heard) */
+    if ui_is_harmonic(440i64, 880i64, 2i64) != 1u32 { return 5u64 }      /* 880 == 2*440 -- in tune */
+    if ui_is_harmonic(440i64, 900i64, 2i64) != 0u32 { return 6u64 }      /* 900 != 880 -- OUT of tune */
+
+    return 99u64
+}

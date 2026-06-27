@@ -1,0 +1,269 @@
+/* STDLIB/iii/aether/ui_repl.iii -- III-GLASS feature #2: the constraint sculptor.  A REPL whose commands invoke
+ * III's REAL faculties, not restatements: cov/tri/edge -> the exact-integer coverage engine (ui_exact), mod ->
+ * sks_mod_prove_linear (the verification membrane that proves "x % m == r" inductive under x+c over ALL 2^64).
+ * You type a constraint; the prover answers; the answer is drawn and coloured by the actual verdict (green
+ * PROVEN / red REFUTED).  Event-driven: WM_CHAR -> ui_getchar -> the input line; Enter executes.  No float. */
+module ui_repl
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_tri_aa(buf: u64, w: u32, h: u32, x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_circle_cov(cx: i64, cy: i64, r: i64, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_tri_cov(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_edge(ax: i64, ay: i64, bx: i64, by: i64, px: i64, py: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_glyph(buf: u64, w: u32, h: u32, x: u32, y: u32, c: u32, color: u32) -> i32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn sks_mod_prove_linear(m: u64, r: u64, c: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn aff_reset() -> i32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_disjoint(p: u64, q: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn sks_consv_prove(w0: u64, w1: u64, c: u64, a: u64, b: u64, x0: u64, y0: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_drift(w0: u64, w1: u64, a: u64, b: u64) -> u64 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+
+var FB    : [u32; 364800]   /* 760 x 480 */
+var TITLE : [u8; 10] = [73u8,73u8,73u8,45u8,71u8,76u8,65u8,83u8,83u8,0u8]
+var INBUF : [u8; 96]
+var INLEN : u32 = 0u32
+var ARGS  : [i64; 12]
+var NARGS : u32 = 0u32
+var VERB  : u32 = 0u32      /* last executed: 1 cov, 2 tri, 3 mod, 4 edge */
+var RVAL  : i64 = 0i64
+var ROK   : u32 = 0u32      /* 1 green, 2 red, 3 neutral */
+var HAVE  : u32 = 0u32
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+fn b_at(buf: u64, i: u32) -> u32 { let p : *u8 = (buf + (i as u64)) as *u8  return p[0u64] as u32 }
+
+fn skip_sp(buf: u64, i: u32, len: u32) -> u32 {
+    let mut j : u32 = i  let mut d : u32 = 0u32
+    while d == 0u32 { if j >= len { d = 1u32 } else { if b_at(buf, j) != 32u32 { d = 1u32 } else { j = j + 1u32 } } }
+    return j
+}
+fn tok_end(buf: u64, i: u32, len: u32) -> u32 {
+    let mut j : u32 = i  let mut d : u32 = 0u32
+    while d == 0u32 { if j >= len { d = 1u32 } else { if b_at(buf, j) == 32u32 { d = 1u32 } else { j = j + 1u32 } } }
+    return j
+}
+fn parse_int(buf: u64, s: u32, e: u32) -> i64 {
+    let mut i : u32 = s  let mut neg : u32 = 0u32
+    if i < e { if b_at(buf, i) == 45u32 { neg = 1u32  i = i + 1u32 } }
+    let mut v : i64 = 0i64
+    while i < e {
+        let c : u32 = b_at(buf, i)
+        if c >= 48u32 { if c <= 57u32 { v = (v * 10i64) + ((c - 48u32) as i64) } }
+        i = i + 1u32
+    }
+    if neg == 1u32 { return 0i64 - v }
+    return v
+}
+fn tok_eq(buf: u64, s: u32, e: u32, lit: u64, litlen: u32) -> u32 {
+    if (e - s) != litlen { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < litlen {
+        let a : *u8 = (buf + ((s + i) as u64)) as *u8
+        let b : *u8 = (lit + (i as u64)) as *u8
+        if (a[0u64] as u32) != (b[0u64] as u32) { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* parse INBUF -> VERB + ARGS, then invoke the REAL faculty. */
+fn execute() -> i32 {
+    VERB = 0u32  NARGS = 0u32  HAVE = 0u32  ROK = 0u32
+    let len : u32 = INLEN
+    let buf : u64 = &INBUF as u64
+    let i  : u32 = skip_sp(buf, 0u32, len)
+    let ve : u32 = tok_end(buf, i, len)
+    if tok_eq(buf, i, ve, "cov" as u64, 3u32) == 1u32 { VERB = 1u32 }
+    if tok_eq(buf, i, ve, "tri" as u64, 3u32) == 1u32 { VERB = 2u32 }
+    if tok_eq(buf, i, ve, "mod" as u64, 3u32) == 1u32 { VERB = 3u32 }
+    if tok_eq(buf, i, ve, "edge" as u64, 4u32) == 1u32 { VERB = 4u32 }
+    if tok_eq(buf, i, ve, "disj" as u64, 4u32) == 1u32 { VERB = 5u32 }
+    if tok_eq(buf, i, ve, "consv" as u64, 5u32) == 1u32 { VERB = 6u32 }
+    let mut p : u32 = ve
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        p = skip_sp(buf, p, len)
+        if p >= len { go = 0u32 }
+        if go == 1u32 {
+            let te : u32 = tok_end(buf, p, len)
+            if NARGS < 12u32 { ARGS[NARGS as u64] = parse_int(buf, p, te)  NARGS = NARGS + 1u32 }
+            p = te
+        }
+    }
+    if VERB == 1u32 { if NARGS >= 5u32 { RVAL = ui_circle_cov(ARGS[0u64], ARGS[1u64], ARGS[2u64], ARGS[3u64], ARGS[4u64], 8i64)  ROK = 3u32  HAVE = 1u32 } }
+    if VERB == 2u32 { if NARGS >= 8u32 { RVAL = ui_tri_cov(ARGS[0u64], ARGS[1u64], ARGS[2u64], ARGS[3u64], ARGS[4u64], ARGS[5u64], ARGS[6u64], ARGS[7u64], 8i64)  ROK = 3u32  HAVE = 1u32 } }
+    if VERB == 3u32 { if NARGS >= 4u32 {
+        let pr : u8 = sks_mod_prove_linear(ARGS[0u64] as u64, ARGS[1u64] as u64, ARGS[2u64] as u64, ARGS[3u64] as u64)
+        RVAL = pr as i64
+        if pr == 1u8 { ROK = 1u32 } else { ROK = 2u32 }
+        HAVE = 1u32
+    } }
+    if VERB == 4u32 { if NARGS >= 6u32 {
+        RVAL = ui_edge(ARGS[0u64], ARGS[1u64], ARGS[2u64], ARGS[3u64], ARGS[4u64], ARGS[5u64])
+        if RVAL > 0i64 { ROK = 1u32 } else { ROK = 2u32 }
+        HAVE = 1u32
+    } }
+    if VERB == 5u32 { if NARGS >= 6u32 {   /* disj b1 s1 c1 b2 s2 c2 -> ai_disjoint over two address lattices (i in 0..32) */
+        aff_reset()
+        let pa : u64 = aff_of(ARGS[0u64] as u64, ARGS[1u64] as u64, 0u64, 32u64, ARGS[2u64] as u64)
+        let pb : u64 = aff_of(ARGS[3u64] as u64, ARGS[4u64] as u64, 0u64, 32u64, ARGS[5u64] as u64)
+        let dj : u32 = ai_disjoint(pa, pb)
+        RVAL = dj as i64
+        if dj == 1u32 { ROK = 1u32 } else { ROK = 2u32 }
+        HAVE = 1u32
+    } }
+    if VERB == 6u32 { if NARGS >= 7u32 {   /* consv w0 w1 c a b x0 y0 -> F=w0*x+w1*y conserved under (x,y)->(x+a,y+b)? */
+        let pr : u8 = sks_consv_prove(ARGS[0u64] as u64, ARGS[1u64] as u64, ARGS[2u64] as u64, ARGS[3u64] as u64, ARGS[4u64] as u64, ARGS[5u64] as u64, ARGS[6u64] as u64)
+        RVAL = sks_consv_drift(ARGS[0u64] as u64, ARGS[1u64] as u64, ARGS[3u64] as u64, ARGS[4u64] as u64) as i64
+        if pr == 1u8 { ROK = 1u32 } else { ROK = 2u32 }
+        HAVE = 1u32
+    } }
+    return 0i32
+}
+
+/* render an i64 (with sign) at (x,y); returns pen x. */
+fn text_i64(b: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 {
+    if v < 0i64 { let cx : u32 = ui_text_n(b, w, h, x, y, "-" as u64, 1u32, color)  return ui_text_u32(b, w, h, cx, y, (0i64 - v) as u32, color) }
+    return ui_text_u32(b, w, h, x, y, v as u32, color)
+}
+
+fn statcol(ok: u32) -> u32 { if ok == 1u32 { return rgb(40u32,220u32,95u32) }  if ok == 2u32 { return rgb(235u32,60u32,70u32) }  return rgb(235u32,240u32,250u32) }
+
+fn render(b: u64, w: u32, h: u32, frame: u32) -> i32 {
+    ui_clear(b, w, h, rgb(10u32, 11u32, 16u32))
+    ui_fill_rect(b, w, h, 0u32, 0u32, w, 28u32, rgb(22u32, 24u32, 38u32))
+    ui_text_n(b, w, h, 10u32, 6u32, "III-GLASS  constraint sculptor -- the membrane answers, live" as u64, 59u32, rgb(0u32, 229u32, 255u32))
+
+    /* visualisation canvas (top) reflecting the last command's REAL geometry. */
+    if HAVE == 1u32 {
+        if VERB == 1u32 { ui_fill_circle_aa(b, w, h, ARGS[0u64], ARGS[1u64], ARGS[2u64], rgb(0u32,200u32,255u32), 8i64)
+            ui_fill_rect(b, w, h, (ARGS[3u64] as u32), (ARGS[4u64] as u32), 6u32, 2u32, rgb(255u32,255u32,255u32))
+            ui_fill_rect(b, w, h, (ARGS[3u64] as u32), (ARGS[4u64] as u32), 2u32, 6u32, rgb(255u32,255u32,255u32)) }
+        if VERB == 2u32 { ui_fill_tri_aa(b, w, h, ARGS[0u64], ARGS[1u64], ARGS[2u64], ARGS[3u64], ARGS[4u64], ARGS[5u64], rgb(255u32,150u32,40u32), 8i64) }
+        if VERB == 5u32 {   /* two address lattices A (cyan) vs B (orange); interleave => disjoint, coincide => may-alias. */
+            let b1 : i64 = ARGS[0u64]  let s1 : i64 = ARGS[1u64]  let cc1 : i64 = ARGS[2u64]
+            let b2 : i64 = ARGS[3u64]  let s2 : i64 = ARGS[4u64]  let cc2 : i64 = ARGS[5u64]
+            let mut mx : i64 = (b1 + cc1) + (s1 * 32i64)
+            let m2 : i64 = (b2 + cc2) + (s2 * 32i64)
+            if m2 > mx { mx = m2 }
+            if mx < 1i64 { mx = 1i64 }
+            ui_text_n(b, w, h, 40u32, 64u32, "address lattices   A=cyan   B=orange   (coincide => may alias)" as u64, 62u32, rgb(120u32,135u32,165u32))
+            let mut k : i64 = 0i64
+            while k <= 32i64 {
+                let sxa : i64 = 40i64 + ((((b1 + cc1) + (s1 * k)) * 680i64) / mx)
+                let sxb : i64 = 40i64 + ((((b2 + cc2) + (s2 * k)) * 680i64) / mx)
+                ui_fill_rect(b, w, h, sxa as u32, 92u32, 3u32, 16u32, rgb(0u32,200u32,255u32))
+                ui_fill_rect(b, w, h, sxb as u32, 116u32, 3u32, 16u32, rgb(255u32,150u32,40u32))
+                k = k + 1i64
+            }
+        }
+        if VERB == 6u32 {   /* conserved quantity F = w0*x + w1*y along (x,y)->(x+a,y+b): flat line iff conserved. */
+            let cw0 : i64 = ARGS[0u64]  let cw1 : i64 = ARGS[1u64]  let cc : i64 = ARGS[2u64]
+            let ca : i64 = ARGS[3u64]  let cb : i64 = ARGS[4u64]  let cx0 : i64 = ARGS[5u64]  let cy0 : i64 = ARGS[6u64]
+            let mut fmin : i64 = cc  let mut fmax : i64 = cc
+            let mut kk : i64 = 0i64
+            while kk <= 16i64 {
+                let fk : i64 = (cw0 * (cx0 + (kk * ca))) + (cw1 * (cy0 + (kk * cb)))
+                if fk < fmin { fmin = fk }
+                if fk > fmax { fmax = fk }
+                kk = kk + 1i64
+            }
+            let mut span : i64 = fmax - fmin  if span < 1i64 { span = 1i64 }
+            ui_text_n(b, w, h, 40u32, 64u32, "F = w0*x + w1*y  (flat = conserved)" as u64, 35u32, rgb(120u32,135u32,165u32))
+            let cyl : i64 = 250i64 - (((cc - fmin) * 150i64) / span)
+            ui_line(b, w, h, 50i32, cyl as i32, 700i32, cyl as i32, rgb(60u32,70u32,90u32))
+            let mut px : i32 = 0i32  let mut py : i32 = 0i32  let mut first : u32 = 1u32
+            kk = 0i64
+            while kk <= 16i64 {
+                let fk : i64 = (cw0 * (cx0 + (kk * ca))) + (cw1 * (cy0 + (kk * cb)))
+                let sx : i32 = (50i64 + ((kk * 650i64) / 16i64)) as i32
+                let sy : i32 = (250i64 - (((fk - fmin) * 150i64) / span)) as i32
+                if first == 0u32 { ui_line(b, w, h, px, py, sx, sy, statcol(ROK)) }
+                px = sx  py = sy  first = 0u32
+                kk = kk + 1i64
+            }
+        }
+        if VERB == 4u32 { ui_line(b, w, h, ARGS[0u64] as i32, ARGS[1u64] as i32, ARGS[2u64] as i32, ARGS[3u64] as i32, rgb(0u32,200u32,255u32))
+            ui_fill_rect(b, w, h, (ARGS[4u64] as u32), (ARGS[5u64] as u32), 5u32, 5u32, rgb(255u32,200u32,0u32)) }
+        if VERB == 3u32 {   /* number line: cells where x % m == r (the invariant set), the verdict's geometry. */
+            let m : i64 = ARGS[0u64]  let r : i64 = ARGS[1u64]
+            let mut x : i64 = 0i64
+            while x < 48i64 {
+                let mut col : u32 = rgb(40u32,44u32,60u32)
+                if m > 0i64 { if (x % m) == r { col = statcol(ROK) } }
+                ui_fill_rect(b, w, h, 40u32 + (x as u32) * 14u32, 90u32, 12u32, 24u32, col)
+                x = x + 1i64
+            }
+            ui_text_n(b, w, h, 40u32, 122u32, "cells: x where x % m == r  (the proven invariant set)" as u64, 53u32, rgb(120u32,135u32,165u32))
+        }
+    }
+
+    /* result panel. */
+    ui_fill_rect(b, w, h, 0u32, 330u32, w, 2u32, rgb(40u32,44u32,60u32))
+    if HAVE == 1u32 {
+        let mut cx : u32 = ui_text_n(b, w, h, 12u32, 344u32, "result: " as u64, 8u32, rgb(120u32,135u32,165u32))
+        if VERB == 3u32 {
+            if ROK == 1u32 { ui_text_n(b, w, h, cx, 344u32, "PROVEN over all 2^64  (x % m == r holds under x+c)" as u64, 49u32, statcol(ROK)) }
+            if ROK == 2u32 { ui_text_n(b, w, h, cx, 344u32, "REFUTED  (not invariant, or vacuous m<=1)" as u64, 41u32, statcol(ROK)) }
+        }
+        if VERB == 5u32 {
+            if ROK == 1u32 { ui_text_n(b, w, h, cx, 344u32, "PROVEN DISJOINT  (stride-incongruent or separated -- never alias)" as u64, 65u32, statcol(ROK)) }
+            if ROK == 2u32 { ui_text_n(b, w, h, cx, 344u32, "MAY_ALIAS  (sound: cannot prove disjoint -- defer to solver)" as u64, 60u32, statcol(ROK)) }
+        }
+        if VERB == 6u32 {
+            if ROK == 1u32 { ui_text_n(b, w, h, cx, 344u32, "CONSERVED over all steps  (drift = 0)  PROVEN" as u64, 45u32, statcol(ROK)) }
+            if ROK == 2u32 { let dx : u32 = ui_text_n(b, w, h, cx, 344u32, "NOT CONSERVED  per-step drift = " as u64, 32u32, statcol(ROK))  text_i64(b, w, h, dx, 344u32, RVAL, statcol(ROK)) }
+        }
+        if VERB != 3u32 { if VERB != 5u32 { if VERB != 6u32 {
+            cx = ui_text_n(b, w, h, cx, 344u32, "= " as u64, 2u32, rgb(235u32,240u32,250u32))
+            cx = text_i64(b, w, h, cx, 344u32, RVAL, statcol(ROK))
+            if VERB == 1u32 { ui_text_n(b, w, h, cx, 344u32, " / 64  exact subsamples inside" as u64, 30u32, rgb(120u32,135u32,165u32)) }
+            if VERB == 2u32 { ui_text_n(b, w, h, cx, 344u32, " / 64  exact subsamples inside" as u64, 30u32, rgb(120u32,135u32,165u32)) }
+            if VERB == 4u32 { ui_text_n(b, w, h, cx, 344u32, "  (signed area determinant; +left -right)" as u64, 41u32, rgb(120u32,135u32,165u32)) }
+        } } }
+    }
+
+    /* help + input line. */
+    ui_text_n(b, w, h, 12u32, 388u32, "cov cx cy r px py   |   tri x0 y0 x1 y1 x2 y2 px py" as u64, 50u32, rgb(95u32,105u32,130u32))
+    ui_text_n(b, w, h, 12u32, 406u32, "mod m r c i  (prove x%m==r under x+c)   |   edge ax ay bx by px py" as u64, 65u32, rgb(95u32,105u32,130u32))
+    ui_text_n(b, w, h, 12u32, 418u32, "disj b1 s1 c1 b2 s2 c2   |   consv w0 w1 c a b x0 y0  (conserved law)" as u64, 67u32, rgb(95u32,105u32,130u32))
+    ui_fill_rect(b, w, h, 0u32, 436u32, w, 28u32, rgb(18u32,20u32,30u32))
+    let mut ix : u32 = ui_text_n(b, w, h, 12u32, 442u32, "> " as u64, 2u32, rgb(0u32,229u32,255u32))
+    ix = ui_text_n(b, w, h, ix, 442u32, &INBUF as u64, INLEN, rgb(235u32,240u32,250u32))
+    if (frame & 16u32) != 0u32 { ui_fill_rect(b, w, h, ix, 442u32, 8u32, 16u32, rgb(0u32,229u32,255u32)) }   /* blinking cursor */
+    return 0i32
+}
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 760u32, 480u32)
+    let mut frame : u32 = 0u32
+    while ui_win_pump() == 0u32 {
+        let mut c : u32 = ui_getchar()
+        let mut drain : u32 = 1u32
+        while drain == 1u32 {
+            if c == 0u32 { drain = 0u32 }
+            if c != 0u32 {
+                if c == 13u32 { execute()  INLEN = 0u32 }
+                if c == 8u32 { if INLEN > 0u32 { INLEN = INLEN - 1u32 } }
+                if c >= 32u32 { if c <= 126u32 { if INLEN < 90u32 { INBUF[INLEN as u64] = c as u8  INLEN = INLEN + 1u32 } } }
+                c = ui_getchar()
+            }
+        }
+        render(&FB as u64, 760u32, 480u32, frame)
+        ui_win_present(&FB as u64, 760u32, 480u32)
+        ui_sleep(16u32)
+        frame = frame + 1u32
+    }
+    return 0u64
+}

@@ -1,0 +1,64 @@
+/* STDLIB/corpus/2088_frp_kinematics.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 1: III crushes UI motion into
+ * PROVEN closed forms, killing the Functional-Reactive (FRP) time/space leak at its root, and DERIVING kinematics.
+ *
+ * The leak the industry abandoned FRP over: Position=f(Time) must remember the frame history (pos[n]=pos[n-1]+vel)
+ * to evaluate "now" -- an unbounded accumulation that leaks.  III crushes that recurrence into a closed form that
+ * carries NO history, so there is nothing to leak and it evaluates at ANY t in O(1).  And the crushed form IS a
+ * physics law III derived -- an association it can reuse:
+ *   Phase 1a  constant velocity   ->  x = x0 + v*t   -- THE LOAD-BEARING PROOF: au_topo_amputate bit-blasts
+ *             step==pos+vel over ALL 2^64.  This orbit genuinely equals its closed form.  (paired with 2092.)
+ *   Phase 1b  constant accel      ->  x = x0 + v0*t + accel*t(t-1)/2  -- WEAKER, honest scope: the lgg FITS the
+ *             orbit (v0,accel recovered from samples) and au_prove_quadratic proves the UNIVERSAL Gauss identity
+ *             tri(n+1)==tri(n)+n -- so the closed-form FORMULA is valid, but THIS orbit is NOT certified over 2^64
+ *             (the proof is identity-universal, the fit is sampled).  Only the 1a miter is a per-orbit 2^64 proof.
+ * 99 = 1a proven over 2^64; 1b's formula valid + fitted; the closed forms reproduce the sampled recurrences. */
+module corpus_2088_frp_kinematics
+
+/* -- linear (constant-velocity) crush + the SVIR interpreter -- */
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_arith_delta() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_get(slot: u32) -> u64 from "ser_antiunify.iii"
+/* -- quadratic (constant-acceleration) crush -- */
+extern @abi(c-msvc-x64) fn au_fuzz_arith_sum(b0: u64, c: u64, seed: u64, niter: u32) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_is_quadratic() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_quad_b() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_quad_c() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_closed_quadratic(nn: u64) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic(s0: u64, b: u64, c: u64) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic_gen(s0: u64, b: u64, c: u64, brk: u64) -> u8 from "ser_antiunify.iii"
+
+/* per-frame SVIR body: pos(slot0) += vel(=7), a LOCAL_GET 0, CONST 7, ADD, LOCAL_SET 0. */
+var MOT : [u8; 14] = [16u8,0u8, 1u8, 7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]
+
+fn recur(pos0: u64, n: u32) -> u64 {
+    au_tp_set(0u32, pos0)
+    let mut i : u32 = 0u32
+    while i < n { au_svir_exec(&MOT as u64, 0u64, 14u64)  i = i + 1u32 }
+    return au_tp_get(0u32)
+}
+fn closed_lin(pos0: u64, vel: u64, t: u64) -> u64 { return pos0 + (t * vel) }
+
+fn main() -> u64 {
+    /* === Phase 1a: constant velocity -> x = x0 + v*t (linear bit-blast guillotine) === */
+    if au_topo_amputate(&MOT as u64, 0u64, 14u64, 0u32, 0u64) != 1u32 { return 1u64 }
+    let vel : u64 = au_arith_delta()
+    if vel != 7u64 { return 2u64 }
+    if recur(100u64, 10u32) != closed_lin(100u64, vel, 10u64) { return 3u64 }
+    if recur(0u64, 25u32)   != closed_lin(0u64,   vel, 25u64) { return 4u64 }
+    if recur(5u64, 1u32)    != closed_lin(5u64,   vel, 1u64)  { return 5u64 }
+    if closed_lin(0u64, vel, 1000000u64) != 7000000u64 { return 6u64 }   /* O(1) at huge t, no frames stored */
+
+    /* === Phase 1b: constant acceleration -> x = x0 + v0*t + accel*t(t-1)/2 (Gauss guillotine) === */
+    /* accel orbit: pos starts 10, vel starts 3, accel 2.  pos: 10,13,18,25,34,...  (v0=3, a=2). */
+    au_fuzz_arith_sum(3u64, 2u64, 10u64, 6u32)
+    if au_is_quadratic() != 1u32 { return 7u64 }       /* genuinely degree-2 */
+    if au_quad_b() != 3u64 { return 8u64 }             /* III RECOVERED v0 = 3 from the orbit */
+    if au_quad_c() != 2u64 { return 9u64 }             /* III RECOVERED accel = 2 (curvature) */
+    if au_closed_quadratic(4u64) != 34u64 { return 10u64 }   /* x(4) = 10 + 3*4 + 2*tri(4) = 34, O(1) */
+    if au_prove_quadratic(10u64, 3u64, 2u64) != 1u8 { return 11u64 }   /* tri recurrence PROVEN over all n */
+    if au_prove_quadratic_gen(10u64, 3u64, 2u64, 1u64) != 0u8 { return 12u64 }   /* teeth: off-by-1 REFUTED */
+
+    return 99u64
+}

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# run_legA.sh -- the autopoietic seed-synthesis proof gate: Leg-A SVIR<->SVIR equivalence + the three legacy-wall
+# amputations (control flow, memory, the proven memory model).  Builds the lifted membrane modules FRESH and runs
+# every KAT; exit 0 iff all return 99.  Each KAT carries its own teeth.  Pins COMPILED/iiis-2.exe; gcc links only
+# the differential test harness (NOT the proven path).
+#  ser_kinduct_sym : SVIR<->SVIR prover + IF-diamond mux (Algebraic Path Superposition)   -- Leg A core + control flow
+#  ser_absint      : affine alias domain + addr accessors (ai_disjoint/aff_addr)           -- ETAT mechanism 1
+#  ser_causal      : memory-as-causal-fold, B0 prove-the-prover, B2 Causal Tensorization   -- ETAT memory leg
+#  ser_intent      : cegis-proposes / seq_equiv-certifies (in_certify)                     -- the closed loop (C4)
+set -uo pipefail
+III="${III_ROOT:-/c/Users/Edwin Boston/OneDrive/Desktop/III}"
+IIIS="$III/COMPILED/iiis-2.exe"
+A="$III/STDLIB/build/iii/libiii_native.a"
+O="$III/STDLIB/build/_seqprobe"; mkdir -p "$O"
+LIBS="-lws2_32 -lkernel32"
+fail=0
+cc() { "$IIIS" "$1" --compile-only --out "$2" >/dev/null 2>&1 || { echo "[legA] COMPILE FAIL $1"; fail=1; }; }
+run() { local exe="$1"; shift; rm -f "$exe"; gcc "$@" "$A" $LIBS -o "$exe" 2>/dev/null || { echo "[legA] LINK FAIL $exe"; fail=1; return; }
+        local st="$O/$(basename "$exe" .exe).run.exe"; cp "$exe" "$st"; timeout 240 "$st"; local rc=$?; rm -f "$st"
+        if [ "$rc" -eq 99 ]; then echo "[legA] PASS $(basename "$exe")  (=99)"; else echo "[legA] FAIL $(basename "$exe")  (=$rc)"; fail=1; fi; }
+cc "$III/STDLIB/iii/numera/bv_bits.iii"          "$O/bb.o"
+cc "$III/STDLIB/iii/numera/ser_kinduct_sym.iii"  "$O/sks.o"
+cc "$III/STDLIB/iii/numera/ser_absint.iii"       "$O/absint.o"
+cc "$III/STDLIB/iii/numera/ser_causal.iii"       "$O/causal.o"
+cc "$III/STDLIB/iii/numera/ser_intent.iii"       "$O/intent.o"
+cc "$III/STDLIB/iii/numera/ser_antiunify.iii"    "$O/au.o"
+cc "$III/STDLIB/sovir/svir_verify.iii"           "$O/svf.o"
+cc "$III/STDLIB/build/sovir/_seq_equiv_kat.iii"      "$O/kat.o"
+cc "$III/STDLIB/build/sovir/_seq_equiv_mod_kat.iii"  "$O/modkat.o"
+cc "$III/STDLIB/build/sovir/_slt_kat.iii"            "$O/sltkat.o"
+cc "$III/STDLIB/build/sovir/_aff_disjoint_kat.iii"   "$O/affkat.o"
+cc "$III/STDLIB/build/sovir/_etat_b0_core_kat.iii"   "$O/b0core.o"
+cc "$III/STDLIB/build/sovir/_etat_mem_kat.iii"       "$O/memkat.o"
+cc "$III/STDLIB/build/sovir/_etat_b2_kat.iii"        "$O/b2kat.o"
+cc "$III/STDLIB/build/sovir/_if_diamond_kat.iii"     "$O/ifkat.o"
+cc "$III/STDLIB/build/sovir/_au_b3_kat.iii"          "$O/aukat.o"
+cc "$III/STDLIB/build/sovir/_au_deg2_kat.iii"        "$O/deg2kat.o"
+cc "$III/STDLIB/build/sovir/_au_crucible_kat.iii"    "$O/cruc.o"
+cc "$III/STDLIB/build/sovir/_au_topo_kat.iii"        "$O/topo.o"
+cc "$III/STDLIB/build/sovir/_au_crush_kat.iii"       "$O/crush.o"
+cc "$III/STDLIB/build/sovir/_au_crush2_kat.iii"      "$O/crush2.o"
+cc "$III/STDLIB/build/sovir/_au_nested_kat.iii"      "$O/nested.o"
+cc "$III/STDLIB/build/sovir/_au_cf_kat.iii"          "$O/cf.o"
+cc "$III/STDLIB/build/sovir/_au_nestcrush_kat.iii"   "$O/ncrush.o"
+cc "$III/STDLIB/build/sovir/_au_report_kat.iii"      "$O/rpt.o"
+cc "$III/STDLIB/build/sovir/_au_rhash_kat.iii"       "$O/rh.o"
+cc "$III/STDLIB/build/sovir/_au_tcb_kat.iii"         "$O/tcb.o"
+cc "$III/STDLIB/build/sovir/_au_nl_kat.iii"          "$O/nl.o"
+cc "$III/STDLIB/build/sovir/_au_fold_kat.iii"        "$O/fold.o"
+cc "$III/STDLIB/build/sovir/_synth_prove_kat.iii"    "$O/spkat.o"
+cc "$III/STDLIB/build/sovir/_au_conform_kat.iii"     "$O/conform.o"
+run "$O/seqkat.exe"  "$O/kat.o"    "$O/sks.o" "$O/bb.o"
+run "$O/modkat.exe"  "$O/modkat.o" "$O/sks.o" "$O/bb.o" "$O/svf.o"
+run "$O/sltkat.exe"  "$O/sltkat.o" "$O/sks.o" "$O/bb.o"
+run "$O/affkat.exe"  "$O/affkat.o" "$O/absint.o"
+run "$O/b0core.exe"  "$O/b0core.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+run "$O/memkat.exe"  "$O/memkat.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+run "$O/b2kat.exe"   "$O/b2kat.o"  "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+run "$O/ifkat.exe"   "$O/ifkat.o"  "$O/sks.o" "$O/bb.o"
+run "$O/aukat.exe"   "$O/aukat.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/deg2kat.exe" "$O/deg2kat.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/cruc.exe"    "$O/cruc.o"    "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/topo.exe"    "$O/topo.o"    "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/crush.exe"   "$O/crush.o"   "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/crush2.exe"  "$O/crush2.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/nested.exe"  "$O/nested.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/cf.exe"      "$O/cf.o"      "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/ncrush.exe"  "$O/ncrush.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/rpt.exe"     "$O/rpt.o"     "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/rh.exe"      "$O/rh.o"      "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/tcb.exe"     "$O/tcb.o"     "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/nl.exe"      "$O/nl.o"      "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/fold.exe"    "$O/fold.o"    "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/spkat.exe"   "$O/spkat.o"  "$O/intent.o" "$O/sks.o" "$O/bb.o"
+ run "$O/conform.exe" "$O/conform.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+if [ "$fail" -eq 0 ]; then echo "[legA] ALL GREEN -- Leg A + IF-diamond + ETAT(mech1+B0+B2 memory) + closed synthesis loop, teeth live"; exit 0; else echo "[legA] RED"; exit 1; fi

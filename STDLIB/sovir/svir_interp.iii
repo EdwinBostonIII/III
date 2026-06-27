@@ -1,0 +1,176 @@
+/* svir_interp.iii -- the REFERENCE SVIR v1 interpreter (the value-tracer): a 3rd, INDEPENDENT executor of a
+ * linked `gen_svir` module, sharing NO code with svir_x86 / svir_wasm.  It executes SVIR SEMANTICS faithfully
+ * (per DOCS/SVIR-V1-CANONICAL.md + the svir_x86 ABI: func 0 = main; flat `svir_mem` byte memory with direct
+ * mem[addr] LOAD/STORE; trailing [u16 len][bytes] data section byte-packed at offset 0; CALL = pop argcount
+ * args -> callee locals 0..n-1, push the RETURN result) and PRINTS the program's output via putchar.
+ *
+ * PURPOSE (Boss-1): a faithful reference executor is the ground-truth oracle for ANY SVIR-vs-backend question.
+ * If it reproduces the SHADOW_ON=1 wrong SHA digest, the SVIR is semantically wrong (ccsv codegen) -- a 3rd
+ * independent confirmation -- AND it can be instrumented to trace the exact diverging memory/slot.
+ *
+ * NIH: libc putchar only.  No island: it is the SVIR reference semantics, the same ISA svir_verify validates. */
+module svir_interp
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var MEM  : [u8; 4194304]                 /* svir_mem: flat linear memory (4 MiB) */
+var VS   : [u64; 16384]   var VSP : u32 = 0u32      /* the shared eval (value) stack */
+var LOC  : [u64; 131072]                 /* per-call locals: frame `depth` owns LOC[depth*256 .. +256] (512 frames) */
+var CK   : [u32; 16384]   var CP : [u64; 16384]   var CE : [u64; 16384]   /* per-call control stack: depth*64 + csp */
+
+var FN_OFF   : [u64; 2048]   var FN_BLEN : [u64; 2048]   var NFUNC : u32 = 0u32
+const STEP_CAP : u64 = 4000000000u64     /* global step budget (a non-terminating module refuses, never hangs) */
+var STEPS : u64 = 0u64
+
+/* CONST-DATA CORRUPTION WATCH: the data section [0..DLEN_G) is const/input (CL_K, string literals) and must NOT
+ * be written during execution.  Any STORE below DLEN_G is a codegen bug (a mis-addressed write).  Record the
+ * first 64 such writes with the offending function id -> pins the corrupting opcode's function. */
+var DLEN_G : u64 = 0u64
+var CUR_FN : u32 = 0u32
+var BADW_N : u32 = 0u32   var BADW_A : [u64; 64]   var BADW_V : [u64; 64]   var BADW_F : [u32; 64]
+var PDEC_D : [u8; 24]
+fn pdec(v0: u64) { if v0==0u64 { putchar(48i32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { PDEC_D[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  putchar(PDEC_D[n as u64] as i32) } }
+fn pstr2(a:u32,b:u32){ putchar(a as i32) putchar(b as i32) }
+
+fn ib(i: u64) -> u32 { let p : *u8 = (svir_ptr() + i) as *u8  return p[0u64] as u32 }   /* a byte of the SVIR module */
+fn ird8(i: u64) -> u64 { let mut v:u64=0u64  let mut k:u64=0u64  while k<8u64 { v = v | ((ib(i+k)) as u64 << (k*8u64))  k=k+1u64 }  return v }   /* 8-byte LE from the module body */
+fn iu16(i: u64) -> u64 { return (ib(i) as u64) | ((ib(i+1u64) as u64) << 8u64) }
+
+fn mb(a: u64) -> u32 { if a < 4194304u64 { return MEM[a] as u32 }  return 0u32 }
+fn msb(a: u64, v: u32) { if a < 4194304u64 { MEM[a] = (v & 255u32) as u8 } }
+fn mld(a: u64, w: u32, sgn: u32) -> u64 {                 /* load w bytes (1/2/4/8) from MEM, sign- or zero-extend */
+    let mut v : u64 = 0u64  let mut k : u64 = 0u64
+    while k < (w as u64) { v = v | ((mb(a+k)) as u64 << (k*8u64))  k=k+1u64 }
+    if sgn == 1u32 { if w == 2u32 { if v >= 32768u64 { v = v | 18446744073709551360u64 } }   /* sign-extend 16 */
+                     if w == 4u32 { if v >= 2147483648u64 { v = v | 18446744069414584320u64 } } }   /* sign-extend 32 */
+    return v
+}
+fn mst(a: u64, w: u32, v: u64) {
+    if a < DLEN_G { if BADW_N < 64u32 { BADW_A[BADW_N as u64]=a  BADW_V[BADW_N as u64]=v  BADW_F[BADW_N as u64]=CUR_FN  BADW_N=BADW_N+1u32 } }   /* WRITE into the const data section = the codegen bug */
+    let mut k : u64 = 0u64  while k < (w as u64) { msb(a+k, ((v >> (k*8u64)) & 255u64) as u32)  k=k+1u64 }
+}
+
+fn vpush(v: u64) { if VSP < 16384u32 { VS[VSP as u64] = v  VSP = VSP + 1u32 } }
+fn vpop() -> u64 { if VSP > 0u32 { VSP = VSP - 1u32  return VS[VSP as u64] }  return 0u64 }
+
+fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  return 0u64 }
+
+/* find, for the construct opening at body-offset q (BLOCK/LOOP/IF), its matching END position (opcode-aware). */
+fn match_end(boff: u64, blen: u64, q: u64) -> u64 {
+    let mut p : u64 = q + 1u64  let mut depth : i64 = 1i64  let mut res : u64 = blen  let mut done : u32 = 0u32
+    while p < blen { if done == 0u32 {
+        let op : u32 = ib(boff + p)  let w : u64 = op_w(op)
+        if op==0x40u32 { depth=depth+1i64 }  if op==0x41u32 { depth=depth+1i64 }  if op==0x42u32 { depth=depth+1i64 }
+        if op==0x44u32 { depth=depth-1i64  if depth==0i64 { res=p  done=1u32 } }
+        p = p + 1u64 + w
+    } else { p = blen } }
+    return res
+}
+/* for an IF at body-offset q, find its matching ELSE position (at depth 0) or NONE (=blen). */
+fn match_else(boff: u64, blen: u64, q: u64) -> u64 {
+    let mut p : u64 = q + 1u64  let mut depth : i64 = 1i64  let mut res : u64 = blen  let mut done : u32 = 0u32
+    while p < blen { if done == 0u32 {
+        let op : u32 = ib(boff + p)  let w : u64 = op_w(op)
+        if op==0x40u32 { depth=depth+1i64 }  if op==0x41u32 { depth=depth+1i64 }  if op==0x42u32 { depth=depth+1i64 }
+        if op==0x44u32 { depth=depth-1i64  if depth==0i64 { done=1u32 } }
+        if op==0x43u32 { if depth==1i64 { res=p  done=1u32 } }
+        if done==0u32 { p = p + 1u64 + w }
+    } else { p = blen } }
+    return res
+}
+
+/* execute function `fnidx` at call-frame `depth` (locals base = depth*256, control base = depth*64).
+ * args are already placed in LOC[depth*256 .. +argcount] by the caller.  Returns the RETURN value. */
+fn exec_fn(fnidx: u32, depth: u32) -> u64 {
+    let boff : u64 = FN_OFF[fnidx as u64]
+    let blen : u64 = FN_BLEN[fnidx as u64]
+    let lb   : u64 = (depth as u64) * 256u64        /* locals base */
+    let cb   : u64 = (depth as u64) * 64u64         /* control-stack base */
+    let mut csp : u32 = 0u32
+    let mut p   : u64 = 0u64
+    while p < blen {
+        STEPS = STEPS + 1u64
+        if STEPS > STEP_CAP { return 0u64 }
+        CUR_FN = fnidx                                  /* attribute any store this iteration to THIS function */
+        let op : u32 = ib(boff + p)
+        let mut adv : u32 = 1u32        /* most ops advance p by 1+operand; control ops set p directly + adv=0 */
+        if op == 0x60u32 { return vpop() }                                                  /* RETURN */
+        if op == 0x01u32 { vpush(ird8(boff + p + 1u64))  p = p + 9u64  adv = 0u32 }          /* CONST */
+        if op == 0x10u32 { let sl:u32=ib(boff+p+1u64)  vpush(LOC[lb + (sl as u64)])  p = p + 2u64  adv=0u32 }   /* LOCAL_GET */
+        if op == 0x11u32 { let sl:u32=ib(boff+p+1u64)  LOC[lb + (sl as u64)] = vpop()  p = p + 2u64  adv=0u32 } /* LOCAL_SET */
+        if op == 0x40u32 { CK[(cb+(csp as u64))]=0u32  CP[(cb+(csp as u64))]=p  CE[(cb+(csp as u64))]=match_end(boff,blen,p)  csp=csp+1u32 }   /* BLOCK */
+        if op == 0x41u32 { CK[(cb+(csp as u64))]=1u32  CP[(cb+(csp as u64))]=p  CE[(cb+(csp as u64))]=match_end(boff,blen,p)  csp=csp+1u32 }   /* LOOP */
+        if op == 0x44u32 { if csp>0u32 {csp=csp-1u32} }                                      /* END */
+        if op == 0x71u32 { let c:u64=vpop()  putchar((c & 255u64) as i32) }                  /* PRINT_CHAR */
+        if op == 0x72u32 { vpop() }                                                          /* DROP */
+        if op == 0x42u32 { adv=0u32  let c:u64=vpop()  let me:u64=match_end(boff,blen,p)  CK[(cb+(csp as u64))]=2u32  CP[(cb+(csp as u64))]=p  CE[(cb+(csp as u64))]=me  csp=csp+1u32   /* IF */
+            if c != 0u64 { p = p + 1u64 } else { let el:u64=match_else(boff,blen,p)  if el < blen { p = el + 1u64 } else { if csp>0u32 {csp=csp-1u32}  p = me + 1u64 } } }
+        if op == 0x43u32 { adv=0u32  let top:u32=csp-1u32  p = CE[(cb+(top as u64))] + 1u64  if csp>0u32 {csp=csp-1u32} }   /* ELSE -> past END */
+        if op == 0x50u32 { adv=0u32  let d:u32=ib(boff+p+1u64)  let tgt:u32=(csp-1u32)-d      /* BR d */
+            if CK[(cb+(tgt as u64))]==1u32 { csp=tgt+1u32  p=CP[(cb+(tgt as u64))]+1u64 } else { csp=tgt  p=CE[(cb+(tgt as u64))]+1u64 } }
+        if op == 0x51u32 { adv=0u32  let c:u64=vpop()  let d:u32=ib(boff+p+1u64)              /* BR_IF d */
+            if c != 0u64 { let tgt:u32=(csp-1u32)-d  if CK[(cb+(tgt as u64))]==1u32 { csp=tgt+1u32  p=CP[(cb+(tgt as u64))]+1u64 } else { csp=tgt  p=CE[(cb+(tgt as u64))]+1u64 } } else { p=p+2u64 } }
+        if op == 0x70u32 { adv=0u32  let fi:u32=ib(boff+p+1u64)  let ac:u32=ib(boff+p+2u64)  p=p+3u64   /* CALL fi ac */
+            let nb : u64 = ((depth+1u32) as u64) * 256u64
+            let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }
+            vpush(exec_fn(fi, depth + 1u32)) }
+        if op >= 0x80u32 { if op <= 0x89u32 {                                                 /* typed memory */
+            if op==0x80u32 { let a:u64=vpop()  vpush(mld(a,1u32,0u32)) }
+            if op==0x82u32 { let a:u64=vpop()  vpush(mld(a,8u32,0u32)) }
+            if op==0x84u32 { let a:u64=vpop()  vpush(mld(a,2u32,0u32)) }
+            if op==0x85u32 { let a:u64=vpop()  vpush(mld(a,2u32,1u32)) }
+            if op==0x86u32 { let a:u64=vpop()  vpush(mld(a,4u32,0u32)) }
+            if op==0x87u32 { let a:u64=vpop()  vpush(mld(a,4u32,1u32)) }
+            if op==0x81u32 { let v:u64=vpop()  let a:u64=vpop()  mst(a,1u32,v) }
+            if op==0x83u32 { let v:u64=vpop()  let a:u64=vpop()  mst(a,8u32,v) }
+            if op==0x88u32 { let v:u64=vpop()  let a:u64=vpop()  mst(a,2u32,v) }
+            if op==0x89u32 { let v:u64=vpop()  let a:u64=vpop()  mst(a,4u32,v) }
+        } }
+        if op >= 0x20u32 { if op <= 0x35u32 {                                                 /* binops */
+            let b:u64=vpop()  let a:u64=vpop()  let mut r:u64=0u64
+            if op==0x20u32 { r = a + b }  if op==0x21u32 { r = a - b }  if op==0x22u32 { r = a * b }
+            if op==0x23u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) / bi) as u64 } }
+            if op==0x24u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) % bi) as u64 } }
+            if op==0x25u32 { r = a & b }  if op==0x26u32 { r = a | b }  if op==0x27u32 { r = a ^ b }
+            if op==0x28u32 { r = a << (b & 63u64) }  if op==0x29u32 { r = a >> (b & 63u64) }
+            if op==0x30u32 { if a == b { r = 1u64 } }  if op==0x31u32 { if a != b { r = 1u64 } }
+            if op==0x32u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai <  bi { r = 1u64 } }
+            if op==0x33u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai >= bi { r = 1u64 } }
+            if op==0x34u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai <= bi { r = 1u64 } }
+            if op==0x35u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai >  bi { r = 1u64 } }
+            vpush(r)
+        } }
+        if adv == 1u32 { p = p + 1u64 + op_w(op) }
+    }
+    return 0u64
+}
+
+fn load_module() {
+    NFUNC = ib(0u64)
+    let mut p : u64 = 1u64  let mut fi : u32 = 0u32
+    while fi < NFUNC {
+        let bl : u64 = iu16(p + 2u64)
+        FN_OFF[fi as u64] = p + 4u64  FN_BLEN[fi as u64] = bl
+        p = p + 4u64 + bl
+        fi = fi + 1u32
+    }
+    /* trailing data section [u16 len][bytes] -> byte-packed into MEM at offset 0 */
+    let total : u64 = svir_len()
+    if p < total { let dl : u64 = iu16(p)  DLEN_G = dl  let mut k : u64 = 0u64  while k < dl { MEM[k] = ib(p + 2u64 + k) as u8  k=k+1u64 } }
+}
+
+fn main() -> u64 {
+    load_module()
+    let mut s : u32 = 0u32  while s < 256u32 { LOC[s as u64] = 0u64  s = s + 1u32 }   /* main's locals start 0 */
+    let r : u64 = exec_fn(0u32, 0u32)            /* func 0 = main (the entry); prints via PRINT_CHAR */
+    if BADW_N > 0u32 {                            /* CONST-DATA CORRUPTION detected -> print the offending writes */
+        putchar(10i32)  pstr2(66u32,87u32)  putchar(58i32)  putchar(32i32)   /* "BW: " */
+        let mut i : u32 = 0u32
+        while i < BADW_N { if i < 8u32 {           /* first 8 bad writes: fn=F@addr=A=val */
+            pstr2(102u32,110u32) putchar(61i32) pdec(BADW_F[i as u64] as u64)  putchar(64i32)  pdec(BADW_A[i as u64])  putchar(61i32)  pdec(BADW_V[i as u64])  putchar(32i32)
+        }  i = i + 1u32 }
+        putchar(10i32)  pstr2(78u32,61u32) pdec(BADW_N as u64) putchar(10i32)   /* "N=<total>" */
+    }
+    return r
+}

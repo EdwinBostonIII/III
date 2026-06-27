@@ -1,0 +1,31 @@
+/* STDLIB/corpus/2087_conservation.iii -- falsifier for sks_consv_prove (ser_kinduct_sym), the conservation-law
+ * prover the III-GLASS sculptor's `consv` command projects.  F = w0*x + w1*y is a SOUND conserved invariant iff
+ * BASE (F(x0,y0)==c) AND STEP (per-step drift w0*a+w1*b == 0).  Three real cases:
+ *   (A) x+y under (x,y)->(x+3,y-3): drift 0, base 4+6=10 -> PROVEN; sks_consv_step_sym confirms by bit-blast.
+ *   (B) (x,y)->(x+3,y-2): drift = 1 != 0 -> REFUTED, and the drift IS the exact defect (a checkable witness).
+ *   (C) same step but c=99 != base 10 -> REFUTED (base fails).
+ * 99 = the conservation prover is real + sound (no false 'conserved'). */
+module corpus_2087_conservation
+
+extern @abi(c-msvc-x64) fn sks_consv_prove(w0: u64, w1: u64, c: u64, a: u64, b: u64, x0: u64, y0: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_drift(w0: u64, w1: u64, a: u64, b: u64) -> u64 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_step_sym(w0: u64, w1: u64, a: u64, b: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    let bm3 : u64 = 0u64 - 3u64   /* -3 in u64 */
+    let bm2 : u64 = 0u64 - 2u64   /* -2 in u64 */
+
+    /* (A) x+y conserved under (x,y) -> (x+3, y-3) from (4,6), c=10. */
+    if sks_consv_prove(1u64, 1u64, 10u64, 3u64, bm3, 4u64, 6u64) != 1u8 { return 1u64 }
+    if sks_consv_drift(1u64, 1u64, 3u64, bm3) != 0u64 { return 2u64 }
+    if sks_consv_step_sym(1u64, 1u64, 3u64, bm3) != 1u8 { return 3u64 }   /* bit-blast miter UNSAT */
+
+    /* (B) (x,y) -> (x+3, y-2): drift = 3 + (-2) = 1 != 0 -> NOT conserved, and the drift is the exact defect. */
+    if sks_consv_prove(1u64, 1u64, 10u64, 3u64, bm2, 4u64, 6u64) != 0u8 { return 4u64 }
+    if sks_consv_drift(1u64, 1u64, 3u64, bm2) != 1u64 { return 5u64 }
+
+    /* (C) drift 0 but base 4+6=10 != c=99 -> NOT conserved (base fails). */
+    if sks_consv_prove(1u64, 1u64, 99u64, 3u64, bm3, 4u64, 6u64) != 0u8 { return 6u64 }
+
+    return 99u64
+}

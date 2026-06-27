@@ -1,0 +1,46 @@
+/* STDLIB/corpus/2080_ui_raster.iii -- proves III-GLASS L2 (the NIH rasterizer) pixel-exact: fills clip, the
+ * outline is hollow, alpha-OVER computes the right channels, and Bresenham hits the diagonal.  The drawing layer
+ * is a verified organ before any UI stands on it.  99 = every primitive lands the exact pixels expected. */
+module corpus_2080_ui_raster
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_get(buf: u64, w: u32, x: u32, y: u32) -> u32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_put(buf: u64, w: u32, x: u32, y: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_blend(buf: u64, w: u32, x: u32, y: u32, argb: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+
+var FB : [u32; 4096]   /* a 64x64 ARGB surface */
+
+fn main() -> u64 {
+    let b : u64 = &FB as u64
+    /* clear to transparent black. */
+    ui_clear(b, 64u32, 64u32, 0u32)
+    if ui_get(b, 64u32, 0u32, 0u32) != 0u32 { return 1u64 }
+
+    /* filled RED rect at (10,10) size 20x20 -> interior set, exterior clear, edges exact. */
+    ui_fill_rect(b, 64u32, 64u32, 10u32, 10u32, 20u32, 20u32, 4294901760u32)   /* 0xFFFF0000 */
+    if ui_get(b, 64u32, 15u32, 15u32) != 4294901760u32 { return 2u64 }
+    if ui_get(b, 64u32, 5u32, 5u32)   != 0u32          { return 3u64 }
+    if ui_get(b, 64u32, 29u32, 29u32) != 4294901760u32 { return 4u64 }   /* last interior pixel */
+    if ui_get(b, 64u32, 30u32, 30u32) != 0u32          { return 5u64 }   /* one past */
+
+    /* GREEN outline rect at (40,5) size 10x10 -> edges set, interior hollow. */
+    ui_rect(b, 64u32, 64u32, 40u32, 5u32, 10u32, 10u32, 4278255360u32)   /* 0xFF00FF00 */
+    if ui_get(b, 64u32, 40u32, 5u32)  != 4278255360u32 { return 6u64 }   /* corner */
+    if ui_get(b, 64u32, 49u32, 14u32) != 4278255360u32 { return 7u64 }   /* opposite corner */
+    if ui_get(b, 64u32, 45u32, 10u32) != 0u32          { return 8u64 }   /* hollow interior */
+
+    /* alpha-OVER: 50% white (0x80FFFFFF) onto a red pixel -> 0xFFFF8080 exactly. */
+    ui_put(b, 64u32, 50u32, 50u32, 4294901760u32)    /* red */
+    ui_blend(b, 64u32, 50u32, 50u32, 2164260863u32)  /* 0x80FFFFFF */
+    if ui_get(b, 64u32, 50u32, 50u32) != 4294934656u32 { return 9u64 }   /* 0xFFFF8080 */
+
+    /* Bresenham diagonal (0,0)->(20,20) sets the (i,i) staircase; (10,10) must be white. */
+    ui_line(b, 64u32, 64u32, 0i32, 0i32, 20i32, 20i32, 4294967295u32)
+    if ui_get(b, 64u32, 10u32, 10u32) != 4294967295u32 { return 10u64 }
+    if ui_get(b, 64u32, 3u32, 3u32)   != 4294967295u32 { return 11u64 }
+
+    return 99u64
+}

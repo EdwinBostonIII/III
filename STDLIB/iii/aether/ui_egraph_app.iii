@@ -1,0 +1,8 @@
+/* STDLIB/iii/aether/ui_egraph_app.iii -- thin entry for the standalone live e-graph window (egraph.exe).  The
+ * renderer + window loop live in ui_egraph.iii (eg_render + eg_window_main, no main), so the zoom view can link
+ * ui_egraph.o to host the e-graph in place without a two-mains conflict.  This module is the standalone main. */
+module ui_egraph_app
+
+extern @abi(c-msvc-x64) fn eg_window_main() -> u64 from "ui_egraph.iii"
+
+fn main() -> u64 { return eg_window_main() }

@@ -1,0 +1,35 @@
+/* STDLIB/corpus/2106_field_time.iii -- THE UNIFIED FIELD, faculty 4: CONTINUOUS TIME AS AN ALGEBRAIC VARIABLE.
+ * Position p(t) = p0 + v0 t + (acc/2) t^2.  Time is a continuous variable, not a discrete tick; at ANY instant --
+ * including an irrational one t=(-1+sqrt3)/2 -- the position is a PROVEN algebraic value, not an interpolated frame.
+ * Infinite framerate, zero error.  99 = the kinematics are exact at irrational AND rational instants. */
+module corpus_2106_field_time
+
+extern @abi(c-msvc-x64) fn ui_kinematic_at_t(p0: i64, v0: i64, acc: i64, ta: i64, tD: i64, tc: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_kin_p() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_kin_q() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_kin_den() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_kin_d() -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* CONSTANT velocity 2, sampled at the IRRATIONAL instant t = (-1+sqrt3)/2 -> position = 2*t = -1 + sqrt3 EXACTLY */
+    ui_kinematic_at_t(0i64, 2i64, 0i64, 0i64 - 1i64, 3i64, 2i64)
+    if ui_kin_p() != (0i64 - 1i64) { return 1u64 }
+    if ui_kin_q() != 1i64 { return 2u64 }
+    if ui_kin_den() != 1i64 { return 3u64 }
+    if ui_kin_d() != 3i64 { return 4u64 }                 /* position = (-1 + 1*sqrt3)/1 = -1 + sqrt3 */
+
+    /* RATIONAL instant t = 1/2 -> position = 2*(1/2) = 1 EXACTLY (the keyframe lands clean, no float drift) */
+    ui_kinematic_at_t(0i64, 2i64, 0i64, 1i64, 0i64, 2i64)
+    if ui_kin_d() != 0i64 { return 5u64 }                 /* tD=0 -> rational */
+    if ui_kin_den() != 1i64 { return 6u64 }
+    if ui_kin_p() != 1i64 { return 7u64 }                 /* position = 1 */
+
+    /* ACCELERATED (a=2, v0=0) at the irrational t_c -> position = t_c^2 = (2 - sqrt3)/2 EXACTLY */
+    ui_kinematic_at_t(0i64, 0i64, 2i64, 0i64 - 1i64, 3i64, 2i64)
+    if ui_kin_p() != 2i64 { return 8u64 }
+    if ui_kin_q() != (0i64 - 1i64) { return 9u64 }
+    if ui_kin_den() != 2i64 { return 10u64 }
+    if ui_kin_d() != 3i64 { return 11u64 }                /* position = (2 - sqrt3)/2 */
+
+    return 99u64
+}

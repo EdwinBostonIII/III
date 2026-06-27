@@ -1,0 +1,71 @@
+/* STDLIB/corpus/2064_kinduct_general.iii -- the GENERAL symbolic k-induction engine (ser_kinduct_sym), proving
+ * ARBITRARY invariants over ARBITRARY transitions, sound over all 2^64 -- the unbounded prover the synthesis
+ * pipeline discharges against.  Each check builds P and T as bv_bits circuits and asks sks_step/sks_prove;
+ * the engine returns 1 iff the inductive miter is UNSAT over the WHOLE state space (never from samples).
+ * 99 = every inductive claim PROVEN and every non-inductive claim correctly REFUTED. */
+module corpus_2064_kinduct_general
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_ult(x: u32, c: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_step(p_x: u32, p_tx: u32) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_base(p_root: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_prove(p_x: u32, p_tx: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn p_even(x: u32) -> u32 { return sks_mask_eq(x, 1u64, 0u64) }   /* (x & 1) == 0 */
+
+fn main() -> u64 {
+    /* 1) evenness is 1-inductive under x'=x+2, NOT under x'=x+1 (the canonical witnessed system, now general). */
+    bb_reset(64u64)
+    let x1 : u32 = bb_var(0u32)
+    let t2 : u32 = bb_add(x1, bb_const(2u64))
+    if sks_step(p_even(x1), p_even(t2)) != 1u8 { return 1u64 }
+    bb_reset(64u64)
+    let x2 : u32 = bb_var(0u32)
+    let t1 : u32 = bb_add(x2, bb_const(1u64))
+    if sks_step(p_even(x2), p_even(t1)) != 0u8 { return 2u64 }
+
+    /* 2) "x % 4 == 0" (x&3==0) is inductive under x'=x+4, NOT under x'=x+2. */
+    bb_reset(64u64)
+    let x3 : u32 = bb_var(0u32)
+    let t4 : u32 = bb_add(x3, bb_const(4u64))
+    if sks_step(sks_mask_eq(x3, 3u64, 0u64), sks_mask_eq(t4, 3u64, 0u64)) != 1u8 { return 3u64 }
+    bb_reset(64u64)
+    let x4 : u32 = bb_var(0u32)
+    let t2b : u32 = bb_add(x4, bb_const(2u64))
+    if sks_step(sks_mask_eq(x4, 3u64, 0u64), sks_mask_eq(t2b, 3u64, 0u64)) != 0u8 { return 4u64 }
+
+    /* 3) the INTERVAL invariant "x < 64" is inductive under x'=x&63 (always <64), NOT under x'=x+1 (63->64). */
+    bb_reset(64u64)
+    let x5 : u32 = bb_var(0u32)
+    let tm : u32 = bb_and(x5, bb_const(63u64))
+    if sks_step(sks_ult(x5, 64u64), sks_ult(tm, 64u64)) != 1u8 { return 5u64 }
+    bb_reset(64u64)
+    let x6 : u32 = bb_var(0u32)
+    let t1c : u32 = bb_add(x6, bb_const(1u64))
+    if sks_step(sks_ult(x6, 64u64), sks_ult(t1c, 64u64)) != 0u8 { return 6u64 }
+
+    /* 4) BASE: P_even holds at init=0, fails at init=1 (concrete evaluation). */
+    bb_reset(64u64)
+    let x7 : u32 = bb_var(0u32)
+    if sks_base(p_even(x7), 0u32, 0u64) != 1u8 { return 7u64 }
+    bb_reset(64u64)
+    let x8 : u32 = bb_var(0u32)
+    if sks_base(p_even(x8), 0u32, 1u64) != 0u8 { return 8u64 }
+
+    /* 5) FULL PROOF: "x even" is a sound UNBOUNDED invariant under x'=x+2 from init=0; NOT under x'=x+1. */
+    bb_reset(64u64)
+    let x9 : u32 = bb_var(0u32)
+    let t9 : u32 = bb_add(x9, bb_const(2u64))
+    if sks_prove(p_even(x9), p_even(t9), 0u32, 0u64) != 1u8 { return 9u64 }
+    bb_reset(64u64)
+    let xa : u32 = bb_var(0u32)
+    let ta : u32 = bb_add(xa, bb_const(1u64))
+    if sks_prove(p_even(xa), p_even(ta), 0u32, 0u64) != 0u8 { return 10u64 }
+
+    return 99u64
+}

@@ -1,0 +1,63 @@
+/* STDLIB/corpus/2095_exact_coverage.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 7: EXACT arbitrary-geometry
+ * coverage.  ui_exact.ui_lattice_cover computes the EXACT pixel count of any integer polygon via shoelace + Pick's
+ * theorem -- the "triangle's pixels" the subsampled ui_tri_cov only estimated and au_crush_nested deferred on.
+ *
+ * The falsifier is adversarial: for each polygon it compares the closed-form Pick count against a BRUTE-FORCE
+ * lattice-point count (the ground truth -- every integer point in the bbox tested inside-or-on via the signed-area
+ * edge function).  If the shoelace/Pick algebra were wrong by a single point, the two diverge.  Three polygons:
+ *   triangle (0,0),(4,0),(0,3)      -> 11   (Pick (12+8)/2+1; direct 5+3+2+1)
+ *   square   (0,0),(5,0),(5,5),(0,5)-> 36   (Pick (50+20)/2+1; direct 6*6)
+ *   triangle (0,0),(10,0),(7,8)     -> formula must equal brute force exactly.
+ * 99 = the exact coverage matches the ground-truth count on every polygon. */
+module corpus_2095_exact_coverage
+
+extern @abi(c-msvc-x64) fn ui_lattice_cover(xs: u64, ys: u64, n: u32) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_edge(ax: i64, ay: i64, bx: i64, by: i64, px: i64, py: i64) -> i64 from "ui_exact.iii"
+
+var TX : [i64; 8]
+var TY : [i64; 8]
+
+/* ground truth: count lattice points inside-or-on a CCW convex polygon (all edges' signed area >= 0). */
+fn direct_count(n: u32, minx: i64, miny: i64, maxx: i64, maxy: i64) -> i64 {
+    let mut cnt : i64 = 0i64
+    let mut y : i64 = miny
+    while y <= maxy {
+        let mut x : i64 = minx
+        while x <= maxx {
+            let mut inside : u32 = 1u32
+            let mut i : u32 = 0u32
+            while i < n {
+                let mut j : u32 = i + 1u32  if j == n { j = 0u32 }
+                if ui_edge(TX[i as u64], TY[i as u64], TX[j as u64], TY[j as u64], x, y) < 0i64 { inside = 0u32 }
+                i = i + 1u32
+            }
+            if inside == 1u32 { cnt = cnt + 1i64 }
+            x = x + 1i64
+        }
+        y = y + 1i64
+    }
+    return cnt
+}
+
+fn main() -> u64 {
+    let xp : u64 = &TX as u64
+    let yp : u64 = &TY as u64
+
+    /* triangle (0,0),(4,0),(0,3) -- CCW */
+    TX[0u64] = 0i64  TY[0u64] = 0i64   TX[1u64] = 4i64  TY[1u64] = 0i64   TX[2u64] = 0i64  TY[2u64] = 3i64
+    if ui_lattice_cover(xp, yp, 3u32) != 11i64 { return 1u64 }
+    if direct_count(3u32, 0i64, 0i64, 4i64, 3i64) != 11i64 { return 2u64 }
+    if ui_lattice_cover(xp, yp, 3u32) != direct_count(3u32, 0i64, 0i64, 4i64, 3i64) { return 3u64 }
+
+    /* square (0,0),(5,0),(5,5),(0,5) -- CCW */
+    TX[0u64] = 0i64  TY[0u64] = 0i64   TX[1u64] = 5i64  TY[1u64] = 0i64   TX[2u64] = 5i64  TY[2u64] = 5i64   TX[3u64] = 0i64  TY[3u64] = 5i64
+    if ui_lattice_cover(xp, yp, 4u32) != 36i64 { return 4u64 }
+    if direct_count(4u32, 0i64, 0i64, 5i64, 5i64) != 36i64 { return 5u64 }
+    if ui_lattice_cover(xp, yp, 4u32) != direct_count(4u32, 0i64, 0i64, 5i64, 5i64) { return 6u64 }
+
+    /* a skew triangle (0,0),(10,0),(7,8) -- the exact formula must match brute force point-for-point */
+    TX[0u64] = 0i64  TY[0u64] = 0i64   TX[1u64] = 10i64  TY[1u64] = 0i64   TX[2u64] = 7i64  TY[2u64] = 8i64
+    if ui_lattice_cover(xp, yp, 3u32) != direct_count(3u32, 0i64, 0i64, 10i64, 8i64) { return 7u64 }
+
+    return 99u64
+}

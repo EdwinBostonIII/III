@@ -1,0 +1,53 @@
+/* STDLIB/corpus/2090_topological_field.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 3: the hybrid field COMPOSITION.
+ *
+ * SCOPE (honest, conscience): this KAT has ZERO externs -- it is a UNIT TEST of composing the closed forms,
+ * exercising NO III faculty.  The load-bearing machine-crush proofs over 2^64 live in 2088 (linear) and 2092.
+ * What this shows: the field is ONE pure O(1) function of (x,y,t,W) with no loop-carried state --
+ *
+ * A window pixel is a single closed-form function  Pixel(x,y,t,W) = f(x,y,t,W)  with NO loop-carried state:
+ *   - its TIME dependence is the crushed FRP closed form  box_x(t) = X0 + VX*t   (Phase 1: no history -> no leak)
+ *   - its WIDTH dependence is the closed-form layout       box_w(W) = W - 2*MARGIN (Phase 2: no re-solve -> no cliff)
+ *   - its SPACE test is a pure predicate                   inside the box?         (Phase 3: no interpreter)
+ * Evaluated directly at any (x,y,t,W): O(1), parallel across pixels (a tensor), and provably equal to the naive
+ * frame-loop + solver + rasterizer it replaces.  This is the unified thing NeWS+FRP+Cassowary could not be.
+ * 99 = the field composes the closed forms and renders the box exactly, history-free and solve-free. */
+module corpus_2090_topological_field
+
+/* the three closed forms, composed.  X0=100, VX=3 (px/frame); MARGIN=40; Y0=200, BOXH=80. */
+fn box_x(t: u64) -> u64 { return 100u64 + (3u64 * t) }                 /* FRP motion: pos(t), no history */
+fn box_w(w: u64) -> u64 { return w - 80u64 }                          /* layout: fills width minus 2*MARGIN */
+
+/* the per-pixel field -- a pure function, the O(1) tensor element. */
+fn field(x: u64, y: u64, t: u64, w: u64) -> u32 {
+    let bx : u64 = box_x(t)
+    let bw : u64 = box_w(w)
+    let mut inx : u32 = 0u32
+    if x >= bx { if x < (bx + bw) { inx = 1u32 } }
+    let mut iny : u32 = 0u32
+    if y >= 200u64 { if y < 280u64 { iny = 1u32 } }
+    if inx == 1u32 { if iny == 1u32 { return 1u32 } }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* === TIME (Phase 1 composed): the motion is the closed form -- per-frame delta is exactly VX, no accumulation === */
+    if (box_x(10u64) - box_x(9u64)) != 3u64 { return 1u64 }
+    if box_x(0u64) != 100u64 { return 2u64 }
+    if box_x(1000000u64) != 3000100u64 { return 3u64 }       /* O(1) at frame one-million, zero frames stored */
+
+    /* === WIDTH (Phase 2 composed): the box grows exactly with the window -- closed-form, no re-solve === */
+    if (box_w(1920u64) - box_w(1280u64)) != 640u64 { return 4u64 }   /* == 1920 - 1280 */
+    if box_w(1280u64) != 1200u64 { return 5u64 }
+
+    /* === SPACE (Phase 3): the pixel field renders the box exactly at the crushed position === */
+    /* at frame t=0, W=1280: box spans x in [100, 100+1200) = [100,1300), y in [200,280). */
+    if field(150u64, 220u64, 0u64, 1280u64) != 1u32 { return 6u64 }   /* inside */
+    if field(50u64,  220u64, 0u64, 1280u64) != 0u32 { return 7u64 }   /* left of box */
+    if field(150u64, 100u64, 0u64, 1280u64) != 0u32 { return 8u64 }   /* above box */
+    if field(1290u64,220u64, 0u64, 1280u64) != 1u32 { return 9u64 }   /* still inside (x<1300) */
+    /* at frame t=100 the box has MOVED to x in [400, 1600): a point that was outside is now inside, history-free. */
+    if field(390u64, 220u64, 100u64, 1280u64) != 0u32 { return 10u64 }   /* x=390 < box_x(100)=400 */
+    if field(401u64, 220u64, 100u64, 1280u64) != 1u32 { return 11u64 }   /* x=401 inside the moved box */
+
+    return 99u64
+}

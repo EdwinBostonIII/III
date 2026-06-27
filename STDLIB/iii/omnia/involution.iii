@@ -1,0 +1,89 @@
+/* STDLIB/iii/omnia/involution.iii -- THE CANONICAL {BELOW,REFLECT} ENGINE (the Ripple Merge, Phase I core; the §9
+ * "one primitive").  SEMANTIC-FREE: it records uniform ripples <verb, a, b> over OPAQUE 256-bit content-addresses
+ * and knows NOTHING of what a,b mean -- in a spatial ripple `a` resolves to a dependency node, in an optimizer edit
+ * to an e-class; the engine doesn't care (Gate 6: one log, distinct graphs).  It GENERALIZES omnia::isub (the
+ * Ring-(-1) u32 metal bus: same uniform <verb,a,b> block, same sha256 content-address, same witness hash-chain) to
+ * 32-byte addresses + an INJECTED disposer gate + a FIRST-CLASS involution.  Encapsulates the real sha256_oneshot --
+ * authors NO crypto.
+ *
+ *   IDENTITY    H = sha256( verb(1 byte) ‖ a(32) ‖ b(32) )  -- the ripple's content-address (Gate 3: in the hash).
+ *   WITNESS     ROOT_i = sha256( ROOT_{i-1} ‖ H_i )         -- the transparency hash-chain (isub's pattern).
+ *   INVOLUTION  reflect(verb,a,b) = (flip verb, b, a) ; reflect∘reflect = identity  -- syntactic & PROVABLE.
+ *   DISPOSER    inv_emit admits H only if the domain's real gate verdict == 1 (Gate 1: one engine, injected gates).
+ *
+ * The proof obligation Ω is a SATELLITE (Phase II, omnia/crystal): stored at map[H], NEVER in the hash input. */
+module omnia_involution
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const INV_BELOW      : u32 = 0u32
+const INV_REFLECT    : u32 = 1u32
+const INV_CAP        : u32 = 4096u32
+/* error codes are INLINED at the return sites (iii does not fold an expression const initializer like
+ * `0i32 - 1i32` -> it emits an undefined label): -1 = name in verb slot, -2 = disposer refused, -3 = window full. */
+
+var INV_VERB  : [u32; 4096]
+var INV_A     : [u8; 131072]               /* 4096 * 32 -- the opaque a-address per ripple */
+var INV_B     : [u8; 131072]
+var INV_H     : [u8; 131072]               /* the committed content-address per ripple */
+var INV_ROOT  : [u8; 32]                   /* the witness hash-chain root (the fold-identity of the log) */
+var INV_COUNT : u32 = 0u32
+var INV_PRE   : [u8; 72]                   /* address preimage: verb(1)+a(32)+b(32) = 65 */
+var INV_WIT   : [u8; 72]                   /* witness preimage: root(32)+H(32) = 64 */
+
+fn inv_count() -> u32 @export { return INV_COUNT }
+
+/* flip(BELOW)=REFLECT, flip(REFLECT)=BELOW -- the verb half of the involution. */
+fn inv_flip(verb: u32) -> u32 @export { if verb == INV_BELOW { return INV_REFLECT }   return INV_BELOW }
+
+fn inv_reset() -> i32 @export {
+    INV_COUNT = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 { INV_ROOT[i] = 0u8   i = i + 1u64 }
+    return 0i32
+}
+
+/* H = sha256( verb ‖ a[32] ‖ b[32] ) into out32. */
+fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 @export {
+    let pa : *u8 = a_ptr as *u8
+    let pb : *u8 = b_ptr as *u8
+    INV_PRE[0u64] = (verb & 255u32) as u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { INV_PRE[1u64 + i] = pa[i]   INV_PRE[33u64 + i] = pb[i]   i = i + 1u64 }
+    sha256_oneshot(&INV_PRE[0u64], 65u64, out32 as *u8)
+    return 0i32
+}
+
+/* DISPOSER-GATED emit: record the ripple <verb,a,b> iff disposer_verdict==1 (the domain's real gate).  Commits H,
+ * extends the witness chain, copies H to out32.  Returns the log index (>=0) or an error code. */
+fn inv_emit(verb: u32, a_ptr: u64, b_ptr: u64, disposer_verdict: u32, out32: u64) -> i32 @export {
+    if verb > INV_REFLECT { return 0i32 - 1i32 }
+    if disposer_verdict != 1u32 { return 0i32 - 2i32 }
+    if INV_COUNT >= INV_CAP { return 0i32 - 3i32 }
+    let idx : u32 = INV_COUNT
+    let base : u64 = (idx as u64) * 32u64
+    let pa : *u8 = a_ptr as *u8
+    let pb : *u8 = b_ptr as *u8
+    INV_VERB[idx as u64] = verb
+    let mut i : u64 = 0u64
+    while i < 32u64 { INV_A[base + i] = pa[i]   INV_B[base + i] = pb[i]   i = i + 1u64 }
+    inv_address(verb, a_ptr, b_ptr, (&INV_H[base]) as u64)            /* commit H_idx */
+    let mut j : u64 = 0u64
+    while j < 32u64 { INV_WIT[j] = INV_ROOT[j]   INV_WIT[32u64 + j] = INV_H[base + j]   j = j + 1u64 }
+    sha256_oneshot(&INV_WIT[0u64], 64u64, &INV_ROOT[0u64])            /* ROOT = sha256(ROOT ‖ H) */
+    let pout : *u8 = out32 as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { pout[k] = INV_H[base + k]   k = k + 1u64 }
+    INV_COUNT = idx + 1u32
+    return idx as i32
+}
+
+fn inv_root(out32: u64) -> i32 @export {
+    let pout : *u8 = out32 as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { pout[i] = INV_ROOT[i]   i = i + 1u64 }
+    return 0i32
+}
+
+fn inv_verb_at(idx: u32) -> u32 @export { return INV_VERB[idx as u64] }
+fn inv_h_byte(idx: u32, k: u32) -> u32 @export { return INV_H[((idx as u64) * 32u64) + (k as u64)] as u32 }

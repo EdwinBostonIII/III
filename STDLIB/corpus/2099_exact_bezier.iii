@@ -1,0 +1,129 @@
+/* STDLIB/corpus/2099_exact_bezier.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 10: EXACT BEZIER (curved outlines).
+ *
+ * Two faculties, both exact, no flattening, no float:
+ *  (A) EXACT AREA of a curved boundary by Green's theorem -- the closed-form signed-area contribution of a line /
+ *      quadratic / cubic Bezier segment (each returns 60*A as an exact integer; segments of any type SUM in 60ths).
+ *      Verified three independent ways: the parabola area = 2/3*base*height; degree-elevation invariance (a cubic
+ *      that IS a quadratic must give the same area); the degenerate line = 1/2*cross.
+ *  (B) III FINDS THE REAL NUMBER.  A Bezier crosses a line at t_c=(-b+-sqrt D)/2a -- IRRATIONAL.  But it is an exact
+ *      ALGEBRAIC number in Q(sqrt D), and III computes it exactly and compares it to any rational with a PROVEN SIGN
+ *      by integer arithmetic -- where a float is ambiguous at the boundary bit.  This is the per-pixel coverage of a
+ *      curved edge done WITHOUT flattening: the curve<->edge crossings are exact algebraic, not rounded.
+ * 99 = the exact areas check three ways AND the irrational crossing is found, verified a true root, and ordered
+ *      against rationals exactly to 7 digits. */
+module corpus_2099_exact_bezier
+
+extern @abi(c-msvc-x64) fn ui_quad_area_s(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cubic_area_s(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_line_area_s(x0: i64, y0: i64, x1: i64, y1: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_cross_x(ax0: i64, ax1: i64, ax2: i64, cval: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_root_ok(ax0: i64, ax1: i64, ax2: i64, cval: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alg_cmp(a: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_qx_a() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_qx_c() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_qx_d() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_reset() -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_ovf() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn mul128(a: u64, b: u64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_m128_hi() -> u64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_m128_lo() -> u64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alg_cmp_128(a: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_area_at_x(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, cval: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_p() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_q() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_d() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_ext_t(a1: i64, a2: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_ext_num() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_ext_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alg_cmp_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alg_alpha(pp: i64, qq: i64, den: i64, dD: i64, sa: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_cross_bracket(a: i64, c: i64, dD: i64, k: u32) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_br_lo_n() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_br_lo_d() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_br_hi_n() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_br_hi_d() -> i64 from "ui_exact.iii"
+
+fn main() -> u64 {
+    ui_aa_reset()
+
+    /* === (A) EXACT AREA, no flattening === */
+    /* parabola (0,0),(2,3),(4,0): 60A = -240 -> |area| = 4 = 2/3 * base(4) * height(1.5) */
+    if ui_quad_area_s(0i64, 0i64, 2i64, 3i64, 4i64, 0i64) != (0i64 - 240i64) { return 1u64 }
+    /* degree-elevation invariance: a CUBIC that is exactly this quadratic must give the SAME area (independent check) */
+    if ui_cubic_area_s(0i64, 0i64, 4i64, 6i64, 8i64, 6i64, 12i64, 0i64) != ui_quad_area_s(0i64, 0i64, 6i64, 9i64, 12i64, 0i64) { return 2u64 }
+    if ui_cubic_area_s(0i64, 0i64, 4i64, 6i64, 8i64, 6i64, 12i64, 0i64) != (0i64 - 2160i64) { return 3u64 }
+    /* degenerate line (0,1)->(6,1): 60A = 30*cross = -180 */
+    if ui_line_area_s(0i64, 1i64, 6i64, 1i64) != (0i64 - 180i64) { return 4u64 }
+    if ui_aa_ovf() != 0u32 { return 5u64 }
+
+    /* === (B) III FINDS THE REAL NUMBER === */
+    /* Bezier (0,0),(1,3),(4,0) has B_x(t)=2t+2t^2; it crosses x=1 at t_c=(-1+sqrt 3)/2 = 0.36602540... (irrational) */
+    if ui_bez_root_ok(0i64, 2i64, 2i64, 1i64) != 1u32 { return 6u64 }   /* exact root: sqrt D cancels, rational part == cval */
+    if ui_bez_cross_x(0i64, 2i64, 2i64, 1i64) != 1u32 { return 7u64 }
+    if ui_qx_a() != (0i64 - 2i64) { return 8u64 }
+    if ui_qx_c() != 4i64 { return 9u64 }
+    if ui_qx_d() != 12i64 { return 10u64 }                              /* t_c = (-2 + sqrt 12)/4 */
+    /* PROVEN-SIGN ordering of the irrational t_c against rationals, EXACT to 7 digits (a float would be at its limit) */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, 366i64, 1000i64) != 1i32 { return 11u64 }              /* t_c > 0.366 */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, 367i64, 1000i64) != (0i32 - 1i32) { return 12u64 }     /* t_c < 0.367 */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, 3660254i64, 10000000i64) != 1i32 { return 13u64 }      /* t_c > 0.3660254 */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, 3660255i64, 10000000i64) != (0i32 - 1i32) { return 14u64 } /* t_c < 0.3660255 */
+    if ui_aa_ovf() != 0u32 { return 15u64 }
+
+    /* === III BEATS THE FLOAT: 128-bit EXACT ordering past a double's ~16 significant digits === */
+    /* ground the 128-bit multiply: 10^10 * 10^10 = 10^20 = 5*2^64 + 7766279631452241920 */
+    mul128(10000000000u64, 10000000000u64)
+    if ui_m128_hi() != 5u64 { return 16u64 }
+    if ui_m128_lo() != 7766279631452241920u64 { return 17u64 }
+    /* t_c = 0.36602540378443864676... ; III straddles it at the 17th digit -- a gap a 53-bit double cannot represent */
+    if ui_alg_cmp_128(0i64 - 2i64, 4i64, 12i64, 36602540378443864i64, 100000000000000000i64) != 1i32 { return 18u64 }       /* t_c > 0.36602540378443864 */
+    if ui_alg_cmp_128(0i64 - 2i64, 4i64, 12i64, 36602540378443865i64, 100000000000000000i64) != (0i32 - 1i32) { return 19u64 } /* t_c < 0.36602540378443865 */
+
+    /* === EXACT ALGEBRAIC AREA-AT-CROSSING: the curved-coverage primitive === */
+    /* area under B(t)=(0,0),(1,3),(4,0) [ax 0,2,2 ; ay 0,6,-6] up to its x=1 crossing = (-19 + 6*sqrt 12)/2 ~ 0.892305 */
+    if ui_bez_area_at_x(0i64, 2i64, 2i64, 0i64, 6i64, 0i64 - 6i64, 1i64) != 1u32 { return 20u64 }
+    if ui_area_p() != (0i64 - 19i64) { return 21u64 }       /* the IRRATIONAL area, computed EXACTLY: P = -19 */
+    if ui_area_q() != 6i64 { return 22u64 }                 /* Q = 6  (coefficient of sqrt D) */
+    if ui_area_den() != 2i64 { return 23u64 }               /* DEN = 2 */
+    if ui_area_d() != 12i64 { return 24u64 }                /* D = 12  -> area = (-19 + 6 sqrt 12)/2 */
+    if ui_aa_ovf() != 0u32 { return 25u64 }
+
+    /* === RESOLUTION INDEPENDENCE: the per-pixel coverage is DYNAMICALLY ABSTRACTED by the device scale S (a 4K
+     * screen and a phone differ only by S).  Scaling the glyph by S maps (a,c,D) -> (S a, S c, S^2 D), so the
+     * algebraic crossing t_c=(a+sqrt D)/c is UNCHANGED -- the SAME real geometric point at every resolution; only the
+     * area scales S^2.  III computes that same exact crossing at any S. === */
+    if ui_bez_cross_x(0i64, 2i64, 2i64, 1i64) != 1u32 { return 26u64 }              /* B=(0,0),(1,1),(4,0) at x=1 */
+    if ui_qx_a() != (0i64 - 2i64) { return 27u64 }
+    if ui_qx_c() != 4i64 { return 28u64 }
+    if ui_qx_d() != 12i64 { return 29u64 }                                          /* base: (a,c,D)=(-2,4,12) */
+    if ui_bez_cross_x(0i64, 6i64, 6i64, 3i64) != 1u32 { return 30u64 }              /* SAME glyph at scale S=3, device x=3 */
+    if ui_qx_a() != (0i64 - 6i64) { return 31u64 }                                  /* a -> 3a */
+    if ui_qx_c() != 12i64 { return 32u64 }                                          /* c -> 3c */
+    if ui_qx_d() != 108i64 { return 33u64 }                                         /* D -> 9D  (=3^2 D) */
+    /* and it is the SAME point: t_c has an identical PROVEN sign vs 0.366 at both scales */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, 366i64, 1000i64) != ui_alg_cmp(0i64 - 6i64, 12i64, 108i64, 366i64, 1000i64) { return 34u64 }
+
+    /* === MONOTONE SPLIT (the plan): split each Bezier at its extrema B'(t)=0 so every sub-arc meets a pixel
+     * scanline AT MOST ONCE -- then each pixel sees one clean arc and the coverage is exact via the single-D
+     * crossings.  For QUADRATIC Beziers the extrema are RATIONAL (exact split points). === */
+    if ui_bez_ext_t(2i64, 2i64) != 0u32 { return 35u64 }            /* x(t)=2t+2t^2 : x-extremum t*=-1/2 outside (0,1) -> x-monotone */
+    if ui_bez_ext_t(6i64, 0i64 - 6i64) != 1u32 { return 36u64 }     /* y(t)=6t-6t^2 : y-extremum t*=1/2 in (0,1) -> split (rational) */
+    if ui_ext_num() != 1i64 { return 37u64 }
+    if ui_ext_den() != 2i64 { return 38u64 }                        /* the EXACT split point t* = 1/2 */
+
+    /* === THE CAPSTONE: the algebraic coverage -> the CORRECTLY-ROUNDED 8-bit pixel value (no float guess) === */
+    /* coverage = (-19 + 6 sqrt 12)/2 = 0.8923109... ; 8-bit alpha = round(255 * 0.8923109) = round(227.54) = 228 */
+    if ui_alg_alpha(0i64 - 19i64, 6i64, 2i64, 12i64, 255i64) != 228i64 { return 39u64 }
+    /* same coverage at sa=100 -> round(89.23) = 89 ; the bucket boundary decided by a PROVEN sign, exactly */
+    if ui_alg_alpha(0i64 - 19i64, 6i64, 2i64, 12i64, 100i64) != 89i64 { return 40u64 }
+
+    /* === INTERVAL REFINEMENT (the render's coverage engine): bracket the irrational crossing in a RATIONAL interval === */
+    ui_bez_cross_bracket(0i64 - 2i64, 4i64, 12i64, 16u32)             /* bracket t_c=(-1+sqrt 3)/2 to width 1/2^16 */
+    if ui_br_lo_d() != 65536i64 { return 41u64 }                     /* denominator 2^16 */
+    if (ui_br_hi_n() - ui_br_lo_n()) != 1i64 { return 42u64 }        /* tight: hi - lo = 1 ulp */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, ui_br_lo_n(), ui_br_lo_d()) < 0i32 { return 43u64 }   /* t_c >= lo (bracket contains it) */
+    if ui_alg_cmp(0i64 - 2i64, 4i64, 12i64, ui_br_hi_n(), ui_br_hi_d()) > 0i32 { return 44u64 }   /* t_c <= hi */
+
+    return 99u64
+}

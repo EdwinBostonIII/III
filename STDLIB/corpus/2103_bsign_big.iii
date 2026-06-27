@@ -1,0 +1,49 @@
+/* STDLIB/corpus/2103_bsign_big.iii -- BIGINT single-sqrt sign, the load-bearing primitive for the full-resolution
+ * symmetric 2D coverage.  sign(u + v*sqrt D) reduces to |u|^2 vs v^2*D; at screen-scale coefficients those squares
+ * exceed i64 ((5e9)^2 = 2.5e19 > 9.2e18), so the proven reduction runs in arbitrary-precision bigint.
+ * 99 = the sign is exact on values whose squares overflow i64 (where the i64 path would be silently wrong). */
+module corpus_2103_bsign_big
+
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_big.iii"
+
+fn main() -> u64 {
+    /* 5e9 - 3.5e9*sqrt2 = 5e9 - 4.9497e9 = +0.0503e9 > 0.  |u|^2=2.5e19 > v^2 D=2.45e19 -> +1.  (i64 would overflow.) */
+    if ui_bsign1(5000000000i64, 0i64 - 3500000000i64, 2i64) != 1i32 { return 1u64 }
+    /* 4e9 - 3e9*sqrt2 = 4e9 - 4.2426e9 = -0.2426e9 < 0.  |u|^2=1.6e19 < v^2 D=1.8e19 -> -1. */
+    if ui_bsign1(4000000000i64, 0i64 - 3000000000i64, 2i64) != (0i32 - 1i32) { return 2u64 }
+    /* -5e9 + 3.5e9*sqrt2 = -0.0503e9 < 0 -> -1 (mirror) */
+    if ui_bsign1(0i64 - 5000000000i64, 3500000000i64, 2i64) != (0i32 - 1i32) { return 3u64 }
+    /* -4e9 + 3e9*sqrt2 = +0.2426e9 > 0 -> +1 (mirror) */
+    if ui_bsign1(0i64 - 4000000000i64, 3000000000i64, 2i64) != 1i32 { return 4u64 }
+    /* same sign -> trivial */
+    if ui_bsign1(3000000000i64, 2000000000i64, 2i64) != 1i32 { return 5u64 }
+    if ui_bsign1(0i64 - 3000000000i64, 0i64 - 2000000000i64, 2i64) != (0i32 - 1i32) { return 6u64 }
+    /* v=0 -> sign(u) ; D=0 -> sign(u) */
+    if ui_bsign1(5000000000i64, 0i64, 2i64) != 1i32 { return 7u64 }
+    if ui_bsign1(0i64 - 5000000000i64, 7000000000i64, 0i64) != (0i32 - 1i32) { return 8u64 }
+    /* a near-equal case where the squares are close: 7e9 vs 5e9*sqrt2=7.071e9 -> 7e9 < 7.071e9 -> -1 */
+    if ui_bsign1(7000000000i64, 0i64 - 5000000000i64, 2i64) != (0i32 - 1i32) { return 9u64 }
+    /* exact equality: 0 + 0*sqrt D pattern -> |u|^2 == v^2 D  e.g. u=6e9? need u^2 = v^2 D exactly: u=3e9*sqrt? skip,
+     * use u=v=0 -> 0 */
+    if ui_bsign1(0i64, 0i64, 5i64) != 0i32 { return 10u64 }
+
+    /* === DEGREE-4 (bi-quadratic) sign at large coords -- the nested squaring (an^2 ~ 1e20, |u|^2 ~ 1e40) overflows
+     * i64; bigint keeps it exact.  Scaled by 1e10 so every irrational identity from 2100 is re-decided in bigint. === */
+    if ui_sign_bi_big(20000000000i64, 10000000000i64, 2i64, 0i64 - 10000000000i64, 3i64) != 1i32 { return 11u64 }          /* 1e10(2+sqrt2-sqrt3)=+1.68e10 > 0 */
+    if ui_sign_bi_big(10000000000i64, 20000000000i64, 2i64, 0i64 - 30000000000i64, 3i64) != (0i32 - 1i32) { return 12u64 } /* 1e10(1+2sqrt2-3sqrt3)=-1.37e10 < 0 (level-2 |u| wins) */
+    if ui_sign_bi_big(10000000000i64, 0i64 - 10000000000i64, 3i64, 10000000000i64, 2i64) != 1i32 { return 13u64 }          /* 1e10(1-sqrt3+sqrt2)=+0.68e10 > 0 (level-2 v wins) */
+    if ui_sign_bi_big(10000000000i64, 10000000000i64, 2i64, 0i64 - 10000000000i64, 2i64) != 1i32 { return 14u64 }          /* 1e10(1+sqrt2-sqrt2)=+1e10 > 0 (sqrt cancel) */
+
+    /* === FULL-RESOLUTION symmetric 2D coverage via BIGINT: exact at small coords (matches the i64 path) AND at
+     * SCREEN coords (where the i64 ui_arc_cover2d overflowed to -1).  Region {py <= y <= f(x)} below the arc. === */
+    /* small curve (0,0),(1,1),(4,0): pixel col[1,2] row[0,1] -> the SAME degree-4 coverage 0.4895 -> alpha 125 */
+    if ui_arc_cover2d_big(0i64, 2i64, 2i64, 0i64, 2i64, 0i64 - 2i64, 1i64, 0i64, 255i64) != 125i64 { return 15u64 }
+    /* the DOME at screen coords -- i64 returns -1 here; bigint computes it.  arc f(100)~121.5 above row [90,91] -> full */
+    if ui_arc_cover2d_big(40i64, 160i64, 140i64, 180i64, 0i64 - 280i64, 280i64, 100i64, 90i64, 255i64) != 255i64 { return 16u64 }
+    /* arc below the row [181,182] (f<=180) -> empty (the binary search clamps coverage<0 to 0) */
+    if ui_arc_cover2d_big(40i64, 160i64, 140i64, 180i64, 0i64 - 280i64, 280i64, 100i64, 181i64, 255i64) != 0i64 { return 17u64 }
+
+    return 99u64
+}

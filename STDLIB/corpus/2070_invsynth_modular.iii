@@ -1,0 +1,46 @@
+/* STDLIB/corpus/2070_invsynth_modular.iii -- closes the observe->generalize->prove loop for the NON-POW2
+ * modular case (the extension's reason to exist) AND pins the production-grade guard: a vacuous candidate is
+ * REFUSED, never reported proven.  99 = the x+3 counter's x%3==0 is synthesized end-to-end and PROVEN, while
+ * the x+1 counter (modulus 1, all bits vary) yields NOT-FOUND. */
+module corpus_2070_invsynth_modular
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sp_fuzz_det(t_root: u32, statevar: u32, init: u64, nsteps: u32) -> u32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn au_modulus() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_residue() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_bitmask_care() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_bitmask_val() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn sks_cegar_linear(mask: u64, mval: u64, m: u64, r: u64, c: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_mod_prove_linear(m: u64, r: u64, c: u64, init: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    /* NON-POW2 PIPELINE (fuzz -> generalize -> prove): x+3 counter -> au_modulus()=3 (NOT a power of two) ->
+     * the CEGAR driver proves "x % 3 == 0" inductive over ALL 2^64 via the closed-form modular law. */
+    bb_reset(64u64)
+    let xf : u32 = bb_var(0u32)
+    let tf : u32 = bb_add(xf, bb_const(3u64))
+    sp_fuzz_det(tf, 0u32, 0u64, 16u32)
+    let m : u64 = au_modulus()
+    let r : u64 = au_residue()
+    if m != 3u64 { return 1u64 }
+    if sks_cegar_linear(au_bitmask_care(), au_bitmask_val(), m, r, 3u64, 0u64) != 1u8 { return 2u64 }
+
+    /* VACUOUS REJECTION (the production guard): x+1 counter -> au_modulus()=1, all low bits vary -> the only
+     * candidates are the vacuous x%1==0 and the spurious "x < 2^k" bound; the driver must return NOT-FOUND. */
+    bb_reset(64u64)
+    let xg : u32 = bb_var(0u32)
+    let tg : u32 = bb_add(xg, bb_const(1u64))
+    sp_fuzz_det(tg, 0u32, 0u64, 16u32)
+    let m2 : u64 = au_modulus()
+    if m2 != 1u64 { return 3u64 }
+    if sks_cegar_linear(au_bitmask_care(), au_bitmask_val(), m2, au_residue(), 1u64, 0u64) != 0u8 { return 4u64 }
+
+    /* the guards directly: m=1 modular is refused, and an all-vacuous candidate set returns not-found. */
+    if sks_mod_prove_linear(1u64, 0u64, 1u64, 0u64) != 0u8 { return 5u64 }
+    if sks_cegar_linear(0u64, 0u64, 1u64, 0u64, 1u64, 0u64) != 0u8 { return 6u64 }
+
+    return 99u64
+}

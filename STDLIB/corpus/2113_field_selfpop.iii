@@ -1,0 +1,50 @@
+/* STDLIB/corpus/2113_field_selfpop.iii -- THE UNIFIED FIELD, faculty S: SELF-POPULATION (emergent complexity).
+ * Humans author ONE base rule and press start; the macro-structure grows itself.  A single seed under the local
+ * rule 90 (new = left XOR right) self-populates into the EXACT Sierpinski fractal -- integer-exact, so the emergent
+ * structure is perfect and no one drew it.  The row-k population is exactly 2^popcount(k), the gasket's self-similar
+ * signature.  99 = the fractal grows itself precisely from purely local interactions.
+ * BASELINE: the Sierpinski gasket (Pascal's triangle mod 2) is the reference the self-grown structure must match. */
+module corpus_2113_field_selfpop
+
+extern @abi(c-msvc-x64) fn ui_ca_seed(n: i64, pos: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_ca_step(n: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_ca_get(idx: i64) -> u8 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_ca_count(n: i64) -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* one seed event at the centre of a 64-cell line -- nothing else authored */
+    ui_ca_seed(64i64, 32i64)
+    if ui_ca_get(32i64) != 1u8 { return 1u64 }
+    if ui_ca_count(64i64) != 1i64 { return 2u64 }
+
+    /* tick 1: the seed begets two neighbours, leaving a gap at the centre -- the gasket begins */
+    ui_ca_step(64i64)
+    if ui_ca_get(31i64) != 1u8 { return 3u64 }
+    if ui_ca_get(33i64) != 1u8 { return 4u64 }
+    if ui_ca_get(32i64) != 0u8 { return 5u64 }            /* the central void -- a Sierpinski hole */
+    if ui_ca_count(64i64) != 2i64 { return 6u64 }         /* 2^popcount(1) = 2 */
+
+    /* tick 2: the two arms spread outward, the centre stays empty */
+    ui_ca_step(64i64)
+    if ui_ca_get(30i64) != 1u8 { return 7u64 }
+    if ui_ca_get(34i64) != 1u8 { return 8u64 }
+    if ui_ca_get(32i64) != 0u8 { return 9u64 }
+    if ui_ca_count(64i64) != 2i64 { return 10u64 }        /* 2^popcount(2) = 2 */
+
+    /* tick 3: four cells -- the row fills (popcount(3)=2 -> 4) */
+    ui_ca_step(64i64)
+    if ui_ca_get(29i64) != 1u8 { return 11u64 }
+    if ui_ca_get(31i64) != 1u8 { return 12u64 }
+    if ui_ca_get(33i64) != 1u8 { return 13u64 }
+    if ui_ca_get(35i64) != 1u8 { return 14u64 }
+    if ui_ca_count(64i64) != 4i64 { return 15u64 }        /* 2^popcount(3) = 4 */
+
+    /* tick 4: BACK to two outermost cells -- the self-similar collapse that makes the gasket fractal */
+    ui_ca_step(64i64)
+    if ui_ca_get(28i64) != 1u8 { return 16u64 }
+    if ui_ca_get(36i64) != 1u8 { return 17u64 }
+    if ui_ca_get(32i64) != 0u8 { return 18u64 }
+    if ui_ca_count(64i64) != 2i64 { return 19u64 }        /* 2^popcount(4) = 2 -- the exact signature */
+
+    return 99u64
+}

@@ -1,0 +1,48 @@
+/* STDLIB/corpus/2125_verb_geom.iii -- THE GRAPH RESTORED as the verb-geometry equivalence substrate.
+ * Equal exact values hash-cons to ONE e-class (sqrt8 == 2sqrt2); unequal ones stay distinct (sqrt18 = 3sqrt2);
+ * all structural zeros collapse to the zero class; and a decided sign is cached per class, so an equal value reuses
+ * it (O(1)) and the graph gets ever-stronger as it runs.  99 = the graph remembers identity and caches truth. */
+module corpus_2125_verb_geom
+
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_eclass(a_ptr: u64, b_ptr: u64, n: u64) -> u32 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_hit() -> u64 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_miss() -> u64 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+
+var AC : [i64; 8]   var BC : [i64; 8]
+fn ec(n: u64) -> u32 { return vg_eclass((&AC) as u64, (&BC) as u64, n) }
+fn sg(n: u64) -> i32 { return vg_sign((&AC) as u64, (&BC) as u64, n) }
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* sqrt8 and 2sqrt2 are equal -> ONE e-class (the graph remembers the identity) */
+    AC[0u64]=1i64 BC[0u64]=8i64   let e1 : u32 = ec(1u64)
+    AC[0u64]=2i64 BC[0u64]=2i64   let e2 : u32 = ec(1u64)
+    if eg_find(e1) != eg_find(e2) { return 1u64 }
+
+    /* sqrt18 = 3sqrt2 -> DIFFERENT class (not falsely merged) */
+    AC[0u64]=1i64 BC[0u64]=18i64   let e3 : u32 = ec(1u64)
+    if eg_find(e3) == eg_find(e1) { return 2u64 }
+
+    /* every structural zero collapses to the zero class */
+    AC[0u64]=1i64 AC[1u64]=1i64 AC[2u64]=0i64-1i64 BC[0u64]=2i64 BC[1u64]=8i64 BC[2u64]=18i64   let ez1 : u32 = ec(3u64)
+    AC[0u64]=1i64 AC[1u64]=0i64-1i64 BC[0u64]=5i64 BC[1u64]=5i64   let ez2 : u32 = ec(2u64)
+    if eg_find(ez1) != eg_find(ez2) { return 3u64 }
+    if eg_find(ez1) == eg_find(e1) { return 4u64 }
+
+    /* the SIGN CACHE: decide once, reuse for every equal value */
+    vg_reset()
+    AC[0u64]=1i64 BC[0u64]=8i64   if sg(1u64) != 1i32 { return 5u64 }       /* sqrt8 > 0 -- MISS, decided */
+    AC[0u64]=2i64 BC[0u64]=2i64   if sg(1u64) != 1i32 { return 6u64 }       /* 2sqrt2 > 0 -- HIT, same class */
+    if vg_hit() != 1u64 { return 7u64 }
+    if vg_miss() != 1u64 { return 8u64 }
+
+    /* ever-stronger: re-querying an already-known value is a cache hit */
+    AC[0u64]=1i64 BC[0u64]=8i64   if sg(1u64) != 1i32 { return 9u64 }       /* HIT */
+    if vg_hit() != 2u64 { return 10u64 }
+
+    return 99u64
+}

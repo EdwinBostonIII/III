@@ -468,6 +468,27 @@ fn bb_equal(a: u32, b: u32) -> u8 @export {
 }
 
 /* ============================================================================================================
+ * CEGAR COUNTEREXAMPLE EXTRACTION.  After bb_equal(a,b) returns 0 (SAT -- a and b DIFFER), the SAT model is
+ * still live (bb_equal restored only the bv_bits DAG, never the solver's assignment).  bb_witness(v) reads the
+ * satisfying assignment of input word v -- its BB_W bit-vars are SAT variables BB_INBASE[v] .. +BB_W-1 -- back
+ * into a concrete u64.  For an inductive miter P(x) & ~P(T(x)), a 0-verdict means P is NOT inductive and
+ * bb_witness(statevar) is the concrete state x where P holds yet its successor violates P: the counterexample
+ * that DRIVES refinement (strengthen the candidate / detect a genuine violation), not a bare reject. */
+extern @abi(c-msvc-x64) fn sat_value(vr: u32) -> u8 from "sat.iii"
+fn bb_witness(v: u32) -> u64 @export {
+    if v >= BB_MAX_INPUTS { return 0u64 }
+    let base : u32 = BB_INBASE[v as u64]
+    if base == 0u32 { return 0u64 }                 /* input v never materialised */
+    let mut val : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < BB_W {
+        if sat_value(base + (i as u32)) == 1u8 { val = val | (1u64 << i) }
+        i = i + 1u64
+    }
+    return val
+}
+
+/* ============================================================================================================
  * THE EVALUATOR -- the circuit EXECUTES (the half that makes the substrate ONE, not two).
  *
  * Set the concrete input words with bb_set_input(v, value), then bb_eval(node) sweeps the DAG FORWARD -- every
@@ -630,6 +651,11 @@ var BB_NULL_NODE : u32 = 0xFFFFFFFFu32
 var BB_ALL_NODE  : u32 = 0xFFFFFFFFu32
 fn bb_intern_reset() -> i32 @export { BB_HC_N = 0u32  BB_NULL_NODE = 0xFFFFFFFFu32  BB_ALL_NODE = 0xFFFFFFFFu32  return 0i32 }
 fn bb_node_count() -> u32 @export { return BB_NN }
+/* read-only introspection over the netlist nodes (the III-GLASS bit-blast view walks these): each node's EK_*
+ * kind and its two operand node-ids.  No logic touched. */
+fn bb_node_kind(i: u64) -> u32 @export { if i >= 2048u64 { return EK_NULL }  return BB_NKIND[i] }
+fn bb_node_a(i: u64) -> u32 @export { if i >= 2048u64 { return 0u32 }  return BB_NA[i] }
+fn bb_node_b(i: u64) -> u32 @export { if i >= 2048u64 { return 0u32 }  return BB_NB[i] }
 /* the substrate's construction working-set capacity -- consumers derive their node budget from THIS, never a
  * hardcoded magic number, so a change here propagates everywhere. */
 fn bb_capacity() -> u32 @export { return BB_MAX_NODES }

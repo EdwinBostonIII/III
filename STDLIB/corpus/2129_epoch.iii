@@ -1,0 +1,38 @@
+/* STDLIB/corpus/2129_epoch.iii -- Ripple-Merge Phase III: the DETERMINISTIC MULTI-WRITER EPOCH (Gate 5).
+ * The SAME set of pending ripples, submitted in DIFFERENT orders (simulating concurrent writers), must seal to the
+ * SAME witness root; a DIFFERENT set must seal to a different root.  This is the byte-identical fixpoint guarantee
+ * under concurrency.  99 = the fold is a pure function of the SET, not the arrival order. */
+module corpus_2129_epoch
+
+extern @abi(c-msvc-x64) fn epoch_reset() -> i32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn epoch_submit(verb: u32, a_ptr: u64, b_ptr: u64) -> i32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn epoch_seal(out_root: u64) -> u32 from "epoch.iii"
+
+var AA : [u8; 32]   var BB : [u8; 32]   var CC : [u8; 32]
+var RA : [u8; 32]   var RB : [u8; 32]   var RC : [u8; 32]   var RD : [u8; 32]
+
+fn fill(p: u64, s: u32) -> i32 { let pp : *u8 = p as *u8   let mut i : u64 = 0u64   while i < 32u64 { pp[i] = ((s + (i as u32)) & 255u32) as u8   i = i + 1u64 }   return 0i32 }
+fn eq32(p: u64, q: u64) -> u32 { let pp : *u8 = p as *u8   let qq : *u8 = q as *u8   let mut i : u64 = 0u64   while i < 32u64 { if pp[i] != qq[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+
+/* the three distinct ripples R1=(BELOW,a,b), R2=(REFLECT,b,c), R3=(BELOW,c,a) */
+fn submit_R1() -> i32 { return epoch_submit(0u32, (&AA[0u64]) as u64, (&BB[0u64]) as u64) }
+fn submit_R2() -> i32 { return epoch_submit(1u32, (&BB[0u64]) as u64, (&CC[0u64]) as u64) }
+fn submit_R3() -> i32 { return epoch_submit(0u32, (&CC[0u64]) as u64, (&AA[0u64]) as u64) }
+
+fn main() -> u64 {
+    fill((&AA[0u64]) as u64, 11u32)   fill((&BB[0u64]) as u64, 90u32)   fill((&CC[0u64]) as u64, 170u32)
+
+    /* order 1: R1,R2,R3 */
+    epoch_reset()   submit_R1()   submit_R2()   submit_R3()   epoch_seal((&RA[0u64]) as u64)
+    /* order 2: R3,R2,R1 (reverse) -- same SET */
+    epoch_reset()   submit_R3()   submit_R2()   submit_R1()   epoch_seal((&RB[0u64]) as u64)
+    if eq32((&RA[0u64]) as u64, (&RB[0u64]) as u64) != 1u32 { return 1u64 }       /* order-independent */
+    /* order 3: R2,R1,R3 (another permutation) -- same SET */
+    epoch_reset()   submit_R2()   submit_R1()   submit_R3()   epoch_seal((&RD[0u64]) as u64)
+    if eq32((&RA[0u64]) as u64, (&RD[0u64]) as u64) != 1u32 { return 2u64 }       /* still the same root */
+    /* a DIFFERENT set: only R1,R2 */
+    epoch_reset()   submit_R1()   submit_R2()   epoch_seal((&RC[0u64]) as u64)
+    if eq32((&RC[0u64]) as u64, (&RA[0u64]) as u64) == 1u32 { return 3u64 }       /* distinct set -> distinct root */
+
+    return 99u64
+}

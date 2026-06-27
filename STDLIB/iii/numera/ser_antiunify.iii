@@ -82,3 +82,1155 @@ fn au_prove_family(family: u32) -> u8 @export {
     }
     return 0u8
 }
+
+/* ============================================================================================================
+ * GENERAL STRUCTURAL ANTI-UNIFICATION over observed STATES (the boundless-k-induction generalizer).  The family
+ * matcher above generalizes rewrite-rule constants; THIS generalizes the concrete reachable states a fuzzer
+ * (ser_petri) observed into a candidate INDUCTIVE INVARIANT -- Plotkin's least-general-generalization, exact
+ * and deterministic, over three invariant lattices: bit-pattern, interval, modular.  Each is the STRONGEST
+ * member of its lattice consistent with EVERY observation (the "aha!" structure binding the samples).
+ *
+ * THE CONSCIENCE LINE (unbroken): "all observations fit template P" is a CONJECTURE -- finite samples never
+ * prove an infinite law.  Soundness is ser_kinduct_sym's job (the miter UNSAT over all 2^64).  The candidate
+ * may PROVABLY hold far beyond the samples, but only because the symbolic prover certifies it -- never assumed.
+ * NO-ML: a closed-form fold over the samples (mask-intersection, min/max, gcd); same states => same template;
+ * no statistics, no training, no accumulated history. */
+const AU_ALLONES : u64 = 18446744073709551615u64
+
+/* the observation trace is OWNED by the fuzzer (ser_petri, the producer); the generalizer READS it -- so the
+ * module graph stays ACYCLIC (ser_antiunify -> ser_petri, never the reverse).  Manual callers AND the fuzzer
+ * both populate the trace via ser_petri's sp_obs_reset / sp_obs_push. */
+extern @abi(c-msvc-x64) fn sp_obs_count() -> u32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_at(i: u32) -> u64 from "ser_petri.iii"
+
+/* BIT-PATTERN lgg: care_mask = the bits ALL observations agree on; val = their common value there.
+ * P(x) = (x & care_mask) == val is the strongest bit-pattern invariant (a bit is cared-about iff no
+ * observation disagrees on it -- otherwise it is generalized to "don't care"). */
+fn au_bitmask_care() -> u64 @export {
+    let n : u32 = sp_obs_count()
+    if n == 0u32 { return 0u64 }
+    let s0 : u64 = sp_obs_at(0u32)
+    let mut care : u64 = AU_ALLONES
+    let mut i : u32 = 1u32
+    while i < n {
+        let diff : u64 = sp_obs_at(i) ^ s0           /* bits where obs[i] differs from s0 */
+        care = care & (diff ^ AU_ALLONES)            /* care &= ~diff -> drop the disagreeing bits */
+        i = i + 1u32
+    }
+    return care
+}
+fn au_bitmask_val() -> u64 @export {
+    if sp_obs_count() == 0u32 { return 0u64 }
+    return sp_obs_at(0u32) & au_bitmask_care()
+}
+
+/* INTERVAL lgg: [lo, hi] = [min, max] of the observations -- the strongest range invariant. */
+fn au_interval_lo() -> u64 @export {
+    let n : u32 = sp_obs_count()
+    if n == 0u32 { return 0u64 }
+    let mut lo : u64 = sp_obs_at(0u32)
+    let mut i : u32 = 1u32
+    while i < n {
+        let v : u64 = sp_obs_at(i)
+        if v < lo { lo = v }
+        i = i + 1u32
+    }
+    return lo
+}
+fn au_interval_hi() -> u64 @export {
+    let n : u32 = sp_obs_count()
+    if n == 0u32 { return 0u64 }
+    let mut hi : u64 = sp_obs_at(0u32)
+    let mut i : u32 = 1u32
+    while i < n {
+        let v : u64 = sp_obs_at(i)
+        if v > hi { hi = v }
+        i = i + 1u32
+    }
+    return hi
+}
+
+/* MODULAR lgg: m = gcd of all (obs[i] - obs[0]); every observation satisfies x ≡ r (mod m), r = obs[0] mod m.
+ * When m is a power of two this is exactly the bit-pattern (x & (m-1)) == r -- expressible to ser_kinduct_sym. */
+fn au_gcd(a: u64, b: u64) -> u64 {
+    let mut x : u64 = a
+    let mut y : u64 = b
+    while y != 0u64 {
+        let t : u64 = y
+        let q : u64 = x % y
+        y = q
+        x = t
+    }
+    return x
+}
+fn au_modulus() -> u64 @export {
+    let n : u32 = sp_obs_count()
+    if n < 2u32 { return 0u64 }
+    let s0 : u64 = sp_obs_at(0u32)
+    let mut g : u64 = 0u64
+    let mut i : u32 = 1u32
+    while i < n {
+        let d : u64 = sp_obs_at(i) - s0
+        g = au_gcd(g, d)
+        i = i + 1u32
+    }
+    return g
+}
+fn au_residue() -> u64 @export {
+    let m : u64 = au_modulus()
+    if m == 0u64 { return 0u64 }
+    let s0 : u64 = sp_obs_at(0u32)
+    return s0 % m
+}
+/* is the modulus a power of two? (then the modular invariant is a bit-mask, directly k-inductive-checkable). */
+fn au_modulus_is_pow2() -> u32 @export {
+    let m : u64 = au_modulus()
+    if m == 0u64 { return 0u32 }
+    if (m & (m - 1u64)) == 0u64 { return 1u32 }
+    return 0u32
+}
+
+/* ============================================================================================================
+ * CONSERVATION lgg (the RELATIONAL invariant -- the class the three single-scalar lattices above CANNOT express).
+ * The single-variable templates (bit-pattern / interval / modular) each bound ONE component's reached values; a
+ * CONSERVATION law is a RELATION BETWEEN components: a linear functional  F(x,y) = w0*x + w1*y  held CONSTANT
+ * across a COUPLED transition.  It is the sound, in-domain image of "the fractional charges +2/3,-1/3,-1/3 sum to
+ * exactly zero" -- a conserved quantity, not a per-variable bound.  Discovery is closed-form: a constant-increment
+ * coupled step moves the state along (a,b) = (dx,dy) (read off the FIRST observed step); F is conserved iff its
+ * gradient (w0,w1) is ORTHOGONAL to the increment over Z/2^64, i.e. w0*a + w1*b == 0.  The PRIMITIVE kernel of
+ * (a,b) is (w0,w1) = (b, -a) -- because b*a + (-a)*b == 0 EXACTLY (an integer identity, hence mod 2^64).  The
+ * constant is then c = F(x0,y0).
+ *
+ * THE CONSCIENCE LINE (unbroken, as for every lgg here): two points FIX a candidate (w0,w1,c); that it holds for
+ * EVERY observed pair is a CONJECTURE -- finite samples never prove an infinite law.  Soundness is ser_kinduct_sym
+ * (sks_consv_prove: the miter over all 2^128, or the closed-form w0*a+w1*b==0).  au_consv_found rejects the
+ * VACUOUS (no motion / zero kernel) and the SPURIOUS (a pair the candidate misses) before the prover is troubled.
+ * NO-ML: a closed-form fold over the samples (one first difference + a constancy scan); same pairs => same kernel. */
+extern @abi(c-msvc-x64) fn sp_obs_y_at(i: u32) -> u64 from "ser_petri.iii"
+
+fn au_consv_dx() -> u64 { let x1 : u64 = sp_obs_at(1u32)   let x0 : u64 = sp_obs_at(0u32)   return x1 - x0 }   /* first-step a */
+fn au_consv_dy() -> u64 { let y1 : u64 = sp_obs_y_at(1u32) let y0 : u64 = sp_obs_y_at(0u32) return y1 - y0 }   /* first-step b */
+
+/* the conserved functional's gradient (w0,w1) = (b, -a) -- the primitive kernel of the increment (a,b). */
+fn au_consv_w0() -> u64 @export { if sp_obs_count() < 2u32 { return 0u64 } return au_consv_dy() }
+fn au_consv_w1() -> u64 @export { if sp_obs_count() < 2u32 { return 0u64 } let dx : u64 = au_consv_dx() return 0u64 - dx }
+/* the conserved constant c = F(x0,y0) = w0*x0 + w1*y0. */
+fn au_consv_c() -> u64 @export {
+    if sp_obs_count() < 2u32 { return 0u64 }
+    let w0 : u64 = au_consv_w0()
+    let w1 : u64 = au_consv_w1()
+    let x0 : u64 = sp_obs_at(0u32)
+    let y0 : u64 = sp_obs_y_at(0u32)
+    return w0 * x0 + w1 * y0
+}
+/* 1 iff a NON-VACUOUS linear conservation law fits EVERY observed pair (the candidate the prover then certifies);
+ * 0 iff < 2 observations, a degenerate (0,0) kernel (no motion -- every functional trivially "conserved"), or
+ * some observed pair breaks the candidate constant (the samples are not linearly conserved). */
+fn au_consv_found() -> u32 @export {
+    let n : u32 = sp_obs_count()
+    if n < 2u32 { return 0u32 }
+    let w0 : u64 = au_consv_w0()
+    let w1 : u64 = au_consv_w1()
+    if w0 == 0u64 { if w1 == 0u64 { return 0u32 } }    /* (0,0): no motion -> vacuous, not a real law */
+    let c : u64 = au_consv_c()
+    let mut i : u32 = 0u32
+    while i < n {
+        let xi : u64 = sp_obs_at(i)
+        let yi : u64 = sp_obs_y_at(i)
+        if (w0 * xi + w1 * yi) != c { return 0u32 }    /* a pair the candidate misses -> not conserved */
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* ============================================================================================================
+ * B3 -- HOLOGRAPHIC ORBIT AMPUTATION: a loop is not a process that takes time, it is an orbit whose final state
+ * B3 computes in O(1), proves, and DELETES.  The pipeline the module header names, now load-bearing: (1) FUZZ
+ * the manifold -- ser_petri runs the loop's transition T for k=0..3 from a seed, recording the state trace on
+ * the obs log; (2) the RECURRENCE SINGULARITY -- FINITE DIFFERENCES (Plotkin's least-degree generalization) fit
+ * the trace to a closed form: constant first difference => arithmetic cf(N) = S_0 + N*delta; (3) the GUILLOTINE
+ * -- the symbolic step proof DISCHARGES the conjecture: prove the loop's REAL symbolic step T(s) == s + delta
+ * over ALL 2^64 (3 samples never prove a law -- the conscience line; the bit-blast does).  PROVEN => the loop is
+ * amputated, replaced by the O(1) node cf(N).  CEGIS cascade: no arithmetic fit (chaotic loop) => DEFER; a fit
+ * the symbolic step REFUTES (looked arithmetic on samples but isn't -- e.g. piecewise) => REFUTED, NOT amputated.
+ * The MEMORY-STRIDE lift composes B2: a write-position accumulator pos_{n+1}=pos_n+stride has the bulk tensor
+ * effect aff_of(base, stride, 0, N-1).  NO ISLAND: composes ser_petri (fuzz/trace) + bv_bits (the bit-blast
+ * discharge) + ser_kinduct_sym/sks_ult + ser_absint/aff_of.  NO-ML: finite differences + a deductive miter. */
+extern @abi(c-msvc-x64) fn sp_obs_reset() -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_push(v: u64) -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_ult(x: u32, c: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_eq(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_not1(a: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_prove(p_x: u32, p_tx: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_counterexample(p_x: u32, p_tx: u32, statevar: u32) -> u64 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn etat_mem_reset() -> i32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn etat_write_aff(idx_node: u32, val_node: u32, aff: u64) -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_epoch_hash() -> u64 from "ser_causal.iii"
+
+const AU_T_ADD   : u32 = 0u32   /* T(s) = s + arg   (arithmetic accumulator) */
+const AU_T_MUL   : u32 = 1u32   /* T(s) = s * arg   (geometric -- NOT arithmetic) */
+const AU_T_XOR   : u32 = 2u32   /* T(s) = s ^ arg   (NOT arithmetic) */
+const AU_T_PIECE : u32 = 3u32   /* T(s) = s<100 ? s+5 : s+7  (looks arithmetic on small samples; ISN'T) */
+const AU_DEFER   : u32 = 2u32   /* no low-degree fit -> SEQ_TOP (the chaotic-loop honesty) */
+const AU_NONE64  : u64 = 18446744073709551615u64
+
+/* the CONCRETE one-step transition (the fuzz side). */
+fn au_step_concrete(op: u32, arg: u64, s: u64) -> u64 {
+    if op == AU_T_ADD   { return s + arg }
+    if op == AU_T_MUL   { return s * arg }
+    if op == AU_T_XOR   { return s ^ arg }
+    if op == AU_T_PIECE { if s < 100u64 { return s + 5u64 }  return s + 7u64 }
+    return s
+}
+/* FUZZ the manifold: trace T for k=0..niter from seed onto ser_petri's obs log (S_0 .. S_niter). */
+fn au_fuzz_transition(op: u32, arg: u64, seed: u64, niter: u32) -> i32 @export {
+    sp_obs_reset()
+    let mut s : u64 = seed
+    sp_obs_push(s)
+    let mut i : u32 = 0u32
+    while i < niter { s = au_step_concrete(op, arg, s)  sp_obs_push(s)  i = i + 1u32 }
+    return 0i32
+}
+/* first difference of the trace. */
+fn au_diff1(i: u32) -> u64 { return sp_obs_at(i + 1u32) - sp_obs_at(i) }
+/* RECURRENCE SINGULARITY: is the trace an arithmetic progression (constant first difference)?  Needs >=3 obs. */
+fn au_is_arith() -> u32 @export {
+    let n : u32 = sp_obs_count()
+    if n < 3u32 { return 0u32 }
+    let d0 : u64 = au_diff1(0u32)
+    let mut i : u32 = 1u32
+    while i < (n - 1u32) {
+        if au_diff1(i) != d0 { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+fn au_arith_delta() -> u64 @export { if sp_obs_count() < 2u32 { return 0u64 }  return au_diff1(0u32) }
+/* the loop's O(1) destiny: cf(N) = S_0 + N*delta. */
+fn au_closed_linear(nn: u64) -> u64 @export { return sp_obs_at(0u32) + nn * au_arith_delta() }
+
+/* the SYMBOLIC one-step transition T(s) as a bv_bits circuit (the discharge side). */
+fn au_step_sym(op: u32, arg: u64, s: u32) -> u32 {
+    if op == AU_T_ADD { return bb_add(s, bb_const(arg)) }
+    if op == AU_T_MUL { return bb_mul(s, bb_const(arg)) }
+    if op == AU_T_XOR { return bb_xor(s, bb_const(arg)) }
+    if op == AU_T_PIECE {
+        let lt   : u32 = sks_ult(s, 100u64)                       /* 1 iff s < 100 */
+        let mask : u32 = bb_sub(bb_const(0u64), lt)               /* all-ones iff s<100 */
+        let nmask: u32 = bb_xor(mask, bb_const(AU_ALLONES))
+        return bb_or(bb_and(bb_add(s, bb_const(5u64)), mask), bb_and(bb_add(s, bb_const(7u64)), nmask))
+    }
+    return s
+}
+/* THE GUILLOTINE: discharge the arithmetic conjecture -- prove the loop's REAL step T(s) == s + delta over ALL
+ * 2^64.  1 iff PROVEN (the loop genuinely is an arithmetic accumulator; cf(N) is its exact destiny). */
+fn au_prove_recurrence(op: u32, arg: u64, delta: u64) -> u8 @export {
+    bb_reset(64u64)
+    let s  : u32 = bb_var(0u32)
+    let ts : u32 = au_step_sym(op, arg, s)
+    let cf : u32 = bb_add(s, bb_const(delta))
+    return bb_equal(ts, cf)
+}
+/* THE FULL PIPELINE (scalar accumulator orbit amputation): fuzz -> generalize -> discharge.
+ * 1 = PROVEN deletable (cf(N)=S_0+N*delta) ; 0 = conjecture refuted by the symbolic step ; AU_DEFER = no fit. */
+fn au_amputate_linear(op: u32, arg: u64, seed: u64) -> u32 @export {
+    au_fuzz_transition(op, arg, seed, 3u32)
+    if au_is_arith() == 0u32 { return AU_DEFER }
+    let delta : u64 = au_arith_delta()
+    if au_prove_recurrence(op, arg, delta) == 1u8 { return 1u32 }
+    return 0u32
+}
+/* MEMORY-STRIDE LIFT (compose B2): a write-position accumulator pos_{n+1}=pos_n+stride over N iterations has the
+ * bulk tensor effect aff_of(base, stride, 0, N-1) -- the loop's whole memory geometry as ONE descriptor, IFF the
+ * address accumulator is PROVEN arithmetic.  Returns the B2 descriptor handle, or AU_NONE64 if not amputatable. */
+fn au_amputate_stride(base: u64, stride: u64, nn: u64) -> u64 @export {
+    if au_amputate_linear(AU_T_ADD, stride, base) != 1u32 { return AU_NONE64 }
+    if nn == 0u64 { return aff_of(0u64, 0u64, 0u64, 0u64, 0u64) }
+    return aff_of(base, stride, 0u64, nn - 1u64, 0u64)
+}
+
+/* ============================================================================================================
+ * B3 DEGREE-2 -- GAUSS'S TRICK, MECHANIZED: arithmetic-series sums.  A degree-2 orbit has LINEAR first
+ * differences and CONSTANT second differences; the second finite difference recovers the curvature c, and the
+ * closed form is  cf(N) = S_0 + b*N + c*(N*(N-1)/2)  -- the N(N-1)/2 Gauss computed at age 7.  THE SOUND PROOF
+ * is the GAUSS TRIANGULAR RECURRENCE  tri(n+1) == tri(n) + n  bit-blasted over all REPRESENTABLE n: with the
+ * trivial linear recurrence (b*n) and the base cf(0)==S_0, induction gives acc_N == cf(N) for every representable
+ * trip count.  THE WRAP-EDGE (found by the witness n=2^w-1, NOT assumed): tri has true period 2^(w+1), so the
+ * step fails ONLY where n+1 overflows the word -- excluded by the domain guard since no w-bit-counted loop runs
+ * 2^w iterations.  tri(n) halves the EVEN operand BEFORE the product (a post-product >>1 is lossy).  TEETH: a
+ * corrupted step (off-by-brk) is REFUTED.  8-bit width: the n*(n-1) var*var multiplier is SAT-heavy and the
+ * recurrence is width-independent.  Fuzz proposes (b,c); the bit-blast disposes. */
+fn au_diff2(i: u32) -> u64 { return au_diff1(i + 1u32) - au_diff1(i) }
+/* RECURRENCE SINGULARITY (degree-2): constant SECOND difference AND non-constant first difference.  Needs >=4. */
+fn au_is_quadratic() -> u32 @export {
+    let n : u32 = sp_obs_count()
+    if n < 4u32 { return 0u32 }
+    let dd0 : u64 = au_diff2(0u32)
+    let mut i : u32 = 1u32
+    while i < (n - 2u32) {
+        if au_diff2(i) != dd0 { return 0u32 }
+        i = i + 1u32
+    }
+    if au_is_arith() == 1u32 { return 0u32 }       /* genuinely degree-2, not a degenerate line */
+    return 1u32
+}
+fn au_quad_b() -> u64 @export { return au_diff1(0u32) }      /* the linear coefficient (first difference at 0) */
+fn au_quad_c() -> u64 @export { return au_diff2(0u32) }      /* the curvature (constant second difference)      */
+/* the loop's O(1) destiny: cf(N) = S_0 + b*N + c*N(N-1)/2  (N(N-1) is always even -> >>1 is exact). */
+/* the triangular number n(n-1)/2 computed EXACTLY mod 2^w: halve the EVEN operand BEFORE the product (a
+ * post-product >>1 is lossy under the modulus -- it drops the bit that exact division by 2 carries). */
+fn au_tri(nn: u64) -> u64 {
+    if (nn & 1u64) == 0u64 { return (nn >> 1u64) * (nn - 1u64) }
+    return nn * ((nn - 1u64) >> 1u64)
+}
+fn au_closed_quadratic(nn: u64) -> u64 @export {
+    let s0 : u64 = sp_obs_at(0u32)
+    let b  : u64 = au_quad_b()
+    let c  : u64 = au_quad_c()
+    return s0 + b * nn + c * au_tri(nn)
+}
+
+/* the parity-correct symbolic triangular number tri(n)=n(n-1)/2 EXACT mod 2^w: halve the EVEN operand BEFORE
+ * the product (a post-product >>1 is lossy under the modulus -- it drops the carry bit). */
+fn au_tri_sym(n: u32) -> u32 {
+    let nm1  : u32 = bb_sub(n, bb_const(1u64))
+    let lowb : u32 = bb_and(n, bb_const(1u64))                          /* n's low bit (0=even, 1=odd) */
+    let mo   : u32 = bb_sub(bb_const(0u64), lowb)                       /* all-ones iff n is odd       */
+    let trie : u32 = bb_mul(bb_shr(n, 1u64), nm1)                       /* even: (n>>1)*(n-1)          */
+    let trio : u32 = bb_mul(n, bb_shr(nm1, 1u64))                       /* odd:  n*((n-1)>>1)          */
+    return bb_or(bb_and(trio, mo), bb_and(trie, bb_xor(mo, bb_const(AU_ALLONES))))
+}
+/* the symbolic closed form cf(n) = s0 + b*n + c*tri(n). */
+fn au_cf_quad_sym(s0: u32, b: u32, c: u32, n: u32) -> u32 {
+    return bb_add(s0, bb_add(bb_mul(b, n), bb_mul(c, au_tri_sym(n))))
+}
+/* THE DEGREE-2 GUILLOTINE: prove the GAUSS TRIANGULAR RECURRENCE  tri(n+1) == tri(n) + n  over all REPRESENTABLE
+ * n (the single n=2^w-1 wrap excluded -- tri has true period 2^(w+1), and no w-bit-counted loop runs 2^w times,
+ * so that transition is not a real trip count).  This is the heart of cf(N)=S_0+b*N+c*tri(N): with the trivial
+ * linear recurrence (b*n) and the base cf(0)=S_0, it proves the arithmetic-sum loop sums exactly to cf(N) for
+ * every representable N.  ONE symbolic variable -> the UNSAT discharge is tractable.  brk!=0 perturbs the step
+ * (off-by-brk) to demonstrate the teeth (a wrong recurrence is REFUTED).  s0/b/c are part of the contract but
+ * the triangular recurrence is universal in c, so the proof certifies the whole family at once. */
+fn au_prove_quadratic_gen(s0: u64, b: u64, c: u64, brk: u64) -> u8 @export {
+    bb_reset(8u64)                                                          /* 8-bit: the n*(n-1) var*var multiplier
+                                                                            * is SAT-heavy; the recurrence is width-
+                                                                            * independent, so 8 bits is a tractable
+                                                                            * grounding (256 valuations). */
+    let n      : u32 = bb_var(0u32)
+    let tn     : u32 = au_tri_sym(n)
+    let tn1    : u32 = au_tri_sym(bb_add(n, bb_const(1u64)))
+    let nguard : u32 = sks_not1(sks_eq(n, bb_const(AU_ALLONES)))             /* n != 2^w-1: n+1 does not wrap */
+    let rhs    : u32 = bb_add(bb_add(tn, n), bb_const(brk))                  /* tri(n) + n (+brk teeth)      */
+    let differ : u32 = sks_not1(sks_eq(tn1, rhs))                            /* 1 iff tri(n+1) != tri(n)+n   */
+    return bb_equal(bb_and(nguard, differ), bb_const(0u64))                  /* 1 iff no representable n breaks it */
+}
+fn au_prove_quadratic(s0: u64, b: u64, c: u64) -> u8 @export { return au_prove_quadratic_gen(s0, b, c, 0u64) }
+
+/* FUZZ a degree-2 arithmetic-sum orbit: acc_{n+1} = acc_n + inc_n, inc starts at b0 and grows by c. */
+fn au_fuzz_arith_sum(b0: u64, c: u64, seed: u64, niter: u32) -> i32 @export {
+    sp_obs_reset()
+    let mut acc : u64 = seed
+    let mut inc : u64 = b0
+    sp_obs_push(acc)
+    let mut i : u32 = 0u32
+    while i < niter { acc = acc + inc  inc = inc + c  sp_obs_push(acc)  i = i + 1u32 }
+    return 0i32
+}
+/* THE FULL DEGREE-2 PIPELINE: fuzz -> second-difference generalize -> 2-state inductive discharge.
+ * 1 = PROVEN deletable (cf(N)=S_0+b*N+c*N(N-1)/2) ; 0 = refuted ; AU_DEFER = not quadratic. */
+fn au_amputate_quadratic(b0: u64, c: u64, seed: u64) -> u32 @export {
+    au_fuzz_arith_sum(b0, c, seed, 5u32)               /* 6 observations -> 3 second differences */
+    if au_is_quadratic() == 0u32 { return AU_DEFER }
+    let s0 : u64 = sp_obs_at(0u32)
+    let b  : u64 = au_quad_b()
+    let cc : u64 = au_quad_c()
+    if au_prove_quadratic(s0, b, cc) == 1u8 { return 1u32 }
+    return 0u32
+}
+
+/* ============================================================================================================
+ * THE CRUCIBLE (Phase 2/3 integration: B3 (x) B2): a strided-write loop  for k in [0,N): mem[base + stride*k]=v
+ * is CRUSHED to a single O(1) HOLOGRAPHIC TENSOR object -- no loop, no branch survives.  The PROVE-THEN-BUILD
+ * order (the creative key that dissolves the bb_reset clobber): au_amputate_stride PROVES the address
+ * accumulator affine FIRST (its bit-blast context is self-contained), returning the B2 affine descriptor (an
+ * INTEGER handle -- the loop is now gone); THEN, in a fresh context, B2 folds the bulk write into the causal
+ * epoch and et_epoch_hash emits the Merkle root.  Returns the root, or 0 if the loop is NOT amputatable (the
+ * honest CEGIS defer).  No interleaving of prove and build, so no clobber.  Two loops with the same write
+ * geometry hash equal in O(1); a different geometry changes the root (the teeth). */
+fn au_crucible_stride(base: u64, stride: u64, nn: u64, valbits: u64) -> u64 @export {
+    let d : u64 = au_amputate_stride(base, stride, nn)        /* B3: prove affine -> B2 descriptor (loop GONE) */
+    if d == AU_NONE64 { return 0u64 }
+    etat_mem_reset()
+    bb_reset(64u64)
+    let v : u32 = bb_const(valbits)
+    etat_write_aff(v, v, d)                                    /* B2/B4: the whole loop's memory as ONE tensor write */
+    return et_epoch_hash()                                     /* B2: the holographic root (the crushed O(1) object) */
+}
+/* a SCALAR-accumulator loop crush: an affine `acc += delta` loop is crushed to its closed-form value (no loop),
+ * a NON-affine (geometric/chaotic) loop honestly DEFERS (returns AU_NONE64).  op: 0=ADD(affine) 1=MUL(geometric). */
+fn au_crucible_scalar(op: u32, arg: u64, seed: u64, nn: u64) -> u64 @export {
+    if au_amputate_linear(op, arg, seed) != 1u32 { return AU_NONE64 }   /* not affine -> defer (no crush) */
+    return au_closed_linear(nn)                                          /* the loop's O(1) destiny */
+}
+
+/* ============================================================================================================
+ * AGNOSTIC TOPOLOGICAL EXTRACTION -- the compiler stops READING code and starts STIMULATING behavior.  The loop
+ * body is an OPAQUE BLACK BOX: au_svir_exec EXECUTES it concretely (no opcode pattern-matching -- it runs whatever
+ * is there), so the affine recurrence is read off the BEHAVIORAL TRACE, immune to how the human wrote the loop
+ * (for/while/goto/Duff/obfuscated all cast the same shadow).  THE CONSCIENCE: the concrete trace only PROPOSES a
+ * delta (finite samples never prove a law); au_svir_step_sym DENOTES the same black box symbolically and the
+ * guillotine bit-blasts step(acc)==acc+delta over ALL 2^64 -- a fuzz mis-extraction (e.g. acc*2 sampled at 0,
+ * which looks like +0) is REFUTED, never crushed.  Observe the finite trajectory, guess the infinite destiny,
+ * PROVE it algebraically, skip the execution.  NO ISLAND: composes ser_petri (the obs trace) + bv_bits. */
+var TP_STK : [u64; 256]   /* concrete value stack */
+var TP_SP  : u32 = 0u32
+var TP_LOC : [u64; 256]   /* concrete locals = the black-box state */
+fn tpb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64] as u32 }
+fn tp_rd8(base: u64, i: u64) -> u64 {
+    let mut v : u64 = 0u64  let mut k : u64 = 0u64
+    while k < 8u64 { v = v | ((tpb(base, i + k) as u64) << (k * 8u64))  k = k + 1u64 }
+    return v
+}
+/* CONCRETE black-box execution of ONE pass of a straight-line SVIR body over TP_LOC.  0=ok, 1=out-of-fragment. */
+fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {
+    TP_SP = 0u32
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = tpb(base, boff + p)  p = p + 1u64
+        let mut handled : u32 = 0u32
+        if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p)  p = p + 8u64  if TP_SP < 256u32 { TP_STK[TP_SP as u64] = v  TP_SP = TP_SP + 1u32 }  handled = 1u32 }
+        if op == 0x10u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP < 256u32 { TP_STK[TP_SP as u64] = TP_LOC[sl as u64]  TP_SP = TP_SP + 1u32 }  handled = 1u32 }
+        if op == 0x11u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP < 1u32 { return 1u32 }  TP_SP = TP_SP - 1u32  TP_LOC[sl as u64] = TP_STK[TP_SP as u64]  handled = 1u32 }
+        if op >= 0x20u32 { if op <= 0x29u32 {
+            if TP_SP < 2u32 { return 1u32 }
+            let b : u64 = TP_STK[(TP_SP - 1u32) as u64]
+            let a : u64 = TP_STK[(TP_SP - 2u32) as u64]
+            TP_SP = TP_SP - 2u32
+            let mut r : u64 = 0u64
+            let mut bm : u32 = 0u32
+            if op == 0x20u32 { r = a + b  bm = 1u32 }
+            if op == 0x21u32 { r = a - b  bm = 1u32 }
+            if op == 0x22u32 { r = a * b  bm = 1u32 }
+            if op == 0x25u32 { r = a & b  bm = 1u32 }
+            if op == 0x26u32 { r = a | b  bm = 1u32 }
+            if op == 0x27u32 { r = a ^ b  bm = 1u32 }
+            if op == 0x28u32 { r = a << (b & 63u64)  bm = 1u32 }
+            if op == 0x29u32 { r = a >> (b & 63u64)  bm = 1u32 }
+            if bm == 0u32 { return 1u32 }                          /* SDIV/SREM -> out of fragment */
+            if TP_SP < 256u32 { TP_STK[TP_SP as u64] = r  TP_SP = TP_SP + 1u32 }
+            handled = 1u32
+        } }
+        if op == 0x60u32 { return 0u32 }                          /* RETURN: stop */
+        if op == 0x72u32 { if TP_SP < 1u32 { return 1u32 }  TP_SP = TP_SP - 1u32  handled = 1u32 }
+        if handled == 0u32 { return 1u32 }                        /* control/memory/call -> out of fragment */
+    }
+    return 0u32
+}
+
+const TP_SYMTOP : u32 = 4294967295u32
+var TP_STK_SYM : [u32; 256]   /* symbolic value stack (bv_bits node ids) */
+var TP_SP_SYM  : u32 = 0u32
+var TP_LOC_SYM : [u32; 256]   /* symbolic locals */
+/* SYMBOLIC denotation of one pass of the black box: locals[accum] starts as bb_var(0), the rest at 0; returns the
+ * bv_bits node of locals[accum] AFTER the body (the body's symbolic step), or TP_SYMTOP if out of the denotable
+ * fragment (shift/memory/control). */
+fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
+    let z : u32 = bb_const(0u64)
+    let mut s : u32 = 0u32
+    while s < 256u32 { TP_LOC_SYM[s as u64] = z  s = s + 1u32 }
+    TP_LOC_SYM[accum as u64] = bb_var(0u32)
+    TP_SP_SYM = 0u32
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = tpb(base, boff + p)  p = p + 1u64
+        let mut handled : u32 = 0u32
+        if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p)  p = p + 8u64  if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = bb_const(v)  TP_SP_SYM = TP_SP_SYM + 1u32 }  handled = 1u32 }
+        if op == 0x10u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = TP_LOC_SYM[sl as u64]  TP_SP_SYM = TP_SP_SYM + 1u32 }  handled = 1u32 }
+        if op == 0x11u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  TP_LOC_SYM[sl as u64] = TP_STK_SYM[TP_SP_SYM as u64]  handled = 1u32 }
+        if op >= 0x20u32 { if op <= 0x27u32 {
+            if TP_SP_SYM < 2u32 { return TP_SYMTOP }
+            let b : u32 = TP_STK_SYM[(TP_SP_SYM - 1u32) as u64]
+            let a : u32 = TP_STK_SYM[(TP_SP_SYM - 2u32) as u64]
+            TP_SP_SYM = TP_SP_SYM - 2u32
+            let mut r : u32 = TP_SYMTOP
+            if op == 0x20u32 { r = bb_add(a, b) }
+            if op == 0x21u32 { r = bb_sub(a, b) }
+            if op == 0x22u32 { r = bb_mul(a, b) }
+            if op == 0x25u32 { r = bb_and(a, b) }
+            if op == 0x26u32 { r = bb_or(a, b) }
+            if op == 0x27u32 { r = bb_xor(a, b) }
+            if r == TP_SYMTOP { return TP_SYMTOP }                 /* SDIV/SREM/shift -> not denotable here */
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            handled = 1u32
+        } }
+        if op == 0x60u32 { return TP_LOC_SYM[accum as u64] }       /* RETURN */
+        if op == 0x72u32 { if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  handled = 1u32 }
+        if handled == 0u32 { return TP_SYMTOP }
+    }
+    return TP_LOC_SYM[accum as u64]
+}
+
+/* THE AGNOSTIC TOPOLOGICAL AMPUTATION: fuzz the black box (au_svir_exec) for the accum trace -> finite-difference
+ * extract delta -> PROVE the symbolic body step == acc+delta over 2^64.  1 = PROVEN (the loop is acc+=delta,
+ * crushable to acc_0 + N*delta) ; 0 = the fuzz-extracted delta is REFUTED by the symbolic body (no false crush) ;
+ * AU_DEFER = non-affine behavior or non-denotable.  NO opcode pattern-matching -- pure behavioral resonance. */
+fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < 256u32 { TP_LOC[s as u64] = 0u64  s = s + 1u32 }
+    TP_LOC[accum as u64] = seed
+    sp_obs_reset()
+    sp_obs_push(TP_LOC[accum as u64])
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        if au_svir_exec(base, boff, blen) != 0u32 { return AU_DEFER }
+        sp_obs_push(TP_LOC[accum as u64])
+        i = i + 1u32
+    }
+    if au_is_arith() == 0u32 { return AU_DEFER }                   /* non-affine trajectory -> defer */
+    let delta : u64 = au_arith_delta()
+    bb_reset(64u64)
+    let step : u32 = au_svir_step_sym(base, boff, blen, accum)     /* THE GUILLOTINE against the black box */
+    if step == TP_SYMTOP { return AU_DEFER }
+    let v0 : u32 = bb_var(0u32)
+    if bb_equal(step, bb_add(v0, bb_const(delta))) == 1u8 { return 1u32 }   /* step(acc)==acc+delta over 2^64 */
+    return 0u32                                                    /* fuzz-affine but symbolically REFUTED */
+}
+
+/* ============================================================================================================
+ * THE WHOLE-PROGRAM DRIVER (Task F1) -- the ZERO-LOOP / ZERO-BRANCH INVARIANT.  Walks a real SVIR body opcode-
+ * aware; at each LOOP it locates the per-iteration straight-line body STRUCTURALLY (between the condition's
+ * BR_IF and the back-edge BR -- a trivial nesting scan, NOT semantic pattern-matching), feeds it to the proven
+ * agnostic extractor au_topo_amputate, and counts it CRUSHED iff the orbit amputation is PROVEN.  Returns 1 iff
+ * EVERY loop crushed (no back-edge survives -- the invariant holds), 0 iff a loop survives (non-affine -> honest
+ * C-backed residue, NEVER a false "proven"), 2 iff the body has no loops.  THE TEETH: a surviving loop fails the
+ * invariant -- the driver does not pretend the artifact is gone.  Operand-aware so a CONST value byte can never
+ * be mistaken for an opcode. */
+fn au_op_width(op: u32) -> u64 {
+    if op == 0x01u32 { return 8u64 }   /* CONST_I64 + 8 LE */
+    if op == 0x10u32 { return 1u64 }   /* LOCAL_GET + slot */
+    if op == 0x11u32 { return 1u64 }   /* LOCAL_SET + slot */
+    if op == 0x50u32 { return 1u64 }   /* BR + depth */
+    if op == 0x51u32 { return 1u64 }   /* BR_IF + depth */
+    if op == 0x70u32 { return 2u64 }   /* CALL + funcidx,argcount */
+    return 0u64                         /* binops / structured control / RETURN / DROP / mem: no operand */
+}
+var AU_BODY_OFF : u64 = 0u64
+var AU_BODY_LEN : u64 = 0u64
+/* UNIVERSAL (nesting-aware) loop-body locator: from the LOOP at lp, track structured-control depth (BLOCK/LOOP/
+ * IF push, END pop) and find the BR_IF (condition break) + back-edge BR at THIS loop's OWN level (depth 0) --
+ * NOT the innermost.  So nested loops are correctly delineated (an inner loop's BR_IF/BR sit at depth>0 and are
+ * ignored) and sequential loops are each found at their own LOOP.  Sets AU_BODY_OFF/AU_BODY_LEN; 1 if found.
+ * Opcode-aware (au_op_width skips CONST operands so a value byte is never read as a control opcode). */
+fn au_locate_loop_body(base: u64, boff: u64, blen: u64, lp: u64) -> u32 {
+    let mut p : u64 = lp + 1u64
+    let mut depth : i64 = 0i64
+    let mut brif_end : u64 = 18446744073709551615u64
+    let mut found : u32 = 0u32
+    let mut stop : u32 = 0u32
+    while p < blen {
+        if stop == 0u32 {
+            let op : u32 = tpb(base, boff + p)
+            let w  : u64 = au_op_width(op)
+            if op == 0x44u32 {                                    /* END */
+                if depth == 0i64 { stop = 1u32 }                  /* this LOOP's own END -> no back-edge found */
+                else { depth = depth - 1i64 }
+            }
+            if op != 0x44u32 {
+                if depth == 0i64 {
+                    if op == 0x51u32 { if brif_end == 18446744073709551615u64 { brif_end = p + 1u64 + w } }
+                    if op == 0x50u32 { if brif_end != 18446744073709551615u64 { AU_BODY_OFF = brif_end  AU_BODY_LEN = p - brif_end  found = 1u32  stop = 1u32 } }
+                }
+                if op == 0x40u32 { depth = depth + 1i64 }         /* BLOCK pushes */
+                if op == 0x41u32 { depth = depth + 1i64 }         /* nested LOOP pushes */
+                if op == 0x42u32 { depth = depth + 1i64 }         /* IF pushes */
+            }
+            p = p + 1u64 + w
+        } else { p = blen }
+    }
+    return found
+}
+var AU_LT : u32 = 0u32   /* loops found (set by the last au_crush_module) */
+var AU_LC : u32 = 0u32   /* loops crushed */
+fn au_loops_total() -> u32 @export { return AU_LT }
+fn au_loops_crushed() -> u32 @export { return AU_LC }
+fn au_crush_module(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
+    let mut loops_total   : u32 = 0u32
+    let mut loops_crushed : u32 = 0u32
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = tpb(base, boff + p)
+        let w  : u64 = au_op_width(op)
+        if op == 0x41u32 {                                         /* LOOP (the walk hits every loop, inner & outer) */
+            loops_total = loops_total + 1u32
+            if au_locate_loop_body(base, boff, blen, p) == 1u32 {
+                if au_topo_amputate(base, boff + AU_BODY_OFF, AU_BODY_LEN, accum, 7u64) == 1u32 { loops_crushed = loops_crushed + 1u32 }
+            }
+        }
+        p = p + 1u64 + w
+    }
+    AU_LT = loops_total  AU_LC = loops_crushed
+    if loops_total == 0u32 { return 2u32 }                         /* no loops to crush */
+    if loops_crushed == loops_total { return 1u32 }               /* ZERO LOOPS REMAIN -- the invariant holds */
+    return 0u32                                                    /* a loop survived -> C-backed residue (teeth) */
+}
+
+/* ============================================================================================================
+ * THE PARTIAL-EVAL FOUNDATION (Task F2b core): a CONCRETE structured-control SVIR interpreter that EXECUTES a
+ * full body INCLUDING nested loops -- it follows BR/BR_IF as real control flow (back-edges re-enter LOOP, breaks
+ * exit BLOCK to its matching END), so an inner loop is RUN to completion, never pattern-matched.  Bounded steps
+ * (a non-terminating body returns 1).  This is what the nested OUTER-crush stands on: fuzz the outer body and the
+ * inner loop executes inside it, so the combined per-iteration delta is observed directly.  0=ok, 1=out-of-
+ * fragment / step-budget exceeded.  TP_LOC is the live state (set via au_tp_set, read via au_tp_get). */
+const TP_MAXSTEP : u64 = 4000000u64
+var TP_CK : [u32; 64]    /* control stack: 0=BLOCK 1=LOOP 2=IF */
+var TP_CP : [u64; 64]    /* construct opcode position    */
+var TP_CE : [u64; 64]    /* matching END position        */
+var TP_CSP : u32 = 0u32
+fn au_tp_set(slot: u32, val: u64) -> i32 @export { if slot < 256u32 { TP_LOC[slot as u64] = val }  return 0i32 }
+fn au_tp_get(slot: u32) -> u64 @export { if slot < 256u32 { return TP_LOC[slot as u64] }  return 0u64 }
+/* find the END that closes the construct opening at q (opcode-aware nesting count) */
+fn tp_match_end(base: u64, boff: u64, blen: u64, q: u64) -> u64 {
+    let mut p : u64 = q + 1u64
+    let mut depth : i64 = 1i64
+    let mut res : u64 = blen
+    let mut done : u32 = 0u32
+    while p < blen {
+        if done == 0u32 {
+            let op : u32 = tpb(base, boff + p)
+            let w  : u64 = au_op_width(op)
+            if op == 0x40u32 { depth = depth + 1i64 }
+            if op == 0x41u32 { depth = depth + 1i64 }
+            if op == 0x42u32 { depth = depth + 1i64 }
+            if op == 0x44u32 { depth = depth - 1i64  if depth == 0i64 { res = p  done = 1u32 } }
+            p = p + 1u64 + w
+        } else { p = blen }
+    }
+    return res
+}
+fn au_svir_exec_cf(base: u64, boff: u64, blen: u64) -> u32 @export {
+    let mut sp  : u32 = 0u32      /* value-stack pointer -- LOCAL (a stable stack slot; the global TP_SP read-
+                                   * modified-write across this many loop iterations mis-codegens in this fn) */
+    let mut csp : u32 = 0u32      /* control-stack pointer -- LOCAL for the same reason */
+    let mut p : u64 = 0u64
+    let mut steps : u64 = 0u64
+    while p < blen {
+        steps = steps + 1u64
+        if steps > TP_MAXSTEP { return 1u32 }                  /* bounded: a non-terminating body refuses, never hangs */
+        let op : u32 = tpb(base, boff + p)
+        let mut handled : u32 = 0u32
+        if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p + 1u64)  p = p + 9u64  if sp < 256u32 { TP_STK[sp as u64] = v  sp = sp + 1u32 }  handled = 1u32 }
+        if op == 0x10u32 { let sl : u32 = tpb(base, boff + p + 1u64)  p = p + 2u64  if sp < 256u32 { TP_STK[sp as u64] = TP_LOC[sl as u64]  sp = sp + 1u32 }  handled = 1u32 }
+        if op == 0x11u32 { let sl : u32 = tpb(base, boff + p + 1u64)  p = p + 2u64  if sp < 1u32 { return 1u32 }  sp = sp - 1u32  TP_LOC[sl as u64] = TP_STK[sp as u64]  handled = 1u32 }
+        if op == 0x40u32 { if csp < 64u32 { TP_CK[csp as u64] = 0u32  TP_CP[csp as u64] = p  TP_CE[csp as u64] = tp_match_end(base, boff, blen, p)  csp = csp + 1u32 }  p = p + 1u64  handled = 1u32 }
+        if op == 0x41u32 { if csp < 64u32 { TP_CK[csp as u64] = 1u32  TP_CP[csp as u64] = p  TP_CE[csp as u64] = tp_match_end(base, boff, blen, p)  csp = csp + 1u32 }  p = p + 1u64  handled = 1u32 }
+        if op == 0x44u32 { if csp > 0u32 { csp = csp - 1u32 }  p = p + 1u64  handled = 1u32 }
+        if op == 0x60u32 { return 0u32 }
+        if op == 0x72u32 { if sp < 1u32 { return 1u32 }  sp = sp - 1u32  p = p + 1u64  handled = 1u32 }
+        if op == 0x50u32 {
+            let d : u32 = tpb(base, boff + p + 1u64)
+            if csp < (d + 1u32) { return 1u32 }
+            let tgt : u32 = (csp - 1u32) - d
+            if TP_CK[tgt as u64] == 1u32 { csp = tgt + 1u32  p = TP_CP[tgt as u64] + 1u64 }
+            if TP_CK[tgt as u64] != 1u32 { csp = tgt  p = TP_CE[tgt as u64] + 1u64 }
+            handled = 1u32
+        }
+        if op == 0x51u32 {
+            if sp < 1u32 { return 1u32 }
+            sp = sp - 1u32
+            let c : u64 = TP_STK[sp as u64]
+            let d : u32 = tpb(base, boff + p + 1u64)
+            if c != 0u64 {
+                if csp < (d + 1u32) { return 1u32 }
+                let tgt : u32 = (csp - 1u32) - d
+                if TP_CK[tgt as u64] == 1u32 { csp = tgt + 1u32  p = TP_CP[tgt as u64] + 1u64 }
+                if TP_CK[tgt as u64] != 1u32 { csp = tgt  p = TP_CE[tgt as u64] + 1u64 }
+            }
+            if c == 0u64 { p = p + 2u64 }
+            handled = 1u32
+        }
+        if op >= 0x20u32 { if op <= 0x31u32 {
+            p = p + 1u64                                        /* THE FIX: binops/compares are 1 byte, no operand -- advance p (was missing -> ADD/EQ re-ran forever) */
+            if sp < 2u32 { return 1u32 }
+            let b : u64 = TP_STK[(sp - 1u32) as u64]
+            let a : u64 = TP_STK[(sp - 2u32) as u64]
+            sp = sp - 2u32
+            let mut r  : u64 = 0u64
+            let mut bm : u32 = 0u32
+            if op == 0x20u32 { r = a + b  bm = 1u32 }
+            if op == 0x21u32 { r = a - b  bm = 1u32 }
+            if op == 0x22u32 { r = a * b  bm = 1u32 }
+            if op == 0x25u32 { r = a & b  bm = 1u32 }
+            if op == 0x26u32 { r = a | b  bm = 1u32 }
+            if op == 0x27u32 { r = a ^ b  bm = 1u32 }
+            if op == 0x28u32 { r = a << (b & 63u64)  bm = 1u32 }
+            if op == 0x29u32 { r = a >> (b & 63u64)  bm = 1u32 }
+            if op == 0x30u32 { if a == b { r = 1u64 }  bm = 1u32 }
+            if op == 0x31u32 { if a != b { r = 1u64 }  bm = 1u32 }
+            if bm == 0u32 { return 1u32 }                          /* signed compares / SDIV / SREM not in this interpreter */
+            if sp < 256u32 { TP_STK[sp as u64] = r  sp = sp + 1u32 }
+            handled = 1u32
+        } }
+        if handled == 0u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+/* ============================================================================================================
+ * COMPOSITIONAL AMPUTATION (Task F2b complete) -- the nested OUTER-crush by ITERATIVE COLLAPSE.  Given an outer
+ * loop BODY that contains an inner loop:  (1) MEASURE the inner's net per-outer-iteration effect on `accum` by
+ * EXECUTING one pass of the outer body with au_svir_exec_cf (the inner loop runs to completion -- behavioral
+ * resonance, no parsing of its trip count);  (2) SUBSTITUTE: splice  GET accum / CONST net / ADD / SET accum  in
+ * place of the inner-loop bytes, producing a STRAIGHT-LINE outer body in TP_SCRATCH;  (3) CRUSH the flattened
+ * outer with au_topo_amputate -- which PROVES it affine over 2^64 (the inner is now an O(1) const-add);  (4) the
+ * TEETH: differentially validate original-outer vs flattened-outer accum-deltas over several seeds with
+ * au_svir_exec_cf -- if the inner's trip count is NOT constant (net varies), they diverge and we DEFER.  Returns
+ * the proven outer delta, or AU_NONE64 (no inner loop / not proven / substitution unfaithful). */
+var TP_SCRATCH : [u8; 1024]
+fn au_crush_nested(base: u64, boff: u64, blen: u64, accum: u32) -> u64 @export {
+    /* (1) net = inner's effect: run one pass of the outer body from a zeroed state */
+    let mut z : u32 = 0u32
+    while z < 16u32 { au_tp_set(z, 0u64)  z = z + 1u32 }
+    if au_svir_exec_cf(base, boff, blen) != 0u32 { return AU_NONE64 }
+    let net : u64 = au_tp_get(accum)
+    /* (2a) locate the inner loop region: first BLOCK (opcode-aware so a CONST byte is never mistaken) */
+    let mut il_start : u64 = blen
+    let mut p : u64 = 0u64
+    let mut found : u32 = 0u32
+    while p < blen {
+        if found == 0u32 {
+            let op : u32 = tpb(base, boff + p)
+            let w  : u64 = au_op_width(op)
+            if op == 0x40u32 { il_start = p  found = 1u32 }
+            p = p + 1u64 + w
+        } else { p = blen }
+    }
+    if found == 0u32 { return AU_NONE64 }                          /* no inner loop -> not nested */
+    let il_end : u64 = tp_match_end(base, boff, blen, il_start) + 1u64
+    /* (2b) build the flattened straight-line outer in TP_SCRATCH: prefix + (acc += net) + suffix */
+    let mut o : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < il_start { TP_SCRATCH[o] = tpb(base, boff + k) as u8  o = o + 1u64  k = k + 1u64 }
+    TP_SCRATCH[o] = 0x10u8       o = o + 1u64    TP_SCRATCH[o] = accum as u8   o = o + 1u64   /* GET accum */
+    TP_SCRATCH[o] = 0x01u8       o = o + 1u64                                                  /* CONST net */
+    let mut bi : u64 = 0u64
+    while bi < 8u64 { TP_SCRATCH[o] = ((net >> (bi * 8u64)) & 255u64) as u8  o = o + 1u64  bi = bi + 1u64 }
+    TP_SCRATCH[o] = 0x20u8       o = o + 1u64                                                  /* ADD */
+    TP_SCRATCH[o] = 0x11u8       o = o + 1u64    TP_SCRATCH[o] = accum as u8   o = o + 1u64   /* SET accum */
+    k = il_end
+    while k < blen { TP_SCRATCH[o] = tpb(base, boff + k) as u8  o = o + 1u64  k = k + 1u64 }
+    let flen : u64 = o
+    let sb   : u64 = &TP_SCRATCH as u64
+    /* (3) PROVE the flattened outer affine over 2^64 */
+    if au_topo_amputate(sb, 0u64, flen, accum, 7u64) != 1u32 { return AU_NONE64 }
+    /* (4) TEETH: original-outer vs flattened-outer must agree on accum over several seeds */
+    let mut seed : u64 = 3u64
+    let mut t : u32 = 0u32
+    while t < 4u32 {
+        let mut z2 : u32 = 0u32
+        while z2 < 16u32 { au_tp_set(z2, seed)  z2 = z2 + 1u32 }
+        au_svir_exec_cf(base, boff, blen)
+        let orig : u64 = au_tp_get(accum)
+        let mut z3 : u32 = 0u32
+        while z3 < 16u32 { au_tp_set(z3, seed)  z3 = z3 + 1u32 }
+        au_svir_exec_cf(sb, 0u64, flen)
+        let flat : u64 = au_tp_get(accum)
+        if orig != flat { return AU_NONE64 }                       /* substitution unfaithful -> defer */
+        seed = seed + 5u64
+        t = t + 1u32
+    }
+    return net
+}
+
+/* does the body [boff,boff+blen) contain a LOOP opcode? (opcode-aware so a CONST byte 0x41 is never mistaken) */
+fn au_body_has_loop(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut p : u64 = 0u64
+    let mut found : u32 = 0u32
+    while p < blen {
+        if found == 0u32 {
+            let op : u32 = tpb(base, boff + p)
+            let w  : u64 = au_op_width(op)
+            if op == 0x41u32 { found = 1u32 }
+            p = p + 1u64 + w
+        } else { p = blen }
+    }
+    return found
+}
+/* ============================================================================================================
+ * THE WHOLE-PROGRAM DRIVER + SER_CRUSH_REPORT (Task F2c operational core) -- walk a real SVIR module; for EACH
+ * top-level loop, dispatch: a body with an inner loop -> au_crush_nested (compositional), else -> au_topo_amputate
+ * (simple affine).  RECORD every loop in a ledger: offset, verdict (1=CRUSHED/AMPUTATED_PROVEN, 0=DEFER/residue),
+ * and the proven delta.  After crushing a loop, SKIP past its body so inner loops are never double-counted.  This
+ * is the HONEST end-state: every loop is either crushed (proven) or witnessed as residue (logged, never forced).
+ * Returns the crushed count.  The deferral list IS the roadmap-to-residue (read via au_report_*). */
+var RPT_OFF   : [u64; 256]
+var RPT_VERD  : [u32; 256]
+var RPT_DELTA : [u64; 256]
+var RPT_N : u32 = 0u32
+fn au_report_n()              -> u32 @export { return RPT_N }
+fn au_report_off(i: u32)      -> u64 @export { if i < 256u32 { return RPT_OFF[i as u64] }  return 0u64 }
+fn au_report_verdict(i: u32)  -> u32 @export { if i < 256u32 { return RPT_VERD[i as u64] }  return 0u32 }
+fn au_report_delta(i: u32)    -> u64 @export { if i < 256u32 { return RPT_DELTA[i as u64] }  return 0u64 }
+/* THE RESIDUE-STABILITY INVARIANT (Task F2c, advice #1): an FNV-1a fingerprint of the WHOLE crush ledger -- every
+ * loop's offset, verdict (CRUSHED/residue), and proven delta.  Same module -> same hash (the stable ANCHOR a
+ * seed-DDC gate binds to).  Any verdict flip (affine<->residue) or delta change moves the root, so the gate
+ * reddens the moment the residue drifts -- you focus engineering on the CRUSHABLE fraction while the residue
+ * stays Frozen/Verified.  The deferral set is versioned, not silently mutable. */
+fn au_report_hash() -> u64 @export {
+    let mut acc : u64 = 14695981039346656037u64                    /* FNV-1a offset basis */
+    let mut i : u32 = 0u32
+    while i < RPT_N {
+        acc = (acc ^ RPT_OFF[i as u64])         * 1099511628211u64
+        acc = (acc ^ (RPT_VERD[i as u64] as u64)) * 1099511628211u64
+        acc = (acc ^ RPT_DELTA[i as u64])       * 1099511628211u64
+        i = i + 1u32
+    }
+    acc = acc ^ (RPT_N as u64)
+    return acc
+}
+
+/* ============================================================================================================
+ * EPOCH I -- THE MERKLE-SEALED TCB.  Upgrade the flat ledger fingerprint into a binary HASH TREE over the per-loop
+ * certificates (leaf_i = H(offset, verdict, delta)).  The root is the GENESIS seal; a leaf membership proof shows
+ * a specific crushed function descends from it; the admission gate accepts a build ONLY if its report-root equals
+ * the sealed genesis.  Undefined drift cannot pass: change any cert and the root moves.  Attaches to RPT_*. */
+fn au_h2(a: u64, b: u64) -> u64 {                                  /* 2-to-1 compression (FNV mix + murmur avalanche) */
+    let mut x : u64 = (a ^ 14695981039346656037u64) * 1099511628211u64
+    x = (x ^ b) * 1099511628211u64
+    x = (x ^ (x >> 33u64)) * 18397679294719823053u64
+    x = (x ^ (x >> 29u64)) * 14181476777654086739u64
+    return x ^ (x >> 32u64)
+}
+fn au_report_leaf(i: u32) -> u64 @export {
+    if i >= RPT_N { return 0u64 }
+    return au_h2(au_h2(RPT_OFF[i as u64], RPT_VERD[i as u64] as u64), RPT_DELTA[i as u64])
+}
+var MK_LV : [u64; 512]                                             /* in-place Merkle level buffer */
+fn au_report_merkle_root() -> u64 @export {
+    if RPT_N == 0u32 { return 0u64 }
+    let mut cnt : u32 = RPT_N
+    let mut i : u32 = 0u32
+    while i < cnt { MK_LV[i as u64] = au_report_leaf(i)  i = i + 1u32 }
+    while cnt > 1u32 {                                             /* fold pairs up; odd tail duplicates itself */
+        let mut j : u32 = 0u32
+        let mut o : u32 = 0u32
+        while j < cnt {
+            let lft : u64 = MK_LV[j as u64]
+            let mut rgt : u64 = lft
+            if (j + 1u32) < cnt { rgt = MK_LV[(j + 1u32) as u64] }
+            MK_LV[o as u64] = au_h2(lft, rgt)                      /* o<=j always, so in-place is safe */
+            o = o + 1u32
+            j = j + 2u32
+        }
+        cnt = o
+    }
+    return MK_LV[0u64]
+}
+var MK_PATH : [u64; 64]                                            /* sibling hashes along a proof path */
+var MK_PLEN : u32 = 0u32
+fn au_merkle_open(target: u32) -> u32 @export {                   /* build the membership proof for leaf `target` */
+    if target >= RPT_N { return 0u32 }
+    MK_PLEN = 0u32
+    let mut cnt : u32 = RPT_N
+    let mut i : u32 = 0u32
+    while i < cnt { MK_LV[i as u64] = au_report_leaf(i)  i = i + 1u32 }
+    let mut idx : u32 = target
+    while cnt > 1u32 {
+        let sib : u32 = idx ^ 1u32
+        let mut sibval : u64 = MK_LV[idx as u64]                   /* odd-tail: sibling is self */
+        if sib < cnt { sibval = MK_LV[sib as u64] }
+        MK_PATH[MK_PLEN as u64] = sibval  MK_PLEN = MK_PLEN + 1u32
+        let mut j : u32 = 0u32
+        let mut o : u32 = 0u32
+        while j < cnt {
+            let lft : u64 = MK_LV[j as u64]
+            let mut rgt : u64 = lft
+            if (j + 1u32) < cnt { rgt = MK_LV[(j + 1u32) as u64] }
+            MK_LV[o as u64] = au_h2(lft, rgt)
+            o = o + 1u32
+            j = j + 2u32
+        }
+        idx = idx >> 1u32
+        cnt = o
+    }
+    return 1u32
+}
+fn au_merkle_check(leaf_hash: u64, target: u32, root: u64) -> u32 @export {   /* recompute root from leaf + MK_PATH */
+    let mut h : u64 = leaf_hash
+    let mut idx : u32 = target
+    let mut k : u32 = 0u32
+    while k < MK_PLEN {
+        let sib : u64 = MK_PATH[k as u64]
+        if (idx & 1u32) == 0u32 { h = au_h2(h, sib) }             /* we are the left child  */
+        if (idx & 1u32) == 1u32 { h = au_h2(sib, h) }             /* we are the right child */
+        idx = idx >> 1u32
+        k = k + 1u32
+    }
+    if h == root { return 1u32 }
+    return 0u32
+}
+var GENESIS_ROOT : u64 = 0u64
+var GENESIS_SET  : u32 = 0u32
+fn au_tcb_seal()   -> u64 @export { let r : u64 = au_report_merkle_root()  GENESIS_ROOT = r  GENESIS_SET = 1u32  return r }
+fn au_tcb_genesis() -> u64 @export { return GENESIS_ROOT }
+fn au_tcb_admits() -> u32 @export {                              /* the loader gate: 1 iff current root == sealed genesis */
+    if GENESIS_SET == 0u32 { return 0u32 }
+    if au_report_merkle_root() == GENESIS_ROOT { return 1u32 }
+    return 0u32
+}
+
+/* ============================================================================================================
+ * EPOCH IV -- MORPHIC RESONANCE (SVIR -> HARDWARE).  A CRUSHED straight-line SVIR body is a pure dataflow DAG;
+ * it maps 1:1 to a combinational arithmetic netlist (each binop = a logic block, each CONST/local = a wire).  No
+ * branches, no clock, no fetch-decode: the algebra IS the circuit.  au_svir_to_netlist lowers a straight-line
+ * body into a gate DAG (SSA via local->wire binding); au_netlist_eval is the faithful evaluator (the proof the
+ * circuit computes the same function as the code); the accessors let a thin formatter emit Verilog/VHDL.  Builds
+ * on the same opcode set au_svir_exec runs. */
+const NL_CONST : u32 = 240u32                                     /* 0xF0 gate kind: constant wire */
+const NL_INPUT : u32 = 241u32                                     /* 0xF1 gate kind: input (local)  */
+const NL_NONE  : u32 = 4294967295u32
+var NL_OP   : [u32; 512]    var NL_A : [u32; 512]    var NL_B : [u32; 512]
+var NL_K    : [u64; 512]    var NL_VAL : [u64; 512]
+var NL_N    : u32 = 0u32    var NL_OUT : u32 = 0u32
+var NL_STK  : [u32; 256]    var NL_SP  : u32 = 0u32
+var NL_LOCAL : [u32; 256]
+fn au_nl_n()        -> u32 @export { return NL_N }
+fn au_nl_out()      -> u32 @export { return NL_OUT }
+fn au_nl_op(i: u32) -> u32 @export { if i < 512u32 { return NL_OP[i as u64] }  return 0u32 }
+fn au_nl_a(i: u32)  -> u32 @export { if i < 512u32 { return NL_A[i as u64] }  return 0u32 }
+fn au_nl_b(i: u32)  -> u32 @export { if i < 512u32 { return NL_B[i as u64] }  return 0u32 }
+fn au_nl_k(i: u32)  -> u64 @export { if i < 512u32 { return NL_K[i as u64] }  return 0u64 }
+/* lower a straight-line SVIR body to a combinational netlist; returns the output gate id, or NL_NONE on a non-
+ * combinational op (loop/branch/memory).  A CRUSHED body is always combinational -- that is the whole point. */
+fn au_svir_to_netlist(base: u64, boff: u64, blen: u64) -> u32 @export {
+    NL_N = 0u32  NL_SP = 0u32
+    let mut s : u32 = 0u32
+    while s < 256u32 { NL_LOCAL[s as u64] = NL_NONE  s = s + 1u32 }
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = tpb(base, boff + p)
+        let mut handled : u32 = 0u32
+        if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p + 1u64)  p = p + 9u64  NL_OP[NL_N as u64] = NL_CONST  NL_K[NL_N as u64] = v  if NL_SP < 256u32 { NL_STK[NL_SP as u64] = NL_N  NL_SP = NL_SP + 1u32 }  NL_N = NL_N + 1u32  handled = 1u32 }
+        if op == 0x10u32 { let sl : u32 = tpb(base, boff + p + 1u64)  p = p + 2u64  let mut g : u32 = NL_LOCAL[sl as u64]  if g == NL_NONE { NL_OP[NL_N as u64] = NL_INPUT  NL_A[NL_N as u64] = sl  g = NL_N  NL_LOCAL[sl as u64] = g  NL_N = NL_N + 1u32 }  if NL_SP < 256u32 { NL_STK[NL_SP as u64] = g  NL_SP = NL_SP + 1u32 }  handled = 1u32 }
+        if op == 0x11u32 { let sl : u32 = tpb(base, boff + p + 1u64)  p = p + 2u64  if NL_SP < 1u32 { return NL_NONE }  NL_SP = NL_SP - 1u32  NL_LOCAL[sl as u64] = NL_STK[NL_SP as u64]  handled = 1u32 }
+        if op == 0x60u32 { if NL_SP > 0u32 { NL_OUT = NL_STK[(NL_SP - 1u32) as u64] }  return NL_OUT }
+        if op == 0x72u32 { if NL_SP < 1u32 { return NL_NONE }  NL_SP = NL_SP - 1u32  handled = 1u32 }
+        if op >= 0x20u32 { if op <= 0x31u32 {
+            p = p + 1u64
+            if op == 0x23u32 { return NL_NONE }                  /* SDIV/SREM are not combinational primitives here */
+            if op == 0x24u32 { return NL_NONE }
+            if NL_SP < 2u32 { return NL_NONE }
+            let b : u32 = NL_STK[(NL_SP - 1u32) as u64]
+            let a : u32 = NL_STK[(NL_SP - 2u32) as u64]
+            NL_SP = NL_SP - 2u32
+            NL_OP[NL_N as u64] = op  NL_A[NL_N as u64] = a  NL_B[NL_N as u64] = b
+            if NL_SP < 256u32 { NL_STK[NL_SP as u64] = NL_N  NL_SP = NL_SP + 1u32 }
+            NL_N = NL_N + 1u32
+            handled = 1u32
+        } }
+        if handled == 0u32 { return NL_NONE }
+    }
+    if NL_SP > 0u32 { NL_OUT = NL_STK[(NL_SP - 1u32) as u64] }
+    return NL_OUT
+}
+/* faithful combinational evaluation of the netlist (inputs from TP_LOC) -- the proof the circuit == the code. */
+fn au_netlist_eval() -> u64 @export {
+    let mut g : u32 = 0u32
+    while g < NL_N {
+        let op : u32 = NL_OP[g as u64]
+        let mut v : u64 = 0u64
+        if op == NL_CONST { v = NL_K[g as u64] }
+        if op == NL_INPUT { v = TP_LOC[NL_A[g as u64] as u64] }
+        if op >= 0x20u32 { if op <= 0x31u32 {
+            let a : u64 = NL_VAL[NL_A[g as u64] as u64]
+            let b : u64 = NL_VAL[NL_B[g as u64] as u64]
+            if op == 0x20u32 { v = a + b }
+            if op == 0x21u32 { v = a - b }
+            if op == 0x22u32 { v = a * b }
+            if op == 0x25u32 { v = a & b }
+            if op == 0x26u32 { v = a | b }
+            if op == 0x27u32 { v = a ^ b }
+            if op == 0x28u32 { v = a << (b & 63u64) }
+            if op == 0x29u32 { v = a >> (b & 63u64) }
+            if op == 0x30u32 { if a == b { v = 1u64 } }
+            if op == 0x31u32 { if a != b { v = 1u64 } }
+        } }
+        NL_VAL[g as u64] = v
+        g = g + 1u32
+    }
+    return NL_VAL[NL_OUT as u64]
+}
+
+/* ============================================================================================================
+ * EPOCH II -- AUTOPOIETIC ANNEALING (the CEGIS-safe core).  A proof-carrying minimizer: constant-propagate the
+ * netlist (any binop over two constants folds to a constant).  Gates are topologically ordered, so one forward
+ * pass cools every constant chain -- a fully-constant computation collapses to a single wire.  Each fold is an
+ * EXACT algebraic identity (not a likelihood), so equivalence is preserved by construction; au_netlist_eval is
+ * the witness (same output before and after).  This is the ratchet toward minimal -- proven, never guessed.
+ * Returns the number of gates folded. */
+fn au_netlist_fold() -> u32 @export {
+    let mut folded : u32 = 0u32
+    let mut g : u32 = 0u32
+    while g < NL_N {
+        let op : u32 = NL_OP[g as u64]
+        if op >= 0x20u32 { if op <= 0x31u32 {
+            let ga : u32 = NL_A[g as u64]
+            let gb : u32 = NL_B[g as u64]
+            if NL_OP[ga as u64] == NL_CONST { if NL_OP[gb as u64] == NL_CONST {
+                let a : u64 = NL_K[ga as u64]
+                let b : u64 = NL_K[gb as u64]
+                let mut v : u64 = 0u64
+                if op == 0x20u32 { v = a + b }
+                if op == 0x21u32 { v = a - b }
+                if op == 0x22u32 { v = a * b }
+                if op == 0x25u32 { v = a & b }
+                if op == 0x26u32 { v = a | b }
+                if op == 0x27u32 { v = a ^ b }
+                if op == 0x28u32 { v = a << (b & 63u64) }
+                if op == 0x29u32 { v = a >> (b & 63u64) }
+                if op == 0x30u32 { if a == b { v = 1u64 } }
+                if op == 0x31u32 { if a != b { v = 1u64 } }
+                NL_OP[g as u64] = NL_CONST  NL_K[g as u64] = v
+                folded = folded + 1u32
+            } }
+        } }
+        g = g + 1u32
+    }
+    return folded
+}
+/* live (reachable-from-output, non-const-collapsed) gate count -- the circuit's size after annealing. */
+fn au_netlist_live() -> u32 @export {
+    if NL_OP[NL_OUT as u64] == NL_CONST { return 1u32 }           /* whole computation collapsed to one wire */
+    let mut live : u32 = 0u32
+    let mut g : u32 = 0u32
+    while g < NL_N { if NL_OP[g as u64] != NL_CONST { live = live + 1u32 }  g = g + 1u32 }
+    return live
+}
+/* the loop-walking core: walk [boff,boff+blen), APPEND each loop to the ledger (no reset).  Shared by the single-
+ * body report and the whole-module walker.  RPT_OFF stores the ABSOLUTE offset (boff+p) so multi-function modules
+ * get globally-unique loop ids. */
+fn au_crush_walk(base: u64, boff: u64, blen: u64, accum: u32) {
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op  : u32 = tpb(base, boff + p)
+        let w   : u64 = au_op_width(op)
+        let mut adv : u32 = 1u32
+        if op == 0x41u32 {                                         /* a loop */
+            if au_locate_loop_body(base, boff, blen, p) == 1u32 {
+                let bo : u64 = AU_BODY_OFF
+                let bl : u64 = AU_BODY_LEN
+                let mut verd : u32 = 0u32
+                let mut dlt  : u64 = 0u64
+                if au_body_has_loop(base, boff + bo, bl) == 1u32 {            /* NESTED -> compositional crush */
+                    let net : u64 = au_crush_nested(base, boff + bo, bl, accum)
+                    if net != AU_NONE64 { verd = 1u32  dlt = net }
+                }
+                if au_body_has_loop(base, boff + bo, bl) == 0u32 {           /* SIMPLE -> agnostic affine crush */
+                    if au_topo_amputate(base, boff + bo, bl, accum, 7u64) == 1u32 { verd = 1u32  dlt = au_arith_delta() }
+                }
+                if RPT_N < 256u32 { RPT_OFF[RPT_N as u64] = boff + p  RPT_VERD[RPT_N as u64] = verd  RPT_DELTA[RPT_N as u64] = dlt  RPT_N = RPT_N + 1u32 }
+                p = bo + bl                                          /* skip past the body -> inner loops not re-counted */
+                adv = 0u32
+            }
+        }
+        if adv == 1u32 { p = p + 1u64 + w }
+    }
+}
+fn au_count_crushed() -> u32 {
+    let mut crushed : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < RPT_N { if RPT_VERD[i as u64] == 1u32 { crushed = crushed + 1u32 }  i = i + 1u32 }
+    return crushed
+}
+fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
+    RPT_N = 0u32
+    au_crush_walk(base, boff, blen, accum)
+    return au_count_crushed()
+}
+/* THE GHOST-BUILD over a real SVIR MODULE: parse [nfunc][per-fn: params,nresults,blen(u16 LE),body] and crush
+ * every function's body, cumulatively logging the ledger.  This is what consumes raw ccsv output -- the seed's
+ * affine loops crush, its residue defers, and the au_report accessors + au_report_hash give the target map. */
+fn au_crush_svir_module(base: u64, len: u64, accum: u32) -> u32 @export {
+    RPT_N = 0u32
+    let nfunc : u32 = tpb(base, 0u64)
+    let mut p : u64 = 1u64
+    let mut fi : u32 = 0u32
+    while fi < nfunc {
+        let blen : u32 = tpb(base, p + 2u64) | (tpb(base, p + 3u64) << 8u32)   /* u16 LE body length */
+        let body_off : u64 = p + 4u64
+        au_crush_walk(base, body_off, blen as u64, accum)
+        p = body_off + (blen as u64)
+        fi = fi + 1u32
+    }
+    return au_count_crushed()
+}
+
+/* ============================================================================================================
+ * HOLOGRAPHIC CONFORMANCE (the "Mold/Key intersect", made SOUND and BOUNDED to the affine fragment) -- a real
+ * zero-runtime conformance check, NOT the universal overclaim.  The ARCHITECTURE invariant is a boundary
+ * constraint P(accum) = "accum < bound"; the MODULE is an SVIR loop body M.  PROJECT M to its closed form
+ * acc' = acc + delta -- PROVEN over ALL 2^64 by au_topo_amputate's symbolic guillotine (au_svir_step_sym vs the
+ * fuzz-extracted delta; behavioral resonance, NO opcode pattern-match).  INTERSECT: prove P is 1-inductive over
+ * that transition with the membrane prover sks_prove (the bit-blast miter P(x) & ~P(x+delta), decided UNSAT over
+ * 2^64).  No CPU execution of M -- two closed forms meet in the SMT layer.
+ *   AU_CONF_OK (1)    : PROVEN -- M can NEVER drive accum past `bound`, for EVERY reachable state.
+ *   AU_CONF_VIOL (0)  : VIOLATES -- au_conform_iter() = the FIRST iteration n with acc0 + n*delta >= bound, a
+ *                       CLOSED-FORM pinpoint from the proven (acc0,delta) ("drift outside the architectural
+ *                       bound at iteration N", no run); au_conform_witness() = the bit-level breaking state
+ *                       (sks_counterexample), au_conform_delta() = the proven per-iteration delta.
+ *   AU_CONF_DEFER (2) : M is NON-AFFINE (does not crush) -> HONEST DEFER to runtime.  THE CONSCIENCE LINE: the
+ *                       O(1) verdict is REAL for the affine fragment; a module the tensor cannot capture is
+ *                       NEVER falsely blessed -- it is witnessed as residue, exactly like the crush ledger.
+ * COMPOSITION (no island): au_topo_amputate (module->tensor, here) + sks_ult/sks_prove/sks_counterexample (the
+ * architecture invariant + the SMT intersect + the witness, ser_kinduct_sym) + bv_bits.  Same primitives the
+ * crush ledger + ser_intent already stand on. */
+const AU_CONF_OK    : u32 = 1u32
+const AU_CONF_VIOL  : u32 = 0u32
+const AU_CONF_DEFER : u32 = 2u32
+var AU_CONF_ITER  : u64 = 0u64   /* breach iteration (valid iff VIOL) */
+var AU_CONF_WIT   : u64 = 0u64   /* bit-level breaking state (sks_counterexample) */
+var AU_CONF_DELTA : u64 = 0u64   /* the proven per-iteration delta of the crushed module */
+fn au_conform_iter()    -> u64 @export { return AU_CONF_ITER }
+fn au_conform_witness() -> u64 @export { return AU_CONF_WIT }
+fn au_conform_delta()   -> u64 @export { return AU_CONF_DELTA }
+fn au_conform_bound(base: u64, boff: u64, blen: u64, accum: u32, acc0: u64, bound: u64) -> u32 @export {
+    AU_CONF_ITER = 0u64  AU_CONF_WIT = 0u64  AU_CONF_DELTA = 0u64
+    /* (1) PROJECT: crush M to acc' = acc + delta, PROVEN over 2^64 (else non-affine -> honest DEFER) */
+    if au_topo_amputate(base, boff, blen, accum, acc0) != 1u32 { return AU_CONF_DEFER }
+    let delta : u64 = au_arith_delta()
+    AU_CONF_DELTA = delta
+    /* (2) INTERSECT: prove the architecture invariant "accum < bound" 1-inductive over the crushed transition */
+    bb_reset(64u64)
+    let x   : u32 = bb_var(0u32)
+    let px  : u32 = sks_ult(x, bound)
+    let tx  : u32 = bb_add(x, bb_const(delta))
+    let ptx : u32 = sks_ult(tx, bound)
+    if sks_prove(px, ptx, x, acc0) == 1u8 { return AU_CONF_OK }    /* PROVEN: accum < bound for ALL reachable states */
+    /* (3) WITNESS + PINPOINT: the bit-level breaking state, and the closed-form breach iteration (no run) */
+    AU_CONF_WIT = sks_counterexample(px, ptx, x)
+    if acc0 >= bound { AU_CONF_ITER = 0u64  return AU_CONF_VIOL }  /* already out of bounds at iteration 0 */
+    if delta == 0u64 { return AU_CONF_OK }                         /* delta 0 + acc0<bound: never breaches (defensive) */
+    /* The closed-form breach iteration is sound ONLY in the NO-WRAP regime: a positive delta whose crossing
+     * value acc0+n*delta stays < 2^64.  Outside it the mod-2^64 machine wraps before/at the boundary and the
+     * integer ceil is WRONG (e.g. delta = 2^64-1 is a -1 DECREMENT: it breaches by wrapping, not by ceil).
+     * Guard: bound + delta must not overflow, i.e. delta <= 2^64 - bound.  Outside the guard the VIOLATION is
+     * still PROVEN (sks_prove decided it over 2^64) but the iteration is not closed-form-determinable here ->
+     * AU_NONE64 ("violates, iteration deferred"), NEVER a wrong number. */
+    let room : u64 = 0u64 - bound                                 /* 2^64 - bound (bound >= 1 since acc0 < bound) */
+    if delta > room { AU_CONF_ITER = AU_NONE64  return AU_CONF_VIOL }   /* wrapping/decrement regime: iteration deferred */
+    let gap : u64 = bound - acc0
+    AU_CONF_ITER = (gap + delta - 1u64) / delta                    /* first n: acc0 + n*delta >= bound (ceil div) */
+    return AU_CONF_VIOL
+}

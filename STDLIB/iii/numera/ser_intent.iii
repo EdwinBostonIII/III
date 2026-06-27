@@ -87,3 +87,68 @@ fn in_resolve(handle: u64) -> u32 @export { return seg_best_cost(handle) }
 
 /* the replayable witness of the whole intent resolution (declare -> propose -> merge). */
 fn in_witness() -> u64 @export { return evt_witness(evt_count()) }
+
+/* ============================================================================================================
+ * THE CLOSED SYNTHESIS LOOP, AT THE SVIR LEVEL -- ser_cegis PROPOSES, seq_equiv DISPOSES.
+ * in_propose_shlsub above needs the caller to supply k.  Here the SYNTHESIZER (ser_cegis/cg_synth) AUTONOMOUSLY
+ * chooses the strength-reduction descriptor {form,k} for x*v, this module EMITS both the multiply and the
+ * reduction as real SVIR bodies, and the SVIR<->SVIR prover (numera/ser_kinduct_sym/seq_equiv) CERTIFIES them
+ * equivalent over ALL 2^64.  This is the apply-half the EIDOS retrospective recorded as unbuilt (C4): the
+ * synthesizer drives a rewrite that is PROVEN sound -- and the prover is the independent backstop that REFUTES
+ * a corrupted proposal (in_certify_wrong).  cg_synth's concrete oracle only makes the proposal PLAUSIBLE; the
+ * exhaustive bit-blast miter makes it PROVEN.  NO ISLAND: composes ser_cegis + ser_kinduct_sym.  Ring R0. */
+extern @abi(c-msvc-x64) fn cg_synth(v: u64, seed: u64) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_form(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_k(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const IN_CGNONE : u32 = 4294967295u32
+const IN_SEQTOP : u32 = 2u32
+var IN_MULB : [u8; 32]   /* emitted body of  x * v        */
+var IN_REDB : [u8; 32]   /* emitted body of  the reduction */
+
+fn in_emit_b(base: u64, off: u64, byte: u8) -> u64 { let p : *u8 = (base + off) as *u8  p[0u64] = byte  return off + 1u64 }
+fn in_emit_const(base: u64, off: u64, val: u64) -> u64 {
+    let mut o : u64 = in_emit_b(base, off, 1u8)              /* CONST_I64 opcode 0x01 */
+    let mut i : u64 = 0u64
+    while i < 8u64 { o = in_emit_b(base, o, ((val >> (i * 8u64)) & 255u64) as u8)  i = i + 1u64 }
+    return o
+}
+fn in_emit_mul(base: u64, v: u64) -> u64 {                   /* GET0 CONST(v) MUL */
+    let mut o : u64 = in_emit_b(base, 0u64, 16u8)  o = in_emit_b(base, o, 0u8)
+    o = in_emit_const(base, o, v)
+    return in_emit_b(base, o, 34u8)
+}
+fn in_emit_red(base: u64, form: u32, k: u64) -> u64 {        /* GET0 CONST(k) SHL [GET0 ADD|SUB] */
+    let mut o : u64 = in_emit_b(base, 0u64, 16u8)  o = in_emit_b(base, o, 0u8)
+    o = in_emit_const(base, o, k)
+    o = in_emit_b(base, o, 40u8)                            /* SHL */
+    if form == 1u32 { o = in_emit_b(base, o, 16u8)  o = in_emit_b(base, o, 0u8)  o = in_emit_b(base, o, 32u8) }   /* (x<<k)+x */
+    if form == 2u32 { o = in_emit_b(base, o, 16u8)  o = in_emit_b(base, o, 0u8)  o = in_emit_b(base, o, 33u8) }   /* (x<<k)-x */
+    return o
+}
+
+/* THE DRIVER: synthesize a reduction for x*v and PROVE it.  1 = synth proposed AND prover certified over 2^64;
+ * 0 = proposal refuted; IN_SEQTOP = no reduction found / undecided. */
+fn in_certify(v: u64, seed: u64) -> u32 @export {
+    let d : u32 = cg_synth(v, seed)
+    if d == IN_CGNONE { return IN_SEQTOP }
+    let form : u32 = cg_form(d)
+    let kk : u32 = cg_k(d)
+    let k : u64 = kk as u64
+    let lm : u64 = in_emit_mul(&IN_MULB as u64, v)
+    let lr : u64 = in_emit_red(&IN_REDB as u64, form, k)
+    return seq_equiv(&IN_MULB as u64, 0u64, lm, &IN_REDB as u64, 0u64, lr, 1u32)
+}
+/* TEETH: corrupt the synthesized shift by +1 -- the prover MUST refute (0), proving it certifies the SPECIFIC
+ * descriptor, not "any reduction". */
+fn in_certify_wrong(v: u64, seed: u64) -> u32 @export {
+    let d : u32 = cg_synth(v, seed)
+    if d == IN_CGNONE { return IN_SEQTOP }
+    let form : u32 = cg_form(d)
+    let kk : u32 = cg_k(d)
+    let k : u64 = (kk as u64) + 1u64
+    let lm : u64 = in_emit_mul(&IN_MULB as u64, v)
+    let lr : u64 = in_emit_red(&IN_REDB as u64, form, k)
+    return seq_equiv(&IN_MULB as u64, 0u64, lm, &IN_REDB as u64, 0u64, lr, 1u32)
+}

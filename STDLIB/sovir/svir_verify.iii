@@ -12,7 +12,7 @@ fn vb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64
 var CSTK : [u32; 256]      /* construct stack: 0=BLOCK/LOOP, 2=IF (module-scope: fn-local runtime arrays segfault) */
 var CSN : u32 = 0u32
 
-fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 {
+fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 @export {
     CSN = 0u32
     let mut depth : i64 = 0i64
     let mut p : u64 = 0u64

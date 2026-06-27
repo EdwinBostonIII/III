@@ -142,32 +142,100 @@ part of the realization.
 
 ---
 
-## 4. The ripples — do they still matter, and should they be done better?
+## 4. The ripples — the fractured atom of change, and the leverage of merging it
 
-There are **multiple distinct "ripples"**, and the name is overloaded:
+The name is overloaded for a deep reason: the "ripples" are not three things to tidy — they are
+**three fragments of ONE primitive, the universal quantum of *change*,** held apart by three
+content-address spaces and two proof-regimes. Inventory first:
 
-1. **`eidos/ripple`** — the substrate atom. Proves the *spatial* ripple (a gradient on a
-   dependency edge, `omnia::ripple_field`) and the *temporal* event (a content-addressed
-   `<verb,a,b>` on the `omnia::isub` bus) are **one block read two ways: SPATIAL = gradient
-   "now", TEMPORAL = event log, state = fold** `[cited: eidos/ripple.iii:3-33]`. EVENT-primary /
-   STATE=fold is *realized here*, by encapsulation (K 1.00, no island).
-2. **`forcefield/ripple*`** — a *change* calculus: proof-gated MERGE/CUT/EXTRACT moves on the
-   system's own e-graph; each admitted move earns a content-addressed crystal
-   `[cited: proof_ripple_unified.iii:1-18]`. This is the system *editing itself*.
-3. **`omnia/ripple_field` + `omnia/isub`** — the underlying spatial/temporal mechanisms #1
-   encapsulates.
+1. **`eidos/ripple`** — the substrate atom. The *spatial* ripple (a gradient on a dependency edge,
+   `omnia::ripple_field`) and the *temporal* event (a content-addressed `<verb∈{V_BELOW,V_REFLECT},
+   a, b>` on the `omnia::isub` bus) are **one `sha256(verb‖a‖b)` block read two ways: SPATIAL =
+   gradient "now", TEMPORAL = event log, state = fold** — and the verb is *derived* from the
+   dependency rank (`rf_rank`), never a free label `[cited: eidos/ripple.iii:3-33]`. EVENT-primary /
+   STATE=fold, realized by encapsulation (K 1.00, no island).
+2. **`forcefield/ripple*`** — the *change calculus*: proof-gated MERGE/CUT/EXTRACT moves on the
+   system's own e-graph, each behind a **kernel-first gate that self-edits NOTHING while the prover
+   is blind**, each admitted move earning a content-addressed **crystal** *and* a replayable `pcc`
+   labelled-edge explanation that justifies it `[cited: proof_ripple_unified.iii:1-18]`. The system
+   *editing itself, with a receipt.*
+3. **`omnia/ripple_field` + `omnia/isub`** — the spatial/temporal mechanisms #1 folds.
 
-**Do they still matter? Yes — they are load-bearing,** not vestigial: #1 is the EIDOS atom, #3
-is what it folds, #2 is the self-optimizer's edit unit, and `eidos/field` already unifies
-ripple_field + event_substrate `[cited: ser_eidos.iii:5-6]`. The network "relay/distance-field"
-(the wavefront demo) is the *spatial* fold of #3.
+**They are load-bearing, and already half-merged.** #1 is the EIDOS atom; #3 is what it folds; #2
+is the self-optimizer's edit unit; and `eidos/field` *already* encapsulates ripple_field +
+event_substrate + dome into a substrate with **three views — spatial, temporal, and `field_rewind`
+(a byte-exact undo whose abandoned rule is RETAINED as `field_provenance`, the immune memory)**
+`[cited: ser_eidos.iii:5-16]`. The wavefront "relay/distance-field" is the *spatial* fold of #3.
 
-**Should they be done better? Yes — by unification, not rework `[judgt]`.** #1 (substrate atom)
-and #2 (self-edit move) are the **same pattern at different layers**: a self-modification *move*
-**is** an event that mutates a graph, and its move-crystal **is** an event payload. They are
-currently **unwired** — two ripple vocabularies. The right move is to make a `forcefield` ripple
-*emit onto the same event substrate* `eidos/field` carries, so there is **one ripple concept**
-(a witnessed, content-addressed change-event) with two consumers (planner + self-optimizer).
+**The leverage of completing the merge is total, not incremental `[judgt]`.** #1 and #2 are the
+*same pattern at two layers*: a self-modification **move IS an event that mutates a graph, and its
+move-crystal IS the event payload.** Collapse them onto the one field and the power compounds:
+
+- **One witnessed history for everything that changes.** Geometry edits (planner), e-graph
+  self-edits (optimizer), and the whole self-improvement loop (`self_model → nous → Seraphytes →
+  forcefield`, §11) become `<verb,a,b>` events on one log — **one content-addressed evolution**,
+  replayable and diffable, where today there are three address spaces (§9).
+- **REVERT is the verb algebra, not a feature.** `V_REFLECT` *is* the order-reversing involution
+  `[cited: eidos/ripple.iii:16]`; `field_rewind` already does the byte-exact undo. Universal
+  time-travel falls out of the two-verb pair — the verb-geometry "REVERT" *is* the `REFLECT` ripple,
+  system-wide.
+- **Proof-carrying by construction.** Every move already earns a crystal + a replayable explanation;
+  if *all* change is ripples, the membrane (`zk_air`) seals the **whole** log → the system's entire
+  history is certifiable, and "no self-edit while the prover is blind" becomes a universal invariant,
+  not a local one.
+- **The planner can plan self-edits; the optimizer's edits become plannable.** `eidos/weave` is the
+  ripple-quanta *planner* (§5); `forcefield` is the *applier*. One ripple type = one vocabulary = the
+  planner composes self-edits and reasons over the optimizer's moves as ordinary events. The §11 loop
+  collapses into one plannable, replayable stream.
+- **One block, THREE reads.** The same `sha256(verb‖a‖b)` is SPATIAL (where it propagates), TEMPORAL
+  (when/what), and CAUSAL (why-admissible — its crystal). #1 proved spatial=temporal; the merge adds
+  causal as the third read of the *same* atom — binding `{BELOW,REFLECT}` as the one order+involution
+  language across geometry, code, logic, and time.
+
+**What must be overcome for the no-compromise version — named, not waved `[judgt]`:**
+
+1. **Three address spaces → one (the hard precondition, §9).** `ripple`, `master_logic`, and `isub`
+   each run their own `{BELOW,REFLECT}` engine in their own content-address space — §9 is explicit
+   that "the one primitive" is *a target, not yet a fact*. The merge is GATED on extracting **one
+   canonical order+involution engine** and re-routing all three through it without breaking their
+   gates (ripple's flat-boundary corpus-1931 gate, master_logic's assimilation gate, isub's witness).
+2. **The proof asymmetry → a lazy obligation, not a forced one.** eidos events are ungated;
+   forcefield moves are proof-gated. A naïve merge would drag every geometry tick through the prover.
+   The no-compromise answer is the lazy-tier discipline: the ripple carries an **optional** obligation
+   — a plain event has a vacuous proof; a self-edit carries the real crystal; the membrane checks only
+   the gated kind. One type, two proof-weights, no second vocabulary.
+3. **Content-addressed atom vs context-bound proof.** A MERGE is sound only *in a graph state*; a
+   `<verb,a,b>` atom is context-free by identity. Keep the atom `<verb,a,b>` with `a,b` the
+   **content-addresses of the e-classes** (which already encode their state) and bind the crystal as a
+   **content-addressed satellite** of the same hash — the proof orbits the atom, never enters its
+   identity, and stays re-checkable from `a,b` + the field prefix.
+4. **Proof-carrying reversibility (crystal closed under involution).** `REFLECT` must un-do a `BELOW`
+   *soundly*: un-merge is admissible iff the merge was. The crystal algebra must satisfy
+   `REFLECT(crystal(move)) = crystal(move⁻¹)`, both re-checkable. `ser_eidos` retaining the rolled-back
+   rule as provenance is the *seed*; the inverse must become a first-class crystal, not just bytes.
+5. **Deterministic multi-writer fold.** Planner + optimizer + membrane all emitting to one field
+   demands a deterministic fold (the byte-identical/fixpoint property the whole sovereignty rests on)
+   — i.e. `ser_causal`'s epoch partition arbitrating concurrent writers into one replayable order.
+6. **The graph duality — bridge the language, don't force one graph (yet).** Spatial ripples move on
+   the *dependency* graph; forcefield ripples move on the *e-graph*; `verb_geom`/`cg_r3` already make
+   values and codegen e-graph nodes. Don't collapse the two graphs prematurely — make the **ripple the
+   common change-language** and the **field the common log** over both (`a,b` are content-addresses in
+   either), so the graphs stay distinct while *change* becomes one. (Full one-graph is a deeper, later
+   move.)
+7. **Subsume, do not add #15.** The `forcefield` ripple family is ~14 modules
+   (`cut/extract/apply/journal/unify/search/synthesizer/metric/loop/dyn/…`). §10's law is "duplicate
+   vocabularies → unify, not add" — the merge succeeds only if it **retires** that parallel vocabulary
+   onto the field, never if it spawns a `unified_ripple_v2` island.
+
+**Verdict `[judgt]`:** the ripple is *the* atom of change, and it is the strongest leverage point in
+III precisely because *everything the system does is a change*. Made whole — one `<verb,a,b>` block,
+three reads, one field, proof-carrying and reversible by construction — it **is** the "one primitive"
+§9 is hunting, and it turns geometry, self-optimization, compilation, and time into a single
+witnessed, replayable, certifiable evolution. But "maximal" is earned, not declared: the realized
+core is #1 + `eidos/field`; the merge is GATED, in order, on (1) extracting the canonical
+`{BELOW,REFLECT}` engine, then (2) lazy proof, (3) satellite crystals, (4) involution-closed proofs,
+(5) the deterministic epoch fold, (6) the common change-language over both graphs, (7) subsumption not
+addition. Do those, in that order, and there is one ripple — great with no compromise.
 
 ---
 

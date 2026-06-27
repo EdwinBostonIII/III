@@ -1,0 +1,143 @@
+/* STDLIB/iii/aether/ui_destiny.iii -- III-GLASS feature #3: Holographic Destiny Navigation, the death of the
+ * step-debugger.  A legacy debugger shows a variable's value at ONE instant and makes you step through time.
+ * III has already solved the function: sd_denote lifts a SVIR body to an EXACT bv_bits circuit over its input,
+ * and bb_eval reads off the value with no float.  So we plot the variable's DESTINY -- every value it takes
+ * across its whole input domain, the closed-form image, instantly.  [<-]/[->] switch functions; the mouse reads
+ * the exact value at any input.  Wired to the real denotation engine (sd_denote/bb_eval), not a re-run. */
+module ui_destiny
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mx() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_key() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+
+var FB    : [u32; 364800]   /* 760 x 480 */
+var TITLE : [u8; 10] = [73u8,73u8,73u8,45u8,71u8,76u8,65u8,83u8,83u8,0u8]
+
+/* four real SVIR functions f(x).  layout [nfunc,params,nres,blen_lo,blen_hi, body].  opcodes: 0x10 LOCAL_GET+idx,
+ * 0x01 CONST+8LE, 0x20 ADD, 0x22 MUL, 0x25 AND, 0x60 RETURN. */
+var F0 : [u8; 11] = [1u8,1u8,1u8,6u8,0u8, 16u8,0u8, 16u8,0u8, 32u8, 96u8]                                         /* x + x  = 2x */
+var F1 : [u8; 11] = [1u8,1u8,1u8,6u8,0u8, 16u8,0u8, 16u8,0u8, 34u8, 96u8]                                         /* x * x  = x^2 */
+var F2 : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 96u8]             /* x + 5 */
+var F3 : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 16u8,0u8, 1u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 96u8]             /* x & 7  (sawtooth) */
+var NM0 : [u8; 8] = [102u8,40u8,120u8,41u8,61u8,50u8,120u8,0u8]   /* "f(x)=2x" */
+var NM1 : [u8; 9] = [102u8,40u8,120u8,41u8,61u8,120u8,94u8,50u8,0u8]   /* "f(x)=x^2" */
+var NM2 : [u8; 9] = [102u8,40u8,120u8,41u8,61u8,120u8,43u8,53u8,0u8]   /* "f(x)=x+5" */
+var NM3 : [u8; 9] = [102u8,40u8,120u8,41u8,61u8,120u8,38u8,55u8,0u8]   /* "f(x)=x&7" */
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+
+fn fbase(sel: u32) -> u64 { if sel == 0u32 { return &F0 as u64 }  if sel == 1u32 { return &F1 as u64 }  if sel == 2u32 { return &F2 as u64 }  return &F3 as u64 }
+fn fblen(sel: u32) -> u64 { if sel == 0u32 { return 6u64 }  if sel == 1u32 { return 6u64 }  return 13u64 }
+fn fname(sel: u32) -> u64 { if sel == 0u32 { return &NM0 as u64 }  if sel == 1u32 { return &NM1 as u64 }  if sel == 2u32 { return &NM2 as u64 }  return &NM3 as u64 }
+fn fnamelen(sel: u32) -> u32 { if sel == 0u32 { return 7u32 }  return 8u32 }
+
+/* evaluate the selected function's exact denotation at x (lift once, read off). */
+fn eval_at(node: u32, x: u64) -> u64 { bb_set_input(0u32, x)  return bb_eval(node) }
+
+/* disassemble the selected function's REAL SVIR body into a horizontal op listing -- the code behind the destiny. */
+fn dis_render(b: u64, w: u32, h: u32, sel: u32, x: u32, y: u32) -> i32 {
+    let base : u64 = fbase(sel)
+    let end  : u64 = 5u64 + fblen(sel)
+    let oc   : u32 = rgb(0u32,210u32,255u32)
+    let vc   : u32 = rgb(255u32,210u32,80u32)
+    let mut cx : u32 = ui_text_n(b, w, h, x, y, "SVIR  " as u64, 6u32, rgb(120u32,135u32,165u32))
+    let mut i : u64 = 5u64
+    while i < end {
+        let oldi : u64 = i
+        let p  : *u8 = (base + i) as *u8
+        let op : u32 = p[0u64] as u32
+        if op == 16u32 { cx = ui_text_n(b, w, h, cx, y, "get" as u64, 3u32, oc)  let pi : *u8 = (base + i + 1u64) as *u8  cx = ui_text_u32(b, w, h, cx, y, pi[0u64] as u32, vc)  cx = cx + 12u32  i = i + 2u64 }
+        if op == 1u32  { cx = ui_text_n(b, w, h, cx, y, "const " as u64, 6u32, oc)  let pk : *u8 = (base + i + 1u64) as *u8  cx = ui_text_u32(b, w, h, cx, y, pk[0u64] as u32, vc)  cx = cx + 12u32  i = i + 9u64 }
+        if op == 32u32 { cx = ui_text_n(b, w, h, cx, y, "add" as u64, 3u32, oc)  cx = cx + 12u32  i = i + 1u64 }
+        if op == 34u32 { cx = ui_text_n(b, w, h, cx, y, "mul" as u64, 3u32, oc)  cx = cx + 12u32  i = i + 1u64 }
+        if op == 37u32 { cx = ui_text_n(b, w, h, cx, y, "and" as u64, 3u32, oc)  cx = cx + 12u32  i = i + 1u64 }
+        if op == 96u32 { cx = ui_text_n(b, w, h, cx, y, "ret" as u64, 3u32, rgb(120u32,200u32,120u32))  cx = cx + 12u32  i = i + 1u64 }
+        if i == oldi { i = i + 1u64 }   /* safety: unknown op -> advance one byte */
+    }
+    return 0i32
+}
+
+fn render(b: u64, w: u32, h: u32, sel: u32, mx: u32) -> i32 {
+    ui_clear(b, w, h, rgb(10u32, 11u32, 16u32))
+    ui_fill_rect(b, w, h, 0u32, 0u32, w, 28u32, rgb(22u32, 24u32, 38u32))
+    ui_text_n(b, w, h, 10u32, 6u32, "III-GLASS  holographic destiny -- the closed-form image, no stepping" as u64, 66u32, rgb(0u32, 229u32, 255u32))
+
+    /* the REAL SVIR bytecode behind this destiny -- the code, beside its closed-form image. */
+    dis_render(b, w, h, sel, 12u32, 42u32)
+
+    /* lift the function ONCE to its exact circuit. */
+    bb_reset(64u64)
+    let node : u32 = sd_denote(fbase(sel), 5u64, fblen(sel), 1u32)
+    if node == 4294967295u32 { ui_text_n(b, w, h, 20u32, 60u32, "denotation left the decided fragment (SD_TOP)" as u64, 45u32, rgb(235u32,60u32,70u32))  return 0i32 }
+
+    /* plot domain x in [0, XN); auto-scale y to the destiny's actual max. */
+    let x0p : u32 = 60u32
+    let y0p : u32 = 80u32
+    let pw  : u32 = 640u32
+    let ph  : u32 = 300u32
+    let xn  : u32 = 128u32
+    ui_fill_rect(b, w, h, x0p, y0p, pw, ph, rgb(14u32, 16u32, 24u32))
+    let mut maxv : u64 = 1u64
+    let mut xi : u32 = 0u32
+    while xi < xn { let v : u64 = eval_at(node, xi as u64)  if v > maxv { maxv = v }  xi = xi + 1u32 }
+    /* draw the destiny curve (exact bb_eval values mapped to the box). */
+    let cyl : u32 = rgb(0u32, 220u32, 255u32)
+    let mut px : i32 = 0i32  let mut py : i32 = 0i32  let mut first : u32 = 1u32
+    xi = 0u32
+    while xi < xn {
+        let v  : u64 = eval_at(node, xi as u64)
+        let sx : i32 = (x0p + ((xi * pw) / xn)) as i32
+        let sy : i32 = ((y0p + ph) - (((v * (ph as u64)) / maxv) as u32)) as i32
+        if first == 0u32 { ui_line(b, w, h, px, py, sx, sy, cyl) }
+        px = sx  py = sy  first = 0u32
+        xi = xi + 1u32
+    }
+
+    /* the cursor reads the exact value at the input under it -- destiny at a point. */
+    let mut hv : u64 = 0u64  let mut hx : u32 = 0u32  let mut onplot : u32 = 0u32
+    if mx >= x0p { if mx < (x0p + pw) { hx = ((mx - x0p) * xn) / pw  hv = eval_at(node, hx as u64)  onplot = 1u32 } }
+    if onplot == 1u32 {
+        let sx2 : u32 = x0p + ((hx * pw) / xn)
+        ui_fill_rect(b, w, h, sx2, y0p, 2u32, ph, rgb(255u32, 255u32, 255u32))
+    }
+
+    /* panel. */
+    let mut cx : u32 = ui_text_n(b, w, h, 20u32, 398u32, "variable: " as u64, 10u32, rgb(120u32,135u32,165u32))
+    cx = ui_text_n(b, w, h, cx, 398u32, fname(sel), fnamelen(sel), rgb(255u32,200u32,80u32))
+    cx = ui_text_n(b, w, h, cx + 16u32, 398u32, "destiny max = " as u64, 14u32, rgb(120u32,135u32,165u32))
+    ui_text_u32(b, w, h, cx, 398u32, maxv as u32, rgb(235u32,240u32,250u32))
+    if onplot == 1u32 {
+        let mut dx : u32 = ui_text_n(b, w, h, 20u32, 420u32, "at x = " as u64, 7u32, rgb(120u32,135u32,165u32))
+        dx = ui_text_u32(b, w, h, dx, 420u32, hx, rgb(235u32,240u32,250u32))
+        dx = ui_text_n(b, w, h, dx, 420u32, "  ->  f(x) = " as u64, 13u32, rgb(120u32,135u32,165u32))
+        ui_text_u32(b, w, h, dx, 420u32, hv as u32, rgb(0u32,229u32,255u32))
+    }
+    ui_text_n(b, w, h, 20u32, 452u32, "[<-] [->] switch function   move mouse = read destiny at that input   [ESC] quit" as u64, 80u32, rgb(95u32,105u32,130u32))
+    return 0i32
+}
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 760u32, 480u32)
+    let mut sel : u32 = 0u32
+    while ui_win_pump() == 0u32 {
+        let k : u32 = ui_key()
+        if k == 37u32 { if sel > 0u32 { sel = sel - 1u32 } }   /* VK_LEFT */
+        if k == 39u32 { if sel < 3u32 { sel = sel + 1u32 } }   /* VK_RIGHT */
+        render(&FB as u64, 760u32, 480u32, sel, ui_mx())
+        ui_win_present(&FB as u64, 760u32, 480u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

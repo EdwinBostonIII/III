@@ -1,0 +1,194 @@
+/* STDLIB/iii/eidos/eidolon.iii -- THE EIDOLON: a self-identical primitive (a PoC of "perfect identity as the base
+ * primitive", per the long discussion).  It is NOT a number/blank-slate: its SHAPE (the canonical surd terms), its
+ * LOGIC (how it combines), and its ADDRESS (the content-hash of its shape) are the SAME thing.  It carries its own
+ * physics inside -- the surd algebra of the field Q(sqrt d1, sqrt d2, ...).
+ *
+ *   FORM       a value is the canonical sum  sum_i c_i * sqrt(d_i),  d_i DISTINCT squarefree, c_i nonzero, sorted.
+ *   IDENTITY   two eidolons are THE SAME iff their canonical forms are identical -- which (by linear independence of
+ *              {sqrt d : d squarefree} over Q) holds iff they are equal as REAL NUMBERS.  Equality is decided by
+ *              IDENTITY, never by computing the (irrational, unrepresentable) decimal value.
+ *   ADDRESS    the content-hash of the canonical form -- the eidolon "knows itself" as one 32-byte name.
+ *   TAG        an identity marker: 2-apples and 2-spaceships have the SAME value but DIFFERENT identity (a number
+ *              cannot tell them apart; an eidolon can).
+ *
+ * It represents EXACTLY what arithmetic cannot: an irrational's true self, and the exact collapses (sqrt2*sqrt8 = 4,
+ * (sqrt3+sqrt2)(sqrt3-sqrt2) = 1) that float arithmetic can only approximate. */
+module eidos_eidolon
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const EID_CAP : u32 = 256u32
+
+var EID_N   : [u32; 256]                 /* term count per eidolon */
+var EID_TAG : [u32; 256]                 /* identity tag (context) */
+var EID_C   : [i64; 2048]                /* coeff: slot*8 + i */
+var EID_D   : [u64; 2048]                /* squarefree radicand */
+var EID_COUNT : u32 = 0u32
+var TMPC : [i64; 64]   var TMPD : [u64; 64]
+var SFS_e : u64   var SFD_e : u64
+var ADRBUF : [u8; 320]
+
+fn eid_reset() -> i32 @export { EID_COUNT = 0u32   return 0i32 }
+fn eid_nterms(a: u32) -> u32 @export { return EID_N[a as u64] }
+fn eid_term_d(a: u32, i: u32) -> u64 @export { return EID_D[((a as u64) * 8u64) + (i as u64)] }
+fn eid_term_c(a: u32, i: u32) -> i64 @export { return EID_C[((a as u64) * 8u64) + (i as u64)] }
+
+/* squarefree split: d = s^2 * d', sets SFS_e=s, SFD_e=d'. */
+fn eid_sqfree(d: u64) -> i32 {
+    let mut x : u64 = d   let mut s : u64 = 1u64   let mut k : u64 = 2u64
+    while (k * k) <= x {
+        let kk : u64 = k * k   let q : u64 = x / kk
+        let mut div : u8 = 0u8
+        if (x - (q * kk)) == 0u64 { div = 1u8 }
+        if div == 1u8 { x = q   s = s * k }
+        if div == 0u8 { k = k + 1u64 }
+    }
+    SFS_e = s   SFD_e = x   return 0i32
+}
+
+/* canonicalize TMPC/TMPD[0..m] (sort by d, collect like surds, drop zeros) into a fresh slot with tag; returns handle. */
+fn eid_canon(m: u64, tag: u32) -> u32 {
+    let mut a : u64 = 0u64
+    while a < m {
+        let mut mn : u64 = a   let mut b : u64 = a + 1u64
+        while b < m { if TMPD[b] < TMPD[mn] { mn = b }   b = b + 1u64 }
+        let td : u64 = TMPD[a]   TMPD[a] = TMPD[mn]   TMPD[mn] = td
+        let tc : i64 = TMPC[a]   TMPC[a] = TMPC[mn]   TMPC[mn] = tc
+        a = a + 1u64
+    }
+    let h : u32 = EID_COUNT
+    EID_COUNT = EID_COUNT + 1u32
+    EID_TAG[h as u64] = tag
+    let base : u64 = (h as u64) * 8u64
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < m {
+        let d : u64 = TMPD[i]
+        let mut c : i64 = 0i64
+        let mut going : u8 = 1u8
+        while going == 1u8 {
+            if i >= m { going = 0u8 }
+            if going == 1u8 { if TMPD[i] != d { going = 0u8 } }
+            if going == 1u8 { c = c + TMPC[i]   i = i + 1u64 }
+        }
+        if c != 0i64 { EID_D[base + n] = d   EID_C[base + n] = c   n = n + 1u64 }
+    }
+    EID_N[h as u64] = n as u32
+    return h
+}
+
+/* make the eidolon  coeff * sqrt(d)  with identity tag.  coeff*sqrt(s^2 d') = (coeff*s)*sqrt(d'). */
+fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 @export {
+    if coeff == 0i64 {
+        let h : u32 = EID_COUNT   EID_COUNT = EID_COUNT + 1u32
+        EID_N[h as u64] = 0u32   EID_TAG[h as u64] = tag   return h
+    }
+    eid_sqfree(d)
+    TMPC[0u64] = coeff * (SFS_e as i64)
+    TMPD[0u64] = SFD_e
+    return eid_canon(1u64, tag)
+}
+
+/* sum of two eidolons (tag 0 result -- a pure algebraic value). */
+fn eid_add(a: u32, b: u32) -> u32 @export {
+    let mut m : u64 = 0u64
+    let ba : u64 = (a as u64) * 8u64   let na : u64 = EID_N[a as u64] as u64
+    let mut i : u64 = 0u64
+    while i < na { TMPC[m] = EID_C[ba + i]   TMPD[m] = EID_D[ba + i]   m = m + 1u64   i = i + 1u64 }
+    let bb : u64 = (b as u64) * 8u64   let nb : u64 = EID_N[b as u64] as u64
+    i = 0u64
+    while i < nb { TMPC[m] = EID_C[bb + i]   TMPD[m] = EID_D[bb + i]   m = m + 1u64   i = i + 1u64 }
+    return eid_canon(m, 0u32)
+}
+
+/* product of two eidolons: sqrt(dA)*sqrt(dB) = sqrt(dA*dB), squarefree-collapsed (this is where irrationals can
+ * collapse to a RATIONAL -- d' becomes 1 -- the exact fact arithmetic cannot see). */
+fn eid_mul(a: u32, b: u32) -> u32 @export {
+    let mut m : u64 = 0u64
+    let ba : u64 = (a as u64) * 8u64   let na : u64 = EID_N[a as u64] as u64
+    let bb : u64 = (b as u64) * 8u64   let nb : u64 = EID_N[b as u64] as u64
+    let mut i : u64 = 0u64
+    while i < na {
+        let mut j : u64 = 0u64
+        while j < nb {
+            eid_sqfree(EID_D[ba + i] * EID_D[bb + j])
+            TMPC[m] = (EID_C[ba + i] * EID_C[bb + j]) * (SFS_e as i64)
+            TMPD[m] = SFD_e
+            m = m + 1u64
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return eid_canon(m, 0u32)
+}
+
+/* IDENTITY equality: same tag AND identical canonical form -> the same eidolon (== equal as reals, exactly). */
+fn eid_same(a: u32, b: u32) -> u32 @export {
+    if EID_TAG[a as u64] != EID_TAG[b as u64] { return 0u32 }
+    let na : u32 = EID_N[a as u64]
+    if na != EID_N[b as u64] { return 0u32 }
+    let ba : u64 = (a as u64) * 8u64   let bb : u64 = (b as u64) * 8u64
+    let mut i : u64 = 0u64
+    while i < (na as u64) {
+        if EID_D[ba + i] != EID_D[bb + i] { return 0u32 }
+        if EID_C[ba + i] != EID_C[bb + i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* is this eidolon a RATIONAL (empty = 0, or a single sqrt(1) term)? */
+fn eid_is_rational(a: u32) -> u32 @export {
+    let n : u32 = EID_N[a as u64]
+    if n == 0u32 { return 1u32 }
+    if n == 1u32 { if EID_D[(a as u64) * 8u64] == 1u64 { return 1u32 } }
+    return 0u32
+}
+fn eid_rat_value(a: u32) -> i64 @export {
+    if EID_N[a as u64] == 0u32 { return 0i64 }
+    if EID_N[a as u64] == 1u32 { if EID_D[(a as u64) * 8u64] == 1u64 { return EID_C[(a as u64) * 8u64] } }
+    return 0i64
+}
+
+/* the content-ADDRESS: sha256 of (tag ‖ canonical terms) -- the eidolon's single 32-byte self-name. */
+fn eid_addr(a: u32, out32: u64) -> i32 @export {
+    let tag : u32 = EID_TAG[a as u64]
+    ADRBUF[0u64] = (tag & 255u32) as u8
+    ADRBUF[1u64] = ((tag >> 8u32) & 255u32) as u8
+    ADRBUF[2u64] = ((tag >> 16u32) & 255u32) as u8
+    ADRBUF[3u64] = ((tag >> 24u32) & 255u32) as u8
+    let n : u64 = EID_N[a as u64] as u64
+    let base : u64 = (a as u64) * 8u64
+    let mut p : u64 = 4u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let d : u64 = EID_D[base + i]
+        let cu : u64 = EID_C[base + i] as u64
+        let mut k : u64 = 0u64
+        while k < 8u64 { ADRBUF[p] = ((d >> (k * 8u64)) & 255u64) as u8   p = p + 1u64   k = k + 1u64 }
+        k = 0u64
+        while k < 8u64 { ADRBUF[p] = ((cu >> (k * 8u64)) & 255u64) as u8   p = p + 1u64   k = k + 1u64 }
+        i = i + 1u64
+    }
+    sha256_oneshot(&ADRBUF[0u64], p, out32 as *u8)
+    return 0i32
+}
+
+/* plain-u64 floor sqrt (for the test's fixed-point contrast: arithmetic vs identity). */
+fn eid_isqrt(N: u64) -> u64 @export {
+    if N == 0u64 { return 0u64 }
+    let mut bl : u64 = 0u64   let mut t : u64 = N
+    while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+    let k : u64 = (bl - 1u64) / 2u64
+    let mut bit : u64 = 1u64 << (2u64 * k)
+    let mut res : u64 = 0u64   let mut n : u64 = N
+    while bit != 0u64 {
+        let rb : u64 = res + bit
+        let mut ge : u8 = 0u8
+        if n >= rb { ge = 1u8 }
+        if ge == 1u8 { n = n - rb   res = (res >> 1u64) + bit }
+        if ge == 0u8 { res = res >> 1u64 }
+        bit = bit >> 2u64
+    }
+    return res
+}

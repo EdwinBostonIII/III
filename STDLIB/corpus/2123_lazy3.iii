@@ -1,0 +1,44 @@
+/* STDLIB/corpus/2123_lazy3.iii -- the THREE-TIER lazy sign, killing the adversarial attacks on the lazy real.
+ * ATTACK 1 (e-graph saturation latency) killed: Tier 2 = radical canonicalization (squarefree-factor + collect like
+ *   surds), deterministic, NO saturation, gated to small radicands.  Structural zeros decided with NO bigint.
+ * ATTACK 3 (hardcoded 20-bit ceiling) killed: Tier 1 scale F = (60-maxbitlen)/2 adapts to magnitude, so LARGE
+ *   radicands ride the fast path when clearly-nonzero (old f=20 forced them all to bigint).
+ * 99 = 4 fast / 3 canon (no bigint) / 1 exact -- bigint on 1 of 8, every answer correct. */
+module corpus_2123_lazy3
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_fast_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_canon_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_exact_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_reset_counts() -> i32 from "sqrt_sum_sign.iii"
+
+var AC : [i64; 8]   var BC : [i64; 8]
+fn q(n: u64) -> i32 { return sqrtsum_lazy3((&AC) as u64, (&BC) as u64, n) }
+
+fn main() -> u64 {
+    lazy_reset_counts()
+
+    /* --- TIER 2: structural zeros, decided by canonicalization, NO bigint --- */
+    AC[0u64]=1i64 AC[1u64]=1i64 AC[2u64]=0i64-1i64   BC[0u64]=2i64 BC[1u64]=8i64 BC[2u64]=18i64   if q(3u64) != 0i32 { return 1u64 }   /* sqrt2+sqrt8-sqrt18 = 0 */
+    AC[0u64]=2i64 AC[1u64]=0i64-1i64   BC[0u64]=6i64 BC[1u64]=24i64   if q(2u64) != 0i32 { return 2u64 }                               /* 2sqrt6-sqrt24 = 0 */
+    AC[0u64]=1i64 AC[1u64]=0i64-2i64   BC[0u64]=8i64 BC[1u64]=2i64   if q(2u64) != 0i32 { return 3u64 }                               /* sqrt8-2sqrt2 = 0 */
+
+    /* --- TIER 1: small clearly-nonzero --- */
+    AC[0u64]=5i64 AC[1u64]=0i64-3i64   BC[0u64]=1i64 BC[1u64]=2i64   if q(2u64) != 1i32 { return 4u64 }
+    AC[0u64]=7i64 AC[1u64]=0i64-5i64   BC[0u64]=2i64 BC[1u64]=3i64   if q(2u64) != 1i32 { return 5u64 }
+    AC[0u64]=1i64 AC[1u64]=1i64   BC[0u64]=2i64 BC[1u64]=3i64   if q(2u64) != 1i32 { return 6u64 }
+
+    /* --- TIER 1 via ADAPTIVE F: LARGE radicands, clearly nonzero (old 20-bit ceiling would force bigint) --- */
+    AC[0u64]=1i64 AC[1u64]=0i64-1i64   BC[0u64]=10000000000000000i64 BC[1u64]=8100000000000000i64
+    if q(2u64) != 1i32 { return 7u64 }                                                                                                /* sqrt(1e16)-sqrt(8.1e15) = 1e8-9e7 = +1e7 */
+
+    /* --- TIER 3: large near-zero, genuinely needs the exact engine --- */
+    AC[0u64]=1i64 AC[1u64]=0i64-1i64   BC[0u64]=10000000000000000i64 BC[1u64]=9999999999999999i64
+    if q(2u64) != 1i32 { return 8u64 }                                                                                                /* sqrt(1e16)-sqrt(1e16-1) ~ +5e-9 */
+
+    if lazy_fast_count() != 4u64 { return 20u64 }                                                                                     /* 4 on the adaptive interval */
+    if lazy_canon_count() != 3u64 { return 21u64 }                                                                                    /* 3 structural zeros, no bigint */
+    if lazy_exact_count() != 1u64 { return 22u64 }                                                                                    /* bigint on only 1 of 8 */
+
+    return 99u64
+}

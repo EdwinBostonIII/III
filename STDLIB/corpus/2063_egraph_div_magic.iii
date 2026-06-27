@@ -1,0 +1,74 @@
+/* STDLIB/corpus/2063_egraph_div_magic.iii -- magic-number division (DOCS/III-EIDOS Phase 5): the optimization
+ * the hand peephole CANNOT do.  seg_div_plan(d) returns SDP_MAGIC only when the Granlund-Montgomery bound
+ * CERTIFIES x/d == mulhi(x,m)>>s for ALL x.  This KAT cross-checks the implementation by EXECUTING the
+ * reduced form against a real divide over the GM-stressing x values (edges + near-multiples).  99 = pow2 is
+ * SHR, at least 4 non-pow2 divisors are certified MAGIC, and every certified magic computes x/d exactly. */
+module corpus_2063_egraph_div_magic
+
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
+
+fn mulhi(a: u64, b: u64) -> u64 {
+    let alo : u64 = a & 4294967295u64
+    let ahi : u64 = a >> 32u64
+    let blo : u64 = b & 4294967295u64
+    let bhi : u64 = b >> 32u64
+    let p0 : u64 = alo * blo
+    let p1 : u64 = alo * bhi
+    let p2 : u64 = ahi * blo
+    let p3 : u64 = ahi * bhi
+    let mid : u64 = (p0 >> 32u64) + (p1 & 4294967295u64) + (p2 & 4294967295u64)
+    return p3 + (p1 >> 32u64) + (p2 >> 32u64) + (mid >> 32u64)
+}
+
+/* module-scope (fn-local var arrays by runtime index segfault -- iiis trap). */
+var XS : [u64; 12]
+var DS : [u64; 10] = [3u64, 5u64, 6u64, 7u64, 9u64, 10u64, 25u64, 100u64, 1000u64, 86400u64]
+fn xs_init(d: u64) -> i32 {
+    XS[0u64] = 0u64  XS[1u64] = 1u64  XS[2u64] = d - 1u64  XS[3u64] = d  XS[4u64] = d + 1u64
+    XS[5u64] = 4294967296u64  XS[6u64] = 9223372036854775808u64  XS[7u64] = 9223372036854775809u64
+    XS[8u64] = 18446744073709551615u64  XS[9u64] = 18446744073709551615u64 - d
+    XS[10u64] = 12345678901234567890u64  XS[11u64] = d + d + d + 7u64
+    return 0i32
+}
+/* mulhi(x,m)>>s == x/d for the whole battery? */
+fn check_magic(d: u64, m: u64, s: u64) -> u32 {
+    xs_init(d)
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let x : u64 = XS[i]
+        let red : u64 = mulhi(x, m) >> s
+        if red != x / d { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* pow2: x/8 -> SHR, k=3. */
+    let p8 : u64 = seg_div_plan(8u64)
+    if (p8 & 255u64) != 1u64 { return 1u64 }
+    if ((p8 >> 8u64) & 255u64) != 3u64 { return 2u64 }
+    /* x/1024 -> SHR, k=10. */
+    let p1024 : u64 = seg_div_plan(1024u64)
+    if (p1024 & 255u64) != 1u64 { return 3u64 }
+    if ((p1024 >> 8u64) & 255u64) != 10u64 { return 4u64 }
+    /* non-pow2: every CERTIFIED magic must compute x/d exactly; count them. */
+    let mut magics : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 10u64 {
+        let d : u64 = DS[i]
+        let plan : u64 = seg_div_plan(d)
+        if (plan & 255u64) == 2u64 {
+            let m : u64 = seg_div_magic_m()
+            let s : u64 = seg_div_shift()
+            if check_magic(d, m, s) == 0u32 { return 10u64 + i }   /* a certified magic that is WRONG -> defect */
+            magics = magics + 1u32
+        }
+        i = i + 1u64
+    }
+    /* the magic path must actually be exercised (not all-fallback). */
+    if magics < 4u32 { return 90u64 }
+    return 99u64
+}

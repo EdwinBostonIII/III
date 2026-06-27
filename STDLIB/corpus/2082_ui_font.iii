@@ -1,0 +1,38 @@
+/* STDLIB/corpus/2082_ui_font.iii -- proves III-GLASS text renders: the font table is present, a glyph lights a
+ * sensible partial cell, a space lights nothing, and ui_text advances the pen and draws.  99 = text works. */
+module corpus_2082_ui_font
+
+extern @abi(c-msvc-x64) fn ui_glyph(buf: u64, w: u32, h: u32, x: u32, y: u32, c: u32, color: u32) -> i32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_font_base() -> u64 from "ui_font_data.iii"
+
+var FB  : [u32; 4096]   /* 64x64 scratch surface */
+var MSG : [u8; 3] = [72u8, 105u8, 0u8]   /* "Hi\0" */
+
+fn fb_clear() -> i32 { let mut i : u64 = 0u64  while i < 4096u64 { FB[i] = 0u32  i = i + 1u64 }  return 0i32 }
+fn fb_count() -> u32 { let mut i : u64 = 0u64  let mut n : u32 = 0u32  while i < 4096u64 { if FB[i] != 0u32 { n = n + 1u32 }  i = i + 1u64 }  return n }
+
+fn main() -> u64 {
+    if ui_font_base() == 0u64 { return 1u64 }
+    let b : u64 = &FB as u64
+
+    /* 'A' (0x41) lights some pixels, but not the whole 8x16 cell. */
+    fb_clear()
+    ui_glyph(b, 64u32, 64u32, 5u32, 5u32, 65u32, 4294967295u32)
+    let na : u32 = fb_count()
+    if na == 0u32 { return 2u64 }
+    if na >= 128u32 { return 3u64 }
+
+    /* space (0x20) lights nothing. */
+    fb_clear()
+    ui_glyph(b, 64u32, 64u32, 5u32, 5u32, 32u32, 4294967295u32)
+    if fb_count() != 0u32 { return 4u64 }
+
+    /* ui_text "Hi" advances the pen by two cells (16px) and draws glyphs. */
+    fb_clear()
+    let endx : u32 = ui_text(b, 64u32, 64u32, 0u32, 0u32, &MSG as u64, 4294967295u32)
+    if endx != 16u32 { return 5u64 }
+    if fb_count() == 0u32 { return 6u64 }
+
+    return 99u64
+}

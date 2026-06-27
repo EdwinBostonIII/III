@@ -1,0 +1,30 @@
+/* STDLIB/corpus/2102_cover2d.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 13: FULL SYMMETRIC 2D COVERAGE.
+ *
+ * The Green's-theorem 2D-exact per-pixel alpha for the region below an x-monotone arc: coverage = integral over the
+ * pixel column of (f(x)-py) dx = G(t2) - G(t1) - py, where G is the area-at-crossing (one single-sqrt value at each
+ * of the two pixel-edge crossings, with DIFFERENT discriminants).  So the coverage is a DEGREE-4 (bi-quadratic)
+ * algebraic number, and the exact 8-bit alpha is ui_alpha_bi's proven-sign binary search -- NO interval refinement,
+ * symmetric in x/y (steep vertical edges are not a special case, just swapped variables).
+ *
+ * HONEST RANGE: G's denominator is 6*c^4 (c=2*ax2), so at SCREEN coords the assembly products reach ~1e24 and exceed
+ * i64; the overflow is DETECTED (returns -1), never a silently-wrong pixel.  A full-resolution render needs bigint
+ * coefficients -- the MATHEMATICS is exact and proven here; only the i64 word size is the limit.
+ * 99 = the degree-4 2D coverage is exact at small coords AND the screen-coord overflow is detected. */
+module corpus_2102_cover2d
+
+extern @abi(c-msvc-x64) fn ui_arc_cover2d(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact.iii"
+
+fn main() -> u64 {
+    /* === SMALL coords: the FULL symmetric 2D coverage is EXACT (degree-4 algebraic) === */
+    /* curve B=(0,0),(1,1),(4,0) [ax 0,2,2 ; ay 0,2,-2].  Pixel column [1,2], row [0,1]: the arc spans the column
+     * (x=1 at y~0.464, x=2 at y~0.472) entirely inside the row.  coverage = integral_1^2 f dx = G(t2)-G(t1)
+     * = 0.48946... (t1=(-1+sqrt3)/2 with D1=12, t2=(-1+sqrt5)/2 with D2=20 -- a genuine TWO-D bi-quadratic).
+     * alpha = round(255 * 0.48946) = round(124.81) = 125. */
+    if ui_arc_cover2d(0i64, 2i64, 2i64, 0i64, 2i64, 0i64 - 2i64, 1i64, 0i64, 255i64) != 125i64 { return 1u64 }
+
+    /* === SCREEN coords: the c^4 area denominators overflow i64 -- DETECTED, returns -1 (never silently wrong) === */
+    /* the dome arc (40,180),(120,40),(340,180) [ax 40,160,140 ; ay 180,-280,280] at pixel (100,90) */
+    if ui_arc_cover2d(40i64, 160i64, 140i64, 180i64, 0i64 - 280i64, 280i64, 100i64, 90i64, 255i64) != (0i64 - 1i64) { return 2u64 }
+
+    return 99u64
+}

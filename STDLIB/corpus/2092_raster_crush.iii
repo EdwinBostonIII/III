@@ -1,0 +1,31 @@
+/* STDLIB/corpus/2092_raster_crush.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 5: the MACHINE crushes a real
+ * rasterizer LOOP to O(1) -- not a hand-written closed form, but au_crush_module collapsing actual SVIR bytecode.
+ *
+ * This is the literal "feed the geometric constraints into the sovereign compiler and let the machine crush the
+ * pixels."  FILL is a genuine SVIR scanline fill: `for each row: area += ROW_WIDTH` encoded as LOOP / BR_IF / body
+ * / BR / END.  au_crush_module walks it, locates the loop body structurally, hands it to the proven orbit
+ * amputator au_topo_amputate (which bit-blasts the step and proves area' == area + ROW_WIDTH over all 2^64), and
+ * returns 1 IFF EVERY loop is crushed -- zero back-edges survive.  The O(N) scanline loop becomes the O(1) closed
+ * form area = N * ROW_WIDTH, PROVEN by the machine, not asserted by me.
+ *
+ * SVIR: LOOP(0x41) LOCAL_GET 1 (0x10 01) BR_IF 1 (0x51 01) | LOCAL_GET 0 (0x10 00) CONST 5 (0x01..) ADD(0x20)
+ *        LOCAL_SET 0 (0x11 00) | BR 0 (0x50 00) END(0x44).  Body (crushed) = area += 5.
+ * 99 = the machine crushed the rasterizer loop: loops_total==loops_crushed==1, the back-edge is GONE. */
+module corpus_2092_raster_crush
+
+extern @abi(c-msvc-x64) fn au_crush_module(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_loops_total() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_loops_crushed() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_arith_delta() -> u64 from "ser_antiunify.iii"
+
+/* a real SVIR rasterizer fill loop (area += 5 per row). */
+var FILL : [u8; 22] = [65u8, 16u8,1u8, 81u8,1u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 80u8,0u8, 68u8]
+
+fn main() -> u64 {
+    /* the MACHINE crushes the loop: 1 iff zero loops survive (the back-edge is amputated, PROVEN). */
+    if au_crush_module(&FILL as u64, 0u64, 22u64, 0u32) != 1u32 { return 1u64 }
+    if au_loops_total() != 1u32 { return 2u64 }            /* there was one real loop */
+    if au_loops_crushed() != 1u32 { return 3u64 }          /* and it is GONE -> O(N) scanline became O(1) */
+    if au_arith_delta() != 5u64 { return 4u64 }            /* the crushed per-row contribution = ROW_WIDTH */
+    return 99u64
+}

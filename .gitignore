@@ -5,6 +5,10 @@
 __pycache__/
 *.pyc
 
+# Local dev-harness wiring — points node at the sibling iii-master-mcp server.
+# Kept out of the sovereign tree's git history (purity); the harness lives in a sibling dir.
+.mcp.json
+
 # Regenerable build artifacts (WASTE-AUDIT-II §6; seal hashes sources, not these)
 STDLIB/build/**/*.log
 STDLIB/build/**/*.exe
@@ -14,3 +18,12 @@ STDLIB/build/**/*.clog
 STDLIB/build/**/*.lerr
 STDLIB/build/**/*.lderr
 STDLIB/build/**/*.err
+
+# Session probe/scratch artifacts (regenerable; not part of the sovereign source tree)
+/....
+/..._
+/...._
+STDLIB/build/_*
+STDLIB/_probe/
+DOCS/_*
+_audit_scratch/

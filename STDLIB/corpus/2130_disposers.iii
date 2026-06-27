@@ -1,0 +1,72 @@
+/* STDLIB/corpus/2130_disposers.iii -- Ripple-Merge Phase I completion: THE DISPOSER FUNCTORS route the three legacy
+ * engines through the ONE canonical engine, each injecting its REAL gate.
+ *   RIPPLE : flat edge (equal rf_rank) REFUSED; non-flat ADMITTED -- the corpus-1931 boundary, in the unified log.
+ *   MASTER : disp_master admits EXACTLY when logic6 says ordered/involution (l6_and(a,b)==a or b==l6_not(a)) --
+ *            consistency proven against the real logic6 over many pairs; the gate genuinely discriminates.
+ *   ISUB   : a valid block admits; a NAME in the verb slot is rejected BY THE ENGINE (isub == the engine).
+ * Admit/refuse is detected by the unified engine's count (no i32-ordering).  99 = three gates, one engine, one log. */
+module corpus_2130_disposers
+
+extern @abi(c-msvc-x64) fn inv_reset() -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_count() -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn disp_ripple_emit(prim_a: u32, hexad_a: u32, prim_b: u32, hexad_b: u32, out32: u64) -> i32 from "disposer.iii"
+extern @abi(c-msvc-x64) fn disp_master_emit(a: u32, b: u32, out32: u64) -> i32 from "disposer.iii"
+extern @abi(c-msvc-x64) fn disp_isub_emit(verb: u32, a: u32, b: u32, out32: u64) -> i32 from "disposer.iii"
+extern @abi(c-msvc-x64) fn disp_master_init() -> i32 from "disposer.iii"
+
+var OUT : [u8; 32]
+
+/* admit/refuse by the unified engine's count: returns 1 if the call ADMITTED (count grew), 0 if REFUSED. */
+fn r_ripple(pa: u32, ha: u32, pb: u32, hb: u32) -> u32 { let c0 : u32 = inv_count()   disp_ripple_emit(pa, ha, pb, hb, (&OUT[0u64]) as u64)   let c1 : u32 = inv_count()   if c1 != c0 { return 1u32 }   return 0u32 }
+fn r_isub(verb: u32, a: u32, b: u32) -> u32 { let c0 : u32 = inv_count()   disp_isub_emit(verb, a, b, (&OUT[0u64]) as u64)   let c1 : u32 = inv_count()   if c1 != c0 { return 1u32 }   return 0u32 }
+
+/* MASTER consistency: disp must admit IFF logic6 says ordered/involution.  Returns 2 admit+consistent, 1
+ * refuse+consistent, 0 INCONSISTENT (disp disagrees with logic6 -> falsified). */
+fn check_master(a: u32, b: u32) -> u32 {
+    let m : u32 = l6_and(a, b)
+    let n : u32 = l6_not(a)
+    let mut exp : u32 = 0u32
+    if m == a { exp = 1u32 }
+    if b == n { exp = 1u32 }
+    let c0 : u32 = inv_count()
+    disp_master_emit(a, b, (&OUT[0u64]) as u64)
+    let c1 : u32 = inv_count()
+    let mut got : u32 = 0u32
+    if c1 != c0 { got = 1u32 }
+    if got != exp { return 0u32 }
+    if got == 1u32 { return 2u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    inv_reset()
+
+    /* RIPPLE: non-flat admits, flat refuses */
+    if r_ripple(1u32, 2u32, 2u32, 5u32) != 1u32 { return 1u64 }     /* hexad 2 vs 5: different rank -> admit */
+    if r_ripple(3u32, 4u32, 4u32, 4u32) != 0u32 { return 2u64 }     /* hexad 4 vs 4: flat -> refuse */
+
+    /* MASTER: consistent with logic6 over many pairs + discriminates (>=1 admit, >=1 refuse) */
+    disp_master_init()
+    let mut adm : u32 = 0u32   let mut ref : u32 = 0u32
+    let mut pi : u32 = 0u32
+    /* pairs (0,5),(1,0),(2,1),(0,4),(3,2),(2,4) -- inline */
+    let r0 : u32 = check_master(0u32, 5u32)   if r0 == 0u32 { return 3u64 }   if r0 == 2u32 { adm = adm + 1u32 }   if r0 == 1u32 { ref = ref + 1u32 }
+    let r1 : u32 = check_master(1u32, 0u32)   if r1 == 0u32 { return 4u64 }   if r1 == 2u32 { adm = adm + 1u32 }   if r1 == 1u32 { ref = ref + 1u32 }
+    let r2 : u32 = check_master(2u32, 1u32)   if r2 == 0u32 { return 5u64 }   if r2 == 2u32 { adm = adm + 1u32 }   if r2 == 1u32 { ref = ref + 1u32 }
+    let r3 : u32 = check_master(0u32, 4u32)   if r3 == 0u32 { return 6u64 }   if r3 == 2u32 { adm = adm + 1u32 }   if r3 == 1u32 { ref = ref + 1u32 }
+    let r4 : u32 = check_master(3u32, 2u32)   if r4 == 0u32 { return 7u64 }   if r4 == 2u32 { adm = adm + 1u32 }   if r4 == 1u32 { ref = ref + 1u32 }
+    let r5 : u32 = check_master(2u32, 4u32)   if r5 == 0u32 { return 8u64 }   if r5 == 2u32 { adm = adm + 1u32 }   if r5 == 1u32 { ref = ref + 1u32 }
+    if adm == 0u32 { return 9u64 }                                  /* the gate admitted at least one */
+    if ref == 0u32 { return 10u64 }                                 /* the gate refused at least one (discriminates) */
+
+    /* ISUB: valid block admits; a NAME (verb 99) is rejected BY THE ENGINE */
+    if r_isub(0u32, 5u32, 6u32) != 1u32 { return 11u64 }            /* BELOW block -> admit */
+    if r_isub(99u32, 5u32, 6u32) != 0u32 { return 12u64 }           /* name in verb slot -> engine rejects */
+
+    /* the unified log holds everything admitted, from all three domains */
+    if inv_count() == 0u32 { return 13u64 }
+
+    return 99u64
+}

@@ -1,0 +1,60 @@
+/* STDLIB/corpus/2065_invariant_pipeline.iii -- THE "AHA!" MECHANIZED: finite observation -> structural
+ * generalization -> formal proof.  ser_antiunify anti-unifies fuzzed states into a candidate invariant;
+ * ser_kinduct_sym proves (or refuses) it over ALL 2^64.  This is the boundless k-induction pipeline, and the
+ * conscience line is demonstrated: the prover REFUSES an over-general candidate the samples happened to fit.
+ * 99 = the lgg templates are exact AND the propose->prove pipeline is sound (proves the inductive, refuses the not). */
+module corpus_2065_invariant_pipeline
+
+extern @abi(c-msvc-x64) fn sp_obs_reset() -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_push(v: u64) -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn au_bitmask_care() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_bitmask_val() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_modulus() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_residue() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_interval_lo() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_interval_hi() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_prove(p_x: u32, p_tx: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    /* (a) anti-unify {4,8,12,16}: the lggs are EXACT.  Bit-pattern: bits 2,3,4 vary -> don't-care; bits 0,1
+     *     (and the high zeros) agree -> cared.  Modular: gcd(4,8,12)=4.  Interval: [4,16]. */
+    sp_obs_reset()
+    sp_obs_push(4u64)  sp_obs_push(8u64)  sp_obs_push(12u64)  sp_obs_push(16u64)
+    if (au_bitmask_care() & 28u64) != 0u64 { return 1u64 }    /* bits 2,3,4 (the varying ones) are don't-care */
+    if (au_bitmask_care() & 3u64) != 3u64 { return 2u64 }     /* bits 0,1 (always 0) are cared */
+    if au_modulus() != 4u64 { return 3u64 }                   /* gcd(4,8,12) = 4 */
+    if au_residue() != 0u64 { return 4u64 }
+    if au_interval_lo() != 4u64 { return 5u64 }
+    if au_interval_hi() != 16u64 { return 6u64 }
+
+    /* (b) THE FULL AHA: observe an even counter's fuzzed states, GENERALIZE via the MODULAR lgg (the template
+     *     that survives growth -- the bit-pattern's high-zero bits would falsely bound x), then PROVE it
+     *     inductive over ALL 2^64 under the real transition x'=x+2.  observe -> generalize -> prove. */
+    sp_obs_reset()
+    sp_obs_push(0u64)  sp_obs_push(2u64)  sp_obs_push(4u64)  sp_obs_push(6u64)  sp_obs_push(8u64)
+    if au_modulus() != 2u64 { return 7u64 }                   /* gcd(2,4,6,8) = 2 -> "x is even" */
+    let m  : u64 = au_modulus()
+    let r  : u64 = au_residue()
+    bb_reset(64u64)
+    let x  : u32 = bb_var(0u32)
+    let tx : u32 = bb_add(x, bb_const(2u64))
+    if sks_prove(sks_mask_eq(x, m - 1u64, r), sks_mask_eq(tx, m - 1u64, r), 0u32, 0u64) != 1u8 { return 8u64 }
+
+    /* (c) THE CONSCIENCE LINE: from {0,4,8} the modular lgg conjectures x%4==0 -- but that is NOT inductive
+     *     under x'=x+2 (4 -> 6 breaks it).  The prover REFUSES it: synthesis proposes, only the proof disposes. */
+    sp_obs_reset()
+    sp_obs_push(0u64)  sp_obs_push(4u64)  sp_obs_push(8u64)
+    let m2 : u64 = au_modulus()                               /* gcd(4,8) = 4 -> conjecture x%4==0 */
+    let r2 : u64 = au_residue()
+    bb_reset(64u64)
+    let x2 : u32 = bb_var(0u32)
+    let t2 : u32 = bb_add(x2, bb_const(2u64))
+    if sks_prove(sks_mask_eq(x2, m2 - 1u64, r2), sks_mask_eq(t2, m2 - 1u64, r2), 0u32, 0u64) != 0u8 { return 9u64 }
+
+    return 99u64
+}

@@ -368,7 +368,7 @@ static bool iii_pool_grow(iii_ast_t *ast, uint32_t pool, uint32_t need_slots)
 
     uint8_t (**mh)[32] = iii_pool_mhash(ast, pool);
     uint8_t (*mh_p)[32] = (uint8_t (*)[32])
-        realloc(*mh, (size_t)new_cap * sizeof((*mh)[0]));
+        realloc(*mh, (size_t)new_cap * 32u);   /* 32 = sizeof((*mh)[0]) = one mhash[32]; literal matches the memset below + avoids ccsv's deref-index-sizeof gap */
     if (!mh_p) return false;
     memset(mh_p + *cap_ptr, 0, (size_t)(new_cap - *cap_ptr) * 32);
     *mh = mh_p;
@@ -451,7 +451,7 @@ iii_ast_t *iii_ast_create(const uint8_t *source_buf,
     ast->list_cap   = 64;
     ast->list_used  = 0;
 
-    ast->string_payloads = (const uint8_t **)calloc(16, sizeof(*ast->string_payloads));
+    ast->string_payloads = (const uint8_t **)calloc(16, 8u);   /* 8 = sizeof(const uint8_t *) = one payload pointer; the literal avoids ccsv's sizeof-of-POINTER-type-as-calloc-arg gap (sizeof of a scalar type is fine; of a pointer type it left a value on the stack -> rc=8) */
     if (!ast->string_payloads) goto fail;
     ast->string_payload_cap   = 16;
     ast->string_payload_count = 0;

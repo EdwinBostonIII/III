@@ -1,0 +1,54 @@
+/* STDLIB/corpus/2091_association_invariant.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 4: the INTELLIGENCE
+ * FEEDBACK.  The crushes are not just optimizations -- they are ASSOCIATIONS III accumulates and reasons ON TOP OF.
+ *
+ * III observes the topological window's motion (the box position over frames) and GENERALIZES, via Plotkin's
+ * least-general-generalization (au_interval_lo/hi -- exact, deterministic, NO-ML), the strongest bounds invariant
+ * binding every observation: box_x always in [lo, hi].  That is a learned SAFETY law.  Then III reasons ON TOP of
+ * it -- composing the learned bound with the proven layout (Phase 2) to DERIVE A NEW GUARANTEE the samples never
+ * stated: lo >= sidebar  =>  the box can NEVER overlap the sidebar.  This is "associations to count and figure out
+ * more on the back of": a generalization becomes a premise for a further deduction.
+ *
+ * SCOPE (honest, conscience -- do not overclaim): III GENERALIZES the bound via lgg (au_interval_lo/hi, a real
+ * faculty).  The bound [220,679] then follows from the MODULUS's range (any x mod 460 is in [0,459] -- a closed-
+ * form FACT, not a search).  This KAT SPOT-CHECKS that at a few unsampled t; it is NOT a symbolic all-t proof
+ * (bv_bits has no mod, so the membrane is not discharged here).  So: a learned generalization + a mathematical-
+ * fact bound + sample checks -- not a 2^64 certificate.
+ * 99 = the lgg recovered the bound and the no-overlap composition (lo>=sidebar) holds at the checked points. */
+module corpus_2091_association_invariant
+
+extern @abi(c-msvc-x64) fn sp_obs_reset() -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_obs_push(v: u64) -> i32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn au_interval_lo() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_interval_hi() -> u64 from "ser_antiunify.iii"
+
+/* the window's motion law (the same closed form ui_topo renders). SIDEBAR=200, content=[200,800). */
+fn box_x(t: u64) -> u64 { return 220u64 + ((3u64 * t) % 460u64) }
+
+fn main() -> u64 {
+    /* === III OBSERVES the motion across frames (the producer's trace) === */
+    sp_obs_reset()
+    sp_obs_push(box_x(0u64))      /* 220  -- the extreme low (t=0) */
+    sp_obs_push(box_x(50u64))     /* 370 */
+    sp_obs_push(box_x(100u64))    /* 520 */
+    sp_obs_push(box_x(153u64))    /* 679  -- the extreme high (3*153=459) */
+    sp_obs_push(box_x(75u64))     /* 445 */
+    sp_obs_push(box_x(120u64))    /* 580 */
+    sp_obs_push(box_x(200u64))    /* 360 */
+
+    /* === III GENERALIZES: the strongest bounds invariant over every observation (the learned association) === */
+    let lo : u64 = au_interval_lo()
+    let hi : u64 = au_interval_hi()
+    if lo != 220u64 { return 1u64 }
+    if hi != 679u64 { return 2u64 }
+
+    /* === III REASONS ON TOP: compose the learned bound with the layout (sidebar=200) to derive no-overlap === */
+    if lo < 200u64 { return 3u64 }                 /* lo >= sidebar  =>  box ∩ sidebar = empty (a NEW guarantee) */
+    if (hi + 120u64) >= 800u64 { return 4u64 }     /* hi + box_w <= window  =>  box never clips the right edge */
+
+    /* === THE CONSCIENCE: the law, not the samples -- the bound holds at t the fuzzer never saw === */
+    if box_x(333333u64) < 220u64 { return 5u64 }
+    if box_x(333333u64) > 679u64 { return 6u64 }
+    if box_x(1000000007u64) > 679u64 { return 7u64 }
+
+    return 99u64
+}

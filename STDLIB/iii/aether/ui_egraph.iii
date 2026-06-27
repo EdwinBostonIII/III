@@ -1,0 +1,280 @@
+/* STDLIB/iii/aether/ui_egraph.iii -- III-GLASS: the visual E-graph, the deepest "represent the system".  It does
+ * NOT draw a diagram of an e-graph; it builds the REAL one (ser_egraph: MUL(x,7)), runs equality saturation, then
+ * WALKS the saturated node arrays (seg_node_count/op/a/b + seg_find) and renders them.  Nodes are laid out by
+ * depth, child-edges drawn, and each node COLORED BY ITS E-CLASS -- so MUL(x,7) and the SUB(SHL(x,3),x) that
+ * saturation proved equal share one colour: you SEE the merge.  The caption shows seg_best_cost -- the cheapest
+ * extracted form.  This is III's actual optimiser reasoning, projected. */
+module ui_egraph
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_find(x: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_count() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_op(i: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_a(i: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_b(i: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_kind(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_a(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_b(i: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
+
+var EG_FB    : [u32; 480000]   /* 800 x 600 */
+var EG_TITLE : [u8; 10] = [73u8,73u8,73u8,69u8,71u8,82u8,65u8,80u8,72u8,0u8]   /* "IIIEGRAPH\0" */
+var DEPTH : [u32; 512]
+var NX    : [i32; 512]
+var NY    : [i32; 512]
+var ROWCNT: [u32; 32]
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+
+/* a stable colour per e-class root, so equal nodes look equal. */
+fn classcol(root: u64) -> u32 {
+    let m : u64 = root % 6u64
+    if m == 0u64 { return rgb(0u32,200u32,255u32) }
+    if m == 1u64 { return rgb(255u32,150u32,40u32) }
+    if m == 2u64 { return rgb(120u32,230u32,100u32) }
+    if m == 3u64 { return rgb(235u32,110u32,205u32) }
+    if m == 4u64 { return rgb(255u32,210u32,70u32) }
+    return rgb(160u32,170u32,205u32)
+}
+
+fn oplabel(b: u64, x: u32, y: u32, op: u32, val: u64, color: u32) -> i32 {
+    if op == 0u32 { ui_text_n(b, 800u32, 600u32, x, y, "VAR x" as u64, 5u32, color) }
+    if op == 1u32 { let cx : u32 = ui_text_n(b, 800u32, 600u32, x, y, "= " as u64, 2u32, color)  ui_text_u32(b, 800u32, 600u32, cx, y, val as u32, color) }
+    if op == 2u32 { ui_text_n(b, 800u32, 600u32, x, y, "ADD +" as u64, 5u32, color) }
+    if op == 3u32 { ui_text_n(b, 800u32, 600u32, x, y, "SUB -" as u64, 5u32, color) }
+    if op == 4u32 { ui_text_n(b, 800u32, 600u32, x, y, "MUL *" as u64, 5u32, color) }
+    if op == 5u32 { ui_text_n(b, 800u32, 600u32, x, y, "SHL <<" as u64, 6u32, color) }
+    return 0i32
+}
+
+/* build + saturate the REAL e-graph of x*mult and render it into the passed 800x600 buffer; returns cheapest cost.
+ * Taking the buffer as a parameter lets the zoom view host the e-graph in place (the "zoom dissolves into the
+ * E-graph" composition) rather than duplicating the renderer. */
+fn eg_render(buf: u64, mult: u64) -> u32 @export {
+    seg_reset()
+    let x   : u64 = seg_var()
+    let cm  : u64 = seg_const(mult)
+    let mul : u64 = seg_intern(4u32, x, cm)
+    seg_saturate()
+    let n : u32 = seg_node_count()
+
+    /* depth by relaxation (binary ops = 1 + max child depth; leaves = 0). */
+    let mut i : u64 = 0u64
+    while i < (n as u64) { DEPTH[i] = 0u32  i = i + 1u64 }
+    let mut iter : u32 = 0u32
+    while iter < 64u32 {
+        let mut m : u64 = 0u64
+        while m < (n as u64) {
+            if seg_node_op(m) >= 2u32 {
+                let da : u32 = DEPTH[seg_node_a(m)]
+                let db : u32 = DEPTH[seg_node_b(m)]
+                let mut d : u32 = da  if db > d { d = db }
+                d = d + 1u32
+                if d > DEPTH[m] { DEPTH[m] = d }
+            }
+            m = m + 1u64
+        }
+        iter = iter + 1u32
+    }
+    /* layout: column by depth, row by per-depth counter. */
+    let mut d : u64 = 0u64
+    while d < 32u64 { ROWCNT[d] = 0u32  d = d + 1u64 }
+    i = 0u64
+    while i < (n as u64) {
+        let dp : u32 = DEPTH[i]
+        let row : u32 = ROWCNT[dp as u64]
+        NX[i] = 40i32 + ((dp as i32) * 175i32)
+        NY[i] = 44i32 + ((row as i32) * 50i32)
+        ROWCNT[dp as u64] = row + 1u32
+        i = i + 1u64
+    }
+
+    let b : u64 = buf
+    ui_clear(b, 800u32, 600u32, rgb(10u32, 12u32, 18u32))
+    ui_text_n(b, 800u32, 600u32, 16u32, 12u32, "III-GLASS  e-graph -- equality saturation, the real ser_egraph" as u64, 61u32, rgb(0u32,229u32,255u32))
+    ui_text_n(b, 800u32, 600u32, 16u32, 30u32, "same colour = same e-class (proven equal by saturation)" as u64, 55u32, rgb(110u32,125u32,150u32))
+
+    /* edges (under the boxes): each op -> its two children. */
+    let mut m : u64 = 0u64
+    while m < (n as u64) {
+        if seg_node_op(m) >= 2u32 {
+            let a  : u64 = seg_node_a(m)
+            let bb : u64 = seg_node_b(m)
+            ui_line(b, 800u32, 600u32, NX[m] + 55i32, NY[m] + 22i32, NX[a] + 55i32, NY[a] + 10i32, rgb(55u32,65u32,85u32))
+            ui_line(b, 800u32, 600u32, NX[m] + 55i32, NY[m] + 22i32, NX[bb] + 55i32, NY[bb] + 10i32, rgb(55u32,65u32,85u32))
+        }
+        m = m + 1u64
+    }
+    /* nodes: a box outlined in its e-class colour, with op label + index. */
+    m = 0u64
+    while m < (n as u64) {
+        let op  : u32 = seg_node_op(m)
+        let col : u32 = classcol(seg_find(m))
+        ui_fill_rect(b, 800u32, 600u32, NX[m] as u32, NY[m] as u32, 110u32, 44u32, rgb(20u32,24u32,34u32))
+        ui_rect(b, 800u32, 600u32, NX[m] as u32, NY[m] as u32, 110u32, 44u32, col)
+        oplabel(b, (NX[m] + 10i32) as u32, (NY[m] + 8i32) as u32, op, seg_node_a(m), col)
+        let ix : u32 = ui_text_n(b, 800u32, 600u32, (NX[m] + 10i32) as u32, (NY[m] + 26i32) as u32, "node " as u64, 5u32, rgb(110u32,120u32,140u32))
+        ui_text_u32(b, 800u32, 600u32, ix, (NY[m] + 26i32) as u32, m as u32, rgb(110u32,120u32,140u32))
+        m = m + 1u64
+    }
+
+    /* caption: x*mult, saturated, with the cheapest extracted cost. */
+    let cost : u32 = seg_best_cost(mul)
+    let mut cx : u32 = ui_text_n(b, 800u32, 600u32, 16u32, 582u32, "x * " as u64, 4u32, rgb(150u32,165u32,190u32))
+    cx = ui_text_u32(b, 800u32, 600u32, cx, 582u32, mult as u32, rgb(255u32,210u32,80u32))
+    cx = ui_text_n(b, 800u32, 600u32, cx, 582u32, "  saturated -- cheapest extracted cost = " as u64, 41u32, rgb(150u32,165u32,190u32))
+    ui_text_u32(b, 800u32, 600u32, cx, 582u32, cost, rgb(40u32,220u32,95u32))
+    return cost
+}
+/* ===== BIT-BLAST NETLIST VIEW (bv_bits) -- the level below the e-graph: the gates III lowers to SAT. ===== */
+fn bb_kindcol(kind: u32) -> u32 {
+    if kind == 2u32 { return rgb(235u32,90u32,90u32) }     /* AND -- the SAT-constraint cost */
+    if kind == 4u32 { return rgb(0u32,220u32,255u32) }     /* XOR */
+    if kind == 3u32 { return rgb(120u32,230u32,100u32) }   /* OR */
+    if kind == 6u32 { return rgb(255u32,200u32,80u32) }    /* SHL */
+    if kind == 7u32 { return rgb(255u32,160u32,50u32) }    /* SHR */
+    if kind == 5u32 { return rgb(235u32,110u32,205u32) }   /* NOT */
+    if kind == 0u32 { return rgb(180u32,190u32,215u32) }   /* VAR */
+    if kind == 1u32 { return rgb(160u32,150u32,215u32) }   /* CONST */
+    return rgb(200u32,205u32,215u32)
+}
+fn bb_lbl(b: u64, x: u32, y: u32, kind: u32, color: u32) -> i32 {
+    if kind == 0u32 { ui_text_n(b, 800u32, 600u32, x, y, "VAR" as u64, 3u32, color) }
+    if kind == 1u32 { ui_text_n(b, 800u32, 600u32, x, y, "CONST" as u64, 5u32, color) }
+    if kind == 2u32 { ui_text_n(b, 800u32, 600u32, x, y, "AND" as u64, 3u32, color) }
+    if kind == 3u32 { ui_text_n(b, 800u32, 600u32, x, y, "OR" as u64, 2u32, color) }
+    if kind == 4u32 { ui_text_n(b, 800u32, 600u32, x, y, "XOR" as u64, 3u32, color) }
+    if kind == 5u32 { ui_text_n(b, 800u32, 600u32, x, y, "NOT" as u64, 3u32, color) }
+    if kind == 6u32 { ui_text_n(b, 800u32, 600u32, x, y, "SHL" as u64, 3u32, color) }
+    if kind == 7u32 { ui_text_n(b, 800u32, 600u32, x, y, "SHR" as u64, 3u32, color) }
+    return 0i32
+}
+fn bb_is_binary(kind: u32) -> u32 { if kind == 2u32 { return 1u32 }  if kind == 3u32 { return 1u32 }  if kind == 4u32 { return 1u32 }  if kind == 8u32 { return 1u32 }  if kind == 9u32 { return 1u32 }  if kind == 10u32 { return 1u32 }  return 0u32 }
+fn bb_is_unary(kind: u32) -> u32 { if kind == 5u32 { return 1u32 }  if kind == 6u32 { return 1u32 }  if kind == 7u32 { return 1u32 }  return 0u32 }
+
+/* build a REAL bit-op netlist and render it into the passed 800x600 buffer (reuses the e-graph layout scratch). */
+fn bb_render(buf: u64) -> i32 @export {
+    bb_reset(16u64)
+    let x  : u32 = bb_var(0u32)
+    let c  : u32 = bb_const(15u64)
+    let a  : u32 = bb_and(x, c)
+    let s1 : u32 = bb_shl(x, 1u64)
+    let xr : u32 = bb_xor(a, s1)
+    let s3 : u32 = bb_shr(x, 3u64)
+    let o  : u32 = bb_or(xr, s3)
+    let n  : u32 = bb_node_count()
+
+    let mut i : u64 = 0u64
+    while i < (n as u64) { DEPTH[i] = 0u32  i = i + 1u64 }
+    let mut iter : u32 = 0u32
+    while iter < 64u32 {
+        let mut m : u64 = 0u64
+        while m < (n as u64) {
+            let k : u32 = bb_node_kind(m)
+            if bb_is_binary(k) == 1u32 {
+                let da : u32 = DEPTH[bb_node_a(m) as u64]  let db : u32 = DEPTH[bb_node_b(m) as u64]
+                let mut d : u32 = da  if db > d { d = db }  d = d + 1u32
+                if d > DEPTH[m] { DEPTH[m] = d }
+            }
+            if bb_is_unary(k) == 1u32 {
+                let d : u32 = DEPTH[bb_node_a(m) as u64] + 1u32
+                if d > DEPTH[m] { DEPTH[m] = d }
+            }
+            m = m + 1u64
+        }
+        iter = iter + 1u32
+    }
+    let mut dd : u64 = 0u64
+    while dd < 32u64 { ROWCNT[dd] = 0u32  dd = dd + 1u64 }
+    i = 0u64
+    while i < (n as u64) {
+        let dp : u32 = DEPTH[i]  let row : u32 = ROWCNT[dp as u64]
+        NX[i] = 40i32 + ((dp as i32) * 180i32)
+        NY[i] = 70i32 + ((row as i32) * 64i32)
+        ROWCNT[dp as u64] = row + 1u32
+        i = i + 1u64
+    }
+
+    let b : u64 = buf
+    ui_clear(b, 800u32, 600u32, rgb(8u32, 10u32, 16u32))
+    ui_text_n(b, 800u32, 600u32, 16u32, 12u32, "III-GLASS  bit-blast netlist (bv_bits) -- the gates III lowers to SAT" as u64, 67u32, rgb(0u32,229u32,255u32))
+    ui_text_n(b, 800u32, 600u32, 16u32, 32u32, "each AND-gate (red) becomes one SAT constraint / multiplication gate" as u64, 67u32, rgb(110u32,125u32,150u32))
+    let mut m : u64 = 0u64
+    while m < (n as u64) {
+        let k : u32 = bb_node_kind(m)
+        if bb_is_binary(k) == 1u32 {
+            ui_line(b, 800u32, 600u32, NX[m] + 50i32, NY[m] + 22i32, NX[bb_node_a(m) as u64] + 50i32, NY[bb_node_a(m) as u64] + 10i32, rgb(55u32,65u32,85u32))
+            ui_line(b, 800u32, 600u32, NX[m] + 50i32, NY[m] + 22i32, NX[bb_node_b(m) as u64] + 50i32, NY[bb_node_b(m) as u64] + 10i32, rgb(55u32,65u32,85u32))
+        }
+        if bb_is_unary(k) == 1u32 {
+            ui_line(b, 800u32, 600u32, NX[m] + 50i32, NY[m] + 22i32, NX[bb_node_a(m) as u64] + 50i32, NY[bb_node_a(m) as u64] + 10i32, rgb(55u32,65u32,85u32))
+        }
+        m = m + 1u64
+    }
+    m = 0u64
+    while m < (n as u64) {
+        let k   : u32 = bb_node_kind(m)
+        let col : u32 = bb_kindcol(k)
+        ui_fill_rect(b, 800u32, 600u32, NX[m] as u32, NY[m] as u32, 100u32, 44u32, rgb(18u32,22u32,30u32))
+        ui_rect(b, 800u32, 600u32, NX[m] as u32, NY[m] as u32, 100u32, 44u32, col)
+        bb_lbl(b, (NX[m] + 10i32) as u32, (NY[m] + 8i32) as u32, k, col)
+        let ix : u32 = ui_text_n(b, 800u32, 600u32, (NX[m] + 10i32) as u32, (NY[m] + 26i32) as u32, "g" as u64, 1u32, rgb(110u32,120u32,140u32))
+        ui_text_u32(b, 800u32, 600u32, ix, (NY[m] + 26i32) as u32, m as u32, rgb(110u32,120u32,140u32))
+        m = m + 1u64
+    }
+    let mut cx : u32 = ui_text_n(b, 800u32, 600u32, 16u32, 568u32, "((x & 15) ^ (x << 1)) | (x >> 3)   gates = " as u64, 43u32, rgb(150u32,165u32,190u32))
+    cx = ui_text_u32(b, 800u32, 600u32, cx, 568u32, n, rgb(235u32,240u32,250u32))
+    cx = ui_text_n(b, 800u32, 600u32, cx, 568u32, "   AND-gates = " as u64, 15u32, rgb(150u32,165u32,190u32))
+    ui_text_u32(b, 800u32, 600u32, cx, 568u32, bb_count_and() as u32, rgb(235u32,90u32,90u32))
+    return 0i32
+}
+
+/* LIVE: type digits to set the multiplier N; the REAL e-graph of x*N re-saturates and redraws.  Backspace edits.
+ * Named eg_window_main (not main) so ui_egraph.o carries eg_render WITHOUT a main -- the zoom view links it to
+ * host the e-graph in place; the standalone egraph.exe gets a thin main from ui_egraph_app.iii. */
+fn eg_window_main() -> u64 @export {
+    ui_win_open(&EG_TITLE as u64, 800u32, 600u32)
+    let mut nval  : u64 = 7u64
+    let mut dirty : u32 = 1u32
+    while ui_win_pump() == 0u32 {
+        let mut c : u32 = ui_getchar()
+        let mut drain : u32 = 1u32
+        while drain == 1u32 {
+            if c == 0u32 { drain = 0u32 }
+            if c != 0u32 {
+                if c >= 48u32 { if c <= 57u32 { nval = (nval * 10u64) + ((c - 48u32) as u64)  if nval > 99999u64 { nval = 99999u64 }  dirty = 1u32 } }
+                if c == 8u32 { nval = nval / 10u64  dirty = 1u32 }
+                c = ui_getchar()
+            }
+        }
+        if dirty == 1u32 { if nval > 0u64 { eg_render(&EG_FB as u64, nval) }  dirty = 0u32 }
+        ui_win_present(&EG_FB as u64, 800u32, 600u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

@@ -1,0 +1,37 @@
+/* STDLIB/corpus/2100_biquad_coverage.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 11: SYMBOLIC 2D COVERAGE engine.
+ *
+ * A curved region's EXACT per-pixel coverage is the difference of two single-sqrt area-at-crossings -- a degree-4
+ * algebraic number a + b sqrt D1 + c sqrt D2 in Q(sqrt D1, sqrt D2).  Rather than INTERVAL-REFINE it (a computer
+ * approximating a number it cannot name), III evaluates its sign SYMBOLICALLY: ui_sign_bi reduces the nested radical
+ * to two single-D proven signs (P^2 lives back in Q(sqrt D1)).  ui_alpha_bi turns the degree-4 coverage into the
+ * correctly-rounded 8-bit alpha by a proven-sign binary search.  This is symmetric in x and y -- no steep-edge case.
+ *
+ * Grounded on KNOWN irrationals: sqrt2=1.41421356, sqrt3=1.73205081.
+ * 99 = the bi-quadratic sign and alpha are exact on every checked degree-4 value. */
+module corpus_2100_biquad_coverage
+
+extern @abi(c-msvc-x64) fn ui_sign_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cmp_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64, den: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alpha_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64, den: i64, sa: i64) -> i64 from "ui_exact.iii"
+
+fn main() -> u64 {
+    /* === BI-QUADRATIC SIGN (degree-4 decided by two degree-2 proven signs) === */
+    if ui_sign_bi(0i64, 1i64, 2i64, 0i64 - 1i64, 3i64) != (0i32 - 1i32) { return 1u64 }   /* sqrt2 - sqrt3 < 0 */
+    if ui_sign_bi(0i64, 1i64, 3i64, 0i64 - 1i64, 2i64) != 1i32 { return 2u64 }            /* sqrt3 - sqrt2 > 0 */
+    if ui_sign_bi(1i64, 1i64, 2i64, 0i64 - 1i64, 3i64) != 1i32 { return 3u64 }            /* 1 + sqrt2 - sqrt3 = 0.682 > 0 */
+    if ui_sign_bi(1i64, 0i64 - 1i64, 2i64, 0i64 - 1i64, 3i64) != (0i32 - 1i32) { return 4u64 } /* 1 - sqrt2 - sqrt3 < 0 */
+    if ui_sign_bi(0i64, 1i64, 2i64, 0i64 - 1i64, 2i64) != 0i32 { return 5u64 }            /* sqrt2 - sqrt2 = 0 EXACTLY */
+    if ui_sign_bi(0i64 - 5i64, 1i64, 2i64, 1i64, 3i64) != (0i32 - 1i32) { return 6u64 }   /* -5 + sqrt2 + sqrt3 = -1.85 < 0 */
+    if ui_sign_bi(0i64 - 3i64, 1i64, 2i64, 1i64, 3i64) != 1i32 { return 7u64 }            /* -3 + sqrt2 + sqrt3 = 0.146 > 0 */
+
+    /* === EXACT ORDER of a degree-4 value vs rationals (the symbolic coverage, no interval refinement) === */
+    /* (sqrt2 + sqrt3)/4 = 0.78656584... ; straddle it exactly between 0.7865 and 0.7866 */
+    if ui_cmp_bi(0i64, 1i64, 2i64, 1i64, 3i64, 4i64, 7865i64, 10000i64) != 1i32 { return 8u64 }            /* > 0.7865 */
+    if ui_cmp_bi(0i64, 1i64, 2i64, 1i64, 3i64, 4i64, 7866i64, 10000i64) != (0i32 - 1i32) { return 9u64 }   /* < 0.7866 */
+
+    /* === EXACT 8-BIT ALPHA of a degree-4 coverage === */
+    /* coverage = (sqrt2 + sqrt3)/4 = 0.786566 ; alpha = round(255 * 0.786566) = round(200.57) = 201 */
+    if ui_alpha_bi(0i64, 1i64, 2i64, 1i64, 3i64, 4i64, 255i64) != 201i64 { return 10u64 }
+
+    return 99u64
+}

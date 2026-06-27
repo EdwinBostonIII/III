@@ -1,0 +1,53 @@
+/* STDLIB/iii/eidos/ripple_eidolon.iii -- THE EIDOLON WIRED INTO THE RIPPLE.  A ripple between two eidolons (exact
+ * self-identical surd values): its operands a,b are the eidolons' content-addresses (eid_addr), its FLAT-boundary is
+ * exact identity (eid_same -- two spellings of one value are ONE node, no ripple between a thing and itself), and its
+ * VERB is the EXACT real order of the two values -- sign(eidB - eidA) via the separation-bound predicate
+ * ui_sqrt_sum_sign.  Closes the loop: eidolon identity -> eidolon algebra (the difference) -> exact sign -> {BELOW,
+ * REFLECT} -> the canonical engine (omnia/involution), witnessed.  Authors no engine/crypto; composes the three. */
+module eidos_ripple_eidolon
+
+extern @abi(c-msvc-x64) fn inv_emit(verb: u32, a_ptr: u64, b_ptr: u64, disposer_verdict: u32, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_mul(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_same(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_addr(a: u32, out32: u64) -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_nterms(a: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_term_c(a: u32, i: u32) -> i64 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_term_d(a: u32, i: u32) -> u64 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+var RE_AC : [i64; 16]   var RE_BC : [i64; 16]
+var RE_ADA : [u8; 32]   var RE_ADB : [u8; 32]
+
+/* emit a ripple between eidolons A and B.  FLAT (A and B are the SAME identity) -> refused by the engine (no ripple
+ * between a thing and itself).  Else verb = exact order: B>A -> BELOW (A climbs to B); B<A -> REFLECT.  Returns the
+ * engine index (>=0) on admit, or INV_E_DISPOSER on flat. */
+/* THE EXACT ORDER (no side effect): sign(eidB - eidA) -- +1 if B>A, -1 if B<A, 0 if A and B are the SAME identity.
+ * This is the comparison a planner sorts by: the real order of the reals, correct even for values 1e-6 apart. */
+fn re_cmp(eidA: u32, eidB: u32) -> i32 @export {
+    if eid_same(eidA, eidB) == 1u32 { return 0i32 }
+    let negA : u32 = eid_mul(eidA, eid_make(0i64 - 1i64, 1u64, 0u32))
+    let d : u32 = eid_add(eidB, negA)
+    let n : u32 = eid_nterms(d)
+    let mut i : u64 = 0u64
+    while i < (n as u64) {
+        RE_AC[i] = eid_term_c(d, i as u32)
+        RE_BC[i] = (eid_term_d(d, i as u32)) as i64
+        i = i + 1u64
+    }
+    return ui_sqrt_sum_sign((&RE_AC[0u64]) as u64, (&RE_BC[0u64]) as u64, n as u64)
+}
+
+fn re_emit(eidA: u32, eidB: u32, out32: u64) -> i32 @export {
+    let c : i32 = re_cmp(eidA, eidB)
+    if c == 0i32 {                                                                             /* FLAT (same identity) */
+        eid_addr(eidA, (&RE_ADA[0u64]) as u64)
+        return inv_emit(0u32, (&RE_ADA[0u64]) as u64, (&RE_ADA[0u64]) as u64, 0u32, out32)
+    }
+    let mut verb : u32 = 1u32                                                                  /* REFLECT (B < A) */
+    if c == 1i32 { verb = 0u32 }                                                               /* BELOW   (B > A) */
+    eid_addr(eidA, (&RE_ADA[0u64]) as u64)
+    eid_addr(eidB, (&RE_ADB[0u64]) as u64)
+    return inv_emit(verb, (&RE_ADA[0u64]) as u64, (&RE_ADB[0u64]) as u64, 1u32, out32)
+}

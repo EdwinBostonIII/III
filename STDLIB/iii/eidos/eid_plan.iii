@@ -1,0 +1,72 @@
+/* STDLIB/iii/eidos/eid_plan.iii -- THE EXACT-ALGEBRAIC RIPPLE-GRAPH PLANNER (a consumer of ripple_eidolon).
+ * Given a bag of eidolons it builds the exact total-order graph over them and materialises it as a witnessed ripple
+ * chain in the canonical engine:
+ *   1. DEDUP by exact identity (eid_same): two surd spellings of one value are ONE node.
+ *   2. SORT by exact order (re_cmp = the separation-bound sign): a true total order on the reals, correct even when
+ *      two values differ by 1e-6 -- where a float sort would mis-order.
+ *   3. EMIT the COVERING CHAIN: re_emit(node_i, node_{i+1}) for the ascending order -- each a BELOW ripple; the exact
+ *      Hasse diagram of the order, folded into the engine's witness.
+ * The witness root is then a pure function of the SET (dedup + canonical sort), so the SAME bag in ANY input order
+ * yields the SAME graph -- determinism and identity at the graph level.  Authors nothing; composes re_cmp + re_emit.
+ * Complementary to eidos/weave (the general cost-based ripple-quanta planner); this is the exact-ORDER specialisation. */
+module eidos_eid_plan
+
+extern @abi(c-msvc-x64) fn re_cmp(eidA: u32, eidB: u32) -> i32 from "ripple_eidolon.iii"
+extern @abi(c-msvc-x64) fn re_emit(eidA: u32, eidB: u32, out32: u64) -> i32 from "ripple_eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_same(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn inv_root(out32: u64) -> i32 from "involution.iii"
+
+const EP_CAP : u32 = 64u32
+var EP_SET : [u32; 64]
+var EP_N   : u32 = 0u32
+var EP_OUT : [u8; 32]
+
+fn ep_reset() -> i32 @export { EP_N = 0u32   return 0i32 }
+fn ep_count() -> u32 @export { return EP_N }
+fn ep_node_at(rank: u32) -> u32 @export { return EP_SET[rank as u64] }
+fn ep_root(out32: u64) -> i32 @export { return inv_root(out32) }
+
+fn ep_add(eid: u32) -> i32 @export {
+    if EP_N >= EP_CAP { return 0i32 - 1i32 }
+    EP_SET[EP_N as u64] = eid
+    EP_N = EP_N + 1u32
+    return 0i32
+}
+
+/* build the exact-order graph: dedup -> sort -> emit the covering chain.  Returns the distinct-node count. */
+fn ep_build() -> u32 @export {
+    /* (1) DEDUP by exact identity, compacting kept nodes to the front */
+    let mut k : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < EP_N {
+        let e : u32 = EP_SET[i as u64]
+        let mut dup : u32 = 0u32
+        let mut j : u32 = 0u32
+        while j < k { if eid_same(EP_SET[j as u64], e) == 1u32 { dup = 1u32 }   j = j + 1u32 }
+        if dup == 0u32 { EP_SET[k as u64] = e   k = k + 1u32 }
+        i = i + 1u32
+    }
+    EP_N = k
+    /* (2) SELECTION SORT ascending by exact order (re_cmp) */
+    let mut a : u32 = 0u32
+    while a < k {
+        let mut mn : u32 = a
+        let mut b : u32 = a + 1u32
+        while b < k {
+            let c : i32 = re_cmp(EP_SET[b as u64], EP_SET[mn as u64])   /* +1 => EP_SET[b] < EP_SET[mn] */
+            if c == 1i32 { mn = b }
+            b = b + 1u32
+        }
+        let t : u32 = EP_SET[a as u64]
+        EP_SET[a as u64] = EP_SET[mn as u64]
+        EP_SET[mn as u64] = t
+        a = a + 1u32
+    }
+    /* (3) EMIT the covering chain (each consecutive pair is a BELOW ripple, since ascending) */
+    let mut e : u32 = 0u32
+    while (e + 1u32) < k {
+        re_emit(EP_SET[e as u64], EP_SET[(e + 1u32) as u64], (&EP_OUT[0u64]) as u64)
+        e = e + 1u32
+    }
+    return k
+}

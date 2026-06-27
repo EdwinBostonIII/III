@@ -1,0 +1,48 @@
+/* STDLIB/corpus/2122_lazy_real.iii -- the LAZY EXACT-REAL thesis, falsified by a COUNTED metric.
+ * sqrtsum_lazy_sign resolves a sign on a bigint-free i64 interval (Tier 1) whenever the interval does not straddle 0;
+ * it escalates to the exact separation-bound bigint (Tier 3) only on a straddle or out-of-range input.  The answer is
+ * always identical to the pure-exact ui_sqrt_sum_sign -- but bigint runs only on the rare hard case.
+ * 99 = 12 clearly-nonzero signs decided at hardware speed (no bigint), 3 hard ones (2 exact zeros + 1 large-radicand
+ * near-zero) escalated, ALL correct -- bigint demoted from default to last-resort. */
+module corpus_2122_lazy_real
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_fast_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_exact_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_reset_counts() -> i32 from "sqrt_sum_sign.iii"
+
+var AC : [i64; 8]   var BC : [i64; 8]
+fn q(n: u64) -> i32 { return sqrtsum_lazy_sign((&AC) as u64, (&BC) as u64, n) }
+
+fn main() -> u64 {
+    lazy_reset_counts()
+
+    /* --- 12 clearly-nonzero signs: must resolve on the i64 interval, NO bigint --- */
+    AC[0u64]=5i64   AC[1u64]=0i64-3i64   BC[0u64]=1i64   BC[1u64]=2i64                 if q(2u64) != 1i64 as i32 { return 1u64 }   /* 5-3sqrt2 = +0.76 */
+    AC[0u64]=1i64   AC[1u64]=1i64        BC[0u64]=2i64   BC[1u64]=3i64                 if q(2u64) != 1i32 { return 2u64 }          /* sqrt2+sqrt3 */
+    AC[0u64]=1i64   AC[1u64]=1i64   AC[2u64]=1i64   AC[3u64]=0i64-1i64   BC[0u64]=2i64 BC[1u64]=3i64 BC[2u64]=5i64 BC[3u64]=30i64
+    if q(4u64) != (0i32-1i32) { return 3u64 }                                          /* sqrt2+sqrt3+sqrt5-sqrt30 = -0.095 */
+    AC[0u64]=7i64   AC[1u64]=0i64-5i64   BC[0u64]=2i64   BC[1u64]=3i64                 if q(2u64) != 1i32 { return 4u64 }          /* 7sqrt2-5sqrt3 = +1.24 */
+    AC[0u64]=2i64   AC[1u64]=1i64   AC[2u64]=0i64-1i64   BC[0u64]=1i64 BC[1u64]=2i64 BC[2u64]=3i64   if q(3u64) != 1i32 { return 5u64 }   /* 2+sqrt2-sqrt3 */
+    AC[0u64]=10i64  AC[1u64]=0i64-22i64  BC[0u64]=5i64   BC[1u64]=1i64                 if q(2u64) != 1i32 { return 6u64 }          /* 10sqrt5-22 = +0.36 */
+    AC[0u64]=3i64   AC[1u64]=0i64-8i64   BC[0u64]=7i64   BC[1u64]=1i64                 if q(2u64) != (0i32-1i32) { return 7u64 }   /* 3sqrt7-8 = -0.063 */
+    AC[0u64]=1i64   AC[1u64]=0i64-3i64   BC[0u64]=11i64  BC[1u64]=1i64                 if q(2u64) != 1i32 { return 8u64 }          /* sqrt11-3 = +0.32 */
+    AC[0u64]=4i64   AC[1u64]=0i64-1i64   BC[0u64]=2i64   BC[1u64]=31i64                if q(2u64) != 1i32 { return 9u64 }          /* 4sqrt2-sqrt31 = +0.089 */
+    AC[0u64]=1i64   AC[1u64]=0i64-2i64   BC[0u64]=6i64   BC[1u64]=1i64                 if q(2u64) != 1i32 { return 10u64 }         /* sqrt6-2 = +0.45 */
+    AC[0u64]=6i64   AC[1u64]=0i64-1i64   BC[0u64]=1i64   BC[1u64]=35i64                if q(2u64) != 1i32 { return 11u64 }         /* 6-sqrt35 = +0.084 */
+    AC[0u64]=1i64   AC[1u64]=1i64   AC[2u64]=0i64-1i64   BC[0u64]=13i64 BC[1u64]=17i64 BC[2u64]=59i64   if q(3u64) != 1i32 { return 12u64 }   /* sqrt13+sqrt17-sqrt59 = +0.048 */
+
+    if lazy_fast_count() != 12u64 { return 20u64 }                                     /* all 12 on the fast path */
+    if lazy_exact_count() != 0u64 { return 21u64 }                                     /* bigint never touched */
+
+    /* --- 3 hard signs: must escalate to the exact bigint tier --- */
+    AC[0u64]=1i64   AC[1u64]=1i64   AC[2u64]=0i64-1i64   BC[0u64]=2i64 BC[1u64]=8i64 BC[2u64]=18i64    if q(3u64) != 0i32 { return 13u64 }   /* sqrt2+sqrt8-sqrt18 = 0 EXACTLY */
+    AC[0u64]=2i64   AC[1u64]=0i64-1i64   BC[0u64]=6i64   BC[1u64]=24i64                if q(2u64) != 0i32 { return 14u64 }         /* 2sqrt6-sqrt24 = 0 EXACTLY */
+    AC[0u64]=1i64   AC[1u64]=0i64-1i64   BC[0u64]=10000000000000000i64   BC[1u64]=9999999999999999i64
+    if q(2u64) != 1i32 { return 15u64 }                                                /* sqrt(1e16)-sqrt(1e16-1) ~ +5e-9 */
+
+    if lazy_fast_count() != 12u64 { return 22u64 }                                     /* fast count unchanged */
+    if lazy_exact_count() != 3u64 { return 23u64 }                                     /* exactly 3 bigint escalations */
+
+    return 99u64
+}

@@ -1,0 +1,830 @@
+/* STDLIB/iii/aether/ui_exact.iii -- III-GLASS L2-exact: anti-aliasing the way only III can.  Every geometry
+ * predicate here is an EXACT INTEGER -- the signed-area determinant ui_edge and the squared-distance circle test
+ * never touch a float.  So per-pixel coverage is an EXACT integer count (cnt/n^2, no rounding, no drift), edges
+ * are smoothly anti-aliased, and the SAME integer geometry rasterises identically at ANY resolution (scale the
+ * coords; the predicate stays exact).  A float rasteriser cannot make these guarantees.  KAT 2081 proves the
+ * coverage counts are exact to the unit.  (Next: analytic-rational coverage for the true continuous area, and
+ * bigint coordinates for unbounded resolution -- both categorically impossible in float, both standing here.) */
+module aether_ui_exact
+
+extern @abi(c-msvc-x64) fn ui_blend(buf: u64, w: u32, x: u32, y: u32, argb: u32) -> i32 from "ui_raster.iii"
+
+/* EXACT signed-area determinant: sign = which side of directed line (a->b) the point p is on; |value| = 2*area.
+ * Pure integer; this single exact predicate is why III's coverage is exact where float's is approximate. */
+fn ui_edge(ax: i64, ay: i64, bx: i64, by: i64, px: i64, py: i64) -> i64 @export {
+    return ((bx - ax) * (py - ay)) - ((by - ay) * (px - ax))
+}
+
+/* EXACT coverage of pixel (px,py) by triangle (pixel coords), via n*n integer subsamples.  Returns the exact
+ * inside count in [0, n*n].  Scaling triangle AND subsample centres by s=2n keeps every coord integral, so the
+ * three ui_edge tests stay exact -- the coverage is a true rational cnt/(n*n) with zero float. */
+fn ui_tri_cov(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, px: i64, py: i64, n: i64) -> i64 @export {
+    let s : i64 = n + n
+    let a0x : i64 = x0 * s  let a0y : i64 = y0 * s
+    let a1x : i64 = x1 * s  let a1y : i64 = y1 * s
+    let a2x : i64 = x2 * s  let a2y : i64 = y2 * s
+    let mut cnt : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < n {
+        let sy : i64 = (py * s) + ((j + j) + 1i64)
+        let mut i : i64 = 0i64
+        while i < n {
+            let sx : i64 = (px * s) + ((i + i) + 1i64)
+            let e0 : i64 = ui_edge(a0x, a0y, a1x, a1y, sx, sy)
+            let e1 : i64 = ui_edge(a1x, a1y, a2x, a2y, sx, sy)
+            let e2 : i64 = ui_edge(a2x, a2y, a0x, a0y, sx, sy)
+            let mut inside : u32 = 0u32
+            if e0 >= 0i64 { if e1 >= 0i64 { if e2 >= 0i64 { inside = 1u32 } } }
+            if e0 <= 0i64 { if e1 <= 0i64 { if e2 <= 0i64 { inside = 1u32 } } }
+            if inside == 1u32 { cnt = cnt + 1i64 }
+            i = i + 1i64
+        }
+        j = j + 1i64
+    }
+    return cnt
+}
+
+/* EXACT coverage of pixel (px,py) by a circle centre (cx,cy) radius r -- the inside test is the integer
+ * inequality dx*dx + dy*dy <= (r*s)^2, exact, no sqrt, no float.  A smooth circle with provable coverage. */
+fn ui_circle_cov(cx: i64, cy: i64, r: i64, px: i64, py: i64, n: i64) -> i64 @export {
+    let s   : i64 = n + n
+    let scx : i64 = cx * s
+    let scy : i64 = cy * s
+    let rs  : i64 = r * s
+    let r2  : i64 = rs * rs
+    let mut cnt : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < n {
+        let sy  : i64 = (py * s) + ((j + j) + 1i64)
+        let dy  : i64 = sy - scy
+        let dy2 : i64 = dy * dy
+        let mut i : i64 = 0i64
+        while i < n {
+            let sx : i64 = (px * s) + ((i + i) + 1i64)
+            let dx : i64 = sx - scx
+            let d2 : i64 = (dx * dx) + dy2
+            if d2 <= r2 { cnt = cnt + 1i64 }
+            i = i + 1i64
+        }
+        j = j + 1i64
+    }
+    return cnt
+}
+
+/* anti-aliased triangle fill: each pixel's alpha = src_alpha * coverage / n^2, blended over the framebuffer. */
+fn ui_fill_tri_aa(buf: u64, w: u32, h: u32, x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, color: u32, n: i64) -> i32 @export {
+    let mut minx : i64 = x0  if x1 < minx { minx = x1 }  if x2 < minx { minx = x2 }
+    let mut maxx : i64 = x0  if x1 > maxx { maxx = x1 }  if x2 > maxx { maxx = x2 }
+    let mut miny : i64 = y0  if y1 < miny { miny = y1 }  if y2 < miny { miny = y2 }
+    let mut maxy : i64 = y0  if y1 > maxy { maxy = y1 }  if y2 > maxy { maxy = y2 }
+    if minx < 0i64 { minx = 0i64 }
+    if miny < 0i64 { miny = 0i64 }
+    if maxx > (w as i64) { maxx = w as i64 }
+    if maxy > (h as i64) { maxy = h as i64 }
+    let sa : i64 = ((color >> 24u32) & 255u32) as i64
+    let nn : i64 = n * n
+    let mut py : i64 = miny
+    while py < maxy {
+        let mut px : i64 = minx
+        while px < maxx {
+            let cov : i64 = ui_tri_cov(x0, y0, x1, y1, x2, y2, px, py, n)
+            if cov > 0i64 {
+                let alpha : u32 = ((sa * cov) / nn) as u32
+                ui_blend(buf, w, px as u32, py as u32, (alpha << 24u32) | (color & 16777215u32))
+            }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}
+
+/* EXACT coverage of pixel (px,py) by an arbitrary closed polygon given as `ne` edges (4 i64 each: x0 y0 x1 y1),
+ * via the even-odd rule with an exact-integer crossing test -- the foundation of vector glyphs (a glyph is a
+ * filled outline, holes and all).  Scaling edges + subsample by s=2n keeps the ray/edge intersection exact. */
+fn ui_poly_cov(ex: u64, ne: u32, px: i64, py: i64, n: i64) -> i64 @export {
+    let s : i64 = n + n
+    let mut cnt : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < n {
+        let sy : i64 = (py * s) + ((j + j) + 1i64)
+        let mut i : i64 = 0i64
+        while i < n {
+            let sx : i64 = (px * s) + ((i + i) + 1i64)
+            let mut cross : u32 = 0u32
+            let mut k : u32 = 0u32
+            while k < ne {
+                let p  : *i64 = (ex + ((k as u64) * 32u64)) as *i64
+                let y0 : i64 = p[1u64] * s
+                let y1 : i64 = p[3u64] * s
+                let mut a0 : u32 = 0u32  if y0 > sy { a0 = 1u32 }
+                let mut a1 : u32 = 0u32  if y1 > sy { a1 = 1u32 }
+                if a0 != a1 {
+                    let x0 : i64 = p[0u64] * s
+                    let x1 : i64 = p[2u64] * s
+                    let lhs : i64 = (sx - x0) * (y1 - y0)
+                    let rhs : i64 = (sy - y0) * (x1 - x0)
+                    if y1 > y0 { if lhs < rhs { cross = cross + 1u32 } }
+                    if y1 < y0 { if lhs > rhs { cross = cross + 1u32 } }
+                }
+                k = k + 1u32
+            }
+            if (cross & 1u32) == 1u32 { cnt = cnt + 1i64 }
+            i = i + 1i64
+        }
+        j = j + 1i64
+    }
+    return cnt
+}
+
+/* anti-aliased fill of an arbitrary outline (the vector-glyph primitive). */
+fn ui_fill_poly_aa(buf: u64, w: u32, h: u32, ex: u64, ne: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32, n: i64) -> i32 @export {
+    let mut x0 : i64 = minx  if x0 < 0i64 { x0 = 0i64 }
+    let mut y0 : i64 = miny  if y0 < 0i64 { y0 = 0i64 }
+    let mut x1 : i64 = maxx  if x1 > (w as i64) { x1 = w as i64 }
+    let mut y1 : i64 = maxy  if y1 > (h as i64) { y1 = h as i64 }
+    let sa : i64 = ((color >> 24u32) & 255u32) as i64
+    let nn : i64 = n * n
+    let mut py : i64 = y0
+    while py < y1 {
+        let mut px : i64 = x0
+        while px < x1 {
+            let cov : i64 = ui_poly_cov(ex, ne, px, py, n)
+            if cov > 0i64 {
+                let alpha : u32 = ((sa * cov) / nn) as u32
+                ui_blend(buf, w, px as u32, py as u32, (alpha << 24u32) | (color & 16777215u32))
+            }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}
+
+/* === EXACT polygon geometry (NO subsampling) -- the TRUE area + lattice pixel-count of any integer polygon, via
+ * shoelace + Pick's theorem.  The subsampled ui_tri_cov/ui_poly_cov only APPROXIMATE coverage at n*n samples; THIS
+ * is exact.  2*area = the signed shoelace sum (exact integer); B = boundary lattice points = sum of gcd over edges;
+ * Pick's theorem A = I + B/2 - 1 => the EXACT interior+boundary lattice-point count is (|2A| + B)/2 + 1 (2A+B is
+ * always even, so the division is exact).  This is the "triangle's pixels" computed exactly, not estimated. */
+fn ui_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0  if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0  if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = b  b = a - ((a / b) * b)  a = t }   /* a mod b without the modulo trap */
+    return a
+}
+fn ui_shoelace2(xs: u64, ys: u64, n: u32) -> i64 @export {
+    let px : *i64 = xs as *i64
+    let py : *i64 = ys as *i64
+    let mut s : i64 = 0i64
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32  if j == n { j = 0u32 }
+        s = s + ((px[i as u64] * py[j as u64]) - (px[j as u64] * py[i as u64]))
+        i = i + 1u32
+    }
+    return s
+}
+fn ui_boundary_pts(xs: u64, ys: u64, n: u32) -> i64 @export {
+    let px : *i64 = xs as *i64
+    let py : *i64 = ys as *i64
+    let mut b : i64 = 0i64
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32  if j == n { j = 0u32 }
+        b = b + ui_gcd(px[j as u64] - px[i as u64], py[j as u64] - py[i as u64])
+        i = i + 1u32
+    }
+    return b
+}
+/* THE EXACT pixel coverage of an integer polygon: interior + boundary lattice points (Pick), no sampling. */
+fn ui_lattice_cover(xs: u64, ys: u64, n: u32) -> i64 @export {
+    let mut a2 : i64 = ui_shoelace2(xs, ys, n)
+    if a2 < 0i64 { a2 = 0i64 - a2 }
+    let b : i64 = ui_boundary_pts(xs, ys, n)
+    return ((a2 + b) / 2i64) + 1i64
+}
+
+/* ============================================================================================================
+ * EXACT ANALYTIC ANTI-ALIASING -- the TRUE area(pixel ∩ CCW convex polygon), no subsampling, no rounding.
+ * Clip the unit pixel against each polygon edge by Sutherland-Hodgman in HOMOGENEOUS INTEGER coordinates: every
+ * intersection is the exact cross product e0*P1 - e1*P0 (integer, division-free), gcd-reduced after each clip so
+ * i64 stays bounded; the only division is the final exact rational shoelace.  ui_exact_cover2 leaves 2*area in
+ * AA_NUM/AA_DEN (reduced); the coverage is AA_NUM/(2*AA_DEN) in [0,1].  Polygon MUST be CCW (interior left of each
+ * directed edge).  This is the perfect AA the subsampled ui_poly_cov only approximates. */
+var AA_SX : [i64; 24]   var AA_SY : [i64; 24]   var AA_SW : [i64; 24]
+var AA_OX : [i64; 24]   var AA_OY : [i64; 24]   var AA_OW : [i64; 24]
+var AA_NUM : i64 = 0i64   var AA_DEN : i64 = 1i64
+var AA_OVF : u32 = 0u32    /* sticky overflow latch -- a wrapped product must NEVER silently certify a wrong area */
+
+fn aa_g3(a: i64, b: i64, c: i64) -> i64 { return ui_gcd(ui_gcd(a, b), c) }
+/* checked i64 multiply: latches AA_OVF if a*b wraps, so a too-large polygon REFUSES (coverage 0) rather than lying. */
+fn aa_mulck(a: i64, b: i64) -> i64 {
+    let p : i64 = a * b
+    if a != 0i64 { if (p / a) != b { AA_OVF = 1u32 } }
+    return p
+}
+fn ui_aa_ovf() -> u32 @export { return AA_OVF }
+
+/* clip AA_S[0..n) against the half-plane to the LEFT of directed edge (ax,ay)->(bx,by); write AA_O, return count. */
+fn aa_clip(n: u32, ax: i64, ay: i64, bx: i64, by: i64) -> u32 {
+    let ex : i64 = bx - ax
+    let ey : i64 = by - ay
+    let mut o : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32  if j == n { j = 0u32 }
+        let x0 : i64 = AA_SX[i as u64]  let y0 : i64 = AA_SY[i as u64]  let w0 : i64 = AA_SW[i as u64]
+        let x1 : i64 = AA_SX[j as u64]  let y1 : i64 = AA_SY[j as u64]  let w1 : i64 = AA_SW[j as u64]
+        let e0 : i64 = aa_mulck(ex, (y0 - aa_mulck(ay, w0))) - aa_mulck(ey, (x0 - aa_mulck(ax, w0)))   /* edge fn at P0 (*W) */
+        let e1 : i64 = aa_mulck(ex, (y1 - aa_mulck(ay, w1))) - aa_mulck(ey, (x1 - aa_mulck(ax, w1)))
+        let mut s0 : u32 = 0u32  if e0 >= 0i64 { s0 = 1u32 }
+        let mut s1 : u32 = 0u32  if e1 >= 0i64 { s1 = 1u32 }
+        if s0 == 1u32 { if o < 24u32 { AA_OX[o as u64] = x0  AA_OY[o as u64] = y0  AA_OW[o as u64] = w0  o = o + 1u32 } }
+        if s0 != s1 {
+            let mut ix : i64 = aa_mulck(e0, x1) - aa_mulck(e1, x0)   /* exact homogeneous intersection on the edge line */
+            let mut iy : i64 = aa_mulck(e0, y1) - aa_mulck(e1, y0)
+            let mut iw : i64 = aa_mulck(e0, w1) - aa_mulck(e1, w0)
+            if iw < 0i64 { ix = 0i64 - ix  iy = 0i64 - iy  iw = 0i64 - iw }
+            let g : i64 = aa_g3(ix, iy, iw)
+            if g > 1i64 { ix = ix / g  iy = iy / g  iw = iw / g }
+            if o < 24u32 { AA_OX[o as u64] = ix  AA_OY[o as u64] = iy  AA_OW[o as u64] = iw  o = o + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return o
+}
+fn aa_o2s(n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n { AA_SX[i as u64] = AA_OX[i as u64]  AA_SY[i as u64] = AA_OY[i as u64]  AA_SW[i as u64] = AA_OW[i as u64]  i = i + 1u32 }
+    return 0i32
+}
+/* exact |2*area| of AA_S[0..n) (homogeneous) as the reduced rational AA_NUM/AA_DEN. */
+fn aa_area2(n: u32) -> i32 {
+    let mut num : i64 = 0i64
+    let mut den : i64 = 1i64
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32  if j == n { j = 0u32 }
+        let tn : i64 = aa_mulck(AA_SX[i as u64], AA_SY[j as u64]) - aa_mulck(AA_SX[j as u64], AA_SY[i as u64])
+        let td : i64 = aa_mulck(AA_SW[i as u64], AA_SW[j as u64])
+        let nn : i64 = aa_mulck(num, td) + aa_mulck(tn, den)
+        let nd : i64 = aa_mulck(den, td)
+        let g  : i64 = ui_gcd(nn, nd)
+        num = nn  den = nd
+        if g > 1i64 { num = num / g  den = den / g }
+        i = i + 1u32
+    }
+    if num < 0i64 { num = 0i64 - num }
+    AA_NUM = num  AA_DEN = den
+    return 0i32
+}
+/* THE EXACT COVERAGE: leaves 2*area(pixel(px,py) ∩ CCW polygon vx,vy[0..nv)) in AA_NUM/AA_DEN. */
+fn ui_exact_cover2(vx: u64, vy: u64, nv: u32, px: i64, py: i64) -> i32 @export {
+    AA_OVF = 0u32
+    AA_SX[0u64] = px         AA_SY[0u64] = py         AA_SW[0u64] = 1i64
+    AA_SX[1u64] = px + 1i64  AA_SY[1u64] = py         AA_SW[1u64] = 1i64
+    AA_SX[2u64] = px + 1i64  AA_SY[2u64] = py + 1i64  AA_SW[2u64] = 1i64
+    AA_SX[3u64] = px         AA_SY[3u64] = py + 1i64  AA_SW[3u64] = 1i64
+    let mut n : u32 = 4u32
+    let pvx : *i64 = vx as *i64
+    let pvy : *i64 = vy as *i64
+    let mut k : u32 = 0u32
+    while k < nv {
+        if n >= 3u32 {
+            let mut m : u32 = k + 1u32  if m == nv { m = 0u32 }
+            let on : u32 = aa_clip(n, pvx[k as u64], pvy[k as u64], pvx[m as u64], pvy[m as u64])
+            aa_o2s(on)
+            n = on
+        }
+        k = k + 1u32
+    }
+    if n < 3u32 { AA_NUM = 0i64  AA_DEN = 1i64  return 0i32 }
+    aa_area2(n)
+    if AA_OVF == 1u32 { AA_NUM = 0i64  AA_DEN = 1i64 }   /* overflow -> REFUSE (0 coverage), never a wrong area */
+    return 0i32
+}
+fn ui_aa_num() -> i64 @export { return AA_NUM }
+fn ui_aa_den() -> i64 @export { return AA_DEN }
+
+/* the EXACT pixel alpha: src_alpha * coverage = sa * AA_NUM/(2*AA_DEN), the only quantisation being the final
+ * floor to the display's 8-bit alpha.  Full pixel -> sa; half -> sa/2; exactly, no subsampling noise. */
+fn ui_exact_alpha(vx: u64, vy: u64, nv: u32, px: i64, py: i64, sa: u32) -> u32 @export {
+    ui_exact_cover2(vx, vy, nv, px, py)
+    if AA_NUM <= 0i64 { return 0u32 }
+    let a : i64 = ((sa as i64) * AA_NUM) / (2i64 * AA_DEN)
+    return a as u32
+}
+/* PERFECT-AA convex-polygon fill: every edge pixel gets its EXACT analytic coverage, not an n*n estimate. */
+fn ui_fill_tri_exact(buf: u64, w: u32, h: u32, vx: u64, vy: u64, nv: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32) -> i32 @export {
+    let sa  : u32 = (color >> 24u32) & 255u32
+    let rgbp: u32 = color & 16777215u32
+    let mut x0 : i64 = minx  if x0 < 0i64 { x0 = 0i64 }
+    let mut y0 : i64 = miny  if y0 < 0i64 { y0 = 0i64 }
+    let mut x1 : i64 = maxx  if x1 > (w as i64) { x1 = w as i64 }
+    let mut y1 : i64 = maxy  if y1 > (h as i64) { y1 = h as i64 }
+    let mut py : i64 = y0
+    while py < y1 {
+        let mut px : i64 = x0
+        while px < x1 {
+            let al : u32 = ui_exact_alpha(vx, vy, nv, px, py, sa)
+            if al > 0u32 { ui_blend(buf, w, px as u32, py as u32, (al << 24u32) | rgbp) }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}
+
+/* ============================================================================================================
+ * EXACT analytic AA for a GENERAL polygon -- non-convex, AND multiple contours (holes).  Given as `ne` edges
+ * (4 i64 each: ax ay bx by), the coverage is the SIGNED-FAN sum (proven identity: the fan from the origin O equals
+ * the winding number):  area(pixel ∩ polygon) = sum over edges of  sign(cross(A,B)) * |area(pixel ∩ triangle(O,A,B))|.
+ * Each |area| is the convex-triangle clip already proven (ui_exact_cover2); a CW hole contour contributes negative
+ * area and is excluded.  Net 2*area in AA_NUM/AA_DEN; AA_OVF latches (refuse 0) on any i64 wrap anywhere in the sum. */
+var POLY3X : [i64; 4]   var POLY3Y : [i64; 4]
+fn ui_exact_cover_edges(ex: u64, ne: u32, px: i64, py: i64) -> i32 @export {
+    let pe : *i64 = ex as *i64
+    /* TRANSLATE to the shape's local origin (min edge coord).  Coverage is translation-invariant, so this is exact;
+     * but it bounds the origin->shape fan wedge coords to the shape's EXTENT regardless of absolute position -- a
+     * glyph at screen/zoomed coordinates (1e3..1e9) stays inside i64 instead of silently overflowing to coverage 0
+     * (the shape vanishing).  Load-bearing, not cosmetic (see 2098 extreme-coords arm). */
+    let mut ox : i64 = pe[0u64]
+    let mut oy : i64 = pe[1u64]
+    let mut t : u32 = 0u32
+    while t < ne {
+        let tb : u64 = (t as u64) * 4u64
+        if pe[tb] < ox { ox = pe[tb] }
+        if pe[tb + 1u64] < oy { oy = pe[tb + 1u64] }
+        if pe[tb + 2u64] < ox { ox = pe[tb + 2u64] }
+        if pe[tb + 3u64] < oy { oy = pe[tb + 3u64] }
+        t = t + 1u32
+    }
+    let lpx : i64 = px - ox
+    let lpy : i64 = py - oy
+    let mut povf : u32 = 0u32
+    let mut sn : i64 = 0i64
+    let mut sd : i64 = 1i64
+    let mut k : u32 = 0u32
+    while k < ne {
+        let base : u64 = (k as u64) * 4u64
+        let ax : i64 = pe[base] - ox          let ay : i64 = pe[base + 1u64] - oy
+        let bx : i64 = pe[base + 2u64] - ox   let by : i64 = pe[base + 3u64] - oy
+        AA_OVF = 0u32
+        let cr : i64 = aa_mulck(ax, by) - aa_mulck(bx, ay)        /* sign of triangle(O,A,B) orientation */
+        if AA_OVF == 1u32 { povf = 1u32 }
+        if cr != 0i64 {
+            if cr > 0i64 { POLY3X[0u64] = 0i64  POLY3Y[0u64] = 0i64  POLY3X[1u64] = ax  POLY3Y[1u64] = ay  POLY3X[2u64] = bx  POLY3Y[2u64] = by }
+            if cr < 0i64 { POLY3X[0u64] = 0i64  POLY3Y[0u64] = 0i64  POLY3X[1u64] = bx  POLY3Y[1u64] = by  POLY3X[2u64] = ax  POLY3Y[2u64] = ay }
+            ui_exact_cover2(&POLY3X as u64, &POLY3Y as u64, 3u32, lpx, lpy)   /* |2*area| of LOCAL pixel ∩ this wedge */
+            if AA_OVF == 1u32 { povf = 1u32 }
+            let mut tn : i64 = AA_NUM
+            let td : i64 = AA_DEN
+            if cr < 0i64 { tn = 0i64 - tn }                       /* signed by the wedge orientation */
+            AA_OVF = 0u32
+            let nn : i64 = aa_mulck(sn, td) + aa_mulck(tn, sd)    /* sn/sd += tn/td */
+            let nd : i64 = aa_mulck(sd, td)
+            if AA_OVF == 1u32 { povf = 1u32 }
+            let g : i64 = ui_gcd(nn, nd)
+            sn = nn  sd = nd
+            if g > 1i64 { sn = sn / g  sd = sd / g }
+        }
+        k = k + 1u32
+    }
+    if povf == 1u32 { AA_OVF = 1u32  AA_NUM = 0i64  AA_DEN = 1i64  return 0i32 }
+    if sn < 0i64 { sn = 0i64 - sn }                              /* net coverage is positive */
+    AA_OVF = 0u32
+    AA_NUM = sn  AA_DEN = sd
+    return 0i32
+}
+
+/* ============================================================================================================
+ * EXACT BEZIER AREA -- the signed area contribution of a curved boundary segment by Green's theorem (A = 1/2 *
+ * integral (x dy - y dx)), evaluated in closed form over t in [0,1] (RATIONAL bounds -> EXACT, no flattening).
+ * Derived from 2A = sum_{i<j} (j-i)/(i+j) * crossA(i,j) on the curve's monomial coeffs; each returns 60*A as an
+ * EXACT integer (60 = lcm of the line/quadratic/cubic denominators, so segments of any type SUM in one unit).
+ * The exact AREA of a Bezier-bounded glyph = sum of its segment contributions / 60.
+ * THE BOUNDARY IS ALGEBRAIC, NOT LOST: a curve<->edge crossing is a root t=(-b±sqrt(D))/2a -- IRRATIONAL, but an
+ * exact ALGEBRAIC number in Q(sqrt D).  III is the system that finds the real number: it computes the crossing
+ * exactly and compares it to any rational with a PROVEN sign by integer arithmetic (ui_bez_cross_x + ui_alg_cmp,
+ * below), where a float is ambiguous at the boundary.  So a curve's per-pixel coverage is exact-ALGEBRAIC -- NOT
+ * flattened, NOT float-rounded.  This AREA is the rational core; the algebraic crossings carry the curved edge. */
+var BZ_AX : [i64; 4]   var BZ_AY : [i64; 4]
+fn ui_aa_reset() -> i32 @export { AA_OVF = 0u32  return 0i32 }
+fn bz_ca(i: u64, j: u64) -> i64 { return aa_mulck(BZ_AX[i], BZ_AY[j]) - aa_mulck(BZ_AY[i], BZ_AX[j]) }
+
+/* line segment P0->P1: 60*A = 30 * cross(P0,P1). */
+fn ui_line_area_s(x0: i64, y0: i64, x1: i64, y1: i64) -> i64 @export {
+    return 30i64 * (aa_mulck(x0, y1) - aa_mulck(x1, y0))
+}
+/* QUADRATIC Bezier P0,P1,P2: 60*A = 30 caA(0,1) + 30 caA(0,2) + 10 caA(1,2). */
+fn ui_quad_area_s(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64) -> i64 @export {
+    BZ_AX[0u64] = x0   BZ_AX[1u64] = 2i64 * (x1 - x0)   BZ_AX[2u64] = (x0 - (2i64 * x1)) + x2
+    BZ_AY[0u64] = y0   BZ_AY[1u64] = 2i64 * (y1 - y0)   BZ_AY[2u64] = (y0 - (2i64 * y1)) + y2
+    return (30i64 * bz_ca(0u64, 1u64)) + (30i64 * bz_ca(0u64, 2u64)) + (10i64 * bz_ca(1u64, 2u64))
+}
+/* CUBIC Bezier P0,P1,P2,P3: 60*A = 30(caA(0,1)+caA(0,2)+caA(0,3)) + 10 caA(1,2) + 15 caA(1,3) + 6 caA(2,3). */
+fn ui_cubic_area_s(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i64 @export {
+    BZ_AX[0u64] = x0
+    BZ_AX[1u64] = 3i64 * (x1 - x0)
+    BZ_AX[2u64] = 3i64 * ((x0 - (2i64 * x1)) + x2)
+    BZ_AX[3u64] = (((0i64 - x0) + (3i64 * x1)) - (3i64 * x2)) + x3
+    BZ_AY[0u64] = y0
+    BZ_AY[1u64] = 3i64 * (y1 - y0)
+    BZ_AY[2u64] = 3i64 * ((y0 - (2i64 * y1)) + y2)
+    BZ_AY[3u64] = (((0i64 - y0) + (3i64 * y1)) - (3i64 * y2)) + y3
+    return (30i64 * (bz_ca(0u64, 1u64) + bz_ca(0u64, 2u64) + bz_ca(0u64, 3u64))) + (10i64 * bz_ca(1u64, 2u64)) + (15i64 * bz_ca(1u64, 3u64)) + (6i64 * bz_ca(2u64, 3u64))
+}
+
+/* ============================================================================================================
+ * EXACT ALGEBRAIC NUMBERS (degree 2, Q(sqrt D)) -- III FINDS THE REAL NUMBER, not a float.  A quadratic Bezier
+ * crosses a vertical line x=cval where B_x(t)=cval is a quadratic in t; the root t_c=(a+sqrt D)/c is an exact
+ * ALGEBRAIC number (a=-ax1, c=2 ax2, D=ax1^2-4 ax2 (ax0-cval)).  It is irrational, but III computes it exactly and
+ * compares it to any rational with a PROVEN sign by integer arithmetic -- where a float is ambiguous at the bit. */
+var QX_A : i64   var QX_C : i64   var QX_D : i64    /* the last crossing: t_c = (QX_A + sqrt QX_D) / QX_C */
+
+/* sign of (a + sqrt D)/c - rn/rd, with c != 0, rd > 0, D >= 0.  Returns -1/0/+1 -- EXACT (no float).
+ * = sign(N)*sign(c), N = M + rd*sqrt D, M = a*rd - rn*c; for M<0 compare rd^2 D vs M^2 (integers). */
+fn ui_alg_cmp(a: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    let m : i64 = aa_mulck(a, rd) - aa_mulck(rn, c)
+    let mut sN : i32 = 0i32
+    if m > 0i64 { sN = 1i32 }
+    if m == 0i64 { if dD > 0i64 { sN = 1i32 } }
+    if m < 0i64 {
+        let lhs : i64 = aa_mulck(aa_mulck(rd, rd), dD)
+        let rhs : i64 = aa_mulck(m, m)
+        if lhs > rhs { sN = 1i32 }
+        if lhs < rhs { sN = -1i32 }
+    }
+    if c < 0i64 { return 0i32 - sN }
+    return sN
+}
+/* the exact crossing of B_x (monomial ax0,ax1,ax2) with x=cval -> QX_A,QX_C,QX_D.  1 iff a real crossing exists. */
+fn ui_bez_cross_x(ax0: i64, ax1: i64, ax2: i64, cval: i64) -> u32 @export {
+    if ax2 == 0i64 { return 0u32 }
+    let dD : i64 = aa_mulck(ax1, ax1) - aa_mulck(4i64 * ax2, ax0 - cval)
+    if dD < 0i64 { return 0u32 }
+    QX_A = 0i64 - ax1
+    QX_C = 2i64 * ax2
+    QX_D = dD
+    return 1u32
+}
+fn ui_qx_a() -> i64 @export { return QX_A }
+fn ui_qx_c() -> i64 @export { return QX_C }
+fn ui_qx_d() -> i64 @export { return QX_D }
+/* VERIFY the algebraic crossing is an EXACT root: B_x(t_c) == cval, the sqrt D part CANCELLING.  Substituting
+ * t_c=(a+sqrt D)/c gives B_x = (RN + SN*sqrt D)/c^2 with SN = ax1 c + 2 a ax2 and RN = ax0 c^2 + ax1 a c + ax2(a^2+D);
+ * a true root iff SN==0 AND RN == cval*c^2.  Returns 1 iff exact (checks the Q(sqrt D) arithmetic, not just the math). */
+fn ui_bez_root_ok(ax0: i64, ax1: i64, ax2: i64, cval: i64) -> u32 @export {
+    if ui_bez_cross_x(ax0, ax1, ax2, cval) != 1u32 { return 0u32 }
+    let a : i64 = QX_A   let c : i64 = QX_C   let dD : i64 = QX_D
+    let c2 : i64 = aa_mulck(c, c)
+    let rn : i64 = aa_mulck(ax0, c2) + aa_mulck(aa_mulck(ax1, a), c) + aa_mulck(ax2, aa_mulck(a, a) + dD)
+    let sn : i64 = aa_mulck(ax1, c) + aa_mulck(2i64 * a, ax2)
+    if sn != 0i64 { return 0u32 }
+    if rn != aa_mulck(cval, c2) { return 0u32 }
+    return 1u32
+}
+
+/* === UNBOUNDED-PRECISION ordering via 128-bit integers -- EXACT where a double (53-bit mantissa, ~16 digits) is at
+ * its last bit.  At 17-digit rationals rd^2*D and M^2 are ~118 bits and fit one 128-bit product M128_HI:M128_LO.
+ * This is III deciding an irrational-vs-rational order a float physically CANNOT represent the difference of. */
+var M128_HI : u64   var M128_LO : u64
+fn mul128(a: u64, b: u64) -> i32 @export {
+    let al : u64 = a & 4294967295u64   let ah : u64 = a >> 32u64
+    let bl : u64 = b & 4294967295u64   let bh : u64 = b >> 32u64
+    let ll : u64 = al * bl
+    let lh : u64 = al * bh
+    let hl : u64 = ah * bl
+    let hh : u64 = ah * bh
+    let cross : u64 = (ll >> 32u64) + (lh & 4294967295u64) + (hl & 4294967295u64)
+    M128_LO = (ll & 4294967295u64) | (cross << 32u64)
+    M128_HI = ((hh + (lh >> 32u64)) + (hl >> 32u64)) + (cross >> 32u64)
+    return 0i32
+}
+fn ui_m128_hi() -> u64 @export { return M128_HI }
+fn ui_m128_lo() -> u64 @export { return M128_LO }
+/* sign of (a+sqrt D)/c - rn/rd at 128-bit (rd^2 D = rd*(rd*D), M^2 = |M|^2) -- exact to ~18 digits, beats a double. */
+fn ui_alg_cmp_128(a: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    let m : i64 = (a * rd) - (rn * c)
+    let mut sN : i32 = 0i32
+    if m > 0i64 { sN = 1i32 }
+    if m == 0i64 { if dD > 0i64 { sN = 1i32 } }
+    if m < 0i64 {
+        let am : u64 = (0i64 - m) as u64
+        mul128(rd as u64, (rd * dD) as u64)
+        let lh : u64 = M128_HI   let ll : u64 = M128_LO
+        mul128(am, am)
+        let rh : u64 = M128_HI   let rl : u64 = M128_LO
+        if lh > rh { sN = 1i32 }
+        if lh < rh { sN = 0i32 - 1i32 }
+        if lh == rh { if ll > rl { sN = 1i32 }   if ll < rl { sN = 0i32 - 1i32 } }
+    }
+    if c < 0i64 { return 0i32 - sN }
+    return sN
+}
+
+/* === EXACT ALGEBRAIC AREA-AT-CROSSING -- the curved-coverage primitive.  G(t)=integral y(s) x'(s) ds is the area
+ * under the quadratic Bezier; at the algebraic crossing t_c=(a+sqrt D)/c, G(t_c) is an exact element of Q(sqrt D).
+ * 6*G(t) = 6g1 t + 6g2 t^2 + 6g3 t^3 + 6g4 t^4 (integer coeffs; 6 = lcm of the integration denominators 1,2,3,2),
+ * and the powers t_c^k have closed (P_k + Q_k sqrt D)/c^k forms, so G(t_c) = (P + Q sqrt D)/(6 c^4), gcd-reduced. */
+var AREA_P : i64   var AREA_Q : i64   var AREA_DEN : i64   var AREA_D : i64
+fn ui_bez_area_at_x(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, cval: i64) -> u32 @export {
+    if ui_bez_cross_x(ax0, ax1, ax2, cval) != 1u32 { return 0u32 }
+    let a : i64 = QX_A   let c : i64 = QX_C   let dD : i64 = QX_D
+    let g1 : i64 = 6i64 * aa_mulck(ay0, ax1)
+    let g2 : i64 = 3i64 * (aa_mulck(2i64 * ay0, ax2) + aa_mulck(ay1, ax1))
+    let g3 : i64 = 2i64 * (aa_mulck(2i64 * ay1, ax2) + aa_mulck(ay2, ax1))
+    let g4 : i64 = 3i64 * aa_mulck(ay2, ax2)
+    let a2 : i64 = aa_mulck(a, a)
+    let aD : i64 = aa_mulck(a, dD)
+    let c2 : i64 = aa_mulck(c, c)   let c3 : i64 = aa_mulck(c2, c)   let c4 : i64 = aa_mulck(c2, c2)
+    let p2 : i64 = a2 + dD                       let q2 : i64 = 2i64 * a
+    let p3 : i64 = aa_mulck(a2, a) + (3i64 * aD) let q3 : i64 = (3i64 * a2) + dD
+    let p4 : i64 = (aa_mulck(a2, a2) + (6i64 * aa_mulck(a2, dD))) + aa_mulck(dD, dD)   let q4 : i64 = (4i64 * aa_mulck(a2, a)) + (4i64 * aD)
+    let pp : i64 = ((aa_mulck(aa_mulck(g1, c3), a) + aa_mulck(aa_mulck(g2, c2), p2)) + aa_mulck(aa_mulck(g3, c), p3)) + aa_mulck(g4, p4)
+    let qq : i64 = ((aa_mulck(g1, c3) + aa_mulck(aa_mulck(g2, c2), q2)) + aa_mulck(aa_mulck(g3, c), q3)) + aa_mulck(g4, q4)
+    let den : i64 = 6i64 * c4
+    let mut p : i64 = pp   let mut q : i64 = qq   let mut d : i64 = den
+    if d < 0i64 { p = 0i64 - p   q = 0i64 - q   d = 0i64 - d }
+    let g : i64 = aa_g3(p, q, d)
+    if g > 1i64 { p = p / g   q = q / g   d = d / g }
+    AREA_P = p   AREA_Q = q   AREA_DEN = d   AREA_D = dD
+    return 1u32
+}
+fn ui_area_p() -> i64 @export { return AREA_P }
+fn ui_area_q() -> i64 @export { return AREA_Q }
+fn ui_area_den() -> i64 @export { return AREA_DEN }
+fn ui_area_d() -> i64 @export { return AREA_D }
+
+/* === MONOTONE SPLITTING -- split a Bezier at its extrema (B'(t)=0) so every sub-arc is monotone in x AND y, hence
+ * meets any vertical/horizontal pixel scanline AT MOST ONCE.  Then each pixel sees a single clean arc (one entry,
+ * one exit), the coverage is the area-at-crossing, and the exact alpha is a bracketed refinement of the SINGLE-D
+ * crossings -- no bi-quadratic field.  For a QUADRATIC Bezier the extremum t* = -a1/(2 a2) is RATIONAL (exact split
+ * point); EXT_NUM/EXT_DEN = t* reduced (den>0).  Returns 1 iff t* in (0,1) (a real split is needed). */
+var EXT_NUM : i64   var EXT_DEN : i64
+fn ui_bez_ext_t(a1: i64, a2: i64) -> u32 @export {
+    if a2 == 0i64 { EXT_NUM = 0i64   EXT_DEN = 1i64   return 0u32 }   /* linear coordinate -> already monotone */
+    let mut n : i64 = 0i64 - a1
+    let mut d : i64 = 2i64 * a2
+    if d < 0i64 { n = 0i64 - n   d = 0i64 - d }
+    let g : i64 = ui_gcd(n, d)
+    if g > 1i64 { n = n / g   d = d / g }
+    EXT_NUM = n   EXT_DEN = d
+    if n <= 0i64 { return 0u32 }       /* extremum <= 0 -> monotone on [0,1] */
+    if n >= d { return 0u32 }          /* extremum >= 1 -> monotone on [0,1] */
+    return 1u32                        /* split at t* = n/d in (0,1) */
+}
+fn ui_ext_num() -> i64 @export { return EXT_NUM }
+fn ui_ext_den() -> i64 @export { return EXT_DEN }
+
+/* === THE EXACT 8-BIT ALPHA -- the capstone.  A monotone arc's per-pixel coverage is the area-at-crossing
+ * (P + Q sqrt D)/DEN, an algebraic number.  The displayed alpha = round(sa * coverage) is found by a PROVEN-SIGN
+ * binary search over the 256 buckets -- so the pixel value is the CORRECTLY-ROUNDED real number, never a float guess. */
+/* sign of (P + Q sqrt D)/DEN - rn/rd, EXACT.  = sign(M + S sqrt D)*sign(DEN), M=P rd - rn DEN, S=Q rd, rd>0, D>=0. */
+fn ui_alg_cmp_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    let m : i64 = aa_mulck(pp, rd) - aa_mulck(rn, den)
+    let s : i64 = aa_mulck(qq, rd)
+    let mut sN : i32 = 0i32
+    if s == 0i64 {
+        if m > 0i64 { sN = 1i32 }
+        if m < 0i64 { sN = 0i32 - 1i32 }
+    }
+    if s > 0i64 {
+        if m >= 0i64 { sN = 1i32   if m == 0i64 { if dD == 0i64 { sN = 0i32 } } }
+        if m < 0i64 {
+            let lhs : i64 = aa_mulck(aa_mulck(s, s), dD)
+            let rhs : i64 = aa_mulck(m, m)
+            if lhs > rhs { sN = 1i32 }
+            if lhs < rhs { sN = 0i32 - 1i32 }
+        }
+    }
+    if s < 0i64 {
+        if m <= 0i64 { sN = 0i32 - 1i32   if m == 0i64 { if dD == 0i64 { sN = 0i32 } } }
+        if m > 0i64 {
+            let lhs : i64 = aa_mulck(m, m)
+            let rhs : i64 = aa_mulck(aa_mulck(s, s), dD)
+            if lhs > rhs { sN = 1i32 }
+            if lhs < rhs { sN = 0i32 - 1i32 }
+        }
+    }
+    if den < 0i64 { return 0i32 - sN }
+    return sN
+}
+/* round(sa * (P+Q sqrt D)/DEN) -- the EXACT alpha.  Largest k in [0,sa] with 2*sa*coverage >= 2k-1. */
+fn ui_alg_alpha(pp: i64, qq: i64, den: i64, dD: i64, sa: i64) -> i64 @export {
+    let p2 : i64 = aa_mulck(2i64 * sa, pp)
+    let q2 : i64 = aa_mulck(2i64 * sa, qq)
+    let mut lo : i64 = 0i64
+    let mut hi : i64 = sa
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        if ui_alg_cmp_g(p2, q2, den, dD, (2i64 * mid) - 1i64, 1i64) >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* === INTERVAL REFINEMENT -- bracket the algebraic crossing t_c=(a+sqrt D)/c in a RATIONAL interval [lo,hi] of
+ * width 1/2^k by bisection driven by the PROVEN-SIGN comparison.  This is the render's coverage engine: the exact
+ * per-pixel coverage is a polynomial in the crossings, so bracketing the crossings (rational) and evaluating the
+ * area at those bounds gives a rational coverage bracket, tightened until the 8-bit alpha is pinned -- exact, no
+ * bi-quadratic field, no float.  Assumes t_c in [0,1] (a crossing in the curve's parameter range). */
+var BR_LO_N : i64   var BR_LO_D : i64   var BR_HI_N : i64   var BR_HI_D : i64
+fn ui_bez_cross_bracket(a: i64, c: i64, dD: i64, k: u32) -> i32 @export {
+    let mut lo : i64 = 0i64   let mut hi : i64 = 1i64   let mut den : i64 = 1i64   /* [lo/den, hi/den] = [0,1] */
+    let mut i : u32 = 0u32
+    while i < k {
+        let midn : i64 = lo + hi          /* mid = midn/(2*den) */
+        let midd : i64 = 2i64 * den
+        if ui_alg_cmp(a, c, dD, midn, midd) >= 0i32 { lo = midn   hi = 2i64 * hi   den = midd }
+        else { hi = midn   lo = 2i64 * lo   den = midd }
+        i = i + 1u32
+    }
+    BR_LO_N = lo   BR_LO_D = den   BR_HI_N = hi   BR_HI_D = den
+    return 0i32
+}
+fn ui_br_lo_n() -> i64 @export { return BR_LO_N }
+fn ui_br_lo_d() -> i64 @export { return BR_LO_D }
+fn ui_br_hi_n() -> i64 @export { return BR_HI_N }
+fn ui_br_hi_d() -> i64 @export { return BR_HI_D }
+
+/* === EXACT INSIDE TEST -- the curve's height at a vertical line, as an exact algebraic number, used to decide
+ * (resolution-independently) whether a pixel is inside a curved region.  For an x-monotone arc, y(t_c) at the
+ * crossing t_c with x=xval is (P + Q sqrt D)/c^2; comparing it to a pixel's y is an EXACT proven sign. */
+var YC_P : i64   var YC_Q : i64   var YC_DEN : i64   var YC_D : i64
+fn ui_bez_y_at_cross(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64) -> u32 @export {
+    if ui_bez_cross_x(ax0, ax1, ax2, xval) != 1u32 { return 0u32 }
+    let a : i64 = QX_A   let c : i64 = QX_C   let dD : i64 = QX_D
+    let c2 : i64 = aa_mulck(c, c)
+    YC_P = aa_mulck(ay0, c2) + aa_mulck(aa_mulck(ay1, a), c) + aa_mulck(ay2, aa_mulck(a, a) + dD)
+    YC_Q = aa_mulck(ay1, c) + aa_mulck(2i64 * a, ay2)
+    YC_DEN = c2   YC_D = dD
+    return 1u32
+}
+/* 1 iff the point (xval,yval) is BELOW the x-monotone arc (y_arc(xval) <= yval), EXACTLY. */
+fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64, yval: i64) -> u32 @export {
+    if ui_bez_y_at_cross(ax0, ax1, ax2, ay0, ay1, ay2, xval) != 1u32 { return 0u32 }
+    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, yval, 1i64) <= 0i32 { return 1u32 }
+    return 0u32
+}
+/* the EXACT vertical coverage of pixel (px,py) by the region BELOW the arc: the fraction of [py,py+1] that lies
+ * below y_arc(px), as a correctly-rounded alpha.  fully-below -> sa ; fully-above -> 0 ; else round(sa*((py+1)-y_arc)). */
+fn ui_arc_valpha(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    if ui_bez_y_at_cross(ax0, ax1, ax2, ay0, ay1, ay2, px) != 1u32 { return 0i64 }
+    /* y_arc <= py  -> pixel fully below the arc -> full */
+    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, py, 1i64) <= 0i32 { return sa }
+    /* y_arc >= py+1 -> fully above -> empty */
+    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, py + 1i64, 1i64) >= 0i32 { return 0i64 }
+    /* boundary: coverage = (py+1) - y_arc = ((py+1)DEN - P - Q sqrt D)/DEN ; alpha = round(sa*coverage) */
+    return ui_alg_alpha(aa_mulck(py + 1i64, YC_DEN) - YC_P, 0i64 - YC_Q, YC_DEN, YC_D, sa)
+}
+
+/* === BI-QUADRATIC SIGN -- the symbolic 2D coverage engine.  A curve's exact per-pixel coverage is the difference
+ * of two single-sqrt area-at-crossings, a degree-4 algebraic number a + b sqrt D1 + c sqrt D2 in Q(sqrt D1, sqrt D2).
+ * Its order vs any rational is decided SYMBOLICALLY (no interval refinement): the nested radical collapses to two
+ * single-D proven signs.  This is symmetric in x and y -- "steep edge" is not a case, just swapped variables. */
+fn ui_sign_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
+    let sP : i32 = ui_alg_cmp_g(an, bn, 1i64, dD1, 0i64, 1i64)        /* sign of P = an + bn sqrt D1 */
+    if cn == 0i64 { return sP }
+    if dD2 == 0i64 { return sP }
+    let mut sC : i32 = 1i32
+    if cn < 0i64 { sC = 0i32 - 1i32 }                                 /* sign of cn sqrt D2 (D2>0) */
+    if sP == 0i32 { return sC }
+    if sP == sC { return sP }
+    /* opposite signs: the winner is |P| vs |cn| sqrt D2, i.e. P^2 vs cn^2 D2 -- and P^2 lives in Q(sqrt D1) */
+    let pp : i64 = (aa_mulck(an, an) + aa_mulck(aa_mulck(bn, bn), dD1)) - aa_mulck(aa_mulck(cn, cn), dD2)
+    let qq : i64 = aa_mulck(2i64 * an, bn)
+    let s2 : i32 = ui_alg_cmp_g(pp, qq, 1i64, dD1, 0i64, 1i64)        /* sign of P^2 - cn^2 D2 */
+    if s2 > 0i32 { return sP }
+    if s2 < 0i32 { return sC }
+    return 0i32
+}
+/* sign of (an + bn sqrt D1 + cn sqrt D2)/DEN - rn/rd, DEN>0, rd>0. */
+fn ui_cmp_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64, den: i64, rn: i64, rd: i64) -> i32 @export {
+    let a2 : i64 = aa_mulck(an, rd) - aa_mulck(rn, den)
+    let b2 : i64 = aa_mulck(bn, rd)
+    let c2 : i64 = aa_mulck(cn, rd)
+    return ui_sign_bi(a2, b2, dD1, c2, dD2)
+}
+/* round(sa * (an + bn sqrt D1 + cn sqrt D2)/DEN) -- the EXACT alpha of a degree-4 coverage, proven-sign binary search. */
+fn ui_alpha_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64, den: i64, sa: i64) -> i64 @export {
+    let a2 : i64 = aa_mulck(2i64 * sa, an)
+    let b2 : i64 = aa_mulck(2i64 * sa, bn)
+    let c2 : i64 = aa_mulck(2i64 * sa, cn)
+    let mut lo : i64 = 0i64   let mut hi : i64 = sa
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        if ui_cmp_bi(a2, b2, dD1, c2, dD2, den, (2i64 * mid) - 1i64, 1i64) >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* === CONTINUOUS HAUSDORFF / BOX-COUNTING DIMENSION -- the metric that makes the UI "mathematically alive": a
+ * boundary with 1<d<2 reveals new state at every zoom (semantic zoom as TOPOLOGY, not if/then).  Two exact grounds:
+ * (1) a smooth (rectifiable) curve has box dimension EXACTLY 1 -- N(eps) is LINEAR in 1/eps (ui_boxcount_seg).
+ * (2) a self-similar IFS (M copies at scale 1/invScale, open-set condition) has box=Hausdorff dimension
+ *     d = log M / log invScale; when that is RATIONAL it is verified by an INTEGER relation (M^q = invScale^p). */
+var DIM_P : i64   var DIM_Q : i64
+/* a>=0 such that b^a == n, else -1.  (n>=1, b>=2.) */
+fn ipow_exp(n: i64, b: i64) -> i64 {
+    if n < 1i64 { return 0i64 - 1i64 }
+    if b < 2i64 { return 0i64 - 1i64 }
+    let mut a : i64 = 0i64
+    let mut v : i64 = 1i64
+    while v < n { v = aa_mulck(v, b)   a = a + 1i64 }
+    if v == n { return a }
+    return 0i64 - 1i64
+}
+/* box-count of the straight segment (0,0)->(a,b) at scale 1/scl: scl*(a + b - gcd(a,b)) cells.  Linear in scl=1/eps
+ * => box dimension EXACTLY 1 (a smooth curve does NOT fold under zoom). */
+fn ui_boxcount_seg(a: i64, b: i64, scl: i64) -> i64 @export {
+    let g : i64 = ui_gcd(a, b)
+    return aa_mulck(scl, (a + b) - g)
+}
+/* exact box=Hausdorff dimension of the self-similar IFS (M copies, scale 1/invScale).  Sets DIM_P/DIM_Q (reduced)
+ * and returns 1 if d=log M/log invScale is RATIONAL; returns 0 (irrational, e.g. Koch log4/log3) -- verify by scaling. */
+fn ui_dim_selfsim(M: i64, invScale: i64) -> u32 @export {
+    DIM_P = 0i64   DIM_Q = 0i64
+    if invScale < 2i64 { return 0u32 }
+    if M < 2i64 { return 0u32 }
+    let mut b : i64 = 2i64
+    while b <= invScale {
+        let c : i64 = ipow_exp(invScale, b)
+        if c > 0i64 {
+            let a : i64 = ipow_exp(M, b)
+            if a > 0i64 {
+                let g : i64 = ui_gcd(a, c)
+                DIM_P = a / g   DIM_Q = c / g
+                return 1u32
+            }
+            return 0u32                       /* invScale is a power of b but M is not -> d irrational */
+        }
+        b = b + 1i64
+    }
+    return 0u32
+}
+fn ui_dim_p() -> i64 @export { return DIM_P }
+fn ui_dim_q() -> i64 @export { return DIM_Q }
+
+/* SEMANTIC ZOOM as TOPOLOGY: the detail a boundary reveals at zoom z is z^d (d = box dimension).  For a self-
+ * similar boundary (M copies at scale 1/n), the detail at zoom z=n^k is M^k -- so a fractal (d>1) unfolds strictly
+ * MORE state per zoom than a smooth line (d=1).  The unfolding is driven by topology, not if/then thresholds. */
+fn ui_zoom_detail(M: i64, n: i64, zoom: i64) -> i64 @export {
+    let k : i64 = ipow_exp(zoom, n)
+    if k < 0i64 { return 0i64 }          /* zoom is not a clean power of the IFS scale */
+    let mut d : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < k { d = aa_mulck(d, M)   i = i + 1i64 }
+    return d
+}
+
+/* === SYMMETRIC 2D COVERAGE (Green's theorem) -- the FULL 2D-exact per-pixel alpha for the region below an x-
+ * monotone arc, for a pixel the arc SPANS in x (enters x=px, exits x=px+1) and stays within the row [py,py+1].
+ * coverage = integral_px^{px+1} (f(x) - py) dx = G(t2) - G(t1) - py, where G is the area-at-crossing (single-sqrt at
+ * each of the two crossings, DIFFERENT D) -- so the coverage is a DEGREE-4 number a+b sqrt D1+c sqrt D2, signed by
+ * ui_alpha_bi.  No interval refinement, symmetric in x/y.  Returns the exact 8-bit alpha, or -1 if the c^4 area
+ * denominators overflow i64 (true at screen coords -- the caller then needs bigint coefficients; the MATH is exact,
+ * the i64 RANGE is the only limit, and overflow is DETECTED here, never silently wrong). */
+fn ui_arc_cover2d(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    if ui_bez_area_at_x(ax0, ax1, ax2, ay0, ay1, ay2, px) != 1u32 { return 0i64 - 1i64 }
+    let p1 : i64 = AREA_P   let q1 : i64 = AREA_Q   let den1 : i64 = AREA_DEN   let d1 : i64 = AREA_D
+    let mut ovf : u32 = 0u32
+    if AA_OVF == 1u32 { ovf = 1u32 }
+    if ui_bez_area_at_x(ax0, ax1, ax2, ay0, ay1, ay2, px + 1i64) != 1u32 { return 0i64 - 1i64 }
+    let p2 : i64 = AREA_P   let q2 : i64 = AREA_Q   let den2 : i64 = AREA_DEN   let d2 : i64 = AREA_D
+    if AA_OVF == 1u32 { ovf = 1u32 }
+    AA_OVF = 0u32
+    let dd : i64 = aa_mulck(den1, den2)
+    let an : i64 = (aa_mulck(p2, den1) - aa_mulck(p1, den2)) - aa_mulck(py, dd)
+    let bn : i64 = 0i64 - aa_mulck(q1, den2)        /* coeff of sqrt D1 (from -G(t1)) */
+    let cn : i64 = aa_mulck(q2, den1)               /* coeff of sqrt D2 (from +G(t2)) */
+    let alpha : i64 = ui_alpha_bi(an, bn, d1, cn, d2, dd, sa)
+    if AA_OVF == 1u32 { return 0i64 - 1i64 }        /* overflow in the assembly OR inside ui_alpha_bi -> refuse */
+    if ovf == 1u32 { return 0i64 - 1i64 }           /* overflow already in the area-at-crossing -> refuse */
+    return alpha
+}
+
+/* anti-aliased circle fill -- the showcase: a smooth disk whose edge coverage is exact integer. */
+fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 @export {
+    let mut minx : i64 = cx - r  let mut maxx : i64 = (cx + r) + 1i64
+    let mut miny : i64 = cy - r  let mut maxy : i64 = (cy + r) + 1i64
+    if minx < 0i64 { minx = 0i64 }
+    if miny < 0i64 { miny = 0i64 }
+    if maxx > (w as i64) { maxx = w as i64 }
+    if maxy > (h as i64) { maxy = h as i64 }
+    let sa : i64 = ((color >> 24u32) & 255u32) as i64
+    let nn : i64 = n * n
+    let mut py : i64 = miny
+    while py < maxy {
+        let mut px : i64 = minx
+        while px < maxx {
+            let cov : i64 = ui_circle_cov(cx, cy, r, px, py, n)
+            if cov > 0i64 {
+                let alpha : u32 = ((sa * cov) / nn) as u32
+                ui_blend(buf, w, px as u32, py as u32, (alpha << 24u32) | (color & 16777215u32))
+            }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 0i32
+}

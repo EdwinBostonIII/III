@@ -1,0 +1,85 @@
+/* STDLIB/iii/aether/ui_font.iii -- III-GLASS L3: text.  The 8x16 glyph table (ui_font_data, pure bytes) is
+ * blitted by III itself -- this is what turns a decorative panel into a tool: real symbol names, real values,
+ * real results.  ui_glyph draws one character; ui_text walks a NUL-terminated C string (\n = newline).  Crisp
+ * 1-bit blit via ui_put; bounds-clipped. */
+module aether_ui_font
+
+extern @abi(c-msvc-x64) fn ui_font_base() -> u64 from "ui_font_data.iii"
+extern @abi(c-msvc-x64) fn ui_put(buf: u64, w: u32, x: u32, y: u32, color: u32) -> i32 from "ui_raster.iii"
+
+/* draw the glyph for printable char c (0x20..0x7E) with top-left at (x,y). */
+fn ui_glyph(buf: u64, w: u32, h: u32, x: u32, y: u32, c: u32, color: u32) -> i32 @export {
+    if c < 32u32 { return 0i32 }
+    if c > 126u32 { return 0i32 }
+    let base : u64 = ui_font_base()
+    let goff : u64 = ((c - 32u32) as u64) * 16u64
+    let mut row : u32 = 0u32
+    while row < 16u32 {
+        let py : u32 = y + row
+        if py < h {
+            let p : *u8 = (base + goff + (row as u64)) as *u8
+            let bits : u32 = p[0u64] as u32
+            let mut col : u32 = 0u32
+            while col < 8u32 {
+                let px : u32 = x + col
+                if px < w {
+                    if (bits & (1u32 << (7u32 - col))) != 0u32 { ui_put(buf, w, px, py, color) }
+                }
+                col = col + 1u32
+            }
+        }
+        row = row + 1u32
+    }
+    return 0i32
+}
+
+var FONT_DIG : [u8; 20]   /* decimal scratch (module-scope: fn-local array by runtime index segfaults) */
+
+/* render an unsigned decimal at (x,y); returns the pen x after the last digit. */
+fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 @export {
+    if v == 0u32 { ui_glyph(buf, w, h, x, y, 48u32, color)  return x + 8u32 }
+    let mut n : u32 = v
+    let mut k : u32 = 0u32
+    while n > 0u32 { FONT_DIG[k as u64] = (48u32 + (n % 10u32)) as u8  n = n / 10u32  k = k + 1u32 }
+    let mut cx : u32 = x
+    let mut j : u32 = k
+    while j > 0u32 {
+        j = j - 1u32
+        ui_glyph(buf, w, h, cx, y, FONT_DIG[j as u64] as u32, color)
+        cx = cx + 8u32
+    }
+    return cx
+}
+
+/* draw `len` bytes of a string at (x,y) -- works on raw (non-NUL-terminated) string literals.  Returns pen x. */
+fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 @export {
+    let mut i  : u32 = 0u32
+    let mut cx : u32 = x
+    while i < len {
+        let p : *u8 = (str + (i as u64)) as *u8
+        let c : u32 = p[0u64] as u32
+        ui_glyph(buf, w, h, cx, y, c, color)
+        cx = cx + 8u32
+        i = i + 1u32
+    }
+    return cx
+}
+
+/* draw a NUL-terminated string at (x,y); \n moves to the next line.  Returns the pen x after the last glyph. */
+fn ui_text(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, color: u32) -> u32 @export {
+    let mut i  : u64 = 0u64
+    let mut cx : u32 = x
+    let mut cy : u32 = y
+    let mut done : u32 = 0u32
+    while done == 0u32 {
+        let p : *u8 = (str + i) as *u8
+        let c : u32 = p[0u64] as u32
+        if c == 0u32 { done = 1u32 }
+        if done == 0u32 {
+            if c == 10u32 { cy = cy + 16u32  cx = x }
+            if c != 10u32 { ui_glyph(buf, w, h, cx, cy, c, color)  cx = cx + 8u32 }
+            i = i + 1u64
+        }
+    }
+    return cx
+}

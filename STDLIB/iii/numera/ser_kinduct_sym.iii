@@ -37,3 +37,656 @@ fn sks_pres_even(inc: u64) -> u8 @export {
     let miter : u32 = bb_and(evn, odd)                                  /* even(x) & odd(x')  */
     return bb_equal(miter, bb_const(0u64))                              /* 1 iff UNSAT (inductive) */
 }
+
+/* ============================================================================================================
+ * THE GENERAL SYMBOLIC k-INDUCTION ENGINE.  sks_pres_even above is ONE witnessed instance; this is the machine
+ * that proves an ARBITRARY invariant P over an ARBITRARY transition T -- both built by the caller as bv_bits
+ * circuits over the symbolic 64-bit state var -- SOUND over all 2^64 states (the bit-blast inductive miter is
+ * UNSAT).  This is the prover the synthesis pipeline (ser_petri fuzz -> ser_antiunify generalize -> HERE prove)
+ * discharges its candidate invariants against.  THE CONSCIENCE LINE: synthesis PROPOSES a candidate from finite
+ * observation; soundness comes ONLY from sks_prove below -- the miter UNSAT over the WHOLE 2^64, never from "it
+ * held on the fuzzed traces."  NO-ML: a deductive SAT discharge; same circuits => same verdict.
+ *
+ * PREDICATE CONVENTION: a predicate is a bv_bits node valued 0 (false) / 1 (true) in bit 0; the combinators
+ * below preserve that, so predicates compose into the inductive miter P(x) & ~P(T(x)).  WIDTH: these assume a
+ * 64-bit state (every caller does bb_reset(64u64)) -- sks_nonzero folds 64 bits and sks_ult reads bit 63 as
+ * the MSB; for a narrower decision width they would need the width threaded in. */
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+const SKS_ONES : u64 = 18446744073709551615u64   /* 2^64-1 (all ones; the bitwise-NOT mask) */
+
+/* OR-reduce all 64 bits of y into bit 0 (log-depth fold): a 0/1 predicate, 1 iff y != 0. */
+fn sks_nonzero(y: u32) -> u32 @export {
+    let mut r : u32 = bb_or(y, bb_shr(y, 32u64))
+    r = bb_or(r, bb_shr(r, 16u64))
+    r = bb_or(r, bb_shr(r, 8u64))
+    r = bb_or(r, bb_shr(r, 4u64))
+    r = bb_or(r, bb_shr(r, 2u64))
+    r = bb_or(r, bb_shr(r, 1u64))
+    return bb_and(r, bb_const(1u64))
+}
+fn sks_iszero(y: u32) -> u32 @export { return bb_xor(sks_nonzero(y), bb_const(1u64)) }
+fn sks_eq(a: u32, b: u32) -> u32 @export { return sks_iszero(bb_xor(a, b)) }              /* P "a == b" (0/1) */
+fn sks_bit(x: u32, k: u64) -> u32 @export { return bb_and(bb_shr(x, k), bb_const(1u64)) } /* P "bit k set" */
+fn sks_and2(a: u32, b: u32) -> u32 @export { return bb_and(a, b) }
+fn sks_or2(a: u32, b: u32) -> u32 @export { return bb_or(a, b) }
+fn sks_not1(a: u32) -> u32 @export { return bb_xor(a, bb_const(1u64)) }
+/* P "(x & mask) == val" -- the bit-pattern invariant template anti-unification synthesizes. */
+fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 @export { return sks_eq(bb_and(x, bb_const(mask)), bb_const(val)) }
+/* P "x < c" UNSIGNED, as 0/1: MSB( (~x & c) | (~(x^c) & (x-c)) ) -- the borrow-network high bit (verified). */
+fn sks_ult(x: u32, c: u64) -> u32 @export {
+    let cc   : u32 = bb_const(c)
+    let t1   : u32 = bb_and(bb_xor(x, bb_const(SKS_ONES)), cc)                 /* ~x & c            */
+    let axb  : u32 = bb_xor(x, cc)                                             /* x ^ c             */
+    let t2   : u32 = bb_and(bb_xor(axb, bb_const(SKS_ONES)), bb_sub(x, cc))    /* ~(x^c) & (x-c)    */
+    return bb_and(bb_shr(bb_or(t1, t2), 63u64), bb_const(1u64))               /* MSB as 0/1        */
+}
+
+/* THE INDUCTIVE STEP (general): is "P(x) => P(T(x))" valid over ALL 2^64?  p_x=P(x), p_tx=P(T(x)) circuits.
+ * 1 iff the miter P(x) & ~P(T(x)) is UNSAT -- there is NO state where P holds yet the successor violates P. */
+fn sks_step(p_x: u32, p_tx: u32) -> u8 @export {
+    let miter : u32 = bb_and(p_x, sks_not1(p_tx))
+    return bb_equal(miter, bb_const(0u64))
+}
+/* THE BASE (concrete init): P(init) holds?  statevar = the bb_var index the circuits are built over. */
+fn sks_base(p_root: u32, statevar: u32, init: u64) -> u8 @export {
+    bb_set_input(statevar, init)
+    if bb_eval(p_root) == 0u64 { return 0u8 }
+    return 1u8
+}
+/* PROVE: P is a SOUND unbounded-safety invariant iff BASE (P(init)) AND STEP (1-inductive over all 2^64). */
+fn sks_prove(p_x: u32, p_tx: u32, statevar: u32, init: u64) -> u8 @export {
+    let st : u8 = sks_step(p_x, p_tx)
+    let bs : u8 = sks_base(p_x, statevar, init)
+    if st == 1u8 { if bs == 1u8 { return 1u8 } }
+    return 0u8
+}
+
+extern @abi(c-msvc-x64) fn bb_witness(v: u32) -> u64 from "bv_bits.iii"
+
+/* CEGAR COUNTEREXAMPLE: the concrete state where P fails 1-induction (P(x) holds, P(T(x)) violated), or 0 if P
+ * IS inductive.  Runs the step miter; on SAT, extracts the SAT witness for statevar -- the breaking state that
+ * drives refinement instead of a bare reject.  (The model is consumed here, so call right after building p_x/p_tx.) */
+fn sks_counterexample(p_x: u32, p_tx: u32, statevar: u32) -> u64 @export {
+    let miter : u32 = bb_and(p_x, sks_not1(p_tx))
+    if bb_equal(miter, bb_const(0u64)) == 1u8 { return 0u64 }   /* UNSAT -> inductive, no counterexample */
+    return bb_witness(statevar)
+}
+
+/* ============================================================================================================
+ * NON-POW2 MODULAR INVARIANTS under a LINEAR transition x' = x + c.  "x % m == r" is 1-inductive under x+c iff
+ * c % m == 0 -- a CLOSED FORM (a theorem of modular arithmetic), SOUND over all 2^64, for ANY modulus m incl.
+ * non-powers-of-two (x%3, x%7, x%10...).  This is the production route: a 64-bit division CIRCUIT in bv_bits
+ * would make the inductive miter SAT-infeasible (the same multiplier/divider wall 64-bit magic-division hit), so
+ * the closed-form abstract -- ser_absint's Astree instinct, exact -- is the right tool, not a heroic circuit. */
+fn sks_mod_step_linear(m: u64, c: u64) -> u8 @export {
+    if m == 0u64 { return 0u8 }
+    if (c % m) == 0u64 { return 1u8 }
+    return 0u8
+}
+fn sks_mod_base(m: u64, r: u64, init: u64) -> u8 @export {
+    if m == 0u64 { return 0u8 }
+    if (init % m) == r { return 1u8 }
+    return 0u8
+}
+fn sks_mod_prove_linear(m: u64, r: u64, c: u64, init: u64) -> u8 @export {
+    if m <= 1u64 { return 0u8 }   /* m=0 undefined, m=1 VACUOUS (x%1==0 holds for every x) -- not a real invariant */
+    if sks_mod_step_linear(m, c) == 0u8 { return 0u8 }
+    return sks_mod_base(m, r, init)
+}
+
+/* THE CEGAR REFINEMENT DRIVER for a linear transition x' = x + c from init.  Given the anti-unified templates
+ * (bit-mask mask/mval, modular m/r), tries them STRONGEST-FIRST: 1 iff SOME template is a PROVEN inductive
+ * invariant, 0 iff the candidate is refused (then sks_counterexample yields the breaking state).  "Strengthen,
+ * not just reject": the modular law survives unbounded growth where the over-fit bit-pattern (carrying its
+ * spurious high-zero bound) does not -- so a refused bit-mask is retried as the modular invariant. */
+fn sks_cegar_linear(mask: u64, mval: u64, m: u64, r: u64, c: u64, init: u64) -> u8 @export {
+    if sks_mod_prove_linear(m, r, c, init) == 1u8 { return 1u8 }   /* (rejects vacuous m<=1 internally) */
+    if mask != 0u64 {                                              /* mask==0 -> sks_mask_eq is constant-true: VACUOUS, skip */
+        bb_reset(64u64)
+        let x  : u32 = bb_var(0u32)
+        let tx : u32 = bb_add(x, bb_const(c))
+        if sks_prove(sks_mask_eq(x, mask, mval), sks_mask_eq(tx, mask, mval), 0u32, init) == 1u8 { return 1u8 }
+    }
+    return 0u8   /* no NON-VACUOUS inductive invariant found among the candidates */
+}
+
+/* ============================================================================================================
+ * LINEAR CONSERVATION INVARIANTS over a COUPLED transition (x' = x + a, y' = y + b) -- the RELATIONAL sibling of
+ * the modular law above.  The functional F(x,y) = w0*x + w1*y is 1-inductive (held CONSTANT) under that step iff
+ *   w0*a + w1*b == 0  (mod 2^64)
+ * a CLOSED FORM, SOUND over all 2^128 pairs (x,y): F(x+a, y+b) - F(x,y) = w0*a + w1*b, INDEPENDENT of (x,y), so
+ * the step preserves F for EVERY pair iff that constant drift is 0 (the gradient (w0,w1) is the kernel of the
+ * increment (a,b)).  This is the sound, in-domain image of "the charges sum to exactly zero" -- a conserved
+ * quantity proven over the WHOLE state space, the relational class cg_r3's single-scalar templates cannot reach.
+ * THE CONSCIENCE LINE: ser_antiunify PROPOSES (w0,w1,c) from finite pairs; soundness is THIS proof, never "it
+ * held on the trace".  NO-ML: integer arithmetic; same (w0,w1,a,b) => same verdict.
+ *
+ * TWO INDEPENDENT ENGINES (the no-tautology discipline -- two paths, different machinery, must agree):
+ *   sks_consv_step    -- the CLOSED FORM (integer w0*a+w1*b==0), the production route (no bit-blast wall).
+ *   sks_consv_step_sym-- a GENUINE 2-var bit-blast miter proving F(x+a,y+b)==F(x,y) over all 2^128 (bb_equal
+ *                        UNSAT); it actually QUANTIFIES over (x,y), so a flaw in the closed-form algebra would
+ *                        surface here as a SAT miter.  Exact for the small weights the conservation lgg yields. */
+fn sks_consv_step(w0: u64, w1: u64, a: u64, b: u64) -> u8 @export {
+    if w0 == 0u64 { if w1 == 0u64 { return 0u8 } }   /* (0,0): vacuous -- every functional trivially "conserved" */
+    if (w0 * a + w1 * b) == 0u64 { return 1u8 }
+    return 0u8
+}
+fn sks_consv_base(w0: u64, w1: u64, c: u64, x0: u64, y0: u64) -> u8 @export {
+    if (w0 * x0 + w1 * y0) == c { return 1u8 }
+    return 0u8
+}
+/* PROVE: F = w0*x+w1*y is a SOUND conserved-quantity invariant iff BASE (F(x0,y0)==c) AND STEP (drift 0). */
+fn sks_consv_prove(w0: u64, w1: u64, c: u64, a: u64, b: u64, x0: u64, y0: u64) -> u8 @export {
+    if sks_consv_step(w0, w1, a, b) == 0u8 { return 0u8 }
+    return sks_consv_base(w0, w1, c, x0, y0)
+}
+/* THE CHECKABLE COUNTEREXAMPLE-TO-INDUCTION: the per-step drift F(x+a,y+b) - F(x,y) = w0*a + w1*b, a CONSTANT
+ * (independent of x,y).  0 iff conserved; the exact nonzero defect otherwise -- a witness anyone can recompute,
+ * unambiguous (no state/sentinel collision).  "Strengthen or refute with evidence", not a bare reject. */
+fn sks_consv_drift(w0: u64, w1: u64, a: u64, b: u64) -> u64 @export { return w0 * a + w1 * b }
+
+/* w*v for a CONSTANT weight w, MULTIPLIER-FREE: sum of (v << e) over the set bits e of w (the same shift-add
+ * discipline sd_scale / Leg A use -- a 64x64 multiplier would reopen the SAT wall this engine stays clear of).
+ * Exact for any w; a large-popcount w simply emits more nodes (a small-weight conserved law stays tiny). */
+fn sks_wmul(w: u64, v: u32) -> u32 {
+    let mut acc : u32 = bb_const(0u64)
+    let mut e   : u64 = 0u64
+    let mut ww  : u64 = w
+    while ww != 0u64 {
+        if (ww & 1u64) == 1u64 { acc = bb_add(acc, bb_shl(v, e)) }
+        ww = ww >> 1u64
+        e = e + 1u64
+    }
+    return acc
+}
+fn sks_consv_func(w0: u64, w1: u64, x: u32, y: u32) -> u32 { return bb_add(sks_wmul(w0, x), sks_wmul(w1, y)) }
+/* THE INDEPENDENT BIT-BLAST WITNESS: 1 iff F(x+a,y+b) == F(x,y) for ALL 2^128 (x,y) (the miter F!=F' is UNSAT).
+ * Built over x=bb_var(0), y=bb_var(1); confirms sks_consv_step by a different engine.  A weight whose shift-add
+ * exceeds the bit-blast capacity poisons bb_equal (0xFF) -> reported 0 (NEVER a false 'conserved'). */
+fn sks_consv_step_sym(w0: u64, w1: u64, a: u64, b: u64) -> u8 @export {
+    if w0 == 0u64 { if w1 == 0u64 { return 0u8 } }
+    bb_reset(64u64)
+    let x  : u32 = bb_var(0u32)
+    let y  : u32 = bb_var(1u32)
+    let xp : u32 = bb_add(x, bb_const(a))
+    let yp : u32 = bb_add(y, bb_const(b))
+    let f  : u32 = sks_consv_func(w0, w1, x, y)
+    let fp : u32 = sks_consv_func(w0, w1, xp, yp)
+    let miter : u32 = sks_not1(sks_eq(f, fp))                   /* F(x,y) != F(x',y') somewhere? */
+    if bb_equal(miter, bb_const(0u64)) == 1u8 { return 1u8 }    /* UNSAT -> conserved over all 2^128 */
+    return 0u8
+}
+
+/* ============================================================================================================
+ * N-ARY conservation (the relational invariant over k>2 components: free+used+reserved==cap; and the static
+ * 3-component "neutrality" the quark picture +2,-1,-1 motivates -- ANALOGY, not QCD).  The functional
+ * F = sum_i w_i*v_i over a coupled k-component transition v_i' = v_i + a_i is conserved iff sum_i w_i*a_i == 0
+ * (mod 2^64) -- the same kernel-of-the-increment law, lifted to k dimensions.  Weights and per-component values
+ * are set into a BOUNDED module array (k<=8) to avoid array params (the house pattern; no island).  ONE combine
+ * serves both roles: with v=increments it is the DRIFT (0 iff conserved); with v=states it is the functional
+ * VALUE (the base / neutrality check).  NO-ML: integer fold; same inputs => same verdict. */
+const SKS_CVN : u32 = 8u32
+var SKS_CW : [u64; 8]    /* weights   w_i */
+var SKS_CV : [u64; 8]    /* values    v_i (increments for the step test, states for the base/neutrality test) */
+fn sks_consv_set(i: u32, w: u64, v: u64) -> i32 @export {
+    if i < SKS_CVN { SKS_CW[i as u64] = w  SKS_CV[i as u64] = v }
+    return 0i32
+}
+/* sum_i w_i*v_i (mod 2^64): DRIFT when v=increments (0 iff conserved); functional VALUE when v=states. */
+fn sks_consv_combine(n: u32) -> u64 @export {
+    let mut nn : u32 = n
+    if nn > SKS_CVN { nn = SKS_CVN }
+    let mut acc : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < nn {
+        let w : u64 = SKS_CW[i as u64]
+        let v : u64 = SKS_CV[i as u64]
+        acc = acc + w * v
+        i = i + 1u32
+    }
+    return acc
+}
+/* with v=increments: 1 iff the k-component transition conserves F (combine==0) AND the weights are non-vacuous. */
+fn sks_consv_step_vec(n: u32) -> u8 @export {
+    let mut nn : u32 = n
+    if nn > SKS_CVN { nn = SKS_CVN }
+    let mut anyw : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < nn { anyw = anyw | SKS_CW[i as u64]  i = i + 1u32 }
+    if anyw == 0u64 { return 0u8 }                  /* all-zero weights -> vacuous */
+    if sks_consv_combine(n) == 0u64 { return 1u8 }
+    return 0u8
+}
+
+/* ============================================================================================================
+ * SVIR <-> SVIR OBSERVATIONAL EQUIVALENCE -- the production proof leg (Leg A of the autopoietic seed synthesis,
+ * DOCS/III-AUTOPOIETIC-SEED-SYNTHESIS-PLAN.md).  sd_denote lifts a STRAIGHT-LINE SVIR function body into a
+ * bv_bits circuit over the symbolic params -- the denotation [[.]] -- modelling each opcode by its exact SVIR-v1
+ * semantics (DOCS/SVIR-V1-CANONICAL.md) over Z/2^64.  seq_equiv mitres two bodies: 1 iff [[a]] == [[b]] for ALL
+ * 2^64 valuations of every param (bb_equal UNSAT -- EXHAUSTIVE, never sampled), 0 iff a counterexample exists,
+ * SEQ_TOP (2) iff either body leaves the decided fragment (SDIV/SREM, variable shift, signed compare, control
+ * flow, memory, call) OR the bit-blast capacity is exceeded -- NEVER a silent "equal" (bb_equal's 0xFF poison
+ * maps to SEQ_TOP).  This is the lifted, load-bearing form of sks_pres_even: from one hardcoded even/odd
+ * instance to an arbitrary pair of SVIR functions -- the apply-half the EIDOS retrospective recorded as unbuilt.
+ * NO ISLAND: composes bv_bits + the sks_* predicate combinators above.  Ring R0.  K 1.00.  NO-ML: a deductive
+ * bit-blast discharge; same bodies => same verdict. */
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+
+const SD_TOP   : u32 = 4294967295u32   /* 0xFFFFFFFF: the body left the decided straight-line fragment */
+const SEQ_TOP  : u32 = 2u32            /* equivalence UNDECIDED (out of fragment, or bit-blast capacity) */
+const SD_MAXIN : u32 = 8u32            /* bv_bits BB_MAX_INPUTS: at most 8 symbolic params, else defer */
+
+var SD_STK : [u32; 512]   /* the abstract value stack: bv_bits node ids */
+var SD_IC  : [u32; 512]   /* parallel: 1 iff that slot is a known integer literal (for const shift amounts) */
+var SD_CV  : [u64; 512]   /* parallel: the literal value when SD_IC[slot]==1 */
+var SD_SP  : u32 = 0u32
+var SD_OVF : u32 = 0u32   /* stack overflow flag -> forces SD_TOP (no OOB write) */
+var SD_LOC : [u32; 256]   /* locals -> node id */
+var SD_LIC : [u32; 256]   /* locals -> is-const */
+var SD_LCV : [u64; 256]   /* locals -> const value */
+
+fn sdb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return (p[0u64] as u32) & 255u32 }
+fn sd_rd8(base: u64, i: u64) -> u64 {
+    let mut v : u64 = 0u64  let mut k : u64 = 0u64
+    while k < 8u64 { v = v | ((sdb(base, i + k) as u64) << (k * 8u64))  k = k + 1u64 }
+    return v
+}
+fn sd_push(node: u32, ic: u32, cv: u64) -> i32 {
+    if SD_SP >= 512u32 { SD_OVF = 1u32  return 0i32 }
+    SD_STK[SD_SP as u64] = node  SD_IC[SD_SP as u64] = ic  SD_CV[SD_SP as u64] = cv
+    SD_SP = SD_SP + 1u32  return 0i32
+}
+
+/* ---- Amputation 1: structured control (IF/ELSE/END) as a branch-free SELECT ----------------------------------
+ * The if-frame stack mirrors SVIR's well-nested IF/ELSE/END: IF pops the condition and records the stack height
+ * entering the branch; the THEN arm net-pushes one value (captured at ELSE); the ELSE arm net-pushes one value
+ * (read at END), where the two fuse by sd_mux.  A known-constant condition collapses to the live arm -- the O(1)
+ * abstract prune, so the dead arm never enters the equivalence miter.  A value-less IF...END (no ELSE) stays
+ * SD_TOP until the memory leg.  Nesting is handled for free: inner IF...ELSE...END is fully bracketed. */
+var SD_IFC  : [u32; 64]    /* condition node */
+var SD_IFS0 : [u32; 64]    /* stack height on entering the branch */
+var SD_IFT  : [u32; 64]    /* captured THEN value */
+var SD_IFCF : [u32; 64]    /* condition is a known constant */
+var SD_IFCV : [u64; 64]    /* the constant value */
+var SD_IFEL : [u32; 64]    /* 1 once ELSE has been seen */
+var SD_IFSP : u32 = 0u32   /* if-frame stack pointer */
+
+/* branch-free SELECT: with C the (possibly arbitrary) i64 condition, Cm = 0 - [C!=0] is all-ones iff C!=0 else
+ * 0, and the result is (Cm & T) | (~Cm & F).  Multiplier-FREE -- the arithmetic C*T+(1-C)*F would inject a 64x64
+ * multiplier and reopen the exact SAT wall this leg amputates; the select is the sound, SAT-cheap denotation.
+ * sks_nonzero gives SVIR's "nonzero is true" so the select matches IF/BR_IF semantics for ANY condition word. */
+fn sd_mux(c: u32, t: u32, f: u32) -> u32 {
+    let cm  : u32 = bb_sub(bb_const(0u64), sks_nonzero(c))
+    let ncm : u32 = bb_xor(cm, bb_const(SKS_ONES))
+    return bb_or(bb_and(cm, t), bb_and(ncm, f))
+}
+
+/* SIGNED less-than as a 0/1 node: the overflow-corrected sign bit MSB( (a-b) ^ ((a^b) & ((a-b)^a)) ).
+ * This is the textbook SLT bit formula (exact over Z/2^64 incl. INT_MIN/INT_MAX wrap edges; validated
+ * concretely by sd_slt_eval below). */
+fn sd_slt(a: u32, b: u32) -> u32 {
+    let d    : u32 = bb_sub(a, b)
+    let axb  : u32 = bb_xor(a, b)
+    let dxa  : u32 = bb_xor(d, a)
+    let corr : u32 = bb_xor(d, bb_and(axb, dxa))
+    return bb_and(bb_shr(corr, 63u64), bb_const(1u64))
+}
+/* concrete validation hook: evaluate (a <s b) on specific 64-bit values (independent of the equivalence miter). */
+fn sd_slt_eval(a: u64, b: u64) -> u64 @export {
+    bb_reset(64u64)
+    let va : u32 = bb_var(0u32)
+    let vb : u32 = bb_var(1u32)
+    let r  : u32 = sd_slt(va, vb)
+    bb_set_input(0u32, a)
+    bb_set_input(1u32, b)
+    return bb_eval(r)
+}
+
+/* ---- Amputation 2: structured while-loops as a PROVEN closed-form recurrence --------------------------------
+ * The SVIR lowerer emits  while c { b }  as  BLOCK LOOP <c> CONST 0 EQ BR_IF 1 <b> BR 0 END END.  sd_loop
+ * recognises the canonical counter+accumulator shape -- condition  LOCAL_GET<i> <bound> LT_S , body a run of
+ * LOCAL_GET<l> CONST<k> ADD LOCAL_SET<l> updates -- and replaces the loop with each carried local's closed form
+ *   l_final = l0 + trip*k ,   trip = MUX(i0 < N, N - i0, 0)
+ * ONLY when the counter i advances by exactly 1 against the monotone < bound (PROVABLY TOTAL: it halts in
+ * max(0, N - i0) steps).  Non-unit stride / non-counter exit / non-constant body update / non-pow2 scale ->
+ * SD_LOOPFAIL, and sd_denote falls back to SD_TOP -- NEVER a finite value for a possibly-divergent loop (the
+ * termination soundness gate).  trip*k uses a SHIFT (strength reduction), not bb_mul: the 64x64 multiplier this
+ * whole leg amputates stays gone. */
+const SD_LOOPFAIL : u64 = 18446744073709551614u64
+var SD_LP_L : [u32; 32]    /* carried locals discovered in the body */
+var SD_LP_K : [u64; 32]    /* each one's constant per-iteration delta */
+
+/* ---- Amputation 3 state: a const-address byte-memory cell map (the causal epoch for decidable addresses) ---- */
+const SD_MEMCELLS : u32 = 64u32
+var SD_MEM    : [u32; 64]   /* cell -> current byte-value node */
+var SD_MEMW   : [u32; 64]   /* cell -> 1 once written */
+var SD_MEM_A  : [u32; 64]   /* program-A snapshot for seq_equiv_mem */
+var SD_MEMW_A : [u32; 64]
+fn sd_mem_reset() -> i32 {
+    let mut c : u32 = 0u32
+    while c < SD_MEMCELLS { SD_MEMW[c as u64] = 0u32  c = c + 1u32 }
+    return 0i32
+}
+var SD_STDIAG : u64 = 0u64
+fn sd_stdiag() -> u64 @export { return SD_STDIAG }
+var SD_TRACE : [u32; 80]
+var SD_TRACEN : u32 = 0u32
+fn sd_tracen() -> u32 @export { return SD_TRACEN }
+fn sd_trace(i: u32) -> u32 @export { return SD_TRACE[i as u64] }
+
+/* trip*k for a CONSTANT k, multiplier-free: 0, identity, or one shift for k = 2^e; else SD_TOP (defer). */
+fn sd_scale(x: u32, k: u64) -> u32 {
+    if k == 0u64 { return bb_const(0u64) }
+    if k == 1u64 { return x }
+    let mut e  : u64 = 0u64
+    let mut kk : u64 = k
+    while (kk & 1u64) == 0u64 { kk = kk >> 1u64  e = e + 1u64 }
+    if kk == 1u64 { return bb_shl(x, e) }
+    return SD_TOP
+}
+
+/* p0 points just past BLOCK (at LOOP).  Returns the offset just past END END on a recognised + provably-total
+ * loop (having set SD_LOC for every carried local to its closed form), else SD_LOOPFAIL. */
+fn sd_loop(base: u64, boff: u64, p0: u64, blen: u64) -> u64 {
+    let mut p : u64 = p0
+    if p + 1u64 > blen { return SD_LOOPFAIL }
+    if sdb(base, boff + p) != 0x41u32 { return SD_LOOPFAIL }      /* LOOP */
+    p = p + 1u64
+    if sdb(base, boff + p) != 0x10u32 { return SD_LOOPFAIL }      /* LOCAL_GET<i> (the counter) */
+    let ci : u32 = sdb(base, boff + p + 1u64)
+    p = p + 2u64
+    let mut nbound : u32 = SD_TOP                                  /* <bound>: a local or a constant */
+    let bop : u32 = sdb(base, boff + p)
+    if bop == 0x10u32 { nbound = SD_LOC[(sdb(base, boff + p + 1u64)) as u64]  p = p + 2u64 }
+    if bop == 0x01u32 { nbound = bb_const(sd_rd8(base, boff + p + 1u64))  p = p + 9u64 }
+    if nbound == SD_TOP { return SD_LOOPFAIL }
+    if sdb(base, boff + p) != 0x32u32 { return SD_LOOPFAIL }      /* LT_S: the monotone bound */
+    p = p + 1u64
+    if sdb(base, boff + p) != 0x01u32 { return SD_LOOPFAIL }      /* CONST 0 */
+    if sd_rd8(base, boff + p + 1u64) != 0u64 { return SD_LOOPFAIL }
+    p = p + 9u64
+    if sdb(base, boff + p) != 0x30u32 { return SD_LOOPFAIL }      /* EQ */
+    p = p + 1u64
+    if sdb(base, boff + p) != 0x51u32 { return SD_LOOPFAIL }      /* BR_IF 1 (break out of BLOCK) */
+    if sdb(base, boff + p + 1u64) != 1u32 { return SD_LOOPFAIL }
+    p = p + 2u64
+    /* body: a run of  LOCAL_GET<l> CONST<k> ADD LOCAL_SET<l>  until BR */
+    let mut nlp  : u32 = 0u32
+    let mut done : u32 = 0u32
+    while done == 0u32 {
+        if p >= blen { return SD_LOOPFAIL }
+        if sdb(base, boff + p) == 0x50u32 { done = 1u32 }
+        if done == 0u32 {
+            if nlp >= 32u32 { return SD_LOOPFAIL }
+            if sdb(base, boff + p) != 0x10u32 { return SD_LOOPFAIL }
+            let lg : u32 = sdb(base, boff + p + 1u64)
+            p = p + 2u64
+            if sdb(base, boff + p) != 0x01u32 { return SD_LOOPFAIL }
+            let kk : u64 = sd_rd8(base, boff + p + 1u64)
+            p = p + 9u64
+            if sdb(base, boff + p) != 0x20u32 { return SD_LOOPFAIL }     /* ADD */
+            p = p + 1u64
+            if sdb(base, boff + p) != 0x11u32 { return SD_LOOPFAIL }     /* LOCAL_SET<l> (same l) */
+            if sdb(base, boff + p + 1u64) != lg { return SD_LOOPFAIL }
+            p = p + 2u64
+            SD_LP_L[nlp as u64] = lg
+            SD_LP_K[nlp as u64] = kk
+            nlp = nlp + 1u32
+        }
+    }
+    if sdb(base, boff + p + 1u64) != 0u32 { return SD_LOOPFAIL }  /* BR 0 */
+    p = p + 2u64
+    if sdb(base, boff + p) != 0x44u32 { return SD_LOOPFAIL }      /* END (loop) */
+    p = p + 1u64
+    if sdb(base, boff + p) != 0x44u32 { return SD_LOOPFAIL }      /* END (block) */
+    p = p + 1u64
+    /* TERMINATION GATE: the counter must advance by exactly 1 (against the monotone < bound -> total). */
+    let mut ci_found : u32 = 0u32
+    let mut ci_delta : u64 = 0u64
+    let mut t : u32 = 0u32
+    while t < nlp { if SD_LP_L[t as u64] == ci { ci_found = 1u32  ci_delta = SD_LP_K[t as u64] }  t = t + 1u32 }
+    if ci_found == 0u32 { return SD_LOOPFAIL }
+    if ci_delta != 1u64 { return SD_LOOPFAIL }
+    /* trip = MUX(i0 < N, N - i0, 0); each carried local l: l0 + trip*k. */
+    let i0   : u32 = SD_LOC[ci as u64]
+    let ltb  : u32 = sd_slt(i0, nbound)
+    let diff : u32 = bb_sub(nbound, i0)
+    let trip : u32 = sd_mux(ltb, diff, bb_const(0u64))
+    let mut u : u32 = 0u32
+    while u < nlp {
+        let ll  : u32 = SD_LP_L[u as u64]
+        let l0  : u32 = SD_LOC[ll as u64]
+        let con : u32 = sd_scale(trip, SD_LP_K[u as u64])
+        if con == SD_TOP { return SD_LOOPFAIL }
+        SD_LOC[ll as u64] = bb_add(l0, con)
+        SD_LIC[ll as u64] = 0u32
+        u = u + 1u32
+    }
+    return p
+}
+
+/* lift a straight-line SVIR body [boff, boff+blen) to the bv_bits node of its returned value, or SD_TOP. */
+fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
+    if nparam > SD_MAXIN { return SD_TOP }
+    SD_SP = 0u32  SD_OVF = 0u32  SD_IFSP = 0u32  sd_mem_reset()  SD_TRACEN = 0u32
+    let z : u32 = bb_const(0u64)
+    let mut s : u32 = 0u32
+    while s < 256u32 { SD_LOC[s as u64] = z  SD_LIC[s as u64] = 1u32  SD_LCV[s as u64] = 0u64  s = s + 1u32 }
+    let mut pidx : u32 = 0u32
+    while pidx < nparam { SD_LOC[pidx as u64] = bb_var(pidx)  SD_LIC[pidx as u64] = 0u32  pidx = pidx + 1u32 }
+    let mut p : u64 = 0u64
+    while p < blen {
+        if SD_OVF == 1u32 { return SD_TOP }
+        let op : u32 = sdb(base, boff + p)  p = p + 1u64
+        if SD_TRACEN < 80u32 { SD_TRACE[SD_TRACEN as u64] = (((p - 1u64) as u32) * 256u32) + op  SD_TRACEN = SD_TRACEN + 1u32 }
+        let mut handled : u32 = 0u32
+        if op == 0x01u32 { let v : u64 = sd_rd8(base, boff + p)  p = p + 8u64  sd_push(bb_const(v), 1u32, v)  handled = 1u32 }
+        if op == 0x10u32 { let sl : u32 = sdb(base, boff + p)  p = p + 1u64  sd_push(SD_LOC[sl as u64], SD_LIC[sl as u64], SD_LCV[sl as u64])  handled = 1u32 }
+        if op == 0x11u32 {
+            let sl : u32 = sdb(base, boff + p)  p = p + 1u64
+            if SD_SP < 1u32 { return SD_TOP }
+            SD_SP = SD_SP - 1u32
+            SD_LOC[sl as u64] = SD_STK[SD_SP as u64]  SD_LIC[sl as u64] = SD_IC[SD_SP as u64]  SD_LCV[sl as u64] = SD_CV[SD_SP as u64]
+            handled = 1u32
+        }
+        if op >= 0x20u32 { if op <= 0x35u32 {
+            if SD_SP < 2u32 { return SD_TOP }
+            let topic : u32 = SD_IC[(SD_SP - 1u32) as u64]
+            let topcv : u64 = SD_CV[(SD_SP - 1u32) as u64]
+            let bn : u32 = SD_STK[(SD_SP - 1u32) as u64]
+            let an : u32 = SD_STK[(SD_SP - 2u32) as u64]
+            SD_SP = SD_SP - 2u32
+            let mut r : u32 = SD_TOP
+            if op == 0x20u32 { r = bb_add(an, bn) }
+            if op == 0x21u32 { r = bb_sub(an, bn) }
+            if op == 0x22u32 { r = bb_mul(an, bn) }
+            if op == 0x25u32 { r = bb_and(an, bn) }
+            if op == 0x26u32 { r = bb_or(an, bn) }
+            if op == 0x27u32 { r = bb_xor(an, bn) }
+            if op == 0x28u32 { if topic == 0u32 { return SD_TOP }  let mut k : u64 = topcv  if k > 64u64 { k = 64u64 }  r = bb_shl(an, k) }
+            if op == 0x29u32 { if topic == 0u32 { return SD_TOP }  let mut k2 : u64 = topcv  if k2 > 64u64 { k2 = 64u64 }  r = bb_shr(an, k2) }
+            if op == 0x30u32 { r = sks_eq(an, bn) }
+            if op == 0x31u32 { r = sks_not1(sks_eq(an, bn)) }
+            if op == 0x32u32 { r = sd_slt(an, bn) }                /* LT_S: a <s b           */
+            if op == 0x33u32 { r = sks_not1(sd_slt(an, bn)) }      /* GE_S: !(a <s b)        */
+            if op == 0x34u32 { r = sks_not1(sd_slt(bn, an)) }      /* LE_S: !(b <s a)        */
+            if op == 0x35u32 { r = sd_slt(bn, an) }                /* GT_S: a >s b = b <s a  */
+            if r == SD_TOP { return SD_TOP }
+            sd_push(r, 0u32, 0u64)
+            handled = 1u32
+        } }
+        if op == 0x60u32 { if SD_SP < 1u32 { return SD_TOP }  return SD_STK[(SD_SP - 1u32) as u64] }
+        if op == 0x72u32 { if SD_SP < 1u32 { return SD_TOP }  SD_SP = SD_SP - 1u32  handled = 1u32 }
+        if op == 0x42u32 {                                       /* IF: pop condition, open an if-frame */
+            if SD_SP < 1u32 { return SD_TOP }
+            if SD_IFSP >= 64u32 { return SD_TOP }
+            SD_SP = SD_SP - 1u32
+            SD_IFC[SD_IFSP as u64]  = SD_STK[SD_SP as u64]
+            SD_IFCF[SD_IFSP as u64] = SD_IC[SD_SP as u64]
+            SD_IFCV[SD_IFSP as u64] = SD_CV[SD_SP as u64]
+            SD_IFS0[SD_IFSP as u64] = SD_SP
+            SD_IFEL[SD_IFSP as u64] = 0u32
+            SD_IFSP = SD_IFSP + 1u32
+            handled = 1u32
+        }
+        if op == 0x43u32 {                                       /* ELSE: capture THEN value, reset to branch height */
+            if SD_IFSP < 1u32 { return SD_TOP }
+            let efr : u32 = SD_IFSP - 1u32
+            let es0 : u32 = SD_IFS0[efr as u64]
+            if SD_SP != es0 + 1u32 { return SD_TOP }             /* THEN must net-push exactly one value */
+            SD_IFT[efr as u64] = SD_STK[es0 as u64]
+            SD_IFEL[efr as u64] = 1u32
+            SD_SP = es0
+            handled = 1u32
+        }
+        if op == 0x44u32 {                                       /* END: fuse THEN/ELSE via sd_mux (or const-collapse) */
+            if SD_IFSP < 1u32 { return SD_TOP }                  /* a BLOCK/LOOP END we do not yet model */
+            let xfr : u32 = SD_IFSP - 1u32
+            if SD_IFEL[xfr as u64] == 0u32 { return SD_TOP }     /* value-less IF...END -> memory leg */
+            let xs0 : u32 = SD_IFS0[xfr as u64]
+            if SD_SP != xs0 + 1u32 { return SD_TOP }             /* ELSE must net-push exactly one value */
+            let fval : u32 = SD_STK[xs0 as u64]
+            let tval : u32 = SD_IFT[xfr as u64]
+            let mut res : u32 = SD_TOP
+            if SD_IFCF[xfr as u64] == 1u32 {                     /* O(1) prune: constant condition collapses */
+                if SD_IFCV[xfr as u64] != 0u64 { res = tval }
+                if SD_IFCV[xfr as u64] == 0u64 { res = fval }
+            }
+            if SD_IFCF[xfr as u64] == 0u32 { res = sd_mux(SD_IFC[xfr as u64], tval, fval) }
+            SD_SP = xs0
+            SD_IFSP = SD_IFSP - 1u32
+            sd_push(res, 0u32, 0u64)
+            handled = 1u32
+        }
+        if op == 0x40u32 {                                       /* BLOCK: only the structured while-loop idiom */
+            let np : u64 = sd_loop(base, boff, p, blen)
+            if np == SD_LOOPFAIL { return SD_TOP }
+            p = np
+            handled = 1u32
+        }
+        if op == 0x81u32 {                                       /* STORE8: mem[addr] = value & 0xFF (const addr) */
+            SD_STDIAG = 80u64
+            if SD_SP < 2u32 { SD_STDIAG = 1u64  return SD_TOP }
+            let vnode : u32 = SD_STK[(SD_SP - 1u32) as u64]
+            let aic   : u32 = SD_IC[(SD_SP - 2u32) as u64]
+            let acv   : u64 = SD_CV[(SD_SP - 2u32) as u64]
+            SD_SP = SD_SP - 2u32
+            if aic == 0u32 { SD_STDIAG = 2u64  return SD_TOP }   /* symbolic address -> ser_causal future */
+            if acv >= 64u64 { SD_STDIAG = 300u64 + acv  return SD_TOP }
+            SD_STDIAG = 9u64
+            SD_MEM[acv] = bb_and(vnode, bb_const(255u64))
+            SD_MEMW[acv] = 1u32
+            handled = 1u32
+        }
+        if op == 0x80u32 {                                       /* LOAD8: push mem[addr] (0-init; const addr) */
+            if SD_SP < 1u32 { return SD_TOP }
+            let aic2 : u32 = SD_IC[(SD_SP - 1u32) as u64]
+            let acv2 : u64 = SD_CV[(SD_SP - 1u32) as u64]
+            SD_SP = SD_SP - 1u32
+            if aic2 == 0u32 { return SD_TOP }
+            if acv2 >= 64u64 { return SD_TOP }
+            let mut rv : u32 = bb_const(0u64)
+            if SD_MEMW[acv2] == 1u32 { rv = SD_MEM[acv2] }
+            sd_push(rv, 0u32, 0u64)
+            handled = 1u32
+        }
+        if handled == 0u32 { SD_STDIAG = 1000u64 + (op as u64)  return SD_TOP }
+    }
+    if SD_SP < 1u32 { return SD_TOP }
+    return SD_STK[(SD_SP - 1u32) as u64]
+}
+
+/* SVIR <-> SVIR equivalence over two raw bodies of the same param arity.  1 PROVEN-equal / 0 REFUTED /
+ * SEQ_TOP undecided.  ONE bb_reset so both denotations share the symbolic inputs (bb_var(i) aliases input i). */
+fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 @export {
+    bb_reset(64u64)
+    let ra : u32 = sd_denote(ba, oa, la, nparam)
+    if ra == SD_TOP { return SEQ_TOP }
+    let rb : u32 = sd_denote(bx, ox, lx, nparam)
+    if rb == SD_TOP { return SEQ_TOP }
+    let e : u8 = bb_equal(ra, rb)
+    if e == 1u8 { return 1u32 }
+    if e == 0u8 { return 0u32 }
+    return SEQ_TOP
+}
+
+/* ---- Amputation 3: memory equivalence by causal epoch, not a McCarthy ITE alias chain ----------------------
+ * Two SVIR bodies are memory-equivalent iff they leave the SAME final byte-memory for ALL inputs.  Denote A
+ * (STORE8 fills the cell map), snapshot it, denote B, then bb_equal each cell A-vs-B (an unwritten cell reads 0).
+ * Const-address writes to DISJOINT cells commute by construction; same-cell writes are last-wins ordered -- the
+ * causal epoch decided structurally, no nested ITE.  A symbolic address in either body -> SD_TOP -> SEQ_TOP (the
+ * ser_causal / aff_of+ai_disjoint commute-fold over symbolic regions is the next layer). */
+fn seq_equiv_mem(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 @export {
+    bb_reset(64u64)
+    let ra : u32 = sd_denote(ba, oa, la, nparam)
+    if ra == SD_TOP { return SEQ_TOP }
+    let mut c : u32 = 0u32
+    while c < SD_MEMCELLS { SD_MEM_A[c as u64] = SD_MEM[c as u64]  SD_MEMW_A[c as u64] = SD_MEMW[c as u64]  c = c + 1u32 }
+    let rb : u32 = sd_denote(bx, ox, lx, nparam)
+    if rb == SD_TOP { return SEQ_TOP }
+    let zc : u32 = bb_const(0u64)
+    let mut k : u32 = 0u32
+    let mut anytop : u32 = 0u32
+    while k < SD_MEMCELLS {
+        let wa : u32 = SD_MEMW_A[k as u64]
+        let wb : u32 = SD_MEMW[k as u64]
+        let mut rel : u32 = 0u32
+        if wa == 1u32 { rel = 1u32 }
+        if wb == 1u32 { rel = 1u32 }
+        if rel == 1u32 {
+            let mut av : u32 = zc
+            if wa == 1u32 { av = SD_MEM_A[k as u64] }
+            let mut bv : u32 = zc
+            if wb == 1u32 { bv = SD_MEM[k as u64] }
+            let e : u8 = bb_equal(av, bv)
+            if e == 0u8 { return 0u32 }                          /* a cell differs -> NOT equal */
+            if e == 0xFFu8 { anytop = 1u32 }
+        }
+        k = k + 1u32
+    }
+    if anytop == 1u32 { return SEQ_TOP }
+    return 1u32
+}
+
+/* Locate function fnidx inside a full SVIR module ([u8 nfunc] then per-fn [u8 params][u8 nresults][u16 LE blen]
+ * [body]).  Returns packed (boff<<24 | blen<<8 | params), or SD_LOCFAIL.  This is what makes Leg A load-bearing
+ * on REAL ccsv/iiisv output instead of hand-assembled bodies. */
+const SD_LOCFAIL : u64 = 18446744073709551615u64
+fn sd_locate(base: u64, len: u64, fnidx: u32) -> u64 @export {
+    if len < 1u64 { return SD_LOCFAIL }
+    let nfunc : u32 = sdb(base, 0u64)
+    if fnidx >= nfunc { return SD_LOCFAIL }
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < fnidx {
+        let bl : u64 = (sdb(base, off + 2u64) as u64) | ((sdb(base, off + 3u64) as u64) << 8u64)
+        off = off + 4u64 + bl
+        i = i + 1u32
+    }
+    let params : u64 = sdb(base, off + 0u64) as u64
+    let blen : u64 = (sdb(base, off + 2u64) as u64) | ((sdb(base, off + 3u64) as u64) << 8u64)
+    let boff : u64 = off + 4u64
+    return (boff << 24u64) | (blen << 8u64) | params
+}
+
+/* SVIR <-> SVIR equivalence of function fa in module ma vs function fb in module mb (the module-level Leg A). */
+fn seq_equiv_mod(ma: u64, la: u64, fa: u32, mb: u64, lb: u64, fb: u32) -> u32 @export {
+    let pa : u64 = sd_locate(ma, la, fa)
+    if pa == SD_LOCFAIL { return SEQ_TOP }
+    let pb : u64 = sd_locate(mb, lb, fb)
+    if pb == SD_LOCFAIL { return SEQ_TOP }
+    let para : u32 = (pa & 255u64) as u32
+    let parb : u32 = (pb & 255u64) as u32
+    if para != parb { return SEQ_TOP }                 /* differing arity: cannot miter -> undecided */
+    let boa : u64 = pa >> 24u64
+    let bla : u64 = (pa >> 8u64) & 65535u64
+    let bob : u64 = pb >> 24u64
+    let blb : u64 = (pb >> 8u64) & 65535u64
+    return seq_equiv(ma, boa, bla, mb, bob, blb, para)
+}

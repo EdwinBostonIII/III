@@ -1,0 +1,25 @@
+/* STDLIB/corpus/2069_svir_equiv_mod.iii -- covers seq_equiv_mod (SVIR<->SVIR equivalence on whole modules, the
+ * top-level Leg-A entry): locate a function in each module, lift both to bv_bits, and prove [[a]] == [[b]] over
+ * ALL 2^64.  Module layout: [u8 nfunc][per-fn: u8 params, u8 nresults, u16 LE blen, body].  Body opcodes:
+ * 0x10 load-local+idx, 0x01 const+8LE, 0x20 add, 0x28 shl, 0x60 return.  99 = equal proven, unequal refuted. */
+module corpus_2069_svir_equiv_mod
+
+extern @abi(c-msvc-x64) fn seq_equiv_mod(ma: u64, la: u64, fa: u32, mb: u64, lb: u64, fb: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sd_slt_eval(a: u64, b: u64) -> u64 from "ser_kinduct_sym.iii"
+
+var MODA : [u8; 11] = [1u8,1u8,1u8,6u8,0u8, 16u8,0u8,16u8,0u8,32u8,96u8]                                          /* f0(x) = x + x      = 2x */
+var MODB : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 16u8,0u8,1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,40u8,96u8]              /* f0(x) = x << 1     = 2x */
+var MODC : [u8; 14] = [1u8,1u8,1u8,9u8,0u8, 16u8,0u8,16u8,0u8,32u8,16u8,0u8,32u8,96u8]                            /* f0(x) = x + x + x  = 3x */
+
+fn main() -> u64 {
+    /* 2x (via add) == 2x (via shl): PROVEN equal over all 2^64. */
+    if seq_equiv_mod(&MODA as u64, 11u64, 0u32, &MODB as u64, 18u64, 0u32) != 1u32 { return 1u64 }
+    /* 2x != 3x: REFUTED (a counterexample exists). */
+    if seq_equiv_mod(&MODA as u64, 11u64, 0u32, &MODC as u64, 14u64, 0u32) != 0u32 { return 2u64 }
+    /* reflexive: a module's function equals itself. */
+    if seq_equiv_mod(&MODB as u64, 18u64, 0u32, &MODB as u64, 18u64, 0u32) != 1u32 { return 3u64 }
+    /* sd_slt_eval (the SVIR signed-less-than denotation hook): -1 <s 1 is true; 1 <s -1 is false. */
+    if sd_slt_eval(18446744073709551615u64, 1u64) != 1u64 { return 4u64 }
+    if sd_slt_eval(1u64, 18446744073709551615u64) != 0u64 { return 5u64 }
+    return 99u64
+}

@@ -1,0 +1,61 @@
+/* STDLIB/corpus/2128_involution_closed.iii -- Ripple-Merge Phase II Gate 4: the INVOLUTION-CLOSED PROOF.
+ * The inverse ripple REFLECT(b,a) is a DISTINCT content-address from BELOW(a,b), yet mbr_reflect copies the
+ * obligation so that mbr_verify(inverse) == mbr_verify(original) for EVERY case: a valid crystal (both admit), a
+ * forged crystal (both reject), and a vacuous event (both free-admit).  The undo is exactly as proven as the action.
+ * 99 = the proof algebra is closed under the REFLECT involution. */
+module corpus_2128_involution_closed
+
+extern @abi(c-msvc-x64) fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn mbr_reset() -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_vacuous(h_ptr: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_crystal(h_ptr: u64, crystal_id: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_reflect(h_orig: u64, h_inv: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_verify(h_ptr: u64) -> u32 from "membrane.iii"
+
+var AA : [u8; 32]   var BB : [u8; 32]   var CC : [u8; 32]   var SITE : [u8; 32]
+var HD : [u8; 32]   var HR : [u8; 32]   var HD2 : [u8; 32]  var HR2 : [u8; 32]   var HV : [u8; 32]   var HVI : [u8; 32]
+
+fn fill(p: u64, s: u32) -> i32 { let pp : *u8 = p as *u8   let mut i : u64 = 0u64   while i < 32u64 { pp[i] = ((s + (i as u32)) & 255u32) as u8   i = i + 1u64 }   return 0i32 }
+fn eq32(p: u64, q: u64) -> u32 { let pp : *u8 = p as *u8   let qq : *u8 = q as *u8   let mut i : u64 = 0u64   while i < 32u64 { if pp[i] != qq[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+
+fn main() -> u64 {
+    mbr_reset()
+    fill((&AA[0u64]) as u64, 3u32)   fill((&BB[0u64]) as u64, 130u32)   fill((&CC[0u64]) as u64, 60u32)   fill((&SITE[0u64]) as u64, 9u32)
+
+    /* the inverse ripple is a DISTINCT content-address */
+    inv_address(0u32, (&AA[0u64]) as u64, (&BB[0u64]) as u64, (&HD[0u64]) as u64)    /* BELOW(a,b) */
+    inv_address(1u32, (&BB[0u64]) as u64, (&AA[0u64]) as u64, (&HR[0u64]) as u64)    /* REFLECT(b,a) = its involution */
+    if eq32((&HD[0u64]) as u64, (&HR[0u64]) as u64) == 1u32 { return 1u64 }          /* distinct ripples */
+
+    /* (1) VALID crystal: original admits, reflected admits identically */
+    let cid : u64 = crystal_mint(5u32, (&SITE[0u64]) as u64, 1u64, 0u64)
+    mbr_set_crystal((&HD[0u64]) as u64, cid)
+    mbr_reflect((&HD[0u64]) as u64, (&HR[0u64]) as u64)
+    let vd : u32 = mbr_verify((&HD[0u64]) as u64)
+    let vr : u32 = mbr_verify((&HR[0u64]) as u64)
+    if vd != 1u32 { return 2u64 }
+    if vr != vd { return 3u64 }                                                       /* THE LAW: inverse == original */
+
+    /* (2) FORGED crystal (id 0): original rejects, reflected rejects identically */
+    inv_address(0u32, (&AA[0u64]) as u64, (&CC[0u64]) as u64, (&HD2[0u64]) as u64)
+    inv_address(1u32, (&CC[0u64]) as u64, (&AA[0u64]) as u64, (&HR2[0u64]) as u64)
+    mbr_set_crystal((&HD2[0u64]) as u64, 0u64)
+    mbr_reflect((&HD2[0u64]) as u64, (&HR2[0u64]) as u64)
+    let vd2 : u32 = mbr_verify((&HD2[0u64]) as u64)
+    let vr2 : u32 = mbr_verify((&HR2[0u64]) as u64)
+    if vd2 != 0u32 { return 4u64 }
+    if vr2 != vd2 { return 5u64 }                                                     /* THE LAW: both reject */
+
+    /* (3) VACUOUS: original free-admits, reflected free-admits */
+    inv_address(0u32, (&BB[0u64]) as u64, (&CC[0u64]) as u64, (&HV[0u64]) as u64)
+    inv_address(1u32, (&CC[0u64]) as u64, (&BB[0u64]) as u64, (&HVI[0u64]) as u64)
+    mbr_set_vacuous((&HV[0u64]) as u64)
+    mbr_reflect((&HV[0u64]) as u64, (&HVI[0u64]) as u64)
+    let vv : u32 = mbr_verify((&HV[0u64]) as u64)
+    let vvi : u32 = mbr_verify((&HVI[0u64]) as u64)
+    if vv != 1u32 { return 6u64 }
+    if vvi != vv { return 7u64 }                                                      /* THE LAW: both free-admit */
+
+    return 99u64
+}

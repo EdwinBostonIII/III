@@ -99,3 +99,103 @@ fn sp_membrane_smallonly(form: u32, k: u32, v: u64) -> u32 @export {
  * no duplicated battery): the membrane OWNS the edge vectors; the synthesizer borrows them. */
 fn sp_edge_n() -> u64 @export { return SP_NEDGE }
 fn sp_edge_at(i: u64) -> u64 @export { sp_init() if i >= SP_NEDGE { return 0u64 } return SP_EDGE[i] }
+
+/* ============================================================================================================
+ * GENERAL TRANSITION-SYSTEM FUZZING (the boundless-k-induction FRONT END).  sp_membrane above refutes a single
+ * rewrite candidate; THIS is the general organ: it walks an ARBITRARY transition T (a bv_bits circuit over the
+ * symbolic state) from a concrete init, recording every reached state as an OBSERVATION for ser_antiunify --
+ * the finite empirical trace the generalizer abstracts into a candidate invariant, which ser_kinduct_sym then
+ * proves over ALL 2^64.  "Fuzzing as the eyes of the synthesizer."  REFUTER -> OBSERVER: a finite trace can
+ * never PROVE an infinite law -- it is the raw evidence the deterministic generalization folds.
+ *
+ * NO-ML: sp_fuzz_det is a concrete deterministic walk (same (T,init,nsteps) => same trace); sp_fuzz_seeded is
+ * a SEEDED walk (egs_next -- the Grace-seed exception) for input-driven systems (same seed => same trace).  No
+ * statistics, no learned policy -- exploration is a function of the SEED, never of accumulated success history. */
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+/* THE OBSERVATION TRACE BUFFER -- owned by the fuzzer (the PRODUCER).  Each fuzzed state is recorded here for
+ * ser_antiunify to generalize.  Owning it here (not in the consumer) keeps the module graph ACYCLIC: the
+ * generalizer READS the trace (ser_antiunify -> ser_petri); the fuzzer never depends on the generalizer. */
+const SP_OCAP : u64 = 256u64
+var SP_OBS : [u64; 256]
+var SP_ON : u32 = 0u32
+fn sp_obs_reset() -> i32 @export { SP_ON = 0u32  return 0i32 }
+fn sp_obs_push(v: u64) -> i32 @export {
+    if (SP_ON as u64) < SP_OCAP { SP_OBS[SP_ON as u64] = v  SP_ON = SP_ON + 1u32 }
+    return 0i32
+}
+fn sp_obs_count() -> u32 @export { return SP_ON }
+fn sp_obs_at(i: u32) -> u64 @export { if (i as u64) < SP_OCAP { return SP_OBS[i as u64] }  return 0u64 }
+
+/* DETERMINISTIC FUZZ: walk T (a bv_bits circuit over statevar) from init for nsteps, recording each reached
+ * state as an observation (s_{n+1} = T(s_n), evaluated concretely).  Returns the number of observations. */
+fn sp_fuzz_det(t_root: u32, statevar: u32, init: u64, nsteps: u32) -> u32 @export {
+    sp_obs_reset()
+    let mut s : u64 = init
+    let mut i : u32 = 0u32
+    while i < nsteps {
+        sp_obs_push(s)
+        bb_set_input(statevar, s)
+        s = bb_eval(t_root)
+        i = i + 1u32
+    }
+    return sp_obs_count()
+}
+
+/* SEEDED FUZZ for input-driven systems: T is a circuit over (statevar, inputvar); each step draws a fresh
+ * seeded input and steps s' = T(s, input), exploring a deterministic-by-seed reachable subset.  Returns the
+ * number of observations.  Same seed => same trace (the Grace-seed exception -- a seeded RNG, not learning). */
+fn sp_fuzz_seeded(t_root: u32, statevar: u32, inputvar: u32, init: u64, nsteps: u32, seed: u64) -> u32 @export {
+    sp_obs_reset()
+    let mut s   : u64 = init
+    let mut rng : u64 = seed
+    let mut i : u32 = 0u32
+    while i < nsteps {
+        sp_obs_push(s)
+        rng = egs_next(rng)
+        bb_set_input(statevar, s)
+        bb_set_input(inputvar, rng)
+        s = bb_eval(t_root)
+        i = i + 1u32
+    }
+    return sp_obs_count()
+}
+
+/* ============================================================================================================
+ * MULTI-COMPONENT OBSERVATION (the RELATIONAL front end).  sp_fuzz_det records ONE state variable's reached
+ * values; a CONSERVATION invariant -- a quantity held CONSTANT across a COUPLED transition (the sound image of
+ * "the fractional charges sum to exactly zero") -- is a RELATION between TWO components, so the generalizer
+ * (ser_antiunify's relational lgg) needs BOTH streams.  This adds a parallel y-stream SHARING the obs count,
+ * and a JOINT deterministic fuzz that walks (x,y) under coupled circuits (tx,ty) over (xvar,yvar) with a
+ * SIMULTANEOUS update: BOTH successors are evaluated from the CURRENT pair before EITHER is assigned, so a
+ * truly coupled system (x'=x+y, ...) is observed faithfully.  Same (tx,ty,x0,y0,nsteps) => same trace
+ * (deterministic; no learning -- exploration is a function of the inputs, never of accumulated history). */
+var SP_OBS_Y : [u64; 256]
+fn sp_obs2_reset() -> i32 @export { SP_ON = 0u32  return 0i32 }
+fn sp_obs2_push(vx: u64, vy: u64) -> i32 @export {
+    if (SP_ON as u64) < SP_OCAP { SP_OBS[SP_ON as u64] = vx  SP_OBS_Y[SP_ON as u64] = vy  SP_ON = SP_ON + 1u32 }
+    return 0i32
+}
+fn sp_obs_y_at(i: u32) -> u64 @export { if (i as u64) < SP_OCAP { return SP_OBS_Y[i as u64] }  return 0u64 }
+
+/* DETERMINISTIC JOINT FUZZ: walk the coupled transition (tx,ty) -- each a bv_bits circuit over BOTH statevars --
+ * from (x0,y0) for nsteps, recording each reached (x,y) pair.  Simultaneous: evaluate xn,yn from the current
+ * (x,y) before assigning, so the step is s_{n+1} = T(s_n), not a sequential half-update.  Returns the count. */
+fn sp_fuzz_det2(tx_root: u32, ty_root: u32, xvar: u32, yvar: u32, x0: u64, y0: u64, nsteps: u32) -> u32 @export {
+    sp_obs2_reset()
+    let mut x : u64 = x0
+    let mut y : u64 = y0
+    let mut i : u32 = 0u32
+    while i < nsteps {
+        sp_obs2_push(x, y)
+        bb_set_input(xvar, x)
+        bb_set_input(yvar, y)
+        let xn : u64 = bb_eval(tx_root)
+        let yn : u64 = bb_eval(ty_root)
+        x = xn
+        y = yn
+        i = i + 1u32
+    }
+    return sp_obs_count()
+}

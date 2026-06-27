@@ -1,0 +1,78 @@
+/* svir_dis.iii -- SVIR per-function opcode+depth TRACER (Phi1 diagnostic).
+ * For each function whose eval-depth (modelled exactly as svir_verify's verify_body) goes negative, prints
+ * the opcode stream with the running depth and stops at the first underflow ("<<<") -- turning a bare rc=8
+ * into the precise opcode/construct that pops with an empty stack.  Linked like verify_each (gcc harness). */
+module svir_dis
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+
+var DB : [u8; 32]
+var M_P : u64 = 0u64
+var M_DEPTH : i64 = 0i64
+
+fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
+fn ph(v: u32) { let hi:u32=(v>>4u32)&0xFu32  let lo:u32=v&0xFu32  if hi<10u32 {pc(48u32+hi)} else {pc(87u32+hi)}  if lo<10u32 {pc(48u32+lo)} else {pc(87u32+lo)} }
+fn pd(v0: u64) { if v0==0u64 { pc(48u32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { DB[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  pc(DB[n as u64] as u32) } }
+fn psd(v: i64) { if v<0i64 { pc(45u32)  pd((0i64-v) as u64) } else { pd(v as u64) } }
+fn vb(base: u64, i: u64) -> u32 { let p:*u8=(base+i) as *u8  return p[0u64] as u32 }
+
+/* advance M_P over one op at boff+M_P and update M_DEPTH by verify_body's exact net-stack rules */
+fn step(base: u64, boff: u64) {
+    let op : u32 = vb(base, boff + M_P)
+    M_P = M_P + 1u64
+    if op == 0x01u32 { M_P = M_P + 8u64  M_DEPTH = M_DEPTH + 1i64  return }      /* CONST */
+    if op == 0x10u32 { M_P = M_P + 1u64  M_DEPTH = M_DEPTH + 1i64  return }      /* LOCAL_GET */
+    if op == 0x11u32 { M_P = M_P + 1u64  M_DEPTH = M_DEPTH - 1i64  return }      /* LOCAL_SET */
+    if op >= 0x20u32 { if op <= 0x35u32 { M_DEPTH = M_DEPTH - 1i64  return } }   /* binops net -1 */
+    if op == 0x42u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* IF pops cond */
+    if op == 0x50u32 { M_P = M_P + 1u64  return }                               /* BR */
+    if op == 0x51u32 { M_P = M_P + 1u64  M_DEPTH = M_DEPTH - 1i64  return }      /* BR_IF */
+    if op == 0x60u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* RETURN */
+    if op == 0x70u32 { let ac:u32=vb(base, boff + M_P + 1u64)  M_P = M_P + 2u64  M_DEPTH = M_DEPTH - (ac as i64) + 1i64  return }   /* CALL */
+    if op == 0x71u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* PRINT_CHAR */
+    if op == 0x72u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* DROP */
+    if op == 0x81u32 { M_DEPTH = M_DEPTH - 2i64  return }                        /* STORE8 */
+    if op == 0x83u32 { M_DEPTH = M_DEPTH - 2i64  return }                        /* STORE64 */
+    if op == 0x88u32 { M_DEPTH = M_DEPTH - 2i64  return }                        /* STORE16 */
+    if op == 0x89u32 { M_DEPTH = M_DEPTH - 2i64  return }                        /* STORE32 */
+    /* 0x40/0x41 BLOCK/LOOP, 0x43 ELSE, 0x44 END, 0x80/0x82/0x84-0x87 LOAD* : net 0 */
+    return
+}
+
+fn underflows(base: u64, boff: u64, blen: u64) -> u32 {   /* 0=ok ; 2=underflow at LAST body op (spurious-trailing class) ; 1=underflow mid-body (emit-nothing class) */
+    M_P = 0u64  M_DEPTH = 0i64
+    while M_P < blen { step(base, boff)  if M_DEPTH < 0i64 { if M_P >= blen { return 2u32 }  return 1u32 } }
+    return 0u32
+}
+
+fn trace(base: u64, boff: u64, blen: u64) {
+    M_P = 0u64  M_DEPTH = 0i64
+    while M_P < blen {
+        let op : u32 = vb(base, boff + M_P)
+        let opp : u64 = M_P
+        step(base, boff)
+        ph(op)
+        if op == 0x01u32 { pc(58u32)  let mut val:u64=0u64  let mut k:u64=0u64  while k<8u64 { val = val | ((vb(base, boff+opp+1u64+k) as u64) << (k*8u64))  k=k+1u64 }  pd(val) }
+        if op == 0x10u32 { pc(58u32)  pd(vb(base, boff+opp+1u64) as u64) }
+        if op == 0x11u32 { pc(58u32)  pd(vb(base, boff+opp+1u64) as u64) }
+        pc(64u32)  psd(M_DEPTH)  pc(32u32)                        /* "op[:operand]@depth " */
+        if M_DEPTH < 0i64 { pc(60u32) pc(60u32) pc(60u32)  return }
+    }
+}
+
+fn main() -> u64 {
+    let base : u64 = svir_ptr()
+    let nfunc : u32 = vb(base, 0u64)
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let blen : u64 = (vb(base, off + 2u64) as u64) | ((vb(base, off + 3u64) as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        let cls : u32 = underflows(base, boff, blen)
+        if cls != 0u32 { if cls == 2u32 { pc(76u32) } else { pc(77u32) }  pc(32u32) pd(i as u64) pc(58u32) pc(32u32) trace(base, boff, blen) pc(10u32) }
+        off = boff + blen
+        i = i + 1u32
+    }
+    return 0u64
+}

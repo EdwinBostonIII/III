@@ -1,0 +1,58 @@
+/* STDLIB/corpus/2117_field_superpos.iii -- THE UNIFIED FIELD, faculty E: E-GRAPH SPATIAL SUPERPOSITION.
+ * ATTACHED to the REAL e-graph (numera/egraph.iii), not an island.  Equivalent layouts are held simultaneously as
+ * ONE e-class (the superposition, no exponential memory); a constraint that two layouts are equivalent is an
+ * eg_union that COLLAPSES them; and congruence closure propagates the superposition through structure (if layout
+ * L0==L2 then any container f(L0)==f(L2) automatically).  99 = N equivalent forms held at once, collapsed by a
+ * constraint, propagated by congruence -- the visual superposition mechanic, on III's exact e-graph.
+ * NAMED limit: the e-graph holds equivalences exactly; choosing WHICH form to display under a cost is eg_extract. */
+module corpus_2117_field_superpos
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: u64, children: u64, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_size(root: u32) -> u32 from "egraph.iii"
+
+var SYM : [u8; 32]
+var CHILD : [u32; 8]
+
+fn setsym(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SYM[i] = 0u8   i = i + 1u64 }
+    SYM[0u64] = tag
+    return 0i32
+}
+
+fn main() -> u64 {
+    eg_init()
+    let s : u64 = (&SYM) as u64
+    let c : u64 = (&CHILD) as u64
+
+    /* three EQUIVALENT layouts as distinct leaf forms (e.g. the same data as list / graph / matrix) */
+    setsym(1u8)   let l0 : u32 = eg_add(s, c, 0u32)
+    setsym(2u8)   let l1 : u32 = eg_add(s, c, 0u32)
+    setsym(3u8)   let l2 : u32 = eg_add(s, c, 0u32)
+    if l0 == 4294967295u32 { return 1u64 }
+    if l2 == 4294967295u32 { return 2u64 }
+
+    /* two CONTAINERS f(L0), f(L2) -- distinct windows each holding one layout */
+    setsym(10u8)   CHILD[0u64] = l0   let f0 : u32 = eg_add(s, c, 1u32)
+    setsym(10u8)   CHILD[0u64] = l2   let f2 : u32 = eg_add(s, c, 1u32)
+    if eg_find(f0) == eg_find(f2) { return 3u64 }              /* distinct before the constraint */
+
+    /* the CONSTRAINT: assert the three layouts are equivalent -> the superposition collapses them into one class */
+    eg_union(l0, l1)
+    eg_union(l1, l2)
+    let passes : u32 = eg_rebuild()
+    if passes < 1u32 { return 4u64 }
+
+    /* SUPERPOSITION BREADTH: three equivalent forms held at once in a single e-class (no exponential blowup) */
+    if eg_class_size(l0) != 3u32 { return 5u64 }
+
+    /* CONGRUENCE: the superposition propagated through structure -- the two containers are now the same */
+    if eg_find(f0) != eg_find(f2) { return 6u64 }
+    if eg_class_size(f0) != 2u32 { return 7u64 }              /* f(L0), f(L2) collapsed to one class of 2 */
+
+    return 99u64
+}

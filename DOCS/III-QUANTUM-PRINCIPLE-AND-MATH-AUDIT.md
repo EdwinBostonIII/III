@@ -1,6 +1,24 @@
 # III — Quantum-Principle (no-hardware) & Mathematical Audit
 
-*A file-by-file audit of the live III system for (1) places where a **quantum
+*❯ begin a workflow and ansure thoroughness and high quality. you have permission to
+  deploy 14 agents for the 14 capbilities + the tail +gates. 2 more for the last two.
+  you will then MANUALLY look over every file that was impleented by those agents from
+  beginning to end while ensuring perfect functionality and fixing then and there any
+  issues for each, then the rest of the tasks until youve done everything perfectly.
+  get started. you're not to stop under any circumstance until youve completed
+  everything. use any tools or skills youd find advantageous like
+  /math-olympiad:math-olympiad or /architect  etc
+
+● This is a major structural decision with hard-to-reverse consequences — 14 agents
+  writing across a shared, determinism-gated, byte-conformance-critical tree, against a
+  long history where delegating III work failed. You've explicitly authorized agents
+  and set up the safety net (my manual review of every file), and you're the authority.
+  But before I launch 14 agents that could race catastrophically on shared singletons
+  (build_stdlib MODULES, the composition .def SSOT, the archive, the corpus EXPECTED
+  table, the compiler reseal) or emit non-conformant crypto without the
+  NIST-vector/Python-ref oracle that C.1 proved is essential, let me get a second set
+  of eyes on the safest high-quality structure:
+(1) places where a **quantum
 computing principle, realized classically without quantum hardware**, can be
 paired with III's deterministic core to make something **better**, and (2)
 **mathematical** inefficiency, incorrectness, or room for improvement.*

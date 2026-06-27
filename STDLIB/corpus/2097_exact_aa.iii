@@ -1,0 +1,145 @@
+/* STDLIB/corpus/2097_exact_aa.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 9: EXACT ANALYTIC anti-aliasing.
+ *
+ * ui_exact.ui_exact_cover2 computes the TRUE area(pixel ∩ CCW polygon) by a homogeneous-integer Sutherland-Hodgman
+ * clip + an exact rational shoelace -- no subsampling, no rounding.  What grounds per-pixel correctness, honestly:
+ *   (a) the algorithm is exact BY CONSTRUCTION -- the homogeneous cross-product intersection is exact integer
+ *       arithmetic; there is no rounding step to be wrong;
+ *   (b) THREE hand-checked pixels (full=2, empty=0, half=1) and the exact alpha (255/127);
+ *   (c) a CONSERVATION law pinning the AGGREGATE: the per-pixel coverages SUM to the exact total area (necessary --
+ *       it catches any systematic error -- but NOT sufficient alone, since two pixels could compensate);
+ *   (d) the discriminator conservation misses: an INDEPENDENT per-pixel cross-check against the even-odd ray-crossing
+ *       subsampler (a different algorithm) within the subsampling bound 8/N at N=64 -- this catches the
+ *       compensating-error class (one pixel +e, another -e) that (c) cannot.
+ * Plus distribution-ready robustness: a checked multiply latches AA_OVF on any wrap, and the cover REFUSES (0)
+ * rather than returning a wrong area; a realistic-coords (~1000) KAT demonstrates the i64 bound is not exceeded.
+ * 99 = exact coverage matches hand pixels + the independent subsampler per-pixel + conserves area + never overflows
+ *      silently (latch clear at realistic coords). */
+module corpus_2097_exact_aa
+
+extern @abi(c-msvc-x64) fn ui_exact_cover2(vx: u64, vy: u64, nv: u32, px: i64, py: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_num() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_ovf() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_exact_alpha(vx: u64, vy: u64, nv: u32, px: i64, py: i64, sa: u32) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_poly_cov(ex: u64, ne: u32, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+
+var TVX : [i64; 4]
+var TVY : [i64; 4]
+var TE  : [i64; 16]   /* edge array (4 i64/edge) for the independent subsampler */
+
+fn kgcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0  if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0  if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = b  b = a - ((a / b) * b)  a = t }
+    return a
+}
+
+/* build TE (edges) from TVX/TVY[0..nv) so the same triangle can drive the even-odd subsampler. */
+fn build_edges(nv: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < nv {
+        let mut j : u32 = i + 1u32  if j == nv { j = 0u32 }
+        let b : u64 = (i as u64) * 4u64
+        TE[b] = TVX[i as u64]  TE[b + 1u64] = TVY[i as u64]  TE[b + 2u64] = TVX[j as u64]  TE[b + 3u64] = TVY[j as u64]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* CONSERVATION: sum 2*area over the bbox [0,bx)x[0,by); returns 1 iff the rational sum equals (want)/1 exactly. */
+fn partition_is(nv: u32, bx: i64, by: i64, want: i64) -> u32 {
+    let vx : u64 = &TVX as u64
+    let vy : u64 = &TVY as u64
+    let mut sn : i64 = 0i64
+    let mut sd : i64 = 1i64
+    let mut py : i64 = 0i64
+    while py < by {
+        let mut px : i64 = 0i64
+        while px < bx {
+            ui_exact_cover2(vx, vy, nv, px, py)
+            if ui_aa_ovf() != 0u32 { return 0u32 }
+            let an : i64 = ui_aa_num()
+            let ad : i64 = ui_aa_den()
+            let nn : i64 = (sn * ad) + (an * sd)
+            let nd : i64 = sd * ad
+            let g  : i64 = kgcd(nn, nd)
+            sn = nn  sd = nd
+            if g > 1i64 { sn = sn / g  sd = sd / g }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    if sd != 1i64 { return 0u32 }
+    if sn != want { return 0u32 }
+    return 1u32
+}
+
+/* INDEPENDENT per-pixel check over the window [x0,x1)x[y0,y1): exact 2A vs the even-odd subsampler at N=64 must
+ * agree within the subsampling bound 8/N (cross-multiplied to integers); and the latch must stay clear. */
+fn perpixel_agrees(nv: u32, x0: i64, y0: i64, x1: i64, y1: i64) -> u32 {
+    let vx : u64 = &TVX as u64
+    let vy : u64 = &TVY as u64
+    let ep : u64 = &TE as u64
+    let nn : i64 = 64i64
+    let n2 : i64 = nn * nn
+    let mut py : i64 = y0
+    while py < y1 {
+        let mut px : i64 = x0
+        while px < x1 {
+            ui_exact_cover2(vx, vy, nv, px, py)
+            if ui_aa_ovf() != 0u32 { return 0u32 }            /* overflow here -> FAIL (never pass blind) */
+            let an : i64 = ui_aa_num()
+            let ad : i64 = ui_aa_den()
+            let cnt : i64 = ui_poly_cov(ep, nv, px, py, nn)   /* inside subsamples out of N^2 */
+            let lhs : i64 = (an * n2) - ((2i64 * cnt) * ad)   /* ad*N^2 * (2A_exact - 2A_sub) */
+            let mut al : i64 = lhs  if al < 0i64 { al = 0i64 - al }
+            let bound : i64 = (8i64 * nn) * ad                /* tol = 8/N in 2A units */
+            if al > bound { return 0u32 }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    let vx : u64 = &TVX as u64
+    let vy : u64 = &TVY as u64
+
+    /* === 45-deg triangle (0,0),(6,0),(0,6), CCW, area 18 === */
+    TVX[0u64] = 0i64  TVY[0u64] = 0i64   TVX[1u64] = 6i64  TVY[1u64] = 0i64   TVX[2u64] = 0i64  TVY[2u64] = 6i64
+    build_edges(3u32)
+    ui_exact_cover2(vx, vy, 3u32, 1i64, 1i64)
+    if ui_aa_num() != 2i64 { return 1u64 }              /* fully inside -> 2*area = 2 */
+    if ui_aa_den() != 1i64 { return 2u64 }
+    ui_exact_cover2(vx, vy, 3u32, 5i64, 5i64)
+    if ui_aa_num() != 0i64 { return 3u64 }              /* fully outside -> 0 */
+    ui_exact_cover2(vx, vy, 3u32, 2i64, 3i64)
+    if ui_aa_num() != 1i64 { return 4u64 }              /* cut diagonally -> 2*area = 1 (half) */
+    if ui_aa_den() != 1i64 { return 5u64 }
+    if partition_is(3u32, 6i64, 6i64, 36i64) != 1u32 { return 6u64 }            /* AGGREGATE: sum 2A == 2*18 */
+    if perpixel_agrees(3u32, 0i64, 0i64, 6i64, 6i64) != 1u32 { return 7u64 }    /* PER-PIXEL vs the independent subsampler */
+    if ui_exact_alpha(vx, vy, 3u32, 1i64, 1i64, 255u32) != 255u32 { return 8u64 }
+    if ui_exact_alpha(vx, vy, 3u32, 2i64, 3i64, 255u32) != 127u32 { return 9u64 }
+
+    /* === skew triangle (0,0),(5,0),(0,3), CCW, area 7.5 -- fractional coverages === */
+    TVX[0u64] = 0i64  TVY[0u64] = 0i64   TVX[1u64] = 5i64  TVY[1u64] = 0i64   TVX[2u64] = 0i64  TVY[2u64] = 3i64
+    build_edges(3u32)
+    if partition_is(3u32, 5i64, 3i64, 15i64) != 1u32 { return 10u64 }           /* AGGREGATE: sum 2A == 15 */
+    if perpixel_agrees(3u32, 0i64, 0i64, 5i64, 3i64) != 1u32 { return 11u64 }    /* PER-PIXEL agreement */
+
+    /* === REALISTIC COORDS (~1000): the clip+area must fit i64 (latch clear) and still agree per-pixel === */
+    TVX[0u64] = 100i64  TVY[0u64] = 100i64   TVX[1u64] = 1100i64  TVY[1u64] = 200i64   TVX[2u64] = 300i64  TVY[2u64] = 1000i64
+    build_edges(3u32)
+    /* a window straddling the long edge near (600,150) -- inside, outside, and partial pixels at ~1000 coords */
+    if perpixel_agrees(3u32, 560i64, 130i64, 640i64, 175i64) != 1u32 { return 12u64 }
+
+    /* === NEGATIVE arm: coords so large the area product provably wraps i64 -> the latch MUST fire (not vacuous),
+     * and the cover MUST refuse (0) rather than return a silently-wrong area.  3.5e9^2 = 1.225e19 > i64 max. === */
+    TVX[0u64] = 0i64  TVY[0u64] = 0i64   TVX[1u64] = 8000000000i64  TVY[1u64] = 0i64   TVX[2u64] = 0i64  TVY[2u64] = 8000000000i64
+    ui_exact_cover2(vx, vy, 3u32, 3500000000i64, 3500000000i64)
+    if ui_aa_ovf() != 1u32 { return 13u64 }            /* the guard FIRED on real overflow -- it is not vacuous */
+    if ui_aa_num() != 0i64 { return 14u64 }            /* and the cover REFUSED, never a silently-wrong coverage */
+
+    return 99u64
+}

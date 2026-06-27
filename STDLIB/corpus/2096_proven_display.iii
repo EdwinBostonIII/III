@@ -1,0 +1,62 @@
+/* STDLIB/corpus/2096_proven_display.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 8: NeWS done right -- a display
+ * field whose memory safety is PROVEN before it is evaluated.
+ *
+ * NeWS (Sun, 1989) shipped Turing-complete PostScript to the display server: infinite-resolution math instead of
+ * bitmaps, but a buggy component could write out of bounds and crash the whole OS -- so the dream was abandoned for
+ * "dumb" pixel compositors.  III's answer: the display receives a CLOSED-FORM field (math, O(1)/pixel, no
+ * interpreter), and its framebuffer writes are PROVEN in-bounds by the real solver (smt.iii) before it runs.
+ *
+ * The field is the framebuffer index  idx(x,y) = stride*y + x  over the viewport x in [0,799], y in [0,599].
+ *   stride=800 (correct): max idx = 800*599+799 = 479999 < 480000 = W*H.  The solver proves idx>=480000 UNSAT --
+ *                         the field can NEVER write out of bounds.  SAFE to ship.
+ *   stride=1000 (buggy):  idx reaches 1000*599+799 = 599799.  The solver returns SAT with a WITNESS (x,y) where the
+ *                         write escapes -- the bug is CAUGHT and rejected, never crashes the server.
+ * 99 = the safe field is proven memory-safe and the buggy field is caught with a real out-of-bounds witness. */
+module corpus_2096_proven_display
+
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_new_var() -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_le(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_eq(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_ge(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_solve() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_value(vr: u32) -> i64 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_check_model() -> u8 from "smt.iii"
+
+var TC : [i64; 8]
+var TV : [u32; 8]
+
+fn addc(n: u32, b: i64, op: u32) -> i32 {
+    let cp : *i64 = (&TC as u64) as *i64
+    let vp : *u32 = (&TV as u64) as *u32
+    if op == 0u32 { return smt_lia_add_eq(cp, vp, n, b) }
+    if op == 1u32 { return smt_lia_add_le(cp, vp, n, b) }
+    return smt_lia_add_ge(cp, vp, n, b)
+}
+
+/* assert: idx = stride*y + x, viewport bounds, and the out-of-bounds VIOLATION idx >= W*H (480000). */
+fn build(stride: i64) -> i32 {
+    smt_init()
+    let idx : u32 = smt_lia_new_var()   let xx : u32 = smt_lia_new_var()   let yy : u32 = smt_lia_new_var()
+    TC[0u64] = 1i64  TV[0u64] = idx   TC[1u64] = -1i64  TV[1u64] = xx   TC[2u64] = (0i64 - stride)  TV[2u64] = yy   addc(3u32, 0i64, 0u32)   /* idx - x - stride*y = 0 */
+    TC[0u64] = 1i64  TV[0u64] = xx                                                addc(1u32, 0i64, 2u32)      /* x >= 0 */
+    TC[0u64] = 1i64  TV[0u64] = xx                                                addc(1u32, 799i64, 1u32)    /* x <= 799 */
+    TC[0u64] = 1i64  TV[0u64] = yy                                                addc(1u32, 0i64, 2u32)      /* y >= 0 */
+    TC[0u64] = 1i64  TV[0u64] = yy                                                addc(1u32, 599i64, 1u32)    /* y <= 599 */
+    TC[0u64] = 1i64  TV[0u64] = idx                                               addc(1u32, 480000i64, 2u32) /* idx >= W*H  (the violation) */
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* === SAFE field (stride=800): the violation is UNSAT -> the field PROVABLY never writes out of bounds === */
+    build(800i64)
+    if smt_solve() != 2i32 { return 1u64 }           /* SMT_UNSAT -> idx < 480000 for every pixel -> memory-safe */
+
+    /* === BUGGY field (stride=1000): the violation is SAT -> the solver hands back the out-of-bounds witness === */
+    build(1000i64)
+    if smt_solve() != 1i32 { return 2u64 }           /* SMT_SAT -> an escaping pixel exists */
+    if smt_check_model() != 1u8 { return 3u64 }
+    if smt_lia_value(1u32) < 480000i64 { return 4u64 }   /* the witness idx genuinely escapes the framebuffer */
+
+    return 99u64
+}

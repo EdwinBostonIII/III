@@ -1,0 +1,26 @@
+/* STDLIB/corpus/2124_transcendental.iii -- ATTACK 2 killed: transcendental contamination handled by a TRISTATE.
+ * sign(sum a_i sqrt(b_i) + k*pi).  The interval decides +1/-1 fast even with pi present; a near-zero TRANSCENDENTAL
+ * returns 2 = UNKNOWN (honest -- Richardson forbids certifying a transcendental zero), NEVER panic, NEVER false zero;
+ * an algebraic near-zero (pi coeff 0) is still certified exactly to 0.  99 = sound tristate, no contamination crash. */
+module corpus_2124_transcendental
+
+extern @abi(c-msvc-x64) fn sqrtsum_pi_sign(a_ptr: u64, b_ptr: u64, n: u64, pi_coeff: i64) -> i32 from "sqrt_sum_sign.iii"
+
+var AC : [i64; 8]   var BC : [i64; 8]
+fn ps(n: u64, k: i64) -> i32 { return sqrtsum_pi_sign((&AC) as u64, (&BC) as u64, n, k) }
+
+fn main() -> u64 {
+    /* 5sqrt2 + pi = +10.21 -> +1 (decided fast, pi present) */
+    AC[0u64]=5i64   BC[0u64]=2i64                  if ps(1u64, 1i64) != 1i32 { return 1u64 }
+    /* pi - 4 = -0.86 -> -1 */
+    AC[0u64]=0i64-4i64   BC[0u64]=1i64             if ps(1u64, 1i64) != (0i32-1i32) { return 2u64 }
+    /* 2pi - 7 = -0.72 -> -1 */
+    AC[0u64]=0i64-7i64   BC[0u64]=1i64             if ps(1u64, 2i64) != (0i32-1i32) { return 3u64 }
+    /* 33102*pi - 103993 ~ +1.9e-5 : a near-zero TRANSCENDENTAL -> UNKNOWN (cannot certify, no panic) */
+    AC[0u64]=0i64-103993i64   BC[0u64]=1i64        if ps(1u64, 33102i64) != 2i32 { return 4u64 }
+    /* CONTRAST: sqrt2+sqrt8-sqrt18 = 0 with NO pi -> ALGEBRAIC, certified exactly to 0 */
+    AC[0u64]=1i64 AC[1u64]=1i64 AC[2u64]=0i64-1i64   BC[0u64]=2i64 BC[1u64]=8i64 BC[2u64]=18i64
+    if ps(3u64, 0i64) != 0i32 { return 5u64 }
+
+    return 99u64
+}

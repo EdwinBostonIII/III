@@ -1,0 +1,65 @@
+/* STDLIB/corpus/2133_ripple_eidolon.iii -- THE EIDOLON WIRED INTO THE RIPPLE, tested.
+ * (1) FLAT by exact identity: sqrt8 and 2sqrt2 are ONE node -> no ripple between a thing and itself.
+ * (2) DIRECTION by exact order: sqrt2 < sqrt3 -> BELOW ; sqrt3 > sqrt2 -> REFLECT.
+ * (3) IDENTITY FLOWS UP: ripple(sqrt8, sqrt5) and ripple(2sqrt2, sqrt5) are the SAME ripple (identical H) -- two
+ *     surd spellings produce one node, so one ripple.
+ * (4) OLYMPIAD, exact + tight: by strict concavity sqrt1969 + sqrt1971 < 2 sqrt1970 -> BELOW, decided exactly by
+ *     the separation-bound predicate where float catastrophically cancels.
+ * 99 = the change-substrate now speaks exact algebraic truth between self-identifying primitives. */
+module corpus_2133_ripple_eidolon
+
+extern @abi(c-msvc-x64) fn inv_reset() -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_count() -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_verb_at(idx: u32) -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_h_byte(idx: u32, k: u32) -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn eid_reset() -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn re_emit(eidA: u32, eidB: u32, out32: u64) -> i32 from "ripple_eidolon.iii"
+
+var OUT : [u8; 32]
+
+fn main() -> u64 {
+    inv_reset()   eid_reset()
+    let s2 : u32 = eid_make(1i64, 2u64, 0u32)
+    let s3 : u32 = eid_make(1i64, 3u64, 0u32)
+    let s5 : u32 = eid_make(1i64, 5u64, 0u32)
+    let s8 : u32 = eid_make(1i64, 8u64, 0u32)
+    let two_s2 : u32 = eid_make(2i64, 2u64, 0u32)
+
+    /* (1) FLAT: sqrt8 == 2sqrt2 -> no ripple */
+    let c0 : u32 = inv_count()
+    re_emit(s8, two_s2, (&OUT[0u64]) as u64)
+    if inv_count() != c0 { return 1u64 }
+
+    /* (2) BELOW: sqrt2 < sqrt3 */
+    let c1 : u32 = inv_count()
+    re_emit(s2, s3, (&OUT[0u64]) as u64)
+    if inv_count() != (c1 + 1u32) { return 2u64 }
+    if inv_verb_at(c1) != 0u32 { return 3u64 }
+
+    /* (3) REFLECT: sqrt3 > sqrt2 */
+    let c2 : u32 = inv_count()
+    re_emit(s3, s2, (&OUT[0u64]) as u64)
+    if inv_count() != (c2 + 1u32) { return 4u64 }
+    if inv_verb_at(c2) != 1u32 { return 5u64 }
+
+    /* (4) IDENTITY FLOWS: ripple(sqrt8, sqrt5) == ripple(2sqrt2, sqrt5) -- same node, same ripple */
+    let i1 : u32 = inv_count()
+    re_emit(s8, s5, (&OUT[0u64]) as u64)
+    let i2 : u32 = inv_count()
+    re_emit(two_s2, s5, (&OUT[0u64]) as u64)
+    let mut k : u32 = 0u32   let mut diff : u32 = 0u32
+    while k < 32u32 { if inv_h_byte(i1, k) != inv_h_byte(i2, k) { diff = 1u32 }   k = k + 1u32 }
+    if diff != 0u32 { return 6u64 }
+
+    /* (5) OLYMPIAD: sqrt1969 + sqrt1971 < 2 sqrt1970 (strict concavity), exact + tight -> BELOW */
+    let lo : u32 = eid_add(eid_make(1i64, 1969u64, 0u32), eid_make(1i64, 1971u64, 0u32))
+    let hi : u32 = eid_make(2i64, 1970u64, 0u32)
+    let c5 : u32 = inv_count()
+    re_emit(lo, hi, (&OUT[0u64]) as u64)
+    if inv_count() != (c5 + 1u32) { return 7u64 }
+    if inv_verb_at(c5) != 0u32 { return 8u64 }
+
+    return 99u64
+}

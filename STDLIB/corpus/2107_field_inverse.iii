@@ -1,0 +1,34 @@
+/* STDLIB/corpus/2107_field_inverse.iii -- THE UNIFIED FIELD, faculty 5: REVERSE RASTERIZATION (optical proofing).
+ * Because the coverage is an exact algebraic identity, it is INVERTIBLE: from a pixel's exact alpha alone, III
+ * recovers the boundary's exact offset -- the geometry that cast the shadow, proven not guessed.  Forward∘inverse
+ * is the identity.  99 = round-trips recover the exact geometry on a constrained edge family. */
+module corpus_2107_field_inverse
+
+extern @abi(c-msvc-x64) fn ui_forward_diag(off_n: i64, off_d: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inverse_diag(cov_n: i64, cov_d: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_cov_n() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_cov_d() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inv_n() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inv_d() -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* FORWARD: a 45-deg edge at offset 1/2 covers exactly 1/8 of the pixel */
+    ui_forward_diag(1i64, 2i64)
+    if ui_cov_n() != 1i64 { return 1u64 }
+    if ui_cov_d() != 8i64 { return 2u64 }
+
+    /* INVERSE: from coverage 1/8 alone, recover offset^2 = 1/4 = (1/2)^2 -- the exact geometry that cast the shadow */
+    ui_inverse_diag(1i64, 8i64)
+    if ui_inv_n() != 1i64 { return 3u64 }
+    if ui_inv_d() != 4i64 { return 4u64 }
+
+    /* ROUND-TRIP on a non-trivial offset 3/5: forward -> coverage 9/50 ; inverse -> offset^2 = 9/25 = (3/5)^2 */
+    ui_forward_diag(3i64, 5i64)
+    if ui_cov_n() != 9i64 { return 5u64 }
+    if ui_cov_d() != 50i64 { return 6u64 }
+    ui_inverse_diag(ui_cov_n(), ui_cov_d())
+    if ui_inv_n() != 9i64 { return 7u64 }                 /* offset^2 = 9/25 -- recovered exactly */
+    if ui_inv_d() != 25i64 { return 8u64 }
+
+    return 99u64
+}

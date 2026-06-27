@@ -1,0 +1,24 @@
+module corpus_58_udiv_highbit
+
+/* FALSIFIER (Phase 0, the cg_r3 twin-divergence gate): exercises UNSIGNED u64 / and %
+ * with high-bit operands.  cg_r3.c emitted `cqto; idivq` for ALL division (signed),
+ * which reads 0xFFFF..FE as negative -> 0xFFFF..FE / 2 wrongly gives MAX instead of
+ * 0x7FFF..FF.  cg_r3.iii emits `xorl %edx,%edx; divq` for unsigned (correct).  The two
+ * bootstrap twins therefore DIVERGED on this program; this test reddens build_iiis1.sh
+ * --check-corpus (iiis-0 from cg_r3.c vs iiis-1 from cg_r3.iii) until cg_r3.c is fixed.
+ * Both operands are runtime params, so neither div is strength-reduced to a shift -- the
+ * full general division path (idivq vs divq) is what is compared. */
+
+fn udiv(a: u64, b: u64) -> u64 {
+    return a / b
+}
+
+fn umod(a: u64, b: u64) -> u64 {
+    return a % b
+}
+
+fn main() -> u64 {
+    let q : u64 = udiv(18446744073709551614u64, 2u64)
+    let r : u64 = umod(18446744073709551615u64, 7u64)
+    return q + r
+}

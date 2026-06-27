@@ -1,0 +1,401 @@
+/* STDLIB/iii/aether/sqrt_sum_sign.iii -- GENERAL exact sign of a sum of square roots, sign(sum_i a_i sqrt(b_i)), for
+ * ARBITRARY n, certified by a separation bound (algebraic-integer norm >= 1).
+ *
+ * SEPARATION BOUND (rigorous): E = sum a_i sqrt(b_i) is an algebraic integer of degree d <= 2^n.  If E != 0 its norm
+ * (product of d conjugates, each a sign-variant E_eps bounded by M = sum |a_i|*ceil(sqrt b_i)) is a NONZERO integer,
+ * so |E| = |norm| / prod(other d-1 conjugates) >= 1/M^(d-1) >= 1/M^(2^n - 1) =: 1/T.
+ * ALGORITHM: approximate E*2^p with r_i = floor(sqrt(b_i * 2^(2p))) (bigint isqrt), error |~E - E*2^p| < A = sum|a_i|;
+ * pick p with 2^p > 2*A*T; then |~E| > A -> sign(~E), else (|~E| <= A) -> |E| < 1/T <= separation -> E is EXACTLY 0.
+ *
+ * HONEST SCOPE: a NEW capability (handles n>=3 AND certifies exact zeros that float cancels) -- NOT a speedup of the
+ * n<=2 coverage path (there the symbolic square-twice in ui_exact_big is far cheaper).  Precision is exponential in n
+ * (the 2^n-1 exponent is inherent: the sum-of-roots sign problem is not known polynomial-bit).  No III consumer calls
+ * it yet -- it is a correct library primitive whose benefit is realized only once something consumes it. */
+module sqrt_sum_sign
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+
+/* bit length of a bigint (position of the highest set bit), robust to a non-normalised top limb */
+fn bi_bitlen(N: u64) -> u64 {
+    let len : u64 = bigint_len_limbs(N)
+    let mut i : u64 = len
+    while i > 0u64 {
+        let limb : u64 = bigint_get_limb(N, i - 1u64)
+        if limb != 0u64 {
+            let mut bl : u64 = 0u64
+            let mut t : u64 = limb
+            while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+            return ((i - 1u64) * 64u64) + bl
+        }
+        i = i - 1u64
+    }
+    return 0u64
+}
+
+/* floor(sqrt(N)) as a fresh bigint in arena ar.  Base-4 digit-by-digit: only add/sub/cmp/shift (no div, no mul). */
+/* floor(sqrt(N)).  Handle-FRUGAL: every intermediate is dropped, so the live count stays ~6 (III's bigint handle
+ * table is only 64 slots) and callers can chain many isqrt + ops without exhausting it. */
+fn bigint_isqrt(ar: u64, N: u64) -> u64 @export {
+    if bigint_is_zero(N) == 1u8 { return bigint_from_u64(ar, 0u64) }
+    let bl : u64 = bi_bitlen(N)
+    let k : u64 = (bl - 1u64) / 2u64                                  /* largest k with 4^k <= N */
+    let one : u64 = bigint_from_u64(ar, 1u64)
+    let mut bit : u64 = bigint_shl_bits(ar, one, 2u64 * k)
+    bigint_drop(one)
+    let mut res : u64 = bigint_from_u64(ar, 0u64)
+    let mut n : u64 = bigint_copy(ar, N)
+    while bigint_is_zero(bit) == 0u8 {
+        let rb : u64 = bigint_add(ar, res, bit)
+        let c : i32 = bigint_cmp(n, rb)                              /* capture BEFORE mutating n */
+        let mut ge : u8 = 0u8                                        /* n >= rb, via > and == (i32 >= is the ordering trap) */
+        if c > 0i32 { ge = 1u8 }
+        if c == 0i32 { ge = 1u8 }
+        if ge == 1u8 {
+            let nn : u64 = bigint_sub(ar, n, rb)
+            bigint_drop(n)   n = nn
+            let sr : u64 = bigint_shr_bits(ar, res, 1u64)
+            let nr : u64 = bigint_add(ar, sr, bit)
+            bigint_drop(sr)   bigint_drop(res)   res = nr
+        }
+        if ge == 0u8 {
+            let nr : u64 = bigint_shr_bits(ar, res, 1u64)
+            bigint_drop(res)   res = nr
+        }
+        bigint_drop(rb)
+        let nb : u64 = bigint_shr_bits(ar, bit, 2u64)
+        bigint_drop(bit)   bit = nb
+    }
+    bigint_drop(n)
+    return res
+}
+
+fn iabs64(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn isign64(x: i64) -> i32 { if x > 0i64 { return 1i32 }   if x < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+/* plain-u64 floor(sqrt(N)) -- NO bigint, NO arena, NO handles: the fast Tier-1 primitive. */
+fn u64_isqrt(N: u64) -> u64 {
+    if N == 0u64 { return 0u64 }
+    let mut bl : u64 = 0u64   let mut t : u64 = N
+    while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+    let k : u64 = (bl - 1u64) / 2u64
+    let mut bit : u64 = 1u64 << (2u64 * k)
+    let mut res : u64 = 0u64
+    let mut n : u64 = N
+    while bit != 0u64 {
+        let rb : u64 = res + bit
+        let mut ge : u8 = 0u8
+        if n >= rb { ge = 1u8 }
+        if ge == 1u8 { n = n - rb   res = (res >> 1u64) + bit }
+        if ge == 0u8 { res = res >> 1u64 }
+        bit = bit >> 2u64
+    }
+    return res
+}
+
+/* TIER COUNTERS: how many sign decisions resolved on the fast i64 interval vs escalated to exact bigint.
+ * The whole thesis is FASTCT >> EXACTCT -- bigint demoted from default to last-resort. */
+var FASTCT : u64 = 0u64
+var CANONCT : u64 = 0u64
+var EXACTCT : u64 = 0u64
+fn lazy_fast_count() -> u64 @export { return FASTCT }
+fn lazy_canon_count() -> u64 @export { return CANONCT }
+fn lazy_exact_count() -> u64 @export { return EXACTCT }
+fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT = 0u64   return 0i32 }
+
+/* squarefree split: b = s^2 * d with d squarefree; sets SFS=s, SFD=d.  Trial-divide square factors (cheap for small b). */
+var SFS : u64   var SFD : u64
+fn squarefree_part(b: u64) -> i32 {
+    let mut d : u64 = b
+    let mut s : u64 = 1u64
+    let mut k : u64 = 2u64
+    while (k * k) <= d {
+        let kk : u64 = k * k
+        let q : u64 = d / kk
+        let mut divides : u8 = 0u8
+        if (d - (q * kk)) == 0u64 { divides = 1u8 }
+        if divides == 1u8 { d = q   s = s * k }
+        if divides == 0u8 { k = k + 1u64 }
+    }
+    SFS = s   SFD = d
+    return 0i32
+}
+
+/* TIER 2 -- radical canonicalization: reduce sum a_i sqrt(b_i) to collected-like-surds sum c_d sqrt(d) (d squarefree),
+ * then decide by STRUCTURE: 0 = all c_d cancel (exact zero, no bigint); +-1 = a single surd; 2 = >=2 surds (undecided,
+ * fall through to Tier 3).  ACCEPT-ONLY: never falsely rejects -- "2" just means "not proven here". */
+var CD : [u64; 16]   var CC : [i64; 16]
+fn sqrtsum_canon_decide(a_ptr: u64, b_ptr: u64, n: u64) -> i32 {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bu : u64 = pb[i] as u64
+        if ai != 0i64 {
+            if bu != 0u64 {
+                squarefree_part(bu)
+                let d : u64 = SFD
+                let coeff : i64 = ai * (SFS as i64)
+                let mut fidx : u64 = 0u64   let mut hit : u8 = 0u8
+                let mut j : u64 = 0u64
+                while j < m {
+                    if CD[j] == d { fidx = j   hit = 1u8 }
+                    j = j + 1u64
+                }
+                if hit == 1u8 { CC[fidx] = CC[fidx] + coeff }
+                if hit == 0u8 { CD[m] = d   CC[m] = coeff   m = m + 1u64 }
+            }
+        }
+        i = i + 1u64
+    }
+    let mut nz : u64 = 0u64   let mut last : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < m {
+        if CC[j] != 0i64 { nz = nz + 1u64   last = j }
+        j = j + 1u64
+    }
+    if nz == 0u64 { return 0i32 }                        /* all surds cancelled -> EXACT structural zero */
+    if nz == 1u64 { return isign64(CC[last]) }           /* one surd sqrt(d>0) -> sign of its coefficient */
+    return 2i32                                          /* >= 2 distinct surds -> undecided here */
+}
+
+/* THE THREE-TIER LAZY SIGN (Attacks 1 + 3 killed):
+ *   Tier 1  -- adaptive i64 interval (scale F = (60 - maxbitlen)/2, so ANY b_i rides the fast path; no fixed ceiling);
+ *   Tier 2  -- radical canonicalization, gated to SMALL radicands (so factoring is cheap, no e-graph saturation);
+ *   Tier 3  -- the separation-bound bigint, only when both above abstain. */
+fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let mut maxbl : u64 = 1u64
+    let mut allsmall : u8 = 1u8
+    let mut bad : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bi : i64 = pb[i]
+        if isign64(bi) == (0i32 - 1i32) { bad = 1u8 }
+        if iabs64(ai) >= (1u64 << 20u64) { bad = 1u8 }
+        let bu : u64 = bi as u64
+        let mut bl : u64 = 0u64   let mut t : u64 = bu
+        while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+        if bl > maxbl { maxbl = bl }
+        if bu >= (1u64 << 20u64) { allsmall = 0u8 }
+        i = i + 1u64
+    }
+    if bad == 1u8 { EXACTCT = EXACTCT + 1u64   return ui_sqrt_sum_sign(a_ptr, b_ptr, n) }
+    let mut F : u64 = 1u64
+    if maxbl < 58u64 { F = (60u64 - maxbl) / 2u64 }      /* RELATIVE windowing -- precision adapts to magnitude */
+    if F == 0u64 { F = 1u64 }
+    let mut elo : i64 = 0i64   let mut ehi : i64 = 0i64
+    i = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bu : u64 = pb[i] as u64
+        let silo : u64 = u64_isqrt(bu << (2u64 * F))
+        let sihi : u64 = silo + 1u64
+        let sa : i32 = isign64(ai)
+        if sa == 1i32 { elo = elo + (ai * (silo as i64))   ehi = ehi + (ai * (sihi as i64)) }
+        if sa == (0i32 - 1i32) { elo = elo + (ai * (sihi as i64))   ehi = ehi + (ai * (silo as i64)) }
+        i = i + 1u64
+    }
+    if isign64(elo) == 1i32 { FASTCT = FASTCT + 1u64   return 1i32 }
+    if isign64(ehi) == (0i32 - 1i32) { FASTCT = FASTCT + 1u64   return 0i32 - 1i32 }
+    if allsmall == 1u8 {
+        let r : i32 = sqrtsum_canon_decide(a_ptr, b_ptr, n)
+        if r != 2i32 { CANONCT = CANONCT + 1u64   return r }
+    }
+    EXACTCT = EXACTCT + 1u64
+    return ui_sqrt_sum_sign(a_ptr, b_ptr, n)
+}
+
+/* ATTACK 2 killed -- TRANSCENDENTAL CONTAMINATION handled by a provenance-aware TRISTATE.  Decides
+ * sign(sum a_i sqrt(b_i) + pi_coeff * pi).  The interval (now including pi's bracket) decides +1/-1 at hardware speed
+ * whenever it doesn't straddle 0.  On a straddle: if pi_coeff==0 the value is ALGEBRAIC -> certify exactly via Tier 3
+ * (may be 0); if pi_coeff!=0 the value is TRANSCENDENTAL -> return 2 = UNKNOWN, an HONEST bounded answer (Richardson:
+ * a transcendental zero is undecidable -- NEVER a panic, NEVER a false zero).  pi bracketed at 2^-20: [PILO,PIHI]. */
+var PILO : u64 = 3294198u64                                 /* floor(pi * 2^20) */
+var PIHI : u64 = 3294199u64
+fn sqrtsum_pi_sign(a_ptr: u64, b_ptr: u64, n: u64, pi_coeff: i64) -> i32 @export {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let f : u64 = 20u64
+    let mut elo : i64 = 0i64   let mut ehi : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bu : u64 = pb[i] as u64
+        let silo : u64 = u64_isqrt(bu << (2u64 * f))
+        let sihi : u64 = silo + 1u64
+        let sa : i32 = isign64(ai)
+        if sa == 1i32 { elo = elo + (ai * (silo as i64))   ehi = ehi + (ai * (sihi as i64)) }
+        if sa == (0i32 - 1i32) { elo = elo + (ai * (sihi as i64))   ehi = ehi + (ai * (silo as i64)) }
+        i = i + 1u64
+    }
+    let sp : i32 = isign64(pi_coeff)
+    if sp == 1i32 { elo = elo + (pi_coeff * (PILO as i64))   ehi = ehi + (pi_coeff * (PIHI as i64)) }
+    if sp == (0i32 - 1i32) { elo = elo + (pi_coeff * (PIHI as i64))   ehi = ehi + (pi_coeff * (PILO as i64)) }
+    if isign64(elo) == 1i32 { return 1i32 }
+    if isign64(ehi) == (0i32 - 1i32) { return 0i32 - 1i32 }
+    if pi_coeff == 0i64 { return ui_sqrt_sum_sign(a_ptr, b_ptr, n) }   /* algebraic -> exact (may certify 0) */
+    return 2i32                                                        /* transcendental straddle -> honest UNKNOWN */
+}
+
+/* THE LAZY EXACT-REAL SIGN: Tier 1 = bigint-free i64 interval at 2^-20; if it does NOT straddle 0 (and stays in i64
+ * range) the sign is returned at hardware speed.  Otherwise escalate to Tier 3 (the separation-bound bigint, exact).
+ * Same answer as ui_sqrt_sum_sign always -- but bigint runs only on the rare straddle / out-of-range input. */
+fn sqrtsum_lazy_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let f : u64 = 20u64                                          /* fractional bits of the interval */
+    let lim : u64 = 1u64 << (64u64 - (2u64 * f))                 /* b_i must be < 2^24 for the u64 isqrt at 2f bits */
+    let mut elo : i64 = 0i64                                     /* lower bound of E * 2^f */
+    let mut ehi : i64 = 0i64                                     /* upper bound of E * 2^f */
+    let mut escalate : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bi : i64 = pb[i]
+        if isign64(bi) == (0i32 - 1i32) { escalate = 1u8 }       /* negative radicand -> not handled here */
+        let bu : u64 = bi as u64
+        if bu >= lim { escalate = 1u8 }                          /* radicand too large for the fast path */
+        if iabs64(ai) >= (1u64 << 20u64) { escalate = 1u8 }      /* coefficient too large -> i64 sum could overflow */
+        if escalate == 0u8 {
+            let silo : u64 = u64_isqrt(bu << (2u64 * f))         /* floor(sqrt(b_i)*2^f) */
+            let sihi : u64 = silo + 1u64
+            let sa : i32 = isign64(ai)
+            if sa == 1i32 {
+                elo = elo + (ai * (silo as i64))
+                ehi = ehi + (ai * (sihi as i64))
+            }
+            if sa == (0i32 - 1i32) {
+                elo = elo + (ai * (sihi as i64))                 /* a_i<0: a_i*sihi is the LOWER bound */
+                ehi = ehi + (ai * (silo as i64))
+            }
+        }
+        i = i + 1u64
+    }
+    let mut r : i32 = 0i32
+    if escalate == 0u8 {
+        if isign64(elo) == 1i32 { r = 1i32 }                     /* interval entirely > 0 */
+        if isign64(ehi) == (0i32 - 1i32) { r = 0i32 - 1i32 }     /* interval entirely < 0 */
+    }
+    if r != 0i32 {
+        FASTCT = FASTCT + 1u64
+        return r                                                 /* TIER 1: hardware-speed, no bigint */
+    }
+    EXACTCT = EXACTCT + 1u64
+    return ui_sqrt_sum_sign(a_ptr, b_ptr, n)                     /* TIER 3: exact bigint, only on a straddle */
+}
+
+/* sign(sum_{i<n} a[i]*sqrt(b[i])) -- EXACT for arbitrary n, via the separation bound.  a[i] signed i64, b[i] >= 0.
+ * Returns +1 / 0 / -1.  Certifies EXACT ZEROS (where float cancels).  All bigint intermediates are dropped to stay
+ * inside the 64-slot handle table. */
+fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let ar : u64 = arena_new(16777216u64)
+    let one : u64 = bigint_from_u64(ar, 1u64)
+
+    /* Phase 1: A = sum|a_i| ; M = sum |a_i|*(floor(sqrt b_i)+1)  [ceil-safe upper bound on sqrt b_i] */
+    let mut A : u64 = bigint_from_u64(ar, 0u64)
+    let mut M : u64 = bigint_from_u64(ar, 0u64)
+    let mut i : u64 = 0u64
+    while i < n {
+        let aa : u64 = iabs64(pa[i])
+        if aa != 0u64 {
+            let aabig : u64 = bigint_from_u64(ar, aa)
+            let nA : u64 = bigint_add(ar, A, aabig)
+            bigint_drop(A)   A = nA
+            let bibig : u64 = bigint_from_u64(ar, pb[i] as u64)
+            let si : u64 = bigint_isqrt(ar, bibig)
+            bigint_drop(bibig)
+            let si1 : u64 = bigint_add(ar, si, one)
+            bigint_drop(si)
+            let term : u64 = bigint_mul(ar, aabig, si1)
+            bigint_drop(si1)   bigint_drop(aabig)
+            let nM : u64 = bigint_add(ar, M, term)
+            bigint_drop(M)   bigint_drop(term)   M = nM
+        }
+        i = i + 1u64
+    }
+
+    /* Phase 2: T = M^(2^n - 1) */
+    let e : u64 = (1u64 << n) - 1u64
+    let mut T : u64 = bigint_from_u64(ar, 1u64)
+    let mut j : u64 = 0u64
+    while j < e {
+        let nT : u64 = bigint_mul(ar, T, M)
+        bigint_drop(T)   T = nT
+        j = j + 1u64
+    }
+
+    /* Phase 3: p with 2^p > 2*A*T */
+    let AT : u64 = bigint_mul(ar, A, T)
+    let thresh : u64 = bigint_add(ar, AT, AT)
+    bigint_drop(AT)   bigint_drop(T)   bigint_drop(M)
+    let p : u64 = bi_bitlen(thresh) + 1u64
+    bigint_drop(thresh)
+    let twop : u64 = 2u64 * p
+
+    /* Phase 4: psum = sum_{a_i>0} a_i*r_i , nsum = sum_{a_i<0} |a_i|*r_i ,  r_i = floor(sqrt(b_i << 2p)) */
+    let mut psum : u64 = bigint_from_u64(ar, 0u64)
+    let mut nsum : u64 = bigint_from_u64(ar, 0u64)
+    i = 0u64
+    while i < n {
+        let aa : u64 = iabs64(pa[i])
+        let sa : i32 = isign64(pa[i])
+        if aa != 0u64 {
+            if pb[i] != 0i64 {
+                let bibig : u64 = bigint_from_u64(ar, pb[i] as u64)
+                let bishift : u64 = bigint_shl_bits(ar, bibig, twop)
+                bigint_drop(bibig)
+                let ri : u64 = bigint_isqrt(ar, bishift)
+                bigint_drop(bishift)
+                let aabig : u64 = bigint_from_u64(ar, aa)
+                let term : u64 = bigint_mul(ar, aabig, ri)
+                bigint_drop(aabig)   bigint_drop(ri)
+                if sa == 1i32 {
+                    let nP : u64 = bigint_add(ar, psum, term)
+                    bigint_drop(psum)   psum = nP
+                }
+                if sa == (0i32 - 1i32) {
+                    let nN : u64 = bigint_add(ar, nsum, term)
+                    bigint_drop(nsum)   nsum = nN
+                }
+                bigint_drop(term)
+            }
+        }
+        i = i + 1u64
+    }
+
+    /* Phase 5: |psum-nsum| > A -> sign ; else EXACTLY 0 (|E| < 1/T <= separation) */
+    let cs : i32 = bigint_cmp(psum, nsum)
+    let mut result : i32 = 0i32
+    if cs > 0i32 {
+        let diff : u64 = bigint_sub(ar, psum, nsum)
+        if bigint_cmp(diff, A) > 0i32 { result = 1i32 }
+        bigint_drop(diff)
+    }
+    if cs < 0i32 {
+        let diff : u64 = bigint_sub(ar, nsum, psum)
+        if bigint_cmp(diff, A) > 0i32 { result = 0i32 - 1i32 }
+        bigint_drop(diff)
+    }
+    bigint_drop(psum)   bigint_drop(nsum)   bigint_drop(A)   bigint_drop(one)
+    bigint_drop_arena(ar)
+    return result
+}

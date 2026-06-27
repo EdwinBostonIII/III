@@ -1,0 +1,47 @@
+/* STDLIB/iii/aether/ui_aa_showcase.iii -- the visual proof of the EXACT analytic AA.
+ * Same triangle, two fills side by side: LEFT = subsampled coverage (n=2, the old way -- visible banding on the
+ * slanted edges); RIGHT = ui_fill_tri_exact, the TRUE area(pixel ∩ triangle) by homogeneous-integer clip + rational
+ * shoelace (KAT 2097).  Rendered once at startup (the exact per-pixel clip is not a 60fps operation -- it is the
+ * perfect static rasterizer), then presented. */
+module ui_aa_showcase
+
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_fill_poly_aa(buf: u64, w: u32, h: u32, ex: u64, ne: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_tri_exact(buf: u64, w: u32, h: u32, vx: u64, vy: u64, nv: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32) -> i32 from "ui_exact.iii"
+
+var FB : [u32; 156000]   /* 520 x 300 */
+var TITLE : [u8; 8] = [73u8,73u8,73u8,45u8,65u8,65u8,0u8,0u8]   /* "III-AA\0" */
+var LE  : [i64; 16]   /* left-triangle edges (4 i64/edge) for the subsampled fill */
+var RVX : [i64; 4]   var RVY : [i64; 4]   /* right-triangle vertices for the exact fill (CCW) */
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 520u32, 300u32)
+    let b : u64 = &FB as u64
+    ui_clear(b, 520u32, 300u32, rgb(12u32, 14u32, 20u32))
+
+    /* LEFT: subsampled coverage at n=2 -- the slanted edges band. Triangle (20,40),(240,90),(120,260). */
+    LE[0u64] = 20i64   LE[1u64] = 40i64    LE[2u64] = 240i64  LE[3u64] = 90i64
+    LE[4u64] = 240i64  LE[5u64] = 90i64    LE[6u64] = 120i64  LE[7u64] = 260i64
+    LE[8u64] = 120i64  LE[9u64] = 260i64   LE[10u64] = 20i64  LE[11u64] = 40i64
+    ui_fill_poly_aa(b, 520u32, 300u32, &LE as u64, 3u32, 20i64, 40i64, 241i64, 261i64, rgb(255u32, 170u32, 40u32), 2i64)
+
+    /* RIGHT: the EXACT analytic coverage. Same triangle shifted +260 in x (CCW). */
+    RVX[0u64] = 280i64  RVY[0u64] = 40i64    RVX[1u64] = 500i64  RVY[1u64] = 90i64    RVX[2u64] = 380i64  RVY[2u64] = 260i64
+    ui_fill_tri_exact(b, 520u32, 300u32, &RVX as u64, &RVY as u64, 3u32, 280i64, 40i64, 501i64, 261i64, rgb(255u32, 170u32, 40u32))
+
+    ui_text_n(b, 520u32, 300u32, 70u32, 14u32, "subsampled n=2" as u64, 14u32, rgb(150u32, 160u32, 180u32))
+    ui_text_n(b, 520u32, 300u32, 330u32, 14u32, "exact analytic" as u64, 14u32, rgb(120u32, 229u32, 160u32))
+
+    while ui_win_pump() == 0u32 {
+        ui_win_present(b, 520u32, 300u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

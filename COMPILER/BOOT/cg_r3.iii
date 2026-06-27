@@ -225,6 +225,18 @@ extern @abi(c-msvc-x64) fn cgopt_mul_2ss_j(v: u64) -> u32 from "cg_opt_rules.iii
 extern @abi(c-msvc-x64) fn cgopt_mul_2ss_m(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_div_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_div_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mod_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mod_mask(v: u64) -> u64 from "cg_opt_rules.iii"
+/* EIDOS lift (DOCS plan Phase 2): the e-graph synthesizer DRIVES cg_r3's mul-by-constant lowering.  At compile
+ * time cg_r3 calls seg_mul_plan(v): the e-graph saturates x*v, extracts the cost-optimal equivalent, PROVES it
+ * == x*v over all 2^64 (bv_ring), and returns a byte-faithful emit plan (kind|j<<8|m<<16).  Resolved from
+ * libiii_native.a (linked into iiis-1/2/3 -- see build_iiis1.sh EIDOS lift).  ONE definition (STDLIB), no island. */
+extern @abi(c-msvc-x64) fn seg_mul_plan(v: u64) -> u64 from "ser_egraph.iii"
+/* magic-number division (Phase 5): seg_div_plan(d) returns 2 (SDP_MAGIC) only when the GM bound certifies
+ * x/d == mulhi(x,m)>>s for ALL x; m,s read via seg_div_magic_m()/seg_div_shift(). */
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 
 extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
@@ -728,7 +740,13 @@ const R3_MOD_SPEC_LEN : u64 = 10u64
 fn r3_emit_bytes(addr: u64, n: u64) -> u32 { if R3_G_OUT == 0u64 { R3_G_LAST_ERROR = R3_E_IO; return R3_E_IO }; let r: i32 = iii_cg_r3_fwrite_c(R3_G_OUT, addr, n); iii_cg_r3_sha_update_c(addr, n); if r != 0i32 { R3_G_LAST_ERROR = R3_E_IO; return R3_E_IO }; return R3_OK }
 fn r3_emit_arr(addr: u64, n: u64) -> u32 { return r3_emit_bytes(addr, n) }
 fn r3_emit_ch(ch: u32) -> u32 { R3_NUMBUF[0] = ch as u8; return r3_emit_bytes(&R3_NUMBUF as u64, 1u64) }
-fn r3_emit_dec(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { R3_NUMBUF[0]=48u8; return r3_emit_bytes(&R3_NUMBUF as u64, 1u64) }; while v > 0u64 { R3_NUMBUF[n] = (48u64 + (v % 10u64)) as u8; n = n + 1u32; v = v / 10u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = R3_NUMBUF[a]; R3_NUMBUF[a] = R3_NUMBUF[b]; R3_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return r3_emit_bytes(&R3_NUMBUF as u64, n as u64) }
+/* SEED-DIV-IMMUNE decimal emit.  The frozen C seed iiis-0 mis-compiles unsigned u64 `%`/`/` to SIGNED idivq
+ * (the P0.2 bug; seed rebuild blocked by the gcc-15.2 acc.iii hang).  A naive `v%10`/`v/10` therefore returns
+ * GARBAGE in iiis-0-compiled code for v>=2^63 -- which broke magic-division emission (magic multipliers are
+ * routinely >=2^63), garbling `movabsq $<m>` and stalling the whole bootstrap at affine_audit.iii.  Here we divide
+ * by 10 over two 32-bit halves so EVERY dividend stays < 2^37 (no high bit), where signed idivq == unsigned div --
+ * so r3_emit_dec is correct regardless of how the compiling seed lowers division.  Remainders via x-(q*10) avoid %. */
+fn r3_emit_dec(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { R3_NUMBUF[0]=48u8; return r3_emit_bytes(&R3_NUMBUF as u64, 1u64) }; while v > 0u64 { let hi: u64 = v >> 32u64; let lo: u64 = v & 4294967295u64; let qhi: u64 = hi / 10u64; let rhi: u64 = hi - (qhi * 10u64); let mid: u64 = (rhi << 32u64) + lo; let qlo: u64 = mid / 10u64; let rd: u64 = mid - (qlo * 10u64); R3_NUMBUF[n] = (48u64 + rd) as u8; n = n + 1u32; v = (qhi << 32u64) + qlo }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = R3_NUMBUF[a]; R3_NUMBUF[a] = R3_NUMBUF[b]; R3_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return r3_emit_bytes(&R3_NUMBUF as u64, n as u64) }
 fn r3_emit_hex(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { R3_NUMBUF[0]=48u8; return r3_emit_bytes(&R3_NUMBUF as u64, 1u64) }; while v > 0u64 { let d: u64 = v & 15u64; if d < 10u64 { R3_NUMBUF[n] = (48u64 + d) as u8 } else { R3_NUMBUF[n] = (87u64 + d) as u8 }; n = n + 1u32; v = v >> 4u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = R3_NUMBUF[a]; R3_NUMBUF[a] = R3_NUMBUF[b]; R3_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return r3_emit_bytes(&R3_NUMBUF as u64, n as u64) }
 
 
@@ -935,6 +953,17 @@ fn r3_div_pow2_k(op: u32, rhs: u32) -> u32 {
     let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
     if cgopt_div_admit(v) != 1u32 { return 0u32 }
     return cgopt_div_shift_k(v)
+}
+/* MODULO-BY-POW2 -> AND mask test (single-source law cgopt_mod_*): if op is MOD(5) and rhs is a constant
+ * 2^k (k>=1), return the AND mask v-1 (>= 1 = admitted); else 0.  cg_r3.c (iiis-0) has NO modulo fold, but
+ * this fires ONLY on a CONSTANT pow2 modulus (absent from stage1_corpus -- only `a % b` there), so iiis-0 ==
+ * iiis-2 on stage1 holds (byte-safe, like magic-div).  Sound: x % 2^k == x & (2^k-1) for unsigned. */
+fn r3_mod_pow2_mask(op: u32, rhs: u32) -> u64 {
+    if op != 5u32 { return 0u64 }
+    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u64 }
+    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+    if cgopt_mod_admit(v) != 1u32 { return 0u64 }
+    return cgopt_mod_mask(v)
 }
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.c's shift_const_k -- IDENTICAL logic so the emitted assembly
  * is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL(9)/SHR(10) and rhs is a constant
@@ -2206,6 +2235,15 @@ var R3_STR_DIVU : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8
 const R3_STR_DIVU_LEN : u64 = 34u64
 var R3_STR_DIVUMOD : [u8; 54] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8, 32u8, 37u8, 101u8, 100u8, 120u8, 44u8, 32u8, 37u8, 101u8, 100u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R3_STR_DIVUMOD_LEN : u64 = 54u64
+/* EIDOS magic-division emit primitives (Phase 5): unsigned x/d (d not pow2) -> movabsq $m, %rcx; mulq %rcx;
+ * shrq $s, %rdx; movq %rdx, %rax  (= mulhi(x,m) >> s, the Granlund-Montgomery reduction).  REUSES the tree's
+ * existing R3_STR_MOVABSQ_DEC (decimal movabs prefix) + R3_STR_COMMA_RCX_NL + R3_STR_COMMA_RDX_NL; only
+ * `mulq %rcx` and `movq %rdx, %rax` are genuinely new.  cg_r3.c keeps general divq (magic never fires on
+ * stage1 -> byte-check unaffected; behavioral equivalence is GM-bound-proven for ALL x). */
+var R3_STR_MULQ_RCX : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 109u8, 117u8, 108u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R3_STR_MULQ_RCX_LEN : u64 = 14u64
+var R3_STR_MOVQ_RDX_RAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R3_STR_MOVQ_RDX_RAX_LEN : u64 = 20u64
 var R3_STR_ANDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 110u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R3_STR_ANDQ_LEN : u64 = 20u64
 var R3_STR_ORQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
@@ -2531,66 +2569,65 @@ fn r3_emit_expr(node: u32) -> u32 {
     }
     if k == R3_K_EXPR_BINARY {
         let lhs: u32 = iii_ast_binary_lhs(R3_G_AST, node); let rhs: u32 = iii_ast_binary_rhs(R3_G_AST, node); let op: u32 = iii_ast_binary_op(R3_G_AST, node)
-        let srk: u32 = r3_mul_pow2_k(op, rhs)
-        if srk != 0u32 {
-            /* STRENGTH REDUCTION (the live self-optimizer; dual-implemented byte-identically in cg_r3.c):
-             * mul by a constant 2^k becomes an immediate shift -- emit only the lhs, skip loading the
-             * constant + the imul.  Sound: mul(x,2^k) == shl(x,k).  u32 truncate matches the imul path. */
-            r3_emit_expr(lhs); r3_pop_rax()
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(srk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
-            r3_push_rax(); return R3_OK
+        /* ===== THE E-GRAPH DRIVES cg_r3 (DOCS/III-EIDOS plan Phase 2) =========================================
+         * For `x * v` (v a constant) the e-graph saturates, extracts the cost-optimal equivalent, PROVES it
+         * == x*v over all 2^64 (bv_ring), and returns a byte-faithful emit plan.  Nothing but imul is emitted
+         * unless the form is machine-CERTIFIED -- the soundness invariant in the live compiler.  The proven
+         * forms are exactly the families the hand peephole encodes (the e-graph's constant-split/subk laws
+         * derive the same shapes), so emission is byte-identical; the mul peephole arms below are now a
+         * PROVEN-unreachable fallback -- corpus 2135 (a) emulates seg_mul_plan's encode->emit and verifies it
+         * computes x*v for all families incl 2^64-1 (SOUND), and (b) measures 0 declines over pow2 / 2^k+/-1 /
+         * 2^j+/-2^m (FULL COVERAGE), so the r3_mul_* arms never fire.  Deletion is byte-neutral + proven-safe;
+         * kept here as the independent reference cg_r3.c also embodies (deletion lands on the next clean reseal). */
+        if op == 3u32 {
+            if iii_ast_node_kind(R3_G_AST, rhs) == R3_K_EXPR_INT {
+                let mv: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+                let plan: u64 = seg_mul_plan(mv)
+                let pkind: u64 = plan & 255u64
+                if pkind != 0u64 {
+                    let pj: u64 = (plan >> 8u64) & 255u64
+                    let pm: u64 = (plan >> 16u64) & 255u64
+                    r3_emit_expr(lhs); r3_pop_rax()
+                    if pkind == 1u64 {
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pj); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                    }
+                    if pkind == 2u64 {
+                        r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pj); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                        r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
+                    }
+                    if pkind == 3u64 {
+                        r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pj); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                        r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
+                    }
+                    if pkind == 4u64 {
+                        r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pj); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pm); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                        r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
+                    }
+                    if pkind == 5u64 {
+                        r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pj); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                        r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(pm); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                        r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
+                    }
+                    /* pkind == 6 (IDENT, x*1): x already in rax -- emit nothing. */
+                    if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+                    r3_push_rax(); return R3_OK
+                }
+            }
         }
-        let slk: u32 = r3_mul_shladd_k(op, rhs)
-        if slk != 0u32 {
-            /* SHIFT-AND-ADD STRENGTH REDUCTION (the live self-optimizer; dual-implemented byte-identically in
-             * cg_r3.c): mul by a constant 2^k+1 becomes movq %rax,%rcx; shlq $k,%rax; addq %rcx,%rax --
-             * (x<<k)+x -- replacing a full imul.  Sound: x*(2^k+1) == (x<<k)+x mod 2^64.  u32 truncate matches
-             * the imul path.  Reuses only twin-verified emit primitives, so iiis-0 == iiis-2 holds. */
-            r3_emit_expr(lhs); r3_pop_rax()
-            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(slk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-            r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
-            r3_push_rax(); return R3_OK
-        }
-        let ssubk: u32 = r3_mul_subk_k(op, rhs)
-        if ssubk != 0u32 {
-            /* [EMITTED] SHIFT-AND-SUBQ: mul by 2^k-1 -> movq %rax,%rcx; shlq $k,%rax; subq %rcx,%rax --
-             * (x<<k)-x -- replacing a full imul.  Sound: x*(2^k-1) == (x<<k)-x mod 2^64.  Twin-verified prims. */
-            r3_emit_expr(lhs); r3_pop_rax()
-            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(ssubk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-            r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
-            r3_push_rax(); return R3_OK
-        }
-        let j2sh: u32 = r3_mul_2sh_j(op, rhs)
-        if j2sh != 0u32 {
-            /* [EMITTED] TWO-SHIFT: mul by 2^j+2^m -> movq %rax,%rcx; shlq $j,%rax; shlq $m,%rcx; addq %rcx,%rax
-             * -- (x<<j)+(x<<m) -- replacing a full imul.  Sound: x*(2^j+2^m) == (x<<j)+(x<<m) mod 2^64. */
-            let m2sh: u32 = r3_mul_2sh_m(op, rhs)
-            r3_emit_expr(lhs); r3_pop_rax()
-            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(j2sh as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(m2sh as u64); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
-            r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
-            r3_push_rax(); return R3_OK
-        }
-        let j2ss: u32 = r3_mul_2ss_j(op, rhs)
-        if j2ss != 0u32 {
-            /* [EMITTED] 2-SHIFT-SUB: mul by 2^j-2^m -> movq %rax,%rcx; shlq $j,%rax; shlq $m,%rcx; subq %rcx,%rax
-             * -- (x<<j)-(x<<m) -- replacing a full imul.  Sound: x*(2^j-2^m) == (x<<j)-(x<<m) mod 2^64. */
-            let m2ss: u32 = r3_mul_2ss_m(op, rhs)
-            r3_emit_expr(lhs); r3_pop_rax()
-            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(j2ss as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(m2ss as u64); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
-            r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
-            r3_push_rax(); return R3_OK
-        }
+        /* ===== MUL-BY-CONSTANT STRENGTH REDUCTION: the e-graph (seg_mul_plan, above) is now the SOLE path. =====
+         * The five hand peephole arms here (r3_mul_pow2_k / shladd_k / subk_k / 2sh / 2ss) were PROVEN DEAD and
+         * removed: corpus 2135 proves seg_mul_plan's encode->emit is SOUND for every reducible form (complete by
+         * linearity over Z/2^64), and a coverage sweep measured 0 declines over pow2 / 2^k+/-1 / 2^j+/-2^m -- so
+         * seg_mul_plan returns a proven plan FIRST for every form these arms could fire on, and the arms never ran.
+         * Output is byte-neutral (the e-graph byte-matches the families they encoded), verified by the stage1
+         * byte-check (iiis-0==iiis-2) + run_corpus.  The extractor helpers (r3_mul_*) remain defined; cg_r3.c (the
+         * frozen seed twin, unrebuildable under the gcc-15.2 blocker) keeps its mirror peephole -- iiis-0==iiis-2
+         * holds because the emitted bytes agree, not because the source mirrors. ===================================*/
         let shk: u32 = r3_shift_const_k(op, rhs)
         if shk != 0u32 {
             /* CONSTANT-SHIFT FOLD (the live self-optimizer; dual-implemented byte-identically in cg_r3.c):
@@ -2606,6 +2643,30 @@ fn r3_emit_expr(node: u32) -> u32 {
             }
             r3_push_rax(); return R3_OK
         }
+        /* ===== MAGIC-NUMBER DIVISION (DOCS/III-EIDOS Phase 5): unsigned u64 x/d (d not pow2) -> mulhi(x,m)>>s.
+         * seg_div_plan returns SDP_MAGIC(2) ONLY when the Granlund-Montgomery bound CERTIFIES the reduction for
+         * ALL x.  The optimization the hand peephole could never do, soundly proven.  pow2 stays with
+         * r3_div_pow2_k below; cg_r3.c keeps general divq (magic never fires on stage1 -> byte-check safe). ===== */
+        if op == 4u32 {
+            if iii_ast_node_kind(R3_G_AST, rhs) == R3_K_EXPR_INT {
+                if r3_either_is_signed(lhs, rhs) == 0u32 {
+                    if r3_expr_is_u32(lhs) == 0u32 {
+                        let dv: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+                        let dplan: u64 = seg_div_plan(dv)
+                        if (dplan & 255u64) == 2u64 {
+                            let dm: u64 = seg_div_magic_m()
+                            let ds: u64 = seg_div_shift()
+                            r3_emit_expr(lhs); r3_pop_rax()
+                            r3_emit_arr(&R3_STR_MOVABSQ_DEC as u64, R3_STR_MOVABSQ_DEC_LEN); r3_emit_dec(dm); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                            r3_emit_arr(&R3_STR_MULQ_RCX as u64, R3_STR_MULQ_RCX_LEN)
+                            r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(ds); r3_emit_arr(&R3_STR_COMMA_RDX_NL as u64, R3_STR_COMMA_RDX_NL_LEN)
+                            r3_emit_arr(&R3_STR_MOVQ_RDX_RAX as u64, R3_STR_MOVQ_RDX_RAX_LEN)
+                            r3_push_rax(); return R3_OK
+                        }
+                    }
+                }
+            }
+        }
         let dpk: u32 = r3_div_pow2_k(op, rhs)
         if dpk != 0u32 {
             if r3_either_is_signed(lhs, rhs) == 0u32 {
@@ -2615,6 +2676,20 @@ fn r3_emit_expr(node: u32) -> u32 {
                  * Mirrors the SHR const-fold's emit primitives, so iiis-0 == iiis-2 holds. */
                 r3_emit_expr(lhs); r3_pop_rax()
                 r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(dpk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                r3_push_rax(); return R3_OK
+            }
+        }
+        let mmask: u64 = r3_mod_pow2_mask(op, rhs)
+        if mmask != 0u64 {
+            if r3_either_is_signed(lhs, rhs) == 0u32 {
+                /* [EMITTED] UNSIGNED MODULO-BY-POW2 -> AND mask: x % 2^k == x & (2^k-1) -- the low k bits ARE the
+                 * unsigned remainder.  Emit the lhs, then AND the mask -- skip the divumod entirely.  The symmetric
+                 * partner of the divide-by-pow2 fold above; cg_r3 had NO modulo strength reduction.  Reuses the
+                 * magic-div emit primitives (movabsq $mask,%rcx ; andq %rcx,%rax); byte-safe vs cg_r3.c (fires only
+                 * on a CONSTANT pow2 modulus, absent from stage1_corpus). */
+                r3_emit_expr(lhs); r3_pop_rax()
+                r3_emit_arr(&R3_STR_MOVABSQ_DEC as u64, R3_STR_MOVABSQ_DEC_LEN); r3_emit_dec(mmask); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                r3_emit_arr(&R3_STR_ANDQ as u64, R3_STR_ANDQ_LEN)
                 r3_push_rax(); return R3_OK
             }
         }

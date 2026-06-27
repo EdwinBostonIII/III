@@ -1,0 +1,116 @@
+/* STDLIB/iii/aether/ui_morphic.iii -- III-GLASS feature #4: autopoietic morphic editing.  The visual, the
+ * source, and the proof are ONE object.  Drag the handle -> it writes the constant C straight into the SVIR
+ * byte arrays of f(x)=x+C and g(x)=C+x -> sd_denote re-lifts both -> seq_equiv RE-PROVES f==g over all 2^64 for
+ * the new C (commutativity, which holds for every C) -> the destiny re-plots.  The compiler is edited by touch,
+ * and the membrane re-certifies in the same frame.  No float; the bytes you mutate are the bytes proven. */
+module ui_morphic
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mx() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_my() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mdown() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+
+var FB    : [u32; 364800]   /* 760 x 480 */
+var TITLE : [u8; 10] = [73u8,73u8,73u8,45u8,71u8,76u8,65u8,83u8,83u8,0u8]
+/* f(x) = x + C : LOCAL_GET 0, CONST C(@off 8), ADD, RETURN. */
+var FF : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 16u8,0u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 96u8]
+/* g(x) = C + x : CONST C(@off 6), LOCAL_GET 0, ADD, RETURN. */
+var GG : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,0u8, 32u8, 96u8]
+
+fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
+
+/* write C as the CONST value (8-byte LE) at byte offset `off` of module `base` -- this IS editing the source. */
+fn put_c(base: u64, off: u64, c: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 { let p : *u8 = (base + off + k) as *u8  p[0u64] = ((c >> (k * 8u64)) & 255u64) as u8  k = k + 1u64 }
+    return 0i32
+}
+
+fn render(b: u64, w: u32, h: u32, c: u64, proven: u32, node: u32) -> i32 {
+    ui_clear(b, w, h, rgb(10u32, 11u32, 16u32))
+    ui_fill_rect(b, w, h, 0u32, 0u32, w, 28u32, rgb(22u32, 24u32, 38u32))
+    ui_text_n(b, w, h, 10u32, 6u32, "III-GLASS  morphic editing -- drag rewrites the SVIR source; the membrane re-proves" as u64, 81u32, rgb(0u32, 229u32, 255u32))
+
+    /* destiny of the JUST-edited f(x)=x+C (exact, via the re-lifted circuit). */
+    let x0p : u32 = 60u32  let y0p : u32 = 70u32  let pw : u32 = 640u32  let ph : u32 = 230u32  let xn : u32 = 100u32
+    ui_fill_rect(b, w, h, x0p, y0p, pw, ph, rgb(14u32, 16u32, 24u32))
+    let maxv : u64 = (xn as u64) + c + 4u64
+    let cyl : u32 = rgb(0u32, 220u32, 255u32)
+    let mut px : i32 = 0i32  let mut py : i32 = 0i32  let mut first : u32 = 1u32
+    let mut xi : u32 = 0u32
+    while xi < xn {
+        bb_set_input(0u32, xi as u64)
+        let v  : u64 = bb_eval(node)
+        let sx : i32 = (x0p + ((xi * pw) / xn)) as i32
+        let sy : i32 = ((y0p + ph) - (((v * (ph as u64)) / maxv) as u32)) as i32
+        if first == 0u32 { ui_line(b, w, h, px, py, sx, sy, cyl) }
+        px = sx  py = sy  first = 0u32
+        xi = xi + 1u32
+    }
+
+    /* the source, live: f(x) = x + C, with C from the bytes we just wrote. */
+    let mut sx2 : u32 = ui_text_n(b, w, h, 20u32, 320u32, "SVIR source (editing it directly):  f(x) = x + " as u64, 47u32, rgb(180u32,190u32,210u32))
+    ui_text_u32(b, w, h, sx2, 320u32, c as u32, rgb(255u32, 200u32, 80u32))
+    let mut gx : u32 = ui_text_n(b, w, h, 20u32, 342u32, "compared with        g(x) = " as u64, 28u32, rgb(180u32,190u32,210u32))
+    gx = ui_text_u32(b, w, h, gx, 342u32, c as u32, rgb(255u32, 200u32, 80u32))
+    ui_text_n(b, w, h, gx, 342u32, " + x" as u64, 4u32, rgb(180u32,190u32,210u32))
+
+    /* the membrane's verdict, RE-PROVEN this frame for the current C. */
+    let mut rx : u32 = ui_text_n(b, w, h, 20u32, 372u32, "seq_equiv(f, g) over all 2^64 :  " as u64, 33u32, rgb(120u32,135u32,165u32))
+    if proven == 1u32 { ui_text_n(b, w, h, rx, 372u32, "PROVEN  (commutativity holds for THIS C)" as u64, 40u32, rgb(40u32,220u32,95u32)) }
+    if proven != 1u32 { ui_text_n(b, w, h, rx, 372u32, "REFUTED / undecided" as u64, 19u32, rgb(235u32,60u32,70u32)) }
+
+    /* the slider -- drag the handle to set C. */
+    ui_fill_rect(b, w, h, 60u32, 418u32, 500u32, 4u32, rgb(40u32,44u32,60u32))
+    let hx : u32 = 60u32 + ((c as u32) * 500u32) / 64u32
+    ui_fill_rect(b, w, h, hx, 410u32, 12u32, 20u32, rgb(0u32,229u32,255u32))
+    ui_text_n(b, w, h, 60u32, 444u32, "drag the cyan handle: it writes C into the SVIR bytes, re-denotes, re-proves   [ESC] quit" as u64, 88u32, rgb(95u32,105u32,130u32))
+    return 0i32
+}
+
+fn main() -> u64 {
+    ui_win_open(&TITLE as u64, 760u32, 480u32)
+    let mut c : u64 = 12u64
+    let mut proven : u32 = 0u32
+    let mut node : u32 = 0u32
+    let mut dirty : u32 = 1u32
+    while ui_win_pump() == 0u32 {
+        /* drag -> set C from cursor -> mark dirty (edit the source). */
+        if ui_mdown() == 1u32 {
+            let my : u32 = ui_my()
+            if my >= 400u32 { if my <= 436u32 {
+                let mx : u32 = ui_mx()
+                let mut nc : i64 = (((mx as i64) - 60i64) * 64i64) / 500i64
+                if nc < 0i64 { nc = 0i64 }
+                if nc > 64i64 { nc = 64i64 }
+                if (nc as u64) != c { c = nc as u64  dirty = 1u32 }
+            } }
+        }
+        if dirty == 1u32 {
+            /* AUTOPOIETIC EDIT: write C into both SVIR sources, re-lift, re-prove. */
+            put_c(&FF as u64, 8u64, c)
+            put_c(&GG as u64, 6u64, c)
+            proven = seq_equiv(&FF as u64, 5u64, 13u64, &GG as u64, 5u64, 13u64, 1u32)
+            bb_reset(64u64)
+            node = sd_denote(&FF as u64, 5u64, 13u64, 1u32)
+            dirty = 0u32
+        }
+        render(&FB as u64, 760u32, 480u32, c, proven, node)
+        ui_win_present(&FB as u64, 760u32, 480u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

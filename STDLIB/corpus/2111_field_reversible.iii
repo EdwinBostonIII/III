@@ -1,0 +1,30 @@
+/* STDLIB/corpus/2111_field_reversible.iii -- THE UNIFIED FIELD, faculty 8: REVERSIBLE TIME-TRAVEL.
+ * Every transform is a bijection, so the past is RECOMPUTED, never stored.  A time-parameterised shear has the exact
+ * inverse t -> -t; setting time negative un-folds the geometry to its proven past state with no undo stack.
+ * 99 = evolve then reverse is the identity, exactly -- zero-entropy undo across multiple steps. */
+module corpus_2111_field_reversible
+
+extern @abi(c-msvc-x64) fn ui_evolve(x: i64, y: i64, k: i64, t: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_rev_x() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_rev_y() -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* evolve the point (3,5) forward by one time step (shear factor k=2) -> (13, 5) */
+    ui_evolve(3i64, 5i64, 2i64, 1i64)
+    if ui_rev_x() != 13i64 { return 1u64 }
+    if ui_rev_y() != 5i64 { return 2u64 }
+
+    /* set the time variable NEGATIVE -> the algebra runs backward -> recover the EXACT past state (3,5), no stack */
+    ui_evolve(13i64, 5i64, 2i64, 0i64 - 1i64)
+    if ui_rev_x() != 3i64 { return 3u64 }
+    if ui_rev_y() != 5i64 { return 4u64 }
+
+    /* a 3-step jump: evolve to t=3, then "set t = -3" -> the geometry un-folds exactly to the origin state */
+    ui_evolve(3i64, 5i64, 2i64, 3i64)
+    if ui_rev_x() != 33i64 { return 5u64 }                  /* (3 + 2*3*5) = 33 */
+    ui_evolve(33i64, 5i64, 2i64, 0i64 - 3i64)
+    if ui_rev_x() != 3i64 { return 6u64 }                   /* rewound to the proven past, zero entropy */
+    if ui_rev_y() != 5i64 { return 7u64 }
+
+    return 99u64
+}

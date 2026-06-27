@@ -1,0 +1,75 @@
+/* STDLIB/corpus/2094_constraint_solver.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 6: the REAL constraint solver.
+ *
+ * This is the layout dream done for real -- and it ATTACHES to III's existing solver: smt.iii is a DPLL(T) SMT
+ * solver whose LIA theory is an EXACT-RATIONAL BLAND'S-RULE SIMPLEX + branch-and-bound (the genuine Cassowary
+ * engine, overflow-checked).  Unlike 2089 (which hand-derived w_flex and bb_equal-checked trivial algebra), HERE
+ * the SOLVER does the work: it SOLVES the inequality system for the layout variables, and DETECTS a genuine
+ * conflict on its own.  No assignment is precomputed by me.
+ *
+ * The layout (the user's archetype): a row [A][gap][B][gap][C] with A 10px left of B, B at least 2x as wide as C,
+ * minimum widths 20, fitting screen width W.  6 integer vars wA,wB,wC,xA,xB,xC; 8 linear constraints.
+ *   W=300 -> the simplex FINDS a satisfying layout (SAT); we read it back and verify every constraint holds.
+ *   W=50  -> the same system is over-constrained (min total = 100 > 50); the simplex PROVES UNSAT (the witness).
+ * 99 = the real solver solved the feasible layout and refuted the infeasible one. */
+module corpus_2094_constraint_solver
+
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_new_var() -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_le(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_eq(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_ge(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_solve() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_value(vr: u32) -> i64 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_check_model() -> u8 from "smt.iii"
+
+var TC : [i64; 8]   /* coefficient scratch */
+var TV : [u32; 8]   /* variable-id scratch */
+
+/* push the constraint currently in TC/TV (n terms) with rhs b; op 0=eq 1=le 2=ge. */
+fn addc(n: u32, b: i64, op: u32) -> i32 {
+    let cp : *i64 = (&TC as u64) as *i64
+    let vp : *u32 = (&TV as u64) as *u32
+    if op == 0u32 { return smt_lia_add_eq(cp, vp, n, b) }
+    if op == 1u32 { return smt_lia_add_le(cp, vp, n, b) }
+    return smt_lia_add_ge(cp, vp, n, b)
+}
+
+/* build the row layout, parameterised by the screen width; vars come out 1..6 in this fixed order. */
+fn build(fitW: i64) -> i32 {
+    smt_init()
+    let wA : u32 = smt_lia_new_var()   let wB : u32 = smt_lia_new_var()   let wC : u32 = smt_lia_new_var()
+    let xA : u32 = smt_lia_new_var()   let xB : u32 = smt_lia_new_var()   let xC : u32 = smt_lia_new_var()
+    TC[0u64] = 1i64   TV[0u64] = xA                                                   addc(1u32, 0i64, 0u32)   /* xA = 0 */
+    TC[0u64] = 1i64   TV[0u64] = xB   TC[1u64] = -1i64  TV[1u64] = xA   TC[2u64] = -1i64  TV[2u64] = wA   addc(3u32, 10i64, 0u32)  /* xB = xA+wA+10 */
+    TC[0u64] = 1i64   TV[0u64] = xC   TC[1u64] = -1i64  TV[1u64] = xB   TC[2u64] = -1i64  TV[2u64] = wB   addc(3u32, 10i64, 0u32)  /* xC = xB+wB+10 */
+    TC[0u64] = 1i64   TV[0u64] = xC   TC[1u64] = 1i64   TV[1u64] = wC                  addc(2u32, fitW, 1u32)   /* xC+wC <= W */
+    TC[0u64] = 1i64   TV[0u64] = wB   TC[1u64] = -2i64  TV[1u64] = wC                  addc(2u32, 0i64, 2u32)   /* wB >= 2*wC */
+    TC[0u64] = 1i64   TV[0u64] = wA                                                   addc(1u32, 20i64, 2u32)  /* wA >= 20 */
+    TC[0u64] = 1i64   TV[0u64] = wB                                                   addc(1u32, 20i64, 2u32)  /* wB >= 20 */
+    TC[0u64] = 1i64   TV[0u64] = wC                                                   addc(1u32, 20i64, 2u32)  /* wC >= 20 */
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* === SAT: the simplex SOLVES the feasible layout (W=300) === */
+    build(300i64)
+    if smt_solve() != 1i32 { return 1u64 }           /* SMT_SAT */
+    if smt_check_model() != 1u8 { return 2u64 }      /* the solver's own independent re-check */
+    let wA : i64 = smt_lia_value(1u32)   let wB : i64 = smt_lia_value(2u32)   let wC : i64 = smt_lia_value(3u32)
+    let xA : i64 = smt_lia_value(4u32)   let xB : i64 = smt_lia_value(5u32)   let xC : i64 = smt_lia_value(6u32)
+    /* verify the SOLVER's assignment actually satisfies the layout (whatever values it chose) */
+    if xA != 0i64 { return 3u64 }
+    if xB != (xA + wA + 10i64) { return 4u64 }       /* B is 10px right of A */
+    if xC != (xB + wB + 10i64) { return 5u64 }       /* C is 10px right of B */
+    if (xC + wC) > 300i64 { return 6u64 }            /* the row fits the screen */
+    if wB < (2i64 * wC) { return 7u64 }              /* B is at least twice C */
+    if wA < 20i64 { return 8u64 }
+    if wB < 20i64 { return 9u64 }
+    if wC < 20i64 { return 10u64 }
+
+    /* === UNSAT: the SAME system at W=50 is over-constrained; the simplex PROVES it has no layout === */
+    build(50i64)
+    if smt_solve() != 2i32 { return 11u64 }          /* SMT_UNSAT -- the conflict, detected by the solver */
+
+    return 99u64
+}

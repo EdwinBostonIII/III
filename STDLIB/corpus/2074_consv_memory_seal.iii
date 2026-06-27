@@ -1,0 +1,102 @@
+/* STDLIB/corpus/2074_consv_memory_seal.iii -- CONSERVATION applied to MEMORY: the capacity-conservation seal,
+ * composed from the EXISTING separation algebra (numera/heaplet) + separation logic frame rule (numera/sep_logic)
+ * + the conservation prover (numera/ser_kinduct_sym).  This is the sound, in-domain image of "the charges sum to
+ * exactly zero": an allocator's Size(free)+Size(used)[+Size(reserved)] == capacity, proven conserved across the
+ * alloc/free transition over all 2^128, tied to a REAL heaplet move whose recomputed sizes MUST match.
+ *
+ * SCOPE (locked, honest): this proves the allocator's COUNT BOOKKEEPING never drifts (catches the accounting class
+ * -- a leaked or double-counted cell) PLUS spatial separation (disjoint regions, framed writes).  It is
+ * COMPLEMENTARY to an aliasing borrow-checker, NOT a replacement: it does not prove temporal use-after-free.
+ *
+ * 99 = pointer-offset conservation (a), n-ary capacity conservation + leak refusal (b), the quark-neutrality
+ * ANALOGY (c), the memory seal tied to a real heap with a real free->used move (d,e), and the conscience cases --
+ * OVERLAP and LEAK -- that BREAK the seal (f,g).  Two distinct outcomes everywhere: propose, and the proof disposes. */
+module corpus_2074_consv_memory_seal
+
+extern @abi(c-msvc-x64) fn hl_init() -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_empty() -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_set(h: u32, a: u32, v: u32) -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_disjoint(h1: u32, h2: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_size(h: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn sl_frame_holds(kind: u32, a: u32, v: u32, b: u32, hP: u32, hR: u32) -> u32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sks_consv_step(w0: u64, w1: u64, a: u64, b: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_set(i: u32, w: u64, v: u64) -> i32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_combine(n: u32) -> u64 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_step_vec(n: u32) -> u8 from "ser_kinduct_sym.iii"
+
+/* a heaplet over exactly the cells set in `mask` (0..63) -- the same construction the seal uses. */
+fn k_build(mask: u64) -> u32 {
+    let h : u32 = hl_empty()
+    let mut a : u32 = 0u32
+    while a < 64u32 {
+        if (mask & (1u64 << (a as u64))) != 0u64 { hl_set(h, a, 1u32) }
+        a = a + 1u32
+    }
+    return h
+}
+
+fn main() -> u64 {
+    let bneg1 : u64 = 0u64 - 1u64
+    let bneg2 : u64 = 0u64 - 2u64
+
+    /* (a) POINTER-OFFSET conservation: two cursors advancing by the SAME stride keep their GAP invariant.
+     *     F = 1*x + (-1)*y = x - y; under (x'=x+8, y'=y+8) the drift is 1*8 + (-1)*8 = 0 -> conserved.
+     *     Under unequal advance (+8, +16) the gap drifts -> REFUSED. (The "distance between two pointers".) */
+    if sks_consv_step(1u64, bneg1, 8u64, 8u64) != 1u8 { return 1u64 }
+    if sks_consv_step(1u64, bneg1, 8u64, 16u64) != 0u8 { return 2u64 }
+
+    /* (b) N-ARY capacity conservation: free + used + reserved == cap, over the allocator transitions.
+     *     alloc-from-free moves a unit free->used (increments -1,+1,0); both that and reserve (free->reserved,
+     *     -1,0,+1) conserve the 3-way sum.  A LEAK (free-1 with no recipient) drifts -> refused. */
+    sks_consv_set(0u32, 1u64, bneg1)   /* free:     weight 1, increment -1 */
+    sks_consv_set(1u32, 1u64, 1u64)    /* used:     weight 1, increment +1 */
+    sks_consv_set(2u32, 1u64, 0u64)    /* reserved: weight 1, increment  0 */
+    if sks_consv_step_vec(3u32) != 1u8 { return 3u64 }       /* alloc-from-free conserves free+used+reserved */
+    sks_consv_set(1u32, 1u64, 0u64)    /* used      +0 */
+    sks_consv_set(2u32, 1u64, 1u64)    /* reserved  +1  (free->reserved) */
+    if sks_consv_step_vec(3u32) != 1u8 { return 4u64 }       /* reserve conserves */
+    sks_consv_set(1u32, 1u64, 0u64)    /* used      +0 */
+    sks_consv_set(2u32, 1u64, 0u64)    /* reserved  +0  -> free-1 with no recipient = LEAK */
+    if sks_consv_step_vec(3u32) != 0u8 { return 5u64 }       /* a lost cell -> NOT conserved (refused) */
+    /* the combine VALUE (base): occupancy free=3, used=4, reserved=1 over unit weights sums to 8 == cap. */
+    sks_consv_set(0u32, 1u64, 3u64)  sks_consv_set(1u32, 1u64, 4u64)  sks_consv_set(2u32, 1u64, 1u64)
+    if sks_consv_combine(3u32) != 8u64 { return 6u64 }
+
+    /* (c) the QUARK-NEUTRALITY ANALOGY (motivating picture, NOT a physics claim): charge weights (2,-1,-1) on an
+     *     up/down/down occupancy (1,1,1) evaluate to exactly 0 -- a static linear functional summing to zero. */
+    sks_consv_set(0u32, 2u64, 1u64)  sks_consv_set(1u32, bneg1, 1u64)  sks_consv_set(2u32, bneg1, 1u64)
+    if sks_consv_combine(3u32) != 0u64 { return 7u64 }
+
+    /* (d) THE MEMORY SEAL on a REAL heap: free={0,1,2,3}, used={4,5,6,7}, cap=8.  Disjoint (no double-owned cell)
+     *     + sizes sum to cap (capacity accounted) + storing an allocated cell is framed off the free region. */
+    hl_init()
+    let free_h : u32 = k_build(0x0Fu64)
+    let used_h : u32 = k_build(0xF0u64)
+    if hl_disjoint(free_h, used_h) != 1u32 { return 8u64 }                       /* SPATIAL */
+    if (hl_size(free_h) + hl_size(used_h)) != 8u32 { return 9u64 }               /* QUANTITATIVE */
+    if sl_frame_holds(0u32, 4u32, 200u32, 0u32, used_h, free_h) != 1u32 { return 10u64 }  /* FRAME: alloc cell 4 framed off free */
+
+    /* (e) the count<->heap SPINE: a REAL free->used move (cell 3) -> recompute sizes -> they MATCH the conserved
+     *     prediction (sum still 8).  This ties the abstract conservation law to the actual heaplet sizes. */
+    hl_init()
+    let free2 : u32 = k_build(0x07u64)        /* {0,1,2}      -- cell 3 moved OUT of free */
+    let used2 : u32 = k_build(0xF8u64)        /* {3,4,5,6,7}  -- cell 3 moved INTO used   */
+    if hl_disjoint(free2, used2) != 1u32 { return 11u64 }
+    if (hl_size(free2) + hl_size(used2)) != 8u32 { return 12u64 }                /* the move conserved cap */
+    if sl_frame_holds(0u32, 3u32, 200u32, 0u32, used2, free2) != 1u32 { return 13u64 }  /* now cell 3 is framed off free */
+
+    /* (f) CONSCIENCE -- OVERLAP: counts can look plausible, but if a cell is in BOTH regions the seal MUST fail
+     *     (hl_disjoint=0).  Without this spatial check, "counts conserve" alone would falsely seal a double-owned cell. */
+    hl_init()
+    let fo : u32 = k_build(0x0Fu64)           /* {0,1,2,3} */
+    let uo : u32 = k_build(0xF8u64)           /* {3,4,5,6,7} -- cell 3 in BOTH */
+    if hl_disjoint(fo, uo) != 0u32 { return 14u64 }                             /* overlap detected -> NOT sealed */
+
+    /* (g) CONSCIENCE -- LEAK: a lost cell -> sizes sum to 7 != cap 8 -> the seal MUST fail (capacity unaccounted). */
+    hl_init()
+    let fl : u32 = k_build(0x07u64)           /* {0,1,2}   */
+    let ul : u32 = k_build(0xF0u64)           /* {4,5,6,7} -- cell 3 lost */
+    if (hl_size(fl) + hl_size(ul)) == 8u32 { return 15u64 }                      /* 3+4=7 != 8 -> not conserved */
+
+    return 99u64
+}

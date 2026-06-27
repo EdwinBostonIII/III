@@ -1,0 +1,45 @@
+/* STDLIB/corpus/2104_field_kolmogorov.iii -- THE UNIFIED FIELD, faculty 1: DATA IS GEOMETRY.
+ * The boundary's Hausdorff dimension is DERIVED from the data's Renyi-2 collision entropy (an exactly-computable,
+ * honest proxy for the uncomputable Kolmogorov complexity).  d=1+H2/8: a predictable structure is a smooth line
+ * (d=1), uniform-random data wrinkles to a space-filling boundary (d=2), and structured data lands between.
+ * 99 = the measured dimension tracks the data's complexity EXACTLY on the cases whose entropy is integral. */
+module corpus_2104_field_kolmogorov
+
+extern @abi(c-msvc-x64) fn ui_data_dim(buf: u64, n: u64) -> u64 from "ui_field.iii"
+
+var BUF : [u8; 256]
+
+fn main() -> u64 {
+    let b : u64 = &BUF as u64
+
+    /* PREDICTABLE (all one symbol): H2=0 -> d = 1.000 (a smooth Euclidean line) */
+    let mut i : u64 = 0u64
+    while i < 256u64 { BUF[i] = 0u8   i = i + 1u64 }
+    if ui_data_dim(b, 256u64) != 1000u64 { return 1u64 }
+
+    /* TWO equiprobable symbols: H2=1 bit -> d = 1.125 */
+    i = 0u64
+    while i < 128u64 { BUF[i] = 0u8   i = i + 1u64 }
+    while i < 256u64 { BUF[i] = 1u8   i = i + 1u64 }
+    if ui_data_dim(b, 256u64) != 1125u64 { return 2u64 }
+
+    /* SIXTEEN equiprobable symbols: H2=4 bits -> d = 1.500 */
+    i = 0u64
+    while i < 256u64 { BUF[i] = (i / 16u64) as u8   i = i + 1u64 }
+    if ui_data_dim(b, 256u64) != 1500u64 { return 3u64 }
+
+    /* UNIFORM (256 symbols, max entropy): H2=8 bits -> d = 2.000 (space-filling boundary) */
+    i = 0u64
+    while i < 256u64 { BUF[i] = i as u8   i = i + 1u64 }
+    if ui_data_dim(b, 256u64) != 2000u64 { return 4u64 }
+
+    /* a STRUCTURED real-data case (mostly one symbol, a little variety) must land strictly between 1.0 and 2.0 */
+    i = 0u64
+    while i < 240u64 { BUF[i] = 65u8   i = i + 1u64 }          /* 240 'A' */
+    while i < 256u64 { BUF[i] = (66u64 + (i - 240u64)) as u8   i = i + 1u64 }  /* 16 distinct tail bytes */
+    let d : u64 = ui_data_dim(b, 256u64)
+    if d <= 1000u64 { return 5u64 }
+    if d >= 2000u64 { return 6u64 }
+
+    return 99u64
+}

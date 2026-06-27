@@ -152,6 +152,7 @@ declare -A EXPECTED=(
     [2061_div_strength_reduction]=99
     [2062_egraph_mul_plan]=99
     [2063_egraph_div_magic]=99
+    [2135_mul_subsume]=99
     [2064_kinduct_general]=99
     [2065_invariant_pipeline]=99
     [2066_invsynth_full]=99
@@ -1804,6 +1805,10 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             ;;
         2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom)
             RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + egraph + bigint)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2126_involution|2127_membrane|2128_involution_closed|2129_epoch|2130_disposers|2131_reactor|2132_eidolon|2133_ripple_eidolon|2134_planner)
+            RESULTS+=("SKIP  $base : RIPPLE MERGE -- owned by run_ripple_kats.sh (involution + membrane + epoch + disposer + crystal/ripple_field/logic6)")
             SKIP=$((SKIP+1)); continue
             ;;
         2088_frp_kinematics|2089_constraint_layout|2090_topological_field|2091_association_invariant|2092_raster_crush|2093_pixel_crush)

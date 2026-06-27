@@ -1,0 +1,58 @@
+/* STDLIB/corpus/2134_planner.iii -- THE EXACT-ALGEBRAIC RIPPLE-GRAPH PLANNER (consumer of ripple_eidolon), tested.
+ * Bag: sqrt2+sqrt7 (~4.060), sqrt3+sqrt6 (~4.181), sqrt4+sqrt5 (=2+sqrt5 ~4.236), 2+sqrt5 (DUP of the last),
+ *      sqrt1969+sqrt1971 (~88.7588), 2sqrt1970 (~88.7591).  The planner:
+ *   - DEDUPS by exact identity (sqrt4+sqrt5 == 2+sqrt5): 6 inputs -> 5 nodes.
+ *   - SORTS by EXACT order (incl. the tight pair, ~3e-4 apart, by strict concavity sqrt1969+sqrt1971 < 2sqrt1970).
+ *   - EMITS the covering chain (k-1 = 4 BELOW ripples).
+ *   - is DETERMINISTIC: the SAME bag in a DIFFERENT input order yields the SAME witness root.
+ * 99 = the planner builds the exact total order, dedups by identity, and the graph is a pure function of the set. */
+module corpus_2134_planner
+
+extern @abi(c-msvc-x64) fn inv_reset() -> i32 from "involution.iii"
+extern @abi(c-msvc-x64) fn inv_count() -> u32 from "involution.iii"
+extern @abi(c-msvc-x64) fn eid_reset() -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn re_cmp(eidA: u32, eidB: u32) -> i32 from "ripple_eidolon.iii"
+extern @abi(c-msvc-x64) fn ep_reset() -> i32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_add(eid: u32) -> i32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_build() -> u32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_node_at(rank: u32) -> u32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_root(out32: u64) -> i32 from "eid_plan.iii"
+
+var R1 : [u8; 32]   var R2 : [u8; 32]
+fn eq32(p: u64, q: u64) -> u32 { let pp : *u8 = p as *u8   let qq : *u8 = q as *u8   let mut i : u64 = 0u64   while i < 32u64 { if pp[i] != qq[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+
+fn main() -> u64 {
+    inv_reset()   eid_reset()
+    let aa : u32 = eid_add(eid_make(1i64, 2u64, 0u32), eid_make(1i64, 7u64, 0u32))     /* sqrt2+sqrt7 */
+    let bb : u32 = eid_add(eid_make(1i64, 3u64, 0u32), eid_make(1i64, 6u64, 0u32))     /* sqrt3+sqrt6 */
+    let cc : u32 = eid_add(eid_make(1i64, 4u64, 0u32), eid_make(1i64, 5u64, 0u32))     /* sqrt4+sqrt5 = 2+sqrt5 */
+    let cd : u32 = eid_add(eid_make(2i64, 1u64, 0u32), eid_make(1i64, 5u64, 0u32))     /* 2+sqrt5 (DUP of cc) */
+    let pp : u32 = eid_add(eid_make(1i64, 1969u64, 0u32), eid_make(1i64, 1971u64, 0u32)) /* sqrt1969+sqrt1971 */
+    let qq : u32 = eid_make(2i64, 1970u64, 0u32)                                       /* 2sqrt1970 */
+
+    /* build 1: scrambled input */
+    ep_reset()
+    ep_add(cc)   ep_add(qq)   ep_add(aa)   ep_add(cd)   ep_add(pp)   ep_add(bb)
+    let k : u32 = ep_build()
+    if k != 5u32 { return 1u64 }                                       /* 6 inputs deduped to 5 nodes */
+    if re_cmp(ep_node_at(0u32), ep_node_at(1u32)) != 1i32 { return 2u64 }
+    if re_cmp(ep_node_at(1u32), ep_node_at(2u32)) != 1i32 { return 3u64 }
+    if re_cmp(ep_node_at(2u32), ep_node_at(3u32)) != 1i32 { return 4u64 }
+    if re_cmp(ep_node_at(3u32), ep_node_at(4u32)) != 1i32 { return 5u64 }   /* the tight pair, ordered exactly */
+    if inv_count() != 4u32 { return 6u64 }                            /* covering chain = k-1 = 4 BELOW ripples */
+    if re_cmp(ep_node_at(0u32), aa) != 0i32 { return 7u64 }            /* smallest is sqrt2+sqrt7 */
+    if re_cmp(ep_node_at(4u32), qq) != 0i32 { return 8u64 }            /* largest is 2sqrt1970 */
+    ep_root((&R1[0u64]) as u64)
+
+    /* build 2: SAME bag, DIFFERENT input order -> same graph */
+    inv_reset()   ep_reset()
+    ep_add(pp)   ep_add(aa)   ep_add(bb)   ep_add(qq)   ep_add(cc)   ep_add(cd)
+    let k2 : u32 = ep_build()
+    if k2 != 5u32 { return 9u64 }
+    ep_root((&R2[0u64]) as u64)
+    if eq32((&R1[0u64]) as u64, (&R2[0u64]) as u64) != 1u32 { return 10u64 }   /* identical witness, any order */
+
+    return 99u64
+}

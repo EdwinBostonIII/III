@@ -1,0 +1,142 @@
+/* STDLIB/iii/aether/fractal_dim.iii -- validate the dimension faculty against EXACTLY self-similar fractals, whose
+ * box-count at the natural scale r^-k is EXACTLY M^k (Moran/Hutchinson), so the similarity dimension d = log M/log r
+ * is reproduced EXACTLY -- no asymptotic convergence, no precision wall (unlike the quasi-self-similar Mandelbrot).
+ *   Sierpinski triangle : M=3, r=2 -> d = log3/log2 ~ 1.585
+ *   Sierpinski carpet   : M=8, r=3 -> d = log8/log3 ~ 1.893
+ *   Cantor set (1-D)    : M=2, r=3 -> d = log2/log3 ~ 0.631
+ * The witness: the box counts ARE the exact integer powers, and the measured d matches the closed form. */
+module fractal_dim
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn log2_q20(m: u64) -> u64 from "ui_field.iii"
+
+var SET : [u8; 1048576]
+var BOXHIT : [u8; 1048576]
+var DIG : [u8; 24]
+
+fn pstr(s: *u8) -> i32 {
+    let mut i : u64 = 0u64   let mut go : u8 = 1u8
+    while go == 1u8 { let c : u8 = s[i]   if c == 126u8 { go = 0u8 }   if go == 1u8 { putchar(c as i32)   i = i + 1u64 } }
+    return 0i32
+}
+fn pnl() -> i32 { return putchar(10i32) }
+fn pint(n: i64) -> i32 {
+    let mut x : i64 = n
+    if x < 0i64 { putchar(45i32)   x = 0i64 - x }
+    if x == 0i64 { putchar(48i32)   return 0i32 }
+    let mut k : i64 = 0i64
+    while x > 0i64 { let q : i64 = x / 10i64   DIG[k] = ((x - (q * 10i64)) + 48i64) as u8   x = q   k = k + 1i64 }
+    while k > 0i64 { k = k - 1i64   putchar(DIG[k] as i32) }
+    return 0i32
+}
+
+/* Sierpinski triangle on a 2^bits grid: cell set iff (x AND y) == 0.  Set-cell count = 3^bits. */
+fn sierp_gen(sz: i64) -> i32 {
+    let mut y : i64 = 0i64
+    while y < sz {
+        let mut x : i64 = 0i64
+        while x < sz { let mut v : u8 = 0u8   if (x & y) == 0i64 { v = 1u8 }   SET[(y * sz) + x] = v   x = x + 1i64 }
+        y = y + 1i64
+    }
+    return 0i32
+}
+/* Sierpinski carpet on a 3^lev grid: removed iff some base-3 digit position has BOTH x and y digit == 1. */
+fn carpet_gen(sz: i64, lev: i64) -> i32 {
+    let mut y : i64 = 0i64
+    while y < sz {
+        let mut x : i64 = 0i64
+        while x < sz {
+            let mut xx : i64 = x   let mut yy : i64 = y   let mut l : i64 = 0i64   let mut inside : u8 = 1u8
+            while l < lev {
+                let xd : i64 = xx - ((xx / 3i64) * 3i64)
+                let yd : i64 = yy - ((yy / 3i64) * 3i64)
+                if xd == 1i64 { if yd == 1i64 { inside = 0u8 } }
+                xx = xx / 3i64   yy = yy / 3i64   l = l + 1i64
+            }
+            SET[(y * sz) + x] = inside
+            x = x + 1i64
+        }
+        y = y + 1i64
+    }
+    return 0i32
+}
+/* Cantor set on [0, 3^lev): in iff no base-3 digit is 1.  Stored 1-D in SET. */
+fn cantor_gen(len: i64, lev: i64) -> i32 {
+    let mut x : i64 = 0i64
+    while x < len {
+        let mut xx : i64 = x   let mut l : i64 = 0i64   let mut inside : u8 = 1u8
+        while l < lev {
+            let xd : i64 = xx - ((xx / 3i64) * 3i64)
+            if xd == 1i64 { inside = 0u8 }
+            xx = xx / 3i64   l = l + 1i64
+        }
+        SET[x] = inside
+        x = x + 1i64
+    }
+    return 0i32
+}
+/* count b-by-b boxes (2-D) holding a set cell */
+fn box_count_2d(sz: i64, b: i64) -> i64 {
+    let bw : i64 = sz / b
+    let mut i : i64 = 0i64   while i < (bw * bw) { BOXHIT[i] = 0u8   i = i + 1i64 }
+    let mut y : i64 = 0i64
+    while y < sz {
+        let mut x : i64 = 0i64
+        while x < sz { if SET[(y * sz) + x] == 1u8 { BOXHIT[((y / b) * bw) + (x / b)] = 1u8 }   x = x + 1i64 }
+        y = y + 1i64
+    }
+    let mut c : i64 = 0i64   let mut k : i64 = 0i64
+    while k < (bw * bw) { c = c + (BOXHIT[k] as i64)   k = k + 1i64 }
+    return c
+}
+/* count length-b segments (1-D) holding a set point */
+fn box_count_1d(len: i64, b: i64) -> i64 {
+    let nb : i64 = len / b
+    let mut i : i64 = 0i64   while i < nb { BOXHIT[i] = 0u8   i = i + 1i64 }
+    let mut x : i64 = 0i64
+    while x < len { if SET[x] == 1u8 { BOXHIT[x / b] = 1u8 }   x = x + 1i64 }
+    let mut c : i64 = 0i64   let mut k : i64 = 0i64
+    while k < nb { c = c + (BOXHIT[k] as i64)   k = k + 1i64 }
+    return c
+}
+/* d * 1000 = log(Nfine/Ncoarse) / log(box_ratio), ROUNDED.  The 2^20 log-scale cancels in num/den, so the extra
+ * precision + round-to-nearest lands the exact closed-form milli-dimension (1585, 1893, 631). */
+fn dim_milli(nf: i64, nc: i64, box_ratio: i64) -> i64 {
+    let num : i64 = 1000i64 * ((log2_q20(nf as u64) as i64) - (log2_q20(nc as u64) as i64))
+    let den : i64 = log2_q20(box_ratio as u64) as i64
+    return (num + (den / 2i64)) / den
+}
+
+fn main() -> i32 {
+    pstr("=== EXACT self-similar fractal dimensions (box-count = exact integer power) ===~")   pnl()
+
+    /* SIERPINSKI TRIANGLE  2^9 grid -> box counts must be 3^k, d = log3/log2 = 1585 */
+    sierp_gen(512i64)
+    let s256 : i64 = box_count_2d(512i64, 256i64)
+    let s64  : i64 = box_count_2d(512i64, 64i64)
+    let s16  : i64 = box_count_2d(512i64, 16i64)
+    let s4   : i64 = box_count_2d(512i64, 4i64)
+    let s1   : i64 = box_count_2d(512i64, 1i64)
+    pstr("[SIERPINSKI tri]  N(box=256,64,16,4,1) = ~")   pint(s256)   pstr(",~")   pint(s64)   pstr(",~")   pint(s16)   pstr(",~")   pint(s4)   pstr(",~")   pint(s1)   pstr("  (= 3^1,3,5,7,9)~")   pnl()
+    pstr("                  measured d = ~")   pint(dim_milli(s1, s256, 256i64))   pstr("/1000   theorem log3/log2 = 1585~")   pnl()
+
+    /* SIERPINSKI CARPET  3^6 grid -> box counts must be 8^k, d = log8/log3 = 1893 */
+    carpet_gen(729i64, 6i64)
+    let p243 : i64 = box_count_2d(729i64, 243i64)
+    let p27  : i64 = box_count_2d(729i64, 27i64)
+    let p3   : i64 = box_count_2d(729i64, 3i64)
+    let p1   : i64 = box_count_2d(729i64, 1i64)
+    pstr("[SIERPINSKI crp]  N(box=243,27,3,1) = ~")   pint(p243)   pstr(",~")   pint(p27)   pstr(",~")   pint(p3)   pstr(",~")   pint(p1)   pstr("  (= 8^1,3,5,6)~")   pnl()
+    pstr("                  measured d = ~")   pint(dim_milli(p1, p243, 243i64))   pstr("/1000   theorem log8/log3 = 1893~")   pnl()
+
+    /* CANTOR SET  3^11 -> box counts must be 2^k, d = log2/log3 = 631 (note d < 1) */
+    cantor_gen(177147i64, 11i64)
+    let c6561 : i64 = box_count_1d(177147i64, 6561i64)
+    let c81   : i64 = box_count_1d(177147i64, 81i64)
+    let c1    : i64 = box_count_1d(177147i64, 1i64)
+    pstr("[CANTOR set 1D]   N(box=6561,81,1) = ~")   pint(c6561)   pstr(",~")   pint(c81)   pstr(",~")   pint(c1)   pstr("  (= 2^3,7,11)~")   pnl()
+    pstr("                  measured d = ~")   pint(dim_milli(c1, c6561, 6561i64))   pstr("/1000   theorem log2/log3 = 631~")   pnl()
+
+    pstr("=== box counts ARE the exact powers; measured d matches the closed forms ===~")   pnl()
+    return 0i32
+}

@@ -1,0 +1,101 @@
+/* STDLIB/iii/eidos/membrane.iii -- THE LAZY MEMBRANE + the orbiting Ω satellite (Ripple Merge, Phase II).
+ * The ripple's identity is H = sha256(verb‖a‖b) (omnia/involution); the proof obligation Ω is a SATELLITE stored
+ * at map[H] -> Ω, NEVER in the hash input (Gate 3 -- the proof orbits the atom).  Ω is a tagged union:
+ * VACUOUS | CRYSTAL(crystal_id).
+ *   LAZY (Gate 2): VACUOUS verifies FREE -- a spatial geometry tick never touches the prover; CRYSTAL verifies via
+ *   the EXISTING forge-resistant omnia::crystal_verify (ENCAPSULATED, not reimplemented -- no new MAC, no island).
+ *   A forged crystal (crystal_verify==0) or an absent obligation -> reject.
+ * Open-addressing satellite keyed by the 32-byte H.  Authors no crypto; consumes only crystal_verify. */
+module eidos_membrane
+
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+
+const MBR_CAP : u32 = 8192u32
+
+var MBR_H    : [u8; 262144]            /* 8192 * 32 -- content-address keys */
+var MBR_TAG  : [u32; 8192]             /* 0 = absent, 1 = VACUOUS, 2 = CRYSTAL */
+var MBR_CID  : [u64; 8192]             /* the crystal_id for the CRYSTAL case */
+var MBR_USED : u32 = 0u32
+
+fn mbr_used() -> u32 @export { return MBR_USED }
+fn mbr_reset() -> i32 @export { let mut i : u64 = 0u64   while i < 8192u64 { MBR_TAG[i] = 0u32   i = i + 1u64 }   MBR_USED = 0u32   return 0i32 }
+
+fn mbr_slot0(h_ptr: u64) -> u64 { let ph : *u8 = h_ptr as *u8   let mut k : u64 = 0u64   let mut i : u64 = 0u64   while i < 8u64 { k = (k << 8u64) | (ph[i] as u64)   i = i + 1u64 }   return k & 8191u64 }
+fn mbr_eq_h(slot: u64, h_ptr: u64) -> u32 { let ph : *u8 = h_ptr as *u8   let base : u64 = slot * 32u64   let mut i : u64 = 0u64   while i < 32u64 { if MBR_H[base + i] != ph[i] { return 0u32 }   i = i + 1u64 }   return 1u32 }
+fn mbr_find(h_ptr: u64) -> u64 { let mut s : u64 = mbr_slot0(h_ptr)   let mut p : u64 = 0u64   while p < 8192u64 { if MBR_TAG[s] == 0u32 { return s }   if mbr_eq_h(s, h_ptr) == 1u32 { return s }   s = (s + 1u64) & 8191u64   p = p + 1u64 }   return 8192u64 }
+fn mbr_store_h(slot: u64, h_ptr: u64) -> i32 { let ph : *u8 = h_ptr as *u8   let base : u64 = slot * 32u64   let mut i : u64 = 0u64   while i < 32u64 { MBR_H[base + i] = ph[i]   i = i + 1u64 }   return 0i32 }
+
+/* Ω = VACUOUS for H (a lazy event -- no proof needed). */
+fn mbr_set_vacuous(h_ptr: u64) -> i32 @export {
+    let s : u64 = mbr_find(h_ptr)
+    if s >= 8192u64 { return 0i32 - 3i32 }
+    if MBR_TAG[s] == 0u32 { mbr_store_h(s, h_ptr)   MBR_USED = MBR_USED + 1u32 }
+    MBR_TAG[s] = 1u32
+    return 0i32
+}
+
+/* Ω = CRYSTAL(crystal_id) for H (a proof-carrying self-edit -- the crystal is an omnia::crystal). */
+fn mbr_set_crystal(h_ptr: u64, crystal_id: u64) -> i32 @export {
+    let s : u64 = mbr_find(h_ptr)
+    if s >= 8192u64 { return 0i32 - 3i32 }
+    if MBR_TAG[s] == 0u32 { mbr_store_h(s, h_ptr)   MBR_USED = MBR_USED + 1u32 }
+    MBR_TAG[s] = 2u32
+    MBR_CID[s] = crystal_id
+    return 0i32
+}
+
+/* tag for H: 0 = absent, 1 = VACUOUS, 2 = CRYSTAL. */
+fn mbr_tag(h_ptr: u64) -> u32 @export {
+    let mut s : u64 = mbr_slot0(h_ptr)
+    let mut p : u64 = 0u64
+    while p < 8192u64 {
+        if MBR_TAG[s] == 0u32 { return 0u32 }
+        if mbr_eq_h(s, h_ptr) == 1u32 { return MBR_TAG[s] }
+        s = (s + 1u64) & 8191u64
+        p = p + 1u64
+    }
+    return 0u32
+}
+
+/* THE LAZY MEMBRANE: VACUOUS -> 1 (free); CRYSTAL -> crystal_verify(cid) (forge-resistance, encapsulated);
+ * absent -> 0 (no obligation == not admitted). */
+fn mbr_verify(h_ptr: u64) -> u32 @export {
+    let mut s : u64 = mbr_slot0(h_ptr)
+    let mut p : u64 = 0u64
+    while p < 8192u64 {
+        if MBR_TAG[s] == 0u32 { return 0u32 }
+        if mbr_eq_h(s, h_ptr) == 1u32 {
+            if MBR_TAG[s] == 1u32 { return 1u32 }
+            let cv : u8 = crystal_verify(MBR_CID[s])
+            if cv == 1u8 { return 1u32 }
+            return 0u32
+        }
+        s = (s + 1u64) & 8191u64
+        p = p + 1u64
+    }
+    return 0u32
+}
+
+/* the crystal_id bound to H (0 if absent or VACUOUS). */
+fn mbr_cid(h_ptr: u64) -> u64 @export {
+    let mut s : u64 = mbr_slot0(h_ptr)
+    let mut p : u64 = 0u64
+    while p < 8192u64 {
+        if MBR_TAG[s] == 0u32 { return 0u64 }
+        if mbr_eq_h(s, h_ptr) == 1u32 { return MBR_CID[s] }
+        s = (s + 1u64) & 8191u64
+        p = p + 1u64
+    }
+    return 0u64
+}
+
+/* INVOLUTION-CLOSED PROOF (Gate 4).  The inverse ripple carries the SAME obligation as the original: the equality
+ * a≡b that justifies BELOW(a,b) is symmetric, so it justifies REFLECT(b,a) identically -- the inverse crystal IS the
+ * crystal.  Copy Ω from h_orig to h_inv; thereafter mbr_verify(h_inv) == mbr_verify(h_orig) BY CONSTRUCTION (the undo
+ * is as proven as the action).  VACUOUS reflects to VACUOUS (free both ways); absent original -> nothing to reflect. */
+fn mbr_reflect(h_orig: u64, h_inv: u64) -> i32 @export {
+    let t : u32 = mbr_tag(h_orig)
+    if t == 1u32 { return mbr_set_vacuous(h_inv) }
+    if t == 2u32 { let cid : u64 = mbr_cid(h_orig)   return mbr_set_crystal(h_inv, cid) }
+    return 0i32 - 4i32
+}

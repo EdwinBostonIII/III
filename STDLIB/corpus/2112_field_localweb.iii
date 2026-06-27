@@ -1,0 +1,38 @@
+/* STDLIB/corpus/2112_field_localweb.iii -- THE UNIFIED FIELD, faculty L: THE LOCAL WEB (relational ontology).
+ * Test the hypothesis that only local events, their relations, and hard-logic walls exist -- no global background.
+ * Each node is a dot that reads ONLY its neighbors (a local event) under the wall min(self, neighbor+1).  Run it and
+ * the global distance field emerges one hop per step; observe the wavefront, then read off the global diameter that
+ * no node ever saw whole.  99 = a global property reconstructed from purely local events -- evidence for locality. */
+module corpus_2112_field_localweb
+
+extern @abi(c-msvc-x64) fn ui_relay_init(n: i64, src: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_relay_step(n: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_relay_get(idx: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_relay_converge(n: i64) -> i64 from "ui_field.iii"
+
+fn main() -> u64 {
+    /* 8 dots in a line, a single source event at dot 0 ; everything else is "unreached" (infinity = 1000000) */
+    ui_relay_init(8i64, 0i64)
+    if ui_relay_get(0i64) != 0i64 { return 1u64 }
+    if ui_relay_get(1i64) != 1000000i64 { return 2u64 }            /* not yet reached */
+
+    /* OBSERVE THE RELAY: each step propagates the wavefront exactly one hop, using only adjacency */
+    ui_relay_step(8i64)
+    if ui_relay_get(1i64) != 1i64 { return 3u64 }                  /* hop 1: dot 1 now knows it is distance 1 */
+    if ui_relay_get(2i64) != 1000000i64 { return 4u64 }            /* dot 2 still unreached -- the wavefront is local */
+    ui_relay_step(8i64)
+    if ui_relay_get(2i64) != 2i64 { return 5u64 }                  /* hop 2 */
+    if ui_relay_get(3i64) != 1000000i64 { return 6u64 }
+    ui_relay_step(8i64)
+    if ui_relay_get(3i64) != 3i64 { return 7u64 }                  /* hop 3 -- the relay marches one dot per tick */
+
+    /* THE EVIDENCE: converge from a fresh source -> the EXACT global distance field dist[i]=i emerges, and the global
+     * diameter (7) is reconstructed though no dot ever saw more than its two neighbors -- locality sufficed. */
+    ui_relay_init(8i64, 0i64)
+    if ui_relay_converge(8i64) != 7i64 { return 8u64 }             /* global diameter, from purely local relays */
+    if ui_relay_get(0i64) != 0i64 { return 9u64 }
+    if ui_relay_get(7i64) != 7i64 { return 10u64 }                 /* dist[i] = i, the whole global field */
+    if ui_relay_get(4i64) != 4i64 { return 11u64 }
+
+    return 99u64
+}

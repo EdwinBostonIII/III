@@ -1,0 +1,124 @@
+/* STDLIB/iii/aether/ui_win.iii -- III-GLASS L0: the real-time present + input shell.  III opens its OWN window
+ * and pumps its OWN message loop -- the only external surface is the OS ABI (user32/gdi32/kernel32), exactly the
+ * unavoidable floor, no imported library.  The WNDPROC is a III function (its address handed to RegisterClassExA);
+ * the framebuffer (0xAARRGGBB == a 32bpp DIB) is blitted with StretchDIBits, no per-pixel conversion.  Input is
+ * folded into module state the render loop reads -- the seed of the event-fold UI. */
+module aether_ui_win
+
+extern @abi(c-msvc-x64) fn GetModuleHandleA(name: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn LoadCursorA(inst: u64, name: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn RegisterClassExA(wc: u64) -> u16 from "user32"
+extern @abi(c-msvc-x64) fn CreateWindowExA(exstyle: u32, cls: u64, title: u64, style: u32, x: i32, y: i32, w: i32, h: i32, parent: u64, menu: u64, inst: u64, param: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn DefWindowProcA(hwnd: u64, msg: u32, wp: u64, lp: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ShowWindow(hwnd: u64, cmd: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn PeekMessageA(msg: u64, hwnd: u64, fmin: u32, fmax: u32, remove: u32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn TranslateMessage(msg: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn DispatchMessageA(msg: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn PostQuitMessage(code: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn GetDC(hwnd: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ReleaseDC(hwnd: u64, hdc: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn GetClientRect(hwnd: u64, rect: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn StretchDIBits(hdc: u64, xd: i32, yd: i32, wd: i32, hd: i32, xs: i32, ys: i32, ws: i32, hs: i32, bits: u64, bmi: u64, usage: u32, rop: u32) -> i32 from "gdi32"
+
+var UI_WC   : [u8; 80]   /* WNDCLASSEXA */
+var UI_MSG  : [u8; 48]   /* MSG */
+var UI_BMI  : [u8; 40]   /* BITMAPINFOHEADER */
+var UI_RECT : [u8; 16]   /* RECT */
+var UI_CLS  : [u8; 9] = [73u8,73u8,73u8,71u8,76u8,65u8,83u8,83u8,0u8]   /* "IIIGLASS\0" */
+var UI_HWND : u64 = 0u64
+var UI_MX   : u32 = 0u32
+var UI_MY   : u32 = 0u32
+var UI_MDOWN: u32 = 0u32
+var UI_KEY  : u32 = 0u32
+var UI_QUIT : u32 = 0u32
+var UI_CB   : [u32; 64]   /* WM_CHAR ring buffer -- event-driven text input */
+var UI_CBH  : u32 = 0u32  /* write head */
+var UI_CBT  : u32 = 0u32  /* read tail */
+
+fn w8(b: u64, o: u64, v: u32) -> i32 { let p : *u8 = (b + o) as *u8  p[0u64] = (v & 255u32) as u8  return 0i32 }
+fn w16(b: u64, o: u64, v: u32) -> i32 { w8(b, o, v)  w8(b, o + 1u64, v >> 8u32)  return 0i32 }
+fn w32(b: u64, o: u64, v: u32) -> i32 { w8(b, o, v)  w8(b, o + 1u64, v >> 8u32)  w8(b, o + 2u64, v >> 16u32)  w8(b, o + 3u64, v >> 24u32)  return 0i32 }
+fn wptr(b: u64, o: u64, v: u64) -> i32 { let p : *u64 = (b + o) as *u64  p[0u64] = v  return 0i32 }
+fn r32(b: u64, o: u64) -> u32 { let p : *u8 = (b + o) as *u8  return (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32) }
+
+/* input accessors the render loop folds over. */
+fn ui_mx() -> u32 @export { return UI_MX }
+fn ui_my() -> u32 @export { return UI_MY }
+fn ui_mdown() -> u32 @export { return UI_MDOWN }
+fn ui_quit() -> u32 @export { return UI_QUIT }
+fn ui_key() -> u32 @export { let k : u32 = UI_KEY  UI_KEY = 0u32  return k }   /* consume the last key (0 if none) */
+fn ui_getchar() -> u32 @export {   /* pop the next typed character (WM_CHAR), or 0 if the ring is empty */
+    if UI_CBT == UI_CBH { return 0u32 }
+    let c : u32 = UI_CB[(UI_CBT & 63u32) as u64]
+    UI_CBT = UI_CBT + 1u32
+    return c
+}
+fn ui_sleep(ms: u32) -> i32 @export { return Sleep(ms) }
+
+/* the III WNDPROC -- Windows calls this directly; it folds input into module state, quits on close/ESC. */
+fn ui_wndproc(hwnd: u64, msg: u32, wp: u64, lp: u64) -> u64 @export {
+    if msg == 2u32 { PostQuitMessage(0i32)  return 0u64 }                                   /* WM_DESTROY */
+    if msg == 512u32 { UI_MX = (lp & 65535u64) as u32  UI_MY = ((lp >> 16u64) & 65535u64) as u32 }   /* WM_MOUSEMOVE */
+    if msg == 513u32 { UI_MDOWN = 1u32 }                                                    /* WM_LBUTTONDOWN */
+    if msg == 514u32 { UI_MDOWN = 0u32 }                                                    /* WM_LBUTTONUP */
+    if msg == 256u32 { UI_KEY = (wp & 65535u64) as u32  if wp == 27u64 { UI_QUIT = 1u32 } } /* WM_KEYDOWN / ESC */
+    if msg == 258u32 { UI_CB[(UI_CBH & 63u32) as u64] = (wp & 65535u64) as u32  UI_CBH = UI_CBH + 1u32 } /* WM_CHAR -> ring */
+    return DefWindowProcA(hwnd, msg, wp, lp)
+}
+
+/* open a w x h client window titled `title` (NUL-terminated). */
+fn ui_win_open(title: u64, w: u32, h: u32) -> u64 @export {
+    let hinst : u64 = GetModuleHandleA(0u64)
+    let wc : u64 = &UI_WC as u64
+    w32(wc, 0u64, 80u32)                       /* cbSize */
+    w32(wc, 4u64, 3u32)                         /* CS_HREDRAW|CS_VREDRAW */
+    wptr(wc, 8u64, &ui_wndproc as u64)          /* lpfnWndProc */
+    w32(wc, 16u64, 0u32)  w32(wc, 20u64, 0u32)
+    wptr(wc, 24u64, hinst)
+    wptr(wc, 32u64, 0u64)
+    wptr(wc, 40u64, LoadCursorA(0u64, 32512u64))  /* IDC_ARROW */
+    wptr(wc, 48u64, 0u64)
+    wptr(wc, 56u64, 0u64)
+    wptr(wc, 64u64, &UI_CLS as u64)
+    wptr(wc, 72u64, 0u64)
+    RegisterClassExA(wc)
+    /* WS_OVERLAPPEDWINDOW(0x00CF0000) | WS_VISIBLE(0x10000000) = 282001408 */
+    let hwnd : u64 = CreateWindowExA(0u32, &UI_CLS as u64, title, 282001408u32, 120i32, 120i32, (w + 16u32) as i32, (h + 39u32) as i32, 0u64, 0u64, hinst, 0u64)
+    UI_HWND = hwnd
+    ShowWindow(hwnd, 5i32)                      /* SW_SHOW */
+    return hwnd
+}
+
+/* blit the w x h ARGB framebuffer to the window's client area. */
+fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 @export {
+    let bmi : u64 = &UI_BMI as u64
+    w32(bmi, 0u64, 40u32)
+    w32(bmi, 4u64, w)
+    w32(bmi, 8u64, 0u32 - h)                    /* top-down rows */
+    w16(bmi, 12u64, 1u32)
+    w16(bmi, 14u64, 32u32)
+    w32(bmi, 16u64, 0u32)
+    w32(bmi, 20u64, (w * h) * 4u32)
+    w32(bmi, 24u64, 0u32)  w32(bmi, 28u64, 0u32)  w32(bmi, 32u64, 0u32)  w32(bmi, 36u64, 0u32)
+    let rc : u64 = &UI_RECT as u64
+    GetClientRect(UI_HWND, rc)
+    let cw : u32 = r32(rc, 8u64)
+    let ch : u32 = r32(rc, 12u64)
+    let hdc : u64 = GetDC(UI_HWND)
+    StretchDIBits(hdc, 0i32, 0i32, cw as i32, ch as i32, 0i32, 0i32, w as i32, h as i32, buf, bmi, 0u32, 13369376u32)   /* SRCCOPY */
+    ReleaseDC(UI_HWND, hdc)
+    return 0i32
+}
+
+/* drain the message queue; returns 1 once the window should close. */
+fn ui_win_pump() -> u32 @export {
+    let msg : u64 = &UI_MSG as u64
+    while PeekMessageA(msg, 0u64, 0u32, 0u32, 1u32) != 0i32 {
+        let m : u32 = r32(msg, 8u64)
+        if m == 18u32 { UI_QUIT = 1u32 }        /* WM_QUIT */
+        TranslateMessage(msg)
+        DispatchMessageA(msg)
+    }
+    return UI_QUIT
+}

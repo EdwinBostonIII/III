@@ -133,6 +133,111 @@ fn svp_kinduct_sym() -> u8 @export {
     return 1u8
 }
 
+/* CONSERVATION (the RELATIONAL invariant -- ser_petri fuzz -> ser_antiunify generalize -> ser_kinduct_sym prove,
+ * the full loop on a class the single-scalar templates cannot express).  A COUPLED counter x'=x+1, y'=y-1
+ * conserves x+y; the relational lgg DISCOVERS the kernel from the fuzzed pairs and BOTH prover engines (closed
+ * form + 2-var bit-blast) certify it over all 2^128, while a non-conserving candidate is REFUSED.  1 = the true
+ * law is proven by both engines AND the false one refused -- the sound, in-domain image of "the charges sum to
+ * zero".  STRUCTURALLY gated in svp_autopoietic_wave (remove it and the wave's verdict changes); the wave
+ * binary is un-runnable here (pre-existing ~1.25GB BSS), so its RUNTIME load-bearingness is UNVERIFIED --
+ * the conservation ENGINE itself is runtime-proven (corpus 2073=99), the wave wiring is structural. */
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sp_fuzz_det2(tx: u32, ty: u32, xv: u32, yv: u32, x0: u64, y0: u64, n: u32) -> u32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn au_consv_found() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_consv_w0() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_consv_w1() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_consv_c() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn sks_consv_prove(w0: u64, w1: u64, c: u64, a: u64, b: u64, x0: u64, y0: u64) -> u8 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sks_consv_step_sym(w0: u64, w1: u64, a: u64, b: u64) -> u8 from "ser_kinduct_sym.iii"
+fn svp_conservation() -> u8 @export {
+    let bneg1 : u64 = 0u64 - 1u64
+    let bneg2 : u64 = 0u64 - 2u64
+    /* FUZZ the coupled counter x'=x+1, y'=y-1 from (5,5) -> observe (x,y) pairs (x+y == 10 conserved). */
+    bb_reset(64u64)
+    let xv : u32 = bb_var(0u32)
+    let yv : u32 = bb_var(1u32)
+    let tx : u32 = bb_add(xv, bb_const(1u64))
+    let ty : u32 = bb_sub(yv, bb_const(1u64))
+    if sp_fuzz_det2(tx, ty, 0u32, 1u32, 5u64, 5u64, 12u32) != 12u32 { return 0u8 }
+    /* GENERALIZE: the relational lgg fits a linear conservation law to every observed pair. */
+    if au_consv_found() != 1u32 { return 0u8 }
+    let w0 : u64 = au_consv_w0()
+    let w1 : u64 = au_consv_w1()
+    let c  : u64 = au_consv_c()
+    /* PROVE: the DISCOVERED kernel is conserved over ALL 2^128 under (a,b)=(+1,-1). */
+    if sks_consv_prove(w0, w1, c, 1u64, bneg1, 5u64, 5u64) != 1u8 { return 0u8 }
+    /* CROSS-CHECK + CONSCIENCE: the clean (1,1) sum is conserved under (+1,-1) [independent bit-blast engine],
+     * and the same candidate under (+1,-2) is REFUSED -- two engines, two verdicts. */
+    if sks_consv_step_sym(1u64, 1u64, 1u64, bneg1) != 1u8 { return 0u8 }
+    if sks_consv_step_sym(1u64, 1u64, 1u64, bneg2) != 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* ============================================================================================================
+ * CAPACITY-CONSERVATION SEAL (the relational invariant, applied to MEMORY -- conservation wired into the EXISTING
+ * separation-algebra membrane).  An allocator partitions `cap` cells into a FREE heaplet and a USED heaplet.  The
+ * seal composes THREE existing organs, none authored here:
+ *   QUANTITATIVE (conservation): hl_size(free)+hl_size(used)==cap, and the alloc/free transition PROVEN to
+ *                                conserve the sum over all 2^128 (sks_consv_step) -- the count bookkeeping never
+ *                                drifts (catches an UNCOMPENSATED leak/double-count -- count DRIFT; NOT a
+ *                                count-preserving identity swap, which is the disjointness half's job).
+ *   SPATIAL-DISJOINT (heaplet) : hl_disjoint(free,used)==1 -- no cell is BOTH free and used.
+ *   SPATIAL-FRAME (sep_logic)  : sl_frame_holds(STORE into a used cell over (used,free))==1 -- allocating a used
+ *                                cell provably leaves the FREE region byte-identical (the frame rule).
+ * SCOPE (locked): proves bookkeeping consistency + separation, NOT temporal use-after-free -- COMPLEMENTARY to an
+ * aliasing borrow-checker, discovered+proven with zero annotations, never a replacement. */
+extern @abi(c-msvc-x64) fn hl_init() -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_empty() -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_set(h: u32, a: u32, v: u32) -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_disjoint(h1: u32, h2: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_size(h: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn sl_frame_holds(kind: u32, a: u32, v: u32, b: u32, hP: u32, hR: u32) -> u32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sks_consv_step(w0: u64, w1: u64, a: u64, b: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn svp_mem_build(mask: u64) -> u32 {            /* a heaplet over exactly the cells set in `mask` (0..63) */
+    let h : u32 = hl_empty()
+    let mut a : u32 = 0u32
+    while a < 64u32 {
+        if (mask & (1u64 << (a as u64))) != 0u64 { hl_set(h, a, 1u32) }
+        a = a + 1u32
+    }
+    return h
+}
+/* the CONCRETE-STATE seal: 1 iff (free,used) over `cap` cells is conservatively sealed RIGHT NOW.  `used_cell`
+ * must be a cell in `used` (the frame demonstration: storing it leaves `free` byte-identical). */
+fn svp_mem_state_sealed(free_mask: u64, used_mask: u64, cap: u32, used_cell: u32) -> u8 @export {
+    hl_init()
+    let free_h : u32 = svp_mem_build(free_mask)
+    let used_h : u32 = svp_mem_build(used_mask)
+    if hl_disjoint(free_h, used_h) != 1u32 { return 0u8 }                  /* SPATIAL: no double-owned cell */
+    let nf : u32 = hl_size(free_h)
+    let nu : u32 = hl_size(used_h)
+    if (nf + nu) != cap { return 0u8 }                                     /* QUANTITATIVE: capacity accounted */
+    if sl_frame_holds(0u32, used_cell, 200u32, 0u32, used_h, free_h) != 1u32 { return 0u8 }  /* FRAME: write framed off free */
+    return 1u8
+}
+/* THE SEAL (wave gate): the ABSTRACT laws (alloc/free conserve capacity over all 2^128; a leak is REFUSED) tied
+ * to a CONCRETE heap whose real free->used move keeps the sizes summing to cap; overlap and leak FAIL the seal. */
+fn svp_mem_seal() -> u8 @export {
+    let bneg1 : u64 = 0u64 - 1u64
+    /* ABSTRACT: alloc (free-1,used+1) and free (free+1,used-1) conserve free+used; a LEAK (free-1,used+0) drifts. */
+    if sks_consv_step(1u64, 1u64, bneg1, 1u64) != 1u8 { return 0u8 }
+    if sks_consv_step(1u64, 1u64, 1u64, bneg1) != 1u8 { return 0u8 }
+    if sks_consv_step(1u64, 1u64, bneg1, 0u64) != 0u8 { return 0u8 }       /* LEAK refused (drift = -1) */
+    /* CONCRETE TIE: free={0,1,2,3}, used={4,5,6,7}, cap=8 -> sealed.  Move cell 3 free->used -> STILL sealed
+     * (sizes still sum to 8 -- the real heaplet move MATCHES the conserved prediction). */
+    if svp_mem_state_sealed(0x0Fu64, 0xF0u64, 8u32, 4u32) != 1u8 { return 0u8 }
+    if svp_mem_state_sealed(0x07u64, 0xF8u64, 8u32, 3u32) != 1u8 { return 0u8 }   /* after moving cell 3 free->used */
+    /* CONSCIENCE: overlap (cell 3 in BOTH) -> not disjoint -> seal FAILS; size-mismatch (sum 6 != 8) -> FAILS. */
+    if svp_mem_state_sealed(0x0Fu64, 0xF8u64, 8u32, 3u32) != 0u8 { return 0u8 }   /* cell 3 in both -> overlap */
+    if svp_mem_state_sealed(0x07u64, 0x70u64, 8u32, 4u32) != 0u8 { return 0u8 }   /* sizes 3+3=6 != 8 -> leak */
+    return 1u8
+}
+
 /* THE FULL PIPELINE for a real family factor v: intuition -> prove -> intent -> collapse x3 -> align ->
  * witness(eidos ACCEPT).  Returns 99 iff EVERY organ's real output succeeds.  The eidos frontier commits only
  * when all gates are green -- so each organ is load-bearing in the accept decision. */
@@ -218,5 +323,7 @@ fn svp_autopoietic_wave() -> u64 @export {
     if sr_selftest() != 99u64 { return 10u64 }    /* REAL: the membrane-observed reality substrate */
     if sm_selftest() != 99u64 { return 11u64 }    /* MEMBRANE: the unified admission boundary */
     if sa_selftest() != 99u64 { return 12u64 }    /* AUTOPOIESIS: the living loop (K-ratchet, immortality) */
+    if svp_conservation() != 1u8 { return 13u64 } /* CONSERVATION: the relational invariant, fuzz->generalize->prove (two engines) */
+    if svp_mem_seal() != 1u8 { return 14u64 }     /* MEMORY SEAL: capacity conservation + separation (heaplet/sep_logic), leak/overlap refused */
     return 99u64
 }

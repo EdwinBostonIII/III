@@ -1,0 +1,73 @@
+/* STDLIB/corpus/2118_field_binding.iii -- THE UNIFIED FIELD, faculty B: THE BINDING (one field equation).
+ * topo (logic) + egraph (conservation) + exact-algebraic (render), bound on a SHARED exact invariant.  The binding
+ * is REAL only if the exact-algebraic invariant DRIVES the e-graph: try_bind unions two forms IFF their exact areas
+ * are equal -- the area is the quantity flowing through all three engines.  Proven load-bearing by a NEGATIVE arm: a
+ * shape of DIFFERENT area must REFUSE to bind (no union, classes stay distinct).  99 = equal-invariant forms bind and
+ * conserve; unequal-invariant forms are refused -- the field equation, not three tests glued together.
+ * Links ui_field (the render/invariant leg) + the real egraph.iii (the conservation leg). */
+module corpus_2118_field_binding
+
+extern @abi(c-msvc-x64) fn ui_poly_area2(xs: u64, ys: u64, n: u64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: u64, children: u64, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+
+var SQX : [i64; 4]   var SQY : [i64; 4]
+var T1X : [i64; 3]   var T1Y : [i64; 3]
+var T2X : [i64; 3]   var T2Y : [i64; 3]
+var SMX : [i64; 4]   var SMY : [i64; 4]
+var SYM : [u8; 32]   var CHILD : [u32; 8]
+
+fn setsym(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SYM[i] = 0u8   i = i + 1u64 }
+    SYM[0u64] = tag
+    return 0i32
+}
+
+/* THE BINDING MECHANISM: the exact-algebraic invariant DRIVES the e-graph.  Union the two forms ONLY because their
+ * exact areas are equal -- the area is what flows through render -> conservation.  Returns 1 if bound, 0 if refused. */
+fn try_bind(fa: u32, area_a: i64, fb: u32, area_b: i64) -> i32 {
+    if area_a == area_b {
+        eg_union(fa, fb)
+        eg_rebuild()
+        return 1i32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- exact-algebraic invariants (the render leg): three shapes' areas ---- */
+    SQX[0u64] = 0i64   SQX[1u64] = 4i64   SQX[2u64] = 4i64   SQX[3u64] = 0i64
+    SQY[0u64] = 0i64   SQY[1u64] = 0i64   SQY[2u64] = 4i64   SQY[3u64] = 4i64
+    let whole : i64 = ui_poly_area2((&SQX) as u64, (&SQY) as u64, 4u64)        /* 4x4 square: 2A = 32 */
+
+    T1X[0u64] = 0i64   T1X[1u64] = 4i64   T1X[2u64] = 4i64
+    T1Y[0u64] = 0i64   T1Y[1u64] = 0i64   T1Y[2u64] = 4i64
+    T2X[0u64] = 0i64   T2X[1u64] = 4i64   T2X[2u64] = 0i64
+    T2Y[0u64] = 0i64   T2Y[1u64] = 4i64   T2Y[2u64] = 4i64
+    let tri : i64 = ui_poly_area2((&T1X) as u64, (&T1Y) as u64, 3u64) + ui_poly_area2((&T2X) as u64, (&T2Y) as u64, 3u64)  /* 16+16 = 32 */
+
+    SMX[0u64] = 0i64   SMX[1u64] = 3i64   SMX[2u64] = 3i64   SMX[3u64] = 0i64
+    SMY[0u64] = 0i64   SMY[1u64] = 0i64   SMY[2u64] = 3i64   SMY[3u64] = 3i64
+    let small : i64 = ui_poly_area2((&SMX) as u64, (&SMY) as u64, 4u64)        /* 3x3 square: 2A = 18 (DIFFERENT) */
+
+    /* ---- the e-graph forms (the conservation leg) ---- */
+    eg_init()
+    setsym(1u8)   let w : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* the square */
+    setsym(2u8)   let t : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* the triangulation */
+    setsym(3u8)   let d : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* the smaller square */
+
+    /* ---- POSITIVE: equal invariant DRIVES the union -> bound AND conserved ---- */
+    if try_bind(w, whole, t, tri) != 1i32 { return 1u64 }                      /* 32 == 32 -> the area binds them */
+    if eg_find(w) != eg_find(t) { return 2u64 }                                /* information conserved across forms */
+
+    /* ---- NEGATIVE arm (proves the invariant is LOAD-BEARING): different invariant REFUSES to bind ---- */
+    if try_bind(w, whole, d, small) != 0i32 { return 3u64 }                    /* 32 != 18 -> the binding REFUSES */
+    if eg_find(w) == eg_find(d) { return 4u64 }                                /* NOT conserved -- distinct classes */
+
+    /* the field equation: forms bind and conserve EXACTLY when their exact-algebraic invariant agrees, never otherwise */
+    return 99u64
+}

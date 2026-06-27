@@ -1,0 +1,147 @@
+/* STDLIB/corpus/2098_exact_aa_poly.iii -- THE TOPOLOGICAL WINDOWING SYSTEM, Phase 9b: EXACT AA for GENERAL polygons.
+ *
+ * ui_exact.ui_exact_cover_edges extends the exact analytic coverage to NON-CONVEX shapes AND multiple contours
+ * (HOLES) via the signed-fan identity: area(pixel ∩ polygon) = sum over edges of sign(cross(A,B))*|area(pixel ∩
+ * triangle(O,A,B))| -- the fan from the origin equals the winding number, so a CW hole contour subtracts.  Each
+ * |area| is the proven convex-triangle clip; nothing new is approximated.
+ *
+ * Grounded exactly as the convex case (advisor-hardened): conservation (aggregate) + an INDEPENDENT per-pixel
+ * cross-check against the even-odd ray-crossing subsampler (a different algorithm) + hand pixels:
+ *   L-shape (0,0),(6,0),(6,2),(2,2),(2,6),(0,6)  area 20:  sum 2A == 40 ; (0,0) full ; (4,4) in the notch -> 0.
+ *   holed square 10x10 with CW 4x4 hole [3,7]^2  area 84:  sum 2A == 168 ; (1,1) ring full ; (5,5) hole -> 0.
+ * 99 = non-convex AND holed coverage matches the independent subsampler per-pixel, conserves net area, and the hole
+ *      reads EXACTLY zero. */
+module corpus_2098_exact_aa_poly
+
+extern @abi(c-msvc-x64) fn ui_exact_cover_edges(ex: u64, ne: u32, px: i64, py: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_num() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_ovf() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_poly_cov(ex: u64, ne: u32, px: i64, py: i64, n: i64) -> i64 from "ui_exact.iii"
+
+var EDG : [i64; 64]   /* edge array (up to 16 edges, 4 i64 each) */
+
+fn kgcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0  if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0  if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = b  b = a - ((a / b) * b)  a = t }
+    return a
+}
+
+/* CONSERVATION: sum 2A over the window [x0,x1)x[y0,y1) must equal the polygon's net 2*area (want)/1 exactly. */
+fn partition_edges(ne: u32, x0: i64, y0: i64, x1: i64, y1: i64, want: i64) -> u32 {
+    let ep : u64 = &EDG as u64
+    let mut sn : i64 = 0i64
+    let mut sd : i64 = 1i64
+    let mut py : i64 = y0
+    while py < y1 {
+        let mut px : i64 = x0
+        while px < x1 {
+            ui_exact_cover_edges(ep, ne, px, py)
+            if ui_aa_ovf() != 0u32 { return 0u32 }
+            let an : i64 = ui_aa_num()
+            let ad : i64 = ui_aa_den()
+            let nn : i64 = (sn * ad) + (an * sd)
+            let nd : i64 = sd * ad
+            let g  : i64 = kgcd(nn, nd)
+            sn = nn  sd = nd
+            if g > 1i64 { sn = sn / g  sd = sd / g }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    if sd != 1i64 { return 0u32 }
+    if sn != want { return 0u32 }
+    return 1u32
+}
+
+/* INDEPENDENT per-pixel: signed-fan exact 2A vs the even-odd subsampler at N=64 within 8/N (cross-multiplied). */
+fn perpixel_edges(ne: u32, x0: i64, y0: i64, x1: i64, y1: i64) -> u32 {
+    let ep : u64 = &EDG as u64
+    let nn : i64 = 64i64
+    let n2 : i64 = nn * nn
+    let mut py : i64 = y0
+    while py < y1 {
+        let mut px : i64 = x0
+        while px < x1 {
+            ui_exact_cover_edges(ep, ne, px, py)
+            if ui_aa_ovf() != 0u32 { return 0u32 }
+            let an : i64 = ui_aa_num()
+            let ad : i64 = ui_aa_den()
+            let cnt : i64 = ui_poly_cov(ep, ne, px, py, nn)
+            let lhs : i64 = (an * n2) - ((2i64 * cnt) * ad)
+            let mut al : i64 = lhs  if al < 0i64 { al = 0i64 - al }
+            let bound : i64 = (8i64 * nn) * ad
+            if al > bound { return 0u32 }
+            px = px + 1i64
+        }
+        py = py + 1i64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    let ep : u64 = &EDG as u64
+
+    /* === L-shape (non-convex), CCW, 6 edges, area 20 === */
+    EDG[0u64]=0i64  EDG[1u64]=0i64  EDG[2u64]=6i64  EDG[3u64]=0i64
+    EDG[4u64]=6i64  EDG[5u64]=0i64  EDG[6u64]=6i64  EDG[7u64]=2i64
+    EDG[8u64]=6i64  EDG[9u64]=2i64  EDG[10u64]=2i64 EDG[11u64]=2i64
+    EDG[12u64]=2i64 EDG[13u64]=2i64 EDG[14u64]=2i64 EDG[15u64]=6i64
+    EDG[16u64]=2i64 EDG[17u64]=6i64 EDG[18u64]=0i64 EDG[19u64]=6i64
+    EDG[20u64]=0i64 EDG[21u64]=6i64 EDG[22u64]=0i64 EDG[23u64]=0i64
+    if partition_edges(6u32, 0i64, 0i64, 6i64, 6i64, 40i64) != 1u32 { return 1u64 }            /* sum 2A == 2*20 */
+    if perpixel_edges(6u32, 0i64, 0i64, 6i64, 6i64) != 1u32 { return 2u64 }        /* vs the independent subsampler */
+    ui_exact_cover_edges(ep, 6u32, 0i64, 0i64)
+    if ui_aa_num() != 2i64 { return 3u64 }                                          /* (0,0) inside the bottom bar -> full */
+    ui_exact_cover_edges(ep, 6u32, 4i64, 4i64)
+    if ui_aa_num() != 0i64 { return 4u64 }                                          /* (4,4) in the notch -> outside -> 0 */
+
+    /* === holed square: outer 10x10 CCW + hole 4x4 CW [3,7]^2, 8 edges, net area 84 === */
+    EDG[0u64]=0i64   EDG[1u64]=0i64   EDG[2u64]=10i64  EDG[3u64]=0i64
+    EDG[4u64]=10i64  EDG[5u64]=0i64   EDG[6u64]=10i64  EDG[7u64]=10i64
+    EDG[8u64]=10i64  EDG[9u64]=10i64  EDG[10u64]=0i64  EDG[11u64]=10i64
+    EDG[12u64]=0i64  EDG[13u64]=10i64 EDG[14u64]=0i64  EDG[15u64]=0i64
+    EDG[16u64]=3i64  EDG[17u64]=3i64  EDG[18u64]=3i64  EDG[19u64]=7i64
+    EDG[20u64]=3i64  EDG[21u64]=7i64  EDG[22u64]=7i64  EDG[23u64]=7i64
+    EDG[24u64]=7i64  EDG[25u64]=7i64  EDG[26u64]=7i64  EDG[27u64]=3i64
+    EDG[28u64]=7i64  EDG[29u64]=3i64  EDG[30u64]=3i64  EDG[31u64]=3i64
+    if partition_edges(8u32, 0i64, 0i64, 10i64, 10i64, 168i64) != 1u32 { return 5u64 }         /* sum 2A == 2*(100-16) = 168 */
+    if perpixel_edges(8u32, 0i64, 0i64, 10i64, 10i64) != 1u32 { return 6u64 }      /* vs even-odd (which excludes the hole) */
+    ui_exact_cover_edges(ep, 8u32, 1i64, 1i64)
+    if ui_aa_num() != 2i64 { return 7u64 }                                          /* (1,1) in the ring -> full */
+    ui_exact_cover_edges(ep, 8u32, 5i64, 5i64)
+    if ui_aa_num() != 0i64 { return 8u64 }                                          /* (5,5) in the HOLE -> exactly 0 */
+
+    /* === slanted NON-CONVEX chevron (0,0),(4,2),(0,4),(2,2), CCW, area 4 -- FRACTIONAL coverages exercise the
+     * signed-fan's RATIONAL accumulation, and the cross-check exercises the 8/N bound (not just lhs=0). === */
+    EDG[0u64]=0i64  EDG[1u64]=0i64  EDG[2u64]=4i64  EDG[3u64]=2i64
+    EDG[4u64]=4i64  EDG[5u64]=2i64  EDG[6u64]=0i64  EDG[7u64]=4i64
+    EDG[8u64]=0i64  EDG[9u64]=4i64  EDG[10u64]=2i64 EDG[11u64]=2i64
+    EDG[12u64]=2i64 EDG[13u64]=2i64 EDG[14u64]=0i64 EDG[15u64]=0i64
+    if partition_edges(4u32, 0i64, 0i64, 4i64, 4i64, 8i64) != 1u32 { return 9u64 }              /* fractional coverages SUM to 2*4=8 */
+    if perpixel_edges(4u32, 0i64, 0i64, 4i64, 4i64) != 1u32 { return 10u64 }        /* vs even-odd, fractional per-pixel */
+
+    /* === GLYPH-COORDS arm (advisor): the SAME chevron translated to screen coords (1500,800).  The signed fan's
+     * wedges now run origin->glyph -- long thin slivers whose intermediate homogeneous values dwarf the compact
+     * triangle.  This is the path a REAL glyph hits; the compact arms do not cover it.  Must STILL conserve + agree
+     * + not silently overflow (AA_OVF -> refuse -> coverage 0 -> the glyph would VANISH).  translation-invariant. === */
+    EDG[0u64]=1500i64  EDG[1u64]=800i64  EDG[2u64]=1504i64  EDG[3u64]=802i64
+    EDG[4u64]=1504i64  EDG[5u64]=802i64  EDG[6u64]=1500i64  EDG[7u64]=804i64
+    EDG[8u64]=1500i64  EDG[9u64]=804i64  EDG[10u64]=1502i64 EDG[11u64]=802i64
+    EDG[12u64]=1502i64 EDG[13u64]=802i64 EDG[14u64]=1500i64 EDG[15u64]=800i64
+    if partition_edges(4u32, 1499i64, 799i64, 1505i64, 805i64, 8i64) != 1u32 { return 11u64 }   /* SAME area 8 at screen coords */
+    if perpixel_edges(4u32, 1499i64, 799i64, 1505i64, 805i64) != 1u32 { return 12u64 }          /* agree + no silent overflow */
+
+    /* === EXTREME-COORDS arm: the SAME chevron at 1e9 (a zoomed/high-DPI canvas).  Without translate-to-local-origin
+     * the origin->shape wedge products reach ~1e27 and overflow -> the shape would SILENTLY VANISH.  The fan must
+     * translate internally and stay exact (area still 8) regardless of absolute position. === */
+    EDG[0u64]=1000000000i64  EDG[1u64]=1000000000i64  EDG[2u64]=1000000004i64  EDG[3u64]=1000000002i64
+    EDG[4u64]=1000000004i64  EDG[5u64]=1000000002i64  EDG[6u64]=1000000000i64  EDG[7u64]=1000000004i64
+    EDG[8u64]=1000000000i64  EDG[9u64]=1000000004i64  EDG[10u64]=1000000002i64 EDG[11u64]=1000000002i64
+    EDG[12u64]=1000000002i64 EDG[13u64]=1000000002i64 EDG[14u64]=1000000000i64 EDG[15u64]=1000000000i64
+    if partition_edges(4u32, 999999999i64, 999999999i64, 1000000005i64, 1000000005i64, 8i64) != 1u32 { return 13u64 }
+    if perpixel_edges(4u32, 999999999i64, 999999999i64, 1000000005i64, 1000000005i64) != 1u32 { return 14u64 }
+
+    return 99u64
+}

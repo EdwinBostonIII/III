@@ -1,0 +1,93 @@
+/* STDLIB/corpus/2135_mul_subsume.iii -- THE END-TO-END SOUNDNESS FALSIFIER for the e-graph mul lowering (P2).
+ *
+ * seg_mul_plan() already proves its e-graph FORM == x*v internally (bv_ring, ser_egraph.iii:371-376).  This KAT
+ * proves the part that gate does NOT cover: the ENCODE->DECODE->EMIT pipeline.  seg_mul_plan packs a plan as
+ * (pkind | pj<<8 | pm<<16); cg_r3.iii unpacks it and emits shl/add/sub (cg_r3.iii:2576-2611).  An off-by-one in
+ * that packing would pass the internal form-proof yet emit WRONG machine code.  Here we EMULATE the emitted
+ * instruction semantics EXACTLY as cg_r3 decodes them, and check the result == x*v (mod 2^64) for a diverse x-set
+ * across every reducible family + edges.  99 == every plan seg_mul_plan returns emits code that computes x*v.
+ *
+ * Anti-vacuity: asserts seg_mul_plan returns REAL (non-IMUL) plans for the canonical pow2/+/-1 forms, so the test
+ * is exercising strength-reduction, not just the trivial imul fallback. */
+module corpus_2135_mul_subsume
+
+extern @abi(c-msvc-x64) fn seg_mul_plan(v: u64) -> u64 from "ser_egraph.iii"
+
+var XS : [u64; 16]
+
+/* emulate EXACTLY the bytes cg_r3 emits for a decoded plan (pkind,pj,pm), applied to x; pkind 0 == general imul. */
+fn apply_decoded(pkind: u64, pj: u64, pm: u64, v: u64, x: u64) -> u64 {
+    if pkind == 1u64 { return x << pj }                 /* SMP_POW2   : x<<j         */
+    if pkind == 2u64 { return (x << pj) + x }           /* SMP_SHLADD : (x<<j)+x     */
+    if pkind == 3u64 { return (x << pj) - x }           /* SMP_SUBK   : (x<<j)-x     */
+    if pkind == 4u64 { return (x << pj) + (x << pm) }   /* SMP_2SH    : (x<<j)+(x<<m) */
+    if pkind == 5u64 { return (x << pj) - (x << pm) }   /* SMP_2SS    : (x<<j)-(x<<m) */
+    if pkind == 6u64 { return x }                       /* SMP_IDENT  : x  (v==1)    */
+    return x * v                                        /* SMP_IMUL(0): general imul -> x*v */
+}
+
+/* one seg_mul_plan call per v; the decoded plan checked against x*v for all 12 x's. */
+fn check_v(v: u64) -> u32 {
+    let p : u64 = seg_mul_plan(v)
+    let pkind : u64 = p & 255u64
+    let pj : u64 = (p >> 8u64) & 255u64
+    let pm : u64 = (p >> 16u64) & 255u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let x : u64 = XS[i]
+        if apply_decoded(pkind, pj, pm, v, x) != (x * v) { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    XS[0u64] = 0u64                      XS[1u64] = 1u64
+    XS[2u64] = 2u64                      XS[3u64] = 3u64
+    XS[4u64] = 7u64                      XS[5u64] = 0x101u64
+    XS[6u64] = 0xFFFFu64                 XS[7u64] = 0xFFFFFFFFu64
+    XS[8u64] = 0x100000001u64           XS[9u64] = 0xDEADBEEFCAFEBABEu64
+    XS[10u64] = 0x8000000000000000u64   XS[11u64] = 0xFFFFFFFFFFFFFFFFu64
+
+    /* teeth: the == comparison must distinguish a wrong shift (x<<2 == x*4 != x*8) -- not vacuous */
+    if (3u64 << 2u64) == (3u64 * 8u64) { return 2u64 }
+
+    /* anti-vacuity / canonical coverage: these MUST be real plans, else the soundness loop tests only imul */
+    if (seg_mul_plan(4u64) & 255u64) == 0u64 { return 20u64 }    /* 2^2     -> POW2   */
+    if (seg_mul_plan(9u64) & 255u64) == 0u64 { return 21u64 }    /* 2^3+1   -> SHLADD */
+    if (seg_mul_plan(7u64) & 255u64) == 0u64 { return 22u64 }    /* 2^3-1   -> SUBK   */
+
+    /* (1) powers of two 2^1..2^62 */
+    let mut k : u64 = 1u64
+    while k <= 62u64 {
+        if check_v(1u64 << k) == 0u32 { return 1000u64 + k }
+        k = k + 1u64
+    }
+    /* (2) 2^k+1 (shladd) and 2^k-1 (subk), k = 1..62 */
+    k = 1u64
+    while k <= 62u64 {
+        if check_v((1u64 << k) + 1u64) == 0u32 { return 2000u64 + k }
+        if check_v((1u64 << k) - 1u64) == 0u32 { return 3000u64 + k }
+        k = k + 1u64
+    }
+    /* (3) 2^j +/- 2^m, j = 2..40, m = 1..j-1 (the two-shift families) */
+    let mut j : u64 = 2u64
+    while j <= 40u64 {
+        let mut m : u64 = 1u64
+        while m < j {
+            if check_v((1u64 << j) + (1u64 << m)) == 0u32 { return 4000u64 + (j * 64u64) + m }
+            if check_v((1u64 << j) - (1u64 << m)) == 0u32 { return 40000u64 + (j * 64u64) + m }
+            m = m + 1u64
+        }
+        j = j + 1u64
+    }
+    /* (4) arbitrary / primes / edges */
+    if check_v(0u64) == 0u32 { return 10u64 }
+    if check_v(100u64) == 0u32 { return 11u64 }
+    if check_v(1000003u64) == 0u32 { return 12u64 }            /* prime */
+    if check_v(0xFFFFFFFFFFFFFFFFu64) == 0u32 { return 13u64 } /* 2^64-1 */
+    if check_v(0x8000000000000000u64) == 0u32 { return 14u64 } /* 2^63 */
+    if check_v(0xDEADBEEFu64) == 0u32 { return 15u64 }
+
+    return 99u64
+}

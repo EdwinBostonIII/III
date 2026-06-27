@@ -195,9 +195,18 @@ for tu in "${PORTED_TUS[@]}"; do
 done
 
 # ----- link ----------------------------------------------------------------
+# EIDOS lift (DOCS/III-EIDOS-VERIFICATION-MEMBRANE-PLAN Phase 1): cg_r3.iii calls
+# the e-graph synthesizer (seg_*) + bv provers (bv_*/bb_*/sat_*) at COMPILE TIME.
+# iiis-2/iiis-3 already link libiii_native.a (which carries the closure
+# ser_egraph->bv_ring, bv_bits->sat); iiis-1 did NOT.  Link the SAME archive here
+# so the optimizer is the modern-compiled STDLIB source -- ONE definition (no
+# island), and iiis-0 never has to recompile a modern module.  iiis-1's OBJS are
+# a subset of iiis-2's, so this introduces no duplicate symbol iiis-2 lacks.
 phase link
-log "link -> $OUT_BIN"
-"$CC" -o "$OUT_BIN" "${OBJS[@]}" \
+STDLIB_LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
+[[ -f "$STDLIB_LIB" ]] || die "$III_EXIT_LINK" "stdlib archive not found: $STDLIB_LIB (run build_stdlib.sh first)"
+log "link -> $OUT_BIN (with EIDOS optimizer archive)"
+"$CC" -o "$OUT_BIN" "${OBJS[@]}" "$STDLIB_LIB" \
   || die "$III_EXIT_LINK" "link failed: $OUT_BIN"
 
 # ----- mhash + witness -----------------------------------------------------

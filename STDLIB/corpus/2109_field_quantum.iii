@@ -1,0 +1,41 @@
+/* STDLIB/corpus/2109_field_quantum.iii -- THE UNIFIED FIELD, faculty Q: THE QUANTUM USER INTERFACE.
+ * Pipe a quantum state's squared-amplitude weights into III; it renders the superposition as a fractal topology
+ * whose continuous Hausdorff dimension IS the state's entropy.  A uniform superposition is maximally space-filling
+ * (d=2.0); when the wave-function collapses to a pure state, the dimension SNAPS to the integer baseline d=1.000.
+ * Humanity gets a monitor for quantum mechanics that does not destroy the math.
+ * 99 = the dimension tracks superposition and snaps flat on collapse, exactly. */
+module corpus_2109_field_quantum
+
+extern @abi(c-msvc-x64) fn ui_quantum_dim(counts: u64, n_states: u64, total: u64) -> u64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_quantum_collapsed(counts: u64, n_states: u64, total: u64) -> u32 from "ui_field.iii"
+
+var QC : [u64; 8]
+
+fn main() -> u64 {
+    let q : u64 = &QC as u64
+
+    /* 2-qubit UNIFORM superposition |00>+|01>+|10>+|11> -> maximal entropy -> d = 2.000 (space-filling fractal) */
+    QC[0u64] = 1u64   QC[1u64] = 1u64   QC[2u64] = 1u64   QC[3u64] = 1u64
+    if ui_quantum_dim(q, 4u64, 4u64) != 2000u64 { return 1u64 }
+    if ui_quantum_collapsed(q, 4u64, 4u64) != 0u32 { return 2u64 }      /* superposed, NOT collapsed */
+
+    /* a PARTIAL superposition of 2 of the 4 basis states -> d = 1.500 (half-folded) */
+    QC[0u64] = 2u64   QC[1u64] = 2u64   QC[2u64] = 0u64   QC[3u64] = 0u64
+    if ui_quantum_dim(q, 4u64, 4u64) != 1500u64 { return 3u64 }
+
+    /* COLLAPSE: the wave-function collapses to the pure state |00> -> the dimension SNAPS to the integer baseline */
+    QC[0u64] = 4u64   QC[1u64] = 0u64   QC[2u64] = 0u64   QC[3u64] = 0u64
+    if ui_quantum_dim(q, 4u64, 4u64) != 1000u64 { return 4u64 }         /* d = 1.000 -- snapped flat */
+    if ui_quantum_collapsed(q, 4u64, 4u64) != 1u32 { return 5u64 }      /* COLLAPSED */
+
+    /* 3-qubit uniform superposition (8 states) -> still d = 2.000 (max entropy, any qubit count) */
+    QC[0u64] = 1u64   QC[1u64] = 1u64   QC[2u64] = 1u64   QC[3u64] = 1u64
+    QC[4u64] = 1u64   QC[5u64] = 1u64   QC[6u64] = 1u64   QC[7u64] = 1u64
+    if ui_quantum_dim(q, 8u64, 8u64) != 2000u64 { return 6u64 }
+    /* and its collapse to |000> -> d = 1.000 */
+    QC[0u64] = 8u64   QC[1u64] = 0u64   QC[2u64] = 0u64   QC[3u64] = 0u64
+    QC[4u64] = 0u64   QC[5u64] = 0u64   QC[6u64] = 0u64   QC[7u64] = 0u64
+    if ui_quantum_dim(q, 8u64, 8u64) != 1000u64 { return 7u64 }
+
+    return 99u64
+}

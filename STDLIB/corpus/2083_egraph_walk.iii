@@ -1,0 +1,46 @@
+/* STDLIB/corpus/2083_egraph_walk.iii -- falsifier for the e-graph introspection the III-GLASS e-graph view rides
+ * on.  Builds MUL(x,7), runs equality saturation, then WALKS the node arrays via the new read-accessors and
+ * demands the saturation genuinely found x*7 == (x<<3)-x: a SUB node must land in MUL's e-class, and a SHL node
+ * must exist.  If saturation were hollow (no equivalence discovered) the walk returns 3/4 -- a real falsifier,
+ * not a tautology.  99 = the e-graph is real and walkable. */
+module corpus_2083_egraph_walk
+
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_find(x: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_count() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_op(i: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_a(i: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_b(i: u64) -> u64 from "ser_egraph.iii"
+
+fn main() -> u64 {
+    seg_reset()
+    let x   : u64 = seg_var()
+    let c7  : u64 = seg_const(7u64)
+    let mul : u64 = seg_intern(4u32, x, c7)        /* MUL(x, 7) */
+    if seg_node_count() < 3u32 { return 1u64 }
+    if seg_node_op(mul) != 4u32 { return 2u64 }    /* accessor exposes the MUL op */
+    if seg_node_a(mul) != x { return 5u64 }        /* seg_node_a: MUL's first child is x */
+    if seg_node_b(mul) != c7 { return 6u64 }       /* seg_node_b: MUL's second child is the const 7 */
+
+    seg_saturate()                                  /* discover MUL(x,2^k-1) == SUB(SHL(x,k), x) */
+    let mulclass : u64 = seg_find(mul)
+
+    /* walk the saturated graph: a SUB must share MUL's class, and a SHL must have been created. */
+    let n : u32 = seg_node_count()
+    let mut found_sub : u32 = 0u32
+    let mut found_shl : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < (n as u64) {
+        let op : u32 = seg_node_op(i)
+        if op == 3u32 { if seg_find(i) == mulclass { found_sub = 1u32 } }   /* SUB in MUL's e-class */
+        if op == 5u32 { found_shl = 1u32 }                                   /* SHL node exists */
+        i = i + 1u64
+    }
+    if found_sub == 0u32 { return 3u64 }   /* FALSIFIER: saturation found no shift-sub equivalent */
+    if found_shl == 0u32 { return 4u64 }
+    return 99u64
+}

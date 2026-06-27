@@ -1016,14 +1016,11 @@ MODULES=(
     # Consumed by corpus 1913 (the CAV RED-probe); reuses the sealed exec_cert + cad -- zero new crypto,
     # BSS-neutral, compiler-unreferenced.  Phase 0 of the Master Logic Assimilation (DOCS/III-INVERSE-LIBRARY.md).
     "omnia/isub"
-    # --- DOME (omnia::dome + dome_audit + dome_society): the inverse-form ARENA -- a sealed event-space where
-    # a society of event-primary twins (EYE/WAVE/ECHO/TIDE) co-inhabit one append-only, witnessed, REVERSIBLE
-    # history with deliberation (choose -> live the butterfly-effect -> rewind + re-choose, the abandoned branch
-    # RETAINED as provenance).  Complete leaf modules (compile clean); corpus 1903/1904/1905 drive them.
-    # Compiler-unreferenced (corpus-only), authored on the DOME line but never added to MODULES -- restored.
-    "omnia/dome"
-    "omnia/dome_audit"
-    "omnia/dome_society"
+    # --- DOME DELETED (was omnia::dome + dome_audit + dome_society) -- a PoC miniature-precursor EIDOS, not
+    # an organ.  Its rewind/provenance was re-homed into omnia/event_substrate (evt_mark/evt_rewind/
+    # evt_provenance_count), which eidos/field now stands on ALONE (one append-only reversible log).  The PoC
+    # society/audit was corpus-only (1903/1904/1905/1982, removed); the re-homed capability is gated by
+    # corpus 1903_event_rewind + the reseal path 2035_seraphyte_eidos.
     # xii_isub: PHASE 1 of the Master Logic Assimilation -- XII ENCAPSULATED.  Drives the REAL xii_rewrite
     # to fixpoint, emitting each real firing as a BELOW reduction-step into the witnessed isub bus; derives
     # "the current term" as a pure FOLD over that history (state = side-effect of events), with time-travel

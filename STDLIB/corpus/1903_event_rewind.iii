@@ -1,0 +1,59 @@
+/* 1903_event_rewind.iii -- the rewind/provenance capability re-homed from the deleted omnia/dome PoC
+ * into the mature omnia/event_substrate.  A frontier is MARKED, speculation PERCEIVED, then REWOUND:
+ * the abandoned span [bp, COUNT) is retained as a provenance count (the immune memory), never silently
+ * erased; a kept event is a permanent commit.  This is the reversible, provenance-carrying ONE log that
+ * eidos/field now stands on (replacing dome).  99 = the re-homed capability is sound; teeth at 10/11.
+ *
+ * (Supersedes the deleted 1903_dome_deliberate/1904/1905/1982 dome KATs for the rewind/provenance axis;
+ *  the integration path -- accept/rollback through eidos/field -- remains gated by 2035_seraphyte_eidos.) */
+module m1903_event_rewind
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_mark() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_rewind(bp: u32) -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_provenance_count() -> u32 from "event_substrate.iii"
+
+fn main() -> u64 {
+    evt_reset()
+    if evt_count() != 0u32 { return 1u64 }
+    if evt_provenance_count() != 0u32 { return 2u64 }
+
+    /* three committed events */
+    evt_perceive(1u64, 0u64, 5u64, 100u64)
+    evt_perceive(2u64, 0u64, 6u64, 200u64)
+    evt_perceive(3u64, 0u64, 7u64, 300u64)
+    if evt_count() != 3u32 { return 3u64 }
+
+    /* mark a frontier, speculate two events, then rewind: the abandoned span -> provenance */
+    let bp : u32 = evt_mark()
+    if bp != 3u32 { return 4u64 }
+    evt_perceive(4u64, 0u64, 8u64, 400u64)
+    evt_perceive(5u64, 0u64, 9u64, 500u64)
+    if evt_count() != 5u32 { return 5u64 }
+    evt_rewind(bp)                                       /* abandon [3,5) -> 2 events */
+    if evt_count() != 3u32 { return 6u64 }              /* frontier restored */
+    if evt_provenance_count() != 2u32 { return 7u64 }  /* abandoned span retained */
+
+    /* a second mark/speculate/rewind ACCUMULATES provenance (immune memory grows, never resets) */
+    let bp2 : u32 = evt_mark()
+    evt_perceive(6u64, 0u64, 1u64, 600u64)
+    evt_rewind(bp2)
+    if evt_count() != 3u32 { return 8u64 }
+    if evt_provenance_count() != 3u32 { return 9u64 }  /* 2 + 1 */
+
+    /* TEETH: a rewind to bp >= the frontier is a no-op -- the committed past cannot be abandoned */
+    evt_rewind(99u32)
+    if evt_count() != 3u32 { return 10u64 }
+    if evt_provenance_count() != 3u32 { return 11u64 } /* unchanged */
+
+    /* a kept (committed) event advances the frontier; a commit adds NO provenance */
+    let bp3 : u32 = evt_mark()
+    if bp3 != 3u32 { return 12u64 }
+    evt_perceive(7u64, 0u64, 2u64, 700u64)              /* keep it -- no rewind */
+    if evt_count() != 4u32 { return 13u64 }
+    if evt_provenance_count() != 3u32 { return 14u64 } /* commit does not add provenance */
+
+    return 99u64
+}

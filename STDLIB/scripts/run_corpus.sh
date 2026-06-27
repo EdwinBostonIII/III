@@ -46,9 +46,8 @@ declare -A EXPECTED=(
     [1900_event_substrate_poc]=99
     [1901_event_substrate_infinitary]=99
     [1902_event_substrate_parity]=99
-    [1903_dome_deliberate]=99
-    [1904_dome_society_compare]=99
-    [1905_dome_trajectory_audit]=99
+    # (1903_dome_deliberate/1904/1905 dome KATs removed -- dome PoC deleted; rewind re-homed to event_substrate)
+    [1903_event_rewind]=99
     [1906_xii_inverse_real]=99
     [1907_coverage_closure]=99
     [1908_xii_canon_cert]=99
@@ -151,7 +150,33 @@ declare -A EXPECTED=(
     [2057_eidos_kinduct_causal]=99
     [2060_eidos_model_checking]=99
     [2061_div_strength_reduction]=99
-    [1982_dome_accessor_coverage]=99
+    [2062_egraph_mul_plan]=99
+    [2063_egraph_div_magic]=99
+    [2064_kinduct_general]=99
+    [2065_invariant_pipeline]=99
+    [2066_invsynth_full]=99
+    [2067_kinduct_coverage]=99
+    [2068_kinduct_extensions]=99
+    [2069_svir_equiv_mod]=99
+    [2070_invsynth_modular]=99
+    [2071_svir_branch_equiv]=99
+    [2072_svir_loop_equiv]=99
+    [2073_invsynth_conservation]=99
+    [2074_consv_memory_seal]=99
+    # 2080-2082 (III-GLASS UI raster/exact/font) are an APPLICATION on III, not core runtime -- they link the UI
+    # .o's directly (not via the coverage-gated libiii_native.a) and are gated by run_ui_kats.sh, delegated below.
+    # 2083/2084 stay: their deps (ser_egraph/ser_absint) ARE core library modules, so they link via the archive.
+    [2083_egraph_walk]=99
+    [2084_disjoint]=99
+    [2085_morphic_denote]=99
+    [2086_bitblast_walk]=99
+    [2087_conservation]=99
+    [2094_constraint_solver]=99    # the REAL layout solver: smt.iii's exact-rational simplex solves + detects conflict (smt is stable core, not WIP)
+    [2096_proven_display]=99       # NeWS done right: smt.iii proves a display field's framebuffer writes in-bounds; catches a buggy field with a witness
+    # 2088-2093 (Topological Windowing) deliberately NOT here: they hard-depend on ser_antiunify/ser_petri (the
+    # concurrent task's volatile WIP), so a signature change there must NOT redden the core gate.  Gated instead by
+    # run_topo_kats.sh (links the archive directly), delegated below -- the same discipline as the UI app KATs.
+    # (1982_dome_accessor_coverage removed -- dome PoC deleted)
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99
@@ -1759,6 +1784,31 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
                 RESULTS+=("SKIP  $base : XII corpus -- owned by run_xii_corpus.sh")
                 SKIP=$((SKIP+1)); continue
             fi
+            ;;
+    esac
+
+    # III-GLASS UI (2080-2082): an APPLICATION on III, not core runtime.  Its modules (ui_raster/ui_exact/ui_font)
+    # are deliberately NOT in the coverage-gated libiii_native.a, so they cannot link via the generic archive link
+    # here.  Gated instead by run_ui_kats.sh (links the UI .o's directly).  Delegate, do not phantom-FAIL.
+    case "$base" in
+        2080_ui_raster|2081_ui_exact|2082_ui_font|2095_exact_coverage|2097_exact_aa|2098_exact_aa_poly|2099_exact_bezier|2100_biquad_coverage|2101_hausdorff_dim|2102_cover2d)
+            RESULTS+=("SKIP  $base : III-GLASS UI -- owned by run_ui_kats.sh (app, not core lib)")
+            ;;
+        2103_bsign_big)
+            RESULTS+=("SKIP  $base : bigint 2D coverage -- owned by run_bigcov_kats.sh (links ui_exact_big + bigint)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2104_field_kolmogorov|2105_field_color|2106_field_time|2107_field_inverse|2108_field_slice|2109_field_quantum|2110_field_acoustic|2111_field_reversible|2112_field_localweb|2113_field_selfpop|2114_field_cf|2115_field_wave|2116_field_hash|2117_field_superpos|2118_field_binding)
+            RESULTS+=("SKIP  $base : UNIFIED FIELD -- owned by run_field_kats.sh (links ui_field/egraph)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom)
+            RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + egraph + bigint)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2088_frp_kinematics|2089_constraint_layout|2090_topological_field|2091_association_invariant|2092_raster_crush|2093_pixel_crush)
+            RESULTS+=("SKIP  $base : Topological Windowing -- owned by run_topo_kats.sh (depends on volatile ser_antiunify/ser_petri WIP)")
+            SKIP=$((SKIP+1)); continue
             ;;
     esac
 

@@ -43,10 +43,12 @@ fn sev_begin() -> i32 @export { return field_reset() }
  * (committed + witnessed), 0 = ROLLED BACK (field_rewind; the abandoned span -> provenance). */
 fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 @export {
     let bp : u32 = field_mark()
-    field_branch(rule_id, SEV_K_ATTEMPT, rule_id, 0u64)     /* speculatively apply the candidate */
+    /* perceive the candidate ONCE on the unified event log; KEEP it (commit) iff the gate is green,
+     * else rewind to the mark -- the abandoned span is retained as provenance (the immune memory).
+     * (The old two-call branch+record split was an artifact of the deleted dome's separate log.) */
+    field_record(rule_id, SEV_K_ACCEPT, 1u64, rule_id)
     if verdict == SEV_ACCEPT_RC {
-        field_record(rule_id, SEV_K_ACCEPT, 1u64, rule_id)  /* commit: a permanent, witnessed event */
-        return 1u64
+        return 1u64                                        /* kept = a permanent, witnessed commit */
     }
     field_rewind(bp)                                        /* rollback: the abandoned span -> provenance */
     return 0u64

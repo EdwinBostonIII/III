@@ -7,7 +7,7 @@
  * system wants to grow) AND a TEMPORAL fold (where it has been), with branch-retaining REWIND:
  *   - SPATIAL read  : steepest-descent / node-potential          [WRAPS omnia/ripple_field rf_steepest]
  *   - TEMPORAL read : the priority fold + witness over events    [WRAPS omnia/event_substrate evt_*]
- *   - REWIND        : mark / rewind, abandoned span kept as PROVENANCE  [WRAPS omnia/dome dome_rewind]
+ *   - REWIND        : mark / rewind, abandoned span kept as PROVENANCE  [WRAPS omnia/event_substrate evt_rewind]
  *
  * Encapsulation, not reimplementation: field authors no log -- it composes the three REAL substrate organs
  * behind one interface, so a reader (eidos/compose's TRY+WITNESS+REWIND, the 3.4 algorithm) sees one field.
@@ -16,7 +16,8 @@
  * their own storage (the leanness payoff -- retiring the redundant ripple machinery once proven a fold of
  * eidos/ripple AND carto-zero-consumer -- is a separate, carefully-gated step, never deletion on faith).
  *
- * Ring R0.  K 1.00.  Composes ripple_field + event_substrate + dome.  NIH: libc-free.
+ * Ring R0.  K 1.00.  Composes ripple_field + event_substrate (the dome PoC was deleted; its rewind/
+ * provenance re-homed into event_substrate, so the temporal view + the rewind are ONE log).  NIH: libc-free.
  */
 module eidos_field
 
@@ -30,18 +31,14 @@ extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
-extern @abi(c-msvc-x64) fn dome_reset() -> i32 from "dome.iii"
-extern @abi(c-msvc-x64) fn dome_emit(participant: u64, kind: u64, value: u64, payload: u64) -> u64 from "dome.iii"
-extern @abi(c-msvc-x64) fn dome_mark() -> u32 from "dome.iii"
-extern @abi(c-msvc-x64) fn dome_rewind(bp: u32) -> i32 from "dome.iii"
-extern @abi(c-msvc-x64) fn dome_count() -> u32 from "dome.iii"
-extern @abi(c-msvc-x64) fn dome_provenance_count() -> u32 from "dome.iii"
+extern @abi(c-msvc-x64) fn evt_mark() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_rewind(bp: u32) -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_provenance_count() -> u32 from "event_substrate.iii"
 
 /* reset the ONE field (all three substrate views). */
 fn field_reset() -> i32 @export {
     rf_reset()
     evt_reset()
-    dome_reset()
     return 0i32
 }
 
@@ -59,11 +56,11 @@ fn field_record(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 @e
 fn field_event_count() -> u32 @export { return evt_count() }
 fn field_temporal_witness(upto: u32) -> u64 @export { return evt_witness(upto) }   /* the temporal fold/witness */
 
-/* --- REWIND: branch-retaining; the abandoned span is kept as PROVENANCE --- */
-fn field_mark() -> u32 @export { return dome_mark() }                   /* a rewind point */
+/* --- REWIND: branch-retaining on the ONE event log; the abandoned span is kept as PROVENANCE --- */
+fn field_mark() -> u32 @export { return evt_mark() }                    /* a rewind point on the event log */
 fn field_branch(participant: u64, kind: u64, value: u64, payload: u64) -> u64 @export {
-    return dome_emit(participant, kind, value, payload)
+    return evt_perceive(participant, kind, value, payload)              /* speculate = perceive (markable/rewindable) */
 }
-fn field_rewind(bp: u32) -> i32 @export { return dome_rewind(bp) }      /* rewind, keeping the abandoned span */
-fn field_branch_count() -> u32 @export { return dome_count() }
-fn field_provenance() -> u32 @export { return dome_provenance_count() } /* the abandoned span, retained as provenance */
+fn field_rewind(bp: u32) -> i32 @export { return evt_rewind(bp) }       /* rewind, keeping the abandoned span as provenance */
+fn field_branch_count() -> u32 @export { return evt_count() }
+fn field_provenance() -> u32 @export { return evt_provenance_count() }  /* the abandoned span, retained as provenance */

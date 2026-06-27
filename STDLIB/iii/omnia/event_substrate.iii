@@ -45,12 +45,14 @@ var EVT_PAYLOAD  : [u64; 256]   /* general slot: position id (parity play) or te
 var EVT_COUNT    : u32 = 0u32   /* history length */
 var EVT_CLOCK    : u64 = 0u64   /* monotonic logical clock */
 var EVT_CYCLE    : u32 = 0u32   /* cycle_start index: events [EVT_CYCLE, EVT_COUNT) recur infinitely */
+var EVT_PROV     : u32 = 0u32   /* abandoned-event count from rewound spans, retained as provenance (re-homed from the deleted omnia/dome PoC) */
 
 /* ── the ONLY mutator: the world grows only by perceiving ─────────────── */
 fn evt_reset() -> i32 @export {
     EVT_COUNT = 0u32
     EVT_CLOCK = 0u64
     EVT_CYCLE = 0u32
+    EVT_PROV  = 0u32
     return 0i32
 }
 
@@ -69,6 +71,18 @@ fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 @e
 }
 
 fn evt_count() -> u32 @export { return EVT_COUNT }
+
+/* ── REWIND / PROVENANCE (re-homed from the deleted omnia/dome PoC into the mature substrate) ──
+ * mark a checkpoint (= the current frontier), speculate by perceiving, then either keep (commit) or
+ * rewind to the mark: the abandoned span [bp, COUNT) is RETAINED as a provenance count (the immune
+ * memory), never silently erased.  This gives the ONE append-only log dome's reversible,
+ * provenance-carrying deliberation, so eidos/field stands on event_substrate alone (no PoC). */
+fn evt_mark() -> u32 @export { return EVT_COUNT }
+fn evt_rewind(bp: u32) -> i32 @export {
+    if bp < EVT_COUNT { EVT_PROV = EVT_PROV + (EVT_COUNT - bp)   EVT_COUNT = bp }
+    return 0i32
+}
+fn evt_provenance_count() -> u32 @export { return EVT_PROV }
 
 /* ── FINITE folds over the first `upto` events ────────────────────────── */
 fn evt_maxprio(upto: u32) -> u64 @export {

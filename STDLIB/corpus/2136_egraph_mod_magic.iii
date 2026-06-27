@@ -1,0 +1,84 @@
+/* STDLIB/corpus/2136_egraph_mod_magic.iii -- unsigned MODULO-by-non-pow2-constant via the GM-proven magic: the
+ * symmetric partner of magic-division (2063) and mod-pow2 (2132).  cg_r3 emits  x % d == x - (mulhi(x,m)>>s)*d
+ * for a non-pow2 constant d exactly when seg_div_plan certifies SDP_MAGIC (the SAME GM bound the div magic rides).
+ * This KAT proves it two independent ways:
+ *   (a) PLANNER battery: for every CERTIFIED magic divisor, x - (mulhi(x,m)>>s)*d must equal a HARDWARE modulo
+ *       (x % d with d a VARIABLE -> divumod, independent of the const-magic) over GM-stressing x; >=4 magics
+ *       must fire (the anti-dead arm -- a sound rule that never triggers is dead weight).
+ *   (b) BEHAVIORAL: x % CONST in this KAT's OWN body is compiled by the iiis-2 under test (exercising the EMITTED
+ *       arm) and compared to ref_mod (hardware divumod via a variable divisor) -- a wrong magic cannot agree.
+ * 99 = the magic modulo computes x%d exactly, the magic path is exercised, and the emitted arm matches hardware. */
+module corpus_2136_egraph_mod_magic
+
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
+
+fn mulhi(a: u64, b: u64) -> u64 {
+    let alo : u64 = a & 4294967295u64   let ahi : u64 = a >> 32u64
+    let blo : u64 = b & 4294967295u64   let bhi : u64 = b >> 32u64
+    let p0 : u64 = alo * blo   let p1 : u64 = alo * bhi   let p2 : u64 = ahi * blo   let p3 : u64 = ahi * bhi
+    let mid : u64 = (p0 >> 32u64) + (p1 & 4294967295u64) + (p2 & 4294967295u64)
+    return p3 + (p1 >> 32u64) + (p2 >> 32u64) + (mid >> 32u64)
+}
+
+/* module-scope (fn-local var arrays by runtime index segfault -- iiis trap). */
+var XS : [u64; 12]
+var DS : [u64; 10] = [3u64, 5u64, 6u64, 7u64, 9u64, 10u64, 25u64, 100u64, 1000u64, 86400u64]
+fn xs_init(d: u64) -> i32 {
+    XS[0u64] = 0u64  XS[1u64] = 1u64  XS[2u64] = d - 1u64  XS[3u64] = d  XS[4u64] = d + 1u64
+    XS[5u64] = 4294967296u64  XS[6u64] = 9223372036854775808u64  XS[7u64] = 9223372036854775809u64
+    XS[8u64] = 18446744073709551615u64  XS[9u64] = 18446744073709551615u64 - d
+    XS[10u64] = 12345678901234567890u64  XS[11u64] = d + d + d + 7u64
+    return 0i32
+}
+
+/* HARDWARE reference: d is a VARIABLE parameter -> emitted as divumod, NOT the const-magic. Independent oracle. */
+fn ref_mod(x: u64, d: u64) -> u64 { return x % d }
+
+/* the magic composition x - (mulhi(x,m)>>s)*d == x % d (hardware) for the whole battery? */
+fn check_mod(d: u64, m: u64, s: u64) -> u32 {
+    xs_init(d)
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let x : u64 = XS[i]
+        let q : u64 = mulhi(x, m) >> s
+        let r : u64 = x - q * d
+        if r != ref_mod(x, d) { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* BEHAVIORAL: x % CONST (emitted by the iiis-2 under test) vs ref_mod (hardware). consts span the magic set. */
+fn beh(x: u64) -> u64 {
+    if (x % 3u64)    != ref_mod(x, 3u64)    { return 1u64 }
+    if (x % 7u64)    != ref_mod(x, 7u64)    { return 2u64 }
+    if (x % 100u64)  != ref_mod(x, 100u64)  { return 3u64 }
+    if (x % 1000u64) != ref_mod(x, 1000u64) { return 4u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* (a) planner battery: every certified magic's modulo composition is exact; count the magics fired. */
+    let mut magics : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 10u64 {
+        let d : u64 = DS[i]
+        let plan : u64 = seg_div_plan(d)
+        if (plan & 255u64) == 2u64 {
+            let m : u64 = seg_div_magic_m()
+            let s : u64 = seg_div_shift()
+            if check_mod(d, m, s) == 0u32 { return 10u64 + i }   /* a certified magic whose modulo is WRONG -> defect */
+            magics = magics + 1u32
+        }
+        i = i + 1u64
+    }
+    if magics < 4u32 { return 90u64 }                            /* the magic path must actually be exercised */
+    /* (b) behavioral: the EMITTED x % CONST matches hardware over stressing x. */
+    let b1 : u64 = beh(123456789u64)                  if b1 != 0u64 { return 40u64 + b1 }
+    let b2 : u64 = beh(18446744073709551615u64)       if b2 != 0u64 { return 50u64 + b2 }
+    let b3 : u64 = beh(1000000000000u64)              if b3 != 0u64 { return 60u64 + b3 }
+    let b4 : u64 = beh(9223372036854775809u64)        if b4 != 0u64 { return 70u64 + b4 }
+    return 99u64
+}

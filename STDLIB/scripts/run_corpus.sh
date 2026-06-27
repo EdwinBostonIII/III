@@ -102,6 +102,14 @@ declare -A EXPECTED=(
     [1993_eidos_cli_run]=99
     [2000_eidos_field]=99
     [2001_eidos_cli]=99
+    # Core conformance KATs that link via libiii_native.a and run to 99, but were missing from this table
+    # -> run_corpus FATAL-aborted on each in turn (2002 then 2003, both sequence gaps) before completing.
+    # Verified compile+link+run = 99 each (2026-06-27). Not owned by any run_*_kats.sh gate (unlike 2097-2134).
+    [2002_cg_opt_rules_certified]=99
+    [2003_xii_route_r_teeth]=99
+    [2012_zk_air_mal_cp]=99
+    [2132_mod_pow2]=99
+    [2300_zk_fused_perm_seedrig]=99
     [2004_seraphyte_kvalue]=99
     [2005_seraphyte_energy]=99
     [2006_seraphyte_membrane]=99
@@ -153,6 +161,7 @@ declare -A EXPECTED=(
     [2062_egraph_mul_plan]=99
     [2063_egraph_div_magic]=99
     [2135_mul_subsume]=99
+    [2136_egraph_mod_magic]=99
     [2064_kinduct_general]=99
     [2065_invariant_pipeline]=99
     [2066_invsynth_full]=99
@@ -1794,6 +1803,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     case "$base" in
         2080_ui_raster|2081_ui_exact|2082_ui_font|2095_exact_coverage|2097_exact_aa|2098_exact_aa_poly|2099_exact_bezier|2100_biquad_coverage|2101_hausdorff_dim|2102_cover2d)
             RESULTS+=("SKIP  $base : III-GLASS UI -- owned by run_ui_kats.sh (app, not core lib)")
+            SKIP=$((SKIP+1)); continue
             ;;
         2103_bsign_big)
             RESULTS+=("SKIP  $base : bigint 2D coverage -- owned by run_bigcov_kats.sh (links ui_exact_big + bigint)")
@@ -1869,8 +1879,16 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             ;;
     esac
 
-    "$IIIS" "$src" --compile-only --out "$obj" >"$log" 2>&1
+    timeout 60 "$IIIS" "$src" --compile-only --out "$obj" >"$log" 2>&1
     rc=$?
+    # Per-test COMPILE timeout (closes the gap flagged above): a compile that never returns is a
+    # genuine defect to SURFACE, not a reason to stall the whole sweep indefinitely. rc=124 = timed
+    # out -> classify it explicitly here, BEFORE the negative-compile case (a TIMEOUT must not be
+    # miscounted as a correct rejection).
+    if [[ $rc -eq 124 ]]; then
+        RESULTS+=("FAIL  $base : iiis-compile TIMEOUT (>60s -- infinite-loop suspected)")
+        FAIL=$((FAIL+1)); continue
+    fi
 
     # NEGATIVE-COMPILE tests (NNN_neg_*): their headers declare
     # "THIS FILE MUST FAIL TO COMPILE" and they are authoritatively
@@ -1950,7 +1968,13 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     # for a code bug; it is a workaround for a path-based AV policy.
     staged_exe="/tmp/run_$$_$RANDOM${BIN_SUFFIX}"
     cp "$exe" "$staged_exe"
-    "$staged_exe" >>"$log" 2>&1
+    # Generous hang-backstop (600s = the max), NOT a perf gate: the genuinely near-infinite tests are
+    # SKIP-delegated above (1751/1763/1764); this only catches an UNKNOWN runaway loop.  A tight bound
+    # mis-fires under the full sweep's memory pressure (which inflates runtimes) -- a 120s value turned
+    # valid compute-heavy tests (the 400-tick sovereign optimizer 1206/1411, the full Seraphyte
+    # k-induction pipeline 2036, subk-discover 2016) into false rc=124 FAILs.  Enlarging the bound can
+    # only let a slow test finish, never break a passing one.
+    timeout 600 "$staged_exe" >>"$log" 2>&1
     actual=$?
     rm -f "$staged_exe"
     expected="${EXPECTED[$base]:-?}"

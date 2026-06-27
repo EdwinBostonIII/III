@@ -511,6 +511,15 @@ Working the ledger top-down, read-first, each verified in the artifact before be
 - **E2 — run_ccsv log-noise eliminated.** The real defect was ONE line (`run_ccsv.sh:104`, three unescaped
   backtick-pairs `` `goto fail` `` / `` `goto L` `` / `` `L:` ``), not the "44" the systems map estimated.
   Escaped them; re-run gate: `command not found` noise = 0 (was 3), goto verdict intact, exit=0. `[gated]`
+- **E9 — au_*/aff_* resolved (verified; neither thrown nor fake-wired).** `aff_*` is **live**:
+  `iiis-2 --affine-audit` runs (exit=0, report `AA P=0 A=0 R=0`); `affine_audit` is in the compiler's
+  `PORTED_TUS` and `main.iii`'s `--affine-audit` dispatch (`main.iii:670,884,1161`). `au_*` (the
+  crush/conform family in `ser_antiunify.iii`) is **sound + KAT-gated**: `run_topo_kats.sh` **PASS=6/0**,
+  with `2092`/`2093` running real SVIR + a bit-blast `step==acc+delta` proof over 2^64. Both are *reached*
+  (CLI / KAT), just not by another **library** export — a blind throw would break `ser_antiunify`'s compile;
+  fake plumbing is the scaffolding to avoid. `[gated: --affine-audit exit=0; run_topo_kats PASS=6/0]`
+  *(Also retracts the ledger's "au_ collision split": au_* is ONE crush engine in `ser_antiunify`, serving
+  raster/pixel/SVIR crush — no UI-vs-autopoietic name collision exists.)*
 
 **REFINED BY EVIDENCE (the "dark surface" is not what the count implied):**
 - The 119 "dark" exports are largely **NOT dead code.** Verified: `eg_render`/`bb_render`/`eg_window_main`
@@ -529,7 +538,16 @@ Working the ledger top-down, read-first, each verified in the artifact before be
 - **E6** event_substrate/dome flat-array caps → Merkle/incremental folds (scale re-architecture).
 - **E7** rename the weave trio + `au_` split: a ~17-consumer `extern…from` sweep + full rebuild.
 - **E8** merge the two ripples / the two `{BELOW,REFLECT}` engines / dome→field: deep structural refactor.
-- **E9** finish-or-shelve `au_*` after E5's reclassification isolates the true residual.
+- **E5 ⚠ FINAL-CALL POINT (premise refuted).** Evidence (E9 + the UI/CLI samples) shows the 119 "dark"
+  are overwhelmingly *terminal surfaces* — CLI features (`aff_*`), app entry points (aether UI), and
+  KAT-gated capabilities (`au_*`) — **not dead code.** So the ledger's "cut-or-wire the 119" rests on a
+  false premise: *cutting* them deletes live features; *wiring* them to library callers is exactly the
+  fake plumbing to avoid. The correct fix is the coverage gate's **reachability definition** (count
+  CLI/app/KAT reach, not only intra-library calls) — which is **not** "moving the pins" (the ≤14 threshold
+  is untouched); it corrects a miscount. Only the genuine residual orphans after that correction are true
+  cut-or-wire candidates. This needs your final call: **gate-measurement-fix** vs **literal cut-119**.
+
+(E9 — DONE, above. au_* and aff_* verified sound/live; neither thrown nor fake-wired.)
 
 None deferred for convenience; none claimed done without a green gate. Each remaining item is a dedicated
 read→edit→build→regression cycle — the discipline the CRASH-protocol requires on load-bearing/self-host code.

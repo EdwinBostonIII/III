@@ -158,10 +158,14 @@ fn loc_add(t: u32) -> u32 { let s : u32 = LOC_N  if LOC_N < 256u32 { LOC_OFF[LOC
 var BODY : [u8; 16384]
 var BLEN : u64 = 0u64
 fn eb(b: u32) { if BLEN < 16384u64 { BODY[BLEN] = (b & 0xFFu32) as u8  BLEN = BLEN + 1u64 } }
-fn e_const(v: i64) { eb(0x01u32)  let mut k : u32 = 0u32  while k < 8u32 { eb(((v as u64) >> (8u64 * (k as u64))) as u32)  k = k + 1u32 } }
-fn e_op(o: u32) { eb(o) }
-fn e_u8(o: u32, a: u32) { eb(o)  eb(a) }
-fn e_call(f: u32, ac: u32) { eb(0x70u32)  eb(f)  eb(ac) }
+/* SV_LAST_OP = the last OPCODE emitted into BODY (operand bytes via eb do NOT change it).  compile_fn uses it to
+ * emit the trailing default return ONLY on fall-through -- so a function already ending in an unconditional RETURN
+ * (0x60) gets no dead trailing return, making iiisv's SVIR byte-identical to ccsv's (the cross-language DDC). */
+var SV_LAST_OP : u32 = 0u32
+fn e_const(v: i64) { SV_LAST_OP = 0x01u32  eb(0x01u32)  let mut k : u32 = 0u32  while k < 8u32 { eb(((v as u64) >> (8u64 * (k as u64))) as u32)  k = k + 1u32 } }
+fn e_op(o: u32) { SV_LAST_OP = o  eb(o) }
+fn e_u8(o: u32, a: u32) { SV_LAST_OP = o  eb(o)  eb(a) }
+fn e_call(f: u32, ac: u32) { SV_LAST_OP = 0x70u32  eb(0x70u32)  eb(f)  eb(ac) }
 
 var MOD : [u8; 32768]
 var MLEN : u64 = 0u64
@@ -354,9 +358,12 @@ fn compile_fn(fk: u32) {
     if cur_punct(PU_ARROW) == 1u32 { TP = TP + 1u32  TP = TP + 1u32 }
     let mut sg : u32 = 1u32   /* skip annotation tokens (e.g. @export) between the signature and the body `{` */
     while sg == 1u32 { if TK_KIND[TP as u64] == 0u32 { sg = 0u32 } else { if cur_punct(PU_LB) == 1u32 { sg = 0u32 } else { TP = TP + 1u32 } } }
-    BLEN = 0u64
+    BLEN = 0u64   SV_LAST_OP = 0u32
     parse_block()
-    e_const(0i64)  e_op(0x60u32)   /* trailing default return: a void fn (or any fall-through) returns 0, so EVERY fn pushes exactly one value -- the SVIR CALL convention (svir_verify: depth+1 per call) requires it; an explicit `return e` makes this dead code */
+    /* Trailing default return ONLY on fall-through.  A void fn / fall-through must push 0 (the SVIR CALL convention,
+     * svir_verify: depth+1 per call).  When the body already ends in an unconditional RETURN (0x60) the default is
+     * dead code; omitting it makes iiisv's SVIR byte-identical to ccsv's for the same algorithm (cross-language DDC). */
+    if SV_LAST_OP != 0x60u32 { e_const(0i64)  e_op(0x60u32) }
     mb(params)  mb(1u32)  mb((BLEN & 0xFFu64) as u32)  mb(((BLEN >> 8u64) & 0xFFu64) as u32)
     let mut i : u64 = 0u64  while i < BLEN { mb(BODY[i] as u32)  i = i + 1u64 }
 }

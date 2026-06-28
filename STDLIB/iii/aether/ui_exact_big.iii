@@ -6,6 +6,7 @@
 module ui_exact_big
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena_id: u64) -> i32 from "arena.iii"   /* release the region after bigint_drop_arena (the contract's missing half) */
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
@@ -41,6 +42,7 @@ fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 @export {
     let bv2D : u64 = bigint_mul(ar, bv2, bD)
     let c : i32 = bigint_cmp(bu2, bv2D)
     bigint_drop_arena(ar)
+    arena_drop(ar)                                            /* free the region slot -> no 64-slot pool leak (render-scale) */
     if c > 0i32 { return su }
     if c < 0i32 { return sv }
     return 0i32
@@ -91,6 +93,7 @@ fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export 
         }
     }
     bigint_drop_arena(ar)
+    arena_drop(ar)                                            /* free the region slot -> no 64-slot pool leak (render-scale) */
     if s2 > 0i32 { return sP }
     if s2 < 0i32 { return sC }
     return 0i32
@@ -150,3 +153,6 @@ fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64
     }
     return lo
 }
+
+/* (ui_arc_cover2d_sym_big moved to ui_exact_sym.iii -- keeps ui_exact_big independent of ui_exact, so the exact-real
+ * consumers (sqrt_sum_sign) that use only ui_bsign1/cover2d_big do NOT drag in the i64 geometry + framebuffer.) */

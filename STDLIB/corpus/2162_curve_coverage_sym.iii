@@ -1,0 +1,105 @@
+/* STDLIB/corpus/2162_curve_coverage_sym.iii -- THE GENERAL EXACT PER-PIXEL CURVED COVERAGE closes cover2d's named
+ * STEEP/CORNER limit.  ui_arc_cover2d (Green degree-4) was exact only for GENTLE pixels (arc spans the column in x
+ * within the row); ui_arc_cover2d_sym_big handles GENTLE, STEEP, and CORNER pixels uniformly via the per-x CLAMP
+ * (the arc's two pixel-boundary crossings bound a t-interval; coverage = G(t_hi)-G(t_lo) - py*width + full-piece, a
+ * degree-4 number whose sign is finished in bigint).  Proven vs the now-fixed (escalating, exact-at-scale) subsampler
+ * -- an INDEPENDENT algorithm (point-sampling vs Green-integration) -- across EVERY pixel class (the advisor's rule:
+ * the class enumeration IS the proof).
+ *
+ * arc P0=(0,0)P1=(2,1)P2=(8,8): ax=0,8,4 ay=0,2,6 ; x,y both increasing on [0,1] (sym's monotone precondition).
+ * Classes present: GENTLE near x=0 (dy/dx~0.25), STEEP at (4,1) (arc enters left, exits top), CORNER B->R at (4,2),
+ * INTERIOR (4,0 -> sa), EXTERIOR (4,3 -> 0).  Scan is BOUNDED to 25 pixels (under the bigint-arena exhaustion the
+ * full-frame render manages with a per-batch reset). */
+module corpus_2162_curve_coverage_sym
+
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_sym.iii"
+extern @abi(c-msvc-x64) fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64, yval: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn region_count_live() -> u32 from "region.iii"   /* prove the arena leak is fixed (no exhaustion) */
+
+const SA : i64 = 255i64
+const NN : i64 = 32i64
+const BOUND : i64 = 12i64
+
+fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* independent oracle: fraction of the pixel with y < y_arc (the {y<=y_arc} region, cover2d convention). */
+fn subA(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64) -> i64 {
+    let m : i64 = 2i64 * NN
+    let mx0 : i64 = m*ax0   let mx1 : i64 = m*ax1   let mx2 : i64 = m*ax2
+    let my0 : i64 = m*ay0   let my1 : i64 = m*ay1   let my2 : i64 = m*ay2
+    let bx : i64 = m*px     let by : i64 = m*py
+    let mut count : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < NN {
+        let cx : i64 = bx + ((2i64*i)+1i64)
+        let mut j : i64 = 0i64
+        while j < NN {
+            let cy : i64 = by + ((2i64*j)+1i64)
+            let bel : u32 = ui_pt_below_arc(mx0,mx1,mx2,my0,my1,my2, cx, cy)
+            if bel == 0u32 { count = count + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    let nn2 : i64 = NN*NN
+    return ((2i64*count*SA)+nn2)/(2i64*nn2)
+}
+
+/* ONE sym_big call: check it agrees with the independent subsampler within BOUND AND meets the class constraint.
+ * kind 0 = strict AA (0 < alpha < sa) ; 1 = interior (== sa) ; 2 = exterior (== 0).  Returns 1 ok / 0 fail.
+ * (Curated, not a full scan: each call uses the bigint sign -- ~8 internal allocs -- so the count is kept small,
+ * under the bigint-arena pool the full-frame render manages with a per-batch reset.) */
+fn chk(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, kind: i64) -> u32 {
+    let s : i64 = ui_arc_cover2d_sym_big(ax0,ax1,ax2,ay0,ay1,ay2, px, py, SA)
+    if kind == 1i64 { if s != SA { return 0u32 }   return 1u32 }
+    if kind == 2i64 { if s != 0i64 { return 0u32 }   return 1u32 }
+    if s <= 0i64 { return 0u32 }                      /* strict AA: genuine partial coverage ... */
+    if s >= SA { return 0u32 }                        /* ... not a fill mask */
+    let u : i64 = subA(ax0,ax1,ax2,ay0,ay1,ay2, px, py)
+    let d : i64 = iabs(s - u)
+    if d > BOUND { return 0u32 }                      /* ... matching the independent oracle */
+    return 1u32
+}
+
+/* bound-only agreement (any class): sym_big within BOUND of the independent subsampler.  1 ok / 0 fail. */
+fn agree(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64) -> u32 {
+    let s : i64 = ui_arc_cover2d_sym_big(ax0,ax1,ax2,ay0,ay1,ay2, px, py, SA)
+    if s < 0i64 { return 0u32 }
+    let u : i64 = subA(ax0,ax1,ax2,ay0,ay1,ay2, px, py)
+    let d : i64 = iabs(s - u)
+    if d > BOUND { return 0u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    let ax0:i64=0i64   let ax1:i64=8i64   let ax2:i64=4i64
+    let ay0:i64=0i64   let ay1:i64=2i64   let ay2:i64=6i64
+
+    /* LEG 1 -- FULL 6x6 SCAN (36 pixels, every class present): each exact vs the independent subsampler.  This many
+     * AA pixels = hundreds of bigint-sign arena cycles -- it EXHAUSTED the region pool before the arena-leak fix
+     * (ui_sign_bi_big/ui_bsign1 now release their region).  r0/r1 bracket the live-region count across the scan. */
+    let r0 : u32 = region_count_live()
+    let mut px : i64 = 0i64
+    while px < 6i64 {
+        let mut py : i64 = 0i64
+        while py < 6i64 {
+            if agree(ax0,ax1,ax2,ay0,ay1,ay2, px, py) != 1u32 { return (10i64 + (px*6i64) + py) as u64 }
+            py = py + 1i64
+        }
+        px = px + 1i64
+    }
+    let r1 : u32 = region_count_live()
+    /* THE ARENA-LEAK PROOF: after ~36 pixels (~hundreds of arena_new/drop cycles), the live-region count is unchanged
+     * (it climbed to the 64-slot ceiling before the fix).  A leaky path would fail LEG 1 (exhaustion -> wrong sign)
+     * AND blow this. */
+    if r1 > r0 + 2u32 { return 90u64 }
+
+    /* LEG 2 (teeth -- named classes close cover2d's limit; STRICT where AA, exact where full/empty). */
+    if chk(ax0,ax1,ax2,ay0,ay1,ay2, 0i64, 0i64, 0i64) != 1u32 { return 80u64 }   /* GENTLE  strict */
+    if chk(ax0,ax1,ax2,ay0,ay1,ay2, 4i64, 1i64, 0i64) != 1u32 { return 81u64 }   /* STEEP   strict (the closed limit) */
+    if chk(ax0,ax1,ax2,ay0,ay1,ay2, 4i64, 2i64, 0i64) != 1u32 { return 82u64 }   /* CORNER  strict (the closed limit) */
+    if chk(ax0,ax1,ax2,ay0,ay1,ay2, 4i64, 0i64, 1i64) != 1u32 { return 83u64 }   /* INTERIOR -> sa */
+    if chk(ax0,ax1,ax2,ay0,ay1,ay2, 4i64, 3i64, 2i64) != 1u32 { return 84u64 }   /* EXTERIOR -> 0  */
+
+    return 99u64
+}

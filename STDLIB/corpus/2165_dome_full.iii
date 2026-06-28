@@ -1,0 +1,138 @@
+/* STDLIB/corpus/2165_dome_full.iii -- THE PROOF ON THE REAL DOME.  ui_arc_cover_full renders a full x-monotone arc
+ * with a y-EXTREMUM (a dome / arch -- the shape a glyph or UI bevel actually is) by splitting at t* and routing each
+ * column to sub-arc A ([0,t*]), sub-arc B ([t*,1]), or -- for the single column the extremum x(t*) lands in -- the
+ * EXACT SUM cov_A+cov_B rounded ONCE (degree-4, never two rounded alphas added).  Three legs, three oracles:
+ *
+ *  LEG A -- EXACT de Casteljau (no subsampler).  Dome A = ax(0,4,8) ay(0,8,-8): peak x=x(1/2)=4 INTEGER -> clean split
+ *    at a column boundary; the halves re-parametrize (t=s/2 ; t=1/2+s/2) to MONOTONE integer arcs left ax(0,2,2)
+ *    ay(0,4,-2) [x 0..4] and right ax(4,6,2) ay(2,0,-2) [x 4..12].  ui_arc_cover_full MUST EQUAL the 2162-PROVEN
+ *    ui_arc_cover2d_sym_big on the matching half -- to the BIT.  This is the strong (exact) proof of the split.
+ *  LEG B -- the REAL t*=4/7 dome (a non-1/2 extremum).  ax(0,6,2) ay(0,16,-14): x(t)=6t+2t^2 (x in 0..8), peak 224/49
+ *    at t*=4/7, x(t*)=200/49~4.08 -> extremum column px=4.  Every pixel class (A-side, extremum sum, B-side, fill,
+ *    empty, strict-AA) within a tight bound of an independent subsampler (Dome is x-monotone -> the point oracle holds).
+ *  LEG C -- TEETH (the exact sum is NECESSARY).  On Dome B' = ax(0,2,6) ay(0,16,-16) (extremum column [2,3]), scanning
+ *    sa, the round-EACH-then-sum concession DIFFERS from round-ONCE ui_arc_cover_full and round-once is STRICTLY closer
+ *    to the fine subsampler -- i.e. round-each is provably off by 1 and the degree-4 exact sum fixes it.
+ * 99 = the full-arc driver is exact across the dome, the extremum-column SUM included, and provably beats the +-1 path. */
+module corpus_2165_dome_full
+
+extern @abi(c-msvc-x64) fn ui_arc_cover_full(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_sym.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_sym.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_big_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 from "ui_exact_sym.iii"
+extern @abi(c-msvc-x64) fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64, yval: i64) -> u32 from "ui_exact.iii"
+
+const SA : i64 = 255i64
+
+fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* point-sampling oracle at resolution nn and a given sa (valid for an x-monotone arc): round(sa*(#below)/nn^2). */
+fn subN(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, nn: i64, sav: i64) -> i64 {
+    let m : i64 = 2i64 * nn
+    let mx0 : i64 = m*ax0   let mx1 : i64 = m*ax1   let mx2 : i64 = m*ax2
+    let my0 : i64 = m*ay0   let my1 : i64 = m*ay1   let my2 : i64 = m*ay2
+    let bx : i64 = m*px     let by : i64 = m*py
+    let mut count : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < nn {
+        let cx : i64 = bx + ((2i64*i)+1i64)
+        let mut j : i64 = 0i64
+        while j < nn {
+            let cy : i64 = by + ((2i64*j)+1i64)
+            if ui_pt_below_arc(mx0,mx1,mx2,my0,my1,my2, cx, cy) == 0u32 { count = count + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    let nn2 : i64 = nn*nn
+    return ((2i64*count*sav)+nn2)/(2i64*nn2)
+}
+
+fn roundeach(px: i64, py: i64, sav: i64) -> i64 {
+    let ll : i64 = ui_arc_cover2d_sym_big_t(0i64, 2i64, 6i64, 0i64, 16i64, 0i64 - 16i64, px, py, sav, 0i64, 1i64, 1i64, 2i64)
+    let rr : i64 = ui_arc_cover2d_sym_big_t(0i64, 2i64, 6i64, 0i64, 16i64, 0i64 - 16i64, px, py, sav, 1i64, 2i64, 1i64, 1i64)
+    let mut rs : i64 = 0i64
+    if ll > 0i64 { rs = rs + ll }
+    if rr > 0i64 { rs = rs + rr }
+    if rs > sav { rs = sav }
+    return rs
+}
+
+fn main() -> u64 {
+    /* ===== LEG A: EXACT de Casteljau on Dome A (split proven to the bit, no subsampler) ===== */
+    let mut px : i64 = 0i64
+    while px < 12i64 {
+        let mut py : i64 = 0i64
+        while py < 3i64 {
+            let f : i64 = ui_arc_cover_full(0i64, 4i64, 8i64, 0i64, 8i64, 0i64 - 8i64, px, py, SA)
+            let mut o : i64 = 0i64
+            if px < 4i64 { o = ui_arc_cover2d_sym_big(0i64, 2i64, 2i64, 0i64, 4i64, 0i64 - 2i64, px, py, SA) }
+            else { o = ui_arc_cover2d_sym_big(4i64, 6i64, 2i64, 2i64, 0i64, 0i64 - 2i64, px, py, SA) }
+            if f != o { return (10i64 + px) as u64 }
+            py = py + 1i64
+        }
+        px = px + 1i64
+    }
+
+    /* ===== LEG B: the real t*=4/7 dome vs the independent subsampler, every pixel class ===== */
+    px = 0i64
+    while px < 8i64 {
+        let mut py : i64 = 0i64
+        while py < 6i64 {
+            let s : i64 = ui_arc_cover_full(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, px, py, SA)
+            if s < 0i64 { return (40i64 + (px*6i64) + py) as u64 }
+            let u : i64 = subN(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, px, py, 16i64, SA)
+            if iabs(s - u) > 14i64 { return (40i64 + (px*6i64) + py) as u64 }
+            py = py + 1i64
+        }
+        px = px + 1i64
+    }
+    /* the extremum column px=4 holds all three sub-classes -- AA, fill, empty (the sum path is real, not degenerate). */
+    let e0 : i64 = ui_arc_cover_full(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, 4i64, 4i64, SA)
+    if e0 <= 0i64 { return 80u64 }
+    if e0 >= SA  { return 81u64 }
+    if ui_arc_cover_full(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, 4i64, 0i64, SA) != SA { return 82u64 }
+    if ui_arc_cover_full(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, 4i64, 5i64, SA) != 0i64 { return 83u64 }
+    /* pin the extremum-column SUM value ABSOLUTELY (Leg A's clean split never exercises the SUM path): every row of
+     * px=4 within 2 of a FINE NN=256 subsampler -- the exact value, not merely "beats the +-1 path". */
+    let mut ry2 : i64 = 0i64
+    while ry2 < 6i64 {
+        let sx : i64 = ui_arc_cover_full(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, 4i64, ry2, SA)
+        let ux : i64 = subN(0i64, 6i64, 2i64, 0i64, 16i64, 0i64 - 14i64, 4i64, ry2, 256i64, SA)
+        if iabs(sx - ux) > 2i64 { return (90i64 + ry2) as u64 }
+        ry2 = ry2 + 1i64
+    }
+
+    /* ===== LEG C: TEETH -- round-ONCE strictly beats round-EACH on the extremum column (sa scan) ===== */
+    let mut teeth : u32 = 0u32
+    let mut sav : i64 = 2i64
+    while sav <= 64i64 {
+        let mut ry : i64 = 0i64
+        while ry < 4i64 {
+            let ex : i64 = ui_arc_cover_full(0i64, 2i64, 6i64, 0i64, 16i64, 0i64 - 16i64, 2i64, ry, sav)
+            if ex < 0i64 { return 50u64 }
+            let rs : i64 = roundeach(2i64, ry, sav)
+            if rs != ex {
+                let uf : i64 = subN(0i64, 2i64, 6i64, 0i64, 16i64, 0i64 - 16i64, 2i64, ry, 96i64, sav)
+                if iabs(ex - uf) < iabs(rs - uf) { teeth = 1u32 }
+            }
+            ry = ry + 1i64
+        }
+        sav = sav + 1i64
+    }
+    if teeth == 0u32 { return 60u64 }
+
+    /* ===== LEG D: NEVER SILENTLY WRONG -- the same dome scaled 200x (coords ~1600) overflows the i64 coeff assembly;
+     * the driver must REFUSE (-1) at the extremum column, never finish the bigint sign on garbage coeffs. ===== */
+    let mut saw_refuse : u32 = 0u32
+    let mut by : i64 = 905i64
+    while by < 918i64 {
+        let big : i64 = ui_arc_cover_full(0i64, 1200i64, 400i64, 0i64, 3200i64, 0i64 - 2800i64, 816i64, by, SA)
+        if big > SA { return 70u64 }                 /* garbage above sa */
+        if big < 0i64 - 2i64 { return 71u64 }        /* garbage below -2 */
+        if big == 0i64 - 1i64 { saw_refuse = 1u32 }  /* the honest refuse */
+        by = by + 1i64
+    }
+    if saw_refuse == 0u32 { return 72u64 }           /* the cap must actually bite (non-vacuous) */
+
+    return 99u64
+}

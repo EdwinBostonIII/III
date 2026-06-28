@@ -528,9 +528,12 @@ fn ui_alg_cmp_128(a: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
  * 6*G(t) = 6g1 t + 6g2 t^2 + 6g3 t^3 + 6g4 t^4 (integer coeffs; 6 = lcm of the integration denominators 1,2,3,2),
  * and the powers t_c^k have closed (P_k + Q_k sqrt D)/c^k forms, so G(t_c) = (P + Q sqrt D)/(6 c^4), gcd-reduced. */
 var AREA_P : i64   var AREA_Q : i64   var AREA_DEN : i64   var AREA_D : i64
-fn ui_bez_area_at_x(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, cval: i64) -> u32 @export {
-    if ui_bez_cross_x(ax0, ax1, ax2, cval) != 1u32 { return 0u32 }
-    let a : i64 = QX_A   let c : i64 = QX_C   let dD : i64 = QX_D
+var AREA_PR : i64  var AREA_QR : i64  var AREA_DR : i64    /* RAW (un-gcd-reduced) (pp + qq sqrt D)/(6 c^4) -- the
+ * general coverage (ui_arc_cover2d_sym) needs the un-reduced 6 c^4 denominator so x(t)'s c^2 combines cleanly. */
+/* G(t) at an ARBITRARY algebraic crossing t=(a+sqrt D)/c (vertical OR horizontal) -> AREA_P/Q/DEN/D.  The area-at-
+ * crossing engine, factored out of ui_bez_area_at_x so a HORIZONTAL crossing (the t where y(t)=const, from the
+ * y-monomial) reuses it for the general (steep/corner) per-pixel coverage. */
+fn ui_bez_area_at_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a: i64, c: i64, dD: i64) -> u32 @export {
     let g1 : i64 = 6i64 * aa_mulck(ay0, ax1)
     let g2 : i64 = 3i64 * (aa_mulck(2i64 * ay0, ax2) + aa_mulck(ay1, ax1))
     let g3 : i64 = 2i64 * (aa_mulck(2i64 * ay1, ax2) + aa_mulck(ay2, ax1))
@@ -544,12 +547,18 @@ fn ui_bez_area_at_x(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, 
     let pp : i64 = ((aa_mulck(aa_mulck(g1, c3), a) + aa_mulck(aa_mulck(g2, c2), p2)) + aa_mulck(aa_mulck(g3, c), p3)) + aa_mulck(g4, p4)
     let qq : i64 = ((aa_mulck(g1, c3) + aa_mulck(aa_mulck(g2, c2), q2)) + aa_mulck(aa_mulck(g3, c), q3)) + aa_mulck(g4, q4)
     let den : i64 = 6i64 * c4
+    AREA_PR = pp   AREA_QR = qq   AREA_DR = den            /* raw, den = 6 c^4 > 0 (un-reduced) for ui_arc_cover2d_sym */
     let mut p : i64 = pp   let mut q : i64 = qq   let mut d : i64 = den
     if d < 0i64 { p = 0i64 - p   q = 0i64 - q   d = 0i64 - d }
     let g : i64 = aa_g3(p, q, d)
     if g > 1i64 { p = p / g   q = q / g   d = d / g }
     AREA_P = p   AREA_Q = q   AREA_DEN = d   AREA_D = dD
     return 1u32
+}
+/* area-at-crossing at the VERTICAL line x=cval (the original entry; now a thin shell over ui_bez_area_at_t). */
+fn ui_bez_area_at_x(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, cval: i64) -> u32 @export {
+    if ui_bez_cross_x(ax0, ax1, ax2, cval) != 1u32 { return 0u32 }
+    return ui_bez_area_at_t(ax0, ax1, ax2, ay0, ay1, ay2, QX_A, QX_C, QX_D)
 }
 fn ui_area_p() -> i64 @export { return AREA_P }
 fn ui_area_q() -> i64 @export { return AREA_Q }
@@ -610,6 +619,80 @@ fn ui_alg_cmp_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 @e
     if den < 0i64 { return 0i32 - sN }
     return sN
 }
+
+/* === THE TIERED EXACT SIGN -- subverting the i64 RANGE compromise.  ui_alg_cmp_g (above) is exact only while the
+ * M^2 / S^2*D squaring fits i64 (coords ~2700); past that aa_mulck LATCHES AA_OVF.  Rather than let a caller read a
+ * wrapped sign (the ui_pt_below_arc/ui_arc_valpha silent-overflow bug), one ESCALATING entry (ui_alg_sign_g) carries
+ * every caller up the precision ladder: i64 -> 128-bit -> (AA_OVF flagged for) bigint.  Exact at every realistic
+ * coordinate, never a silent wrong sign. */
+
+/* compare M^2 vs S^2*D in 128-bit (M,S already fit i64; D>=0).  -1 if M^2 < S^2 D, 0 if ==, +1 if >.  M^2 ALWAYS
+ * fits 128 bits (|M| < 2^63), so if S^2*D exceeds 128 bits it necessarily dominates -> -1 (the radical wins). */
+fn aa_cmp_m2_s2d(absM: u64, absS: u64, dD: u64) -> i32 {
+    mul128(absM, absM)
+    let m2h : u64 = M128_HI   let m2l : u64 = M128_LO
+    mul128(absS, absS)
+    let s2h : u64 = M128_HI   let s2l : u64 = M128_LO
+    /* S^2 * D = (s2h:s2l) * dD as a 128-bit value with carry-out detection */
+    mul128(s2l, dD)
+    let loh : u64 = M128_HI   let lol : u64 = M128_LO
+    mul128(s2h, dD)
+    let hih : u64 = M128_HI   let hil : u64 = M128_LO
+    if hih != 0u64 { return 0i32 - 1i32 }            /* S^2 D > 128 bits -> > M^2 */
+    let mid : u64 = loh + hil
+    if mid < loh { return 0i32 - 1i32 }              /* carry into bit 128 -> > M^2 */
+    let sdh : u64 = mid   let sdl : u64 = lol
+    if m2h > sdh { return 1i32 }
+    if m2h < sdh { return 0i32 - 1i32 }
+    if m2l > sdl { return 1i32 }
+    if m2l < sdl { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* 128-bit general compare: sign of (pp + qq sqrt D)/den - rn/rd, EXACT in the regime where pp,qq,den,rn,rd PRODUCTS
+ * fit i64 but the squaring exceeds it (coords ~2700..~2e6).  Resets AA_OVF on entry; if M=pp*rd-rn*den or S=qq*rd
+ * themselves overflow i64 (coords >~2e6) it LEAVES AA_OVF set and returns 0 -- the signal to escalate to bigint,
+ * NEVER squaring garbage (the landmine that would build a second silent-wrong tier). */
+fn ui_alg_cmp_g_128(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    AA_OVF = 0u32
+    let m : i64 = aa_mulck(pp, rd) - aa_mulck(rn, den)
+    let s : i64 = aa_mulck(qq, rd)
+    if AA_OVF == 1u32 { return 0i32 }                /* M or S overflow i64 -> escalate to bigint (AA_OVF stays set) */
+    let mut sN : i32 = 0i32
+    if s == 0i64 {
+        if m > 0i64 { sN = 1i32 }
+        if m < 0i64 { sN = 0i32 - 1i32 }
+    }
+    if s > 0i64 {
+        if m >= 0i64 { sN = 1i32   if m == 0i64 { if dD == 0i64 { sN = 0i32 } } }
+        if m < 0i64 {
+            let c : i32 = aa_cmp_m2_s2d((0i64 - m) as u64, s as u64, dD as u64)
+            if c < 0i32 { sN = 1i32 }                /* S^2 D > M^2 -> s sqrt D wins -> + */
+            if c > 0i32 { sN = 0i32 - 1i32 }
+        }
+    }
+    if s < 0i64 {
+        if m <= 0i64 { sN = 0i32 - 1i32   if m == 0i64 { if dD == 0i64 { sN = 0i32 } } }
+        if m > 0i64 {
+            let c : i32 = aa_cmp_m2_s2d(m as u64, (0i64 - s) as u64, dD as u64)
+            if c > 0i32 { sN = 1i32 }                /* M^2 > S^2 D -> m wins -> + */
+            if c < 0i32 { sN = 0i32 - 1i32 }
+        }
+    }
+    if den < 0i64 { return 0i32 - sN }
+    return sN
+}
+
+/* THE ONE ESCALATING ENTRY every geometry sign-query routes through.  Try i64 (fast, exact to coords ~2700); on
+ * AA_OVF, the 128-bit tier (exact to ~2e6 -- every realistic display/zoom).  If 128-bit ALSO overflows it leaves
+ * AA_OVF set (the bigint signal), so a caller is never handed a silently-wrong sign. */
+fn ui_alg_sign_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    AA_OVF = 0u32
+    let r : i32 = ui_alg_cmp_g(pp, qq, den, dD, rn, rd)
+    if AA_OVF == 0u32 { return r }
+    return ui_alg_cmp_g_128(pp, qq, den, dD, rn, rd)
+}
+
 /* round(sa * (P+Q sqrt D)/DEN) -- the EXACT alpha.  Largest k in [0,sa] with 2*sa*coverage >= 2k-1. */
 fn ui_alg_alpha(pp: i64, qq: i64, den: i64, dD: i64, sa: i64) -> i64 @export {
     let p2 : i64 = aa_mulck(2i64 * sa, pp)
@@ -618,7 +701,7 @@ fn ui_alg_alpha(pp: i64, qq: i64, den: i64, dD: i64, sa: i64) -> i64 @export {
     let mut hi : i64 = sa
     while lo < hi {
         let mid : i64 = (lo + hi + 1i64) / 2i64
-        if ui_alg_cmp_g(p2, q2, den, dD, (2i64 * mid) - 1i64, 1i64) >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+        if ui_alg_sign_g(p2, q2, den, dD, (2i64 * mid) - 1i64, 1i64) >= 0i32 { lo = mid } else { hi = mid - 1i64 }
     }
     return lo
 }
@@ -663,7 +746,7 @@ fn ui_bez_y_at_cross(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64,
 /* 1 iff the point (xval,yval) is BELOW the x-monotone arc (y_arc(xval) <= yval), EXACTLY. */
 fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64, yval: i64) -> u32 @export {
     if ui_bez_y_at_cross(ax0, ax1, ax2, ay0, ay1, ay2, xval) != 1u32 { return 0u32 }
-    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, yval, 1i64) <= 0i32 { return 1u32 }
+    if ui_alg_sign_g(YC_P, YC_Q, YC_DEN, YC_D, yval, 1i64) <= 0i32 { return 1u32 }
     return 0u32
 }
 /* the EXACT vertical coverage of pixel (px,py) by the region BELOW the arc: the fraction of [py,py+1] that lies
@@ -671,9 +754,9 @@ fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, x
 fn ui_arc_valpha(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
     if ui_bez_y_at_cross(ax0, ax1, ax2, ay0, ay1, ay2, px) != 1u32 { return 0i64 }
     /* y_arc <= py  -> pixel fully below the arc -> full */
-    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, py, 1i64) <= 0i32 { return sa }
+    if ui_alg_sign_g(YC_P, YC_Q, YC_DEN, YC_D, py, 1i64) <= 0i32 { return sa }
     /* y_arc >= py+1 -> fully above -> empty */
-    if ui_alg_cmp_g(YC_P, YC_Q, YC_DEN, YC_D, py + 1i64, 1i64) >= 0i32 { return 0i64 }
+    if ui_alg_sign_g(YC_P, YC_Q, YC_DEN, YC_D, py + 1i64, 1i64) >= 0i32 { return 0i64 }
     /* boundary: coverage = (py+1) - y_arc = ((py+1)DEN - P - Q sqrt D)/DEN ; alpha = round(sa*coverage) */
     return ui_alg_alpha(aa_mulck(py + 1i64, YC_DEN) - YC_P, 0i64 - YC_Q, YC_DEN, YC_D, sa)
 }
@@ -683,7 +766,7 @@ fn ui_arc_valpha(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px:
  * Its order vs any rational is decided SYMBOLICALLY (no interval refinement): the nested radical collapses to two
  * single-D proven signs.  This is symmetric in x and y -- "steep edge" is not a case, just swapped variables. */
 fn ui_sign_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
-    let sP : i32 = ui_alg_cmp_g(an, bn, 1i64, dD1, 0i64, 1i64)        /* sign of P = an + bn sqrt D1 */
+    let sP : i32 = ui_alg_cmp_g(an, bn, 1i64, dD1, 0i64, 1i64)        /* sign of P = an + bn sqrt D1 (AA_OVF-latching: cover2d's detect-and-refuse depends on it) */
     if cn == 0i64 { return sP }
     if dD2 == 0i64 { return sP }
     let mut sC : i32 = 1i32
@@ -693,7 +776,26 @@ fn ui_sign_bi(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
     /* opposite signs: the winner is |P| vs |cn| sqrt D2, i.e. P^2 vs cn^2 D2 -- and P^2 lives in Q(sqrt D1) */
     let pp : i64 = (aa_mulck(an, an) + aa_mulck(aa_mulck(bn, bn), dD1)) - aa_mulck(aa_mulck(cn, cn), dD2)
     let qq : i64 = aa_mulck(2i64 * an, bn)
-    let s2 : i32 = ui_alg_cmp_g(pp, qq, 1i64, dD1, 0i64, 1i64)        /* sign of P^2 - cn^2 D2 */
+    let s2 : i32 = ui_alg_cmp_g(pp, qq, 1i64, dD1, 0i64, 1i64)        /* sign of P^2 - cn^2 D2 (AA_OVF-latching) */
+    if s2 > 0i32 { return sP }
+    if s2 < 0i32 { return sC }
+    return 0i32
+}
+/* 128-bit tier of ui_sign_bi -- identical squaring reduction but through ui_alg_cmp_g_128, so the inner P^2 squaring
+ * (~coord^8) is exact to ~coord 43000 (>> glyph EM 2048).  pp,qq themselves are i64-exact to ~coord 55000.  Used by
+ * ui_tcmp's escalation so the crossing-ORDER in ui_sym_sel is exact at render scale (the bigint-selection landing for bc),
+ * WITHOUT changing ui_sign_bi (so cover2d via ui_cmp_bi keeps its existing refuse contract). */
+fn ui_sign_bi_128(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
+    let sP : i32 = ui_alg_cmp_g_128(an, bn, 1i64, dD1, 0i64, 1i64)
+    if cn == 0i64 { return sP }
+    if dD2 == 0i64 { return sP }
+    let mut sC : i32 = 1i32
+    if cn < 0i64 { sC = 0i32 - 1i32 }
+    if sP == 0i32 { return sC }
+    if sP == sC { return sP }
+    let pp : i64 = (aa_mulck(an, an) + aa_mulck(aa_mulck(bn, bn), dD1)) - aa_mulck(aa_mulck(cn, cn), dD2)
+    let qq : i64 = aa_mulck(2i64 * an, bn)
+    let s2 : i32 = ui_alg_cmp_g_128(pp, qq, 1i64, dD1, 0i64, 1i64)
     if s2 > 0i32 { return sP }
     if s2 < 0i32 { return sC }
     return 0i32
@@ -803,6 +905,271 @@ fn ui_arc_cover2d(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px
     return alpha
 }
 
+/* === GENERAL EXACT PER-PIXEL COVERAGE (ui_arc_cover2d_sym) -- closes cover2d's steep/corner limit ===========
+ * coverage of pixel [px,px+1]x[py,py+1] by {y <= y_arc(x)}, for a sub-arc MONOTONE IN BOTH x and y over t in [0,1]
+ * (the caller splits at both extrema via ui_bez_ext_t).  Per-x clamp: the arc is in the row band y in [py,py+1] over a
+ * t-sub-interval [t_lo,t_hi] = (the column x-interval) intersect (the row-band y-interval); coverage = G(t_hi)-G(t_lo)
+ * - py*(x_hi-x_lo) + full, full = column width where y_arc>py+1.  A both-monotone arc meets the pixel boundary at two
+ * points => degree-4 (a + b sqrt D_hi + c sqrt D_lo), signed by ui_alpha_bi.  i64 leaf: AA_OVF -> -1 (refuse), exactly
+ * like ui_arc_cover2d; the bigint-assembly tier (any coord) is Phase 2.  A crossing t=(A + B sqrt D)/C, B in {+1,-1}. */
+var XC_A : i64   var XC_C : i64   var XC_D : i64        /* last crossing: roots (XC_A +- sqrt XC_D)/XC_C */
+var CO_P : i64   var CO_Q : i64                          /* last coord(t): (CO_P + B*CO_Q sqrt D)/C^2 */
+
+/* solve c2 t^2 + c1 t + (c0 - cval) = 0 -> XC_A=-c1, XC_C=2c2, XC_D=disc.  1 iff a real root exists. */
+fn ui_xc(c0: i64, c1: i64, c2: i64, cval: i64) -> u32 @export {
+    if c2 == 0i64 { return 0u32 }
+    let dD : i64 = aa_mulck(c1, c1) - aa_mulck(4i64 * c2, c0 - cval)
+    if dD < 0i64 { return 0u32 }
+    XC_A = 0i64 - c1   XC_C = 2i64 * c2   XC_D = dD
+    return 1u32
+}
+/* coord(t)=(CO_P + B*CO_Q sqrt D)/C^2 for the OTHER monomial (c0,c1,c2), at t=(A+B sqrt D)/C. */
+fn ui_copq(c0: i64, c1: i64, c2: i64, a: i64, c: i64, dD: i64) -> i32 @export {
+    let cc : i64 = aa_mulck(c, c)
+    CO_P = (aa_mulck(c0, cc) + aa_mulck(aa_mulck(c1, a), c)) + aa_mulck(c2, aa_mulck(a, a) + dD)
+    CO_Q = aa_mulck(c1, c) + aa_mulck(2i64 * c2, a)
+    return 0i32
+}
+/* sign of t1 - t2, t_i = (A_i + B_i sqrt D_i)/C_i (B in {+1,-1}, C signed).  Two-surd compare via ui_sign_bi. */
+fn ui_tcmp(a1: i64, b1: i64, c1: i64, dd1: i64, a2: i64, b2: i64, c2: i64, dd2: i64) -> i32 @export {
+    let an : i64 = aa_mulck(a1, c2) - aa_mulck(a2, c1)
+    let bn : i64 = aa_mulck(b1, c2)
+    let cn : i64 = aa_mulck(0i64 - b2, c1)
+    /* AUTO-ESCALATE the crossing-order sign i64 -> 128-bit: the i64 P^2 squaring overflows above ~coord 234 and
+     * silently mis-orders crossings in ui_sym_sel at render scale (the bigint-selection bug for bc).  an,bn,cn are
+     * glyph-safe (~coord^2); only the sign's inner square overflows -> redo via ui_sign_bi_128 (exact to ~coord 43000).
+     * Scoped to ui_tcmp (ui_sym_sel's ONLY caller) so cover2d (ui_cmp_bi -> ui_sign_bi) keeps its refuse contract. */
+    AA_OVF = 0u32
+    let mut s : i32 = ui_sign_bi(an, bn, dd1, cn, dd2)
+    if AA_OVF == 1u32 { s = ui_sign_bi_128(an, bn, dd1, cn, dd2) }
+    let sc : i64 = aa_mulck(c1, c2)
+    if sc < 0i64 { return 0i32 - s }
+    return s
+}
+/* sign of t - rn/rd, t=(A+B sqrt D)/C (escalating). */
+fn ui_tcmp_q(a: i64, b: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 @export {
+    return ui_alg_sign_g(a, b, c, dD, rn, rd)
+}
+
+/* the in-[0,1] root branch (+1 or -1) of the last ui_xc crossing, or 0 if neither root lies in [0,1]. */
+fn ui_pickroot01() -> i32 {
+    let lo1 : i32 = ui_alg_sign_g(XC_A, 1i64, XC_C, XC_D, 0i64, 1i64)
+    if lo1 >= 0i32 { let hi1 : i32 = ui_alg_sign_g(XC_A, 1i64, XC_C, XC_D, 1i64, 1i64)   if hi1 <= 0i32 { return 1i32 } }
+    let lo2 : i32 = ui_alg_sign_g(XC_A, 0i64 - 1i64, XC_C, XC_D, 0i64, 1i64)
+    if lo2 >= 0i32 { let hi2 : i32 = ui_alg_sign_g(XC_A, 0i64 - 1i64, XC_C, XC_D, 1i64, 1i64)   if hi2 <= 0i32 { return 0i32 - 1i32 } }
+    return 0i32
+}
+
+/* the root branch (+1/-1) of the last ui_xc crossing lying in [t0,t1] (rationals), or 0 if neither does.
+ * ui_pickroot_t(.,0,1,1,1) == ui_pickroot01 EXACTLY.  Needed for the y-crossings of a sub-RANGE: y is monotone on
+ * each split sub-arc even when non-monotone over [0,1], so the in-range root is the unique correct one. */
+fn ui_pickroot_t(t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i32 {
+    let lo1 : i32 = ui_alg_sign_g(XC_A, 1i64, XC_C, XC_D, t0n, t0d)
+    if lo1 >= 0i32 { let hi1 : i32 = ui_alg_sign_g(XC_A, 1i64, XC_C, XC_D, t1n, t1d)   if hi1 <= 0i32 { return 1i32 } }
+    let lo2 : i32 = ui_alg_sign_g(XC_A, 0i64 - 1i64, XC_C, XC_D, t0n, t0d)
+    if lo2 >= 0i32 { let hi2 : i32 = ui_alg_sign_g(XC_A, 0i64 - 1i64, XC_C, XC_D, t1n, t1d)   if hi2 <= 0i32 { return 0i32 - 1i32 } }
+    return 0i32
+}
+
+/* one (A,B,C,D) crossing -> (coverage bracket) contribution.  hi-bracket = G - pyc*x ; lo-bracket = -G + pyc*x.
+ * sets BR_N (rational numerator over 6 C^4), BR_Q (sqrt D coeff over 6 C^4).  side=+1 => G - pyc*x ; side=-1 => -G+pyc*x. */
+var BR_N : i64   var BR_Q : i64   var BR_DEN : i64
+fn ui_sym_bracket(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a: i64, b: i64, c: i64, dD: i64, pyc: i64, side: i64) -> i32 {
+    ui_bez_area_at_t(ax0, ax1, ax2, ay0, ay1, ay2, a, c, dD)   /* G(t) = (AREA_P + b*AREA_Q sqrt D)/AREA_DEN, gcd-reduced */
+    let gp : i64 = AREA_P   let gq : i64 = aa_mulck(b, AREA_Q)   let gden : i64 = AREA_DEN
+    ui_copq(ax0, ax1, ax2, a, c, dD)                              /* x(t) = (CO_P + b*CO_Q sqrt D)/c^2 (CO_Q=0 at a vertical crossing) */
+    let cc : i64 = aa_mulck(c, c)
+    let xp0 : i64 = CO_P   let xq0 : i64 = aa_mulck(b, CO_Q)
+    let mut xpr : i64 = xp0   let mut xqr : i64 = xq0   let mut xden : i64 = cc   /* reduce x to keep the combine small */
+    let gx : i64 = ui_gcd(ui_gcd(xp0, xq0), cc)
+    if gx > 1i64 { xpr = xp0 / gx   xqr = xq0 / gx   xden = cc / gx }
+    /* bracket = side*(G - pyc*x) over the common denom gden*xden, gcd-reduced */
+    let cden : i64 = aa_mulck(gden, xden)
+    let rn : i64 = aa_mulck(side, aa_mulck(gp, xden) - aa_mulck(pyc, aa_mulck(xpr, gden)))
+    let rq : i64 = aa_mulck(side, aa_mulck(gq, xden) - aa_mulck(pyc, aa_mulck(xqr, gden)))
+    let g : i64 = ui_gcd(ui_gcd(rn, rq), cden)
+    if g > 1i64 { BR_N = rn / g   BR_Q = rq / g   BR_DEN = cden / g } else { BR_N = rn   BR_Q = rq   BR_DEN = cden }
+    return 0i32
+}
+
+/* the degree-4 coverage numerator (SYM_AN + SYM_BN sqrt SYM_DHI + SYM_CN sqrt SYM_DLO)/SYM_DEN and a KIND selector,
+ * exposed so ui_exact_big can finish the sign in bigint (the i64 ui_alpha_bi cannot -- the bi-quadratic double-square
+ * blows i64 for sym's coefficients).  KIND: 0 = use the coeffs ; 1 = full (sa) ; 2 = empty (0) ; 3 = out-of-extent (-2). */
+var SYM_AN : i64   var SYM_BN : i64   var SYM_CN : i64   var SYM_DEN : i64   var SYM_DHI : i64   var SYM_DLO : i64
+var SYM_KIND : u32
+fn ui_sym_an() -> i64 @export { return SYM_AN }
+fn ui_sym_bn() -> i64 @export { return SYM_BN }
+fn ui_sym_cn() -> i64 @export { return SYM_CN }
+fn ui_sym_den() -> i64 @export { return SYM_DEN }
+fn ui_sym_dhi() -> i64 @export { return SYM_DHI }
+fn ui_sym_dlo() -> i64 @export { return SYM_DLO }
+fn ui_sym_kind() -> u32 @export { return SYM_KIND }
+/* AA_OVF snapshot taken AFTER the coeff assembly but BEFORE ui_alpha_bi: distinguishes a GARBAGE-COEFF overflow
+ * (the assembly itself wrapped -> SYM_* are wrong -> a bigint finisher MUST refuse) from the EXPECTED i64-sign
+ * overflow (ui_alpha_bi's bi-quadratic double-square wraps on valid sym coeffs -> the bigint sign handles it). */
+var SYM_ASM_OVF : u32 = 0u32
+fn ui_sym_asm_ovf() -> u32 @export { return SYM_ASM_OVF }
+/* ui_sym_sel's RAW return (0 assembled / 2 empty / 3 out-of-extent / 5 rational-strip).  kind 5 and kind 0 both leave
+ * SYM_KIND=0, but kind 5 does NOT populate SEL_* -- the bigint tier needs this to tell them apart. */
+var SYM_SELK : u32 = 0u32
+fn ui_sym_selk() -> u32 @export { return SYM_SELK }
+
+/* === GENERAL EXACT PER-PIXEL COVERAGE -- closes cover2d's steep/corner limit, now t-RANGE aware so a FULL arc can be
+ * split at its y-extremum and the two sub-arcs summed (ui_arc_cover_full).  TWO phases as SEPARATE functions because the
+ * monolith exceeded cg_r3's ~64 per-frame local-slot budget, and the seam is natural: ui_sym_sel does the crossing find
+ * + t_lo/t_hi/full-piece selection + [t0,t1] clamp, writing the SEL_* slots; the assembly reads them.  Sub-arc must be
+ * MONOTONE in x AND y over [t0,t1] (the caller guarantees by splitting at both extrema). */
+var SEL_LOA : i64   var SEL_LOB : i64   var SEL_LOC : i64   var SEL_LOD : i64   /* selected t_lo crossing (A,B,C,D)   */
+var SEL_HIA : i64   var SEL_HIB : i64   var SEL_HIC : i64   var SEL_HID : i64   /* selected t_hi crossing (A,B,C,D)   */
+var SEL_PYHV : i64  var SEL_PYLV : i64                                          /* py or py+1 for the hi / lo bracket */
+var SEL_RATN : i64  var SEL_RATD : i64                                          /* full-piece constant ratN/ratD     */
+
+/* === the coordinated SEAM for the render-scale bigint-coefficient tier (ui_exact_bigcov): expose the i64 (overflow-
+ * free) crossing selection + the RAW per-crossing area/coord numerators, so a bigint tier can recompute the degree-4
+ * coverage coefficients in arbitrary precision (only the i64 PRODUCTS overflow; these inputs fit i64 to ~coord 4e4). */
+fn ui_sel_loa() -> i64 @export { return SEL_LOA }   fn ui_sel_lob() -> i64 @export { return SEL_LOB }
+fn ui_sel_loc() -> i64 @export { return SEL_LOC }   fn ui_sel_lod() -> i64 @export { return SEL_LOD }
+fn ui_sel_hia() -> i64 @export { return SEL_HIA }   fn ui_sel_hib() -> i64 @export { return SEL_HIB }
+fn ui_sel_hic() -> i64 @export { return SEL_HIC }   fn ui_sel_hid() -> i64 @export { return SEL_HID }
+fn ui_sel_pyhv() -> i64 @export { return SEL_PYHV } fn ui_sel_pylv() -> i64 @export { return SEL_PYLV }
+fn ui_sel_ratn() -> i64 @export { return SEL_RATN } fn ui_sel_ratd() -> i64 @export { return SEL_RATD }
+fn ui_area_pr() -> i64 @export { return AREA_PR }   fn ui_area_qr() -> i64 @export { return AREA_QR }
+fn ui_co_p() -> i64 @export { return CO_P }         fn ui_co_q() -> i64 @export { return CO_Q }
+
+/* selection + clamp phase.  Finds the column crossings x=px (tL), x=px+1 (tR) and the row-band crossings y=py (ta),
+ * y=py+1 (tb); picks t_lo/t_hi and the full piece; clamps to the parameter sub-range [t0,t1] (a sub-range bound is a
+ * DEGENERATE crossing B=0,D=0 -- it enters the SAME assembly with no new branch; a full-piece cut by t0/t1 ends at the
+ * RATIONAL x(t_bound), carried in SEL_RATN/SEL_RATD).  Writes SEL_* and returns the KIND: 3 = out-of-x-extent,
+ * 1 = pixel fully below the arc (region fills), 2 = fully above (empty), 0 = proceed to the assembly. */
+fn ui_sym_sel(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> u32 {
+    let mut yi : u32 = 0u32
+    /* y-direction of the SUB-RANGE [t0,t1] (NOT the whole arc): sign(y(t1)-y(t0)) = sign(ay1*(t1d*t0d) +
+     * ay2*(t1n*t0d + t0n*t1d)); reduces to (ay1+ay2)>0 at the default [0,1], so 2162 stays byte-identical.  Taking
+     * yi from the full arc was wrong for a sub-arc of a non-monotone dome (symmetric -> ay1+ay2=0 -> yi=0 on the rising half). */
+    let yisn : i64 = aa_mulck(ay1, aa_mulck(t1d, t0d)) + aa_mulck(ay2, aa_mulck(t1n, t0d) + aa_mulck(t0n, t1d))
+    if yisn > 0i64 { yi = 1u32 }
+    if ui_xc(ax0, ax1, ax2, px) != 1u32 { return 3u32 }
+    let lb : i64 = ui_pickroot01() as i64
+    if lb == 0i64 { return 3u32 }
+    let la : i64 = XC_A   let lc : i64 = XC_C   let ld : i64 = XC_D
+    if ui_xc(ax0, ax1, ax2, px + 1i64) != 1u32 { return 3u32 }
+    let rb : i64 = ui_pickroot01() as i64
+    if rb == 0i64 { return 3u32 }
+    let ra : i64 = XC_A   let rc : i64 = XC_C   let rd : i64 = XC_D
+    let mut hasa : u32 = 0u32   let mut aa : i64 = 0i64   let mut ab : i64 = 0i64   let mut ac : i64 = 0i64   let mut ad : i64 = 0i64
+    if ui_xc(ay0, ay1, ay2, py) == 1u32 { let t : i32 = ui_pickroot_t(t0n, t0d, t1n, t1d)   if t != 0i32 { hasa = 1u32   aa = XC_A   ab = t as i64   ac = XC_C   ad = XC_D } }
+    let mut hasb : u32 = 0u32   let mut ba : i64 = 0i64   let mut bb : i64 = 0i64   let mut bc : i64 = 0i64   let mut bd : i64 = 0i64
+    if ui_xc(ay0, ay1, ay2, py + 1i64) == 1u32 { let t : i32 = ui_pickroot_t(t0n, t0d, t1n, t1d)   if t != 0i32 { hasb = 1u32   ba = XC_A   bb = t as i64   bc = XC_C   bd = XC_D } }
+
+    /* select t_lo (lower middle bound) and t_hi (upper), + whether the y=py+1 crossing binds (the full piece). */
+    let mut loa : i64 = la   let mut lob : i64 = lb   let mut loc : i64 = lc   let mut lod : i64 = ld
+    let mut hia : i64 = ra   let mut hib : i64 = rb   let mut hic : i64 = rc   let mut hid : i64 = rd
+    let mut fullR : u32 = 0u32   let mut fullL : u32 = 0u32
+    if yi == 1u32 {
+        if hasa == 1u32 { if ui_tcmp(aa, ab, ac, ad, la, lb, lc, ld) > 0i32 { loa = aa   lob = ab   loc = ac   lod = ad } }
+        if hasb == 1u32 { if ui_tcmp(ba, bb, bc, bd, ra, rb, rc, rd) < 0i32 { hia = ba   hib = bb   hic = bc   hid = bd   fullR = 1u32 } }
+    }
+    if yi == 0u32 {
+        if hasb == 1u32 { if ui_tcmp(ba, bb, bc, bd, la, lb, lc, ld) > 0i32 { loa = ba   lob = bb   loc = bc   lod = bd   fullL = 1u32 } }
+        if hasa == 1u32 { if ui_tcmp(aa, ab, ac, ad, ra, rb, rc, rd) < 0i32 { hia = aa   hib = ab   hic = ac   hid = ad } }
+    }
+
+    /* clamp to [t0,t1] via degenerate crossings.  ela = column entry tL clamped up to t0 (empty-middle probe point).  A
+     * bound short of the band crossing KILLS the full-piece; a bound inside a full-piece makes that piece end at the
+     * RATIONAL x(t_bound) (xN/xD; fullR/fullL are mutually exclusive so one xN/xD set serves both). */
+    let mut ela : i64 = la   let mut elb : i64 = lb   let mut elc : i64 = lc   let mut eld : i64 = ld
+    let mut xN : i64 = 0i64   let mut xD : i64 = 1i64   let mut xrat : u32 = 0u32
+    if ui_tcmp(t1n, 0i64, t1d, 0i64, hia, hib, hic, hid) < 0i32 {        /* t1 < t_hi : sub-arc ends before t_hi */
+        hia = t1n   hib = 0i64   hic = t1d   hid = 0i64   fullR = 0u32
+    } else {
+        if fullR == 1u32 {
+            if ui_tcmp(t1n, 0i64, t1d, 0i64, ra, rb, rc, rd) < 0i32 {    /* t1 < tR : full-piece ends at x(t1), RATIONAL */
+                ui_copq(ax0, ax1, ax2, t1n, t1d, 0i64)   xN = CO_P   xD = aa_mulck(t1d, t1d)   xrat = 1u32
+            }
+        }
+    }
+    if ui_tcmp(t0n, 0i64, t0d, 0i64, loa, lob, loc, lod) > 0i32 {        /* t0 > t_lo : sub-arc starts after t_lo */
+        loa = t0n   lob = 0i64   loc = t0d   lod = 0i64   fullL = 0u32
+    } else {
+        if fullL == 1u32 {
+            if ui_tcmp(t0n, 0i64, t0d, 0i64, la, lb, lc, ld) > 0i32 {    /* t0 > tL : full-piece starts at x(t0), RATIONAL */
+                ui_copq(ax0, ax1, ax2, t0n, t0d, 0i64)   xN = CO_P   xD = aa_mulck(t0d, t0d)   xrat = 1u32
+            }
+        }
+    }
+    if ui_tcmp(t0n, 0i64, t0d, 0i64, ela, elb, elc, eld) > 0i32 { ela = t0n   elb = 0i64   elc = t0d   eld = 0i64 }
+
+    /* empty middle (t_lo >= t_hi): the arc misses the row band over the CLAMPED sub-column [xlo,xhi] = x(max(tL,t0)) ..
+     * x(min(tR,t1)).  Probe y at the entry: y_arc >= py+1 => the whole row [py,py+1] is below the arc over [xlo,xhi], so
+     * the coverage is the RATIONAL strip width (xhi - xlo), NOT the full pixel (conflating those was the t-range bug;
+     * un-clamped, xlo=px and xhi=px+1 so xhi-xlo=1 -> sa, the original behaviour).  Both column-edge crossings give an
+     * integer x (tL->px, tR->px+1) and t0/t1 give a rational x, so xhi-xlo is a PURE rational -> SYM_BN=SYM_CN=0, which
+     * both the i64 and bigint rounders handle directly.  y_arc <= py => empty (0). */
+    if ui_tcmp(loa, lob, loc, lod, hia, hib, hic, hid) >= 0i32 {
+        ui_copq(ay0, ay1, ay2, ela, elc, eld)
+        if ui_alg_sign_g(CO_P, aa_mulck(elb, CO_Q), aa_mulck(elc, elc), eld, py + 1i64, 1i64) >= 0i32 {
+            let mut xlon : i64 = px   let mut xlod : i64 = 1i64                 /* xlo = x(max(tL,t0)) : px, else rational x(t0) */
+            if ui_tcmp(t0n, 0i64, t0d, 0i64, la, lb, lc, ld) > 0i32 { ui_copq(ax0, ax1, ax2, t0n, t0d, 0i64)   xlon = CO_P   xlod = aa_mulck(t0d, t0d) }
+            let mut xhin : i64 = px + 1i64   let mut xhid : i64 = 1i64         /* xhi = x(min(tR,t1)) : px+1, else rational x(t1) */
+            if ui_tcmp(t1n, 0i64, t1d, 0i64, ra, rb, rc, rd) < 0i32 { ui_copq(ax0, ax1, ax2, t1n, t1d, 0i64)   xhin = CO_P   xhid = aa_mulck(t1d, t1d) }
+            SYM_AN = aa_mulck(xhin, xlod) - aa_mulck(xlon, xhid)   SYM_BN = 0i64   SYM_CN = 0i64
+            SYM_DEN = aa_mulck(xhid, xlod)   SYM_DHI = 0i64   SYM_DLO = 0i64   SYM_KIND = 0u32
+            return 5u32
+        }
+        SYM_KIND = 2u32   return 2u32
+    }
+
+    SEL_LOA = loa   SEL_LOB = lob   SEL_LOC = loc   SEL_LOD = lod
+    SEL_HIA = hia   SEL_HIB = hib   SEL_HIC = hic   SEL_HID = hid
+    SEL_PYHV = py   if fullR == 1u32 { SEL_PYHV = py + 1i64 }
+    SEL_PYLV = py   if fullL == 1u32 { SEL_PYLV = py + 1i64 }
+    SEL_RATN = 0i64   SEL_RATD = 1i64
+    if fullR == 1u32 { if xrat == 0u32 { SEL_RATN = px + 1i64 } else { SEL_RATN = xN   SEL_RATD = xD } }
+    if fullL == 1u32 { if xrat == 0u32 { SEL_RATN = 0i64 - px } else { SEL_RATN = 0i64 - xN   SEL_RATD = xD } }
+    return 0u32
+}
+
+/* The t-RANGE coverage -- selection (ui_sym_sel) then the degree-4 bracket assembly + correctly-rounded alpha.  A
+ * sub-range bound enters the assembly as a DEGENERATE crossing; the full-piece edge cut by a bound is the RATIONAL
+ * x(t_bound) via SEL_RATN/SEL_RATD.  Default (0,1,1,1) is bit-identical to the un-ranged engine: t0=0 <= every t_lo
+ * and t1=1 >= every t_hi, so neither clamp ever binds and SEL_RATD stays 1.  Returns the exact 8-bit alpha, -1 on i64
+ * overflow (use ui_arc_cover2d_sym_big, which reads the exposed SYM_* coeffs), or -2 for an out-of-x-extent column. */
+fn ui_arc_cover2d_sym_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 @export {
+    AA_OVF = 0u32
+    let k : u32 = ui_sym_sel(ax0, ax1, ax2, ay0, ay1, ay2, px, py, t0n, t0d, t1n, t1d)
+    SYM_SELK = k
+    if k == 3u32 { SYM_KIND = 3u32   return 0i64 - 2i64 }
+    if k == 2u32 { return 0i64 }                          /* SYM_KIND already 2 (empty) */
+    if k == 5u32 {                                        /* pure-rational fill: SYM_AN/0/0/SYM_DEN/0/0 + SYM_KIND=0 are set */
+        SYM_ASM_OVF = AA_OVF                              /* fill coeffs done -> snapshot assembly overflow before the i64 sign */
+        let af : i64 = ui_alpha_bi(SYM_AN, 0i64, 0i64, 0i64, 0i64, SYM_DEN, sa)
+        if AA_OVF == 1u32 { return 0i64 - 1i64 }
+        return af
+    }
+    ui_sym_bracket(ax0, ax1, ax2, ay0, ay1, ay2, SEL_HIA, SEL_HIB, SEL_HIC, SEL_HID, SEL_PYHV, 1i64)        /* hi: +(G - pyhv*x) */
+    let hn : i64 = BR_N   let hq : i64 = BR_Q   let hden : i64 = BR_DEN                                      /* over 6 chi^4 */
+    ui_sym_bracket(ax0, ax1, ax2, ay0, ay1, ay2, SEL_LOA, SEL_LOB, SEL_LOC, SEL_LOD, SEL_PYLV, 0i64 - 1i64)  /* lo: -G + pylv*x */
+    let ln : i64 = BR_N   let lq : i64 = BR_Q   let lden : i64 = BR_DEN                                      /* over 6 clo^4 */
+    let ratNn : i64 = SEL_RATN   let ratDd : i64 = SEL_RATD
+    let hl : i64 = aa_mulck(hden, lden)
+    let mut an : i64 = aa_mulck(ratDd, aa_mulck(hn, lden) + aa_mulck(ln, hden)) + aa_mulck(ratNn, hl)
+    let mut bn : i64 = aa_mulck(ratDd, aa_mulck(hq, lden))
+    let mut cn : i64 = aa_mulck(ratDd, aa_mulck(lq, hden))
+    let mut den : i64 = aa_mulck(ratDd, hl)
+    let g : i64 = ui_gcd(aa_g3(an, bn, cn), den)          /* shrink before the binary search (ui_alpha_bi squares sa*an) */
+    if g > 1i64 { an = an / g   bn = bn / g   cn = cn / g   den = den / g }
+    SYM_AN = an   SYM_BN = bn   SYM_CN = cn   SYM_DEN = den   SYM_DHI = SEL_HID   SYM_DLO = SEL_LOD   SYM_KIND = 0u32
+    SYM_ASM_OVF = AA_OVF                                  /* coeffs done -> snapshot assembly overflow before the i64 sign attempt */
+    let alpha : i64 = ui_alpha_bi(an, bn, SEL_HID, cn, SEL_LOD, den, sa)
+    if AA_OVF == 1u32 { return 0i64 - 1i64 }
+    return alpha
+}
+
+/* thin wrapper -- the full parameter interval [0,1] (the un-split single-arc entry used by ui_arc_cover2d_sym_big). */
+fn ui_arc_cover2d_sym(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    return ui_arc_cover2d_sym_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, 1i64, 1i64)
+}
+
 /* anti-aliased circle fill -- the showcase: a smooth disk whose edge coverage is exact integer. */
 fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 @export {
     let mut minx : i64 = cx - r  let mut maxx : i64 = (cx + r) + 1i64
@@ -827,4 +1194,138 @@ fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: 
         py = py + 1i64
     }
     return 0i32
+}
+
+/* ============================================================================================================
+ * EXACT CUBIC BEZIER -- the curve order of real fonts (PostScript/CFF) and SVG paths, ONE degree above the
+ * quadratic engine.  A quadratic's crossing Bx(t)=c lives in Q(sqrt D) (closed form, ui_bez_cross_x); a CUBIC's
+ * crossing is a degree-3 algebraic number, and when the cubic has THREE distinct real roots its discriminant is
+ * POSITIVE and Cardano's formula is forced through the cube root of a COMPLEX number -- the casus irreducibilis,
+ * the 500-year wall where real radicals provably cannot express the (entirely real) roots.  III walks through it
+ * WITHOUT complex numbers: a pure-integer proven-sign evaluation (ui_cubic_sign_at) drives bisection that isolates
+ * every real root EXACTLY and brackets the rendering crossing to any rational precision.  No float, no flattening
+ * (the universal industry shortcut: everyone subdivides cubics into line/quadratic pieces; III does not).  i64-range
+ * overflow LATCHES AA_OVF -- refuse, never a wrong coverage; the bigint path is the escape, exactly as the quadratic.
+ * Bx(t) = b0 + b1 t + b2 t^2 + b3 t^3.  Control points P0..P3 -> monomial coeffs via ui_cubic_coeffs (Bernstein->power). */
+var CUB_BX : [i64; 4]   var CUB_BY : [i64; 4]    /* the last cubic's monomial coeffs (x and y) */
+
+/* control points P0..P3 -> monomial coeffs b0..b3, into CUB_BX (x) and CUB_BY (y).  The Bernstein->power basis:
+ * b0=x0 ; b1=3(x1-x0) ; b2=3(x0-2x1+x2) ; b3=-x0+3x1-3x2+x3.  (Same coeffs ui_cubic_area_s builds.) */
+fn ui_cubic_coeffs(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i32 @export {
+    CUB_BX[0u64] = x0
+    CUB_BX[1u64] = 3i64 * (x1 - x0)
+    CUB_BX[2u64] = 3i64 * ((x0 - (2i64 * x1)) + x2)
+    CUB_BX[3u64] = (((0i64 - x0) + (3i64 * x1)) - (3i64 * x2)) + x3
+    CUB_BY[0u64] = y0
+    CUB_BY[1u64] = 3i64 * (y1 - y0)
+    CUB_BY[2u64] = 3i64 * ((y0 - (2i64 * y1)) + y2)
+    CUB_BY[3u64] = (((0i64 - y0) + (3i64 * y1)) - (3i64 * y2)) + y3
+    return 0i32
+}
+fn ui_cub_bx(i: u32) -> i64 @export { return CUB_BX[i as u64] }
+fn ui_cub_by(i: u32) -> i64 @export { return CUB_BY[i as u64] }
+
+/* PROVEN-SIGN exact evaluation: the sign of (b0 + b1 t + b2 t^2 + b3 t^3) - cval at the RATIONAL t = pn/pd (pd>0),
+ * computed as the sign of the integer N = b3 pn^3 + b2 pn^2 pd + b1 pn pd^2 + (b0-cval) pd^3 -- no float, exact at
+ * every bit.  This single primitive isolates real roots (sign changes) AND brackets crossings.  Each product is
+ * overflow-checked (aa_mulck); the caller resets+checks AA_OVF (a wrapped term must never certify a wrong sign). */
+fn ui_cubic_sign_at(b0: i64, b1: i64, b2: i64, b3: i64, cval: i64, pn: i64, pd: i64) -> i32 @export {
+    let pn2 : i64 = aa_mulck(pn, pn)
+    let pn3 : i64 = aa_mulck(pn2, pn)
+    let pd2 : i64 = aa_mulck(pd, pd)
+    let pd3 : i64 = aa_mulck(pd2, pd)
+    let s3 : i64 = aa_mulck(b3, pn3)
+    let s2 : i64 = aa_mulck(b2, aa_mulck(pn2, pd))
+    let s1 : i64 = aa_mulck(b1, aa_mulck(pn, pd2))
+    let s0 : i64 = aa_mulck(b0 - cval, pd3)
+    let n  : i64 = ((s3 + s2) + s1) + s0
+    if n > 0i64 { return 1i32 }
+    if n < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* the EXACT discriminant of the cubic b3 t^3 + b2 t^2 + b1 t + b0 (a=b3,b=b2,c=b1,d=b0):
+ *   D = 18 a b c d - 4 b^3 d + b^2 c^2 - 4 a c^3 - 27 a^2 d^2.
+ * D > 0  <=> three distinct REAL roots (the casus irreducibilis -- Cardano needs the cube root of a complex number).
+ * D < 0  <=> one real root + a complex-conjugate pair.   D == 0 <=> a multiple (repeated) real root.
+ * Integer-exact; overflow LATCHES AA_OVF. */
+fn ui_cubic_disc(b0: i64, b1: i64, b2: i64, b3: i64) -> i64 @export {
+    let t1  : i64 = aa_mulck(aa_mulck(18i64, aa_mulck(b3, b2)), aa_mulck(b1, b0))   /* 18 a b c d */
+    let b3c : i64 = aa_mulck(aa_mulck(b2, b2), b2)                                   /* b^3 */
+    let t2  : i64 = aa_mulck(0i64 - 4i64, aa_mulck(b3c, b0))                         /* -4 b^3 d */
+    let t3  : i64 = aa_mulck(aa_mulck(b2, b2), aa_mulck(b1, b1))                     /* b^2 c^2 */
+    let c3  : i64 = aa_mulck(aa_mulck(b1, b1), b1)                                   /* c^3 */
+    let t4  : i64 = aa_mulck(0i64 - 4i64, aa_mulck(b3, c3))                          /* -4 a c^3 */
+    let t5  : i64 = aa_mulck(0i64 - 27i64, aa_mulck(aa_mulck(b3, b3), aa_mulck(b0, b0)))  /* -27 a^2 d^2 */
+    return (((t1 + t2) + t3) + t4) + t5
+}
+
+/* a SUFFICIENT x-monotonicity certificate: monotone control x's (x0<=x1<=x2<=x3 OR x0>=x1>=x2>=x3) make Bx(t)
+ * monotone on [0,1] -- because Bx'(t) is a non-negative (resp non-positive) Bernstein combination of the control
+ * differences.  Exact and trivial; this is the standard form a font/SVG segment is split into.  1 iff x-monotone. */
+fn ui_cubic_ctrl_xmono(x0: i64, x1: i64, x2: i64, x3: i64) -> u32 @export {
+    if x1 >= x0 { if x2 >= x1 { if x3 >= x2 { return 1u32 } } }   /* non-decreasing */
+    if x1 <= x0 { if x2 <= x1 { if x3 <= x2 { return 1u32 } } }   /* non-increasing */
+    return 0u32
+}
+
+/* bracket the unique crossing Bx(t)=cval of the LAST cubic (CUB_BX, assumed x-monotone on [0,1]) into a rational
+ * interval [CB_LO_N/CB_LO_D, CB_HI_N/CB_HI_D] of width 1/2^k, by proven-sign bisection (ui_cubic_sign_at).  Returns
+ * 1 iff a crossing exists in [0,1] (the endpoints straddle cval); 0 if Bx never reaches cval there.  An EXACT
+ * rational root collapses the interval to a point. */
+var CB_LO_N : i64 = 0i64   var CB_LO_D : i64 = 1i64   var CB_HI_N : i64 = 1i64   var CB_HI_D : i64 = 1i64
+fn ui_cubic_xcross_bracket(cval: i64, k: u32) -> u32 @export {
+    let bb0 : i64 = CUB_BX[0u64]   let bb1 : i64 = CUB_BX[1u64]
+    let bb2 : i64 = CUB_BX[2u64]   let bb3 : i64 = CUB_BX[3u64]
+    let s0 : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, 0i64, 1i64)   /* sign at t=0 */
+    let s1 : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, 1i64, 1i64)   /* sign at t=1 */
+    if s0 == 0i32 { CB_LO_N = 0i64   CB_LO_D = 1i64   CB_HI_N = 0i64   CB_HI_D = 1i64   return 1u32 }
+    if s1 == 0i32 { CB_LO_N = 1i64   CB_LO_D = 1i64   CB_HI_N = 1i64   CB_HI_D = 1i64   return 1u32 }
+    if s0 == s1 { return 0u32 }                       /* no sign change -> no crossing on [0,1] */
+    let mut lo : i64 = 0i64   let mut hi : i64 = 1i64   let mut den : i64 = 1i64
+    let mut i : u32 = 0u32
+    while i < k {
+        let midn : i64 = lo + hi                      /* mid = midn / (2 den) */
+        let midd : i64 = 2i64 * den
+        let sm : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, midn, midd)
+        if sm == 0i32 { CB_LO_N = midn   CB_LO_D = midd   CB_HI_N = midn   CB_HI_D = midd   return 1u32 }
+        if sm == s0 { lo = midn   hi = 2i64 * hi   den = midd }    /* mid is before the root -> go right */
+        else { hi = midn   lo = 2i64 * lo   den = midd }           /* mid is past the root   -> go left  */
+        i = i + 1u32
+    }
+    CB_LO_N = lo   CB_LO_D = den   CB_HI_N = hi   CB_HI_D = den
+    return 1u32
+}
+fn ui_cub_lo_n() -> i64 @export { return CB_LO_N }
+fn ui_cub_lo_d() -> i64 @export { return CB_LO_D }
+fn ui_cub_hi_n() -> i64 @export { return CB_HI_N }
+fn ui_cub_hi_d() -> i64 @export { return CB_HI_D }
+
+/* the exact "below-the-arc" 8-bit alpha at a rational parameter pn/pd: coverage = clamp((py+1) - By(pn/pd), 0, 1),
+ * alpha = round(sa * coverage).  By(pn/pd) = NUM/pd^3 (NUM exact integer), so coverage = CN/pd^3, CN = (py+1)pd^3 - NUM;
+ * the correctly-rounded alpha = floor((2 sa CN + pd^3)/(2 pd^3)).  Overflow LATCHES AA_OVF.  Reads CUB_BY. */
+fn ui_cubic_alpha_at(pn: i64, pd: i64, py: i64, sa: i64) -> i64 @export {
+    let pn2 : i64 = aa_mulck(pn, pn)   let pn3 : i64 = aa_mulck(pn2, pn)
+    let pd2 : i64 = aa_mulck(pd, pd)   let pd3 : i64 = aa_mulck(pd2, pd)
+    let num : i64 = (((aa_mulck(CUB_BY[3u64], pn3) + aa_mulck(CUB_BY[2u64], aa_mulck(pn2, pd))) + aa_mulck(CUB_BY[1u64], aa_mulck(pn, pd2))) + aa_mulck(CUB_BY[0u64], pd3))
+    let cn  : i64 = aa_mulck(py + 1i64, pd3) - num     /* CN = (py+1) pd^3 - NUM ; coverage = CN/pd^3 */
+    if cn <= 0i64 { return 0i64 }                      /* arc at/below the pixel top -> fully above region -> empty */
+    if cn >= pd3 { return sa }                         /* arc at/above the pixel bottom -> fully below -> full */
+    let numr : i64 = aa_mulck(2i64, aa_mulck(sa, cn)) + pd3
+    let denr : i64 = aa_mulck(2i64, pd3)
+    return numr / denr                                 /* round(sa * CN/pd^3), proven exact */
+}
+
+/* THE EXACT CUBIC COVERAGE: the correctly-rounded 8-bit alpha of pixel (px,py) under the region BELOW the LAST
+ * x-monotone cubic arc (CUB_BX/CUB_BY).  Brackets the crossing t* of Bx=px to depth k, then evaluates the alpha at
+ * BOTH rational bounds; for an arc whose By is monotone across that bracket the true alpha is between them, so when
+ * the two bounds AGREE the alpha is PROVEN correct.  Returns that alpha, or -1 if (no crossing) OR (overflow) OR
+ * (the bracket has not pinned a single bucket at depth k -- the honest refusal: deepen k, never a wrong pixel). */
+fn ui_cubic_valpha(px: i64, py: i64, sa: i64, k: u32) -> i64 @export {
+    if ui_cubic_xcross_bracket(px, k) != 1u32 { return 0i64 - 1i64 }   /* arc does not cross this column */
+    let alo : i64 = ui_cubic_alpha_at(CB_LO_N, CB_LO_D, py, sa)
+    let ahi : i64 = ui_cubic_alpha_at(CB_HI_N, CB_HI_D, py, sa)
+    if AA_OVF == 1u32 { return 0i64 - 1i64 }                           /* i64 range exceeded -> refuse */
+    if alo == ahi { return alo }                                      /* both bounds pin the same bucket -> exact */
+    return 0i64 - 1i64                                                /* not pinned at depth k -> refuse (deepen) */
 }

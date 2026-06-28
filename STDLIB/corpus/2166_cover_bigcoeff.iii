@@ -1,0 +1,93 @@
+/* 2166_cover_bigcoeff.iii -- THE BIGINT-COEFFICIENT coverage tier (ui_exact_bigcov + ui_exact_bigsign): proven exact
+ * and faithful to the i64 sym engine, with the ROUNDING cap removed.
+ *
+ * The i64 sym engine rounds the degree-4 coverage with ui_alpha_bi / ui_sign_bi, whose double-square overflows i64 and
+ * makes ui_arc_cover2d_sym_big REFUSE (-1) above coord ~480.  This tier recomputes the IDENTICAL coverage with the area
+ * numerator + bracket + combine in arbitrary-precision bigint, and -- the fix this KAT pins -- rounds via ui_bigsign2,
+ * the EXACT 2-surd squaring sign (the bigint port of the proven ui_sign_bi: no separation bound, no isqrt, robust at
+ * the near-cancellation rounding boundary where ui_sqrt_sum_sign_big's N-surd separation bound false-zeros at scale).
+ *
+ *  LEG A -- FAITHFULNESS, small coords, EXACT, ALL pixel classes.  bc == the 2162-proven i64 ui_arc_cover2d_sym_big on
+ *    ax(0,8,4) ay(0,2,6), every pixel; identical value + round.  Any algebra/sign error in the bigint port shows.
+ *  LEG B -- FAITHFULNESS at coord 960 + ROUNDING-CAP REMOVED.  On ax(0,960,480) ay(0,240,720): wherever the i64 sym
+ *    still WORKS it is exact, so bc must equal it bit-for-bit (all classes); wherever the i64 sym REFUSES (-1, its i64
+ *    COMBINE overflowed) bc returns a defined coverage -- the cap-removal -- and never refuses.  sawcap asserts it bit.
+ *  LEG C -- TRUE RENDER SCALE (coord ~2000), now PROVEN: the bigint-SELECTION landing (ui_tcmp i64->128 escalation, see
+ *    ui_exact.iii) made the crossing order exact to ~coord 43000, so bc is exact at glyph EM.  Column rx=408 on
+ *    ax(0,2000,200) ay(0,200,2000): bc is cap-free, MONOTONE non-increasing in py, spans full(SA)->AA->empty(0), and the
+ *    i64 sym genuinely refuses here.  (The earlier OPEN-FRONT -- ui_sym_sel mis-kinding fully-below pixels at render
+ *    scale -- is now CLOSED by that escalation, scoped to ui_tcmp so cover2d/2102/2160 are untouched.)
+ * 99 = exact-faithful (A small + B coord-960 all classes) AND cap-free/monotone/complete at TRUE render scale (C). */
+module corpus_2166_cover_bigcoeff
+
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_bigc_full(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_bigcov.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_sym.iii"
+
+const SA : i64 = 255i64
+
+fn main() -> u64 {
+    /* ===== LEG A: faithfulness, small, exact, all classes ===== */
+    let mut px : i64 = 0i64
+    while px < 6i64 {
+        let mut py : i64 = 0i64
+        while py < 6i64 {
+            let big : i64 = ui_arc_cover2d_sym_bigc_full(0i64, 8i64, 4i64, 0i64, 2i64, 6i64, px, py, SA)
+            let i64v : i64 = ui_arc_cover2d_sym_big(0i64, 8i64, 4i64, 0i64, 2i64, 6i64, px, py, SA)
+            if big != i64v { return (10i64 + (px*6i64) + py) as u64 }
+            py = py + 1i64
+        }
+        px = px + 1i64
+    }
+
+    /* ===== LEG B: coord 960 (S=120) -- exact faithfulness where the i64 sym works + cap removed where it refuses.
+     * After the ui_tcmp i64->128 escalation (the bigint-selection landing) the crossing SELECTION is exact to ~coord
+     * 43000, so the i64 sym now WORKS at coord 480; its refuse onset moved up to ~coord 960 where the i64 coverage
+     * COMBINE (the an/bn/cn assembly) overflows.  bc, on the bigint combine + the now-exact selection, computes there
+     * exactly -- the cap removed -- and matches sym wherever sym still works (all pixel classes, render scale). ===== */
+    let mut sawcap : u32 = 0u32
+    let mut qx : i64 = 0i64
+    while qx < 1440i64 {
+        let mut qy : i64 = 0i64
+        while qy < 960i64 {
+            let bc : i64 = ui_arc_cover2d_sym_bigc_full(0i64, 960i64, 480i64, 0i64, 240i64, 720i64, qx, qy, SA)
+            if bc > SA { return 50u64 }
+            if bc < 0i64 - 2i64 { return 51u64 }
+            if bc == 0i64 - 1i64 { return 52u64 }                              /* the bigint tier must NEVER refuse */
+            let sb : i64 = ui_arc_cover2d_sym_big(0i64, 960i64, 480i64, 0i64, 240i64, 720i64, qx, qy, SA)
+            if sb >= 0i64 { if sb <= SA { if bc != sb { return 60u64 } } }     /* sym works (exact selection) -> EXACT match */
+            if sb == 0i64 - 1i64 { sawcap = 1u32 }                            /* sym's i64 combine overflowed; bc carried on */
+            qy = qy + 8i64
+        }
+        qx = qx + 8i64
+    }
+    if sawcap == 0u32 { return 70u64 }                                        /* the rounding cap must actually bite */
+
+    /* ===== LEG C: TRUE RENDER SCALE (coord ~2000) -- now the SELECTION is exact (ui_tcmp i64->128), bc is exact at glyph
+     * EM.  Column rx=408 on ax(0,2000,200) ay(0,200,2000) (arc-y(408)=120): bc is cap-free, MONOTONE non-increasing in py,
+     * spans full(SA)->AA->empty(0), and the i64 sym REFUSES here (its combine overflows) -- cap genuinely exercised. ===== */
+    let mut sawC : u32 = 0u32   let mut sawFull : u32 = 0u32   let mut sawEmpty : u32 = 0u32   let mut sawAA : u32 = 0u32
+    let mut prev : i64 = SA + 1i64
+    let mut ry : i64 = 80i64
+    while ry < 156i64 {
+        let bc : i64 = ui_arc_cover2d_sym_bigc_full(0i64, 2000i64, 200i64, 0i64, 200i64, 2000i64, 408i64, ry, SA)
+        if bc > SA { return 80u64 }
+        if bc == 0i64 - 1i64 { return 82u64 }                                 /* MUST never refuse at render scale */
+        if bc < 0i64 - 2i64 { return 81u64 }
+        if bc >= 0i64 {
+            if bc > prev { return 92u64 }                                     /* coverage monotone non-increasing in py */
+            prev = bc
+            if bc == SA { sawFull = 1u32 }
+            if bc == 0i64 { sawEmpty = 1u32 }
+            if bc > 0i64 { if bc < SA { sawAA = 1u32 } }
+            let sb : i64 = ui_arc_cover2d_sym_big(0i64, 2000i64, 200i64, 0i64, 200i64, 2000i64, 408i64, ry, SA)
+            if sb == 0i64 - 1i64 { sawC = 1u32 }                              /* i64 sym refuses here -> cap exercised */
+        }
+        ry = ry + 1i64
+    }
+    if sawFull == 0u32 { return 93u64 }                                       /* column spans full coverage (below arc) */
+    if sawEmpty == 0u32 { return 94u64 }                                      /* ... down to empty (above arc) */
+    if sawAA == 0u32 { return 95u64 }                                         /* through an AA transition */
+    if sawC == 0u32 { return 96u64 }                                          /* the i64 cap genuinely fires at render scale */
+
+    return 99u64
+}

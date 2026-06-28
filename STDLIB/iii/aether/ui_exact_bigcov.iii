@@ -1,0 +1,292 @@
+/* STDLIB/iii/aether/ui_exact_bigcov.iii -- THE RENDER-SCALE BIGINT-COEFFICIENT coverage tier.
+ *
+ * ui_exact's i64 sym engine computes the steep/corner per-x-clamp coverage exactly within i64, but its degree-4
+ * coefficients (the hi*lo bracket combine ~ coord^16) OVERFLOW i64 above coord ~128 -- so ui_arc_cover2d_sym_big
+ * REFUSES there (the never-silently-wrong guard).  This tier removes that cap WITH NO CONCESSION: it reads ui_exact's
+ * i64 (overflow-free) crossing SELECTION (SEL_*) + the RAW per-crossing area/coord numerators, recomputes the bracket
+ * + combine coefficients in ARBITRARY-PRECISION BIGINT (the crossing inputs fit i64 to ~coord 4e4; only their PRODUCTS
+ * overflow), and rounds via the N-surd ui_sqrt_sum_sign_big.  Exact at ANY glyph coordinate; degree-4 handled (a
+ * 3-surd sum, never refused); and it is the LIVE consumer of ui_sqrt_sum_sign_big (de-islands Increment 3).
+ *
+ * coverage = (an + bn sqrt SEL_HID + cn sqrt SEL_LOD)/den, an/bn/cn/den computed as signed bigints from:
+ *   bracket(crossing) = side*(G(t) - py*x(t)), G=(AREA_PR + B*AREA_QR sqrt D)/(6 c^4), x=(CO_P + B*CO_Q sqrt D)/c^2;
+ *   combine: an = hN*lD*ratd + lN*hD*ratd + ratN*hD*lD ; bn = hQ*lD*ratd ; cn = lQ*hD*ratd ; den = hD*lD*ratd (>0).
+ * Dependency tier: ui_exact_bigcov -> { ui_exact (i64 selection + raw numerators), bigint/arena, sqrt_sum_sign }. */
+module ui_exact_bigcov
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena_id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena_id: u64, src_id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_selk() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_an() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_loa() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_lob() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_loc() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_lod() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_hia() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_hib() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_hic() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_hid() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_pyhv() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_pylv() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_ratn() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sel_ratd() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_pr() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_qr() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_co_p() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_co_q() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_bn() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_cn() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_dhi() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_dlo() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bez_area_at_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a: i64, c: i64, dD: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_copq(c0: i64, c1: i64, c2: i64, a: i64, c: i64, dD: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn ui_bigsign2(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, dhi: i64, cnsg: i64, cnm: u64, dlo: i64) -> i32 from "ui_exact_bigsign.iii"
+
+fn iabs64(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn isign64(x: i64) -> i64 { if x > 0i64 { return 1i64 }   if x < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+
+/* signed-bigint combine: result magnitude = | asg*am + bsg*bm |, result sign -> SB_SG. */
+var SB_SG : i64
+fn sb_comb(ar: u64, asg: i64, am: u64, bsg: i64, bm: u64) -> u64 {
+    if asg == 0i64 { SB_SG = bsg   return bm }
+    if bsg == 0i64 { SB_SG = asg   return am }
+    if asg == bsg { SB_SG = asg   return bigint_add(ar, am, bm) }
+    let c : i32 = bigint_cmp(am, bm)
+    if c == 0i32 { SB_SG = 0i64   return bigint_from_u64(ar, 0u64) }
+    if c > 0i32 { SB_SG = asg   return bigint_sub(ar, am, bm) }
+    SB_SG = bsg   return bigint_sub(ar, bm, am)
+}
+
+/* one bracket: side*(G - py*x) over the common denom 6 c^6 (= BRDEN_M).  G=(pp + b*qq sqrt D)/(6 c^4) with pp,qq the
+ * BIGINT area numerator (from bigarea -- the i64 AREA_PR is degree-6 and OVERFLOWS at glyph scale); x=(xp + b*xq0 sqrt
+ * D)/c^2 with xp,xq0 the i64 x numerator (CO_P/CO_Q, degree-3, exact wherever the SEL_* selection is valid <= coord 4e4).
+ * Runs in its OWN sub-arena and copies only the 3 result magnitudes back to `ar`, so the GLOBAL 64-slot bigint handle
+ * table never fills.  Writes rational part (BRN_SG,BRN_M) + sqrt-D part (BRQ_SG,BRQ_M) + the denom BRDEN_M. */
+var BRN_SG : i64   var BRN_M : u64   var BRQ_SG : i64   var BRQ_M : u64   var BRDEN_M : u64
+fn bigbracket(ar: u64, ppsg: i64, ppm: u64, qqsg: i64, qqm: u64, xp: i64, xq0: i64, c: i64, b: i64, py: i64, side: i64) -> i32 {
+    let sb : u64 = arena_new(2097152u64)
+    let cab : u64 = bigint_from_u64(sb, iabs64(c))
+    let xden : u64 = bigint_mul(sb, cab, cab)                                                  /* c^2 (>0) */
+    let gden : u64 = bigint_mul(sb, bigint_mul(sb, xden, xden), bigint_from_u64(sb, 6u64))     /* 6 c^4 (>0) */
+    /* rational part: pp*xden - py*xp*gden  (pp bigint in `ar`, read cross-arena) */
+    let a1m : u64 = bigint_mul(sb, ppm, xden)
+    let b1m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(py)), bigint_from_u64(sb, iabs64(xp))), gden)
+    let nm : u64 = sb_comb(sb, ppsg, a1m, 0i64 - (isign64(py) * isign64(xp)), b1m)
+    let ns : i64 = SB_SG
+    /* sqrt-D part: b*(qq*xden - py*xq0*gden) */
+    let a2m : u64 = bigint_mul(sb, qqm, xden)
+    let b2m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(py)), bigint_from_u64(sb, iabs64(xq0))), gden)
+    let qm : u64 = sb_comb(sb, qqsg, a2m, 0i64 - (isign64(py) * isign64(xq0)), b2m)
+    let qs : i64 = SB_SG * isign64(b)
+    let sd : i64 = isign64(side)
+    BRN_SG = ns * sd   BRN_M = bigint_copy(ar, nm)
+    BRQ_SG = qs * sd   BRQ_M = bigint_copy(ar, qm)
+    BRDEN_M = bigint_copy(ar, bigint_mul(sb, gden, xden))                                      /* 6 c^6 (>0) */
+    bigint_drop_arena(sb)   arena_drop(sb)
+    return 0i32
+}
+
+/* round: largest k in [0,sa] with sign(2 sa (an + bn sqrt dhi + cn sqrt dlo) - (2k-1) den) >= 0 (den>0), via the
+ * bigint N-surd sign.  Each term is sgn[i]*|mag[i]|*sqrt(b[i]); term 0 carries the k-dependent rational part. */
+var MAG : [u64; 3]   var SGN : [i64; 3]   var BB : [i64; 3]
+fn biground(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, cnsg: i64, cnm: u64, denm: u64, dhi: i64, dlo: i64, sa: i64) -> i64 {
+    let two_sa : u64 = bigint_from_u64(ar, (2i64 * sa) as u64)
+    let san : u64 = bigint_mul(ar, anm, two_sa)
+    let sbn : u64 = bigint_mul(ar, bnm, two_sa)
+    let scn : u64 = bigint_mul(ar, cnm, two_sa)
+    let mut lo : i64 = 0i64
+    let mut hi : i64 = sa
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        let k2 : i64 = (2i64 * mid) - 1i64
+        /* per-iteration sub-arena: kabs/kden/m0 + sb_comb internals all reclaimed by one drop, so the GLOBAL 64-slot
+         * bigint handle table never fills across the search (san/sbn/scn/denm live in the parent `ar`). */
+        let sub : u64 = arena_new(1048576u64)
+        let kden : u64 = bigint_mul(sub, denm, bigint_from_u64(sub, iabs64(k2)))
+        let m0 : u64 = sb_comb(sub, ansg, san, 0i64 - isign64(k2), kden)
+        /* EXACT 2-surd sign (squaring reduction) -- replaces ui_sqrt_sum_sign_big, whose N-surd separation bound
+         * false-zeros near-cancellations at render-scale magnitudes (the rounding boundary is exactly such a tie). */
+        let s : i32 = ui_bigsign2(sub, SB_SG, m0, bnsg, sbn, dhi, cnsg, scn, dlo)
+        bigint_drop_arena(sub)
+        arena_drop(sub)
+        if s >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* DEBUG: round the i64-magnitude coeffs (an + bn sqrt dhi + cn sqrt dlo)/den via biground -- to bisect biground
+ * against the proven ui_sym_round on identical coefficients. */
+fn ui_bigc_round_i64dbg(an: i64, bn: i64, cn: i64, den: i64, dhi: i64, dlo: i64, sa: i64) -> i64 @export {
+    let ar : u64 = arena_new(1048576u64)
+    let r : i64 = biground(ar, isign64(an), bigint_from_u64(ar, iabs64(an)), isign64(bn), bigint_from_u64(ar, iabs64(bn)), isign64(cn), bigint_from_u64(ar, iabs64(cn)), bigint_from_u64(ar, iabs64(den)), dhi, dlo, sa)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return r
+}
+
+/* The RAW area-at-crossing numerator pp,qq (G(t)=(pp + b qq sqrt D)/(6 c^4)) computed in BIGINT from the i64 control
+ * points + crossing (a,c,dD).  ui_exact's i64 ui_bez_area_at_t builds pp = g1 c^3 a + g2 c^2 (a^2+D) + ... ~ coord^6,
+ * which OVERFLOWS i64 at coord ~1480 (glyph EM 2048 is past it) -> AREA_PR is silently garbage at glyph scale.  Every
+ * factor (g1..g4 deg-2, c2/c3 deg<=3, p2..p4, a) still fits i64; ONLY the triple products overflow, so we lift just
+ * those to bigint.  Faithful port of ui_exact.iii:ui_bez_area_at_t (lines 537-548).  Runs in its OWN sub-arena and
+ * copies pp,qq to `ar` (sign in i64 globals).  Writes BAR_P (signed pp), BAR_Q (signed qq). */
+var BAR_PSG : i64   var BAR_PM : u64   var BAR_QSG : i64   var BAR_QM : u64
+fn bigarea(ar: u64, ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a_i: i64, c_i: i64, dD_i: i64) -> i32 {
+    let sb : u64 = arena_new(2097152u64)
+    let g1 : i64 = 6i64 * (ay0 * ax1)
+    let g2 : i64 = 3i64 * (((2i64 * ay0) * ax2) + (ay1 * ax1))
+    let g3 : i64 = 2i64 * (((2i64 * ay1) * ax2) + (ay2 * ax1))
+    let g4 : i64 = 3i64 * (ay2 * ax2)
+    let asg : i64 = isign64(a_i)   let csg : i64 = isign64(c_i)
+    let A : u64 = bigint_from_u64(sb, iabs64(a_i))
+    let C : u64 = bigint_from_u64(sb, iabs64(c_i))
+    let D : u64 = bigint_from_u64(sb, iabs64(dD_i))                          /* dD >= 0 */
+    let C2 : u64 = bigint_mul(sb, C, C)                                      /* c^2 (+) */
+    let C3 : u64 = bigint_mul(sb, C2, C)                                     /* |c|^3, sign csg */
+    let A2 : u64 = bigint_mul(sb, A, A)                                      /* a^2 (+) */
+    let three : u64 = bigint_from_u64(sb, 3u64)
+    let A2pD : u64 = bigint_add(sb, A2, D)                                   /* a^2 + D   (p2) */
+    let A2p3D : u64 = bigint_add(sb, A2, bigint_mul(sb, three, D))           /* a^2 + 3D */
+    let P3m : u64 = bigint_mul(sb, A, A2p3D)                                 /* |a|(a^2+3D), sign asg */
+    let P4m : u64 = bigint_add(sb, bigint_add(sb, bigint_mul(sb, A2, A2), bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, 6u64), A2), D)), bigint_mul(sb, D, D))  /* a^4+6a^2 D+D^2 (+) */
+    let Q3m : u64 = bigint_add(sb, bigint_mul(sb, three, A2), D)             /* 3a^2 + D (+) */
+    let Q4m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, 4u64), A), A2pD)   /* 4|a|(a^2+D), sign asg */
+    let Q2m : u64 = bigint_mul(sb, bigint_from_u64(sb, 2u64), A)             /* 2|a|, sign asg */
+    /* pp = g1 c^3 a + g2 c^2 (a^2+D) + g3 c |a|(a^2+3D) + g4 p4 */
+    let t1m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(g1)), C3), A)
+    let t1s : i64 = (isign64(g1) * csg) * asg
+    let t2m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(g2)), C2), A2pD)
+    let t2s : i64 = isign64(g2)
+    let t3m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(g3)), C), P3m)
+    let t3s : i64 = (isign64(g3) * csg) * asg
+    let t4m : u64 = bigint_mul(sb, bigint_from_u64(sb, iabs64(g4)), P4m)
+    let t4s : i64 = isign64(g4)
+    let s12 : u64 = sb_comb(sb, t1s, t1m, t2s, t2m)   let s12s : i64 = SB_SG
+    let s123 : u64 = sb_comb(sb, s12s, s12, t3s, t3m)   let s123s : i64 = SB_SG
+    let ppm : u64 = sb_comb(sb, s123s, s123, t4s, t4m)   let pps : i64 = SB_SG
+    /* qq = g1 c^3 + g2 c^2 (2a) + g3 c (3a^2+D) + g4 q4 */
+    let r1m : u64 = bigint_mul(sb, bigint_from_u64(sb, iabs64(g1)), C3)
+    let r1s : i64 = isign64(g1) * csg
+    let r2m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(g2)), C2), Q2m)
+    let r2s : i64 = isign64(g2) * asg
+    let r3m : u64 = bigint_mul(sb, bigint_mul(sb, bigint_from_u64(sb, iabs64(g3)), C), Q3m)
+    let r3s : i64 = isign64(g3) * csg
+    let r4m : u64 = bigint_mul(sb, bigint_from_u64(sb, iabs64(g4)), Q4m)
+    let r4s : i64 = isign64(g4) * asg
+    let w12 : u64 = sb_comb(sb, r1s, r1m, r2s, r2m)   let w12s : i64 = SB_SG
+    let w123 : u64 = sb_comb(sb, w12s, w12, r3s, r3m)   let w123s : i64 = SB_SG
+    let qqm : u64 = sb_comb(sb, w123s, w123, r4s, r4m)   let qqs : i64 = SB_SG
+    BAR_PSG = pps   BAR_PM = bigint_copy(ar, ppm)
+    BAR_QSG = qqs   BAR_QM = bigint_copy(ar, qqm)
+    bigint_drop_arena(sb)   arena_drop(sb)
+    return 0i32
+}
+
+/* assembled coverage coefficients (an + bn sqrt BC_DHI + cn sqrt BC_DLO)/den, as signed bigints in `ar`. */
+var BC_ANS : i64   var BC_ANM : u64   var BC_BNS : i64   var BC_BNM : u64
+var BC_CNS : i64   var BC_CNM : u64   var BC_DENM : u64  var BC_DHI : i64   var BC_DLO : i64
+fn bigc_assemble(ar: u64, ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64) -> i32 {
+    let ratd : i64 = ui_sel_ratd()   let ratn : i64 = ui_sel_ratn()
+    let ratdb : u64 = bigint_from_u64(ar, iabs64(ratd))                          /* ratd > 0 */
+    /* HI bracket -- area numerator pp,qq in BIGINT (i64 AREA_PR overflows ~coord 1480); x numerator CO_P/Q i64 (exact). */
+    bigarea(ar, ax0, ax1, ax2, ay0, ay1, ay2, ui_sel_hia(), ui_sel_hic(), ui_sel_hid())
+    let bphs : i64 = BAR_PSG   let bphm : u64 = BAR_PM   let bqhs : i64 = BAR_QSG   let bqhm : u64 = BAR_QM
+    ui_copq(ax0, ax1, ax2, ui_sel_hia(), ui_sel_hic(), ui_sel_hid())
+    bigbracket(ar, bphs, bphm, bqhs, bqhm, ui_co_p(), ui_co_q(), ui_sel_hic(), ui_sel_hib(), ui_sel_pyhv(), 1i64)
+    let hNs : i64 = BRN_SG   let hNm : u64 = BRN_M   let hQs : i64 = BRQ_SG   let hQm : u64 = BRQ_M   let hD : u64 = BRDEN_M
+    BC_DHI = ui_sel_hid()
+    bigint_drop(bphm)   bigint_drop(bqhm)                                        /* HI area numerators consumed -> free slots */
+    /* LO bracket */
+    bigarea(ar, ax0, ax1, ax2, ay0, ay1, ay2, ui_sel_loa(), ui_sel_loc(), ui_sel_lod())
+    let bpls : i64 = BAR_PSG   let bplm : u64 = BAR_PM   let bqls : i64 = BAR_QSG   let bqlm : u64 = BAR_QM
+    ui_copq(ax0, ax1, ax2, ui_sel_loa(), ui_sel_loc(), ui_sel_lod())
+    bigbracket(ar, bpls, bplm, bqls, bqlm, ui_co_p(), ui_co_q(), ui_sel_loc(), ui_sel_lob(), ui_sel_pylv(), 0i64 - 1i64)
+    let lNs : i64 = BRN_SG   let lNm : u64 = BRN_M   let lQs : i64 = BRQ_SG   let lQm : u64 = BRQ_M   let lD : u64 = BRDEN_M
+    BC_DLO = ui_sel_lod()
+    bigint_drop(bplm)   bigint_drop(bqlm)
+    /* combine */
+    BC_DENM = bigint_mul(ar, bigint_mul(ar, hD, lD), ratdb)
+    let t1m : u64 = bigint_mul(ar, bigint_mul(ar, hNm, lD), ratdb)
+    let t2m : u64 = bigint_mul(ar, bigint_mul(ar, lNm, hD), ratdb)
+    let t3m : u64 = bigint_mul(ar, bigint_mul(ar, bigint_from_u64(ar, iabs64(ratn)), hD), lD)
+    let s12 : u64 = sb_comb(ar, hNs, t1m, lNs, t2m)
+    BC_ANM = sb_comb(ar, SB_SG, s12, isign64(ratn), t3m)
+    BC_ANS = SB_SG
+    BC_BNS = hQs   BC_BNM = bigint_mul(ar, bigint_mul(ar, hQm, lD), ratdb)
+    BC_CNS = lQs   BC_CNM = bigint_mul(ar, bigint_mul(ar, lQm, hD), ratdb)
+    return 0i32
+}
+
+/* kind-0 (assembled) coverage in bigint: assemble the coeffs in a SUB-arena (the bracket+combine burns ~35 transient
+ * handles), COPY the 4 surviving coeffs into the parent `ar`, then DROP the sub-arena -- so the search runs with ~8
+ * live handles, never approaching the global 64-slot ceiling. */
+fn bigc_kind0(ar: u64, ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, sa: i64) -> i64 {
+    let sub : u64 = arena_new(8388608u64)
+    bigc_assemble(sub, ax0, ax1, ax2, ay0, ay1, ay2)
+    let anm : u64 = bigint_copy(ar, BC_ANM)   let bnm : u64 = bigint_copy(ar, BC_BNM)
+    let cnm : u64 = bigint_copy(ar, BC_CNM)   let denm : u64 = bigint_copy(ar, BC_DENM)
+    let ans : i64 = BC_ANS   let bns : i64 = BC_BNS   let cns : i64 = BC_CNS
+    let dhi : i64 = BC_DHI   let dlo : i64 = BC_DLO
+    bigint_drop_arena(sub)
+    arena_drop(sub)
+    return biground(ar, ans, anm, bns, bnm, cns, cnm, denm, dhi, dlo, sa)
+}
+
+/* DEBUG: bit-compare the assembled bigint coeffs against the proven i64 SYM_* (cross-multiply, since the dens differ).
+ * returns a bitmask: 1=an 2=bn 4=cn 16=dhi 32=dlo  (0 = all coeffs equal as rationals over their denominators). */
+fn ui_bigc_check_coeffs(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    let dum : i64 = ui_arc_cover2d_sym_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, 1i64, 1i64)
+    if ui_sym_selk() != 0u32 { return 500i64 + (ui_sym_selk() as i64) }
+    let ar : u64 = arena_new(8388608u64)
+    bigc_assemble(ar, ax0, ax1, ax2, ay0, ay1, ay2)
+    let sden : u64 = bigint_from_u64(ar, iabs64(ui_sym_den()))
+    let mut mask : i64 = 0i64
+    if BC_ANS != isign64(ui_sym_an()) { mask = mask + 1i64 } else {
+        if bigint_cmp(bigint_mul(ar, BC_ANM, sden), bigint_mul(ar, bigint_from_u64(ar, iabs64(ui_sym_an())), BC_DENM)) != 0i32 { mask = mask + 1i64 } }
+    if BC_DHI != ui_sym_dhi() { mask = mask + 16i64 }
+    if BC_BNS != isign64(ui_sym_bn()) { mask = mask + 2i64 } else {
+        if bigint_cmp(bigint_mul(ar, BC_BNM, sden), bigint_mul(ar, bigint_from_u64(ar, iabs64(ui_sym_bn())), BC_DENM)) != 0i32 { mask = mask + 2i64 } }
+    if BC_DLO != ui_sym_dlo() { mask = mask + 32i64 }
+    if BC_CNS != isign64(ui_sym_cn()) { mask = mask + 4i64 } else {
+        if bigint_cmp(bigint_mul(ar, BC_CNM, sden), bigint_mul(ar, bigint_from_u64(ar, iabs64(ui_sym_cn())), BC_DENM)) != 0i32 { mask = mask + 4i64 } }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return mask
+}
+
+/* per-column exact coverage over the parameter sub-range [t0,t1], at ANY coordinate (bigint coefficients). */
+fn ui_arc_cover2d_sym_bigc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 @export {
+    let dummy : i64 = ui_arc_cover2d_sym_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, t0n, t0d, t1n, t1d)
+    let sk : u32 = ui_sym_selk()
+    if sk == 3u32 { return 0i64 - 2i64 }
+    if sk == 2u32 { return 0i64 }
+    let ar : u64 = arena_new(8388608u64)
+    let mut result : i64 = 0i64
+    if sk == 5u32 {
+        let an : i64 = ui_sym_an()   let den : i64 = ui_sym_den()
+        let z1 : u64 = bigint_from_u64(ar, 0u64)   let z2 : u64 = bigint_from_u64(ar, 0u64)
+        result = biground(ar, isign64(an), bigint_from_u64(ar, iabs64(an)), 0i64, z1, 0i64, z2, bigint_from_u64(ar, iabs64(den)), 1i64, 1i64, sa)
+    } else {
+        result = bigc_kind0(ar, ax0, ax1, ax2, ay0, ay1, ay2, sa)
+    }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return result
+}
+
+/* full single-arc [0,1] entry -- gentle/steep/corner, exact at ANY coordinate (the cap-free replacement for the
+ * i64-coefficient ui_arc_cover2d_sym_big). */
+fn ui_arc_cover2d_sym_bigc_full(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    return ui_arc_cover2d_sym_bigc(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, 1i64, 1i64)
+}

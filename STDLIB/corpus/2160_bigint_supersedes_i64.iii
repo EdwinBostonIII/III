@@ -1,0 +1,93 @@
+/* STDLIB/corpus/2160_bigint_supersedes_i64.iii -- WHY III's BIGINT JUSTIFIES ITS EXISTENCE (in the exact-geometry
+ * stack): it is a FAITHFUL SUPERSET of the i64 exact-coverage path.  The 2D per-pixel coverage (Green's theorem,
+ * degree-4 bi-quadratic sign) is computed two ways -- ui_arc_cover2d (i64) and ui_arc_cover2d_big (arbitrary-
+ * precision bigint).  The i64 path is FAST but RANGE-LIMITED: its area numerators (~c^4 * coords) overflow i64 on any
+ * non-tiny arc; it DETECTS this and returns -1 (refuses -- it never lies).  The bigint path does the SAME proven
+ * reduction with bigint products, so it is exact at ANY coordinate.  This KAT proves:
+ *
+ *   LEG A (FAITHFUL -- never worse):  wherever the i64 path returns a real value, the bigint path returns the
+ *     BIT-IDENTICAL value.  bigint does not change answers; it only extends range.
+ *   LEG B (SUPERIOR -- strictly more capable):  on an arc where the i64 path REFUSES (-1), the bigint path returns
+ *     the exact, in-range anti-aliased coverage -- ANCHORED independently by ui_arc_valpha (the vertical-coverage AA,
+ *     a DIFFERENT i64 computation that is safe at these coords): cover2d_big measures {y<=y_arc}, valpha the
+ *     complement {y>=y_arc}, so for a near-flat arc the two must sum to sa.  Without bigint this pixel is UNCOMPUTABLE
+ *     by III's exact path.
+ *   TEETH:  the superior pixel reads a STRICT 0 < alpha < sa (genuine AA, not a mask); the i64 path GENUINELY
+ *     refuses (== -1), so leg B is not vacuous.
+ *
+ * 99 = bigint earns its place: identical to the i64 path in range, exact beyond it. */
+module corpus_2160_bigint_supersedes_i64
+
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_arc_valpha(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact.iii"
+
+const SA : i64 = 255i64
+
+fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* the 2102 demo arc P0=(0,0)P1=(1,1)P2=(4,0) [ax 0,2,2 ; ay 0,2,-2] SCALED by s: i64-valid at small s, overflows at
+ * large s.  Powers of two 1..512 sweep THROUGH the i64 area-overflow boundary. */
+fn scale_of(si: i64) -> i64 {
+    if si == 0i64 { return 1i64 }    if si == 1i64 { return 2i64 }    if si == 2i64 { return 4i64 }
+    if si == 3i64 { return 8i64 }    if si == 4i64 { return 16i64 }   if si == 5i64 { return 32i64 }
+    if si == 6i64 { return 64i64 }   if si == 7i64 { return 128i64 }  if si == 8i64 { return 256i64 }
+    return 512i64
+}
+
+fn main() -> u64 {
+    /* LEG A -- FAITHFUL across the OVERFLOW BOUNDARY (the conscience-hardened differential, not a few samples): scale
+     * the demo arc through s=1..512; at the arc's AA pixel for each scale, wherever the i64 path returns a value it
+     * must be BIT-IDENTICAL to bigint.  A silent disagreement = an incomplete i64 overflow guard (the bug class found
+     * in ui_pt_below_arc) -> caught here.  The scan must SPAN the boundary: some scale i64-valid, some i64-refused. */
+    let mut overlap : i64 = 0i64       /* (scale,pixel) cases where i64 returned a value */
+    let mut refused : i64 = 0i64       /* cases where i64 refused (-1) */
+    let mut si : i64 = 0i64
+    while si < 10i64 {
+        let s : i64 = scale_of(si)
+        let ax1 : i64 = 2i64 * s    let ax2 : i64 = 2i64 * s
+        let ay1 : i64 = 2i64 * s    let ay2 : i64 = 0i64 - (2i64 * s)
+        let pym : i64 = (47i64 * s) / 100i64               /* ~y_arc(2s) ~ 0.47s: the arc's AA row at this scale */
+        let mut pk : i64 = 1i64                            /* sweep columns x = 1s, 2s, 3s ... */
+        while pk < 4i64 {
+            let pxx : i64 = pk * s
+            let mut dy : i64 = 0i64 - 1i64                 /* ... and the AA window py = pym-1 .. pym+1 */
+            while dy <= 1i64 {
+                let py0 : i64 = pym + dy
+                if py0 >= 0i64 {
+                    let i64v : i64 = ui_arc_cover2d(0i64, ax1, ax2, 0i64, ay1, ay2, pxx, py0, SA)
+                    if i64v >= 0i64 {
+                        overlap = overlap + 1i64
+                        let bigv : i64 = ui_arc_cover2d_big(0i64, ax1, ax2, 0i64, ay1, ay2, pxx, py0, SA)
+                        if bigv != i64v { return 10u64 }   /* SILENT i64 disagreement -> not a faithful superset */
+                    }
+                    if i64v < 0i64 { refused = refused + 1i64 }
+                }
+                dy = dy + 1i64
+            }
+            pk = pk + 1i64
+        }
+        si = si + 1i64
+    }
+    if overlap < 1i64 { return 11u64 }                     /* must test the overlap (i64-valid) regime */
+    if refused < 1i64 { return 12u64 }                     /* must SPAN the boundary (reach where i64 refuses) */
+
+    /* LEG B -- SUPERIOR: a shallow arc P0=(0,3)P1=(8,2)P2=(20,3) [ax 0,16,4 ; ay 3,-2,2], y_arc in [2.5,3].  The i64
+     * area numerators overflow on THIS arc (ax1=16, 8x the demo) -> i64 REFUSES (-1); bigint is exact. */
+    let sx1 : i64 = 16i64   let sx2 : i64 = 4i64
+    let sy0 : i64 = 3i64    let sy1 : i64 = 0i64 - 2i64    let sy2 : i64 = 2i64
+    let i64s : i64 = ui_arc_cover2d(0i64, sx1, sx2, sy0, sy1, sy2, 9i64, 2i64, SA)
+    if i64s != (0i64 - 1i64) { return 20u64 }              /* the i64 path must GENUINELY refuse (else leg B vacuous) */
+    let bigs : i64 = ui_arc_cover2d_big(0i64, sx1, sx2, sy0, sy1, sy2, 9i64, 2i64, SA)
+    if bigs <= 0i64 { return 21u64 }                       /* bigint gives a real, strictly-positive coverage ... */
+    if bigs >= SA { return 22u64 }                         /* ... strictly below full: a genuine AA pixel (teeth) */
+    /* INDEPENDENT ANCHOR: valpha (vertical AA, a different i64 computation, safe at these small coords) measures the
+     * COMPLEMENT region {y>=y_arc}; for this near-flat arc cover2d_big({y<=y_arc}) + valpha must sum to sa. */
+    let vbelow : i64 = ui_arc_valpha(0i64, sx1, sx2, sy0, sy1, sy2, 9i64, 2i64, SA)
+    if vbelow <= 0i64 { return 23u64 }
+    if vbelow >= SA { return 24u64 }
+    let sum_err : i64 = iabs((bigs + vbelow) - SA)
+    if sum_err > 2i64 { return 25u64 }                     /* bigint corroborated by an independent primitive */
+
+    return 99u64
+}

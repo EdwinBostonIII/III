@@ -14,6 +14,7 @@
 module sqrt_sum_sign
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
@@ -51,35 +52,45 @@ fn bi_bitlen(N: u64) -> u64 {
 fn bigint_isqrt(ar: u64, N: u64) -> u64 @export {
     if bigint_is_zero(N) == 1u8 { return bigint_from_u64(ar, 0u64) }
     let bl : u64 = bi_bitlen(N)
+    /* The base-4 digit loop allocates ~bl/2 intermediates that bigint_drop frees from the HANDLE TABLE but NOT from
+     * the arena (a bump allocator -- bytes are reclaimed only by arena_drop).  Run it in a SUB-ARENA sized to the input
+     * (~bl^2 bytes, generous) and copy only the result back, so the caller's arena does not accumulate ~bl^2 bytes per
+     * isqrt.  That accumulation overflowed ui_sqrt_sum_sign's 16 MB arena at high precision (the n>=6 sqrt-sum-sign
+     * FALSE-ZERO: 7 isqrts at p~2300 bits exhausted the arena -> degenerate handles -> psum==nsum -> wrong 0).  Now
+     * isqrt is memory-frugal for EVERY caller and any precision -- no n ceiling. */
+    let sub : u64 = arena_new((bl * bl) + 16777216u64)
     let k : u64 = (bl - 1u64) / 2u64                                  /* largest k with 4^k <= N */
-    let one : u64 = bigint_from_u64(ar, 1u64)
-    let mut bit : u64 = bigint_shl_bits(ar, one, 2u64 * k)
+    let one : u64 = bigint_from_u64(sub, 1u64)
+    let mut bit : u64 = bigint_shl_bits(sub, one, 2u64 * k)
     bigint_drop(one)
-    let mut res : u64 = bigint_from_u64(ar, 0u64)
-    let mut n : u64 = bigint_copy(ar, N)
+    let mut res : u64 = bigint_from_u64(sub, 0u64)
+    let mut n : u64 = bigint_copy(sub, N)
     while bigint_is_zero(bit) == 0u8 {
-        let rb : u64 = bigint_add(ar, res, bit)
+        let rb : u64 = bigint_add(sub, res, bit)
         let c : i32 = bigint_cmp(n, rb)                              /* capture BEFORE mutating n */
         let mut ge : u8 = 0u8                                        /* n >= rb, via > and == (i32 >= is the ordering trap) */
         if c > 0i32 { ge = 1u8 }
         if c == 0i32 { ge = 1u8 }
         if ge == 1u8 {
-            let nn : u64 = bigint_sub(ar, n, rb)
+            let nn : u64 = bigint_sub(sub, n, rb)
             bigint_drop(n)   n = nn
-            let sr : u64 = bigint_shr_bits(ar, res, 1u64)
-            let nr : u64 = bigint_add(ar, sr, bit)
+            let sr : u64 = bigint_shr_bits(sub, res, 1u64)
+            let nr : u64 = bigint_add(sub, sr, bit)
             bigint_drop(sr)   bigint_drop(res)   res = nr
         }
         if ge == 0u8 {
-            let nr : u64 = bigint_shr_bits(ar, res, 1u64)
+            let nr : u64 = bigint_shr_bits(sub, res, 1u64)
             bigint_drop(res)   res = nr
         }
         bigint_drop(rb)
-        let nb : u64 = bigint_shr_bits(ar, bit, 2u64)
+        let nb : u64 = bigint_shr_bits(sub, bit, 2u64)
         bigint_drop(bit)   bit = nb
     }
     bigint_drop(n)
-    return res
+    let result : u64 = bigint_copy(ar, res)                          /* the only value that escapes the sub-arena */
+    bigint_drop(res)
+    bigint_drop_arena(sub)   arena_drop(sub)
+    return result
 }
 
 fn iabs64(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
@@ -397,5 +408,100 @@ fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
     }
     bigint_drop(psum)   bigint_drop(nsum)   bigint_drop(A)   bigint_drop(one)
     bigint_drop_arena(ar)
+    arena_drop(ar)                                          /* release the region too (was leaked) -- safe under a per-pixel loop */
+    return result
+}
+
+/* sign(sum_{i<n} sgn[i]*|mag[i]|*sqrt(b[i])) with BIGINT coefficient magnitudes -- the render-scale N-surd sign.  Same
+ * separation bound as ui_sqrt_sum_sign, but each |a_i| is a caller-owned bigint HANDLE (mag[i]) with its sign in sgn[i]
+ * (+1/-1/0), so coefficients that overflow i64 (the extremum-column SUM cov_A+cov_B cross-products) are exact.  b[i]>=0
+ * stay i64 (the crossing discriminants fit i64 to ~coord 4e4).  sgn[i]==0 skips the term.  Returns +1/0/-1; certifies
+ * exact zeros.  Caller owns mag[i] (never dropped here).  This is the finisher under ui_arc_cover_full's extremum sum. */
+fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let pmag : *u64 = mag_ptr as *u64
+    let psgn : *i64 = sgn_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let ar : u64 = arena_new(16777216u64)
+    let one : u64 = bigint_from_u64(ar, 1u64)
+
+    /* Phase 1: A = sum|a_i| ; M = sum |a_i|*(floor(sqrt b_i)+1) */
+    let mut A : u64 = bigint_from_u64(ar, 0u64)
+    let mut M : u64 = bigint_from_u64(ar, 0u64)
+    let mut i : u64 = 0u64
+    while i < n {
+        if psgn[i] != 0i64 {
+            let amag : u64 = pmag[i]
+            let nA : u64 = bigint_add(ar, A, amag)
+            bigint_drop(A)   A = nA
+            let bibig : u64 = bigint_from_u64(ar, pb[i] as u64)
+            let si : u64 = bigint_isqrt(ar, bibig)
+            bigint_drop(bibig)
+            let si1 : u64 = bigint_add(ar, si, one)
+            bigint_drop(si)
+            let term : u64 = bigint_mul(ar, amag, si1)
+            bigint_drop(si1)
+            let nM : u64 = bigint_add(ar, M, term)
+            bigint_drop(M)   bigint_drop(term)   M = nM
+        }
+        i = i + 1u64
+    }
+
+    /* Phase 2: T = M^(2^n - 1) */
+    let e : u64 = (1u64 << n) - 1u64
+    let mut T : u64 = bigint_from_u64(ar, 1u64)
+    let mut j : u64 = 0u64
+    while j < e {
+        let nT : u64 = bigint_mul(ar, T, M)
+        bigint_drop(T)   T = nT
+        j = j + 1u64
+    }
+
+    /* Phase 3: p with 2^p > 2*A*T */
+    let AT : u64 = bigint_mul(ar, A, T)
+    let thresh : u64 = bigint_add(ar, AT, AT)
+    bigint_drop(AT)   bigint_drop(T)   bigint_drop(M)
+    let p : u64 = bi_bitlen(thresh) + 1u64
+    bigint_drop(thresh)
+    let twop : u64 = 2u64 * p
+
+    /* Phase 4: psum = sum_{sgn>0} |a_i|*r_i ; nsum = sum_{sgn<0} |a_i|*r_i ; r_i = floor(sqrt(b_i << 2p)) */
+    let mut psum : u64 = bigint_from_u64(ar, 0u64)
+    let mut nsum : u64 = bigint_from_u64(ar, 0u64)
+    i = 0u64
+    while i < n {
+        let sgni : i64 = psgn[i]
+        if sgni != 0i64 {
+            if pb[i] != 0i64 {
+                let bibig : u64 = bigint_from_u64(ar, pb[i] as u64)
+                let bishift : u64 = bigint_shl_bits(ar, bibig, twop)
+                bigint_drop(bibig)
+                let ri : u64 = bigint_isqrt(ar, bishift)
+                bigint_drop(bishift)
+                let term : u64 = bigint_mul(ar, pmag[i], ri)
+                bigint_drop(ri)
+                if sgni > 0i64 { let nP : u64 = bigint_add(ar, psum, term)   bigint_drop(psum)   psum = nP }
+                if sgni < 0i64 { let nN : u64 = bigint_add(ar, nsum, term)   bigint_drop(nsum)   nsum = nN }
+                bigint_drop(term)
+            }
+        }
+        i = i + 1u64
+    }
+
+    /* Phase 5: |psum-nsum| > A -> sign ; else EXACTLY 0 */
+    let cs : i32 = bigint_cmp(psum, nsum)
+    let mut result : i32 = 0i32
+    if cs > 0i32 {
+        let diff : u64 = bigint_sub(ar, psum, nsum)
+        if bigint_cmp(diff, A) > 0i32 { result = 1i32 }
+        bigint_drop(diff)
+    }
+    if cs < 0i32 {
+        let diff : u64 = bigint_sub(ar, nsum, psum)
+        if bigint_cmp(diff, A) > 0i32 { result = 0i32 - 1i32 }
+        bigint_drop(diff)
+    }
+    bigint_drop(psum)   bigint_drop(nsum)   bigint_drop(A)   bigint_drop(one)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
     return result
 }

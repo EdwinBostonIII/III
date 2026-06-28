@@ -1,0 +1,147 @@
+/* STDLIB/iii/aether/ui_exact_sym.iii -- the GENERAL EXACT per-pixel curved coverage at FULL RESOLUTION: the bigint
+ * finisher for ui_exact's i64 sym ASSEMBLER.  This is its own tier (NOT inside ui_exact_big) precisely so that
+ * ui_exact_big stays independent of ui_exact -- the exact-real consumers (sqrt_sum_sign) that use only the bigint sign
+ * (ui_bsign1) / cover2d_big do not drag in the i64 geometry + framebuffer.  Dependency direction: ui_exact_sym ->
+ * { ui_exact (the i64 assembler + coeff accessors), ui_exact_big (the bigint degree-4 sign) }.
+ *
+ * The i64 ui_arc_cover2d_sym_t builds the degree-4 coverage numerator (an + bn sqrt Dhi + cn sqrt Dlo)/den and exposes
+ * it; the SIGN -- which the i64 bi-quadratic double-square cannot hold for sym's coefficients -- is the bigint
+ * ui_sign_bi_big binary search here.  Closes ui_arc_cover2d's named STEEP/CORNER limit (gentle, steep, AND corner
+ * pixels alike, exact), and is t-RANGE aware: a FULL arc is split at its y-extremum and each sub-arc covered over its
+ * own parameter sub-interval [t0,t1] (ui_arc_cover_full sums the two at the extremum column). */
+module ui_exact_sym
+
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_an() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_bn() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_cn() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_dhi() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_dlo() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_kind() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_bez_ext_t(a1: i64, a2: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_ext_num() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_ext_den() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_sym_asm_ovf() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_ovf() -> u32 from "ui_exact.iii"
+
+/* exact per-pixel coverage for a sub-arc MONOTONE in x and y over the parameter sub-interval [t0,t1] (t0=t0n/t0d,
+ * t1=t1n/t1d).  8-bit alpha; sa for a fully-below pixel, 0 for fully-above, -2 for an out-of-x-extent column. */
+fn ui_arc_cover2d_sym_big_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64, t0n: i64, t0d: i64, t1n: i64, t1d: i64) -> i64 @export {
+    let unused : i64 = ui_arc_cover2d_sym_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, t0n, t0d, t1n, t1d)   /* populates SYM_* + kind */
+    let k : u32 = ui_sym_kind()
+    if k == 1u32 { return sa }                            /* pixel fully below the arc -> region fills */
+    if k == 2u32 { if ui_aa_ovf() == 1u32 { return 0i64 - 1i64 }   return 0i64 }       /* empty -- but if the SELECTION overflowed, the kind is suspect -> refuse */
+    if k == 3u32 { if ui_aa_ovf() == 1u32 { return 0i64 - 1i64 }   return 0i64 - 2i64 } /* out-of-extent -- ditto (no ui_alpha_bi ran, so AA_OVF is selection-only here) */
+    if ui_sym_asm_ovf() == 1u32 { return 0i64 - 1i64 }    /* the COEFF ASSEMBLY overflowed (not merely the i64 sign) ->
+                                                           * SYM_* are garbage -> REFUSE.  Never finish the bigint sign on
+                                                           * garbage coeffs (the never-silently-wrong invariant). */
+    let an : i64 = ui_sym_an()   let bn : i64 = ui_sym_bn()   let cn : i64 = ui_sym_cn()
+    let den : i64 = ui_sym_den() let d1 : i64 = ui_sym_dhi()  let d2 : i64 = ui_sym_dlo()
+    let san : i64 = (2i64 * sa) * an
+    let sbn : i64 = (2i64 * sa) * bn
+    let scn : i64 = (2i64 * sa) * cn
+    let mut lo : i64 = 0i64
+    let mut hi : i64 = sa
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        let s : i32 = ui_sign_bi_big(san - (((2i64 * mid) - 1i64) * den), sbn, d1, scn, d2)
+        if s >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* the un-split single-arc entry (full parameter interval [0,1]) -- the original gentle/steep/corner closer. */
+fn ui_arc_cover2d_sym_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    return ui_arc_cover2d_sym_big_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, 1i64, 1i64)
+}
+
+/* ---- the full-arc driver: split an x-monotone arc at its y-extremum and SUM the two sub-arc coverages EXACTLY ---- */
+
+var USF_OVF : u32 = 0u32
+/* checked i64 multiply -- latches USF_OVF on wrap so the combine REFUSES (-1) rather than returning a wrong coverage. */
+fn usf_mul(a: i64, b: i64) -> i64 { let p : i64 = a * b   if a != 0i64 { if (p / a) != b { USF_OVF = 1u32 } }   return p }
+/* gcd(|a|,|b|) via division (no `%`, sidestepping the modulo-after-call trap). */
+fn usf_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a - (a / b) * b   a = b   b = t }
+    return a
+}
+
+/* round a coverage fraction (an + bn sqrt d1 + cn sqrt d2)/den (den>0) to 8-bit alpha = round(sa*frac), by the SAME
+ * proven bigint-sign binary search ui_arc_cover2d_sym_big_t uses. */
+fn ui_sym_round(an: i64, bn: i64, d1: i64, cn: i64, d2: i64, den: i64, sa: i64) -> i64 {
+    let san : i64 = (2i64 * sa) * an
+    let sbn : i64 = (2i64 * sa) * bn
+    let scn : i64 = (2i64 * sa) * cn
+    let mut lo : i64 = 0i64   let mut hi : i64 = sa
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        let s : i32 = ui_sign_bi_big(san - (((2i64 * mid) - 1i64) * den), sbn, d1, scn, d2)
+        if s >= 0i32 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* extract a just-computed sub-arc (SYM_* populated by the preceding ui_arc_cover2d_sym_big_t) as the degree-2 fraction
+ * (SBA_A + SBA_B sqrt SBA_D)/SBA_DEN.  Returns: 3 = out-of-x-extent (absent); 4 = DEGREE-4 (both surds -- the exact-sum
+ * method does not apply, shouldn't occur at the extremum column); 0 = degree-<=2 present.  kind 1/2/5 -> rational (B=0). */
+var SBA_A : i64   var SBA_B : i64   var SBA_D : i64   var SBA_DEN : i64
+fn ui_sba_extract() -> u32 {
+    let k : u32 = ui_sym_kind()
+    if k == 3u32 { SBA_A = 0i64   SBA_B = 0i64   SBA_D = 0i64   SBA_DEN = 1i64   return 3u32 }
+    if k == 2u32 { SBA_A = 0i64   SBA_B = 0i64   SBA_D = 0i64   SBA_DEN = 1i64   return 0u32 }
+    if k == 1u32 { SBA_A = 1i64   SBA_B = 0i64   SBA_D = 0i64   SBA_DEN = 1i64   return 0u32 }
+    let bn : i64 = ui_sym_bn()   let cn : i64 = ui_sym_cn()
+    SBA_A = ui_sym_an()   SBA_DEN = ui_sym_den()
+    if bn != 0i64 { SBA_B = bn   SBA_D = ui_sym_dhi()   if cn != 0i64 { return 4u32 } }
+    else { SBA_B = cn   SBA_D = ui_sym_dlo() }
+    return 0u32
+}
+
+/* THE FULL-ARC DRIVER.  Exact per-pixel coverage of an x-MONOTONE Bezier arc that may have a y-extremum (a dome).
+ * y-monotone -> the single-arc closer.  y-extremum t* (ui_bez_ext_t, rational) -> split [0,t*]+[t*,1] (each both-
+ * monotone).  A column is covered by exactly ONE sub-arc (the other returns -2) EXCEPT the extremum column, where BOTH
+ * are partial and their coverages are SUMMED EXACTLY: each is degree-2 (the t* bound is rational), combined into ONE
+ * degree-4 (lA*rden+rA*lden, lB*rden sqrt lD, rB*lden sqrt rD)/(lden*rden) and rounded ONCE -- never two rounded alphas
+ * added (that is the +-1 concession this subverts).  Returns 8-bit alpha, -2 out-of-x-extent, -1 on i64 combine overflow.
+ * SCOPE: x-monotone arc (the curv render de-Casteljau-splits any x-extremum first); the y-extremum is handled here. */
+fn ui_arc_cover_full(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
+    if ui_bez_ext_t(ay1, ay2) != 1u32 { return ui_arc_cover2d_sym_big(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa) }
+    let tyn : i64 = ui_ext_num()   let tyd : i64 = ui_ext_den()
+    /* peak x = x(t*) = pxn/td2 (td2>0).  Classify the column by the peak position -- so the driver never queries a
+     * sub-range disjoint from the column: peak_x <= px -> column is right of the peak (right sub-arc only); peak_x >=
+     * px+1 -> left of the peak (left sub-arc only), each via the FULL degree-4 closer; px < peak_x < px+1 -> the
+     * extremum column, where BOTH sub-arcs are partial and summed exactly. */
+    USF_OVF = 0u32
+    let td2 : i64 = usf_mul(tyd, tyd)
+    let pxn : i64 = (usf_mul(ax0, td2) + usf_mul(usf_mul(ax1, tyn), tyd)) + usf_mul(ax2, usf_mul(tyn, tyn))
+    let lolim : i64 = usf_mul(px, td2)
+    let hilim : i64 = usf_mul(px + 1i64, td2)
+    if USF_OVF == 1u32 { return 0i64 - 1i64 }
+    if pxn <= lolim { return ui_arc_cover2d_sym_big_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, tyn, tyd, 1i64, 1i64) }
+    if pxn >= hilim { return ui_arc_cover2d_sym_big_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, tyn, tyd) }
+    /* THE EXTREMUM COLUMN: both sub-arcs partial -> exact degree-4 round-once sum */
+    let lu : i64 = ui_arc_cover2d_sym_big_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, 0i64, 1i64, tyn, tyd)
+    let lstat : u32 = ui_sba_extract()
+    let lA : i64 = SBA_A   let lB : i64 = SBA_B   let lD : i64 = SBA_D   let lden : i64 = SBA_DEN
+    let ru : i64 = ui_arc_cover2d_sym_big_t(ax0, ax1, ax2, ay0, ay1, ay2, px, py, sa, tyn, tyd, 1i64, 1i64)
+    let rstat : u32 = ui_sba_extract()
+    let rA : i64 = SBA_A   let rB : i64 = SBA_B   let rD : i64 = SBA_D   let rden : i64 = SBA_DEN
+    if lu < 0i64 { return 0i64 - 1i64 }                     /* a sub-arc overflowed/refused -> SYM_* garbage -> refuse the sum */
+    if ru < 0i64 { return 0i64 - 1i64 }
+    if lstat == 4u32 { return 0i64 - 1i64 }                 /* degree-4 sub-arc -> exact-sum N/A (guarded, not lied about) */
+    if rstat == 4u32 { return 0i64 - 1i64 }
+    USF_OVF = 0u32
+    let an : i64 = usf_mul(lA, rden) + usf_mul(rA, lden)
+    let bn : i64 = usf_mul(lB, rden)
+    let cn : i64 = usf_mul(rB, lden)
+    let den : i64 = usf_mul(lden, rden)
+    if USF_OVF == 1u32 { return 0i64 - 1i64 }               /* combine overflowed i64 -> refuse (never a wrong coverage) */
+    let mut a2 : i64 = an   let mut b2 : i64 = bn   let mut c2 : i64 = cn   let mut d2 : i64 = den
+    let g : i64 = usf_gcd(usf_gcd(an, bn), usf_gcd(cn, den))
+    if g > 1i64 { a2 = an / g   b2 = bn / g   c2 = cn / g   d2 = den / g }
+    return ui_sym_round(a2, b2, lD, c2, rD, d2, sa)
+}

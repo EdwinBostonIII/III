@@ -1,0 +1,77 @@
+/* STDLIB/corpus/2161_exact_sign_escalation.iii -- SUBVERTING THE i64 RANGE COMPROMISE: the exact-geometry sign query
+ * is now AUTO-ESCALATING (ui_alg_sign_g: i64 -> 128-bit -> AA_OVF-flagged-for-bigint), so it is exact at every
+ * realistic coordinate and NEVER silently wrong -- the ui_pt_below_arc / ui_arc_valpha silent-overflow bug, fixed at
+ * the CLASS level (one escalating entry, every silent caller routed through it).  This KAT proves:
+ *
+ *   (1) THE FIX, on the EXACT failing case:  ui_pt_below_arc on the (0,16,4;3,-2,2) arc scaled x128 at point (63,63)
+ *       -- which the i64-only path reported BELOW=1 (WRONG: the point sits far ABOVE the arc) -- now reports 0.
+ *   (2) ESCALATION SOUNDNESS, across the overflow boundary:  for a radical-DECIDED sign (sqrt2 - 1.4142 > 0 by a hair,
+ *       so the M^2 vs S^2*D comparison is what matters), scaled S=1..3e5 (the value is scale-invariant; only M^2
+ *       grows), ui_alg_sign_g EQUALS the bigint reference ui_bsign1 at EVERY scale -- including the scales where the
+ *       raw i64 ui_alg_cmp_g OVERFLOWS (AA_OVF latched).  Where i64 is valid it agrees; where it overflows the
+ *       escalation (128-bit) carries the exact answer.
+ *   TEETH:  the scan must REACH the overflow regime (>=1 scale with AA_OVF) AND the faithful regime (>=1 i64-valid),
+ *       and where i64 is valid it must already equal the reference -- so the escalation is neither vacuous nor a
+ *       silent answer-changer in the safe regime.
+ *
+ * 99 = III's exact-geometry sign is exact past the i64 wall, witnessed bit-for-bit by the bigint tier. */
+module corpus_2161_exact_sign_escalation
+
+extern @abi(c-msvc-x64) fn ui_alg_sign_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_alg_cmp_g(pp: i64, qq: i64, den: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_reset() -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_aa_ovf() -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_pt_below_arc(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, xval: i64, yval: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "ui_exact_big.iii"
+
+/* exact sign of (m + s sqrt D)/den, by the bigint tier -- the independent reference. */
+fn refsign(m: i64, s: i64, dD: i64, den: i64) -> i32 {
+    let r : i32 = ui_bsign1(m, s, dD)
+    if den < 0i64 { return 0i32 - r }
+    return r
+}
+
+fn scale_of(si: i64) -> i64 {
+    if si == 0i64 { return 1i64 }       if si == 1i64 { return 1000i64 }    if si == 2i64 { return 100000i64 }
+    if si == 3i64 { return 220000i64 }  return 300000i64
+}
+
+fn main() -> u64 {
+    /* (1) THE FIX on the exact silent-wrong case: arc (0,16,4 ; 3,-2,2) x128 = (0,2048,512 ; 384,-256,256).  At
+     * x=63 the arc's y is ~376 (scaled); the point (63,63) sits far ABOVE it -> NOT below -> 0.  Pre-fix: 1 (wrong). */
+    let b : u32 = ui_pt_below_arc(0i64, 2048i64, 512i64, 384i64, 0i64 - 256i64, 256i64, 63i64, 63i64)
+    if b != 0u32 { return 10u64 }
+
+    /* (2) ESCALATION == BIGINT REFERENCE across the i64 overflow boundary.  Base value sqrt2 - 14142/10000 > 0 (the
+     * radical wins by a hair).  Scaling pp,qq,den by S leaves the VALUE (hence its sign) invariant but grows M^2. */
+    let mut overflowed : i64 = 0i64
+    let mut faithful : i64 = 0i64
+    let mut si : i64 = 0i64
+    while si < 5i64 {
+        let s : i64 = scale_of(si)
+        let pp : i64 = 0i64
+        let qq : i64 = s
+        let den : i64 = s
+        let dD : i64 = 2i64
+        let rn : i64 = 14142i64
+        let rd : i64 = 10000i64
+        let m : i64 = (pp * rd) - (rn * den)        /* = -14142*s ; fits i64 across the whole scan */
+        let sv : i64 = qq * rd                      /* = 10000*s */
+        let refv : i32 = refsign(m, sv, dD, den)    /* bigint -- exact, always */
+        let esc : i32 = ui_alg_sign_g(pp, qq, den, dD, rn, rd)
+        if esc != refv { return 20u64 }             /* the escalating sign MUST equal the bigint reference, every scale */
+        ui_aa_reset()
+        let raw : i32 = ui_alg_cmp_g(pp, qq, den, dD, rn, rd)
+        let ovf : u32 = ui_aa_ovf()
+        if ovf == 1u32 { overflowed = overflowed + 1i64 }
+        if ovf == 0u32 {
+            if raw != refv { return 21u64 }         /* where the i64 path is VALID it must already be correct */
+            faithful = faithful + 1i64
+        }
+        si = si + 1i64
+    }
+    if overflowed < 1i64 { return 30u64 }           /* the scan reached the overflow regime (escalation exercised) */
+    if faithful < 1i64 { return 31u64 }             /* and the i64-valid regime (faithful overlap) */
+
+    return 99u64
+}

@@ -14,9 +14,60 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 39 seed verify-failures (144 cleared, 79%) — lex.c at STRUCTURAL ZERO; BOTH BOSSES CLOSED
-Per module now (re-measured 2026-06-26, `run_seed_verify.sh`, deterministic): **lex 0 · sema 5 · emit 4 ·
-ast 10 · cg_r3 2 · parse 18** = 39 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+## Verified state: 183 → 37 seed verify-failures (146 cleared, 80%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr INC-1 landed
+Per module now (re-measured **2026-06-30**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
+emit 4 · ast 8 · cg_r3 2 · parse 18** = 37 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+
+**fn-ptr Increment 1 LANDED (2026-06-30, fix #23): ast 10→8.** ccsv codegen for function pointers, the #1 feature-wall:
+two load-bearing edits with DISTINCT roles (revert-teeth DEMONSTRATED 2026-06-30, not argued):
+**(B) the *producer*** — a bare function name used as a value → `CONST(fidx)` (ccsv.iii:922) — is **THE FLOOR-MOVER**:
+it fixes the structural *underflow* when a fn-name emits nothing; it cleared `iii_ast_walk_post` (passes `iii_walk_child_visit`)
++ `iii_ast_debug_dump` (passes `iii_dump_pre`). **(A) the *consumer*** — `NAME(args)` with `fidx<0 ∧ lidx≥0` →
+`emit_lget; CALL_INDIRECT ac` (ccsv.iii:829) — is **THE CORRECTNESS-MAKER**: it makes the indirect call (`walk_post`'s
+`return fn(...)`) runtime-correct. **Teeth:** revert B → both fns fail again + KAT verify-fails (fail=1); revert A → floor
+STAYS 37 (svir_verify is a *no-underflow* check, blind to a missing call — it leaks an arg) but the KAT's svir_interp
+drops **99→1**. So only B moves the structural count; A is necessary for RUNTIME correctness (the UPDATE-10/11
+verify≠runtime lesson, live). **Soundness — INDEX-SPACE AGREEMENT discharged
+by construction:** ccsv registers `main` first then source order (1480-1482) and emits in registration order (1982),
+so `fidx == module-position == svir_interp.exec_fn` index; every working direct call already proves it, and the KAT's
+add/sub teeth prove it at runtime (a swap → wrong answer). Gate `STDLIB/sovir/run_fnptr_gate.sh` =
+`svir_verify(0) + svir_interp(99) + gcc(99)`; determinism byte-identical; `run_ccsv` 25-suite EXIT=0 (no regression);
+iii_adversarial_verify SURVIVES-high. **NOT all-4 yet** — `CALL_INDIRECT` runs on the reference interpreter + gcc but
+NOT the sovereign x86/wasm backends (that is INC-3); so this advances the *verify floor* + interp-correctness, the
+sovereign run of fn-ptr fns awaits INC-3.
+- **INC-2 (next):** field-indirect call `obj.field(args)` / `obj->field(args)` (clears the rest of the ast cluster +
+  emit `G_EMIT.audit_fn` + parse `st->witness_sink`/`pratt_trace`) + the fn-ptr-typedef FIELD sizing 4B→8B
+  (ccsv.iii:1685 defaults an unrecognized typedef field to 4B → `iii_ast_visit_fn_t fn;` corrupts struct layout).
+- **INC-3:** svir_x86 computed-call (dispatch over the fn-offset table the linker builds) + wasm `call_indirect` +
+  funcref table + OOB TRAP (hard teeth). Touches the trust-critical sovereign backends → a focused fresh session,
+  not a session tail (crash-protocol). Makes the fn-ptr feature meet the all-4 standard + wires test_fnptr.c into cfeat.
+
+**★ FN-POINTER FEATURE — LAYER 1 LANDED (CALL_INDIRECT opcode, 2026-06-27).** Re-verified the 39 floor live
+(lex0·sema5·emit4·ast10·cg_r3 2·parse18) and root-bucketed it: it is a WALL of TWO features — **function-pointers**
+(the ast visitor cluster idx 80/86/88/89/91/94/95/110/112/114, AND the three rc=2 "mis-parse" cases which are all
+indirect calls through fields: `iii_emit_audit`→`G_EMIT.audit_fn(...)`, `iiip_witness_sink_emit`→`st->witness_sink`,
+`iiip_parse_expr_prec`→`st->pratt_trace`) and **struct-by-value params** (parse/cg_r3/sema, Boss-2). The easy
+construct-fixes are exhausted; these two features dominate. Began the fn-ptr feature (the named highest-leverage
+item: ≈13 fns across ast/parse/emit). **Layer 1 = the SVIR opcode `CALL_INDIRECT` (`0x73 [ac]`; the fn-index is the
+top eval-stack value, popped first; net depth = −ac):** added to BOTH `svir_verify.iii` (the trust anchor: stack
+accounting, no static funcidx bound since the index is runtime) AND `svir_interp.iii` (`op_w(0x73)=1` so the
+control-flow scanners skip it + a pop-index/pop-args/`exec_fn` handler mirroring 0x70). **GATED 3 ways** —
+behavioral (interp runs a hand-built `add(3,4)` via CALL_INDIRECT = **7**), structural (`svir_verify` = **0**),
+teeth (a stack-starved variant = rc **8**); KAT fixtures `STDLIB/build/sovir/gen_svir_ci{,_bad}.iii` + `_ci_verify.iii`.
+**Additive + INERT**: no existing SVIR contains 0x73, so the trust anchor is byte-unchanged in behavior for every
+current program — **floor stays 39** (Layer 1 is the foundation; the floor moves when ccsv EMITS 0x73 in Layer 2).
+**REMAINING (Layers 2–3, a focused multi-backend build, fully designed):** (2) ccsv codegen — fn-name→`CONST fidx`,
+indirect call `p(args)`/`s->field(args)`→push args+index+`CALL_INDIRECT`, parse `T (*p)(...)` decls/params/fields;
+(4) x86 backend computed-call (the hard part — dispatch over the fn-offset table the linker already builds); (5)
+wasm native `call_indirect` + funcref table. Each gated all-4 + run_ccsv + floor-down.
+**TWO OBLIGATIONS (advisor — pin BEFORE Layer 2):** (i) **INDEX-SPACE AGREEMENT is the real risk, NOT de-risked by
+Layer 1.** The feature assumes fn-ptr-value = SVIR function index; Layer-1's KAT hand-picks `CONST 1`, so it does
+NOT prove ccsv's `fidx` ordering == the interp's `exec_fn(fi)` ordering == the x86/wasm dispatch ordering. If they
+disagree, every indirect call dispatches to the WRONG function and still verifies. Layer 2's FIRST KAT must CHECK a
+fn-name-as-value's `CONST fidx` equals the index the interp actually dispatches — a 2-fn module where the wrong
+ordering yields the wrong answer. (ii) **OOB indirect index = a soundness obligation** (the verifier cannot bound a
+runtime index): `svir_interp` now BOUNDS-CHECKS it (teeth KAT `STDLIB/build/sovir/gen_svir_ci_oob.iii` → sentinel
+199 instead of silent fn0); the x86/wasm backends MUST TRAP an OOB index as a hard Layer-3 teeth gate.
 
 **FIX #36 — `sizeof(p->field[i])` (iii_ast_rollback, 42→39, cleared 3 fns: 1 ast + 2 cg_r3).** Same recurring root
 family as #33/#34/#35: the esizeof `sizeof(p->field)` handler consumed `->field` (giving the field's POINTER size

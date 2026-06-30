@@ -826,7 +826,7 @@ fn eprim() {
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac)
                 let mut cur:i32=fn_ret_struct(FNT[fi as u64])  let mut gc:u32=1u32  if cur<0i32 {gc=0u32}  if cp(Q_ARROW)==0u32 {gc=0u32}   /* call()->field : the call leaves a `StructType *` -> resolve a trailing -> chain (parsers: iiip_peek2(st)->kind) */
                 while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)  let np:i32=fieldpt(cur,ftc)  if cp(Q_ARROW)==1u32 { if np>=0i32 { if fo>0i64 {econst(fo) eb(0x20u32)}  eb(0x82u32)  cur=np } else {gc=0u32} } else { if fo>0i64 {econst(fo) eb(0x20u32)}  eload(fieldelem(cur,ftc), fieldsign(cur,ftc))  gc=0u32 } }
-            } }
+            } else { let lci:i32=lidx(t)  if lci>=0i32 { emit_lget(lci as u32)  eb(0x73u32)  eb(ac) } } }   /* fn-ptr INC-1: indirect call fp(args) -- fp a LOCAL/PARAM (fidx<0, lidx>=0) holding a fn-index; args already emitted above; push the index (local value) then CALL_INDIRECT ac (soundness: fidx==exec_fn index, discharged @1982/_fnptr_inc1_audit.md) */
             return
         }
         if cp(Q_LBR)==1u32 {                                         /* NAME[i] : array / pointer index load (typed width) */
@@ -919,7 +919,7 @@ fn eprim() {
             let svt:i32=LVT[li as u64]  if svt>=0i32 { let ssz:u64=STSZ[svt as u64]  if ssz<=8u64 { emit_vbase(t, 0i64)  eb(0x82u32)  return } else { if SRET_ON==1u32 { emit_vbase(t, 0i64)  return } } }   /* bare struct-VALUE used as a value (frame-aware): <=8B -> LOAD64 packed bytes ; >8B (SRET_ON) -> push its ADDRESS (pass-by-pointer arg; the callee's aliased struct-ptr param derefs) */
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_local(li as u32,1u32,1u32)  return }   /* i-- (postfix) */
-            emit_lget(li as u32) }
+            emit_lget(li as u32) } else { let fnv:i32=fidx(t)  if fnv>=0i32 { econst(fnv as i64) } }   /* fn-ptr INC-1: a function NAME used as a VALUE (not called) -> CONST(fidx) ; locals/globals/enums checked first so they shadow it ; builtins have fidx<0 -> unchanged */
         return
     }
     C=C+1u32

@@ -29,6 +29,7 @@ var STEPS : u64 = 0u64
 var DLEN_G : u64 = 0u64
 var CUR_FN : u32 = 0u32
 var BADW_N : u32 = 0u32   var BADW_A : [u64; 64]   var BADW_V : [u64; 64]   var BADW_F : [u32; 64]
+var OOB_IND : u32 = 0u32   /* count of out-of-range CALL_INDIRECT indices -> the oracle reflects safe (no-silent-dispatch) semantics */
 var PDEC_D : [u8; 24]
 fn pdec(v0: u64) { if v0==0u64 { putchar(48i32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { PDEC_D[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  putchar(PDEC_D[n as u64] as i32) } }
 fn pstr2(a:u32,b:u32){ putchar(a as i32) putchar(b as i32) }
@@ -54,7 +55,7 @@ fn mst(a: u64, w: u32, v: u64) {
 fn vpush(v: u64) { if VSP < 16384u32 { VS[VSP as u64] = v  VSP = VSP + 1u32 } }
 fn vpop() -> u64 { if VSP > 0u32 { VSP = VSP - 1u32  return VS[VSP as u64] }  return 0u64 }
 
-fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  return 0u64 }
+fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  if op==0x73u32 {return 1u64}  return 0u64 }   /* 0x73 CALL_INDIRECT ac (1 imm byte); needed so match_end/match_else skip it correctly */
 
 /* find, for the construct opening at body-offset q (BLOCK/LOOP/IF), its matching END position (opcode-aware). */
 fn match_end(boff: u64, blen: u64, q: u64) -> u64 {
@@ -115,6 +116,11 @@ fn exec_fn(fnidx: u32, depth: u32) -> u64 {
             let nb : u64 = ((depth+1u32) as u64) * 256u64
             let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }
             vpush(exec_fn(fi, depth + 1u32)) }
+        if op == 0x73u32 { adv=0u32  let ac:u32=ib(boff+p+1u64)  p=p+2u64   /* CALL_INDIRECT ac : fn-index is on TOP of the eval stack (pushed after the args) */
+            let fi:u32 = vpop() as u32                                       /* pop the index first */
+            let nb : u64 = ((depth+1u32) as u64) * 256u64
+            let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }   /* then pop ac args -> callee locals */
+            if fi < NFUNC { vpush(exec_fn(fi, depth + 1u32)) } else { OOB_IND = OOB_IND + 1u32  vpush(0u64) } }   /* OOB runtime index: defined-safe (no FN_OFF OOB, no silent mis-dispatch) + recorded; a real x86/wasm backend MUST TRAP here (hard Layer-3 gate) */
         if op >= 0x80u32 { if op <= 0x89u32 {                                                 /* typed memory */
             if op==0x80u32 { let a:u64=vpop()  vpush(mld(a,1u32,0u32)) }
             if op==0x82u32 { let a:u64=vpop()  vpush(mld(a,8u32,0u32)) }
@@ -172,5 +178,6 @@ fn main() -> u64 {
         }  i = i + 1u32 }
         putchar(10i32)  pstr2(78u32,61u32) pdec(BADW_N as u64) putchar(10i32)   /* "N=<total>" */
     }
+    if OOB_IND > 0u32 { return 199u64 }   /* an out-of-range indirect call fired -> distinct sentinel (teeth for the CALL_INDIRECT bounds-check) */
     return r
 }

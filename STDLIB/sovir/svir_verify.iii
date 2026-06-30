@@ -35,6 +35,7 @@ fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 @export {
         if op == 0x70u32 { let fi : u32 = vb(base, boff + p)  let ac : u32 = vb(base, boff + p + 1u64)  p = p + 2u64  if fi >= nfunc { return 9u64 }  depth = depth - (ac as i64) + 1i64  known = 1u32 }   /* CALL */
         if op == 0x71u32 { depth = depth - 1i64  known = 1u32 }                               /* PRINT_CHAR */
         if op == 0x72u32 { depth = depth - 1i64  known = 1u32 }                               /* DROP */
+        if op == 0x73u32 { let ac : u32 = vb(base, boff + p)  p = p + 1u64  depth = depth - (ac as i64)  known = 1u32 }   /* CALL_INDIRECT ac : pops ac args + 1 stack fn-index, pushes 1 result -> net -ac. The index is runtime, so (unlike CALL 0x70) there is NO static funcidx check here; an out-of-range index MUST be trapped at EXECUTION -- enforced in svir_interp (bounds-check), and a HARD Layer-3 teeth gate for the x86/wasm backends (a deliberately-OOB index must trap, never silently call fn0). */
         if op == 0x80u32 { known = 1u32 }                                                     /* LOAD8: net 0 */
         if op == 0x81u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE8 */
         if op == 0x82u32 { known = 1u32 }                                                     /* LOAD64: net 0 */

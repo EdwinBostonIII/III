@@ -184,6 +184,8 @@ var HAS_STRUCTVAL:u32 = 0u32   /* Boss-2: this fn declares a struct-VALUE local 
 var SHADOW_ON:u32 = 1u32   /* Boss-1 shadow-stack: NOW THE DEFAULT (ON). The ceiling_sha_full regression that forced OFF is FIXED (the NLOC-reserve in the prologue below: CUR_FB's frame-base slot is now persistent, so a body local no longer clobbers it). Validated @ON: recursive-&local KAT all-4=99 + svir_interp=99 (OFF crashes it); ceiling_sha_full x86+wasm+verifier+gcc all 99 == ba7816bf; run_ccsv green (only pre-existing crosslang); seed floor 56 unchanged; iii_adversarial_verify SURVIVES-high. Boss-2 (struct-VALUE LVB frame-relative, for recursive struct-value) is the REMAINDER. Pinned via STDLIB/sovir/svir_interp.iii (the reference SVIR value-tracer). */
 var SRET_ON:u32 = 1u32   /* Boss-2 struct-by-value (sret hidden-pointer) master switch.  COMPLETE + PROVEN all-4=99 (RETURN+RECEIVE+PARAMS incl MUTATING + SAME-ARG + sret-fn-WITH-struct-params): test_structparam (comprehensive) + test_structval + _mut2 + _dup2 + _span.  COPY-IN value-semantics: a >8B struct param is a struct-value local (LVT/LVB) entry-copied from the passed &arg (cfn:1710 + :1729).  The sret+struct-params SLOT COLLISION (1st struct param aliased the sret slot) was a leftover LO/LL name-table false-match in lidx (searches 0..LN; the sret reserve bumps LN past slot 0 with no ladd); FIXED by the per-fn LL reset (cfn:~1690).  ON: seed verify_fail=69 < the SRET_ON=0 floor of 70 -- net progress, construct behaviorally gated by test_structparam. */
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+var FPTDO : [u32; 256]  var FPTDL : [u32; 256]  var FPTDN : u32 = 0u32   /* INC-2b: fn-ptr typedef names (`typedef RET (*NAME)(..)`) -> NAME is an 8-byte fn-ptr type, so its FIELDS size 8B not the enum-default 4B (else the AFTER-field is mis-offset: G_EMIT.audit_user, st->witness_sink_ctx) */
+fn is_fptd(t:u32) -> u32 { let mut k:u32=0u32  while k<FPTDN { if neq(FPTDO[k as u64],FPTDL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return 1u32}  k=k+1u32 }  return 0u32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]  var LPP : [i64; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed ; LPP=ULTIMATE element size (base type) for `(*pp)[i]` on a multi-level pointer */
 var LVT : [i32; 256]  var LVB : [i64; 256]   /* local struct-VALUE: LVT=struct type (-1=not a struct value) ; LVB=its inline frame base (STSZ bytes reserved) -> `p.field` via abase/avtype */
@@ -849,6 +851,7 @@ fn eprim() {
                 eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
+            if ispat(C+2u32,Q_LP)==1u32 { let vti:i32=avtype(t)  if vti>=0i32 { let dof:i64=fieldoff(vti,C+1u32)  let dew:i64=fieldelem(vti,C+1u32)  let dsw:u32=fieldsign(vti,C+1u32)  C=C+3u32  let mut acd:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  acd=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  acd=acd+1u32 } }  eat(Q_RP)  emit_vbase(t, dof)  eload(dew, dsw)  eb(0x73u32)  eb(acd)  return } }   /* fn-ptr INC-2: obj.field(args) indirect call (global/struct-value base via emit_vbase; field value = fn-index) */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)  let fm:i64=fieldmask(vt,ft)
                 let fpt0:i32=fieldpt(vt,ft)  if fpt0>=0i32 { if cp(Q_DOT)==1u32 {   /* p.f1.f2.. : nested struct/union member chain (union members at +0) -> sum offsets via fieldpt, typed LOAD on the last */
                     let mut cur:i32=fpt0  let mut acc:i64=foff  let mut gc:u32=1u32
@@ -875,6 +878,7 @@ fn eprim() {
             let lptd:i32=lpt(t)  if lptd>=0i32 { if SRET_ON==1u32 { C=C+1u32  let ftd:u32=C  C=C+1u32  let fod:i64=fieldoff(lptd,ftd)  emit_lget(lidx(t) as u32)  if fod>0i64 {econst(fod)  eb(0x20u32)}  eload(fieldelem(lptd,ftd), fieldsign(lptd,ftd))  return } }   /* `p.field` where p is an ALIASED struct-VALUE param (>8B, registered as a pointer) -> deref like p->field */
         }
         if cp(Q_ARROW)==1u32 {                                       /* p->field [/ p->field[i]] : struct-pointer field load */
+            if ispat(C+2u32,Q_LP)==1u32 { let pti:i32=lpt(t)  if pti>=0i32 { let fof:i64=fieldoff(pti,C+1u32)  let few:i64=fieldelem(pti,C+1u32)  let fsw:u32=fieldsign(pti,C+1u32)  C=C+3u32  let mut acp:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  acp=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  acp=acp+1u32 } }  eat(Q_RP)  emit_lget(lidx(t) as u32)  if fof>0i64 {econst(fof)  eb(0x20u32)}  eload(few, fsw)  eb(0x73u32)  eb(acp)  return } }   /* fn-ptr INC-2: p->field(args) indirect call -- args first, then the field value (the fn-index, loaded at its registered width), then CALL_INDIRECT */
             let ptt:i32=lpt(t)  if ptt>=0i32 { if ispat(C+2u32,Q_ARROW)==1u32 { let elt1:i32=fieldpt(ptt,C+1u32)  if elt1>=0i32 {   /* p->f1->f2->... : CHAINED pointer-field read (a->head->used) */
                 emit_lget(lidx(t) as u32)  let mut cur:i32=ptt  let mut gc:u32=1u32
                 while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)
@@ -1108,6 +1112,7 @@ fn pstmt() {
     if isqual(C)==1u32 { let mut sg:u32=1u32  while sg==1u32 { if isqual(C)==1u32 { if kw(C,"unsigned" as u64,8u32)==1u32 {sg=0u32} else { if kw(C,"signed" as u64,6u32)==1u32 {sg=0u32} else { if kw(C,"long" as u64,4u32)==1u32 {sg=0u32} else { if kw(C,"short" as u64,5u32)==1u32 {sg=0u32} else {C=C+1u32} } } } } else {sg=0u32} } }   /* skip leading const/static/volatile but KEEP the type specifiers unsigned/signed/long/short (the decl handler reads their size) */
     if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
     if cp(Q_DEC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* --lvalue ; */
+    if TK[C as u64]==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_LP)==1u32 { if ispat(C+1u32,Q_ARROW)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }  if ispat(C+1u32,Q_DOT)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return } } } }   /* fn-ptr INC-2: STATEMENT field-indirect call obj->field(args); / obj.field(args); -> eval (eprim emits CALL_INDIRECT) + DROP. Guarded by ispat(C+3,Q_LP) so a store `p->field = e` / `p->field[i]` (= / [ at C+3) is NOT caught. The seed's G_EMIT.audit_fn(...); + st->witness_sink(...); */
     if cp(Q_LP)==1u32 { if ispat(C+1u32,Q_MUL)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_RP)==1u32 { if ispat(C+4u32,Q_LBR)==1u32 {   /* (*pp)[i] = e ; : store through the dereffed inner pointer (the seed pool write `(*bd)[slot]=v`); read side already at eprim:680 */
         let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let st:i64=LPP[li as u64]  emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(st)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  estore(st)  eat(Q_SEMI)  return } } } } } }
     if cp(Q_MUL)==1u32 {                                            /* *p [op]= e ;  (pointer deref store/compound, typed width) */
@@ -1684,7 +1689,7 @@ fn reg_fields(si:u32) {   /* fill slot si's fields from its stored body (STBODY/
                 let mut g3:u32=1u32  while g3==1u32 { if ispat(q,Q_SEMI)==1u32 {g3=0u32} else { if TK[q as u64]==0u32 {g3=0u32} else {q=q+1u32} } }  q=q+1u32
             } else {   /* unrecognized typedef field `TypedefName [*] f ;` (enum / forward typedef): scalar=4B (enum=int) / ptr=8B -- else the field is SKIPPED and the struct layout is wrong */
                 let nx2:u32=q+1u32  let mut isf:u32=0u32  let mut ffq:u32=nx2  let mut fesz:i64=4i64  let mut fmsk:i64=4294967295i64  let mut fsg:u32=1u32
-                if ispat(nx2,Q_MUL)==1u32 { isf=1u32  ffq=q+2u32  fesz=8i64  fmsk=0i64  fsg=0u32 } else { if TK[nx2 as u64]==1u32 { isf=1u32  ffq=nx2 } }
+                if ispat(nx2,Q_MUL)==1u32 { isf=1u32  ffq=q+2u32  fesz=8i64  fmsk=0i64  fsg=0u32 } else { if TK[nx2 as u64]==1u32 { isf=1u32  ffq=nx2  if is_fptd(q)==1u32 { fesz=8i64  fmsk=0i64  fsg=0u32 } } }   /* INC-2b: a fn-ptr-typedef field (no *) sizes 8B not the enum-default 4B */
                 if isf==1u32 {
                     let al:u64=fesz as u64  if is_union==0u32 { let r:u64=off & (al-1u64)  if r!=0u64 { off=off+(al-r) } }  if al>maxal {maxal=al}
                     let mut isarr:u32=0u32  if ispat(ffq+1u32,Q_LBR)==1u32 {isarr=1u32}
@@ -1730,6 +1735,10 @@ fn prescan_struct() {
                 if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=match_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) }
                 else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=match_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 1u32) } } }   /* typedef union TAG { } Name */
             }
+            if kw(t+1u32,"struct" as u64,6u32)==0u32 { if kw(t+1u32,"union" as u64,5u32)==0u32 {   /* INC-2b: typedef RET (*NAME)(params) ; -> register NAME as a fn-ptr type (8B fields). Guarded off struct/union typedefs so an inline `(*field)` is not mistaken for a typedef name. */
+                let mut k:u32=t+1u32  let mut g:u32=1u32
+                while g==1u32 { if TK[k as u64]==0u32 {g=0u32} else { if ispat(k,Q_SEMI)==1u32 {g=0u32} else { if ispat(k,Q_LP)==1u32 { if ispat(k+1u32,Q_MUL)==1u32 { if TK[(k+2u32) as u64]==1u32 { if ispat(k+3u32,Q_RP)==1u32 { if FPTDN<256u32 { FPTDO[FPTDN as u64]=TO[(k+2u32) as u64]  FPTDL[FPTDN as u64]=TL[(k+2u32) as u64]  FPTDN=FPTDN+1u32 }  g=0u32 } } } }  if g==1u32 {k=k+1u32} } } }
+            } }
         }
         t=t+1u32
     }

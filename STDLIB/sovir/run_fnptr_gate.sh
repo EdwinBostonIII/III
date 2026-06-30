@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# run_fnptr_gate.sh -- durable regression guard for the fn-pointer feature, INCREMENT 1 (ccsv codegen).
+# run_fnptr_gate.sh -- durable regression guard for the fn-pointer feature (ccsv codegen), INC-1 + INC-2.
 #
 # WHY a separate gate (not run_ccsv's cfeat): cfeat requires all-4 (svir_verify + sovereign-x86 + wasm + gcc).
-# INC-1 lands ccsv's CALL_INDIRECT *codegen*; the x86/wasm backends do NOT yet implement the computed-call
-# (that is INC-3).  So INC-1's honest standard is the THREE oracles that are valid now: svir_verify (structural),
-# svir_interp (the independent reference executor -- the runtime oracle), and gcc (the reference semantics).
-# test_fnptr.c bakes in the INDEX-SPACE-AGREEMENT teeth: add->14, sub->6; a swap of their indices yields r1=6,
-# r2=14 -> returns 1, not 99.  So a 99 here proves the indirect dispatch hits the RIGHT function.
+# These KATs use CALL_INDIRECT, whose *codegen* lands in INC-1/INC-2; the x86/wasm computed-call is INC-3.
+# So the honest standard here is the THREE oracles valid now: svir_verify (structural), svir_interp (the
+# independent reference executor = runtime oracle), and gcc (reference semantics). Each KAT bakes in
+# add/sub INDEX-SPACE-AGREEMENT teeth (a swapped dispatch -> wrong answer -> not 99).
+#   test_fnptr.c  : INC-1 -- indirect call of a fn-ptr local/param + fn-name-as-value.
+#   test_fnptr2.c : INC-2 -- field-indirect STATEMENT call obj->field(args); / obj.field(args); (the seed's
+#                   G_EMIT.audit_fn(...); / st->witness_sink(...); shape) + fn-ptr-typedef field 8B sizing.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/sovir"
@@ -16,16 +18,15 @@ mkdir -p "$W"; say(){ echo "[fnptr-gate] $*"; }
 "$IIIS" "$S/verify_each.iii"  --compile-only --out "$W/verify_each.o"  >/dev/null 2>&1 || { say "FAIL verify_each"; exit 1; }
 "$IIIS" "$S/svir_interp.iii"  --compile-only --out "$W/svir_interp.o"  >/dev/null 2>&1 || { say "FAIL svir_interp"; exit 1; }
 
-"$W/ccsv.exe" "$S/test_fnptr.c" > "$W/g_fnptr.iii" 2>/dev/null
-"$IIIS" "$W/g_fnptr.iii" --compile-only --out "$W/gen_svir.o" >/dev/null 2>&1 || { say "FAIL iiis compile of ccsv(test_fnptr.c)"; exit 1; }
-# 1. structural: svir_verify must accept every function (fail count = 0)
-gcc "$W/verify_each.o" "$W/svir_verify.o" "$W/gen_svir.o" -o "$W/_ve_fnptr.exe" 2>/dev/null
-vsum=$("$W/_ve_fnptr.exe" 2>/dev/null | grep '^#'); vfail=$(echo "$vsum" | awk '{print $3}')
-# 2. runtime: the reference interpreter (independent executor) -- index-agreement teeth -> 99
-gcc "$W/svir_interp.o" "$W/gen_svir.o" -o "$W/_interp_fnptr.exe" 2>/dev/null
-"$W/_interp_fnptr.exe" >/dev/null 2>&1; ir=$?
-# 3. reference: gcc semantics -> 99
-gcc "$S/test_fnptr.c" -o "$W/_ref_fnptr.exe" 2>/dev/null; "$W/_ref_fnptr.exe" >/dev/null 2>&1; gr=$?
-say "svir_verify=[$vsum] (fail=$vfail)  svir_interp=$ir  gcc=$gr  (all want: fail=0, interp=99, gcc=99)"
-if [ "$vfail" = "0" ] && [ "$ir" = "99" ] && [ "$gr" = "99" ]; then say "PASS -- fn-ptr INC-1: indirect call + fn-name-value, index-agreement sound"; exit 0; fi
-say "FAIL"; exit 1
+rc=0
+for kat in test_fnptr.c test_fnptr2.c; do
+  "$W/ccsv.exe" "$S/$kat" > "$W/g_k.iii" 2>/dev/null
+  "$IIIS" "$W/g_k.iii" --compile-only --out "$W/gen_svir.o" >/dev/null 2>&1 || { say "FAIL iiis compile of ccsv($kat)"; rc=1; continue; }
+  gcc "$W/verify_each.o" "$W/svir_verify.o" "$W/gen_svir.o" -o "$W/_ve_k.exe" 2>/dev/null
+  vf=$("$W/_ve_k.exe" 2>/dev/null | grep '^#' | awk '{print $3}')
+  gcc "$W/svir_interp.o" "$W/gen_svir.o" -o "$W/_in_k.exe" 2>/dev/null; "$W/_in_k.exe" >/dev/null 2>&1; ir=$?
+  gcc "$S/$kat" -o "$W/_rf_k.exe" 2>/dev/null; "$W/_rf_k.exe" >/dev/null 2>&1; gr=$?
+  if [ "$vf" = "0" ] && [ "$ir" = "99" ] && [ "$gr" = "99" ]; then say "PASS $kat (svir_verify=0 svir_interp=99 gcc=99)"; else say "FAIL $kat (vf=$vf interp=$ir gcc=$gr)"; rc=1; fi
+done
+[ "$rc" = "0" ] && say "ALL PASS -- fn-ptr INC-1 (indirect call + fn-name-value) + INC-2 (field-indirect statement call + 8B field), index-agreement sound"
+exit $rc

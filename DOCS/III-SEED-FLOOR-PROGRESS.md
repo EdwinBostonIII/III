@@ -14,9 +14,24 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 37 seed verify-failures (146 cleared, 80%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr INC-1 landed
+## Verified state: 183 → 34 seed verify-failures (149 cleared, 81%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr INC-1 + INC-2 landed
 Per module now (re-measured **2026-06-30**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
-emit 4 · ast 8 · cg_r3 2 · parse 18** = 37 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+
+**fn-ptr Increment 2 LANDED (2026-06-30, fix #24): floor 37→34.** Field-indirect calls — the seed's
+`G_EMIT.audit_fn(...);` / `st->witness_sink(...);` / `st->pratt_trace(...);`. Cleared exactly those 3 (emit_audit +
+witness_sink + pratt_trace). **★ Decode CORRECTED the memory's "ast cluster = fn-ptr":** `struct iii_ast_walk_state`
+has NO fn-ptr field; the 8 remaining ast fns (zipper/walk_state/diff_recurse/serialize_buf) are struct-by-value/buffer,
+NOT fn-ptr — INC-2 clears 3, not 8. **★ The real blocker was STATEMENT-vs-EXPRESSION routing:** my eprim ARROW/DOT
+field-indirect edits handle `x = p->fn()` (expression); the seed's calls are bare void STATEMENTS (`p->fn();`) routed
+through `pstmt` not `eprim`. Fix: `pstmt:1115` detects `obj->field(args); / obj.field(args);` (guarded `ispat(C+3,Q_LP)`
+so a store `=`/`[` isn't caught) → `ebin`+DROP. eprim-only stayed at 37; +pstmt → 34 (the pstmt fix is the floor-mover;
+`_fc_var` v3/v4 rc2→0 = the teeth). **INC-2b** (fn-ptr-typedef FIELD 8B sizing: FPTD table + prescan reg + reg_fields):
+`audit_fn` el 4→8; the after-field offset now matches gcc (`offsetof(after)=8`, gcc-differential). **NOT seed-critical** —
+`audit_user` is read only in the NULL-skipped `if(audit_fn)` call (the seed sets no sinks), so it's a general-correctness/
+byte-DDC fix, not a floor/seed-run mover. Gate `run_fnptr_gate.sh` (test_fnptr2.c: svir_verify=0 + svir_interp=99 +
+gcc=99, index-agreement teeth); `run_ccsv` EXIT=0; determinism byte-identical; iii_adversarial_verify SURVIVES-high;
+check_discharge pstmt@1115 DISCHARGED. **NOT all-4** (x86/wasm computed-call = INC-3).
 
 **fn-ptr Increment 1 LANDED (2026-06-30, fix #23): ast 10→8.** ccsv codegen for function pointers, the #1 feature-wall:
 two load-bearing edits with DISTINCT roles (revert-teeth DEMONSTRATED 2026-06-30, not argued):

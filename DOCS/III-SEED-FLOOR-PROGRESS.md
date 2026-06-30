@@ -33,6 +33,19 @@ byte-DDC fix, not a floor/seed-run mover. Gate `run_fnptr_gate.sh` (test_fnptr2.
 gcc=99, index-agreement teeth); `run_ccsv` EXIT=0; determinism byte-identical; iii_adversarial_verify SURVIVES-high;
 check_discharge pstmt@1115 DISCHARGED. **NOT all-4** (x86/wasm computed-call = INC-3).
 
+## ★★ RUNTIME DE-RISK (2026-06-30) — structural-zero ≠ runtime-correct; lex.c DIVERGES from gcc
+The COMPLETION-PLAN milestone, finally cashed (`COMPILER/BOOT/_lexharness.c`): drove the FULL `lex.c` (at
+structural-zero across 4 increments, never before RUN) on a real snippet → tokenize-all → `iii_lex_stream_mhash`,
+compiled by BOTH gcc AND ccsv→SVIR→`svir_interp` (the reference oracle). **gcc = `4bddb768…`; ccsv/interp = `N`
+(`iii_lex_create` returned NULL); x86 = empty.** A structurally-clean module **does not run** — a ccsv *codegen*
+bug the faithful interp confirms. **★ BINDING: the floor (34) is STRUCTURAL-ONLY** (`svir_verify` = a no-underflow
+check); it does NOT validate runtime/byte-identity. So INC-1/INC-2 + all prior floor work are *structural reach*,
+not proven runtime correctness — the real Φ1 exit gate is "sovereign iiis-0 byte-matches gcc on stage1_corpus".
+Narrowing: NOT struct-sizing (`sizeof(iii_lex_state_t)=464==gcc`), NOT generic calloc (`calloc(1,808)` isolated=Y).
+Candidate root (NOT pinned): the interp's const-data-corruption watch fired on a local `char b[8]` (STOREs below
+`DLEN_G`) → local buffers may be placed *inside* the const-data section; lex's `scan_number`/`scan_string` use local
+byte buffers. **De-risk method (durable): per-module `ccsv→interp mhash == gcc mhash` before trusting the count.**
+
 **fn-ptr Increment 1 LANDED (2026-06-30, fix #23): ast 10→8.** ccsv codegen for function pointers, the #1 feature-wall:
 two load-bearing edits with DISTINCT roles (revert-teeth DEMONSTRATED 2026-06-30, not argued):
 **(B) the *producer*** — a bare function name used as a value → `CONST(fidx)` (ccsv.iii:922) — is **THE FLOOR-MOVER**:

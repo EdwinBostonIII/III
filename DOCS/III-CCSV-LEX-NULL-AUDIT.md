@@ -144,4 +144,18 @@ The 2026-07-01 rewind to df7ef796 dropped a SET of uncommitted session work (`00
 **COMMIT (recommended, pending user go):** land the CLEAR recovered set (ccsv+ISA+iiisv2+controls+this
 audit) so it can't be lost a THIRD time (root failure mode = verified work left uncommitted). Target
 `master` (all recent history is there; env names `main` as repo-main — confirm). Adjudicate the 5 ambiguous
-files separately (fix vs roadmap-WIP).
+files separately (fix vs roadmap-WIP).  **→ COMMITTED `e46cedb7` (surgical, concurrent WIP untouched).**
+
+## PHASE 4 — RUNTIME-DIFFERENTIAL GATE (built, verified, committed)
+`STDLIB/sovir/run_seed_runtime.sh` — the institutional fix for this session's lesson (structural floor ≠
+runtime-correct). Per seed module with a behavioral harness, asserts `ccsv→SVIR→svir_interp` stream-mhash ==
+`gcc` stream-mhash. Today: lex.c (via `COMPILER/BOOT/_lexharness.c`); extensible via a MODULES table (no stub rows).
+- **POSITIVE:** `lex : ccsv==gcc mhash=4bddb768…` → RUNTIME-CORRECT; `GATE_EXIT=0`.
+- **TEETH (falsifier):** rebuilds the pre-recovery `df7ef796` ccsv → `[<NULL/none>] != gcc` → the gate reddens
+  on the real bug. Red-demo: the broken ccsv as the one-under-test → `GATE RED (rc1)`.
+- **Conscience (you invoked math-conscience):** `iii_math_rigor` = PROVEN-IN-CODE (calibrated to the harness
+  input x₀ — NOT all-lex, NOT the other 5 modules); `iii_adversarial_verify` = SURVIVES-high (empty-collusion
+  edge closed by the `-n "$cg"` guard, gate:52); `iii_check_discharge` = DISCHARGED (teeth @ gate:58);
+  `iii_proof_obligations` contract met (DETERMINISM/BINARY N/A — compiler-unreferenced gate, no codegen change).
+- **SCOPE (honest, not a placeholder):** proves lex.c runtime on x₀; sema/emit/ast/cg_r3/parse await behavioral
+  harnesses (several gated on the shadow-stack / struct-by-value rework) — add a MODULES row when one lands.

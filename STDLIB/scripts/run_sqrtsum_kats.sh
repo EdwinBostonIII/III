@@ -39,6 +39,7 @@ run 2140_adaptive_big    99   "$OUT/sqrt_sum_sign.o" "$LIB"  # TIER 2.5 BIGINT-C
 run 2141_cyclotomic_rotation 99 "$LIB"  # EXACT cyclotomic rotation: rational-multiple-of-π angles in ℚ(√2,√3); 24×15° returns bit-exact to identity (zero drift) where fixed-point drifts
 run 2142_se3_screw       99   "$LIB"  # EXACT SE(3) screw: 3D rotation closure + SO(3) non-commutativity + exact screw translation in ℚ(√2,√3); zero drift vs fixed-point
 run 2143_traj_arclen     99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # LOAD-BEARING: traj_len_sign consumes the bigint adaptive tier -- exact gantry-trajectory length comparison (3+ independent surds at bigint scale)
+run 2144_lattice_pathfind 99  "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # HIGH-END PATHFINDING: exact lattice Dijkstra (lattice_shortest_path) -- frontier ordered by EXACT Sqrt-sum length; matches brute-min, resolves a float-blind Pell near-tie
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

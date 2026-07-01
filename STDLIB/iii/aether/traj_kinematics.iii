@@ -18,6 +18,10 @@
 module traj_kinematics
 
 extern @abi(c-msvc-x64) fn sqrtsum_adaptive_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
 
 var TJ_MAG : [u64; 64]   var TJ_SGN : [i64; 64]   var TJ_BB : [i64; 64]
 
@@ -31,4 +35,75 @@ fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u6
     i = 0u64
     while i < nB { TJ_MAG[m] = pmB[i]   TJ_SGN[m] = 0i64 - 1i64  TJ_BB[m] = pdB[i]   m = m + 1u64   i = i + 1u64 }
     return sqrtsum_adaptive_sign_big((&TJ_MAG) as u64, (&TJ_SGN) as u64, (&TJ_BB) as u64, m)
+}
+
+/* ─── EXACT LATTICE PATHFINDER: high-end shortest-path built on the exact Σ√ length primitive.  Array-based (O(V²))
+ * Dijkstra on a graph whose edges are "move a bigint amount along a lattice direction" (class = squared length =
+ * radicand).  Each node's tentative distance is a per-class bigint amount vector; the priority (min-extract) and the
+ * relaxation both compare EXACT Σ√ lengths via traj_len_sign -> the bigint adaptive tier.  It returns the PROVABLY
+ * shortest Euclidean path, correct where a float solver errs on a Σ√ near-tie.  Builder API: lsp_reset, lsp_rad,
+ * lsp_edge, then lattice_shortest_path.  NB the 64-slot bigint handle table bounds N·classes (keep it small); every
+ * intermediate is dropped so the search never exhausts the table. */
+var G_NN : u64   var G_NC : u64   var G_RAD : [i64; 4]
+var EU : [i64; 16]   var EV : [i64; 16]   var ECLS : [i64; 16]   var EAMT : [u64; 16]   var G_NE : u64
+var DIST : [u64; 32]   var REACHED : [u8; 8]   var SETTLED : [u8; 8]   var CAND : [u64; 4]
+
+fn lsp_reset(nn: u64, nc: u64) -> i32 @export { G_NN = nn   G_NC = nc   G_NE = 0u64   return 0i32 }
+fn lsp_rad(c: u64, r: i64) -> i32 @export { G_RAD[c] = r   return 0i32 }
+fn lsp_edge(u: i64, v: i64, cls: i64, amt: u64) -> i32 @export { EU[G_NE] = u   EV[G_NE] = v   ECLS[G_NE] = cls   EAMT[G_NE] = amt   G_NE = G_NE + 1u64   return 0i32 }
+
+fn lsp_dist_cmp(a: u64, b: u64) -> i32 {
+    let base : u64 = (&DIST) as u64   let rr : u64 = (&G_RAD) as u64
+    return traj_len_sign(base + a * G_NC * 8u64, rr, G_NC, base + b * G_NC * 8u64, rr, G_NC)
+}
+fn lsp_cand_cmp(v: u64) -> i32 {
+    let bv : u64 = (&DIST) as u64 + v * G_NC * 8u64   let rr : u64 = (&G_RAD) as u64
+    return traj_len_sign((&CAND) as u64, rr, G_NC, bv, rr, G_NC)
+}
+
+/* solve source->target; writes the shortest length vector (G_NC bigint handles, in arena ar) to distout; returns reachable. */
+fn lattice_shortest_path(ar: u64, source: u64, target: u64, distout: u64) -> u8 @export {
+    let mut v : u64 = 0u64
+    while v < G_NN { REACHED[v] = 0u8   SETTLED[v] = 0u8   v = v + 1u64 }
+    let mut c : u64 = 0u64
+    while c < G_NC { DIST[source * G_NC + c] = bigint_from_u64(ar, 0u64)   c = c + 1u64 }
+    REACHED[source] = 1u8
+    let mut guard : u64 = 0u64
+    while guard < G_NN {
+        let mut u : u64 = 0u64   let mut found : u8 = 0u8
+        v = 0u64
+        while v < G_NN {
+            let rv : u8 = REACHED[v]   let sv : u8 = SETTLED[v]
+            if rv == 1u8 { if sv == 0u8 { if found == 0u8 { u = v   found = 1u8 } else { let d : i32 = lsp_dist_cmp(v, u)   if d < 0i32 { u = v } } } }
+            v = v + 1u64
+        }
+        if found == 0u8 { guard = G_NN } else {
+            SETTLED[u] = 1u8
+            let mut e : u64 = 0u64
+            while e < G_NE {
+                let eu : i64 = EU[e]
+                if (eu as u64) == u {
+                    let vv : u64 = EV[e] as u64   let cc : i64 = ECLS[e]   let amt : u64 = EAMT[e]
+                    let mut k : u64 = 0u64
+                    while k < G_NC {
+                        if k == (cc as u64) { CAND[k] = bigint_add(ar, DIST[u * G_NC + k], amt) } else { CAND[k] = bigint_copy(ar, DIST[u * G_NC + k]) }
+                        k = k + 1u64
+                    }
+                    let rvv : u8 = REACHED[vv]
+                    let mut better : u8 = 0u8
+                    if rvv == 0u8 { better = 1u8 } else { let d : i32 = lsp_cand_cmp(vv)   if d < 0i32 { better = 1u8 } }
+                    if better == 1u8 {
+                        if rvv == 1u8 { k = 0u64   while k < G_NC { bigint_drop(DIST[vv * G_NC + k])   k = k + 1u64 } }
+                        k = 0u64   while k < G_NC { DIST[vv * G_NC + k] = CAND[k]   k = k + 1u64 }
+                        REACHED[vv] = 1u8
+                    } else { k = 0u64   while k < G_NC { bigint_drop(CAND[k])   k = k + 1u64 } }
+                }
+                e = e + 1u64
+            }
+        }
+        guard = guard + 1u64
+    }
+    let out : *u64 = distout as *u64
+    c = 0u64   while c < G_NC { out[c] = DIST[target * G_NC + c]   c = c + 1u64 }
+    return REACHED[target]
 }

@@ -1,0 +1,92 @@
+/* 2144_lattice_pathfind.iii -- GATE for lattice_shortest_path (traj_kinematics.iii): high-end EXACT pathfinding on the
+ * exact Σ√ length primitive.  Array-based Dijkstra whose frontier is ordered by EXACT Euclidean length (traj_len_sign ->
+ * the bigint adaptive tier), so it returns the PROVABLY shortest lattice path where a float solver errs on a near-tie.
+ *
+ * Graph (N=4; classes {1,2,3,5}=√1,√2,√3,√5; edge amounts bigint): four source->target paths --
+ *   A: 0-3 class √2, amount Y            -> Y√2          (the exact shortest)
+ *   B: 0-3 class √1, amount X            -> X            (a FLOAT-BLIND Pell near-tie, X²−2Y²=1 so Y√2<X by ~1/2X)
+ *   C: 0-1(√3,Y) 1-3(√5,Y)               -> Y(√3+√5)     (3-surd comparison vs A; clearly longer)
+ *   D: 0-2(√2,Y) 2-3(√3,Y)               -> Y(√2+√3)     (longer)
+ * Gate: (A) Dijkstra's answer == the brute-force min over all four path vectors (algorithm CORRECT); (B) the winner is
+ * path A, strictly shorter than the Pell near-tie B (exact resolves what float ties); (C) the Pell amounts are bigint.
+ *   exit 99 = reachable + Dijkstra==brute-min==A + A strictly < B.
+ *   10 target unreachable   11 brute-min != A   12 Dijkstra != brute-min (algorithm wrong / handle leak)   13 A not < B */
+module corpus_2144_lattice_pathfind
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_reset(nn: u64, nc: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_rad(c: u64, r: i64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_edge(u: i64, v: i64, cls: i64, amt: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lattice_shortest_path(ar: u64, source: u64, target: u64, distout: u64) -> u8 from "traj_kinematics.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var K_RAD : [i64; 4]   var PATHV : [u64; 16]   var DOUT : [u64; 4]
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(8388608u64)
+    /* Pell (X,Y): X²−2Y²=1, bigint, drop-managed recurrence from (3,2). */
+    let mut px : u64 = bigint_from_u64(ar, 3u64)   let mut py : u64 = bigint_from_u64(ar, 2u64)
+    let t3 : u64 = bigint_from_u64(ar, 3u64)   let t4 : u64 = bigint_from_u64(ar, 4u64)   let t2 : u64 = bigint_from_u64(ar, 2u64)
+    let mut it : u64 = 0u64
+    while it < 25u64 {
+        let m1 : u64 = bigint_mul(ar, t3, px)   let m2 : u64 = bigint_mul(ar, t4, py)   let nx : u64 = bigint_add(ar, m1, m2)   bigint_drop(m1)   bigint_drop(m2)
+        let m3 : u64 = bigint_mul(ar, t2, px)   let m4 : u64 = bigint_mul(ar, t3, py)   let ny : u64 = bigint_add(ar, m3, m4)   bigint_drop(m3)   bigint_drop(m4)
+        bigint_drop(px)   bigint_drop(py)   px = nx   py = ny   it = it + 1u64
+    }
+    let bigX : u64 = px   let bigY : u64 = py
+
+    /* build the graph via the exact-pathfinder builder API. */
+    lsp_reset(4u64, 4u64)
+    lsp_rad(0u64, 1i64)   lsp_rad(1u64, 2i64)   lsp_rad(2u64, 3i64)   lsp_rad(3u64, 5i64)
+    lsp_edge(0i64, 3i64, 1i64, bigY)                       /* A: 0-3, √2, Y */
+    lsp_edge(0i64, 3i64, 0i64, bigX)                       /* B: 0-3, √1, X (Pell near-tie) */
+    lsp_edge(0i64, 1i64, 2i64, bigY)                       /* C: 0-1, √3, Y */
+    lsp_edge(1i64, 3i64, 3i64, bigY)                       /* C: 1-3, √5, Y */
+    lsp_edge(0i64, 2i64, 1i64, bigY)                       /* D: 0-2, √2, Y */
+    lsp_edge(2i64, 3i64, 2i64, bigY)                       /* D: 2-3, √3, Y */
+
+    let reach : u8 = lattice_shortest_path(ar, 0u64, 3u64, (&DOUT) as u64)
+
+    /* brute-force min over the four explicit path vectors [√1,√2,√3,√5]-amounts. */
+    K_RAD[0u64]=1i64 K_RAD[1u64]=2i64 K_RAD[2u64]=3i64 K_RAD[3u64]=5i64
+    let z0 : u64 = bigint_from_u64(ar, 0u64)
+    /* A=[0,Y,0,0] */ PATHV[0u64]=z0 PATHV[1u64]=bigint_copy(ar,bigY) PATHV[2u64]=z0 PATHV[3u64]=z0
+    /* B=[X,0,0,0] */ PATHV[4u64]=bigint_copy(ar,bigX) PATHV[5u64]=z0 PATHV[6u64]=z0 PATHV[7u64]=z0
+    /* C=[0,0,Y,Y] */ PATHV[8u64]=z0 PATHV[9u64]=z0 PATHV[10u64]=bigint_copy(ar,bigY) PATHV[11u64]=bigint_copy(ar,bigY)
+    /* D=[0,Y,Y,0] */ PATHV[12u64]=z0 PATHV[13u64]=bigint_copy(ar,bigY) PATHV[14u64]=bigint_copy(ar,bigY) PATHV[15u64]=z0
+    let rr : u64 = (&K_RAD) as u64
+    let mut bi : u64 = 0u64   let mut p : u64 = 1u64
+    while p < 4u64 {
+        let cur : u64 = (&PATHV) as u64 + p * 4u64 * 8u64
+        let best : u64 = (&PATHV) as u64 + bi * 4u64 * 8u64
+        let d : i32 = traj_len_sign(cur, rr, 4u64, best, rr, 4u64)
+        if d < 0i32 { bi = p }
+        p = p + 1u64
+    }
+    let bm : u64 = (&PATHV) as u64 + bi * 4u64 * 8u64
+    let eqlen : i32 = traj_len_sign((&DOUT) as u64, rr, 4u64, bm, rr, 4u64)
+    let ab : i32 = traj_len_sign((&PATHV) as u64, rr, 4u64, (&PATHV) as u64 + 4u64 * 8u64, rr, 4u64)
+    let xlimbs : u64 = bigint_len_limbs(bigX)
+
+    e_i64(reach as i64) sp() e_i64(bi as i64) sp() e_i64((eqlen + 1i32) as i64) sp() e_i64((ab + 1i32) as i64) sp() e_i64(xlimbs as i64) nl()
+    bigint_drop_arena(ar)   arena_drop(ar)
+
+    if reach != 1u8 { return 10u64 }
+    if bi != 0u64 { return 11u64 }
+    if eqlen != 0i32 { return 12u64 }
+    if ab != (0i32 - 1i32) { return 13u64 }
+    if xlimbs < 2u64 { return 14u64 }              /* the Pell amounts must be genuinely bigint (> 2^64) */
+    return 99u64
+}

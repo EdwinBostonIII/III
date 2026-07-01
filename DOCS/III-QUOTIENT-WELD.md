@@ -110,6 +110,20 @@ fix is dropping every intermediate (the engines themselves are sound at deep Pel
 HONEST boundary: smooth cyclotomic-screw arc-lengths are `√(ℚ(√2,√3)-element)` (nested radicals, NOT
 integer radicands) — a separate future tower-denesting problem, not this consumer.
 
+**High-end exact pathfinding on top of the primitive** (`lattice_shortest_path`, gate `2144`, gate now
+14/0). Array-based (O(V²)) Dijkstra on a lattice graph whose edges are "move a bigint amount along a
+lattice direction"; each node's tentative distance is a per-class bigint amount vector, and both the
+min-extract and the relaxation compare EXACT Euclidean lengths via `traj_len_sign` → the bigint adaptive
+tier. It returns the provably-shortest path — the *contribution* is exactness of the frontier order, where
+a float solver errs on a Σ√ near-tie. Gated three ways: (a) the result exactly equals the brute-force min
+over all source→target paths (algorithm correct — the check that catches a handle-leak, not just a wrong
+length); (b) the winner is a path whose length is strictly shorter than a **Pell near-tie** (`X²−2Y²=1`,
+X,Y bigint, rel gap ~10⁻³⁹ — float calls it equal); (c) the amounts are genuinely bigint (X > 2⁶⁴). This
+turns `traj_kinematics` from a length primitive into an exact motion planner. Honest scope: exact
+comparison is slower than float — this is for the cases where float-optimality is *wrong* (near-degenerate
+Σ√ ties), not a float replacement; and the 64-slot bigint handle table bounds `nodes×classes`, so it is a
+small-graph exact solver (every intermediate dropped so the search never exhausts the table).
+
 ## 0. The ask, de-hyped
 
 The vision (oracle for a prover · Gröbner accelerator · exact Lie-group kinematics · break the

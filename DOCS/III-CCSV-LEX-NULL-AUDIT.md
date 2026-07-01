@@ -137,9 +137,16 @@ x86(sovereign)+wasm=99). **ALL FOUR GATES GREEN.**
 The 2026-07-01 rewind to df7ef796 dropped a SET of uncommitted session work (`004e1baa` ⊇ df7ef796):
 - **CLEAR verified-fix losses (gate-un-redding) — RECOVERED:** `ccsv.iii`+DIV_U/REM_U ISA (lex parity),
   `iiisv2.iii` (DDC closure), `_ve_goodmod/_ve_badmod` controls (seed-verify instrument).
-- **AMBIGUOUS (differ master↔004e1baa; may be "event-build roadmap" WIP per the backup commit msg, NOT
-  verified fixes) — NOT auto-recovered, need adjudication:** `eidos_ripple_native.iii`(14),
-  `eidos_ripple_probe.iii`(14), `xii_proof_demo.iii`(28), `zk_eidos_ripple.iii`(14), `zk_gu_ripple_xii.iii`(24).
+- **ADJUDICATED (2026-07-01, /deep-think) — all 5 = LEAVE (no recovery, no build):** the master↔004e1baa diff
+  is UNIFORMLY reorg-rename plumbing — extern `from "ripple.iii"/"xii_term.iii"/"xii_canonicalise.iii"/
+  "xii_proof.iii"/"xii_proof_check.iii"/"xii_admission.iii"` → `"ripple_omnia.iii"/"rewrite_term.iii"/
+  "rewrite_canonicalise.iii"/"rewrite_proof.iii"/"rewrite_proof_check.iii"/"rewrite_admission.iii"` — with NO
+  logic/body/new-function changes. MASTER versions are CORRECT: the referenced organs EXIST
+  (`STDLIB/iii/eidos/ripple.iii`, `STDLIB/iii/omnia/xii_{term,canonicalise,proof,proof_check,admission}.iii`)
+  and the 5 gates are WIRED (`run_grand_unification`/`run_xii_proof`/`run_zk`/`run_eidos_svir.sh`). The
+  reorg-renamed targets are ABSENT on master → recovering would BREAK the gates. NOT demos-needing-production
+  (they drive EXISTING production organs; `xii_proof_demo` is a legacy-named Ω3 GATE *with adversary arms*).
+  The rewind correctly kept the master versions. **No files changed.**
 
 **COMMIT (recommended, pending user go):** land the CLEAR recovered set (ccsv+ISA+iiisv2+controls+this
 audit) so it can't be lost a THIRD time (root failure mode = verified work left uncommitted). Target

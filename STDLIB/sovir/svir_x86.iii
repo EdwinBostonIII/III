@@ -77,6 +77,7 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x21u32 { ez("popq %rcx\npopq %rax\nsubq %rcx, %rax\npushq %rax\n~" as u64) }
         if op == 0x22u32 { ez("popq %rcx\npopq %rax\nimulq %rcx, %rax\npushq %rax\n~" as u64) }
         if op == 0x23u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rax\n~" as u64) }
+        if op == 0x2Au32 { ez("popq %rcx\npopq %rax\nxorq %rdx, %rdx\ndivq %rcx\npushq %rax\n~" as u64) }   /* DIV_U : UNSIGNED divide (zero-extend rdx, divq) */
         if op == 0x30u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsete %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
         if op == 0x32u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetl %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
         if op == 0x33u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetge %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
@@ -116,6 +117,7 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x88u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovw %dx, (%rcx,%rax,1)\n~" as u64) }       /* STORE16 mem[addr]=val (low 2 bytes) */
         if op == 0x89u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovl %edx, (%rcx,%rax,1)\n~" as u64) }      /* STORE32 mem[addr]=val (low 4 bytes) */
         if op == 0x24u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rdx\n~" as u64) }   /* SREM -> remainder in %rdx */
+        if op == 0x2Bu32 { ez("popq %rcx\npopq %rax\nxorq %rdx, %rdx\ndivq %rcx\npushq %rdx\n~" as u64) }   /* REM_U : UNSIGNED remainder in %rdx */
         if op == 0x72u32 { ez("addq $8, %rsp\n~" as u64) }                                          /* DROP */
         if op == 0x71u32 { ez("popq %rcx\nmovq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq __putc\nmovq -8(%rbp), %rsp\n~" as u64) }   /* PRINT_CHAR -> __putc(char in rcx) */
         if op == 0x60u32 { ez("popq %rax\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64) }

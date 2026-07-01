@@ -1,0 +1,10 @@
+/* _ve_badmod.iii -- instrument NEGATIVE control (the falsifier for the instrument itself):
+ * a hand-laid 1-function SVIR module whose body is a single UNKNOWN opcode 0xFF.
+ * nfunc=1 ; fn0 header [0,0, blen=1 (lo,hi)] ; body = [0xFF].
+ * verify_body: op 0xFF matches no case -> known stays 0 -> returns 2 (unknown opcode).
+ * Expect verify_each: "0 2" then "# 1 1 2 2".  If a structurally-broken module reports 0, the instrument
+ * cannot detect failures and every "verify_fail=0" it prints is worthless. */
+module ve_badmod
+var SVIR : [u8; 6] = [1u8, 0u8,0u8, 1u8,0u8, 255u8]
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 6u64 }

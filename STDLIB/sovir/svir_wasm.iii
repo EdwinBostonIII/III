@@ -70,6 +70,8 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x22u32 { c_emit(0x7Eu32) }
         if op == 0x23u32 { c_emit(0x7Fu32) }
         if op == 0x24u32 { c_emit(0x81u32) }                  /* SREM -> i64.rem_s */
+        if op == 0x2Au32 { c_emit(0x80u32) }                  /* DIV_U -> i64.div_u */
+        if op == 0x2Bu32 { c_emit(0x82u32) }                  /* REM_U -> i64.rem_u */
         if op == 0x30u32 { c_emit(0x51u32)  c_emit(0xADu32) }
         if op == 0x32u32 { c_emit(0x53u32)  c_emit(0xADu32) }  /* LT_S -> i64.lt_s (0x53; 0x55 is gt_s) ; extend */
         if op == 0x33u32 { c_emit(0x59u32)  c_emit(0xADu32) }

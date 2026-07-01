@@ -96,9 +96,11 @@ fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL
 fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LN=LN+1u32 }  return s }
 
 var BD : [u8; 16384]  var BL : u64 = 0u64
-fn eb(b: u32) { if BL<16384u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }
-fn econst(v: i64) { eb(0x01u32)  let mut k:u32=0u32  while k<8u32 { eb(((v as u64) >> (8u64*(k as u64))) as u32)  k=k+1u32 } }
-fn eu8(o: u32, a: u32) { eb(o)  eb(a) }
+var SV_LAST_OP : u32 = 0u32   /* last OPCODE emitted into BD (operand bytes via erb do NOT change it); gates the trailing default-return so a fn already ending in RETURN (0x60) gets no dead tail -- byte-identical to iiisv (cross-frontend DDC) */
+fn erb(b: u32) { if BL<16384u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }   /* raw body byte (operands): does NOT update SV_LAST_OP */
+fn eb(b: u32) { SV_LAST_OP = b & 0xFFu32  erb(b) }                              /* OPCODE byte: tracks the last opcode for the fall-through guard */
+fn econst(v: i64) { eb(0x01u32)  let mut k:u32=0u32  while k<8u32 { erb(((v as u64) >> (8u64*(k as u64))) as u32)  k=k+1u32 } }
+fn eu8(o: u32, a: u32) { eb(o)  erb(a) }
 
 var MO : [u8; 32768]  var ML : u64 = 0u64
 fn mb(b: u32) { if ML<32768u64 { MO[ML]=(b & 0xFFu32) as u8  ML=ML+1u64 } }
@@ -135,7 +137,7 @@ fn emit_atom() {
             C=C+1u32  let mut ac:u32=0u32
             if cp(Q_RP)==0u32 { emit_expr()  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  emit_expr()  ac=ac+1u32 } }
             eat(Q_RP)
-            let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac) }
+            let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  erb(fi as u32)  erb(ac) }
             return
         }
         if cp(Q_LBR)==1u32 {                                  /* array load */
@@ -242,8 +244,8 @@ fn cfn(fk: u32) {
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { let pt:u32=C  C=C+1u32  eat(Q_COL)  C=C+1u32  ladd(pt)  params=params+1u32  eat(Q_COM) } } }
     eat(Q_RP)  if cp(Q_ARR)==1u32 { C=C+1u32  C=C+1u32 }
     let mut sg:u32=1u32  while sg==1u32 { if TK[C as u64]==0u32 {sg=0u32} else { if cp(Q_LB)==1u32 {sg=0u32} else {C=C+1u32} } }   /* skip @export etc. before body */
-    BL=0u64  pblock()
-    econst(0i64)  eb(0x60u32)   /* trailing default return (see iiisv): every fn pushes one value for the CALL convention */
+    BL=0u64  SV_LAST_OP=0u32  pblock()
+    if SV_LAST_OP != 0x60u32 { econst(0i64)  eb(0x60u32) }   /* trailing default return ONLY on fall-through -- a fn already ending in RETURN (0x60) gets no dead tail; byte-identical to iiisv (run_ddc) */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
 }

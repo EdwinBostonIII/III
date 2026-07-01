@@ -1,0 +1,8 @@
+/* _ve_goodmod.iii -- instrument POSITIVE control: a hand-laid VALID 1-function SVIR module.
+ * nfunc=1 ; fn0 header [b0=0,b1=0, blen=10 (lo,hi)] ; body = CONST 7 (0x01 + 8 LE bytes) ; DROP (0x72).
+ * verify_body: CONST depth+1, DROP depth-1 -> depth 0, body consumed, CSN 0 -> rc 0.  No trailing data.
+ * Expect verify_each: "0 0" then "# 1 0 0 0".  If this fails, the instrument itself is broken. */
+module ve_goodmod
+var SVIR : [u8; 15] = [1u8, 0u8,0u8, 10u8,0u8, 1u8, 7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 114u8]
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 15u64 }

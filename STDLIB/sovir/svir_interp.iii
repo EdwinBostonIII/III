@@ -138,6 +138,7 @@ fn exec_fn(fnidx: u32, depth: u32) -> u64 {
             if op==0x20u32 { r = a + b }  if op==0x21u32 { r = a - b }  if op==0x22u32 { r = a * b }
             if op==0x23u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) / bi) as u64 } }
             if op==0x24u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) % bi) as u64 } }
+            if op==0x2Au32 { if b != 0u64 { r = a / b } }  if op==0x2Bu32 { if b != 0u64 { r = a % b } }   /* DIV_U / REM_U : UNSIGNED div/mod (a,b already u64) -- the unsigned complement of SDIV/SREM */
             if op==0x25u32 { r = a & b }  if op==0x26u32 { r = a | b }  if op==0x27u32 { r = a ^ b }
             if op==0x28u32 { r = a << (b & 63u64) }  if op==0x29u32 { r = a >> (b & 63u64) }
             if op==0x30u32 { if a == b { r = 1u64 } }  if op==0x31u32 { if a != b { r = 1u64 } }

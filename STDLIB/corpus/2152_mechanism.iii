@@ -9,10 +9,14 @@
  *   SCREW     an SE(3) lead-screw feed [rotate +15°, translate +1 along z] × 24 restores orientation EXACTLY and lands
  *             at z = 24 exactly;
  *   NONCOMM   R_z·R_x != R_x·R_z EXACTLY (the genuine 3D signature -- not a 2D-degenerate stand-in);
- *   DRIFT     the fixed-point (float-proxy) rotation loop DRIFTS after 240 steps -- the failure the exact engine defeats.
+ *   DRIFT     the fixed-point (float-proxy) rotation loop DRIFTS after 240 steps -- the failure the exact engine defeats;
+ *   QUOTIENT  (T3.b) q23_sign routes through verb_geom's e-class sign cache: a second full revolution over the SAME
+ *             24 exact configurations touches the exact-sign wall ZERO more times -- every re-query is a class hit
+ *             (the symmetry-quotient thesis live at a consumer, not a KAT-only demo).
  *
  * HONEST SCOPE: cyclotomic (integer-multiple-of-15°) angles only; transcendental angles are undecidable (Richardson).
- *   exit 99 = all arms correct.  10 closure/drift-of-exact  20 reach/sign  30 screw  40 3D-degenerate  50 fixed-point-no-drift */
+ *   exit 99 = all arms correct.  10 closure/drift-of-exact  20 reach/sign  30 screw  40 3D-degenerate  50 fixed-point-no-drift
+ *   60 quotient: a revisited exact configuration MISSED the class cache (the wall was touched twice for one value) */
 module corpus_2152_mechanism
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -29,17 +33,21 @@ extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
 extern @abi(c-msvc-x64) fn so3_rot_z15(mb: u64) -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn so3_rot_x15(mb: u64) -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_hit() -> u64 from "verb_geom.iii"
+extern @abi(c-msvc-x64) fn vg_miss() -> u64 from "verb_geom.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 /* exact sign of rotated end-effector coordinate `axis` (0=x,1=y,2=z), via the Σ√ bridge (q23_sign.iii). */
 fn pts(axis: u64) -> i32 { return q23_sign(mech_pt_addr() + axis * 32u64) }
 
-var FCLOSE : u64   var FREACH : u64   var FSCREW : u64   var FNC : u64   var FDRIFT : u64
+var FCLOSE : u64   var FREACH : u64   var FSCREW : u64   var FNC : u64   var FDRIFT : u64   var FQUOT : u64
 var RZ : [i64; 36]   var RX : [i64; 36]   var MA : [i64; 36]   var MB : [i64; 36]   var DIFF : [i64; 4]
 
 fn main() -> u64 {
-    FCLOSE = 0u64   FREACH = 0u64   FSCREW = 0u64   FNC = 0u64   FDRIFT = 0u64
+    FCLOSE = 0u64   FREACH = 0u64   FSCREW = 0u64   FNC = 0u64   FDRIFT = 0u64   FQUOT = 0u64
+    vg_reset()
 
     /* ── Arm CLOSURE: zero drift over 100 revolutions.  home at 24/240/2400; NOT home at 5/12. ── */
     mech_reset()
@@ -100,10 +108,25 @@ fn main() -> u64 {
     if drift != 1u8 { FDRIFT = FDRIFT + 1u64 }
     putchar(68i32) putchar(58i32) sp() e_i64(differ as i64) sp() e_i64(drift as i64) sp() e_i64(fc) sp() e_i64(fs) nl()   /* "D: 1 1 <fc> <fs>" */
 
+    /* ── Arm QUOTIENT (T3.b): the 24-periodic orbit re-queried -- the wall is touched once per DISTINCT exact
+     * value; the SECOND revolution generates ZERO new misses (every query is an e-class cache hit). ── */
+    vg_reset()
+    mech_reset()
+    let mut qk : u64 = 0u64
+    while qk < 24u64 { mech_rotate_z15()   mech_apply(10i64, 3i64, 0i64)   pts(0u64)   qk = qk + 1u64 }
+    let m1 : u64 = vg_miss()                                               /* first revolution: the distinct classes */
+    qk = 0u64
+    while qk < 24u64 { mech_rotate_z15()   mech_apply(10i64, 3i64, 0i64)   pts(0u64)   qk = qk + 1u64 }
+    let m2 : u64 = vg_miss()   let h2 : u64 = vg_hit()
+    putchar(81i32) putchar(58i32) sp() e_i64(m1 as i64) sp() e_i64((m2 - m1) as i64) sp() e_i64(h2 as i64) nl()   /* "Q: 24 0 24" */
+    if m2 != m1 { FQUOT = FQUOT + 1u64 }                                   /* zero NEW wall touches on the revisit */
+    if h2 < 24u64 { FQUOT = FQUOT + 1u64 }                                 /* all 24 revisit queries were class hits */
+
     if FCLOSE != 0u64 { return 10u64 }
     if FREACH != 0u64 { return 20u64 }
     if FSCREW != 0u64 { return 30u64 }
     if FNC    != 0u64 { return 40u64 }
     if FDRIFT != 0u64 { return 50u64 }
+    if FQUOT  != 0u64 { return 60u64 }
     return 99u64
 }

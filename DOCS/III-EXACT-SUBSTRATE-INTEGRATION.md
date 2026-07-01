@@ -40,7 +40,23 @@ verification against the WIP tree (not the docs). Every claim below is tagged `[
   the whole family committed.  Census (committed reports): uncovered 75 / gate 10 / reach 157 — ALL inherited WIP
   debt (au_*/et_*/xii_proof_*/UI-cubics/lens-app exports; the weld organs contribute **zero**; `csg_union/intersect`
   covered this session in `2150`).  The burn-down remains the coverage-ledger campaign's, unchanged by this landing.
-- **T3 — reconciliation of the two live kernels + consumer promotion: in flight below.**
+- **T3.a THE ONE-KERNEL RECONCILIATION — LANDED.**  `ui_bsign1`/`ui_sign_bi_big` (i64-coeff 1–2-surd iterated
+  squaring) and `ui_bigsign2` (bigint-coeff 2-surd) MOVED into `sqrt_sum_sign.iii` as the ladder's Tier 0;
+  `ui_exact_bigsign.iii` DELETED; `ui_exact_big.iii` keeps only the coverage engine and consumes the kernel.
+  `sqrtsum_lazy3` gained the low-surd SHAPE rung (any raw ≤2-surd query — any radicand magnitude, and any
+  coefficient magnitude via the bad-screen path — decides by exact O(1) squaring; `lazy_biq_count`, gate 2159
+  ARM 7), and `sqrtsum_adaptive_sign_big` gained the 2-class O(1) fast path.  ONE kernel, six ordered rungs:
+  interval → canon → kfield tower → bi-quadratic squaring → adaptive → separation bound.  Consumers repointed
+  at the symbol level (`ui_exact_bigcov`, `field_full`, `ui_exact_sym`); gates 28/0 · 7/0 · 9/0 · 2/0; reseal
+  790 BIT-IDENTICAL.
+- **T3.b THE CONSUMER PROMOTION — LANDED (gate 2152 arm QUOTIENT).**  `q23_sign` (the ℚ(√2,√3) bridge under
+  the zero-drift mechanism and the collision organ) now routes through `verb_geom`'s e-class sign cache
+  (`vg_sign`) — verb_geom stops being a 2125-only demo.  Executed evidence `Q: 24 0 24`: sweeping the
+  24-periodic orbit touches the exact-sign wall once per DISTINCT configuration; the second full revolution
+  generates ZERO new wall touches (24/24 class hits) — the symmetry-quotient thesis (2138) live at a real
+  consumer, and IDENTIFY⟺DECIDE operating as a rule (same e-class ⟺ kernel-certified equal), exactly the
+  promotion §3 called for.  Answers identical (vg_sign falls through to the ladder; unpackable values skip
+  the cache).  2153 (collision) re-proved through the promoted route.
 
 ## 0. Verdict in one line
 

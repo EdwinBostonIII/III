@@ -1,0 +1,34 @@
+/* traj_kinematics.iii -- EXACT trajectory arc-length comparison: the load-bearing consumer of the bigint adaptive tier.
+ *
+ * A gantry / waypoint trajectory is a sequence of MOVES, each along a fixed lattice direction (squared length dirsq[i],
+ * a small integer) by a large integer amount mag[i] (a bigint handle).  Its exact Euclidean length is
+ * Σ mag[i]·√(dirsq[i]) -- a sum of square roots with BIGINT coefficients and small INTEGER radicands.  When the
+ * directions have ≥3 distinct squarefree squared-lengths (e.g. (1,1,0)→2, (1,1,1)→3, (2,1,0)→5) the length is a sum of
+ * 3+ INDEPENDENT surds at render/workspace scale -- exactly sqrtsum_adaptive_sign_big's domain (the tier ui_bigsign2's
+ * 2-surd squaring cannot reach, since squaring 3 independent surds blows up to cross-terms).
+ *
+ * traj_len_sign decides sign(len(A) − len(B)) EXACTLY: +1 A longer, −1 B longer, 0 equal -- the exact "which path is
+ * shorter" predicate (Euclidean shortest-path / motion planning), correct where IEEE float collapses near-ties at scale.
+ * This is what makes the bigint adaptive tier load-bearing: a shipped organ that consumes it on a real kinematics query.
+ *
+ * HONEST SCOPE: the directions' squared-lengths must fit i64 (the radicand interface); the MOVE AMOUNTS are unbounded
+ * (bigint).  Smooth CYCLOTOMIC-screw arc-lengths are √(ℚ(√2,√3)-element) -- nested radicals, NOT integer radicands -- so
+ * they are a separate future problem (a tower-denesting kf_sqrt), not this consumer.  Here: rigid moves along lattice
+ * directions, which is genuinely SE(3) (translations) and genuinely feeds the integer-radicand tier. */
+module traj_kinematics
+
+extern @abi(c-msvc-x64) fn sqrtsum_adaptive_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+var TJ_MAG : [u64; 64]   var TJ_SGN : [i64; 64]   var TJ_BB : [i64; 64]
+
+/* sign(len(A) − len(B)); A moves get sign +1, B moves −1; radicand = the direction's squared length. */
+fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 @export {
+    let pmA : *u64 = magA as *u64   let pdA : *i64 = dirsqA as *i64
+    let pmB : *u64 = magB as *u64   let pdB : *i64 = dirsqB as *i64
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < nA { TJ_MAG[m] = pmA[i]   TJ_SGN[m] = 1i64        TJ_BB[m] = pdA[i]   m = m + 1u64   i = i + 1u64 }
+    i = 0u64
+    while i < nB { TJ_MAG[m] = pmB[i]   TJ_SGN[m] = 0i64 - 1i64  TJ_BB[m] = pdB[i]   m = m + 1u64   i = i + 1u64 }
+    return sqrtsum_adaptive_sign_big((&TJ_MAG) as u64, (&TJ_SGN) as u64, (&TJ_BB) as u64, m)
+}

@@ -1,0 +1,92 @@
+/* 2143_traj_arclen.iii -- GATE for traj_len_sign (traj_kinematics.iii): the load-bearing consumer of the bigint adaptive
+ * tier.  Compares exact Euclidean lengths of two gantry trajectories (moves along lattice directions by bigint amounts).
+ * Each case is decided by the CONSUMER (traj_len_sign -> sqrtsum_adaptive_sign_big) AND cross-checked against the
+ * INDEPENDENT separation-bound oracle ui_sqrt_sum_sign_big, and against the KNOWN truth.
+ *   Case 1: √2+√3 vs √5           -> A longer (3 independent surds, small).
+ *   Case 2: 1e25·(√2+√3) vs 1e25·√5 -> A longer (3 independent surds at BIGINT scale -- the tier's target domain).
+ *   Case 3: 5·√2 vs 5·√2          -> EQUAL (exact zero the interval alone would loop on).
+ *   Case 4: Y·√2 vs X (X²−2Y²=1, a deep √2 Pell convergent, X,Y bigint) -> B longer by ~1/(2X) ~ 1e-… , a FLOAT-BLIND
+ *           near-tie IEEE double calls equal; the exact tier resolves it to −1.
+ *   exit 99 = consumer==oracle on every case AND each matches its known sign (incl the bigint 3-surd + float-blind cases).
+ *   10 consumer disagreed with the oracle     20 a case's sign != the known truth (3-surd/zero/float-blind arm missing) */
+module corpus_2143_traj_arclen
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn e_sp() -> i32 { putchar(32i32)   return 0i32 }
+fn e_nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var MAGA : [u64; 8]   var DSA : [i64; 8]   var MAGB : [u64; 8]   var DSB : [i64; 8]
+var KMAG : [u64; 16]  var KSGN : [i64; 16]  var CBB : [i64; 16]
+var FAILC : u64   var TRUTHC : u64
+
+/* run a case: consumer vs oracle vs known truth.  builds the combined arrays for the oracle from MAGA/DSA + MAGB/DSB. */
+fn run_case(nA: u64, nB: u64, expect: i32) -> i32 {
+    let cons : i32 = traj_len_sign((&MAGA) as u64, (&DSA) as u64, nA, (&MAGB) as u64, (&DSB) as u64, nB)
+    /* combined for the independent oracle: A moves +, B moves −. */
+    let mut m : u64 = 0u64   let mut i : u64 = 0u64
+    while i < nA { KMAG[m]=MAGA[i]  KSGN[m]=1i64        CBB[m]=DSA[i]  m=m+1u64  i=i+1u64 }
+    i = 0u64
+    while i < nB { KMAG[m]=MAGB[i]  KSGN[m]=0i64-1i64   CBB[m]=DSB[i]  m=m+1u64  i=i+1u64 }
+    let orac : i32 = ui_sqrt_sum_sign_big((&KMAG) as u64, (&KSGN) as u64, (&CBB) as u64, m)
+    e_i64((cons + 1i32) as i64) e_sp() e_i64((orac + 1i32) as i64) e_sp() e_i64((expect + 1i32) as i64) e_nl()
+    if cons != orac { FAILC = FAILC + 1u64 }
+    if cons != expect { TRUTHC = TRUTHC + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    FAILC = 0u64   TRUTHC = 0u64
+    let tar : u64 = arena_new(4194304u64)
+    let one : u64 = bigint_from_u64(tar, 1u64)
+    let five : u64 = bigint_from_u64(tar, 5u64)
+    let e12 : u64 = bigint_from_u64(tar, 1000000000000u64)
+    let e13 : u64 = bigint_from_u64(tar, 10000000000000u64)
+    let big : u64 = bigint_mul(tar, e12, e13)                     /* 1e25 > i64 */
+
+    /* CASE 1: √2 + √3  vs  √5  -> A longer (+1). */
+    MAGA[0u64]=one  DSA[0u64]=2i64   MAGA[1u64]=one  DSA[1u64]=3i64
+    MAGB[0u64]=one  DSB[0u64]=5i64
+    run_case(2u64, 1u64, 1i32)
+
+    /* CASE 2: 1e25·(√2+√3) vs 1e25·√5 -> A longer (+1), 3 INDEPENDENT surds at BIGINT scale. */
+    MAGA[0u64]=big  DSA[0u64]=2i64   MAGA[1u64]=big  DSA[1u64]=3i64
+    MAGB[0u64]=big  DSB[0u64]=5i64
+    run_case(2u64, 1u64, 1i32)
+
+    /* CASE 3: 5·√2 vs 5·√2 -> EQUAL (0). */
+    MAGA[0u64]=five DSA[0u64]=2i64
+    MAGB[0u64]=five DSB[0u64]=2i64
+    run_case(1u64, 1u64, 0i32)
+
+    /* CASE 4: deep √2 Pell convergent (X,Y bigint, X²−2Y²=1): Y·√2 vs X·1 -> B longer (−1), FLOAT-BLIND. */
+    let mut px : u64 = bigint_from_u64(tar, 3u64)   let mut py : u64 = bigint_from_u64(tar, 2u64)   /* 3²−2·2²=1 */
+    let three : u64 = bigint_from_u64(tar, 3u64)   let four : u64 = bigint_from_u64(tar, 4u64)   let two : u64 = bigint_from_u64(tar, 2u64)
+    let mut it : u64 = 0u64
+    while it < 25u64 {                                            /* x'=3x+4y, y'=2x+3y  (preserves x²−2y²=1) */
+        /* DROP every intermediate + the old X,Y -- the 64-slot bigint handle table exhausts otherwise, and a degenerate
+         * zero-handle would feed the sign engine 0 mags => a spurious FALSE ZERO (iii_bigint_handle_table_64). */
+        let m1 : u64 = bigint_mul(tar, three, px)   let m2 : u64 = bigint_mul(tar, four, py)   let nx : u64 = bigint_add(tar, m1, m2)   bigint_drop(m1)   bigint_drop(m2)
+        let m3 : u64 = bigint_mul(tar, two, px)     let m4 : u64 = bigint_mul(tar, three, py)  let ny : u64 = bigint_add(tar, m3, m4)   bigint_drop(m3)   bigint_drop(m4)
+        bigint_drop(px)   bigint_drop(py)   px = nx   py = ny
+        it = it + 1u64
+    }
+    MAGA[0u64]=py DSA[0u64]=2i64      /* Y·√2 */
+    MAGB[0u64]=px DSB[0u64]=1i64      /* X·√1 = X */
+    run_case(1u64, 1u64, 0i32 - 1i32)
+
+    bigint_drop_arena(tar)   arena_drop(tar)
+    if FAILC != 0u64 { return 10u64 }
+    if TRUTHC != 0u64 { return 20u64 }
+    return 99u64
+}

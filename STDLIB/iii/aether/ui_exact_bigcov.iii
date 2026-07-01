@@ -50,7 +50,8 @@ extern @abi(c-msvc-x64) fn ui_sym_dhi() -> i64 from "ui_exact.iii"
 extern @abi(c-msvc-x64) fn ui_sym_dlo() -> i64 from "ui_exact.iii"
 extern @abi(c-msvc-x64) fn ui_bez_area_at_t(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a: i64, c: i64, dD: i64) -> u32 from "ui_exact.iii"
 extern @abi(c-msvc-x64) fn ui_copq(c0: i64, c1: i64, c2: i64, a: i64, c: i64, dD: i64) -> i32 from "ui_exact.iii"
-extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+/* (removed dead extern ui_sqrt_sum_sign_big: superseded by ui_bigsign2 2-surd squaring; never called -- the coverage
+ * path is intrinsically 2-surd, where squaring is exact and O(1). See DOCS/III-QUOTIENT-WELD.md.) */
 extern @abi(c-msvc-x64) fn ui_bigsign2(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, dhi: i64, cnsg: i64, cnm: u64, dlo: i64) -> i32 from "ui_exact_bigsign.iii"
 
 fn iabs64(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }

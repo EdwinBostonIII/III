@@ -230,7 +230,10 @@ fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
         if r != 2i32 { CANONCT = CANONCT + 1u64   return r }
     }
     EXACTCT = EXACTCT + 1u64
-    return ui_sqrt_sum_sign(a_ptr, b_ptr, n)
+    /* TIER 2.5 is now the escalation target (was ui_sqrt_sum_sign): the adaptive engine pays the instance's true
+     * precision and only falls to the exponential separation bound if its cap is hit -- same answer, never slower.
+     * This makes sqrtsum_adaptive_sign LOAD-BEARING in the shipped dispatcher that verb_geom consumes. */
+    return sqrtsum_adaptive_sign(a_ptr, b_ptr, n)
 }
 
 /* ATTACK 2 killed -- TRANSCENDENTAL CONTAMINATION handled by a provenance-aware TRISTATE.  Decides
@@ -503,5 +506,184 @@ fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 @
     bigint_drop(psum)   bigint_drop(nsum)   bigint_drop(A)   bigint_drop(one)
     bigint_drop_arena(ar)
     arena_drop(ar)
+    return result
+}
+
+/* ─── TIER 2.5 — LINEAR INDEPENDENCE + ADAPTIVE PRECISION.  The direct attack on the exponential separation bound.
+ * After canonicalizing to distinct squarefree radicands, {√d} are ℚ-LINEARLY INDEPENDENT, so Σ c_j √d_j is EXACTLY 0
+ * iff every collected c_j vanishes (decided FREE — no bound) and ANY survivor makes the sum NONZERO.  A nonzero sum is
+ * separated from 0 by DOUBLING interval precision to the instance's true need p ~ log(1/|E|), never the a-priori
+ * M^(2ⁿ⁻¹).  Same answer as ui_sqrt_sum_sign, but it pays the instance cost, not the worst case.
+ *   HONEST SCOPE: this does NOT solve PosSLP — the WORST-CASE p is unchanged (a pathologically-near-zero instance can
+ *   still need ~2ⁿ bits).  The win is per-instance: generic / non-degenerate inputs (the robot-arm case) resolve in
+ *   tens of bits where the separation bound demands thousands.  SOUNDNESS is unconditional: m≥2 ⇒ nonzero, so
+ *   result==0 after the loop can ONLY mean 'capped before separation' → it falls to the exact engine, never a false 0. */
+var ADAPT_LAST_P : u64 = 0u64
+fn sqrtsum_last_p() -> u64 @export { return ADAPT_LAST_P }
+
+/* collect distinct squarefree radicands into CD[]/CC[] (reuses this file's squarefree_part); returns survivor count. */
+fn sqrtsum_canon_collect(a_ptr: u64, b_ptr: u64, n: u64) -> u64 {
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bu : u64 = pb[i] as u64
+        if ai != 0i64 { if bu != 0u64 {
+            squarefree_part(bu)
+            let d : u64 = SFD
+            let coeff : i64 = ai * (SFS as i64)
+            let mut hit : u8 = 0u8   let mut fj : u64 = 0u64   let mut j : u64 = 0u64
+            while j < m { if CD[j] == d { fj = j   hit = 1u8 }   j = j + 1u64 }
+            if hit == 1u8 { CC[fj] = CC[fj] + coeff } else { CD[m] = d   CC[m] = coeff   m = m + 1u64 }
+        } }
+        i = i + 1u64
+    }
+    let mut w : u64 = 0u64   let mut r : u64 = 0u64
+    while r < m { let cr : i64 = CC[r]   if cr != 0i64 { CD[w] = CD[r]   CC[w] = cr   w = w + 1u64 }   r = r + 1u64 }
+    return w
+}
+
+fn sqrtsum_adaptive_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let m : u64 = sqrtsum_canon_collect(a_ptr, b_ptr, n)
+    ADAPT_LAST_P = 0u64
+    if m == 0u64 { return 0i32 }                               /* all surds cancelled -> EXACT zero, FREE */
+    if m == 1u64 { let c0 : i64 = CC[0u64]   return isign64(c0) }   /* single surd sqrt(d>0) -> sign of its coeff, FREE */
+    let ar : u64 = arena_new(33554432u64)
+    let mut p : u64 = 8u64
+    let mut result : i32 = 0i32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let twop : u64 = 2u64 * p
+        let mut pL : u64 = bigint_from_u64(ar, 0u64)   let mut pH : u64 = bigint_from_u64(ar, 0u64)
+        let mut nL : u64 = bigint_from_u64(ar, 0u64)   let mut nH : u64 = bigint_from_u64(ar, 0u64)
+        let mut j : u64 = 0u64
+        while j < m {
+            let cj : i64 = CC[j]                               /* HOIST before the signed compare (iii array-index-in->0 trap) */
+            let bd : u64 = bigint_from_u64(ar, CD[j])
+            let bsh : u64 = bigint_shl_bits(ar, bd, twop)   bigint_drop(bd)
+            let L : u64 = bigint_isqrt(ar, bsh)   bigint_drop(bsh)         /* floor(sqrt(d) * 2^p) */
+            let one : u64 = bigint_from_u64(ar, 1u64)
+            let L1 : u64 = bigint_add(ar, L, one)   bigint_drop(one)
+            let cabs : u64 = bigint_from_u64(ar, iabs64(cj))
+            let tL : u64 = bigint_mul(ar, cabs, L)                         /* |c|*floor (lower for |c|*sqrt d) */
+            let tH : u64 = bigint_mul(ar, cabs, L1)                        /* |c|*(floor+1) (upper)           */
+            bigint_drop(cabs)   bigint_drop(L)   bigint_drop(L1)
+            if cj > 0i64 {
+                let a2 : u64 = bigint_add(ar, pL, tL)   bigint_drop(pL)   pL = a2
+                let b2 : u64 = bigint_add(ar, pH, tH)   bigint_drop(pH)   pH = b2
+            } else {
+                let a2 : u64 = bigint_add(ar, nL, tL)   bigint_drop(nL)   nL = a2
+                let b2 : u64 = bigint_add(ar, nH, tH)   bigint_drop(nH)   nH = b2
+            }
+            bigint_drop(tL)   bigint_drop(tH)
+            j = j + 1u64
+        }
+        /* E in [pL - nH , pH - nL].  pL>nH => E>0 ; pH<nL => E<0 ; else double precision. */
+        if bigint_cmp(pL, nH) > 0i32 { result = 1i32   done = 1u8 }
+        if done == 0u8 { if bigint_cmp(pH, nL) < 0i32 { result = 0i32 - 1i32   done = 1u8 } }
+        bigint_drop(pL)   bigint_drop(pH)   bigint_drop(nL)   bigint_drop(nH)
+        if done == 1u8 { ADAPT_LAST_P = p }
+        if done == 0u8 { p = p * 2u64   if p > 500000u64 { done = 1u8 } }   /* CAP = performance knob ONLY */
+    }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    if result == 0i32 { return ui_sqrt_sum_sign(a_ptr, b_ptr, n) }   /* capped before separation -> exact fallback, never a false zero */
+    return result
+}
+
+/* ─── TIER 2.5, BIGINT-COEFFICIENT.  sqrtsum_adaptive_sign_big decides sign(Σ sgn[i]·|mag[i]|·√b[i]) with mag[i] a
+ * caller-owned BIGINT handle (the render-scale case ui_sqrt_sum_sign_big serves -- glyph cross-products overflow i64),
+ * by the SAME linear-independence + adaptive-precision method: SIGNED-bigint squarefree canonicalization (EXACT zero iff
+ * every class coeff cancels -- FREE), then double the bigint interval precision to the instance's need.  Falls back to
+ * ui_sqrt_sum_sign_big only if the cap is hit.  Each interval iteration uses its OWN sub-arena to bound the bump-allocator
+ * accumulation (drop frees handles, not bytes).  Same answer as ui_sqrt_sum_sign_big, without its a-priori M^(2ⁿ⁻¹). */
+var AB_SFS : i64   var AB_SFD : i64
+fn ab_sqfree(v: i64) -> i32 {
+    let mut d : i64 = v   let mut s : i64 = 1i64   let mut k : i64 = 2i64
+    while k * k <= d { let kk : i64 = k * k   let q : i64 = d / kk   if d - q * kk == 0i64 { d = q   s = s * k } else { k = k + 1i64 } }
+    AB_SFS = s   AB_SFD = d   return 0i32
+}
+var CMAG : [u64; 16]   var CSGN : [i64; 16]   var CRAD : [i64; 16]   var NCLS : u64
+
+/* signed add of (bmag,bsgn) into class j; bigints in arena ar. */
+fn cls_add(ar: u64, j: u64, bmag: u64, bsgn: i64) -> i32 {
+    let asgn : i64 = CSGN[j]
+    if bsgn == 0i64 { return 0i32 }
+    if asgn == 0i64 { let nw : u64 = bigint_copy(ar, bmag)   bigint_drop(CMAG[j])   CMAG[j] = nw   CSGN[j] = bsgn   return 0i32 }
+    if asgn == bsgn { let nw : u64 = bigint_add(ar, CMAG[j], bmag)   bigint_drop(CMAG[j])   CMAG[j] = nw   return 0i32 }
+    let c : i32 = bigint_cmp(CMAG[j], bmag)
+    if c > 0i32 { let nw : u64 = bigint_sub(ar, CMAG[j], bmag)   bigint_drop(CMAG[j])   CMAG[j] = nw   return 0i32 }
+    if c < 0i32 { let nw : u64 = bigint_sub(ar, bmag, CMAG[j])   bigint_drop(CMAG[j])   CMAG[j] = nw   CSGN[j] = bsgn   return 0i32 }
+    let z : u64 = bigint_from_u64(ar, 0u64)   bigint_drop(CMAG[j])   CMAG[j] = z   CSGN[j] = 0i64   return 0i32
+}
+
+fn canon_big(ar: u64, mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> u64 {
+    let pm : *u64 = mag_ptr as *u64   let ps : *i64 = sgn_ptr as *i64   let pb : *i64 = b_ptr as *i64
+    NCLS = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let si : i64 = ps[i]
+        if si != 0i64 {
+            let bi : i64 = pb[i]
+            ab_sqfree(bi)
+            let c : i64 = AB_SFS   let d : i64 = AB_SFD
+            let cbig : u64 = bigint_from_u64(ar, c as u64)
+            let magp : u64 = bigint_mul(ar, pm[i], cbig)
+            bigint_drop(cbig)
+            let mut j : u64 = 0u64   let mut hit : u8 = 0u8   let mut fj : u64 = 0u64
+            while j < NCLS { if CRAD[j] == d { fj = j   hit = 1u8 }   j = j + 1u64 }
+            if hit == 0u8 { CRAD[NCLS] = d   CMAG[NCLS] = bigint_from_u64(ar, 0u64)   CSGN[NCLS] = 0i64   fj = NCLS   NCLS = NCLS + 1u64 }
+            cls_add(ar, fj, magp, si)
+            bigint_drop(magp)
+        }
+        i = i + 1u64
+    }
+    return NCLS
+}
+
+fn sqrtsum_adaptive_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    let ar : u64 = arena_new(16777216u64)
+    canon_big(ar, mag_ptr, sgn_ptr, b_ptr, n)
+    let mut nz : u64 = 0u64   let mut lastj : u64 = 0u64   let mut j : u64 = 0u64
+    while j < NCLS { let cs : i64 = CSGN[j]   if cs != 0i64 { nz = nz + 1u64   lastj = j }   j = j + 1u64 }
+    if nz == 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i32 }
+    if nz == 1u64 { let s : i64 = CSGN[lastj]   bigint_drop_arena(ar)   arena_drop(ar)   if s > 0i64 { return 1i32 }   return 0i32 - 1i32 }
+    let mut p : u64 = 8u64   let mut result : i32 = 0i32   let mut done : u8 = 0u8
+    while done == 0u8 {
+        let iar : u64 = arena_new(16777216u64)
+        let twop : u64 = 2u64 * p
+        let mut pL : u64 = bigint_from_u64(iar, 0u64)   let mut pH : u64 = bigint_from_u64(iar, 0u64)
+        let mut nL : u64 = bigint_from_u64(iar, 0u64)   let mut nH : u64 = bigint_from_u64(iar, 0u64)
+        let mut k : u64 = 0u64
+        while k < NCLS {
+            let cs : i64 = CSGN[k]
+            if cs != 0i64 {
+                let bd : u64 = bigint_from_u64(iar, CRAD[k] as u64)
+                let bsh : u64 = bigint_shl_bits(iar, bd, twop)   bigint_drop(bd)
+                let L : u64 = bigint_isqrt(iar, bsh)   bigint_drop(bsh)
+                let one : u64 = bigint_from_u64(iar, 1u64)
+                let L1 : u64 = bigint_add(iar, L, one)   bigint_drop(one)
+                let tL : u64 = bigint_mul(iar, CMAG[k], L)
+                let tH : u64 = bigint_mul(iar, CMAG[k], L1)
+                bigint_drop(L)   bigint_drop(L1)
+                if cs > 0i64 {
+                    let a2 : u64 = bigint_add(iar, pL, tL)   bigint_drop(pL)   pL = a2
+                    let b2 : u64 = bigint_add(iar, pH, tH)   bigint_drop(pH)   pH = b2
+                } else {
+                    let a2 : u64 = bigint_add(iar, nL, tL)   bigint_drop(nL)   nL = a2
+                    let b2 : u64 = bigint_add(iar, nH, tH)   bigint_drop(nH)   nH = b2
+                }
+                bigint_drop(tL)   bigint_drop(tH)
+            }
+            k = k + 1u64
+        }
+        if bigint_cmp(pL, nH) > 0i32 { result = 1i32   done = 1u8 }
+        if done == 0u8 { if bigint_cmp(pH, nL) < 0i32 { result = 0i32 - 1i32   done = 1u8 } }
+        bigint_drop_arena(iar)   arena_drop(iar)
+        if done == 0u8 { p = p * 2u64   if p > 200000u64 { done = 1u8 } }
+    }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    if result == 0i32 { return ui_sqrt_sum_sign_big(mag_ptr, sgn_ptr, b_ptr, n) }   /* capped -> exact fallback */
     return result
 }

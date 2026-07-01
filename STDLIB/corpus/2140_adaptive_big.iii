@@ -1,0 +1,77 @@
+/* 2140_adaptive_big.iii -- GATE for sqrtsum_adaptive_sign_big (Tier 2.5, bigint coefficients).
+ *
+ * The render-scale adaptive tier: sign(Σ sgn[i]·|mag[i]|·√b[i]) with mag[i] a caller-owned BIGINT handle -- the case
+ * ui_sqrt_sum_sign_big serves (glyph-coverage cross-products overflow i64).  Same linear-independence + adaptive-precision
+ * method as the i64 tier, over SIGNED bigint canonicalization.  This KAT proves it is SOUND: identical answer to the exact
+ * separation-bound oracle ui_sqrt_sum_sign_big on exact zeros (incl big coeffs + square-factor radicands), big
+ * near-cancellations, and coefficients exceeding i64.  Reaches ui_arc_cover_full's bigint sign path.
+ *   exit 99 = every case AGREES with ui_sqrt_sum_sign_big.   10 = a disagreement (unsound). */
+module corpus_2140_adaptive_big
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn sqrtsum_adaptive_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn e_sp() -> i32 { putchar(32i32)   return 0i32 }
+fn e_nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var MAG : [u64; 8]   var SGN : [i64; 8]   var BB : [i64; 8]   var FAILC : u64
+
+fn check(n: u64) -> i32 {
+    let mine : i32 = sqrtsum_adaptive_sign_big((&MAG) as u64, (&SGN) as u64, (&BB) as u64, n)
+    let orac : i32 = ui_sqrt_sum_sign_big((&MAG) as u64, (&SGN) as u64, (&BB) as u64, n)
+    e_u64(n) e_sp() e_u64((mine + 1i32) as u64) e_sp() e_u64((orac + 1i32) as u64) e_nl()
+    if mine != orac { FAILC = FAILC + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    FAILC = 0u64
+    let tar : u64 = arena_new(4194304u64)
+    let e10 : u64 = bigint_from_u64(tar, 10000000000u64)
+    let big : u64 = bigint_mul(tar, e10, e10)                     /* 1e20 > i64 */
+    let one : u64 = bigint_from_u64(tar, 1u64)
+    let bigM1 : u64 = bigint_sub(tar, big, one)                   /* 1e20 - 1 */
+    let two : u64 = bigint_from_u64(tar, 2u64)
+    let big2 : u64 = bigint_mul(tar, big, two)                    /* 2e20 */
+    let three : u64 = bigint_from_u64(tar, 3u64)
+    let big3 : u64 = bigint_mul(tar, big, three)                  /* 3e20 */
+
+    /* CASE 0: EXACT ZERO, big coeffs + square-factor radicands: 1e20·√8 − 2e20·√2 = 0 */
+    MAG[0u64]=big   SGN[0u64]=1i64      BB[0u64]=8i64
+    MAG[1u64]=big2  SGN[1u64]=0i64-1i64 BB[1u64]=2i64
+    check(2u64)
+
+    /* CASE 1: big near-cancel, distinct radicands: 1e20·√2 − 1e20·√3 < 0 */
+    MAG[0u64]=big   SGN[0u64]=1i64      BB[0u64]=2i64
+    MAG[1u64]=big   SGN[1u64]=0i64-1i64 BB[1u64]=3i64
+    check(2u64)
+
+    /* CASE 2: big commensurable reducing to a small nonzero: 1e20·√2 − (1e20−1)·√2 = √2 > 0 */
+    MAG[0u64]=big   SGN[0u64]=1i64      BB[0u64]=2i64
+    MAG[1u64]=bigM1 SGN[1u64]=0i64-1i64 BB[1u64]=2i64
+    check(2u64)
+
+    /* CASE 3: 3-surd big, clear positive: 1e20·√5 + √2 − √3 > 0 */
+    MAG[0u64]=big   SGN[0u64]=1i64      BB[0u64]=5i64
+    MAG[1u64]=one   SGN[1u64]=1i64      BB[1u64]=2i64
+    MAG[2u64]=one   SGN[2u64]=0i64-1i64 BB[2u64]=3i64
+    check(3u64)
+
+    /* CASE 4: EXACT ZERO, 3-term commensurable big: 1e20·√2 + 2e20·√2 − 3e20·√2 = 0 */
+    MAG[0u64]=big   SGN[0u64]=1i64      BB[0u64]=2i64
+    MAG[1u64]=big2  SGN[1u64]=1i64      BB[1u64]=2i64
+    MAG[2u64]=big3  SGN[2u64]=0i64-1i64 BB[2u64]=2i64
+    check(3u64)
+
+    bigint_drop_arena(tar)   arena_drop(tar)
+    if FAILC != 0u64 { return 10u64 }
+    return 99u64
+}

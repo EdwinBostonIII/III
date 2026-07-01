@@ -1,0 +1,168 @@
+/* 2142_se3_screw.iii -- EXACT SE(3) SCREW MOTION in the cyclotomic field ℚ(√2,√3): the 2D exact rotation (2141) lifted
+ * to 3D rigid motion.  A 3×3 rotation by 15° = π/12 about a coordinate axis has entries in ℚ(√2,√3); a screw adds an
+ * exact translation along the axis.  Three exactly-checkable facts a float engine cannot hold:
+ *   (A) EXACT CLOSURE (3D): R_z(15°)^24 = I, bit-for-bit (the 3×3 orbit returns exactly -- SO(3) closure).
+ *   (B) NON-COMMUTATIVITY (the SO(3) signature 2D lacks): R_z·R_x ≠ R_x·R_z, EXACTLY -- a specific entry differs.
+ *   (C) SCREW CLOSURE (SE(3)): the screw [rotate R_z(15°), translate +T along z] applied to a point 24× restores the
+ *       orientation EXACTLY and lands the point at start + 24·T along z, with x,y bit-exact to start.
+ * TEETH: (A) closure exact; (B) non-commutativity witnessed (else 2D-degenerate); (C) z-displacement exactly 24T + x,y
+ * exactly restored; (D) a fixed-point rotation DRIFTS.  Mutating the ℚ(√2,√3) product table or a matrix entry breaks one.
+ * HONEST SCOPE: cyclotomic (rational-π) angles only; a transcendental angle has an undecidable zero-test (Richardson).
+ *   exit 99 = closure + non-commutativity + exact screw + fixed-point drift.
+ *   10 R_z^24 != I     11 R_z and R_x COMMUTE (3D-degenerate)     12 screw not exact     20 fixed-point did not drift */
+module corpus_2142_se3_screw
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn e_sp() -> i32 { putchar(32i32)   return 0i32 }
+fn e_nl() -> i32 { putchar(10i32)   return 0i32 }
+fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn gcd2(a: i64, b: i64) -> i64 { let mut x : i64 = iabs(a)   let mut y : i64 = iabs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
+
+var PRD : [i64; 4]
+fn mul4(xp: u64, yp: u64, op: u64) -> i32 {
+    let x : *i64 = xp as *i64   let y : *i64 = yp as *i64   let o : *i64 = op as *i64
+    let x0 : i64 = x[0u64]   let x1 : i64 = x[1u64]   let x2 : i64 = x[2u64]   let x3 : i64 = x[3u64]
+    let y0 : i64 = y[0u64]   let y1 : i64 = y[1u64]   let y2 : i64 = y[2u64]   let y3 : i64 = y[3u64]
+    o[0u64] = x0*y0 + 2i64*x1*y1 + 3i64*x2*y2 + 6i64*x3*y3
+    o[1u64] = x0*y1 + x1*y0 + 3i64*(x2*y3 + x3*y2)
+    o[2u64] = x0*y2 + x2*y0 + 2i64*(x1*y3 + x3*y1)
+    o[3u64] = x0*y3 + x3*y0 + x1*y2 + x2*y1
+    return 0i32
+}
+
+var RZ : [i64; 36]   var RX : [i64; 36]   var MA : [i64; 36]   var MB : [i64; 36]   var MC : [i64; 36]
+var DRZ : i64   var DRX : i64
+var CVEC : [i64; 4]   var SVEC : [i64; 4]   var XV : [i64; 4]   var YV : [i64; 4]
+
+fn ent_addr(base: u64, i: u64, j: u64) -> u64 { return base + ((i * 3u64 + j) * 4u64) * 8u64 }
+
+fn mat_mul(ab: u64, bb: u64, cb: u64) -> i32 {
+    let C : *i64 = cb as *i64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let mut j : u64 = 0u64
+        while j < 3u64 {
+            let mut c0 : i64 = 0i64   let mut c1 : i64 = 0i64   let mut c2 : i64 = 0i64   let mut c3 : i64 = 0i64
+            let mut k : u64 = 0u64
+            while k < 3u64 {
+                mul4(ent_addr(ab, i, k), ent_addr(bb, k, j), (&PRD) as u64)
+                c0 = c0 + PRD[0u64]   c1 = c1 + PRD[1u64]   c2 = c2 + PRD[2u64]   c3 = c3 + PRD[3u64]
+                k = k + 1u64
+            }
+            let base : u64 = (i * 3u64 + j) * 4u64
+            C[base] = c0   C[base + 1u64] = c1   C[base + 2u64] = c2   C[base + 3u64] = c3
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn mat_reduce(mb: u64, den: i64) -> i64 {
+    let M : *i64 = mb as *i64
+    let mut g : i64 = iabs(den)
+    let mut i : u64 = 0u64
+    while i < 36u64 { g = gcd2(g, M[i])   i = i + 1u64 }
+    if g <= 1i64 { return den }
+    i = 0u64   while i < 36u64 { M[i] = M[i] / g   i = i + 1u64 }
+    return den / g
+}
+
+fn mat_copy(sb: u64, db: u64) -> i32 { let s : *i64 = sb as *i64   let d : *i64 = db as *i64   let mut i : u64 = 0u64   while i < 36u64 { d[i] = s[i]   i = i + 1u64 }   return 0i32 }
+
+fn mat_is_ident(mb: u64, den: i64) -> u8 {
+    let M : *i64 = mb as *i64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let mut j : u64 = 0u64
+        while j < 3u64 {
+            let base : u64 = (i * 3u64 + j) * 4u64
+            let e0 : i64 = M[base]   let e1 : i64 = M[base + 1u64]   let e2 : i64 = M[base + 2u64]   let e3 : i64 = M[base + 3u64]
+            if e1 != 0i64 { return 0u8 }   if e2 != 0i64 { return 0u8 }   if e3 != 0i64 { return 0u8 }
+            if i == j { if e0 != den { return 0u8 } } else { if e0 != 0i64 { return 0u8 } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64   while i < 36u64 { RZ[i] = 0i64   RX[i] = 0i64   i = i + 1u64 }
+    /* entry (i,j) coord c at flat index (i*3+j)*4 + c.  c=cos15=[0,1,0,1], s=sin15=[0,-1,0,1], -s=[0,1,0,-1]. */
+    RZ[0u64]=0i64  RZ[1u64]=1i64  RZ[2u64]=0i64  RZ[3u64]=1i64        /* (0,0)=c  @0  */
+    RZ[4u64]=0i64  RZ[5u64]=1i64  RZ[6u64]=0i64  RZ[7u64]=0i64-1i64   /* (0,1)=-s @4  */
+    RZ[12u64]=0i64 RZ[13u64]=0i64-1i64 RZ[14u64]=0i64 RZ[15u64]=1i64  /* (1,0)=s  @12 */
+    RZ[16u64]=0i64 RZ[17u64]=1i64 RZ[18u64]=0i64 RZ[19u64]=1i64       /* (1,1)=c  @16 */
+    RZ[32u64]=4i64                                                     /* (2,2)=1  @32 */
+    DRZ = 4i64
+    RX[0u64]=4i64                                                     /* (0,0)=1  @0  */
+    RX[16u64]=0i64 RX[17u64]=1i64 RX[18u64]=0i64 RX[19u64]=1i64       /* (1,1)=c  @16 */
+    RX[20u64]=0i64 RX[21u64]=1i64 RX[22u64]=0i64 RX[23u64]=0i64-1i64  /* (1,2)=-s @20 */
+    RX[28u64]=0i64 RX[29u64]=0i64-1i64 RX[30u64]=0i64 RX[31u64]=1i64  /* (2,1)=s  @28 */
+    RX[32u64]=0i64 RX[33u64]=1i64 RX[34u64]=0i64 RX[35u64]=1i64       /* (2,2)=c  @32 */
+    DRX = 4i64
+
+    /* (A) EXACT 3D CLOSURE: R_z^24 = I. */
+    mat_copy((&RZ) as u64, (&MA) as u64)   let mut dA : i64 = DRZ
+    let mut step : u64 = 1u64
+    while step < 24u64 {
+        mat_mul((&MA) as u64, (&RZ) as u64, (&MC) as u64)   let mut dC : i64 = dA * DRZ
+        dC = mat_reduce((&MC) as u64, dC)
+        mat_copy((&MC) as u64, (&MA) as u64)   dA = dC
+        step = step + 1u64
+    }
+    let closed : u8 = mat_is_ident((&MA) as u64, dA)
+
+    /* (B) NON-COMMUTATIVITY: R_z·R_x vs R_x·R_z (both denom 16); some entry must differ. */
+    mat_mul((&RZ) as u64, (&RX) as u64, (&MA) as u64)
+    mat_mul((&RX) as u64, (&RZ) as u64, (&MB) as u64)
+    let A2 : *i64 = (&MA) as *i64   let B2 : *i64 = (&MB) as *i64
+    let mut differ : u8 = 0u8
+    i = 0u64   while i < 36u64 { let ai : i64 = A2[i]   let bi : i64 = B2[i]   if ai != bi { differ = 1u8 }   i = i + 1u64 }
+
+    /* (C) SCREW CLOSURE: point (1,0,0) under [R_z(15°), +T along z] × 24.  x,y restore exactly, z = 24·T. */
+    let mut px0 : i64 = 4i64   let mut px1 : i64 = 0i64   let mut px2 : i64 = 0i64   let mut px3 : i64 = 0i64
+    let mut py0 : i64 = 0i64   let mut py1 : i64 = 0i64   let mut py2 : i64 = 0i64   let mut py3 : i64 = 0i64
+    let mut pz : i64 = 0i64
+    let TT : i64 = 1i64
+    CVEC[0u64]=0i64 CVEC[1u64]=1i64 CVEC[2u64]=0i64 CVEC[3u64]=1i64
+    SVEC[0u64]=0i64 SVEC[1u64]=0i64-1i64 SVEC[2u64]=0i64 SVEC[3u64]=1i64
+    let mut sstep : u64 = 0u64
+    while sstep < 24u64 {
+        XV[0u64]=px0 XV[1u64]=px1 XV[2u64]=px2 XV[3u64]=px3
+        YV[0u64]=py0 YV[1u64]=py1 YV[2u64]=py2 YV[3u64]=py3
+        mul4((&CVEC) as u64, (&XV) as u64, (&PRD) as u64)   let cx0 : i64 = PRD[0u64]  let cx1 : i64 = PRD[1u64]  let cx2 : i64 = PRD[2u64]  let cx3 : i64 = PRD[3u64]
+        mul4((&SVEC) as u64, (&YV) as u64, (&PRD) as u64)   let sy0 : i64 = PRD[0u64]  let sy1 : i64 = PRD[1u64]  let sy2 : i64 = PRD[2u64]  let sy3 : i64 = PRD[3u64]
+        let nx0 : i64 = cx0 - sy0   let nx1 : i64 = cx1 - sy1   let nx2 : i64 = cx2 - sy2   let nx3 : i64 = cx3 - sy3
+        mul4((&SVEC) as u64, (&XV) as u64, (&PRD) as u64)   let sx0 : i64 = PRD[0u64]  let sx1 : i64 = PRD[1u64]  let sx2 : i64 = PRD[2u64]  let sx3 : i64 = PRD[3u64]
+        mul4((&CVEC) as u64, (&YV) as u64, (&PRD) as u64)   let cy0 : i64 = PRD[0u64]  let cy1 : i64 = PRD[1u64]  let cy2 : i64 = PRD[2u64]  let cy3 : i64 = PRD[3u64]
+        let ny0 : i64 = sx0 + cy0   let ny1 : i64 = sx1 + cy1   let ny2 : i64 = sx2 + cy2   let ny3 : i64 = sx3 + cy3
+        px0 = nx0 / 4i64   px1 = nx1 / 4i64   px2 = nx2 / 4i64   px3 = nx3 / 4i64
+        py0 = ny0 / 4i64   py1 = ny1 / 4i64   py2 = ny2 / 4i64   py3 = ny3 / 4i64
+        pz = pz + TT
+        sstep = sstep + 1u64
+    }
+    let mut screw_ok : u8 = 1u8
+    if px0 != 4i64 { screw_ok = 0u8 }   if px1 != 0i64 { screw_ok = 0u8 }   if px2 != 0i64 { screw_ok = 0u8 }   if px3 != 0i64 { screw_ok = 0u8 }
+    if py0 != 0i64 { screw_ok = 0u8 }   if py1 != 0i64 { screw_ok = 0u8 }   if py2 != 0i64 { screw_ok = 0u8 }   if py3 != 0i64 { screw_ok = 0u8 }
+    if pz != 24i64 * TT { screw_ok = 0u8 }
+
+    e_i64(closed as i64) e_sp() e_i64(differ as i64) e_sp() e_i64(screw_ok as i64) e_sp() e_i64(px0) e_sp() e_i64(py0) e_sp() e_i64(pz) e_nl()
+
+    /* (D) FIXED-POINT DRIFT: same rotation at 2^30, 240 steps -> does not return exactly. */
+    let S : i64 = 1073741824i64   let COS15 : i64 = 1037202592i64   let SIN15 : i64 = 277904907i64
+    let mut fx : i64 = S   let mut fy : i64 = 0i64
+    let mut n : u64 = 0u64
+    while n < 240u64 { let nfx : i64 = (fx * COS15 - fy * SIN15) / S   let nfy : i64 = (fx * SIN15 + fy * COS15) / S   fx = nfx   fy = nfy   n = n + 1u64 }
+    e_i64(fx) e_sp() e_i64(fy) e_nl()
+    let mut drift : u8 = 0u8
+    if fx != S { drift = 1u8 }   if fy != 0i64 { drift = 1u8 }
+
+    if closed != 1u8 { return 10u64 }
+    if differ != 1u8 { return 11u64 }
+    if screw_ok != 1u8 { return 12u64 }
+    if drift != 1u8 { return 20u64 }
+    return 99u64
+}

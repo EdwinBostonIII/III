@@ -1,0 +1,157 @@
+/* 2139_padic_barrier.iii -- the p-adic sieve, RUN, and its wall-face GATED.  Verified before building (iii_adversarial_verify
+ * REFUTED, iii_math_rigor DECORATIVE, advisor): a factoring-free modular sieve for sign/zero of E = Σ aᵢ√bᵢ is UNSOUND --
+ * reduction mod p destroys the perfect-square factor that carries the real proportionality (√8 = 2√2, but 8 ≡ 1 mod 7,
+ * so root(8 mod 7) loses the factor 2).  This KAT RUNS both arms and gates the boundary:
+ *   SOUND arm  = split bᵢ = cᵢ²·dᵢ (squarefree), map √bᵢ ↦ cᵢ · root(dᵢ mod p) -- consistent per squarefree class.
+ *   NAIVE arm  = map √bᵢ ↦ root(bᵢ mod p) directly -- ignores the square factor.
+ * TEETH: the SOUND arm must agree with the exact oracle ui_sqrt_sum_sign on ALL cases incl commensurable zeros; the NAIVE
+ * arm must FALSE-POSITIVE (certify nonzero) on those zeros -- proving unsoundness.  Mutating SOUND->NAIVE flips the zeros
+ * (RED 10); mutating NAIVE->SOUND removes the false positive (RED 20).  The sound arm NEEDS the factoring (the squarefree
+ * split), so it is redundant with the linear-independence test already in sqrtsum_adaptive_sign -- this KAT LOCATES the
+ * wall face precisely (why modular/p-adic evaluation cannot escape squarefree-factoring for SOSR), it does not cross it.
+ * See DOCS/III-SOSR-BARRIER-ANATOMY.md.
+ *   exit 99 = sound arm sound (matches oracle incl zeros) AND naive false-positives on the perfect-square zeros AND sound certifies a genuine nonzero
+ *   10 SOUND arm certified nonzero for a real zero (unsound -- == the SOUND->NAIVE mutation)
+ *   20 NAIVE arm did NOT false-positive on a perfect-square zero (barrier not demonstrated -- == the NAIVE->SOUND mutation)
+ *   30 SOUND arm never certified a genuine nonzero (positive arm missing) */
+module corpus_2139_padic_barrier
+
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn e_sp() -> i32 { putchar(32i32)   return 0i32 }
+fn e_nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var SQ_SFS : i64   var SQ_SFD : i64
+fn sq_sqfree(n: i64) -> i32 {
+    let mut d : i64 = n   let mut s : i64 = 1i64   let mut k : i64 = 2i64
+    while k * k <= d {
+        let kk : i64 = k * k   let q : i64 = d / kk
+        if d - q * kk == 0i64 { d = q   s = s * k } else { k = k + 1i64 }
+    }
+    SQ_SFS = s   SQ_SFD = d   return 0i32
+}
+
+fn modp(x: i64, p: i64) -> i64 { let r : i64 = x % p   if r < 0i64 { return r + p }   return r }
+
+/* canonical root of a mod p: 0 if a≡0; the root in [1, p/2] if a is a QR; -1 if a is a non-residue. */
+fn canon_root(a: i64, p: i64) -> i64 {
+    let am : i64 = modp(a, p)
+    if am == 0i64 { return 0i64 }
+    let mut r : i64 = 1i64
+    while r < p {
+        if (r * r) % p == am {
+            let lo : i64 = p - r
+            if r <= lo { return r }
+            return lo
+        }
+        r = r + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+/* SOUND fingerprint of E=Σaᵢ√bᵢ at prime p: √bᵢ ↦ cᵢ·root(dᵢ), bᵢ=cᵢ²dᵢ.  APPLIES=0 if some dᵢ is a non-residue. */
+var APPLIES : u8
+fn sound_fp(aptr: u64, bptr: u64, n: u64, p: i64) -> i64 {
+    let pa : *i64 = aptr as *i64   let pb : *i64 = bptr as *i64
+    APPLIES = 1u8
+    let mut F : i64 = 0i64   let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]   let bi : i64 = pb[i]
+        sq_sqfree(bi)
+        let c : i64 = SQ_SFS   let d : i64 = SQ_SFD
+        let t : i64 = canon_root(d, p)
+        if t < 0i64 { APPLIES = 0u8   return 0i64 }
+        let term : i64 = (((modp(ai, p) * modp(c, p)) % p) * modp(t, p)) % p
+        F = modp(F + term, p)
+        i = i + 1u64
+    }
+    return F
+}
+
+/* NAIVE fingerprint: √bᵢ ↦ root(bᵢ) directly, ignoring the perfect-square factor.  This is the UNSOUND arm. */
+fn naive_fp(aptr: u64, bptr: u64, n: u64, p: i64) -> i64 {
+    let pa : *i64 = aptr as *i64   let pb : *i64 = bptr as *i64
+    APPLIES = 1u8
+    let mut F : i64 = 0i64   let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]   let bi : i64 = pb[i]
+        let t : i64 = canon_root(bi, p)
+        if t < 0i64 { APPLIES = 0u8   return 0i64 }
+        let term : i64 = (modp(ai, p) * modp(t, p)) % p
+        F = modp(F + term, p)
+        i = i + 1u64
+    }
+    return F
+}
+
+var PR : [i64; 6]
+
+var SOUND_NZ : u8
+fn sound_scan(aptr: u64, bptr: u64, n: u64) -> i32 {
+    SOUND_NZ = 0u8
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        let F : i64 = sound_fp(aptr, bptr, n, PR[k])
+        if APPLIES == 1u8 { if F != 0i64 { SOUND_NZ = 1u8 } }
+        k = k + 1u64
+    }
+    return 0i32
+}
+var NAIVE_NZ : u8
+fn naive_scan(aptr: u64, bptr: u64, n: u64) -> i32 {
+    NAIVE_NZ = 0u8
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        let F : i64 = naive_fp(aptr, bptr, n, PR[k])
+        if APPLIES == 1u8 { if F != 0i64 { NAIVE_NZ = 1u8 } }
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+var CA : [i64; 4]   var CB : [i64; 4]
+
+fn main() -> u64 {
+    PR[0u64]=7i64  PR[1u64]=17i64  PR[2u64]=23i64  PR[3u64]=31i64  PR[4u64]=41i64  PR[5u64]=47i64
+
+    let mut bad_sound : u64 = 0u64      /* sound arm certified nonzero for a real zero (would be unsound) */
+    let mut fp_on_zero : u64 = 0u64     /* perfect-square zeros where the naive arm false-positived */
+    let mut pos_arm : u64 = 0u64        /* nonzero cases the sound arm correctly certified */
+
+    /* CASE 0: √2 + √8 − √18 = 0  (commensurable, perfect-square factors 8=2·4, 18=2·9) */
+    CA[0u64]=1i64 CB[0u64]=2i64   CA[1u64]=1i64 CB[1u64]=8i64   CA[2u64]=0i64-1i64 CB[2u64]=18i64
+    let ex0 : i32 = ui_sqrt_sum_sign((&CA) as u64, (&CB) as u64, 3u64)
+    sound_scan((&CA) as u64, (&CB) as u64, 3u64)
+    naive_scan((&CA) as u64, (&CB) as u64, 3u64)
+    if ex0 == 0i32 { if SOUND_NZ == 1u8 { bad_sound = bad_sound + 1u64 }   if NAIVE_NZ == 1u8 { fp_on_zero = fp_on_zero + 1u64 } }
+    e_u64(0u64) e_sp() e_u64((ex0 + 1i32) as u64) e_sp() e_u64(SOUND_NZ as u64) e_sp() e_u64(NAIVE_NZ as u64) e_nl()
+
+    /* CASE 1: √8 − 2√2 = 0  (perfect-square factor 8=2·4) */
+    CA[0u64]=1i64 CB[0u64]=8i64   CA[1u64]=0i64-2i64 CB[1u64]=2i64
+    let ex1 : i32 = ui_sqrt_sum_sign((&CA) as u64, (&CB) as u64, 2u64)
+    sound_scan((&CA) as u64, (&CB) as u64, 2u64)
+    naive_scan((&CA) as u64, (&CB) as u64, 2u64)
+    if ex1 == 0i32 { if SOUND_NZ == 1u8 { bad_sound = bad_sound + 1u64 }   if NAIVE_NZ == 1u8 { fp_on_zero = fp_on_zero + 1u64 } }
+    e_u64(1u64) e_sp() e_u64((ex1 + 1i32) as u64) e_sp() e_u64(SOUND_NZ as u64) e_sp() e_u64(NAIVE_NZ as u64) e_nl()
+
+    /* CASE 2: √2 − √3 < 0  (genuine nonzero, distinct squarefree) */
+    CA[0u64]=1i64 CB[0u64]=2i64   CA[1u64]=0i64-1i64 CB[1u64]=3i64
+    let ex2 : i32 = ui_sqrt_sum_sign((&CA) as u64, (&CB) as u64, 2u64)
+    sound_scan((&CA) as u64, (&CB) as u64, 2u64)
+    if ex2 != 0i32 { if SOUND_NZ == 1u8 { pos_arm = pos_arm + 1u64 } }
+    e_u64(2u64) e_sp() e_u64((ex2 + 1i32) as u64) e_sp() e_u64(SOUND_NZ as u64) e_nl()
+
+    /* CASE 3: √8 + √2 − √18 + √2 = √2 > 0  (commensurable NONZERO -- sound must still certify) */
+    CA[0u64]=1i64 CB[0u64]=8i64   CA[1u64]=1i64 CB[1u64]=2i64   CA[2u64]=0i64-1i64 CB[2u64]=18i64   CA[3u64]=1i64 CB[3u64]=2i64
+    let ex3 : i32 = ui_sqrt_sum_sign((&CA) as u64, (&CB) as u64, 4u64)
+    sound_scan((&CA) as u64, (&CB) as u64, 4u64)
+    if ex3 != 0i32 { if SOUND_NZ == 1u8 { pos_arm = pos_arm + 1u64 } }
+    e_u64(3u64) e_sp() e_u64((ex3 + 1i32) as u64) e_sp() e_u64(SOUND_NZ as u64) e_nl()
+
+    if bad_sound != 0u64 { return 10u64 }
+    if fp_on_zero != 2u64 { return 20u64 }    /* both perfect-square zeros must expose the naive false positive */
+    if pos_arm == 0u64 { return 30u64 }
+    return 99u64
+}

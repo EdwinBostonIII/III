@@ -1813,7 +1813,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : UNIFIED FIELD -- owned by run_field_kats.sh (links ui_field/egraph)")
             SKIP=$((SKIP+1)); continue
             ;;
-        2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom)
+        2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom|2137_adaptive_sign|2138_symmetry_quotient|2139_padic_barrier|2140_adaptive_big|2141_cyclotomic_rotation|2142_se3_screw|2143_traj_arclen)
             RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + egraph + bigint)")
             SKIP=$((SKIP+1)); continue
             ;;

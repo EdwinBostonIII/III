@@ -5,8 +5,8 @@ module field_full
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 /* bigint-like primitives (exact past i64) */
-extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "ui_exact_big.iii"
-extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "sqrt_sum_sign.iii"
 /* self-populating numbers */
 extern @abi(c-msvc-x64) fn ui_cf_run(a0: i64, period: u64, period_len: i64, n_terms: i64) -> i32 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_cf_p() -> i64 from "ui_field.iii"

@@ -1,103 +1,15 @@
-/* STDLIB/iii/aether/ui_exact_big.iii -- BIGINT-backed bi-quadratic sign for the FULL-RESOLUTION symmetric 2D
- * coverage.  ui_exact's ui_arc_cover2d is exact within i64; at screen coords the nested squaring in the degree-4
+/* STDLIB/iii/aether/ui_exact_big.iii -- BIGINT-backed bi-quadratic COVERAGE for the FULL-RESOLUTION symmetric 2D
+ * path.  ui_exact's ui_arc_cover2d is exact within i64; at screen coords the nested squaring in the degree-4
  * sign (an^2 ~ 1e28, pp^2 ~ 1e62) exceeds i64.  Here the same proven REDUCTION (degree-4 -> two single-D signs)
- * runs with arbitrary-precision bigint products, so the coverage is exact at ANY glyph coordinate -- the word size
- * is no longer the limit.  Attaches to III's bigint (numera/bigint.iii) + arena (memoria/arena.iii). */
+ * runs with arbitrary-precision products, so the coverage is exact at ANY glyph coordinate.
+ *
+ * THE FOLD (III-EXACT-SUBSTRATE-INTEGRATION T3): the signers ui_bsign1 / ui_sign_bi_big moved INTO the one
+ * exact-sign kernel (sqrt_sum_sign.iii, Tier 0 -- the low-surd iterated-squaring fast path of the ladder).  The
+ * two-live-kernels redundancy is over: this file keeps the bigint COVERAGE engine (bez_area_raw +
+ * ui_arc_cover2d_big) and consumes the kernel's signer like every other face. */
 module ui_exact_big
 
-extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_drop(arena_id: u64) -> i32 from "arena.iii"   /* release the region after bigint_drop_arena (the contract's missing half) */
-extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
-
-fn iabs64(x: i64) -> u64 {
-    if x < 0i64 { return (0i64 - x) as u64 }
-    return x as u64
-}
-fn isign64(x: i64) -> i32 {
-    if x > 0i64 { return 1i32 }
-    if x < 0i64 { return 0i32 - 1i32 }
-    return 0i32
-}
-
-/* sign(u + v*sqrt D), u,v signed i64, D>=0 -- EXACT via bigint (handles u^2, v^2*D far beyond i64). */
-fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 @export {
-    let su : i32 = isign64(u)
-    let sv : i32 = isign64(v)
-    if v == 0i64 { return su }
-    if dD == 0i64 { return su }
-    if su == 0i32 { return sv }
-    if su == sv { return su }
-    /* opposite signs: the larger magnitude wins -- |u|^2  vs  v^2 * D  (both as bigints) */
-    let ar : u64 = arena_new(65536u64)
-    let bu : u64 = bigint_from_u64(ar, iabs64(u))
-    let bu2 : u64 = bigint_mul(ar, bu, bu)
-    let bv : u64 = bigint_from_u64(ar, iabs64(v))
-    let bv2 : u64 = bigint_mul(ar, bv, bv)
-    let bD : u64 = bigint_from_u64(ar, dD as u64)
-    let bv2D : u64 = bigint_mul(ar, bv2, bD)
-    let c : i32 = bigint_cmp(bu2, bv2D)
-    bigint_drop_arena(ar)
-    arena_drop(ar)                                            /* free the region slot -> no 64-slot pool leak (render-scale) */
-    if c > 0i32 { return su }
-    if c < 0i32 { return sv }
-    return 0i32
-}
-
-/* sign(an + bn*sqrt D1 + cn*sqrt D2) -- the DEGREE-4 (bi-quadratic) sign, in arbitrary-precision bigint.  Same
- * proven reduction as ui_sign_bi (i64): level 1 = sign(an + bn sqrt D1) [ui_bsign1]; if it opposes cn*sqrt D2, the
- * winner is decided by the level-2 single-D sign of u + v sqrt D1, u = an^2+bn^2 D1 - cn^2 D2, v = 2 an bn -- but now
- * u,v are BIGINTS, so the nested squaring (pp^2 ~ 1e62 at screen scale) never overflows. */
-fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
-    let sP : i32 = ui_bsign1(an, bn, dD1)
-    if cn == 0i64 { return sP }
-    if dD2 == 0i64 { return sP }
-    let sC : i32 = isign64(cn)
-    if sP == 0i32 { return sC }
-    if sP == sC { return sP }
-    /* opposite: s2 = sign(u + v sqrt D1), u = an^2+bn^2 D1 - cn^2 D2, v = 2 an bn (bigint) */
-    let ar : u64 = arena_new(262144u64)
-    let bD1 : u64 = bigint_from_u64(ar, dD1 as u64)
-    let ban : u64 = bigint_from_u64(ar, iabs64(an))
-    let bbn : u64 = bigint_from_u64(ar, iabs64(bn))
-    let bcn : u64 = bigint_from_u64(ar, iabs64(cn))
-    let an2 : u64 = bigint_mul(ar, ban, ban)
-    let bn2D1 : u64 = bigint_mul(ar, bigint_mul(ar, bbn, bbn), bD1)
-    let cn2D2 : u64 = bigint_mul(ar, bigint_mul(ar, bcn, bcn), bigint_from_u64(ar, dD2 as u64))
-    let pos : u64 = bigint_add(ar, an2, bn2D1)                 /* an^2 + bn^2 D1 (>= 0) */
-    let cu : i32 = bigint_cmp(pos, cn2D2)
-    let mut su : i32 = 0i32
-    let mut absu : u64 = 0u64
-    if cu > 0i32 { su = 1i32         absu = bigint_sub(ar, pos, cn2D2) }
-    if cu < 0i32 { su = 0i32 - 1i32  absu = bigint_sub(ar, cn2D2, pos) }
-    let sv : i32 = isign64(an) * isign64(bn)
-    let mut s2 : i32 = 0i32
-    if sv == 0i32 { s2 = su }
-    if sv != 0i32 {
-        if su == 0i32 { s2 = sv }
-        if su == sv { s2 = su }
-        if su != sv {
-            if su != 0i32 {
-                /* |u|^2 vs v^2 D1 = (2|an||bn|)^2 D1 */
-                let absv : u64 = bigint_mul(ar, bigint_mul(ar, ban, bbn), bigint_from_u64(ar, 2u64))
-                let u2 : u64 = bigint_mul(ar, absu, absu)
-                let v2D1 : u64 = bigint_mul(ar, bigint_mul(ar, absv, absv), bD1)
-                let c2 : i32 = bigint_cmp(u2, v2D1)
-                if c2 > 0i32 { s2 = su }
-                if c2 < 0i32 { s2 = sv }
-            }
-        }
-    }
-    bigint_drop_arena(ar)
-    arena_drop(ar)                                            /* free the region slot -> no 64-slot pool leak (render-scale) */
-    if s2 > 0i32 { return sP }
-    if s2 < 0i32 { return sC }
-    return 0i32
-}
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "sqrt_sum_sign.iii"
 
 /* RAW area-at-crossing numerators (pp + qq*sqrt dD)/(6 c^4) -- NO gcd reduction, so both crossings of one curve share
  * the denominator 6 c^4 (c=2 ax2, a=-ax1 are the same; only dD differs).  i64 holds pp ~ 1e15 at screen scale. */
@@ -119,10 +31,10 @@ fn bez_area_raw(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, a: i
     return 0i32
 }
 
-/* FULL-RESOLUTION symmetric 2D coverage (region below an x-monotone arc), exact at ANY coord via bigint.
- * coverage = G(t2) - G(t1) - py = (an + bn sqrt D1 + cn sqrt D2)/(6 c^4), an=pp2-pp1-py*den, bn=-qq1, cn=qq2; the
- * exact alpha = round(sa*coverage) by a PROVEN-SIGN bigint binary search.  The binary search also CLAMPS naturally:
- * coverage<0 (arc below) -> 0, coverage>1 (arc above the row) -> sa, fractional -> the exact 8-bit value. */
+/* FULL-RESOLUTION symmetric 2D coverage (region below an x-monotone arc), exact at ANY coord via the kernel's
+ * bigint signer.  coverage = G(t2) - G(t1) - py = (an + bn sqrt D1 + cn sqrt D2)/(6 c^4), an=pp2-pp1-py*den,
+ * bn=-qq1, cn=qq2; the exact alpha = round(sa*coverage) by a PROVEN-SIGN binary search.  The binary search also
+ * CLAMPS naturally: coverage<0 (arc below) -> 0, coverage>1 (arc above the row) -> sa, fractional -> exact 8-bit. */
 fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 @export {
     if ax2 == 0i64 { return 0i64 - 1i64 }
     let a : i64 = 0i64 - ax1
@@ -154,5 +66,5 @@ fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64
     return lo
 }
 
-/* (ui_arc_cover2d_sym_big moved to ui_exact_sym.iii -- keeps ui_exact_big independent of ui_exact, so the exact-real
- * consumers (sqrt_sum_sign) that use only ui_bsign1/cover2d_big do NOT drag in the i64 geometry + framebuffer.) */
+/* (ui_arc_cover2d_sym_big lives in ui_exact_sym.iii -- keeps this file independent of the i64 geometry +
+ * framebuffer; the signers live in sqrt_sum_sign.iii -- ONE kernel for every exact-sign consumer.) */

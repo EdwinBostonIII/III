@@ -135,12 +135,187 @@ var CANONCT : u64 = 0u64
 var EXACTCT : u64 = 0u64
 var KFCT : u64 = 0u64                     /* decided by the kfield Galois-tower tier (pure i64, no bigint) */
 var KFABST : u64 = 0u64                   /* kfield tier attempted but ABSTAINED (rank>3 / envelope) -> fell through */
+var BIQCT : u64 = 0u64                    /* decided by the low-surd bi-quadratic squaring rung (O(1) bigint; also counted in EXACTCT) */
 fn lazy_fast_count() -> u64 @export { return FASTCT }
 fn lazy_canon_count() -> u64 @export { return CANONCT }
 fn lazy_exact_count() -> u64 @export { return EXACTCT }
 fn lazy_kf_count() -> u64 @export { return KFCT }
 fn lazy_kf_abstain_count() -> u64 @export { return KFABST }
-fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT = 0u64   KFCT = 0u64   KFABST = 0u64   return 0i32 }
+fn lazy_biq_count() -> u64 @export { return BIQCT }
+fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT = 0u64   KFCT = 0u64   KFABST = 0u64   BIQCT = 0u64   return 0i32 }
+
+/* ═══ TIER 0 -- THE LOW-SURD FAST-EXACT SIGNERS (folded here from ui_exact_big.iii / ui_exact_bigsign.iii: the
+ * two-live-kernels redundancy ends -- ONE kernel, and the n<=2 iterated-squaring signers are its low-surd tiers).
+ * For <=2 surds the ITERATED SQUARING is exact, finite, O(1) bigint -- NO separation bound, NO precision knob,
+ * ANY coefficient magnitude.  The UI/coverage path (ui_arc_cover2d_big, ui_exact_sym, ui_exact_bigcov, field_full)
+ * consumes these exports directly; sqrtsum_lazy3 dispatches them for any raw <=2-surd query. ═══ */
+
+/* sign(u + v*sqrt D), u,v signed i64, D>=0 -- EXACT via bigint (handles u^2, v^2*D far beyond i64). */
+fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 @export {
+    let su : i32 = isign64(u)
+    let sv : i32 = isign64(v)
+    if v == 0i64 { return su }
+    if dD == 0i64 { return su }
+    if su == 0i32 { return sv }
+    if su == sv { return su }
+    /* opposite signs: the larger magnitude wins -- |u|^2  vs  v^2 * D  (both as bigints) */
+    let ar : u64 = arena_new(65536u64)
+    let bu : u64 = bigint_from_u64(ar, iabs64(u))
+    let bu2 : u64 = bigint_mul(ar, bu, bu)
+    let bv : u64 = bigint_from_u64(ar, iabs64(v))
+    let bv2 : u64 = bigint_mul(ar, bv, bv)
+    let bD : u64 = bigint_from_u64(ar, dD as u64)
+    let bv2D : u64 = bigint_mul(ar, bv2, bD)
+    let c : i32 = bigint_cmp(bu2, bv2D)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    if c > 0i32 { return su }
+    if c < 0i32 { return sv }
+    return 0i32
+}
+
+/* sign(an + bn*sqrt D1 + cn*sqrt D2) -- the DEGREE-4 (bi-quadratic) sign, in arbitrary-precision bigint.  The
+ * proven reduction: level 1 = sign(an + bn sqrt D1) [ui_bsign1]; if it opposes cn*sqrt D2, the winner is decided
+ * by the level-2 single-D sign of u + v sqrt D1, u = an^2+bn^2 D1 - cn^2 D2, v = 2 an bn -- u,v BIGINT, so the
+ * nested squaring (pp^2 ~ 1e62 at screen scale) never overflows. */
+fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 @export {
+    let sP : i32 = ui_bsign1(an, bn, dD1)
+    if cn == 0i64 { return sP }
+    if dD2 == 0i64 { return sP }
+    let sC : i32 = isign64(cn)
+    if sP == 0i32 { return sC }
+    if sP == sC { return sP }
+    /* opposite: s2 = sign(u + v sqrt D1), u = an^2+bn^2 D1 - cn^2 D2, v = 2 an bn (bigint) */
+    let ar : u64 = arena_new(262144u64)
+    let bD1 : u64 = bigint_from_u64(ar, dD1 as u64)
+    let ban : u64 = bigint_from_u64(ar, iabs64(an))
+    let bbn : u64 = bigint_from_u64(ar, iabs64(bn))
+    let bcn : u64 = bigint_from_u64(ar, iabs64(cn))
+    let an2 : u64 = bigint_mul(ar, ban, ban)
+    let bn2D1 : u64 = bigint_mul(ar, bigint_mul(ar, bbn, bbn), bD1)
+    let cn2D2 : u64 = bigint_mul(ar, bigint_mul(ar, bcn, bcn), bigint_from_u64(ar, dD2 as u64))
+    let pos : u64 = bigint_add(ar, an2, bn2D1)                 /* an^2 + bn^2 D1 (>= 0) */
+    let cu : i32 = bigint_cmp(pos, cn2D2)
+    let mut su : i32 = 0i32
+    let mut absu : u64 = 0u64
+    if cu > 0i32 { su = 1i32         absu = bigint_sub(ar, pos, cn2D2) }
+    if cu < 0i32 { su = 0i32 - 1i32  absu = bigint_sub(ar, cn2D2, pos) }
+    let sv : i32 = isign64(an) * isign64(bn)
+    let mut s2 : i32 = 0i32
+    if sv == 0i32 { s2 = su }
+    if sv != 0i32 {
+        if su == 0i32 { s2 = sv }
+        if su == sv { s2 = su }
+        if su != sv {
+            if su != 0i32 {
+                /* |u|^2 vs v^2 D1 = (2|an||bn|)^2 D1 */
+                let absv : u64 = bigint_mul(ar, bigint_mul(ar, ban, bbn), bigint_from_u64(ar, 2u64))
+                let u2 : u64 = bigint_mul(ar, absu, absu)
+                let v2D1 : u64 = bigint_mul(ar, bigint_mul(ar, absv, absv), bD1)
+                let c2 : i32 = bigint_cmp(u2, v2D1)
+                if c2 > 0i32 { s2 = su }
+                if c2 < 0i32 { s2 = sv }
+            }
+        }
+    }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    if s2 > 0i32 { return sP }
+    if s2 < 0i32 { return sC }
+    return 0i32
+}
+
+fn ui_bsgnv(s: i64) -> i32 { if s > 0i64 { return 1i32 }   if s < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+/* sign(asg*am + bsg*bm*sqrt(dD)), dD >= 0, am/bm magnitudes (bigint handles in ar), asg/bsg in {-1,0,1}. */
+fn ui_bigsign_surd(ar: u64, asg: i64, am: u64, bsg: i64, bm: u64, dD: i64) -> i32 {
+    if dD == 0i64 { return ui_bsgnv(asg) }
+    if asg == 0i64 { return ui_bsgnv(bsg) }
+    if bsg == 0i64 { return ui_bsgnv(asg) }
+    if asg == bsg { return ui_bsgnv(asg) }
+    let am2 : u64 = bigint_mul(ar, am, am)
+    let bm2d : u64 = bigint_mul(ar, bigint_mul(ar, bm, bm), bigint_from_u64(ar, dD as u64))
+    let c : i32 = bigint_cmp(am2, bm2d)
+    if c > 0i32 { return ui_bsgnv(asg) }
+    if c < 0i32 { return ui_bsgnv(bsg) }
+    return 0i32
+}
+
+/* sign(an + bn*sqrt(dhi) + cn*sqrt(dlo)), an/bn/cn signed BIGINTS (sign + magnitude-handle pairs, caller arena),
+ * dhi/dlo >= 0 small integers.  The bigint-coefficient port of the same proven squaring reduction; the exact
+ * 2-surd decider under the render-scale coverage rounder (biground) and adaptive_sign_big's 2-class fast path. */
+fn ui_bigsign2(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, dhi: i64, cnsg: i64, cnm: u64, dlo: i64) -> i32 @export {
+    let sP : i32 = ui_bigsign_surd(ar, ansg, anm, bnsg, bnm, dhi)
+    if cnsg == 0i64 { return sP }
+    if dlo == 0i64 { return sP }
+    let sC : i32 = ui_bsgnv(cnsg)
+    if sP == 0i32 { return sC }
+    if sP == sC { return sP }
+    /* opposite signs: sign(P + cn*sqrt(dlo)) = sign(P) iff P^2 > cn^2*dlo.
+     * P^2 = (an^2 + bn^2*dhi) + (2*an*bn)*sqrt(dhi); compare to cn^2*dlo (rational) -> a single-surd sign. */
+    let an2 : u64 = bigint_mul(ar, anm, anm)
+    let bn2dhi : u64 = bigint_mul(ar, bigint_mul(ar, bnm, bnm), bigint_from_u64(ar, dhi as u64))
+    let ppA : u64 = bigint_add(ar, an2, bn2dhi)
+    let cn2dlo : u64 = bigint_mul(ar, bigint_mul(ar, cnm, cnm), bigint_from_u64(ar, dlo as u64))
+    let cc : i32 = bigint_cmp(ppA, cn2dlo)
+    let mut rsg : i64 = 0i64
+    let mut rmag : u64 = ppA
+    if cc > 0i32 { rsg = 1i64        rmag = bigint_sub(ar, ppA, cn2dlo) }
+    if cc < 0i32 { rsg = 0i64 - 1i64 rmag = bigint_sub(ar, cn2dlo, ppA) }
+    let ppBsg : i64 = ansg * bnsg
+    let ppBm : u64 = bigint_mul(ar, bigint_mul(ar, anm, bnm), bigint_from_u64(ar, 2u64))
+    let s2 : i32 = ui_bigsign_surd(ar, rsg, rmag, ppBsg, ppBm, dhi)
+    if s2 > 0i32 { return sP }
+    if s2 < 0i32 { return sC }
+    return 0i32
+}
+
+/* raw low-surd SHAPE probe for the dispatcher: sum rational terms (b==1) into SS_AN (overflow-checked), collect
+ * up to TWO surd terms (b>1).  1 = shape fits (the bi-quadratic rung applies); 0 = refuse (negative/overflow/
+ * more than 2 surds) -> the caller falls through.  b==0 or a==0 terms contribute nothing and are skipped. */
+var SS_AN : i64   var SS_B1A : i64   var SS_B1D : i64   var SS_B2A : i64   var SS_B2D : i64
+var SS_OVF : u32
+fn ss_add_ck(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = iabs64(a)   let ub : u64 = iabs64(b)
+    if pa == 1u8 {
+        if (ua + ub) > 9223372036854775807u64 { SS_OVF = 1u32   return 0i64 }
+        return a + b
+    }
+    if ua > 9223372036854775807u64 { SS_OVF = 1u32   return 0i64 }
+    if ub > 9223372036854775807u64 { SS_OVF = 1u32   return 0i64 }
+    if (ua + ub) > 9223372036854775808u64 { SS_OVF = 1u32   return 0i64 }
+    return a + b
+}
+fn ss_shape2(a_ptr: u64, b_ptr: u64, n: u64) -> i32 {
+    if n > 16u64 { return 0i32 }
+    SS_AN = 0i64   SS_B1A = 0i64   SS_B1D = 0i64   SS_B2A = 0i64   SS_B2D = 0i64   SS_OVF = 0u32
+    let pa : *i64 = a_ptr as *i64
+    let pb : *i64 = b_ptr as *i64
+    let mut ns : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bi : i64 = pb[i]
+        if ai != 0i64 { if bi != 0i64 {
+            if bi < 0i64 { return 0i32 }
+            if bi == 1i64 {
+                SS_AN = ss_add_ck(SS_AN, ai)
+                if SS_OVF != 0u32 { return 0i32 }
+            }
+            if bi > 1i64 {
+                if ns == 0u64 { SS_B1A = ai   SS_B1D = bi   ns = 1u64 }
+                else { if ns == 1u64 { SS_B2A = ai   SS_B2D = bi   ns = 2u64 } else { return 0i32 } }
+            }
+        } }
+        i = i + 1u64
+    }
+    return 1i32
+}
 
 /* squarefree split: b = s^2 * d with d squarefree; sets SFS=s, SFD=d.  Trial-divide square factors (cheap for small b). */
 var SFS : u64   var SFD : u64
@@ -223,7 +398,16 @@ fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
         if bu >= (1u64 << 20u64) { allsmall = 0u8 }
         i = i + 1u64
     }
-    if bad == 1u8 { EXACTCT = EXACTCT + 1u64   return ui_sqrt_sum_sign(a_ptr, b_ptr, n) }
+    if bad == 1u8 {
+        /* TIER 0 -- any-magnitude coefficients but a low-surd SHAPE: <=2 surd terms decide by the exact O(1)
+         * bi-quadratic squaring instead of the exponential separation bound (negative radicands refuse). */
+        if ss_shape2(a_ptr, b_ptr, n) == 1i32 {
+            EXACTCT = EXACTCT + 1u64   BIQCT = BIQCT + 1u64
+            return ui_sign_bi_big(SS_AN, SS_B1A, SS_B1D, SS_B2A, SS_B2D)
+        }
+        EXACTCT = EXACTCT + 1u64
+        return ui_sqrt_sum_sign(a_ptr, b_ptr, n)
+    }
     let mut F : u64 = 1u64
     if maxbl < 58u64 { F = (60u64 - maxbl) / 2u64 }      /* RELATIVE windowing -- precision adapts to magnitude */
     if F == 0u64 { F = 1u64 }
@@ -253,8 +437,14 @@ fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
         if kr != 2i32 { KFCT = KFCT + 1u64   return kr }
         KFABST = KFABST + 1u64
     }
+    /* TIER 0 -- low-surd shape at any radicand magnitude: <=2 surd terms decide by the exact O(1) bi-quadratic
+     * squaring (the folded ui_exact_big path) instead of the adaptive doubling loop. */
+    if ss_shape2(a_ptr, b_ptr, n) == 1i32 {
+        EXACTCT = EXACTCT + 1u64   BIQCT = BIQCT + 1u64
+        return ui_sign_bi_big(SS_AN, SS_B1A, SS_B1D, SS_B2A, SS_B2D)
+    }
     EXACTCT = EXACTCT + 1u64
-    /* TIER 2.5 is now the escalation target (was ui_sqrt_sum_sign): the adaptive engine pays the instance's true
+    /* TIER 2.5 is the escalation target for >=3-surd shapes: the adaptive engine pays the instance's true
      * precision and only falls to the exponential separation bound if its cap is hit -- same answer, never slower.
      * This makes sqrtsum_adaptive_sign LOAD-BEARING in the shipped dispatcher that verb_geom consumes. */
     return sqrtsum_adaptive_sign(a_ptr, b_ptr, n)
@@ -673,6 +863,29 @@ fn sqrtsum_adaptive_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> 
     while j < NCLS { let cs : i64 = CSGN[j]   if cs != 0i64 { nz = nz + 1u64   lastj = j }   j = j + 1u64 }
     if nz == 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i32 }
     if nz == 1u64 { let s : i64 = CSGN[lastj]   bigint_drop_arena(ar)   arena_drop(ar)   if s > 0i64 { return 1i32 }   return 0i32 - 1i32 }
+    if nz == 2u64 {
+        /* TIER 0' -- TWO classes decide by the exact O(1) bigint squaring (the folded ui_bigsign2), not the
+         * doubling loop: rational class (rad 1) -> an; the surd class(es) -> (bn, dhi) / (cn, dlo). */
+        let mut j1 : u64 = 99u64   let mut j2 : u64 = 99u64
+        let mut k1 : u64 = 0u64
+        while k1 < NCLS {
+            let cs1 : i64 = CSGN[k1]
+            if cs1 != 0i64 { if j1 == 99u64 { j1 = k1 } else { j2 = k1 } }
+            k1 = k1 + 1u64
+        }
+        let r1 : i64 = CRAD[j1]   let r2c : i64 = CRAD[j2]
+        let mut res2 : i32 = 0i32
+        if r1 == 1i64 {
+            res2 = ui_bigsign2(ar, CSGN[j1], CMAG[j1], CSGN[j2], CMAG[j2], r2c, 0i64, CMAG[j1], 0i64)
+        } else { if r2c == 1i64 {
+            res2 = ui_bigsign2(ar, CSGN[j2], CMAG[j2], CSGN[j1], CMAG[j1], r1, 0i64, CMAG[j2], 0i64)
+        } else {
+            let zh : u64 = bigint_from_u64(ar, 0u64)
+            res2 = ui_bigsign2(ar, 0i64, zh, CSGN[j1], CMAG[j1], r1, CSGN[j2], CMAG[j2], r2c)
+        } }
+        bigint_drop_arena(ar)   arena_drop(ar)
+        return res2
+    }
     let mut p : u64 = 8u64   let mut result : i32 = 0i32   let mut done : u8 = 0u8
     while done == 0u8 {
         let iar : u64 = arena_new(16777216u64)

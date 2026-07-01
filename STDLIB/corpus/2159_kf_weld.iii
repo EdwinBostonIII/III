@@ -26,11 +26,14 @@
  *         sqrt2*sqrt8 to the RATIONAL 4; the overflow sentinel is never identity-equal; + the remaining kfield
  *         verbs exercised directly (kf_embed on the rank-collapse set; the sticky guard flag get/clear).
  *
+ *       7 the folded low-surd Tier 0 (T3 reconciliation): big-radicand and big-coefficient <=2-surd queries
+ *         decided by the O(1) bi-quadratic squaring IN the dispatcher (lazy_biq_count proves the rung is live).
+ *
  * exit 99 = pass
  *   10 dispatcher != oracle            14 exact-zero case wrong          17 39-family: a non-abstain differed
  *   11 direct tower != oracle          15 lazy_kf_count wrong (tier dead) 18 surd-value law / kf verb arm failed
  *   12 in-envelope tower ABSTAINED     16 abstain->fallback path never exercised
- *   13 out-of-envelope tower ANSWERED (guard dead) */
+ *   13 out-of-envelope tower ANSWERED (guard dead)                       19 lazy_biq_count wrong (Tier 0 dead) */
 module corpus_2159_kf_weld
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -39,6 +42,7 @@ extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i
 extern @abi(c-msvc-x64) fn lazy_reset_counts() -> i32 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn lazy_kf_count() -> u64 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn lazy_kf_abstain_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_biq_count() -> u64 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn kf_multiquadratic_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "kfield.iii"
 extern @abi(c-msvc-x64) fn kf_sign_checked(x: u64) -> i32 from "kfield.iii"
 extern @abi(c-msvc-x64) fn kf_radix(sa: i64, sb: i64, sc: i64) -> i32 from "kfield.iii"
@@ -192,6 +196,16 @@ fn main() -> u64 {
     let ab5 : u64 = lazy_kf_abstain_count()
     putchar(53i32) w_sp() w_sgn(p5) w_sp() w_emit(ab5) w_nl()                       /* "5 + 1" */
     if ab5 != 1u64 { wfail(16u64) }
+
+    /* ══ ARM 7: the folded low-surd Tier 0 (T3 reconciliation).  A big-radicand 2-surd near-tie and a
+     * big-coefficient (bad-screen) 2-surd query both decide by the O(1) bi-quadratic squaring rung, == oracle. */
+    WA[0u64]=1i64 WA[1u64]=0i64-1i64   WB[0u64]=10000000000000000i64 WB[1u64]=9999999999999999i64
+    let q1 : i32 = w_disp(2u64)                                                     /* sqrt(1e16)-sqrt(1e16-1) ~ +5e-9 */
+    WA[0u64]=5000000000i64 WA[1u64]=0i64-3000000000i64   WB[0u64]=1i64 WB[1u64]=2i64
+    let q2 : i32 = w_disp(2u64)                                                     /* 5e9 - 3e9*sqrt2 > 0 (coeffs past the 2^20 screen) */
+    let bq : u64 = lazy_biq_count()
+    putchar(55i32) w_sp() w_sgn(q1) w_sgn(q2) w_sp() w_emit(bq) w_nl()              /* "7 ++ 2" */
+    if bq != 2u64 { wfail(19u64) }
 
     /* ══ ARM 6: the SURD-VALUE identity law <=> the kernel (IDENTIFY <=> DECIDE at the single-surd level), plus
      * the remaining kfield verbs.  gestate canonicalizes, so sqrt8 and 2sqrt2 are the SAME 64 bits; the kernel

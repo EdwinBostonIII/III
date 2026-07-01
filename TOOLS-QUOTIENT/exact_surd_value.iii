@@ -1,0 +1,110 @@
+/* STDLIB/iii/eidos/eidolon_pure.iii -- THE PURE EIDOLON: an exact essentialist value as ONE 64-bit self-name.
+ *
+ * The distillation of eidolon.iii to its 1:1:1 core, emancipated from arithmetic into pure structure:
+ *   * NO hash.  eidolon.iii's address is a sha256 -- a one-way NUMBER you can gestate but never INGEST.  Here the
+ *     packed structure IS the address: shape = logic = address, and (via ingest) = VALUE.  No number stands between
+ *     the eidolon and its name.
+ *   * NO handle table.  No 256-slot arrays.  The value IS the essence -- one machine word, nothing allocated.
+ *
+ * A single u64 holds three projections of ONE object, in a strict 1:1:1 (one bit-field each, mutually determining):
+ *   FORM   (bits 26..63) the squarefree radicand d' -- the AXIS the value lives on (linearly independent per d').
+ *   RATIO  (bits  2..25) the integer magnitude |c|*s -- the PROPORTION (collar) riding that axis.
+ *   VERB   (bits  0..1 ) the orientation of the current:  BELOW(+) ascends, REFLECT(-) descends, FLAT(0) anchors.
+ *   These VERBs are the eidos substrate's own three (ripple.iii: ER_V_BELOW / ER_V_REFLECT / ER_V_NONE).
+ *
+ * GESTATE  value (c,d) -> essence : canonicalize c*sqrt(d) = (c*s)*sqrt(d') and pack.   (deterministic INTENT)
+ * INGEST   essence -> value (c,d) : read the canonical (coeff, radicand) back, LOSSLESS.(deterministic INTUITION)
+ * The pair is an INVOLUTION on canonical values -- ingest(gestate(v)) == canon(v), and gestate is injective, so
+ * essence <-> canonical value is a 1:1 bijection.  IDENTITY is bit-equality: gestate(1,8) and gestate(2,2) are the
+ * SAME 64 bits -- sqrt8 == 2 sqrt2 EXACTLY, where float can only say 2.828...  MUL collapses sqrt(Fa)*sqrt(Fb).
+ *
+ * DOMAIN (the inverse is exact iff in-domain): Form < 2^38, Ratio < 2^24.  Out-of-domain -> the OVERFLOW sentinel
+ * (Form=0, Ratio!=0) -- a state no valid atom occupies -- so the pack is never SILENTLY lossy. */
+module eidos_eidolon_pure
+
+const EP_FLAT    : u64 = 0u64   /* 0 : the stationary anchor (zero, or a collapsed nothing)         */
+const EP_BELOW   : u64 = 1u64   /* + : forward / ascending current                                 */
+const EP_REFLECT : u64 = 2u64   /* - : reflected / descending current                              */
+const EP_RMASK   : u64 = 16777215u64       /* (1<<24)-1 : the RATIO field width (projection mask)   */
+const EP_FMAX    : u64 = 274877906944u64   /* 2^38 : radicand (Form) bound                          */
+const EP_RMAX    : u64 = 16777216u64       /* 2^24 : coefficient (Ratio) bound                      */
+const EP_OVF     : u64 = 4u64              /* the OVERFLOW sentinel: Form=0, Ratio=1, Verb=FLAT     */
+
+var EP_S : u64   var EP_D : u64   /* squarefree split scratch: d = s^2 * d' */
+
+/* squarefree split: d = s^2 * d', sets EP_S=s, EP_D=d'. */
+fn ep_sqfree(d: u64) -> i32 {
+    let mut x : u64 = d   let mut s : u64 = 1u64   let mut k : u64 = 2u64
+    while (k * k) <= x {
+        let kk : u64 = k * k   let q : u64 = x / kk
+        let mut div : u8 = 0u8
+        if (x - (q * kk)) == 0u64 { div = 1u8 }
+        if div == 1u8 { x = q   s = s * k }
+        if div == 0u8 { k = k + 1u64 }
+    }
+    EP_S = s   EP_D = x   return 0i32
+}
+
+fn ep_iabs(c: i64) -> u64 { if c < 0i64 { return (0i64 - c) as u64 }   return c as u64 }
+
+/* GESTATE -- deterministic INTENT: a value declares its essence.  c*sqrt(s^2 d') = (c*s)*sqrt(d'). */
+fn ep_gestate(c: i64, d: u64) -> u64 @export {
+    if c == 0i64 { return EP_FLAT }
+    if d == 0u64 { return EP_FLAT }
+    ep_sqfree(d)
+    let form  : u64 = EP_D
+    let ratio : u64 = ep_iabs(c) * EP_S
+    if form >= EP_FMAX { return EP_OVF }            /* out of domain -> sentinel, never a silent wrap */
+    if ratio >= EP_RMAX { return EP_OVF }
+    let mut verb : u64 = EP_BELOW
+    if c < 0i64 { verb = EP_REFLECT }
+    return (form << 26u64) | (ratio << 2u64) | verb
+}
+
+/* the three projections -- one object, three mutually-determining faces (1:1:1). */
+fn ep_form (e: u64) -> u64 @export { return e >> 26u64 }
+fn ep_ratio(e: u64) -> u64 @export { return (e >> 2u64) & EP_RMASK }
+fn ep_verb (e: u64) -> u64 @export { return e & 3u64 }
+
+/* OVERFLOW: Form=0 with Ratio!=0 -- a state no valid atom occupies (a valid Form is >= 1; FLAT is fully 0). */
+fn ep_is_overflow(e: u64) -> u32 @export { if ep_form(e) == 0u64 { if ep_ratio(e) != 0u64 { return 1u32 } }   return 0u32 }
+
+/* INGEST -- deterministic INTUITION: from the essence alone, reconstruct the exact value (coeff, radicand). */
+fn ep_ingest_coeff(e: u64) -> i64 @export {
+    let r : i64 = ep_ratio(e) as i64
+    if ep_verb(e) == EP_REFLECT { return 0i64 - r }
+    return r
+}
+fn ep_ingest_rad(e: u64) -> u64 @export { return ep_form(e) }
+
+/* IDENTITY: same iff identical bits -> equal as EXACT reals (decided by self-name, never by decimal).
+ * An OVERFLOW sentinel is NOT a value -- distinct out-of-domain atoms collapse to the same sentinel, so it must
+ * never be identity-equal to anything (otherwise two different out-of-domain values would falsely equate). */
+fn ep_same(e1: u64, e2: u64) -> u32 @export {
+    if ep_is_overflow(e1) == 1u32 { return 0u32 }
+    if ep_is_overflow(e2) == 1u32 { return 0u32 }
+    if e1 == e2 { return 1u32 }
+    return 0u32
+}
+
+/* MUL: sqrt(Fa)*sqrt(Fb) = sqrt(Fa Fb) squarefree-collapsed -- where an irrational can collapse to a RATIONAL
+ * (Form'=1), the exact fact float cannot see.  Verb is the sign product; FLAT (a zero) absorbs. */
+fn ep_mul(e1: u64, e2: u64) -> u64 @export {
+    let v1 : u64 = ep_verb(e1)   let v2 : u64 = ep_verb(e2)
+    if v1 == EP_FLAT { return EP_FLAT }
+    if v2 == EP_FLAT { return EP_FLAT }
+    ep_sqfree(ep_form(e1) * ep_form(e2))
+    let form  : u64 = EP_D
+    let ratio : u64 = (ep_ratio(e1) * ep_ratio(e2)) * EP_S
+    if form >= EP_FMAX { return EP_OVF }
+    if ratio >= EP_RMAX { return EP_OVF }
+    let mut verb : u64 = EP_BELOW
+    if v1 != v2 { verb = EP_REFLECT }
+    return (form << 26u64) | (ratio << 2u64) | verb
+}
+
+/* did the radical collapse to a pure number?  (Form==1, or the FLAT anchor). */
+fn ep_is_rational(e: u64) -> u32 @export { if ep_form(e) == 1u64 { return 1u32 }   if e == EP_FLAT { return 1u32 }   return 0u32 }
+
+/* THE UNIT (1:1:1): Form=1, Ratio=1, Verb=BELOW -- the value 1, and the multiplicative identity of the algebra. */
+fn ep_unit() -> u64 @export { return (1u64 << 26u64) | (1u64 << 2u64) | EP_BELOW }

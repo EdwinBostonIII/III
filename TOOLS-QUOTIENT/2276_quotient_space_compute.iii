@@ -1,0 +1,132 @@
+/* 2276_quotient_space_compute.iii -- WEAPONIZING THE QUOTIENT (the path forward from Theorem 2274, face c3).
+ *
+ * STRATEGY: exact analogy lives in the QUOTIENT (the sign/orientation-abstracted shape address, 2273/2274).  So run
+ * the search ENTIRELY in the quotient at O(1) per candidate, and expand into the 2^m orbit -- the exact spatial sign,
+ * the PosSLP-family wall op -- ONLY at the last moment, once per DISTINCT shape.  Each candidate's own strict sign is
+ * then reconstructed from its shape's representative sign XOR its cheap REFLECT (orientation) bit -- never a second
+ * wall touch.  This is c2 (reflect = the orientation bit) + c3 (shape = the analogy address) turned into an algorithm.
+ *
+ * SETUP: N candidate differences a*sqrt(d1) - b*sqrt(d2).  They are built from only D distinct SHAPES, each appearing
+ * many times in both orientations (the same geometric theorem "wearing different labels/orientations").  A brute engine
+ * touches the wall N times (one exact sign per candidate).  The quotient engine touches it D times.
+ *
+ * exit 99 = quotient-space compute is SOUND and DEFERS the wall.
+ *   10 SOUNDNESS: a candidate's reconstructed sign (shape-rep sign XOR reflect bit) != its brute exact sign
+ *   20 DEFERRAL: wall touches != number of distinct shapes
+ *   21 DEFERRAL: wall touches were not fewer than N (no saving -- the quotient bought nothing)
+ *   22 the distinct-shape count was not the expected D (construction sanity)
+ *   30 vacuous: N candidates were not built */
+module corpus_2276_quotient_space_compute
+
+const NB : u64 = 6u64        /* distinct base SHAPES */
+const NDUP : u64 = 5u64      /* duplicates per (shape,orientation) */
+const NCAND : u64 = 60u64    /* NB * 2 orientations * NDUP */
+
+/* candidate store */
+var CA  : [i64; 60]   var CD1 : [i64; 60]   var CB : [i64; 60]   var CD2 : [i64; 60]
+/* base shapes */
+var BA  : [i64; 6]    var BD1 : [i64; 6]    var BB : [i64; 6]    var BD2 : [i64; 6]
+/* quotient cache: one representative sign per distinct shape-key */
+var SKEY  : [u64; 64] var SSIGN : [i32; 64]
+
+/* EXACT spatial sign = the WALL / orbit-expansion op: sign(a*sqrt(d1) - b*sqrt(d2)) = sign(a^2 d1 - b^2 d2). */
+fn verdict_exact(a: i64, d1: i64, b: i64, d2: i64) -> i32 {
+    let x : i64 = (a * a * d1) - (b * b * d2)
+    if x > 0i64 { return 1i32 }
+    if x < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* term1 "dominant" iff (d1 > d2) or (d1==d2 and a>=b) -- a total order on the two terms. */
+fn term1_dominant(a: i64, d1: i64, b: i64, d2: i64) -> u32 {
+    if d1 > d2 { return 1u32 }
+    if d1 < d2 { return 0u32 }
+    if a >= b { return 1u32 }
+    return 0u32
+}
+
+/* pack the canonical (hi_d,hi_a,lo_d,lo_a) into a 64-bit shape key (fields < 2^16). */
+fn shape_key(hd: i64, ha: i64, ld: i64, la: i64) -> u64 {
+    let p0 : u64 = ((hd as u64) & 65535u64) << 48u64
+    let p1 : u64 = ((ha as u64) & 65535u64) << 32u64
+    let p2 : u64 = ((ld as u64) & 65535u64) << 16u64
+    let p3 : u64 = (la as u64) & 65535u64
+    return p0 | p1 | p2 | p3
+}
+
+fn main() -> u64 {
+    /* six distinct base shapes with definite nonzero signs. */
+    BA[0u64]=3i64  BD1[0u64]=2i64  BB[0u64]=2i64  BD2[0u64]=3i64     /* 3root2 - 2root3 = +6  */
+    BA[1u64]=5i64  BD1[1u64]=2i64  BB[1u64]=7i64  BD2[1u64]=1i64     /* 5root2 - 7    = +1  */
+    BA[2u64]=11i64 BD1[2u64]=2i64  BB[2u64]=9i64  BD2[2u64]=3i64     /* 11root2 - 9root3= -1  */
+    BA[3u64]=1i64  BD1[3u64]=2i64  BB[3u64]=1i64  BD2[3u64]=3i64     /* root2 - root3  = -1  */
+    BA[4u64]=17i64 BD1[4u64]=5i64  BB[4u64]=27i64 BD2[4u64]=2i64     /* 17root5 - 27root2=-13 */
+    BA[5u64]=3i64  BD1[5u64]=5i64  BB[5u64]=4i64  BD2[5u64]=2i64     /* 3root5 - 4root2 = +13 */
+
+    /* build N candidates: each base in BOTH orientations, NDUP times (same shape, relabelled/reflected). */
+    let mut idx : u64 = 0u64
+    let mut base : u64 = 0u64
+    while base < NB {
+        let mut orient : u64 = 0u64
+        while orient < 2u64 {
+            let mut dup : u64 = 0u64
+            while dup < NDUP {
+                if orient == 0u64 {
+                    CA[idx]=BA[base]  CD1[idx]=BD1[base]  CB[idx]=BB[base]  CD2[idx]=BD2[base]
+                } else {
+                    CA[idx]=BB[base]  CD1[idx]=BD2[base]  CB[idx]=BA[base]  CD2[idx]=BD1[base]  /* reflected */
+                }
+                idx = idx + 1u64
+                dup = dup + 1u64
+            }
+            orient = orient + 1u64
+        }
+        base = base + 1u64
+    }
+    if idx != NCAND { return 30u64 }
+
+    /* ===== THE QUOTIENT ENGINE ===== */
+    let mut nseen : u64 = 0u64      /* distinct shapes */
+    let mut wall  : u64 = 0u64      /* WALL touches (exact-sign / orbit expansions) */
+    let mut i : u64 = 0u64
+    while i < NCAND {
+        let a : i64 = CA[i]   let d1 : i64 = CD1[i]   let b : i64 = CB[i]   let d2 : i64 = CD2[i]
+
+        /* QUOTIENT op (O(1)): canonicalize to the shape address; the reflect/orientation bit is the swap. */
+        let swapped : u32 = 1u32 - term1_dominant(a, d1, b, d2)
+        let mut ha : i64 = a   let mut hd : i64 = d1   let mut la : i64 = b   let mut ld : i64 = d2
+        if swapped == 1u32 { ha = b   hd = d2   la = a   ld = d1 }
+        let key : u64 = shape_key(hd, ha, ld, la)
+
+        /* look the shape up in the quotient cache. */
+        let mut found : u32 = 0u32
+        let mut rep : i32 = 0i32
+        let mut s : u64 = 0u64
+        while s < nseen {
+            if SKEY[s] == key { found = 1u32   rep = SSIGN[s]   s = nseen } else { s = s + 1u64 }
+        }
+        if found == 0u32 {
+            /* NEW shape -> the ONLY place we touch the wall: one exact spatial sign for the representative. */
+            rep = verdict_exact(ha, hd, la, ld)
+            SKEY[nseen] = key   SSIGN[nseen] = rep
+            nseen = nseen + 1u64
+            wall = wall + 1u64
+        }
+
+        /* reconstruct THIS candidate's strict sign from the representative XOR the reflect bit -- NO wall touch. */
+        let mut mine : i32 = rep
+        if swapped == 1u32 { mine = 0i32 - rep }        /* reflecting a difference negates its sign */
+
+        /* SOUNDNESS: it must equal the brute exact sign computed directly on this candidate. */
+        if mine != verdict_exact(a, d1, b, d2) { return 10u64 }
+
+        i = i + 1u64
+    }
+
+    /* ===== DEFERRAL: the wall was touched once per DISTINCT shape, far fewer than N. ===== */
+    if wall != nseen { return 20u64 }
+    if wall >= NCAND { return 21u64 }
+    if nseen != NB { return 22u64 }        /* 6 wall touches served all 60 candidates */
+
+    return 99u64
+}

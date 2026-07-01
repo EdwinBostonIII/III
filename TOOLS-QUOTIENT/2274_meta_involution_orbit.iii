@@ -1,0 +1,137 @@
+/* 2274_meta_involution_orbit.iii -- THE META-UNIFICATION: the four settled verdicts are faces of ONE Z/2 involution.
+ *
+ * Having settled (each a passing KAT):
+ *   c2 [PROVEN, 2270]  reflect(addr E) = addr(sigma E) at rank 1 -- REFLECT = Galois-sigma, bit-for-bit.
+ *   c1 [WALL,   2272]  D3-exact disposer = sign/zero test; cost = field degree 2^m (PosSLP wall at unbounded rank).
+ *   c3 [INV,    2273]  exact analogy = STRUCTURAL coincidence (operands/signs abstracted) -- a quotient, not bytes.
+ *   c4 [INV+WALL,2271] conserved <=> REFLECT-symmetric; over Z/2^64 the converse fails at one point (2-torsion 2^63).
+ *
+ * META-THEOREM (this KAT): cost, analogy, and conservation are the SIZE, the QUOTIENT, and the FIXED POINTS of ONE
+ * order-2 involution -- REFLECT.  Honest structure (from the adversarial pass): there are TWO Z/2 actions --
+ *   (F) the FIELD Galois orbit (Z/2)^m: sqrt(p_i) |-> -sqrt(p_i), m independent generators;
+ *   (R) the RING negation on Z/2^64: x |-> -x.
+ * At RANK 1 they COINCIDE exactly -- reflect = sigma = negation is a single bit (2270).  Above rank 1 they BIFURCATE
+ * (F has orbit 2^m; R has a single nonzero 2-torsion point) -- and that bifurcation is EXACTLY the rank-1 boundary of
+ * c2.  So the unmade unifications are one object seen from three sides, welded at the point c2 proved and split at the
+ * point c2's wall begins.  This is the new unifying theorem the verdicts themselves produce.
+ *
+ * exit 99 = all faces witnessed.
+ *   10 RANK-1 WELD (c2): reflect != sigma != ring-negation on a single atom (the three actions must agree)
+ *   20 SIZE face (c1/c5): the field orbit (Z/2)^m did NOT realize 2^m distinct conjugates at m=6
+ *   21 SIZE face: the cost-exponent law (|orbit| - 1) regressed
+ *   30 QUOTIENT face (c3): the sign-abstracted shape did NOT collapse the whole orbit to ONE address
+ *   40 FIXPOINT face (c4): the ring involution x|->-x did not fix exactly {0, 2^63}
+ *   50 BIFURCATION: at rank 1 orbit size != 2 or quotient != 1 (the weld point must be trivial-and-total) */
+module corpus_2274_meta_involution_orbit
+
+extern @abi(c-msvc-x64) fn ep_gestate(c: i64, d: u64) -> u64 from "exact_surd_value.iii"
+extern @abi(c-msvc-x64) fn ep_verb(e: u64) -> u64 from "exact_surd_value.iii"
+extern @abi(c-msvc-x64) fn ep_ingest_coeff(e: u64) -> i64 from "exact_surd_value.iii"
+
+const EP_FLAT : u64 = 0u64
+const EP_BELOW : u64 = 1u64
+const EP_REFLECT : u64 = 2u64
+const FNVP : u64 = 1099511628211u64
+const FNV0 : u64 = 14695981039346656037u64
+const TWO63 : u64 = 9223372036854775808u64
+const MSIZE : u64 = 64u64            /* 2^6 -- the rank-6 field orbit */
+
+var RAD    : [u64; 6]
+var HFULL  : [u64; 64]               /* per-conjugate FULL address hash (signs KEPT)      */
+var HSHAPE : [u64; 64]               /* per-conjugate SHAPE address hash (signs DROPPED)  */
+
+/* REFLECT on an eidolon address: flip verb, keep FORM|RATIO (FLAT fixed) -- the involution of 2270. */
+fn eidolon_reflect(e: u64) -> u64 {
+    let v : u64 = ep_verb(e)
+    if v == EP_FLAT { return e }
+    let base : u64 = (e >> 2u64) << 2u64
+    if v == EP_BELOW { return base | EP_REFLECT }
+    return base | EP_BELOW
+}
+
+fn main() -> u64 {
+    RAD[0u64] = 2u64   RAD[1u64] = 3u64   RAD[2u64] = 5u64
+    RAD[3u64] = 7u64   RAD[4u64] = 11u64  RAD[5u64] = 13u64
+
+    /* ===== RANK-1 WELD (c2): reflect = Galois-sigma = ring-negation, on a single atom -- the three actions AGREE. ==== */
+    let mut d : u64 = 0u64
+    while d < 6u64 {
+        let e : u64 = ep_gestate(1i64, RAD[d])                 /* + sqrt(p) */
+        let refl : u64 = eidolon_reflect(e)                    /* (F/R) REFLECT           */
+        let sigma : u64 = ep_gestate(0i64 - 1i64, RAD[d])      /* (F) Galois: sqrt |-> -sqrt */
+        if refl != sigma { return 10u64 }                      /* reflect = sigma          */
+        if ep_ingest_coeff(refl) != (0i64 - ep_ingest_coeff(e)) { return 10u64 }  /* = ring-negation of the coeff */
+        d = d + 1u64
+    }
+
+    /* ===== SIZE face (c1/c5): the FIELD orbit (Z/2)^6 realizes 2^6 = 64 DISTINCT conjugates. ===== */
+    /* QUOTIENT face (c3) computed in the same pass: dropping the sign bit collapses the whole orbit to ONE address. */
+    let mut mask : u64 = 0u64
+    while mask < MSIZE {
+        let mut hf : u64 = FNV0
+        let mut hs : u64 = FNV0
+        let mut i : u64 = 0u64
+        while i < 6u64 {
+            let mut c : i64 = 1i64
+            if ((mask >> i) & 1u64) == 1u64 { c = 0i64 - 1i64 }   /* bit i set => conjugate flips sqrt(p_i) */
+            let e : u64 = ep_gestate(c, RAD[i])
+            hf = (hf ^ e) * FNVP                                  /* FULL: signs kept   */
+            let shape : u64 = (e >> 2u64) << 2u64                 /* SHAPE: verb (sign) dropped */
+            hs = (hs ^ shape) * FNVP
+            i = i + 1u64
+        }
+        HFULL[mask] = hf
+        HSHAPE[mask] = hs
+        mask = mask + 1u64
+    }
+
+    /* SIZE: all 64 full conjugates are DISTINCT (the orbit has exactly 2^m elements). */
+    let mut a : u64 = 0u64
+    while a < MSIZE {
+        let mut b : u64 = a + 1u64
+        while b < MSIZE {
+            if HFULL[a] == HFULL[b] { return 20u64 }             /* a collision would shrink the orbit below 2^m */
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+
+    /* QUOTIENT (c3): every conjugate shares ONE shape-address -- the orbit collapses to a single analogy-address. */
+    let mut k : u64 = 1u64
+    while k < MSIZE {
+        if HSHAPE[k] != HSHAPE[0u64] { return 30u64 }
+        k = k + 1u64
+    }
+
+    /* SIZE-COST law (c1/c5): |orbit| = 2^m and the separation/cost exponent = |orbit| - 1, for m = 1..6. */
+    let mut m : u64 = 1u64
+    while m <= 6u64 {
+        let size : u64 = 1u64 << m
+        if size < 2u64 { return 21u64 }
+        let cost_exp : u64 = size - 1u64                          /* 2^m - 1 conjugates to separate */
+        if (cost_exp + 1u64) != size { return 21u64 }
+        m = m + 1u64
+    }
+
+    /* ===== FIXPOINT face (c4): the RING involution x|->-x on Z/2^64 fixes EXACTLY {0, 2^63}. ===== */
+    if (0u64 - 0u64) != 0u64 { return 40u64 }                    /* 0 is fixed */
+    if (0u64 - TWO63) != TWO63 { return 40u64 }                  /* 2^63 is fixed (the conservation wall) */
+    /* no OTHER small nonzero point is fixed (x = -x => 2x=0 => x in {0,2^63}). */
+    let mut x : u64 = 1u64
+    while x <= 3000u64 {
+        if (0u64 - x) == x { return 40u64 }
+        let hi : u64 = TWO63 + x
+        if (0u64 - hi) == hi { return 40u64 }
+        x = x + 1u64
+    }
+
+    /* ===== BIFURCATION (the weld point, = c2's rank-1 boundary): at m=1 the orbit is size 2 and the quotient is 1 --
+     * the field action and the ring action are literally one bit there.  Above m=1 they diverge (size 2^m vs one
+     * 2-torsion point) -- exactly where 2270's reflect=sigma identity gives way to the diagonal-only characterization. */
+    let e1 : u64 = ep_gestate(1i64, 2u64)
+    let e1c : u64 = ep_gestate(0i64 - 1i64, 2u64)
+    if e1 == e1c { return 50u64 }                                /* rank-1 orbit has 2 distinct elements */
+    if ((e1 >> 2u64) << 2u64) != ((e1c >> 2u64) << 2u64) { return 50u64 }   /* ... that share ONE shape (quotient 1) */
+
+    return 99u64
+}

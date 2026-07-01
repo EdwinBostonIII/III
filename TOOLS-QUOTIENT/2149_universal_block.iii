@@ -1,0 +1,178 @@
+/* 2149_universal_block.iii -- THE ONE KERNEL, FOUR VERBS, MANY FACES.  The unification the disparate exact-geometry tools
+ * were always instances of: a POINT in a fixed multiquadratic field K = ℚ(√A,√B,√C), acted on by FOUR verbs that kfield
+ * ALREADY provides -- CONSTRUCT (kf_mul/add/scale/reflect: build a point), IDENTIFY (kf_point_addr = the Eidolon content-
+ * address), DECIDE (kf_sign = exact zero/order test), QUOTIENT (Galois REFLECT √d↦−√d = the orbit action).  Every "scope"
+ * we built -- triangle discovery, the coincidence-fuzzer, the SE(3) screw, the quotient oracle, kinematics -- is the SAME
+ * kernel with a different CONSTRUCT front-end feeding the same three downstream verbs.  This KAT PROVES that by COMPOSITION
+ * (not by re-exporting kfield behind a new name -- that would be a facade island).
+ *
+ * THE UNIFYING LAW (FACE 3): for two K-points P,Q with a COMMON denominator, IDENTIFY-coincidence and DECIDE-zero are the
+ * SAME relation -- kf_point_addr(P)==kf_point_addr(Q)  ⟺  kf_sign(Px−Qx)==0 ∧ kf_sign(Py−Qy)==0 -- because both are just
+ * field equality on K (kfield sound+complete on K).  So "the Eidolon" and "the exact sign" are two faces of one predicate.
+ *
+ * FACE 1 -- KINEMATICS as the kernel: exact inverse kinematics of a planar 2-link arm (L2=L3=2) to target W=(3,0).
+ * Law of cosines gives cosθ3=1/8 (rational) and sinθ3=3√7/8 (a surd) -> the joint trig lives in ℚ(√7).  CONSTRUCT the
+ * forward kinematics from the solved trig; the √7 CANCELS and the wrist lands on (3,0) EXACTLY -- DECIDE (kf_sign of each
+ * coord diff ==0) AND IDENTIFY (the wrist Eidolon == the target Eidolon) both certify it.  QUOTIENT: the OTHER elbow
+ * solution is the Galois conjugate under √7↦−√7 (pure sign flip, O(1), zero kf_mul) and reaches the SAME target -- proving
+ * one elbow branch proves the other for free, exactly as σ_A maps the incenter to an excenter in 2277.
+ *
+ * HONEST WALL (not overclaimed): joint ANGLES are arccos(algebraic) = TRANSCENDENTAL -- not field elements; general 6R
+ * inverse kinematics is degree-16 (Raghavan-Roth), generically NOT solvable in radicals, so NOT in any multiquadratic
+ * field.  What IS exact here: the joint COS/SIN and the wrist POSITION for the decoupled (spherical-wrist) sub-problem,
+ * where the closed form replaces the jittering Jacobian/Newton iteration.  Float can't hold the √7-cancellation (wrist_y
+ * would be ~1e-16, not 0) nor the reach-boundary sign -- the exact kernel decides both.
+ *
+ *   exit 99 = every face holds.  30-34 FACE 3 (unifying law)   10-14 FACE 1 (kinematics)
+ *   20-22 FACE 2 (cross-application: the fuzzer's coincidence engine detects the kinematics identity)
+ *   40-44 FACE 4 (the wall: field-exit refuse + exact reach/singularity decision) */
+module tq_2149_universal_block
+
+extern @abi(c-msvc-x64) fn kf_radix(sa: i64, sb: i64, sc: i64) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn kf_zero(p: u64) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn kf_mul(out: u64, x: u64, y: u64) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn kf_point_addr(nx: u64, ny: u64, den: u64, out32: *u8) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn kf_sign(x: u64) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn kf_rat_in_field(n: i64) -> i32 from "kfield.iii"
+extern @abi(c-msvc-x64) fn coin_reset() -> i32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_observe_concrete(addr: *u8, faculty: u32, result: u64) -> u8 from "coincidence.iii"
+
+var DEN1 : [i64; 8]   var DEN32 : [i64; 8]
+/* FACE 3 buffers */
+var P3X:[i64;8] var P3Y:[i64;8] var Q3X:[i64;8] var Q3Y:[i64;8] var R3Y:[i64;8] var S23:[i64;8] var T2:[i64;8] var T3:[i64;8] var DF:[i64;8]
+var AP:[u8;32] var AQ:[u8;32] var AR:[u8;32]
+/* FACE 1 buffers */
+var C2:[i64;8] var S2:[i64;8] var C3:[i64;8] var S3:[i64;8] var CC:[i64;8] var SC:[i64;8] var WX:[i64;8] var WY:[i64;8]
+var TA:[i64;8] var TB:[i64;8] var RS2:[i64;8] var RS3:[i64;8] var CC2:[i64;8] var SC2:[i64;8] var WX2:[i64;8] var WY2:[i64;8] var TGT:[i64;8]
+var AW:[u8;32] var AT:[u8;32] var AW2:[u8;32]
+
+fn fset8(p: u64, c0: i64, c1: i64, c2: i64, c3: i64, c4: i64, c5: i64, c6: i64, c7: i64) -> i32 {
+    let v : *i64 = p as *i64
+    v[0u64]=c0 v[1u64]=c1 v[2u64]=c2 v[3u64]=c3 v[4u64]=c4 v[5u64]=c5 v[6u64]=c6 v[7u64]=c7
+    return 0i32
+}
+fn fsub(o: u64, a: u64, b: u64) -> i32 { let po:*i64=o as *i64  let pa:*i64=a as *i64  let pb:*i64=b as *i64  let mut i:u64=0u64  while i<8u64 { po[i]=pa[i]-pb[i]  i=i+1u64 }  return 0i32 }
+fn fadd(o: u64, a: u64, b: u64) -> i32 { let po:*i64=o as *i64  let pa:*i64=a as *i64  let pb:*i64=b as *i64  let mut i:u64=0u64  while i<8u64 { po[i]=pa[i]+pb[i]  i=i+1u64 }  return 0i32 }
+fn fscale(o: u64, a: u64, k: i64) -> i32 { let po:*i64=o as *i64  let pa:*i64=a as *i64  let mut i:u64=0u64  while i<8u64 { po[i]=pa[i]*k  i=i+1u64 }  return 0i32 }
+fn fcopy(o: u64, a: u64) -> i32 { let po:*i64=o as *i64  let pa:*i64=a as *i64  let mut i:u64=0u64  while i<8u64 { po[i]=pa[i]  i=i+1u64 }  return 0i32 }
+fn reflect(p: u64, gbit: u64) -> i32 { let v:*i64=p as *i64  let mut i:u64=0u64  while i<8u64 { if (i & gbit) != 0u64 { v[i] = 0i64 - v[i] }  i=i+1u64 }  return 0i32 }
+fn addr_eq(x: *u8, y: *u8) -> u32 { let mut i:u64=0u64  while i<32u64 { if x[i] != y[i] { return 0u32 }  i=i+1u64 }  return 1u32 }
+
+/* ===== FACE 3 -- THE UNIFYING LAW: IDENTIFY-coincidence ⟺ DECIDE-zero (kfield radix 2,3,5). ===== */
+fn face3() -> u64 {
+    kf_radix(2i64, 3i64, 5i64)                          /* idx1=√2 idx2=√3 idx3=√6 idx4=√5 */
+    fset8((&P3X) as u64, 5i64,0i64,0i64,2i64,0i64,0i64,0i64,0i64)   /* P=(5+2√6, √6) direct */
+    fset8((&P3Y) as u64, 0i64,0i64,0i64,1i64,0i64,0i64,0i64,0i64)
+    fset8((&S23) as u64, 0i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64)   /* √2+√3 */
+    kf_mul((&Q3X) as u64, (&S23) as u64, (&S23) as u64)            /* Q=((√2+√3)², √2·√3) -- SAME point, other construction */
+    fset8((&T2) as u64, 0i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fset8((&T3) as u64, 0i64,0i64,1i64,0i64,0i64,0i64,0i64,0i64)
+    kf_mul((&Q3Y) as u64, (&T2) as u64, (&T3) as u64)
+    fset8((&R3Y) as u64, 1i64,0i64,0i64,1i64,0i64,0i64,0i64,0i64)   /* R=(5+2√6, 1+√6) -- differs in y */
+
+    kf_point_addr((&P3X) as u64, (&P3Y) as u64, (&DEN1) as u64, (&AP) as *u8)
+    kf_point_addr((&Q3X) as u64, (&Q3Y) as u64, (&DEN1) as u64, (&AQ) as *u8)
+    kf_point_addr((&P3X) as u64, (&R3Y) as u64, (&DEN1) as u64, (&AR) as *u8)
+
+    /* MATCHED pair: IDENTIFY says equal AND DECIDE says equal -- the two verbs AGREE. */
+    if addr_eq((&AP) as *u8, (&AQ) as *u8) != 1u32 { return 31u64 }
+    fsub((&DF) as u64, (&P3X) as u64, (&Q3X) as u64)   if kf_sign((&DF) as u64) != 0i32 { return 32u64 }
+    fsub((&DF) as u64, (&P3Y) as u64, (&Q3Y) as u64)   if kf_sign((&DF) as u64) != 0i32 { return 32u64 }
+    /* MISMATCHED pair: IDENTIFY says distinct AND DECIDE says distinct -- again the two verbs AGREE. */
+    if addr_eq((&AP) as *u8, (&AR) as *u8) != 0u32 { return 33u64 }
+    fsub((&DF) as u64, (&P3Y) as u64, (&R3Y) as u64)   if kf_sign((&DF) as u64) == 0i32 { return 34u64 }
+    return 0u64
+}
+
+/* ===== FACE 1 -- KINEMATICS IS THE KERNEL: exact 2-link IK for W=(3,0), verified by all four verbs (radix 7,2,3). ===== */
+fn face1() -> u64 {
+    kf_radix(7i64, 2i64, 3i64)                          /* idx1=√7 (the only surd the solution needs) */
+    /* IK (law of cosines): cosθ3=1/8, sinθ3=3√7/8, cosθ2=3/4, sinθ2=−√7/4.  Numerators below; dens folded into the scale. */
+    fset8((&C3) as u64, 1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)         /* c3 num (den 8) */
+    fset8((&S3) as u64, 0i64,3i64,0i64,0i64,0i64,0i64,0i64,0i64)         /* s3 num = 3√7 (den 8) */
+    fset8((&C2) as u64, 3i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)         /* c2 num (den 4) */
+    fset8((&S2) as u64, 0i64,0i64-1i64,0i64,0i64,0i64,0i64,0i64,0i64)    /* s2 num = −√7 (den 4) */
+
+    /* FK (angle addition), all at common den 32: cos(θ2+θ3)=c2c3−s2s3, sin(θ2+θ3)=s2c3+c2s3. */
+    kf_mul((&TA) as u64, (&C2) as u64, (&C3) as u64)   kf_mul((&TB) as u64, (&S2) as u64, (&S3) as u64)   fsub((&CC) as u64, (&TA) as u64, (&TB) as u64)
+    kf_mul((&TA) as u64, (&S2) as u64, (&C3) as u64)   kf_mul((&TB) as u64, (&C2) as u64, (&S3) as u64)   fadd((&SC) as u64, (&TA) as u64, (&TB) as u64)
+    /* wrist = L2·(cosθ2,sinθ2) + L3·(cos(θ2+θ3),sin(θ2+θ3)), L2=L3=2, at den 32 (cosθ2 num scaled ×16 = 2·8). */
+    fscale((&TA) as u64, (&C2) as u64, 16i64)   fscale((&TB) as u64, (&CC) as u64, 2i64)   fadd((&WX) as u64, (&TA) as u64, (&TB) as u64)
+    fscale((&TA) as u64, (&S2) as u64, 16i64)   fscale((&TB) as u64, (&SC) as u64, 2i64)   fadd((&WY) as u64, (&TA) as u64, (&TB) as u64)
+
+    /* DECIDE: wrist == (3,0) exactly.  target x at den 32 = 96; the √7 in wrist_y must CANCEL to 0. */
+    fset8((&TGT) as u64, 96i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fsub((&DF) as u64, (&WX) as u64, (&TGT) as u64)   if kf_sign((&DF) as u64) != 0i32 { return 10u64 }
+    if kf_sign((&WY) as u64) != 0i32 { return 10u64 }                    /* the surd-cancellation float cannot hold */
+
+    /* IDENTIFY: the wrist Eidolon == the target Eidolon (den 32 reduces by gcd to (3,0)/1). */
+    kf_point_addr((&WX) as u64, (&WY) as u64, (&DEN32) as u64, (&AW) as *u8)
+    fset8((&TA) as u64, 3i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fset8((&TB) as u64, 0i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    kf_point_addr((&TA) as u64, (&TB) as u64, (&DEN1) as u64, (&AT) as *u8)
+    if addr_eq((&AW) as *u8, (&AT) as *u8) != 1u32 { return 11u64 }
+
+    /* QUOTIENT: the OTHER elbow = Galois conjugate under √7↦−√7 (reflect idx1, O(1), zero kf_mul).  It reaches SAME target. */
+    fcopy((&RS2) as u64, (&S2) as u64)   reflect((&RS2) as u64, 1u64)
+    fcopy((&RS3) as u64, (&S3) as u64)   reflect((&RS3) as u64, 1u64)
+    fsub((&DF) as u64, (&RS2) as u64, (&S2) as u64)   if kf_sign((&DF) as u64) == 0i32 { return 14u64 }   /* conjugate elbow is a GENUINELY DISTINCT config -> the orbit is nontrivial (not a no-op reflect) */
+    kf_mul((&TA) as u64, (&C2) as u64, (&C3) as u64)   kf_mul((&TB) as u64, (&RS2) as u64, (&RS3) as u64)   fsub((&CC2) as u64, (&TA) as u64, (&TB) as u64)
+    kf_mul((&TA) as u64, (&RS2) as u64, (&C3) as u64)  kf_mul((&TB) as u64, (&C2) as u64, (&RS3) as u64)    fadd((&SC2) as u64, (&TA) as u64, (&TB) as u64)
+    fscale((&TA) as u64, (&C2) as u64, 16i64)   fscale((&TB) as u64, (&CC2) as u64, 2i64)   fadd((&WX2) as u64, (&TA) as u64, (&TB) as u64)
+    fscale((&TA) as u64, (&RS2) as u64, 16i64)  fscale((&TB) as u64, (&SC2) as u64, 2i64)   fadd((&WY2) as u64, (&TA) as u64, (&TB) as u64)
+    fset8((&DEN32) as u64, 32i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)     /* kf_point_addr rationalized DEN32 in place above -- reset it */
+    kf_point_addr((&WX2) as u64, (&WY2) as u64, (&DEN32) as u64, (&AW2) as *u8)
+    if addr_eq((&AW2) as *u8, (&AT) as *u8) != 1u32 { return 13u64 }     /* conjugate elbow reaches the same target: FREE */
+    return 0u64
+}
+
+/* ===== FACE 2 -- CROSS-APPLICATION: the coincidence engine that discovers ALGEBRAIC identities (2148) ALSO discovers
+ * the KINEMATICS identity.  Both elbow branches + the target are ONE Eidolon; feed them to the SAME coin_observe used by
+ * the fuzzer -> it flags the collision.  "Two different arm configurations reach the same point" = a proven theorem, by
+ * the identical IDENTIFY verb.  (Reuses the persisted AW/AW2/AT addresses from FACE 1; radix still 7,2,3.) ===== */
+fn face2() -> u64 {
+    coin_reset()
+    let s0 : u8 = coin_observe_concrete((&AW) as *u8, 3u32, 0u64)    /* elbow-up wrist: NEW */
+    let s1 : u8 = coin_observe_concrete((&AW2) as *u8, 3u32, 0u64)   /* elbow-down wrist: SEEN (same point) */
+    let s2 : u8 = coin_observe_concrete((&AT) as *u8, 3u32, 0u64)    /* the target: SEEN */
+    fset8((&DEN1) as u64, 1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fset8((&TA) as u64, 3i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fset8((&TB) as u64, 1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)     /* control point (3,1) -- a DIFFERENT configuration */
+    kf_point_addr((&TA) as u64, (&TB) as u64, (&DEN1) as u64, (&AR) as *u8)
+    let sc : u8 = coin_observe_concrete((&AR) as *u8, 3u32, 0u64)    /* control: NEW */
+    if s0 != 0u8 { return 20u64 }
+    if s1 != 1u8 { return 21u64 }                                    /* elbow-down did NOT collide -> unification broken */
+    if s2 != 1u8 { return 21u64 }
+    if sc != 0u8 { return 22u64 }                                    /* control false-collided -> unsound */
+    return 0u64
+}
+
+/* ===== FACE 4 -- THE WALL, stated with teeth.  (a) FIELD-EXIT: kf_rat_in_field honestly reports which reach-surds stay
+ * in K = ℚ(√7,√2,√3) and which LEAVE it -- √7 and √14(=√2·√7) stay, √5 and √11 leave (the kernel REFUSES to fake an
+ * address off-field: the miniature of the degree-16 / non-multiquadratic barrier).  (b) EXACT REACH/SINGULARITY: the
+ * DECIDE verb returns sign(64−(D2−8)²) = reachable(+) / singular-boundary(0) / unreachable(−); at full extension it is
+ * EXACTLY 0, the value a float reach-test rounds to ±ε and mis-classifies. ===== */
+fn face4() -> u64 {
+    kf_radix(7i64, 2i64, 3i64)
+    if kf_rat_in_field(7i64) != 1i32 { return 40u64 }
+    if kf_rat_in_field(14i64) != 1i32 { return 40u64 }
+    if kf_rat_in_field(5i64) != 0i32 { return 41u64 }
+    if kf_rat_in_field(11i64) != 0i32 { return 41u64 }
+    fset8((&TA) as u64, 63i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)         /* D2=9  -> 64−1  = 63  reachable  */
+    if kf_sign((&TA) as u64) != 1i32 { return 42u64 }
+    fset8((&TA) as u64, 0i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)          /* D2=16 -> 64−64 = 0   singular (EXACT) */
+    if kf_sign((&TA) as u64) != 0i32 { return 43u64 }
+    fset8((&TA) as u64, 0i64-17i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)    /* D2=17 -> 64−81 = −17 unreachable */
+    if kf_sign((&TA) as u64) != 0i32-1i32 { return 44u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    fset8((&DEN1) as u64, 1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    fset8((&DEN32) as u64, 32i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64)
+    let r3 : u64 = face3()   if r3 != 0u64 { return r3 }
+    let r1 : u64 = face1()   if r1 != 0u64 { return r1 }
+    let r2 : u64 = face2()   if r2 != 0u64 { return r2 }
+    let r4 : u64 = face4()   if r4 != 0u64 { return r4 }
+    return 99u64
+}

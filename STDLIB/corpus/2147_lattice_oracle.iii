@@ -1,0 +1,105 @@
+/* 2147_lattice_oracle.iii -- GATE for lattice_dist_oracle (traj_kinematics.iii): the Oₕ quotient oracle -- O(1) exact
+ * shortest king-move-lattice distance via the octahedral point group (48 sign/permutation symmetries collapse to one
+ * sorted-magnitude lookup).
+ *
+ * Two teeth, both exact via traj_len_sign (fast -- a full grid Dijkstra is too slow here because each comparison spins
+ * up an adaptive-tier arena, an honest performance note):
+ *   (A) Oₕ-INVARIANCE: the oracle returns the SAME per-class distance for every sign/permutation image of a displacement.
+ *   (B) OPTIMALITY: the oracle equals the greedy decomposition [p−q, q−r, r] AND that greedy is EXACTLY shorter than ALL
+ *       THREE elementary diagonal exchanges among {√1,√2,√3} moves: A body-diagonal vs face-diagonal+axis (√3 < √2+√1),
+ *       B face-diagonal vs two axes (√2 < 2√1), and C body-diagonal+axis vs two face-diagonals (√3+√1 < 2√2).  These are
+ *       the complete set of one-step re-decompositions preserving the displacement, so beating all three = the greedy is
+ *       the exact Euclidean shortest king-move path (the classical greedy result, here validated per exchange rather than
+ *       assumed).  ★ The adversary lens added competitor C: A+B alone leave [0,2,0]-type decompositions unchecked.
+ *   exit 99 = Oₕ-invariance holds AND oracle==greedy AND greedy strictly beats every applicable competitor.
+ *   10 an Oₕ image differed   20 oracle != greedy   30 greedy was NOT strictly shorter than a competitor */
+module corpus_2147_lattice_oracle
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lattice_dist_oracle(a: i64, b: i64, c: i64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn oracle_c(i: u64) -> i64 from "traj_kinematics.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var R3 : [i64; 3]   var GV : [u64; 3]   var AV : [u64; 3]
+var FAILINV : u64   var FAILEQ : u64   var FAILOPT : u64
+
+fn set3(vp: u64, a: i64, b: i64, c: i64, ar: u64) -> i32 {
+    let v : *u64 = vp as *u64
+    v[0u64] = bigint_from_u64(ar, a as u64)   v[1u64] = bigint_from_u64(ar, b as u64)   v[2u64] = bigint_from_u64(ar, c as u64)
+    return 0i32
+}
+
+fn inv_eq(a: i64, b: i64, c: i64, r0: i64, r1: i64, r2: i64) -> i32 {
+    lattice_dist_oracle(a, b, c)
+    if oracle_c(0u64) != r0 { FAILINV = FAILINV + 1u64 }
+    if oracle_c(1u64) != r1 { FAILINV = FAILINV + 1u64 }
+    if oracle_c(2u64) != r2 { FAILINV = FAILINV + 1u64 }
+    return 0i32
+}
+
+/* p>=q>=r>=0.  oracle==greedy [p−q,q−r,r]; greedy strictly beats all three elementary diagonal-exchange competitors.
+ * PER-CALL sub-arena: each comparison's vectors are dropped, so the 64-slot bigint handle table never accumulates
+ * across the displacement loop (a shared arena leaked ~12 handles/call -> degenerate handle -> a spurious false zero). */
+fn test_disp(p: i64, q: i64, r: i64) -> i32 {
+    let ar : u64 = arena_new(1048576u64)
+    lattice_dist_oracle(p, q, r)
+    let g0 : i64 = p - q   let g1 : i64 = q - r   let g2 : i64 = r
+    if oracle_c(0u64) != g0 { FAILEQ = FAILEQ + 1u64 }
+    if oracle_c(1u64) != g1 { FAILEQ = FAILEQ + 1u64 }
+    if oracle_c(2u64) != g2 { FAILEQ = FAILEQ + 1u64 }
+    set3((&GV) as u64, g0, g1, g2, ar)
+    let rr : u64 = (&R3) as u64
+    let mut a_lt : i32 = 2i32   let mut b_lt : i32 = 2i32
+    if r >= 1i64 {                                             /* competitor A: one body-diagonal -> face-diagonal + axis */
+        set3((&AV) as u64, g0 + 1i64, g1 + 1i64, g2 - 1i64, ar)
+        a_lt = traj_len_sign((&GV) as u64, rr, 3u64, (&AV) as u64, rr, 3u64)
+        if a_lt != (0i32 - 1i32) { FAILOPT = FAILOPT + 1u64 }
+    }
+    if g1 >= 1i64 {                                            /* competitor B: one face-diagonal -> two axis steps */
+        set3((&AV) as u64, g0 + 2i64, g1 - 1i64, g2, ar)
+        b_lt = traj_len_sign((&GV) as u64, rr, 3u64, (&AV) as u64, rr, 3u64)
+        if b_lt != (0i32 - 1i32) { FAILOPT = FAILOPT + 1u64 }
+    }
+    let mut c_lt : i32 = 2i32
+    if g0 >= 1i64 { if g2 >= 1i64 {                            /* competitor C: body-diagonal + axis -> two face-diagonals */
+        set3((&AV) as u64, g0 - 1i64, g1 + 2i64, g2 - 1i64, ar)
+        c_lt = traj_len_sign((&GV) as u64, rr, 3u64, (&AV) as u64, rr, 3u64)
+        if c_lt != (0i32 - 1i32) { FAILOPT = FAILOPT + 1u64 }
+    } }
+    e_i64(p) sp() e_i64(q) sp() e_i64(r) sp() putchar(61i32) sp() e_i64(g0) sp() e_i64(g1) sp() e_i64(g2) sp() e_i64((a_lt + 1i32) as i64) sp() e_i64((b_lt + 1i32) as i64) sp() e_i64((c_lt + 1i32) as i64) nl()
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return 0i32
+}
+
+fn main() -> u64 {
+    FAILINV = 0u64   FAILEQ = 0u64   FAILOPT = 0u64
+    R3[0u64]=1i64 R3[1u64]=2i64 R3[2u64]=3i64
+
+    /* (A) Oₕ-INVARIANCE on (2,1,1) -> [1,0,1]: permutations + sign flips all agree. */
+    lattice_dist_oracle(2i64, 1i64, 1i64)
+    let r0 : i64 = oracle_c(0u64)   let r1 : i64 = oracle_c(1u64)   let r2 : i64 = oracle_c(2u64)
+    inv_eq(1i64, 2i64, 1i64, r0, r1, r2)
+    inv_eq(1i64, 1i64, 2i64, r0, r1, r2)
+    inv_eq(0i64 - 2i64, 1i64, 0i64 - 1i64, r0, r1, r2)
+    inv_eq(0i64 - 1i64, 0i64 - 2i64, 1i64, r0, r1, r2)
+    inv_eq(1i64, 0i64 - 1i64, 0i64 - 2i64, r0, r1, r2)
+
+    /* (B) OPTIMALITY (oracle==greedy, greedy beats all 3 elementary exchanges). cols: p q r = g0 g1 g2  A<? B<? C<? */
+    test_disp(2i64, 1i64, 1i64)
+    test_disp(3i64, 2i64, 1i64)
+    test_disp(4i64, 2i64, 1i64)
+    test_disp(3i64, 3i64, 1i64)
+    test_disp(5i64, 3i64, 2i64)
+
+    if FAILINV != 0u64 { return 10u64 }
+    if FAILEQ != 0u64 { return 20u64 }
+    if FAILOPT != 0u64 { return 30u64 }
+    return 99u64
+}

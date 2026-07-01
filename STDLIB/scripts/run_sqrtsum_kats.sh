@@ -42,6 +42,8 @@ run 2142_se3_screw       99   "$LIB"  # EXACT SE(3) screw: 3D rotation closure +
 run 2143_traj_arclen     99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # LOAD-BEARING: traj_len_sign consumes the bigint adaptive tier -- exact gantry-trajectory length comparison (3+ independent surds at bigint scale)
 run 2144_lattice_pathfind 99  "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # HIGH-END PATHFINDING: exact lattice Dijkstra (lattice_shortest_path) -- frontier ordered by EXACT Sqrt-sum length; matches brute-min, resolves a float-blind Pell near-tie
 run 2145_denest          99   "$OUT/exact_denest.o"  # TOWER DENESTING: exact rank-1 sqrt of a+b*sqrt(d) in Q(sqrt d) -- decides square-vs-extension, verified root; rejects the norm-square-but-not-alpha case
+run 2146_compactor       99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # FRONTIER COMPACTOR: drop settled Dijkstra distances (dead to the search) -> peak handles = frontier width; correct + behavior-preserving on a 100-node graph
+run 2147_lattice_oracle  99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # Oh QUOTIENT ORACLE: O(1) exact shortest king-move-lattice distance via octahedral symmetry; oracle==greedy, greedy beats both competitors
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

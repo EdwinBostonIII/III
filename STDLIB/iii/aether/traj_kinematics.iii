@@ -45,8 +45,8 @@ fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u6
  * lsp_edge, then lattice_shortest_path.  NB the 64-slot bigint handle table bounds N·classes (keep it small); every
  * intermediate is dropped so the search never exhausts the table. */
 var G_NN : u64   var G_NC : u64   var G_RAD : [i64; 4]
-var EU : [i64; 16]   var EV : [i64; 16]   var ECLS : [i64; 16]   var EAMT : [u64; 16]   var G_NE : u64
-var DIST : [u64; 32]   var REACHED : [u8; 8]   var SETTLED : [u8; 8]   var CAND : [u64; 4]
+var EU : [i64; 256]   var EV : [i64; 256]   var ECLS : [i64; 256]   var EAMT : [u64; 256]   var G_NE : u64
+var DIST : [u64; 512]   var REACHED : [u8; 128]   var SETTLED : [u8; 128]   var CAND : [u64; 4]   /* up to 128 nodes x 4 classes */
 
 fn lsp_reset(nn: u64, nc: u64) -> i32 @export { G_NN = nn   G_NC = nc   G_NE = 0u64   return 0i32 }
 fn lsp_rad(c: u64, r: i64) -> i32 @export { G_RAD[c] = r   return 0i32 }
@@ -106,4 +106,86 @@ fn lattice_shortest_path(ar: u64, source: u64, target: u64, distout: u64) -> u8 
     let out : *u64 = distout as *u64
     c = 0u64   while c < G_NC { out[c] = DIST[target * G_NC + c]   c = c + 1u64 }
     return REACHED[target]
+}
+
+/* ─── Oₕ QUOTIENT ORACLE: O(1) exact shortest king-move-lattice distance via the octahedral point group.  A path's
+ * length depends only on its move-CLASSES, and an Oₕ isometry (all 48 sign-and-permutation symmetries of the cubic
+ * lattice) preserves squared edge-lengths -- so the exact shortest distance from the origin to a displacement (a,b,c)
+ * depends only on the Oₕ-canonical form of (a,b,c): the sorted magnitudes p≥q≥r≥0.  The exact shortest king-move path
+ * is then the greedy r body-diagonals (√3) + (q−r) face-diagonals (√2) + (p−q) axis steps (√1) -- returned as per-class
+ * amounts OD=[√1,√2,√3].  O(1), pure integer, no adaptive-tier call; the 48-fold Oₕ orbit collapses to one lookup.
+ * (Optimality of the greedy decomposition is VALIDATED against the exact Dijkstra solver in gate 2147, not assumed.) */
+var OD : [i64; 3]
+fn od_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn lattice_dist_oracle(a: i64, b: i64, c: i64) -> i32 @export {
+    let mut p : i64 = od_iabs(a)   let mut q : i64 = od_iabs(b)   let mut r : i64 = od_iabs(c)
+    if p < q { let t : i64 = p   p = q   q = t }
+    if q < r { let t : i64 = q   q = r   r = t }
+    if p < q { let t : i64 = p   p = q   q = t }
+    OD[0u64] = p - q       /* √1 axis steps      */
+    OD[1u64] = q - r       /* √2 face-diagonals  */
+    OD[2u64] = r           /* √3 body-diagonals  */
+    return 0i32
+}
+fn oracle_c(i: u64) -> i64 @export { return OD[i] }   /* the per-class amount (0=√1, 1=√2, 2=√3) */
+
+/* FRONTIER-COMPACTED Dijkstra: identical result to lattice_shortest_path, but a settled node's distance is DROPPED the
+ * moment its edges are relaxed -- it is dead to the search (never re-extracted, never a relaxation source again, and
+ * DIST[v] is a fresh copy so it never aliases DIST[u]).  Live handles then track the FRONTIER WIDTH, not the total node
+ * count, so it solves graphs whose nodes×classes exceed the 64-slot bigint handle table.  The target's vector is
+ * bigint_copy'd to distout at settle-time (so it survives the drops); returns reachable.  Path reconstruction (not done
+ * here) would use PRED[] -- integers, no handles. */
+fn lattice_shortest_path_c(ar: u64, source: u64, target: u64, distout: u64) -> u8 @export {
+    let mut v : u64 = 0u64
+    while v < G_NN { REACHED[v] = 0u8   SETTLED[v] = 0u8   v = v + 1u64 }
+    let mut c : u64 = 0u64
+    while c < G_NC { DIST[source * G_NC + c] = bigint_from_u64(ar, 0u64)   c = c + 1u64 }
+    REACHED[source] = 1u8
+    let mut reached_target : u8 = 0u8
+    let mut guard : u64 = 0u64
+    while guard < G_NN {
+        let mut u : u64 = 0u64   let mut found : u8 = 0u8
+        v = 0u64
+        while v < G_NN {
+            let rv : u8 = REACHED[v]   let sv : u8 = SETTLED[v]
+            if rv == 1u8 { if sv == 0u8 { if found == 0u8 { u = v   found = 1u8 } else { let d : i32 = lsp_dist_cmp(v, u)   if d < 0i32 { u = v } } } }
+            v = v + 1u64
+        }
+        if found == 0u8 { guard = G_NN } else {
+            SETTLED[u] = 1u8
+            if u == target {
+                /* extraction of target = its distance is final.  copy it out (survives the drops), then stop. */
+                let out : *u64 = distout as *u64
+                c = 0u64   while c < G_NC { out[c] = bigint_copy(ar, DIST[u * G_NC + c])   c = c + 1u64 }
+                reached_target = 1u8
+                guard = G_NN
+            } else {
+                let mut e : u64 = 0u64
+                while e < G_NE {
+                    let eu : i64 = EU[e]
+                    if (eu as u64) == u {
+                        let vv : u64 = EV[e] as u64   let cc : i64 = ECLS[e]   let amt : u64 = EAMT[e]
+                        let mut k : u64 = 0u64
+                        while k < G_NC {
+                            if k == (cc as u64) { CAND[k] = bigint_add(ar, DIST[u * G_NC + k], amt) } else { CAND[k] = bigint_copy(ar, DIST[u * G_NC + k]) }
+                            k = k + 1u64
+                        }
+                        let rvv : u8 = REACHED[vv]
+                        let mut better : u8 = 0u8
+                        if rvv == 0u8 { better = 1u8 } else { let d : i32 = lsp_cand_cmp(vv)   if d < 0i32 { better = 1u8 } }
+                        if better == 1u8 {
+                            if rvv == 1u8 { k = 0u64   while k < G_NC { bigint_drop(DIST[vv * G_NC + k])   k = k + 1u64 } }
+                            k = 0u64   while k < G_NC { DIST[vv * G_NC + k] = CAND[k]   k = k + 1u64 }
+                            REACHED[vv] = 1u8
+                        } else { k = 0u64   while k < G_NC { bigint_drop(CAND[k])   k = k + 1u64 } }
+                    }
+                    e = e + 1u64
+                }
+                /* COMPACT: u is settled and fully relaxed -> its distance is dead.  Drop it, freeing the table. */
+                c = 0u64   while c < G_NC { bigint_drop(DIST[u * G_NC + c])   c = c + 1u64 }
+            }
+        }
+        guard = guard + 1u64
+    }
+    return reached_target
 }

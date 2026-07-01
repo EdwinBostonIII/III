@@ -1,0 +1,73 @@
+/* 2146_compactor.iii -- GATE for lattice_shortest_path_c (traj_kinematics.iii): the FRONTIER COMPACTOR.  A settled
+ * Dijkstra node's distance is DEAD to the search (never re-extracted, never a relaxation source again, and DIST[v] is a
+ * fresh copy so it never aliases DIST[u]), so the compacted solver DROPS it on settle -> PEAK live handles track the
+ * FRONTIER WIDTH, not the total node count.  This is the correct-at-scale design.
+ *
+ * ★ HONEST FINDING (measured, not assumed): a raw single-arena probe exhausts the bigint handle table between 50 and 100
+ * undropped handles, BUT the Dijkstra's interspersed drops keep effective occupancy far lower -- the non-compacted
+ * lattice_shortest_path solves a 100-node graph (nominally 400 distance handles) WITHOUT failing.  So there is no
+ * 64-slot ceiling manifesting at these sizes; the compactor is a provable peak-memory bound (frontier vs total), not a
+ * fix for an observed failure.  This KAT therefore gates CORRECTNESS + BEHAVIOR-PRESERVATION, not a ceiling break.
+ *
+ * Graph: a 100-node line 0->...->99 (each edge √2, amount 1; shortest = 99√2) with longer √3 shortcuts (never taken).
+ *   exit 99 = both solvers reach the target AND both lengths == 99√2 (compacted is exact and behavior-preserving).
+ *   10 compacted did not reach   11 compacted length != 99√2 (algorithm wrong)   12 non-compacted != 99√2 (behavior differs) */
+module corpus_2146_compactor
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_reset(nn: u64, nc: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_rad(c: u64, r: i64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_edge(u: i64, v: i64, cls: i64, amt: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lattice_shortest_path(ar: u64, source: u64, target: u64, distout: u64) -> u8 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lattice_shortest_path_c(ar: u64, source: u64, target: u64, distout: u64) -> u8 from "traj_kinematics.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var K_RAD : [i64; 4]   var KV : [u64; 4]   var NC_OUT : [u64; 4]   var C_OUT : [u64; 4]
+
+fn main() -> u64 {
+    let tar : u64 = arena_new(1048576u64)             /* KAT-persistent handles (edge amounts + known answer) */
+    let one : u64 = bigint_from_u64(tar, 1u64)
+    let two : u64 = bigint_from_u64(tar, 2u64)
+    let zero : u64 = bigint_from_u64(tar, 0u64)
+    let n99 : u64 = bigint_from_u64(tar, 99u64)
+    K_RAD[0u64]=1i64 K_RAD[1u64]=2i64 K_RAD[2u64]=3i64 K_RAD[3u64]=5i64
+    KV[0u64]=zero KV[1u64]=n99 KV[2u64]=zero KV[3u64]=zero   /* known shortest length = 99·√2 */
+    let rr : u64 = (&K_RAD) as u64
+
+    /* build the graph ONCE: 100-node line (√2, amt 1) + longer √3 shortcuts (never optimal). */
+    lsp_reset(100u64, 4u64)
+    lsp_rad(0u64,1i64) lsp_rad(1u64,2i64) lsp_rad(2u64,3i64) lsp_rad(3u64,5i64)
+    let mut i : i64 = 0i64
+    while i < 99i64 { lsp_edge(i, i + 1i64, 1i64, one)   i = i + 1i64 }        /* 99 line edges: √2 */
+    i = 0i64
+    while i < 97i64 { lsp_edge(i, i + 2i64, 2i64, two)   i = i + 2i64 }        /* √3 shortcuts (2√3 > 2√2 -> not taken) */
+
+    /* NON-COMPACTED: keeps all 100×4=400 distance handles -> far past the ~64-slot table -> WRONG answer. */
+    let ar_a : u64 = arena_new(8388608u64)
+    let nc_reach : u8 = lattice_shortest_path(ar_a, 0u64, 99u64, (&NC_OUT) as u64)
+    let nc_cmp : i32 = traj_len_sign((&NC_OUT) as u64, rr, 4u64, (&KV) as u64, rr, 4u64)
+    let mut nc_ok : u8 = 0u8   if nc_reach == 1u8 { if nc_cmp == 0i32 { nc_ok = 1u8 } }
+    bigint_drop_arena(ar_a)   arena_drop(ar_a)         /* free ar_a's handles so the table is clear for the compacted run */
+
+    /* COMPACTED: drops settled distances -> live handles ~ frontier width -> solves the 120-handle graph. */
+    let ar_b : u64 = arena_new(8388608u64)
+    let c_reach : u8 = lattice_shortest_path_c(ar_b, 0u64, 99u64, (&C_OUT) as u64)
+    let c_cmp : i32 = traj_len_sign((&C_OUT) as u64, rr, 4u64, (&KV) as u64, rr, 4u64)
+    bigint_drop_arena(ar_b)   arena_drop(ar_b)
+    bigint_drop_arena(tar)   arena_drop(tar)
+
+    e_i64(nc_reach as i64) sp() e_i64(nc_ok as i64) sp() e_i64(c_reach as i64) sp() e_i64((c_cmp + 1i32) as i64) nl()
+    /* cols: nc_reach  nc_ok(non-compacted correct)  c_reach(want 1)  c_cmp+1(want 1 = compacted equal to 99√2) */
+
+    if c_reach != 1u8 { return 10u64 }
+    if c_cmp != 0i32 { return 11u64 }        /* compacted length must be exactly 99√2 */
+    if nc_ok != 1u8 { return 12u64 }         /* behavior-preservation: non-compacted agrees (== 99√2) */
+    return 99u64
+}

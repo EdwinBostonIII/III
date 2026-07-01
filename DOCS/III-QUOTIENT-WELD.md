@@ -136,7 +136,21 @@ returning only a root that squares back exactly. Gated with squares (round-trip)
 case, odd-`b`, `b=0` sub-cases, and — after `iii_adversarial_verify`/`iii_math_rigor` caught a `d·b²` i64
 overflow at the old guard — a tightened envelope (`|b|<2²⁰`) with a b-overflow abstain case as the falsifier.
 
-**Roadmap for the two scaling directions (honest, correct algorithms):**
+**The two scaling directions — BUILT (gate 17/0), with the findings the conscience forced:**
+- `lattice_shortest_path_c` (`2146`) is the compactor exactly as described below. ★ But the "break the 64-slot ceiling"
+  premise did NOT survive measurement: a raw single-arena probe exhausts ~64 undropped handles, yet the *non-compacted*
+  Dijkstra solves a 100-node graph fine (its interspersed drops keep effective occupancy low). So it is a *provable
+  peak-memory bound* (frontier vs total), gated as correct + behavior-preserving — NOT a fix for a ceiling that doesn't
+  manifest. I did not fake the failure.
+- `lattice_dist_oracle` (`2147`). ★ The Oₕ bullet below is REFUTED by the adversary lens: a path's length depends only on
+  move-CLASSES and Oₕ preserves classes, so the per-class representation is ALREADY Oₕ-invariant — "cache comparisons
+  under Oₕ" is vacuous (a redundant re-run of `2138`). The real Oₕ win is an `O(1)` closed-form: reduce a *displacement*
+  to sorted magnitudes `p≥q≥r` and return `r√3+(q−r)√2+(p−q)√1`. Gated: invariance + oracle==greedy + greedy beats all
+  THREE elementary diagonal exchanges (`√3<√2+1`, `√2<2`, `√3+1<2√2` — the adversary lens added the third; A+B left
+  `[0,2,0]` unchecked) = exact Euclidean shortest. (Grid-Dijkstra cross-check dropped: an adaptive arena per comparison
+  makes the O(V²) grid too slow — honest performance note.)
+
+Original roadmap sketch (the compactor bullet is accurate; the Oₕ bullet is the refuted one):
 - *Frontier compactor (break the 64-slot ceiling).* Simpler than serialization: a settled Dijkstra node's
   distance is **dead to the search** after its edges are relaxed (Dijkstra never revisits it), so `DROP` its
   distance handles right there — reconstruction needs only the integer `PRED[]` array, and the target's

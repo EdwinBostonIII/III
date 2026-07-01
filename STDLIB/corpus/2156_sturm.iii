@@ -1,0 +1,117 @@
+/* 2156_sturm.iii -- GATE for sturm.iii: EXACT REAL ROOT ISOLATION via Sturm's theorem.
+ *
+ * Each arm a DIFFERENT rule:
+ *   WITNESS   the float smoking gun: p=(x-1)(x-2)=x^2-3x+2 is POSITIVE at both ends of (0,3] (p(0)=p(3)=2>0) so an
+ *             endpoint check / coarse sampling finds NO root -- but Sturm counts EXACTLY 2 (the roots 1,2 hide inside).
+ *   COUNT     root_count is correct on (x-1)(x-2)(x-3): 3 roots in (0,4], 2 in (0,5/2], 1 in (5/2,4].
+ *   ISOLATE   isolate_roots separates (x-1)(x-2)(x-3)(x-4) into 4 disjoint one-root rational intervals.
+ *   CLUSTER   two roots one apart, (x-5)(x-6), are isolated into 2 disjoint intervals (bisection separates them).
+ *   SQFREE    a DOUBLE root is detected: gcd((x-1)^2(x-2), its derivative) = (x-1) -> the squarefree part is recoverable.
+ *
+ * HONEST SCOPE: squarefree for the Sturm count (the SQFREE arm shows the gcd that reduces a multiple root); degree<=7,
+ * i64 coefficient/interval envelope.  No epsilon -- exact counts.
+ *   exit 99 = all arms correct.  10 witness  20 count  30 isolate  40 cluster  50 squarefree */
+module corpus_2156_sturm
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sturm_var(xn: i64, xd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn poly_gcd(a_ptr: u64, dega: i64, b_ptr: u64, degb: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn gcd_coeff(i: u64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* polynomials as coefficient arrays, index i = coeff of x^i.  Filled by assignment in main (initializers take literals). */
+var P2  : [i64; 3]   var P3  : [i64; 4]   var P4  : [i64; 5]   var P56 : [i64; 3]   var PD  : [i64; 4]   var PDD : [i64; 3]
+
+var FW : u64   var FC : u64   var FI : u64   var FCL : u64   var FSQ : u64   var FDEF : u64
+
+fn main() -> u64 {
+    FW = 0u64   FC = 0u64   FI = 0u64   FCL = 0u64   FSQ = 0u64   FDEF = 0u64
+    P2[0u64] = 2i64   P2[1u64] = 0i64 - 3i64   P2[2u64] = 1i64                                    /* (x-1)(x-2) */
+    P3[0u64] = 0i64 - 6i64   P3[1u64] = 11i64   P3[2u64] = 0i64 - 6i64   P3[3u64] = 1i64          /* (x-1)(x-2)(x-3) */
+    P4[0u64] = 24i64   P4[1u64] = 0i64 - 50i64   P4[2u64] = 35i64   P4[3u64] = 0i64 - 10i64   P4[4u64] = 1i64  /* ..(x-4) */
+    P56[0u64] = 30i64   P56[1u64] = 0i64 - 11i64   P56[2u64] = 1i64                               /* (x-5)(x-6) */
+    PD[0u64] = 0i64 - 2i64   PD[1u64] = 5i64   PD[2u64] = 0i64 - 4i64   PD[3u64] = 1i64            /* (x-1)^2(x-2) */
+    PDD[0u64] = 5i64   PDD[1u64] = 0i64 - 8i64   PDD[2u64] = 3i64                                 /* derivative 3x^2-8x+5 */
+
+    /* ── Arm WITNESS: (x-1)(x-2), positive at both ends of (0,3], yet 2 roots inside. ── */
+    sturm_build((&P2) as u64, 2i64)
+    let s0 : i64 = sturm_var(0i64, 1i64)   let s3 : i64 = sturm_var(3i64, 1i64)
+    let cnt2 : i64 = root_count(0i64,1i64, 3i64,1i64)
+    if cnt2 != 2i64 { FW = FW + 1u64 }                         /* Sturm: 2 roots in (0,3] */
+    /* endpoint check (what a naive float does): p(0)=2>0 and p(3)=2>0 -> "no root" (0 sign changes at endpoints). */
+    putchar(87i32) putchar(58i32) sp() e_i64(s0) sp() e_i64(s3) sp() e_i64(cnt2) nl()   /* "W: 2 0 2" (V(0)=2, V(3)=0, count=2) */
+
+    /* ── Arm COUNT: (x-1)(x-2)(x-3). ── */
+    sturm_build((&P3) as u64, 3i64)
+    if root_count(0i64,1i64, 4i64,1i64) != 3i64 { FC = FC + 1u64 }   /* 3 roots in (0,4]   */
+    if root_count(0i64,1i64, 5i64,2i64) != 2i64 { FC = FC + 1u64 }   /* 2 roots in (0,5/2] */
+    if root_count(5i64,2i64, 4i64,1i64) != 1i64 { FC = FC + 1u64 }   /* 1 root  in (5/2,4] */
+
+    /* ── Arm ISOLATE: (x-1)(x-2)(x-3)(x-4) -> 4 disjoint one-root intervals. ── */
+    sturm_build((&P4) as u64, 4i64)
+    let ni : i64 = isolate_roots(0i64, 5i64, 30i64)
+    if ni != 4i64 { FI = FI + 1u64 }
+    /* each isolated interval must contain exactly one root. */
+    let mut i : i64 = 0i64
+    while i < ni {
+        let c : i64 = root_count(iso_lo_num(i as u64), iso_lo_den(i as u64), iso_hi_num(i as u64), iso_hi_den(i as u64))
+        if c != 1i64 { FI = FI + 1u64 }
+        i = i + 1i64
+    }
+    putchar(73i32) putchar(58i32) sp() e_i64(ni) nl()   /* "I: 4" */
+
+    /* ── Arm CLUSTER: (x-5)(x-6) -> 2 disjoint intervals. ── */
+    sturm_build((&P56) as u64, 2i64)
+    let nc : i64 = isolate_roots(0i64, 10i64, 30i64)
+    if nc != 2i64 { FCL = FCL + 1u64 }
+
+    /* ── Arm SQFREE: double root of (x-1)^2(x-2) detected via gcd(p, p') = (x-1). ── */
+    let dg : i64 = poly_gcd((&PD) as u64, 3i64, (&PDD) as u64, 2i64)
+    if dg != 1i64 { FSQ = FSQ + 1u64 }                         /* gcd has degree 1 (the repeated factor (x-1)) */
+    else {
+        let g0 : i64 = gcd_coeff(0u64)   let g1 : i64 = gcd_coeff(1u64)
+        /* gcd is a positive multiple of (x-1) = [-1, 1]: root at 1 means g0 + g1*1 == 0, and g1 != 0. */
+        if g1 == 0i64 { FSQ = FSQ + 1u64 }
+        if g0 + g1 != 0i64 { FSQ = FSQ + 1u64 }
+        putchar(81i32) putchar(58i32) sp() e_i64(g0) sp() e_i64(g1) nl()   /* "Q: -1 1" (root at 1) */
+    }
+
+    /* distinct-root counting is exact even for NON-squarefree p: the Sturm chain ends at (a multiple of) gcd(p,p'), and
+     * V(a)-V(b) counts DISTINCT real roots regardless of multiplicity.  (x-1)^2(x-2) -> 2 distinct; (x-1)^3 -> 1. */
+    sturm_build((&PD) as u64, 3i64)                                     /* PD still = (x-1)^2(x-2) */
+    if root_count(0i64,1i64, 3i64,1i64) != 2i64 { FSQ = FSQ + 1u64 }
+    PD[0u64] = 0i64 - 1i64   PD[1u64] = 3i64   PD[2u64] = 0i64 - 3i64   PD[3u64] = 1i64   /* (x-1)^3 (triple root) */
+    sturm_build((&PD) as u64, 3i64)
+    if root_count(0i64,1i64, 3i64,1i64) != 1i64 { FSQ = FSQ + 1u64 }
+
+    /* ── Arm DEFECTIVE: x^4+x-1 (no x^2,x^3) has a Sturm chain with a DEGREE GAP -- the remainder skips a degree, so a
+     * later step has an ODD number of eliminations with a NEGATIVE leading coefficient, and the pseudo-remainder SIGN
+     * CORRECTION (S = -R*sign(lc)^s) is load-bearing: it counts 2 real roots; without the correction it wrongly counts 0.
+     * (x^4+x+1 has 0 real roots; without the correction it wrongly counts 2.)  This gates the correctness crux. ── */
+    P4[0u64] = 0i64 - 1i64   P4[1u64] = 1i64   P4[2u64] = 0i64   P4[3u64] = 0i64   P4[4u64] = 1i64   /* x^4 + x - 1 */
+    sturm_build((&P4) as u64, 4i64)
+    let dcnt : i64 = root_count(0i64 - 10i64, 1i64, 10i64, 1i64)
+    if dcnt != 2i64 { FDEF = FDEF + 1u64 }
+    P4[0u64] = 1i64   P4[1u64] = 1i64   P4[2u64] = 0i64   P4[3u64] = 0i64   P4[4u64] = 1i64            /* x^4 + x + 1 */
+    sturm_build((&P4) as u64, 4i64)
+    if root_count(0i64 - 10i64, 1i64, 10i64, 1i64) != 0i64 { FDEF = FDEF + 1u64 }
+    putchar(68i32) putchar(58i32) sp() e_i64(dcnt) nl()   /* "D: 2" (2 real roots of x^4+x-1; sign-correction load-bearing) */
+
+    if FW  != 0u64 { return 10u64 }
+    if FC  != 0u64 { return 20u64 }
+    if FI  != 0u64 { return 30u64 }
+    if FCL != 0u64 { return 40u64 }
+    if FSQ != 0u64 { return 50u64 }
+    if FDEF != 0u64 { return 60u64 }
+    return 99u64
+}

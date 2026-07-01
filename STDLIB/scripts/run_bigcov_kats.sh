@@ -19,6 +19,7 @@ pass=0; fail=0
 "$I2" "$A/ui_exact_bigsign.iii" --compile-only --out "$OUT/ui_exact_bigsign.o" 2>"$OUT/bsg.log" || { echo "FAIL ui_exact_bigsign compile"; cat "$OUT/bsg.log"; exit 1; }
 "$I2" "$A/ui_exact_bigcov.iii"  --compile-only --out "$OUT/ui_exact_bigcov.o"  2>"$OUT/bcov.log" || { echo "FAIL ui_exact_bigcov compile"; cat "$OUT/bcov.log"; exit 1; }
 "$I2" "$A/sqrt_sum_sign.iii"    --compile-only --out "$OUT/sqrt_sum_sign.o"    2>"$OUT/ssg.log"  || { echo "FAIL sqrt_sum_sign compile"; cat "$OUT/ssg.log"; exit 1; }
+"$I2" "$A/kfield.iii"  --compile-only --out "$OUT/kfield.o"  2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
 
 run() {  # $1 name  $2 expected  $3.. extra .o's (besides ui_exact_big.o + $LIB)
     local name="$1" want="$2"; shift 2
@@ -54,7 +55,7 @@ run 2165_dome_full 99 "$OUT/ui_exact_sym.o" "$OUT/ui_exact.o" "$OUT/ui_raster.o"
 # coord-480 across all pixel classes, with the ROUNDING cap removed -- the exact 2-surd sign ui_bigsign2 (bigint port
 # of ui_sign_bi) replacing the N-surd ui_sqrt_sum_sign_big, whose separation bound false-zeros near-cancellations at
 # scale.  (The render-scale SELECTION cap -- ui_sym_sel's i64 ui_tcmp -- is the next increment, not claimed here.)
-run 2166_cover_bigcoeff 99 "$OUT/ui_exact_bigcov.o" "$OUT/ui_exact_bigsign.o" "$OUT/ui_exact_sym.o" "$OUT/ui_exact.o" "$OUT/ui_raster.o" "$OUT/sqrt_sum_sign.o"
+run 2166_cover_bigcoeff 99 "$OUT/ui_exact_bigcov.o" "$OUT/ui_exact_bigsign.o" "$OUT/ui_exact_sym.o" "$OUT/ui_exact.o" "$OUT/ui_raster.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o"
 
 echo "=== BIGINT-COVERAGE KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

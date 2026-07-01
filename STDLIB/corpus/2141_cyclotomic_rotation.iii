@@ -25,17 +25,8 @@ fn e_nl() -> i32 { putchar(10i32)   return 0i32 }
 fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
 fn gcd2(a: i64, b: i64) -> i64 { let mut x : i64 = iabs(a)   let mut y : i64 = iabs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
 
-/* product in ℚ(√2,√3), basis {1,√2,√3,√6}:  √2²=2, √3²=3, √6²=6, √2√3=√6, √2√6=2√3, √3√6=3√2.  out = x*y. */
-fn mul4(xp: u64, yp: u64, op: u64) -> i32 {
-    let x : *i64 = xp as *i64   let y : *i64 = yp as *i64   let o : *i64 = op as *i64
-    let x0 : i64 = x[0u64]   let x1 : i64 = x[1u64]   let x2 : i64 = x[2u64]   let x3 : i64 = x[3u64]
-    let y0 : i64 = y[0u64]   let y1 : i64 = y[1u64]   let y2 : i64 = y[2u64]   let y3 : i64 = y[3u64]
-    o[0u64] = x0*y0 + 2i64*x1*y1 + 3i64*x2*y2 + 6i64*x3*y3
-    o[1u64] = x0*y1 + x1*y0 + 3i64*(x2*y3 + x3*y2)
-    o[2u64] = x0*y2 + x2*y0 + 2i64*(x1*y3 + x3*y1)
-    o[3u64] = x0*y3 + x3*y0 + x1*y2 + x2*y1
-    return 0i32
-}
+/* exact ℚ(√2,√3) product -- DEDUPED onto the canonical organ (was inline here and in 2142; cyclotomic_se3 is now its home). */
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
 
 var CC : [i64; 4]   var SS : [i64; 4]   var DEN : i64
 var STEPC : [i64; 4]   var STEPS : [i64; 4]
@@ -52,12 +43,12 @@ fn reduce_state() -> i32 {
 }
 
 fn step15() -> i32 {
-    mul4((&CC) as u64, (&STEPC) as u64, (&T1) as u64)
-    mul4((&SS) as u64, (&STEPS) as u64, (&T2) as u64)
+    q23_mul((&CC) as u64, (&STEPC) as u64, (&T1) as u64)
+    q23_mul((&SS) as u64, (&STEPS) as u64, (&T2) as u64)
     let mut i : u64 = 0u64
     while i < 4u64 { NC[i] = T1[i] - T2[i]   i = i + 1u64 }
-    mul4((&SS) as u64, (&STEPC) as u64, (&T1) as u64)
-    mul4((&CC) as u64, (&STEPS) as u64, (&T2) as u64)
+    q23_mul((&SS) as u64, (&STEPC) as u64, (&T1) as u64)
+    q23_mul((&CC) as u64, (&STEPS) as u64, (&T2) as u64)
     i = 0u64   while i < 4u64 { NS[i] = T1[i] + T2[i]   i = i + 1u64 }
     i = 0u64   while i < 4u64 { CC[i] = NC[i]   SS[i] = NS[i]   i = i + 1u64 }
     DEN = DEN * 4i64

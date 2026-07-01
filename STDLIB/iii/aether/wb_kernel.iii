@@ -1,0 +1,39 @@
+/* wb_kernel.iii -- the EXACT-sign predicates behind the III WORKBENCH interactions, factored out of the GUI as a pure,
+ * float-free, testable organ.  The workbench (aether_world.iii) computes the integer quadratic inputs and calls these
+ * for every exact decision; corpus 2159 tests them against CONSTRUCTED ground truth.  Composes sqrt_sum_sign.  Ring R0. */
+module wb_kernel
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a: u64, b: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+var WBK_A : [i64; 8]   var WBK_B : [i64; 8]
+
+/* COLLISION (spheres): sign(dd - sm^2) for centre-distance^2 dd and radius-sum sm.
+ * +1 separated, 0 touching (exact tangency), -1 overlapping.  Pure integer -- complete + exact for spheres. */
+fn wbk_collide_sign(dd: i64, sm: i64) -> i32 @export {
+    let diff : i64 = dd - sm * sm
+    if diff > 0i64 { return 1i32 }
+    if diff < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* PHOTON depth order along ONE ray (all candidates share A>0).  A hit's entry parameter is t = (-B - sqrt(Delta))/(2A).
+ * For two hits a,b:  sign(t_a - t_b) = sign[ (Bb-Ba).sqrt(1) + (-1).sqrt(Da) + (+1).sqrt(Db) ]  -- an exact n=3
+ * sum-of-square-roots sign (the z-fight-proof comparison; never mis-orders a near-tie, no floating point).
+ * returns -1 if a is strictly nearer (t_a<t_b), +1 if b is nearer, 0 if the two entry depths are EXACTLY equal. */
+fn wbk_order_sign(ba: i64, da: i64, bb: i64, db: i64) -> i32 @export {
+    WBK_A[0u64] = bb - ba       WBK_B[0u64] = 1i64
+    WBK_A[1u64] = 0i64 - 1i64   WBK_B[1u64] = da
+    WBK_A[2u64] = 1i64          WBK_B[2u64] = db
+    return sqrtsum_lazy3((&WBK_A) as u64, (&WBK_B) as u64, 3u64)
+}
+
+/* CALC relay: compare two 2-leg routes S->R1->T and S->R2->T by EXACT length, given the squared leg lengths.
+ * sign[ sqrt(d_sr1)+sqrt(d_r1t) - sqrt(d_sr2)-sqrt(d_r2t) ]  -- an exact n=4 sum-of-square-roots sign.
+ * returns -1 if the route via R1 is strictly shorter, +1 if via R2 is shorter, 0 if the routes are EXACTLY equal. */
+fn wbk_relay_sign(d_sr1: i64, d_r1t: i64, d_sr2: i64, d_r2t: i64) -> i32 @export {
+    WBK_A[0u64] = 1i64          WBK_B[0u64] = d_sr1
+    WBK_A[1u64] = 1i64          WBK_B[1u64] = d_r1t
+    WBK_A[2u64] = 0i64 - 1i64   WBK_B[2u64] = d_sr2
+    WBK_A[3u64] = 0i64 - 1i64   WBK_B[3u64] = d_r2t
+    return sqrtsum_lazy3((&WBK_A) as u64, (&WBK_B) as u64, 4u64)
+}

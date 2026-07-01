@@ -7,7 +7,10 @@
  * This KAT proves, per case:  (1) SOUND -- identical answer to the exact separation-bound oracle ui_sqrt_sum_sign,
  * on exact zeros, positives, negatives, and near-degenerate inputs;  (2) BYPASS -- the precision actually used is far
  * below the separation-bound precision the oracle must pay;  (3) DISCRIMINATOR -- on a continued-fraction convergent
- * of √2 the SHIPPED sqrtsum_lazy3 escalates to its exponential Tier-3, while adaptive resolves it and agrees.
+ * of √2 the SHIPPED sqrtsum_lazy3 leaves Tiers 1-2 (the interval straddles; canon sees 2 independent surds), while
+ * adaptive resolves it and agrees.  Since the kfield WELD (gate 2159) that escalation lands on the pure-i64 GALOIS
+ * TOWER (lazy_kf_count) instead of the exponential bigint tier (lazy_exact_count); the discriminator asserts the case
+ * left Tiers 1-2 either way (kf + exact escalations != 0) and every answer still equals the oracle.
  *   exit 99 = all sound AND every nonzero multi-surd case bypassed the bound AND the discriminator held.
  *   10 a case DISAGREED with the exact oracle (soundness broken)         31 discriminator: adaptive != oracle
  *   20 a nonzero multi-surd case did NOT beat the separation bound       32 discriminator: shipped lazy3 != oracle
@@ -21,6 +24,7 @@ extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i
 extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn lazy_reset_counts() -> i32 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn lazy_exact_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_kf_count() -> u64 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
@@ -142,10 +146,11 @@ fn main() -> u64 {
     lazy_reset_counts()
     let flz : i32 = sqrtsum_lazy3((&AV) as u64, (&BV) as u64, 2u64)
     let ec : u64 = lazy_exact_count()
-    putchar(70i32) putchar(58i32) k_sp() k_emit(ec) k_sp() k_emit(sqrtsum_last_p()) k_sp() k_sgn(fad) k_sp() k_sgn(flz) k_sp() k_sgn(for_) k_nl()
+    let kc : u64 = lazy_kf_count()                                   /* post-weld: the Galois tower decides this in pure i64 */
+    putchar(70i32) putchar(58i32) k_sp() k_emit(ec + kc) k_sp() k_emit(sqrtsum_last_p()) k_sp() k_sgn(fad) k_sp() k_sgn(flz) k_sp() k_sgn(for_) k_nl()
     if fad != for_ { return 31u64 }
     if flz != for_ { return 32u64 }
-    if ec == 0u64 { return 33u64 }
+    if (ec + kc) == 0u64 { return 33u64 }                            /* left Tiers 1-2: the kf tower or the exact tier fired */
 
     return 99u64
 }

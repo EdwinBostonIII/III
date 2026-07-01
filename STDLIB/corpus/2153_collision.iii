@@ -1,0 +1,116 @@
+/* 2153_collision.iii -- GATE for collide.iii: EXACT NO-TUNNELING collision detection.
+ *
+ * Each arm a DIFFERENT rule:
+ *   TUNNEL   the headline: a segment whose BOTH endpoints are strictly OUTSIDE the sphere still passes THROUGH it.
+ *            Endpoint sampling (what a float engine checks) says CLEAR at t=0 AND t=1; the exact swept predicate finds
+ *            the interior dip (4ac−b² = −25600 < 0) and returns HIT.  Tunneling is impossible for the exact predicate.
+ *   TANGENT  the predicate flips EXACTLY at the grazing radius: R²=8 clear, R²=9 tangent(HIT, 4ac−b²=0 certified),
+ *            R²=10 through -- the exact boundary a float engine flickers across.
+ *   CASES    endpoint-inside -> HIT; straddle (one endpoint in) -> HIT (min at t=1); fully clear -> no hit; and the
+ *            a==0 (zero-length / no-motion) branch -> the point-membership sign(c).
+ *   MECH     the mechanism's EXACT rotated tool point (5√3, 5, 0) [cyclotomic_se3, 30° turn] tested against an OFF-CENTRE
+ *            sphere is a genuine ℚ(√2,√3) decision -- q23_sign resolves 416−240√3 (>0, out at R²=32) vs 412−240√3 (<0, in
+ *            at R²=33) exactly.
+ *   SWEEP    THE UNIFICATION (kinematics ⊗ geometry): the rotating tool's actual MOTION -- the common-denominator swept
+ *            segment between two CONSECUTIVE exact configs (0° and 15°) -- tunnels an origin obstacle.  Both configs sit at
+ *            radius 10 (|P|²=100 > R²=99, endpoints CLEAR), but the straight chord dips to |P|²=50(1+cos15)=98.30 < 99,
+ *            so the tool's motion passes THROUGH the sphere: col_seg_hits (fed the mechanism's own swept segment) says HIT.
+ *
+ * HONEST SCOPE: sphere obstacle, swept POINT; the straight segment is the conservative CCD model of the true rotating
+ * arc (the predicate is exact FOR the segment).  i64 envelope.
+ *   exit 99 = all arms correct.  10 tunnel  20 tangent/cases  30 mechanism  40 swept unification */
+module corpus_2153_collision
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn col_seg_hits_sphere(w0p: u64, w1p: u64, D: i64, R2: i64) -> u8 from "collide.iii"
+extern @abi(c-msvc-x64) fn col_point_in_sphere(wp: u64, D: i64, cx: i64, cy: i64, cz: i64, R2: i64) -> i32 from "collide.iii"
+extern @abi(c-msvc-x64) fn mech_reset() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_rotate_z15() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_apply(px: i64, py: i64, pz: i64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt(i: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt_addr() -> u64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_den() -> i64 from "cyclotomic_se3.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var W0 : [i64; 12]   var W1 : [i64; 12]
+var WA : [i64; 12]   var WB : [i64; 12]   var WAS : [i64; 12]   var WBS : [i64; 12]
+fn set_pt(bp: u64, x: i64, y: i64, z: i64) -> i32 {
+    let b : *i64 = bp as *i64
+    let mut i : u64 = 0u64   while i < 12u64 { b[i] = 0i64   i = i + 1u64 }
+    b[0u64] = x   b[4u64] = y   b[8u64] = z    /* integer (rational) point: coord k rational part at 4k */
+    return 0i32
+}
+
+var FTUN : u64   var FCASE : u64   var FMECH : u64   var FSWEEP : u64
+
+fn main() -> u64 {
+    FTUN = 0u64   FCASE = 0u64   FMECH = 0u64   FSWEEP = 0u64
+
+    /* ── Arm TUNNEL: (−10,3,0) → (10,3,0) through sphere R²=25.  Endpoints OUTSIDE, segment THROUGH. ── */
+    set_pt((&W0) as u64, 0i64 - 10i64, 3i64, 0i64)
+    set_pt((&W1) as u64, 10i64, 3i64, 0i64)
+    let p0 : i32 = col_point_in_sphere((&W0) as u64, 1i64, 0i64, 0i64, 0i64, 25i64)   /* endpoint sample t=0 */
+    let p1 : i32 = col_point_in_sphere((&W1) as u64, 1i64, 0i64, 0i64, 0i64, 25i64)   /* endpoint sample t=1 */
+    let hit : u8 = col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 25i64)        /* exact swept predicate */
+    if p0 != 1i32 { FTUN = FTUN + 1u64 }        /* t=0 strictly outside (float would say clear) */
+    if p1 != 1i32 { FTUN = FTUN + 1u64 }        /* t=1 strictly outside */
+    if hit != 1u8 { FTUN = FTUN + 1u64 }        /* but the segment HITS -- no tunneling */
+    putchar(84i32) putchar(58i32) sp() e_i64(p0 as i64) sp() e_i64(p1 as i64) sp() e_i64(hit as i64) nl()   /* "T: 1 1 1" */
+
+    /* ── Arm TANGENT: the predicate flips exactly at the grazing radius. ── */
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 8i64)  != 0u8 { FCASE = FCASE + 1u64 }   /* R²=8  clear   */
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 9i64)  != 1u8 { FCASE = FCASE + 1u64 }   /* R²=9  tangent */
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 10i64) != 1u8 { FCASE = FCASE + 1u64 }   /* R²=10 through */
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 4i64)  != 0u8 { FCASE = FCASE + 1u64 }   /* R²=4  clear (deep) */
+
+    /* ── Arm CASES: endpoint-inside, straddle, and a==0 (zero-length). ── */
+    set_pt((&W0) as u64, 1i64, 0i64, 0i64)     set_pt((&W1) as u64, 10i64, 0i64, 0i64)
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 25i64) != 1u8 { FCASE = FCASE + 1u64 }   /* W0 inside -> hit */
+    if col_point_in_sphere((&W0) as u64, 1i64, 0i64, 0i64, 0i64, 25i64) != (0i32 - 1i32) { FCASE = FCASE + 1u64 }  /* W0 inside */
+    set_pt((&W0) as u64, 10i64, 0i64, 0i64)    set_pt((&W1) as u64, 0i64, 0i64, 0i64)
+    if col_seg_hits_sphere((&W0) as u64, (&W1) as u64, 1i64, 25i64) != 1u8 { FCASE = FCASE + 1u64 }   /* straddle (t=1 in) -> hit */
+    set_pt((&W0) as u64, 1i64, 0i64, 0i64)
+    if col_seg_hits_sphere((&W0) as u64, (&W0) as u64, 1i64, 25i64) != 1u8 { FCASE = FCASE + 1u64 }   /* a==0, point inside -> hit */
+    set_pt((&W0) as u64, 10i64, 0i64, 0i64)
+    if col_seg_hits_sphere((&W0) as u64, (&W0) as u64, 1i64, 25i64) != 0u8 { FCASE = FCASE + 1u64 }   /* a==0, point outside -> clear */
+
+    /* ── Arm MECH: exact rotated tool point vs off-centre sphere. ── */
+    mech_reset()
+    mech_rotate_z15()   mech_rotate_z15()       /* 30° */
+    mech_apply(10i64, 0i64, 0i64)               /* tool tip (10,0,0) -> (5√3, 5, 0) over den 2 */
+    let m_out : i32 = col_point_in_sphere(mech_pt_addr(), mech_den(), 6i64, 0i64, 0i64, 32i64)   /* 416−240√3 > 0 */
+    let m_in  : i32 = col_point_in_sphere(mech_pt_addr(), mech_den(), 6i64, 0i64, 0i64, 33i64)   /* 412−240√3 < 0 */
+    if m_out != 1i32 { FMECH = FMECH + 1u64 }
+    if m_in != (0i32 - 1i32) { FMECH = FMECH + 1u64 }
+    putchar(77i32) putchar(58i32) sp() e_i64(m_out as i64) sp() e_i64(m_in as i64) nl()   /* "M: 1 -1" */
+
+    /* ── Arm SWEEP: THE UNIFICATION -- the mechanism's OWN swept motion collides an obstacle, exactly, no tunneling. ── */
+    mech_reset()
+    mech_apply(10i64, 0i64, 0i64)               /* config A = 0°: tool (10,0,0), den 1 */
+    let dA : i64 = mech_den()
+    let mut i : u64 = 0u64   while i < 12u64 { WA[i] = mech_pt(i)   i = i + 1u64 }
+    mech_rotate_z15()                           /* config B = 15° */
+    mech_apply(10i64, 0i64, 0i64)               /* tool (10cos15, 10sin15, 0), den 4 */
+    let dB : i64 = mech_den()
+    i = 0u64   while i < 12u64 { WB[i] = mech_pt(i)   i = i + 1u64 }
+    /* common denominator D = dA·dB: scale WA by dB, WB by dA so both share D (the segment predicate's precondition). */
+    let D : i64 = dA * dB
+    i = 0u64   while i < 12u64 { WAS[i] = WA[i] * dB   WBS[i] = WB[i] * dA   i = i + 1u64 }
+    let ea : i32 = col_point_in_sphere((&WA) as u64, dA, 0i64, 0i64, 0i64, 99i64)   /* config A: |P|²=100 > 99 -> OUT */
+    let eb : i32 = col_point_in_sphere((&WB) as u64, dB, 0i64, 0i64, 0i64, 99i64)   /* config B: |P|²=100 > 99 -> OUT */
+    let sw99 : u8 = col_seg_hits_sphere((&WAS) as u64, (&WBS) as u64, D, 99i64)     /* chord dips to 98.30 < 99 -> HIT */
+    let sw98 : u8 = col_seg_hits_sphere((&WAS) as u64, (&WBS) as u64, D, 98i64)     /* 98.30 > 98 -> chord stays clear */
+    if ea != 1i32 { FSWEEP = FSWEEP + 1u64 }        /* both endpoints (float sampling) say CLEAR ... */
+    if eb != 1i32 { FSWEEP = FSWEEP + 1u64 }
+    if sw99 != 1u8 { FSWEEP = FSWEEP + 1u64 }       /* ... but the tool's MOTION tunnels R²=99 -> exact HIT */
+    if sw98 != 0u8 { FSWEEP = FSWEEP + 1u64 }       /* R²=98: no tunnel */
+    putchar(87i32) putchar(58i32) sp() e_i64(ea as i64) sp() e_i64(eb as i64) sp() e_i64(sw99 as i64) sp() e_i64(sw98 as i64) nl()   /* "W: 1 1 1 0" */
+
+    if FTUN   != 0u64 { return 10u64 }
+    if FCASE  != 0u64 { return 20u64 }
+    if FMECH  != 0u64 { return 30u64 }
+    if FSWEEP != 0u64 { return 40u64 }
+    return 99u64
+}

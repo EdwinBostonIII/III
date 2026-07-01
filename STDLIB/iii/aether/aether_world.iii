@@ -1,0 +1,1002 @@
+/* aether_world.iii -- III AETHER-WORLD: a live, resizable, mouse-driven 3D explorer of III's OWN sovereign geometry,
+ * in III's OWN native window (raw Win32 + GDI, no toolkit, no library, no imported asset).
+ *
+ * It shows the actual calculus, not a demo:
+ *   [1] PHOTONIC LATTICE + exact O_h geodesic  -- the crystal lattice nodes and the exact shortest photon route
+ *       (photon_route::plr_bulk), drawn as the routed path of king-moves.  PHOTONS. LATTICE. LINES.
+ *   [2] EXACT SHAPES + CSG  -- a sphere, an ellipsoid, and the EXACT sphere-minus-cylinder solid whose surface shell is
+ *       decided point-by-point by csg_kernel::csg_inside (integer-exact membership).  ANY SHAPE.
+ *   [3] WIREFRAME  -- a cube and an octahedron as edges + vertices.  LINES. CORNERS.
+ * Coordinate axes always.  On-screen GDI labels say what you are looking at.
+ *
+ * Camera: DRAG to rotate, WHEEL to zoom, keys 1/2/3 to switch, R reset, Q/Esc quit.  The window is resizable/maximizable
+ * (WS_OVERLAPPEDWINDOW + WM_SIZE) and the image fills the whole client.  Geometry is computed by III's exact organs; the
+ * viewport projection is fixed-point integer for speed.  Ring R0.  Composes photon_route + csg_kernel. */
+module aether_world
+
+extern @abi(c-msvc-x64) fn GetModuleHandleA(name: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn RegisterClassA(wc: u64) -> u16 from "user32"
+extern @abi(c-msvc-x64) fn CreateWindowExA(ex: u32, cls: u64, wname: u64, style: u32, x: i32, y: i32, w: i32, h: i32, parent: u64, menu: u64, inst: u64, param: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn DefWindowProcA(hwnd: u64, msg: u64, wp: u64, lp: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ShowWindow(hwnd: u64, cmd: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn PeekMessageA(msg: u64, hwnd: u64, mn: u32, mx: u32, rm: u32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn TranslateMessage(msg: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn DispatchMessageA(msg: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn GetDC(hwnd: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ReleaseDC(hwnd: u64, dc: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn PostQuitMessage(code: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn GetClientRect(hwnd: u64, r: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn StretchDIBits(dc: u64, xd: i32, yd: i32, wd: i32, hd: i32, xs: i32, ys: i32, ws: i32, hs: i32, bits: u64, bmi: u64, usage: u32, rop: u32) -> i32 from "gdi32"
+extern @abi(c-msvc-x64) fn TextOutA(dc: u64, x: i32, y: i32, s: u64, n: i32) -> i32 from "gdi32"
+extern @abi(c-msvc-x64) fn SetTextColor(dc: u64, c: u32) -> u32 from "gdi32"
+extern @abi(c-msvc-x64) fn SetBkMode(dc: u64, m: i32) -> i32 from "gdi32"
+
+extern @abi(c-msvc-x64) fn plr_bulk(dx: i64, dy: i64, dz: i64) -> i32 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_route_class(i: u64) -> i64 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn csg_inside(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x: i64, y: i64, z: i64) -> i32 from "csg_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_collide_sign(dd: i64, sm: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_order_sign(ba: i64, da: i64, bb: i64, db: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_relay_sign(d_sr1: i64, d_r1t: i64, d_sr2: i64, d_r2t: i64) -> i32 from "wb_kernel.iii"
+/* the REAL system graph, generated from III's own source: 783 modules (nodes) + 5108 extern-dependency edges. */
+extern @abi(c-msvc-x64) fn gr_nodes() -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_edges() -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_clu(i: u64) -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_e0(i: u64) -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_e1(i: u64) -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_init() -> i32 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_name(i: u64) -> u64 from "world_graph.iii"
+
+const MAXN : u64 = 1024000u64
+const MAXPT : u64 = 40000u64
+const MAXLN : u64 = 6000u64
+
+var FB : [u32; 1024000]
+var SN : [i64; 256]
+var WC : [u64; 9]   var BMI : [u32; 10]   var MSG : [u64; 8]   var RC : [i32; 4]
+var CLS : [u8; 12]  var TITLE : [u8; 20]
+
+var VW_W : i64   var VW_H : i64   var VW_RUN : u8
+var YAW : i64    var PITCH : i64  var ZOOM : i64   var WDIST : i64
+var MDOWN : u8   var MLX : i64    var MLY : i64
+var MODE : u8    var NEED : u8
+var PX : i64     var PY : i64     var PVIS : i32   var PZC : i64
+
+/* scene point + line lists (world coords, colour); rebuilt on mode change, re-projected every frame */
+var SPX : [i64; 40000]   var SPY : [i64; 40000]   var SPZ : [i64; 40000]   var SPC : [u32; 40000]   var SPR : [i64; 40000]
+var NPT : u64
+var LX0 : [i64; 6000]  var LY0 : [i64; 6000]  var LZ0 : [i64; 6000]
+var LX1 : [i64; 6000]  var LY1 : [i64; 6000]  var LZ1 : [i64; 6000]  var LLC : [u32; 6000]
+var NLN : u64
+/* system-map + analytics that III computes natively over the real graph */
+var NPX : [i64; 800]   var NPY : [i64; 800]   var NPZ : [i64; 800]   var NDEG : [i64; 800]
+var CCX : [i64; 16]    var CCY : [i64; 16]    var CCZ : [i64; 16]     var CCOL : [u32; 16]
+var OUTD : [i64; 800]  var IND : [i64; 800]   var LEVEL : [i64; 800]  var IMPACT : [i64; 800]  var FOOT : [i64; 800]
+var FST : [i64; 802]   var ADJ : [i64; 8000]  var RST : [i64; 802]    var RADJ : [i64; 8000]
+var VIS : [i64; 800]   var GQ : [i64; 800]    var TMPP : [i64; 800]   var GSTAMP : i64
+var REACH : [u8; 800]  var SELN : i64         var NEEDCLICK : u8      var CLKX : i64   var CLKY : i64   var MMOVED : u8
+var CORE : [i64; 6]    var CIMP : [i64; 6]     var GMAXLV : i64        var NBUF : [u8; 24]
+
+/* ══ III WORKBENCH: a live scene of exact CONSTRUCTS the user summons + moves; III decides their exact interactions. ══
+ * kind: 1=sphere  2=ellipsoid  3=photon(ray).  Everything is integer-lattice placed so every decision below is EXACT. */
+var WB_KIND : [i64; 64]
+var WB_X : [i64; 64]   var WB_Y : [i64; 64]   var WB_Z : [i64; 64]      /* centre / ray origin */
+var WB_RA : [i64; 64]  var WB_RB : [i64; 64]  var WB_RC : [i64; 64]     /* ellipsoid semi-axes (sphere: all equal) */
+var WB_DX : [i64; 64]  var WB_DY : [i64; 64]  var WB_DZ : [i64; 64]     /* photon direction */
+var WB_COL : [u32; 64]
+var WB_N : i64    var WB_SEL : i64    var WB_XSHOW : u8
+var WB_CA : i64   var WB_CB : i64     var WB_CST : i64   var WB_CPEN : i64   /* collision: pair + state(+1 sep,0 touch,-1 overlap) + exact metric */
+var WB_HP : i64   var WB_HO : i64     var WB_HN : i64    var WB_HDEN : i64   /* photon: which photon, hit shape, entry-t = HN/HDEN */
+var WB_XA : i64   var WB_XB : i64     var WB_XST : i64                       /* Sqrt-sum relay calc: two relays + verdict */
+var WB_SSA : [i64; 8]   var WB_SSB : [i64; 8]                                /* scratch coeffs/radicands for sqrtsum_lazy3 */
+
+fn w_sn(a: i64) -> i64 { return SN[(a & 255i64) as u64] }
+fn w_cs(a: i64) -> i64 { return SN[((a + 64i64) & 255i64) as u64] }
+fn w_i16(v: u64) -> i64 { if v >= 32768u64 { return (v as i64) - 65536i64 }   return v as i64 }
+
+fn add_pt(x: i64, y: i64, z: i64, c: u32, r: i64) -> i32 {
+    if NPT >= MAXPT { return 0i32 }
+    SPX[NPT] = x   SPY[NPT] = y   SPZ[NPT] = z   SPC[NPT] = c   SPR[NPT] = r
+    NPT = NPT + 1u64   return 0i32
+}
+fn add_ln(x0: i64, y0: i64, z0: i64, x1: i64, y1: i64, z1: i64, c: u32) -> i32 {
+    if NLN >= MAXLN { return 0i32 }
+    LX0[NLN]=x0 LY0[NLN]=y0 LZ0[NLN]=z0 LX1[NLN]=x1 LY1[NLN]=y1 LZ1[NLN]=z1 LLC[NLN]=c
+    NLN = NLN + 1u64   return 0i32
+}
+
+/* rotate (yaw about Y, pitch about X), translate by WDIST, perspective-project to screen -> PX,PY,PZC ; PVIS=0 if culled. */
+fn w_proj(x: i64, y: i64, z: i64) -> i32 {
+    let cy : i64 = w_cs(YAW)   let sy : i64 = w_sn(YAW)
+    let xr : i64 = (x*cy - z*sy) / 1024i64
+    let zr : i64 = (x*sy + z*cy) / 1024i64
+    let cp : i64 = w_cs(PITCH)   let sp : i64 = w_sn(PITCH)
+    let yr : i64 = (y*cp - zr*sp) / 1024i64
+    let zt : i64 = (y*sp + zr*cp) / 1024i64
+    let zc : i64 = zt + WDIST
+    if zc < 24i64 { PVIS = 0i32   return 0i32 }
+    PX = VW_W/2i64 + (ZOOM * xr) / zc
+    PY = VW_H/2i64 - (ZOOM * yr) / zc
+    PZC = zc   PVIS = 1i32   return 1i32
+}
+
+fn fb_clear(c: u32) -> i32 { let n : u64 = (VW_W * VW_H) as u64   let mut i : u64 = 0u64   while i < n { FB[i] = c   i = i + 1u64 }   return 0i32 }
+fn fb_px(x: i64, y: i64, c: u32) -> i32 {
+    if x < 0i64 { return 0i32 }   if y < 0i64 { return 0i32 }   if x >= VW_W { return 0i32 }   if y >= VW_H { return 0i32 }
+    FB[(y*VW_W + x) as u64] = c   return 0i32
+}
+fn fb_dot(x: i64, y: i64, r: i64, c: u32) -> i32 {
+    let mut yy : i64 = y - r
+    while yy <= y + r { let mut xx : i64 = x - r   while xx <= x + r { fb_px(xx, yy, c)   xx = xx + 1i64 }   yy = yy + 1i64 }
+    return 0i32
+}
+fn fb_line(x0: i64, y0: i64, x1: i64, y1: i64, c: u32) -> i32 {
+    let mut x : i64 = x0   let mut y : i64 = y0
+    let mut dx : i64 = x1 - x0   if dx < 0i64 { dx = 0i64 - dx }
+    let mut dy : i64 = y1 - y0   if dy < 0i64 { dy = 0i64 - dy }
+    let mut sx : i64 = 1i64   if x0 >= x1 { sx = 0i64 - 1i64 }
+    let mut sy : i64 = 1i64   if y0 >= y1 { sy = 0i64 - 1i64 }
+    let mut err : i64 = dx - dy
+    let mut n : i64 = 0i64
+    let cap : i64 = dx + dy + 2i64
+    let mut go : i32 = 1i32
+    while go == 1i32 {
+        fb_px(x, y, c)
+        if x == x1 { if y == y1 { go = 0i32 } }
+        if go == 1i32 {
+            let e2 : i64 = err + err
+            if e2 > (0i64 - dy) { err = err - dy   x = x + sx }
+            if e2 < dx { err = err + dx   y = y + sy }
+            n = n + 1i64   if n > cap { go = 0i32 }
+        }
+    }
+    return 0i32
+}
+
+/* ── scene builders ─────────────────────────────────────────────────────────────────────────────────────── */
+fn build_axes() -> i32 {
+    add_ln(0i64,0i64,0i64, 150i64,0i64,0i64, 0xFF4444u32)   add_pt(150i64,0i64,0i64, 0xFF6666u32, 2i64)
+    add_ln(0i64,0i64,0i64, 0i64,150i64,0i64, 0x44FF44u32)   add_pt(0i64,150i64,0i64, 0x66FF66u32, 2i64)
+    add_ln(0i64,0i64,0i64, 0i64,0i64,150i64, 0x4488FFu32)   add_pt(0i64,0i64,150i64, 0x66AAFFu32, 2i64)
+    return 0i32
+}
+
+/* [1] photonic lattice + exact O_h geodesic photon route */
+fn build_lattice() -> i32 {
+    let sp : i64 = 42i64   let lg : i64 = 6i64
+    let off : i64 = 0i64 - (lg * sp) / 2i64
+    let mut i : i64 = 0i64
+    while i <= lg {
+        let mut j : i64 = 0i64
+        while j <= lg {
+            let mut k : i64 = 0i64
+            while k <= lg {
+                add_pt(i*sp + off, j*sp + off, k*sp + off, 0x39394Au32, 0i64)
+                k = k + 1i64
+            }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    /* exact O_h geodesic route from source (0,0,0) to target (6,5,2): the greedy king-move path */
+    let ti : i64 = 6i64   let tj : i64 = 5i64   let tk : i64 = 2i64
+    plr_bulk(ti, tj, tk)                              /* fills PLR_ROUTE with the exact per-class step counts */
+    let mut ci : i64 = 0i64   let mut cj : i64 = 0i64   let mut ck : i64 = 0i64
+    add_pt(off, off, off, 0x33FF66u32, 4i64)          /* SOURCE (green) */
+    let mut go : i32 = 1i32   let mut guard : i64 = 0i64
+    while go == 1i32 {
+        let px : i64 = ci*sp + off   let py : i64 = cj*sp + off   let pk : i64 = ck*sp + off
+        if ci < ti { ci = ci + 1i64 }
+        if cj < tj { cj = cj + 1i64 }
+        if ck < tk { ck = ck + 1i64 }
+        let qx : i64 = ci*sp + off   let qy : i64 = cj*sp + off   let qk : i64 = ck*sp + off
+        add_ln(px, py, pk, qx, qy, qk, 0x30E0FFu32)   /* the routed photon path (cyan) */
+        add_pt(qx, qy, qk, 0x88F0FFu32, 1i64)
+        if ci == ti { if cj == tj { if ck == tk { go = 0i32 } } }
+        guard = guard + 1i64   if guard > 64i64 { go = 0i32 }
+    }
+    add_pt(ti*sp + off, tj*sp + off, tk*sp + off, 0xFF4466u32, 4i64)   /* TARGET (red) */
+    return 0i32
+}
+
+/* parametric quadric-surface point cloud (radii rx,ry,rz) at centre (cx,cy,cz) */
+fn build_ellipsoid(cx: i64, cy: i64, cz: i64, rx: i64, ry: i64, rz: i64, col: u32) -> i32 {
+    let mut la : i64 = 0i64 - 60i64
+    while la <= 60i64 {
+        let cla : i64 = w_cs(la)   let sla : i64 = w_sn(la)
+        let mut lo : i64 = 0i64
+        while lo < 256i64 {
+            let clo : i64 = w_cs(lo)   let slo : i64 = w_sn(lo)
+            let x : i64 = cx + (((rx * cla) / 1024i64) * clo) / 1024i64
+            let y : i64 = cy + (ry * sla) / 1024i64
+            let z : i64 = cz + (((rz * cla) / 1024i64) * slo) / 1024i64
+            add_pt(x, y, z, col, 0i64)
+            lo = lo + 10i64
+        }
+        la = la + 10i64
+    }
+    return 0i32
+}
+
+/* [2] exact sphere-minus-cylinder SOLID via csg_kernel: keep the boundary shell (inside solid, a neighbour outside) */
+fn build_csg(cx: i64) -> i32 {
+    let r2 : i64 = 3600i64                                   /* sphere radius 60 (local units, scaled to world) */
+    let cr2 : i64 = 900i64                                   /* cylinder radius 30, axis parallel to y at (18,*,0) */
+    let ca : i64 = 18i64
+    let sc : i64 = 1i64                                      /* local->world scale (local coords already world-sized) */
+    let mut x : i64 = 0i64 - 66i64
+    while x <= 66i64 {
+        let mut y : i64 = 0i64 - 66i64
+        while y <= 66i64 {
+            let mut z : i64 = 0i64 - 66i64
+            while z <= 66i64 {
+                /* in solid = inside sphere AND outside cylinder (bite along y) */
+                let ins : i32 = csg_inside(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64 - r2, x,y,z)
+                let inc : i32 = csg_inside(1i64,0i64,1i64,0i64,0i64,0i64,0i64 - 2i64*ca,0i64,0i64, ca*ca - cr2, x,y,z)
+                let mut here : i32 = 0i32
+                if ins == 1i32 { if inc == 0i32 { here = 1i32 } }
+                if here == 1i32 {
+                    /* shell test: is a +6 neighbour outside the solid on any axis? */
+                    let ix : i32 = csg_inside(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64 - r2, x+6i64,y,z)
+                    let cxn : i32 = csg_inside(1i64,0i64,1i64,0i64,0i64,0i64,0i64 - 2i64*ca,0i64,0i64, ca*ca - cr2, x+6i64,y,z)
+                    let iy : i32 = csg_inside(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64 - r2, x,y+6i64,z)
+                    let cyn : i32 = csg_inside(1i64,0i64,1i64,0i64,0i64,0i64,0i64 - 2i64*ca,0i64,0i64, ca*ca - cr2, x,y+6i64,z)
+                    let iz : i32 = csg_inside(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64 - r2, x,y,z+6i64)
+                    let czn : i32 = csg_inside(1i64,0i64,1i64,0i64,0i64,0i64,0i64 - 2i64*ca,0i64,0i64, ca*ca - cr2, x,y,z+6i64)
+                    let mut shell : u8 = 0u8
+                    if ix == 0i32 { shell = 1u8 }   if cxn == 1i32 { shell = 1u8 }
+                    if iy == 0i32 { shell = 1u8 }   if cyn == 1i32 { shell = 1u8 }
+                    if iz == 0i32 { shell = 1u8 }   if czn == 1i32 { shell = 1u8 }
+                    if shell == 1u8 { add_pt(cx + x*sc, y*sc, z*sc, 0xFFC060u32, 0i64) }
+                }
+                z = z + 6i64
+            }
+            y = y + 6i64
+        }
+        x = x + 6i64
+    }
+    return 0i32
+}
+
+/* [3] wireframe cube + octahedron: edges (lines) + vertices (corners) */
+fn build_wire() -> i32 {
+    let s : i64 = 80i64   let cx : i64 = 0i64 - 90i64
+    /* cube 8 corners */
+    add_ln(cx-s,0i64-s,0i64-s, cx+s,0i64-s,0i64-s, 0xE0E080u32)   add_ln(cx+s,0i64-s,0i64-s, cx+s,s,0i64-s, 0xE0E080u32)
+    add_ln(cx+s,s,0i64-s, cx-s,s,0i64-s, 0xE0E080u32)             add_ln(cx-s,s,0i64-s, cx-s,0i64-s,0i64-s, 0xE0E080u32)
+    add_ln(cx-s,0i64-s,s, cx+s,0i64-s,s, 0xE0E080u32)             add_ln(cx+s,0i64-s,s, cx+s,s,s, 0xE0E080u32)
+    add_ln(cx+s,s,s, cx-s,s,s, 0xE0E080u32)                       add_ln(cx-s,s,s, cx-s,0i64-s,s, 0xE0E080u32)
+    add_ln(cx-s,0i64-s,0i64-s, cx-s,0i64-s,s, 0xE0E080u32)        add_ln(cx+s,0i64-s,0i64-s, cx+s,0i64-s,s, 0xE0E080u32)
+    add_ln(cx+s,s,0i64-s, cx+s,s,s, 0xE0E080u32)                  add_ln(cx-s,s,0i64-s, cx-s,s,s, 0xE0E080u32)
+    add_pt(cx-s,0i64-s,0i64-s,0xFFFFA0u32,2i64) add_pt(cx+s,0i64-s,0i64-s,0xFFFFA0u32,2i64) add_pt(cx+s,s,0i64-s,0xFFFFA0u32,2i64) add_pt(cx-s,s,0i64-s,0xFFFFA0u32,2i64)
+    add_pt(cx-s,0i64-s,s,0xFFFFA0u32,2i64) add_pt(cx+s,0i64-s,s,0xFFFFA0u32,2i64) add_pt(cx+s,s,s,0xFFFFA0u32,2i64) add_pt(cx-s,s,s,0xFFFFA0u32,2i64)
+    /* octahedron 6 vertices at +-r on each axis, centre (ox,0,0) */
+    let ox : i64 = 110i64   let r : i64 = 90i64
+    add_ln(ox+r,0i64,0i64, ox,r,0i64, 0x80D0FFu32)  add_ln(ox,r,0i64, ox-r,0i64,0i64, 0x80D0FFu32)  add_ln(ox-r,0i64,0i64, ox,0i64-r,0i64, 0x80D0FFu32)  add_ln(ox,0i64-r,0i64, ox+r,0i64,0i64, 0x80D0FFu32)
+    add_ln(ox+r,0i64,0i64, ox,0i64,r, 0x80D0FFu32)  add_ln(ox,0i64,r, ox-r,0i64,0i64, 0x80D0FFu32)  add_ln(ox-r,0i64,0i64, ox,0i64,0i64-r, 0x80D0FFu32)  add_ln(ox,0i64,0i64-r, ox+r,0i64,0i64, 0x80D0FFu32)
+    add_ln(ox,r,0i64, ox,0i64,r, 0x80D0FFu32)  add_ln(ox,0i64,r, ox,0i64-r,0i64, 0x80D0FFu32)  add_ln(ox,0i64-r,0i64, ox,0i64,0i64-r, 0x80D0FFu32)  add_ln(ox,0i64,0i64-r, ox,r,0i64, 0x80D0FFu32)
+    add_pt(ox+r,0i64,0i64,0xC0E8FFu32,2i64) add_pt(ox-r,0i64,0i64,0xC0E8FFu32,2i64) add_pt(ox,r,0i64,0xC0E8FFu32,2i64) add_pt(ox,0i64-r,0i64,0xC0E8FFu32,2i64) add_pt(ox,0i64,r,0xC0E8FFu32,2i64) add_pt(ox,0i64,0i64-r,0xC0E8FFu32,2i64)
+    return 0i32
+}
+
+/* deterministic pseudo-random offset -60..60 from a node id + seed (spreads nodes within a subsystem column). */
+fn w_hash(i: i64, seed: i64) -> i64 {
+    let h : u64 = (i as u64) * 2654435761u64 + (seed as u64) * 1000003u64
+    return (((h >> 9u64) % 121u64) as i64) - 60i64
+}
+fn sys_name(c: i64) -> u64 {
+    if c == 0i64 { return "numera" as u64 }      if c == 1i64 { return "omnia" as u64 }
+    if c == 2i64 { return "aether" as u64 }      if c == 3i64 { return "verba" as u64 }
+    if c == 4i64 { return "sanctus" as u64 }     if c == 5i64 { return "nous" as u64 }
+    if c == 6i64 { return "forcefield" as u64 }  if c == 7i64 { return "eidos" as u64 }
+    if c == 8i64 { return "katabasis" as u64 }   if c == 9i64 { return "tempora" as u64 }
+    if c == 10i64 { return "memoria" as u64 }    if c == 11i64 { return "intent" as u64 }
+    return "?" as u64
+}
+fn node_r(im: i64) -> i64 { if im >= 150i64 { return 4i64 }   if im >= 50i64 { return 3i64 }   if im >= 14i64 { return 2i64 }   if im >= 3i64 { return 1i64 }   return 0i64 }
+
+/* draw a non-negative integer as text at (x,y) via GDI. */
+fn w_numtext(dc: u64, x: i32, y: i32, v: i64) -> i32 {
+    let mut val : i64 = v   if val < 0i64 { val = 0i64 - val }
+    let mut cnt : u64 = 0u64
+    if val == 0i64 { NBUF[0u64] = 48u8   cnt = 1u64 } else {
+        while val > 0i64 { NBUF[cnt] = ((val % 10i64) + 48i64) as u8   val = val / 10i64   cnt = cnt + 1u64 }
+        let mut a : u64 = 0u64   let mut b : u64 = cnt - 1u64
+        while a < b { let t : u8 = NBUF[a]   NBUF[a] = NBUF[b]   NBUF[b] = t   a = a + 1u64   b = b - 1u64 }
+    }
+    NBUF[cnt] = 0u8
+    TextOutA(dc, x, y, (&NBUF) as u64, cnt as i32)
+    return 0i32
+}
+
+/* ── ANALYTICS III COMPUTES OVER ITS OWN GRAPH: forward+reverse CSR, longest-path LEVEL, transitive IMPACT/FOOT (BFS). */
+fn build_csr() -> i32 {
+    let n : i64 = gr_nodes()   let ne : i64 = gr_edges()
+    let mut i : u64 = 0u64
+    while (i as i64) < n { OUTD[i] = 0i64   IND[i] = 0i64   i = i + 1u64 }
+    let mut k : u64 = 0u64
+    while (k as i64) < ne { let a : i64 = gr_e0(k)   let b : i64 = gr_e1(k)   OUTD[a as u64] = OUTD[a as u64] + 1i64   IND[b as u64] = IND[b as u64] + 1i64   k = k + 1u64 }
+    FST[0u64] = 0i64   RST[0u64] = 0i64
+    i = 0u64
+    while (i as i64) < n { FST[i + 1u64] = FST[i] + OUTD[i]   RST[i + 1u64] = RST[i] + IND[i]   i = i + 1u64 }
+    i = 0u64   while (i as i64) < n { TMPP[i] = FST[i]   i = i + 1u64 }
+    k = 0u64
+    while (k as i64) < ne { let a : i64 = gr_e0(k)   let b : i64 = gr_e1(k)   ADJ[TMPP[a as u64] as u64] = b   TMPP[a as u64] = TMPP[a as u64] + 1i64   k = k + 1u64 }
+    i = 0u64   while (i as i64) < n { TMPP[i] = RST[i]   i = i + 1u64 }
+    k = 0u64
+    while (k as i64) < ne { let a : i64 = gr_e0(k)   let b : i64 = gr_e1(k)   RADJ[TMPP[b as u64] as u64] = a   TMPP[b as u64] = TMPP[b as u64] + 1i64   k = k + 1u64 }
+    return 0i32
+}
+fn bfs_mark(start: i64, rev: u8, val: u8) -> i64 {
+    GSTAMP = GSTAMP + 1i64
+    let mut head : u64 = 0u64   let mut tail : u64 = 1u64
+    GQ[0u64] = start   VIS[start as u64] = GSTAMP
+    let mut cnt : i64 = 0i64
+    while head < tail {
+        let u : i64 = GQ[head]   head = head + 1u64
+        let mut s : u64 = 0u64   let mut e : u64 = 0u64
+        if rev == 1u8 { s = RST[u as u64] as u64   e = RST[(u + 1i64) as u64] as u64 } else { s = FST[u as u64] as u64   e = FST[(u + 1i64) as u64] as u64 }
+        let mut p : u64 = s
+        while p < e {
+            let mut v : i64 = 0i64
+            if rev == 1u8 { v = RADJ[p] } else { v = ADJ[p] }
+            if VIS[v as u64] != GSTAMP { VIS[v as u64] = GSTAMP   GQ[tail] = v   tail = tail + 1u64   cnt = cnt + 1i64   if val != 9u8 { REACH[v as u64] = val } }
+            p = p + 1u64
+        }
+    }
+    return cnt
+}
+fn compute_analytics() -> i32 {
+    build_csr()
+    let n : i64 = gr_nodes()   let ne : i64 = gr_edges()
+    let mut i : u64 = 0u64
+    while (i as i64) < n { LEVEL[i] = 0i64   i = i + 1u64 }
+    let mut it : i64 = 0i64
+    while it < 48i64 {
+        let mut k : u64 = 0u64
+        while (k as i64) < ne { let a : i64 = gr_e0(k)   let b : i64 = gr_e1(k)   let cand : i64 = LEVEL[b as u64] + 1i64   if cand > LEVEL[a as u64] { LEVEL[a as u64] = cand }   k = k + 1u64 }
+        it = it + 1i64
+    }
+    GMAXLV = 1i64   i = 0u64
+    while (i as i64) < n { let lv : i64 = LEVEL[i]   if lv > GMAXLV { GMAXLV = lv }   i = i + 1u64 }
+    i = 0u64
+    while (i as i64) < n { IMPACT[i] = bfs_mark(i as i64, 1u8, 9u8)   FOOT[i] = bfs_mark(i as i64, 0u8, 9u8)   i = i + 1u64 }
+    let mut c : u64 = 0u64
+    while c < 6u64 { CORE[c] = 0i64   CIMP[c] = 0i64 - 1i64   c = c + 1u64 }
+    i = 0u64
+    while (i as i64) < n {
+        let im : i64 = IMPACT[i]
+        let mut pos : i64 = 0i64 - 1i64   let mut j : u64 = 0u64
+        while j < 5u64 { let cv : i64 = CIMP[j]   if im > cv { pos = j as i64   j = 5u64 } else { j = j + 1u64 } }
+        if pos >= 0i64 {
+            let mut s : i64 = 4i64
+            while s > pos { CIMP[s as u64] = CIMP[(s - 1i64) as u64]   CORE[s as u64] = CORE[(s - 1i64) as u64]   s = s - 1i64 }
+            CIMP[pos as u64] = im   CORE[pos as u64] = i as i64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* [4] THE SYSTEM MAP: every real module positioned by DERIVED topological LEVEL (foundations low, apps high) within its
+ * subsystem column, sized by DERIVED transitive IMPACT (how many organs depend on it).  Extracted + analysed from source. */
+fn build_sysmap() -> i32 {
+    CCOL[0u64]=0x66C0FFu32 CCOL[1u64]=0xFF9060u32 CCOL[2u64]=0x66FF9Au32 CCOL[3u64]=0xFFD24Du32 CCOL[4u64]=0xD98CFFu32 CCOL[5u64]=0xFF6E8Au32
+    CCOL[6u64]=0x4DE0D0u32 CCOL[7u64]=0xC0FF66u32 CCOL[8u64]=0xB0B0C0u32 CCOL[9u64]=0xFFA0C0u32 CCOL[10u64]=0x80B0FFu32 CCOL[11u64]=0xE0E060u32
+    gr_init()
+    compute_analytics()
+    let n : i64 = gr_nodes()
+    let mut c : i64 = 0i64
+    while c < 12i64 { let ca : i64 = c * 21i64   CCX[c as u64] = (255i64 * w_cs(ca)) / 1024i64   CCZ[c as u64] = (255i64 * w_sn(ca)) / 1024i64   CCY[c as u64] = 0i64   c = c + 1i64 }
+    let mut i : u64 = 0u64
+    while (i as i64) < n {
+        let cl : i64 = gr_clu(i)
+        NPX[i] = CCX[cl as u64] + w_hash(i as i64, 1i64)
+        NPZ[i] = CCZ[cl as u64] + w_hash(i as i64, 3i64)
+        NPY[i] = (LEVEL[i] * 2i64 - GMAXLV) * 15i64
+        i = i + 1u64
+    }
+    SELN = 0i64 - 1i64
+    return 0i32
+}
+
+/* click -> select the nearest projected module, then light its transitive cone: deps (what it needs) green, dependents
+ * (what needs it) orange.  This is the LEARN interaction -- interrogate any module's real role in the whole. */
+fn do_select() -> i32 {
+    let n : i64 = gr_nodes()
+    let mut best : i64 = 0i64 - 1i64   let mut bestd : i64 = 1100i64
+    let mut i : u64 = 0u64
+    while (i as i64) < n {
+        w_proj(NPX[i], NPY[i], NPZ[i])
+        if PVIS == 1i32 { let dx : i64 = PX - CLKX   let dy : i64 = PY - CLKY   let d : i64 = dx*dx + dy*dy   if d < bestd { bestd = d   best = i as i64 } }
+        i = i + 1u64
+    }
+    SELN = best
+    i = 0u64   while (i as i64) < n { REACH[i] = 0u8   i = i + 1u64 }
+    if best >= 0i64 { bfs_mark(best, 0u8, 1u8)   bfs_mark(best, 1u8, 2u8) }
+    return 0i32
+}
+
+fn draw_graph_frame() -> i32 {
+    fb_clear(0x0A0A14u32)
+    let n : i64 = gr_nodes()   let ne : i64 = gr_edges()
+    let mut k : u64 = 0u64
+    while (k as i64) < ne {
+        let a : i64 = gr_e0(k)   let b : i64 = gr_e1(k)
+        w_proj(NPX[a as u64], NPY[a as u64], NPZ[a as u64])   let ax : i64 = PX   let ay : i64 = PY   let av : i32 = PVIS
+        w_proj(NPX[b as u64], NPY[b as u64], NPZ[b as u64])   let bx : i64 = PX   let by : i64 = PY   let bv : i32 = PVIS
+        if av == 1i32 { if bv == 1i32 {
+            let mut col : u32 = 0x161C2Au32
+            if SELN >= 0i64 {
+                let mut ha : u8 = 0u8   let mut hb : u8 = 0u8
+                if a == SELN { ha = 1u8 }   if REACH[a as u64] != 0u8 { ha = 1u8 }
+                if b == SELN { hb = 1u8 }   if REACH[b as u64] != 0u8 { hb = 1u8 }
+                col = 0x0E1018u32
+                if ha == 1u8 { if hb == 1u8 { col = 0x4E90C8u32 } }
+            } else { if gr_clu(a as u64) != gr_clu(b as u64) { col = 0x28425Eu32 } }
+            fb_line(ax, ay, bx, by, col)
+        } }
+        k = k + 1u64
+    }
+    let mut i : u64 = 0u64
+    while (i as i64) < n {
+        w_proj(NPX[i], NPY[i], NPZ[i])
+        if PVIS == 1i32 {
+            let cl : i64 = gr_clu(i)
+            let mut col : u32 = CCOL[cl as u64]
+            let mut r : i64 = node_r(IMPACT[i])
+            if SELN >= 0i64 {
+                if (i as i64) == SELN { col = 0xFFFFFFu32   r = r + 2i64 } else {
+                    let rr : u8 = REACH[i]
+                    if rr == 1u8 { col = 0x66FF88u32 } else { if rr == 2u8 { col = 0xFF9840u32 } else { col = 0x2A2A38u32 } }
+                }
+            }
+            fb_dot(PX, PY, r, col)
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* integer square root (Newton) -- for DRAWING the photon hit marker; the hit DECISION/ORDER stays exact (Sqrt-sum sign). */
+fn wb_isqrt(n: i64) -> i64 {
+    if n <= 0i64 { return 0i64 }
+    let mut x : i64 = n
+    if x > 3037000499i64 { x = 3037000499i64 }
+    let mut y : i64 = (x + n / x) / 2i64
+    let mut go : i32 = 1i32   let mut guard : i64 = 0i64
+    while go == 1i32 { if y < x { x = y   y = (x + n / x) / 2i64 } else { go = 0i32 }   guard = guard + 1i64   if guard > 200i64 { go = 0i32 } }
+    return x
+}
+fn wb_kind_name(k: i64) -> u64 { if k == 1i64 { return "sphere" as u64 }   if k == 2i64 { return "ellipsoid" as u64 }   if k == 3i64 { return "photon" as u64 }   return "-" as u64 }
+
+/* ── summon / edit constructs ─────────────────────────────────────────────────────────────────────── */
+fn wb_add(kind: i64) -> i32 {
+    if WB_N >= 60i64 { return 0i32 }
+    let i : u64 = WB_N as u64
+    WB_KIND[i] = kind
+    let sx : i64 = (WB_N % 4i64) * 46i64 - 70i64
+    WB_X[i] = sx   WB_Y[i] = 0i64   WB_Z[i] = 0i64
+    WB_RA[i] = 56i64   WB_RB[i] = 56i64   WB_RC[i] = 56i64
+    WB_DX[i] = 100i64  WB_DY[i] = 0i64    WB_DZ[i] = 0i64
+    if kind == 1i64 { WB_COL[i] = 0x6FA8FFu32 }
+    if kind == 2i64 { WB_RB[i] = 32i64   WB_RC[i] = 46i64   WB_COL[i] = 0xC08CFFu32 }
+    if kind == 3i64 { WB_COL[i] = 0xFFE24Du32   WB_X[i] = 0i64 - 210i64   WB_Y[i] = 34i64   WB_Z[i] = 0i64 - 44i64   WB_DX[i] = 150i64   WB_DY[i] = 0i64 - 22i64   WB_DZ[i] = 52i64 }
+    WB_SEL = WB_N
+    WB_N = WB_N + 1i64
+    return 0i32
+}
+fn wb_init() -> i32 {
+    if WB_N > 0i64 { return 0i32 }                 /* persist across resize; seed the scene only once */
+    wb_add(1i64)   WB_X[0u64] = 0i64 - 78i64
+    wb_add(1i64)   WB_X[1u64] = 84i64   WB_RA[1u64] = 48i64   WB_RB[1u64] = 48i64   WB_RC[1u64] = 48i64
+    wb_add(3i64)
+    WB_SEL = 0i64
+    return 0i32
+}
+fn wb_del() -> i32 {
+    if WB_SEL < 0i64 { return 0i32 }
+    if WB_N <= 0i64 { return 0i32 }
+    let mut i : i64 = WB_SEL
+    while i < WB_N - 1i64 {
+        let a : u64 = i as u64   let b : u64 = (i + 1i64) as u64
+        WB_KIND[a]=WB_KIND[b] WB_X[a]=WB_X[b] WB_Y[a]=WB_Y[b] WB_Z[a]=WB_Z[b]
+        WB_RA[a]=WB_RA[b] WB_RB[a]=WB_RB[b] WB_RC[a]=WB_RC[b]
+        WB_DX[a]=WB_DX[b] WB_DY[a]=WB_DY[b] WB_DZ[a]=WB_DZ[b] WB_COL[a]=WB_COL[b]
+        i = i + 1i64
+    }
+    WB_N = WB_N - 1i64
+    if WB_SEL >= WB_N { WB_SEL = WB_N - 1i64 }
+    return 0i32
+}
+fn wb_cycle() -> i32 { if WB_N <= 0i64 { WB_SEL = 0i64 - 1i64   return 0i32 }   WB_SEL = (WB_SEL + 1i64) % WB_N   return 0i32 }
+fn wb_move(dx: i64, dy: i64, dz: i64) -> i32 {
+    if WB_SEL < 0i64 { return 0i32 }
+    let s : u64 = WB_SEL as u64
+    WB_X[s] = WB_X[s] + dx   WB_Y[s] = WB_Y[s] + dy   WB_Z[s] = WB_Z[s] + dz
+    return 0i32
+}
+fn wb_grow(d: i64) -> i32 {
+    if WB_SEL < 0i64 { return 0i32 }
+    let s : u64 = WB_SEL as u64
+    let k : i64 = WB_KIND[s]
+    if k == 3i64 { return 0i32 }
+    let mut a : i64 = WB_RA[s] + d   if a < 8i64 { a = 8i64 }   WB_RA[s] = a
+    let mut b : i64 = WB_RB[s] + d   if b < 8i64 { b = 8i64 }   WB_RB[s] = b
+    let mut c : i64 = WB_RC[s] + d   if c < 8i64 { c = 8i64 }   WB_RC[s] = c
+    return 0i32
+}
+
+/* ── EXACT INTERACTIONS III computes over the scene every frame ──────────────────────────────────────
+ * COLLISION (spheres): integer-exact.  dd = |c_a - c_b|^2 ; rs = (r_a + r_b)^2 ; sign(dd - rs) is the complete,
+ * float-free contact test -- separated / touching / overlapping, with an exact penetration metric. */
+fn wb_coll_eval() -> i32 {
+    WB_CA = 0i64 - 1i64   WB_CB = 0i64 - 1i64   WB_CST = 2i64   WB_CPEN = 0i64
+    let mut ref : i64 = 0i64 - 1i64
+    if WB_SEL >= 0i64 { let ks : i64 = WB_KIND[WB_SEL as u64]   if ks == 1i64 { ref = WB_SEL } }
+    if ref < 0i64 { let mut i : i64 = 0i64   while i < WB_N { let ki : i64 = WB_KIND[i as u64]   if ki == 1i64 { ref = i   i = WB_N } else { i = i + 1i64 } } }
+    if ref < 0i64 { return 0i32 }
+    let ra : u64 = ref as u64
+    let rax : i64 = WB_X[ra]   let ray : i64 = WB_Y[ra]   let raz : i64 = WB_Z[ra]   let rr : i64 = WB_RA[ra]
+    let mut best : i64 = 0i64   let mut haveb : i64 = 0i64   let mut bdd : i64 = 0i64   let mut bsm : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < WB_N {
+        let kj : i64 = WB_KIND[j as u64]
+        let notself : i64 = j - ref
+        if kj == 1i64 { if notself != 0i64 {
+            let jb : u64 = j as u64
+            let dx : i64 = WB_X[jb] - rax   let dy : i64 = WB_Y[jb] - ray   let dz : i64 = WB_Z[jb] - raz
+            let dd : i64 = dx*dx + dy*dy + dz*dz
+            let orad : i64 = WB_RA[jb]
+            let sm : i64 = rr + orad
+            let diff : i64 = dd - sm*sm
+            if haveb == 0i64 { best = diff   bdd = dd   bsm = sm   WB_CB = j   haveb = 1i64 } else { if diff < best { best = diff   bdd = dd   bsm = sm   WB_CB = j } }
+        } }
+        j = j + 1i64
+    }
+    if haveb == 1i64 {
+        WB_CA = ref   WB_CPEN = best   WB_CST = wbk_collide_sign(bdd, bsm) as i64
+    }
+    return 0i32
+}
+
+/* PHOTON (Sqrt-sum EXACT depth order -- the z-fight killer).  Ray o+t*d vs sphere -> integer quadratic A t^2 + B t + C.
+ * hit = sign(Delta) integer; forward entry t = (-B - sqrt(Delta))/(2A).  All candidates share ONE ray (same A>0), so
+ * t_j < t_i  <=>  sign[ (B_i - B_j).sqrt(1)  +  (+1).sqrt(Delta_i)  +  (-1).sqrt(Delta_j) ] < 0  -- an n=3 Sqrt-sum sign
+ * decided EXACTLY by sqrtsum_lazy3.  Never z-fights, never mis-orders a near-tie. */
+fn wb_photon_eval() -> i32 {
+    WB_HP = 0i64 - 1i64   WB_HO = 0i64 - 1i64   WB_HN = 0i64   WB_HDEN = 1i64
+    let mut pi : i64 = 0i64 - 1i64
+    if WB_SEL >= 0i64 { let ks : i64 = WB_KIND[WB_SEL as u64]   if ks == 3i64 { pi = WB_SEL } }
+    if pi < 0i64 { let mut i : i64 = 0i64   while i < WB_N { let ki : i64 = WB_KIND[i as u64]   if ki == 3i64 { pi = i   i = WB_N } else { i = i + 1i64 } } }
+    if pi < 0i64 { return 0i32 }
+    WB_HP = pi
+    let p : u64 = pi as u64
+    let ox : i64 = WB_X[p]   let oy : i64 = WB_Y[p]   let oz : i64 = WB_Z[p]
+    let dx : i64 = WB_DX[p]  let dy : i64 = WB_DY[p]  let dz : i64 = WB_DZ[p]
+    let aa : i64 = dx*dx + dy*dy + dz*dz
+    let mut bset : i64 = 0i64   let mut bi : i64 = 0i64 - 1i64   let mut bB : i64 = 0i64   let mut bD : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < WB_N {
+        let kj : i64 = WB_KIND[j as u64]
+        if kj == 1i64 {
+            let jb : u64 = j as u64
+            let ex : i64 = ox - WB_X[jb]   let ey : i64 = oy - WB_Y[jb]   let ez : i64 = oz - WB_Z[jb]
+            let r : i64 = WB_RA[jb]
+            let bb : i64 = 2i64 * (dx*ex + dy*ey + dz*ez)
+            let cc : i64 = ex*ex + ey*ey + ez*ez - r*r
+            let delta : i64 = bb*bb - 4i64*aa*cc
+            if delta >= 0i64 { if bb <= 0i64 { if cc >= 0i64 {
+                if bset == 0i64 { bi = j   bB = bb   bD = delta   bset = 1i64 } else {
+                    /* is candidate (bb,delta) nearer than best (bB,bD)?  sign(t_best - t_cand) > 0  =>  candidate nearer */
+                    let sg : i32 = wbk_order_sign(bB, bD, bb, delta)
+                    if sg > 0i32 { bi = j   bB = bb   bD = delta }
+                }
+            } } }
+        }
+        j = j + 1i64
+    }
+    if bset == 1i64 {
+        WB_HO = bi
+        let sq : i64 = wb_isqrt(bD)
+        WB_HN = (0i64 - bB) - sq   WB_HDEN = 2i64 * aa
+    }
+    return 0i32
+}
+
+/* CALC (Sqrt-sum EXACT relay).  Given four scene points S,R1,R2,T: which relay route is exactly shorter?
+ * |S->R1->T| vs |S->R2->T|  =  sign[ sqrt(d(S,R1)) + sqrt(d(R1,T)) - sqrt(d(S,R2)) - sqrt(d(R2,T)) ] -- n=4 Sqrt-sum. */
+fn wb_dist2(a: i64, b: i64) -> i64 {
+    let au : u64 = a as u64   let bu : u64 = b as u64
+    let dx : i64 = WB_X[au] - WB_X[bu]   let dy : i64 = WB_Y[au] - WB_Y[bu]   let dz : i64 = WB_Z[au] - WB_Z[bu]
+    return dx*dx + dy*dy + dz*dz
+}
+fn wb_calc_eval() -> i32 {
+    WB_XA = 0i64 - 1i64   WB_XB = 0i64 - 1i64   WB_XST = 3i64
+    if WB_N < 4i64 { return 0i32 }
+    let s : i64 = 0i64   let r1 : i64 = 1i64   let r2 : i64 = 2i64   let t : i64 = WB_N - 1i64
+    WB_XA = r1   WB_XB = r2
+    let sg : i32 = wbk_relay_sign(wb_dist2(s, r1), wb_dist2(r1, t), wb_dist2(s, r2), wb_dist2(r2, t))
+    WB_XST = sg as i64
+    return 0i32
+}
+fn wb_eval() -> i32 { wb_coll_eval()   wb_photon_eval()   wb_calc_eval()   return 0i32 }
+
+/* ── draw the scene ───────────────────────────────────────────────────────────────────────────────── */
+fn wb_ring(cx: i64, cy: i64, cz: i64, r1: i64, r2: i64, mode: i64, col: u32) -> i32 {
+    let mut px : i64 = 0i64   let mut py : i64 = 0i64   let mut have : i32 = 0i32
+    let mut s : i64 = 0i64
+    while s <= 32i64 {
+        let ang : i64 = s * 8i64
+        let c1 : i64 = (r1 * w_cs(ang)) / 1024i64
+        let c2 : i64 = (r2 * w_sn(ang)) / 1024i64
+        let mut wx : i64 = cx   let mut wy : i64 = cy   let mut wz : i64 = cz
+        if mode == 0i64 { wx = cx + c1   wy = cy + c2 }
+        if mode == 1i64 { wx = cx + c1   wz = cz + c2 }
+        if mode == 2i64 { wy = cy + c1   wz = cz + c2 }
+        w_proj(wx, wy, wz)
+        if PVIS == 1i32 { if have == 1i32 { fb_line(px, py, PX, PY, col) }   px = PX   py = PY   have = 1i32 } else { have = 0i32 }
+        s = s + 1i64
+    }
+    return 0i32
+}
+fn wb_draw_shape(i: i64) -> i32 {
+    let b : u64 = i as u64
+    let cx : i64 = WB_X[b]   let cy : i64 = WB_Y[b]   let cz : i64 = WB_Z[b]
+    let ra : i64 = WB_RA[b]  let rb : i64 = WB_RB[b]  let rc : i64 = WB_RC[b]
+    let mut col : u32 = WB_COL[b]
+    let cst : i64 = WB_CST
+    if cst < 0i64 { let ca : i64 = WB_CA   let cb : i64 = WB_CB   if i == ca { col = 0xFF5A5Au32 }   if i == cb { col = 0xFF5A5Au32 } }
+    let sel : i64 = WB_SEL
+    if i == sel { col = 0xFFFFFFu32 }
+    wb_ring(cx,cy,cz, ra,rb, 0i64, col)
+    wb_ring(cx,cy,cz, ra,rc, 1i64, col)
+    wb_ring(cx,cy,cz, rb,rc, 2i64, col)
+    w_proj(cx,cy,cz)
+    if PVIS == 1i32 { if i == sel { fb_dot(PX,PY,3i64,0xFFFFFFu32) } else { fb_dot(PX,PY,1i64,col) } }
+    return 0i32
+}
+fn wb_draw_photon(i: i64) -> i32 {
+    let b : u64 = i as u64
+    let ox : i64 = WB_X[b]   let oy : i64 = WB_Y[b]   let oz : i64 = WB_Z[b]
+    let dx : i64 = WB_DX[b]  let dy : i64 = WB_DY[b]  let dz : i64 = WB_DZ[b]
+    let mut ex : i64 = ox + dx * 4i64   let mut ey : i64 = oy + dy * 4i64   let mut ez : i64 = oz + dz * 4i64
+    let hp : i64 = WB_HP   let ho : i64 = WB_HO
+    let mut hit : i32 = 0i32
+    if hp == i { if ho >= 0i64 {
+        let den : i64 = WB_HDEN   let num : i64 = WB_HN
+        if den != 0i64 { ex = ox + (num * dx) / den   ey = oy + (num * dy) / den   ez = oz + (num * dz) / den   hit = 1i32 }
+    } }
+    let mut col : u32 = 0xFFE24Du32
+    let sel : i64 = WB_SEL   if i == sel { col = 0xFFF6C0u32 }
+    w_proj(ox,oy,oz)   let sx : i64 = PX   let sy : i64 = PY   let sv : i32 = PVIS
+    w_proj(ex,ey,ez)   let tx : i64 = PX   let ty : i64 = PY   let tv : i32 = PVIS
+    if sv == 1i32 { if tv == 1i32 { fb_line(sx,sy,tx,ty, col) } }
+    if sv == 1i32 { fb_dot(sx,sy,2i64, 0xFFF0A0u32) }
+    if hit == 1i32 { if tv == 1i32 { fb_dot(tx,ty,4i64, 0xFF3020u32)   fb_dot(tx,ty,1i64,0xFFFFFFu32) } }
+    return 0i32
+}
+fn wb_draw_grid() -> i32 {
+    let mut g : i64 = 0i64 - 240i64
+    while g <= 240i64 {
+        w_proj(g, 0i64, 0i64 - 240i64)   let ax : i64 = PX   let ay : i64 = PY   let av : i32 = PVIS
+        w_proj(g, 0i64, 240i64)          let bx : i64 = PX   let by : i64 = PY   let bv : i32 = PVIS
+        if av == 1i32 { if bv == 1i32 { fb_line(ax,ay,bx,by, 0x141826u32) } }
+        w_proj(0i64 - 240i64, 0i64, g)   let cx2 : i64 = PX   let cy2 : i64 = PY   let cv : i32 = PVIS
+        w_proj(240i64, 0i64, g)          let dx2 : i64 = PX   let dy2 : i64 = PY   let dv : i32 = PVIS
+        if cv == 1i32 { if dv == 1i32 { fb_line(cx2,cy2,dx2,dy2, 0x141826u32) } }
+        g = g + 60i64
+    }
+    return 0i32
+}
+fn wb_seg(a: i64, b: i64, col: u32) -> i32 {
+    let au : u64 = a as u64   let bu : u64 = b as u64
+    w_proj(WB_X[au],WB_Y[au],WB_Z[au])   let ax : i64 = PX   let ay : i64 = PY   let av : i32 = PVIS
+    w_proj(WB_X[bu],WB_Y[bu],WB_Z[bu])   let bx : i64 = PX   let by : i64 = PY   let bv : i32 = PVIS
+    if av == 1i32 { if bv == 1i32 { fb_line(ax,ay,bx,by,col) } }
+    return 0i32
+}
+fn wb_draw_relay() -> i32 {
+    if WB_XSHOW == 0u8 { return 0i32 }
+    let xst : i64 = WB_XST   if xst == 3i64 { return 0i32 }
+    let s : i64 = 0i64   let t : i64 = WB_N - 1i64   let r1 : i64 = WB_XA   let r2 : i64 = WB_XB
+    wb_seg(s, r1, 0x66FF88u32)   wb_seg(r1, t, 0x66FF88u32)
+    wb_seg(s, r2, 0xFF9840u32)   wb_seg(r2, t, 0xFF9840u32)
+    return 0i32
+}
+fn wb_render() -> i32 {
+    fb_clear(0x07070Eu32)
+    wb_eval()
+    wb_draw_grid()
+    /* origin axes */
+    w_proj(0i64,0i64,0i64)   let ax : i64 = PX   let ay : i64 = PY   let av : i32 = PVIS
+    w_proj(140i64,0i64,0i64) let x1 : i64 = PX   let y1 : i64 = PY   let v1 : i32 = PVIS   if av==1i32 { if v1==1i32 { fb_line(ax,ay,x1,y1,0x883333u32) } }
+    w_proj(0i64,140i64,0i64) let x2 : i64 = PX   let y2 : i64 = PY   let v2 : i32 = PVIS   if av==1i32 { if v2==1i32 { fb_line(ax,ay,x2,y2,0x338833u32) } }
+    w_proj(0i64,0i64,140i64) let x3 : i64 = PX   let y3 : i64 = PY   let v3 : i32 = PVIS   if av==1i32 { if v3==1i32 { fb_line(ax,ay,x3,y3,0x333388u32) } }
+    wb_draw_relay()
+    let mut i : i64 = 0i64
+    while i < WB_N {
+        let k : i64 = WB_KIND[i as u64]
+        if k == 3i64 { wb_draw_photon(i) } else { wb_draw_shape(i) }
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+fn build_scene(m: u8) -> i32 {
+    NPT = 0u64   NLN = 0u64
+    build_axes()
+    if m == 0u8 { NPT = 0u64   NLN = 0u64   wb_init() }
+    if m == 4u8 { NPT = 0u64   NLN = 0u64   build_sysmap() }
+    if m == 1u8 { build_lattice() }
+    if m == 2u8 {
+        build_ellipsoid(0i64 - 150i64, 0i64, 0i64, 66i64, 66i64, 66i64, 0x6FA8FFu32)   /* sphere */
+        build_ellipsoid(0i64, 0i64, 0i64, 96i64, 52i64, 60i64, 0x9060FFu32)             /* ellipsoid */
+        build_csg(150i64)                                                                /* exact CSG solid */
+    }
+    if m == 3u8 { build_wire() }
+    return 0i32
+}
+
+fn render_frame() -> i32 {
+    if MODE == 0u8 { wb_render()   return 0i32 }
+    if MODE == 4u8 { draw_graph_frame()   return 0i32 }
+    fb_clear(0x0A0A14u32)
+    /* lines */
+    let mut i : u64 = 0u64
+    while i < NLN {
+        w_proj(LX0[i], LY0[i], LZ0[i])   let ax : i64 = PX   let ay : i64 = PY   let av : i32 = PVIS
+        w_proj(LX1[i], LY1[i], LZ1[i])   let bx : i64 = PX   let by : i64 = PY   let bv : i32 = PVIS
+        if av == 1i32 { if bv == 1i32 { fb_line(ax, ay, bx, by, LLC[i]) } }
+        i = i + 1u64
+    }
+    /* points (size grows as they come closer) */
+    i = 0u64
+    while i < NPT {
+        w_proj(SPX[i], SPY[i], SPZ[i])
+        if PVIS == 1i32 {
+            let mut r : i64 = SPR[i]
+            if PZC < 520i64 { r = r + 1i64 }
+            fb_dot(PX, PY, r, SPC[i])
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn wndproc(hwnd: u64, msg: u64, wp: u64, lp: u64) -> u64 @abi(c-msvc-x64) {
+    if msg == 2u64 { VW_RUN = 0u8   PostQuitMessage(0i32)   return 0u64 }
+    if msg == 5u64 {
+        let w : i64 = (lp & 0xFFFFu64) as i64   let h : i64 = ((lp >> 16u64) & 0xFFFFu64) as i64
+        if w > 0i64 { if w <= 1280i64 { VW_W = w } else { VW_W = 1280i64 } }
+        if h > 0i64 { if h <= 800i64 { VW_H = h } else { VW_H = 800i64 } }
+        return 0u64
+    }
+    if msg == 513u64 { MDOWN = 1u8   MMOVED = 0u8   MLX = w_i16(lp & 0xFFFFu64)   MLY = w_i16((lp >> 16u64) & 0xFFFFu64)   return 0u64 }
+    if msg == 514u64 { MDOWN = 0u8   if MMOVED == 0u8 { NEEDCLICK = 1u8   CLKX = w_i16(lp & 0xFFFFu64)   CLKY = w_i16((lp >> 16u64) & 0xFFFFu64) }   return 0u64 }
+    if msg == 512u64 {
+        let mx : i64 = w_i16(lp & 0xFFFFu64)   let my : i64 = w_i16((lp >> 16u64) & 0xFFFFu64)
+        if MDOWN == 1u8 {
+            let mut adx : i64 = mx - MLX   if adx < 0i64 { adx = 0i64 - adx }
+            let mut ady : i64 = my - MLY   if ady < 0i64 { ady = 0i64 - ady }
+            if (adx + ady) > 3i64 { MMOVED = 1u8 }
+            YAW = YAW + (mx - MLX)
+            PITCH = PITCH + (my - MLY)
+            if PITCH > 62i64 { PITCH = 62i64 }   if PITCH < (0i64 - 62i64) { PITCH = 0i64 - 62i64 }
+        }
+        MLX = mx   MLY = my   return 0u64
+    }
+    if msg == 522u64 {
+        let d : i64 = w_i16((wp >> 16u64) & 0xFFFFu64)
+        if d > 0i64 { ZOOM = ZOOM + 90i64 } else { ZOOM = ZOOM - 90i64 }
+        if ZOOM < 160i64 { ZOOM = 160i64 }   if ZOOM > 4000i64 { ZOOM = 4000i64 }
+        return 0u64
+    }
+    if msg == 256u64 {
+        if wp == 81u64 { VW_RUN = 0u8 }
+        if wp == 27u64 { VW_RUN = 0u8 }
+        if wp == 48u64 { MODE = 0u8   NEED = 1u8 }
+        if wp == 49u64 { MODE = 1u8   NEED = 1u8 }
+        if wp == 50u64 { MODE = 2u8   NEED = 1u8 }
+        if wp == 51u64 { MODE = 3u8   NEED = 1u8 }
+        if wp == 52u64 { MODE = 4u8   NEED = 1u8 }
+        if wp == 82u64 { YAW = 32i64   PITCH = 24i64   ZOOM = 900i64   SELN = 0i64 - 1i64 }
+        /* WORKBENCH: summon constructs (auto-switches to the workbench) */
+        if wp == 83u64 { MODE = 0u8   wb_add(1i64) }                 /* S sphere    */
+        if wp == 69u64 { MODE = 0u8   wb_add(2i64) }                 /* E ellipsoid */
+        if wp == 80u64 { MODE = 0u8   wb_add(3i64) }                 /* P photon    */
+        if wp == 88u64 { if WB_XSHOW == 0u8 { WB_XSHOW = 1u8 } else { WB_XSHOW = 0u8 } }   /* X routes */
+        if MODE == 0u8 {
+            if wp == 9u64  { wb_cycle() }                            /* Tab select  */
+            if wp == 46u64 { wb_del() }                             /* Del remove  */
+            if wp == 8u64  { wb_del() }                             /* Backspace   */
+            if wp == 37u64 { wb_move(0i64 - 12i64, 0i64, 0i64) }    /* Left  -X */
+            if wp == 39u64 { wb_move(12i64, 0i64, 0i64) }           /* Right +X */
+            if wp == 38u64 { wb_move(0i64, 0i64, 12i64) }           /* Up    +Z */
+            if wp == 40u64 { wb_move(0i64, 0i64, 0i64 - 12i64) }    /* Down  -Z */
+            if wp == 33u64 { wb_move(0i64, 12i64, 0i64) }           /* PgUp  +Y */
+            if wp == 34u64 { wb_move(0i64, 0i64 - 12i64, 0i64) }    /* PgDn  -Y */
+            if wp == 71u64 { wb_grow(8i64) }                        /* G grow  */
+            if wp == 72u64 { wb_grow(0i64 - 8i64) }                 /* H shrink*/
+        }
+        return 0u64
+    }
+    return DefWindowProcA(hwnd, msg, wp, lp)
+}
+
+fn w_init_sin() -> i32 {
+    SN[0u64]=0i64 SN[1u64]=25i64 SN[2u64]=50i64 SN[3u64]=75i64 SN[4u64]=100i64 SN[5u64]=125i64 SN[6u64]=150i64 SN[7u64]=175i64
+    SN[8u64]=200i64 SN[9u64]=224i64 SN[10u64]=249i64 SN[11u64]=273i64 SN[12u64]=297i64 SN[13u64]=321i64 SN[14u64]=345i64 SN[15u64]=369i64
+    SN[16u64]=392i64 SN[17u64]=415i64 SN[18u64]=438i64 SN[19u64]=460i64 SN[20u64]=483i64 SN[21u64]=505i64 SN[22u64]=526i64 SN[23u64]=548i64
+    SN[24u64]=569i64 SN[25u64]=590i64 SN[26u64]=610i64 SN[27u64]=630i64 SN[28u64]=650i64 SN[29u64]=669i64 SN[30u64]=688i64 SN[31u64]=706i64
+    SN[32u64]=724i64 SN[33u64]=742i64 SN[34u64]=759i64 SN[35u64]=775i64 SN[36u64]=792i64 SN[37u64]=807i64 SN[38u64]=822i64 SN[39u64]=837i64
+    SN[40u64]=851i64 SN[41u64]=865i64 SN[42u64]=878i64 SN[43u64]=891i64 SN[44u64]=903i64 SN[45u64]=915i64 SN[46u64]=926i64 SN[47u64]=936i64
+    SN[48u64]=946i64 SN[49u64]=955i64 SN[50u64]=964i64 SN[51u64]=972i64 SN[52u64]=980i64 SN[53u64]=987i64 SN[54u64]=993i64 SN[55u64]=999i64
+    SN[56u64]=1004i64 SN[57u64]=1009i64 SN[58u64]=1013i64 SN[59u64]=1016i64 SN[60u64]=1019i64 SN[61u64]=1021i64 SN[62u64]=1023i64 SN[63u64]=1024i64
+    SN[64u64]=1024i64 SN[65u64]=1024i64 SN[66u64]=1023i64 SN[67u64]=1021i64 SN[68u64]=1019i64 SN[69u64]=1016i64 SN[70u64]=1013i64 SN[71u64]=1009i64
+    SN[72u64]=1004i64 SN[73u64]=999i64 SN[74u64]=993i64 SN[75u64]=987i64 SN[76u64]=980i64 SN[77u64]=972i64 SN[78u64]=964i64 SN[79u64]=955i64
+    SN[80u64]=946i64 SN[81u64]=936i64 SN[82u64]=926i64 SN[83u64]=915i64 SN[84u64]=903i64 SN[85u64]=891i64 SN[86u64]=878i64 SN[87u64]=865i64
+    SN[88u64]=851i64 SN[89u64]=837i64 SN[90u64]=822i64 SN[91u64]=807i64 SN[92u64]=792i64 SN[93u64]=775i64 SN[94u64]=759i64 SN[95u64]=742i64
+    SN[96u64]=724i64 SN[97u64]=706i64 SN[98u64]=688i64 SN[99u64]=669i64 SN[100u64]=650i64 SN[101u64]=630i64 SN[102u64]=610i64 SN[103u64]=590i64
+    SN[104u64]=569i64 SN[105u64]=548i64 SN[106u64]=526i64 SN[107u64]=505i64 SN[108u64]=483i64 SN[109u64]=460i64 SN[110u64]=438i64 SN[111u64]=415i64
+    SN[112u64]=392i64 SN[113u64]=369i64 SN[114u64]=345i64 SN[115u64]=321i64 SN[116u64]=297i64 SN[117u64]=273i64 SN[118u64]=249i64 SN[119u64]=224i64
+    SN[120u64]=200i64 SN[121u64]=175i64 SN[122u64]=150i64 SN[123u64]=125i64 SN[124u64]=100i64 SN[125u64]=75i64 SN[126u64]=50i64 SN[127u64]=25i64
+    SN[128u64]=0i64 SN[129u64]=(0i64-25i64) SN[130u64]=(0i64-50i64) SN[131u64]=(0i64-75i64) SN[132u64]=(0i64-100i64) SN[133u64]=(0i64-125i64) SN[134u64]=(0i64-150i64) SN[135u64]=(0i64-175i64)
+    SN[136u64]=(0i64-200i64) SN[137u64]=(0i64-224i64) SN[138u64]=(0i64-249i64) SN[139u64]=(0i64-273i64) SN[140u64]=(0i64-297i64) SN[141u64]=(0i64-321i64) SN[142u64]=(0i64-345i64) SN[143u64]=(0i64-369i64)
+    SN[144u64]=(0i64-392i64) SN[145u64]=(0i64-415i64) SN[146u64]=(0i64-438i64) SN[147u64]=(0i64-460i64) SN[148u64]=(0i64-483i64) SN[149u64]=(0i64-505i64) SN[150u64]=(0i64-526i64) SN[151u64]=(0i64-548i64)
+    SN[152u64]=(0i64-569i64) SN[153u64]=(0i64-590i64) SN[154u64]=(0i64-610i64) SN[155u64]=(0i64-630i64) SN[156u64]=(0i64-650i64) SN[157u64]=(0i64-669i64) SN[158u64]=(0i64-688i64) SN[159u64]=(0i64-706i64)
+    SN[160u64]=(0i64-724i64) SN[161u64]=(0i64-742i64) SN[162u64]=(0i64-759i64) SN[163u64]=(0i64-775i64) SN[164u64]=(0i64-792i64) SN[165u64]=(0i64-807i64) SN[166u64]=(0i64-822i64) SN[167u64]=(0i64-837i64)
+    SN[168u64]=(0i64-851i64) SN[169u64]=(0i64-865i64) SN[170u64]=(0i64-878i64) SN[171u64]=(0i64-891i64) SN[172u64]=(0i64-903i64) SN[173u64]=(0i64-915i64) SN[174u64]=(0i64-926i64) SN[175u64]=(0i64-936i64)
+    SN[176u64]=(0i64-946i64) SN[177u64]=(0i64-955i64) SN[178u64]=(0i64-964i64) SN[179u64]=(0i64-972i64) SN[180u64]=(0i64-980i64) SN[181u64]=(0i64-987i64) SN[182u64]=(0i64-993i64) SN[183u64]=(0i64-999i64)
+    SN[184u64]=(0i64-1004i64) SN[185u64]=(0i64-1009i64) SN[186u64]=(0i64-1013i64) SN[187u64]=(0i64-1016i64) SN[188u64]=(0i64-1019i64) SN[189u64]=(0i64-1021i64) SN[190u64]=(0i64-1023i64) SN[191u64]=(0i64-1024i64)
+    SN[192u64]=(0i64-1024i64) SN[193u64]=(0i64-1024i64) SN[194u64]=(0i64-1023i64) SN[195u64]=(0i64-1021i64) SN[196u64]=(0i64-1019i64) SN[197u64]=(0i64-1016i64) SN[198u64]=(0i64-1013i64) SN[199u64]=(0i64-1009i64)
+    SN[200u64]=(0i64-1004i64) SN[201u64]=(0i64-999i64) SN[202u64]=(0i64-993i64) SN[203u64]=(0i64-987i64) SN[204u64]=(0i64-980i64) SN[205u64]=(0i64-972i64) SN[206u64]=(0i64-964i64) SN[207u64]=(0i64-955i64)
+    SN[208u64]=(0i64-946i64) SN[209u64]=(0i64-936i64) SN[210u64]=(0i64-926i64) SN[211u64]=(0i64-915i64) SN[212u64]=(0i64-903i64) SN[213u64]=(0i64-891i64) SN[214u64]=(0i64-878i64) SN[215u64]=(0i64-865i64)
+    SN[216u64]=(0i64-851i64) SN[217u64]=(0i64-837i64) SN[218u64]=(0i64-822i64) SN[219u64]=(0i64-807i64) SN[220u64]=(0i64-792i64) SN[221u64]=(0i64-775i64) SN[222u64]=(0i64-759i64) SN[223u64]=(0i64-742i64)
+    SN[224u64]=(0i64-724i64) SN[225u64]=(0i64-706i64) SN[226u64]=(0i64-688i64) SN[227u64]=(0i64-669i64) SN[228u64]=(0i64-650i64) SN[229u64]=(0i64-630i64) SN[230u64]=(0i64-610i64) SN[231u64]=(0i64-590i64)
+    SN[232u64]=(0i64-569i64) SN[233u64]=(0i64-548i64) SN[234u64]=(0i64-526i64) SN[235u64]=(0i64-505i64) SN[236u64]=(0i64-483i64) SN[237u64]=(0i64-460i64) SN[238u64]=(0i64-438i64) SN[239u64]=(0i64-415i64)
+    SN[240u64]=(0i64-392i64) SN[241u64]=(0i64-369i64) SN[242u64]=(0i64-345i64) SN[243u64]=(0i64-321i64) SN[244u64]=(0i64-297i64) SN[245u64]=(0i64-273i64) SN[246u64]=(0i64-249i64) SN[247u64]=(0i64-224i64)
+    SN[248u64]=(0i64-200i64) SN[249u64]=(0i64-175i64) SN[250u64]=(0i64-150i64) SN[251u64]=(0i64-125i64) SN[252u64]=(0i64-100i64) SN[253u64]=(0i64-75i64) SN[254u64]=(0i64-50i64) SN[255u64]=(0i64-25i64)
+    return 0i32
+}
+
+fn w_strlen(s: u64) -> i64 { let p : *u8 = s as *u8   let mut i : i64 = 0i64   while p[i as u64] != 0u8 { i = i + 1i64 }   return i }
+fn w_text(dc: u64, x: i32, y: i32, s: u64) -> i32 { TextOutA(dc, x, y, s, w_strlen(s) as i32)   return 0i32 }
+fn w_snumtext(dc: u64, x: i32, y: i32, v: i64) -> i32 {
+    if v < 0i64 { TextOutA(dc, x, y, "-" as u64, 1i32)   w_numtext(dc, x + 7i32, y, 0i64 - v) } else { w_numtext(dc, x, y, v) }
+    return 0i32
+}
+
+/* the WORKBENCH readout: III's exact verdicts in words + real numbers, updated live every frame. */
+fn wb_readout(dc: u64) -> i32 {
+    SetTextColor(dc, 0x0080E0FFu32)
+    w_text(dc, 14i32, 30i32, "[WORKBENCH]  summon & move exact constructs  ->  every interaction decided by EXACT algebra: integer + sum-of-square-roots signs (no float)" as u64)
+    let sel : i64 = WB_SEL
+    SetTextColor(dc, 0x00FFFFFFu32)
+    w_text(dc, 14i32, 50i32, "selected:" as u64)
+    if sel >= 0i64 {
+        let sb : u64 = sel as u64   let k : i64 = WB_KIND[sb]
+        w_text(dc, 92i32, 50i32, wb_kind_name(k))
+        w_text(dc, 196i32, 50i32, "#" as u64)   w_numtext(dc, 206i32, 50i32, sel)
+        w_text(dc, 236i32, 50i32, "pos (" as u64)
+        w_snumtext(dc, 278i32, 50i32, WB_X[sb])   w_text(dc, 316i32, 50i32, "," as u64)
+        w_snumtext(dc, 326i32, 50i32, WB_Y[sb])   w_text(dc, 364i32, 50i32, "," as u64)
+        w_snumtext(dc, 374i32, 50i32, WB_Z[sb])   w_text(dc, 412i32, 50i32, ")" as u64)
+    } else { w_text(dc, 92i32, 50i32, "(none - press Tab or add one)" as u64) }
+
+    let yl0 : i32 = (VW_H - 96i64) as i32
+    let yl1 : i32 = (VW_H - 76i64) as i32
+    let yl2 : i32 = (VW_H - 56i64) as i32
+
+    SetTextColor(dc, 0x0066FF88u32)
+    w_text(dc, 14i32, yl0, "COLLISION (sphere, exact):" as u64)
+    let ca : i64 = WB_CA
+    if ca >= 0i64 {
+        w_text(dc, 236i32, yl0, "sphere #" as u64)   w_numtext(dc, 300i32, yl0, WB_CA)
+        w_text(dc, 322i32, yl0, "vs #" as u64)       w_numtext(dc, 356i32, yl0, WB_CB)
+        let cst : i64 = WB_CST
+        if cst > 0i64 { SetTextColor(dc, 0x0080FF80u32)   w_text(dc, 386i32, yl0, "SEPARATED   gap^2 =" as u64)   w_numtext(dc, 526i32, yl0, WB_CPEN) }
+        if cst == 0i64 { SetTextColor(dc, 0x00FFFF60u32)  w_text(dc, 386i32, yl0, "TOUCHING  (exact tangency)" as u64) }
+        if cst < 0i64 { SetTextColor(dc, 0x00FF6060u32)   w_text(dc, 386i32, yl0, "OVERLAPPING   depth^2 =" as u64)   let pen : i64 = 0i64 - WB_CPEN   w_numtext(dc, 560i32, yl0, pen) }
+    } else { SetTextColor(dc, 0x00708090u32)   w_text(dc, 236i32, yl0, "add 2+ spheres (press S) and slide one into the other" as u64) }
+
+    SetTextColor(dc, 0x00FFE24Du32)
+    w_text(dc, 14i32, yl1, "PHOTON (Sqrt-sum exact depth order):" as u64)
+    let hp : i64 = WB_HP
+    if hp >= 0i64 {
+        w_text(dc, 300i32, yl1, "photon #" as u64)   w_numtext(dc, 366i32, yl1, WB_HP)
+        let ho : i64 = WB_HO
+        if ho >= 0i64 { SetTextColor(dc, 0x00FFD0A0u32)   w_text(dc, 392i32, yl1, "->  nearest hit = sphere #" as u64)   w_numtext(dc, 600i32, yl1, WB_HO)   w_text(dc, 626i32, yl1, "(exact Sqrt-sum ordering, no float)" as u64) }
+        else { SetTextColor(dc, 0x00A09070u32)   w_text(dc, 392i32, yl1, "->  no sphere in its path" as u64) }
+    } else { SetTextColor(dc, 0x00A09070u32)   w_text(dc, 300i32, yl1, "press P to fire a photon into the scene" as u64) }
+
+    SetTextColor(dc, 0x00C0A0FFu32)
+    w_text(dc, 14i32, yl2, "CALC (Sqrt-sum exact relay):" as u64)
+    let xst : i64 = WB_XST
+    if xst == 3i64 { SetTextColor(dc, 0x00807090u32)   w_text(dc, 236i32, yl2, "need >=4 constructs for a relay measurement (press X to draw the routes)" as u64) } else {
+        w_text(dc, 236i32, yl2, "S->#" as u64)   w_numtext(dc, 274i32, yl2, WB_XA)
+        w_text(dc, 296i32, yl2, "->T   vs   S->#" as u64)   w_numtext(dc, 416i32, yl2, WB_XB)   w_text(dc, 438i32, yl2, "->T :" as u64)
+        SetTextColor(dc, 0x00E0C0FFu32)
+        if xst < 0i64 { w_text(dc, 480i32, yl2, "via #" as u64)   w_numtext(dc, 520i32, yl2, WB_XA)   w_text(dc, 542i32, yl2, "is EXACTLY shorter" as u64) }
+        if xst > 0i64 { w_text(dc, 480i32, yl2, "via #" as u64)   w_numtext(dc, 520i32, yl2, WB_XB)   w_text(dc, 542i32, yl2, "is EXACTLY shorter" as u64) }
+        if xst == 0i64 { w_text(dc, 480i32, yl2, "the two routes are EXACTLY equal" as u64) }
+    }
+
+    SetTextColor(dc, 0x00A0A0B0u32)
+    w_text(dc, 14i32, (VW_H - 24i64) as i32, "[S]phere [E]llipsoid [P]hoton   arrows + PgUp/PgDn move   [G/H] size   [X] routes   Tab select   Del remove   drag=rotate wheel=zoom   [4] atlas   [Q]uit" as u64)
+    return 0i32
+}
+
+fn main() -> u64 {
+    w_init_sin()
+    let inst : u64 = GetModuleHandleA(0u64)
+    CLS[0u64]=65u8 CLS[1u64]=87u8 CLS[2u64]=111u8 CLS[3u64]=114u8 CLS[4u64]=108u8 CLS[5u64]=100u8 CLS[6u64]=0u8   /* "AWorld" */
+    TITLE[0u64]=73u8 TITLE[1u64]=73u8 TITLE[2u64]=73u8 TITLE[3u64]=32u8 TITLE[4u64]=65u8 TITLE[5u64]=69u8 TITLE[6u64]=84u8 TITLE[7u64]=72u8 TITLE[8u64]=69u8 TITLE[9u64]=82u8 TITLE[10u64]=45u8 TITLE[11u64]=87u8 TITLE[12u64]=79u8 TITLE[13u64]=82u8 TITLE[14u64]=76u8 TITLE[15u64]=68u8 TITLE[16u64]=0u8   /* "III AETHER-WORLD" */
+    WC[0u64]=0u64   WC[1u64]=(&wndproc) as u64   WC[2u64]=0u64   WC[3u64]=inst   WC[4u64]=0u64   WC[5u64]=0u64   WC[6u64]=0u64   WC[7u64]=0u64   WC[8u64]=(&CLS) as u64
+    RegisterClassA((&WC) as u64)
+    let hwnd : u64 = CreateWindowExA(0u32, (&CLS) as u64, (&TITLE) as u64, 0x10CF0000u32, 90i32, 90i32, 1000i32, 720i32, 0u64, 0u64, inst, 0u64)
+    if hwnd == 0u64 { return 1u64 }
+    ShowWindow(hwnd, 5i32)
+    GetClientRect(hwnd, (&RC) as u64)
+    VW_W = RC[2u64] as i64   VW_H = RC[3u64] as i64
+    if VW_W < 16i64 { VW_W = 960i64 }   if VW_H < 16i64 { VW_H = 680i64 }
+    YAW = 32i64   PITCH = 24i64   ZOOM = 900i64   WDIST = 980i64   MODE = 0u8   VW_RUN = 1u8   NEED = 0u8   MDOWN = 0u8
+    SELN = 0i64 - 1i64   NEEDCLICK = 0u8   MMOVED = 0u8   GSTAMP = 0i64
+    WB_N = 0i64   WB_SEL = 0i64 - 1i64   WB_XSHOW = 0u8
+    build_scene(MODE)
+    let dc : u64 = GetDC(hwnd)
+    SetBkMode(dc, 1i32)
+    let mut guard : u64 = 0u64
+    while VW_RUN == 1u8 {
+        while PeekMessageA((&MSG) as u64, 0u64, 0u32, 0u32, 1u32) != 0i32 { TranslateMessage((&MSG) as u64)   DispatchMessageA((&MSG) as u64) }
+        if NEED == 1u8 { build_scene(MODE)   NEED = 0u8 }
+        if NEEDCLICK == 1u8 { if MODE == 4u8 { do_select() }   NEEDCLICK = 0u8 }
+        render_frame()
+        BMI[0u64]=40u32   BMI[1u64]=(VW_W as u32)   BMI[2u64]=(0u32 - (VW_H as u32))   BMI[3u64]=1u32 | (32u32 << 16u32)   BMI[4u64]=0u32
+        BMI[5u64]=0u32 BMI[6u64]=0u32 BMI[7u64]=0u32 BMI[8u64]=0u32 BMI[9u64]=0u32
+        StretchDIBits(dc, 0i32, 0i32, VW_W as i32, VW_H as i32, 0i32, 0i32, VW_W as i32, VW_H as i32, (&FB) as u64, (&BMI) as u64, 0u32, 0x00CC0020u32)
+        SetTextColor(dc, 0x00FFFFFFu32)
+        w_text(dc, 14i32, 10i32, "III  AETHER-WORLD   -   the sovereign exact-geometry workbench" as u64)
+        SetTextColor(dc, 0x0080E0FFu32)
+        if MODE == 0u8 { wb_readout(dc) }
+        if MODE == 1u8 { w_text(dc, 14i32, 30i32, "[1] PHOTONIC LATTICE  +  exact O_h geodesic photon route (photon_route)   green=source  red=target" as u64) }
+        if MODE == 2u8 { w_text(dc, 14i32, 30i32, "[2] EXACT SHAPES  +  sphere-minus-cylinder CSG shell decided by csg_kernel (integer-exact membership)" as u64) }
+        if MODE == 3u8 { w_text(dc, 14i32, 30i32, "[3] WIREFRAME  -  cube + octahedron : edges (lines) and vertices (corners)" as u64) }
+        if MODE == 4u8 {
+            w_text(dc, 14i32, 30i32, "[4] SYSTEM MAP - III analysing ITSELF: 783 modules by DERIVED topological layer (bottom=foundation, top=app), size = transitive impact" as u64)
+            let mut cc : i64 = 0i64
+            while cc < 12i64 {
+                SetTextColor(dc, CCOL[cc as u64])
+                w_proj(CCX[cc as u64], CCY[cc as u64], CCZ[cc as u64])
+                if PVIS == 1i32 { w_text(dc, (PX + 5i64) as i32, (PY - 7i64) as i32, sys_name(cc)) }
+                cc = cc + 1i64
+            }
+            SetTextColor(dc, 0x00FFD24Du32)
+            w_text(dc, (VW_W - 330i64) as i32, 54i32, "CORES  (most modules depend on):" as u64)
+            let mut ci : u64 = 0u64
+            while ci < 5u64 {
+                let yy : i32 = (74i64 + (ci as i64) * 20i64) as i32
+                SetTextColor(dc, 0x00FFFFFFu32)   w_text(dc, (VW_W - 318i64) as i32, yy, gr_name(CORE[ci] as u64))
+                SetTextColor(dc, 0x0080E0FFu32)   w_numtext(dc, (VW_W - 96i64) as i32, yy, CIMP[ci])
+                ci = ci + 1u64
+            }
+            let sy2 : i32 = (VW_H - 52i64) as i32
+            if SELN >= 0i64 {
+                SetTextColor(dc, 0x00FFFFFFu32)   w_text(dc, 14i32, (VW_H - 74i64) as i32, "SELECTED:" as u64)   w_text(dc, 100i32, (VW_H - 74i64) as i32, gr_name(SELN as u64))
+                SetTextColor(dc, 0x0066FF88u32)   w_text(dc, 14i32, sy2, "needs (direct/all):" as u64)   w_numtext(dc, 190i32, sy2, OUTD[SELN as u64])   w_text(dc, 224i32, sy2, "/" as u64)   w_numtext(dc, 236i32, sy2, FOOT[SELN as u64])
+                SetTextColor(dc, 0x00FF9840u32)   w_text(dc, 330i32, sy2, "depended-on (direct/all):" as u64)   w_numtext(dc, 566i32, sy2, IND[SELN as u64])   w_text(dc, 600i32, sy2, "/" as u64)   w_numtext(dc, 612i32, sy2, IMPACT[SELN as u64])
+                SetTextColor(dc, 0x00FFD24Du32)   w_text(dc, 720i32, sy2, "layer:" as u64)   w_numtext(dc, 772i32, sy2, LEVEL[SELN as u64])
+            } else {
+                SetTextColor(dc, 0x0090A0B0u32)   w_text(dc, 14i32, sy2, "CLICK any module -> its name, what depends on it (orange cone), what it needs (green cone), and its layer" as u64)
+            }
+        }
+        if MODE != 0u8 {
+            SetTextColor(dc, 0x00A0A0B0u32)
+            w_text(dc, 14i32, (VW_H - 24i64) as i32, "[0] WORKBENCH   [1] photon lattice  [2] exact shapes+CSG  [3] wireframe  [4] system atlas   drag=rotate wheel=zoom  [R] reset  [Q] quit" as u64)
+        }
+        Sleep(8u32)
+        guard = guard + 1u64   if guard > 2000000u64 { VW_RUN = 0u8 }
+    }
+    ReleaseDC(hwnd, dc)
+    return 0u64
+}

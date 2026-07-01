@@ -17,6 +17,7 @@ OUT="$(mktemp -d)"; pass=0; fail=0
 "$I2" "$E/reactor.iii"    --compile-only --out "$OUT/reactor.o"    2>"$OUT/r.log" || { echo "FAIL reactor compile";    cat "$OUT/r.log"; exit 1; }
 "$I2" "$E/eidolon.iii"    --compile-only --out "$OUT/eidolon.o"    2>"$OUT/eid.log" || { echo "FAIL eidolon compile";    cat "$OUT/eid.log"; exit 1; }
 "$I2" "$A/sqrt_sum_sign.iii"  --compile-only --out "$OUT/sqrt_sum_sign.o"  2>"$OUT/ss.log"  || { echo "FAIL sqrt_sum_sign compile"; cat "$OUT/ss.log"; exit 1; }
+"$I2" "$A/kfield.iii"  --compile-only --out "$OUT/kfield.o"  2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
 "$I2" "$A/ui_exact_big.iii"   --compile-only --out "$OUT/ui_exact_big.o"   2>"$OUT/ueb.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/ueb.log"; exit 1; }
 "$I2" "$E/ripple_eidolon.iii" --compile-only --out "$OUT/ripple_eidolon.o" 2>"$OUT/re.log"  || { echo "FAIL ripple_eidolon compile"; cat "$OUT/re.log"; exit 1; }
 "$I2" "$E/eid_plan.iii"       --compile-only --out "$OUT/eid_plan.o"       2>"$OUT/ep.log"  || { echo "FAIL eid_plan compile"; cat "$OUT/ep.log"; exit 1; }
@@ -37,8 +38,8 @@ run 2129_epoch             99 "$OUT/epoch.o" "$OUT/involution.o" "$LIB"
 run 2130_disposers         99 "$OUT/disposer.o" "$OUT/involution.o" "$LIB"
 run 2131_reactor           99 "$OUT/reactor.o" "$OUT/epoch.o" "$OUT/membrane.o" "$OUT/involution.o" "$LIB"   # the resident reactor loop (sound Dynamic Reactor)
 run 2132_eidolon           99 "$OUT/eidolon.o" "$LIB"   # the self-identical primitive: exact where arithmetic is lossy
-run 2133_ripple_eidolon    99 "$OUT/ripple_eidolon.o" "$OUT/eidolon.o" "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$OUT/involution.o" "$LIB"   # eidolon wired INTO the ripple: exact-order edges
-run 2134_planner           99 "$OUT/eid_plan.o" "$OUT/ripple_eidolon.o" "$OUT/eidolon.o" "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$OUT/involution.o" "$LIB"   # exact-algebraic ripple-graph planner
+run 2133_ripple_eidolon    99 "$OUT/ripple_eidolon.o" "$OUT/eidolon.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$OUT/involution.o" "$LIB"   # eidolon wired INTO the ripple: exact-order edges
+run 2134_planner           99 "$OUT/eid_plan.o" "$OUT/ripple_eidolon.o" "$OUT/eidolon.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$OUT/involution.o" "$LIB"   # exact-algebraic ripple-graph planner
 
 echo "=== RIPPLE-MERGE KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

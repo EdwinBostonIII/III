@@ -1,0 +1,94 @@
+/* aether_lens_win.iii -- THE REAL VIEWER: III's own native graphical WINDOW, hand-rolled from raw Win32 + GDI syscalls
+ * (user32 + gdi32 + kernel32), NO toolkit, NO library, NO imported asset.  It opens a window on the desktop, renders the
+ * EXACT 3D scene (integer ray-caster; exact depth ordering via lens_t_cmp_fx -> no z-fighting at any angle), and paints
+ * it live -- you WATCH it spin and STEER it in real time with the keyboard.  Windows calls back into an III WNDPROC for
+ * input; the framebuffer (0x00RRGGBB = a 32bpp BI_RGB DIB) is StretchDIBits'd straight to the window each frame.
+ *
+ * CONTROLS:  A / <-  turn left   |   D / ->  turn right   |   Up / +  zoom in   |   Down / -  zoom out
+ *            SPACE  toggle auto-spin   |   Q / Esc  quit   |   or just close the window.
+ *
+ * What surpasses other viewers: the geometry on screen is EXACT (no float, no z-fight, bit-reproducible) and the whole
+ * stack -- ray cast, shading, window, blit -- is III's own.  Ring R0.  Composes aether_lens_frame (the exact caster). */
+module aether_lens_win
+
+extern @abi(c-msvc-x64) fn GetModuleHandleA(name: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn RegisterClassA(wc: u64) -> u16 from "user32"
+extern @abi(c-msvc-x64) fn CreateWindowExA(ex: u32, cls: u64, wname: u64, style: u32, x: i32, y: i32, w: i32, h: i32, parent: u64, menu: u64, inst: u64, param: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn DefWindowProcA(hwnd: u64, msg: u64, wp: u64, lp: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ShowWindow(hwnd: u64, cmd: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn PeekMessageA(msg: u64, hwnd: u64, mn: u32, mx: u32, rm: u32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn TranslateMessage(msg: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn DispatchMessageA(msg: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn GetDC(hwnd: u64) -> u64 from "user32"
+extern @abi(c-msvc-x64) fn ReleaseDC(hwnd: u64, dc: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn PostQuitMessage(code: i32) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn SetWindowTextA(hwnd: u64, s: u64) -> i32 from "user32"
+extern @abi(c-msvc-x64) fn StretchDIBits(dc: u64, xd: i32, yd: i32, wd: i32, hd: i32, xs: i32, ys: i32, ws: i32, hs: i32, bits: u64, bmi: u64, usage: u32, rop: u32) -> i32 from "gdi32"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
+
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_fb_addr() -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_set_focal(f: i64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_get_focal() -> i64 from "aether_lens_frame.iii"
+
+const RW : u64 = 192u64          /* internal exact-render resolution */
+const RH : u64 = 144u64
+const CW : i32 = 576i32          /* window client size (3x, StretchDIBits upscales) */
+const CH : i32 = 432i32
+const NANG : u64 = 36u64
+
+var WC : [u64; 9]   var BMI : [u32; 10]   var MSG : [u64; 8]
+var CLS : [u8; 12]  var TITLE : [u8; 24]
+var VW_ANG : u64    var VW_SPIN : u8   var VW_RUN : u8
+
+/* the WNDPROC Windows calls back into: window-close + keyboard, updating the shared view state. */
+fn wndproc(hwnd: u64, msg: u64, wp: u64, lp: u64) -> u64 @abi(c-msvc-x64) {
+    if msg == 2u64 { VW_RUN = 0u8   PostQuitMessage(0i32)   return 0u64 }          /* WM_DESTROY */
+    if msg == 256u64 {                                                              /* WM_KEYDOWN, wp = virtual-key */
+        if wp == 81u64 { VW_RUN = 0u8 }                                            /* Q */
+        if wp == 27u64 { VW_RUN = 0u8 }                                            /* Esc */
+        if wp == 65u64 { VW_SPIN = 0u8   if VW_ANG == 0u64 { VW_ANG = NANG }   VW_ANG = VW_ANG - 1u64 }   /* A  turn left */
+        if wp == 37u64 { VW_SPIN = 0u8   if VW_ANG == 0u64 { VW_ANG = NANG }   VW_ANG = VW_ANG - 1u64 }   /* Left */
+        if wp == 68u64 { VW_SPIN = 0u8   VW_ANG = VW_ANG + 1u64   if VW_ANG >= NANG { VW_ANG = 0u64 } }   /* D  turn right */
+        if wp == 39u64 { VW_SPIN = 0u8   VW_ANG = VW_ANG + 1u64   if VW_ANG >= NANG { VW_ANG = 0u64 } }   /* Right */
+        if wp == 32u64 { if VW_SPIN == 1u8 { VW_SPIN = 0u8 } else { VW_SPIN = 1u8 } }                     /* Space */
+        if wp == 38u64 { frame_set_focal(frame_get_focal() + 40i64) }              /* Up   zoom in */
+        if wp == 187u64 { frame_set_focal(frame_get_focal() + 40i64) }             /* =/+  zoom in */
+        if wp == 40u64 { frame_set_focal(frame_get_focal() - 40i64) }              /* Down zoom out */
+        if wp == 189u64 { frame_set_focal(frame_get_focal() - 40i64) }             /* -    zoom out */
+        return 0u64
+    }
+    return DefWindowProcA(hwnd, msg, wp, lp)
+}
+
+fn main() -> u64 {
+    let inst : u64 = GetModuleHandleA(0u64)
+    CLS[0u64]=65u8 CLS[1u64]=69u8 CLS[2u64]=76u8 CLS[3u64]=101u8 CLS[4u64]=110u8 CLS[5u64]=115u8 CLS[6u64]=0u8   /* "AELens" */
+    /* title: "III AETHER-LENS" */
+    TITLE[0u64]=73u8 TITLE[1u64]=73u8 TITLE[2u64]=73u8 TITLE[3u64]=32u8 TITLE[4u64]=65u8 TITLE[5u64]=69u8 TITLE[6u64]=84u8 TITLE[7u64]=72u8 TITLE[8u64]=69u8 TITLE[9u64]=82u8 TITLE[10u64]=45u8 TITLE[11u64]=76u8 TITLE[12u64]=69u8 TITLE[13u64]=78u8 TITLE[14u64]=83u8 TITLE[15u64]=0u8
+    WC[0u64]=0u64   WC[1u64]=(&wndproc) as u64   WC[2u64]=0u64   WC[3u64]=inst
+    WC[4u64]=0u64   WC[5u64]=0u64   WC[6u64]=0u64   WC[7u64]=0u64   WC[8u64]=(&CLS) as u64
+    RegisterClassA((&WC) as u64)
+    let hwnd : u64 = CreateWindowExA(0u32, (&CLS) as u64, (&TITLE) as u64, 0x10CF0000u32, 130i32, 130i32, CW + 16i32, CH + 39i32, 0u64, 0u64, inst, 0u64)
+    if hwnd == 0u64 { return 1u64 }
+    ShowWindow(hwnd, 5i32)
+    /* top-down 32bpp BI_RGB DIB describing the RW x RH framebuffer */
+    BMI[0u64]=40u32   BMI[1u64]=(RW as u32)   BMI[2u64]=(0u32 - (RH as u32))   BMI[3u64]=1u32 | (32u32 << 16u32)   BMI[4u64]=0u32
+    BMI[5u64]=0u32   BMI[6u64]=0u32   BMI[7u64]=0u32   BMI[8u64]=0u32   BMI[9u64]=0u32
+    let dc : u64 = GetDC(hwnd)
+    VW_ANG = 0u64   VW_SPIN = 1u8   VW_RUN = 1u8
+    let mut guard : u64 = 0u64
+    while VW_RUN == 1u8 {
+        while PeekMessageA((&MSG) as u64, 0u64, 0u32, 0u32, 1u32) != 0i32 {
+            TranslateMessage((&MSG) as u64)
+            DispatchMessageA((&MSG) as u64)
+        }
+        frame_render_spin(RW, RH, VW_ANG)
+        StretchDIBits(dc, 0i32, 0i32, CW, CH, 0i32, 0i32, RW as i32, RH as i32, frame_fb_addr(), (&BMI) as u64, 0u32, 0x00CC0020u32)
+        if VW_SPIN == 1u8 { VW_ANG = VW_ANG + 1u64   if VW_ANG >= NANG { VW_ANG = 0u64 } }
+        Sleep(12u32)
+        guard = guard + 1u64   if guard > 500000u64 { VW_RUN = 0u8 }
+    }
+    ReleaseDC(hwnd, dc)
+    return 0u64
+}

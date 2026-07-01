@@ -9,8 +9,19 @@
  *
  * HONEST SCOPE: a NEW capability (handles n>=3 AND certifies exact zeros that float cancels) -- NOT a speedup of the
  * n<=2 coverage path (there the symbolic square-twice in ui_exact_big is far cheaper).  Precision is exponential in n
- * (the 2^n-1 exponent is inherent: the sum-of-roots sign problem is not known polynomial-bit).  No III consumer calls
- * it yet -- it is a correct library primitive whose benefit is realized only once something consumes it. */
+ * (the 2^n-1 exponent is inherent: the sum-of-roots sign problem is not known polynomial-bit).
+ *
+ * THE LADDER (sqrtsum_lazy3, dispatch order = cost order; every tier sound-or-abstain, the bottom total):
+ *   Tier 1    adaptive i64 interval        hardware speed on any non-straddle;
+ *   Tier 2    radical canonicalization     structural zeros / single surd, small radicands, no bigint;
+ *   Tier 3    MULTIQUADRATIC GALOIS TOWER  kfield.iii weld: bounded-rank exact sign, pure guarded i64, NO
+ *             separation bound (abstains on rank>3 / overflow -- never guesses; runs before the bigint tiers
+ *             because it allocates nothing; the "2.5"/"3" labels are historical, dispatch is by cost);
+ *   Tier 2.5  adaptive precision           bigint interval doubled to the instance's true need p~log(1/|E|);
+ *   Tier 4    separation bound (oracle)    ui_sqrt_sum_sign, arbitrary n, exponential, certifies exact zeros.
+ * LIVE CONSUMERS: eidos/ripple_eidolon (exact real-order verb of the eidolon ripple, gate 2133) and the aether
+ * faces (csg_kernel, delaunay, algnum, aether_lens, aether_world, q23_sign->cyclotomic_se3/collide, verb_geom),
+ * all through this one kernel -- gates run_sqrtsum_kats.sh / run_ripple_kats.sh / run_aether_lens_kats.sh. */
 module sqrt_sum_sign
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
@@ -28,6 +39,7 @@ extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn kf_multiquadratic_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "kfield.iii"
 
 /* bit length of a bigint (position of the highest set bit), robust to a non-normalised top limb */
 fn bi_bitlen(N: u64) -> u64 {
@@ -121,10 +133,14 @@ fn u64_isqrt(N: u64) -> u64 {
 var FASTCT : u64 = 0u64
 var CANONCT : u64 = 0u64
 var EXACTCT : u64 = 0u64
+var KFCT : u64 = 0u64                     /* decided by the kfield Galois-tower tier (pure i64, no bigint) */
+var KFABST : u64 = 0u64                   /* kfield tier attempted but ABSTAINED (rank>3 / envelope) -> fell through */
 fn lazy_fast_count() -> u64 @export { return FASTCT }
 fn lazy_canon_count() -> u64 @export { return CANONCT }
 fn lazy_exact_count() -> u64 @export { return EXACTCT }
-fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT = 0u64   return 0i32 }
+fn lazy_kf_count() -> u64 @export { return KFCT }
+fn lazy_kf_abstain_count() -> u64 @export { return KFABST }
+fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT = 0u64   KFCT = 0u64   KFABST = 0u64   return 0i32 }
 
 /* squarefree split: b = s^2 * d with d squarefree; sets SFS=s, SFD=d.  Trial-divide square factors (cheap for small b). */
 var SFS : u64   var SFD : u64
@@ -228,6 +244,14 @@ fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
     if allsmall == 1u8 {
         let r : i32 = sqrtsum_canon_decide(a_ptr, b_ptr, n)
         if r != 2i32 { CANONCT = CANONCT + 1u64   return r }
+        /* TIER 3 -- the multiquadratic GALOIS TOWER (kfield weld).  After canon abstains (>=2 independent surds,
+         * so the value is provably NONZERO), try the bounded-rank tower: F2-embed the surds into K = Q(sqrtA,
+         * sqrtB, sqrtC) and sign by pure guarded i64 squaring down the tower -- NO separation bound, NO arena.
+         * 2 = abstain (rank > 3 / i64 envelope) -> fall through to the bigint tiers.  Sound by the differential
+         * gate 2159 (identical to ui_sqrt_sum_sign wherever it answers). */
+        let kr : i32 = kf_multiquadratic_sign(a_ptr, b_ptr, n)
+        if kr != 2i32 { KFCT = KFCT + 1u64   return kr }
+        KFABST = KFABST + 1u64
     }
     EXACTCT = EXACTCT + 1u64
     /* TIER 2.5 is now the escalation target (was ui_sqrt_sum_sign): the adaptive engine pays the instance's true

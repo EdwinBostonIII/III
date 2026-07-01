@@ -20,16 +20,8 @@ fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
 fn gcd2(a: i64, b: i64) -> i64 { let mut x : i64 = iabs(a)   let mut y : i64 = iabs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
 
 var PRD : [i64; 4]
-fn mul4(xp: u64, yp: u64, op: u64) -> i32 {
-    let x : *i64 = xp as *i64   let y : *i64 = yp as *i64   let o : *i64 = op as *i64
-    let x0 : i64 = x[0u64]   let x1 : i64 = x[1u64]   let x2 : i64 = x[2u64]   let x3 : i64 = x[3u64]
-    let y0 : i64 = y[0u64]   let y1 : i64 = y[1u64]   let y2 : i64 = y[2u64]   let y3 : i64 = y[3u64]
-    o[0u64] = x0*y0 + 2i64*x1*y1 + 3i64*x2*y2 + 6i64*x3*y3
-    o[1u64] = x0*y1 + x1*y0 + 3i64*(x2*y3 + x3*y2)
-    o[2u64] = x0*y2 + x2*y0 + 2i64*(x1*y3 + x3*y1)
-    o[3u64] = x0*y3 + x3*y0 + x1*y2 + x2*y1
-    return 0i32
-}
+/* exact ℚ(√2,√3) product -- DEDUPED onto the canonical organ (was inline here and in 2141; cyclotomic_se3 is its home). */
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
 
 var RZ : [i64; 36]   var RX : [i64; 36]   var MA : [i64; 36]   var MB : [i64; 36]   var MC : [i64; 36]
 var DRZ : i64   var DRX : i64
@@ -46,7 +38,7 @@ fn mat_mul(ab: u64, bb: u64, cb: u64) -> i32 {
             let mut c0 : i64 = 0i64   let mut c1 : i64 = 0i64   let mut c2 : i64 = 0i64   let mut c3 : i64 = 0i64
             let mut k : u64 = 0u64
             while k < 3u64 {
-                mul4(ent_addr(ab, i, k), ent_addr(bb, k, j), (&PRD) as u64)
+                q23_mul(ent_addr(ab, i, k), ent_addr(bb, k, j), (&PRD) as u64)
                 c0 = c0 + PRD[0u64]   c1 = c1 + PRD[1u64]   c2 = c2 + PRD[2u64]   c3 = c3 + PRD[3u64]
                 k = k + 1u64
             }
@@ -133,11 +125,11 @@ fn main() -> u64 {
     while sstep < 24u64 {
         XV[0u64]=px0 XV[1u64]=px1 XV[2u64]=px2 XV[3u64]=px3
         YV[0u64]=py0 YV[1u64]=py1 YV[2u64]=py2 YV[3u64]=py3
-        mul4((&CVEC) as u64, (&XV) as u64, (&PRD) as u64)   let cx0 : i64 = PRD[0u64]  let cx1 : i64 = PRD[1u64]  let cx2 : i64 = PRD[2u64]  let cx3 : i64 = PRD[3u64]
-        mul4((&SVEC) as u64, (&YV) as u64, (&PRD) as u64)   let sy0 : i64 = PRD[0u64]  let sy1 : i64 = PRD[1u64]  let sy2 : i64 = PRD[2u64]  let sy3 : i64 = PRD[3u64]
+        q23_mul((&CVEC) as u64, (&XV) as u64, (&PRD) as u64)   let cx0 : i64 = PRD[0u64]  let cx1 : i64 = PRD[1u64]  let cx2 : i64 = PRD[2u64]  let cx3 : i64 = PRD[3u64]
+        q23_mul((&SVEC) as u64, (&YV) as u64, (&PRD) as u64)   let sy0 : i64 = PRD[0u64]  let sy1 : i64 = PRD[1u64]  let sy2 : i64 = PRD[2u64]  let sy3 : i64 = PRD[3u64]
         let nx0 : i64 = cx0 - sy0   let nx1 : i64 = cx1 - sy1   let nx2 : i64 = cx2 - sy2   let nx3 : i64 = cx3 - sy3
-        mul4((&SVEC) as u64, (&XV) as u64, (&PRD) as u64)   let sx0 : i64 = PRD[0u64]  let sx1 : i64 = PRD[1u64]  let sx2 : i64 = PRD[2u64]  let sx3 : i64 = PRD[3u64]
-        mul4((&CVEC) as u64, (&YV) as u64, (&PRD) as u64)   let cy0 : i64 = PRD[0u64]  let cy1 : i64 = PRD[1u64]  let cy2 : i64 = PRD[2u64]  let cy3 : i64 = PRD[3u64]
+        q23_mul((&SVEC) as u64, (&XV) as u64, (&PRD) as u64)   let sx0 : i64 = PRD[0u64]  let sx1 : i64 = PRD[1u64]  let sx2 : i64 = PRD[2u64]  let sx3 : i64 = PRD[3u64]
+        q23_mul((&CVEC) as u64, (&YV) as u64, (&PRD) as u64)   let cy0 : i64 = PRD[0u64]  let cy1 : i64 = PRD[1u64]  let cy2 : i64 = PRD[2u64]  let cy3 : i64 = PRD[3u64]
         let ny0 : i64 = sx0 + cy0   let ny1 : i64 = sx1 + cy1   let ny2 : i64 = sx2 + cy2   let ny3 : i64 = sx3 + cy3
         px0 = nx0 / 4i64   px1 = nx1 / 4i64   px2 = nx2 / 4i64   px3 = nx3 / 4i64
         py0 = ny0 / 4i64   py1 = ny1 / 4i64   py2 = ny2 / 4i64   py3 = ny3 / 4i64

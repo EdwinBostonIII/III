@@ -1,0 +1,106 @@
+/* collide.iii -- EXACT NO-TUNNELING COLLISION DETECTION.
+ *
+ * PROBLEM.  A float physics/robotics engine tests collision by SAMPLING: is the moving body inside the obstacle at
+ * time t0? at t1?  A fast body can pass ENTIRELY THROUGH a thin obstacle between two samples -- it TUNNELS -- because
+ * discrete sampling never sees the contact instant.  Shrinking the timestep only hides the bug (there is always a fast
+ * enough body / thin enough wall).
+ *
+ * INSIGHT (first principles).  Collision of a swept POINT with a quadric region is NOT a sampling question -- it is a
+ * SIGN question about a QUADRATIC.  For a segment  P(t) = P0 + t·(P1−P0), t∈[0,1], and a sphere Q(x,y,z)=x²+y²+z²−R²,
+ *   Q(P(t)) = a·t² + b·t + c ,   a = |ΔW|² ,  b = 2·(W0·ΔW) ,  c = |W0|² − R²·D²      (P = W/D, ΔW = W1−W0)
+ * (working over a common integer denominator D so W0,W1,ΔW are ℚ(√2,√3) integer 4-tuples).  a = Σ of real squares ≥ 0,
+ * so the parabola opens UP: the segment HITS the sphere (Q≤0 somewhere on [0,1]) iff the minimum of Q on [0,1] is ≤ 0 --
+ *   min at t=0 (vertex t*=−b/2a ≤ 0, i.e. b≥0)   -> c ≤ 0
+ *   min at t=1 (t* ≥ 1, i.e. 2a+b ≤ 0)           -> a+b+c ≤ 0
+ *   min at the interior vertex (0<t*<1)          -> 4ac − b² ≤ 0   (the NEGATIVE DISCRIMINANT)
+ * Every one of those is an EXACT q23_sign decision (ℚ(√2,√3) 4-term Σ√), so the predicate NEVER samples and NEVER
+ * misses an interior dip -- tunneling is impossible.  It also CERTIFIES the exact grazing case 4ac−b²=0 (tangent touch),
+ * where a float engine flickers between hit and clear.
+ *
+ * COMPOSES (never reimplements): cyclotomic_se3::q23_mul (exact ℚ(√2,√3) product) + q23_sign.iii::q23_sign (the Σ√ sign
+ * engine behind the CSG kernel, the router and the kinematics organ).  This is the SECOND consumer of cyclotomic_se3 --
+ * it collides the EXACT rotated tool point (mech_apply) against an obstacle: kinematics ⊗ geometry, one substrate.
+ *
+ * HONEST SCOPE: sphere obstacle; a swept POINT (tool tip).  The straight segment between two mechanism configs is the
+ * standard CONSERVATIVE CCD model of the true rotating ARC -- what is EXACT is the segment-vs-sphere predicate, not that
+ * the segment equals the arc (denser configs -> segment ≈ arc; the predicate is exact for the segment).  i64 envelope
+ * (small configs/coordinates keep every q23_mul product in i64).
+ *
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00. */
+module collide
+
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
+/* dot3: out(4-tuple) = Σ_{k=0..2} u[k]·v[k]  (u,v are 3 ℚ(√2,√3) coords = 3×4 i64; coord k at byte offset k*32). */
+var COL_T : [i64; 4]
+fn dot3(up: u64, vp: u64, op: u64) -> i32 {
+    let o : *i64 = op as *i64
+    o[0u64] = 0i64   o[1u64] = 0i64   o[2u64] = 0i64   o[3u64] = 0i64
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        q23_mul(up + k * 32u64, vp + k * 32u64, (&COL_T) as u64)
+        o[0u64] = o[0u64] + COL_T[0u64]   o[1u64] = o[1u64] + COL_T[1u64]
+        o[2u64] = o[2u64] + COL_T[2u64]   o[3u64] = o[3u64] + COL_T[3u64]
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+var COL_DW : [i64; 12]   var COL_A : [i64; 4]   var COL_B : [i64; 4]   var COL_C : [i64; 4]
+var COL_HALF : [i64; 4]  var COL_TMP : [i64; 4]  var COL_AC : [i64; 4]  var COL_BB : [i64; 4]
+
+/* exact swept-segment vs origin-sphere(R²): 1 = HITS (Q≤0 somewhere on the segment), 0 = clear.  No sampling. */
+fn col_seg_hits_sphere(w0p: u64, w1p: u64, D: i64, R2: i64) -> u8 @export {
+    let w0 : *i64 = w0p as *i64   let w1 : *i64 = w1p as *i64
+    let mut i : u64 = 0u64
+    while i < 12u64 { COL_DW[i] = w1[i] - w0[i]   i = i + 1u64 }
+    dot3((&COL_DW) as u64, (&COL_DW) as u64, (&COL_A) as u64)          /* a = ΔW·ΔW           */
+    dot3(w0p, (&COL_DW) as u64, (&COL_HALF) as u64)                    /* W0·ΔW               */
+    COL_B[0u64] = 2i64*COL_HALF[0u64]   COL_B[1u64] = 2i64*COL_HALF[1u64]
+    COL_B[2u64] = 2i64*COL_HALF[2u64]   COL_B[3u64] = 2i64*COL_HALF[3u64]   /* b = 2(W0·ΔW)     */
+    dot3(w0p, w0p, (&COL_C) as u64)                                   /* |W0|²               */
+    COL_C[0u64] = COL_C[0u64] - R2 * D * D                            /* c = |W0|² − R²D²    */
+
+    let sa : i32 = q23_sign((&COL_A) as u64)
+    if sa == 0i32 {                                                   /* no motion: Q ≡ c    */
+        let sc0 : i32 = q23_sign((&COL_C) as u64)
+        if sc0 <= 0i32 { return 1u8 }   return 0u8
+    }
+    let sb : i32 = q23_sign((&COL_B) as u64)
+    if sb >= 0i32 {                                                   /* vertex t* ≤ 0: min at t=0 */
+        let sc : i32 = q23_sign((&COL_C) as u64)
+        if sc <= 0i32 { return 1u8 }   return 0u8
+    }
+    COL_TMP[0u64] = 2i64*COL_A[0u64] + COL_B[0u64]   COL_TMP[1u64] = 2i64*COL_A[1u64] + COL_B[1u64]
+    COL_TMP[2u64] = 2i64*COL_A[2u64] + COL_B[2u64]   COL_TMP[3u64] = 2i64*COL_A[3u64] + COL_B[3u64]   /* 2a+b */
+    let s2 : i32 = q23_sign((&COL_TMP) as u64)
+    if s2 <= 0i32 {                                                   /* vertex t* ≥ 1: min at t=1 = a+b+c */
+        COL_TMP[0u64] = COL_A[0u64] + COL_B[0u64] + COL_C[0u64]   COL_TMP[1u64] = COL_A[1u64] + COL_B[1u64] + COL_C[1u64]
+        COL_TMP[2u64] = COL_A[2u64] + COL_B[2u64] + COL_C[2u64]   COL_TMP[3u64] = COL_A[3u64] + COL_B[3u64] + COL_C[3u64]
+        let se : i32 = q23_sign((&COL_TMP) as u64)
+        if se <= 0i32 { return 1u8 }   return 0u8
+    }
+    /* interior vertex 0<t*<1: min = (4ac − b²)/(4a), a>0 so sign = sign(4ac − b²). */
+    q23_mul((&COL_A) as u64, (&COL_C) as u64, (&COL_AC) as u64)
+    q23_mul((&COL_B) as u64, (&COL_B) as u64, (&COL_BB) as u64)
+    COL_TMP[0u64] = 4i64*COL_AC[0u64] - COL_BB[0u64]   COL_TMP[1u64] = 4i64*COL_AC[1u64] - COL_BB[1u64]
+    COL_TMP[2u64] = 4i64*COL_AC[2u64] - COL_BB[2u64]   COL_TMP[3u64] = 4i64*COL_AC[3u64] - COL_BB[3u64]   /* 4ac − b² */
+    let sd : i32 = q23_sign((&COL_TMP) as u64)
+    if sd <= 0i32 { return 1u8 }   return 0u8
+}
+
+/* exact membership of a ℚ(√2,√3) point W/D in a sphere centred at integer (cx,cy,cz), radius²=R2:
+ * returns q23_sign(|W − C·D|² − R²·D²): +1 outside / 0 exactly-on / −1 inside.  The rotated-tool-point predicate. */
+var COL_WP : [i64; 12]
+fn col_point_in_sphere(wp: u64, D: i64, cx: i64, cy: i64, cz: i64, R2: i64) -> i32 @export {
+    let w : *i64 = wp as *i64
+    let mut i : u64 = 0u64
+    while i < 12u64 { COL_WP[i] = w[i]   i = i + 1u64 }
+    COL_WP[0u64] = COL_WP[0u64] - cx * D                              /* shift x rational component by −cx·D */
+    COL_WP[4u64] = COL_WP[4u64] - cy * D
+    COL_WP[8u64] = COL_WP[8u64] - cz * D
+    dot3((&COL_WP) as u64, (&COL_WP) as u64, (&COL_C) as u64)         /* |W − C·D|² */
+    COL_C[0u64] = COL_C[0u64] - R2 * D * D
+    return q23_sign((&COL_C) as u64)
+}

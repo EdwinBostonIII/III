@@ -1,0 +1,179 @@
+/* 2157_algnum.iii -- GATE for algnum.iii: EXACT REAL ALGEBRAIC NUMBERS (sign, total order, decidable EQUALITY).
+ *
+ * Each arm a DIFFERENT rule:
+ *   ZERO    the headline the float cannot touch: sqrt(2) presented THREE ways -- root of x^2-2, of x^3-2x, of 2x^2-4,
+ *           all in (1,2] with OVERLAPPING isolating intervals -- is decided EQUAL each pair.  A refine-to-epsilon
+ *           impostor loops forever / guesses; the exact test (gcd has a common root in the overlap) decides it.  Z: 0 0 0.
+ *   NEQ     distinct-yet-overlapping is decided by refinement, NOT epsilon: sqrt(2) vs cbrt(3) (coprime, both ~1.4x in
+ *           (1,2]) -> sqrt(2) < cbrt(3); sqrt(2) vs the near-miss rational 99/70=1.41428.. -> sqrt(2) < 99/70; reversed -> +1.
+ *   SIGN    +sqrt(2) -> +1, -sqrt(2) (root of x^2-2 in (-2,-1]) -> -1, the exact rational 0 (root of x in (-1,1]) -> 0.
+ *   UNIFY   face 1 wedded to face 6: for sqrt(2), sign(sqrt(2) - n/d) by STURM refinement equals sign(d*sqrt(2) - n) by
+ *           the Sigma-sqrt separation-bound oracle, for a fan of rationals incl. the tight 99/70 (70*sqrt2=98.995 vs 99).
+ *           Two mathematically independent exact-sign faculties certify one cut.  Plus: 99/70 vs its own root -> exactly 0.
+ *
+ *   REAL    the capstone made literal: order/equate algebraic numbers that face 6 (sturm.iii isolate_roots) actually
+ *           PRODUCED -- two polynomials sharing the root 3, each isolated by isolate_roots, decided EQUAL by gcd; then a
+ *           produced root 3 ordered before a produced root 5.  Consumes a real prior-face output, not a hand-authored interval.
+ *
+ * HONEST SCOPE: order structure (sign/compare/equality), i64 envelope, degree <= 3 witnesses separating at depth <= 14.
+ *   exit 99 = all arms correct.  10 zero  20 neq  30 sign  40 unify  50 real-consumer. */
+module corpus_2157_algnum
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn an_set(r: i64, coeffs_ptr: u64, deg: i64, lo: i64, hi: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_valid(r: i64) -> i64 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_cmp(r: i64, s: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_sign(r: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_sign_vs_rat(r: i64, n: i64, dd: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_sqrt_vs_rat(b: i64, n: i64, dd: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_set_iv(r: i64, coeffs_ptr: u64, deg: i64, ln: i64, ld: i64, hn: i64, hd: i64) -> i32 from "algnum.iii"
+/* REAL-CONSUMER arm: consume face-6's PRODUCT (isolate_roots' isolating intervals), not just its root_count primitive. */
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn e_i32(v: i32) -> i32 { return e_i64(v as i64) }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* polynomials, index i = coeff of x^i.  Filled by assignment in main (initializers take literals, not expressions). */
+var PA : [i64; 3]    /* x^2 - 2         (+/- sqrt 2)          */
+var PB : [i64; 4]    /* x^3 - 2x        (0, +/- sqrt 2)       */
+var PC : [i64; 3]    /* 2x^2 - 4        (+/- sqrt 2)          */
+var PD : [i64; 4]    /* x^3 - 3         (cbrt 3)              */
+var PR : [i64; 2]    /* 70x - 99        (99/70)               */
+var PZ : [i64; 2]    /* x               (0)                   */
+var PRA : [i64; 3]   /* (x-3)(x-5)      real isolate input    */
+var PRB : [i64; 3]   /* (x-3)(x-7)      real isolate input    */
+
+var FZ : u64   var FN : u64   var FS : u64   var FU : u64   var FRC : u64
+
+/* a fan check for UNIFY: STURM sign(sqrt(2)-n/d) must equal Sigma-sqrt sign(d*sqrt(2)-n); returns that agreed sign. */
+fn uni(n: i64, d: i64) -> i32 {
+    let sa : i32 = an_sign_vs_rat(0i64, n, d)      /* register 0 holds sqrt(2) */
+    let sb : i32 = an_sqrt_vs_rat(2i64, n, d)
+    if sa != sb { FU = FU + 1u64 }
+    return sb
+}
+
+/* index of the isolate_roots interval bracketing integer `root` (lo < root <= hi over each endpoint's own denominator). */
+fn iso_find(root: i64) -> i64 {
+    let n : i64 = iso_count()
+    let mut i : i64 = 0i64
+    let mut found : i64 = 0i64 - 1i64
+    while i < n {
+        let lon : i64 = iso_lo_num(i as u64)   let lod : i64 = iso_lo_den(i as u64)
+        let hin : i64 = iso_hi_num(i as u64)   let hid : i64 = iso_hi_den(i as u64)
+        let a : i64 = root * lod   let bb : i64 = root * hid
+        if lon < a { if bb <= hin { found = i } }
+        i = i + 1i64
+    }
+    return found
+}
+
+fn main() -> u64 {
+    FZ = 0u64   FN = 0u64   FS = 0u64   FU = 0u64   FRC = 0u64
+    PRA[0u64] = 15i64   PRA[1u64] = 0i64 - 8i64   PRA[2u64] = 1i64                            /* (x-3)(x-5) */
+    PRB[0u64] = 21i64   PRB[1u64] = 0i64 - 10i64  PRB[2u64] = 1i64                            /* (x-3)(x-7) */
+    PA[0u64] = 0i64 - 2i64   PA[1u64] = 0i64        PA[2u64] = 1i64                          /* x^2 - 2   */
+    PB[0u64] = 0i64          PB[1u64] = 0i64 - 2i64 PB[2u64] = 0i64        PB[3u64] = 1i64   /* x^3 - 2x  */
+    PC[0u64] = 0i64 - 4i64   PC[1u64] = 0i64        PC[2u64] = 2i64                          /* 2x^2 - 4  */
+    PD[0u64] = 0i64 - 3i64   PD[1u64] = 0i64        PD[2u64] = 0i64        PD[3u64] = 1i64   /* x^3 - 3   */
+    PR[0u64] = 0i64 - 99i64  PR[1u64] = 70i64                                                /* 70x - 99  */
+    PZ[0u64] = 0i64          PZ[1u64] = 1i64                                                 /* x         */
+
+    /* ── Arm ZERO: sqrt(2) three ways, overlapping intervals, decided EQUAL.  The zero problem, decided. ── */
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)     /* sqrt2 via x^2-2   in (1,2] */
+    an_set(1i64, (&PB) as u64, 3i64, 1i64, 2i64)     /* sqrt2 via x^3-2x  in (1,2] */
+    an_set(2i64, (&PC) as u64, 2i64, 1i64, 2i64)     /* sqrt2 via 2x^2-4  in (1,2] */
+    if an_valid(0i64) != 1i64 { FZ = FZ + 1u64 }     /* each interval isolates exactly one root */
+    if an_valid(1i64) != 1i64 { FZ = FZ + 1u64 }
+    if an_valid(2i64) != 1i64 { FZ = FZ + 1u64 }
+    let z01 : i32 = an_cmp(0i64, 1i64)   if z01 != 0i32 { FZ = FZ + 1u64 }
+    let z02 : i32 = an_cmp(0i64, 2i64)   if z02 != 0i32 { FZ = FZ + 1u64 }
+    let z12 : i32 = an_cmp(1i64, 2i64)   if z12 != 0i32 { FZ = FZ + 1u64 }
+    putchar(90i32) putchar(58i32) sp() e_i32(z01) sp() e_i32(z02) sp() e_i32(z12) nl()   /* "Z: 0 0 0" */
+
+    /* ── Arm NEQ: distinct-yet-overlapping decided by REFINEMENT (coprime -> not equal -> separate). ── */
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)     /* sqrt2  ~1.41421 */
+    an_set(1i64, (&PD) as u64, 3i64, 1i64, 2i64)     /* cbrt3  ~1.44225 */
+    let ncop : i32 = an_cmp(0i64, 1i64)              /* sqrt2 < cbrt3 -> -1 */
+    if ncop != (0i32 - 1i32) { FN = FN + 1u64 }
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)     /* re-set (both were refined) */
+    an_set(1i64, (&PR) as u64, 1i64, 1i64, 2i64)     /* 99/70 ~1.414285 (just above sqrt2) */
+    let nrat : i32 = an_cmp(0i64, 1i64)              /* sqrt2 < 99/70 -> -1 */
+    if nrat != (0i32 - 1i32) { FN = FN + 1u64 }
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)
+    an_set(1i64, (&PR) as u64, 1i64, 1i64, 2i64)
+    let nrev : i32 = an_cmp(1i64, 0i64)              /* 99/70 > sqrt2 -> +1 */
+    if nrev != 1i32 { FN = FN + 1u64 }
+    putchar(78i32) putchar(58i32) sp() e_i32(ncop) sp() e_i32(nrat) sp() e_i32(nrev) nl()   /* "N: -1 -1 1" */
+
+    /* ── Arm SIGN: +sqrt2, -sqrt2, exact 0. ── */
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)             /* +sqrt2 */
+    an_set(1i64, (&PA) as u64, 2i64, 0i64 - 2i64, 0i64 - 1i64)  /* -sqrt2 in (-2,-1] */
+    an_set(2i64, (&PZ) as u64, 1i64, 0i64 - 1i64, 1i64)     /* 0 in (-1,1] */
+    let sp0 : i32 = an_sign(0i64)   if sp0 != 1i32       { FS = FS + 1u64 }
+    let sn0 : i32 = an_sign(1i64)   if sn0 != (0i32-1i32) { FS = FS + 1u64 }
+    let sz0 : i32 = an_sign(2i64)   if sz0 != 0i32       { FS = FS + 1u64 }
+    putchar(83i32) putchar(58i32) sp() e_i32(sp0) sp() e_i32(sn0) sp() e_i32(sz0) nl()   /* "S: 1 -1 0" */
+
+    /* ── Arm UNIFY: STURM sign vs Sigma-sqrt sign of sqrt(2)-n/d agree over a fan; plus 99/70 vs its own root = exactly 0. ── */
+    an_set(0i64, (&PA) as u64, 2i64, 1i64, 2i64)            /* sqrt2, reused by uni() (an_sign_vs_rat does not refine) */
+    let u1 : i32 = uni(7i64, 5i64)      /* 7/5=1.4   < sqrt2 -> +1 */
+    let u2 : i32 = uni(3i64, 2i64)      /* 3/2=1.5   > sqrt2 -> -1 */
+    let u3 : i32 = uni(41i64, 29i64)    /* 41/29     < sqrt2 -> +1 */
+    let u4 : i32 = uni(99i64, 70i64)    /* 99/70     > sqrt2 -> -1  (tight: 70*sqrt2=98.995 vs 99) */
+    let u5 : i32 = uni(17i64, 12i64)    /* 17/12     > sqrt2 -> -1 */
+    if u1 != 1i32       { FU = FU + 1u64 }
+    if u2 != (0i32-1i32) { FU = FU + 1u64 }
+    if u3 != 1i32       { FU = FU + 1u64 }
+    if u4 != (0i32-1i32) { FU = FU + 1u64 }
+    if u5 != (0i32-1i32) { FU = FU + 1u64 }
+    an_set(1i64, (&PR) as u64, 1i64, 1i64, 2i64)           /* 99/70 as an algebraic number */
+    let ueq : i32 = an_sign_vs_rat(1i64, 99i64, 70i64)     /* n/d IS the root -> exactly 0 */
+    if ueq != 0i32 { FU = FU + 1u64 }
+    putchar(85i32) putchar(58i32) sp() e_i32(u1) sp() e_i32(u2) sp() e_i32(u3) sp() e_i32(u4) sp() e_i32(u5) sp() e_i32(ueq) nl()   /* "U: 1 -1 1 -1 -1 0" */
+
+    /* ── Arm REAL-CONSUMER: order/equate algebraic numbers that face 6 (sturm.iii isolate_roots) actually PRODUCED. ──
+     * (x-3)(x-5) and (x-3)(x-7) share the root 3.  Isolate each over (2,4]; each yields one interval bracketing 3.  Load
+     * those isolate_roots OUTPUTS into registers and decide EQUAL by gcd -> the shared root 3 (real cross-face capstone).
+     * Then isolate (x-3)(x-5)'s root 5 over (4,6] and order it after root 3.  Not a hand-authored interval in sight. */
+    sturm_build((&PRA) as u64, 2i64)   isolate_roots(0i64, 8i64, 30i64)                       /* BISECTS (0,8] -> roots 3,5 at dyadic denom>1 */
+    let ia3 : i64 = iso_find(3i64)   let ia5 : i64 = iso_find(5i64)
+    an_set_iv(0i64, (&PRA) as u64, 2i64, iso_lo_num(ia3 as u64), iso_lo_den(ia3 as u64), iso_hi_num(ia3 as u64), iso_hi_den(ia3 as u64))
+    an_set_iv(2i64, (&PRA) as u64, 2i64, iso_lo_num(ia5 as u64), iso_lo_den(ia5 as u64), iso_hi_num(ia5 as u64), iso_hi_den(ia5 as u64))
+    sturm_build((&PRB) as u64, 2i64)   isolate_roots(0i64, 8i64, 30i64)                       /* roots 3,7 */
+    let ib3 : i64 = iso_find(3i64)
+    an_set_iv(1i64, (&PRB) as u64, 2i64, iso_lo_num(ib3 as u64), iso_lo_den(ib3 as u64), iso_hi_num(ib3 as u64), iso_hi_den(ib3 as u64))
+    /* the loaded isolate_roots outputs must each still isolate exactly one root under the common-denomination */
+    if an_valid(0i64) != 1i64 { FRC = FRC + 1u64 }
+    if an_valid(2i64) != 1i64 { FRC = FRC + 1u64 }
+    if an_valid(1i64) != 1i64 { FRC = FRC + 1u64 }
+    let rc_eq : i32 = an_cmp(0i64, 1i64)                                                       /* root 3 of (x-3)(x-5) == root 3 of (x-3)(x-7) -> EQUAL */
+    if rc_eq != 0i32 { FRC = FRC + 1u64 }
+    let rc_ord : i32 = an_cmp(0i64, 2i64)                                                      /* produced root 3 < produced root 5 -> -1 */
+    if rc_ord != (0i32 - 1i32) { FRC = FRC + 1u64 }
+    /* full strength: a face PRODUCED an IRRATIONAL -- isolate_roots emits sqrt(2)'s interval (root of x^2-2); compare it to
+     * the hand-authored sqrt(2) via x^3-2x.  DIFFERENT polynomials, decided EQUAL by a nontrivial gcd (x^2-2).  This is the
+     * exact thing floats cannot do: equate two representations of an irrational.  (Rational roots 3,5 above could be done by
+     * hand; sqrt(2) cannot.) */
+    sturm_build((&PA) as u64, 2i64)   isolate_roots(0i64, 2i64, 30i64)                         /* PA = x^2-2; iso[0] brackets sqrt(2) */
+    an_set_iv(3i64, (&PA) as u64, 2i64, iso_lo_num(0u64), iso_lo_den(0u64), iso_hi_num(0u64), iso_hi_den(0u64))
+    an_set(0i64, (&PB) as u64, 3i64, 1i64, 2i64)                                               /* hand-authored sqrt(2) via x^3-2x */
+    if an_valid(3i64) != 1i64 { FRC = FRC + 1u64 }
+    let ri_eq : i32 = an_cmp(3i64, 0i64)                                                       /* sqrt2(isolate output) == sqrt2(x^3-2x) -> EQUAL */
+    if ri_eq != 0i32 { FRC = FRC + 1u64 }
+    putchar(82i32) putchar(58i32) sp() e_i32(rc_eq) sp() e_i32(rc_ord) sp() e_i32(ri_eq) nl()  /* "R: 0 -1 0" */
+
+    if FZ != 0u64 { return 10u64 }
+    if FN != 0u64 { return 20u64 }
+    if FS != 0u64 { return 30u64 }
+    if FU != 0u64 { return 40u64 }
+    if FRC != 0u64 { return 50u64 }
+    return 99u64
+}

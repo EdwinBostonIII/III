@@ -1,0 +1,21 @@
+/* q23_sign.iii -- the Σ√ BRIDGE for the cyclotomic field ℚ(√2,√3).
+ *
+ * A ℚ(√2,√3) element (a0,a1,a2,a3) = a0 + a1√2 + a2√3 + a3√6 has its SIGN given exactly by sign(a0·√1 + a1·√2 + a2·√3
+ * + a3·√6) -- a 4-term sum of square roots (radicands {1,2,3,6}).  So ordering exact rotated coordinates produced by
+ * cyclotomic_se3 (which config's end-effector reaches further? is this coordinate exactly 0?) routes through the SAME
+ * exact-sign engine (sqrt_sum_sign::sqrtsum_lazy3) that powers the CSG kernel and the photonic router -- one substrate.
+ *
+ * Kept in a SEPARATE module from the PURE cyclotomic_se3 organ so the pure-math rotation KATs (2141/2142) can link the
+ * exact field ops WITHOUT dragging in the Σ√ engine (and its BSS symbols) -- avoiding a cross-module `var` collision. */
+module q23_sign
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+var QS_A : [i64; 4]   var QS_B : [i64; 4]
+/* exact sign of the ℚ(√2,√3) element at xp = (a0,a1,a2,a3):  +1 / 0 / -1  (0 certified where float cancels). */
+fn q23_sign(xp: u64) -> i32 @export {
+    let x : *i64 = xp as *i64
+    QS_A[0u64] = x[0u64]   QS_A[1u64] = x[1u64]   QS_A[2u64] = x[2u64]   QS_A[3u64] = x[3u64]
+    QS_B[0u64] = 1i64   QS_B[1u64] = 2i64   QS_B[2u64] = 3i64   QS_B[3u64] = 6i64
+    return sqrtsum_lazy3((&QS_A) as u64, (&QS_B) as u64, 4u64)
+}

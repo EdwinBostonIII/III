@@ -1,0 +1,92 @@
+/* aether_lens_view.iii -- THE LIVE, INTERACTIVE surface for the exact ray-cast interface.
+ *
+ * v1 wrote a static .bmp.  This is the actual interface: a 3D scene of exact-rendered spheres that appears IN THE
+ * TERMINAL and spins live, that you steer in real time.  The surface is the terminal itself (truecolor via Unicode
+ * half-blocks -- frame_print_ansi); the animation is in-place cursor-home reprint; the input is msvcrt _kbhit/_getch;
+ * the pacing is kernel32 Sleep.  Zero imported assets, no GPU, no window toolkit -- it runs in any VT terminal.
+ *
+ * Every frame is a FULLY-EXACT render (integer ray-caster; no z-fighting between the overlapping spheres at any angle);
+ * the turntable rotates the scene by an integer rational-rotation table (frame_spin), rounded to the integer lattice so
+ * each pose renders exactly.  CONTROLS: A/D turn, +/- (or =) zoom, SPACE toggle auto-spin, Q quit.
+ *
+ * main() is the interactive loop (runs until Q).  view_demo(n) is a finite auto-spin (n frames -> return) for headless
+ * verification.  Ring R0.  Composes aether_lens_frame (which composes the exact caster).  NIH: libc + kernel32 only. */
+module aether_lens_view
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _kbhit() -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _getch() -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
+
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_print_ansi(w: u64, h: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_set_focal(f: i64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_get_focal() -> i64 from "aether_lens_frame.iii"
+
+const VW_W : u64 = 100u64
+const VW_H : u64 = 60u64
+const VW_NANG : u64 = 36u64
+
+fn vw_num(v: u64) -> i32 { if v >= 10u64 { vw_num(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn vw_hide() -> i32 { putchar(27i32) putchar(91i32) putchar(63i32) putchar(50i32) putchar(53i32) putchar(108i32)   return 0i32 }   /* ESC[?25l */
+fn vw_show() -> i32 { putchar(27i32) putchar(91i32) putchar(63i32) putchar(50i32) putchar(53i32) putchar(104i32)   return 0i32 }   /* ESC[?25h */
+fn vw_clear() -> i32 { putchar(27i32) putchar(91i32) putchar(50i32) putchar(74i32) putchar(27i32) putchar(91i32) putchar(72i32)   return 0i32 }   /* ESC[2J ESC[H */
+
+/* HUD row under the image: "AETHER-LENS ang=NN foc=NNN  [A/D +/- SPC Q]" + clear-to-EOL. */
+fn vw_hud(ang: u64, foc: i64) -> i32 {
+    putchar(10i32)
+    putchar(65i32) putchar(69i32) putchar(84i32) putchar(72i32) putchar(69i32) putchar(82i32) putchar(45i32) putchar(76i32) putchar(69i32) putchar(78i32) putchar(83i32) putchar(32i32)   /* AETHER-LENS  */
+    putchar(97i32) putchar(110i32) putchar(103i32) putchar(61i32)   vw_num(ang)              /* ang=NN */
+    putchar(32i32) putchar(102i32) putchar(111i32) putchar(99i32) putchar(61i32)   vw_num(foc as u64)   /* foc=NNN */
+    putchar(32i32) putchar(32i32) putchar(91i32)
+    putchar(65i32) putchar(47i32) putchar(68i32) putchar(32i32)      /* A/D  */
+    putchar(43i32) putchar(47i32) putchar(45i32) putchar(32i32)      /* +/-  */
+    putchar(83i32) putchar(80i32) putchar(67i32) putchar(32i32)      /* SPC  */
+    putchar(81i32) putchar(93i32)                                    /* Q]   */
+    putchar(27i32) putchar(91i32) putchar(75i32)                     /* ESC[K clear to EOL */
+    return 0i32
+}
+
+fn view_frame(ang: u64) -> i32 {
+    frame_render_spin(VW_W, VW_H, ang)
+    frame_print_ansi(VW_W, VW_H)
+    vw_hud(ang, frame_get_focal())
+    return 0i32
+}
+
+/* headless proof: auto-spin `frames` frames then return (terminates, so it can be run + timed without a TTY). */
+fn view_demo(frames: u64) -> i32 @export {
+    vw_hide()   vw_clear()
+    let mut i : u64 = 0u64   let mut ang : u64 = 0u64
+    while i < frames {
+        view_frame(ang)
+        ang = ang + 1u64   if ang >= VW_NANG { ang = 0u64 }
+        Sleep(12u32)
+        i = i + 1u64
+    }
+    vw_show()   putchar(10i32)
+    return 0i32
+}
+
+fn main() -> u64 {
+    vw_hide()   vw_clear()
+    let mut ang : u64 = 0u64   let mut spinning : u8 = 1u8   let mut run : u8 = 1u8   let mut guard : u64 = 0u64
+    while run == 1u8 {
+        view_frame(ang)
+        if _kbhit() != 0i32 {
+            let c : i32 = _getch()
+            if c == 113i32 { run = 0u8 }                                                            /* q */
+            if c == 97i32  { spinning = 0u8   if ang == 0u64 { ang = VW_NANG }   ang = ang - 1u64 } /* a: turn left, pause */
+            if c == 100i32 { spinning = 0u8   ang = ang + 1u64   if ang >= VW_NANG { ang = 0u64 } } /* d: turn right, pause */
+            if c == 32i32  { if spinning == 1u8 { spinning = 0u8 } else { spinning = 1u8 } }          /* space: toggle spin */
+            if c == 43i32  { frame_set_focal(frame_get_focal() + 40i64) }                            /* + zoom in */
+            if c == 61i32  { frame_set_focal(frame_get_focal() + 40i64) }                            /* = zoom in */
+            if c == 45i32  { frame_set_focal(frame_get_focal() - 40i64) }                            /* - zoom out */
+        }
+        if spinning == 1u8 { ang = ang + 1u64   if ang >= VW_NANG { ang = 0u64 } }
+        Sleep(12u32)
+        guard = guard + 1u64   if guard > 200000u64 { run = 0u8 }   /* safety cap (~3 hours) */
+    }
+    vw_show()   putchar(10i32)
+    return 0u64
+}

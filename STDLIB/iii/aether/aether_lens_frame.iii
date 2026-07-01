@@ -1,0 +1,332 @@
+/* aether_lens_frame.iii -- THE INTERFACE, first light: a full exact-rendered 3D scene composed on the aether_lens core.
+ *
+ * It shows the three things the substrate makes exact, together, in ONE image:
+ *   - MULTIPLE SOLIDS INTERACTING by exact OCCLUSION: three spheres overlapping in screen space, the nearer chosen at
+ *     every pixel by lens_t_cmp (the exact depth order) -- provably correct, no z-fighting on the overlaps.
+ *   - EXACT CSG: a bite is carved from the first sphere by a second one, decided by lens_membership_sign (the exact
+ *     membership of an IRRATIONAL near-hit point in another quadric) -- one solid subtracted from another, zero float.
+ *   - DERIVED colour: each lit pixel's brightness is COMPUTED by exact Lambert (lens_shade255_big), never sampled.
+ *
+ * Every asset here is MADE BY III: the framebuffer, the rasterless ray cast, the shading, and even the 24-bit BMP file
+ * are hand-rolled (libc fwrite only -- no image library, no imported texture, no WebAssembly).  The image is a pure
+ * function of integers, so frame_sig() is bit-identical on every run (the determinism gate).  Camera and objects are
+ * integer-exact; a cyclotomic_se3 orbit of the eye would return bit-for-bit (the zero-drift theorem, rendered).
+ *
+ * Ring R0.  K 1.00.  Composes aether_lens (which composes sqrt_sum_sign) + libc file write.  NIH. */
+module aether_lens_frame
+
+extern @abi(c-msvc-x64) fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_a() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_b() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_disc() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp_fast(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_membership_fast(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255_fast(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+/* the fully-EXACT predicate trio (surd-signed) -- the FL_EXACT render path proves a fully-exact frame is achievable. */
+extern @abi(c-msvc-x64) fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_membership_sign(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255_big(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+
+/* cyclotomic_se3: the EXACT zero-drift SE(3) rotation used to PLACE / ORBIT an object (see frame_orient). */
+extern @abi(c-msvc-x64) fn mech_reset() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_rotate_z15() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_home() -> u8 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_apply(px: i64, py: i64, pz: i64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt(i: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_den() -> i64 from "cyclotomic_se3.iii"
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"   /* the live-terminal surface writes bytes with putchar */
+
+const FL_MAXW : u64 = 256u64
+const FL_MAXN : u64 = 49152u64          /* FL_MAXW * 192 */
+const FL_FOCAL : i64 = 280i64           /* focal length in pixels (literal const inlines; expression consts do not) */
+const VW_K : i64 = 100i64               /* rational-rotation denominator: turntable cos,sin are scaled by 100 (integer) */
+const VW_PIVOT_Z : i64 = 270i64         /* the turntable's vertical axis sits at depth z = 270 */
+const FNV_OFF : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME : u64 = 0x100000001b3u64
+
+var FL_FB : [u32; 49152]
+
+/* three spheres: centre (cx,cy,cz), radius^2, albedo (r,g,b). */
+var OBJ_CX : [i64; 3]   var OBJ_CY : [i64; 3]   var OBJ_CZ : [i64; 3]   var OBJ_R2 : [i64; 3]
+var OBJ_R : [i64; 3]    var OBJ_G : [i64; 3]    var OBJ_B : [i64; 3]
+var OBJ_K : [i64; 3]                                   /* per-object quadric scale: centre = (OBJ_CX,OBJ_CY,OBJ_CZ) / OBJ_K */
+var OBJ_BX : [i64; 3]   var OBJ_BY : [i64; 3]   var OBJ_BZ : [i64; 3]   /* base (unrotated) integer centres */
+var COST : [i64; 36]    var SINT : [i64; 36]           /* integer cos*100, sin*100 for the 36 turntable angles (10 deg each) */
+var FL_CARVE : u8                                      /* 1 = apply the CSG carve (batch BMP); 0 = plain spheres (live spin) */
+var VW_FOCAL : i64 = 280i64                            /* live focal length (zoom); frame_scene does NOT reset it, so zoom persists */
+/* the carver that bites the first sphere (sphere 0 \ carver). */
+var CV_CX : i64   var CV_CY : i64   var CV_CZ : i64   var CV_R2 : i64
+/* object-0 base centre; frame_orient rotates it by cyclotomic_se3 and writes OBJ_C*[0]. */
+var FL_BX0 : i64   var FL_BY0 : i64   var FL_BZ0 : i64
+/* 0 = fast fixed-point predicates (interactive render); 1 = the fully-EXACT surd predicates (slower, proof-of-feasibility). */
+var FL_EXACT : u8
+
+var BMP_HDR : [u8; 54]   var BMP_ROW : [u8; 780]   var BMP_MODE : [u8; 4]
+
+fn frame_scene() -> i32 @export {
+    OBJ_CX[0u64] = 0i64 - 30i64   OBJ_CY[0u64] = 20i64          OBJ_CZ[0u64] = 340i64   OBJ_R2[0u64] = 7225i64   /* r 85 warm */
+    OBJ_R[0u64]  = 235i64         OBJ_G[0u64]  = 150i64         OBJ_B[0u64]  = 70i64
+    OBJ_CX[1u64] = 55i64          OBJ_CY[1u64] = 0i64 - 4i64    OBJ_CZ[1u64] = 250i64   OBJ_R2[1u64] = 3600i64   /* r 60 cyan, nearer */
+    OBJ_R[1u64]  = 80i64          OBJ_G[1u64]  = 175i64         OBJ_B[1u64]  = 225i64
+    OBJ_CX[2u64] = 0i64 - 82i64   OBJ_CY[2u64] = 0i64 - 60i64   OBJ_CZ[2u64] = 205i64   OBJ_R2[2u64] = 2025i64   /* r 45 green, nearest */
+    OBJ_R[2u64]  = 120i64         OBJ_G[2u64]  = 220i64         OBJ_B[2u64]  = 110i64
+    CV_CX = 22i64   CV_CY = 74i64   CV_CZ = 322i64   CV_R2 = 5041i64                                             /* r 71 carver -> bite top-right of sphere 0 */
+    FL_BX0 = 0i64 - 30i64   FL_BY0 = 20i64   FL_BZ0 = 340i64                                                     /* object-0 base centre (== its default centre) */
+    OBJ_K[0u64] = 1i64   OBJ_K[1u64] = 1i64   OBJ_K[2u64] = 1i64
+    OBJ_BX[0u64] = OBJ_CX[0u64]   OBJ_BY[0u64] = OBJ_CY[0u64]   OBJ_BZ[0u64] = OBJ_CZ[0u64]
+    OBJ_BX[1u64] = OBJ_CX[1u64]   OBJ_BY[1u64] = OBJ_CY[1u64]   OBJ_BZ[1u64] = OBJ_CZ[1u64]
+    OBJ_BX[2u64] = OBJ_CX[2u64]   OBJ_BY[2u64] = OBJ_CY[2u64]   OBJ_BZ[2u64] = OBJ_CZ[2u64]
+    FL_CARVE = 1u8
+    frame_init_tables()
+    return 0i32
+}
+
+fn fl_pack(r: u32, g: u32, b: u32) -> u32 { return ((r & 0xFFu32) << 16u32) | ((g & 0xFFu32) << 8u32) | (b & 0xFFu32) }
+fn fl_clamp(v: u32) -> u32 { if v > 255u32 { return 255u32 }   return v }
+
+/* set the current LENS quadric to sphere k (unit-coefficient sphere in csg qa..qj form). returns sign(Delta). */
+/* build the sphere quadric for object k.  Centre = (px,py,pz)/kk (rational), radius^2 = r2.  Scaling the sphere equation
+ * |p - P/kk|^2 = r2 by kk^2 clears to the ALL-INTEGER quadric  kk^2|p|^2 - 2 kk (P.p) + (|P|^2 - kk^2 r2) = 0, so the
+ * exact integer caster renders a rotated (rational-centre) sphere with zero float error.  kk=1 = the static integer scene. */
+fn fl_setup_obj(k: u64) -> i32 {
+    let px : i64 = OBJ_CX[k]   let py : i64 = OBJ_CY[k]   let pz : i64 = OBJ_CZ[k]   let r2 : i64 = OBJ_R2[k]   let kk : i64 = OBJ_K[k]
+    let k2 : i64 = kk*kk
+    return lens_setup(k2, k2, k2, 0i64, 0i64, 0i64, 0i64 - 2i64*kk*px, 0i64 - 2i64*kk*py, 0i64 - 2i64*kk*pz, px*px + py*py + pz*pz - k2*r2)
+}
+
+/* background: a soft top-to-bottom blue gradient. */
+fn fl_bg(y: u64, h: u64) -> u32 {
+    let t : u64 = (y * 64u64) / h
+    return fl_pack((6u64 + t/4u64) as u32, (10u64 + t/2u64) as u32, (26u64 + t) as u32)
+}
+
+/* albedo(k) * intensity/255 + a little ambient. */
+fn fl_shade_albedo(k: u64, inten: u32) -> u32 {
+    let r : u32 = (((OBJ_R[k] as u32) * inten) / 255u32) + 10u32
+    let g : u32 = (((OBJ_G[k] as u32) * inten) / 255u32) + 12u32
+    let b : u32 = (((OBJ_B[k] as u32) * inten) / 255u32) + 16u32
+    return fl_pack(fl_clamp(r), fl_clamp(g), fl_clamp(b))
+}
+
+/* ── render a w x h frame into FL_FB (row-major, w-stride).  Per pixel: cast all 3 spheres, carve sphere 0 by the
+ * carver (exact CSG membership), pick the exactly-nearest survivor (lens_t_cmp), shade it (exact Lambert). */
+/* PLACE object 0 by rotating its base centre by steps*15 deg via cyclotomic_se3 (EXACT ℚ(√2,√3) rotation).  At 90-deg
+ * multiples (steps 0,6,12,18,24) the rotated integer point is again integer (the √2,√3,√6 components vanish), so the
+ * integer ray caster consumes it directly.  Returns mech_home() -- 1 exactly when the accumulated rotation is the
+ * bit-for-bit identity (steps a multiple of 24 = 360 deg).  This is the zero-drift theorem driving the renderer. */
+fn frame_orient(steps: u64) -> u8 @export {
+    mech_reset()
+    let mut s : u64 = 0u64
+    while s < steps { mech_rotate_z15()   s = s + 1u64 }
+    let hm : u8 = mech_home()
+    mech_apply(FL_BX0, FL_BY0, FL_BZ0)
+    let den : i64 = mech_den()
+    OBJ_CX[0u64] = mech_pt(0u64) / den
+    OBJ_CY[0u64] = mech_pt(4u64) / den
+    OBJ_CZ[0u64] = mech_pt(8u64) / den
+    return hm
+}
+
+fn frame_render(w: u64, h: u64) -> i32 @export { frame_scene()   return fl_do_render(w, h) }
+/* the same scene, but object 0 is PLACED by a cyclotomic_se3 rotation of steps*15 deg (0/6/12/18/24 = integer poses). */
+fn frame_render_oriented(w: u64, h: u64, steps: u64) -> i32 @export { frame_scene()   frame_orient(steps)   return fl_do_render(w, h) }
+/* the same scene rendered with the FULLY-EXACT surd predicates (occlusion, CSG, shading) -- slower, proof no concession. */
+fn frame_render_exact(w: u64, h: u64) -> i32 @export { frame_scene()   FL_EXACT = 1u8   fl_do_render(w, h)   FL_EXACT = 0u8   return 0i32 }
+
+fn fl_do_render(w: u64, h: u64) -> i32 {
+    let lx : i64 = 0i64 - 5i64   let ly : i64 = 7i64   let lz : i64 = 0i64 - 4i64   /* light direction (upper-left, toward eye) */
+    let hw : i64 = (w / 2u64) as i64
+    let hh : i64 = (h / 2u64) as i64
+    let mut y : u64 = 0u64
+    while y < h {
+        let sy : i64 = hh - (y as i64)
+        let mut x : u64 = 0u64
+        while x < w {
+            let sx : i64 = (x as i64) - hw
+            lens_set_ray(0i64, 0i64, 0i64, sx, sy, VW_FOCAL)
+            let mut best : i64 = 0i64 - 1i64
+            let mut ba : i64 = 0i64   let mut bb : i64 = 0i64   let mut bd : i64 = 0i64
+            let mut k : u64 = 0u64
+            while k < 3u64 {
+                let hs : i32 = fl_setup_obj(k)
+                if hs >= 0i32 {
+                    let ca : i64 = lens_a()   let cb : i64 = lens_b()   let cd : i64 = lens_disc()
+                    let mut alive : u8 = 1u8
+                    if k == 0u64 { if FL_CARVE == 1u8 {
+                        let cvi9 : i64 = 0i64 - 2i64*CV_CZ
+                        let cvj9 : i64 = CV_CX*CV_CX + CV_CY*CV_CY + CV_CZ*CV_CZ - CV_R2
+                        let mut mem : i32 = lens_membership_fast(1i64,1i64,1i64,0i64,0i64,0i64, 0i64 - 2i64*CV_CX, 0i64 - 2i64*CV_CY, cvi9, cvj9)
+                        if FL_EXACT == 1u8 { mem = lens_membership_sign(1i64,1i64,1i64,0i64,0i64,0i64, 0i64 - 2i64*CV_CX, 0i64 - 2i64*CV_CY, cvi9, cvj9) }
+                        if mem <= 0i32 { alive = 0u8 }        /* near hit is inside the carver -> carved away */
+                    } }
+                    if alive == 1u8 {
+                        if best < 0i64 { best = k as i64   ba = ca   bb = cb   bd = cd }
+                        else {
+                            let cmp : i32 = lens_t_cmp_fx(ca, cb, cd, ba, bb, bd)   /* EXACT depth order (nested-squaring), interactive speed */
+                            if cmp < 0i32 { best = k as i64   ba = ca   bb = cb   bd = cd }   /* this hit is nearer */
+                        }
+                    }
+                }
+                k = k + 1u64
+            }
+            let mut px : u32 = fl_bg(y, h)
+            if best >= 0i64 {
+                fl_setup_obj(best as u64)
+                let mut inten : u32 = lens_shade255_fast(lx, ly, lz)
+                if FL_EXACT == 1u8 { inten = lens_shade255_big(lx, ly, lz) }
+                px = fl_shade_albedo(best as u64, inten)
+            }
+            FL_FB[y * w + x] = px
+            x = x + 1u64
+        }
+        y = y + 1u64
+    }
+    return 0i32
+}
+
+fn frame_px(x: u64, y: u64, w: u64) -> u32 @export { return FL_FB[y * w + x] }
+
+/* FNV-1a of the w*h frame -- equal iff two renders are byte-identical (the determinism gate). */
+fn frame_sig(w: u64, h: u64) -> u64 @export {
+    let mut hsh : u64 = FNV_OFF
+    let n : u64 = w * h
+    let mut i : u64 = 0u64
+    while i < n {
+        hsh = hsh ^ (FL_FB[i] as u64)
+        hsh = hsh * FNV_PRIME
+        i = i + 1u64
+    }
+    return hsh
+}
+
+fn hput32(off: u64, v: u64) -> i32 {
+    BMP_HDR[off] = (v & 0xFFu64) as u8
+    BMP_HDR[off + 1u64] = ((v >> 8u64) & 0xFFu64) as u8
+    BMP_HDR[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    BMP_HDR[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    return 0i32
+}
+fn hput16(off: u64, v: u64) -> i32 { BMP_HDR[off] = (v & 0xFFu64) as u8   BMP_HDR[off + 1u64] = ((v >> 8u64) & 0xFFu64) as u8   return 0i32 }
+
+/* write FL_FB as a 24-bit uncompressed BMP (bottom-up BGR rows, 4-byte padded).  Returns bytes written (0 on open fail). */
+fn frame_write_bmp(w: u64, h: u64, path: u64) -> u64 @export {
+    let pad : u64 = (4u64 - ((w * 3u64) % 4u64)) % 4u64
+    let rowbytes : u64 = w * 3u64 + pad
+    let filesize : u64 = 54u64 + rowbytes * h
+    BMP_HDR[0u64] = 66u8   BMP_HDR[1u64] = 77u8                 /* 'B','M' */
+    hput32(2u64, filesize)   hput32(6u64, 0u64)   hput32(10u64, 54u64)
+    hput32(14u64, 40u64)   hput32(18u64, w)   hput32(22u64, h)
+    hput16(26u64, 1u64)   hput16(28u64, 24u64)   hput32(30u64, 0u64)
+    hput32(34u64, rowbytes * h)   hput32(38u64, 2835u64)   hput32(42u64, 2835u64)
+    hput32(46u64, 0u64)   hput32(50u64, 0u64)
+    BMP_MODE[0u64] = 119u8   BMP_MODE[1u64] = 98u8   BMP_MODE[2u64] = 0u8   /* "wb" */
+    let f : u64 = fopen(path, (&BMP_MODE) as u64)
+    if f == 0u64 { return 0u64 }
+    let mut written : u64 = fwrite((&BMP_HDR) as u64, 1u64, 54u64, f)
+    let mut r : u64 = 0u64
+    while r < h {
+        let srcrow : u64 = h - 1u64 - r
+        let mut c : u64 = 0u64
+        while c < w {
+            let px : u32 = FL_FB[srcrow * w + c]
+            let bi : u64 = c * 3u64
+            BMP_ROW[bi] = (px & 0xFFu32) as u8                    /* B */
+            BMP_ROW[bi + 1u64] = ((px >> 8u32) & 0xFFu32) as u8   /* G */
+            BMP_ROW[bi + 2u64] = ((px >> 16u32) & 0xFFu32) as u8  /* R */
+            c = c + 1u64
+        }
+        let mut pp : u64 = 0u64
+        while pp < pad { BMP_ROW[w * 3u64 + pp] = 0u8   pp = pp + 1u64 }
+        written = written + fwrite((&BMP_ROW) as u64, 1u64, rowbytes, f)
+        r = r + 1u64
+    }
+    fclose(f)
+    return written
+}
+
+/* the 36 turntable angles as integer cos*100, sin*100 (hand-computed, hardcoded -- III has no float trig). */
+fn frame_init_tables() -> i32 {
+    COST[0u64]=100i64 COST[1u64]=98i64 COST[2u64]=94i64 COST[3u64]=87i64 COST[4u64]=77i64 COST[5u64]=64i64
+    COST[6u64]=50i64 COST[7u64]=34i64 COST[8u64]=17i64 COST[9u64]=0i64 COST[10u64]=(0i64-17i64) COST[11u64]=(0i64-34i64)
+    COST[12u64]=(0i64-50i64) COST[13u64]=(0i64-64i64) COST[14u64]=(0i64-77i64) COST[15u64]=(0i64-87i64) COST[16u64]=(0i64-94i64) COST[17u64]=(0i64-98i64)
+    COST[18u64]=(0i64-100i64) COST[19u64]=(0i64-98i64) COST[20u64]=(0i64-94i64) COST[21u64]=(0i64-87i64) COST[22u64]=(0i64-77i64) COST[23u64]=(0i64-64i64)
+    COST[24u64]=(0i64-50i64) COST[25u64]=(0i64-34i64) COST[26u64]=(0i64-17i64) COST[27u64]=0i64 COST[28u64]=17i64 COST[29u64]=34i64
+    COST[30u64]=50i64 COST[31u64]=64i64 COST[32u64]=77i64 COST[33u64]=87i64 COST[34u64]=94i64 COST[35u64]=98i64
+    SINT[0u64]=0i64 SINT[1u64]=17i64 SINT[2u64]=34i64 SINT[3u64]=50i64 SINT[4u64]=64i64 SINT[5u64]=77i64
+    SINT[6u64]=87i64 SINT[7u64]=94i64 SINT[8u64]=98i64 SINT[9u64]=100i64 SINT[10u64]=98i64 SINT[11u64]=94i64
+    SINT[12u64]=87i64 SINT[13u64]=77i64 SINT[14u64]=64i64 SINT[15u64]=50i64 SINT[16u64]=34i64 SINT[17u64]=17i64
+    SINT[18u64]=0i64 SINT[19u64]=(0i64-17i64) SINT[20u64]=(0i64-34i64) SINT[21u64]=(0i64-50i64) SINT[22u64]=(0i64-64i64) SINT[23u64]=(0i64-77i64)
+    SINT[24u64]=(0i64-87i64) SINT[25u64]=(0i64-94i64) SINT[26u64]=(0i64-98i64) SINT[27u64]=(0i64-100i64) SINT[28u64]=(0i64-98i64) SINT[29u64]=(0i64-94i64)
+    SINT[30u64]=(0i64-87i64) SINT[31u64]=(0i64-77i64) SINT[32u64]=(0i64-64i64) SINT[33u64]=(0i64-50i64) SINT[34u64]=(0i64-34i64) SINT[35u64]=(0i64-17i64)
+    return 0i32
+}
+
+/* TURNTABLE: rotate every object's BASE centre about the vertical axis at z=VW_PIVOT_Z by angle index ai, writing the
+ * rational rotated centre (numerator OBJ_C*, denominator OBJ_K=VW_K).  Recomputed from the base each frame -> NO drift. */
+fn frame_spin(ai: u64) -> i32 @export {
+    let a : i64 = COST[ai]   let b : i64 = SINT[ai]
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        let cx : i64 = OBJ_BX[k]   let cy : i64 = OBJ_BY[k]   let cz : i64 = OBJ_BZ[k]
+        let dz : i64 = cz - VW_PIVOT_Z
+        /* rotate in high-precision integer arithmetic, then round back to the integer lattice (K=1): every frame is then
+         * a FULLY-EXACT unit-quadric render (no i64 blow-up, no z-fight); the orbit is a smooth lattice-rounded path. */
+        OBJ_CX[k] = (cx*a + dz*b) / VW_K
+        OBJ_CY[k] = cy
+        OBJ_CZ[k] = ((0i64 - cx*b) + dz*a) / VW_K + VW_PIVOT_Z
+        OBJ_K[k] = 1i64
+        k = k + 1u64
+    }
+    FL_CARVE = 0u8
+    return 0i32
+}
+fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 @export { frame_scene()   frame_spin(ai)   return fl_do_render(w, h) }
+/* live zoom: set the focal length (clamped to a sane range so a hit stays in the i64 envelope). */
+fn frame_set_focal(f: i64) -> i32 @export { let mut v : i64 = f   if v < 60i64 { v = 60i64 }   if v > 900i64 { v = 900i64 }   VW_FOCAL = v   return 0i32 }
+fn frame_get_focal() -> i64 @export { return VW_FOCAL }
+/* base address of the framebuffer -- FL_FB is packed 0x00RRGGBB, i.e. B,G,R,0 in memory = a 32bpp BI_RGB DIB, so a
+ * native window can StretchDIBits it straight to screen with no copy or conversion. */
+fn frame_fb_addr() -> u64 @export { return (&FL_FB) as u64 }
+
+/* ─── the LIVE SURFACE: print the framebuffer to the terminal as truecolor via Unicode UPPER-HALF-BLOCK (U+2580):
+ * one character cell = two vertical pixels (fg = top, bg = bottom).  Run-length coalesced (emit an SGR colour only when
+ * it changes along a scanline).  Cursor-home first (in-place redraw = no flicker); NO trailing newline (no scroll/tear). */
+fn vw_dec(v: u32) -> i32 { if v >= 10u32 { vw_dec(v / 10u32) }   putchar(((v % 10u32) + 48u32) as i32)   return 0i32 }
+fn vw_sgr(kind: u32, rgb: u32) -> i32 {
+    putchar(27i32) putchar(91i32)                                  /* ESC [ */
+    if kind == 0u32 { putchar(51i32) } else { putchar(52i32) }     /* 3 (fg) / 4 (bg) */
+    putchar(56i32) putchar(59i32) putchar(50i32) putchar(59i32)    /* 8 ; 2 ; */
+    vw_dec((rgb >> 16u32) & 0xFFu32)   putchar(59i32)
+    vw_dec((rgb >> 8u32) & 0xFFu32)    putchar(59i32)
+    vw_dec(rgb & 0xFFu32)   putchar(109i32)                        /* m */
+    return 0i32
+}
+fn vw_block() -> i32 { putchar(226i32) putchar(150i32) putchar(128i32)   return 0i32 }   /* UTF-8 of U+2580 */
+fn frame_print_ansi(w: u64, h: u64) -> i32 @export {
+    putchar(27i32) putchar(91i32) putchar(72i32)                   /* ESC [ H : cursor home */
+    let halfh : u64 = h / 2u64
+    let mut cr : u64 = 0u64
+    while cr < halfh {
+        let toprow : u64 = cr * 2u64   let botrow : u64 = toprow + 1u64
+        let mut pf : u32 = 0xFF000000u32   let mut pb : u32 = 0xFF000000u32   /* impossible colour -> force first emit */
+        let mut c : u64 = 0u64
+        while c < w {
+            let fg : u32 = FL_FB[toprow * w + c] & 0xFFFFFFu32
+            let bg : u32 = FL_FB[botrow * w + c] & 0xFFFFFFu32
+            if fg != pf { vw_sgr(0u32, fg)   pf = fg }
+            if bg != pb { vw_sgr(1u32, bg)   pb = bg }
+            vw_block()
+            c = c + 1u64
+        }
+        putchar(27i32) putchar(91i32) putchar(48i32) putchar(109i32)   /* ESC [ 0 m : reset */
+        if cr < (halfh - 1u64) { putchar(10i32) }                      /* newline except after the last row */
+        cr = cr + 1u64
+    }
+    return 0i32
+}

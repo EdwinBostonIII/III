@@ -1,0 +1,219 @@
+/* algnum.iii -- EXACT REAL ALGEBRAIC NUMBERS: the ordered-field comparison core (sign, total order, EQUALITY).
+ *
+ * PROBLEM (the zero problem).  A real algebraic number is a root of an integer polynomial -- the exact coordinate that
+ * every prior face produces: a CSG surface intersection, a collision time-of-impact, a rotation angle, a circumcentre,
+ * a Sturm-isolated root.  To USE such numbers you must COMPARE them: is this constructed point ON that curve (is the
+ * value zero)?  do two constructed points COINCIDE (are two algebraic numbers equal)?  A float cannot answer.  Deciding
+ * a = b by refining approximations to an epsilon is a category error: any threshold both MISSES true equalities that
+ * differ below it and FABRICATES false ones above it.  Equality of algebraic numbers is the classical undecidable-looking
+ * "zero problem" -- yet for algebraic numbers it IS decidable, and a float simply never decides it.
+ *
+ * INSIGHT.  An algebraic number's identity is (a polynomial it satisfies, WHICH of its real roots).  Two are EQUAL iff
+ * they share that root -- decidable exactly by gcd: a common root exists iff gcd(p,q) is non-constant AND has a root in
+ * the region where both live.  Their ORDER is decidable because Q is dense: distinct reals have a rational strictly
+ * between them, and Sturm's root_count finds it by bisection in finitely many steps.  SIGN is order against 0.  None of
+ * this approximates a root -- it is finitely many exact integer sign evaluations.  The number is the exact CUT it makes
+ * in Q, computed, never sampled.
+ *
+ * REPRESENTATION.  A register r holds an integer polynomial (coeffs AN_C[r*8 + i], i = coeff of x^i, degree AN_DG[r])
+ * and a half-open isolating interval (AN_LN[r]/AN_D[r], AN_HN[r]/AN_D[r]] with a SHARED denominator AN_D[r] = 2^depth
+ * that holds EXACTLY one real root of the polynomial.  Refinement is true dyadic bisection: the denominator doubles, so
+ * numerators stay integer and every endpoint is exact.
+ *
+ * UNIFICATION (face 1 wedded to face 6).  For alpha = sqrt(b) (root of x^2 - b), sign(alpha - n/d) is computable TWO
+ * mathematically independent exact ways: by Sturm refinement of alpha's isolating interval (this file, on the sturm.iii
+ * engine), and by the sum-of-square-roots separation-bound oracle sign(d*sqrt(b) - n) = sqrtsum_lazy3([d,-n],[b,1]).
+ * They MUST agree for every rational -- two exact-sign faculties certifying one cut.  The KAT gates that agreement.
+ *
+ * COMPOSES, REIMPLEMENTS NOTHING: sturm.iii (build / sturm_var / root_count / poly_gcd / gcd_coeff -- face 6) and
+ * sqrt_sum_sign.iii (sqrtsum_lazy3 -- face 1, the substrate).  This file adds ONLY the register file and the
+ * compare / equality / sign logic.
+ *
+ * HONEST SCOPE: the ORDER structure (sign, total order, decidable equality) -- NOT algebraic arithmetic (alpha + beta,
+ * alpha * beta via resultants), which needs a bigint tier and is stated future work.  i64 envelope: the homogenised sign
+ * eval forms xn^i * xd^(deg-i), so with dyadic xd = 2^depth a refinement of degree d costs ~2^(d*depth) -- i64 holds
+ * d*depth <~ 60.  The gate's witnesses separate at depth <= 14 (degree <= 3), safely inside; deeper/higher needs bigint.
+ * No epsilon, ever.
+ *
+ * Hexad: kind_form (exact algebra).  Ring: R-1.  K: 1.00. */
+module algnum
+
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sturm_var(xn: i64, xd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn poly_gcd(a_ptr: u64, dega: i64, b_ptr: u64, degb: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn gcd_coeff(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+/* register file: 4 algebraic-number registers.  coeffs AN_C[r*8 + i]; interval (AN_LN/AN_D, AN_HN/AN_D], AN_D = 2^depth. */
+var AN_C : [i64; 32]   var AN_DG : [i64; 4]
+var AN_LN : [i64; 4]   var AN_HN : [i64; 4]   var AN_D : [i64; 4]
+var AN_G : [i64; 8]                              /* scratch for a gcd polynomial before building its chain */
+var AN_SA : [i64; 2]   var AN_SB : [i64; 2]      /* scratch for the Sigma-sqrt cross-check terms */
+
+/* set register r to the unique root of coeffs[0..deg] in the integer-endpoint interval (lo, hi].  Denominator starts 1. */
+fn an_set(r: i64, coeffs_ptr: u64, deg: i64, lo: i64, hi: i64) -> i32 @export {
+    let p : *i64 = coeffs_ptr as *i64
+    let mut i : i64 = 0i64
+    while i <= deg { AN_C[((r * 8i64) + i) as u64] = p[i as u64]   i = i + 1i64 }
+    AN_DG[r as u64] = deg
+    AN_LN[r as u64] = lo   AN_HN[r as u64] = hi   AN_D[r as u64] = 1i64
+    return 0i32
+}
+
+/* set register r from an interval with SEPARATE endpoint denominators (ln/ld, hn/hd] -- e.g. a sturm.iii isolate_roots
+ * output (iso_lo_num/iso_lo_den, iso_hi_num/iso_hi_den).  Common-denominated to a single D = ld*hd; refinement stays
+ * exact (integer arithmetic, any D > 0).  This is how a real prior-face PRODUCT (an isolated root) becomes comparable. */
+fn an_set_iv(r: i64, coeffs_ptr: u64, deg: i64, ln: i64, ld: i64, hn: i64, hd: i64) -> i32 @export {
+    let p : *i64 = coeffs_ptr as *i64
+    let mut i : i64 = 0i64
+    while i <= deg { AN_C[((r * 8i64) + i) as u64] = p[i as u64]   i = i + 1i64 }
+    AN_DG[r as u64] = deg
+    AN_LN[r as u64] = ln * hd   AN_HN[r as u64] = hn * ld   AN_D[r as u64] = ld * hd
+    return 0i32
+}
+
+/* (re)build register r's Sturm chain into the shared sturm.iii chain store.  Must be called before any root_count that
+ * is meant to concern register r, because the chain store is single and every sturm_build / poly_gcd overwrites it. */
+fn an_build(r: i64) -> i64 {
+    let base0 : u64 = (&AN_C) as u64
+    let off : i64 = r * 64i64                                   /* 8 coeffs * 8 bytes */
+    let base : u64 = base0 + (off as u64)
+    return sturm_build(base, AN_DG[r as u64])
+}
+
+/* precondition check: register r's interval really isolates exactly ONE distinct real root.  Returns that count. */
+fn an_valid(r: i64) -> i64 @export {
+    an_build(r)
+    let d : i64 = AN_D[r as u64]
+    return root_count(AN_LN[r as u64], d, AN_HN[r as u64], d)
+}
+
+/* one dyadic refinement of register r: bisect (lo, hi] at its midpoint m, keep the half that holds the root.  The shared
+ * denominator doubles (2^depth -> 2^(depth+1)); numerators rescale by 2.  Rebuilds r's chain to read the sign at m. */
+fn an_refine(r: i64) -> i32 @export {
+    let ln : i64 = AN_LN[r as u64]   let hn : i64 = AN_HN[r as u64]   let d : i64 = AN_D[r as u64]
+    let mnum : i64 = ln + hn                                    /* midpoint numerator over 2d */
+    let d2 : i64 = 2i64 * d
+    an_build(r)
+    let c : i64 = root_count(ln, d, mnum, d2)                   /* # roots in (lo, m] */
+    if c == 1i64 { AN_LN[r as u64] = 2i64 * ln   AN_HN[r as u64] = mnum        AN_D[r as u64] = d2 }
+    else         { AN_LN[r as u64] = mnum        AN_HN[r as u64] = 2i64 * hn   AN_D[r as u64] = d2 }
+    return 0i32
+}
+
+/* order of two registers from their intervals alone: -1 (alpha_r < alpha_s), +1 (alpha_r > alpha_s), 2 (overlap, undecided).
+ * Half-open (lo,hi]: if hi_r <= lo_s then alpha_r <= hi_r <= lo_s < alpha_s.  Cross-multiplied over positive denominators. */
+fn an_disjoint_order(r: i64, s: i64) -> i32 {
+    let hnr : i64 = AN_HN[r as u64]   let dr : i64 = AN_D[r as u64]
+    let lns : i64 = AN_LN[s as u64]   let ds : i64 = AN_D[s as u64]
+    let a1 : i64 = hnr * ds   let b1 : i64 = lns * dr
+    if a1 <= b1 { return 0i32 - 1i32 }                          /* alpha_r < alpha_s */
+    let hns : i64 = AN_HN[s as u64]   let lnr : i64 = AN_LN[r as u64]
+    let a2 : i64 = hns * dr   let b2 : i64 = lnr * ds
+    if a2 <= b2 { return 1i32 }                                 /* alpha_r > alpha_s */
+    return 2i32                                                 /* overlap */
+}
+
+/* THE ZERO PROBLEM: are registers r and s the SAME algebraic number?  Decided exactly: gcd(p_r,p_s) has a common root,
+ * and if one lies in the interval overlap it must equal each register's unique root there (isolation), so alpha_r=alpha_s.
+ * gcd args ordered by descending degree for st_prem's degA>=degB precondition (gcd is symmetric, so this is free). */
+fn an_gcd_equal(r: i64, s: i64) -> u8 {
+    let dgr : i64 = AN_DG[r as u64]   let dgs : i64 = AN_DG[s as u64]
+    let base0 : u64 = (&AN_C) as u64
+    let baser : u64 = base0 + ((r * 64i64) as u64)
+    let bases : u64 = base0 + ((s * 64i64) as u64)
+    let mut g : i64 = 0i64
+    if dgr >= dgs { g = poly_gcd(baser, dgr, bases, dgs) }
+    else          { g = poly_gcd(bases, dgs, baser, dgr) }
+    if g < 1i64 { return 0u8 }                                  /* constant gcd -> coprime -> distinct */
+    let mut i : i64 = 0i64
+    while i <= g { AN_G[i as u64] = gcd_coeff(i as u64)   i = i + 1i64 }
+    sturm_build((&AN_G) as u64, g)                              /* chain of the gcd; overlap count next */
+    let dr : i64 = AN_D[r as u64]   let ds : i64 = AN_D[s as u64]
+    let dd : i64 = dr * ds
+    let lor : i64 = AN_LN[r as u64] * ds   let los : i64 = AN_LN[s as u64] * dr
+    let hir : i64 = AN_HN[r as u64] * ds   let his : i64 = AN_HN[s as u64] * dr
+    let mut lon : i64 = lor   if los > lor { lon = los }        /* max of the two lows  */
+    let mut hin : i64 = hir   if his < hir { hin = his }        /* min of the two highs */
+    let c : i64 = root_count(lon, dd, hin, dd)
+    if c >= 1i64 { return 1u8 }                                 /* a shared root in the overlap -> EQUAL */
+    return 0u8
+}
+
+/* TOTAL ORDER with decidable equality: -1 (alpha_r < alpha_s), 0 (equal), +1 (alpha_r > alpha_s).  Terminating.
+ *  (1) intervals disjoint       -> read order off the intervals.
+ *  (2) overlap and gcd-common   -> EQUAL (the zero problem, decided -- NOT by refinement).
+ *  (3) overlap and coprime      -> refine both (each on its own chain) until disjoint; alpha_r != beta so density separates. */
+fn an_cmp(r: i64, s: i64) -> i32 @export {
+    let d0 : i32 = an_disjoint_order(r, s)
+    if d0 != 2i32 { return d0 }
+    let eq : u8 = an_gcd_equal(r, s)
+    if eq == 1u8 { return 0i32 }
+    let mut depth : i64 = 0i64
+    let mut ord : i32 = 2i32
+    while depth < 40i64 {
+        an_refine(r)
+        an_refine(s)
+        let dz : i32 = an_disjoint_order(r, s)
+        if dz != 2i32 { ord = dz   depth = 40i64 } else { depth = depth + 1i64 }
+    }
+    return ord
+}
+
+/* is n/dd an exact root of register r's polynomial?  Homogenised Horner: sum c_i * n^i * dd^(deg-i) == 0. */
+fn an_poly_at_zero(r: i64, n: i64, dd: i64) -> u8 {
+    let deg : i64 = AN_DG[r as u64]
+    let base : i64 = r * 8i64
+    let mut acc : i64 = AN_C[(base + deg) as u64]
+    let mut pw : i64 = 1i64
+    let mut i : i64 = deg - 1i64
+    while i >= 0i64 {
+        pw = pw * dd
+        acc = acc * n + AN_C[(base + i) as u64] * pw
+        i = i - 1i64
+    }
+    if acc == 0i64 { return 1u8 }
+    return 0u8
+}
+
+/* sign(alpha_r - n/dd) by the STURM engine (dd > 0): -1, 0 (n/dd is exactly the root), +1.  Uses root_count against the
+ * rational n/dd inside the isolating interval -- no refinement needed, one exact count. */
+fn an_sign_vs_rat(r: i64, n: i64, dd: i64) -> i32 @export {
+    let ln : i64 = AN_LN[r as u64]   let hn : i64 = AN_HN[r as u64]   let d : i64 = AN_D[r as u64]
+    let a1 : i64 = n * d   let b1 : i64 = ln * dd
+    if a1 <= b1 { return 1i32 }                                 /* n/dd <= lo < alpha -> alpha > n/dd */
+    let a2 : i64 = n * d   let b2 : i64 = hn * dd
+    if a2 >= b2 {                                               /* n/dd >= hi >= alpha */
+        if an_poly_at_zero(r, n, dd) == 1u8 { return 0i32 }
+        return 0i32 - 1i32
+    }
+    an_build(r)
+    let c : i64 = root_count(n, dd, hn, d)                      /* # roots in (n/dd, hi] */
+    if c == 1i64 { return 1i32 }                               /* alpha in (n/dd, hi] -> alpha > n/dd */
+    if an_poly_at_zero(r, n, dd) == 1u8 { return 0i32 }
+    return 0i32 - 1i32
+}
+
+/* sign(sqrt(b) - n/dd) by the Sigma-sqrt SEPARATION-BOUND oracle (face 1): sign(dd*sqrt(b) - n) over radicands {b, 1}. */
+fn an_sqrt_vs_rat(b: i64, n: i64, dd: i64) -> i32 @export {
+    AN_SA[0u64] = dd          AN_SA[1u64] = 0i64 - n
+    AN_SB[0u64] = b           AN_SB[1u64] = 1i64
+    return sqrtsum_lazy3((&AN_SA) as u64, (&AN_SB) as u64, 2u64)
+}
+
+/* SIGN of register r: -1, 0, +1.  Exact rational root at 0 (constant term 0 and 0 in the interval) -> 0; else refine
+ * until the interval lies strictly on one side of 0. */
+fn an_sign(r: i64) -> i32 @export {
+    let c0 : i64 = AN_C[(r * 8i64) as u64]
+    let ln0 : i64 = AN_LN[r as u64]   let hn0 : i64 = AN_HN[r as u64]
+    if c0 == 0i64 { if ln0 < 0i64 { if hn0 >= 0i64 { return 0i32 } } }
+    let mut depth : i64 = 0i64
+    let mut res : i32 = 0i32
+    while depth < 40i64 {
+        let lo : i64 = AN_LN[r as u64]   let hi : i64 = AN_HN[r as u64]
+        if lo >= 0i64 { res = 1i32   depth = 40i64 }
+        else { if hi <= 0i64 { res = 0i32 - 1i32   depth = 40i64 } else { an_refine(r)   depth = depth + 1i64 } }
+    }
+    return res
+}

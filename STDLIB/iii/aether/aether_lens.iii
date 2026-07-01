@@ -1,0 +1,440 @@
+/* aether_lens.iii -- THE EXACT RAY-CAST substrate: a floating-point-free camera that resolves a 3D scene of quadric
+ * solids by EXACT ALGEBRA, so it never z-fights, never misses a tangent, and renders bit-for-bit reproducibly.
+ *
+ * PROBLEM.  Every renderer on Earth casts rays in float.  Two surfaces that meet the ray at almost the same depth
+ * (a near-tie) are ordered by comparing two rounded floats -- and when the true gap is below float epsilon the sort
+ * FLIPS between frames: z-fighting.  A ray that exactly grazes a sphere (tangent) rounds to either a spurious hit or a
+ * spurious miss.  The pixel is a rounding artifact, not the geometry.
+ *
+ * INSIGHT (first principles).  A ray p(t)=o+t*d meeting a quadric Q(p)=0 is EXACTLY a quadratic  a*t^2 + b*t + g = 0
+ * with a,b,g INTEGERS (integer camera + integer quadric coeffs, the csg_kernel qa..qj form).  Then:
+ *   - HIT / MISS / TANGENT is sign(Delta), Delta = b^2 - 4ag : plain INTEGER arithmetic -- exact, trivially.
+ *   - the near hit is t- = (-b - sqrt Delta)/(2a).  For a POSITIVE-DEFINITE quadric (a = d^T A d > 0: spheres,
+ *     ellipsoids) the minus-root is unconditionally the nearer, and t- lives in the rank-1 field Q(sqrt Delta).
+ *   - DEPTH ORDER across two surfaces i,j -- the operation float z-fights on -- reduces EXACTLY to a sign of a sum of
+ *     square roots:  (t_i - t_j)*4 a_i a_j = (2 a_i b_j - 2 a_j b_i) sqrt 1  +  (-2 a_j) sqrt(Delta_i)  +  (2 a_i) sqrt(Delta_j)
+ *     an n=3 surd sign.  With a_i,a_j>0 the 4 a_i a_j factor is positive, so sign(t_i - t_j) IS that surd sign -- decided
+ *     by sqrtsum_lazy3, the SAME engine behind csg_kernel / q23_sign / photon_route.  It NEVER collapses a near-tie.
+ *   - SHADING is DERIVED, not stored (the "Schrodinger colour"): the exact surface normal is N = grad Q(p) = 2A p + b,
+ *     an element of Q(sqrt Delta)^3.  A Lambert intensity k in 0..255 is the largest k with cos^2 theta >= (k/255)^2,
+ *     i.e.  255^2 (N.L)^2 >= k^2 |N|^2 |L|^2 -- and after clearing (2a)^2 that is  C0 sqrt 1 + C1 sqrt Delta >= 0, an
+ *     n=2 surd sign.  So the pixel's brightness is COMPUTED by an exact predicate, never sampled.
+ *
+ * So a whole exact ray tracer for quadric CSG is just the composition:  integer quadratic -> integer sign(Delta) for
+ * hit -> n<=3 surd sign for depth/CSG -> n=2 surd sign for shading.  No mesh, no texture, no float, no epsilon.
+ *
+ * WHAT IT GIVES BACK (honest -- a consumed-by relationship, not manufactured plumbing).  aether_lens is a VISUAL PROVER:
+ * it CONSUMES csg_kernel (it renders the exact solid whose membership csg_kernel decides) and cyclotomic_se3 (the camera
+ * and objects are placed / orbited by the zero-drift SE(3) rotation, so an orbit returns bit-for-bit -- a rendered proof
+ * of the zero-drift theorem).  The scene is fed as csg_kernel qa..qj quadrics: ONE representation, no adapter.
+ *
+ * EXACTNESS SCOPE (honest, sibling-consistent with csg_kernel's "integer-exact within the i64 envelope"):
+ *   - MODE A (this file): CLOSED-FORM ray-quadric roots -> UNCONDITIONAL exactness (hit/miss/tangent/order/shade all
+ *     decided with zero float error).  Scoped to POSITIVE-DEFINITE quadrics (a>0); a<=0 (cylinder ray-parallel-to-axis,
+ *     plane, hyperboloid: linear or two-positive-root cases) is the NEXT increment, not faked here.
+ *   - MODE B (named, not built here): raymarch photon_route's lattice_dist_oracle for the implicit infinite lattice --
+ *     picked SECOND on purpose: a marched "hit" is exact only via discrete node membership (asymptotic approach
+ *     otherwise), so the closed-form quadric root is the STRONGER exactness and ships first.
+ *   - i64 ENVELOPE: a,b,g,Delta and the shading coefficients C0,C1 are integer; keep the scene coeffs bounded so they
+ *     fit i64 (the surd engine then signs them exactly, escalating to its own bigint tier past 2^20).  The render-scale
+ *     widening is the EXISTING ui_sqrt_sum_sign_big (bigint-coefficient surd sign) -- named, not a stub.
+ *
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00.  Depends only on sqrt_sum_sign (+ the csg_kernel quadric form). */
+module aether_lens
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+/* render-scale surd sign: caller-owned bigint magnitudes -- lets shading coeffs exceed i64 (the 255^2 factor on a wide
+ * image) while staying EXACT.  The i64 reps (NLP..NNR) still fit i64; only the final C0,C1 are promoted to bigint. */
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign_big(mag_ptr: u64, sgn_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+/* the integer ray  p(t) = o + t*d  (set once, then cast many quadrics against it) */
+var LENS_OX : i64   var LENS_OY : i64   var LENS_OZ : i64
+var LENS_DX : i64   var LENS_DY : i64   var LENS_DZ : i64
+/* the current quadric's csg_kernel coeffs qa..qj (kept for the exact gradient / shading) */
+var LENS_Q : [i64; 10]
+/* the current ray-quadric quadratic  a t^2 + b t + g = 0 ,  Delta = b^2 - 4 a g */
+var LENS_A : i64   var LENS_B : i64   var LENS_G : i64   var LENS_D : i64
+/* scratch for sqrtsum_lazy3 (coeffs, radicands) */
+var LENS_SA : [i64; 4]   var LENS_SB : [i64; 4]
+/* the exact Q(sqrt Delta) shading reps:  N.L = (NLP + NLR sqrt D)/(2a) ;  |N|^2 = (NNP + NNR sqrt D)/(4 a^2) */
+var LENS_NLP : i64   var LENS_NLR : i64   var LENS_NNP : i64   var LENS_NNR : i64
+/* scratch for the render-scale (bigint-coefficient) surd sign */
+var LENS_MAG : [u64; 2]   var LENS_SGN : [i64; 2]   var LENS_RAD : [i64; 2]
+
+fn lens_u64abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn lens_isign64(x: i64) -> i64 { if x > 0i64 { return 1i64 }   if x < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+
+fn lens_isign(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+/* ── internal surd-sign helpers: sign(c0*sqrt1 + c1*sqrt r1 [+ c2*sqrt r2]).  Radicands must be >= 0 (the caller passes
+ * Delta, which is >= 0 exactly when the ray hits -- guarded by sign(Delta) before any shading / ordering call). */
+fn lens_sign2(c0: i64, c1: i64, r1: i64) -> i32 {
+    LENS_SA[0u64] = c0   LENS_SB[0u64] = 1i64
+    LENS_SA[1u64] = c1   LENS_SB[1u64] = r1
+    return sqrtsum_lazy3((&LENS_SA) as u64, (&LENS_SB) as u64, 2u64)
+}
+fn lens_sign3(c0: i64, c1: i64, r1: i64, c2: i64, r2: i64) -> i32 {
+    LENS_SA[0u64] = c0   LENS_SB[0u64] = 1i64
+    LENS_SA[1u64] = c1   LENS_SB[1u64] = r1
+    LENS_SA[2u64] = c2   LENS_SB[2u64] = r2
+    return sqrtsum_lazy3((&LENS_SA) as u64, (&LENS_SB) as u64, 3u64)
+}
+
+/* set the integer ray. */
+fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 @export {
+    LENS_OX = ox   LENS_OY = oy   LENS_OZ = oz
+    LENS_DX = dx   LENS_DY = dy   LENS_DZ = dz
+    return 0i32
+}
+
+/* ── (1) HIT / MISS / TANGENT -- integer-exact.  Casts the current ray at a csg_kernel quadric qa..qj; writes the
+ * quadratic (a,b,g,Delta) into module state and returns sign(Delta):  +1 two real hits | 0 EXACT tangent | -1 miss.
+ * a = d^T A d is the leading coeff; for the positive-definite scope of MODE A the caller ensures a > 0. */
+fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 @export {
+    LENS_Q[0u64] = qa   LENS_Q[1u64] = qb   LENS_Q[2u64] = qc   LENS_Q[3u64] = qd   LENS_Q[4u64] = qe
+    LENS_Q[5u64] = qf   LENS_Q[6u64] = qg   LENS_Q[7u64] = qh   LENS_Q[8u64] = qi   LENS_Q[9u64] = qj
+    let ox : i64 = LENS_OX   let oy : i64 = LENS_OY   let oz : i64 = LENS_OZ
+    let dx : i64 = LENS_DX   let dy : i64 = LENS_DY   let dz : i64 = LENS_DZ
+    let a : i64 = qa*dx*dx + qb*dy*dy + qc*dz*dz + qd*dx*dy + qe*dx*dz + qf*dy*dz
+    let b : i64 = 2i64*qa*ox*dx + 2i64*qb*oy*dy + 2i64*qc*oz*dz + qd*(ox*dy + oy*dx) + qe*(ox*dz + oz*dx) + qf*(oy*dz + oz*dy) + qg*dx + qh*dy + qi*dz
+    let g : i64 = qa*ox*ox + qb*oy*oy + qc*oz*oz + qd*ox*oy + qe*ox*oz + qf*oy*oz + qg*ox + qh*oy + qi*oz + qj
+    let dsc : i64 = b*b - 4i64*a*g
+    LENS_A = a   LENS_B = b   LENS_G = g   LENS_D = dsc
+    return lens_isign(dsc)
+}
+fn lens_a() -> i64 @export { return LENS_A }
+fn lens_b() -> i64 @export { return LENS_B }
+fn lens_g() -> i64 @export { return LENS_G }
+fn lens_disc() -> i64 @export { return LENS_D }
+
+/* ── (2) IS THE NEAR HIT IN FRONT OF THE EYE?  sign(t-) with t- = (-b - sqrt Delta)/(2a), a>0  ->  sign(-b - sqrt Delta).
+ * +1 the surface is ahead (render it) | 0 exactly at the eye | -1 behind (the eye is past this near surface). */
+fn lens_front_sign() -> i32 @export {
+    return lens_sign2(0i64 - LENS_B, 0i64 - 1i64, LENS_D)
+}
+
+/* ── (3) EXACT DEPTH TEST vs a rational scalar depth d0 (a z-buffer compare against a plane).  sign(t- - d0), a>0,
+ * cleared by 2a:  sign((-b - 2 a d0) sqrt 1 + (-1) sqrt Delta) -- an n=2 surd sign that NEVER straddles a near-tie. */
+fn lens_depth_vs_rational(d0: i64) -> i32 @export {
+    return lens_sign2((0i64 - LENS_B) - 2i64*LENS_A*d0, 0i64 - 1i64, LENS_D)
+}
+
+/* ── (4) EXACT DEPTH ORDER across two surfaces (the z-fight killer).  sign(t_i - t_j) for near hits of two
+ * positive-definite quadrics, each given by its snapshot (a,b,Delta):
+ *   (t_i - t_j) * 4 a_i a_j = (2 a_i b_j - 2 a_j b_i) sqrt 1 + (-2 a_j) sqrt(Delta_i) + (2 a_i) sqrt(Delta_j)
+ * with 4 a_i a_j > 0, so the sign of that n=3 surd sum IS sign(t_i - t_j).  Returns +1 (i farther) / 0 (exactly equal
+ * depth) / -1 (i nearer -> i occludes j).  Exact -> the nearer surface is chosen deterministically, no z-fighting. */
+fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 @export {
+    return lens_sign3(2i64*ai*bj - 2i64*aj*bi, 0i64 - 2i64*aj, di, 2i64*ai, dj)
+}
+
+/* ── (5) DERIVED SHADING.  Build the exact Q(sqrt Delta) reps of N.L and |N|^2 at the near hit, for the CURRENT quadric.
+ * N = grad Q(p) = 2A p + b.  Per component c:  N_c = AO_c + t- * AD_c , with AD_c the d-directional gradient coeff and
+ * AO_c the o-part.  With t- = (-b - sqrt Delta)/(2a):  N_c = (P_c - AD_c sqrt Delta)/(2a),  P_c = 2 a AO_c - AD_c b.
+ * Hence  N.L = (NLP + NLR sqrt Delta)/(2a),  NLP = sum P_c L_c , NLR = - sum AD_c L_c ; and
+ *        |N|^2 = (NNP + NNR sqrt Delta)/(4 a^2), NNP = sum(P_c^2 + AD_c^2 Delta), NNR = -2 sum P_c AD_c . */
+fn lens_shade_prep(lx: i64, ly: i64, lz: i64) -> i32 @export {
+    let qa : i64 = LENS_Q[0u64]   let qb : i64 = LENS_Q[1u64]   let qc : i64 = LENS_Q[2u64]   let qd : i64 = LENS_Q[3u64]
+    let qe : i64 = LENS_Q[4u64]   let qf : i64 = LENS_Q[5u64]   let qg : i64 = LENS_Q[6u64]   let qh : i64 = LENS_Q[7u64]
+    let qi : i64 = LENS_Q[8u64]
+    let ox : i64 = LENS_OX   let oy : i64 = LENS_OY   let oz : i64 = LENS_OZ
+    let dx : i64 = LENS_DX   let dy : i64 = LENS_DY   let dz : i64 = LENS_DZ
+    let a : i64 = LENS_A   let b : i64 = LENS_B   let dd : i64 = LENS_D
+    /* gradient split into o-part AO and d-part AD (grad Q = (2qa x+qd y+qe z+qg, qd x+2qb y+qf z+qh, qe x+qf y+2qc z+qi)) */
+    let aox : i64 = 2i64*qa*ox + qd*oy + qe*oz + qg      let adx : i64 = 2i64*qa*dx + qd*dy + qe*dz
+    let aoy : i64 = qd*ox + 2i64*qb*oy + qf*oz + qh      let ady : i64 = qd*dx + 2i64*qb*dy + qf*dz
+    let aoz : i64 = qe*ox + qf*oy + 2i64*qc*oz + qi      let adz : i64 = qe*dx + qf*dy + 2i64*qc*dz
+    let px : i64 = 2i64*a*aox - adx*b
+    let py : i64 = 2i64*a*aoy - ady*b
+    let pz : i64 = 2i64*a*aoz - adz*b
+    LENS_NLP = px*lx + py*ly + pz*lz
+    LENS_NLR = 0i64 - (adx*lx + ady*ly + adz*lz)
+    LENS_NNP = px*px + adx*adx*dd + py*py + ady*ady*dd + pz*pz + adz*adz*dd
+    LENS_NNR = 0i64 - 2i64*(px*adx + py*ady + pz*adz)
+    return 0i32
+}
+/* front/back facing of the current near hit toward light L: sign(N.L) = sign(NLP sqrt1 + NLR sqrt Delta), a>0. */
+fn lens_ndotl_sign(lx: i64, ly: i64, lz: i64) -> i32 @export {
+    lens_shade_prep(lx, ly, lz)
+    return lens_sign2(LENS_NLP, LENS_NLR, LENS_D)
+}
+/* exact 8-bit Lambert intensity 0..255 of the current near hit under light L.  Back-faces / grazing -> 0.  The largest k
+ * with 255^2 (N.L)^2 >= k^2 |N|^2 |L|^2 ; after *4a^2 that is  C0 sqrt1 + C1 sqrt Delta >= 0 (an n=2 surd sign per step). */
+fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 @export {
+    lens_shade_prep(lx, ly, lz)
+    let nl : i32 = lens_sign2(LENS_NLP, LENS_NLR, LENS_D)
+    if nl < 1i32 { return 0u32 }
+    let ll : i64 = lx*lx + ly*ly + lz*lz
+    let nlp : i64 = LENS_NLP   let nlr : i64 = LENS_NLR   let dd : i64 = LENS_D
+    let nnp : i64 = LENS_NNP   let nnr : i64 = LENS_NNR
+    let base0 : i64 = 65025i64 * (nlp*nlp + nlr*nlr*dd)      /* 255^2 (NLP^2 + NLR^2 Delta) */
+    let base1 : i64 = 2i64 * 65025i64 * nlp * nlr            /* 2*255^2 NLP NLR             */
+    let mut lo : i64 = 0i64   let mut hi : i64 = 255i64
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        let k2ll : i64 = mid*mid*ll
+        let c0 : i64 = base0 - k2ll*nnp
+        let c1 : i64 = base1 - k2ll*nnr
+        let s : i32 = lens_sign2(c0, c1, dd)
+        if s < 0i32 { hi = mid - 1i64 } else { lo = mid }
+    }
+    return lo as u32
+}
+
+/* ── (6) EXACT CSG MEMBERSHIP of the current near hit in ANOTHER quadric B (qa..qj of B), same ray.  This is what makes
+ * solids INTERACT: it decides sign(Q_B(p)) at p = the CURRENT quadric's near hit -- an IRRATIONAL point in Q(sqrt Delta_A)
+ * -- so a CSG A\B / A∩B can carve one exact solid against another with zero float error (the direct generalisation of
+ * csg_kernel::csg_surf_point_side to an arbitrary ray hit).  Returns +1 outside B / 0 exactly on B / -1 inside B.
+ *   Q_B(p)*4 a_A^2 = C0 sqrt1 + C1 sqrt(Delta_A),  C0 = a_B(b_A^2+Delta_A) - 2 a_A b_A b_B + 4 a_A^2 g_B,  C1 = 2 a_B b_A - 2 a_A b_B
+ * (identity check: B==A gives C0=C1=0 -> 0, the hit is on A).  a_A>0 so the *4a_A^2 is sign-preserving. */
+fn lens_membership_sign(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 @export {
+    let ox : i64 = LENS_OX   let oy : i64 = LENS_OY   let oz : i64 = LENS_OZ
+    let dx : i64 = LENS_DX   let dy : i64 = LENS_DY   let dz : i64 = LENS_DZ
+    let ab : i64 = qa*dx*dx + qb*dy*dy + qc*dz*dz + qd*dx*dy + qe*dx*dz + qf*dy*dz
+    let bb : i64 = 2i64*qa*ox*dx + 2i64*qb*oy*dy + 2i64*qc*oz*dz + qd*(ox*dy + oy*dx) + qe*(ox*dz + oz*dx) + qf*(oy*dz + oz*dy) + qg*dx + qh*dy + qi*dz
+    let gb : i64 = qa*ox*ox + qb*oy*oy + qc*oz*oz + qd*ox*oy + qe*ox*oz + qf*oy*oz + qg*ox + qh*oy + qi*oz + qj
+    let aa : i64 = LENS_A   let ba : i64 = LENS_B   let da : i64 = LENS_D
+    let c0 : i64 = ab*(ba*ba + da) - 2i64*aa*ba*bb + 4i64*aa*aa*gb
+    let c1 : i64 = 2i64*ab*ba - 2i64*aa*bb
+    return lens_sign2(c0, c1, da)
+}
+
+/* EXACT sign of a 2-term surd  s0*|m0| + s1*|m1|*sqrt(D)  (D >= 0), m0,m1 caller-owned bigint magnitudes.  For a 2-term
+ * surd the sign needs NO separation bound and NO isqrt: same signs -> trivial; opposite signs -> compare |m0|^2 vs
+ * |m1|^2 * D by bigint multiply.  This is why render-scale shading is fast -- a few bigint ops, no 16 MB arena. */
+fn lens_n2sign_sq(ar: u64, m0: u64, s0: i64, m1: u64, s1: i64, dcap: i64) -> i32 {
+    if s0 >= 0i64 { if s1 >= 0i64 { if s0 == 0i64 { if s1 == 0i64 { return 0i32 } }   return 1i32 } }
+    if s0 <= 0i64 { if s1 <= 0i64 { if s0 == 0i64 { if s1 == 0i64 { return 0i32 } }   return 0i32 - 1i32 } }
+    let a2 : u64 = bigint_mul(ar, m0, m0)
+    let bd : u64 = bigint_from_u64(ar, dcap as u64)
+    let m1s : u64 = bigint_mul(ar, m1, m1)
+    let b2 : u64 = bigint_mul(ar, m1s, bd)
+    let c : i32 = bigint_cmp(a2, b2)
+    bigint_drop(a2)   bigint_drop(bd)   bigint_drop(m1s)   bigint_drop(b2)
+    if s0 > 0i64 { return c }
+    return 0i32 - c
+}
+
+/* ── (5b) DERIVED SHADING at RENDER SCALE (exact, unbounded resolution).  Identical exact 8-bit Lambert to lens_shade255,
+ * but the final comparison coefficients C0,C1 -- which carry a 255^2 factor and overflow i64 for a wide image -- are
+ * formed in BIGINT and signed by the 2-term squaring predicate lens_n2sign_sq (fast: no separation bound, no isqrt, no
+ * 16 MB arena).  The Q(sqrt Delta) reps (NLP..NNR) stay i64.  Cross-checked EQUAL to lens_shade255 (gate 2158). */
+fn lens_shade255_big(lx: i64, ly: i64, lz: i64) -> u32 @export {
+    lens_shade_prep(lx, ly, lz)
+    let nl : i32 = lens_sign2(LENS_NLP, LENS_NLR, LENS_D)
+    if nl < 1i32 { return 0u32 }
+    let ll : i64 = lx*lx + ly*ly + lz*lz
+    let nlp : i64 = LENS_NLP   let nlr : i64 = LENS_NLR   let dd : i64 = LENS_D
+    let nnp : i64 = LENS_NNP   let nnr : i64 = LENS_NNR
+    let base_in : i64 = nlp*nlp + nlr*nlr*dd                 /* >= 0 */
+    let base1 : i64 = 2i64 * nlp * nlr                       /* signed */
+    let base1a : u64 = lens_u64abs(base1)   let base1s : i64 = lens_isign64(base1)
+    let nnra : u64 = lens_u64abs(nnr)       let nnrs : i64 = lens_isign64(nnr)
+    let ar : u64 = arena_new(65536u64)                       /* ONE small arena, reused across the 8 search steps */
+    let mut lo : i64 = 0i64   let mut hi : i64 = 255i64
+    while lo < hi {
+        let mid : i64 = (lo + hi + 1i64) / 2i64
+        let k2ll : i64 = mid*mid*ll                          /* >= 0 */
+        let b65 : u64 = bigint_from_u64(ar, 65025u64)
+        /* C0 = 65025*base_in - k2ll*NNP  (both terms >= 0) */
+        let bbi : u64 = bigint_from_u64(ar, base_in as u64)
+        let p0 : u64 = bigint_mul(ar, b65, bbi)
+        let bk2 : u64 = bigint_from_u64(ar, k2ll as u64)
+        let bnnp : u64 = bigint_from_u64(ar, nnp as u64)
+        let n0 : u64 = bigint_mul(ar, bk2, bnnp)
+        bigint_drop(bbi)   bigint_drop(bnnp)   bigint_drop(bk2)
+        let c0cmp : i32 = bigint_cmp(p0, n0)
+        let mut mag0 : u64 = bigint_from_u64(ar, 0u64)   let mut sgn0 : i64 = 0i64
+        if c0cmp > 0i32 { bigint_drop(mag0)   mag0 = bigint_sub(ar, p0, n0)   sgn0 = 1i64 }
+        if c0cmp < 0i32 { bigint_drop(mag0)   mag0 = bigint_sub(ar, n0, p0)   sgn0 = 0i64 - 1i64 }
+        bigint_drop(p0)   bigint_drop(n0)
+        /* C1 = 65025*base1 - k2ll*NNR  (signed): t1 = base1s*|t1|, minus t2 = nnrs*|t2| */
+        let bb1 : u64 = bigint_from_u64(ar, base1a)
+        let bt1 : u64 = bigint_mul(ar, b65, bb1)
+        let bnr : u64 = bigint_from_u64(ar, nnra)
+        let bk2b : u64 = bigint_from_u64(ar, k2ll as u64)
+        let bt2 : u64 = bigint_mul(ar, bk2b, bnr)
+        bigint_drop(b65)   bigint_drop(bb1)   bigint_drop(bnr)   bigint_drop(bk2b)
+        let sa : i64 = base1s   let sb : i64 = 0i64 - nnrs
+        let mut mag1 : u64 = bigint_from_u64(ar, 0u64)   let mut sgn1 : i64 = 0i64
+        if sa == 0i64 {
+            if sb != 0i64 { bigint_drop(mag1)   mag1 = bigint_copy(ar, bt2)   sgn1 = sb }
+        } else {
+            if sb == 0i64 { bigint_drop(mag1)   mag1 = bigint_copy(ar, bt1)   sgn1 = sa } else {
+                if sa == sb { bigint_drop(mag1)   mag1 = bigint_add(ar, bt1, bt2)   sgn1 = sa } else {
+                    let c1cmp : i32 = bigint_cmp(bt1, bt2)
+                    if c1cmp > 0i32 { bigint_drop(mag1)   mag1 = bigint_sub(ar, bt1, bt2)   sgn1 = sa }
+                    if c1cmp < 0i32 { bigint_drop(mag1)   mag1 = bigint_sub(ar, bt2, bt1)   sgn1 = sb }
+                }
+            }
+        }
+        bigint_drop(bt1)   bigint_drop(bt2)
+        /* n=2 EXACT sign of  sgn0*mag0 + sgn1*mag1*sqrt(Delta)  by SQUARING -- no isqrt, no separation bound */
+        let s : i32 = lens_n2sign_sq(ar, mag0, sgn0, mag1, sgn1, dd)
+        bigint_drop(mag0)   bigint_drop(mag1)
+        if s < 0i32 { hi = mid - 1i64 } else { lo = mid }
+    }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return lo as u32
+}
+
+fn lens_isqrt_i64(n: i64) -> i64 {
+    if n <= 0i64 { return 0i64 }
+    let mut bl : i64 = 0i64   let mut t : i64 = n
+    while t > 0i64 { t = t >> 1i64   bl = bl + 1i64 }
+    let k : i64 = (bl - 1i64) / 2i64
+    let mut bit : i64 = 1i64 << (2i64 * k)
+    let mut res : i64 = 0i64   let mut x : i64 = n
+    while bit != 0i64 {
+        let rb : i64 = res + bit
+        if x >= rb { x = x - rb   res = (res >> 1i64) + bit } else { res = res >> 1i64 }
+        bit = bit >> 2i64
+    }
+    return res
+}
+
+/* ── (5c) FAST DERIVED SHADING for the RENDER: exact NORMAL, fixed-point intensity.  The geometry (hit, depth, CSG) is
+ * exact; only the final 8-bit brightness uses a fixed-point evaluation of the exact reps with sd = floor(sqrt Delta):
+ *   intensity = floor( 255 * (NLP + NLR*sd) / sqrt( (NNP + NNR*sd) * |L|^2 ) )      (front faces; 0 for back faces).
+ * Accurate to ~1e-5 vs the fully-exact lens_shade255_big (imperceptible at 8-bit) but ~1000x faster -- a full frame
+ * renders in well under a second.  The fully-exact 8-bit path (lens_shade255 / _big) remains the gated reference. */
+fn lens_shade255_fast(lx: i64, ly: i64, lz: i64) -> u32 @export {
+    lens_shade_prep(lx, ly, lz)
+    let ll : i64 = lx*lx + ly*ly + lz*lz
+    let sd : i64 = lens_isqrt_i64(LENS_D)
+    let numer : i64 = LENS_NLP + LENS_NLR * sd     /* (N.L) numerator with sd=floor(sqrt Delta); front face iff > 0 */
+    if numer <= 0i64 { return 0u32 }
+    let denomi : i64 = (LENS_NNP + LENS_NNR * sd) * ll
+    if denomi <= 0i64 { return 0u32 }
+    /* scale denomi up as far as fits so floor(sqrt) is precise at every scale (numer <= sqrt(denomi) keeps 255*numer*2^p2
+     * < 2^40, no overflow); dd2 = denomi << 2*p2, so lens_isqrt_i64(dd2) = floor(sqrt(denomi) * 2^p2). */
+    let mut dd2 : i64 = denomi   let mut p2 : i64 = 0i64
+    while dd2 < (1i64 << 60i64) { dd2 = dd2 << 2i64   p2 = p2 + 1i64 }
+    let ds : i64 = lens_isqrt_i64(dd2)
+    if ds <= 0i64 { return 0u32 }
+    let mut v : i64 = ((numer << p2) * 255i64) / ds
+    if v > 255i64 { v = 255i64 }
+    return v as u32
+}
+
+/* FAST (fixed-point) depth order for the RENDER: sign(t_i - t_j), t = (-b - sqrt Delta)/(2a), a>0, sd = floor(sqrt Delta).
+ * cross-multiplied by the positive 4 a_i a_j.  The EXACT sign is lens_t_cmp (gated, z-fight-proof); this fixed-point form
+ * is for the artifact, where surfaces are distinct (not near-ties). */
+fn lens_t_cmp_fast(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 @export {
+    let sdi : i64 = lens_isqrt_i64(di)   let sdj : i64 = lens_isqrt_i64(dj)
+    let tin : i64 = (0i64 - bi) - sdi
+    let tjn : i64 = (0i64 - bj) - sdj
+    return lens_isign(tin * (2i64*aj) - tjn * (2i64*ai))
+}
+/* FAST (fixed-point) membership of the current near hit in quadric B, for the RENDER (exact form: lens_membership_sign). */
+fn lens_membership_fast(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 @export {
+    let ox : i64 = LENS_OX   let oy : i64 = LENS_OY   let oz : i64 = LENS_OZ
+    let dx : i64 = LENS_DX   let dy : i64 = LENS_DY   let dz : i64 = LENS_DZ
+    let ab : i64 = qa*dx*dx + qb*dy*dy + qc*dz*dz + qd*dx*dy + qe*dx*dz + qf*dy*dz
+    let bb : i64 = 2i64*qa*ox*dx + 2i64*qb*oy*dy + 2i64*qc*oz*dz + qd*(ox*dy + oy*dx) + qe*(ox*dz + oz*dx) + qf*(oy*dz + oz*dy) + qg*dx + qh*dy + qi*dz
+    let gb : i64 = qa*ox*ox + qb*oy*oy + qc*oz*oz + qd*ox*oy + qe*ox*oz + qf*oy*oz + qg*ox + qh*oy + qi*oz + qj
+    let aa : i64 = LENS_A   let ba : i64 = LENS_B   let da : i64 = LENS_D
+    let c0 : i64 = ab*(ba*ba + da) - 2i64*aa*ba*bb + 4i64*aa*aa*gb
+    let c1 : i64 = 2i64*ab*ba - 2i64*aa*bb
+    let sd : i64 = lens_isqrt_i64(da)
+    return lens_isign(c0 + c1*sd)
+}
+
+/* ── (7) FAST EXACT n=3 surd sign: sign(a0*sqrt1 + a1*sqrt(r1) + a2*sqrt(r2)), r1,r2 >= 0, by NESTED conjugate squaring.
+ * U = a0 + a1*sqrt(r1), W = a2*sqrt(r2).  su=sign(U) (n=2), sw=sign(a2).  Same/zero signs -> trivial.  Opposite: compare
+ * U^2 vs W^2, where U^2 = (a0^2 + a1^2 r1) + (2 a0 a1) sqrt(r1) and W^2 = a2^2 r2, so U^2 - W^2 is another n=2 surd whose
+ * sign (via lens_n2sign_sq) decides which magnitude wins -> return su if U^2>W^2 else sw.  ONLY bigint multiply+compare
+ * (squares overflow i64 at render scale) -- NO isqrt, NO separation bound, NO 16 MB arena.  Exact, and ~1000x faster than
+ * routing the same query through sqrtsum_lazy3's exact tier, so the LIVE viewer can order depth EXACTLY per frame. */
+fn lens_n3sign_sq(a0: i64, a1: i64, r1: i64, a2: i64, r2: i64) -> i32 {
+    let ar : u64 = arena_new(8192u64)
+    let s0 : i64 = lens_isign64(a0)   let s1 : i64 = lens_isign64(a1)
+    let ba0 : u64 = bigint_from_u64(ar, lens_u64abs(a0))
+    let ba1 : u64 = bigint_from_u64(ar, lens_u64abs(a1))
+    let su : i32 = lens_n2sign_sq(ar, ba0, s0, ba1, s1, r1)     /* sign of U = a0 + a1 sqrt r1 */
+    let swi : i32 = lens_isign64(a2) as i32                     /* sign of W = a2 sqrt r2 */
+    let mut res : i32 = 0i32   let mut done : u8 = 0u8
+    if su >= 0i32 { if swi >= 0i32 {
+        if su == 0i32 { if swi == 0i32 { res = 0i32   done = 1u8 } }
+        if done == 0u8 { res = 1i32   done = 1u8 }
+    } }
+    if done == 0u8 { if su <= 0i32 { if swi <= 0i32 {
+        if su == 0i32 { if swi == 0i32 { res = 0i32   done = 1u8 } }
+        if done == 0u8 { res = 0i32 - 1i32   done = 1u8 }
+    } } }
+    if done == 0u8 {
+        /* opposite signs: P = a0^2 + a1^2 r1 (>=0), R = a2^2 r2 (>=0), C0 = P - R (signed), Q = 2 a0 a1 (signed) */
+        let a0sq : u64 = bigint_mul(ar, ba0, ba0)
+        let a1sq : u64 = bigint_mul(ar, ba1, ba1)
+        let br1 : u64 = bigint_from_u64(ar, r1 as u64)
+        let a1r1 : u64 = bigint_mul(ar, a1sq, br1)
+        let pbig : u64 = bigint_add(ar, a0sq, a1r1)
+        bigint_drop(a0sq)   bigint_drop(a1sq)   bigint_drop(br1)   bigint_drop(a1r1)
+        let ba2 : u64 = bigint_from_u64(ar, lens_u64abs(a2))
+        let a2sq : u64 = bigint_mul(ar, ba2, ba2)
+        let br2 : u64 = bigint_from_u64(ar, r2 as u64)
+        let rbig : u64 = bigint_mul(ar, a2sq, br2)
+        bigint_drop(ba2)   bigint_drop(a2sq)   bigint_drop(br2)
+        let cc : i32 = bigint_cmp(pbig, rbig)
+        let mut c0m : u64 = bigint_from_u64(ar, 0u64)   let mut c0s : i64 = 0i64
+        if cc > 0i32 { bigint_drop(c0m)   c0m = bigint_sub(ar, pbig, rbig)   c0s = 1i64 }
+        if cc < 0i32 { bigint_drop(c0m)   c0m = bigint_sub(ar, rbig, pbig)   c0s = 0i64 - 1i64 }
+        bigint_drop(pbig)   bigint_drop(rbig)
+        let two : u64 = bigint_from_u64(ar, 2u64)
+        let ba01 : u64 = bigint_mul(ar, ba0, ba1)
+        let qm : u64 = bigint_mul(ar, two, ba01)               /* |Q| = 2|a0||a1| */
+        bigint_drop(two)   bigint_drop(ba01)
+        let qs : i64 = s0 * s1                                  /* sign(Q) = sign(a0) sign(a1) */
+        let cmp : i32 = lens_n2sign_sq(ar, c0m, c0s, qm, qs, r1)   /* sign(U^2 - W^2) */
+        bigint_drop(c0m)   bigint_drop(qm)
+        if cmp > 0i32 { res = su }
+        if cmp < 0i32 { res = swi }
+    }
+    bigint_drop(ba0)   bigint_drop(ba1)
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return res
+}
+
+/* SOUND i64 interval FILTER for the n=3 sign: bounds a0 + a1*sqrt(r1) + a2*sqrt(r2) at 2^-10 using floor-sqrt brackets.
+ * Returns +1/-1 only when the bracket does NOT straddle 0 (then the sign is CERTAIN); returns 2 = undecided on a straddle
+ * (a genuine near-tie) OR if a product could overflow i64 -> the caller escalates to the exact bigint squaring.  This is
+ * why the live viewer is fast: the overwhelming majority of depth comparisons (well-separated surfaces) resolve here in
+ * i64 with no arena; only a true near-tie pays the bigint cost -- and is still decided EXACTLY. */
+fn lens_n3_i64_filter(a0: i64, a1: i64, r1: i64, a2: i64, r2: i64) -> i32 {
+    if lens_u64abs(a0) >= (1u64 << 52u64) { return 2i32 }
+    if lens_u64abs(a1) >= (1u64 << 30u64) { return 2i32 }
+    if lens_u64abs(a2) >= (1u64 << 30u64) { return 2i32 }
+    if (r1 as u64) >= (1u64 << 44u64) { return 2i32 }
+    if (r2 as u64) >= (1u64 << 44u64) { return 2i32 }
+    let sc : i64 = 1i64 << 10i64
+    let sd1 : i64 = lens_isqrt_i64(r1 << 20i64)          /* floor(sqrt(r1) * 2^10) */
+    let sd2 : i64 = lens_isqrt_i64(r2 << 20i64)
+    let mut lo : i64 = a0 * sc   let mut hi : i64 = a0 * sc
+    if a1 >= 0i64 { lo = lo + a1*sd1   hi = hi + a1*(sd1 + 1i64) } else { lo = lo + a1*(sd1 + 1i64)   hi = hi + a1*sd1 }
+    if a2 >= 0i64 { lo = lo + a2*sd2   hi = hi + a2*(sd2 + 1i64) } else { lo = lo + a2*(sd2 + 1i64)   hi = hi + a2*sd2 }
+    if lo > 0i64 { return 1i32 }
+    if hi < 0i64 { return 0i32 - 1i32 }
+    return 2i32
+}
+
+/* FAST-EXACT depth order (drop-in exact replacement for lens_t_cmp / lens_t_cmp_fast): sign(t_i - t_j), a_i,a_j>0.
+ * Sound i64 filter first (no arena); on a near-tie straddle, the nested-squaring exact predicate -- so the live viewer
+ * orders depth EXACTLY every frame (no z-fight at a contact) at interactive speed. */
+fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 @export {
+    let a0 : i64 = 2i64*ai*bj - 2i64*aj*bi
+    let a1 : i64 = 0i64 - 2i64*aj
+    let a2 : i64 = 2i64*ai
+    let q : i32 = lens_n3_i64_filter(a0, a1, di, a2, dj)
+    if q != 2i32 { return q }
+    return lens_n3sign_sq(a0, a1, di, a2, dj)
+}

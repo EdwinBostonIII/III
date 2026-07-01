@@ -1,0 +1,242 @@
+/* sturm.iii -- EXACT REAL ROOT ISOLATION via Sturm's theorem.  The exact equation solver.
+ *
+ * PROBLEM.  A float root-finder samples/iterates and CANNOT know how many real roots a polynomial has, nor separate
+ * roots that lie closer than its precision: it merges a cluster into one, misses a pair entirely, or hallucinates a
+ * spurious root from rounding.  Worst and simplest: a polynomial that dips below zero and back up inside [a,b] has the
+ * SAME sign at a and b, so checking the endpoints (or any coarse sampling) finds NO root -- while there are two.
+ *
+ * INSIGHT.  The NUMBER of real roots in an interval is a topological invariant computable EXACTLY from finitely many
+ * integer SIGN evaluations -- no approximation of a root is needed to COUNT roots.  Sturm's theorem: for a squarefree p,
+ * build the chain  p0=p, p1=p', p_{k+1} = -rem(p_{k-1}, p_k)  down to a nonzero constant; then the number of distinct
+ * real roots in (a,b] is  V(a) - V(b),  where V(x) = the number of sign changes in (p0(x),p1(x),...) skipping zeros.
+ * Bisect any interval whose count exceeds 1 until every root sits alone in its own rational interval.  All exact.
+ *
+ * THE SUBTLETY (the whole correctness of the thing).  The exact remainder has rational coefficients; an integer
+ * PSEUDO-remainder scales the result by lc(p_k)^s (s eliminations).  If that factor is NEGATIVE it FLIPS signs and
+ * corrupts the count.  So each stored polynomial is made a POSITIVE multiple of the true -rem  (S = -R * sign(lc)^s),
+ * then content-reduced (divided by the gcd of |coeffs|, positive) to keep i64 coefficients bounded.
+ *
+ * UNIFICATION.  The real roots ARE the exact algebraic numbers everything prior reduces to: a CSG surface intersection,
+ * a collision time-of-impact, a rotation angle -- all are roots of integer polynomials.  This is the exact engine beneath.
+ *
+ * HONEST SCOPE: SQUAREFREE input (distinct roots); a multiple root needs the squarefree part p/gcd(p,p') (poly_gcd is
+ * provided; the KAT exercises it).  degree <= 7 and a coefficient/interval envelope that keeps every product in i64
+ * (a bigint tier removes this).  No epsilon, no iteration-to-convergence -- exact counts.
+ *
+ * Hexad: kind_form (exact algebra).  Ring: R-1.  K: 1.00. */
+module sturm
+
+fn st_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn st_gcd(a: i64, b: i64) -> i64 { let mut x : i64 = st_iabs(a)   let mut y : i64 = st_iabs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
+fn st_sign(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+/* chain store: up to 8 polynomials, each up to degree 7 (8 coeffs).  poly k coeff i at STURM_C[k*8 + i]. */
+var STURM_C : [i64; 64]   var STURM_DEG : [i64; 8]   var STURM_N : i64
+var PR_R : [i64; 8]
+
+/* actual degree of the coeff array at base (highest nonzero index <= hi), or -1 if all zero. */
+fn st_deg_of(base: u64, hi: i64) -> i64 {
+    let mut d : i64 = hi
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if d < 0i64 { done = 1u8 } else { let c : i64 = STURM_C[base + (d as u64)]   if c != 0i64 { done = 1u8 } else { d = d - 1i64 } }
+    }
+    return d
+}
+
+/* content-reduce coeffs [0..deg] at base by the gcd of their absolute values (keeps sign; positive divisor). */
+fn st_content_reduce(base: u64, deg: i64) -> i32 {
+    let mut g : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= deg { g = st_gcd(g, STURM_C[base + (i as u64)])   i = i + 1i64 }
+    if g <= 1i64 { return 0i32 }
+    i = 0i64   while i <= deg { STURM_C[base + (i as u64)] = STURM_C[base + (i as u64)] / g   i = i + 1i64 }
+    return 0i32
+}
+
+/* dst := -rem(A,B) as a POSITIVE multiple, content-reduced.  A at Abase (deg degA), B at Bbase (deg degB), degA>=degB>=0.
+ * returns the degree of the result (or -1 if the remainder is the zero polynomial). */
+fn st_prem(Abase: u64, degA: i64, Bbase: u64, degB: i64, dstbase: u64) -> i64 {
+    let mut i : i64 = 0i64
+    while i <= degA { PR_R[i as u64] = STURM_C[Abase + (i as u64)]   i = i + 1i64 }   /* PR_R := A */
+    let lcB : i64 = STURM_C[Bbase + (degB as u64)]
+    let mut dR : i64 = degA
+    let mut steps : i64 = 0i64
+    while dR >= degB {
+        let lcR : i64 = PR_R[dR as u64]
+        let mut j : i64 = 0i64
+        while j <= dR { PR_R[j as u64] = lcB * PR_R[j as u64]   j = j + 1i64 }          /* R := lcB*R */
+        let shift : i64 = dR - degB
+        j = 0i64
+        while j <= degB { PR_R[(shift + j) as u64] = PR_R[(shift + j) as u64] - lcR * STURM_C[Bbase + (j as u64)]   j = j + 1i64 }  /* R -= lcR*x^shift*B */
+        steps = steps + 1i64
+        /* new degree of PR_R (strictly < dR now that the leading term cancelled) */
+        let mut nd : i64 = dR - 1i64
+        let mut done : u8 = 0u8
+        while done == 0u8 {
+            if nd < 0i64 { done = 1u8 } else { let c : i64 = PR_R[nd as u64]   if c != 0i64 { done = 1u8 } else { nd = nd - 1i64 } }
+        }
+        if nd < 0i64 { dR = 0i64 - 1i64   done = 1u8 } else { dR = nd }
+        if dR < 0i64 { dR = 0i64 - 1i64 }
+        if nd < 0i64 { dR = 0i64 - 1i64 }
+        if dR < degB { done = 1u8 }
+        /* loop guard uses dR; if dR<0 the while condition (dR>=degB, degB>=0) is false -> exits */
+    }
+    /* PR_R = lcB^steps * rem(A,B).  S = -R * sign(lcB)^steps  (a POSITIVE multiple of -rem). */
+    let mut mult : i64 = 0i64 - 1i64                        /* the negation in -rem */
+    if lcB < 0i64 { if (steps % 2i64) == 1i64 { mult = 1i64 } }
+    let degS : i64 = st_deg_of_pr(dR)
+    if degS < 0i64 { STURM_C[dstbase] = 0i64   return 0i64 - 1i64 }
+    i = 0i64
+    while i <= degS { STURM_C[dstbase + (i as u64)] = mult * PR_R[i as u64]   i = i + 1i64 }
+    st_content_reduce(dstbase, degS)
+    return degS
+}
+/* degree of PR_R[0..hi] (highest nonzero), or -1. */
+fn st_deg_of_pr(hi: i64) -> i64 {
+    let mut d : i64 = hi
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if d < 0i64 { done = 1u8 } else { let c : i64 = PR_R[d as u64]   if c != 0i64 { done = 1u8 } else { d = d - 1i64 } }
+    }
+    return d
+}
+
+/* build the Sturm chain of the polynomial coeffs[0..deg] (integer, deg>=1, squarefree).  Returns chain length. */
+fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 @export {
+    let p : *i64 = coeffs_ptr as *i64
+    let mut i : i64 = 0i64
+    while i <= deg { STURM_C[i as u64] = p[i as u64]   i = i + 1i64 }                    /* p0 = p */
+    STURM_DEG[0u64] = deg
+    /* p1 = p' : (p1)[i] = (i+1)*p[i+1] */
+    i = 0i64
+    while i < deg { STURM_C[8u64 + (i as u64)] = (i + 1i64) * p[(i + 1i64) as u64]   i = i + 1i64 }
+    STURM_DEG[1u64] = deg - 1i64
+    let mut k : i64 = 1i64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let dkm1 : i64 = STURM_DEG[(k - 1i64) as u64]
+        let dk : i64 = STURM_DEG[k as u64]
+        if dk <= 0i64 { done = 1u8 } else {
+            let ds : i64 = st_prem((((k - 1i64) * 8i64) as u64), dkm1, ((k * 8i64) as u64), dk, (((k + 1i64) * 8i64) as u64))
+            let mut dds : i64 = ds
+            if dds < 0i64 { dds = 0i64 }                    /* zero remainder -> constant 0 terminator */
+            STURM_DEG[(k + 1i64) as u64] = dds
+            k = k + 1i64
+            if k >= 7i64 { done = 1u8 }
+        }
+    }
+    STURM_N = k + 1i64
+    return STURM_N
+}
+
+/* exact sign of chain-poly k at rational x = xn/xd (xd > 0): sign( sum p[i]*xn^i*xd^(deg-i) ), homogenized Horner. */
+fn st_eval_sign(k: i64, xn: i64, xd: i64) -> i32 {
+    let base : u64 = (k * 8i64) as u64
+    let deg : i64 = STURM_DEG[k as u64]
+    let mut acc : i64 = STURM_C[base + (deg as u64)]
+    let mut pw : i64 = 1i64
+    let mut i : i64 = deg - 1i64
+    while i >= 0i64 {
+        pw = pw * xd
+        acc = acc * xn + STURM_C[base + (i as u64)] * pw
+        i = i - 1i64
+    }
+    return st_sign(acc)
+}
+
+/* V(x): number of sign changes in the Sturm chain at x = xn/xd, skipping zeros. */
+fn sturm_var(xn: i64, xd: i64) -> i64 @export {
+    let mut prev : i32 = 0i32
+    let mut v : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k < STURM_N {
+        let s : i32 = st_eval_sign(k, xn, xd)
+        if s != 0i32 {
+            if prev != 0i32 { if s != prev { v = v + 1i64 } }
+            prev = s
+        }
+        k = k + 1i64
+    }
+    return v
+}
+
+/* number of distinct real roots in the half-open interval (a, b],  a=an/ad, b=bn/bd  (ad,bd>0). */
+fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    return sturm_var(an, ad) - sturm_var(bn, bd)
+}
+
+/* ── ISOLATION: bisect [lo,hi] (dyadic, denominator = 2^depth) until each root sits alone.  Fills ISO_* arrays with the
+ * disjoint one-root intervals; returns the count.  Bounded work-stack (no recursion).  A root landing exactly on a
+ * bisection midpoint m needs no special case: the HALF-OPEN convention (lo,m] / (m,hi] places it in the left half, which
+ * then has count 1 and isolates normally as [lo,m] with the root at its endpoint m (an exact rational root). */
+var ISO_LN : [i64; 16]   var ISO_LD : [i64; 16]   var ISO_HN : [i64; 16]   var ISO_HD : [i64; 16]   var ISO_N : i64
+var WK_LN : [i64; 64]   var WK_LD : [i64; 64]   var WK_HN : [i64; 64]   var WK_HD : [i64; 64]   var WK_DEP : [i64; 64]
+fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 @export {
+    ISO_N = 0i64
+    /* work stack seeded with the whole interval [lo,hi] over denominator 1. */
+    WK_LN[0u64] = lo   WK_LD[0u64] = 1i64   WK_HN[0u64] = hi   WK_HD[0u64] = 1i64   WK_DEP[0u64] = 0i64
+    let mut top : i64 = 1i64
+    let mut guard : i64 = 0i64
+    while top > 0i64 {
+        if guard > 4000i64 { top = 0i64 } else {
+        guard = guard + 1i64
+        top = top - 1i64
+        let ln : i64 = WK_LN[top as u64]   let ld : i64 = WK_LD[top as u64]
+        let hn : i64 = WK_HN[top as u64]   let hd : i64 = WK_HD[top as u64]
+        let dep : i64 = WK_DEP[top as u64]
+        let cnt : i64 = root_count(ln, ld, hn, hd)
+        if cnt == 1i64 {
+            if ISO_N < 16i64 { ISO_LN[ISO_N as u64] = ln   ISO_LD[ISO_N as u64] = ld   ISO_HN[ISO_N as u64] = hn   ISO_HD[ISO_N as u64] = hd   ISO_N = ISO_N + 1i64 }
+        } else { if cnt > 1i64 { if dep < maxdepth {
+            /* midpoint m = (ln/ld + hn/hd)/2 = (ln*hd + hn*ld) / (2*ld*hd) */
+            let mn : i64 = ln * hd + hn * ld
+            let md : i64 = 2i64 * ld * hd
+            /* recurse on (lo,m] and (m,hi] ; push both */
+            if top < 62i64 {
+                WK_LN[top as u64] = ln   WK_LD[top as u64] = ld   WK_HN[top as u64] = mn   WK_HD[top as u64] = md   WK_DEP[top as u64] = dep + 1i64   top = top + 1i64
+                WK_LN[top as u64] = mn   WK_LD[top as u64] = md   WK_HN[top as u64] = hn   WK_HD[top as u64] = hd   WK_DEP[top as u64] = dep + 1i64   top = top + 1i64
+            }
+        } } }
+        }
+    }
+    return ISO_N
+}
+fn iso_count() -> i64 @export { return ISO_N }
+fn iso_lo_num(i: u64) -> i64 @export { return ISO_LN[i] }
+fn iso_lo_den(i: u64) -> i64 @export { return ISO_LD[i] }
+fn iso_hi_num(i: u64) -> i64 @export { return ISO_HN[i] }
+fn iso_hi_den(i: u64) -> i64 @export { return ISO_HD[i] }
+
+/* ── SQUAREFREE PART support: poly_gcd(a,b) via the Euclidean algorithm on integer polynomials (content-reduced), so a
+ * caller can form p/gcd(p,p') before Sturm.  Writes the gcd into GCD_C[0..], returns its degree. */
+var GA : [i64; 8]   var GB : [i64; 8]   var GCD_C : [i64; 8]
+fn poly_gcd(a_ptr: u64, dega: i64, b_ptr: u64, degb: i64) -> i64 @export {
+    let pa : *i64 = a_ptr as *i64   let pb : *i64 = b_ptr as *i64
+    let mut i : i64 = 0i64   while i <= dega { GA[i as u64] = pa[i as u64]   i = i + 1i64 }
+    i = 0i64   while i <= degb { GB[i as u64] = pb[i as u64]   i = i + 1i64 }
+    let mut da : i64 = dega   let mut db : i64 = degb
+    let mut guard : i64 = 0i64
+    while db >= 0i64 {
+        if guard > 64i64 { db = 0i64 - 1i64 } else {
+        guard = guard + 1i64
+        /* GA := pseudo-remainder(GA, GB) via st_prem-style, but on GA/GB local stores; reuse PR_R by copying GA into chain slot 0. */
+        let mut j : i64 = 0i64   while j <= da { STURM_C[j as u64] = GA[j as u64]   j = j + 1i64 }
+        j = 0i64   while j <= db { STURM_C[8u64 + (j as u64)] = GB[j as u64]   j = j + 1i64 }
+        if db == 0i64 {
+            /* GB is a nonzero constant -> gcd is 1 (constant). */
+            GCD_C[0u64] = 1i64   return 0i64
+        }
+        let dr : i64 = st_prem(0u64, da, 8u64, db, 16u64)   /* remainder (a positive multiple) into slot 2 */
+        /* GA <- GB ; GB <- remainder */
+        j = 0i64   while j <= db { GA[j as u64] = GB[j as u64]   j = j + 1i64 }   da = db
+        if dr < 0i64 { db = 0i64 - 1i64 } else {
+            j = 0i64   while j <= dr { GB[j as u64] = STURM_C[16u64 + (j as u64)]   j = j + 1i64 }   db = dr
+        }
+        }
+    }
+    /* gcd = GA (content-reduced) */
+    let mut j : i64 = 0i64   while j <= da { GCD_C[j as u64] = GA[j as u64]   j = j + 1i64 }
+    return da
+}
+fn gcd_coeff(i: u64) -> i64 @export { return GCD_C[i] }

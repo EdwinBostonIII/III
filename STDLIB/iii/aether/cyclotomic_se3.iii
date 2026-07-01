@@ -1,0 +1,174 @@
+/* cyclotomic_se3.iii -- EXACT ZERO-DRIFT MECHANISM KINEMATICS in the cyclotomic field ℚ(√2,√3).
+ *
+ * PROBLEM.  A CNC axis / robot joint / spacecraft attitude that rotates in float accumulates rounding error every
+ * increment: after millions of steps the rotation matrix drifts OFF SO(3) (det != 1, no longer orthonormal), so the
+ * tool / end-effector / star-tracker points the wrong way -- real, unavoidable float drift.
+ *
+ * INSIGHT.  A rotation by a RATIONAL multiple of π is ALGEBRAIC.  15° = π/12 lives in the multiquadratic field
+ * ℚ(√2,√3): cos15 = (√6+√2)/4, sin15 = (√6−√2)/4, basis {1,√2,√3,√6}.  Composing rotations is EXACT complex / matrix
+ * multiplication in that field, and the group relation ζ²⁴ = 1 (24×15° = 360°) is an ALGEBRAIC identity: 24 exact steps
+ * return BIT-FOR-BIT to the identity -- ZERO drift, forever -- something float cannot represent at any precision.
+ *
+ * A ℚ(√2,√3) element is a 4-tuple (a0,a1,a2,a3) meaning a0 + a1√2 + a2√3 + a3√6 over a positive integer denominator.
+ * THE UNIFICATION: its SIGN is exactly sign(a0·√1 + a1·√2 + a2·√3 + a3·√6) -- a 4-term sum of square roots (radicands
+ * {1,2,3,6}) -- so q23_sign routes through sqrtsum_lazy3, the SAME exact-sign engine behind the CSG kernel and the
+ * photonic router.  That lets a mechanism ORDER exact rotated coordinates (which config reaches further?), a query
+ * 2141/2142 could not answer -- they only checked EQUALITY to the identity.
+ *
+ * This organ is the canonical home of the exact ℚ(√2,√3) product + SO(3) ops that were previously duplicated inline in
+ * the 2141/2142 KATs (which now extern q23_mul).  It is PURE (i64 only, zero external deps) so those pure-math KATs link
+ * it without dragging in the Σ√ engine.  The bridge q23_sign (which composes sqrt_sum_sign to ORDER exact ℚ(√2,√3)
+ * coordinates -- the same engine behind the CSG kernel and router) lives in the sibling module q23_sign.iii.
+ *
+ * HONEST SCOPE: CYCLOTOMIC (rational-π) angles only -- here integer multiples of 15°.  A transcendental angle (e.g. 1
+ * radian) has transcendental cos/sin whose exact zero-test is UNDECIDABLE (Richardson) -- out of scope, never faked.
+ *
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00. */
+module cyclotomic_se3
+
+fn q23_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn q23_gcd2(a: i64, b: i64) -> i64 { let mut x : i64 = q23_iabs(a)   let mut y : i64 = q23_iabs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
+
+/* ── ℚ(√2,√3) exact product, basis {1,√2,√3,√6}:  √2²=2, √3²=3, √6²=6, √2·√3=√6, √2·√6=2√3, √3·√6=3√2.  o = x·y. */
+fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 @export {
+    let x : *i64 = xp as *i64   let y : *i64 = yp as *i64   let o : *i64 = op as *i64
+    let x0 : i64 = x[0u64]   let x1 : i64 = x[1u64]   let x2 : i64 = x[2u64]   let x3 : i64 = x[3u64]
+    let y0 : i64 = y[0u64]   let y1 : i64 = y[1u64]   let y2 : i64 = y[2u64]   let y3 : i64 = y[3u64]
+    o[0u64] = x0*y0 + 2i64*x1*y1 + 3i64*x2*y2 + 6i64*x3*y3
+    o[1u64] = x0*y1 + x1*y0 + 3i64*(x2*y3 + x3*y2)
+    o[2u64] = x0*y2 + x2*y0 + 2i64*(x1*y3 + x3*y1)
+    o[3u64] = x0*y3 + x3*y0 + x1*y2 + x2*y1
+    return 0i32
+}
+
+/* gcd-reduce `ncoords` flat i64 values together with `den`; returns the reduced den (>0). */
+fn q23_reduce_flat(vp: u64, ncoords: u64, den: i64) -> i64 @export {
+    let v : *i64 = vp as *i64
+    let mut g : i64 = q23_iabs(den)
+    let mut i : u64 = 0u64
+    while i < ncoords { let vi : i64 = v[i]   g = q23_gcd2(g, vi)   i = i + 1u64 }
+    if g <= 1i64 { return den }
+    i = 0u64   while i < ncoords { v[i] = v[i] / g   i = i + 1u64 }
+    return den / g
+}
+
+/* ── SO(3) over ℚ(√2,√3): a 3×3 matrix is 36 i64 (entry (i,j) coord c at flat (i*3+j)*4 + c) over a scalar den. ── */
+var Q23_PRD : [i64; 4]
+fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 @export {
+    let C : *i64 = cb as *i64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let mut j : u64 = 0u64
+        while j < 3u64 {
+            let mut c0 : i64 = 0i64   let mut c1 : i64 = 0i64   let mut c2 : i64 = 0i64   let mut c3 : i64 = 0i64
+            let mut k : u64 = 0u64
+            while k < 3u64 {
+                let aik : u64 = ab + ((i * 3u64 + k) * 4u64) * 8u64
+                let bkj : u64 = bb + ((k * 3u64 + j) * 4u64) * 8u64
+                q23_mul(aik, bkj, (&Q23_PRD) as u64)
+                c0 = c0 + Q23_PRD[0u64]   c1 = c1 + Q23_PRD[1u64]   c2 = c2 + Q23_PRD[2u64]   c3 = c3 + Q23_PRD[3u64]
+                k = k + 1u64
+            }
+            let base : u64 = (i * 3u64 + j) * 4u64
+            C[base] = c0   C[base + 1u64] = c1   C[base + 2u64] = c2   C[base + 3u64] = c3
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn so3_reduce(mb: u64, den: i64) -> i64 @export { return q23_reduce_flat(mb, 36u64, den) }
+fn so3_copy(sb: u64, db: u64) -> i32 @export { let s : *i64 = sb as *i64   let d : *i64 = db as *i64   let mut i : u64 = 0u64   while i < 36u64 { d[i] = s[i]   i = i + 1u64 }   return 0i32 }
+fn so3_is_ident(mb: u64, den: i64) -> u8 @export {
+    let M : *i64 = mb as *i64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let mut j : u64 = 0u64
+        while j < 3u64 {
+            let base : u64 = (i * 3u64 + j) * 4u64
+            let e0 : i64 = M[base]   let e1 : i64 = M[base + 1u64]   let e2 : i64 = M[base + 2u64]   let e3 : i64 = M[base + 3u64]
+            if e1 != 0i64 { return 0u8 }   if e2 != 0i64 { return 0u8 }   if e3 != 0i64 { return 0u8 }
+            if i == j { if e0 != den { return 0u8 } } else { if e0 != 0i64 { return 0u8 } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u8
+}
+/* zero a 3x3 matrix buffer (36 i64). */
+fn so3_zero(mb: u64) -> i32 { let M : *i64 = mb as *i64   let mut i : u64 = 0u64   while i < 36u64 { M[i] = 0i64   i = i + 1u64 }   return 0i32 }
+fn so3_set(mb: u64, i: u64, j: u64, c0: i64, c1: i64, c2: i64, c3: i64) -> i32 {
+    let M : *i64 = mb as *i64   let base : u64 = (i * 3u64 + j) * 4u64
+    M[base] = c0   M[base + 1u64] = c1   M[base + 2u64] = c2   M[base + 3u64] = c3   return 0i32
+}
+/* R_z(15°) into mb (den 4): [[c,-s,0],[s,c,0],[0,0,1]], c=(0,1,0,1)/4, s=(0,-1,0,1)/4, 1=(4,0,0,0)/4. */
+fn so3_rot_z15(mb: u64) -> i64 @export {
+    so3_zero(mb)
+    so3_set(mb, 0u64, 0u64, 0i64, 1i64, 0i64, 1i64)          /* c  = (√2+√6)/4          */
+    so3_set(mb, 0u64, 1u64, 0i64, 1i64, 0i64, 0i64 - 1i64)   /* -s = (√2-√6)/4          */
+    so3_set(mb, 1u64, 0u64, 0i64, 0i64 - 1i64, 0i64, 1i64)   /* +s = (√6-√2)/4          */
+    so3_set(mb, 1u64, 1u64, 0i64, 1i64, 0i64, 1i64)          /* c                       */
+    so3_set(mb, 2u64, 2u64, 4i64, 0i64, 0i64, 0i64)          /* 1                       */
+    return 4i64
+}
+/* R_x(15°) into mb (den 4): [[1,0,0],[0,c,-s],[0,s,c]]. */
+fn so3_rot_x15(mb: u64) -> i64 @export {
+    so3_zero(mb)
+    so3_set(mb, 0u64, 0u64, 4i64, 0i64, 0i64, 0i64)          /* 1                       */
+    so3_set(mb, 1u64, 1u64, 0i64, 1i64, 0i64, 1i64)          /* c                       */
+    so3_set(mb, 1u64, 2u64, 0i64, 1i64, 0i64, 0i64 - 1i64)   /* -s = (√2-√6)/4          */
+    so3_set(mb, 2u64, 1u64, 0i64, 0i64 - 1i64, 0i64, 1i64)   /* +s = (√6-√2)/4          */
+    so3_set(mb, 2u64, 2u64, 0i64, 1i64, 0i64, 1i64)          /* c                       */
+    return 4i64
+}
+
+/* ── THE MECHANISM (the application): a rotary joint / CNC axis with an accumulated exact orientation that NEVER drifts. ── */
+var MECH_R : [i64; 36]   var MECH_DEN : i64   var MECH_STEPS : i64   var MECH_ZPOS : i64
+var MECH_RZ : [i64; 36]   var MECH_TMP : [i64; 36]
+var MECH_PT : [i64; 12]                                       /* rotated tool point: 3 coords x 4 (a0..a3), over MECH_DEN */
+
+fn mech_reset() -> i32 @export {
+    so3_zero((&MECH_R) as u64)
+    so3_set((&MECH_R) as u64, 0u64, 0u64, 1i64, 0i64, 0i64, 0i64)
+    so3_set((&MECH_R) as u64, 1u64, 1u64, 1i64, 0i64, 0i64, 0i64)
+    so3_set((&MECH_R) as u64, 2u64, 2u64, 1i64, 0i64, 0i64, 0i64)
+    MECH_DEN = 1i64   MECH_STEPS = 0i64   MECH_ZPOS = 0i64
+    return 0i32
+}
+/* compose one exact +15° rotation about z:  R <- R · R_z(15°). */
+fn mech_rotate_z15() -> i32 @export {
+    let dz : i64 = so3_rot_z15((&MECH_RZ) as u64)
+    so3_mul((&MECH_R) as u64, (&MECH_RZ) as u64, (&MECH_TMP) as u64)
+    let mut d : i64 = MECH_DEN * dz
+    d = so3_reduce((&MECH_TMP) as u64, d)
+    so3_copy((&MECH_TMP) as u64, (&MECH_R) as u64)
+    MECH_DEN = d   MECH_STEPS = MECH_STEPS + 1i64
+    return 0i32
+}
+fn mech_home() -> u8 @export { return so3_is_ident((&MECH_R) as u64, MECH_DEN) }
+fn mech_steps() -> i64 @export { return MECH_STEPS }
+fn mech_den() -> i64 @export { return MECH_DEN }
+/* SE(3) screw: one +15° z-rotation AND a +t translation along z (a drill / lead-screw feed). */
+fn mech_screw_z(t: i64) -> i32 @export { mech_rotate_z15()   MECH_ZPOS = MECH_ZPOS + t   return 0i32 }
+fn mech_zpos() -> i64 @export { return MECH_ZPOS }
+
+/* apply the accumulated rotation to an INTEGER tool point (px,py,pz): MECH_PT[coord] = Σ_k R[i,k]·p_k, over MECH_DEN. */
+fn mech_apply(px: i64, py: i64, pz: i64) -> i32 @export {
+    let M : *i64 = (&MECH_R) as *i64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let b0 : u64 = (i * 3u64 + 0u64) * 4u64
+        let b1 : u64 = (i * 3u64 + 1u64) * 4u64
+        let b2 : u64 = (i * 3u64 + 2u64) * 4u64
+        let mut c : u64 = 0u64
+        while c < 4u64 {
+            MECH_PT[i * 4u64 + c] = px * M[b0 + c] + py * M[b1 + c] + pz * M[b2 + c]
+            c = c + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn mech_pt(i: u64) -> i64 @export { return MECH_PT[i] }       /* flat 0..11 (coord*4 + a_c); q23_sign it (q23_sign.iii) to ORDER exact coords */
+/* the rotated tool point's base address, so a caller can q23_sign(mech_pt_addr()+axis*32) an end-effector coordinate. */
+fn mech_pt_addr() -> u64 @export { return (&MECH_PT) as u64 }

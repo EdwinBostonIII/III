@@ -1813,8 +1813,12 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : UNIFIED FIELD -- owned by run_field_kats.sh (links ui_field/egraph)")
             SKIP=$((SKIP+1)); continue
             ;;
-        2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom|2137_adaptive_sign|2138_symmetry_quotient|2139_padic_barrier|2140_adaptive_big|2141_cyclotomic_rotation|2142_se3_screw|2143_traj_arclen|2144_lattice_pathfind|2145_denest|2146_compactor|2147_lattice_oracle)
-            RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + egraph + bigint)")
+        2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom|2137_adaptive_sign|2138_symmetry_quotient|2139_padic_barrier|2140_adaptive_big|2141_cyclotomic_rotation|2142_se3_screw|2143_traj_arclen|2144_lattice_pathfind|2145_denest|2146_compactor|2147_lattice_oracle|2148_theorem_fuzzer|2149_universal_block|2150_csg_kernel|2151_photon_route|2152_mechanism|2153_collision|2154_delaunay|2156_sturm|2157_algnum|2159_kf_weld)
+            RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom / csg kernel / photon route / mechanism / collision / delaunay / sturm / algebraic-numbers -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + exact_denest + traj_kinematics + cyclotomic_se3 + collide + delaunay + sturm + algnum + bigint)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2155_aether_lens|2158_aether_lens_render)
+            RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- owned by run_aether_lens_kats.sh (links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
             SKIP=$((SKIP+1)); continue
             ;;
         2126_involution|2127_membrane|2128_involution_closed|2129_epoch|2130_disposers|2131_reactor|2132_eidolon|2133_ripple_eidolon|2134_planner)

@@ -1,0 +1,212 @@
+/* 2155_aether_lens.iii -- GATE for aether_lens.iii: the EXACT floating-point-free ray-cast substrate.
+ *
+ * Proves the exact ray tracer for quadric CSG, each arm driving a DIFFERENT rule (no tautology).  It also renders, as
+ * visible FIRST LIGHT, a shaded sphere computed entirely by exact predicates -- every pixel's brightness DERIVED, not
+ * stored.  The scene is fed as csg_kernel qa..qj quadrics: aether_lens CONSUMES the csg_kernel representation directly.
+ *
+ * ARMS:
+ *   A  HIT / MISS / TANGENT by sign(Delta) -- INTEGER arithmetic (no surd): a ray through a sphere (+1), one that misses
+ *      (-1), and one that EXACTLY grazes it (Delta=0) -- the tangent a float rounds to a spurious hit-or-miss.  These
+ *      arms deliberately DO NOT touch the surd engine (so the tier guard below is non-tautological).
+ *   C  IS THE NEAR HIT IN FRONT OF THE EYE -- n=2 surd sign: eye outside (+1) vs eye at the centre (-1, near root behind).
+ *   D  THE Z-FIGHT KILLER (marquee) -- n=3 surd sign.  Two real spheres whose near hits differ by ~5e-4 along the ray:
+ *      lens_t_cmp returns the EXACT order (+1), while a FIXED precision f=10 interval STRADDLES 0 ([-2,+2]) -- i.e. a
+ *      float renderer z-fights on exactly this input, the exact caster does not.  The float-breaks witness.
+ *   D2 LARGE-COEFFICIENT depth order -> forces the EXACT bigint tier (coeffs >= 2^20): two co-centred spheres, the
+ *      smaller-radius one is farther (+1) -- a genuine surd decision certified by the separation-bound engine.
+ *   E  DERIVED SHADING -- n=2 surd sign, exact 8-bit Lambert: a head-on face is full 255, an oblique face is dimmer
+ *      (monotone, 180 < 255), a back face is 0.  The brightness is COMPUTED by an exact predicate, never sampled.
+ *   TIER-COVERAGE guard: across C/D/D2/E the FAST i64 path AND the EXACT bigint path must both have fired -- proof the
+ *   inputs really traversed the surd machinery, not an i64 short-circuit (the integer arms A never enter it).
+ *
+ *   exit 99 = every arm correct.  10 hit/miss/tangent  20 front  30 z-fight/straddle  40 exact-tier  50 shading  60 tiers */
+module corpus_2155_aether_lens
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_a() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_b() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_disc() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_front_sign() -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_depth_vs_rational(d0: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_ndotl_sign(lx: i64, ly: i64, lz: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+
+extern @abi(c-msvc-x64) fn lazy_fast_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_canon_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_exact_count() -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn lazy_reset_counts() -> i32 from "sqrt_sum_sign.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* floor(sqrt n), bit-by-bit -- for the Arm-D fixed-precision (f=10) interval emulation. */
+fn kisqrt(n: i64) -> i64 {
+    if n <= 0i64 { return 0i64 }
+    let mut bl : i64 = 0i64   let mut t : i64 = n
+    while t > 0i64 { t = t >> 1i64   bl = bl + 1i64 }
+    let k : i64 = (bl - 1i64) / 2i64
+    let mut bit : i64 = 1i64 << (2i64 * k)
+    let mut res : i64 = 0i64   let mut x : i64 = n
+    while bit != 0i64 {
+        let rb : i64 = res + bit
+        if x >= rb { x = x - rb   res = (res >> 1i64) + bit } else { res = res >> 1i64 }
+        bit = bit >> 2i64
+    }
+    return res
+}
+
+/* a 10-step brightness ramp: darkest (space) -> brightest (@). */
+fn ramp_char(v: u32) -> i32 {
+    let idx : u32 = v / 26u32
+    if idx == 0u32 { return 32i32 }
+    if idx == 1u32 { return 46i32 }
+    if idx == 2u32 { return 58i32 }
+    if idx == 3u32 { return 45i32 }
+    if idx == 4u32 { return 61i32 }
+    if idx == 5u32 { return 43i32 }
+    if idx == 6u32 { return 42i32 }
+    if idx == 7u32 { return 35i32 }
+    if idx == 8u32 { return 37i32 }
+    return 64i32
+}
+
+var FAILA : u64   var FAILC : u64   var FAILD : u64   var FAILE : u64   var FAILS : u64   var FAILFX : u64
+
+/* Arm F helper: the fast-exact n=3 depth predicate must return the SAME sign as the slow exact lens_t_cmp. */
+fn fx_ok(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 {
+    let s : i32 = lens_t_cmp(ai, bi, di, aj, bj, dj)
+    let f : i32 = lens_t_cmp_fx(ai, bi, di, aj, bj, dj)
+    if s == f { return 1i32 }
+    return 0i32
+}
+
+/* ── FIRST LIGHT: a shaded sphere, every pixel resolved + lit by exact predicates.
+ * Sphere x^2+y^2+(z-60)^2 = 400 (csg qa..qj), eye at origin, image plane z=24, light direction (-3,4,-6). */
+fn draw_sphere_shaded() -> i32 {
+    let cz : i64 = 60i64   let r2 : i64 = 400i64   let ff : i64 = 24i64
+    let lx : i64 = 0i64 - 3i64   let ly : i64 = 4i64   let lz : i64 = 0i64 - 6i64
+    let mut row : i64 = 0i64 - 12i64
+    while row <= 12i64 {
+        let mut col : i64 = 0i64 - 12i64
+        while col <= 12i64 {
+            lens_set_ray(0i64, 0i64, 0i64, col, row, ff)
+            let hs : i32 = lens_setup(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64 - 2i64*cz, cz*cz - r2)
+            if hs < 0i32 { putchar(32i32) } else {
+                let inten : u32 = lens_shade255(lx, ly, lz)
+                putchar(ramp_char(inten))
+            }
+            col = col + 1i64
+        }
+        nl()
+        row = row + 1i64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    FAILA = 0u64   FAILC = 0u64   FAILD = 0u64   FAILE = 0u64   FAILS = 0u64   FAILFX = 0u64
+
+    putchar(61i32) putchar(61i32) sp()
+    putchar(65i32) putchar(69i32) putchar(84i32) putchar(72i32) putchar(69i32) putchar(82i32)   /* "AETHER" */
+    putchar(45i32) putchar(76i32) putchar(69i32) putchar(78i32) putchar(83i32)                   /* "-LENS" */
+    sp() putchar(61i32) putchar(61i32) nl()
+    draw_sphere_shaded()
+    nl()
+
+    /* ── Arm A: HIT / MISS / TANGENT by sign(Delta) -- pure integer, no surd engine. */
+    lens_set_ray(0i64, 0i64, 0i64, 0i64, 0i64, 1i64)
+    /* hit: sphere centre (0,0,10) r^2=4 -> Delta = 16 > 0 */
+    if lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 20i64, 96i64) != 1i32 { FAILA = FAILA + 1u64 }
+    /* miss: sphere centre (5,0,10) r^2=4 -> the z-axis ray passes 5 away (>2) -> Delta = -84 < 0 */
+    if lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64 - 10i64, 0i64, 0i64 - 20i64, 121i64) != (0i32 - 1i32) { FAILA = FAILA + 1u64 }
+    /* tangent: sphere centre (2,0,10) r^2=4 -> the z-axis grazes it -> Delta = 0 EXACTLY */
+    if lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64 - 4i64, 0i64, 0i64 - 20i64, 100i64) != 0i32 { FAILA = FAILA + 1u64 }
+
+    lazy_reset_counts()
+
+    /* ── Arm C: is the near hit in front of the eye (n=2 surd)? */
+    lens_set_ray(0i64, 0i64, 0i64, 0i64, 0i64, 1i64)
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 20i64, 96i64)     /* centre (0,0,10) r^2=4, eye outside */
+    if lens_front_sign() != 1i32 { FAILC = FAILC + 1u64 }                          /* t- = 8 > 0, ahead */
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64, 0i64 - 4i64)        /* centre (0,0,0) r^2=4, eye AT centre */
+    if lens_front_sign() != (0i32 - 1i32) { FAILC = FAILC + 1u64 }                 /* t- = -2 < 0, near root behind */
+
+    /* ── Arm D: THE Z-FIGHT KILLER.  Two spheres, near hits ~5e-4 apart along ray o=0 d=(0,0,1):
+     *    sphere i centre (0,0,709) r^2=501413 ; sphere j centre (0,0,708) r^2=499998.
+     *    a=1 both; b_i=-1418, Delta_i=2005652 ; b_j=-1416, Delta_j=1999992. */
+    let dcmp : i32 = lens_t_cmp(1i64, 0i64 - 1418i64, 2005652i64, 1i64, 0i64 - 1416i64, 1999992i64)
+    if dcmp != 1i32 { FAILD = FAILD + 1u64 }                                        /* EXACT: i is farther (16*1999992 > 5656^2) */
+    /* the float-breaks witness: a FIXED f=10 interval for 4√1 - 2√2005652 + 2√1999992 must STRADDLE 0. */
+    let s1 : i64 = kisqrt(2005652i64 << 20i64)    /* floor(sqrt(2005652)*1024) */
+    let s2 : i64 = kisqrt(1999992i64 << 20i64)    /* floor(sqrt(1999992)*1024) */
+    let one10 : i64 = 1i64 << 10i64
+    let elo : i64 = 4i64*one10 - 2i64*(s1 + 1i64) + 2i64*s2       /* -2 coeff uses HIGH sqrt for the LOW bound */
+    let ehi : i64 = 4i64*one10 - 2i64*s1 + 2i64*(s2 + 1i64)
+    let mut straddle : u8 = 0u8
+    if elo < 0i64 { if ehi > 0i64 { straddle = 1u8 } }
+    if straddle == 0u8 { FAILD = FAILD + 1u64 }                                     /* fixed precision MUST fail to decide */
+    putchar(68i32) putchar(58i32) sp()                                             /* "D: " */
+    putchar(101i32) putchar(108i32) putchar(111i32) sp() e_i64(elo) sp()           /* elo <v> */
+    putchar(101i32) putchar(104i32) putchar(105i32) sp() e_i64(ehi) sp()           /* ehi <v> */
+    putchar(99i32) putchar(109i32) putchar(112i32) sp() e_i64(dcmp as i64) nl()    /* cmp <v> */
+
+    /* ── Arm D2: LARGE-coefficient depth order -> forces the EXACT bigint tier.
+     *    ray o=0 d=(0,0,1024) (a=2^20); two co-centred spheres centre (0,0,1000), r^2 = 100 vs 105.  smaller = farther. */
+    lens_set_ray(0i64, 0i64, 0i64, 0i64, 0i64, 1024i64)
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 2000i64, 999900i64)   /* cz=1000 r^2=100 */
+    let ai : i64 = lens_a()   let bi : i64 = lens_b()   let di : i64 = lens_disc()
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 2000i64, 999895i64)   /* cz=1000 r^2=105 */
+    let aj : i64 = lens_a()   let bj : i64 = lens_b()   let dj : i64 = lens_disc()
+    let ec : i32 = lens_t_cmp(ai, bi, di, aj, bj, dj)
+    if ec != 1i32 { FAILD = FAILD + 1u64 }                                          /* smaller-radius sphere i is farther */
+
+    /* ── Arm E: DERIVED shading (exact 8-bit Lambert).  Sphere centre (0,0,10) r^2=4, ray o=0 d=(0,0,1), near hit p=(0,0,8).
+     *    Outward normal N = 2(p-C) = (0,0,-4). */
+    lens_set_ray(0i64, 0i64, 0i64, 0i64, 0i64, 1i64)
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 20i64, 96i64)
+    let head : u32 = lens_shade255(0i64, 0i64, 0i64 - 1i64)      /* L=(0,0,-1): cos=1 -> 255 */
+    let obliq : u32 = lens_shade255(0i64, 0i64 - 1i64, 0i64 - 1i64)  /* L=(0,-1,-1): cos=1/sqrt2 -> 180 */
+    let backf : u32 = lens_shade255(0i64, 0i64, 1i64)           /* L=(0,0,1): back face -> 0 */
+    if head != 255u32 { FAILE = FAILE + 1u64 }
+    if obliq != 180u32 { FAILE = FAILE + 1u64 }
+    if backf != 0u32 { FAILE = FAILE + 1u64 }
+    if obliq >= head { FAILE = FAILE + 1u64 }                    /* monotone: oblique strictly dimmer than head-on */
+    let bf : i32 = lens_ndotl_sign(0i64, 0i64, 1i64)            /* back face: N.L < 0 */
+    if bf != (0i32 - 1i32) { FAILE = FAILE + 1u64 }
+    putchar(69i32) putchar(58i32) sp()                          /* "E: " */
+    e_i64(head as i64) sp() e_i64(obliq as i64) sp() e_i64(backf as i64) nl()
+
+    /* ── Arm F: the FAST-EXACT n=3 depth predicate (lens_t_cmp_fx, nested conjugate squaring -- no separation bound, no
+     *    isqrt, no 16 MB arena) must AGREE with the slow exact lens_t_cmp on every case, and give the exact +1 on the
+     *    marquee near-tie.  This is what lets the LIVE viewer order depth EXACTLY per frame (no z-fight at a contact). */
+    if lens_t_cmp_fx(1i64, 0i64 - 1418i64, 2005652i64, 1i64, 0i64 - 1416i64, 1999992i64) != 1i32 { FAILFX = FAILFX + 1u64 }   /* marquee -> exact +1 */
+    if fx_ok(1i64, 0i64 - 1418i64, 2005652i64, 1i64, 0i64 - 1416i64, 1999992i64) != 1i32 { FAILFX = FAILFX + 1u64 }          /* near-tie */
+    if fx_ok(1i64, 0i64 - 1416i64, 1999992i64, 1i64, 0i64 - 1418i64, 2005652i64) != 1i32 { FAILFX = FAILFX + 1u64 }          /* reverse near-tie */
+    if fx_ok(1048576i64, 0i64 - 2048000i64, 419430400i64, 1048576i64, 0i64 - 2048000i64, 440401920i64) != 1i32 { FAILFX = FAILFX + 1u64 }   /* large coeff (>2^20) */
+    if fx_ok(1i64, 0i64 - 10i64, 0i64, 1i64, 0i64 - 8i64, 16i64) != 1i32 { FAILFX = FAILFX + 1u64 }                          /* tangent  d_i = 0 */
+    if fx_ok(1i64, 0i64 - 8i64, 16i64, 1i64, 0i64 - 10i64, 0i64) != 1i32 { FAILFX = FAILFX + 1u64 }                          /* tangent  d_j = 0 */
+    if fx_ok(1i64, 0i64 - 100i64, 10000i64, 1i64, 0i64 - 20i64, 400i64) != 1i32 { FAILFX = FAILFX + 1u64 }                   /* clearly separated */
+    putchar(70i32) putchar(88i32) putchar(58i32) sp() e_i64(lens_t_cmp_fx(1i64, 0i64 - 1418i64, 2005652i64, 1i64, 0i64 - 1416i64, 1999992i64) as i64) nl()   /* "FX: 1" */
+
+    /* ── TIER-COVERAGE guard: the FAST path AND the EXACT path must both have fired across C/D/D2/E. */
+    let fc : u64 = lazy_fast_count()   let ec2 : u64 = lazy_exact_count()
+    if fc == 0u64 { FAILS = FAILS + 1u64 }
+    if ec2 == 0u64 { FAILS = FAILS + 1u64 }
+    putchar(84i32) putchar(58i32) sp()                          /* "T: " */
+    putchar(102i32) sp() e_i64(fc as i64) sp()                  /* f <fast> */
+    putchar(120i32) sp() e_i64(ec2 as i64) nl()                 /* x <exact> */
+
+    if FAILA != 0u64 { return 10u64 }
+    if FAILC != 0u64 { return 20u64 }
+    if FAILD != 0u64 { return 30u64 }
+    if FAILE != 0u64 { return 50u64 }
+    if FAILS != 0u64 { return 60u64 }
+    if FAILFX != 0u64 { return 70u64 }
+    return 99u64
+}

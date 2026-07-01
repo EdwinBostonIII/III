@@ -1,0 +1,109 @@
+/* 2152_mechanism.iii -- GATE for cyclotomic_se3.iii: EXACT ZERO-DRIFT MECHANISM KINEMATICS.
+ *
+ * A CNC axis / robot joint / spacecraft attitude built on exact ℚ(√2,√3) rotation.  Each arm a DIFFERENT rule:
+ *   CLOSURE   the joint returns BIT-EXACT to home after 24, 240 AND 2400 steps (100 revolutions) -- ZERO drift -- and is
+ *             correctly NOT home at 5 and 12 steps (closure is not vacuous);
+ *   REACH     the Σ√ UNIFICATION: q23_sign orders EXACT rotated end-effector coordinates -- a 90° turn puts the tool's
+ *             x EXACTLY at 0 (certified zero, where float gives ~1e-16), and a 30° turn's x-reach (5√3) is proven
+ *             greater than its y-reach (5) by the same sum-of-square-roots engine the CSG kernel and router use;
+ *   SCREW     an SE(3) lead-screw feed [rotate +15°, translate +1 along z] × 24 restores orientation EXACTLY and lands
+ *             at z = 24 exactly;
+ *   NONCOMM   R_z·R_x != R_x·R_z EXACTLY (the genuine 3D signature -- not a 2D-degenerate stand-in);
+ *   DRIFT     the fixed-point (float-proxy) rotation loop DRIFTS after 240 steps -- the failure the exact engine defeats.
+ *
+ * HONEST SCOPE: cyclotomic (integer-multiple-of-15°) angles only; transcendental angles are undecidable (Richardson).
+ *   exit 99 = all arms correct.  10 closure/drift-of-exact  20 reach/sign  30 screw  40 3D-degenerate  50 fixed-point-no-drift */
+module corpus_2152_mechanism
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mech_reset() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_rotate_z15() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_home() -> u8 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_steps() -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_screw_z(t: i64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_zpos() -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_apply(px: i64, py: i64, pz: i64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt(i: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt_addr() -> u64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+extern @abi(c-msvc-x64) fn so3_rot_z15(mb: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn so3_rot_x15(mb: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 from "cyclotomic_se3.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+/* exact sign of rotated end-effector coordinate `axis` (0=x,1=y,2=z), via the Σ√ bridge (q23_sign.iii). */
+fn pts(axis: u64) -> i32 { return q23_sign(mech_pt_addr() + axis * 32u64) }
+
+var FCLOSE : u64   var FREACH : u64   var FSCREW : u64   var FNC : u64   var FDRIFT : u64
+var RZ : [i64; 36]   var RX : [i64; 36]   var MA : [i64; 36]   var MB : [i64; 36]   var DIFF : [i64; 4]
+
+fn main() -> u64 {
+    FCLOSE = 0u64   FREACH = 0u64   FSCREW = 0u64   FNC = 0u64   FDRIFT = 0u64
+
+    /* ── Arm CLOSURE: zero drift over 100 revolutions.  home at 24/240/2400; NOT home at 5/12. ── */
+    mech_reset()
+    let mut k : u64 = 1u64
+    while k <= 2400u64 {
+        mech_rotate_z15()
+        if k == 5u64   { if mech_home() != 0u8 { FCLOSE = FCLOSE + 1u64 } }    /* 75°  : not home */
+        if k == 12u64  { if mech_home() != 0u8 { FCLOSE = FCLOSE + 1u64 } }    /* 180° : not home */
+        if k == 24u64  { if mech_home() != 1u8 { FCLOSE = FCLOSE + 1u64 } }    /* 360° : EXACT home */
+        if k == 240u64 { if mech_home() != 1u8 { FCLOSE = FCLOSE + 1u64 } }    /* 10 rev */
+        if k == 2400u64 { if mech_home() != 1u8 { FCLOSE = FCLOSE + 1u64 } }   /* 100 rev, still bit-exact */
+        k = k + 1u64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(mech_steps()) sp() e_i64(mech_home() as i64) nl()   /* "C: 2400 1" */
+
+    /* ── Arm REACH: exact rotated end-effector coordinates ordered by the Σ√ engine. ── */
+    /* 90° (6 steps): tool (10,0,0) -> (0,10,0).  x EXACTLY 0 (certified), y strictly + . */
+    mech_reset()
+    let mut a : u64 = 0u64   while a < 6u64 { mech_rotate_z15()   a = a + 1u64 }
+    mech_apply(10i64, 0i64, 0i64)
+    if pts(0u64) != 0i32 { FREACH = FREACH + 1u64 }             /* rotated x == 0 EXACTLY */
+    if pts(1u64) != 1i32 { FREACH = FREACH + 1u64 }             /* rotated y  > 0 */
+    /* 30° (2 steps): tool (10,0,0) -> x = 5√3, y = 5.  Prove x-reach > y-reach EXACTLY. */
+    mech_reset()
+    a = 0u64   while a < 2u64 { mech_rotate_z15()   a = a + 1u64 }
+    mech_apply(10i64, 0i64, 0i64)
+    if pts(0u64) != 1i32 { FREACH = FREACH + 1u64 }             /* 5√3 > 0 */
+    let mut c : u64 = 0u64
+    while c < 4u64 { DIFF[c] = mech_pt(c) - mech_pt(4u64 + c)   c = c + 1u64 }   /* x - y as a ℚ(√2,√3) element */
+    let reach : i32 = q23_sign((&DIFF) as u64)                            /* sign(5√3 - 5) = +1 */
+    if reach != 1i32 { FREACH = FREACH + 1u64 }
+    putchar(82i32) putchar(58i32) sp() e_i64(pts(0u64) as i64) sp() e_i64(reach as i64) nl()   /* "R: 1 1" */
+
+    /* ── Arm SCREW: SE(3) lead-screw [rotate +15°, +1 z] x 24 -> orientation home, z = 24 exactly. ── */
+    mech_reset()
+    a = 0u64   while a < 24u64 { mech_screw_z(1i64)   a = a + 1u64 }
+    if mech_home() != 1u8 { FSCREW = FSCREW + 1u64 }
+    if mech_zpos() != 24i64 { FSCREW = FSCREW + 1u64 }
+    putchar(83i32) putchar(58i32) sp() e_i64(mech_home() as i64) sp() e_i64(mech_zpos()) nl()   /* "S: 1 24" */
+
+    /* ── Arm NONCOMM: R_z·R_x != R_x·R_z exactly (3D signature). ── */
+    so3_rot_z15((&RZ) as u64)   so3_rot_x15((&RX) as u64)
+    so3_mul((&RZ) as u64, (&RX) as u64, (&MA) as u64)
+    so3_mul((&RX) as u64, (&RZ) as u64, (&MB) as u64)
+    let pA : *i64 = (&MA) as *i64   let pB : *i64 = (&MB) as *i64
+    let mut differ : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < 36u64 { let ai : i64 = pA[i]   let bi : i64 = pB[i]   if ai != bi { differ = 1u8 }   i = i + 1u64 }
+    if differ != 1u8 { FNC = FNC + 1u64 }
+
+    /* ── Arm DRIFT: the fixed-point (float-proxy) rotation drifts after 240 steps -- what exact defeats. ── */
+    let S : i64 = 1073741824i64   let COS15 : i64 = 1037202592i64   let SIN15 : i64 = 277904907i64
+    let mut fc : i64 = S   let mut fs : i64 = 0i64
+    let mut n : u64 = 0u64
+    while n < 240u64 { let nfc : i64 = (fc * COS15 - fs * SIN15) / S   let nfs : i64 = (fc * SIN15 + fs * COS15) / S   fc = nfc   fs = nfs   n = n + 1u64 }
+    let mut drift : u8 = 0u8
+    if fc != S { drift = 1u8 }   if fs != 0i64 { drift = 1u8 }
+    if drift != 1u8 { FDRIFT = FDRIFT + 1u64 }
+    putchar(68i32) putchar(58i32) sp() e_i64(differ as i64) sp() e_i64(drift as i64) sp() e_i64(fc) sp() e_i64(fs) nl()   /* "D: 1 1 <fc> <fs>" */
+
+    if FCLOSE != 0u64 { return 10u64 }
+    if FREACH != 0u64 { return 20u64 }
+    if FSCREW != 0u64 { return 30u64 }
+    if FNC    != 0u64 { return 40u64 }
+    if FDRIFT != 0u64 { return 50u64 }
+    return 99u64
+}

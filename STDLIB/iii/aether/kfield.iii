@@ -1,0 +1,556 @@
+/* STDLIB/iii/aether/kfield.iii -- the MULTIQUADRATIC FIELD K = Q(sqrt A, sqrt B, sqrt C), welded into the exact-sign
+ * substrate as the GALOIS-TOWER tier of sqrt_sum_sign.iii's ladder (relocated from TOOLS-QUOTIENT; the staging copy
+ * remains there untouched).
+ *
+ * THE SOLVE for exact content-addressing of irrational geometry points. Every triangle center lives in K
+ * (A,B,C = squared side lengths). K has degree <= 8 over Q with fixed basis indexed by a 3-bit MASK:
+ *   mask m  <->  sqrt( prod_{bit i set in m} R_i )        R = (A,B,C)
+ * A K-element is 8 integer coefficients (a common scalar denominator is carried separately by the point).
+ *   MULTIPLY:  (e_i)(e_j) = ( prod_{bits in i&j} R ) * e_{i^j}     -- AND gives the rational factor, XOR the result
+ *   CONJUGATE: the automorphism sqrt R_axis -> -sqrt R_axis  flips the sign of every mask with that bit set
+ *   RATIONALIZE a denominator: multiply num & den by conj_A, conj_B, conj_C in turn -> after 3 the den is rational
+ *   CANONICALIZE (degeneracy-robust): square-free-reduce each mask's radicand and COMBINE masks whose radicands
+ *     share a square-free part (perfect squares fold into mask 0). This is the ONLY canonical form -- without it an
+ *     isoceles/commensurable triangle would split one value across two masks and a real coincidence would be MISSED.
+ *
+ * SOUNDNESS/COMPLETENESS: general exact-real equality is undecidable (transcendental zero-test). Points in a FIXED
+ * number field are decidable via this canonical form. So the content-address is SOUND ALWAYS (equal address => equal
+ * value, never a false coincidence) and COMPLETE ON K (equal value => equal address, every real coincidence fires).
+ * The general unsolvability IS the soundness guarantee; triangle centers live on the decidable island. No float, no ML.
+ *
+ * THE WELD (III-EXACT-SUBSTRATE-INTEGRATION T2): every i64 step of the multiply/tower path is OVERFLOW-GUARDED (the
+ * 19/39 falsifier proved raw i64 kf_sign silently wrong out of envelope -- self_graded_overflow_blind).  kf_embed maps
+ * a flat  sum a_i*sqrt(b_i)  into K by F2 LINEAR ALGEBRA on prime-exponent parity vectors (NOT distinct-radicand
+ * counting: {sqrt6,sqrt10,sqrt15} is rank 2, since sqrt6*sqrt10 = 2*sqrt15), scaling by the positive lcm of the
+ * integer factors so the vector stays integral and the SIGN is preserved.  kf_multiquadratic_sign = embed + guarded
+ * tower sign; it returns 2 = ABSTAIN (never a guess) on rank > 3, factoring out of envelope, or any flagged overflow.
+ * sqrt_sum_sign::sqrtsum_lazy3 dispatches it after radical canonicalization and before the bigint tiers. */
+module numera_kfield
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+var KR : [i64; 3]                    /* the radicands A,B,C */
+var KTMP : [i64; 8]   var KCONJ : [i64; 8]
+var KSFS : i64   var KSFD : i64
+var KOC : [i64; 8]   var KOR : [i64; 8]      /* canonicalized (coeff, radicand) buckets for one coordinate */
+var KOC2 : [i64; 8]  var KOR2 : [i64; 8]
+var KPBUF : [u8; 272]                        /* address preimage: 2*(8 coeff + 8 rad) i64 + count + den */
+
+fn kf_radix(sa: i64, sb: i64, sc: i64) -> i32 @export { KR[0] = sa   KR[1] = sb   KR[2] = sc   return 0i32 }
+
+fn kf_zero(p: u64) -> i32 @export { let pp : *i64 = p as *i64   let mut m : u64 = 0u64   while m < 8u64 { pp[m] = 0i64   m = m + 1u64 }   return 0i32 }
+fn kf_copy(dst: u64, src: u64) -> i32 { let d : *i64 = dst as *i64   let s : *i64 = src as *i64   let mut m : u64 = 0u64   while m < 8u64 { d[m] = s[m]   m = m + 1u64 }   return 0i32 }
+
+fn kf_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn kf_igcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = kf_iabs(x)   let mut b : i64 = kf_iabs(y)
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* ── THE MAGNITUDE GUARD.  kf_sign squares through the tower (p^2 - q^2*R per level), so coefficients grow
+ * ~c^(2^r)*R^(2^r-1); raw i64 is SILENTLY WRONG out of envelope (falsifier: 19 of 39 adversarial rank-2 cases
+ * disagreed with the exact oracle).  Every multiply/add/subtract on the K-arithmetic path runs through these
+ * checked ops; any overflow sets the sticky KF_OVF flag and the caller ABSTAINS instead of guessing.  Checks are
+ * u64-magnitude based, so i64 MIN is handled (|MIN| = 2^63 exactly). ── */
+var KF_OVF : u32 = 0u32
+fn kf_ovf_get() -> u32 @export { return KF_OVF }
+fn kf_ovf_clear() -> i32 @export { KF_OVF = 0u32   return 0i32 }
+fn kfg_absu(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+
+fn kfg_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = kfg_absu(a)   let ub : u64 = kfg_absu(b)
+    if ub > (9223372036854775807u64 / ua) { KF_OVF = 1u32   return 0i64 }   /* |a*b| > i64 MAX (covers MIN: |MIN|=2^63) */
+    return a * b
+}
+
+fn kfg_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }                                            /* mixed signs never overflow */
+    let ua : u64 = kfg_absu(a)   let ub : u64 = kfg_absu(b)
+    if pa == 1u8 {
+        if (ua + ub) > 9223372036854775807u64 { KF_OVF = 1u32   return 0i64 }
+        return a + b
+    }
+    if ua > 9223372036854775807u64 { KF_OVF = 1u32   return 0i64 }          /* a == i64 MIN, b < 0: certain overflow */
+    if ub > 9223372036854775807u64 { KF_OVF = 1u32   return 0i64 }
+    if (ua + ub) > 9223372036854775808u64 { KF_OVF = 1u32   return 0i64 }   /* both negative: magnitude may reach 2^63 */
+    return a + b
+}
+
+fn kfg_sub(a: i64, b: i64) -> i64 {
+    if b == 0i64 { return a }
+    let ub : u64 = kfg_absu(b)
+    if ub > 9223372036854775807u64 { KF_OVF = 1u32   return 0i64 }          /* b == i64 MIN: -b unrepresentable, abstain */
+    return kfg_add(a, 0i64 - b)
+}
+
+fn kf_radicand(mask: u64) -> i64 {
+    let mut r : i64 = 1i64
+    if (mask & 1u64) != 0u64 { r = kfg_mul(r, KR[0]) }
+    if (mask & 2u64) != 0u64 { r = kfg_mul(r, KR[1]) }
+    if (mask & 4u64) != 0u64 { r = kfg_mul(r, KR[2]) }
+    return r
+}
+
+/* out = x * y in K.  out MUST be distinct storage from x and y.  Every product and accumulation is guarded. */
+fn kf_mul(out: u64, x: u64, y: u64) -> i32 @export {
+    let po : *i64 = out as *i64   let px : *i64 = x as *i64   let py : *i64 = y as *i64
+    kf_zero(out)
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let xi : i64 = px[i]
+        if xi != 0i64 {
+            let mut j : u64 = 0u64
+            while j < 8u64 {
+                let yj : i64 = py[j]
+                if yj != 0i64 {
+                    let inter : u64 = i & j
+                    let mut f : i64 = 1i64
+                    if (inter & 1u64) != 0u64 { f = kfg_mul(f, KR[0]) }
+                    if (inter & 2u64) != 0u64 { f = kfg_mul(f, KR[1]) }
+                    if (inter & 4u64) != 0u64 { f = kfg_mul(f, KR[2]) }
+                    let mm : u64 = i ^ j
+                    let t1 : i64 = kfg_mul(xi, yj)
+                    let t2 : i64 = kfg_mul(t1, f)
+                    let cur : i64 = po[mm]
+                    po[mm] = kfg_add(cur, t2)
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn kf_conj(out: u64, x: u64, axis: u32) -> i32 {
+    let po : *i64 = out as *i64   let px : *i64 = x as *i64
+    let bit : u64 = 1u64 << (axis as u64)
+    let mut m : u64 = 0u64
+    while m < 8u64 {
+        if (m & bit) != 0u64 { po[m] = 0i64 - px[m] } else { po[m] = px[m] }
+        m = m + 1u64
+    }
+    return 0i32
+}
+
+/* divide the point (nx,ny,den) by the common gcd of all their coefficients -- preserves nx/den, ny/den; bounds growth. */
+fn kf_reduce3(nx: u64, ny: u64, den: u64) -> i32 {
+    let px : *i64 = nx as *i64   let py : *i64 = ny as *i64   let pd : *i64 = den as *i64
+    let mut g : i64 = 0i64
+    let mut m : u64 = 0u64
+    while m < 8u64 { g = kf_igcd(g, px[m])   g = kf_igcd(g, py[m])   g = kf_igcd(g, pd[m])   m = m + 1u64 }
+    if g <= 1i64 { return 0i32 }
+    m = 0u64
+    while m < 8u64 { px[m] = px[m] / g   py[m] = py[m] / g   pd[m] = pd[m] / g   m = m + 1u64 }
+    return 0i32
+}
+
+fn kf_rat_axis(nx: u64, ny: u64, den: u64, axis: u32) -> i32 {
+    kf_conj((&KCONJ) as u64, den, axis)
+    kf_mul((&KTMP) as u64, den, (&KCONJ) as u64)   kf_copy(den, (&KTMP) as u64)
+    kf_mul((&KTMP) as u64, nx,  (&KCONJ) as u64)   kf_copy(nx,  (&KTMP) as u64)
+    kf_mul((&KTMP) as u64, ny,  (&KCONJ) as u64)   kf_copy(ny,  (&KTMP) as u64)
+    kf_reduce3(nx, ny, den)
+    return 0i32
+}
+/* rationalize the point's denominator to a pure rational (mask 0); returns 1 if den became rational, 0 if not. */
+fn kf_rationalize(nx: u64, ny: u64, den: u64) -> i32 {
+    kf_rat_axis(nx, ny, den, 0u32)
+    kf_rat_axis(nx, ny, den, 1u32)
+    kf_rat_axis(nx, ny, den, 2u32)
+    let pd : *i64 = den as *i64
+    let mut m : u64 = 1u64
+    while m < 8u64 { if pd[m] != 0i64 { return 0i32 }   m = m + 1u64 }
+    return 1i32
+}
+
+fn kf_sqfree(n: i64) -> i32 {
+    let mut d : i64 = n   let mut s : i64 = 1i64   let mut k : i64 = 2i64
+    while k * k <= d {
+        let kk : i64 = k * k
+        let qd : i64 = d / kk
+        if d - qd * kk == 0i64 { d = qd   s = s * k } else { k = k + 1i64 }
+    }
+    KSFS = s   KSFD = d
+    return 0i32
+}
+
+/* degeneracy-robust canonical form of one K-coordinate v[8]: fold to buckets (coeff, square-free radicand),
+ * combining masks with equal square-free part; insertion-sort by radicand into (oc,or); returns the term count. */
+fn kf_canon_vec(v: u64, oc: u64, orad: u64) -> u64 {
+    let pv : *i64 = v as *i64   let poc : *i64 = oc as *i64   let por : *i64 = orad as *i64
+    let mut n : u64 = 0u64
+    let mut mask : u64 = 0u64
+    while mask < 8u64 {
+        let vm : i64 = pv[mask]
+        if vm != 0i64 {
+            kf_sqfree(kf_radicand(mask))
+            let coeff : i64 = kfg_mul(vm, KSFS)
+            let d : i64 = KSFD
+            let mut hit : u8 = 0u8   let mut fj : u64 = 0u64   let mut j : u64 = 0u64
+            while j < n { if por[j] == d { fj = j   hit = 1u8 }   j = j + 1u64 }
+            if hit == 1u8 { let cf : i64 = poc[fj]   poc[fj] = kfg_add(cf, coeff) } else { poc[n] = coeff   por[n] = d   n = n + 1u64 }
+        }
+        mask = mask + 1u64
+    }
+    /* drop any zeroed bucket, then insertion-sort by radicand */
+    let mut w : u64 = 0u64   let mut r : u64 = 0u64
+    while r < n { if poc[r] != 0i64 { poc[w] = poc[r]   por[w] = por[r]   w = w + 1u64 }   r = r + 1u64 }
+    n = w
+    let mut p : u64 = 1u64
+    while p < n {
+        let cv : i64 = poc[p]   let dv : i64 = por[p]
+        let mut q : u64 = p   let mut go : u8 = 1u8
+        while go == 1u8 {
+            if q == 0u64 { go = 0u8 }
+            if go == 1u8 { if por[q - 1u64] <= dv { go = 0u8 } }
+            if go == 1u8 { poc[q] = poc[q - 1u64]   por[q] = por[q - 1u64]   q = q - 1u64 }
+        }
+        poc[q] = cv   por[q] = dv
+        p = p + 1u64
+    }
+    return n
+}
+
+fn kf_put_i64(off: u64, v: i64) -> i32 {
+    let u : u64 = v as u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { KPBUF[off + k] = ((u >> (8u64 * k)) & 255u64) as u8   k = k + 1u64 }
+    return 0i32
+}
+
+/* content-address the point (nx,ny,den): rationalize, canonicalize both coordinates (degeneracy-robust), reduce the
+ * whole triple by gcd + fix sign(den)>0, and hash the canonical (coeff,radicand) lists + den. Returns 0 ok, 1 if the
+ * denominator did not rationalize (a zero-divisor / off-field input), 2 if the i64 envelope overflowed anywhere in
+ * the K-arithmetic (a wrapped coefficient would hash to a FALSE address -- refuse rather than emit one). */
+fn kf_point_addr(nx: u64, ny: u64, den: u64, out32: *u8) -> i32 @export {
+    KF_OVF = 0u32
+    if kf_rationalize(nx, ny, den) != 1i32 { return 1i32 }
+    let nxn : u64 = kf_canon_vec(nx, (&KOC) as u64, (&KOR) as u64)
+    let nyn : u64 = kf_canon_vec(ny, (&KOC2) as u64, (&KOR2) as u64)
+    if KF_OVF != 0u32 { return 2i32 }
+    let pd : *i64 = den as *i64
+    let mut d : i64 = pd[0]
+    /* common gcd of all coeffs and d; then sign so d>0 */
+    let mut g : i64 = kf_iabs(d)
+    let mut m : u64 = 0u64
+    while m < nxn { g = kf_igcd(g, KOC[m])   m = m + 1u64 }
+    m = 0u64
+    while m < nyn { g = kf_igcd(g, KOC2[m])   m = m + 1u64 }
+    if g <= 0i64 { g = 1i64 }
+    let mut sgn : i64 = 1i64
+    if d < 0i64 { sgn = 0i64 - 1i64 }
+    let gg : i64 = g * sgn
+    m = 0u64   while m < nxn { KOC[m] = KOC[m] / gg   m = m + 1u64 }
+    m = 0u64   while m < nyn { KOC2[m] = KOC2[m] / gg   m = m + 1u64 }
+    d = d / gg
+    /* pack: [nxn][ then nxn (coeff,rad) pairs ][nyn][ nyn pairs ][d]  into KPBUF, zero-padded region hashed fully */
+    let mut z : u64 = 0u64   while z < 272u64 { KPBUF[z] = 0u8   z = z + 1u64 }
+    kf_put_i64(0u64, nxn as i64)
+    m = 0u64
+    while m < nxn { kf_put_i64(8u64 + m * 16u64, KOC[m])   kf_put_i64(16u64 + m * 16u64, KOR[m])   m = m + 1u64 }
+    kf_put_i64(136u64, nyn as i64)
+    m = 0u64
+    while m < nyn { kf_put_i64(144u64 + m * 16u64, KOC2[m])   kf_put_i64(152u64 + m * 16u64, KOR2[m])   m = m + 1u64 }
+    kf_put_i64(264u64, d)
+    sha256_oneshot((&KPBUF) as *u8, 272u64, out32)
+    return 0i32
+}
+
+/* ── kf_sign: the GALOIS-TOWER sign decision — the theory made runnable. Decides sign(x) for x ∈ K EXACTLY, with NO
+ * separation bound. Write x = p + q·√R (R = KR[level]; p,q in the subfield with bit `level` cleared): if sign(p) and
+ * sign(q) agree it is that sign; if one is zero it is the other; if they differ it is sign(p)·sign(p²−q²R) — a value
+ * one level down the tower ℚ(√A,√B,√C) ⊃ ℚ(√A,√B) ⊃ ℚ(√A) ⊃ ℚ. Depth 3, pure exact rational arithmetic, no float.
+ * This closes "Σ√-sign OPEN" for the BOUNDED-rank (triangle) field; unbounded rank would blow the tower up 2^n (the
+ * SOSR wall). Robust to un-squarefree radicands: √4 resolves to 2 through the recursion.
+ * ENVELOPE: every product is guarded; on overflow KF_OVF is set and the RESULT IS NOT TRUSTWORTHY — callers that need
+ * a certified answer use kf_sign_checked / kf_multiquadratic_sign (which abstain), never raw kf_sign. ── */
+var SGP : [i64; 24]   var SGQ : [i64; 24]   var SGP2 : [i64; 24]   var SGQ2 : [i64; 24]   var SGD : [i64; 24]
+
+fn kf_split(x: u64, level: i32, pout: u64, qout: u64) -> i32 {
+    let px : *i64 = x as *i64   let pp : *i64 = pout as *i64   let pq : *i64 = qout as *i64
+    let bit : u64 = 1u64 << (level as u64)
+    let mut m : u64 = 0u64
+    while m < 8u64 { pp[m] = 0i64   pq[m] = 0i64   m = m + 1u64 }
+    m = 0u64
+    while m < 8u64 {
+        if (m & bit) == 0u64 { pp[m] = px[m] } else { pq[m ^ bit] = px[m] }
+        m = m + 1u64
+    }
+    return 0i32
+}
+
+fn kf_sign_rec(x: u64, level: i32) -> i32 {
+    let px : *i64 = x as *i64
+    if level < 0i32 {
+        let v : i64 = px[0u64]                  /* bind first: inline `px[0] < 0` mis-evaluates as UNSIGNED (iii trap) */
+        if v > 0i64 { return 1i32 }
+        if v < 0i64 { return 0i32 - 1i32 }
+        return 0i32
+    }
+    let off : u64 = (level as u64) * 8u64
+    let pp : u64 = (&SGP as u64) + off * 8u64
+    let qq : u64 = (&SGQ as u64) + off * 8u64
+    kf_split(x, level, pp, qq)
+    let sp : i32 = kf_sign_rec(pp, level - 1i32)
+    let sq : i32 = kf_sign_rec(qq, level - 1i32)
+    if sp == 0i32 { return sq }
+    if sq == 0i32 { return sp }
+    if sp == sq { return sp }
+    let p2 : u64 = (&SGP2 as u64) + off * 8u64
+    let q2 : u64 = (&SGQ2 as u64) + off * 8u64
+    let dd : u64 = (&SGD as u64) + off * 8u64
+    kf_mul(p2, pp, pp)
+    kf_mul(q2, qq, qq)
+    let r : i64 = KR[level as u64]
+    let pp2 : *i64 = p2 as *i64   let pq2 : *i64 = q2 as *i64   let pdd : *i64 = dd as *i64
+    let mut m : u64 = 0u64
+    while m < 8u64 {
+        let a1 : i64 = pp2[m]   let b1 : i64 = pq2[m]
+        let t : i64 = kfg_mul(r, b1)
+        pdd[m] = kfg_sub(a1, t)
+        m = m + 1u64
+    }
+    let sd : i32 = kf_sign_rec(dd, level - 1i32)
+    return sp * sd
+}
+
+/* sign of x ∈ K = Q(√KR[0], √KR[1], √KR[2]): +1 / 0 / -1, exact IN-ENVELOPE (see kf_sign_checked). */
+fn kf_sign(x: u64) -> i32 @export { return kf_sign_rec(x, 2i32) }
+
+/* the certified entry: sign in {-1,0,+1}, or 2 = ABSTAIN if any i64 step overflowed (never a silent wrong sign). */
+fn kf_sign_checked(x: u64) -> i32 @export {
+    KF_OVF = 0u32
+    let s : i32 = kf_sign_rec(x, 2i32)
+    if KF_OVF != 0u32 { return 2i32 }
+    return s
+}
+
+/* FIELD-EXIT DETECTOR (rational case): is sqrt(n) in K for a rational n>=0?  kfield is CLOSED under mul/add/rationalize
+ * -- it never leaves K by itself. A construction leaves K only if it needs sqrt(a value). For a RATIONAL radicand,
+ * sqrt(n) is in K iff sqfree(n) lies in K's SQUARE-CLASS GROUP, generated (in Q modulo squares) by the square-free
+ * parts of KR[0..2]. Decided WITHOUT a root or a division: sqfree(n) times some subset-product of the generators is a
+ * perfect square (its own square-free part is 1) for exactly the in-field radicands. Returns 1 = sqrt(n) in K (stays),
+ * 0 = sqrt(n) not in K (the construction LEAVES the multiquadratic field -- flag it, do NOT hash it as if in K). The
+ * GENERIC-K case (sqrt of a non-rational K-element, e.g. a distance between Sigma-sqrt points) is the tower-denesting
+ * extension (kf_sqrt), documented but not built here. */
+fn kf_rat_in_field(n: i64) -> i32 @export {
+    let nn : i64 = n
+    if nn < 0i64 { return 0i32 }
+    if nn == 0i64 { return 1i32 }
+    kf_sqfree(KR[0u64])   let g0 : i64 = KSFD
+    kf_sqfree(KR[1u64])   let g1 : i64 = KSFD
+    kf_sqfree(KR[2u64])   let g2 : i64 = KSFD
+    kf_sqfree(nn)         let d : i64 = KSFD
+    let mut mask : u64 = 0u64
+    while mask < 8u64 {
+        let mut prod : i64 = d
+        if (mask & 1u64) != 0u64 { prod = prod * g0 }
+        if (mask & 2u64) != 0u64 { prod = prod * g1 }
+        if (mask & 4u64) != 0u64 { prod = prod * g2 }
+        kf_sqfree(prod)
+        if KSFD == 1i64 { return 1i32 }
+        mask = mask + 1u64
+    }
+    return 0i32
+}
+
+/* ═══ THE WELD: kf_embed + kf_multiquadratic_sign — Tier 3 of sqrt_sum_sign.iii's ladder ═══
+ *
+ * kf_embed maps a flat  sum_{i<n} a_i * sqrt(b_i)  (i64 coeffs, 0 <= b_i < 2^20) into the mask basis of K:
+ *   1. squarefree-collect terms -> distinct squarefree radicands d_j with integer coeffs c_j;
+ *   2. factor each d_j (trial division, cheap under the 2^20 envelope) -> prime-exponent PARITY vector over F2;
+ *   3. XOR-basis Gaussian elimination WITH PROVENANCE -> rank r; r > 3 => FAIL (K has 3 generators / 8 masks);
+ *      the r independent d_j themselves become the generators g_0..g_{r-1} (pad with 1);
+ *   4. each d_j's parity is the XOR of a generator subset S_j, so  d_j * prod(S_j) = w_j^2  (VERIFIED, not trusted:
+ *      divisibility + perfect-square are both checked) and  sqrt(d_j) = e_{mask(S_j)} / w_j;
+ *   5. scale the whole sum by L = lcm(w_j) > 0 (POSITIVE => sign-preserving): coefficient c_j*(L/w_j) at mask(S_j).
+ * Every integer step is guarded; any overflow / rank / envelope failure returns 0 = FAIL and the caller escalates.
+ * Returns 1 with KR set (kf_radix) and the vector in KFE_VEC.
+ *
+ * kf_multiquadratic_sign = kf_embed + kf_sign, certified: returns sign(sum a_i sqrt(b_i)) in {-1,0,+1}, or
+ * 2 = ABSTAIN.  A tower result of 0 on a NONZERO vector is refused too (distinct squarefree surds are Q-linearly
+ * independent, so a nonzero vector cannot be the zero value -- a 0 there could only be a bug or missed overflow;
+ * self-distrust beats self-grading).  THE THEOREM this tier carries (gated by corpus 2159): on the bounded-rank
+ * multiquadratic domain the Galois-tower sign EQUALS the separation-bound sign -- a third independent exact-sign
+ * faculty joining the agreement web (Sturm ≡ Σ√ was 2157). */
+var KFE_D : [i64; 16]   var KFE_C : [i64; 16]      /* collected classes: squarefree radicand, integer coeff */
+var KFE_MASKV : [u64; 16]   var KFE_W : [i64; 16]  /* per-class generator-subset mask and integer factor w_j */
+var KFE_PR : [i64; 64]   var KFE_NPR : u64         /* collected primes across all classes (parity axes) */
+var KFE_PFAIL : u32
+var KFE_BVEC : [u64; 3]   var KFE_BLEAD : [u64; 3]   var KFE_BPROV : [u64; 3]
+var KFE_GEN : [i64; 3]
+var KFE_VEC : [i64; 8]                             /* the embedded 8-vector (valid after kf_embed == 1) */
+var KFE_M : u64
+
+/* squarefree-collect the flat sum into KFE_D/KFE_C; sets KFE_M; returns 0 ok / -1 refuse (bad radicand, n>16, overflow). */
+fn kfe_collect(a_ptr: u64, b_ptr: u64, n: u64) -> i32 {
+    let pa : *i64 = a_ptr as *i64   let pb : *i64 = b_ptr as *i64
+    if n > 16u64 { return 0i32 - 1i32 }
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ai : i64 = pa[i]
+        let bi : i64 = pb[i]
+        if ai != 0i64 { if bi != 0i64 {
+            if bi < 0i64 { return 0i32 - 1i32 }
+            if bi >= 1048576i64 { return 0i32 - 1i32 }           /* factoring envelope: b < 2^20 */
+            kf_sqfree(bi)
+            let d : i64 = KSFD
+            let coeff : i64 = kfg_mul(ai, KSFS)
+            if KF_OVF != 0u32 { return 0i32 - 1i32 }
+            let mut hit : u8 = 0u8   let mut fj : u64 = 0u64   let mut j : u64 = 0u64
+            while j < m { if KFE_D[j] == d { fj = j   hit = 1u8 }   j = j + 1u64 }
+            if hit == 1u8 {
+                let cf : i64 = KFE_C[fj]
+                KFE_C[fj] = kfg_add(cf, coeff)
+                if KF_OVF != 0u32 { return 0i32 - 1i32 }
+            } else { KFE_D[m] = d   KFE_C[m] = coeff   m = m + 1u64 }
+        } }
+        i = i + 1u64
+    }
+    let mut w : u64 = 0u64   let mut r : u64 = 0u64
+    while r < m { let cr : i64 = KFE_C[r]   if cr != 0i64 { KFE_D[w] = KFE_D[r]   KFE_C[w] = cr   w = w + 1u64 }   r = r + 1u64 }
+    KFE_M = w
+    return 0i32
+}
+
+/* index bit of prime p in the collected prime list (append on first sight); >64 distinct primes => KFE_PFAIL. */
+fn kfe_prbit(p: i64) -> u64 {
+    let mut j : u64 = 0u64
+    while j < KFE_NPR { if KFE_PR[j] == p { return 1u64 << j }   j = j + 1u64 }
+    if KFE_NPR >= 64u64 { KFE_PFAIL = 1u32   return 0u64 }
+    KFE_PR[KFE_NPR] = p
+    let bit : u64 = 1u64 << KFE_NPR
+    KFE_NPR = KFE_NPR + 1u64
+    return bit
+}
+
+/* prime-exponent parity vector of a SQUAREFREE d < 2^20 (trial division; each prime appears exactly once). */
+fn kfe_parity(d0: i64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut d : i64 = d0
+    let mut k : i64 = 2i64
+    while (k * k) <= d {
+        let q : i64 = d / k
+        if d - q * k == 0i64 { v = v ^ kfe_prbit(k)   d = q } else { k = k + 1i64 }
+    }
+    if d > 1i64 { v = v ^ kfe_prbit(d) }
+    return v
+}
+
+/* plain-u64 floor(sqrt(N)) -- kfield-local so the layering stays kfield -> (nothing): sqrt_sum_sign externs kfield,
+ * never the reverse (no cycle).  12 lines, digit-by-digit base 4, exact. */
+fn kfe_isqrt64(N: u64) -> u64 {
+    if N == 0u64 { return 0u64 }
+    let mut bl : u64 = 0u64   let mut t : u64 = N
+    while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+    let k : u64 = (bl - 1u64) / 2u64
+    let mut bit : u64 = 1u64 << (2u64 * k)
+    let mut res : u64 = 0u64
+    let mut n : u64 = N
+    while bit != 0u64 {
+        let rb : u64 = res + bit
+        let mut ge : u8 = 0u8
+        if n >= rb { ge = 1u8 }
+        if ge == 1u8 { n = n - rb   res = (res >> 1u64) + bit }
+        if ge == 0u8 { res = res >> 1u64 }
+        bit = bit >> 2u64
+    }
+    return res
+}
+
+/* embed sum a_i*sqrt(b_i) into K: 1 = embedded (KR set, vector in KFE_VEC), 0 = FAIL (caller escalates). */
+fn kf_embed(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    KF_OVF = 0u32   KFE_PFAIL = 0u32   KFE_NPR = 0u64
+    if kfe_collect(a_ptr, b_ptr, n) != 0i32 { return 0i32 }
+    kf_zero((&KFE_VEC) as u64)
+    let m : u64 = KFE_M
+    if m == 0u64 { kf_radix(1i64, 1i64, 1i64)   return 1i32 }         /* all terms cancelled: the zero vector */
+    /* F2 XOR-basis elimination with provenance (one forward pass in insertion order is sound: a new basis vector is
+     * fully reduced against all earlier ones, and any XOR-combination retains the max member lead bit). */
+    let mut r : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < m {
+        let dj : i64 = KFE_D[j]
+        let mut v : u64 = kfe_parity(dj)
+        if KFE_PFAIL != 0u32 { return 0i32 }
+        let mut prov : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < r {
+            if (v & KFE_BLEAD[k]) != 0u64 { v = v ^ KFE_BVEC[k]   prov = prov ^ KFE_BPROV[k] }
+            k = k + 1u64
+        }
+        if v == 0u64 { KFE_MASKV[j] = prov }
+        if v != 0u64 {
+            if r >= 3u64 { return 0i32 }                              /* rank > 3: leaves the multiquadratic island */
+            let mut lead : u64 = 1u64
+            let mut t : u64 = v
+            while t > 1u64 { t = t >> 1u64   lead = lead << 1u64 }
+            KFE_BVEC[r] = v   KFE_BLEAD[r] = lead
+            KFE_BPROV[r] = prov | (1u64 << r)
+            KFE_GEN[r] = dj
+            KFE_MASKV[j] = 1u64 << r
+            r = r + 1u64
+        }
+        j = j + 1u64
+    }
+    if r < 1u64 { KFE_GEN[0] = 1i64 }
+    if r < 2u64 { KFE_GEN[1] = 1i64 }
+    if r < 3u64 { KFE_GEN[2] = 1i64 }
+    /* per-class integer factor w_j: d_j * prod(gen subset) = w_j^2 * d_j^2 ... i.e. prod(S_j) = d_j * w_j^2; verify. */
+    let mut L : i64 = 1i64
+    j = 0u64
+    while j < m {
+        let mk : u64 = KFE_MASKV[j]
+        let mut G : i64 = 1i64
+        if (mk & 1u64) != 0u64 { G = kfg_mul(G, KFE_GEN[0]) }
+        if (mk & 2u64) != 0u64 { G = kfg_mul(G, KFE_GEN[1]) }
+        if (mk & 4u64) != 0u64 { G = kfg_mul(G, KFE_GEN[2]) }
+        if KF_OVF != 0u32 { return 0i32 }
+        let dj : i64 = KFE_D[j]
+        let q : i64 = G / dj
+        if q * dj != G { return 0i32 }                                /* defense: d_j must divide its generator product */
+        let wq : u64 = kfe_isqrt64(q as u64)
+        let wqs : i64 = (wq * wq) as i64
+        if wqs != q { return 0i32 }                                   /* defense: the quotient must be a perfect square */
+        KFE_W[j] = wq as i64
+        let g : i64 = kf_igcd(L, wq as i64)
+        L = kfg_mul(L / g, wq as i64)                                 /* L = lcm(L, w_j), positive */
+        if KF_OVF != 0u32 { return 0i32 }
+        j = j + 1u64
+    }
+    /* the integer 8-vector: c_j * (L / w_j) at mask(S_j).  L > 0 => the SIGN of the sum is preserved. */
+    j = 0u64
+    while j < m {
+        let scale : i64 = L / KFE_W[j]
+        let contrib : i64 = kfg_mul(KFE_C[j], scale)
+        let mk : u64 = KFE_MASKV[j]
+        let cur : i64 = KFE_VEC[mk]
+        KFE_VEC[mk] = kfg_add(cur, contrib)
+        if KF_OVF != 0u32 { return 0i32 }
+        j = j + 1u64
+    }
+    kf_radix(KFE_GEN[0], KFE_GEN[1], KFE_GEN[2])
+    return 1i32
+}
+
+/* Tier-3 entry: sign(sum a_i sqrt(b_i)) in {-1,0,+1}, or 2 = ABSTAIN (embed fail / overflow / self-distrust). */
+fn kf_multiquadratic_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 @export {
+    if kf_embed(a_ptr, b_ptr, n) != 1i32 { return 2i32 }
+    let mut nzv : u8 = 0u8
+    let mut m : u64 = 0u64
+    while m < 8u64 { let vm : i64 = KFE_VEC[m]   if vm != 0i64 { nzv = 1u8 }   m = m + 1u64 }
+    KF_OVF = 0u32
+    let s : i32 = kf_sign((&KFE_VEC) as u64)
+    if KF_OVF != 0u32 { return 2i32 }                                 /* out of the i64 envelope: abstain, never guess */
+    if s == 0i32 { if nzv == 1u8 { return 2i32 } }                    /* nonzero vector can NOT be the zero value */
+    return s
+}

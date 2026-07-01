@@ -1,0 +1,160 @@
+/* 2158_aether_lens_render.iii -- GATE for aether_lens_frame.iii: the exact 3D interface renders correctly + reproducibly.
+ *
+ * ARMS (each a DIFFERENT rule):
+ *   DET   DETERMINISM: render the scene twice; frame_sig must be BIT-IDENTICAL (the image is a pure function of integers).
+ *   CSG   EXACT MEMBERSHIP: at a sphere's irrational near hit, lens_membership_sign decides the point's side of ANOTHER
+ *         quadric EXACTLY -- on the sphere itself -> 0 (the incidence identity), inside a big carver -> -1, outside a far
+ *         one -> +1.  This is the predicate that carves one exact solid from another (CSG A\B).
+ *   SHD   the render-scale bigint Lambert lens_shade255_big must AGREE with the i64-gated lens_shade255 on an in-envelope
+ *         hit (255 head-on, 180 oblique, 0 back) -- proof the unbounded-resolution path is the same exact function.
+ *   OCC   EXACT OCCLUSION: a ray that provably hits two overlapping spheres -> lens_t_cmp picks the nearer one (no z-fight).
+ *   BMP   writes the 256x192 image as a real 24-bit BMP (hand-rolled, libc only) -- the artifact.  bytes written > 0.
+ *
+ *   exit 99 = all correct.  10 determinism  20 membership  30 shade-agree  40 occlusion  50 bmp */
+module corpus_2158_aether_lens_render
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_a() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_b() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_disc() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_membership_sign(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255_big(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255_fast(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+
+extern @abi(c-msvc-x64) fn frame_render(w: u64, h: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_sig(w: u64, h: u64) -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_write_bmp(w: u64, h: u64, path: u64) -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_render_oriented(w: u64, h: u64, steps: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_orient(steps: u64) -> u8 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_render_exact(w: u64, h: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var FAILDET : u64   var FAILCSG : u64   var FAILSHD : u64   var FAILOCC : u64   var FAILBMP : u64   var FAILORB : u64   var FAILEXR : u64   var FAILSPN : u64
+var PATH : [u8; 20]   var PATH2 : [u8; 26]
+
+fn main() -> u64 {
+    FAILDET = 0u64   FAILCSG = 0u64   FAILSHD = 0u64   FAILOCC = 0u64   FAILBMP = 0u64   FAILORB = 0u64   FAILEXR = 0u64   FAILSPN = 0u64
+
+    /* ── DET: render twice at 128x96, signatures must match (pure-function determinism). */
+    frame_render(128u64, 96u64)
+    let sig1 : u64 = frame_sig(128u64, 96u64)
+    frame_render(128u64, 96u64)
+    let sig2 : u64 = frame_sig(128u64, 96u64)
+    if sig1 != sig2 { FAILDET = FAILDET + 1u64 }
+    if sig1 == 0u64 { FAILDET = FAILDET + 1u64 }
+    if sig1 != 4217277645121327875u64 { FAILDET = FAILDET + 1u64 }   /* PINNED: any render change reddens this (real teeth) */
+    putchar(68i32) putchar(69i32) putchar(84i32) putchar(58i32) sp() e_u64(sig1) nl()   /* "DET: <sig>" */
+
+    /* ── CSG: sphere A centre (0,0,10) r^2=4, ray o=0 d=(0,0,1), near hit p=(0,0,8). */
+    lens_set_ray(0i64, 0i64, 0i64, 0i64, 0i64, 1i64)
+    lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 20i64, 96i64)
+    /* p on A itself -> 0 (the incidence identity C0=C1=0) */
+    if lens_membership_sign(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 20i64, 96i64) != 0i32 { FAILCSG = FAILCSG + 1u64 }
+    /* carver B centre (0,0,8) r^2=100 contains p -> inside -> -1 */
+    if lens_membership_sign(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 16i64, 0i64 - 36i64) != (0i32 - 1i32) { FAILCSG = FAILCSG + 1u64 }
+    /* carver C centre (0,0,50) r^2=4, far from p -> outside -> +1 */
+    if lens_membership_sign(1i64,1i64,1i64,0i64,0i64,0i64, 0i64,0i64, 0i64 - 100i64, 2496i64) != 1i32 { FAILCSG = FAILCSG + 1u64 }
+
+    /* ── SHD: bigint Lambert must equal the i64-gated Lambert on the same hit. */
+    if lens_shade255_big(0i64, 0i64, 0i64 - 1i64) != lens_shade255(0i64, 0i64, 0i64 - 1i64) { FAILSHD = FAILSHD + 1u64 }
+    if lens_shade255_big(0i64, 0i64 - 1i64, 0i64 - 1i64) != lens_shade255(0i64, 0i64 - 1i64, 0i64 - 1i64) { FAILSHD = FAILSHD + 1u64 }
+    if lens_shade255_big(0i64, 0i64, 1i64) != lens_shade255(0i64, 0i64, 1i64) { FAILSHD = FAILSHD + 1u64 }
+    /* the values themselves (proven in 2155): 255 head-on, 180 oblique, 0 back */
+    if lens_shade255_big(0i64, 0i64, 0i64 - 1i64) != 255u32 { FAILSHD = FAILSHD + 1u64 }
+    if lens_shade255_big(0i64, 0i64 - 1i64, 0i64 - 1i64) != 180u32 { FAILSHD = FAILSHD + 1u64 }
+    /* the FAST render shade (exact normal, fixed-point intensity) must be within 1 level of the exact one. */
+    let fh : u32 = lens_shade255_fast(0i64, 0i64, 0i64 - 1i64)         let eh : u32 = lens_shade255(0i64, 0i64, 0i64 - 1i64)
+    let fo : u32 = lens_shade255_fast(0i64, 0i64 - 1i64, 0i64 - 1i64)  let eo : u32 = lens_shade255(0i64, 0i64 - 1i64, 0i64 - 1i64)
+    if fh > eh + 1u32 { FAILSHD = FAILSHD + 1u64 }   if eh > fh + 1u32 { FAILSHD = FAILSHD + 1u64 }
+    if fo > eo + 1u32 { FAILSHD = FAILSHD + 1u64 }   if eo > fo + 1u32 { FAILSHD = FAILSHD + 1u64 }
+    putchar(83i32) putchar(72i32) putchar(68i32) putchar(58i32) sp()
+    e_u64(lens_shade255_big(0i64, 0i64, 0i64 - 1i64)) sp() e_u64(lens_shade255_big(0i64, 0i64 - 1i64, 0i64 - 1i64)) nl()
+
+    /* ── OCC: ray d=(20,6,280) hits BOTH sphere 0 (centre -30,20,340 r85) and sphere 1 (centre 55,-4,250 r60);
+     *    sphere 1 is nearer (z 250 < 340), so lens_t_cmp(t0 - t1) > 0. */
+    lens_set_ray(0i64, 0i64, 0i64, 20i64, 6i64, 280i64)
+    let s0 : i32 = lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 60i64, 0i64 - 40i64, 0i64 - 680i64, 109675i64)
+    let a0 : i64 = lens_a()   let b0 : i64 = lens_b()   let d0 : i64 = lens_disc()
+    let s1 : i32 = lens_setup(1i64,1i64,1i64,0i64,0i64,0i64, 0i64 - 110i64, 8i64, 0i64 - 500i64, 61941i64)
+    let a1 : i64 = lens_a()   let b1 : i64 = lens_b()   let d1 : i64 = lens_disc()
+    if s0 < 0i32 { FAILOCC = FAILOCC + 1u64 }             /* must actually hit sphere 0 */
+    if s1 < 0i32 { FAILOCC = FAILOCC + 1u64 }             /* must actually hit sphere 1 */
+    let occ : i32 = lens_t_cmp(a0, b0, d0, a1, b1, d1)
+    if occ != 1i32 { FAILOCC = FAILOCC + 1u64 }           /* t0 > t1 -> sphere 1 occludes sphere 0 */
+    putchar(79i32) putchar(67i32) putchar(67i32) putchar(58i32) sp() e_i64(occ as i64) nl()
+
+    /* ── ORBIT: cyclotomic_se3 PLACES object 0.  A full 24x15=360 deg turn returns the render BIT-FOR-BIT (zero drift);
+     *    90 deg (6 steps) actually moves it.  The zero-drift kinematics theorem, driving the renderer. */
+    frame_render_oriented(128u64, 96u64, 0u64)    let orb0 : u64 = frame_sig(128u64, 96u64)
+    frame_render_oriented(128u64, 96u64, 24u64)   let orb24 : u64 = frame_sig(128u64, 96u64)
+    frame_render_oriented(128u64, 96u64, 6u64)    let orb6 : u64 = frame_sig(128u64, 96u64)
+    let hm24 : u8 = frame_orient(24u64)
+    if hm24 != 1u8 { FAILORB = FAILORB + 1u64 }                       /* mechanism is bit-exact identity after 360 deg */
+    if orb0 != orb24 { FAILORB = FAILORB + 1u64 }                     /* zero-drift: identical render after a full turn */
+    if orb0 == orb6 { FAILORB = FAILORB + 1u64 }                      /* 90 deg must change the image (rotation is real) */
+    putchar(79i32) putchar(82i32) putchar(66i32) putchar(58i32) sp()   /* "ORB: " */
+    e_i64(hm24 as i64) sp()
+    if orb0 == orb24 { putchar(49i32) } else { putchar(48i32) }   sp()
+    if orb0 == orb6 { putchar(48i32) } else { putchar(49i32) }   nl()
+
+    /* ── EXACT RENDER: the FULLY-EXACT surd predicates (occlusion + CSG + shading, zero fixed-point) render
+     *    deterministically -- proof a fully-exact frame is achievable (no concession); fast is only the default. */
+    frame_render_exact(48u64, 36u64)   let ex1 : u64 = frame_sig(48u64, 36u64)
+    frame_render_exact(48u64, 36u64)   let ex2 : u64 = frame_sig(48u64, 36u64)
+    if ex1 != ex2 { FAILEXR = FAILEXR + 1u64 }
+    if ex1 == 0u64 { FAILEXR = FAILEXR + 1u64 }
+    putchar(69i32) putchar(88i32) putchar(82i32) putchar(58i32) sp() e_u64(ex1) nl()   /* "EXR: <sig>" */
+
+    /* ── SPIN: the live turntable renders a DETERMINISTIC, VALID frame at every one of the 36 angles -- no vanish, no
+     *    i64 overflow (which would freeze the image to a constant).  (This gates the LIVE VIEWER's per-frame render;
+     *    it is a determinism + validity check, NOT an exactness claim -- exactness stays the ORBIT + near-tie arms.) */
+    let mut sp_prev : u64 = 0u64   let mut sp_distinct : u64 = 0u64
+    let mut ai : u64 = 0u64
+    while ai < 36u64 {
+        frame_render_spin(96u64, 64u64, ai)   let sa : u64 = frame_sig(96u64, 64u64)
+        frame_render_spin(96u64, 64u64, ai)   let sb : u64 = frame_sig(96u64, 64u64)
+        if sa != sb { FAILSPN = FAILSPN + 1u64 }                          /* deterministic at this angle */
+        if ai > 0u64 { if sa != sp_prev { sp_distinct = sp_distinct + 1u64 } }
+        sp_prev = sa
+        ai = ai + 1u64
+    }
+    if sp_distinct < 20u64 { FAILSPN = FAILSPN + 1u64 }                   /* most angles differ -> rotation is real, not overflow-frozen */
+    putchar(83i32) putchar(80i32) putchar(78i32) putchar(58i32) sp() e_u64(sp_distinct) nl()   /* "SPN: <distinct>" */
+
+    /* ── BMP: write the full 256x192 image as the artifact. */
+    PATH[0u64]=97u8 PATH[1u64]=101u8 PATH[2u64]=116u8 PATH[3u64]=104u8 PATH[4u64]=101u8 PATH[5u64]=114u8   /* aether */
+    PATH[6u64]=95u8 PATH[7u64]=108u8 PATH[8u64]=101u8 PATH[9u64]=110u8 PATH[10u64]=115u8                   /* _lens */
+    PATH[11u64]=46u8 PATH[12u64]=98u8 PATH[13u64]=109u8 PATH[14u64]=112u8 PATH[15u64]=0u8                  /* .bmp\0 */
+    frame_render(256u64, 192u64)
+    let wrote : u64 = frame_write_bmp(256u64, 192u64, (&PATH) as u64)
+    if wrote == 0u64 { FAILBMP = FAILBMP + 1u64 }
+    putchar(66i32) putchar(77i32) putchar(80i32) putchar(58i32) sp() e_u64(wrote) nl()
+    /* second artifact: a FULLY-EXACT frame -> aether_lens_exact.bmp (surd occlusion/CSG/shading everywhere) */
+    PATH2[0u64]=97u8 PATH2[1u64]=101u8 PATH2[2u64]=116u8 PATH2[3u64]=104u8 PATH2[4u64]=101u8 PATH2[5u64]=114u8
+    PATH2[6u64]=95u8 PATH2[7u64]=108u8 PATH2[8u64]=101u8 PATH2[9u64]=110u8 PATH2[10u64]=115u8
+    PATH2[11u64]=95u8 PATH2[12u64]=101u8 PATH2[13u64]=120u8 PATH2[14u64]=97u8 PATH2[15u64]=99u8 PATH2[16u64]=116u8
+    PATH2[17u64]=46u8 PATH2[18u64]=98u8 PATH2[19u64]=109u8 PATH2[20u64]=112u8 PATH2[21u64]=0u8
+    frame_render_exact(128u64, 96u64)
+    let wrote2 : u64 = frame_write_bmp(128u64, 96u64, (&PATH2) as u64)
+    putchar(69i32) putchar(88i32) putchar(66i32) putchar(58i32) sp() e_u64(wrote2) nl()   /* "EXB: <bytes>" */
+
+    if FAILDET != 0u64 { return 10u64 }
+    if FAILCSG != 0u64 { return 20u64 }
+    if FAILSHD != 0u64 { return 30u64 }
+    if FAILOCC != 0u64 { return 40u64 }
+    if FAILBMP != 0u64 { return 50u64 }
+    if FAILORB != 0u64 { return 60u64 }
+    if FAILEXR != 0u64 { return 70u64 }
+    if FAILSPN != 0u64 { return 80u64 }
+    return 99u64
+}

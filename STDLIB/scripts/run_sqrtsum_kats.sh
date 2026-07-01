@@ -11,10 +11,21 @@ OUT="$(mktemp -d)"
 pass=0; fail=0
 
 "$I2" "$A/sqrt_sum_sign.iii" --compile-only --out "$OUT/sqrt_sum_sign.o" 2>"$OUT/s.log" || { echo "FAIL sqrt_sum_sign compile"; cat "$OUT/s.log"; exit 1; }
+"$I2" "$A/kfield.iii"       --compile-only --out "$OUT/kfield.o"       2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
+"$I2" "$A/exact_surd_value.iii" --compile-only --out "$OUT/exact_surd_value.o" 2>"$OUT/esv.log" || { echo "FAIL exact_surd_value compile"; cat "$OUT/esv.log"; exit 1; }
 "$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/u.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/u.log"; exit 1; }
 "$I2" "$A/verb_geom.iii"     --compile-only --out "$OUT/verb_geom.o"     2>"$OUT/v.log" || { echo "FAIL verb_geom compile"; cat "$OUT/v.log"; exit 1; }
 "$I2" "$A/traj_kinematics.iii" --compile-only --out "$OUT/traj_kinematics.o" 2>"$OUT/t.log" || { echo "FAIL traj_kinematics compile"; cat "$OUT/t.log"; exit 1; }
 "$I2" "$A/exact_denest.iii"  --compile-only --out "$OUT/exact_denest.o"  2>"$OUT/d.log" || { echo "FAIL exact_denest compile"; cat "$OUT/d.log"; exit 1; }
+"$I2" "$A/csg_kernel.iii"    --compile-only --out "$OUT/csg_kernel.o"    2>"$OUT/csg.log" || { echo "FAIL csg_kernel compile"; cat "$OUT/csg.log"; exit 1; }
+"$I2" "$A/photon_route.iii"  --compile-only --out "$OUT/photon_route.o"  2>"$OUT/pr.log" || { echo "FAIL photon_route compile"; cat "$OUT/pr.log"; exit 1; }
+"$I2" "$A/cyclotomic_se3.iii" --compile-only --out "$OUT/cyclotomic_se3.o" 2>"$OUT/cse3.log" || { echo "FAIL cyclotomic_se3 compile"; cat "$OUT/cse3.log"; exit 1; }
+"$I2" "$A/q23_sign.iii"      --compile-only --out "$OUT/q23_sign.o"      2>"$OUT/q23s.log" || { echo "FAIL q23_sign compile"; cat "$OUT/q23s.log"; exit 1; }
+"$I2" "$A/collide.iii"       --compile-only --out "$OUT/collide.o"       2>"$OUT/col.log" || { echo "FAIL collide compile"; cat "$OUT/col.log"; exit 1; }
+"$I2" "$A/delaunay.iii"      --compile-only --out "$OUT/delaunay.o"      2>"$OUT/dln.log" || { echo "FAIL delaunay compile"; cat "$OUT/dln.log"; exit 1; }
+"$I2" "$A/sturm.iii"         --compile-only --out "$OUT/sturm.o"         2>"$OUT/stm.log" || { echo "FAIL sturm compile"; cat "$OUT/stm.log"; exit 1; }
+"$I2" "$A/aether_lens.iii"   --compile-only --out "$OUT/aether_lens.o"   2>"$OUT/al.log" || { echo "FAIL aether_lens compile"; cat "$OUT/al.log"; exit 1; }
+"$I2" "$A/algnum.iii"        --compile-only --out "$OUT/algnum.o"        2>"$OUT/an.log" || { echo "FAIL algnum compile"; cat "$OUT/an.log"; exit 1; }
 
 run() {
     local name="$1" want="$2"; shift 2
@@ -27,23 +38,34 @@ run() {
     if [[ "$rc" == "$want" ]]; then echo "PASS  $name : exit $rc"; pass=$((pass+1)); else echo "FAIL  $name : exit $rc (want $want)"; fail=$((fail+1)); fi
 }
 
-run 2120_bigint_isqrt   99   "$OUT/sqrt_sum_sign.o" "$LIB"
-run 2121_sqrt_sum_sign  99   "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$LIB"
-run 2122_lazy_real      99   "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$LIB"   # lazy tier-1 interval + tier-3 escalation, counted
-run 2123_lazy3          99   "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$LIB"   # ATTACK 1+3: canonicalization Tier 2 + adaptive-F windowing
-run 2124_transcendental 99   "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$LIB"   # ATTACK 2: transcendental tristate (UNKNOWN, no panic)
-run 2125_verb_geom      99   "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/ui_exact_big.o" "$LIB"   # GRAPH RESTORED: e-class equivalence substrate + sign cache
-run 2137_adaptive_sign  99   "$OUT/sqrt_sum_sign.o" "$LIB"   # TIER 2.5: linear-independence + adaptive precision -- bypasses the exponential separation bound per-instance
-run 2138_symmetry_quotient 99 "$OUT/sqrt_sum_sign.o" "$LIB"  # SYMMETRY QUOTIENT: real Euclidean perimeter comparisons -- pay the exact-sign wall once per distinct shape (similarity/relabel/swap orbit)
-run 2139_padic_barrier   99   "$OUT/sqrt_sum_sign.o" "$LIB"  # P-ADIC WALL FACE: factoring-free modular sieve is UNSOUND (mod p destroys perfect-square factors); sound arm needs factoring => redundant
-run 2140_adaptive_big    99   "$OUT/sqrt_sum_sign.o" "$LIB"  # TIER 2.5 BIGINT-COEFF: adaptive sign for caller-owned bigint magnitudes (the ui_sqrt_sum_sign_big / ui_arc_cover_full render-scale path)
-run 2141_cyclotomic_rotation 99 "$LIB"  # EXACT cyclotomic rotation: rational-multiple-of-π angles in ℚ(√2,√3); 24×15° returns bit-exact to identity (zero drift) where fixed-point drifts
-run 2142_se3_screw       99   "$LIB"  # EXACT SE(3) screw: 3D rotation closure + SO(3) non-commutativity + exact screw translation in ℚ(√2,√3); zero drift vs fixed-point
-run 2143_traj_arclen     99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # LOAD-BEARING: traj_len_sign consumes the bigint adaptive tier -- exact gantry-trajectory length comparison (3+ independent surds at bigint scale)
-run 2144_lattice_pathfind 99  "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # HIGH-END PATHFINDING: exact lattice Dijkstra (lattice_shortest_path) -- frontier ordered by EXACT Sqrt-sum length; matches brute-min, resolves a float-blind Pell near-tie
+run 2120_bigint_isqrt   99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"
+run 2121_sqrt_sum_sign  99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$LIB"
+run 2122_lazy_real      99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$LIB"   # lazy tier-1 interval + tier-3 escalation, counted
+run 2123_lazy3          99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$LIB"   # ATTACK 1+3: canonicalization Tier 2 + adaptive-F windowing
+run 2124_transcendental 99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$LIB"   # ATTACK 2: transcendental tristate (UNKNOWN, no panic)
+run 2125_verb_geom      99   "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/ui_exact_big.o" "$LIB"   # GRAPH RESTORED: e-class equivalence substrate + sign cache
+run 2137_adaptive_sign  99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"   # TIER 2.5: linear-independence + adaptive precision -- bypasses the exponential separation bound per-instance
+run 2138_symmetry_quotient 99 "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # SYMMETRY QUOTIENT: real Euclidean perimeter comparisons -- pay the exact-sign wall once per distinct shape (similarity/relabel/swap orbit)
+run 2139_padic_barrier   99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # P-ADIC WALL FACE: factoring-free modular sieve is UNSOUND (mod p destroys perfect-square factors); sound arm needs factoring => redundant
+run 2140_adaptive_big    99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # TIER 2.5 BIGINT-COEFF: adaptive sign for caller-owned bigint magnitudes (the ui_sqrt_sum_sign_big / ui_arc_cover_full render-scale path)
+run 2141_cyclotomic_rotation 99 "$OUT/cyclotomic_se3.o" "$LIB"  # EXACT cyclotomic rotation: rational-multiple-of-π angles in ℚ(√2,√3); 24×15° returns bit-exact to identity; DEDUPED onto cyclotomic_se3::q23_mul (pure organ, no Σ√ dep)
+run 2142_se3_screw       99   "$OUT/cyclotomic_se3.o" "$LIB"  # EXACT SE(3) screw: 3D rotation closure + SO(3) non-commutativity + exact screw translation in ℚ(√2,√3); DEDUPED onto cyclotomic_se3::q23_mul
+run 2143_traj_arclen     99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # LOAD-BEARING: traj_len_sign consumes the bigint adaptive tier -- exact gantry-trajectory length comparison (3+ independent surds at bigint scale)
+run 2144_lattice_pathfind 99  "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # HIGH-END PATHFINDING: exact lattice Dijkstra (lattice_shortest_path) -- frontier ordered by EXACT Sqrt-sum length; matches brute-min, resolves a float-blind Pell near-tie
 run 2145_denest          99   "$OUT/exact_denest.o"  # TOWER DENESTING: exact rank-1 sqrt of a+b*sqrt(d) in Q(sqrt d) -- decides square-vs-extension, verified root; rejects the norm-square-but-not-alpha case
-run 2146_compactor       99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # FRONTIER COMPACTOR: drop settled Dijkstra distances (dead to the search) -> peak handles = frontier width; correct + behavior-preserving on a 100-node graph
-run 2147_lattice_oracle  99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # Oh QUOTIENT ORACLE: O(1) exact shortest king-move-lattice distance via octahedral symmetry; oracle==greedy, greedy beats both competitors
+run 2146_compactor       99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # FRONTIER COMPACTOR: drop settled Dijkstra distances (dead to the search) -> peak handles = frontier width; correct + behavior-preserving on a 100-node graph
+run 2147_lattice_oracle  99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # Oh QUOTIENT ORACLE: O(1) exact shortest king-move-lattice distance via octahedral symmetry; oracle==greedy, greedy beats both competitors
+run 2150_csg_kernel      99   "$OUT/csg_kernel.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_denest.o" "$LIB"  # UNSHATTERABLE CSG: exact quadric membership/incidence (Sum-sqrt) + tangency (integer) + triple-point corner (denest); float-breaks near-tie witness
+run 2151_photon_route    99   "$OUT/photon_route.o" "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # PHOTONIC LATTICE ROUTING: O(1) O_h bulk geodesic (millions of nodes, zero memory) + exact zero-loss near-tie compare + frontier-compacted defect detour
+run 2152_mechanism       99   "$OUT/cyclotomic_se3.o" "$OUT/q23_sign.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # ZERO-DRIFT KINEMATICS: exact ℚ(√2,√3) rotation, bit-exact home after 2400 steps (100 rev) + q23_sign exact reach ordering (Σ√ unification) + SE(3) screw
+run 2153_collision       99   "$OUT/collide.o" "$OUT/cyclotomic_se3.o" "$OUT/q23_sign.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # NO-TUNNELING COLLISION: exact swept-segment vs sphere (endpoints clear yet HIT) + certified tangency + rotated-tool Σ√ membership (cyclotomic_se3 ⊗ geometry)
+run 2154_delaunay        99   "$OUT/delaunay.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # ROBUST PREDICATES: exact orient2d/incircle2d (consistent signs, no invalid topology) + Fibonacci-Cassini float-blind witness (exact -1 where a double returns 0) + Delaunay flip + Σ√ orient
+run 2156_sturm           99   "$OUT/sturm.o" "$LIB"  # EXACT ROOT ISOLATION: Sturm's theorem, exact real-root count/isolation; positive-at-both-endpoints-yet-2-roots-inside witness (endpoint-sampling finds 0, Sturm counts 2); squarefree-part gcd
+run 2155_aether_lens     99   "$OUT/aether_lens.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # EXACT RAY-CAST: floating-point-free ray∩quadric CSG -- integer sign(Delta) hit/miss/tangent + n=3 surd depth order (z-FIGHT KILLER: fixed f=10 straddles [-2,+2], exact resolves +1) + n=2 surd DERIVED 8-bit Lambert; renders a shaded sphere as first light
+run 2157_algnum          99   "$OUT/algnum.o" "$OUT/sturm.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # EXACT ALGEBRAIC NUMBERS: sign/total-order/decidable-EQUALITY (the zero problem) -- sqrt(2) three ways decided EQUAL via gcd-shared-root (a refine-to-epsilon impostor loops/guesses); sqrt(2)<cbrt(3)/<99/70 by refinement; face1⊗face6 -- Sturm sign == Sigma-sqrt separation-bound sign over a rational fan; composes sturm.iii + sqrt_sum_sign.iii
+run 2159_kf_weld        99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_surd_value.o" "$LIB"  # THE WELD GATE: kfield Galois-tower sign as Tier 3 -- differential vs the separation-bound oracle (19/39 overflow family -> 39/39 guarded abstains; Pell near-ties DECIDED in pure i64 by the tower; rank-collapse {6,10,15} F2-embed; rank-4 abstain->adaptive fallback).  THEOREM: bounded-rank Galois-tower sign == separation-bound sign
+run 2148_theorem_fuzzer  99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: generative coincidence-fuzzer over kfield (CONSTRUCT/IDENTIFY verbs; identity pairs collide, control does not)
+run 2149_universal_block 99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: the universal block -- kfield four verbs = ONE kernel; addr-coincidence <=> sign-zero (IDENTIFY <=> DECIDE)
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

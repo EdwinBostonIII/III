@@ -1,0 +1,84 @@
+/* delaunay.iii -- EXACT ROBUST GEOMETRIC PREDICATES (orientation + in-circle) and Delaunay decisions.
+ *
+ * PROBLEM.  Every triangulation / convex-hull / Voronoi / mesh algorithm is driven by two predicates:
+ *   orient2d(a,b,c)   -- is c left of, on, or right of the directed line a->b?   (sign of a 2x2 determinant)
+ *   incircle2d(a,b,c,d) -- is d inside, on, or outside the circumcircle of a,b,c? (sign of a 3x3 determinant)
+ * Evaluated in floating point on near-degenerate inputs these signs are not merely wrong -- they are MUTUALLY
+ * INCONSISTENT (Kettner-Mehlhorn, "Classroom Examples of Robustness Problems"): float can report c left of a->b AND
+ * right of b->a; three points pairwise "collinear" yet forming a triangle.  Algorithms assume the predicate is a
+ * consistent function of the true geometry (antisymmetry, transitivity); an inconsistent predicate makes them build
+ * combinatorially IMPOSSIBLE topology -> invalid meshes, infinite loops, crashes.
+ *
+ * INSIGHT.  A predicate is the SIGN of a determinant polynomial in the coordinates.  For integer (or rational)
+ * coordinates that sign is computed EXACTLY with integer arithmetic -- and an exact sign is automatically CONSISTENT
+ * (a function of the true value obeys antisymmetry and transitivity).  So exact predicates are the whole cure: the
+ * mesh is provably valid because every branch the algorithm took was the geometrically true branch.
+ *
+ * THE FLOAT SMOKING GUN (Kettner-Mehlhorn, realized in-code by KAT 2154).  For consecutive Fibonacci numbers,
+ * orient2d((0,0),(F42,F41),(F41,F40)) = F42*F40 - F41^2 = (-1)^41 = -1 EXACTLY (Cassini's identity).  But both products
+ * are ~2^54.6, above the 53-bit double mantissa, and differ by only 1 -- so they round to the SAME double and a float
+ * orient returns 0 (COLLINEAR, wrong), while this exact predicate returns -1 (CW).
+ *
+ * UNIFICATION.  orient2d_surd orients points whose coordinates live in Q(sqrt b) (e.g. a CSG intersection point, a
+ * rotated tool point): the determinant is then a 2-term sum of square roots A + B*sqrt(b), whose sign routes through
+ * sqrt_sum_sign::sqrtsum_lazy3 -- the SAME exact-sign engine behind the CSG kernel, router, kinematics and collision.
+ *
+ * HONEST SCOPE: 2D.  orient2d is degree 2 (products of coordinate differences) -- exact in i64 for |coord| < 2^30.
+ * incircle2d is degree 4 -- exact in i64 for |coord| < 2^15 (coord^4 < 2^60); larger coordinates need a bigint
+ * determinant (a future tier), stated not hidden.  No epsilon, ever.
+ *
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00. */
+module delaunay
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+fn dl_sign(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+/* orientation of (a,b,c): +1 counter-clockwise (c left of a->b), 0 collinear, -1 clockwise.  Exact, |coord| < 2^30. */
+fn orient2d(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64) -> i32 @export {
+    let det : i64 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+    return dl_sign(det)
+}
+
+/* in-circle of (a,b,c) [assumed CCW]: sign of the 3x3 determinant of rows (p-d, |p-d|^2) for p in {a,b,c}.
+ * +1 = d strictly INSIDE the circumcircle, 0 = cocircular, -1 = outside.  (Flips if a,b,c is CW -- see circum_contains.)
+ * Exact, |coord| < 2^15 (degree-4 determinant fits i64). */
+fn incircle2d(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, dx: i64, dy: i64) -> i32 @export {
+    let adx : i64 = ax - dx   let ady : i64 = ay - dy   let ad2 : i64 = adx*adx + ady*ady
+    let bdx : i64 = bx - dx   let bdy : i64 = by - dy   let bd2 : i64 = bdx*bdx + bdy*bdy
+    let cdx : i64 = cx - dx   let cdy : i64 = cy - dy   let cd2 : i64 = cdx*cdx + cdy*cdy
+    let det : i64 = adx * (bdy*cd2 - bd2*cdy) - ady * (bdx*cd2 - bd2*cdx) + ad2 * (bdx*cdy - bdy*cdx)
+    return dl_sign(det)
+}
+
+/* orientation-normalized in-circle: +1 p strictly INSIDE circumcircle(a,b,c), 0 cocircular, -1 outside -- independent
+ * of the orientation of a,b,c (the load-bearing query for Delaunay validity and Bowyer-Watson). */
+fn circum_contains(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, px: i64, py: i64) -> i32 @export {
+    let o : i32 = orient2d(ax, ay, bx, by, cx, cy)
+    let ic : i32 = incircle2d(ax, ay, bx, by, cx, cy, px, py)
+    if o < 0i32 { return 0i32 - ic }        /* a,b,c clockwise: determinant sign is inverted */
+    return ic
+}
+
+/* Delaunay edge-flip test: the diagonal (a,c) of convex quad (a,b,c,d) is ILLEGAL (must flip to (b,d)) iff the
+ * opposite vertex d lies strictly inside the circumcircle of (a,b,c).  1 = flip needed, 0 = already legal. */
+fn delaunay_flip_needed(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, dx: i64, dy: i64) -> u8 @export {
+    if circum_contains(ax, ay, bx, by, cx, cy, dx, dy) > 0i32 { return 1u8 }
+    return 0u8
+}
+
+/* ─── UNIFICATION: orientation of points in Q(sqrt b).  Coordinate i = rp_i + sc_i*sqrt(b).  The determinant is
+ * A + B*sqrt(b); its sign is the exact sum-of-square-roots sign (sqrtsum_lazy3 over radicands {1, b}).  +1/0/-1. */
+var DL_A : [i64; 2]   var DL_B : [i64; 2]
+fn orient2d_surd(rax: i64, sax: i64, ray: i64, say: i64, rbx: i64, sbx: i64, rby: i64, sby: i64, rcx: i64, scx: i64, rcy: i64, scy: i64, b: i64) -> i32 @export {
+    let p1 : i64 = rbx - rax   let q1 : i64 = sbx - sax        /* (bx-ax) = p1 + q1*sqrt b */
+    let p2 : i64 = rcy - ray   let q2 : i64 = scy - say        /* (cy-ay) = p2 + q2*sqrt b */
+    let p3 : i64 = rby - ray   let q3 : i64 = sby - say        /* (by-ay) = p3 + q3*sqrt b */
+    let p4 : i64 = rcx - rax   let q4 : i64 = scx - sax        /* (cx-ax) = p4 + q4*sqrt b */
+    /* (p1+q1 s)(p2+q2 s) - (p3+q3 s)(p4+q4 s) = A + B s,  s^2 = b */
+    let A : i64 = (p1*p2 + q1*q2*b) - (p3*p4 + q3*q4*b)
+    let B : i64 = (p1*q2 + q1*p2) - (p3*q4 + q3*p4)
+    DL_A[0u64] = A   DL_A[1u64] = B
+    DL_B[0u64] = 1i64   DL_B[1u64] = b
+    return sqrtsum_lazy3((&DL_A) as u64, (&DL_B) as u64, 2u64)
+}

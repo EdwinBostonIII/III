@@ -1,0 +1,108 @@
+/* photon_route.iii -- EXACT PHOTONIC / STRESS-LOAD LATTICE ROUTING on a 3D crystalline (cubic king-move) lattice.
+ *
+ * PROBLEM.  Signals (photons) and stress-loads route through massive 3D crystal lattices.  Float pathfinders collapse
+ * on near-ties (two routes equal to within float epsilon), so they pick a longer, lossier path -- excess routing loss.
+ *
+ * INSIGHT (first principles).  On a symmetric lattice, routing splits in two:
+ *   - BULK (pristine crystal): the shortest origin->(dx,dy,dz) path needs NO SEARCH.  The octahedral group O_h (48
+ *     symmetries) preserves edge lengths, so the geodesic depends only on the O_h-canonical form -- the sorted
+ *     magnitudes p>=q>=r.  The exact shortest king-move path is the greedy  r*(1,1,1) + (q-r)*(1,1,0) + (p-q)*(1,0,0),
+ *     i.e. r body-diagonals (sqrt 3) + (q-r) face-diagonals (sqrt 2) + (p-q) axis steps (sqrt 1).  This is O(1), ZERO
+ *     per-node memory -- it routes through MILLIONS of nodes without enumerating a single one (lattice_dist_oracle).
+ *   - DEFECTS (broken/forbidden nodes): a bounded local SEARCH -- the frontier-compacted exact Dijkstra
+ *     (lattice_shortest_path_c), whose peak memory is the FRONTIER width, not the enclosed volume.
+ * A route in BOTH cases is a per-class amount vector (a axis-steps, b face-diagonals, c body-diagonals); its exact
+ * Euclidean length is a*sqrt 1 + b*sqrt 2 + c*sqrt 3 -- a sum of square roots, so route lengths are COMPARED EXACTLY by
+ * traj_len_sign.  That single shared representation is what lets the oracle, the comparator and the detour compose.
+ *
+ * This is the FIRST shipped consumer of the exact pathfinder + O_h oracle: it CONSUMES them to make a routing decision.
+ * COMPOSES (never reimplements): traj_kinematics (lattice_dist_oracle, oracle_c, traj_len_sign, lattice_shortest_path_c).
+ *
+ * ZERO-LOSS means ZERO EXCESS routing loss: the router always selects the exact-minimum-length route, so it never adds
+ * avoidable loss by mis-ranking a near-tie (NOT literally zero photon loss -- physics forbids that).
+ *
+ * EXACTNESS SCOPE (honest):
+ *   - UNCONDITIONAL: (a) the O_h bulk geodesic is exactly shortest on the pristine lattice [gated 2147];
+ *                    (b) each local detour is exactly shortest within its subgraph [gated 2144/2146];
+ *                    (c) traj_len_sign never mis-ranks two route lengths [gated 2143].
+ *   - HYPOTHESIS (NOT claimed unconditionally): a global route = bulk legs spliced with detours is globally shortest
+ *     only when defects are ISOLATED (their neighborhoods don't overlap).  Dense-defect regions need a full bounded
+ *     search.  The KAT states this and does not overclaim it.
+ *
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00.  Scope: cubic king-move lattice (O_h). */
+module photon_route
+
+extern @abi(c-msvc-x64) fn lattice_dist_oracle(a: i64, b: i64, c: i64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn oracle_c(i: u64) -> i64 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn traj_len_sign(magA: u64, dirsqA: u64, nA: u64, magB: u64, dirsqB: u64, nB: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lattice_shortest_path_c(ar: u64, source: u64, target: u64, distout: u64) -> u8 from "traj_kinematics.iii"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+
+/* A route = per-class amount vector: PLR_ROUTE[0]=axis(sqrt1), [1]=face-diag(sqrt2), [2]=body-diag(sqrt3), ... */
+var PLR_ROUTE : [i64; 8]
+fn plr_route_class(i: u64) -> i64 @export { return PLR_ROUTE[i] }
+
+/* ─── (1) BULK: the O(1), zero-node-memory exact geodesic from origin to (dx,dy,dz) via the O_h quotient oracle.
+ * Writes the route as per-class amounts into PLR_ROUTE[0..2].  Spans |dx|+|dy|+|dz|-scale nodes without enumerating one. */
+fn plr_bulk(dx: i64, dy: i64, dz: i64) -> i32 @export {
+    lattice_dist_oracle(dx, dy, dz)
+    PLR_ROUTE[0u64] = oracle_c(0u64)     /* axis  steps  (sqrt 1) = p - q */
+    PLR_ROUTE[1u64] = oracle_c(1u64)     /* face  diags  (sqrt 2) = q - r */
+    PLR_ROUTE[2u64] = oracle_c(2u64)     /* body  diags  (sqrt 3) = r     */
+    return 0i32
+}
+/* total hop count (nodes stepped through) for the bulk geodesic -- informational (the exact LENGTH stays symbolic). */
+fn plr_bulk_hops(dx: i64, dy: i64, dz: i64) -> i64 @export {
+    lattice_dist_oracle(dx, dy, dz)
+    return oracle_c(0u64) + oracle_c(1u64) + oracle_c(2u64)
+}
+
+/* ─── (2) ZERO-LOSS COMPARE: exact sign(len(A) - len(B)) for two routes A=(a1,b1,c1), B=(a2,b2,c2) (per-class amounts),
+ * len = a*sqrt1 + b*sqrt2 + c*sqrt3.  Returns +1 (A longer), -1 (A shorter -> A better), 0 (exactly equal).  EXACT via
+ * traj_len_sign -> never collapses a near-tie, so the router never routes the longer (lossier) of two near-equal paths. */
+var PLR_A : [u64; 3]   var PLR_B : [u64; 3]   var PLR_RAD : [i64; 3]
+fn plr_cmp_len(a1: u64, b1: u64, c1: u64, a2: u64, b2: u64, c2: u64) -> i32 @export {
+    let ar : u64 = arena_new(4194304u64)
+    PLR_A[0u64] = bigint_from_u64(ar, a1)   PLR_A[1u64] = bigint_from_u64(ar, b1)   PLR_A[2u64] = bigint_from_u64(ar, c1)
+    PLR_B[0u64] = bigint_from_u64(ar, a2)   PLR_B[1u64] = bigint_from_u64(ar, b2)   PLR_B[2u64] = bigint_from_u64(ar, c2)
+    PLR_RAD[0u64] = 1i64   PLR_RAD[1u64] = 2i64   PLR_RAD[2u64] = 3i64
+    let s : i32 = traj_len_sign((&PLR_A) as u64, (&PLR_RAD) as u64, 3u64, (&PLR_B) as u64, (&PLR_RAD) as u64, 3u64)
+    bigint_drop(PLR_A[0u64])   bigint_drop(PLR_A[1u64])   bigint_drop(PLR_A[2u64])
+    bigint_drop(PLR_B[0u64])   bigint_drop(PLR_B[1u64])   bigint_drop(PLR_B[2u64])
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return s
+}
+/* routing decision: return 1 if route A is the shorter-or-equal (the one to send the signal down), else 0. */
+fn plr_pick_shorter(a1: u64, b1: u64, c1: u64, a2: u64, b2: u64, c2: u64) -> i32 @export {
+    let s : i32 = plr_cmp_len(a1, b1, c1, a2, b2, c2)
+    if s > 0i32 { return 0i32 }      /* A longer -> pick B */
+    return 1i32                       /* A shorter or equal -> pick A */
+}
+
+/* ─── (3) DETOUR: exact shortest path across a bounded DEFECT subgraph via the frontier-compacted exact Dijkstra.
+ * The caller builds the subgraph first (lsp_reset / lsp_rad / lsp_edge from traj_kinematics), then calls this.  The
+ * result is decoded from the distout bigint handles into PLR_ROUTE per-class counts (amounts are small integers here).
+ * Peak memory tracks the FRONTIER width (compaction), not the node count.  Returns 1 if target reachable, else 0. */
+var PLR_DIST : [u64; 8]
+fn plr_detour_solve(ar: u64, source: u64, target: u64, nc: u64) -> u8 @export {
+    /* zero the result first: lattice_shortest_path_c writes distout ONLY when the target settles, so on an
+     * unreachable target PLR_DIST would keep stale handles -- decoding those would read garbage. */
+    let mut z : u64 = 0u64
+    while z < nc { PLR_ROUTE[z] = 0i64   z = z + 1u64 }
+    let reached : u8 = lattice_shortest_path_c(ar, source, target, (&PLR_DIST) as u64)
+    if reached == 0u8 { return 0u8 }
+    let mut i : u64 = 0u64
+    while i < nc {
+        let h : u64 = PLR_DIST[i]
+        if bigint_is_zero(h) == 1u8 { PLR_ROUTE[i] = 0i64 } else { PLR_ROUTE[i] = bigint_get_limb(h, 0u64) as i64 }
+        i = i + 1u64
+    }
+    return reached
+}

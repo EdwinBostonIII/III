@@ -1,0 +1,132 @@
+/* 2151_photon_route.iii -- GATE for photon_route.iii: EXACT photonic / stress-load lattice routing.
+ *
+ * Proves the composition of THREE gated traj_kinematics organs into a real routing consumer, each arm a DIFFERENT rule:
+ *   BULK      the O_h oracle routes origin->(dx,dy,dz) in O(1), ZERO node memory -- verified on hand-computed
+ *             displacements AND on a MILLION-scale displacement (a 10^6-node span returned instantly as 3 amounts);
+ *   ZERO-LOSS the exact Sum-sqrt comparator resolves a FLOAT-BLIND near-tie: relay X at 577*sqrt1 vs relay Y at
+ *             408*sqrt2 differ by ~8e-4; a fixed precision f=10 STRADDLES (would mis-route to the lossier relay), while
+ *             plr_cmp_len returns the exact +1 (X longer) so the router picks Y -- zero EXCESS routing loss;
+ *   DETOUR    a defect blocks the direct 10*sqrt1 edge; the frontier-compacted exact Dijkstra finds the indirect
+ *             7*sqrt2 route (=sqrt98 < 10) and the comparator confirms it is exactly shorter.
+ *
+ * SCOPE (honest, not overclaimed): cubic king-move lattice (O_h).  Per-piece exactness is UNCONDITIONAL; a global
+ * bulk+detour splice is shortest only under the isolated-defect hypothesis -- this KAT gates the pieces, not that splice.
+ *
+ *   exit 99 = all arms correct.  10 bulk amount wrong   20 zero-loss/near-tie wrong   30 detour wrong */
+module corpus_2151_photon_route
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+extern @abi(c-msvc-x64) fn plr_bulk(dx: i64, dy: i64, dz: i64) -> i32 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_route_class(i: u64) -> i64 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_bulk_hops(dx: i64, dy: i64, dz: i64) -> i64 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_cmp_len(a1: u64, b1: u64, c1: u64, a2: u64, b2: u64, c2: u64) -> i32 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_pick_shorter(a1: u64, b1: u64, c1: u64, a2: u64, b2: u64, c2: u64) -> i32 from "photon_route.iii"
+extern @abi(c-msvc-x64) fn plr_detour_solve(ar: u64, source: u64, target: u64, nc: u64) -> u8 from "photon_route.iii"
+
+extern @abi(c-msvc-x64) fn lsp_reset(nn: u64, nc: u64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_rad(c: u64, r: i64) -> i32 from "traj_kinematics.iii"
+extern @abi(c-msvc-x64) fn lsp_edge(u: i64, v: i64, cls: i64, amt: u64) -> i32 from "traj_kinematics.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* floor(sqrt n), bit-by-bit -- for the fixed-precision (float proxy) interval in the zero-loss arm. */
+fn kisqrt(n: i64) -> i64 {
+    if n <= 0i64 { return 0i64 }
+    let mut bl : i64 = 0i64   let mut t : i64 = n
+    while t > 0i64 { t = t >> 1i64   bl = bl + 1i64 }
+    let k : i64 = (bl - 1i64) / 2i64
+    let mut bit : i64 = 1i64 << (2i64 * k)
+    let mut res : i64 = 0i64   let mut x : i64 = n
+    while bit != 0i64 {
+        let rb : i64 = res + bit
+        if x >= rb { x = x - rb   res = (res >> 1i64) + bit } else { res = res >> 1i64 }
+        bit = bit >> 2i64
+    }
+    return res
+}
+
+var FBULK : u64   var FTIE : u64   var FDET : u64
+
+/* assert the bulk route for (dx,dy,dz) equals hand-computed per-class amounts (ax axis, fc face, bd body). */
+fn bulk_is(dx: i64, dy: i64, dz: i64, ax: i64, fc: i64, bd: i64) -> i32 {
+    plr_bulk(dx, dy, dz)
+    if plr_route_class(0u64) != ax { FBULK = FBULK + 1u64 }
+    if plr_route_class(1u64) != fc { FBULK = FBULK + 1u64 }
+    if plr_route_class(2u64) != bd { FBULK = FBULK + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    FBULK = 0u64   FTIE = 0u64   FDET = 0u64
+
+    /* ── Arm BULK: O_h oracle geodesic = per-class amounts (p-q axis, q-r face, r body), p>=q>=r=sorted|coord|. */
+    bulk_is(2i64, 2i64, 2i64,   0i64, 0i64, 2i64)                     /* pure body-diagonal: 2√3            */
+    bulk_is(3i64, 1i64, 0i64,   2i64, 1i64, 0i64)                     /* 2 axis + 1 face                    */
+    bulk_is(0i64 - 1i64, 3i64, 0i64 - 1i64,   2i64, 0i64, 1i64)       /* sign/permutation invariance -> sorted (3,1,1) */
+    bulk_is(5i64, 5i64, 5i64,   0i64, 0i64, 5i64)                     /* 5√3                                */
+
+    /* MILLION-scale: a route spanning >10^6 nodes returned in O(1) with ZERO node memory. */
+    bulk_is(1000000i64, 700000i64, 300000i64,   300000i64, 400000i64, 300000i64)
+    let hops : i64 = plr_bulk_hops(1000000i64, 700000i64, 300000i64)  /* = 300000+400000+300000 = 1000000 */
+    putchar(66i32) putchar(58i32) sp()                                /* "B: " */
+    e_i64(plr_route_class(0u64)) sp() e_i64(plr_route_class(1u64)) sp() e_i64(plr_route_class(2u64))
+    sp() putchar(104i32) putchar(61i32) e_i64(hops) nl()              /* h=<hops> */
+
+    /* ── Arm ZERO-LOSS: relay selection near-tie.  X=(577,0,0)->577√1=577 ; Y=(408,408,0)->408√2≈576.9993.
+     * 577^2 - 2*408^2 = +1 -> X is longer by ~8e-4 ; a fixed precision f=10 STRADDLES 0 (cannot decide -> mis-route). */
+    let s1 : i64 = kisqrt(1i64 << 20i64)          /* floor(sqrt1 * 2^10) = 1024 (exact) */
+    let s2 : i64 = kisqrt(2i64 << 20i64)          /* floor(sqrt2 * 2^10) = 1448          */
+    let elo : i64 = 577i64 * s1 - 408i64 * (s2 + 1i64)
+    let ehi : i64 = 577i64 * (s1 + 1i64) - 408i64 * s2
+    let mut straddle : u8 = 0u8
+    if elo < 0i64 { if ehi > 0i64 { straddle = 1u8 } }
+    if straddle == 0u8 { FTIE = FTIE + 1u64 }      /* fixed precision MUST fail to decide, else the witness is void */
+    let tie : i32 = plr_cmp_len(577u64, 0u64, 0u64, 0u64, 408u64, 0u64)   /* exact sign(lenX - lenY) */
+    if tie != 1i32 { FTIE = FTIE + 1u64 }          /* exact: X strictly longer */
+    let pick : i32 = plr_pick_shorter(577u64, 0u64, 0u64, 0u64, 408u64, 0u64)
+    if pick != 0i32 { FTIE = FTIE + 1u64 }         /* router must pick B (relay Y, the true-shorter) */
+    putchar(90i32) putchar(58i32) sp()             /* "Z: " */
+    putchar(101i32) putchar(108i32) putchar(111i32) sp() e_i64(elo) sp()
+    putchar(101i32) putchar(104i32) putchar(105i32) sp() e_i64(ehi) sp()
+    putchar(101i32) putchar(120i32) putchar(97i32) putchar(99i32) putchar(116i32) sp() e_i64(tie as i64)
+    sp() putchar(112i32) putchar(105i32) putchar(99i32) putchar(107i32) sp() e_i64(pick as i64) nl()
+
+    /* ── Arm DETOUR: a defect blocks the direct 10√1 edge 0->3; the exact compacted Dijkstra finds 0->1->3 = 7√2. */
+    let tar : u64 = arena_new(1048576u64)          /* persistent edge-amount handles */
+    let a10 : u64 = bigint_from_u64(tar, 10u64)
+    let a3  : u64 = bigint_from_u64(tar, 3u64)
+    let a4  : u64 = bigint_from_u64(tar, 4u64)
+    lsp_reset(4u64, 2u64)
+    lsp_rad(0u64, 1i64)   lsp_rad(1u64, 2i64)      /* class 0 = √1 (axis), class 1 = √2 (face-diag) */
+    lsp_edge(0i64, 3i64, 0i64, a10)                /* direct: 10√1 = 10 (the lossy straight run)     */
+    lsp_edge(0i64, 1i64, 1i64, a3)                 /* 0->1 : 3√2                                      */
+    lsp_edge(1i64, 3i64, 1i64, a4)                 /* 1->3 : 4√2  => 0->1->3 = 7√2 = √98 < 10         */
+    let ar : u64 = arena_new(8388608u64)
+    let reached : u8 = plr_detour_solve(ar, 0u64, 3u64, 2u64)
+    let dax : i64 = plr_route_class(0u64)   let dfc : i64 = plr_route_class(1u64)   /* capture BEFORE the reject probe */
+    if reached != 1u8 { FDET = FDET + 1u64 }
+    if dax != 0i64 { FDET = FDET + 1u64 }          /* 0 axis steps    */
+    if dfc != 7i64 { FDET = FDET + 1u64 }          /* 7 face-diagonals */
+    /* NEGATIVE ARM: node 2 has no in-edge -> unreachable.  The reachability guard MUST return 0 (never a false path). */
+    let unreach : u8 = plr_detour_solve(ar, 0u64, 2u64, 2u64)
+    if unreach != 0u8 { FDET = FDET + 1u64 }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    bigint_drop_arena(tar)  arena_drop(tar)
+    let det : i32 = plr_cmp_len(0u64, 7u64, 0u64, 10u64, 0u64, 0u64)   /* 7√2 vs 10√1 : exact */
+    if det != (0i32 - 1i32) { FDET = FDET + 1u64 }  /* detour strictly shorter than the blocked-direct alternative */
+    putchar(68i32) putchar(58i32) sp()             /* "D: " */
+    e_i64(reached as i64) sp() e_i64(dax) sp() e_i64(dfc) sp()
+    putchar(99i32) putchar(109i32) putchar(112i32) sp() e_i64(det as i64) sp()
+    putchar(117i32) putchar(110i32) putchar(114i32) sp() e_i64(unreach as i64) nl()   /* unr=<0 = reject ok> */
+
+    if FBULK != 0u64 { return 10u64 }
+    if FTIE  != 0u64 { return 20u64 }
+    if FDET  != 0u64 { return 30u64 }
+    return 99u64
+}

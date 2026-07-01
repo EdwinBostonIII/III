@@ -14,6 +14,7 @@ pass=0; fail=0
 "$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/u.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/u.log"; exit 1; }
 "$I2" "$A/verb_geom.iii"     --compile-only --out "$OUT/verb_geom.o"     2>"$OUT/v.log" || { echo "FAIL verb_geom compile"; cat "$OUT/v.log"; exit 1; }
 "$I2" "$A/traj_kinematics.iii" --compile-only --out "$OUT/traj_kinematics.o" 2>"$OUT/t.log" || { echo "FAIL traj_kinematics compile"; cat "$OUT/t.log"; exit 1; }
+"$I2" "$A/exact_denest.iii"  --compile-only --out "$OUT/exact_denest.o"  2>"$OUT/d.log" || { echo "FAIL exact_denest compile"; cat "$OUT/d.log"; exit 1; }
 
 run() {
     local name="$1" want="$2"; shift 2
@@ -40,6 +41,7 @@ run 2141_cyclotomic_rotation 99 "$LIB"  # EXACT cyclotomic rotation: rational-mu
 run 2142_se3_screw       99   "$LIB"  # EXACT SE(3) screw: 3D rotation closure + SO(3) non-commutativity + exact screw translation in ℚ(√2,√3); zero drift vs fixed-point
 run 2143_traj_arclen     99   "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # LOAD-BEARING: traj_len_sign consumes the bigint adaptive tier -- exact gantry-trajectory length comparison (3+ independent surds at bigint scale)
 run 2144_lattice_pathfind 99  "$OUT/traj_kinematics.o" "$OUT/sqrt_sum_sign.o" "$LIB"  # HIGH-END PATHFINDING: exact lattice Dijkstra (lattice_shortest_path) -- frontier ordered by EXACT Sqrt-sum length; matches brute-min, resolves a float-blind Pell near-tie
+run 2145_denest          99   "$OUT/exact_denest.o"  # TOWER DENESTING: exact rank-1 sqrt of a+b*sqrt(d) in Q(sqrt d) -- decides square-vs-extension, verified root; rejects the norm-square-but-not-alpha case
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

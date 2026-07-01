@@ -1,0 +1,65 @@
+/* 2145_denest.iii -- GATE for denest_r1 (exact_denest.iii): exact rank-1 tower denesting.
+ * Decides whether α = a + b√d is a perfect square in ℚ(√d) and returns a VERIFIED root (x+y√d)²=α.
+ *
+ * Teeth: (1) every constructed square (a=x²+dy², b=2xy) is recognized AND its recovered root squares back EXACTLY
+ * (x²+dy²==a AND 2xy==b) -- a wrong root fails; (2) genuine non-squares are rejected; (3) THE norm-is-square-but-α-is-
+ * NOT case (9+6√2: N=9=3² yet not a square) is rejected -- proving the algorithm never trusts the norm alone; (4) the
+ * b=0 sub-cases (√ of a rational: perfect square, or d·square) are handled; (5) out-of-envelope inputs abstain (2).
+ *   exit 99 = all verdicts correct and every recovered root squares back exactly.
+ *   10 a square was missed or its root did NOT square back   20 a non-square was accepted   30 abstain verdict wrong */
+module corpus_2145_denest
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn denest_r1(a: i64, b: i64, d: i64) -> i32 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_x() -> i64 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_y() -> i64 from "exact_denest.iii"
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var FAILSQ : u64   var FAILNS : u64   var FAILAB : u64
+
+/* a square: verdict must be 1 AND the recovered root squares back to (a,b). */
+fn run_sq(a: i64, b: i64, d: i64) -> i32 {
+    let v : i32 = denest_r1(a, b, d)
+    if v != 1i32 { FAILSQ = FAILSQ + 1u64   e_i64(a) sp() e_i64(b) sp() e_i64(d) sp() putchar(88i32) nl()   return 0i32 }   /* 'X' */
+    let x : i64 = denest_x()   let y : i64 = denest_y()
+    let back_a : i64 = x * x + d * (y * y)
+    let back_b : i64 = 2i64 * x * y
+    if back_a != a { FAILSQ = FAILSQ + 1u64 }
+    if back_b != b { FAILSQ = FAILSQ + 1u64 }
+    e_i64(a) sp() e_i64(b) sp() e_i64(d) sp() putchar(61i32) sp() e_i64(x) sp() e_i64(y) nl()   /* '=' x y */
+    return 0i32
+}
+fn run_ns(a: i64, b: i64, d: i64) -> i32 { let v : i32 = denest_r1(a, b, d)   if v != 0i32 { FAILNS = FAILNS + 1u64 }   return 0i32 }
+fn run_ab(a: i64, b: i64, d: i64) -> i32 { let v : i32 = denest_r1(a, b, d)   if v != 2i32 { FAILAB = FAILAB + 1u64 }   return 0i32 }
+
+fn main() -> u64 {
+    FAILSQ = 0u64   FAILNS = 0u64   FAILAB = 0u64
+
+    /* SQUARES (a=x²+dy², b=2xy). */
+    run_sq(3i64, 2i64, 2i64)              /* (1+√2)²  */
+    run_sq(22i64, 12i64, 2i64)            /* (2+3√2)² */
+    run_sq(22i64, 0i64 - 12i64, 2i64)     /* (2−3√2)² -- negative b */
+    run_sq(28i64, 10i64, 3i64)            /* (5+√3)²  */
+    run_sq(21i64, 4i64, 5i64)             /* (1+2√5)² */
+    run_sq(9i64, 0i64, 2i64)              /* b=0, a=9=3²  -> √9=3      */
+    run_sq(8i64, 0i64, 2i64)              /* b=0, a=8=2·2² -> √8=2√2   */
+    run_sq(1470000i64, 980000i64, 2i64)   /* (700+700√2)²: large IN-ENVELOPE (b<2^20) -- must not overflow, root (700,700) */
+
+    /* NON-SQUARES. */
+    run_ns(9i64, 6i64, 2i64)              /* ★ N=81−72=9=3² but 9+6√2 is NOT a square -> must reject */
+    run_ns(0i64, 1i64, 2i64)             /* √2 itself: N=−2<0 -> extension */
+    run_ns(5i64, 2i64, 2i64)             /* N=17 not square */
+    run_ns(1i64, 1i64, 3i64)             /* N=−2<0 */
+    run_ns(6i64, 3i64, 3i64)             /* ★ N=36−27=9=3² but b=3 is ODD -> 2xy=b impossible -> not a square */
+    run_ns(10i64, 4i64, 2i64)            /* N=100−32=68 not a perfect square -> extension */
+
+    /* OUT OF ENVELOPE -> abstain (2). */
+    run_ab(2000000000i64, 2i64, 2i64)     /* |a| >= 2^30 */
+    run_ab(100i64, 2000000i64, 2i64)      /* |b| >= 2^20 (the case the old |b|<2^30 guard would OVERFLOW on) */
+
+    if FAILSQ != 0u64 { return 10u64 }
+    if FAILNS != 0u64 { return 20u64 }
+    if FAILAB != 0u64 { return 30u64 }
+    return 99u64
+}

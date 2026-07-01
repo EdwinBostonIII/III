@@ -1,0 +1,83 @@
+/* exact_denest.iii -- TOWER DENESTING (rank-1): the exact square-root that decides whether √α stays in the field or
+ * forces a genuine extension.  For α = a + b√d ∈ ℚ(√d) (a,b integers, d>0 squarefree), decide if α is a perfect SQUARE
+ * in ℚ(√d) and, if so, return the exact root (x,y) with (x + y√d)² = a + b√d.
+ *
+ * ALGEBRA:  (x+y√d)² = (x²+dy²) + (2xy)√d.  So x²+dy²=a and 2xy=b.  Then N(α)=a²−db²=(x²−dy²)² is a perfect square, and
+ * x²=(a+s)/2, dy²=(a−s)/2 with s=√N (either sign).  ★ N being a perfect square is NECESSARY but NOT SUFFICIENT (e.g.
+ * 9+6√2: N=9=3² yet 9+6√2 is not a square in ℚ(√2)) -- so this NEVER trusts the norm alone: it reconstructs (x,y) and
+ * VERIFIES 2xy==b (and x²+dy²==a holds by construction), returning success only for a root that squares back EXACTLY.
+ * If no branch verifies, √α leaves ℚ(√d) -> a genuine tower extension (rank +1).  This is the exact denest that keeps
+ * the algebraic rank bounded when the radical collapses, and honestly reports when it does not.
+ *
+ * verdict: 1 = perfect square (DN_X, DN_Y set); 0 = NOT a square in ℚ(√d) (√α forces an extension); 2 = out of the i64
+ * envelope (|a|,|b| ≥ 2^30 or d ≥ 2^20) -> abstain rather than risk silent overflow (a future bigint tier removes this). */
+module exact_denest
+
+var DN_X : i64   var DN_Y : i64
+fn denest_x() -> i64 @export { return DN_X }   /* the recovered root's rational part x */
+fn denest_y() -> i64 @export { return DN_Y }   /* the recovered root's √d coefficient y */
+
+fn dn_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* floor(sqrt(n)) for n >= 0, bit-by-bit (add/sub/shift only); returns -1 for n < 0. */
+fn dn_isqrt(n: i64) -> i64 {
+    if n < 0i64 { return 0i64 - 1i64 }
+    if n == 0i64 { return 0i64 }
+    let mut bl : i64 = 0i64   let mut t : i64 = n
+    while t > 0i64 { t = t >> 1i64   bl = bl + 1i64 }
+    let mut k : i64 = (bl - 1i64) / 2i64
+    let mut bit : i64 = 1i64 << (2i64 * k)
+    let mut res : i64 = 0i64   let mut x : i64 = n
+    while bit != 0i64 {
+        let rb : i64 = res + bit
+        if x >= rb { x = x - rb   res = (res >> 1i64) + bit } else { res = res >> 1i64 }
+        bit = bit >> 2i64
+    }
+    return res
+}
+
+/* is v a nonneg perfect square?  writes root to DN_TMP, returns 1/0. */
+var DN_TMP : i64
+fn dn_is_sq(v: i64) -> i32 {
+    if v < 0i64 { return 0i32 }
+    let s : i64 = dn_isqrt(v)
+    if s * s == v { DN_TMP = s   return 1i32 }
+    return 0i32
+}
+
+/* try the branch x² = (a + ss)/2, d·y² = (a − ss)/2 (ss = ±s).  On a verified match set DN_X,DN_Y and return 1. */
+fn dn_branch(a: i64, ss: i64, b: i64, d: i64) -> i32 {
+    let two_xx : i64 = a + ss             /* = 2 x²   */
+    let two_dyy : i64 = a - ss            /* = 2 d y² */
+    if two_xx < 0i64 { return 0i32 }
+    if two_dyy < 0i64 { return 0i32 }
+    if (two_xx & 1i64) != 0i64 { return 0i32 }
+    if (two_dyy & 1i64) != 0i64 { return 0i32 }
+    let xx : i64 = two_xx / 2i64
+    let dyy : i64 = two_dyy / 2i64
+    if dn_is_sq(xx) != 1i32 { return 0i32 }   let x : i64 = DN_TMP
+    if (dyy % d) != 0i64 { return 0i32 }
+    let yy : i64 = dyy / d
+    if dn_is_sq(yy) != 1i32 { return 0i32 }   let y : i64 = DN_TMP
+    /* x²+dy² == a holds by construction; VERIFY 2xy == b (try y and −y). */
+    if (2i64 * x) * y == b { DN_X = x   DN_Y = y   return 1i32 }
+    if (2i64 * x) * (0i64 - y) == b { DN_X = x   DN_Y = 0i64 - y   return 1i32 }
+    return 0i32
+}
+
+/* decide if a + b√d is a perfect square in ℚ(√d); on success (x+y√d)²=a+b√d with x,y in DN_X,DN_Y. */
+fn denest_r1(a: i64, b: i64, d: i64) -> i32 @export {
+    /* ENVELOPE (conscience-fixed): every i64 intermediate must not overflow.  N=a²−d·b², so a²<2^60 (|a|<2^30) AND
+     * d·b²<2^60 -- with d<2^20 that needs |b|<2^20 (the naive |b|<2^30 lets d·b² reach 2^80 -> silent overflow). */
+    if d <= 0i64 { return 2i32 }
+    if dn_iabs(a) >= 1073741824i64 { return 2i32 }     /* 2^30 : a² < 2^60 */
+    if dn_iabs(b) >= 1048576i64 { return 2i32 }        /* 2^20 : with d<2^20, d·b² < 2^60 (was 2^30 -> OVERFLOW BUG) */
+    if d >= 1048576i64 { return 2i32 }                 /* 2^20 */
+    let N : i64 = a * a - d * (b * b)                  /* norm; = (x²−dy²)² for a real square */
+    if N < 0i64 { return 0i32 }
+    let s : i64 = dn_isqrt(N)
+    if s * s != N { return 0i32 }                      /* N not a perfect square -> extension */
+    if dn_branch(a, s, b, d) == 1i32 { return 1i32 }
+    if dn_branch(a, 0i64 - s, b, d) == 1i32 { return 1i32 }
+    return 0i32                                        /* N square but α is NOT (or forces extension) */
+}

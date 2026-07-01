@@ -124,6 +124,31 @@ comparison is slower than float — this is for the cases where float-optimality
 Σ√ ties), not a float replacement; and the 64-slot bigint handle table bounds `nodes×classes`, so it is a
 small-graph exact solver (every intermediate dropped so the search never exhausts the table).
 
+**Tower denesting — crossing the flagged boundary** (`denest_r1` in `exact_denest.iii`, gate `2145`, gate
+now 15/0). The exact `√` of a *field element*: for `α = a + b√d ∈ ℚ(√d)`, decide whether `α` is a perfect
+square in `ℚ(√d)` and return the verified root `(x,y)` with `(x+y√d)² = a+b√d`, else report that `√α` forces
+a genuine tower extension (rank +1). This is the primitive the honest boundary above needed (√ of a
+K-element) — it keeps algebraic rank bounded when the radical collapses and reports honestly when it does
+not. ★ The correction the conscience forced: `N(α)=a²−db²` being a perfect square is **necessary but not
+sufficient** — `9+6√2` has `N=9=3²` yet is not a square (`6` is even but `(9±3)/2 ∈ {6,3}` are not squares).
+So the algorithm never trusts the norm: it reconstructs `x²=(a±√N)/2, dy²=(a∓√N)/2` and **verifies `2xy==b`**,
+returning only a root that squares back exactly. Gated with squares (round-trip), the norm-square-but-not-α
+case, odd-`b`, `b=0` sub-cases, and — after `iii_adversarial_verify`/`iii_math_rigor` caught a `d·b²` i64
+overflow at the old guard — a tightened envelope (`|b|<2²⁰`) with a b-overflow abstain case as the falsifier.
+
+**Roadmap for the two scaling directions (honest, correct algorithms):**
+- *Frontier compactor (break the 64-slot ceiling).* Simpler than serialization: a settled Dijkstra node's
+  distance is **dead to the search** after its edges are relaxed (Dijkstra never revisits it), so `DROP` its
+  distance handles right there — reconstruction needs only the integer `PRED[]` array, and the target's
+  vector is copied out before drop. Live handles then track the *frontier width*, not total nodes → bounded
+  memory, unbounded graph. Gate: solve a graph whose `nodes×classes` exceeds the ~44-handle ceiling the
+  current keep-all version fails on.
+- *Quotient oracle on the lattice (Oₕ symmetry).* This is `2138`'s symmetry quotient applied inside the
+  pathfinder: a point-group isometry preserves squared edge-lengths (radicands), so a comparison that is an
+  Oₕ-image of a cached one has the same shape → `O(1)` sign via the cached representative + reflect bit, no
+  adaptive-tier call. Soundness caveat (the `2138` teeth): only cache-hit when the image is genuinely
+  sign-preserving; verify the orientation bit, never assume.
+
 ## 0. The ask, de-hyped
 
 The vision (oracle for a prover · Gröbner accelerator · exact Lie-group kinematics · break the

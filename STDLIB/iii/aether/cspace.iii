@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn mech_pt(i: u64) -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn mech_den() -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+extern @abi(c-msvc-x64) fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
 
 const CS_MAXK : u64 = 24u64
 const CS_MAXG : u64 = 8u64
@@ -202,13 +203,14 @@ fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i
         let gx : i64 = ((cur / CS_MAXG) % CS_MAXG) as i64
         let k : i64 = (cur / (CS_MAXG * CS_MAXG)) as i64
         if k == k1 { if gx == x1 { if gy == y1 { return cd } } }
-        /* rotation neighbors (endpoint-certified; the arc-sweep is the charted OPEN) */
+        /* rotation neighbors: since arc_sweep.iii the CONTINUOUS 15-degree arc is Sturm-certified in mode 0
+         * (the discreteness lock retired for z-rotations); the twin (mode 1) stays endpoint-only */
         let mut kk : i64 = k + 1i64
         if kk >= 24i64 { kk = 0i64 }
-        cs_try(kk, gx, gy, cd)
+        if cs_arcok(k, gx, gy) == 1i32 { cs_try(kk, gx, gy, cd) }
         kk = k - 1i64
         if kk < 0i64 { kk = 23i64 }
-        cs_try(kk, gx, gy, cd)
+        if cs_arcok(kk, gx, gy) == 1i32 { cs_try(kk, gx, gy, cd) }
         /* translation neighbors: swept-certified in mode 0 */
         if gx + 1i64 < CS_GW { if cs_tredge(k, gx, gy, gx + 1i64, gy) == 1i32 { cs_try(k, gx + 1i64, gy, cd) } }
         if gx - 1i64 >= 0i64 { if cs_tredge(k, gx, gy, gx - 1i64, gy) == 1i32 { cs_try(k, gx - 1i64, gy, cd) } }
@@ -221,6 +223,18 @@ fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i
 fn cs_tredge(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 {
     if CS_MODE == 1i64 { return 1i32 }
     return cs_edge_ok(k, gx, gy, nx, ny)
+}
+/* the CONTINUOUS rotation-arc certificate (arc index = the lower k of the edge) against both obstacles. */
+fn cs_arcok(karc: i64, gx: i64, gy: i64) -> i32 {
+    if CS_MODE == 1i64 { return 1i32 }
+    let bx : i64 = gx * CS_GS   let by : i64 = gy * CS_GS
+    let a1 : i32 = as_cert(CS_AX, bx, by, 0i64, karc, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
+    if a1 == 0i32 { return 0i32 }
+    if CS_R2 > 0i64 {
+        let a2 : i32 = as_cert(CS_AX, bx, by, 0i64, karc, CS_C2[0u64], CS_C2[1u64], CS_C2[2u64], CS_R2)
+        if a2 == 0i32 { return 0i32 }
+    }
+    return 1i32
 }
 fn cs_try(k: i64, gx: i64, gy: i64, cd: i64) -> i32 {
     let sid : u64 = cs_sid(k, gx, gy)

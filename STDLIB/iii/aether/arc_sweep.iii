@@ -1,0 +1,80 @@
+/* STDLIB/iii/aether/arc_sweep.iii -- THE ROTATIONAL ARC-SWEEP CERTIFICATE (charter [BUILD-next] retired;
+ * Program III Vector VI): continuous collision certification for a tip sweeping a 15-degree CYCLOTOMIC arc,
+ * decided by Sturm on an INTEGER polynomial -- the C-space compiler's rotation edges stop being
+ * endpoint-only (the discreteness lock, closed for rotations about z).
+ *
+ * THE CONSTRUCTION: tip(theta) = R_z(theta)(AX,0,0) + B vs the sphere (C, r2).  The WEIERSTRASS substitution
+ * u = tan(theta/2) rationalizes the arc: cos = (1-u^2)/(1+u^2), sin = 2u/(1+u^2); clearing (1+u^2)^2 makes
+ * the clearance a DEGREE-4 INTEGER polynomial
+ *   N(u) = (P+Dx)^2+Dy^2+Dz^2-r2) u^4 - 4PDy u^3 + 2(P^2+Dx^2+Dy^2+Dz^2-r2) u^2 - 4PDy u + ((P-Dx)^2+Dy^2+Dz^2-r2)
+ * (P = AX, D = C - B).  On an arc whose ENDPOINT states are free (N > 0 at both ends), any contact or
+ * penetration inside the arc forces a real root of N -- so root_count == 0 on the u-interval IS the
+ * continuous clearance certificate (sturm.iii, exact).
+ *
+ * THE TWO DISCHARGED CATCHES:
+ *   - u is singular at theta = 180 degrees: arcs with k in 6..17 are reduced by the EXACT integer chart
+ *     R(180) = diag(-1,-1,1) (negate Dx, Dy; k -= 12), and k in 18..23 by k -= 24 -- every arc lands in
+ *     k in [-6, 5] where |u| <= 1;
+ *   - the arc's u-endpoints tan(k*7.5deg) are irrational: the certificate uses machine-derived RATIONAL
+ *     COVERS (+-2/1e5 padding, a SUPERSET of the true arc) -- conservative: it can only over-refuse by a
+ *     ~2e-3 sliver of arc, never under-certify.  Tangency inside the arc is a root and REFUSES (stricter
+ *     than the state rule's contact-is-legal: an arc certificate cannot tell touch from cross without
+ *     multiplicity work -- charted).  Rotation is about z (the cspace joint); general axes recompose. */
+module arc_sweep
+
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+var AS_P : [i64; 5]
+
+/* tan(k*7.5deg) * 1e3 (coarse: sturm evaluation homogenizes by xd^deg -- 1e5 denominators overflow i64 at degree 4; /1000 with +-2 padding keeps eval <= ~1e16 and stays a strict cover), k = -6..6 (machine-derived; index i = k+6). */
+fn as_tt(i: i64) -> i64 {
+    if i == 0i64 { return 0i64 - 1000i64 }
+    if i == 1i64 { return 0i64 - 767i64 }
+    if i == 2i64 { return 0i64 - 577i64 }
+    if i == 3i64 { return 0i64 - 414i64 }
+    if i == 4i64 { return 0i64 - 268i64 }
+    if i == 5i64 { return 0i64 - 132i64 }
+    if i == 6i64 { return 0i64 }
+    if i == 7i64 { return 132i64 }
+    if i == 8i64 { return 268i64 }
+    if i == 9i64 { return 414i64 }
+    if i == 10i64 { return 577i64 }
+    if i == 11i64 { return 767i64 }
+    return 1000i64
+}
+
+/* certify the CONTINUOUS 15-degree arc edge k -> k+1 of tip = R_z(theta)(AX,0,0) + B against sphere (C,r2):
+ * 1 = the whole arc is certified clear; 0 = a possible contact exists -> refuse (conservative). */
+fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 @export {
+    let mut dx : i64 = Cx - Bx
+    let mut dy : i64 = Cy - By
+    let dz : i64 = Cz - Bz
+    let mut kk : i64 = k % 24i64
+    if kk < 0i64 { kk = kk + 24i64 }
+    if kk >= 6i64 { if kk < 18i64 { dx = 0i64 - dx   dy = 0i64 - dy   kk = kk - 12i64 } }
+    if kk >= 18i64 { kk = kk - 24i64 }
+    /* kk in [-6, 5]; the covering u-interval is [tt(kk+6)-2, tt(kk+7)+2] / 1e5 */
+    let p : i64 = AX
+    let s2 : i64 = ((dx * dx) + (dy * dy)) + (dz * dz)
+    AS_P[4u64] = (((p + dx) * (p + dx)) + (s2 - (dx * dx))) - r2
+    AS_P[3u64] = 0i64 - ((4i64 * p) * dy)
+    AS_P[2u64] = (2i64 * ((p * p) + s2)) - (2i64 * r2)
+    AS_P[1u64] = 0i64 - ((4i64 * p) * dy)
+    AS_P[0u64] = (((p - dx) * (p - dx)) + (s2 - (dx * dx))) - r2
+    /* true degree (top coefficients can vanish, e.g. C on the arc cylinder) */
+    let mut deg : i64 = 0i64
+    if AS_P[1u64] != 0i64 { deg = 1i64 }
+    if AS_P[2u64] != 0i64 { deg = 2i64 }
+    if AS_P[3u64] != 0i64 { deg = 3i64 }
+    if AS_P[4u64] != 0i64 { deg = 4i64 }
+    if deg == 0i64 {
+        let c0 : i64 = AS_P[0u64]
+        if c0 > 0i64 { return 1i32 }                              /* constant positive clearance */
+        return 0i32
+    }
+    if sturm_build((&AS_P) as u64, deg) < 0i64 { return 0i32 }    /* refuse on any build failure */
+    let n : i64 = root_count(as_tt(kk + 6i64) - 2i64, 1000i64, as_tt(kk + 7i64) + 2i64, 1000i64)
+    if n == 0i64 { return 1i32 }
+    return 0i32
+}

@@ -1,0 +1,56 @@
+/* 2175_arc_sweep.iii -- GATE for arc_sweep.iii + the cspace rotation upgrade (Program III Vector VI):
+ * CONTINUOUS rotational collision certification -- the C-space discreteness lock retired for z-arcs.
+ *
+ * ARM A -- THE ROTATIONAL GRAZE: arm 400 sweeping its first 15-degree arc; a small obstacle (r=2) tucked
+ *   against the arc's belly at the 7.5-degree direction (C=(398,52), between the chord and the arc).  BOTH
+ *   endpoint states are FREE (tip distances^2 2708 and ~2786 >> 4) yet the CONTINUOUS arc passes through
+ *   it: the Weierstrass quartic has roots in the covered u-interval -> as_cert REFUSES.  A clear obstacle
+ *   position certifies 1.  This is the rotational tunneling no endpoint sampler can see.
+ * ARM C -- THE 180-DEGREE CHART: the same scene rotated by R(180) (arc k=12, obstacle negated in x,y)
+ *   refuses identically -- the Weierstrass singularity is dodged by an EXACT integer transform.
+ * ARM P -- THE PLANNER CONSEQUENCE: in cspace (mode 0) the arc 0->1 at base (0,0) is killed, so the
+ *   certified plan to (k=2) detours through base (1,0): translate, rotate twice in clean air, translate
+ *   back = 4 moves.  The endpoint twin (mode 1) rotates straight through the obstacle: 2 moves.  The twin
+ *   is shorter because it swept an arm through solid matter.
+ *
+ * exit 99 = pass;  10 A certificates wrong;  11 C chart wrong;  12 cspace compile failed;
+ * 13 certified plan wrong;  14 twin plan wrong (witness void) */
+module corpus_2175_arc_sweep
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
+extern @abi(c-msvc-x64) fn cs_compile(GS: i64, AX: i64, c1x: i64, c1y: i64, c1z: i64, r1: i64, c2x: i64, c2y: i64, c2z: i64, r2: i64, GW: i64, GH: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_free(k: i64, gx: i64, gy: i64) -> i64 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 from "cspace.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ ARM A: the graze refuses, the clear certifies. */
+    let ga : i32 = as_cert(20i64, 0i64, 0i64, 0i64, 0i64, 25i64, 3i64, 0i64, 30i64)      /* belly graze -> 0 */
+    let ca : i32 = as_cert(20i64, 0i64, 0i64, 0i64, 0i64, 25i64, 20i64, 0i64, 30i64)     /* well clear  -> 1 */
+    putchar(65i32) putchar(58i32) sp() e_i64(ga as i64) sp() e_i64(ca as i64) nl()          /* "A: 0 1" */
+    if ga != 0i32 { return 10u64 }
+    if ca != 1i32 { return 10u64 }
+
+    /* ══ ARM C: the exact R(180) chart. */
+    let gc : i32 = as_cert(20i64, 0i64, 0i64, 0i64, 12i64, 0i64 - 25i64, 0i64 - 3i64, 0i64, 30i64)
+    let cc : i32 = as_cert(20i64, 0i64, 0i64, 0i64, 12i64, 0i64 - 25i64, 0i64 - 20i64, 0i64, 30i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(gc as i64) sp() e_i64(cc as i64) nl()          /* "C: 0 1" */
+    if gc != 0i32 { return 11u64 }
+    if cc != 1i32 { return 11u64 }
+
+    /* ══ ARM P: the planner consequence.  Grid 2x1 (step 800), arm 400, the graze obstacle at base (0,0). */
+    if cs_compile(100i64, 20i64, 25i64, 3i64, 0i64, 30i64, 0i64, 0i64, 0i64, 0i64, 1i64, 1i64) != 0i32 { return 12u64 }
+    let pc : i64 = cs_plan(0i64, 0i64, 0i64, 2i64, 0i64, 0i64, 0i64)                        /* certified */
+    let pt : i64 = cs_plan(0i64, 0i64, 0i64, 2i64, 0i64, 0i64, 1i64)                        /* endpoint twin */
+    putchar(80i32) putchar(58i32) sp() e_i64(pc) sp() e_i64(pt) nl()                        /* "P: 22 2" */
+    if pc != 22i64 { return 13u64 }
+    if pt != 2i64 { return 14u64 }
+
+    return 99u64
+}

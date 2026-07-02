@@ -71,7 +71,7 @@ fn main() -> u64 {
     putchar(80i32) putchar(58i32) sp() e_i64(pc) sp() e_i64(pt) sp() e_i64(pr) nl()   /* "P: 6 4 10" */
     if pc != 6i64 { return 13u64 }
     if pt != 4i64 { return 14u64 }
-    if pr != 10i64 { return 15u64 }                                    /* via the certified zero-clearance corridor at k=2 */
+    if pr != 10i64 { return 15u64 }                                    /* the 10-route again: its rotation arcs are GENUINELY certified clear by arc_sweep (2175) -- an earlier 12 was an eval-overflow artifact, fixed by the /1000 covers */
 
     return 99u64
 }

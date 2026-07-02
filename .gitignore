@@ -57,3 +57,14 @@ STDLIB/build/stoma_kats/
 STDLIB/build/stoma_probes/*.exe
 STDLIB/build/stoma_probes/*.o
 STDLIB/build/stoma_probes/*.out
+
+# session build-probe outputs (regenerable: compiled organ/KAT objects, probe exes, sweep reports)
+STDLIB/build/fuzzprobe/
+STDLIB/build/cone/
+STDLIB/build/sovbuild/
+STDLIB/build/sovir/
+STDLIB/build/uikats/
+STDLIB/build/probe2179/
+STDLIB/build/VERIFIED.tsv
+STDLIB/build/worldgraph.*.nodes
+STDLIB/build/worldgraph.*.edges

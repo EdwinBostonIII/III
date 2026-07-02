@@ -221,3 +221,38 @@ V, VII, VIII are fully specified above with falsifiers -- the next session build
 STATE AT PROGRAM III CLOSE: sqrtsum gate 40/0.  Organs 2167-2178 all landed.  Charted next: bigint
 determinants, products/inverses, arc-tangency multiplicity, rational-direction march v2, ensemble
 compaction, multi-interface photonic lattices on the refract class algebra.
+
+## THE CHARTED-NEXT INCREMENTS -- ALL SIX LANDED (the post-Program-III close)
+1. **Modular-CRT determinants (33114b62, gate 2179):** rs_sum_big -- 16-prime Gauss + Garner CRT +
+   the CERTIFIED permanent bound (bits(P) > 464); v1 refuses at cbrt(2^31)+sqrt3 and at D=12, v2
+   derives both exactly (constant 2^62-27; monic deg-12, R(0)=73, both real roots Horner-bracketed);
+   Bareiss == CRT twin weld.  FINDING: sturm's i64 PRS chain honestly overflows at degree 12 -- the
+   bigint PRS remains charted.
+2. **Closure verbs (8bf7c3aa, gate 2180):** rs_prod/rs_prod_big/rs_inv/rs_primitive -- roots closed
+   under *, inverse, rational scaling; (t^2-6)^2 norm form; t^12-648 past the v1 guard; the golden
+   ratio COMPOSED (1+sqrt5)*(1/2) -> t^2-t-1.  HARDENED: zero-lead Sylvester degeneracy (found live)
+   now refuses on both engines.
+3. **Root multiplicity (918cbeb7, gate 2181):** root_mult by iterated gcd(p,p') -- EVEN = touch (every
+   finite sampler structurally blind: p(7/5), p(3/2) both negative around the sqrt2 double root), ODD =
+   cross; the arc_sweep GRAZE (mult 2) vs r2=226 CROSS (mult 1) discriminated where as_cert returns the
+   same conservative 0.
+4. **Rational-direction march v2 (292714df, gate 2182):** THE ISOMORPHISM -- march on lattice L in
+   direction d == integer march on the DHAT-refined lattice; 12000 crossings d=(5,7) with the PARITY
+   THEOREM certifying zero corners; bit-exact 12000-crossing reversal; the biased twin enters the sum-4
+   cell the ray never touches; disc==0 tangent with |d|^2=25.
+5. **Ensemble compaction (bef17e18, gate 2183):** g2_compact -- gcd-reduce + FRESH-ARENA migration
+   (bump bytes reclaimed); snap_diff == 0 across the call; STRICT bit ratchet 35 -> 3 at event 10 (the
+   self-limiting-denominator finding QUANTIFIED); maximality; involution-transparent mid-run; the
+   120-event twin identical in history and velocities at 1 limb vs 6.
+6. **Multi-interface optics (80d89801, gate 2184):** the periodic stack (band index COMBINATORIAL; 20
+   certified interfaces, iterated slab theorem, walk-off EXACTLY 280+100sqrt3) and the guided channel
+   (1000 strict +2 TIR bounces, pitch EXACTLY -9995sqrt3; the 45-class held only marginally -- one
+   geometry, two classes, two certificates).
+
+STATE: sqrtsum gate 46/0.  Charted next: bigint PRS (lifts sturm past degree ~7 and root_mult with it);
+resultant products at large magnitude (norm-form constants outgrow i64 before intermediates do --
+bigint output ABI); vertical-interface refraction (the transposed class (s*sqrt3, s) -- a 4-class
+algebra); stack+channel composition (2-D photonic crystals); compaction-aware deep ensembles (10^4+
+events).  PROCESS NOTE: a gate piped through grep loses its exit status -- commit chains must gate on
+the gate's OWN rc (a 3-KAT link-stage transient under memory pressure slipped one commit through red;
+the rerun and the tree were green).

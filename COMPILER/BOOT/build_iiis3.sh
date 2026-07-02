@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-# C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\build_iiis1.sh
+# COMPILER/BOOT/build_iiis3.sh
 #
-# Build iiis-3: the first mixed (C + .iii) Stage-0 compiler.
-#
-# Per the b-stage1-build plan-row: iiis-3 = (all C TUs except those that
-# have been ported to .iii) + (their .iii.o counterparts produced by
-# iiis-0).  Each successful TU port replaces one .c in this build.
-#
-# Currently ported:
-#   - ceiling.iii   (replaces ceiling.c)
+# Build iiis-3: the self-host FIXED POINT.  iiis-2 (the self-hosted
+# compiler) recompiles the same PORTED_TUS (below) from .iii; the remaining
+# C TUs are compiled by $CC (gcc).  A correct, deterministic self-host makes
+# iiis-3 byte-identical to iiis-2 (mhash-verified); any divergence is a
+# self-host or determinism regression.
 #
 # Reproducibility env mirrors build_iiis0.sh exactly (SOURCE_DATE_EPOCH,
-# locale, ccache).  iiis-0 is invoked with no env tweaks: its determinism
-# is its own contract (verified by build_iiis0.sh --check-deterministic).
+# locale, ccache).  iiis-2 is invoked with no env tweaks: its determinism
+# is its own contract (mhash-sealed by build_iiis2.sh).
 #
 # Usage:
-#   bash build_iiis1.sh [--mode release|debug] [--out <path>]
+#   bash build_iiis3.sh [--mode release|debug] [--out <path>]
 #                       [--check-corpus] [--clean] [--help]
 #
 # Exit codes mirror build_iiis0.sh.
@@ -61,17 +58,18 @@ DO_CHECK_CORPUS=0
 DO_CLEAN=0
 
 # TUs ported from C to .iii.  Each entry maps "name.c" -> compile name.iii
-# via iiis-0 instead of gcc.  Keep this list LC_ALL=C sorted.
+# via iiis-2 ($IIIS0_BIN -- historical variable name) instead of gcc.
+# Keep this list LC_ALL=C sorted.
 PORTED_TUS=( acc affine_audit ast ceiling cg_opt_rules cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha cg_typeclass emit emit_sanctum hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
 
 usage() {
     cat <<'EOF' >&2
-Usage: bash build_iiis1.sh [options]
+Usage: bash build_iiis3.sh [options]
 
 Options:
   --mode release|debug      Build mode (default: release).
   --out <path>              Output binary path (default: III/COMPILED/iiis-3[.exe]).
-  --check-corpus            After build, run stage1_corpus through iiis-0 AND iiis-3
+  --check-corpus            After build, run stage1_corpus through iiis-2 AND iiis-3
                             and assert byte-identical .o output for every program.
   --clean                   Remove iiis-3 artifacts and ported .iii.o files; exit.
   -h, --help                Show this help and exit.
@@ -105,7 +103,7 @@ fi
 CC="${CC:-gcc}"
 command -v "$CC"     >/dev/null 2>&1 || die "$III_EXIT_ENV" "compiler not found: $CC"
 command -v sha256sum >/dev/null 2>&1 || die "$III_EXIT_ENV" "sha256sum not found"
-[[ -x "$IIIS0_BIN"   ]] || die "$III_EXIT_ENV" "iiis-0 binary not found: $IIIS0_BIN  (run build_iiis0.sh first)"
+[[ -x "$IIIS0_BIN"   ]] || die "$III_EXIT_ENV" "iiis-2 binary not found: $IIIS0_BIN  (run build_iiis2.sh first)"
 
 case "$MODE" in
     release) CFLAGS_OPT=(-O2 -DNDEBUG) ;;

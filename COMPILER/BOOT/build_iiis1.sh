@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\build_iiis1.sh
+# COMPILER/BOOT/build_iiis1.sh
 #
-# Build iiis-1: the first mixed (C + .iii) Stage-0 compiler.
-#
-# Per the b-stage1-build plan-row: iiis-1 = (all C TUs except those that
-# have been ported to .iii) + (their .iii.o counterparts produced by
-# iiis-0).  Each successful TU port replaces one .c in this build.
-#
-# Currently ported:
-#   - ceiling.iii   (replaces ceiling.c)
+# Build iiis-1: the first mixed (C + .iii) stage.  The frozen C seed iiis-0
+# compiles every TU listed in PORTED_TUS (below) from .iii -- the full core
+# pipeline (lex, parse, sema, cg_r3, emit, link, main, ...); the remaining
+# C TUs are compiled by $CC (gcc).  Each successful TU port replaces one .c
+# in this build.  PORTED_TUS is the authoritative list.
 #
 # Reproducibility env mirrors build_iiis0.sh exactly (SOURCE_DATE_EPOCH,
 # locale, ccache).  iiis-0 is invoked with no env tweaks: its determinism

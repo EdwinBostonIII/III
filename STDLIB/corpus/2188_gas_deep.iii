@@ -26,6 +26,7 @@ extern @abi(c-msvc-x64) fn g2_snap() -> i32 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn g2_snap_diff() -> i64 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn g2_snap_free() -> i32 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn g2_energy() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_mom(ax: u64) -> i64 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn g2_den_bits() -> i64 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn g2_events() -> u64 from "gas_big.iii"
 extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
@@ -59,13 +60,22 @@ fn main() -> u64 {
     g2_snap_free()
     let cn : i64 = g2_compactions()
     let e1 : i64 = g2_energy()
+    /* momentum restoration (coverage arm): the involution restores the SNAPSHOT velocity vector
+     * exactly (the post-event-1 state; event 1 is a PAIR collision, per-axis momentum-preserving,
+     * so the probed triple equals the t=0 sums (13-11+2, 3+4+9, 2+3+7) = (4, 16, 12)) */
+    let mm0 : i64 = g2_mom(0u64)
+    let mm1 : i64 = g2_mom(1u64)
+    let mm2 : i64 = g2_mom(2u64)
     let db : i64 = g2_den_bits()
     let ev : i64 = g2_events() as i64
-    putchar(68i32) putchar(58i32) sp() e_i64(sd) sp() e_i64(cn) sp() e_i64(e0) sp() e_i64(e1) sp() e_i64(db) sp() e_i64(ev) nl()
-    /* "D: 0 <cn>=1 <E> <E> <=64 19999" */
+    putchar(68i32) putchar(58i32) sp() e_i64(sd) sp() e_i64(cn) sp() e_i64(e0) sp() e_i64(e1) sp() e_i64(db) sp() e_i64(ev) sp() e_i64(mm0) sp() e_i64(mm1) sp() e_i64(mm2) nl()
+    /* "D: 0 1254 462 462 38 20027 4 16 12" */
     if sd != 0i64 { return 13u64 }
     if cn < 1i64 { return 14u64 }
     if e1 != e0 { return 15u64 }
+    if mm0 != 4i64 { return 15u64 }
+    if mm1 != 16i64 { return 15u64 }
+    if mm2 != 12i64 { return 15u64 }
     if db > 64i64 { return 16u64 }
     if ev != 20027i64 { return 17u64 }                 /* 19999 steps + 28 commuting-pair second responses */
     return 99u64

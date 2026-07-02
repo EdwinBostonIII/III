@@ -45,7 +45,12 @@ owner_of() {
 declare -A CONE KATS
 build_cone() {
     for f in "$@"; do
-        case "$f" in *.iii) CONE["$(basename "$f")"]=1;; esac
+        # a changed corpus KAT is ITSELF the cone tip (no organ growth from it, but it must re-run);
+        # everything else .iii is an organ module whose reverse closure grows below.
+        case "$f" in
+            *corpus/[0-9]*.iii) KATS["$(basename "$f" .iii)"]=1;;
+            *.iii)              CONE["$(basename "$f")"]=1;;
+        esac
     done
     local grow=1
     while [[ $grow -eq 1 ]]; do
@@ -63,20 +68,19 @@ build_cone() {
         done < <(grep -l "from \"$m\"" "$CORPUS"/[0-9]*_*.iii 2>/dev/null)
     done
 }
-dep_tuple() {  # sha256 over the KAT source + every cone module it externs
+dep_tuple() {  # sha256 over the KAT source + EVERY organ module it directly externs
+    # (must be the SAME tuple --check recomputes, or every fresh verification reads STALE)
     local kat="$1"; local acc="$RUN/.tuple.$$"
     sha256sum "$CORPUS/$kat.iii" > "$acc" 2>/dev/null
-    for m in "${!CONE[@]}"; do
-        if grep -q "from \"$m\"" "$CORPUS/$kat.iii" 2>/dev/null; then
-            find "$ORG" -name "$m" -exec sha256sum {} \; >> "$acc" 2>/dev/null
-        fi
-    done
+    while IFS= read -r m; do
+        find "$ORG" -name "$m" -exec sha256sum {} \; >> "$acc" 2>/dev/null
+    done < <(grep -oE 'from "[a-z0-9_]+\.iii"' "$CORPUS/$kat.iii" 2>/dev/null | sed 's/from "//; s/"//' | sort -u)
     sort "$acc" | sha256sum | awk '{print $1}'; rm -f "$acc"
 }
-ledger_put() {  # kat, tuple, status
+ledger_put() {  # kat, tuple, status   (rm-first: mv over a OneDrive-locked target fails silently)
     grep -v "^$1	" "$LEDGER" > "$LEDGER.tmp" 2>/dev/null || true
     printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LEDGER.tmp"
-    mv "$LEDGER.tmp" "$LEDGER"
+    rm -f "$LEDGER"; mv "$LEDGER.tmp" "$LEDGER"
 }
 
 # ── the core-loop per-KAT recipe (mirrors run_corpus.sh: compile, whole-archive link with lock
@@ -155,14 +159,14 @@ if [[ "$mode" == "selftest" ]]; then
     printf 'zz_forged_kat\t%s\tPASS\t2020-01-01T00:00:00Z\n' "deadbeef" >> "$LEDGER"
     if "$0" --check | grep -q "STALE zz_forged_kat"; then echo "selftest staleness: teeth confirmed"
     else echo "SELFTEST-FAIL: forged ledger row not flagged"; fails=$((fails+1)); fi
-    grep -v "^zz_forged_kat	" "$LEDGER" > "$LEDGER.tmp" && mv "$LEDGER.tmp" "$LEDGER"
+    grep -v "^zz_forged_kat	" "$LEDGER" > "$LEDGER.tmp"; rm -f "$LEDGER"; mv "$LEDGER.tmp" "$LEDGER"
     echo "[cone-selftest] fails=$fails"; exit $(( fails > 0 ? 1 : 0 ))
 fi
 
 # plan / verify
 [[ $# -lt 1 ]] && { echo "usage: verify_cone.sh [--plan|--check|--selftest] <changed-file>..."; exit 2; }
 build_cone "$@"
-echo "[cone] modules: ${#CONE[@]} -> ${!CONE[*]}"
+echo "[cone] modules: ${#CONE[@]} -> ${!CONE[*]-}"
 echo "[cone] KATs: ${#KATS[@]}"
 declare -A FAMS
 for k in "${!KATS[@]}"; do

@@ -24,6 +24,7 @@ extern @abi(c-msvc-x64) fn pc_z(i: u64) -> i64 from "photon3.iii"
 extern @abi(c-msvc-x64) fn pc_den() -> i64 from "photon3.iii"
 extern @abi(c-msvc-x64) fn pc_cls() -> i64 from "photon3.iii"
 extern @abi(c-msvc-x64) fn pc_band() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_sxg() -> i64 from "photon3.iii"
 extern @abi(c-msvc-x64) fn pc_cert() -> i64 from "photon3.iii"
 extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
 
@@ -67,6 +68,7 @@ fn main() -> u64 {
     if pc_den() != 2i64 { return 13u64 }
     if pc_cls() != 1i64 { return 13u64 }
     if pc_band() != (0i64 - 4i64) { return 13u64 }
+    if pc_sxg() != (0i64 - 1i64) { return 13u64 }      /* sx flipped at e1, e4, e6: +1 -> -1 (coverage arm) */
     /* ══ refusals: wrong class parity; boundary start; degenerate box. */
     let r1 : i32 = pc_set(3i64, 0i64, 15i64, 1i64, 1i64, 1i64, 1i64, 0i64 - 1i64)
     let r2 : i32 = pc_set(3i64, 0i64, 12i64, 1i64, 0i64, 1i64, 1i64, 0i64 - 1i64)

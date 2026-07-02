@@ -19,6 +19,7 @@ module corpus_2186_resultant_abi
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
 extern @abi(c-msvc-x64) fn rs_sum_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_prod_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
 extern @abi(c-msvc-x64) fn rs_big_sgn(i: i64) -> i64 from "resultant.iii"
 extern @abi(c-msvc-x64) fn rs_big_len(i: i64) -> i64 from "resultant.iii"
 extern @abi(c-msvc-x64) fn rs_big_fit(i: i64) -> i64 from "resultant.iii"
@@ -95,6 +96,17 @@ fn main() -> u64 {
     }
     putchar(67i32) putchar(58i32) sp() e_i64(ok) nl()                                     /* "C: 1" */
     if ok != 1i64 { return 13u64 }
+
+    /* ══ P: rs_prod_big2 (coverage arm) -- the D=12 product through the raw ABI: t^12 - 648, every
+     * coefficient fitting i64 (fit flags all 1), equal to the closed form gated in 2180. */
+    AF[0u64] = 0i64 - 2i64   AF[1u64] = 0i64   AF[2u64] = 0i64   AF[3u64] = 0i64   AF[4u64] = 1i64
+    AG[0u64] = 0i64 - 3i64   AG[1u64] = 0i64   AG[2u64] = 0i64   AG[3u64] = 1i64
+    let dp : i64 = rs_prod_big2((&AF) as u64, 4i64, (&AG) as u64, 3i64, (&AO) as u64)
+    if dp != 12i64 { return 14u64 }
+    if AO[0u64] != (0i64 - 648i64) { return 14u64 }
+    if AO[12u64] != 1i64 { return 14u64 }
+    i = 0i64
+    while i <= 12i64 { if rs_big_fit(i) != 1i64 { return 14u64 }   i = i + 1i64 }
 
     return 99u64
 }

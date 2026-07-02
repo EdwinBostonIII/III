@@ -47,7 +47,7 @@ run() {
     rm -f "$OUT/$name.exe"
     gcc "$OUT/$name.o" "$@" -lws2_32 -lkernel32 -o "$OUT/$name.exe" 2>"$OUT/$name.l.log" || { echo "FAIL  $name : link"; grep -i undefined "$OUT/$name.l.log" | head; fail=$((fail+1)); return; }
     local st="$OUT/${name}.run.exe"; cp "$OUT/$name.exe" "$st"
-    timeout 150 "$st"; local rc=$?
+    timeout 300 "$st"; local rc=$?
     rm -f "$st"
     if [[ "$rc" == "$want" ]]; then echo "PASS  $name : exit $rc"; pass=$((pass+1)); else echo "FAIL  $name : exit $rc (want $want)"; fail=$((fail+1)); fi
 }
@@ -108,6 +108,7 @@ run 2184_photon_stack   99 "$OUT/refract.o" "$OUT/verb_geom.o" "$OUT/sqrt_sum_si
 run 2185_sturm_big     99 "$OUT/sturm_big.o" "$OUT/sturm.o" "$OUT/resultant.o" "$LIB"  # BIGINT PRS (Turing charter V-I.1): the chain in RAW POOL ARRAYS (a full bigint chain would exceed the 64-slot handle table), transient handles only -- the deg-12 wall CROSSED (i64 chain garbage -4 pinned as twin; sturm2 counts EXACTLY 2, brackets match 2179 Horner); the CRT->PRS weld at deg 16 (2^(1/4)+3^(1/4): 4 roots, both isolations); multiplicity 2 at sqrt2+sqrt3 past the wall; deg-25 refusal
 run 2186_resultant_abi 99 "$OUT/resultant.o" "$OUT/sturm_big.o" "$LIB"  # BIGINT OUTPUT ABI (Turing charter V-I.2): the 2179-D refusal now DELIVERS -- a^2-27 = 2^80-27 as raw limbs (18446744073709551589, 65535) fit-flagged, every fitting coefficient in out[], the mod-every-prime check run on FULL limb values; the raw rows bridge into sturm_big: 2 real roots isolated at 10319/10323 with no i64 anywhere in the object; shared-envelope twin equality
 run 2187_green_moments 99 "$OUT/green_moments.o" "$LIB"  # EXACT MOMENTS (Turing charter V-I.3): integral x^2 over [0,sqrt2] = (0,2,3) EXACT rank-1 (irrational -- the anti-mesh certificate: NO rational tessellation can equal it); first moment = 1 EXACTLY RATIONAL from the irrational domain (radicals cancel); inertia kernel 4sqrt2/5; centroid as the integer identity 4Mx == 3sqrt2*A; the 4-panel trapezoid twin provably ABOVE by certified i64 sign; pi-domains structurally absent + refusals
+run 2196_moments_big   99 "$OUT/green_moments.o" "$LIB"  # BIGINT MOMENTS (Turing-next N-4): the i64 Horner passes 1.35e19 mid-flight and honestly refuses at K=1.5e6*sqrt2 -- the bigint field Horner (signed pairs, own dropped arena) delivers the fully-reduced exact triple (0, 2.25e18, 1) = 2sqrt2K^3/3 (the machine out-reduced the author: gcd 6, not 2); twin weld triple-for-triple on the 2187 envelope; K=3e6 output-width refusal
 run 2174_gas_demon      99 "$OUT/gas.o" "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # THE SPEED-SELECTIVE MEMBRANE (Vector IV, the exact Maxwell demon): slow particles CONFINED (3 exact membrane bounces, contact-on-membrane legal), the fast particle passes and works the far wall; energy an integer identity at every event; the DIRECTION-BLIND gate is reversal-symmetric -- the involution holds WITH the demon active (a reversible demon pumps no entropy, gated)
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="

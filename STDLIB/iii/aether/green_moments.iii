@@ -116,3 +116,194 @@ fn gm_moment(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, b
 fn gm_r0() -> i64 @export { return GM_R0 }
 fn gm_r1() -> i64 @export { return GM_R1 }
 fn gm_rd() -> i64 @export { return GM_RD }
+
+/* ═════════ BIGINT MOMENTS (Turing-next N-4): the same construction with unbounded intermediates.
+ * The i64 organ's Horner trips on ENDPOINT POWERS long before the reduced result outgrows i64 (a
+ * cube of 1.5e6*sqrt2 passes 1.35e19 mid-flight while the gcd-reduced answer is 6.75e18).  Here the
+ * field pairs are SIGNED BIGINTS (sign + |magnitude| handle) in the call's OWN dropped arena
+ * (<= ~10 live handles); the output ABI stays the exact i64 triple -- a result beyond i64 REFUSES,
+ * never rounds.  Same integer antiderivative, same field algebra, same pi-honesty. ═════════ */
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
+
+var GB_QS : i64   var GB_QH : u64                     /* signed-result channel */
+fn gmb_from(ar: u64, v: i64) -> u64 {
+    let mut a : i64 = v
+    if a < 0i64 { a = 0i64 - a }
+    return bigint_from_u64(ar, a as u64)
+}
+fn gmb_sadd(ar: u64, s1: i64, m1: u64, s2: i64, m2: u64) -> i32 {
+    if s1 == 0i64 { GB_QS = s2   GB_QH = bigint_copy(ar, m2)   return 0i32 }
+    if s2 == 0i64 { GB_QS = s1   GB_QH = bigint_copy(ar, m1)   return 0i32 }
+    if s1 == s2 { GB_QS = s1   GB_QH = bigint_add(ar, m1, m2)   return 0i32 }
+    let c : i32 = bigint_cmp(m1, m2)
+    if c > 0i32 { GB_QS = s1   GB_QH = bigint_sub(ar, m1, m2)   return 0i32 }
+    if c < 0i32 { GB_QS = s2   GB_QH = bigint_sub(ar, m2, m1)   return 0i32 }
+    GB_QS = 0i64   GB_QH = bigint_from_u64(ar, 0u64)
+    return 0i32
+}
+fn gmb_gcd(ar: u64, x: u64, m: u64) -> u64 {          /* consumes x; m untouched */
+    if bigint_is_zero(m) == 1u8 { return x }
+    let mut a : u64 = x
+    let mut b : u64 = bigint_copy(ar, m)
+    if bigint_is_zero(a) == 1u8 { bigint_drop(a)   return b }
+    let mut zb : u8 = bigint_is_zero(b)
+    while zb == 0u8 {
+        let q : u64 = bigint_div_qr(ar, a, b)
+        let r : u64 = bigint_remainder_take()
+        bigint_drop(q)   bigint_drop(a)
+        a = b   b = r
+        zb = bigint_is_zero(b)
+    }
+    bigint_drop(b)
+    return a
+}
+/* fit-checked signed extraction: writes v, or flags */
+var GMB_BAD : i64
+fn gmb_fit(sgn: i64, h: u64) -> i64 {
+    if bigint_is_zero(h) == 1u8 { return 0i64 }
+    if bigint_len_limbs(h) > 1u64 { GMB_BAD = 1i64   return 0i64 }
+    let lo : u64 = bigint_to_u64_lo(h)
+    if lo > 9223372036854775807u64 { GMB_BAD = 1i64   return 0i64 }
+    let mut v : i64 = lo as i64
+    if sgn < 0i64 { v = 0i64 - v }
+    return v
+}
+
+/* the bigint field Horner state: value = (S0,H0) + (S1,H1)*sqrt(d), all in `ar` */
+var GA0S : i64   var GA0H : u64   var GA1S : i64   var GA1H : u64
+fn gmb_fmul(ar: u64, b0s: i64, b0h: u64, b1s: i64, b1h: u64) -> i32 {
+    /* (A0,A1) *= (b0,b1): n0 = A0*b0 + d*A1*b1;  n1 = A0*b1 + A1*b0 */
+    let t1 : u64 = bigint_mul(ar, GA0H, b0h)
+    let t2 : u64 = bigint_mul(ar, GA1H, b1h)
+    let t2d : u64 = bigint_mul_u64(ar, t2, GM_D as u64)
+    bigint_drop(t2)
+    gmb_sadd(ar, GA0S * b0s, t1, GA1S * b1s, t2d)
+    bigint_drop(t1)   bigint_drop(t2d)
+    let n0s : i64 = GB_QS   let n0h : u64 = GB_QH
+    let t3 : u64 = bigint_mul(ar, GA0H, b1h)
+    let t4 : u64 = bigint_mul(ar, GA1H, b0h)
+    gmb_sadd(ar, GA0S * b1s, t3, GA1S * b0s, t4)
+    bigint_drop(t3)   bigint_drop(t4)
+    bigint_drop(GA0H)   bigint_drop(GA1H)
+    GA0S = n0s   GA0H = n0h
+    GA1S = GB_QS   GA1H = GB_QH
+    return 0i32
+}
+
+fn gm_moment_big(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, bn1: i64, bd: i64) -> i32 @export {
+    GM_OVF = 0i64
+    if GM_D <= 0i64 { return 0i32 - 1i32 }
+    if deg < 0i64 { return 0i32 - 1i32 }
+    if k < 0i64 { return 0i32 - 1i32 }
+    if (deg + k) > 12i64 { return 0i32 - 1i32 }
+    if ad <= 0i64 { return 0i32 - 1i32 }
+    if bd <= 0i64 { return 0i32 - 1i32 }
+    let p : *i64 = pp as *i64
+    let mut L : i64 = 1i64
+    let mut i : i64 = 1i64
+    while i <= (deg + k + 1i64) { L = (L / gm_gcd(L, i)) * i   i = i + 1i64 }
+    let dq : i64 = deg + k + 1i64
+    i = 0i64
+    while i <= dq { GM_Q[i as u64] = 0i64   i = i + 1i64 }
+    i = 0i64
+    while i <= deg {
+        GM_Q[(i + k + 1i64) as u64] = gm_mul(L / (i + k + 1i64), p[i as u64])
+        i = i + 1i64
+    }
+    if GM_OVF != 0i64 { return 0i32 - 1i32 }
+    let ed : i64 = (ad / gm_gcd(ad, bd)) * bd
+    let bs : i64 = ed / bd
+    let asf : i64 = ed / ad
+    let e0b : i64 = gm_mul(bn0, bs)   let e1b : i64 = gm_mul(bn1, bs)
+    let e0a : i64 = gm_mul(an0, asf)   let e1a : i64 = gm_mul(an1, asf)
+    if GM_OVF != 0i64 { return 0i32 - 1i32 }
+    let ar : u64 = arena_new(4194304u64)
+    /* homogenized bigint field Horner at both endpoints */
+    let mut pass : i64 = 0i64
+    /* endpoint B then endpoint A; results parked as signed pairs */
+    let mut rb0s : i64 = 0i64   let mut rb0h : u64 = 0u64   let mut rb1s : i64 = 0i64   let mut rb1h : u64 = 0u64
+    let mut ra0s : i64 = 0i64   let mut ra0h : u64 = 0u64   let mut ra1s : i64 = 0i64   let mut ra1h : u64 = 0u64
+    while pass < 2i64 {
+        let mut e0 : i64 = e0b   let mut e1 : i64 = e1b
+        if pass == 1i64 { e0 = e0a   e1 = e1a }
+        let e0h : u64 = gmb_from(ar, e0)   let e1h : u64 = gmb_from(ar, e1)
+        let qd : i64 = GM_Q[dq as u64]
+        GA0S = 0i64   if qd > 0i64 { GA0S = 1i64 }   if qd < 0i64 { GA0S = 0i64 - 1i64 }
+        GA0H = gmb_from(ar, qd)
+        GA1S = 0i64   GA1H = bigint_from_u64(ar, 0u64)
+        let mut pw : u64 = bigint_from_u64(ar, 1u64)
+        i = dq - 1i64
+        while i >= 0i64 {
+            let p2 : u64 = bigint_mul_u64(ar, pw, ed as u64)
+            bigint_drop(pw)   pw = p2
+            let mut e0sg : i64 = 0i64   if e0 > 0i64 { e0sg = 1i64 }   if e0 < 0i64 { e0sg = 0i64 - 1i64 }
+            let mut e1sg : i64 = 0i64   if e1 > 0i64 { e1sg = 1i64 }   if e1 < 0i64 { e1sg = 0i64 - 1i64 }
+            gmb_fmul(ar, e0sg, e0h, e1sg, e1h)
+            let qi : i64 = GM_Q[i as u64]
+            if qi != 0i64 {
+                let qih : u64 = gmb_from(ar, qi)
+                let qpw : u64 = bigint_mul(ar, qih, pw)
+                bigint_drop(qih)
+                let mut qs : i64 = 1i64
+                if qi < 0i64 { qs = 0i64 - 1i64 }
+                gmb_sadd(ar, GA0S, GA0H, qs, qpw)
+                bigint_drop(qpw)   bigint_drop(GA0H)
+                GA0S = GB_QS   GA0H = GB_QH
+            }
+            i = i - 1i64
+        }
+        bigint_drop(pw)   bigint_drop(e0h)   bigint_drop(e1h)
+        if pass == 0i64 { rb0s = GA0S   rb0h = GA0H   rb1s = GA1S   rb1h = GA1H }
+        if pass == 1i64 { ra0s = GA0S   ra0h = GA0H   ra1s = GA1S   ra1h = GA1H }
+        pass = pass + 1i64
+    }
+    /* (LQ(b) - LQ(a)) over L*ed^dq, gcd-reduced in bigint, fit-checked out */
+    gmb_sadd(ar, rb0s, rb0h, 0i64 - ra0s, ra0h)
+    let r0s : i64 = GB_QS   let r0h : u64 = GB_QH
+    gmb_sadd(ar, rb1s, rb1h, 0i64 - ra1s, ra1h)
+    let r1s : i64 = GB_QS   let r1h : u64 = GB_QH
+    let mut rdh : u64 = gmb_from(ar, L)
+    i = 0i64
+    while i < dq {
+        let t : u64 = bigint_mul_u64(ar, rdh, ed as u64)
+        bigint_drop(rdh)   rdh = t
+        i = i + 1i64
+    }
+    let mut g : u64 = bigint_copy(ar, rdh)
+    g = gmb_gcd(ar, g, r0h)
+    g = gmb_gcd(ar, g, r1h)
+    let one : u64 = bigint_from_u64(ar, 1u64)
+    let redu : i32 = bigint_cmp(g, one)
+    bigint_drop(one)
+    let mut f0 : u64 = r0h   let mut f1 : u64 = r1h   let mut fd : u64 = rdh
+    if redu > 0i32 {
+        let q0 : u64 = bigint_div_qr(ar, r0h, g)   let x0 : u64 = bigint_remainder_take()   bigint_drop(x0)
+        let q1 : u64 = bigint_div_qr(ar, r1h, g)   let x1 : u64 = bigint_remainder_take()   bigint_drop(x1)
+        let qdv : u64 = bigint_div_qr(ar, rdh, g)   let xd : u64 = bigint_remainder_take()   bigint_drop(xd)
+        f0 = q0   f1 = q1   fd = qdv
+    }
+    GMB_BAD = 0i64
+    GM_R0 = gmb_fit(r0s, f0)
+    GM_R1 = gmb_fit(r1s, f1)
+    GM_RD = gmb_fit(1i64, fd)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    if GMB_BAD != 0i64 { return 0i32 - 1i32 }
+    if GM_RD == 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}

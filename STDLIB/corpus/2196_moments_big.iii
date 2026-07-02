@@ -1,0 +1,63 @@
+/* 2196_moments_big.iii -- GATE for BIGINT MOMENTS (Turing-next N-4): unbounded intermediates, the
+ * same exact triple out.
+ *
+ * A -- THE LIFT: area under x^2 to 1500000*sqrt2.  The i64 organ's Horner passes 1.35e19 mid-flight
+ *   and REFUSES (-1, its honest guard); the bigint organ delivers the gcd-reduced exact triple
+ *   (0, 2250000000000000000, 1) = 2*sqrt2*K^3/3 fully reduced -- the result fit i64 all along, only the road
+ *   did not.
+ * B -- THE TWIN WELD: the three 2187 moments (2sqrt2/3, the rational 1, 4sqrt2/5) reproduced by the
+ *   bigint path triple-for-triple on the shared envelope.
+ * C -- honest output refusal: K = 3000000 makes even the reduced numerator exceed i64: -1, never a
+ *   rounded value.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C */
+module corpus_2196_moments_big
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gm_begin(d: i64) -> i32 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_moment(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, bn1: i64, bd: i64) -> i32 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_moment_big(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, bn1: i64, bd: i64) -> i32 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_r0() -> i64 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_r1() -> i64 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_rd() -> i64 from "green_moments.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var MP : [i64; 8]
+
+fn main() -> u64 {
+    if gm_begin(2i64) != 0i32 { return 10u64 }
+    MP[0u64] = 0i64   MP[1u64] = 0i64   MP[2u64] = 1i64
+
+    /* ══ A: the lift at K = 1.5e6. */
+    let v1 : i32 = gm_moment((&MP) as u64, 2i64, 0i64, 0i64, 0i64, 1i64, 0i64, 1500000i64, 1i64)
+    let vb : i32 = gm_moment_big((&MP) as u64, 2i64, 0i64, 0i64, 0i64, 1i64, 0i64, 1500000i64, 1i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(v1 as i64) sp() e_i64(vb as i64) sp() e_i64(gm_r0()) sp() e_i64(gm_r1()) sp() e_i64(gm_rd()) nl()
+    /* "A: -1 0 0 2250000000000000000 1" */
+    if v1 != (0i32 - 1i32) { return 10u64 }
+    if vb != 0i32 { return 10u64 }
+    if gm_r0() != 0i64 { return 10u64 }
+    if gm_r1() != 2250000000000000000i64 { return 10u64 }
+    if gm_rd() != 1i64 { return 10u64 }
+
+    /* ══ B: the twin weld on the shared envelope (2187's three moments). */
+    let mut kk : i64 = 0i64
+    while kk <= 2i64 {
+        if gm_moment((&MP) as u64, 2i64, kk, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64) != 0i32 { return 11u64 }
+        let s0 : i64 = gm_r0()   let s1 : i64 = gm_r1()   let sd : i64 = gm_rd()
+        if gm_moment_big((&MP) as u64, 2i64, kk, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64) != 0i32 { return 11u64 }
+        if gm_r0() != s0 { return 11u64 }
+        if gm_r1() != s1 { return 11u64 }
+        if gm_rd() != sd { return 11u64 }
+        kk = kk + 1i64
+    }
+    putchar(66i32) putchar(58i32) sp() e_i64(1i64) nl()                       /* "B: 1" */
+
+    /* ══ C: honest output refusal at K = 3e6. */
+    let vc : i32 = gm_moment_big((&MP) as u64, 2i64, 0i64, 0i64, 0i64, 1i64, 0i64, 3000000i64, 1i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(vc as i64) nl()                  /* "C: -1" */
+    if vc != (0i32 - 1i32) { return 12u64 }
+
+    return 99u64
+}

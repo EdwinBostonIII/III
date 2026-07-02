@@ -13,3 +13,4 @@ run_aether_lens_kats.sh  | AETHER-LENS exact ray-cast: 2155, 2158, 2169 (links t
 run_ripple_kats.sh       | RIPPLE MERGE: 2126-2134, 2145 (links eidos ripple cohort)
 run_topo_kats.sh         | Topological Windowing: 2088-2093 (links the archive directly)
 run_bench_corpus.sh      | perf benchmarks 237/242/243/244 (correctness hard-gated, timing advisory)
+run_stoma_kats.sh        | STOMA console/proc/pty arc: 2455-2466 (sibling in-flight; runner + KATs land with their arc)

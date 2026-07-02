@@ -1744,6 +1744,24 @@ fi
 
 SKIP=0
 RESULTS=()
+
+# DERIVED FAMILY OWNERSHIP (reunification fix, 2026-07-02): the per-KAT owned set is read LIVE
+# from the family runners named in corpus_families.txt (their `run NNNN_name ...` lines) -- a KAT
+# added to its runner is skipped here AUTOMATICALLY, killing the FATAL class where the
+# hand-enumerated arms below lag the runners (2160-2198 lagged after the Turing-charter waves).
+# The hand arms remain for runners without run-lines (ui's for-loop, xii's own table); the
+# dispatch consults this derived map FIRST.
+declare -A FAMILY_OWNER
+while IFS='|' read -r _fo_runner _; do
+    _fo_runner="$(echo "$_fo_runner" | tr -d ' \t')"
+    case "$_fo_runner" in ''|\#*) continue;; esac
+    _fo_rf="$(dirname "${BASH_SOURCE[0]}")/$_fo_runner"
+    [[ -f "$_fo_rf" ]] || continue
+    while IFS= read -r _fo_kat; do
+        [[ -n "$_fo_kat" ]] && FAMILY_OWNER["$_fo_kat"]="$_fo_runner"
+    done < <(grep -oE '^run +[0-9]+_[A-Za-z0-9_]+' "$_fo_rf" | awk '{print $2}')
+done < "$_S8_MANIFEST"
+
 # Aggregate any hand-written-asm .o files that live alongside the iii
 # modules in $BUILD_DIR.  These are produced by build_stdlib.sh and are
 # normally absorbed into libiii_native.a, but we record their presence
@@ -1800,6 +1818,13 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     exe="$RUN_DIR/${base}${BIN_SUFFIX}"
     log="$RUN_DIR/${base}.log"
     rm -f "$obj" "$exe" "$log"
+
+    # Derived ownership first: any KAT a manifest-declared family runner names in a
+    # `run NNNN_name` line belongs to that family gate, not this core loop.
+    if [[ -n "${FAMILY_OWNER[$base]+x}" ]]; then
+        RESULTS+=("SKIP  $base : family-owned -- ${FAMILY_OWNER[$base]} (derived from its run-lines)")
+        SKIP=$((SKIP+1)); continue
+    fi
 
     # The XII corpus (280..372) is OWNED and authoritatively validated
     # by run_xii_corpus.sh (its own EXPECTED table, incl.

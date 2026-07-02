@@ -240,3 +240,39 @@ fn poly_gcd(a_ptr: u64, dega: i64, b_ptr: u64, degb: i64) -> i64 @export {
     return da
 }
 fn gcd_coeff(i: u64) -> i64 @export { return GCD_C[i] }
+
+/* ── ROOT MULTIPLICITY certificate (the touch-vs-cross discriminator).  Precondition: the bracket (a,b]
+ * holds exactly ONE distinct root of p (isolate first).  A root of multiplicity m in p has multiplicity
+ * m-1 in gcd(p,p'): iterate  count -> reduce to the gcd  until the root disappears; the number of rounds
+ * IS the multiplicity.  EVEN multiplicity = the curve TOUCHES without crossing (no sign change -- every
+ * finite sampler is structurally blind to it); ODD = a true crossing.  Returns m >= 1, or -1 (no root in
+ * the bracket), or -2 (bracket ambiguous: more than one distinct root -- isolate further). */
+var RM_CUR : [i64; 8]   var RM_DRV : [i64; 8]
+fn root_mult(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    let p : *i64 = coeffs_ptr as *i64
+    let mut d : i64 = deg
+    let mut i : i64 = 0i64
+    while i <= d { RM_CUR[i as u64] = p[i as u64]   i = i + 1i64 }
+    let mut m : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if d < 1i64 { going = 0u8 } else {
+            sturm_build((&RM_CUR) as u64, d)
+            let c : i64 = root_count(an, ad, bn, bd)
+            if c > 1i64 { return 0i64 - 2i64 }
+            if c < 1i64 { going = 0u8 } else {
+                m = m + 1i64
+                i = 0i64
+                while i < d { RM_DRV[i as u64] = (i + 1i64) * RM_CUR[(i + 1i64) as u64]   i = i + 1i64 }
+                let gd : i64 = poly_gcd((&RM_CUR) as u64, d, (&RM_DRV) as u64, d - 1i64)
+                if gd < 1i64 { going = 0u8 } else {
+                    i = 0i64
+                    while i <= gd { RM_CUR[i as u64] = GCD_C[i as u64]   i = i + 1i64 }
+                    d = gd
+                }
+            }
+        }
+    }
+    if m == 0i64 { return 0i64 - 1i64 }
+    return m
+}

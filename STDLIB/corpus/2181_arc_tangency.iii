@@ -1,0 +1,103 @@
+/* 2181_arc_tangency.iii -- GATE for ROOT MULTIPLICITY certificates (charter increment 3): the
+ * touch-vs-cross discriminator the arc-sweep certificate documented as missing.
+ *
+ * ALGEBRA ARM: p(u) = (u^2-2)^2 (u^2-3) = u^6 - 7u^4 + 16u^2 - 12.
+ *   root_mult brackets sqrt2 -> 2 (EVEN: tangential), sqrt3 -> 1 (ODD: crossing); a rootless bracket
+ *   refuses -1; an ambiguous bracket (two distinct roots) refuses -2.  THE BLINDNESS WITNESS: the exact
+ *   homogenized values p(7/5)*5^6 = -26 and p(3/2)*2^6 = -3 are BOTH NEGATIVE -- no finite sampler sees
+ *   the mult-2 root between them; the certificate names it and its parity.
+ *
+ * GEOMETRY ARM (the arc_sweep consumer): tip = R_z(theta)(5,0,0), 15-degree edge k=-1, sphere at
+ * (20,0,0).  Using as_cert's OWN integer coefficient formulas:
+ *   r2 = 225: N(u) = 400u^4 + 400u^2 = 400 u^2 (u^2+1)  -- the tip GRAZES at theta=0 (double root,
+ *     N >= 0 on the whole arc: touch, zero penetration);
+ *   r2 = 226: N(u) = 399u^4 + 398u^2 - 1 = (u^2+1)(399u^2-1) -- a true crossing (penetration).
+ *   as_cert returns 0 for BOTH (conservative refuse -- structurally blind to the difference);
+ *   root_mult over the SAME /1000 cover returns 2 (graze) vs 1 (cross): the exact discrimination.
+ *   With it, the state rule's contact-is-legal can accept the graze arc and hard-refuse the crossing.
+ *
+ * exit 99 = pass;  10 alg mult wrong;  11 alg refusal wrong;  12 blindness pins wrong;
+ * 13 geo graze wrong;  14 geo cross wrong */
+module corpus_2181_arc_tangency
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn root_mult(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var TP : [i64; 8]   var TN : [i64; 8]
+
+/* homogenized integer evaluation of TP (degree 6) at n/d: p(n/d) * d^6 */
+fn hom6(n: i64, d: i64) -> i64 {
+    let mut acc : i64 = TP[6u64]
+    let mut pw : i64 = 1i64
+    let mut i : i64 = 5i64
+    while i >= 0i64 {
+        pw = pw * d
+        acc = (acc * n) + (TP[i as u64] * pw)
+        i = i - 1i64
+    }
+    return acc
+}
+
+fn main() -> u64 {
+    /* ══ ALGEBRA: (u^2-2)^2 (u^2-3). */
+    TP[0u64] = 0i64 - 12i64   TP[1u64] = 0i64   TP[2u64] = 16i64   TP[3u64] = 0i64
+    TP[4u64] = 0i64 - 7i64    TP[5u64] = 0i64   TP[6u64] = 1i64
+    let m2 : i64 = root_mult((&TP) as u64, 6i64, 14i64, 10i64, 15i64, 10i64)     /* sqrt2 */
+    let m3 : i64 = root_mult((&TP) as u64, 6i64, 17i64, 10i64, 18i64, 10i64)     /* sqrt3 */
+    let mn : i64 = root_mult((&TP) as u64, 6i64, 2i64, 1i64, 3i64, 1i64)         /* rootless */
+    let ma : i64 = root_mult((&TP) as u64, 6i64, 0i64, 1i64, 18i64, 10i64)       /* ambiguous */
+    putchar(65i32) putchar(58i32) sp() e_i64(m2) sp() e_i64(m3) sp() e_i64(mn) sp() e_i64(ma) nl()   /* "A: 2 1 -1 -2" */
+    if m2 != 2i64 { return 10u64 }
+    if m3 != 1i64 { return 10u64 }
+    if mn != (0i64 - 1i64) { return 11u64 }
+    if ma != (0i64 - 2i64) { return 11u64 }
+    let e1 : i64 = hom6(7i64, 5i64)
+    let e2 : i64 = hom6(3i64, 2i64)
+    putchar(87i32) putchar(58i32) sp() e_i64(e1) sp() e_i64(e2) nl()             /* "W: -26 -3" */
+    if e1 != (0i64 - 26i64) { return 12u64 }
+    if e2 != (0i64 - 3i64) { return 12u64 }
+
+    /* ══ GEOMETRY: the arc_sweep consumer -- as_cert's own coefficient formulas, edge k = -1. */
+    let P : i64 = 5i64
+    let dx : i64 = 20i64
+    let s2 : i64 = dx * dx
+    /* graze: r2 = 225 */
+    let mut r2 : i64 = 225i64
+    TN[4u64] = (((P + dx) * (P + dx)) + (s2 - (dx * dx))) - r2
+    TN[3u64] = 0i64
+    TN[2u64] = (2i64 * ((P * P) + s2)) - (2i64 * r2)
+    TN[1u64] = 0i64
+    TN[0u64] = (((P - dx) * (P - dx)) + (s2 - (dx * dx))) - r2
+    if TN[4u64] != 400i64 { return 13u64 }
+    if TN[2u64] != 400i64 { return 13u64 }
+    if TN[0u64] != 0i64 { return 13u64 }
+    let cg : i32 = as_cert(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 225i64)
+    if sturm_build((&TN) as u64, 4i64) < 0i64 { return 13u64 }
+    let dg : i64 = root_count(0i64 - 134i64, 1000i64, 2i64, 1000i64)             /* distinct roots in cover */
+    let mg : i64 = root_mult((&TN) as u64, 4i64, 0i64 - 134i64, 1000i64, 2i64, 1000i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(cg as i64) sp() e_i64(dg) sp() e_i64(mg) nl()   /* "G: 0 1 2" */
+    if cg != 0i32 { return 13u64 }                                               /* as_cert refuses... */
+    if dg != 1i64 { return 13u64 }
+    if mg != 2i64 { return 13u64 }                                               /* ...mult certifies GRAZE */
+    /* cross: r2 = 226 */
+    r2 = 226i64
+    TN[4u64] = (((P + dx) * (P + dx)) + (s2 - (dx * dx))) - r2
+    TN[2u64] = (2i64 * ((P * P) + s2)) - (2i64 * r2)
+    TN[0u64] = (((P - dx) * (P - dx)) + (s2 - (dx * dx))) - r2
+    if TN[4u64] != 399i64 { return 14u64 }
+    if TN[2u64] != 398i64 { return 14u64 }
+    if TN[0u64] != (0i64 - 1i64) { return 14u64 }
+    let cc : i32 = as_cert(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 226i64)
+    let mc : i64 = root_mult((&TN) as u64, 4i64, 0i64 - 134i64, 1000i64, 2i64, 1000i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(cc as i64) sp() e_i64(mc) nl()      /* "C: 0 1" */
+    if cc != 0i32 { return 14u64 }                                               /* SAME as_cert verdict... */
+    if mc != 1i64 { return 14u64 }                                               /* ...DIFFERENT certificate */
+
+    return 99u64
+}

@@ -25,6 +25,8 @@
  * Public API:
  *   asyn_sum_loop(n) / asyn_sum_closed(n) -> u32 ; asyn_cost(form,n) -> u64
  *   asyn_dispose_sum(prop,maxn) -> u32 ; asyn_synthesize_sum(prop,maxn) -> u32 ; asyn_synthesize_join(target) -> u32
+ *   asyn_synthesize_from_spec(spec_id) -> u32   -- THE SPEC ENTRY (W4a.6.2): consumes a
+ *     numera/synthesis_spec canonical spec (verifier-admission + cost-budget gated); corpus 2472.
  *
  * Hexad: kind_essence.  Ring: R0.  K: 0.99.
  */
@@ -36,6 +38,8 @@ extern @abi(c-msvc-x64) fn pcc_merge(a: u32, b: u32, reason: u32) -> i32 from "c
 extern @abi(c-msvc-x64) fn pcc_eq(a: u32, b: u32) -> u32 from "congruence_closure.iii"
 extern @abi(c-msvc-x64) fn pcc_explain(a: u32, b: u32) -> u32 from "congruence_closure.iii"
 extern @abi(c-msvc-x64) fn rem_equiv(form_a: u32, form_b: u32, param: u32) -> u32 from "relational_ematch.iii"
+extern @abi(c-msvc-x64) fn ss_canonical_encode(spec_id: *u8, out_buf: *u8, out_buf_cap: u64, out_len: *u64) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
 
 const PROP_CLOSED : u32 = 1u32
 const PROP_WRONG  : u32 = 2u32
@@ -105,6 +109,81 @@ fn asyn_synthesize_join(target: u32) -> u32 @export {
     if rem_equiv(REM_NESTED, REM_HASH, target) == 0u32 { return 0u32 }   /* DISPOSE: semantic equivalence */
     if asyn_cost(COST_HASH, 20u32) >= asyn_cost(COST_NESTED, 20u32) { return 0u32 }   /* asymptotically cheaper */
     return 1u32
+}
+
+/* =====================================================================================
+ * THE SPEC ENTRY (reunification W4a.6.2): synthesis_spec is the canonical synthesis-problem
+ * language -- this entry takes an ENCODED SPEC, not ad-hoc params, closing the island.
+ *
+ * The spec's first constraint is the synthesis TARGET: predicate byte 0 = opcode
+ * (1 = SUM: O(n) loop -> O(1) closed form; 2 = JOIN: O(n^2) nested -> O(n) hash),
+ * bytes 1..5 = maxn LE32 (the dispose range / cost scale).  ADMISSION: the spec's
+ * verifier_module id must equal ident_from_bytes("algo_synth.iii") -- a spec naming a
+ * different verifier is REFUSED (0), the W33 discipline.  The spec's 8-dim cost budget
+ * gates acceptance: the synthesized form's asyn_cost at maxn must be <= budget dim 0
+ * (time, LE32) -- a budget below even the cheaper form lawfully refuses the synthesis.
+ * Returns 1 = synthesized+proven+within-budget; 0 = refused (absent spec, encode
+ * overflow, wrong verifier, no constraint, unknown opcode, dispose failure, or budget).
+ * ===================================================================================== */
+var ASYN_SPEC_ENC : [u8; 512]      /* canonical-encode staging (E_BUF_TOO_SMALL -> refuse) */
+var ASYN_SPEC_LEN : [u64; 1]
+var ASYN_SPEC_VID : [u8; 32]       /* expected verifier-module id */
+var ASYN_VNAME    : [u8; 14]       /* "algo_synth.iii" */
+
+fn asyn_vname_fill() -> i32 {
+    ASYN_VNAME[0u64] = 97u8    ASYN_VNAME[1u64] = 108u8   ASYN_VNAME[2u64] = 103u8
+    ASYN_VNAME[3u64] = 111u8   ASYN_VNAME[4u64] = 95u8    ASYN_VNAME[5u64] = 115u8
+    ASYN_VNAME[6u64] = 121u8   ASYN_VNAME[7u64] = 110u8   ASYN_VNAME[8u64] = 116u8
+    ASYN_VNAME[9u64] = 104u8   ASYN_VNAME[10u64] = 46u8   ASYN_VNAME[11u64] = 105u8
+    ASYN_VNAME[12u64] = 105u8  ASYN_VNAME[13u64] = 105u8
+    return 0i32
+}
+fn asyn_enc_u32(off: u64) -> u32 {
+    let b0 : u32 = ASYN_SPEC_ENC[off] as u32
+    let b1 : u32 = ASYN_SPEC_ENC[off + 1u64] as u32
+    let b2 : u32 = ASYN_SPEC_ENC[off + 2u64] as u32
+    let b3 : u32 = ASYN_SPEC_ENC[off + 3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn asyn_synthesize_from_spec(spec_id: *u8) -> u32 @export {
+    if (spec_id as u64) == 0u64 { return 0u32 }
+    let encp : *u8 = (&ASYN_SPEC_ENC as u64) as *u8
+    let lenp : *u64 = (&ASYN_SPEC_LEN as u64) as *u64
+    if ss_canonical_encode(spec_id, encp, 512u64, lenp) != 0i32 { return 0u32 }
+    /* framed layout: id(32) in_ar(4) out_ar(4) in_kinds out_kinds cost(32) vmod(32) vfn(32) nc(4) [len(4) bytes]* */
+    let in_ar : u64 = (asyn_enc_u32(32u64) as u64) & 0xFFFFFFFFu64
+    let out_ar : u64 = (asyn_enc_u32(36u64) as u64) & 0xFFFFFFFFu64
+    let cost_off : u64 = 40u64 + in_ar + out_ar
+    let budget_time : u64 = (asyn_enc_u32(cost_off) as u64) & 0xFFFFFFFFu64
+    /* ADMISSION: verifier module must be THIS organ */
+    asyn_vname_fill()
+    ident_from_bytes((&ASYN_VNAME as u64) as *u8, 14u64, (&ASYN_SPEC_VID as u64) as *u8)
+    let vmod_off : u64 = cost_off + 32u64
+    let mut vi : u64 = 0u64
+    while vi < 32u64 {
+        if ASYN_SPEC_ENC[vmod_off + vi] != ASYN_SPEC_VID[vi] { return 0u32 }
+        vi = vi + 1u64
+    }
+    let nc_off : u64 = vmod_off + 64u64
+    let nc : u32 = asyn_enc_u32(nc_off)
+    if nc < 1u32 { return 0u32 }
+    let c0len : u32 = asyn_enc_u32(nc_off + 4u64)
+    if c0len < 5u32 { return 0u32 }
+    let pred : u64 = nc_off + 8u64
+    let opcode : u8 = ASYN_SPEC_ENC[pred]
+    let maxn : u32 = asyn_enc_u32(pred + 1u64)
+    if opcode == 1u8 {
+        if asyn_synthesize_sum(PROP_CLOSED, maxn) != 1u32 { return 0u32 }
+        if asyn_cost(COST_CLOSED, maxn) > budget_time { return 0u32 }
+        return 1u32
+    }
+    if opcode == 2u8 {
+        if asyn_synthesize_join(maxn) != 1u32 { return 0u32 }
+        if asyn_cost(COST_HASH, maxn) > budget_time { return 0u32 }
+        return 1u32
+    }
+    return 0u32
 }
 
 /* =====================================================================================

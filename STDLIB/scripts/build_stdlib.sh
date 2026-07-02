@@ -856,7 +856,6 @@ MODULES=(
     # (the APOTHEOSIS C.14 "provable cycle bound" comment that stood here described a module never
     #  built, composing the equally-unbuilt C.8 manifold -- struck by the reunification S7 sweep)
     "aether/bone_marrow"
-    "numera/cost_lattice_synth"
     "aether/basal_probe"
     # --- CONVERGENCE Wave 3 (12; deps built or earlier in this block; appended to preserve BSS layout) ---
     "numera/temporal_logic"

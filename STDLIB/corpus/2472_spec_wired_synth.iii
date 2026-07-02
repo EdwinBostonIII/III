@@ -1,0 +1,120 @@
+/* 2472_spec_wired_synth.iii -- GATE for the synthesis_spec -> algo_synth WIRING (reunification
+ * W4a.6.2: the island closed).  synthesis_spec is the canonical synthesis-problem language;
+ * algo_synth's spec entry (asyn_synthesize_from_spec) consumes the ENCODED spec -- signature,
+ * cost budget, verifier ref, constraint -- instead of ad-hoc params.
+ *
+ * S -- SUM spec: constraint opcode 1 (O(n) loop -> O(1) closed form), maxn 64, budget time 10,
+ *      verifier = ident("algo_synth.iii"): ACCEPTED (dispose proves over [0,64), closed cost 1 <= 10).
+ * V -- WRONG VERIFIER: same spec shape, verifier = ident("nous_synth.iii"): REFUSED (W33 admission).
+ * B -- BUDGET REFUSAL: budget time 0 < closed cost 1: REFUSED (the lattice gates acceptance).
+ * J -- JOIN spec: opcode 2 (O(n^2) -> O(n) hash), maxn 40, budget 100: ACCEPTED (40 <= 100).
+ * U -- UNKNOWN OPCODE 9: REFUSED (no silent default synthesis).
+ *
+ * exit 99 = pass;  10 setup;  11 S;  12 V;  13 B;  14 J;  15 U */
+module corpus_2472_spec_wired_synth
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ss_init() -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_alloc(out_spec_id: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_set_signature(spec_id: *u8, sig: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_add_constraint(spec_id: *u8, predicate: *u8, predicate_len: u32) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_set_cost_vector(spec_id: *u8, cost: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_set_verifier(spec_id: *u8, verifier_module: *u8, verifier_fn: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn asyn_synthesize_from_spec(spec_id: *u8) -> u32 from "algo_synth.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var SID  : [u8; 32]      /* spec id */
+var SIGD : [u8; 72]      /* SigDesc aggregate: in_ar(4) out_ar(4) in_kinds(32) out_kinds(32) */
+var COST : [u8; 32]      /* 8 x u32 LE dims */
+var PRED : [u8; 8]       /* opcode(1) + maxn LE32(4) */
+var VMOD : [u8; 32]      /* verifier module id */
+var VFN  : [u8; 32]      /* verifier fn id */
+var NAME : [u8; 16]      /* name staging */
+
+fn put32(b: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = b as *u8
+    p[off] = (v & 0xFFu32) as u8   p[off+1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[off+2u64] = ((v >> 16u32) & 0xFFu32) as u8   p[off+3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+/* "algo_synth.iii" -> VMOD */
+fn vmod_good() -> i32 {
+    NAME[0u64] = 97u8    NAME[1u64] = 108u8   NAME[2u64] = 103u8   NAME[3u64] = 111u8
+    NAME[4u64] = 95u8    NAME[5u64] = 115u8   NAME[6u64] = 121u8   NAME[7u64] = 110u8
+    NAME[8u64] = 116u8   NAME[9u64] = 104u8   NAME[10u64] = 46u8   NAME[11u64] = 105u8
+    NAME[12u64] = 105u8  NAME[13u64] = 105u8
+    return ident_from_bytes((&NAME) as u64 as *u8, 14u64, (&VMOD) as u64 as *u8)
+}
+/* "nous_synth.iii" -> VMOD (the wrong verifier) */
+fn vmod_bad() -> i32 {
+    NAME[0u64] = 110u8   NAME[1u64] = 111u8   NAME[2u64] = 117u8   NAME[3u64] = 115u8
+    NAME[4u64] = 95u8    NAME[5u64] = 115u8   NAME[6u64] = 121u8   NAME[7u64] = 110u8
+    NAME[8u64] = 116u8   NAME[9u64] = 104u8   NAME[10u64] = 46u8   NAME[11u64] = 105u8
+    NAME[12u64] = 105u8  NAME[13u64] = 105u8
+    return ident_from_bytes((&NAME) as u64 as *u8, 14u64, (&VMOD) as u64 as *u8)
+}
+
+/* allocate + fill one spec: opcode/maxn/budget with the CURRENT VMOD. */
+fn mk_spec(opcode: u8, maxn: u32, budget: u32) -> i32 {
+    if ss_alloc((&SID) as u64 as *u8) != 0i32 { return -1i32 }
+    put32((&SIGD) as u64, 0u64, 1u32)
+    put32((&SIGD) as u64, 4u64, 1u32)
+    SIGD[8u64] = 7u8                    /* one in-kind byte */
+    SIGD[40u64] = 7u8                   /* one out-kind byte */
+    if ss_set_signature((&SID) as u64 as *u8, (&SIGD) as u64 as *u8) != 0i32 { return -1i32 }
+    let mut z : u64 = 0u64
+    while z < 32u64 { COST[z] = 0u8   z = z + 1u64 }
+    put32((&COST) as u64, 0u64, budget)             /* dim 0 = time budget */
+    if ss_set_cost_vector((&SID) as u64 as *u8, (&COST) as u64 as *u8) != 0i32 { return -1i32 }
+    if ss_set_verifier((&SID) as u64 as *u8, (&VMOD) as u64 as *u8, (&VFN) as u64 as *u8) != 0i32 { return -1i32 }
+    PRED[0u64] = opcode
+    put32((&PRED) as u64, 1u64, maxn)
+    if ss_add_constraint((&SID) as u64 as *u8, (&PRED) as u64 as *u8, 5u32) != 0i32 { return -1i32 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    if ss_init() != 0i32 { return 10u64 }
+    let mut z : u64 = 0u64
+    while z < 32u64 { VFN[z] = 0u8   z = z + 1u64 }
+
+    /* ══ S: SUM spec, budget 10 >= closed cost 1 -> ACCEPT. */
+    vmod_good()
+    if mk_spec(1u8, 64u32, 10u32) != 0i32 { return 10u64 }
+    let rs : u32 = asyn_synthesize_from_spec((&SID) as u64 as *u8)
+    putchar(83i32) putchar(58i32) sp() e_i64(rs as i64) nl()          /* "S: 1" */
+    if rs != 1u32 { return 11u64 }
+
+    /* ══ V: wrong verifier -> REFUSE. */
+    vmod_bad()
+    if mk_spec(1u8, 64u32, 10u32) != 0i32 { return 10u64 }
+    let rv : u32 = asyn_synthesize_from_spec((&SID) as u64 as *u8)
+    putchar(86i32) putchar(58i32) sp() e_i64(rv as i64) nl()          /* "V: 0" */
+    if rv != 0u32 { return 12u64 }
+
+    /* ══ B: budget 0 < closed cost 1 -> REFUSE. */
+    vmod_good()
+    if mk_spec(1u8, 64u32, 0u32) != 0i32 { return 10u64 }
+    let rb : u32 = asyn_synthesize_from_spec((&SID) as u64 as *u8)
+    putchar(66i32) putchar(58i32) sp() e_i64(rb as i64) nl()          /* "B: 0" */
+    if rb != 0u32 { return 13u64 }
+
+    /* ══ J: JOIN spec, maxn 40, budget 100 >= hash cost 40 -> ACCEPT. */
+    vmod_good()
+    if mk_spec(2u8, 40u32, 100u32) != 0i32 { return 10u64 }
+    let rj : u32 = asyn_synthesize_from_spec((&SID) as u64 as *u8)
+    putchar(74i32) putchar(58i32) sp() e_i64(rj as i64) nl()          /* "J: 1" */
+    if rj != 1u32 { return 14u64 }
+
+    /* ══ U: unknown opcode -> REFUSE. */
+    vmod_good()
+    if mk_spec(9u8, 64u32, 100u32) != 0i32 { return 10u64 }
+    let ru : u32 = asyn_synthesize_from_spec((&SID) as u64 as *u8)
+    putchar(85i32) putchar(58i32) sp() e_i64(ru as i64) nl()          /* "U: 0" */
+    if ru != 0u32 { return 15u64 }
+
+    return 99u64
+}

@@ -1724,6 +1724,9 @@ declare -A EXPECTED=(
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.
     [1803_invent_canonical]=99
+    [2470_symreg_wrong_form]=99
+    [2471_symreg_overfit_refuse]=99
+    [2472_spec_wired_synth]=99
 )
 
 PASS=0

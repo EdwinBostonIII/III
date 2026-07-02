@@ -533,16 +533,27 @@ fn symreg_shape_next() -> u8 {
         let carried : u8 = symreg_shape_inc(nc)
         if carried == 1u8 { done = 1u8 }
         if done == 0u8 {
-            if symreg_shape_valid(nc) == 1u8 {
-                found = 1u8
-                done = 1u8
-            } else {
-                /* skip the whole doomed-prefix block: re-seat the odometer
-                 * just past every string sharing the failing prefix. */
-                let f : u32 = symreg_shape_failpos(nc)
-                if f < nc {
-                    let ovf : u8 = symreg_shape_jump(nc, f)
-                    if ovf == 1u8 { done = 1u8 }
+            /* validate the current string; on a doomed prefix, jump PAST the
+             * block and validate the JUMP TARGET too before falling back to
+             * the outer single-step increment.  (Defect fixed 2026-07-02: the
+             * old loop incremented again after every jump, so the string the
+             * jump landed on was SKIPPED UNVALIDATED -- systematically losing
+             * the compound-LEFT shapes, e.g. LLBLB = SUB(MUL(x,x),c).
+             * Commutative ops masked it via their right-leaning twins; SUB
+             * and DIV lost half their expression space: (x*x)-2 was
+             * unfindable while 2-(x*x) fit.  Falsifier: corpus 2470/2471.) */
+            let mut checking : u8 = 1u8
+            while checking == 1u8 {
+                checking = 0u8
+                if symreg_shape_valid(nc) == 1u8 {
+                    found = 1u8
+                    done = 1u8
+                } else {
+                    let f : u32 = symreg_shape_failpos(nc)
+                    if f < nc {
+                        let ovf : u8 = symreg_shape_jump(nc, f)
+                        if ovf == 1u8 { done = 1u8 } else { checking = 1u8 }
+                    }
                 }
             }
         }

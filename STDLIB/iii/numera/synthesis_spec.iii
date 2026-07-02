@@ -13,6 +13,10 @@
  * M12 (Synthesis Verifiability) foundation -- the checkable certificate that
  * synthesis_search (63) and synthesis_witness (64) build upon.
  *
+ * LIVE CONSUMER (reunification W4a.6.2): numera/algo_synth's spec entry
+ * (asyn_synthesize_from_spec) consumes the canonical encoding -- verifier
+ * admission + cost-budget gating over the encoded spec; corpus 2472.
+ *
  * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.
  * NIH: depends only on identifier.iii, keccak256.iii,
  *      witness_hook.iii, constitution.iii (Module 13, not-yet-built).

@@ -1,0 +1,123 @@
+/* 2470_symreg_wrong_form.iii -- FALSIFIER for symbolic_regression (reunification W4a.6.1a):
+ * WRONG-FORM REJECTION.  Data generated from y = x^2 + 3x over x in {1,2,3,4} (y = 4,10,18,28).
+ *
+ * A -- ADMISSIBLE BASIS {ADD, MUL} + const 3, depth 3, tol 0: the exact deterministic search MUST
+ *   find an exact form -- and the returned expression must ALSO hit the HOLD-OUT point x=5 -> 40
+ *   exactly (an interpolation impostor that only memorized the 4 training points dies here; only
+ *   the true function x^2+3x extends).
+ * B -- EXCLUDED BASIS {ADD} + const 3 (no MUL), same data: additive combinations of x and 3 are
+ *   degree-1, so NO form exists; the engine must return SYMREG_E_NO_FIT (-3) -- a REFUSAL, never
+ *   a force-fit.  This is the wrong-form-rejection tooth: the engine cannot hand back a form the
+ *   basis cannot express.
+ *
+ * exit 99 = pass;  10 A regress;  11 A verify;  12 A hold-out;  13 B not-NO_FIT */
+module corpus_2470_symreg_wrong_form
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn symreg_init() -> i32 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn symreg_regress(req: *u8, out_expr: *u8, out_expr_cap: u32, out_len: *u32) -> i32 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn symreg_verify(expr: *u8, expr_len: u32, data: *u8, data_len: u32, tol_q: u64) -> u8 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn symreg_eval(expr: *u8, expr_len: u32, x_vec: *u8, n_vars: u32, out_y_q: *u64, out_sign: *u8) -> i32 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn wh_init(t: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(p: u64, m: u64, e: u64) -> u64 from "capability.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var RQ  : [u8; 64]     /* request aggregate */
+var SG  : [u8; 64]     /* signature blob */
+var DT  : [u8; 128]    /* dataset: 4 rows x (1 var + y) x 9 bytes = 72 */
+var EX  : [u8; 320]    /* returned expression */
+var XL  : [u32; 1]
+var XV  : [u8; 16]     /* hold-out x record (sign+mag) */
+var YQ  : [u64; 1]
+var CAPV : [u64; 1]
+var YS  : [u8; 1]
+
+fn put32(b: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = b as *u8
+    p[off] = (v & 0xFFu32) as u8   p[off+1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[off+2u64] = ((v >> 16u32) & 0xFFu32) as u8   p[off+3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+fn put64(b: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = b as *u8
+    let mut k : u64 = 0u64
+    while k < 8u64 { p[off+k] = ((v >> (k*8u64)) & 0xFFu64) as u8   k = k + 1u64 }
+    return 0i32
+}
+fn putval(b: u64, off: u64, sign: u8, mag: u64) -> i32 {
+    let p : *u8 = b as *u8
+    p[off] = sign & 1u8
+    put64(b, off + 1u64, mag)
+    return 0i32
+}
+/* k in Q32.32 */
+fn q(k: u64) -> u64 { return k * 4294967296u64 }
+
+/* request: magic,n_vars,n_points,tol_sign,tol_mag,max_depth,data_ptr,sig_ptr,sig_len,cap_id */
+fn build_req(n_pts: u32, sig_len: u32) -> i32 {
+    let b : u64 = &RQ as u64
+    put32(b, 0u64, 0x53525231u32)
+    put32(b, 4u64, 1u32)
+    put32(b, 8u64, n_pts)
+    let p : *u8 = b as *u8
+    p[12u64] = 0u8
+    put64(b, 13u64, 0u64)              /* tol 0: exact */
+    put32(b, 21u64, 3u32)              /* depth 3 */
+    put64(b, 25u64, &DT as u64)
+    put64(b, 33u64, &SG as u64)
+    put32(b, 41u64, sig_len)
+    put64(b, 45u64, CAPV[0u64])        /* minted ATTEST capability (regress publishes on success) */
+    return 0i32
+}
+
+fn main() -> u64 {
+    symreg_init()
+    wh_init(0u64)
+    let root : u64 = cap_env_init()
+    CAPV[0u64] = cap_attenuate(root, 0x0800u64, 0u64)
+    /* dataset y = x^2 + 3x: (1,4) (2,10) (3,18) (4,28) */
+    let d : u64 = &DT as u64
+    putval(d, 0u64,  0u8, q(1u64))   putval(d, 9u64,  0u8, q(4u64))
+    putval(d, 18u64, 0u8, q(2u64))   putval(d, 27u64, 0u8, q(10u64))
+    putval(d, 36u64, 0u8, q(3u64))   putval(d, 45u64, 0u8, q(18u64))
+    putval(d, 54u64, 0u8, q(4u64))   putval(d, 63u64, 0u8, q(28u64))
+
+    /* ══ A: admissible basis {ADD, MUL} + const 3. */
+    let s : u64 = &SG as u64
+    put32(s, 0u64, 0x53524731u32)
+    put32(s, 4u64, 2u32)
+    let sp8 : *u8 = s as *u8
+    sp8[8u64] = 0x10u8                 /* ADD */
+    sp8[9u64] = 0x12u8                 /* MUL */
+    put32(s, 10u64, 1u32)              /* n_consts = 1 */
+    sp8[14u64] = 0u8                   /* +3 */
+    put64(s, 15u64, q(3u64))
+    build_req(4u32, 23u32)
+    let ra : i32 = symreg_regress((&RQ) as u64 as *u8, (&EX) as u64 as *u8, 320u32, (&XL) as u64 as *u32)
+    putchar(65i32) putchar(58i32) sp() e_i64(ra as i64) sp() e_i64(XL[0u64] as i64) nl()
+    if ra != 0i32 { return 10u64 }
+    if symreg_verify((&EX) as u64 as *u8, XL[0u64], (&DT) as u64 as *u8, 72u32, 0u64) != 1u8 { return 11u64 }
+    /* hold-out: x=5 -> 40 exactly */
+    putval(&XV as u64, 0u64, 0u8, q(5u64))
+    let re : i32 = symreg_eval((&EX) as u64 as *u8, XL[0u64], (&XV) as u64 as *u8, 1u32, (&YQ) as u64 as *u64, (&YS) as u64 as *u8)
+    putchar(72i32) putchar(58i32) sp() e_i64(re as i64) sp() e_i64((YQ[0u64] / 4294967296u64) as i64) sp() e_i64(YS[0u64] as i64) nl()
+    if re != 0i32 { return 12u64 }
+    if YS[0u64] != 0u8 { return 12u64 }
+    if YQ[0u64] != q(40u64) { return 12u64 }
+
+    /* ══ B: excluded basis {ADD} only -- must REFUSE (E_NO_FIT = -3), not force-fit. */
+    put32(s, 4u64, 1u32)
+    sp8[8u64] = 0x10u8                 /* ADD only */
+    put32(s, 9u64, 1u32)               /* n_consts = 1 */
+    sp8[13u64] = 0u8
+    put64(s, 14u64, q(3u64))
+    build_req(4u32, 22u32)
+    let rb : i32 = symreg_regress((&RQ) as u64 as *u8, (&EX) as u64 as *u8, 320u32, (&XL) as u64 as *u32)
+    putchar(66i32) putchar(58i32) sp() e_i64(rb as i64) nl()          /* "B: -3" */
+    if rb != (0i32 - 3i32) { return 13u64 }
+
+    return 99u64
+}

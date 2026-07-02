@@ -1,0 +1,72 @@
+/* 2188_gas_deep.iii -- GATE for the DEEP ENSEMBLE (Turing charter V-II.1): 10^4 forward events under
+ * the threshold compaction law, and the involution STILL bit-exact through all of it.
+ *
+ * The proven tie-free 3-particle box runs 1 + 9999 events forward under g2_run_ct(48): whenever the
+ * ensemble denominator exceeds 48 bits it is gcd-compacted and arena-migrated (the DETERMINISTIC law
+ * -- a rule on exact state, not a tuned heuristic).  Then the whole 9999 are retraced in reverse
+ * (compacting there too), and the state must equal the event-1 snapshot AS EXACT RATIONALS
+ * (snap_diff == 0): 19,998 events, dozens of compactions, arena migrations on BOTH legs -- and not
+ * one bit of drift.  Energy stays the same integer; the final denominator sits within one limb.
+ *
+ * exit 99 = pass;  10 setup;  11 forward leg;  12 reverse leg;  13 involution;  14 no compactions;
+ * 15 energy;  16 denominator bits;  17 event count */
+module corpus_2188_gas_deep
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run(k: u64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run_ct(k: u64, bits: i64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ct_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_compactions() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_reverse() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_diff() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_free() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_energy() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_den_bits() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_events() -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+    g2_reset()   g2_envelope(2i64)
+    /* sqrt2-offset high walls with DISTINCT coefficients (1,3,7): a cross-axis wall tie would need a
+     * vanishing nonzero sqrt2-linear form (the 2176 Phase-1 tie-killer) */
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 40i64, 7i64, 1i64)
+    g2_part(10i64, 4i64, 4i64, 13i64, 3i64, 2i64)
+    g2_part(36i64, 4i64, 4i64, 0i64 - 11i64, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, 7i64)
+    g2_ct_reset()
+    let e0 : i64 = g2_energy()
+    if g2_run(1u64) != 1u64 { return 10u64 }
+    g2_snap()
+    let d1 : u64 = g2_run_ct(9999u64, 48i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(d1 as i64) sp() e_i64(g2_compactions()) sp() e_i64(g2_den_bits()) nl()
+    if d1 != 9999u64 { return 11u64 }
+    g2_reverse()
+    let d2 : u64 = g2_run_ct(9999u64, 48i64)
+    if d2 != 9999u64 { return 12u64 }
+    g2_reverse()
+    let sd : i64 = g2_snap_diff()
+    g2_snap_free()
+    let cn : i64 = g2_compactions()
+    let e1 : i64 = g2_energy()
+    let db : i64 = g2_den_bits()
+    let ev : i64 = g2_events() as i64
+    putchar(68i32) putchar(58i32) sp() e_i64(sd) sp() e_i64(cn) sp() e_i64(e0) sp() e_i64(e1) sp() e_i64(db) sp() e_i64(ev) nl()
+    /* "D: 0 <cn>=1 <E> <E> <=64 19999" */
+    if sd != 0i64 { return 13u64 }
+    if cn < 1i64 { return 14u64 }
+    if e1 != e0 { return 15u64 }
+    if db > 64i64 { return 16u64 }
+    if ev != 20027i64 { return 17u64 }                 /* 19999 steps + 28 commuting-pair second responses */
+    return 99u64
+}

@@ -34,7 +34,7 @@ extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
 
-const G2_MAXE : u64 = 1024u64
+const G2_MAXE : u64 = 32768u64
 const G2_OK : i32 = 1i32
 const G2_NONE : i32 = 0i32
 const G2_TIE : i32 = 2i32
@@ -48,7 +48,8 @@ var G2_V : [i64; 12]                                 /* integer velocities, fore
 var G2_NP : u64   var G2_ES : i64
 var GW2_AX : [i64; 8]   var GW2_DIR : [i64; 8]   var GW2_C0 : [i64; 8]   var GW2_C1 : [i64; 8]
 var GW2_CD : [i64; 8]   var GW2_VTH : [i64; 8]   var G2_NW : u64
-var G2E_K : [i64; 1024]   var G2E_A : [i64; 1024]   var G2E_B : [i64; 1024]   var G2E_AX : [i64; 1024]
+var G2E_K : [i64; 32768]   var G2E_A : [i64; 32768]   var G2E_B : [i64; 32768]   var G2E_AX : [i64; 32768]
+var G2E_TW : [i64; 32768]                            /* 1 = second response of a commuting simultaneous pair */
 var G2_NE : u64
 
 fn g2_iabs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
@@ -146,11 +147,28 @@ fn sb_sign2(ar: u64, s0: i64, m0: u64, s1: i64, m1: u64) -> i32 {
 var GB_TS0 : i64   var GB_TM0 : u64   var GB_TS1 : i64   var GB_TM1 : u64   var GB_TD : i64
 var GB_K : i64   var GB_A : i64   var GB_B : i64   var GB_AX : i64
 var GB_HAVE : u8   var GB_TIE : u8
+/* THE COMMUTING-TIE RESOLUTION (V-II.1 depth unlock): two SIMULTANEOUS events whose responses touch
+ * DISJOINT (particle, axis) velocity slots commute as operators -- applying both in arrival order is
+ * a theorem, not a choice (each response reads/writes only its own slots; the position advance is
+ * common).  Only INTERACTING ties (a shared slot) remain certified refusals.  Different axes always
+ * commute, even on one particle (negation and swap act on different components). */
+var GB2_K : i64   var GB2_A : i64   var GB2_B : i64   var GB2_AX : i64   var GB_NC : i64
+
+fn gb_slot_ov(k1: i64, a1: i64, b1: i64, x1: i64, k2: i64, a2: i64, b2: i64, x2: i64) -> i64 {
+    if x1 != x2 { return 0i64 }
+    if a1 == a2 { return 1i64 }
+    if k2 == 1i64 { if a1 == b2 { return 1i64 } }
+    if k1 == 1i64 {
+        if b1 == a2 { return 1i64 }
+        if k2 == 1i64 { if b1 == b2 { return 1i64 } }
+    }
+    return 0i64
+}
 
 fn gb_offer(sub: u64, ts0: i64, tm0: u64, ts1: i64, tm1: u64, td: i64, k: i64, a: i64, b: i64, ax: i64) -> i32 {
     if GB_HAVE == 0u8 {
         GB_TS0 = ts0   GB_TM0 = tm0   GB_TS1 = ts1   GB_TM1 = tm1   GB_TD = td
-        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax   GB_HAVE = 1u8
+        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax   GB_HAVE = 1u8   GB_NC = 1i64
         return 0i32
     }
     /* x = NUM_new * td_best - NUM_best * td_new (rank-1); sign < 0 -> new is earlier */
@@ -164,11 +182,18 @@ fn gb_offer(sub: u64, ts0: i64, tm0: u64, ts1: i64, tm1: u64, td: i64, k: i64, a
     bigint_drop(a1m)   bigint_drop(b1m)
     let c : i32 = sb_sign2(sub, x0s, x0m, x1s, x1m)
     bigint_drop(x0m)   bigint_drop(x1m)
-    if c == 0i32 { GB_TIE = 1u8   return 0i32 }
+    if c == 0i32 {
+        if GB_NC == 2i64 { GB_TIE = 1u8   bigint_drop(tm0)   bigint_drop(tm1)   return 0i32 }
+        let mut ov : i64 = gb_slot_ov(GB_K, GB_A, GB_B, GB_AX, k, a, b, ax)
+        if ov == 1i64 { GB_TIE = 1u8   bigint_drop(tm0)   bigint_drop(tm1)   return 0i32 }
+        GB2_K = k   GB2_A = a   GB2_B = b   GB2_AX = ax   GB_NC = 2i64
+        bigint_drop(tm0)   bigint_drop(tm1)
+        return 0i32
+    }
     if c < 0i32 {
         bigint_drop(GB_TM0)   bigint_drop(GB_TM1)
         GB_TS0 = ts0   GB_TM0 = tm0   GB_TS1 = ts1   GB_TM1 = tm1   GB_TD = td
-        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax
+        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax   GB_NC = 1i64
         return 0i32
     }
     bigint_drop(tm0)   bigint_drop(tm1)
@@ -284,8 +309,22 @@ fn gb_cand_pair(sub: u64, i: u64, j: u64) -> i32 {
     return 0i32
 }
 
+fn g2_apply(k: i64, a: i64, b: i64, ax0: i64) -> i32 {
+    let ax : u64 = ax0 as u64
+    if k == 0i64 {
+        let pi : u64 = a as u64
+        G2_V[pi * 3u64 + ax] = 0i64 - G2_V[pi * 3u64 + ax]
+    } else {
+        let pi : u64 = a as u64   let pj : u64 = b as u64
+        let t : i64 = G2_V[pi * 3u64 + ax]
+        G2_V[pi * 3u64 + ax] = G2_V[pj * 3u64 + ax]
+        G2_V[pj * 3u64 + ax] = t
+    }
+    return 0i32
+}
+
 fn g2_step() -> i32 @export {
-    if G2_NE >= G2_MAXE { return G2_CAP }
+    if (G2_NE + 2u64) > G2_MAXE { return G2_CAP }
     let sub : u64 = arena_new(8388608u64)
     GB_HAVE = 0u8   GB_TIE = 0u8
     let mut p : u64 = 0u64
@@ -327,18 +366,16 @@ fn g2_step() -> i32 @export {
     bigint_drop(nd)
     bigint_drop(G2_DEN)
     G2_DEN = ndp
-    /* the response: same integer involutions as the i64 gas */
-    if GB_K == 0i64 {
-        let pi : u64 = GB_A as u64   let ax : u64 = GB_AX as u64
-        G2_V[pi * 3u64 + ax] = 0i64 - G2_V[pi * 3u64 + ax]
-    } else {
-        let pi : u64 = GB_A as u64   let pj : u64 = GB_B as u64   let ax : u64 = GB_AX as u64
-        let t : i64 = G2_V[pi * 3u64 + ax]
-        G2_V[pi * 3u64 + ax] = G2_V[pj * 3u64 + ax]
-        G2_V[pj * 3u64 + ax] = t
-    }
-    G2E_K[G2_NE] = GB_K   G2E_A[G2_NE] = GB_A   G2E_B[G2_NE] = GB_B   G2E_AX[G2_NE] = GB_AX
+    /* the response(s): same integer involutions as the i64 gas; a commuting simultaneous pair applies
+     * both (order-independent by the disjoint-slot theorem) and logs the second with the TW mark */
+    g2_apply(GB_K, GB_A, GB_B, GB_AX)
+    G2E_K[G2_NE] = GB_K   G2E_A[G2_NE] = GB_A   G2E_B[G2_NE] = GB_B   G2E_AX[G2_NE] = GB_AX   G2E_TW[G2_NE] = 0i64
     G2_NE = G2_NE + 1u64
+    if GB_NC == 2i64 {
+        g2_apply(GB2_K, GB2_A, GB2_B, GB2_AX)
+        G2E_K[G2_NE] = GB2_K   G2E_A[G2_NE] = GB2_A   G2E_B[G2_NE] = GB2_B   G2E_AX[G2_NE] = GB2_AX   G2E_TW[G2_NE] = 1i64
+        G2_NE = G2_NE + 1u64
+    }
     bigint_drop(GB_TM0)   bigint_drop(GB_TM1)
     bigint_drop_arena(sub)
     arena_drop(sub)
@@ -355,21 +392,39 @@ fn g2_run(k: u64) -> u64 @export {
     return done
 }
 
+/* deep run under the THRESHOLD COMPACTION LAW (Turing charter V-II.1): after each event, if the
+ * ensemble denominator exceeds `bits` bits, compact -- a DETERMINISTIC rule on exact state, never a
+ * tuned heuristic.  Returns events completed; g2_compactions() counts the compactions applied. */
+var G2C_N : i64
+fn g2_ct_reset() -> i32 @export { G2C_N = 0i64   return 0i32 }
+fn g2_compactions() -> i64 @export { return G2C_N }
+fn g2_run_ct(k: u64, bits: i64) -> u64 @export {
+    let mut done : u64 = 0u64
+    while done < k {
+        let r : i32 = g2_step()
+        if r != G2_OK { return done }
+        done = done + 1u64
+        let b : i64 = g2_den_bits()
+        if b > bits {
+            let cr : i32 = g2_compact()
+            if cr < 0i32 { return done }
+            if cr == 1i32 { G2C_N = G2C_N + 1i64 }
+        }
+    }
+    return done
+}
+
 fn g2_reverse() -> i32 @export {
     let mut k : u64 = 0u64
     while k < (G2_NP * 3u64) { G2_V[k] = 0i64 - G2_V[k]   k = k + 1u64 }
     if G2_NE > 0u64 {
         let e : u64 = G2_NE - 1u64
-        let ax : u64 = (G2E_AX[e]) as u64
-        if G2E_K[e] == 0i64 {
-            let pi : u64 = (G2E_A[e]) as u64
-            G2_V[pi * 3u64 + ax] = 0i64 - G2_V[pi * 3u64 + ax]
-        } else {
-            let pi : u64 = (G2E_A[e]) as u64   let pj : u64 = (G2E_B[e]) as u64
-            let t : i64 = G2_V[pi * 3u64 + ax]
-            G2_V[pi * 3u64 + ax] = G2_V[pj * 3u64 + ax]
-            G2_V[pj * 3u64 + ax] = t
-        }
+        g2_apply(G2E_K[e], G2E_A[e], G2E_B[e], G2E_AX[e])
+        /* a commuting simultaneous pair sits WHOLLY underfoot: un-apply its first member too */
+        if G2E_TW[e] == 1i64 { if e > 0u64 {
+            let e2 : u64 = e - 1u64
+            g2_apply(G2E_K[e2], G2E_A[e2], G2E_B[e2], G2E_AX[e2])
+        } }
     }
     return 0i32
 }

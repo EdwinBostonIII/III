@@ -1,0 +1,100 @@
+/* 2186_resultant_abi.iii -- GATE for the resultant BIGINT OUTPUT ABI (Turing charter V-I.2): what
+ * 2179-D certifiably REFUSED is now DELIVERED, exactly, and composes onward.
+ *
+ * A -- gamma = cbrt(2^40) + sqrt3: rs_sum_big still refuses (-1: the i64 output ABI, regated); the
+ *   big2 ABI returns degree 6 with the constant term a^2 - 27 = 2^80 - 27 delivered as TWO RAW LIMBS
+ *   (18446744073709551589, 65535), fit-flagged 0, while every fitting coefficient lands in out[]
+ *   (-18a = -19791209299968, -2a = -2199023255552, 27, -9, 0, 1) -- all still certified by the
+ *   mod-every-prime consistency check, now run on the FULL limb values.
+ * B -- THE PIPELINE: the raw rows bridge STRAIGHT into sturm_big (sturm2_in_*): the degree-6
+ *   polynomial with a 2^80 constant term has EXACTLY 2 real roots, isolated in (10319, 10320] and
+ *   (10323, 10324] (= cbrt(2^40) -+ sqrt3: 10319.54, 10323.01) -- resultant -> bigint-Sturm with no
+ *   i64 anywhere in the object.
+ * C -- the shared-envelope twin: on cbrt2 + sqrt3 the big2 ABI equals rs_sum_big coefficient-for-
+ *   coefficient with every fit flag 1 (the extension is conservative).
+ *
+ * exit 99 = pass;  10 A refusal/degree;  11 A coefficients/limbs;  12 B;  13 C */
+module corpus_2186_resultant_abi
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_sum_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_sgn(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_len(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_fit(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_limb(i: i64, j: i64) -> u64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_begin(deg: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var AF : [i64; 10]   var AG : [i64; 10]   var AO : [i64; 20]   var AO2 : [i64; 20]
+
+fn main() -> u64 {
+    /* ══ A: a = 2^40. */
+    AF[0u64] = 0i64 - 1099511627776i64   AF[1u64] = 0i64   AF[2u64] = 0i64   AF[3u64] = 1i64
+    AG[0u64] = 0i64 - 3i64   AG[1u64] = 0i64   AG[2u64] = 1i64
+    let r1 : i64 = rs_sum_big((&AF) as u64, 3i64, (&AG) as u64, 2i64, (&AO) as u64)
+    let r2 : i64 = rs_sum_big2((&AF) as u64, 3i64, (&AG) as u64, 2i64, (&AO) as u64)
+    let lz : u64 = rs_big_limb(0i64, 0i64)
+    let mut l0ok : i64 = 0i64
+    if lz == 18446744073709551589u64 { l0ok = 1i64 }
+    putchar(65i32) putchar(58i32) sp() e_i64(r1) sp() e_i64(r2) sp() e_i64(rs_big_fit(0i64)) sp() e_i64(rs_big_sgn(0i64)) sp() e_i64(rs_big_len(0i64)) sp() e_i64(l0ok) sp() e_i64(rs_big_limb(0i64, 1i64) as i64) sp() e_i64(AO[1u64]) sp() e_i64(AO[3u64]) nl()
+    /* "A: -1 6 0 1 2 1 65535 -19791209299968 -2199023255552" */
+    if r1 != (0i64 - 1i64) { return 10u64 }
+    if r2 != 6i64 { return 10u64 }
+    if rs_big_fit(0i64) != 0i64 { return 11u64 }
+    if rs_big_sgn(0i64) != 1i64 { return 11u64 }
+    if rs_big_len(0i64) != 2i64 { return 11u64 }
+    if l0ok != 1i64 { return 11u64 }
+    if rs_big_limb(0i64, 1i64) != 65535u64 { return 11u64 }
+    if AO[1u64] != (0i64 - 19791209299968i64) { return 11u64 }
+    if AO[2u64] != 27i64 { return 11u64 }
+    if AO[3u64] != (0i64 - 2199023255552i64) { return 11u64 }
+    if AO[4u64] != (0i64 - 9i64) { return 11u64 }
+    if AO[5u64] != 0i64 { return 11u64 }
+    if AO[6u64] != 1i64 { return 11u64 }
+    let mut i : i64 = 1i64
+    while i <= 6i64 { if rs_big_fit(i) != 1i64 { return 11u64 }   i = i + 1i64 }
+
+    /* ══ B: the raw bridge into the bigint PRS. */
+    if sturm2_in_begin(6i64) != 0i32 { return 12u64 }
+    i = 0i64
+    while i <= 6i64 {
+        let ln : i64 = rs_big_len(i)
+        let mut j : i64 = 0i64
+        while j < ln { sturm2_in_limb(i, j, rs_big_limb(i, j))   j = j + 1i64 }
+        sturm2_in_set(i, rs_big_sgn(i), ln)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 12u64 }
+    let nr : i64 = root_count2(10000i64, 1i64, 11000i64, 1i64)
+    let w1 : i64 = root_count2(10319i64, 1i64, 10320i64, 1i64)
+    let w2 : i64 = root_count2(10323i64, 1i64, 10324i64, 1i64)
+    putchar(66i32) putchar(58i32) sp() e_i64(nr) sp() e_i64(w1) sp() e_i64(w2) nl()       /* "B: 2 1 1" */
+    if nr != 2i64 { return 12u64 }
+    if w1 != 1i64 { return 12u64 }
+    if w2 != 1i64 { return 12u64 }
+
+    /* ══ C: shared-envelope twin (cbrt2 + sqrt3). */
+    AF[0u64] = 0i64 - 2i64
+    let c1 : i64 = rs_sum_big((&AF) as u64, 3i64, (&AG) as u64, 2i64, (&AO) as u64)
+    let c2 : i64 = rs_sum_big2((&AF) as u64, 3i64, (&AG) as u64, 2i64, (&AO2) as u64)
+    if c1 != 6i64 { return 13u64 }
+    if c2 != 6i64 { return 13u64 }
+    let mut ok : i64 = 1i64
+    i = 0i64
+    while i <= 6i64 {
+        if AO2[i as u64] != AO[i as u64] { ok = 0i64 }
+        if rs_big_fit(i) != 1i64 { ok = 0i64 }
+        i = i + 1i64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(ok) nl()                                     /* "C: 1" */
+    if ok != 1i64 { return 13u64 }
+
+    return 99u64
+}

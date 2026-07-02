@@ -283,8 +283,14 @@ extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+/* raw bigint-output rows (V-I.2): filled when RSB_WANT == 1 (rs_*_big2) */
+var RSB_WANT : i64
+var RSB_SGN : [i64; 20]   var RSB_LEN : [i64; 20]   var RSB_FIT : [i64; 20]
+var RSB_LIMB : [u64; 1280]                              /* coefficient i limb j at i*64+j */
 
 var RS_PRIMES : [i64; 16]
 var RS_PINIT : i64
@@ -571,12 +577,28 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
         let mut mag : u64 = X
         if cw > 0i32 { sgn = 0i64 - 1i64   mag = Y }
         let ln : u64 = bigint_len_limbs(mag)
-        if ln > 1u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+        let mut zln : u64 = ln
+        if bigint_is_zero(mag) == 1u8 { zln = 0u64 }
+        let mut fits : i64 = 1i64
+        if zln > 1u64 { fits = 0i64 }
         let lo : u64 = bigint_to_u64_lo(mag)
-        if lo > 9223372036854775807u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
-        let mut qv : i64 = lo as i64
-        if sgn < 0i64 { qv = 0i64 - qv }
-        RS_Q[i as u64] = qv
+        if lo > 9223372036854775807u64 { fits = 0i64 }
+        if RSB_WANT == 1i64 {
+            if zln > 64u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+            let mut sg2 : i64 = sgn
+            if zln == 0u64 { sg2 = 0i64 }
+            RSB_SGN[i as u64] = sg2   RSB_LEN[i as u64] = zln as i64   RSB_FIT[i as u64] = fits
+            let mut j2 : u64 = 0u64
+            while j2 < zln { RSB_LIMB[((i as u64) * 64u64) + j2] = bigint_get_limb(mag, j2)   j2 = j2 + 1u64 }
+        }
+        if fits == 0i64 {
+            if RSB_WANT == 0i64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+            RS_Q[i as u64] = 0i64
+        } else {
+            let mut qv : i64 = lo as i64
+            if sgn < 0i64 { qv = 0i64 - qv }
+            RS_Q[i as u64] = qv
+        }
         bigint_drop(X)   bigint_drop(Y)   bigint_drop(PB)
         i = i + 1i64
     }
@@ -592,8 +614,9 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
             let mut acc : i64 = 0i64
             i = 0i64
             while i <= D {
-                let qi : i64 = RS_Q[i as u64]
-                acc = (acc + (rs_modp(qi, p) * rs_powmod(t, i, p))) % p
+                let mut ri : i64 = 0i64
+                if RSB_WANT == 1i64 { ri = rs_rawmod(i, p) } else { ri = rs_modp(RS_Q[i as u64], p) }
+                acc = (acc + (ri * rs_powmod(t, i, p))) % p
                 i = i + 1i64
             }
             let rv : i64 = RS_RMOD[((t * 16i64) + l) as u64]
@@ -602,21 +625,70 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
         }
         l = l + 1i64
     }
-    let ld : i64 = RS_Q[D as u64]
+    let mut ld : i64 = RS_Q[D as u64]
+    if RSB_WANT == 1i64 { ld = RSB_SGN[D as u64] }
     if ld < 0i64 {
         i = 0i64
-        while i <= D { RS_Q[i as u64] = 0i64 - RS_Q[i as u64]   i = i + 1i64 }
+        while i <= D {
+            RS_Q[i as u64] = 0i64 - RS_Q[i as u64]
+            if RSB_WANT == 1i64 { RSB_SGN[i as u64] = 0i64 - RSB_SGN[i as u64] }
+            i = i + 1i64
+        }
     }
     i = 0i64
     while i <= D { out[i as u64] = RS_Q[i as u64]   i = i + 1i64 }
     return D
 }
+/* residue of raw coefficient row i mod p (limb walk, sign applied) */
+fn rs_rawmod(i: i64, p: i64) -> i64 {
+    let pu : u64 = p as u64
+    let b32 : u64 = 4294967296u64 % pu
+    let pw64 : u64 = (b32 * b32) % pu
+    let mut r : u64 = 0u64
+    let mut j : i64 = RSB_LEN[i as u64]
+    while j > 0i64 {
+        j = j - 1i64
+        let lm : u64 = RSB_LIMB[((i as u64) * 64u64) + (j as u64)]
+        r = ((r * pw64) + (lm % pu)) % pu
+    }
+    let mut v : i64 = r as i64
+    let sg : i64 = RSB_SGN[i as u64]
+    if sg < 0i64 { if v != 0i64 { v = p - v } }
+    return v
+}
 fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    RSB_WANT = 0i64
     return rs_gamma_big(fp, degf, gp, degg, outp, 0i64)
 }
 fn rs_prod_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
     let g : *i64 = gp as *i64
     let g0 : i64 = g[0u64]
     if g0 == 0i64 { return 0i64 - 1i64 }
+    RSB_WANT = 0i64
     return rs_gamma_big(fp, degf, gp, degg, outp, 1i64)
+}
+
+/* ═════════ THE BIGINT OUTPUT ABI (Turing charter V-I.2): coefficients BEYOND i64 delivered, not
+ * refused -- as raw sign/limb rows (the same shape sturm_big's sturm2_in_* rows consume).  The i64
+ * out[] still receives the coefficients that fit; the ones that do not are marked (rs_big_fit(i)==0)
+ * and readable exactly via rs_big_sgn/len/limb.  The mod-every-prime consistency check runs on the
+ * FULL values (limb-walk residues), so the delivered bigints carry the same certificate. ═════════ */
+fn rs_big_sgn(i: i64) -> i64 @export { return RSB_SGN[i as u64] }
+fn rs_big_len(i: i64) -> i64 @export { return RSB_LEN[i as u64] }
+fn rs_big_fit(i: i64) -> i64 @export { return RSB_FIT[i as u64] }
+fn rs_big_limb(i: i64, j: i64) -> u64 @export { return RSB_LIMB[((i * 64i64) + j) as u64] }
+fn rs_sum_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    RSB_WANT = 1i64
+    let d : i64 = rs_gamma_big(fp, degf, gp, degg, outp, 0i64)
+    RSB_WANT = 0i64
+    return d
+}
+fn rs_prod_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    let g : *i64 = gp as *i64
+    let g0 : i64 = g[0u64]
+    if g0 == 0i64 { return 0i64 - 1i64 }
+    RSB_WANT = 1i64
+    let d : i64 = rs_gamma_big(fp, degf, gp, degg, outp, 1i64)
+    RSB_WANT = 0i64
+    return d
 }

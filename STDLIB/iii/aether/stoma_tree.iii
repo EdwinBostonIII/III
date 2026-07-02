@@ -1,0 +1,239 @@
+/* STDLIB/iii/aether/stoma_tree.iii -- STOMA organ: the navigable tree/sidebar (M9 of the plan).
+ *
+ * The visual face the CLI was asked for: an arrow-key-navigable tree that DOUBLES as the live
+ * monitor.  Each node carries a STATUS driven by the ripple + gate state (clean / dirty /
+ * impacted / PASS / WRONG), so the tree IS the sidebar -- not a dumb file browser.  And it obeys
+ * the Collapse Law by construction: the exact same model renders two ways --
+ *   tr_render_vt   -> an alt-screen frame (VT: box glyphs, SGR verdict colours, cursor highlight)
+ *   tr_render_plain-> a flat text log (one line per visible node, no escapes)
+ * so leaving the tree (or any failure) lands on the plain projection with ZERO information loss.
+ *
+ * The model is pure and headless: nodes are a flat array with parent/depth/expanded/status; the
+ * "visible" list is the pre-order walk skipping collapsed subtrees; navigation moves a cursor over
+ * that visible list.  KATs drive nav + snapshot both renders (no console needed).  The live driver
+ * (stoma.iii, interactive mode) feeds con_key kinds to tr_key and blits tr_render_vt.
+ *
+ * status codes: 0 none | 1 clean | 2 dirty | 3 impacted | 4 PASS | 5 WRONG  (map to SGR in render)
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_tree
+
+extern @abi(c-msvc-x64) fn con_vt_cup(dst: u64, row: u32, col: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_sgr(dst: u64, n: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_eol(dst: u64) -> u32 from "stoma_con.iii"
+
+const TT_MAXN  : u64 = 1024u64        /* max nodes */
+const TT_NAMEP : u64 = 65536u64       /* name pool bytes */
+
+var TT_PARENT : [i64; 1024]      /* parent index, -1 for roots */
+var TT_DEPTH  : [u64; 1024]
+var TT_EXPAND : [u8; 1024]       /* 1 = expanded (children shown) */
+var TT_HASKID : [u8; 1024]
+var TT_STATUS : [u32; 1024]
+var TT_NOFF   : [u64; 1024]      /* name offset in pool */
+var TT_NLEN   : [u64; 1024]
+var TT_N      : u64 = 0u64
+var TT_POOL   : [u8; 65536]
+var TT_FILL   : u64 = 0u64
+
+var TT_VIS    : [u64; 1024]      /* visible node indices in pre-order */
+var TT_VISN   : u64 = 0u64
+var TT_CUR    : u64 = 0u64       /* cursor position into the visible list */
+
+fn tree_reset() -> i32 @export {
+    TT_N = 0u64
+    TT_FILL = 0u64
+    TT_VISN = 0u64
+    TT_CUR = 0u64
+    return 0i32
+}
+
+/* add a node under parent (-1 = root).  name[0..nlen).  Returns the new node index. */
+fn tree_add(parent: i64, name: u64, nlen: u64) -> i64 @export {
+    if TT_N >= TT_MAXN { return 0i64 - 1i64 }
+    if TT_FILL + nlen > TT_NAMEP { return 0i64 - 1i64 }
+    let id : u64 = TT_N
+    TT_PARENT[id] = parent
+    if parent < 0i64 { TT_DEPTH[id] = 0u64 }
+    else {
+        TT_DEPTH[id] = TT_DEPTH[parent as u64] + 1u64
+        TT_HASKID[parent as u64] = 1u8
+        TT_EXPAND[parent as u64] = TT_EXPAND[parent as u64]     /* unchanged */
+    }
+    TT_EXPAND[id] = 1u8            /* expanded by default */
+    TT_HASKID[id] = 0u8
+    TT_STATUS[id] = 1u32           /* clean */
+    TT_NOFF[id] = TT_FILL
+    TT_NLEN[id] = nlen
+    let s : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    while i < nlen { TT_POOL[TT_FILL + i] = s[i]   i = i + 1u64 }
+    TT_FILL = TT_FILL + nlen
+    TT_N = TT_N + 1u64
+    return id as i64
+}
+
+fn tree_set_status(id: u64, st: u32) -> i32 @export {
+    if id >= TT_N { return 0i32 - 1i32 }
+    TT_STATUS[id] = st
+    return 0i32
+}
+fn tree_status(id: u64) -> u32 @export { if id >= TT_N { return 0u32 }   return TT_STATUS[id] }
+
+/* is node `id` hidden because some ancestor is collapsed? */
+fn tt_hidden(id: u64) -> u32 {
+    let mut p : i64 = TT_PARENT[id]
+    while p >= 0i64 {
+        if TT_EXPAND[p as u64] == 0u8 { return 1u32 }
+        p = TT_PARENT[p as u64]
+    }
+    return 0u32
+}
+
+/* rebuild the visible pre-order list (node order is insertion order = pre-order for a tree built
+ * parent-before-children, which tree_add enforces). */
+fn tree_rebuild_visible() -> u64 @export {
+    TT_VISN = 0u64
+    let mut id : u64 = 0u64
+    while id < TT_N {
+        if tt_hidden(id) == 0u32 {
+            TT_VIS[TT_VISN] = id
+            TT_VISN = TT_VISN + 1u64
+        }
+        id = id + 1u64
+    }
+    if TT_CUR >= TT_VISN { if TT_VISN > 0u64 { TT_CUR = TT_VISN - 1u64 } else { TT_CUR = 0u64 } }
+    return TT_VISN
+}
+
+fn tree_visible_count() -> u64 @export { return TT_VISN }
+fn tree_cursor() -> u64 @export { return TT_CUR }
+/* the node id currently under the cursor */
+fn tree_cursor_node() -> u64 @export {
+    if TT_VISN == 0u64 { return 0u64 }
+    return TT_VIS[TT_CUR]
+}
+
+/* navigation key: kind 2 specials from stoma_con (1 up 2 down 3 left 4 right 5 enter).
+ * left collapses (or moves to parent if already collapsed/leaf); right expands.  Returns 1 if a
+ * node was ACTIVATED (Enter), else 0. */
+fn tree_key(kind: u32, val: u32) -> u32 @export {
+    if kind != 2u32 { return 0u32 }
+    if val == 1u32 { if TT_CUR > 0u64 { TT_CUR = TT_CUR - 1u64 }   return 0u32 }          /* up */
+    if val == 2u32 { if TT_CUR + 1u64 < TT_VISN { TT_CUR = TT_CUR + 1u64 }   return 0u32 } /* down */
+    if val == 4u32 {                                                                        /* right: expand */
+        let id : u64 = TT_VIS[TT_CUR]
+        if TT_HASKID[id] == 1u8 { TT_EXPAND[id] = 1u8   tree_rebuild_visible() }
+        return 0u32
+    }
+    if val == 3u32 {                                                                        /* left: collapse or go parent */
+        let id : u64 = TT_VIS[TT_CUR]
+        if TT_HASKID[id] == 1u8 {
+            if TT_EXPAND[id] == 1u8 { TT_EXPAND[id] = 0u8   tree_rebuild_visible()   return 0u32 }
+        }
+        /* already collapsed or leaf: jump to parent in the visible list */
+        let par : i64 = TT_PARENT[id]
+        if par >= 0i64 {
+            let mut k : u64 = 0u64
+            let mut go : u32 = 1u32
+            while go == 1u32 {
+                if k >= TT_VISN { go = 0u32 }
+                else { if TT_VIS[k] == (par as u64) { TT_CUR = k   go = 0u32 } else { k = k + 1u64 } }
+            }
+        }
+        return 0u32
+    }
+    if val == 5u32 { return 1u32 }                                                          /* enter: activate */
+    return 0u32
+}
+
+/* ── renderers ─────────────────────────────────────────────────────────────────────────────
+ * Both walk the visible list.  A byte builder appends into a caller buffer; returns total len. */
+
+fn tt_put(dst: u64, off: u64, b: u8) -> u64 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return off + 1u64
+}
+fn tt_name(dst: u64, off: u64, id: u64) -> u64 {
+    let noff : u64 = TT_NOFF[id]
+    let nlen : u64 = TT_NLEN[id]
+    let mut o : u64 = off
+    let mut i : u64 = 0u64
+    while i < nlen { o = tt_put(dst, o, TT_POOL[noff + i])   i = i + 1u64 }
+    return o
+}
+/* status tag as ASCII: [.] clean [*] dirty [~] impacted [P] pass [X] wrong */
+fn tt_status_ch(st: u32) -> u8 {
+    if st == 2u32 { return 42u8 }     /* * dirty */
+    if st == 3u32 { return 126u8 }    /* ~ impacted */
+    if st == 4u32 { return 80u8 }     /* P pass */
+    if st == 5u32 { return 88u8 }     /* X wrong */
+    return 46u8                       /* . clean/none */
+}
+/* SGR colour code per status: dirty=33 yellow, impacted=36 cyan, pass=32 green, wrong=31 red,
+ * clean=90 grey */
+fn tt_status_sgr(st: u32) -> u32 {
+    if st == 2u32 { return 33u32 }
+    if st == 3u32 { return 36u32 }
+    if st == 4u32 { return 32u32 }
+    if st == 5u32 { return 31u32 }
+    return 90u32
+}
+
+/* PLAIN projection: one line per visible node -- "<indent><status> name\n".  Lossless: carries
+ * depth (as 2-space indent), status (as a char), and name -- everything the VT frame shows minus
+ * colour.  Returns byte length. */
+fn tree_render_plain(dst: u64) -> u64 @export {
+    let mut o : u64 = 0u64
+    let mut v : u64 = 0u64
+    while v < TT_VISN {
+        let id : u64 = TT_VIS[v]
+        let mut d : u64 = 0u64
+        while d < TT_DEPTH[id] { o = tt_put(dst, o, 32u8)   o = tt_put(dst, o, 32u8)   d = d + 1u64 }
+        /* expansion marker for parents */
+        if TT_HASKID[id] == 1u8 {
+            if TT_EXPAND[id] == 1u8 { o = tt_put(dst, o, 45u8) }    /* - open */
+            else { o = tt_put(dst, o, 43u8) }                       /* + closed */
+        } else { o = tt_put(dst, o, 32u8) }
+        o = tt_put(dst, o, 32u8)
+        o = tt_put(dst, o, 91u8)                                    /* [ */
+        o = tt_put(dst, o, tt_status_ch(TT_STATUS[id]))
+        o = tt_put(dst, o, 93u8)                                    /* ] */
+        o = tt_put(dst, o, 32u8)
+        o = tt_name(dst, o, id)
+        o = tt_put(dst, o, 10u8)                                    /* \n */
+        v = v + 1u64
+    }
+    return o
+}
+
+/* VT frame: alt-screen assumed already entered by the driver.  Draws each visible node at its
+ * row with CUP, SGR colour by status, and the cursor row reverse-video (SGR 7).  Returns len. */
+fn tree_render_vt(dst: u64, top_row: u32) -> u64 @export {
+    let mut o : u64 = 0u64
+    let mut v : u64 = 0u64
+    while v < TT_VISN {
+        let id : u64 = TT_VIS[v]
+        let row : u32 = top_row + (v as u32)
+        o = o + (con_vt_cup(dst + o, row, 1u32) as u64)
+        o = o + (con_vt_eol(dst + o) as u64)
+        if v == TT_CUR { o = o + (con_vt_sgr(dst + o, 7u32) as u64) }    /* reverse video */
+        o = o + (con_vt_sgr(dst + o, tt_status_sgr(TT_STATUS[id])) as u64)
+        /* indent */
+        let mut d : u64 = 0u64
+        while d < TT_DEPTH[id] { o = tt_put(dst, o, 32u8)   o = tt_put(dst, o, 32u8)   d = d + 1u64 }
+        if TT_HASKID[id] == 1u8 {
+            if TT_EXPAND[id] == 1u8 { o = tt_put(dst, o, 45u8) } else { o = tt_put(dst, o, 43u8) }
+        } else { o = tt_put(dst, o, 32u8) }
+        o = tt_put(dst, o, 32u8)
+        o = tt_put(dst, o, 91u8)
+        o = tt_put(dst, o, tt_status_ch(TT_STATUS[id]))
+        o = tt_put(dst, o, 93u8)
+        o = tt_put(dst, o, 32u8)
+        o = tt_name(dst, o, id)
+        o = o + (con_vt_sgr(dst + o, 0u32) as u64)                       /* reset */
+        v = v + 1u64
+    }
+    return o
+}

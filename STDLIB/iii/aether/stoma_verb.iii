@@ -34,6 +34,7 @@ const VB_ERR    : u32 = 9u32
 const VB_GATE   : u32 = 10u32
 const VB_SEAL   : u32 = 11u32
 const VB_BUILD  : u32 = 12u32
+const VB_TREE   : u32 = 13u32
 
 const VB_MAXTOK : u64 = 32u64
 
@@ -218,6 +219,7 @@ fn vb_parse(line: u64, llen: u64) -> u32 @export {
     if vb_tok_is(0u64, "gate" as u64, 4u64) == 1u32 { return VB_GATE }
     if vb_tok_is(0u64, "seal" as u64, 4u64) == 1u32 { return VB_SEAL }
     if vb_tok_is(0u64, "build" as u64, 5u64) == 1u32 { return VB_BUILD }
+    if vb_tok_is(0u64, "tree" as u64, 4u64) == 1u32 { return VB_TREE }
     return VB_EXTERN
 }
 
@@ -241,3 +243,4 @@ fn vb_k_err()    -> u32 @export { return VB_ERR }
 fn vb_k_gate()   -> u32 @export { return VB_GATE }
 fn vb_k_seal()   -> u32 @export { return VB_SEAL }
 fn vb_k_build()  -> u32 @export { return VB_BUILD }
+fn vb_k_tree()   -> u32 @export { return VB_TREE }

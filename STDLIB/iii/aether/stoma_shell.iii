@@ -37,6 +37,12 @@ extern @abi(c-msvc-x64) fn vb_k_extern() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_err() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_gate() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_seal() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_tree() -> u32 from "stoma_verb.iii"
+
+extern @abi(c-msvc-x64) fn tree_reset() -> i32 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_add(parent: i64, name: u64, nlen: u64) -> i64 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_rebuild_visible() -> u64 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_render_plain(dst: u64) -> u64 from "stoma_tree.iii"
 
 extern @abi(c-msvc-x64) fn gate_ledger_load(path: u64) -> i32 from "stoma_gate.iii"
 extern @abi(c-msvc-x64) fn gate_status(kat: u64, klen: u64) -> u32 from "stoma_gate.iii"
@@ -202,6 +208,52 @@ fn sh_seal() -> i32 {
     return 0i32
 }
 
+/* tree: build a one-level tree of the target dir (arg or cwd) and emit its lossless plain
+ * projection to the transcript.  In a console the driver would blit the VT frame with arrow-nav;
+ * in plain mode the same model renders as text (Collapse Law).  A directory entry becomes a
+ * parent node; files are leaves. */
+fn sh_tree() -> i32 {
+    /* pattern into SH_TMP: "<arg>\*" or "*" */
+    if vb_ntok() >= 2u64 {
+        let al : u64 = vb_tok_len(1u64)
+        let ap : *u8 = vb_tok_ptr(1u64) as *u8
+        let mut i : u64 = 0u64
+        while i < al { if i < 1000u64 { SH_TMP[i] = ap[i] }   i = i + 1u64 }
+        SH_TMP[al] = 92u8            /* \ */
+        SH_TMP[al + 1u64] = 42u8     /* * */
+        SH_TMP[al + 2u64] = 0u8
+    } else {
+        SH_TMP[0u64] = 42u8   SH_TMP[1u64] = 0u8    /* "*" */
+    }
+    tree_reset()
+    let root : i64 = tree_add(0i64 - 1i64, "." as u64, 1u64)
+    let h : u64 = FindFirstFileA((&SH_TMP) as u64, (&SH_FIND) as u64)
+    if h == SH_INVALID { vb_emit("tree: no entries\n" as u64, 16u64)   return 0i32 }
+    let mut more : u32 = 1u32
+    while more == 1u32 {
+        let base : u64 = ((&SH_FIND) as u64) + 44u64
+        let bp : *u8 = base as *u8
+        /* skip "." and ".." */
+        let mut skip : u32 = 0u32
+        if bp[0u64] == 46u8 { if bp[1u64] == 0u8 { skip = 1u32 }   if bp[1u64] == 46u8 { if bp[2u64] == 0u8 { skip = 1u32 } } }
+        if skip == 0u32 {
+            let mut k : u64 = 0u64
+            let mut scan : u32 = 1u32
+            while scan == 1u32 {
+                if k >= 260u64 { scan = 0u32 }
+                else { if bp[k] == 0u8 { scan = 0u32 } else { k = k + 1u64 } }
+            }
+            tree_add(root, base, k)
+        }
+        if FindNextFileA(h, (&SH_FIND) as u64) == 0i32 { more = 0u32 }
+    }
+    FindClose(h)
+    tree_rebuild_visible()
+    let n : u64 = tree_render_plain((&SH_STG) as u64)
+    vb_emit((&SH_STG) as u64, n)
+    return 0i32
+}
+
 /* external: run the raw line captured (pipe mode), copy child stdout to transcript + "exit N". */
 fn sh_extern() -> i32 {
     let rc : i32 = proc_run(vb_line_ptr(), 0u64, 60000u32)
@@ -243,8 +295,9 @@ fn shell_feed_line(line: u64, llen: u64) -> u32 @export {
     else { if k == vb_k_exit() { sig = 2u32 }
     else { if k == vb_k_gate() { sh_gate() }
     else { if k == vb_k_seal() { sh_seal() }
+    else { if k == vb_k_tree() { sh_tree() }
     else { sh_extern() }                              /* EXTERN + (M4) build fallthrough */
-    } } } } } } } } } }
+    } } } } } } } } } } }
 
     /* journal the transcript output (verbatim) */
     journal_append(2u32, vb_out_ptr(), vb_out_len())

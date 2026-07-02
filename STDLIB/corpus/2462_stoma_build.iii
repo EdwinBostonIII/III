@@ -2,8 +2,9 @@
  *
  * Proves the native dependency engine (the ripple's impacted-set kernel) matches the closure
  * sovbuild.sh computes by grep:
- *   1. index STDLIB/iii/aether, then closure("stoma") == 8 modules (sovbuild reported closure=8:
- *      stoma con line verb shell proc journal gate).
+ *   1. index STDLIB/iii/aether, then closure("stoma") == 9 modules (sovbuild reports closure=9:
+ *      stoma con line verb shell proc journal gate tree -- the shell's `tree` verb pulled
+ *      stoma_tree into the closure at M9, and native + sovbuild agree on the new count).
  *   2. the closure CONTAINS its true deps (stoma_gate, stoma_proc, stoma_journal) and EXCLUDES a
  *      real aether module stoma does NOT import (aether_fs) -- a cone, not the whole directory.
  *   3. closure of a leaf (stoma_journal) is smaller than the root's -- deps flow one way.
@@ -25,9 +26,9 @@ fn main() -> u64 {
     if idx < 8u64 { return 10u64 }              /* the aether dir has many modules */
     if bd_index_count() != idx { return 11u64 }
 
-    /* closure of stoma == 8 (parity with sovbuild's closure=8) */
+    /* closure of stoma == 9 (parity with sovbuild's closure=9 after the M9 tree verb) */
     let c : u64 = bd_closure("stoma" as u64, 5u64)
-    if c != 8u64 { return 12u64 }
+    if c != 9u64 { return 12u64 }
 
     /* membership: true deps in, a non-dep out */
     if bd_in_closure("stoma_gate" as u64, 10u64) != 1u32 { return 20u64 }

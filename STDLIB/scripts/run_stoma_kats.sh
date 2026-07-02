@@ -10,7 +10,7 @@ OUT="$III/STDLIB/build/stoma_kats"
 mkdir -p "$OUT"
 pass=0; fail=0
 
-ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_shell"
+ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_tree stoma_shell"
 for m in $ORGANS; do
     "$I2" "$A/$m.iii" --compile-only --out "$OUT/$m.o" 2>"$OUT/$m.c.log" \
         || { echo "FAIL $m : organ compile"; tail -3 "$OUT/$m.c.log"; exit 1; }
@@ -33,11 +33,12 @@ run 2455_stoma_con   99 "$OUT/stoma_con.o"
 run 2456_stoma_proc  99 "$OUT/stoma_proc.o"
 run 2457_stoma_pty   99 "$OUT/stoma_pty.o"
 run 2458_stoma_line  99 "$OUT/stoma_line.o"
-run 2459_stoma_shell 99 "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_shell.o"
+run 2459_stoma_shell 99 "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" "$OUT/stoma_con.o" "$OUT/stoma_shell.o"
 run 2460_stoma_gate  99 "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
 run 2461_stoma_queue 99 "$OUT/stoma_traps.o" "$OUT/stoma_queue.o" "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
 run 2462_stoma_build  99 "$OUT/stoma_build.o"
 run 2463_stoma_ripple 99 "$OUT/stoma_ripple.o" "$OUT/stoma_build.o"
+run 2464_stoma_tree   99 "$OUT/stoma_tree.o" "$OUT/stoma_con.o"
 
 # ---- stoma.exe walking-skeleton: build (gcc dev-link here; sovbuild parity is the M5/M7 gate) + plain-mode smoke ----
 "$I2" "$A/stoma.iii" --compile-only --out "$OUT/stoma.o" 2>"$OUT/stoma.c.log" \
@@ -45,15 +46,15 @@ run 2463_stoma_ripple 99 "$OUT/stoma_ripple.o" "$OUT/stoma_build.o"
 if [[ -f "$OUT/stoma.o" ]]; then
     gcc "$OUT/stoma.o" "$OUT/stoma_con.o" "$OUT/stoma_line.o" "$OUT/stoma_verb.o" \
         "$OUT/stoma_shell.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_pty.o" \
-        "$OUT/stoma_gate.o" \
+        "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" \
         -lkernel32 -o "$OUT/stoma.exe" 2>"$OUT/stoma.l.log" \
         || { echo "FAIL stoma.exe : link"; grep -i undefined "$OUT/stoma.l.log" | head -3; fail=$((fail+1)); }
 fi
 if [[ -f "$OUT/stoma.exe" ]]; then
     # plain-mode smoke: pipe a script, expect help text + echo marker + exit-0 line in the transcript
-    SMOKE="$( printf 'help\ncmd /c echo SMOKE_OK\nexit\n' | (cd "$OUT" && timeout 60 ./stoma.exe) 2>/dev/null )"
-    if echo "$SMOKE" | grep -q 'STOMA verbs' && echo "$SMOKE" | grep -q 'SMOKE_OK' && echo "$SMOKE" | grep -q '\[exit 0\]'; then
-        echo "PASS  stoma.exe : plain-mode smoke (help + spawn + exit)"; pass=$((pass+1))
+    SMOKE="$( printf 'help\ncmd /c echo SMOKE_OK\ntree\nexit\n' | (cd "$OUT" && timeout 60 ./stoma.exe) 2>/dev/null )"
+    if echo "$SMOKE" | grep -q 'STOMA verbs' && echo "$SMOKE" | grep -q 'SMOKE_OK' && echo "$SMOKE" | grep -q '\[exit 0\]' && echo "$SMOKE" | grep -q 'stoma.exe'; then
+        echo "PASS  stoma.exe : plain-mode smoke (help + spawn + tree + exit)"; pass=$((pass+1))
     else
         echo "FAIL  stoma.exe : plain-mode smoke"; echo "--- transcript:"; echo "$SMOKE" | head -8; fail=$((fail+1))
     fi

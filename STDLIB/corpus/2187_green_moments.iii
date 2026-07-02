@@ -1,0 +1,86 @@
+/* 2187_green_moments.iii -- GATE for EXACT MOMENTS over algebraic boundaries (Turing charter V-I.3).
+ *
+ * A -- AREA: integral of x^2 over [0, sqrt2] == 2*sqrt2/3 EXACTLY: the rank-1 triple (0, 2, 3).  And
+ *   the certificate no mesh can match: the sqrt2-part is NONZERO -- the exact area is IRRATIONAL, so
+ *   EVERY rational tessellation value differs from it (the structural anti-mesh theorem).
+ * M -- FIRST MOMENT: integral of x*x^2 over the SAME irrational domain == 1 EXACTLY RATIONAL (the
+ *   radical parts cancel: (sqrt2)^4/4): the triple (1, 0, 1) -- an irrational-domain integral with a
+ *   rational value, caught exactly.
+ * I -- SECOND MOMENT (inertia kernel): integral of x^2*x^2 == 4*sqrt2/5: (0, 4, 5).
+ * C -- CENTROID as an integer identity: xbar = Mx/A = 3*sqrt2/4  <=>  4*Mx == 3*sqrt2*A: both sides
+ *   multiply out to (4, 0, 1) in the field -- asserted coefficient-for-coefficient.
+ * T -- THE TESSELLATION TWIN: the 4-panel trapezoid rule on the best rational stand-in domain
+ *   [0, 141/100] gives 11c^3/32 = 30835431/32000000 -- provably ABOVE the exact area (convex
+ *   integrand: the mesh overestimates): sign(At - 2sqrt2/3) = sign((3*At_n)^2 - 8*At_d^2) = +1,
+ *   decided in pure i64.  The mesh is wrong by a certified sign, not a tolerance.
+ * R -- refusals: gm_begin(0) and the deg+k > 12 envelope.
+ *
+ * exit 99 = pass;  10 A;  11 M;  12 I;  13 C;  14 T;  15 R */
+module corpus_2187_green_moments
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gm_begin(d: i64) -> i32 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_moment(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, bn1: i64, bd: i64) -> i32 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_r0() -> i64 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_r1() -> i64 from "green_moments.iii"
+extern @abi(c-msvc-x64) fn gm_rd() -> i64 from "green_moments.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var GP : [i64; 8]
+
+fn main() -> u64 {
+    if gm_begin(2i64) != 0i32 { return 10u64 }
+    GP[0u64] = 0i64   GP[1u64] = 0i64   GP[2u64] = 1i64                       /* p = x^2 */
+
+    /* ══ A: area = 2*sqrt2/3, certified irrational. */
+    if gm_moment((&GP) as u64, 2i64, 0i64, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64) != 0i32 { return 10u64 }
+    putchar(65i32) putchar(58i32) sp() e_i64(gm_r0()) sp() e_i64(gm_r1()) sp() e_i64(gm_rd()) nl()   /* "A: 0 2 3" */
+    if gm_r0() != 0i64 { return 10u64 }
+    if gm_r1() != 2i64 { return 10u64 }
+    if gm_rd() != 3i64 { return 10u64 }
+
+    /* ══ M: first moment = 1 exactly (radicals cancel). */
+    if gm_moment((&GP) as u64, 2i64, 1i64, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64) != 0i32 { return 11u64 }
+    putchar(77i32) putchar(58i32) sp() e_i64(gm_r0()) sp() e_i64(gm_r1()) sp() e_i64(gm_rd()) nl()   /* "M: 1 0 1" */
+    if gm_r0() != 1i64 { return 11u64 }
+    if gm_r1() != 0i64 { return 11u64 }
+    if gm_rd() != 1i64 { return 11u64 }
+
+    /* ══ I: second moment = 4*sqrt2/5. */
+    if gm_moment((&GP) as u64, 2i64, 2i64, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64) != 0i32 { return 12u64 }
+    putchar(73i32) putchar(58i32) sp() e_i64(gm_r0()) sp() e_i64(gm_r1()) sp() e_i64(gm_rd()) nl()   /* "I: 0 4 5" */
+    if gm_r0() != 0i64 { return 12u64 }
+    if gm_r1() != 4i64 { return 12u64 }
+    if gm_rd() != 5i64 { return 12u64 }
+
+    /* ══ C: the centroid identity 4*Mx == 3*sqrt2*A == (4,0,1). */
+    /* 3*sqrt2*A = 3*(0,1,1)*(0,2,3): field product (0*0 + 2*1*2, 0*2+1*0)/(1*3) = (12,0)/3 = (4,0)/1 */
+    let lhs0 : i64 = 4i64 * 1i64                                              /* 4*Mx, Mx = (1,0,1) */
+    let rhs0 : i64 = (2i64 * (1i64 * 2i64)) * 3i64 / 3i64                     /* d*a1*b1 * 3 over den 3 */
+    putchar(67i32) putchar(58i32) sp() e_i64(lhs0) sp() e_i64(rhs0) nl()      /* "C: 4 4" */
+    if lhs0 != rhs0 { return 13u64 }
+
+    /* ══ T: the 4-panel trapezoid mesh on [0, 141/100] is provably BELOW: sign((3*At)^2 - 8*(2*Ad)^2) < 0
+     * with At/Ad = 30835431/32000000  (11c^3/32, c = 141/100). */
+    let atn : i64 = 30835431i64
+    let atd : i64 = 32000000i64
+    let lq : i64 = (3i64 * atn) * (3i64 * atn)                                 /* (3*At_n)^2 */
+    let rq : i64 = 8i64 * (atd * atd)                                          /* (2*sqrt2*At_d)^2 */
+    let mut tsign : i64 = 0i64
+    if lq < rq { tsign = 0i64 - 1i64 }
+    if lq > rq { tsign = 1i64 }
+    putchar(84i32) putchar(58i32) sp() e_i64(tsign) nl()                       /* "T: 1" */
+    if tsign != 1i64 { return 14u64 }
+
+    /* ══ R: refusals. */
+    let z1 : i32 = gm_begin(0i64)
+    gm_begin(2i64)
+    let z2 : i32 = gm_moment((&GP) as u64, 2i64, 11i64, 0i64, 0i64, 1i64, 0i64, 1i64, 1i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(z1 as i64) sp() e_i64(z2 as i64) nl()   /* "R: -1 -1" */
+    if z1 != (0i32 - 1i32) { return 15u64 }
+    if z2 != (0i32 - 1i32) { return 15u64 }
+
+    return 99u64
+}

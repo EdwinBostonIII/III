@@ -1,0 +1,118 @@
+/* STDLIB/iii/aether/green_moments.iii -- EXACT MOMENTS over algebraic boundaries (Turing charter
+ * V-I.3): area / first moment / second moment of regions bounded by INTEGER-polynomial arcs with
+ * ALGEBRAIC breakpoints, as exact rank-1 Q(sqrt d) values.  No mesh, no epsilon.
+ *
+ * THE MECHANISM: moment_k = integral x^k p(x) dx over [a,b] = (Q(b) - Q(a)) where Q is the
+ * antiderivative of x^k p.  Q has rational coefficients with denominators <= deg+k+1: we carry the
+ * INTEGER polynomial L*Q (L = lcm(1..deg+k+1)) and return the value as (r0 + r1*sqrt d)/rd with the
+ * L folded into rd -- exact division deferred, never rounded.  Powers of a rank-1 argument stay
+ * rank-1 (the quadratic field is closed: (a0+a1 s)(b0+b1 s) = (a0b0 + d a1b1) + (a0b1+a1b0) s), so
+ * evaluation is Horner in the field with one common endpoint denominator.  Overflow-guarded (refuse).
+ * pi-DOMAINS ARE STRUCTURALLY ABSENT: the API takes integer polynomials only -- a circular-arc area
+ * is transcendental and has NO ENCODING here (the adjudicated honesty; gm_begin(d<=0) refuses too).
+ * Envelope: deg + k <= 12, |coefficients| and endpoint parts within guarded i64 products. */
+module green_moments
+
+var GM_D : i64   var GM_OVF : i64
+var GM_R0 : i64   var GM_R1 : i64   var GM_RD : i64
+
+fn gm_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn gm_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = gm_abs(a)   let ub : u64 = gm_abs(b)
+    if ub > (9223372036854775807u64 / ua) { GM_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn gm_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+fn gm_begin(d: i64) -> i32 @export {
+    if d <= 0i64 { return 0i32 - 1i32 }
+    GM_D = d
+    return 0i32
+}
+
+/* field product accumulator state for one endpoint evaluation */
+var GM_A0 : i64   var GM_A1 : i64
+fn gm_fmul(b0: i64, b1: i64) -> i32 {                       /* (GM_A) *= (b0 + b1 s) */
+    let n0 : i64 = gm_mul(GM_A0, b0) + gm_mul(GM_D, gm_mul(GM_A1, b1))
+    let n1 : i64 = gm_mul(GM_A0, b1) + gm_mul(GM_A1, b0)
+    GM_A0 = n0   GM_A1 = n1
+    return 0i32
+}
+
+/* value of the integer polynomial q (ascending, degree dq) at (e0 + e1 s)/ed:
+ * homogenized Horner: acc = acc*(e0+e1 s) + q_i * ed^(dq-i) * (1,0); result over ed^dq. */
+var GM_V0 : i64   var GM_V1 : i64
+fn gm_evalq(qp: u64, dq: i64, e0: i64, e1: i64, ed: i64) -> i32 {
+    let q : *i64 = qp as *i64
+    GM_A0 = q[dq as u64]   GM_A1 = 0i64
+    let mut pw : i64 = 1i64
+    let mut i : i64 = dq - 1i64
+    while i >= 0i64 {
+        pw = gm_mul(pw, ed)
+        gm_fmul(e0, e1)
+        let ci : i64 = q[i as u64]
+        GM_A0 = GM_A0 + gm_mul(ci, pw)
+        i = i - 1i64
+    }
+    GM_V0 = GM_A0   GM_V1 = GM_A1
+    return 0i32
+}
+
+var GM_Q : [i64; 16]
+/* moment_k of p (ascending coeffs, degree deg) over [(an0+an1 s)/ad, (bn0+bn1 s)/bd]:
+ * result (GM_R0 + GM_R1 s)/GM_RD, gcd-reduced.  Returns 0, or -1 refused (overflow/envelope). */
+fn gm_moment(pp: u64, deg: i64, k: i64, an0: i64, an1: i64, ad: i64, bn0: i64, bn1: i64, bd: i64) -> i32 @export {
+    GM_OVF = 0i64
+    if GM_D <= 0i64 { return 0i32 - 1i32 }
+    if deg < 0i64 { return 0i32 - 1i32 }
+    if k < 0i64 { return 0i32 - 1i32 }
+    if (deg + k) > 12i64 { return 0i32 - 1i32 }
+    if ad <= 0i64 { return 0i32 - 1i32 }
+    if bd <= 0i64 { return 0i32 - 1i32 }
+    let p : *i64 = pp as *i64
+    /* L = lcm(1 .. deg+k+1); L*Q coefficients: (L/(i+k+1)) * p_i at power i+k+1 */
+    let mut L : i64 = 1i64
+    let mut i : i64 = 1i64
+    while i <= (deg + k + 1i64) { L = (L / gm_gcd(L, i)) * i   i = i + 1i64 }
+    let dq : i64 = deg + k + 1i64
+    i = 0i64
+    while i <= dq { GM_Q[i as u64] = 0i64   i = i + 1i64 }
+    i = 0i64
+    while i <= deg {
+        let ci : i64 = p[i as u64]
+        GM_Q[(i + k + 1i64) as u64] = gm_mul(L / (i + k + 1i64), ci)
+        i = i + 1i64
+    }
+    if GM_OVF != 0i64 { return 0i32 - 1i32 }
+    /* common endpoint denominator ed = lcm(ad, bd): scale each endpoint's parts */
+    let ed : i64 = (ad / gm_gcd(ad, bd)) * bd
+    let bs : i64 = ed / bd
+    let asf : i64 = ed / ad
+    gm_evalq((&GM_Q) as u64, dq, gm_mul(bn0, bs), gm_mul(bn1, bs), ed)
+    let vb0 : i64 = GM_V0   let vb1 : i64 = GM_V1
+    gm_evalq((&GM_Q) as u64, dq, gm_mul(an0, asf), gm_mul(an1, asf), ed)
+    let va0 : i64 = GM_V0   let va1 : i64 = GM_V1
+    if GM_OVF != 0i64 { return 0i32 - 1i32 }
+    /* (LQ(b) - LQ(a)) / (L * ed^dq) */
+    let mut r0 : i64 = vb0 - va0
+    let mut r1 : i64 = vb1 - va1
+    let mut rd : i64 = L
+    i = 0i64
+    while i < dq { rd = gm_mul(rd, ed)   i = i + 1i64 }
+    if GM_OVF != 0i64 { return 0i32 - 1i32 }
+    let g : i64 = gm_gcd(gm_gcd(r0, r1), rd)
+    if g > 1i64 { r0 = r0 / g   r1 = r1 / g   rd = rd / g }
+    if rd < 0i64 { r0 = 0i64 - r0   r1 = 0i64 - r1   rd = 0i64 - rd }
+    GM_R0 = r0   GM_R1 = r1   GM_RD = rd
+    return 0i32
+}
+fn gm_r0() -> i64 @export { return GM_R0 }
+fn gm_r1() -> i64 @export { return GM_R1 }
+fn gm_rd() -> i64 @export { return GM_RD }

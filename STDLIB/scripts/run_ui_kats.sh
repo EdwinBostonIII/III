@@ -20,7 +20,9 @@ fail=0; pass=0
 cc() { "$I2" "$1" --compile-only --out "$2" 2>/dev/null; }
 
 # pure UI library .o's (framebuffer/math; no Windows APIs)
-for m in ui_raster ui_font_data ui_exact ui_exact_cubic ui_font ui_vfont ui_vfont_data ui_present studio_theme studio_sample ui_win ui_morphic ui_destiny ui_morphic_app ui_destiny_app; do
+# + the app shells for the live root exes (atlas = ui_egraph_app, topo = ui_topo): compile-gated
+#   here so their sources can never silently rot (whole-tree sweep 2026-07-02 found them orphaned).
+for m in ui_raster ui_font_data ui_exact ui_exact_cubic ui_font ui_vfont ui_vfont_data ui_present studio_theme studio_sample ui_win ui_morphic ui_destiny ui_morphic_app ui_destiny_app ui_egraph ui_egraph_app ui_topo; do
     cc "$A/$m.iii" "$OUT/$m.o" || { echo "FAIL  lib $m : compile"; fail=$((fail+1)); }
 done
 

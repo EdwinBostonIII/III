@@ -1,4 +1,6 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\safety_prover.iii
+ * MODEL-TIER (III-PERFECTION-LEDGER label): this file is the didactic verified MODEL of the method;
+ * III's REAL optimizer is XII (xii_canonicalise) + cg_r3 -- the teaching model, not the live pass.
  *
  * III STDLIB - numera::safety_prover  --  THE COMPLETE k-INDUCTION VERDICT (decision-complete; verified).
  *

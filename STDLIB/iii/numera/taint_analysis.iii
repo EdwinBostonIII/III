@@ -1,4 +1,6 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\taint_analysis.iii
+ * MODEL-TIER ORIGIN (III-PERFECTION-LEDGER label): a verified-model method WITH real live consumers --
+ * kept as a working pass, not merely didactic (see the ledger's optimizer-model exemption row).
  *
  * III STDLIB - numera::taint_analysis  --  INFORMATION-FLOW SECURITY (taint tracking, verified).
  *

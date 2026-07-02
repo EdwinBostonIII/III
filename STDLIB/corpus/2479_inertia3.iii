@@ -35,6 +35,7 @@ extern @abi(c-msvc-x64) fn in3_v6(i: i64) -> i64 from "inertia3.iii"
 extern @abi(c-msvc-x64) fn in3_inertia(vp: u64, den: i64, outp: u64) -> i64 from "inertia3.iii"
 extern @abi(c-msvc-x64) fn in3_translate(vp: u64, den: i64, tx: i64, ty: i64, tz: i64) -> i64 from "inertia3.iii"
 extern @abi(c-msvc-x64) fn in3_apply_so3(vp: u64, den: i64, mp: u64, mden: i64, outp: u64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_ovf() -> i64 from "inertia3.iii"
 extern @abi(c-msvc-x64) fn so3_rot_z15(mb: u64) -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 from "cyclotomic_se3.iii"
 
@@ -103,6 +104,7 @@ fn main() -> u64 {
     /* ══ A: the standard simplex pins. */
     mk_std((&VT) as u64)
     if in3_moment((&VT) as u64, 1i64, 0i64, 0i64, 0i64) != 0i64 { return 10u64 }
+    if in3_ovf() != 0i64 { return 10u64 }                  /* the sticky guard is CLEAN on a good call */
     if pin_r(1i64, 0i64, 0i64, 0i64, 6i64) != 1i64 { return 10u64 }
     if in3_moment((&VT) as u64, 1i64, 1i64, 0i64, 0i64) != 0i64 { return 10u64 }
     if pin_r(1i64, 0i64, 0i64, 0i64, 24i64) != 1i64 { return 10u64 }
@@ -275,6 +277,7 @@ fn main() -> u64 {
     if r1 != (0i64 - 1i64) { return 16u64 }
     if r2 != (0i64 - 1i64) { return 16u64 }
     if r3 != (0i64 - 1i64) { return 16u64 }
+    if in3_ovf() != 1i64 { return 16u64 }                  /* r3 refused BECAUSE the product guard tripped */
 
     return 99u64
 }

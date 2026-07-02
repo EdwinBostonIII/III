@@ -52,6 +52,9 @@ extern @abi(c-msvc-x64) fn b3_bv_mul(ap: u64, adx: i64, ady: i64, bp: u64, bdx: 
 extern @abi(c-msvc-x64) fn b3_bv_axpy(dp: u64, sp: u64, lam: i64, dx: i64, dy: i64) -> i64 from "brep3.iii"
 extern @abi(c-msvc-x64) fn b3_bv_diff(ap: u64, bp: u64, dx: i64, dy: i64) -> i64 from "brep3.iii"
 extern @abi(c-msvc-x64) fn b3_slice_x(rp: u64, dx: i64, dy: i64, x0: i64, outp: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_slice_y(rp: u64, dx: i64, dy: i64, y0: i64, outp: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_eval3(pp: u64, dz: i64, dx: i64, dy: i64, x0: i64, y0: i64, z0: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_ovf() -> i64 from "brep3.iii"
 extern @abi(c-msvc-x64) fn b3_slice_x_big(x0: i64) -> i64 from "brep3.iii"
 extern @abi(c-msvc-x64) fn b3_content3(hp: u64, dz: i64, dx: i64, dy: i64) -> i64 from "brep3.iii"
 extern @abi(c-msvc-x64) fn b3_zrow(hp: u64, k: i64, dx: i64, dy: i64, outp: u64) -> i32 from "brep3.iii"
@@ -176,6 +179,20 @@ fn main() -> u64 {
     putchar(83i32) putchar(58i32) sp() e_i64(sd) sp() e_i64(rc5) sp() e_i64(ic5) nl()  /* "S: 4 2 2" */
     if rc5 != 2i64 { return 14u64 }
     if ic5 != 2i64 { return 14u64 }
+    /* the y-slice mirror: R(x,1) = x^4 + 3x^2 - 2 by the shadow's x<->y symmetry -- same 2 roots */
+    let sdy : i64 = b3_slice_y((&RO) as u64, 6i64, 6i64, 1i64, (&SL) as u64)
+    if sdy != 4i64 { return 14u64 }
+    if SL[0u64] != (0i64 - 2i64) { return 14u64 }
+    if SL[2u64] != 3i64 { return 14u64 }
+    let sby : i64 = sturm_build((&SL) as u64, 4i64)
+    if sby < 0i64 { return 14u64 }
+    let rcy : i64 = root_count(0i64 - 8i64, 1i64, 8i64, 1i64)
+    if rcy != 2i64 { return 14u64 }
+    /* the witness evaluator: sphere F at the interior point (1,1,1) is exactly -1, guard clean */
+    mk_sphere((&TR) as u64)
+    let ev3 : i64 = b3_eval3((&TR) as u64, 2i64, 2i64, 2i64, 1i64, 1i64, 1i64)
+    if ev3 != (0i64 - 1i64) { return 14u64 }
+    if b3_ovf() != 0i64 { return 14u64 }
 
     /* 6: the fiber by the second elimination axis: Res_y(F(1), G(1)) = (z^2 + z - 4)^2 */
     z2()

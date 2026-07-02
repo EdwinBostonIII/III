@@ -4,7 +4,7 @@
  * original length; too-few shards refused. HARMONY of numera lzss + erasure_store. */
 module corpus_1225
 
-extern @abi(c-msvc-x64) fn cas_kat() -> u64 from "cas_blob.iii"
+extern @abi(c-msvc-x64) fn cas_kat() -> u64 from "erasure_store.iii"
 
 fn main() -> u64 {
     let r : u64 = cas_kat()

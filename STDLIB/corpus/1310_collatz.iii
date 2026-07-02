@@ -5,7 +5,7 @@
  * halving by shift (no modulo/division). */
 module corpus_1310
 
-extern @abi(c-msvc-x64) fn collatz_kat() -> u64 from "collatz.iii"
+extern @abi(c-msvc-x64) fn collatz_kat() -> u64 from "conjecture_probe.iii"
 
 fn main() -> u64 {
     let r : u64 = collatz_kat()

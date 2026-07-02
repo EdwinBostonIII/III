@@ -85,9 +85,8 @@ fn mandate_check_m15(kchain_id: u64) -> u8 @export {
     return 0u8
 }
 
-/* M22: Resolution Determinism -- implementation in sanctus/mandate_m22.iii
+/* M22: Resolution Determinism -- implementation is the M22 section BELOW (merged)
  * supplies the bit contribution; mandate_audit() OR-combines below. */
-extern @abi(c-msvc-x64) fn mandate_audit_m22_contribution() -> u32 from "mandate_m22.iii"
 
 /* Combined runtime audit. */
 fn mandate_audit(kchain_id: u64, mhash_matched: u8) -> u32 @export {
@@ -114,4 +113,31 @@ fn mandate_all_mask() -> u32 @export {
 
 fn mandate_process_mask() -> u32 @export {
     return MANDATE_PROCESS_BITS
+}
+
+/* ===================== M22 SECTION (formerly sanctus/mandate_m22.iii — III-PERFECTION-LEDGER merge:
+ * a 40-line single-clause satellite of this audit organ).  Mandate M22: Resolution Determinism.
+ * FROZEN SPEC §13, §Z.D.2; ADR-RES-010.  M22 = bit 21 = 0x00200000u32.  The bit is granted iff:
+ *   (a) Q7 gate is green   (b) pattern registry is sealed   (c) closure root absorbs SEAL_RESOLVER.mhash */
+
+extern @abi(c-msvc-x64) fn quality_check_q7_resolution() -> u8 from "quality.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn closure_with_resolver_is_computed() -> u8 from "closure.iii"
+
+const M22_BIT : u32 = 0x00200000u32
+
+fn mandate_check_m22() -> u8 @export {
+    if quality_check_q7_resolution() == 0u8 { return 0u8 }
+    if pattern_registry_is_sealed() == 0u8 { return 0u8 }
+    if closure_with_resolver_is_computed() == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn mandate_m22_bit() -> u32 @export {
+    return M22_BIT
+}
+
+fn mandate_audit_m22_contribution() -> u32 @export {
+    if mandate_check_m22() == 1u8 { return M22_BIT }
+    return 0u32
 }

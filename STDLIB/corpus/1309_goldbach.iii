@@ -5,7 +5,7 @@
  * a sieve cross-verified against trial division -- a primality structure put to work by a conjecture-checker. */
 module corpus_1309
 
-extern @abi(c-msvc-x64) fn goldbach_kat() -> u64 from "goldbach.iii"
+extern @abi(c-msvc-x64) fn goldbach_kat() -> u64 from "conjecture_probe.iii"
 
 fn main() -> u64 {
     let r : u64 = goldbach_kat()

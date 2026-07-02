@@ -5,5 +5,5 @@
  * (kernel-down -> no self-edit); and re-seals the IDENTICAL checkpoint on a re-run (deterministic
  * outcome).  propose->prove->apply with one theorem per move + a sealed pass record. */
 module corpus_1091_ripple_synthesizer
-extern @abi(c-msvc-x64) fn ripple_synthesizer_selftest() -> u64 from "ripple_synthesizer.iii"
+extern @abi(c-msvc-x64) fn ripple_synthesizer_selftest() -> u64 from "sovereign_optimizer.iii"
 fn main() -> u64 { return ripple_synthesizer_selftest() }

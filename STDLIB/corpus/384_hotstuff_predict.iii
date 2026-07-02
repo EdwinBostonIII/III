@@ -4,8 +4,8 @@
  * Plus the out_cap overflow guard (#4 backlog): a too-small out_quorum buffer
  * is REJECTED before any write (was an unbounded write to a NULL-checked-only *u8). */
 module corpus_384
-extern @abi(c-msvc-x64) fn hsp_selftest() -> u64 from "hotstuff_predict.iii"
-extern @abi(c-msvc-x64) fn hsp_predict_quorum(view: u64, out_quorum: *u8, out_size: *u32, out_cap: u32) -> i32 from "hotstuff_predict.iii"
+extern @abi(c-msvc-x64) fn hsp_selftest() -> u64 from "hotstuff_unified.iii"
+extern @abi(c-msvc-x64) fn hsp_predict_quorum(view: u64, out_quorum: *u8, out_size: *u32, out_cap: u32) -> i32 from "hotstuff_unified.iii"
 
 var SMALL_BUF : [u8; 256]
 var SZ : [u32; 1]

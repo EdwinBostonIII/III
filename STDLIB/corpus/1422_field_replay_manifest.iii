@@ -42,8 +42,8 @@ extern @abi(c-msvc-x64) fn xtm_first_anomaly_rid() -> u32 from "xii_termination.
 extern @abi(c-msvc-x64) fn sid_provenance_delta(old_root_ptr: u64, new_root_ptr: u64, step_no: u64) -> u64 from "crystal_deps.iii"
 extern @abi(c-msvc-x64) fn crystal_cause(id: u64) -> u64 from "crystal.iii"
 extern @abi(c-msvc-x64) fn crystal_site_byte(id: u64, i: u32) -> u32 from "crystal.iii"
-extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
-extern @abi(c-msvc-x64) fn quality_resolver_lint_passed() -> u8 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality.iii"
+extern @abi(c-msvc-x64) fn quality_resolver_lint_passed() -> u8 from "quality.iii"
 
 var PROD : [u8; 32]
 var OPID : [u8; 32]

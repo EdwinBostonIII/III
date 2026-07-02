@@ -1,18 +1,37 @@
-/* STDLIB/iii/numera/pareto_extraction.iii -- APOTHEOSIS C.8: the 6-D PARETO FRONTIER.
+/* STDLIB/iii/numera/pareto_extraction.iii -- APOTHEOSIS C.8: the PARETO FRONTIER (both tiers).
  *
- * Physical cost is genuinely multi-dimensional (latency · inverse-throughput · area · power ·
- * register-pressure · gate-count); collapsing it to a SINGLE scalar minimum HIDES the real trade
- * space (a design with the lowest latency may have the worst area). The honest answer is the
- * ANTICHAIN of non-dominated designs -- the Pareto frontier: the set of candidates that no other
- * candidate beats in ALL six dimensions at once. The §C.5 e-graph extraction and the §C.7 ripple
- * selection consult this instead of a scalar argmin, so the optimizer sees the whole trade space.
+ * ONE antichain organ, two tiers (III-PERFECTION-LEDGER merge of numera/pareto_frontier into this
+ * module — two antichain-of-cost-vectors organs was one seat claimed twice):
  *
+ * TIER 1 (pe_*, 6-D core): physical cost is genuinely multi-dimensional (latency ·
+ * inverse-throughput · area · power · register-pressure · gate-count); collapsing it to a SINGLE
+ * scalar minimum HIDES the real trade space (a design with the lowest latency may have the worst
+ * area). The honest answer is the ANTICHAIN of non-dominated designs -- the Pareto frontier: the
+ * set of candidates that no other candidate beats in ALL six dimensions at once. The §C.5 e-graph
+ * extraction and the §C.7 ripple selection consult this instead of a scalar argmin, so the
+ * optimizer sees the whole trade space.
  * Lower-is-better in every dimension. A DOMINATES B iff  A[k] <= B[k] for all k  AND  A[k] < B[k]
  * for some k (strict Pareto dominance). The frontier = { c : no other candidate dominates c }.
  * /math-olympiad: the frontier is a TRUE antichain -- no frontier member dominates another (the
  * KAT's negative arm checks this directly). Compiler-UNREFERENCED -> LIBNATIVE.
- * Hexad: kind_form.  Ring: R0.  NIH: nothing (integer compares only).  K: 1.00. */
+ *
+ * TIER 2 (pf_*, the K_0-GATED verified frontier + scalarization): a frontier point is admissible
+ * ONLY if the frozen referee (numera::k0_referee) certifies the kernel CORRECT -- a wrong kernel
+ * that dominates everything on cost is excluded. A weight vector then picks one frontier point,
+ * and DIFFERENT weights select DIFFERENT verified points: the signature of a genuine
+ * multi-objective trade-off. Bank (2-D): v0 anchor (10,10); v1 (2,8); v2 (8,2); v3 (4,4);
+ * v4 (6,6) dominated; vbad (1,1) dominates all but is WRONG -> verified frontier {v1,v2,v3}.
+ *
+ * Public API:
+ *   pe_reset() ; pe_add(c0..c5) -> i64 ; pe_dominates(a,b) -> u8 ; pe_pareto_frontier() -> u64 ;
+ *   pe_on_frontier(i) -> u8
+ *   pf_setup() ; pf_dominates(a,b) -> u32 ; pf_verified(k) -> u32 ; pf_on_frontier(k) -> u32 ;
+ *   pf_scalarize(w_lat, w_ene) -> u32
+ *
+ * Hexad: kind_form.  Ring: R0.  NIH: nothing (integer compares; tier 2 composes k0_referee).  K: 1.00. */
 module numera_pareto_extraction
+
+/* ===================== TIER 1: the 6-D antichain core (pe_*) ===================== */
 
 const PE_DIMS : u64 = 6u64
 const PE_MAX  : u64 = 256u64    /* max candidates */
@@ -125,5 +144,131 @@ fn pareto_selftest() -> u64 @export {
     pe_add(9u64,8u64,7u64,6u64,5u64,4u64)   /* 2 */
     if pe_pareto_frontier() != 1u64 { return 10u64 }
     if pe_on_frontier(0u64) != 1u8 { return 11u64 }
+    return 99u64
+}
+
+/* ===================== TIER 2: the K_0-gated verified frontier (pf_*, formerly numera/pareto_frontier.iii) ===================== */
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+
+const PF_M    : u32 = 6u32
+const PF_D    : u32 = 16u32
+const PF_NONE : u32 = 0xFFFFFFFFu32
+const PF_BIG  : u32 = 0xFFFFFFFFu32
+
+var PF_LAT : [u32; 6]
+var PF_ENE : [u32; 6]
+
+fn pf_run(kid: u32, n: u32) -> u32 {
+    let s : u32 = (n * (n - 1u32)) / 2u32
+    if kid <= 4u32 { return s }      /* v0..v4 correct (same observable trace) */
+    return s + 1u32                  /* vbad wrong */
+}
+
+fn pf_setup() -> i32 @export {
+    PF_LAT[0u64]=10u32 ; PF_ENE[0u64]=10u32      /* v0 anchor */
+    PF_LAT[1u64]=2u32  ; PF_ENE[1u64]=8u32       /* v1 latency-optimal */
+    PF_LAT[2u64]=8u32  ; PF_ENE[2u64]=2u32       /* v2 energy-optimal */
+    PF_LAT[3u64]=4u32  ; PF_ENE[3u64]=4u32       /* v3 balanced */
+    PF_LAT[4u64]=6u32  ; PF_ENE[4u64]=6u32       /* v4 dominated by v3 */
+    PF_LAT[5u64]=1u32  ; PF_ENE[5u64]=1u32       /* vbad dominates all -- but WRONG */
+    /* set up K_0: register, populate behaviours by execution, freeze the anchor */
+    k0_reset()
+    let mut v : u32 = 0u32
+    while v < PF_M { k0_register(PF_LAT[v as u64] + PF_ENE[v as u64]) ; v = v + 1u32 }
+    let mut w : u32 = 0u32
+    while w < PF_M {
+        let mut x : u32 = 0u32
+        while x < PF_D { k0_set_behav(w, x, pf_run(w, x)) ; x = x + 1u32 }
+        w = w + 1u32
+    }
+    k0_freeze_anchor()
+    return 0i32
+}
+
+/* a dominates b iff a is no worse in every dimension and strictly better in at least one. */
+fn pf_dominates(a: u32, b: u32) -> u32 @export {
+    if a >= PF_M { return 0u32 }   /* [W2616 sev3] PF_LAT/PF_ENE are [6]; unchecked a/b OOB (the pe_ tier guards) */
+    if b >= PF_M { return 0u32 }
+    if PF_LAT[a as u64] > PF_LAT[b as u64] { return 0u32 }
+    if PF_ENE[a as u64] > PF_ENE[b as u64] { return 0u32 }
+    if PF_LAT[a as u64] < PF_LAT[b as u64] { return 1u32 }
+    if PF_ENE[a as u64] < PF_ENE[b as u64] { return 1u32 }
+    return 0u32                                  /* equal in both -> no strict domination */
+}
+
+/* a candidate is admissible iff it is the anchor or K_0 certifies it correct. */
+fn pf_verified(k: u32) -> u32 @export {
+    if k == 0u32 { return 1u32 }
+    return k0_verify(k)
+}
+
+/* k is on the verified Pareto frontier iff it is verified and no OTHER verified kernel dominates it. */
+fn pf_on_frontier(k: u32) -> u32 @export {
+    if k >= PF_M { return 0u32 }   /* [W2616 sev3] k indexes the [6] arrays via pf_verified/pf_dominates */
+    if pf_verified(k) == 0u32 { return 0u32 }
+    let mut j : u32 = 0u32
+    while j < PF_M {
+        if j != k {
+            if pf_verified(j) == 1u32 {
+                if pf_dominates(j, k) == 1u32 { return 0u32 }
+            }
+        }
+        j = j + 1u32
+    }
+    return 1u32
+}
+
+/* pick the frontier kernel minimizing w_lat*latency + w_ene*energy. */
+fn pf_scalarize(w_lat: u32, w_ene: u32) -> u32 @export {
+    let mut best : u32 = PF_NONE
+    let mut bestscore : u32 = PF_BIG
+    let mut k : u32 = 0u32
+    while k < PF_M {
+        if pf_on_frontier(k) == 1u32 {
+            let score : u32 = (w_lat * PF_LAT[k as u64]) + (w_ene * PF_ENE[k as u64])
+            if score < bestscore { best = k ; bestscore = score }
+        }
+        k = k + 1u32
+    }
+    return best
+}
+
+/* =====================================================================================
+ * pareto_frontier_kat -- 99 = multi-objective verified optimization is correct, self-checked:
+ *   (1) the verified Pareto frontier is exactly {v1,v2,v3};
+ *   (2) the anchor v0 and the dominated v4 are OFF the frontier; the WRONG-but-dominant vbad is OFF it
+ *       (verification excludes it despite it dominating on cost);
+ *   (3) three weight vectors select three DIFFERENT frontier points: latency-heavy->v1, energy-heavy->v2,
+ *       balanced->v3 (the genuine multi-objective trade-off);
+ *   (4) the wrong kernel is NEVER scalarized.
+ * ===================================================================================== */
+fn pareto_frontier_kat() -> u64 @export {
+    pf_setup()
+
+    /* (1) the verified frontier is {v1,v2,v3} */
+    if pf_on_frontier(1u32) != 1u32 { return 1u64 }
+    if pf_on_frontier(2u32) != 1u32 { return 2u64 }
+    if pf_on_frontier(3u32) != 1u32 { return 3u64 }
+
+    /* (2) v0, v4 dominated; vbad excluded by verification */
+    if pf_on_frontier(0u32) != 0u32 { return 4u64 }      /* anchor (10,10) dominated by v3 */
+    if pf_on_frontier(4u32) != 0u32 { return 5u64 }      /* (6,6) dominated by v3 (4,4) */
+    if pf_on_frontier(5u32) != 0u32 { return 6u64 }      /* vbad (1,1) dominates all but is WRONG */
+    if pf_verified(5u32) != 0u32 { return 7u64 }         /* vbad really is unverified */
+
+    /* (3) different weights -> different frontier points */
+    if pf_scalarize(3u32, 1u32) != 1u32 { return 8u64 }  /* latency-heavy -> v1 (2,8) */
+    if pf_scalarize(1u32, 3u32) != 2u32 { return 9u64 }  /* energy-heavy  -> v2 (8,2) */
+    if pf_scalarize(1u32, 1u32) != 3u32 { return 10u64 } /* balanced      -> v3 (4,4) */
+
+    /* (4) the wrong kernel is never chosen, even though it has the lowest raw cost */
+    if pf_scalarize(1u32, 1u32) == 5u32 { return 11u64 }
+    if pf_scalarize(5u32, 5u32) == 5u32 { return 12u64 }
+
     return 99u64
 }

@@ -7,7 +7,7 @@
  * scope" deferral (the IF-lift family was the named next strike). */
 module corpus_1331
 
-extern @abi(c-msvc-x64) fn xiv_verify() -> u64 from "xii_iflift_verify.iii"
+extern @abi(c-msvc-x64) fn xiv_verify() -> u64 from "xii_semantic_verify.iii"
 
 fn main() -> u64 {
     let r : u64 = xiv_verify()

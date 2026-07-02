@@ -483,7 +483,6 @@ MODULES=(
     "sanctus/observe"
     "sanctus/onelang"
     "aether/hotstuff"
-    "aether/hotstuff_predict"
     # APOTHEOSIS C.11: the tier-aware certified-monotone pacemaker -- constitutional-constant
     # timeouts (no-ML), monotone+bounded backoff (liveness), explicit BFT 2f+1 quorum. Safety stays
     # the mhash vote-block match in hotstuff.iii. Compiler-unreferenced -> LIBNATIVE.
@@ -505,8 +504,6 @@ MODULES=(
     "aether/pq_quorum"
     "numera/slhdsa"
     "numera/pq_dispatch"
-    "sanctus/mandate_m22"
-    "sanctus/quality_q7"
     "sanctus/seal_resolver"
     "verba/pattern"
     "sanctus/resolver_replay"
@@ -719,7 +716,6 @@ MODULES=(
     "numera/gf_poly"
     "numera/rscode_ec"
     "numera/lzss"
-    "numera/cas_blob"
     "numera/crt"
     "numera/bitio"
     "numera/elias"
@@ -740,8 +736,6 @@ MODULES=(
     "numera/conjecture_refute"
     "numera/self_engine"
     "numera/verified_search"
-    "numera/omega_engine"
-    "numera/pareto_frontier"
     "numera/verified_ripple"
     "numera/optimality_cert"
     "numera/contract_gate"
@@ -773,7 +767,6 @@ MODULES=(
     "numera/liveness"
     "numera/proof_replay"
     "numera/bmc"
-    "numera/kinduction"
     "numera/dijkstra"
     "numera/safety_prover"
     "numera/value_range_prover"
@@ -793,8 +786,7 @@ MODULES=(
     "numera/sieve"
     "numera/gray_code"
     "numera/catalan"
-    "numera/goldbach"
-    "numera/collatz"
+    "numera/conjecture_probe"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"
@@ -884,7 +876,6 @@ MODULES=(
     "aether/compute_box"
     # aether/xii_sort_meter -- the R042 sort-penalty tier: charges an R042 site's geometric weight to the
     # compute-box CPU meter, bounding adversarial owner-domain sorts.  Composes xii_rewrite + xii_canonicalise + compute_box.
-    "aether/xii_sort_meter"
     "aether/snapshot_box"
     "aether/sid_router"
     "aether/determinism_firewall"
@@ -1116,7 +1107,6 @@ MODULES=(
     # the live sov_isa adoption.  Composes proof_bisimulation + sov_isa.
     "numera/isa_macro_synth"
     "forcefield/cg_surgical_strike"
-    "forcefield/daemon_scythe"
     "forcefield/scythe_census"
     "forcefield/sovereign_optimizer"
     # Path C: the single-source SR rule table + CIC kernel certifier (width-invariance guard +
@@ -1125,11 +1115,8 @@ MODULES=(
     # The verification missile on III's LIVE rules: drives the real xii_canonicalise
     # engine over the trit fragment and verifies it against an INDEPENDENT Kleene spec
     # (non-tautological, unlike corpus 670).  Externs only the live XII engine.
-    "omnia/xii_rule_verify"
-    # Second strike: the semantic-soundness gate extended to XII's LIVE fusion identity-null
-    # rewrites (R016/R017/R021/R022), verified against the independent monoid-identity authority.
-    "omnia/xii_fusion_verify"
-    "omnia/xii_iflift_verify"
+    # (merged missiles: rule_verify + fusion_verify + iflift_verify -> ONE battery, per III-PERFECTION-LEDGER)
+    "omnia/xii_semantic_verify"
     # The Sovereign Pipeline: every kernel faculty (conversion, induction, superposition,
     # proof-carrying optimization, kernel-governed admission) actively used through ONE
     # kernel-disposed path (the kernel tc_check is the universal disposer). Externs sov_isa
@@ -1302,7 +1289,6 @@ MODULES=(
     "forcefield/integrity"
     # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
     "forcefield/ripple_search"
-    "forcefield/ripple_synthesizer"
     "forcefield/ripple_apply"
     "forcefield/ripple_journal"
     "numera/costed_cat"

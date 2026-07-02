@@ -5,7 +5,7 @@
  * predicate boundary are correct. The bridge from bounded checking to unbounded proof. */
 module corpus_1289
 
-extern @abi(c-msvc-x64) fn kinduction_kat() -> u64 from "kinduction.iii"
+extern @abi(c-msvc-x64) fn kinduction_kat() -> u64 from "bmc.iii"
 
 fn main() -> u64 {
     let r : u64 = kinduction_kat()

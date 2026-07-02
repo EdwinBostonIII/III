@@ -11,7 +11,7 @@
  * on XII's live fusion rules.  99 = the four identity rewrites are meaning-preserving + teeth. */
 module corpus_885
 
-extern @abi(c-msvc-x64) fn xfv_verify() -> u64 from "xii_fusion_verify.iii"
+extern @abi(c-msvc-x64) fn xfv_verify() -> u64 from "xii_semantic_verify.iii"
 
 fn main() -> u64 {
     return xfv_verify()

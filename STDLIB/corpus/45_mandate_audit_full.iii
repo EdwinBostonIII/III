@@ -6,7 +6,7 @@ extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii
 extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
 extern @abi(c-msvc-x64) fn mandate_audit(kchain_id: u64, mhash_matched: u8) -> u32 from "mandate.iii"
 extern @abi(c-msvc-x64) fn mandate_all_mask() -> u32 from "mandate.iii"
-extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality.iii"
 extern @abi(c-msvc-x64) fn seal_resolver_compute() -> i32 from "seal_resolver.iii"
 extern @abi(c-msvc-x64) fn closure_set(root_ptr: u64) -> i32 from "closure.iii"
 extern @abi(c-msvc-x64) fn closure_compute_with_resolver() -> i32 from "closure.iii"

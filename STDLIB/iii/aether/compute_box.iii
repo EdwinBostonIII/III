@@ -72,3 +72,30 @@ fn cb_run(guest_cap: u64, sb_id: u64, kind: u32, ctx: u64) -> i32 @export {
     if cap_verify_rights(guest_cap, CB_RIGHT_COMPUTE) == 0u8 { return CB_E_DENIED }
     return sandbox_exec_begin(sb_id, kind, ctx)
 }
+
+/* ===================== THE R042 SORT-PENALTY METER TIER (r042_*, formerly aether/xii_sort_meter.iii —
+ * III-PERFECTION-LEDGER merge: a 35-line meter tier is not an organ; it charges THIS box's CPU meter).
+ * The blocked-frontier caveat: the R042 "sort modulo associativity" rewrite (omnia/xii_rewrite) lacked a
+ * cost tier for OWNER-DOMAIN convergence -- an adversarial owner could submit deeply out-of-order
+ * associative FORM spines that force expensive R042 transposition cascades, paying nothing.  This ties the
+ * theoretical cost of the rewrite directly to the PHYSICAL resource meter: r042_penalty(t) is the canonical
+ * weight (geometric spine depth) of a term that MATCHES R042 (0 for a non-site); r042_charge debits that
+ * penalty from the box's CPU quota, so a deep adversarial sort EXHAUSTS the owner's budget and is bounded.
+ * Composes omnia/xii_rewrite (match_R042) + omnia/xii_canonicalise (the weight) + this box's cb_charge_cpu. */
+
+extern @abi(c-msvc-x64) fn match_R042(t: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_canon_weight(t: u32) -> u32 from "xii_canonicalise.iii"
+
+/* the geometric sort-penalty of t: the canonical weight (geometric depth) of an R042 match site, else 0. */
+fn r042_penalty(t: u32) -> u32 @export {
+    if match_R042(t) == 0u8 { return 0u32 }
+    return xii_canon_weight(t)
+}
+
+/* charge the R042 sort-penalty to a compute box's CPU meter.  1 = charged within budget (or nothing to
+ * charge); 0 = the (deep) sort exhausted the owner's quota -- the owner-domain sorting attack is bounded. */
+fn r042_charge(guest_cap: u64, sb_id: u64, t: u32) -> u8 @export {
+    let p : u32 = r042_penalty(t)
+    if p == 0u32 { return 1u8 }
+    return cb_charge_cpu(guest_cap, sb_id, p as u64)
+}

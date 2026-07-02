@@ -16,8 +16,8 @@ extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii
 extern @abi(c-msvc-x64) fn tv_keyshare_ptr(i: u32) -> u64 from "threshold_vault.iii"
 extern @abi(c-msvc-x64) fn mcmc_cost(s: u32) -> u32 from "mcmc_egraph.iii"
 extern @abi(c-msvc-x64) fn mcmc_greedy(start: u32) -> u32 from "mcmc_egraph.iii"
-extern @abi(c-msvc-x64) fn pf_dominates(a: u32, b: u32) -> u32 from "pareto_frontier.iii"
-extern @abi(c-msvc-x64) fn pf_on_frontier(k: u32) -> u32 from "pareto_frontier.iii"
+extern @abi(c-msvc-x64) fn pf_dominates(a: u32, b: u32) -> u32 from "pareto_extraction.iii"
+extern @abi(c-msvc-x64) fn pf_on_frontier(k: u32) -> u32 from "pareto_extraction.iii"
 
 var IDBUF : [u8; 32]
 

@@ -16,7 +16,7 @@
  * never autonomous.  The hunter PROPOSES; the CIC kernel DISPOSES.  99 never hard-coded. */
 module corpus_1203
 
-extern @abi(c-msvc-x64) fn daemon_scythe_kat() -> u64 from "daemon_scythe.iii"
+extern @abi(c-msvc-x64) fn daemon_scythe_kat() -> u64 from "scythe_census.iii"
 
 fn main() -> u64 {
     let r : u64 = daemon_scythe_kat()

@@ -17,7 +17,7 @@ extern @abi(c-msvc-x64) fn quality_set_kchain(id: u64) -> i32 from "quality.iii"
 extern @abi(c-msvc-x64) fn quality_set_seal(prev_ptr: u64, new_ptr: u64, step_no: u32) -> i32 from "quality.iii"
 extern @abi(c-msvc-x64) fn quality_gate_check() -> u32 from "quality.iii"
 extern @abi(c-msvc-x64) fn quality_all_mask() -> u32 from "quality.iii"
-extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality.iii"
 extern @abi(c-msvc-x64) fn seal_resolver_compute() -> i32 from "seal_resolver.iii"
 extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
 

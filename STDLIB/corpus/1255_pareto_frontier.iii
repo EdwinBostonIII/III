@@ -5,7 +5,7 @@
  * is never scalarized. Multi-objective optimization disciplined by verification. */
 module corpus_1255
 
-extern @abi(c-msvc-x64) fn pareto_frontier_kat() -> u64 from "pareto_frontier.iii"
+extern @abi(c-msvc-x64) fn pareto_frontier_kat() -> u64 from "pareto_extraction.iii"
 
 fn main() -> u64 {
     let r : u64 = pareto_frontier_kat()

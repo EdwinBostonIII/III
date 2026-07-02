@@ -39,7 +39,7 @@ extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
 
-extern @abi(c-msvc-x64) fn omega_mem(x: u32) -> u32 from "omega_engine.iii"
+extern @abi(c-msvc-x64) fn omega_mem(x: u32) -> u32 from "self_engine.iii"
 
 extern @abi(c-msvc-x64) fn sl_reset() -> i32 from "sep_logic.iii"
 extern @abi(c-msvc-x64) fn sl_pt(a: u32, v: u32) -> u32 from "sep_logic.iii"
@@ -49,7 +49,7 @@ extern @abi(c-msvc-x64) fn sl_sat(node: u32, h: u32) -> u32 from "sep_logic.iii"
 extern @abi(c-msvc-x64) fn csl_set_a(i: u32, op: u32, cell: u32, val: u32) -> i32 from "csl.iii"
 extern @abi(c-msvc-x64) fn csl_set_b(i: u32, op: u32, cell: u32, val: u32) -> i32 from "csl.iii"
 
-const BB_MAX_NODES : u32 = 128u32
+const BB_MAX_NODES : u32 = 2048u32   /* MUST track numera/bv_bits BB_MAX_NODES (was 128; enlarged by 68aa615c "no magic caps") */
 const BB_SENT      : u32 = 0xFFFFFFFFu32
 const SL_NODES     : u32 = 512u32
 const OM_D         : u32 = 16u32

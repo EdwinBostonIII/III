@@ -11,7 +11,7 @@
  * 99 = the real engine is sound against the independent authority. */
 module corpus_884
 
-extern @abi(c-msvc-x64) fn xrv_verify() -> u64 from "xii_rule_verify.iii"
+extern @abi(c-msvc-x64) fn xrv_verify() -> u64 from "xii_semantic_verify.iii"
 
 fn main() -> u64 {
     return xrv_verify()

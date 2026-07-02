@@ -1,0 +1,436 @@
+/* STDLIB/iii/aether/gas_big.iii -- THE TRANS-ENVELOPE MICROCANONICAL GAS (charter Program III Vector V):
+ * the hard-cube ensemble with UNBOUNDED positions -- the i64 event-count ceiling removed.
+ *
+ * THE ADJUDICATED CORE (charter): velocities NEVER need migration -- swaps and negations keep them small
+ * integers forever, so energy and momentum remain i64 INTEGER IDENTITIES at any depth.  Only the position
+ * numerators (rank-1 pairs pn0 + pn1*sqrt2) and the ONE shared ensemble denominator migrate to bigint,
+ * growing LINEARLY (a few bits per event -- the orbit's true information content), never the tower.
+ * Event-time comparisons are 1-surd bigint signs -- ui_bigsign2, already Tier 0 of the one kernel.
+ * Every event computes its candidates inside a per-event SUB-ARENA (the adaptive_big recipe): certified,
+ * applied, dropped; only the final exact state is persisted (copied into the ensemble arena).
+ *
+ * HONEST SCOPE (charter): NO Poincare-recurrence observation claim (recurrence times are astronomical);
+ * NO Landauer claim (information accounting is not gate-able here).  The gated statement: the ensemble a
+ * guarded-i64 gas REFUSES (GS_E_OVER) is continued exactly, with the same integer conservation identities
+ * and the same bit-exact (rational-equality) reversal involution.  Canonicalization (bigint gcd) is
+ * deferred: growth is linear without it; state equality is decided by CROSS-MULTIPLIED rational identity.
+ * Persistent-arena bytes accumulate per event (bump allocator) -- recycling/compaction is the charted v2. */
+module gas_big
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn ui_bigsign2(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, dhi: i64, cnsg: i64, cnm: u64, dlo: i64) -> i32 from "sqrt_sum_sign.iii"
+
+const G2_MAXE : u64 = 1024u64
+const G2_OK : i32 = 1i32
+const G2_NONE : i32 = 0i32
+const G2_TIE : i32 = 2i32
+const G2_CAP : i32 = 3i32
+
+var G2_AR : u64   var G2_LIVE : i64
+var G2_S0 : [i64; 12]   var G2_M0 : [u64; 12]        /* rational slot: sign, |numerator| handle */
+var G2_S1 : [i64; 12]   var G2_M1 : [u64; 12]        /* sqrt2 slot */
+var G2_DEN : u64                                     /* the ONE ensemble denominator (positive bigint) */
+var G2_V : [i64; 12]                                 /* integer velocities, forever */
+var G2_NP : u64   var G2_ES : i64
+var GW2_AX : [i64; 8]   var GW2_DIR : [i64; 8]   var GW2_C0 : [i64; 8]   var GW2_C1 : [i64; 8]
+var GW2_CD : [i64; 8]   var GW2_VTH : [i64; 8]   var G2_NW : u64
+var G2E_K : [i64; 1024]   var G2E_A : [i64; 1024]   var G2E_B : [i64; 1024]   var G2E_AX : [i64; 1024]
+var G2_NE : u64
+
+fn g2_iabs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn g2_isgn(x: i64) -> i64 { if x > 0i64 { return 1i64 }   if x < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+
+fn g2_reset() -> i32 @export {
+    if G2_LIVE == 1i64 { bigint_drop_arena(G2_AR)   arena_drop(G2_AR) }
+    G2_AR = arena_new(33554432u64)
+    G2_LIVE = 1i64
+    G2_DEN = bigint_from_u64(G2_AR, 1u64)
+    G2_NP = 0u64   G2_NW = 0u64   G2_NE = 0u64   G2_ES = 1i64
+    return 0i32
+}
+fn g2_envelope(S: i64) -> i32 @export { G2_ES = S   return 0i32 }
+fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 @export {
+    if G2_NW >= 8u64 { return 0i32 - 1i32 }
+    if cden <= 0i64 { return 0i32 - 1i32 }
+    let w : u64 = G2_NW
+    GW2_AX[w] = ax   GW2_DIR[w] = dir   GW2_C0[w] = c0   GW2_C1[w] = c1   GW2_CD[w] = cden   GW2_VTH[w] = 0i64
+    G2_NW = w + 1u64
+    return w as i32
+}
+fn g2_valve(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64, vth: i64) -> i32 @export {
+    let w : i32 = g2_wall(ax, dir, c0, c1, cden)
+    if w >= 0i32 { GW2_VTH[w as u64] = vth }
+    return w
+}
+fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 @export {
+    if G2_NP >= 4u64 { return 0i32 - 1i32 }
+    let p : u64 = G2_NP
+    let mut ax : u64 = 0u64
+    while ax < 3u64 {
+        let mut c : i64 = x
+        if ax == 1u64 { c = y }
+        if ax == 2u64 { c = z }
+        G2_S0[p * 3u64 + ax] = g2_isgn(c)
+        G2_M0[p * 3u64 + ax] = bigint_from_u64(G2_AR, g2_iabs(c))
+        G2_S1[p * 3u64 + ax] = 0i64
+        G2_M1[p * 3u64 + ax] = bigint_from_u64(G2_AR, 0u64)
+        ax = ax + 1u64
+    }
+    G2_V[p * 3u64] = vx   G2_V[p * 3u64 + 1u64] = vy   G2_V[p * 3u64 + 2u64] = vz
+    G2_NP = p + 1u64
+    return p as i32
+}
+fn g2_energy() -> i64 @export {
+    let mut e : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < (G2_NP * 3u64) { let v : i64 = G2_V[i]   e = e + (v * v)   i = i + 1u64 }
+    return e
+}
+fn g2_mom(ax: u64) -> i64 @export {
+    let mut m : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < G2_NP { m = m + G2_V[p * 3u64 + ax]   p = p + 1u64 }
+    return m
+}
+
+/* signed-bigint helpers over (sign, |mag| handle): all results allocated in `ar`; inputs never dropped. */
+var SB_S : i64   var SB_M : u64
+fn sb_scale(ar: u64, s: i64, m: u64, k: i64) -> i32 {
+    if s == 0i64 { SB_S = 0i64   SB_M = bigint_from_u64(ar, 0u64)   return 0i32 }
+    if k == 0i64 { SB_S = 0i64   SB_M = bigint_from_u64(ar, 0u64)   return 0i32 }
+    let kb : u64 = bigint_from_u64(ar, g2_iabs(k))
+    SB_M = bigint_mul(ar, m, kb)
+    bigint_drop(kb)
+    SB_S = s * g2_isgn(k)
+    return 0i32
+}
+fn sb_add(ar: u64, s1: i64, m1: u64, s2: i64, m2: u64) -> i32 {
+    if s1 == 0i64 { SB_S = s2   SB_M = bigint_copy(ar, m2)   return 0i32 }
+    if s2 == 0i64 { SB_S = s1   SB_M = bigint_copy(ar, m1)   return 0i32 }
+    if s1 == s2 { SB_S = s1   SB_M = bigint_add(ar, m1, m2)   return 0i32 }
+    let c : i32 = bigint_cmp(m1, m2)
+    if c > 0i32 { SB_S = s1   SB_M = bigint_sub(ar, m1, m2)   return 0i32 }
+    if c < 0i32 { SB_S = s2   SB_M = bigint_sub(ar, m2, m1)   return 0i32 }
+    SB_S = 0i64   SB_M = bigint_from_u64(ar, 0u64)
+    return 0i32
+}
+/* sign of (s0,m0) + (s1,m1)*sqrt2 -- the 1-surd bigint order, decided by the kernel's Tier 0.
+ * RUNS IN ITS OWN DROPPED ARENA: ui_bigsign2 allocates ~a dozen intermediates it does not drop, and the
+ * bigint HANDLE TABLE is 64 slots GLOBAL -- leaking them into the step arena exhausts the table mid-step
+ * and degenerate zero-reading handles masquerade as certified ties (the documented trap, hit live here). */
+fn sb_sign2(ar: u64, s0: i64, m0: u64, s1: i64, m1: u64) -> i32 {
+    let a2 : u64 = arena_new(2097152u64)
+    let c0 : u64 = bigint_copy(a2, m0)
+    let c1 : u64 = bigint_copy(a2, m1)
+    let s : i32 = ui_bigsign2(a2, s0, c0, s1, c1, 2i64, 0i64, c0, 0i64)
+    bigint_drop_arena(a2)
+    arena_drop(a2)
+    return s
+}
+
+/* the current best candidate (handles live in the event sub-arena) */
+var GB_TS0 : i64   var GB_TM0 : u64   var GB_TS1 : i64   var GB_TM1 : u64   var GB_TD : i64
+var GB_K : i64   var GB_A : i64   var GB_B : i64   var GB_AX : i64
+var GB_HAVE : u8   var GB_TIE : u8
+
+fn gb_offer(sub: u64, ts0: i64, tm0: u64, ts1: i64, tm1: u64, td: i64, k: i64, a: i64, b: i64, ax: i64) -> i32 {
+    if GB_HAVE == 0u8 {
+        GB_TS0 = ts0   GB_TM0 = tm0   GB_TS1 = ts1   GB_TM1 = tm1   GB_TD = td
+        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax   GB_HAVE = 1u8
+        return 0i32
+    }
+    /* x = NUM_new * td_best - NUM_best * td_new (rank-1); sign < 0 -> new is earlier */
+    sb_scale(sub, ts0, tm0, GB_TD)   let a0s : i64 = SB_S   let a0m : u64 = SB_M
+    sb_scale(sub, GB_TS0, GB_TM0, td)   let b0s : i64 = SB_S   let b0m : u64 = SB_M
+    sb_add(sub, a0s, a0m, 0i64 - b0s, b0m)   let x0s : i64 = SB_S   let x0m : u64 = SB_M
+    bigint_drop(a0m)   bigint_drop(b0m)
+    sb_scale(sub, ts1, tm1, GB_TD)   let a1s : i64 = SB_S   let a1m : u64 = SB_M
+    sb_scale(sub, GB_TS1, GB_TM1, td)   let b1s : i64 = SB_S   let b1m : u64 = SB_M
+    sb_add(sub, a1s, a1m, 0i64 - b1s, b1m)   let x1s : i64 = SB_S   let x1m : u64 = SB_M
+    bigint_drop(a1m)   bigint_drop(b1m)
+    let c : i32 = sb_sign2(sub, x0s, x0m, x1s, x1m)
+    bigint_drop(x0m)   bigint_drop(x1m)
+    if c == 0i32 { GB_TIE = 1u8   return 0i32 }
+    if c < 0i32 {
+        bigint_drop(GB_TM0)   bigint_drop(GB_TM1)
+        GB_TS0 = ts0   GB_TM0 = tm0   GB_TS1 = ts1   GB_TM1 = tm1   GB_TD = td
+        GB_K = k   GB_A = a   GB_B = b   GB_AX = ax
+        return 0i32
+    }
+    bigint_drop(tm0)   bigint_drop(tm1)
+    return 0i32
+}
+
+/* wall candidates for particle p (sub-arena handles) */
+fn gb_cand_walls(sub: u64, p: u64) -> i32 {
+    let mut w : u64 = 0u64
+    while w < G2_NW {
+        let ax : u64 = (GW2_AX[w]) as u64
+        let dir : i64 = GW2_DIR[w]
+        let vth : i64 = GW2_VTH[w]
+        let mut solid : u8 = 1u8
+        if vth > 0i64 {
+            let vax : i64 = G2_V[p * 3u64 + ax]
+            let mut sp : i64 = vax
+            if sp < 0i64 { sp = 0i64 - sp }
+            if sp >= vth { solid = 0u8 }
+        }
+        let mut vn : i64 = 0i64
+        if solid == 1u8 { vn = dir * G2_V[p * 3u64 + ax] }
+        if vn > 0i64 {
+            let cd : i64 = GW2_CD[w]
+            /* NUM = c*DEN - dir*pn*cd (rank-1 pair) */
+            sb_scale(sub, 1i64, G2_DEN, GW2_C0[w])   let c0s : i64 = SB_S   let c0m : u64 = SB_M
+            sb_scale(sub, G2_S0[p * 3u64 + ax], G2_M0[p * 3u64 + ax], (0i64 - dir) * cd)
+            let p0s : i64 = SB_S   let p0m : u64 = SB_M
+            sb_add(sub, c0s, c0m, p0s, p0m)   let n0s : i64 = SB_S   let n0m : u64 = SB_M
+            bigint_drop(c0m)   bigint_drop(p0m)
+            sb_scale(sub, 1i64, G2_DEN, GW2_C1[w])   let c1s : i64 = SB_S   let c1m : u64 = SB_M
+            sb_scale(sub, G2_S1[p * 3u64 + ax], G2_M1[p * 3u64 + ax], (0i64 - dir) * cd)
+            let p1s : i64 = SB_S   let p1m : u64 = SB_M
+            sb_add(sub, c1s, c1m, p1s, p1m)   let n1s : i64 = SB_S   let n1m : u64 = SB_M
+            bigint_drop(c1m)   bigint_drop(p1m)
+            let s : i32 = sb_sign2(sub, n0s, n0m, n1s, n1m)
+            if s > 0i32 { gb_offer(sub, n0s, n0m, n1s, n1m, vn * cd, 0i64, p as i64, w as i64, ax as i64) }
+            if s <= 0i32 { bigint_drop(n0m)   bigint_drop(n1m) }
+        }
+        w = w + 1u64
+    }
+    return 0i32
+}
+
+/* pair candidates (i,j): contact on axis face at +-S; approach + face-validity in signed bigint. */
+fn gb_cand_pair(sub: u64, i: u64, j: u64) -> i32 {
+    let mut ax : u64 = 0u64
+    while ax < 3u64 {
+        let dv : i64 = G2_V[i * 3u64 + ax] - G2_V[j * 3u64 + ax]
+        if dv != 0i64 {
+            /* dp = p_i - p_j (rank-1, sub handles) */
+            sb_add(sub, G2_S0[i * 3u64 + ax], G2_M0[i * 3u64 + ax], 0i64 - G2_S0[j * 3u64 + ax], G2_M0[j * 3u64 + ax])
+            let d0s : i64 = SB_S   let d0m : u64 = SB_M
+            sb_add(sub, G2_S1[i * 3u64 + ax], G2_M1[i * 3u64 + ax], 0i64 - G2_S1[j * 3u64 + ax], G2_M1[j * 3u64 + ax])
+            let d1s : i64 = SB_S   let d1m : u64 = SB_M
+            /* tn = (dp - S*DEN) if dv<0 (the +S face), (-S*DEN - dp) if dv>0; td = |dv| */
+            let mut sgnf : i64 = 1i64
+            if dv > 0i64 { sgnf = 0i64 - 1i64 }
+            sb_scale(sub, 1i64, G2_DEN, 0i64 - G2_ES)   let ss : i64 = SB_S   let sm : u64 = SB_M   /* tn = sgnf*d0 - S*DEN on BOTH faces */
+            sb_scale(sub, d0s, d0m, sgnf)   let f0s : i64 = SB_S   let f0m : u64 = SB_M
+            sb_add(sub, f0s, f0m, ss, sm)   let t0s : i64 = SB_S   let t0m : u64 = SB_M
+            bigint_drop(sm)   bigint_drop(f0m)
+            sb_scale(sub, d1s, d1m, sgnf)   let f1s : i64 = SB_S   let f1m : u64 = SB_M
+            let t1s : i64 = f1s   let t1m : u64 = f1m
+            let td : i64 = dv * sgnf * (0i64 - 1i64)
+            let s : i32 = sb_sign2(sub, t0s, t0m, t1s, t1m)
+            if s > 0i32 {
+                /* face validity on the other axes: |dp_o*td + tn*dv_o| < S*DEN*td (equality = graze -> tie) */
+                let mut good : u8 = 1u8
+                let mut o : u64 = 0u64
+                while o < 3u64 {
+                    if o != ax { if good == 1u8 {
+                        let dvo : i64 = G2_V[i * 3u64 + o] - G2_V[j * 3u64 + o]
+                        sb_add(sub, G2_S0[i * 3u64 + o], G2_M0[i * 3u64 + o], 0i64 - G2_S0[j * 3u64 + o], G2_M0[j * 3u64 + o])
+                        let e0ds : i64 = SB_S   let e0dm : u64 = SB_M
+                        sb_scale(sub, e0ds, e0dm, td)   let q0s : i64 = SB_S   let q0m : u64 = SB_M
+                        bigint_drop(e0dm)
+                        sb_scale(sub, t0s, t0m, dvo)   let r0s : i64 = SB_S   let r0m : u64 = SB_M
+                        sb_add(sub, q0s, q0m, r0s, r0m)   let e0s : i64 = SB_S   let e0m : u64 = SB_M
+                        bigint_drop(q0m)   bigint_drop(r0m)
+                        sb_add(sub, G2_S1[i * 3u64 + o], G2_M1[i * 3u64 + o], 0i64 - G2_S1[j * 3u64 + o], G2_M1[j * 3u64 + o])
+                        let e1ds : i64 = SB_S   let e1dm : u64 = SB_M
+                        sb_scale(sub, e1ds, e1dm, td)   let q1s : i64 = SB_S   let q1m : u64 = SB_M
+                        bigint_drop(e1dm)
+                        sb_scale(sub, t1s, t1m, dvo)   let r1s : i64 = SB_S   let r1m : u64 = SB_M
+                        sb_add(sub, q1s, q1m, r1s, r1m)   let e1s : i64 = SB_S   let e1m : u64 = SB_M
+                        bigint_drop(q1m)   bigint_drop(r1m)
+                        sb_scale(sub, 1i64, G2_DEN, G2_ES * td)   let bs : i64 = SB_S   let bm : u64 = SB_M
+                        /* S*DEN*td - e > 0  and  S*DEN*td + e > 0 (strict; zero = corner graze -> tie) */
+                        sb_add(sub, bs, bm, 0i64 - e0s, e0m)   let h0s : i64 = SB_S   let h0m : u64 = SB_M
+                        sb_scale(sub, e1s, e1m, 0i64 - 1i64)   let h1s : i64 = SB_S   let h1m : u64 = SB_M
+                        let shi : i32 = sb_sign2(sub, h0s, h0m, h1s, h1m)
+                        bigint_drop(h0m)   bigint_drop(h1m)
+                        sb_add(sub, bs, bm, e0s, e0m)   let l0s : i64 = SB_S   let l0m : u64 = SB_M
+                        let slo : i32 = sb_sign2(sub, l0s, l0m, e1s, e1m)
+                        bigint_drop(l0m)
+                        bigint_drop(bm)   bigint_drop(e0m)   bigint_drop(e1m)
+                        if shi == 0i32 { GB_TIE = 1u8 }
+                        if slo == 0i32 { GB_TIE = 1u8 }
+                        if shi <= 0i32 { good = 0u8 }
+                        if slo <= 0i32 { good = 0u8 }
+                    } }
+                    o = o + 1u64
+                }
+                if good == 1u8 { gb_offer(sub, t0s, t0m, t1s, t1m, td, 1i64, i as i64, j as i64, ax as i64) }
+                if good == 0u8 { bigint_drop(t0m)   bigint_drop(t1m) }
+            }
+            if s <= 0i32 { bigint_drop(t0m)   bigint_drop(t1m) }
+            bigint_drop(d0m)   bigint_drop(d1m)
+        }
+        ax = ax + 1u64
+    }
+    return 0i32
+}
+
+fn g2_step() -> i32 @export {
+    if G2_NE >= G2_MAXE { return G2_CAP }
+    let sub : u64 = arena_new(8388608u64)
+    GB_HAVE = 0u8   GB_TIE = 0u8
+    let mut p : u64 = 0u64
+    while p < G2_NP { gb_cand_walls(sub, p)   p = p + 1u64 }
+    let mut i : u64 = 0u64
+    while i < G2_NP {
+        let mut j : u64 = i + 1u64
+        while j < G2_NP { gb_cand_pair(sub, i, j)   j = j + 1u64 }
+        i = i + 1u64
+    }
+    if GB_TIE == 1u8 { bigint_drop_arena(sub)   arena_drop(sub)   return G2_TIE }
+    if GB_HAVE == 0u8 { bigint_drop_arena(sub)   arena_drop(sub)   return G2_NONE }
+    /* advance the ensemble: pn' = pn*td + tn*v (persist), DEN' = DEN*td */
+    let td : i64 = GB_TD
+    let mut k : u64 = 0u64
+    while k < (G2_NP * 3u64) {
+        let v : i64 = G2_V[k]
+        sb_scale(sub, G2_S0[k], G2_M0[k], td)   let a0s : i64 = SB_S   let a0m : u64 = SB_M
+        sb_scale(sub, GB_TS0, GB_TM0, v)   let b0s : i64 = SB_S   let b0m : u64 = SB_M
+        sb_add(sub, a0s, a0m, b0s, b0m)
+        bigint_drop(a0m)   bigint_drop(b0m)
+        let n0 : u64 = bigint_copy(G2_AR, SB_M)   let n0s : i64 = SB_S
+        bigint_drop(SB_M)
+        sb_scale(sub, G2_S1[k], G2_M1[k], td)   let a1s : i64 = SB_S   let a1m : u64 = SB_M
+        sb_scale(sub, GB_TS1, GB_TM1, v)   let b1s : i64 = SB_S   let b1m : u64 = SB_M
+        sb_add(sub, a1s, a1m, b1s, b1m)
+        bigint_drop(a1m)   bigint_drop(b1m)
+        let n1 : u64 = bigint_copy(G2_AR, SB_M)   let n1s : i64 = SB_S
+        bigint_drop(SB_M)
+        bigint_drop(G2_M0[k])   bigint_drop(G2_M1[k])
+        G2_M0[k] = n0   G2_S0[k] = n0s
+        G2_M1[k] = n1   G2_S1[k] = n1s
+        k = k + 1u64
+    }
+    let tdb : u64 = bigint_from_u64(sub, td as u64)
+    let nd : u64 = bigint_mul(sub, G2_DEN, tdb)
+    bigint_drop(tdb)
+    let ndp : u64 = bigint_copy(G2_AR, nd)
+    bigint_drop(nd)
+    bigint_drop(G2_DEN)
+    G2_DEN = ndp
+    /* the response: same integer involutions as the i64 gas */
+    if GB_K == 0i64 {
+        let pi : u64 = GB_A as u64   let ax : u64 = GB_AX as u64
+        G2_V[pi * 3u64 + ax] = 0i64 - G2_V[pi * 3u64 + ax]
+    } else {
+        let pi : u64 = GB_A as u64   let pj : u64 = GB_B as u64   let ax : u64 = GB_AX as u64
+        let t : i64 = G2_V[pi * 3u64 + ax]
+        G2_V[pi * 3u64 + ax] = G2_V[pj * 3u64 + ax]
+        G2_V[pj * 3u64 + ax] = t
+    }
+    G2E_K[G2_NE] = GB_K   G2E_A[G2_NE] = GB_A   G2E_B[G2_NE] = GB_B   G2E_AX[G2_NE] = GB_AX
+    G2_NE = G2_NE + 1u64
+    bigint_drop(GB_TM0)   bigint_drop(GB_TM1)
+    bigint_drop_arena(sub)
+    arena_drop(sub)
+    return G2_OK
+}
+
+fn g2_run(k: u64) -> u64 @export {
+    let mut done : u64 = 0u64
+    while done < k {
+        let r : i32 = g2_step()
+        if r != G2_OK { return done }
+        done = done + 1u64
+    }
+    return done
+}
+
+fn g2_reverse() -> i32 @export {
+    let mut k : u64 = 0u64
+    while k < (G2_NP * 3u64) { G2_V[k] = 0i64 - G2_V[k]   k = k + 1u64 }
+    if G2_NE > 0u64 {
+        let e : u64 = G2_NE - 1u64
+        let ax : u64 = (G2E_AX[e]) as u64
+        if G2E_K[e] == 0i64 {
+            let pi : u64 = (G2E_A[e]) as u64
+            G2_V[pi * 3u64 + ax] = 0i64 - G2_V[pi * 3u64 + ax]
+        } else {
+            let pi : u64 = (G2E_A[e]) as u64   let pj : u64 = (G2E_B[e]) as u64
+            let t : i64 = G2_V[pi * 3u64 + ax]
+            G2_V[pi * 3u64 + ax] = G2_V[pj * 3u64 + ax]
+            G2_V[pj * 3u64 + ax] = t
+        }
+    }
+    return 0i32
+}
+
+/* snapshot + RATIONAL-EQUALITY comparison (no canonicalization needed: cross-multiplied identity). */
+var G2SNS0 : [i64; 12]   var G2SNM0 : [u64; 12]   var G2SNS1 : [i64; 12]   var G2SNM1 : [u64; 12]
+var G2SND : u64   var G2SNV : [i64; 12]   var G2_SNAPPED : i64
+fn g2_snap() -> i32 @export {
+    let mut k : u64 = 0u64
+    while k < (G2_NP * 3u64) {
+        if G2_SNAPPED == 1i64 { bigint_drop(G2SNM0[k])   bigint_drop(G2SNM1[k]) }
+        G2SNS0[k] = G2_S0[k]   G2SNM0[k] = bigint_copy(G2_AR, G2_M0[k])
+        G2SNS1[k] = G2_S1[k]   G2SNM1[k] = bigint_copy(G2_AR, G2_M1[k])
+        G2SNV[k] = G2_V[k]
+        k = k + 1u64
+    }
+    if G2_SNAPPED == 1i64 { bigint_drop(G2SND) }
+    G2SND = bigint_copy(G2_AR, G2_DEN)
+    G2_SNAPPED = 1i64
+    return 0i32
+}
+/* 0 = the current state EQUALS the snapshot as exact rationals (and velocities match); else the mismatch count. */
+fn g2_snap_diff() -> i64 @export {
+    let sub : u64 = arena_new(8388608u64)
+    let mut bad : i64 = 0i64
+    let mut k : u64 = 0u64
+    while k < (G2_NP * 3u64) {
+        if G2_V[k] != G2SNV[k] { bad = bad + 1i64 }
+        /* slot equality: s*m/DEN == s'*m'/SND  <=>  signs equal (or both mags zero) and m*SND == m'*DEN */
+        let mut z1 : u8 = bigint_is_zero(G2_M0[k])
+        let mut z2 : u8 = bigint_is_zero(G2SNM0[k])
+        if z1 == 1u8 { if z2 == 1u8 { } else { bad = bad + 1i64 } }
+        if z1 == 0u8 {
+            if G2_S0[k] != G2SNS0[k] { bad = bad + 1i64 }
+            let x1 : u64 = bigint_mul(sub, G2_M0[k], G2SND)
+            let x2 : u64 = bigint_mul(sub, G2SNM0[k], G2_DEN)
+            if bigint_cmp(x1, x2) != 0i32 { bad = bad + 1i64 }
+            bigint_drop(x1)   bigint_drop(x2)
+        }
+        z1 = bigint_is_zero(G2_M1[k])
+        z2 = bigint_is_zero(G2SNM1[k])
+        if z1 == 1u8 { if z2 == 1u8 { } else { bad = bad + 1i64 } }
+        if z1 == 0u8 {
+            if G2_S1[k] != G2SNS1[k] { bad = bad + 1i64 }
+            let y1 : u64 = bigint_mul(sub, G2_M1[k], G2SND)
+            let y2 : u64 = bigint_mul(sub, G2SNM1[k], G2_DEN)
+            if bigint_cmp(y1, y2) != 0i32 { bad = bad + 1i64 }
+            bigint_drop(y1)   bigint_drop(y2)
+        }
+        k = k + 1u64
+    }
+    bigint_drop_arena(sub)
+    arena_drop(sub)
+    return bad
+}
+/* release the snapshot's handles (the 64-slot table is global: free them before a deep run). */
+fn g2_snap_free() -> i32 @export {
+    if G2_SNAPPED == 1i64 {
+        let mut k : u64 = 0u64
+        while k < (G2_NP * 3u64) { bigint_drop(G2SNM0[k])   bigint_drop(G2SNM1[k])   k = k + 1u64 }
+        bigint_drop(G2SND)
+        G2_SNAPPED = 0i64
+    }
+    return 0i32
+}
+fn g2_events() -> u64 @export { return G2_NE }
+fn g2_ek(i: u64) -> i64 @export { return G2E_K[i] }
+fn g2_v(p: u64, ax: u64) -> i64 @export { return G2_V[p * 3u64 + ax] }

@@ -1,0 +1,142 @@
+/* 2176_gas_big.iii -- GATE for gas_big.iii: TRANS-ENVELOPE THERMODYNAMICS (Program III Vector V).
+ *
+ * AN HONEST FINDING FIRST: the i64 gas's shared denominator is largely SELF-LIMITING -- after every event
+ * the moving particle's own slot equals v*c*GDEN, so the ensemble gcd keeps reclaiming the growth factor
+ * (128+ events survived in probing, far past the charter's estimate).  The envelope binds elsewhere, and
+ * that is where this gate attacks it:
+ *   PHASE 1 (MAGNITUDE): a 2^61-scale box.  The guarded i64 gas REFUSES within a few events (the candidate
+ *     arithmetic c*GDEN - pn*cd exceeds i64 -- honest GS_E_OVER, never a wrap).  The bigint ensemble runs
+ *     the SAME scenario 3x deeper with the energy identity (52) intact and the reversal involution exact
+ *     AS RATIONALS (cross-multiplied equality).
+ *   PHASE 2 (DEPTH): a benign 40-box scenario run on the bigint ensemble for 200 events -- beyond the i64
+ *     organ's own 128-event ceiling -- energy identity after EVERY event, >= 1 pair swap, and the deep
+ *     involution R.F^199.R.F^199 == id.
+ *   ARM V: the speed-selective membrane (Vector IV) upgraded to the bigint ensemble.
+ * HONEST SCOPE (charter): no Poincare-recurrence or Landauer claims; the gated claim is the REMOVED CEILING
+ * in both magnitude and depth.  Velocities never migrate (integer identities stay i64).
+ *
+ * exit 99 = pass;  10 phase-1 i64 did not refuse honestly;  11 big forward failed;  12 energy identity
+ * broke;  13 a reversal was not exact;  14 no pair event in phase 2;  15 demon arm failed */
+module corpus_2176_gas_big
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gs_reset() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_envelope(S: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_step() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_run(k: u64) -> u64 from "gas.iii"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_valve(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64, vth: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_step() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run(k: u64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_reverse() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_energy() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_diff() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_free() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ek(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_v(p: u64, ax: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+const BIGC : i64 = 2305843009213693952i64                     /* 2^61 */
+const HALF : i64 = 1152921504606846976i64                     /* 2^60 */
+const QUAR : i64 = 576460752303423488i64                      /* 2^59 */
+
+/* run n big events asserting the energy identity at every one; 0 ok else the exit code */
+fn g2_checked(n: u64, e: i64) -> u64 {
+    let mut done : u64 = 0u64
+    while done < n {
+        let r : i32 = g2_step()
+        if r != 1i32 { return (20i64 + (r as i64)) as u64 }
+        if g2_energy() != e { return 12u64 }
+        done = done + 1u64
+    }
+    return 0u64
+}
+/* the closed involution on gas_big vs a post-event-1 snapshot; n = total forward events */
+fn g2_involution(n: u64, e: i64) -> u64 {
+    if g2_run(1u64) != 1u64 { return 11u64 }
+    g2_snap()
+    let r1 : u64 = g2_checked(n - 1u64, e)
+    if r1 != 0u64 { return r1 }
+    g2_reverse()
+    let r2 : u64 = g2_checked(n - 1u64, e)
+    if r2 != 0u64 { return r2 }
+    g2_reverse()
+    let sd : i64 = g2_snap_diff()   g2_snap_free()   if sd != 0i64 { return 13u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ PHASE 1 -- MAGNITUDE.  A 2^55 box: the i64 gas refuses honestly; the big ensemble continues 3x. */
+    gs_reset()   gs_envelope(2i64)
+    gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   gs_wall(0i64, 1i64, BIGC, 1i64, 1i64)
+    gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   gs_wall(1i64, 1i64, BIGC, 3i64, 1i64)
+    gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   gs_wall(2i64, 1i64, BIGC, 7i64, 1i64)
+    gs_part(HALF + 1i64, QUAR + 3i64, QUAR + 7i64, 3i64, 2i64, 1i64)
+    gs_part(HALF + 29i64, QUAR + 11i64, QUAR + 13i64, 0i64 - 5i64, 3i64, 2i64)
+    let ki : u64 = gs_run(200u64)
+    let rc : i32 = gs_step()
+    putchar(73i32) putchar(58i32) sp() e_i64(ki as i64) sp() e_i64(rc as i64) nl()          /* "I: <k> 3" */
+    if rc != 3i32 { return 10u64 }
+    if ki > 40u64 { return 10u64 }
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, BIGC, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, BIGC, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, BIGC, 7i64, 1i64)
+    g2_part(HALF + 1i64, QUAR + 3i64, QUAR + 7i64, 3i64, 2i64, 1i64)
+    g2_part(HALF + 29i64, QUAR + 11i64, QUAR + 13i64, 0i64 - 5i64, 3i64, 2i64)
+    let mut deep : u64 = 3u64 * ki
+    if deep < 12u64 { deep = 12u64 }
+    if deep > 60u64 { deep = 60u64 }
+    let m1 : u64 = g2_involution(deep, 52i64)
+    putchar(77i32) putchar(58i32) sp() e_i64(deep as i64) sp() e_i64(m1 as i64) nl()        /* "M: <3k> 0" */
+    if m1 != 0u64 { return m1 }
+
+    /* ══ PHASE 2 -- DEPTH.  A benign box run on the bigint ensemble PAST the i64 organ's 128-event ceiling. */
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 40i64, 1i64, 1i64)
+    g2_part(10i64, 4i64, 4i64, 13i64, 3i64, 2i64)
+    g2_part(36i64, 4i64, 4i64, 0i64 - 11i64, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, 7i64)
+    let e2 : i64 = g2_energy()
+    let m2 : u64 = g2_involution(200u64, e2)
+    let mut pairs : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 200u64 { if g2_ek(i) == 1i64 { pairs = pairs + 1i64 }   i = i + 1u64 }
+    putchar(68i32) putchar(58i32) sp() e_i64(200i64) sp() e_i64(e2) sp() e_i64(pairs) sp() e_i64(m2 as i64) nl()   /* "D: 200 <E> >=1 0" */
+    if m2 != 0u64 { return m2 }
+    if pairs < 1i64 { return 14u64 }
+
+    /* ══ ARM V -- the demon membrane on the bigint ensemble. */
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 0i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 16i64, 0i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 16i64, 0i64, 1i64)
+    g2_valve(0i64, 1i64, 20i64, 0i64, 1i64, 3i64)
+    g2_valve(0i64, 0i64 - 1i64, 0i64 - 20i64, 0i64, 1i64, 3i64)
+    g2_part(10i64, 4i64, 4i64, 3i64, 0i64, 0i64)
+    g2_part(10i64, 4i64, 8i64, 2i64, 0i64, 0i64)
+    g2_part(4i64, 4i64, 12i64, 1i64, 0i64, 0i64)
+    if g2_run(6u64) != 6u64 { return 15u64 }
+    if g2_energy() != 14i64 { return 15u64 }
+    let f0 : i64 = g2_v(0u64, 0u64)   let f1 : i64 = g2_v(1u64, 0u64)
+    let mut bad : i64 = 0i64
+    if f0 != 3i64 { if f0 != (0i64 - 3i64) { bad = bad + 1i64 } }
+    if f1 != 2i64 { if f1 != (0i64 - 2i64) { bad = bad + 1i64 } }
+    putchar(86i32) putchar(58i32) sp() e_i64(bad) nl()                                       /* "V: 0" */
+    if bad != 0i64 { return 15u64 }
+
+    return 99u64
+}

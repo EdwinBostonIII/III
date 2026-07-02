@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_lens.iii -- III STUDIO workspace: LENS.  The gated exact ray-cast renderer (aether_lens /
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * aether_lens_frame, corpus 2155+2158) rendering INSIDE the studio: three exact-shaded spheres with exact
  * occlusion, orbited with the arrow keys.  Every re-render calls the REAL organ (frame_render_spin) and then
  * prints the frame's determinism signature (frame_sig) -- the same angle always yields the same signature, and

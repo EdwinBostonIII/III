@@ -1,4 +1,7 @@
 /* aether_lens_view.iii -- THE LIVE, INTERACTIVE surface for the exact ray-cast interface.
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  *
  * v1 wrote a static .bmp.  This is the actual interface: a 3D scene of exact-rendered spheres that appears IN THE
  * TERMINAL and spins live, that you steer in real time.  The surface is the terminal itself (truecolor via Unicode
@@ -54,19 +57,9 @@ fn view_frame(ang: u64) -> i32 {
     return 0i32
 }
 
-/* headless proof: auto-spin `frames` frames then return (terminates, so it can be run + timed without a TTY). */
-fn view_demo(frames: u64) -> i32 @export {
-    vw_hide()   vw_clear()
-    let mut i : u64 = 0u64   let mut ang : u64 = 0u64
-    while i < frames {
-        view_frame(ang)
-        ang = ang + 1u64   if ang >= VW_NANG { ang = 0u64 }
-        Sleep(12u32)
-        i = i + 1u64
-    }
-    vw_show()   putchar(10i32)
-    return 0i32
-}
+/* (the never-wired headless auto-spin view_demo was removed by the reunification coverage sweep:
+ * zero callers in 8 days, uncoverable by a corpus KAT -- this app carries main() so its object
+ * cannot link into a KAT; the interactive loop below IS the viewer.  git history preserves it.) */
 
 fn main() -> u64 {
     vw_hide()   vw_clear()

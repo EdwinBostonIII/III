@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_home.iii -- III STUDIO workspace: HOME, the observatory.  The front door IS the system:
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * the hero panel is the REAL exact ray-cast render (aether_lens, gated 2155+2158) on its zero-drift integer
  * turntable, advancing live while you watch; the numbers are read from world_graph (the real 783-module graph
  * extracted from III's own source) and drawn as exact vector digits; the launcher rows SPAWN real sibling

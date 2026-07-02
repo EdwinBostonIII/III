@@ -1,11 +1,22 @@
-/* STDLIB/iii/aether/field_run.iii -- THE CAUSAL TOPOLOGY ENGINE, run live.
- * Drives the unified field (ui_field.iii) and PRINTS its actual output: self-population growing the Sierpinski,
- * the local-web relay wavefront, the quantum dimension snapping on collapse, exact irrationals self-populating,
- * structural color from geometry, exact kinematics at an irrational instant, and the binding's conserved invariant.
- * This is the engine running, not a test -- executed output. */
+/* STDLIB/iii/aether/field_run.iii -- THE CAUSAL TOPOLOGY ENGINE, run live (argv-selected modes).
+ * MERGED (reunification W4b-i.12, the ledger's §2m): field_dim + field_full absorbed as modes --
+ *   (default)      the engine run: Sierpinski self-population, relay wavefront, quantum dimension
+ *                  snap, self-populating sqrt2, structural color, exact kinematics, the binding.
+ *   full           EVERY organ in one execution (bigint signs, deg-4 signs, dim/color/wave/slice/
+ *                  inverse-raster/fractal-hash/reversible-time/e-graph/acoustic/binding/CA).
+ *   dim <file>     the Kolmogorov-Hausdorff dimension faculty over a REAL file's bytes (cross-check
+ *                  against gzip: compressible reads LOW, incompressible near 2.000 -- not rigged).
+ * Visible output, not exit codes -- pure glue over genuine symbols (the linker proves none stubbed). */
 module field_run
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+/* bigint-like primitives (exact past i64) */
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "sqrt_sum_sign.iii"
+/* the unified field */
 extern @abi(c-msvc-x64) fn ui_ca_seed(n: i64, pos: i64) -> i32 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_ca_step(n: i64) -> i32 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_ca_get(idx: i64) -> u8 from "ui_field.iii"
@@ -23,6 +34,31 @@ extern @abi(c-msvc-x64) fn ui_cf_p() -> i64 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_cf_q() -> i64 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_cf_pell(d: i64) -> i64 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_poly_area2(xs: u64, ys: u64, n: u64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_data_dim(buf: u64, n: u64) -> u64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_grating_wavelength(p_nm: i64, sin_num: i64, sin_den: i64, order: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_interfere(s1x: i64, s1y: i64, s2x: i64, s2y: i64, px: i64, py: i64, lam: i64, m: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_slice_quadric(b: i64, fixed_sum: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_forward_diag(off_n: i64, off_d: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inverse_diag(cov_n: i64, cov_d: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_cov_n() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_cov_d() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inv_n() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_inv_d() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_fractal_hash(buf: u64, n: u64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_hash_ex() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_hash_ey() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_evolve(x: i64, y: i64, k: i64, t: i64) -> i32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_rev_x() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_rev_y() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_acoustic_freq(length: i64, n_harm: i64, speed: i64) -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn ui_is_harmonic(f1: i64, fq: i64, n: i64) -> u32 from "ui_field.iii"
+/* the e-graph */
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: u64, children: u64, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_size(root: u32) -> u32 from "egraph.iii"
 
 var QC : [u64; 4]
 var DIG : [u8; 24]
@@ -30,6 +66,11 @@ var PER : [i64; 1]
 var SQX : [i64; 4]   var SQY : [i64; 4]
 var T1X : [i64; 3]   var T1Y : [i64; 3]
 var T2X : [i64; 3]   var T2Y : [i64; 3]
+var SYM : [u8; 32]   var CHILD : [u32; 8]
+var BUF : [u8; 256]
+var PX : [i64; 4]   var PY : [i64; 4]
+var RAW : [u8; 4194304]      /* dim mode: 4 MB ceiling */
+var MODE_RB : [u8; 4]
 
 /* print a string literal up to the '~' sentinel (iii literals are not NUL-terminated; '~' is our terminator) */
 fn pstr(s: *u8) -> i32 {
@@ -58,8 +99,160 @@ fn pint(n: i64) -> i32 {
     while k > 0i64 { k = k - 1i64   putchar(DIG[k] as i32) }
     return 0i32
 }
+fn setsym(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SYM[i] = 0u8   i = i + 1u64 }
+    SYM[0u64] = tag
+    return 0i32
+}
+fn rgb_of(d: i64) -> i32 {
+    let c : u32 = ui_dim_to_rgb(d)
+    pint(((c >> 16u32) & 255u32) as i64)   psp()   pint(((c >> 8u32) & 255u32) as i64)   psp()   pint((c & 255u32) as i64)
+    return 0i32
+}
 
-fn main() -> i32 {
+/* ══ mode: dim <file> (formerly field_dim.iii) ══ */
+fn fr_dim(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { pstr("usage: field_run dim <file>~")   pnl()   return 2u64 }
+    let pp : *u64 = argv as *u64
+    MODE_RB[0u64] = 114u8   MODE_RB[1u64] = 98u8   MODE_RB[2u64] = 0u8       /* "rb" */
+    let f : u64 = fopen(pp[2u64], (&MODE_RB) as u64)
+    if f == 0u64 { pstr("cannot open file~")   pnl()   return 1u64 }
+    let n : u64 = fread((&RAW) as u64, 1u64, 4194303u64, f)
+    fclose(f)
+    if n == 0u64 { pstr("empty file~")   pnl()   return 1u64 }
+    let d : u64 = ui_data_dim((&RAW) as u64, n)
+    pstr("  bytes=~")   pint(n as i64)
+    pstr("   dimension(x1000)=~")   pint(d as i64)
+    pnl()
+    return 0u64
+}
+
+/* ══ mode: full (formerly field_full.iii -- every organ in one execution) ══ */
+fn fr_full() -> u64 {
+    pstr("================ THE CAUSAL TOPOLOGY ENGINE -- FULL RUN ================~")   pnl()
+
+    pstr("[BIG] bigint sign(u + v*sqrt2), |coeffs|~1e9 (i64 square would overflow):  ~")
+    pstr("5e9-3e9r2=~")   pint(ui_bsign1(5000000000i64, 0i64 - 3000000000i64, 2i64) as i64)
+    pstr("   4e9-3e9r2=~")   pint(ui_bsign1(4000000000i64, 0i64 - 3000000000i64, 2i64) as i64)   pnl()
+
+    pstr("[DEG4] bigint degree-4 sign(a + b*r2 + c*r3) at 1e10 coords (nested square ~1e40):  ~")
+    pstr("2e10+1e10r2-1e10r3=~")   pint(ui_sign_bi_big(20000000000i64, 10000000000i64, 2i64, 0i64 - 10000000000i64, 3i64) as i64)
+    pstr("   1e10+2e10r2-3e10r3=~")   pint(ui_sign_bi_big(10000000000i64, 20000000000i64, 2i64, 0i64 - 30000000000i64, 3i64) as i64)   pnl()
+
+    pnl()   pstr("[NUM] self-populating sqrt2 = [1;2,2,...] -- finite seed, Pell-exact:~")   pnl()
+    PER[0u64] = 2i64
+    let mut t : i64 = 3i64
+    while t <= 6i64 { ui_cf_run(1i64, (&PER) as u64, 1i64, t)   pstr("      ~")   pint(ui_cf_p())   putchar(47i32)   pint(ui_cf_q())   pstr("   p^2-2q^2=~")   pint(ui_cf_pell(2i64))   pnl()   t = t + 1i64 }
+
+    pnl()   pstr("[DIM] data is geometry -- complexity-dimension (x1000) of 256 bytes:~")   pnl()
+    let mut i : u64 = 0u64   while i < 256u64 { BUF[i] = 65u8   i = i + 1u64 }
+    pstr("      all-one-byte (predictable)  -> d = ~")   pint(ui_data_dim((&BUF) as u64, 256u64) as i64)   pnl()
+    i = 0u64   while i < 256u64 { BUF[i] = i as u8   i = i + 1u64 }
+    pstr("      all-256-values (max entropy)-> d = ~")   pint(ui_data_dim((&BUF) as u64, 256u64) as i64)   pnl()
+
+    pnl()   pstr("[CLR] structural color -- dimension -> RGB (generated by topology):~")   pnl()
+    pstr("      d=1.0 -> RGB ~")   rgb_of(1000i64)   pstr(" (red)    d=1.5 -> RGB ~")   rgb_of(1500i64)   pstr(" (green)    d=2.0 -> RGB ~")   rgb_of(2000i64)   pstr(" (violet)~")   pnl()
+    pstr("      exact grating wavelength p*sin/m (p=1000nm, 30deg): ~")   pint(ui_grating_wavelength(1000i64, 1i64, 2i64, 1i64))   pstr(" nm~")   pnl()
+
+    pnl()   pstr("[WAV] wave optics -- exact interference fringe (3-4-5, path diff 2):~")   pnl()
+    pstr("      lambda=2,m=1 bright? ~")   pint(ui_interfere(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 2i64, 1i64) as i64)   pstr("     lambda=3,m=1 (off)? ~")   pint(ui_interfere(0i64, 0i64, 0i64, 4i64, 3i64, 4i64, 3i64, 1i64) as i64)   pnl()
+
+    pnl()   pstr("[TIM] continuous time -- position at the IRRATIONAL instant t=(-1+sqrt3)/2:~")   pnl()
+    ui_kinematic_at_t(0i64, 2i64, 0i64, 0i64 - 1i64, 3i64, 2i64)
+    pstr("      p(t) = ~")   pint(ui_kin_p())   pstr(" + ~")   pint(ui_kin_q())   pstr("*sqrt(~")   pint(ui_kin_d())   pstr(")   (= -1 + sqrt3, exact)~")   pnl()
+
+    pnl()   pstr("[SLC] N-dim slice -- a 5-D hypersphere (r^2=100) sliced as the viewport moves through dims:~")   pnl()
+    pstr("      circle radius^2: ~")   pint(ui_slice_quadric(100i64, 0i64))   pstr(" -> ~")   pint(ui_slice_quadric(100i64, 36i64))   pstr(" -> ~")   pint(ui_slice_quadric(100i64, 64i64))   pstr(" -> ~")   pint(ui_slice_quadric(100i64, 100i64))   pstr(" (point) -> empty~")   pnl()
+
+    pnl()   pstr("[INV] reverse rasterization -- pixel coverage -> exact geometry (round-trip):~")   pnl()
+    ui_forward_diag(3i64, 5i64)
+    pstr("      offset 3/5 -> coverage ~")   pint(ui_cov_n())   putchar(47i32)   pint(ui_cov_d())
+    ui_inverse_diag(9i64, 50i64)
+    pstr("   -> recovered offset^2 = ~")   pint(ui_inv_n())   putchar(47i32)   pint(ui_inv_d())   pstr(" = (3/5)^2~")   pnl()
+
+    pnl()   pstr("[HSH] fractal hash -- a turtle-path seal; one bit-flip shears the endpoint:~")   pnl()
+    i = 0u64   while i < 16u64 { BUF[i] = ((i * 13u64) + 7u64) as u8   i = i + 1u64 }   BUF[5u64] = 53u8
+    ui_fractal_hash((&BUF) as u64, 16u64)
+    pstr("      clean   endpoint = (~")   pint(ui_hash_ex())   putchar(44i32)   pint(ui_hash_ey())   pstr(")~")   pnl()
+    BUF[5u64] = 54u8   ui_fractal_hash((&BUF) as u64, 16u64)
+    pstr("      tampered endpoint = (~")   pint(ui_hash_ex())   putchar(44i32)   pint(ui_hash_ey())   pstr(")  <- shifted, detected~")   pnl()
+
+    pnl()   pstr("[REV] reversible time -- evolve(t) then evolve(-t) = identity (zero-entropy undo):~")   pnl()
+    ui_evolve(3i64, 5i64, 2i64, 1i64)
+    pstr("      (3,5) --evolve+1--> (~")   pint(ui_rev_x())   putchar(44i32)   pint(ui_rev_y())   pstr(")~")
+    ui_evolve(13i64, 5i64, 2i64, 0i64 - 1i64)
+    pstr(" --evolve-1--> (~")   pint(ui_rev_x())   putchar(44i32)   pint(ui_rev_y())   pstr(")~")   pnl()
+
+    pnl()   pstr("[NET] local-web relay -- global field from local hops ('.'=unreached), wavefront:~")   pnl()
+    ui_relay_init(10i64, 0i64)
+    let mut tick : i64 = 0i64
+    while tick < 4i64 {
+        pstr("      ~")
+        let mut j : i64 = 0i64
+        while j < 10i64 { let d : i64 = ui_relay_get(j)   if d >= 1000000i64 { putchar(46i32) }   if d < 1000000i64 { pint(d) }   psp()   j = j + 1i64 }
+        pnl()   ui_relay_step(10i64)   tick = tick + 1i64
+    }
+
+    pnl()   pstr("[EGR] e-graph -- 3 equivalent forms as ONE class; container congruence-collapses:~")   pnl()
+    eg_init()
+    setsym(1u8)   let l0 : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)
+    setsym(2u8)   let l1 : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)
+    setsym(3u8)   let l2 : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)
+    setsym(10u8)  CHILD[0u64] = l0   let f0 : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 1u32)
+    setsym(10u8)  CHILD[0u64] = l2   let f2 : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 1u32)
+    eg_union(l0, l1)   eg_union(l1, l2)   eg_rebuild()
+    pstr("      class size = ~")   pint(eg_class_size(l0) as i64)   pstr(";  f(L0) vs f(L2): ~")
+    if eg_find(f0) == eg_find(f2) { pstr("SAME (congruence propagated)~") }
+    if eg_find(f0) != eg_find(f2) { pstr("distinct~") }
+    pnl()
+
+    pnl()   pstr("[TON] acoustic -- overtones f_n=n*v/2L (L=1,v=880) + in-tune predicate:~")   pnl()
+    pstr("      f1=~")   pint(ui_acoustic_freq(1i64, 1i64, 880i64))   pstr(" f2=~")   pint(ui_acoustic_freq(1i64, 2i64, 880i64))   pstr(" f3=~")   pint(ui_acoustic_freq(1i64, 3i64, 880i64))   pstr("   880=2*440?~")   pint(ui_is_harmonic(440i64, 880i64, 2i64) as i64)   pstr(" 900=2*440?~")   pint(ui_is_harmonic(440i64, 900i64, 2i64) as i64)   pnl()
+
+    pnl()   pstr("[QUA] quantum UI -- dimension(x1000):  superposition -> ~")
+    QC[0u64] = 1u64   QC[1u64] = 1u64   QC[2u64] = 1u64   QC[3u64] = 1u64
+    pint(ui_quantum_dim((&QC) as u64, 4u64, 4u64) as i64)   pstr("   collapse -> ~")
+    QC[0u64] = 4u64   QC[1u64] = 0u64   QC[2u64] = 0u64   QC[3u64] = 0u64
+    pint(ui_quantum_dim((&QC) as u64, 4u64, 4u64) as i64)   pnl()
+
+    pnl()   pstr("[BND] the binding -- exact area DRIVES the e-graph: equal areas bind, unequal refuse:~")   pnl()
+    PX[0u64] = 0i64   PX[1u64] = 4i64   PX[2u64] = 4i64   PX[3u64] = 0i64
+    PY[0u64] = 0i64   PY[1u64] = 0i64   PY[2u64] = 4i64   PY[3u64] = 4i64
+    let sq : i64 = ui_poly_area2((&PX) as u64, (&PY) as u64, 4u64)
+    PX[0u64] = 0i64   PX[1u64] = 8i64   PX[2u64] = 8i64   PX[3u64] = 0i64
+    PY[0u64] = 0i64   PY[1u64] = 0i64   PY[2u64] = 2i64   PY[3u64] = 2i64
+    let rect : i64 = ui_poly_area2((&PX) as u64, (&PY) as u64, 4u64)
+    PX[0u64] = 0i64   PX[1u64] = 3i64   PX[2u64] = 3i64   PX[3u64] = 0i64
+    PY[0u64] = 0i64   PY[1u64] = 0i64   PY[2u64] = 3i64   PY[3u64] = 3i64
+    let small : i64 = ui_poly_area2((&PX) as u64, (&PY) as u64, 4u64)
+    eg_init()
+    setsym(1u8)   let bw : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* 4x4 square */
+    setsym(2u8)   let br : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* 2x8 rect  */
+    setsym(3u8)   let bs : u32 = eg_add((&SYM) as u64, (&CHILD) as u64, 0u32)   /* 3x3 square */
+    if sq == rect { eg_union(bw, br)   eg_rebuild() }
+    pstr("      square 2A=~")   pint(sq)   pstr("  rect 2A=~")   pint(rect)   pstr("  -> ~")
+    if eg_find(bw) == eg_find(br) { pstr("BOUND~") }   if eg_find(bw) != eg_find(br) { pstr("refused~") }
+    pstr("     vs 3x3 2A=~")   pint(small)   pstr("  -> ~")
+    if eg_find(bw) == eg_find(bs) { pstr("BOUND~") }   if eg_find(bw) != eg_find(bs) { pstr("refused (unequal invariant)~") }
+    pnl()
+
+    pnl()   pstr("[POP] self-population -- one local XOR rule grows the exact Sierpinski:~")   pnl()
+    ui_ca_seed(64i64, 32i64)
+    let mut row : i64 = 0i64
+    while row < 16i64 {
+        pstr("      ~")
+        let mut col : i64 = 16i64
+        while col <= 48i64 { if ui_ca_get(col) == 1u8 { putchar(35i32) }   if ui_ca_get(col) == 0u8 { putchar(32i32) }   col = col + 1i64 }
+        pnl()   ui_ca_step(64i64)   row = row + 1i64
+    }
+
+    pstr("====================== 17 organs, one process ======================~")   pnl()
+    return 0u64
+}
+
+/* ══ mode: (default) -- the original live run ══ */
+fn fr_default() -> u64 {
     pstr("============================================================~")   pnl()
     pstr("              THE CAUSAL TOPOLOGY ENGINE                    ~")   pnl()
     pstr("        only local events, relations, and logic walls       ~")   pnl()
@@ -152,5 +345,21 @@ fn main() -> i32 {
     pnl()   pstr("============================================================~")   pnl()
     pstr("  15 faculties, exact. The lens is ground and pointed.       ~")   pnl()
     pstr("============================================================~")   pnl()
-    return 0i32
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc >= 2i32 {
+        let pp : *u64 = argv as *u64
+        let a1 : *u8 = pp[1u64] as *u8
+        /* "dim" */
+        if a1[0u64] == 100u8 { if a1[1u64] == 105u8 { if a1[2u64] == 109u8 { if a1[3u64] == 0u8 {
+            return fr_dim(argc, argv)
+        } } } }
+        /* "full" */
+        if a1[0u64] == 102u8 { if a1[1u64] == 117u8 { if a1[2u64] == 108u8 { if a1[3u64] == 108u8 { if a1[4u64] == 0u8 {
+            return fr_full()
+        } } } } }
+    }
+    return fr_default()
 }

@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_console.iii -- III STUDIO workspace: CONSOLE, the sovereign CLI.  Every verb invokes a
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * REAL faculty and prints its REAL verdict -- no canned strings:
  *   sign a b [a b ...]          exact sign of a1*sqrt(b1)+...  (sqrtsum_lazy3 -- the Sqrt-sum engine)
  *   collide x y z r  x y z r    exact sphere contact: SEPARATED / TOUCHING / OVERLAPPING + the exact metric

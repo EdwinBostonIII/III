@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ui_win.iii -- III-GLASS L0: the real-time present + input shell.  III opens its OWN window
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * and pumps its OWN message loop -- the only external surface is the OS ABI (user32/gdi32/kernel32), exactly the
  * unavoidable floor, no imported library.  The WNDPROC is a III function (its address handed to RegisterClassExA);
  * the framebuffer (0xAARRGGBB == a 32bpp DIB) is blitted with StretchDIBits, no per-pixel conversion.  Input is
@@ -49,7 +52,8 @@ fn r32(b: u64, o: u64) -> u32 { let p : *u8 = (b + o) as *u8  return (p[0u64] as
 fn ui_mx() -> u32 @export { return UI_MX }
 fn ui_my() -> u32 @export { return UI_MY }
 fn ui_mdown() -> u32 @export { return UI_MDOWN }
-fn ui_quit() -> u32 @export { return UI_QUIT }
+/* (ui_quit() accessor removed by the reunification coverage sweep: redundant -- ui_pump's return value
+ * IS the quit flag, and no caller ever polled the accessor.  git history preserves it.) */
 fn ui_key() -> u32 @export { let k : u32 = UI_KEY  UI_KEY = 0u32  return k }   /* consume the last key (0 if none) */
 fn ui_getkey() -> u32 @export {   /* pop the next queued keydown (VK code), or 0 -- the loss-proof ring variant */
     if UI_KBT == UI_KBH { return 0u32 }

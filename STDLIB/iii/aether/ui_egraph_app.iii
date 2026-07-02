@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ui_egraph_app.iii -- thin entry for the standalone live e-graph window (egraph.exe).  The
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * renderer + window loop live in ui_egraph.iii (eg_render + eg_window_main, no main), so the zoom view can link
  * ui_egraph.o to host the e-graph in place without a two-mains conflict.  This module is the standalone main. */
 module ui_egraph_app

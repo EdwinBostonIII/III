@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_forge.iii -- III STUDIO workspace: FORGE, the IDE core.  A real editing loop with a real
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * build: load any file (Ctrl+L, type the path, Enter), edit it (the OS WM_CHAR ring + arrows), save (Ctrl+S),
  * and COMPILE IT WITH THE REAL COMPILER (F7): the studio spawns  cmd /C COMPILED\iiis-2.exe <path> --compile-only
  * ... 2> err  , waits, reads the REAL exit code and the REAL stderr, and paints them.  Green means iiis-2 itself

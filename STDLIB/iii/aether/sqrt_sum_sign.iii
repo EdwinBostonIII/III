@@ -147,7 +147,7 @@ fn lazy_reset_counts() -> i32 @export { FASTCT = 0u64   CANONCT = 0u64   EXACTCT
 /* ═══ TIER 0 -- THE LOW-SURD FAST-EXACT SIGNERS (folded here from ui_exact_big.iii / ui_exact_bigsign.iii: the
  * two-live-kernels redundancy ends -- ONE kernel, and the n<=2 iterated-squaring signers are its low-surd tiers).
  * For <=2 surds the ITERATED SQUARING is exact, finite, O(1) bigint -- NO separation bound, NO precision knob,
- * ANY coefficient magnitude.  The UI/coverage path (ui_arc_cover2d_big, ui_exact_sym, ui_exact_bigcov, field_full)
+ * ANY coefficient magnitude.  The UI/coverage path (ui_arc_cover2d_big, ui_exact_sym, ui_exact_bigcov, field_run full)
  * consumes these exports directly; sqrtsum_lazy3 dispatches them for any raw <=2-surd query. ═══ */
 
 /* sign(u + v*sqrt D), u,v signed i64, D>=0 -- EXACT via bigint (handles u^2, v^2*D far beyond i64). */

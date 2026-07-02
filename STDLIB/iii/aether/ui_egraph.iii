@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ui_egraph.iii -- III-GLASS: the visual E-graph, the deepest "represent the system".  It does
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * NOT draw a diagram of an e-graph; it builds the REAL one (ser_egraph: MUL(x,7)), runs equality saturation, then
  * WALKS the saturated node arrays (seg_node_count/op/a/b + seg_find) and renders them.  Nodes are laid out by
  * depth, child-edges drawn, and each node COLORED BY ITS E-CLASS -- so MUL(x,7) and the SUB(SHL(x,3),x) that

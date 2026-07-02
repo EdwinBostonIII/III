@@ -1,4 +1,7 @@
 /* aether_lens_win.iii -- THE REAL VIEWER: III's own native graphical WINDOW, hand-rolled from raw Win32 + GDI syscalls
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * (user32 + gdi32 + kernel32), NO toolkit, NO library, NO imported asset.  It opens a window on the desktop, renders the
  * EXACT 3D scene (integer ray-caster; exact depth ordering via lens_t_cmp_fx -> no z-fighting at any angle), and paints
  * it live -- you WATCH it spin and STEER it in real time with the keyboard.  Windows calls back into an III WNDPROC for

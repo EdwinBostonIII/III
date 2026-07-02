@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_bench.iii -- III STUDIO workspace: BENCH, the exact-physics table.  Summon constructs
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * (S sphere, E ellipsoid, P photon), drag to orbit, arrows/PgUp/PgDn to move the selected one -- and every frame
  * III re-decides the scene's interactions EXACTLY through wb_kernel: sphere contact is an integer sign, the
  * photon's nearest-hit ordering is an n=3 sum-of-square-roots sign, the relay comparison is n=4.  The readout

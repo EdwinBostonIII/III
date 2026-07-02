@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ws_zoom.iii -- III STUDIO workspace: ZOOM, infinite semantic depth.  An exact-integer camera
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * (scale SN/32, world pan) over the studio's REAL architecture: every box names a real module and its real attach
  * point.  Text is exact vector outlines, so it stays razor-sharp at any magnification -- and past the thresholds
  * the map DISSOLVES INTO THE REAL MATH: the saturated e-graph (ser_egraph, live) and then the bit-blast netlist

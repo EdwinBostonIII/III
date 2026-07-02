@@ -38,5 +38,31 @@ run 2116_field_hash        99    # FRACTAL HASH -- geometry as tamper-evident se
 run 2117_field_superpos    99    "$LIB" -lws2_32   # E-GRAPH SUPERPOSITION -- attached to the REAL egraph.iii
 run 2118_field_binding     99    "$LIB" -lws2_32   # THE BINDING -- topo+egraph+exact agree on one conserved invariant
 
+
+# ── DEMO-MAIN SMOKE (reunification W4b-i.12): the three surviving field/fractal demo mains compile,
+#    link against the SAME organ objects, and RUN headless to rc=0.  field_run absorbed field_dim
+#    (mode `dim <file>`) + field_full (mode `full`); fractal_dim + mandel_run stay (the falsifiers).
+"$I2" "$A/sqrt_sum_sign.iii" --compile-only --out "$OUT/sqrt_sum_sign.o" 2>"$OUT/sss.log" || { echo "FAIL sqrt_sum_sign compile (smoke)"; fail=$((fail+1)); }
+"$I2" "$A/kfield.iii"        --compile-only --out "$OUT/kfield.o"        2>"$OUT/kf.log"  || { echo "FAIL kfield compile (smoke)"; fail=$((fail+1)); }
+"$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/ueb.log" || { echo "FAIL ui_exact_big compile (smoke)"; fail=$((fail+1)); }
+smoke() {
+    local name="$1"; shift
+    if ! "$I2" "$A/$name.iii" --compile-only --out "$OUT/$name.o" 2>"$OUT/$name.clog"; then
+        echo "FAIL  $name : compile"; cat "$OUT/$name.clog"; fail=$((fail+1)); return
+    fi
+    if ! gcc "$OUT/$name.o" "$OUT/ui_field.o" "$OUT/ui_exact_big.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB" -lws2_32 -lkernel32 -o "$OUT/$name.exe" 2>"$OUT/$name.ld"; then
+        echo "FAIL  $name : link"; tail -3 "$OUT/$name.ld"; fail=$((fail+1)); return
+    fi
+    local st="/tmp/fsmoke_$$_$RANDOM.exe"; cp "$OUT/$name.exe" "$st"
+    if timeout 90 "$st" "$@" > /dev/null 2>&1; then echo "PASS  $name $* : runs (rc=0)"; pass=$((pass+1))
+    else echo "FAIL  $name $* : run rc=$?"; fail=$((fail+1)); fi
+    rm -f "$st"
+}
+smoke field_run
+smoke field_run full
+smoke field_run dim "$A/field_run.iii"
+smoke fractal_dim
+smoke mandel_run
 echo "=== UNIFIED-FIELD KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1
+

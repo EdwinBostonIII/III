@@ -36,6 +36,9 @@ extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_
 extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
 extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
 
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
 var MXDIG : [u8; 32]
 var MXPD  : [i64; 8]
 var MXS   : i64        /* square part s of the last sqfree() call: n = s^2 * r */
@@ -340,11 +343,343 @@ fn design(a: i64, b: i64, c: i64, lo: i64, hi: i64) -> u64 {
     return 0u64
 }
 
+/* ------------------------------------------------ coupler sweep (zeta-24 grid) ---------------- */
+/* The rocker joint B(theta) at the 24 exact crank angles theta = 15k deg.  cos/sin of every grid
+ * angle live in Q(sqrt2,sqrt3); with O=(0,0), D=(d,0), A = a*(cos,sin), B solves
+ *   |B-A| = b,  |B-D| = c.
+ * Radical line: U*x = 4K + V*y with U = 8d - 2*(4*a*cos), V = 2*(4*a*sin), K = b^2-c^2-a^2+d^2
+ * (everything scaled x4 so the ring Z[sqrt2,sqrt3] carries it in integer 4-vectors).  Substituting
+ * gives the y-quadratic  (U^2+V^2) y^2 + 2VW y + (W^2 - c^2 U^2) = 0  with W = 4K - d*U, and the
+ * symmetric x-quadratic  (U^2+V^2) x^2 - (2dV^2 + 8KU) x + (d^2 V^2 + 16 K^2 - c^2 V^2) = 0.
+ * NO square root is ever taken symbolically: each root is isolated by bisection where every probe
+ * is ONE exact sign query q23_sign(alpha p^2 + beta pq + gamma q^2) -- so the digits printed are
+ * certified even though the root generally lives in a degree-8 field over Q.
+ * Reachability at each k is the exact sign of Delta = beta^2 - 4*alpha*gamma; branches are paired
+ * through the exact sign of U*V (the radical-line slope).  Sweep envelope: links 1..40 (keeps the
+ * worst intermediate, Delta's components, inside i64; checked against the bound 8.6e18 < 2^63). */
+
+var MW24C : [i64; 96]     /* 4*cos(15k deg) as rank-4 vectors, k = 0..23 */
+var MW24S : [i64; 96]     /* 4*sin(15k deg) */
+var MWU4 : [i64; 4]   var MWV4 : [i64; 4]   var MWW4 : [i64; 4]
+var MWA4 : [i64; 4]   var MWB4 : [i64; 4]   var MWG4 : [i64; 4]
+var MWT4A : [i64; 4]  var MWT4B : [i64; 4]  var MWT4C : [i64; 4]
+var MWD4 : [i64; 4]   var MWE4 : [i64; 4]   var MWF4 : [i64; 4]
+var MWROOT : [i64; 8]     /* isolated bounds: root1 lo/hi, root2 lo/hi (scaled), count in [4], tag in [5] */
+
+fn swrow(k: i64, c0: i64, c1: i64, c2: i64, c3: i64, s0: i64, s1: i64, s2: i64, s3: i64) -> i32 {
+    let b : i64 = k * 4i64
+    MW24C[b] = c0   MW24C[b + 1i64] = c1   MW24C[b + 2i64] = c2   MW24C[b + 3i64] = c3
+    MW24S[b] = s0   MW24S[b + 1i64] = s1   MW24S[b + 2i64] = s2   MW24S[b + 3i64] = s3
+    return 0i32
+}
+fn sw_tab() -> i32 {
+    /* quadrant I explicitly: 4cos/4sin at 0,15,30,45,60,75,90 deg */
+    swrow(0i64,  4i64,0i64,0i64,0i64,           0i64,0i64,0i64,0i64)
+    swrow(1i64,  0i64,1i64,0i64,1i64,           0i64,0i64 - 1i64,0i64,1i64)
+    swrow(2i64,  0i64,0i64,2i64,0i64,           2i64,0i64,0i64,0i64)
+    swrow(3i64,  0i64,2i64,0i64,0i64,           0i64,2i64,0i64,0i64)
+    swrow(4i64,  2i64,0i64,0i64,0i64,           0i64,0i64,2i64,0i64)
+    swrow(5i64,  0i64,0i64 - 1i64,0i64,1i64,    0i64,1i64,0i64,1i64)
+    swrow(6i64,  0i64,0i64,0i64,0i64,           4i64,0i64,0i64,0i64)
+    /* 7..12: cos(k) = -cos(12-k), sin(k) = sin(12-k) */
+    let mut k : i64 = 7i64
+    while k <= 12i64 {
+        let m : i64 = (12i64 - k) * 4i64
+        let b : i64 = k * 4i64
+        let mut i : i64 = 0i64
+        while i < 4i64 {
+            let cv : i64 = MW24C[m + i]   MW24C[b + i] = 0i64 - cv
+            let sv : i64 = MW24S[m + i]   MW24S[b + i] = sv
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    /* 13..23: cos(k) = cos(24-k), sin(k) = -sin(24-k) */
+    k = 13i64
+    while k <= 23i64 {
+        let m : i64 = (24i64 - k) * 4i64
+        let b : i64 = k * 4i64
+        let mut i : i64 = 0i64
+        while i < 4i64 {
+            let cv : i64 = MW24C[m + i]   MW24C[b + i] = cv
+            let sv : i64 = MW24S[m + i]   MW24S[b + i] = 0i64 - sv
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* vector helpers on rank-4 i64 vectors */
+fn v_zero(dp: u64) -> i32 { let d : *i64 = dp as *i64   d[0u64] = 0i64   d[1u64] = 0i64   d[2u64] = 0i64   d[3u64] = 0i64   return 0i32 }
+fn v_scaled_from(dp: u64, sp: u64, m: i64) -> i32 {
+    let d : *i64 = dp as *i64   let s : *i64 = sp as *i64
+    d[0u64] = s[0u64] * m   d[1u64] = s[1u64] * m   d[2u64] = s[2u64] * m   d[3u64] = s[3u64] * m
+    return 0i32
+}
+fn v_axpy(dp: u64, sp: u64, m: i64) -> i32 {          /* d += m*s */
+    let d : *i64 = dp as *i64   let s : *i64 = sp as *i64
+    d[0u64] = d[0u64] + (s[0u64] * m)   d[1u64] = d[1u64] + (s[1u64] * m)
+    d[2u64] = d[2u64] + (s[2u64] * m)   d[3u64] = d[3u64] + (s[3u64] * m)
+    return 0i32
+}
+fn v_is_zero(sp: u64) -> u8 {
+    let s : *i64 = sp as *i64
+    let a0 : i64 = s[0u64]   let a1 : i64 = s[1u64]   let a2 : i64 = s[2u64]   let a3 : i64 = s[3u64]
+    if a0 != 0i64 { return 0u8 }
+    if a1 != 0i64 { return 0u8 }
+    if a2 != 0i64 { return 0u8 }
+    if a3 != 0i64 { return 0u8 }
+    return 1u8
+}
+
+/* sign of  alpha*p^2 + beta*p*q + gamma*q^2  (exact; the bisection probe) */
+fn sw_qsign(p: i64, q: i64) -> i32 {
+    v_zero((&MWE4) as u64)
+    v_axpy((&MWE4) as u64, (&MWA4) as u64, p * p)
+    v_axpy((&MWE4) as u64, (&MWB4) as u64, p * q)
+    v_axpy((&MWE4) as u64, (&MWG4) as u64, q * q)
+    return q23_sign((&MWE4) as u64)
+}
+/* sign of the linear  2*alpha*y + beta  at p/q (locates the vertex between the two roots) */
+fn sw_lsign(p: i64, q: i64) -> i32 {
+    v_zero((&MWE4) as u64)
+    v_axpy((&MWE4) as u64, (&MWA4) as u64, 2i64 * p)
+    v_axpy((&MWE4) as u64, (&MWB4) as u64, q)
+    return q23_sign((&MWE4) as u64)
+}
+
+/* isolate the (up to) 2 real roots of alpha t^2 + beta t + gamma inside [-bnd, bnd], scale S=10^4.
+ * MWROOT[0..3] = r1lo,r1hi,r2lo,r2hi (scaled); MWROOT[4] = count; MWROOT[5] = 1 if near-tangent. */
+fn sw_isolate(bnd: i64, dsg: i32) -> i32 {
+    let sc : i64 = 10000i64
+    let lo0 : i64 = (0i64 - bnd) * sc
+    let hi0 : i64 = bnd * sc
+    MWROOT[5u64] = 0i64
+    if dsg < 0i32 { MWROOT[4u64] = 0i64   return 0i32 }
+    if dsg == 0i32 {
+        /* tangent: the double root = vertex; bisect the (monotone) linear form */
+        let mut lb : i64 = lo0   let mut hb : i64 = hi0
+        while (hb - lb) > 1i64 {
+            let mid : i64 = (lb + hb) / 2i64
+            let sg : i32 = sw_lsign(mid, sc)
+            if sg >= 0i32 { hb = mid } else { lb = mid }
+        }
+        MWROOT[0u64] = lb   MWROOT[1u64] = hb
+        MWROOT[2u64] = lb   MWROOT[3u64] = hb
+        MWROOT[4u64] = 1i64
+        return 0i32
+    }
+    /* two roots: find a rational point strictly between them via the vertex bisection */
+    let mut lb : i64 = lo0   let mut hb : i64 = hi0
+    while (hb - lb) > 1i64 {
+        let mid : i64 = (lb + hb) / 2i64
+        let sg : i32 = sw_lsign(mid, sc)
+        if sg >= 0i32 { hb = mid } else { lb = mid }
+    }
+    let y0 : i64 = lb
+    let g0 : i32 = sw_qsign(y0, sc)
+    if g0 >= 0i32 {
+        /* roots closer together than the grid: report the shared cell (still exact bounds) */
+        MWROOT[0u64] = y0 - 1i64   MWROOT[1u64] = y0 + 1i64
+        MWROOT[2u64] = y0 - 1i64   MWROOT[3u64] = y0 + 1i64
+        MWROOT[4u64] = 2i64   MWROOT[5u64] = 1i64
+        return 0i32
+    }
+    /* root 1 in [lo0, y0] (g>0 at lo0, g<0 at y0) */
+    let mut a1 : i64 = lo0   let mut b1 : i64 = y0
+    while (b1 - a1) > 1i64 {
+        let mid : i64 = (a1 + b1) / 2i64
+        let sg : i32 = sw_qsign(mid, sc)
+        if sg > 0i32 { a1 = mid } else { b1 = mid }
+    }
+    MWROOT[0u64] = a1   MWROOT[1u64] = b1
+    /* root 2 in [y0, hi0] (g<0 at y0, g>0 at hi0) */
+    let mut a2 : i64 = y0   let mut b2 : i64 = hi0
+    while (b2 - a2) > 1i64 {
+        let mid : i64 = (a2 + b2) / 2i64
+        let sg : i32 = sw_qsign(mid, sc)
+        if sg < 0i32 { a2 = mid } else { b2 = mid }
+    }
+    MWROOT[2u64] = a2   MWROOT[3u64] = b2
+    MWROOT[4u64] = 2i64
+    return 0i32
+}
+
+/* signed scaled decimal (v/10^4) */
+fn psdec4(v: i64) -> i32 {
+    if v < 0i64 { putchar(45i32)   return pdec4(0i64 - v) }
+    return pdec4(v)
+}
+fn pivl(lo: i64, hi: i64) -> i32 {
+    putchar(40i32)   psdec4(lo)   putchar(44i32)   psdec4(hi)   putchar(93i32)
+    return 0i32
+}
+
+/* the certified transmission-cosine interval at grid angle k:
+ * cos(mu) = (4(b^2+c^2-a^2-d^2) + 2ad*C4[k]) / (8bc)  -- bisected against rationals p/S. */
+fn sw_mu(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
+    let base : i64 = k * 4i64
+    v_zero((&MWF4) as u64)
+    let cc0 : i64 = MW24C[base]   let cc1 : i64 = MW24C[base + 1i64]
+    let cc2 : i64 = MW24C[base + 2i64]   let cc3 : i64 = MW24C[base + 3i64]
+    MWF4[0u64] = (4i64 * (((b * b) + (c * c)) - ((a * a) + (d * d)))) + ((2i64 * (a * d)) * cc0)
+    MWF4[1u64] = (2i64 * (a * d)) * cc1
+    MWF4[2u64] = (2i64 * (a * d)) * cc2
+    MWF4[3u64] = (2i64 * (a * d)) * cc3
+    let den : i64 = 8i64 * (b * c)
+    let sc : i64 = 10000i64
+    /* bracket from the coarse bound |cos mu| <= ((a+d)^2 + b^2 + c^2) / (2bc) + 1 */
+    let bb : i64 = ((((a + d) * (a + d)) + ((b * b) + (c * c))) / (2i64 * (b * c))) + 2i64
+    let mut lb : i64 = (0i64 - bb) * sc
+    let mut hb : i64 = bb * sc
+    while (hb - lb) > 1i64 {
+        let mid : i64 = (lb + hb) / 2i64
+        /* sign of  cos(mu) - mid/(S)  =  sign( S*F - mid*den ) on the rational axis */
+        v_scaled_from((&MWE4) as u64, (&MWF4) as u64, sc)
+        MWE4[0u64] = MWE4[0u64] - (mid * den)
+        let sg : i32 = q23_sign((&MWE4) as u64)
+        if sg >= 0i32 { lb = mid } else { hb = mid }
+    }
+    pstr("cos(mu) in ~")   pivl(lb, hb)
+    return 0i32
+}
+
+/* one sweep row */
+fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
+    let base : i64 = k * 4i64
+    pstr("k=~")
+    if k < 10i64 { putchar(32i32) }
+    pint(k)   pstr(" (~")   pint(k * 15i64)   pstr(" deg)  ~")
+    sw_mu(k, a, b, c, d)   pstr("  ~")
+
+    /* U = 8d - 2*a*C4[k]; V = 2*a*S4[k]; K; W = 4K - d*U   (rank-4 integer vectors) */
+    v_zero((&MWU4) as u64)
+    MWU4[0u64] = 8i64 * d
+    let mut i : i64 = 0i64
+    while i < 4i64 { let cv : i64 = MW24C[base + i]   MWU4[i] = MWU4[i] - ((2i64 * a) * cv)   i = i + 1i64 }
+    i = 0i64
+    while i < 4i64 { let sv : i64 = MW24S[base + i]   MWV4[i] = (2i64 * a) * sv   i = i + 1i64 }
+    let kk : i64 = (((b * b) - (c * c)) - (a * a)) + (d * d)
+    v_scaled_from((&MWW4) as u64, (&MWU4) as u64, 0i64 - d)
+    MWW4[0u64] = MWW4[0u64] + (4i64 * kk)
+
+    let uz : u8 = v_is_zero((&MWU4) as u64)
+    let vz : u8 = v_is_zero((&MWV4) as u64)
+    if uz == 1u8 { if vz == 1u8 { pstr("DEGENERATE: crank tip coincides with the ground pivot~")   pnl()   return 0i32 } }
+
+    if uz == 1u8 {
+        /* vertical-line case: y is the exact field element -4K/V; branches split in x:
+         * V^2 x^2 - 2dV^2 x + (d^2 V^2 + 16K^2 - c^2 V^2) = 0 */
+        q23_mul((&MWV4) as u64, (&MWV4) as u64, (&MWT4A) as u64)          /* V^2 */
+        i = 0i64
+        while i < 4i64 { let t : i64 = MWT4A[i]   MWA4[i] = t   MWB4[i] = (0i64 - (2i64 * d)) * t   MWG4[i] = ((d * d) - (c * c)) * t   i = i + 1i64 }
+        MWG4[0u64] = MWG4[0u64] + ((16i64 * kk) * kk)
+        /* Delta sign for the x-quadratic */
+        q23_mul((&MWB4) as u64, (&MWB4) as u64, (&MWT4B) as u64)
+        q23_mul((&MWA4) as u64, (&MWG4) as u64, (&MWT4C) as u64)
+        i = 0i64
+        while i < 4i64 { MWD4[i] = MWT4B[i] - (4i64 * MWT4C[i])   i = i + 1i64 }
+        let dsg : i32 = q23_sign((&MWD4) as u64)
+        if dsg < 0i32 { pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
+        sw_isolate(c + d + 1i64, dsg)
+        pstr("x branches: ~")   let r0 : i64 = MWROOT[0u64]   let r1 : i64 = MWROOT[1u64]   pivl(r0, r1)
+        pstr(" ~")             let r2 : i64 = MWROOT[2u64]   let r3 : i64 = MWROOT[3u64]   pivl(r2, r3)
+        /* y is the single exact field element -4K/V on the vertical radical line: isolate the
+         * monotone linear form V*y + 4K (slope sign from q23_sign(V), never 0 for V != 0). */
+        let sv : i32 = q23_sign((&MWV4) as u64)
+        let sgn : i64 = sv as i64
+        let sc2 : i64 = 10000i64
+        let mut yl : i64 = (0i64 - (c + d + 1i64)) * sc2
+        let mut yh : i64 = (c + d + 1i64) * sc2
+        while (yh - yl) > 1i64 {
+            let mid : i64 = (yl + yh) / 2i64
+            v_zero((&MWE4) as u64)
+            v_axpy((&MWE4) as u64, (&MWV4) as u64, mid * sgn)
+            MWE4[0u64] = MWE4[0u64] + (((4i64 * kk) * sc2) * sgn)
+            let sg : i32 = q23_sign((&MWE4) as u64)
+            if sg >= 0i32 { yh = mid } else { yl = mid }
+        }
+        pstr("  shared y: ~")   pivl(yl, yh)   pnl()
+        return 0i32
+    }
+
+    /* general case: y-quadratic  (U^2+V^2) y^2 + 2VW y + (W^2 - c^2 U^2) = 0 */
+    q23_mul((&MWU4) as u64, (&MWU4) as u64, (&MWT4A) as u64)              /* U^2 */
+    q23_mul((&MWV4) as u64, (&MWV4) as u64, (&MWT4B) as u64)              /* V^2 */
+    i = 0i64
+    while i < 4i64 { MWA4[i] = MWT4A[i] + MWT4B[i]   i = i + 1i64 }
+    q23_mul((&MWV4) as u64, (&MWW4) as u64, (&MWT4C) as u64)              /* VW */
+    i = 0i64
+    while i < 4i64 { MWB4[i] = 2i64 * MWT4C[i]   i = i + 1i64 }
+    q23_mul((&MWW4) as u64, (&MWW4) as u64, (&MWF4) as u64)               /* W^2 */
+    i = 0i64
+    while i < 4i64 { MWG4[i] = MWF4[i] - ((c * c) * MWT4A[i])   i = i + 1i64 }
+    /* Delta = B^2 - 4AG */
+    q23_mul((&MWB4) as u64, (&MWB4) as u64, (&MWF4) as u64)
+    q23_mul((&MWA4) as u64, (&MWG4) as u64, (&MWD4) as u64)
+    i = 0i64
+    while i < 4i64 { MWD4[i] = MWF4[i] - (4i64 * MWD4[i])   i = i + 1i64 }
+    let dsg : i32 = q23_sign((&MWD4) as u64)
+    if dsg < 0i32 { pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
+    if dsg == 0i32 { pstr("TANGENT (dead-centre pose)  ~") }
+    sw_isolate(c + 1i64, dsg)
+    let y1l : i64 = MWROOT[0u64]   let y1h : i64 = MWROOT[1u64]
+    let y2l : i64 = MWROOT[2u64]   let y2h : i64 = MWROOT[3u64]
+    let nt : i64 = MWROOT[5u64]
+
+    /* x-quadratic (symmetric elimination): (U^2+V^2) x^2 - (2dV^2 + 8KU) x + (d^2V^2 + 16K^2 - c^2V^2) = 0.
+     * MWA4 (=U^2+V^2) is unchanged; rebuild MWB4/MWG4 in place. */
+    i = 0i64
+    while i < 4i64 {
+        let vv : i64 = MWT4B[i]                                   /* V^2 */
+        let uu : i64 = MWU4[i]
+        MWB4[i] = (0i64 - ((2i64 * d) * vv)) - ((8i64 * kk) * uu)
+        MWG4[i] = ((d * d) - (c * c)) * vv
+        i = i + 1i64
+    }
+    MWG4[0u64] = MWG4[0u64] + ((16i64 * kk) * kk)
+    /* the x-quadratic has the same Delta sign (same geometry) -- isolate directly */
+    sw_isolate(c + d + 1i64, dsg)
+    let x1l : i64 = MWROOT[0u64]   let x1h : i64 = MWROOT[1u64]
+    let x2l : i64 = MWROOT[2u64]   let x2h : i64 = MWROOT[3u64]
+
+    /* pair branches by the exact sign of U*V (radical-line slope): >0 -> (ylo,xlo)+(yhi,xhi), <0 -> cross */
+    q23_mul((&MWU4) as u64, (&MWV4) as u64, (&MWE4) as u64)
+    let sl : i32 = q23_sign((&MWE4) as u64)
+    if vz == 1u8 {
+        pstr("x = ~")   pivl(x1l, x1h)   pstr(" (both branches; horizontal radical line)  y branches: ~")
+        pivl(y1l, y1h)   pstr(" ~")   pivl(y2l, y2h)   pnl()
+        return 0i32
+    }
+    pstr("B1(x,y): ~")
+    if sl >= 0i32 { pivl(x1l, x1h)   pstr(" ~")   pivl(y1l, y1h) } else { pivl(x2l, x2h)   pstr(" ~")   pivl(y1l, y1h) }
+    pstr("   B2(x,y): ~")
+    if sl >= 0i32 { pivl(x2l, x2h)   pstr(" ~")   pivl(y2l, y2h) } else { pivl(x1l, x1h)   pstr(" ~")   pivl(y2l, y2h) }
+    if nt == 1i64 { pstr("   [near-tangent: branches within 1e-4]~") }
+    pnl()
+    return 0i32
+}
+
+fn sweep(a: i64, b: i64, c: i64, d: i64) -> u64 {
+    pstr("III MECH -- exact coupler sweep: rocker joint B(theta) at the 24 zeta-24 crank angles~")   pnl()
+    pstr("links: a=~")   pint(a)   pstr(" b=~")   pint(b)   pstr(" c=~")   pint(c)   pstr(" d=~")   pint(d)
+    pstr("   (every interval below is exact-sign-certified; width 1e-4)~")   pnl()
+    sw_tab()
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        sw_pose(k, a, b, c, d)
+        k = k + 1i64
+    }
+    return 0u64
+}
+
 /* ------------------------------------------------ entry --------------------------------------- */
 fn usage() -> u64 {
     pstr("III MECH -- the exact mechanism workbench~")   pnl()
     pstr("  mech <a> <b> <c> <d>              exact 4-bar analysis (links 1..150)~")   pnl()
     pstr("  mech design <a> <b> <c> [lo hi]   exact inverse design of the ground link~")   pnl()
+    pstr("  mech sweep <a> <b> <c> <d>        exact coupler sweep at the 24 zeta-24 crank angles (links 1..40)~")   pnl()
     return 2u64
 }
 
@@ -362,7 +697,23 @@ fn main(argc: i32, argv: u64) -> u64 {
     if a1 < 0i64 {
         /* word mode */
         let fb : u8 = first_byte(a1p)
-        if fb != 100u8 { return usage() }          /* only 'design' */
+        if fb == 115u8 {
+            /* sweep: exactly 4 links */
+            if argc != 6i32 { return usage() }
+            let sa : u64 = pp[2u64]   let sb : u64 = pp[3u64]   let sc2 : u64 = pp[4u64]   let sd : u64 = pp[5u64]
+            let a : i64 = parse_u(sa)   let b : i64 = parse_u(sb)
+            let c : i64 = parse_u(sc2)   let d : i64 = parse_u(sd)
+            if a < 1i64 { return usage() }
+            if b < 1i64 { return usage() }
+            if c < 1i64 { return usage() }
+            if d < 1i64 { return usage() }
+            if a > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
+            if b > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
+            if c > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
+            if d > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
+            return sweep(a, b, c, d)
+        }
+        if fb != 100u8 { return usage() }          /* only 'design' / 'sweep' */
         if argc != 5i32 { if argc != 7i32 { return usage() } }
         let pa : u64 = pp[2u64]   let pb : u64 = pp[3u64]   let pc : u64 = pp[4u64]
         let a : i64 = parse_u(pa)   let b : i64 = parse_u(pb)   let c : i64 = parse_u(pc)

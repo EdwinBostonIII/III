@@ -13,6 +13,9 @@
 module corpus_2477_destiny_closed_form
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ud_fb() -> u64 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_title() -> u64 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_render(b: u64, w: u32, h: u32, sel: u32, mx: u32) -> i32 from "ui_destiny.iii"
 extern @abi(c-msvc-x64) fn ud_lift(sel: u32) -> u32 from "ui_destiny.iii"
 extern @abi(c-msvc-x64) fn ud_eval(node: u32, x: u64) -> u64 from "ui_destiny.iii"
 extern @abi(c-msvc-x64) fn ud_max(node: u32, xn: u32) -> u64 from "ui_destiny.iii"
@@ -33,10 +36,23 @@ fn arm(sel: u32, e7: u64, e100: u64, mx: u64) -> u32 {
     return 1u32
 }
 
+var RB : [u32; 2048]
+
 fn main() -> u64 {
     if arm(0u32, 14u64, 200u64, 254u64) != 1u32 { return 11u64 }
     if arm(1u32, 49u64, 10000u64, 16129u64) != 1u32 { return 12u64 }
     if arm(2u32, 12u64, 105u64, 132u64) != 1u32 { return 13u64 }
     if arm(3u32, 7u64, 4u64, 7u64) != 1u32 { return 14u64 }
+
+    /* the headless RENDER surface: every pixel of a 64x32 frame is painted (the clear color is
+     * nonzero), the organ's own fb exists, and the window title's first byte is set. */
+    if ud_fb() == 0u64 { return 15u64 }
+    let tp : *u8 = ud_title() as *u8
+    if tp[0u64] == 0u8 { return 15u64 }
+    ud_render((&RB) as u64, 64u32, 32u32, 0u32, 64u32)
+    let mut px : u64 = 0u64
+    let mut lit : u64 = 0u64
+    while px < 2048u64 { if RB[px] != 0u32 { lit = lit + 1u64 }   px = px + 1u64 }
+    if lit != 2048u64 { return 15u64 }
     return 99u64
 }

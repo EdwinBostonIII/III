@@ -18,6 +18,8 @@ extern @abi(c-msvc-x64) fn pty_spawn(cmd: u64, cols: u32, rows: u32) -> i32 from
 extern @abi(c-msvc-x64) fn pty_pump() -> u64 from "stoma_pty.iii"
 extern @abi(c-msvc-x64) fn pty_acc_find(pat: u64, plen: u64) -> u32 from "stoma_pty.iii"
 extern @abi(c-msvc-x64) fn pty_acc_len() -> u64 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_acc_byte(i: u64) -> u8 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_resize(cols: u32, rows: u32) -> i32 from "stoma_pty.iii"
 extern @abi(c-msvc-x64) fn pty_acc_reset() -> i32 from "stoma_pty.iii"
 extern @abi(c-msvc-x64) fn pty_exited() -> u32 from "stoma_pty.iii"
 extern @abi(c-msvc-x64) fn pty_code() -> u32 from "stoma_pty.iii"
@@ -27,6 +29,7 @@ extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> u64 from "kernel32"
 
 var K_CMD : [u8; 96]
 var K_ESC : [u8; 2]
+var K_PAT : [u8; 9]
 
 fn k_scpy(lit: u64, n: u32) -> i32 {
     let s : *u8 = lit as *u8
@@ -65,6 +68,24 @@ fn main() -> u64 {
     pty_close()
     if pty_acc_len() == 0u64 { return 10u64 }
     if pty_acc_find("PTYMARK55" as u64, 9u64) != 1u32 { return 11u64 }
+    /* pty_acc_byte (the ring reader) finds the SAME marker pty_acc_find does -- two independent
+     * readers agree -- and returns 0 past the stored length (the bound) */
+    K_PAT[0u64]=80u8 K_PAT[1u64]=84u8 K_PAT[2u64]=89u8 K_PAT[3u64]=77u8 K_PAT[4u64]=65u8
+    K_PAT[5u64]=82u8 K_PAT[6u64]=75u8 K_PAT[7u64]=53u8 K_PAT[8u64]=53u8
+    let alen : u64 = pty_acc_len()
+    let mut abfound : u32 = 0u32
+    let mut ai : u64 = 0u64
+    while ai + 9u64 <= alen {
+        if pty_acc_byte(ai) == 80u8 {
+            let mut aj : u64 = 0u64   let mut am : u32 = 1u32
+            while aj < 9u64 { if pty_acc_byte(ai + aj) != K_PAT[aj] { am = 0u32   aj = 9u64 } else { aj = aj + 1u64 } }
+            if am == 1u32 { abfound = 1u32   ai = alen }
+        }
+        ai = ai + 1u64
+    }
+    if abfound != 1u32 { return 14u64 }
+    if pty_acc_byte(alen) != 0u8 { return 14u64 }              /* one past the stored length */
+    if pty_acc_byte(1000000000u64) != 0u8 { return 14u64 }     /* far past = guarded 0 */
     /* VT preamble: ESC '[' '?' appears (ConPTY private-mode hello) */
     K_ESC[0u64] = 27u8
     K_ESC[1u64] = 91u8
@@ -76,6 +97,8 @@ fn main() -> u64 {
     k_scpy("cmd /c pause" as u64, 12u32)
     let r2 : i32 = pty_spawn((&K_CMD) as u64, 80u32, 25u32)
     if r2 != 0i32 { return 20u64 }
+    /* the LIVE pseudo-console accepts a resize (ResizePseudoConsole -> S_OK == 0) */
+    if pty_resize(100u32, 30u32) != 0i32 { return 23u64 }
     /* let cmd print its "Press any key" prompt */
     let mut warm : u32 = 0u32
     while warm < 60u32 {
@@ -96,6 +119,8 @@ fn main() -> u64 {
     }
     pty_close()
     if done != 1u32 { return 22u64 }
+    /* ...and a CLOSED pty refuses the resize (PT_ALIVE == 0 -> -1): the negative arm */
+    if pty_resize(80u32, 25u32) != (0i32 - 1i32) { return 24u64 }
 
     return 99u64
 }

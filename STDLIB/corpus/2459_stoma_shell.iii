@@ -16,8 +16,20 @@
 module corpus_2459
 
 extern @abi(c-msvc-x64) fn shell_feed_line(line: u64, llen: u64) -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_set_plain(v: u32) -> i32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_plain() -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_set_con(v: u32) -> i32 from "stoma_shell.iii"
 extern @abi(c-msvc-x64) fn vb_out_ptr() -> u64 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_out_len() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_byte(i: u64) -> u8 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_reset() -> i32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_err_off() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_build() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_extern() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn journal_seq() -> u64 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn journal_seg() -> u64 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn journal_rec_seq() -> u64 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn journal_rec_fnv() -> u64 from "stoma_journal.iii"
 
 extern @abi(c-msvc-x64) fn journal_open(base: u64, taglen: u64, tag: u64) -> i32 from "stoma_journal.iii"
 extern @abi(c-msvc-x64) fn journal_append(kind: u32, payload: u64, paylen: u64) -> i32 from "stoma_journal.iii"
@@ -75,6 +87,14 @@ fn w32(base: u64, off: u64, v: u32) -> i32 {
 }
 
 fn main() -> u64 {
+    /* headless mode: externals dispatch through plain pipes (no pty), the piped-gate default.
+     * shell_plain reads back the flag we set; shell_set_con is the console-mode toggle (0 = off) */
+    if shell_set_plain(1u32) != 0i32 { return 4u64 }
+    if shell_plain() != 1u32 { return 4u64 }
+    if shell_set_con(0u32) != 0i32 { return 4u64 }
+    /* the verb-kind namespace is injective -- a classifier collapsing two kinds is a defect */
+    if vb_k_build() == vb_k_extern() { return 4u64 }
+
     /* journal base: create ./stjt, session tag "s1" */
     CreateDirectoryA("stjt" as u64, 0u64)
     if journal_open("stjt" as u64, 2u64, "s1" as u64) != 0i32 { return 5u64 }
@@ -82,6 +102,10 @@ fn main() -> u64 {
     /* ── 1. transcript ── */
     feed("help" as u64, 4u64)
     if out_find("STOMA verbs" as u64, 11u64) != 1u32 { return 10u64 }
+    /* vb_out_byte mirrors the transcript buffer byte-for-byte, guarded past the written length */
+    let vp : *u8 = vb_out_ptr() as *u8
+    if vb_out_byte(0u64) != vp[0u64] { return 15u64 }
+    if vb_out_byte(1000000u64) != 0u8 { return 15u64 }
 
     feed("cmd /c echo SHELLRUN" as u64, 20u64)
     if out_find("SHELLRUN" as u64, 8u64) != 1u32 { return 11u64 }
@@ -93,8 +117,13 @@ fn main() -> u64 {
     /* bad quote -> caret error */
     feed("cd \"abc" as u64, 7u64)
     if out_find("unterminated quote" as u64, 18u64) != 1u32 { return 14u64 }
+    /* the error offset points somewhere inside the 7-byte fed line (never a garbage magnitude) */
+    if vb_err_off() > 7u64 { return 16u64 }
 
     journal_close()
+    /* the append counters after four two-record lines: 8 records, all in segment 0 */
+    if journal_seq() != 8u64 { return 6u64 }
+    if journal_seg() != 0u64 { return 6u64 }
 
     /* ── 2. journal round-trip: reopen seg0 and count kind-1/kind-2 pairs ── */
     if journal_read_open("stjt/s1/seg0.sj1" as u64) != 0i32 { return 20u64 }
@@ -107,13 +136,25 @@ fn main() -> u64 {
     let mut cnt : u64 = 1u64
     let mut expect : u32 = 2u32
     let mut ok : u32 = 1u32
+    /* record 1 carries stored seq 1 and a nonzero payload FNV; later records' seqs strictly
+     * increase and at least one differs in FNV (distinct payloads -> distinct hash) */
+    if journal_rec_seq() != 1u64 { return 22u64 }
+    let fnv1 : u64 = journal_rec_fnv()
+    if fnv1 == 0u64 { return 22u64 }
+    let mut prev : u64 = 1u64
+    let mut fnvdiff : u32 = 0u32
     while journal_read_next() == 1u32 {
         if journal_rec_kind() != expect { ok = 0u32 }
+        let sq : u64 = journal_rec_seq()
+        if sq <= prev { ok = 0u32 }
+        prev = sq
+        if journal_rec_fnv() != fnv1 { fnvdiff = 1u32 }
         if expect == 2u32 { expect = 1u32 } else { expect = 2u32 }
         cnt = cnt + 1u64
     }
     if ok != 1u32 { return 23u64 }
     if cnt != 8u64 { return 24u64 }
+    if fnvdiff != 1u32 { return 24u64 }
 
     /* ── 3. torn tail: SJ1 header + one good record (len 24+3 "XYZ") + partial header ── */
     K_TORN[0u64]=83u8  K_TORN[1u64]=74u8  K_TORN[2u64]=49u8  K_TORN[3u64]=1u8
@@ -138,6 +179,10 @@ fn main() -> u64 {
     let before : u64 = journal_unjournaled()
     if journal_append(2u32, "z" as u64, 1u64) != 1i32 { return 40u64 }
     if journal_unjournaled() != before + 1u64 { return 41u64 }
+
+    /* vb_out_reset empties the transcript buffer (the app clears it between frames) */
+    vb_out_reset()
+    if vb_out_len() != 0u64 { return 42u64 }
 
     return 99u64
 }

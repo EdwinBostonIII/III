@@ -138,6 +138,8 @@ fn main() -> u64 {
     let rc : i32 = bl_step()
     putchar(69i32) putchar(58i32) sp() e_i64(rc as i64) nl()                   /* "E: 2" */
     if rc != 2i32 { return 30u64 }
+    /* the event-log observer: a REFUSED corner commits NOTHING -- zero events since reset */
+    if bl_events() != 0u64 { return 31u64 }
 
     return 99u64
 }

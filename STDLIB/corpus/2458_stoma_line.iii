@@ -13,6 +13,7 @@ extern @abi(c-msvc-x64) fn ln_key(kind: u32, val: u32) -> u32 from "stoma_line.i
 extern @abi(c-msvc-x64) fn ln_len() -> u64 from "stoma_line.iii"
 extern @abi(c-msvc-x64) fn ln_cur() -> u64 from "stoma_line.iii"
 extern @abi(c-msvc-x64) fn ln_byte(i: u64) -> u8 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_ptr() -> u64 from "stoma_line.iii"
 extern @abi(c-msvc-x64) fn ln_hist_count() -> u64 from "stoma_line.iii"
 extern @abi(c-msvc-x64) fn ln_cand_reset() -> i32 from "stoma_line.iii"
 extern @abi(c-msvc-x64) fn ln_cand_add(s: u64, n: u64) -> i32 from "stoma_line.iii"
@@ -46,6 +47,10 @@ fn main() -> u64 {
     ln_reset()
     type_str("hello" as u64, 5u64)
     if buf_eq("hello" as u64, 5u64) != 1u32 { return 10u64 }
+    /* ln_ptr exposes the raw line buffer; the byte there equals ln_byte(i) -- two readers agree */
+    let bp : *u8 = ln_ptr() as *u8
+    if bp[0u64] != ln_byte(0u64) { return 10u64 }
+    if bp[4u64] != ln_byte(4u64) { return 10u64 }
     if ln_cur() != 5u64 { return 11u64 }
     /* left twice, insert 'X' -> "helXlo" */
     ln_key(2u32, 3u32)  ln_key(2u32, 3u32)

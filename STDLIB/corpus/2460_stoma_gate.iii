@@ -14,6 +14,8 @@ module corpus_2460
 
 extern @abi(c-msvc-x64) fn gate_run(cmd: u64, want: u32, cap_ms: u32) -> u32 from "stoma_gate.iii"
 extern @abi(c-msvc-x64) fn gate_last_code() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_last_timed() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_ledger_bytes() -> u64 from "stoma_gate.iii"
 extern @abi(c-msvc-x64) fn gate_bash_would_see() -> u32 from "stoma_gate.iii"
 extern @abi(c-msvc-x64) fn gate_full_vs_bash_diverges() -> u32 from "stoma_gate.iii"
 extern @abi(c-msvc-x64) fn gate_ledger_load(path: u64) -> i32 from "stoma_gate.iii"
@@ -53,6 +55,7 @@ fn main() -> u64 {
     k_scpy("cmd /c exit 99" as u64, 14u32)
     if gate_run((&K_CMD) as u64, 99u32, 20000u32) != 1u32 { return 10u64 }
     if gate_last_code() != 99u32 { return 10u64 }
+    if gate_last_timed() != 0u32 { return 10u64 }          /* a prompt exit did NOT time out */
 
     k_scpy("cmd /c exit 1" as u64, 13u32)
     if gate_run((&K_CMD) as u64, 99u32, 20000u32) != 0u32 { return 11u64 }   /* WRONG */
@@ -76,6 +79,8 @@ fn main() -> u64 {
     CloseHandle(h)
 
     if gate_ledger_load("stjt_led.tsv" as u64) != 0i32 { return 21u64 }
+    if gate_ledger_bytes() != K_LN { return 21u64 }        /* the reader ingested EXACTLY the file it wrote */
+    if gate_ledger_bytes() == 0u64 { return 21u64 }
     if gate_status("2104_field_kolmogorov" as u64, 21u64) != 1u32 { return 22u64 }   /* PASS */
     if gate_status("2178_refract" as u64, 12u64) != 2u32 { return 23u64 }            /* WRONG */
     if gate_status("2155_aether_lens" as u64, 16u64) != 3u32 { return 24u64 }        /* PASS-family */

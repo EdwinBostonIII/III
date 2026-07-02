@@ -19,6 +19,8 @@ extern @abi(c-msvc-x64) fn rp_reset() -> i32 from "stoma_ripple.iii"
 extern @abi(c-msvc-x64) fn rp_baseline() -> i32 from "stoma_ripple.iii"
 extern @abi(c-msvc-x64) fn rp_pulse() -> u64 from "stoma_ripple.iii"
 extern @abi(c-msvc-x64) fn rp_impacted() -> u64 from "stoma_ripple.iii"
+extern @abi(c-msvc-x64) fn rp_dirty_count() -> u64 from "stoma_ripple.iii"
+extern @abi(c-msvc-x64) fn rp_impact_count() -> u64 from "stoma_ripple.iii"
 extern @abi(c-msvc-x64) fn rp_in_impact(name: u64, nlen: u64) -> u32 from "stoma_ripple.iii"
 extern @abi(c-msvc-x64) fn rp_blame(name: u64, nlen: u64) -> u64 from "stoma_ripple.iii"
 
@@ -67,6 +69,8 @@ fn main() -> u64 {
     wfile("stjt_rip/rgc.iii" as u64, "module rgc\n// leaf v2 EDITED\n" as u64)
     if rp_pulse() != 1u64 { return 30u64 }
     if rp_impacted() != 3u64 { return 31u64 }
+    if rp_dirty_count() != 1u64 { return 31u64 }           /* exactly one file edited */
+    if rp_impact_count() != rp_impacted() { return 31u64 } /* the count observer == the pulse's forward closure */
     if rp_in_impact("rga" as u64, 3u64) != 1u32 { return 32u64 }
     if rp_in_impact("rgb" as u64, 3u64) != 1u32 { return 32u64 }
     if rp_in_impact("rgc" as u64, 3u64) != 1u32 { return 32u64 }

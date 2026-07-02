@@ -97,5 +97,19 @@ fn main() -> u64 {
     putchar(84i32) putchar(58i32) sp() e_i64(tq) nl()                                                          /* "T: 0" */
     if tq != 0i64 { return 21u64 }
 
+    /* ══ the INTERSECT node: two overlapping r^2=25 spheres -- inside both (-1), boundary-of-one
+     * inside-the-other (0: the ON certificate carries through the boolean), outside one (+1). */
+    let ia : i64 = ct_sphere(0i64, 0i64, 0i64, 25i64)
+    let ib : i64 = ct_sphere(6i64, 0i64, 0i64, 25i64)
+    let ix : i64 = ct_intersect(ia, ib)
+    if ix < 0i64 { return 22u64 }
+    let ii : i32 = ct_side(ix, 3i64, 0i64, 0i64)
+    let io : i32 = ct_side(ix, 5i64, 0i64, 0i64)
+    let iu : i32 = ct_side(ix, 0i64, 0i64, 0i64)
+    putchar(73i32) putchar(58i32) sp() e_i64(ii as i64) sp() e_i64(io as i64) sp() e_i64(iu as i64) nl()       /* "I: -1 0 1" */
+    if ii != (0i32 - 1i32) { return 22u64 }
+    if io != 0i32 { return 22u64 }
+    if iu != 1i32 { return 22u64 }
+
     return 99u64
 }

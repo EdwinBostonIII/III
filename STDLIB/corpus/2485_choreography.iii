@@ -79,7 +79,7 @@ fn main() -> u64 {
     ch_reset()   addI(0i64,0i64,0i64, 1i64,0i64,0i64, 1i64)   addI(10i64,2i64,0i64, 0i64-1i64,0i64,0i64, 1i64)
     let s2 : i32 = ch_disc_sign(0u64,1u64)
     let g2 : i32 = ch_graze_time(0u64,1u64)
-    let gt0 : i64 = ch_t0()   let gtd : i64 = ch_td()
+    let gt0 : i64 = ch_t0()   let gt1 : i64 = ch_t1()   let gtd : i64 = ch_td()
     ch_reset()   addI(0i64,0i64,0i64, 1i64,0i64,0i64, 1i64)   addI(10i64,3i64,0i64, 0i64-1i64,0i64,0i64, 1i64)
     let s3 : i32 = ch_disc_sign(0u64,1u64)
     putchar(87i32) putchar(58i32) sp() e_i64(s1 as i64) sp() e_i64(s2 as i64) sp() e_i64(s3 as i64) sp() e_i64(gt0) putchar(47i32) e_i64(gtd) nl()   /* "W: 1 0 -1 320/64" */
@@ -88,6 +88,7 @@ fn main() -> u64 {
     if s3 != (0i32 - 1i32) { return 11u64 }
     if g2 != 1i32 { return 11u64 }
     if (gt0 * 1i64) != (5i64 * gtd) { return 11u64 }       /* t* == 5 exactly (as a fraction) */
+    if gt1 != 0i64 { return 11u64 }                        /* the integer-scene graze time is RATIONAL: zero sqrt2-coefficient */
 
     /* ══ B: the commuting-event planner. certify the two disjoint pairs share the exact TOI. */
     scene4()

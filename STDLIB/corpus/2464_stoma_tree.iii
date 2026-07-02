@@ -23,6 +23,7 @@ module corpus_2464
 extern @abi(c-msvc-x64) fn tree_reset() -> i32 from "stoma_tree.iii"
 extern @abi(c-msvc-x64) fn tree_add(parent: i64, name: u64, nlen: u64) -> i64 from "stoma_tree.iii"
 extern @abi(c-msvc-x64) fn tree_set_status(id: u64, st: u32) -> i32 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_status(id: u64) -> u32 from "stoma_tree.iii"
 extern @abi(c-msvc-x64) fn tree_rebuild_visible() -> u64 from "stoma_tree.iii"
 extern @abi(c-msvc-x64) fn tree_visible_count() -> u64 from "stoma_tree.iii"
 extern @abi(c-msvc-x64) fn tree_cursor() -> u64 from "stoma_tree.iii"
@@ -64,9 +65,17 @@ fn main() -> u64 {
     let sub : i64 = tree_add(root, "sub" as u64, 3u64)
     let b : i64 = tree_add(sub, "b.iii" as u64, 5u64)
     let c : i64 = tree_add(root, "c.iii" as u64, 5u64)
+    /* tree_status reads back the stored per-node status: fresh nodes are clean (1) */
+    if tree_status(root as u64) != 1u32 { return 12u64 }
+    if tree_status(a as u64) != 1u32 { return 12u64 }
     tree_set_status(a as u64, 2u32)      /* dirty */
     tree_set_status(b as u64, 3u32)      /* impacted */
     tree_set_status(c as u64, 4u32)      /* PASS */
+    /* ...and reflects each set exactly, with a guarded out-of-range read */
+    if tree_status(a as u64) != 2u32 { return 12u64 }
+    if tree_status(b as u64) != 3u32 { return 12u64 }
+    if tree_status(c as u64) != 4u32 { return 12u64 }
+    if tree_status(9999u64) != 0u32 { return 12u64 }
 
     /* fully expanded: 5 visible nodes (root,a,sub,b,c) */
     if tree_rebuild_visible() != 5u64 { return 10u64 }

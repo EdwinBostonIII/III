@@ -8,6 +8,7 @@ module corpus_2104_field_kolmogorov
 extern @abi(c-msvc-x64) fn ui_data_dim(buf: u64, n: u64) -> u64 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_ax2_d() -> i64 from "ui_field.iii"
 extern @abi(c-msvc-x64) fn ui_ay2_d() -> i64 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn log2_q20(m: u64) -> u64 from "ui_field.iii"
 
 var BUF : [u8; 256]
 
@@ -46,6 +47,15 @@ fn main() -> u64 {
     /* reunification W0.2 arm: the arc-denominator read surface, pinned deterministic. */
     if ui_ax2_d() != ui_ax2_d() { return 7u64 }
     if ui_ay2_d() != ui_ay2_d() { return 8u64 }
+
+    /* the Q20 log2 kernel behind the ratio dimensions: exact at powers of two, strictly
+     * monotone between them (log2(3) lies strictly inside (1, 2) in Q20). */
+    if log2_q20(1u64) != 0u64 { return 9u64 }
+    if log2_q20(2u64) != 1048576u64 { return 9u64 }
+    if log2_q20(1024u64) != 10485760u64 { return 9u64 }
+    let l3 : u64 = log2_q20(3u64)
+    if l3 <= 1048576u64 { return 9u64 }
+    if l3 >= 2097152u64 { return 9u64 }
 
     return 99u64
 }

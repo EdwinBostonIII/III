@@ -26,6 +26,8 @@ extern @abi(c-msvc-x64) fn proc_out_len() -> u64 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_err_len() -> u64 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_out_find(pat: u64, plen: u64) -> u32 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_err_find(pat: u64, plen: u64) -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_at(i: u64) -> u8 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_err_at(i: u64) -> u8 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_quote(arg: u64, alen: u32, dst: u64, off: u32) -> u32 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> u64 from "kernel32"
 extern @abi(c-msvc-x64) fn Process32First(snap: u64, ppe: u64) -> i32 from "kernel32"
@@ -98,6 +100,12 @@ fn main() -> u64 {
     if r3 != 0i32 { return 20u64 }
     if proc_err_find("ERRSIDE" as u64, 7u64) != 1u32 { return 21u64 }
     if proc_out_find("ERRSIDE" as u64, 7u64) != 0u32 { return 22u64 }
+    /* the raw byte-accessor surface: stderr captured 'E' first, stdout empty, both guarded past cap */
+    if proc_err_len() == 0u64 { return 23u64 }
+    if proc_err_at(0u64) != 69u8 { return 23u64 }           /* 'E' of ERRSIDE */
+    if proc_err_at(1000000u64) != 0u8 { return 23u64 }      /* past-cap guard */
+    if proc_out_len() != 0u64 { return 23u64 }              /* this command wrote nothing to stdout */
+    if proc_out_at(1000000u64) != 0u8 { return 23u64 }      /* past-cap guard */
 
     /* ── 4. no orphans on job CLOSE ── */
     k_scpy("cmd /c start /b ping -n 30 -w 1000 127.0.0.1" as u64, 44u32)

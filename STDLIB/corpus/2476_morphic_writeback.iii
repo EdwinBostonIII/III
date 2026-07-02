@@ -13,6 +13,9 @@
 module corpus_2476_morphic_writeback
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn um_fb() -> u64 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_title() -> u64 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_render(b: u64, w: u32, h: u32, c: u64, proven: u32, node: u32) -> i32 from "ui_morphic.iii"
 extern @abi(c-msvc-x64) fn um_edit_c(c: u64) -> u32 from "ui_morphic.iii"
 extern @abi(c-msvc-x64) fn um_relift() -> u32 from "ui_morphic.iii"
 extern @abi(c-msvc-x64) fn um_eval(node: u32, x: u64) -> u64 from "ui_morphic.iii"
@@ -23,6 +26,7 @@ fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) 
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
 var FSNAP : [u8; 18]   var GSNAP : [u8; 18]
+var RB : [u32; 2048]
 
 fn main() -> u64 {
     /* snapshot both fixture sources pre-edit */
@@ -61,6 +65,16 @@ fn main() -> u64 {
     if pv2 != 1u32 { return 13u64 }
     let node2 : u32 = um_relift()
     if um_eval(node2, 5u64) != 5u64 { return 13u64 }
+
+    /* the headless RENDER surface: every pixel of a 64x32 frame painted, fb + title live. */
+    if um_fb() == 0u64 { return 14u64 }
+    let tp : *u8 = um_title() as *u8
+    if tp[0u64] == 0u8 { return 14u64 }
+    um_render((&RB) as u64, 64u32, 32u32, 0u64, pv2, node2)
+    let mut px : u64 = 0u64
+    let mut lit : u64 = 0u64
+    while px < 2048u64 { if RB[px] != 0u32 { lit = lit + 1u64 }   px = px + 1u64 }
+    if lit != 2048u64 { return 14u64 }
 
     return 99u64
 }

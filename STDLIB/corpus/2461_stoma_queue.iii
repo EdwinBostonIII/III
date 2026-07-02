@@ -23,6 +23,7 @@ extern @abi(c-msvc-x64) fn queue_reset() -> i32 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_push(cmd: u64, len: u64, want: u32, cap_ms: u32) -> i64 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_run() -> i32 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_state(i: u64) -> u32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_count() -> u64 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_trap(i: u64) -> u32 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_cap(i: u64) -> u32 from "stoma_queue.iii"
 extern @abi(c-msvc-x64) fn queue_code(i: u64) -> u32 from "stoma_queue.iii"
@@ -111,6 +112,8 @@ fn main() -> u64 {
     if queue_code(2u64) != 300u32 { return 54u64 }
     if queue_ran_blocked() != 1u64 { return 55u64 }
     if queue_ran_pass() != 2u64 { return 55u64 }
+    if queue_count() != 3u64 { return 56u64 }              /* three jobs pushed */
+    if queue_ran_wrong() != 0u64 { return 56u64 }          /* none WRONG: 1 blocked + 2 pass */
 
     return 99u64
 }

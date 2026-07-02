@@ -24,6 +24,12 @@ extern @abi(c-msvc-x64) fn con_vt_clear(dst: u64) -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_vt_cup(dst: u64, row: u32, col: u32) -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_vt_sgr(dst: u64, n: u32) -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_vt_eol(dst: u64) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_state() -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_cursor(show: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_alt(enter: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_raw(on: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_restore() -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_key() -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_key_decode(rec: u64) -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_u8to16(src: u64, n: u32, dst: u64, cap: u32) -> u32 from "stoma_con.iii"
 extern @abi(c-msvc-x64) fn con_u16to8(src: u64, n: u32, dst: u64, cap: u32) -> u32 from "stoma_con.iii"
@@ -78,6 +84,30 @@ fn main() -> u64 {
         if rc != 0i32 { return 2u64 }
     } else {
         if rc != 1i32 { return 2u64 }
+    }
+    /* con_state mirrors the init verdict EXACTLY: 1 console / 2 redirected (never 0 post-init) */
+    let st : u32 = con_state()
+    if live != 0i32 {
+        if st != 1u32 { return 2u64 }
+    } else {
+        if st != 2u32 { return 2u64 }
+    }
+    /* con_cursor emits the show/hide sequence through con_out -- WriteFile succeeds on a real
+     * console AND on a redirected pipe, so the app-facing verb returns 0 in both modes */
+    if con_cursor(0u32) != 0i32 { return 3u64 }
+    if con_cursor(1u32) != 0i32 { return 3u64 }
+    /* the SC_STATE-guarded console verbs: in redirected mode (the piped gate) con_raw/con_restore
+     * no-op and return 1, con_key returns 0 (no input), con_alt emits to the pipe and returns 0.
+     * On a live console they mutate real modes; con_restore puts them back. */
+    if live != 0i32 {
+        if con_raw(1u32) != 0i32 { return 3u64 }
+        if con_restore() != 0i32 { return 3u64 }
+    } else {
+        if con_alt(1u32) != 0i32 { return 3u64 }
+        if con_alt(0u32) != 0i32 { return 3u64 }
+        if con_raw(1u32) != 1i32 { return 3u64 }
+        if con_restore() != 1i32 { return 3u64 }
+        if con_key() != 0u32 { return 3u64 }
     }
 
     /* ── 2. VT builders ── */

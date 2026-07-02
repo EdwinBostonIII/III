@@ -1836,6 +1836,17 @@ done
 for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9][0-9]_*.iii; do
     [[ -f "$src" ]] || continue
     base="$(basename "$src" .iii)"
+
+    # SWEEP SLICING (whole-tree verification, 2026-07-02): optional CORPUS_FROM/CORPUS_TO numeric
+    # window so the 1820-KAT loop can run in bounded slices with per-slice logs -- the monolithic
+    # detached run has died mid-loop before, losing every RESULTS line.  Unset => full run,
+    # behavior byte-identical.
+    if [[ -n "${CORPUS_FROM:-}" || -n "${CORPUS_TO:-}" ]]; then
+        _num=$((10#${base%%_*}))
+        if [[ -n "${CORPUS_FROM:-}" ]] && (( _num < CORPUS_FROM )); then continue; fi
+        if [[ -n "${CORPUS_TO:-}"   ]] && (( _num > CORPUS_TO   )); then continue; fi
+    fi
+
     obj="$RUN_DIR/${base}.iii.o"
     exe="$RUN_DIR/${base}${BIN_SUFFIX}"
     log="$RUN_DIR/${base}.log"

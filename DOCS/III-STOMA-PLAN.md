@@ -295,7 +295,19 @@ record `{code: u32 FULL-width, timed_out: u8, out_seg: u64, err_seg: u64}`.
 - [x] `DOCS/III-STOMA.md` operating doc (verbs, laws, organ table, ripple, trap table, cone
   connection, honest scope). MEMORY updated (project_iii_stoma_cli COMPLETE). Final gate 13/0.
 
-## STATUS: COMPLETE — all milestones M0-M11 landed; gate `run_stoma_kats.sh` = 13/0 (stable).
+## STATUS: COMPLETE — all milestones M0-M11 landed; gate `run_stoma_kats.sh` = 14/0 (stable).
+
+### M11 addendum (advisor-driven): the interactive pty was wired, not just documented
+The first M11 close documented "pty is a verified organ, not the interactive default" as a
+non-blocking gap. A stronger review flagged that as the user's CENTRAL requirement (programs must
+"think they're on their console"), so it was WIRED, not deferred:
+- `stoma_fg.iii` (fg_run): foreground pty runner — child on a live pseudoconsole, output streamed +
+  journaled, keystrokes translated (CR/DEL/arrows/ctrl) and forwarded. `sh_extern` uses it in
+  console mode; the `tree` verb gets an alt-screen arrow-nav loop (`st_tree_interactive`).
+- Corpus **2466**: console-detector child prints CON via fg_run (pty), PIPE via proc_run (pipe).
+- Fixes forced: fg_run drains BEFORE ClosePseudoConsole (ConPTY discards unread output on close);
+  both spawners normalize `/`→`\` in the exe token so forward-slash paths spawn (bare-name matrix
+  children never hit this). Closure grew to 11 (fg+pty); native engine + sovbuild agree.
 
 ## 6. Risks → falsifiers → kill-switches
 

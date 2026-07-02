@@ -29,8 +29,17 @@ extern @abi(c-msvc-x64) fn ln_ptr() -> u64 from "stoma_line.iii"
 
 extern @abi(c-msvc-x64) fn shell_feed_line(line: u64, llen: u64) -> u32 from "stoma_shell.iii"
 extern @abi(c-msvc-x64) fn shell_plain() -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_set_con(v: u32) -> i32 from "stoma_shell.iii"
 extern @abi(c-msvc-x64) fn vb_out_ptr() -> u64 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_out_len() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_parse(line: u64, llen: u64) -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_tree() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn shell_build_tree() -> u64 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn con_alt(enter: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_clear(dst: u64) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn tree_render_vt(dst: u64, top_row: u32) -> u64 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_key(kind: u32, val: u32) -> u32 from "stoma_tree.iii"
+extern @abi(c-msvc-x64) fn tree_render_plain(dst: u64) -> u64 from "stoma_tree.iii"
 
 extern @abi(c-msvc-x64) fn journal_open(base: u64, taglen: u64, tag: u64) -> i32 from "stoma_journal.iii"
 extern @abi(c-msvc-x64) fn journal_close() -> i32 from "stoma_journal.iii"
@@ -43,6 +52,7 @@ var ST_LINE  : [u8; 1024]        /* plain-mode line assembly */
 var ST_TAG   : [u8; 32]          /* session tag "pid-tick" */
 var ST_RB    : [u8; 4096]        /* plain-mode stdin slice */
 var ST_REND  : [u8; 1152]        /* interactive redraw scratch */
+var ST_TREEB : [u8; 32768]       /* alt-screen tree frame buffer */
 const ST_PROMPT_N : u64 = 7u64
 
 /* format a u64 decimal into ST_TAG at off; returns new off */
@@ -104,8 +114,33 @@ fn st_redraw() -> i32 {
     return 0i32
 }
 
+/* interactive alt-screen tree: build the model, enter alt-screen, loop
+ * (render VT frame -> con_out; blocking key -> tree_key) until Enter/Esc, leave alt-screen.
+ * On exit the LINE-mode transcript is intact (Collapse Law) -- we only borrowed the alt-screen. */
+fn st_tree_interactive() -> i32 {
+    shell_build_tree()
+    con_alt(1u32)                                  /* enter alt-screen */
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let mut o : u64 = 0u64
+        o = con_vt_clear((&ST_TREEB) as u64) as u64
+        o = o + tree_render_vt(((&ST_TREEB) as u64) + o, 1u32)
+        con_out((&ST_TREEB) as u64, o as u32)
+        let k : u32 = con_key()
+        if k != 0u32 {
+            let kind : u32 = k >> 16u32
+            let val : u32 = k & 65535u32
+            /* Esc (special 6) or Enter (special 5) leaves; else navigate */
+            if kind == 2u32 { if val == 6u32 { go = 0u32 }   else { if val == 5u32 { go = 0u32 } else { tree_key(kind, val) } } }
+        }
+    }
+    con_alt(0u32)                                  /* leave alt-screen -> back to the intact log */
+    return 0i32
+}
+
 /* INTERACTIVE loop: raw keys -> line editor -> shell.  Returns on exit. */
 fn st_interactive() -> i32 {
+    shell_set_con(1u32)          /* externals now run on a foreground pty (fg_run) */
     con_raw(1u32)
     st_redraw()
     let mut go : u32 = 1u32
@@ -118,11 +153,19 @@ fn st_interactive() -> i32 {
             let committed : u32 = ln_key(kind, val)
             if committed == 1u32 {
                 con_out("\r\n" as u64, 2u32)
-                let sig : u32 = shell_feed_line(ln_ptr(), ln_len())
-                st_flush_out()
-                ln_reset()
-                if sig == 2u32 { go = 0u32 }
-                else { st_redraw() }
+                /* peek the verb: `tree` gets the interactive alt-screen nav; everything else goes
+                 * through the shell (where console-mode externals run on a foreground pty) */
+                if vb_parse(ln_ptr(), ln_len()) == vb_k_tree() {
+                    st_tree_interactive()
+                    ln_reset()
+                    st_redraw()
+                } else {
+                    let sig : u32 = shell_feed_line(ln_ptr(), ln_len())
+                    st_flush_out()
+                    ln_reset()
+                    if sig == 2u32 { go = 0u32 }
+                    else { st_redraw() }
+                }
             } else {
                 st_redraw()
             }

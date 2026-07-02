@@ -60,6 +60,9 @@ extern @abi(c-msvc-x64) fn proc_out_copy(dst: u64, off: u64, n: u64) -> u64 from
 
 extern @abi(c-msvc-x64) fn journal_append(kind: u32, payload: u64, paylen: u64) -> i32 from "stoma_journal.iii"
 
+extern @abi(c-msvc-x64) fn fg_run(cmd: u64, len: u64, cols: u32, rows: u32) -> u32 from "stoma_fg.iii"
+extern @abi(c-msvc-x64) fn con_size() -> u64 from "stoma_con.iii"
+
 extern @abi(c-msvc-x64) fn GetCurrentDirectoryA(n: u32, buf: u64) -> u32 from "kernel32"
 extern @abi(c-msvc-x64) fn SetCurrentDirectoryA(path: u64) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn GetEnvironmentVariableA(name: u64, buf: u64, n: u32) -> u32 from "kernel32"
@@ -70,12 +73,15 @@ extern @abi(c-msvc-x64) fn FindClose(h: u64) -> i32 from "kernel32"
 const SH_INVALID : u64 = 18446744073709551615u64
 
 var SH_PLAIN : u32 = 0u32          /* plain-mode flag (driver reads it) */
+var SH_CON   : u32 = 0u32          /* console mode: run externals on a foreground pty (fg_run) */
 var SH_TMP   : [u8; 1024]          /* scratch: cwd / env value / arg copy */
 var SH_FIND  : [u8; 320]           /* WIN32_FIND_DATAA (cFileName @ +44) */
 var SH_STG   : [u8; 262144]        /* staging for proc stdout copy */
 
 fn shell_plain() -> u32 @export { return SH_PLAIN }
 fn shell_set_plain(v: u32) -> i32 @export { SH_PLAIN = v   return 0i32 }
+/* the driver calls this with 1 when con_init reported a real console -> externals get a pty */
+fn shell_set_con(v: u32) -> i32 @export { SH_CON = v   return 0i32 }
 
 /* copy token i (NUL-terminated) into SH_TMP; returns its length */
 fn sh_tok_to_tmp(i: u64) -> u64 {
@@ -212,7 +218,9 @@ fn sh_seal() -> i32 {
  * projection to the transcript.  In a console the driver would blit the VT frame with arrow-nav;
  * in plain mode the same model renders as text (Collapse Law).  A directory entry becomes a
  * parent node; files are leaves. */
-fn sh_tree() -> i32 {
+/* Populate the stoma_tree model from a directory (arg token 1, or cwd).  Shared by the plain
+ * `tree` verb and the driver's interactive alt-screen nav.  Returns visible node count. */
+fn shell_build_tree() -> u64 @export {
     /* pattern into SH_TMP: "<arg>\*" or "*" */
     if vb_ntok() >= 2u64 {
         let al : u64 = vb_tok_len(1u64)
@@ -228,12 +236,11 @@ fn sh_tree() -> i32 {
     tree_reset()
     let root : i64 = tree_add(0i64 - 1i64, "." as u64, 1u64)
     let h : u64 = FindFirstFileA((&SH_TMP) as u64, (&SH_FIND) as u64)
-    if h == SH_INVALID { vb_emit("tree: no entries\n" as u64, 16u64)   return 0i32 }
+    if h == SH_INVALID { return tree_rebuild_visible() }
     let mut more : u32 = 1u32
     while more == 1u32 {
         let base : u64 = ((&SH_FIND) as u64) + 44u64
         let bp : *u8 = base as *u8
-        /* skip "." and ".." */
         let mut skip : u32 = 0u32
         if bp[0u64] == 46u8 { if bp[1u64] == 0u8 { skip = 1u32 }   if bp[1u64] == 46u8 { if bp[2u64] == 0u8 { skip = 1u32 } } }
         if skip == 0u32 {
@@ -248,14 +255,28 @@ fn sh_tree() -> i32 {
         if FindNextFileA(h, (&SH_FIND) as u64) == 0i32 { more = 0u32 }
     }
     FindClose(h)
-    tree_rebuild_visible()
+    return tree_rebuild_visible()
+}
+
+fn sh_tree() -> i32 {
+    shell_build_tree()
     let n : u64 = tree_render_plain((&SH_STG) as u64)
     vb_emit((&SH_STG) as u64, n)
     return 0i32
 }
 
-/* external: run the raw line captured (pipe mode), copy child stdout to transcript + "exit N". */
+/* external command dispatch.  On a REAL console (SH_CON) the child is hosted on a FOREGROUND PTY
+ * (fg_run): it believes it is interactive, its bytes stream to the console live and to the
+ * journal, and keystrokes flow back to it -- the user's central ask.  When redirected/plain, the
+ * child is pipe-captured (proc_run) and its stdout is copied to the transcript + "[exit N]". */
 fn sh_extern() -> i32 {
+    if SH_CON == 1u32 {
+        let d : u64 = con_size()
+        let cols : u32 = ((d >> 32u64) & 65535u64) as u32
+        let rows : u32 = (d & 65535u64) as u32
+        fg_run(vb_line_ptr(), vb_line_len(), cols, rows)   /* streams to console + journals */
+        return 0i32
+    }
     let rc : i32 = proc_run(vb_line_ptr(), 0u64, 60000u32)
     if rc < 0i32 {
         vb_emit("stoma: cannot spawn: " as u64, 21u64)

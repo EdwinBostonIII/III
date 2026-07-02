@@ -26,9 +26,10 @@ fn main() -> u64 {
     if idx < 8u64 { return 10u64 }              /* the aether dir has many modules */
     if bd_index_count() != idx { return 11u64 }
 
-    /* closure of stoma == 9 (parity with sovbuild's closure=9 after the M9 tree verb) */
+    /* closure of stoma == 11 (parity with sovbuild): M9 added tree, M11 added fg (which pulls in
+     * pty) to the interactive path -- native engine + sovbuild agree on the grown count */
     let c : u64 = bd_closure("stoma" as u64, 5u64)
-    if c != 9u64 { return 12u64 }
+    if c != 11u64 { return 12u64 }
 
     /* membership: true deps in, a non-dep out */
     if bd_in_closure("stoma_gate" as u64, 10u64) != 1u32 { return 20u64 }

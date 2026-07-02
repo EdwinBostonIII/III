@@ -52,7 +52,8 @@ Every parse error is letter-precise: `err@<byteoff>: <reason>` + the line + a ca
 | `stoma_build` | native import-closure engine (sovbuild-parity) | 2462 |
 | `stoma_ripple` | content-hash pulse → reverse impact / blame set | 2463 |
 | `stoma_tree` | navigable tree/sidebar, dual render (VT + plain) | 2464 |
-| `stoma` | main: mode select + interactive/plain loops | (smoke) |
+| `stoma_fg` | foreground pty runner: child on a live console, keys forwarded | 2466 |
+| `stoma` | main: mode select + interactive/plain loops + alt-screen tree | (smoke) |
 
 ## The ripple heartbeat (cell⇄gene)
 
@@ -86,13 +87,23 @@ STOMA is the **native cockpit** over the existing cone infrastructure, not a rei
 `verify_cone.sh --plan stoma_gate.iii` maps to `2460_stoma_gate` (proven in the gate) — STOMA's
 organs live inside the cone. The native adds are full-width verdicts and content-addressed reads.
 
+## Interactive path (WIRED + verified)
+
+On a real console, `stoma.exe` runs external commands on a **foreground pseudoconsole**
+(`sh_extern` → `fg_run` → `stoma_pty`): the child gets a real console, its bytes stream to the
+terminal live and to the journal, and keystrokes flow back to it. Verified headlessly by corpus
+**2466**: the console-detector child prints `CON` through `fg_run` (pty) and `PIPE` through
+`proc_run` (pipe) — the exact "the program thinks it's on its console" claim. The `tree` verb enters
+an alt-screen arrow-key navigation loop (`st_tree_interactive`) and collapses back to the intact log
+on Enter/Esc. Redirected/plain mode still uses pipe capture (correct there).
+
+Two fixes this required: `fg_run` drains the pty to dry **before** `ClosePseudoConsole`
+(ConPTY discards unread output on close); and both spawners normalize `/`→`\` in the **first token**
+(exe path) so forward-slash paths spawn via `CreateProcessA` while argument slashes (`/c`) are
+preserved.
+
 ## Honest scope (what is NOT yet true)
 
-- **pty is a verified organ, not the interactive default.** `stoma.exe`'s skeleton runs external
-  commands **pipe-captured** (`sh_extern` → `proc_run`), so a full-screen TUI child does not yet get
-  a live pseudoconsole from the interactive prompt. `stoma_pty` is proven (matrix 2465, both
-  transports) and ready; wiring it as the interactive foreground transport (so `vim`/`less` run on a
-  live pty with resize + ^C) is the next integration step.
 - **msys/git bash: transport fidelity only.** STOMA spawns exactly what the OS resolves and captures
   the true exit code; bash-from-a-native-PE is environmentally fragile here (WSL-stub PATH shadow;
   MSYS2 fork/quote quirks) — an MSYS2 concern, documented in the matrix.
@@ -106,7 +117,7 @@ organs live inside the cone. The native adds are full-width verdicts and content
 ## Build + verify
 
 ```
-bash STDLIB/scripts/run_stoma_kats.sh                       # family gate: 13/0
-bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld)
+bash STDLIB/scripts/run_stoma_kats.sh                       # family gate: 14/0 (run from repo root)
+bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld; closure 11)
 printf 'help\n<cmd>\nexit\n' | ./out.exe                    # plain-mode drive
 ```

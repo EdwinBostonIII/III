@@ -50,6 +50,16 @@ for cmd/powershell/git. Making a WSL stub or an MSYS2 fork succeed is not within
   meaning-plane search is robust to interleaved control sequences while the wire stays raw
   (Membrane Law).
 
+## Interactive foreground pty (M11, corpus 2466)
+
+Beyond the matrix's organ-level pty test, the **interactive** path is verified: a console-detector
+child (`GetConsoleMode(stdout)`) prints `CON` when run through `fg_run` (the foreground pty path
+`stoma.exe` uses on a real console) and `PIPE` through `proc_run`. This is the definitive
+"the program thinks it's on its console" proof. Two fixes it forced:
+- `fg_run` drains the pty **before** `ClosePseudoConsole` (ConPTY discards unread output on close);
+- both spawners normalize `/`→`\` in the exe token (first token only) so forward-slash paths spawn
+  via `CreateProcessA` — a real usability fix the bare-name matrix children never exercised.
+
 ## Not yet exercised (future hardening, non-blocking)
 
 - STOMA hosted *inside* Windows Terminal / VS Code terminal / conhost (manual smoke; the sovereign

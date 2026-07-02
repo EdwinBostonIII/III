@@ -76,6 +76,29 @@ fn pt_zero(base: u64, n: u64) -> i32 {
     return 0i32
 }
 
+/* Normalize `/` -> `\` in the FIRST token (the exe path) of a NUL-terminated command line, so a
+ * forward-slash path spawns via CreateProcessA (which, with lpApplicationName=NULL, treats only
+ * backslashes as path separators).  Argument slashes (cmd's /c, git's --x) are untouched: the
+ * scan stops at the first unquoted space.  Slashes inside a quoted exe path ARE converted. */
+fn pt_norm_exe(buf: u64) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    let mut quoted : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u8 = p[i]
+        if c == 0u8 { go = 0u32 }
+        else {
+            if c == 34u8 { quoted = 1u32 - quoted   i = i + 1u64 }
+            else {
+                if quoted == 0u32 { if c == 32u8 { go = 0u32 } }
+                if go == 1u32 { if c == 47u8 { p[i] = 92u8 }   i = i + 1u64 }
+            }
+        }
+    }
+    return 0i32
+}
+
 /* pack a ConPTY COORD: cols | rows<<16 (clamped to sane console bounds) */
 fn pty_coord(cols: u32, rows: u32) -> u32 @export {
     let mut c : u32 = cols
@@ -103,6 +126,7 @@ fn pty_spawn(cmd: u64, cols: u32, rows: u32) -> i32 @export {
         else { i = i + 1u64 }
     }
     PT_CMD[2047u64] = 0u8
+    pt_norm_exe((&PT_CMD) as u64)
 
     if CreatePipe((&PT_H) as u64, ((&PT_H) as u64) + 8u64, 0u64, 0u32) == 0i32 { return 2i32 }
     if CreatePipe(((&PT_H) as u64) + 16u64, ((&PT_H) as u64) + 24u64, 0u64, 0u32) == 0i32 { return 2i32 }
@@ -307,6 +331,32 @@ fn pty_exited() -> u32 @export {
 }
 
 fn pty_code() -> u32 @export { return PT_CODE as u32 }
+
+/* SHUTDOWN (step 1 of 2 for a LIVE driver): wait for child exit, then ClosePseudoConsole so
+ * ConPTY flushes its final frame -- but keep the read pipe + PT_ALIVE open so the driver can
+ * pty_pump the flushed tail and forward it to the console.  Pair with pty_reap. */
+fn pty_shutdown() -> i32 @export {
+    if PT_ALIVE == 0u32 { return 0i32 }
+    WaitForSingleObject(PT_H[5u64], 5000u32)
+    if pty_exited() != 1u32 {
+        WaitForSingleObject(PT_H[5u64], 5000u32)
+        GetExitCodeProcess(PT_H[5u64], ((&PT_SCR) as u64) + 24u64)
+        PT_CODE = PT_SCR[3u64]
+    }
+    ClosePseudoConsole(PT_H[4u64])
+    return 0i32
+}
+
+/* REAP (step 2): close all remaining handles.  After this pty_pump returns 0 (PT_ALIVE=0). */
+fn pty_reap() -> i32 @export {
+    if PT_ALIVE == 0u32 { return 0i32 }
+    CloseHandle(PT_H[2u64])
+    CloseHandle(PT_H[1u64])
+    CloseHandle(PT_H[6u64])
+    CloseHandle(PT_H[5u64])
+    PT_ALIVE = 0u32
+    return 0i32
+}
 
 /* Close the pty job: flush the tail into the accumulator, close pty (breaks the pipe), reap.
  * The live driver forwards each slice as it lands; here we just ensure the pipe is fully drained

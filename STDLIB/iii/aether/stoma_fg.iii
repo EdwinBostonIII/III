@@ -1,0 +1,130 @@
+/* STDLIB/iii/aether/stoma_fg.iii -- STOMA organ: the FOREGROUND pty runner (the live consumer).
+ *
+ * This is what makes the user's central ask real: when you run a command interactively, the child
+ * is hosted on a REAL kernel pseudoconsole (stoma_pty), so it believes it is on its native console
+ * and emits its true signals -- while STOMA forwards the child's bytes to our console VERBATIM
+ * (Membrane Law) and journals them, and forwards your keystrokes back to the child.
+ *
+ *   fg_run(cmd, len, cols, rows): spawn cmd on a pty; loop { pump child bytes -> con_out + journal;
+ *     poll a key -> translate to input bytes -> pty_write } until the child exits; then shutdown
+ *     (ConPTY flushes the final frame), forward the tail, reap.  Returns the child's exit code.
+ *
+ * Keys are the decoded stoma_con packed kind|value; fg_key_bytes turns them into the byte sequence
+ * a terminal child expects (CR for Enter, DEL for backspace, ESC[A.. for arrows, ^letter for ctrl).
+ *
+ * Pipe-mode (redirected / non-console) callers must NOT use this -- they use stoma_proc capture.
+ * The driver picks fg_run only when con_init reported a real console.  Hexad: kind_passage.
+ * Ring: R-1.  K: 0.95.
+ */
+module stoma_fg
+
+extern @abi(c-msvc-x64) fn pty_spawn(cmd: u64, cols: u32, rows: u32) -> i32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_pump() -> u64 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_rb_ptr() -> u64 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_exited() -> u32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_shutdown() -> i32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_reap() -> i32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_write(p: u64, n: u32) -> i32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_code() -> u32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn pty_acc_reset() -> i32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn con_out(p: u64, n: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_key_poll() -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn journal_append(kind: u32, payload: u64, paylen: u64) -> i32 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> u64 from "kernel32"
+
+var FG_CMD : [u8; 2048]
+var FG_KB  : [u8; 8]        /* key byte sequence scratch */
+
+/* translate a decoded key (kind<<16 | value) to the byte sequence a pty child expects.
+ * kind 1 printable | 2 special | 3 ctrl-letter.  Returns byte count in FG_KB (0 = ignore). */
+fn fg_key_bytes(k: u32) -> u32 {
+    let kind : u32 = k >> 16u32
+    let val : u32 = k & 65535u32
+    if kind == 1u32 {
+        if val < 128u32 { FG_KB[0u64] = val as u8   return 1u32 }
+        /* 2-byte UTF-8 for U+0080..U+07FF (covers Latin-1 typing) */
+        if val < 2048u32 {
+            FG_KB[0u64] = (192u32 | (val >> 6u32)) as u8
+            FG_KB[1u64] = (128u32 | (val & 63u32)) as u8
+            return 2u32
+        }
+        FG_KB[0u64] = (224u32 | (val >> 12u32)) as u8
+        FG_KB[1u64] = (128u32 | ((val >> 6u32) & 63u32)) as u8
+        FG_KB[2u64] = (128u32 | (val & 63u32)) as u8
+        return 3u32
+    }
+    if kind == 3u32 { FG_KB[0u64] = val as u8   return 1u32 }     /* Ctrl+A..Z = 1..26 */
+    /* kind 2 specials */
+    if val == 5u32 { FG_KB[0u64] = 13u8   return 1u32 }           /* enter -> CR */
+    if val == 7u32 { FG_KB[0u64] = 127u8   return 1u32 }          /* backspace -> DEL */
+    if val == 8u32 { FG_KB[0u64] = 9u8   return 1u32 }            /* tab */
+    if val == 6u32 { FG_KB[0u64] = 27u8   return 1u32 }           /* esc */
+    /* arrows / nav -> CSI sequences: ESC [ <c> */
+    if val == 1u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=65u8   return 3u32 }   /* up    A */
+    if val == 2u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=66u8   return 3u32 }   /* down  B */
+    if val == 4u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=67u8   return 3u32 }   /* right C */
+    if val == 3u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=68u8   return 3u32 }   /* left  D */
+    if val == 11u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=72u8   return 3u32 }  /* home  H */
+    if val == 12u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=70u8   return 3u32 }  /* end   F */
+    if val == 13u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=51u8 FG_KB[3u64]=126u8   return 4u32 } /* del 3~ */
+    if val == 9u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=53u8 FG_KB[3u64]=126u8   return 4u32 }  /* pgup 5~ */
+    if val == 10u32 { FG_KB[0u64]=27u8 FG_KB[1u64]=91u8 FG_KB[2u64]=54u8 FG_KB[3u64]=126u8   return 4u32 } /* pgdn 6~ */
+    return 0u32
+}
+
+/* forward one pumped slice to the console + journal (Membrane: verbatim) */
+fn fg_forward(got: u64) -> i32 {
+    con_out(pty_rb_ptr(), got as u32)
+    journal_append(2u32, pty_rb_ptr(), got)
+    return 0i32
+}
+
+/* Run a command on a foreground pty.  Returns the child's exit code (0xFFFFFFFF on spawn fail). */
+fn fg_run(cmd: u64, len: u64, cols: u32, rows: u32) -> u32 @export {
+    pty_acc_reset()
+    /* private NUL-terminated copy */
+    let s : *u8 = cmd as *u8
+    let mut i : u64 = 0u64
+    while i < len { if i < 2047u64 { FG_CMD[i] = s[i] }   i = i + 1u64 }
+    let mut cl : u64 = len   if cl > 2047u64 { cl = 2047u64 }
+    FG_CMD[cl] = 0u8
+    journal_append(1u32, cmd, len)
+    if pty_spawn((&FG_CMD) as u64, cols, rows) != 0i32 { return 4294967295u32 }
+
+    /* Main loop.  Crucially, once the child has EXITED we keep pumping+forwarding until the pipe
+     * is dry (N consecutive empties) BEFORE shutdown -- ConPTY discards unread output on
+     * ClosePseudoConsole, so we must drain while the pty is still open. */
+    let mut g : u32 = 0u32
+    let mut exited : u32 = 0u32
+    let mut empties : u32 = 0u32
+    while g < 2000000u32 {
+        g = g + 1u32
+        let got : u64 = pty_pump()
+        if got > 0u64 { fg_forward(got)   empties = 0u32 }
+        else {
+            if exited == 0u32 { if pty_exited() == 1u32 { exited = 1u32 } }
+            if exited == 1u32 {
+                empties = empties + 1u32
+                if empties > 24u32 { g = 2000000u32 }        /* pipe dry after exit -> done */
+                Sleep(2u32)
+            } else {
+                let k : u32 = con_key_poll()
+                if k != 0u32 { let n : u32 = fg_key_bytes(k)   if n > 0u32 { pty_write((&FG_KB) as u64, n) } }
+                else { Sleep(2u32) }
+            }
+        }
+    }
+
+    /* pipe drained while open; now flush ConPTY's final frame + forward any last tail, then reap */
+    pty_shutdown()
+    let mut te : u32 = 0u32
+    let mut t : u32 = 0u32
+    while t < 400u32 {
+        t = t + 1u32
+        let got2 : u64 = pty_pump()
+        if got2 > 0u64 { fg_forward(got2)   te = 0u32 }
+        else { te = te + 1u32   if te > 20u32 { t = 400u32 }   Sleep(3u32) }
+    }
+    pty_reap()
+    return pty_code()
+}

@@ -1,0 +1,54 @@
+/* 2466_stoma_fg.iii -- STOMA M11 gate: the foreground pty path actually gives a child a CONSOLE.
+ *
+ * The user's central ask, verified headlessly: a program run through STOMA's interactive
+ * foreground path (fg_run -> stoma_pty) sees a REAL console; the same program pipe-captured
+ * (proc_run) sees a pipe.  The child con_probe.exe prints CON iff GetConsoleMode(stdout) succeeds.
+ *
+ *   fg_run(con_probe)   -> child prints CON, exits 0  (it believes it is on a console -- it IS)
+ *   proc_run(con_probe) -> child prints PIPE, exits 1  (captured, correctly a pipe)
+ *
+ * This is the difference between "registers as the CLI a program needs" and a dumb pipe.  Exit
+ * map: 10-11 fg/console; 20-22 pipe; 99 pass.  NIH: stoma_fg + stoma_pty + stoma_con + stoma_proc
+ * + stoma_journal + kernel32.  (con_probe.exe built by the family gate at the path below.) */
+module corpus_2466
+
+extern @abi(c-msvc-x64) fn con_init() -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn fg_run(cmd: u64, len: u64, cols: u32, rows: u32) -> u32 from "stoma_fg.iii"
+extern @abi(c-msvc-x64) fn pty_cooked_find(pat: u64, plen: u64) -> u32 from "stoma_pty.iii"
+extern @abi(c-msvc-x64) fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_find(pat: u64, plen: u64) -> u32 from "stoma_proc.iii"
+
+var K_P : [u8; 64]
+
+fn slen(p: u64) -> u64 {
+    let s : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    let mut g : u32 = 1u32
+    while g == 1u32 { if s[i] == 0u8 { g = 0u32 } else { i = i + 1u64 } }
+    return i
+}
+fn setp(lit: u64) -> u64 {
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    let mut g : u32 = 1u32
+    while g == 1u32 { let c : u8 = s[i]   K_P[i] = c   if c == 0u8 { g = 0u32 } else { i = i + 1u64 } }
+    return i
+}
+
+fn main() -> u64 {
+    con_init()
+    let plen : u64 = setp("STDLIB/build/stoma_kats/con_probe.exe" as u64)
+
+    /* foreground pty: child sees a real console */
+    let ec : u32 = fg_run((&K_P) as u64, plen, 100u32, 30u32)
+    if pty_cooked_find("CON" as u64, 3u64) != 1u32 { return 10u64 }
+    if ec != 0u32 { return 11u64 }                 /* console -> con_probe exits 0 */
+
+    /* pipe capture: same child sees a pipe */
+    if proc_run((&K_P) as u64, 0u64, 20000u32) < 0i32 { return 20u64 }
+    if proc_out_find("PIPE" as u64, 4u64) != 1u32 { return 21u64 }
+    if proc_code() != 1u32 { return 22u64 }        /* pipe -> con_probe exits 1 */
+
+    return 99u64
+}

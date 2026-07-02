@@ -159,6 +159,17 @@ fn sc_priv(dst: u64, n: u32, on: u32) -> u32 {
 fn con_vt_alt(dst: u64, enter: u32) -> u32 @export { return sc_priv(dst, 1049u32, enter) }
 fn con_vt_cursor(dst: u64, show: u32) -> u32 @export { return sc_priv(dst, 25u32, show) }
 
+/* direct emitters (build the sequence + WriteFile it) -- for driver loops that just want to act */
+var SC_EMIT : [u8; 16]
+fn con_alt(enter: u32) -> i32 @export {
+    let n : u32 = sc_priv((&SC_EMIT) as u64, 1049u32, enter)
+    return con_out((&SC_EMIT) as u64, n)
+}
+fn con_cursor(show: u32) -> i32 @export {
+    let n : u32 = sc_priv((&SC_EMIT) as u64, 25u32, show)
+    return con_out((&SC_EMIT) as u64, n)
+}
+
 /* mouse: SGR-encoded (1006) + button-event tracking (1002), set or clear both */
 fn con_vt_mouse(dst: u64, on: u32) -> u32 @export {
     let a : u32 = sc_priv(dst, 1002u32, on)

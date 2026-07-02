@@ -10,7 +10,7 @@ OUT="$III/STDLIB/build/stoma_kats"
 mkdir -p "$OUT"
 pass=0; fail=0
 
-ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_tree stoma_shell"
+ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_tree stoma_fg stoma_shell"
 for m in $ORGANS; do
     "$I2" "$A/$m.iii" --compile-only --out "$OUT/$m.o" 2>"$OUT/$m.c.log" \
         || { echo "FAIL $m : organ compile"; tail -3 "$OUT/$m.c.log"; exit 1; }
@@ -33,7 +33,7 @@ run 2455_stoma_con   99 "$OUT/stoma_con.o"
 run 2456_stoma_proc  99 "$OUT/stoma_proc.o"
 run 2457_stoma_pty   99 "$OUT/stoma_pty.o"
 run 2458_stoma_line  99 "$OUT/stoma_line.o"
-run 2459_stoma_shell 99 "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" "$OUT/stoma_con.o" "$OUT/stoma_shell.o"
+run 2459_stoma_shell 99 "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" "$OUT/stoma_con.o" "$OUT/stoma_fg.o" "$OUT/stoma_pty.o" "$OUT/stoma_shell.o"
 run 2460_stoma_gate  99 "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
 run 2461_stoma_queue 99 "$OUT/stoma_traps.o" "$OUT/stoma_queue.o" "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
 run 2462_stoma_build  99 "$OUT/stoma_build.o"
@@ -41,13 +41,19 @@ run 2463_stoma_ripple 99 "$OUT/stoma_ripple.o" "$OUT/stoma_build.o"
 run 2464_stoma_tree   99 "$OUT/stoma_tree.o" "$OUT/stoma_con.o"
 run 2465_stoma_matrix 99 "$OUT/stoma_proc.o" "$OUT/stoma_pty.o"
 
+# con_probe.exe: the console-vs-pipe detector child for the foreground-pty verification (2466)
+"$I2" "$III/STDLIB/build/stoma_probes/con_probe.iii" --compile-only --out "$OUT/con_probe.o" 2>"$OUT/cp.log" \
+    && gcc "$OUT/con_probe.o" -lkernel32 -o "$OUT/con_probe.exe" 2>>"$OUT/cp.log" \
+    || { echo "FAIL con_probe : build"; tail -3 "$OUT/cp.log"; fail=$((fail+1)); }
+run 2466_stoma_fg     99 "$OUT/stoma_fg.o" "$OUT/stoma_pty.o" "$OUT/stoma_con.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o"
+
 # ---- stoma.exe walking-skeleton: build (gcc dev-link here; sovbuild parity is the M5/M7 gate) + plain-mode smoke ----
 "$I2" "$A/stoma.iii" --compile-only --out "$OUT/stoma.o" 2>"$OUT/stoma.c.log" \
     || { echo "FAIL stoma.iii : compile"; tail -3 "$OUT/stoma.c.log"; fail=$((fail+1)); }
 if [[ -f "$OUT/stoma.o" ]]; then
     gcc "$OUT/stoma.o" "$OUT/stoma_con.o" "$OUT/stoma_line.o" "$OUT/stoma_verb.o" \
         "$OUT/stoma_shell.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_pty.o" \
-        "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" \
+        "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" "$OUT/stoma_fg.o" \
         -lkernel32 -o "$OUT/stoma.exe" 2>"$OUT/stoma.l.log" \
         || { echo "FAIL stoma.exe : link"; grep -i undefined "$OUT/stoma.l.log" | head -3; fail=$((fail+1)); }
 fi

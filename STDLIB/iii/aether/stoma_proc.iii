@@ -84,6 +84,28 @@ fn sp_zero(base: u64, n: u64) -> i32 {
     return 0i32
 }
 
+/* Normalize `/` -> `\` in the FIRST token (exe path) of a NUL-terminated command line so a
+ * forward-slash path spawns via CreateProcessA.  Stops at the first unquoted space (argument
+ * slashes like cmd's /c are preserved); slashes inside a quoted exe path ARE converted. */
+fn sp_norm_exe(buf: u64) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    let mut quoted : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u8 = p[i]
+        if c == 0u8 { go = 0u32 }
+        else {
+            if c == 34u8 { quoted = 1u32 - quoted   i = i + 1u64 }
+            else {
+                if quoted == 0u32 { if c == 32u8 { go = 0u32 } }
+                if go == 1u32 { if c == 47u8 { p[i] = 92u8 }   i = i + 1u64 }
+            }
+        }
+    }
+    return 0i32
+}
+
 /* ── accessors ──────────────────────────────────────────────────────────────────────────── */
 fn proc_code() -> u32 @export { return SP_CODE as u32 }
 fn proc_timed_out() -> u32 @export { return SP_TIMED }
@@ -318,6 +340,7 @@ fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 @export {
         else { ci = ci + 1u64 }
     }
     SP_CMD[2047u64] = 0u8
+    sp_norm_exe((&SP_CMD) as u64)
 
     let sp : i32 = sp_spawn(cwd)
     if sp != 0i32 { return sp }

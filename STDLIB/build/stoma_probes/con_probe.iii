@@ -1,0 +1,22 @@
+/* con_probe.iii -- console-vs-pipe detector child (STOMA M11 verification helper).
+ * Prints CON if its stdout is a real console (GetConsoleMode succeeds), else PIPE.  Used to prove
+ * that STOMA's foreground pty path gives a child a REAL console interactively, while pipe capture
+ * gives it a pipe.  Exit 0 = console, 1 = pipe. */
+module con_probe
+
+extern @abi(c-msvc-x64) fn GetStdHandle(which: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn GetConsoleMode(h: u64, pmode: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+
+var CP_M : [u64; 1]
+var CP_S : [u64; 1]
+
+fn main() -> u64 {
+    let h : u64 = GetStdHandle(4294967285u32)          /* STD_OUTPUT_HANDLE */
+    if GetConsoleMode(h, (&CP_M) as u64) != 0i32 {
+        WriteFile(h, "CON" as u64, 3u32, (&CP_S) as u64, 0u64)
+        return 0u64
+    }
+    WriteFile(h, "PIPE" as u64, 4u32, (&CP_S) as u64, 0u64)
+    return 1u64
+}

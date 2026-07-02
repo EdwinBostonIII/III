@@ -1,0 +1,234 @@
+/* STDLIB/iii/aether/cspace.iii -- THE EXACT CONFIGURATION-SPACE COMPILER (charter II-III / Program II
+ * Vector I): a robot's free space as a COMPILED, EXACT, finite object -- every state decided by the
+ * certified sign substrate, every translation EDGE certified by the continuous swept-volume predicate.
+ *
+ * THE ROBOT: a base on an integer grid (step GS) carrying an arm rotated by k x 15-degree cyclotomic steps
+ * (cyclotomic_se3: the tool tip is EXACT in Q(sqrt2,sqrt3) over a tiny denominator).  A state is (k, gx, gy).
+ * THE MAP: a state is BLOCKED iff the tip lies strictly inside an obstacle sphere -- sign(|tip - C|^2 - r2)
+ * via q23_sign (the promoted, e-class-cached route).  EXACT TANGENCY (== 0) is FREE-with-contact: the
+ * zero-clearance corridor a float planner cannot even represent.
+ * THE EDGES (the Vector-I fusion): a translation edge sweeps the tip along a straight segment; validity is
+ * the SWEPT-SPHERE parabola-minimum predicate lifted to Q(sqrt2,sqrt3) -- min_t |W + tD|^2 vs r2, decided
+ * by q23_sign on the den-cleared clamped-vertex form.  BOTH ENDPOINTS FREE does NOT make an edge safe: the
+ * sweep can tunnel THROUGH an obstacle between them -- the exact oracle kills exactly those edges (gate
+ * 2173's twin: an endpoint-only planner happily walks through the obstacle).
+ * THE PLAN: exact BFS over the compiled map.  A found path is PROVEN collision-free (every state and every
+ * translation edge certified); no-path is PROVEN BY EXHAUSTION of the exact finite map.
+ *
+ * HONEST DISCRETENESS LOCK (charter II-III): the guarantee is over the DISCRETIZED C-space.  Rotation
+ * edges are certified at their ENDPOINTS only -- the arc-sweep certificate (a trigonometric envelope, not
+ * an algebraic segment) is the charted [OPEN]; translation edges get the FULL continuous certificate. */
+module cspace
+
+extern @abi(c-msvc-x64) fn mech_reset() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_rotate_z15() -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_apply(px: i64, py: i64, pz: i64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_pt(i: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn mech_den() -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
+const CS_MAXK : u64 = 24u64
+const CS_MAXG : u64 = 8u64
+const CS_MAXS : u64 = 1536u64                   /* 24 * 8 * 8 */
+
+var CS_GS : i64   var CS_AX : i64
+var CS_GW : i64   var CS_GH : i64
+var CS_C1 : [i64; 3]   var CS_R1 : i64          /* obstacle 1 */
+var CS_C2 : [i64; 3]   var CS_R2 : i64          /* obstacle 2 (r2 <= 0: absent) */
+var CS_TIP : [i64; 288]                         /* per k: 3 coords x 4 slots (0..23 * 12) */
+var CS_DEN : [i64; 24]
+var CS_FREE : [i64; 1536]
+var CS_DIST : [i64; 1536]
+var CS_Q : [i64; 1536]
+
+var CW_A : [i64; 4]   var CW_B : [i64; 4]   var CW_S : [i64; 4]   var CW_T : [i64; 4]   var CW_V : [i64; 4]
+
+fn cs_sid(k: i64, gx: i64, gy: i64) -> u64 { return (((k as u64) * CS_MAXG) + (gx as u64)) * CS_MAXG + (gy as u64) }
+
+/* |W|^2 - rr  as a 4-slot q23 value into CW_V, where W = tip*den-cleared + integer offset per axis.
+ * W_ax slots: (tip_n0 + off_ax * den, tip_n1, tip_n2, tip_n3).  rr = r2 * den^2 (integer, slot 0). */
+fn cs_clearance(k: i64, wx: i64, wy: i64, wz: i64, cx: i64, cy: i64, cz: i64, r2: i64) -> i32 {
+    let den : i64 = CS_DEN[k as u64]
+    let mut v : u64 = 0u64
+    while v < 4u64 { CW_V[v] = 0i64   v = v + 1u64 }
+    let mut ax : u64 = 0u64
+    while ax < 3u64 {
+        let mut off : i64 = wx - cx
+        if ax == 1u64 { off = wy - cy }
+        if ax == 2u64 { off = wz - cz }
+        let base : u64 = ((k as u64) * 12u64) + (ax * 4u64)
+        CW_A[0u64] = CS_TIP[base] + (off * den)
+        CW_A[1u64] = CS_TIP[base + 1u64]
+        CW_A[2u64] = CS_TIP[base + 2u64]
+        CW_A[3u64] = CS_TIP[base + 3u64]
+        q23_mul((&CW_A) as u64, (&CW_A) as u64, (&CW_S) as u64)
+        let mut s : u64 = 0u64
+        while s < 4u64 { CW_V[s] = CW_V[s] + CW_S[s]   s = s + 1u64 }
+        ax = ax + 1u64
+    }
+    CW_V[0u64] = CW_V[0u64] - ((r2 * den) * den)
+    return q23_sign((&CW_V) as u64)
+}
+
+/* the swept-edge certificate against one obstacle: tip sweeps W -> W + D (D integer, den-cleared).
+ * m(t)*den^2 = WW + 2t WD + t^2 DD; interior vertex iff WD in (-DD, 0); penetration iff
+ * sign(WW*DD - WD^2 - r2*den^2*DD) < 0.  Returns 1 = edge ok (0-clearance contact allowed), 0 = killed. */
+var CE_WW : [i64; 4]   var CE_WD : [i64; 4]   var CE_T : [i64; 4]
+fn cs_edge_vs(k: i64, wx: i64, wy: i64, wz: i64, dxi: i64, dyi: i64, dzi: i64, cx: i64, cy: i64, cz: i64, r2: i64) -> i32 {
+    let den : i64 = CS_DEN[k as u64]
+    let ddx : i64 = dxi * den   let ddy : i64 = dyi * den   let ddz : i64 = dzi * den
+    let dd : i64 = ((ddx * ddx) + (ddy * ddy)) + (ddz * ddz)
+    if dd == 0i64 { return 1i32 }
+    let mut s : u64 = 0u64
+    while s < 4u64 { CE_WW[s] = 0i64   CE_WD[s] = 0i64   s = s + 1u64 }
+    let mut ax : u64 = 0u64
+    while ax < 3u64 {
+        let mut off : i64 = wx - cx
+        let mut dc : i64 = ddx
+        if ax == 1u64 { off = wy - cy   dc = ddy }
+        if ax == 2u64 { off = wz - cz   dc = ddz }
+        let base : u64 = ((k as u64) * 12u64) + (ax * 4u64)
+        CW_A[0u64] = CS_TIP[base] + (off * den)
+        CW_A[1u64] = CS_TIP[base + 1u64]
+        CW_A[2u64] = CS_TIP[base + 2u64]
+        CW_A[3u64] = CS_TIP[base + 3u64]
+        q23_mul((&CW_A) as u64, (&CW_A) as u64, (&CW_S) as u64)
+        s = 0u64
+        while s < 4u64 {
+            CE_WW[s] = CE_WW[s] + CW_S[s]
+            CE_WD[s] = CE_WD[s] + (CW_A[s] * dc)
+            s = s + 1u64
+        }
+        ax = ax + 1u64
+    }
+    /* vertex position: WD >= 0 -> min at t=0; WD + DD <= 0 -> min at t=1 (endpoints are state-certified) */
+    let swd : i32 = q23_sign((&CE_WD) as u64)
+    if swd >= 0i32 { return 1i32 }
+    s = 0u64
+    while s < 4u64 { CE_T[s] = CE_WD[s]   s = s + 1u64 }
+    CE_T[0u64] = CE_T[0u64] + dd
+    let swdd : i32 = q23_sign((&CE_T) as u64)
+    if swdd <= 0i32 { return 1i32 }
+    /* interior: val = WW*DD - WD*WD - r2*den^2*DD */
+    q23_mul((&CE_WD) as u64, (&CE_WD) as u64, (&CW_T) as u64)
+    s = 0u64
+    while s < 4u64 { CE_T[s] = (CE_WW[s] * dd) - CW_T[s]   s = s + 1u64 }
+    CE_T[0u64] = CE_T[0u64] - (((r2 * CS_DEN[k as u64]) * CS_DEN[k as u64]) * dd)
+    let sv : i32 = q23_sign((&CE_T) as u64)
+    if sv < 0i32 { return 0i32 }
+    return 1i32
+}
+
+/* world tip-anchor of state (k,gx,gy) is base = (gx*GS, gy*GS, 0); W offset fed as base - C per axis. */
+fn cs_state_free(k: i64, gx: i64, gy: i64) -> i32 {
+    let bx : i64 = gx * CS_GS   let by : i64 = gy * CS_GS
+    let s1 : i32 = cs_clearance(k, bx, by, 0i64, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
+    if s1 < 0i32 { return 0i32 }
+    if CS_R2 > 0i64 {
+        let s2 : i32 = cs_clearance(k, bx, by, 0i64, CS_C2[0u64], CS_C2[1u64], CS_C2[2u64], CS_R2)
+        if s2 < 0i32 { return 0i32 }
+    }
+    return 1i32
+}
+
+fn cs_edge_ok(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 @export {
+    let bx : i64 = gx * CS_GS   let by : i64 = gy * CS_GS
+    let dxi : i64 = (nx - gx) * CS_GS   let dyi : i64 = (ny - gy) * CS_GS
+    let e1 : i32 = cs_edge_vs(k, bx, by, 0i64, dxi, dyi, 0i64, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
+    if e1 == 0i32 { return 0i32 }
+    if CS_R2 > 0i64 {
+        let e2 : i32 = cs_edge_vs(k, bx, by, 0i64, dxi, dyi, 0i64, CS_C2[0u64], CS_C2[1u64], CS_C2[2u64], CS_R2)
+        if e2 == 0i32 { return 0i32 }
+    }
+    return 1i32
+}
+
+/* compile the exact free map: 24 x GW x GH states, each decided by the certified sign substrate. */
+fn cs_compile(GS: i64, AX: i64, c1x: i64, c1y: i64, c1z: i64, r1: i64, c2x: i64, c2y: i64, c2z: i64, r2: i64, GW: i64, GH: i64) -> i32 @export {
+    if GW > 8i64 { return 0i32 - 1i32 }
+    if GH > 8i64 { return 0i32 - 1i32 }
+    CS_GS = GS   CS_AX = AX   CS_GW = GW   CS_GH = GH
+    CS_C1[0u64] = c1x   CS_C1[1u64] = c1y   CS_C1[2u64] = c1z   CS_R1 = r1
+    CS_C2[0u64] = c2x   CS_C2[1u64] = c2y   CS_C2[2u64] = c2z   CS_R2 = r2
+    mech_reset()
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        if k > 0i64 { mech_rotate_z15() }
+        mech_apply(AX, 0i64, 0i64)
+        let mut i : u64 = 0u64
+        while i < 12u64 { CS_TIP[((k as u64) * 12u64) + i] = mech_pt(i)   i = i + 1u64 }
+        CS_DEN[k as u64] = mech_den()
+        k = k + 1i64
+    }
+    k = 0i64
+    while k < 24i64 {
+        let mut gx : i64 = 0i64
+        while gx < GW {
+            let mut gy : i64 = 0i64
+            while gy < GH {
+                CS_FREE[cs_sid(k, gx, gy)] = cs_state_free(k, gx, gy) as i64
+                gy = gy + 1i64
+            }
+            gx = gx + 1i64
+        }
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+fn cs_free(k: i64, gx: i64, gy: i64) -> i64 @export { return CS_FREE[cs_sid(k, gx, gy)] }
+
+/* exact BFS.  mode 0 = CERTIFIED (translation edges swept-certified); mode 1 = the ENDPOINT-ONLY twin
+ * (the industry default: an edge is taken if both endpoint states are free -- it can tunnel).
+ * returns the path length in moves, or -1 = PROVEN no path (exhaustion of the exact map). */
+var CS_MODE : i64
+var CS_QT : u64
+fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 @export {
+    CS_MODE = mode
+    let mut i : u64 = 0u64
+    while i < CS_MAXS { CS_DIST[i] = 0i64 - 1i64   i = i + 1u64 }
+    let s0 : u64 = cs_sid(k0, x0, y0)
+    if CS_FREE[s0] == 0i64 { return 0i64 - 1i64 }
+    CS_DIST[s0] = 0i64
+    CS_Q[0u64] = s0 as i64
+    CS_QT = 1u64
+    let mut qh : u64 = 0u64
+    while qh < CS_QT {
+        let cur : u64 = (CS_Q[qh]) as u64
+        qh = qh + 1u64
+        let cd : i64 = CS_DIST[cur]
+        let gy : i64 = (cur % CS_MAXG) as i64
+        let gx : i64 = ((cur / CS_MAXG) % CS_MAXG) as i64
+        let k : i64 = (cur / (CS_MAXG * CS_MAXG)) as i64
+        if k == k1 { if gx == x1 { if gy == y1 { return cd } } }
+        /* rotation neighbors (endpoint-certified; the arc-sweep is the charted OPEN) */
+        let mut kk : i64 = k + 1i64
+        if kk >= 24i64 { kk = 0i64 }
+        cs_try(kk, gx, gy, cd)
+        kk = k - 1i64
+        if kk < 0i64 { kk = 23i64 }
+        cs_try(kk, gx, gy, cd)
+        /* translation neighbors: swept-certified in mode 0 */
+        if gx + 1i64 < CS_GW { if cs_tredge(k, gx, gy, gx + 1i64, gy) == 1i32 { cs_try(k, gx + 1i64, gy, cd) } }
+        if gx - 1i64 >= 0i64 { if cs_tredge(k, gx, gy, gx - 1i64, gy) == 1i32 { cs_try(k, gx - 1i64, gy, cd) } }
+        if gy + 1i64 < CS_GH { if cs_tredge(k, gx, gy, gx, gy + 1i64) == 1i32 { cs_try(k, gx, gy + 1i64, cd) } }
+        if gy - 1i64 >= 0i64 { if cs_tredge(k, gx, gy, gx, gy - 1i64) == 1i32 { cs_try(k, gx, gy - 1i64, cd) } }
+        /* mode is read inside cs_tredge via CS_MODE */
+    }
+    return 0i64 - 1i64
+}
+fn cs_tredge(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 {
+    if CS_MODE == 1i64 { return 1i32 }
+    return cs_edge_ok(k, gx, gy, nx, ny)
+}
+fn cs_try(k: i64, gx: i64, gy: i64, cd: i64) -> i32 {
+    let sid : u64 = cs_sid(k, gx, gy)
+    if CS_FREE[sid] == 0i64 { return 0i32 }
+    let dv : i64 = CS_DIST[sid]                 /* HOIST before the signed compare (the cg_r3 array-index trap) */
+    if dv >= 0i64 { return 0i32 }
+    CS_DIST[sid] = cd + 1i64
+    CS_Q[CS_QT] = sid as i64
+    CS_QT = CS_QT + 1u64
+    return 0i32
+}

@@ -1,0 +1,77 @@
+/* 2173_cspace.iii -- GATE for cspace.iii: THE EXACT C-SPACE COMPILER (charter II-III / Program II Vector I).
+ *
+ * SCENE: grid step 8, arm length 4, 24 cyclotomic rotations, 6x3 bases.  Obstacle 1 at (16,0,0) r^2=4 sits
+ * BETWEEN the k=0 tips of bases (1,0) and (2,0) -- both endpoint states are FREE (tip distances 4 > 2) but
+ * the translation sweep passes THROUGH it.  Obstacle 2 at (37,9,0) r^2=3 blocks states at base (4,1) for
+ * k=0 (rational tip) AND k=1 (IRRATIONAL tip -- the blocked certificate is a genuine Q(sqrt2,sqrt3) sign).
+ *
+ * ARM M -- THE MAP: free/blocked decided exactly: (0,(4,1)) BLOCKED rational; (1,(4,1)) BLOCKED irrational
+ *   (42 - 12sqrt6 - 8sqrt2 < 3 certified by q23_sign); (6,(4,1)) FREE.
+ * ARM W -- THE TUNNELING EDGE (the Vector-I witness): edge (k=0, (1,0) -> (2,0)) has BOTH ENDPOINTS FREE
+ *   yet is KILLED by the swept certificate (the tip sweep 12 -> 20 passes through x=16, min distance 0
+ *   inside r=2).  The ENDPOINT-ONLY twin (mode 1, the industry default) accepts it and TUNNELS.
+ * ARM P -- THE PLANS: certified BFS start (0,(0,0)) -> goal (0,(4,0)): the direct 4-move row is broken by
+ *   the killed edge; the certified path detours (length 6); the endpoint twin reports 4 (shorter = it
+ *   walked through the obstacle).  Rotation goal (6,(4,0)): the engine found length 10, BETTER than the
+ *   author's hand plan (12): rotating to k=2 puts the tip sweep on the line y = 2, which GRAZES the r=2
+ *   obstacle EXACTLY (distance^2 == r^2, a certified tangency) -- contact is not penetration, so the
+ *   zero-clearance corridor is legal and the row is passable at k=2.  The exact map contains corridors a
+ *   float planner cannot even represent, and BFS finds them without being told.
+ *
+ * DISCRETENESS LOCK (honest): guarantees are over the exact DISCRETIZED map; rotation edges are
+ * endpoint-certified (the arc-sweep certificate is the charted OPEN); translation edges are FULLY certified.
+ *
+ * exit 99 = pass;  10 compile refused;  11 map wrong;  12 witness edge not killed / twin killed it;
+ * 13 certified path length wrong;  14 twin did not tunnel;  15 rotation goal wrong */
+module corpus_2173_cspace
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn cs_compile(GS: i64, AX: i64, c1x: i64, c1y: i64, c1z: i64, r1: i64, c2x: i64, c2y: i64, c2z: i64, r2: i64, GW: i64, GH: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_free(k: i64, gx: i64, gy: i64) -> i64 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_edge_ok(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 from "cspace.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+    if cs_compile(8i64, 4i64, 16i64, 0i64, 0i64, 4i64, 37i64, 9i64, 0i64, 3i64, 6i64, 3i64) != 0i32 { return 10u64 }
+
+    /* ══ ARM M: the exact map. */
+    let m0 : i64 = cs_free(0i64, 4i64, 1i64)                       /* rational tip (36,8): dist^2 = 2 < 3: BLOCKED */
+    let m1 : i64 = cs_free(1i64, 4i64, 1i64)                       /* irrational tip: 42-12sqrt6-8sqrt2 < 3: BLOCKED */
+    let m6 : i64 = cs_free(6i64, 4i64, 1i64)                       /* tip (32,12): dist^2 = 34 > 3: FREE */
+    putchar(77i32) putchar(58i32) sp() e_i64(m0) sp() e_i64(m1) sp() e_i64(m6) nl()   /* "M: 0 0 1" */
+    if m0 != 0i64 { return 11u64 }
+    if m1 != 0i64 { return 11u64 }
+    if m6 != 1i64 { return 11u64 }
+
+    /* ══ ARM W: both endpoints free, the sweep tunnels -- the certified oracle kills the edge. */
+    let f1 : i64 = cs_free(0i64, 1i64, 0i64)
+    let f2 : i64 = cs_free(0i64, 2i64, 0i64)
+    let ee : i32 = cs_edge_ok(0i64, 1i64, 0i64, 2i64, 0i64)
+    putchar(87i32) putchar(58i32) sp() e_i64(f1) sp() e_i64(f2) sp() e_i64(ee as i64) nl()   /* "W: 1 1 0" */
+    if f1 != 1i64 { return 12u64 }
+    if f2 != 1i64 { return 12u64 }
+    if ee != 0i32 { return 12u64 }
+
+    /* ══ ARM P: the certified plan detours; the endpoint twin tunnels; the rotation goal composes. */
+    let p00 : i64 = cs_free(0i64, 0i64, 0i64)
+    let pz : i64 = cs_plan(0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64)   /* start == goal: 0 by definition */
+    let p1 : i64 = cs_plan(0i64, 0i64, 0i64, 0i64, 1i64, 0i64, 0i64)   /* one certified step */
+    putchar(112i32) putchar(58i32) sp() e_i64(p00) sp() e_i64(pz) sp() e_i64(p1) nl()   /* "p: 1 0 1" */
+    if p00 != 1i64 { return 13u64 }
+    if pz != 0i64 { return 13u64 }
+    if p1 != 1i64 { return 13u64 }
+    let pc : i64 = cs_plan(0i64, 0i64, 0i64, 0i64, 4i64, 0i64, 0i64)   /* certified */
+    let pt : i64 = cs_plan(0i64, 0i64, 0i64, 0i64, 4i64, 0i64, 1i64)   /* endpoint twin */
+    let pr : i64 = cs_plan(0i64, 0i64, 0i64, 6i64, 4i64, 0i64, 0i64)   /* rotate + translate */
+    putchar(80i32) putchar(58i32) sp() e_i64(pc) sp() e_i64(pt) sp() e_i64(pr) nl()   /* "P: 6 4 10" */
+    if pc != 6i64 { return 13u64 }
+    if pt != 4i64 { return 14u64 }
+    if pr != 10i64 { return 15u64 }                                    /* via the certified zero-clearance corridor at k=2 */
+
+    return 99u64
+}

@@ -14,6 +14,14 @@ The purge and the S2 correction were EXECUTED and gate-verified:
 - **NEW FLAG (found during verification): KAT number collision** — `2169_gas_reversal.iii` (sqrtsum family) and `2169_studio_kernel.iii` (aether-lens family) share number 2169. Functionally green (name-keyed EXPECTED, disjoint runners) but violates unique-numbering; FIX: renumber 2169_gas_reversal to a free number and update its run_sqrtsum_kats.sh line.
 - Still open from §1: S1 ratchet restoration (uncovered/gates/dark 75/10/157 vs pins 5/2/14) — untouched by this execution, next in order. In-flight sibling-session work observed and deliberately left alone: gas_big (self-committed mid-run), resultant.iii + 2177_resultant, gs3_counter.c, win.txt.
 
+## EXECUTION RECORD 2 (2026-07-01/02 — THE 12 MERGE PAIRS)
+
+**`1d21c3f6`** — all 12 merge REFACTORs of §2-§11 EXECUTED, verbatim behavior-preserving folds (extern surgery only): goldbach+collatz→**conjecture_probe** (new) · kinduction→bmc (MODEL-TIER) · pareto_frontier→pareto_extraction · cas_blob→erasure_store · omega_engine→self_engine · mandate_m22→mandate · quality_q7→quality · hotstuff_predict→hotstuff_unified · xii_sort_meter→compute_box · ripple_synthesizer→sovereign_optimizer · daemon_scythe→scythe_census · the three verification missiles→**xii_semantic_verify** (new).
+- MODULES 726→713, diff verified 1:1, orphan comments cleaned. All 23 dependent corpus KATs retargeted (the ledger's 19 + the 4 the manifest's extern-truncation missed: 45, 1421, 1422, 1423); zero residual donor references; the two stage1_corpus `quality_q7` decorations left by design (symbol-based linking; golden byte-equivalence witnesses must not move).
+- **Gates:** build_stdlib compile **PASS=713 FAIL=0** + fresh archive; retargeted-KAT gate **23/23 exit=99** through run_corpus's exact link line.
+- **Defect found + fixed en route:** corpus 1509's local `BB_MAX_NODES` pin was stale at 128 since bv_bits went to 2048 (`68aa615c` "no magic caps") — pre-existing red, invisible until this per-KAT run; pin refreshed with a tracking comment.
+- **Ratchet delta adjudicated:** uncovered 75→85: +5 scaffold-deletion fallout now queued under S1 (ui_fill_tri_aa, ui_fill_tri_exact, ui_save_bmp, fs_demo, th_panel_std — their only referencing code was the 11 deleted demos; cover or de-export), +5 sibling in-flight (g2_events, g2_mom, lm_cellz, lm2_cellz, lm2_pz). The merges added ZERO uncovered exports.
+
 ## 0. The keep-criteria (the bar a module must clear to be labeled KEEP)
 
 A module stays listed only if ALL hold:

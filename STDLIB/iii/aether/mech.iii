@@ -187,6 +187,35 @@ fn parse_u(sp: u64) -> i64 {
 fn first_byte(sp: u64) -> u8 { let s : *u8 = sp as *u8   let c : u8 = s[0u64]   return c }
 fn second_byte(sp: u64) -> u8 { let s : *u8 = sp as *u8   let c : u8 = s[1u64]   return c }
 
+/* signed decimal parse (optional leading '-'); MECH_BADI sentinel via a huge magnitude guard.
+ * returns the value; sets MECH_PARSE_OK=0 on any malformed input, 1 on success. */
+var MECH_PARSE_OK : i64 = 1i64
+fn parse_i(sp: u64) -> i64 {                 /* caller sets MECH_PARSE_OK=1 once; this only clears it */
+    let s : *u8 = sp as *u8
+    let mut i : u64 = 0u64
+    let mut neg : u8 = 0u8
+    let c0 : u8 = s[0u64]
+    if c0 == 45u8 { neg = 1u8   i = 1u64 }
+    let mut v : i64 = 0i64
+    let mut ok : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let c : u8 = s[i]
+        if c == 0u8 { going = 0u8 }
+        if going == 1u8 {
+            if c < 48u8 { MECH_PARSE_OK = 0i64   return 0i64 }
+            if c > 57u8 { MECH_PARSE_OK = 0i64   return 0i64 }
+            v = (v * 10i64) + ((c - 48u8) as i64)
+            ok = 1u8
+            if v > 100000000i64 { MECH_PARSE_OK = 0i64   return 0i64 }
+            i = i + 1u64
+        }
+    }
+    if ok == 0u8 { MECH_PARSE_OK = 0i64   return 0i64 }
+    if neg == 1u8 { return 0i64 - v }
+    return v
+}
+
 /* ------------------------------------------------ report pieces ------------------------------- */
 fn class_words(g: i32) -> i32 {
     if g == 0i32 { pstr("NON-GRASHOF triple-rocker (no link can fully rotate)~") }
@@ -1068,19 +1097,148 @@ fn cv_render(a: i64, d: i64, n: i64) -> i32 {
 }
 
 /* ------------------------------------------------ path synthesis (exact bounded search) ------- */
+/* ---- FAST elbow-up joint B for synthesis: isolate By (larger root) from the y-quadratic, then
+ * derive Bx EXACTLY from the radical line  2*Bx*(d-Ax) - 2*By*Ay = K  =>  Bx = (K + 2*By*Ay)/(2(d-Ax)),
+ * propagated as a certified interval (outward rounding).  ~3x fewer sign queries than the twin
+ * quadratic solve.  Guard: only when d-Ax is provably positive (a<d region); else the caller falls
+ * back to the trusted sw_pose.  Fills SFBXL..SFBYH (scaled 1e4).  Returns 1 fast-ok, 0 fall-back, -1 unreachable. */
+var SFBXL : i64   var SFBXH : i64   var SFBYL : i64   var SFBYH : i64
+var SFAXL : i64   var SFAXH : i64   var SFAYL : i64   var SFAYH : i64
+/* isolate the LARGER root of MWA4 t^2 + MWB4 t + MWG4 (a Q(sqrt2,sqrt3) quadratic) into [lo,hi] scaled 1e4. */
+fn sf_iso_hi(bnd: i64) -> i32 {
+    let sc : i64 = 10000i64
+    let lo0 : i64 = (0i64 - bnd) * sc
+    let hi0 : i64 = bnd * sc
+    /* vertex via the monotone linear form 2*A*t + B */
+    let mut lb : i64 = lo0   let mut hb : i64 = hi0
+    while (hb - lb) > 1i64 {
+        let mid : i64 = (lb + hb) / 2i64
+        let sg : i32 = sw_lsign(mid, sc)
+        if sg >= 0i32 { hb = mid } else { lb = mid }
+    }
+    let y0 : i64 = lb
+    /* larger root lives in [y0, hi0]: q<0 at y0, q>0 at hi0 (A>0 leading) */
+    let mut a2 : i64 = y0   let mut b2 : i64 = hi0
+    while (b2 - a2) > 1i64 {
+        let mid : i64 = (a2 + b2) / 2i64
+        let sg : i32 = sw_qsign(mid, sc)
+        if sg < 0i32 { a2 = mid } else { b2 = mid }
+    }
+    SFBYL = a2   SFBYH = b2
+    return 0i32
+}
+fn syn_pose_fast(a: i64, b: i64, c: i64, d: i64, k: i64) -> i32 {
+    let base : i64 = k * 4i64
+    /* U,V,K,W exactly as sw_pose */
+    v_zero((&MWU4) as u64)
+    MWU4[0u64] = 8i64 * d
+    let mut i : i64 = 0i64
+    while i < 4i64 { let cv : i64 = MW24C[base + i]   MWU4[i] = MWU4[i] - ((2i64 * a) * cv)   i = i + 1i64 }
+    i = 0i64
+    while i < 4i64 { let sv : i64 = MW24S[base + i]   MWV4[i] = (2i64 * a) * sv   i = i + 1i64 }
+    let kk : i64 = (((b * b) - (c * c)) - (a * a)) + (d * d)
+    v_scaled_from((&MWW4) as u64, (&MWU4) as u64, 0i64 - d)
+    MWW4[0u64] = MWW4[0u64] + (4i64 * kk)
+    let uz : u8 = v_is_zero((&MWU4) as u64)
+    let vz : u8 = v_is_zero((&MWV4) as u64)
+    if uz == 1u8 { return 0i32 }              /* vertical / degenerate -> slow path */
+    if vz == 1u8 { return 0i32 }              /* horizontal radical line -> slow path */
+    /* A(k) = a*(cos,sin), isolate to [lo, lo+1] */
+    i = 0i64
+    while i < 4i64 { let cv : i64 = MW24C[base + i]   MWF4[i] = a * cv   i = i + 1i64 }
+    SFAXL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAXH = SFAXL + 1i64
+    i = 0i64
+    while i < 4i64 { let sv : i64 = MW24S[base + i]   MWF4[i] = a * sv   i = i + 1i64 }
+    SFAYL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAYH = SFAYL + 1i64
+    /* denominator 2(d-Ax) must be provably positive: need d*1e4 > SFAXH */
+    let sc : i64 = 10000i64
+    if (d * sc) <= SFAXH { return 0i32 }      /* d-Ax could be <= 0 -> slow path */
+    /* y-quadratic  (U^2+V^2) y^2 + 2VW y + (W^2 - c^2 U^2) */
+    q23_mul((&MWU4) as u64, (&MWU4) as u64, (&MWT4A) as u64)
+    q23_mul((&MWV4) as u64, (&MWV4) as u64, (&MWT4B) as u64)
+    i = 0i64
+    while i < 4i64 { MWA4[i] = MWT4A[i] + MWT4B[i]   i = i + 1i64 }
+    q23_mul((&MWV4) as u64, (&MWW4) as u64, (&MWT4C) as u64)
+    i = 0i64
+    while i < 4i64 { MWB4[i] = 2i64 * MWT4C[i]   i = i + 1i64 }
+    q23_mul((&MWW4) as u64, (&MWW4) as u64, (&MWF4) as u64)
+    i = 0i64
+    while i < 4i64 { MWG4[i] = MWF4[i] - ((c * c) * MWT4A[i])   i = i + 1i64 }
+    /* Delta sign */
+    q23_mul((&MWB4) as u64, (&MWB4) as u64, (&MWF4) as u64)
+    q23_mul((&MWA4) as u64, (&MWG4) as u64, (&MWD4) as u64)
+    i = 0i64
+    while i < 4i64 { MWD4[i] = MWF4[i] - (4i64 * MWD4[i])   i = i + 1i64 }
+    let dsg : i32 = q23_sign((&MWD4) as u64)
+    if dsg < 0i32 { return 0i32 - 1i32 }       /* unreachable */
+    /* elbow-up By = larger root */
+    sf_iso_hi(c + 1i64)
+    /* Bx = (K + 2*By*Ay)/(2(d-Ax)) as a certified interval (scaled 1e4), denom>0.
+     * SB*SAY scaled 1e8 -> 4 products; N_s (scaled 1e4) = K*1e4 + 2*[floor/ceil(prod/1e4)];
+     * D_s (scaled 1e4) = 2d*1e4 - 2*Ax; Bx_s = N_s*1e4 / D_s (interval, denom>0). */
+    let p1 : i64 = SFBYL * SFAYL   let p2 : i64 = SFBYL * SFAYH
+    let p3 : i64 = SFBYH * SFAYL   let p4 : i64 = SFBYH * SFAYH
+    let mut plo : i64 = p1   let mut phi : i64 = p1
+    if p2 < plo { plo = p2 }   if p2 > phi { phi = p2 }
+    if p3 < plo { plo = p3 }   if p3 > phi { phi = p3 }
+    if p4 < plo { plo = p4 }   if p4 > phi { phi = p4 }
+    let nlo : i64 = (kk * sc) + (2i64 * idiv_floor(plo, sc))
+    let nhi : i64 = (kk * sc) + (2i64 * idiv_ceil(phi, sc))
+    let dlo : i64 = ((2i64 * d) * sc) - (2i64 * SFAXH)     /* > 0 by the guard */
+    let dhi : i64 = ((2i64 * d) * sc) - (2i64 * SFAXL)
+    let nnlo : i64 = nlo * sc
+    let nnhi : i64 = nhi * sc
+    /* 4-corner interval divide by a positive-denominator interval, outward */
+    let c1 : i64 = idiv_floor(nnlo, dlo)   let c2 : i64 = idiv_floor(nnlo, dhi)
+    let c3 : i64 = idiv_floor(nnhi, dlo)   let c4 : i64 = idiv_floor(nnhi, dhi)
+    let mut bxl : i64 = c1
+    if c2 < bxl { bxl = c2 }   if c3 < bxl { bxl = c3 }   if c4 < bxl { bxl = c4 }
+    let e1 : i64 = idiv_ceil(nnlo, dlo)    let e2 : i64 = idiv_ceil(nnlo, dhi)
+    let e3 : i64 = idiv_ceil(nnhi, dlo)    let e4 : i64 = idiv_ceil(nnhi, dhi)
+    let mut bxh : i64 = e1
+    if e2 > bxh { bxh = e2 }   if e3 > bxh { bxh = e3 }   if e4 > bxh { bxh = e4 }
+    SFBXL = bxl   SFBXH = bxh
+    return 1i32
+}
+
 /* the certified coupler-point box for ONE candidate mechanism at ONE crank angle, standalone
  * (no per-pose caches). Returns 1 if the pose is reachable (box filled), 0 otherwise. */
 var SYNPXL : i64   var SYNPXH : i64   var SYNPYL : i64   var SYNPYH : i64
+/* the coupler affine P = A + u(B-A) + v*perp(B-A) from certified A,B intervals -> SYNP* (outward). */
+fn syn_couple(un: i64, ud: i64, vn: i64, vd: i64,
+              axl: i64, axh: i64, ayl: i64, ayh: i64,
+              bxl: i64, bxh: i64, byl: i64, byh: i64) -> i32 {
+    let omu : i64 = ud - un
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, axl, axh)
+    cv_term(un, ud, bxl, bxh)
+    cv_term(vn, vd, ayl, ayh)
+    cv_term(0i64 - vn, vd, byl, byh)
+    SYNPXL = CVLO   SYNPXH = CVHI
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, ayl, ayh)
+    cv_term(un, ud, byl, byh)
+    cv_term(0i64 - vn, vd, axl, axh)
+    cv_term(vn, vd, bxl, bxh)
+    SYNPYL = CVLO   SYNPYH = CVHI
+    return 0i32
+}
 fn syn_box(a: i64, b: i64, c: i64, d: i64, k: i64, un: i64, ud: i64, vn: i64, vd: i64) -> i32 {
+    /* fast radical-line path first (verified to contain the trusted twin-quadratic box) */
+    let fr : i32 = syn_pose_fast(a, b, c, d, k)
+    if fr == (0i32 - 1i32) { return 0i32 }             /* unreachable */
+    if fr == 1i32 {
+        syn_couple(un, ud, vn, vd, SFAXL, SFAXH, SFAYL, SFAYH, SFBXL, SFBXH, SFBYL, SFBYH)
+        return 1i32
+    }
+    /* fr==0: degenerate / vertical / horizontal / a>=d -> trusted sw_pose fallback */
     MWQUIET = 1i64
     SWCASE = 1i64
     sw_pose(k, a, b, c, d)
     MWQUIET = 0i64
     if SWCASE < 2i64 { return 0i32 }
-    /* B = elbow-up branch (branch 2) interval */
     let bxl : i64 = SWX[2u64]   let bxh : i64 = SWX[3u64]
     let byl : i64 = SWY[2u64]   let byh : i64 = SWY[3u64]
-    /* A(k) = a*(cos,sin), isolate each exact field element to [lo, lo+1] */
     let tb : i64 = k * 4i64
     let mut i : i64 = 0i64
     while i < 4i64 { let cv : i64 = MW24C[tb + i]   MWF4[i] = a * cv   i = i + 1i64 }
@@ -1088,21 +1246,7 @@ fn syn_box(a: i64, b: i64, c: i64, d: i64, k: i64, un: i64, ud: i64, vn: i64, vd
     i = 0i64
     while i < 4i64 { let sv : i64 = MW24S[tb + i]   MWF4[i] = a * sv   i = i + 1i64 }
     let ayl : i64 = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   let ayh : i64 = ayl + 1i64
-    let omu : i64 = ud - un
-    /* Px */
-    CVLO = 0i64   CVHI = 0i64
-    cv_term(omu, ud, axl, axh)
-    cv_term(un, ud, bxl, bxh)
-    cv_term(vn, vd, ayl, ayh)
-    cv_term(0i64 - vn, vd, byl, byh)
-    SYNPXL = CVLO   SYNPXH = CVHI
-    /* Py */
-    CVLO = 0i64   CVHI = 0i64
-    cv_term(omu, ud, ayl, ayh)
-    cv_term(un, ud, byl, byh)
-    cv_term(0i64 - vn, vd, axl, axh)
-    cv_term(vn, vd, bxl, bxh)
-    SYNPYL = CVLO   SYNPYH = CVHI
+    syn_couple(un, ud, vn, vd, axl, axh, ayl, ayh, bxl, bxh, byl, byh)
     return 1i32
 }
 
@@ -1288,13 +1432,15 @@ fn main(argc: i32, argv: u64) -> u64 {
             if sb == 121u8 {
                 /* synth: d lim k1 x1n x1d y1n y1d k2 x2n x2d y2n y2d  (12 args) */
                 if argc != 14i32 { return usage() }
+                MECH_PARSE_OK = 1i64
                 let sd : i64 = parse_u(pp[2u64])   let sl : i64 = parse_u(pp[3u64])
                 let sk1 : i64 = parse_u(pp[4u64])
-                let sx1n : i64 = parse_u(pp[5u64])   let sx1d : i64 = parse_u(pp[6u64])
-                let sy1n : i64 = parse_u(pp[7u64])   let sy1d : i64 = parse_u(pp[8u64])
+                let sx1n : i64 = parse_i(pp[5u64])   let sx1d : i64 = parse_u(pp[6u64])
+                let sy1n : i64 = parse_i(pp[7u64])   let sy1d : i64 = parse_u(pp[8u64])
                 let sk2 : i64 = parse_u(pp[9u64])
-                let sx2n : i64 = parse_u(pp[10u64])  let sx2d : i64 = parse_u(pp[11u64])
-                let sy2n : i64 = parse_u(pp[12u64])  let sy2d : i64 = parse_u(pp[13u64])
+                let sx2n : i64 = parse_i(pp[10u64])  let sx2d : i64 = parse_u(pp[11u64])
+                let sy2n : i64 = parse_i(pp[12u64])  let sy2d : i64 = parse_u(pp[13u64])
+                if MECH_PARSE_OK == 0i64 { return usage() }
                 if sd < 1i64 { return usage() }
                 if sl < 1i64 { return usage() }
                 if sd > 40i64 { pstr("REFUSED: envelope 1..40~")   pnl()   return 3u64 }

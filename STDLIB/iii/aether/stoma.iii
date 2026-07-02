@@ -1,0 +1,179 @@
+/* STDLIB/iii/aether/stoma.iii -- STOMA: the sovereign CLI entry point (M4 of III-STOMA-PLAN.md).
+ *
+ * The thin driver: detect console vs redirected (Collapse Law sensor), open a per-session
+ * journal, and run one of two loops -- INTERACTIVE (raw console keys -> line editor -> shell,
+ * with live echo) or PLAIN (read stdin lines -> shell -> stdout, for pipes/CI).  Both drive the
+ * SAME stoma_shell.shell_feed_line and print the SAME transcript, so the faces are byte-identical.
+ *
+ * External foreground programs run captured (stoma_proc pipe mode) in this skeleton; full-screen
+ * pty hosting (stoma_pty) is wired by the interactive front-end as it matures (M9).  Journal root
+ * is ./.stoma/journal/<pid>-<tick>/ (repo-local, per-session -- no nesting interleave).
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma
+
+extern @abi(c-msvc-x64) fn con_init() -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_raw(on: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_restore() -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_out(p: u64, n: u32) -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_in_raw(p: u64, cap: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_key() -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_eol(dst: u64) -> u32 from "stoma_con.iii"
+
+extern @abi(c-msvc-x64) fn ln_reset() -> i32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_key(kind: u32, val: u32) -> u32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_len() -> u64 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_cur() -> u64 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_ptr() -> u64 from "stoma_line.iii"
+
+extern @abi(c-msvc-x64) fn shell_feed_line(line: u64, llen: u64) -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_plain() -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn vb_out_ptr() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_len() -> u64 from "stoma_verb.iii"
+
+extern @abi(c-msvc-x64) fn journal_open(base: u64, taglen: u64, tag: u64) -> i32 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn journal_close() -> i32 from "stoma_journal.iii"
+
+extern @abi(c-msvc-x64) fn CreateDirectoryA(name: u64, sec: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetCurrentProcessId() -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetTickCount64() -> u64 from "kernel32"
+
+var ST_LINE  : [u8; 1024]        /* plain-mode line assembly */
+var ST_TAG   : [u8; 32]          /* session tag "pid-tick" */
+var ST_RB    : [u8; 4096]        /* plain-mode stdin slice */
+var ST_REND  : [u8; 1152]        /* interactive redraw scratch */
+const ST_PROMPT_N : u64 = 7u64
+
+/* format a u64 decimal into ST_TAG at off; returns new off */
+fn st_tagnum(off: u64, v: u64) -> u64 {
+    var ST_D : [u8; 24]
+    if v == 0u64 { ST_TAG[off] = 48u8   return off + 1u64 }
+    let mut x : u64 = v
+    let mut k : u64 = 0u64
+    while x > 0u64 { ST_D[k] = ((x % 10u64) + 48u64) as u8   x = x / 10u64   k = k + 1u64 }
+    let mut o : u64 = off
+    while k > 0u64 { k = k - 1u64   ST_TAG[o] = ST_D[k]   o = o + 1u64 }
+    return o
+}
+
+/* build session tag "<pid>-<tick>" (NUL-terminated); returns its length */
+fn st_build_tag() -> u64 {
+    let mut o : u64 = st_tagnum(0u64, GetCurrentProcessId() as u64)
+    ST_TAG[o] = 45u8   o = o + 1u64                 /* '-' */
+    o = st_tagnum(o, GetTickCount64() & 16777215u64)
+    ST_TAG[o] = 0u8
+    return o
+}
+
+fn st_open_journal() -> i32 {
+    /* ensure ./.stoma/journal exists (parent chain for the per-session dir) */
+    CreateDirectoryA(".stoma" as u64, 0u64)
+    CreateDirectoryA(".stoma/journal" as u64, 0u64)
+    let tl : u64 = st_build_tag()
+    return journal_open(".stoma/journal" as u64, tl, (&ST_TAG) as u64)
+}
+
+/* write the current transcript to the console */
+fn st_flush_out() -> i32 {
+    let n : u64 = vb_out_len()
+    if n > 0u64 { con_out(vb_out_ptr(), n as u32) }
+    return 0i32
+}
+
+/* interactive redraw: CR, erase-line, prompt, buffer.  (Caret tracking is coarse in M4 -- the
+ * caret sits at end-of-line after redraw; fine-grained CUP positioning lands with the tree
+ * front-end in M9.) */
+fn st_redraw() -> i32 {
+    let mut o : u64 = 0u64
+    ST_REND[o] = 13u8   o = o + 1u64                /* CR */
+    let e : u32 = con_vt_eol(((&ST_REND) as u64) + o)
+    o = o + (e as u64)
+    /* prompt "stoma> " */
+    ST_REND[o]=115u8 ST_REND[o+1u64]=116u8 ST_REND[o+2u64]=111u8 ST_REND[o+3u64]=109u8
+    ST_REND[o+4u64]=97u8 ST_REND[o+5u64]=62u8 ST_REND[o+6u64]=32u8
+    o = o + ST_PROMPT_N
+    let bp : *u8 = ln_ptr() as *u8
+    let bl : u64 = ln_len()
+    let mut i : u64 = 0u64
+    while i < bl {
+        if o < 1150u64 { ST_REND[o] = bp[i]   o = o + 1u64 }
+        i = i + 1u64
+    }
+    con_out((&ST_REND) as u64, o as u32)
+    return 0i32
+}
+
+/* INTERACTIVE loop: raw keys -> line editor -> shell.  Returns on exit. */
+fn st_interactive() -> i32 {
+    con_raw(1u32)
+    st_redraw()
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let k : u32 = con_key()
+        if k == 0u32 { go = 1u32 }                  /* ignore undecodable */
+        else {
+            let kind : u32 = k >> 16u32
+            let val : u32 = k & 65535u32
+            let committed : u32 = ln_key(kind, val)
+            if committed == 1u32 {
+                con_out("\r\n" as u64, 2u32)
+                let sig : u32 = shell_feed_line(ln_ptr(), ln_len())
+                st_flush_out()
+                ln_reset()
+                if sig == 2u32 { go = 0u32 }
+                else { st_redraw() }
+            } else {
+                st_redraw()
+            }
+        }
+    }
+    con_restore()
+    return 0i32
+}
+
+/* feed a completed plain-mode line (in ST_LINE[0..n]) to the shell; returns the shell signal */
+fn st_plain_line(n: u64) -> u32 {
+    let sig : u32 = shell_feed_line((&ST_LINE) as u64, n)
+    st_flush_out()
+    return sig
+}
+
+/* PLAIN loop: read stdin bytes, split on \n (\r stripped), feed each line.  EOF ends it. */
+fn st_plain() -> i32 {
+    let mut ll : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let got : u32 = con_in_raw((&ST_RB) as u64, 4096u32)
+        if got == 0u32 {
+            /* EOF: flush any trailing partial line */
+            if ll > 0u64 { st_plain_line(ll) }
+            go = 0u32
+        } else {
+            let mut i : u64 = 0u64
+            while i < (got as u64) {
+                let c : u8 = ST_RB[i]
+                if c == 10u8 {
+                    let sig : u32 = st_plain_line(ll)
+                    ll = 0u64
+                    if sig == 2u32 { go = 0u32   i = got as u64 }
+                } else {
+                    if c != 13u8 {
+                        if ll < 1023u64 { ST_LINE[ll] = c   ll = ll + 1u64 }
+                    }
+                }
+                i = i + 1u64
+            }
+        }
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let mode : i32 = con_init()
+    st_open_journal()
+    if mode == 0i32 { st_interactive() }
+    else { st_plain() }
+    journal_close()
+    return 0u64
+}

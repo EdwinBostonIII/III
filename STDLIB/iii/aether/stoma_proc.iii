@@ -1,0 +1,337 @@
+/* STDLIB/iii/aether/stoma_proc.iii -- STOMA organ: pipe-mode spawn (M2 of DOCS/III-STOMA-PLAN.md).
+ *
+ * The captured-job broker of the wire plane: spawn a child with piped stdin(EOF)/stdout/stderr,
+ * pump both pipes without blocking (PeekNamedPipe before ReadFile -- the M0 discipline), enforce
+ * a native millisecond timeout, and capture the FULL-WIDTH u32 exit code (kills the 8-bit trap
+ * class at the root).  Every child lives inside a JOB OBJECT with KILL_ON_JOB_CLOSE: a timeout
+ * terminates the whole process TREE, and even a clean run's stragglers die when the job handle
+ * closes -- no orphans, ever (KAT 2456 proves it with an independent Toolhelp witness).
+ *
+ * Spawn recipe (pinned facts):
+ *   pipes with SECURITY_ATTRIBUTES{24,0,TRUE}; OUR ends cleared of inheritance via
+ *   SetHandleInformation(h, HANDLE_FLAG_INHERIT=1, 0); STARTUPINFOA cb=104, dwFlags=
+ *   STARTF_USESTDHANDLES(0x100), hStdInput/Output/Error = child pipe ends; CreateProcessA
+ *   inherit=TRUE, flags=CREATE_SUSPENDED(0x4); AssignProcessToJobObject BEFORE ResumeThread
+ *   (grandchildren cannot escape the job); child-side ends closed after spawn.
+ *
+ * Results are module state read through accessors (fs_dir_name idiom): proc_code (u32, full
+ * width), proc_timed_out, proc_pid, proc_ms, proc_out_len/proc_out_at/proc_out_copy, and the
+ * err_* mirrors.  Capture caps: 256 KiB stdout, 64 KiB stderr (overflow bytes are DRAINED and
+ * COUNTED in *_len but not stored -- the wire is never stalled by a full buffer; a later
+ * journal consumer streams instead).
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+module stoma_proc
+
+extern @abi(c-msvc-x64) fn CreatePipe(prd: u64, pwr: u64, sec: u64, size: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn SetHandleInformation(h: u64, mask: u32, flags: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateProcessA(app: u64, cmd: u64, pa: u64, ta: u64, inherit: u32, flags: u32, env: u64, dir: u64, si: u64, pi: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn PeekNamedPipe(h: u64, buf: u64, n: u32, pread: u64, pavail: u64, pleft: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WaitForSingleObject(h: u64, ms: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetExitCodeProcess(h: u64, pcode: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn GetTickCount64() -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ResumeThread(h: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateJobObjectW(sec: u64, name: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn SetInformationJobObject(h: u64, class: u32, pinfo: u64, len: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn AssignProcessToJobObject(hjob: u64, hproc: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn TerminateJobObject(hjob: u64, code: u32) -> i32 from "kernel32"
+
+const SP_OUT_CAP : u64 = 262144u64
+const SP_ERR_CAP : u64 = 65536u64
+
+var SP_OUT    : [u8; 262144]
+var SP_ERR    : [u8; 65536]
+var SP_CMD    : [u8; 2048]
+var SP_SA     : [u8; 24]          /* SECURITY_ATTRIBUTES (inheritable) */
+var SP_SI     : [u8; 112]         /* STARTUPINFOA (104 used) */
+var SP_PI     : [u8; 24]          /* PROCESS_INFORMATION */
+var SP_JOBI   : [u8; 144]         /* JOBOBJECT_EXTENDED_LIMIT_INFORMATION */
+var SP_SCR    : [u64; 4]          /* out-params: nread, avail, code, spare */
+var SP_H      : [u64; 8]          /* 0 inR 1 inW 2 outR 3 outW 4 errR 5 errW 6 hproc 7 hthr */
+var SP_CODE   : u64 = 0u64
+var SP_TIMED  : u32 = 0u32
+var SP_PID    : u64 = 0u64
+var SP_MS     : u64 = 0u64
+var SP_LEN    : [u64; 2]          /* 0 = stdout total produced, 1 = stderr (may exceed caps) */
+var SP_JH     : u64 = 0u64        /* live job handle across spawn/pump */
+var SP_SINK   : [u8; 4096]        /* drain-and-count sink for capture-overflow bytes */
+
+fn sp_w32(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u32 = (base + off) as *u32
+    p[0u64] = v
+    return 0i32
+}
+fn sp_w64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u64 = (base + off) as *u64
+    p[0u64] = v
+    return 0i32
+}
+fn sp_r64(base: u64, off: u64) -> u64 {
+    let p : *u64 = (base + off) as *u64
+    return p[0u64]
+}
+fn sp_zero(base: u64, n: u64) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ── accessors ──────────────────────────────────────────────────────────────────────────── */
+fn proc_code() -> u32 @export { return SP_CODE as u32 }
+fn proc_timed_out() -> u32 @export { return SP_TIMED }
+fn proc_pid() -> u32 @export { return SP_PID as u32 }
+fn proc_ms() -> u64 @export { return SP_MS }
+fn proc_out_len() -> u64 @export { return SP_LEN[0u64] }
+fn proc_err_len() -> u64 @export { return SP_LEN[1u64] }
+fn proc_out_at(i: u64) -> u8 @export {
+    if i >= SP_OUT_CAP { return 0u8 }
+    return SP_OUT[i]
+}
+fn proc_err_at(i: u64) -> u8 @export {
+    if i >= SP_ERR_CAP { return 0u8 }
+    return SP_ERR[i]
+}
+fn proc_out_copy(dst: u64, off: u64, n: u64) -> u64 @export {
+    let mut stored : u64 = SP_LEN[0u64]
+    if stored > SP_OUT_CAP { stored = SP_OUT_CAP }
+    if off >= stored { return 0u64 }
+    let mut m : u64 = n
+    if off + m > stored { m = stored - off }
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i < m {
+        d[i] = SP_OUT[off + i]
+        i = i + 1u64
+    }
+    return m
+}
+
+/* find pattern in captured stdout; 1 = present */
+fn proc_out_find(pat: u64, plen: u64) -> u32 @export {
+    let mut stored : u64 = SP_LEN[0u64]
+    if stored > SP_OUT_CAP { stored = SP_OUT_CAP }
+    if plen == 0u64 { return 1u32 }
+    if stored < plen { return 0u32 }
+    let s : *u8 = pat as *u8
+    let mut i : u64 = 0u64
+    let lim : u64 = stored - plen + 1u64
+    while i < lim {
+        let mut j : u64 = 0u64
+        let mut ok : u32 = 1u32
+        while j < plen {
+            if SP_OUT[i + j] != s[j] { ok = 0u32   j = plen }
+            else { j = j + 1u64 }
+        }
+        if ok == 1u32 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+fn proc_err_find(pat: u64, plen: u64) -> u32 @export {
+    let mut stored : u64 = SP_LEN[1u64]
+    if stored > SP_ERR_CAP { stored = SP_ERR_CAP }
+    if plen == 0u64 { return 1u32 }
+    if stored < plen { return 0u32 }
+    let s : *u8 = pat as *u8
+    let mut i : u64 = 0u64
+    let lim : u64 = stored - plen + 1u64
+    while i < lim {
+        let mut j : u64 = 0u64
+        let mut ok : u32 = 1u32
+        while j < plen {
+            if SP_ERR[i + j] != s[j] { ok = 0u32   j = plen }
+            else { j = j + 1u64 }
+        }
+        if ok == 1u32 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* crt0-compatible quoting: append arg to dst at off, wrapping in quotes when it contains a
+ * space/tab (crt0's tokenizer honors "quoted" tokens, no escapes -- args carrying literal
+ * quotes are outside the representable set and refused with 0xFFFFFFFF). */
+fn proc_quote(arg: u64, alen: u32, dst: u64, off: u32) -> u32 @export {
+    let s : *u8 = arg as *u8
+    let d : *u8 = dst as *u8
+    let mut need : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < alen {
+        let c : u8 = s[i as u64]
+        if c == 32u8 { need = 1u32 }
+        if c == 9u8  { need = 1u32 }
+        if c == 34u8 { return 4294967295u32 }
+        i = i + 1u32
+    }
+    let mut o : u32 = off
+    if need == 1u32 { d[o as u64] = 34u8   o = o + 1u32 }
+    i = 0u32
+    while i < alen {
+        d[o as u64] = s[i as u64]
+        o = o + 1u32
+        i = i + 1u32
+    }
+    if need == 1u32 { d[o as u64] = 34u8   o = o + 1u32 }
+    return o
+}
+
+/* drain one pipe slice into a capture buffer; returns bytes moved */
+fn sp_drain(h: u64, buf: u64, cap: u64, plen: u64) -> u64 {
+    if PeekNamedPipe(h, 0u64, 0u32, 0u64, ((&SP_SCR) as u64) + 8u64, 0u64) == 0i32 { return 0u64 }
+    let avail : u64 = SP_SCR[1u64]
+    if avail == 0u64 { return 0u64 }
+    let cur : u64 = sp_r64(plen, 0u64)
+    let mut room : u64 = 0u64
+    if cur < cap { room = cap - cur }
+    let mut want : u64 = avail
+    if want > 65536u64 { want = 65536u64 }
+    /* read into the capture tail when room remains, else into a scratch sink (drain+count) */
+    let mut dstp : u64 = (&SP_SINK) as u64
+    let mut rdw : u64 = want
+    if room > 0u64 {
+        if rdw > room { rdw = room }
+        dstp = buf + cur
+    } else {
+        if rdw > 4096u64 { rdw = 4096u64 }
+    }
+    if ReadFile(h, dstp, rdw as u32, (&SP_SCR) as u64, 0u64) == 0i32 { return 0u64 }
+    let got : u64 = SP_SCR[0u64]
+    sp_w64(plen, 0u64, cur + got)
+    return got
+}
+
+/* spawn helper (kept small to stay under the cg_r3 local-slot ceiling): fills SP_H[0..5]
+ * pipes + SP_H[6]=hproc + SP_H[7]=hthr + SP_JH=hjob + SP_PID.  Assumes SP_CMD holds the
+ * NUL-terminated command line.  Returns 0 ok, negative = plumbing failure. */
+fn sp_spawn(cwd: u64) -> i32 {
+    sp_zero((&SP_SA) as u64, 24u64)
+    sp_w32((&SP_SA) as u64, 0u64, 24u32)
+    sp_w32((&SP_SA) as u64, 16u64, 1u32)                /* bInheritHandle = TRUE */
+
+    if CreatePipe((&SP_H) as u64, ((&SP_H) as u64) + 8u64, (&SP_SA) as u64, 0u32) == 0i32 { return 0i32 - 2i32 }
+    if CreatePipe(((&SP_H) as u64) + 16u64, ((&SP_H) as u64) + 24u64, (&SP_SA) as u64, 0u32) == 0i32 { return 0i32 - 2i32 }
+    if CreatePipe(((&SP_H) as u64) + 32u64, ((&SP_H) as u64) + 40u64, (&SP_SA) as u64, 0u32) == 0i32 { return 0i32 - 2i32 }
+    /* OUR ends (inW, outR, errR) must not leak into the child */
+    SetHandleInformation(SP_H[1u64], 1u32, 0u32)
+    SetHandleInformation(SP_H[2u64], 1u32, 0u32)
+    SetHandleInformation(SP_H[4u64], 1u32, 0u32)
+
+    SP_JH = CreateJobObjectW(0u64, 0u64)
+    if SP_JH == 0u64 { return 0i32 - 5i32 }
+    sp_zero((&SP_JOBI) as u64, 144u64)
+    sp_w32((&SP_JOBI) as u64, 16u64, 8192u32)          /* LimitFlags = KILL_ON_JOB_CLOSE */
+    if SetInformationJobObject(SP_JH, 9u32, (&SP_JOBI) as u64, 144u32) == 0i32 {
+        CloseHandle(SP_JH)
+        return 0i32 - 5i32
+    }
+
+    sp_zero((&SP_SI) as u64, 112u64)
+    sp_w32((&SP_SI) as u64, 0u64, 104u32)              /* cb = sizeof STARTUPINFOA */
+    sp_w32((&SP_SI) as u64, 60u64, 256u32)             /* dwFlags = STARTF_USESTDHANDLES */
+    sp_w64((&SP_SI) as u64, 80u64, SP_H[0u64])         /* hStdInput  = inR  */
+    sp_w64((&SP_SI) as u64, 88u64, SP_H[3u64])         /* hStdOutput = outW */
+    sp_w64((&SP_SI) as u64, 96u64, SP_H[5u64])         /* hStdError  = errW */
+    sp_zero((&SP_PI) as u64, 24u64)
+
+    /* CREATE_SUSPENDED(0x4) so the job binds before the child runs */
+    if CreateProcessA(0u64, (&SP_CMD) as u64, 0u64, 0u64, 1u32, 4u32, 0u64, cwd, (&SP_SI) as u64, (&SP_PI) as u64) == 0u32 {
+        CloseHandle(SP_JH)
+        CloseHandle(SP_H[0u64])  CloseHandle(SP_H[1u64])  CloseHandle(SP_H[2u64])
+        CloseHandle(SP_H[3u64])  CloseHandle(SP_H[4u64])  CloseHandle(SP_H[5u64])
+        return 0i32 - 6i32
+    }
+    SP_H[6u64] = sp_r64((&SP_PI) as u64, 0u64)          /* hProcess */
+    SP_H[7u64] = sp_r64((&SP_PI) as u64, 8u64)          /* hThread  */
+    let ppid : *u32 = (((&SP_PI) as u64) + 16u64) as *u32
+    SP_PID = ppid[0u64] as u64
+    AssignProcessToJobObject(SP_JH, SP_H[6u64])
+    ResumeThread(SP_H[7u64])
+
+    /* child-side ends belong to the child now; closing inW gives the child immediate stdin EOF */
+    CloseHandle(SP_H[0u64])
+    CloseHandle(SP_H[3u64])
+    CloseHandle(SP_H[5u64])
+    CloseHandle(SP_H[1u64])
+    return 0i32
+}
+
+/* pump helper: drain both pipes until child exit or budget (tree-killed on timeout), then
+ * tail-drain and capture the full-width exit code.  Kept small for the slot ceiling. */
+fn sp_pump(budget: u64) -> i32 {
+    let t0 : u64 = GetTickCount64()
+    let mut running : u32 = 1u32
+    while running == 1u32 {
+        let a : u64 = sp_drain(SP_H[2u64], (&SP_OUT) as u64, SP_OUT_CAP, ((&SP_LEN) as u64))
+        let b : u64 = sp_drain(SP_H[4u64], (&SP_ERR) as u64, SP_ERR_CAP, (((&SP_LEN) as u64) + 8u64))
+        if a + b == 0u64 {
+            if WaitForSingleObject(SP_H[6u64], 10u32) == 0u32 { running = 0u32 }
+            else {
+                if GetTickCount64() - t0 > budget {
+                    SP_TIMED = 1u32
+                    TerminateJobObject(SP_JH, 4294901760u32)
+                    WaitForSingleObject(SP_H[6u64], 5000u32)
+                    running = 0u32
+                }
+            }
+        }
+    }
+    let mut dry : u32 = 0u32
+    while dry < 2u32 {
+        let a2 : u64 = sp_drain(SP_H[2u64], (&SP_OUT) as u64, SP_OUT_CAP, ((&SP_LEN) as u64))
+        let b2 : u64 = sp_drain(SP_H[4u64], (&SP_ERR) as u64, SP_ERR_CAP, (((&SP_LEN) as u64) + 8u64))
+        if a2 + b2 == 0u64 { dry = dry + 1u32 }
+        else { dry = 0u32 }
+    }
+    GetExitCodeProcess(SP_H[6u64], ((&SP_SCR) as u64) + 16u64)
+    SP_CODE = SP_SCR[2u64]
+    SP_MS = GetTickCount64() - t0
+    return 0i32
+}
+
+/* Run a command line to completion (or timeout).  cmd = NUL-terminated bytes (copied to a
+ * private mutable buffer -- CreateProcessA writes into it); cwd = 0 or NUL-terminated path;
+ * cap_ms = wall budget (0 = 600000).  Returns 0 = ran to exit, 1 = timed out (tree killed),
+ * negative = plumbing failure.  Results via the accessors. */
+fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 @export {
+    SP_CODE = 0u64
+    SP_TIMED = 0u32
+    SP_PID = 0u64
+    SP_MS = 0u64
+    SP_LEN[0u64] = 0u64
+    SP_LEN[1u64] = 0u64
+
+    /* copy + NUL the command line into the private mutable buffer */
+    let s : *u8 = cmd as *u8
+    let mut ci : u64 = 0u64
+    while ci < 2047u64 {
+        let c : u8 = s[ci]
+        SP_CMD[ci] = c
+        if c == 0u8 { ci = 2047u64 }
+        else { ci = ci + 1u64 }
+    }
+    SP_CMD[2047u64] = 0u8
+
+    let sp : i32 = sp_spawn(cwd)
+    if sp != 0i32 { return sp }
+
+    let mut budget : u64 = cap_ms as u64
+    if budget == 0u64 { budget = 600000u64 }
+    sp_pump(budget)
+
+    CloseHandle(SP_H[7u64])
+    CloseHandle(SP_H[6u64])
+    CloseHandle(SP_H[2u64])
+    CloseHandle(SP_H[4u64])
+    CloseHandle(SP_JH)                                  /* kill-on-close reaps any stragglers */
+
+    if SP_TIMED == 1u32 { return 1i32 }
+    return 0i32
+}

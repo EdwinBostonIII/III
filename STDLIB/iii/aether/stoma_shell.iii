@@ -1,0 +1,185 @@
+/* STDLIB/iii/aether/stoma_shell.iii -- STOMA organ: the shell integration (M4 of the plan).
+ *
+ * Ties the walking skeleton together with NO main (so KATs drive it headlessly and stoma.iii
+ * stays a thin entry): parse a line (stoma_verb), dispatch built-ins against real OS state
+ * (cwd/env/dir via kernel32), route external commands to the captured-spawn broker
+ * (stoma_proc), and journal every step (stoma_journal).  All human-visible bytes accumulate in
+ * the verb transcript (stoma_verb VB_OUT); the driver forwards that ONE buffer to console +
+ * journal -- so the interactive face and the plain log are byte-identical (Collapse Law).
+ *
+ * shell_feed_line returns a control signal: 0 continue, 2 exit requested.
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_shell
+
+extern @abi(c-msvc-x64) fn vb_parse(line: u64, llen: u64) -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_ntok() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_tok_ptr(i: u64) -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_tok_len(i: u64) -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_line_ptr() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_line_len() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_emit(p: u64, n: u64) -> i32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_emit_num(v: u64) -> i32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_ptr() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_len() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_byte(i: u64) -> u8 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_do_help() -> i32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_empty() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_cd() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_pwd() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_ls() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_env() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_help() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_plain() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_exit() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_extern() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_err() -> u32 from "stoma_verb.iii"
+
+extern @abi(c-msvc-x64) fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_len() -> u64 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_copy(dst: u64, off: u64, n: u64) -> u64 from "stoma_proc.iii"
+
+extern @abi(c-msvc-x64) fn journal_append(kind: u32, payload: u64, paylen: u64) -> i32 from "stoma_journal.iii"
+
+extern @abi(c-msvc-x64) fn GetCurrentDirectoryA(n: u32, buf: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn SetCurrentDirectoryA(path: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetEnvironmentVariableA(name: u64, buf: u64, n: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn FindFirstFileA(pat: u64, data: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn FindNextFileA(h: u64, data: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn FindClose(h: u64) -> i32 from "kernel32"
+
+const SH_INVALID : u64 = 18446744073709551615u64
+
+var SH_PLAIN : u32 = 0u32          /* plain-mode flag (driver reads it) */
+var SH_TMP   : [u8; 1024]          /* scratch: cwd / env value / arg copy */
+var SH_FIND  : [u8; 320]           /* WIN32_FIND_DATAA (cFileName @ +44) */
+var SH_STG   : [u8; 262144]        /* staging for proc stdout copy */
+
+fn shell_plain() -> u32 @export { return SH_PLAIN }
+fn shell_set_plain(v: u32) -> i32 @export { SH_PLAIN = v   return 0i32 }
+
+/* copy token i (NUL-terminated) into SH_TMP; returns its length */
+fn sh_tok_to_tmp(i: u64) -> u64 {
+    let n : u64 = vb_tok_len(i)
+    let p : *u8 = vb_tok_ptr(i) as *u8
+    let mut k : u64 = 0u64
+    while k < n {
+        if k < 1023u64 { SH_TMP[k] = p[k] }
+        k = k + 1u64
+    }
+    let mut m : u64 = n
+    if m > 1023u64 { m = 1023u64 }
+    SH_TMP[m] = 0u8
+    return m
+}
+
+fn sh_cd() -> i32 {
+    if vb_ntok() < 2u64 { vb_emit("cd: missing directory\n" as u64, 22u64)   return 0i32 }
+    sh_tok_to_tmp(1u64)
+    if SetCurrentDirectoryA((&SH_TMP) as u64) == 0i32 {
+        vb_emit("cd: no such directory: " as u64, 23u64)
+        vb_emit((&SH_TMP) as u64, vb_tok_len(1u64))
+        vb_emit("\n" as u64, 1u64)
+    }
+    return 0i32
+}
+
+fn sh_pwd() -> i32 {
+    let n : u32 = GetCurrentDirectoryA(1024u32, (&SH_TMP) as u64)
+    vb_emit((&SH_TMP) as u64, n as u64)
+    vb_emit("\n" as u64, 1u64)
+    return 0i32
+}
+
+fn sh_env() -> i32 {
+    if vb_ntok() < 2u64 { vb_emit("env: missing NAME\n" as u64, 18u64)   return 0i32 }
+    sh_tok_to_tmp(1u64)
+    /* read into SH_STG (env value may be long, e.g. PATH) */
+    let n : u32 = GetEnvironmentVariableA((&SH_TMP) as u64, (&SH_STG) as u64, 262144u32)
+    if n == 0u32 {
+        vb_emit("env: not set: " as u64, 14u64)
+        vb_emit((&SH_TMP) as u64, vb_tok_len(1u64))
+        vb_emit("\n" as u64, 1u64)
+    } else {
+        vb_emit((&SH_STG) as u64, n as u64)
+        vb_emit("\n" as u64, 1u64)
+    }
+    return 0i32
+}
+
+/* ls [pattern]: default "*"; emit each cFileName + newline */
+fn sh_ls() -> i32 {
+    if vb_ntok() >= 2u64 { sh_tok_to_tmp(1u64) }
+    else { SH_TMP[0u64] = 42u8   SH_TMP[1u64] = 0u8 }        /* "*" */
+    let h : u64 = FindFirstFileA((&SH_TMP) as u64, (&SH_FIND) as u64)
+    if h == SH_INVALID { vb_emit("ls: no matches\n" as u64, 15u64)   return 0i32 }
+    let mut more : u32 = 1u32
+    while more == 1u32 {
+        /* cFileName at +44, NUL-terminated */
+        let base : u64 = ((&SH_FIND) as u64) + 44u64
+        let bp : *u8 = base as *u8
+        let mut k : u64 = 0u64
+        let mut scan : u32 = 1u32
+        while scan == 1u32 {
+            if k >= 260u64 { scan = 0u32 }
+            else {
+                if bp[k] == 0u8 { scan = 0u32 }
+                else { k = k + 1u64 }
+            }
+        }
+        vb_emit(base, k)
+        vb_emit("\n" as u64, 1u64)
+        if FindNextFileA(h, (&SH_FIND) as u64) == 0i32 { more = 0u32 }
+    }
+    FindClose(h)
+    return 0i32
+}
+
+/* external: run the raw line captured (pipe mode), copy child stdout to transcript + "exit N". */
+fn sh_extern() -> i32 {
+    let rc : i32 = proc_run(vb_line_ptr(), 0u64, 60000u32)
+    if rc < 0i32 {
+        vb_emit("stoma: cannot spawn: " as u64, 21u64)
+        vb_emit(vb_line_ptr(), vb_line_len())
+        vb_emit("\n" as u64, 1u64)
+        return 0i32
+    }
+    /* copy captured stdout (bounded) into the transcript */
+    let mut olen : u64 = proc_out_len()
+    if olen > 262144u64 { olen = 262144u64 }
+    proc_out_copy((&SH_STG) as u64, 0u64, olen)
+    vb_emit((&SH_STG) as u64, olen)
+    if rc == 1i32 { vb_emit("\n[stoma] timed out\n" as u64, 19u64) }
+    vb_emit("[exit " as u64, 6u64)
+    vb_emit_num(proc_code() as u64)
+    vb_emit("]\n" as u64, 2u64)
+    return 0i32
+}
+
+/* Parse + dispatch one committed line.  Journals the input (kind 1) and the transcript
+ * (kind 2), then returns a control signal (0 continue, 2 exit). */
+fn shell_feed_line(line: u64, llen: u64) -> u32 @export {
+    /* journal the raw input line first (verbatim, before any dispatch) */
+    journal_append(1u32, line, llen)
+
+    let k : u32 = vb_parse(line, llen)      /* resets the transcript */
+    let mut sig : u32 = 0u32
+
+    if k == vb_k_empty() { sig = 0u32 }
+    else { if k == vb_k_err() { sig = 0u32 }         /* transcript already holds the caret error */
+    else { if k == vb_k_cd() { sh_cd() }
+    else { if k == vb_k_pwd() { sh_pwd() }
+    else { if k == vb_k_ls() { sh_ls() }
+    else { if k == vb_k_env() { sh_env() }
+    else { if k == vb_k_help() { vb_do_help() }
+    else { if k == vb_k_plain() { SH_PLAIN = 1u32   vb_emit("[plain mode]\n" as u64, 13u64) }
+    else { if k == vb_k_exit() { sig = 2u32 }
+    else { sh_extern() }                              /* EXTERN + (M4) gate/seal/build fallthrough */
+    } } } } } } } }
+
+    /* journal the transcript output (verbatim) */
+    journal_append(2u32, vb_out_ptr(), vb_out_len())
+    return sig
+}

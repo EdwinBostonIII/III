@@ -1,0 +1,265 @@
+/* STDLIB/iii/aether/stoma_pty.iii -- STOMA organ: ConPTY jobs (M3 of DOCS/III-STOMA-PLAN.md).
+ *
+ * The interactive-job broker of the wire plane.  Productizes the M0 probe (exit 99): a child
+ * attached to a real kernel pseudoconsole, so cmd/powershell/git/msys/TUIs all believe they are
+ * on their native console and emit their true VT.  ONE live pty at a time (STOMA drives one
+ * foreground job; background jobs use stoma_proc pipe mode) -- state is module-scoped, which also
+ * keeps every function under the cg_r3 local-slot ceiling.
+ *
+ * PINNED ConPTY facts (from the probe, DOCS/III-STOMA-PLAN.md Sec 2):
+ *   - CreatePseudoConsole(size u32 = cols|rows<<16, hin, hout, 0, &hpc); S_OK == 0.
+ *   - UpdateProcThreadAttribute(list, 0, 0x20016, hpc AS VALUE, 8, 0, 0)  (NOT pointer-to-hpc).
+ *   - STARTUPINFOEXA: cb=112@0, dwFlags=STARTF_USESTDHANDLES(0x100)@60 with NULL std handles
+ *     (else a redirected parent leaks child text past the pty -- trap T-CONPTY-STDIO),
+ *     lpAttributeList@104; CreateProcessA flag EXTENDED_STARTUPINFO_PRESENT(0x80000).
+ *   - Pump: PeekNamedPipe before ReadFile (blind read deadlocks until ClosePseudoConsole);
+ *     drain after child exit; post-close tail drain.
+ *
+ * Membrane law: pty_pump reads a child-byte slice VERBATIM into PT_RB and returns its length;
+ * the live driver forwards PT_RB[0..len] to the console + journal unchanged -- this module never
+ * transforms them.  A bounded tail accumulator (PT_ACC) mirrors recent bytes for search/KATs.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+module stoma_pty
+
+extern @abi(c-msvc-x64) fn CreatePipe(prd: u64, pwr: u64, sec: u64, size: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreatePseudoConsole(size: u32, hin: u64, hout: u64, flags: u32, phpc: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ResizePseudoConsole(hpc: u64, size: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ClosePseudoConsole(hpc: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn InitializeProcThreadAttributeList(list: u64, count: u32, flags: u32, psize: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn UpdateProcThreadAttribute(list: u64, flags: u32, attr: u64, val: u64, sz: u64, prev: u64, ret: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn DeleteProcThreadAttributeList(list: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateProcessA(app: u64, cmd: u64, pa: u64, ta: u64, inherit: u32, flags: u32, env: u64, dir: u64, si: u64, pi: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn PeekNamedPipe(h: u64, buf: u64, n: u32, pread: u64, pavail: u64, pleft: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn WaitForSingleObject(h: u64, ms: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetExitCodeProcess(h: u64, pcode: u64) -> u32 from "kernel32"
+
+/* live pty state (single foreground job) */
+var PT_H     : [u64; 8]      /* 0 inR 1 inW 2 outR 3 outW 4 hpc 5 hproc 6 hthr */
+var PT_ATTR  : [u8; 256]     /* PROC_THREAD_ATTRIBUTE_LIST */
+var PT_SIEX  : [u8; 120]     /* STARTUPINFOEXA (112 used) */
+var PT_PI    : [u8; 24]      /* PROCESS_INFORMATION */
+var PT_CMD   : [u8; 2048]
+var PT_SCR   : [u64; 4]      /* out-params: attr-size, nread, avail, exit-code */
+var PT_RB    : [u8; 16384]   /* most-recent read slice (forwarded verbatim by the driver) */
+var PT_ACC   : [u8; 65536]   /* bounded tail accumulator (search / scrollback / KATs) */
+var PT_ACCLEN : u64 = 0u64   /* total bytes ever accumulated (may exceed the 64 KiB cap) */
+var PT_ALIVE : u32 = 0u32
+var PT_CODE  : u64 = 0u64
+
+const PT_ACC_CAP : u64 = 65536u64
+
+fn pt_w32(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u32 = (base + off) as *u32
+    p[0u64] = v
+    return 0i32
+}
+fn pt_w64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u64 = (base + off) as *u64
+    p[0u64] = v
+    return 0i32
+}
+fn pt_r64(base: u64, off: u64) -> u64 {
+    let p : *u64 = (base + off) as *u64
+    return p[0u64]
+}
+fn pt_zero(base: u64, n: u64) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < n { p[i] = 0u8   i = i + 1u64 }
+    return 0i32
+}
+
+/* pack a ConPTY COORD: cols | rows<<16 (clamped to sane console bounds) */
+fn pty_coord(cols: u32, rows: u32) -> u32 @export {
+    let mut c : u32 = cols
+    let mut r : u32 = rows
+    if c < 1u32 { c = 1u32 }
+    if c > 1000u32 { c = 1000u32 }
+    if r < 1u32 { r = 1u32 }
+    if r > 1000u32 { r = 1000u32 }
+    return c | (r << 16u32)
+}
+
+/* Open a pseudoconsole of the given size and spawn cmd attached to it.  cmd = NUL-terminated
+ * (copied private, CreateProcessA may write into it).  Returns 0 ok; 2 pipe; 3 pty; 4 attr;
+ * 5 attr-set; 6 spawn.  On success the job is running; drive it with pty_pump/pty_write. */
+fn pty_spawn(cmd: u64, cols: u32, rows: u32) -> i32 @export {
+    PT_ALIVE = 0u32
+    PT_CODE = 0u64
+
+    let s : *u8 = cmd as *u8
+    let mut i : u64 = 0u64
+    while i < 2047u64 {
+        let ch : u8 = s[i]
+        PT_CMD[i] = ch
+        if ch == 0u8 { i = 2047u64 }
+        else { i = i + 1u64 }
+    }
+    PT_CMD[2047u64] = 0u8
+
+    if CreatePipe((&PT_H) as u64, ((&PT_H) as u64) + 8u64, 0u64, 0u32) == 0i32 { return 2i32 }
+    if CreatePipe(((&PT_H) as u64) + 16u64, ((&PT_H) as u64) + 24u64, 0u64, 0u32) == 0i32 { return 2i32 }
+
+    let sz : u32 = pty_coord(cols, rows)
+    if CreatePseudoConsole(sz, PT_H[0u64], PT_H[3u64], 0u32, ((&PT_H) as u64) + 32u64) != 0i32 { return 3i32 }
+
+    InitializeProcThreadAttributeList(0u64, 1u32, 0u32, (&PT_SCR) as u64)
+    if PT_SCR[0u64] == 0u64 { return 4i32 }
+    if PT_SCR[0u64] > 256u64 { return 4i32 }
+    if InitializeProcThreadAttributeList((&PT_ATTR) as u64, 1u32, 0u32, (&PT_SCR) as u64) == 0i32 { return 4i32 }
+    /* PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x20016; hpc passed AS the value (probe-adjudicated) */
+    if UpdateProcThreadAttribute((&PT_ATTR) as u64, 0u32, 131094u64, PT_H[4u64], 8u64, 0u64, 0u64) == 0i32 { return 5i32 }
+
+    pt_zero((&PT_SIEX) as u64, 120u64)
+    pt_w32((&PT_SIEX) as u64, 0u64, 112u32)             /* cb = sizeof STARTUPINFOEXA */
+    pt_w32((&PT_SIEX) as u64, 60u64, 256u32)            /* dwFlags = STARTF_USESTDHANDLES, NULL handles */
+    pt_w64((&PT_SIEX) as u64, 104u64, (&PT_ATTR) as u64)
+    pt_zero((&PT_PI) as u64, 24u64)
+
+    /* EXTENDED_STARTUPINFO_PRESENT = 0x80000 */
+    if CreateProcessA(0u64, (&PT_CMD) as u64, 0u64, 0u64, 0u32, 524288u32, 0u64, 0u64, (&PT_SIEX) as u64, (&PT_PI) as u64) == 0u32 {
+        return 6i32
+    }
+    PT_H[5u64] = pt_r64((&PT_PI) as u64, 0u64)
+    PT_H[6u64] = pt_r64((&PT_PI) as u64, 8u64)
+
+    /* the pty owns inR/outW now */
+    CloseHandle(PT_H[0u64])
+    CloseHandle(PT_H[3u64])
+    PT_ALIVE = 1u32
+    return 0i32
+}
+
+/* Address + length of the most-recent slice (for the live driver to forward verbatim). */
+fn pty_rb_ptr() -> u64 @export { return (&PT_RB) as u64 }
+
+/* Bounded tail accumulator: append the just-read slice, wrapping the 64 KiB cap. */
+fn pt_accum(n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        let slot : u64 = (PT_ACCLEN + i) % PT_ACC_CAP
+        PT_ACC[slot] = PT_RB[i]
+        i = i + 1u64
+    }
+    PT_ACCLEN = PT_ACCLEN + n
+    return 0i32
+}
+
+fn pty_acc_reset() -> i32 @export { PT_ACCLEN = 0u64   return 0i32 }
+fn pty_acc_len() -> u64 @export { return PT_ACCLEN }
+
+/* substring search over the (possibly wrapped) accumulator; 1 = present.  When the total
+ * exceeds the cap the search covers the retained 64 KiB window in write order. */
+fn pty_acc_find(pat: u64, plen: u64) -> u32 @export {
+    if plen == 0u64 { return 1u32 }
+    let mut stored : u64 = PT_ACCLEN
+    let mut base : u64 = 0u64
+    if stored > PT_ACC_CAP {
+        base = PT_ACCLEN - PT_ACC_CAP
+        stored = PT_ACC_CAP
+    }
+    if stored < plen { return 0u32 }
+    let s : *u8 = pat as *u8
+    let mut i : u64 = 0u64
+    let lim : u64 = stored - plen + 1u64
+    while i < lim {
+        let mut j : u64 = 0u64
+        let mut ok : u32 = 1u32
+        while j < plen {
+            let slot : u64 = (base + i + j) % PT_ACC_CAP
+            if PT_ACC[slot] != s[j] { ok = 0u32   j = plen }
+            else { j = j + 1u64 }
+        }
+        if ok == 1u32 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* One nonblocking pump slice: if the pty has bytes, read them VERBATIM into PT_RB, mirror them
+ * into the tail accumulator, and return the byte count (0 = none this slice).  The live driver
+ * forwards pty_rb_ptr()[0..return] to the console + journal unchanged. */
+fn pty_pump() -> u64 @export {
+    if PT_ALIVE == 0u32 { return 0u64 }
+    if PeekNamedPipe(PT_H[2u64], 0u64, 0u32, 0u64, ((&PT_SCR) as u64) + 16u64, 0u64) == 0i32 { return 0u64 }
+    let avail : u64 = PT_SCR[2u64]
+    if avail == 0u64 { return 0u64 }
+    let mut want : u32 = 16384u32
+    if avail < 16384u64 { want = avail as u32 }
+    if ReadFile(PT_H[2u64], (&PT_RB) as u64, want, ((&PT_SCR) as u64) + 8u64, 0u64) == 0i32 { return 0u64 }
+    let got : u64 = PT_SCR[1u64]
+    if got == 0u64 { return 0u64 }
+    pt_accum(got)
+    return got
+}
+
+/* Write bytes to the child's input (keystrokes/paste). */
+fn pty_write(p: u64, n: u32) -> i32 @export {
+    if PT_ALIVE == 0u32 { return 0i32 - 1i32 }
+    if WriteFile(PT_H[1u64], p, n, ((&PT_SCR) as u64) + 8u64, 0u64) == 0i32 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* Send Ctrl-C (0x03) to the child. */
+fn pty_ctrlc() -> i32 @export {
+    var PT_ETX : [u8; 1]
+    PT_ETX[0u64] = 3u8
+    return pty_write((&PT_ETX) as u64, 1u32)
+}
+
+/* Resize the pseudoconsole (on parent console resize). */
+fn pty_resize(cols: u32, rows: u32) -> i32 @export {
+    if PT_ALIVE == 0u32 { return 0i32 - 1i32 }
+    return ResizePseudoConsole(PT_H[4u64], pty_coord(cols, rows))
+}
+
+/* Has the child exited?  1 = yes (fills PT_CODE), 0 = still running. */
+fn pty_exited() -> u32 @export {
+    if PT_ALIVE == 0u32 { return 1u32 }
+    if WaitForSingleObject(PT_H[5u64], 0u32) == 0u32 {
+        GetExitCodeProcess(PT_H[5u64], ((&PT_SCR) as u64) + 24u64)
+        PT_CODE = PT_SCR[3u64]
+        return 1u32
+    }
+    return 0u32
+}
+
+fn pty_code() -> u32 @export { return PT_CODE as u32 }
+
+/* Close the pty job: flush the tail into the accumulator, close pty (breaks the pipe), reap.
+ * The live driver forwards each slice as it lands; here we just ensure the pipe is fully drained
+ * (the accumulator holds the tail for any final scrollback/search). */
+fn pty_close() -> i32 @export {
+    if PT_ALIVE == 0u32 { return 0i32 }
+    /* drain whatever the child already produced */
+    let mut spins : u32 = 0u32
+    while spins < 64u32 {
+        spins = spins + 1u32
+        if pty_pump() == 0u64 {
+            if pty_exited() == 1u32 { spins = 64u32 }
+        }
+    }
+    ClosePseudoConsole(PT_H[4u64])
+    /* post-close tail drain */
+    let mut tail : u32 = 0u32
+    while tail < 64u32 {
+        tail = tail + 1u32
+        if pty_pump() == 0u64 { tail = 64u32 }
+    }
+    if pty_exited() != 1u32 {
+        WaitForSingleObject(PT_H[5u64], 5000u32)
+        GetExitCodeProcess(PT_H[5u64], ((&PT_SCR) as u64) + 24u64)
+        PT_CODE = PT_SCR[3u64]
+    }
+    CloseHandle(PT_H[2u64])
+    CloseHandle(PT_H[1u64])
+    CloseHandle(PT_H[6u64])
+    CloseHandle(PT_H[5u64])
+    PT_ALIVE = 0u32
+    return 0i32
+}

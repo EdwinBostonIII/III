@@ -1,0 +1,256 @@
+/* STDLIB/iii/aether/stoma_line.iii -- STOMA organ: the line editor (M4 of III-STOMA-PLAN.md).
+ *
+ * A headless-testable input line with a history ring and verb/path completion.  It owns NO IO:
+ * the driver feeds it decoded keys (stoma_con's packed kind|value) via ln_key and reads the
+ * rendered line back through accessors.  This keeps the editor pure enough to KAT byte-exactly
+ * (scripted key stream -> expected buffer + caret) and small enough for the cg_r3 slot ceiling.
+ *
+ * Key kinds (from stoma_con.con_key_decode): 1 printable(char) | 2 special(code) | 3 ctrl(1..26).
+ * Specials handled: 1 up, 2 down (history), 3 left, 4 right, 5 enter (commit), 7 backspace,
+ * 8 tab (completion), 11 home, 12 end, 13 delete.  Ctrl: 1 (Ctrl+A=home), 5 (Ctrl+E=end),
+ * 21 (Ctrl+U=kill line).  Enter returns 1 (line ready); everything else returns 0.
+ *
+ * Completion is a two-source pull: the driver registers candidate strings (verbs, then dir
+ * entries) via ln_cand_reset/ln_cand_add before it presses Tab-equivalent; ln_complete fills the
+ * common prefix of the candidates that match the current token.  (The driver decides WHICH
+ * candidates -- the editor stays domain-neutral.)
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_line
+
+const LN_MAX   : u64 = 1024u64        /* max line bytes */
+const LN_HISTN : u64 = 64u64          /* history ring entries */
+const LN_CANDN : u64 = 256u64         /* max completion candidates */
+
+var LN_BUF   : [u8; 1024]             /* current line */
+var LN_LEN   : u64 = 0u64             /* line length */
+var LN_CUR   : u64 = 0u64             /* caret position (0..LN_LEN) */
+
+var LN_HIST  : [u8; 65536]            /* 64 * 1024 ring of past lines */
+var LN_HLEN  : [u64; 64]              /* length of each ring slot */
+var LN_HHEAD : u64 = 0u64             /* count of lines ever committed */
+var LN_HNAV  : u64 = 0u64             /* current up/down nav depth (0 = editing live) */
+
+var LN_CAND  : [u8; 16384]            /* candidate strings, NUL-separated */
+var LN_COFF  : [u64; 256]             /* offset of each candidate in LN_CAND */
+var LN_CLEN  : [u64; 256]             /* length of each candidate */
+var LN_CN    : u64 = 0u64             /* candidate count */
+var LN_CFILL : u64 = 0u64             /* fill cursor into LN_CAND */
+
+/* ── line accessors ─────────────────────────────────────────────────────────────────────── */
+fn ln_len() -> u64 @export { return LN_LEN }
+fn ln_cur() -> u64 @export { return LN_CUR }
+fn ln_byte(i: u64) -> u8 @export {
+    if i >= LN_LEN { return 0u8 }
+    return LN_BUF[i]
+}
+fn ln_ptr() -> u64 @export { return (&LN_BUF) as u64 }
+
+fn ln_reset() -> i32 @export {
+    LN_LEN = 0u64
+    LN_CUR = 0u64
+    LN_HNAV = 0u64
+    return 0i32
+}
+
+/* insert one byte at the caret */
+fn ln_insert(c: u8) -> i32 {
+    if LN_LEN >= LN_MAX { return 0i32 }
+    /* shift right from the end down to caret */
+    let mut i : u64 = LN_LEN
+    while i > LN_CUR {
+        LN_BUF[i] = LN_BUF[i - 1u64]
+        i = i - 1u64
+    }
+    LN_BUF[LN_CUR] = c
+    LN_LEN = LN_LEN + 1u64
+    LN_CUR = LN_CUR + 1u64
+    return 0i32
+}
+
+fn ln_backspace() -> i32 {
+    if LN_CUR == 0u64 { return 0i32 }
+    let mut i : u64 = LN_CUR
+    while i < LN_LEN {
+        LN_BUF[i - 1u64] = LN_BUF[i]
+        i = i + 1u64
+    }
+    LN_LEN = LN_LEN - 1u64
+    LN_CUR = LN_CUR - 1u64
+    return 0i32
+}
+
+fn ln_delete() -> i32 {
+    if LN_CUR >= LN_LEN { return 0i32 }
+    let mut i : u64 = LN_CUR
+    while i + 1u64 < LN_LEN {
+        LN_BUF[i] = LN_BUF[i + 1u64]
+        i = i + 1u64
+    }
+    LN_LEN = LN_LEN - 1u64
+    return 0i32
+}
+
+/* load a history slot into the live buffer (nav = 1..depth from newest) */
+fn ln_load_hist(nav: u64) -> i32 {
+    if nav == 0u64 { LN_LEN = 0u64   LN_CUR = 0u64   return 0i32 }
+    if nav > LN_HHEAD { return 0i32 }
+    if nav > LN_HISTN { return 0i32 }
+    let slot : u64 = (LN_HHEAD - nav) % LN_HISTN
+    let n : u64 = LN_HLEN[slot]
+    let base : u64 = slot * LN_MAX
+    let mut i : u64 = 0u64
+    while i < n {
+        LN_BUF[i] = LN_HIST[base + i]
+        i = i + 1u64
+    }
+    LN_LEN = n
+    LN_CUR = n
+    return 0i32
+}
+
+/* commit the live line to the history ring */
+fn ln_commit() -> i32 {
+    if LN_LEN == 0u64 { return 0i32 }
+    let slot : u64 = LN_HHEAD % LN_HISTN
+    let base : u64 = slot * LN_MAX
+    let mut i : u64 = 0u64
+    while i < LN_LEN {
+        LN_HIST[base + i] = LN_BUF[i]
+        i = i + 1u64
+    }
+    LN_HLEN[slot] = LN_LEN
+    LN_HHEAD = LN_HHEAD + 1u64
+    return 0i32
+}
+
+/* ── completion candidate registration (driver-supplied) ──────────────────────────────────── */
+fn ln_cand_reset() -> i32 @export {
+    LN_CN = 0u64
+    LN_CFILL = 0u64
+    return 0i32
+}
+fn ln_cand_add(s: u64, n: u64) -> i32 @export {
+    if LN_CN >= LN_CANDN { return 0i32 }
+    if LN_CFILL + n + 1u64 > 16384u64 { return 0i32 }
+    let src : *u8 = s as *u8
+    LN_COFF[LN_CN] = LN_CFILL
+    LN_CLEN[LN_CN] = n
+    let mut i : u64 = 0u64
+    while i < n {
+        LN_CAND[LN_CFILL + i] = src[i]
+        i = i + 1u64
+    }
+    LN_CFILL = LN_CFILL + n
+    LN_CAND[LN_CFILL] = 0u8
+    LN_CFILL = LN_CFILL + 1u64
+    LN_CN = LN_CN + 1u64
+    return 0i32
+}
+
+/* start of the token under the caret (last run of non-space bytes before caret) */
+fn ln_token_start() -> u64 {
+    if LN_CUR == 0u64 { return 0u64 }
+    let mut i : u64 = LN_CUR
+    while i > 0u64 {
+        if LN_BUF[i - 1u64] == 32u8 { return i }
+        i = i - 1u64
+    }
+    return 0u64
+}
+
+/* candidate c matches the token [tstart..LN_CUR) as a prefix? */
+fn ln_cand_matches(c: u64, tstart: u64) -> u32 {
+    let tlen : u64 = LN_CUR - tstart
+    if LN_CLEN[c] < tlen { return 0u32 }
+    let coff : u64 = LN_COFF[c]
+    let mut i : u64 = 0u64
+    while i < tlen {
+        if LN_CAND[coff + i] != LN_BUF[tstart + i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* Complete the token under the caret to the longest common prefix of matching candidates.
+ * Returns the number of matches (0 none, 1 unique->fully inserted, >1 common prefix inserted). */
+fn ln_complete() -> u64 @export {
+    let tstart : u64 = ln_token_start()
+    let tlen : u64 = LN_CUR - tstart
+    /* first matching candidate seeds the common prefix; then intersect */
+    let mut matches : u64 = 0u64
+    let mut first : u64 = 0u64
+    let mut cp : u64 = 0u64          /* common-prefix length among matches */
+    let mut c : u64 = 0u64
+    while c < LN_CN {
+        if ln_cand_matches(c, tstart) == 1u32 {
+            if matches == 0u64 {
+                first = c
+                cp = LN_CLEN[c]
+            } else {
+                /* shrink cp to the shared prefix of candidate `first` and candidate `c` */
+                let of1 : u64 = LN_COFF[first]
+                let of2 : u64 = LN_COFF[c]
+                let mut m : u64 = 0u64
+                let lim1 : u64 = LN_CLEN[c]
+                while m < cp {
+                    if m >= lim1 { m = cp }
+                    else {
+                        if LN_CAND[of1 + m] != LN_CAND[of2 + m] { cp = m }
+                        else { m = m + 1u64 }
+                    }
+                }
+            }
+            matches = matches + 1u64
+        }
+        c = c + 1u64
+    }
+    if matches == 0u64 { return 0u64 }
+    /* insert the completion tail (candidate `first`, bytes tlen..cp) at the caret */
+    let of : u64 = LN_COFF[first]
+    let mut j : u64 = tlen
+    while j < cp {
+        ln_insert(LN_CAND[of + j])
+        j = j + 1u64
+    }
+    return matches
+}
+
+/* Feed one decoded key.  Returns 1 = line committed (Enter), 0 = still editing. */
+fn ln_key(kind: u32, val: u32) -> u32 @export {
+    if kind == 1u32 {
+        LN_HNAV = 0u64
+        ln_insert(val as u8)
+        return 0u32
+    }
+    if kind == 3u32 {
+        if val == 1u32  { LN_CUR = 0u64 }                 /* Ctrl+A home */
+        if val == 5u32  { LN_CUR = LN_LEN }               /* Ctrl+E end  */
+        if val == 21u32 { LN_LEN = 0u64   LN_CUR = 0u64 } /* Ctrl+U kill */
+        return 0u32
+    }
+    /* kind == 2 specials */
+    if val == 5u32 {                                       /* enter */
+        ln_commit()
+        return 1u32
+    }
+    if val == 7u32 { LN_HNAV = 0u64   ln_backspace()   return 0u32 }
+    if val == 13u32 { ln_delete()   return 0u32 }
+    if val == 3u32 { if LN_CUR > 0u64 { LN_CUR = LN_CUR - 1u64 }   return 0u32 }   /* left */
+    if val == 4u32 { if LN_CUR < LN_LEN { LN_CUR = LN_CUR + 1u64 }   return 0u32 } /* right */
+    if val == 11u32 { LN_CUR = 0u64   return 0u32 }        /* home */
+    if val == 12u32 { LN_CUR = LN_LEN   return 0u32 }      /* end  */
+    if val == 8u32 { ln_complete()   return 0u32 }         /* tab  */
+    if val == 1u32 {                                       /* up: older history */
+        if LN_HNAV < LN_HHEAD { LN_HNAV = LN_HNAV + 1u64   ln_load_hist(LN_HNAV) }
+        return 0u32
+    }
+    if val == 2u32 {                                       /* down: newer history */
+        if LN_HNAV > 0u64 { LN_HNAV = LN_HNAV - 1u64   ln_load_hist(LN_HNAV) }
+        return 0u32
+    }
+    return 0u32
+}
+
+fn ln_hist_count() -> u64 @export { return LN_HHEAD }

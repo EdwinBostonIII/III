@@ -1,0 +1,115 @@
+/* 2458_stoma_line.iii -- STOMA M4 gate: the line editor, headless.
+ *
+ * Drives ln_key with scripted decoded-key streams and asserts the buffer + caret + history +
+ * completion behave byte-exactly.  No console -- pure editor logic (Collapse Law: the editor is
+ * the same in every mode).
+ *
+ * Exit map: 10-13 insert/caret; 20-22 edit ops; 30-33 history; 40-44 completion; 99 pass.
+ * NIH: stoma_line only. */
+module corpus_2458
+
+extern @abi(c-msvc-x64) fn ln_reset() -> i32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_key(kind: u32, val: u32) -> u32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_len() -> u64 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_cur() -> u64 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_byte(i: u64) -> u8 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_hist_count() -> u64 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_cand_reset() -> i32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_cand_add(s: u64, n: u64) -> i32 from "stoma_line.iii"
+extern @abi(c-msvc-x64) fn ln_complete() -> u64 from "stoma_line.iii"
+
+/* type a literal string as printable keys */
+fn type_str(s: u64, n: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        ln_key(1u32, p[i] as u32)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* assert buffer equals literal */
+fn buf_eq(s: u64, n: u64) -> u32 {
+    if ln_len() != n { return 0u32 }
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if ln_byte(i) != p[i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ── 1. insert + caret ── */
+    ln_reset()
+    type_str("hello" as u64, 5u64)
+    if buf_eq("hello" as u64, 5u64) != 1u32 { return 10u64 }
+    if ln_cur() != 5u64 { return 11u64 }
+    /* left twice, insert 'X' -> "helXlo" */
+    ln_key(2u32, 3u32)  ln_key(2u32, 3u32)
+    if ln_cur() != 3u64 { return 12u64 }
+    ln_key(1u32, 88u32)
+    if buf_eq("helXlo" as u64, 6u64) != 1u32 { return 13u64 }
+
+    /* ── 2. edit ops: backspace, delete, home/end, ctrl-u ── */
+    ln_reset()
+    type_str("abcd" as u64, 4u64)
+    ln_key(2u32, 7u32)                    /* backspace -> "abc" */
+    if buf_eq("abc" as u64, 3u64) != 1u32 { return 20u64 }
+    ln_key(2u32, 11u32)                   /* home */
+    ln_key(2u32, 13u32)                   /* delete 'a' -> "bc" */
+    if buf_eq("bc" as u64, 2u64) != 1u32 { return 21u64 }
+    ln_key(3u32, 21u32)                   /* Ctrl+U kill */
+    if ln_len() != 0u64 { return 22u64 }
+
+    /* ── 3. history: commit two lines, navigate up ── */
+    /* (the driver reads the line after Enter, THEN calls ln_reset(); mirror that here) */
+    ln_reset()
+    type_str("first" as u64, 5u64)
+    ln_key(2u32, 5u32)                    /* enter -> commit "first" */
+    ln_reset()
+    type_str("second" as u64, 6u64)
+    ln_key(2u32, 5u32)                    /* commit "second" */
+    ln_reset()
+    if ln_hist_count() != 2u64 { return 30u64 }
+    ln_reset()
+    ln_key(2u32, 1u32)                    /* up -> "second" (newest) */
+    if buf_eq("second" as u64, 6u64) != 1u32 { return 31u64 }
+    ln_key(2u32, 1u32)                    /* up -> "first" */
+    if buf_eq("first" as u64, 5u64) != 1u32 { return 32u64 }
+    ln_key(2u32, 2u32)                    /* down -> "second" */
+    if buf_eq("second" as u64, 6u64) != 1u32 { return 33u64 }
+
+    /* ── 4. completion ── */
+    /* unique prefix: candidates {gate, git, ls}; token "ga" -> "gate" */
+    ln_reset()
+    ln_cand_reset()
+    ln_cand_add("gate" as u64, 4u64)
+    ln_cand_add("git" as u64, 3u64)
+    ln_cand_add("ls" as u64, 2u64)
+    type_str("ga" as u64, 2u64)
+    let m1 : u64 = ln_complete()
+    if m1 != 1u64 { return 40u64 }
+    if buf_eq("gate" as u64, 4u64) != 1u32 { return 41u64 }
+    /* common prefix: candidates {build, builtin}; token "bu" -> "buil" (2 matches) */
+    ln_reset()
+    ln_cand_reset()
+    ln_cand_add("build" as u64, 5u64)
+    ln_cand_add("builtin" as u64, 7u64)
+    type_str("bu" as u64, 2u64)
+    let m2 : u64 = ln_complete()
+    if m2 != 2u64 { return 42u64 }
+    if buf_eq("buil" as u64, 4u64) != 1u32 { return 43u64 }
+    /* no match: token "zz" unchanged */
+    ln_reset()
+    ln_cand_reset()
+    ln_cand_add("gate" as u64, 4u64)
+    type_str("zz" as u64, 2u64)
+    let m3 : u64 = ln_complete()
+    if m3 != 0u64 { return 44u64 }
+    if buf_eq("zz" as u64, 2u64) != 1u32 { return 44u64 }
+
+    return 99u64
+}

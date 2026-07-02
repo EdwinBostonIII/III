@@ -1,0 +1,394 @@
+/* STDLIB/iii/aether/stoma_con.iii -- STOMA organ: our OWN console (M1 of DOCS/III-STOMA-PLAN.md).
+ *
+ * The console face of the sovereign CLI: detect whether stdout is a real console (plain-mode
+ * detector -- the Collapse Law's sensor), enable VT processing, emit VT sequences from PURE
+ * builders (headless-KATable byte generators; the live emitters are one WriteFile away), decode
+ * console key events from raw INPUT_RECORDs (pure decoder + live reader), and convert UTF-8⇄16
+ * at the W-API membrane.  kernel32 is the only OS surface; no C runtime, no msvcrt.
+ *
+ * Layering law (Membrane/Collapse): everything here is OUR face's plumbing -- child wires never
+ * pass through this module.  Every visual capability has a pure byte-level form so views can be
+ * KAT'd without a console and can collapse to plain output when con_init() reports redirected.
+ *
+ * Key encoding (con_key/con_key_decode): 0 = nothing; else (kind<<16)|value with
+ *   kind 1 = printable char   (value = unicode code unit)
+ *   kind 2 = special          (1 up 2 down 3 left 4 right 5 enter 6 esc 7 backspace 8 tab
+ *                              9 pgup 10 pgdn 11 home 12 end 13 delete)
+ *   kind 3 = ctrl-letter      (value = 1..26, Ctrl+A..Ctrl+Z)
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+module stoma_con
+
+extern @abi(c-msvc-x64) fn GetStdHandle(which: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn GetConsoleMode(h: u64, pmode: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn SetConsoleMode(h: u64, mode: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadConsoleInputW(h: u64, prec: u64, n: u32, pnr: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetNumberOfConsoleInputEvents(h: u64, pn: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetConsoleScreenBufferInfo(h: u64, pinfo: u64) -> i32 from "kernel32"
+
+/* state (literal initializers only -- computed values are set in con_init) */
+var SC_HOUT  : u64 = 0u64          /* stdout handle */
+var SC_HIN   : u64 = 0u64          /* stdin handle  */
+var SC_MOUT0 : u64 = 0u64          /* original stdout mode (valid when SC_STATE==1) */
+var SC_MIN0  : u64 = 0u64          /* original stdin mode  */
+var SC_STATE : u32 = 0u32          /* 0 uninit; 1 console; 2 redirected/plain */
+var SC_SCR   : [u64; 4]            /* scratch out-params (mode, nwritten, nread, events) */
+var SC_CSBI  : [u8; 24]            /* CONSOLE_SCREEN_BUFFER_INFO (22 used) */
+var SC_REC   : [u8; 24]            /* one INPUT_RECORD (20 used) */
+
+/* ── init / restore ─────────────────────────────────────────────────────────────────────── */
+
+/* Detect console vs redirected and enable VT output processing.  Returns 0 = interactive
+ * console (VT enabled), 1 = redirected (plain mode; NOTHING touched).  Idempotent. */
+fn con_init() -> i32 @export {
+    SC_HOUT = GetStdHandle(4294967285u32)          /* STD_OUTPUT_HANDLE (-11) */
+    SC_HIN  = GetStdHandle(4294967286u32)          /* STD_INPUT_HANDLE  (-10) */
+    if GetConsoleMode(SC_HOUT, (&SC_SCR) as u64) == 0i32 {
+        SC_STATE = 2u32
+        return 1i32
+    }
+    SC_MOUT0 = SC_SCR[0u64]
+    /* ENABLE_VIRTUAL_TERMINAL_PROCESSING(0x4) | DISABLE_NEWLINE_AUTO_RETURN(0x8) on top */
+    let want : u32 = (SC_MOUT0 as u32) | 4u32 | 8u32
+    SetConsoleMode(SC_HOUT, want)
+    if GetConsoleMode(SC_HIN, (&SC_SCR) as u64) != 0i32 {
+        SC_MIN0 = SC_SCR[0u64]
+    }
+    SC_STATE = 1u32
+    return 0i32
+}
+
+/* Raw key input on (1) / off (0): line+echo+processed off, VT input on.  Console mode only. */
+fn con_raw(on: u32) -> i32 @export {
+    if SC_STATE != 1u32 { return 1i32 }
+    if on == 1u32 {
+        /* keep EXTENDED_FLAGS(0x80)|WINDOW_INPUT(0x8)? no: minimal raw = mouse+window off,
+         * ENABLE_VIRTUAL_TERMINAL_INPUT(0x200) + EXTENDED_FLAGS(0x80) only */
+        SetConsoleMode(SC_HIN, 640u32)             /* 0x200 | 0x80 */
+    } else {
+        SetConsoleMode(SC_HIN, SC_MIN0 as u32)
+    }
+    return 0i32
+}
+
+/* Restore both saved modes (call at exit). */
+fn con_restore() -> i32 @export {
+    if SC_STATE != 1u32 { return 1i32 }
+    SetConsoleMode(SC_HOUT, SC_MOUT0 as u32)
+    SetConsoleMode(SC_HIN,  SC_MIN0 as u32)
+    return 0i32
+}
+
+fn con_state() -> u32 @export { return SC_STATE }
+
+/* ── raw out / in ───────────────────────────────────────────────────────────────────────── */
+
+fn con_out(p: u64, n: u32) -> i32 @export {
+    if n == 0u32 { return 0i32 }
+    if WriteFile(SC_HOUT, p, n, ((&SC_SCR) as u64) + 8u64, 0u64) == 0i32 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* blocking byte read from stdin (plain/piped mode); returns bytes read, 0 = EOF */
+fn con_in_raw(p: u64, cap: u32) -> u32 @export {
+    if ReadFile(SC_HIN, p, cap, ((&SC_SCR) as u64) + 16u64, 0u64) == 0i32 { return 0u32 }
+    return SC_SCR[2u64] as u32
+}
+
+/* console size: (cols<<32)|rows from the VIEW rect; 80x25 fallback when redirected */
+fn con_size() -> u64 @export {
+    if SC_STATE == 1u32 {
+        if GetConsoleScreenBufferInfo(SC_HOUT, (&SC_CSBI) as u64) != 0i32 {
+            /* srWindow SMALL_RECT @10: l,t,r,b as i16 */
+            let l : u64 = (SC_CSBI[10u64] as u64) | ((SC_CSBI[11u64] as u64) << 8u64)
+            let t : u64 = (SC_CSBI[12u64] as u64) | ((SC_CSBI[13u64] as u64) << 8u64)
+            let r : u64 = (SC_CSBI[14u64] as u64) | ((SC_CSBI[15u64] as u64) << 8u64)
+            let b : u64 = (SC_CSBI[16u64] as u64) | ((SC_CSBI[17u64] as u64) << 8u64)
+            let w : u64 = r - l + 1u64
+            let h : u64 = b - t + 1u64
+            return (w << 32u64) | h
+        }
+    }
+    return (80u64 << 32u64) | 25u64
+}
+
+/* ── PURE VT builders (headless-KATable byte generators) ───────────────────────────────────
+ * Each writes its escape sequence into dst and returns the byte count.  ESC = 27. */
+
+fn sc_wb(dst: u64, off: u32, b: u8) -> u32 {
+    let p : *u8 = (dst + (off as u64)) as *u8
+    p[0u64] = b
+    return off + 1u32
+}
+
+/* decimal u32 into dst at off; returns new off */
+fn sc_wnum(dst: u64, off: u32, v: u32) -> u32 {
+    var SC_DIG : [u8; 12]
+    if v == 0u32 { return sc_wb(dst, off, 48u8) }
+    let mut x : u32 = v
+    let mut k : u32 = 0u32
+    while x > 0u32 {
+        SC_DIG[k as u64] = ((x % 10u32) + 48u32) as u8
+        x = x / 10u32
+        k = k + 1u32
+    }
+    let mut o : u32 = off
+    while k > 0u32 {
+        k = k - 1u32
+        o = sc_wb(dst, o, SC_DIG[k as u64])
+    }
+    return o
+}
+
+/* ESC [ ? <n> h|l */
+fn sc_priv(dst: u64, n: u32, on: u32) -> u32 {
+    let mut o : u32 = 0u32
+    o = sc_wb(dst, o, 27u8)
+    o = sc_wb(dst, o, 91u8)
+    o = sc_wb(dst, o, 63u8)
+    o = sc_wnum(dst, o, n)
+    let mut c : u8 = 108u8
+    if on == 1u32 { c = 104u8 }
+    o = sc_wb(dst, o, c)
+    return o
+}
+
+fn con_vt_alt(dst: u64, enter: u32) -> u32 @export { return sc_priv(dst, 1049u32, enter) }
+fn con_vt_cursor(dst: u64, show: u32) -> u32 @export { return sc_priv(dst, 25u32, show) }
+
+/* mouse: SGR-encoded (1006) + button-event tracking (1002), set or clear both */
+fn con_vt_mouse(dst: u64, on: u32) -> u32 @export {
+    let a : u32 = sc_priv(dst, 1002u32, on)
+    let b : u32 = sc_priv(dst + (a as u64), 1006u32, on)
+    return a + b
+}
+
+/* ESC [ 2 J */
+fn con_vt_clear(dst: u64) -> u32 @export {
+    let mut o : u32 = 0u32
+    o = sc_wb(dst, o, 27u8)
+    o = sc_wb(dst, o, 91u8)
+    o = sc_wb(dst, o, 50u8)
+    o = sc_wb(dst, o, 74u8)
+    return o
+}
+
+/* ESC [ <row> ; <col> H   (1-based) */
+fn con_vt_cup(dst: u64, row: u32, col: u32) -> u32 @export {
+    let mut o : u32 = 0u32
+    o = sc_wb(dst, o, 27u8)
+    o = sc_wb(dst, o, 91u8)
+    o = sc_wnum(dst, o, row)
+    o = sc_wb(dst, o, 59u8)
+    o = sc_wnum(dst, o, col)
+    o = sc_wb(dst, o, 72u8)
+    return o
+}
+
+/* ESC [ <n> m */
+fn con_vt_sgr(dst: u64, n: u32) -> u32 @export {
+    let mut o : u32 = 0u32
+    o = sc_wb(dst, o, 27u8)
+    o = sc_wb(dst, o, 91u8)
+    o = sc_wnum(dst, o, n)
+    o = sc_wb(dst, o, 109u8)
+    return o
+}
+
+/* ESC [ K  (erase to end of line) */
+fn con_vt_eol(dst: u64) -> u32 @export {
+    let mut o : u32 = 0u32
+    o = sc_wb(dst, o, 27u8)
+    o = sc_wb(dst, o, 91u8)
+    o = sc_wb(dst, o, 75u8)
+    return o
+}
+
+/* ── key decode (pure) + live reader ───────────────────────────────────────────────────────
+ * INPUT_RECORD layout (x64): EventType u16 @0; KEY_EVENT_RECORD @4:
+ *   bKeyDown i32 @4, wRepeatCount u16 @8, wVirtualKeyCode u16 @10, wVirtualScanCode u16 @12,
+ *   UnicodeChar u16 @14, dwControlKeyState u32 @16.  KEY_EVENT = 0x0001. */
+
+fn sc_r16(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    return (p[0u64] as u32) | ((p[1u64] as u32) << 8u32)
+}
+
+fn con_key_decode(rec: u64) -> u32 @export {
+    let et : u32 = sc_r16(rec, 0u64)
+    if et != 1u32 { return 0u32 }                       /* not KEY_EVENT */
+    let pdown : *u8 = (rec + 4u64) as *u8
+    if pdown[0u64] == 0u8 { return 0u32 }               /* key-up */
+    let vk : u32 = sc_r16(rec, 10u64)
+    let ch : u32 = sc_r16(rec, 14u64)
+    let pcs : *u8 = (rec + 16u64) as *u8
+    let ctrl : u32 = (pcs[0u64] as u32) & 12u32         /* LEFT_CTRL 0x8 | RIGHT_CTRL 0x4 */
+    /* ctrl-letter: unicode 1..26 with a ctrl key held */
+    if ctrl != 0u32 {
+        if ch >= 1u32 {
+            if ch <= 26u32 { return (3u32 << 16u32) | ch }
+        }
+    }
+    /* specials by virtual key */
+    if vk == 38u32 { return (2u32 << 16u32) | 1u32 }    /* up    */
+    if vk == 40u32 { return (2u32 << 16u32) | 2u32 }    /* down  */
+    if vk == 37u32 { return (2u32 << 16u32) | 3u32 }    /* left  */
+    if vk == 39u32 { return (2u32 << 16u32) | 4u32 }    /* right */
+    if vk == 13u32 { return (2u32 << 16u32) | 5u32 }    /* enter */
+    if vk == 27u32 { return (2u32 << 16u32) | 6u32 }    /* esc   */
+    if vk == 8u32  { return (2u32 << 16u32) | 7u32 }    /* backspace */
+    if vk == 9u32  { return (2u32 << 16u32) | 8u32 }    /* tab   */
+    if vk == 33u32 { return (2u32 << 16u32) | 9u32 }    /* pgup  */
+    if vk == 34u32 { return (2u32 << 16u32) | 10u32 }   /* pgdn  */
+    if vk == 36u32 { return (2u32 << 16u32) | 11u32 }   /* home  */
+    if vk == 35u32 { return (2u32 << 16u32) | 12u32 }   /* end   */
+    if vk == 46u32 { return (2u32 << 16u32) | 13u32 }   /* del   */
+    if ch != 0u32  { return (1u32 << 16u32) | ch }      /* printable */
+    return 0u32                                          /* bare modifier etc. */
+}
+
+/* blocking read of ONE decoded key from the real console (0 when redirected) */
+fn con_key() -> u32 @export {
+    if SC_STATE != 1u32 { return 0u32 }
+    let mut k : u32 = 0u32
+    let mut guard : u32 = 0u32
+    while guard < 4096u32 {
+        guard = guard + 1u32
+        if ReadConsoleInputW(SC_HIN, (&SC_REC) as u64, 1u32, ((&SC_SCR) as u64) + 16u64) == 0i32 { return 0u32 }
+        k = con_key_decode((&SC_REC) as u64)
+        if k != 0u32 { guard = 4096u32 }
+    }
+    return k
+}
+
+/* nonblocking: 0 when no key pending */
+fn con_key_poll() -> u32 @export {
+    if SC_STATE != 1u32 { return 0u32 }
+    if GetNumberOfConsoleInputEvents(SC_HIN, ((&SC_SCR) as u64) + 24u64) == 0i32 { return 0u32 }
+    if SC_SCR[3u64] == 0u64 { return 0u32 }
+    if ReadConsoleInputW(SC_HIN, (&SC_REC) as u64, 1u32, ((&SC_SCR) as u64) + 16u64) == 0i32 { return 0u32 }
+    return con_key_decode((&SC_REC) as u64)
+}
+
+/* ── UTF-8 ⇄ UTF-16 (the W-API membrane; sovereign, no MultiByteToWideChar) ───────────────
+ * Invalid input becomes U+FFFD.  Returns count of u16 units / u8 bytes written. */
+
+fn sc_put16(dst: u64, idx: u32, v: u32) -> u32 {
+    let p : *u8 = (dst + ((idx as u64) * 2u64)) as *u8
+    p[0u64] = (v & 255u32) as u8
+    p[1u64] = ((v >> 8u32) & 255u32) as u8
+    return idx + 1u32
+}
+
+fn con_u8to16(src: u64, n: u32, dst: u64, cap: u32) -> u32 @export {
+    let s : *u8 = src as *u8
+    let mut i : u32 = 0u32
+    let mut o : u32 = 0u32
+    while i < n {
+        if o >= cap { i = n } else {
+        let b0 : u32 = s[i as u64] as u32
+        if b0 < 128u32 {
+            o = sc_put16(dst, o, b0)
+            i = i + 1u32
+        } else { if b0 < 192u32 {
+            /* stray continuation byte */
+            o = sc_put16(dst, o, 65533u32)
+            i = i + 1u32
+        } else { if b0 < 224u32 {
+            /* 2-byte */
+            if i + 1u32 < n {
+                let b1 : u32 = s[(i + 1u32) as u64] as u32
+                if (b1 & 192u32) == 128u32 {
+                    o = sc_put16(dst, o, ((b0 & 31u32) << 6u32) | (b1 & 63u32))
+                    i = i + 2u32
+                } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+            } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+        } else { if b0 < 240u32 {
+            /* 3-byte */
+            if i + 2u32 < n {
+                let b1 : u32 = s[(i + 1u32) as u64] as u32
+                let b2 : u32 = s[(i + 2u32) as u64] as u32
+                if ((b1 & 192u32) == 128u32) {
+                    if ((b2 & 192u32) == 128u32) {
+                        o = sc_put16(dst, o, ((b0 & 15u32) << 12u32) | ((b1 & 63u32) << 6u32) | (b2 & 63u32))
+                        i = i + 3u32
+                    } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+                } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+            } else { o = sc_put16(dst, o, 65533u32)   i = n }
+        } else {
+            /* 4-byte -> surrogate pair */
+            if i + 3u32 < n {
+                let b1 : u32 = s[(i + 1u32) as u64] as u32
+                let b2 : u32 = s[(i + 2u32) as u64] as u32
+                let b3 : u32 = s[(i + 3u32) as u64] as u32
+                if ((b1 & 192u32) == 128u32) {
+                    if ((b2 & 192u32) == 128u32) {
+                        if ((b3 & 192u32) == 128u32) {
+                            let cp : u32 = ((b0 & 7u32) << 18u32) | ((b1 & 63u32) << 12u32) | ((b2 & 63u32) << 6u32) | (b3 & 63u32)
+                            let cc : u32 = cp - 65536u32
+                            o = sc_put16(dst, o, 55296u32 | (cc >> 10u32))
+                            if o < cap { o = sc_put16(dst, o, 56320u32 | (cc & 1023u32)) }
+                            i = i + 4u32
+                        } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+                    } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+                } else { o = sc_put16(dst, o, 65533u32)   i = i + 1u32 }
+            } else { o = sc_put16(dst, o, 65533u32)   i = n }
+        } } } }
+        }
+    }
+    return o
+}
+
+fn sc_put8(dst: u64, off: u32, b: u32) -> u32 {
+    let p : *u8 = (dst + (off as u64)) as *u8
+    p[0u64] = b as u8
+    return off + 1u32
+}
+
+fn con_u16to8(src: u64, n: u32, dst: u64, cap: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut o : u32 = 0u32
+    while i < n {
+        if o + 4u32 > cap { i = n } else {
+        let u : u32 = sc_r16(src, (i as u64) * 2u64)
+        let mut cp : u32 = u
+        let mut adv : u32 = 1u32
+        if u >= 55296u32 {
+            if u < 56320u32 {
+                /* high surrogate: need a low one */
+                if i + 1u32 < n {
+                    let lo : u32 = sc_r16(src, ((i + 1u32) as u64) * 2u64)
+                    if lo >= 56320u32 {
+                        if lo < 57344u32 {
+                            cp = 65536u32 + ((u - 55296u32) << 10u32) + (lo - 56320u32)
+                            adv = 2u32
+                        } else { cp = 65533u32 }
+                    } else { cp = 65533u32 }
+                } else { cp = 65533u32 }
+            } else { if u < 57344u32 {
+                cp = 65533u32                       /* lone low surrogate */
+            } }
+        }
+        if cp < 128u32 {
+            o = sc_put8(dst, o, cp)
+        } else { if cp < 2048u32 {
+            o = sc_put8(dst, o, 192u32 | (cp >> 6u32))
+            o = sc_put8(dst, o, 128u32 | (cp & 63u32))
+        } else { if cp < 65536u32 {
+            o = sc_put8(dst, o, 224u32 | (cp >> 12u32))
+            o = sc_put8(dst, o, 128u32 | ((cp >> 6u32) & 63u32))
+            o = sc_put8(dst, o, 128u32 | (cp & 63u32))
+        } else {
+            o = sc_put8(dst, o, 240u32 | (cp >> 18u32))
+            o = sc_put8(dst, o, 128u32 | ((cp >> 12u32) & 63u32))
+            o = sc_put8(dst, o, 128u32 | ((cp >> 6u32) & 63u32))
+            o = sc_put8(dst, o, 128u32 | (cp & 63u32))
+        } } }
+        i = i + adv
+        }
+    }
+    return o
+}

@@ -1,0 +1,194 @@
+/* 2455_stoma_con.iii -- STOMA M1 gate: the console organ's pure surfaces, headless.
+ *
+ * Proves (byte-exact, no console needed):
+ *   1. con_init() is SELF-CONSISTENT with the real handle state: returns 0 iff GetConsoleMode
+ *      succeeds on stdout, 1 iff it fails (the plain-mode detector -- Collapse Law sensor).
+ *      Environment-robust: passes both piped (gate harness) and on a live console.
+ *   2. VT builders emit EXACT bytes: alt-screen 1049h/l, cursor 25h/l, mouse 1002+1006 pair,
+ *      clear 2J, CUP row;col, SGR n, EOL K.
+ *   3. Key decoder: synthetic INPUT_RECORDs -> packed kinds (char/special/ctrl; key-up and
+ *      non-key events ignored).
+ *   4. UTF-8⇄16: ASCII, 2-byte (U+00E9), 3-byte (U+20AC), 4-byte (U+1F600 surrogate pair)
+ *      round-trip byte-identically; lone-high-surrogate and stray-continuation become U+FFFD.
+ *
+ * Exit map: 2 init-inconsistent; 10..17 VT builder byte mismatch; 20..27 key decode wrong;
+ *           30..36 UTF conversion wrong; 99 = full pass.
+ * NIH: stoma_con + kernel32 only. */
+module corpus_2455
+
+extern @abi(c-msvc-x64) fn con_init() -> i32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_alt(dst: u64, enter: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_cursor(dst: u64, show: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_mouse(dst: u64, on: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_clear(dst: u64) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_cup(dst: u64, row: u32, col: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_sgr(dst: u64, n: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_vt_eol(dst: u64) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_key_decode(rec: u64) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_u8to16(src: u64, n: u32, dst: u64, cap: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn con_u16to8(src: u64, n: u32, dst: u64, cap: u32) -> u32 from "stoma_con.iii"
+extern @abi(c-msvc-x64) fn GetStdHandle(which: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn GetConsoleMode(h: u64, pmode: u64) -> i32 from "kernel32"
+
+var K_BUF  : [u8; 64]
+var K_EXP  : [u8; 64]
+var K_REC  : [u8; 24]
+var K_U16  : [u8; 64]
+var K_U8   : [u8; 64]
+var K_SCR  : [u64; 2]
+
+/* compare K_BUF[0..n] to K_EXP[0..n] */
+fn k_eq(n: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < n {
+        if K_BUF[i as u64] != K_EXP[i as u64] { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+fn k_exp_set(i: u32, b: u32) -> i32 {
+    K_EXP[i as u64] = b as u8
+    return 0i32
+}
+
+/* build a KEY_EVENT INPUT_RECORD: down flag, vk, unicode char, ctrl-state */
+fn k_rec(down: u32, vk: u32, ch: u32, cs: u32) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 24u64 {
+        K_REC[i] = 0u8
+        i = i + 1u64
+    }
+    K_REC[0u64] = 1u8                       /* EventType = KEY_EVENT */
+    K_REC[4u64] = down as u8                /* bKeyDown (low byte)   */
+    K_REC[10u64] = (vk & 255u32) as u8
+    K_REC[11u64] = ((vk >> 8u32) & 255u32) as u8
+    K_REC[14u64] = (ch & 255u32) as u8
+    K_REC[15u64] = ((ch >> 8u32) & 255u32) as u8
+    K_REC[16u64] = cs as u8                 /* dwControlKeyState low byte */
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ── 1. init self-consistency ── */
+    let rc : i32 = con_init()
+    let hout : u64 = GetStdHandle(4294967285u32)
+    let live : i32 = GetConsoleMode(hout, (&K_SCR) as u64)
+    if live != 0i32 {
+        if rc != 0i32 { return 2u64 }
+    } else {
+        if rc != 1i32 { return 2u64 }
+    }
+
+    /* ── 2. VT builders ── */
+    /* alt enter: 1b 5b 3f 31 30 34 39 68 */
+    let mut n : u32 = con_vt_alt((&K_BUF) as u64, 1u32)
+    if n != 8u32 { return 10u64 }
+    k_exp_set(0u32,27u32) k_exp_set(1u32,91u32) k_exp_set(2u32,63u32) k_exp_set(3u32,49u32)
+    k_exp_set(4u32,48u32) k_exp_set(5u32,52u32) k_exp_set(6u32,57u32) k_exp_set(7u32,104u32)
+    if k_eq(8u32) == 0u32 { return 10u64 }
+    /* alt leave ends in 'l' */
+    n = con_vt_alt((&K_BUF) as u64, 0u32)
+    if n != 8u32 { return 11u64 }
+    if K_BUF[7u64] != 108u8 { return 11u64 }
+    /* cursor show: 1b 5b 3f 32 35 68 */
+    n = con_vt_cursor((&K_BUF) as u64, 1u32)
+    if n != 6u32 { return 12u64 }
+    if K_BUF[3u64] != 50u8 { return 12u64 }
+    if K_BUF[4u64] != 53u8 { return 12u64 }
+    if K_BUF[5u64] != 104u8 { return 12u64 }
+    /* mouse on = 1002h + 1006h = 8+8 bytes, both end 'h' */
+    n = con_vt_mouse((&K_BUF) as u64, 1u32)
+    if n != 16u32 { return 13u64 }
+    if K_BUF[7u64]  != 104u8 { return 13u64 }
+    if K_BUF[15u64] != 104u8 { return 13u64 }
+    /* clear: 1b 5b 32 4a */
+    n = con_vt_clear((&K_BUF) as u64)
+    if n != 4u32 { return 14u64 }
+    if K_BUF[2u64] != 50u8 { return 14u64 }
+    if K_BUF[3u64] != 74u8 { return 14u64 }
+    /* cup(3,7): 1b 5b 33 3b 37 48 */
+    n = con_vt_cup((&K_BUF) as u64, 3u32, 7u32)
+    if n != 6u32 { return 15u64 }
+    k_exp_set(0u32,27u32) k_exp_set(1u32,91u32) k_exp_set(2u32,51u32)
+    k_exp_set(3u32,59u32) k_exp_set(4u32,55u32) k_exp_set(5u32,72u32)
+    if k_eq(6u32) == 0u32 { return 15u64 }
+    /* cup(12,120): 1b 5b 31 32 3b 31 32 30 48 */
+    n = con_vt_cup((&K_BUF) as u64, 12u32, 120u32)
+    if n != 9u32 { return 16u64 }
+    if K_BUF[2u64] != 49u8 { return 16u64 }
+    if K_BUF[3u64] != 50u8 { return 16u64 }
+    if K_BUF[8u64] != 72u8 { return 16u64 }
+    /* sgr(31): 1b 5b 33 31 6d ; eol: 1b 5b 4b */
+    n = con_vt_sgr((&K_BUF) as u64, 31u32)
+    if n != 5u32 { return 17u64 }
+    if K_BUF[4u64] != 109u8 { return 17u64 }
+    n = con_vt_eol((&K_BUF) as u64)
+    if n != 3u32 { return 17u64 }
+    if K_BUF[2u64] != 75u8 { return 17u64 }
+
+    /* ── 3. key decode ── */
+    k_rec(1u32, 65u32, 97u32, 0u32)                    /* 'a' down */
+    if con_key_decode((&K_REC) as u64) != 65633u32 { return 20u64 }   /* (1<<16)|97 */
+    k_rec(0u32, 65u32, 97u32, 0u32)                    /* 'a' up -> ignore */
+    if con_key_decode((&K_REC) as u64) != 0u32 { return 21u64 }
+    k_rec(1u32, 38u32, 0u32, 0u32)                     /* VK_UP */
+    if con_key_decode((&K_REC) as u64) != 131073u32 { return 22u64 }  /* (2<<16)|1 */
+    k_rec(1u32, 13u32, 13u32, 0u32)                    /* ENTER */
+    if con_key_decode((&K_REC) as u64) != 131077u32 { return 23u64 }  /* (2<<16)|5 */
+    k_rec(1u32, 27u32, 27u32, 0u32)                    /* ESC */
+    if con_key_decode((&K_REC) as u64) != 131078u32 { return 24u64 }  /* (2<<16)|6 */
+    k_rec(1u32, 67u32, 3u32, 8u32)                     /* Ctrl+C (LEFT_CTRL) */
+    if con_key_decode((&K_REC) as u64) != 196611u32 { return 25u64 }  /* (3<<16)|3 */
+    k_rec(1u32, 46u32, 0u32, 0u32)                     /* DEL */
+    if con_key_decode((&K_REC) as u64) != 131085u32 { return 26u64 }  /* (2<<16)|13 */
+    /* non-key event ignored */
+    k_rec(1u32, 65u32, 97u32, 0u32)
+    K_REC[0u64] = 2u8                                   /* MOUSE_EVENT */
+    if con_key_decode((&K_REC) as u64) != 0u32 { return 27u64 }
+
+    /* ── 4. UTF-8 ⇄ UTF-16 ── */
+    /* "aé€😀" utf8 = 61 | C3 A9 | E2 82 AC | F0 9F 98 80  (10 bytes) */
+    K_BUF[0u64]=97u8  K_BUF[1u64]=195u8 K_BUF[2u64]=169u8 K_BUF[3u64]=226u8 K_BUF[4u64]=130u8
+    K_BUF[5u64]=172u8 K_BUF[6u64]=240u8 K_BUF[7u64]=159u8 K_BUF[8u64]=152u8 K_BUF[9u64]=128u8
+    let u16n : u32 = con_u8to16((&K_BUF) as u64, 10u32, (&K_U16) as u64, 32u32)
+    if u16n != 5u32 { return 30u64 }                    /* a, é, €, D83D, DE00 */
+    /* check units: 0061 00E9 20AC D83D DE00 (little-endian byte pairs) */
+    if K_U16[0u64] != 97u8  { return 31u64 }
+    if K_U16[2u64] != 233u8 { return 31u64 }
+    if K_U16[4u64] != 172u8 { return 31u64 }
+    if K_U16[5u64] != 32u8  { return 31u64 }
+    if K_U16[6u64] != 61u8  { return 31u64 }
+    if K_U16[7u64] != 216u8 { return 31u64 }
+    if K_U16[8u64] != 0u8   { return 31u64 }
+    if K_U16[9u64] != 222u8 { return 31u64 }
+    /* round-trip back to utf8 */
+    let u8n : u32 = con_u16to8((&K_U16) as u64, u16n, (&K_U8) as u64, 32u32)
+    if u8n != 10u32 { return 32u64 }
+    let mut i : u32 = 0u32
+    while i < 10u32 {
+        if K_U8[i as u64] != K_BUF[i as u64] { return 33u64 }
+        i = i + 1u32
+    }
+    /* lone high surrogate D83D -> FFFD (EF BF BD) */
+    K_U16[0u64] = 61u8
+    K_U16[1u64] = 216u8
+    let l8 : u32 = con_u16to8((&K_U16) as u64, 1u32, (&K_U8) as u64, 32u32)
+    if l8 != 3u32 { return 34u64 }
+    if K_U8[0u64] != 239u8 { return 34u64 }
+    if K_U8[1u64] != 191u8 { return 34u64 }
+    if K_U8[2u64] != 189u8 { return 34u64 }
+    /* stray continuation byte 0x80 -> FFFD in u16 (FFFD = FD FF LE) */
+    K_BUF[0u64] = 128u8
+    let s16 : u32 = con_u8to16((&K_BUF) as u64, 1u32, (&K_U16) as u64, 32u32)
+    if s16 != 1u32 { return 35u64 }
+    if K_U16[0u64] != 253u8 { return 35u64 }
+    if K_U16[1u64] != 255u8 { return 35u64 }
+    /* truncated 4-byte lead at end -> FFFD */
+    K_BUF[0u64] = 240u8
+    let t16 : u32 = con_u8to16((&K_BUF) as u64, 1u32, (&K_U16) as u64, 32u32)
+    if t16 != 1u32 { return 36u64 }
+    if K_U16[0u64] != 253u8 { return 36u64 }
+
+    return 99u64
+}

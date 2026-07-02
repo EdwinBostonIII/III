@@ -1,0 +1,284 @@
+/* p0_conpty.iii -- STOMA M0 probe: can .iii bind and drive Windows ConPTY (kernel32 only)?
+ *
+ * THE question this answers (the one unproven OS surface in the STOMA plan): a pseudoconsole
+ * created from .iii via CreatePseudoConsole, wired to a child through STARTUPINFOEXA +
+ * PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, actually carries the child's console output back to us.
+ * Everything else STOMA needs (CreateProcessA/WaitForSingleObject/GetExitCodeProcess spawn+code
+ * capture, kernel32 file+dir IO, console-subsystem PEs from sovld) is already proven in-tree
+ * (ws_console.iii, aether fs.iii, sovld.iii:233 p16(3)).
+ *
+ * Sequence (the documented ConPTY recipe, hand-laid x64 ABI):
+ *   CreatePipe(inR,inW) + CreatePipe(outR,outW)
+ *   CreatePseudoConsole(COORD 80x25 packed u32, inR, outW, 0, &hpc)   HRESULT 0 = S_OK
+ *   InitializeProcThreadAttributeList(NULL,1,0,&size) -> size; init in static buf
+ *   UpdateProcThreadAttribute(list, 0, 0x20016 PSEUDOCONSOLE, hpc AS VALUE, 8, 0, 0)
+ *   STARTUPINFOEXA: cb=112 at +0, lpAttributeList at +104 (x64 layout), all else zero
+ *   CreateProcessA(NULL, "cmd.exe /c echo HELLOPTY", ..., EXTENDED_STARTUPINFO_PRESENT=0x80000)
+ *   read outR, scan accumulated bytes for "HELLOPTY" (ConPTY emits VT preamble first -- the
+ *   marker is NOT at offset 0; substring scan is the honest check)
+ *
+ * Exit map:  2 pipe fail   3 pty create fail   4 attr-list fail   5 attr-set fail
+ *            6 spawn fail  7 marker never seen in 32 reads        99 PASS
+ * NIH: kernel32 only.  Probe scaffolding links via gcc -lkernel32 (NOT the trusted path). */
+module stoma_p0
+
+extern @abi(c-msvc-x64) fn CreatePipe(prd: u64, pwr: u64, sec: u64, size: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreatePseudoConsole(size: u32, hin: u64, hout: u64, flags: u32, phpc: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ClosePseudoConsole(hpc: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn InitializeProcThreadAttributeList(list: u64, count: u32, flags: u32, psize: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn UpdateProcThreadAttribute(list: u64, flags: u32, attr: u64, val: u64, sz: u64, prev: u64, ret: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateProcessA(app: u64, cmd: u64, pa: u64, ta: u64, inherit: u32, flags: u32, env: u64, dir: u64, si: u64, pi: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnwritten: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetStdHandle(which: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn GetLastError() -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn PeekNamedPipe(h: u64, buf: u64, n: u32, pread: u64, pavail: u64, pleft: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn WaitForSingleObject(h: u64, ms: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetExitCodeProcess(h: u64, pcode: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> u64 from "kernel32"
+
+/* ADJUDICATED by the C control (conpty_ref.c, exit 99): the HPCON is passed AS lpValue
+ * (variant A, the canonical sample form).  Variant B (pointer-to-HPCON) creates the child
+ * console-less: no attach hello, echo into the void.  Keep 0. */
+const P0_PTRFORM : u32 = 0u32
+
+var P0_HS   : [u64; 8]        /* 0 inR  1 inW  2 outR  3 outW  4 hpc  5 hpc-slot for ptr-form */
+var P0_MSG  : [u8; 24]        /* diagnostic line: tag + 16 hex + \n */
+var P0_SZ   : [u64; 4]        /* 0 attr-list size out   1 nread out   2 peek-avail out */
+var P0_ATTR : [u8; 256]
+var P0_SIEX : [u8; 120]       /* STARTUPINFOEXA: 112 used */
+var P0_PI   : [u8; 24]        /* PROCESS_INFORMATION */
+var P0_CMD  : [u8; 40]
+var P0_OUT  : [u8; 8192]
+var P0_ACC  : [u8; 32768]
+
+fn p0_w32(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u32 = (base + off) as *u32
+    p[0u64] = v
+    return 0i32
+}
+fn p0_w64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u64 = (base + off) as *u64
+    p[0u64] = v
+    return 0i32
+}
+fn p0_r64(base: u64, off: u64) -> u64 {
+    let p : *u64 = (base + off) as *u64
+    return p[0u64]
+}
+fn p0_zero(base: u64, n: u64) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn p0_scpy(dst: u64, src: u64, n: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        d[i] = s[i]
+        i = i + 1u64
+    }
+    d[n] = 0u8
+    return 0i32
+}
+
+/* diagnostic: one line "X<16 hex digits>\n" to stdout (tag X names the value) */
+fn p0_diag(tag: u8, v: u64) -> i32 {
+    P0_MSG[0u64] = tag
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        let sh : u64 = ((15u32 - k) * 4u32) as u64
+        let nib : u64 = (v >> sh) & 15u64
+        let mut c : u64 = nib + 48u64
+        if nib > 9u64 { c = nib + 87u64 }
+        P0_MSG[(1u32 + k) as u64] = c as u8
+        k = k + 1u32
+    }
+    P0_MSG[17u64] = 10u8
+    WriteFile(GetStdHandle(4294967285u32), (&P0_MSG) as u64, 18u32, ((&P0_SZ) as u64) + 8u64, 0u64)
+    return 0i32
+}
+
+/* substring scan for "HELLOPTY" (72 69 76 76 79 80 84 89) in base[0..n] */
+fn p0_find(base: u64, n: u64) -> u32 {
+    if n < 8u64 { return 0u32 }
+    let mut i : u64 = 0u64
+    let lim : u64 = n - 7u64
+    while i < lim {
+        let q : *u8 = (base + i) as *u8
+        if q[0u64] == 72u8 {
+            if q[1u64] == 69u8 {
+                if q[2u64] == 76u8 {
+                    if q[3u64] == 76u8 {
+                        if q[4u64] == 79u8 {
+                            if q[5u64] == 80u8 {
+                                if q[6u64] == 84u8 {
+                                    if q[7u64] == 89u8 { return 1u32 }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* two pipes: pty-input (pty reads inR) and pty-output (pty writes outW) */
+    if CreatePipe((&P0_HS) as u64, ((&P0_HS) as u64) + 8u64, 0u64, 0u32) == 0i32 { return 2u64 }
+    if CreatePipe(((&P0_HS) as u64) + 16u64, ((&P0_HS) as u64) + 24u64, 0u64, 0u32) == 0i32 { return 2u64 }
+    let inr  : u64 = P0_HS[0u64]
+    let inw  : u64 = P0_HS[1u64]
+    let outr : u64 = P0_HS[2u64]
+    let outw : u64 = P0_HS[3u64]
+
+    /* COORD 80x25 packed: 80 | 25<<16 */
+    let hr : i32 = CreatePseudoConsole(1638480u32, inr, outw, 0u32, ((&P0_HS) as u64) + 32u64)
+    if hr != 0i32 { return 3u64 }
+    let hpc : u64 = P0_HS[4u64]
+
+    /* attribute list: size probe (expected to "fail" with the needed size), then real init */
+    InitializeProcThreadAttributeList(0u64, 1u32, 0u32, (&P0_SZ) as u64)
+    let need : u64 = P0_SZ[0u64]
+    if need == 0u64 { return 4u64 }
+    if need > 256u64 { return 4u64 }
+    if InitializeProcThreadAttributeList((&P0_ATTR) as u64, 1u32, 0u32, (&P0_SZ) as u64) == 0i32 { return 4u64 }
+    /* PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x20016.  The payload semantics are the open
+     * question this probe adjudicates -- P0_PTRFORM selects the form; diagnostics print the
+     * actual hpc value ('P'), attr-list size ('N'), child exit code ('C'), bytes received
+     * through the pty ('A'), so the two forms can be compared on EVIDENCE, not memory. */
+    p0_diag(80u8, hpc)
+    p0_diag(78u8, need)
+    P0_HS[5u64] = hpc
+    let mut aval : u64 = hpc
+    if P0_PTRFORM == 1u32 { aval = ((&P0_HS) as u64) + 40u64 }
+    if UpdateProcThreadAttribute((&P0_ATTR) as u64, 0u32, 131094u64, aval, 8u64, 0u64, 0u64) == 0i32 { return 5u64 }
+
+    /* STARTUPINFOEXA, zeroed: cb=112 @ +0, dwFlags @ +60, lpAttributeList @ +104.
+     * dwFlags = STARTF_USESTDHANDLES (0x100) with hStd* left NULL: a parent with REDIRECTED
+     * stdio (gate harness, CI pipes) otherwise has those handles propagated into console
+     * children even with bInheritHandles=FALSE, and the child's text bypasses the pty
+     * (adjudicated by the C control: without this flag the echo leaks to the parent's
+     * stdout; with it the echo arrives through the pty).  Console init then binds the
+     * child's stdio to its console -- the pseudoconsole. */
+    p0_zero((&P0_SIEX) as u64, 120u64)
+    p0_w32((&P0_SIEX) as u64, 0u64, 112u32)
+    p0_w32((&P0_SIEX) as u64, 60u64, 256u32)
+    p0_w64((&P0_SIEX) as u64, 104u64, (&P0_ATTR) as u64)
+    p0_zero((&P0_PI) as u64, 24u64)
+
+    /* mutable command line (CreateProcessA may write into it): "cmd.exe /c echo HELLOPTY" = 24 chars */
+    p0_scpy((&P0_CMD) as u64, "cmd.exe /c echo HELLOPTY" as u64, 24u64)
+
+    /* EXTENDED_STARTUPINFO_PRESENT = 0x00080000 */
+    let ok : u32 = CreateProcessA(0u64, (&P0_CMD) as u64, 0u64, 0u64, 0u32, 524288u32, 0u64, 0u64, (&P0_SIEX) as u64, (&P0_PI) as u64)
+    if ok == 0u32 {
+        p0_diag(69u8, GetLastError() as u64)
+        return 6u64
+    }
+    let hproc : u64 = p0_r64((&P0_PI) as u64, 0u64)
+    let hthrd : u64 = p0_r64((&P0_PI) as u64, 8u64)
+
+    /* hand-off copies now belong to the pty/child */
+    CloseHandle(inr)
+    CloseHandle(outw)
+
+    /* Pump pty output NON-BLOCKING: PeekNamedPipe tells us available bytes so ReadFile never
+     * blocks (the pty holds outw open until ClosePseudoConsole, so a blind ReadFile would
+     * deadlock -- the M0 mistake).  Spin up to 200 * 25ms = 5s; stop early on marker, or when
+     * the child has exited AND the pipe has drained (several consecutive empty peeks). */
+    let mut acc   : u64 = 0u64
+    let mut spins : u32 = 0u32
+    let mut found : u32 = 0u32
+    let mut empty : u32 = 0u32
+    while spins < 200u32 {
+        spins = spins + 1u32
+        PeekNamedPipe(outr, 0u64, 0u32, 0u64, ((&P0_SZ) as u64) + 16u64, 0u64)
+        let avail : u64 = P0_SZ[2u64]
+        if avail > 0u64 {
+            empty = 0u32
+            let mut want : u32 = 8192u32
+            if avail < 8192u64 { want = avail as u32 }
+            if ReadFile(outr, (&P0_OUT) as u64, want, ((&P0_SZ) as u64) + 8u64, 0u64) != 0i32 {
+                let n : u64 = P0_SZ[1u64]
+                let mut j : u64 = 0u64
+                while j < n {
+                    if acc < 32768u64 {
+                        P0_ACC[acc] = P0_OUT[j]
+                        acc = acc + 1u64
+                    }
+                    j = j + 1u64
+                }
+                if p0_find((&P0_ACC) as u64, acc) == 1u32 {
+                    found = 1u32
+                    spins = 200u32
+                }
+            }
+        } else {
+            empty = empty + 1u32
+            GetExitCodeProcess(hproc, ((&P0_SZ) as u64) + 24u64)
+            let code : u64 = P0_SZ[3u64]
+            /* 259 = STILL_ACTIVE; if child is gone and 4 empty peeks in a row, the pipe is dry */
+            if code != 259u64 {
+                /* child gone: keep draining a FULL 2s -- ConPTY's first frame after an
+                 * attach can land well after child exit (the M0 race: 125ms was too short) */
+                if empty > 80u32 { spins = 200u32 }
+            }
+            Sleep(25u32)
+        }
+    }
+
+    WaitForSingleObject(hproc, 5000u32)
+    GetExitCodeProcess(hproc, ((&P0_SZ) as u64) + 24u64)
+    ClosePseudoConsole(hpc)
+
+    /* post-close drain (the documented pattern): closing the pty flushes the tail and breaks
+     * the pipe; read whatever remains until the pipe is dry or broken */
+    let mut post : u32 = 0u32
+    while post < 64u32 {
+        post = post + 1u32
+        PeekNamedPipe(outr, 0u64, 0u32, 0u64, ((&P0_SZ) as u64) + 16u64, 0u64)
+        if P0_SZ[2u64] > 0u64 {
+            if ReadFile(outr, (&P0_OUT) as u64, 8192u32, ((&P0_SZ) as u64) + 8u64, 0u64) != 0i32 {
+                let n2 : u64 = P0_SZ[1u64]
+                let mut j2 : u64 = 0u64
+                while j2 < n2 {
+                    if acc < 32768u64 {
+                        P0_ACC[acc] = P0_OUT[j2]
+                        acc = acc + 1u64
+                    }
+                    j2 = j2 + 1u64
+                }
+            } else { post = 64u32 }
+        } else {
+            Sleep(15u32)
+        }
+    }
+    if p0_find((&P0_ACC) as u64, acc) == 1u32 { found = 1u32 }
+
+    p0_diag(67u8, P0_SZ[3u64])
+    p0_diag(65u8, acc)
+    CloseHandle(inw)
+    CloseHandle(outr)
+    CloseHandle(hthrd)
+    CloseHandle(hproc)
+
+    /* Diagnostic exit map so we KNOW, not guess:
+     *   99  marker found through the pty  -> ConPTY delivers child output  (M0 PASS)
+     *    7  pty delivered ZERO bytes      -> child did NOT attach to our pty (attach failed)
+     *    8+ pty delivered bytes but no marker (return 8 + min(acc,240) to see the volume) */
+    if found == 1u32 { return 99u64 }
+    if acc == 0u64 { return 7u64 }
+    let mut a : u64 = acc
+    if a > 240u64 { a = 240u64 }
+    return 8u64 + a
+}

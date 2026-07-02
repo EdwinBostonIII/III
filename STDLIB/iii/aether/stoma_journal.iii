@@ -1,0 +1,262 @@
+/* STDLIB/iii/aether/stoma_journal.iii -- STOMA organ: the SJ1 journal (M4 of III-STOMA-PLAN.md).
+ *
+ * The one source of truth both planes share.  The wire plane APPENDS verbatim records here; the
+ * meaning plane (tree/sidebar/ripple) only ever READS this journal + exit codes + artifacts, so
+ * no smart organ can corrupt the wire (Membrane Law).  Every view is a projection of SJ1, so
+ * exiting any view collapses losslessly to the plain record stream (Collapse Law).
+ *
+ * SJ1 wire format (little-endian, append-only):
+ *   segment header  : 4 bytes  'S' 'J' '1' 0x01
+ *   record          : u32 rec_len (TOTAL incl. this field) | u32 kind | u64 seq | u64 tstamp
+ *                     | payload[rec_len-24]
+ *   kinds: 1 cmd  2 stdout  3 stderr  4 exit  5 verdict  6 meta
+ * Crash-safety: a torn tail is detected by rec_len (a length that runs past the file end, or is
+ * < 24, ends the read cleanly -- the prefix stays parseable).  Segments rotate at 16 MiB.
+ *
+ * Robustness (adversarial-verify fix): a WRITE failure never stalls or truncates the wire.  If a
+ * record cannot be written (disk full, OneDrive lock, no open journal), the append is counted as
+ * UNJOURNALED (journal_unjournaled()) and the caller proceeds -- the child's execution and exit
+ * code are never corrupted; only that record's transcript is lost, and the face shows the wound.
+ *
+ * Per-session isolation: journal_open builds STDLIB/build/stoma/journal/<tag>/ from a caller tag
+ * (pid + launch counter), so a nested or concurrent STOMA never interleaves another's journal.
+ *
+ * kernel32-direct IO (same membrane as crt0/sovas); no C runtime, no capability handshake -- this
+ * is STOMA's OWN artifact, not user-file access.  Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+module stoma_journal
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateDirectoryA(name: u64, sec: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetTickCount64() -> u64 from "kernel32"
+
+const JN_SEG_CAP  : u64 = 16777216u64      /* 16 MiB rotation */
+const JN_INVALID  : u64 = 18446744073709551615u64   /* INVALID_HANDLE_VALUE (-1) */
+
+var JN_H       : u64 = 0u64        /* current write segment handle (0 = none) */
+var JN_SEG     : u64 = 0u64        /* current segment index */
+var JN_SEGLEN  : u64 = 0u64        /* bytes in current segment */
+var JN_SEQ     : u64 = 0u64        /* monotonic record sequence */
+var JN_UNJ     : u64 = 0u64        /* count of UNJOURNALED (failed) appends */
+var JN_DIR     : [u8; 512]         /* session journal directory (NUL-terminated) */
+var JN_DIRLEN  : u64 = 0u64
+var JN_PATH    : [u8; 640]         /* scratch: full segment path */
+var JN_HDR     : [u8; 24]          /* record header scratch */
+var JN_SCR     : [u64; 2]          /* out-params: nwritten / nread */
+
+/* read cursor state (separate from the writer) */
+var JN_RH      : u64 = 0u64
+var JN_RBUF    : [u8; 16777216]    /* whole-segment read buffer (a segment is <= 16 MiB) */
+var JN_RLEN    : u64 = 0u64        /* bytes loaded */
+var JN_RPOS    : u64 = 0u64        /* parse cursor */
+var JN_RKIND   : u32 = 0u32
+var JN_RSEQ    : u64 = 0u64
+var JN_RTS     : u64 = 0u64
+var JN_RPAY    : u64 = 0u64        /* payload offset into JN_RBUF */
+var JN_RPAYLEN : u64 = 0u64
+
+fn jn_w32(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u32 = (base + off) as *u32
+    p[0u64] = v
+    return 0i32
+}
+fn jn_w64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u64 = (base + off) as *u64
+    p[0u64] = v
+    return 0i32
+}
+fn jn_r32(base: u64, off: u64) -> u32 {
+    let p : *u32 = (base + off) as *u32
+    return p[0u64]
+}
+fn jn_r64(base: u64, off: u64) -> u64 {
+    let p : *u64 = (base + off) as *u64
+    return p[0u64]
+}
+
+/* append a decimal u64 to JN_PATH at off; returns new off */
+fn jn_path_num(off: u64, v: u64) -> u64 {
+    var JN_D : [u8; 24]
+    if v == 0u64 { JN_PATH[off] = 48u8   return off + 1u64 }
+    let mut x : u64 = v
+    let mut k : u64 = 0u64
+    while x > 0u64 {
+        JN_D[k] = ((x % 10u64) + 48u64) as u8
+        x = x / 10u64
+        k = k + 1u64
+    }
+    let mut o : u64 = off
+    while k > 0u64 {
+        k = k - 1u64
+        JN_PATH[o] = JN_D[k]
+        o = o + 1u64
+    }
+    return o
+}
+
+/* build JN_PATH = JN_DIR + "/seg" + seg + ".sj1"; returns 0 */
+fn jn_seg_path(seg: u64) -> i32 {
+    let mut o : u64 = 0u64
+    while o < JN_DIRLEN {
+        JN_PATH[o] = JN_DIR[o]
+        o = o + 1u64
+    }
+    JN_PATH[o] = 47u8   o = o + 1u64        /* / */
+    JN_PATH[o] = 115u8  o = o + 1u64        /* s */
+    JN_PATH[o] = 101u8  o = o + 1u64        /* e */
+    JN_PATH[o] = 103u8  o = o + 1u64        /* g */
+    o = jn_path_num(o, seg)
+    JN_PATH[o] = 46u8   o = o + 1u64        /* . */
+    JN_PATH[o] = 115u8  o = o + 1u64        /* s */
+    JN_PATH[o] = 106u8  o = o + 1u64        /* j */
+    JN_PATH[o] = 49u8   o = o + 1u64        /* 1 */
+    JN_PATH[o] = 0u8
+    return 0i32
+}
+
+/* open (create/truncate) segment `seg` for writing and lay the SJ1 header */
+fn jn_open_seg(seg: u64) -> i32 {
+    jn_seg_path(seg)
+    /* GENERIC_WRITE 0x40000000, share-read 1, CREATE_ALWAYS 2, FILE_ATTRIBUTE_NORMAL 0x80 */
+    let h : u64 = CreateFileA((&JN_PATH) as u64, 1073741824u32, 1u32, 0u64, 2u32, 128u32, 0u64)
+    if h == JN_INVALID { return 0i32 - 1i32 }
+    JN_H = h
+    JN_SEGLEN = 0u64
+    JN_HDR[0u64] = 83u8   JN_HDR[1u64] = 74u8   JN_HDR[2u64] = 49u8   JN_HDR[3u64] = 1u8
+    if WriteFile(JN_H, (&JN_HDR) as u64, 4u32, (&JN_SCR) as u64, 0u64) == 0i32 { return 0i32 - 1i32 }
+    JN_SEGLEN = 4u64
+    return 0i32
+}
+
+/* Open a session journal under STDLIB/build/stoma/journal/<tag>/.  tag = NUL-terminated bytes
+ * (caller supplies pid + launch counter).  base = NUL-terminated repo path to STDLIB/build/stoma
+ * /journal (so the module carries no absolute path).  Returns 0 ok, negative on IO failure. */
+fn journal_open(base: u64, taglen: u64, tag: u64) -> i32 @export {
+    JN_SEQ = 0u64
+    JN_SEG = 0u64
+    JN_UNJ = 0u64
+    /* JN_DIR = base + "/" + tag  (copy base up to its NUL, counting the real length) */
+    let b : *u8 = base as *u8
+    let mut baselen : u64 = 0u64
+    let mut done : u32 = 0u32
+    while done == 0u32 {
+        if baselen >= 400u64 { done = 1u32 }
+        else {
+            let c : u8 = b[baselen]
+            if c == 0u8 { done = 1u32 }
+            else { JN_DIR[baselen] = c   baselen = baselen + 1u64 }
+        }
+    }
+    JN_DIR[baselen] = 47u8                   /* '/' after base */
+    let t : *u8 = tag as *u8
+    let mut k : u64 = 0u64
+    while k < taglen {
+        JN_DIR[baselen + 1u64 + k] = t[k]
+        k = k + 1u64
+    }
+    JN_DIRLEN = baselen + 1u64 + taglen
+    JN_DIR[JN_DIRLEN] = 0u8
+    /* mkdir the session dir (parent chain assumed present: build/stoma/journal) */
+    CreateDirectoryA((&JN_DIR) as u64, 0u64)
+    return jn_open_seg(0u64)
+}
+
+/* Append one record VERBATIM.  Returns 0 = journaled, 1 = UNJOURNALED (write failed / no
+ * journal); the caller proceeds regardless -- the wire is never stalled by a journal fault. */
+fn journal_append(kind: u32, payload: u64, paylen: u64) -> i32 @export {
+    if JN_H == 0u64 { JN_UNJ = JN_UNJ + 1u64   return 1i32 }
+    let rec_len : u64 = 24u64 + paylen
+    /* rotate if this record would blow the segment cap */
+    if JN_SEGLEN + rec_len > JN_SEG_CAP {
+        CloseHandle(JN_H)
+        JN_H = 0u64
+        JN_SEG = JN_SEG + 1u64
+        if jn_open_seg(JN_SEG) != 0i32 { JN_UNJ = JN_UNJ + 1u64   return 1i32 }
+    }
+    JN_SEQ = JN_SEQ + 1u64
+    jn_w32((&JN_HDR) as u64, 0u64, rec_len as u32)
+    jn_w32((&JN_HDR) as u64, 4u64, kind)
+    jn_w64((&JN_HDR) as u64, 8u64, JN_SEQ)
+    jn_w64((&JN_HDR) as u64, 16u64, GetTickCount64())
+    if WriteFile(JN_H, (&JN_HDR) as u64, 24u32, (&JN_SCR) as u64, 0u64) == 0i32 { JN_UNJ = JN_UNJ + 1u64   return 1i32 }
+    if paylen > 0u64 {
+        if WriteFile(JN_H, payload, paylen as u32, (&JN_SCR) as u64, 0u64) == 0i32 { JN_UNJ = JN_UNJ + 1u64   return 1i32 }
+    }
+    JN_SEGLEN = JN_SEGLEN + rec_len
+    return 0i32
+}
+
+fn journal_seq() -> u64 @export { return JN_SEQ }
+fn journal_unjournaled() -> u64 @export { return JN_UNJ }
+fn journal_seg() -> u64 @export { return JN_SEG }
+
+fn journal_close() -> i32 @export {
+    if JN_H != 0u64 { CloseHandle(JN_H)   JN_H = 0u64 }
+    return 0i32
+}
+
+/* ── reader (projection source) ─────────────────────────────────────────────────────────── */
+
+/* Load a segment file wholly into JN_RBUF and validate the SJ1 header.  path = NUL-terminated.
+ * Returns 0 ok, negative on IO / bad-magic. */
+fn journal_read_open(path: u64) -> i32 @export {
+    JN_RLEN = 0u64
+    JN_RPOS = 0u64
+    /* GENERIC_READ 0x80000000, share-rw 3, OPEN_EXISTING 3 */
+    let h : u64 = CreateFileA(path, 2147483648u32, 3u32, 0u64, 3u32, 128u32, 0u64)
+    if h == JN_INVALID { return 0i32 - 1i32 }
+    JN_RH = h
+    /* single ReadFile up to 16 MiB (segment cap) */
+    if ReadFile(JN_RH, (&JN_RBUF) as u64, 16777216u32, ((&JN_SCR) as u64) + 8u64, 0u64) == 0i32 {
+        CloseHandle(JN_RH)   JN_RH = 0u64
+        return 0i32 - 1i32
+    }
+    JN_RLEN = JN_SCR[1u64]
+    CloseHandle(JN_RH)
+    JN_RH = 0u64
+    if JN_RLEN < 4u64 { return 0i32 - 2i32 }
+    if JN_RBUF[0u64] != 83u8 { return 0i32 - 2i32 }
+    if JN_RBUF[1u64] != 74u8 { return 0i32 - 2i32 }
+    if JN_RBUF[2u64] != 49u8 { return 0i32 - 2i32 }
+    if JN_RBUF[3u64] != 1u8  { return 0i32 - 2i32 }
+    JN_RPOS = 4u64
+    return 0i32
+}
+
+/* Advance to the next record.  Returns 1 = record loaded (accessors valid), 0 = end / torn tail
+ * (a rec_len that is < 24 or runs past the loaded bytes ends the stream cleanly). */
+fn journal_read_next() -> u32 @export {
+    if JN_RPOS + 24u64 > JN_RLEN { return 0u32 }
+    let rec_len : u64 = jn_r32((&JN_RBUF) as u64, JN_RPOS) as u64
+    if rec_len < 24u64 { return 0u32 }                     /* torn / corrupt */
+    if JN_RPOS + rec_len > JN_RLEN { return 0u32 }         /* truncated tail */
+    JN_RKIND = jn_r32((&JN_RBUF) as u64, JN_RPOS + 4u64)
+    JN_RSEQ  = jn_r64((&JN_RBUF) as u64, JN_RPOS + 8u64)
+    JN_RTS   = jn_r64((&JN_RBUF) as u64, JN_RPOS + 16u64)
+    JN_RPAY    = JN_RPOS + 24u64
+    JN_RPAYLEN = rec_len - 24u64
+    JN_RPOS = JN_RPOS + rec_len
+    return 1u32
+}
+
+fn journal_rec_kind() -> u32 @export { return JN_RKIND }
+fn journal_rec_seq() -> u64 @export { return JN_RSEQ }
+fn journal_rec_paylen() -> u64 @export { return JN_RPAYLEN }
+fn journal_rec_byte(i: u64) -> u8 @export {
+    if i >= JN_RPAYLEN { return 0u8 }
+    return JN_RBUF[JN_RPAY + i]
+}
+/* content-address helper for the ripple debounce: FNV-1a over the current payload */
+fn journal_rec_fnv() -> u64 @export {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u64 = 0u64
+    while i < JN_RPAYLEN {
+        h = h ^ (JN_RBUF[JN_RPAY + i] as u64)
+        h = h * 1099511628211u64
+        i = i + 1u64
+    }
+    return h
+}

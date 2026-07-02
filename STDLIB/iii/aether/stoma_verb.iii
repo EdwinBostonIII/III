@@ -1,0 +1,243 @@
+/* STDLIB/iii/aether/stoma_verb.iii -- STOMA organ: verb grammar + dispatch (M4 of the plan).
+ *
+ * The shell's meaning plane entry: tokenize a committed line (crt0-compatible quote rules:
+ * space-split honoring "quoted" tokens, no escapes), dispatch built-in verbs, and for anything
+ * else hand the raw line to the driver as an external job (vb_kind EXTERN -- the driver decides
+ * pipe vs pty).  ALL output goes to a transcript buffer (VB_OUT) that the driver forwards to
+ * console + journal -- headless-KATable byte-for-byte, and the same bytes in every mode
+ * (Collapse Law: the transcript IS the plain face).
+ *
+ * Errors are LETTER-PRECISE: a bad line reports  err@<byteoff>: <reason>  followed by the line
+ * and a caret column -- the compiler discipline applied to the shell grammar.
+ *
+ * Built-ins (M4 set -- gate/seal/build land in M5/M7 as complete verbs, never stubs):
+ *   cd <dir> | pwd | ls [dir] | env <NAME> | help | plain | exit
+ * vb_parse returns the verb kind; the driver acts on kinds that need OS state (cd/exit/extern)
+ * using the tokens exposed by accessors.  Verbs that only produce text (help/err) are fully
+ * handled here.
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_verb
+
+/* verb kinds */
+const VB_EMPTY  : u32 = 0u32
+const VB_CD     : u32 = 1u32
+const VB_PWD    : u32 = 2u32
+const VB_LS     : u32 = 3u32
+const VB_ENV    : u32 = 4u32
+const VB_HELP   : u32 = 5u32
+const VB_PLAIN  : u32 = 6u32
+const VB_EXIT   : u32 = 7u32
+const VB_EXTERN : u32 = 8u32
+const VB_ERR    : u32 = 9u32
+const VB_GATE   : u32 = 10u32
+const VB_SEAL   : u32 = 11u32
+const VB_BUILD  : u32 = 12u32
+
+const VB_MAXTOK : u64 = 32u64
+
+var VB_LINE  : [u8; 1024]        /* private copy of the parsed line */
+var VB_LLEN  : u64 = 0u64
+var VB_TOFF  : [u64; 32]         /* token offsets into VB_LINE */
+var VB_TLEN  : [u64; 32]         /* token lengths */
+var VB_NTOK  : u64 = 0u64
+var VB_OUT   : [u8; 8192]        /* transcript output of the last dispatch */
+var VB_OLEN  : u64 = 0u64
+var VB_EOFF  : u64 = 0u64        /* byte offset of the reported error */
+
+/* ── transcript builder ─────────────────────────────────────────────────────────────────── */
+fn vb_out_len() -> u64 @export { return VB_OLEN }
+fn vb_out_ptr() -> u64 @export { return (&VB_OUT) as u64 }
+fn vb_out_byte(i: u64) -> u8 @export {
+    if i >= VB_OLEN { return 0u8 }
+    return VB_OUT[i]
+}
+fn vb_out_reset() -> i32 @export {
+    VB_OLEN = 0u64
+    return 0i32
+}
+fn vb_emit(p: u64, n: u64) -> i32 @export {
+    let s : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if VB_OLEN < 8192u64 {
+            VB_OUT[VB_OLEN] = s[i]
+            VB_OLEN = VB_OLEN + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn vb_emit_ch(c: u8) -> i32 {
+    if VB_OLEN < 8192u64 {
+        VB_OUT[VB_OLEN] = c
+        VB_OLEN = VB_OLEN + 1u64
+    }
+    return 0i32
+}
+fn vb_emit_num(v: u64) -> i32 @export {
+    var VB_D : [u8; 24]
+    if v == 0u64 { vb_emit_ch(48u8)   return 0i32 }
+    let mut x : u64 = v
+    let mut k : u64 = 0u64
+    while x > 0u64 {
+        VB_D[k] = ((x % 10u64) + 48u64) as u8
+        x = x / 10u64
+        k = k + 1u64
+    }
+    while k > 0u64 {
+        k = k - 1u64
+        vb_emit_ch(VB_D[k])
+    }
+    return 0i32
+}
+
+/* ── token accessors ────────────────────────────────────────────────────────────────────── */
+fn vb_ntok() -> u64 @export { return VB_NTOK }
+fn vb_tok_ptr(i: u64) -> u64 @export {
+    if i >= VB_NTOK { return 0u64 }
+    return ((&VB_LINE) as u64) + VB_TOFF[i]
+}
+fn vb_tok_len(i: u64) -> u64 @export {
+    if i >= VB_NTOK { return 0u64 }
+    return VB_TLEN[i]
+}
+fn vb_err_off() -> u64 @export { return VB_EOFF }
+/* the raw line (for EXTERN dispatch) */
+fn vb_line_ptr() -> u64 @export { return (&VB_LINE) as u64 }
+fn vb_line_len() -> u64 @export { return VB_LLEN }
+
+/* token i equals the given literal? */
+fn vb_tok_is(i: u64, lit: u64, n: u64) -> u32 {
+    if i >= VB_NTOK { return 0u32 }
+    if VB_TLEN[i] != n { return 0u32 }
+    let s : *u8 = lit as *u8
+    let off : u64 = VB_TOFF[i]
+    let mut k : u64 = 0u64
+    while k < n {
+        if VB_LINE[off + k] != s[k] { return 0u32 }
+        k = k + 1u64
+    }
+    return 1u32
+}
+
+/* letter-precise error: "err@<off>: <msg>\n<line>\n<caret col>^\n" */
+fn vb_error(off: u64, msg: u64, mlen: u64) -> u32 {
+    VB_EOFF = off
+    vb_emit("err@" as u64, 4u64)
+    vb_emit_num(off)
+    vb_emit(": " as u64, 2u64)
+    vb_emit(msg, mlen)
+    vb_emit_ch(10u8)
+    vb_emit((&VB_LINE) as u64, VB_LLEN)
+    vb_emit_ch(10u8)
+    let mut i : u64 = 0u64
+    while i < off {
+        vb_emit_ch(32u8)
+        i = i + 1u64
+    }
+    vb_emit_ch(94u8)                       /* ^ */
+    vb_emit_ch(10u8)
+    return VB_ERR
+}
+
+/* crt0-compatible tokenizer: space-split, "quoted" tokens keep spaces, quotes stripped;
+ * an unterminated quote is a letter-precise error.  (iii has no break; loops exit via a guard
+ * that jams the index past the bound.) */
+fn vb_tokenize() -> u32 {
+    VB_NTOK = 0u64
+    let mut i : u64 = 0u64
+    while i < VB_LLEN {
+        let c0 : u8 = VB_LINE[i]
+        if c0 == 32u8 { i = i + 1u64 }
+        else {
+            if VB_NTOK >= VB_MAXTOK { return vb_error(i, "too many tokens (max 32)" as u64, 24u64) }
+            if c0 == 34u8 {
+                /* quoted token: starts after the quote, ends at the closing quote */
+                let qstart : u64 = i
+                i = i + 1u64
+                VB_TOFF[VB_NTOK] = i
+                let mut closed : u32 = 0u32
+                let mut scan : u32 = 1u32
+                while scan == 1u32 {
+                    if i >= VB_LLEN { scan = 0u32 }
+                    else {
+                        if VB_LINE[i] == 34u8 {
+                            VB_TLEN[VB_NTOK] = i - VB_TOFF[VB_NTOK]
+                            VB_NTOK = VB_NTOK + 1u64
+                            i = i + 1u64
+                            closed = 1u32
+                            scan = 0u32
+                        } else { i = i + 1u64 }
+                    }
+                }
+                if closed == 0u32 { return vb_error(qstart, "unterminated quote" as u64, 18u64) }
+            } else {
+                VB_TOFF[VB_NTOK] = i
+                let mut scan2 : u32 = 1u32
+                while scan2 == 1u32 {
+                    if i >= VB_LLEN { scan2 = 0u32 }
+                    else {
+                        if VB_LINE[i] == 32u8 { scan2 = 0u32 }
+                        else { i = i + 1u64 }
+                    }
+                }
+                VB_TLEN[VB_NTOK] = i - VB_TOFF[VB_NTOK]
+                VB_NTOK = VB_NTOK + 1u64
+            }
+        }
+    }
+    return 0u32
+}
+
+/* Parse a committed line: copy it private, tokenize, classify verb 0 (transcript reset here so
+ * the driver gets a clean buffer per command).  Returns the verb kind. */
+fn vb_parse(line: u64, llen: u64) -> u32 @export {
+    VB_OLEN = 0u64
+    VB_EOFF = 0u64
+    VB_LLEN = llen
+    if VB_LLEN > 1024u64 { VB_LLEN = 1024u64 }
+    let s : *u8 = line as *u8
+    let mut i : u64 = 0u64
+    while i < VB_LLEN {
+        VB_LINE[i] = s[i]
+        i = i + 1u64
+    }
+    let terr : u32 = vb_tokenize()
+    if terr == VB_ERR { return VB_ERR }
+    if VB_NTOK == 0u64 { return VB_EMPTY }
+
+    if vb_tok_is(0u64, "cd" as u64, 2u64) == 1u32 { return VB_CD }
+    if vb_tok_is(0u64, "pwd" as u64, 3u64) == 1u32 { return VB_PWD }
+    if vb_tok_is(0u64, "ls" as u64, 2u64) == 1u32 { return VB_LS }
+    if vb_tok_is(0u64, "env" as u64, 3u64) == 1u32 { return VB_ENV }
+    if vb_tok_is(0u64, "help" as u64, 4u64) == 1u32 { return VB_HELP }
+    if vb_tok_is(0u64, "plain" as u64, 5u64) == 1u32 { return VB_PLAIN }
+    if vb_tok_is(0u64, "exit" as u64, 4u64) == 1u32 { return VB_EXIT }
+    if vb_tok_is(0u64, "gate" as u64, 4u64) == 1u32 { return VB_GATE }
+    if vb_tok_is(0u64, "seal" as u64, 4u64) == 1u32 { return VB_SEAL }
+    if vb_tok_is(0u64, "build" as u64, 5u64) == 1u32 { return VB_BUILD }
+    return VB_EXTERN
+}
+
+/* Render the built-in help text into the transcript. */
+fn vb_do_help() -> i32 @export {
+    vb_emit("STOMA verbs: cd pwd ls env help plain exit  |  gate seal build  |  <cmd> = spawn\n" as u64, 81u64)
+    return 0i32
+}
+
+/* Expose the verb-kind constants to the driver/KAT (avoids magic numbers across modules). */
+fn vb_k_empty()  -> u32 @export { return VB_EMPTY }
+fn vb_k_cd()     -> u32 @export { return VB_CD }
+fn vb_k_pwd()    -> u32 @export { return VB_PWD }
+fn vb_k_ls()     -> u32 @export { return VB_LS }
+fn vb_k_env()    -> u32 @export { return VB_ENV }
+fn vb_k_help()   -> u32 @export { return VB_HELP }
+fn vb_k_plain()  -> u32 @export { return VB_PLAIN }
+fn vb_k_exit()   -> u32 @export { return VB_EXIT }
+fn vb_k_extern() -> u32 @export { return VB_EXTERN }
+fn vb_k_err()    -> u32 @export { return VB_ERR }
+fn vb_k_gate()   -> u32 @export { return VB_GATE }
+fn vb_k_seal()   -> u32 @export { return VB_SEAL }
+fn vb_k_build()  -> u32 @export { return VB_BUILD }

@@ -1,0 +1,138 @@
+/* STDLIB/iii/aether/stoma_traps.iii -- STOMA organ: the trap ledger (M6 of III-STOMA-PLAN.md).
+ *
+ * The "ensure traps aren't fallen into" faculty: a STATIC, DETERMINISTIC table of the recurring
+ * traps from the project's hard-won ledger, each with a fixed matcher, an action, and a CITATION
+ * to its source.  This is machine-enforced discipline, not prose -- and NOT machine learning:
+ * every decision is a fixed rule over the job's own text/params (no counting, no thresholds, no
+ * adaptation).  A job is checked BEFORE it runs (a preflight in stoma_queue); a matched trap
+ * BLOCKs the job, REWRITEs it to safety, or WARNs, and prints the citation letter-precisely.
+ *
+ * Trap ids / actions / citations:
+ *   1 TR_TMP       BLOCK   /tmp path in a job -> use repo-local     [feedback_tmp_path_split]
+ *   2 TR_EXIT8     WARN    want-exit > 255 -> bash $? masks to 8b   [feedback_probe_exit_code_8bit]
+ *   3 TR_CRLF      WARN    script file has CRLF -> bash dies        [feedback_edit_tool_crlf]
+ *   4 TR_TIMEOUT   REWRITE cap_ms == 0 -> default 25000ms bound     [feedback_iii_env_quirks]
+ *   5 TR_CONPTY    (doc)   pty spawn must use STARTF_USESTDHANDLES  [T-CONPTY-STDIO, this plan M0]
+ *   6 TR_CONCUR    (doc)   shared-artifact writers run SERIAL       [feedback_concurrent_writer]
+ *   7 TR_BIGINT    (doc)   >64 live bigint handles degrade          [feedback_iii_bigint_handle_64]
+ *   8 TR_PIPE_RC   (doc)   piped rc is lost -> per-stage codes      [feedback_probe_exit_code_8bit]
+ *
+ * Matchable traps (1-4) have live matchers with positive AND negative arms (KAT 2461); the
+ * structural traps (5-8) carry citations the queue surfaces when their job-shape appears.
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_traps
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+const TR_TMP     : u32 = 1u32
+const TR_EXIT8   : u32 = 2u32
+const TR_CRLF    : u32 = 3u32
+const TR_TIMEOUT : u32 = 4u32
+const TR_CONPTY  : u32 = 5u32
+const TR_CONCUR  : u32 = 6u32
+const TR_BIGINT  : u32 = 7u32
+const TR_PIPE_RC : u32 = 8u32
+
+/* actions */
+const TA_CLEAN   : u32 = 0u32
+const TA_BLOCK   : u32 = 1u32
+const TA_REWRITE : u32 = 2u32
+const TA_WARN    : u32 = 3u32
+
+const TR_INVALID : u64 = 18446744073709551615u64
+
+var TR_FBUF : [u8; 65536]     /* scratch for CRLF file scan */
+var TR_SCR  : [u64; 2]
+
+/* action for a trap id */
+fn trap_action(id: u32) -> u32 @export {
+    if id == TR_TMP { return TA_BLOCK }
+    if id == TR_EXIT8 { return TA_WARN }
+    if id == TR_CRLF { return TA_WARN }
+    if id == TR_TIMEOUT { return TA_REWRITE }
+    return TA_WARN
+}
+
+/* citation string for a trap id, copied into caller buffer (NUL-terminated); returns length.
+ * Copies until the source literal's NUL (no hand-counted lengths -> no off-by-one). */
+fn trap_cite(id: u32, dst: u64) -> u64 @export {
+    let mut src : u64 = "unknown trap" as u64
+    if id == TR_TMP     { src = "[feedback_tmp_path_split_python_msys] use repo-local, not /tmp" as u64 }
+    if id == TR_EXIT8   { src = "[feedback_probe_exit_code_8bit] bash masks exit to 8 bits; read native full-width" as u64 }
+    if id == TR_CRLF    { src = "[feedback_edit_tool_crlf_breaks_scripts] CRLF in a script kills bash" as u64 }
+    if id == TR_TIMEOUT { src = "[feedback_iii_build_verify_env_quirks] bound every job with a timeout" as u64 }
+    if id == TR_CONPTY  { src = "[T-CONPTY-STDIO] pty spawn needs STARTF_USESTDHANDLES + NULL std handles" as u64 }
+    if id == TR_CONCUR  { src = "[feedback_concurrent_writer_standalone_gate] serialize shared-artifact writers" as u64 }
+    if id == TR_BIGINT  { src = "[feedback_iii_bigint_handle_table_64] drop bigints; only 64 handle slots" as u64 }
+    if id == TR_PIPE_RC { src = "[feedback_probe_exit_code_8bit] piped rc is lost; capture per-stage codes" as u64 }
+    let s : *u8 = src as *u8
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u8 = s[i]
+        if c == 0u8 { go = 0u32 }
+        else { d[i] = c   i = i + 1u64   if i >= 255u64 { go = 0u32 } }
+    }
+    d[i] = 0u8
+    return i
+}
+
+/* does cmd[0..len) contain the substring "/tmp/" or "/tmp " or a bare "/tmp\0" end? */
+fn tr_has_tmp(cmd: u64, len: u64) -> u32 {
+    if len < 4u64 { return 0u32 }
+    let s : *u8 = cmd as *u8
+    let mut i : u64 = 0u64
+    let lim : u64 = len - 3u64
+    while i < lim {
+        if s[i] == 47u8 {            /* '/' */
+            if s[i + 1u64] == 116u8 { if s[i + 2u64] == 109u8 { if s[i + 3u64] == 112u8 { return 1u32 } } }  /* t m p */
+        }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* scan a command string for a command-level trap (currently TR_TMP).  0 = clean. */
+fn trap_scan_cmd(cmd: u64, len: u64) -> u32 @export {
+    if tr_has_tmp(cmd, len) == 1u32 { return TR_TMP }
+    return 0u32
+}
+
+/* scan a wanted exit code: >255 means bash would mask it (TR_EXIT8). */
+fn trap_scan_want(want: u32) -> u32 @export {
+    if want > 255u32 { return TR_EXIT8 }
+    return 0u32
+}
+
+/* scan a timeout budget: 0 (unbounded) trips TR_TIMEOUT (queue rewrites to a default). */
+fn trap_scan_timeout(cap_ms: u32) -> u32 @export {
+    if cap_ms == 0u32 { return TR_TIMEOUT }
+    return 0u32
+}
+fn trap_timeout_default() -> u32 @export { return 25000u32 }
+
+/* scan a file (NUL-terminated path) for a CR-LF pair -> TR_CRLF; 0 clean, TR_INVALID-ish -1 on
+ * unreadable (caller treats missing file as clean). */
+fn trap_scan_file_crlf(path: u64) -> u32 @export {
+    let h : u64 = CreateFileA(path, 2147483648u32, 3u32, 0u64, 3u32, 128u32, 0u64)
+    if h == TR_INVALID { return 0u32 }
+    if ReadFile(h, (&TR_FBUF) as u64, 65536u32, (&TR_SCR) as u64, 0u64) == 0i32 {
+        CloseHandle(h)
+        return 0u32
+    }
+    CloseHandle(h)
+    let n : u64 = TR_SCR[0u64]
+    if n < 2u64 { return 0u32 }
+    let mut i : u64 = 0u64
+    let lim : u64 = n - 1u64
+    while i < lim {
+        if TR_FBUF[i] == 13u8 { if TR_FBUF[i + 1u64] == 10u8 { return TR_CRLF } }
+        i = i + 1u64
+    }
+    return 0u32
+}

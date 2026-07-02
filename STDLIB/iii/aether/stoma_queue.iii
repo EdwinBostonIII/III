@@ -1,0 +1,141 @@
+/* STDLIB/iii/aether/stoma_queue.iii -- STOMA organ: the intent queue (M6 of III-STOMA-PLAN.md).
+ *
+ * The "auto-queue precise commands and ensure traps aren't fallen into" faculty.  A verb expands
+ * into a typed job list; each job is run through the trap preflights (stoma_traps) BEFORE it
+ * executes.  A BLOCK trap refuses the job with its citation; a REWRITE trap fixes the job in
+ * place (e.g. an unbounded timeout gets the default bound); a WARN trap annotates but proceeds.
+ * Surviving jobs run through the native full-width verdict executive (stoma_gate.gate_run), so
+ * the queue's PASS/WRONG decisions are RIGHT where a bash pipeline's 8-bit $? would be wrong.
+ *
+ * The queue is SERIAL by construction -- it runs one job at a time -- which IS the concurrent-
+ * writer guard (TR_CONCUR): two jobs that write the same artifact can never race here.
+ *
+ * Job record (fixed-size columns; strings live in one packed byte pool):
+ *   state: 0 pending | 1 PASS | 2 WRONG | 3 BLOCKED     want: full-width exit code
+ *   cap_ms: 0 means "unbounded" (rewritten by TR_TIMEOUT preflight)   trap: firing trap id (0 none)
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_queue
+
+extern @abi(c-msvc-x64) fn trap_scan_cmd(cmd: u64, len: u64) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_scan_want(want: u32) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_scan_timeout(cap_ms: u32) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_timeout_default() -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_action(id: u32) -> u32 from "stoma_traps.iii"
+
+extern @abi(c-msvc-x64) fn gate_run(cmd: u64, want: u32, cap_ms: u32) -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_last_code() -> u32 from "stoma_gate.iii"
+
+const Q_MAXJOB : u64 = 128u64
+const Q_POOL   : u64 = 32768u64
+
+const TA_BLOCK   : u32 = 1u32
+const TA_REWRITE : u32 = 2u32
+const TA_WARN    : u32 = 3u32
+
+var Q_OFF   : [u64; 128]      /* command offset into the pool */
+var Q_LEN   : [u64; 128]      /* command length */
+var Q_WANT  : [u32; 128]
+var Q_CAP   : [u32; 128]
+var Q_STATE : [u32; 128]      /* 0 pending 1 PASS 2 WRONG 3 BLOCKED */
+var Q_TRAP  : [u32; 128]      /* firing trap id (blocked/warned) */
+var Q_CODE  : [u32; 128]      /* observed full-width exit code */
+var Q_POOLB : [u8; 32768]
+var Q_N     : u64 = 0u64      /* job count */
+var Q_FILL  : u64 = 0u64      /* pool fill cursor */
+var Q_RANPASS : u64 = 0u64
+var Q_RANWRONG : u64 = 0u64
+var Q_RANBLOCK : u64 = 0u64
+
+fn queue_reset() -> i32 @export {
+    Q_N = 0u64
+    Q_FILL = 0u64
+    Q_RANPASS = 0u64
+    Q_RANWRONG = 0u64
+    Q_RANBLOCK = 0u64
+    return 0i32
+}
+
+/* enqueue a job.  cmd[0..len) copied into the pool.  Returns the job index, or -1 if full. */
+fn queue_push(cmd: u64, len: u64, want: u32, cap_ms: u32) -> i64 @export {
+    if Q_N >= Q_MAXJOB { return 0i64 - 1i64 }
+    if Q_FILL + len + 1u64 > Q_POOL { return 0i64 - 1i64 }
+    let s : *u8 = cmd as *u8
+    Q_OFF[Q_N] = Q_FILL
+    Q_LEN[Q_N] = len
+    let mut i : u64 = 0u64
+    while i < len {
+        Q_POOLB[Q_FILL + i] = s[i]
+        i = i + 1u64
+    }
+    Q_POOLB[Q_FILL + len] = 0u8       /* NUL for spawn */
+    Q_FILL = Q_FILL + len + 1u64
+    Q_WANT[Q_N] = want
+    Q_CAP[Q_N] = cap_ms
+    Q_STATE[Q_N] = 0u32
+    Q_TRAP[Q_N] = 0u32
+    Q_CODE[Q_N] = 0u32
+    let idx : i64 = Q_N as i64
+    Q_N = Q_N + 1u64
+    return idx
+}
+
+/* preflight one job: run the deterministic trap matchers; apply BLOCK/REWRITE/WARN.
+ * Returns 1 = may run, 0 = blocked.  Records the firing trap in Q_TRAP[i]. */
+fn q_preflight(i: u64) -> u32 {
+    let base : u64 = (&Q_POOLB) as u64 + Q_OFF[i]
+    /* command-level (TR_TMP -> BLOCK) */
+    let tc : u32 = trap_scan_cmd(base, Q_LEN[i])
+    if tc != 0u32 {
+        if trap_action(tc) == TA_BLOCK {
+            Q_TRAP[i] = tc
+            Q_STATE[i] = 3u32
+            return 0u32
+        }
+        Q_TRAP[i] = tc
+    }
+    /* timeout (TR_TIMEOUT -> REWRITE to default bound) */
+    let tt : u32 = trap_scan_timeout(Q_CAP[i])
+    if tt != 0u32 {
+        if trap_action(tt) == TA_REWRITE {
+            Q_CAP[i] = trap_timeout_default()
+            if Q_TRAP[i] == 0u32 { Q_TRAP[i] = tt }
+        }
+    }
+    /* want-code (TR_EXIT8 -> WARN; the native executive already handles full width) */
+    let tw : u32 = trap_scan_want(Q_WANT[i])
+    if tw != 0u32 { if Q_TRAP[i] == 0u32 { Q_TRAP[i] = tw } }
+    return 1u32
+}
+
+/* run the whole queue serially: preflight then execute survivors via the full-width executive. */
+fn queue_run() -> i32 @export {
+    Q_RANPASS = 0u64
+    Q_RANWRONG = 0u64
+    Q_RANBLOCK = 0u64
+    let mut i : u64 = 0u64
+    while i < Q_N {
+        if q_preflight(i) == 0u32 {
+            Q_RANBLOCK = Q_RANBLOCK + 1u64
+        } else {
+            let base : u64 = (&Q_POOLB) as u64 + Q_OFF[i]
+            let ok : u32 = gate_run(base, Q_WANT[i], Q_CAP[i])
+            Q_CODE[i] = gate_last_code()
+            if ok == 1u32 { Q_STATE[i] = 1u32   Q_RANPASS = Q_RANPASS + 1u64 }
+            else { Q_STATE[i] = 2u32   Q_RANWRONG = Q_RANWRONG + 1u64 }
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* accessors */
+fn queue_count() -> u64 @export { return Q_N }
+fn queue_state(i: u64) -> u32 @export { if i >= Q_N { return 255u32 }   return Q_STATE[i] }
+fn queue_trap(i: u64) -> u32 @export { if i >= Q_N { return 0u32 }   return Q_TRAP[i] }
+fn queue_code(i: u64) -> u32 @export { if i >= Q_N { return 0u32 }   return Q_CODE[i] }
+fn queue_cap(i: u64) -> u32 @export { if i >= Q_N { return 0u32 }   return Q_CAP[i] }
+fn queue_ran_pass() -> u64 @export { return Q_RANPASS }
+fn queue_ran_wrong() -> u64 @export { return Q_RANWRONG }
+fn queue_ran_blocked() -> u64 @export { return Q_RANBLOCK }

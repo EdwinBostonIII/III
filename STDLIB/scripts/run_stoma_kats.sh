@@ -10,7 +10,7 @@ OUT="$III/STDLIB/build/stoma_kats"
 mkdir -p "$OUT"
 pass=0; fail=0
 
-ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_shell"
+ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_shell"
 for m in $ORGANS; do
     "$I2" "$A/$m.iii" --compile-only --out "$OUT/$m.o" 2>"$OUT/$m.c.log" \
         || { echo "FAIL $m : organ compile"; tail -3 "$OUT/$m.c.log"; exit 1; }
@@ -35,6 +35,7 @@ run 2457_stoma_pty   99 "$OUT/stoma_pty.o"
 run 2458_stoma_line  99 "$OUT/stoma_line.o"
 run 2459_stoma_shell 99 "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_shell.o"
 run 2460_stoma_gate  99 "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
+run 2461_stoma_queue 99 "$OUT/stoma_traps.o" "$OUT/stoma_queue.o" "$OUT/stoma_gate.o" "$OUT/stoma_proc.o"
 
 # ---- stoma.exe walking-skeleton: build (gcc dev-link here; sovbuild parity is the M5/M7 gate) + plain-mode smoke ----
 "$I2" "$A/stoma.iii" --compile-only --out "$OUT/stoma.o" 2>"$OUT/stoma.c.log" \

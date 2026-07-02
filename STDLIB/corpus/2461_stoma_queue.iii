@@ -1,0 +1,116 @@
+/* 2461_stoma_queue.iii -- STOMA M6 gate: trap ledger + intent queue.
+ *
+ * Proves each matchable trap has BOTH arms (positive: the trap fires; negative: the guarded
+ * variant is clean) -- no negative-only proofs -- and that the queue enforces them:
+ *   TR_TMP (BLOCK):   a "/tmp/..." job is refused; a repo-local job runs.
+ *   TR_TIMEOUT (REWRITE): a cap_ms=0 job gets the default bound; a bounded job is untouched.
+ *   TR_EXIT8 (WARN):  want=300 is flagged; want=99 is clean.
+ *   TR_CRLF (WARN):   a CRLF file is flagged; an LF file is clean.
+ *   queue:            blocked jobs don't run; survivors get full-width PASS/WRONG verdicts.
+ *
+ * Exit map: 10-13 TMP; 20-22 timeout; 30-31 exit8; 40-42 crlf; 50-55 queue; 99 = pass.
+ * NIH: stoma_traps + stoma_queue + stoma_gate + stoma_proc + kernel32. */
+module corpus_2461
+
+extern @abi(c-msvc-x64) fn trap_scan_cmd(cmd: u64, len: u64) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_scan_want(want: u32) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_scan_timeout(cap_ms: u32) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_scan_file_crlf(path: u64) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_action(id: u32) -> u32 from "stoma_traps.iii"
+extern @abi(c-msvc-x64) fn trap_cite(id: u32, dst: u64) -> u64 from "stoma_traps.iii"
+
+extern @abi(c-msvc-x64) fn queue_reset() -> i32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_push(cmd: u64, len: u64, want: u32, cap_ms: u32) -> i64 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_run() -> i32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_state(i: u64) -> u32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_trap(i: u64) -> u32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_cap(i: u64) -> u32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_code(i: u64) -> u32 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_ran_pass() -> u64 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_ran_wrong() -> u64 from "stoma_queue.iii"
+extern @abi(c-msvc-x64) fn queue_ran_blocked() -> u64 from "stoma_queue.iii"
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+var K_A : [u8; 64]
+var K_B : [u8; 64]
+var K_CITE : [u8; 300]
+var K_SCR : [u64; 2]
+
+fn slen(p: u64) -> u64 {
+    let s : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 { if s[i] == 0u8 { go = 0u32 } else { i = i + 1u64 } }
+    return i
+}
+fn cpy(dst: u64, lit: u64) -> u64 {
+    let s : *u8 = lit as *u8
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 { let c : u8 = s[i]   d[i] = c   if c == 0u8 { go = 0u32 } else { i = i + 1u64 } }
+    return i
+}
+
+fn main() -> u64 {
+    /* ── TR_TMP both arms ── */
+    let a1 : u64 = cpy((&K_A) as u64, "gcc -o /tmp/x.exe x.o" as u64)
+    if trap_scan_cmd((&K_A) as u64, a1) != 1u32 { return 10u64 }         /* positive: fires TR_TMP */
+    if trap_action(1u32) != 1u32 { return 11u64 }                        /* TR_TMP -> BLOCK */
+    let a2 : u64 = cpy((&K_B) as u64, "gcc -o STDLIB/build/x.exe x.o" as u64)
+    if trap_scan_cmd((&K_B) as u64, a2) != 0u32 { return 12u64 }         /* negative: clean */
+    /* citation is non-empty and letter-precise */
+    if trap_cite(1u32, (&K_CITE) as u64) < 10u64 { return 13u64 }
+
+    /* ── TR_TIMEOUT both arms ── */
+    if trap_scan_timeout(0u32) != 4u32 { return 20u64 }                  /* positive */
+    if trap_action(4u32) != 2u32 { return 21u64 }                        /* REWRITE */
+    if trap_scan_timeout(25000u32) != 0u32 { return 22u64 }              /* negative */
+
+    /* ── TR_EXIT8 both arms ── */
+    if trap_scan_want(300u32) != 2u32 { return 30u64 }                   /* positive */
+    if trap_scan_want(99u32) != 0u32 { return 31u64 }                    /* negative */
+
+    /* ── TR_CRLF both arms ── */
+    /* positive: a file with CRLF */
+    let h1 : u64 = CreateFileA("stjt_crlf.txt" as u64, 1073741824u32, 1u32, 0u64, 2u32, 128u32, 0u64)
+    if h1 + 1u64 == 0u64 { return 40u64 }
+    K_A[0u64]=97u8 K_A[1u64]=13u8 K_A[2u64]=10u8 K_A[3u64]=98u8          /* "a\r\nb" */
+    WriteFile(h1, (&K_A) as u64, 4u32, (&K_SCR) as u64, 0u64)
+    CloseHandle(h1)
+    if trap_scan_file_crlf("stjt_crlf.txt" as u64) != 3u32 { return 41u64 }
+    /* negative: LF-only */
+    let h2 : u64 = CreateFileA("stjt_lf.txt" as u64, 1073741824u32, 1u32, 0u64, 2u32, 128u32, 0u64)
+    if h2 + 1u64 == 0u64 { return 42u64 }
+    K_B[0u64]=97u8 K_B[1u64]=10u8 K_B[2u64]=98u8                          /* "a\nb" */
+    WriteFile(h2, (&K_B) as u64, 3u32, (&K_SCR) as u64, 0u64)
+    CloseHandle(h2)
+    if trap_scan_file_crlf("stjt_lf.txt" as u64) != 0u32 { return 42u64 }
+
+    /* ── queue: block + rewrite + full-width verdict ── */
+    queue_reset()
+    /* job 0: /tmp job -> BLOCKED (never runs) */
+    let j0 : u64 = cpy((&K_A) as u64, "cmd /c echo /tmp/should_block" as u64)
+    queue_push((&K_A) as u64, j0, 0u32, 20000u32)
+    /* job 1: unbounded timeout -> REWRITE cap to default, then PASS */
+    let j1 : u64 = cpy((&K_B) as u64, "cmd /c exit 7" as u64)
+    queue_push((&K_B) as u64, j1, 7u32, 0u32)                            /* cap 0 -> rewritten */
+    /* job 2: full-width want 300 -> PASS (bash would mask to 44) */
+    let j2 : u64 = cpy((&K_A) as u64, "cmd /c exit 300" as u64)
+    queue_push((&K_A) as u64, j2, 300u32, 20000u32)
+    queue_run()
+
+    if queue_state(0u64) != 3u32 { return 50u64 }                        /* BLOCKED */
+    if queue_trap(0u64) != 1u32 { return 51u64 }                         /* by TR_TMP */
+    if queue_state(1u64) != 1u32 { return 52u64 }                        /* PASS */
+    if queue_cap(1u64) != 25000u32 { return 53u64 }                      /* timeout rewritten */
+    if queue_state(2u64) != 1u32 { return 54u64 }                        /* PASS full-width */
+    if queue_code(2u64) != 300u32 { return 54u64 }
+    if queue_ran_blocked() != 1u64 { return 55u64 }
+    if queue_ran_pass() != 2u64 { return 55u64 }
+
+    return 99u64
+}

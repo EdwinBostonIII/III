@@ -1,0 +1,39 @@
+/* 2191_graze_legal.iii -- GATE for the GRAZE-LEGAL ARC VERB (Turing charter V-IV.1): the C-space
+ * rotation certificate learns to tell touch from cross.
+ *
+ * The 2181 geometry, now at the VERB level: tip R_z(theta)(5,0,0), edge k=-1, sphere at (20,0,0).
+ *   r2 = 225 (the exact GRAZE, N = 400u^2(u^2+1)):  as_cert 0 (its documented blindness) but
+ *       as_cert2 = 2 -- GRAZE-LEGAL: one distinct root, multiplicity 2, clearance N >= 0 throughout:
+ *       the state rule's contact-is-legal admits the arc.
+ *   r2 = 226 (a true crossing):                     as_cert 0, as_cert2 0 -- STILL BLOCKED.
+ *   r2 = 4  (clear):                                both 1 -- the extension is CONSERVATIVE: it never
+ *       relaxes anything but the certified-even-tangency case.
+ * One geometry, three radii, and the verb now names which refusals were real.
+ *
+ * exit 99 = pass;  10 graze;  11 cross;  12 clear/agreement */
+module corpus_2191_graze_legal
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
+extern @abi(c-msvc-x64) fn as_cert2(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    let g1 : i32 = as_cert(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 225i64)
+    let g2 : i32 = as_cert2(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 225i64)
+    let x1 : i32 = as_cert(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 226i64)
+    let x2 : i32 = as_cert2(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 226i64)
+    let c1 : i32 = as_cert(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 4i64)
+    let c2 : i32 = as_cert2(5i64, 0i64, 0i64, 0i64, 0i64 - 1i64, 20i64, 0i64, 0i64, 4i64)
+    putchar(86i32) putchar(58i32) sp() e_i64(g1 as i64) sp() e_i64(g2 as i64) sp() e_i64(x1 as i64) sp() e_i64(x2 as i64) sp() e_i64(c1 as i64) sp() e_i64(c2 as i64) nl()
+    /* "V: 0 2 0 0 1 1" */
+    if g1 != 0i32 { return 10u64 }
+    if g2 != 2i32 { return 10u64 }                     /* the graze is LEGAL, by certificate */
+    if x1 != 0i32 { return 11u64 }
+    if x2 != 0i32 { return 11u64 }                     /* the crossing stays blocked */
+    if c1 != 1i32 { return 12u64 }
+    if c2 != 1i32 { return 12u64 }                     /* conservative on clear */
+    return 99u64
+}

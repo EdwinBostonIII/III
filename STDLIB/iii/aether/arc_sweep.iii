@@ -24,6 +24,7 @@ module arc_sweep
 
 extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
 extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_mult(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
 
 var AS_P : [i64; 5]
 
@@ -76,5 +77,35 @@ fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64
     if sturm_build((&AS_P) as u64, deg) < 0i64 { return 0i32 }    /* refuse on any build failure */
     let n : i64 = root_count(as_tt(kk + 6i64) - 2i64, 1000i64, as_tt(kk + 7i64) + 2i64, 1000i64)
     if n == 0i64 { return 1i32 }
+    return 0i32
+}
+
+/* THE GRAZE-LEGAL VERB (Turing charter V-IV.1): as_cert refuses EVERY interior root -- it cannot tell
+ * a tangential graze from a penetration (its documented blindness, discriminated in 2181).  as_cert2
+ * upgrades ONLY the refusal path: if the cover holds exactly ONE distinct root and its multiplicity is
+ * EVEN (root_mult on the SAME AS_P the refusing call just built), the arc merely TOUCHES (clearance
+ * N >= 0 throughout): verdict 2 = graze-legal under the state rule's contact-is-legal.  Odd
+ * multiplicity or multiple roots stay blocked (0).  as_cert itself is untouched. */
+fn as_cert2(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 @export {
+    let c : i32 = as_cert(AX, Bx, By, Bz, k, Cx, Cy, Cz, r2)
+    if c == 1i32 { return 1i32 }
+    /* AS_P and its Sturm chain are still the refusing call's state */
+    let mut deg : i64 = 0i64
+    if AS_P[1u64] != 0i64 { deg = 1i64 }
+    if AS_P[2u64] != 0i64 { deg = 2i64 }
+    if AS_P[3u64] != 0i64 { deg = 3i64 }
+    if AS_P[4u64] != 0i64 { deg = 4i64 }
+    if deg < 1i64 { return 0i32 }
+    let mut kk : i64 = k % 24i64
+    if kk < 0i64 { kk = kk + 24i64 }
+    if kk >= 6i64 { if kk < 18i64 { kk = kk - 12i64 } }
+    if kk >= 18i64 { kk = kk - 24i64 }
+    let lo : i64 = as_tt(kk + 6i64) - 2i64
+    let hi : i64 = as_tt(kk + 7i64) + 2i64
+    let n : i64 = root_count(lo, 1000i64, hi, 1000i64)
+    if n != 1i64 { return 0i32 }
+    let m : i64 = root_mult((&AS_P) as u64, deg, lo, 1000i64, hi, 1000i64)
+    if m < 1i64 { return 0i32 }
+    if (m % 2i64) == 0i64 { return 2i32 }
     return 0i32
 }

@@ -14,7 +14,11 @@
 #  copy reappears, so the "one address" invariant cannot silently regress.
 #  (BOOT is excluded: BOOT files embed the K-constant for closure hashing, not
 #  a sha256.c copy; CRYPTO-AGILITY/src/sha2.c is the distinct FIPS SHA-2 family,
-#  not a single-purpose sha256.c copy -- both are out of scope here.)
+#  not a single-purpose sha256.c copy -- both are out of scope here.
+#  STDLIB/sovir/ is excluded (whole-tree sweep 2026-07-02): it is the ccsv/sovtc
+#  C-compiler TEST CORPUS -- its sha256.c is INPUT-UNDER-TEST for the sovereign
+#  C toolchain (drivers: sovir/run_ccsv.sh, sovir/run_ddc.sh, sovtc/run_sovtc.sh),
+#  never linked into III; same exclusion class as BOOT.)
 #
 #  Exit 0  = no C sha256.c/sha256_local.c copy exists (cad is the one address).
 #  Exit 1  = a retired copy reappeared (listed) -- M24#1 regression.
@@ -33,7 +37,7 @@ while IFS= read -r f; do
     FOUND=$((FOUND+1))
     echo "  REGRESSION  ${f#$ROOT/}  (a retired C sha256 copy reappeared)"
 done < <(find "$ROOT" -type f \( -name "sha256.c" -o -name "sha256_local.c" \) \
-            -not -path "*/BOOT/*" -not -path "*/build/*" | sort)
+            -not -path "*/BOOT/*" -not -path "*/build/*" -not -path "*/sovir/*" | sort)
 
 echo "============================================================"
 echo "  reappeared copies = $FOUND"

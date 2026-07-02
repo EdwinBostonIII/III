@@ -31,7 +31,9 @@ _run() {  # $1 = driver .iii text -> echoes rc
   printf '%s\n' "$1" > "$W/_pcdrv.iii"
   "$IIIS" "$W/_pcdrv.iii" --compile-only --out "$W/_pcdrv.o" >/dev/null 2>&1 || { echo 254; return; }
   gcc "$W/_pcdrv.o" "$W/_pcmod.o" "$LIB" -lkernel32 -o "$W/_pcdrv.exe" 2>/dev/null || { echo 253; return; }
-  timeout 30 "$W/_pcdrv.exe" >/dev/null 2>&1; echo $?
+  # 120s: cor_selftest CIC-certifies all 63 tabled rules and measured 41s wall on 2026-07-02
+  # (the 30s budget predates the table's growth; a hang still dies well inside the gate).
+  timeout 120 "$W/_pcdrv.exe" >/dev/null 2>&1; echo $?
 }
 
 # ---- (A) kernel proof + width guard ----
@@ -135,14 +137,19 @@ else
   say "(C-subk) FAIL negative : x*13 did not emit imul-without-shift -- got: $(printf '%s' "$ssneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
 fi
 
-# ---- (C) emit negative: a non-pow2 factor must emit imul, NOT shl ----
-printf 'module p\nfn f(x: u64) -> u64 { return x * 6u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcneg.iii"
+# ---- (C) emit negative: a factor outside EVERY certified family must emit imul, NOT shl ----
+# HISTORY (2026-07-02 whole-tree sweep): this arm's original factor was 6, chosen when only the
+# plain-pow2 rules existed.  The certified strength-reduction family has since grown to cover
+# 6 = 2^2 + 2^1 (two-shift + add decomposition, legitimately emitted, certificates bound by the
+# (B) family checks) -- so 6 stopped being a negative.  19 (10011b) is outside pow2, 2^k+-1, and
+# the two-term family: verified 2026-07-02 to emit movabs+imul with zero shifts.
+printf 'module p\nfn f(x: u64) -> u64 { return x * 19u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcneg.iii"
 "$IIIS" "$W/_pcneg.iii" --compile-only --out "$W/_pcneg.o" >/dev/null 2>&1
 negasm="$(objdump -d "$W/_pcneg.o" 2>/dev/null | grep -iE 'shl|sal|imul')"
 if printf '%s' "$negasm" | grep -qi imul && ! printf '%s' "$negasm" | grep -qiE 'shl|sal'; then
-  say "(C) negative : x*6 (non-pow2) -> emits 'imul', NO shift  [the binding has teeth]"
+  say "(C) negative : x*19 (outside all certified families) -> emits 'imul', NO shift  [the binding has teeth]"
 else
-  say "(C) FAIL negative : x*6 did not emit imul-without-shift -- got: $(printf '%s' "$negasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+  say "(C) FAIL negative : x*19 did not emit imul-without-shift -- got: $(printf '%s' "$negasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
 fi
 
 echo "============================================================"

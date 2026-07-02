@@ -41,7 +41,7 @@ extern @abi(c-msvc-x64) fn rs_init(n: u32, k: u32) -> i32 from "rscode.iii"
 extern @abi(c-msvc-x64) fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 from "rscode.iii"
 extern @abi(c-msvc-x64) fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 from "rscode.iii"
 extern @abi(c-msvc-x64) fn rs_decode_apply(present_sym: u64, data_out: u64) -> i32 from "rscode.iii"
-extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "cad.iii"   /* H2 one-address: suite 1 = Keccak-256, byte-identical to the retired direct keccak256_oneshot route */
 extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
 
 const ES_MAX_N    : u32 = 16u32
@@ -129,7 +129,7 @@ fn es_encode(blob_ptr: u64, dlen: u32, k: u32, n: u32) -> i32 @export {
     /* content-address every shard, then commit the set with a Merkle root */
     let mut s : u32 = 0u32
     while s < n {
-        keccak256_oneshot(es_shard_ptr(s), slen as u64, es_ca_ptr(s))
+        cad_oneshot(1u32, es_shard_ptr(s), slen as u64, es_ca_ptr(s))   /* via cad (H2): byte-identical keccak digest */
         s = s + 1u32
     }
     merkle_compute_root(&ES_CA as u64, n, 32u64, &ES_ROOT as u64)
@@ -139,7 +139,7 @@ fn es_encode(blob_ptr: u64, dlen: u32, k: u32, n: u32) -> i32 @export {
 /* 1 iff shard i hashes (keccak256 over its shard_len bytes) to its stored content address. */
 fn es_verify_shard(i: u32) -> u8 @export {
     let slen : u32 = ES_PN[2u32]
-    keccak256_oneshot(es_shard_ptr(i), slen as u64, &ES_SCA as u64)
+    cad_oneshot(1u32, es_shard_ptr(i), slen as u64, &ES_SCA as u64)   /* via cad (H2): byte-identical keccak digest */
     let mut b : u32 = 0u32
     while b < 32u32 {
         if ES_SCA[b] != ES_CA[i * 32u32 + b] { return 0u8 }

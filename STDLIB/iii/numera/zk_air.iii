@@ -55,7 +55,7 @@ extern @abi(c-msvc-x64) fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u6
 extern @abi(c-msvc-x64) fn zk_proof_seal_begin() -> i32 from "zk_stark_seal.iii"
 extern @abi(c-msvc-x64) fn zk_proof_seal_absorb(addr: u64, len: u64) -> i32 from "zk_stark_seal.iii"
 extern @abi(c-msvc-x64) fn zk_proof_seal_final(out32: u64) -> i32 from "zk_stark_seal.iii"
-extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "cad.iii"   /* H2 one-address: suite 1 = Keccak-256, byte-identical to the retired direct keccak256_oneshot route */
 var ZKAIR_PERM_DIG : [u8; 32]       /* keccak digest of the committed access roots -> the FS permutation challenges (vetted hash, not the bespoke square-mix) */
 extern @abi(c-msvc-x64) fn zk_proof_seal_eq(a: u64, b: u64) -> u8 from "zk_stark_seal.iii"
 
@@ -863,7 +863,7 @@ fn air_derive_alphas(tlen: u64) -> i32 {
 fn air_perm_field(start: u64, nv: u64, off: u64) -> u32 {
     /* KECCAK-256 the committed access roots (vetted hash -> no algebraic shortcut), then take a 4-byte slice at `off`
      * (0 -> alpha, 4 -> beta) reduced mod p.  Both prover and verifier hash the SAME committed roots. */
-    keccak256_oneshot((&ZKAIR_TRACE_ROOTS as u64) + start * 32u64, nv * 32u64, &ZKAIR_PERM_DIG as u64)
+    cad_oneshot(1u32, (&ZKAIR_TRACE_ROOTS as u64) + start * 32u64, nv * 32u64, &ZKAIR_PERM_DIG as u64)   /* via cad (H2): suite 1 = KECCAK, byte-identical digest */
     let p : *u8 = ((&ZKAIR_PERM_DIG as u64) + off) as *u8
     let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
     while x >= AIR_Q { x = x - AIR_Q }

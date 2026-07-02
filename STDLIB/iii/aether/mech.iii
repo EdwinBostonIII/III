@@ -1,0 +1,399 @@
+/* STDLIB/iii/aether/mech.iii -- THE EXACT MECHANISM WORKBENCH (mech.exe).
+ *
+ * A user-facing product, not a test: planar 4-bar linkage analysis and inverse design where
+ * every printed number is exact.  A floating CAD kernel near a toggle/dead-centre computes
+ * cos(phi) = 0.9999999 and cannot say whether the mechanism locks; this tool prints the exact
+ * rational/surd value and a certified sign.
+ *
+ * usage:
+ *   mech <a> <b> <c> <d>              exact analysis (crank a, coupler b, rocker c, ground d)
+ *   mech design <a> <b> <c> [lo hi]   exact inverse design: the ground length d giving a
+ *                                     PERPENDICULAR extended dead-centre (d^2 = (a+b)^2 - c^2),
+ *                                     Sturm-isolated in (lo,hi] + exact surd form s*sqrt(r)
+ *
+ * link-length envelope: 1..150 (keeps every intermediate product, including the swing surd
+ * certificate (2cd*2c'd')^2-class terms, inside i64 -- violations are REFUSED with the reason,
+ * never silently truncated).
+ *
+ * exit: 0 = report printed (including honest refusals)   2 = usage error
+ *
+ * Composes: fourbar.iii (rational analysis organs) + sqrt_sum_sign.iii (ui_bsign1 surd sign
+ * certificates) + sturm.iii (exact real-root counting/isolation) over libiii_native.
+ */
+module mech
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn fbar_grashof(a: i64, b: i64, c: i64, d: i64) -> i32 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_dc_cos_num(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_dc_cos_den(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_trans_cos_num(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_trans_cos_den(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_assembles(a: i64, b: i64, c: i64, d: i64, ext: i32) -> u8 from "fourbar.iii"
+
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_sum_sign.iii"
+
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+var MXDIG : [u8; 32]
+var MXPD  : [i64; 8]
+var MXS   : i64        /* square part s of the last sqfree() call: n = s^2 * r */
+var MXR   : i64        /* radicand  r of the last sqfree() call */
+
+/* ------------------------------------------------ printing ------------------------------------ */
+fn pstr(s: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let c : u8 = s[i]
+        if c == 126u8 { going = 0u8 }
+        if going == 1u8 { putchar(c as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+fn pnl() -> i32 { return putchar(10i32) }
+fn pint(n: i64) -> i32 {
+    let mut x : i64 = n
+    if x < 0i64 { putchar(45i32)   x = 0i64 - x }
+    if x == 0i64 { putchar(48i32)   return 0i32 }
+    let mut k : i64 = 0i64
+    while x > 0i64 {
+        let q : i64 = x / 10i64
+        MXDIG[k] = ((x - (q * 10i64)) + 48i64) as u8
+        x = q
+        k = k + 1i64
+    }
+    while k > 0i64 { k = k - 1i64   let dg : u8 = MXDIG[k]   putchar(dg as i32) }
+    return 0i32
+}
+/* exact fraction n/d (d>0, reduced by the producer); prints "n" when d==1 */
+fn pfrac(n: i64, d: i64) -> i32 {
+    pint(n)
+    if d != 1i64 { putchar(47i32)   pint(d) }
+    return 0i32
+}
+/* scaled decimal: v/10000 printed as "I.FFFF" (v >= 0) */
+fn pdec4(v: i64) -> i32 {
+    let ip : i64 = v / 10000i64
+    let fp : i64 = v - (ip * 10000i64)
+    pint(ip)   putchar(46i32)
+    let mut m : i64 = 1000i64
+    let mut f : i64 = fp
+    while m > 0i64 {
+        let dg : i64 = f / m
+        putchar((dg + 48i64) as i32)
+        f = f - (dg * m)
+        m = m / 10i64
+    }
+    return 0i32
+}
+
+/* ------------------------------------------------ arithmetic ---------------------------------- */
+fn mx_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   let mut b : i64 = y
+    if a < 0i64 { a = 0i64 - a }
+    if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = b   b = a - ((a / b) * b)   a = t }
+    if a == 0i64 { return 1i64 }
+    return a
+}
+fn mx_isqrt(n: i64) -> i64 {
+    if n < 0i64 { return 0i64 - 1i64 }
+    if n == 0i64 { return 0i64 }
+    let mut r : i64 = 1i64
+    let mut nn : i64 = n
+    /* scale the seed up by halving the bit-length (fast enough for the 150-envelope) */
+    while nn > 3i64 { nn = nn / 4i64   r = r * 2i64 }
+    /* Newton steps on integers */
+    let mut k : i64 = 0i64
+    while k < 40i64 {
+        let rr : i64 = (r + (n / r)) / 2i64
+        if rr >= r { k = 40i64 } else { r = rr }
+        k = k + 1i64
+    }
+    while (r * r) > n { r = r - 1i64 }
+    while ((r + 1i64) * (r + 1i64)) <= n { r = r + 1i64 }
+    return r
+}
+/* factor n = s^2 * r with r minimal (trial primes to 46341, then a perfect-square check).
+ * always CORRECT (s^2*r == n); r minimal for every input in the 150-envelope. */
+fn mx_sqfree(n: i64) -> i32 {
+    let mut rem : i64 = n
+    let mut s : i64 = 1i64
+    let mut p : i64 = 2i64
+    while (p * p) <= rem {
+        let pp : i64 = p * p
+        let mut div : u8 = 1u8
+        while div == 1u8 {
+            let q : i64 = rem / pp
+            if (q * pp) == rem { rem = q   s = s * p } else { div = 0u8 }
+        }
+        p = p + 1i64
+        if p > 46341i64 { p = rem + 1i64 }   /* p^2 would overflow the loop guard's usefulness */
+    }
+    /* residual perfect square? */
+    let rt : i64 = mx_isqrt(rem)
+    if rt > 0i64 {
+        if (rt * rt) == rem { s = s * rt   rem = 1i64 }
+    }
+    MXS = s
+    MXR = rem
+    return 0i32
+}
+
+/* ------------------------------------------------ argv ---------------------------------------- */
+/* parse a decimal C-string; returns -1 on any non-digit / empty / >6 digits */
+fn parse_u(sp: u64) -> i64 {
+    let s : *u8 = sp as *u8
+    let mut i : u64 = 0u64
+    let mut v : i64 = 0i64
+    let mut ok : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let c : u8 = s[i]
+        if c == 0u8 { going = 0u8 }
+        if going == 1u8 {
+            if c < 48u8 { return 0i64 - 1i64 }
+            if c > 57u8 { return 0i64 - 1i64 }
+            v = (v * 10i64) + ((c - 48u8) as i64)
+            ok = 1u8
+            if v > 1000000i64 { return 0i64 - 1i64 }
+            i = i + 1u64
+        }
+    }
+    if ok == 0u8 { return 0i64 - 1i64 }
+    return v
+}
+fn first_byte(sp: u64) -> u8 { let s : *u8 = sp as *u8   let c : u8 = s[0u64]   return c }
+
+/* ------------------------------------------------ report pieces ------------------------------- */
+fn class_words(g: i32) -> i32 {
+    if g == 0i32 { pstr("NON-GRASHOF triple-rocker (no link can fully rotate)~") }
+    if g == 1i32 { pstr("GRASHOF CRANK-ROCKER (the short side link fully rotates)~") }
+    if g == 2i32 { pstr("GRASHOF DRAG-LINK / double-crank (shortest link is the ground)~") }
+    if g == 3i32 { pstr("GRASHOF DOUBLE-ROCKER (shortest link is the coupler)~") }
+    if g == 4i32 { pstr("CHANGE-POINT (s+l = p+q: the linkage folds flat; class is configuration-dependent)~") }
+    return 0i32
+}
+
+/* the swing-angle cosine between the two dead-centres:
+ *   cos(dphi) = (n1*n2 + sqrt((d1^2-n1^2)(d2^2-n2^2))) / (d1*d2)
+ * printed exactly with certified sign + real-angle certificates. */
+fn swing_report(n1: i64, d1: i64, n2: i64, d2: i64) -> i32 {
+    let k1 : i64 = (d1 * d1) - (n1 * n1)
+    let k2 : i64 = (d2 * d2) - (n2 * n2)
+    let kk : i64 = k1 * k2
+    let u0 : i64 = n1 * n2
+    let dd : i64 = d1 * d2
+    pstr("rocker swing between dead-centres:~")   pnl()
+    if kk == 0i64 {
+        /* one dead-centre is flat (|cos|=1): the swing cosine is rational */
+        let g : i64 = mx_gcd(u0, dd)
+        pstr("  cos(swing) = ~")   pfrac(u0 / g, dd / g)
+        pstr("   (exact rational: a dead-centre sits at the fold)~")   pnl()
+        return 0i32
+    }
+    mx_sqfree(kk)
+    let s : i64 = MXS
+    let r : i64 = MXR
+    if r == 1i64 {
+        /* perfect square: rational cosine */
+        let num : i64 = u0 + s
+        let g : i64 = mx_gcd(num, dd)
+        pstr("  cos(swing) = ~")   pfrac(num / g, dd / g)
+        pstr("   (exact rational)~")   pnl()
+        return 0i32
+    }
+    /* genuinely irrational: (u0 + s*sqrt(r))/dd, reduced by gcd(u0, s, dd) */
+    let g1 : i64 = mx_gcd(u0, s)
+    let g : i64 = mx_gcd(g1, dd)
+    let ur : i64 = u0 / g
+    let sr : i64 = s / g
+    let dr : i64 = dd / g
+    pstr("  cos(swing) = (~")   pint(ur)
+    pstr(" + ~")   pint(sr)   pstr("*sqrt(~")   pint(r)   pstr("))/~")   pint(dr)
+    pstr("   (exact surd)~")   pnl()
+    let sg : i32 = ui_bsign1(ur, sr, r)
+    pstr("  sign certificate (ui_bsign1): ~")   pint(sg as i64)   pnl()
+    let c1 : i32 = ui_bsign1(dr - ur, 0i64 - sr, r)     /* cos <= 1  <=>  dr-ur-s*sqrt(r) >= 0 */
+    let c2 : i32 = ui_bsign1(dr + ur, sr, r)            /* cos >= -1 <=>  dr+ur+s*sqrt(r) >= 0 */
+    pstr("  real-angle certificates (cos<=1, cos>=-1): ~")
+    pint(c1 as i64)   pstr(" ~")   pint(c2 as i64)
+    if c1 >= 0i32 { if c2 >= 0i32 { pstr("   -> real swing angle~") } }
+    if c1 < 0i32 { pstr("   -> NOT a real angle (configuration impossible)~") }
+    pnl()
+    return 0i32
+}
+
+/* ------------------------------------------------ analyze ------------------------------------- */
+fn analyze(a: i64, b: i64, c: i64, d: i64) -> u64 {
+    pstr("III MECH -- exact 4-bar linkage analysis~")   pnl()
+    pstr("links: crank a=~")   pint(a)   pstr("  coupler b=~")   pint(b)
+    pstr("  rocker c=~")   pint(c)   pstr("  ground d=~")   pint(d)   pnl()
+
+    /* closure: the longest link must be shorter than the other three combined */
+    let sum : i64 = ((a + b) + c) + d
+    let mut l : i64 = a
+    if b > l { l = b }   if c > l { l = c }   if d > l { l = d }
+    let rest : i64 = sum - l
+    if l > rest {
+        pstr("REFUSED: the links cannot form a closed loop (longest ~")   pint(l)
+        pstr(" > sum of others ~")   pint(rest)   pstr(") -- exact integer decision~")   pnl()
+        return 0u64
+    }
+    if l == rest {
+        pstr("note: degenerate closure (longest = sum of others): the loop only closes flat~")   pnl()
+    }
+
+    pstr("class: ~")
+    let g : i32 = fbar_grashof(a, b, c, d)
+    class_words(g)   pnl()
+
+    /* dead-centres: cos(phi) = (c^2+d^2-e^2)/(2cd), e = a+b (extended) / |b-a| (folded) */
+    let n1 : i64 = fbar_dc_cos_num(a, b, c, d, 1i32)
+    let d1 : i64 = fbar_dc_cos_den(a, b, c, d, 1i32)
+    let n2 : i64 = fbar_dc_cos_num(a, b, c, d, 0i32)
+    let d2 : i64 = fbar_dc_cos_den(a, b, c, d, 0i32)
+    let asm1 : u8 = fbar_assembles(a, b, c, d, 1i32)
+    let asm2 : u8 = fbar_assembles(a, b, c, d, 0i32)
+
+    pstr("dead-centre (extended, e=a+b):  cos(phi) = ~")   pfrac(n1, d1)
+    if asm1 == 1u8 { pstr("   [reachable]~") } else { pstr("   [UNREACHABLE: |cos|>1 -- the input link never toggles here]~") }
+    pnl()
+    pstr("dead-centre (folded,  e=|b-a|): cos(phi) = ~")   pfrac(n2, d2)
+    if asm2 == 1u8 { pstr("   [reachable]~") } else { pstr("   [UNREACHABLE: |cos|>1 -- the input link never toggles here]~") }
+    pnl()
+
+    /* transmission-angle extremes: cos(mu) at crank-ground e = d+a (hi) / d-a (lo) */
+    let tn1 : i64 = fbar_trans_cos_num(a, b, c, d, 1i32)
+    let td1 : i64 = fbar_trans_cos_den(a, b, c, d, 1i32)
+    let tn2 : i64 = fbar_trans_cos_num(a, b, c, d, 0i32)
+    let td2 : i64 = fbar_trans_cos_den(a, b, c, d, 0i32)
+    pstr("transmission extremes: cos(mu) = ~")   pfrac(tn1, td1)
+    pstr(" and ~")   pfrac(tn2, td2)   pnl()
+    /* the worse (closer-to-locking) extreme = larger |cos|, decided exactly by cross-multiplication */
+    let mut w1 : i64 = tn1   if w1 < 0i64 { w1 = 0i64 - w1 }
+    let mut w2 : i64 = tn2   if w2 < 0i64 { w2 = 0i64 - w2 }
+    let lhs : i64 = w1 * td2
+    let rhs : i64 = w2 * td1
+    pstr("  worst |cos(mu)| = ~")
+    if lhs >= rhs { pfrac(w1, td1) } else { pfrac(w2, td2) }
+    /* locking iff worst |cos| >= 1 */
+    let mut ln : i64 = w1   let mut ld : i64 = td1
+    if lhs < rhs { ln = w2   ld = td2 }
+    if ln >= ld { pstr("   -> TOGGLE LOCK (|cos(mu)| >= 1) -- exact~") } else { pstr("   -> no lock (|cos(mu)| < 1) -- exact~") }
+    pnl()
+
+    /* swing surd only when both dead-centres are real angles */
+    if asm1 == 1u8 { if asm2 == 1u8 { swing_report(n1, d1, n2, d2) } }
+    if asm1 == 0u8 { pstr("no rocker swing (an unreachable dead-centre: the output link does not oscillate between toggles)~")   pnl() }
+    if asm1 == 1u8 { if asm2 == 0u8 { pstr("no rocker swing (an unreachable dead-centre: the output link does not oscillate between toggles)~")   pnl() } }
+    return 0u64
+}
+
+/* ------------------------------------------------ inverse design ------------------------------ */
+fn design(a: i64, b: i64, c: i64, lo: i64, hi: i64) -> u64 {
+    pstr("III MECH -- exact inverse design: ground d for a PERPENDICULAR extended dead-centre~")   pnl()
+    pstr("links: crank a=~")   pint(a)   pstr("  coupler b=~")   pint(b)   pstr("  rocker c=~")   pint(c)   pnl()
+    let e : i64 = a + b
+    let nn : i64 = (e * e) - (c * c)
+    pstr("condition: d^2 = (a+b)^2 - c^2 = ~")   pint(nn)   pnl()
+    if nn <= 0i64 {
+        pstr("REFUSED: no real ground length exists (rocker c >= a+b: the right angle cannot close) -- exact~")   pnl()
+        return 0u64
+    }
+    /* Sturm isolation of P(d) = d^2 - nn on (lo, hi] */
+    MXPD[0u64] = 0i64 - nn
+    MXPD[1u64] = 0i64
+    MXPD[2u64] = 1i64
+    sturm_build((&MXPD) as u64, 2i64)
+    let k : i64 = root_count(lo, 1i64, hi, 1i64)
+    pstr("roots of d^2-~")   pint(nn)   pstr(" in (~")   pint(lo)   pstr(", ~")   pint(hi)   pstr("]: ~")   pint(k)   pnl()
+    if k == 0i64 {
+        pstr("no root in the window -- exact (widen the window or the target is impossible there)~")   pnl()
+        return 0u64
+    }
+    /* bisect to 4 decimals, all-integer (scaled by 10^4) */
+    let sc : i64 = 10000i64
+    let mut lb : i64 = lo * sc
+    let mut hb : i64 = hi * sc
+    while (hb - lb) > 1i64 {
+        let mid : i64 = (lb + hb) / 2i64
+        let km : i64 = root_count(lb, sc, mid, sc)
+        if km > 0i64 { hb = mid } else { lb = mid }
+    }
+    pstr("Sturm-certified isolation: d in (~")   pdec4(lb)   pstr(", ~")   pdec4(hb)   pstr("]~")   pnl()
+    /* exact closed form: d = s*sqrt(r) */
+    mx_sqfree(nn)
+    let s : i64 = MXS
+    let r : i64 = MXR
+    if r == 1i64 {
+        pstr("exact: d = ~")   pint(s)   pstr("   (integer; d^2 = ~")   pint(s * s)   pstr(" exactly)~")   pnl()
+        pstr("verify with: mech ~")   pint(a)   pstr(" ~")   pint(b)   pstr(" ~")   pint(c)   pstr(" ~")   pint(s)   pnl()
+    } else {
+        pstr("exact: d = ~")   pint(s)   pstr("*sqrt(~")   pint(r)   pstr(")   (surd; s^2*r = ~")
+        pint((s * s) * r)   pstr(" exactly)~")   pnl()
+        pstr("(d is irrational -- the perpendicular condition d^2 = ~")   pint(nn)
+        pstr(" holds exactly by construction; integer-CLI re-analysis does not apply)~")   pnl()
+    }
+    return 0u64
+}
+
+/* ------------------------------------------------ entry --------------------------------------- */
+fn usage() -> u64 {
+    pstr("III MECH -- the exact mechanism workbench~")   pnl()
+    pstr("  mech <a> <b> <c> <d>              exact 4-bar analysis (links 1..150)~")   pnl()
+    pstr("  mech design <a> <b> <c> [lo hi]   exact inverse design of the ground link~")   pnl()
+    return 2u64
+}
+
+fn envelope_ok(v: i64) -> u8 {
+    if v < 1i64 { return 0u8 }
+    if v > 150i64 { return 0u8 }
+    return 1u8
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let pp : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let a1p : u64 = pp[1u64]
+    let a1 : i64 = parse_u(a1p)
+    if a1 < 0i64 {
+        /* word mode */
+        let fb : u8 = first_byte(a1p)
+        if fb != 100u8 { return usage() }          /* only 'design' */
+        if argc != 5i32 { if argc != 7i32 { return usage() } }
+        let pa : u64 = pp[2u64]   let pb : u64 = pp[3u64]   let pc : u64 = pp[4u64]
+        let a : i64 = parse_u(pa)   let b : i64 = parse_u(pb)   let c : i64 = parse_u(pc)
+        if a < 0i64 { return usage() }
+        if b < 0i64 { return usage() }
+        if c < 0i64 { return usage() }
+        if envelope_ok(a) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope~")   pnl()   return 3u64 }
+        if envelope_ok(b) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope~")   pnl()   return 3u64 }
+        if envelope_ok(c) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope~")   pnl()   return 3u64 }
+        let mut lo : i64 = 0i64
+        let mut hi : i64 = (a + b) + c
+        if argc == 7i32 {
+            let plo : u64 = pp[5u64]   let phi : u64 = pp[6u64]
+            lo = parse_u(plo)   hi = parse_u(phi)
+            if lo < 0i64 { return usage() }
+            if hi <= lo { return usage() }
+        }
+        return design(a, b, c, lo, hi)
+    }
+    /* numeric mode: exactly 4 links */
+    if argc != 5i32 { return usage() }
+    let pb2 : u64 = pp[2u64]   let pc2 : u64 = pp[3u64]   let pd2 : u64 = pp[4u64]
+    let b : i64 = parse_u(pb2)
+    let c : i64 = parse_u(pc2)
+    let d : i64 = parse_u(pd2)
+    if b < 0i64 { return usage() }
+    if c < 0i64 { return usage() }
+    if d < 0i64 { return usage() }
+    if envelope_ok(a1) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope (i64 surd certificates)~")   pnl()   return 3u64 }
+    if envelope_ok(b) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope (i64 surd certificates)~")   pnl()   return 3u64 }
+    if envelope_ok(c) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope (i64 surd certificates)~")   pnl()   return 3u64 }
+    if envelope_ok(d) == 0u8 { pstr("REFUSED: link out of the 1..150 exact envelope (i64 surd certificates)~")   pnl()   return 3u64 }
+    return analyze(a1, b, c, d)
+}

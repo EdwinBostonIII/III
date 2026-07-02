@@ -20,7 +20,7 @@ echo "PASS  aether_lens_view : compiles (the live interactive terminal viewer)"
 "$I2" "$A/aether_lens_win.iii"   --compile-only --out "$OUT/aether_lens_win.o"   2>"$OUT/alw.log" || { echo "FAIL aether_lens_win compile"; cat "$OUT/alw.log"; exit 1; }
 echo "PASS  aether_lens_win  : compiles (the REAL native Win32/GDI window viewer)"
 "$I2" "$A/world_graph.iii"    --compile-only --out "$OUT/world_graph.o"    2>"$OUT/wgd.log" || { echo "FAIL world_graph compile"; cat "$OUT/wgd.log"; exit 1; }
-echo "PASS  world_graph      : compiles (783 real modules + 5108 dependency edges, extracted from III's own source)"
+echo "PASS  world_graph      : compiles (nodes+edges extracted LIVE by gen_world_graph.sh -- counts in the file header)"
 "$I2" "$A/aether_world.iii"   --compile-only --out "$OUT/aether_world.o"   2>"$OUT/awd.log" || { echo "FAIL aether_world compile"; cat "$OUT/awd.log"; exit 1; }
 echo "PASS  aether_world     : compiles (the resizable 3D sovereign-geometry explorer: photons + shapes + CSG + wireframe)"
 "$I2" "$A/cyclotomic_se3.iii"    --compile-only --out "$OUT/cyclotomic_se3.o"   2>"$OUT/cse3.log" || { echo "FAIL cyclotomic_se3 compile"; cat "$OUT/cse3.log"; exit 1; }

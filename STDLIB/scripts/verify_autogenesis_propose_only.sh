@@ -38,10 +38,13 @@ else
 fi
 
 echo "== (2) commit chokepoint: ag_commit referenced only from the autogenesis corpus =="
-# ag_commit's definition lives in sanctus/autogenesis.iii (the owner, excluded).  The only
-# legitimate references are the corpus KATs (1406 commit arm, 1409 charter canary).  A
-# production organ calling ag_commit would mean the tree can self-commit unattended -- RED.
-CALLERS="$(grep -rIl 'ag_commit(' "$STDLIB/iii" 2>/dev/null | grep -v 'sanctus/autogenesis.iii' || true)"
+# ag_commit's definition lives in sanctus/autogenesis.iii (the owner, excluded).  The
+# legitimate references are the corpus KATs (1406 commit arm, 1409 charter canary) and
+# sanctus/autogenesis_cli.iii -- the OPERATOR command surface (grail b68e9b95): its `commit`
+# verb dispatches ag_commit(cap, sig) under the session capability set by agc_attach, adding
+# dispatch but NO new authority (the apprentice commit gate still bites; a human drives it).
+# Any OTHER organ calling ag_commit would mean the tree can self-commit unattended -- RED.
+CALLERS="$(grep -rIl 'ag_commit(' "$STDLIB/iii" 2>/dev/null | grep -v 'sanctus/autogenesis.iii' | grep -v 'sanctus/autogenesis_cli.iii' || true)"
 if [ -n "$CALLERS" ]; then
     echo "  RED: ag_commit referenced from a production organ:"
     printf '%s\n' "$CALLERS" | sed 's/^/    /'

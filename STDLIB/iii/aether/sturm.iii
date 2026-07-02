@@ -1,5 +1,9 @@
 /* sturm.iii -- EXACT REAL ROOT ISOLATION via Sturm's theorem.  The exact equation solver.
  *
+ * ESCAPE TIER: sturm_big.iii carries the SAME chain over BIGINT coefficients (Turing charter
+ * V-I.1, gate 2185) -- this i64 fast path stays; when coefficients outgrow i64 the caller
+ * routes to sturm2_* (complementary, not superseding).
+ *
  * PROBLEM.  A float root-finder samples/iterates and CANNOT know how many real roots a polynomial has, nor separate
  * roots that lie closer than its precision: it merges a cluster into one, misses a pair entirely, or hallucinates a
  * spurious root from rounding.  Worst and simplest: a polynomial that dips below zero and back up inside [a,b] has the

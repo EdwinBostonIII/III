@@ -57,40 +57,67 @@ extern @abi(c-msvc-x64) fn g2_eax(i: u64) -> i64 from "gas_big.iii"
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-/* the fixed scenario: box [0,20]^3 with an IRRATIONAL x-hi face (20 + sqrt2), three particles */
+/* the fixed scenario: the 2433-gated geometry -- box [0,40]^3 with an irrational x-hi face
+ * (40 + sqrt2), envelope 2, one head-on pair + one wall-bouncer (tie-free through 12+ events) */
 var IX : [i64; 9]   var IV : [i64; 9]
 fn scen() -> i32 {
     gs_reset()
-    gs_envelope(1i64)
+    gs_envelope(2i64)
     gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    gs_wall(0i64, 1i64, 20i64, 1i64, 1i64)                 /* x-hi at 20 + sqrt2 */
+    gs_wall(0i64, 1i64, 40i64, 1i64, 1i64)                 /* x-hi at 40 + sqrt2 */
     gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    gs_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    gs_wall(1i64, 1i64, 40i64, 0i64, 1i64)
     gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    gs_wall(2i64, 1i64, 20i64, 0i64, 1i64)
-    IX[0u64] = 2i64    IX[1u64] = 3i64    IX[2u64] = 4i64
-    IX[3u64] = 8i64    IX[4u64] = 7i64    IX[5u64] = 6i64
-    IX[6u64] = 14i64   IX[7u64] = 11i64   IX[8u64] = 9i64
-    IV[0u64] = 3i64    IV[1u64] = 1i64    IV[2u64] = 2i64
-    IV[3u64] = 0i64 - 2i64   IV[4u64] = 2i64   IV[5u64] = 0i64 - 1i64
-    IV[6u64] = 1i64    IV[7u64] = 0i64 - 3i64   IV[8u64] = 2i64
+    gs_wall(2i64, 1i64, 40i64, 0i64, 1i64)
+    IX[0u64] = 5i64    IX[1u64] = 10i64   IX[2u64] = 10i64
+    IX[3u64] = 15i64   IX[4u64] = 10i64   IX[5u64] = 10i64
+    IX[6u64] = 10i64   IX[7u64] = 30i64   IX[8u64] = 30i64
+    IV[0u64] = 3i64    IV[1u64] = 0i64    IV[2u64] = 0i64
+    IV[3u64] = 0i64 - 2i64   IV[4u64] = 0i64   IV[5u64] = 0i64
+    IV[6u64] = 0i64    IV[7u64] = 3i64    IV[8u64] = 1i64
     gs_part(IX[0u64], IX[1u64], IX[2u64], IV[0u64], IV[1u64], IV[2u64])
     gs_part(IX[3u64], IX[4u64], IX[5u64], IV[3u64], IV[4u64], IV[5u64])
     gs_part(IX[6u64], IX[7u64], IX[8u64], IV[6u64], IV[7u64], IV[8u64])
     return 0i32
 }
-/* exact defect vs the initial state: DV = count of differing velocity slots, DL = sum |dv|,
- * DP = count of position slots differing AS RATIONALS (initial integers over den 1:
- * equal  <=>  n0 == x_init * den  AND  n1 == 0). */
-var DV : i64   var DL : i64   var DP : i64
+/* THE ORIGIN of every echo is the post-event-1 snapshot (the 2433-gated protocol: the reversal
+ * operator's fixed point is a post-event state -- R re-applies the last response, so the closed
+ * involution is R.F^k.R.F^k == id FROM a state that has just had an event).  The state is kept
+ * CANONICAL every step (gcd-reduced, den > 0), so exact rational comparison is cross-multiplied
+ * per slot with overflow-guarded products. */
+var SN0 : [i64; 9]   var SN1 : [i64; 9]   var SV : [i64; 9]   var SDEN : i64
+fn snap() -> i32 {
+    SDEN = gs_den()
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            SN0[p * 3u64 + ax] = gs_p0(p, ax)
+            SN1[p * 3u64 + ax] = gs_p1(p, ax)
+            SV[p * 3u64 + ax] = gs_v(p, ax)
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+var DV : i64   var DL : i64   var DP : i64   var DGUARD : i64
+fn dmul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let mut ua : u64 = a as u64   if a < 0i64 { ua = (0i64 - a) as u64 }
+    let mut ub : u64 = b as u64   if b < 0i64 { ub = (0i64 - b) as u64 }
+    if ub > (9223372036854775807u64 / ua) { DGUARD = 1i64   return 0i64 }
+    return a * b
+}
 fn defect() -> i32 {
-    DV = 0i64   DL = 0i64   DP = 0i64
+    DV = 0i64   DL = 0i64   DP = 0i64   DGUARD = 0i64
     let den : i64 = gs_den()
     let mut p : u64 = 0u64
     while p < 3u64 {
         let mut ax : u64 = 0u64
         while ax < 3u64 {
-            let vi : i64 = IV[p * 3u64 + ax]
+            let vi : i64 = SV[p * 3u64 + ax]
             let vf : i64 = gs_v(p, ax)
             if vf != vi {
                 DV = DV + 1i64
@@ -100,10 +127,11 @@ fn defect() -> i32 {
             }
             let n0 : i64 = gs_p0(p, ax)
             let n1 : i64 = gs_p1(p, ax)
-            let xi : i64 = IX[p * 3u64 + ax]
+            let s0 : i64 = SN0[p * 3u64 + ax]
+            let s1 : i64 = SN1[p * 3u64 + ax]
             let mut pd : i64 = 0i64
-            if n0 != (xi * den) { pd = 1i64 }
-            if n1 != 0i64 { pd = 1i64 }
+            if dmul(n0, SDEN) != dmul(s0, den) { pd = 1i64 }
+            if dmul(n1, SDEN) != dmul(s1, den) { pd = 1i64 }
             DP = DP + pd
             ax = ax + 1u64
         }
@@ -111,18 +139,24 @@ fn defect() -> i32 {
     }
     return 0i32
 }
-/* one echo experiment: F^n R [kick dq on p0.vx] F^n R; returns 0 ok / -1 a leg refused */
-fn echo(n: u64, dq: i64) -> i64 {
+/* one echo experiment from the post-event-1 origin: F^1 snap F^n R [kick dq1, dq2] F^n R;
+ * returns 0 ok / -1 a leg refused */
+fn echo(n: u64, dq1: i64, dq2: i64) -> i64 {
     scen()
+    let d0 : u64 = gs_run(1u64)
+    if d0 != 1u64 { return 0i64 - 1i64 }
+    snap()
     let d1 : u64 = gs_run(n)
     if d1 != n { return 0i64 - 1i64 }
     gs_reverse()
-    if dq != 0i64 { gs_kick(0u64, 0u64, dq) }
+    if dq1 != 0i64 { gs_kick(0u64, 0u64, dq1) }
+    if dq2 != 0i64 { gs_kick(0u64, 0u64, dq2) }
     let d2 : u64 = gs_run(n)
     if d2 != n { return 0i64 - 1i64 }
     gs_reverse()
     if gs_ovf() != 0u32 { return 0i64 - 1i64 }
     defect()
+    if DGUARD != 0i64 { return 0i64 - 2i64 }
     return 0i64
 }
 
@@ -156,7 +190,7 @@ fn words(L: i64) -> i64 {                                  /* distinct L-words i
 
 fn main() -> u64 {
     /* ══ A: the perfect echo -- defect 0, bit for bit. */
-    let ra : i64 = echo(7u64, 0i64)
+    let ra : i64 = echo(7u64, 0i64, 0i64)
     putchar(65i32) putchar(58i32) sp() e_i64(ra) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()   /* "A: 0 0 0 0" */
     if ra != 0i64 { return 10u64 }
     if DV != 0i64 { return 10u64 }
@@ -165,37 +199,42 @@ fn main() -> u64 {
     let e0 : i64 = gs_energy()
 
     /* ══ B: the imperfect echo at n = 7 -- one quantum, exact integer defect. */
-    let rb : i64 = echo(7u64, 1i64)
+    let rb : i64 = echo(7u64, 1i64, 0i64)
     let eb : i64 = gs_energy()
     putchar(66i32) putchar(58i32) sp() e_i64(rb) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) sp() e_i64(eb - e0) nl()
     if rb != 0i64 { return 11u64 }
-    if DV == 0i64 { return 11u64 }                         /* the kick must leave a mark */
+    if DV != 3i64 { return 11u64 }                         /* the exact mark of one quantum at n = 7 */
+    if DL != 17i64 { return 11u64 }
+    if DP != 4i64 { return 11u64 }
+    if (eb - e0) != 7i64 { return 11u64 }                  /* (v+1)^2 - v^2 with v = 3: the kick's energy identity */
 
     /* ══ C: kick-unkick -- the impulse composes to identity, the echo is PERFECT again. */
-    scen()
-    let dc1 : u64 = gs_run(7u64)
-    gs_reverse()
-    gs_kick(0u64, 0u64, 1i64)
-    gs_kick(0u64, 0u64, 0i64 - 1i64)
-    let dc2 : u64 = gs_run(7u64)
-    gs_reverse()
-    defect()
-    putchar(67i32) putchar(58i32) sp() e_i64(dc1 as i64) sp() e_i64(dc2 as i64) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()   /* "C: 7 7 0 0 0" */
-    if dc1 != 7u64 { return 12u64 }
-    if dc2 != 7u64 { return 12u64 }
+    let rc : i64 = echo(7u64, 1i64, 0i64 - 1i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(rc) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()   /* "C: 0 0 0 0" */
+    if rc != 0i64 { return 12u64 }
     if DV != 0i64 { return 12u64 }
     if DL != 0i64 { return 12u64 }
     if DP != 0i64 { return 12u64 }
 
-    /* ══ D: the depth table -- exact defects at n = 5, 7, 9 (measured, never fitted). */
+    /* ══ D: the depth table -- exact defects at n = 5, 7, 9, MEASURED and pinned.  The machine
+     * confirms the 2189 law live: the n = 9 defect (1, 1) is SMALLER than the n = 5 defect (2, 7)
+     * -- the bounded gas's separation FLUCTUATES; there is no exponent to fit, and this gate
+     * would redden on any attempt to smuggle one in. */
+    var EDV : [i64; 3]   var EDL : [i64; 3]
+    EDV[0u64] = 2i64   EDL[0u64] = 7i64
+    EDV[1u64] = 3i64   EDL[1u64] = 17i64
+    EDV[2u64] = 1i64   EDL[2u64] = 1i64
     let mut di : u64 = 0u64
     while di < 3u64 {
         let mut n : u64 = 5u64
         if di == 1u64 { n = 7u64 }
         if di == 2u64 { n = 9u64 }
-        let rd : i64 = echo(n, 1i64)
+        let rd : i64 = echo(n, 1i64, 0i64)
         putchar(68i32) putchar(58i32) sp() e_i64(n as i64) sp() e_i64(rd) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()
         if rd != 0i64 { return 13u64 }
+        if DV != EDV[di] { return 13u64 }
+        if DL != EDL[di] { return 13u64 }
+        if DP != 4i64 { return 13u64 }
         di = di + 1u64
     }
 
@@ -216,14 +255,14 @@ fn main() -> u64 {
     g2_reset()
     g2_envelope(1i64)
     g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(0i64, 1i64, 20i64, 1i64, 1i64)
+    g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
     g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
     g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(2i64, 1i64, 20i64, 0i64, 1i64)
-    g2_part(2i64, 3i64, 4i64, 3i64, 1i64, 2i64)
-    g2_part(8i64, 7i64, 6i64, 0i64 - 2i64, 2i64, 0i64 - 1i64)
-    g2_part(14i64, 11i64, 9i64, 1i64, 0i64 - 3i64, 2i64)
+    g2_wall(2i64, 1i64, 40i64, 7i64, 1i64)
+    g2_part(10i64, 4i64, 4i64, 13i64, 3i64, 2i64)
+    g2_part(36i64, 4i64, 4i64, 0i64 - 11i64, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, 7i64)
     EENSYM = 0i64
     let mut st : i64 = 0i64
     let mut ep : u64 = 0u64
@@ -251,15 +290,21 @@ fn main() -> u64 {
     let g8 : i64 = words(8i64)
     putchar(70i32) putchar(58i32) sp() e_i64(stuck) sp() e_i64(gn) sp() e_i64(g1) sp() e_i64(g2c) sp() e_i64(g4) sp() e_i64(g6) sp() e_i64(g8) nl()
     if stuck != 0i64 { return 15u64 }
+    if gn != 2500i64 { return 15u64 }
+    if g1 != 22i64 { return 15u64 }
+    if g2c != 265i64 { return 15u64 }
+    if g4 != 2124i64 { return 15u64 }
+    if g6 != 2471i64 { return 15u64 }
+    if g8 != 2493i64 { return 15u64 }
     /* the integrable control: ONE particle in the same box -- a periodic skeleton */
     g2_reset()
     g2_envelope(1i64)
     g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(0i64, 1i64, 20i64, 1i64, 1i64)
+    g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
     g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
     g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
-    g2_wall(2i64, 1i64, 20i64, 0i64, 1i64)
+    g2_wall(2i64, 1i64, 40i64, 7i64, 1i64)
     g2_part(2i64, 3i64, 4i64, 3i64, 0i64, 0i64)           /* one axis only: period-2 skeleton */
     EENSYM = 0i64
     st = 0i64
@@ -285,6 +330,9 @@ fn main() -> u64 {
     let b8 : i64 = words(8i64)
     putchar(71i32) putchar(58i32) sp() e_i64(stuck) sp() e_i64(bn) sp() e_i64(b1) sp() e_i64(b8) nl()
     if stuck != 0i64 { return 15u64 }
+    if bn != 400i64 { return 15u64 }
+    if b1 != 2i64 { return 15u64 }
+    if b8 != 2i64 { return 15u64 }
     /* the adjudicated separation: the gas's exact word diversity dwarfs the periodic control's */
     if b1 > 4i64 { return 15u64 }
     if b8 > 4i64 { return 15u64 }

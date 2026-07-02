@@ -128,6 +128,18 @@ fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 @export {
     return p as i32
 }
 
+/* THE MOMENTUM IMPULSE (the Loschmidt-echo perturbation verb): one quantum added to one velocity
+ * component -- the minimal exact perturbation of an integer-velocity ensemble.  It is its own
+ * inverse composition (kick dq then -dq restores bit-exactly), which gate 2482 pins as a theorem
+ * arm; an IMPERFECT time reversal is gs_reverse followed by one gs_kick at the turn. */
+fn gs_kick(p: u64, ax: u64, dq: i64) -> i32 @export {
+    if p >= GS_NP { return 0i32 - 1i32 }
+    if ax > 2u64 { return 0i32 - 1i32 }
+    GV[p * 3u64 + ax] = gg_add(GV[p * 3u64 + ax], dq)
+    if GS_OVF != 0u32 { return 0i32 - 1i32 }
+    return 0i32
+}
+
 /* the invariants the ensemble IS: integer identities, not epsilon checks */
 fn gs_energy() -> i64 @export {
     let mut e : i64 = 0i64

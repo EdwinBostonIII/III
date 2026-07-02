@@ -1,0 +1,102 @@
+/* 2486_fourbar.iii -- THE FIRST ENGINEERING DESIGN synthesized through the completed exact substrate:
+ * an EXACT 4-bar linkage design oracle (fourbar.iii + sqrt_sum_sign + sturm).  A planar four-bar
+ * (crank a=2, coupler b=7, rocker c=6, ground d=5) is analysed with ZERO float, where a floating CAD
+ * kernel blurs the dead-centres and can misclassify a change-point.
+ *
+ * A -- GRASHOF CLASSIFICATION (exact integer decision): this linkage is a CRANK-ROCKER (shortest link
+ *   is a side, s+l=9 < p+q=11).  Teeth: (5,6,7,2) shortest=ground -> DRAG-LINK; (1,2,3,10) s+l=11 >
+ *   p+q=5 -> NON-GRASHOF; (3,4,5,6) s+l=9 == p+q=9 -> CHANGE-POINT; (2,7,6,5) coupler-not-shortest.
+ * B -- DEAD-CENTRE (TOGGLE) output angles: the rocker's exact extremes are cos(phi) = (c^2+d^2-e^2)/
+ *   (2cd) with e = a+b (extended -> -1/3) and |b-a| (folded -> 3/5).  Exact rationals -- the toggle
+ *   positions a sampler steps over.
+ * C -- TRANSMISSION-ANGLE extremes (the mechanism's force-transmission quality): at the crank's own
+ *   dead centres cos(mu) = (b^2+c^2-e^2)/(2bc) with e = d+a (-> 3/7, the MINIMUM) and |d-a| (-> 19/21).
+ *   The minimum transmission cosine 3/7 (mu ~ 64.6 deg) is an exact bound.  Assembly certified exact.
+ * D -- THE SWING-ANGLE COSINE IS AN EXACT SURD: the rocker swings between the two dead centres, and
+ *   cos(swing) = cos(phi1)cos(phi2) + sin(phi1)sin(phi2) = -1/5 + sqrt((8/9)(16/25)) = -1/5 + 8 sqrt2/15
+ *   = (-3 + 8 sqrt2)/15 -- an element of Q(sqrt2), positive (sqrt_sum_sign), in (-1,1).  The mechanism's
+ *   working stroke is an exact algebraic number, not a rounded degree.
+ * E -- INVERSE DESIGN by exact root isolation: "for which ground length d does the extended dead-centre
+ *   put the rocker at 90deg (cos phi = 0)?"  The design condition is c^2 + d^2 - (a+b)^2 = 0, i.e.
+ *   d^2 = 45, whose EXACT solution d = 3 sqrt5 (irrational -- a float kernel returns 6.708... and never
+ *   knows it is exactly 3 sqrt5) is isolated by Sturm as the unique root of d^2 - 45 in (6,7).
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E */
+module corpus_2486_fourbar
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fbar_grashof(a: i64, b: i64, c: i64, d: i64) -> i32 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_dc_cos_num(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_dc_cos_den(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_trans_cos_num(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_trans_cos_den(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn fbar_assembles(a: i64, b: i64, c: i64, d: i64, ext: i32) -> u8 from "fourbar.iii"
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var PD : [i64; 4]   /* design polynomial coefficients */
+
+fn main() -> u64 {
+    /* ══ A: Grashof classification + teeth. */
+    let ga : i32 = fbar_grashof(2i64,7i64,6i64,5i64)     /* crank-rocker = 1 */
+    let gd : i32 = fbar_grashof(5i64,6i64,7i64,2i64)     /* drag-link = 2 */
+    let gn : i32 = fbar_grashof(1i64,2i64,3i64,10i64)    /* non-Grashof = 0 */
+    let gc : i32 = fbar_grashof(3i64,4i64,5i64,6i64)     /* change-point = 4 */
+    putchar(65i32) putchar(58i32) sp() e_i64(ga as i64) sp() e_i64(gd as i64) sp() e_i64(gn as i64) sp() e_i64(gc as i64) nl()   /* "A: 1 2 0 4" */
+    if ga != 1i32 { return 10u64 }
+    if gd != 2i32 { return 10u64 }
+    if gn != 0i32 { return 10u64 }
+    if gc != 4i32 { return 10u64 }
+
+    /* ══ B: dead-centre output cosines -1/3 (extended) and 3/5 (folded). */
+    let en : i64 = fbar_dc_cos_num(2i64,7i64,6i64,5i64,1i32)   let ed : i64 = fbar_dc_cos_den(2i64,7i64,6i64,5i64,1i32)
+    let fn0 : i64 = fbar_dc_cos_num(2i64,7i64,6i64,5i64,0i32)  let fd : i64 = fbar_dc_cos_den(2i64,7i64,6i64,5i64,0i32)
+    putchar(66i32) putchar(58i32) sp() e_i64(en) putchar(47i32) e_i64(ed) sp() e_i64(fn0) putchar(47i32) e_i64(fd) nl()   /* "B: -1/3 3/5" */
+    if en != (0i64 - 1i64) { return 11u64 }   if ed != 3i64 { return 11u64 }
+    if fn0 != 3i64 { return 11u64 }            if fd != 5i64 { return 11u64 }
+
+    /* ══ C: transmission extremes 3/7 (min) and 19/21 (max) + assembly. */
+    let tln : i64 = fbar_trans_cos_num(2i64,7i64,6i64,5i64,0i32)   let tld : i64 = fbar_trans_cos_den(2i64,7i64,6i64,5i64,0i32)
+    let thn : i64 = fbar_trans_cos_num(2i64,7i64,6i64,5i64,1i32)   let thd : i64 = fbar_trans_cos_den(2i64,7i64,6i64,5i64,1i32)
+    putchar(67i32) putchar(58i32) sp() e_i64(tln) putchar(47i32) e_i64(tld) sp() e_i64(thn) putchar(47i32) e_i64(thd) sp() e_i64(fbar_assembles(2i64,7i64,6i64,5i64,1i32) as i64) nl()   /* "C: 3/7 19/21 1" */
+    if tln != 3i64 { return 12u64 }   if tld != 7i64 { return 12u64 }
+    if thn != 19i64 { return 12u64 }  if thd != 21i64 { return 12u64 }
+    if fbar_assembles(2i64,7i64,6i64,5i64,1i32) != 1u8 { return 12u64 }
+
+    /* ══ D: swing cosine = c1 c2 + sqrt((1-c1^2)(1-c2^2)) = (-3 + 8 sqrt2)/15, an exact Q(sqrt2) surd.
+     * c1=-1/3, c2=3/5.  c1c2 = -1/5.  (1-c1^2)(1-c2^2) = (8/9)(16/25) = 128/225.  sqrt(128/225) =
+     * sqrt(128)/15 = 8 sqrt2/15 (128 = 64*2).  So cos(swing) = (-3 + 8 sqrt2)/15. */
+    /* verify the sin-product-square is exactly 128/225 from the two dead-centre cosines */
+    let s1n : i64 = (ed * ed) - (en * en)      /* 1 - c1^2 numerator over ed^2 : (9-1)/9 = 8/9 */
+    let s1d : i64 = ed * ed                     /* 9 */
+    let s2n : i64 = (fd * fd) - (fn0 * fn0)     /* (25-9)/25 = 16/25 */
+    let s2d : i64 = fd * fd                     /* 25 */
+    let pn : i64 = s1n * s2n                    /* 8*16 = 128 */
+    let pd : i64 = s1d * s2d                    /* 9*25 = 225 */
+    /* 128/225: numerator 128 = 64*2 so sqrt = 8*sqrt2 ; denominator 225 = 15^2 */
+    putchar(68i32) putchar(58i32) sp() e_i64(pn) putchar(47i32) e_i64(pd) sp() e_i64(ui_bsign1(0i64-3i64, 8i64, 2i64) as i64) nl()   /* "D: 128/225 1" */
+    if pn != 128i64 { return 13u64 }
+    if pd != 225i64 { return 13u64 }
+    if (8i64 * 8i64 * 2i64) != 128i64 { return 13u64 }        /* sqrt(128) = 8 sqrt2 */
+    if (15i64 * 15i64) != 225i64 { return 13u64 }             /* sqrt(225) = 15 */
+    if ui_bsign1(0i64 - 3i64, 8i64, 2i64) != 1i32 { return 13u64 }   /* cos(swing) = (-3+8 sqrt2)/15 > 0 */
+    /* and it is a real angle: cos(swing) < 1  <=>  -3 + 8 sqrt2 < 15  <=>  8 sqrt2 < 18  <=>  sign(18 - 8 sqrt2) > 0 */
+    if ui_bsign1(18i64, 0i64 - 8i64, 2i64) != 1i32 { return 13u64 }
+
+    /* ══ E: inverse design.  d^2 = (a+b)^2 - c^2 = 81 - 36 = 45  ->  d = 3 sqrt5, isolated by Sturm as
+     * the unique root of P(d) = d^2 - 45 in (6,7).  (3 sqrt5)^2 = 45 exactly. */
+    PD[0u64] = 0i64 - 45i64   PD[1u64] = 0i64   PD[2u64] = 1i64        /* d^2 - 45 */
+    sturm_build((&PD) as u64, 2i64)
+    let nroot : i64 = root_count(6i64, 1i64, 7i64, 1i64)               /* roots in (6, 7] */
+    let nlo   : i64 = root_count(0i64, 1i64, 6i64, 1i64)               /* roots in (0, 6] : none (6^2=36<45) */
+    putchar(69i32) putchar(58i32) sp() e_i64(nroot) sp() e_i64(nlo) sp() e_i64((3i64*3i64)*5i64) nl()   /* "E: 1 0 45" */
+    if nroot != 1i64 { return 14u64 }                                 /* the exact d = 3 sqrt5 in (6,7) */
+    if nlo != 0i64 { return 14u64 }                                   /* no smaller positive design */
+    if ((3i64 * 3i64) * 5i64) != 45i64 { return 14u64 }               /* (3 sqrt5)^2 = 45 exact */
+
+    return 99u64
+}

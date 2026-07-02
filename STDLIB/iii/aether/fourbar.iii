@@ -1,0 +1,119 @@
+/* STDLIB/iii/aether/fourbar.iii -- EXACT 4-BAR LINKAGE DESIGN ORACLE (the first engineering design
+ * synthesized through the completed exact substrate; cashes the resultant/Sturm elimination stack
+ * into planar mechanism design).
+ *
+ * A planar 4-bar has integer/rational link lengths (a = input crank, b = coupler, c = output rocker,
+ * d = ground).  Every classical design quantity is an EXACT algebraic fact -- decided here without a
+ * single float, where a floating CAD kernel would blur a dead-centre or misclassify a change-point:
+ *
+ *  (1) GRASHOF CLASSIFICATION -- whether a link fully rotates is the exact integer decision
+ *      s + l  <=>  p + q  (shortest + longest vs the other two).  Strict <  ->  a rotating (Grashof)
+ *      mechanism whose TYPE is fixed by which link is shortest (side -> crank-rocker; ground ->
+ *      double-crank/drag-link; coupler -> double-rocker); equality -> a CHANGE-POINT (foldable)
+ *      linkage; strict >  ->  a non-Grashof triple-rocker.  fbar_grashof.
+ *
+ *  (2) DEAD-CENTRE (TOGGLE) OUTPUT ANGLES -- the rocker reaches an output extreme exactly when the
+ *      crank and coupler are collinear (effective length a+b extended, |b-a| folded).  The extreme
+ *      output cosine is the law of cosines cos(phi) = (c^2 + d^2 - e^2)/(2 c d) -- an EXACT rational
+ *      (fbar_dc_cos_num / _den, reduced).  These are the toggle positions where the mechanism jams;
+ *      a CAD kernel that samples angles can step right over them.
+ *
+ *  (3) TRANSMISSION-ANGLE EXTREMES -- the transmission angle mu (coupler-to-rocker) governs force
+ *      transmission; its extremes occur at the crank's own dead centres (crank aligned with ground,
+ *      effective d+a / |d-a|).  cos(mu) = (b^2 + c^2 - e^2)/(2 b c), EXACT rational (fbar_trans_cos_*).
+ *      The minimum transmission angle -- the mechanism's quality bound -- is thus an exact number.
+ *
+ *  (4) ASSEMBLY -- the four-bar assembles for a crank angle iff the coupler/rocker triangle closes;
+ *      over the crank's extreme reach the exact assembly condition is |b - c| <= diag <= b + c with
+ *      diag^2 = a^2 + d^2 -+ 2 a d.  fbar_assembles gives the exact yes/no at a dead centre.
+ *
+ * The SWING-ANGLE cosine (an exact Q(sqrt2) surd for suitable links) and the INVERSE DESIGN of the
+ * ground length via resultant elimination are composed in the gate (corpus 2486).
+ *
+ * Public API:
+ *   fbar_grashof(a,b,c,d) -> i32      (0 non-Grashof / 1 crank-rocker / 2 double-crank / 3 double-rocker / 4 change-point)
+ *   fbar_dc_cos_num(a,b,c,d, ext) -> i64 ; fbar_dc_cos_den(...) -> i64   (dead-centre output cos, reduced)
+ *   fbar_trans_cos_num(a,b,c,d, hi) -> i64 ; fbar_trans_cos_den(...) -> i64   (transmission extreme cos)
+ *   fbar_assembles(a,b,c,d, ext) -> u8
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  NIH: none (pure exact integer/rational).
+ */
+module fourbar
+
+fn fbar_absi(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+fn fbar_gcd(a: i64, b: i64) -> i64 {
+    let mut x : i64 = fbar_absi(a)   let mut y : i64 = fbar_absi(b)
+    while y != 0i64 { let t : i64 = x % y   x = y   y = t }
+    if x == 0i64 { return 1i64 }
+    return x
+}
+
+/* ─── (1) Grashof classification (exact integer decision) ─── */
+/* min / max over the four lengths, and the sum of the middle two. */
+fn fbar_min4(a: i64, b: i64, c: i64, d: i64) -> i64 {
+    let mut m : i64 = a
+    if b < m { m = b }   if c < m { m = c }   if d < m { m = d }
+    return m
+}
+fn fbar_max4(a: i64, b: i64, c: i64, d: i64) -> i64 {
+    let mut m : i64 = a
+    if b > m { m = b }   if c > m { m = c }   if d > m { m = d }
+    return m
+}
+fn fbar_grashof(a: i64, b: i64, c: i64, d: i64) -> i32 @export {
+    let s : i64 = fbar_min4(a,b,c,d)
+    let l : i64 = fbar_max4(a,b,c,d)
+    let mid : i64 = ((a + b + c + d) - s) - l        /* sum of the middle two = total - s - l */
+    /* Grashof inequality: s + l vs (p+q)=mid */
+    if (s + l) > mid { return 0i32 }                 /* non-Grashof: triple-rocker */
+    if (s + l) == mid { return 4i32 }                /* change-point (foldable) */
+    /* strict Grashof: type by the POSITION of the shortest link (a=crank,b=coupler,c=rocker,d=ground) */
+    if s == d { return 2i32 }                        /* shortest is ground -> double-crank / drag-link */
+    if s == b { return 3i32 }                        /* shortest is coupler -> double-rocker */
+    return 1i32                                      /* shortest is a side (crank or rocker) -> crank-rocker */
+}
+
+/* ─── (2) dead-centre output cosine  cos(phi) = (c^2 + d^2 - e^2)/(2 c d),  e = a+b (ext) or |b-a| ─── */
+var FBAR_DCN : i64 = 0i64   var FBAR_DCD : i64 = 1i64
+fn fbar_dc_build(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i32 {
+    let mut e : i64 = a + b
+    if ext == 0i32 { e = fbar_absi(b - a) }
+    let num : i64 = ((c * c) + (d * d)) - (e * e)
+    let den : i64 = 2i64 * (c * d)
+    let g : i64 = fbar_gcd(num, den)
+    FBAR_DCN = num / g
+    FBAR_DCD = den / g
+    if FBAR_DCD < 0i64 { FBAR_DCN = 0i64 - FBAR_DCN   FBAR_DCD = 0i64 - FBAR_DCD }
+    return 0i32
+}
+fn fbar_dc_cos_num(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 @export { fbar_dc_build(a,b,c,d,ext)   return FBAR_DCN }
+fn fbar_dc_cos_den(a: i64, b: i64, c: i64, d: i64, ext: i32) -> i64 @export { fbar_dc_build(a,b,c,d,ext)   return FBAR_DCD }
+
+/* ─── (3) transmission-angle extreme  cos(mu) = (b^2 + c^2 - e^2)/(2 b c),  e = d+a (hi=0) or |d-a| ─── */
+var FBAR_TCN : i64 = 0i64   var FBAR_TCD : i64 = 1i64
+fn fbar_tc_build(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i32 {
+    let mut e : i64 = d + a
+    if hi != 0i32 { e = fbar_absi(d - a) }
+    let num : i64 = ((b * b) + (c * c)) - (e * e)
+    let den : i64 = 2i64 * (b * c)
+    let g : i64 = fbar_gcd(num, den)
+    FBAR_TCN = num / g
+    FBAR_TCD = den / g
+    if FBAR_TCD < 0i64 { FBAR_TCN = 0i64 - FBAR_TCN   FBAR_TCD = 0i64 - FBAR_TCD }
+    return 0i32
+}
+fn fbar_trans_cos_num(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 @export { fbar_tc_build(a,b,c,d,hi)   return FBAR_TCN }
+fn fbar_trans_cos_den(a: i64, b: i64, c: i64, d: i64, hi: i32) -> i64 @export { fbar_tc_build(a,b,c,d,hi)   return FBAR_TCD }
+
+/* ─── (4) assembly at a dead centre: the coupler/rocker triangle closes iff |c-d... | -- at the crank
+ * dead centre the diagonal from ground pivot to the coupler-rocker joint is e = a+b or |b-a|, and the
+ * output triangle (e, c, d) must satisfy the triangle inequalities exactly. ─── */
+fn fbar_assembles(a: i64, b: i64, c: i64, d: i64, ext: i32) -> u8 @export {
+    let mut e : i64 = a + b
+    if ext == 0i32 { e = fbar_absi(b - a) }
+    /* triangle (e, c, d): each side <= sum of the other two, and >= |difference| */
+    if e > (c + d) { return 0u8 }
+    if c > (e + d) { return 0u8 }
+    if d > (e + c) { return 0u8 }
+    return 1u8
+}

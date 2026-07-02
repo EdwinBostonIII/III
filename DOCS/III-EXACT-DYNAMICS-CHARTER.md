@@ -286,3 +286,30 @@ Increments in order: I.1 bigint PRS (2185) -> I.2 resultant bigint ABI (2186) ->
 moments (2187) -> II.1 deep ensemble (2188) -> II.2 shadow divergence (2189) -> III.1 3D class
 algebra (2190) -> III.2 certified trapping (2191) -> IV.1 graze-legal C-space (2192) -> IV.2 dynamic
 TOI (2193).  Every gate: twin-divergence or certified-refusal witness; commit only on the gate's OWN rc.
+
+## TURING-SUBSTRATE VECTORS I-IV -- ALL NINE INCREMENTS LANDED (sqrtsum 54/0 at close)
+I.1 ade94379 (2185) bigint PRS: chain in RAW POOL ARRAYS (handles transient; the 64-slot wall answered
+    again); the deg-12 wall crossed (i64 chain garbage -4 = the pinned twin); CRT->PRS weld at deg 16.
+I.2 15782000 (2186) bigint output ABI: 2^80-27 DELIVERED as raw limbs, mod-every-prime check on full
+    values; raw rows bridge into sturm2 (roots at 10319/10323, no i64 in the object).
+I.3 9c9cdcab (2187) exact moments: 2sqrt2/3 area (certified IRRATIONAL: the anti-mesh theorem);
+    RATIONAL first moment from the irrational domain; centroid as integer identity; trapezoid twin
+    wrong by certified sign (the machine corrected the author's sign claim in probe).
+II.1 1bd80694 (2188) deep ensemble: 9999+9999 steps, involution EXACT through 1254 compactions; THE
+    COMMUTING-TIE RESOLUTION (disjoint slots => responses commute -- both applied; interacting ties
+    refuse) unlocked depth: rational box tied at 475, sqrt2 walls at 2306, the theorem carried 9999.
+II.2 e82b6163 (2189) the shadow: one quantum -> k* = 9 identical responses then the exact split;
+    separations 95/81/63 -- THE MACHINE REFUTED the drafted "strictly growing" (bounded gas conserves
+    the velocity multiset up to sign: chaos = permanent decorrelation + different event densities
+    3006/3011, never a fitted exponent).
+III 82d4a145 (2190) photon3: Q(sqrt2,sqrt6) closure table (sqrt5 non-closure = the wave-vector
+    constraint); 1000 reflective events, den NEVER grew (the z-parity invariant, engineered after the
+    naive x2 scaling was caught at design); NON-RECURRENCE: all 1000 exact states distinct (trapped
+    forever, repeating never -- corrects "infinite periodic loop").
+IV.1 a7f62ef5 (2191) as_cert2: refusals that name themselves -- graze 2 / cross 0 / clear 1.
+IV.2 6858d416 (2192) cs_set_graze + dynamic TOI: normal mode cannot rotate AT ALL (the tangency sits
+    in both adjacent covers) while graze mode finds the 2-move corridor; transient occlusion EXACTLY
+    [7,13] where every static snapshot says blocked; graze-in-TIME mult 2 at t = 10.
+CHARTED NEXT: multivariate elimination (independent (u,t)); the 2-D photonic crystal (stack x channel
+on photon3); 10^5-event ensembles (runtime, not soundness); bigint moments (green_moments past i64);
+graze-legal translation edges; the shadow at k*-adjacent perturbation families.

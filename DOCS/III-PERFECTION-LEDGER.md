@@ -4,6 +4,16 @@
 **Scope:** every module in `STDLIB/iii/` (806), `STDLIB/sovir/` (77), `STDLIB/sovtc/` (54), `STDLIB/independence/` (12); every corpus KAT (`STDLIB/corpus/`, 1761 numbered + rejects); every `COMPILER/BOOT/` source (153); `STDLIB/scripts/` (66); plus build litter, root artifacts, and top-level dirs.
 **Completeness gate:** §14 proves every file above appears exactly once in this ledger (mechanical diff of manifest vs ledger entries).
 
+## EXECUTION RECORD (2026-07-01, same day)
+
+The purge and the S2 correction were EXECUTED and gate-verified:
+- **`4a715dae`** — the great cleanout: 862 tracked paths git-rm'd + ~90 untracked root artifacts + _audit_scratch/ + TOOLS-QUOTIENT staging + .gitignore artifact patterns. Every §-DELETE verdict of this ledger executed; every target re-verified reference-free immediately before removal; zero misses.
+- **`4c42cbb2`** — follow-up: staged the _audit_scratch/ tracked removals + UNIVERSAL-BLOCK.md → DOCS/III-UNIVERSAL-BLOCK.md relocation.
+- **`de032c60`** — S2 CLOSED: III-STUDIO family committed (shell + theme + trig + 6 workspaces + ui_win input-ring mod + build_studio.sh + KAT 2169_studio_kernel + DOCS/III-STUDIO.md), `forge_scratch.iii` → **`studio_sample.iii`** (module + all referents renamed, zero residuals), SEAL.mhash committed as the pinned closure seal, this ledger committed. arc_sweep/cspace/2174/2175 were committed concurrently by the sibling session (`44de723b` era).
+- **Gate verification (real runs, real exit codes):** run_aether_lens_kats.sh → **PASS=3 FAIL=0** (2155, 2158, 2169 studio kernel — the renamed sample compiles in the studio loop). run_sqrtsum_kats.sh → **PASS=38 FAIL=0** (incl. 2173_cspace, 2175_arc_sweep, 2174_gas_demon, 2176_gas_big).
+- **NEW FLAG (found during verification): KAT number collision** — `2169_gas_reversal.iii` (sqrtsum family) and `2169_studio_kernel.iii` (aether-lens family) share number 2169. Functionally green (name-keyed EXPECTED, disjoint runners) but violates unique-numbering; FIX: renumber 2169_gas_reversal to a free number and update its run_sqrtsum_kats.sh line.
+- Still open from §1: S1 ratchet restoration (uncovered/gates/dark 75/10/157 vs pins 5/2/14) — untouched by this execution, next in order. In-flight sibling-session work observed and deliberately left alone: gas_big (self-committed mid-run), resultant.iii + 2177_resultant, gs3_counter.c, win.txt.
+
 ## 0. The keep-criteria (the bar a module must clear to be labeled KEEP)
 
 A module stays listed only if ALL hold:

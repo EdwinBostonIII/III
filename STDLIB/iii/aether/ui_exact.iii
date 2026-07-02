@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/ui_exact.iii -- III-GLASS L2-exact: anti-aliasing the way only III can.  Every geometry
+ * SPLIT (reunification W4b-i.10.1): the EXACT CUBIC CROSSING tier lives in ui_exact_cubic.iii (externs
+ * ui_aa_mulck/ui_aa_ovf back here -- ONE overflow latch).  ui_cubic_area_s STAYS: the lcm-60 one-unit
+ * summation identity needs line/quad/cubic areas in one module.
  * predicate here is an EXACT INTEGER -- the signed-area determinant ui_edge and the squared-distance circle test
  * never touch a float.  So per-pixel coverage is an EXACT integer count (cnt/n^2, no rounding, no drift), edges
  * are smoothly anti-aliased, and the SAME integer geometry rasterises identically at ANY resolution (scale the
@@ -224,6 +227,9 @@ fn aa_mulck(a: i64, b: i64) -> i64 {
     return p
 }
 fn ui_aa_ovf() -> u32 @export { return AA_OVF }
+/* the ONE checked multiply, shared with the split cubic tier (ui_exact_cubic externs it): the
+ * latch stays HERE so every exact-coverage path refuses through the same flag. */
+fn ui_aa_mulck(a: i64, b: i64) -> i64 @export { return aa_mulck(a, b) }
 
 /* clip AA_S[0..n) against the half-plane to the LEFT of directed edge (ax,ay)->(bx,by); write AA_O, return count. */
 fn aa_clip(n: u32, ax: i64, ay: i64, bx: i64, by: i64) -> u32 {
@@ -1196,136 +1202,3 @@ fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: 
     return 0i32
 }
 
-/* ============================================================================================================
- * EXACT CUBIC BEZIER -- the curve order of real fonts (PostScript/CFF) and SVG paths, ONE degree above the
- * quadratic engine.  A quadratic's crossing Bx(t)=c lives in Q(sqrt D) (closed form, ui_bez_cross_x); a CUBIC's
- * crossing is a degree-3 algebraic number, and when the cubic has THREE distinct real roots its discriminant is
- * POSITIVE and Cardano's formula is forced through the cube root of a COMPLEX number -- the casus irreducibilis,
- * the 500-year wall where real radicals provably cannot express the (entirely real) roots.  III walks through it
- * WITHOUT complex numbers: a pure-integer proven-sign evaluation (ui_cubic_sign_at) drives bisection that isolates
- * every real root EXACTLY and brackets the rendering crossing to any rational precision.  No float, no flattening
- * (the universal industry shortcut: everyone subdivides cubics into line/quadratic pieces; III does not).  i64-range
- * overflow LATCHES AA_OVF -- refuse, never a wrong coverage; the bigint path is the escape, exactly as the quadratic.
- * Bx(t) = b0 + b1 t + b2 t^2 + b3 t^3.  Control points P0..P3 -> monomial coeffs via ui_cubic_coeffs (Bernstein->power). */
-var CUB_BX : [i64; 4]   var CUB_BY : [i64; 4]    /* the last cubic's monomial coeffs (x and y) */
-
-/* control points P0..P3 -> monomial coeffs b0..b3, into CUB_BX (x) and CUB_BY (y).  The Bernstein->power basis:
- * b0=x0 ; b1=3(x1-x0) ; b2=3(x0-2x1+x2) ; b3=-x0+3x1-3x2+x3.  (Same coeffs ui_cubic_area_s builds.) */
-fn ui_cubic_coeffs(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i32 @export {
-    CUB_BX[0u64] = x0
-    CUB_BX[1u64] = 3i64 * (x1 - x0)
-    CUB_BX[2u64] = 3i64 * ((x0 - (2i64 * x1)) + x2)
-    CUB_BX[3u64] = (((0i64 - x0) + (3i64 * x1)) - (3i64 * x2)) + x3
-    CUB_BY[0u64] = y0
-    CUB_BY[1u64] = 3i64 * (y1 - y0)
-    CUB_BY[2u64] = 3i64 * ((y0 - (2i64 * y1)) + y2)
-    CUB_BY[3u64] = (((0i64 - y0) + (3i64 * y1)) - (3i64 * y2)) + y3
-    return 0i32
-}
-fn ui_cub_bx(i: u32) -> i64 @export { return CUB_BX[i as u64] }
-fn ui_cub_by(i: u32) -> i64 @export { return CUB_BY[i as u64] }
-
-/* PROVEN-SIGN exact evaluation: the sign of (b0 + b1 t + b2 t^2 + b3 t^3) - cval at the RATIONAL t = pn/pd (pd>0),
- * computed as the sign of the integer N = b3 pn^3 + b2 pn^2 pd + b1 pn pd^2 + (b0-cval) pd^3 -- no float, exact at
- * every bit.  This single primitive isolates real roots (sign changes) AND brackets crossings.  Each product is
- * overflow-checked (aa_mulck); the caller resets+checks AA_OVF (a wrapped term must never certify a wrong sign). */
-fn ui_cubic_sign_at(b0: i64, b1: i64, b2: i64, b3: i64, cval: i64, pn: i64, pd: i64) -> i32 @export {
-    let pn2 : i64 = aa_mulck(pn, pn)
-    let pn3 : i64 = aa_mulck(pn2, pn)
-    let pd2 : i64 = aa_mulck(pd, pd)
-    let pd3 : i64 = aa_mulck(pd2, pd)
-    let s3 : i64 = aa_mulck(b3, pn3)
-    let s2 : i64 = aa_mulck(b2, aa_mulck(pn2, pd))
-    let s1 : i64 = aa_mulck(b1, aa_mulck(pn, pd2))
-    let s0 : i64 = aa_mulck(b0 - cval, pd3)
-    let n  : i64 = ((s3 + s2) + s1) + s0
-    if n > 0i64 { return 1i32 }
-    if n < 0i64 { return 0i32 - 1i32 }
-    return 0i32
-}
-
-/* the EXACT discriminant of the cubic b3 t^3 + b2 t^2 + b1 t + b0 (a=b3,b=b2,c=b1,d=b0):
- *   D = 18 a b c d - 4 b^3 d + b^2 c^2 - 4 a c^3 - 27 a^2 d^2.
- * D > 0  <=> three distinct REAL roots (the casus irreducibilis -- Cardano needs the cube root of a complex number).
- * D < 0  <=> one real root + a complex-conjugate pair.   D == 0 <=> a multiple (repeated) real root.
- * Integer-exact; overflow LATCHES AA_OVF. */
-fn ui_cubic_disc(b0: i64, b1: i64, b2: i64, b3: i64) -> i64 @export {
-    let t1  : i64 = aa_mulck(aa_mulck(18i64, aa_mulck(b3, b2)), aa_mulck(b1, b0))   /* 18 a b c d */
-    let b3c : i64 = aa_mulck(aa_mulck(b2, b2), b2)                                   /* b^3 */
-    let t2  : i64 = aa_mulck(0i64 - 4i64, aa_mulck(b3c, b0))                         /* -4 b^3 d */
-    let t3  : i64 = aa_mulck(aa_mulck(b2, b2), aa_mulck(b1, b1))                     /* b^2 c^2 */
-    let c3  : i64 = aa_mulck(aa_mulck(b1, b1), b1)                                   /* c^3 */
-    let t4  : i64 = aa_mulck(0i64 - 4i64, aa_mulck(b3, c3))                          /* -4 a c^3 */
-    let t5  : i64 = aa_mulck(0i64 - 27i64, aa_mulck(aa_mulck(b3, b3), aa_mulck(b0, b0)))  /* -27 a^2 d^2 */
-    return (((t1 + t2) + t3) + t4) + t5
-}
-
-/* a SUFFICIENT x-monotonicity certificate: monotone control x's (x0<=x1<=x2<=x3 OR x0>=x1>=x2>=x3) make Bx(t)
- * monotone on [0,1] -- because Bx'(t) is a non-negative (resp non-positive) Bernstein combination of the control
- * differences.  Exact and trivial; this is the standard form a font/SVG segment is split into.  1 iff x-monotone. */
-fn ui_cubic_ctrl_xmono(x0: i64, x1: i64, x2: i64, x3: i64) -> u32 @export {
-    if x1 >= x0 { if x2 >= x1 { if x3 >= x2 { return 1u32 } } }   /* non-decreasing */
-    if x1 <= x0 { if x2 <= x1 { if x3 <= x2 { return 1u32 } } }   /* non-increasing */
-    return 0u32
-}
-
-/* bracket the unique crossing Bx(t)=cval of the LAST cubic (CUB_BX, assumed x-monotone on [0,1]) into a rational
- * interval [CB_LO_N/CB_LO_D, CB_HI_N/CB_HI_D] of width 1/2^k, by proven-sign bisection (ui_cubic_sign_at).  Returns
- * 1 iff a crossing exists in [0,1] (the endpoints straddle cval); 0 if Bx never reaches cval there.  An EXACT
- * rational root collapses the interval to a point. */
-var CB_LO_N : i64 = 0i64   var CB_LO_D : i64 = 1i64   var CB_HI_N : i64 = 1i64   var CB_HI_D : i64 = 1i64
-fn ui_cubic_xcross_bracket(cval: i64, k: u32) -> u32 @export {
-    let bb0 : i64 = CUB_BX[0u64]   let bb1 : i64 = CUB_BX[1u64]
-    let bb2 : i64 = CUB_BX[2u64]   let bb3 : i64 = CUB_BX[3u64]
-    let s0 : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, 0i64, 1i64)   /* sign at t=0 */
-    let s1 : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, 1i64, 1i64)   /* sign at t=1 */
-    if s0 == 0i32 { CB_LO_N = 0i64   CB_LO_D = 1i64   CB_HI_N = 0i64   CB_HI_D = 1i64   return 1u32 }
-    if s1 == 0i32 { CB_LO_N = 1i64   CB_LO_D = 1i64   CB_HI_N = 1i64   CB_HI_D = 1i64   return 1u32 }
-    if s0 == s1 { return 0u32 }                       /* no sign change -> no crossing on [0,1] */
-    let mut lo : i64 = 0i64   let mut hi : i64 = 1i64   let mut den : i64 = 1i64
-    let mut i : u32 = 0u32
-    while i < k {
-        let midn : i64 = lo + hi                      /* mid = midn / (2 den) */
-        let midd : i64 = 2i64 * den
-        let sm : i32 = ui_cubic_sign_at(bb0, bb1, bb2, bb3, cval, midn, midd)
-        if sm == 0i32 { CB_LO_N = midn   CB_LO_D = midd   CB_HI_N = midn   CB_HI_D = midd   return 1u32 }
-        if sm == s0 { lo = midn   hi = 2i64 * hi   den = midd }    /* mid is before the root -> go right */
-        else { hi = midn   lo = 2i64 * lo   den = midd }           /* mid is past the root   -> go left  */
-        i = i + 1u32
-    }
-    CB_LO_N = lo   CB_LO_D = den   CB_HI_N = hi   CB_HI_D = den
-    return 1u32
-}
-fn ui_cub_lo_n() -> i64 @export { return CB_LO_N }
-fn ui_cub_lo_d() -> i64 @export { return CB_LO_D }
-fn ui_cub_hi_n() -> i64 @export { return CB_HI_N }
-fn ui_cub_hi_d() -> i64 @export { return CB_HI_D }
-
-/* the exact "below-the-arc" 8-bit alpha at a rational parameter pn/pd: coverage = clamp((py+1) - By(pn/pd), 0, 1),
- * alpha = round(sa * coverage).  By(pn/pd) = NUM/pd^3 (NUM exact integer), so coverage = CN/pd^3, CN = (py+1)pd^3 - NUM;
- * the correctly-rounded alpha = floor((2 sa CN + pd^3)/(2 pd^3)).  Overflow LATCHES AA_OVF.  Reads CUB_BY. */
-fn ui_cubic_alpha_at(pn: i64, pd: i64, py: i64, sa: i64) -> i64 @export {
-    let pn2 : i64 = aa_mulck(pn, pn)   let pn3 : i64 = aa_mulck(pn2, pn)
-    let pd2 : i64 = aa_mulck(pd, pd)   let pd3 : i64 = aa_mulck(pd2, pd)
-    let num : i64 = (((aa_mulck(CUB_BY[3u64], pn3) + aa_mulck(CUB_BY[2u64], aa_mulck(pn2, pd))) + aa_mulck(CUB_BY[1u64], aa_mulck(pn, pd2))) + aa_mulck(CUB_BY[0u64], pd3))
-    let cn  : i64 = aa_mulck(py + 1i64, pd3) - num     /* CN = (py+1) pd^3 - NUM ; coverage = CN/pd^3 */
-    if cn <= 0i64 { return 0i64 }                      /* arc at/below the pixel top -> fully above region -> empty */
-    if cn >= pd3 { return sa }                         /* arc at/above the pixel bottom -> fully below -> full */
-    let numr : i64 = aa_mulck(2i64, aa_mulck(sa, cn)) + pd3
-    let denr : i64 = aa_mulck(2i64, pd3)
-    return numr / denr                                 /* round(sa * CN/pd^3), proven exact */
-}
-
-/* THE EXACT CUBIC COVERAGE: the correctly-rounded 8-bit alpha of pixel (px,py) under the region BELOW the LAST
- * x-monotone cubic arc (CUB_BX/CUB_BY).  Brackets the crossing t* of Bx=px to depth k, then evaluates the alpha at
- * BOTH rational bounds; for an arc whose By is monotone across that bracket the true alpha is between them, so when
- * the two bounds AGREE the alpha is PROVEN correct.  Returns that alpha, or -1 if (no crossing) OR (overflow) OR
- * (the bracket has not pinned a single bucket at depth k -- the honest refusal: deepen k, never a wrong pixel). */
-fn ui_cubic_valpha(px: i64, py: i64, sa: i64, k: u32) -> i64 @export {
-    if ui_cubic_xcross_bracket(px, k) != 1u32 { return 0i64 - 1i64 }   /* arc does not cross this column */
-    let alo : i64 = ui_cubic_alpha_at(CB_LO_N, CB_LO_D, py, sa)
-    let ahi : i64 = ui_cubic_alpha_at(CB_HI_N, CB_HI_D, py, sa)
-    if AA_OVF == 1u32 { return 0i64 - 1i64 }                           /* i64 range exceeded -> refuse */
-    if alo == ahi { return alo }                                      /* both bounds pin the same bucket -> exact */
-    return 0i64 - 1i64                                                /* not pinned at depth k -> refuse (deepen) */
-}

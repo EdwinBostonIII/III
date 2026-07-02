@@ -39,27 +39,37 @@ extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64
 extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
 
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_save_bmp(fb: u64, w: u32, h: u32, path: u64) -> i32 from "ui_present.iii"
+
 var MXDIG : [u8; 32]
 var MXPD  : [i64; 8]
 var MXS   : i64        /* square part s of the last sqfree() call: n = s^2 * r */
 var MXR   : i64        /* radicand  r of the last sqfree() call */
 
 /* ------------------------------------------------ printing ------------------------------------ */
+var MWQUIET : i64 = 0i64      /* 1 = suppress output (the view renderer reuses sweep computation silently) */
+fn pch(c: i32) -> i32 {
+    if MWQUIET != 0i64 { return 0i32 }
+    return putchar(c)
+}
 fn pstr(s: *u8) -> i32 {
     let mut i : u64 = 0u64
     let mut going : u8 = 1u8
     while going == 1u8 {
         let c : u8 = s[i]
         if c == 126u8 { going = 0u8 }
-        if going == 1u8 { putchar(c as i32)   i = i + 1u64 }
+        if going == 1u8 { pch(c as i32)   i = i + 1u64 }
     }
     return 0i32
 }
-fn pnl() -> i32 { return putchar(10i32) }
+fn pnl() -> i32 { return pch(10i32) }
 fn pint(n: i64) -> i32 {
     let mut x : i64 = n
-    if x < 0i64 { putchar(45i32)   x = 0i64 - x }
-    if x == 0i64 { putchar(48i32)   return 0i32 }
+    if x < 0i64 { pch(45i32)   x = 0i64 - x }
+    if x == 0i64 { pch(48i32)   return 0i32 }
     let mut k : i64 = 0i64
     while x > 0i64 {
         let q : i64 = x / 10i64
@@ -67,25 +77,25 @@ fn pint(n: i64) -> i32 {
         x = q
         k = k + 1i64
     }
-    while k > 0i64 { k = k - 1i64   let dg : u8 = MXDIG[k]   putchar(dg as i32) }
+    while k > 0i64 { k = k - 1i64   let dg : u8 = MXDIG[k]   pch(dg as i32) }
     return 0i32
 }
 /* exact fraction n/d (d>0, reduced by the producer); prints "n" when d==1 */
 fn pfrac(n: i64, d: i64) -> i32 {
     pint(n)
-    if d != 1i64 { putchar(47i32)   pint(d) }
+    if d != 1i64 { pch(47i32)   pint(d) }
     return 0i32
 }
 /* scaled decimal: v/10000 printed as "I.FFFF" (v >= 0) */
 fn pdec4(v: i64) -> i32 {
     let ip : i64 = v / 10000i64
     let fp : i64 = v - (ip * 10000i64)
-    pint(ip)   putchar(46i32)
+    pint(ip)   pch(46i32)
     let mut m : i64 = 1000i64
     let mut f : i64 = fp
     while m > 0i64 {
         let dg : i64 = f / m
-        putchar((dg + 48i64) as i32)
+        pch((dg + 48i64) as i32)
         f = f - (dg * m)
         m = m / 10i64
     }
@@ -508,13 +518,19 @@ fn sw_isolate(bnd: i64, dsg: i32) -> i32 {
 
 /* signed scaled decimal (v/10^4) */
 fn psdec4(v: i64) -> i32 {
-    if v < 0i64 { putchar(45i32)   return pdec4(0i64 - v) }
+    if v < 0i64 { pch(45i32)   return pdec4(0i64 - v) }
     return pdec4(v)
 }
 fn pivl(lo: i64, hi: i64) -> i32 {
-    putchar(40i32)   psdec4(lo)   putchar(44i32)   psdec4(hi)   putchar(93i32)
+    pch(40i32)   psdec4(lo)   pch(44i32)   psdec4(hi)   pch(93i32)
     return 0i32
 }
+
+/* per-pose results captured for the renderer: paired branch points, scaled 1e-4.
+ * SWCASE: 0 degenerate, 1 unreachable, 2 tangent, 3 general, 4 vertical line, 5 horizontal line */
+var SWCASE : i64 = 0i64
+var SWX : [i64; 4]            /* branch1 x lo/hi, branch2 x lo/hi */
+var SWY : [i64; 4]            /* branch1 y lo/hi, branch2 y lo/hi */
 
 /* the certified transmission-cosine interval at grid angle k:
  * cos(mu) = (4(b^2+c^2-a^2-d^2) + 2ad*C4[k]) / (8bc)  -- bisected against rationals p/S. */
@@ -549,7 +565,7 @@ fn sw_mu(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
 fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
     let base : i64 = k * 4i64
     pstr("k=~")
-    if k < 10i64 { putchar(32i32) }
+    if k < 10i64 { pch(32i32) }
     pint(k)   pstr(" (~")   pint(k * 15i64)   pstr(" deg)  ~")
     sw_mu(k, a, b, c, d)   pstr("  ~")
 
@@ -566,7 +582,7 @@ fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
 
     let uz : u8 = v_is_zero((&MWU4) as u64)
     let vz : u8 = v_is_zero((&MWV4) as u64)
-    if uz == 1u8 { if vz == 1u8 { pstr("DEGENERATE: crank tip coincides with the ground pivot~")   pnl()   return 0i32 } }
+    if uz == 1u8 { if vz == 1u8 { SWCASE = 0i64   pstr("DEGENERATE: crank tip coincides with the ground pivot~")   pnl()   return 0i32 } }
 
     if uz == 1u8 {
         /* vertical-line case: y is the exact field element -4K/V; branches split in x:
@@ -581,10 +597,12 @@ fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
         i = 0i64
         while i < 4i64 { MWD4[i] = MWT4B[i] - (4i64 * MWT4C[i])   i = i + 1i64 }
         let dsg : i32 = q23_sign((&MWD4) as u64)
-        if dsg < 0i32 { pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
+        if dsg < 0i32 { SWCASE = 1i64   pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
         sw_isolate(c + d + 1i64, dsg)
         pstr("x branches: ~")   let r0 : i64 = MWROOT[0u64]   let r1 : i64 = MWROOT[1u64]   pivl(r0, r1)
         pstr(" ~")             let r2 : i64 = MWROOT[2u64]   let r3 : i64 = MWROOT[3u64]   pivl(r2, r3)
+        SWCASE = 4i64
+        SWX[0u64] = r0   SWX[1u64] = r1   SWX[2u64] = r2   SWX[3u64] = r3
         /* y is the single exact field element -4K/V on the vertical radical line: isolate the
          * monotone linear form V*y + 4K (slope sign from q23_sign(V), never 0 for V != 0). */
         let sv : i32 = q23_sign((&MWV4) as u64)
@@ -600,6 +618,7 @@ fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
             let sg : i32 = q23_sign((&MWE4) as u64)
             if sg >= 0i32 { yh = mid } else { yl = mid }
         }
+        SWY[0u64] = yl   SWY[1u64] = yh   SWY[2u64] = yl   SWY[3u64] = yh
         pstr("  shared y: ~")   pivl(yl, yh)   pnl()
         return 0i32
     }
@@ -621,12 +640,13 @@ fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
     i = 0i64
     while i < 4i64 { MWD4[i] = MWF4[i] - (4i64 * MWD4[i])   i = i + 1i64 }
     let dsg : i32 = q23_sign((&MWD4) as u64)
-    if dsg < 0i32 { pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
+    if dsg < 0i32 { SWCASE = 1i64   pstr("unreachable (exact: circles apart)~")   pnl()   return 0i32 }
     if dsg == 0i32 { pstr("TANGENT (dead-centre pose)  ~") }
     sw_isolate(c + 1i64, dsg)
     let y1l : i64 = MWROOT[0u64]   let y1h : i64 = MWROOT[1u64]
     let y2l : i64 = MWROOT[2u64]   let y2h : i64 = MWROOT[3u64]
     let nt : i64 = MWROOT[5u64]
+    SWY[0u64] = y1l   SWY[1u64] = y1h   SWY[2u64] = y2l   SWY[3u64] = y2h
 
     /* x-quadratic (symmetric elimination): (U^2+V^2) x^2 - (2dV^2 + 8KU) x + (d^2V^2 + 16K^2 - c^2V^2) = 0.
      * MWA4 (=U^2+V^2) is unchanged; rebuild MWB4/MWG4 in place. */
@@ -648,9 +668,17 @@ fn sw_pose(k: i64, a: i64, b: i64, c: i64, d: i64) -> i32 {
     q23_mul((&MWU4) as u64, (&MWV4) as u64, (&MWE4) as u64)
     let sl : i32 = q23_sign((&MWE4) as u64)
     if vz == 1u8 {
+        SWCASE = 5i64
+        SWX[0u64] = x1l   SWX[1u64] = x1h   SWX[2u64] = x1l   SWX[3u64] = x1h
         pstr("x = ~")   pivl(x1l, x1h)   pstr(" (both branches; horizontal radical line)  y branches: ~")
         pivl(y1l, y1h)   pstr(" ~")   pivl(y2l, y2h)   pnl()
         return 0i32
+    }
+    if dsg == 0i32 { SWCASE = 2i64 } else { SWCASE = 3i64 }
+    if sl >= 0i32 {
+        SWX[0u64] = x1l   SWX[1u64] = x1h   SWX[2u64] = x2l   SWX[3u64] = x2h
+    } else {
+        SWX[0u64] = x2l   SWX[1u64] = x2h   SWX[2u64] = x1l   SWX[3u64] = x1h
     }
     pstr("B1(x,y): ~")
     if sl >= 0i32 { pivl(x1l, x1h)   pstr(" ~")   pivl(y1l, y1h) } else { pivl(x2l, x2h)   pstr(" ~")   pivl(y1l, y1h) }
@@ -674,12 +702,158 @@ fn sweep(a: i64, b: i64, c: i64, d: i64) -> u64 {
     return 0u64
 }
 
+/* ------------------------------------------------ view: the cycle rendered to a BMP ----------- */
+/* mech view <a> <b> <c> <d> -> mech_view.bmp (800x600, 32bpp): ground + pivots, the mechanism at
+ * every reachable zeta-24 pose (crank red, coupler green, rocker blue), both joint circuits traced
+ * (elbow-up gold, elbow-down dark gold).  Every endpoint pixel comes from an exact-sign-certified
+ * 1e-4 isolation -- the picture is the sweep table made visible, not a float re-computation. */
+var MVFB : [u32; 480000]      /* 800 x 600 ARGB */
+var MVPTS : [i64; 96]         /* per pose: b1x, b1y, b2x, b2y (scaled 1e-4 midpoints) */
+var MVCASE : [i64; 24]
+var MVA : [i64; 48]           /* per pose: Ax, Ay (scaled) */
+var MVX0 : i64   var MVY0 : i64   var MVNUM : i64   var MVDEN : i64
+var MVPATH : [u8; 14]
+
+/* isolate the exact field element (vec/den) to a scaled 1e-4 lower bound by q23_sign bisection */
+fn mv_field_iso(vp: u64, den: i64, bnd: i64) -> i64 {
+    let sc : i64 = 10000i64
+    let mut lb : i64 = (0i64 - bnd) * sc
+    let mut hb : i64 = bnd * sc
+    while (hb - lb) > 1i64 {
+        let mid : i64 = (lb + hb) / 2i64
+        v_scaled_from((&MWE4) as u64, vp, sc)
+        MWE4[0u64] = MWE4[0u64] - (mid * den)
+        let sg : i32 = q23_sign((&MWE4) as u64)
+        if sg >= 0i32 { lb = mid } else { hb = mid }
+    }
+    return lb
+}
+fn mv_px(xs: i64) -> i32 { return (40i64 + (((xs - MVX0) * MVNUM) / MVDEN)) as i32 }
+fn mv_py(ys: i64) -> i32 { return (560i64 - (((ys - MVY0) * MVNUM) / MVDEN)) as i32 }
+fn mv_dot(xs: i64, ys: i64, col: u32) -> i32 {
+    let px : i32 = mv_px(xs)   let py : i32 = mv_py(ys)
+    ui_fill_rect((&MVFB) as u64, 800u32, 600u32, (px - 2i32) as u32, (py - 2i32) as u32, 5u32, 5u32, col)
+    return 0i32
+}
+fn mv_seg(x0: i64, y0: i64, x1: i64, y1: i64, col: u32) -> i32 {
+    ui_line((&MVFB) as u64, 800u32, 600u32, mv_px(x0), mv_py(y0), mv_px(x1), mv_py(y1), col)
+    return 0i32
+}
+
+fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
+    sw_tab()
+    /* world box (units): x in [min(-a, d-c)-1, max(a, d+c)+1], y in [-(max(a,c)+1), +(max(a,c)+1)] */
+    let mut xmin : i64 = 0i64 - a
+    if (d - c) < xmin { xmin = d - c }
+    xmin = xmin - 1i64
+    let mut xmax : i64 = a
+    if (d + c) > xmax { xmax = d + c }
+    xmax = xmax + 1i64
+    let mut ym : i64 = a
+    if c > ym { ym = c }
+    ym = ym + 1i64
+    let sc : i64 = 10000i64
+    MVX0 = xmin * sc
+    MVY0 = (0i64 - ym) * sc
+    let spanx : i64 = (xmax - xmin) * sc
+    let spany : i64 = (2i64 * ym) * sc
+    /* one scale for both axes: fit 720 px horizontally, 520 vertically */
+    if (720i64 * spany) <= (520i64 * spanx) { MVNUM = 720i64   MVDEN = spanx } else { MVNUM = 520i64   MVDEN = spany }
+
+    ui_clear((&MVFB) as u64, 800u32, 600u32, 4279173144u32)                      /* 0xFF101018 */
+
+    /* compute all poses quietly through the SAME sweep path */
+    let mut k : i64 = 0i64
+    let mut drawn : i64 = 0i64
+    while k < 24i64 {
+        MWQUIET = 1i64
+        SWCASE = 1i64
+        sw_pose(k, a, b, c, d)
+        MWQUIET = 0i64
+        MVCASE[k] = SWCASE
+        let p : i64 = k * 4i64
+        MVPTS[p]          = (SWX[0u64] + SWX[1u64]) / 2i64
+        MVPTS[p + 1i64]   = (SWY[0u64] + SWY[1u64]) / 2i64
+        MVPTS[p + 2i64]   = (SWX[2u64] + SWX[3u64]) / 2i64
+        MVPTS[p + 3i64]   = (SWY[2u64] + SWY[3u64]) / 2i64
+        /* A(k) = a*(cos,sin): isolate each exact field element */
+        let tb : i64 = k * 4i64
+        let mut i : i64 = 0i64
+        while i < 4i64 { let cv : i64 = MW24C[tb + i]   MWF4[i] = a * cv   i = i + 1i64 }
+        MVA[k * 2i64] = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        i = 0i64
+        while i < 4i64 { let sv : i64 = MW24S[tb + i]   MWF4[i] = a * sv   i = i + 1i64 }
+        MVA[(k * 2i64) + 1i64] = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        k = k + 1i64
+    }
+
+    /* joint circuits first (under the linkage): elbow-down dark gold, elbow-up gold */
+    k = 0i64
+    while k < 24i64 {
+        let kn : i64 = k + 1i64
+        let mut k2 : i64 = kn
+        if kn == 24i64 { k2 = 0i64 }
+        let ca : i64 = MVCASE[k]
+        let cb : i64 = MVCASE[k2]
+        if ca >= 2i64 { if cb >= 2i64 {
+            let p : i64 = k * 4i64
+            let q : i64 = k2 * 4i64
+            let p0 : i64 = MVPTS[p]          let p1 : i64 = MVPTS[p + 1i64]
+            let p2 : i64 = MVPTS[p + 2i64]   let p3 : i64 = MVPTS[p + 3i64]
+            let q0 : i64 = MVPTS[q]          let q1 : i64 = MVPTS[q + 1i64]
+            let q2 : i64 = MVPTS[q + 2i64]   let q3 : i64 = MVPTS[q + 3i64]
+            mv_seg(p0, p1, q0, q1, 4286736416u32)                                /* 0xFF806820 */
+            mv_seg(p2, p3, q2, q3, 4294955072u32)                                /* 0xFFFFD040 */
+        } }
+        k = k + 1i64
+    }
+
+    /* ground + pivots */
+    mv_seg(0i64, 0i64, d * sc, 0i64, 4286611584u32)                              /* 0xFF808080 */
+    mv_dot(0i64, 0i64, 4294967295u32)                                            /* white */
+    mv_dot(d * sc, 0i64, 4294967295u32)
+
+    /* the mechanism at every reachable pose: crank red, coupler green, rocker blue (elbow-up) */
+    k = 0i64
+    while k < 24i64 {
+        let ca : i64 = MVCASE[k]
+        if ca >= 2i64 {
+            let p : i64 = k * 4i64
+            let ax : i64 = MVA[k * 2i64]
+            let ay : i64 = MVA[(k * 2i64) + 1i64]
+            let bx : i64 = MVPTS[p + 2i64]
+            let by : i64 = MVPTS[p + 3i64]
+            mv_seg(0i64, 0i64, ax, ay, 4292923472u32)                            /* 0xFFE05050 crank */
+            mv_seg(ax, ay, bx, by, 4283484280u32)                                /* 0xFF50C878 coupler */
+            mv_seg(bx, by, d * sc, 0i64, 4283531488u32)                          /* 0xFF5080E0 rocker */
+            let ox : i64 = MVPTS[p]
+            let oy : i64 = MVPTS[p + 1i64]
+            mv_dot(ox, oy, 4286736416u32)                                        /* elbow-down joint */
+            mv_dot(bx, by, 4294955072u32)                                        /* elbow-up joint */
+            drawn = drawn + 1i64
+        }
+        k = k + 1i64
+    }
+
+    /* write mech_view.bmp */
+    MVPATH[0u64] = 109u8   MVPATH[1u64] = 101u8   MVPATH[2u64] = 99u8   MVPATH[3u64] = 104u8
+    MVPATH[4u64] = 95u8    MVPATH[5u64] = 118u8   MVPATH[6u64] = 105u8  MVPATH[7u64] = 101u8
+    MVPATH[8u64] = 119u8   MVPATH[9u64] = 46u8    MVPATH[10u64] = 98u8  MVPATH[11u64] = 109u8
+    MVPATH[12u64] = 112u8  MVPATH[13u64] = 0u8
+    let rc : i32 = ui_save_bmp((&MVFB) as u64, 800u32, 600u32, (&MVPATH) as u64)
+    if rc != 0i32 { pstr("FAILED to write mech_view.bmp~")   pnl()   return 4u64 }
+    pstr("wrote mech_view.bmp (800x600): ~")   pint(drawn)
+    pstr(" of 24 poses drawn (crank red, coupler green, rocker blue; joint circuits gold)~")   pnl()
+    return 0u64
+}
+
 /* ------------------------------------------------ entry --------------------------------------- */
 fn usage() -> u64 {
     pstr("III MECH -- the exact mechanism workbench~")   pnl()
     pstr("  mech <a> <b> <c> <d>              exact 4-bar analysis (links 1..150)~")   pnl()
     pstr("  mech design <a> <b> <c> [lo hi]   exact inverse design of the ground link~")   pnl()
     pstr("  mech sweep <a> <b> <c> <d>        exact coupler sweep at the 24 zeta-24 crank angles (links 1..40)~")   pnl()
+    pstr("  mech view <a> <b> <c> <d>         render the exact cycle to mech_view.bmp (links 1..40)~")   pnl()
     return 2u64
 }
 
@@ -697,6 +871,22 @@ fn main(argc: i32, argv: u64) -> u64 {
     if a1 < 0i64 {
         /* word mode */
         let fb : u8 = first_byte(a1p)
+        if fb == 118u8 {
+            /* view: exactly 4 links, sweep envelope */
+            if argc != 6i32 { return usage() }
+            let va : u64 = pp[2u64]   let vb : u64 = pp[3u64]   let vc : u64 = pp[4u64]   let vd : u64 = pp[5u64]
+            let a : i64 = parse_u(va)   let b : i64 = parse_u(vb)
+            let c : i64 = parse_u(vc)   let d : i64 = parse_u(vd)
+            if a < 1i64 { return usage() }
+            if b < 1i64 { return usage() }
+            if c < 1i64 { return usage() }
+            if d < 1i64 { return usage() }
+            if a > 40i64 { pstr("REFUSED: view envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if b > 40i64 { pstr("REFUSED: view envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if c > 40i64 { pstr("REFUSED: view envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if d > 40i64 { pstr("REFUSED: view envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            return view(a, b, c, d)
+        }
         if fb == 115u8 {
             /* sweep: exactly 4 links */
             if argc != 6i32 { return usage() }

@@ -1728,6 +1728,7 @@ declare -A EXPECTED=(
     [2471_symreg_overfit_refuse]=99
     [2472_spec_wired_synth]=99
     [2475_nl_parse_roles]=99
+    [2478_route_sweep]=99
 )
 
 PASS=0

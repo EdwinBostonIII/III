@@ -1,0 +1,99 @@
+/* 2478_route_sweep.iii -- THE ROUTE-SWEEP (reunification W4b-ii.7.1): closes all 24 transform-arrow
+ * registrations in ONE gate.  Distinct from 1390_tp_planner (which tests ONE composite III->HEX
+ * route with cost trade-offs); this proves EVERY registered arrow is (a) present in both registries
+ * and (b) planner-reachable end-to-end.
+ *
+ * COUNT teeth      : tpm_register_all() (the planner category) registers EXACTLY 24 morphisms;
+ *                    transform_register_all() (the codec dispatch table) returns 0 (success).  A
+ *                    new codec cannot arrive unproven -- the count is pinned.
+ * ENDPOINT golden  : the 24 category morphisms carry EXACTLY the pinned (src_obj,dst_obj) pairs
+ *                    (probed 2026-07-02).  A dropped/misregistered arrow moves a pair -> FAIL.
+ * REACHABILITY     : for every one of the 24, tpp_plan(src_obj,dst_obj) FINDS a route (a registered
+ *                    arrow whose endpoints the planner cannot reach is a dead registration).
+ * DISPATCH present : all 24 codec-table slots carry a non-zero (src_form,dst_form); slot 24 is
+ *                    out-of-range and reads (0,0) -- the table is exactly 24 wide, no phantom slot.
+ *
+ * Golden-corruption falsification (run at authoring, restored): flipping any one endpoint-golden
+ * entry makes the ENDPOINT arm return 11.  Verified.
+ *
+ * exit 99 = pass;  10 counts;  11 endpoint golden;  12 unreachable arrow;  13 dispatch slot empty;
+ *   14 phantom 25th slot */
+module corpus_2478_route_sweep
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn tpm_register_all() -> i32 from "tp_morphism.iii"
+extern @abi(c-msvc-x64) fn transform_register_all() -> i32 from "transform_patterns.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_src(m: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_dst(m: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn tpp_init() -> i32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_set_cost(mor_slot: u32, cost: *u64) -> i32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_plan(src_obj: u32, dst_obj: u32) -> i64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_len(r: u64) -> u64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tp_table_get_src(idx: u32) -> u8 from "transform_patterns.iii"
+extern @abi(c-msvc-x64) fn tp_table_get_dst(idx: u32) -> u8 from "transform_patterns.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var COSTV : [u64; 6]
+/* the 24 category-morphism endpoint golden (src_obj,dst_obj), probed 2026-07-02. */
+var GSRC : [u32; 24]   var GDST : [u32; 24]
+
+fn seed_golden() -> i32 {
+    GSRC[0u64]=0u32   GDST[0u64]=1u32     GSRC[1u64]=0u32   GDST[1u64]=2u32
+    GSRC[2u64]=0u32   GDST[2u64]=3u32     GSRC[3u64]=0u32   GDST[3u64]=5u32
+    GSRC[4u64]=0u32   GDST[4u64]=6u32     GSRC[5u64]=0u32   GDST[5u64]=8u32
+    GSRC[6u64]=0u32   GDST[6u64]=12u32    GSRC[7u64]=6u32   GDST[7u64]=0u32
+    GSRC[8u64]=7u32   GDST[8u64]=8u32     GSRC[9u64]=7u32   GDST[9u64]=16u32
+    GSRC[10u64]=8u32  GDST[10u64]=7u32    GSRC[11u64]=8u32  GDST[11u64]=0u32
+    GSRC[12u64]=8u32  GDST[12u64]=9u32    GSRC[13u64]=9u32  GDST[13u64]=8u32
+    GSRC[14u64]=11u32 GDST[14u64]=10u32   GSRC[15u64]=10u32 GDST[15u64]=11u32
+    GSRC[16u64]=4u32  GDST[16u64]=0u32    GSRC[17u64]=5u32  GDST[17u64]=13u32
+    GSRC[18u64]=13u32 GDST[18u64]=12u32   GSRC[19u64]=14u32 GDST[19u64]=12u32
+    GSRC[20u64]=5u32  GDST[20u64]=15u32   GSRC[21u64]=15u32 GDST[21u64]=5u32
+    GSRC[22u64]=17u32 GDST[22u64]=16u32   GSRC[23u64]=17u32 GDST[23u64]=1u32
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ══ COUNT teeth. */
+    let nr : i32 = tpm_register_all()
+    let ntx : i32 = transform_register_all()
+    putchar(82i32) putchar(58i32) sp() e_i64(nr as i64) sp() e_i64(ntx as i64) nl()
+    if nr != 24i32 { return 10u64 }
+    if ntx != 0i32 { return 10u64 }
+
+    seed_golden()
+    tpp_init()
+    COSTV[0u64]=1u64 COSTV[1u64]=1u64 COSTV[2u64]=1u64 COSTV[3u64]=1u64 COSTV[4u64]=1u64 COSTV[5u64]=1u64
+    let mut t : u32 = 0u32
+    while t < 24u32 { tpp_set_cost(t, (&COSTV) as u64 as *u64)   t = t + 1u32 }
+
+    /* ══ ENDPOINT golden + REACHABILITY, all 24 arrows. */
+    let mut i : u32 = 0u32
+    let mut reach : u32 = 0u32
+    while i < 24u32 {
+        let so : u32 = cat_morphism_src(i)
+        let doo : u32 = cat_morphism_dst(i)
+        if so != GSRC[i as u64] { return 11u64 }
+        if doo != GDST[i as u64] { return 11u64 }
+        let pl : i64 = tpp_plan(so, doo)
+        if pl < 0i64 { return 12u64 }                 /* the endpoints must be planner-reachable */
+        if tpp_route_len(0u64) < 1u64 { return 12u64 } /* a real route of >=1 arrow */
+        reach = reach + 1u32
+        i = i + 1u32
+    }
+    putchar(86i32) putchar(58i32) sp() e_i64(reach as i64) nl()          /* "V: 24" */
+
+    /* ══ DISPATCH present: 24 non-empty codec slots, no phantom 25th. */
+    i = 0u32
+    while i < 24u32 {
+        if tp_table_get_src(i) == 0u8 { return 13u64 }
+        if tp_table_get_dst(i) == 0u8 { return 13u64 }
+        i = i + 1u32
+    }
+    if tp_table_get_src(24u32) != 0u8 { return 14u64 }   /* out-of-range -> 0 (exactly 24 wide) */
+    if tp_table_get_dst(24u32) != 0u8 { return 14u64 }
+
+    return 99u64
+}

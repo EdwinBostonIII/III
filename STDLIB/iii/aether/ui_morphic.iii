@@ -15,13 +15,6 @@ extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64
 extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_mx() -> u32 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_my() -> u32 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_mdown() -> u32 from "ui_win.iii"
-extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
 
 var FB    : [u32; 364800]   /* 760 x 480 */
 var TITLE : [u8; 10] = [73u8,73u8,73u8,45u8,71u8,76u8,65u8,83u8,83u8,0u8]
@@ -32,6 +25,24 @@ var GG : [u8; 18] = [1u8,1u8,1u8,13u8,0u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 
 
 fn rgb(r: u32, g: u32, b: u32) -> u32 { return (255u32 << 24u32) | (r << 16u32) | (g << 8u32) | b }
 
+/* ══ THE HEADLESS CORE (reunification W4b-i.11: gated by corpus 2473, which drives EXACTLY what the
+ * drag drives -- write C into both SVIR sources, re-prove, re-lift, evaluate -- no window needed). ══ */
+fn um_edit_c(c: u64) -> u32 @export {
+    put_c(&FF as u64, 8u64, c)
+    put_c(&GG as u64, 6u64, c)
+    return seq_equiv(&FF as u64, 5u64, 13u64, &GG as u64, 5u64, 13u64, 1u32)
+}
+fn um_relift() -> u32 @export {
+    bb_reset(64u64)
+    return sd_denote(&FF as u64, 5u64, 13u64, 1u32)
+}
+fn um_eval(node: u32, x: u64) -> u64 @export {
+    bb_set_input(0u32, x)
+    return bb_eval(node)
+}
+fn um_ff_byte(i: u64) -> u8 @export { return FF[i] }
+fn um_gg_byte(i: u64) -> u8 @export { return GG[i] }
+
 /* write C as the CONST value (8-byte LE) at byte offset `off` of module `base` -- this IS editing the source. */
 fn put_c(base: u64, off: u64, c: u64) -> i32 {
     let mut k : u64 = 0u64
@@ -39,7 +50,9 @@ fn put_c(base: u64, off: u64, c: u64) -> i32 {
     return 0i32
 }
 
-fn render(b: u64, w: u32, h: u32, c: u64, proven: u32, node: u32) -> i32 {
+fn um_fb() -> u64 @export { return &FB as u64 }
+fn um_title() -> u64 @export { return &TITLE as u64 }
+fn um_render(b: u64, w: u32, h: u32, c: u64, proven: u32, node: u32) -> i32 @export {
     ui_clear(b, w, h, rgb(10u32, 11u32, 16u32))
     ui_fill_rect(b, w, h, 0u32, 0u32, w, 28u32, rgb(22u32, 24u32, 38u32))
     ui_text_n(b, w, h, 10u32, 6u32, "III-GLASS  morphic editing -- drag rewrites the SVIR source; the membrane re-proves" as u64, 81u32, rgb(0u32, 229u32, 255u32))
@@ -81,36 +94,3 @@ fn render(b: u64, w: u32, h: u32, c: u64, proven: u32, node: u32) -> i32 {
     return 0i32
 }
 
-fn main() -> u64 {
-    ui_win_open(&TITLE as u64, 760u32, 480u32)
-    let mut c : u64 = 12u64
-    let mut proven : u32 = 0u32
-    let mut node : u32 = 0u32
-    let mut dirty : u32 = 1u32
-    while ui_win_pump() == 0u32 {
-        /* drag -> set C from cursor -> mark dirty (edit the source). */
-        if ui_mdown() == 1u32 {
-            let my : u32 = ui_my()
-            if my >= 400u32 { if my <= 436u32 {
-                let mx : u32 = ui_mx()
-                let mut nc : i64 = (((mx as i64) - 60i64) * 64i64) / 500i64
-                if nc < 0i64 { nc = 0i64 }
-                if nc > 64i64 { nc = 64i64 }
-                if (nc as u64) != c { c = nc as u64  dirty = 1u32 }
-            } }
-        }
-        if dirty == 1u32 {
-            /* AUTOPOIETIC EDIT: write C into both SVIR sources, re-lift, re-prove. */
-            put_c(&FF as u64, 8u64, c)
-            put_c(&GG as u64, 6u64, c)
-            proven = seq_equiv(&FF as u64, 5u64, 13u64, &GG as u64, 5u64, 13u64, 1u32)
-            bb_reset(64u64)
-            node = sd_denote(&FF as u64, 5u64, 13u64, 1u32)
-            dirty = 0u32
-        }
-        render(&FB as u64, 760u32, 480u32, c, proven, node)
-        ui_win_present(&FB as u64, 760u32, 480u32)
-        ui_sleep(16u32)
-    }
-    return 0u64
-}

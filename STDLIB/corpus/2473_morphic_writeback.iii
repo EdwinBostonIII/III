@@ -1,0 +1,66 @@
+/* 2473_morphic_writeback.iii -- GATE for ui_morphic's autopoietic SVIR write-back (reunification
+ * W4b-i.11): the drag's ENTIRE effect -- write C into the SVIR byte arrays, re-prove f==g, re-lift,
+ * evaluate -- driven headlessly through the SAME core the window drives (um_edit_c/um_relift/um_eval).
+ *
+ * A -- BYTE-DIFF EXACTNESS: after um_edit_c(37), the ONLY changed bytes of f(x)=x+C are the 8 LE
+ *   CONST bytes at offset 8 (37,0,0,0,0,0,0,0) and of g(x)=C+x at offset 6 -- every opcode byte
+ *   around them is pinned unchanged (a wrong write offset dies here).
+ * B -- THE MEMBRANE RE-PROVES: seq_equiv(f,g) == 1 for the new C (commutativity re-certified).
+ * C -- BEHAVIOR: the re-lifted circuit computes x+C exactly: eval(5)=42, eval(0)=37.
+ * D -- SECOND EDIT: um_edit_c(0) -> proven, eval(5)=5 (the edit is repeatable, not one-shot).
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D */
+module corpus_2473_morphic_writeback
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn um_edit_c(c: u64) -> u32 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_relift() -> u32 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_eval(node: u32, x: u64) -> u64 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_ff_byte(i: u64) -> u8 from "ui_morphic.iii"
+extern @abi(c-msvc-x64) fn um_gg_byte(i: u64) -> u8 from "ui_morphic.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var FSNAP : [u8; 18]   var GSNAP : [u8; 18]
+
+fn main() -> u64 {
+    /* snapshot both fixture sources pre-edit */
+    let mut i : u64 = 0u64
+    while i < 18u64 { FSNAP[i] = um_ff_byte(i)   GSNAP[i] = um_gg_byte(i)   i = i + 1u64 }
+
+    /* ══ A+B: the edit -- byte-diff must be EXACTLY the constant, and the membrane re-proves. */
+    let pv : u32 = um_edit_c(37u64)
+    putchar(80i32) putchar(58i32) sp() e_i64(pv as i64) nl()          /* "P: 1" */
+    if pv != 1u32 { return 11u64 }
+    i = 0u64
+    while i < 18u64 {
+        let fb : u8 = um_ff_byte(i)
+        let gb : u8 = um_gg_byte(i)
+        if i == 8u64 { if fb != 37u8 { return 10u64 } }
+        else { if i >= 9u64 { if i < 16u64 { if fb != 0u8 { return 10u64 } } } }
+        if i < 8u64 { if fb != FSNAP[i] { return 10u64 } }
+        if i >= 16u64 { if fb != FSNAP[i] { return 10u64 } }
+        if i == 6u64 { if gb != 37u8 { return 10u64 } }
+        else { if i >= 7u64 { if i < 14u64 { if gb != 0u8 { return 10u64 } } } }
+        if i < 6u64 { if gb != GSNAP[i] { return 10u64 } }
+        if i >= 14u64 { if gb != GSNAP[i] { return 10u64 } }
+        i = i + 1u64
+    }
+
+    /* ══ C: the re-lifted circuit computes x+37 exactly. */
+    let node : u32 = um_relift()
+    let v5 : u64 = um_eval(node, 5u64)
+    let v0 : u64 = um_eval(node, 0u64)
+    putchar(67i32) putchar(58i32) sp() e_i64(v5 as i64) sp() e_i64(v0 as i64) nl()   /* "C: 42 37" */
+    if v5 != 42u64 { return 12u64 }
+    if v0 != 37u64 { return 12u64 }
+
+    /* ══ D: second edit -- repeatable, not one-shot. */
+    let pv2 : u32 = um_edit_c(0u64)
+    if pv2 != 1u32 { return 13u64 }
+    let node2 : u32 = um_relift()
+    if um_eval(node2, 5u64) != 5u64 { return 13u64 }
+
+    return 99u64
+}

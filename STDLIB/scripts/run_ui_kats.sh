@@ -9,6 +9,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STDLIB="$(cd "$SCRIPT_DIR/.." && pwd)"
 III="$(cd "$STDLIB/.." && pwd)"
+LIB="$STDLIB/build/iii/libiii_native.a"
 I2="$III/COMPILED/iiis-2.exe"
 A="$STDLIB/iii/aether"
 C="$STDLIB/corpus"
@@ -19,7 +20,7 @@ fail=0; pass=0
 cc() { "$I2" "$1" --compile-only --out "$2" 2>/dev/null; }
 
 # pure UI library .o's (framebuffer/math; no Windows APIs)
-for m in ui_raster ui_font_data ui_exact ui_exact_cubic ui_font ui_vfont ui_vfont_data ui_present studio_theme studio_sample; do
+for m in ui_raster ui_font_data ui_exact ui_exact_cubic ui_font ui_vfont ui_vfont_data ui_present studio_theme studio_sample ui_win ui_morphic ui_destiny ui_morphic_app ui_destiny_app; do
     cc "$A/$m.iii" "$OUT/$m.o" || { echo "FAIL  lib $m : compile"; fail=$((fail+1)); }
 done
 
@@ -45,6 +46,8 @@ run 2100_biquad_coverage 99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"  # SYMBOLIC 2D 
 run 2101_hausdorff_dim  99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"   # continuous HAUSDORFF DIMENSION (smooth d=1; self-similar fractal d in (1,2))
 run 2102_cover2d        99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"   # FULL symmetric 2D coverage (Green: G(t2)-G(t1)-py degree-4; overflow detected)
 run 2453_glass_surface  99 "$OUT/ui_vfont.o" "$OUT/ui_vfont_data.o" "$OUT/ui_exact.o" "$OUT/ui_exact_cubic.o" "$OUT/ui_raster.o" "$OUT/ui_present.o" "$OUT/studio_theme.o" "$OUT/studio_sample.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o"   # reunification W0.2: the cubic/coverage seam + present/theme/sample surface
+run 2473_morphic_writeback 99 "$OUT/ui_morphic.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: autopoietic SVIR write-back headless (byte-diff EXACT + re-prove + re-lift)
+run 2474_destiny_closed_form 99 "$OUT/ui_destiny.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: holographic destiny -- 4 real SVIR fns, exact eval + exact closed-form max
 
 echo "=== UI KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

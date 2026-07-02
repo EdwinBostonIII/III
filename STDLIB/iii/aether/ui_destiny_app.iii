@@ -1,0 +1,28 @@
+/* STDLIB/iii/aether/ui_destiny_app.iii -- the WINDOW SHELL for ui_destiny (reunification W4b-i.11
+ * split: the destiny core + render live in ui_destiny.iii, gated headless by corpus 2474; this shim
+ * owns only the window loop, so the core links into KATs with no user32 dependency). */
+module ui_destiny_app
+
+extern @abi(c-msvc-x64) fn ud_render(b: u64, w: u32, h: u32, sel: u32, mx: u32) -> i32 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_fb() -> u64 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_title() -> u64 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_mx() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_key() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+
+fn main() -> u64 {
+    ui_win_open(ud_title(), 760u32, 480u32)
+    let mut sel : u32 = 0u32
+    while ui_win_pump() == 0u32 {
+        let k : u32 = ui_key()
+        if k == 37u32 { if sel > 0u32 { sel = sel - 1u32 } }   /* VK_LEFT */
+        if k == 39u32 { if sel < 3u32 { sel = sel + 1u32 } }   /* VK_RIGHT */
+        ud_render(ud_fb(), 760u32, 480u32, sel, ui_mx())
+        ui_win_present(ud_fb(), 760u32, 480u32)
+        ui_sleep(16u32)
+    }
+    return 0u64
+}

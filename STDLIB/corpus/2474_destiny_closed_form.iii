@@ -1,0 +1,42 @@
+/* 2474_destiny_closed_form.iii -- GATE for ui_destiny's holographic destiny surface (reunification
+ * W4b-i.11): the closed-form image the window plots, driven headlessly (ud_lift/ud_eval/ud_max).
+ *
+ * For each of the four REAL SVIR bodies the organ carries, the lifted exact circuit must compute
+ * the function bit-exactly and the destiny max over the plot domain [0,128) must be the exact
+ * closed-form value:
+ *   F0: 2x    -> eval(7)=14,  eval(100)=200,  max=254
+ *   F1: x^2   -> eval(7)=49,  eval(100)=10000, max=127^2=16129
+ *   F2: x+5   -> eval(7)=12,  eval(100)=105,  max=132
+ *   F3: x&7   -> eval(7)=7,   eval(100)=4,    max=7   (the sawtooth: 100=0b1100100 -> 0b100)
+ *
+ * exit 99 = pass;  10 lift;  11 F0;  12 F1;  13 F2;  14 F3 */
+module corpus_2474_destiny_closed_form
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ud_lift(sel: u32) -> u32 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_eval(node: u32, x: u64) -> u64 from "ui_destiny.iii"
+extern @abi(c-msvc-x64) fn ud_max(node: u32, xn: u32) -> u64 from "ui_destiny.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn arm(sel: u32, e7: u64, e100: u64, mx: u64) -> u32 {
+    let node : u32 = ud_lift(sel)
+    if node == 4294967295u32 { return 0u32 }
+    let v7 : u64 = ud_eval(node, 7u64)
+    let v100 : u64 = ud_eval(node, 100u64)
+    let vm : u64 = ud_max(node, 128u32)
+    putchar((70u32 + sel) as i32) putchar(58i32) sp() e_i64(v7 as i64) sp() e_i64(v100 as i64) sp() e_i64(vm as i64) nl()
+    if v7 != e7 { return 0u32 }
+    if v100 != e100 { return 0u32 }
+    if vm != mx { return 0u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    if arm(0u32, 14u64, 200u64, 254u64) != 1u32 { return 11u64 }
+    if arm(1u32, 49u64, 10000u64, 16129u64) != 1u32 { return 12u64 }
+    if arm(2u32, 12u64, 105u64, 132u64) != 1u32 { return 13u64 }
+    if arm(3u32, 7u64, 4u64, 7u64) != 1u32 { return 14u64 }
+    return 99u64
+}

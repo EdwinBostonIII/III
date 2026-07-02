@@ -286,11 +286,16 @@ record `{code: u32 FULL-width, timed_out: u8, out_seg: u64, err_seg: u64}`.
 - [ ] Long paths (>260 via `\\?\` W-APIs), UTF-8 filenames, OneDrive lock storm (rm-first retry),
   4 GiB child output soak (ring + backpressure: bytes never dropped, UI lag only).
 
-### M11 — Review + docs + ledger
-- [ ] `/requesting-code-review` on the whole organ family; `iii_adversarial_verify` on the Membrane
-  and Attrition claims with the matrix as evidence; fix-loop until findings are zero or refuted.
-- [ ] `DOCS/III-STOMA.md` (operating doc: verbs, laws, trap table, matrix), MEMORY update, ledger
-  entries; final safepoint.
+### M11 — Review + docs + ledger  (DONE 2026-07-02)
+- [x] Adversarial self-review (no-subagents-on-III → by hand): `iii_adversarial_verify` on the
+  Membrane + verdict-sovereignty claims; grepped the organ family for the cg_r3 signed-compare-on-
+  array-index trap (NONE — values bound to locals throughout) and unbounded writes (`proc_quote` is
+  library-only, contract documented). One honest gap surfaced + documented: pty is a verified organ
+  but not yet stoma.exe's interactive default.
+- [x] `DOCS/III-STOMA.md` operating doc (verbs, laws, organ table, ripple, trap table, cone
+  connection, honest scope). MEMORY updated (project_iii_stoma_cli COMPLETE). Final gate 13/0.
+
+## STATUS: COMPLETE — all milestones M0-M11 landed; gate `run_stoma_kats.sh` = 13/0 (stable).
 
 ## 6. Risks → falsifiers → kill-switches
 

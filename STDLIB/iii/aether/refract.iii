@@ -57,6 +57,40 @@ fn rf_canon() -> i32 {
     return 0i32
 }
 
+/* advance to the vertical plane x = xw (exact): px' = xw, py' += sy * (class-scaled) t.
+ * class 0: t = TX: py' = py + sy*TX.  class 1: t = TX: py' = py + sy*sqrt3*TX -> (py0+3sy*TX1, py1+sy*TX0). */
+fn rf_adv_x(xw: i64) -> i32 {
+    let mut tx0 : i64 = rf_mul(xw, RF_DEN) - RF_PX0
+    let mut tx1 : i64 = 0i64 - RF_PX1
+    if RF_SX < 0i64 { tx0 = 0i64 - tx0   tx1 = 0i64 - tx1 }
+    RF_PX0 = rf_mul(xw, RF_DEN)   RF_PX1 = 0i64
+    if RF_CLS == 0i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, tx0)   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx1) }
+    if RF_CLS == 1i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, rf_mul(3i64, tx1))   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx0) }
+    if RF_OVF != 0i64 { return 0i32 - 1i32 }
+    rf_canon()
+    return 0i32
+}
+/* advance to the horizontal plane y = ty (exact): class 0: px' = px + sx*TY;
+ * class 1: t = TY/sqrt3 = (3*TY1 + TY0*sqrt3)/3: den scales by 3. */
+fn rf_adv_y(ty: i64) -> i32 {
+    let mut ty0 : i64 = rf_mul(ty, RF_DEN) - RF_PY0
+    let mut ty1 : i64 = 0i64 - RF_PY1
+    if RF_SY < 0i64 { ty0 = 0i64 - ty0   ty1 = 0i64 - ty1 }
+    if RF_CLS == 0i64 {
+        RF_PX0 = RF_PX0 + rf_mul(RF_SX, ty0)   RF_PX1 = RF_PX1 + rf_mul(RF_SX, ty1)
+        RF_PY0 = rf_mul(ty, RF_DEN)   RF_PY1 = 0i64
+    }
+    if RF_CLS == 1i64 {
+        RF_PX0 = rf_mul(3i64, RF_PX0) + rf_mul(RF_SX, rf_mul(3i64, ty1))
+        RF_PX1 = rf_mul(3i64, RF_PX1) + rf_mul(RF_SX, ty0)
+        RF_PY0 = rf_mul(rf_mul(ty, RF_DEN), 3i64)   RF_PY1 = 0i64
+        RF_DEN = rf_mul(RF_DEN, 3i64)
+    }
+    if RF_OVF != 0i64 { return 0i32 - 1i32 }
+    rf_canon()
+    return 0i32
+}
+
 fn rf_cfg(Y1: i64, Y2: i64, XV: i64, hasxv: i64) -> i32 @export {
     RF_Y1 = Y1   RF_Y2 = Y2   RF_XV = XV   RF_HASXV = hasxv
     return 0i32
@@ -115,34 +149,14 @@ fn rf_step() -> i32 @export {
     }
     if RF_OVF != 0i64 { return RF_OVER }
     if wallfirst == 1i64 {
-        /* advance to x = XV: class 0: t = TX: px' = XV exactly, py' = py + sy*TX.
-         * class 1: t = TX: px' = XV, py' = py + sy*sqrt3*TX -> slots (py0 + 3*sy*TX1, py1 + sy*TX0). */
-        RF_PX0 = rf_mul(RF_XV, RF_DEN)   RF_PX1 = 0i64
-        if RF_CLS == 0i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, tx0)   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx1) }
-        if RF_CLS == 1i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, rf_mul(3i64, tx1))   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx0) }
-        if RF_OVF != 0i64 { return RF_OVER }
-        rf_canon()
+        if rf_adv_x(RF_XV) != 0i32 { return RF_OVER }
         /* the TIR certificate at the vertical wall: n2^2 * dy^2 - n1^2 * |d|^2:
          * class 1: 2*3 - 1*4 = +2 > 0 strictly -> TOTAL reflection; class 0: 2*1 - 1*2 = 0 -> critical. */
         if RF_CLS == 1i64 { RF_CERT = 2i64   RF_SX = 0i64 - RF_SX   return RF_TIR }
         RF_CERT = 0i64   RF_SX = 0i64 - RF_SX
         return RF_CRIT
     }
-    /* advance to the y-plane: class 0: t = TY: py' = ty, px' = px + sx*TY.
-     * class 1: t = TY/sqrt3: py' = ty, px' = px + sx*TY/sqrt3 -> px' slots (px0 + sx*TY1, px1 + sx*TY0/3)
-     *   via the exact form: TY/sqrt3 = (TY1*3 + TY0*sqrt3)/3: scale den by 3. */
-    if RF_CLS == 0i64 {
-        RF_PX0 = RF_PX0 + rf_mul(RF_SX, ty0)   RF_PX1 = RF_PX1 + rf_mul(RF_SX, ty1)
-        RF_PY0 = rf_mul(ty, RF_DEN)   RF_PY1 = 0i64
-    }
-    if RF_CLS == 1i64 {
-        RF_PX0 = rf_mul(3i64, RF_PX0) + rf_mul(RF_SX, rf_mul(3i64, ty1))
-        RF_PX1 = rf_mul(3i64, RF_PX1) + rf_mul(RF_SX, ty0)
-        RF_PY0 = rf_mul(rf_mul(ty, RF_DEN), 3i64)   RF_PY1 = 0i64
-        RF_DEN = rf_mul(RF_DEN, 3i64)
-    }
-    if RF_OVF != 0i64 { return RF_OVER }
-    rf_canon()
+    if rf_adv_y(ty) != 0i32 { return RF_OVER }
     /* the transition at this y-interface.  Downward through Y1 or upward through Y2: LIGHT <-> DENSE map.
      * Entering dense as class 0 -> class 1; exiting dense as class 1 -> class 0 (both CERTIFIED);
      * meeting an interface as class 0 INSIDE dense: the EXACT critical angle -> reflect (certified zero). */
@@ -165,6 +179,79 @@ fn rf_step() -> i32 @export {
     RF_CERT = rf_mul(rf_mul(1i64, 1i64), 4i64) - rf_mul(rf_mul(2i64, 1i64), 2i64)
     RF_CLS = 1i64
     return RF_REFR
+}
+
+/* ═════════ MULTI-INTERFACE MODES (charter increment 6) ═════════
+ * THE PERIODIC STACK: infinitely many alternating layers of height H -- band m spans [mH, (m+1)H),
+ * DENSE iff m is even.  The current band is tracked COMBINATORIALLY (an integer index, like a lattice
+ * cell): no region sign-evaluation exists to get wrong, and the class-parity alignment (45 in light,
+ * 30 in dense) is an invariant the organ enforces -- a violated alignment refuses.  Every crossing is
+ * the same CERTIFIED integer Snell identity as v1; the slab theorem ITERATES: k periods exit parallel
+ * with the exact accumulated walk-off.
+ * THE GUIDED CHANNEL: vertical walls x = 0 and x = W, dense inside -- the 30-degree class is confined
+ * by STRICT TIR (+2) at every bounce with an exact Q(sqrt3) pitch; the 45-degree class is held only
+ * MARGINALLY (the certified-zero critical angle): one geometry, two classes, two different
+ * certificates. */
+var RF_H : i64   var RF_W : i64   var RF_BAND : i64
+
+fn rf_mod2(b: i64) -> i64 { return ((b % 2i64) + 2i64) % 2i64 }
+
+fn rf_stack_cfg(H: i64) -> i32 @export {
+    if H <= 0i64 { return 0i32 - 1i32 }
+    RF_H = H
+    return 0i32
+}
+/* place the ray STRICTLY inside band `band` (integer py; refuses a lying caller or a boundary start) */
+fn rf_stack_set(px: i64, py: i64, band: i64, cls: i64, sx: i64, sy: i64) -> i32 @export {
+    if py <= (band * RF_H) { return 0i32 - 1i32 }
+    if py >= ((band + 1i64) * RF_H) { return 0i32 - 1i32 }
+    rf_set(px, py, cls, sx, sy)
+    RF_BAND = band
+    return 0i32
+}
+fn rf_stack_step() -> i32 @export {
+    RF_OVF = 0i64
+    let mut plane : i64 = RF_BAND
+    if RF_SY > 0i64 { plane = RF_BAND + 1i64 }
+    if rf_adv_y(rf_mul(plane, RF_H)) != 0i32 { return RF_OVER }
+    let mut nb : i64 = RF_BAND - 1i64
+    if RF_SY > 0i64 { nb = RF_BAND + 1i64 }
+    let curdense : i64 = 1i64 - rf_mod2(RF_BAND)
+    if curdense == 0i64 {
+        /* light -> dense: the class-parity invariant demands class 0 here */
+        if RF_CLS != 0i64 { return RF_OVER }
+        RF_CERT = rf_mul(rf_mul(1i64, 1i64), 4i64) - rf_mul(rf_mul(2i64, 1i64), 2i64)
+        RF_CLS = 1i64
+        RF_BAND = nb
+        return RF_REFR
+    }
+    /* dense -> light */
+    if RF_CLS == 1i64 {
+        RF_CERT = rf_mul(rf_mul(2i64, 1i64), 2i64) - rf_mul(rf_mul(1i64, 1i64), 4i64)
+        RF_CLS = 0i64
+        RF_BAND = nb
+        return RF_REFR
+    }
+    /* the 45-degree class inside dense meets the interface: the EXACT critical angle -- reflect in-band */
+    RF_CERT = rf_mul(2i64, 1i64) - rf_mul(1i64, 2i64)
+    RF_SY = 0i64 - RF_SY
+    return RF_CRIT
+}
+fn rf_band() -> i64 @export { return RF_BAND }
+
+fn rf_chan_cfg(W: i64) -> i32 @export {
+    if W <= 0i64 { return 0i32 - 1i32 }
+    RF_W = W
+    return 0i32
+}
+fn rf_chan_step() -> i32 @export {
+    RF_OVF = 0i64
+    let mut xw : i64 = 0i64
+    if RF_SX > 0i64 { xw = RF_W }
+    if rf_adv_x(xw) != 0i32 { return RF_OVER }
+    if RF_CLS == 1i64 { RF_CERT = 2i64   RF_SX = 0i64 - RF_SX   return RF_TIR }
+    RF_CERT = 0i64   RF_SX = 0i64 - RF_SX
+    return RF_CRIT
 }
 
 fn rf_px0() -> i64 @export { return RF_PX0 }

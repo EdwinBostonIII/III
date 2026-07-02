@@ -1,0 +1,110 @@
+/* 2184_photon_stack.iii -- GATE for MULTI-INTERFACE OPTICS on the refract class algebra (charter
+ * increment 6): many certified interfaces, zero radicals injected, ever.
+ *
+ * S -- THE PERIODIC STACK (H = 30, band m = [30m, 30m+30), dense iff m even): a 45-degree ray descends
+ *   from (0, 100) through TWENTY certified interfaces (every Snell-squared residue EXACTLY 0).  The slab
+ *   theorem ITERATES: the exit ray is PARALLEL to the entry (class/sx/sy restored), y = -480 exactly, and
+ *   the accumulated walk-off is the EXACT Q(sqrt3) value  x = 280 + 100*sqrt3  (the 10-unit entry run +
+ *   9 light bands at 45 degrees + 10 dense bands contributing 10*sqrt3 each) -- asserted den-robustly.
+ * G -- THE GUIDED MODE (channel walls x = 0, 10, dense inside): the 30-degree class bounces 1000 TIMES,
+ *   every bounce a STRICT TIR certificate (+2; sum 2000), pitch exact: py = -(5 + 999*10)*sqrt3 =
+ *   -9995*sqrt3 with denominator 1, and the ray returns to the wall x = 0 with sx restored (+1).
+ * D -- THE DISCRIMINATION: the SAME channel holds the 45-degree class only MARGINALLY -- one step gives
+ *   the certified-ZERO critical verdict (rc 3, cert 0).  One geometry, two classes, two certificates.
+ * R -- refusals: a boundary start, an out-of-band start, and the class-parity invariant (a 30-degree
+ *   ray claimed inside a LIGHT band refuses at the first step -- the state is unconstructible).
+ *
+ * exit 99 = pass;  10 S transitions;  11 S pins;  12 G;  13 D;  14 R */
+module corpus_2184_photon_stack
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rf_stack_cfg(H: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_stack_set(px: i64, py: i64, band: i64, cls: i64, sx: i64, sy: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_stack_step() -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_band() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_chan_cfg(W: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_chan_step() -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_set(px: i64, py: i64, cls: i64, sx: i64, sy: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_px0() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_px1() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_py0() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_py1() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_den() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_cls() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_sx() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_sy() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_cert() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ S: twenty certified interfaces, the iterated slab theorem. */
+    rf_stack_cfg(30i64)
+    if rf_stack_set(0i64, 100i64, 3i64, 0i64, 1i64, 0i64 - 1i64) != 0i32 { return 10u64 }
+    let mut certsum : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k < 20i64 {
+        let rc : i32 = rf_stack_step()
+        if rc != 1i32 { return 10u64 }
+        let mut c : i64 = rf_cert()
+        if c < 0i64 { c = 0i64 - c }
+        certsum = certsum + c
+        k = k + 1i64
+    }
+    let dn : i64 = rf_den()
+    putchar(83i32) putchar(58i32) sp() e_i64(certsum) sp() e_i64(rf_cls()) sp() e_i64(rf_sx()) sp() e_i64(rf_sy()) sp() e_i64(rf_band()) sp() e_i64(rf_px0()) sp() e_i64(rf_px1()) sp() e_i64(rf_py0()) sp() e_i64(rf_py1()) sp() e_i64(dn) nl()
+    /* "S: 0 0 1 -1 -17 280 100 -480 0 1" (den-robust asserts below) */
+    if certsum != 0i64 { return 10u64 }
+    if rf_cls() != 0i64 { return 11u64 }
+    if rf_sx() != 1i64 { return 11u64 }
+    if rf_sy() != (0i64 - 1i64) { return 11u64 }
+    if rf_band() != (0i64 - 17i64) { return 11u64 }
+    if rf_px0() != (280i64 * dn) { return 11u64 }
+    if rf_px1() != (100i64 * dn) { return 11u64 }
+    if rf_py0() != ((0i64 - 480i64) * dn) { return 11u64 }
+    if rf_py1() != 0i64 { return 11u64 }
+
+    /* ══ G: the guided mode -- 1000 strict TIR certificates, exact pitch. */
+    rf_chan_cfg(10i64)
+    rf_set(5i64, 0i64, 1i64, 1i64, 0i64 - 1i64)
+    let mut tirsum : i64 = 0i64
+    k = 0i64
+    while k < 1000i64 {
+        let rc : i32 = rf_chan_step()
+        if rc != 2i32 { return 12u64 }
+        tirsum = tirsum + rf_cert()
+        k = k + 1i64
+    }
+    putchar(71i32) putchar(58i32) sp() e_i64(tirsum) sp() e_i64(rf_px0()) sp() e_i64(rf_py0()) sp() e_i64(rf_py1()) sp() e_i64(rf_den()) sp() e_i64(rf_sx()) nl()
+    /* "G: 2000 0 0 -9995 1 1" */
+    if tirsum != 2000i64 { return 12u64 }
+    if rf_px0() != 0i64 { return 12u64 }
+    if rf_py0() != 0i64 { return 12u64 }
+    if rf_py1() != (0i64 - 9995i64) { return 12u64 }
+    if rf_den() != 1i64 { return 12u64 }
+    if rf_sx() != 1i64 { return 12u64 }
+
+    /* ══ D: the same channel holds the 45-degree class only marginally. */
+    rf_set(5i64, 0i64, 0i64, 1i64, 0i64 - 1i64)
+    let rd : i32 = rf_chan_step()
+    putchar(68i32) putchar(58i32) sp() e_i64(rd as i64) sp() e_i64(rf_cert()) sp() e_i64(rf_sx()) nl()   /* "D: 3 0 -1" */
+    if rd != 3i32 { return 13u64 }
+    if rf_cert() != 0i64 { return 13u64 }
+    if rf_sx() != (0i64 - 1i64) { return 13u64 }
+
+    /* ══ R: refusals -- boundary start, out-of-band start, class-parity violation. */
+    let r1 : i32 = rf_stack_set(0i64, 90i64, 3i64, 0i64, 1i64, 0i64 - 1i64)
+    let r2 : i32 = rf_stack_set(0i64, 50i64, 3i64, 0i64, 1i64, 0i64 - 1i64)
+    if rf_stack_set(0i64, 100i64, 3i64, 1i64, 1i64, 0i64 - 1i64) != 0i32 { return 14u64 }
+    let r3 : i32 = rf_stack_step()
+    putchar(82i32) putchar(58i32) sp() e_i64(r1 as i64) sp() e_i64(r2 as i64) sp() e_i64(r3 as i64) nl()   /* "R: -1 -1 4" */
+    if r1 != (0i32 - 1i32) { return 14u64 }
+    if r2 != (0i32 - 1i32) { return 14u64 }
+    if r3 != 4i32 { return 14u64 }
+
+    return 99u64
+}

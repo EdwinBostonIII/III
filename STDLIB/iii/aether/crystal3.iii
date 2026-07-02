@@ -1,0 +1,366 @@
+/* STDLIB/iii/aether/crystal3.iii -- THE 3D PHOTONIC CRYSTAL CAVITY (E-III): the 2194-gated 2D
+ * crystal escalated to a fully-closed 3D structure -- TWO mirror families (x-walls at 0/W and the
+ * NEW y-walls at 0/V), a z-stratified refractive lattice (bands 0..NB-1 of height H, class
+ * alternating by band parity: L travels at sqrt2 z-speed, D at sqrt6), and END-CAPS that close the
+ * z-axis into a CAVITY (or open the top into an escape aperture -- the control arm).
+ *
+ * THE STATE is exact: each coordinate is a rank-4 Q(sqrt2,sqrt3) slot vector (a + b sqrt2 +
+ * c sqrt3 + d sqrt6) over ONE positive denominator; velocities are (SX, SY, SZ*sqrtk) with
+ * SX,SY,SZ in {-1,+1}; the ONE load-bearing decision -- which face comes first -- is a q23_sign
+ * query (the same rank-4 oracle behind the cyclotomic kinematics and the 2194 crystal: no island).
+ * Certificates: every mirror event carries the class-dependent TIR margin (p3_cert_tir_l/_d = +2
+ * / +6) and every interface crossing the exact Snell-closure residue (p3_cert_refr_ld /
+ * p3_cert_trans_dl = 0), CONSUMED from photon3 -- the closure table is one set of constants.
+ *
+ * THE EXACT CLOCK: total traversal time accumulates as a rank-4 field element over its own
+ * denominator (an x/y mirror leg takes t = distance; a z leg takes t = dz*sqrtk/k, slot-exact
+ * over den*k) -- so INTERFEROMETRIC PHASE COMPARISONS between two cavity geometries are exact
+ * Sigma-sqrt sign queries: q23_sign(T1*TD2 - T2*TD1) decides constructive/destructive/ordered,
+ * including the CERTIFIED EXACT ZERO of path-reordering (a straight ray's traversal time is the
+ * band-multiset sum, order-invariant -- the theorem gate 2483 pins).
+ *
+ * THE CRYSTALLOGRAPHIC DEN BOUND: mirrors never scale the denominator; an interface crossing
+ * scales it by exactly k (2 or 6) -- so den's prime support is contained in {2,3} FOREVER (gate-
+ * checked by trial division), and the reachable slot pattern over any run is a machine-scanned
+ * fact (the 3D subring bound, the 2194 theorem's escalation).
+ * Ties (two faces at one instant) are CERTIFIED and REFUSED (-1), never rounded; all arithmetic
+ * is overflow-guarded (sticky CR_OVF -> refuse).  Envelope: i64 slots under the guards; the
+ * bigint crystal is the charted v2. */
+module crystal3
+
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+extern @abi(c-msvc-x64) fn p3_cert_refr_ld() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_trans_dl() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_tir_l() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_tir_d() -> i64 from "photon3.iii"
+
+var CR_OVF : i64
+fn cr_ovf() -> i64 @export { return CR_OVF }
+fn cr_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn cr_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = cr_abs(a)   let ub : u64 = cr_abs(b)
+    if ub > (9223372036854775807u64 / ua) { CR_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn cr_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = cr_abs(a)   let ub : u64 = cr_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { CR_OVF = 1i64   return 0i64 }   return a + b }
+    if (ua + ub) > 9223372036854775808u64 { CR_OVF = 1i64   return 0i64 }
+    return a + b
+}
+fn cr_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* ── configuration and state ── */
+var CR_W : i64   var CR_V : i64   var CR_H : i64   var CR_NB : i64   var CR_MODE : i64
+var CR_X : [i64; 4]   var CR_Y : [i64; 4]   var CR_Z : [i64; 4]   var CR_DEN : i64
+var CR_SX : i64   var CR_SY : i64   var CR_SZ : i64
+var CR_BAND : i64   var CR_CLS : i64   var CR_CERT : i64
+var CR_T : [i64; 4]   var CR_TD : i64                      /* the exact clock */
+var CR_NE : i64
+var CRE_K : [i64; 2048]   var CRE_C : [i64; 2048]
+var CR_USED : [i64; 12]                                    /* cumulative nonzero-slot scan: axis*4+slot */
+
+fn cr_cfg(W: i64, V: i64, H: i64, NB: i64, mode: i64) -> i32 @export {
+    if W <= 0i64 { return 0i32 - 1i32 }
+    if V <= 0i64 { return 0i32 - 1i32 }
+    if H <= 0i64 { return 0i32 - 1i32 }
+    if NB <= 0i64 { return 0i32 - 1i32 }
+    CR_W = W   CR_V = V   CR_H = H   CR_NB = NB   CR_MODE = mode
+    return 0i32
+}
+fn cr_mod2(b: i64) -> i64 { return ((b % 2i64) + 2i64) % 2i64 }
+fn cr_set(x: i64, y: i64, z: i64, band: i64, cls: i64, sx: i64, sy: i64, sz: i64) -> i32 @export {
+    if band < 0i64 { return 0i32 - 1i32 }
+    if band >= CR_NB { return 0i32 - 1i32 }
+    if z <= (band * CR_H) { return 0i32 - 1i32 }
+    if z >= ((band + 1i64) * CR_H) { return 0i32 - 1i32 }
+    if x <= 0i64 { return 0i32 - 1i32 }
+    if x >= CR_W { return 0i32 - 1i32 }
+    if y <= 0i64 { return 0i32 - 1i32 }
+    if y >= CR_V { return 0i32 - 1i32 }
+    let dense : i64 = 1i64 - cr_mod2(band)
+    if cls != dense { return 0i32 - 1i32 }                 /* the class-parity invariant */
+    /* transverse speeds are INTEGERS in {1,2,3} (signed): equal |sx| == |sy| makes exact corner
+     * re-alignment STRUCTURAL (u - v invariant under the shared clock) -- the machine found that
+     * as certified ties; incommensurate integer speeds dissolve it.  |sz| == 1 (the class algebra
+     * owns the z-speed sqrtk).  Speeds from {1,2,3} keep den's prime support inside {2,3}. */
+    let mut asx : i64 = sx   if asx < 0i64 { asx = 0i64 - asx }
+    let mut asy : i64 = sy   if asy < 0i64 { asy = 0i64 - asy }
+    if asx < 1i64 { return 0i32 - 1i32 }
+    if asx > 3i64 { return 0i32 - 1i32 }
+    if asy < 1i64 { return 0i32 - 1i32 }
+    if asy > 3i64 { return 0i32 - 1i32 }
+    if (sz * sz) != 1i64 { return 0i32 - 1i32 }
+    let mut i : u64 = 0u64
+    while i < 4u64 { CR_X[i] = 0i64   CR_Y[i] = 0i64   CR_Z[i] = 0i64   CR_T[i] = 0i64   i = i + 1u64 }
+    CR_X[0u64] = x   CR_Y[0u64] = y   CR_Z[0u64] = z   CR_DEN = 1i64
+    CR_T[0u64] = 0i64   CR_TD = 1i64
+    CR_BAND = band   CR_CLS = cls
+    CR_SX = sx   CR_SY = sy   CR_SZ = sz
+    CR_CERT = 0i64   CR_OVF = 0i64   CR_NE = 0i64
+    i = 0u64
+    while i < 12u64 { CR_USED[i] = 0i64   i = i + 1u64 }
+    return 0i32
+}
+
+/* slot shuffles: r := sqrt2 * o  /  r := sqrt6 * o  (exact in the {1,sqrt2,sqrt3,sqrt6} basis) */
+fn cr_sh2(op: u64, rp: u64) -> i32 {
+    let o : *i64 = op as *i64   let r : *i64 = rp as *i64
+    r[0u64] = cr_mul(2i64, o[1u64])   r[1u64] = o[0u64]
+    r[2u64] = cr_mul(2i64, o[3u64])   r[3u64] = o[2u64]
+    return 0i32
+}
+fn cr_sh6(op: u64, rp: u64) -> i32 {
+    let o : *i64 = op as *i64   let r : *i64 = rp as *i64
+    r[0u64] = cr_mul(6i64, o[3u64])   r[1u64] = cr_mul(3i64, o[2u64])
+    r[2u64] = cr_mul(2i64, o[1u64])   r[3u64] = o[0u64]
+    return 0i32
+}
+fn cr_shk(op: u64, rp: u64) -> i32 {
+    if CR_CLS == 1i64 { return cr_sh6(op, rp) }
+    return cr_sh2(op, rp)
+}
+
+fn cr_canon() -> i32 {
+    let mut g : i64 = CR_DEN
+    let mut i : u64 = 0u64
+    while i < 4u64 { g = cr_gcd(g, cr_gcd(CR_X[i], cr_gcd(CR_Y[i], CR_Z[i])))   i = i + 1u64 }
+    if g > 1i64 {
+        i = 0u64
+        while i < 4u64 { CR_X[i] = CR_X[i] / g   CR_Y[i] = CR_Y[i] / g   CR_Z[i] = CR_Z[i] / g   i = i + 1u64 }
+        CR_DEN = CR_DEN / g
+    }
+    return 0i32
+}
+fn cr_tcanon() -> i32 {
+    let mut g : i64 = CR_TD
+    let mut i : u64 = 0u64
+    while i < 4u64 { g = cr_gcd(g, CR_T[i])   i = i + 1u64 }
+    if g > 1i64 {
+        i = 0u64
+        while i < 4u64 { CR_T[i] = CR_T[i] / g   i = i + 1u64 }
+        CR_TD = CR_TD / g
+    }
+    return 0i32
+}
+/* the exact clock: T += (tn over tden); cross-denominator, gcd-canonicalized */
+var CR_TA : [i64; 4]
+fn cr_taccum(tnp: u64, tden: i64) -> i32 {
+    let tn : *i64 = tnp as *i64
+    let mut i : u64 = 0u64
+    while i < 4u64 { CR_T[i] = cr_add(cr_mul(CR_T[i], tden), cr_mul(tn[i], CR_TD))   i = i + 1u64 }
+    CR_TD = cr_mul(CR_TD, tden)
+    cr_tcanon()
+    return 0i32
+}
+fn cr_scan() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let xv : i64 = CR_X[i]   let yv : i64 = CR_Y[i]   let zv : i64 = CR_Z[i]
+        if xv != 0i64 { CR_USED[i] = 1i64 }
+        if yv != 0i64 { CR_USED[4u64 + i] = 1i64 }
+        if zv != 0i64 { CR_USED[8u64 + i] = 1i64 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* directioned distance to the next face along one axis, as rank-4 slots over CR_DEN */
+var CR_DX : [i64; 4]   var CR_DY : [i64; 4]   var CR_DZ : [i64; 4]
+var CR_S1 : [i64; 4]   var CR_S2 : [i64; 4]   var CR_CMP : [i64; 4]
+fn cr_dist(cp: u64, hi: i64, sgn: i64, outp: u64) -> i32 {  /* (target - c) directed by sgn */
+    let c : *i64 = cp as *i64   let out : *i64 = outp as *i64
+    let mut tgt : i64 = 0i64
+    if sgn > 0i64 { tgt = hi }
+    let mut i : u64 = 0u64
+    while i < 4u64 { out[i] = 0i64 - c[i]   i = i + 1u64 }
+    out[0u64] = cr_add(out[0u64], cr_mul(tgt, CR_DEN))
+    if sgn < 0i64 { i = 0u64   while i < 4u64 { out[i] = 0i64 - out[i]   i = i + 1u64 } }
+    return 0i32
+}
+
+
+const CR_R_XW : i32 = 1i32
+const CR_R_YW : i32 = 2i32
+const CR_R_ZI : i32 = 3i32
+const CR_R_ZC : i32 = 4i32
+const CR_R_ESC : i32 = 5i32
+
+/* one exact event: the strict-minimum face by pairwise q23_sign, then the exact response */
+fn cr_step() -> i32 @export {
+    if CR_NE >= 2048i64 { return 0i32 - 1i32 }
+    CR_OVF = 0i64
+    cr_dist((&CR_X) as u64, CR_W, CR_SX, (&CR_DX) as u64)
+    cr_dist((&CR_Y) as u64, CR_V, CR_SY, (&CR_DY) as u64)
+    /* the z target: the next band plane (or cap) in the SZ direction */
+    let mut zplane : i64 = CR_BAND
+    if CR_SZ > 0i64 { zplane = CR_BAND + 1i64 }
+    cr_dist((&CR_Z) as u64, 0i64, 1i64, (&CR_DZ) as u64)   /* seed: -Z */
+    CR_DZ[0u64] = cr_add(CR_DZ[0u64], cr_mul(cr_mul(zplane, CR_H), CR_DEN))
+    if CR_SZ < 0i64 { let mut i0 : u64 = 0u64   while i0 < 4u64 { CR_DZ[i0] = 0i64 - CR_DZ[i0]   i0 = i0 + 1u64 } }
+    if CR_OVF != 0i64 { return 0i32 - 1i32 }
+    /* times: tx = dx/|sx|, ty = dy/|sy|, tz = dz*sqrtk/k.  Pairwise strict order via q23_sign. */
+    let mut k : i64 = 2i64
+    if CR_CLS == 1i64 { k = 6i64 }
+    let mut asx : i64 = CR_SX   if asx < 0i64 { asx = 0i64 - asx }
+    let mut asy : i64 = CR_SY   if asy < 0i64 { asy = 0i64 - asy }
+    /* tx vs ty: sign(|sy| dx - |sx| dy) */
+    let mut i : u64 = 0u64
+    while i < 4u64 { CR_CMP[i] = cr_add(cr_mul(asy, CR_DX[i]), 0i64 - cr_mul(asx, CR_DY[i]))   i = i + 1u64 }
+    if CR_OVF != 0i64 { return 0i32 - 1i32 }
+    let sxy : i32 = q23_sign((&CR_CMP) as u64)
+    if sxy == 0i32 { return 0i32 - 1i32 }
+    /* winner of {x,y} vs z: sign(k dw - |sw| sqrtk dz) */
+    let mut wp : u64 = (&CR_DX) as u64
+    let mut aw : i64 = asx
+    if sxy > 0i32 { wp = (&CR_DY) as u64   aw = asy }
+    cr_shk((&CR_DZ) as u64, (&CR_S1) as u64)
+    let w : *i64 = wp as *i64
+    i = 0u64
+    while i < 4u64 { CR_CMP[i] = cr_add(cr_mul(k, w[i]), 0i64 - cr_mul(aw, CR_S1[i]))   i = i + 1u64 }
+    if CR_OVF != 0i64 { return 0i32 - 1i32 }
+    let swz : i32 = q23_sign((&CR_CMP) as u64)
+    if swz == 0i32 { return 0i32 - 1i32 }
+    if swz < 0i32 {
+        /* a MIRROR event: t = dw/|sw|, so the den scales by |sw|; the mirrored coordinate snaps */
+        cr_shk(wp, (&CR_S2) as u64)                        /* sqrtk * dw (the z-advance numerator) */
+        i = 0u64
+        while i < 4u64 {
+            let tv : i64 = w[i]
+            if sxy < 0i32 {
+                CR_Y[i] = cr_add(cr_mul(aw, CR_Y[i]), cr_mul(CR_SY, tv))
+                CR_X[i] = cr_mul(aw, CR_X[i])
+            } else {
+                CR_X[i] = cr_add(cr_mul(aw, CR_X[i]), cr_mul(CR_SX, tv))
+                CR_Y[i] = cr_mul(aw, CR_Y[i])
+            }
+            CR_Z[i] = cr_add(cr_mul(aw, CR_Z[i]), cr_mul(CR_SZ, CR_S2[i]))
+            i = i + 1u64
+        }
+        CR_DEN = cr_mul(CR_DEN, aw)
+        cr_taccum(wp, CR_DEN)                              /* t = dw/|sw|: slots over oldden*|sw| */
+        let mut kind : i32 = CR_R_XW
+        if sxy < 0i32 {
+            let mut xw : i64 = 0i64
+            if CR_SX > 0i64 { xw = CR_W }
+            i = 0u64   while i < 4u64 { CR_X[i] = 0i64   i = i + 1u64 }
+            CR_X[0u64] = cr_mul(xw, CR_DEN)
+            CR_SX = 0i64 - CR_SX
+        } else {
+            let mut yw : i64 = 0i64
+            if CR_SY > 0i64 { yw = CR_V }
+            i = 0u64   while i < 4u64 { CR_Y[i] = 0i64   i = i + 1u64 }
+            CR_Y[0u64] = cr_mul(yw, CR_DEN)
+            CR_SY = 0i64 - CR_SY
+            kind = CR_R_YW
+        }
+        if CR_OVF != 0i64 { return 0i32 - 1i32 }
+        cr_canon()
+        CR_CERT = p3_cert_tir_l()
+        if CR_CLS == 1i64 { CR_CERT = p3_cert_tir_d() }
+        CRE_K[CR_NE as u64] = kind as i64   CRE_C[CR_NE as u64] = CR_CERT
+        CR_NE = CR_NE + 1i64
+        cr_scan()
+        return kind
+    }
+    /* a Z event: advance by t = dz*sqrtk/k (den scales by k), Z snaps to the plane */
+    cr_shk((&CR_DZ) as u64, (&CR_S1) as u64)               /* sqrtk * dz -- the x/y advance over den*k */
+    i = 0u64
+    while i < 4u64 {
+        CR_X[i] = cr_add(cr_mul(k, CR_X[i]), cr_mul(CR_SX, CR_S1[i]))
+        CR_Y[i] = cr_add(cr_mul(k, CR_Y[i]), cr_mul(CR_SY, CR_S1[i]))
+        CR_Z[i] = cr_mul(k, CR_Z[i])
+        i = i + 1u64
+    }
+    let oldden : i64 = CR_DEN
+    CR_DEN = cr_mul(CR_DEN, k)
+    i = 0u64   while i < 4u64 { CR_Z[i] = 0i64   i = i + 1u64 }
+    CR_Z[0u64] = cr_mul(cr_mul(zplane, CR_H), CR_DEN)
+    /* the exact clock: t = sqrtk*dz / (k*oldden_scale) -- dz slots were over oldden */
+    cr_taccum((&CR_S1) as u64, cr_mul(k, oldden))
+    if CR_OVF != 0i64 { return 0i32 - 1i32 }
+    cr_canon()
+    /* cap, escape, or interface? */
+    let mut nb : i64 = CR_BAND - 1i64
+    if CR_SZ > 0i64 { nb = CR_BAND + 1i64 }
+    if nb < 0i64 {
+        CR_SZ = 0i64 - CR_SZ
+        CR_CERT = p3_cert_tir_l()
+        if CR_CLS == 1i64 { CR_CERT = p3_cert_tir_d() }
+        CRE_K[CR_NE as u64] = CR_R_ZC as i64   CRE_C[CR_NE as u64] = CR_CERT
+        CR_NE = CR_NE + 1i64
+        cr_scan()
+        return CR_R_ZC
+    }
+    if nb >= CR_NB {
+        if CR_MODE == 1i64 {
+            CR_CERT = 0i64
+            CRE_K[CR_NE as u64] = CR_R_ESC as i64   CRE_C[CR_NE as u64] = 0i64
+            CR_NE = CR_NE + 1i64
+            cr_scan()
+            return CR_R_ESC
+        }
+        CR_SZ = 0i64 - CR_SZ
+        CR_CERT = p3_cert_tir_l()
+        if CR_CLS == 1i64 { CR_CERT = p3_cert_tir_d() }
+        CRE_K[CR_NE as u64] = CR_R_ZC as i64   CRE_C[CR_NE as u64] = CR_CERT
+        CR_NE = CR_NE + 1i64
+        cr_scan()
+        return CR_R_ZC
+    }
+    /* interface: the class alternates (parity-certified), Snell closure residue 0 */
+    let ndense : i64 = 1i64 - cr_mod2(nb)
+    if CR_CLS == ndense { return 0i32 - 1i32 }                /* parity broke: unconstructible */
+    if CR_CLS == 0i64 {
+        CR_CERT = p3_cert_refr_ld()
+        CR_CLS = 1i64
+    } else {
+        CR_CERT = p3_cert_trans_dl()
+        CR_CLS = 0i64
+    }
+    CR_BAND = nb
+    CRE_K[CR_NE as u64] = CR_R_ZI as i64   CRE_C[CR_NE as u64] = CR_CERT
+    CR_NE = CR_NE + 1i64
+    cr_scan()
+    return CR_R_ZI
+}
+fn cr_run(n: i64) -> i64 @export {
+    let mut done : i64 = 0i64
+    while done < n {
+        let r : i32 = cr_step()
+        if r < 1i32 { return done }
+        if r == CR_R_ESC { return done + 1i64 }
+        done = done + 1i64
+    }
+    return done
+}
+
+/* observers */
+fn cr_x(i: i64) -> i64 @export { return CR_X[i as u64] }
+fn cr_y(i: i64) -> i64 @export { return CR_Y[i as u64] }
+fn cr_z(i: i64) -> i64 @export { return CR_Z[i as u64] }
+fn cr_den() -> i64 @export { return CR_DEN }
+fn cr_cls() -> i64 @export { return CR_CLS }
+fn cr_band() -> i64 @export { return CR_BAND }
+fn cr_cert() -> i64 @export { return CR_CERT }
+fn cr_t(i: i64) -> i64 @export { return CR_T[i as u64] }
+fn cr_td() -> i64 @export { return CR_TD }
+fn cr_events() -> i64 @export { return CR_NE }
+fn cr_ek(i: i64) -> i64 @export { return CRE_K[i as u64] }
+fn cr_ecert(i: i64) -> i64 @export { return CRE_C[i as u64] }
+fn cr_used(i: i64) -> i64 @export { return CR_USED[i as u64] }
+fn cr_sx() -> i64 @export { return CR_SX }
+fn cr_sy() -> i64 @export { return CR_SY }
+fn cr_sz() -> i64 @export { return CR_SZ }

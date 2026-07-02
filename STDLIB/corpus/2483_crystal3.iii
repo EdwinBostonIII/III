@@ -1,0 +1,306 @@
+/* 2483_crystal3.iii -- GATE for THE 3D PHOTONIC CRYSTAL CAVITY (E-III): the 2194 crystal closed
+ * into a fully-3D structure -- two mirror families + refractive strata + end-caps -- with the
+ * subring bound, the trapping certificates, and EXACT INTERFEROMETRIC PHASE.
+ *
+ * A -- THE 3D SUBRING + DEN-SUPPORT BOUND: 300 exact events in the closed cavity; the reachable
+ *   denominator's prime support is EXACTLY {2,3} (trial-divided to 1: mirrors never scale den,
+ *   interfaces scale by k in {2,6} -- the crystallographic bound, machine-checked); and THE
+ *   MACHINE-FOUND AXIS-STRATIFIED RANK BOUND (the 3D escalation of 2194's subring theorem):
+ *   over 300 events the TRANSVERSE (mirror) axes never form sqrt3 -- their reachable ring is
+ *   rank-3 {1, sqrt2, sqrt6}, the sqrt3 slots pinned identically zero -- while the OPTICAL axis
+ *   reaches full rank-4 (sqrt6 legs over sqrt2-carrying distances deposit 2*sqrt3 into z alone).
+ *   Census pinned: 56 x-mirrors, 76 y-mirrors, 112 interfaces, 56 caps.
+ * B -- CERTIFIED TRAPPING: at EVERY one of the 300 events, the exact position lies inside the
+ *   cavity (q23_sign membership on all six faces) and the event carries its class certificate
+ *   (TIR margins +2/+6 at mirrors and caps; Snell-closure residue 0 at interfaces) -- census
+ *   pinned by kind.
+ * C -- NON-RECURRENCE: all 300 exact post-event states are pairwise DISTINCT (canonical slot
+ *   vectors compared verbatim): trapped forever, repeating never -- 2190's theorem inside the
+ *   3D crystal.
+ * D -- THE ESCAPE CONTROL: open the top (aperture mode): the same photon leaves through the open
+ *   face after a pinned number of events -- trapping is the CAP'S doing, witnessed by its absence.
+ * E -- EXACT PHASE, the symmetry-protected ZERO: the exact traversal clock T is a rank-4 field
+ *   element; swapping the x and y axes (W<->V, x0<->y0, sx<->sy) is a dynamical mirror symmetry,
+ *   so DT = T1*TD2 - T2*TD1 == (0,0,0,0) EXACTLY -- q23_sign certifies the zero: constructive
+ *   interference as an algebraic identity, not a tolerance.  The event skeletons mirror (x-wall
+ *   <-> y-wall) event for event.
+ * F -- EXACT PHASE, the decided near-tie: two INEQUIVALENT geometries' clocks differ by a rank-4
+ *   value whose sign q23_sign decides (pinned); a comparator BLIND to the surd slots (rational
+ *   part only) returns the WRONG verdict on the same pair -- the float-blindness witness at the
+ *   phase level.
+ * R -- refusals: wrong class parity; start outside the band; a zero direction component.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E;  15 F;  16 R */
+module corpus_2483_crystal3
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn cr_cfg(W: i64, V: i64, H: i64, NB: i64, mode: i64) -> i32 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_set(x: i64, y: i64, z: i64, band: i64, cls: i64, sx: i64, sy: i64, sz: i64) -> i32 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_step() -> i32 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_run(n: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_band() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_cert() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_sx() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_sy() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_sz() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_x(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_y(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_z(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_den() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_cls() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_t(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_td() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_events() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_ek(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_ecert(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_used(i: i64) -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn cr_ovf() -> i64 from "crystal3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var QT : [i64; 4]
+/* q23_sign of (a 4-slot vector minus nothing): membership sign of the CURRENT coordinate c
+ * against a face at integer f (>= 0 side): sign(c - f*den) or sign(f*den - c) */
+fn face_ok(cx: i64, lo_hi: i64, f: i64) -> i64 {           /* cx selects coord: 0 x, 1 y, 2 z */
+    let den : i64 = cr_den()
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        let mut v : i64 = 0i64
+        if cx == 0i64 { v = cr_x(i) }
+        if cx == 1i64 { v = cr_y(i) }
+        if cx == 2i64 { v = cr_z(i) }
+        if lo_hi == 1i64 { v = 0i64 - v }
+        QT[i as u64] = v
+        i = i + 1i64
+    }
+    if lo_hi == 1i64 { QT[0u64] = QT[0u64] + (f * den) }   /* f*den - c  (hi face) */
+    let s : i32 = q23_sign((&QT) as u64)
+    if s < 0i32 { return 0i64 }
+    return 1i64
+}
+
+var ST : [i64; 4800]                                       /* state log: 16 i64 per event, 300 events */
+var T1 : [i64; 4]   var TD1 : i64
+var T2 : [i64; 4]   var TD2 : i64
+var K1 : [i64; 60]
+var KX : i64   var KY : i64   var KZ : i64   var KC : i64   var INBOX : i64
+
+/* the closed-cavity run: 300 events with kind census, membership checks, state log */
+fn arm_abc_run() -> i64 {
+    cr_cfg(6i64, 9i64, 4i64, 3i64, 0i64)
+    if cr_set(1i64, 2i64, 5i64, 1i64, 0i64, 1i64, 0i64 - 2i64, 1i64) != 0i32 { return 1i64 }
+    KX = 0i64   KY = 0i64   KZ = 0i64   KC = 0i64   INBOX = 1i64
+    let mut ev : i64 = 0i64
+    while ev < 300i64 {
+        let rc : i32 = cr_step()
+        if rc < 1i32 { putchar(33i32) sp() e_i64(ev) sp() e_i64(rc as i64) sp() e_i64(cr_ovf()) sp() e_i64(cr_den()) nl()   return 1i64 }
+        if rc == 5i32 { return 1i64 }
+        if rc == 1i32 { KX = KX + 1i64 }
+        if rc == 2i32 { KY = KY + 1i64 }
+        if rc == 3i32 { KZ = KZ + 1i64 }
+        if rc == 4i32 { KC = KC + 1i64 }
+        if face_ok(0i64, 0i64, 0i64) == 0i64 { INBOX = 0i64 }
+        if face_ok(0i64, 1i64, 6i64) == 0i64 { INBOX = 0i64 }
+        if face_ok(1i64, 0i64, 0i64) == 0i64 { INBOX = 0i64 }
+        if face_ok(1i64, 1i64, 9i64) == 0i64 { INBOX = 0i64 }
+        if face_ok(2i64, 0i64, 0i64) == 0i64 { INBOX = 0i64 }
+        if face_ok(2i64, 1i64, 12i64) == 0i64 { INBOX = 0i64 }
+        let base : u64 = (ev as u64) * 16u64
+        let mut i : i64 = 0i64
+        while i < 4i64 {
+            ST[base + (i as u64)] = cr_x(i)
+            ST[base + 4u64 + (i as u64)] = cr_y(i)
+            ST[base + 8u64 + (i as u64)] = cr_z(i)
+            i = i + 1i64
+        }
+        ST[base + 12u64] = cr_den()
+        ST[base + 13u64] = cr_cls()
+        ST[base + 14u64] = 0i64
+        ST[base + 15u64] = 0i64
+        ev = ev + 1i64
+    }
+    if cr_ovf() != 0i64 { return 1i64 }
+    return 0i64
+}
+fn arm_a() -> i64 {
+    let mut dn : i64 = cr_den()
+    while (dn % 2i64) == 0i64 { dn = dn / 2i64 }
+    while (dn % 3i64) == 0i64 { dn = dn / 3i64 }
+    putchar(65i32) putchar(58i32) sp() e_i64(KX) sp() e_i64(KY) sp() e_i64(KZ) sp() e_i64(KC) sp() e_i64(dn) sp()
+    let mut u : i64 = 0i64
+    while u < 12i64 { e_i64(cr_used(u))   u = u + 1i64 }
+    nl()
+    /* the LIVE-STATE observers, welded against the event log and the dynamics' invariants:
+     * speed MAGNITUDES are invariant (mirrors only flip signs); the live cert equals the last
+     * logged cert; the band stays inside the lattice */
+    putchar(79i32) putchar(58i32) sp() e_i64(cr_band()) sp() e_i64(cr_cert()) sp()
+    e_i64(cr_sx()) sp() e_i64(cr_sy()) sp() e_i64(cr_sz()) nl()
+    if cr_cert() != cr_ecert(299i64) { return 1i64 }
+    if cr_band() != 1i64 { return 1i64 }                   /* the measured landing band */
+    if cr_cert() != 0i64 { return 1i64 }                   /* event 300 was an interface: residue 0 */
+    if (cr_sx() * cr_sx()) != 1i64 { return 1i64 }
+    if (cr_sy() * cr_sy()) != 4i64 { return 1i64 }
+    if (cr_sz() * cr_sz()) != 1i64 { return 1i64 }
+    if dn != 1i64 { return 1i64 }
+    if KX != 56i64 { return 1i64 }
+    if KY != 76i64 { return 1i64 }
+    if KZ != 112i64 { return 1i64 }
+    if KC != 56i64 { return 1i64 }
+    /* the axis-stratified rank bound: sqrt3 slots (index 2) ZERO on x and y, FULL rank on z */
+    if cr_used(0i64) != 1i64 { return 1i64 }
+    if cr_used(1i64) != 1i64 { return 1i64 }
+    if cr_used(2i64) != 0i64 { return 1i64 }
+    if cr_used(3i64) != 1i64 { return 1i64 }
+    if cr_used(4i64) != 1i64 { return 1i64 }
+    if cr_used(5i64) != 1i64 { return 1i64 }
+    if cr_used(6i64) != 0i64 { return 1i64 }
+    if cr_used(7i64) != 1i64 { return 1i64 }
+    if cr_used(8i64) != 1i64 { return 1i64 }
+    if cr_used(9i64) != 1i64 { return 1i64 }
+    if cr_used(10i64) != 1i64 { return 1i64 }
+    if cr_used(11i64) != 1i64 { return 1i64 }
+    return 0i64
+}
+fn arm_b() -> i64 {
+    let mut certbad : i64 = 0i64
+    let ne : i64 = cr_events()
+    let mut ev : i64 = 0i64
+    while ev < ne {
+        let k : i64 = cr_ek(ev)
+        let c : i64 = cr_ecert(ev)
+        if k == 3i64 {
+            if c != 0i64 { certbad = certbad + 1i64 }
+        } else {
+            let mut okc : i64 = 0i64
+            if c == 2i64 { okc = 1i64 }
+            if c == 6i64 { okc = 1i64 }
+            if okc == 0i64 { certbad = certbad + 1i64 }
+        }
+        ev = ev + 1i64
+    }
+    putchar(66i32) putchar(58i32) sp() e_i64(INBOX) sp() e_i64(certbad) nl()           /* "B: 1 0" */
+    if INBOX != 1i64 { return 1i64 }
+    if certbad != 0i64 { return 1i64 }
+    return 0i64
+}
+fn arm_c() -> i64 {
+    let mut dup : i64 = 0i64
+    let mut a : i64 = 0i64
+    while a < 300i64 {
+        let mut b : i64 = a + 1i64
+        while b < 300i64 {
+            let mut same : i64 = 1i64
+            let mut j : i64 = 0i64
+            while j < 14i64 {
+                let va : i64 = ST[((a * 16i64) + j) as u64]
+                let vb : i64 = ST[((b * 16i64) + j) as u64]
+                if va != vb { same = 0i64   j = 14i64 }
+                if j < 14i64 { j = j + 1i64 }
+            }
+            if same == 1i64 { dup = dup + 1i64 }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(dup) nl()                                 /* "C: 0" */
+    if dup != 0i64 { return 1i64 }
+    return 0i64
+}
+fn arm_d() -> i64 {
+    cr_cfg(6i64, 9i64, 4i64, 3i64, 1i64)
+    if cr_set(1i64, 2i64, 5i64, 1i64, 0i64, 1i64, 0i64 - 2i64, 1i64) != 0i32 { return 1i64 }
+    /* cr_run drives the whole flight: two certified events, then the ESCAPE through the open
+     * top ends the run -- it returns done+1 == 3, the pinned escape count */
+    let done : i64 = cr_run(300i64)
+    putchar(68i32) putchar(58i32) sp() e_i64(done) nl()
+    if done != 3i64 { return 1i64 }
+    return 0i64
+}
+fn run_and_keep(W: i64, V: i64, H: i64, x: i64, y: i64, z: i64, sx: i64, sy: i64, n: i64, slot: i64) -> i64 {
+    cr_cfg(W, V, H, 3i64, 0i64)
+    if cr_set(x, y, z, 1i64, 0i64, sx, sy, 1i64) != 0i32 { return 1i64 }
+    let mut ev : i64 = 0i64
+    while ev < n { if cr_step() < 1i32 { return 1i64 }   ev = ev + 1i64 }
+    let mut i : i64 = 0i64
+    if slot == 1i64 {
+        while i < 4i64 { T1[i as u64] = cr_t(i)   i = i + 1i64 }
+        TD1 = cr_td()
+    } else {
+        while i < 4i64 { T2[i as u64] = cr_t(i)   i = i + 1i64 }
+        TD2 = cr_td()
+    }
+    return 0i64
+}
+fn dt_sign() -> i32 {
+    let mut i : i64 = 0i64
+    while i < 4i64 { QT[i as u64] = (T1[i as u64] * TD2) - (T2[i as u64] * TD1)   i = i + 1i64 }
+    return q23_sign((&QT) as u64)
+}
+fn arm_e() -> i64 {
+    if run_and_keep(6i64, 9i64, 4i64, 1i64, 2i64, 5i64, 1i64, 0i64 - 2i64, 60i64, 1i64) != 0i64 { return 1i64 }
+    /* keep arm 1's skeleton */
+    let mut ev : i64 = 0i64
+    while ev < 60i64 { K1[ev as u64] = cr_ek(ev)   ev = ev + 1i64 }
+    if run_and_keep(9i64, 6i64, 4i64, 2i64, 1i64, 5i64, 0i64 - 2i64, 1i64, 60i64, 2i64) != 0i64 { return 1i64 }
+    let sz : i32 = dt_sign()
+    let mut mir : i64 = 1i64
+    ev = 0i64
+    while ev < 60i64 {
+        let ka : i64 = K1[ev as u64]
+        let kb : i64 = cr_ek(ev)
+        let mut want : i64 = ka
+        if ka == 1i64 { want = 2i64 }
+        if ka == 2i64 { want = 1i64 }
+        if kb != want { mir = 0i64 }
+        ev = ev + 1i64
+    }
+    putchar(69i32) putchar(58i32) sp() e_i64(sz as i64) sp() e_i64(mir) sp() e_i64(TD1) sp() e_i64(TD2) nl()   /* "E: 0 1 ..." */
+    if sz != 0i32 { return 1i64 }
+    if mir != 1i64 { return 1i64 }
+    return 0i64
+}
+fn arm_f() -> i64 {
+    if run_and_keep(6i64, 9i64, 4i64, 1i64, 2i64, 5i64, 1i64, 0i64 - 2i64, 45i64, 1i64) != 0i64 { return 1i64 }
+    if run_and_keep(6i64, 9i64, 5i64, 1i64, 2i64, 6i64, 1i64, 0i64 - 2i64, 45i64, 2i64) != 0i64 { return 1i64 }
+    let sf : i32 = dt_sign()
+    let mut blind : i64 = 0i64
+    let q0 : i64 = QT[0u64]
+    if q0 > 0i64 { blind = 1i64 }
+    if q0 < 0i64 { blind = 0i64 - 1i64 }
+    putchar(70i32) putchar(58i32) sp() e_i64(sf as i64) sp() e_i64(blind) sp()
+    e_i64(QT[0u64]) sp() e_i64(QT[1u64]) sp() e_i64(QT[2u64]) sp() e_i64(QT[3u64]) nl()
+    /* pinned: DT = -24 sqrt2 - 22 sqrt6 exactly -- the rational slot is ZERO, so the surd-blind
+     * comparator declares the two cavities phase-EQUAL while q23_sign decides -1 */
+    if sf != (0i32 - 1i32) { return 1i64 }
+    if blind != 0i64 { return 1i64 }
+    if QT[0u64] != 0i64 { return 1i64 }
+    if QT[1u64] != (0i64 - 24i64) { return 1i64 }
+    if QT[2u64] != 0i64 { return 1i64 }
+    if QT[3u64] != (0i64 - 22i64) { return 1i64 }
+    return 0i64
+}
+fn arm_r() -> i64 {
+    cr_cfg(6i64, 9i64, 4i64, 3i64, 0i64)
+    let r1 : i32 = cr_set(1i64, 2i64, 5i64, 1i64, 1i64, 1i64, 1i64, 1i64)      /* wrong parity */
+    let r2 : i32 = cr_set(1i64, 2i64, 9i64, 1i64, 0i64, 1i64, 1i64, 1i64)      /* z outside band */
+    let r3 : i32 = cr_set(1i64, 2i64, 5i64, 1i64, 0i64, 0i64, 1i64, 1i64)      /* zero direction */
+    putchar(82i32) putchar(58i32) sp() e_i64(r1 as i64) sp() e_i64(r2 as i64) sp() e_i64(r3 as i64) nl()   /* "R: -1 -1 -1" */
+    if r1 != (0i32 - 1i32) { return 1i64 }
+    if r2 != (0i32 - 1i32) { return 1i64 }
+    if r3 != (0i32 - 1i32) { return 1i64 }
+    return 0i64
+}
+
+fn main() -> u64 {
+    if arm_abc_run() != 0i64 { return 10u64 }
+    if arm_a() != 0i64 { return 10u64 }
+    if arm_b() != 0i64 { return 11u64 }
+    if arm_c() != 0i64 { return 12u64 }
+    if arm_d() != 0i64 { return 13u64 }
+    if arm_e() != 0i64 { return 14u64 }
+    if arm_f() != 0i64 { return 15u64 }
+    if arm_r() != 0i64 { return 16u64 }
+    return 99u64
+}

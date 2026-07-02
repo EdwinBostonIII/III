@@ -256,3 +256,33 @@ algebra); stack+channel composition (2-D photonic crystals); compaction-aware de
 events).  PROCESS NOTE: a gate piped through grep loses its exit status -- commit chains must gate on
 the gate's OWN rc (a 3-KAT link-stage transient under memory pressure slipped one commit through red;
 the rerun and the tree were green).
+
+# THE TURING-COMPLETE SUBSTRATE CHARTER (Vectors I-IV) -- ADJUDICATED BEFORE CONSTRUCTION
+Binding strips (conscience-forced; prose claims die here, not at gate time):
+- "The exact Lyapunov exponent" is a t->infinity LIMIT: not finite-run computable, and fitting a rate
+  would be observational learning (forbidden).  GATEABLE CORE: the exact FIRST-DIVERGENCE event index
+  k* of one-quantum twin ensembles (histories combinatorially IDENTICAL before k*), plus exact
+  separation values certified strictly growing at checkpoints.  Poincare-recurrence "bounds" and
+  fluid-kinetic "theorems": STRIPPED (measure-theoretic prose; a finite observation is not a bound).
+- "Anderson localization" is WAVE INTERFERENCE; this substrate is exact RAY optics.  The honest object:
+  CERTIFIED RAY TRAPPING -- exact state recurrence (fundamental-domain position + class) in a defect
+  lattice IS a theorem of infinite periodic confinement; named as such, never as Anderson.
+- 3D closure DERIVED at adjudication: the diagonal family light (+-1,+-1,+-sqrt2) [sin^2 = 1/2] <->
+  dense (+-1,+-1,+-sqrt6) [sin^2 = 1/4] closes at z-interfaces with INTEGER certificates over
+  |d|^2 in {4,8}; the sqrt2-class at a CROSS-AXIS interface demands sqrt5 (PROVEN: 2a^2 = ... a^2 = 5)
+  -- NOT closed: cross-axis refraction is a CERTIFIED REFUSAL (this IS the "wave-vector constraint");
+  x/y walls are strict TIR (+6) for the dense class.  6 classes = the two families over three normals.
+- "Exact mass properties": moments of regions bounded by POLYNOMIAL arcs with ALGEBRAIC breakpoints --
+  values in bounded-rank fields (Q(sqrt d) rank-1 first).  pi-sector areas are TRANSCENDENTAL: a
+  certified-refusal arm, never a rounded one.  "Topological morphing" names no mechanism: STRIPPED.
+- Bigint PRS: a full bigint chain (deg 24 x ~26 polys) would exceed the GLOBAL 64-slot handle table --
+  the SAME wall that killed the bigint matrix.  Adjudicated design: chain coefficients in RAW ARENA
+  runs (sign/len/limbs), transient handle materialization (<= ~6 live) via bigint_new/set_limb.
+- 10^6-event ensembles: soundness-ready but runtime-heavy; the GATED depth is 10^4 with the
+  den_bits-THRESHOLD compaction rule (a deterministic rule on exact state, not tuning); 10^6 charted.
+- "E-class hyper-graph": verb_geom ALREADY IS the cache; the increment is routing new TOI signs
+  through vg_sign, not a new island.  RRT comparisons, "micrometer tolerances", "aerospace": prose.
+Increments in order: I.1 bigint PRS (2185) -> I.2 resultant bigint ABI (2186) -> I.3 exact Green
+moments (2187) -> II.1 deep ensemble (2188) -> II.2 shadow divergence (2189) -> III.1 3D class
+algebra (2190) -> III.2 certified trapping (2191) -> IV.1 graze-legal C-space (2192) -> IV.2 dynamic
+TOI (2193).  Every gate: twin-divergence or certified-refusal witness; commit only on the gate's OWN rc.

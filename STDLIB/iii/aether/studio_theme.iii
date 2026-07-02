@@ -1,0 +1,110 @@
+/* STDLIB/iii/aether/studio_theme.iii -- III STUDIO's visual identity: comfy-tech maroon + off-white + BOLD ink
+ * outlines, drawn entirely by III's own rasterizer (ui_raster) -- every asset is computed, none imported.
+ * Surface-parametric like the whole GLASS substrate: every helper takes (buf,w,h,...), so the same chrome renders
+ * into any framebuffer.  One palette, stated once, used by the shell and every workspace -- the studio looks like
+ * ONE instrument because its colours ARE one module. */
+module studio_theme
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_glyph(buf: u64, w: u32, h: u32, x: u32, y: u32, c: u32, color: u32) -> i32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+
+/* ── the palette: warm paper, deep maroon, near-black ink ─────────────────────────────────────────── */
+fn th_paper()    -> u32 @export { return 0xFFF3EEE4u32 }   /* warm off-white -- the ground              */
+fn th_panel()    -> u32 @export { return 0xFFEBE4D6u32 }   /* panel fill                                */
+fn th_inset()    -> u32 @export { return 0xFFE3DACAu32 }
+fn th_ink()      -> u32 @export { return 0xFF2E1F1Bu32 }   /* warm near-black -- text + bold outlines   */
+fn th_maroon()   -> u32 @export { return 0xFF7A2E2Eu32 }   /* the primary maroon                        */
+fn th_maroon_d() -> u32 @export { return 0xFF571F1Fu32 }   /* deep maroon -- rail / bars                */
+fn th_wash()     -> u32 @export { return 0xFFDCC2B8u32 }   /* maroon wash -- selection                  */
+fn th_cream()    -> u32 @export { return 0xFFF9F4EAu32 }   /* brightest -- active card                  */
+fn th_good()     -> u32 @export { return 0xFF3F7A4Eu32 }   /* PROVEN / PASS green                       */
+fn th_bad()      -> u32 @export { return 0xFFA8382Eu32 }   /* REFUTED / FAIL red                        */
+fn th_warn()     -> u32 @export { return 0xFFB07A35u32 }   /* amber -- busy / caution                   */
+fn th_dim()      -> u32 @export { return 0xFF8A7A6Cu32 }   /* secondary text                            */
+
+/* ── chrome ───────────────────────────────────────────────────────────────────────────────────────── */
+/* the studio's signature BOLD outline: a 2px ink frame. */
+fn th_outline2(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 @export {
+    ui_rect(buf, w, h, x, y, rw, rh, color)
+    ui_rect(buf, w, h, x + 1u32, y + 1u32, rw - 2u32, rh - 2u32, color)
+    return 0i32
+}
+/* a panel: custom fill + bold ink outline. */
+fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 @export {
+    ui_fill_rect(buf, w, h, x, y, rw, rh, fill)
+    th_outline2(buf, w, h, x, y, rw, rh, th_ink())
+    return 0i32
+}
+fn th_panel_std(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32) -> i32 @export {
+    return th_panel_c(buf, w, h, x, y, rw, rh, th_panel())
+}
+/* a badge: small filled box with bitmap-font text, outlined. */
+fn th_badge(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, fill: u32, tcol: u32) -> u32 @export {
+    let bw : u32 = (len * 8u32) + 14u32
+    ui_fill_rect(buf, w, h, x, y, bw, 24u32, fill)
+    th_outline2(buf, w, h, x, y, bw, 24u32, th_ink())
+    ui_text_n(buf, w, h, x + 7u32, y + 4u32, str, len, tcol)
+    return x + bw
+}
+fn th_shadow()   -> u32 @export { return 0xFFDDD2BFu32 }   /* the cast-shadow tone on paper           */
+
+/* rounded-corner filled rect: body rects + four EXACT-AA quarter circles (the substrate's proven engine). */
+fn th_rr_fill(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, r: u32, fill: u32) -> i32 @export {
+    ui_fill_rect(buf, w, h, x + r, y, rw - 2u32 * r, rh, fill)
+    ui_fill_rect(buf, w, h, x, y + r, r, rh - 2u32 * r, fill)
+    ui_fill_rect(buf, w, h, x + rw - r, y + r, r, rh - 2u32 * r, fill)
+    let ri : i64 = r as i64
+    ui_fill_circle_aa(buf, w, h, (x + r) as i64, (y + r) as i64, ri, fill, 2i64)
+    ui_fill_circle_aa(buf, w, h, (x + rw - r) as i64, (y + r) as i64, ri, fill, 2i64)
+    ui_fill_circle_aa(buf, w, h, (x + r) as i64, (y + rh - r) as i64, ri, fill, 2i64)
+    ui_fill_circle_aa(buf, w, h, (x + rw - r) as i64, (y + rh - r) as i64, ri, fill, 2i64)
+    return 0i32
+}
+/* THE hero surface: offset cast shadow, heavy ink border, rounded corners.  Use sparingly -- weight is meaning. */
+fn th_card(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 @export {
+    th_rr_fill(buf, w, h, x + 5u32, y + 6u32, rw, rh, 12u32, th_shadow())
+    th_rr_fill(buf, w, h, x, y, rw, rh, 12u32, th_ink())
+    th_rr_fill(buf, w, h, x + 3u32, y + 3u32, rw - 6u32, rh - 6u32, 9u32, fill)
+    return 0i32
+}
+/* quiet surface: rounded fill only, no border -- secondary content sits softly on the paper. */
+fn th_soft(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 @export {
+    return th_rr_fill(buf, w, h, x, y, rw, rh, 9u32, fill)
+}
+/* weighted vector title: the exact outline font drawn with a 1px double-strike -- real display weight. */
+fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 @export {
+    ui_vtext(buf, w, h, x + 1i64, y, str, len, size, color, 3i64)
+    return ui_vtext(buf, w, h, x, y, str, len, size, color, 3i64)
+}
+/* huge exact vector digits for a signed i64 -- display numbers, not body text.  Returns pen x. */
+var TH_VDIG : [u8; 24]
+fn th_vnum(buf: u64, w: u32, h: u32, x: i64, y: i64, v: i64, size: i64, color: u32) -> i64 @export {
+    let mut val : i64 = v
+    let mut cx : i64 = x
+    if val < 0i64 { TH_VDIG[0u64] = 45u8   cx = th_vbold(buf, w, h, cx, y, (&TH_VDIG) as u64, 1u32, size, color)   val = 0i64 - val }
+    let mut k : u32 = 0u32
+    if val == 0i64 { TH_VDIG[0u64] = 48u8   k = 1u32 } else {
+        while val > 0i64 { TH_VDIG[k as u64] = ((val % 10i64) + 48i64) as u8   val = val / 10i64   k = k + 1u32 }
+        let mut a : u32 = 0u32   let mut b : u32 = k - 1u32
+        while a < b { let t : u8 = TH_VDIG[a as u64]   TH_VDIG[a as u64] = TH_VDIG[b as u64]   TH_VDIG[b as u64] = t   a = a + 1u32   b = b - 1u32 }
+    }
+    return th_vbold(buf, w, h, cx, y, (&TH_VDIG) as u64, k, size, color)
+}
+
+/* signed i64 in the bitmap font; returns pen x. */
+var TH_DIG : [u8; 24]
+fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 @export {
+    let mut cx : u32 = x
+    let mut val : i64 = v
+    if val < 0i64 { ui_glyph(buf, w, h, cx, y, 45u32, color)   cx = cx + 8u32   val = 0i64 - val }
+    if val == 0i64 { ui_glyph(buf, w, h, cx, y, 48u32, color)   return cx + 8u32 }
+    let mut k : u32 = 0u32
+    while val > 0i64 { TH_DIG[k as u64] = ((val % 10i64) + 48i64) as u8   val = val / 10i64   k = k + 1u32 }
+    let mut j : u32 = k
+    while j > 0u32 { j = j - 1u32   ui_glyph(buf, w, h, cx, y, TH_DIG[j as u64] as u32, color)   cx = cx + 8u32 }
+    return cx
+}

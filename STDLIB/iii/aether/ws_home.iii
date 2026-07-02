@@ -1,0 +1,162 @@
+/* STDLIB/iii/aether/ws_home.iii -- III STUDIO workspace: HOME, the observatory.  The front door IS the system:
+ * the hero panel is the REAL exact ray-cast render (aether_lens, gated 2155+2158) on its zero-drift integer
+ * turntable, advancing live while you watch; the numbers are read from world_graph (the real 783-module graph
+ * extracted from III's own source) and drawn as exact vector digits; the launcher rows SPAWN real sibling
+ * binaries.  Nothing decorative -- every pixel of the hero is computed mathematics, recomputed in front of you. */
+module ws_home
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn th_card(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_soft(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vnum(buf: u64, w: u32, h: u32, x: i64, y: i64, v: i64, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_badge(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, fill: u32, tcol: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_panel() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_wash() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_cream() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_bad() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn gr_nodes() -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn gr_edges() -> i64 from "world_graph.iii"
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_sig(w: u64, h: u64) -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_fb_addr() -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn CreateProcessA(appName: u64, cmdLine: u64, procAttr: u64, threadAttr: u64, inherit: u32, flags: u32, env: u64, curDir: u64, si: u64, pi: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(handle: u64) -> u32 from "kernel32"
+
+var HME_SI  : [u8; 104]
+var HME_PI  : [u8; 24]
+var HME_CMD : [u8; 64]
+var HME_SEL : i64 = 0i64
+var HME_ST  : [i64; 4]          /* 0 not tried, 1 spawned, 2 failed */
+var HME_ANG : i64 = 0i64        /* the hero's turntable step (0..35) */
+var HME_SIG : i64 = 0i64        /* the hero frame's determinism signature */
+var HME_TICK : i64 = 0i64
+var HME_RDY : u8 = 0u8
+
+fn hz(b: u64, n: u64) -> i32 { let mut i : u64 = 0u64   while i < n { let p : *u8 = (b + i) as *u8   p[0u64] = 0u8   i = i + 1u64 }   return 0i32 }
+fn hw32(b: u64, o: u64, v: u32) -> i32 { let p : *u8 = (b + o) as *u8   p[0u64] = (v & 255u32) as u8   p[1u64] = ((v >> 8u32) & 255u32) as u8   p[2u64] = ((v >> 16u32) & 255u32) as u8   p[3u64] = ((v >> 24u32) & 255u32) as u8   return 0i32 }
+fn hrptr(b: u64, o: u64) -> u64 { let p : *u64 = (b + o) as *u64   return p[0u64] }
+
+fn app_name(i: i64) -> u64 { if i == 0i64 { return "aether_world.exe" as u64 }   if i == 1i64 { return "atlas.exe" as u64 }   if i == 2i64 { return "topo.exe" as u64 }   return "egraph.exe" as u64 }
+fn app_len(i: i64) -> u32 { if i == 0i64 { return 16u32 }   if i == 1i64 { return 9u32 }   if i == 2i64 { return 8u32 }   return 10u32 }
+
+fn h_launch(i: i64) -> i32 {
+    let nm : u64 = app_name(i)   let nl : u32 = app_len(i)
+    hz((&HME_CMD) as u64, 64u64)
+    let mut k : u32 = 0u32
+    while k < nl { let s : *u8 = (nm + (k as u64)) as *u8   HME_CMD[k as u64] = s[0u64]   k = k + 1u32 }
+    hz((&HME_SI) as u64, 104u64)   hw32((&HME_SI) as u64, 0u64, 104u32)
+    hz((&HME_PI) as u64, 24u64)
+    let ok : u32 = CreateProcessA(0u64, (&HME_CMD) as u64, 0u64, 0u64, 0u32, 0u32, 0u64, 0u64, (&HME_SI) as u64, (&HME_PI) as u64)
+    if ok == 0u32 { HME_ST[i as u64] = 2i64   return 0i32 }
+    CloseHandle(hrptr((&HME_PI) as u64, 0u64))
+    CloseHandle(hrptr((&HME_PI) as u64, 8u64))
+    HME_ST[i as u64] = 1i64
+    return 0i32
+}
+
+fn hme_orbit() -> i32 {
+    frame_render_spin(256u64, 192u64, HME_ANG as u64)
+    HME_SIG = (frame_sig(256u64, 192u64) & 0x7FFFFFFFFFFFFFFFu64) as i64
+    HME_RDY = 1u8
+    return 0i32
+}
+
+fn ws_home_init() -> i32 @export {
+    if HME_RDY == 1u8 { return 0i32 }
+    HME_SEL = 0i64
+    let mut i : u64 = 0u64
+    while i < 4u64 { HME_ST[i] = 0i64   i = i + 1u64 }
+    hme_orbit()
+    return 0i32
+}
+
+fn ws_home_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    if k == 38u32 { if HME_SEL > 0i64 { HME_SEL = HME_SEL - 1i64 } }
+    if k == 40u32 { if HME_SEL < 3i64 { HME_SEL = HME_SEL + 1i64 } }
+    if k == 13u32 { h_launch(HME_SEL) }
+    return 0i32
+}
+
+fn chip_name(i: i64) -> u64 {
+    if i == 1i64 { return "FORGE  edit+build" as u64 }   if i == 2i64 { return "BENCH  exact physics" as u64 }
+    if i == 3i64 { return "LENS  exact render" as u64 }  if i == 4i64 { return "ZOOM  endless depth" as u64 }
+    return "CONSOLE  cli+gates" as u64
+}
+fn chip_len(i: i64) -> u32 { if i == 1i64 { return 17u32 }  if i == 2i64 { return 20u32 }  if i == 3i64 { return 18u32 }  if i == 4i64 { return 19u32 }  return 18u32 }
+
+fn ws_home_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    /* the hero orbits BY ITSELF: every ~20s of frames advance the zero-drift turntable one exact step */
+    HME_TICK = HME_TICK + 1i64
+    if HME_TICK % 120i64 == 0i64 { HME_ANG = (HME_ANG + 1i64) % 36i64   hme_orbit() }
+
+    /* masthead */
+    th_vbold(buf, w, h, (cx + 10u32) as i64, (cy + 2u32) as i64, "III STUDIO" as u64, 10u32, 44i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 14u32, cy + 58u32, "the sovereign exact-mathematics workshop" as u64, 40u32, th_dim())
+
+    /* ── HERO: the real exact ray-cast render, live on its integer turntable ─────────────────────── */
+    let hx : u32 = cx + 10u32
+    let hy : u32 = cy + 88u32
+    th_card(buf, w, h, hx, hy, 610u32, 470u32, th_ink())
+    /* blit the organ's 256x192 framebuffer scaled x2 + a hairline inset frame */
+    let px : u32 = hx + 49u32
+    let py : u32 = hy + 28u32
+    let src : u64 = frame_fb_addr()
+    let sp : *u32 = src as *u32
+    let dp : *u32 = buf as *u32
+    let mut yy : u32 = 0u32
+    while yy < 384u32 {
+        let sy : u64 = ((yy / 2u32) as u64) * 256u64
+        let drow : u64 = (((py + yy) * w) + px) as u64
+        let mut xx : u32 = 0u32
+        while xx < 512u32 {
+            dp[drow + (xx as u64)] = sp[sy + ((xx / 2u32) as u64)] | 0xFF000000u32
+            xx = xx + 1u32
+        }
+        yy = yy + 1u32
+    }
+    /* caption inside the dark card: cream on ink */
+    ui_text_n(buf, w, h, px, py + 396u32, "the exact ray-caster LIVE -- hit=sign(D), depth = n=3 Sqrt-sum" as u64, 62u32, th_cream())
+    let mut cxp : u32 = ui_text_n(buf, w, h, px, py + 416u32, "turntable step " as u64, 15u32, th_wash())
+    cxp = th_num(buf, w, h, cxp, py + 416u32, HME_ANG, th_cream())
+    cxp = ui_text_n(buf, w, h, cxp, py + 416u32, " / 35   signature " as u64, 18u32, th_wash())
+    th_num(buf, w, h, cxp, py + 416u32, HME_SIG, th_cream())
+
+    /* ── the system in exact vector digits ────────────────────────────────────────────────────────── */
+    let rx : u32 = cx + 648u32
+    th_soft(buf, w, h, rx, cy + 88u32, 420u32, 128u32, th_wash())
+    th_vnum(buf, w, h, (rx + 24u32) as i64, (cy + 106u32) as i64, gr_nodes(), 56i64, th_maroon())
+    ui_text_n(buf, w, h, rx + 24u32, cy + 184u32, "modules, extracted from III's own source" as u64, 40u32, th_ink())
+    th_soft(buf, w, h, rx, cy + 232u32, 420u32, 128u32, th_wash())
+    th_vnum(buf, w, h, (rx + 24u32) as i64, (cy + 250u32) as i64, gr_edges(), 56i64, th_maroon())
+    ui_text_n(buf, w, h, rx + 24u32, cy + 328u32, "dependency edges, live in world_graph" as u64, 37u32, th_ink())
+    th_soft(buf, w, h, rx, cy + 376u32, 420u32, 128u32, th_wash())
+    th_vnum(buf, w, h, (rx + 24u32) as i64, (cy + 394u32) as i64, 0i64, 56i64, th_maroon())
+    ui_text_n(buf, w, h, rx + 24u32, cy + 472u32, "floats -- every verdict is an exact sign" as u64, 40u32, th_ink())
+
+    /* ── launcher: real sibling binaries ──────────────────────────────────────────────────────────── */
+    let ly : u32 = cy + 512u32
+    th_vbold(buf, w, h, (rx + 4u32) as i64, ly as i64, "siblings" as u64, 8u32, 18i64, th_ink())
+    let mut j : i64 = 0i64
+    while j < 4i64 {
+        let ry : u32 = ly + 28u32 + (j as u32) * 32u32
+        let mut fill : u32 = th_panel()
+        if j == HME_SEL { fill = th_cream() }
+        th_soft(buf, w, h, rx, ry, 420u32, 26u32, fill)
+        if j == HME_SEL { ui_fill_rect(buf, w, h, rx, ry + 3u32, 4u32, 20u32, th_maroon()) }
+        ui_text_n(buf, w, h, rx + 18u32, ry + 5u32, app_name(j), app_len(j), th_ink())
+        let st : i64 = HME_ST[j as u64]
+        if st == 1i64 { ui_text_n(buf, w, h, rx + 340u32, ry + 5u32, "LIVE" as u64, 4u32, th_good()) }
+        if st == 2i64 { ui_text_n(buf, w, h, rx + 340u32, ry + 5u32, "FAIL" as u64, 4u32, th_bad()) }
+        j = j + 1i64
+    }
+    ui_text_n(buf, w, h, rx + 2u32, ly + 28u32 + 4u32 * 32u32 + 2u32, "up/down + Enter spawns the real process" as u64, 39u32, th_dim())
+    return 0i32
+}

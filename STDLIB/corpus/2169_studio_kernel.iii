@@ -1,0 +1,62 @@
+/* 2169_studio_kernel.iii -- gate for III STUDIO's pure exact organs:
+ *   wb_kernel   (wbk_collide_sign / wbk_order_sign / wbk_relay_sign -- the workbench's decision kernel)
+ *   studio_trig (the 256-entry integer sine table every studio view projects through)
+ * Ground truth is CONSTRUCTED, not echoed: hand-derived ray quadratics, the halved 2155 marquee near-tie,
+ * a genuine surd identity for the relay-equality arm, and the trig table's exact symmetries.
+ * exit 99 = pass; any other exit names the failing arm. */
+module corpus_2169_studio_kernel
+
+extern @abi(c-msvc-x64) fn wbk_collide_sign(dd: i64, sm: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_order_sign(ba: i64, da: i64, bb: i64, db: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_relay_sign(d_sr1: i64, d_r1t: i64, d_sr2: i64, d_r2t: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn st_init() -> i32 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_sn(a: i64) -> i64 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_cs(a: i64) -> i64 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn say(c: u8) -> i32 { putchar(c as i32)   putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    /* ── COLLISION: all three arms, integer-exact.  sm=5: touch at dd=25 exactly. ─────────────────── */
+    if wbk_collide_sign(26i64, 5i64) != 1i32 { say(65u8)   return 10u64 }            /* separated  */
+    if wbk_collide_sign(25i64, 5i64) != 0i32 { say(66u8)   return 11u64 }            /* tangency   */
+    if wbk_collide_sign(24i64, 5i64) != (0i32 - 1i32) { say(67u8)   return 12u64 }   /* overlap    */
+
+    /* ── PHOTON ORDER: hand-derived quadratics on the ray o=0, d=(1,0,0).
+     *    sphere A: c=(10,0,0) r=2 -> B=-20, Delta=16, entry t=8
+     *    sphere B: c=( 5,0,0) r=1 -> B=-10, Delta=4,  entry t=4   (B strictly nearer)              */
+    if wbk_order_sign(0i64 - 20i64, 16i64, 0i64 - 10i64, 4i64) != 1i32 { say(68u8)   return 20u64 }
+    if wbk_order_sign(0i64 - 10i64, 4i64, 0i64 - 20i64, 16i64) != (0i32 - 1i32) { say(69u8)   return 21u64 }
+    if wbk_order_sign(0i64 - 10i64, 4i64, 0i64 - 10i64, 4i64) != 0i32 { say(70u8)   return 22u64 }
+    /* the 2155 marquee near-tie, halved: sign( 2 - sqrt(2005652) + sqrt(1999992) ) = +1 exactly.
+     * interval arithmetic straddles zero here; only the exact tier decides it.                       */
+    if wbk_order_sign(0i64, 2005652i64, 2i64, 1999992i64) != 1i32 { say(71u8)   return 23u64 }
+
+    /* ── RELAY: strict both ways + a GENUINE surd identity for the equality arm:
+     *    sqrt(2) + sqrt(8) - sqrt(8) - sqrt(2) = 0  via DIFFERENT leg pairings:
+     *    legs (2,8) vs (8,2): sqrt2+2sqrt2 - 2sqrt2-sqrt2 = 0 -- zero through irrationals.          */
+    if wbk_relay_sign(1i64, 1i64, 4i64, 4i64) != (0i32 - 1i32) { say(72u8)   return 30u64 }
+    if wbk_relay_sign(4i64, 4i64, 1i64, 1i64) != 1i32 { say(73u8)   return 31u64 }
+    if wbk_relay_sign(2i64, 8i64, 8i64, 2i64) != 0i32 { say(74u8)   return 32u64 }
+
+    /* ── TRIG TABLE: exact anchors + whole-table symmetries. ──────────────────────────────────────── */
+    st_init()
+    if st_sn(0i64) != 0i64 { say(75u8)   return 40u64 }
+    if st_sn(64i64) != 1024i64 { say(76u8)   return 41u64 }
+    if st_sn(32i64) != 724i64 { say(77u8)   return 42u64 }
+    if st_cs(0i64) != 1024i64 { say(78u8)   return 43u64 }
+    let mut a : i64 = 0i64
+    while a < 256i64 {
+        if st_sn(a + 128i64) != (0i64 - st_sn(a)) { say(79u8)   return 44u64 }       /* half-turn antisymmetry */
+        if st_cs(a) != st_sn(a + 64i64) { say(80u8)   return 45u64 }                 /* cos = quarter-shifted sin */
+        a = a + 1i64
+    }
+    a = 0i64
+    while a < 64i64 {
+        if st_sn(a + 1i64) < st_sn(a) { say(81u8)   return 46u64 }                   /* monotone on the first quarter */
+        a = a + 1i64
+    }
+
+    say(80u8)   say(65u8)   say(83u8)   say(83u8)   /* P A S S */
+    return 99u64
+}

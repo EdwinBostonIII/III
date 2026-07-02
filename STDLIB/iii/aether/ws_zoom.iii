@@ -1,0 +1,162 @@
+/* STDLIB/iii/aether/ws_zoom.iii -- III STUDIO workspace: ZOOM, infinite semantic depth.  An exact-integer camera
+ * (scale SN/32, world pan) over the studio's REAL architecture: every box names a real module and its real attach
+ * point.  Text is exact vector outlines, so it stays razor-sharp at any magnification -- and past the thresholds
+ * the map DISSOLVES INTO THE REAL MATH: the saturated e-graph (ser_egraph, live) and then the bit-blast netlist
+ * III lowers to SAT.  You are not zooming a picture; you are zooming into the system. */
+module ws_zoom
+
+extern @abi(c-msvc-x64) fn ui_clear(buf: u64, w: u32, h: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_outline2(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_paper() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_warn() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn eg_render(buf: u64, mult: u64) -> u32 from "ui_egraph.iii"
+extern @abi(c-msvc-x64) fn bb_render(buf: u64) -> i32 from "ui_egraph.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn st_init() -> i32 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_sn(a: i64) -> i64 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_cs(a: i64) -> i64 from "studio_trig.iii"
+
+var WSZ_EG : [u32; 480000]     /* offscreen 800x600 for the hosted e-graph / netlist */
+var WSZ_SN : i64 = 32i64       /* scale: SN/32 px per world unit */
+var WSZ_PCX : i64 = 540i64     /* world point at the view centre */
+var WSZ_PCY : i64 = 360i64
+var WSZ_LMX : i64 = 0i64   var WSZ_LMY : i64 = 0i64   var WSZ_DRAG : u32 = 0u32
+var WSZ_CX : u32 = 0u32   var WSZ_CY : u32 = 0u32   var WSZ_CW : u32 = 100u32   var WSZ_CH : u32 = 100u32
+
+fn w2sx(wx: i64) -> i64 { return (((wx - WSZ_PCX) * WSZ_SN) / 32i64) + (WSZ_CX as i64) + (WSZ_CW as i64) / 2i64 }
+fn w2sy(wy: i64) -> i64 { return (((wy - WSZ_PCY) * WSZ_SN) / 32i64) + (WSZ_CY as i64) + (WSZ_CH as i64) / 2i64 }
+
+fn ws_zoom_init() -> i32 @export { st_init()   return 0i32 }
+
+/* a PRECISE curve: integer-lattice Lissajous through the exact camera -- razor-sharp at ANY magnification,
+ * because both the curve's points and the camera are exact integers.  This is the endless-zoom promise kept. */
+fn wsz_lissajous(buf: u64, w: u32, h: u32, ax: i64, ay: i64, fx: i64, fy: i64, ph: i64, col: u32) -> i32 {
+    let mut lx : i64 = 0i64   let mut ly : i64 = 0i64   let mut have : i32 = 0i32
+    let mut t : i64 = 0i64
+    while t <= 256i64 {
+        let wx : i64 = 540i64 + (ax * st_cs(fx * t)) / 1024i64
+        let wy : i64 = 360i64 + (ay * st_sn(fy * t + ph)) / 1024i64
+        let sx : i64 = w2sx(wx)   let sy : i64 = w2sy(wy)
+        if have == 1i32 { ui_line(buf, w, h, lx as i32, ly as i32, sx as i32, sy as i32, col) }
+        lx = sx   ly = sy   have = 1i32
+        t = t + 2i64
+    }
+    return 0i32
+}
+
+fn ws_zoom_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 {
+        if c == 43u32 { WSZ_SN = (WSZ_SN * 5i64) / 4i64 }
+        if c == 61u32 { WSZ_SN = (WSZ_SN * 5i64) / 4i64 }
+        if c == 45u32 { WSZ_SN = (WSZ_SN * 4i64) / 5i64 }
+        c = ui_getchar()
+    }
+    if k == 38u32 { WSZ_SN = (WSZ_SN * 5i64) / 4i64 }
+    if k == 40u32 { WSZ_SN = (WSZ_SN * 4i64) / 5i64 }
+    if WSZ_SN < 2i64 { WSZ_SN = 2i64 }
+    if WSZ_SN > 4000i64 { WSZ_SN = 4000i64 }
+    let mxi : i64 = mx as i64   let myi : i64 = my as i64
+    if md == 1u32 {
+        if mx >= WSZ_CX { if my >= WSZ_CY {
+            if WSZ_DRAG == 1u32 {
+                WSZ_PCX = WSZ_PCX - (((mxi - WSZ_LMX) * 32i64) / WSZ_SN)
+                WSZ_PCY = WSZ_PCY - (((myi - WSZ_LMY) * 32i64) / WSZ_SN)
+            }
+            WSZ_DRAG = 1u32
+        } }
+        WSZ_LMX = mxi   WSZ_LMY = myi
+    }
+    if md != 1u32 { WSZ_DRAG = 0u32 }
+    return 0i32
+}
+
+/* one architecture box: bold outline, vector title, LOD detail line. */
+fn wsz_node(buf: u64, w: u32, h: u32, wx: i64, wy: i64, hw: i64, hh: i64, title: u64, tl: u32, det: u64, dl: u32, col: u32) -> i32 {
+    let sx0 : i64 = w2sx(wx - hw)   let sy0 : i64 = w2sy(wy - hh)
+    let sx1 : i64 = w2sx(wx + hw)   let sy1 : i64 = w2sy(wy + hh)
+    if sx1 < (WSZ_CX as i64) { return 0i32 }
+    if sy1 < (WSZ_CY as i64) { return 0i32 }
+    if sx0 > ((WSZ_CX + WSZ_CW) as i64) { return 0i32 }
+    if sy0 > ((WSZ_CY + WSZ_CH) as i64) { return 0i32 }
+    let bw : i64 = sx1 - sx0   let bh : i64 = sy1 - sy0
+    if bw < 3i64 { return 0i32 }
+    if sx0 < 0i64 { return 0i32 }
+    if sy0 < 0i64 { return 0i32 }
+    th_outline2(buf, w, h, sx0 as u32, sy0 as u32, bw as u32, bh as u32, col)
+    let ts : i64 = (26i64 * WSZ_SN) / 32i64
+    if ts >= 7i64 { ui_vtext(buf, w, h, sx0 + (10i64 * WSZ_SN) / 32i64, sy0 + (10i64 * WSZ_SN) / 32i64, title, tl, ts, col, 4i64) }
+    if bw > 300i64 { ui_vtext(buf, w, h, sx0 + (10i64 * WSZ_SN) / 32i64, sy0 + (52i64 * WSZ_SN) / 32i64, det, dl, (15i64 * WSZ_SN) / 32i64, th_dim(), 4i64) }
+    return 0i32
+}
+fn wsz_link(buf: u64, w: u32, h: u32, x0: i64, y0: i64, x1: i64, y1: i64) -> i32 {
+    ui_line(buf, w, h, w2sx(x0) as i32, w2sy(y0) as i32, w2sx(x1) as i32, w2sy(y1) as i32, 0xFFC9B8A6u32)
+    return 0i32
+}
+
+fn ws_zoom_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    WSZ_CX = cx + 4u32   WSZ_CY = cy + 38u32   WSZ_CW = cw - 16u32   WSZ_CH = chh - 76u32
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "ZOOM" as u64, 4u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 100u32, cy + 8u32, "exact-integer camera -- zoom until the map becomes the real math" as u64, 64u32, th_dim())
+    th_panel_c(buf, w, h, WSZ_CX, WSZ_CY, WSZ_CW, WSZ_CH, th_inset())
+    if WSZ_SN <= 130i64 {
+        /* level 1: precise exact curves under the studio's REAL architecture */
+        wsz_lissajous(buf, w, h, 470i64, 330i64, 1i64, 2i64, 0i64, 0xFFE2CDBAu32)
+        wsz_lissajous(buf, w, h, 440i64, 300i64, 3i64, 1i64, 64i64, 0xFFD9C6BEu32)
+        wsz_link(buf, w, h, 540i64, 360i64, 220i64, 170i64)   wsz_link(buf, w, h, 540i64, 360i64, 540i64, 150i64)
+        wsz_link(buf, w, h, 540i64, 360i64, 860i64, 170i64)   wsz_link(buf, w, h, 540i64, 360i64, 220i64, 560i64)
+        wsz_link(buf, w, h, 540i64, 360i64, 540i64, 580i64)   wsz_link(buf, w, h, 540i64, 360i64, 860i64, 560i64)
+        wsz_node(buf, w, h, 540i64, 360i64, 150i64, 62i64, "III STUDIO" as u64, 10u32, "one shell, six live instruments" as u64, 31u32, th_maroon())
+        wsz_node(buf, w, h, 220i64, 170i64, 140i64, 58i64, "FORGE" as u64, 5u32, "-> spawns COMPILED/iiis-2.exe" as u64, 29u32, th_ink())
+        wsz_node(buf, w, h, 540i64, 150i64, 140i64, 58i64, "BENCH" as u64, 5u32, "-> wb_kernel Sqrt-sum signs" as u64, 27u32, th_ink())
+        wsz_node(buf, w, h, 860i64, 170i64, 140i64, 58i64, "LENS" as u64, 4u32, "-> aether_lens exact rays" as u64, 25u32, th_ink())
+        wsz_node(buf, w, h, 220i64, 560i64, 140i64, 58i64, "CONSOLE" as u64, 7u32, "-> sks_prove + live gates" as u64, 25u32, th_ink())
+        wsz_node(buf, w, h, 540i64, 580i64, 140i64, 58i64, "ZOOM" as u64, 4u32, "you are inside it now" as u64, 21u32, th_ink())
+        wsz_node(buf, w, h, 860i64, 560i64, 140i64, 58i64, "HOME" as u64, 4u32, "-> world_graph 783 / 5108" as u64, 25u32, th_ink())
+        /* the substrate rail underneath */
+        wsz_node(buf, w, h, 540i64, 780i64, 420i64, 44i64, "III-GLASS substrate" as u64, 19u32, "ui_win ui_raster ui_font ui_vfont ui_exact studio_theme" as u64, 55u32, th_good())
+        wsz_link(buf, w, h, 540i64, 640i64, 540i64, 736i64)
+        ui_text_n(buf, w, h, WSZ_CX + 14u32, WSZ_CY + WSZ_CH - 26u32, "keep zooming IN (+ / up): past 4x the map dissolves into the live e-graph, then the SAT netlist" as u64, 95u32, th_dim())
+    }
+    if WSZ_SN > 130i64 {
+        /* levels 2+3: the REAL math, rendered by the real organ into 800x600 and scaled into this panel */
+        if WSZ_SN <= 400i64 { eg_render((&WSZ_EG) as u64, 7u64) }
+        if WSZ_SN > 400i64 { bb_render((&WSZ_EG) as u64) }
+        let sp : *u32 = (&WSZ_EG) as *u32
+        let dp : *u32 = buf as *u32
+        let iw : u32 = WSZ_CW - 8u32
+        let ih : u32 = WSZ_CH - 8u32
+        let mut yy : u32 = 0u32
+        while yy < ih {
+            let sy : u64 = (((yy * 600u32) / ih) as u64) * 800u64
+            let drow : u64 = (((WSZ_CY + 4u32 + yy) * w) + WSZ_CX + 4u32) as u64
+            let mut xx : u32 = 0u32
+            while xx < iw {
+                dp[drow + (xx as u64)] = sp[sy + (((xx * 800u32) / iw) as u64)] | 0xFF000000u32
+                xx = xx + 1u32
+            }
+            yy = yy + 1u32
+        }
+        ui_fill_rect(buf, w, h, WSZ_CX + 2u32, WSZ_CY + WSZ_CH - 32u32, WSZ_CW - 4u32, 30u32, th_ink())
+        if WSZ_SN <= 400i64 { ui_text_n(buf, w, h, WSZ_CX + 14u32, WSZ_CY + WSZ_CH - 24u32, "LEVEL 2: the LIVE e-graph -- ser_egraph saturating MUL(x,7); same colour = proven equal" as u64, 87u32, th_warn()) }
+        if WSZ_SN > 400i64 { ui_text_n(buf, w, h, WSZ_CX + 14u32, WSZ_CY + WSZ_CH - 24u32, "LEVEL 3: the bit-blast netlist III lowers to SAT -- the floor of the tower" as u64, 74u32, th_warn()) }
+    }
+    /* HUD on its own strip so it never mixes with hosted content */
+    ui_fill_rect(buf, w, h, WSZ_CX + 2u32, WSZ_CY + 2u32, WSZ_CW - 4u32, 28u32, th_paper())
+    let mut hx : u32 = ui_text_n(buf, w, h, WSZ_CX + 14u32, WSZ_CY + 10u32, "scale " as u64, 6u32, th_ink())
+    hx = th_num(buf, w, h, hx, WSZ_CY + 10u32, WSZ_SN, th_maroon())
+    ui_text_n(buf, w, h, hx, WSZ_CY + 10u32, "/32   +/- or up/down zoom   drag pans   exact integers, crisp at any depth" as u64, 74u32, th_dim())
+    return 0i32
+}

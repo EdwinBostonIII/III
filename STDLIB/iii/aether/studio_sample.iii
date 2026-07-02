@@ -1,0 +1,15 @@
+/* STDLIB/iii/aether/studio_sample.iii -- the FORGE's default working file: a real module that really compiles.
+ * Edit it inside III STUDIO and press F7 -- the real iiis-2 compiles it and the studio shows the real verdict. */
+module studio_sample
+
+fn fs_gcd(a: i64, b: i64) -> i64 @export {
+    let mut x : i64 = a   if x < 0i64 { x = 0i64 - x }
+    let mut y : i64 = b   if y < 0i64 { y = 0i64 - y }
+    while y != 0i64 { let t : i64 = x % y   x = y   y = t }
+    return x
+}
+
+fn fs_demo() -> i64 @export {
+    /* gcd(1071, 462) = 21 -- Euclid, exactly */
+    return fs_gcd(1071i64, 462i64)
+}

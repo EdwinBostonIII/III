@@ -1,0 +1,316 @@
+/* STDLIB/iii/aether/ws_forge.iii -- III STUDIO workspace: FORGE, the IDE core.  A real editing loop with a real
+ * build: load any file (Ctrl+L, type the path, Enter), edit it (the OS WM_CHAR ring + arrows), save (Ctrl+S),
+ * and COMPILE IT WITH THE REAL COMPILER (F7): the studio spawns  cmd /C COMPILED\iiis-2.exe <path> --compile-only
+ * ... 2> err  , waits, reads the REAL exit code and the REAL stderr, and paints them.  Green means iiis-2 itself
+ * said yes just now; red shows you the compiler's own words.  Safety: a file longer than the buffer loads
+ * truncated and save is LOCKED for it -- the forge will never write back a mutilated organ. */
+module ws_forge
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_badge(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, fill: u32, tcol: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_cream() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_wash() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_bad() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_warn() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn CreateProcessA(appName: u64, cmdLine: u64, procAttr: u64, threadAttr: u64, inherit: u32, flags: u32, env: u64, curDir: u64, si: u64, pi: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn WaitForSingleObject(handle: u64, ms: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetExitCodeProcess(handle: u64, codePtr: u64) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(handle: u64) -> u32 from "kernel32"
+
+const WSF_ML : u64 = 400u64      /* max lines   */
+const WSF_MC : u64 = 118u64      /* max columns */
+var WSF_TXT  : [u8; 47200]       /* 400 * 118   */
+var WSF_LLEN : [u32; 400]
+var WSF_NL   : i64 = 0i64
+var WSF_CR   : i64 = 0i64        /* cursor row */
+var WSF_CC   : i64 = 0i64        /* cursor col */
+var WSF_TOP  : i64 = 0i64        /* first visible row */
+var WSF_PATH : [u8; 120]
+var WSF_PLEN : u32 = 0u32
+var WSF_PMODE: u8 = 0u8          /* 1 = editing the path field */
+var WSF_TRUNC: u8 = 0u8          /* 1 = loaded truncated -> save LOCKED */
+var WSF_DIRTY: u8 = 0u8
+var WSF_MSG  : [u8; 100]   var WSF_MLEN : u32 = 0u32   var WSF_MCOL : u32 = 0u32
+var WSF_RAW  : [u8; 65536]
+var WSF_ERR  : [u8; 1600]        /* 8 stderr lines x 200 */
+var WSF_ELEN : [u32; 8]
+var WSF_ENL  : u64 = 0u64
+var WSF_RC   : i64 = 0i64        /* last compile rc; set to -1 (never) in init -- module-var expression inits are a known trap */
+var WSF_SI   : [u8; 104]   var WSF_PI : [u8; 24]   var WSF_CODE : [u8; 8]
+var WSF_CMD  : [u8; 320]
+
+fn f_msg(s: u64, n: u32, col: u32) -> i32 {
+    let mut i : u32 = 0u32
+    let mut m : u32 = n   if m > 98u32 { m = 98u32 }
+    while i < m { let p : *u8 = (s + (i as u64)) as *u8   WSF_MSG[i as u64] = p[0u64]   i = i + 1u32 }
+    WSF_MLEN = m   WSF_MCOL = col
+    return 0i32
+}
+fn f_cell(r: i64, c: i64) -> u64 { return ((r as u64) * WSF_MC) + (c as u64) }
+fn fz(b: u64, n: u64) -> i32 { let mut i : u64 = 0u64   while i < n { let p : *u8 = (b + i) as *u8   p[0u64] = 0u8   i = i + 1u64 }   return 0i32 }
+fn fw32(b: u64, o: u64, v: u32) -> i32 { let p : *u8 = (b + o) as *u8   p[0u64] = (v & 255u32) as u8   p[1u64] = ((v >> 8u32) & 255u32) as u8   p[2u64] = ((v >> 16u32) & 255u32) as u8   p[3u64] = ((v >> 24u32) & 255u32) as u8   return 0i32 }
+fn fr32(b: u64, o: u64) -> u32 { let p : *u8 = (b + o) as *u8   return (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32) }
+fn frptr(b: u64, o: u64) -> u64 { let p : *u64 = (b + o) as *u64   return p[0u64] }
+
+fn set_path(s: u64, n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n { let p : *u8 = (s + (i as u64)) as *u8   WSF_PATH[i as u64] = p[0u64]   i = i + 1u32 }
+    WSF_PLEN = n
+    return 0i32
+}
+
+/* ── load / save ──────────────────────────────────────────────────────────────────────────────────── */
+fn f_load() -> i32 {
+    WSF_PATH[WSF_PLEN as u64] = 0u8
+    let fh : u64 = fopen((&WSF_PATH) as u64, "rb" as u64)
+    if fh == 0u64 { f_msg("could not open file" as u64, 19u32, th_bad())   return 0i32 }
+    let got : u64 = fread((&WSF_RAW) as u64, 1u64, 65535u64, fh)
+    fclose(fh)
+    WSF_NL = 0i64   WSF_CR = 0i64   WSF_CC = 0i64   WSF_TOP = 0i64   WSF_TRUNC = 0u8   WSF_DIRTY = 0u8
+    let mut li : u64 = 0u64      /* current line length */
+    let mut i : u64 = 0u64
+    while i < got {
+        let ch : u8 = WSF_RAW[i]
+        if ch == 10u8 {
+            WSF_LLEN[WSF_NL as u64] = li as u32
+            WSF_NL = WSF_NL + 1i64   li = 0u64
+            if WSF_NL >= (WSF_ML as i64) { WSF_TRUNC = 1u8   i = got }
+        } else {
+            if ch != 13u8 { if li < WSF_MC { WSF_TXT[f_cell(WSF_NL, li as i64)] = ch   li = li + 1u64 } else { WSF_TRUNC = 1u8 } }
+        }
+        i = i + 1u64
+    }
+    if WSF_NL < (WSF_ML as i64) { WSF_LLEN[WSF_NL as u64] = li as u32   WSF_NL = WSF_NL + 1i64 }
+    if got >= 65535u64 { WSF_TRUNC = 1u8 }
+    if WSF_TRUNC == 1u8 { f_msg("LOADED TRUNCATED -- save is LOCKED for this file (protecting the original)" as u64, 74u32, th_warn()) }
+    if WSF_TRUNC == 0u8 { f_msg("loaded" as u64, 6u32, th_good()) }
+    return 0i32
+}
+fn f_save() -> i32 {
+    if WSF_TRUNC == 1u8 { f_msg("save LOCKED: this file was loaded truncated" as u64, 43u32, th_bad())   return 0i32 }
+    WSF_PATH[WSF_PLEN as u64] = 0u8
+    let fh : u64 = fopen((&WSF_PATH) as u64, "wb" as u64)
+    if fh == 0u64 { f_msg("could not open file for writing" as u64, 31u32, th_bad())   return 0i32 }
+    let mut r : i64 = 0i64
+    while r < WSF_NL {
+        fwrite(((&WSF_TXT) as u64) + f_cell(r, 0i64), 1u64, WSF_LLEN[r as u64] as u64, fh)
+        fwrite("\n" as u64, 1u64, 1u64, fh)
+        r = r + 1i64
+    }
+    fclose(fh)
+    WSF_DIRTY = 0u8
+    f_msg("saved" as u64, 5u32, th_good())
+    return 0i32
+}
+
+/* ── compile: spawn the REAL iiis-2 through cmd (stderr redirected), read the REAL verdict ────────── */
+fn cmd_put(at: u64, s: u64, n: u32) -> u64 {
+    let mut i : u32 = 0u32
+    while i < n { let p : *u8 = (s + (i as u64)) as *u8   WSF_CMD[at + (i as u64)] = p[0u64]   i = i + 1u32 }
+    return at + (n as u64)
+}
+fn f_compile() -> i32 {
+    fz((&WSF_CMD) as u64, 320u64)
+    let mut at : u64 = 0u64
+    at = cmd_put(at, "cmd /C \"COMPILED\\iiis-2.exe " as u64, 28u32)
+    at = cmd_put(at, (&WSF_PATH) as u64, WSF_PLEN)
+    at = cmd_put(at, " --compile-only --out build\\forge_out.o 2> build\\forge_err.txt\"" as u64, 64u32)
+    WSF_CMD[at] = 0u8
+    fz((&WSF_SI) as u64, 104u64)   fw32((&WSF_SI) as u64, 0u64, 104u32)
+    fz((&WSF_PI) as u64, 24u64)
+    f_msg("compiling with the real iiis-2 ..." as u64, 34u32, th_warn())
+    let ok : u32 = CreateProcessA(0u64, (&WSF_CMD) as u64, 0u64, 0u64, 0u32, 134217728u32, 0u64, 0u64, (&WSF_SI) as u64, (&WSF_PI) as u64)
+    if ok == 0u32 { f_msg("could not spawn the compiler" as u64, 28u32, th_bad())   return 0i32 }
+    let hp : u64 = frptr((&WSF_PI) as u64, 0u64)
+    WaitForSingleObject(hp, 60000u32)
+    GetExitCodeProcess(hp, (&WSF_CODE) as u64)
+    WSF_RC = fr32((&WSF_CODE) as u64, 0u64) as i64
+    CloseHandle(hp)   CloseHandle(frptr((&WSF_PI) as u64, 8u64))
+    /* read the compiler's own words */
+    WSF_ENL = 0u64
+    let eh : u64 = fopen("build\\forge_err.txt" as u64, "rb" as u64)
+    if eh != 0u64 {
+        let got : u64 = fread((&WSF_RAW) as u64, 1u64, 4000u64, eh)
+        fclose(eh)
+        let mut li : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < got {
+            let ch : u8 = WSF_RAW[i]
+            if ch == 10u8 { if li > 0u64 { WSF_ELEN[WSF_ENL] = li as u32   WSF_ENL = WSF_ENL + 1u64   li = 0u64   if WSF_ENL >= 8u64 { i = got } } }
+            if ch != 10u8 { if ch != 13u8 { if li < 198u64 { if WSF_ENL < 8u64 { WSF_ERR[(WSF_ENL * 200u64) + li] = ch   li = li + 1u64 } } } }
+            i = i + 1u64
+        }
+        if li > 0u64 { if WSF_ENL < 8u64 { WSF_ELEN[WSF_ENL] = li as u32   WSF_ENL = WSF_ENL + 1u64 } }
+    }
+    if WSF_RC == 0i64 { f_msg("COMPILED CLEAN -- iiis-2 exit 0" as u64, 31u32, th_good()) }
+    if WSF_RC != 0i64 { f_msg("compile FAILED -- the compiler's words are below" as u64, 48u32, th_bad()) }
+    return 0i32
+}
+
+/* ── editing ──────────────────────────────────────────────────────────────────────────────────────── */
+fn cur_len() -> i64 { return WSF_LLEN[WSF_CR as u64] as i64 }
+fn ins_char(c: u8) -> i32 {
+    let ll : i64 = cur_len()
+    if ll >= (WSF_MC as i64) { return 0i32 }
+    let mut k : i64 = ll
+    while k > WSF_CC { WSF_TXT[f_cell(WSF_CR, k)] = WSF_TXT[f_cell(WSF_CR, k - 1i64)]   k = k - 1i64 }
+    WSF_TXT[f_cell(WSF_CR, WSF_CC)] = c
+    WSF_LLEN[WSF_CR as u64] = (ll + 1i64) as u32
+    WSF_CC = WSF_CC + 1i64
+    WSF_DIRTY = 1u8
+    return 0i32
+}
+fn split_line() -> i32 {
+    if WSF_NL >= (WSF_ML as i64) { return 0i32 }
+    let mut r : i64 = WSF_NL
+    while r > WSF_CR + 1i64 {          /* shift lines down */
+        let mut c : i64 = 0i64
+        let pl : i64 = WSF_LLEN[(r - 1i64) as u64] as i64
+        while c < pl { WSF_TXT[f_cell(r, c)] = WSF_TXT[f_cell(r - 1i64, c)]   c = c + 1i64 }
+        WSF_LLEN[r as u64] = pl as u32
+        r = r - 1i64
+    }
+    /* the new line r = CR+1 receives the tail of CR */
+    let ll : i64 = cur_len()
+    let tail : i64 = ll - WSF_CC
+    let mut c2 : i64 = 0i64
+    while c2 < tail { WSF_TXT[f_cell(WSF_CR + 1i64, c2)] = WSF_TXT[f_cell(WSF_CR, WSF_CC + c2)]   c2 = c2 + 1i64 }
+    WSF_LLEN[(WSF_CR + 1i64) as u64] = tail as u32
+    WSF_LLEN[WSF_CR as u64] = WSF_CC as u32
+    WSF_NL = WSF_NL + 1i64
+    WSF_CR = WSF_CR + 1i64   WSF_CC = 0i64
+    WSF_DIRTY = 1u8
+    return 0i32
+}
+fn back_char() -> i32 {
+    if WSF_CC > 0i64 {
+        let ll : i64 = cur_len()
+        let mut k : i64 = WSF_CC - 1i64
+        while k < ll - 1i64 { WSF_TXT[f_cell(WSF_CR, k)] = WSF_TXT[f_cell(WSF_CR, k + 1i64)]   k = k + 1i64 }
+        WSF_LLEN[WSF_CR as u64] = (ll - 1i64) as u32
+        WSF_CC = WSF_CC - 1i64
+        WSF_DIRTY = 1u8
+        return 0i32
+    }
+    if WSF_CR == 0i64 { return 0i32 }
+    /* join with the previous line (if it fits) */
+    let pl : i64 = WSF_LLEN[(WSF_CR - 1i64) as u64] as i64
+    let ll2 : i64 = cur_len()
+    if pl + ll2 > (WSF_MC as i64) { return 0i32 }
+    let mut c : i64 = 0i64
+    while c < ll2 { WSF_TXT[f_cell(WSF_CR - 1i64, pl + c)] = WSF_TXT[f_cell(WSF_CR, c)]   c = c + 1i64 }
+    WSF_LLEN[(WSF_CR - 1i64) as u64] = (pl + ll2) as u32
+    /* shift the rest up */
+    let mut r : i64 = WSF_CR
+    while r < WSF_NL - 1i64 {
+        let nl : i64 = WSF_LLEN[(r + 1i64) as u64] as i64
+        let mut c3 : i64 = 0i64
+        while c3 < nl { WSF_TXT[f_cell(r, c3)] = WSF_TXT[f_cell(r + 1i64, c3)]   c3 = c3 + 1i64 }
+        WSF_LLEN[r as u64] = nl as u32
+        r = r + 1i64
+    }
+    WSF_NL = WSF_NL - 1i64
+    WSF_CR = WSF_CR - 1i64   WSF_CC = pl
+    WSF_DIRTY = 1u8
+    return 0i32
+}
+
+fn ws_forge_init() -> i32 @export {
+    if WSF_NL > 0i64 { return 0i32 }
+    WSF_RC = 0i64 - 1i64
+    set_path("STDLIB\\iii\\aether\\studio_sample.iii" as u64, 35u32)
+    f_load()
+    f_msg("Ctrl+L path   Ctrl+S save   F7 compile with the real iiis-2" as u64, 59u32, th_dim())
+    return 0i32
+}
+
+fn ws_forge_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    /* typed characters */
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 {
+        if WSF_PMODE == 1u8 {
+            if c == 13u32 { WSF_PMODE = 0u8   f_load() }
+            if c == 8u32 { if WSF_PLEN > 0u32 { WSF_PLEN = WSF_PLEN - 1u32 } }
+            if c == 12u32 { WSF_PMODE = 0u8 }
+            if c >= 32u32 { if c <= 126u32 { if WSF_PLEN < 118u32 { WSF_PATH[WSF_PLEN as u64] = c as u8   WSF_PLEN = WSF_PLEN + 1u32 } } }
+        } else {
+            if c == 12u32 { WSF_PMODE = 1u8 }                    /* Ctrl+L: edit the path */
+            if c == 19u32 { f_save() }                            /* Ctrl+S */
+            if c == 13u32 { split_line() }
+            if c == 8u32 { back_char() }
+            if c >= 32u32 { if c <= 126u32 { ins_char(c as u8) } }
+        }
+        c = ui_getchar()
+    }
+    if WSF_PMODE == 1u8 { return 0i32 }
+    /* control keys */
+    if k == 118u32 { f_compile() }                                /* F7 */
+    if k == 37u32 { if WSF_CC > 0i64 { WSF_CC = WSF_CC - 1i64 } else { if WSF_CR > 0i64 { WSF_CR = WSF_CR - 1i64   WSF_CC = cur_len() } } }
+    if k == 39u32 { if WSF_CC < cur_len() { WSF_CC = WSF_CC + 1i64 } else { if WSF_CR < WSF_NL - 1i64 { WSF_CR = WSF_CR + 1i64   WSF_CC = 0i64 } } }
+    if k == 38u32 { if WSF_CR > 0i64 { WSF_CR = WSF_CR - 1i64   if WSF_CC > cur_len() { WSF_CC = cur_len() } } }
+    if k == 40u32 { if WSF_CR < WSF_NL - 1i64 { WSF_CR = WSF_CR + 1i64   if WSF_CC > cur_len() { WSF_CC = cur_len() } } }
+    if k == 33u32 { WSF_CR = WSF_CR - 24i64   if WSF_CR < 0i64 { WSF_CR = 0i64 }   if WSF_CC > cur_len() { WSF_CC = cur_len() } }
+    if k == 34u32 { WSF_CR = WSF_CR + 24i64   if WSF_CR >= WSF_NL { WSF_CR = WSF_NL - 1i64 }   if WSF_CC > cur_len() { WSF_CC = cur_len() } }
+    if k == 36u32 { WSF_CC = 0i64 }
+    if k == 35u32 { WSF_CC = cur_len() }
+    return 0i32
+}
+
+fn ws_forge_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "FORGE" as u64, 5u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 120u32, cy + 8u32, "edit -> save -> the REAL compiler judges" as u64, 40u32, th_dim())
+    /* path bar */
+    let py : u32 = cy + 38u32
+    let mut pfill : u32 = th_cream()
+    if WSF_PMODE == 1u8 { pfill = th_wash() }
+    th_panel_c(buf, w, h, cx + 4u32, py, cw - 12u32, 32u32, pfill)
+    ui_text_n(buf, w, h, cx + 16u32, py + 8u32, "file:" as u64, 5u32, th_maroon())
+    ui_text_n(buf, w, h, cx + 64u32, py + 8u32, (&WSF_PATH) as u64, WSF_PLEN, th_ink())
+    if WSF_PMODE == 1u8 { ui_fill_rect(buf, w, h, cx + 64u32 + WSF_PLEN * 8u32, py + 6u32, 8u32, 18u32, th_maroon()) }
+    if WSF_DIRTY == 1u8 { th_badge(buf, w, h, cx + cw - 130u32, py + 4u32, "edited" as u64, 6u32, th_warn(), th_cream()) }
+    /* the text panel */
+    let ty : u32 = py + 40u32
+    let th2 : u32 = chh - 78u32 - 150u32
+    th_panel_c(buf, w, h, cx + 4u32, ty, cw - 12u32, th2, th_inset())
+    let rows : i64 = ((th2 - 16u32) / 16u32) as i64
+    if WSF_CR < WSF_TOP { WSF_TOP = WSF_CR }
+    if WSF_CR >= WSF_TOP + rows { WSF_TOP = WSF_CR - rows + 1i64 }
+    let mut r : i64 = 0i64
+    while r < rows {
+        let ln : i64 = WSF_TOP + r
+        if ln < WSF_NL {
+            let yy : u32 = ty + 10u32 + (r as u32) * 16u32
+            th_num(buf, w, h, cx + 18u32, yy, ln + 1i64, th_dim())
+            ui_text_n(buf, w, h, cx + 64u32, yy, ((&WSF_TXT) as u64) + f_cell(ln, 0i64), WSF_LLEN[ln as u64], th_ink())
+            if ln == WSF_CR { if WSF_PMODE == 0u8 { ui_fill_rect(buf, w, h, cx + 64u32 + (WSF_CC as u32) * 8u32, yy - 1u32, 2u32, 17u32, th_maroon()) } }
+        }
+        r = r + 1i64
+    }
+    /* verdict + the compiler's own stderr */
+    let vy : u32 = ty + th2 + 8u32
+    ui_text_n(buf, w, h, cx + 16u32, vy + 4u32, (&WSF_MSG) as u64, WSF_MLEN, WSF_MCOL)
+    if WSF_RC == 0i64 { th_badge(buf, w, h, cx + cw - 150u32, vy, "iiis-2: 0" as u64, 9u32, th_good(), th_cream()) }
+    if WSF_RC > 0i64 { th_badge(buf, w, h, cx + cw - 150u32, vy, "iiis-2:" as u64, 7u32, th_bad(), th_cream())   th_num(buf, w, h, cx + cw - 80u32, vy + 4u32, WSF_RC, th_cream()) }
+    let ey : u32 = vy + 30u32
+    let mut e : u64 = 0u64
+    while e < WSF_ENL {
+        ui_text_n(buf, w, h, cx + 16u32, ey + (e as u32) * 16u32, ((&WSF_ERR) as u64) + (e * 200u64), WSF_ELEN[e], th_bad())
+        e = e + 1u64
+    }
+    return 0i32
+}

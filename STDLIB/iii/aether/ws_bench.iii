@@ -1,0 +1,345 @@
+/* STDLIB/iii/aether/ws_bench.iii -- III STUDIO workspace: BENCH, the exact-physics table.  Summon constructs
+ * (S sphere, E ellipsoid, P photon), drag to orbit, arrows/PgUp/PgDn to move the selected one -- and every frame
+ * III re-decides the scene's interactions EXACTLY through wb_kernel: sphere contact is an integer sign, the
+ * photon's nearest-hit ordering is an n=3 sum-of-square-roots sign, the relay comparison is n=4.  The readout
+ * prints the exact numbers (gap^2, depth^2), never a float.  The VIEW is fixed-point; the VERDICTS are exact. */
+module ws_bench
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_badge(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, fill: u32, tcol: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_cream() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_bad() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_warn() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn st_init() -> i32 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_sn(a: i64) -> i64 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn st_cs(a: i64) -> i64 from "studio_trig.iii"
+extern @abi(c-msvc-x64) fn wbk_collide_sign(dd: i64, sm: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_order_sign(ba: i64, da: i64, bb: i64, db: i64) -> i32 from "wb_kernel.iii"
+extern @abi(c-msvc-x64) fn wbk_relay_sign(d_sr1: i64, d_r1t: i64, d_sr2: i64, d_r2t: i64) -> i32 from "wb_kernel.iii"
+
+/* scene: kind 1=sphere 2=ellipsoid 3=photon */
+var WSB_K  : [i64; 48]
+var WSB_X  : [i64; 48]   var WSB_Y : [i64; 48]   var WSB_Z : [i64; 48]
+var WSB_RA : [i64; 48]   var WSB_RB : [i64; 48]  var WSB_RC : [i64; 48]
+var WSB_DX : [i64; 48]   var WSB_DY : [i64; 48]  var WSB_DZ : [i64; 48]
+var WSB_COL: [u32; 48]
+var WSB_N  : i64 = 0i64   var WSB_SEL : i64 = 0i64
+/* camera */
+var WSB_YAW : i64 = 32i64   var WSB_PIT : i64 = 22i64   var WSB_ZOOM : i64 = 760i64
+var WSB_LMX : i64 = 0i64    var WSB_LMY : i64 = 0i64    var WSB_DRAG : u32 = 0u32
+/* projection out */
+var WSB_PX : i64 = 0i64   var WSB_PY : i64 = 0i64   var WSB_PV : i32 = 0i32
+/* verdicts */
+var WSB_CA : i64 = 0i64   var WSB_CB : i64 = 0i64   var WSB_CST : i64 = 2i64   var WSB_CPEN : i64 = 0i64
+var WSB_HP : i64 = 0i64   var WSB_HO : i64 = 0i64   var WSB_HN : i64 = 0i64    var WSB_HD : i64 = 1i64
+var WSB_XA : i64 = 0i64   var WSB_XB : i64 = 0i64   var WSB_XST : i64 = 3i64   var WSB_XSHOW : u8 = 0u8
+/* content rect (set each render; input uses it for drag hit-test) */
+var WSB_CX : u32 = 0u32   var WSB_CY : u32 = 0u32   var WSB_CW : u32 = 100u32   var WSB_CH : u32 = 100u32
+
+fn wsb_isqrt(n: i64) -> i64 {
+    if n <= 0i64 { return 0i64 }
+    let mut x : i64 = n   if x > 3037000499i64 { x = 3037000499i64 }
+    let mut y : i64 = (x + n / x) / 2i64
+    let mut g : i64 = 0i64
+    while y < x { x = y   y = (x + n / x) / 2i64   g = g + 1i64   if g > 200i64 { y = x } }
+    return x
+}
+
+fn wsb_add(kind: i64) -> i32 {
+    if WSB_N >= 44i64 { return 0i32 }
+    let i : u64 = WSB_N as u64
+    WSB_K[i] = kind
+    WSB_X[i] = (WSB_N % 4i64) * 46i64 - 70i64   WSB_Y[i] = 0i64   WSB_Z[i] = 0i64
+    WSB_RA[i] = 56i64   WSB_RB[i] = 56i64   WSB_RC[i] = 56i64
+    WSB_DX[i] = 150i64   WSB_DY[i] = 0i64 - 22i64   WSB_DZ[i] = 52i64
+    if kind == 1i64 { WSB_COL[i] = 0xFF6E86C8u32 }
+    if kind == 2i64 { WSB_RB[i] = 32i64   WSB_RC[i] = 46i64   WSB_COL[i] = 0xFF9A6EC8u32 }
+    if kind == 3i64 { WSB_COL[i] = 0xFFB07A35u32   WSB_X[i] = 0i64 - 210i64   WSB_Y[i] = 34i64   WSB_Z[i] = 0i64 - 44i64 }
+    WSB_SEL = WSB_N
+    WSB_N = WSB_N + 1i64
+    return 0i32
+}
+
+fn ws_bench_init() -> i32 @export {
+    st_init()
+    if WSB_N > 0i64 { return 0i32 }
+    wsb_add(1i64)   WSB_X[0u64] = 0i64 - 78i64
+    wsb_add(1i64)   WSB_X[1u64] = 84i64   WSB_RA[1u64] = 48i64   WSB_RB[1u64] = 48i64   WSB_RC[1u64] = 48i64
+    wsb_add(3i64)
+    WSB_SEL = 0i64
+    return 0i32
+}
+
+/* fixed-point view transform (the VERDICTS below never use it) */
+fn wsb_proj(x: i64, y: i64, z: i64) -> i32 {
+    let cy : i64 = st_cs(WSB_YAW)   let sy : i64 = st_sn(WSB_YAW)
+    let xr : i64 = (x*cy - z*sy) / 1024i64
+    let zr : i64 = (x*sy + z*cy) / 1024i64
+    let cp : i64 = st_cs(WSB_PIT)   let sp : i64 = st_sn(WSB_PIT)
+    let yr : i64 = (y*cp - zr*sp) / 1024i64
+    let zt : i64 = (y*sp + zr*cp) / 1024i64
+    let zc : i64 = zt + 940i64
+    if zc < 24i64 { WSB_PV = 0i32   return 0i32 }
+    WSB_PX = (WSB_CX as i64) + (WSB_CW as i64) / 2i64 + (WSB_ZOOM * xr) / zc
+    WSB_PY = (WSB_CY as i64) + (WSB_CH as i64) / 2i64 - 30i64 - (WSB_ZOOM * yr) / zc
+    WSB_PV = 1i32
+    return 1i32
+}
+
+/* ── the exact evaluations (wb_kernel + organs), re-decided every frame ───────────────────────────── */
+fn wsb_eval() -> i32 {
+    /* collision: reference = selected sphere else first sphere; nearest other sphere by diff */
+    WSB_CA = 0i64 - 1i64   WSB_CB = 0i64 - 1i64   WSB_CST = 2i64
+    let mut ref : i64 = 0i64 - 1i64
+    if WSB_SEL >= 0i64 { if WSB_K[WSB_SEL as u64] == 1i64 { ref = WSB_SEL } }
+    if ref < 0i64 { let mut i : i64 = 0i64   while i < WSB_N { if WSB_K[i as u64] == 1i64 { ref = i   i = WSB_N } else { i = i + 1i64 } } }
+    if ref >= 0i64 {
+        let ra : u64 = ref as u64
+        let mut best : i64 = 0i64   let mut have : i64 = 0i64   let mut bdd : i64 = 0i64   let mut bsm : i64 = 0i64
+        let mut j : i64 = 0i64
+        while j < WSB_N {
+            if WSB_K[j as u64] == 1i64 { if j != ref {
+                let jb : u64 = j as u64
+                let dx : i64 = WSB_X[jb] - WSB_X[ra]   let dy : i64 = WSB_Y[jb] - WSB_Y[ra]   let dz : i64 = WSB_Z[jb] - WSB_Z[ra]
+                let dd : i64 = dx*dx + dy*dy + dz*dz
+                let sm : i64 = WSB_RA[ra] + WSB_RA[jb]
+                let diff : i64 = dd - sm*sm
+                if have == 0i64 { best = diff   bdd = dd   bsm = sm   WSB_CB = j   have = 1i64 } else { if diff < best { best = diff   bdd = dd   bsm = sm   WSB_CB = j } }
+            } }
+            j = j + 1i64
+        }
+        if have == 1i64 { WSB_CA = ref   WSB_CPEN = best   WSB_CST = wbk_collide_sign(bdd, bsm) as i64 }
+    }
+    /* photon: nearest hit by EXACT n=3 ordering */
+    WSB_HP = 0i64 - 1i64   WSB_HO = 0i64 - 1i64
+    let mut pi : i64 = 0i64 - 1i64
+    if WSB_SEL >= 0i64 { if WSB_K[WSB_SEL as u64] == 3i64 { pi = WSB_SEL } }
+    if pi < 0i64 { let mut i2 : i64 = 0i64   while i2 < WSB_N { if WSB_K[i2 as u64] == 3i64 { pi = i2   i2 = WSB_N } else { i2 = i2 + 1i64 } } }
+    if pi >= 0i64 {
+        WSB_HP = pi
+        let p : u64 = pi as u64
+        let ox : i64 = WSB_X[p]   let oy : i64 = WSB_Y[p]   let oz : i64 = WSB_Z[p]
+        let dx : i64 = WSB_DX[p]  let dy : i64 = WSB_DY[p]  let dz : i64 = WSB_DZ[p]
+        let aa : i64 = dx*dx + dy*dy + dz*dz
+        let mut bset : i64 = 0i64   let mut bi : i64 = 0i64 - 1i64   let mut bB : i64 = 0i64   let mut bD : i64 = 0i64
+        let mut j2 : i64 = 0i64
+        while j2 < WSB_N {
+            if WSB_K[j2 as u64] == 1i64 {
+                let jb : u64 = j2 as u64
+                let ex : i64 = ox - WSB_X[jb]   let ey : i64 = oy - WSB_Y[jb]   let ez : i64 = oz - WSB_Z[jb]
+                let r : i64 = WSB_RA[jb]
+                let bb : i64 = 2i64 * (dx*ex + dy*ey + dz*ez)
+                let cc : i64 = ex*ex + ey*ey + ez*ez - r*r
+                let dl : i64 = bb*bb - 4i64*aa*cc
+                if dl >= 0i64 { if bb <= 0i64 { if cc >= 0i64 {
+                    if bset == 0i64 { bi = j2   bB = bb   bD = dl   bset = 1i64 } else {
+                        let sg : i32 = wbk_order_sign(bB, bD, bb, dl)
+                        if sg > 0i32 { bi = j2   bB = bb   bD = dl }
+                    }
+                } } }
+            }
+            j2 = j2 + 1i64
+        }
+        if bset == 1i64 { WSB_HO = bi   WSB_HN = (0i64 - bB) - wsb_isqrt(bD)   WSB_HD = 2i64 * aa }
+    }
+    /* relay: S=0, R1=1, R2=2, T=last */
+    WSB_XST = 3i64
+    if WSB_N >= 4i64 {
+        WSB_XA = 1i64   WSB_XB = 2i64
+        let t : u64 = (WSB_N - 1i64) as u64
+        let mut dv : [i64; 4]
+        let mut leg : u64 = 0u64
+        while leg < 4u64 {
+            let mut a : u64 = 0u64   let mut b : u64 = 1u64
+            if leg == 1u64 { a = 1u64   b = t }
+            if leg == 2u64 { a = 0u64   b = 2u64 }
+            if leg == 3u64 { a = 2u64   b = t }
+            let ex : i64 = WSB_X[b] - WSB_X[a]   let ey : i64 = WSB_Y[b] - WSB_Y[a]   let ez : i64 = WSB_Z[b] - WSB_Z[a]
+            dv[leg] = ex*ex + ey*ey + ez*ez
+            leg = leg + 1u64
+        }
+        WSB_XST = wbk_relay_sign(dv[0u64], dv[1u64], dv[2u64], dv[3u64]) as i64
+    }
+    return 0i32
+}
+
+/* ── drawing ──────────────────────────────────────────────────────────────────────────────────────── */
+fn wsb_ring(buf: u64, w: u32, h: u32, cxx: i64, cyy: i64, czz: i64, r1: i64, r2: i64, mode: i64, col: u32) -> i32 {
+    let mut px : i64 = 0i64   let mut py : i64 = 0i64   let mut have : i32 = 0i32
+    let mut s : i64 = 0i64
+    while s <= 32i64 {
+        let ang : i64 = s * 8i64
+        let c1 : i64 = (r1 * st_cs(ang)) / 1024i64
+        let c2 : i64 = (r2 * st_sn(ang)) / 1024i64
+        let mut wx : i64 = cxx   let mut wy : i64 = cyy   let mut wz : i64 = czz
+        if mode == 0i64 { wx = cxx + c1   wy = cyy + c2 }
+        if mode == 1i64 { wx = cxx + c1   wz = czz + c2 }
+        if mode == 2i64 { wy = cyy + c1   wz = czz + c2 }
+        wsb_proj(wx, wy, wz)
+        if WSB_PV == 1i32 { if have == 1i32 { ui_line(buf, w, h, px as i32, py as i32, WSB_PX as i32, WSB_PY as i32, col) }   px = WSB_PX   py = WSB_PY   have = 1i32 } else { have = 0i32 }
+        s = s + 1i64
+    }
+    return 0i32
+}
+fn wsb_seg(buf: u64, w: u32, h: u32, a: i64, b: i64, col: u32) -> i32 {
+    let au : u64 = a as u64   let bu : u64 = b as u64
+    wsb_proj(WSB_X[au], WSB_Y[au], WSB_Z[au])   let ax : i64 = WSB_PX   let ay : i64 = WSB_PY   let av : i32 = WSB_PV
+    wsb_proj(WSB_X[bu], WSB_Y[bu], WSB_Z[bu])   let bx : i64 = WSB_PX   let by : i64 = WSB_PY   let bv : i32 = WSB_PV
+    if av == 1i32 { if bv == 1i32 { ui_line(buf, w, h, ax as i32, ay as i32, bx as i32, by as i32, col) } }
+    return 0i32
+}
+
+fn ws_bench_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    /* chars: consume the ring; use +/- as zoom, x toggles routes, s/e/p summon (lowercase from WM_CHAR) */
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 {
+        if c == 43u32 { WSB_ZOOM = WSB_ZOOM + 90i64   if WSB_ZOOM > 3200i64 { WSB_ZOOM = 3200i64 } }
+        if c == 61u32 { WSB_ZOOM = WSB_ZOOM + 90i64   if WSB_ZOOM > 3200i64 { WSB_ZOOM = 3200i64 } }
+        if c == 45u32 { WSB_ZOOM = WSB_ZOOM - 90i64   if WSB_ZOOM < 200i64 { WSB_ZOOM = 200i64 } }
+        c = ui_getchar()
+    }
+    if k == 83u32 { wsb_add(1i64) }   /* S */
+    if k == 69u32 { wsb_add(2i64) }   /* E */
+    if k == 80u32 { wsb_add(3i64) }   /* P */
+    if k == 88u32 { if WSB_XSHOW == 0u8 { WSB_XSHOW = 1u8 } else { WSB_XSHOW = 0u8 } }   /* X */
+    if k == 9u32 { if WSB_N > 0i64 { WSB_SEL = (WSB_SEL + 1i64) % WSB_N } }              /* Tab */
+    if k == 46u32 { if WSB_N > 0i64 { if WSB_SEL >= 0i64 {                               /* Del */
+        let mut i : i64 = WSB_SEL
+        while i < WSB_N - 1i64 {
+            let a : u64 = i as u64   let b : u64 = (i + 1i64) as u64
+            WSB_K[a]=WSB_K[b] WSB_X[a]=WSB_X[b] WSB_Y[a]=WSB_Y[b] WSB_Z[a]=WSB_Z[b]
+            WSB_RA[a]=WSB_RA[b] WSB_RB[a]=WSB_RB[b] WSB_RC[a]=WSB_RC[b]
+            WSB_DX[a]=WSB_DX[b] WSB_DY[a]=WSB_DY[b] WSB_DZ[a]=WSB_DZ[b] WSB_COL[a]=WSB_COL[b]
+            i = i + 1i64
+        }
+        WSB_N = WSB_N - 1i64
+        if WSB_SEL >= WSB_N { WSB_SEL = WSB_N - 1i64 }
+    } } }
+    if WSB_SEL >= 0i64 {
+        let s : u64 = WSB_SEL as u64
+        if k == 37u32 { WSB_X[s] = WSB_X[s] - 12i64 }
+        if k == 39u32 { WSB_X[s] = WSB_X[s] + 12i64 }
+        if k == 38u32 { WSB_Z[s] = WSB_Z[s] + 12i64 }
+        if k == 40u32 { WSB_Z[s] = WSB_Z[s] - 12i64 }
+        if k == 33u32 { WSB_Y[s] = WSB_Y[s] + 12i64 }
+        if k == 34u32 { WSB_Y[s] = WSB_Y[s] - 12i64 }
+        if WSB_K[s] != 3i64 {
+            if k == 71u32 { WSB_RA[s] = WSB_RA[s] + 8i64   WSB_RB[s] = WSB_RB[s] + 8i64   WSB_RC[s] = WSB_RC[s] + 8i64 }
+            if k == 72u32 {
+                if WSB_RA[s] > 16i64 { WSB_RA[s] = WSB_RA[s] - 8i64 }
+                if WSB_RB[s] > 16i64 { WSB_RB[s] = WSB_RB[s] - 8i64 }
+                if WSB_RC[s] > 16i64 { WSB_RC[s] = WSB_RC[s] - 8i64 }
+            }
+        }
+    }
+    /* drag = orbit (inside the content rect) */
+    let mxi : i64 = mx as i64   let myi : i64 = my as i64
+    if md == 1u32 {
+        if mx >= WSB_CX { if my >= WSB_CY {
+            if WSB_DRAG == 1u32 {
+                WSB_YAW = WSB_YAW + (mxi - WSB_LMX) / 2i64
+                WSB_PIT = WSB_PIT + (myi - WSB_LMY) / 2i64
+                if WSB_PIT > 62i64 { WSB_PIT = 62i64 }   if WSB_PIT < (0i64 - 62i64) { WSB_PIT = 0i64 - 62i64 }
+            }
+            WSB_DRAG = 1u32
+        } }
+        WSB_LMX = mxi   WSB_LMY = myi
+    }
+    if md != 1u32 { WSB_DRAG = 0u32 }
+    return 0i32
+}
+
+fn ws_bench_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    WSB_CX = cx   WSB_CY = cy + 34u32   WSB_CW = cw - 8u32   WSB_CH = chh - 168u32
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "BENCH" as u64, 5u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 120u32, cy + 8u32, "the view is fixed-point; every VERDICT is exact algebra" as u64, 55u32, th_dim())
+    th_panel_c(buf, w, h, WSB_CX + 4u32, WSB_CY, WSB_CW - 8u32, WSB_CH, th_inset())
+    wsb_eval()
+    /* ground grid */
+    let mut g : i64 = 0i64 - 240i64
+    while g <= 240i64 {
+        wsb_proj(g, 0i64, 0i64 - 240i64)   let ax : i64 = WSB_PX   let ay : i64 = WSB_PY   let av : i32 = WSB_PV
+        wsb_proj(g, 0i64, 240i64)          let bx : i64 = WSB_PX   let by : i64 = WSB_PY   let bv : i32 = WSB_PV
+        if av == 1i32 { if bv == 1i32 { ui_line(buf, w, h, ax as i32, ay as i32, bx as i32, by as i32, 0xFFD8CDBBu32) } }
+        wsb_proj(0i64 - 240i64, 0i64, g)   let cx2 : i64 = WSB_PX   let cy2 : i64 = WSB_PY   let cv : i32 = WSB_PV
+        wsb_proj(240i64, 0i64, g)          let dx2 : i64 = WSB_PX   let dy2 : i64 = WSB_PY   let dv : i32 = WSB_PV
+        if cv == 1i32 { if dv == 1i32 { ui_line(buf, w, h, cx2 as i32, cy2 as i32, dx2 as i32, dy2 as i32, 0xFFD8CDBBu32) } }
+        g = g + 60i64
+    }
+    /* relay routes */
+    if WSB_XSHOW == 1u8 { if WSB_XST != 3i64 {
+        wsb_seg(buf, w, h, 0i64, 1i64, 0xFF3F7A4Eu32)   wsb_seg(buf, w, h, 1i64, WSB_N - 1i64, 0xFF3F7A4Eu32)
+        wsb_seg(buf, w, h, 0i64, 2i64, 0xFFB07A35u32)   wsb_seg(buf, w, h, 2i64, WSB_N - 1i64, 0xFFB07A35u32)
+    } }
+    /* constructs */
+    let mut i : i64 = 0i64
+    while i < WSB_N {
+        let b : u64 = i as u64
+        if WSB_K[b] == 3i64 {
+            /* photon ray + exact first-hit marker */
+            let ox : i64 = WSB_X[b]   let oy : i64 = WSB_Y[b]   let oz : i64 = WSB_Z[b]
+            let mut ex : i64 = ox + WSB_DX[b] * 4i64   let mut ey : i64 = oy + WSB_DY[b] * 4i64   let mut ez : i64 = oz + WSB_DZ[b] * 4i64
+            let mut hit : i32 = 0i32
+            if WSB_HP == i { if WSB_HO >= 0i64 { if WSB_HD != 0i64 {
+                ex = ox + (WSB_HN * WSB_DX[b]) / WSB_HD   ey = oy + (WSB_HN * WSB_DY[b]) / WSB_HD   ez = oz + (WSB_HN * WSB_DZ[b]) / WSB_HD
+                hit = 1i32
+            } } }
+            wsb_proj(ox, oy, oz)   let sx : i64 = WSB_PX   let sy : i64 = WSB_PY   let sv : i32 = WSB_PV
+            wsb_proj(ex, ey, ez)   let tx : i64 = WSB_PX   let ty : i64 = WSB_PY   let tv : i32 = WSB_PV
+            let mut pc : u32 = WSB_COL[b]
+            if i == WSB_SEL { pc = 0xFF7A2E2Eu32 }
+            if sv == 1i32 { if tv == 1i32 { ui_line(buf, w, h, sx as i32, sy as i32, tx as i32, ty as i32, pc) } }
+            if sv == 1i32 { ui_fill_rect(buf, w, h, (sx - 3i64) as u32, (sy - 3i64) as u32, 6u32, 6u32, pc) }
+            if hit == 1i32 { if tv == 1i32 { ui_fill_rect(buf, w, h, (tx - 4i64) as u32, (ty - 4i64) as u32, 8u32, 8u32, 0xFFA8382Eu32) } }
+        } else {
+            let mut col : u32 = WSB_COL[b]
+            if WSB_CST < 0i64 { if i == WSB_CA { col = 0xFFA8382Eu32 } }
+            if WSB_CST < 0i64 { if i == WSB_CB { col = 0xFFA8382Eu32 } }
+            if i == WSB_SEL { col = 0xFF2E1F1Bu32 }
+            wsb_ring(buf, w, h, WSB_X[b], WSB_Y[b], WSB_Z[b], WSB_RA[b], WSB_RB[b], 0i64, col)
+            wsb_ring(buf, w, h, WSB_X[b], WSB_Y[b], WSB_Z[b], WSB_RA[b], WSB_RC[b], 1i64, col)
+            wsb_ring(buf, w, h, WSB_X[b], WSB_Y[b], WSB_Z[b], WSB_RB[b], WSB_RC[b], 2i64, col)
+        }
+        i = i + 1i64
+    }
+    /* readout: the exact verdicts */
+    let ry : u32 = WSB_CY + WSB_CH + 8u32
+    th_panel_c(buf, w, h, cx + 4u32, ry, cw - 12u32, 118u32, th_cream())
+    ui_text_n(buf, w, h, cx + 20u32, ry + 12u32, "COLLISION (integer-exact)" as u64, 25u32, th_ink())
+    if WSB_CA >= 0i64 {
+        let mut vx : u32 = ui_text_n(buf, w, h, cx + 260u32, ry + 12u32, "#" as u64, 1u32, th_dim())
+        vx = th_num(buf, w, h, vx, ry + 12u32, WSB_CA, th_dim())
+        vx = ui_text_n(buf, w, h, vx, ry + 12u32, " vs #" as u64, 5u32, th_dim())
+        vx = th_num(buf, w, h, vx, ry + 12u32, WSB_CB, th_dim())
+        if WSB_CST > 0i64 { vx = ui_text_n(buf, w, h, vx + 16u32, ry + 12u32, "SEPARATED   gap^2 = " as u64, 20u32, th_good())   th_num(buf, w, h, vx, ry + 12u32, WSB_CPEN, th_good()) }
+        if WSB_CST == 0i64 { ui_text_n(buf, w, h, vx + 16u32, ry + 12u32, "TOUCHING -- exact tangency" as u64, 26u32, th_warn()) }
+        if WSB_CST < 0i64 { vx = ui_text_n(buf, w, h, vx + 16u32, ry + 12u32, "OVERLAPPING   depth^2 = " as u64, 24u32, th_bad())   th_num(buf, w, h, vx, ry + 12u32, 0i64 - WSB_CPEN, th_bad()) }
+    } else { ui_text_n(buf, w, h, cx + 260u32, ry + 12u32, "summon two spheres (S) and slide one into the other" as u64, 51u32, th_dim()) }
+    ui_text_n(buf, w, h, cx + 20u32, ry + 38u32, "PHOTON (n=3 Sqrt-sum order)" as u64, 27u32, th_ink())
+    if WSB_HP >= 0i64 {
+        if WSB_HO >= 0i64 {
+            let mut hx : u32 = ui_text_n(buf, w, h, cx + 260u32, ry + 38u32, "nearest hit = sphere #" as u64, 22u32, th_good())
+            hx = th_num(buf, w, h, hx, ry + 38u32, WSB_HO, th_good())
+            ui_text_n(buf, w, h, hx + 12u32, ry + 38u32, "decided exactly -- never z-fights" as u64, 33u32, th_dim())
+        } else { ui_text_n(buf, w, h, cx + 260u32, ry + 38u32, "no sphere in its path" as u64, 21u32, th_dim()) }
+    } else { ui_text_n(buf, w, h, cx + 260u32, ry + 38u32, "summon a photon (P)" as u64, 19u32, th_dim()) }
+    ui_text_n(buf, w, h, cx + 20u32, ry + 64u32, "RELAY (n=4 Sqrt-sum)" as u64, 20u32, th_ink())
+    if WSB_XST == 3i64 { ui_text_n(buf, w, h, cx + 260u32, ry + 64u32, "needs 4+ constructs -- press X to draw the routes" as u64, 49u32, th_dim()) }
+    if WSB_XST < 0i64 { if WSB_XST > 0i64 - 2i64 { ui_text_n(buf, w, h, cx + 260u32, ry + 64u32, "via #1 is EXACTLY shorter (green route)" as u64, 39u32, th_good()) } }
+    if WSB_XST == 0i64 { ui_text_n(buf, w, h, cx + 260u32, ry + 64u32, "the two routes are EXACTLY equal" as u64, 32u32, th_warn()) }
+    if WSB_XST == 1i64 { ui_text_n(buf, w, h, cx + 260u32, ry + 64u32, "via #2 is EXACTLY shorter (amber route)" as u64, 39u32, th_good()) }
+    ui_text_n(buf, w, h, cx + 20u32, ry + 92u32, "S sphere  E ellipsoid  P photon   arrows/PgUp/PgDn move   G/H size   Tab select   Del remove   X routes   drag orbit   +/- zoom" as u64, 127u32, th_dim())
+    return 0i32
+}

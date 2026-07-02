@@ -24,6 +24,11 @@ echo "PASS  world_graph      : compiles (783 real modules + 5108 dependency edge
 "$I2" "$A/aether_world.iii"   --compile-only --out "$OUT/aether_world.o"   2>"$OUT/awd.log" || { echo "FAIL aether_world compile"; cat "$OUT/awd.log"; exit 1; }
 echo "PASS  aether_world     : compiles (the resizable 3D sovereign-geometry explorer: photons + shapes + CSG + wireframe)"
 "$I2" "$A/cyclotomic_se3.iii"    --compile-only --out "$OUT/cyclotomic_se3.o"   2>"$OUT/cse3.log" || { echo "FAIL cyclotomic_se3 compile"; cat "$OUT/cse3.log"; exit 1; }
+# III STUDIO: the sovereign exact-mathematics IDE (shell + six live workspaces on the GLASS substrate)
+for sm in wb_kernel studio_theme studio_trig ws_home ws_forge ws_bench ws_lens ws_zoom ws_console iii_studio studio_sample; do
+    "$I2" "$A/$sm.iii" --compile-only --out "$OUT/$sm.o" 2>"$OUT/$sm.log" || { echo "FAIL $sm compile"; cat "$OUT/$sm.log"; exit 1; }
+done
+echo "PASS  iii_studio       : compiles (shell + HOME/FORGE/BENCH/LENS/ZOOM/CONSOLE -- all six live workspaces)"
 
 # run <corpus-name> <want-exit> <workdir> <link objs...>
 run() {
@@ -39,6 +44,7 @@ run() {
 
 run 2155_aether_lens          99 "$OUT" "$OUT/aether_lens.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"                          # EXACT RAY-CAST core: hit/miss/tangent + z-fight-killer depth near-tie + derived 8-bit Lambert; first-light shaded sphere
 run 2158_aether_lens_render   99 "$III" "$OUT/aether_lens_frame.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # THE INTERFACE: determinism + exact CSG membership + occlusion + bigint==i64 shade + cyclotomic_se3 zero-drift ORBIT; writes aether_lens.bmp
+run 2169_studio_kernel        99 "$OUT" "$OUT/wb_kernel.o" "$OUT/studio_trig.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"        # III STUDIO's pure organs: collide/order/relay exact signs (hand-derived quadratics + marquee near-tie + surd-identity zero) + trig-table symmetries
 
 echo "=== AETHER-LENS gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

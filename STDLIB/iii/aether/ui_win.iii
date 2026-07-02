@@ -35,6 +35,9 @@ var UI_QUIT : u32 = 0u32
 var UI_CB   : [u32; 64]   /* WM_CHAR ring buffer -- event-driven text input */
 var UI_CBH  : u32 = 0u32  /* write head */
 var UI_CBT  : u32 = 0u32  /* read tail */
+var UI_KB   : [u32; 64]   /* WM_KEYDOWN ring -- so no keypress is ever lost to a slow frame */
+var UI_KBH  : u32 = 0u32
+var UI_KBT  : u32 = 0u32
 
 fn w8(b: u64, o: u64, v: u32) -> i32 { let p : *u8 = (b + o) as *u8  p[0u64] = (v & 255u32) as u8  return 0i32 }
 fn w16(b: u64, o: u64, v: u32) -> i32 { w8(b, o, v)  w8(b, o + 1u64, v >> 8u32)  return 0i32 }
@@ -48,6 +51,12 @@ fn ui_my() -> u32 @export { return UI_MY }
 fn ui_mdown() -> u32 @export { return UI_MDOWN }
 fn ui_quit() -> u32 @export { return UI_QUIT }
 fn ui_key() -> u32 @export { let k : u32 = UI_KEY  UI_KEY = 0u32  return k }   /* consume the last key (0 if none) */
+fn ui_getkey() -> u32 @export {   /* pop the next queued keydown (VK code), or 0 -- the loss-proof ring variant */
+    if UI_KBT == UI_KBH { return 0u32 }
+    let k : u32 = UI_KB[(UI_KBT & 63u32) as u64]
+    UI_KBT = UI_KBT + 1u32
+    return k
+}
 fn ui_getchar() -> u32 @export {   /* pop the next typed character (WM_CHAR), or 0 if the ring is empty */
     if UI_CBT == UI_CBH { return 0u32 }
     let c : u32 = UI_CB[(UI_CBT & 63u32) as u64]
@@ -62,7 +71,12 @@ fn ui_wndproc(hwnd: u64, msg: u32, wp: u64, lp: u64) -> u64 @export {
     if msg == 512u32 { UI_MX = (lp & 65535u64) as u32  UI_MY = ((lp >> 16u64) & 65535u64) as u32 }   /* WM_MOUSEMOVE */
     if msg == 513u32 { UI_MDOWN = 1u32 }                                                    /* WM_LBUTTONDOWN */
     if msg == 514u32 { UI_MDOWN = 0u32 }                                                    /* WM_LBUTTONUP */
-    if msg == 256u32 { UI_KEY = (wp & 65535u64) as u32  if wp == 27u64 { UI_QUIT = 1u32 } } /* WM_KEYDOWN / ESC */
+    if msg == 256u32 {                                                                      /* WM_KEYDOWN / ESC */
+        UI_KEY = (wp & 65535u64) as u32
+        UI_KB[(UI_KBH & 63u32) as u64] = (wp & 65535u64) as u32
+        UI_KBH = UI_KBH + 1u32
+        if wp == 27u64 { UI_QUIT = 1u32 }
+    }
     if msg == 258u32 { UI_CB[(UI_CBH & 63u32) as u64] = (wp & 65535u64) as u32  UI_CBH = UI_CBH + 1u32 } /* WM_CHAR -> ring */
     return DefWindowProcA(hwnd, msg, wp, lp)
 }

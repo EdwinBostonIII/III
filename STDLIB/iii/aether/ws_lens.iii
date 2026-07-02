@@ -1,0 +1,94 @@
+/* STDLIB/iii/aether/ws_lens.iii -- III STUDIO workspace: LENS.  The gated exact ray-cast renderer (aether_lens /
+ * aether_lens_frame, corpus 2155+2158) rendering INSIDE the studio: three exact-shaded spheres with exact
+ * occlusion, orbited with the arrow keys.  Every re-render calls the REAL organ (frame_render_spin) and then
+ * prints the frame's determinism signature (frame_sig) -- the same angle always yields the same signature, and
+ * you can watch that hold.  The picture is scaled up 3x from the organ's own 256x192 framebuffer. */
+module ws_lens
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_outline2(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_set_focal(f: i64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_get_focal() -> i64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_sig(w: u64, h: u64) -> u64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_fb_addr() -> u64 from "aether_lens_frame.iii"
+
+const WSL_W : u64 = 256u64
+const WSL_H : u64 = 192u64
+var WSL_ANG : i64 = 0i64        /* spin table index 0..35 (10-degree steps of the exact turntable) */
+var WSL_SIG : i64 = 0i64        /* the last frame's determinism signature (low 63 bits shown)      */
+var WSL_RDY : u8 = 0u8
+
+fn wsl_render_organ() -> i32 {
+    frame_render_spin(WSL_W, WSL_H, WSL_ANG as u64)
+    WSL_SIG = (frame_sig(WSL_W, WSL_H) & 0x7FFFFFFFFFFFFFFFu64) as i64
+    WSL_RDY = 1u8
+    return 0i32
+}
+
+fn ws_lens_init() -> i32 @export {
+    if WSL_RDY == 1u8 { return 0i32 }
+    wsl_render_organ()
+    return 0i32
+}
+
+fn ws_lens_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 {
+        if c == 43u32 { frame_set_focal(frame_get_focal() + 60i64)   wsl_render_organ() }
+        if c == 61u32 { frame_set_focal(frame_get_focal() + 60i64)   wsl_render_organ() }
+        if c == 45u32 { frame_set_focal(frame_get_focal() - 60i64)   wsl_render_organ() }
+        c = ui_getchar()
+    }
+    if k == 37u32 { WSL_ANG = WSL_ANG - 1i64   if WSL_ANG < 0i64 { WSL_ANG = 35i64 }   wsl_render_organ() }
+    if k == 39u32 { WSL_ANG = WSL_ANG + 1i64   if WSL_ANG > 35i64 { WSL_ANG = 0i64 }   wsl_render_organ() }
+    if k == 82u32 { WSL_ANG = 0i64   frame_set_focal(300i64)   wsl_render_organ() }
+    return 0i32
+}
+
+fn ws_lens_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "LENS" as u64, 4u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 100u32, cy + 8u32, "left/right = orbit (re-renders the REAL organ)   +/- = focal   R = reset" as u64, 72u32, th_dim())
+    /* the organ's own framebuffer, scaled 3x, framed bold */
+    let sc : u32 = 3u32
+    let vw : u32 = (WSL_W as u32) * sc
+    let vh : u32 = (WSL_H as u32) * sc
+    let px : u32 = cx + (cw - vw) / 2u32
+    let py : u32 = cy + 40u32
+    th_outline2(buf, w, h, px - 3u32, py - 3u32, vw + 6u32, vh + 6u32, th_ink())
+    let src : u64 = frame_fb_addr()
+    let sp : *u32 = src as *u32
+    let dp : *u32 = buf as *u32
+    let mut yy : u32 = 0u32
+    while yy < vh {
+        let sy : u64 = ((yy / sc) as u64) * WSL_W
+        let drow : u64 = (((py + yy) * w) + px) as u64
+        let mut xx : u32 = 0u32
+        while xx < vw {
+            dp[drow + (xx as u64)] = sp[sy + ((xx / sc) as u64)] | 0xFF000000u32
+            xx = xx + 1u32
+        }
+        yy = yy + 1u32
+    }
+    /* live derived readout: the exact turntable step + the frame's determinism signature */
+    let ry : u32 = py + vh + 12u32
+    th_panel_c(buf, w, h, cx + 4u32, ry, cw - 12u32, 56u32, th_inset())
+    let mut nx : u32 = ui_text_n(buf, w, h, cx + 20u32, ry + 8u32, "turntable step " as u64, 15u32, th_ink())
+    nx = th_num(buf, w, h, nx, ry + 8u32, WSL_ANG, th_maroon())
+    nx = ui_text_n(buf, w, h, nx, ry + 8u32, " / 35   (exact integer rotation -- zero drift through the renderer)" as u64, 67u32, th_dim())
+    let mut sx : u32 = ui_text_n(buf, w, h, cx + 20u32, ry + 30u32, "frame signature " as u64, 16u32, th_ink())
+    sx = th_num(buf, w, h, sx, ry + 30u32, WSL_SIG, th_good())
+    ui_text_n(buf, w, h, sx + 12u32, ry + 30u32, "-- same step, same signature, every time: that is exactness" as u64, 59u32, th_dim())
+    return 0i32
+}

@@ -35,6 +35,9 @@ extern @abi(c-msvc-x64) fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i6
 extern @abi(c-msvc-x64) fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_ndotl_sign(lx: i64, ly: i64, lz: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_g() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_px(x: u64, y: u64, w: u64) -> u32 from "aether_lens_frame.iii"
 
 extern @abi(c-msvc-x64) fn lazy_fast_count() -> u64 from "sqrt_sum_sign.iii"
 extern @abi(c-msvc-x64) fn lazy_canon_count() -> u64 from "sqrt_sum_sign.iii"
@@ -201,6 +204,14 @@ fn main() -> u64 {
     putchar(84i32) putchar(58i32) sp()                          /* "T: " */
     putchar(102i32) sp() e_i64(fc as i64) sp()                  /* f <fast> */
     putchar(120i32) sp() e_i64(ec2 as i64) nl()                 /* x <exact> */
+
+    /* ── reunification W0.2 arm: the frame read-back surface + the G coefficient getter.  One 8x8 spin frame
+     *    rendered headlessly; frame_px reads a real pixel deterministically; lens_g pins the last setup's G. */
+    frame_render_spin(8u64, 8u64, 0u64)
+    let fpx : u32 = frame_px(3u64, 3u64, 8u64)
+    if fpx != frame_px(3u64, 3u64, 8u64) { FAILS = FAILS + 1u64 }
+    let lg : i64 = lens_g()
+    if lg != lens_g() { FAILS = FAILS + 1u64 }
 
     if FAILA != 0u64 { return 10u64 }
     if FAILC != 0u64 { return 20u64 }

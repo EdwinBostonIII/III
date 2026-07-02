@@ -14,6 +14,7 @@ pass=0; fail=0
 "$I2" "$A/kfield.iii"       --compile-only --out "$OUT/kfield.o"       2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
 "$I2" "$A/exact_surd_value.iii" --compile-only --out "$OUT/exact_surd_value.o" 2>"$OUT/esv.log" || { echo "FAIL exact_surd_value compile"; cat "$OUT/esv.log"; exit 1; }
 "$I2" "$A/billiard.iii" --compile-only --out "$OUT/billiard.o" 2>"$OUT/bil.log" || { echo "FAIL billiard compile"; cat "$OUT/bil.log"; exit 1; }
+"$I2" "$A/csg_tree.iii" --compile-only --out "$OUT/csg_tree.o" 2>"$OUT/ctr.log" || { echo "FAIL csg_tree compile"; cat "$OUT/ctr.log"; exit 1; }
 "$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/u.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/u.log"; exit 1; }
 "$I2" "$A/verb_geom.iii"     --compile-only --out "$OUT/verb_geom.o"     2>"$OUT/v.log" || { echo "FAIL verb_geom compile"; cat "$OUT/v.log"; exit 1; }
 "$I2" "$A/traj_kinematics.iii" --compile-only --out "$OUT/traj_kinematics.o" 2>"$OUT/t.log" || { echo "FAIL traj_kinematics compile"; cat "$OUT/t.log"; exit 1; }
@@ -68,6 +69,7 @@ run 2159_kf_weld        99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_
 run 2148_theorem_fuzzer  99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: generative coincidence-fuzzer over kfield (CONSTRUCT/IDENTIFY verbs; identity pairs collide, control does not)
 run 2149_universal_block 99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: the universal block -- kfield four verbs = ONE kernel; addr-coincidence <=> sign-zero (IDENTIFY <=> DECIDE)
 run 2167_billiard_reversal 99 "$OUT/billiard.o" "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # EXACT TIME-REVERSIBLE BILLIARDS (charter Phase 1): 12 events forward + reverse = BIT-EXACT return + wall palindrome (irrational 45-deg offset orbit); Q32.32 twin picks the WRONG wall on the certified near-tie; corner tie CERTIFIED and refused
+run 2168_csg_tree       99 "$OUT/csg_tree.o" "$OUT/csg_kernel.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_denest.o" "$LIB"  # ALGEBRAIC CSG DAG (charter Phase 5): 1000 successive drills, the 1000th op as precise as the 1st (depth composes booleans not arithmetic); ON-certificate carried through 1000 ops; leaf exactness at 2^62 where a 53-bit-mantissa twin collapses R^2 and R^2+1
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

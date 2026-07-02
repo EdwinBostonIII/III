@@ -1,0 +1,135 @@
+/* 2172_constraint.iii -- GATE for constraint.iii: EXACT 1-DOF CONSTRAINT RESOLUTION + the kinematic
+ * remeshing flip-instant (charter Phase 3 + II-V / Program II Vector II).
+ *
+ * ARM L -- THE SINGULAR LINKAGE: p(t) = (t^2 - 2)^2 (t - 3): a constraint whose tangent configuration sits
+ *   at the IRRATIONAL t = sqrt2 with multiplicity 2.  The resolver certifies: 2 distinct configurations on
+ *   [0,4]; gcd(p,p') = t^2 - 2 (degree 2 -> SINGULAR flagged); exactly 1 distinct singular configuration;
+ *   and the isolation brackets sqrt2 EXACTLY (lo^2 < 2 < hi^2 in rationals) disjointly from the bracket of 3.
+ * ARM N -- THE SAMPLING TWIN IS STRUCTURALLY BLIND: a tangential root touches zero WITHOUT crossing, so
+ *   sign-sampling (even with EXACT integer evaluation -- the flaw is methodological, not precision) counts
+ *   only 1 root on a 17-point grid where Sturm certifies 2.  No finite grid can see the tangency; the
+ *   Sturm chain's algebra can.
+ * ARM F -- THE FLIP INSTANT (II-V): A(0,0) B(4,0) C(0,4) with D(t) = (5-t, 5-t): the incircle condition is
+ *   2t^2 - 12t + 10, whose Sturm-isolated roots {1, 5} ARE the exact Delaunay flip times.  Cross-checked
+ *   against the SHIPPED exact predicate: incircle2d(A,B,C,D(1)) == 0 CERTIFIED co-circularity, with D(0)
+ *   strictly outside and D(2) strictly inside (the sign crosses exactly at the isolated instant).
+ *
+ * exit 99 = pass;  10 solve refused;  11 L counts wrong;  12 L singular certificate wrong;
+ * 13 L brackets wrong;  20 N the sampling twin agreed (witness void);  30 F flip roots wrong;
+ * 31 F incircle cross-check failed */
+module corpus_2172_constraint
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn cn_solve(coeffs_ptr: u64, deg: i64, lo: i64, hi: i64) -> i32 from "constraint.iii"
+extern @abi(c-msvc-x64) fn cn_count() -> i64 from "constraint.iii"
+extern @abi(c-msvc-x64) fn cn_iso() -> i64 from "constraint.iii"
+extern @abi(c-msvc-x64) fn cn_singular_deg() -> i64 from "constraint.iii"
+extern @abi(c-msvc-x64) fn cn_singular_count() -> i64 from "constraint.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn incircle2d(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, dx: i64, dy: i64) -> i32 from "delaunay.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var PL : [i64; 8]   var PF : [i64; 4]
+
+/* does isolation bracket i contain sqrt2?  (endpoints rational >= 0 on this range) */
+fn brackets_sqrt2(i: u64) -> u8 {
+    let ln : i64 = iso_lo_num(i)   let ld : i64 = iso_lo_den(i)
+    let hn : i64 = iso_hi_num(i)   let hd : i64 = iso_hi_den(i)
+    if ((ln * ln) - (2i64 * (ld * ld))) >= 0i64 { return 0u8 }               /* lo < sqrt2 */
+    if ((hn * hn) - (2i64 * (hd * hd))) <= 0i64 { return 0u8 }               /* hi > sqrt2 */
+    return 1u8
+}
+/* does bracket i contain the rational r? */
+fn brackets_r(i: u64, r: i64) -> u8 {
+    let ln : i64 = iso_lo_num(i)   let ld : i64 = iso_lo_den(i)
+    let hn : i64 = iso_hi_num(i)   let hd : i64 = iso_hi_den(i)
+    if ln > (r * ld) { return 0u8 }
+    if hn < (r * hd) { return 0u8 }
+    return 1u8
+}
+
+/* exact Horner at t = k/4 -- returns the SIGN of p(k/4) (multiply through by 4^deg: integers). */
+fn horner_sign_q4(k: i64) -> i32 {
+    /* p scaled: P(k) = sum PL[i] * k^i * 4^(5-i) */
+    let mut acc : i64 = 0i64
+    let mut i : i64 = 5i64
+    while i >= 0i64 {
+        acc = (acc * k) + (PL[i as u64] * pow4(5i64 - i))
+        i = i - 1i64
+    }
+    if acc > 0i64 { return 1i32 }
+    if acc < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+fn pow4(e: i64) -> i64 {
+    let mut r : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < e { r = r * 4i64   i = i + 1i64 }
+    return r
+}
+
+fn main() -> u64 {
+    /* ══ ARM L: p(t) = (t^2-2)^2 (t-3) = t^5 - 3t^4 - 4t^3 + 12t^2 + 4t - 12 on [0,4]. */
+    PL[0u64] = 0i64 - 12i64   PL[1u64] = 4i64   PL[2u64] = 12i64
+    PL[3u64] = 0i64 - 4i64    PL[4u64] = 0i64 - 3i64   PL[5u64] = 1i64
+    if cn_solve((&PL) as u64, 5i64, 0i64, 4i64) != 0i32 { return 10u64 }
+    putchar(76i32) putchar(58i32) sp() e_i64(cn_count()) sp() e_i64(cn_singular_deg()) sp() e_i64(cn_singular_count()) sp() e_i64(cn_iso()) nl()   /* "L: 2 2 1 2" */
+    if cn_count() != 2i64 { return 11u64 }
+    if cn_singular_deg() != 2i64 { return 12u64 }
+    if cn_singular_count() != 1i64 { return 12u64 }
+    if cn_iso() != 2i64 { return 11u64 }
+    /* exactly one bracket holds sqrt2, the other holds 3 (the intervals are disjoint by construction) */
+    let b2a : u8 = brackets_sqrt2(0u64)   let b2b : u8 = brackets_sqrt2(1u64)
+    let b3a : u8 = brackets_r(0u64, 3i64)   let b3b : u8 = brackets_r(1u64, 3i64)
+    if (b2a + b2b) != 1u8 { return 13u64 }
+    if (b3a + b3b) != 1u8 { return 13u64 }
+    if b2a == 1u8 { if b3a == 1u8 { return 13u64 } }
+    if b2b == 1u8 { if b3b == 1u8 { return 13u64 } }
+
+    /* ══ ARM N: exact-evaluation sign-sampling on t = k/4, k = 0..16: the tangential root at sqrt2 touches
+     * without crossing -- the grid counts ONLY the crossing at 3.  (Grid point k=12 IS the root 3: count it.) */
+    let mut roots_seen : i64 = 0i64
+    let mut prev : i32 = horner_sign_q4(0i64)
+    let mut k : i64 = 1i64
+    while k <= 16i64 {
+        let s : i32 = horner_sign_q4(k)
+        if s == 0i32 { roots_seen = roots_seen + 1i64   prev = 0i32 }          /* an on-grid root, counted once */
+        if s != 0i32 {
+            if prev != 0i32 { if s != prev { roots_seen = roots_seen + 1i64 } }
+            prev = s
+        }
+        k = k + 1i64
+    }
+    putchar(78i32) putchar(58i32) sp() e_i64(roots_seen) sp() e_i64(cn_count()) nl()               /* "N: 1 2" */
+    if roots_seen >= cn_count() { return 20u64 }                                                   /* the twin MUST undercount */
+
+    /* ══ ARM F: the flip instant.  incircle(A,B,C,D(t)) ~ 2t^2 - 12t + 10; roots {1,5} on [0,10]. */
+    PF[0u64] = 10i64   PF[1u64] = 0i64 - 12i64   PF[2u64] = 2i64
+    if cn_solve((&PF) as u64, 2i64, 0i64, 10i64) != 0i32 { return 10u64 }
+    putchar(70i32) putchar(58i32) sp() e_i64(cn_count()) sp() e_i64(cn_singular_deg()) nl()        /* "F: 2 0" */
+    if cn_count() != 2i64 { return 30u64 }
+    if cn_singular_deg() != 0i64 { return 30u64 }
+    let f1a : u8 = brackets_r(0u64, 1i64)   let f1b : u8 = brackets_r(1u64, 1i64)
+    let f5a : u8 = brackets_r(0u64, 5i64)   let f5b : u8 = brackets_r(1u64, 5i64)
+    putchar(98i32) putchar(58i32) sp()
+    e_i64(iso_lo_num(0u64)) putchar(47i32) e_i64(iso_lo_den(0u64)) sp() e_i64(iso_hi_num(0u64)) putchar(47i32) e_i64(iso_hi_den(0u64)) sp()
+    e_i64(iso_lo_num(1u64)) putchar(47i32) e_i64(iso_lo_den(1u64)) sp() e_i64(iso_hi_num(1u64)) putchar(47i32) e_i64(iso_hi_den(1u64)) nl()
+    if (f1a + f1b) < 1u8 { return 30u64 }                                                          /* some bracket holds 1 */
+    if (f5a + f5b) < 1u8 { return 30u64 }                                                          /* some bracket holds 5 */
+    /* the shipped exact predicate certifies the instant: co-circular AT t=1, strictly off-circle around it */
+    let s0 : i32 = incircle2d(0i64, 0i64, 4i64, 0i64, 0i64, 4i64, 5i64, 5i64)                      /* D(0) outside  */
+    let s1 : i32 = incircle2d(0i64, 0i64, 4i64, 0i64, 0i64, 4i64, 4i64, 4i64)                      /* D(1) ON       */
+    let s2 : i32 = incircle2d(0i64, 0i64, 4i64, 0i64, 0i64, 4i64, 3i64, 3i64)                      /* D(2) inside   */
+    putchar(73i32) putchar(58i32) sp() e_i64(s0 as i64) sp() e_i64(s1 as i64) sp() e_i64(s2 as i64) nl()   /* "I: <s0> 0 <s2>" */
+    if s1 != 0i32 { return 31u64 }
+    if s0 == 0i32 { return 31u64 }
+    if s2 == 0i32 { return 31u64 }
+    if s0 == s2 { return 31u64 }
+
+    return 99u64
+}

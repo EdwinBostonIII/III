@@ -17,6 +17,7 @@ pass=0; fail=0
 "$I2" "$A/csg_tree.iii" --compile-only --out "$OUT/csg_tree.o" 2>"$OUT/ctr.log" || { echo "FAIL csg_tree compile"; cat "$OUT/ctr.log"; exit 1; }
 "$I2" "$A/gas.iii" --compile-only --out "$OUT/gas.o" 2>"$OUT/gas.log" || { echo "FAIL gas compile"; cat "$OUT/gas.log"; exit 1; }
 "$I2" "$A/lattice_march.iii" --compile-only --out "$OUT/lattice_march.o" 2>"$OUT/lmr.log" || { echo "FAIL lattice_march compile"; cat "$OUT/lmr.log"; exit 1; }
+"$I2" "$A/constraint.iii" --compile-only --out "$OUT/constraint.o" 2>"$OUT/cnr.log" || { echo "FAIL constraint compile"; cat "$OUT/cnr.log"; exit 1; }
 "$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/u.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/u.log"; exit 1; }
 "$I2" "$A/verb_geom.iii"     --compile-only --out "$OUT/verb_geom.o"     2>"$OUT/v.log" || { echo "FAIL verb_geom compile"; cat "$OUT/v.log"; exit 1; }
 "$I2" "$A/traj_kinematics.iii" --compile-only --out "$OUT/traj_kinematics.o" 2>"$OUT/t.log" || { echo "FAIL traj_kinematics compile"; cat "$OUT/t.log"; exit 1; }
@@ -75,6 +76,7 @@ run 2168_csg_tree       99 "$OUT/csg_tree.o" "$OUT/csg_kernel.o" "$OUT/sqrt_sum_
 run 2169_gas_reversal   99 "$OUT/gas.o" "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # THE EXACT MICROCANONICAL GAS (Program II Phase I): N-body hard-cube gas -- pair collisions = integer component SWAPS (energy+momentum = INTEGER IDENTITIES at every event); ensemble involution R.F^7.R.F^7 == id BIT-EXACT; two-pair simultaneity CERTIFIED and refused
 run 2170_swept_leaf     99 "$OUT/csg_tree.o" "$OUT/csg_kernel.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_denest.o" "$LIB"  # THE SWEPT-SPHERE LEAF (Program II Phase II / Vector I base): CSG leaves as continuous spacetime volumes -- exact clamped-parabola membership at ANY t; ON-certificates through booleans; 100-pass zigzag depth-independent; the snapshot CAM twin leaves PHANTOM MATERIAL at t*=5/8 where the exact leaf proves the cut
 run 2171_lattice_march  99 "$OUT/lattice_march.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # INFINITE PERIODIC TIR OPTICS (Phase 4 / Vector III): 2,999,997 exact crossings to the sphere at x-cell 999999 (EXACT integers, zero drift, zero storage); 50-bounce mirror labyrinth retraced BIT-EXACTLY; disc==0 certified tangent; corner-tie double-step vs the biased-DDA twin entering a mirror cell the true ray never touches
+run 2172_constraint     99 "$OUT/constraint.o" "$OUT/sturm.o" "$OUT/delaunay.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # EXACT 1-DOF CONSTRAINT RESOLUTION (Phase 3 + II-V / Vector II): Sturm count/isolate + gcd(p,pPRIME) SINGULARITY certificate (the irrational tangent config sqrt2 EXACTLY bracketed); sign-sampling is STRUCTURALLY blind to tangential roots (1 vs 2, even with exact evaluation); the incircle flip-instant isolated and cross-certified by delaunay incircle2d == 0
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

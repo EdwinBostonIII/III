@@ -1,0 +1,71 @@
+/* STDLIB/iii/aether/constraint.iii -- THE EXACT 1-DOF CONSTRAINT RESOLVER (charter Phase 3 / Program II
+ * Vector II): a geometric constraint along one degree of freedom IS an integer polynomial in the driving
+ * parameter t, and its valid configurations are DECIDED, not iterated toward.
+ *
+ * Composes sturm.iii (face 6 of the exact substrate):
+ *   - cn_solve(coeffs, deg, lo, hi): Sturm-COUNTS the distinct real configurations on [lo,hi] exactly,
+ *     ISOLATES each into disjoint rational brackets, and CERTIFIES DEGENERACY -- gcd(p, p') of degree >= 1
+ *     means a multiple root: an exact tangency/singular configuration (the state where a float
+ *     Jacobian/Newton solver jitters and where SIGN-SAMPLING is structurally blind: a tangential root
+ *     touches zero without crossing, so no finite sampling grid can see it; the Sturm chain's algebra can).
+ *   - the singular locus itself is resolved: the count of distinct SINGULAR configurations on the range.
+ *
+ * This is also the KINEMATIC REMESHING primitive (charter II-V): four points with one moving vertex make
+ * the incircle determinant a polynomial in t (degree <= 2 for linear motion); its Sturm-isolated roots ARE
+ * the exact Delaunay flip instants -- topological events DECIDED at their algebraic time, so a moving mesh
+ * flips exactly when four points are exactly co-circular (cross-checked against delaunay.iii's incircle2d
+ * in gate 2172), never on a float threshold.
+ *
+ * HONEST SCOPE: univariate (one driven dof).  Multi-dof systems need resultant elimination first --
+ * charted [BUILD-next], not claimed.  Degrees and coefficients live in sturm.iii's integer-PRS envelope. */
+module constraint
+
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn poly_gcd(a_ptr: u64, dega: i64, b_ptr: u64, degb: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn gcd_coeff(i: u64) -> i64 from "sturm.iii"
+
+var CN_P : [i64; 16]   var CN_D : [i64; 16]   var CN_G : [i64; 16]
+var CN_COUNT : i64   var CN_ISO : i64
+var CN_GDEG : i64   var CN_SCOUNT : i64
+
+/* resolve p(t) = sum coeffs[i] t^i (degree deg <= 12) over [lo, hi] (integers):
+ *   CN_COUNT  = distinct real configurations (Sturm, exact)
+ *   CN_ISO    = isolated disjoint brackets (readable via sturm.iii's iso_* observers)
+ *   CN_GDEG   = degree of gcd(p, p')  (>= 1 <=> a SINGULAR / tangent configuration exists)
+ *   CN_SCOUNT = distinct singular configurations on [lo, hi]
+ * returns 0 ok, -1 refused. */
+fn cn_solve(coeffs_ptr: u64, deg: i64, lo: i64, hi: i64) -> i32 @export {
+    if deg < 1i64 { return 0i32 - 1i32 }
+    if deg > 12i64 { return 0i32 - 1i32 }
+    let pc : *i64 = coeffs_ptr as *i64
+    let mut i : u64 = 0u64
+    while i <= (deg as u64) { CN_P[i] = pc[i]   i = i + 1u64 }
+    /* the derivative: d_i = (i+1) * p_{i+1} */
+    i = 0u64
+    while i < (deg as u64) { CN_D[i] = ((i as i64) + 1i64) * CN_P[i + 1u64]   i = i + 1u64 }
+    /* degeneracy certificate: gcd(p, p') */
+    CN_GDEG = poly_gcd((&CN_P) as u64, deg, (&CN_D) as u64, deg - 1i64)
+    if CN_GDEG < 0i64 { return 0i32 - 1i32 }
+    /* distinct-root count + isolation on the ORIGINAL p (the canonical Sturm chain counts distinct roots) */
+    if sturm_build((&CN_P) as u64, deg) < 0i64 { return 0i32 - 1i32 }
+    CN_COUNT = root_count(lo, 1i64, hi, 1i64)
+    CN_ISO = isolate_roots(lo, hi, 64i64)
+    if CN_ISO != CN_COUNT { return 0i32 - 1i32 }                    /* isolation must account for every root */
+    /* the singular locus, resolved on the same range */
+    CN_SCOUNT = 0i64
+    if CN_GDEG >= 1i64 {
+        i = 0u64
+        while i <= (CN_GDEG as u64) { CN_G[i] = gcd_coeff(i)   i = i + 1u64 }
+        if sturm_build((&CN_G) as u64, CN_GDEG) < 0i64 { return 0i32 - 1i32 }
+        CN_SCOUNT = root_count(lo, 1i64, hi, 1i64)
+    }
+    return 0i32
+}
+
+fn cn_count() -> i64 @export { return CN_COUNT }
+fn cn_iso() -> i64 @export { return CN_ISO }
+fn cn_singular_deg() -> i64 @export { return CN_GDEG }
+fn cn_singular_count() -> i64 @export { return CN_SCOUNT }

@@ -10,14 +10,19 @@ Built entirely in `.iii` over `kernel32` (no C runtime, no third party). Charter
 `DOCS/III-STOMA-PLAN.md`. Universality evidence: `DOCS/III-STOMA-MATRIX.md`. Family gate:
 `STDLIB/scripts/run_stoma_kats.sh` (14/0, run from repo root).
 
-**Build status (honest):** the shipping `stoma.exe` is **gcc-linked** and fully verified (gate 14/0,
-interactive pty included). The **sovereign** path (`sovbuild.sh` → `sovas`/`sovld`, no `ld`)
-*compiles and links* all 11 modules to a PE32+ (8 sovereign + 3 witness), and it produced a running
-binary at the earlier smaller closure (M4, ~7 modules) — but at the current closure of 11 the
-sovld-linked image fails to start (loader error, exit 127), an IAT/import-table limitation in the
-**sovereign linker** surfaced by STOMA's large kernel32 surface (ConPTY + job objects + pipes +
-console + file APIs). That is a `sovld` issue to fix on the sovereign-toolchain track, not a STOMA
-defect; STOMA's own `.iii` is sovereign-clean (kernel32-only, no CRT).
+**Build status:** `stoma.exe` builds and runs **both** via gcc (dev loop) and via the **sovereign**
+path (`sovbuild.sh` → `sovas`/`sovld`, **no `ld`**): the sovld-linked PE32+ (8 sovereign + 3 witness
+modules) runs the shell, spawns children, and exits cleanly. Verified: `stoma verbs` + a spawned
+child + `[exit 0]` from the sovereign binary.
+
+Getting there fixed a real **sovereign-toolchain** bug STOMA surfaced: the assembler/linker stored
+symbol names at a **32-byte-per-slot** stride, truncating 33-char imports like
+`InitializeProcThreadAttributeList` → the loader couldn't resolve the truncated name → exit 127.
+Root-caused (the `.o.s` had the full name; the COFF object had it truncated) and fixed at all three
+layers — `sovparse` (`.o.s` tokenizer cap + SYM/LBL/EXP/BR name strides), `sovas` (EXT_NAME intern),
+`sovlink_main` (GSYM/ST tables) — all 32→64 with arrays resized. The toolchain self-test
+(`run_sovtc.sh`) is ALL PASS after the change (incl. `coff/longname`, `ld/import*`), so no regression.
+STOMA's own `.iii` is sovereign-clean (kernel32-only, no CRT).
 
 ## The two laws
 
@@ -127,7 +132,6 @@ preserved.
 ```
 bash STDLIB/scripts/run_stoma_kats.sh                       # family gate: 14/0 (run from repo root)
 # gcc-linked stoma.exe (the verified product) is built + smoke-tested inside the gate above.
-bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld; links, but
-                                                                    #   see Build status: exit 127 at closure 11)
-printf 'help\n<cmd>\nexit\n' | STDLIB/build/stoma_kats/stoma.exe    # plain-mode drive (gcc build)
+bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld) -- runs
+printf 'help\n<cmd>\nexit\n' | ./out.exe                            # plain-mode drive (sovereign build)
 ```

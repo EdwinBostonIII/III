@@ -36,12 +36,12 @@ var O_SEC_RAWLEN: [u32; 16]
 var O_SEC_RAWPTR: [u32; 16]
 var O_SEC_RELPTR: [u32; 16]
 var O_SEC_NRELOC: [u32; 16]
-var GSYM_NAME : [u8; 524288]   /* 16384 * 32 */
+var GSYM_NAME : [u8; 1048576]  /* 16384 * 64 (stride 32 truncated 33-char imports -> exit 127) */
 var GSYM_NLEN : [u32; 16384]
 var GSYM_OFF  : [u32; 16384]
 var GSYM_N : u32 = 0u32
 var ST_OFF  : [u32; 65536]
-var ST_NAME : [u8; 2097152]    /* 65536 * 32 */
+var ST_NAME : [u8; 4194304]    /* 65536 * 64 */
 var ST_NLEN : [u32; 65536]
 var ST_N : u32 = 0u32
 var NMBUF : [u8; 64]
@@ -79,7 +79,9 @@ fn sym_name(idx: u32) -> u32 {
     if rd32(so) == 0u32 {
         let stroff : u32 = (O_SYMPTR + (O_NSYM * 18u32)) + rd32(so + 4u32)
         let mut n : u32 = 0u32  let mut go : u32 = 1u32
-        while go == 1u32 { let c : u32 = rd8(stroff + n)  if c == 0u32 { go = 0u32 } else { if n < 64u32 { NMBUF[n as u64] = c as u8 }  n = n + 1u32 } }
+        /* cap at 64 (the GSYM/ST slot stride + NMBUF size) so a long name can neither overflow the
+         * store nor read past NMBUF; Win32 API names are well under 64 */
+        while go == 1u32 { let c : u32 = rd8(stroff + n)  if c == 0u32 { go = 0u32 } else { if n < 64u32 { NMBUF[n as u64] = c as u8   n = n + 1u32 } else { go = 0u32 } } }
         return n
     }
     let mut n : u32 = 0u32  let mut go : u32 = 1u32
@@ -103,7 +105,7 @@ fn gsym_find(len: u32) -> u32 {
     while g < GSYM_N {
         if GSYM_NLEN[g as u64] == len {
             let mut j : u32 = 0u32  let mut eq : u32 = 1u32
-            while j < len { if NMBUF[j as u64] != GSYM_NAME[((g * 32u32) + j) as u64] { eq = 0u32  j = len } else { j = j + 1u32 } }
+            while j < len { if NMBUF[j as u64] != GSYM_NAME[((g * 64u32) + j) as u64] { eq = 0u32  j = len } else { j = j + 1u32 } }
             if eq == 1u32 { return GSYM_OFF[g as u64] }
         }
         g = g + 1u32
@@ -143,7 +145,7 @@ fn add_object() {
             let id : u32 = O_SEC_ID[(sec - 1u32) as u64]
             let nlen : u32 = sym_name(k)
             if GSYM_N < 16384u32 {
-                let mut j : u32 = 0u32  while j < nlen { GSYM_NAME[((GSYM_N * 32u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
+                let mut j : u32 = 0u32  while j < nlen { GSYM_NAME[((GSYM_N * 64u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
                 GSYM_NLEN[GSYM_N as u64] = nlen
                 let mut goff : u32 = tb + val
                 if id == 1u32 { goff = db + val }  if id == 2u32 { goff = rob + val }  if id == 3u32 { goff = bb + val }
@@ -189,7 +191,7 @@ fn add_object() {
                     let nlen : u32 = sym_name(symidx)
                     if ST_N < 65536u32 {
                         ST_OFF[ST_N as u64] = merged
-                        let mut j : u32 = 0u32  while j < nlen { ST_NAME[((ST_N * 32u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
+                        let mut j : u32 = 0u32  while j < nlen { ST_NAME[((ST_N * 64u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
                         ST_NLEN[ST_N as u64] = nlen
                         ST_N = ST_N + 1u32
                     }
@@ -206,7 +208,7 @@ fn resolve() {
     while i < ST_N {
         let off : u32 = ST_OFF[i as u64]
         let len : u32 = ST_NLEN[i as u64]
-        let mut j : u32 = 0u32  while j < len { NMBUF[j as u64] = ST_NAME[((i * 32u32) + j) as u64]  j = j + 1u32 }
+        let mut j : u32 = 0u32  while j < len { NMBUF[j as u64] = ST_NAME[((i * 64u32) + j) as u64]  j = j + 1u32 }
         let tgt : u32 = gsym_find(len)
         if tgt != 0xFFFFFFFFu32 { patch32(off, (tgt - (off + 4u32))) }    /* cross-module .text call, inline */
         else {                                                           /* unresolved name -> DLL import: intern + rsec==0 thunk reloc */
@@ -223,7 +225,7 @@ fn find_main() -> u32 {
     let mut g : u32 = 0u32
     while g < GSYM_N {
         if GSYM_NLEN[g as u64] == 4u32 {
-            if GSYM_NAME[(g * 32u32) as u64] == 109u8 { if GSYM_NAME[((g * 32u32) + 1u32) as u64] == 97u8 { if GSYM_NAME[((g * 32u32) + 2u32) as u64] == 105u8 { if GSYM_NAME[((g * 32u32) + 3u32) as u64] == 110u8 {
+            if GSYM_NAME[(g * 64u32) as u64] == 109u8 { if GSYM_NAME[((g * 64u32) + 1u32) as u64] == 97u8 { if GSYM_NAME[((g * 64u32) + 2u32) as u64] == 105u8 { if GSYM_NAME[((g * 64u32) + 3u32) as u64] == 110u8 {
                 return GSYM_OFF[g as u64]
             } } } }
         }
@@ -237,7 +239,7 @@ fn find_cstart() -> u32 {
     let mut g : u32 = 0u32
     while g < GSYM_N {
         if GSYM_NLEN[g as u64] == 6u32 {
-            if GSYM_NAME[(g * 32u32) as u64] == 99u8 { if GSYM_NAME[((g * 32u32) + 1u32) as u64] == 115u8 { if GSYM_NAME[((g * 32u32) + 2u32) as u64] == 116u8 { if GSYM_NAME[((g * 32u32) + 3u32) as u64] == 97u8 { if GSYM_NAME[((g * 32u32) + 4u32) as u64] == 114u8 { if GSYM_NAME[((g * 32u32) + 5u32) as u64] == 116u8 {
+            if GSYM_NAME[(g * 64u32) as u64] == 99u8 { if GSYM_NAME[((g * 64u32) + 1u32) as u64] == 115u8 { if GSYM_NAME[((g * 64u32) + 2u32) as u64] == 116u8 { if GSYM_NAME[((g * 64u32) + 3u32) as u64] == 97u8 { if GSYM_NAME[((g * 64u32) + 4u32) as u64] == 114u8 { if GSYM_NAME[((g * 64u32) + 5u32) as u64] == 116u8 {
                 return GSYM_OFF[g as u64]
             } } } } } }
         }

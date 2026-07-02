@@ -26,7 +26,10 @@ var REL_SYM : [u32; 65536]    /* for named relocs (REL_SEC==0): the extern-symbo
 var REL_N   : u32 = 0u32
 
 /* extern (named) symbol table -- the targets of callq-to-named-symbol relocs (and, later, COFF symbols). */
-var EXT_NAME : [u8; 65536]   /* 32 bytes per slot */
+var EXT_NAME : [u8; 131072]  /* 64 bytes per slot (was 32 -> truncated 33-char imports like
+                              * InitializeProcThreadAttributeList, corrupting the import name so the
+                              * PE loader could not resolve it -> exit 127.  64 covers any Win32 API
+                              * name; 2048 slots * 64 = 131072). */
 var EXT_NLEN : [u32; 2048]
 var EXT_N    : u32 = 0u32
 var CN_BUF   : [u8; 256]      /* the parser pushes a call-target name here, then calls sov_call_ext */
@@ -69,7 +72,7 @@ fn sov_ext_intern_pub() -> u32 @export { return sov_ext_intern() }   /* LINKER: 
 fn cn_eq(slot: u32) -> u32 {
     if EXT_NLEN[slot as u64] != CN_LEN { return 0u32 }
     let mut j : u32 = 0u32
-    while j < CN_LEN { if EXT_NAME[((slot * 32u32) + j) as u64] != CN_BUF[j as u64] { return 0u32 }  j = j + 1u32 }
+    while j < CN_LEN { if EXT_NAME[((slot * 64u32) + j) as u64] != CN_BUF[j as u64] { return 0u32 }  j = j + 1u32 }
     return 1u32
 }
 fn sov_ext_intern() -> u32 {   /* find or add CN_BUF as an extern symbol; return its slot */
@@ -77,15 +80,16 @@ fn sov_ext_intern() -> u32 {   /* find or add CN_BUF as an extern symbol; return
     while i < EXT_N { if cn_eq(i) == 1u32 { return i }  i = i + 1u32 }
     if EXT_N < 2048u32 {
         let mut j : u32 = 0u32
-        while j < CN_LEN { EXT_NAME[((EXT_N * 32u32) + j) as u64] = CN_BUF[j as u64]  j = j + 1u32 }
-        EXT_NLEN[EXT_N as u64] = CN_LEN
+        let mut nl : u32 = CN_LEN   if nl > 64u32 { nl = 64u32 }   /* clamp to the slot stride */
+        while j < nl { EXT_NAME[((EXT_N * 64u32) + j) as u64] = CN_BUF[j as u64]  j = j + 1u32 }
+        EXT_NLEN[EXT_N as u64] = nl
         let s : u32 = EXT_N  EXT_N = EXT_N + 1u32  return s
     }
     return 0xFFFFFFFFu32
 }
 fn sov_ext_n() -> u32 @export { return EXT_N }
 fn sov_ext_namelen(slot: u32) -> u32 @export { if slot < EXT_N { return EXT_NLEN[slot as u64] }  return 0xFFFFFFFFu32 }
-fn sov_ext_namebyte(slot: u32, j: u32) -> u32 @export { if slot < EXT_N { if j < EXT_NLEN[slot as u64] { return EXT_NAME[((slot * 32u32) + j) as u64] as u32 } }  return 0xFFFFFFFFu32 }
+fn sov_ext_namebyte(slot: u32, j: u32) -> u32 @export { if slot < EXT_N { if j < EXT_NLEN[slot as u64] { return EXT_NAME[((slot * 64u32) + j) as u64] as u32 } }  return 0xFFFFFFFFu32 }
 
 /* callq to a NAMED symbol (extern): E8 + a REL32 reloc to the symbol in CN_BUF + disp32=0 (the gas convention). */
 fn sov_call_ext() -> i32 @export {

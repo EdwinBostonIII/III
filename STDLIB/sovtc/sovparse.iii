@@ -162,7 +162,7 @@ const SEC_DATA : u32 = 1u32
 const SEC_RODATA : u32 = 2u32
 const SEC_BSS : u32 = 3u32
 const SEC_OTHER : u32 = 9u32
-var SYM_NAME : [u8; 262144]   /* flat name bytes, 32 per slot */
+var SYM_NAME : [u8; 524288]   /* flat name bytes, 64 per slot (32 truncated 33-char import names) */
 var SYM_NLEN : [u32; 8192]
 var SYM_SEC  : [u32; 8192]
 var SYM_OFF  : [u32; 8192]
@@ -171,7 +171,7 @@ var SEC_OFF  : [u32; 4]      /* running byte offset per section (TEXT/DATA/RODAT
 var CUR_SEC  : u32 = 9u32
 
 /* .text label byte-offset table (for branch + sibling-call resolution), built in the LAYOUT pass. */
-var LBL_NAME : [u8; 262144]
+var LBL_NAME : [u8; 524288]   /* 8192 slots * 64 */
 var LBL_NLEN : [u32; 8192]
 var LBL_OFF  : [u32; 8192]
 var LBL_N    : u32 = 0u32
@@ -180,7 +180,7 @@ var SP_PASS  : u32 = 2u32     /* 1 = layout (record label offsets), 2 = final (r
 fn lbl_record(slot: u32, slen2: u32) {   /* the label name is in SYM_NAME scratch slot 'slot' */
     if LBL_N < 8192u32 {   /* match the LBL array size (was a 64 dev-scaffold cap; cg_r3 has 998 .text labels) */
         let mut j : u32 = 0u32
-        while j < slen2 { LBL_NAME[((LBL_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
+        while j < slen2 { LBL_NAME[((LBL_N * 64u32) + j) as u64] = SYM_NAME[((slot * 64u32) + j) as u64]  j = j + 1u32 }
         LBL_NLEN[LBL_N as u64] = slen2
         LBL_OFF[LBL_N as u64] = sov_len()
         LBL_N = LBL_N + 1u32
@@ -189,7 +189,7 @@ fn lbl_record(slot: u32, slen2: u32) {   /* the label name is in SYM_NAME scratc
 fn lbl_name_eq(slot: u32, slen2: u32, lidx: u32) -> u32 {
     if LBL_NLEN[lidx as u64] != slen2 { return 0u32 }
     let mut j : u32 = 0u32
-    while j < slen2 { if SYM_NAME[((slot * 32u32) + j) as u64] != LBL_NAME[((lidx * 32u32) + j) as u64] { return 0u32 }  j = j + 1u32 }
+    while j < slen2 { if SYM_NAME[((slot * 64u32) + j) as u64] != LBL_NAME[((lidx * 64u32) + j) as u64] { return 0u32 }  j = j + 1u32 }
     return 1u32
 }
 fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the label, or 0xFFFFFFFF */
@@ -200,28 +200,28 @@ fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the 
 
 /* exported symbols (.global names) -- the COFF defined-external symbols.  Names recorded in pass D, .text
  * offsets resolved from LBL after the layout pass. */
-var EXP_NAME : [u8; 65536]
+var EXP_NAME : [u8; 131072]   /* 2048 slots * 64 */
 var EXP_NLEN : [u32; 2048]
 var EXP_OFF  : [u32; 2048]
 var EXP_N    : u32 = 0u32
 fn exp_record(slot: u32, slen2: u32) {
     if EXP_N < 2048u32 {   /* match the EXP array size (was a 32 dev-scaffold cap; cg_r3 has 340 .global) */
         let mut j : u32 = 0u32
-        while j < slen2 { EXP_NAME[((EXP_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
+        while j < slen2 { EXP_NAME[((EXP_N * 64u32) + j) as u64] = SYM_NAME[((slot * 64u32) + j) as u64]  j = j + 1u32 }
         EXP_NLEN[EXP_N as u64] = slen2  EXP_N = EXP_N + 1u32
     }
 }
 fn sp_export_n() -> u32 @export { return EXP_N }
 fn sp_export_off(i: u32) -> u32 @export { if i < EXP_N { return EXP_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sp_export_namelen(i: u32) -> u32 @export { if i < EXP_N { return EXP_NLEN[i as u64] }  return 0u32 }
-fn sp_export_namebyte(i: u32, j: u32) -> u32 @export { if i < EXP_N { if j < EXP_NLEN[i as u64] { return EXP_NAME[((i * 32u32) + j) as u64] as u32 } }  return 0u32 }
+fn sp_export_namebyte(i: u32, j: u32) -> u32 @export { if i < EXP_N { if j < EXP_NLEN[i as u64] { return EXP_NAME[((i * 64u32) + j) as u64] as u32 } }  return 0u32 }
 /* LINKER: register an export named "main" at off, so sovld's find_main_off picks up the merged entry point. */
 fn sp_export_inject(off: u32) -> i32 @export {
     if EXP_N < 2048u32 {
-        EXP_NAME[(EXP_N * 32u32) as u64] = 109u8
-        EXP_NAME[((EXP_N * 32u32) + 1u32) as u64] = 97u8
-        EXP_NAME[((EXP_N * 32u32) + 2u32) as u64] = 105u8
-        EXP_NAME[((EXP_N * 32u32) + 3u32) as u64] = 110u8
+        EXP_NAME[(EXP_N * 64u32) as u64] = 109u8
+        EXP_NAME[((EXP_N * 64u32) + 1u32) as u64] = 97u8
+        EXP_NAME[((EXP_N * 64u32) + 2u32) as u64] = 105u8
+        EXP_NAME[((EXP_N * 64u32) + 3u32) as u64] = 110u8
         EXP_NLEN[EXP_N as u64] = 4u32  EXP_OFF[EXP_N as u64] = off  EXP_N = EXP_N + 1u32
     }
     return 0i32
@@ -242,7 +242,7 @@ fn is_ident(c: u32) -> u32 {
 fn sp_read_name_into(slot: u32) -> u32 {
     let mut n : u32 = 0u32
     while is_ident(sp_ch()) == 1u32 {
-        if n < 32u32 { SYM_NAME[((slot * 32u32) + n) as u64] = sp_ch() as u8  n = n + 1u32 }
+        if n < 64u32 { SYM_NAME[((slot * 64u32) + n) as u64] = sp_ch() as u8  n = n + 1u32 }
         sp_adv()
     }
     return n
@@ -251,7 +251,7 @@ fn sp_names_eq(slot: u32, alen: u32, blot: u32, blen: u32) -> u32 {
     if alen != blen { return 0u32 }
     let mut i : u32 = 0u32
     while i < alen {
-        if SYM_NAME[((slot * 32u32) + i) as u64] != SYM_NAME[((blot * 32u32) + i) as u64] { return 0u32 }
+        if SYM_NAME[((slot * 64u32) + i) as u64] != SYM_NAME[((blot * 64u32) + i) as u64] { return 0u32 }
         i = i + 1u32
     }
     return 1u32
@@ -423,7 +423,7 @@ var BR_SITE : [u32; 16384]
 var BR_BIG  : [u32; 16384]    /* 0 = rel8 (2B), 1 = rel32 (jmp 5B / jcc 6B) */
 var BR_JMP  : [u32; 16384]
 var BR_CC   : [u32; 16384]
-var BR_TNAME: [u8; 524288]    /* 16384 slots * 32 */
+var BR_TNAME: [u8; 1048576]   /* 16384 slots * 64 */
 var BR_TLEN : [u32; 16384]
 var BR_N    : u32 = 0u32
 var BR_IDX  : u32 = 0u32
@@ -445,7 +445,7 @@ fn sp_relax_check() -> u32 {
         if BR_BIG[id as u64] == 0u32 {
             let nlen : u32 = BR_TLEN[id as u64]
             let mut jj : u32 = 0u32
-            while jj < nlen { SYM_NAME[((SYM_N * 32u32) + jj) as u64] = BR_TNAME[((id * 32u32) + jj) as u64]  jj = jj + 1u32 }
+            while jj < nlen { SYM_NAME[((SYM_N * 64u32) + jj) as u64] = BR_TNAME[((id * 64u32) + jj) as u64]  jj = jj + 1u32 }
             let off : u32 = lbl_find(SYM_N, nlen)
             if off != 0xFFFFFFFFu32 {
                 let rel : i32 = (off as i32) - ((BR_SITE[id as u64] + 2u32) as i32)
@@ -483,7 +483,7 @@ fn sp_try_branch() -> u32 {
         BR_SITE[id as u64] = sov_len()
         BR_JMP[id as u64] = isjmp  BR_CC[id as u64] = cc  BR_TLEN[id as u64] = nlen
         let mut jj : u32 = 0u32
-        while jj < nlen { BR_TNAME[((id * 32u32) + jj) as u64] = SYM_NAME[((SYM_N * 32u32) + jj) as u64]  jj = jj + 1u32 }
+        while jj < nlen { BR_TNAME[((id * 64u32) + jj) as u64] = SYM_NAME[((SYM_N * 64u32) + jj) as u64]  jj = jj + 1u32 }
         if (id + 1u32) > BR_N { BR_N = id + 1u32 }
         sp_emit_branch(id, isjmp, cc, 0i32)
     } else {                                               /* FINAL: resolve + emit at the relaxed size */
@@ -590,7 +590,7 @@ fn sp_dispatch_instr() {
             if sp_names_eq(SYM_N, nlen, ci, SYM_NLEN[ci as u64]) == 1u32 { if SYM_SEC[ci as u64] == SEC_TEXT { sib = 1u32 }  ci = SYM_N } else { ci = ci + 1u32 }
         }
         if sib == 1u32 { sp_sibcall(nlen) }
-        else { sov_cn_clear()  let mut cj : u32 = 0u32  while cj < nlen { sov_cn_push(SYM_NAME[((SYM_N * 32u32) + cj) as u64] as u32)  cj = cj + 1u32 }  sov_call_ext() }
+        else { sov_cn_clear()  let mut cj : u32 = 0u32  while cj < nlen { sov_cn_push(SYM_NAME[((SYM_N * 64u32) + cj) as u64] as u32)  cj = cj + 1u32 }  sov_call_ext() }
         return
     }
     /* binary ALU (op1 reg|imm, op2 reg) */
@@ -730,7 +730,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                 let tlen : u32 = sp_read_name_into(SYM_N)
                 MNN = tlen  if MNN > 16u32 { MNN = 16u32 }   /* 16 (was 8): long SIMD mnemonics need MN[9] disambiguation */
                 let mut mi : u32 = 0u32
-                while mi < MNN { MN[mi as u64] = SYM_NAME[((SYM_N * 32u32) + mi) as u64] as u32  mi = mi + 1u32 }
+                while mi < MNN { MN[mi as u64] = SYM_NAME[((SYM_N * 64u32) + mi) as u64] as u32  mi = mi + 1u32 }
                 if sp_ch() == C_COLON {
                     sp_adv()
                     if SP_PASS == 1u32 { if CUR_SEC == SEC_TEXT { lbl_record(SYM_N, tlen) } }   /* record .text label offset */
@@ -914,7 +914,7 @@ fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
     let mut e : u32 = 0u32
     while e < EXP_N {
         let mut j : u32 = 0u32
-        while j < EXP_NLEN[e as u64] { SYM_NAME[((SYM_N * 32u32) + j) as u64] = EXP_NAME[((e * 32u32) + j) as u64]  j = j + 1u32 }
+        while j < EXP_NLEN[e as u64] { SYM_NAME[((SYM_N * 64u32) + j) as u64] = EXP_NAME[((e * 64u32) + j) as u64]  j = j + 1u32 }
         EXP_OFF[e as u64] = lbl_find(SYM_N, EXP_NLEN[e as u64])
         e = e + 1u32
     }

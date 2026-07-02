@@ -850,3 +850,77 @@ the other. The remedy for "gates too slow" is the CONE (verify less, exactly), n
    and skips those KATs with the owner named; probe over the full corpus: residual orphans 0,
    EXPECTED∩family double-coverage 0. + corpus_families.txt gains the sibling's run_stoma_kats.sh
    line (their KATs stay uncommitted with their arc).
+
+---
+## W4a EXECUTION RECORD (2026-07-02)
+
+- **W4a.7.1 cost_lattice_synth MERGE** (commit: W4a increment 1): cls_* synthesis section moved into
+  cost_lattice.iii below a section banner (pure microarch layer above, impure witness path below);
+  corpus 642 + 1433 retargeted to cost_lattice.iii (both exit 99 vs merged organ); MODULES line
+  removed from build_stdlib; L5 grep residue = generated-data (world_graph regenerated; self_atlas_data
+  provenance-fixed W4b-ii.9.1).
+- **W4a.6.1 symbolic_regression** — the falsifiers EXPOSED A REAL ORGAN DEFECT: symreg_shape_next
+  skipped every shape_jump target unvalidated, making all compound-LEFT (LLBLB) shapes unreachable —
+  (x*x)-2 was unfindable while 2-(x*x) fit (commutative twins masked it; SUB/DIV lost half their
+  space). FIXED (jump targets validated in-loop). Falsifier KATs: 2470_symreg_wrong_form (hold-out
+  x=5 kills interpolation impostors; excluded basis → NO-FIT -3), 2471_symreg_overfit_refuse (noise
+  → -3 + live positive arm). 631 selftest + 1449 + 1245 unregressed.
+- **W4a.6.2 synthesis_spec** — island closed: asyn_synthesize_from_spec consumes the canonical spec
+  (verifier-admission gated on ident("algo_synth.iii") + 8-D cost-budget gate); 2472_spec_wired_synth
+  (accept/wrong-verifier/budget/join/unknown-opcode all pinned). Headers cross-note the relation.
+- **W4a.9.1 label sweep** — verified: the MODEL-TIER labels landed in the prior session's numera
+  sweep (31 files, commit 6baf4655) + the cross-labels (bmc/temporal_logic/category, d7477630);
+  no new labels owed this wave.
+- **W4a.16.1 call-graph audit** — re-checked live: all 31 harvested exports (q128_mul, fp_div,
+  mod_u64_pow, checked_*, fix_*, pt_to_program, ml_slot_*, ss_propose/ratify, pc_coeff_leaf,
+  cad_branch_key, ident_encode_seq, eg_class_count, ntt_*) now carry ≥1 corpus reference (0 untested
+  remain of the audited set). No new arms owed.
+- **W4a.14.6 corrigendum** — verified already present in III-PERFECTION-LEDGER §17.
+- Exit gates: run_nous_corpus GREEN; run_autogenesis_corpus GREEN (after allowlisting the operator
+  chokepoint, below).
+
+## W4b EXECUTION RECORD (2026-07-02)
+
+- **W4b-i.6.1 topology_atlas** — TRIM-DONE (no edit): the remaining BFS is unweighted hop-count over
+  edge-kinds, cross-validated vs dijkstra on unit weights — a different query, not superseded routing.
+- **W4b-i.8.3 sturm** — escape-tier pointer to sturm_big added (comment-only).
+- **W4b-i.9.1 world_graph** — the GENERATED file NAMED its producer: NEW gen_world_graph.sh (extraction
+  semantics reverse-engineered from v1 + frozen; MSYS traps killed — spaced-path xargs 2×-node bug,
+  per-edge subshell timeout). Regenerated 802 nodes / 5338 edges reflecting the post-merge tree
+  (cost_lattice_synth absent). AETHER-LENS family gate 3/0.
+- **W4b-i.10.1 ui_exact SPLIT** — the cubic crossing tier → ui_exact_cubic.iii (shared ui_aa_mulck
+  latch, one overflow flag); ui_cubic_area_s STAYS (lcm-60 identity). 2453 externs re-split 10/8.
+  UI family 11/0 + BIGCOV 7/0. (NOTE: ui modules are app-surface, family-compiled — no MODULES line,
+  correcting the plan's assumption.)
+- **W4b-i.11 ui_morphic + ui_destiny GATED** — headless cores split from window shells: NEW 2476
+  (byte-diff EXACTLY the constant + re-prove + re-lift, teeth on wrong offset), 2477 (4 real SVIR
+  bodies, exact eval + exact closed-form max). ADJUDICATION: ui_destiny's plan-draft "3-step scrub"
+  named a surface the organ never had — the closed-form destiny is what's gated. UI family 13/0.
+- **W4b-i.12 field demos MERGED** — field_dim + field_full → field_run argv modes (dim/full/default);
+  both sources deleted; DEMO-MAIN SMOKE block gates all 3 survivors + fractal_dim + mandel_run headless.
+  FIELD gate 20/0.
+- **W4b-ii.7.1 route-sweep** — NEW 2478: 24 transform arrows closed in one gate (count teeth + 24
+  endpoint goldens + planner reachability + dispatch width); golden-corruption teeth exit 11.
+- **W4b-ii.9.1 self_atlas_data** — provenance corrected: the header named the DELETED gen_self_atlas.py
+  (a ghost, no-Python); now names the native scarto_map → satlas_emit_data path. Full data regen
+  DEFERRED to W8 (quiescent tree — concurrent-session WIP must not bake into the self-image).
+- **autogenesis propose-only gate** — allowlist repaired: sanctus/autogenesis_cli (the operator command
+  chokepoint, grail b68e9b95) is capability-gated with no new authority; any OTHER ag_commit caller
+  still reddens. Gate GREEN 10 KATs + invariant.
+
+## W4c + W4d EXECUTION RECORD (2026-07-02)
+
+- **W4c.1.1 nl_parse** — role-tagger falsifier 2475: exact role vector [VERB,PATIENT,SOURCE,DESTINATION]
+  probed then pinned; structure-discrimination arm ([VERB,PATIENT] for the 2-arg form); no-verb reject
+  (-3); empty reject (-4); teeth on SOURCE↔DESTINATION swap (exit 11). ADJUDICATION: the plan's
+  "AMBIGUOUS marker" arm — nl_parse is a deterministic single-parse recognizer with no ambiguity kind;
+  discrimination + reject arms are the teeth.
+- **W4c.4.1 ripple_dyn** — header records its live consumer (forcefield/pleroma); attrition flag closed.
+- **W4d.5.1 zk_fused_forge63** — copy-paste header rewritten to forge63's actual variant (the three
+  last-access forge teeth), orphaned tail excised.
+- **W4d duration_cert** — states its deliberate typecheck-isolation split from duration.
+- **CONCURRENT-SESSION NOTE:** a parallel session is executing E-I (task #44, exact 3D B-Rep) as
+  untracked 2473_elim3.iii + 2474_brep_edge.iii. My reunification UI KATs vacated 2473/2474 → 2476/2477
+  (first-committed by me, but E-I's numbers extend the exact-geometry 2167-2198 block, so I moved).
+  Sibling files untouched. The coverage/reachability ratchets read RED purely from the sibling's
+  untracked brep3.iii + stoma arc globbed into the archive — 0 of my exports uncovered (verified).

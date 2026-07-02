@@ -56,11 +56,10 @@ L_loop_top_0:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    movq %rax, %rcx
+    shlq $3, %rax
+    subq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0xff, %rax

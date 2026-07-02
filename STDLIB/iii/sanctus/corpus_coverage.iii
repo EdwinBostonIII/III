@@ -159,6 +159,15 @@ var CV_NEDGE    : u64 = 0u64
 var CV_ESEEN    : [u64; 524288]    /* open-addressed edge-dedup keys (0 = empty) */
 var CV_RIDX     : [u32; 16384]     /* sorted unreachable-export indices */
 var CV_NUNREACH : u64 = 0u64
+/* --- APP-SURFACE designation (reunification W0.2): a module whose RAW TEXT carries the token
+ * APP-SURFACE-MODULE (by convention in its header comment) declares its export surface app-class:
+ * window pumps, workspace init/input/render triads, theme drawing verbs -- compiled by the family
+ * gates so they cannot rot, but by NATURE never executed headless by a corpus KAT.  Such exports
+ * are EXCLUDED from the v3 dark census (the LIB teeth stay full-strength for every organ module).
+ * The designation is per-module, opt-in, and visible in the module's own header -- auditable. */
+var CV_EAPP     : [u8; 16384]      /* 1 iff the export's module is APP-SURFACE designated */
+var CV_FILE_APP : u8 = 0u8         /* pass-1 current-file flag */
+var CV_NAPP     : u64 = 0u64       /* app-designated exports excluded from the dark census */
 var CV_CUR_FILE : u64 = 0u64       /* pass-4 file ordinal (scopes internal node keys) */
 var CV_ENC      : u32 = 0xFFFFFFFFu32   /* enclosing-fn node id (sentinel = none) */
 var CV_ENCPEND  : [u8; 64]         /* def name awaiting its '{' */
@@ -422,6 +431,7 @@ fn cv_register(tok_addr: u64, len: u64) {
     CV_ONC[idx] = 0u8
     CV_EROOT[idx] = 0u8
     CV_EREACH[idx] = 0u8
+    CV_EAPP[idx] = CV_FILE_APP
     let mut slot : u64 = cv_fnv(tok_addr, len) & CV_HASH_MASK
     let mut go : u8 = 1u8
     while go == 1u8 {
@@ -909,7 +919,12 @@ fn cv_scan_file(cap_id: u64, phase: u32) {
     if got != sz { CV_TRUNC = CV_TRUNC + 1u64   return }
     /* census counters: pass 3 (outcomes) must NOT perturb the v1 census -- 1391 pins
      * reffiles == pass-2 file count exactly (caught 2026-06-12 when pass 3 double-counted) */
-    if phase == 1u32 { CV_N_FILES = CV_N_FILES + 1u64 }
+    if phase == 1u32 {
+        CV_N_FILES = CV_N_FILES + 1u64
+        /* APP-SURFACE designation: RAW-buffer scan (the marker lives in a comment, which the
+         * code-level lexer below deliberately never sees) */
+        CV_FILE_APP = cv_contains((&CV_FBUF as u64), got, ("APP-SURFACE-MODULE" as u64), 18u64)
+    }
     if phase == 2u32 { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
     if phase == 4u32 {
         /* v3: a fresh file ordinal scopes internal-node keys; enclosing state resets */
@@ -1105,15 +1120,20 @@ fn cv_reach_fixpoint() {
     }
 }
 
-/* collect + insertion-sort the v3 dark surface: exports no corpus use site reaches */
+/* collect + insertion-sort the v3 dark surface: exports no corpus use site reaches.
+ * APP-SURFACE-designated exports are excluded (counted in CV_NAPP): their unreachability is
+ * by nature (window pumps cannot run headless), not rot -- see the designation block above. */
 fn cv_finalize_reach() {
     cv_reach_fixpoint()
     CV_NUNREACH = 0u64
+    CV_NAPP = 0u64
     let mut e : u64 = 0u64
     while e < CV_NEXP {
         if CV_EREACH[e] == 0u8 {
-            CV_RIDX[CV_NUNREACH] = (e & 0xFFFFFFFFu64) as u32
-            CV_NUNREACH = CV_NUNREACH + 1u64
+            if CV_EAPP[e] == 1u8 { CV_NAPP = CV_NAPP + 1u64 } else {
+                CV_RIDX[CV_NUNREACH] = (e & 0xFFFFFFFFu64) as u32
+                CV_NUNREACH = CV_NUNREACH + 1u64
+            }
         }
         e = e + 1u64
     }
@@ -1174,6 +1194,7 @@ fn cov_n_trunc() -> u64 @export { return CV_TRUNC }
 fn cov_overflow() -> u8 @export { return CV_OVERFLOW }
 fn cov_n_gates() -> u64 @export { return CV_NGATE }
 fn cov_n_underproven() -> u64 @export { return CV_NGUND }
+fn cov_n_appsurface() -> u64 @export { return CV_NAPP }   /* dark-by-nature exports excluded via APP-SURFACE-MODULE */
 
 /* the v2 verdict: COMPLETE iff certifiable AND every gate-stem export has been seen
  * saying two different things in the corpus (the anti-inversion, anti-stub criterion) */

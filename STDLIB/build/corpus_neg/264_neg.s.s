@@ -85,9 +85,7 @@ L_kmax_ok_805306382:
     popq %rax
     movq %rax, -16(%rbp)
     # III_K_FLOOR_VIOLATION: caller floor 400000000 below callee floor 800000000 (deficit 400000000)
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    leaq L_r(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

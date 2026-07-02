@@ -4,6 +4,8 @@
  *
  * MODEL-TIER (III-PERFECTION-LEDGER label): this is the didactic verified model of the method;
  * III's LIVE verification membrane is the ser_* family (ser_tgraph BMC / ser_kinduct / ser_kinduct_sym).
+ * Its live TEMPORAL sibling is numera/temporal_logic (LTL + bounded MC over the real witness chain);
+ * this bmc is the didactic bounded-model-checking model, temporal_logic is the pass on real history.
  * Merged per the ledger: numera/kinduction was the other half of this same method in its own file.
  *
  * BOUNDED half: given a transition system and a BAD state, explore the reachable states out to a

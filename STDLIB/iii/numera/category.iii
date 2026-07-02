@@ -1,4 +1,7 @@
 /* III/STDLIB/iii/numera/category.iii
+ * PROOF-GATED ADMISSION: category admits any arrow; numera/certified_morphism is the path that admits
+ * an arrow ONLY with a kernel-checked proof (category + theorem_commons/CIC) -- the unproven path here
+ * is never the only path.
  *
  * III STDLIB - numera::category
  *

@@ -1,4 +1,6 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\temporal_logic.iii
+ * DIDACTIC SIBLING: numera/bmc is the model-tier bounded model checker; THIS file is the LIVE temporal
+ * tier -- LTL + bounded MC over the real III witness chain (complementary, not a duplicate).
  *
  * III STDLIB - numera::temporal_logic
  *

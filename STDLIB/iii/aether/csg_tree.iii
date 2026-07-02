@@ -19,6 +19,7 @@ const CT_LEAF : i64 = 0i64
 const CT_UNION : i64 = 1i64
 const CT_INTER : i64 = 2i64
 const CT_DIFF : i64 = 3i64
+const CT_SWEPT : i64 = 4i64                   /* 4D kinematic leaf: the swept volume of a moving sphere */
 
 var CT_KIND : [i64; 2048]
 var CT_L : [i64; 2048]   var CT_R : [i64; 2048]
@@ -44,6 +45,45 @@ fn ct_leaf(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i6
 fn ct_sphere(cx: i64, cy: i64, cz: i64, r2: i64) -> i64 @export {
     let qj : i64 = ((cx * cx) + (cy * cy) + (cz * cz)) - r2
     return ct_leaf(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64 - (2i64 * cx), 0i64 - (2i64 * cy), 0i64 - (2i64 * cz), qj)
+}
+
+/* THE SWEPT LEAF (charter Program II, Phase II): the volume covered by a sphere of squared radius r2 whose
+ * center moves A -> B (a ball-nose cutter pass).  Membership of p is the sign of  min_{t in [0,1]} |p-A-tD|^2 - r2
+ * (D = B-A) -- an upward parabola in t, decided EXACTLY by the clamped-vertex form: interior vertex at
+ * t* = (W.D)/(D.D) gives sign(|W|^2 (D.D) - (W.D)^2 - r2 (D.D)) (D.D > 0 preserves sign); clamped ends are
+ * static-sphere signs.  Pure integer arithmetic -- a toolpath pass is exact at ANY t, killing the snapshot
+ * approximation (a sampled tool union leaves PHANTOM MATERIAL between samples; gate 2170's twin arm).
+ * ENVELOPE: |coordinates| <= 8192 and r2 <= 2^30 keep every product within i64 (documented, gate-sized). */
+fn ct_swept(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64, r2: i64) -> i64 @export {
+    if CT_N >= CT_MAXN { return 0i64 - 1i64 }
+    let n : u64 = CT_N
+    CT_KIND[n] = CT_SWEPT
+    let b : u64 = n * 10u64
+    CT_Q[b] = ax   CT_Q[b + 1u64] = ay   CT_Q[b + 2u64] = az
+    CT_Q[b + 3u64] = bx   CT_Q[b + 4u64] = by   CT_Q[b + 5u64] = bz
+    CT_Q[b + 6u64] = r2   CT_Q[b + 7u64] = 0i64   CT_Q[b + 8u64] = 0i64   CT_Q[b + 9u64] = 0i64
+    CT_N = n + 1u64
+    return n as i64
+}
+
+fn ct_sgn(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+
+fn ct_swept_side(n: u64, x: i64, y: i64, z: i64) -> i32 {
+    let b : u64 = n * 10u64
+    let wx : i64 = x - CT_Q[b]   let wy : i64 = y - CT_Q[b + 1u64]   let wz : i64 = z - CT_Q[b + 2u64]
+    let dx : i64 = CT_Q[b + 3u64] - CT_Q[b]   let dy : i64 = CT_Q[b + 4u64] - CT_Q[b + 1u64]   let dz : i64 = CT_Q[b + 5u64] - CT_Q[b + 2u64]
+    let r2 : i64 = CT_Q[b + 6u64]
+    let ww : i64 = ((wx * wx) + (wy * wy)) + (wz * wz)
+    let dd : i64 = ((dx * dx) + (dy * dy)) + (dz * dz)
+    if dd == 0i64 { return ct_sgn(ww - r2) }                        /* degenerate sweep: a static sphere */
+    let wd : i64 = ((wx * dx) + (wy * dy)) + (wz * dz)
+    if wd <= 0i64 { return ct_sgn(ww - r2) }                        /* nearest at t = 0 (the A end-cap) */
+    if wd >= dd {
+        let ux : i64 = wx - dx   let uy : i64 = wy - dy   let uz : i64 = wz - dz
+        let uu : i64 = ((ux * ux) + (uy * uy)) + (uz * uz)
+        return ct_sgn(uu - r2)                                      /* nearest at t = 1 (the B end-cap) */
+    }
+    return ct_sgn(((ww * dd) - (wd * wd)) - (r2 * dd))              /* interior vertex, sign-preserving x dd */
 }
 
 fn ct_node(kind: i64, l: i64, r: i64) -> i64 @export {
@@ -72,6 +112,7 @@ fn ct_side(node: i64, x: i64, y: i64, z: i64) -> i32 @export {
         return csg_quadric_eval_sign(CT_Q[b], CT_Q[b + 1u64], CT_Q[b + 2u64], CT_Q[b + 3u64], CT_Q[b + 4u64],
                                      CT_Q[b + 5u64], CT_Q[b + 6u64], CT_Q[b + 7u64], CT_Q[b + 8u64], CT_Q[b + 9u64], x, y, z)
     }
+    if k == CT_SWEPT { return ct_swept_side(n, x, y, z) }
     let sl : i32 = ct_side(CT_L[n], x, y, z)
     let sr : i32 = ct_side(CT_R[n], x, y, z)
     if k == CT_UNION { return ct_min(sl, sr) }

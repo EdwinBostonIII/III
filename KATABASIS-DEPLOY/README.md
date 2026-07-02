@@ -96,3 +96,14 @@ Input for the gate IOCTLs (6×u64): `family, target_kind, target, action_hexad, 
 (dispatch + the I0→I4 handlers + the extracted `floor_gate_loop`/`floor_npt_loop`). `src/kernel_abi.s` +
 `src/gate_driver.iii` — the Tier-3 gate. `src/gate_resident.iii` — the Tier-2 selftest. `src/witness_kernel.s`,
 `src/cpufeat_kernel.iii` — the kernel leaf + the scalar-crypto-forcing shim.
+
+## Purged build litter (reunification W7.1, 2026-07-02)
+
+Two one-shot Python analysis tools were removed under the no-Python law; their findings are
+long-committed and their outputs frozen:
+- `build/decode_rm1_hv.py` — decoded cg_rm1.iii's RM1_HV_* asm-text arrays to diff against the
+  Phase-0 CHARIOT sequence; the cg_rm1 port to `.iii` is complete, so the decoder is retired.
+- `build/stackdepth.py` — one-shot kernel stack-depth bound from `objdump -dr` over the linked
+  `.o` set; the gate_resident bound it computed is baked into the resident selftest.
+Also removed: 26 session `build/*.log`, `build/obj/` intermediates, and 4 regenerable client exes
+(floor_client, gate_client, quine_attest_check, quine_attest_client) — all reproduced by the gates.

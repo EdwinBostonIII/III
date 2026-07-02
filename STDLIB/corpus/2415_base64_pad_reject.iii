@@ -1,0 +1,43 @@
+/* 1051 -- base64_decode padding-validation falsifier (gap-backlog #23).
+ *
+ * RFC 4648 §3.1: '=' padding terminates the stream and valid base64 is a multiple of 4.
+ * Pre-fix base64_decode accepted '=' MID-STREAM ("AB==CDEF" -> 4 bytes, B64_OK) and
+ * silently dropped 1-3 trailing bytes.  Now both are rejected with B64_E_BADPAD (-2).
+ *
+ * Positive control proves the negative arms are not false-positives.
+ * All compares use != / == (equality), never i32 ordering. 99 = pass.
+ */
+module corpus_2415
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base64_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base64.iii"
+
+var SRC_OK   : [u8; 4] = [81u8, 85u8, 74u8, 68u8]                               /* "QUJD" -> "ABC" */
+var SRC_MID  : [u8; 8] = [65u8, 66u8, 61u8, 61u8, 67u8, 68u8, 69u8, 70u8]       /* "AB==CDEF" -> mid-stream pad, ILLEGAL */
+var SRC_TAIL : [u8; 5] = [81u8, 85u8, 74u8, 68u8, 120u8]                        /* "QUJDx" -> 1 trailing byte, ILLEGAL */
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Positive: a valid 4-char block decodes to 3 bytes "ABC". */
+    let bo : u64 = builder_new(a, 64u64)
+    if base64_decode(bo, (&SRC_OK) as u64, 4u64) != 0i32 { return 2u64 }
+    if builder_len(bo) != 3u64 { return 3u64 }
+    let dec : *u8 = builder_seal(bo) as *u8
+    if dec[0u64] != 65u8 { return 4u64 }   /* A */
+    if dec[1u64] != 66u8 { return 5u64 }   /* B */
+    if dec[2u64] != 67u8 { return 6u64 }   /* C */
+
+    /* FALSIFIER 1: mid-stream '=' padding rejected with B64_E_BADPAD (-2). */
+    let br : u64 = builder_new(a, 64u64)
+    if base64_decode(br, (&SRC_MID) as u64, 8u64) != -2i32 { return 7u64 }
+
+    /* FALSIFIER 2: a non-multiple-of-4 trailing byte rejected with B64_E_BADPAD (-2). */
+    if base64_decode(br, (&SRC_TAIL) as u64, 5u64) != -2i32 { return 8u64 }
+
+    return 99u64
+}

@@ -2109,7 +2109,7 @@ sense, and the literal multi-target-inline form is both infeasible and unnecessa
   `keccak`/`keccak256`, `blake2s`, `sha256`/`sha512`, `aes*`, `chacha20` — gated by corpus
   `193/195/196/197_ed25519_*_rfc8032`, **`194_ed25519_verify_tamper` (verify REJECTS a
   tampered sig — the prove-the-negative)**, `02/15/151_sha256`, `55/185_sha512`,
-  `168/181/378_keccak`, `183_x25519`, `202_aes`, `206_xchacha20_poly1305`, etc.
+  `168/181/378_keccak`, `183_x25519`, `202_aes`, `2407_xchacha20_poly1305`, etc.
 - **Why a full crypto inline is impossible (any source, any target):** the XII inline
   envelope is `XEG_MAX_PAYLOAD=512` B and the per-target kernel fragments are 2–20 B
   primary-op primitives; a real ed25519/x25519 body is thousands of instructions with

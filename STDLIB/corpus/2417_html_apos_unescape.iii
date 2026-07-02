@@ -1,0 +1,58 @@
+/* 1053 -- html_unescape &apos; falsifier (gap-backlog #88).
+ *
+ * The module doc-comment promises to decode &apos; (HTML5 named entity for ', 0x27).
+ * Pre-fix html_unescape left &apos; undecoded (passed through), contradicting its own
+ * contract.  Now &apos; decodes to ' (0x27) like &#39;.
+ *
+ * Controls: &#39; and &amp; still decode (the entity table is intact); a truncated
+ * "&apos" (no ';') is NOT decoded -- proving the arm requires the full 6-char entity.
+ * All compares use != / == (equality). 99 = pass.
+ */
+module corpus_2417
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn html_unescape(builder_id: u64, src: *u8, src_len: u64) -> i32 from "html_escape.iii"
+
+var SRC_APOS  : [u8; 6] = [38u8, 97u8, 112u8, 111u8, 115u8, 59u8]   /* "&apos;" -> ' */
+var SRC_NUM   : [u8; 5] = [38u8, 35u8, 51u8, 57u8, 59u8]            /* "&#39;"  -> ' */
+var SRC_AMP   : [u8; 5] = [38u8, 97u8, 109u8, 112u8, 59u8]          /* "&amp;"  -> & */
+var SRC_TRUNC : [u8; 5] = [38u8, 97u8, 112u8, 111u8, 115u8]         /* "&apos" (no ';') -> NOT decoded */
+
+fn main() -> u64 {
+    let a : u64 = arena_new(8192u64)
+    if a == 0u64 { return 1u64 }
+
+    /* &apos; -> single byte 0x27 (the fix). */
+    let b1 : u64 = builder_new(a, 64u64)
+    if html_unescape(b1, (&SRC_APOS) as *u8, 6u64) != 0i32 { return 2u64 }
+    if builder_len(b1) != 1u64 { return 3u64 }
+    let d1 : *u8 = builder_seal(b1) as *u8
+    if d1[0u64] != 39u8 { return 4u64 }   /* ' */
+
+    /* Control: &#39; still decodes to the same byte. */
+    let b2 : u64 = builder_new(a, 64u64)
+    if html_unescape(b2, (&SRC_NUM) as *u8, 5u64) != 0i32 { return 5u64 }
+    if builder_len(b2) != 1u64 { return 6u64 }
+    let d2 : *u8 = builder_seal(b2) as *u8
+    if d2[0u64] != 39u8 { return 7u64 }
+
+    /* Control: &amp; still decodes to '&' (entity table intact). */
+    let b3 : u64 = builder_new(a, 64u64)
+    if html_unescape(b3, (&SRC_AMP) as *u8, 5u64) != 0i32 { return 8u64 }
+    if builder_len(b3) != 1u64 { return 9u64 }
+    let d3 : *u8 = builder_seal(b3) as *u8
+    if d3[0u64] != 38u8 { return 10u64 }   /* & */
+
+    /* FALSIFIER: "&apos" without the trailing ';' is NOT an entity -> emitted literally
+     * (5 bytes, first byte '&'=38), proving the arm demands the full 6-char "&apos;". */
+    let b4 : u64 = builder_new(a, 64u64)
+    if html_unescape(b4, (&SRC_TRUNC) as *u8, 5u64) != 0i32 { return 11u64 }
+    if builder_len(b4) != 5u64 { return 12u64 }
+    let d4 : *u8 = builder_seal(b4) as *u8
+    if d4[0u64] != 38u8 { return 13u64 }   /* literal '&' */
+
+    return 99u64
+}

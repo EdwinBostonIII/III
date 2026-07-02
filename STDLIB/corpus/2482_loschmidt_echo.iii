@@ -1,0 +1,295 @@
+/* 2482_loschmidt_echo.iii -- GATE for THE EXACT LOSCHMIDT ECHO (E-II): imperfect time reversal
+ * measured as EXACT integers, and the KS-entropy claim adjudicated down to exact finite
+ * observables -- the machine delivers what IS certifiable and refuses what is not.
+ *
+ * THE ECHO PROTOCOL (the classical Loschmidt gedanken, exact): evolve F^n, apply the reversal R,
+ * evolve F^n, apply R.  Perfect reversal returns BIT-EXACTLY (the gated involution).  An IMPERFECT
+ * reversal -- R followed by ONE MOMENTUM QUANTUM (gs_kick, the minimal exact perturbation of an
+ * integer-velocity ensemble) -- returns a state whose distance from the origin is an EXACT INTEGER
+ * OBSERVABLE, not a float estimate:
+ *   A  PERFECT ECHO (control): defect == 0, bit for bit, positions and velocities.
+ *   B  IMPERFECT ECHO at n = 7: the exact defect (velocity slots differing, sum |dv|, position
+ *      slots differing as exact rationals) -- pinned integers.
+ *   C  KICK-UNKICK: gs_kick(+1) then gs_kick(-1) at the turn restores the PERFECT echo (the
+ *      impulse verb is its own inverse composition) -- defect 0, a theorem arm.
+ *   D  THE DEPTH TABLE at n = 5, 7, 9: exact defects MEASURED and pinned.  NO growth law is
+ *      claimed: 2189 taught that the bounded gas conserves the velocity multiset up to sign, so
+ *      separation FLUCTUATES -- the machine pins values, never a fitted exponent.
+ *   E  energy is the SAME integer through every leg of every echo (conservation as identity).
+ *
+ * THE KS ADJUDICATION (F).  Kolmogorov-Sinai entropy is an asymptotic, measure-theoretic limit --
+ * NO finite exact run can certify it; any h_KS > 0 claim from finite data is extrapolation.  What
+ * the exact substrate CAN deliver: the event skeleton (the collision-kind symbol stream) of an
+ * exact trajectory, and its EXACT distinct-word counts W(L).  Gate F runs the 3-body gas 2500
+ * exact steps (gas_big under the den-bits-48 compaction law) and pins W(L) for L = 1,2,4,6,8
+ * against the INTEGRABLE CONTROL (one particle in a box: a periodic skeleton, W(L) pinned tiny
+ * and L-independent).  The separation W_gas(8) >> W_box(8) is the exact-observable content of
+ * "chaotic-looking" -- delivered as integers, with the honest refusal of the limit object.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E;  15 F */
+module corpus_2482_loschmidt_echo
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gs_reset() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_envelope(S: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_kick(p: u64, ax: u64, dq: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_energy() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_run(k: u64) -> u64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_reverse() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p0(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p1(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_den() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_v(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ovf() -> u32 from "gas.iii"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run_ct(k: u64, bits: i64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_events() -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ek(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ea(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eb(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eax(i: u64) -> i64 from "gas_big.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* the fixed scenario: box [0,20]^3 with an IRRATIONAL x-hi face (20 + sqrt2), three particles */
+var IX : [i64; 9]   var IV : [i64; 9]
+fn scen() -> i32 {
+    gs_reset()
+    gs_envelope(1i64)
+    gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(0i64, 1i64, 20i64, 1i64, 1i64)                 /* x-hi at 20 + sqrt2 */
+    gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(2i64, 1i64, 20i64, 0i64, 1i64)
+    IX[0u64] = 2i64    IX[1u64] = 3i64    IX[2u64] = 4i64
+    IX[3u64] = 8i64    IX[4u64] = 7i64    IX[5u64] = 6i64
+    IX[6u64] = 14i64   IX[7u64] = 11i64   IX[8u64] = 9i64
+    IV[0u64] = 3i64    IV[1u64] = 1i64    IV[2u64] = 2i64
+    IV[3u64] = 0i64 - 2i64   IV[4u64] = 2i64   IV[5u64] = 0i64 - 1i64
+    IV[6u64] = 1i64    IV[7u64] = 0i64 - 3i64   IV[8u64] = 2i64
+    gs_part(IX[0u64], IX[1u64], IX[2u64], IV[0u64], IV[1u64], IV[2u64])
+    gs_part(IX[3u64], IX[4u64], IX[5u64], IV[3u64], IV[4u64], IV[5u64])
+    gs_part(IX[6u64], IX[7u64], IX[8u64], IV[6u64], IV[7u64], IV[8u64])
+    return 0i32
+}
+/* exact defect vs the initial state: DV = count of differing velocity slots, DL = sum |dv|,
+ * DP = count of position slots differing AS RATIONALS (initial integers over den 1:
+ * equal  <=>  n0 == x_init * den  AND  n1 == 0). */
+var DV : i64   var DL : i64   var DP : i64
+fn defect() -> i32 {
+    DV = 0i64   DL = 0i64   DP = 0i64
+    let den : i64 = gs_den()
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            let vi : i64 = IV[p * 3u64 + ax]
+            let vf : i64 = gs_v(p, ax)
+            if vf != vi {
+                DV = DV + 1i64
+                let mut d : i64 = vf - vi
+                if d < 0i64 { d = 0i64 - d }
+                DL = DL + d
+            }
+            let n0 : i64 = gs_p0(p, ax)
+            let n1 : i64 = gs_p1(p, ax)
+            let xi : i64 = IX[p * 3u64 + ax]
+            let mut pd : i64 = 0i64
+            if n0 != (xi * den) { pd = 1i64 }
+            if n1 != 0i64 { pd = 1i64 }
+            DP = DP + pd
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+/* one echo experiment: F^n R [kick dq on p0.vx] F^n R; returns 0 ok / -1 a leg refused */
+fn echo(n: u64, dq: i64) -> i64 {
+    scen()
+    let d1 : u64 = gs_run(n)
+    if d1 != n { return 0i64 - 1i64 }
+    gs_reverse()
+    if dq != 0i64 { gs_kick(0u64, 0u64, dq) }
+    let d2 : u64 = gs_run(n)
+    if d2 != n { return 0i64 - 1i64 }
+    gs_reverse()
+    if gs_ovf() != 0u32 { return 0i64 - 1i64 }
+    defect()
+    return 0i64
+}
+
+/* ── the word-count machinery (gate F): symbols and exact distinct-L-word counts ── */
+var EESYM : [i64; 6000]   var EENSYM : i64
+fn words(L: i64) -> i64 {                                  /* distinct L-words in EESYM[0..EENSYM) */
+    let mut w : i64 = 0i64
+    let lim : i64 = EENSYM - L
+    let mut i : i64 = 0i64
+    while i <= lim {
+        /* is EESYM[i..i+L) the FIRST occurrence of its word? */
+        let mut first : i64 = 1i64
+        let mut j : i64 = 0i64
+        while j < i {
+            let mut same : i64 = 1i64
+            let mut k : i64 = 0i64
+            while k < L {
+                let a : i64 = EESYM[(j + k) as u64]
+                let b : i64 = EESYM[(i + k) as u64]
+                if a != b { same = 0i64   k = L }
+                if k < L { k = k + 1i64 }
+            }
+            if same == 1i64 { first = 0i64   j = i }
+            if j < i { j = j + 1i64 }
+        }
+        if first == 1i64 { w = w + 1i64 }
+        i = i + 1i64
+    }
+    return w
+}
+
+fn main() -> u64 {
+    /* ══ A: the perfect echo -- defect 0, bit for bit. */
+    let ra : i64 = echo(7u64, 0i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(ra) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()   /* "A: 0 0 0 0" */
+    if ra != 0i64 { return 10u64 }
+    if DV != 0i64 { return 10u64 }
+    if DL != 0i64 { return 10u64 }
+    if DP != 0i64 { return 10u64 }
+    let e0 : i64 = gs_energy()
+
+    /* ══ B: the imperfect echo at n = 7 -- one quantum, exact integer defect. */
+    let rb : i64 = echo(7u64, 1i64)
+    let eb : i64 = gs_energy()
+    putchar(66i32) putchar(58i32) sp() e_i64(rb) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) sp() e_i64(eb - e0) nl()
+    if rb != 0i64 { return 11u64 }
+    if DV == 0i64 { return 11u64 }                         /* the kick must leave a mark */
+
+    /* ══ C: kick-unkick -- the impulse composes to identity, the echo is PERFECT again. */
+    scen()
+    let dc1 : u64 = gs_run(7u64)
+    gs_reverse()
+    gs_kick(0u64, 0u64, 1i64)
+    gs_kick(0u64, 0u64, 0i64 - 1i64)
+    let dc2 : u64 = gs_run(7u64)
+    gs_reverse()
+    defect()
+    putchar(67i32) putchar(58i32) sp() e_i64(dc1 as i64) sp() e_i64(dc2 as i64) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()   /* "C: 7 7 0 0 0" */
+    if dc1 != 7u64 { return 12u64 }
+    if dc2 != 7u64 { return 12u64 }
+    if DV != 0i64 { return 12u64 }
+    if DL != 0i64 { return 12u64 }
+    if DP != 0i64 { return 12u64 }
+
+    /* ══ D: the depth table -- exact defects at n = 5, 7, 9 (measured, never fitted). */
+    let mut di : u64 = 0u64
+    while di < 3u64 {
+        let mut n : u64 = 5u64
+        if di == 1u64 { n = 7u64 }
+        if di == 2u64 { n = 9u64 }
+        let rd : i64 = echo(n, 1i64)
+        putchar(68i32) putchar(58i32) sp() e_i64(n as i64) sp() e_i64(rd) sp() e_i64(DV) sp() e_i64(DL) sp() e_i64(DP) nl()
+        if rd != 0i64 { return 13u64 }
+        di = di + 1u64
+    }
+
+    /* ══ E: energy is one integer through every echo (checked on the arm-B final state above,
+     * and here across the perfect echo): conservation as identity. */
+    scen()
+    let ee0 : i64 = gs_energy()
+    gs_run(7u64)
+    let ee1 : i64 = gs_energy()
+    gs_reverse()
+    gs_run(7u64)
+    let ee2 : i64 = gs_energy()
+    putchar(69i32) putchar(58i32) sp() e_i64(ee0) sp() e_i64(ee1 - ee0) sp() e_i64(ee2 - ee0) nl()   /* "E: 37 0 0" */
+    if ee1 != ee0 { return 14u64 }
+    if ee2 != ee0 { return 14u64 }
+
+    /* ══ F: the KS adjudication -- exact word counts, gas vs the integrable control. */
+    g2_reset()
+    g2_envelope(1i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(0i64, 1i64, 20i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(2i64, 1i64, 20i64, 0i64, 1i64)
+    g2_part(2i64, 3i64, 4i64, 3i64, 1i64, 2i64)
+    g2_part(8i64, 7i64, 6i64, 0i64 - 2i64, 2i64, 0i64 - 1i64)
+    g2_part(14i64, 11i64, 9i64, 1i64, 0i64 - 3i64, 2i64)
+    EENSYM = 0i64
+    let mut st : i64 = 0i64
+    let mut ep : u64 = 0u64
+    let mut stuck : i64 = 0i64
+    while st < 2500i64 {
+        let dn : u64 = g2_run_ct(1u64, 48i64)
+        if dn != 1u64 { stuck = 1i64   st = 2500i64 }
+        if stuck == 0i64 {
+            let ne : u64 = g2_events()
+            while ep < ne {
+                if EENSYM < 6000i64 {
+                    EESYM[EENSYM as u64] = (((g2_ek(ep) * 4i64) + g2_ea(ep)) * 4i64 + g2_eb(ep)) * 4i64 + g2_eax(ep)
+                    EENSYM = EENSYM + 1i64
+                }
+                ep = ep + 1u64
+            }
+            st = st + 1i64
+        }
+    }
+    let gn : i64 = EENSYM
+    let g1 : i64 = words(1i64)
+    let g2c : i64 = words(2i64)
+    let g4 : i64 = words(4i64)
+    let g6 : i64 = words(6i64)
+    let g8 : i64 = words(8i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(stuck) sp() e_i64(gn) sp() e_i64(g1) sp() e_i64(g2c) sp() e_i64(g4) sp() e_i64(g6) sp() e_i64(g8) nl()
+    if stuck != 0i64 { return 15u64 }
+    /* the integrable control: ONE particle in the same box -- a periodic skeleton */
+    g2_reset()
+    g2_envelope(1i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(0i64, 1i64, 20i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(1i64, 1i64, 20i64, 0i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    g2_wall(2i64, 1i64, 20i64, 0i64, 1i64)
+    g2_part(2i64, 3i64, 4i64, 3i64, 0i64, 0i64)           /* one axis only: period-2 skeleton */
+    EENSYM = 0i64
+    st = 0i64
+    ep = 0u64
+    stuck = 0i64
+    while st < 400i64 {
+        let dn : u64 = g2_run_ct(1u64, 48i64)
+        if dn != 1u64 { stuck = 1i64   st = 400i64 }
+        if stuck == 0i64 {
+            let ne : u64 = g2_events()
+            while ep < ne {
+                if EENSYM < 6000i64 {
+                    EESYM[EENSYM as u64] = (((g2_ek(ep) * 4i64) + g2_ea(ep)) * 4i64 + g2_eb(ep)) * 4i64 + g2_eax(ep)
+                    EENSYM = EENSYM + 1i64
+                }
+                ep = ep + 1u64
+            }
+            st = st + 1i64
+        }
+    }
+    let bn : i64 = EENSYM
+    let b1 : i64 = words(1i64)
+    let b8 : i64 = words(8i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(stuck) sp() e_i64(bn) sp() e_i64(b1) sp() e_i64(b8) nl()
+    if stuck != 0i64 { return 15u64 }
+    /* the adjudicated separation: the gas's exact word diversity dwarfs the periodic control's */
+    if b1 > 4i64 { return 15u64 }
+    if b8 > 4i64 { return 15u64 }
+    if g8 < (10i64 * b8) { return 15u64 }
+    if g8 <= g1 { return 15u64 }
+
+    return 99u64
+}

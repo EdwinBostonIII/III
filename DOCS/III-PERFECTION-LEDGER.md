@@ -11,7 +11,7 @@ The purge and the S2 correction were EXECUTED and gate-verified:
 - **`4c42cbb2`** — follow-up: staged the _audit_scratch/ tracked removals + UNIVERSAL-BLOCK.md → DOCS/III-UNIVERSAL-BLOCK.md relocation.
 - **`de032c60`** — S2 CLOSED: III-STUDIO family committed (shell + theme + trig + 6 workspaces + ui_win input-ring mod + build_studio.sh + KAT 2169_studio_kernel + DOCS/III-STUDIO.md), `forge_scratch.iii` → **`studio_sample.iii`** (module + all referents renamed, zero residuals), SEAL.mhash committed as the pinned closure seal, this ledger committed. arc_sweep/cspace/2174/2175 were committed concurrently by the sibling session (`44de723b` era).
 - **Gate verification (real runs, real exit codes):** run_aether_lens_kats.sh → **PASS=3 FAIL=0** (2155, 2158, 2169 studio kernel — the renamed sample compiles in the studio loop). run_sqrtsum_kats.sh → **PASS=38 FAIL=0** (incl. 2173_cspace, 2175_arc_sweep, 2174_gas_demon, 2176_gas_big).
-- **NEW FLAG (found during verification): KAT number collision** — `2169_gas_reversal.iii` (sqrtsum family) and `2169_studio_kernel.iii` (aether-lens family) share number 2169. Functionally green (name-keyed EXPECTED, disjoint runners) but violates unique-numbering; FIX: renumber 2169_gas_reversal to a free number and update its run_sqrtsum_kats.sh line.
+- **NEW FLAG (found during verification): KAT number collision** — `2433_gas_reversal.iii` (sqrtsum family) and `2169_studio_kernel.iii` (aether-lens family) share number 2169. Functionally green (name-keyed EXPECTED, disjoint runners) but violates unique-numbering; FIX: renumber 2433_gas_reversal to a free number and update its run_sqrtsum_kats.sh line.
 - Still open from §1: S1 ratchet restoration (uncovered/gates/dark 75/10/157 vs pins 5/2/14) — untouched by this execution, next in order. In-flight sibling-session work observed and deliberately left alone: gas_big (self-committed mid-run), resultant.iii + 2177_resultant, gs3_counter.c, win.txt.
 
 ## EXECUTION RECORD 2 (2026-07-01/02 — THE 12 MERGE PAIRS)
@@ -634,7 +634,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 125_bitops|CONF|K|bitops|
 126_inet_ipv4|CONF|K|arena,builder,inet|
 127_semver|CONF|K|semver|
-128_glob|CONF|K|glob|
+2400_glob|CONF|K|glob|
 128_self_host_ripple|CONF|K|arena,crystal,dynamic_impact,dynamic_record|
 129_list|CONF|K|arena,list|
 130_lru|CONF|K|arena,lru|
@@ -707,26 +707,26 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 197_ed25519_sign_long_message|CONF|K|crypt_ed25519|
 198_mldsa_roundtrip|CONF|K|mldsa|
 199_mlkem_roundtrip|CONF|K|mlkem|
-200_calculus_18_primitives|CONF|K|calculus_v1,intent,irreducibility_proof,resolution_init|
+2401_calculus_18_primitives|CONF|K|calculus_v1,intent,irreducibility_proof,resolution_init|
 200_slhdsa_roundtrip|CONF|K|slhdsa|
-201_lazy_crystal_levels|CONF|K|call_context,crystal,mini_crystal,resolver|
+2402_lazy_crystal_levels|CONF|K|call_context,crystal,mini_crystal,resolver|
 201_pq_dispatch|CONF|K|pq_dispatch|
-202_aes192_kat|CONF|K|aes|
+2403_aes192_kat|CONF|K|aes|
 202_memo_determinism|CONF|K|resolver_memo|
-203_hmac_sha512_rfc4231|CONF|K|hmac|
+2404_hmac_sha512_rfc4231|CONF|K|hmac|
 203_jit_fuse_amortized|CONF|K|jit_fuse|
-204_drbg_sp80090a|CONF|K|drbg|
+2405_drbg_sp80090a|CONF|K|drbg|
 204_prespec_hw_offload|CONF|K|hw_offload,prespec|
 205_drbg_hw_entropy|CONF|K|cpufeat,drbg|
-205_governance_full_loop|CONF|K|governance,resolution_init|
+2406_governance_full_loop|CONF|K|governance,resolution_init|
 206_observe_and_propose|CONF|K|governance,resolution_init|
-206_xchacha20_poly1305|CONF|K|chacha20,xchacha20_poly1305|
-207_aes_siv_rfc5297|CONF|K|aes_siv|
+2407_xchacha20_poly1305|CONF|K|chacha20,xchacha20_poly1305|
+2408_aes_siv_rfc5297|CONF|K|aes_siv|
 207_babel_wire_roundtrip|CONF|K|babel_wire|
-208_cap_handshake|CONF|K|cap_handshake|
+2409_cap_handshake|CONF|K|cap_handshake|
 208_ecdsa_p256|CONF|K|ecdsa_p256|
 209_ecdsa_p384|CONF|K|ecdsa_p384|
-209_idoc_roundtrip|CONF|K|babel_wire,idoc|
+2410_idoc_roundtrip|CONF|K|babel_wire,idoc|
 210_sealed_channel_handshake|CONF|K|sealed_channel,x25519|
 211_hip_resolve|CONF|K|hip|
 212_hip_verb_coverage|CONF|K|hip|
@@ -915,9 +915,9 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 391_katabasis_cycle_dominance|CONF|K|hexad_pfs,svm_layout|
 392_katabasis_cycle_family|CONF|K|cycle_family|
 393_specialize|CONF|K|spec_probe|
-394_katabasis_bar_typing|CONF|K|bar_layout|
+2412_katabasis_bar_typing|CONF|K|bar_layout|
 394_option_specialize|CONF|K|option|
-395_katabasis_cycle_admit|CONF|K|cycle_admit|
+2413_katabasis_cycle_admit|CONF|K|cycle_admit|
 395_result_specialize|CONF|K|result|
 396_span_specialize|CONF|K|span|
 397_iter_specialize|CONF|K|iter,span|
@@ -1044,12 +1044,12 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 708_option_full_distinct|CONF|K|option|
 709_reach_oracle_null_pin|CONF|K|reach_oracle|
 710_base32_sealed_builder|CONF|K|arena,base32,builder|
-711_format_sealed_builder|CONF|K|arena,builder,format|
+2434_format_sealed_builder|CONF|K|arena,builder,format|
 711_sovereign_neg|NEG|K||
 712_sovereign_pos|CONF|K||
-713_inet_sealed_builder|CONF|K|arena,builder,inet|
+2435_inet_sealed_builder|CONF|K|arena,builder,inet|
 713_sovflow_neg|NEG|K||
-714_async_id_alias|CONF|K|arena,async|
+2436_async_id_alias|CONF|K|arena,async|
 714_sovflow_pos|CONF|K||
 715_sovout_neg|NEG|K||
 716_sovout_pos|CONF|K||
@@ -1323,15 +1323,15 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 1047_quine_seal|CONF|K|quine_seal|
 1048_json_uescape|CONF|ORPHAN-REF|Binary file STDLIB/corpus/1048_json_uescape.iii matches|MISSING:Binary file STDLIB/corpus/1048_json_uescape.iii matches
 1049_mig2_keystone|CONF|K|typecheck|
-1050_mig2_cost|CONF|K|typecheck|
+2414_mig2_cost|CONF|K|typecheck|
 1050_sealed_channel_forge_desync|CONF|K|sealed_channel,x25519|
-1051_base64_pad_reject|CONF|K|arena,base64,builder|
+2415_base64_pad_reject|CONF|K|arena,base64,builder|
 1051_mig2_sovval|CONF|K|typecheck|
-1052_base32_trailing_reject|CONF|K|arena,base32,builder|
+2416_base32_trailing_reject|CONF|K|arena,base32,builder|
 1052_sov_morphism|CONF|K|sov_morphism|
-1053_html_apos_unescape|CONF|K|arena,builder,html_escape|
+2417_html_apos_unescape|CONF|K|arena,builder,html_escape|
 1053_xii_morphism|CONF|K|xii_morphism|
-1054_h9_mig2_tie|CONF|K|h9_mig2_tie|
+2418_h9_mig2_tie|CONF|K|h9_mig2_tie|
 1054_q128_ops|CONF|K|q128|
 1055_modular_ops|CONF|K|modular|
 1056_fixed_ops|CONF|K|fixed|
@@ -1448,7 +1448,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 1244_relational_ematch|CONF|K|relational_ematch|
 1245_algo_synth|CONF|K|algo_synth|
 1246_bv_canon_addr|CONF|K|bv_dispose,bv_ring,mhash,typecheck|
-1247_induct_wj|CONF|K|induct,typecheck|
+2419_induct_wj|CONF|K|induct,typecheck|
 1247_k0_referee|CONF|K|k0_referee|
 1248_golden_shift|CONF|K|golden_shift|
 1249_conjecture_refute|CONF|K|conjecture_refute|
@@ -1585,27 +1585,27 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 1397_registry_probe_verdict|CONF|K|attest,cg_autocatalyst,charter_terminal,cpufeat|
 1398_fed_sybil_gate|CONF|K|crypt_ed25519,fed_sybil|
 1399_anchor_store_wave|CONF|K|arena,builder,bv_bits,bv_ring|
-1400_glyph_v3_forms|CONF|K|glyph_bytes,glyph_core,glyph_crystal,glyph_enum|
+2420_glyph_v3_forms|CONF|K|glyph_bytes,glyph_core,glyph_crystal,glyph_enum|
 1400_self_model|CONF|K|capability,corpus_coverage,fs,self_model|
-1401_field_curve_vault|CONF|K|fn256,fn384,fp256,fp384|
+2421_field_curve_vault|CONF|K|fn256,fn384,fp256,fp384|
 1401_gap_conjecture|CONF|K|gap_conjecture|
-1402_gov_charter_hexad|CONF|K|governance,h13_charter,h2_charter,hexad_algebra|
+2422_gov_charter_hexad|CONF|K|governance,h13_charter,h2_charter,hexad_algebra|
 1402_harmony_synth|CONF|K|harmony_synth|
-1403_kchain_json_iter|CONF|K|arena,capability,fs,iter|
+2423_kchain_json_iter|CONF|K|arena,capability,fs,iter|
 1403_refactor_propose|CONF|K|refactor_propose|
 1404_optimize_self|CONF|K|optimize_self|
-1404_scalar_result_rune|CONF|K|result,rune,scalar|
-1405_provenance_span_basis|CONF|K|crystal,scalar_provenance,span,string|
+2424_scalar_result_rune|CONF|K|result,rune,scalar|
+2425_provenance_span_basis|CONF|K|crystal,scalar_provenance,span,string|
 1405_theorem_grow|CONF|K|capability,fs,theorem_grow,typecheck|
 1406_autogenesis_cycle|CONF|K|autogenesis,capability|
-1406_term_arena_xoshiro|CONF|K|xii_term,xoshiro,zk_field|
+2426_term_arena_xoshiro|CONF|K|xii_term,xoshiro,zk_field|
 1407_autogenesis_revert|CONF|K|autogenesis,capability|
-1407_lattice_cells|CONF|K|xii_lattice|
+2427_lattice_cells|CONF|K|xii_lattice|
 1408_autogenesis_attest|CONF|K|attest_box,autogenesis,capability,node_identity|
-1408_intent_table|CONF|K|intent|
+2428_intent_table|CONF|K|intent|
 1409_autogenesis_charter|CONF|K|autogenesis,capability|
-1409_scalar64_sat_counters|CONF|K|sat,scalar|
-1410_autogenesis_cli|CONF|K|autogenesis_cli,capability|
+2429_scalar64_sat_counters|CONF|K|sat,scalar|
+2430_autogenesis_cli|CONF|K|autogenesis_cli,capability|
 1410_semver_uri_sha512_tp|CONF|K|arena,semver,sha512,transform_patterns|
 1411_sovereign_optimizer|CONF|K|scythe_census,sovereign_optimizer|
 1412_circ_horizon|CONF|K|xii_circ,xii_horizon,xii_horizon_reach|
@@ -2120,7 +2120,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 2009_seraphyte_commit|CONF|K|ser_commit|
 2010_seraphyte_discover|CONF|K|ser_discover|
 2011_seraphyte_optimize|CONF|K|ser_optimize|
-2012_seraphyte_isub|CONF|K|ser_isub|
+2431_seraphyte_isub|CONF|K|ser_isub|
 2012_zk_air_mal_cp|CONF|K|ntt_fri_organ,zk_air|
 2013_seraphyte_immune|CONF|K|ser_immune|
 2014_seraphyte_diff|CONF|K|ser_diff|
@@ -2226,7 +2226,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 2130_disposers|RIPPLE|K|disposer,involution,logic6|
 2131_reactor|RIPPLE|K|crystal,reactor|
 2132_eidolon|RIPPLE|K|eidolon|
-2132_mod_pow2|CONF|K||
+2432_mod_pow2|CONF|K||
 2133_ripple_eidolon|RIPPLE|K|eidolon,involution,ripple_eidolon|
 2134_planner|RIPPLE|K|eid_plan,eidolon,involution,ripple_eidolon|
 2135_mul_subsume|CONF|K|ser_egraph|
@@ -2262,7 +2262,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 2166_cover_bigcoeff|CONF|K|ui_exact_bigcov,ui_exact_sym|
 2167_billiard_reversal|CONF|K|billiard,verb_geom|
 2168_csg_tree|CONF|K|csg_tree|
-2169_gas_reversal|CONF|K|gas,verb_geom|
+2433_gas_reversal|CONF|K|gas,verb_geom|
 2169_studio_kernel|CONF|K|studio_trig,wb_kernel|
 2170_swept_leaf|CONF|K|csg_tree|
 2171_lattice_march|CONF|K|lattice_march|

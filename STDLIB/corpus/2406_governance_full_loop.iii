@@ -1,0 +1,167 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\205_governance_full_loop.iii
+ *
+ * III conformance corpus 205 -- Phase F.1 + F.2:
+ * full sealed-evolution governance loop.
+ *
+ * End-to-end:
+ *   propose -> sandbox -> prove_equivalence -> tally -> promote -> seal
+ *
+ * Asserts:
+ *   1. governance_reset clears state.
+ *   2. governance_propose registers a proposal; returns 1-based id.
+ *   3. State transitions follow the lifecycle (PENDING -> SANDBOXED ->
+ *      PROVEN -> ACCEPTED -> SEALED).
+ *   4. proof_ripple_equivalence emits a valid cert for two slots that
+ *      share a dispatch_fp (slot 5 PRIMITIVE_COMPOSE vs itself) -- the
+ *      same dispatch is trivially equivalent.
+ *   5. Vote tally matches the recorded votes; quorum 2/3 logic correct.
+ *   6. Quorum-fail path: <2/3 yes -> promote returns error, status
+ *      transitions to REJECTED.
+ *   7. governance_seal with mismatched lifecycle -> error.
+ *   8. Diagnostic accessors return expected metadata.
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_2406
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence_with_count(proposal_id: u64, old_pid: u32, new_pid_and_count: u64, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_vote(voter_cap: u64, proposal_id: u64, vote: u8) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_tally(proposal_id: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_threshold_met(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_promote(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_seal(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_cert(proposal_id: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_intent(proposal_id: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_new_pid(proposal_id: u64) -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_proposer_cap(proposal_id: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_proposal_count() -> u32 from "governance.iii"
+
+fn main() -> u64 {
+    /* Initialise the calculus + pattern registry. Required so
+     * pattern_table_get(5) returns the PRIMITIVE_COMPOSE meta-pattern
+     * with a valid dispatch_fp. */
+    resolution_init()
+
+    /* ---- 1. Reset; capacity + count baseline. ---- */
+    governance_reset()
+    if governance_proposal_count() != 0u32 { return 1u64 }
+
+    /* ---- 2. Register a proposal. ---- */
+    let cap_alice : u64 = 0x4000u64
+    let intent_a  : u64 = 0xABCDu64
+    let rat       : *u8 = malloc(16u64)
+    if rat as u64 == 0u64 { return 2u64 }
+    let mut k : u64 = 0u64
+    while k < 16u64 {
+        rat[k] = (65u64 + k) as u8   /* "ABCD..." */
+        k = k + 1u64
+    }
+    let pid : u64 = governance_propose(cap_alice, intent_a, rat as u64, 16u32)
+    if pid == 0u64 { free(rat); return 3u64 }
+    if pid != 1u64 { free(rat); return 4u64 }   /* first slot -> id 1 */
+
+    if governance_proposal_count() != 1u32 { free(rat); return 5u64 }
+    if governance_status(pid) != 0u8 { free(rat); return 6u64 }   /* PENDING */
+
+    /* illegal seal from PENDING: exact -3 (GOV_E_BAD_STATE), state untouched */
+    if governance_seal(pid) != -3i32 { free(rat); return 70u64 }
+    if governance_status(pid) != 0u8 { free(rat); return 71u64 }
+    if governance_intent(pid) != intent_a { free(rat); return 7u64 }
+    if governance_proposer_cap(pid) != cap_alice { free(rat); return 8u64 }
+
+    /* ---- 3. Reject sandbox transition from a wrong state -- not pending. ---- */
+    /* (we are in PENDING; sandbox should succeed) */
+    if governance_sandbox(pid) != 0i32 { free(rat); return 9u64 }
+    if governance_status(pid) != 1u8 { free(rat); return 10u64 }   /* SANDBOXED */
+
+    /* illegal seal from SANDBOXED */
+    if governance_seal(pid) != -3i32 { free(rat); return 72u64 }
+    if governance_status(pid) != 1u8 { free(rat); return 73u64 }
+
+    /* Re-sandbox should fail (status no longer PENDING). */
+    if governance_sandbox(pid) == 0i32 { free(rat); return 11u64 }
+
+    /* ---- 4. Prove equivalence with slot 5 vs itself; count = 0.
+     * Pack: (count_u32 << 32) | new_pid_u32 = (0 << 32) | 5 = 5u64. */
+    let new_pid_and_count : u64 = 5u64
+    let cert : u64 = governance_prove_equivalence_with_count(pid, 5u32, new_pid_and_count, 0u64)
+    if cert == 0u64 { free(rat); return 12u64 }
+    if governance_status(pid) != 2u8 { free(rat); return 13u64 }   /* PROVEN */
+
+    /* illegal seal from PROVEN (not yet voted/promoted) */
+    if governance_seal(pid) != -3i32 { free(rat); return 74u64 }
+    if governance_status(pid) != 2u8 { free(rat); return 75u64 }
+    if governance_cert(pid) != cert { free(rat); return 14u64 }
+    if governance_new_pid(pid) != 5u32 { free(rat); return 15u64 }
+
+    /* ---- 5. Vote: 4 yes, 1 no -> threshold met (4*3=12 >= 2*5=10). ---- */
+    governance_vote(0x10u64, pid, 1u8)   /* yes */
+    governance_vote(0x11u64, pid, 1u8)
+    governance_vote(0x12u64, pid, 1u8)
+    governance_vote(0x13u64, pid, 1u8)
+    governance_vote(0x14u64, pid, 0u8)   /* no */
+    governance_vote(0x15u64, pid, 2u8)   /* abstain (does not affect quorum) */
+
+    let tally : u64 = governance_tally(pid)
+    /* yes in bits 32..63: 4. no in bits 16..31: 1. abstain in bits 0..15: 1. */
+    if (tally >> 32u64) != 4u64 { free(rat); return 20u64 }
+    if ((tally >> 16u64) & 0xFFFFu64) != 1u64 { free(rat); return 21u64 }
+    if (tally & 0xFFFFu64) != 1u64 { free(rat); return 22u64 }
+
+    if governance_threshold_met(pid) != 1u8 { free(rat); return 23u64 }
+
+    /* ---- 6. Promote: PROVEN + threshold -> ACCEPTED. ---- */
+    if governance_promote(pid) != 0i32 { free(rat); return 30u64 }
+    if governance_status(pid) != 3u8 { free(rat); return 31u64 }   /* ACCEPTED */
+
+    /* ---- 7. Seal: ACCEPTED -> SEALED. ---- */
+    if governance_seal(pid) != 0i32 { free(rat); return 40u64 }
+    if governance_status(pid) != 5u8 { free(rat); return 41u64 }   /* SEALED */
+
+    /* Re-seal should fail (status no longer ACCEPTED). */
+    if governance_seal(pid) != -3i32 { free(rat); return 42u64 }   /* exact: GOV_E_BAD_STATE */
+
+    /* ---- 8. Quorum-fail path. ---- */
+    let pid2 : u64 = governance_propose(cap_alice, 0x9999u64, 0u64, 0u32)
+    if pid2 == 0u64 { free(rat); return 50u64 }
+    governance_sandbox(pid2)
+    let cert2 : u64 = governance_prove_equivalence_with_count(pid2, 5u32, 5u64, 0u64)
+    if cert2 == 0u64 { free(rat); return 51u64 }
+    /* 1 yes, 5 no -> 1*3 = 3 < 2*6 = 12; threshold NOT met. */
+    governance_vote(0x20u64, pid2, 1u8)
+    governance_vote(0x21u64, pid2, 0u8)
+    governance_vote(0x22u64, pid2, 0u8)
+    governance_vote(0x23u64, pid2, 0u8)
+    governance_vote(0x24u64, pid2, 0u8)
+    governance_vote(0x25u64, pid2, 0u8)
+    if governance_threshold_met(pid2) != 0u8 { free(rat); return 52u64 }
+    /* Promote should return non-zero error AND mark as REJECTED. */
+    if governance_promote(pid2) == 0i32 { free(rat); return 53u64 }
+    if governance_status(pid2) != 4u8 { free(rat); return 54u64 }   /* REJECTED */
+
+    /* illegal seal from REJECTED */
+    if governance_seal(pid2) != -3i32 { free(rat); return 76u64 }
+    if governance_status(pid2) != 4u8 { free(rat); return 77u64 }
+
+    /* ---- 9. Bad-state error paths. ---- */
+    /* Propose-with-null-intent fails. */
+    if governance_propose(cap_alice, 0u64, 0u64, 0u32) != 0u64 { free(rat); return 60u64 }
+    /* Vote with invalid code fails. */
+    if governance_vote(0u64, pid, 99u8) == 0i32 { free(rat); return 61u64 }
+    /* Operations on bad id fail. */
+    if governance_status(0u64) != 0xFFu8 { free(rat); return 62u64 }
+    if governance_status(9999u64) != 0xFFu8 { free(rat); return 63u64 }
+
+    free(rat)
+    return 99u64
+}

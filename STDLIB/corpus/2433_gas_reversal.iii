@@ -1,0 +1,171 @@
+/* 2169_gas_reversal.iii -- GATE for gas.iii: THE EXACT MICROCANONICAL (hard-cube) GAS (charter Program II, Phase I).
+ *
+ * A 3-particle Minkowski gas in a box with a sqrt2 wall offset runs 8 exact events -- pair collisions
+ * (axis-component SWAPS) interleaved with wall reflections -- then the time-reversal involution
+ * R.F^7.R.F^7 == id returns the WHOLE ensemble bit-exactly.  The conservation laws are INTEGER IDENTITIES:
+ *   - energy sum v^2 == 23 after EVERY event (a swap and a negation cannot change a sum of squares);
+ *   - per-axis momentum is UNCHANGED across every PAIR event (swaps permute, walls exchange with the box).
+ * Non-vacuity: >= 2 pair events fire (the second with sqrt2 already in the positions -- its time comparison
+ * is genuinely irrational, decided by the ladder) and the sqrt2 wall is hit.  A second scenario aims TWO
+ * pairs to collide at EXACTLY the same instant: the tie is CERTIFIED and refused (GS_E_TIE) -- the
+ * simultaneity a float engine cannot even detect.
+ *
+ * exit 99 = pass;  10 forward run failed;  11 reversal not bit-exact;  12 event palindrome broke;
+ * 13 vacuity (pairs < 2 or the sqrt2 wall unhit);  14 energy identity broke;  15 momentum changed at a pair;
+ * 30 simultaneous pair tie not certified */
+module corpus_2433_gas_reversal
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gs_reset() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_envelope(S: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_step() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_reverse() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_energy() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_mom(ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p0(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p1(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_den() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_v(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_events() -> u64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ek(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ea(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_eb(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_eax(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ovf() -> u32 from "gas.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+const KG : u64 = 8u64
+var S1P0 : [i64; 9]   var S1P1 : [i64; 9]   var S1V : [i64; 9]
+
+fn snap() -> i32 {
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            S1P0[p * 3u64 + ax] = gs_p0(p, ax)
+            S1P1[p * 3u64 + ax] = gs_p1(p, ax)
+            S1V[p * 3u64 + ax] = gs_v(p, ax)
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+fn snap_diff() -> i64 {
+    let mut bad : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            if gs_p0(p, ax) != S1P0[p * 3u64 + ax] { bad = bad + 1i64 }
+            if gs_p1(p, ax) != S1P1[p * 3u64 + ax] { bad = bad + 1i64 }
+            if gs_v(p, ax) != S1V[p * 3u64 + ax] { bad = bad + 1i64 }
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return bad
+}
+
+/* run n exact events with the conservation identities asserted at EVERY event; 0 ok / 14 energy / 15 pair-mom / 10 step */
+var MX : i64   var MY : i64   var MZ : i64
+fn run_checked(n: u64) -> u64 {
+    let mut done : u64 = 0u64
+    while done < n {
+        MX = gs_mom(0u64)   MY = gs_mom(1u64)   MZ = gs_mom(2u64)
+        let r : i32 = gs_step()
+        if r != 1i32 { return 10u64 }
+        if gs_energy() != 23i64 { return 14u64 }
+        let e : u64 = gs_events() - 1u64
+        if gs_ek(e) == 1i64 {
+            if gs_mom(0u64) != MX { return 15u64 }
+            if gs_mom(1u64) != MY { return 15u64 }
+            if gs_mom(2u64) != MZ { return 15u64 }
+        }
+        done = done + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ the ensemble: box x in [0, 40+sqrt2], y,z in [0,40]; envelope S = 2; three particles, E = 23. */
+    gs_reset()
+    gs_envelope(2i64)
+    gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)                 /* wall 0: x >= 0            */
+    gs_wall(0i64, 1i64, 40i64, 1i64, 1i64)                       /* wall 1: x <= 40 + sqrt2   */
+    gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(1i64, 1i64, 40i64, 0i64, 1i64)
+    gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(2i64, 1i64, 40i64, 0i64, 1i64)
+    gs_part(5i64, 10i64, 10i64, 3i64, 0i64, 0i64)
+    gs_part(15i64, 10i64, 10i64, 0i64 - 2i64, 0i64, 0i64)
+    gs_part(10i64, 30i64, 30i64, 0i64, 3i64, 1i64)
+    if gs_energy() != 23i64 { return 10u64 }
+
+    /* event 1, snapshot, then the closed involution R.F^(K-1).R.F^(K-1) == id */
+    let r1 : u64 = run_checked(1u64)
+    if r1 != 0u64 { return r1 }
+    snap()
+    let r2 : u64 = run_checked(KG - 1u64)
+    if r2 != 0u64 { return r2 }
+    gs_reverse()
+    let r3 : u64 = run_checked(KG - 1u64)
+    if r3 != 0u64 { return r3 }
+    gs_reverse()
+    let bad : i64 = snap_diff()
+    putchar(71i32) putchar(58i32) sp() e_i64(KG as i64) sp() e_i64(bad) sp() e_i64(gs_den()) sp() e_i64(gs_energy()) nl()   /* "G: 8 0 <den> 23" */
+    if bad != 0i64 { return 11u64 }
+
+    /* palindrome of (kind, a, b, ax): reverse event i mirrors forward event KG-2-i */
+    let mut i : u64 = 0u64
+    while i < (KG - 1u64) {
+        let f : u64 = KG - 2u64 - i   let b : u64 = KG + i
+        if gs_ek(b) != gs_ek(f) { return 12u64 }
+        if gs_ea(b) != gs_ea(f) { return 12u64 }
+        if gs_eb(b) != gs_eb(f) { return 12u64 }
+        if gs_eax(b) != gs_eax(f) { return 12u64 }
+        i = i + 1u64
+    }
+
+    /* non-vacuity: >= 2 pair events among the forward KG, and the sqrt2 wall (id 1) hit */
+    let mut pairs : i64 = 0i64
+    let mut w1 : i64 = 0i64
+    i = 0u64
+    while i < KG {
+        if gs_ek(i) == 1i64 { pairs = pairs + 1i64 }
+        if gs_ek(i) == 0i64 { if gs_eb(i) == 1i64 { w1 = w1 + 1i64 } }
+        i = i + 1u64
+    }
+    putchar(86i32) putchar(58i32) sp()
+    i = 0u64
+    while i < KG { e_i64(gs_ek(i)) e_i64(gs_eb(i)) sp()   i = i + 1u64 }
+    putchar(124i32) sp() e_i64(pairs) sp() e_i64(w1) nl()                          /* "V: <k,b pairs> | 2 1" */
+    if pairs < 2i64 { return 13u64 }
+    if w1 < 1i64 { return 13u64 }
+
+    /* ══ CERTIFIED SIMULTANEITY: two pairs aimed to collide at EXACTLY the same instant -> honest refusal. */
+    gs_reset()
+    gs_envelope(2i64)
+    gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(0i64, 1i64, 100i64, 0i64, 1i64)
+    gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(1i64, 1i64, 100i64, 0i64, 1i64)
+    gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(2i64, 1i64, 100i64, 0i64, 1i64)
+    gs_part(5i64, 5i64, 5i64, 1i64, 0i64, 0i64)
+    gs_part(11i64, 5i64, 5i64, 0i64 - 1i64, 0i64, 0i64)
+    gs_part(5i64, 20i64, 5i64, 1i64, 0i64, 0i64)
+    gs_part(11i64, 20i64, 5i64, 0i64 - 1i64, 0i64, 0i64)
+    let rt : i32 = gs_step()
+    putchar(84i32) putchar(58i32) sp() e_i64(rt as i64) nl()                       /* "T: 2" */
+    if rt != 2i32 { return 30u64 }
+
+    return 99u64
+}

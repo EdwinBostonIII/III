@@ -1,0 +1,28 @@
+/* Bit-identity probe matching corpus 154's structure. */
+module corpus_2411
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+fn outer(rt: u64) -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let mut iters : u32 = 0u32
+    let mut completed : u32 = 0u32
+    while iters < 3u32 {
+        let tid : u64 = arena_new(128u64)
+        let kind : u64 = arena_new(256u64)
+        let ctx : u64 = arena_new(64u64)
+        let mut result : u64 = 0u64
+        if kind == 1u64 { result = ctx + 1u64 }
+        if kind == 2u64 { result = ctx + 2u64 }
+        if kind == 3u64 { result = ctx + 3u64 }
+        completed = completed + 1u32
+        iters = iters + 1u32
+    }
+    if completed != 3u32 { return 7u64 }
+    let v : u64 = arena_new(32u64)
+    return v
+}
+
+fn main() -> u64 {
+    return outer(1u64)
+}

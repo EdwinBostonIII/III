@@ -1,0 +1,203 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\201_lazy_crystal_levels.iii
+ *
+ * III conformance corpus 201 -- Phase B: Lazy Crystals (L0/L1/L2) +
+ * reflect primitive.
+ *
+ * Asserts:
+ *   1. call_context_l0_provenance_hash emits 8 bytes deterministic
+ *      from L0 fields; same context yields same hash.
+ *   2. mini_crystal_mint allocates a fresh slot with non-zero hash;
+ *      drop reclaims; capacity = 65536.
+ *   3. Mint a small stress batch (256 mints with varying inputs) --
+ *      verify no two slots end up with the same hash (collision
+ *      sanity check).
+ *   4. mini_crystal_promote_to_full converts L1 -> L2; the new L2
+ *      crystal_id is non-zero; the L1 slot is freed.
+ *   5. reflect(scope) returns expected values after a synthetic
+ *      resolve-event seed.
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_2402
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena_id: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_set_caller_pattern_id(p: u64, pat_id: u64) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_l0_provenance_hash(p: u64, out_8: u64) -> i32 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn mini_crystal_mint(value_addr: u64, parent_pattern_id: u64, kchain_state: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_hash(id: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_drop(id: u64) -> i32 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_promote_to_full(id: u64, error_code: u32, site_hash_ptr: u64, cap_id: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_used() -> u32 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_capacity() -> u32 from "mini_crystal.iii"
+
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn reflect(scope: u32) -> u64 from "resolver.iii"
+
+fn read_u64_le(buf: u64, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (buf + off + i) as *u8
+        let b  : u64 = (bp[0u64] as u64) & 0xFFu64
+        v = v | (b << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+fn main() -> u64 {
+    /* ---- 1. L0 provenance hash determinism. ---- */
+    call_context_init_set(0x100u64, 0u8, 2u8, 6u8)
+    call_context_init_set_extras(0x4000u64, 5u16)
+    let ctx_a : u64 = call_context_new()
+    if ctx_a == 0u64 { return 1u64 }
+    call_context_set_caller_pattern_id(ctx_a, 0xABCDu64)
+
+    let h_buf_a : *u8 = malloc(8u64)
+    let h_buf_b : *u8 = malloc(8u64)
+    if h_buf_a as u64 == 0u64 { return 2u64 }
+    if h_buf_b as u64 == 0u64 { return 3u64 }
+    if call_context_l0_provenance_hash(ctx_a, h_buf_a as u64) != 0i32 { return 4u64 }
+    if call_context_l0_provenance_hash(ctx_a, h_buf_b as u64) != 0i32 { return 5u64 }
+
+    let v_a : u64 = read_u64_le(h_buf_a as u64, 0u64)
+    let v_b : u64 = read_u64_le(h_buf_b as u64, 0u64)
+    if v_a != v_b { return 6u64 }
+    if v_a == 0u64 { return 7u64 }
+
+    /* Different caller_pattern_id should produce different hash. */
+    call_context_init_set(0x200u64, 0u8, 2u8, 6u8)
+    call_context_init_set_extras(0x4000u64, 5u16)
+    let ctx_b : u64 = call_context_new()
+    call_context_set_caller_pattern_id(ctx_b, 0x9999u64)
+    if call_context_l0_provenance_hash(ctx_b, h_buf_b as u64) != 0i32 { return 8u64 }
+    let v_c : u64 = read_u64_le(h_buf_b as u64, 0u64)
+    if v_a == v_c { return 9u64 }
+
+    free(h_buf_a)
+    free(h_buf_b)
+
+    /* ---- 2. mini_crystal_mint / hash / drop. ---- */
+    if mini_crystal_capacity() != 65536u32 { return 10u64 }
+    let used_before : u32 = mini_crystal_used()
+
+    let m1 : u64 = mini_crystal_mint(0x1000u64, 0x2000u64, 0x3000u64)
+    if m1 == 0u64 { return 11u64 }
+    if mini_crystal_used() != (used_before + 1u32) { return 12u64 }
+    let h1 : u64 = mini_crystal_hash(m1)
+    if h1 == 0u64 { return 13u64 }
+
+    let m2 : u64 = mini_crystal_mint(0x1001u64, 0x2000u64, 0x3000u64)
+    if m2 == 0u64 { return 14u64 }
+    if m2 == m1 { return 15u64 }
+    let h2 : u64 = mini_crystal_hash(m2)
+    if h1 == h2 { return 16u64 }
+
+    if mini_crystal_drop(m1) != 0i32 { return 17u64 }
+    if mini_crystal_hash(m1) != 0u64 { return 18u64 }
+    if mini_crystal_used() != (used_before + 1u32) { return 19u64 }
+
+    /* ---- 3. Stress: 256 distinct mints, no two share a hash. ---- */
+    let hash_buf : *u8 = malloc(2048u64)   /* 256 * 8 bytes */
+    if hash_buf as u64 == 0u64 { return 20u64 }
+    let id_buf   : *u8 = malloc(2048u64)
+    if id_buf as u64 == 0u64 { return 21u64 }
+
+    let mut idx : u64 = 0u64
+    while idx < 256u64 {
+        let m : u64 = mini_crystal_mint(0x10000u64 + idx, 0x20000u64, 0x30000u64)
+        if m == 0u64 {
+            free(hash_buf); free(id_buf); return 30u64
+        }
+        let h : u64 = mini_crystal_hash(m)
+        let h_off : u64 = idx * 8u64
+        let i_off : u64 = idx * 8u64
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            let hp : *u8 = (hash_buf as u64 + h_off + k) as *u8
+            hp[0u64] = ((h >> (k * 8u64)) & 0xFFu64) as u8
+            let ip : *u8 = (id_buf as u64 + i_off + k) as *u8
+            ip[0u64] = ((m >> (k * 8u64)) & 0xFFu64) as u8
+            k = k + 1u64
+        }
+        idx = idx + 1u64
+    }
+
+    /* Verify all 256 hashes are pairwise distinct. */
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        let h_a : u64 = read_u64_le(hash_buf as u64, a * 8u64)
+        let mut b : u64 = a + 1u64
+        while b < 256u64 {
+            let h_b : u64 = read_u64_le(hash_buf as u64, b * 8u64)
+            if h_a == h_b {
+                free(hash_buf); free(id_buf); return 40u64
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+
+    /* Drop all 256. */
+    let mut d : u64 = 0u64
+    while d < 256u64 {
+        let m_d : u64 = read_u64_le(id_buf as u64, d * 8u64)
+        if mini_crystal_drop(m_d) != 0i32 {
+            free(hash_buf); free(id_buf); return 41u64
+        }
+        d = d + 1u64
+    }
+
+    free(hash_buf)
+    free(id_buf)
+
+    /* ---- 4. Promote L1 -> L2. ---- */
+    let m3 : u64 = mini_crystal_mint(0x4000u64, 0x5000u64, 0x6000u64)
+    if m3 == 0u64 { return 50u64 }
+    let h3 : u64 = mini_crystal_hash(m3)
+    if h3 == 0u64 { return 51u64 }
+
+    let site : *u8 = malloc(32u64)
+    if site as u64 == 0u64 { return 52u64 }
+    let mut s : u64 = 0u64
+    while s < 32u64 {
+        site[s] = (s & 0xFFu64) as u8
+        s = s + 1u64
+    }
+
+    let l2 : u64 = mini_crystal_promote_to_full(m3, 7u32, site as u64, 0xCA00u64)
+    if l2 == 0u64 {
+        free(site); return 53u64
+    }
+    if crystal_verify(l2) != 1u8 {
+        free(site); return 54u64
+    }
+    /* L1 slot should now be free (hash returns 0 for dead slot). */
+    if mini_crystal_hash(m3) != 0u64 {
+        free(site); return 55u64
+    }
+    free(site)
+
+    /* ---- 5. reflect primitive (smoke test). The fields are zero
+     * before any resolve occurs in this test process; all five
+     * scopes return 0u64 except scope=3 which encodes 0 too. */
+    if reflect(0u32) != 0u64 { return 60u64 }
+    if reflect(1u32) != 0u64 { return 61u64 }
+    if reflect(2u32) != 0u64 { return 62u64 }
+    /* scope=3 = (intent_id_hi7 << 8) | (pattern_id & 0xFF). With both
+     * RES_LAST_PATTERN_ID = 0 and RES_LAST_INTENT_ID = 0, result is 0. */
+    if reflect(3u32) != 0u64 { return 63u64 }
+    if reflect(4u32) != 0u64 { return 64u64 }
+    /* Out-of-range scope returns 0. */
+    if reflect(99u32) != 0u64 { return 65u64 }
+
+    return 99u64
+}

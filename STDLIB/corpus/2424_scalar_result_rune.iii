@@ -1,0 +1,117 @@
+/* 1404_scalar_result_rune.iii -- BIT-TWIDDLING EXACTNESS, RESULT HANDLES, ASCII RUNES
+ * (burn-down tranche 13; ~23 census orphans, every law mathematically exact).
+ *
+ *  SCALAR u32/u64 (13): sub_wrap/mul_wrap/add_wrap are arithmetic mod 2^w (pinned at the
+ *      wrap boundary), min/max/clamp total-order laws, popcount/clz/ctz on exact patterns
+ *      (0, 1, 0x80000000, 0xF0F0F0F0, all-ones), byteswap involution + exact vector,
+ *      rotl/rotr inverse pair + exact vector, to_u64 zero-extension;
+ *  RESULT u64 (6): ok(v) decodes to v (is_ok 1, err_code 0), err(c) refuses decode
+ *      (is_ok 0, unwrap_or yields the default, err_code exact), drop-once;
+ *  RUNE (4): is_ascii boundary at 0x80, alnum on letters+digits but not punctuation,
+ *      whitespace on space/tab/nl but not letters, to_ascii_upper maps a-z and FIXES
+ *      everything else (idempotent).
+ * Exit 99. */
+module corpus_2424
+
+extern @abi(c-msvc-x64) fn scalar_u32_sub_wrap(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_mul_wrap(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_add_wrap(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_min(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_max(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_clamp(x: u32, lo: u32, hi: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_popcount(x: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_leading_zeros(x: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_trailing_zeros(x: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_byteswap(x: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_rotl(x: u32, n: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_rotr(x: u32, n: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_to_u64(x: u32) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn result_u64_ok(v: u64) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u64_err(code: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u64_is_ok(r: u64) -> u8 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u64_unwrap_or(r: u64, default: u64) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u64_err_code(r: u64) -> u32 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u64_drop(r: u64) -> u8 from "result.iii"
+extern @abi(c-msvc-x64) fn rune_is_ascii(cp: u32) -> u8 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_is_ascii_alnum(cp: u32) -> u8 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_is_ascii_whitespace(cp: u32) -> u8 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_to_ascii_upper(cp: u32) -> u32 from "rune.iii"
+
+fn main() -> u64 {
+    /* ---- SCALAR: wrap arithmetic mod 2^w, pinned at the boundary ---- */
+    if scalar_u32_sub_wrap(0u32, 1u32) != 0xFFFFFFFFu32 { return 1u64 }
+    if scalar_u32_sub_wrap(5u32, 3u32) != 2u32 { return 2u64 }
+    if scalar_u32_mul_wrap(0x10000u32, 0x10000u32) != 0u32 { return 3u64 }       /* 2^32 == 0 */
+    if scalar_u32_mul_wrap(0xFFFFFFFFu32, 2u32) != 0xFFFFFFFEu32 { return 4u64 }
+    if scalar_u64_add_wrap(0xFFFFFFFFFFFFFFFFu64, 1u64) != 0u64 { return 5u64 }
+    if scalar_u64_add_wrap(40u64, 2u64) != 42u64 { return 6u64 }
+
+    /* min/max/clamp total-order laws */
+    if scalar_u32_min(3u32, 9u32) != 3u32 { return 7u64 }
+    if scalar_u32_max(3u32, 9u32) != 9u32 { return 8u64 }
+    if scalar_u32_min(7u32, 7u32) != 7u32 { return 9u64 }
+    if scalar_u32_clamp(5u32, 10u32, 20u32) != 10u32 { return 10u64 }
+    if scalar_u32_clamp(25u32, 10u32, 20u32) != 20u32 { return 11u64 }
+    if scalar_u32_clamp(15u32, 10u32, 20u32) != 15u32 { return 12u64 }
+
+    /* popcount / clz / ctz on exact patterns */
+    if scalar_u32_popcount(0u32) != 0u32 { return 13u64 }
+    if scalar_u32_popcount(0xFFFFFFFFu32) != 32u32 { return 14u64 }
+    if scalar_u32_popcount(0xF0F0F0F0u32) != 16u32 { return 15u64 }
+    if scalar_u32_popcount(1u32) != 1u32 { return 16u64 }
+    if scalar_u32_leading_zeros(0u32) != 32u32 { return 17u64 }
+    if scalar_u32_leading_zeros(1u32) != 31u32 { return 18u64 }
+    if scalar_u32_leading_zeros(0x80000000u32) != 0u32 { return 19u64 }
+    if scalar_u32_trailing_zeros(0u32) != 32u32 { return 20u64 }
+    if scalar_u32_trailing_zeros(0x80000000u32) != 31u32 { return 21u64 }
+    if scalar_u32_trailing_zeros(1u32) != 0u32 { return 22u64 }
+    if scalar_u32_trailing_zeros(0x10u32) != 4u32 { return 23u64 }
+
+    /* byteswap: exact vector + involution */
+    if scalar_u32_byteswap(0xA1B2C3D4u32) != 0xD4C3B2A1u32 { return 24u64 }
+    if scalar_u32_byteswap(scalar_u32_byteswap(0x12345678u32)) != 0x12345678u32 { return 25u64 }
+
+    /* rotl/rotr: exact vectors + inverse pair */
+    if scalar_u32_rotl(0x80000001u32, 1u32) != 0x00000003u32 { return 26u64 }
+    if scalar_u32_rotr(0x00000003u32, 1u32) != 0x80000001u32 { return 27u64 }
+    if scalar_u32_rotr(scalar_u32_rotl(0xDEADBEEFu32, 13u32), 13u32) != 0xDEADBEEFu32 { return 28u64 }
+
+    /* to_u64: zero extension exactly */
+    if scalar_u32_to_u64(0xFFFFFFFFu32) != 0xFFFFFFFFu64 { return 29u64 }
+    if scalar_u32_to_u64(0u32) != 0u64 { return 30u64 }
+
+    /* ---- RESULT u64: ok decodes, err refuses, drop-once ---- */
+    let rok : u64 = result_u64_ok(0xCAFEu64)
+    if rok == 0u64 { return 40u64 }
+    if result_u64_is_ok(rok) != 1u8 { return 41u64 }
+    if result_u64_unwrap_or(rok, 7u64) != 0xCAFEu64 { return 42u64 }
+    if result_u64_err_code(rok) != 0u32 { return 43u64 }
+    let rerr : u64 = result_u64_err(0xE7u32)
+    if rerr == 0u64 { return 44u64 }
+    if result_u64_is_ok(rerr) != 0u8 { return 45u64 }
+    if result_u64_unwrap_or(rerr, 7u64) != 7u64 { return 46u64 }      /* the default */
+    if result_u64_err_code(rerr) != 0xE7u32 { return 47u64 }
+    if result_u64_drop(rok) != 1u8 { return 48u64 }
+    if result_u64_drop(rok) != 0u8 { return 49u64 }                    /* drop-once */
+    if result_u64_drop(rerr) != 1u8 { return 50u64 }
+
+    /* ---- RUNE: classification boundaries ---- */
+    if rune_is_ascii(0x41u32) != 1u8 { return 60u64 }
+    if rune_is_ascii(0x7Fu32) != 1u8 { return 61u64 }
+    if rune_is_ascii(0x80u32) != 0u8 { return 62u64 }                  /* the boundary */
+    if rune_is_ascii_alnum(0x41u32) != 1u8 { return 63u64 }            /* A */
+    if rune_is_ascii_alnum(0x7Au32) != 1u8 { return 64u64 }            /* z */
+    if rune_is_ascii_alnum(0x39u32) != 1u8 { return 65u64 }            /* 9 */
+    if rune_is_ascii_alnum(0x2Cu32) != 0u8 { return 66u64 }            /* , */
+    if rune_is_ascii_whitespace(0x20u32) != 1u8 { return 67u64 }       /* space */
+    if rune_is_ascii_whitespace(0x09u32) != 1u8 { return 68u64 }       /* tab */
+    if rune_is_ascii_whitespace(0x0Au32) != 1u8 { return 69u64 }       /* nl */
+    if rune_is_ascii_whitespace(0x41u32) != 0u8 { return 70u64 }
+    if rune_to_ascii_upper(0x61u32) != 0x41u32 { return 71u64 }        /* a -> A */
+    if rune_to_ascii_upper(0x7Au32) != 0x5Au32 { return 72u64 }        /* z -> Z */
+    if rune_to_ascii_upper(0x41u32) != 0x41u32 { return 73u64 }        /* A fixed */
+    if rune_to_ascii_upper(0x31u32) != 0x31u32 { return 74u64 }        /* 1 fixed */
+    if rune_to_ascii_upper(rune_to_ascii_upper(0x6Du32)) != 0x4Du32 { return 75u64 }   /* idempotent */
+
+    return 99u64
+}

@@ -319,7 +319,7 @@ strip -- GREP each of 13 names tree-wide incl L_-refs BEFORE stripping; strip on
 
 ## [x] [33] (minor/missing-negative-arm) STDLIB/iii/katabasis/bar_layout.iii:81 [katabasis]
 - WHAT: katabasis_bar_cycle_admissible's documented structural-NEG-action rejection is never tested; the action-parameterized arm is uncovered.
-- FIX: In corpus 394_katabasis_bar_typing.iii, add extern katabasis_bar_cycle_admissible and assert NEG-action rejection to a valid BAR plus POS-action acceptance, e.g. katabasis_bar_cycle_admissible(728u16,0xFB000000) != 1u8 (admissible) and katabasis_bar_cycle_admissible(0u16,0xFB000000) != 0u8 (NEG refused) and a brick6 action to BAR0 != 0u8 -- mirroring 391:35-39; keep EXPECTED=99.
+- FIX: In corpus 2412_katabasis_bar_typing.iii, add extern katabasis_bar_cycle_admissible and assert NEG-action rejection to a valid BAR plus POS-action acceptance, e.g. katabasis_bar_cycle_admissible(728u16,0xFB000000) != 1u8 (admissible) and katabasis_bar_cycle_admissible(0u16,0xFB000000) != 0u8 (NEG refused) and a brick6 action to BAR0 != 0u8 -- mirroring 391:35-39; keep EXPECTED=99.
 
 ## [x] [34] (minor/untested-export) STDLIB/iii/tempora/duration.iii:98 [mem-time-seal]
 - WHAT: duration_div_u32 -- div-by-zero returns DUR_MAX (its only guard) -- is never exercised by any corpus test.

@@ -1,0 +1,27 @@
+/* Falsifier for COMBINE-7 / II-ASYNC-1 / X19: _async_rt_slot_of masked (rt_id-1)&0xF BEFORE any
+ * range check, so an out-of-domain rt_id aliases onto a live runtime slot: rt_id=17 -> (16)&0xF = 0
+ * -> slot 0.  Create one runtime (slot 0) + a task; a query with rt_id=17 MUST be rejected, not
+ * silently aliased to the real runtime.  BROKEN: async_task_state(17, task) aliases to slot 0 and
+ * returns the real task's state (READY=0).  FIXED: bnd_index(17,16) -> INVALID -> 0xFFFFFFFF.
+ * Expected exit: 99. */
+module corpus_2436
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn async_runtime_new(arena_id: u64, max_tasks: u32) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_spawn(rt_id: u64, kind: u64, ctx: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_task_state(rt_id: u64, task_id: u64) -> u32 from "async.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let rt : u64 = async_runtime_new(a, 8u32)
+    if rt == 0u64 { return 1u64 }
+    let task : u64 = async_spawn(rt, 0u64, 0u64)
+    if task == 0u64 { return 2u64 }
+    /* sanity: a VALID query returns READY(0) -- proves the path is live */
+    if async_task_state(rt, task) != 0u32 { return 3u64 }
+    /* falsifier: out-of-domain rt_id=17 aliases to slot 0 on broken code; must be REJECTED */
+    if async_task_state(17u64, task) != 0xFFFFFFFFu32 { return 4u64 }
+    arena_drop(a)
+    return 99u64
+}

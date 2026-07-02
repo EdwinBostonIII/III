@@ -42,7 +42,24 @@ if [[ -z "$IIIS" ]]; then
 fi
 echo "[run_corpus] iiis = $IIIS"
 
+# ── NUMBER-UNIQUENESS TEETH (III-REUNIFICATION-PLAN W5.2.4) ───────────────────────────────────────
+# The corpus number-space is UNIQUE except for one sanctioned exception: a number may be shared by
+# EXACTLY ONE positive/negative twin pair, `N_x` + `N_neg_x`, mirroring the static-negative gate
+# scripts (the twin runs the SAME subject through the positive and the compile-reject arms).  Every
+# other duplicate number is an accidental collision -> FATAL (W5.2.3 renumbered 37 legacy collisions
+# into the 2400-2447 block; this gate holds the line so no NEW collision — including a concurrent
+# session's — can arrive unproven).  The sanctioned twins are enumerated; anything else aborts.
+_TWIN_NUMS=" 262 263 264 265 267 269 "
+_dupnums="$(ls "$CORPUS_DIR"/[0-9]*_*.iii 2>/dev/null | sed 's|.*/||; s|_.*||' | sort | uniq -d)"
+for _dn in $_dupnums; do
+    case "$_TWIN_NUMS" in
+        *" $_dn "*) : ;;   # sanctioned pos/neg twin
+        *) echo "[run_corpus] FATAL: number collision on '$_dn' (not a sanctioned N_x/N_neg_x twin) -- renumber into 2400+ (W5.2.3)"; exit 4;;
+    esac
+done
+
 declare -A EXPECTED=(
+    [2411_bit_identity_probe]=11
     [1900_event_substrate_poc]=99
     [1901_event_substrate_infinitary]=99
     [1902_event_substrate_parity]=99
@@ -108,7 +125,7 @@ declare -A EXPECTED=(
     [2002_cg_opt_rules_certified]=99
     [2003_xii_route_r_teeth]=99
     [2012_zk_air_mal_cp]=99
-    [2132_mod_pow2]=99
+    [2432_mod_pow2]=99
     [2300_zk_fused_perm_seedrig]=99
     [2004_seraphyte_kvalue]=99
     [2005_seraphyte_energy]=99
@@ -118,7 +135,7 @@ declare -A EXPECTED=(
     [2009_seraphyte_commit]=99
     [2010_seraphyte_discover]=99
     [2011_seraphyte_optimize]=99
-    [2012_seraphyte_isub]=99
+    [2431_seraphyte_isub]=99
     [2013_seraphyte_immune]=99
     [2014_seraphyte_diff]=99
     [2015_seraphyte_memo]=99
@@ -314,7 +331,7 @@ declare -A EXPECTED=(
     [125_bitops]=99
     [126_inet_ipv4]=99
     [127_semver]=99
-    [128_glob]=99
+    [2400_glob]=99
     [128_self_host_ripple]=99
     [129_list]=99
     [130_lru]=99
@@ -383,16 +400,16 @@ declare -A EXPECTED=(
     [183_x25519_ed25519_field_bigint_bitident]=88
     [184_sha256_sched_scalar_avx512_bitident]=88
     [185_sha512_sched_scalar_avx512_bitident]=88
-    [200_calculus_18_primitives]=99
-    [201_lazy_crystal_levels]=99
+    [2401_calculus_18_primitives]=99
+    [2402_lazy_crystal_levels]=99
     [202_memo_determinism]=99
     [203_jit_fuse_amortized]=99
     [204_prespec_hw_offload]=99
-    [205_governance_full_loop]=99
+    [2406_governance_full_loop]=99
     [206_observe_and_propose]=99
     [207_babel_wire_roundtrip]=99
-    [208_cap_handshake]=99
-    [209_idoc_roundtrip]=99
+    [2409_cap_handshake]=99
+    [2410_idoc_roundtrip]=99
     [210_sealed_channel_handshake]=99
     [211_hip_resolve]=99
     [212_hip_verb_coverage]=99
@@ -478,12 +495,12 @@ declare -A EXPECTED=(
     [199_mlkem_roundtrip]=99
     [200_slhdsa_roundtrip]=99
     [201_pq_dispatch]=99
-    [202_aes192_kat]=99
-    [203_hmac_sha512_rfc4231]=99
-    [204_drbg_sp80090a]=99
+    [2403_aes192_kat]=99
+    [2404_hmac_sha512_rfc4231]=99
+    [2405_drbg_sp80090a]=99
     [205_drbg_hw_entropy]=99
-    [206_xchacha20_poly1305]=99
-    [207_aes_siv_rfc5297]=99
+    [2407_xchacha20_poly1305]=99
+    [2408_aes_siv_rfc5297]=99
     [208_ecdsa_p256]=99
     [209_ecdsa_p384]=99
     # reunification W0.2 coverage witnesses: the au_ holographic organ, ser_causal law surface,
@@ -511,8 +528,8 @@ declare -A EXPECTED=(
     [391_katabasis_cycle_dominance]=99
     [392_katabasis_cycle_family]=99
     [393_specialize]=99
-    [394_katabasis_bar_typing]=99
-    [395_katabasis_cycle_admit]=99
+    [2412_katabasis_bar_typing]=99
+    [2413_katabasis_cycle_admit]=99
     [600_katabasis_vmexit]=99
     [601_katabasis_ring_lattice]=99
     [602_katabasis_gate_verdict]=99
@@ -615,9 +632,9 @@ declare -A EXPECTED=(
     [708_option_full_distinct]=99
     [709_reach_oracle_null_pin]=99
     [710_base32_sealed_builder]=99
-    [711_format_sealed_builder]=99
-    [713_inet_sealed_builder]=99
-    [714_async_id_alias]=99
+    [2434_format_sealed_builder]=99
+    [2435_inet_sealed_builder]=99
+    [2436_async_id_alias]=99
     [720_caindex]=99
     [754_cg_anchor_caindex]=99
     [755_ripple_sep_grouping]=99
@@ -902,7 +919,7 @@ declare -A EXPECTED=(
     [1047_quine_seal]=99
     [1048_json_uescape]=99
     [1049_mig2_keystone]=99
-    [1050_mig2_cost]=99
+    [2414_mig2_cost]=99
     [1051_mig2_sovval]=99
     [1052_sov_morphism]=99
     [1053_xii_morphism]=99
@@ -1047,7 +1064,7 @@ declare -A EXPECTED=(
     [1326_safety_k_induction]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
-    [1247_induct_wj]=99
+    [2419_induct_wj]=99
     [1252_tcom_goalbound]=99
     [1124_fs_dir_enum]=99
     [1125_onelang_audit]=99
@@ -1114,18 +1131,18 @@ declare -A EXPECTED=(
     [1397_registry_probe_verdict]=99
     [1398_fed_sybil_gate]=99
     [1399_anchor_store_wave]=99
-    [1400_glyph_v3_forms]=99
-    [1401_field_curve_vault]=99
-    [1402_gov_charter_hexad]=99
-    [1403_kchain_json_iter]=99
-    [1404_scalar_result_rune]=99
-    [1405_provenance_span_basis]=99
-    [1406_term_arena_xoshiro]=99
-    [1407_lattice_cells]=99
-    [1408_intent_table]=99
-    [1409_scalar64_sat_counters]=99
+    [2420_glyph_v3_forms]=99
+    [2421_field_curve_vault]=99
+    [2422_gov_charter_hexad]=99
+    [2423_kchain_json_iter]=99
+    [2424_scalar_result_rune]=99
+    [2425_provenance_span_basis]=99
+    [2426_term_arena_xoshiro]=99
+    [2427_lattice_cells]=99
+    [2428_intent_table]=99
+    [2429_scalar64_sat_counters]=99
     [1410_semver_uri_sha512_tp]=99
-    [1410_autogenesis_cli]=99   # NOTE: shares the 1410 number prefix with the above (run_corpus keys by full name, so harmless); autogenesis_cli module restored to build_stdlib MODULES so this links + passes
+    [2430_autogenesis_cli]=99   # NOTE: shares the 1410 number prefix with the above (run_corpus keys by full name, so harmless); autogenesis_cli module restored to build_stdlib MODULES so this links + passes
     [1411_sovereign_optimizer]=99
     [1412_circ_horizon]=99
     [1413_transform_taint_seal]=99
@@ -1382,11 +1399,11 @@ declare -A EXPECTED=(
     [1665_proof_equality_leibniz]=99   # FOL= : Leibniz substitution of equals (PT_RULE_LEIBNIZ 0x1B), implemented in numera/proof_term.iii
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
-    [1054_h9_mig2_tie]=99
+    [2418_h9_mig2_tie]=99
     [1050_sealed_channel_forge_desync]=99
-    [1051_base64_pad_reject]=99
-    [1052_base32_trailing_reject]=99
-    [1053_html_apos_unescape]=99
+    [2415_base64_pad_reject]=99
+    [2416_base32_trailing_reject]=99
+    [2417_html_apos_unescape]=99
     [726_ntt_stage]=99
     [1054_q128_ops]=99
     [1055_modular_ops]=99

@@ -33,7 +33,6 @@ fi
 # run_corpus.sh does for every test; treating rc!=0 as FAIL here was a
 # harness-classification bug, not a real test failure.
 declare -A EXPECTED=(
-    [299_bit_identity_probe]=11
 )
 
 PASS=0

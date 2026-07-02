@@ -3,7 +3,7 @@
 **Status**: SEALED
 **Calculus binding**: `R2-GENESIS/CORE-CALCULUS-V1.0.iii`
 **Reference RTL**: `R2-GENESIS/silicon/resolver_unit.v`
-**Equivalence proof corpus**: `STDLIB/corpus/200_calculus_18_primitives.iii`
+**Equivalence proof corpus**: `STDLIB/corpus/2401_calculus_18_primitives.iii`
 
 ---
 
@@ -306,16 +306,16 @@ witness chain whose root mhash matches.
 
 | Software corpus test                 | Hardware corpus test                     |
 |---------------------------------------|------------------------------------------|
-| `200_calculus_18_primitives.iii`      | `silicon/test_200_18_primitives.sv`      |
-| `201_lazy_crystal_levels.iii`         | `silicon/test_201_lazy.sv`               |
+| `2401_calculus_18_primitives.iii`      | `silicon/test_200_18_primitives.sv`      |
+| `2402_lazy_crystal_levels.iii`         | `silicon/test_201_lazy.sv`               |
 | `202_memo_determinism.iii`            | `silicon/test_202_memo.sv`               |
 | `203_jit_fuse_amortized.iii`          | `silicon/test_203_jit.sv`                |
 | `204_prespec_hw_offload.iii`          | `silicon/test_204_prespec.sv`            |
-| `205_governance_full_loop.iii`        | `silicon/test_205_governance.sv`         |
+| `2406_governance_full_loop.iii`        | `silicon/test_205_governance.sv`         |
 | `206_observe_and_propose.iii`         | `silicon/test_206_observe.sv`            |
 | `207_babel_wire_roundtrip.iii`        | `silicon/test_207_wire.sv`               |
-| `208_cap_handshake.iii`               | `silicon/test_208_handshake.sv`          |
-| `209_idoc_roundtrip.iii`              | `silicon/test_209_idoc.sv`               |
+| `2409_cap_handshake.iii`               | `silicon/test_208_handshake.sv`          |
+| `2410_idoc_roundtrip.iii`              | `silicon/test_209_idoc.sv`               |
 | `210_sealed_channel_handshake.iii`    | `silicon/test_210_sealed.sv`             |
 | `211_hip_resolve.iii`                 | `silicon/test_211_hip.sv`                |
 

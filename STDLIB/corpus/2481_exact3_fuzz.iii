@@ -1,0 +1,522 @@
+/* 2481_exact3_fuzz.iii -- THE UNSCRIPTED ADVERSARY: property-based differential fuzzing of the
+ * Vector-I engines on inputs NO AUTHOR EVER SAW, checked against THEOREMS (which force the answer
+ * structurally) and against INDEPENDENT algorithms/organs -- never against authored constants.
+ *
+ * WHY THIS GATE EXISTS.  Every pinned KAT checks the engine against values its author derived by
+ * hand; if author and engine share a wrong assumption, the pin is green and worthless.  Here the
+ * expected outputs are not authored:
+ *   FAMILY 1 (rs_elim3) -- random surface pairs BUILT to vanish at a random planted point
+ *     (F = (z-c)P + (x-a)Q + (y-b)S vanishes at (a,b,c) for ANY draws): shadow completeness is a
+ *     THEOREM, so R(a,b) == 0 must hold -- verified mod THREE fresh ~2^30 primes DISJOINT from
+ *     the pipeline's 16 (|R(a,b)| <= ||R||_1 * 3^16 < q1*q2*q3, so three zero residues == exact
+ *     zero).  And at random probe points the delivered polynomial must equal the TEXTBOOK
+ *     Sylvester determinant computed by a CHECKER-LOCAL cofactor expansion (different algorithm,
+ *     different primes, different code -- deliberate duplication: checker independence overrides
+ *     the reuse law for verification code).  Any refusal inside this generator's envelope is a
+ *     defect and counts as a violation.
+ *   FAMILY 2 (quantifier elimination) -- random contact families p(t;c) = (t-u)^2 + (c-v)^2 - w^2:
+ *     elimination (resultant.iii, 2193 lineage) must agree with ROOT COUNTING (sturm.iii, 2156
+ *     lineage) at random probes: B(c0) > 0 <=> 0 real contact instants, < 0 <=> 2, == 0 <=> 1.
+ *     Two organs, gated years apart, forced to agree on instances neither author chose.
+ *   FAMILY 3 (inertia3) -- random q23 tetrahedra (including degenerate ones -- the identities are
+ *     polynomial, so NOTHING is filtered): barycentric == divergence twin on five moment shapes;
+ *     the binomial translation law at a random integer shift; I(R body) == R I R^T; additivity
+ *     across a midpoint split.  All cross-multiplied exact equalities.
+ *
+ * UNSCRIPTED CHANNEL: set EXACT3_SEED (and optionally EXACT3_CASES) in the environment and run
+ * the binary -- sawd seed, sawd time, no harness, no Claude:  EXACT3_SEED=12345 ./2481.exe
+ * Unset, it runs the fixed default (seed 20260702, 250 cases/family) so the corpus gate stays
+ * deterministic.  The seed and case count actually used are printed first.  Violations print
+ * full reproduction data and the run exits 7; exit 99 == zero violations, zero refusals.
+ *
+ * exit 99 = pass;  7 = violations (count printed);  9 = harness self-check failed */
+module corpus_2481_exact3_fuzz
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn getenv(np: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_elim3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_dx() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_dy() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn in3_moment(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_moment_div(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_r(i: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_rd() -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_s(i: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_sd() -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_inertia(vp: u64, den: i64, outp: u64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_translate(vp: u64, den: i64, tx: i64, ty: i64, tz: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_apply_so3(vp: u64, den: i64, mp: u64, mden: i64, outp: u64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn so3_rot_z15(mb: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 from "cyclotomic_se3.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn e_tag(a: i32, b: i32) -> i32 { putchar(a) putchar(b) putchar(58i32) sp()   return 0i32 }
+
+/* ── the deterministic PRNG (LCG; III law: no OS randomness -- the SEED is the free input) ── */
+var FZ_S : u64
+fn fz_rnd() -> u64 { FZ_S = (FZ_S * 6364136223846793005u64) + 1442695040888963407u64   return FZ_S >> 17u64 }
+fn fz_ri(lo: i64, hi: i64) -> i64 {                        /* uniform-ish integer in [lo, hi] */
+    let span : u64 = ((hi - lo) + 1i64) as u64
+    return lo + ((fz_rnd() % span) as i64)
+}
+fn fz_rnz(hi: i64) -> i64 {                                /* nonzero in [-hi..-1] u [1..hi] */
+    let m : i64 = fz_ri(1i64, hi)
+    if (fz_rnd() & 1u64) == 1u64 { return 0i64 - m }
+    return m
+}
+
+/* ── env-driven seed/cases (never blocks; unset -> deterministic gate defaults) ── */
+var FZ_NM : [u8; 16]
+fn fz_env_u64(kind: i64) -> u64 {                          /* kind 0 = EXACT3_SEED, 1 = EXACT3_CASES; 0 if unset/empty */
+    FZ_NM[0u64] = 69u8    FZ_NM[1u64] = 88u8   FZ_NM[2u64] = 65u8   FZ_NM[3u64] = 67u8   /* EXAC */
+    FZ_NM[4u64] = 84u8    FZ_NM[5u64] = 51u8   FZ_NM[6u64] = 95u8                        /* T3_  */
+    if kind == 0i64 {
+        FZ_NM[7u64] = 83u8   FZ_NM[8u64] = 69u8   FZ_NM[9u64] = 69u8   FZ_NM[10u64] = 68u8   FZ_NM[11u64] = 0u8   /* SEED */
+    } else {
+        FZ_NM[7u64] = 67u8   FZ_NM[8u64] = 65u8   FZ_NM[9u64] = 83u8   FZ_NM[10u64] = 69u8   FZ_NM[11u64] = 83u8   FZ_NM[12u64] = 0u8   /* CASES */
+    }
+    let p : u64 = getenv((&FZ_NM) as u64)
+    if p == 0u64 { return 0u64 }
+    let s : *u8 = p as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut sawd : i64 = 0i64
+    while i < 20u64 {
+        let ch : u8 = s[i]
+        let mut dig : i64 = 0i64 - 1i64
+        if ch >= 48u8 { if ch <= 57u8 { dig = (ch - 48u8) as i64 } }
+        if dig < 0i64 { i = 20u64 }
+        if dig >= 0i64 { v = (v * 10u64) + (dig as u64)   sawd = 1i64   i = i + 1u64 }
+    }
+    if sawd == 0i64 { return 0u64 }
+    return v
+}
+
+/* ── checker-local guarded exact arithmetic (independent of every engine guard) ── */
+var FZ_OVF : i64
+fn fz_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn fz_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = fz_abs(a)   let ub : u64 = fz_abs(b)
+    if ub > (9223372036854775807u64 / ua) { FZ_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn fz_modp(v: i64, q: i64) -> i64 { let m : i64 = v % q   if m < 0i64 { return m + q }   return m }
+
+/* three checker primes, DISJOINT from the pipeline's sixteen 10737414xx-range primes */
+var FZ_Q : [i64; 3]
+fn fz_qinit() -> i32 { FZ_Q[0u64] = 1000000007i64   FZ_Q[1u64] = 998244353i64   FZ_Q[2u64] = 999999937i64   return 0i32 }
+
+/* ═══ FAMILY 1: rs_elim3 -- planted-zero completeness + textbook-cofactor differential ═══ */
+var F1F : [i64; 125]   var F1G : [i64; 125]   var F1R : [i64; 1089]
+var FZ_M : [i64; 16]                                       /* checker 4x4 Sylvester, mod q */
+
+fn f1_zero(gp: u64) -> i32 { let g : *i64 = gp as *i64   let mut i : u64 = 0u64   while i < 125u64 { g[i] = 0i64   i = i + 1u64 }   return 0i32 }
+/* one random surface vanishing at (a,b,c): (z-c)P + (x-a)Q + (y-b)S; z^2-lead forced nonzero */
+fn f1_mk(gp: u64, a: i64, b: i64, c: i64) -> i32 {
+    f1_zero(gp)
+    let g : *i64 = gp as *i64
+    let mut k : i64 = 0i64
+    while k <= 1i64 {
+        let mut i : i64 = 0i64
+        while i <= 1i64 {
+            let mut j : i64 = 0i64
+            while j <= 1i64 {
+                let mut v : i64 = fz_ri(0i64 - 9i64, 9i64)
+                let mut force : i64 = 0i64
+                if k == 1i64 { if i == 0i64 { if j == 0i64 { force = 1i64 } } }
+                if force == 1i64 { v = fz_rnz(9i64) }
+                let bz : u64 = (((k + 1i64) * 25i64) + (i * 5i64) + j) as u64
+                let b0 : u64 = ((k * 25i64) + (i * 5i64) + j) as u64
+                g[bz] = g[bz] + v
+                g[b0] = g[b0] - (c * v)
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    let mut i2 : i64 = 0i64
+    while i2 <= 1i64 {
+        let mut j2 : i64 = 0i64
+        while j2 <= 1i64 {
+            let v : i64 = fz_ri(0i64 - 9i64, 9i64)
+            let bx : u64 = (((i2 + 1i64) * 5i64) + j2) as u64
+            let b0 : u64 = ((i2 * 5i64) + j2) as u64
+            g[bx] = g[bx] + v
+            g[b0] = g[b0] - (a * v)
+            j2 = j2 + 1i64
+        }
+        i2 = i2 + 1i64
+    }
+    let mut j3 : i64 = 0i64
+    while j3 <= 1i64 {
+        let v : i64 = fz_ri(0i64 - 9i64, 9i64)
+        g[(j3 + 1i64) as u64] = g[(j3 + 1i64) as u64] + v
+        g[j3 as u64] = g[j3 as u64] - (b * v)
+        j3 = j3 + 1i64
+    }
+    return 0i32
+}
+/* z-coefficient row k of a trivariate grid at integer (r,s) mod q -- CHECKER-LOCAL Horner */
+fn f1_cval(gp: u64, k: i64, r: i64, s: i64, q: i64) -> i64 {
+    let g : *i64 = gp as *i64
+    let rm : i64 = fz_modp(r, q)
+    let sm : i64 = fz_modp(s, q)
+    let mut acc : i64 = 0i64
+    let mut i : i64 = 2i64
+    while i >= 0i64 {
+        let mut inner : i64 = 0i64
+        let mut j : i64 = 2i64
+        while j >= 0i64 { inner = ((inner * sm) + fz_modp(g[((k * 25i64) + (i * 5i64) + j) as u64], q)) % q   j = j - 1i64 }
+        acc = ((acc * rm) + inner) % q
+        i = i - 1i64
+    }
+    return acc
+}
+/* the recovered bivariate R at integer (r,s) mod q -- CHECKER-LOCAL Horner over the out grid */
+fn f1_reval(r: i64, s: i64, dx: i64, dy: i64, q: i64) -> i64 {
+    let rm : i64 = fz_modp(r, q)
+    let sm : i64 = fz_modp(s, q)
+    let mut acc : i64 = 0i64
+    let mut a : i64 = dx
+    while a >= 0i64 {
+        let mut inner : i64 = 0i64
+        let mut b : i64 = dy
+        while b >= 0i64 { inner = ((inner * sm) + fz_modp(F1R[((a * 33i64) + b) as u64], q)) % q   b = b - 1i64 }
+        acc = ((acc * rm) + inner) % q
+        a = a - 1i64
+    }
+    return acc
+}
+/* textbook 3x3 determinant mod q of rows (r0,r1,r2) x cols (c0,c1,c2) of FZ_M */
+fn f1_det3(r0: i64, r1: i64, r2: i64, c0: i64, c1: i64, c2: i64, q: i64) -> i64 {
+    let m00 : i64 = FZ_M[((r0 * 4i64) + c0) as u64]   let m01 : i64 = FZ_M[((r0 * 4i64) + c1) as u64]   let m02 : i64 = FZ_M[((r0 * 4i64) + c2) as u64]
+    let m10 : i64 = FZ_M[((r1 * 4i64) + c0) as u64]   let m11 : i64 = FZ_M[((r1 * 4i64) + c1) as u64]   let m12 : i64 = FZ_M[((r1 * 4i64) + c2) as u64]
+    let m20 : i64 = FZ_M[((r2 * 4i64) + c0) as u64]   let m21 : i64 = FZ_M[((r2 * 4i64) + c1) as u64]   let m22 : i64 = FZ_M[((r2 * 4i64) + c2) as u64]
+    let t0 : i64 = fz_modp((m11 * m22) - (m12 * m21), q)
+    let t1 : i64 = fz_modp((m10 * m22) - (m12 * m20), q)
+    let t2 : i64 = fz_modp((m10 * m21) - (m11 * m20), q)
+    let mut d : i64 = (m00 * t0) % q
+    d = fz_modp(d - ((m01 * t1) % q), q)
+    d = (d + ((m02 * t2) % q)) % q
+    return d
+}
+/* textbook cofactor expansion of the 4x4 in FZ_M along row 0, mod q */
+fn f1_det4(q: i64) -> i64 {
+    let a0 : i64 = FZ_M[0u64]   let a1 : i64 = FZ_M[1u64]   let a2 : i64 = FZ_M[2u64]   let a3 : i64 = FZ_M[3u64]
+    let d0 : i64 = f1_det3(1i64, 2i64, 3i64, 1i64, 2i64, 3i64, q)
+    let d1 : i64 = f1_det3(1i64, 2i64, 3i64, 0i64, 2i64, 3i64, q)
+    let d2 : i64 = f1_det3(1i64, 2i64, 3i64, 0i64, 1i64, 3i64, q)
+    let d3 : i64 = f1_det3(1i64, 2i64, 3i64, 0i64, 1i64, 2i64, q)
+    let mut d : i64 = (a0 * d0) % q
+    d = fz_modp(d - ((a1 * d1) % q), q)
+    d = (d + ((a2 * d2) % q)) % q
+    d = fz_modp(d - ((a3 * d3) % q), q)
+    return d
+}
+var F1_VIOL : i64   var F1_CHK : i64
+fn family1(cases: i64) -> i32 {
+    let mut cs : i64 = 0i64
+    while cs < cases {
+        let a : i64 = fz_ri(0i64 - 3i64, 3i64)
+        let b : i64 = fz_ri(0i64 - 3i64, 3i64)
+        let c : i64 = fz_ri(0i64 - 3i64, 3i64)
+        f1_mk((&F1F) as u64, a, b, c)
+        f1_mk((&F1G) as u64, a, b, c)
+        let rc : i64 = rs_elim3((&F1F) as u64, 2i64, 2i64, 2i64, (&F1G) as u64, 2i64, 2i64, 2i64, (&F1R) as u64)
+        let dx : i64 = rs3_dx()   let dy : i64 = rs3_dy()
+        if rc != 0i64 {
+            F1_VIOL = F1_VIOL + 1i64
+            e_tag(86i32, 49i32) e_i64(cs) sp() putchar(114i32) e_i64(rc) nl()          /* "V1: <case> r<rc>" */
+        } else {
+            if dx != 8i64 { F1_VIOL = F1_VIOL + 1i64 }
+            if dy != 8i64 { F1_VIOL = F1_VIOL + 1i64 }
+            /* CHECK A: the planted zero -- R(a,b) == 0 exactly (three disjoint-prime residues) */
+            let mut l : i64 = 0i64
+            let mut zok : i64 = 1i64
+            while l < 3i64 {
+                let q : i64 = FZ_Q[l as u64]
+                let rv : i64 = f1_reval(a, b, dx, dy, q)
+                if rv != 0i64 { zok = 0i64 }
+                l = l + 1i64
+            }
+            F1_CHK = F1_CHK + 1i64
+            if zok == 0i64 {
+                F1_VIOL = F1_VIOL + 1i64
+                e_tag(86i32, 65i32) e_i64(cs) sp() e_i64(a) sp() e_i64(b) sp() e_i64(c) nl()   /* "VA: ..." */
+            }
+            /* CHECK B: two random probes vs the textbook cofactor Sylvester, per checker prime */
+            let mut pr : i64 = 0i64
+            while pr < 2i64 {
+                let r : i64 = fz_ri(0i64 - 6i64, 6i64)
+                let s : i64 = fz_ri(0i64 - 6i64, 6i64)
+                let q : i64 = FZ_Q[(fz_rnd() % 3u64) as u64]
+                /* rows: [F2 F1 F0 0] [0 F2 F1 F0] [G2 G1 G0 0] [0 G2 G1 G0] evaluated mod q */
+                let f2 : i64 = f1_cval((&F1F) as u64, 2i64, r, s, q)
+                let f1v : i64 = f1_cval((&F1F) as u64, 1i64, r, s, q)
+                let f0 : i64 = f1_cval((&F1F) as u64, 0i64, r, s, q)
+                let g2 : i64 = f1_cval((&F1G) as u64, 2i64, r, s, q)
+                let g1 : i64 = f1_cval((&F1G) as u64, 1i64, r, s, q)
+                let g0 : i64 = f1_cval((&F1G) as u64, 0i64, r, s, q)
+                FZ_M[0u64] = f2    FZ_M[1u64] = f1v   FZ_M[2u64] = f0    FZ_M[3u64] = 0i64
+                FZ_M[4u64] = 0i64  FZ_M[5u64] = f2    FZ_M[6u64] = f1v   FZ_M[7u64] = f0
+                FZ_M[8u64] = g2    FZ_M[9u64] = g1    FZ_M[10u64] = g0   FZ_M[11u64] = 0i64
+                FZ_M[12u64] = 0i64 FZ_M[13u64] = g2   FZ_M[14u64] = g1   FZ_M[15u64] = g0
+                let want : i64 = f1_det4(q)
+                let got : i64 = f1_reval(r, s, dx, dy, q)
+                F1_CHK = F1_CHK + 1i64
+                if got != want {
+                    F1_VIOL = F1_VIOL + 1i64
+                    e_tag(86i32, 66i32) e_i64(cs) sp() e_i64(r) sp() e_i64(s) sp() e_i64(got) sp() e_i64(want) nl()
+                }
+                pr = pr + 1i64
+            }
+        }
+        cs = cs + 1i64
+    }
+    return 0i32
+}
+
+/* ═══ FAMILY 2: elimination vs Sturm -- the QE trichotomy on random contact families ═══ */
+var F2F : [i64; 64]   var F2G : [i64; 64]   var F2B : [i64; 20]   var F2P : [i64; 8]
+var F2_VIOL : i64   var F2_CHK : i64
+fn family2(cases: i64) -> i32 {
+    let mut cs : i64 = 0i64
+    while cs < cases {
+        let u : i64 = fz_ri(0i64 - 8i64, 8i64)
+        let v : i64 = fz_ri(0i64 - 8i64, 8i64)
+        let w : i64 = fz_ri(1i64, 6i64)
+        let mut i : u64 = 0u64
+        while i < 64u64 { F2F[i] = 0i64   F2G[i] = 0i64   i = i + 1u64 }
+        F2F[16u64] = 1i64                                  /* t^2 */
+        F2F[8u64] = 0i64 - (2i64 * u)                      /* -2u t */
+        F2F[0u64] = ((u * u) + (v * v)) - (w * w)          /* c-poly const */
+        F2F[1u64] = 0i64 - (2i64 * v)
+        F2F[2u64] = 1i64
+        F2G[8u64] = 2i64                                   /* dp/dt = 2t - 2u */
+        F2G[0u64] = 0i64 - (2i64 * u)
+        let d : i64 = rs_elim((&F2F) as u64, 2i64, 2i64, (&F2G) as u64, 1i64, 0i64, (&F2B) as u64)
+        if d != 2i64 {
+            F2_VIOL = F2_VIOL + 1i64
+            e_tag(86i32, 50i32) e_i64(cs) sp() e_i64(d) nl()                           /* "V2: ..." */
+        } else {
+            let mut pr : i64 = 0i64
+            while pr < 4i64 {
+                let c0 : i64 = fz_ri(0i64 - 12i64, 12i64)
+                /* exact B(c0) by Horner */
+                let mut bv : i64 = 0i64
+                let mut k : i64 = 2i64
+                while k >= 0i64 { bv = (bv * c0) + F2B[k as u64]   k = k - 1i64 }
+                /* p(t; c0) = t^2 - 2u t + (u^2 + (c0-v)^2 - w^2), root-counted by sturm */
+                F2P[0u64] = ((u * u) + ((c0 - v) * (c0 - v))) - (w * w)
+                F2P[1u64] = 0i64 - (2i64 * u)
+                F2P[2u64] = 1i64
+                let sb : i64 = sturm_build((&F2P) as u64, 2i64)
+                let mut n : i64 = 0i64 - 9i64
+                if sb >= 0i64 { n = root_count(0i64 - 1000i64, 1i64, 1000i64, 1i64) }
+                let mut want : i64 = 0i64
+                if bv < 0i64 { want = 2i64 }
+                if bv == 0i64 { want = 1i64 }
+                F2_CHK = F2_CHK + 1i64
+                if n != want {
+                    F2_VIOL = F2_VIOL + 1i64
+                    e_tag(86i32, 67i32) e_i64(cs) sp() e_i64(u) sp() e_i64(v) sp() e_i64(w) sp() e_i64(c0) sp() e_i64(bv) sp() e_i64(n) nl()
+                }
+                pr = pr + 1i64
+            }
+        }
+        cs = cs + 1i64
+    }
+    return 0i32
+}
+
+/* ═══ FAMILY 3: inertia3 theorem sweep on random q23 tetrahedra (degenerates INCLUDED) ═══ */
+var V3T : [i64; 48]   var V3W : [i64; 48]   var V3A : [i64; 48]   var V3B : [i64; 48]
+var MR3 : [i64; 36]   var MT3 : [i64; 36]
+var I3A : [i64; 36]   var I3B : [i64; 36]   var W3A : [i64; 36]   var W3B : [i64; 36]
+var K2 : [i64; 4]   var K2D : i64   var K1 : [i64; 4]   var K1D : i64   var K0 : [i64; 4]   var K0D : i64
+var F3_VIOL : i64   var F3_CHK : i64
+fn f3_draw(vp: u64) -> i32 {
+    let p : *i64 = vp as *i64
+    let mut i : u64 = 0u64
+    while i < 48u64 { p[i] = fz_ri(0i64 - 3i64, 3i64)   i = i + 1u64 }
+    return 0i32
+}
+fn f3_copy(dp: u64, sq: u64) -> i32 { let d : *i64 = dp as *i64   let s : *i64 = sq as *i64   let mut i : u64 = 0u64   while i < 48u64 { d[i] = s[i]   i = i + 1u64 }   return 0i32 }
+fn f3_keep2() -> i32 { K2[0u64] = in3_r(0i64)   K2[1u64] = in3_r(1i64)   K2[2u64] = in3_r(2i64)   K2[3u64] = in3_r(3i64)   K2D = in3_rd()   return 0i32 }
+fn f3_keep1() -> i32 { K1[0u64] = in3_r(0i64)   K1[1u64] = in3_r(1i64)   K1[2u64] = in3_r(2i64)   K1[3u64] = in3_r(3i64)   K1D = in3_rd()   return 0i32 }
+fn f3_keep0() -> i32 { K0[0u64] = in3_r(0i64)   K0[1u64] = in3_r(1i64)   K0[2u64] = in3_r(2i64)   K0[3u64] = in3_r(3i64)   K0D = in3_rd()   return 0i32 }
+fn f3_twin_weld() -> i64 {
+    let rd : i64 = in3_rd()   let sd : i64 = in3_sd()
+    let mut q : i64 = 0i64
+    while q < 4i64 {
+        let rv : i64 = in3_r(q)   let sv : i64 = in3_s(q)
+        let lhs : i64 = fz_mul(rv, sd)
+        let rhs : i64 = fz_mul(sv, rd)
+        if lhs != rhs { return 0i64 }
+        q = q + 1i64
+    }
+    return 1i64
+}
+fn family3(cases: i64) -> i32 {
+    let mut cs : i64 = 0i64
+    while cs < cases {
+        f3_draw((&V3T) as u64)
+        let den : i64 = fz_ri(1i64, 2i64)
+        /* (a) barycentric == divergence on five moment shapes */
+        let mut sh : i64 = 0i64
+        while sh < 5i64 {
+            let mut ma : i64 = 0i64   let mut mb : i64 = 0i64   let mut mc : i64 = 0i64
+            if sh == 1i64 { ma = 1i64 }
+            if sh == 2i64 { ma = 2i64 }
+            if sh == 3i64 { ma = 1i64   mb = 1i64 }
+            if sh == 4i64 { mb = 1i64   mc = 1i64 }
+            let r1 : i64 = in3_moment((&V3T) as u64, den, ma, mb, mc)
+            let r2 : i64 = in3_moment_div((&V3T) as u64, den, ma, mb, mc)
+            F3_CHK = F3_CHK + 1i64
+            let mut ok : i64 = 0i64
+            if r1 == 0i64 { if r2 == 0i64 { ok = f3_twin_weld() } }
+            if ok == 0i64 {
+                F3_VIOL = F3_VIOL + 1i64
+                e_tag(86i32, 68i32) e_i64(cs) sp() e_i64(sh) nl()                      /* "VD: ..." */
+            }
+            sh = sh + 1i64
+        }
+        /* (b) the binomial translation law at a random integer shift (x-direction) */
+        let tx : i64 = fz_ri(0i64 - 4i64, 4i64)
+        if in3_moment((&V3T) as u64, den, 2i64, 0i64, 0i64) == 0i64 {
+            f3_keep2()
+            if in3_moment((&V3T) as u64, den, 1i64, 0i64, 0i64) == 0i64 {
+                f3_keep1()
+                if in3_moment((&V3T) as u64, den, 0i64, 0i64, 0i64) == 0i64 {
+                    f3_keep0()
+                    f3_copy((&V3W) as u64, (&V3T) as u64)
+                    if in3_translate((&V3W) as u64, den, tx, 0i64, 0i64) == 0i64 {
+                        if in3_moment((&V3W) as u64, den, 2i64, 0i64, 0i64) == 0i64 {
+                            let trd : i64 = in3_rd()
+                            let mut ok2 : i64 = 1i64
+                            let mut q : i64 = 0i64
+                            while q < 4i64 {
+                                let tv : i64 = in3_r(q)
+                                let lhs : i64 = fz_mul(fz_mul(tv, K2D), fz_mul(K1D, K0D))
+                                let mut rhs : i64 = fz_mul(fz_mul(K2[q as u64], trd), fz_mul(K1D, K0D))
+                                rhs = rhs + fz_mul(fz_mul(2i64 * tx, fz_mul(K1[q as u64], trd)), fz_mul(K2D, K0D))
+                                rhs = rhs + fz_mul(fz_mul(tx * tx, fz_mul(K0[q as u64], trd)), fz_mul(K2D, K1D))
+                                if lhs != rhs { ok2 = 0i64 }
+                                q = q + 1i64
+                            }
+                            F3_CHK = F3_CHK + 1i64
+                            if ok2 == 0i64 { F3_VIOL = F3_VIOL + 1i64   e_tag(86i32, 84i32) e_i64(cs) sp() e_i64(tx) nl() }
+                        }
+                    }
+                }
+            }
+        }
+        /* (c) the tensor transformation law at exact 15 degrees */
+        let md : i64 = so3_rot_z15((&MR3) as u64)
+        let mut i : i64 = 0i64
+        while i < 3i64 {
+            let mut j : i64 = 0i64
+            while j < 3i64 {
+                let mut q2 : i64 = 0i64
+                while q2 < 4i64 {
+                    MT3[((((i * 3i64) + j) * 4i64) + q2) as u64] = MR3[((((j * 3i64) + i) * 4i64) + q2) as u64]
+                    q2 = q2 + 1i64
+                }
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        let rvd : i64 = in3_apply_so3((&V3T) as u64, den, (&MR3) as u64, md, (&V3W) as u64)
+        let ild : i64 = in3_inertia((&V3W) as u64, rvd, (&I3A) as u64)
+        let i0d : i64 = in3_inertia((&V3T) as u64, den, (&I3B) as u64)
+        F3_CHK = F3_CHK + 1i64
+        let mut ok3 : i64 = 0i64
+        if rvd > 0i64 { if ild > 0i64 { if i0d > 0i64 {
+            so3_mul((&MR3) as u64, (&I3B) as u64, (&W3A) as u64)
+            so3_mul((&W3A) as u64, (&MT3) as u64, (&W3B) as u64)
+            let rhd : i64 = fz_mul(fz_mul(md, md), i0d)
+            ok3 = 1i64
+            let mut k : u64 = 0u64
+            while k < 36u64 {
+                let lv : i64 = I3A[k]   let rv : i64 = W3B[k]
+                if fz_mul(lv, rhd) != fz_mul(rv, ild) { ok3 = 0i64 }
+                k = k + 1u64
+            }
+        } } }
+        if ok3 == 0i64 { F3_VIOL = F3_VIOL + 1i64   e_tag(86i32, 82i32) e_i64(cs) nl() }
+        /* (d) additivity across the v0-v1 midpoint split (everything over 2*den) */
+        let p : *i64 = (&V3T) as *i64
+        let mut m : u64 = 0u64
+        while m < 48u64 { V3A[m] = 2i64 * p[m]   V3B[m] = 2i64 * p[m]   m = m + 1u64 }
+        let mut cq : i64 = 0i64
+        while cq < 12i64 {
+            let s0 : i64 = V3A[cq as u64]                  /* 2*v0 coords */
+            let s1 : i64 = V3A[(12i64 + cq) as u64]        /* 2*v1 coords */
+            let mid : i64 = (s0 + s1) / 2i64               /* v0+v1: exact (both even) */
+            V3A[cq as u64] = mid                           /* half A: (M, v1, v2, v3) */
+            V3B[(12i64 + cq) as u64] = mid                 /* half B: (v0, M, v2, v3) */
+            cq = cq + 1i64
+        }
+        let ra : i64 = in3_moment((&V3T) as u64, den, 2i64, 0i64, 0i64)
+        f3_keep2()
+        let rb : i64 = in3_moment((&V3A) as u64, 2i64 * den, 2i64, 0i64, 0i64)
+        f3_keep1()
+        let rc : i64 = in3_moment((&V3B) as u64, 2i64 * den, 2i64, 0i64, 0i64)
+        F3_CHK = F3_CHK + 1i64
+        let mut ok4 : i64 = 0i64
+        if ra == 0i64 { if rb == 0i64 { if rc == 0i64 {
+            ok4 = 1i64
+            let crd : i64 = in3_rd()
+            let mut q3 : i64 = 0i64
+            while q3 < 4i64 {
+                let cv : i64 = in3_r(q3)
+                let lhs : i64 = fz_mul(K2[q3 as u64], fz_mul(K1D, crd))
+                let rhs : i64 = fz_mul(K1[q3 as u64], fz_mul(K2D, crd)) + fz_mul(cv, fz_mul(K2D, K1D))
+                if lhs != rhs { ok4 = 0i64 }
+                q3 = q3 + 1i64
+            }
+        } } }
+        if ok4 == 0i64 { F3_VIOL = F3_VIOL + 1i64   e_tag(86i32, 83i32) e_i64(cs) nl() }
+        cs = cs + 1i64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    fz_qinit()
+    FZ_OVF = 0i64
+    /* harness self-check: the checker's own determinant on a known matrix (det = 1 identity) */
+    let mut i : u64 = 0u64
+    while i < 16u64 { FZ_M[i] = 0i64   i = i + 1u64 }
+    FZ_M[0u64] = 1i64   FZ_M[5u64] = 1i64   FZ_M[10u64] = 1i64   FZ_M[15u64] = 1i64
+    if f1_det4(1000000007i64) != 1i64 { return 9u64 }
+    /* seed and case count: environment-driven (unscripted) or the deterministic gate default */
+    let mut seed : u64 = fz_env_u64(0i64)
+    let mut cases : i64 = fz_env_u64(1i64) as i64
+    if seed == 0u64 { seed = 20260702u64 }
+    if cases <= 0i64 { cases = 250i64 }
+    if cases > 100000i64 { cases = 100000i64 }
+    FZ_S = seed
+    putchar(83i32) putchar(69i32) putchar(69i32) putchar(68i32) sp() e_u64(seed) sp()
+    putchar(67i32) putchar(65i32) putchar(83i32) putchar(69i32) putchar(83i32) sp() e_i64(cases) nl()
+    family1(cases)
+    family2(cases)
+    family3(cases)
+    /* summary: family checks and violations */
+    e_tag(70i32, 49i32) e_i64(F1_CHK) sp() e_i64(F1_VIOL) nl()
+    e_tag(70i32, 50i32) e_i64(F2_CHK) sp() e_i64(F2_VIOL) nl()
+    e_tag(70i32, 51i32) e_i64(F3_CHK) sp() e_i64(F3_VIOL) nl()
+    let viol : i64 = (F1_VIOL + F2_VIOL) + F3_VIOL
+    putchar(86i32) putchar(73i32) putchar(79i32) putchar(76i32) sp() e_i64(viol) nl()
+    if viol != 0i64 { return 7u64 }
+    if FZ_OVF != 0i64 { return 7u64 }
+    return 99u64
+}

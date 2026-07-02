@@ -1,0 +1,110 @@
+/* 1409_scalar64_sat_counters.iii -- 64-BIT SCALAR LAWS + SAT ARENA COUNTERS
+ * (burn-down tranche 18; 17 census orphans).
+ *
+ *  SCALAR u64 (14): the 64-bit twins of 1404's u32 laws -- wrap arithmetic pinned at
+ *      mod-2^64 boundaries, min/max/clamp order laws, popcount/clz/ctz on exact 64-bit
+ *      patterns, byteswap involution + exact vector, rotl/rotr inverse pair, and the
+ *      split/combine bijection (combine(hi(x), lo(x)) == x, both directions pinned);
+ *  SAT COUNTERS (3): sat_cl_used / sat_lit_used / sat_watch_used -- after a real CDCL
+ *      solve the arena counters are LIVE (nonzero), and the EXACT-REPLAY law holds:
+ *      an identical init+clauses+solve sequence reproduces identical counters (the
+ *      deterministic-solver contract, observable at the allocator level).
+ * Exit 99. */
+module corpus_2429
+
+extern @abi(c-msvc-x64) fn scalar_u64_sub_wrap(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_mul_wrap(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_min(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_max(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_clamp(x: u64, lo: u64, hi: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_popcount(x: u64) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_leading_zeros(x: u64) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_trailing_zeros(x: u64) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_byteswap(x: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_rotl(x: u64, n: u32) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_rotr(x: u64, n: u32) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_to_u32_lo(x: u64) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_to_u32_hi(x: u64) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_combine(hi: u32, lo: u32) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn sat_init(n_vars: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_add_clause(lits: *u32, n_lits: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_solve() -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_cl_used() -> u32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_lit_used() -> u32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_watch_used() -> u32 from "sat.iii"
+
+var LITS : [u32; 4]
+
+fn build_and_solve() -> i32 {
+    if sat_init(3u32) != 0i32 { return -1i32 }
+    /* (x1 OR x2) AND (NOT x1 OR x3) AND (NOT x2 OR NOT x3) -- satisfiable */
+    LITS[0u64] = 2u32                   /* x1  (var 1, pos -> 1<<1) */
+    LITS[1u64] = 4u32                   /* x2  (var 2, pos -> 2<<1) */
+    if sat_add_clause(((&LITS as u64)) as *u32, 2u32) != 0i32 { return -2i32 }
+    LITS[0u64] = 3u32                   /* NOT x1 -> (1<<1)|1 */
+    LITS[1u64] = 6u32                   /* x3  -> 3<<1 */
+    if sat_add_clause(((&LITS as u64)) as *u32, 2u32) != 0i32 { return -3i32 }
+    LITS[0u64] = 5u32                   /* NOT x2 */
+    LITS[1u64] = 7u32                   /* NOT x3 */
+    if sat_add_clause(((&LITS as u64)) as *u32, 2u32) != 0i32 { return -4i32 }
+    return sat_solve()
+}
+
+fn main() -> u64 {
+    /* ---- SCALAR u64: wrap boundaries ---- */
+    if scalar_u64_sub_wrap(0u64, 1u64) != 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    if scalar_u64_sub_wrap(7u64, 3u64) != 4u64 { return 2u64 }
+    if scalar_u64_mul_wrap(0x100000000u64, 0x100000000u64) != 0u64 { return 3u64 }   /* 2^64 == 0 */
+    if scalar_u64_mul_wrap(0xFFFFFFFFFFFFFFFFu64, 2u64) != 0xFFFFFFFFFFFFFFFEu64 { return 4u64 }
+
+    /* order laws */
+    if scalar_u64_min(3u64, 9u64) != 3u64 { return 5u64 }
+    if scalar_u64_max(3u64, 9u64) != 9u64 { return 6u64 }
+    if scalar_u64_clamp(5u64, 10u64, 20u64) != 10u64 { return 7u64 }
+    if scalar_u64_clamp(25u64, 10u64, 20u64) != 20u64 { return 8u64 }
+    if scalar_u64_clamp(15u64, 10u64, 20u64) != 15u64 { return 9u64 }
+
+    /* bit counts on exact patterns */
+    if scalar_u64_popcount(0u64) != 0u32 { return 10u64 }
+    if scalar_u64_popcount(0xFFFFFFFFFFFFFFFFu64) != 64u32 { return 11u64 }
+    if scalar_u64_popcount(0xF0F0F0F0F0F0F0F0u64) != 32u32 { return 12u64 }
+    if scalar_u64_leading_zeros(0u64) != 64u32 { return 13u64 }
+    if scalar_u64_leading_zeros(1u64) != 63u32 { return 14u64 }
+    if scalar_u64_leading_zeros(0x8000000000000000u64) != 0u32 { return 15u64 }
+    if scalar_u64_trailing_zeros(0u64) != 64u32 { return 16u64 }
+    if scalar_u64_trailing_zeros(0x8000000000000000u64) != 63u32 { return 17u64 }
+    if scalar_u64_trailing_zeros(0x100u64) != 8u32 { return 18u64 }
+
+    /* byteswap involution + exact vector */
+    if scalar_u64_byteswap(0x1122334455667788u64) != 0x8877665544332211u64 { return 19u64 }
+    if scalar_u64_byteswap(scalar_u64_byteswap(0xDEADBEEFCAFE1234u64)) != 0xDEADBEEFCAFE1234u64 { return 20u64 }
+
+    /* rotl/rotr inverse + exact vector */
+    if scalar_u64_rotl(0x8000000000000001u64, 1u32) != 0x3u64 { return 21u64 }
+    if scalar_u64_rotr(0x3u64, 1u32) != 0x8000000000000001u64 { return 22u64 }
+    if scalar_u64_rotr(scalar_u64_rotl(0xFEEDFACE12345678u64, 23u32), 23u32) != 0xFEEDFACE12345678u64 { return 23u64 }
+
+    /* split/combine bijection, both directions */
+    if scalar_u64_to_u32_hi(0x11223344AABBCCDDu64) != 0x11223344u32 { return 24u64 }
+    if scalar_u64_to_u32_lo(0x11223344AABBCCDDu64) != 0xAABBCCDDu32 { return 25u64 }
+    if scalar_u64_combine(0x11223344u32, 0xAABBCCDDu32) != 0x11223344AABBCCDDu64 { return 26u64 }
+    let x : u64 = 0xC0FFEE0012345678u64
+    if scalar_u64_combine(scalar_u64_to_u32_hi(x), scalar_u64_to_u32_lo(x)) != x { return 27u64 }
+
+    /* ---- SAT COUNTERS: live after a real solve; exact replay ---- */
+    let v1 : i32 = build_and_solve()
+    if v1 != 1i32 { return 30u64 }                          /* SAT */
+    let cl1 : u32 = sat_cl_used()
+    let li1 : u32 = sat_lit_used()
+    let wa1 : u32 = sat_watch_used()
+    if cl1 == 0u32 { return 31u64 }
+    if li1 == 0u32 { return 32u64 }
+    if wa1 == 0u32 { return 33u64 }
+    let v2 : i32 = build_and_solve()
+    if v2 != 1i32 { return 34u64 }
+    if sat_cl_used() != cl1 { return 35u64 }                /* EXACT replay */
+    if sat_lit_used() != li1 { return 36u64 }
+    if sat_watch_used() != wa1 { return 37u64 }
+
+    return 99u64
+}

@@ -1,0 +1,45 @@
+/* III conformance corpus 207 -- Stage 4.10: AES-SIV (RFC 5297 §A.1).
+ *   key = fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0 f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff
+ *   AD  = 101112131415161718191a1b1c1d1e1f 2021222324252627
+ *   PT  = 112233445566778899aabbccddee
+ *   out = 85632d07c6e8f37f950acd320a2ecc93 (IV) 40c02b9690c4dc04daef7f6afe5c (CT)
+ * (a) encrypt matches the vector; (b) decrypt round-trips + returns 1;
+ * (c) IV tamper -> decrypt returns 0.  Exit 99.
+ */
+module corpus_2408
+
+extern @abi(c-msvc-x64) fn aes_siv_encrypt(key32: u64, ad: u64, ad_len: u64, pt: u64, pt_len: u64, out: u64) -> i32 from "aes_siv.iii"
+extern @abi(c-msvc-x64) fn aes_siv_decrypt(key32: u64, ad: u64, ad_len: u64, in_buf: u64, in_len: u64, pt_out: u64) -> u8 from "aes_siv.iii"
+
+var KEY : [u8; 32]
+var AD  : [u8; 24]
+var PT  : [u8; 14]
+var OUT : [u8; 30]
+var EXP : [u8; 30]
+var DEC : [u8; 14]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { KEY[i] = ((0xFFu64 - i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 16u64 { KEY[16u64 + i] = ((0xF0u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 24u64 { AD[i] = ((0x10u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 14u64 { PT[i] = (((i + 1u64) * 0x11u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    EXP[0]=0x85u8 EXP[1]=0x63u8 EXP[2]=0x2du8 EXP[3]=0x07u8 EXP[4]=0xc6u8 EXP[5]=0xe8u8 EXP[6]=0xf3u8 EXP[7]=0x7fu8
+    EXP[8]=0x95u8 EXP[9]=0x0au8 EXP[10]=0xcdu8 EXP[11]=0x32u8 EXP[12]=0x0au8 EXP[13]=0x2eu8 EXP[14]=0xccu8 EXP[15]=0x93u8
+    EXP[16]=0x40u8 EXP[17]=0xc0u8 EXP[18]=0x2bu8 EXP[19]=0x96u8 EXP[20]=0x90u8 EXP[21]=0xc4u8 EXP[22]=0xdcu8 EXP[23]=0x04u8
+    EXP[24]=0xdau8 EXP[25]=0xefu8 EXP[26]=0x7fu8 EXP[27]=0x6au8 EXP[28]=0xfeu8 EXP[29]=0x5cu8
+    aes_siv_encrypt(&KEY as u64, &AD as u64, 24u64, &PT as u64, 14u64, &OUT as u64)
+    i = 0u64
+    while i < 30u64 { if OUT[i] != EXP[i] { return 1u64 } i = i + 1u64 }
+    let v : u8 = aes_siv_decrypt(&KEY as u64, &AD as u64, 24u64, &OUT as u64, 30u64, &DEC as u64)
+    if v != 1u8 { return 2u64 }
+    i = 0u64
+    while i < 14u64 { if DEC[i] != PT[i] { return 3u64 } i = i + 1u64 }
+    OUT[0] = OUT[0] ^ 0x01u8
+    let v2 : u8 = aes_siv_decrypt(&KEY as u64, &AD as u64, 24u64, &OUT as u64, 30u64, &DEC as u64)
+    if v2 != 0u8 { return 4u64 }
+    return 99u64
+}

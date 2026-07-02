@@ -1,0 +1,46 @@
+/* 395 -- KATABASIS increment 5: the unified hexad-layer cycle-admission
+ * (plan 4.2 step 3).  Asserts the routing that composes cycle_family +
+ * svm_layout + bar_layout into one gate decision: admissible-by-class for
+ * reads/observe/positive/governance; F2/F9 writes gated by the target's hexad
+ * typing; F5 Descend gated on a reachable action; action-honesty propagates.
+ * Exit 99 = all hold; 1..19 = the index of the failing assertion. */
+module corpus_2413_katabasis_cycle_admit
+
+extern @abi(c-msvc-x64) fn katabasis_cycle_admit(family: u32, target_kind: u32, target: u64, action_hexad: u16) -> u8 from "cycle_admit.iii"
+
+fn main() -> u64 {
+    /* admissible-by-class families (target irrelevant), positive action */
+    if katabasis_cycle_admit(1u32, 0u32, 0u64, 728u16) != 1u8 { return 1u64 }   /* F1 ReadMetal */
+    if katabasis_cycle_admit(3u32, 0u32, 0u64, 728u16) != 1u8 { return 2u64 }   /* F3 Census */
+    if katabasis_cycle_admit(7u32, 0u32, 0u64, 728u16) != 1u8 { return 3u64 }   /* F7 SelfVerify */
+    if katabasis_cycle_admit(6u32, 0u32, 0u64, 728u16) != 1u8 { return 4u64 }   /* F6 Observe */
+    if katabasis_cycle_admit(4u32, 0u32, 0u64, 728u16) != 1u8 { return 5u64 }   /* F4 Snapshot */
+    if katabasis_cycle_admit(8u32, 0u32, 0u64, 728u16) != 1u8 { return 6u64 }   /* F8 CapOp */
+
+    /* Descend (F5): reachable action ok, structural-NEG action forbidden */
+    if katabasis_cycle_admit(5u32, 0u32, 0u64, 728u16) != 1u8 { return 7u64 }
+    if katabasis_cycle_admit(5u32, 0u32, 0u64, 0u16)   != 0u8 { return 8u64 }
+
+    /* WriteMetal (F2) to SVM offsets: SHARED ok; HSAVE / VMCB forbidden */
+    if katabasis_cycle_admit(2u32, 1u32, 0x20000u64, 728u16) != 1u8 { return 9u64 }
+    if katabasis_cycle_admit(2u32, 1u32, 0x1000u64,  728u16) != 0u8 { return 10u64 }
+    if katabasis_cycle_admit(2u32, 1u32, 0x0u64,     728u16) != 0u8 { return 11u64 }
+
+    /* WriteMetal (F2) to GPU BAR physical addresses */
+    if katabasis_cycle_admit(2u32, 2u32, 0xFB000000u64, 728u16) != 1u8 { return 12u64 }  /* BAR0 */
+    if katabasis_cycle_admit(2u32, 2u32, 0x1000u64,     728u16) != 0u8 { return 13u64 }  /* host RAM */
+
+    /* CoprocDispatch (F9) to BAR: BAR1 ok; LAPIC forbidden */
+    if katabasis_cycle_admit(9u32, 2u32, 0xF800000000u64, 728u16) != 1u8 { return 14u64 }
+    if katabasis_cycle_admit(9u32, 2u32, 0xFEE00000u64,   728u16) != 0u8 { return 15u64 }
+
+    /* a WriteMetal with no typed target is forbidden; invalid families forbidden */
+    if katabasis_cycle_admit(2u32,  0u32, 0u64,      728u16) != 0u8 { return 16u64 }
+    if katabasis_cycle_admit(0u32,  0u32, 0u64,      728u16) != 0u8 { return 17u64 }
+    if katabasis_cycle_admit(10u32, 1u32, 0x20000u64, 728u16) != 0u8 { return 18u64 }
+
+    /* action-honesty propagates: a NEG action is rejected even to a safe SVM target */
+    if katabasis_cycle_admit(2u32, 1u32, 0x20000u64, 0u16) != 0u8 { return 19u64 }
+
+    return 99u64
+}

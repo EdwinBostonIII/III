@@ -1,0 +1,125 @@
+/* 1406_term_arena_xoshiro.iii -- XII TERM ARENA ACCESSORS, PRNG DETERMINISM, ZKF CONSTANTS
+ * (burn-down tranche 15; ~12 census orphans).
+ *
+ *  XII TERM (8): arena bookkeeping is exact (used grows by 1 per make, capacity is fixed
+ *      and >= used), set/get hexad and set/get mpo-weight round-trip exactly (and the
+ *      setters refuse dead indices), is_null discriminates the null ref from a live term,
+ *      term mhash is 32 bytes, NONZERO, reproducible, and TERM-DISTINCT (two different
+ *      terms hash differently);
+ *  XOSHIRO (2): the seeded stream law -- xoshiro_next_u32 after an identical re-seed
+ *      reproduces the identical first three draws; xoshiro_fill(n) after the same re-seed
+ *      fills bytes that MATCH the draws (fill and next read the same stream), and a
+ *      different seed diverges within three draws;
+ *  ZKF (2): zkf_np (the Montgomery n' constant: nonzero, ODD -- n'*n == -1 mod 2^32
+ *      requires odd n', and deterministic), zkf_set_limb exact write-then-read.
+ * Exit 99. */
+module corpus_2426
+
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_used() -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_capacity() -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_hexad(idx: u32, hexad: u8) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_hexad(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_weight_mpo(idx: u32, w: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_weight_mpo(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_is_null(ref: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_mhash(idx: u32, out_32: *u8) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn xoshiro_next_u32() -> u32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn xoshiro_fill(out: *u8, len: u64) -> i32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn zkf_np() -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_inv_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_set_u32(slot: u64, v: u32) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_set_limb(slot: u64, idx: u64, v: u32) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_get_limb(slot: u64, idx: u64) -> u32 from "zk_field.iii"
+
+var MH1 : [u8; 32]
+var MH2 : [u8; 32]
+var MH3 : [u8; 32]
+var FILLA : [u8; 16]
+var FILLB : [u8; 16]
+
+fn main() -> u64 {
+    /* ---- XII TERM: exact arena bookkeeping ---- */
+    let used0 : u32 = xii_term_arena_used()
+    let cap : u32 = xii_term_arena_capacity()
+    if cap == 0u32 { return 1u64 }
+    if used0 > cap { return 2u64 }
+    let t1 : u32 = xii_term_make_basis(0u8, 0u32)
+    if t1 == 0xFFFFFFFFu32 { return 3u64 }
+    if xii_term_arena_used() != used0 + 1u32 { return 4u64 }           /* exact growth */
+    let t2 : u32 = xii_term_make_basis(1u8, 0u32)
+    if t2 == 0xFFFFFFFFu32 { return 5u64 }
+    if xii_term_arena_used() != used0 + 2u32 { return 6u64 }
+    if xii_term_arena_capacity() != cap { return 7u64 }                /* capacity fixed */
+
+    /* set/get round trips; dead index refused */
+    if xii_term_set_hexad(t1, 3u8) != 0i32 { return 8u64 }
+    if xii_term_get_hexad(t1) != 3u8 { return 9u64 }
+    if xii_term_set_weight_mpo(t1, 0xBEEFu32) != 0i32 { return 10u64 }
+    if xii_term_get_weight_mpo(t1) != 0xBEEFu32 { return 11u64 }
+    if xii_term_set_hexad(0xFFFFFFF0u32, 1u8) == 0i32 { return 12u64 }     /* dead refused */
+    if xii_term_set_weight_mpo(0xFFFFFFF0u32, 1u32) == 0i32 { return 13u64 }
+
+    /* null discrimination */
+    if xii_term_is_null(t1) != 0u8 { return 14u64 }
+    if xii_term_is_null(0xFFFFFFFFu32) != 1u8 { return 15u64 }
+
+    /* mhash: 32B, nonzero, reproducible, term-distinct */
+    if xii_term_mhash(t1, ((&MH1 as u64)) as *u8) != 0i32 { return 16u64 }
+    if xii_term_mhash(t1, ((&MH2 as u64)) as *u8) != 0i32 { return 17u64 }
+    if xii_term_mhash(t2, ((&MH3 as u64)) as *u8) != 0i32 { return 18u64 }
+    let mut nz : u32 = 0u32
+    let mut df : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if MH1[i] != MH2[i] { return 19u64 }                            /* reproducible */
+        if MH1[i] != 0u8 { nz = nz + 1u32 }
+        if MH1[i] != MH3[i] { df = df + 1u32 }
+        i = i + 1u64
+    }
+    if nz == 0u32 { return 20u64 }
+    if df == 0u32 { return 21u64 }                                      /* distinct terms differ */
+
+    /* ---- XOSHIRO: the seeded stream law ---- */
+    if xoshiro_seed(1u64, 2u64, 3u64, 4u64) != 0i32 { return 30u64 }
+    let a1 : u32 = xoshiro_next_u32()
+    let a2 : u32 = xoshiro_next_u32()
+    let a3 : u32 = xoshiro_next_u32()
+    if xoshiro_seed(1u64, 2u64, 3u64, 4u64) != 0i32 { return 31u64 }
+    if xoshiro_next_u32() != a1 { return 32u64 }                        /* identical stream */
+    if xoshiro_next_u32() != a2 { return 33u64 }
+    if xoshiro_next_u32() != a3 { return 34u64 }
+    /* fill reads the same stream as next: re-seed, fill 16, re-seed, fill 16 -> identical */
+    if xoshiro_seed(1u64, 2u64, 3u64, 4u64) != 0i32 { return 35u64 }
+    if xoshiro_fill(((&FILLA as u64)) as *u8, 16u64) != 0i32 { return 36u64 }
+    if xoshiro_seed(1u64, 2u64, 3u64, 4u64) != 0i32 { return 37u64 }
+    if xoshiro_fill(((&FILLB as u64)) as *u8, 16u64) != 0i32 { return 38u64 }
+    let mut k : u64 = 0u64
+    while k < 16u64 {
+        if FILLA[k] != FILLB[k] { return 39u64 }                        /* fill deterministic */
+        k = k + 1u64
+    }
+    /* a different seed diverges within three draws */
+    if xoshiro_seed(9u64, 9u64, 9u64, 9u64) != 0i32 { return 40u64 }
+    let b1 : u32 = xoshiro_next_u32()
+    let b2 : u32 = xoshiro_next_u32()
+    let b3 : u32 = xoshiro_next_u32()
+    let mut same : u32 = 0u32
+    if b1 == a1 { same = same + 1u32 }
+    if b2 == a2 { same = same + 1u32 }
+    if b3 == a3 { same = same + 1u32 }
+    if same == 3u32 { return 41u64 }                                    /* divergence */
+
+    /* ---- ZKF: n' constant law + set_limb exactness ---- */
+    zkf_set_u32(0u64, 9u32)
+    zkf_inv_x(1u64, 0u64)                                               /* lazy-init trigger */
+    let np : u64 = zkf_np()
+    if np == 0u64 { return 50u64 }
+    if (np & 1u64) != 1u64 { return 51u64 }                             /* n' must be ODD */
+    if zkf_np() != np { return 52u64 }                                  /* deterministic */
+    if zkf_set_limb(2u64, 5u64, 0xABCDu32) != 0i32 { return 53u64 }
+    if zkf_get_limb(2u64, 5u64) != 0xABCDu32 { return 54u64 }           /* exact write/read */
+
+    return 99u64
+}

@@ -792,3 +792,35 @@ The staged duplicates are already purged (`4a715dae`); five files remain.
 **Self-review against the brief (run at authoring, recorded):** (1) Every-file coverage — waves 0–7 enumerate every live file by name at authoring time, and W8.2 re-proves it mechanically at execution against the tree as it will then exist (L11 absorbs the growth in between). (2) Placeholder scan — no TBD/TODO/defer verbs in any row; every conditional is a decision procedure with both branches fully specified. (3) The requested tone mix is real: unify (seraphyte emitters, cost_lattice_synth, field demos, S8 manifest, supersession pointers), simplify/refactor (ui_exact split, xii_proof split, MODULES comment sweep), fix bugs (forge63 header, 1492 extern, self_atlas_data ghost provenance, stale volatile note, 34 number collisions), throw away (root regrowth ~170, KATABASIS logs + 2 py, TOOLS-QUOTIENT, root py ×7), gate what was ungated (morphic, destiny, tp_ sweep, symbolic_regression + nl_parse falsifiers, hygiene ratchet, dup-number teeth), and keep-with-proof for the ~3,400 files that already clear the bar — each named, each with its gate.
 
 *This plan was authored against the live tree on 2026-07-01/02 under the session law (gate → invariant-guard → evidence per wave). It is append-only-improving: execution records and L10/L11 additions extend it; its rows are never silently rewritten.*
+
+## L10 ADDITION (2026-07-02) — THE CIRCULATION: seals/gates/KATs re-founded for a system that outpaces them
+
+**The problem, stated honestly (user, mid-execution):** the seals and gates in their batch form do not
+fit a system that changes faster than a full sweep completes. Waiting ~40 minutes for an "okay" is not
+verification, it is a stall. And a monolithic seal re-proves the expensive DDC/twin-build goodie on every
+organ edit although organ edits cannot possibly break compiler-province sovereignty.
+
+**What was actually wrong (and what was NOT):**
+- NOT wrong: the DDC / twin-build BIT-IDENTICAL / GCC-independence properties themselves. Those are real
+  sovereignty goodies and are PRESERVED intact.
+- NOT wrong: KATs as *contract + falsifier* pins. A KAT that carries a twin-divergence or certified-refusal
+  witness proves something a self-aware system cannot prove about itself by introspection — that the WRONG
+  answer is actually rejected by the built binary. "The system knows the right answer" is exactly why the
+  falsifier (does it reject the wrong one?) is the load-bearing half.
+- WRONG: the *topology*. Assurance was BATCH and MONOLITHIC — every change waited on the whole corpus, and
+  every seal re-ran the whole twin build.
+
+**The fix (landed, commit 22c2191e):**
+1. **verify_cone.sh** — the dependency graph is already fully written (externs + runner link-lines), so a
+   change-set resolves to an exact dirty cone and re-verifies ONLY that, keeping a content-addressed ledger
+   (VERIFIED.tsv). Circulation, not batch. Proven: `refract.iii -> {2178,2184}`, sharp vs 1796.
+2. **seal_route.sh** — the seal SPLIT: organ edits get a seconds-long hash re-pin; the twin-build goodie
+   fires only when COMPILER/BOOT/seed sources move (or `--audit`). The goodie is isolated, not weakened.
+3. The full sweep + full twin build demote to a PERIODIC AUDIT (and W8's one-sweep finale is the
+   circulation's first full-cycle cross-check — both paths must agree).
+
+**KAT philosophy, recorded:** in-organ certificates carry *assurance* (the math is right); KATs pin
+*contracts and falsifiers* (the built binary accepts the right answer and REJECTS the wrong one). A system
+being smarter than a KAT is the argument FOR the falsifier, not against it — introspective confidence is
+exactly what a built-binary refutation test exists to check. The two are complementary; neither replaces
+the other. The remedy for "gates too slow" is the CONE (verify less, exactly), not fewer gates.

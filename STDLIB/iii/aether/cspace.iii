@@ -28,6 +28,7 @@ extern @abi(c-msvc-x64) fn mech_den() -> i64 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
 extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
 extern @abi(c-msvc-x64) fn as_cert(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
+extern @abi(c-msvc-x64) fn as_cert2(AX: i64, Bx: i64, By: i64, Bz: i64, k: i64, Cx: i64, Cy: i64, Cz: i64, r2: i64) -> i32 from "arc_sweep.iii"
 
 const CS_MAXK : u64 = 24u64
 const CS_MAXG : u64 = 8u64
@@ -184,6 +185,7 @@ fn cs_free(k: i64, gx: i64, gy: i64) -> i64 @export { return CS_FREE[cs_sid(k, g
  * (the industry default: an edge is taken if both endpoint states are free -- it can tunnel).
  * returns the path length in moves, or -1 = PROVEN no path (exhaustion of the exact map). */
 var CS_MODE : i64
+var CS_GRAZE : i64                                /* 1 = rotation edges accept certified even-tangency grazes (as_cert2 == 2) */
 var CS_QT : u64
 fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 @export {
     CS_MODE = mode
@@ -228,6 +230,16 @@ fn cs_tredge(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 {
 fn cs_arcok(karc: i64, gx: i64, gy: i64) -> i32 {
     if CS_MODE == 1i64 { return 1i32 }
     let bx : i64 = gx * CS_GS   let by : i64 = gy * CS_GS
+    if CS_GRAZE == 1i64 {
+        /* graze-legal routing (V-IV.2): certified even-tangency contact is admissible (as_cert2 == 2) */
+        let g1 : i32 = as_cert2(CS_AX, bx, by, 0i64, karc, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
+        if g1 == 0i32 { return 0i32 }
+        if CS_R2 > 0i64 {
+            let g2 : i32 = as_cert2(CS_AX, bx, by, 0i64, karc, CS_C2[0u64], CS_C2[1u64], CS_C2[2u64], CS_R2)
+            if g2 == 0i32 { return 0i32 }
+        }
+        return 1i32
+    }
     let a1 : i32 = as_cert(CS_AX, bx, by, 0i64, karc, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
     if a1 == 0i32 { return 0i32 }
     if CS_R2 > 0i64 {
@@ -236,6 +248,7 @@ fn cs_arcok(karc: i64, gx: i64, gy: i64) -> i32 {
     }
     return 1i32
 }
+fn cs_set_graze(on: i64) -> i32 @export { CS_GRAZE = on   return 0i32 }
 fn cs_try(k: i64, gx: i64, gy: i64, cd: i64) -> i32 {
     let sid : u64 = cs_sid(k, gx, gy)
     if CS_FREE[sid] == 0i64 { return 0i32 }

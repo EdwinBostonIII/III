@@ -1,0 +1,73 @@
+/* 2192_dynamic_toi.iii -- GATE for V-IV.2: the graze-legal PLANNER and TIME in the certificate.
+ *
+ * P -- THE PLANNER-LEVEL DISCRIMINATION: tip radius 5 at base (0,0), sphere (20,0,0) r2 = 225 tangent
+ *   at theta = 0 -- the tangency lies in BOTH adjacent arc covers (karc 23 and 0), so in normal mode
+ *   the state k=0 cannot rotate AT ALL: cs_plan refuses (-1).  With cs_set_graze(1), both arcs carry
+ *   the certified even-tangency verdict (as_cert2 == 2) and the 2-move rotation plan 0 -> 23 -> 22
+ *   EXISTS: the corridor float planners cannot even represent, opened by a multiplicity certificate.
+ * W -- THE DYNAMIC WINDOW: robot x(t) = t vs obstacle center c(t) = 2t - 10, radius 3, corridor
+ *   [0,20].  The STATIC twin: c(t) sits inside the corridor for ALL t in [5,15] -- every frozen
+ *   snapshot of that epoch says "blocked".  The dynamic clearance p(t) = (10-t)^2 - 9 = t^2-20t+91
+ *   certifies contact EXACTLY on [7,13]: roots isolated in (6,8] and (12,14], each multiplicity 1 --
+ *   a TRUE transient occlusion with exact entry/exit instants, not a permanent wall.
+ * G -- GRAZE IN TIME: shrink to tangency: p(t) = t^2-20t+100 has the double root t = 10 --
+ *   root_mult == 2, EVEN: the swap costs ONE exact touching instant and zero penetration: transit
+ *   legal under contact-is-legal, in TIME rather than angle.  Same discriminator, fourth dimension.
+ *
+ * exit 99 = pass;  10 planner normal-mode;  11 planner graze-mode;  12 window;  13 graze-in-time */
+module corpus_2192_dynamic_toi
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn cs_compile(GS: i64, AX: i64, c1x: i64, c1y: i64, c1z: i64, r1: i64, c2x: i64, c2y: i64, c2z: i64, r2: i64, GW: i64, GH: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_set_graze(on: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_mult(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var TP : [i64; 4]
+
+fn main() -> u64 {
+    /* ══ P: the graze corridor at the planner level. */
+    if cs_compile(40i64, 5i64, 20i64, 0i64, 0i64, 225i64, 0i64, 0i64, 0i64, 0i64, 1i64, 1i64) != 0i32 { return 10u64 }
+    cs_set_graze(0i64)
+    let pn : i64 = cs_plan(0i64, 0i64, 0i64, 22i64, 0i64, 0i64, 0i64)
+    cs_set_graze(1i64)
+    let pg : i64 = cs_plan(0i64, 0i64, 0i64, 22i64, 0i64, 0i64, 0i64)
+    cs_set_graze(0i64)
+    putchar(80i32) putchar(58i32) sp() e_i64(pn) sp() e_i64(pg) nl()          /* "P: -1 2" */
+    if pn != (0i64 - 1i64) { return 10u64 }
+    if pg != 2i64 { return 11u64 }
+
+    /* ══ W: the exact transient-occlusion window [7, 13]. */
+    TP[0u64] = 91i64   TP[1u64] = 0i64 - 20i64   TP[2u64] = 1i64
+    if sturm_build((&TP) as u64, 2i64) < 0i64 { return 12u64 }
+    let nw : i64 = root_count(0i64, 1i64, 20i64, 1i64)
+    let w1 : i64 = root_count(6i64, 1i64, 8i64, 1i64)
+    let w2 : i64 = root_count(12i64, 1i64, 14i64, 1i64)
+    let m1 : i64 = root_mult((&TP) as u64, 2i64, 6i64, 1i64, 8i64, 1i64)
+    let m2 : i64 = root_mult((&TP) as u64, 2i64, 12i64, 1i64, 14i64, 1i64)
+    /* the static twin, stated exactly: c(t) = 2t-10 lies in [0,20] for ALL t in [5,15] (c(5)=0, c(15)=20) */
+    let cin5 : i64 = (2i64 * 5i64) - 10i64
+    let cin15 : i64 = (2i64 * 15i64) - 10i64
+    putchar(87i32) putchar(58i32) sp() e_i64(nw) sp() e_i64(w1) sp() e_i64(w2) sp() e_i64(m1) sp() e_i64(m2) sp() e_i64(cin5) sp() e_i64(cin15) nl()
+    /* "W: 2 1 1 1 1 0 20" */
+    if nw != 2i64 { return 12u64 }
+    if w1 != 1i64 { return 12u64 }
+    if w2 != 1i64 { return 12u64 }
+    if m1 != 1i64 { return 12u64 }
+    if m2 != 1i64 { return 12u64 }
+    if cin5 != 0i64 { return 12u64 }
+    if cin15 != 20i64 { return 12u64 }
+
+    /* ══ G: graze in TIME -- the double root t = 10. */
+    TP[0u64] = 100i64   TP[1u64] = 0i64 - 20i64   TP[2u64] = 1i64
+    let mg : i64 = root_mult((&TP) as u64, 2i64, 9i64, 1i64, 11i64, 1i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(mg) nl()                          /* "G: 2" */
+    if mg != 2i64 { return 13u64 }
+
+    return 99u64
+}

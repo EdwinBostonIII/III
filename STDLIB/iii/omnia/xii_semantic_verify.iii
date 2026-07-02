@@ -1,0 +1,319 @@
+/* STDLIB/iii/omnia/xii_semantic_verify.iii -- THE VERIFICATION MISSILE BATTERY (all three strikes, ONE organ).
+ *
+ * III-PERFECTION-LEDGER merge of omnia/xii_rule_verify + omnia/xii_fusion_verify + omnia/xii_iflift_verify:
+ * three modules were one pattern repeated -- drive the LIVE XII engine (xii_term + xii_canonicalise +
+ * xii_rewrite, the optimizer cg_r3 actually runs) against an INDEPENDENT authority, so a broken rule turns
+ * the gate red where a tautological check (engine vs the ops the engine itself calls) stays green.
+ *
+ *   STRIKE 1 (xrv_*, the trit fragment): the live engine vs a hardcoded ground-truth Kleene spec,
+ *     exhaustive over the 3x3 ground domain, + operational teeth (guards refuse ill-formed operands,
+ *     apply_one names the SPECIFIC rule) + kernel-governed admission on the LIVE rule set (xii_admission:
+ *     root-confluent AND terminating; honest non-overclaim: NOT globally confluent).
+ *   STRIKE 2 (xfv_*, the identity-null fusion family R016/R017/R021/R022): the live engine vs the MONOID
+ *     IDENTITY LAW -- op(null,b) must yield exactly b -- + teeth (non-null pairs do not collapse; the
+ *     priority null-collapse R037 is the rule that fires, verified by evidence).
+ *   STRIKE 3 (xiv_*, the IF-lift family R005/R006/R009-R012): the live engine vs the DISTRIBUTION LAW --
+ *     f(if p then t else e) = if p then f(t) else f(e) -- via struct-eq of normal forms against the
+ *     independently-built hoisted term, + teeth (branches sharing no common operand do NOT lift).
+ *
+ * Honest scope: associativity (R001-R004) is route-S structural (no rule to verify); the loop family
+ * (R013-R015) carries iteration semantics -- a further strike if ever needed.
+ *
+ * NIH: the live XII engine only.  Determinism: equality/struct-eq compares, module-scope tables,
+ * exhaustive over each finite family.  Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+module omnia_xii_semantic_verify
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+
+/* The LIVE operational admission gate (omnia/xii_admission) -- the OTHER half of
+ * kernel-governed admission (sov_admit_rule, corpus 883): admission alone checks
+ * OPERATION (root-confluence + termination over the real rule set), not MEANING. */
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_root_confluent() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_terminating() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_globally_confluent() -> u8 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_decide(root_confluent: u32, terminating: u32) -> u32 from "xii_admission.iii"
+
+/* ===================== STRIKE 1: the trit fragment (xrv_*, formerly xii_rule_verify.iii) ===================== */
+
+/* Live engine TRIT kinds: VAL=24 NOT=25 AND=26 OR=27 SUM=28 MUL=29; subform = trit + 1
+ * (NEG -> 0, ZERO -> 1, POS -> 2).  FORM=1 is a non-TRIT_VAL basis for the guard teeth. */
+const XRV_VAL  : u8 = 24u8
+const XRV_NOT  : u8 = 25u8
+const XRV_AND  : u8 = 26u8
+const XRV_OR   : u8 = 27u8
+const XRV_SUM  : u8 = 28u8
+const XRV_MUL  : u8 = 29u8
+const XRV_FORM : u8 = 1u8
+
+/* INDEPENDENT Kleene spec -- hardcoded ground truth, NOT iii_trit_*'s formulas.
+ * unary idx = a+1; binary idx = (a+1)*3 + (b+1).  Trits NEG=-1 ZERO=0 POS=1. */
+var XRV_NOT_EXP : [i32; 3] = [1i32, 0i32, -1i32]
+var XRV_AND_EXP : [i32; 9] = [-1i32,-1i32,-1i32,  -1i32,0i32,0i32,  -1i32,0i32,1i32]
+var XRV_OR_EXP  : [i32; 9] = [-1i32,0i32,1i32,    0i32,0i32,1i32,   1i32,1i32,1i32]
+var XRV_SUM_EXP : [i32; 9] = [-1i32,-1i32,0i32,   -1i32,0i32,1i32,  0i32,1i32,1i32]
+var XRV_MUL_EXP : [i32; 9] = [1i32,0i32,-1i32,    0i32,0i32,0i32,   -1i32,0i32,1i32]
+
+fn xrv_mkval(v: i32) -> u32 { return xii_term_make_basis(XRV_VAL, (v + 1i32) as u32) }
+fn xrv_getval(idx: u32) -> i32 { return (xii_term_get_subform(idx) as i32) - 1i32 }
+
+/* Drive the LIVE engine on a binary op to its normal form; return the result trit, or
+ * -9i32 (outside {-1,0,1}) if the NF is not a single TRIT_VAL (the rule failed to reduce). */
+fn xrv_eval_bin(opkind: u8, a: i32, b: i32) -> i32 {
+    xii_term_arena_reset()
+    let top : u32 = xii_term_make_fusion2(opkind, xrv_mkval(a), xrv_mkval(b))
+    let nf : u32 = xii_canonicalise(top)
+    if xii_term_get_kind(nf) != XRV_VAL { return -9i32 }
+    return xrv_getval(nf)
+}
+fn xrv_eval_un(opkind: u8, a: i32) -> i32 {
+    xii_term_arena_reset()
+    let top : u32 = xii_term_make_fusion2(opkind, xrv_mkval(a), 0xFFFFFFFFu32)
+    let nf : u32 = xii_canonicalise(top)
+    if xii_term_get_kind(nf) != XRV_VAL { return -9i32 }
+    return xrv_getval(nf)
+}
+
+/* The verification: LIVE engine === INDEPENDENT Kleene spec, exhaustive + teeth.
+ * 99 = sound; any other code names the failing check. */
+fn xrv_verify() -> u64 @export {
+    /* (1) NOT over {-1,0,1}: the live engine === the independent NOT spec. */
+    let mut ia : u64 = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        if xrv_eval_un(XRV_NOT, a) != XRV_NOT_EXP[ia] { return 1u64 }
+        ia = ia + 1u64
+    }
+    /* (2) AND/OR/SUM/MUL over the full 3x3 ground domain: engine === independent spec.
+     * This is the non-tautological soundness check: the authority (XRV_*_EXP) is
+     * independent of iii_trit_*, so a bug in the ops turns this red where 670 cannot. */
+    ia = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        let mut ib : u64 = 0u64
+        while ib < 3u64 {
+            let b : i32 = (ib as i32) - 1i32
+            let k : u64 = ia * 3u64 + ib
+            if xrv_eval_bin(XRV_AND, a, b) != XRV_AND_EXP[k] { return 2u64 }
+            if xrv_eval_bin(XRV_OR,  a, b) != XRV_OR_EXP[k]  { return 3u64 }
+            if xrv_eval_bin(XRV_SUM, a, b) != XRV_SUM_EXP[k] { return 4u64 }
+            if xrv_eval_bin(XRV_MUL, a, b) != XRV_MUL_EXP[k] { return 5u64 }
+            ib = ib + 1u64
+        }
+        ia = ia + 1u64
+    }
+    /* (3) SEMANTIC TEETH (the gate distinguishes, not rubber-stamps): at a cell where
+     * AND != OR (a=-1,b=1: AND=-1, OR=1; idx 2), the live AND output must equal the AND
+     * spec AND differ from the OR spec -- the engine computes AND specifically. */
+    let and_m1p1 : i32 = xrv_eval_bin(XRV_AND, -1i32, 1i32)
+    if and_m1p1 != XRV_AND_EXP[2u64] { return 6u64 }
+    if and_m1p1 == XRV_OR_EXP[2u64] { return 7u64 }
+    if XRV_AND_EXP[2u64] == XRV_OR_EXP[2u64] { return 8u64 }
+
+    /* (4) OPERATIONAL TEETH (the rule's GUARD is real): TRIT_AND whose child_b is NOT a
+     * TRIT_VAL (a FORM basis) must NOT reduce to a single TRIT_VAL -- match_TRIT_AND
+     * requires both children be TRIT_VAL, so the rule must refuse to fire. */
+    xii_term_arena_reset()
+    let bad_b : u32 = xii_term_make_basis(XRV_FORM, 0u32)
+    let illf : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(1i32), bad_b)
+    let illnf : u32 = xii_canonicalise(illf)
+    if xii_term_get_kind(illnf) == XRV_VAL { return 9u64 }
+
+    /* (5) the LIVE rule is the one that fired: apply_one identifies TRIT_AND as rule 102. */
+    xii_term_arena_reset()
+    let andt : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(-1i32), xrv_mkval(1i32))
+    let _r : u32 = xii_rewrite_apply_one(andt)
+    if xii_rewrite_last_rule_fired() != 102u32 { return 10u64 }
+
+    /* ============================================================
+     * KERNEL-GOVERNED ADMISSION on the LIVE rule set -- sov_admit (corpus 883)
+     * brought from the toy Nat models it was demonstrated on to III's REAL engine.
+     * A rule set is admitted iff it is OPERATIONALLY admissible (root-confluent AND
+     * terminating, computed over the actual rules by xii_admission -- xad_admit
+     * re-runs both gates across the WHOLE live set) AND SEMANTICALLY sound (the trit
+     * fragment, arms 1-10, verified vs the independent Kleene spec). */
+    /* (11-13) the live rule set is OPERATIONALLY admitted: root-confluent AND terminating. */
+    if xad_admit() != 1u32 { return 11u64 }
+    if xad_root_confluent() != 1u32 { return 12u64 }
+    if xad_terminating() != 1u32 { return 13u64 }
+    /* (14) HONEST non-overclaim: the engine does NOT pretend global confluence -- it has
+     * residual subterm non-joins; admission certifies DETERMINISTIC NORMALISATION (root-
+     * confluent + terminating + one fixed strategy), not strategy-independent confluence. */
+    if xad_globally_confluent() != 0u8 { return 14u64 }
+    /* (15-17) OPERATIONAL TEETH: the admission decision genuinely discriminates -- it
+     * REJECTS a non-confluent or non-terminating rule set, and ADMITS only when both hold. */
+    if xad_decide(0u32, 1u32) != 0u32 { return 15u64 }
+    if xad_decide(1u32, 0u32) != 0u32 { return 16u64 }
+    if xad_decide(1u32, 1u32) != 1u32 { return 17u64 }
+
+    /* (18-19) NESTED REDUCTION -- folds in corpus 670's termination/confluence witness, now
+     * NON-tautological.  A 2-level term AND(AND(-1,1),0) must canonicalise to a SINGLE TRIT_VAL
+     * whose value equals the INDEPENDENT spec composed (AND_EXP of AND_EXP), proving the trit
+     * fragment terminates to one normal form.  idx = (a+1)*3 + (b+1) per the spec convention. */
+    xii_term_arena_reset()
+    /* spec idx=(a+1)*3+(b+1): inner AND(-1,1)=idx 2 (=-1), so the outer op is AND(-1,0)=idx 1;
+     * the fully-reduced nested term must equal that independent-spec value (XRV_AND_EXP[1]=-1). */
+    let outer_e : i32 = XRV_AND_EXP[1u64]
+    let nn1 : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(-1i32), xrv_mkval(1i32))
+    let nn2 : u32 = xii_term_make_fusion2(XRV_AND, nn1, xrv_mkval(0i32))
+    let nnf : u32 = xii_canonicalise(nn2)
+    if xii_term_get_kind(nnf) != XRV_VAL { return 18u64 }
+    if xrv_getval(nnf) != outer_e { return 19u64 }
+
+    return 99u64
+}
+
+/* ===================== STRIKE 2: the identity-null fusion family (xfv_*, formerly xii_fusion_verify.iii) ===================== */
+
+/* live engine kinds (mirror xii_rewrite XRW_*): K06_COMPOSE=5 / K12_THEN=11 carry the null
+ * GROUND subform to BE the identity element; K01_FORM=1 is a non-null distinguishable operand;
+ * F.COMPOSE=18 / F.THEN=19 are the fusion roots the identity rules fire at. */
+const XFV_K06_COMPOSE : u8 = 5u8
+const XFV_K12_THEN    : u8 = 11u8
+const XFV_FORM        : u8 = 1u8
+const XFV_FCOMPOSE    : u8 = 18u8
+const XFV_FTHEN       : u8 = 19u8
+const XFV_NULL_GROUND : u32 = 0xFFFFFFFFu32
+const XFV_MARK        : u32 = 7u32     /* a distinguishable operand subform */
+
+fn xfv_null_compose() -> u32 { return xii_term_make_basis(XFV_K06_COMPOSE, XFV_NULL_GROUND) }
+fn xfv_null_then() -> u32 { return xii_term_make_basis(XFV_K12_THEN, XFV_NULL_GROUND) }
+fn xfv_form(mark: u32) -> u32 { return xii_term_make_basis(XFV_FORM, mark) }
+
+/* Drive the LIVE engine on `t`; 1 iff the normal form is a term equal (kind AND subform) to
+ * the expected operand (bk, bsub).  Judged against the monoid-identity expectation, not the
+ * rewrite's implementation -- a wrong-child result turns this 0. */
+fn xfv_yields(t: u32, bk: u8, bsub: u32) -> u8 {
+    let nf : u32 = xii_canonicalise(t)
+    if xii_term_get_kind(nf) != bk { return 0u8 }
+    if xii_term_get_subform(nf) != bsub { return 0u8 }
+    return 1u8
+}
+
+/* 99 = every identity-null rewrite is meaning-preserving on the LIVE engine + the teeth hold. */
+fn xfv_verify() -> u64 @export {
+    /* (1) R016  F.COMPOSE(K06_NULL, FORM m) -> FORM m   (left identity) */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FCOMPOSE, xfv_null_compose(), xfv_form(XFV_MARK)), XFV_FORM, XFV_MARK) != 1u8 { return 1u64 }
+    /* (2) R017  F.COMPOSE(FORM m, K06_NULL) -> FORM m   (right identity) */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FCOMPOSE, xfv_form(XFV_MARK), xfv_null_compose()), XFV_FORM, XFV_MARK) != 1u8 { return 2u64 }
+    /* (3) R021  F.THEN(K12_NULL, FORM m) -> FORM m */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FTHEN, xfv_null_then(), xfv_form(XFV_MARK)), XFV_FORM, XFV_MARK) != 1u8 { return 3u64 }
+    /* (4) R022  F.THEN(FORM m, K12_NULL) -> FORM m */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FTHEN, xfv_form(XFV_MARK), xfv_null_then()), XFV_FORM, XFV_MARK) != 1u8 { return 4u64 }
+
+    /* (5) OPERATIONAL TEETH (prove-the-negative): NEITHER operand a null -> the identity rule
+     * must NOT fire.  F.COMPOSE(FORM 7, FORM 9) does NOT collapse to a single operand; the
+     * normal form is still a F.COMPOSE.  (The guard requires a null operand to eliminate.) */
+    xii_term_arena_reset()
+    let nonid : u32 = xii_term_make_fusion2(XFV_FCOMPOSE, xfv_form(7u32), xfv_form(9u32))
+    if xii_term_get_kind(xii_canonicalise(nonid)) != XFV_FCOMPOSE { return 5u64 }
+
+    /* (6) RULE-IDENTITY TEETH: apply_one engages the priority null-collapse rule SPECIFICALLY
+     * (id 37 = R037, the M-family F.COMPOSE null-collapse) and that single step PROJECTS the
+     * operand.  (R037 has priority over the D-family R016/R017 on the compose-null overlap --
+     * the confluence cert's R038 < R017/R037 tie-break -- and projects the same operand, so the
+     * engine eliminates identity-null via R037; both are confluent.  Verified by evidence, not
+     * assumed.) */
+    xii_term_arena_reset()
+    let t37 : u32 = xii_term_make_fusion2(XFV_FCOMPOSE, xfv_null_compose(), xfv_form(XFV_MARK))
+    let r37 : u32 = xii_rewrite_apply_one(t37)
+    if xii_rewrite_last_rule_fired() != 37u32 { return 6u64 }       /* R037 = priority null-collapse fired */
+    if xii_term_get_kind(r37) != XFV_FORM { return 7u64 }            /* the step projected the operand... */
+    if xii_term_get_subform(r37) != XFV_MARK { return 8u64 }        /* ...specifically FORM(MARK) */
+
+    return 99u64
+}
+
+/* ===================== STRIKE 3: the IF-lift family (xiv_*, formerly xii_iflift_verify.iii) ===================== */
+
+const XIV_K01_FORM : u8 = 0u8     /* K01_FORM (kind 0) = the true CAP_NONE form atom; cap_set=0 so two such
+                                   * atoms are cap-disjoint, satisfying the prefix lift's side condition */
+const XIV_FTHEN    : u8 = 19u8
+const XIV_FWITH    : u8 = 20u8
+const XIV_FUNDER   : u8 = 21u8
+const XIV_FIF      : u8 = 22u8
+
+fn xiv_atom(mark: u32) -> u32 { return xii_term_make_basis(XIV_K01_FORM, mark) }
+
+/* Drive the live engine ONE step on `witness` (the IF-lifts live in the apply_one cascade, not the
+ * route-S canonicaliser); 1 iff that step (a) fires the SPECIFIC rule `rid` and (b) yields a term whose
+ * normal form struct-equals the NF of the independently-built `expected`. */
+fn xiv_lift_ok(witness: u32, expected: u32, rid: u32) -> u8 {
+    let lifted : u32 = xii_rewrite_apply_one(witness)
+    if xii_rewrite_last_rule_fired() != rid { return 0u8 }
+    let nl : u32 = xii_canonicalise(lifted)
+    let ne : u32 = xii_canonicalise(expected)
+    return xii_rewrite_struct_eq(nl, ne)
+}
+
+/* prefix:  F.IF(p, X(a,t), X(a,e)) -> X(a, F.IF(p,t,e)) */
+fn xiv_prefix_ok(xk: u8, rid: u32) -> u8 {
+    xii_term_arena_reset()
+    let p  : u32 = xiv_atom(1u32)
+    let a  : u32 = xiv_atom(2u32)
+    let tt : u32 = xiv_atom(3u32)
+    let ee : u32 = xiv_atom(4u32)
+    let wb : u32 = xii_term_make_fusion2(xk, a, tt)
+    let we : u32 = xii_term_make_fusion2(xk, a, ee)
+    let witness  : u32 = xii_term_make_if(p, wb, we)
+    let eif      : u32 = xii_term_make_if(p, tt, ee)
+    let expected : u32 = xii_term_make_fusion2(xk, a, eif)
+    return xiv_lift_ok(witness, expected, rid)
+}
+
+/* suffix:  F.IF(p, X(t,a), X(e,a)) -> X(F.IF(p,t,e), a) */
+fn xiv_suffix_ok(xk: u8, rid: u32) -> u8 {
+    xii_term_arena_reset()
+    let p  : u32 = xiv_atom(1u32)
+    let a  : u32 = xiv_atom(2u32)
+    let tt : u32 = xiv_atom(3u32)
+    let ee : u32 = xiv_atom(4u32)
+    let wb : u32 = xii_term_make_fusion2(xk, tt, a)
+    let we : u32 = xii_term_make_fusion2(xk, ee, a)
+    let witness  : u32 = xii_term_make_if(p, wb, we)
+    let eif      : u32 = xii_term_make_if(p, tt, ee)
+    let expected : u32 = xii_term_make_fusion2(xk, eif, a)
+    return xiv_lift_ok(witness, expected, rid)
+}
+
+/* 99 = every IF-lift branch-distribution rewrite is meaning-preserving on the LIVE engine + the teeth hold. */
+fn xiv_verify() -> u64 @export {
+    /* (1-3) prefix lifts FTHEN/FWITH/FUNDER -- each fires R005/R009/R011 AND yields the hoisted form */
+    if xiv_prefix_ok(XIV_FTHEN,  5u32)  != 1u8 { return 1u64 }
+    if xiv_prefix_ok(XIV_FWITH,  9u32)  != 1u8 { return 2u64 }
+    if xiv_prefix_ok(XIV_FUNDER, 11u32) != 1u8 { return 3u64 }
+    /* (4-6) suffix lifts FTHEN/FWITH/FUNDER -- each fires R006/R010/R012 AND yields the hoisted form */
+    if xiv_suffix_ok(XIV_FTHEN,  6u32)  != 1u8 { return 4u64 }
+    if xiv_suffix_ok(XIV_FWITH,  10u32) != 1u8 { return 5u64 }
+    if xiv_suffix_ok(XIV_FUNDER, 12u32) != 1u8 { return 6u64 }
+    /* (7) TEETH (prove-the-negative): a witness whose two branches share NO common operand (a1 != a2)
+     * does NOT lift -- apply_one fires no IF-lift rule and the term stays an F.IF (the guard's struct-eq
+     * prevents over-firing). */
+    xii_term_arena_reset()
+    let pp  : u32 = xiv_atom(1u32)
+    let a1  : u32 = xiv_atom(2u32)
+    let a2  : u32 = xiv_atom(5u32)
+    let tt2 : u32 = xiv_atom(3u32)
+    let ee2 : u32 = xiv_atom(4u32)
+    let nb  : u32 = xii_term_make_fusion2(XIV_FTHEN, tt2, a1)
+    let ne2 : u32 = xii_term_make_fusion2(XIV_FTHEN, ee2, a2)
+    let nonw : u32 = xii_term_make_if(pp, nb, ne2)
+    let nlift : u32 = xii_rewrite_apply_one(nonw)
+    if xii_rewrite_last_rule_fired() != 0u32 { return 7u64 }      /* no rule fired on the non-liftable term */
+    if xii_term_get_kind(nlift) != XIV_FIF { return 8u64 }        /* and it is still an F.IF (not hoisted) */
+    return 99u64
+}

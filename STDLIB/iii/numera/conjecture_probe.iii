@@ -1,0 +1,173 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\conjecture_probe.iii
+ *
+ * III STDLIB - numera::conjecture_probe  --  OPEN CONJECTURES, EMPIRICALLY VERIFIED TO A BOUND.
+ *
+ * ONE epistemic artifact, two famous instances (III-PERFECTION-LEDGER merge of numera/goldbach +
+ * numera/collatz — the same pattern twice was two modules; it is one module with two probes).
+ * An open conjecture cannot be PROVEN by computation, but every finite instance is checkable —
+ * so the honest computational object is the BOUNDED VERIFIER: it either confirms the conjecture
+ * up to a limit (with concrete witnesses) or refutes it outright with a counterexample.  Nothing
+ * here claims a proof; the KATs pin exact witness values so a drifting verifier cannot fake it.
+ *
+ *   GOLDBACH (1742, open): every even n >= 4 is a sum of two primes.  CONSUMES numera::sieve —
+ *   for each even n it searches a prime p with n-p also prime, returning the smallest witness.
+ *
+ *   COLLATZ / 3n+1 (1937, open): iterating n -> n/2 (even) / 3n+1 (odd) reaches 1.  Stopping
+ *   times and trajectory peaks are exact (27 takes 111 steps, peaks at 9232); parity by bit-AND,
+ *   halving by shift (no division anywhere).
+ *
+ * Public API:
+ *   goldbach_has_pair(n) ; goldbach_first_p(n) ; goldbach_holds_to(limit)
+ *   collatz_step(n) ; collatz_steps(n) ; collatz_max(n) ; collatz_all_reach_one(limit)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_conjecture_probe
+
+/* ===================== GOLDBACH probe (composes numera::sieve) ===================== */
+
+extern @abi(c-msvc-x64) fn sieve_run() -> i32 from "sieve.iii"
+extern @abi(c-msvc-x64) fn sieve_is_prime(n: u32) -> u32 from "sieve.iii"
+
+/* is there a prime p with n-p also prime? (n even, n <= 50 so n-p stays in the sieve range). */
+fn goldbach_has_pair(n: u32) -> u32 @export {
+    let mut p : u32 = 2u32
+    while (p + p) <= n {
+        if sieve_is_prime(p) == 1u32 {
+            let q : u32 = n - p
+            if sieve_is_prime(q) == 1u32 { return 1u32 }
+        }
+        p = p + 1u32
+    }
+    return 0u32
+}
+
+/* the smallest prime p such that n-p is prime (the witness); 0 if none. */
+fn goldbach_first_p(n: u32) -> u32 @export {
+    let mut p : u32 = 2u32
+    while (p + p) <= n {
+        if sieve_is_prime(p) == 1u32 {
+            let q : u32 = n - p
+            if sieve_is_prime(q) == 1u32 { return p }
+        }
+        p = p + 1u32
+    }
+    return 0u32
+}
+
+/* does Goldbach hold for every even number 4..limit? */
+fn goldbach_holds_to(limit: u32) -> u32 @export {
+    let mut n : u32 = 4u32
+    while n <= limit {
+        if goldbach_has_pair(n) == 0u32 { return 0u32 }
+        n = n + 2u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * goldbach_kat -- 99 = Goldbach's conjecture is verified up to 50 via the sieve:
+ *   (1) decompositions exist: 4=2+2, 10, 28 each have a prime pair;
+ *   (2) the smallest witnesses: first_p(4)=2, first_p(10)=3, first_p(28)=5;
+ *   (3) the witness genuinely sums to n with both halves prime;
+ *   (4) Goldbach holds for every even number up to 50.
+ * ===================================================================================== */
+fn goldbach_kat() -> u64 @export {
+    sieve_run()
+
+    /* (1) pairs exist */
+    if goldbach_has_pair(4u32) != 1u32 { return 1u64 }
+    if goldbach_has_pair(10u32) != 1u32 { return 2u64 }
+    if goldbach_has_pair(28u32) != 1u32 { return 3u64 }
+
+    /* (2) the smallest witnesses */
+    if goldbach_first_p(4u32) != 2u32 { return 4u64 }
+    if goldbach_first_p(10u32) != 3u32 { return 5u64 }
+    if goldbach_first_p(28u32) != 5u32 { return 6u64 }
+
+    /* (3) the witness for 28 really is 5 + 23, both prime */
+    if sieve_is_prime(5u32) != 1u32 { return 7u64 }
+    if sieve_is_prime(23u32) != 1u32 { return 8u64 }
+    if (5u32 + 23u32) != 28u32 { return 9u64 }
+
+    /* (4) the conjecture holds up to 50 */
+    if goldbach_holds_to(50u32) != 1u32 { return 10u64 }
+
+    return 99u64
+}
+
+/* ===================== COLLATZ / 3n+1 probe (self-contained) ===================== */
+
+const COLLATZ_DIVERGE : u32 = 0xFFFFFFFFu32     /* sentinel: did not converge within the guard */
+
+/* one Collatz step: halve if even, else 3n+1. */
+fn collatz_step(n: u32) -> u32 @export {
+    if (n & 1u32) == 0u32 { return n >> 1u32 }
+    return (3u32 * n) + 1u32
+}
+
+/* the stopping time: number of steps to reach 1 (DIVERGE if it somehow does not within the guard). */
+fn collatz_steps(n: u32) -> u32 @export {
+    let mut x : u32 = n
+    let mut s : u32 = 0u32
+    let mut guard : u32 = 0u32
+    while x != 1u32 {
+        x = collatz_step(x)
+        s = s + 1u32
+        guard = guard + 1u32
+        if guard > 1000u32 { return COLLATZ_DIVERGE }
+    }
+    return s
+}
+
+/* the maximum value the trajectory of n reaches. */
+fn collatz_max(n: u32) -> u32 @export {
+    let mut x : u32 = n
+    let mut peak : u32 = n
+    let mut guard : u32 = 0u32
+    while x != 1u32 {
+        x = collatz_step(x)
+        if x > peak { peak = x }
+        guard = guard + 1u32
+        if guard > 1000u32 { return COLLATZ_DIVERGE }
+    }
+    return peak
+}
+
+/* does every starting value 1..limit reach 1? */
+fn collatz_all_reach_one(limit: u32) -> u32 @export {
+    let mut n : u32 = 1u32
+    while n <= limit {
+        if collatz_steps(n) == COLLATZ_DIVERGE { return 0u32 }
+        n = n + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * collatz_kat -- 99 = the Collatz conjecture is verified up to 100:
+ *   (1) exact stopping times: 1->0, 6->8, 7->16, 27->111;
+ *   (2) the trajectory of 27 peaks at 9232;
+ *   (3) every starting value 1..100 reaches 1;
+ *   (4) the single-step rule: 8 -> 4 (even), 7 -> 22 (odd).
+ * ===================================================================================== */
+fn collatz_kat() -> u64 @export {
+    /* (1) stopping times */
+    if collatz_steps(1u32) != 0u32 { return 1u64 }
+    if collatz_steps(6u32) != 8u32 { return 2u64 }
+    if collatz_steps(7u32) != 16u32 { return 3u64 }
+    if collatz_steps(27u32) != 111u32 { return 4u64 }
+
+    /* (2) the famous peak */
+    if collatz_max(27u32) != 9232u32 { return 5u64 }
+
+    /* (3) universal convergence up to 100 */
+    if collatz_all_reach_one(100u32) != 1u32 { return 6u64 }
+
+    /* (4) the step rule */
+    if collatz_step(8u32) != 4u32 { return 7u64 }
+    if collatz_step(7u32) != 22u32 { return 8u64 }
+    if collatz_step(1u32) != 4u32 { return 9u64 }       /* 1 is odd -> 3*1+1 = 4 */
+
+    return 99u64
+}

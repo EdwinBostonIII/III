@@ -29,6 +29,10 @@ extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn ui_bigsign2(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, dhi: i64, cnsg: i64, cnm: u64, dlo: i64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
 
 const G2_MAXE : u64 = 1024u64
 const G2_OK : i32 = 1i32
@@ -431,6 +435,103 @@ fn g2_snap_free() -> i32 @export {
     }
     return 0i32
 }
+/* ═════════ ENSEMBLE COMPACTION (charter increment 5) ═════════
+ * Divide the ONE denominator and every numerator by their collective gcd, and MIGRATE into a fresh
+ * arena: the bump allocator reclaims bytes only by dropping the whole arena (drop frees HANDLES, never
+ * bytes -- the documented discipline), so gcd-reduction without migration would shrink numbers but not
+ * memory.  The rational state is UNCHANGED (snap_diff == 0 across the call); a live snapshot is migrated
+ * VERBATIM (copied, not divided -- its gcd is not ours, and equality is cross-multiplied anyway).
+ * Two-phase for atomicity: all exact quotients are built into the fresh arena BEFORE the old state is
+ * touched; an inexact division (impossible by construction) refuses with the state intact.
+ * Returns 1 = compacted (gcd > 1), 0 = already primitive, -1 = refused.
+ * Envelope (global 64-slot handle table): NP <= 3 with a live snapshot, NP <= 4 without. */
+var G2C_Q0 : [u64; 12]   var G2C_Q1 : [u64; 12]   var G2C_BAD : i64
+
+/* gcd(x, m) via Knuth-division Euclid in the scratch arena: CONSUMES x, leaves m untouched. */
+fn g2_bgcd_step(sc: u64, x: u64, m: u64) -> u64 {
+    if bigint_is_zero(m) == 1u8 { return x }
+    let mut a : u64 = x
+    let mut b : u64 = bigint_copy(sc, m)
+    let mut zb : u8 = bigint_is_zero(b)
+    while zb == 0u8 {
+        let q : u64 = bigint_div_qr(sc, a, b)
+        let r : u64 = bigint_remainder_take()
+        bigint_drop(q)
+        bigint_drop(a)
+        a = b
+        b = r
+        zb = bigint_is_zero(b)
+    }
+    bigint_drop(b)
+    return a
+}
+/* exact quotient v/g allocated in `na`; flags G2C_BAD on a nonzero remainder */
+fn g2_exdiv(sc: u64, na: u64, v: u64, g: u64) -> u64 {
+    let q : u64 = bigint_div_qr(sc, v, g)
+    let r : u64 = bigint_remainder_take()
+    if bigint_is_zero(r) == 0u8 { G2C_BAD = 1i64 }
+    bigint_drop(r)
+    let out : u64 = bigint_copy(na, q)
+    bigint_drop(q)
+    return out
+}
+fn g2_compact() -> i32 @export {
+    let sc : u64 = arena_new(8388608u64)
+    let mut g : u64 = bigint_copy(sc, G2_DEN)
+    let mut k : u64 = 0u64
+    while k < (G2_NP * 3u64) {
+        g = g2_bgcd_step(sc, g, G2_M0[k])
+        g = g2_bgcd_step(sc, g, G2_M1[k])
+        k = k + 1u64
+    }
+    let one : u64 = bigint_from_u64(sc, 1u64)
+    let triv : i32 = bigint_cmp(g, one)
+    bigint_drop(one)
+    if triv == 0i32 {
+        bigint_drop(g)   bigint_drop_arena(sc)   arena_drop(sc)
+        return 0i32
+    }
+    G2C_BAD = 0i64
+    let na : u64 = arena_new(33554432u64)
+    let nd : u64 = g2_exdiv(sc, na, G2_DEN, g)
+    k = 0u64
+    while k < (G2_NP * 3u64) {
+        let z0 : u8 = bigint_is_zero(G2_M0[k])
+        if z0 == 1u8 { G2C_Q0[k] = bigint_from_u64(na, 0u64) } else { G2C_Q0[k] = g2_exdiv(sc, na, G2_M0[k], g) }
+        let z1 : u8 = bigint_is_zero(G2_M1[k])
+        if z1 == 1u8 { G2C_Q1[k] = bigint_from_u64(na, 0u64) } else { G2C_Q1[k] = g2_exdiv(sc, na, G2_M1[k], g) }
+        k = k + 1u64
+    }
+    bigint_drop(g)
+    bigint_drop_arena(sc)   arena_drop(sc)
+    if G2C_BAD != 0i64 {
+        bigint_drop_arena(na)   arena_drop(na)
+        return 0i32 - 1i32
+    }
+    k = 0u64
+    while k < (G2_NP * 3u64) {
+        bigint_drop(G2_M0[k])   G2_M0[k] = G2C_Q0[k]
+        bigint_drop(G2_M1[k])   G2_M1[k] = G2C_Q1[k]
+        k = k + 1u64
+    }
+    bigint_drop(G2_DEN)   G2_DEN = nd
+    if G2_SNAPPED == 1i64 {
+        k = 0u64
+        while k < (G2_NP * 3u64) {
+            let s0 : u64 = bigint_copy(na, G2SNM0[k])   bigint_drop(G2SNM0[k])   G2SNM0[k] = s0
+            let s1 : u64 = bigint_copy(na, G2SNM1[k])   bigint_drop(G2SNM1[k])   G2SNM1[k] = s1
+            k = k + 1u64
+        }
+        let sd : u64 = bigint_copy(na, G2SND)   bigint_drop(G2SND)   G2SND = sd
+    }
+    bigint_drop_arena(G2_AR)
+    arena_drop(G2_AR)
+    G2_AR = na
+    return 1i32
+}
+fn g2_den_limbs() -> i64 @export { return bigint_len_limbs(G2_DEN) as i64 }
+fn g2_den_bits() -> i64 @export { return bigint_msb_position(G2_DEN) as i64 }
+
 fn g2_events() -> u64 @export { return G2_NE }
 fn g2_ek(i: u64) -> i64 @export { return G2E_K[i] }
 fn g2_v(p: u64, ax: u64) -> i64 @export { return G2_V[p * 3u64 + ax] }

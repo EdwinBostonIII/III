@@ -1,0 +1,110 @@
+/* 2183_gas_compact.iii -- GATE for ENSEMBLE COMPACTION (charter increment 5): gcd-reduce the one
+ * denominator + every numerator, migrate to a fresh arena (bytes reclaimed), and prove the operation
+ * is DYNAMICALLY INVISIBLE.
+ *
+ * E -- EXACTNESS + MAXIMALITY + THE MID-RUN INVOLUTION (the proven tie-free 3-particle box of 2176):
+ *   run 10, snapshot, compact -> the state is THE SAME RATIONAL (snap_diff == 0 across the call, the
+ *   snapshot itself migrated verbatim), the denominator's limb count strictly drops, and a second
+ *   compact returns 0 (the reduction is MAXIMAL: nothing left to strip).  Then 10 more events, reverse,
+ *   10 back, re-reverse: snap_diff == 0 -- a compaction in the MIDDLE of a trajectory is invisible to
+ *   the involution, forward and backward.
+ * T -- THE TWIN-DEPTH RATCHET: the same 120-event history run twice -- straight, and compacted every 15
+ *   events.  The event-kind sequence is IDENTICAL (120/120), the final velocities are IDENTICAL (9/9),
+ *   and the compacted denominator is strictly smaller in limbs.  Growth is representation, not physics.
+ *
+ * exit 99 = pass;  10 setup/run;  11 exactness;  12 maximality;  13 involution;  14 ratchet;  15 twin equality */
+module corpus_2183_gas_compact
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run(k: u64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_reverse() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_diff() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_snap_free() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_compact() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_den_limbs() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_den_bits() -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ek(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_v(p: u64, ax: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn setup() -> i32 {
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 40i64, 1i64, 1i64)
+    g2_part(10i64, 4i64, 4i64, 13i64, 3i64, 2i64)
+    g2_part(36i64, 4i64, 4i64, 0i64 - 11i64, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, 7i64)
+    return 0i32
+}
+
+var EK : [i64; 128]   var VV : [i64; 9]
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ E: exactness + maximality + the mid-run involution. */
+    setup()
+    if g2_run(10u64) != 10u64 { return 10u64 }
+    g2_snap()
+    let B0 : i64 = g2_den_bits()
+    let c1 : i32 = g2_compact()
+    let B1 : i64 = g2_den_bits()
+    let sd1 : i64 = g2_snap_diff()
+    let c2 : i32 = g2_compact()
+    putchar(69i32) putchar(58i32) sp() e_i64(c1 as i64) sp() e_i64(B0) sp() e_i64(B1) sp() e_i64(sd1) sp() e_i64(c2 as i64) nl()
+    /* "E: 1 <B0> <B1> 0 0" -- g >= 2 forces a STRICT bit drop (den/g <= den/2) */
+    if c1 != 1i32 { return 11u64 }
+    if B1 >= B0 { return 11u64 }
+    if sd1 != 0i64 { return 11u64 }
+    if c2 != 0i32 { return 12u64 }
+    if g2_run(10u64) != 10u64 { return 13u64 }
+    g2_reverse()
+    if g2_run(10u64) != 10u64 { return 13u64 }
+    g2_reverse()
+    let sd2 : i64 = g2_snap_diff()
+    g2_snap_free()
+    putchar(73i32) putchar(58i32) sp() e_i64(sd2) nl()                       /* "I: 0" */
+    if sd2 != 0i64 { return 13u64 }
+
+    /* ══ T: the twin-depth ratchet -- one history, two representations. */
+    setup()
+    if g2_run(120u64) != 120u64 { return 10u64 }
+    let LA : i64 = g2_den_limbs()
+    let mut i : u64 = 0u64
+    while i < 120u64 { EK[i] = g2_ek(i)   i = i + 1u64 }
+    let mut p : u64 = 0u64
+    while p < 3u64 { let mut ax : u64 = 0u64   while ax < 3u64 { VV[p * 3u64 + ax] = g2_v(p, ax)   ax = ax + 1u64 }   p = p + 1u64 }
+    setup()
+    let mut ch : u64 = 0u64
+    let mut cbad : i64 = 0i64
+    while ch < 8u64 {
+        if g2_run(15u64) != 15u64 { return 10u64 }
+        let cr : i32 = g2_compact()
+        if cr < 0i32 { cbad = 1i64 }
+        ch = ch + 1u64
+    }
+    let LB : i64 = g2_den_limbs()
+    let mut keq : i64 = 0i64
+    i = 0u64
+    while i < 120u64 { if g2_ek(i) == EK[i] { keq = keq + 1i64 }   i = i + 1u64 }
+    let mut veq : i64 = 0i64
+    p = 0u64
+    while p < 3u64 { let mut ax : u64 = 0u64   while ax < 3u64 { if g2_v(p, ax) == VV[p * 3u64 + ax] { veq = veq + 1i64 }   ax = ax + 1u64 }   p = p + 1u64 }
+    putchar(84i32) putchar(58i32) sp() e_i64(LA) sp() e_i64(LB) sp() e_i64(cbad) sp() e_i64(keq) sp() e_i64(veq) nl()
+    /* "T: <LA> <LB> 0 120 9" */
+    if cbad != 0i64 { return 14u64 }
+    if LB >= LA { return 14u64 }
+    if keq != 120i64 { return 15u64 }
+    if veq != 9i64 { return 15u64 }
+
+    return 99u64
+}

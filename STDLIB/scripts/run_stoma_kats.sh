@@ -39,6 +39,7 @@ run 2461_stoma_queue 99 "$OUT/stoma_traps.o" "$OUT/stoma_queue.o" "$OUT/stoma_ga
 run 2462_stoma_build  99 "$OUT/stoma_build.o"
 run 2463_stoma_ripple 99 "$OUT/stoma_ripple.o" "$OUT/stoma_build.o"
 run 2464_stoma_tree   99 "$OUT/stoma_tree.o" "$OUT/stoma_con.o"
+run 2465_stoma_matrix 99 "$OUT/stoma_proc.o" "$OUT/stoma_pty.o"
 
 # ---- stoma.exe walking-skeleton: build (gcc dev-link here; sovbuild parity is the M5/M7 gate) + plain-mode smoke ----
 "$I2" "$A/stoma.iii" --compile-only --out "$OUT/stoma.o" 2>"$OUT/stoma.c.log" \

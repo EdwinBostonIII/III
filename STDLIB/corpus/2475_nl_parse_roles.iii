@@ -1,0 +1,90 @@
+/* 2475_nl_parse_roles.iii -- FALSIFIER for verba::nl_parse's thematic-role tagger (reunification
+ * W4c.1.1): the deterministic role assignment, driven through the REAL lex->parse pipeline
+ * (nl_lex_tokenize -> nl_parse_recognize), asserted against hand-verified role vectors.
+ *
+ * A -- EXACT ROLE VECTOR: "send the packet from the buffer to the channel" is an IMPERATIVE whose
+ *   four fragments carry EXACTLY [VERB, PATIENT, SOURCE, DESTINATION] = [1,3,4,5].  A mis-tag (e.g.
+ *   SOURCE<->DESTINATION swap, or a dropped PP) changes the vector and fails.
+ * B -- STRUCTURE DISCRIMINATION: "store the packet" (no locative complements) yields EXACTLY
+ *   [VERB, PATIENT] = [1,3], two fragments -- the tagger produces a STRUCTURE-DEPENDENT vector, not
+ *   a fixed guess (if it did, B would carry A's four roles).
+ * C -- NO-VERB REJECT: "channel packet buffer" (three nouns, no verb) is REFUSED with
+ *   NL_PARSE_E_NO_VERB (-3), zero fragments -- the recognizer rejects a non-command, never
+ *   force-fits a phantom verb.
+ * D -- EMPTY REJECT: the empty string is REFUSED with NL_PARSE_E_EMPTY (-4).
+ *
+ * ADJUDICATION (recorded): the plan's draft named an "AMBIGUOUS marker" arm; nl_parse is a
+ * DETERMINISTIC single-parse recognizer with no ambiguity kind (NLP_KIND_ ∈ {UNKNOWN, IMPERATIVE,
+ * DECLARATIVE, INTERROGATIVE}).  The structure-discrimination arm (B) + the two reject arms (C,D)
+ * are the real teeth; a marker the organ does not have cannot be gated.
+ *
+ * exit 99 = pass;  10 A kind/count;  11 A roles;  12 B kind/count/roles;  13 C not-refused;  14 D not-refused */
+module corpus_2475_nl_parse_roles
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var SRC : [u8; 128]   var TOK : [u64; 64]   var CNT : [u64; 1]   var FRAG : [u8; 8192]   var META : [u32; 2]
+
+/* NLP role ids (nl_parse.iii). */
+/* VERB=1 PATIENT=3 SOURCE=4 DESTINATION=5 ; KIND_IMPERATIVE=1 */
+
+fn zero_src() -> i32 { let mut i : u64 = 0u64   while i < 128u64 { SRC[i] = 0u8   i = i + 1u64 }   return 0i32 }
+fn set_src(s: *u8, n: u64) -> u32 { zero_src()   let mut i : u64 = 0u64   while i < n { SRC[i] = s[i]   i = i + 1u64 }   return n as u32 }
+
+/* lex+recognize the current SRC of length n; return the recognize rc.  META/CNT filled. */
+fn run(n: u32) -> i32 {
+    CNT[0u64] = 0u64   META[0u64] = 0u64   META[1u64] = 0u64
+    let pk : u64 = nl_lex_pack_lens(n, 64u32)
+    nl_lex_tokenize((&SRC) as u64, pk, (&TOK) as u64, (&CNT) as u64)
+    return nl_parse_recognize((&TOK) as u64, CNT[0u64] as u32, (&FRAG) as u64, (&META) as u64)
+}
+fn role(i: u32) -> u32 { return nl_parse_frag_role((&FRAG) as u64, i) }
+
+fn main() -> u64 {
+    nl_lex_init_all()
+
+    /* ══ A: exact imperative role vector [VERB, PATIENT, SOURCE, DESTINATION]. */
+    let na : u32 = set_src("send the packet from the buffer to the channel" as u64 as *u8, 46u64)
+    let ra : i32 = run(na)
+    putchar(65i32) putchar(58i32) sp() e_i64(ra as i64) sp() e_i64(META[1u64] as i64) sp() e_i64(META[0u64] as i64) sp() e_i64(role(0u32) as i64) sp() e_i64(role(1u32) as i64) sp() e_i64(role(2u32) as i64) sp() e_i64(role(3u32) as i64) nl()
+    if ra != 0i32 { return 10u64 }
+    if META[1u64] != 1u32 { return 10u64 }        /* IMPERATIVE */
+    if META[0u64] != 4u32 { return 10u64 }        /* four fragments */
+    if role(0u32) != 1u32 { return 11u64 }        /* VERB */
+    if role(1u32) != 3u32 { return 11u64 }        /* PATIENT */
+    if role(2u32) != 4u32 { return 11u64 }        /* SOURCE */
+    if role(3u32) != 5u32 { return 11u64 }        /* DESTINATION */
+
+    /* ══ B: structure discrimination -- "store the packet" -> [VERB, PATIENT] only. */
+    let nb : u32 = set_src("store the packet" as u64 as *u8, 16u64)
+    let rb : i32 = run(nb)
+    putchar(66i32) putchar(58i32) sp() e_i64(rb as i64) sp() e_i64(META[1u64] as i64) sp() e_i64(META[0u64] as i64) sp() e_i64(role(0u32) as i64) sp() e_i64(role(1u32) as i64) nl()
+    if rb != 0i32 { return 12u64 }
+    if META[1u64] != 1u32 { return 12u64 }
+    if META[0u64] != 2u32 { return 12u64 }        /* only two fragments -- structure-dependent */
+    if role(0u32) != 1u32 { return 12u64 }
+    if role(1u32) != 3u32 { return 12u64 }
+
+    /* ══ C: no-verb reject -- three nouns, no command. */
+    let nc : u32 = set_src("channel packet buffer" as u64 as *u8, 21u64)
+    let rc : i32 = run(nc)
+    putchar(67i32) putchar(58i32) sp() e_i64(rc as i64) sp() e_i64(META[0u64] as i64) nl()
+    if rc != (0i32 - 3i32) { return 13u64 }       /* NL_PARSE_E_NO_VERB */
+    if META[0u64] != 0u32 { return 13u64 }        /* zero fragments -- no force-fit */
+
+    /* ══ D: empty reject. */
+    zero_src()
+    let rd : i32 = run(0u32)
+    putchar(68i32) putchar(58i32) sp() e_i64(rd as i64) nl()
+    if rd != (0i32 - 4i32) { return 14u64 }       /* NL_PARSE_E_EMPTY */
+
+    return 99u64
+}

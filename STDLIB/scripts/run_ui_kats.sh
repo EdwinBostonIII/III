@@ -46,8 +46,8 @@ run 2100_biquad_coverage 99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"  # SYMBOLIC 2D 
 run 2101_hausdorff_dim  99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"   # continuous HAUSDORFF DIMENSION (smooth d=1; self-similar fractal d in (1,2))
 run 2102_cover2d        99 "$OUT/ui_exact.o" "$OUT/ui_raster.o"   # FULL symmetric 2D coverage (Green: G(t2)-G(t1)-py degree-4; overflow detected)
 run 2453_glass_surface  99 "$OUT/ui_vfont.o" "$OUT/ui_vfont_data.o" "$OUT/ui_exact.o" "$OUT/ui_exact_cubic.o" "$OUT/ui_raster.o" "$OUT/ui_present.o" "$OUT/studio_theme.o" "$OUT/studio_sample.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o"   # reunification W0.2: the cubic/coverage seam + present/theme/sample surface
-run 2473_morphic_writeback 99 "$OUT/ui_morphic.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: autopoietic SVIR write-back headless (byte-diff EXACT + re-prove + re-lift)
-run 2474_destiny_closed_form 99 "$OUT/ui_destiny.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: holographic destiny -- 4 real SVIR fns, exact eval + exact closed-form max
+run 2476_morphic_writeback 99 "$OUT/ui_morphic.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: autopoietic SVIR write-back headless (byte-diff EXACT + re-prove + re-lift)
+run 2477_destiny_closed_form 99 "$OUT/ui_destiny.o" "$OUT/ui_raster.o" "$OUT/ui_font.o" "$OUT/ui_font_data.o" "$LIB" -lws2_32   # W4b-i.11: holographic destiny -- 4 real SVIR fns, exact eval + exact closed-form max
 
 echo "=== UI KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

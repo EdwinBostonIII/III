@@ -1,4 +1,4 @@
-/* 2474_destiny_closed_form.iii -- GATE for ui_destiny's holographic destiny surface (reunification
+/* 2477_destiny_closed_form.iii -- GATE for ui_destiny's holographic destiny surface (reunification
  * W4b-i.11): the closed-form image the window plots, driven headlessly (ud_lift/ud_eval/ud_max).
  *
  * For each of the four REAL SVIR bodies the organ carries, the lifted exact circuit must compute
@@ -10,7 +10,7 @@
  *   F3: x&7   -> eval(7)=7,   eval(100)=4,    max=7   (the sawtooth: 100=0b1100100 -> 0b100)
  *
  * exit 99 = pass;  10 lift;  11 F0;  12 F1;  13 F2;  14 F3 */
-module corpus_2474_destiny_closed_form
+module corpus_2477_destiny_closed_form
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn ud_lift(sel: u32) -> u32 from "ui_destiny.iii"

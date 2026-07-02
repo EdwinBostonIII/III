@@ -1,4 +1,4 @@
-/* 2473_morphic_writeback.iii -- GATE for ui_morphic's autopoietic SVIR write-back (reunification
+/* 2476_morphic_writeback.iii -- GATE for ui_morphic's autopoietic SVIR write-back (reunification
  * W4b-i.11): the drag's ENTIRE effect -- write C into the SVIR byte arrays, re-prove f==g, re-lift,
  * evaluate -- driven headlessly through the SAME core the window drives (um_edit_c/um_relift/um_eval).
  *
@@ -10,7 +10,7 @@
  * D -- SECOND EDIT: um_edit_c(0) -> proven, eval(5)=5 (the edit is repeatable, not one-shot).
  *
  * exit 99 = pass;  10 A;  11 B;  12 C;  13 D */
-module corpus_2473_morphic_writeback
+module corpus_2476_morphic_writeback
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn um_edit_c(c: u64) -> u32 from "ui_morphic.iii"

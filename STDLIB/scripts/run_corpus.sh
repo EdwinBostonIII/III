@@ -1727,6 +1727,7 @@ declare -A EXPECTED=(
     [2470_symreg_wrong_form]=99
     [2471_symreg_overfit_refuse]=99
     [2472_spec_wired_synth]=99
+    [2475_nl_parse_roles]=99
 )
 
 PASS=0

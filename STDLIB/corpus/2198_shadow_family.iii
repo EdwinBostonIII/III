@@ -1,0 +1,107 @@
+/* 2198_shadow_family.iii -- GATE for SHADOW PERTURBATION FAMILIES (Turing-next N-6): the first-
+ * divergence index k* as an EXACT FUNCTION of which component takes the quantum.
+ *
+ * One baseline (the proven box, 1500 steps), four one-quantum twins -- the kick lands on P0.vx,
+ * P1.vx, P2.vz, or P0.vz (P1.vy=5 recreates the DOCUMENTED 2176 graze-tie and certifiably refuses at step 0 -- kicked sideways instead).  Each twin's response history is combinatorially IDENTICAL to the
+ * baseline's for exactly k* responses and then splits; the four k* values form the machine-decided
+ * DIVERGENCE TABLE of the flow's perturbation geometry -- which degree of freedom reaches the event
+ * skeleton fastest, decided exactly, pinned exactly.  The P2.vz member must agree with gate 2189's
+ * k* = 9 (cross-gate consistency).  exit 99 = pass;  10 runs;  11 table;  12 2189 consistency */
+module corpus_2198_shadow_family
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run_ct(k: u64, bits: i64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ct_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_events() -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ek(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ea(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eb(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eax(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var LK : [i64; 2048]   var LA : [i64; 2048]   var LB : [i64; 2048]   var LX : [i64; 2048]
+
+/* member m: 0 = baseline; 1..4 kick P0.vx / P1.vx / P2.vz / P0.vz by +1 */
+fn setup(m: i64) -> i32 {
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 40i64, 7i64, 1i64)
+    let mut v0x : i64 = 13i64   let mut v0z : i64 = 2i64
+    let mut v1x : i64 = 0i64 - 11i64
+    let mut v2z : i64 = 7i64
+    if m == 1i64 { v0x = 14i64 }
+    if m == 2i64 { v1x = 0i64 - 10i64 }
+    if m == 3i64 { v2z = 8i64 }
+    if m == 4i64 { v0z = 3i64 }
+    g2_part(10i64, 4i64, 4i64, v0x, 3i64, v0z)
+    g2_part(36i64, 4i64, 4i64, v1x, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, v2z)
+    g2_ct_reset()
+    return 0i32
+}
+
+fn kstar_of(nA: u64) -> i64 {
+    let nB : u64 = g2_events()
+    let mut nmin : u64 = nA
+    if nB < nmin { nmin = nB }
+    let mut ks : i64 = 0i64 - 1i64
+    let mut i : u64 = 0u64
+    while i < nmin {
+        if ks < 0i64 {
+            let mut df : i64 = 0i64
+            if g2_ek(i) != LK[i] { df = 1i64 }
+            if g2_ea(i) != LA[i] { df = 1i64 }
+            if g2_eb(i) != LB[i] { df = 1i64 }
+            if g2_eax(i) != LX[i] { df = 1i64 }
+            if df == 1i64 { ks = i as i64 }
+        }
+        i = i + 1u64
+    }
+    return ks
+}
+
+fn main() -> u64 {
+    vg_reset()
+    setup(0i64)
+    if g2_run_ct(1500u64, 48i64) != 1500u64 { return 10u64 }
+    let nA : u64 = g2_events()
+    let mut i : u64 = 0u64
+    while i < nA { LK[i] = g2_ek(i)   LA[i] = g2_ea(i)   LB[i] = g2_eb(i)   LX[i] = g2_eax(i)   i = i + 1u64 }
+    var KS : [i64; 5]
+    var DN : [i64; 5]
+    let mut m : i64 = 1i64
+    while m <= 4i64 {
+        setup(m)
+        /* a member may meet its own certified tie downstream (member 4 does, at step 372 -- the
+         * perturbed orbit's genuine life); the divergence index needs only the PREFIX, and must be
+         * strictly inside what ran for the table to be well-defined */
+        DN[m as u64] = g2_run_ct(1500u64, 48i64) as i64
+        KS[m as u64] = kstar_of(nA)
+        m = m + 1i64
+    }
+    putchar(75i32) putchar(58i32) sp() e_i64(KS[1u64]) sp() e_i64(KS[2u64]) sp() e_i64(KS[3u64]) sp() e_i64(KS[4u64]) nl()
+    putchar(78i32) putchar(58i32) sp() e_i64(DN[1u64]) sp() e_i64(DN[2u64]) sp() e_i64(DN[3u64]) sp() e_i64(DN[4u64]) nl()
+    /* "K: <vx0> <vx1> <vz2> <vz0>" -- the divergence table, pinned from the machine */
+    m = 1i64
+    while m <= 4i64 {
+        let ksm : i64 = KS[m as u64]
+        let dnm : i64 = DN[m as u64]
+        if ksm < 1i64 { return 11u64 }
+        let mut want : i64 = 11i64
+        if m == 2i64 { want = 10i64 }
+        if m == 3i64 { want = 9i64 }
+        if ksm != want { return 11u64 }                /* the pinned table (11, 10, 9, 11) */
+        if ksm >= dnm { return 11u64 }                 /* k* strictly inside the ran prefix: well-defined */
+        m = m + 1i64
+    }
+    if KS[3u64] != 9i64 { return 12u64 }               /* the 2189 member: cross-gate consistency */
+    return 99u64
+}

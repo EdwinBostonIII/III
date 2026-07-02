@@ -201,3 +201,23 @@ a beyond-critical arm certified TIR; the class-map identity certified, not assum
 
 STATE AT CLOSE: sqrtsum gate 37/0; organs landed this program: arc_sweep (+ cspace rotation upgrade).
 V, VII, VIII are fully specified above with falsifiers -- the next session builds them in that order.
+
+## V, VII, VIII — **LANDED** (the Program III close)
+- **V gas_big.iii + 2176 (44de723b):** the ceiling removed in MAGNITUDE (i64 refuses at 2^61; bigint
+  continues, involution exact AS RATIONALS) and DEPTH (200 events > the i64 organ's own 128 log ceiling).
+  Findings with teeth: the i64 ensemble denominator is largely SELF-LIMITING (event slot = v*c*GDEN, gcd
+  reclaims; 128+ events at 2^55 -- the charter's growth estimate corrected); the GLOBAL 64-slot bigint
+  handle table + ui_bigsign2's undropped internals masqueraded as certified ties (own-arena sign calls);
+  a pair-face sign error (tn = sgnf*d0 - S*DEN on BOTH faces) was caught by prove-positive-arms.
+- **VII resultant.iii + 2177 (b282f016):** Res_x(f(x), g(t-x)) by interpolated Bareiss determinants with
+  exactness-asserted Cramer recovery; DERIVED the classical minimal polynomials of cbrt2+sqrt3 and
+  sqrt2+sqrt3 coefficient-for-coefficient; the derived object composes back through sturm.  Roots are
+  closed under + on the substrate.  Products/inverses + the bigint determinant = next increments.
+- **VIII refract.iii + 2178:** the designed 45<->30 class pair under n^2 = 1|2: every Snell transition a
+  CERTIFIED integer identity (residue 0), the slab theorem exact (exit parallel; lateral shift
+  (300+100sqrt3)/3), the critical angle an EXACT certified zero, TIR a strict positive.  Refraction without
+  the tower -- by making the material obey the algebra.
+
+STATE AT PROGRAM III CLOSE: sqrtsum gate 40/0.  Organs 2167-2178 all landed.  Charted next: bigint
+determinants, products/inverses, arc-tangency multiplicity, rational-direction march v2, ensemble
+compaction, multi-interface photonic lattices on the refract class algebra.

@@ -1,0 +1,178 @@
+/* STDLIB/iii/aether/refract.iii -- BOUNDED-RANK REFRACTION (charter Program III Vector VIII): Snell's law
+ * WITHOUT the tower, by DESIGNING the material to obey the algebra.
+ *
+ * THE ADJUDICATED CORE: generic refraction injects sqrt(1 - (n1/n2)^2 sin^2) per event -- one new radical
+ * per interface, the PosSLP tower.  Here the direction set is CLOSED by construction: media with n^2 = 1
+ * (light) and n^2 = 2 (dense) map the 45-degree class d = (sx, sy) to the 30-degree class d = (sx, sy*sqrt3)
+ * and back at every horizontal interface -- Snell squared is the INTEGER IDENTITY
+ *     n1^2 * dx1^2 * |d2|^2  ==  n2^2 * dx2^2 * |d1|^2      (1*1*4 == 2*1*2),
+ * CERTIFIED at every transition (rf_cert() == 0), never assumed.  Positions stay rank-1 Q(sqrt3) with one
+ * guarded denominator (the billiard pattern; linear growth).  The two refusal-free exact boundary verdicts:
+ *   - the 45-degree class INSIDE the dense medium meets an interface at EXACTLY the critical angle
+ *     (2 * 1/2 == 1 * 1): sin(theta_out) == 1 is a CERTIFIED ZERO -- total reflection at onset, no epsilon;
+ *   - the 30-degree class hitting a VERTICAL wall inside the dense medium: 2 * 3/4 > 1 strictly -- TIR
+ *     certified by a positive integer sign.
+ * Geometry (v1, the slab laboratory): light above y = Y1, dense in [Y2, Y1], light below; an optional
+ * vertical TIR wall x = XV inside the dense band.  Overflow-guarded throughout (refuse, never wrap). */
+module refract
+
+extern @abi(c-msvc-x64) fn vg_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "verb_geom.iii"
+
+const RF_REFR : i32 = 1i32
+const RF_TIR : i32 = 2i32
+const RF_CRIT : i32 = 3i32
+const RF_ESC : i32 = 0i32
+const RF_OVER : i32 = 4i32
+
+var RF_Y1 : i64   var RF_Y2 : i64   var RF_XV : i64   var RF_HASXV : i64
+var RF_PX0 : i64   var RF_PX1 : i64   var RF_PY0 : i64   var RF_PY1 : i64   var RF_DEN : i64
+var RF_CLS : i64                                  /* 0 = 45-degree (sx, sy); 1 = 30-degree (sx, sy*sqrt3) */
+var RF_SX : i64   var RF_SY : i64
+var RF_CERT : i64                                 /* the last transition's Snell-squared identity residue */
+var RF_OVF : i64
+
+fn rf_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn rf_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = rf_abs(a)   let ub : u64 = rf_abs(b)
+    if ub > (9223372036854775807u64 / ua) { RF_OVF = 1i64   return 0i64 }
+    return a * b
+}
+var RFA : [i64; 2]   var RFB : [i64; 2]
+fn rf_s3(x0: i64, x1: i64) -> i32 {
+    RFA[0u64] = x0   RFA[1u64] = x1
+    RFB[0u64] = 1i64   RFB[1u64] = 3i64
+    return vg_sign((&RFA) as u64, (&RFB) as u64, 2u64)
+}
+fn rf_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+fn rf_canon() -> i32 {
+    let mut g : i64 = rf_gcd(rf_gcd(RF_PX0, RF_PX1), rf_gcd(rf_gcd(RF_PY0, RF_PY1), RF_DEN))
+    if g > 1i64 { RF_PX0 = RF_PX0 / g   RF_PX1 = RF_PX1 / g   RF_PY0 = RF_PY0 / g   RF_PY1 = RF_PY1 / g   RF_DEN = RF_DEN / g }
+    return 0i32
+}
+
+fn rf_cfg(Y1: i64, Y2: i64, XV: i64, hasxv: i64) -> i32 @export {
+    RF_Y1 = Y1   RF_Y2 = Y2   RF_XV = XV   RF_HASXV = hasxv
+    return 0i32
+}
+fn rf_set(px: i64, py: i64, cls: i64, sx: i64, sy: i64) -> i32 @export {
+    RF_PX0 = px   RF_PX1 = 0i64   RF_PY0 = py   RF_PY1 = 0i64   RF_DEN = 1i64
+    RF_CLS = cls   RF_SX = sx   RF_SY = sy   RF_CERT = 0i64   RF_OVF = 0i64
+    return 0i32
+}
+
+/* one exact optical event: advance to the next boundary along the current ray and apply the certified
+ * class map / reflection.  Returns RF_*. */
+fn rf_step() -> i32 @export {
+    RF_OVF = 0i64
+    /* the y-interface ahead: dy sign picks Y1 (up) or Y2/Y1 by region.  Region: above Y1, dense, below Y2. */
+    let sab : i32 = rf_s3(RF_PY0 - rf_mul(RF_Y1, RF_DEN), RF_PY1)       /* py - Y1 */
+    let sbe : i32 = rf_s3(RF_PY0 - rf_mul(RF_Y2, RF_DEN), RF_PY1)       /* py - Y2 */
+    let mut region : i64 = 1i64                                          /* 0 above / 1 dense / 2 below */
+    if sab > 0i32 { region = 0i64 }
+    if sbe < 0i32 { region = 2i64 }
+    if sab == 0i32 { if RF_SY > 0i64 { region = 0i64 } }                  /* ON Y1 heading up: above-owned  */
+    if sbe == 0i32 { if RF_SY < 0i64 { region = 2i64 } }                  /* ON Y2 heading down: below-owned */
+    /* the target y-plane */
+    let mut ty : i64 = RF_Y1
+    if region == 0i64 { if RF_SY > 0i64 { return RF_ESC } }
+    if region == 1i64 { if RF_SY > 0i64 { ty = RF_Y1 } else { ty = RF_Y2 } }
+    if region == 2i64 { if RF_SY < 0i64 { return RF_ESC }   ty = RF_Y2 }
+    /* t_y = (ty - py)/|dy-component|: class 0: |dy| = 1: t = |tyn|; class 1: |dy| = sqrt3: t = |tyn|/sqrt3.
+     * Work with the COMMON positive scale T = |ty*DEN - py| as a rank-1 pair (t0, t1). */
+    let mut ty0 : i64 = rf_mul(ty, RF_DEN) - RF_PY0
+    let mut ty1 : i64 = 0i64 - RF_PY1
+    if RF_SY < 0i64 { ty0 = 0i64 - ty0   ty1 = 0i64 - ty1 }              /* |distance| along the motion */
+    if RF_OVF != 0i64 { return RF_OVER }
+    /* the x-wall candidate (only inside the dense band, moving toward it, if configured) */
+    let mut usewall : i64 = 0i64
+    let mut tx0 : i64 = 0i64   let mut tx1 : i64 = 0i64
+    if RF_HASXV == 1i64 { if region == 1i64 {
+        let sxw : i32 = rf_s3(rf_mul(RF_XV, RF_DEN) - RF_PX0, 0i64 - RF_PX1)
+        if RF_SX > 0i64 { if sxw > 0i32 { usewall = 1i64 } }
+        if RF_SX < 0i64 { if sxw < 0i32 { usewall = 1i64 } }
+        if usewall == 1i64 {
+            tx0 = rf_mul(RF_XV, RF_DEN) - RF_PX0
+            tx1 = 0i64 - RF_PX1
+            if RF_SX < 0i64 { tx0 = 0i64 - tx0   tx1 = 0i64 - tx1 }
+        }
+    } }
+    /* compare event times.  |dx| = 1 always; |dy| = 1 (class 0) or sqrt3 (class 1).
+     * class 0: t_y = TY, t_x = TX -> compare TY vs TX.
+     * class 1: t_y = TY/sqrt3, t_x = TX -> compare TY vs TX*sqrt3: (TY0 - 3*TX1) + (TY1 - TX0)*sqrt3. */
+    let mut wallfirst : i64 = 0i64
+    if usewall == 1i64 {
+        let mut c : i32 = 0i32
+        if RF_CLS == 0i64 { c = rf_s3(ty0 - tx0, ty1 - tx1) }
+        if RF_CLS == 1i64 { c = rf_s3(ty0 - rf_mul(3i64, tx1), ty1 - tx0) }
+        if c > 0i32 { wallfirst = 1i64 }                                  /* the wall is nearer */
+    }
+    if RF_OVF != 0i64 { return RF_OVER }
+    if wallfirst == 1i64 {
+        /* advance to x = XV: class 0: t = TX: px' = XV exactly, py' = py + sy*TX.
+         * class 1: t = TX: px' = XV, py' = py + sy*sqrt3*TX -> slots (py0 + 3*sy*TX1, py1 + sy*TX0). */
+        RF_PX0 = rf_mul(RF_XV, RF_DEN)   RF_PX1 = 0i64
+        if RF_CLS == 0i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, tx0)   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx1) }
+        if RF_CLS == 1i64 { RF_PY0 = RF_PY0 + rf_mul(RF_SY, rf_mul(3i64, tx1))   RF_PY1 = RF_PY1 + rf_mul(RF_SY, tx0) }
+        if RF_OVF != 0i64 { return RF_OVER }
+        rf_canon()
+        /* the TIR certificate at the vertical wall: n2^2 * dy^2 - n1^2 * |d|^2:
+         * class 1: 2*3 - 1*4 = +2 > 0 strictly -> TOTAL reflection; class 0: 2*1 - 1*2 = 0 -> critical. */
+        if RF_CLS == 1i64 { RF_CERT = 2i64   RF_SX = 0i64 - RF_SX   return RF_TIR }
+        RF_CERT = 0i64   RF_SX = 0i64 - RF_SX
+        return RF_CRIT
+    }
+    /* advance to the y-plane: class 0: t = TY: py' = ty, px' = px + sx*TY.
+     * class 1: t = TY/sqrt3: py' = ty, px' = px + sx*TY/sqrt3 -> px' slots (px0 + sx*TY1, px1 + sx*TY0/3)
+     *   via the exact form: TY/sqrt3 = (TY1*3 + TY0*sqrt3)/3: scale den by 3. */
+    if RF_CLS == 0i64 {
+        RF_PX0 = RF_PX0 + rf_mul(RF_SX, ty0)   RF_PX1 = RF_PX1 + rf_mul(RF_SX, ty1)
+        RF_PY0 = rf_mul(ty, RF_DEN)   RF_PY1 = 0i64
+    }
+    if RF_CLS == 1i64 {
+        RF_PX0 = rf_mul(3i64, RF_PX0) + rf_mul(RF_SX, rf_mul(3i64, ty1))
+        RF_PX1 = rf_mul(3i64, RF_PX1) + rf_mul(RF_SX, ty0)
+        RF_PY0 = rf_mul(rf_mul(ty, RF_DEN), 3i64)   RF_PY1 = 0i64
+        RF_DEN = rf_mul(RF_DEN, 3i64)
+    }
+    if RF_OVF != 0i64 { return RF_OVER }
+    rf_canon()
+    /* the transition at this y-interface.  Downward through Y1 or upward through Y2: LIGHT <-> DENSE map.
+     * Entering dense as class 0 -> class 1; exiting dense as class 1 -> class 0 (both CERTIFIED);
+     * meeting an interface as class 0 INSIDE dense: the EXACT critical angle -> reflect (certified zero). */
+    let entering : i64 = 1i64 - region                                   /* region 0 -> enters dense at Y1 going down; region 2 -> enters at Y2 going up */
+    if region == 1i64 {
+        /* leaving the dense band */
+        if RF_CLS == 1i64 {
+            /* certified refraction out: n2^2*dx^2*|dA|^2 == n1^2*dxA^2*|dB|^2 : 2*1*2 == 1*1*4 */
+            RF_CERT = rf_mul(rf_mul(2i64, 1i64), 2i64) - rf_mul(rf_mul(1i64, 1i64), 4i64)
+            RF_CLS = 0i64
+            return RF_REFR
+        }
+        /* class 0 inside dense at an interface: n2^2 sin^2 = 2*(1/2) == n1^2 = 1: the EXACT critical angle */
+        RF_CERT = rf_mul(2i64, 1i64) - rf_mul(1i64, 2i64)
+        RF_SY = 0i64 - RF_SY
+        return RF_CRIT
+    }
+    /* entering the dense band from light: class 0 -> class 1, certified */
+    if entering != 0i64 { }                                              /* (direction bookkeeping is via SY) */
+    RF_CERT = rf_mul(rf_mul(1i64, 1i64), 4i64) - rf_mul(rf_mul(2i64, 1i64), 2i64)
+    RF_CLS = 1i64
+    return RF_REFR
+}
+
+fn rf_px0() -> i64 @export { return RF_PX0 }
+fn rf_px1() -> i64 @export { return RF_PX1 }
+fn rf_py0() -> i64 @export { return RF_PY0 }
+fn rf_py1() -> i64 @export { return RF_PY1 }
+fn rf_den() -> i64 @export { return RF_DEN }
+fn rf_cls() -> i64 @export { return RF_CLS }
+fn rf_sx() -> i64 @export { return RF_SX }
+fn rf_sy() -> i64 @export { return RF_SY }
+fn rf_cert() -> i64 @export { return RF_CERT }

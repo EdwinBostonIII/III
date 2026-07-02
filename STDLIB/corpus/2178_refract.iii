@@ -1,0 +1,82 @@
+/* 2178_refract.iii -- GATE for refract.iii: BOUNDED-RANK REFRACTION (Program III Vector VIII).
+ *
+ * ARM S -- THE SLAB THEOREM, EXACT: a 45-degree ray enters the n^2 = 2 slab, refracts to the 30-degree
+ *   class (Snell-squared certified as the INTEGER identity 1*1*4 == 2*1*2, residue 0), crosses, exits
+ *   refracted back to 45 degrees EXACTLY PARALLEL to the entry ray, with the lateral shift an EXACT
+ *   Q(sqrt3) value: exit x = (300 + 100*sqrt3)/3.  Float optics approximates this; the class algebra IS it.
+ * ARM C -- THE EXACT CRITICAL ANGLE: the 45-degree class INSIDE the dense medium meets the interface at
+ *   sin(theta_out) == 1 EXACTLY (2*1/2 == 1*1, a certified ZERO residue): total reflection at onset,
+ *   decided by an integer identity, no epsilon anywhere.
+ * ARM T -- CERTIFIED TIR: the 30-degree class hits a vertical wall inside the dense medium: 2*(3/4) > 1
+ *   strictly (residue +2): total internal reflection, the exit position exact in Q(sqrt3).
+ *
+ * exit 99 = pass;  10 S entry wrong;  11 S slab identity wrong;  12 S escape wrong;  13 C wrong;  14 T wrong */
+module corpus_2178_refract
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rf_cfg(Y1: i64, Y2: i64, XV: i64, hasxv: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_set(px: i64, py: i64, cls: i64, sx: i64, sy: i64) -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_step() -> i32 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_px0() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_px1() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_py0() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_py1() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_den() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_cls() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_sx() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_sy() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn rf_cert() -> i64 from "refract.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ ARM S: the exact slab.  Light above y=100, dense in [0,100], light below. */
+    rf_cfg(100i64, 0i64, 0i64, 0i64)
+    rf_set(0i64, 200i64, 0i64, 1i64, 0i64 - 1i64)
+    let r1 : i32 = rf_step()                                             /* enter the slab at (100,100) */
+    putchar(83i32) putchar(49i32) putchar(58i32) sp() e_i64(r1 as i64) sp() e_i64(rf_cls()) sp() e_i64(rf_cert()) sp() e_i64(rf_px0()) nl()   /* "S1: 1 1 0 100" */
+    if r1 != 1i32 { return 10u64 }
+    if rf_cls() != 1i64 { return 10u64 }
+    if rf_cert() != 0i64 { return 10u64 }
+    if rf_px0() != 100i64 { return 10u64 }
+    let r2 : i32 = rf_step()                                             /* cross + exit at y = 0 */
+    putchar(83i32) putchar(50i32) putchar(58i32) sp() e_i64(r2 as i64) sp() e_i64(rf_cls()) sp() e_i64(rf_sx()) sp() e_i64(rf_sy()) sp() e_i64(rf_px0()) sp() e_i64(rf_px1()) sp() e_i64(rf_den()) sp() e_i64(rf_cert()) nl()   /* "S2: 1 0 1 -1 300 100 3 0" */
+    if r2 != 1i32 { return 11u64 }
+    if rf_cls() != 0i64 { return 11u64 }                                 /* refracted back to 45 degrees */
+    if rf_sx() != 1i64 { return 11u64 }                                  /* EXIT EXACTLY PARALLEL to entry */
+    if rf_sy() != (0i64 - 1i64) { return 11u64 }
+    if rf_px0() != 300i64 { return 11u64 }                               /* exit x = (300 + 100*sqrt3)/3 */
+    if rf_px1() != 100i64 { return 11u64 }
+    if rf_den() != 3i64 { return 11u64 }
+    if rf_py0() != 0i64 { return 11u64 }
+    if rf_cert() != 0i64 { return 11u64 }
+    let r3 : i32 = rf_step()                                             /* free flight below: escape */
+    if r3 != 0i32 { return 12u64 }
+
+    /* ══ ARM C: the EXACT critical angle -- 45-degree class inside the dense medium. */
+    rf_set(50i64, 50i64, 0i64, 1i64, 0i64 - 1i64)
+    let rc : i32 = rf_step()
+    putchar(67i32) putchar(58i32) sp() e_i64(rc as i64) sp() e_i64(rf_cert()) sp() e_i64(rf_sy()) sp() e_i64(rf_px0()) nl()   /* "C: 3 0 1 100" */
+    if rc != 3i32 { return 13u64 }
+    if rf_cert() != 0i64 { return 13u64 }                                /* the certified ZERO: onset exactly */
+    if rf_sy() != 1i64 { return 13u64 }
+    if rf_px0() != 100i64 { return 13u64 }
+
+    /* ══ ARM T: certified TIR at a vertical wall inside the dense medium. */
+    rf_cfg(100i64, 0i64, 30i64, 1i64)
+    rf_set(0i64, 90i64, 1i64, 1i64, 0i64 - 1i64)
+    let rt : i32 = rf_step()
+    putchar(84i32) putchar(58i32) sp() e_i64(rt as i64) sp() e_i64(rf_cert()) sp() e_i64(rf_sx()) sp() e_i64(rf_px0()) sp() e_i64(rf_py0()) sp() e_i64(rf_py1()) nl()   /* "T: 2 2 -1 30 90 -30" */
+    if rt != 2i32 { return 14u64 }
+    if rf_cert() != 2i64 { return 14u64 }                                /* 2*(3/4) - 1 scaled: strictly positive */
+    if rf_sx() != (0i64 - 1i64) { return 14u64 }
+    if rf_px0() != 30i64 { return 14u64 }
+    if rf_py0() != 90i64 { return 14u64 }
+    if rf_py1() != (0i64 - 30i64) { return 14u64 }                       /* y = 90 - 30*sqrt3 EXACT */
+
+    return 99u64
+}

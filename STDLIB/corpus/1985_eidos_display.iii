@@ -75,10 +75,16 @@ fn main() -> u64 {
     let env : u64 = cap_env_init()
     let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
 
-    bcopy((&P_ROOT as u64), ("iii" as u64), 3u64)
+    /* CWD-independent walk root (whole-tree sweep 2026-07-02): the corpus is invoked from the
+     * repo root (where the tree is STDLIB/iii) or from STDLIB/ (where it is iii) -- a KAT's
+     * verdict must not depend on the invoker's directory.  Probe the first, fall back. */
     bcopy((&P_OUT as u64),  ("build/eidos_map.ans" as u64), 19u64)
-
-    let nc : u32 = scarto_map(cap, (&P_ROOT as u64), 3u64)
+    bcopy((&P_ROOT as u64), ("STDLIB/iii" as u64), 10u64)
+    let mut nc : u32 = scarto_map(cap, (&P_ROOT as u64), 10u64)
+    if nc == 0u32 {
+        bcopy((&P_ROOT as u64), ("iii" as u64), 3u64)
+        nc = scarto_map(cap, (&P_ROOT as u64), 3u64)
+    }
     if nc == 0u32 { return 10u64 }
 
     let r1 : u32 = render_atlas()

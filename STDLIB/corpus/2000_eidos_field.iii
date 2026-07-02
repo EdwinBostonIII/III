@@ -46,10 +46,14 @@ fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
 fn main() -> u64 {
     let env : u64 = cap_env_init()
     let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
-    bcopy((&P_ROOT as u64), ("iii" as u64), 3u64)
+    /* CWD-independent walk root (sweep 2026-07-02): repo-root (STDLIB/iii) or STDLIB/ (iii). */
     bcopy((&P_OUT as u64),  ("build/eidos_field.ans" as u64), 21u64)
-
-    let nc : u32 = scarto_map(cap, (&P_ROOT as u64), 3u64)
+    bcopy((&P_ROOT as u64), ("STDLIB/iii" as u64), 10u64)
+    let mut nc : u32 = scarto_map(cap, (&P_ROOT as u64), 10u64)
+    if nc == 0u32 {
+        bcopy((&P_ROOT as u64), ("iii" as u64), 3u64)
+        nc = scarto_map(cap, (&P_ROOT as u64), 3u64)
+    }
     if nc == 0u32 { return 10u64 }
 
     temporal_build()

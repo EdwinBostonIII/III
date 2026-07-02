@@ -64,7 +64,7 @@ const CLI_WEB   : u32 = 1u32
 const CLI_PLAN  : u32 = 2u32
 const CLI_FIELD : u32 = 3u32
 
-var CLI_ROOT : [u8; 8]                    /* the III self-tree root ("iii"), NUL-terminated */
+var CLI_ROOT : [u8; 16]                   /* the III self-tree root ("STDLIB/iii" or "iii"), NUL-terminated */
 
 fn cli_bcopy(dst: u64, src: u64, n: u64) -> u64 {
     let d : *u8 = dst as *u8
@@ -116,18 +116,23 @@ fn eidos_cli_render_map(cap: u64, root_ptr: u64, root_len: u64, path_ptr: u64) -
 }
 
 /* THE DISPATCHER: render the requested VIEW of III to path.  Returns bytes written (0 = failure or an
- * unknown verb -- rejected, never a silent wrong render).  The self-tree root is fixed ("iii"). */
+ * unknown verb -- rejected, never a silent wrong render).  The self-tree root is CWD-independent
+ * (sweep 2026-07-02): repo-root invocations see STDLIB/iii, STDLIB/ invocations see iii -- probe the
+ * first, fall back; the probe IS the walk, so the atlas is populated once and every verb reuses it. */
 fn eidos_cli_run(verb: u32, cap: u64, path_ptr: u64) -> u32 @export {
-    cli_bcopy((&CLI_ROOT as u64), ("iii" as u64), 3u64)
+    cli_bcopy((&CLI_ROOT as u64), ("STDLIB/iii" as u64), 10u64)
+    let mut nw : u32 = scarto_map(cap, (&CLI_ROOT as u64), 10u64)
+    if nw == 0u32 {
+        cli_bcopy((&CLI_ROOT as u64), ("iii" as u64), 3u64)
+        nw = scarto_map(cap, (&CLI_ROOT as u64), 3u64)
+    }
     if verb == CLI_MAP {
-        let nc : u32 = scarto_map(cap, (&CLI_ROOT as u64), 3u64)
-        if nc == 0u32 { return 0u32 }
+        if nw == 0u32 { return 0u32 }
         render_atlas()
         return eidos_cli_write(cap, path_ptr)
     }
     if verb == CLI_FIELD {
-        let nf : u32 = scarto_map(cap, (&CLI_ROOT as u64), 3u64)
-        if nf == 0u32 { return 0u32 }
+        if nw == 0u32 { return 0u32 }
         temporal_build()
         return eidos_temporal_write(cap, path_ptr)
     }

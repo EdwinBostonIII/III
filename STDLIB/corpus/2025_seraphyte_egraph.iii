@@ -6,7 +6,9 @@
  *   ARM 1-2  x*7 and x*15 each saturate to a shift-sub; extraction picks cost 2 (< the imul's 3).
  *   ARM 3    NESTED / arbitrary: (x*7) + 0 -> the +0 folds, the x*7 reduces; best cost propagates to 2.
  *   ARM 4    IDENTITY: x*1 -> x, best cost 0.
- *   ARM 5    IRREDUCIBLE: x*11 (not 2^k-1) stays a multiply, best cost 3 -- the solver's residue.
+ *   ARM 5    IRREDUCIBLE: x*11 (not 2^k-1) -- no <=2-op shift form exists, so the residue is the
+ *            re-priced imul (seg_op_cost(EG_MUL)=4, "imul dearer than any 2-op shift form"): best 4.
+ *            (Pin was 3 before the mul re-price landed; measured 4 on 2026-07-02, sweep fix.)
  *   ARM 6    CONFLUENCE: a second saturation pass finds nothing (fixpoint); the extracted costs are stable
  *            (order-independent => deterministic).
  */
@@ -41,8 +43,8 @@ fn main() -> u64 {
     if seg_best_cost(z) != 2u32 { return 4u64 }
     /* ARM 4: x*1 -> x, cost 0 */
     if seg_best_cost(one) != 0u32 { return 5u64 }
-    /* ARM 5: x*11 irreducible -> 3 (the solver's residue) */
-    if seg_best_cost(m11) != 3u32 { return 6u64 }
+    /* ARM 5: x*11 irreducible -> 4 (the residue at the re-priced imul; no <=2-op shift form) */
+    if seg_best_cost(m11) != 4u32 { return 6u64 }
 
     /* ARM 6: confluence -- saturating again changes nothing; costs stable */
     if seg_saturate() != 0u32 { return 7u64 }

@@ -40,6 +40,16 @@ extern @abi(c-msvc-x64) fn eqv_eq(a: u32, b: u32) -> u8 from "memo.iii"
  * it only removes the re-solving.  This is the EIDOS-consulted-substrate pattern (a decision faculty consults
  * the coincidence engine), acyclic: memo's deps (bv_bits/coincidence/cad) never reach invent. */
 extern @abi(c-msvc-x64) fn eqv_equal(a: u32, b: u32, nvars: u32) -> u8 from "memo.iii"
+/* the RING judge for the reduction-fold congruence (gilr_proves): polynomial normalisation over
+ * Z/2^64 -- the same certified engine as the shl+add strength-reduction family (ser_intent). */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
 extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
@@ -333,17 +343,29 @@ var GILR_PROBES    : u64 = 0u64        /* multipliers tried at the judge */
 /* prove the fold r = (x & (2^k - 1)) + cc*(x>>k) is congruent to x mod (2^k - c): 1 iff x - r == (x>>k)*p
  * for ALL x (the SAT judge, no urem reference).  Sound only when the candidate's cc matches the modulus c. */
 fn gilr_proves(k: u64, c: u64, cc: u64) -> u8 @export {
+    /* THE CONGRUENCE JUDGE, ON THE RING (whole-tree sweep 2026-07-02): prove
+     *     x - (lo + hi*cc)  ==  hi*(2^k - c)   for ALL x
+     * via the split substitution x := H*2^k + L over FREE ring variables H,L (bv_ring polynomial
+     * normalisation over Z/2^64 -- the engine already trusted for the shl+add family).
+     *   SOUND: every concrete (hi = x>>k, lo = x&(2^k-1)) is an (H,L) instance with H*2^k+L == x
+     *   exactly, so the ring-universal identity implies the bit-split-universal one.
+     *   TEETH KEPT: lhs-rhs normalises to H*(c-cc) -- zero iff cc == c (mod 2^64), so a wrong
+     *   multiplier still REFUSES.
+     * REPLACES the bit-blast SAT miter: bb_equal on the k=32 Mersenne instance exceeds the whole
+     * 600s KAT budget (measured on both the current and the creation-era kernel -- multiplication
+     * has no small OBDD and the dense 2^32-1 constant defeats the blast); the ring normal form
+     * decides it structurally.  1754 gates both verdict directions. */
     let twok : u64 = 1u64 << k         /* hoisted: a bare top-level shift (avoids the 1u64<<var misparse) */
-    bb_reset(GILR_W)
-    let x  : u32 = bb_var(0u32)
-    let hi : u32 = bb_shr(x, k)
-    let lo : u32 = bb_and(x, bb_const(twok - 1u64))
-    let mut r : u32 = lo
-    if cc == 1u64 { r = bb_add(lo, hi) } else { r = bb_add(lo, bb_mul(hi, bb_const(cc))) }
-    let lhs : u32 = bb_sub(x, r)
+    bv_reset()
+    let hh : u32 = bv_var(0u32)
+    let ll : u32 = bv_var(1u32)
+    let x  : u32 = bv_add(bv_shl(hh, k as u32), ll)
+    let mut r : u32 = ll
+    if cc == 1u64 { r = bv_add(ll, hh) } else { r = bv_add(ll, bv_mul(hh, bv_const(cc))) }
+    let lhs : u32 = bv_sub(x, r)
     let p   : u64 = twok - c
-    let rhs : u32 = bb_mul(hi, bb_const(p))
-    return eqv_eq(lhs, rhs)
+    let rhs : u32 = bv_mul(hh, bv_const(p))
+    return bv_equal(lhs, rhs)
 }
 
 /* the op-cost of the fold for multiplier cc: and + shr + add, plus a multiply iff cc != 1. */

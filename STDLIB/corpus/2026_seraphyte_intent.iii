@@ -4,13 +4,16 @@
  * equivalence triggers the e-class MERGE; extraction yields the cheapest provably-correct implementation.
  * Intent is the inverse of intuition.  99 = all arms.
  *
- *   ARM 1   DECLARE: the contract x*7 -- before synthesis, the only implementation is the naive multiply (3).
+ *   ARM 1   DECLARE: the contract x*7 -- before synthesis, the only implementation is the naive multiply
+ *           (4 at the re-priced imul: seg_op_cost(EG_MUL)=4 so shift forms win; pin was 3 pre-re-price,
+ *           measured 4 on 2026-07-02, sweep fix).
  *   ARM 2-3 THE PROOF MERGES: propose (x<<3)-x; bv_ring PROVES == x*7 over all 2^64 -> e-classes merge ->
  *           extraction now yields the cheap shift-sub (cost 2).  The intent is fulfilled, provably.
  *   ARM 4-5 SOUND: a WRONG proposal ((x<<4)-x == 15x, claimed for x*7) -- the proof FAILS -> NO merge ->
  *           the resolution is unchanged (2).  Only a proof can fulfil a contract.
  *   ARM 6   UNFULFILLED-BY-CHEAPER: the contract x*11 (not 2^k-1) -- every shl-sub proposal fails its proof
- *           -> no merge -> the cheapest proven implementation is the multiply itself (3, the solver's residue).
+ *           -> no merge -> the cheapest proven implementation is the multiply itself (4, the residue at
+ *           the re-priced imul).
  *   ARM 7   EVENT-DRIVEN: the declare/propose/merge stream is witnessed (replayable), non-empty.
  */
 module corpus_2026_seraphyte_intent
@@ -23,7 +26,7 @@ extern @abi(c-msvc-x64) fn in_witness() -> u64 from "ser_intent.iii"
 fn main() -> u64 {
     /* ARM 1: declare the contract x*7 */
     let h7 : u64 = in_declare(7u64)
-    if in_resolve(h7) != 3u32 { return 1u64 }          /* only the naive multiply so far */
+    if in_resolve(h7) != 4u32 { return 1u64 }          /* only the naive multiply so far (imul re-priced to 4) */
 
     /* ARM 2-3: the PROOF triggers the merge -> the cheap shift-sub fulfils the contract */
     if in_propose_shlsub(h7, 3u64) != 1u32 { return 2u64 }   /* (x<<3)-x == 7x : proven + merged */
@@ -37,7 +40,7 @@ fn main() -> u64 {
     let h11 : u64 = in_declare(11u64)
     if in_propose_shlsub(h11, 3u64) != 0u32 { return 6u64 }
     if in_propose_shlsub(h11, 4u64) != 0u32 { return 7u64 }
-    if in_resolve(h11) != 3u32 { return 8u64 }                /* the solver's residue */
+    if in_resolve(h11) != 4u32 { return 8u64 }                /* the solver's residue (re-priced imul) */
 
     /* ARM 7: the intent resolution is a witnessed, replayable event stream */
     if in_witness() == 0u64 { return 9u64 }

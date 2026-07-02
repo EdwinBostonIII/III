@@ -1,0 +1,532 @@
+/* STDLIB/iii/aether/brep3.iii -- THE EXACT 3D B-REP EDGE (Vector I / CAD-lite): the verbs that turn
+ * a trivariate elimination (resultant.iii rs_elim3) into an exact boundary-representation edge --
+ * shadow slicing, pseudo-Euclidean z-reduction, and the CERTIFIED lift -- with every step an integer
+ * identity or a refusal, never a float.
+ *
+ * THE LIFT THEOREM (v1, fully certified): one cross-multiplied Euclidean step in z,
+ *     H  =  lg * F  -  lf * z^(fdz-gdz) * G        (lf, lg = the z-lead bivariate rows),
+ * is an (F,G)-combination, so V(F,G) is contained in V(F,H).  Its z-degree is < fdz.  Iterated to
+ * z-degree <= 1 it ends in exactly two shapes:
+ *   dz(H) = 1:  H = h1(x,y) z + h0(x,y)  -- on the intersection curve z = -h0/h1 wherever h1 != 0:
+ *               the edge is the graph of an EXACT RATIONAL MAP over its shadow.  Certified by the
+ *               linear-resultant identity  Res_z(F, H) = +- sum_k F_k (-h0)^k h1^(fdz-k)  (direct
+ *               substitution vs the determinant pipeline -- two different engines, one polynomial).
+ *   dz(H) = 0:  H is z-FREE -- a consequence curve of the shadow (the multi-sheet case: z is not a
+ *               function of (x,y)); reducing F modulo H can strip the fiber to a z-only polynomial
+ *               (sturm-isolable heights: the TWO-SHEET edge, e.g. sphere x cone at z = +-sqrt2).
+ * Everything is overflow-GUARDED (sticky B3_OVF -> refuse); the v1 grid envelope is the rs_elim3
+ * trivariate grid (degree <= 4 per variable, stride 25/5) and stride-33 bivariate grids (degree
+ * <= 32); a reduction that leaves the grid REFUSES (-3) -- the wide-grid pseudo-division is the
+ * charted v2.  The BIG SLICE bridges rs_elim3_big raw rows into sturm_big's sturm2_in_* rows:
+ * bivariate shadows whose coefficients never fit i64 still reach exact root isolation. */
+module brep3
+
+extern @abi(c-msvc-x64) fn rs3_dx() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_dy() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_sgn(a: i64, b: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_len(a: i64, b: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_limb(a: i64, b: i64, j: i64) -> u64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_begin(deg: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+var B3_OVF : i64
+fn b3_ovf() -> i64 @export { return B3_OVF }
+fn b3_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn b3_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = b3_abs(a)   let ub : u64 = b3_abs(b)
+    if ub > (9223372036854775807u64 / ua) { B3_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn b3_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = b3_abs(a)   let ub : u64 = b3_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { B3_OVF = 1i64   return 0i64 }   return a + b }
+    if (ua + ub) > 9223372036854775808u64 { B3_OVF = 1i64   return 0i64 }
+    return a + b
+}
+fn b3_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* ── bivariate grid algebra (stride 33, degree <= 32; caller owns the buffers) ── */
+fn b3_bv_zero(pp: u64) -> i32 @export {
+    let p : *i64 = pp as *i64
+    let mut i : u64 = 0u64
+    while i < 1089u64 { p[i] = 0i64   i = i + 1u64 }
+    return 0i32
+}
+/* o = a * b (guarded); refuses (-1) beyond degree 32 or overflow.  o must differ from a and b. */
+fn b3_bv_mul(ap: u64, adx: i64, ady: i64, bp: u64, bdx: i64, bdy: i64, op: u64) -> i64 @export {
+    if (adx + bdx) > 32i64 { return 0i64 - 1i64 }
+    if (ady + bdy) > 32i64 { return 0i64 - 1i64 }
+    let a : *i64 = ap as *i64   let b : *i64 = bp as *i64
+    b3_bv_zero(op)
+    let o : *i64 = op as *i64
+    B3_OVF = 0i64
+    let mut i : i64 = 0i64
+    while i <= adx {
+        let mut j : i64 = 0i64
+        while j <= ady {
+            let av : i64 = a[((i * 33i64) + j) as u64]
+            if av != 0i64 {
+                let mut k : i64 = 0i64
+                while k <= bdx {
+                    let mut l : i64 = 0i64
+                    while l <= bdy {
+                        let bv : i64 = b[((k * 33i64) + l) as u64]
+                        if bv != 0i64 {
+                            let idx : u64 = (((i + k) * 33i64) + (j + l)) as u64
+                            o[idx] = b3_add(o[idx], b3_mul(av, bv))
+                        }
+                        l = l + 1i64
+                    }
+                    k = k + 1i64
+                }
+            }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    if B3_OVF != 0i64 { return 0i64 - 1i64 }
+    return 0i64
+}
+/* d += lam * s over the (dx,dy) bound (guarded; -1 on overflow) */
+fn b3_bv_axpy(dp: u64, sp: u64, lam: i64, dx: i64, dy: i64) -> i64 @export {
+    let d : *i64 = dp as *i64   let s : *i64 = sp as *i64
+    B3_OVF = 0i64
+    let mut i : i64 = 0i64
+    while i <= dx {
+        let mut j : i64 = 0i64
+        while j <= dy {
+            let idx : u64 = ((i * 33i64) + j) as u64
+            d[idx] = b3_add(d[idx], b3_mul(lam, s[idx]))
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    if B3_OVF != 0i64 { return 0i64 - 1i64 }
+    return 0i64
+}
+/* the number of cells where a and b differ over the (dx,dy) bound */
+fn b3_bv_diff(ap: u64, bp: u64, dx: i64, dy: i64) -> i64 @export {
+    let a : *i64 = ap as *i64   let b : *i64 = bp as *i64
+    let mut bad : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= dx {
+        let mut j : i64 = 0i64
+        while j <= dy {
+            let av : i64 = a[((i * 33i64) + j) as u64]
+            let bv : i64 = b[((i * 33i64) + j) as u64]
+            if av != bv { bad = bad + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    return bad
+}
+
+/* ── slices: a stride-33 bivariate R(x,y) specialized at one integer coordinate ── */
+/* fix x = x0: out[b] = sum_a R[a][b] x0^a (Horner), b = 0..dy; returns the TRUE degree of the
+ * slice (trailing zeros trimmed), -1 for the zero polynomial, -2 on overflow. */
+fn b3_slice_x(rp: u64, dx: i64, dy: i64, x0: i64, outp: u64) -> i64 @export {
+    let r : *i64 = rp as *i64   let out : *i64 = outp as *i64
+    B3_OVF = 0i64
+    let mut b : i64 = 0i64
+    while b <= dy {
+        let mut acc : i64 = 0i64
+        let mut a : i64 = dx
+        while a >= 0i64 { acc = b3_add(b3_mul(acc, x0), r[((a * 33i64) + b) as u64])   a = a - 1i64 }
+        out[b as u64] = acc
+        b = b + 1i64
+    }
+    if B3_OVF != 0i64 { return 0i64 - 2i64 }
+    let mut deg : i64 = 0i64 - 1i64
+    b = 0i64
+    while b <= dy { let ov : i64 = out[b as u64]   if ov != 0i64 { deg = b }   b = b + 1i64 }
+    return deg
+}
+/* fix y = y0: out[a] = sum_b R[a][b] y0^b */
+fn b3_slice_y(rp: u64, dx: i64, dy: i64, y0: i64, outp: u64) -> i64 @export {
+    let r : *i64 = rp as *i64   let out : *i64 = outp as *i64
+    B3_OVF = 0i64
+    let mut a : i64 = 0i64
+    while a <= dx {
+        let mut acc : i64 = 0i64
+        let mut b : i64 = dy
+        while b >= 0i64 { acc = b3_add(b3_mul(acc, y0), r[((a * 33i64) + b) as u64])   b = b - 1i64 }
+        out[a as u64] = acc
+        a = a + 1i64
+    }
+    if B3_OVF != 0i64 { return 0i64 - 2i64 }
+    let mut deg : i64 = 0i64 - 1i64
+    a = 0i64
+    while a <= dx { let ov : i64 = out[a as u64]   if ov != 0i64 { deg = a }   a = a + 1i64 }
+    return deg
+}
+
+/* ── THE BIG SLICE: the rs_elim3_big raw rows, sliced at integer x = x0, delivered DIRECTLY into
+ * sturm_big's sturm2_in_* rows -- coefficients beyond i64 never pass through an i64.  The signed
+ * accumulator is a (positive, negative) magnitude pair; |x0|^a is a u64 scalar (refuse -2 if it
+ * would overflow u64 -- envelope |x0|^dx < 2^63).  Returns the slice degree, -1 zero, -2 refused. */
+var B3S_SGN : [i64; 33]   var B3S_LEN : [i64; 33]
+var B3S_LIMB : [u64; 462]                                  /* y-power b limb j at b*14+j (<= 14 limbs) */
+fn b3_slice_x_big(x0: i64) -> i64 @export {
+    let dx : i64 = rs3_dx()
+    let dy : i64 = rs3_dy()
+    let ax0 : u64 = b3_abs(x0)
+    let ar : u64 = arena_new(4194304u64)
+    let mut refuse : i64 = 0i64
+    let mut b : i64 = 0i64
+    while b <= dy {
+        let mut pos : u64 = bigint_from_u64(ar, 0u64)
+        let mut neg : u64 = bigint_from_u64(ar, 0u64)
+        let mut pw : u64 = 1u64                            /* |x0|^a, checked */
+        let mut pwok : i64 = 1i64
+        let mut a : i64 = 0i64
+        while a <= dx {
+            let sg : i64 = rs3_big_sgn(a, b)
+            if sg != 0i64 {
+                if pwok == 0i64 { refuse = 1i64 }
+                /* v = coefficient magnitude from limbs (high -> low) */
+                let ln : i64 = rs3_big_len(a, b)
+                let mut v : u64 = bigint_from_u64(ar, 0u64)
+                let mut j : i64 = ln
+                while j > 0i64 {
+                    j = j - 1i64
+                    let t1 : u64 = bigint_mul_u64(ar, v, 4294967296u64)
+                    let t2 : u64 = bigint_mul_u64(ar, t1, 4294967296u64)
+                    let lb : u64 = bigint_from_u64(ar, rs3_big_limb(a, b, j))
+                    let t3 : u64 = bigint_add(ar, t2, lb)
+                    bigint_drop(v)   bigint_drop(t1)   bigint_drop(t2)   bigint_drop(lb)
+                    v = t3
+                }
+                let vp : u64 = bigint_mul_u64(ar, v, pw)
+                bigint_drop(v)
+                /* effective sign: sgn(c) * sgn(x0)^a */
+                let mut es : i64 = sg
+                if x0 < 0i64 { if (a % 2i64) != 0i64 { es = 0i64 - es } }
+                if es > 0i64 {
+                    let np : u64 = bigint_add(ar, pos, vp)
+                    bigint_drop(pos)   pos = np
+                } else {
+                    let nn : u64 = bigint_add(ar, neg, vp)
+                    bigint_drop(neg)   neg = nn
+                }
+                bigint_drop(vp)
+            }
+            /* advance |x0|^a with a u64 overflow check */
+            if a < dx {
+                if ax0 == 0u64 { pw = 0u64 }
+                else {
+                    if pw > (9223372036854775807u64 / ax0) { pwok = 0i64 } else { pw = pw * ax0 }
+                }
+            }
+            a = a + 1i64
+        }
+        /* settle sign and magnitude */
+        let cw : i32 = bigint_cmp(pos, neg)
+        let mut sgn : i64 = 0i64
+        let mut mag : u64 = pos
+        if cw > 0i32 { sgn = 1i64   mag = bigint_sub(ar, pos, neg) }
+        if cw < 0i32 { sgn = 0i64 - 1i64   mag = bigint_sub(ar, neg, pos) }
+        let mut ln2 : u64 = 0u64
+        if sgn != 0i64 {
+            ln2 = bigint_len_limbs(mag)
+            if bigint_is_zero(mag) == 1u8 { ln2 = 0u64   sgn = 0i64 }
+        }
+        if ln2 > 14u64 { refuse = 1i64   ln2 = 0u64   sgn = 0i64 }
+        B3S_SGN[b as u64] = sgn   B3S_LEN[b as u64] = ln2 as i64
+        let mut j2 : u64 = 0u64
+        while j2 < ln2 { B3S_LIMB[((b as u64) * 14u64) + j2] = bigint_get_limb(mag, j2)   j2 = j2 + 1u64 }
+        if sgn != 0i64 { if cw != 0i32 { bigint_drop(mag) } }
+        bigint_drop(pos)   bigint_drop(neg)
+        b = b + 1i64
+    }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    if refuse != 0i64 { return 0i64 - 2i64 }
+    let mut deg : i64 = 0i64 - 1i64
+    b = 0i64
+    while b <= dy { let sv : i64 = B3S_SGN[b as u64]   if sv != 0i64 { deg = b }   b = b + 1i64 }
+    if deg < 0i64 { return 0i64 - 1i64 }
+    /* deliver into sturm_big's CUR rows */
+    if sturm2_in_begin(deg) != 0i32 { return 0i64 - 2i64 }
+    b = 0i64
+    while b <= deg {
+        let ln3 : i64 = B3S_LEN[b as u64]
+        let mut j3 : i64 = 0i64
+        while j3 < ln3 { sturm2_in_limb(b, j3, B3S_LIMB[((b as u64) * 14u64) + (j3 as u64)])   j3 = j3 + 1i64 }
+        sturm2_in_set(b, B3S_SGN[b as u64], ln3)
+        b = b + 1i64
+    }
+    return deg
+}
+
+/* ── the pseudo-Euclidean z-step:  H = lg * F - lf * z^(fdz-gdz) * G  (requires fdz >= gdz >= 1).
+ * H is written as a trivariate grid (stride 25/5); its TRUE z-degree is returned (0 = z-free: the
+ * consequence-curve / multi-sheet shape).  -1: H identically zero (common-factor shape);
+ * -2: i64 overflow;  -3: a row leaves the degree-4 grid (the charted wide-grid v2).
+ * H is an (F,G)-combination, so V(F,G) is contained in V(F,H): reduction never loses the edge.
+ * hp must be a DISTINCT buffer from fp and gp (H rows are written while later F/G rows are read). */
+var B3_LF : [i64; 1089]   var B3_LG : [i64; 1089]
+var B3_T1 : [i64; 1089]   var B3_T2 : [i64; 1089]   var B3_RK : [i64; 1089]
+fn b3_zred(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, hp: u64) -> i64 @export {
+    if gdz < 1i64 { return 0i64 - 2i64 }
+    if fdz < gdz { return 0i64 - 2i64 }
+    if fdz > 4i64 { return 0i64 - 2i64 }
+    let f : *i64 = fp as *i64   let g : *i64 = gp as *i64   let h : *i64 = hp as *i64
+    let dlt : i64 = fdz - gdz
+    /* z-lead rows into stride-33 grids */
+    b3_bv_zero((&B3_LF) as u64)
+    b3_bv_zero((&B3_LG) as u64)
+    let mut i : i64 = 0i64
+    while i <= fdx { let mut j : i64 = 0i64   while j <= fdy { B3_LF[((i * 33i64) + j) as u64] = f[((fdz * 25i64) + (i * 5i64) + j) as u64]   j = j + 1i64 }   i = i + 1i64 }
+    i = 0i64
+    while i <= gdx { let mut j : i64 = 0i64   while j <= gdy { B3_LG[((i * 33i64) + j) as u64] = g[((gdz * 25i64) + (i * 5i64) + j) as u64]   j = j + 1i64 }   i = i + 1i64 }
+    /* per z-row k < fdz:  H_k = lg * F_k - lf * G_(k-dlt) */
+    let mut zi : u64 = 0u64
+    while zi < 125u64 { h[zi] = 0i64   zi = zi + 1u64 }
+    let mut k : i64 = 0i64
+    while k < fdz {
+        b3_bv_zero((&B3_T1) as u64)
+        i = 0i64
+        while i <= fdx { let mut j : i64 = 0i64   while j <= fdy { B3_T1[((i * 33i64) + j) as u64] = f[((k * 25i64) + (i * 5i64) + j) as u64]   j = j + 1i64 }   i = i + 1i64 }
+        let m1 : i64 = b3_bv_mul((&B3_LG) as u64, gdx, gdy, (&B3_T1) as u64, fdx, fdy, (&B3_RK) as u64)
+        if m1 < 0i64 { return 0i64 - 2i64 }
+        if k >= dlt {
+            let kg : i64 = k - dlt
+            if kg <= gdz {
+                b3_bv_zero((&B3_T1) as u64)
+                i = 0i64
+                while i <= gdx { let mut j : i64 = 0i64   while j <= gdy { B3_T1[((i * 33i64) + j) as u64] = g[((kg * 25i64) + (i * 5i64) + j) as u64]   j = j + 1i64 }   i = i + 1i64 }
+                let m2 : i64 = b3_bv_mul((&B3_LF) as u64, fdx, fdy, (&B3_T1) as u64, gdx, gdy, (&B3_T2) as u64)
+                if m2 < 0i64 { return 0i64 - 2i64 }
+                let ax : i64 = b3_bv_axpy((&B3_RK) as u64, (&B3_T2) as u64, 0i64 - 1i64, fdx + gdx, fdy + gdy)
+                if ax < 0i64 { return 0i64 - 2i64 }
+            }
+        }
+        /* the row must fit the degree-4 trivariate grid */
+        i = 0i64
+        while i <= (fdx + gdx) {
+            let mut j : i64 = 0i64
+            while j <= (fdy + gdy) {
+                let v : i64 = B3_RK[((i * 33i64) + j) as u64]
+                if v != 0i64 {
+                    let mut outg : i64 = 0i64
+                    if i > 4i64 { outg = 1i64 }
+                    if j > 4i64 { outg = 1i64 }
+                    if outg == 1i64 { return 0i64 - 3i64 }
+                    h[((k * 25i64) + (i * 5i64) + j) as u64] = v
+                }
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    /* true z-degree */
+    let mut dz : i64 = 0i64 - 1i64
+    k = 0i64
+    while k < fdz {
+        let mut nz : i64 = 0i64
+        i = 0i64
+        while i <= 4i64 { let mut j : i64 = 0i64   while j <= 4i64 { let v : i64 = h[((k * 25i64) + (i * 5i64) + j) as u64]   if v != 0i64 { nz = 1i64 }   j = j + 1i64 }   i = i + 1i64 }
+        if nz == 1i64 { dz = k }
+        k = k + 1i64
+    }
+    return dz
+}
+
+/* integer content of a trivariate grid (z-rows 0..dz); strips it in place.  Returns the content
+ * (>= 1), or -1 for the zero polynomial. */
+fn b3_content3(hp: u64, dz: i64, dx: i64, dy: i64) -> i64 @export {
+    let h : *i64 = hp as *i64
+    let mut c : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k <= dz {
+        let mut i : i64 = 0i64
+        while i <= dx { let mut j : i64 = 0i64   while j <= dy { c = b3_gcd(c, h[((k * 25i64) + (i * 5i64) + j) as u64])   j = j + 1i64 }   i = i + 1i64 }
+        k = k + 1i64
+    }
+    if c == 0i64 { return 0i64 - 1i64 }
+    if c > 1i64 {
+        k = 0i64
+        while k <= dz {
+            let mut i : i64 = 0i64
+            while i <= dx { let mut j : i64 = 0i64   while j <= dy { let idx : u64 = ((k * 25i64) + (i * 5i64) + j) as u64   h[idx] = h[idx] / c   j = j + 1i64 }   i = i + 1i64 }
+            k = k + 1i64
+        }
+    }
+    return c
+}
+
+/* z-row k of a trivariate grid, copied into a stride-33 bivariate grid */
+fn b3_zrow(hp: u64, k: i64, dx: i64, dy: i64, outp: u64) -> i32 @export {
+    let h : *i64 = hp as *i64
+    b3_bv_zero(outp)
+    let out : *i64 = outp as *i64
+    let mut i : i64 = 0i64
+    while i <= dx { let mut j : i64 = 0i64   while j <= dy { out[((i * 33i64) + j) as u64] = h[((k * 25i64) + (i * 5i64) + j) as u64]   j = j + 1i64 }   i = i + 1i64 }
+    return 0i32
+}
+
+/* f's z-row 0 -= b (stride-33 bivariate, bound (bdx,bdy) <= 4): the modular reduction step that
+ * strips a z-free consequence out of a surface (guarded; -1 overflow / bound breach). */
+fn b3_sub_bv0(fp: u64, bp: u64, bdx: i64, bdy: i64) -> i64 @export {
+    if bdx > 4i64 { return 0i64 - 1i64 }
+    if bdy > 4i64 { return 0i64 - 1i64 }
+    let f : *i64 = fp as *i64   let b : *i64 = bp as *i64
+    B3_OVF = 0i64
+    let mut i : i64 = 0i64
+    while i <= bdx {
+        let mut j : i64 = 0i64
+        while j <= bdy {
+            let idx : u64 = ((i * 5i64) + j) as u64
+            f[idx] = b3_add(f[idx], 0i64 - b[((i * 33i64) + j) as u64])
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    if B3_OVF != 0i64 { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* is the trivariate grid free of x and y above z-rows?  (1 = every cell with i+j > 0 is zero:
+ * the GLOBAL-FIBER certificate -- all shadow points carry the same z-sheet polynomial.) */
+fn b3_xyfree(hp: u64, dz: i64) -> i64 @export {
+    let h : *i64 = hp as *i64
+    let mut k : i64 = 0i64
+    while k <= dz {
+        let mut i : i64 = 0i64
+        while i <= 4i64 {
+            let mut j : i64 = 0i64
+            while j <= 4i64 {
+                if (i + j) > 0i64 {
+                    let v : i64 = h[((k * 25i64) + (i * 5i64) + j) as u64]
+                    if v != 0i64 { return 0i64 }
+                }
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    return 1i64
+}
+
+/* THE LIFT CERTIFICATE polynomial:  C(x,y) = sum_k F_k * (-h0)^k * h1^(fdz-k)  -- the denominator-
+ * cleared substitution of z = -h0/h1 into F, computed by direct grid algebra (NO determinant).
+ * By the linear-resultant identity C == +-Res_z(F, h1 z + h0): the KAT welds this C against the
+ * rs_elim3 pipeline output -- two independent engines, one integer polynomial.  h0/h1 are read from
+ * the trivariate H grid (z-rows 0 and 1, bounds (hdx,hdy)).  Out: stride-33 C; b3_cdx/b3_cdy hold
+ * its degree bounds.  Returns 0, or -1 refused (overflow / beyond the stride-33 envelope). */
+var B3_CDX : i64   var B3_CDY : i64
+var B3_H0N : [i64; 1089]   var B3_H1 : [i64; 1089]
+var B3_PW0 : [i64; 1089]   var B3_PW1 : [i64; 1089]
+var B3_FK : [i64; 1089]    var B3_A1 : [i64; 1089]   var B3_A2 : [i64; 1089]
+fn b3_cdx() -> i64 @export { return B3_CDX }
+fn b3_cdy() -> i64 @export { return B3_CDY }
+fn b3_lift_c(fp: u64, fdz: i64, fdx: i64, fdy: i64, hp: u64, hdx: i64, hdy: i64, outp: u64) -> i64 @export {
+    if fdz < 1i64 { return 0i64 - 1i64 }
+    if fdz > 4i64 { return 0i64 - 1i64 }
+    let f : *i64 = fp as *i64   let h : *i64 = hp as *i64
+    /* n0 = -h0, h1 */
+    b3_bv_zero((&B3_H0N) as u64)
+    b3_bv_zero((&B3_H1) as u64)
+    let mut i : i64 = 0i64
+    while i <= hdx {
+        let mut j : i64 = 0i64
+        while j <= hdy {
+            B3_H0N[((i * 33i64) + j) as u64] = 0i64 - h[((i * 5i64) + j) as u64]
+            B3_H1[((i * 33i64) + j) as u64] = h[(25i64 + (i * 5i64) + j) as u64]
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    /* C accumulates in outp; pw0 = (-h0)^k runs; h1^(fdz-k) computed per k */
+    b3_bv_zero(outp)
+    b3_bv_zero((&B3_PW0) as u64)
+    B3_PW0[0u64] = 1i64
+    let mut p0dx : i64 = 0i64   let mut p0dy : i64 = 0i64
+    B3_CDX = 0i64   B3_CDY = 0i64
+    let mut k : i64 = 0i64
+    while k <= fdz {
+        /* F_k as a stride-33 grid */
+        b3_bv_zero((&B3_FK) as u64)
+        i = 0i64
+        while i <= fdx { let mut j2 : i64 = 0i64   while j2 <= fdy { B3_FK[((i * 33i64) + j2) as u64] = f[((k * 25i64) + (i * 5i64) + j2) as u64]   j2 = j2 + 1i64 }   i = i + 1i64 }
+        /* A1 = F_k * pw0 */
+        let m1 : i64 = b3_bv_mul((&B3_FK) as u64, fdx, fdy, (&B3_PW0) as u64, p0dx, p0dy, (&B3_A1) as u64)
+        if m1 < 0i64 { return 0i64 - 1i64 }
+        let mut a1dx : i64 = fdx + p0dx   let mut a1dy : i64 = fdy + p0dy
+        /* A1 *= h1^(fdz-k) */
+        let mut m : i64 = 0i64
+        while m < (fdz - k) {
+            let m2 : i64 = b3_bv_mul((&B3_A1) as u64, a1dx, a1dy, (&B3_H1) as u64, hdx, hdy, (&B3_A2) as u64)
+            if m2 < 0i64 { return 0i64 - 1i64 }
+            a1dx = a1dx + hdx   a1dy = a1dy + hdy
+            let mut c : u64 = 0u64
+            while c < 1089u64 { B3_A1[c] = B3_A2[c]   c = c + 1u64 }
+            m = m + 1i64
+        }
+        /* C += A1 */
+        let ax : i64 = b3_bv_axpy(outp, (&B3_A1) as u64, 1i64, a1dx, a1dy)
+        if ax < 0i64 { return 0i64 - 1i64 }
+        if a1dx > B3_CDX { B3_CDX = a1dx }
+        if a1dy > B3_CDY { B3_CDY = a1dy }
+        /* pw0 *= (-h0) */
+        if k < fdz {
+            let m3 : i64 = b3_bv_mul((&B3_PW0) as u64, p0dx, p0dy, (&B3_H0N) as u64, hdx, hdy, (&B3_A2) as u64)
+            if m3 < 0i64 { return 0i64 - 1i64 }
+            p0dx = p0dx + hdx   p0dy = p0dy + hdy
+            let mut c2 : u64 = 0u64
+            while c2 < 1089u64 { B3_PW0[c2] = B3_A2[c2]   c2 = c2 + 1u64 }
+        }
+        k = k + 1i64
+    }
+    return 0i64
+}
+
+/* guarded integer evaluation of a trivariate grid at (x0, y0, z0) -- the witness verb */
+fn b3_eval3(pp: u64, dz: i64, dx: i64, dy: i64, x0: i64, y0: i64, z0: i64) -> i64 @export {
+    let p : *i64 = pp as *i64
+    B3_OVF = 0i64
+    let mut acc : i64 = 0i64
+    let mut k : i64 = dz
+    while k >= 0i64 {
+        let mut xr : i64 = 0i64
+        let mut i : i64 = dx
+        while i >= 0i64 {
+            let mut yr : i64 = 0i64
+            let mut j : i64 = dy
+            while j >= 0i64 { yr = b3_add(b3_mul(yr, y0), p[((k * 25i64) + (i * 5i64) + j) as u64])   j = j - 1i64 }
+            xr = b3_add(b3_mul(xr, x0), yr)
+            i = i - 1i64
+        }
+        acc = b3_add(b3_mul(acc, z0), xr)
+        k = k - 1i64
+    }
+    return acc
+}

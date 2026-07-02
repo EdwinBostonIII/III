@@ -580,6 +580,59 @@ fn rs_vd_all(D: i64) -> i64 {
     return 0i64
 }
 
+/* ── THE CRT KERNEL (one substrate, shared by the 1D and the trivariate pipelines) ──
+ * Garner CRT + centered reconstruction of ONE integer from the 16 residues in RS_CR, allocating in
+ * the caller's arena (all transient handles dropped before return).  Leaves the value in module
+ * scratch: RS_CT_SGN (-1/0/+1), RS_CT_LEN (limbs; 0 for the zero value; if > 64 the limbs are NOT
+ * copied -- the caller must treat that as beyond storage), RS_CT_FIT (magnitude fits i64),
+ * RS_CT_LO (low limb), RS_CT_LIMB[0..RS_CT_LEN). */
+var RS_CT_SGN : i64   var RS_CT_LEN : i64   var RS_CT_FIT : i64   var RS_CT_LO : u64
+var RS_CT_LIMB : [u64; 64]
+fn rs_crt_center(ar: u64) -> i32 {
+    let cr0 : i64 = RS_CR[0u64]
+    let mut X : u64 = bigint_from_u64(ar, cr0 as u64)
+    let mut PB : u64 = bigint_from_u64(ar, RS_PRIMES[0u64] as u64)
+    let mut l : i64 = 1i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut pm : i64 = 1i64                            /* prod_{j<l} p_j mod p */
+        let mut jj : i64 = 0i64
+        while jj < l { pm = (pm * (RS_PRIMES[jj as u64] % p)) % p   jj = jj + 1i64 }
+        let xm : i64 = rs_bigmod(X, p)
+        let crl : i64 = RS_CR[l as u64]
+        let m : i64 = (rs_modp(crl - xm, p) * rs_minv(pm, p)) % p
+        let t1 : u64 = bigint_mul_u64(ar, PB, m as u64)
+        let t2 : u64 = bigint_add(ar, X, t1)
+        bigint_drop(X)   bigint_drop(t1)
+        X = t2
+        let t3 : u64 = bigint_mul_u64(ar, PB, RS_PRIMES[l as u64] as u64)
+        bigint_drop(PB)
+        PB = t3
+        l = l + 1i64
+    }
+    let Y : u64 = bigint_sub(ar, PB, X)                    /* PB is now the full P; X in [0,P) */
+    let cw : i32 = bigint_cmp(X, Y)
+    let mut sgn : i64 = 1i64
+    let mut mag : u64 = X
+    if cw > 0i32 { sgn = 0i64 - 1i64   mag = Y }
+    let ln : u64 = bigint_len_limbs(mag)
+    let mut zln : u64 = ln
+    if bigint_is_zero(mag) == 1u8 { zln = 0u64 }
+    let mut fits : i64 = 1i64
+    if zln > 1u64 { fits = 0i64 }
+    let lo : u64 = bigint_to_u64_lo(mag)
+    if lo > 9223372036854775807u64 { fits = 0i64 }
+    let mut sg2 : i64 = sgn
+    if zln == 0u64 { sg2 = 0i64 }
+    RS_CT_SGN = sg2   RS_CT_LEN = zln as i64   RS_CT_FIT = fits   RS_CT_LO = lo
+    if zln <= 64u64 {
+        let mut j2 : u64 = 0u64
+        while j2 < zln { RS_CT_LIMB[j2] = bigint_get_limb(mag, j2)   j2 = j2 + 1u64 }
+    }
+    bigint_drop(X)   bigint_drop(Y)   bigint_drop(PB)
+    return 0i32
+}
+
 /* per-coefficient modular Cramer + Garner CRT (own arena; ~5 live handles): RS_RMOD/RS_VD -> RS_Q
  * (+ the RSB_* raw rows when RSB_WANT).  -1 refused (output width without RSB_WANT / row overflow). */
 fn rs_recover(D: i64) -> i64 {
@@ -606,56 +659,23 @@ fn rs_recover(D: i64) -> i64 {
             RS_CR[l as u64] = (dl * rs_minv(vdl, p)) % p
             l = l + 1i64
         }
-        let cr0 : i64 = RS_CR[0u64]
-        let mut X : u64 = bigint_from_u64(ar, cr0 as u64)
-        let mut PB : u64 = bigint_from_u64(ar, RS_PRIMES[0u64] as u64)
-        l = 1i64
-        while l < 16i64 {
-            let p : i64 = RS_PRIMES[l as u64]
-            let mut pm : i64 = 1i64                        /* prod_{j<l} p_j mod p */
-            let mut jj : i64 = 0i64
-            while jj < l { pm = (pm * (RS_PRIMES[jj as u64] % p)) % p   jj = jj + 1i64 }
-            let xm : i64 = rs_bigmod(X, p)
-            let crl : i64 = RS_CR[l as u64]
-            let m : i64 = (rs_modp(crl - xm, p) * rs_minv(pm, p)) % p
-            let t1 : u64 = bigint_mul_u64(ar, PB, m as u64)
-            let t2 : u64 = bigint_add(ar, X, t1)
-            bigint_drop(X)   bigint_drop(t1)
-            X = t2
-            let t3 : u64 = bigint_mul_u64(ar, PB, RS_PRIMES[l as u64] as u64)
-            bigint_drop(PB)
-            PB = t3
-            l = l + 1i64
-        }
-        let Y : u64 = bigint_sub(ar, PB, X)                /* PB is now the full P; X in [0,P) */
-        let cw : i32 = bigint_cmp(X, Y)
-        let mut sgn : i64 = 1i64
-        let mut mag : u64 = X
-        if cw > 0i32 { sgn = 0i64 - 1i64   mag = Y }
-        let ln : u64 = bigint_len_limbs(mag)
-        let mut zln : u64 = ln
-        if bigint_is_zero(mag) == 1u8 { zln = 0u64 }
-        let mut fits : i64 = 1i64
-        if zln > 1u64 { fits = 0i64 }
-        let lo : u64 = bigint_to_u64_lo(mag)
-        if lo > 9223372036854775807u64 { fits = 0i64 }
+        rs_crt_center(ar)
+        let ctl : i64 = RS_CT_LEN
+        let ctf : i64 = RS_CT_FIT
         if RSB_WANT == 1i64 {
-            if zln > 64u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
-            let mut sg2 : i64 = sgn
-            if zln == 0u64 { sg2 = 0i64 }
-            RSB_SGN[i as u64] = sg2   RSB_LEN[i as u64] = zln as i64   RSB_FIT[i as u64] = fits
-            let mut j2 : u64 = 0u64
-            while j2 < zln { RSB_LIMB[((i as u64) * 64u64) + j2] = bigint_get_limb(mag, j2)   j2 = j2 + 1u64 }
+            if ctl > 64i64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+            RSB_SGN[i as u64] = RS_CT_SGN   RSB_LEN[i as u64] = ctl   RSB_FIT[i as u64] = ctf
+            let mut j2 : i64 = 0i64
+            while j2 < ctl { RSB_LIMB[((i as u64) * 64u64) + (j2 as u64)] = RS_CT_LIMB[j2 as u64]   j2 = j2 + 1i64 }
         }
-        if fits == 0i64 {
+        if ctf == 0i64 {
             if RSB_WANT == 0i64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
             RS_Q[i as u64] = 0i64
         } else {
-            let mut qv : i64 = lo as i64
-            if sgn < 0i64 { qv = 0i64 - qv }
+            let mut qv : i64 = RS_CT_LO as i64
+            if RS_CT_SGN < 0i64 { qv = 0i64 - qv }
             RS_Q[i as u64] = qv
         }
-        bigint_drop(X)   bigint_drop(Y)   bigint_drop(PB)
         i = i + 1i64
     }
     bigint_drop_arena(ar)
@@ -837,5 +857,363 @@ fn rs_prod_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @expor
     RSB_WANT = 1i64
     let d : i64 = rs_gamma_big(fp, degf, gp, degg, outp, 1i64)
     RSB_WANT = 0i64
+    return d
+}
+
+/* ═════════ TRIVARIATE ELIMINATION (Vector I): Res_z of two TRIVARIATE integer polynomials
+ * F(z,x,y), G(z,x,y) -- grids with the coefficient of z^k x^i y^j at [k*25 + i*5 + j] (each degree
+ * <= 4) -- as a BIVARIATE integer polynomial R(x,y), out grid coefficient of x^a y^b at [a*33 + b],
+ * through the SAME certified 16-prime pipeline factored onto a TENSOR grid: per prime, the
+ * fixed-layout Sylvester determinant is evaluated at the (Dx+1)*(Dy+1) integer nodes (r,s) in
+ * 0..Dx x 0..Dy, the bivariate coefficients are recovered by two-stage Lagrange interpolation
+ * (in x per y-node, then in y), Garner-CRT reconstructed per coefficient through rs_crt_center,
+ * and re-checked against EVERY node residue mod EVERY prime before delivery.
+ *
+ * SOUNDNESS.  (1) The interpolated object is det(Syl_z(F,G)) AS A POLYNOMIAL in (x,y): det is a
+ * polynomial in the matrix entries and evaluation at (r,s) is a ring homomorphism Z[x,y] -> Z, so
+ * det(Syl evaluated) == (det Syl)(r,s) UNCONDITIONALLY -- tensor nodes need only be DISTINCT
+ * (0..Dx, 0..Dy), never lead-tested: the classical degenerate-specialization hazard concerns the
+ * resultant of the SPECIALIZED (degree-dropped) polynomials, a matrix this pipeline never builds.
+ * (2) deg_x R <= Dx = gdz*fdx + fdz*gdx and deg_y R <= Dy = gdz*fdy + fdz*gdy (a determinant takes
+ * ONE entry per row).  (3) ||R||_1 <= Fnorm^gdz * Gnorm^fdz (the permanent bound over row 1-norms),
+ * CERTIFIED against the 16-prime window before centered CRT is trusted.  (4) GEOMETRY: every common
+ * zero of F and G projects into {R = 0} (shadow completeness: where both z-leads vanish the first
+ * Sylvester column is zero; otherwise Res specializes up to a nonzero lead power); the CONVERSE
+ * needs the lead conditions -- extraneous shadow points can appear only where BOTH z-leads vanish.
+ * The delivered polynomial is the TRUE determinant -- sign canonical, NOT lead-normalized (unlike
+ * rs_elim): R(x,y) IS det Syl_z(F,G), coefficient for coefficient.
+ * Refusals (-1): z-degree outside [1,4], x/y-degree outside [0,4], an identically-zero z-lead grid
+ * row (the declared degree must be TRUE), Dx or Dy beyond 32, norm overflow, bound beyond the prime
+ * window, or (strict rs_elim3 only) a recovered coefficient beyond i64.  rs_elim3_big delivers
+ * EVERY coefficient as raw sign/limb rows (<= 8 limbs -- guaranteed by the certified 464-bit bound;
+ * the same shape a b3_slice feeds into sturm_big's sturm2_in_* rows). ═════════ */
+
+var RS3_DX : i64   var RS3_DY : i64
+var RS3_RES : [i64; 17424]                                 /* node dets: ((r*(Dy+1)+s)*16 + l) */
+var RS3_CMOD : [i64; 17424]                                /* coeff residues: ((a*(Dy+1)+b)*16 + l) */
+var RS3_XST : [i64; 1089]                                  /* stage-1 x-coeffs at (a*(Dy+1)+s) */
+var RS3_CRES : [i64; 1089]                                 /* per-prime recovered-coeff residues */
+var RS3_LM : [i64; 35]                                     /* Lagrange master polynomial */
+var RS3_LQ : [i64; 34]                                     /* master / (x - node) */
+var RS3_LV : [i64; 34]   var RS3_LC : [i64; 34]            /* one line: values in, coeffs out */
+var RS3B_SGN : [i64; 1089]   var RS3B_LEN : [i64; 1089]   var RS3B_FIT : [i64; 1089]
+var RS3B_LIMB : [u64; 8712]                                /* coefficient m limb j at m*8+j */
+var RS3_WANT : i64
+
+fn rs3_dx() -> i64 @export { return RS3_DX }
+fn rs3_dy() -> i64 @export { return RS3_DY }
+fn rs3_big_sgn(a: i64, b: i64) -> i64 @export { return RS3B_SGN[((a * (RS3_DY + 1i64)) + b) as u64] }
+fn rs3_big_len(a: i64, b: i64) -> i64 @export { return RS3B_LEN[((a * (RS3_DY + 1i64)) + b) as u64] }
+fn rs3_big_fit(a: i64, b: i64) -> i64 @export { return RS3B_FIT[((a * (RS3_DY + 1i64)) + b) as u64] }
+fn rs3_big_limb(a: i64, b: i64, j: i64) -> u64 @export { return RS3B_LIMB[((((a * (RS3_DY + 1i64)) + b) * 8i64) + j) as u64] }
+
+/* z-coefficient row k of a trivariate grid, evaluated at integer (x,y) = (r,s) mod p: nested Horner. */
+fn rs3_cvalmod(mp: u64, k: i64, dx: i64, dy: i64, r: i64, s: i64, p: i64) -> i64 {
+    let m : *i64 = mp as *i64
+    let rm : i64 = rs_modp(r, p)
+    let sm : i64 = rs_modp(s, p)
+    let mut acc : i64 = 0i64
+    let mut i : i64 = dx
+    while i >= 0i64 {
+        let mut inner : i64 = 0i64
+        let mut j : i64 = dy
+        while j >= 0i64 {
+            inner = ((inner * sm) + rs_modp(m[((k * 25i64) + (i * 5i64) + j) as u64], p)) % p
+            j = j - 1i64
+        }
+        acc = ((acc * rm) + inner) % p
+        i = i - 1i64
+    }
+    return acc
+}
+
+/* Lagrange interpolation over the nodes 0..D mod p: values RS3_LV[0..D] -> coefficients RS3_LC[0..D].
+ * Master M(x) = prod_r (x - r); per node i, Q_i = M/(x - i) by synthetic division, d_i = Q_i(i) =
+ * prod_{j != i} (i - j) != 0 mod p (|i - j| <= 32 << p); C += v_i * d_i^{-1} * Q_i.  O(D^2). */
+fn rs3_lagr(D: i64, p: i64) -> i32 {
+    RS3_LM[0u64] = 1i64
+    let mut dm : i64 = 0i64
+    let mut r : i64 = 0i64
+    while r <= D {
+        let rm : i64 = rs_modp(r, p)
+        RS3_LM[(dm + 1i64) as u64] = 0i64
+        let mut i : i64 = dm
+        while i >= 0i64 {
+            let mi : i64 = RS3_LM[i as u64]
+            RS3_LM[(i + 1i64) as u64] = (RS3_LM[(i + 1i64) as u64] + mi) % p
+            RS3_LM[i as u64] = rs_modp(0i64 - ((rm * mi) % p), p)
+            i = i - 1i64
+        }
+        dm = dm + 1i64
+        r = r + 1i64
+    }
+    let mut a : i64 = 0i64
+    while a <= D { RS3_LC[a as u64] = 0i64   a = a + 1i64 }
+    let mut nd : i64 = 0i64
+    while nd <= D {
+        let im : i64 = rs_modp(nd, p)
+        RS3_LQ[D as u64] = RS3_LM[(D + 1i64) as u64]
+        let mut k : i64 = D - 1i64
+        while k >= 0i64 {
+            RS3_LQ[k as u64] = (RS3_LM[(k + 1i64) as u64] + ((im * RS3_LQ[(k + 1i64) as u64]) % p)) % p
+            k = k - 1i64
+        }
+        let mut dv : i64 = 0i64
+        k = D
+        while k >= 0i64 { dv = ((dv * im) + RS3_LQ[k as u64]) % p   k = k - 1i64 }
+        let vi : i64 = RS3_LV[nd as u64]
+        let w : i64 = (rs_modp(vi, p) * rs_minv(dv, p)) % p
+        k = 0i64
+        while k <= D { RS3_LC[k as u64] = (RS3_LC[k as u64] + ((w * RS3_LQ[k as u64]) % p)) % p   k = k + 1i64 }
+        nd = nd + 1i64
+    }
+    return 0i32
+}
+
+/* the z-lead grid row of a trivariate poly must be a NONZERO bivariate polynomial */
+fn rs3_leadchk(mp: u64, dz: i64, dx: i64, dy: i64) -> i64 {
+    let m : *i64 = mp as *i64
+    let mut nz : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= dx {
+        let mut j : i64 = 0i64
+        while j <= dy {
+            let v : i64 = m[((dz * 25i64) + (i * 5i64) + j) as u64]
+            if v != 0i64 { nz = 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    return nz
+}
+
+/* guarded grid 1-norm (all coefficients, all z-rows) */
+fn rs3_norm(mp: u64, dz: i64, dx: i64, dy: i64) -> i64 {
+    let m : *i64 = mp as *i64
+    let mut nrm : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k <= dz {
+        let mut i : i64 = 0i64
+        while i <= dx {
+            let mut j : i64 = 0i64
+            while j <= dy {
+                let mut av : i64 = m[((k * 25i64) + (i * 5i64) + j) as u64]
+                if av < 0i64 { av = 0i64 - av }
+                nrm = rs_add(nrm, av)
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    return nrm
+}
+
+/* per-prime node determinants into RS3_RES (fixed-layout Sylvester, entries by nested Horner) */
+fn rs3_nodes(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, Dx: i64, Dy: i64) -> i32 {
+    let n : i64 = fdz + gdz
+    let Dy1 : i64 = Dy + 1i64
+    let mut l : i64 = 0i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut r : i64 = 0i64
+        while r <= Dx {
+            let mut s : i64 = 0i64
+            while s <= Dy {
+                let mut r0 : i64 = 0i64
+                while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 20i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
+                r0 = 0i64
+                while r0 < gdz {
+                    let mut kk : i64 = 0i64
+                    while kk <= fdz { RS_MM[((r0 * 20i64) + (r0 + kk)) as u64] = rs3_cvalmod(fp, fdz - kk, fdx, fdy, r, s, p)   kk = kk + 1i64 }
+                    r0 = r0 + 1i64
+                }
+                r0 = 0i64
+                while r0 < fdz {
+                    let mut kk : i64 = 0i64
+                    while kk <= gdz { RS_MM[(((gdz + r0) * 20i64) + (r0 + kk)) as u64] = rs3_cvalmod(gp, gdz - kk, gdx, gdy, r, s, p)   kk = kk + 1i64 }
+                    r0 = r0 + 1i64
+                }
+                RS3_RES[((((r * Dy1) + s) * 16i64) + l) as u64] = rs_det_mod(n, p)
+                s = s + 1i64
+            }
+            r = r + 1i64
+        }
+        l = l + 1i64
+    }
+    return 0i32
+}
+
+/* two-stage tensor interpolation per prime: RS3_RES -> RS3_CMOD */
+fn rs3_interp(Dx: i64, Dy: i64) -> i32 {
+    let Dy1 : i64 = Dy + 1i64
+    let mut l : i64 = 0i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut s : i64 = 0i64
+        while s <= Dy {
+            let mut r : i64 = 0i64
+            while r <= Dx { RS3_LV[r as u64] = RS3_RES[((((r * Dy1) + s) * 16i64) + l) as u64]   r = r + 1i64 }
+            rs3_lagr(Dx, p)
+            let mut a : i64 = 0i64
+            while a <= Dx { RS3_XST[((a * Dy1) + s) as u64] = RS3_LC[a as u64]   a = a + 1i64 }
+            s = s + 1i64
+        }
+        let mut a2 : i64 = 0i64
+        while a2 <= Dx {
+            let mut s2 : i64 = 0i64
+            while s2 <= Dy { RS3_LV[s2 as u64] = RS3_XST[((a2 * Dy1) + s2) as u64]   s2 = s2 + 1i64 }
+            rs3_lagr(Dy, p)
+            let mut b : i64 = 0i64
+            while b <= Dy { RS3_CMOD[((((a2 * Dy1) + b) * 16i64) + l) as u64] = RS3_LC[b as u64]   b = b + 1i64 }
+            a2 = a2 + 1i64
+        }
+        l = l + 1i64
+    }
+    return 0i32
+}
+
+/* Garner CRT per coefficient (per-coefficient arena -- the bump arena never shrinks, and ncoef can
+ * be 1089: a single shared arena would grow without bound).  Rows ALWAYS delivered.  -1 on a row
+ * beyond 8 limbs (impossible under the certified bound -- an engine defect, refused not masked). */
+fn rs3_crt_rows(ncoef: i64) -> i64 {
+    let mut m : i64 = 0i64
+    while m < ncoef {
+        let mut l : i64 = 0i64
+        while l < 16i64 { RS_CR[l as u64] = RS3_CMOD[((m * 16i64) + l) as u64]   l = l + 1i64 }
+        let ar : u64 = arena_new(65536u64)
+        rs_crt_center(ar)
+        bigint_drop_arena(ar)
+        arena_drop(ar)
+        let ctl : i64 = RS_CT_LEN
+        if ctl > 8i64 { return 0i64 - 1i64 }
+        RS3B_SGN[m as u64] = RS_CT_SGN   RS3B_LEN[m as u64] = ctl   RS3B_FIT[m as u64] = RS_CT_FIT
+        let mut j : i64 = 0i64
+        while j < ctl { RS3B_LIMB[((m * 8i64) + j) as u64] = RS_CT_LIMB[j as u64]   j = j + 1i64 }
+        m = m + 1i64
+    }
+    return 0i64
+}
+
+/* residue of raw row m mod p (limb walk, sign applied) */
+fn rs3_rawmod(m: i64, p: i64) -> i64 {
+    let pu : u64 = p as u64
+    let b32 : u64 = 4294967296u64 % pu
+    let pw64 : u64 = (b32 * b32) % pu
+    let mut r : u64 = 0u64
+    let mut j : i64 = RS3B_LEN[m as u64]
+    while j > 0i64 {
+        j = j - 1i64
+        let lm : u64 = RS3B_LIMB[((m * 8i64) + j) as u64]
+        r = ((r * pw64) + (lm % pu)) % pu
+    }
+    let mut v : i64 = r as i64
+    let sg : i64 = RS3B_SGN[m as u64]
+    if sg < 0i64 { if v != 0i64 { v = p - v } }
+    return v
+}
+
+/* sum_{a,b} c_ab r^a s^b == the node determinant, at EVERY node mod EVERY prime (limb-walk residues
+ * of the FULL delivered values -- the certificate covers the raw rows, not just the i64 shadows). */
+fn rs3_consist(Dx: i64, Dy: i64) -> i64 {
+    let Dy1 : i64 = Dy + 1i64
+    let ncoef : i64 = (Dx + 1i64) * Dy1
+    let mut l : i64 = 0i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut m : i64 = 0i64
+        while m < ncoef { RS3_CRES[m as u64] = rs3_rawmod(m, p)   m = m + 1i64 }
+        let mut r : i64 = 0i64
+        while r <= Dx {
+            let rm : i64 = rs_modp(r, p)
+            let mut s : i64 = 0i64
+            while s <= Dy {
+                let sm : i64 = rs_modp(s, p)
+                let mut acc : i64 = 0i64
+                let mut a : i64 = Dx
+                while a >= 0i64 {
+                    let mut inner : i64 = 0i64
+                    let mut b : i64 = Dy
+                    while b >= 0i64 { inner = ((inner * sm) + RS3_CRES[((a * Dy1) + b) as u64]) % p   b = b - 1i64 }
+                    acc = ((acc * rm) + inner) % p
+                    a = a - 1i64
+                }
+                let rv : i64 = RS3_RES[((((r * Dy1) + s) * 16i64) + l) as u64]
+                if acc != rv { return 0i64 - 1i64 }
+                s = s + 1i64
+            }
+            r = r + 1i64
+        }
+        l = l + 1i64
+    }
+    return 0i64
+}
+
+fn rs_gamma3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 {
+    rs_pinit()
+    if fdz < 1i64 { return 0i64 - 1i64 }
+    if gdz < 1i64 { return 0i64 - 1i64 }
+    if fdz > 4i64 { return 0i64 - 1i64 }
+    if gdz > 4i64 { return 0i64 - 1i64 }
+    if fdx < 0i64 { return 0i64 - 1i64 }
+    if fdx > 4i64 { return 0i64 - 1i64 }
+    if fdy < 0i64 { return 0i64 - 1i64 }
+    if fdy > 4i64 { return 0i64 - 1i64 }
+    if gdx < 0i64 { return 0i64 - 1i64 }
+    if gdx > 4i64 { return 0i64 - 1i64 }
+    if gdy < 0i64 { return 0i64 - 1i64 }
+    if gdy > 4i64 { return 0i64 - 1i64 }
+    let Dx : i64 = (gdz * fdx) + (fdz * gdx)
+    let Dy : i64 = (gdz * fdy) + (fdz * gdy)
+    if Dx > 32i64 { return 0i64 - 1i64 }
+    if Dy > 32i64 { return 0i64 - 1i64 }
+    let lf : i64 = rs3_leadchk(fp, fdz, fdx, fdy)
+    if lf == 0i64 { return 0i64 - 1i64 }
+    let lg : i64 = rs3_leadchk(gp, gdz, gdx, gdy)
+    if lg == 0i64 { return 0i64 - 1i64 }
+    RS_OVF = 0i64
+    let fnorm : i64 = rs3_norm(fp, fdz, fdx, fdy)
+    let gnorm : i64 = rs3_norm(gp, gdz, gdx, gdy)
+    if RS_OVF != 0i64 { return 0i64 - 1i64 }
+    let bnd : i64 = (gdz * rs_bits(fnorm)) + (fdz * rs_bits(gnorm))
+    if (bnd + 2i64) > 464i64 { return 0i64 - 1i64 }
+    RS3_DX = Dx   RS3_DY = Dy
+    let Dy1 : i64 = Dy + 1i64
+    rs3_nodes(fp, fdz, fdx, fdy, gp, gdz, gdx, gdy, Dx, Dy)
+    rs3_interp(Dx, Dy)
+    let ncoef : i64 = (Dx + 1i64) * Dy1
+    let rc : i64 = rs3_crt_rows(ncoef)
+    if rc < 0i64 { return 0i64 - 1i64 }
+    let cc : i64 = rs3_consist(Dx, Dy)
+    if cc < 0i64 { return 0i64 - 1i64 }
+    let out : *i64 = outp as *i64
+    let mut m : i64 = 0i64
+    while m < ncoef {
+        let ft : i64 = RS3B_FIT[m as u64]
+        let a : i64 = m / Dy1
+        let b : i64 = m % Dy1
+        if ft == 0i64 {
+            if RS3_WANT == 0i64 { return 0i64 - 1i64 }
+            out[((a * 33i64) + b) as u64] = 0i64
+        } else {
+            let ln : i64 = RS3B_LEN[m as u64]
+            let mut qv : i64 = 0i64
+            if ln > 0i64 { qv = RS3B_LIMB[(m * 8i64) as u64] as i64 }
+            let sg : i64 = RS3B_SGN[m as u64]
+            if sg < 0i64 { qv = 0i64 - qv }
+            out[((a * 33i64) + b) as u64] = qv
+        }
+        m = m + 1i64
+    }
+    return 0i64
+}
+fn rs_elim3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 @export {
+    RS3_WANT = 0i64
+    return rs_gamma3(fp, fdz, fdx, fdy, gp, gdz, gdx, gdy, outp)
+}
+fn rs_elim3_big(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 @export {
+    RS3_WANT = 1i64
+    let d : i64 = rs_gamma3(fp, fdz, fdx, fdy, gp, gdz, gdx, gdy, outp)
+    RS3_WANT = 0i64
     return d
 }

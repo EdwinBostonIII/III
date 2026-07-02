@@ -1,0 +1,220 @@
+/* 2473_elim3.iii -- GATE for TRIVARIATE ELIMINATION (Vector I): Res_z of trivariate integer
+ * polynomials as a CERTIFIED bivariate integer polynomial, through the 16-prime tensor pipeline
+ * (fixed-layout Sylvester dets at (Dx+1)x(Dy+1) integer nodes, two-stage Lagrange interpolation,
+ * Garner CRT per coefficient, node-by-node mod-every-prime consistency).
+ *
+ * A -- CLOSED FORM (linear x linear): Res_z(z - (x^2+y^2), z - 2xy) = x^2 - 2xy + y^2 = (x-y)^2:
+ *   the eliminant of two graph surfaces is EXACTLY their difference -- all 16 bound cells pinned.
+ * B -- THE QUADRIC SHADOW: Res_z(z^2 + x^2 + y^2 - 4, z - x^2 - y^2) = s^2 + s - 4 (s = x^2+y^2)
+ *   = x^4 + 2x^2y^2 + y^4 + x^2 + y^2 - 4: the sphere/paraboloid B-Rep intersection projected to
+ *   the xy-plane -- the shadow of the circle at IRRATIONAL height z = (sqrt17 - 1)/2.  All 49
+ *   bound cells pinned.
+ * C -- THE SPECIALIZATION WELD: slicing the arm-B shadow at y = s0 (0, 1, 2) coefficient-for-
+ *   coefficient equals rs_elim of the y-specialized bivariate surfaces (up to rs_elim's positive-
+ *   lead normalization): eliminate-then-specialize == specialize-then-eliminate wherever the
+ *   z-leads survive -- the trivariate pipeline welded onto the 2193-gated bivariate one.
+ * D -- COMMON COMPONENT: Res_z((z-x)(z-y), z - x) IDENTICALLY ZERO (shared factor z - x) -- the
+ *   classical criterion, delivered exactly through the tensor pipeline (8 bound cells all zero).
+ * E -- THE BIGINT ROW ABI: Res_z(z^2 - 2^31, z^2 - 2^31 x^2) = 2^62 x^4 - 2^63 x^2 + 2^62: the
+ *   x^2 coefficient is EXACTLY -2^63 -- one beyond i64 -- so strict rs_elim3 REFUSES (-1) while
+ *   rs_elim3_big DELIVERS it as a raw sign/limb row (sgn -1, len 1, limb 2^63), fit-flagged, with
+ *   the fitting neighbors intact in the i64 grid.  The certified bound (128+2 <= 464 bits) covers
+ *   the full values, so the delivered row carries the same mod-every-prime certificate.
+ * R -- refusals: fdz = 0; an identically-zero z-lead grid row; per-variable degree beyond 4.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E;  15 R */
+module corpus_2473_elim3
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_elim3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_elim3_big(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_dx() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_dy() -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_sgn(a: i64, b: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_len(a: i64, b: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_fit(a: i64, b: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs3_big_limb(a: i64, b: i64, j: i64) -> u64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) -> i64 from "resultant.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var TF : [i64; 125]   var TG : [i64; 125]   var RO : [i64; 1089]
+var EF : [i64; 64]    var EG : [i64; 64]    var EO : [i64; 20]
+var EXP : [i64; 1089]
+
+fn z3() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 125u64 { TF[i] = 0i64   TG[i] = 0i64   i = i + 1u64 }
+    i = 0u64
+    while i < 1089u64 { RO[i] = 0i64   EXP[i] = 0i64   i = i + 1u64 }
+    return 0i32
+}
+fn z2() -> i32 { let mut i : u64 = 0u64   while i < 64u64 { EF[i] = 0i64   EG[i] = 0i64   i = i + 1u64 }   return 0i32 }
+
+/* compare RO against EXP over the full (dx+1)x(dy+1) bound grid; returns mismatch count */
+fn grid_diff(dx: i64, dy: i64) -> i64 {
+    let mut bad : i64 = 0i64
+    let mut a : i64 = 0i64
+    while a <= dx {
+        let mut b : i64 = 0i64
+        while b <= dy {
+            let got : i64 = RO[((a * 33i64) + b) as u64]
+            let want : i64 = EXP[((a * 33i64) + b) as u64]
+            if got != want { bad = bad + 1i64 }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return bad
+}
+
+fn main() -> u64 {
+    /* ══ A: Res_z(z - (x^2+y^2), z - 2xy) = (x - y)^2. */
+    z3()
+    TF[25u64] = 1i64                                       /* z */
+    TF[10u64] = 0i64 - 1i64                                /* -x^2 */
+    TF[2u64]  = 0i64 - 1i64                                /* -y^2 */
+    TG[25u64] = 1i64                                       /* z */
+    TG[6u64]  = 0i64 - 2i64                                /* -2xy */
+    let ra : i64 = rs_elim3((&TF) as u64, 1i64, 2i64, 2i64, (&TG) as u64, 1i64, 1i64, 1i64, (&RO) as u64)
+    let adx : i64 = rs3_dx()   let ady : i64 = rs3_dy()
+    EXP[66u64] = 1i64                                      /* x^2  (2*33+0) */
+    EXP[34u64] = 0i64 - 2i64                               /* xy   (1*33+1) */
+    EXP[2u64]  = 1i64                                      /* y^2  (0*33+2) */
+    let abad : i64 = grid_diff(adx, ady)
+    putchar(65i32) putchar(58i32) sp() e_i64(ra) sp() e_i64(adx) sp() e_i64(ady) sp() e_i64(abad) nl()   /* "A: 0 3 3 0" */
+    if ra != 0i64 { return 10u64 }
+    if adx != 3i64 { return 10u64 }
+    if ady != 3i64 { return 10u64 }
+    if abad != 0i64 { return 10u64 }
+
+    /* ══ B: the sphere/paraboloid shadow  x^4 + 2x^2y^2 + y^4 + x^2 + y^2 - 4. */
+    z3()
+    TF[50u64] = 1i64                                       /* z^2 */
+    TF[10u64] = 1i64   TF[2u64] = 1i64   TF[0u64] = 0i64 - 4i64
+    TG[25u64] = 1i64                                       /* z */
+    TG[10u64] = 0i64 - 1i64   TG[2u64] = 0i64 - 1i64
+    let rb : i64 = rs_elim3((&TF) as u64, 2i64, 2i64, 2i64, (&TG) as u64, 1i64, 2i64, 2i64, (&RO) as u64)
+    let bdx : i64 = rs3_dx()   let bdy : i64 = rs3_dy()
+    EXP[132u64] = 1i64                                     /* x^4 (4*33) */
+    EXP[68u64]  = 2i64                                     /* x^2 y^2 (2*33+2) */
+    EXP[4u64]   = 1i64                                     /* y^4 */
+    EXP[66u64]  = 1i64                                     /* x^2 */
+    EXP[2u64]   = 1i64                                     /* y^2 */
+    EXP[0u64]   = 0i64 - 4i64
+    let bbad : i64 = grid_diff(bdx, bdy)
+    putchar(66i32) putchar(58i32) sp() e_i64(rb) sp() e_i64(bdx) sp() e_i64(bdy) sp() e_i64(bbad) nl()   /* "B: 0 6 6 0" */
+    if rb != 0i64 { return 11u64 }
+    if bdx != 6i64 { return 11u64 }
+    if bdy != 6i64 { return 11u64 }
+    if bbad != 0i64 { return 11u64 }
+
+    /* ══ C: the specialization weld at y = 0, 1, 2 (keep RO from B). */
+    let mut s0 : i64 = 0i64
+    while s0 <= 2i64 {
+        z2()
+        let s2 : i64 = s0 * s0
+        EF[16u64] = 1i64                                   /* z^2 */
+        EF[2u64] = 1i64                                    /* x^2 */
+        EF[0u64] = s2 - 4i64
+        EG[8u64] = 1i64                                    /* z */
+        EG[2u64] = 0i64 - 1i64                             /* -x^2 */
+        EG[0u64] = 0i64 - s2
+        let dw : i64 = rs_elim((&EF) as u64, 2i64, 2i64, (&EG) as u64, 1i64, 2i64, (&EO) as u64)
+        if dw != 6i64 { putchar(67i32) putchar(33i32) nl()   return 12u64 }
+        /* slice the trivariate result: coeff_a = sum_b RO[a*33+b] * s0^b */
+        let mut same : i64 = 1i64
+        let mut neg : i64 = 1i64
+        let mut a : i64 = 0i64
+        while a <= 6i64 {
+            let mut sl : i64 = 0i64
+            let mut b : i64 = 6i64
+            while b >= 0i64 { sl = (sl * s0) + RO[((a * 33i64) + b) as u64]   b = b - 1i64 }
+            let ea : i64 = EO[a as u64]
+            if sl != ea { same = 0i64 }
+            if sl != (0i64 - ea) { neg = 0i64 }
+            a = a + 1i64
+        }
+        let mut ok : i64 = 0i64
+        if same == 1i64 { ok = 1i64 }
+        if neg == 1i64 { ok = 1i64 }
+        putchar(67i32) putchar(58i32) sp() e_i64(s0) sp() e_i64(same) sp() e_i64(neg) nl()   /* "C: s0 1 0" */
+        if ok == 0i64 { return 12u64 }
+        s0 = s0 + 1i64
+    }
+
+    /* ══ D: common component (z - x) | both  ->  identically zero. */
+    z3()
+    TF[50u64] = 1i64                                       /* z^2 */
+    TF[30u64] = 0i64 - 1i64                                /* -zx  (k=1,i=1) */
+    TF[26u64] = 0i64 - 1i64                                /* -zy  (k=1,j=1) */
+    TF[6u64]  = 1i64                                       /* xy */
+    TG[25u64] = 1i64                                       /* z */
+    TG[5u64]  = 0i64 - 1i64                                /* -x */
+    let rd : i64 = rs_elim3((&TF) as u64, 2i64, 1i64, 1i64, (&TG) as u64, 1i64, 1i64, 0i64, (&RO) as u64)
+    let ddx : i64 = rs3_dx()   let ddy : i64 = rs3_dy()
+    let dbad : i64 = grid_diff(ddx, ddy)                   /* EXP all zero */
+    putchar(68i32) putchar(58i32) sp() e_i64(rd) sp() e_i64(ddx) sp() e_i64(ddy) sp() e_i64(dbad) nl()   /* "D: 0 3 1 0" */
+    if rd != 0i64 { return 13u64 }
+    if ddx != 3i64 { return 13u64 }
+    if ddy != 1i64 { return 13u64 }
+    if dbad != 0i64 { return 13u64 }
+
+    /* ══ E: the coefficient ONE beyond i64 -- strict refuses, big delivers the row. */
+    z3()
+    let M : i64 = 2147483648i64                            /* 2^31 */
+    TF[50u64] = 1i64   TF[0u64] = 0i64 - M                 /* z^2 - 2^31 */
+    TG[50u64] = 1i64   TG[10u64] = 0i64 - M                /* z^2 - 2^31 x^2 */
+    let re1 : i64 = rs_elim3((&TF) as u64, 2i64, 0i64, 0i64, (&TG) as u64, 2i64, 2i64, 0i64, (&RO) as u64)
+    let re2 : i64 = rs_elim3_big((&TF) as u64, 2i64, 0i64, 0i64, (&TG) as u64, 2i64, 2i64, 0i64, (&RO) as u64)
+    let edx : i64 = rs3_dx()   let edy : i64 = rs3_dy()
+    let f4 : i64 = rs3_big_fit(4i64, 0i64)
+    let f2 : i64 = rs3_big_fit(2i64, 0i64)
+    let s2g : i64 = rs3_big_sgn(2i64, 0i64)
+    let l2 : i64 = rs3_big_len(2i64, 0i64)
+    let w2 : u64 = rs3_big_limb(2i64, 0i64, 0i64)
+    let c4 : i64 = RO[132u64]                              /* x^4 cell (4*33) */
+    let c0 : i64 = RO[0u64]
+    let c2 : i64 = RO[66u64]                               /* the non-fitting cell: 0 in the i64 grid */
+    let s3g : i64 = rs3_big_sgn(3i64, 0i64)
+    let l3 : i64 = rs3_big_len(3i64, 0i64)
+    putchar(69i32) putchar(58i32) sp() e_i64(re1) sp() e_i64(re2) sp() e_i64(edx) sp() e_i64(edy) sp()
+    e_i64(f4) sp() e_i64(f2) sp() e_i64(s2g) sp() e_i64(l2) sp() e_u64(w2) sp() e_i64(c4) sp() e_i64(c0) sp() e_i64(c2) sp() e_i64(s3g) sp() e_i64(l3) nl()
+    /* "E: -1 0 4 0 1 0 -1 1 9223372036854775808 4611686018427387904 4611686018427387904 0 0 0" */
+    if re1 != (0i64 - 1i64) { return 14u64 }
+    if re2 != 0i64 { return 14u64 }
+    if edx != 4i64 { return 14u64 }
+    if edy != 0i64 { return 14u64 }
+    if f4 != 1i64 { return 14u64 }
+    if f2 != 0i64 { return 14u64 }
+    if s2g != (0i64 - 1i64) { return 14u64 }
+    if l2 != 1i64 { return 14u64 }
+    if w2 != 9223372036854775808u64 { return 14u64 }
+    if c4 != 4611686018427387904i64 { return 14u64 }
+    if c0 != 4611686018427387904i64 { return 14u64 }
+    if c2 != 0i64 { return 14u64 }
+    if s3g != 0i64 { return 14u64 }
+    if l3 != 0i64 { return 14u64 }
+
+    /* ══ R: refusals. */
+    z3()
+    TF[0u64] = 1i64                                        /* fdz = 0: no z-degree */
+    TG[25u64] = 1i64
+    let r1 : i64 = rs_elim3((&TF) as u64, 0i64, 0i64, 0i64, (&TG) as u64, 1i64, 0i64, 0i64, (&RO) as u64)
+    z3()
+    TF[50u64] = 0i64   TF[0u64] = 1i64                     /* declared fdz = 2, z^2 row identically zero */
+    TG[25u64] = 1i64
+    let r2 : i64 = rs_elim3((&TF) as u64, 2i64, 0i64, 0i64, (&TG) as u64, 1i64, 0i64, 0i64, (&RO) as u64)
+    z3()
+    TF[25u64] = 1i64
+    TG[25u64] = 1i64
+    let r3 : i64 = rs_elim3((&TF) as u64, 1i64, 5i64, 0i64, (&TG) as u64, 1i64, 0i64, 0i64, (&RO) as u64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1) sp() e_i64(r2) sp() e_i64(r3) nl()   /* "R: -1 -1 -1" */
+    if r1 != (0i64 - 1i64) { return 15u64 }
+    if r2 != (0i64 - 1i64) { return 15u64 }
+    if r3 != (0i64 - 1i64) { return 15u64 }
+
+    return 99u64
+}

@@ -1,0 +1,475 @@
+/* STDLIB/iii/aether/inertia3.iii -- EXACT 3D MOMENTS AND THE INERTIA TENSOR over the cyclotomic
+ * field Q(sqrt2, sqrt3) (Vector I escalation: 1D/2D green_moments -> full 3D tensor calculus).
+ *
+ * THE OBJECT: a tetrahedron whose vertices are EXACT Q(sqrt2,sqrt3) points -- 4 vertices x 3
+ * coordinates x 4 field coords (a0 + a1 sqrt2 + a2 sqrt3 + a3 sqrt6) over ONE positive integer
+ * denominator: 48 i64 at (vertex*3 + coord)*4 + q, + den.  Irrational solids (a sqrt2-edge
+ * tetrahedron, a 15-degree-rotated body) are EXACT data, not approximations.
+ *
+ * THE MECHANISM (two INDEPENDENT derivations, welded by the 2475 gate):
+ *   BARYCENTRIC: integral over T of a monomial of total degree <= 2 has the closed vertex form
+ *     int 1       = V6 / 6
+ *     int x       = V6 * Sx / 24                      (Sx = sum_i x_i)
+ *     int x^2     = V6 * (Sx^2 + Pxx) / 120           (Pxx = sum_i x_i^2)
+ *     int x y     = V6 * (Sx Sy + Pxy) / 120          (Pxy = sum_i x_i y_i)
+ *   with V6 = det[v1-v0, v2-v0, v3-v0] (6V, SIGNED -- callers supply positive orientation), from
+ *   int_T lam^alpha = 6V * alpha! / (|alpha|+3)!  over barycentric coordinates.
+ *   DIVERGENCE: int_T x^a y^b z^c dV = (1/(a+1)) * sum_{faces} intint x^(a+1) y^b z^c N_x dA --
+ *   outward face normals N = (w1-w0)x(w2-w0), the integrand expanded as an (s,t)-polynomial over
+ *   the 2-simplex and integrated by intint s^i t^j = i! j! / (i+j+2)!  (weights over L = 120).
+ *   Different decomposition, different denominators, different formula family -- ONE exact value.
+ *
+ * THE TENSOR: I = [[int(y^2+z^2), -int xy, -int xz], ...] as 36 i64 in the so3 layout of
+ * cyclotomic_se3 over one den -- so so3_mul composes R * I * R^T DIRECTLY and the transformation
+ * law I(R body) == R I(body) R^T is a machine-checkable identity (gate 2475), with the parallel-
+ * axis (Steiner) content carried by the exact binomial translation law of the raw moments.
+ *
+ * All arithmetic is overflow-GUARDED (sticky IN3_OVF -> refuse -1): q23 products route through the
+ * canonical cyclotomic_se3 q23_mul behind a |coord| < 2^29 input guard (its internal 4-term sums
+ * then stay under 2^63).  pi-solids (spheres, cylinders) have NO ENCODING here -- their moments
+ * are transcendental; polytopes decompose into tetrahedra and moments ADD (gated).  Envelope:
+ * vertex numerators and intermediate sums within the guards; den > 0. */
+module inertia3
+
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_reduce_flat(vp: u64, ncoords: u64, den: i64) -> i64 from "cyclotomic_se3.iii"
+
+var IN3_OVF : i64
+fn in3_ovf() -> i64 @export { return IN3_OVF }
+fn in3_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn in3_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = in3_abs(a)   let ub : u64 = in3_abs(b)
+    if ub > (9223372036854775807u64 / ua) { IN3_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn in3_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = in3_abs(a)   let ub : u64 = in3_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { IN3_OVF = 1i64   return 0i64 }   return a + b }
+    if (ua + ub) > 9223372036854775808u64 { IN3_OVF = 1i64   return 0i64 }
+    return a + b
+}
+
+/* guarded q23 product: inputs bounded so the canonical q23_mul's internal sums cannot wrap */
+var IN3_QA : [i64; 4]   var IN3_QB : [i64; 4]   var IN3_QO : [i64; 4]
+fn in3_qmul(xp: u64, yp: u64, op: u64) -> i32 {
+    let x : *i64 = xp as *i64   let y : *i64 = yp as *i64
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let xv : i64 = x[i]   let yv : i64 = y[i]
+        if xv > 536870911i64 { IN3_OVF = 1i64 }
+        if xv < (0i64 - 536870911i64) { IN3_OVF = 1i64 }
+        if yv > 536870911i64 { IN3_OVF = 1i64 }
+        if yv < (0i64 - 536870911i64) { IN3_OVF = 1i64 }
+        i = i + 1u64
+    }
+    if IN3_OVF != 0i64 { let o : *i64 = op as *i64   o[0u64] = 0i64   o[1u64] = 0i64   o[2u64] = 0i64   o[3u64] = 0i64   return 0i32 }
+    return q23_mul(xp, yp, op)
+}
+fn in3_qadd(dp: u64, sp: u64) -> i32 {
+    let d : *i64 = dp as *i64   let s : *i64 = sp as *i64
+    let mut i : u64 = 0u64
+    while i < 4u64 { d[i] = in3_add(d[i], s[i])   i = i + 1u64 }
+    return 0i32
+}
+fn in3_qzero(dp: u64) -> i32 { let d : *i64 = dp as *i64   d[0u64] = 0i64   d[1u64] = 0i64   d[2u64] = 0i64   d[3u64] = 0i64   return 0i32 }
+fn in3_qcopy(dp: u64, sp: u64) -> i32 { let d : *i64 = dp as *i64   let s : *i64 = sp as *i64   d[0u64] = s[0u64]   d[1u64] = s[1u64]   d[2u64] = s[2u64]   d[3u64] = s[3u64]   return 0i32 }
+fn in3_qneg(dp: u64) -> i32 { let d : *i64 = dp as *i64   d[0u64] = 0i64 - d[0u64]   d[1u64] = 0i64 - d[1u64]   d[2u64] = 0i64 - d[2u64]   d[3u64] = 0i64 - d[3u64]   return 0i32 }
+fn in3_powi(b: i64, e: i64) -> i64 {
+    let mut r : i64 = 1i64
+    let mut q : i64 = 0i64
+    while q < e { r = in3_mul(r, b)   q = q + 1i64 }
+    return r
+}
+
+/* ── the signed 6V determinant: V6 = det[v1-v0, v2-v0, v3-v0] as a q23 value over den^3 ── */
+var IN3_D1 : [i64; 12]   var IN3_D2 : [i64; 12]   var IN3_D3 : [i64; 12]
+var IN3_CX : [i64; 12]                                     /* d2 x d3 */
+var IN3_V6 : [i64; 4]
+var IN3_T1 : [i64; 4]   var IN3_T2 : [i64; 4]
+fn in3_vdiff(vp: u64, a: i64, b: i64, outp: u64) -> i32 {  /* out = vertex a - vertex b (3 coords) */
+    let v : *i64 = vp as *i64   let out : *i64 = outp as *i64
+    let mut c : i64 = 0i64
+    while c < 3i64 {
+        let mut q : i64 = 0i64
+        while q < 4i64 {
+            let ia : i64 = (((a * 3i64) + c) * 4i64) + q
+            let ib : i64 = (((b * 3i64) + c) * 4i64) + q
+            let va : i64 = v[ia as u64]
+            let vb : i64 = v[ib as u64]
+            out[((c * 4i64) + q) as u64] = in3_add(va, 0i64 - vb)
+            q = q + 1i64
+        }
+        c = c + 1i64
+    }
+    return 0i32
+}
+fn in3_vol6(vp: u64) -> i32 {
+    in3_vdiff(vp, 1i64, 0i64, (&IN3_D1) as u64)
+    in3_vdiff(vp, 2i64, 0i64, (&IN3_D2) as u64)
+    in3_vdiff(vp, 3i64, 0i64, (&IN3_D3) as u64)
+    /* CX = D2 x D3 */
+    let mut c : i64 = 0i64
+    while c < 3i64 {
+        let i1 : i64 = (c + 1i64) % 3i64
+        let i2 : i64 = (c + 2i64) % 3i64
+        in3_qmul(((&IN3_D2) as u64) + ((i1 * 4i64) * 8i64) as u64, ((&IN3_D3) as u64) + ((i2 * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+        in3_qmul(((&IN3_D2) as u64) + ((i2 * 4i64) * 8i64) as u64, ((&IN3_D3) as u64) + ((i1 * 4i64) * 8i64) as u64, (&IN3_T2) as u64)
+        in3_qneg((&IN3_T2) as u64)
+        in3_qzero(((&IN3_CX) as u64) + ((c * 4i64) * 8i64) as u64)
+        in3_qadd(((&IN3_CX) as u64) + ((c * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+        in3_qadd(((&IN3_CX) as u64) + ((c * 4i64) * 8i64) as u64, (&IN3_T2) as u64)
+        c = c + 1i64
+    }
+    /* V6 = D1 . CX */
+    in3_qzero((&IN3_V6) as u64)
+    c = 0i64
+    while c < 3i64 {
+        in3_qmul(((&IN3_D1) as u64) + ((c * 4i64) * 8i64) as u64, ((&IN3_CX) as u64) + ((c * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+        in3_qadd((&IN3_V6) as u64, (&IN3_T1) as u64)
+        c = c + 1i64
+    }
+    return 0i32
+}
+fn in3_v6(i: i64) -> i64 @export { return IN3_V6[i as u64] }
+
+/* ── the barycentric moment: int x^a y^b z^c over T, a+b+c <= 2, result IN3_R over IN3_RD ── */
+var IN3_R : [i64; 4]   var IN3_RD : i64
+var IN3_SA : [i64; 4]   var IN3_SB : [i64; 4]   var IN3_PP : [i64; 4]
+fn in3_r(i: i64) -> i64 @export { return IN3_R[i as u64] }
+fn in3_rd() -> i64 @export { return IN3_RD }
+fn in3_sumc(vp: u64, c: i64, outp: u64) -> i32 {           /* out = sum_i vertex_i[coord c] */
+    let v : *i64 = vp as *i64
+    in3_qzero(outp)
+    let out : *i64 = outp as *i64
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        let mut q : i64 = 0i64
+        while q < 4i64 { out[q as u64] = in3_add(out[q as u64], v[((((i * 3i64) + c) * 4i64) + q) as u64])   q = q + 1i64 }
+        i = i + 1i64
+    }
+    return 0i32
+}
+fn in3_pairsum(vp: u64, c1: i64, c2: i64, outp: u64) -> i32 {  /* out = sum_i v_i[c1]*v_i[c2] */
+    let mut i : i64 = 0i64
+    in3_qzero(outp)
+    while i < 4i64 {
+        in3_qmul((vp + ((((i * 3i64) + c1) * 4i64) * 8i64) as u64), (vp + ((((i * 3i64) + c2) * 4i64) * 8i64) as u64), (&IN3_T2) as u64)
+        in3_qadd(outp, (&IN3_T2) as u64)
+        i = i + 1i64
+    }
+    return 0i32
+}
+/* the (c1,c2) coordinate pair of a monomial x^a y^b z^c of total degree 2; -1 if degree 1 (c1 only) */
+fn in3_moment(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 @export {
+    IN3_OVF = 0i64
+    if den <= 0i64 { return 0i64 - 1i64 }
+    if a < 0i64 { return 0i64 - 1i64 }
+    if b < 0i64 { return 0i64 - 1i64 }
+    if c < 0i64 { return 0i64 - 1i64 }
+    let tot : i64 = a + b + c
+    if tot > 2i64 { return 0i64 - 1i64 }
+    in3_vol6(vp)
+    if tot == 0i64 {
+        in3_qcopy((&IN3_R) as u64, (&IN3_V6) as u64)
+        IN3_RD = in3_mul(6i64, in3_powi(den, 3i64))
+        if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+        IN3_RD = q23_reduce_flat((&IN3_R) as u64, 4u64, IN3_RD)
+        return 0i64
+    }
+    if tot == 1i64 {
+        let mut c1 : i64 = 0i64
+        if b == 1i64 { c1 = 1i64 }
+        if c == 1i64 { c1 = 2i64 }
+        in3_sumc(vp, c1, (&IN3_SA) as u64)
+        in3_qmul((&IN3_V6) as u64, (&IN3_SA) as u64, (&IN3_R) as u64)
+        IN3_RD = in3_mul(24i64, in3_powi(den, 4i64))
+        if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+        IN3_RD = q23_reduce_flat((&IN3_R) as u64, 4u64, IN3_RD)
+        return 0i64
+    }
+    /* total degree 2: coordinates c1 <= c2 */
+    let mut c1 : i64 = 0i64 - 1i64
+    let mut c2 : i64 = 0i64 - 1i64
+    if a == 2i64 { c1 = 0i64   c2 = 0i64 }
+    if b == 2i64 { c1 = 1i64   c2 = 1i64 }
+    if c == 2i64 { c1 = 2i64   c2 = 2i64 }
+    if a == 1i64 { if b == 1i64 { c1 = 0i64   c2 = 1i64 } }
+    if a == 1i64 { if c == 1i64 { c1 = 0i64   c2 = 2i64 } }
+    if b == 1i64 { if c == 1i64 { c1 = 1i64   c2 = 2i64 } }
+    if c1 < 0i64 { return 0i64 - 1i64 }
+    in3_sumc(vp, c1, (&IN3_SA) as u64)
+    in3_sumc(vp, c2, (&IN3_SB) as u64)
+    in3_qmul((&IN3_SA) as u64, (&IN3_SB) as u64, (&IN3_T1) as u64)
+    in3_pairsum(vp, c1, c2, (&IN3_PP) as u64)
+    in3_qadd((&IN3_T1) as u64, (&IN3_PP) as u64)
+    in3_qmul((&IN3_V6) as u64, (&IN3_T1) as u64, (&IN3_R) as u64)
+    IN3_RD = in3_mul(120i64, in3_powi(den, 5i64))
+    if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+    IN3_RD = q23_reduce_flat((&IN3_R) as u64, 4u64, IN3_RD)
+    return 0i64
+}
+
+/* ── THE DIVERGENCE TWIN: the same moment by outward face fluxes of X = x^(a+1) y^b z^c e_x/(a+1).
+ * Result IN3_S over IN3_SD -- separate slots so a gate can hold BOTH paths and weld them. ── */
+var IN3_S : [i64; 4]   var IN3_SD : i64
+var IN3_W0 : [i64; 12]   var IN3_E1 : [i64; 12]   var IN3_E2 : [i64; 12]
+var IN3_NX : [i64; 4]
+var IN3_PLX : [i64; 64]   var IN3_PLY : [i64; 64]   var IN3_PLZ : [i64; 64]
+var IN3_ACC : [i64; 64]   var IN3_TMP : [i64; 64]
+var IN3_FW : [i64; 16]                                     /* 120 * intint s^i t^j at i*4+j */
+var IN3_FACE : [i64; 12]                                   /* 4 faces x 3 vertex indices */
+var IN3_FINIT : i64
+fn in3_s(i: i64) -> i64 @export { return IN3_S[i as u64] }
+fn in3_sd() -> i64 @export { return IN3_SD }
+fn in3_finit() -> i32 {
+    if IN3_FINIT != 0i64 { return 0i32 }
+    IN3_FW[0u64] = 60i64    IN3_FW[1u64] = 20i64   IN3_FW[2u64] = 10i64   IN3_FW[3u64] = 6i64
+    IN3_FW[4u64] = 20i64    IN3_FW[5u64] = 5i64    IN3_FW[6u64] = 2i64    IN3_FW[7u64] = 0i64
+    IN3_FW[8u64] = 10i64    IN3_FW[9u64] = 2i64    IN3_FW[10u64] = 0i64   IN3_FW[11u64] = 0i64
+    IN3_FW[12u64] = 6i64    IN3_FW[13u64] = 0i64   IN3_FW[14u64] = 0i64   IN3_FW[15u64] = 0i64
+    /* outward faces for V6 > 0: (0,2,1) (0,1,3) (0,3,2) (1,2,3) */
+    IN3_FACE[0u64] = 0i64   IN3_FACE[1u64] = 2i64    IN3_FACE[2u64] = 1i64
+    IN3_FACE[3u64] = 0i64   IN3_FACE[4u64] = 1i64    IN3_FACE[5u64] = 3i64
+    IN3_FACE[6u64] = 0i64   IN3_FACE[7u64] = 3i64    IN3_FACE[8u64] = 2i64
+    IN3_FACE[9u64] = 1i64   IN3_FACE[10u64] = 2i64   IN3_FACE[11u64] = 3i64
+    IN3_FINIT = 1i64
+    return 0i32
+}
+/* multiply the (s,t)-polynomial ap (degree <= da) by the LINEAR (s,t)-polynomial lp, into op.
+ * slots: coefficient of s^i t^j at (i*4+j)*4+q; linear lp has slots (0,0),(1,0),(0,1). */
+fn in3_stmul_lin(ap: u64, da: i64, lp: u64, op: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 { let o : *i64 = op as *i64   o[i] = 0i64   i = i + 1u64 }
+    let mut ii : i64 = 0i64
+    while ii <= da {
+        let mut jj : i64 = 0i64
+        while jj <= (da - ii) {
+            let abase : u64 = ap + ((((ii * 4i64) + jj) * 4i64) * 8i64) as u64
+            /* term * lp(0,0) -> (ii,jj); * lp(1,0) -> (ii+1,jj); * lp(0,1) -> (ii,jj+1) */
+            in3_qmul(abase, lp, (&IN3_T1) as u64)
+            in3_qadd(op + ((((ii * 4i64) + jj) * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+            in3_qmul(abase, lp + 32u64, (&IN3_T1) as u64)
+            in3_qadd(op + (((((ii + 1i64) * 4i64) + jj) * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+            in3_qmul(abase, lp + 64u64, (&IN3_T1) as u64)
+            in3_qadd(op + ((((ii * 4i64) + (jj + 1i64)) * 4i64) * 8i64) as u64, (&IN3_T1) as u64)
+            jj = jj + 1i64
+        }
+        ii = ii + 1i64
+    }
+    return 0i32
+}
+/* the linear (s,t) form of coordinate c on the face (w0 + s(w1-w0) + t(w2-w0)): slots into IN3_PL* */
+fn in3_face_lin(vp: u64, f: i64, c: i64, outp: u64) -> i32 {
+    let v : *i64 = vp as *i64   let out : *i64 = outp as *i64
+    let w0 : i64 = IN3_FACE[((f * 3i64) + 0i64) as u64]
+    let w1 : i64 = IN3_FACE[((f * 3i64) + 1i64) as u64]
+    let w2 : i64 = IN3_FACE[((f * 3i64) + 2i64) as u64]
+    let mut q : i64 = 0i64
+    while q < 4i64 {
+        let b0 : i64 = v[((((w0 * 3i64) + c) * 4i64) + q) as u64]
+        let b1 : i64 = v[((((w1 * 3i64) + c) * 4i64) + q) as u64]
+        let b2 : i64 = v[((((w2 * 3i64) + c) * 4i64) + q) as u64]
+        out[q as u64] = b0                                 /* (0,0) */
+        out[(4i64 + q) as u64] = in3_add(b1, 0i64 - b0)    /* (1,0) at slot offset 4 */
+        out[(8i64 + q) as u64] = in3_add(b2, 0i64 - b0)    /* (0,1) at slot offset 8 */
+        q = q + 1i64
+    }
+    return 0i32
+}
+fn in3_moment_div(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 @export {
+    IN3_OVF = 0i64
+    in3_finit()
+    if den <= 0i64 { return 0i64 - 1i64 }
+    if a < 0i64 { return 0i64 - 1i64 }
+    if b < 0i64 { return 0i64 - 1i64 }
+    if c < 0i64 { return 0i64 - 1i64 }
+    let tot : i64 = a + b + c
+    if tot > 2i64 { return 0i64 - 1i64 }
+    in3_qzero((&IN3_S) as u64)
+    let mut f : i64 = 0i64
+    while f < 4i64 {
+        /* outward N = (w1-w0) x (w2-w0); only N_x is needed (the field is along e_x) */
+        let w0i : i64 = IN3_FACE[((f * 3i64) + 0i64) as u64]
+        let w1i : i64 = IN3_FACE[((f * 3i64) + 1i64) as u64]
+        let w2i : i64 = IN3_FACE[((f * 3i64) + 2i64) as u64]
+        in3_vdiff(vp, w1i, w0i, (&IN3_E1) as u64)
+        in3_vdiff(vp, w2i, w0i, (&IN3_E2) as u64)
+        /* N_x = e1_y e2_z - e1_z e2_y */
+        in3_qmul(((&IN3_E1) as u64) + 32u64, ((&IN3_E2) as u64) + 64u64, (&IN3_T1) as u64)
+        in3_qmul(((&IN3_E1) as u64) + 64u64, ((&IN3_E2) as u64) + 32u64, (&IN3_T2) as u64)
+        in3_qneg((&IN3_T2) as u64)
+        in3_qzero((&IN3_NX) as u64)
+        in3_qadd((&IN3_NX) as u64, (&IN3_T1) as u64)
+        in3_qadd((&IN3_NX) as u64, (&IN3_T2) as u64)
+        /* the (s,t) linear forms of x, y, z on this face */
+        in3_face_lin(vp, f, 0i64, (&IN3_PLX) as u64)
+        in3_face_lin(vp, f, 1i64, (&IN3_PLY) as u64)
+        in3_face_lin(vp, f, 2i64, (&IN3_PLZ) as u64)
+        /* ACC = x^(a+1) y^b z^c as an (s,t)-polynomial (degree = tot+1 <= 3) */
+        let mut i2 : u64 = 0u64
+        while i2 < 64u64 { IN3_ACC[i2] = 0i64   i2 = i2 + 1u64 }
+        IN3_ACC[0u64] = 1i64                               /* the constant 1 at (0,0), q=0 */
+        IN3_ACC[1u64] = 0i64   IN3_ACC[2u64] = 0i64   IN3_ACC[3u64] = 0i64
+        let mut dg : i64 = 0i64
+        let mut m : i64 = 0i64
+        while m < (a + 1i64) {
+            in3_stmul_lin((&IN3_ACC) as u64, dg, (&IN3_PLX) as u64, (&IN3_TMP) as u64)
+            i2 = 0u64   while i2 < 64u64 { IN3_ACC[i2] = IN3_TMP[i2]   i2 = i2 + 1u64 }
+            dg = dg + 1i64
+            m = m + 1i64
+        }
+        m = 0i64
+        while m < b {
+            in3_stmul_lin((&IN3_ACC) as u64, dg, (&IN3_PLY) as u64, (&IN3_TMP) as u64)
+            i2 = 0u64   while i2 < 64u64 { IN3_ACC[i2] = IN3_TMP[i2]   i2 = i2 + 1u64 }
+            dg = dg + 1i64
+            m = m + 1i64
+        }
+        m = 0i64
+        while m < c {
+            in3_stmul_lin((&IN3_ACC) as u64, dg, (&IN3_PLZ) as u64, (&IN3_TMP) as u64)
+            i2 = 0u64   while i2 < 64u64 { IN3_ACC[i2] = IN3_TMP[i2]   i2 = i2 + 1u64 }
+            dg = dg + 1i64
+            m = m + 1i64
+        }
+        /* face integral: sum_ij W[i][j] * ACC[i][j]  (over 120), then * N_x */
+        in3_qzero((&IN3_T1) as u64)
+        let mut ii : i64 = 0i64
+        while ii <= dg {
+            let mut jj : i64 = 0i64
+            while jj <= (dg - ii) {
+                let w : i64 = IN3_FW[((ii * 4i64) + jj) as u64]
+                if w != 0i64 {
+                    let mut q2 : i64 = 0i64
+                    while q2 < 4i64 {
+                        let av : i64 = IN3_ACC[((((ii * 4i64) + jj) * 4i64) + q2) as u64]
+                        IN3_T1[q2 as u64] = in3_add(IN3_T1[q2 as u64], in3_mul(w, av))
+                        q2 = q2 + 1i64
+                    }
+                }
+                jj = jj + 1i64
+            }
+            ii = ii + 1i64
+        }
+        in3_qmul((&IN3_T1) as u64, (&IN3_NX) as u64, (&IN3_T2) as u64)
+        in3_qadd((&IN3_S) as u64, (&IN3_T2) as u64)
+        f = f + 1i64
+    }
+    IN3_SD = in3_mul(in3_mul(120i64, a + 1i64), in3_powi(den, tot + 3i64))
+    if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+    IN3_SD = q23_reduce_flat((&IN3_S) as u64, 4u64, IN3_SD)
+    return 0i64
+}
+
+/* ── THE INERTIA TENSOR: I as 36 i64 (so3 layout: entry (i,j) coord q at (i*3+j)*4+q) over ONE
+ * den (returned; -1 refused).  I_xx = int(y^2+z^2), I_xy = -int(xy), ... unit density. ── */
+var IN3_M : [i64; 24]                                      /* the six T_ab tuples: xx yy zz xy xz yz */
+fn in3_t2(vp: u64, c1: i64, c2: i64, outp: u64) -> i32 {   /* (S_c1 S_c2 + P_c1c2) */
+    in3_sumc(vp, c1, (&IN3_SA) as u64)
+    in3_sumc(vp, c2, (&IN3_SB) as u64)
+    in3_qmul((&IN3_SA) as u64, (&IN3_SB) as u64, outp)
+    in3_pairsum(vp, c1, c2, (&IN3_PP) as u64)
+    in3_qadd(outp, (&IN3_PP) as u64)
+    return 0i32
+}
+fn in3_inertia(vp: u64, den: i64, outp: u64) -> i64 @export {
+    IN3_OVF = 0i64
+    if den <= 0i64 { return 0i64 - 1i64 }
+    in3_vol6(vp)
+    in3_t2(vp, 0i64, 0i64, ((&IN3_M) as u64) + 0u64)
+    in3_t2(vp, 1i64, 1i64, ((&IN3_M) as u64) + 32u64)
+    in3_t2(vp, 2i64, 2i64, ((&IN3_M) as u64) + 64u64)
+    in3_t2(vp, 0i64, 1i64, ((&IN3_M) as u64) + 96u64)
+    in3_t2(vp, 0i64, 2i64, ((&IN3_M) as u64) + 128u64)
+    in3_t2(vp, 1i64, 2i64, ((&IN3_M) as u64) + 160u64)
+    let out : *i64 = outp as *i64
+    let mut i : u64 = 0u64
+    while i < 36u64 { out[i] = 0i64   i = i + 1u64 }
+    /* diagonal: I_00 = V6*(Tyy+Tzz), I_11 = V6*(Txx+Tzz), I_22 = V6*(Txx+Tyy) */
+    let mut d : i64 = 0i64
+    while d < 3i64 {
+        let mut o1 : i64 = 32i64   let mut o2 : i64 = 64i64          /* skip T_dd */
+        if d == 1i64 { o1 = 0i64    o2 = 64i64 }
+        if d == 2i64 { o1 = 0i64    o2 = 32i64 }
+        in3_qzero((&IN3_T1) as u64)
+        in3_qadd((&IN3_T1) as u64, ((&IN3_M) as u64) + (o1 as u64))
+        in3_qadd((&IN3_T1) as u64, ((&IN3_M) as u64) + (o2 as u64))
+        in3_qmul((&IN3_V6) as u64, (&IN3_T1) as u64, (&IN3_T2) as u64)
+        let base : u64 = (((d * 3i64) + d) * 4i64) as u64
+        out[base] = IN3_T2[0u64]   out[base + 1u64] = IN3_T2[1u64]
+        out[base + 2u64] = IN3_T2[2u64]   out[base + 3u64] = IN3_T2[3u64]
+        d = d + 1i64
+    }
+    /* off-diagonal: I_ij = -V6 * T_ij (symmetric) */
+    let mut k : i64 = 0i64
+    while k < 3i64 {
+        let mut i1 : i64 = 0i64   let mut j1 : i64 = 1i64   let mut off : i64 = 96i64
+        if k == 1i64 { i1 = 0i64   j1 = 2i64   off = 128i64 }
+        if k == 2i64 { i1 = 1i64   j1 = 2i64   off = 160i64 }
+        in3_qmul((&IN3_V6) as u64, ((&IN3_M) as u64) + (off as u64), (&IN3_T2) as u64)
+        in3_qneg((&IN3_T2) as u64)
+        let b1 : u64 = (((i1 * 3i64) + j1) * 4i64) as u64
+        let b2 : u64 = (((j1 * 3i64) + i1) * 4i64) as u64
+        out[b1] = IN3_T2[0u64]   out[b1 + 1u64] = IN3_T2[1u64]   out[b1 + 2u64] = IN3_T2[2u64]   out[b1 + 3u64] = IN3_T2[3u64]
+        out[b2] = IN3_T2[0u64]   out[b2 + 1u64] = IN3_T2[1u64]   out[b2 + 2u64] = IN3_T2[2u64]   out[b2 + 3u64] = IN3_T2[3u64]
+        k = k + 1i64
+    }
+    let mut dn : i64 = in3_mul(120i64, in3_powi(den, 5i64))
+    if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+    dn = q23_reduce_flat(outp, 36u64, dn)
+    return dn
+}
+
+/* ── frame verbs ── */
+/* integer translation (tx,ty,tz): rational parts shift by t*den; den unchanged.  0 / -1. */
+fn in3_translate(vp: u64, den: i64, tx: i64, ty: i64, tz: i64) -> i64 @export {
+    IN3_OVF = 0i64
+    let v : *i64 = vp as *i64
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        let bx : u64 = (((i * 3i64) + 0i64) * 4i64) as u64
+        let by : u64 = (((i * 3i64) + 1i64) * 4i64) as u64
+        let bz : u64 = (((i * 3i64) + 2i64) * 4i64) as u64
+        v[bx] = in3_add(v[bx], in3_mul(tx, den))
+        v[by] = in3_add(v[by], in3_mul(ty, den))
+        v[bz] = in3_add(v[bz], in3_mul(tz, den))
+        i = i + 1i64
+    }
+    if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+    return 0i64
+}
+/* rotate the body: out vertex i = M . v_i (so3 matrix over mden).  Returns den*mden, or -1. */
+fn in3_apply_so3(vp: u64, den: i64, mp: u64, mden: i64, outp: u64) -> i64 @export {
+    IN3_OVF = 0i64
+    if den <= 0i64 { return 0i64 - 1i64 }
+    if mden <= 0i64 { return 0i64 - 1i64 }
+    let out : *i64 = outp as *i64
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        let mut r : i64 = 0i64
+        while r < 3i64 {
+            in3_qzero((&IN3_T1) as u64)
+            let mut k : i64 = 0i64
+            while k < 3i64 {
+                in3_qmul(mp + ((((r * 3i64) + k) * 4i64) * 8i64) as u64, vp + ((((i * 3i64) + k) * 4i64) * 8i64) as u64, (&IN3_T2) as u64)
+                in3_qadd((&IN3_T1) as u64, (&IN3_T2) as u64)
+                k = k + 1i64
+            }
+            let base : u64 = (((i * 3i64) + r) * 4i64) as u64
+            out[base] = IN3_T1[0u64]   out[base + 1u64] = IN3_T1[1u64]
+            out[base + 2u64] = IN3_T1[2u64]   out[base + 3u64] = IN3_T1[3u64]
+            r = r + 1i64
+        }
+        i = i + 1i64
+    }
+    let nd : i64 = in3_mul(den, mden)
+    if IN3_OVF != 0i64 { return 0i64 - 1i64 }
+    return nd
+}

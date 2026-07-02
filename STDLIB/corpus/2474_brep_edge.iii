@@ -1,0 +1,301 @@
+/* 2474_brep_edge.iii -- GATE for THE EXACT 3D B-REP EDGE (Vector I / CAD-lite): two arbitrary
+ * quadric surfaces intersected EXACTLY -- shadow by trivariate elimination, lift by certified
+ * pseudo-Euclidean z-reduction, heights by Sturm isolation -- no mesh, no float, no epsilon.
+ *
+ * PART 1 -- SPHERE x PARABOLOID (the rational-lift shape).  F = z^2 + x^2 + y^2 - 4,
+ * G = z - x^2 - y^2.  The intersection is the circle x^2 + y^2 = (sqrt17 - 1)/2 at the IRRATIONAL
+ * height z = (sqrt17 - 1)/2.
+ *   1  b3_zred gives H = s z + (s - 4)  (s = x^2 + y^2), z-degree 1, every cell pinned: on the
+ *      edge z = (4 - s)/s -- the edge is the graph of an exact rational map over its shadow.
+ *   2  b3_lift_c computes C = sum_k F_k (-h0)^k h1^(2-k) by DIRECT GRID SUBSTITUTION:
+ *      C = s^3 - 3 s^2 - 8 s + 16, all 49 cells pinned.
+ *   3  WELD A: rs_elim3(F, H) == C -- the determinant pipeline and the substitution algebra derive
+ *      THE SAME integer polynomial (the linear-resultant identity, machine-checked cell-for-cell).
+ *   4  WELD B: C == h0 * R (R = the 2473-pinned shadow s^2 + s - 4) -- resultant multiplicativity
+ *      Res_z(F, lg F - lf zG) = +-F(z=0) * Res_z(F,G), machine-checked by grid product.
+ *   5  the slice x = 1: R(1,y) = y^4 + 3y^2 - 2 -- Sturm counts EXACTLY 2 real y (the two edge
+ *      points on that slice plane), isolated in disjoint rational brackets.
+ *   6  the fiber by the SECOND elimination axis: Res_y(F(1), G(1)) = (z^2 + z - 4)^2 -- root_mult
+ *      2 at the true height z = (sqrt17-1)/2 in (1,2) and at the shadow of the COMPLEX branch in
+ *      (-3,-2) (there y^2 = z - 1 < 0: elimination projects complex points too -- the honest
+ *      CAD-lite caveat, certified by the slice count of 5 which sees only the REAL pair).
+ *
+ * PART 2 -- SPHERE x CONE (the two-sheet shape).  G2 = z^2 - x^2 - y^2: the intersection is the
+ * circle x^2 + y^2 = 2 at BOTH irrational heights z = +-sqrt2 -- z is NOT a function of (x,y).
+ *   7  the shadow R2 = 4 (s - 2)^2 arrives SQUARED -- the multiplicity-2 signature of two sheets
+ *      projecting onto one curve -- and b3_zred returns z-degree 0: H2 = 2s - 4, content 2,
+ *      consequence curve s = 2 (the shadow cylinder).  WELD: R2 == 4 * (s-2)^2 by grid product.
+ *   8  reducing F AND G2 by the consequence gives THE SAME z-only fiber z^2 - 2 (two-path
+ *      agreement), certified GLOBAL by b3_xyfree: every shadow point carries both sheets; Sturm
+ *      isolates +-sqrt2 in disjoint brackets ([-2,-1] / [1,2] verified by exact rational compare).
+ *   9  the squared shadow sliced at x = 1: 4(y^2-1)^2 -- root_mult == 2 at y = +-1: the slice
+ *      SEES the two-sheet projection multiplicity.
+ *
+ * PART 3 -- THE BIG WIRE.  F3 = z^2 - 2^31, G3 = z^2 - 2^31 y^2: the shadow 2^62 y^4 - 2^63 y^2
+ * + 2^62 has a coefficient beyond i64 -- strict rs_elim3 REFUSES; rs_elim3_big delivers raw rows;
+ * b3_slice_x_big bridges them into sturm_big with NO i64 anywhere: root_count2 finds EXACTLY the
+ * 2 distinct real roots.  The bivariate-big -> univariate-big -> isolation pipeline, welded shut.
+ *
+ * exit 99 = pass;  10..19 = the failing arm (see checks) */
+module corpus_2474_brep_edge
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_elim3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_elim3_big(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn b3_zred(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64, gdy: i64, hp: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_lift_c(fp: u64, fdz: i64, fdx: i64, fdy: i64, hp: u64, hdx: i64, hdy: i64, outp: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_cdx() -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_cdy() -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_bv_zero(pp: u64) -> i32 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_bv_mul(ap: u64, adx: i64, ady: i64, bp: u64, bdx: i64, bdy: i64, op: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_bv_axpy(dp: u64, sp: u64, lam: i64, dx: i64, dy: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_bv_diff(ap: u64, bp: u64, dx: i64, dy: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_slice_x(rp: u64, dx: i64, dy: i64, x0: i64, outp: u64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_slice_x_big(x0: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_content3(hp: u64, dz: i64, dx: i64, dy: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_zrow(hp: u64, k: i64, dx: i64, dy: i64, outp: u64) -> i32 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_sub_bv0(fp: u64, bp: u64, bdx: i64, bdy: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn b3_xyfree(hp: u64, dz: i64) -> i64 from "brep3.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_mult(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var TF : [i64; 125]   var TG : [i64; 125]   var TH : [i64; 125]   var TR : [i64; 125]
+var RO : [i64; 1089]   var R2 : [i64; 1089]   var CC : [i64; 1089]
+var W3 : [i64; 1089]   var T3 : [i64; 1089]   var X3 : [i64; 1089]
+var SL : [i64; 40]   var EF : [i64; 64]   var EG : [i64; 64]   var EO : [i64; 20]
+
+fn z3(pp: u64) -> i32 { let p : *i64 = pp as *i64   let mut i : u64 = 0u64   while i < 125u64 { p[i] = 0i64   i = i + 1u64 }   return 0i32 }
+fn z2() -> i32 { let mut i : u64 = 0u64   while i < 64u64 { EF[i] = 0i64   EG[i] = 0i64   i = i + 1u64 }   return 0i32 }
+
+/* the sphere and the paraboloid / cone, freshly built */
+fn mk_sphere(pp: u64) -> i32 {
+    z3(pp)
+    let p : *i64 = pp as *i64
+    p[50u64] = 1i64                                        /* z^2 */
+    p[10u64] = 1i64   p[2u64] = 1i64   p[0u64] = 0i64 - 4i64
+    return 0i32
+}
+fn mk_parab(pp: u64) -> i32 {
+    z3(pp)
+    let p : *i64 = pp as *i64
+    p[25u64] = 1i64                                        /* z */
+    p[10u64] = 0i64 - 1i64   p[2u64] = 0i64 - 1i64
+    return 0i32
+}
+fn mk_cone(pp: u64) -> i32 {
+    z3(pp)
+    let p : *i64 = pp as *i64
+    p[50u64] = 1i64                                        /* z^2 */
+    p[10u64] = 0i64 - 1i64   p[2u64] = 0i64 - 1i64
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ═══ PART 1: sphere x paraboloid ═══ */
+    mk_sphere((&TF) as u64)
+    mk_parab((&TG) as u64)
+    let rsh : i64 = rs_elim3((&TF) as u64, 2i64, 2i64, 2i64, (&TG) as u64, 1i64, 2i64, 2i64, (&RO) as u64)
+    if rsh != 0i64 { return 10u64 }
+
+    /* 1: H = s z + (s - 4) -- z-degree 1, cells pinned */
+    let dzh : i64 = b3_zred((&TF) as u64, 2i64, 2i64, 2i64, (&TG) as u64, 1i64, 2i64, 2i64, (&TH) as u64)
+    putchar(72i32) putchar(58i32) sp() e_i64(dzh) sp() e_i64(TH[35u64]) sp() e_i64(TH[27u64]) sp() e_i64(TH[10u64]) sp() e_i64(TH[2u64]) sp() e_i64(TH[0u64]) nl()
+    /* "H: 1 1 1 1 1 -4" : z-row1 x^2 at 25+10, z-row1 y^2 at 25+2; z-row0 x^2, y^2, const */
+    if dzh != 1i64 { return 10u64 }
+    if TH[35u64] != 1i64 { return 10u64 }
+    if TH[27u64] != 1i64 { return 10u64 }
+    if TH[25u64] != 0i64 { return 10u64 }
+    if TH[10u64] != 1i64 { return 10u64 }
+    if TH[2u64] != 1i64 { return 10u64 }
+    if TH[0u64] != (0i64 - 4i64) { return 10u64 }
+
+    /* 2: C by direct substitution = s^3 - 3s^2 - 8s + 16 */
+    let lc : i64 = b3_lift_c((&TF) as u64, 2i64, 2i64, 2i64, (&TH) as u64, 2i64, 2i64, (&CC) as u64)
+    let cdx : i64 = b3_cdx()   let cdy : i64 = b3_cdy()
+    b3_bv_zero((&X3) as u64)
+    X3[198u64] = 1i64                                      /* x^6 (6*33) */
+    X3[134u64] = 3i64                                      /* x^4 y^2 */
+    X3[70u64]  = 3i64                                      /* x^2 y^4 */
+    X3[6u64]   = 1i64                                      /* y^6 */
+    X3[132u64] = 0i64 - 3i64                               /* x^4 */
+    X3[68u64]  = 0i64 - 6i64                               /* x^2 y^2 */
+    X3[4u64]   = 0i64 - 3i64                               /* y^4 */
+    X3[66u64]  = 0i64 - 8i64                               /* x^2 */
+    X3[2u64]   = 0i64 - 8i64                               /* y^2 */
+    X3[0u64]   = 16i64
+    let cbad : i64 = b3_bv_diff((&CC) as u64, (&X3) as u64, 6i64, 6i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(lc) sp() e_i64(cdx) sp() e_i64(cdy) sp() e_i64(cbad) nl()   /* "C: 0 6 6 0" */
+    if lc != 0i64 { return 11u64 }
+    if cbad != 0i64 { return 11u64 }
+
+    /* 3: WELD A -- rs_elim3(F, H) == C (determinant engine vs substitution algebra) */
+    let rwa : i64 = rs_elim3((&TF) as u64, 2i64, 2i64, 2i64, (&TH) as u64, 1i64, 2i64, 2i64, (&R2) as u64)
+    if rwa != 0i64 { return 12u64 }
+    let wa1 : i64 = b3_bv_diff((&R2) as u64, (&CC) as u64, 6i64, 6i64)
+    b3_bv_zero((&X3) as u64)
+    let ng : i64 = b3_bv_axpy((&X3) as u64, (&CC) as u64, 0i64 - 1i64, 6i64, 6i64)
+    let wa2 : i64 = b3_bv_diff((&R2) as u64, (&X3) as u64, 6i64, 6i64)
+    let mut wok : i64 = 0i64
+    if wa1 == 0i64 { wok = 1i64 }
+    if wa2 == 0i64 { wok = 1i64 }
+    putchar(87i32) putchar(65i32) putchar(58i32) sp() e_i64(wa1) sp() e_i64(wa2) nl()   /* "WA: 0 98" (equal, direct sign) */
+    if ng < 0i64 { return 12u64 }
+    if wok == 0i64 { return 12u64 }
+
+    /* 4: WELD B -- C == h0 * R (resultant multiplicativity) */
+    b3_zrow((&TH) as u64, 0i64, 2i64, 2i64, (&W3) as u64)
+    let mb : i64 = b3_bv_mul((&W3) as u64, 2i64, 2i64, (&RO) as u64, 4i64, 4i64, (&T3) as u64)
+    if mb < 0i64 { return 13u64 }
+    let wb : i64 = b3_bv_diff((&T3) as u64, (&CC) as u64, 6i64, 6i64)
+    putchar(87i32) putchar(66i32) putchar(58i32) sp() e_i64(wb) nl()                   /* "WB: 0" */
+    if wb != 0i64 { return 13u64 }
+
+    /* 5: the slice x = 1: R(1,y) = y^4 + 3y^2 - 2 -- exactly 2 real edge points */
+    let sd : i64 = b3_slice_x((&RO) as u64, 6i64, 6i64, 1i64, (&SL) as u64)
+    if sd != 4i64 { return 14u64 }
+    if SL[0u64] != (0i64 - 2i64) { return 14u64 }
+    if SL[2u64] != 3i64 { return 14u64 }
+    if SL[4u64] != 1i64 { return 14u64 }
+    let sb : i64 = sturm_build((&SL) as u64, 4i64)
+    if sb < 0i64 { return 14u64 }
+    let rc5 : i64 = root_count(0i64 - 8i64, 1i64, 8i64, 1i64)
+    let ic5 : i64 = isolate_roots(0i64 - 8i64, 8i64, 60i64)
+    putchar(83i32) putchar(58i32) sp() e_i64(sd) sp() e_i64(rc5) sp() e_i64(ic5) nl()  /* "S: 4 2 2" */
+    if rc5 != 2i64 { return 14u64 }
+    if ic5 != 2i64 { return 14u64 }
+
+    /* 6: the fiber by the second elimination axis: Res_y(F(1), G(1)) = (z^2 + z - 4)^2 */
+    z2()
+    EF[16u64] = 1i64   EF[2u64] = 1i64   EF[0u64] = 0i64 - 3i64          /* y^2 + z^2 - 3 as [y*8+z] */
+    EG[16u64] = 0i64 - 1i64   EG[1u64] = 1i64   EG[0u64] = 0i64 - 1i64   /* -y^2 + z - 1 */
+    let df : i64 = rs_elim((&EF) as u64, 2i64, 2i64, (&EG) as u64, 2i64, 2i64, (&EO) as u64)
+    if df != 8i64 { return 15u64 }
+    /* trim to the true degree 4 and pin (z^2+z-4)^2 = z^4 + 2z^3 - 7z^2 - 8z + 16 */
+    if EO[0u64] != 16i64 { return 15u64 }
+    if EO[1u64] != (0i64 - 8i64) { return 15u64 }
+    if EO[2u64] != (0i64 - 7i64) { return 15u64 }
+    if EO[3u64] != 2i64 { return 15u64 }
+    if EO[4u64] != 1i64 { return 15u64 }
+    if EO[5u64] != 0i64 { return 15u64 }
+    if EO[8u64] != 0i64 { return 15u64 }
+    let m1 : i64 = root_mult((&EO) as u64, 4i64, 1i64, 1i64, 2i64, 1i64)
+    let m2 : i64 = root_mult((&EO) as u64, 4i64, 0i64 - 3i64, 1i64, 0i64 - 2i64, 1i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(m1) sp() e_i64(m2) nl()                   /* "F: 2 2" */
+    if m1 != 2i64 { return 15u64 }
+    if m2 != 2i64 { return 15u64 }
+
+    /* ═══ PART 2: sphere x cone (two sheets) ═══ */
+    mk_sphere((&TF) as u64)
+    mk_cone((&TG) as u64)
+    let rs2 : i64 = rs_elim3((&TF) as u64, 2i64, 2i64, 2i64, (&TG) as u64, 2i64, 2i64, 2i64, (&R2) as u64)
+    if rs2 != 0i64 { return 16u64 }
+    /* 7: z-free reduction, content 2, consequence s - 2 */
+    let dz2 : i64 = b3_zred((&TF) as u64, 2i64, 2i64, 2i64, (&TG) as u64, 2i64, 2i64, 2i64, (&TH) as u64)
+    if dz2 != 0i64 { return 16u64 }
+    let ct : i64 = b3_content3((&TH) as u64, 0i64, 4i64, 4i64)
+    putchar(90i32) putchar(58i32) sp() e_i64(dz2) sp() e_i64(ct) sp() e_i64(TH[10u64]) sp() e_i64(TH[2u64]) sp() e_i64(TH[0u64]) nl()
+    /* "Z: 0 2 1 1 -2" */
+    if ct != 2i64 { return 16u64 }
+    if TH[10u64] != 1i64 { return 16u64 }
+    if TH[2u64] != 1i64 { return 16u64 }
+    if TH[0u64] != (0i64 - 2i64) { return 16u64 }
+    /* WELD: R2 == 4 (s-2)^2 -- the two-sheet multiplicity signature */
+    b3_zrow((&TH) as u64, 0i64, 2i64, 2i64, (&W3) as u64)
+    let mq : i64 = b3_bv_mul((&W3) as u64, 2i64, 2i64, (&W3) as u64, 2i64, 2i64, (&T3) as u64)
+    if mq < 0i64 { return 17u64 }
+    b3_bv_zero((&X3) as u64)
+    let s4 : i64 = b3_bv_axpy((&X3) as u64, (&T3) as u64, 4i64, 4i64, 4i64)
+    if s4 < 0i64 { return 17u64 }
+    let wq : i64 = b3_bv_diff((&X3) as u64, (&R2) as u64, 8i64, 8i64)
+    putchar(77i32) putchar(58i32) sp() e_i64(wq) nl()                                  /* "M: 0" */
+    if wq != 0i64 { return 17u64 }
+
+    /* 8: the GLOBAL two-sheet fiber z^2 - 2, from BOTH surfaces */
+    mk_sphere((&TR) as u64)
+    let sb1 : i64 = b3_sub_bv0((&TR) as u64, (&W3) as u64, 2i64, 2i64)     /* F - (s-2): z^2 - 2 */
+    if sb1 < 0i64 { return 18u64 }
+    let xf1 : i64 = b3_xyfree((&TR) as u64, 2i64)
+    mk_cone((&TF) as u64)
+    b3_bv_zero((&X3) as u64)
+    let ngw : i64 = b3_bv_axpy((&X3) as u64, (&W3) as u64, 0i64 - 1i64, 2i64, 2i64)   /* -(s-2) */
+    if ngw < 0i64 { return 18u64 }
+    let sb2 : i64 = b3_sub_bv0((&TF) as u64, (&X3) as u64, 2i64, 2i64)     /* G2 + (s-2): z^2 - 2 */
+    if sb2 < 0i64 { return 18u64 }
+    let xf2 : i64 = b3_xyfree((&TF) as u64, 2i64)
+    let mut agree : i64 = 1i64
+    let mut ci : u64 = 0u64
+    while ci < 125u64 { let va : i64 = TR[ci]   let vb : i64 = TF[ci]   if va != vb { agree = 0i64 }   ci = ci + 1u64 }
+    if TR[50u64] != 1i64 { return 18u64 }
+    if TR[0u64] != (0i64 - 2i64) { return 18u64 }
+    /* Sturm isolates +-sqrt2, brackets certified on opposite sides of 0 with |z| in [1,2] */
+    SL[0u64] = 0i64 - 2i64   SL[1u64] = 0i64   SL[2u64] = 1i64
+    let sb3 : i64 = sturm_build((&SL) as u64, 2i64)
+    if sb3 < 0i64 { return 18u64 }
+    let rcf : i64 = root_count(0i64 - 2i64, 1i64, 2i64, 1i64)
+    let icf : i64 = isolate_roots(0i64 - 2i64, 2i64, 60i64)
+    if iso_count() != 2i64 { return 18u64 }
+    /* each bracket carries a CERTIFIED sign change of z^2 - 2: sign(n^2 - 2 d^2) flips across it */
+    let mut brk : i64 = 1i64
+    let mut bi : u64 = 0u64
+    while bi < 2u64 {
+        let ln : i64 = iso_lo_num(bi)   let ld : i64 = iso_lo_den(bi)
+        let hn : i64 = iso_hi_num(bi)   let hd : i64 = iso_hi_den(bi)
+        let slo : i64 = (ln * ln) - (2i64 * ld * ld)
+        let shi : i64 = (hn * hn) - (2i64 * hd * hd)
+        let mut neg2 : i64 = 0i64
+        if slo < 0i64 { neg2 = neg2 + 1i64 }
+        if shi < 0i64 { neg2 = neg2 + 1i64 }
+        if neg2 != 1i64 { brk = 0i64 }                     /* exactly one endpoint inside (-sqrt2, sqrt2) */
+        bi = bi + 1u64
+    }
+    putchar(71i32) putchar(58i32) sp() e_i64(xf1) sp() e_i64(xf2) sp() e_i64(agree) sp() e_i64(rcf) sp() e_i64(icf) sp() e_i64(brk) nl()
+    /* "G: 1 1 1 2 2 1" */
+    if xf1 != 1i64 { return 18u64 }
+    if xf2 != 1i64 { return 18u64 }
+    if agree != 1i64 { return 18u64 }
+    if rcf != 2i64 { return 18u64 }
+    if icf != 2i64 { return 18u64 }
+    if brk != 1i64 { return 18u64 }
+
+    /* 9: the squared shadow sliced at x = 1: 4(y^2-1)^2 -- multiplicity 2 at y = +-1 */
+    let sd2 : i64 = b3_slice_x((&R2) as u64, 8i64, 8i64, 1i64, (&SL) as u64)
+    if sd2 != 4i64 { return 19u64 }
+    let mm1 : i64 = root_mult((&SL) as u64, 4i64, 1i64, 2i64, 3i64, 2i64)
+    let mm2 : i64 = root_mult((&SL) as u64, 4i64, 0i64 - 3i64, 2i64, 0i64 - 1i64, 2i64)
+    putchar(81i32) putchar(58i32) sp() e_i64(sd2) sp() e_i64(mm1) sp() e_i64(mm2) nl() /* "Q: 4 2 2" */
+    if mm1 != 2i64 { return 19u64 }
+    if mm2 != 2i64 { return 19u64 }
+
+    /* ═══ PART 3: the big wire -- bivariate-big rows -> sturm_big, no i64 anywhere ═══ */
+    z3((&TF) as u64)
+    z3((&TG) as u64)
+    let M : i64 = 2147483648i64
+    TF[50u64] = 1i64   TF[0u64] = 0i64 - M                 /* z^2 - 2^31 */
+    TG[50u64] = 1i64   TG[2u64] = 0i64 - M                 /* z^2 - 2^31 y^2 */
+    let st : i64 = rs_elim3((&TF) as u64, 2i64, 0i64, 0i64, (&TG) as u64, 2i64, 0i64, 2i64, (&RO) as u64)
+    let bg : i64 = rs_elim3_big((&TF) as u64, 2i64, 0i64, 0i64, (&TG) as u64, 2i64, 0i64, 2i64, (&RO) as u64)
+    if st != (0i64 - 1i64) { return 19u64 }
+    if bg != 0i64 { return 19u64 }
+    let bd : i64 = b3_slice_x_big(0i64)
+    if bd != 4i64 { return 19u64 }
+    let sbc : i64 = sturm2_build_cur()
+    if sbc < 0i64 { return 19u64 }
+    let rcb : i64 = root_count2(0i64 - 3i64, 1i64, 3i64, 1i64)
+    putchar(66i32) putchar(58i32) sp() e_i64(bd) sp() e_i64(rcb) nl()                  /* "B: 4 2" */
+    if rcb != 2i64 { return 19u64 }
+
+    return 99u64
+}

@@ -1,0 +1,177 @@
+/* 2480_inverse_design.iii -- GATE for ONE-PARAMETER INVERSE DESIGN by quantifier elimination
+ * (the forward architecture reversed: not "does design c collide?" but "FOR WHICH c is the design
+ * safe FOR ALL time?" -- the exact continuous parametric answer, delivered).
+ *
+ * THE SCENARIO.  A tool tip travels the line y = c (c = the DESIGN OFFSET), x(t) = t.  A fixed
+ * obstacle disc sits at (10, 4) with radius^2 = 8.  Contact obeys
+ *     p(t; c) = (t - 10)^2 + (c - 4)^2 - 8.
+ * "Safe for ALL t" is a universally quantified sentence.  Eliminating t from (p, dp/dt) through
+ * the 2193-gated pipeline cashes the quantifier into ONE polynomial:
+ *     B(c) = Res_t(p, dp/dt) = 4 c^2 - 32 c + 32 = 4 (c - (4-2sqrt2)) (c - (4+2sqrt2)),
+ * and (for this monic-in-t family)  B(c) > 0  <=>  no real contact instant exists.
+ *
+ * A -- THE BOUNDARY POLYNOMIAL: rs_elim delivers B(c) = [32, -32, 4] (degree bound 2), pinned.
+ * B -- THE EXACT ENDPOINTS: Sturm counts EXACTLY 2 boundary offsets in [-10, 20] and isolates
+ *   them in disjoint rational brackets, each carrying a certified sign change of B.
+ * C -- THE FIELD CLOSES: B(4 +- 2sqrt2) == (0,0,0,0) EXACTLY in Q(sqrt2) by q23 arithmetic --
+ *   the algebraic endpoints ARE roots, verified in the field, not approximated.
+ * D -- INSIDE IS UNSAFE, WITNESSED: at c = 4, B(4) = -32 < 0 and Sturm finds EXACTLY 2 contact
+ *   instants of p(t; 4) in [0, 20] (the collision is real, t = 10 +- 2sqrt2).
+ * E -- OUTSIDE IS SAFE FOR ALL t, CERTIFIED: at c = 1 and c = 8, B > 0 exactly; Sturm counts 0
+ *   real roots of p(.; c) inside [-1000, 1000] (far beyond the Cauchy bound ~113) and p(0) > 0:
+ *   a positive value plus zero real roots == p > 0 EVERYWHERE -- the universal, discharged.
+ * F -- THE COMPOSED DESIGN SPACE: add the reach constraint c >= 2.  q23_sign decides EXACTLY:
+ *   4 - 2sqrt2 < 2 (sign(2 - 2sqrt2) = -1), so the LOW safe band dies ((-inf, 4-2sqrt2) has no
+ *   point >= 2 below the... the band (-inf,4-2sqrt2) intersected with [2,inf) is EMPTY), while
+ *   4 + 2sqrt2 > 2 keeps the high band: the feasible set is EXACTLY (4 + 2sqrt2, inf) -- witness
+ *   c = 7 certified safe.  Elimination boundary (x) exact algebraic comparison (x) witness: the
+ *   inverse-design pipeline composed end to end.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E;  15 F */
+module corpus_2480_inverse_design
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn q23_mul(xp: u64, yp: u64, op: u64) -> i32 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var EF : [i64; 64]   var EG : [i64; 64]   var EO : [i64; 20]
+var PT : [i64; 8]
+var QA : [i64; 4]   var QB : [i64; 4]   var QC : [i64; 4]   var QD : [i64; 4]
+
+fn zf() -> i32 { let mut i : u64 = 0u64   while i < 64u64 { EF[i] = 0i64   EG[i] = 0i64   i = i + 1u64 }   return 0i32 }
+/* B(c) at the rational point n/d, exactly: 4 n^2 - 32 n d + 32 d^2 (sign only needs the value) */
+fn bval(n: i64, d: i64) -> i64 { return (4i64 * n * n) - (32i64 * n * d) + (32i64 * d * d) }
+/* p(t; c) into PT for integer c: t^2 - 20 t + (100 + (c-4)^2 - 8) */
+fn mkp(c: i64) -> i32 {
+    PT[0u64] = 92i64 + ((c - 4i64) * (c - 4i64))
+    PT[1u64] = 0i64 - 20i64
+    PT[2u64] = 1i64
+    return 0i32
+}
+/* B(x) == 0 in Q(sqrt2) for x = (x0 + x1 sqrt2): 4 x^2 - 32 x + 32 slot-exact zero? */
+fn bfield_zero(x0: i64, x1: i64) -> i64 {
+    QA[0u64] = x0   QA[1u64] = x1   QA[2u64] = 0i64   QA[3u64] = 0i64
+    q23_mul((&QA) as u64, (&QA) as u64, (&QB) as u64)
+    let mut q : u64 = 0u64
+    while q < 4u64 {
+        let sq : i64 = QB[q]
+        let li : i64 = QA[q]
+        let mut cv : i64 = 0i64
+        if q == 0u64 { cv = 32i64 }
+        let val : i64 = (4i64 * sq) - (32i64 * li) + cv
+        if val != 0i64 { return 0i64 }
+        q = q + 1u64
+    }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* ══ A: eliminate t from (p, dp/dt): grids [t*8 + c]. */
+    zf()
+    EF[16u64] = 1i64                                       /* t^2 */
+    EF[8u64] = 0i64 - 20i64                                /* -20 t */
+    EF[0u64] = 108i64   EF[1u64] = 0i64 - 8i64   EF[2u64] = 1i64   /* c^2 - 8c + 108 */
+    EG[8u64] = 2i64                                        /* 2 t */
+    EG[0u64] = 0i64 - 20i64
+    let da : i64 = rs_elim((&EF) as u64, 2i64, 2i64, (&EG) as u64, 1i64, 0i64, (&EO) as u64)
+    putchar(65i32) putchar(58i32) sp() e_i64(da) sp() e_i64(EO[0u64]) sp() e_i64(EO[1u64]) sp() e_i64(EO[2u64]) nl()
+    /* "A: 2 32 -32 4" */
+    if da != 2i64 { return 10u64 }
+    if EO[0u64] != 32i64 { return 10u64 }
+    if EO[1u64] != (0i64 - 32i64) { return 10u64 }
+    if EO[2u64] != 4i64 { return 10u64 }
+
+    /* ══ B: Sturm isolates the two boundary offsets, sign-change certified. */
+    let sb : i64 = sturm_build((&EO) as u64, 2i64)
+    if sb < 0i64 { return 11u64 }
+    let rc : i64 = root_count(0i64 - 10i64, 1i64, 20i64, 1i64)
+    let ic : i64 = isolate_roots(0i64 - 10i64, 20i64, 60i64)
+    if rc != 2i64 { return 11u64 }
+    if ic != 2i64 { return 11u64 }
+    if iso_count() != 2i64 { return 11u64 }
+    let mut bok : i64 = 1i64
+    let mut bi : u64 = 0u64
+    while bi < 2u64 {
+        let ln : i64 = iso_lo_num(bi)   let ld : i64 = iso_lo_den(bi)
+        let hn : i64 = iso_hi_num(bi)   let hd : i64 = iso_hi_den(bi)
+        let slo : i64 = bval(ln, ld)
+        let shi : i64 = bval(hn, hd)
+        let mut neg : i64 = 0i64
+        if slo < 0i64 { neg = neg + 1i64 }
+        if shi < 0i64 { neg = neg + 1i64 }
+        if neg != 1i64 { bok = 0i64 }
+        bi = bi + 1u64
+    }
+    putchar(66i32) putchar(58i32) sp() e_i64(rc) sp() e_i64(ic) sp() e_i64(bok) nl()   /* "B: 2 2 1" */
+    if bok != 1i64 { return 11u64 }
+
+    /* ══ C: the endpoints 4 -+ 2 sqrt2 are EXACT roots in the field. */
+    let c1 : i64 = bfield_zero(4i64, 0i64 - 2i64)
+    let c2 : i64 = bfield_zero(4i64, 2i64)
+    let c3 : i64 = bfield_zero(4i64, 1i64)                 /* control: 4 + sqrt2 is NOT a root */
+    putchar(67i32) putchar(58i32) sp() e_i64(c1) sp() e_i64(c2) sp() e_i64(c3) nl()    /* "C: 1 1 0" */
+    if c1 != 1i64 { return 12u64 }
+    if c2 != 1i64 { return 12u64 }
+    if c3 != 0i64 { return 12u64 }
+
+    /* ══ D: inside the band is UNSAFE, witnessed: c = 4. */
+    let b4 : i64 = bval(4i64, 1i64)
+    if b4 >= 0i64 { return 13u64 }
+    mkp(4i64)
+    let sd : i64 = sturm_build((&PT) as u64, 2i64)
+    if sd < 0i64 { return 13u64 }
+    let rcd : i64 = root_count(0i64, 1i64, 20i64, 1i64)
+    putchar(68i32) putchar(58i32) sp() e_i64(b4) sp() e_i64(rcd) nl()                  /* "D: -32 2" */
+    if rcd != 2i64 { return 13u64 }
+
+    /* ══ E: outside is SAFE FOR ALL t -- both sides, certified universally. */
+    let mut side : i64 = 0i64
+    let mut eok : i64 = 1i64
+    while side < 2i64 {
+        let mut cc : i64 = 1i64
+        if side == 1i64 { cc = 8i64 }
+        let bv : i64 = bval(cc, 1i64)
+        if bv <= 0i64 { eok = 0i64 }
+        mkp(cc)
+        let se : i64 = sturm_build((&PT) as u64, 2i64)
+        if se < 0i64 { eok = 0i64 }
+        let rce : i64 = root_count(0i64 - 1000i64, 1i64, 1000i64, 1i64)
+        if rce != 0i64 { eok = 0i64 }
+        let p0 : i64 = PT[0u64]                            /* p(0; c) > 0 with zero real roots => p > 0 everywhere */
+        if p0 <= 0i64 { eok = 0i64 }
+        side = side + 1i64
+    }
+    putchar(69i32) putchar(58i32) sp() e_i64(eok) nl()                                 /* "E: 1" */
+    if eok != 1i64 { return 14u64 }
+
+    /* ══ F: compose the reach constraint c >= 2 -- the feasible set is EXACTLY (4 + 2sqrt2, inf). */
+    QC[0u64] = 2i64   QC[1u64] = 0i64 - 2i64   QC[2u64] = 0i64   QC[3u64] = 0i64      /* (4-2sqrt2) - 2 */
+    let s1 : i32 = q23_sign((&QC) as u64)
+    QD[0u64] = 2i64   QD[1u64] = 2i64   QD[2u64] = 0i64   QD[3u64] = 0i64             /* (4+2sqrt2) - 2 */
+    let s2 : i32 = q23_sign((&QD) as u64)
+    let b7 : i64 = bval(7i64, 1i64)                        /* witness c = 7 in the surviving band */
+    mkp(7i64)
+    let sf : i64 = sturm_build((&PT) as u64, 2i64)
+    if sf < 0i64 { return 15u64 }
+    let rcf : i64 = root_count(0i64 - 1000i64, 1i64, 1000i64, 1i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(s1 as i64) sp() e_i64(s2 as i64) sp() e_i64(b7) sp() e_i64(rcf) nl()
+    /* "F: -1 1 4 0" : low band dies exactly, high band survives, witness certified safe */
+    if s1 != (0i32 - 1i32) { return 15u64 }
+    if s2 != 1i32 { return 15u64 }
+    if b7 <= 0i64 { return 15u64 }
+    if rcf != 0i64 { return 15u64 }
+
+    return 99u64
+}

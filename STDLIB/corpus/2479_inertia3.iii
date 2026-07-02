@@ -1,0 +1,280 @@
+/* 2479_inertia3.iii -- GATE for EXACT 3D MOMENTS + THE INERTIA TENSOR in Q(sqrt2,sqrt3)
+ * (Vector I: green_moments escalated to full 3D tensor calculus; the q23 ring of cyclotomic_se3
+ * consumed as the vertex field, the so3 layout consumed as the tensor container).
+ *
+ * A -- THE UNIT PINS: the standard simplex (V6 = 1): int 1 = 1/6, int x = 1/24, int x^2 = 1/60,
+ *   int xy = 1/120 -- the classical values, delivered as reduced (q23, den) pairs.
+ * B -- THE IRRATIONAL SOLID: the sqrt2-edge tetra (vertices (0,0,0), (sqrt2,0,0), (0,sqrt2,0),
+ *   (0,0,sqrt2)): V6 = 2 sqrt2 EXACT; volume sqrt2/3 IRRATIONAL-EXACT; int x = 1/6 EXACTLY
+ *   RATIONAL from an irrational domain (the radicals cancel -- the 2187 anti-mesh story in 3D);
+ *   int x^2 = sqrt2/15; int xy = sqrt2/30 -- every value pinned as exact field elements.
+ * C -- THE DIVERGENCE TWIN: the SAME moments derived by outward-face flux integration (divergence
+ *   theorem, 2-simplex weights i!j!/(i+j+2)!) -- a different decomposition, different denominators,
+ *   different formula family -- cross-multiplied EQUAL slot-for-slot on the irrational solid.
+ * D -- SIMPLICIAL ADDITIVITY: split the sqrt2-tetra at the edge midpoint (den 2): the two halves'
+ *   moments SUM to the whole, exactly (cross-den identity) -- polytopes decompose.
+ * E -- THE BINOMIAL TRANSLATION LAW (Steiner's engine): translating by (3,0,0),
+ *   int x'^2 == int x^2 + 6 int x + 9 V  and  int x'y' == int xy + 3 int y, exact in the field;
+ *   the perpendicular tensor entry I_xx is translation-INVARIANT (pinned at tensor level).
+ * F -- THE TENSOR TRANSFORMATION LAW: I(R body) == R I(body) R^T for the EXACT 15-degree rotation
+ *   (den 4, entries in Q(sqrt2,sqrt3)) -- 36 cells cross-multiplied equal: zero-drift rotational
+ *   dynamics of an irrational solid, the covariance law as a machine identity.
+ * R -- refusals: den 0; total degree 3; a vertex numerator beyond the 2^29 product guard.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 D;  14 E;  15 F;  16 R */
+module corpus_2479_inertia3
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn in3_moment(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_moment_div(vp: u64, den: i64, a: i64, b: i64, c: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_r(i: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_rd() -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_s(i: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_sd() -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_v6(i: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_inertia(vp: u64, den: i64, outp: u64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_translate(vp: u64, den: i64, tx: i64, ty: i64, tz: i64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn in3_apply_so3(vp: u64, den: i64, mp: u64, mden: i64, outp: u64) -> i64 from "inertia3.iii"
+extern @abi(c-msvc-x64) fn so3_rot_z15(mb: u64) -> i64 from "cyclotomic_se3.iii"
+extern @abi(c-msvc-x64) fn so3_mul(ab: u64, bb: u64, cb: u64) -> i32 from "cyclotomic_se3.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var VT : [i64; 48]   var VA : [i64; 48]   var VB : [i64; 48]   var VR : [i64; 48]
+var MR : [i64; 36]   var MRT : [i64; 36]
+var I1 : [i64; 36]   var I2 : [i64; 36]   var W1 : [i64; 36]   var W2 : [i64; 36]
+var CR : [i64; 4]    var CD : i64
+var M2 : [i64; 4]    var M2D : i64
+var M1 : [i64; 4]    var M1D : i64
+var M0 : [i64; 4]    var M0D : i64
+
+fn vzero(pp: u64) -> i32 { let p : *i64 = pp as *i64   let mut i : u64 = 0u64   while i < 48u64 { p[i] = 0i64   i = i + 1u64 }   return 0i32 }
+fn vset(pp: u64, v: i64, c: i64, q: i64, val: i64) -> i32 {
+    let p : *i64 = pp as *i64
+    p[((((v * 3i64) + c) * 4i64) + q) as u64] = val
+    return 0i32
+}
+/* the standard simplex: v0 = 0, v1 = e_x, v2 = e_y, v3 = e_z (den 1) */
+fn mk_std(pp: u64) -> i32 {
+    vzero(pp)
+    vset(pp, 1i64, 0i64, 0i64, 1i64)
+    vset(pp, 2i64, 1i64, 0i64, 1i64)
+    vset(pp, 3i64, 2i64, 0i64, 1i64)
+    return 0i32
+}
+/* the sqrt2-edge tetra scaled by s over den: coords s*sqrt2 = (0,s,0,0) */
+fn mk_rt2(pp: u64, s: i64) -> i32 {
+    vzero(pp)
+    vset(pp, 1i64, 0i64, 1i64, s)
+    vset(pp, 2i64, 1i64, 1i64, s)
+    vset(pp, 3i64, 2i64, 1i64, s)
+    return 0i32
+}
+/* keep the reduced barycentric result in a named slot */
+fn keep2() -> i32 { M2[0u64] = in3_r(0i64)   M2[1u64] = in3_r(1i64)   M2[2u64] = in3_r(2i64)   M2[3u64] = in3_r(3i64)   M2D = in3_rd()   return 0i32 }
+fn keep1() -> i32 { M1[0u64] = in3_r(0i64)   M1[1u64] = in3_r(1i64)   M1[2u64] = in3_r(2i64)   M1[3u64] = in3_r(3i64)   M1D = in3_rd()   return 0i32 }
+fn keep0() -> i32 { M0[0u64] = in3_r(0i64)   M0[1u64] = in3_r(1i64)   M0[2u64] = in3_r(2i64)   M0[3u64] = in3_r(3i64)   M0D = in3_rd()   return 0i32 }
+/* the barycentric result == (n0,n1,n2,n3)/nd ? (both already reduced; compare literally) */
+fn pin_r(n0: i64, n1: i64, n2: i64, n3: i64, nd: i64) -> i64 {
+    let r0 : i64 = in3_r(0i64)   let r1 : i64 = in3_r(1i64)
+    let r2 : i64 = in3_r(2i64)   let r3 : i64 = in3_r(3i64)
+    let rd : i64 = in3_rd()
+    if r0 != n0 { return 0i64 }
+    if r1 != n1 { return 0i64 }
+    if r2 != n2 { return 0i64 }
+    if r3 != n3 { return 0i64 }
+    if rd != nd { return 0i64 }
+    return 1i64
+}
+/* twin weld: barycentric (in3_r/rd) == divergence (in3_s/sd) by cross-multiplication */
+fn weld() -> i64 {
+    let rd : i64 = in3_rd()   let sd : i64 = in3_sd()
+    let mut q : i64 = 0i64
+    while q < 4i64 {
+        let rv : i64 = in3_r(q)   let sv : i64 = in3_s(q)
+        if (rv * sd) != (sv * rd) { return 0i64 }
+        q = q + 1i64
+    }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* ══ A: the standard simplex pins. */
+    mk_std((&VT) as u64)
+    if in3_moment((&VT) as u64, 1i64, 0i64, 0i64, 0i64) != 0i64 { return 10u64 }
+    if pin_r(1i64, 0i64, 0i64, 0i64, 6i64) != 1i64 { return 10u64 }
+    if in3_moment((&VT) as u64, 1i64, 1i64, 0i64, 0i64) != 0i64 { return 10u64 }
+    if pin_r(1i64, 0i64, 0i64, 0i64, 24i64) != 1i64 { return 10u64 }
+    if in3_moment((&VT) as u64, 1i64, 2i64, 0i64, 0i64) != 0i64 { return 10u64 }
+    if pin_r(1i64, 0i64, 0i64, 0i64, 60i64) != 1i64 { return 10u64 }
+    if in3_moment((&VT) as u64, 1i64, 1i64, 1i64, 0i64) != 0i64 { return 10u64 }
+    let pa : i64 = pin_r(1i64, 0i64, 0i64, 0i64, 120i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(pa) nl()                                  /* "A: 1" */
+    if pa != 1i64 { return 10u64 }
+
+    /* ══ B: the sqrt2 tetra -- exact irrational and exactly-rational moments. */
+    mk_rt2((&VT) as u64, 1i64)
+    if in3_moment((&VT) as u64, 1i64, 0i64, 0i64, 0i64) != 0i64 { return 11u64 }
+    let v60 : i64 = in3_v6(0i64)   let v61 : i64 = in3_v6(1i64)
+    if v60 != 0i64 { return 11u64 }
+    if v61 != 2i64 { return 11u64 }                        /* V6 = 2 sqrt2 */
+    if pin_r(0i64, 1i64, 0i64, 0i64, 3i64) != 1i64 { return 11u64 }        /* V = sqrt2/3 */
+    if in3_moment((&VT) as u64, 1i64, 1i64, 0i64, 0i64) != 0i64 { return 11u64 }
+    if pin_r(1i64, 0i64, 0i64, 0i64, 6i64) != 1i64 { return 11u64 }        /* int x = 1/6 RATIONAL */
+    if in3_moment((&VT) as u64, 1i64, 2i64, 0i64, 0i64) != 0i64 { return 11u64 }
+    if pin_r(0i64, 1i64, 0i64, 0i64, 15i64) != 1i64 { return 11u64 }       /* int x^2 = sqrt2/15 */
+    if in3_moment((&VT) as u64, 1i64, 1i64, 1i64, 0i64) != 0i64 { return 11u64 }
+    let pb : i64 = pin_r(0i64, 1i64, 0i64, 0i64, 30i64)                    /* int xy = sqrt2/30 */
+    putchar(66i32) putchar(58i32) sp() e_i64(pb) nl()                                  /* "B: 1" */
+    if pb != 1i64 { return 11u64 }
+
+    /* ══ C: the divergence twin on the irrational solid, all four moment shapes. */
+    let mut arm : i64 = 0i64
+    let mut cok : i64 = 1i64
+    while arm < 4i64 {
+        let mut a : i64 = 0i64   let mut b : i64 = 0i64
+        if arm == 1i64 { a = 1i64 }
+        if arm == 2i64 { a = 2i64 }
+        if arm == 3i64 { a = 1i64   b = 1i64 }
+        if in3_moment((&VT) as u64, 1i64, a, b, 0i64) != 0i64 { cok = 0i64 }
+        if in3_moment_div((&VT) as u64, 1i64, a, b, 0i64) != 0i64 { cok = 0i64 }
+        let wq : i64 = weld()
+        if wq != 1i64 { cok = 0i64 }
+        arm = arm + 1i64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(cok) nl()                                 /* "C: 1" */
+    if cok != 1i64 { return 12u64 }
+
+    /* ══ D: simplicial additivity across the midpoint split (den 2). */
+    mk_rt2((&VT) as u64, 2i64)                             /* the same solid over den 2 */
+    if in3_moment((&VT) as u64, 2i64, 2i64, 0i64, 0i64) != 0i64 { return 13u64 }
+    keep2()                                                /* int x^2 (whole) */
+    /* half A: (M, v1, v2, v3);  half B: (v0, M, v2, v3);  M = (sqrt2/2, 0, 0) = (0,1,0,0)/2 */
+    vzero((&VA) as u64)
+    vset((&VA) as u64, 0i64, 0i64, 1i64, 1i64)             /* M */
+    vset((&VA) as u64, 1i64, 0i64, 1i64, 2i64)             /* v1 */
+    vset((&VA) as u64, 2i64, 1i64, 1i64, 2i64)             /* v2 */
+    vset((&VA) as u64, 3i64, 2i64, 1i64, 2i64)             /* v3 */
+    vzero((&VB) as u64)
+    vset((&VB) as u64, 1i64, 0i64, 1i64, 1i64)             /* M as second vertex */
+    vset((&VB) as u64, 2i64, 1i64, 1i64, 2i64)
+    vset((&VB) as u64, 3i64, 2i64, 1i64, 2i64)
+    if in3_moment((&VA) as u64, 2i64, 2i64, 0i64, 0i64) != 0i64 { return 13u64 }
+    keep1()                                                /* int x^2 (A) */
+    if in3_moment((&VB) as u64, 2i64, 2i64, 0i64, 0i64) != 0i64 { return 13u64 }
+    /* whole == A + B: M2/M2D == M1/M1D + r/rd  <=>  M2 * (M1D*rd) == M1 * (M2D*rd) + r * (M2D*M1D) */
+    let rd : i64 = in3_rd()
+    let mut dok : i64 = 1i64
+    let mut q : i64 = 0i64
+    while q < 4i64 {
+        let rv : i64 = in3_r(q)
+        let lhs : i64 = M2[q as u64] * M1D * rd
+        let rhs : i64 = (M1[q as u64] * M2D * rd) + (rv * M2D * M1D)
+        if lhs != rhs { dok = 0i64 }
+        q = q + 1i64
+    }
+    putchar(68i32) putchar(58i32) sp() e_i64(dok) nl()                                 /* "D: 1" */
+    if dok != 1i64 { return 13u64 }
+
+    /* ══ E: the binomial translation law (Steiner's engine) + tensor-level invariance. */
+    mk_rt2((&VT) as u64, 1i64)
+    if in3_moment((&VT) as u64, 1i64, 2i64, 0i64, 0i64) != 0i64 { return 14u64 }
+    keep2()                                                /* int x^2 */
+    if in3_moment((&VT) as u64, 1i64, 1i64, 0i64, 0i64) != 0i64 { return 14u64 }
+    keep1()                                                /* int x */
+    if in3_moment((&VT) as u64, 1i64, 0i64, 0i64, 0i64) != 0i64 { return 14u64 }
+    keep0()                                                /* V */
+    let i1d : i64 = in3_inertia((&VT) as u64, 1i64, (&I1) as u64)
+    if i1d <= 0i64 { return 14u64 }
+    mk_rt2((&VR) as u64, 1i64)
+    if in3_translate((&VR) as u64, 1i64, 3i64, 0i64, 0i64) != 0i64 { return 14u64 }
+    if in3_moment((&VR) as u64, 1i64, 2i64, 0i64, 0i64) != 0i64 { return 14u64 }
+    /* int x'^2 == int x^2 + 6 int x + 9 V   (cross-den, 4 slots) */
+    let trd : i64 = in3_rd()
+    let mut eok : i64 = 1i64
+    q = 0i64
+    while q < 4i64 {
+        let tv : i64 = in3_r(q)
+        let lhs : i64 = tv * M2D * M1D * M0D
+        let mut rhs : i64 = M2[q as u64] * trd * M1D * M0D
+        rhs = rhs + (6i64 * M1[q as u64] * trd * M2D * M0D)
+        rhs = rhs + (9i64 * M0[q as u64] * trd * M2D * M1D)
+        if lhs != rhs { eok = 0i64 }
+        q = q + 1i64
+    }
+    /* int x'y' == int xy + 3 int y  (ty = 0; int y of the symmetric tetra = int x) */
+    if in3_moment((&VT) as u64, 1i64, 1i64, 1i64, 0i64) != 0i64 { return 14u64 }
+    keep2()                                                /* int xy */
+    if in3_moment((&VR) as u64, 1i64, 1i64, 1i64, 0i64) != 0i64 { return 14u64 }
+    let t2d : i64 = in3_rd()
+    q = 0i64
+    while q < 4i64 {
+        let tv : i64 = in3_r(q)
+        let lhs : i64 = tv * M2D * M1D
+        let rhs : i64 = (M2[q as u64] * t2d * M1D) + (3i64 * M1[q as u64] * t2d * M2D)
+        if lhs != rhs { eok = 0i64 }
+        q = q + 1i64
+    }
+    /* I_xx is invariant under x-translation */
+    let i2d : i64 = in3_inertia((&VR) as u64, 1i64, (&I2) as u64)
+    if i2d <= 0i64 { return 14u64 }
+    q = 0i64
+    while q < 4i64 {
+        let a1 : i64 = I1[q as u64]   let a2 : i64 = I2[q as u64]
+        if (a1 * i2d) != (a2 * i1d) { eok = 0i64 }
+        q = q + 1i64
+    }
+    putchar(69i32) putchar(58i32) sp() e_i64(eok) nl()                                 /* "E: 1" */
+    if eok != 1i64 { return 14u64 }
+
+    /* ══ F: the tensor transformation law I(R body) == R I R^T at EXACT 15 degrees. */
+    mk_rt2((&VT) as u64, 1i64)
+    let mden : i64 = so3_rot_z15((&MR) as u64)
+    if mden != 4i64 { return 15u64 }
+    /* R^T */
+    let mut i : i64 = 0i64
+    while i < 3i64 {
+        let mut j : i64 = 0i64
+        while j < 3i64 {
+            let mut q2 : i64 = 0i64
+            while q2 < 4i64 {
+                MRT[((((i * 3i64) + j) * 4i64) + q2) as u64] = MR[((((j * 3i64) + i) * 4i64) + q2) as u64]
+                q2 = q2 + 1i64
+            }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    let rvd : i64 = in3_apply_so3((&VT) as u64, 1i64, (&MR) as u64, 4i64, (&VR) as u64)
+    if rvd != 4i64 { return 15u64 }
+    let ild : i64 = in3_inertia((&VR) as u64, 4i64, (&I2) as u64)     /* LHS: I of the rotated body */
+    if ild <= 0i64 { return 15u64 }
+    let i0d : i64 = in3_inertia((&VT) as u64, 1i64, (&I1) as u64)
+    if i0d <= 0i64 { return 15u64 }
+    so3_mul((&MR) as u64, (&I1) as u64, (&W1) as u64)                 /* R I  (den 4*i0d) */
+    so3_mul((&W1) as u64, (&MRT) as u64, (&W2) as u64)                /* (R I) R^T  (den 4*i0d*4) */
+    let rhd : i64 = 16i64 * i0d
+    let mut fok : i64 = 1i64
+    let mut k : u64 = 0u64
+    while k < 36u64 {
+        let lv : i64 = I2[k]   let rv : i64 = W2[k]
+        if (lv * rhd) != (rv * ild) { fok = 0i64 }
+        k = k + 1u64
+    }
+    putchar(70i32) putchar(58i32) sp() e_i64(fok) sp() e_i64(ild) sp() e_i64(rhd) nl() /* "F: 1 ..." */
+    if fok != 1i64 { return 15u64 }
+
+    /* ══ R: refusals. */
+    mk_rt2((&VT) as u64, 1i64)
+    let r1 : i64 = in3_moment((&VT) as u64, 0i64, 0i64, 0i64, 0i64)
+    let r2 : i64 = in3_moment((&VT) as u64, 1i64, 2i64, 1i64, 0i64)
+    vset((&VT) as u64, 1i64, 0i64, 0i64, 1073741824i64)    /* beyond the 2^29 product guard */
+    let r3 : i64 = in3_moment((&VT) as u64, 1i64, 2i64, 0i64, 0i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1) sp() e_i64(r2) sp() e_i64(r3) nl()    /* "R: -1 -1 -1" */
+    if r1 != (0i64 - 1i64) { return 16u64 }
+    if r2 != (0i64 - 1i64) { return 16u64 }
+    if r3 != (0i64 - 1i64) { return 16u64 }
+
+    return 99u64
+}

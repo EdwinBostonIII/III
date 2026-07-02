@@ -1,0 +1,179 @@
+/* STDLIB/iii/aether/lattice_march.iii -- INFINITE PERIODIC LATTICE OPTICS, reflective/TIR scope (charter
+ * Phase 4 / Program II Vector III): a ray marched through an UNBOUNDED periodic crystal defined purely by
+ * its repeating rule -- zero memory regardless of lattice extent.
+ *
+ * THE FIELD-RATIONAL CORE (the Program-I insight verbatim): lattice cell walls are PLANES, so cell-to-cell
+ * traversal never extends the algebraic field.  v1 closes the loop over the INTEGERS: directions are the
+ * diagonal class {+-1}^3 and 45-degree mirror planes (normal (1,1,0) through the cell center) reflect them
+ * by the integer map d -> (-dy, -dx, dz); with the start parity engineered (px+py even, matching the
+ * center-plane constant), every mirror time and every crossing is an INTEGER -- positions stay exact over
+ * MILLIONS of cells with zero growth and zero drift.
+ *
+ * WHERE THE LADDER IS CONSUMED: the sphere-in-cell hit test.  disc = b^2 - 4ac is an exact integer sign
+ * (disc == 0 is a CERTIFIED TANGENT -- float flickers, the integer cannot); and "does the ray hit the
+ * sphere BEFORE leaving the cell" is sign(2a*t_exit + b - sqrt(disc)) -- a 1-surd query answered by the
+ * kernel's ui_bsign1 (Tier 0 of the one exact-sign ladder).
+ *
+ * WHAT EXACTNESS KILLS (gate 2171): the corner-tie mis-step.  A diagonal ray hits cell EDGES/CORNERS
+ * exactly -- the GENERIC case for this direction class, the measure-zero nightmare of float DDA.  The
+ * exact march detects the tie by integer equality and steps ALL tied axes simultaneously (the geometric
+ * truth); a fixed-point DDA twin biases to one axis, enters a cell the ray never touches, and hits/misses
+ * the wrong sphere.  Mirror optics is reversible: negating the direction and re-marching retraces the
+ * bounces to the start EXACTLY.
+ *
+ * HONEST SCOPE: reflection/TIR only -- REFRACTION injects sqrt(1-(n1/n2)^2 sin^2) per event (the tower;
+ * charter II-IV) and is refused here.  General integer directions are the charted rational-march v2
+ * (linear denominator growth, guarded); v1 is the {+-1}^3 class where growth is ZERO. */
+module lattice_march
+
+extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "sqrt_sum_sign.iii"
+
+const LM_HITCAP : i32 = 0i32       /* iteration cap reached (no hit)      */
+const LM_HIT : i32 = 1i32          /* transverse sphere hit               */
+const LM_TANGENT : i32 = 2i32      /* CERTIFIED tangent hit (disc == 0)   */
+const LM_REFUSE : i32 = 3i32       /* invalid config / parity / overflow  */
+
+var LM_L : i64                     /* cell period */
+var LM_SPHP : i64   var LM_SPHA : i64                          /* sphere cells: (ix mod SPHP) == SPHA (SPHP=0: none) */
+var LM_MIRP : i64   var LM_MIRA : i64                          /* mirror cells: ((ix+iy) mod MIRP) == MIRA (0: none) */
+var LM_R2 : i64
+var LM_PX : i64   var LM_PY : i64   var LM_PZ : i64
+var LM_DX : i64   var LM_DY : i64   var LM_DZ : i64
+var LM_CX : i64   var LM_CY : i64   var LM_CZ : i64
+var LM_NCROSS : i64   var LM_NBOUNCE : i64   var LM_NCORNER : i64
+var LM_LASTB : i64                 /* 1 iff the most recent event was a mirror bounce (reversal must un-reflect) */
+
+fn lm_cfg(L: i64, sphp: i64, spha: i64, mirp: i64, mira: i64, r2: i64) -> i32 @export {
+    if L <= 0i64 { return 0i32 - 1i32 }
+    LM_L = L   LM_SPHP = sphp   LM_SPHA = spha   LM_MIRP = mirp   LM_MIRA = mira   LM_R2 = r2
+    return 0i32
+}
+
+fn lm_floorc(p: i64, L: i64) -> i64 {
+    let mut q : i64 = p / L
+    if p < 0i64 { if (q * L) != p { q = q - 1i64 } }
+    return q
+}
+fn lm_mod(a: i64, p: i64) -> i64 {
+    let mut m : i64 = a % p
+    if m < 0i64 { m = m + p }
+    return m
+}
+fn lm_is_sphere(cx: i64) -> u8 { if LM_SPHP <= 0i64 { return 0u8 }   if lm_mod(cx, LM_SPHP) == LM_SPHA { return 1u8 }   return 0u8 }
+fn lm_is_mirror(cx: i64, cy: i64) -> u8 { if LM_MIRP <= 0i64 { return 0u8 }   if lm_mod(cx + cy, LM_MIRP) == LM_MIRA { return 1u8 }   return 0u8 }
+
+fn lm_set(px: i64, py: i64, pz: i64, dx: i64, dy: i64, dz: i64) -> i32 @export {
+    if (dx * dx) != 1i64 { return 0i32 - 1i32 }
+    if (dy * dy) != 1i64 { return 0i32 - 1i32 }
+    if (dz * dz) != 1i64 { return 0i32 - 1i32 }
+    LM_PX = px   LM_PY = py   LM_PZ = pz
+    LM_DX = dx   LM_DY = dy   LM_DZ = dz
+    LM_CX = lm_floorc(px, LM_L)   LM_CY = lm_floorc(py, LM_L)   LM_CZ = lm_floorc(pz, LM_L)
+    LM_NCROSS = 0i64   LM_NBOUNCE = 0i64   LM_NCORNER = 0i64   LM_LASTB = 0i64
+    return 0i32
+}
+
+/* distance (in t; |d|=1 per axis so t is the axis distance) to the next boundary along one axis */
+fn lm_exit1(p: i64, c: i64, d: i64) -> i64 {
+    if d > 0i64 { return ((c + 1i64) * LM_L) - p }
+    return p - (c * LM_L)
+}
+
+/* sphere test in the CURRENT cell from the CURRENT point: 0 none, 1 hit (advance to hit), 2 tangent-hit.
+ * a = 3 (diagonal class); w = p - center; hit iff disc >= 0, b < 0 (approaching, outside), c > 0, and the
+ * near root precedes the exit: 2a*t_exit + b > sqrt(disc)  (ui_bsign1(2a*t_exit + b, -1, disc) > 0). */
+fn lm_sphere_test(t_exit: i64) -> i32 {
+    let ctr : i64 = LM_L / 2i64
+    let wx : i64 = LM_PX - ((LM_CX * LM_L) + ctr)
+    let wy : i64 = LM_PY - ((LM_CY * LM_L) + ctr)
+    let wz : i64 = LM_PZ - ((LM_CZ * LM_L) + ctr)
+    let a : i64 = 3i64
+    let b : i64 = 2i64 * (((wx * LM_DX) + (wy * LM_DY)) + (wz * LM_DZ))
+    let cc : i64 = (((wx * wx) + (wy * wy)) + (wz * wz)) - LM_R2
+    let disc : i64 = (b * b) - ((4i64 * a) * cc)
+    if disc < 0i64 { return 0i32 }
+    if b >= 0i64 { return 0i32 }                                   /* receding or at closest approach */
+    if cc <= 0i64 { return 0i32 }                                  /* starting inside/on: not a fresh hit */
+    let gate : i64 = ((2i64 * a) * t_exit) + b
+    if gate <= 0i64 { return 0i32 }                                /* vertex beyond the cell exit */
+    let s : i32 = ui_bsign1(gate, 0i64 - 1i64, disc)               /* gate - sqrt(disc) : the 1-surd order */
+    if s < 0i32 { return 0i32 }                                    /* hit after exit */
+    if s == 0i32 { }                                               /* hit EXACTLY at the exit plane: count as hit */
+    if disc == 0i64 { return 2i32 }                                /* CERTIFIED tangent */
+    return 1i32
+}
+
+/* one march episode: crossings, mirror bounces, sphere termination.  maxiter bounds the walk. */
+fn lm_march(maxiter: i64) -> i32 @export {
+    let mut it : i64 = 0i64
+    while it < maxiter {
+        /* exit distances (integers; |d| = 1 per axis) */
+        let tx : i64 = lm_exit1(LM_PX, LM_CX, LM_DX)
+        let ty : i64 = lm_exit1(LM_PY, LM_CY, LM_DY)
+        let tz : i64 = lm_exit1(LM_PZ, LM_CZ, LM_DZ)
+        let mut tmin : i64 = tx
+        if ty < tmin { tmin = ty }
+        if tz < tmin { tmin = tz }
+        /* the cell's content, in precedence: sphere terminates; mirror redirects */
+        if lm_is_sphere(LM_CX) == 1u8 {
+            let h : i32 = lm_sphere_test(tmin)
+            if h == 1i32 { return LM_HIT }
+            if h == 2i32 { return LM_TANGENT }
+        } else { if lm_is_mirror(LM_CX, LM_CY) == 1u8 {
+            let dsum : i64 = LM_DX + LM_DY
+            if dsum != 0i64 {
+                let splane : i64 = ((LM_CX + LM_CY) * LM_L) + LM_L          /* x+y at the cell-center plane (L even) */
+                let num : i64 = splane - (LM_PX + LM_PY)
+                let rem : i64 = num % dsum
+                if rem != 0i64 { return LM_REFUSE }                          /* parity contract broken: refuse, never round */
+                let tm : i64 = num / dsum
+                if tm > 0i64 { if tm < tmin {
+                    LM_PX = LM_PX + (tm * LM_DX)   LM_PY = LM_PY + (tm * LM_DY)   LM_PZ = LM_PZ + (tm * LM_DZ)
+                    let ndx : i64 = 0i64 - LM_DY   let ndy : i64 = 0i64 - LM_DX
+                    LM_DX = ndx   LM_DY = ndy
+                    LM_NBOUNCE = LM_NBOUNCE + 1i64
+                    LM_LASTB = 1i64
+                    it = it + 1i64
+                    continue
+                } }
+            }
+        } }
+        /* cross to the next cell: advance tmin, step EVERY tied axis (the exact corner rule) */
+        LM_PX = LM_PX + (tmin * LM_DX)   LM_PY = LM_PY + (tmin * LM_DY)   LM_PZ = LM_PZ + (tmin * LM_DZ)
+        let mut stepped : i64 = 0i64
+        if tx == tmin { LM_CX = LM_CX + LM_DX   stepped = stepped + 1i64 }
+        if ty == tmin { LM_CY = LM_CY + LM_DY   stepped = stepped + 1i64 }
+        if tz == tmin { LM_CZ = LM_CZ + LM_DZ   stepped = stepped + 1i64 }
+        if stepped > 1i64 { LM_NCORNER = LM_NCORNER + 1i64 }
+        LM_NCROSS = LM_NCROSS + stepped
+        LM_LASTB = 0i64
+        it = it + 1i64
+    }
+    return LM_HITCAP
+}
+
+/* THE TIME-REVERSAL OPERATOR (the billiard lesson, in optics): negate the direction, and if the ray sits ON
+ * the mirror it just left (last event = bounce), UN-REFLECT there -- the mirror map is an involution, and
+ * without it the tm > 0 exclusion (correctly) skips the mirror underfoot and the retrace diverges. */
+fn lm_reverse() -> i32 @export {
+    LM_DX = 0i64 - LM_DX   LM_DY = 0i64 - LM_DY   LM_DZ = 0i64 - LM_DZ
+    if LM_LASTB == 1i64 {
+        let ndx : i64 = 0i64 - LM_DY   let ndy : i64 = 0i64 - LM_DX
+        LM_DX = ndx   LM_DY = ndy
+    }
+    return 0i32
+}
+fn lm_lastb() -> i64 @export { return LM_LASTB }
+
+fn lm_px() -> i64 @export { return LM_PX }
+fn lm_py() -> i64 @export { return LM_PY }
+fn lm_pz() -> i64 @export { return LM_PZ }
+fn lm_dx() -> i64 @export { return LM_DX }
+fn lm_dy() -> i64 @export { return LM_DY }
+fn lm_dz() -> i64 @export { return LM_DZ }
+fn lm_cellx() -> i64 @export { return LM_CX }
+fn lm_celly() -> i64 @export { return LM_CY }
+fn lm_cellz() -> i64 @export { return LM_CZ }
+fn lm_crossings() -> i64 @export { return LM_NCROSS }
+fn lm_bounces() -> i64 @export { return LM_NBOUNCE }
+fn lm_corners() -> i64 @export { return LM_NCORNER }

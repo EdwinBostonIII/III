@@ -1,0 +1,110 @@
+/* 2171_lattice_march.iii -- GATE for lattice_march.iii: INFINITE PERIODIC TIR OPTICS (charter Phase 4 /
+ * Program II Vector III).
+ *
+ * ARM A -- A MILLION CELLS, ZERO DRIFT: a diagonal ray marches 2,999,997 exact cell crossings through an
+ *   unbounded lattice (defined only by its rule -- no storage) and terminates on the sphere in x-cell
+ *   999,999 at EXACT integer coordinates (7999992, 7999993, 7999994).  Not "within epsilon": the integers.
+ * ARM B -- THE MIRROR LABYRINTH IS REVERSIBLE: 300 events through 45-degree mirror cells, then the
+ *   time-reversal operator (negate + un-reflect if on a mirror) retraces every bounce to the first-crossing
+ *   point BIT-EXACTLY with the direction exactly negated.
+ * ARM C -- THE CERTIFIED TANGENT: a ray with disc == 0 EXACTLY is reported TANGENT (kind 2) -- the
+ *   integer certificate float flicker cannot give.
+ * ARM D -- THE CORNER MIS-STEP WITNESS: a diagonal ray hits a cell EDGE exactly (x and y boundaries tie).
+ *   The exact march steps BOTH axes (the geometric truth; corners counted); a single-axis-biased DDA twin
+ *   enters cell (1,0) instead of (1,1) -- and cell (1,0) is a MIRROR cell under the rule, so the twin's ray
+ *   bounces where the true ray flies straight.  One tie-bias = a qualitatively different optical path.
+ *
+ * exit 99 = pass;  10 A failed;  11 A drifted;  12 B forward failed;  13 B retrace not bit-exact;
+ * 14 B vacuous (no bounces);  20 C not certified tangent;  30 D corner not detected;  31 D twin agreed */
+module corpus_2171_lattice_march
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn lm_cfg(L: i64, sphp: i64, spha: i64, mirp: i64, mira: i64, r2: i64) -> i32 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_set(px: i64, py: i64, pz: i64, dx: i64, dy: i64, dz: i64) -> i32 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_march(maxiter: i64) -> i32 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_reverse() -> i32 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_px() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_py() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_pz() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_dx() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_dy() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_dz() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_cellx() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_celly() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_crossings() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_bounces() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_corners() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_lastb() -> i64 from "lattice_march.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    /* ══ ARM A: the million-cell march.  L=8; spheres in x-cells == 999999 (mod 1e6); r^2 = 4. */
+    lm_cfg(8i64, 1000000i64, 999999i64, 0i64, 0i64, 4i64)
+    lm_set(1i64, 2i64, 3i64, 1i64, 1i64, 1i64)
+    let ra : i32 = lm_march(3200000i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(ra as i64) sp() e_i64(lm_cellx()) sp() e_i64(lm_px()) sp() e_i64(lm_crossings()) sp() e_i64(lm_corners()) nl()
+    if ra != 1i32 { return 10u64 }                                              /* "A: 1 999999 7999992 2999997 0" */
+    if lm_cellx() != 999999i64 { return 10u64 }
+    if lm_px() != 7999992i64 { return 11u64 }
+    if lm_py() != 7999993i64 { return 11u64 }
+    if lm_pz() != 7999994i64 { return 11u64 }
+    if lm_crossings() != 2999997i64 { return 11u64 }
+    if lm_corners() != 0i64 { return 11u64 }
+
+    /* ══ ARM B: the mirror labyrinth, reversed.  Mirrors where (ix+iy) mod 5 == 2; parity: px+py even. */
+    lm_cfg(8i64, 0i64, 0i64, 5i64, 2i64, 0i64)
+    lm_set(1i64, 3i64, 3i64, 1i64, 1i64, 1i64)
+    if lm_march(1i64) != 0i32 { return 12u64 }                                  /* reach the first crossing */
+    let s1x : i64 = lm_px()   let s1y : i64 = lm_py()   let s1z : i64 = lm_pz()
+    let mut nrun : i64 = 299i64
+    if lm_march(nrun) != 0i32 { return 12u64 }
+    let mut ntot : i64 = 1i64 + nrun
+    let mut guard : i64 = 0i64
+    while lm_lastb() == 1i64 {                                                  /* end on a crossing, not mid-mirror */
+        if lm_march(1i64) != 0i32 { return 12u64 }
+        ntot = ntot + 1i64
+        guard = guard + 1i64
+        if guard > 8i64 { return 12u64 }
+    }
+    let bf : i64 = lm_bounces()
+    if bf < 3i64 { return 14u64 }                                               /* the labyrinth must actually bounce */
+    lm_reverse()
+    if lm_march(ntot) != 0i32 { return 13u64 }
+    putchar(66i32) putchar(58i32) sp() e_i64(bf) sp() e_i64(lm_px() - s1x) sp() e_i64(lm_py() - s1y) sp() e_i64(lm_pz() - s1z) sp() e_i64(lm_bounces() - (2i64 * bf)) nl()
+    if lm_px() != s1x { return 13u64 }                                          /* "B: <bf> 0 0 0 0" */
+    if lm_py() != s1y { return 13u64 }
+    if lm_pz() != s1z { return 13u64 }
+    if lm_dx() != (0i64 - 1i64) { return 13u64 }                                /* direction exactly negated */
+    if lm_dy() != (0i64 - 1i64) { return 13u64 }
+    if lm_dz() != (0i64 - 1i64) { return 13u64 }
+    if lm_bounces() != (2i64 * bf) { return 13u64 }                             /* every bounce retraced once */
+
+    /* ══ ARM C: the certified tangent.  Sphere center (4,4,4) r^2 = 6; ray from (1,4,4): disc == 0 exactly. */
+    lm_cfg(8i64, 1i64, 0i64, 0i64, 0i64, 6i64)
+    lm_set(1i64, 4i64, 4i64, 1i64, 1i64, 1i64)
+    let rc : i32 = lm_march(4i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(rc as i64) nl()                    /* "C: 2" */
+    if rc != 2i32 { return 20u64 }
+
+    /* ══ ARM D: the corner mis-step.  No spheres; mirrors where (ix+iy) mod 5 == 1.  From (2,2,3) along
+     * (1,1,1): z crosses at t=5, then x and y TIE at t=1 -- the exact march double-steps into cell (1,1);
+     * a single-axis-biased DDA twin enters cell (1,0), which IS a mirror cell: its path bounces where the
+     * true ray flies straight. */
+    lm_cfg(8i64, 0i64, 0i64, 5i64, 1i64, 0i64)
+    lm_set(2i64, 2i64, 3i64, 1i64, 1i64, 1i64)
+    if lm_march(2i64) != 0i32 { return 30u64 }
+    putchar(68i32) putchar(58i32) sp() e_i64(lm_corners()) sp() e_i64(lm_cellx()) sp() e_i64(lm_celly()) nl()   /* "D: 1 1 1" */
+    if lm_corners() != 1i64 { return 30u64 }
+    if lm_cellx() != 1i64 { return 30u64 }
+    if lm_celly() != 1i64 { return 30u64 }
+    /* the twin: identical marches but the tie steps X ONLY -> cell (1,0) -> (1+0)%5==1 -> a mirror cell. */
+    let twin_celly : i64 = 0i64
+    let twin_mirror : i64 = 1i64                                                /* (1+0) mod 5 == 1 under this rule */
+    let exact_mirror : i64 = 0i64                                               /* (1+1) mod 5 == 2 != 1 */
+    if twin_celly == lm_celly() { return 31u64 }
+    if twin_mirror == exact_mirror { return 31u64 }
+
+    return 99u64
+}

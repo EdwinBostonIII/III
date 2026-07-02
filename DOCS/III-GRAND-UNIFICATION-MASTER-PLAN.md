@@ -460,7 +460,7 @@ DDC-witnessed; nothing else trusted.
 
 ## 9. The no-concession doctrine (how "10,000 breakthroughs before a concession" executes)
 Every phase decomposes into many gated increments (the opcode AIRs alone are ~10 in Ω1; the `iiisv` constructs
-~6 in Ω2; the proof/format/checker ~3 in Ω3). Each increment is a falsifiable breakthrough: a thing that did not
+~6 in Ω2; the proof/format/checker ~3 in Ω3). Each increment is a falsifiable step: a thing that did not
 exist, now proven by a RED→GREEN gate with a rejecting negative arm. The discipline is not rhetorical — it is the
 ledger: **count landed gates, not intentions.** A concession would be: stubbing an opcode AIR, down-scoping R0 to
 a toy, trusting XII's internal assertion, or accepting a non-reproducible binary. None are permitted; each has a
@@ -480,4 +480,4 @@ every item here is verifiable.
 
 **The first concrete move when execution begins:** Ω1-T1 — `zk_svir_sub` and `zk_svir_bitops`, each gated to 99
 with a forged-carry negative arm, extending the per-opcode AIR set toward full-ISA coverage. RED test first
-(the opcode has no AIR), then the gadget, then GREEN + the rejecting negative. One breakthrough, measured.
+(the opcode has no AIR), then the gadget, then GREEN + the rejecting negative. One increment, measured.

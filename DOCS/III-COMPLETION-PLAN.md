@@ -2,7 +2,7 @@
 
 **Authored 2026-06-24, against the LIVE tree (every claim below was *run*, not relayed).**
 Discipline: the theorem-to-machine obligation — no claim without a runnable realization and a falsifier;
-calibrated verdicts (PROVEN-IN-CODE / STATED-NOT-DISCHARGED / DECORATIVE); no demos, no placeholders, no
+calibrated verdicts (VERIFIED-IN-CODE / STATED-NOT-DISCHARGED / DECORATIVE); no demos, no placeholders, no
 deferrals. Completion = every residual closed, every program independently functional and gated, nothing
 that only "works in a script."
 
@@ -12,11 +12,11 @@ that only "works in a script."
 
 | Claim | How verified (this session) | Verdict |
 |-------|------------------------------|---------|
-| Grand Unification realized end-to-end | **ran `run_grand_unification.sh` → GU_EXIT=0**; Ω.a/d+Ω.b+F2+Ω.e+Ω.f+Ω.g+Ω7 all PASS with adversary arms | **PROVEN-IN-CODE** (honest scope below) |
-| Frontend DDC closed | **ran `run_ddc.sh` → rc=0**; iiisv≡iiisv2 byte-identical (toolchain 1403B / ops 934B / bignum 2901B), verifier-OK, x86+wasm=99 | **PROVEN-IN-CODE** |
-| Committed GF(p⁴) zkVM (~2^-86) | Ω.e PASS inside GU (committed FRI + line-755 STARK + fused compute+memory+control, Merkle-bound, forged-LOAD/non-perm/forged-opening/corrupted-root all reject) | **PROVEN-IN-CODE** at the NQ knob (NQ=128⇒~2^-86; NQ=16 units are mechanism tests) |
-| Trust anchor exists + total ISA | `svir_verify.iii` 80 lines, opcodes 0x01–0x89 (CONST/LOCAL/binops/control/CALL/DROP/typed-mem) | **PROVEN-IN-CODE** |
-| Trust-closed toolchain artifact | `STDLIB/build/iii/libiii_native.a` present; `COMPILED/iiis-2.exe` present (the self-hosted compiler) | **PROVEN-IN-CODE** |
+| Grand Unification realized end-to-end | **ran `run_grand_unification.sh` → GU_EXIT=0**; Ω.a/d+Ω.b+F2+Ω.e+Ω.f+Ω.g+Ω7 all PASS with adversary arms | **VERIFIED-IN-CODE** (honest scope below) |
+| Frontend DDC closed | **ran `run_ddc.sh` → rc=0**; iiisv≡iiisv2 byte-identical (toolchain 1403B / ops 934B / bignum 2901B), verifier-OK, x86+wasm=99 | **VERIFIED-IN-CODE** |
+| Committed GF(p⁴) zkVM (~2^-86) | Ω.e PASS inside GU (committed FRI + line-755 STARK + fused compute+memory+control, Merkle-bound, forged-LOAD/non-perm/forged-opening/corrupted-root all reject) | **VERIFIED-IN-CODE** at the NQ knob (NQ=128⇒~2^-86; NQ=16 units are mechanism tests) |
+| Trust anchor exists + total ISA | `svir_verify.iii` 80 lines, opcodes 0x01–0x89 (CONST/LOCAL/binops/control/CALL/DROP/typed-mem) | **VERIFIED-IN-CODE** |
+| Trust-closed toolchain artifact | `STDLIB/build/iii/libiii_native.a` present; `COMPILED/iiis-2.exe` present (the self-hosted compiler) | **VERIFIED-IN-CODE** |
 | Module corpus scale | 2730 `.iii` in STDLIB (eidos 18, aether 70, omnia 159, numera 296, sovir 72 + build/corpus) | survey fact |
 
 **HONEST SCOPE the GU gate states about itself (not hidden):**

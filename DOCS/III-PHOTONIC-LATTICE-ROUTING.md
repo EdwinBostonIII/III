@@ -55,7 +55,7 @@ avoidable loss by mis-ranking a near-tie. (Not literally zero photon loss — ph
 5. **FALSIFIER (teeth).** Mutate a bulk amount → Arm BULK → exit 10; break the near-tie sign / remove the straddle →
    Arm ZERO-LOSS → exit 20; corrupt the detour amounts / comparator / reachability guard → Arm DETOUR → exit 30.
    **Demonstrated:** mutating the detour expectation `7→6` on a scratch copy reddened the gate to **exit 30**.
-6. **VERDICT: PROVEN-IN-CODE** within scope (cubic king-move lattice; per-piece exactness unconditional; global splice
+6. **VERDICT: VERIFIED-IN-CODE** within scope (cubic king-move lattice; per-piece exactness unconditional; global splice
    stated as hypothesis, not claimed).
 
 ## Adversarial verdict — SURVIVES (high) within scope

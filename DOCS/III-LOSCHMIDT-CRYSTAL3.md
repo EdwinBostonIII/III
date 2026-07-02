@@ -10,12 +10,12 @@ The Loschmidt gedanken, run exactly: `F^n · R · F^n · R` from the post-event-
 2433-gated involution protocol — R re-applies the last response, so its fixed point is a
 post-event state).
 
-- **Perfect echo**: defect 0, bit for bit (theorem arm).
+- **Perfect echo**: defect 0, bit for bit (identity arm — gated).
 - **Imperfect reversal** = R followed by ONE momentum quantum (`gs_kick`, its own inverse under
-  composition — the kick-unkick arm returns defect 0, also a theorem). At n = 7 the echo defect
+  composition — the kick-unkick arm returns defect 0, gated as an exact identity). At n = 7 the echo defect
   is an EXACT integer observable: 3 velocity slots, Σ|Δv| = 17, 4 position slots, and an energy
   shift of exactly 7 = 2v+1 with v = 3 — the kick's energy identity.
-- **The depth table** (n = 5, 7, 9 → defects (2,7), (3,17), (1,1)): the machine CONFIRMS the
+- **The depth table** (n = 5, 7, 9 → defects (2,7), (3,17), (1,1)): the gate pins the
   2189 adjudication live — the n = 9 defect is SMALLER than the n = 5 defect. Separation in a
   bounded exact gas FLUCTUATES; the gate pins values and would redden on any smuggled exponent.
 - **The KS adjudication**: Kolmogorov-Sinai entropy is an asymptotic, measure-theoretic limit —
@@ -33,7 +33,7 @@ the cavity or an aperture opening it. State: each axis a rank-4 ℚ(√2,√3) s
 den; every face-ordering decision one `q23_sign` query; certificates consumed from photon3's
 closure constants (TIR margins +2/+6, Snell residues 0).
 
-Machine-found results, all pinned over 300 certified events:
+Results (authored test arms; every value pinned over 300 certified events):
 
 - **The axis-stratified rank bound** (the 3D escalation of 2194's subring theorem): the
   TRANSVERSE axes never form √3 — their reachable ring is rank-3 {1, √2, √6} — while the
@@ -53,8 +53,8 @@ Machine-found results, all pinned over 300 certified events:
 - **The tie discovery**: equal transverse speeds make exact corner re-alignment STRUCTURAL
   (u−v is invariant under the shared clock — every config tied within ≤46 events, certified and
   refused). Incommensurate integer speeds (|sx| ≠ |sy| from {1,2,3}, which preserves the {2,3}
-  den support) dissolve it: 400+ events tie-free. The machine found the wall; the geometry
-  answered it.
+  den support) dissolve it: 400+ events tie-free. The equal-speed wall surfaced in testing;
+  the incommensurate-speed redesign dissolves it — both arms gated.
 
 Envelopes: gas echo within the i64 ensemble (~12 events/leg); crystal3 i64 slots under guards,
 2048-event log; charted v2 = the bigint crystal and deeper echoes on gas_big with a g2 kick verb.

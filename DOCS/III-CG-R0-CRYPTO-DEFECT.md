@@ -40,7 +40,7 @@ Isolation ladder (all via `--ring R0` vs default, XOR-fold differential):
 So: a classic spill defect — cg_r0's allocator mishandles the spill set once the round's live u32 count crosses
 its threshold. The fix is in `COMPILER/BOOT/cg_r0.iii` (register allocation / spill), golden-moving (reseal).
 
-## Why it stayed invisible — and the structural fix (the breakthrough)
+## Why it stayed invisible — and the structural fix
 
 `cg_r0` is **ungated**: `build_iiis2 --check-corpus` (59/0) and `run_corpus` exercise ONLY the default backend
 (cg_r3 / stage1). Nothing ever compiled through `--ring R0` and checked the output. The KATABASIS gate's verdicts

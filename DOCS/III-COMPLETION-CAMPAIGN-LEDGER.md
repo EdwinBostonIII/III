@@ -17,11 +17,11 @@ grade; auto-continue until explicitly told to stop. Skills in play: /architect,
 - Working tree: `COMPILER/BOOT` ~105 *semantic* lines changed (rest CRLF churn); compiler
   rebuilt today → likely at a clean fixed point but reseal-attribution is muddied.
 
-## Independence proofs (drive III alone) — Phase 1
-- **#1 TOOLCHAIN — PROVEN.** `iiis-2` compiles AND links a pure III program into a runnable
+## Independence verifications (drive III alone) — Phase 1
+- **#1 TOOLCHAIN — VERIFIED.** `iiis-2` compiles AND links a pure III program into a runnable
   53 KB PE by itself (no gcc; its own `link.iii`). Direct path == two-step `--link`,
   **byte-identical** (`07357f2a…`) → deterministic. Runs → 99 (Gauss 4950, Collatz(27)=111).
-- **#2 STDLIB LINK — PROVEN (with honest boundary).** `iiis-2 --link obj lib.a` resolves
+- **#2 STDLIB LINK — VERIFIED (with honest boundary).** `iiis-2 --link obj lib.a` resolves
   stdlib symbols and runs (trit selftest → 99). NOTE: III's general `--link` **orchestrates
   the system `ld` (mingw) backend** — III owns lex→parse→sema→codegen→assemble + a freestanding
   PE emitter (kernel `.sys`), with the standard system-linker boundary for hosted exes. Honest.
@@ -38,7 +38,7 @@ grade; auto-continue until explicitly told to stop. Skills in play: /architect,
     Faculties use module-scope static scratch (determinism discipline); you can't statically
     aggregate every heavy organ into one image. Prove heavy organs solo / in light batches.
 
-## Function-visibility — the real breakthrough behind Finding A (RECORDED, deliberate)
+## Function-visibility — the codegen root cause behind Finding A (RECORDED, deliberate)
 III's codegen ALREADY has the machinery: `r3_emit_fn_symbol(off,len,export)` →
 raw global if export, local label if not; `r3_decl_is_exported` reads `@export`; selftests
 ARE `@export`'d; 3547 `@export` fns vs 1904 plain. The intended model is `@export`=public/global,
@@ -72,7 +72,7 @@ hexad_mobius, unify, crystal_seal, observatory, quota, membrane_cap + Harmony In
 (and h1..h13_selftest ALL exist). NEXT: map the exact done/remaining frontier vs the master doc +
 module plans, then close any genuine gaps to project completion.
 
-## ✅ COMPREHENSIVE CAPABILITY PROOF — III does everything by its own hand
+## ✅ COMPREHENSIVE CAPABILITY VERIFICATION — III does everything by its own hand
 - **Full corpus GREEN: `PASS=708 FAIL=0 SKIP=99`** (the harness runs silently then prints the
   summary — it was never dead, just slow). 708 III programs, compiled by III, all pass. SKIP=99 =
   heavy-BSS tests needing >1 GB commit (environmental, per memory; not failures).
@@ -86,14 +86,14 @@ module plans, then close any genuine gaps to project completion.
 ## ✅ sf_field falsifier closed (1034) + 11 gating-gap KATs (1035-1045)
 - `sf_field_selftest` added to ntt_fri_organ: 64-element field-axiom walk (add/mul commutativity,
   distributivity, Fermat inverse, additive inverse, a^(q-1)=1) + the load-bearing PRIMITIVE-root
-  property ω_n^(n/2)=q-1≠1 (order exactly n) for n=2..2^20. **Controlled-break PROVEN:** wrong
+  property ω_n^(n/2)=q-1≠1 (order exactly n) for n=2..2^20. **Controlled-break VERIFIED:** wrong
   inverse exponent (q-3) → exit 5 (Fermat arm bites); real source → 99. Corpus `1034_sf_field`.
 - Found 12 selftests ungated by any corpus KAT; 11 are `@export` (gateable), 1 internal. All 11
   pass (BLS12-381 tower Fp/Fp2/Fp6/Fp12/G1/G2/EC/fexp + curryh_kat + typecheck + zk_air_fs).
   Added dedicated KATs `1035-1045` (granular pairing-tower diagnostics). 11/11 gate green vs the
   current lib; 1034 gates after the lib rebuild. Registered in run_corpus EXPECTED.
 
-## Visibility breakthrough — DOWNGRADED to code-quality (bug already fixed)
+## Visibility codegen change — DOWNGRADED to code-quality (bug already fixed)
 The dup-symbol class is fully fixed by the sf_* consolidation + pr_pack rename (0 dups stdlib-wide).
 The `priv fn`/non-@export-→-local codegen change would only further clean the namespace (1904
 private helpers leave the global table) — now a pure encapsulation nicety, NOT a correctness fix.
@@ -125,7 +125,7 @@ edit — the documented byte-offset hazard; re-run after the rebuild below).
 faculties — content-address (SHA-256) → Merkle commitment → Ed25519 keypair+sign → verify →
 Merkle inclusion proof → content-address receipt seal — **exit 99**, III-built, only libc at the
 boundary. Three forgery-detection negative arms all bite (tampered sig rejected, tampered leaf
-breaks the proof, edited doc changes its address). The strongest "III alone DOES everything" proof.
+breaks the proof, edited doc changes its address). The strongest "III alone DOES everything" demonstration.
 
 ## ✅ Production hardening — ed25519 signing footgun fixed (surfaced by the integration demo)
 The notary demo surfaced it: `ed25519_sign(seed, pk, ...)` and `ed25519_sign_c4` both READ pk as
@@ -194,14 +194,14 @@ other golden-moves land on a clean tree, each reseal-gated. Forcing them on the 
 the staging) risks the trust root — exactly what the determinism/CRASH-PROTOCOL discipline forbids.
 
 ## CAMPAIGN STATE (honest): the in-environment-completable scope is DONE; the rest is owner-WIP / metal / irreducible
-PROVEN: full corpus 721/0 + 4 independence proofs (toolchain self-link byte-deterministic, self-hosting at
+VERIFIED: full corpus 721/0 + 4 independence demonstrations (toolchain self-link byte-deterministic, self-hosting at
 31 .iii compiler modules, every-faculty capability, real integrated notary app) + byte-determinism.
 FIXED+LOCKED: sf_* collision (consolidated+falsifier 1034), ed25519 footgun (sign_seed+1046), 11 ungated
 faculty falsifiers (1035-1045) — all in the lib (mhash 92225b27), 721/0, zero regression.
 VALIDATED-but-blocked: visibility codegen (correct; needs clean tree). DONE: CP-1 (source+binary; metal=operator).
 BLOCKED-on-owner-WIP: visibility/emit_generic/sid. IRREDUCIBLE: @sovereign boundary + route-through-XII migrations.
 
-## ✅✅✅ VISIBILITY CODEGEN BREAKTHROUGH — LANDED + RESEALED (user-authorized 2026-06-03)
+## ✅✅✅ VISIBILITY CODEGEN — LANDED + RESEALED (user-authorized 2026-06-03)
 The function-visibility codegen is DONE end-to-end on a clean, deterministic, reseal-gated tree:
 - **WIP resolved (the forced, unambiguous fixes):** build_iiis1.sh PORTED += lex_rt/cg_sha/affine_audit
   (the .iii-only TUs the WIP moved out of lex but never wired into iiis-1) + excluded the rm2_driver.c
@@ -216,13 +216,13 @@ The function-visibility codegen is DONE end-to-end on a clean, deterministic, re
   blast radius = 0 (cross-TU API already @export'd); C↔III couplings = 0 (rm2 excluded, no others);
   **drivers UNAFFECTED** (cg_r0/Ring-0 has its own emission — DriverEntry/L_p_* still global; the change is
   cleanly Ring-3-scoped).
-- **Determinism PROVEN:** full chain run-A == run-B (iiis-0 `105d6f78`, iiis-1 `01e25274`, iiis-2 `8b205524`).
+- **Determinism VERIFIED (run-A == run-B byte-identical):** full chain (iiis-0 `105d6f78`, iiis-1 `01e25274`, iiis-2 `8b205524`).
   (An apparent drift was an artifact of running build_iiis2 alone vs a transient iiis-1; the full chain is
   bit-stable.) **Trust-root goldens RESEALED** to the deterministic values (iiis-0 hash+filename format /
   iiis-1 + iiis-2 just-hash format per each checker); build_iiis0/iiis1 `verify: OK`.
 - **Stdlib:** rebuilt GATE PASS, 452/0, lib `a4f846d9` (deterministic). Final corpus validating.
-This is a genuine language-level breakthrough: III now has working function visibility (implicit-public →
-explicit-@export-public + module-private), closing the dup-symbol collision class permanently at the source.
+This is a language-level capability change, landed and gate-verified: III now has working function visibility
+(implicit-public → explicit-@export-public + module-private), closing the dup-symbol collision class at the source.
 **Verified in the resealed lib: ZERO duplicate globals** (the 7-symbol class structurally gone); private
 fns are local (zk_stark: 6 @export-global + the rest dropped from the symbol table — the global namespace
 is now exactly the @export public API).

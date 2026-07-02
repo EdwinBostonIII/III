@@ -81,7 +81,7 @@ This is fully responsive: the prompt's failure mode ("vertices miss each other")
    tier ⟹ tier-coverage guard ⟹ exit 60. Break a tangency inequality ⟹ Arm D ⟹ exit 30. Corrupt the corner ⟹ Arm E
    squares-back fails ⟹ exit 40. A predicate that straddles like fixed precision ⟹ Arm B ⟹ exit 20. All are distinct
    REDs; the real run returns 99 (every arm green).
-6. **VERDICT: PROVEN-IN-CODE** (within the stated scope). The "unshatterable" claim is the scoped one (no float-artifact
+6. **VERDICT: VERIFIED-IN-CODE** (within the stated scope). The "unshatterable" claim is the scoped one (no float-artifact
    non-manifold; genuine degeneracies flagged) — explicitly **not** "always manifold".
 
 ## Adversarial verdict — SURVIVES (high) within scope

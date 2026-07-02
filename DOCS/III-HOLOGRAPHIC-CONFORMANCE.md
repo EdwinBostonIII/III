@@ -13,7 +13,7 @@ boundary** between what is PROVEN and what the framing overclaims.
 > KAT. It is real and verified; it bears no system load yet. The genuinely load-bearing thread remains the ccsv
 > Φ1 trust floor (verify-fails 183→66, `DOCS/III-SEED-FLOOR-PROGRESS.md`) — this capability does not advance it.
 
-## What was built (PROVEN-IN-CODE)
+## What was built (VERIFIED-IN-CODE)
 
 `ser_antiunify.iii: au_conform_bound(base, boff, blen, accum, acc0, bound) -> {OK|VIOL|DEFER}` + accessors
 `au_conform_iter()` (breach iteration), `au_conform_witness()` (bit-level breaking state), `au_conform_delta()`.

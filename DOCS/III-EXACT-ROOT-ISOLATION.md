@@ -47,7 +47,7 @@ the "untested load-bearing path" pattern.)*
    `W: 2 0 2` · `I: 4` · `Q: -1 1` · `D: 2`.
 5. **FALSIFIER (teeth).** Witness assertion flip → exit 10; **removing the sign correction → DEFECTIVE arm exit 60**
    (demonstrated: `x⁴+x−1` counts 2 with the correction, 0 without); isolate/count/sqfree mutations → 30/20/50.
-6. **VERDICT: PROVEN-IN-CODE** within scope (squarefree, degree ≤7, i64 envelope; bigint tier noted).
+6. **VERDICT: VERIFIED-IN-CODE** within scope (squarefree, degree ≤7, i64 envelope; bigint tier noted).
 
 ## Adversarial verdict — SURVIVES (high) within scope
 

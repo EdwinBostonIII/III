@@ -50,7 +50,7 @@ all missed — direction only shows up when you check an actual rotated *positio
    `C: 2400 1` · `R: 1 1` · `S: 1 24` · `D: 1 1 1084841445 -2972076`.
 5. **FALSIFIER (teeth).** Mutate the sin sign / product table → closure breaks (`so3_is_ident=0`) → exit 10; mutate the
    reach ordering → exit 20; mutate the screw target → exit 30. **Demonstrated:** `mech_zpos 24→25` → **exit 30**.
-6. **VERDICT: PROVEN-IN-CODE** within scope (cyclotomic, integer-multiple-of-15° angles). A transcendental angle has an
+6. **VERDICT: VERIFIED-IN-CODE** within scope (cyclotomic, integer-multiple-of-15° angles). A transcendental angle has an
    undecidable zero-test (Richardson) — explicitly out of scope, never faked.
 
 ## Adversarial verdict — SURVIVES (high) within scope

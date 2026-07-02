@@ -18,7 +18,7 @@ defer, no placeholder, no NIH breach, no compromise. The doc is actively appende
   flagged 103 "gaps"; re-verification shows **every §S item it flagged is already DONE** (often done
   *better* than spec, with audit tags + ADRs). Treat it as a where-to-look guide only; live code is truth.
 - **q_generic precedent:** a spec blocked by a real language limit + with **no live consumer** is a
-  verified ADR-skip (not bloat-build). const-generic `@specialize` tracked as a deferred breakthrough that
+  verified ADR-skip (not bloat-build). const-generic `@specialize` tracked as a deferred enhancement that
   graduates if fixed-width-int consumers accumulate.
 - **Lift-don't-weaken:** when consolidating onto a shared organ, never route a stronger caller to a weaker
   organ (e.g. RSA's allocation-free raw-buffer path); lift its strength into the organ (done for §S.2.6).
@@ -943,7 +943,7 @@ by construction). No dedicated structural gate exists for H3 (glyph-routing) —
 
 ## ✅ FRONTIER RE-ADJUDICATED on the user's "if emit_generic & SHA-NI are worth it, implement in fullness" (2026-06-04)
 The user challenged the two receipts. Re-evaluated BOTH with evidence:
-- **emit_generic — PROVEN not worth it (evidence, not a dodge).** Diffed the shared-name cg_r0/cg_r3 function BODIES:
+- **emit_generic — SHOWN not worth it by the diff evidence (not a dodge).** Diffed the shared-name cg_r0/cg_r3 function BODIES:
   `emit_bytes` 58, `emit_dec` 54, `push_rax` 68, `emit_movabs_rax` 59 DIFFERING lines. cg_r0 (Ring-0, 8-byte-uniform)
   and cg_r3 (Ring-3, width-aware) are genuinely DISTINCT backends, not redundancy. A parametric merge threads
   `ring_config` through dozens of fns → a LESS-readable system → a COMPROMISE. "No compromise" forbids shipping worse
@@ -979,7 +979,7 @@ standing rules (not soft blocks), each the operator's to lift or perform:
   my MODEL of the .v == my model of the software (the translation faithfulness is itself unverified → infinite regress)
   = ILLUSORY verification, refused. Real RTL equivalence needs iverilog/yosys/z3 (absent; installing = the forbidden
   rigging). q_generic-caliber verified-skip.
-- **emit_generic — PROVEN a compromise (worse code).** Building it violates "no compromise"; not a block, a principled
+- **emit_generic — SHOWN a compromise by the body-diff evidence (worse code).** Building it violates "no compromise"; not a block, a principled
   refusal with the body-diff receipt.
 - **self-optimizer live-wiring** — the operator's ACTIVE domain (committing `bd3bad6`; editing cg_r0/lex/keccak/xii_term
   right now). Touching it = clobbering live WIP.
@@ -1070,7 +1070,7 @@ the archive-layout change did not perturb referenced members; iiis-2==iiis-3==`8
 
 ---
 
-**⟶ STRENGTH-REDUCTION SCHEMA PROVEN 2026-06-04(d) — proof-carrying optimization, the uniquely-III headline (lib `4d302356`).**
+**⟶ STRENGTH-REDUCTION SCHEMA CERTIFIED 2026-06-04(d) — proof-carrying optimization (kernel-checked terms) (lib `4d302356`).**
 Building on the K5 tower, III's CIC kernel now PROVES its own canonical strength reduction for a SYMBOLIC
 exponent: **`Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), itd(x, k))`** — i.e. `mul(x, 2^k) == double^k(x)`,
 "multiplying by a power of two equals k repeated doublings." This is the exact rewrite the sov_isa "Path C"

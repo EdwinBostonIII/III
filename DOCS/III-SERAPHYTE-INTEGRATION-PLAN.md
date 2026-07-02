@@ -391,7 +391,7 @@ gates that redden under the mutation — the theorem is not decorative.
 
 **RUNG 6 — VERDICT.** `STATED-NOT-DISCHARGED` *until* `ser_membrane_admit()` is built and H3's kernel
 soundness is acknowledged as the bootstrap-fixpoint assumption (it is honestly **not** proven inside the
-system — Gödelian limit, the spec's **M8**). The *sieve* (`cg_autocatalyst`) is **PROVEN-IN-CODE today**
+system — Gödelian limit, the spec's **M8**). The *sieve* (`cg_autocatalyst`) is **VERIFIED-IN-CODE today**
 for the identity-registry case (`cga_all_true` is a live soundness gate). The full organism-level theorem
 is `STATED-NOT-DISCHARGED` pending §5–§9. **This calibration is the honest verdict; do not upgrade it
 without the build + the discharge checks.**

@@ -112,7 +112,7 @@ A standard KAT validates the destination; for a substrate whose value is geometr
 
 ## 5. THE SETTLED FORKS
 
-- **FORM:** woven instrumentation / **encapsulation** (the real faculty emits; the twin is the fold) — *not* parallel reimplementation. The breakthrough that ends failures #2–#4.
+- **FORM:** woven instrumentation / **encapsulation** (the real faculty emits; the twin is the fold) — *not* parallel reimplementation. The change that ends failures #2–#4.
 - **SCOPE:** vertical slice first (one real citizen end-to-end) then replicate — executed as the user's phased blueprint (Phase 0 bedrock → Phase 1 XII → …).
 - **LOGOS:** harvest the uniform-block recognition *idea* into the event form (Phase 2–3); `logos.iii` + `1912` retired as a state-primary island (its De Morgan content is `numera/logic6.iii`; its general absorption engine re-expressed in the inverse form). *Not yet executed — Phase 2/3.*
 

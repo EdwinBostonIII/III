@@ -1,9 +1,9 @@
 # III EIDOS — Bootstrap Blocker: gcc-15.2.0 exposes a latent C-seed memory bug
 
-**Status:** the e-graph breakthrough is complete and verified; the FULL bootstrap rebuild (which recompiles
+**Status:** the e-graph work is complete and verified; the FULL bootstrap rebuild (which recompiles
 the hand-written C seed `iiis-0`) is blocked by a toolchain-exposed latent bug — **not** by the e-graph work.
 
-## What is proven (the breakthrough)
+## What is proven (the change; each item proof-gated as stated)
 - `cg_r3.iii` + `ser_egraph.iii`: the e-graph DRIVES cg_r3's mul-by-constant lowering (proof-gated by bv_ring),
   plus **magic-number division** (`seg_div_plan`, Granlund-Montgomery-bound-proven for all x).
 - KAT `2062` (mul plan) and `2063` (magic div) pre-flight to **99** (forms classified + proven + executed).

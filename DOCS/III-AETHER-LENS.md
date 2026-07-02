@@ -61,7 +61,7 @@ no colour; its brightness is *computed* as the material's exact reaction to the 
   `16·1999992 = 31999872 > 5656² = 31990336`). Mutating the depth predicate to any float/fixed comparison reddens the
   gate. The tier-coverage guard (`f 19  x 4`) proves both the fast i64 path and the exact bigint path were traversed
   (the integer hit/miss arms never enter the surd engine — non-tautological).
-- **RUNG 6 — verdict.** **PROVEN-IN-CODE.** `run_aether_lens_kats.sh` → `PASS 2155` (exit 99) and `PASS 2158` (exit 99).
+- **RUNG 6 — verdict.** **VERIFIED-IN-CODE.** `run_aether_lens_kats.sh` → `PASS 2155` (exit 99) and `PASS 2158` (exit 99).
 
 Adversarial verification (soundness): **SURVIVES (high)** — the unstated `a>0` hypothesis is stated *and* enforced;
 overflow escalates to bigint (exact path) or degrades to a dark pixel (fast path, no crash); the negative arms

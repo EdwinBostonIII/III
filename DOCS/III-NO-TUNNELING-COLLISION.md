@@ -51,7 +51,7 @@ consumer of `cyclotomic_se3`** — it collides the *exact rotated tool point* (`
    Observables: `T: 1 1 1` (endpoints clear, segment HIT) · `M: 1 -1` (rotated-point √3 membership).
 5. **FALSIFIER (teeth).** Mutate a case branch / the hit expectation → tunnel arm exit 10; tangent → exit 20; mechanism
    membership → exit 30. **Demonstrated:** `hit 1→0` → **exit 10**.
-6. **VERDICT: PROVEN-IN-CODE** within scope (sphere obstacle, swept point, conservative straight segment, i64 envelope).
+6. **VERDICT: VERIFIED-IN-CODE** within scope (sphere obstacle, swept point, conservative straight segment, i64 envelope).
 
 ## Adversarial verdict — SURVIVES (high) within scope
 

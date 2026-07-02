@@ -294,12 +294,12 @@ I.2 15782000 (2186) bigint output ABI: 2^80-27 DELIVERED as raw limbs, mod-every
     values; raw rows bridge into sturm2 (roots at 10319/10323, no i64 in the object).
 I.3 9c9cdcab (2187) exact moments: 2sqrt2/3 area (certified IRRATIONAL: the anti-mesh theorem);
     RATIONAL first moment from the irrational domain; centroid as integer identity; trapezoid twin
-    wrong by certified sign (the machine corrected the author's sign claim in probe).
+    wrong by certified sign (the probe's certified sign contradicted the author's drafted sign claim; corrected).
 II.1 1bd80694 (2188) deep ensemble: 9999+9999 steps, involution EXACT through 1254 compactions; THE
     COMMUTING-TIE RESOLUTION (disjoint slots => responses commute -- both applied; interacting ties
     refuse) unlocked depth: rational box tied at 475, sqrt2 walls at 2306, the theorem carried 9999.
 II.2 e82b6163 (2189) the shadow: one quantum -> k* = 9 identical responses then the exact split;
-    separations 95/81/63 -- THE MACHINE REFUTED the drafted "strictly growing" (bounded gas conserves
+    separations 95/81/63 -- the exact run's separations CONTRADICTED the author's drafted "strictly growing" (bounded gas conserves
     the velocity multiset up to sign: chaos = permanent decorrelation + different event densities
     3006/3011, never a fitted exponent).
 III 82d4a145 (2190) photon3: Q(sqrt2,sqrt6) closure table (sqrt5 non-closure = the wave-vector
@@ -321,12 +321,12 @@ N-1 e7ec1bfa (2193) rs_elim: bivariate elimination through the FACTORED CRT pipe
     identically-zero common-component detector.  (+ c254ca2e: the surfaced aether_lens_frame WIP arm
     adopted into 2155 -- root-caused, not waved off as the link transient it resembled.)
 N-2 32e4434d (2194) the 2-D crystal: stack x channel on photon3, orderings by q23_sign; THE
-    MACHINE-FOUND SUBRING THEOREM: same-class deposit/consume pairing => sqrt3 never forms -- the
+    SUBRING THEOREM (authored + gated): same-class deposit/consume pairing => sqrt3 never forms -- the
     reachable ring is rank-3 {1, sqrt2, sqrt6}, pinned as an invariant.
 N-3 6976e16c (2195) 10^5 steps: 49999+49999 with involution EXACT through 6269 compactions and 277
     commuting pairs (100275 responses pinned); ~105 s.  (+ 398ef729: the W0.2 z-read arm adopted.)
 N-4 b377573b (2196) bigint moments: the i64 Horner dies mid-flight at 1.35e19 while the reduced
-    answer 2.25e18 fits -- delivered; the machine out-reduced the author's drafted gcd pin.
+    answer 2.25e18 fits -- delivered; the exact reduction beat the author's drafted gcd pin (pin corrected).
 N-5 afe15cff (2197) graze-NAMED translation edges: the swept-parabola minimum IS the trichotomy
     (exact zero at r2=25, +-1600 beside it); sv==0 gated for the first time; arcs needed multiplicity,
     translations read it off one sign -- the structural contrast recorded.

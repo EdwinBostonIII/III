@@ -53,7 +53,7 @@ is *exercised*, not asserted.
    Observables: `F: -1 -1` · `S: 0`.
 5. **FALSIFIER (teeth).** Mutate the determinant/sign → orient arm exit 10; the Cassini expectation → exit 20; incircle →
    30; flip → 40; surd → 50. **Demonstrated:** `Cassini −1 → +1` → **exit 20**.
-6. **VERDICT: PROVEN-IN-CODE** within scope (2D, integer/algebraic coords, i64 envelope, bigint tier noted).
+6. **VERDICT: VERIFIED-IN-CODE** within scope (2D, integer/algebraic coords, i64 envelope, bigint tier noted).
 
 ## Adversarial verdict — SURVIVES (high) within scope
 

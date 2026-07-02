@@ -64,7 +64,7 @@ breaking either oracle makes them disagree (`U: 1 1 1 1 1 0`, exit 40).
    cross-check is not a tautology). **MUT3** — `an_set_iv` mis-scales a loaded interval (hi by the wrong denominator):
    the R arm's `an_valid` check catches that the interval no longer isolates one root and **reddens to exit 50**. Also:
    witness flip → 10/20/30/40/50 per arm.
-6. **VERDICT: PROVEN-IN-CODE** within scope. Three independent falsifiers redden real gates; three discharge sites
+6. **VERDICT: VERIFIED-IN-CODE** within scope. Three independent falsifiers redden real gates; three discharge sites
    verified against the live tree; determinism resealed BIT-IDENTICAL (784).
 
 ## Adversarial verdict — SURVIVES (high) within scope

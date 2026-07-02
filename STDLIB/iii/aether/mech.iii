@@ -1067,6 +1067,130 @@ fn cv_render(a: i64, d: i64, n: i64) -> i32 {
     return 0i32
 }
 
+/* ------------------------------------------------ path synthesis (exact bounded search) ------- */
+/* the certified coupler-point box for ONE candidate mechanism at ONE crank angle, standalone
+ * (no per-pose caches). Returns 1 if the pose is reachable (box filled), 0 otherwise. */
+var SYNPXL : i64   var SYNPXH : i64   var SYNPYL : i64   var SYNPYH : i64
+fn syn_box(a: i64, b: i64, c: i64, d: i64, k: i64, un: i64, ud: i64, vn: i64, vd: i64) -> i32 {
+    MWQUIET = 1i64
+    SWCASE = 1i64
+    sw_pose(k, a, b, c, d)
+    MWQUIET = 0i64
+    if SWCASE < 2i64 { return 0i32 }
+    /* B = elbow-up branch (branch 2) interval */
+    let bxl : i64 = SWX[2u64]   let bxh : i64 = SWX[3u64]
+    let byl : i64 = SWY[2u64]   let byh : i64 = SWY[3u64]
+    /* A(k) = a*(cos,sin), isolate each exact field element to [lo, lo+1] */
+    let tb : i64 = k * 4i64
+    let mut i : i64 = 0i64
+    while i < 4i64 { let cv : i64 = MW24C[tb + i]   MWF4[i] = a * cv   i = i + 1i64 }
+    let axl : i64 = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   let axh : i64 = axl + 1i64
+    i = 0i64
+    while i < 4i64 { let sv : i64 = MW24S[tb + i]   MWF4[i] = a * sv   i = i + 1i64 }
+    let ayl : i64 = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   let ayh : i64 = ayl + 1i64
+    let omu : i64 = ud - un
+    /* Px */
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, axl, axh)
+    cv_term(un, ud, bxl, bxh)
+    cv_term(vn, vd, ayl, ayh)
+    cv_term(0i64 - vn, vd, byl, byh)
+    SYNPXL = CVLO   SYNPXH = CVHI
+    /* Py */
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, ayl, ayh)
+    cv_term(un, ud, byl, byh)
+    cv_term(0i64 - vn, vd, axl, axh)
+    cv_term(vn, vd, bxl, bxh)
+    SYNPYL = CVLO   SYNPYH = CVHI
+    return 1i32
+}
+
+/* exact containment: does the certified box hold the rational target (tn/td)?  (box scaled 1e-4) */
+fn syn_hit(lo: i64, hi: i64, tn: i64, td: i64) -> u8 {
+    /* lo/1e4 <= tn/td <= hi/1e4  <=>  lo*td <= tn*1e4  and  tn*1e4 <= hi*td   (td > 0) */
+    let t : i64 = tn * 10000i64
+    if (lo * td) > t { return 0u8 }
+    if t > (hi * td) { return 0u8 }
+    return 1u8
+}
+
+/* (u,v) parameter grid for the search (numerators over a common den 2): (un,vn) with ud=vd=2. */
+var SYNUV : [i64; 20]        /* 10 pairs: un,vn */
+fn syn_uv_tab() -> i32 {
+    SYNUV[0u64]=0i64   SYNUV[1u64]=0i64        /* (0,0) */
+    SYNUV[2u64]=2i64   SYNUV[3u64]=0i64        /* (1,0) */
+    SYNUV[4u64]=0i64   SYNUV[5u64]=2i64        /* (0,1) */
+    SYNUV[6u64]=2i64   SYNUV[7u64]=2i64        /* (1,1) */
+    SYNUV[8u64]=1i64   SYNUV[9u64]=0i64        /* (1/2,0) */
+    SYNUV[10u64]=1i64  SYNUV[11u64]=2i64       /* (1/2,1) */
+    SYNUV[12u64]=2i64  SYNUV[13u64]=1i64       /* (1,1/2) */
+    SYNUV[14u64]=1i64  SYNUV[15u64]=1i64       /* (1/2,1/2) */
+    SYNUV[16u64]=3i64  SYNUV[17u64]=1i64       /* (3/2,1/2) */
+    SYNUV[18u64]=1i64  SYNUV[19u64]=3i64       /* (1/2,3/2) */
+    return 0i32
+}
+
+/* synth: find every mechanism (a,b,c in 1..LIM, u,v in the grid; ground d fixed) whose certified
+ * coupler box at k1 holds target1 AND at k2 holds target2.  Exact; reports the count searched. */
+fn synth(d: i64, lim: i64,
+         k1: i64, x1n: i64, x1d: i64, y1n: i64, y1d: i64,
+         k2: i64, x2n: i64, x2d: i64, y2n: i64, y2d: i64) -> u64 {
+    pstr("III MECH -- exact path synthesis (bounded search; ground d=~")   pint(d)   pstr(", links 1..~")   pint(lim)   pstr(")~")   pnl()
+    pstr("target 1 @k=~")   pint(k1)   pstr(": (~")   pfrac(x1n,x1d)   pstr(", ~")   pfrac(y1n,y1d)   pstr(")~")   pnl()
+    pstr("target 2 @k=~")   pint(k2)   pstr(": (~")   pfrac(x2n,x2d)   pstr(", ~")   pfrac(y2n,y2d)   pstr(")~")   pnl()
+    sw_tab()
+    syn_uv_tab()
+    let mut found : i64 = 0i64
+    let mut shown : i64 = 0i64
+    let mut searched : i64 = 0i64
+    let mut a : i64 = 1i64
+    while a <= lim {
+        let mut b : i64 = 1i64
+        while b <= lim {
+            let mut c : i64 = 1i64
+            while c <= lim {
+                let mut ui : i64 = 0i64
+                while ui < 10i64 {
+                    let un : i64 = SYNUV[ui * 2i64]
+                    let vn : i64 = SYNUV[(ui * 2i64) + 1i64]
+                    searched = searched + 1i64
+                    /* target 1 */
+                    let r1 : i32 = syn_box(a, b, c, d, k1, un, 2i64, vn, 2i64)
+                    if r1 == 1i32 {
+                        let hx1 : u8 = syn_hit(SYNPXL, SYNPXH, x1n, x1d)
+                        let hy1 : u8 = syn_hit(SYNPYL, SYNPYH, y1n, y1d)
+                        if hx1 == 1u8 { if hy1 == 1u8 {
+                            /* target 2 */
+                            let r2 : i32 = syn_box(a, b, c, d, k2, un, 2i64, vn, 2i64)
+                            if r2 == 1i32 {
+                                let hx2 : u8 = syn_hit(SYNPXL, SYNPXH, x2n, x2d)
+                                let hy2 : u8 = syn_hit(SYNPYL, SYNPYH, y2n, y2d)
+                                if hx2 == 1u8 { if hy2 == 1u8 {
+                                    found = found + 1i64
+                                    if shown < 16i64 {
+                                        pstr("  SOLUTION: a=~")   pint(a)   pstr(" b=~")   pint(b)   pstr(" c=~")   pint(c)
+                                        pstr(" d=~")   pint(d)   pstr("  u=~")   pfrac(un,2i64)   pstr(" v=~")   pfrac(vn,2i64)   pnl()
+                                        shown = shown + 1i64
+                                    }
+                                } }
+                            }
+                        } }
+                    }
+                    ui = ui + 1i64
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    pstr("searched ~")   pint(searched)   pstr(" candidates; ~")   pint(found)   pstr(" exact solution(s)~")
+    if found > shown { pstr(" (showing first ~")   pint(shown)   pstr(")~") }
+    pnl()
+    return 0u64
+}
+
 var MVTITLE : [u8; 24]
 /* live window: animate the exact poses (ESC or q closes; frames=0 runs until closed) */
 fn show(a: i64, b: i64, c: i64, d: i64, frames: i64) -> u64 {
@@ -1125,6 +1249,7 @@ fn usage() -> u64 {
     pstr("  mech view <a> <b> <c> <d>         render the exact cycle to mech_view.bmp (links 1..40)~")   pnl()
     pstr("  mech show <a> <b> <c> <d> [n]     LIVE window animating the exact cycle (ESC/q quits; n frames cap)~")   pnl()
     pstr("  mech curve <a> <b> <c> <d> <un ud vn vd>  certified coupler-point path P=A+(un/ud)(B-A)+(vn/vd)perp(B-A)~")   pnl()
+    pstr("  mech synth <d> <lim> <k1 x1n x1d y1n y1d> <k2 x2n x2d y2n y2d>  find mechanisms whose coupler hits 2 precision points~")   pnl()
     return 2u64
 }
 
@@ -1160,6 +1285,30 @@ fn main(argc: i32, argv: u64) -> u64 {
         }
         if fb == 115u8 {
             let sb : u8 = second_byte(a1p)
+            if sb == 121u8 {
+                /* synth: d lim k1 x1n x1d y1n y1d k2 x2n x2d y2n y2d  (12 args) */
+                if argc != 14i32 { return usage() }
+                let sd : i64 = parse_u(pp[2u64])   let sl : i64 = parse_u(pp[3u64])
+                let sk1 : i64 = parse_u(pp[4u64])
+                let sx1n : i64 = parse_u(pp[5u64])   let sx1d : i64 = parse_u(pp[6u64])
+                let sy1n : i64 = parse_u(pp[7u64])   let sy1d : i64 = parse_u(pp[8u64])
+                let sk2 : i64 = parse_u(pp[9u64])
+                let sx2n : i64 = parse_u(pp[10u64])  let sx2d : i64 = parse_u(pp[11u64])
+                let sy2n : i64 = parse_u(pp[12u64])  let sy2d : i64 = parse_u(pp[13u64])
+                if sd < 1i64 { return usage() }
+                if sl < 1i64 { return usage() }
+                if sd > 40i64 { pstr("REFUSED: envelope 1..40~")   pnl()   return 3u64 }
+                if sl > 20i64 { pstr("REFUSED: search bound capped at 20~")   pnl()   return 3u64 }
+                if sk1 < 0i64 { return usage() }
+                if sk2 < 0i64 { return usage() }
+                if sk1 > 23i64 { return usage() }
+                if sk2 > 23i64 { return usage() }
+                if sx1d < 1i64 { return usage() }
+                if sy1d < 1i64 { return usage() }
+                if sx2d < 1i64 { return usage() }
+                if sy2d < 1i64 { return usage() }
+                return synth(sd, sl, sk1, sx1n, sx1d, sy1n, sy1d, sk2, sx2n, sx2d, sy2n, sy2d)
+            }
             if sb == 104u8 {
                 /* show: 4 links + optional frame cap */
                 if argc != 6i32 { if argc != 7i32 { return usage() } }

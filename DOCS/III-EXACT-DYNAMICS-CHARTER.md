@@ -313,3 +313,25 @@ IV.2 6858d416 (2192) cs_set_graze + dynamic TOI: normal mode cannot rotate AT AL
 CHARTED NEXT: multivariate elimination (independent (u,t)); the 2-D photonic crystal (stack x channel
 on photon3); 10^5-event ensembles (runtime, not soundness); bigint moments (green_moments past i64);
 graze-legal translation edges; the shadow at k*-adjacent perturbation families.
+
+## TURING-NEXT N-1..N-6 -- ALL LANDED (sqrtsum 60/0 at close)
+N-1 e7ec1bfa (2193) rs_elim: bivariate elimination through the FACTORED CRT pipeline (explicit nodes
+    skipping lead-vanishing integers); the IMPASSABILITY CONSTANT -36 (degree 0 in the departure
+    offset: every unit-speed trajectory meets the faster obstacle -- the universal quantifier cashed);
+    identically-zero common-component detector.  (+ c254ca2e: the surfaced aether_lens_frame WIP arm
+    adopted into 2155 -- root-caused, not waved off as the link transient it resembled.)
+N-2 32e4434d (2194) the 2-D crystal: stack x channel on photon3, orderings by q23_sign; THE
+    MACHINE-FOUND SUBRING THEOREM: same-class deposit/consume pairing => sqrt3 never forms -- the
+    reachable ring is rank-3 {1, sqrt2, sqrt6}, pinned as an invariant.
+N-3 6976e16c (2195) 10^5 steps: 49999+49999 with involution EXACT through 6269 compactions and 277
+    commuting pairs (100275 responses pinned); ~105 s.  (+ 398ef729: the W0.2 z-read arm adopted.)
+N-4 b377573b (2196) bigint moments: the i64 Horner dies mid-flight at 1.35e19 while the reduced
+    answer 2.25e18 fits -- delivered; the machine out-reduced the author's drafted gcd pin.
+N-5 afe15cff (2197) graze-NAMED translation edges: the swept-parabola minimum IS the trichotomy
+    (exact zero at r2=25, +-1600 beside it); sv==0 gated for the first time; arcs needed multiplicity,
+    translations read it off one sign -- the structural contrast recorded.
+N-6 3395a954 (2198) the DIVERGENCE TABLE: four one-quantum kicks -> exact k* = (11, 10, 9, 11); vz
+    reaches the event skeleton fastest (2189-consistent); the table stands on prefixes (member 4's own
+    certified tie at 372); the P1.vy kick would recreate the 2176 graze-tie at step 0 (noted).
+GATE: run() timeout 150 -> 300 (the 10^5 KAT crossed under load).  NEXT: the W0-W8 perfection-sweep
+program (tracked as tasks; the sweep absorbs charter increments as they land).

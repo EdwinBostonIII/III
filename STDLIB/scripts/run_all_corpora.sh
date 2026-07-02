@@ -1,152 +1,89 @@
 #!/usr/bin/env bash
-# run_all_corpora.sh
+# run_all_corpora.sh -- THE ONE SWEEP: every corpus and family gate in the III repo, in order,
+# with an aggregated PASS/FAIL summary.  Exit 0 iff every runner is green.
 #
-# Unified driver for every test corpus in the III repo.  Runs each
-# corpus in turn and reports an aggregated PASS/FAIL summary.  Exits 0
-# iff every corpus passes; otherwise exits with the count of failed
-# tests across all corpora (capped at 255 for shell-portable exit codes).
-#
-# Corpora driven (in order):
-#   1. STDLIB/scripts/run_corpus.sh                — 254 stdlib correctness tests
-#                                                    (XII 280..372 + perf benchmarks
-#                                                     237/242/243/244 are delegated)
-#   2. STDLIB/scripts/run_bench_corpus.sh          —   4 perf benchmarks
-#                                                    (correctness hard-gated;
-#                                                     timing host-relative advisory)
-#   3. COMPILER/BOOT/stage1_corpus/run_corpus.sh   —  57 stage-1 language probes
+# Rewritten by the reunification (III-REUNIFICATION-PLAN W2): the 2026-05-08 original chained only
+# {stdlib, bench, stage1} and assumed it lived at repo root; the family-runner system (nine delegated
+# families) postdates it.  This version lives in STDLIB/scripts/, derives the repo root correctly,
+# and chains EVERY runner the corpus architecture names -- a family cited by run_corpus.sh's SKIP
+# dispatch but absent from the RUNNERS list below fails the count teeth before anything runs.
 #
 # Usage:
-#   bash run_all_corpora.sh                  # run all corpora
-#   bash run_all_corpora.sh --skip-stdlib    # skip the stdlib corpus
-#   bash run_all_corpora.sh --skip-stage1    # skip the stage-1 corpus
-#   bash run_all_corpora.sh --quiet          # suppress per-test output; print summary only
-#   bash run_all_corpora.sh --help           # show this help
-#
-# Created during the 2026-05-08 architectural refactor (item 8 of the
-# 10-item harmonization sequence).  See NOTES/ARCHITECTURE.md.
-
+#   bash STDLIB/scripts/run_all_corpora.sh              # run everything
+#   bash STDLIB/scripts/run_all_corpora.sh --quiet      # two-line tails per runner
+#   bash STDLIB/scripts/run_all_corpora.sh --skip-core  # skip the (long) core run_corpus.sh sweep
 set -u
 IFS=$'\n\t'
 
-# Reproducibility env (matches build_iiis0.sh / build_stdlib.sh).
-export LC_ALL=C
-export LANG=C
-export TZ=UTC0
-export SOURCE_DATE_EPOCH=0
-export CCACHE_DISABLE=1
+export LC_ALL=C LANG=C TZ=UTC0 SOURCE_DATE_EPOCH=0 CCACHE_DISABLE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-III_ROOT="$SCRIPT_DIR"
+III_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+S="$III_ROOT/STDLIB/scripts"
 
-STDLIB_RUNNER="$III_ROOT/STDLIB/scripts/run_corpus.sh"
-BENCH_RUNNER="$III_ROOT/STDLIB/scripts/run_bench_corpus.sh"
-STAGE1_RUNNER="$III_ROOT/COMPILER/BOOT/stage1_corpus/run_corpus.sh"
-
-SKIP_STDLIB=0
-SKIP_BENCH=0
-SKIP_STAGE1=0
-QUIET=0
-
-usage() {
-    cat <<'EOF' >&2
-Usage: bash run_all_corpora.sh [options]
-
-Options:
-  --skip-stdlib   Skip STDLIB/scripts/run_corpus.sh.
-  --skip-bench    Skip STDLIB/scripts/run_bench_corpus.sh.
-  --skip-stage1   Skip COMPILER/BOOT/stage1_corpus/run_corpus.sh.
-  --quiet         Suppress per-test output; print summary only.
-  -h, --help      Show this help and exit.
-
-Exit code: 0 if every corpus passes; otherwise count of failed tests
-(capped at 255 for shell-portable exit codes).
-EOF
-}
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --skip-stdlib)  SKIP_STDLIB=1; shift ;;
-        --skip-bench)   SKIP_BENCH=1; shift ;;
-        --skip-stage1)  SKIP_STAGE1=1; shift ;;
-        --quiet)        QUIET=1; shift ;;
-        -h|--help)      usage; exit 0 ;;
-        *)              printf 'unknown argument: %s\n' "$1" >&2; usage; exit 1 ;;
+QUIET=0; SKIP_CORE=0
+for a in "$@"; do
+    case "$a" in
+        --quiet) QUIET=1 ;;
+        --skip-core) SKIP_CORE=1 ;;
+        -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" >&2; exit 0 ;;
+        *) echo "unknown option: $a" >&2; exit 2 ;;
     esac
 done
 
-run_corpus() {
-    local _name="$1"
-    local _runner="$2"
-    if [[ ! -f "$_runner" ]]; then
-        printf '[run_all_corpora] WARN: runner not found: %s — skipping %s\n' "$_runner" "$_name" >&2
-        return 0
+# THE FAMILY LIST -- one line per runner (order: fast families first, long sweeps last).
+RUNNERS=(
+    "$S/run_xii_corpus.sh"
+    "$S/run_xii_antidrift.sh"
+    "$S/run_ui_kats.sh"
+    "$S/run_bigcov_kats.sh"
+    "$S/run_field_kats.sh"
+    "$S/run_sqrtsum_kats.sh"
+    "$S/run_aether_lens_kats.sh"
+    "$S/run_ripple_kats.sh"
+    "$S/run_topo_kats.sh"
+    "$S/run_bench_corpus.sh"
+    "$S/run_autogenesis_corpus.sh"
+    "$S/run_nous_corpus.sh"
+    "$III_ROOT/COMPILER/BOOT/stage1_corpus/run_corpus.sh"
+)
+
+# COMPLETENESS TEETH: every family runner run_corpus.sh's dispatch cites must appear above,
+# so a newly-added family cannot be silently missing from the one sweep.
+MISSING=0
+for cited in $(grep -o "run_[a-z_]*\.sh" "$S/run_corpus.sh" | sort -u); do
+    [[ "$cited" == "run_corpus.sh" ]] && continue
+    found=0
+    for r in "${RUNNERS[@]}"; do [[ "$(basename "$r")" == "$cited" ]] && found=1; done
+    if [[ $found -eq 0 ]]; then
+        echo "[all-corpora] MISSING from RUNNERS: $cited (cited by run_corpus.sh dispatch)"
+        MISSING=1
     fi
-    printf '\n============================================================\n'
-    printf '  %s\n' "$_name"
-    printf '============================================================\n'
-    if [[ "$QUIET" -eq 1 ]]; then
-        bash "$_runner" >/dev/null 2>&1
+done
+[[ $MISSING -ne 0 ]] && exit 4
+
+FAILED=0; RAN=0
+run_one() {
+    local r="$1"; local name; name="$(basename "$(dirname "$r")")/$(basename "$r")"
+    if [[ ! -f "$r" ]]; then echo "[all-corpora] ABSENT runner: $r"; FAILED=$((FAILED+1)); return; fi
+    echo "=== [$name] ==="
+    local log="/tmp/allcorp_$$_$(basename "$r").log"
+    if (cd "$III_ROOT" && bash "$r") >"$log" 2>&1; then
+        RAN=$((RAN+1))
+        if [[ $QUIET -eq 1 ]]; then tail -2 "$log"; else tail -4 "$log"; fi
     else
-        bash "$_runner"
+        RAN=$((RAN+1)); FAILED=$((FAILED+1))
+        echo "[all-corpora] FAIL: $name (tail follows)"
+        tail -12 "$log"
     fi
-    return $?
+    rm -f "$log"
 }
 
-TOTAL_FAIL=0
+if [[ $SKIP_CORE -eq 0 ]]; then run_one "$S/run_corpus.sh"; fi
+for r in "${RUNNERS[@]}"; do run_one "$r"; done
 
-if [[ "$SKIP_STDLIB" -eq 0 ]]; then
-    run_corpus "STDLIB Conformance Corpus (254 correctness tests; XII + perf benchmarks delegated)" "$STDLIB_RUNNER"
-    rc=$?
-    if [[ $rc -ne 0 ]]; then
-        TOTAL_FAIL=$((TOTAL_FAIL + rc))
-        printf '[run_all_corpora] STDLIB corpus failed (rc=%s)\n' "$rc" >&2
-    else
-        printf '[run_all_corpora] STDLIB corpus PASS\n' >&2
-    fi
-else
-    printf '[run_all_corpora] STDLIB corpus SKIPPED\n' >&2
-fi
-
-# Performance benchmark corpus (237/242/243/244).  Its exit code counts
-# ONLY correctness regressions; timing budgets are host-relative
-# advisories that never fail the suite (RITCHIE Stage 0.7-FIX).
-if [[ "$SKIP_BENCH" -eq 0 ]]; then
-    run_corpus "STDLIB Performance Benchmark Corpus (4 benchmarks; timing advisory)" "$BENCH_RUNNER"
-    rc=$?
-    if [[ $rc -ne 0 ]]; then
-        TOTAL_FAIL=$((TOTAL_FAIL + rc))
-        printf '[run_all_corpora] Bench corpus CORRECTNESS failure (rc=%s)\n' "$rc" >&2
-    else
-        printf '[run_all_corpora] Bench corpus PASS (correctness; timing advisories may print)\n' >&2
-    fi
-else
-    printf '[run_all_corpora] Bench corpus SKIPPED\n' >&2
-fi
-
-if [[ "$SKIP_STAGE1" -eq 0 ]]; then
-    run_corpus "Stage-1 Verification Corpus (57 tests)" "$STAGE1_RUNNER"
-    rc=$?
-    if [[ $rc -ne 0 ]]; then
-        TOTAL_FAIL=$((TOTAL_FAIL + rc))
-        printf '[run_all_corpora] Stage-1 corpus failed (rc=%s)\n' "$rc" >&2
-    else
-        printf '[run_all_corpora] Stage-1 corpus PASS\n' >&2
-    fi
-else
-    printf '[run_all_corpora] Stage-1 corpus SKIPPED\n' >&2
-fi
-
-printf '\n============================================================\n'
-printf '  Overall: '
-if [[ "$TOTAL_FAIL" -eq 0 ]]; then
-    printf 'ALL CORPORA PASSED\n'
-else
-    printf 'TOTAL FAILED TESTS = %s\n' "$TOTAL_FAIL"
-fi
-printf '============================================================\n'
-
-# Cap at 255 for portable shell exit codes.
-if [[ "$TOTAL_FAIL" -gt 255 ]]; then
-    TOTAL_FAIL=255
-fi
-exit "$TOTAL_FAIL"
+echo "==================================================="
+echo "[all-corpora] runners=$RAN failed=$FAILED"
+if [[ $FAILED -eq 0 ]]; then exit 0; fi
+if [[ $FAILED -gt 255 ]]; then exit 255; fi
+exit $FAILED

@@ -38,3 +38,9 @@ _audit_scratch/
 /*.s
 /build/
 /_audit_scratch/
+
+# session gate-logs + regenerated coverage reports at root (III-REUNIFICATION-PLAN W1.4;
+# the cov reports are per-build outputs of the ratchet driver -- never tracked, never litter)
+/_gate_*.log
+/_cov_*.txt
+/_emergence_report.txt

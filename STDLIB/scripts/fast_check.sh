@@ -107,3 +107,27 @@ for pfx in $TESTS; do
 done
 echo "=== fast done: PASS=$PASS  OTHER/FAIL=$OTHER ==="
 echo "(authoritative green = full build_stdlib.sh + run_corpus.sh)"
+
+# ============================================================================
+# HYGIENE RATCHET (III-REUNIFICATION-PLAN W1.4): session litter is a FAILURE,
+# not a habit.  Root and STDLIB-top must hold only load-bearing files; any
+# gate-log/probe/python/bitmap regrowth fails this harness loudly.  The three
+# /_cov_*.txt reports are per-build OUTPUTS (gitignored) and are exempt.
+# ============================================================================
+echo "=== hygiene: root + STDLIB-top litter scan ==="
+HYG=0
+for f in "$ROOT"/_gate_*.log "$ROOT"/_*.o.s "$ROOT"/_*.s.s "$ROOT"/*.bmp "$ROOT"/*.exe "$ROOT"/*.py "$ROOT"/_emergence_report.txt "$ROOT"/_numera_audit*.txt; do
+    [[ -e "$f" ]] || continue
+    echo "  LITTER  $f"; HYG=1
+done
+for f in "$ROOT"/STDLIB/_*; do
+    [[ -e "$f" ]] || continue
+    hbase="$(basename "$f")"
+    [[ "$hbase" == "_quarantine_wip" ]] && continue
+    echo "  LITTER  $f"; HYG=1
+done
+if [[ $HYG -ne 0 ]]; then
+    echo "=== HYGIENE FAIL: session litter detected (purge per DOCS/III-REUNIFICATION-PLAN W1) ==="
+    exit 3
+fi
+echo "  clean"

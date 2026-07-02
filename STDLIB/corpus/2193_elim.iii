@@ -1,0 +1,88 @@
+/* 2193_elim.iii -- GATE for MULTIVARIATE ELIMINATION (Turing-next N-1): Res_u of bivariate integer
+ * polynomials, through the certified 16-prime pipeline with degeneracy-skipping nodes.
+ *
+ * A -- CLOSED FORM: Res_u(u^2 - t, u - 2) = t - 4 (lead-normalized): the eliminant of "u = sqrt(t)"
+ *   against "u = 2" is EXACTLY the constraint t = 4.
+ * B -- THE IMPASSABILITY CONSTANT: the 2192 corridor, asked a UNIVERSAL question.  For the departure
+ *   family u(t) = t + c, contact obeys p(t; c) = t^2 - 2(c+10)t + ((c+10)^2 - 9).  Eliminating t from
+ *   (p, dp/dt) gives Res_t = -36: DEGREE ZERO IN c -- the discriminant is 36 > 0 for EVERY departure
+ *   offset, so every unit-speed trajectory meets the faster obstacle: certified impassability.  The
+ *   universal quantifier, cashed by elimination (hand-checked at c = 0 and c = 1: both -36).
+ * C -- THE COMMON-COMPONENT DETECTOR: Res_u(u^2 - t^2, u - t) is IDENTICALLY ZERO (u = t is a shared
+ *   root at every t) -- the all-zero polynomial delivered exactly, the classical criterion for a
+ *   common factor, certified through the same pipeline.
+ * R -- refusals: no u-degree; an identically-zero u-leading row.
+ *
+ * exit 99 = pass;  10 A;  11 B;  12 C;  13 R */
+module corpus_2193_elim
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) -> i64 from "resultant.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var EF : [i64; 64]   var EG : [i64; 64]   var EO : [i64; 20]
+
+fn zf() -> i32 { let mut i : u64 = 0u64   while i < 64u64 { EF[i] = 0i64   EG[i] = 0i64   i = i + 1u64 }   return 0i32 }
+
+fn main() -> u64 {
+    /* ══ A: Res_u(u^2 - t, u - 2) = t - 4. */
+    zf()
+    EF[16u64] = 1i64                                   /* u^2 */
+    EF[1u64] = 0i64 - 1i64                             /* -t */
+    EG[8u64] = 1i64                                    /* u */
+    EG[0u64] = 0i64 - 2i64                             /* -2 */
+    let da : i64 = rs_elim((&EF) as u64, 2i64, 1i64, (&EG) as u64, 1i64, 0i64, (&EO) as u64)
+    putchar(65i32) putchar(58i32) sp() e_i64(da) sp() e_i64(EO[0u64]) sp() e_i64(EO[1u64]) nl()   /* "A: 1 -4 1" */
+    if da != 1i64 { return 10u64 }
+    if EO[0u64] != (0i64 - 4i64) { return 10u64 }
+    if EO[1u64] != 1i64 { return 10u64 }
+
+    /* ══ B: the impassability constant -36, degree 0 in c. */
+    zf()
+    EF[16u64] = 1i64                                   /* t^2 */
+    EF[8u64] = 0i64 - 20i64   EF[9u64] = 0i64 - 2i64   /* -2(c+10) t */
+    EF[0u64] = 91i64   EF[1u64] = 20i64   EF[2u64] = 1i64   /* (c+10)^2 - 9 */
+    EG[8u64] = 2i64                                    /* 2t */
+    EG[0u64] = 0i64 - 20i64   EG[1u64] = 0i64 - 2i64   /* -2(c+10) */
+    let db : i64 = rs_elim((&EF) as u64, 2i64, 2i64, (&EG) as u64, 1i64, 1i64, (&EO) as u64)
+    putchar(66i32) putchar(58i32) sp() e_i64(db) sp() e_i64(EO[0u64]) sp() e_i64(EO[1u64]) sp() e_i64(EO[2u64]) sp() e_i64(EO[3u64]) sp() e_i64(EO[4u64]) nl()
+    /* "B: 4 -36 0 0 0 0" */
+    if db != 4i64 { return 11u64 }
+    if EO[0u64] != (0i64 - 36i64) { return 11u64 }
+    if EO[1u64] != 0i64 { return 11u64 }
+    if EO[2u64] != 0i64 { return 11u64 }
+    if EO[3u64] != 0i64 { return 11u64 }
+    if EO[4u64] != 0i64 { return 11u64 }
+
+    /* ══ C: the common-component detector -- identically zero. */
+    zf()
+    EF[16u64] = 1i64                                   /* u^2 */
+    EF[2u64] = 0i64 - 1i64                             /* -t^2 */
+    EG[8u64] = 1i64                                    /* u */
+    EG[1u64] = 0i64 - 1i64                             /* -t */
+    let dc : i64 = rs_elim((&EF) as u64, 2i64, 2i64, (&EG) as u64, 1i64, 1i64, (&EO) as u64)
+    putchar(67i32) putchar(58i32) sp() e_i64(dc)
+    let mut i : u64 = 0u64
+    let mut nz : i64 = 0i64
+    while i <= 4u64 { if EO[i] != 0i64 { nz = 1i64 }   sp() e_i64(EO[i])   i = i + 1u64 }
+    nl()                                               /* "C: 4 0 0 0 0 0" */
+    if dc != 4i64 { return 12u64 }
+    if nz != 0i64 { return 12u64 }
+
+    /* ══ R: refusals. */
+    zf()
+    EF[0u64] = 1i64
+    EG[8u64] = 1i64
+    let r1 : i64 = rs_elim((&EF) as u64, 0i64, 0i64, (&EG) as u64, 1i64, 0i64, (&EO) as u64)
+    zf()
+    EF[16u64] = 0i64   EF[0u64] = 1i64                 /* fdu = 2 but the u^2 row is identically zero */
+    EG[8u64] = 1i64
+    let r2 : i64 = rs_elim((&EF) as u64, 2i64, 0i64, (&EG) as u64, 1i64, 0i64, (&EO) as u64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1) sp() e_i64(r2) nl()                             /* "R: -1 -1" */
+    if r1 != (0i64 - 1i64) { return 13u64 }
+    if r2 != (0i64 - 1i64) { return 13u64 }
+
+    return 99u64
+}

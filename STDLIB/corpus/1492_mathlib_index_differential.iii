@@ -32,7 +32,7 @@ extern @abi(c-msvc-x64) fn lib_at(index: u64, out_carrier_id: *u8) -> i32 from "
 extern @abi(c-msvc-x64) fn lib_refine(prior_carrier_id: *u8, new_carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 from "math_library.iii"
 extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
-extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "ident.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
 
 var TID   : [u8; 32]
 var TID2  : [u8; 32]

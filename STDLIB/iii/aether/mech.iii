@@ -44,6 +44,12 @@ extern @abi(c-msvc-x64) fn ui_line(buf: u64, w: u32, h: u32, x0: i32, y0: i32, x
 extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
 extern @abi(c-msvc-x64) fn ui_save_bmp(fb: u64, w: u32, h: u32, path: u64) -> i32 from "ui_present.iii"
 
+extern @abi(c-msvc-x64) fn ui_win_open(title: u64, w: u32, h: u32) -> u64 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_present(buf: u64, w: u32, h: u32) -> i32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_getkey() -> u32 from "ui_win.iii"
+extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
+
 var MXDIG : [u8; 32]
 var MXPD  : [i64; 8]
 var MXS   : i64        /* square part s of the last sqfree() call: n = s^2 * r */
@@ -179,6 +185,7 @@ fn parse_u(sp: u64) -> i64 {
     return v
 }
 fn first_byte(sp: u64) -> u8 { let s : *u8 = sp as *u8   let c : u8 = s[0u64]   return c }
+fn second_byte(sp: u64) -> u8 { let s : *u8 = sp as *u8   let c : u8 = s[1u64]   return c }
 
 /* ------------------------------------------------ report pieces ------------------------------- */
 fn class_words(g: i32) -> i32 {
@@ -740,8 +747,7 @@ fn mv_seg(x0: i64, y0: i64, x1: i64, y1: i64, col: u32) -> i32 {
     return 0i32
 }
 
-fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
-    sw_tab()
+fn mv_setup_map(a: i64, c: i64, d: i64) -> i32 {
     /* world box (units): x in [min(-a, d-c)-1, max(a, d+c)+1], y in [-(max(a,c)+1), +(max(a,c)+1)] */
     let mut xmin : i64 = 0i64 - a
     if (d - c) < xmin { xmin = d - c }
@@ -759,12 +765,13 @@ fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
     let spany : i64 = (2i64 * ym) * sc
     /* one scale for both axes: fit 720 px horizontally, 520 vertically */
     if (720i64 * spany) <= (520i64 * spanx) { MVNUM = 720i64   MVDEN = spanx } else { MVNUM = 520i64   MVDEN = spany }
+    return 0i32
+}
 
-    ui_clear((&MVFB) as u64, 800u32, 600u32, 4279173144u32)                      /* 0xFF101018 */
-
-    /* compute all poses quietly through the SAME sweep path */
+/* compute all 24 poses quietly through the SAME sweep path; returns the reachable count */
+fn mv_compute_all(a: i64, b: i64, c: i64, d: i64) -> i64 {
     let mut k : i64 = 0i64
-    let mut drawn : i64 = 0i64
+    let mut n : i64 = 0i64
     while k < 24i64 {
         MWQUIET = 1i64
         SWCASE = 1i64
@@ -784,11 +791,17 @@ fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
         i = 0i64
         while i < 4i64 { let sv : i64 = MW24S[tb + i]   MWF4[i] = a * sv   i = i + 1i64 }
         MVA[(k * 2i64) + 1i64] = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        let ca : i64 = MVCASE[k]
+        if ca >= 2i64 { n = n + 1i64 }
         k = k + 1i64
     }
+    return n
+}
 
-    /* joint circuits first (under the linkage): elbow-down dark gold, elbow-up gold */
-    k = 0i64
+/* joint circuits + ground + pivots (the static layer) */
+fn mv_draw_static(d: i64) -> i32 {
+    let sc : i64 = 10000i64
+    let mut k : i64 = 0i64
     while k < 24i64 {
         let kn : i64 = k + 1i64
         let mut k2 : i64 = kn
@@ -807,34 +820,40 @@ fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
         } }
         k = k + 1i64
     }
-
-    /* ground + pivots */
-    mv_seg(0i64, 0i64, d * sc, 0i64, 4286611584u32)                              /* 0xFF808080 */
-    mv_dot(0i64, 0i64, 4294967295u32)                                            /* white */
+    mv_seg(0i64, 0i64, d * sc, 0i64, 4286611584u32)                              /* ground 0xFF808080 */
+    mv_dot(0i64, 0i64, 4294967295u32)
     mv_dot(d * sc, 0i64, 4294967295u32)
+    return 0i32
+}
 
-    /* the mechanism at every reachable pose: crank red, coupler green, rocker blue (elbow-up) */
-    k = 0i64
-    while k < 24i64 {
-        let ca : i64 = MVCASE[k]
-        if ca >= 2i64 {
-            let p : i64 = k * 4i64
-            let ax : i64 = MVA[k * 2i64]
-            let ay : i64 = MVA[(k * 2i64) + 1i64]
-            let bx : i64 = MVPTS[p + 2i64]
-            let by : i64 = MVPTS[p + 3i64]
-            mv_seg(0i64, 0i64, ax, ay, 4292923472u32)                            /* 0xFFE05050 crank */
-            mv_seg(ax, ay, bx, by, 4283484280u32)                                /* 0xFF50C878 coupler */
-            mv_seg(bx, by, d * sc, 0i64, 4283531488u32)                          /* 0xFF5080E0 rocker */
-            let ox : i64 = MVPTS[p]
-            let oy : i64 = MVPTS[p + 1i64]
-            mv_dot(ox, oy, 4286736416u32)                                        /* elbow-down joint */
-            mv_dot(bx, by, 4294955072u32)                                        /* elbow-up joint */
-            drawn = drawn + 1i64
-        }
-        k = k + 1i64
-    }
+/* the mechanism at pose k (elbow-up circuit): crank red, coupler green, rocker blue */
+fn mv_draw_pose(k: i64, d: i64) -> i32 {
+    let ca : i64 = MVCASE[k]
+    if ca < 2i64 { return 0i32 }
+    let sc : i64 = 10000i64
+    let p : i64 = k * 4i64
+    let ax : i64 = MVA[k * 2i64]
+    let ay : i64 = MVA[(k * 2i64) + 1i64]
+    let bx : i64 = MVPTS[p + 2i64]
+    let by : i64 = MVPTS[p + 3i64]
+    mv_seg(0i64, 0i64, ax, ay, 4292923472u32)                                    /* crank */
+    mv_seg(ax, ay, bx, by, 4283484280u32)                                        /* coupler */
+    mv_seg(bx, by, d * sc, 0i64, 4283531488u32)                                  /* rocker */
+    let ox : i64 = MVPTS[p]
+    let oy : i64 = MVPTS[p + 1i64]
+    mv_dot(ox, oy, 4286736416u32)
+    mv_dot(bx, by, 4294955072u32)
+    return 0i32
+}
 
+fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
+    sw_tab()
+    mv_setup_map(a, c, d)
+    let drawn : i64 = mv_compute_all(a, b, c, d)
+    ui_clear((&MVFB) as u64, 800u32, 600u32, 4279173144u32)                      /* 0xFF101018 */
+    mv_draw_static(d)
+    let mut k : i64 = 0i64
+    while k < 24i64 { mv_draw_pose(k, d)   k = k + 1i64 }
     /* write mech_view.bmp */
     MVPATH[0u64] = 109u8   MVPATH[1u64] = 101u8   MVPATH[2u64] = 99u8   MVPATH[3u64] = 104u8
     MVPATH[4u64] = 95u8    MVPATH[5u64] = 118u8   MVPATH[6u64] = 105u8  MVPATH[7u64] = 101u8
@@ -847,6 +866,55 @@ fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
     return 0u64
 }
 
+var MVTITLE : [u8; 24]
+/* live window: animate the exact poses (ESC or q closes; frames=0 runs until closed) */
+fn show(a: i64, b: i64, c: i64, d: i64, frames: i64) -> u64 {
+    sw_tab()
+    mv_setup_map(a, c, d)
+    let n : i64 = mv_compute_all(a, b, c, d)
+    if n == 0i64 { pstr("nothing to animate: no reachable pose (see mech sweep for the exact reasons)~")   pnl()   return 0u64 }
+    MVTITLE[0u64] = 73u8    MVTITLE[1u64] = 73u8   MVTITLE[2u64] = 73u8   MVTITLE[3u64] = 32u8
+    MVTITLE[4u64] = 77u8    MVTITLE[5u64] = 69u8   MVTITLE[6u64] = 67u8   MVTITLE[7u64] = 72u8
+    MVTITLE[8u64] = 32u8    MVTITLE[9u64] = 45u8   MVTITLE[10u64] = 45u8  MVTITLE[11u64] = 32u8
+    MVTITLE[12u64] = 101u8  MVTITLE[13u64] = 120u8 MVTITLE[14u64] = 97u8  MVTITLE[15u64] = 99u8
+    MVTITLE[16u64] = 116u8  MVTITLE[17u64] = 32u8  MVTITLE[18u64] = 99u8  MVTITLE[19u64] = 121u8
+    MVTITLE[20u64] = 99u8   MVTITLE[21u64] = 108u8 MVTITLE[22u64] = 101u8 MVTITLE[23u64] = 0u8
+    let hwnd : u64 = ui_win_open((&MVTITLE) as u64, 800u32, 600u32)
+    if hwnd == 0u64 { pstr("FAILED to open a window~")   pnl()   return 4u64 }
+    let mut k : i64 = 0i64
+    let mut f : i64 = 0i64
+    let mut run : u8 = 1u8
+    while run == 1u8 {
+        if ui_win_pump() != 0u32 { run = 0u8 }
+        if run == 1u8 {
+            /* advance to the next reachable pose */
+            let mut hop : i64 = 0i64
+            let mut ca : i64 = MVCASE[k]
+            while ca < 2i64 {
+                k = k + 1i64   if k == 24i64 { k = 0i64 }
+                ca = MVCASE[k]
+                hop = hop + 1i64   if hop > 24i64 { run = 0u8   ca = 9i64 }
+            }
+            ui_clear((&MVFB) as u64, 800u32, 600u32, 4279173144u32)
+            mv_draw_static(d)
+            mv_draw_pose(k, d)
+            ui_win_present((&MVFB) as u64, 800u32, 600u32)
+            ui_sleep(120u32)
+            let mut key : u32 = ui_getkey()
+            while key != 0u32 {
+                if key == 27u32 { run = 0u8 }
+                if key == 81u32 { run = 0u8 }
+                key = ui_getkey()
+            }
+            k = k + 1i64   if k == 24i64 { k = 0i64 }
+            f = f + 1i64
+            if frames > 0i64 { if f >= frames { run = 0u8 } }
+        }
+    }
+    pstr("animated ~")   pint(f)   pstr(" frames (~")   pint(n)   pstr(" reachable poses)~")   pnl()
+    return 0u64
+}
+
 /* ------------------------------------------------ entry --------------------------------------- */
 fn usage() -> u64 {
     pstr("III MECH -- the exact mechanism workbench~")   pnl()
@@ -854,6 +922,7 @@ fn usage() -> u64 {
     pstr("  mech design <a> <b> <c> [lo hi]   exact inverse design of the ground link~")   pnl()
     pstr("  mech sweep <a> <b> <c> <d>        exact coupler sweep at the 24 zeta-24 crank angles (links 1..40)~")   pnl()
     pstr("  mech view <a> <b> <c> <d>         render the exact cycle to mech_view.bmp (links 1..40)~")   pnl()
+    pstr("  mech show <a> <b> <c> <d> [n]     LIVE window animating the exact cycle (ESC/q quits; n frames cap)~")   pnl()
     return 2u64
 }
 
@@ -888,6 +957,29 @@ fn main(argc: i32, argv: u64) -> u64 {
             return view(a, b, c, d)
         }
         if fb == 115u8 {
+            let sb : u8 = second_byte(a1p)
+            if sb == 104u8 {
+                /* show: 4 links + optional frame cap */
+                if argc != 6i32 { if argc != 7i32 { return usage() } }
+                let ha : u64 = pp[2u64]   let hb : u64 = pp[3u64]   let hc : u64 = pp[4u64]   let hd : u64 = pp[5u64]
+                let a : i64 = parse_u(ha)   let b : i64 = parse_u(hb)
+                let c : i64 = parse_u(hc)   let d : i64 = parse_u(hd)
+                if a < 1i64 { return usage() }
+                if b < 1i64 { return usage() }
+                if c < 1i64 { return usage() }
+                if d < 1i64 { return usage() }
+                if a > 40i64 { pstr("REFUSED: show envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+                if b > 40i64 { pstr("REFUSED: show envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+                if c > 40i64 { pstr("REFUSED: show envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+                if d > 40i64 { pstr("REFUSED: show envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+                let mut fr : i64 = 0i64
+                if argc == 7i32 {
+                    let hf : u64 = pp[6u64]
+                    fr = parse_u(hf)
+                    if fr < 0i64 { return usage() }
+                }
+                return show(a, b, c, d, fr)
+            }
             /* sweep: exactly 4 links */
             if argc != 6i32 { return usage() }
             let sa : u64 = pp[2u64]   let sb : u64 = pp[3u64]   let sc2 : u64 = pp[4u64]   let sd : u64 = pp[5u64]

@@ -189,3 +189,330 @@ fn rs_powi(b: i64, e: i64) -> i64 {
     while q < e { r = rs_mul(r, b)   q = q + 1i64 }
     return r
 }
+
+/* ═════════ v2: THE MODULAR-CRT DETERMINANT ENGINE (the charter's "bigint determinant engine") ═════════
+ * Same construction as rs_sum, unbounded intermediates: every determinant (the Sylvester values R(t) AND
+ * the Cramer/Vandermonde recovery) is computed mod 16 fixed 30-bit primes -- i64 products never exceed
+ * 2^60 -- and the integer coefficients are recovered by Garner CRT into UNSIGNED bigints in this call's
+ * OWN dropped arena (peak ~5 live handles; a bigint MATRIX would need n^2 > the global 64-slot table).
+ * SOUNDNESS: |coeff_i| <= ||R||_1 <= prod_rows(row 1-norm of the t-polynomial Sylvester)  [permanent
+ * bound]; we CERTIFY bound_bits + 2 <= 464 <= bits(P) BEFORE trusting centered reconstruction, and
+ * re-check  sum_i q_i t^i == R(t)  mod every prime afterwards.  Refusals (-1): degrees beyond storage,
+ * zero leading input coefficients, bound not certifiable, or a recovered coefficient beyond i64 out. */
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+var RS_PRIMES : [i64; 16]
+var RS_PINIT : i64
+fn rs_pinit() -> i32 {
+    if RS_PINIT != 0i64 { return 0i32 }
+    RS_PRIMES[0u64] = 1073741789i64    RS_PRIMES[1u64] = 1073741783i64
+    RS_PRIMES[2u64] = 1073741741i64    RS_PRIMES[3u64] = 1073741723i64
+    RS_PRIMES[4u64] = 1073741719i64    RS_PRIMES[5u64] = 1073741717i64
+    RS_PRIMES[6u64] = 1073741689i64    RS_PRIMES[7u64] = 1073741671i64
+    RS_PRIMES[8u64] = 1073741663i64    RS_PRIMES[9u64] = 1073741651i64
+    RS_PRIMES[10u64] = 1073741621i64   RS_PRIMES[11u64] = 1073741567i64
+    RS_PRIMES[12u64] = 1073741561i64   RS_PRIMES[13u64] = 1073741527i64
+    RS_PRIMES[14u64] = 1073741503i64   RS_PRIMES[15u64] = 1073741477i64
+    RS_PINIT = 1i64
+    return 0i32
+}
+fn rs_modp(v: i64, p: i64) -> i64 { let m : i64 = v % p   if m < 0i64 { return m + p }   return m }
+fn rs_minv(a0: i64, p: i64) -> i64 {                       /* extended Euclid; gcd(a0,p)=1 assumed */
+    let mut t : i64 = 0i64    let mut nt : i64 = 1i64
+    let mut r : i64 = p       let mut nr : i64 = rs_modp(a0, p)
+    while nr != 0i64 {
+        let q : i64 = r / nr
+        let t2 : i64 = t - (q * nt)    t = nt   nt = t2
+        let r2 : i64 = r - (q * nr)    r = nr   nr = r2
+    }
+    if t < 0i64 { t = t + p }
+    return t
+}
+fn rs_powmod(b: i64, e: i64, p: i64) -> i64 {
+    let bm : i64 = rs_modp(b, p)
+    let mut r : i64 = 1i64
+    let mut q : i64 = 0i64
+    while q < e { r = (r * bm) % p   q = q + 1i64 }
+    return r
+}
+fn rs_bits(v0: i64) -> i64 {
+    let mut v : i64 = v0
+    let mut b : i64 = 0i64
+    while v > 0i64 { v = v / 2i64   b = b + 1i64 }
+    return b
+}
+
+var RS_MM : [i64; 400]                                     /* modular working matrix, stride 20 */
+var RS_HM : [i64; 20]                                      /* h(x) = g(t-x) mod p */
+var RS_RMOD : [i64; 320]                                   /* R(t) mod p_l at index t*16+l (t<=19) */
+var RS_VD : [i64; 16]                                      /* det(Vandermonde) mod p_l */
+var RS_CR : [i64; 16]                                      /* current coefficient residues */
+var RS_Q : [i64; 20]                                       /* recovered integer coefficients */
+
+/* Gauss determinant mod p of the n x n matrix in RS_MM (destructive) */
+fn rs_det_mod(n: i64, p: i64) -> i64 {
+    let mut det : i64 = 1i64
+    let mut k : i64 = 0i64
+    while k < n {
+        let pkk : i64 = RS_MM[((k * 20i64) + k) as u64]
+        if pkk == 0i64 {
+            let mut found : i64 = 0i64 - 1i64
+            let mut r : i64 = k + 1i64
+            while r < n {
+                if found < 0i64 { let v : i64 = RS_MM[((r * 20i64) + k) as u64]   if v != 0i64 { found = r } }
+                r = r + 1i64
+            }
+            if found < 0i64 { return 0i64 }
+            let mut c : i64 = 0i64
+            while c < n {
+                let t : i64 = RS_MM[((k * 20i64) + c) as u64]
+                RS_MM[((k * 20i64) + c) as u64] = RS_MM[((found * 20i64) + c) as u64]
+                RS_MM[((found * 20i64) + c) as u64] = t
+                c = c + 1i64
+            }
+            det = rs_modp(0i64 - det, p)
+        }
+        let pv : i64 = RS_MM[((k * 20i64) + k) as u64]
+        det = (det * pv) % p
+        let inv : i64 = rs_minv(pv, p)
+        let mut i : i64 = k + 1i64
+        while i < n {
+            let fct : i64 = (RS_MM[((i * 20i64) + k) as u64] * inv) % p
+            if fct != 0i64 {
+                let mut j : i64 = k
+                while j < n {
+                    let sub : i64 = (fct * RS_MM[((k * 20i64) + j) as u64]) % p
+                    RS_MM[((i * 20i64) + j) as u64] = rs_modp(RS_MM[((i * 20i64) + j) as u64] - sub, p)
+                    j = j + 1i64
+                }
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    return det
+}
+
+fn rs_shift_mod(gp: u64, degg: i64, t: i64, p: i64) -> i32 {
+    let g : *i64 = gp as *i64
+    let tm : i64 = rs_modp(t, p)
+    let mut i : i64 = 0i64
+    while i <= degg {
+        let mut acc : i64 = 0i64
+        let mut j : i64 = i
+        while j <= degg {
+            let mut binom : i64 = 1i64                     /* C(j,i) exact: <= C(9,4)=126 */
+            let mut q : i64 = 0i64
+            while q < i { binom = binom * (j - q)   q = q + 1i64 }
+            q = 1i64
+            while q <= i { binom = binom / q   q = q + 1i64 }
+            let mut pw : i64 = 1i64
+            q = 0i64
+            while q < (j - i) { pw = (pw * tm) % p   q = q + 1i64 }
+            let gm : i64 = rs_modp(g[j as u64], p)
+            acc = (acc + (((gm * (binom % p)) % p) * pw)) % p
+            j = j + 1i64
+        }
+        if (i % 2i64) != 0i64 { acc = rs_modp(0i64 - acc, p) }
+        RS_HM[i as u64] = acc
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* value of the (nonnegative) bigint mod p, by limb walk high->low */
+fn rs_bigmod(id: u64, p: i64) -> i64 {
+    let pu : u64 = p as u64
+    let b32 : u64 = 4294967296u64 % pu
+    let pw64 : u64 = (b32 * b32) % pu                      /* 2^64 mod p; operands < 2^30 */
+    let mut r : u64 = 0u64
+    let mut i : u64 = bigint_len_limbs(id)
+    while i > 0u64 {
+        i = i - 1u64
+        let lm : u64 = bigint_get_limb(id, i)
+        r = ((r * pw64) + (lm % pu)) % pu
+    }
+    return r as i64
+}
+
+/* gamma = alpha + beta beyond the i64 envelope.  Same ABI as rs_sum; returns deg m*n or -1 refused. */
+fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    rs_pinit()
+    let f : *i64 = fp as *i64
+    let g : *i64 = gp as *i64
+    let out : *i64 = outp as *i64
+    let D : i64 = degf * degg
+    if D < 1i64 { return 0i64 - 1i64 }
+    if D > 18i64 { return 0i64 - 1i64 }
+    if degf > 9i64 { return 0i64 - 1i64 }
+    if degg > 9i64 { return 0i64 - 1i64 }
+    let flead : i64 = f[degf as u64]
+    let glead : i64 = g[degg as u64]
+    if flead == 0i64 { return 0i64 - 1i64 }
+    if glead == 0i64 { return 0i64 - 1i64 }
+
+    /* ── the certified coefficient bound: ||R||_1 <= (frow)^degg * (hrow)^degf ── */
+    RS_OVF = 0i64
+    let mut frow : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j <= degf { let mut av : i64 = f[j as u64]   if av < 0i64 { av = 0i64 - av }   frow = rs_add(frow, av)   j = j + 1i64 }
+    let mut hrow : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= degg {
+        let mut hi : i64 = 0i64
+        j = i
+        while j <= degg {
+            let mut binom : i64 = 1i64
+            let mut q : i64 = 0i64
+            while q < i { binom = binom * (j - q)   q = q + 1i64 }
+            q = 1i64
+            while q <= i { binom = binom / q   q = q + 1i64 }
+            let mut gv : i64 = g[j as u64]
+            if gv < 0i64 { gv = 0i64 - gv }
+            hi = rs_add(hi, rs_mul(gv, binom))
+            j = j + 1i64
+        }
+        hrow = rs_add(hrow, hi)
+        i = i + 1i64
+    }
+    if RS_OVF != 0i64 { return 0i64 - 1i64 }
+    let bnd : i64 = (degg * rs_bits(frow)) + (degf * rs_bits(hrow))
+    if (bnd + 2i64) > 464i64 { return 0i64 - 1i64 }
+
+    /* ── per-prime residues of R(t) for t = 0..D, and det(V) mod p ── */
+    let mut l : i64 = 0i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut t : i64 = 0i64
+        while t <= D {
+            rs_shift_mod(gp, degg, t, p)
+            let n : i64 = degf + degg
+            let mut r : i64 = 0i64
+            while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 20i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
+            r = 0i64
+            while r < degg {
+                let mut k : i64 = 0i64
+                while k <= degf { RS_MM[((r * 20i64) + (r + k)) as u64] = rs_modp(f[(degf - k) as u64], p)   k = k + 1i64 }
+                r = r + 1i64
+            }
+            r = 0i64
+            while r < degf {
+                let mut k : i64 = 0i64
+                while k <= degg { RS_MM[(((degg + r) * 20i64) + (r + k)) as u64] = RS_HM[(degg - k) as u64]   k = k + 1i64 }
+                r = r + 1i64
+            }
+            RS_RMOD[((t * 16i64) + l) as u64] = rs_det_mod(n, p)
+            t = t + 1i64
+        }
+        let nv : i64 = D + 1i64
+        let mut r2 : i64 = 0i64
+        while r2 < nv { let mut c2 : i64 = 0i64   while c2 < nv { RS_MM[((r2 * 20i64) + c2) as u64] = rs_powmod(r2, c2, p)   c2 = c2 + 1i64 }   r2 = r2 + 1i64 }
+        let vd : i64 = rs_det_mod(nv, p)
+        if vd == 0i64 { return 0i64 - 1i64 }
+        RS_VD[l as u64] = vd
+        l = l + 1i64
+    }
+
+    /* ── per-coefficient modular Cramer + Garner CRT (own arena; ~5 live handles) ── */
+    let ar : u64 = arena_new(2097152u64)
+    i = 0i64
+    while i <= D {
+        l = 0i64
+        while l < 16i64 {
+            let p : i64 = RS_PRIMES[l as u64]
+            let nv : i64 = D + 1i64
+            let mut r2 : i64 = 0i64
+            while r2 < nv {
+                let mut c2 : i64 = 0i64
+                while c2 < nv {
+                    let mut v : i64 = rs_powmod(r2, c2, p)
+                    if c2 == i { v = RS_RMOD[((r2 * 16i64) + l) as u64] }
+                    RS_MM[((r2 * 20i64) + c2) as u64] = v
+                    c2 = c2 + 1i64
+                }
+                r2 = r2 + 1i64
+            }
+            let dl : i64 = rs_det_mod(nv, p)
+            let vdl : i64 = RS_VD[l as u64]
+            RS_CR[l as u64] = (dl * rs_minv(vdl, p)) % p
+            l = l + 1i64
+        }
+        let cr0 : i64 = RS_CR[0u64]
+        let mut X : u64 = bigint_from_u64(ar, cr0 as u64)
+        let mut PB : u64 = bigint_from_u64(ar, RS_PRIMES[0u64] as u64)
+        l = 1i64
+        while l < 16i64 {
+            let p : i64 = RS_PRIMES[l as u64]
+            let mut pm : i64 = 1i64                        /* prod_{j<l} p_j mod p */
+            let mut jj : i64 = 0i64
+            while jj < l { pm = (pm * (RS_PRIMES[jj as u64] % p)) % p   jj = jj + 1i64 }
+            let xm : i64 = rs_bigmod(X, p)
+            let crl : i64 = RS_CR[l as u64]
+            let m : i64 = (rs_modp(crl - xm, p) * rs_minv(pm, p)) % p
+            let t1 : u64 = bigint_mul_u64(ar, PB, m as u64)
+            let t2 : u64 = bigint_add(ar, X, t1)
+            bigint_drop(X)   bigint_drop(t1)
+            X = t2
+            let t3 : u64 = bigint_mul_u64(ar, PB, RS_PRIMES[l as u64] as u64)
+            bigint_drop(PB)
+            PB = t3
+            l = l + 1i64
+        }
+        let Y : u64 = bigint_sub(ar, PB, X)                /* PB is now the full P; X in [0,P) */
+        let cw : i32 = bigint_cmp(X, Y)
+        let mut sgn : i64 = 1i64
+        let mut mag : u64 = X
+        if cw > 0i32 { sgn = 0i64 - 1i64   mag = Y }
+        let ln : u64 = bigint_len_limbs(mag)
+        if ln > 1u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+        let lo : u64 = bigint_to_u64_lo(mag)
+        if lo > 9223372036854775807u64 { bigint_drop_arena(ar)   arena_drop(ar)   return 0i64 - 1i64 }
+        let mut qv : i64 = lo as i64
+        if sgn < 0i64 { qv = 0i64 - qv }
+        RS_Q[i as u64] = qv
+        bigint_drop(X)   bigint_drop(Y)   bigint_drop(PB)
+        i = i + 1i64
+    }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+
+    /* ── consistency: sum_i q_i t^i == R(t) mod EVERY prime, then normalize lead positive ── */
+    l = 0i64
+    while l < 16i64 {
+        let p : i64 = RS_PRIMES[l as u64]
+        let mut t : i64 = 0i64
+        while t <= D {
+            let mut acc : i64 = 0i64
+            i = 0i64
+            while i <= D {
+                let qi : i64 = RS_Q[i as u64]
+                acc = (acc + (rs_modp(qi, p) * rs_powmod(t, i, p))) % p
+                i = i + 1i64
+            }
+            let rv : i64 = RS_RMOD[((t * 16i64) + l) as u64]
+            if acc != rv { return 0i64 - 1i64 }
+            t = t + 1i64
+        }
+        l = l + 1i64
+    }
+    let ld : i64 = RS_Q[D as u64]
+    if ld < 0i64 {
+        i = 0i64
+        while i <= D { RS_Q[i as u64] = 0i64 - RS_Q[i as u64]   i = i + 1i64 }
+    }
+    i = 0i64
+    while i <= D { out[i as u64] = RS_Q[i as u64]   i = i + 1i64 }
+    return D
+}

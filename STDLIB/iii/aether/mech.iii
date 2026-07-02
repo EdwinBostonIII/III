@@ -720,6 +720,10 @@ var MVCASE : [i64; 24]
 var MVA : [i64; 48]           /* per pose: Ax, Ay (scaled) */
 var MVX0 : i64   var MVY0 : i64   var MVNUM : i64   var MVDEN : i64
 var MVPATH : [u8; 14]
+var MVBIV : [i64; 96]         /* per pose: elbow-up branch Bx_lo,Bx_hi,By_lo,By_hi (scaled 1e-4) */
+var MVALO : [i64; 48]         /* per pose: Ax_lo, Ay_lo (scaled; upper = +1) */
+var MVCRV : [i64; 96]         /* per pose: certified coupler-point P intervals Px_lo,Px_hi,Py_lo,Py_hi */
+var MVPATH2 : [u8; 15]        /* "mech_curve.bmp" + NUL */
 
 /* isolate the exact field element (vec/den) to a scaled 1e-4 lower bound by q23_sign bisection */
 fn mv_field_iso(vp: u64, den: i64, bnd: i64) -> i64 {
@@ -734,6 +738,16 @@ fn mv_field_iso(vp: u64, den: i64, bnd: i64) -> i64 {
         if sg >= 0i32 { lb = mid } else { hb = mid }
     }
     return lb
+}
+/* map from an explicit world box (used by the coupler-curve render, which extends past the joint circle) */
+fn mv_setup_box(xmin: i64, xmax: i64, ymin: i64, ymax: i64) -> i32 {
+    MVX0 = xmin
+    MVY0 = ymin
+    let spanx : i64 = xmax - xmin
+    let spany : i64 = ymax - ymin
+    if (720i64 * spany) <= (520i64 * spanx) { MVNUM = 720i64   MVDEN = spanx } else { MVNUM = 520i64   MVDEN = spany }
+    if MVDEN < 1i64 { MVDEN = 1i64 }
+    return 0i32
 }
 fn mv_px(xs: i64) -> i32 { return (40i64 + (((xs - MVX0) * MVNUM) / MVDEN)) as i32 }
 fn mv_py(ys: i64) -> i32 { return (560i64 - (((ys - MVY0) * MVNUM) / MVDEN)) as i32 }
@@ -783,14 +797,19 @@ fn mv_compute_all(a: i64, b: i64, c: i64, d: i64) -> i64 {
         MVPTS[p + 1i64]   = (SWY[0u64] + SWY[1u64]) / 2i64
         MVPTS[p + 2i64]   = (SWX[2u64] + SWX[3u64]) / 2i64
         MVPTS[p + 3i64]   = (SWY[2u64] + SWY[3u64]) / 2i64
+        /* elbow-up branch (branch 2) full intervals, for the certified coupler-point curve */
+        MVBIV[p]          = SWX[2u64]   MVBIV[p + 1i64]   = SWX[3u64]
+        MVBIV[p + 2i64]   = SWY[2u64]   MVBIV[p + 3i64]   = SWY[3u64]
         /* A(k) = a*(cos,sin): isolate each exact field element */
         let tb : i64 = k * 4i64
         let mut i : i64 = 0i64
         while i < 4i64 { let cv : i64 = MW24C[tb + i]   MWF4[i] = a * cv   i = i + 1i64 }
-        MVA[k * 2i64] = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        let axl : i64 = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        MVA[k * 2i64] = axl   MVALO[k * 2i64] = axl
         i = 0i64
         while i < 4i64 { let sv : i64 = MW24S[tb + i]   MWF4[i] = a * sv   i = i + 1i64 }
-        MVA[(k * 2i64) + 1i64] = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        let ayl : i64 = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)
+        MVA[(k * 2i64) + 1i64] = ayl   MVALO[(k * 2i64) + 1i64] = ayl
         let ca : i64 = MVCASE[k]
         if ca >= 2i64 { n = n + 1i64 }
         k = k + 1i64
@@ -866,6 +885,188 @@ fn view(a: i64, b: i64, c: i64, d: i64) -> u64 {
     return 0u64
 }
 
+/* ------------------------------------------------ coupler-point curve (certified intervals) --- */
+/* floor(a/d), ceil(a/d) for d > 0, sign-correct on negative a (the outward-rounding primitives). */
+fn idiv_floor(a: i64, d: i64) -> i64 {
+    if a >= 0i64 { return a / d }
+    return 0i64 - (((0i64 - a) + (d - 1i64)) / d)
+}
+fn idiv_ceil(a: i64, d: i64) -> i64 {
+    if a >= 0i64 { return (a + (d - 1i64)) / d }
+    return 0i64 - ((0i64 - a) / d)
+}
+var CVLO : i64   var CVHI : i64
+/* accumulate coeff (n/d) * [lo,hi] into CVLO/CVHI with outward rounding (d > 0). */
+fn cv_term(nn: i64, dd: i64, lo: i64, hi: i64) -> i32 {
+    let mut tl : i64 = 0i64   let mut th : i64 = 0i64
+    if nn >= 0i64 {
+        tl = idiv_floor(nn * lo, dd)
+        th = idiv_ceil(nn * hi, dd)
+    } else {
+        tl = idiv_floor(nn * hi, dd)
+        th = idiv_ceil(nn * lo, dd)
+    }
+    CVLO = CVLO + tl
+    CVHI = CVHI + th
+    return 0i32
+}
+
+/* coupler point P = A + u*(B-A) + v*perp(B-A), perp(dx,dy)=(-dy,dx), u=un/ud, v=vn/vd.
+ *   Px = Ax*(1-u) + Bx*u + Ay*(v)  + By*(-v)
+ *   Py = Ay*(1-u) + By*u + Ax*(-v) + Bx*(v)
+ * every coordinate is an affine map of the CERTIFIED A/B intervals -> certified P intervals. */
+fn cv_point(k: i64, un: i64, ud: i64, vn: i64, vd: i64) -> i32 {
+    let p : i64 = k * 4i64
+    let bxl : i64 = MVBIV[p]        let bxh : i64 = MVBIV[p + 1i64]
+    let byl : i64 = MVBIV[p + 2i64] let byh : i64 = MVBIV[p + 3i64]
+    let axl : i64 = MVALO[k * 2i64]           let axh : i64 = axl + 1i64
+    let ayl : i64 = MVALO[(k * 2i64) + 1i64]  let ayh : i64 = ayl + 1i64
+    /* (1-u) = (ud-un)/ud */
+    let omu : i64 = ud - un
+    /* Px */
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, axl, axh)
+    cv_term(un, ud, bxl, bxh)
+    cv_term(vn, vd, ayl, ayh)
+    cv_term(0i64 - vn, vd, byl, byh)
+    MVCRV[p]        = CVLO   MVCRV[p + 1i64] = CVHI
+    /* Py */
+    CVLO = 0i64   CVHI = 0i64
+    cv_term(omu, ud, ayl, ayh)
+    cv_term(un, ud, byl, byh)
+    cv_term(0i64 - vn, vd, axl, axh)
+    cv_term(vn, vd, bxl, bxh)
+    MVCRV[p + 2i64] = CVLO   MVCRV[p + 3i64] = CVHI
+    return 0i32
+}
+
+fn curve(a: i64, b: i64, c: i64, d: i64, un: i64, ud: i64, vn: i64, vd: i64) -> u64 {
+    pstr("III MECH -- exact coupler-point path:  P = A + (~")   pint(un)   pch(47i32)   pint(ud)
+    pstr(")(B-A) + (~")   pint(vn)   pch(47i32)   pint(vd)   pstr(")*perp(B-A)~")   pnl()
+    pstr("links: a=~")   pint(a)   pstr(" b=~")   pint(b)   pstr(" c=~")   pint(c)   pstr(" d=~")   pint(d)
+    pstr("   (elbow-up circuit; each P interval is A/B-certified, outward-rounded)~")   pnl()
+    sw_tab()
+    let n : i64 = mv_compute_all(a, b, c, d)
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        let ca : i64 = MVCASE[k]
+        pstr("k=~")   if k < 10i64 { pch(32i32) }   pint(k)   pstr(" (~")   pint(k * 15i64)   pstr(" deg)  ~")
+        if ca < 2i64 {
+            pstr("unreachable~")   pnl()
+        } else {
+            cv_point(k, un, ud, vn, vd)
+            let p : i64 = k * 4i64
+            pstr("P = ~")   pivl(MVCRV[p], MVCRV[p + 1i64])   pstr(" ~")   pivl(MVCRV[p + 2i64], MVCRV[p + 3i64])   pnl()
+        }
+        k = k + 1i64
+    }
+    pstr("traced ~")   pint(n)   pstr(" of 24 poses~")   pnl()
+    cv_render(a, d, n)
+    return 0u64
+}
+
+/* box over the mechanism + every coupler-point midpoint, into CVBX*; small frame (slot-safe). */
+var CVBXMIN : i64   var CVBXMAX : i64   var CVBYMIN : i64   var CVBYMAX : i64
+fn cv_box(a: i64, d: i64) -> i32 {
+    let sc : i64 = 10000i64
+    CVBXMIN = 0i64 - (a * sc)
+    CVBXMAX = d * sc
+    CVBYMIN = 0i64
+    CVBYMAX = 0i64
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        let ca : i64 = MVCASE[k]
+        if ca >= 2i64 {
+            let p : i64 = k * 4i64
+            let cl : i64 = MVCRV[p]
+            let ch : i64 = MVCRV[p + 1i64]
+            let pxm : i64 = (cl + ch) / 2i64
+            let dl : i64 = MVCRV[p + 2i64]
+            let dh : i64 = MVCRV[p + 3i64]
+            let pym : i64 = (dl + dh) / 2i64
+            if pxm < CVBXMIN { CVBXMIN = pxm }
+            if pxm > CVBXMAX { CVBXMAX = pxm }
+            if pym < CVBYMIN { CVBYMIN = pym }
+            if pym > CVBYMAX { CVBYMAX = pym }
+            let by : i64 = MVPTS[p + 3i64]
+            if by < CVBYMIN { CVBYMIN = by }
+            if by > CVBYMAX { CVBYMAX = by }
+        }
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* draw the faint mechanism (all reachable poses) under the coupler path. */
+fn cv_draw_mech(d: i64) -> i32 {
+    let sc : i64 = 10000i64
+    mv_seg(0i64, 0i64, d * sc, 0i64, 4283521106u32)
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        let ca : i64 = MVCASE[k]
+        if ca >= 2i64 {
+            let p : i64 = k * 4i64
+            let ax : i64 = MVA[k * 2i64]
+            let ay : i64 = MVA[(k * 2i64) + 1i64]
+            let bx : i64 = MVPTS[p + 2i64]
+            let by : i64 = MVPTS[p + 3i64]
+            mv_seg(0i64, 0i64, ax, ay, 4281019704u32)
+            mv_seg(ax, ay, bx, by, 4280493112u32)
+            mv_seg(bx, by, d * sc, 0i64, 4280498224u32)
+        }
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* the coupler path itself: connect consecutive reachable P midpoints, bright magenta. */
+fn cv_draw_path(n: i64) -> i32 {
+    let mut prevx : i64 = 0i64
+    let mut prevy : i64 = 0i64
+    let mut have : u8 = 0u8
+    let mut firstx : i64 = 0i64
+    let mut firsty : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        let ca : i64 = MVCASE[k]
+        if ca >= 2i64 {
+            let p : i64 = k * 4i64
+            let pxm : i64 = (MVCRV[p] + MVCRV[p + 1i64]) / 2i64
+            let pym : i64 = (MVCRV[p + 2i64] + MVCRV[p + 3i64]) / 2i64
+            if have == 1u8 { mv_seg(prevx, prevy, pxm, pym, 4294934271u32) }
+            mv_dot(pxm, pym, 4294934271u32)
+            prevx = pxm
+            prevy = pym
+            have = 1u8
+            if firstx == 0i64 { if firsty == 0i64 { firstx = pxm   firsty = pym } }
+        }
+        k = k + 1i64
+    }
+    if n == 24i64 { if have == 1u8 { mv_seg(prevx, prevy, firstx, firsty, 4294934271u32) } }
+    return 0i32
+}
+
+/* render mech_curve.bmp: coupler path in magenta over the faint mechanism. */
+fn cv_render(a: i64, d: i64, n: i64) -> i32 {
+    let sc : i64 = 10000i64
+    cv_box(a, d)
+    let padx : i64 = ((CVBXMAX - CVBXMIN) / 12i64) + sc
+    let pady : i64 = ((CVBYMAX - CVBYMIN) / 12i64) + sc
+    mv_setup_box(CVBXMIN - padx, CVBXMAX + padx, CVBYMIN - pady, CVBYMAX + pady)
+    ui_clear((&MVFB) as u64, 800u32, 600u32, 4279173144u32)
+    cv_draw_mech(d)
+    cv_draw_path(n)
+    mv_dot(0i64, 0i64, 4294967295u32)
+    mv_dot(d * sc, 0i64, 4294967295u32)
+    MVPATH2[0u64] = 109u8   MVPATH2[1u64] = 101u8   MVPATH2[2u64] = 99u8   MVPATH2[3u64] = 104u8
+    MVPATH2[4u64] = 95u8    MVPATH2[5u64] = 99u8    MVPATH2[6u64] = 117u8  MVPATH2[7u64] = 114u8
+    MVPATH2[8u64] = 118u8   MVPATH2[9u64] = 101u8   MVPATH2[10u64] = 46u8  MVPATH2[11u64] = 98u8
+    MVPATH2[12u64] = 109u8  MVPATH2[13u64] = 112u8  MVPATH2[14u64] = 0u8
+    let rc : i32 = ui_save_bmp((&MVFB) as u64, 800u32, 600u32, (&MVPATH2) as u64)
+    if rc == 0i32 { pstr("wrote mech_curve.bmp (800x600): the coupler path in magenta over the faint mechanism~")   pnl() }
+    return 0i32
+}
+
 var MVTITLE : [u8; 24]
 /* live window: animate the exact poses (ESC or q closes; frames=0 runs until closed) */
 fn show(a: i64, b: i64, c: i64, d: i64, frames: i64) -> u64 {
@@ -923,6 +1124,7 @@ fn usage() -> u64 {
     pstr("  mech sweep <a> <b> <c> <d>        exact coupler sweep at the 24 zeta-24 crank angles (links 1..40)~")   pnl()
     pstr("  mech view <a> <b> <c> <d>         render the exact cycle to mech_view.bmp (links 1..40)~")   pnl()
     pstr("  mech show <a> <b> <c> <d> [n]     LIVE window animating the exact cycle (ESC/q quits; n frames cap)~")   pnl()
+    pstr("  mech curve <a> <b> <c> <d> <un ud vn vd>  certified coupler-point path P=A+(un/ud)(B-A)+(vn/vd)perp(B-A)~")   pnl()
     return 2u64
 }
 
@@ -995,7 +1197,34 @@ fn main(argc: i32, argv: u64) -> u64 {
             if d > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
             return sweep(a, b, c, d)
         }
-        if fb != 100u8 { return usage() }          /* only 'design' / 'sweep' */
+        if fb == 99u8 {
+            /* curve: 4 links + u (un ud) + v (vn vd) */
+            if argc != 10i32 { return usage() }
+            let qa : u64 = pp[2u64]   let qb : u64 = pp[3u64]   let qc : u64 = pp[4u64]   let qd : u64 = pp[5u64]
+            let a : i64 = parse_u(qa)   let b : i64 = parse_u(qb)
+            let c : i64 = parse_u(qc)   let d : i64 = parse_u(qd)
+            if a < 1i64 { return usage() }
+            if b < 1i64 { return usage() }
+            if c < 1i64 { return usage() }
+            if d < 1i64 { return usage() }
+            if a > 40i64 { pstr("REFUSED: curve envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if b > 40i64 { pstr("REFUSED: curve envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if c > 40i64 { pstr("REFUSED: curve envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            if d > 40i64 { pstr("REFUSED: curve envelope is 1..40 (sweep certificates)~")   pnl()   return 3u64 }
+            let qun : u64 = pp[6u64]   let qud : u64 = pp[7u64]   let qvn : u64 = pp[8u64]   let qvd : u64 = pp[9u64]
+            let un : i64 = parse_u(qun)   let ud : i64 = parse_u(qud)
+            let vn : i64 = parse_u(qvn)   let vd : i64 = parse_u(qvd)
+            if ud < 1i64 { return usage() }
+            if vd < 1i64 { return usage() }
+            if un < 0i64 { return usage() }
+            if vn < 0i64 { return usage() }
+            if ud > 20i64 { pstr("REFUSED: parameter denominators capped at 20~")   pnl()   return 3u64 }
+            if vd > 20i64 { pstr("REFUSED: parameter denominators capped at 20~")   pnl()   return 3u64 }
+            if un > (3i64 * ud) { pstr("REFUSED: |u| capped at 3~")   pnl()   return 3u64 }
+            if vn > (3i64 * vd) { pstr("REFUSED: |v| capped at 3~")   pnl()   return 3u64 }
+            return curve(a, b, c, d, un, ud, vn, vd)
+        }
+        if fb != 100u8 { return usage() }          /* only 'design' / 'sweep' / 'view' / 'show' / 'curve' */
         if argc != 5i32 { if argc != 7i32 { return usage() } }
         let pa : u64 = pp[2u64]   let pb : u64 = pp[3u64]   let pc : u64 = pp[4u64]
         let a : i64 = parse_u(pa)   let b : i64 = parse_u(pb)   let c : i64 = parse_u(pc)

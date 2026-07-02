@@ -1,24 +1,8 @@
-/* zk_fused_committed.iii -- P2b SCALE-UP (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md): the FULL compute+memory+control
- * zkVM (a real 32-STORE + 32-LOAD program, ONE N=64 trace, W=19, 20 transition constraints + a k=4 grand-product
- * permutation) verified as a COMMITTED proof over GF(p^4) -- closing finding F1 for the whole fused AIR.
- *
- * Over zk_fused_prod (whose verify() read the prover's FRI arrays from shared memory and used a FIXED combination
- * alpha), this adds:
- *   (1) the 19 trace-column LDEs are MERKLE-COMMITTED (one SHA-256 root per column); the composition polynomial CP is
- *       committed as the FRI layer-0 root; every FRI layer is committed (P2a).  Challenges + queries derive from the
- *       committed roots, so the prover is BOUND before it sees them.
- *   (2) the combination challenge alpha (GF(p^4), per constraint) is FS-DERIVED from the committed trace roots (sound
- *       order: commit-then-challenge) -- not the fixed alpha zk_fused_prod baked in (a prover could otherwise pick a
- *       trace whose constraint violations cancel under a known alpha).
- *   (3) the verifier, per FS-derived query q, OPENS + merkle_verify_proof's every trace leaf air_combine_ext4 reads
- *       (all 19 columns at q and at q+B) against their committed roots, BINDING air's proven combine to the commitment;
- *       opens CP(q); checks the construction-exact line-755 CP*Z_H == combine*(x-omega^{n-1}) + the GF(p^4) FRI fold;
- *       and checks the k=4 permutation boundary at OPENED accumulator leaves.
- *
- * Returns 99 iff: (H) the honest execution VERIFIES + the k=4 boundary holds; (L) a FORGED LOAD value (read-consistency)
- * is REJECTED by the line-755 at a query; (P) a FORGED program access (non-permutation) is REJECTED by the k=4 boundary;
- * (O) a forged trace OPENING is REJECTED by Merkle; (R) a corrupted committed root is REJECTED.  A committed,
- * commitment-bound fused zkVM -- the production claim earned against Merkle openings, not shared memory. */
+/* zk_fused_forge63.iii -- THE LAST-ACCESS FORGE TEETH for the fused zkVM (P2b family): three memory-
+ * permutation forgeries against the SAME committed N=64 trace zk_fused_committed proves honest --
+ * forge 1 (sorted-side value VS[1]), forge 2 (mid access VP[32]), forge 3 (the ROW-63 LAST ACCESS,
+ * the class an i<63 grand-product would MISS -- the verifier folds access 63 into the final product
+ * and boundary check, so this forge too is REFUSED).  99 = every forge rejected. */
 module zk_fused_committed
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"

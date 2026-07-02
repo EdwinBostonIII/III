@@ -15,6 +15,8 @@
  *   dc_selftest            : every DUR_LIMIT_* constant kernel-certified + the add/mul saturation
  *                            behavior agrees with the kernel verdict on boundary witnesses.
  *
+ * DELIBERATELY SPLIT from tempora/duration (reunification W4d verify): duration stays typecheck-
+ * ISOLATED (zero kernel deps); this file alone carries the BV64 certification -- NOT a merge candidate.
  * ARENA CONTRACT: resets the TC arena (per-decision scratch) -- certification-time use only.
  * Hexad: kind_decision.  Ring: R0.  NIH: typecheck (the BV64 kernel) + duration only. */
 module tempora_duration_cert

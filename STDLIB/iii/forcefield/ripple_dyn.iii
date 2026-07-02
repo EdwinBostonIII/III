@@ -1,5 +1,8 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\ripple_dyn.iii
  *
+ * LIVE CONSUMER (reunification W4c.4.1): forcefield/pleroma (the coherence gate, wired into the
+ * build) consumes this layer -- the retire-by-attrition flag is CLOSED, do not re-litigate.
+ *
  * The ripple network - signed dynamic-name layer (STANDALONE artifact).  Sits
  * ON TOP of the content value layer (ripple.iii): the content layer names
  * immutable values; this layer names MUTABLE cells whose current value is a

@@ -53,7 +53,9 @@ RUNNERS=(
 # so a newly-added family cannot be silently missing from the one sweep.
 MISSING=0
 for cited in $(grep -o "run_[a-z_]*\.sh" "$S/run_corpus.sh" | sort -u); do
-    [[ "$cited" == "run_corpus.sh" ]] && continue
+    # run_corpus.sh is the core loop (a RUNNER entry, not a family); run_all_corpora.sh is THIS
+    # sweep -- run_corpus names it in its S8-teeth exclusion comment, but a sweep never lists itself.
+    [[ "$cited" == "run_corpus.sh" || "$cited" == "run_all_corpora.sh" ]] && continue
     found=0
     for r in "${RUNNERS[@]}"; do [[ "$(basename "$r")" == "$cited" ]] && found=1; done
     if [[ $found -eq 0 ]]; then

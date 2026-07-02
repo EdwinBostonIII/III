@@ -1,4 +1,5 @@
 # CRASH-AUDIT: gate_resident.sys BSOD (2026-05-23)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 Per CRASH DEBUGGING PROTOCOL. Phases 1+2 (evidence + verify-in-binary) complete BEFORE any edit.
 

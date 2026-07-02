@@ -1,4 +1,5 @@
 # CRASH-AUDIT C.10 — the R3 IOCTL bridge `r3_ioctl_driver.c`
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 **Unit:** C.10 — Katabasis descent gate & Ring-0 deploy (`DOCS/III-CAPABILITY-APOTHEOSIS.md` §C.10, lines 517-538).
 **Status:** `audited` — CRASH PROTOCOL **Phase 1 (read-only evidence)** only. **No source built; no .iii/.c/.sov/.py edited; no kernel build or deploy attempted.** This is Ring-0 / BSOD territory; the live build + deploy are explicitly **trigger-gated** (see §4 Escalations).

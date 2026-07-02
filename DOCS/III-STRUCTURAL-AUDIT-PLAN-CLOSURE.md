@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Closure: Provability Verification & Document Map
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > The final pass. The audit was verified against live code (`-VERIFICATION.md`); the work was
 > granularized into a wave-ordered, falsifier-first, deferral-free plan (`-PLAN-00` … `-PLAN-5`).

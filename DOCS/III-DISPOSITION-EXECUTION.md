@@ -1,4 +1,5 @@
 # III — Disposition Execution Package (adversarially verified, seal-safe)
+> **SUPERSEDED-BY: III-PERFECTION-LEDGER.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 **Provenance:** workflow `worshphmy` (`iii-arch-verify`), 2026-05-28 — 18 read-only `Explore`
 agents (4 inventory · 13 adversarial verifiers · 1 synthesizer), prove-the-negative against the

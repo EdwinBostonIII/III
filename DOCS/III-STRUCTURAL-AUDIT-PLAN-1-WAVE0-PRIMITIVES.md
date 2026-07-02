@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Part 1 · Wave 0: The Missing Primitive Layer
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **AUDIT STATUS (2026-05-30, verified vs live code):**
 > - **W0.1 bound.iii — ESSENTIALLY DONE (corrected by code-reading).** Organ ✅; consumers routed:

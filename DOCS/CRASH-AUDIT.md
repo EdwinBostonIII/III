@@ -1,4 +1,5 @@
 # CRASH-AUDIT — Phase XII-φ: iiis u32-in-u64-slot codegen retrofit
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 CRASH-PROTOCOL governed. Phase 1 = EVIDENCE only (read-only; NO
 .iii/.c/.py edits until this audit is complete AND a reproduction is

@@ -1,4 +1,5 @@
 # III — Disposition Audit (get-rid-of / update / refactor)
+> **SUPERSEDED-BY: III-PERFECTION-LEDGER.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 Companion to the cartographer Master Systems Map (scan #80, 2026-05-28). Where the map
 reports *structure* (fan-in, cycles, conflicts), this reports *disposition*: for every

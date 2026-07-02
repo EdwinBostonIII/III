@@ -1,4 +1,5 @@
 # III Findings Wave W2700 — ultracode discovery fan-out (wf_5a3bdce4-199)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 A 16-lens read-only discovery Workflow (54 agents, 4.0M subagent tokens) swept every III subsystem
 for production-readiness defects across classes: crypto false-accept, PQ param-validation, bigint

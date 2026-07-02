@@ -1,4 +1,5 @@
 # Organ E — the Forked Walk (`forcefield/forked_walk`) Implementation Plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **✅ IMPLEMENTED + GREEN (2026-06-04):** built, gated, verified on metal — KAT exit **99**.
 > As-built corpus id is **1101** (`1101_forked_walk`, module `corpus_1101`) — renumbered from the

@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Part 4 · Wave 4: Vacuous gates made load-bearing
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **✅ AUDIT-VERIFIED INTEGRATED (2026-05-30).** Every W4.1–W4.5 gate is live in the working
 > system, load-bearing, and falsifier-gated: charter_terminal self-populates; proof_pair /

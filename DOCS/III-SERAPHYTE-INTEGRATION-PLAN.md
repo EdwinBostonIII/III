@@ -1,4 +1,5 @@
 # III ⊗ SERAPHYTE — THE INTEGRATION PLAN
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 ## ΖΩΟΝ ΣΗΜΑΝΤΙΚΟΝ ΕΝ ΤΗ ΑΛΗΘΕΙΑ — *The Living Meaning-Organism inside the Truth*
 
 > Status: **PLAN (design-complete, implementation-pending).** This is a plan; not one line of the

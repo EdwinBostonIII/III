@@ -1,4 +1,5 @@
 # III Findings Wave W2616 — recovered from the rate-limited discovery workflow (wf_2616d435-59b)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 70 unique grounded findings (discover agents read real code; verify phase rate-limited, so hand-verify
 each here, default-skeptical). Status: [ ] todo, [x] fixed, [~] verified-not-real/declined, [D] deferred.

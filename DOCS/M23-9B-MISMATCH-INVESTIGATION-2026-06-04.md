@@ -1,4 +1,5 @@
 # M23 9b behavioral quine-seal MISMATCH — investigation (2026-06-04)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 Status: **RESOLVED + PROVEN ON METAL — RE-PROVEN 2026-06-04 on .sys `3555362c`** after the perfection
 audit campaign (6 cg_r0/cg_r3 defects + the SHA-NI-dispatch kernel integration; see

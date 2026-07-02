@@ -1,4 +1,5 @@
 # III — Productionizing the Self-Optimizer (diagnosis + the fork)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 **2026-06-04.** Goal (operator): bring about the **full production-ready self-optimizer** — III's compiler
 actually optimizing the code it generates, via III's own reasoning, to the highest quality.

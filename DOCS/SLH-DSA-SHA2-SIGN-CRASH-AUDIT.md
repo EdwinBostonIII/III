@@ -1,4 +1,5 @@
 # SLH-DSA-SHA2 sign SEGFAULT — CRASH-protocol audit (#5)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 Quarantined corpus test: `STDLIB/corpus/_quarantine_wip/1022_pq_dispatch_sha2_route.iii` (exit 139).
 Backtrace (prior gdb, README): `main → iii_pq_sign → iii_slhdsa_sha2_sign → iii_slhdsa_sign → iii_slhdsa_sign_sealed`.

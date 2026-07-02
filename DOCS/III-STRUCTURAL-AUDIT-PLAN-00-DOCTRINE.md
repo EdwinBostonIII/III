@@ -1,4 +1,5 @@
 # III Structural Audit — Implementation Doctrine (Plan, Part 0)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **For agentic workers:** This is the spine of the granular implementation plan derived from
 > `DOCS/III-STRUCTURAL-AUDIT.md`. The per-finding, file-by-file, step-by-step tasks live in the

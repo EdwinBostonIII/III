@@ -1,4 +1,5 @@
 # CRASH AUDIT — BSOD 0x50 PAGE_FAULT_IN_NONPAGED_AREA (gate_ioctl.sys, 2026-06-04)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 Status: **FIXED + verified in Ring-3 and in the binary; gates green; goldens resealed. Metal
 re-deploy is the only remaining step (operator-gated UAC).**

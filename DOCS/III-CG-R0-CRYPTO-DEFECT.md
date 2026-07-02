@@ -1,4 +1,5 @@
 # cg_r0 (Ring-0 backend) crypto codegen defect — u32 WIDTH **[FIXED 2026-06-04]**
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 **Found:** 2026-06-04, by the C.10 KATABASIS IOCTL-gate metal deploy (the first-ever metal test of the M23 quine-seal).
 **Status:** ✅ **FIXED + VERIFIED.** The defect is u32 WIDTH (NOT register pressure — the initial hypothesis below

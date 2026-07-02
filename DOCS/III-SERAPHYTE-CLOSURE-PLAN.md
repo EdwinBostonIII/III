@@ -1,4 +1,5 @@
 # III ⊗ SERAPHYTE — THE CLOSURE PLAN (the apply wire, automated + proof-gated)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > Status: **PLAN, grounded against the live tree 2026-06-24.** This closes the ONE open wire the
 > integration plan (Part XII:924–998) names as the unstarted hard deliverable: *one organism-DISCOVERED

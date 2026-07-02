@@ -1,4 +1,5 @@
 # KATABASIS Ring −1 (the III Floor) — the get-it-right-first-time plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > Status: PLAN (no metal code emitted by this doc). Built from a thorough read of
 > `DOCS/CHARIOT_HARVEST.md`, the working hypervisor at `C:\Users\Edwin Boston\OneDrive\Desktop\

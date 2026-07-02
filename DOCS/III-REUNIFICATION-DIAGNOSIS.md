@@ -2,6 +2,7 @@
 ### "Splinters into a cabin": the honest current-state map + the path back to ONE source of truth
 > **Date:** 2026-06-20 · **Author pass:** /deep-think · /receiving-code-review (verify-before-assume)
 > **Status:** DIAGNOSIS COMPLETE · PLAN PROPOSED — destructive steps gated on user direction (§7 forks)
+> **EXECUTION:** this diagnosis is being executed by **III-REUNIFICATION-PLAN.md** (the file-by-file program, W0-W8, 2026-07-01/02); its per-module XII snapshot predates the 12-merge de-sprawl (xii_rule/fusion/iflift_verify now = xii_semantic_verify).
 > **Method note:** Every claim below was read from git history + the live tree this session. Where the
 > user's recalled mental model and the repo disagree, the repo state is stated and the divergence flagged.
 

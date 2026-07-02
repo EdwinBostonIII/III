@@ -1,4 +1,5 @@
 # III Findings Wave W3000 — fresh-slice coverage strengthening
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 A coverage-strengthening Workflow (37 agents) swept prover falsifier arms, math laws, develop-up
 hypervisor boxes, determinism/confluence, compiler error-paths, and memoria/tempora. Verdict on the

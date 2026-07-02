@@ -1,4 +1,5 @@
 # The Unified Weave — Melt Plan & `@inline` Keystone
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 The weave: ONE mathematical woven structure, the common denominator of every former III primitive,
 until the borrowed names (ChaCha, Blake2, Montgomery, …) are obsolete. Bit-identity is the correctness

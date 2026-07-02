@@ -1,4 +1,5 @@
 # III Compiler — Class 2 (pure-logic) Port Blueprint → zero `.c` in the build tree
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 **Status:** design, ready to execute next session. No code changes made writing this.
 **Author context:** follows the completed compiler **data-model port** (AST + sema + emit

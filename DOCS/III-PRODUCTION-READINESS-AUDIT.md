@@ -1,4 +1,5 @@
 # III — Production-Readiness Audit (file-by-file → macro rollup)
+> **SUPERSEDED-BY: III-PRODUCTION-READINESS-COMPLETION.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 **Directive (2026-05-31, user, ultracode):** audit the *entirety* of III file-by-file / capability-by-capability
 toward **production-ready, fully functional**. A file that comes back perfect is recorded and skipped; a file

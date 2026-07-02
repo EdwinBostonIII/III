@@ -1,4 +1,5 @@
 # III — Sovereign Enhancement: the coordination that makes the improver non-vacuous
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 *The self-improvement faculties (ripple improver, PCC / inductive proof generator, HW/SX silicon
 organs) produce **meaningful** enhancements iff they instantiate the Enhancement Theorem

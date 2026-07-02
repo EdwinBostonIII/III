@@ -1,4 +1,5 @@
 # III zkVM — Concrete Soundness Accounting (the quantitative oracle)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 > **The honest word is the asterisk.** Everywhere the zk gate / docs / commits say a gadget is **SOUND**, it means
 > **STRUCTURALLY sound**: *no prover can bypass the binding* (the permutation challenge is FS-derived from the

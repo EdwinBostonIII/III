@@ -1,4 +1,5 @@
 # III zkVM — the grand-product permutation SEED-PIN gap (found + FIXED 2026-06-24)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 > **✅ FIXED across all consumers.** An adversarial Workflow (`zk-soundness-audit-2`) found + empirically
 > demonstrated a **CRITICAL** soundness hole in the production zkVM's memory-consistency (grand-product

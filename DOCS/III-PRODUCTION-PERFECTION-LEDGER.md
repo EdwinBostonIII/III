@@ -1,4 +1,5 @@
 # III — Production-Perfection Campaign Ledger
+> **SUPERSEDED-BY: III-PERFECTION-LEDGER.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 **Directive (2026-06-03, user, ultracode):** complete ALL increments through to project
 completion — not just the next one. No deferrals, placeholders, compromises, skips, or NIH

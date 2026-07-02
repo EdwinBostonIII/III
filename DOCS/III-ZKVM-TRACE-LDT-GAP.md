@@ -1,4 +1,5 @@
 # III — CRITICAL zkVM soundness hole: the committed STARK has NO low-degree test on the TRACE  **[FIXED 2026-06-24]**
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 > **STATUS UPDATE 2026-06-24 — the first fix (`6e6cc75b`) was INSUFFICIENT (FS audit found two deeper holes); BOTH
 > are now FIXED + verified by reproduce-then-fix. Production was verified unaffected throughout.**

@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Part 5 · Wave 5 (de-deferred forge/frozen passes) + Wave 6 (seal-gated compiler)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **AUDIT STATUS (2026-05-30):** **Wave 5 ✅ INTEGRATED** — W5.1 census OOB + forge reseal
 > (K3 `cca70c89…`, descent root `b21588fb…`); W5.2 the Keccak manifest tool BUILT

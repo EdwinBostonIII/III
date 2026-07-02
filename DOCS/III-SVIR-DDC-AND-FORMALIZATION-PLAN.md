@@ -1,4 +1,5 @@
 # SVIR — DDC Frontend-Closure + Integer-Language Formalization: Conceptualization, Audit, Plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (inline; **no subagents on III**).
 > Steps use `- [ ]`. Process: main-session, gate-driven, commit per task.

@@ -501,6 +501,7 @@ DELETE `STDLIB/build/debug_sha256.c` + `debug_sha256_empty.c` — the wrong-hash
 - [x] Every DELETE verdict verified reference-free by grep across BOOT/scripts/sovir gates before pronouncement.
 - [x] Facts columns (loc/date/build/crefs/callers) machine-extracted from the live tree on 2026-07-01; judgments manual per file.
 - [ ] OPEN: one full `build_stdlib.sh && run_corpus.sh` run after executing S1/S2 to confirm ratchets green (not run during this audit — audit is read-only).
+- **CORRIGENDUM (reunification plan, 2026-07-02):** the name-presence completeness gate above also matched APPENDIX-A extern-subject mentions, so five numera modules (certified_morphism, combinator, cpufeat, synthesis_spec, temporal_logic) were never actually verdicted in §8b — fresh-verdicted KEEP in III-REUNIFICATION-PLAN W4a with the census-hole mechanism named; that plan's W8 completeness gate uses strict verdict-row matching. S1 was RESTORED by that plan's W0 (uncovered 85→3, gates 10→0, dark 205→10, incl. the APP-SURFACE-MODULE designation added to sanctus/corpus_coverage with its falsifier arm in KAT 1464).
 
 ---
 

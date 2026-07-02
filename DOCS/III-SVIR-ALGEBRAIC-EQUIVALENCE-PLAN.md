@@ -1,4 +1,5 @@
 # SVIR Algebraic Equivalence — Implementation Plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **For agentic workers:** implement task-by-task; each task ends in a corpus KAT (EXIT=99) and a clean `build_stdlib`. Steps use `- [ ]` tracking.
 

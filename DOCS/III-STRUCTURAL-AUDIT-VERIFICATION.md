@@ -1,4 +1,5 @@
 # III Structural Audit — Verification Ledger
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > Per-finding verification of every claim in `DOCS/III-STRUCTURAL-AUDIT.md` against the **live**
 > codebase as of **2026-05-29**. Each finding was checked by a read-only verify pass (does the

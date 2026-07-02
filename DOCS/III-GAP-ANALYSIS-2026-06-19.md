@@ -1,4 +1,5 @@
 <!-- III GAP ANALYSIS — generated 2026-06-19 by a 12-lens read-only ultracode workflow (65 agents, 4.35M tokens,
+> **SUPERSEDED-BY: III-GAP-BACKLOG.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
      every high-impact finding adversarially verified). Read-only deliverable; informs the continuous improvement loop. -->
 
 # III Gap Analysis (state vs. opportunity)

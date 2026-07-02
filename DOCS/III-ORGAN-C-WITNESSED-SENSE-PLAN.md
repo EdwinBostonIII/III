@@ -1,4 +1,5 @@
 # Organ C — the Witnessed Sense (`sanctus/observe`) Implementation Plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **✅ IMPLEMENTED + GREEN (2026-06-04):** built, gated, verified on metal — KAT exit **99**.
 > As-built corpus id is **1100** (`1100_obs_witnessed`, module `corpus_1100`) — renumbered from

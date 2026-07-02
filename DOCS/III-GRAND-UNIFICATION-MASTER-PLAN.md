@@ -1,4 +1,5 @@
 # III — GRAND UNIFICATION: Master Plan to the Final State
+> **SUPERSEDED-BY: III-COMPLETION-PLAN.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 > **Final state, in one sentence:** a single, gated, reproducible pipeline in which a real EIDOS
 > computation is compiled to SVIR, canonicalised by XII under a sealed/proven rule manifest with an

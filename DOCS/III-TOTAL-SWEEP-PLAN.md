@@ -1,4 +1,5 @@
 All load-bearing facts are pinned. Producing the plan.
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 ---
 

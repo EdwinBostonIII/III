@@ -1,4 +1,5 @@
 # III-APOTHEOSIS-PREP.md — priming & seeding the current tree for the overhaul
+> **SUPERSEDED-BY: III-APOTHEOSIS.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 **What this is.** The durable state machine (analogous to `CONVERGENCE-BUILD-LEDGER.md`)
 for *preparing* the existing III tree so the 31 idealized modules of

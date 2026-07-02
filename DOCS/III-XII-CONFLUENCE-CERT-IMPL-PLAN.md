@@ -1,4 +1,5 @@
 # III-XII Confluence-Core Certificate — Implementation Plan (R1, execution-exact)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 Companion to `DOCS/III-XII-CONFLUENCE-CERTIFICATE-ARCH.md`. This is the file-by-file, step-by-step
 execution order. **Every step carries a falsifiable GATE and a ROLLBACK; no step begins until the

@@ -1,4 +1,5 @@
 # III Structural Audit — Traceability Matrix (Plan, Inventory)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > Complete map of all **79 findings** (74 axis findings + 5 synthesis claims) → cited source ids →
 > primary live target file(s) → build wave (`-PLAN-00-DOCTRINE.md` §3) → seal class (§2) →

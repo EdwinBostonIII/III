@@ -1,4 +1,5 @@
 # Ring −1 LEDGER — living log of refinements, enhancements, safety means, certainty means
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > Companion to `DOCS/RING-MINUS-1-PLAN.md`. Every refinement to the plan, every enhancement
 > opportunity, every safety mechanism, and every certainty/verification mechanism is recorded here

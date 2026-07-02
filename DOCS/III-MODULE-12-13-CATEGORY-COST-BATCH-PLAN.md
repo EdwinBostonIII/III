@@ -1,4 +1,5 @@
 # Modules 12 + 13 — Category & Cost: batch implementation plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 ## Gate cleared
 

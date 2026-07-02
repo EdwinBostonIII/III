@@ -1,4 +1,5 @@
 # Organ A — the Learned Proposer: a sealed negative finding + the real frontier
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 **Status: FINDING (a proven negative result + a reframe). Date: 2026-06-04.** Not a build — a
 prove-the-negative that *saves* a build. Records why a genuinely-trained `nous` proposer over the

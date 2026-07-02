@@ -1,4 +1,5 @@
 # Module 9 — the Proof Kernel: file-by-file lean implementation plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 ## Gate cleared
 

@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Part 3 · Wave 3: Consumers heal · Performance · Primitives · Hardening · Dead-matter
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **AUDIT STATUS (2026-05-30, verified vs live code):**
 > - **✅ INTEGRATED:** W3.3 crystal id-band (965), W3.4 cgr_contains (964), W3.6 cpufeat AVX-512DQ,

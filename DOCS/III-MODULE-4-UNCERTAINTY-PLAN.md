@@ -1,4 +1,5 @@
 # Module 4 — the Unified Uncertainty (typed gap): file-by-file lean implementation plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 ## Gate cleared
 

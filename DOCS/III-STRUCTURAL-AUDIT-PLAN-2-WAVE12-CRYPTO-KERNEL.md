@@ -1,4 +1,5 @@
 # III Structural Audit — Plan Part 2 · Wave 1 (crypto chokepoint) + Wave 2 (trusted base)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > **✅ AUDIT-VERIFIED INTEGRATED (2026-05-30).** W1.1 chokepoint (`xeg_override_index` +
 > `XEG_CRYPTO_HORIZON_MAX`, corpus 937) ✓; W1.2 dead crypto bodies removed (4 `xii_curated_crypto*`

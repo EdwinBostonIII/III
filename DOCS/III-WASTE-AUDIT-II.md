@@ -1,4 +1,5 @@
 # III WASTE AUDIT II — the flipped default, the named veto list, the build-tree bloat
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 *Supersedes the thesis of `III-WASTE-AUDIT.md` ("don't delete, wire it into the weave"). That thesis was
 the bias the user rejected twice: it is the same "it's gated/valuable, just unwired" defense that protected

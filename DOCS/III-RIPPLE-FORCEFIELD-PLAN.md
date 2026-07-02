@@ -1,4 +1,5 @@
 # III — Ripple / Forcefield Convergence Plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 *End-to-end plan for enhancing the live III system toward the fixed standards of
 this design arc: perfect mathematical consistency, content-addressed determinism,

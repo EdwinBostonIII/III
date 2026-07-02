@@ -1,4 +1,5 @@
 # III Grand-Unification — Adversarial Audit & Perfection Plan
+> **SUPERSEDED-BY: III-COMPLETION-PLAN.md** — this document is a HISTORICAL RECORD of its campaign era; the pointer target is the live doc (reunification W6, 2026-07-02).
 
 **Date:** 2026-06-24. **Method:** read the actual code (not the summaries), default-to-refuted, fairness-check every
 harsh finding. Scope: the grand-unification arc (Ω1 zkVM, Ω2 EIDOS→SVIR, Ω3 XII proof) — the freshest and most

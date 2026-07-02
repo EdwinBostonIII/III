@@ -1,4 +1,5 @@
 # III Findings Wave W2900 — coverage/proof strengthening (renewable loop pivot)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 After the defect/perf axes saturated (yields 13->5->1->14-negligible), the loop pivoted to coverage
 strengthening: a discovery Workflow (40 agents) found weak/shallow KATs + un-asserted negative/property

@@ -1,4 +1,5 @@
 # III WASTE AUDIT (meticulous, read-based) -- what was CUT, and why the rest is NOT waste
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 ## CUT (done, verified, resealed): 13 items, 680 -> 670 modules
 

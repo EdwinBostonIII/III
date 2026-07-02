@@ -1,4 +1,5 @@
 # KATABASIS Ring −1 — Milestone Record (I0 → I4, proven on metal)
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 > The polished record of III's descent into Ring −1 of live Windows. The working log is
 > `DOCS/RING-MINUS-1-LEDGER.md`; the proven SVM recipe is `DOCS/SVM-CONSTANTS-HARVEST.md`; the

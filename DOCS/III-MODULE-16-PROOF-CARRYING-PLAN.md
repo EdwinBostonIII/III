@@ -1,4 +1,5 @@
 # Module 16 — Proof-carrying: lean implementation plan
+> **STATUS: HISTORICAL RECORD** — an executed campaign plan/ledger, kept immutable as evidence (reunification W6).
 
 ## Gate cleared
 

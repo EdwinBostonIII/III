@@ -1,4 +1,5 @@
 # CRASH-AUDIT #2: gate_resident.sys BSOD (2026-05-23, build b756791c)
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 CRASH PROTOCOL. Phases 1+2 (evidence + verify-in-binary) complete BEFORE any .iii/.py edit.
 This is the SECOND BSOD. The first (audit #1) was a dropped `if` guard; this is a different,

@@ -1,4 +1,5 @@
 # III zk layer — the soundness gap, found AND FIXED by the discriminating test
+> **STATUS: HISTORICAL RECORD** — crash forensics / closed findings of their era; the fixes are landed and gated (reunification W6).
 
 > **✅ FULLY RESOLVED 2026-06-24 — in TWO stages (the first was honest-prover-only).** Stage 1 (below) fixed the
 > HONEST-prover transition soundness (the Z_T/true-quotient fix). Stage 2 closed a remaining **MALICIOUS-prover** hole:

@@ -8,8 +8,16 @@ to a plain text log.
 
 Built entirely in `.iii` over `kernel32` (no C runtime, no third party). Charter + milestone history:
 `DOCS/III-STOMA-PLAN.md`. Universality evidence: `DOCS/III-STOMA-MATRIX.md`. Family gate:
-`STDLIB/scripts/run_stoma_kats.sh` (13/0). `stoma.exe` links via **sovld** (sovereign, no `ld`) and
-via gcc for the dev loop.
+`STDLIB/scripts/run_stoma_kats.sh` (14/0, run from repo root).
+
+**Build status (honest):** the shipping `stoma.exe` is **gcc-linked** and fully verified (gate 14/0,
+interactive pty included). The **sovereign** path (`sovbuild.sh` → `sovas`/`sovld`, no `ld`)
+*compiles and links* all 11 modules to a PE32+ (8 sovereign + 3 witness), and it produced a running
+binary at the earlier smaller closure (M4, ~7 modules) — but at the current closure of 11 the
+sovld-linked image fails to start (loader error, exit 127), an IAT/import-table limitation in the
+**sovereign linker** surfaced by STOMA's large kernel32 surface (ConPTY + job objects + pipes +
+console + file APIs). That is a `sovld` issue to fix on the sovereign-toolchain track, not a STOMA
+defect; STOMA's own `.iii` is sovereign-clean (kernel32-only, no CRT).
 
 ## The two laws
 
@@ -118,6 +126,8 @@ preserved.
 
 ```
 bash STDLIB/scripts/run_stoma_kats.sh                       # family gate: 14/0 (run from repo root)
-bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld; closure 11)
-printf 'help\n<cmd>\nexit\n' | ./out.exe                    # plain-mode drive
+# gcc-linked stoma.exe (the verified product) is built + smoke-tested inside the gate above.
+bash STDLIB/sovtc/sovbuild.sh STDLIB/iii/aether/stoma.iii out.exe   # sovereign link (sovld, no ld; links, but
+                                                                    #   see Build status: exit 127 at closure 11)
+printf 'help\n<cmd>\nexit\n' | STDLIB/build/stoma_kats/stoma.exe    # plain-mode drive (gcc build)
 ```

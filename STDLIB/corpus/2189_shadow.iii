@@ -1,0 +1,120 @@
+/* 2189_shadow.iii -- GATE for the LYAPUNOV SHADOW (Turing charter V-II.2), the ADJUDICATED form: the
+ * "exact Lyapunov exponent" is a t->infinity limit (not finite-run computable; fitting one would be
+ * observational learning) -- STRIPPED at the charter.  What IS exact and gateable about sensitive
+ * dependence:
+ *
+ *   TWIN ENSEMBLES: B differs from A by EXACTLY ONE QUANTUM of momentum (particle 2, vz: 7 -> 8).
+ *   K -- THE FIRST-DIVERGENCE INDEX k* = 9: the twins' response sequences are combinatorially
+ *        IDENTICAL for exactly nine responses and split at an EXACT machine-decided index.
+ *   S -- EXACT VELOCITY-SPACE SEPARATION at 500/1500/3000 steps: 95, 81, 63 -- pure i64 identities.
+ *        THE MACHINE'S FINDING (it refuted the author's drafted "strictly growing" pin): in a BOUNDED
+ *        hard-cube gas the velocity multiset is CONSERVED up to sign (responses are swaps/negations),
+ *        so L1 separation is bounded and FLUCTUATES -- sensitive dependence shows as permanent
+ *        decorrelation (s > 0 at every checkpoint: the twins NEVER re-synchronize) and as different
+ *        event densities (3006 vs 3011 responses for the same 3000 steps), not as monotone growth.
+ *
+ * Every number is deterministic and pinned exactly; the claim is about THIS trajectory pair, never a
+ * limit.  exit 99 = pass;  10 runs;  11 k*;  12 decorrelation;  13 pins */
+module corpus_2189_shadow
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn g2_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_envelope(S: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_run_ct(k: u64, bits: i64) -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ct_reset() -> i32 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_events() -> u64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ek(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_ea(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eb(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_eax(i: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn g2_v(p: u64, ax: u64) -> i64 from "gas_big.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var LK : [i64; 8192]   var LA : [i64; 8192]   var LB : [i64; 8192]   var LX : [i64; 8192]
+var VA1 : [i64; 9]   var VA2 : [i64; 9]   var VA3 : [i64; 9]
+var VB1 : [i64; 9]   var VB2 : [i64; 9]   var VB3 : [i64; 9]
+
+fn setup(dvz: i64) -> i32 {
+    g2_reset()   g2_envelope(2i64)
+    g2_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(0i64, 1i64, 40i64, 1i64, 1i64)
+    g2_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(1i64, 1i64, 40i64, 3i64, 1i64)
+    g2_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)   g2_wall(2i64, 1i64, 40i64, 7i64, 1i64)
+    g2_part(10i64, 4i64, 4i64, 13i64, 3i64, 2i64)
+    g2_part(36i64, 4i64, 4i64, 0i64 - 11i64, 4i64, 3i64)
+    g2_part(10i64, 20i64, 20i64, 2i64, 9i64, 7i64 + dvz)
+    g2_ct_reset()
+    return 0i32
+}
+fn harvest(vp: u64) -> i32 {
+    let v : *i64 = vp as *i64
+    let mut p : u64 = 0u64
+    while p < 3u64 { let mut ax : u64 = 0u64   while ax < 3u64 { v[p * 3u64 + ax] = g2_v(p, ax)   ax = ax + 1u64 }   p = p + 1u64 }
+    return 0i32
+}
+fn sepsum(ap: u64, bp: u64) -> i64 {
+    let a : *i64 = ap as *i64   let b : *i64 = bp as *i64
+    let mut s : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 9u64 { let d : i64 = a[i] - b[i]   if d < 0i64 { s = s - d } else { s = s + d }   i = i + 1u64 }
+    return s
+}
+
+fn main() -> u64 {
+    vg_reset()
+    setup(0i64)
+    if g2_run_ct(500u64, 48i64) != 500u64 { return 10u64 }
+    harvest((&VA1) as u64)
+    if g2_run_ct(1000u64, 48i64) != 1000u64 { return 10u64 }
+    harvest((&VA2) as u64)
+    if g2_run_ct(1500u64, 48i64) != 1500u64 { return 10u64 }
+    harvest((&VA3) as u64)
+    let nA : u64 = g2_events()
+    let mut i : u64 = 0u64
+    while i < nA { LK[i] = g2_ek(i)   LA[i] = g2_ea(i)   LB[i] = g2_eb(i)   LX[i] = g2_eax(i)   i = i + 1u64 }
+
+    setup(1i64)                                             /* ONE quantum: particle 2 vz 7 -> 8 */
+    if g2_run_ct(500u64, 48i64) != 500u64 { return 10u64 }
+    harvest((&VB1) as u64)
+    if g2_run_ct(1000u64, 48i64) != 1000u64 { return 10u64 }
+    harvest((&VB2) as u64)
+    if g2_run_ct(1500u64, 48i64) != 1500u64 { return 10u64 }
+    harvest((&VB3) as u64)
+    let nB : u64 = g2_events()
+
+    /* k* = the exact first response-sequence divergence */
+    let mut kstar : i64 = 0i64 - 1i64
+    let mut nmin : u64 = nA
+    if nB < nmin { nmin = nB }
+    i = 0u64
+    while i < nmin {
+        if kstar < 0i64 {
+            let mut df : i64 = 0i64
+            if g2_ek(i) != LK[i] { df = 1i64 }
+            if g2_ea(i) != LA[i] { df = 1i64 }
+            if g2_eb(i) != LB[i] { df = 1i64 }
+            if g2_eax(i) != LX[i] { df = 1i64 }
+            if df == 1i64 { kstar = i as i64 }
+        }
+        i = i + 1u64
+    }
+    let s1 : i64 = sepsum((&VA1) as u64, (&VB1) as u64)
+    let s2 : i64 = sepsum((&VA2) as u64, (&VB2) as u64)
+    let s3 : i64 = sepsum((&VA3) as u64, (&VB3) as u64)
+    putchar(75i32) putchar(58i32) sp() e_i64(kstar) sp() e_i64(nA as i64) sp() e_i64(nB as i64) nl()
+    putchar(83i32) putchar(58i32) sp() e_i64(s1) sp() e_i64(s2) sp() e_i64(s3) nl()
+    if kstar != 9i64 { return 11u64 }                  /* one quantum, nine identical responses, then the split */
+    if s1 <= 0i64 { return 12u64 }                     /* permanent decorrelation: never re-synchronized */
+    if s2 <= 0i64 { return 12u64 }
+    if s3 <= 0i64 { return 12u64 }
+    if s1 != 95i64 { return 13u64 }                    /* exact deterministic separations, pinned */
+    if s2 != 81i64 { return 13u64 }
+    if s3 != 63i64 { return 13u64 }
+    if nA != 3006u64 { return 13u64 }                  /* different event DENSITIES for the same duration */
+    if nB != 3011u64 { return 13u64 }
+    return 99u64
+}

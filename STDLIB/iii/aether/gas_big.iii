@@ -589,4 +589,7 @@ fn g2_den_bits() -> i64 @export { return bigint_msb_position(G2_DEN) as i64 }
 
 fn g2_events() -> u64 @export { return G2_NE }
 fn g2_ek(i: u64) -> i64 @export { return G2E_K[i] }
+fn g2_ea(i: u64) -> i64 @export { return G2E_A[i] }
+fn g2_eb(i: u64) -> i64 @export { return G2E_B[i] }
+fn g2_eax(i: u64) -> i64 @export { return G2E_AX[i] }
 fn g2_v(p: u64, ax: u64) -> i64 @export { return G2_V[p * 3u64 + ax] }

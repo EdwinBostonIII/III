@@ -34,7 +34,7 @@ extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
 
-const G2_MAXE : u64 = 32768u64
+const G2_MAXE : u64 = 131072u64
 const G2_OK : i32 = 1i32
 const G2_NONE : i32 = 0i32
 const G2_TIE : i32 = 2i32
@@ -48,8 +48,8 @@ var G2_V : [i64; 12]                                 /* integer velocities, fore
 var G2_NP : u64   var G2_ES : i64
 var GW2_AX : [i64; 8]   var GW2_DIR : [i64; 8]   var GW2_C0 : [i64; 8]   var GW2_C1 : [i64; 8]
 var GW2_CD : [i64; 8]   var GW2_VTH : [i64; 8]   var G2_NW : u64
-var G2E_K : [i64; 32768]   var G2E_A : [i64; 32768]   var G2E_B : [i64; 32768]   var G2E_AX : [i64; 32768]
-var G2E_TW : [i64; 32768]                            /* 1 = second response of a commuting simultaneous pair */
+var G2E_K : [i64; 131072]   var G2E_A : [i64; 131072]   var G2E_B : [i64; 131072]   var G2E_AX : [i64; 131072]
+var G2E_TW : [i64; 131072]                            /* 1 = second response of a commuting simultaneous pair */
 var G2_NE : u64
 
 fn g2_iabs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }

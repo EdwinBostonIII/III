@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # run_topo_kats.sh -- gate for the Topological Windowing suite (2088-2092).
 #
-# These KATs exercise the crush engine ser_antiunify + the observation trace ser_petri (the concurrent task's
-# WIP).  To keep the CORE corpus gate from reddening on an unrelated signature change there, they live here, linked
-# directly against the whole libiii_native.a (which resolves the au_*/sp_*/cg_synth closure).  run_corpus.sh
+# These KATs exercise the crush engine ser_antiunify + the observation trace ser_petri -- both LIB, heavily
+# corpus-gated, STABLE since 2026-06-27 (the old "concurrent task's WIP" note was stale doc-drift; adjudicated
+# by III-PERFECTION-LEDGER §8b and struck by the reunification W2).  The family stays delegated for the REAL
+# reason: it links directly against the whole libiii_native.a (resolving the au_*/sp_*/cg_synth closure), so the
+# core gate stays decoupled from ser_* signature churn -- the same discipline as the UI app KATs.  run_corpus.sh
 # SKIP-delegates 2088-2092 to this runner.  Each KAT must exit 99 (its real falsifier code).
 #
 # HONEST SCOPE (calibrated): the load-bearing results are 2088's LINEAR arm and 2092 -- au_topo_amputate /
@@ -25,7 +27,8 @@ fail=0; pass=0
 run() {
     local name="$1"
     "$I2" "$C/$name.iii" --compile-only --out "$OUT/$name.o" 2>/dev/null || { echo "FAIL  $name : compile"; fail=$((fail+1)); return; }
-    gcc "$OUT/$name.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$name.exe" 2>/dev/null || { echo "FAIL  $name : link"; fail=$((fail+1)); return; }
+    rm -f "$OUT/$name.exe"
+    gcc "$OUT/$name.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$name.exe" 2>"$OUT/$name.linkerr" || { echo "FAIL  $name : link"; sed -n "1,4p" "$OUT/$name.linkerr"; fail=$((fail+1)); return; }
     local st="/tmp/topok_$$_${name}.exe"; cp "$OUT/$name.exe" "$st" 2>/dev/null
     timeout 90 "$st" >/dev/null 2>&1; local rc=$?; rm -f "$st"
     if [[ "$rc" == 99 ]]; then echo "PASS  $name : exit $rc"; pass=$((pass+1));

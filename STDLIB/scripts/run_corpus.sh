@@ -183,9 +183,10 @@ declare -A EXPECTED=(
     [2087_conservation]=99
     [2094_constraint_solver]=99    # the REAL layout solver: smt.iii's exact-rational simplex solves + detects conflict (smt is stable core, not WIP)
     [2096_proven_display]=99       # NeWS done right: smt.iii proves a display field's framebuffer writes in-bounds; catches a buggy field with a witness
-    # 2088-2093 (Topological Windowing) deliberately NOT here: they hard-depend on ser_antiunify/ser_petri (the
-    # concurrent task's volatile WIP), so a signature change there must NOT redden the core gate.  Gated instead by
-    # run_topo_kats.sh (links the archive directly), delegated below -- the same discipline as the UI app KATs.
+    # 2088-2093 (Topological Windowing) deliberately NOT here: they link the archive DIRECTLY (the au_*/sp_*
+    # closure), so the core gate stays decoupled from ser_* signature churn.  Gated by run_topo_kats.sh, delegated
+    # below -- the same discipline as the UI app KATs.  (ser_antiunify/ser_petri are LIB and stable since
+    # 2026-06-27; the old "volatile WIP" justification was stale doc-drift, struck by the reunification W2.)
     # (1982_dome_accessor_coverage removed -- dome PoC deleted)
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
@@ -485,6 +486,12 @@ declare -A EXPECTED=(
     [207_aes_siv_rfc5297]=99
     [208_ecdsa_p256]=99
     [209_ecdsa_p384]=99
+    # reunification W0.2 coverage witnesses: the au_ holographic organ, ser_causal law surface,
+    # the xii_proof positive+tamper roundtrip (F3 closed), and the seraphyte closed-loop pair.
+    [2450_au_crush_conform]=99
+    [2451_causal_witness]=99
+    [2452_xii_proof_roundtrip]=99
+    [2454_ser_witness]=99
     [373_rsa_pss_sign_verify]=99
     [374_zk_field_bls12381]=99
     [375_zk_snark_groth16]=99
@@ -1721,6 +1728,20 @@ declare -A EXPECTED=(
 
 PASS=0
 FAIL=0
+# S8 ownership-manifest teeth (III-REUNIFICATION-PLAN W2): every family runner this script's
+# SKIP dispatch cites must be declared in corpus_families.txt AND exist on disk -- a family can
+# no longer be added to the dispatch and silently forgotten by the one-sweep drivers.
+_S8_MANIFEST="$(dirname "${BASH_SOURCE[0]}")/corpus_families.txt"
+if [[ -f "$_S8_MANIFEST" ]]; then
+    for _s8 in $(grep -o "run_[a-z_]*\.sh" "${BASH_SOURCE[0]}" | sort -u); do
+        [[ "$_s8" == "run_corpus.sh" || "$_s8" == "run_all_corpora.sh" ]] && continue
+        grep -q "^$_s8 " "$_S8_MANIFEST" || { echo "[run_corpus] S8 MANIFEST MISS: $_s8 cited by dispatch but absent from corpus_families.txt"; exit 4; }
+        [[ -f "$(dirname "${BASH_SOURCE[0]}")/$_s8" ]] || { echo "[run_corpus] S8 RUNNER ABSENT: $_s8"; exit 4; }
+    done
+else
+    echo "[run_corpus] S8 MANIFEST MISSING: corpus_families.txt"; exit 4
+fi
+
 SKIP=0
 RESULTS=()
 # Aggregate any hand-written-asm .o files that live alongside the iii
@@ -1801,7 +1822,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     # are deliberately NOT in the coverage-gated libiii_native.a, so they cannot link via the generic archive link
     # here.  Gated instead by run_ui_kats.sh (links the UI .o's directly).  Delegate, do not phantom-FAIL.
     case "$base" in
-        2080_ui_raster|2081_ui_exact|2082_ui_font|2095_exact_coverage|2097_exact_aa|2098_exact_aa_poly|2099_exact_bezier|2100_biquad_coverage|2101_hausdorff_dim|2102_cover2d)
+        2080_ui_raster|2081_ui_exact|2082_ui_font|2095_exact_coverage|2097_exact_aa|2098_exact_aa_poly|2099_exact_bezier|2100_biquad_coverage|2101_hausdorff_dim|2102_cover2d|2453_glass_surface)
             RESULTS+=("SKIP  $base : III-GLASS UI -- owned by run_ui_kats.sh (app, not core lib)")
             SKIP=$((SKIP+1)); continue
             ;;
@@ -1826,7 +1847,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             SKIP=$((SKIP+1)); continue
             ;;
         2088_frp_kinematics|2089_constraint_layout|2090_topological_field|2091_association_invariant|2092_raster_crush|2093_pixel_crush)
-            RESULTS+=("SKIP  $base : Topological Windowing -- owned by run_topo_kats.sh (depends on volatile ser_antiunify/ser_petri WIP)")
+            RESULTS+=("SKIP  $base : Topological Windowing -- owned by run_topo_kats.sh (links the archive directly; ser_* decoupling)")
             SKIP=$((SKIP+1)); continue
             ;;
     esac

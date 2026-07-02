@@ -31,7 +31,7 @@ run() {  # $1 name  $2 expected  $3.. extra .o's (besides ui_exact_big.o + $LIB)
     if [[ "$rc" == "$want" ]]; then echo "PASS  $name : exit $rc"; pass=$((pass+1)); else echo "FAIL  $name : exit $rc (want $want)"; fail=$((fail+1)); fi
 }
 
-run 2103_bsign_big 99   # ui_exact_big is independent (sym_big moved to ui_exact_sym) -> no ui_exact link needed
+run 2103_bsign_big 99 "$OUT/ui_exact_bigcov.o" "$OUT/ui_exact_sym.o" "$OUT/ui_exact.o" "$OUT/ui_raster.o"   # ui_exact_big is independent (sym_big moved to ui_exact_sym) -> no ui_exact link needed
 # 2142 proves III's bigint EARNS its place in the exact-geometry stack: a faithful superset of the i64 cover2d path
 # (bit-identical where i64 is valid, exact where i64 overflows and refuses -1).  Links ui_exact (the i64 path it
 # supersedes + the independent valpha anchor) which pulls ui_raster (ui_blend).

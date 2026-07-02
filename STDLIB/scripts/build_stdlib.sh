@@ -487,9 +487,8 @@ MODULES=(
     # timeouts (no-ML), monotone+bounded backoff (liveness), explicit BFT 2f+1 quorum. Safety stays
     # the mhash vote-block match in hotstuff.iii. Compiler-unreferenced -> LIBNATIVE.
     "aether/hotstuff_unified"
-    # APOTHEOSIS C.11: the tournament quorum optimizer -- selects the 2f+1 most-available peers by
-    # SEALED fact (no-ML: a data input, never observed-and-adapted), Byzantine-available by
-    # construction. Composes hotstuff_unified. Compiler-unreferenced -> LIBNATIVE.
+    # (the APOTHEOSIS C.11 "tournament quorum optimizer" comment that stood here described a module
+    #  never built -- struck by the reunification S7 sweep; C.11's status lives in III-APOTHEOSIS.md)
     "numera/sha3_256"
     "numera/sha3_512"
     "numera/shake128"
@@ -854,9 +853,8 @@ MODULES=(
     # APOTHEOSIS C.8: the closed-form cost manifold -- uc_formula_latency = critical-path DP (latency
     # queryable DURING e-graph saturation, not just at extraction) + the 6-D vector assembly the
     # pareto frontier + ripple J consult. Compiler-unreferenced -> LIBNATIVE.
-    # APOTHEOSIS C.14: the mechanistic provable cycle bound -- derives a fast path's bound from the
-    # C.8 cost manifold (critical path = analytic lower bound); a path slower than bound+margin is a
-    # PROVABLE regression, not advisory. Composes unified_cost_manifold. Compiler-unreferenced -> LIBNATIVE.
+    # (the APOTHEOSIS C.14 "provable cycle bound" comment that stood here described a module never
+    #  built, composing the equally-unbuilt C.8 manifold -- struck by the reunification S7 sweep)
     "aether/bone_marrow"
     "numera/cost_lattice_synth"
     "aether/basal_probe"
@@ -1661,12 +1659,14 @@ MODULES=(
     # from this MODULES list -- a real omission that a clean rebuild exposes.  Leaf arithmetic; appended at end (BSS-safe).
     "numera/zk_ext2"
     "numera/zk_ext4"
-    # Omega3 proof-carrying XII canonicalisation (omnia/xii_proof + omnia/xii_proof_check) is INTENTIONALLY NOT in this
-    # MODULES list: it is proof-GADGET support, gated standalone by STDLIB/sovir/run_xii_proof.sh (which compiles it
-    # directly against libiii_native.a).  It carries test-tamper @export hooks (xii_proof_set_rid/flip_ahash) that are
-    # unsuitable library exports and cannot be covered by a positive corpus KAT, so adding it here would WORSEN the
-    # down-only coverage ratchets.  Lib-integration is a clean future task = split the library API from the test
-    # scaffolding + add a corpus KAT (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md F3).
+    # Omega3 proof-carrying XII canonicalisation: ADMITTED (reunification W0.2.1, closing F3 of
+    # DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md).  The old exclusion note claimed the tamper hooks
+    # (xii_proof_set_rid/set_pos/flip_ahash) "cannot be covered by a positive corpus KAT" -- refuted:
+    # corpus 2452_xii_proof_roundtrip drives prove->check to BOTH outcomes THROUGH all three hooks
+    # (tamper-then-recheck is exactly their documented purpose), so the hooks are proven negative-arm
+    # instruments, not unsuitable exports.  The sovir standalone gate (run_xii_proof.sh) still stands.
+    "omnia/xii_proof"
+    "omnia/xii_proof_check"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,0 +1,68 @@
+/* 2177_resultant.iii -- GATE for resultant.iii: THE ALGEBRAIC CLOSURE OF + (Program III Vector VII).
+ *
+ * TWO CLASSICAL THEOREMS DERIVED BY THE ENGINE, coefficient for coefficient:
+ *   A) gamma = cbrt(2) + sqrt(3):  Res_x(x^3 - 2, (t-x)^2 - 3) must equal the classical minimal polynomial
+ *      x^6 - 9x^4 - 4x^3 + 27x^2 - 36x - 23  -- all seven integer coefficients EXACT;
+ *   B) gamma = sqrt(2) + sqrt(3):  Res_x(x^2 - 2, (t-x)^2 - 3) == x^4 - 10x^2 + 1.
+ * THE COMPOSITION: the derived degree-6 polynomial is fed straight back into the exact substrate --
+ * sturm counts its real roots on [-10,10] (exactly 2: cbrt2 +- sqrt3) and brackets gamma in (2.9, 3].
+ * The sum of two exact roots is again a first-class exact object: constructed, counted, bracketed.
+ *
+ * exit 99 = pass;  10 A degree/refusal wrong;  11 A coefficients differ;  12 B coefficients differ;
+ * 13 sturm count on the derived polynomial wrong;  14 the gamma bracket wrong */
+module corpus_2177_resultant
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var PF : [i64; 4]   var PG : [i64; 3]   var PO : [i64; 10]   var PW : [i64; 5]
+
+fn main() -> u64 {
+    /* ══ A: cbrt(2) + sqrt(3). */
+    PF[0u64] = 0i64 - 2i64   PF[1u64] = 0i64   PF[2u64] = 0i64   PF[3u64] = 1i64        /* x^3 - 2 */
+    PG[0u64] = 0i64 - 3i64   PG[1u64] = 0i64   PG[2u64] = 1i64                          /* x^2 - 3 */
+    let d : i64 = rs_sum((&PF) as u64, 3i64, (&PG) as u64, 2i64, (&PO) as u64)
+    putchar(65i32) putchar(58i32) sp() e_i64(d)
+    let mut i : u64 = 0u64
+    while i <= 6u64 { sp() e_i64(PO[i])   i = i + 1u64 }
+    nl()                                                                                 /* "A: 6 -23 -36 27 -4 -9 0 1" */
+    if d != 6i64 { return 10u64 }
+    if PO[0u64] != (0i64 - 23i64) { return 11u64 }
+    if PO[1u64] != (0i64 - 36i64) { return 11u64 }
+    if PO[2u64] != 27i64 { return 11u64 }
+    if PO[3u64] != (0i64 - 4i64) { return 11u64 }
+    if PO[4u64] != (0i64 - 9i64) { return 11u64 }
+    if PO[5u64] != 0i64 { return 11u64 }
+    if PO[6u64] != 1i64 { return 11u64 }
+
+    /* ══ B: sqrt(2) + sqrt(3) -> x^4 - 10x^2 + 1. */
+    PW[0u64] = 0i64 - 2i64   PW[1u64] = 0i64   PW[2u64] = 1i64                          /* x^2 - 2 */
+    let d2 : i64 = rs_sum((&PW) as u64, 2i64, (&PG) as u64, 2i64, (&PO) as u64)
+    putchar(66i32) putchar(58i32) sp() e_i64(d2)
+    i = 0u64
+    while i <= 4u64 { sp() e_i64(PO[i])   i = i + 1u64 }
+    nl()                                                                                 /* "B: 4 1 0 -10 0 1" */
+    if d2 != 4i64 { return 12u64 }
+    if PO[0u64] != 1i64 { return 12u64 }
+    if PO[1u64] != 0i64 { return 12u64 }
+    if PO[2u64] != (0i64 - 10i64) { return 12u64 }
+    if PO[3u64] != 0i64 { return 12u64 }
+    if PO[4u64] != 1i64 { return 12u64 }
+
+    /* ══ THE COMPOSITION: the derived degree-6 polynomial through sturm -- count and bracket gamma. */
+    PF[0u64] = 0i64 - 2i64   PF[1u64] = 0i64   PF[2u64] = 0i64   PF[3u64] = 1i64
+    rs_sum((&PF) as u64, 3i64, (&PG) as u64, 2i64, (&PO) as u64)
+    if sturm_build((&PO) as u64, 6i64) < 0i64 { return 13u64 }
+    let nr : i64 = root_count(0i64 - 10i64, 1i64, 10i64, 1i64)
+    let br : i64 = root_count(29i64, 10i64, 3i64, 1i64)                                 /* gamma in (2.9, 3] */
+    putchar(83i32) putchar(58i32) sp() e_i64(nr) sp() e_i64(br) nl()                    /* "S: 2 1" */
+    if nr != 2i64 { return 13u64 }
+    if br != 1i64 { return 14u64 }
+
+    return 99u64
+}

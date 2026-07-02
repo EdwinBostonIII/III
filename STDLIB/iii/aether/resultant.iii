@@ -1,0 +1,191 @@
+/* STDLIB/iii/aether/resultant.iii -- RESULTANT ELIMINATION: the algebraic closure of ADDITION (charter
+ * Program III Vector VII).  Given alpha with integer minimal-ish polynomial f (degree m) and beta with g
+ * (degree n), gamma = alpha + beta is a root of  R(t) = Res_x( f(x), g(t - x) )  -- an integer polynomial
+ * of degree m*n.  The substrate stops being able only to COMPARE algebraic numbers: it can now CONSTRUCT
+ * the defining polynomial of a sum, feed it back to sturm/algnum, and continue -- roots become closed
+ * under +.
+ *
+ * THE CONSTRUCTION (the charter's fixed spec): evaluate R at the m*n+1 integer points t = 0..D as PURE
+ * INTEGER Sylvester determinants (Bareiss fraction-free elimination -- every division exact), then recover
+ * the integer coefficients by solving the Vandermonde system with the SAME determinant engine (Cramer;
+ * the divisions are asserted exact -- a non-integer coefficient is a refused result, never a rounded one).
+ * The leading coefficient is normalized positive.  All arithmetic is overflow-GUARDED (sticky RS_OVF ->
+ * refuse); the v1 envelope is small degrees/coefficients (m*n <= 8, entries within the guarded products) --
+ * the bigint determinant engine is the charted v2.  Products and inverses recompose the same way (charted). */
+module resultant
+
+const RS_MAXN : i64 = 9i64
+
+var RS_M : [i64; 100]                            /* the working matrix (up to 9x9, row-major, stride 10) */
+var RS_OVF : i64
+
+fn rs_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn rs_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = rs_abs(a)   let ub : u64 = rs_abs(b)
+    if ub > (9223372036854775807u64 / ua) { RS_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn rs_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = rs_abs(a)   let ub : u64 = rs_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { RS_OVF = 1i64   return 0i64 }   return a + b }
+    if (ua + ub) > 9223372036854775808u64 { RS_OVF = 1i64   return 0i64 }
+    return a + b
+}
+
+/* Bareiss fraction-free determinant of the n x n matrix in RS_M (destructive).  Exact-integer throughout. */
+fn rs_det(n: i64) -> i64 {
+    let mut sign : i64 = 1i64
+    let mut prev : i64 = 1i64
+    let mut k : i64 = 0i64
+    while k < (n - 1i64) {
+        /* pivot: if M[k][k] == 0, swap in a lower row with a nonzero entry in column k */
+        let pkk : i64 = RS_M[((k * 10i64) + k) as u64]
+        if pkk == 0i64 {
+            let mut r : i64 = k + 1i64
+            let mut found : i64 = 0i64 - 1i64
+            while r < n {
+                if found < 0i64 { let v : i64 = RS_M[((r * 10i64) + k) as u64]   if v != 0i64 { found = r } }
+                r = r + 1i64
+            }
+            if found < 0i64 { return 0i64 }                        /* a zero column: det == 0 */
+            let mut c : i64 = 0i64
+            while c < n {
+                let t : i64 = RS_M[((k * 10i64) + c) as u64]
+                RS_M[((k * 10i64) + c) as u64] = RS_M[((found * 10i64) + c) as u64]
+                RS_M[((found * 10i64) + c) as u64] = t
+                c = c + 1i64
+            }
+            sign = 0i64 - sign
+        }
+        let p : i64 = RS_M[((k * 10i64) + k) as u64]
+        let mut i : i64 = k + 1i64
+        while i < n {
+            let mut j : i64 = k + 1i64
+            while j < n {
+                let a : i64 = rs_mul(RS_M[((i * 10i64) + j) as u64], p)
+                let b : i64 = rs_mul(RS_M[((i * 10i64) + k) as u64], RS_M[((k * 10i64) + j) as u64])
+                let num : i64 = rs_add(a, 0i64 - b)
+                RS_M[((i * 10i64) + j) as u64] = num / prev       /* Bareiss: exact division */
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        prev = p
+        k = k + 1i64
+    }
+    return rs_mul(sign, RS_M[(((n - 1i64) * 10i64) + (n - 1i64)) as u64])
+}
+
+/* h(x) = g(t - x): h[i] = sum_{j>=i} g[j] * C(j,i) * t^(j-i) * (-1)^i */
+var RS_H : [i64; 10]
+fn rs_shift(gp: u64, degg: i64, t: i64) -> i32 {
+    let g : *i64 = gp as *i64
+    let mut i : i64 = 0i64
+    while i <= degg {
+        let mut acc : i64 = 0i64
+        let mut j : i64 = i
+        while j <= degg {
+            /* C(j,i) */
+            let mut binom : i64 = 1i64
+            let mut q : i64 = 0i64
+            while q < i { binom = rs_mul(binom, j - q)   q = q + 1i64 }
+            q = 1i64
+            while q <= i { binom = binom / q   q = q + 1i64 }
+            /* t^(j-i) */
+            let mut pw : i64 = 1i64
+            q = 0i64
+            while q < (j - i) { pw = rs_mul(pw, t)   q = q + 1i64 }
+            acc = rs_add(acc, rs_mul(rs_mul(g[j as u64], binom), pw))
+            j = j + 1i64
+        }
+        let mut v : i64 = acc
+        if (i % 2i64) != 0i64 { v = 0i64 - v }                    /* (-1)^i */
+        RS_H[i as u64] = v
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* Res_x(f, h) as the (m+n) Sylvester determinant */
+fn rs_res_at(fp: u64, degf: i64, degg: i64) -> i64 {
+    let f : *i64 = fp as *i64
+    let n : i64 = degf + degg
+    let mut r : i64 = 0i64
+    while r < n { let mut c : i64 = 0i64   while c < n { RS_M[((r * 10i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
+    r = 0i64
+    while r < degg {                                              /* degg rows of f, shifted */
+        let mut k : i64 = 0i64
+        while k <= degf { RS_M[((r * 10i64) + (r + k)) as u64] = f[(degf - k) as u64]   k = k + 1i64 }
+        r = r + 1i64
+    }
+    r = 0i64
+    while r < degf {                                              /* degf rows of h, shifted */
+        let mut k : i64 = 0i64
+        while k <= degg { RS_M[(((degg + r) * 10i64) + (r + k)) as u64] = RS_H[(degg - k) as u64]   k = k + 1i64 }
+        r = r + 1i64
+    }
+    return rs_det(n)
+}
+
+/* gamma = alpha + beta: out[0..m*n] gets the integer defining polynomial (leading coefficient positive).
+ * Returns the degree m*n, or -1 refused (overflow / non-integer interpolation / degree too large). */
+var RS_R : [i64; 10]
+fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    RS_OVF = 0i64
+    let D : i64 = degf * degg
+    if D < 1i64 { return 0i64 - 1i64 }
+    if D > 8i64 { return 0i64 - 1i64 }
+    if (degf + degg) > 8i64 { return 0i64 - 1i64 }
+    let mut t : i64 = 0i64
+    while t <= D {
+        rs_shift(gp, degg, t)
+        RS_R[t as u64] = rs_res_at(fp, degf, degg)
+        t = t + 1i64
+    }
+    if RS_OVF != 0i64 { return 0i64 - 1i64 }
+    /* Cramer over the Vandermonde V[t][i] = t^i:  det(V) then det(V_i) with column i replaced by R */
+    let n : i64 = D + 1i64
+    let mut r2 : i64 = 0i64
+    while r2 < n { let mut c2 : i64 = 0i64   while c2 < n { RS_M[((r2 * 10i64) + c2) as u64] = rs_powi(r2, c2)   c2 = c2 + 1i64 }   r2 = r2 + 1i64 }
+    let dv : i64 = rs_det(n)
+    if dv == 0i64 { return 0i64 - 1i64 }
+    let out : *i64 = outp as *i64
+    let mut i : i64 = 0i64
+    while i <= D {
+        r2 = 0i64
+        while r2 < n {
+            let mut c2 : i64 = 0i64
+            while c2 < n {
+                let mut v : i64 = rs_powi(r2, c2)
+                if c2 == i { v = RS_R[r2 as u64] }
+                RS_M[((r2 * 10i64) + c2) as u64] = v
+                c2 = c2 + 1i64
+            }
+            r2 = r2 + 1i64
+        }
+        let di : i64 = rs_det(n)
+        let q : i64 = di / dv
+        if rs_mul(q, dv) != di { return 0i64 - 1i64 }             /* the coefficient MUST be an integer */
+        out[i as u64] = q
+        i = i + 1i64
+    }
+    if RS_OVF != 0i64 { return 0i64 - 1i64 }
+    if out[D as u64] < 0i64 {
+        i = 0i64
+        while i <= D { out[i as u64] = 0i64 - out[i as u64]   i = i + 1i64 }
+    }
+    return D
+}
+fn rs_powi(b: i64, e: i64) -> i64 {
+    let mut r : i64 = 1i64
+    let mut q : i64 = 0i64
+    while q < e { r = rs_mul(r, b)   q = q + 1i64 }
+    return r
+}

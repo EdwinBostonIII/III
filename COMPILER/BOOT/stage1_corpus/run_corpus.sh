@@ -66,6 +66,7 @@ declare -A EXPECTED=(
     [55_intent_form_runtime]=1
     [56_transform_form_runtime]=1
     [57_pattern_form_runtime]=1
+    [58_udiv_highbit]=58
 )
 
 PASS=0; FAIL=0; SKIP=0
@@ -139,3 +140,7 @@ for r in "${RESULTS[@]}"; do echo "  $r"; done
 echo "----------------------------------------------------------"
 echo "  PASS=$PASS  FAIL=$FAIL  ASM-ONLY=$SKIP  TOTAL=$((PASS+FAIL+SKIP))"
 echo "=========================================================="
+# SOUNDNESS (whole-tree sweep 2026-07-02): this script previously ENDED at the echo above, so its
+# process exit was always 0 -- a FAIL=1 tally (e.g. the unregistered 58_udiv_highbit) sailed through
+# run_all_corpora's rc check and the capstone stayed green on a red.  A red must redden the sweep.
+[[ "$FAIL" == 0 ]] && exit 0 || exit 1

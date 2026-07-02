@@ -18,7 +18,13 @@ fn umod(a: u64, b: u64) -> u64 {
 }
 
 fn main() -> u64 {
+    /* Exact verdicts (whole-tree sweep 2026-07-02): the original `return q + r` summed to 2^63,
+     * which TRUNCATES to exit 0 through the 32-bit process code -- a degenerate pass any sum
+     * congruent to 0 mod 2^32 would satisfy.  Assert q and r exactly instead; the falsifier's
+     * twin-divergence (idivq vs divq in the EMITTED code) is untouched by the verdict shape. */
     let q : u64 = udiv(18446744073709551614u64, 2u64)
     let r : u64 = umod(18446744073709551615u64, 7u64)
-    return q + r
+    if q != 9223372036854775807u64 { return 1u64 }   /* 0xFFFF..FE / 2 == 0x7FFF..FF exactly */
+    if r != 1u64 { return 2u64 }                     /* (2^64-1) mod 7 == 1 exactly */
+    return 58u64
 }

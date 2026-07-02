@@ -165,6 +165,139 @@ fn lm_reverse() -> i32 @export {
 }
 fn lm_lastb() -> i64 @export { return LM_LASTB }
 
+/* ═════════ v2: THE RATIONAL-DIRECTION MARCH (charter increment 4) ═════════
+ * Any integer direction, not just the diagonal class.  THE ISOMORPHISM: the march on lattice L with
+ * direction d IS an integer march on the lattice refined by DHAT = prod |d_i != 0| -- in the scaled
+ * system every crossing time and every event position is an INTEGER (each d_i divides DHAT and the
+ * divisibility p_i == p0_i (mod d_i) is invariant along events), so corner ties are integer EQUALITIES
+ * and a 12000-crossing march carries zero drift, exactly as in v1.  The rationality was a change of
+ * units, never new machinery.  v2 = crossings + corners + sphere termination (a = |d|^2, r2 scaled by
+ * DHAT^2) + reversal; reflective optics remains v1's diagonal-class domain (the mirror parity contract).
+ * Envelope: |d_i| <= 32, |p0_i| < 2^30, L*DHAT even (integral cell centers); the divisibility invariant
+ * is ASSERTED at every event -- refuse, never round. */
+var L2_UL : i64   var L2_UR2 : i64
+var L2_L : i64    var L2_DHAT : i64   var L2_S2 : i64
+var L2_SPHP : i64   var L2_SPHA : i64   var L2_R2 : i64
+var L2_PX : i64   var L2_PY : i64   var L2_PZ : i64
+var L2_DX : i64   var L2_DY : i64   var L2_DZ : i64
+var L2_CX : i64   var L2_CY : i64   var L2_CZ : i64
+var L2_NCROSS : i64   var L2_NCORNER : i64
+const L2_INF : i64 = 4611686018427387904i64
+
+fn lm2_cfg(L: i64, sphp: i64, spha: i64, r2: i64) -> i32 @export {
+    if L <= 0i64 { return 0i32 - 1i32 }
+    L2_UL = L   L2_SPHP = sphp   L2_SPHA = spha   L2_UR2 = r2
+    return 0i32
+}
+fn lm2_abs(v: i64) -> i64 { if v < 0i64 { return 0i64 - v }   return v }
+fn lm2_gcd(a: i64, b: i64) -> i64 { let mut x : i64 = lm2_abs(a)   let mut y : i64 = lm2_abs(b)   while y != 0i64 { let t : i64 = x % y   x = y   y = t }   return x }
+
+fn lm2_set(px: i64, py: i64, pz: i64, dx0: i64, dy0: i64, dz0: i64) -> i32 @export {
+    let mut dx : i64 = dx0   let mut dy : i64 = dy0   let mut dz : i64 = dz0
+    if ((dx * dx) + (dy * dy)) + (dz * dz) == 0i64 { return 0i32 - 1i32 }
+    let g : i64 = lm2_gcd(lm2_gcd(dx, dy), dz)
+    dx = dx / g   dy = dy / g   dz = dz / g                    /* canonical: gcd-reduced */
+    let ax : i64 = lm2_abs(dx)   let ay : i64 = lm2_abs(dy)   let az : i64 = lm2_abs(dz)
+    if ax > 32i64 { return 0i32 - 1i32 }
+    if ay > 32i64 { return 0i32 - 1i32 }
+    if az > 32i64 { return 0i32 - 1i32 }
+    if lm2_abs(px) > 1073741824i64 { return 0i32 - 1i32 }
+    if lm2_abs(py) > 1073741824i64 { return 0i32 - 1i32 }
+    if lm2_abs(pz) > 1073741824i64 { return 0i32 - 1i32 }
+    let mut dh : i64 = 1i64
+    if ax != 0i64 { dh = dh * ax }
+    if ay != 0i64 { dh = dh * ay }
+    if az != 0i64 { dh = dh * az }
+    let LL : i64 = L2_UL * dh
+    if (LL % 2i64) != 0i64 { return 0i32 - 1i32 }              /* cell centers must be integral */
+    L2_DHAT = dh   L2_L = LL
+    L2_S2 = ((dx * dx) + (dy * dy)) + (dz * dz)
+    L2_R2 = (L2_UR2 * dh) * dh
+    L2_DX = dx   L2_DY = dy   L2_DZ = dz
+    L2_PX = px * dh   L2_PY = py * dh   L2_PZ = pz * dh
+    L2_CX = lm_floorc(L2_PX, LL)   L2_CY = lm_floorc(L2_PY, LL)   L2_CZ = lm_floorc(L2_PZ, LL)
+    L2_NCROSS = 0i64   L2_NCORNER = 0i64
+    return 0i32
+}
+
+/* Δt (a true integer by the invariant) to this axis' boundary; L2_INF = inactive; -1 = invariant broken */
+fn lm2_exit1(p: i64, c: i64, d: i64) -> i64 {
+    if d == 0i64 { return L2_INF }
+    let mut num : i64 = 0i64
+    if d > 0i64 { num = ((c + 1i64) * L2_L) - p } else { num = p - (c * L2_L) }
+    let ad : i64 = lm2_abs(d)
+    if (num % ad) != 0i64 { return 0i64 - 1i64 }
+    return num / ad
+}
+fn lm2_is_sphere(cx: i64) -> u8 { if L2_SPHP <= 0i64 { return 0u8 }   if lm_mod(cx, L2_SPHP) == L2_SPHA { return 1u8 }   return 0u8 }
+
+fn lm2_sphere_test(t_exit: i64) -> i32 {
+    let ctr : i64 = L2_L / 2i64
+    let wx : i64 = L2_PX - ((L2_CX * L2_L) + ctr)
+    let wy : i64 = L2_PY - ((L2_CY * L2_L) + ctr)
+    let wz : i64 = L2_PZ - ((L2_CZ * L2_L) + ctr)
+    let a : i64 = L2_S2
+    let b : i64 = 2i64 * (((wx * L2_DX) + (wy * L2_DY)) + (wz * L2_DZ))
+    let cc : i64 = (((wx * wx) + (wy * wy)) + (wz * wz)) - L2_R2
+    let disc : i64 = (b * b) - ((4i64 * a) * cc)
+    if disc < 0i64 { return 0i32 }
+    if b >= 0i64 { return 0i32 }
+    if cc <= 0i64 { return 0i32 }
+    let gate : i64 = ((2i64 * a) * t_exit) + b
+    if gate <= 0i64 { return 0i32 }
+    let s : i32 = ui_bsign1(gate, 0i64 - 1i64, disc)
+    if s < 0i32 { return 0i32 }
+    if disc == 0i64 { return 2i32 }
+    return 1i32
+}
+
+fn lm2_march(maxiter: i64) -> i32 @export {
+    let mut it : i64 = 0i64
+    while it < maxiter {
+        let tx : i64 = lm2_exit1(L2_PX, L2_CX, L2_DX)
+        let ty : i64 = lm2_exit1(L2_PY, L2_CY, L2_DY)
+        let tz : i64 = lm2_exit1(L2_PZ, L2_CZ, L2_DZ)
+        if tx < 0i64 { return LM_REFUSE }
+        if ty < 0i64 { return LM_REFUSE }
+        if tz < 0i64 { return LM_REFUSE }
+        let mut tmin : i64 = tx
+        if ty < tmin { tmin = ty }
+        if tz < tmin { tmin = tz }
+        if tmin >= L2_INF { return LM_REFUSE }
+        if lm2_is_sphere(L2_CX) == 1u8 {
+            let h : i32 = lm2_sphere_test(tmin)
+            if h == 1i32 { return LM_HIT }
+            if h == 2i32 { return LM_TANGENT }
+        }
+        L2_PX = L2_PX + (tmin * L2_DX)   L2_PY = L2_PY + (tmin * L2_DY)   L2_PZ = L2_PZ + (tmin * L2_DZ)
+        let mut stepped : i64 = 0i64
+        if tx == tmin { L2_CX = L2_CX + L2_DXs()   stepped = stepped + 1i64 }
+        if ty == tmin { L2_CY = L2_CY + L2_DYs()   stepped = stepped + 1i64 }
+        if tz == tmin { L2_CZ = L2_CZ + L2_DZs()   stepped = stepped + 1i64 }
+        if stepped > 1i64 { L2_NCORNER = L2_NCORNER + 1i64 }
+        L2_NCROSS = L2_NCROSS + stepped
+        it = it + 1i64
+    }
+    return LM_HITCAP
+}
+fn L2_DXs() -> i64 { if L2_DX > 0i64 { return 1i64 }   if L2_DX < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+fn L2_DYs() -> i64 { if L2_DY > 0i64 { return 1i64 }   if L2_DY < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+fn L2_DZs() -> i64 { if L2_DZ > 0i64 { return 1i64 }   if L2_DZ < 0i64 { return 0i64 - 1i64 }   return 0i64 }
+
+fn lm2_reverse() -> i32 @export {
+    L2_DX = 0i64 - L2_DX   L2_DY = 0i64 - L2_DY   L2_DZ = 0i64 - L2_DZ
+    return 0i32
+}
+fn lm2_px() -> i64 @export { return L2_PX }
+fn lm2_py() -> i64 @export { return L2_PY }
+fn lm2_pz() -> i64 @export { return L2_PZ }
+fn lm2_den() -> i64 @export { return L2_DHAT }
+fn lm2_cellx() -> i64 @export { return L2_CX }
+fn lm2_celly() -> i64 @export { return L2_CY }
+fn lm2_cellz() -> i64 @export { return L2_CZ }
+fn lm2_crossings() -> i64 @export { return L2_NCROSS }
+fn lm2_corners() -> i64 @export { return L2_NCORNER }
+
 fn lm_px() -> i64 @export { return LM_PX }
 fn lm_py() -> i64 @export { return LM_PY }
 fn lm_pz() -> i64 @export { return LM_PZ }

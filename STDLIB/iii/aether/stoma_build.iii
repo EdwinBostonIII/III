@@ -228,6 +228,11 @@ fn bd_closure(root: u64, rlen: u64) -> u64 @export {
 
 fn bd_index_count() -> u64 @export { return BD_NIDX }
 fn bd_closure_count() -> u64 @export { return BD_CLON }
+/* index accessors (for the ripple's reverse-impact walk + content hashing) */
+fn bd_name_ptr(id: u64) -> u64 @export { if id >= BD_NIDX { return 0u64 }   return (&BD_NPOOL) as u64 + BD_NAME_OFF[id] }
+fn bd_name_len(id: u64) -> u64 @export { if id >= BD_NIDX { return 0u64 }   return BD_NAME_LEN[id] }
+fn bd_path_ptr(id: u64) -> u64 @export { if id >= BD_NIDX { return 0u64 }   return (&BD_PPOOL) as u64 + BD_PATH_OFF[id] }
+fn bd_path_len(id: u64) -> u64 @export { if id >= BD_NIDX { return 0u64 }   return BD_PATH_LEN[id] }
 /* is module base-name in the current closure? */
 fn bd_in_closure(name: u64, nlen: u64) -> u32 @export {
     let id : u64 = bd_find_id(name, nlen)

@@ -1,0 +1,187 @@
+/* STDLIB/iii/aether/stoma_ripple.iii -- STOMA organ: the ripple heartbeat (M8 of the plan).
+ *
+ * The cell<->gene loop the whole CLI was asked for: an edit to one module RIPPLES through the
+ * dependency graph to exactly the verdicts it can change, which re-run and RECOLOR the ledger --
+ * a living homeostatic pulse, deterministic (no ML: no counting, no thresholds, fixed rules over
+ * content hashes and the import graph).
+ *
+ *   downward (gene -> cell): a changed module -> its IMPACTED SET (every module/KAT that
+ *     transitively imports it) -> those verdicts re-queue.
+ *   upward   (cell -> gene): a RED verdict -> its BLAME SET (the forward closure of its module --
+ *     the sources that could be responsible), marked for the operator.
+ *
+ * TRUTH is content, not clocks: a "pulse" re-hashes every indexed module (FNV-1a) and the DIRTY
+ * set is exactly those whose hash MOVED since the last pulse.  A ReadDirectoryChangesW/event
+ * watcher is only ever a HINT that says "pulse now"; the hash-verified diff is the fact -- so
+ * OneDrive's event coalescing / phantom touches cannot cause a false verdict (the plan's probe
+ * outcome: go straight to the robust poll+hash, the named fallback).  Self-trigger is structural:
+ * only SOURCE modules are indexed, so a build artifact write can never dirty anything.
+ *
+ * Reverse impact reuses the forward engine (stoma_build): module M is impacted by change C iff
+ * C lies in closure(M).  Blame reuses it directly: blame(K) = closure(K).
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_ripple
+
+extern @abi(c-msvc-x64) fn bd_index_count() -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_name_ptr(id: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_name_len(id: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_path_ptr(id: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_path_len(id: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_closure(root: u64, rlen: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_in_closure(name: u64, nlen: u64) -> u32 from "stoma_build.iii"
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+const RP_INVALID : u64 = 18446744073709551615u64
+const RP_MAX     : u64 = 512u64
+
+var RP_HASH   : [u64; 512]      /* last-seen FNV-1a per index id */
+var RP_SEEN   : [u8; 512]       /* baseline established for this id? */
+var RP_DIRTY  : [u64; 512]      /* index ids changed this pulse */
+var RP_DIRTYN : u64 = 0u64
+var RP_INIMP  : [u8; 512]       /* impacted-set membership bitmap */
+var RP_IMPACT : [u64; 512]      /* impacted index ids */
+var RP_IMPN   : u64 = 0u64
+var RP_PATHB  : [u8; 512]       /* NUL-terminated path assembly */
+var RP_FILE   : [u8; 262144]    /* file bytes for hashing (separate from stoma_build's buffer) */
+var RP_SCR    : [u64; 2]
+
+fn rp_reset() -> i32 @export {
+    RP_DIRTYN = 0u64
+    RP_IMPN = 0u64
+    let mut i : u64 = 0u64
+    while i < RP_MAX { RP_SEEN[i] = 0u8   RP_INIMP[i] = 0u8   i = i + 1u64 }
+    return 0i32
+}
+
+/* FNV-1a over the file at index id's path (0 on unreadable) */
+fn rp_hash_id(id: u64) -> u64 {
+    let plen : u64 = bd_path_len(id)
+    let pp : *u8 = bd_path_ptr(id) as *u8
+    let mut i : u64 = 0u64
+    while i < plen { RP_PATHB[i] = pp[i]   i = i + 1u64 }
+    RP_PATHB[plen] = 0u8
+    let h : u64 = CreateFileA((&RP_PATHB) as u64, 2147483648u32, 3u32, 0u64, 3u32, 128u32, 0u64)
+    if h == RP_INVALID { return 0u64 }
+    let mut acc : u64 = 14695981039346656037u64
+    let mut more : u32 = 1u32
+    while more == 1u32 {
+        if ReadFile(h, (&RP_FILE) as u64, 262144u32, (&RP_SCR) as u64, 0u64) == 0i32 { more = 0u32 }
+        else {
+            let n : u64 = RP_SCR[0u64]
+            if n == 0u64 { more = 0u32 }
+            else {
+                let mut j : u64 = 0u64
+                while j < n {
+                    acc = acc ^ (RP_FILE[j] as u64)
+                    acc = acc * 1099511628211u64
+                    j = j + 1u64
+                }
+            }
+        }
+    }
+    CloseHandle(h)
+    return acc
+}
+
+/* establish the baseline hash for every indexed module (call after stoma_build indexing) */
+fn rp_baseline() -> i32 @export {
+    let n : u64 = bd_index_count()
+    let mut id : u64 = 0u64
+    while id < n {
+        RP_HASH[id] = rp_hash_id(id)
+        RP_SEEN[id] = 1u8
+        id = id + 1u64
+    }
+    return 0i32
+}
+
+/* one pulse: re-hash all indexed modules; DIRTY = those whose hash moved (or never seen).
+ * Debounce is inherent -- an unchanged module never enters the dirty set.  Returns |dirty|. */
+fn rp_pulse() -> u64 @export {
+    RP_DIRTYN = 0u64
+    let n : u64 = bd_index_count()
+    let mut id : u64 = 0u64
+    while id < n {
+        let h : u64 = rp_hash_id(id)
+        let mut changed : u32 = 0u32
+        if RP_SEEN[id] == 0u8 { changed = 1u32 }
+        else { if h != RP_HASH[id] { changed = 1u32 } }
+        if changed == 1u32 {
+            if RP_DIRTYN < RP_MAX { RP_DIRTY[RP_DIRTYN] = id   RP_DIRTYN = RP_DIRTYN + 1u64 }
+            RP_HASH[id] = h
+            RP_SEEN[id] = 1u8
+        }
+        id = id + 1u64
+    }
+    return RP_DIRTYN
+}
+
+fn rp_dirty_count() -> u64 @export { return RP_DIRTYN }
+
+/* compute the impacted set of the current dirty set: module M is impacted iff some dirty module
+ * lies in closure(M).  Fills RP_IMPACT / RP_INIMP.  Returns |impacted|. */
+fn rp_impacted() -> u64 @export {
+    RP_IMPN = 0u64
+    let n : u64 = bd_index_count()
+    let mut m : u64 = 0u64
+    while m < RP_MAX { RP_INIMP[m] = 0u8   m = m + 1u64 }
+    let mut mi : u64 = 0u64
+    while mi < n {
+        /* closure of module mi (mutates stoma_build's closure state) */
+        bd_closure(bd_name_ptr(mi), bd_name_len(mi))
+        /* impacted if ANY dirty module is inside mi's closure */
+        let mut di : u64 = 0u64
+        let mut hit : u32 = 0u32
+        while di < RP_DIRTYN {
+            let dcid : u64 = RP_DIRTY[di]
+            if bd_in_closure(bd_name_ptr(dcid), bd_name_len(dcid)) == 1u32 { hit = 1u32   di = RP_DIRTYN }
+            else { di = di + 1u64 }
+        }
+        if hit == 1u32 {
+            if RP_INIMP[mi] == 0u8 {
+                RP_INIMP[mi] = 1u8
+                if RP_IMPN < RP_MAX { RP_IMPACT[RP_IMPN] = mi   RP_IMPN = RP_IMPN + 1u64 }
+            }
+        }
+        mi = mi + 1u64
+    }
+    return RP_IMPN
+}
+
+fn rp_impact_count() -> u64 @export { return RP_IMPN }
+
+/* is a module (by name) in the current impacted set? */
+fn rp_in_impact(name: u64, nlen: u64) -> u32 @export {
+    let n : u64 = bd_index_count()
+    let mut id : u64 = 0u64
+    while id < n {
+        if bd_name_len(id) == nlen {
+            let np : *u8 = bd_name_ptr(id) as *u8
+            let s : *u8 = name as *u8
+            let mut j : u64 = 0u64
+            let mut eq : u32 = 1u32
+            while j < nlen {
+                if np[j] != s[j] { eq = 0u32   j = nlen }
+                else { j = j + 1u64 }
+            }
+            if eq == 1u32 {
+                if RP_INIMP[id] == 1u8 { return 1u32 }
+                return 0u32
+            }
+        }
+        id = id + 1u64
+    }
+    return 0u32
+}
+
+/* BLAME set of a RED module (cell -> gene): its forward closure -- the sources that could be
+ * responsible.  Fills stoma_build's closure state; read via bd_in_closure/bd_closure_count.
+ * Returns the blame-set size. */
+fn rp_blame(name: u64, nlen: u64) -> u64 @export {
+    return bd_closure(name, nlen)
+}

@@ -47,6 +47,7 @@ _audit_scratch/
 
 # STOMA KAT scratch (created in cwd by corpus 2459/2460/2461)
 stjt/
+stjt_rip/
 stjt_*.tsv
 stjt_*.txt
 .stoma/

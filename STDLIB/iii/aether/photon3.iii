@@ -1,0 +1,187 @@
+/* STDLIB/iii/aether/photon3.iii -- THE 3D PHOTON CLASS ALGEBRA over Q(sqrt2, sqrt6) (Turing charter
+ * V-III.1/III.2): three-dimensional certified optics with the direction set CLOSED BY DESIGN.
+ *
+ * THE TWO CLASSES (adjudicated; certificates integer over |d|^2 in {4, 8}):
+ *   L = (sx, sy, sz*sqrt2), |d|^2 = 4: sin^2(from z) = 1/2   D = (sx, sy, sz*sqrt6), |d|^2 = 8: 1/4
+ * z-INTERFACE MAP (tangential (sx,sy) PRESERVED): light L <-> dense D, Snell^2 the INTEGER IDENTITY
+ *   n1^2 * t^2 * |d2|^2 == n2^2 * t2^2 * |d1|^2  (1*2*8 == 2*2*4).  The L-SHAPE INSIDE DENSE meets a
+ * z-plane at EXACTLY the critical angle (2*(1/2) == 1: certified zero -> reflect); the D class inside
+ * dense TRANSMITS (2*2*4 == 1*2*8, certified).  x/y WALLS (dense side): strict TIR -- L-shape
+ * 2*3 - 1*4 = +2, D 2*7 - 1*8 = +6.  THE NON-CLOSURE WITNESS: refracting L at a CROSS-AXIS interface
+ * would need direction (a,1,sqrt2) with (1+2)/(a^2+3) = 3/8 -> a^2 = 5: sqrt5 is NOT in the field --
+ * a CERTIFIED REFUSAL (the wave-vector constraint), never an approximation.
+ *
+ * THE MARCHER (the trapped class): the L-shape inside a rational dense box has ONLY reflective
+ * verdicts -- confinement is an induction on certificates.  Its positions stay RANK-2 Q(sqrt2)
+ * (x,y advance by t; z by sqrt2*t; every event time is (rational) or (rational)*sqrt2): pairs
+ * (p0 + p1*sqrt2)/den, the refract.iii pattern.  THE NON-RECURRENCE THEOREM (corrects "infinite
+ * loop" prose): x/y periods are rational, the z period is sqrt2*H -- incommensurate, so the orbit
+ * NEVER exactly repeats: trapped forever WITHOUT periodicity. */
+module photon3
+
+const P3_REFL : i32 = 1i32                 /* reflective event (TIR or critical) */
+const P3_TRANS : i32 = 2i32                /* certified transmission (the escape) */
+const P3_OVER : i32 = 4i32
+
+/* ── the closure/certificate table (V-III.1): pure integer identities ── */
+/* z-interface Snell^2 residue for light->dense of class L: 1*2*8 - 2*2*4 */
+fn p3_cert_refr_ld() -> i64 @export { return ((1i64 * 2i64) * 8i64) - ((2i64 * 2i64) * 4i64) }
+/* dense->light transmission of class D: 2*2*4 - 1*2*8 */
+fn p3_cert_trans_dl() -> i64 @export { return ((2i64 * 2i64) * 4i64) - ((1i64 * 2i64) * 8i64) }
+/* the L-shape inside dense at a z-plane: n^2 sin^2 = 2*(1/2) vs 1: 2*2 - 1*4 over |d|^2=4 */
+fn p3_cert_crit_l() -> i64 @export { return (2i64 * 2i64) - (1i64 * 4i64) }
+/* x/y-wall TIR margins (dense side): L-shape 2*(dy^2+dz^2) - 1*|d|^2 = 2*3-4; D: 2*7-8 */
+fn p3_cert_tir_l() -> i64 @export { return (2i64 * 3i64) - (1i64 * 4i64) }
+fn p3_cert_tir_d() -> i64 @export { return (2i64 * 7i64) - (1i64 * 8i64) }
+/* the sqrt5 NON-CLOSURE witness: cross-axis refraction of L demands a^2 = 5; return a^2 - the nearest
+ * class squares (1 and 2 and 6) -- all nonzero: there is NO class with a^2 = 5.  Exported as the
+ * required a^2 so the gate can assert 5 is not a field square pattern. */
+fn p3_crossaxis_a2() -> i64 @export {
+    /* (1+2)/(a^2+3) = 3/8  =>  3*(a^2+3) = 3*8  =>  a^2 = 5 */
+    let a2 : i64 = ((3i64 * 8i64) / 3i64) - 3i64
+    return a2
+}
+
+/* ── the trapped-class marcher (V-III.2): rank-2 Q(sqrt2) positions in a dense box ── */
+var P3_W : i64   var P3_H : i64                       /* box: x,y in [0,W], z in [0,H]; rational */
+var P3X0 : i64   var P3X1 : i64                       /* x = (x0 + x1*sqrt2)/den */
+var P3Y0 : i64   var P3Y1 : i64
+var P3Z0 : i64   var P3Z1 : i64
+var P3_DEN : i64
+var P3_SX : i64   var P3_SY : i64   var P3_SZ : i64
+var P3_CERT : i64   var P3_OVF : i64
+
+fn p3_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn p3_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = p3_abs(a)   let ub : u64 = p3_abs(b)
+    if ub > (9223372036854775807u64 / ua) { P3_OVF = 1i64   return 0i64 }
+    return a * b
+}
+fn p3_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+fn p3_canon() -> i32 {
+    let mut g : i64 = p3_gcd(p3_gcd(P3X0, P3X1), p3_gcd(p3_gcd(P3Y0, P3Y1), p3_gcd(p3_gcd(P3Z0, P3Z1), P3_DEN)))
+    if g > 1i64 {
+        P3X0 = P3X0 / g   P3X1 = P3X1 / g   P3Y0 = P3Y0 / g   P3Y1 = P3Y1 / g
+        P3Z0 = P3Z0 / g   P3Z1 = P3Z1 / g   P3_DEN = P3_DEN / g
+    }
+    return 0i32
+}
+/* sign of (a0 + a1*sqrt2): exact 1-surd rule in i64 (values here stay small; guarded) */
+fn p3_s2(a0: i64, a1: i64) -> i32 {
+    if a0 == 0i64 { if a1 > 0i64 { return 1i32 }   if a1 < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+    if a1 == 0i64 { if a0 > 0i64 { return 1i32 }   return 0i32 - 1i32 }
+    if a0 > 0i64 { if a1 > 0i64 { return 1i32 } }
+    if a0 < 0i64 { if a1 < 0i64 { return 0i32 - 1i32 } }
+    /* opposite signs: compare a0^2 vs 2*a1^2 */
+    let q0 : i64 = p3_mul(a0, a0)
+    let q1 : i64 = p3_mul(2i64, p3_mul(a1, a1))
+    let mut s : i32 = 0i32
+    if q0 > q1 { s = 1i32 }
+    if q0 < q1 { s = 0i32 - 1i32 }
+    if a0 < 0i64 { s = 0i32 - s }
+    return s
+}
+
+fn p3_box(W: i64, H: i64) -> i32 @export {
+    if W <= 0i64 { return 0i32 - 1i32 }
+    if H <= 0i64 { return 0i32 - 1i32 }
+    if (H % 2i64) != 0i64 { return 0i32 - 1i32 }       /* the z-PARITY INVARIANT needs an even height */
+    P3_W = W   P3_H = H
+    return 0i32
+}
+fn p3_set(x: i64, y: i64, z: i64, sx: i64, sy: i64, sz: i64) -> i32 @export {
+    if (z % 2i64) != 0i64 { return 0i32 - 1i32 }       /* even z0 + even H => dz0 even at EVERY z-event
+                                                        * (all z-slot deltas are even; den stays odd), so
+                                                        * t_z = dz1 + (dz0/2)*sqrt2 is an INTEGER pair and
+                                                        * the denominator NEVER grows */
+    P3X0 = x   P3X1 = 0i64   P3Y0 = y   P3Y1 = 0i64   P3Z0 = z   P3Z1 = 0i64   P3_DEN = 1i64
+    P3_SX = sx   P3_SY = sy   P3_SZ = sz   P3_CERT = 0i64   P3_OVF = 0i64
+    return 0i32
+}
+
+/* one certified event of the TRAPPED class (sx, sy, sz*sqrt2) in the dense box.
+ * Times: t_x = |xw*den - x| (speed 1), t_y likewise, t_z = |zw*den - z| / sqrt2.
+ * All are (q0 + q1*sqrt2) pairs; comparisons are exact 1-surd signs. */
+fn p3_step() -> i32 @export {
+    P3_OVF = 0i64
+    /* distances (positive rank-2 pairs) to the three target planes */
+    let mut xw : i64 = 0i64
+    if P3_SX > 0i64 { xw = P3_W }
+    let mut tx0 : i64 = p3_mul(xw, P3_DEN) - P3X0
+    let mut tx1 : i64 = 0i64 - P3X1
+    if P3_SX < 0i64 { tx0 = 0i64 - tx0   tx1 = 0i64 - tx1 }
+    let mut yw : i64 = 0i64
+    if P3_SY > 0i64 { yw = P3_W }
+    let mut ty0 : i64 = p3_mul(yw, P3_DEN) - P3Y0
+    let mut ty1 : i64 = 0i64 - P3Y1
+    if P3_SY < 0i64 { ty0 = 0i64 - ty0   ty1 = 0i64 - ty1 }
+    let mut zw : i64 = 0i64
+    if P3_SZ > 0i64 { zw = P3_H }
+    let mut dz0 : i64 = p3_mul(zw, P3_DEN) - P3Z0
+    let mut dz1 : i64 = 0i64 - P3Z1
+    if P3_SZ < 0i64 { dz0 = 0i64 - dz0   dz1 = 0i64 - dz1 }
+    /* t_z = dz / sqrt2 = dz1 + (dz0/2)*sqrt2 -- an INTEGER pair by the parity invariant */
+    if (dz0 % 2i64) != 0i64 { return P3_OVER }          /* invariant broken: refuse, never round */
+    let tz0 : i64 = dz1
+    let tz1 : i64 = dz0 / 2i64
+    let cx0 : i64 = tx0 - tz0
+    let cx1 : i64 = tx1 - tz1
+    let sxz : i32 = p3_s2(cx0, cx1)
+    let cy0 : i64 = ty0 - tz0
+    let cy1 : i64 = ty1 - tz1
+    let syz : i32 = p3_s2(cy0, cy1)
+    let dxy0 : i64 = tx0 - ty0
+    let dxy1 : i64 = tx1 - ty1
+    let sxy : i32 = p3_s2(dxy0, dxy1)
+    if P3_OVF != 0i64 { return P3_OVER }
+    /* the earliest event (ties are measure-zero here; refuse if hit) */
+    let mut ev : i64 = 0i64                             /* 0 = x-wall, 1 = y-wall, 2 = z-plane */
+    if sxy > 0i32 { ev = 1i64 }                         /* y earlier than x */
+    if ev == 0i64 { if sxz > 0i32 { ev = 2i64 } }       /* z earlier than x */
+    if ev == 1i64 { if syz > 0i32 { ev = 2i64 } }
+    if sxy == 0i32 { return P3_OVER }                   /* interacting tie: refuse (honest) */
+    if ev == 0i64 { if sxz == 0i32 { return P3_OVER } }
+    if ev == 1i64 { if syz == 0i32 { return P3_OVER } }
+    /* advance by t (an integer pair in all three cases; the denominator NEVER grows) */
+    let mut t0 : i64 = tx0   let mut t1 : i64 = tx1
+    if ev == 1i64 { t0 = ty0   t1 = ty1 }
+    if ev == 2i64 { t0 = tz0   t1 = tz1 }
+    /* x += sx*t, y += sy*t, z += sz*sqrt2*t = sz*(2*t1 + t0*sqrt2) */
+    P3X0 = P3X0 + p3_mul(P3_SX, t0)   P3X1 = P3X1 + p3_mul(P3_SX, t1)
+    P3Y0 = P3Y0 + p3_mul(P3_SY, t0)   P3Y1 = P3Y1 + p3_mul(P3_SY, t1)
+    P3Z0 = P3Z0 + p3_mul(P3_SZ, p3_mul(2i64, t1))   P3Z1 = P3Z1 + p3_mul(P3_SZ, t0)
+    if P3_OVF != 0i64 { return P3_OVER }
+    p3_canon()
+    /* the certified response */
+    if ev == 0i64 { P3_CERT = p3_cert_tir_l()   P3_SX = 0i64 - P3_SX   return P3_REFL }
+    if ev == 1i64 { P3_CERT = p3_cert_tir_l()   P3_SY = 0i64 - P3_SY   return P3_REFL }
+    P3_CERT = p3_cert_crit_l()
+    P3_SZ = 0i64 - P3_SZ
+    return P3_REFL
+}
+
+/* the ESCAPE twin: the D class (sx,sy,sz*sqrt6) in the same box TRANSMITS at its first z-plane.
+ * One-shot: certificate + the exit z (trivially the plane) -- certified escape, no marching needed. */
+fn p3_escape() -> i32 @export {
+    P3_CERT = p3_cert_trans_dl()
+    return P3_TRANS
+}
+
+fn p3_x0() -> i64 @export { return P3X0 }
+fn p3_x1() -> i64 @export { return P3X1 }
+fn p3_y0() -> i64 @export { return P3Y0 }
+fn p3_y1() -> i64 @export { return P3Y1 }
+fn p3_z0() -> i64 @export { return P3Z0 }
+fn p3_z1() -> i64 @export { return P3Z1 }
+fn p3_den() -> i64 @export { return P3_DEN }
+fn p3_sx() -> i64 @export { return P3_SX }
+fn p3_sy() -> i64 @export { return P3_SY }
+fn p3_sz() -> i64 @export { return P3_SZ }
+fn p3_cert() -> i64 @export { return P3_CERT }

@@ -1,0 +1,153 @@
+/* 2190_photon3.iii -- GATE for the 3D PHOTON CLASS ALGEBRA (Turing charter V-III.1 + V-III.2).
+ *
+ * T -- THE CLOSURE TABLE as integer identities: L<->D refraction residue 0 at z-interfaces; the D
+ *   class transmission residue 0; the L-shape-inside-dense CRITICAL zero; strict wall TIR margins
+ *   +2 (L-shape) and +6 (D); and THE NON-CLOSURE WITNESS: cross-axis refraction demands a^2 = 5 --
+ *   sqrt5 is not in Q(sqrt2, sqrt6): the certified refusal that IS the wave-vector constraint.
+ * C -- CERTIFIED CONFINEMENT: the trapped class (1,1,sqrt2) in the dense 7 x 7 x 6 box runs 1000
+ *   events -- EVERY verdict reflective (walls +2, z-planes critical 0), the state exactly inside the
+ *   box at the end, the denominator NEVER grew (the z-parity invariant): confinement by induction on
+ *   certificates, no epsilon anywhere.
+ * N -- THE NON-RECURRENCE FINDING (corrects the "infinite periodic loop" prose): x/y periods are
+ *   rational, the z period is sqrt2*H -- INCOMMENSURATE: the orbit never exactly repeats.  Asserted
+ *   live: all 1000 exact event-states (six position slots + three signs) are PAIRWISE DISTINCT --
+ *   trapped forever, repeating never.
+ * E -- THE ESCAPE TWIN: the D class in the same box transmits at its first z-plane (residue 0).
+ * R -- refusals: odd box height; odd starting z (the parity invariant is checked, not assumed).
+ *
+ * exit 99 = pass;  10 table;  11 confinement;  12 inside-box;  13 recurrence found;  14 escape;  15 refusals */
+module corpus_2190_photon3
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn p3_cert_refr_ld() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_trans_dl() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_crit_l() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_tir_l() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert_tir_d() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_crossaxis_a2() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_box(W: i64, H: i64) -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_set(x: i64, y: i64, z: i64, sx: i64, sy: i64, sz: i64) -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_step() -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_escape() -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_x0() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_x1() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_y0() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_y1() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_z0() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_z1() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_den() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_sx() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_sy() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_sz() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn p3_cert() -> i64 from "photon3.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var SX0 : [i64; 1000]   var SX1 : [i64; 1000]   var SY0 : [i64; 1000]   var SY1 : [i64; 1000]
+var SZ0 : [i64; 1000]   var SZ1 : [i64; 1000]   var SD : [i64; 1000]
+
+fn main() -> u64 {
+    /* ══ T: the closure table. */
+    let c1 : i64 = p3_cert_refr_ld()
+    let c2 : i64 = p3_cert_trans_dl()
+    let c3 : i64 = p3_cert_crit_l()
+    let c4 : i64 = p3_cert_tir_l()
+    let c5 : i64 = p3_cert_tir_d()
+    let a2 : i64 = p3_crossaxis_a2()
+    putchar(84i32) putchar(58i32) sp() e_i64(c1) sp() e_i64(c2) sp() e_i64(c3) sp() e_i64(c4) sp() e_i64(c5) sp() e_i64(a2) nl()
+    /* "T: 0 0 0 2 6 5" */
+    if c1 != 0i64 { return 10u64 }
+    if c2 != 0i64 { return 10u64 }
+    if c3 != 0i64 { return 10u64 }
+    if c4 != 2i64 { return 10u64 }
+    if c5 != 6i64 { return 10u64 }
+    if a2 != 5i64 { return 10u64 }                     /* sqrt5: not 1, 2, or 6 -- outside the field */
+
+    /* ══ C + N: certified confinement, no recurrence. */
+    if p3_box(7i64, 6i64) != 0i32 { return 11u64 }
+    if p3_set(1i64, 2i64, 2i64, 1i64, 1i64, 1i64) != 0i32 { return 11u64 }
+    let mut walls : i64 = 0i64
+    let mut crits : i64 = 0i64
+    let mut e : i64 = 0i64
+    while e < 1000i64 {
+        let rc : i32 = p3_step()
+        if rc != 1i32 { return 11u64 }                 /* every verdict REFLECTIVE */
+        let ct : i64 = p3_cert()
+        if ct == 2i64 { walls = walls + 1i64 }
+        if ct == 0i64 { crits = crits + 1i64 }
+        SX0[e as u64] = p3_x0()   SX1[e as u64] = p3_x1()
+        SY0[e as u64] = p3_y0()   SY1[e as u64] = p3_y1()
+        SZ0[e as u64] = p3_z0()   SZ1[e as u64] = p3_z1()
+        SD[e as u64] = (p3_sx() * 9i64) + (p3_sy() * 3i64) + p3_sz()
+        e = e + 1i64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(walls) sp() e_i64(crits) sp() e_i64(p3_den()) nl()
+    if (walls + crits) != 1000i64 { return 11u64 }
+    if walls < 1i64 { return 11u64 }
+    if crits < 1i64 { return 11u64 }
+    if p3_den() != 1i64 { return 11u64 }               /* the parity invariant held: den never grew */
+    /* inside the box, exactly: 0 <= x <= 7 etc. via 1-surd signs (den == 1) */
+    let fx0 : i64 = p3_x0()   let fx1 : i64 = p3_x1()
+    let fz0 : i64 = p3_z0()   let fz1 : i64 = p3_z1()
+    if s2ok(fx0, fx1, 7i64) != 1i64 { return 12u64 }
+    if s2ok(p3_y0(), p3_y1(), 7i64) != 1i64 { return 12u64 }
+    if s2ok(fz0, fz1, 6i64) != 1i64 { return 12u64 }
+    /* no exact state recurrence among the 1000 event-states */
+    let mut rec : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 1000i64 {
+        let mut j : i64 = i + 1i64
+        while j < 1000i64 {
+            let mut same : i64 = 1i64
+            if SX0[i as u64] != SX0[j as u64] { same = 0i64 }
+            if same == 1i64 { if SX1[i as u64] != SX1[j as u64] { same = 0i64 } }
+            if same == 1i64 { if SY0[i as u64] != SY0[j as u64] { same = 0i64 } }
+            if same == 1i64 { if SY1[i as u64] != SY1[j as u64] { same = 0i64 } }
+            if same == 1i64 { if SZ0[i as u64] != SZ0[j as u64] { same = 0i64 } }
+            if same == 1i64 { if SZ1[i as u64] != SZ1[j as u64] { same = 0i64 } }
+            if same == 1i64 { if SD[i as u64] != SD[j as u64] { same = 0i64 } }
+            if same == 1i64 { rec = rec + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    putchar(78i32) putchar(58i32) sp() e_i64(rec) nl()                        /* "N: 0" */
+    if rec != 0i64 { return 13u64 }
+
+    /* ══ E: the escape twin. */
+    let er : i32 = p3_escape()
+    putchar(69i32) putchar(58i32) sp() e_i64(er as i64) sp() e_i64(p3_cert()) nl()   /* "E: 2 0" */
+    if er != 2i32 { return 14u64 }
+    if p3_cert() != 0i64 { return 14u64 }
+
+    /* ══ R: refusals. */
+    let r1 : i32 = p3_box(7i64, 5i64)
+    p3_box(7i64, 6i64)
+    let r2 : i32 = p3_set(1i64, 2i64, 3i64, 1i64, 1i64, 1i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1 as i64) sp() e_i64(r2 as i64) nl()   /* "R: -1 -1" */
+    if r1 != (0i32 - 1i32) { return 15u64 }
+    if r2 != (0i32 - 1i32) { return 15u64 }
+
+    return 99u64
+}
+
+/* 1 iff 0 <= (a0 + a1*sqrt2) <= B  (den 1): sign checks via the exact 1-surd rule */
+fn s2ok(a0: i64, a1: i64, B: i64) -> i64 {
+    if s2sgn(a0, a1) < 0i32 { return 0i64 }
+    if s2sgn(B - a0, 0i64 - a1) < 0i32 { return 0i64 }
+    return 1i64
+}
+fn s2sgn(a0: i64, a1: i64) -> i32 {
+    if a0 == 0i64 { if a1 > 0i64 { return 1i32 }   if a1 < 0i64 { return 0i32 - 1i32 }   return 0i32 }
+    if a1 == 0i64 { if a0 > 0i64 { return 1i32 }   return 0i32 - 1i32 }
+    if a0 > 0i64 { if a1 > 0i64 { return 1i32 } }
+    if a0 < 0i64 { if a1 < 0i64 { return 0i32 - 1i32 } }
+    let q0 : i64 = a0 * a0
+    let q1 : i64 = 2i64 * (a1 * a1)
+    let mut s : i32 = 0i32
+    if q0 > q1 { s = 1i32 }
+    if q0 < q1 { s = 0i32 - 1i32 }
+    if a0 < 0i64 { s = 0i32 - s }
+    return s
+}

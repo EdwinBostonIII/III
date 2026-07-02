@@ -27,3 +27,14 @@ STDLIB/build/_*
 STDLIB/_probe/
 DOCS/_*
 _audit_scratch/
+
+# root demo/build artifact patterns (III-PERFECTION-LEDGER 15c)
+/*.exe
+/*.bmp
+/*.png
+/*.gif
+/*.mlog
+/*.witness
+/*.s
+/build/
+/_audit_scratch/

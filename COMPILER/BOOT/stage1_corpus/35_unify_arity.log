@@ -1,9 +1,0 @@
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0x1c): undefined reference to `arena_new'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0x35): undefined reference to `unify_buf_new'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0x97): undefined reference to `unify_alloc_args'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0xbe): undefined reference to `unify_alloc_args'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0xf8): undefined reference to `unify_make_struct'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0x132): undefined reference to `unify_make_struct'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/35_unify_arity.exe.o:fake:(.text+0x158): undefined reference to `unify'
-collect2.exe: error: ld returned 1 exit status
-iiis-0: link failed

@@ -1,8 +1,0 @@
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0x10): undefined reference to `resolution_init'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0x39): undefined reference to `intent_form_parse'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0x8f): undefined reference to `intent_goal_kind'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0xdf): undefined reference to `intent_expected_hexad_kind'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0x12f): undefined reference to `intent_required_guarantees'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/55_intent_form_runtime.exe.o:fake:(.text+0x17d): undefined reference to `intent_arena_id'
-collect2.exe: error: ld returned 1 exit status
-iiis-0: link failed

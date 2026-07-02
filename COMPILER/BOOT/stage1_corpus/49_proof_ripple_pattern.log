@@ -1,5 +1,0 @@
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/49_proof_ripple_pattern.exe.o:fake:(.text+0x10): undefined reference to `resolution_init'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/49_proof_ripple_pattern.exe.o:fake:(.text+0x47): undefined reference to `proof_ripple_equivalence_pattern'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/49_proof_ripple_pattern.exe.o:fake:(.text+0xc3): undefined reference to `proof_ripple_verify_pattern'
-collect2.exe: error: ld returned 1 exit status
-iiis-0: link failed

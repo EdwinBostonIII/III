@@ -1,6 +1,0 @@
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/40_resolve_tiebreak.exe.o:fake:(.text+0x10): undefined reference to `resolution_init'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/40_resolve_tiebreak.exe.o:fake:(.text+0x3a): undefined reference to `tiebreak'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/40_resolve_tiebreak.exe.o:fake:(.text+0x69): undefined reference to `tiebreak'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/40_resolve_tiebreak.exe.o:fake:(.text+0xd6): undefined reference to `tiebreak'
-collect2.exe: error: ld returned 1 exit status
-iiis-0: link failed

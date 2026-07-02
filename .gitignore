@@ -51,3 +51,9 @@ stjt_rip/
 stjt_*.tsv
 stjt_*.txt
 .stoma/
+
+# STOMA build outputs (compiled organs/KATs/exes)
+STDLIB/build/stoma_kats/
+STDLIB/build/stoma_probes/*.exe
+STDLIB/build/stoma_probes/*.o
+STDLIB/build/stoma_probes/*.out

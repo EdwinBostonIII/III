@@ -1,0 +1,259 @@
+/* STDLIB/iii/aether/billiard.iii -- EXACT TIME-REVERSIBLE BILLIARDS: the zero-dissipation dynamics organ
+ * (III-EXACT-DYNAMICS-CHARTER Phase 1, the repaired core).
+ *
+ * THE DESIGN THEOREM (the creative-solve result): for a POLYHEDRAL chamber the billiard event map is
+ * FIELD-RATIONAL end to end -- the contact time t* = (c - p.n)/(v.n) is degree-1 (a ratio, never a root)
+ * and the reflection v' = (n.n)v - 2(v.n)n is rational in the normal -- so the orbit NEVER leaves its
+ * starting field.  The tower-growth wall (one sqrt(Delta) per event, degree 2^events -- what kills exact
+ * QUADRIC chambers and ball-ball contacts) simply does not apply.  Chamber authoring rule here: normals
+ * are RATIONAL INTEGER vectors (so v stays a primitive INTEGER vector forever) and offsets live in
+ * Q(sqrt2) (c = (c0 + c1*sqrt2)/cden), so positions are rank-1 field vectors and every load-bearing
+ * decision -- WHICH WALL IS HIT FIRST -- is the sign of a 2-term Sigma-sqrt: exactly the certified
+ * exact-sign ladder, routed through verb_geom's e-class cache (vg_sign: total, sound, cached on exact
+ * revisits -- the Phase-2 memo fused in, not built as an island).
+ *
+ * WHAT EXACTNESS BUYS (each gated by corpus 2167):
+ *   - BIT-EXACT REVERSAL: negate v, run the same number of events, return to the start state exactly --
+ *     float/fixed engines leak state into rounding at every step and cannot return;
+ *   - NO EPSILON HACKS: the wall just left satisfies num == 0 EXACTLY (the zero-certificate replaces the
+ *     re-collision epsilon every float engine hand-tunes);
+ *   - CERTIFIED EVENT ORDER: a near-tie between two wall times (engineered below the fixed-point twin's
+ *     resolution) is decided EXACTLY -- the twin picks the WRONG WALL and its trajectory diverges;
+ *   - CERTIFIED CORNERS: two walls tied EXACTLY (a corner hit) is DETECTED and flagged (float cannot even
+ *     see the tie) -- v1 refuses rather than guesses (BL_E_CORNER).
+ *
+ * HONEST ENVELOPE: the orbit's coefficient bit-size grows ~linearly per event (the orbit's real
+ * information content -- LINEAR, not the exponential tower): PDEN multiplies by vn*cden each event.  All
+ * i64 arithmetic is overflow-GUARDED (sticky BL_OVF -> BL_E_OVER, never a silent wrap); the v1 envelope
+ * is a few dozen events, the bigint-rational state is the charted v2.  Speed is conserved by reflection;
+ * v is rescaled to its PRIMITIVE integer vector each event (a pure time-reparametrization: the geometric
+ * path and wall sequence are invariant), so the gated invariants are bit-exact state return, primitive
+ * direction reversal, and the wall-sequence palindrome. */
+module billiard
+
+extern @abi(c-msvc-x64) fn vg_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "verb_geom.iii"
+
+const BL_MAXW : u64 = 12u64
+const BL_MAXE : u64 = 256u64
+const BL_E_OK : i32 = 1i32          /* event executed */
+const BL_E_ESCAPE : i32 = 0i32      /* no wall ahead */
+const BL_E_CORNER : i32 = 2i32      /* two event times EXACTLY equal (certified corner) -> refused */
+const BL_E_OVER : i32 = 3i32        /* i64 envelope exceeded (guarded) -> refused, never silently wrong */
+
+/* walls: outward integer normal, offset (c0 + c1*sqrt2)/cden with cden > 0 */
+var BW_N : [i64; 36]                /* BL_MAXW * 3 */
+var BW_C0 : [i64; 12]   var BW_C1 : [i64; 12]   var BW_CD : [i64; 12]
+var BW_CT : u64
+
+/* ball state: p[axis] = (PN0 + PN1*sqrt2)/PDEN ; v integer primitive */
+var BP_N0 : [i64; 3]   var BP_N1 : [i64; 3]   var BP_DEN : i64
+var BV : [i64; 3]
+
+var BL_EV : [i64; 256]   var BL_NEV : u64
+var BL_OVF : u32
+
+/* guarded i64 (sticky BL_OVF; the ss_/kfg_ pattern) */
+fn bg_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn bg_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = bg_abs(a)   let ub : u64 = bg_abs(b)
+    if ub > (9223372036854775807u64 / ua) { BL_OVF = 1u32   return 0i64 }
+    return a * b
+}
+fn bg_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = bg_abs(a)   let ub : u64 = bg_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { BL_OVF = 1u32   return 0i64 }   return a + b }
+    if ua > 9223372036854775807u64 { BL_OVF = 1u32   return 0i64 }
+    if ub > 9223372036854775807u64 { BL_OVF = 1u32   return 0i64 }
+    if (ua + ub) > 9223372036854775808u64 { BL_OVF = 1u32   return 0i64 }
+    return a + b
+}
+fn bg_sub(a: i64, b: i64) -> i64 {
+    if b == 0i64 { return a }
+    let ub : u64 = bg_abs(b)
+    if ub > 9223372036854775807u64 { BL_OVF = 1u32   return 0i64 }
+    return bg_add(a, 0i64 - b)
+}
+fn bg_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* sign of x0 + x1*sqrt2 via the certified ladder (vg_sign: e-class cached, total, exact) */
+var BLA : [i64; 2]   var BLB : [i64; 2]
+fn bl_s2(x0: i64, x1: i64) -> i32 {
+    BLA[0u64] = x0   BLA[1u64] = x1
+    BLB[0u64] = 1i64   BLB[1u64] = 2i64
+    return vg_sign((&BLA) as u64, (&BLB) as u64, 2u64)
+}
+
+fn bl_reset() -> i32 @export {
+    BW_CT = 0u64   BL_NEV = 0u64   BL_OVF = 0u32
+    BP_DEN = 1i64
+    let mut i : u64 = 0u64
+    while i < 3u64 { BP_N0[i] = 0i64   BP_N1[i] = 0i64   BV[i] = 0i64   i = i + 1u64 }
+    return 0i32
+}
+
+/* add a wall: outward integer normal (nx,ny,nz), offset (c0 + c1*sqrt2)/cden, cden > 0.  -1 = refused. */
+fn bl_wall(nx: i64, ny: i64, nz: i64, c0: i64, c1: i64, cden: i64) -> i32 @export {
+    if BW_CT >= BL_MAXW { return 0i32 - 1i32 }
+    if cden <= 0i64 { return 0i32 - 1i32 }
+    let w : u64 = BW_CT
+    BW_N[w * 3u64] = nx   BW_N[w * 3u64 + 1u64] = ny   BW_N[w * 3u64 + 2u64] = nz
+    BW_C0[w] = c0   BW_C1[w] = c1   BW_CD[w] = cden
+    BW_CT = w + 1u64
+    return w as i32
+}
+
+/* set the ball: p[axis] = (p0 + p1*sqrt2)/pden, v integer (made primitive). */
+fn bl_set(px0: i64, px1: i64, py0: i64, py1: i64, pz0: i64, pz1: i64, pden: i64, vx: i64, vy: i64, vz: i64) -> i32 @export {
+    if pden <= 0i64 { return 0i32 - 1i32 }
+    BP_N0[0u64] = px0   BP_N1[0u64] = px1
+    BP_N0[1u64] = py0   BP_N1[1u64] = py1
+    BP_N0[2u64] = pz0   BP_N1[2u64] = pz1
+    BP_DEN = pden
+    BV[0u64] = vx   BV[1u64] = vy   BV[2u64] = vz
+    let mut g : i64 = bg_gcd(bg_gcd(vx, vy), vz)
+    if g > 1i64 { BV[0u64] = vx / g   BV[1u64] = vy / g   BV[2u64] = vz / g }
+    BL_NEV = 0u64   BL_OVF = 0u32
+    bl_canon()
+    return 0i32
+}
+
+/* canonicalize p: gcd-reduce the 6 numerator slots with PDEN (PDEN stays > 0). */
+fn bl_canon() -> i32 {
+    let mut g : i64 = BP_DEN
+    let mut i : u64 = 0u64
+    while i < 3u64 { g = bg_gcd(g, BP_N0[i])   g = bg_gcd(g, BP_N1[i])   i = i + 1u64 }
+    if g > 1i64 {
+        i = 0u64
+        while i < 3u64 { BP_N0[i] = BP_N0[i] / g   BP_N1[i] = BP_N1[i] / g   i = i + 1u64 }
+        BP_DEN = BP_DEN / g
+    }
+    return 0i32
+}
+
+var BL_CN0 : i64   var BL_CN1 : i64   var BL_CVN : i64   var BL_CCD : i64
+/* candidate wall w: vn = n.v (int, must be > 0); NUM = c0*PDEN - pn0*cden + (c1*PDEN - pn1*cden)*sqrt2;
+ * t = NUM / (vn * PDEN * cden), denominator > 0.  Fills BL_C*; returns sign(NUM) (2 = not a candidate). */
+fn bl_cand(w: u64) -> i32 {
+    let nx : i64 = BW_N[w * 3u64]   let ny : i64 = BW_N[w * 3u64 + 1u64]   let nz : i64 = BW_N[w * 3u64 + 2u64]
+    let vn : i64 = bg_add(bg_add(bg_mul(nx, BV[0u64]), bg_mul(ny, BV[1u64])), bg_mul(nz, BV[2u64]))
+    if vn <= 0i64 { return 2i32 }                                     /* moving away or parallel */
+    let pn0 : i64 = bg_add(bg_add(bg_mul(nx, BP_N0[0u64]), bg_mul(ny, BP_N0[1u64])), bg_mul(nz, BP_N0[2u64]))
+    let pn1 : i64 = bg_add(bg_add(bg_mul(nx, BP_N1[0u64]), bg_mul(ny, BP_N1[1u64])), bg_mul(nz, BP_N1[2u64]))
+    let cd : i64 = BW_CD[w]
+    let n0 : i64 = bg_sub(bg_mul(BW_C0[w], BP_DEN), bg_mul(pn0, cd))
+    let n1 : i64 = bg_sub(bg_mul(BW_C1[w], BP_DEN), bg_mul(pn1, cd))
+    if BL_OVF != 0u32 { return 2i32 }
+    let s : i32 = bl_s2(n0, n1)                                       /* EXACT: 0 == on this wall NOW (just left it) */
+    if s <= 0i32 { return s }
+    BL_CN0 = n0   BL_CN1 = n1   BL_CVN = vn   BL_CCD = cd
+    return 1i32
+}
+
+var BL_MN0 : i64   var BL_MN1 : i64   var BL_MVN : i64   var BL_MCD : i64   var BL_MW : u64
+/* one exact event: find the strictly-nearest wall ahead, advance, reflect, log.  Return BL_E_*. */
+fn bl_step() -> i32 @export {
+    if BL_NEV >= BL_MAXE { return BL_E_OVER }
+    let mut have : u8 = 0u8
+    let mut w : u64 = 0u64
+    while w < BW_CT {
+        let s : i32 = bl_cand(w)
+        if s == 1i32 {
+            if have == 0u8 { BL_MN0 = BL_CN0   BL_MN1 = BL_CN1   BL_MVN = BL_CVN   BL_MCD = BL_CCD   BL_MW = w   have = 1u8 }
+            else {
+                /* t_c < t_m  <=>  NUMc * DENm < NUMm * DENc, both denominators > 0 (vn, PDEN, cden all positive) */
+                let dc : i64 = bg_mul(BL_CVN, BL_CCD)                 /* candidate denominator / PDEN */
+                let dm : i64 = bg_mul(BL_MVN, BL_MCD)                 /* incumbent denominator / PDEN */
+                let x0 : i64 = bg_sub(bg_mul(BL_CN0, dm), bg_mul(BL_MN0, dc))
+                let x1 : i64 = bg_sub(bg_mul(BL_CN1, dm), bg_mul(BL_MN1, dc))
+                if BL_OVF != 0u32 { return BL_E_OVER }
+                let c : i32 = bl_s2(x0, x1)
+                if c == 0i32 { return BL_E_CORNER }                   /* CERTIFIED corner tie -> refuse honestly */
+                if c < 0i32 { BL_MN0 = BL_CN0   BL_MN1 = BL_CN1   BL_MVN = BL_CVN   BL_MCD = BL_CCD   BL_MW = w }
+            }
+        }
+        if BL_OVF != 0u32 { return BL_E_OVER }
+        w = w + 1u64
+    }
+    if have == 0u8 { return BL_E_ESCAPE }
+    /* advance: p' = (p * vn*cd + NUM * v) / (PDEN * vn*cd) */
+    let f : i64 = bg_mul(BL_MVN, BL_MCD)
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let vi : i64 = BV[i]
+        BP_N0[i] = bg_add(bg_mul(BP_N0[i], f), bg_mul(BL_MN0, vi))
+        BP_N1[i] = bg_add(bg_mul(BP_N1[i], f), bg_mul(BL_MN1, vi))
+        i = i + 1u64
+    }
+    BP_DEN = bg_mul(BP_DEN, f)
+    if BL_OVF != 0u32 { return BL_E_OVER }
+    bl_canon()
+    /* reflect: v' = (n.n) v - 2 (v.n) n, then primitive (a time-reparametrization; path invariant) */
+    let nx : i64 = BW_N[BL_MW * 3u64]   let ny : i64 = BW_N[BL_MW * 3u64 + 1u64]   let nz : i64 = BW_N[BL_MW * 3u64 + 2u64]
+    let nn : i64 = bg_add(bg_add(bg_mul(nx, nx), bg_mul(ny, ny)), bg_mul(nz, nz))
+    let vn2 : i64 = bg_mul(2i64, BL_MVN)
+    let wx : i64 = bg_sub(bg_mul(nn, BV[0u64]), bg_mul(vn2, nx))
+    let wy : i64 = bg_sub(bg_mul(nn, BV[1u64]), bg_mul(vn2, ny))
+    let wz : i64 = bg_sub(bg_mul(nn, BV[2u64]), bg_mul(vn2, nz))
+    if BL_OVF != 0u32 { return BL_E_OVER }
+    let mut g : i64 = bg_gcd(bg_gcd(wx, wy), wz)
+    if g < 1i64 { g = 1i64 }
+    BV[0u64] = wx / g   BV[1u64] = wy / g   BV[2u64] = wz / g
+    BL_EV[BL_NEV] = BL_MW as i64
+    BL_NEV = BL_NEV + 1u64
+    return BL_E_OK
+}
+
+/* run up to k events; returns the count executed (stops early on escape/corner/overflow). */
+fn bl_run(k: u64) -> u64 @export {
+    let mut done : u64 = 0u64
+    while done < k {
+        let r : i32 = bl_step()
+        if r != BL_E_OK { return done }
+        done = done + 1u64
+    }
+    return done
+}
+
+/* THE TIME-REVERSAL OPERATOR.  A post-event state sits ON the last wall with the REFLECTED (inward) velocity;
+ * the time-reverse of "just left the wall with v" is "arriving at the wall with -v_pre" -- i.e. negate AND
+ * un-reflect at the last wall (reflection is an involution, so this is reflect(-v)).  Without the un-reflect,
+ * -v points OUT of the chamber, the num==0 exclusion rightly skips the wall underfoot, and the ball exits --
+ * the operator, not the exclusion, carries the physics.  R is an involution: R(R(s)) == s. */
+fn bl_reverse() -> i32 @export {
+    BV[0u64] = 0i64 - BV[0u64]   BV[1u64] = 0i64 - BV[1u64]   BV[2u64] = 0i64 - BV[2u64]
+    if BL_NEV > 0u64 {
+        let w : u64 = (BL_EV[BL_NEV - 1u64]) as u64
+        let nx : i64 = BW_N[w * 3u64]   let ny : i64 = BW_N[w * 3u64 + 1u64]   let nz : i64 = BW_N[w * 3u64 + 2u64]
+        let nn : i64 = bg_add(bg_add(bg_mul(nx, nx), bg_mul(ny, ny)), bg_mul(nz, nz))
+        let vn : i64 = bg_add(bg_add(bg_mul(nx, BV[0u64]), bg_mul(ny, BV[1u64])), bg_mul(nz, BV[2u64]))
+        let vn2 : i64 = bg_mul(2i64, vn)
+        let wx : i64 = bg_sub(bg_mul(nn, BV[0u64]), bg_mul(vn2, nx))
+        let wy : i64 = bg_sub(bg_mul(nn, BV[1u64]), bg_mul(vn2, ny))
+        let wz : i64 = bg_sub(bg_mul(nn, BV[2u64]), bg_mul(vn2, nz))
+        let mut g : i64 = bg_gcd(bg_gcd(wx, wy), wz)
+        if g < 1i64 { g = 1i64 }
+        BV[0u64] = wx / g   BV[1u64] = wy / g   BV[2u64] = wz / g
+    }
+    return 0i32
+}
+
+/* state observers (canonical form: gcd-reduced, PDEN > 0, v primitive) */
+fn bl_p0(axis: u64) -> i64 @export { return BP_N0[axis] }
+fn bl_p1(axis: u64) -> i64 @export { return BP_N1[axis] }
+fn bl_pden() -> i64 @export { return BP_DEN }
+fn bl_v(axis: u64) -> i64 @export { return BV[axis] }
+fn bl_events() -> u64 @export { return BL_NEV }
+fn bl_event(i: u64) -> i64 @export { return BL_EV[i] }
+fn bl_ovf() -> u32 @export { return BL_OVF }

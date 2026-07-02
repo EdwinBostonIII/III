@@ -1,0 +1,143 @@
+/* 2167_billiard_reversal.iii -- GATE for billiard.iii: EXACT TIME-REVERSIBLE DYNAMICS (charter Phase 1).
+ *
+ * ARM A -- REVERSAL: an irrational-angle orbit in a box + 45-degree wall with a sqrt2 offset runs 12 exact
+ *   events, reverses, runs 12 more, and returns BIT-EXACT to the start state (position slots + denominator +
+ *   primitive direction), with the wall sequence an exact PALINDROME.  A float/fixed engine leaks precision
+ *   at every event and cannot do this.  Non-vacuity teeth: >= 4 distinct walls, the irrational-offset slant
+ *   is hit, no consecutive same-wall events (the num==0 zero-certificate replaces the re-collision epsilon).
+ * ARM B -- CERTIFIED EVENT ORDER (the float-blind witness): two parallel walls ahead at
+ *   a = 100000*sqrt2 and b = 18536380002/131072, engineered so a_fp < b < a where a_fp is a's Q32.32
+ *   fixed-point value (the window between the fixed-point sqrt2 and the true sqrt2).  The EXACT engine picks
+ *   wall B (b < a, decided by the Tier-0 bi-quadratic rung on i64 coeffs past 2^20); the Q32.32 twin computes
+ *   t_a = 100000*SQ2FP, t_b = m*2^15 (exact -- denominator is 2^17) and picks wall A.  One wrong wall = a
+ *   qualitatively divergent trajectory: exactness is load-bearing, not cosmetic.
+ * ARM E -- CERTIFIED CORNER: a start aimed exactly at the meeting line of two walls (t_x == t_y exactly) is
+ *   DETECTED (the tie is a certified Sigma-sqrt zero) and refused honestly (BL_E_CORNER) -- a float engine
+ *   cannot even see the tie.
+ *
+ * exit 99 = pass
+ *   10 A: forward run incomplete (escape/corner/overflow)   13 A: vacuity (walls/slant/repeat teeth)
+ *   11 A: reversal state mismatch (NOT bit-exact)           20 B: exact engine picked the wrong wall
+ *   12 A: wall sequence not a palindrome                    21 B: the twin AGREED (witness void)
+ *                                                           30 E: corner tie not certified */
+module corpus_2167_billiard_reversal
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn bl_reset() -> i32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_wall(nx: i64, ny: i64, nz: i64, c0: i64, c1: i64, cden: i64) -> i32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_set(px0: i64, px1: i64, py0: i64, py1: i64, pz0: i64, pz1: i64, pden: i64, vx: i64, vy: i64, vz: i64) -> i32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_step() -> i32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_run(k: u64) -> u64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_reverse() -> i32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_p0(axis: u64) -> i64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_p1(axis: u64) -> i64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_pden() -> i64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_v(axis: u64) -> i64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_events() -> u64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_event(i: u64) -> i64 from "billiard.iii"
+extern @abi(c-msvc-x64) fn bl_ovf() -> u32 from "billiard.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* tiny distinct-wall tracker (walls are ids 0..11) + the post-event-1 state snapshot */
+var SEENW : [i64; 12]
+var S1P0 : [i64; 3]   var S1P1 : [i64; 3]   var S1V : [i64; 3]
+fn var_seen() -> i32 { let mut i : u64 = 0u64   while i < 12u64 { SEENW[i] = 0i64   i = i + 1u64 }   return 0i32 }
+fn mark_seen(e: i64) -> i32 { if e >= 0i64 { if e < 12i64 { SEENW[e as u64] = 1i64 } }   return 0i32 }
+fn seen_count() -> i64 { let mut c : i64 = 0i64   let mut i : u64 = 0u64   while i < 12u64 { let s : i64 = SEENW[i]   if s == 1i64 { c = c + 1i64 }   i = i + 1u64 }   return c }
+
+const KA : u64 = 12u64
+
+fn main() -> u64 {
+    vg_reset()
+
+    /* ══ ARM A: the reversal theorem.  Box [0,20]^3 (outward normals) + the 45-degree wall x+y = 33 + 2*sqrt2. */
+    bl_reset()
+    let wx0 : i32 = bl_wall(0i64 - 1i64, 0i64, 0i64, 0i64, 0i64, 1i64)         /* -x <= 0  (x >= 0)  */
+    bl_wall(1i64, 0i64, 0i64, 20i64, 0i64, 1i64)                               /*  x <= 20           */
+    bl_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 0i64, 1i64)
+    bl_wall(0i64, 1i64, 0i64, 20i64, 0i64, 1i64)
+    bl_wall(0i64, 0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    bl_wall(0i64, 0i64, 1i64, 20i64, 0i64, 1i64)
+    let wsl : i32 = bl_wall(1i64, 1i64, 0i64, 15i64, 2i64, 1i64)               /* x+y <= 15 + 2*sqrt2 (IRRATIONAL, mid-chamber) */
+    bl_set(3i64, 0i64, 5i64, 0i64, 7i64, 0i64, 1i64, 3i64, 4i64, 5i64)
+    /* run 1 event, SNAPSHOT the post-event-1 state s1, run KA-1 more; then the closed involution
+     * R . F^(KA-1) . R . F^(KA-1) == id on post-event states: reverse, retrace KA-1 events, reverse again,
+     * and the state must equal s1 BIT-EXACTLY (position slots + denominator + primitive velocity). */
+    if bl_run(1u64) != 1u64 { return 10u64 }
+    let mut ax : u64 = 0u64
+    while ax < 3u64 { S1P0[ax] = bl_p0(ax)   S1P1[ax] = bl_p1(ax)   S1V[ax] = bl_v(ax)   ax = ax + 1u64 }
+    let s1den : i64 = bl_pden()
+    if bl_run(KA - 1u64) != (KA - 1u64) { return 10u64 }
+    if bl_ovf() != 0u32 { return 10u64 }
+    bl_reverse()
+    let back : u64 = bl_run(KA - 1u64)
+    if back != (KA - 1u64) { return 10u64 }
+    if bl_ovf() != 0u32 { return 10u64 }
+    bl_reverse()
+    let mut bad : u64 = 0u64
+    ax = 0u64
+    while ax < 3u64 {
+        if bl_p0(ax) != S1P0[ax] { bad = bad + 1u64 }
+        if bl_p1(ax) != S1P1[ax] { bad = bad + 1u64 }
+        if bl_v(ax) != S1V[ax] { bad = bad + 1u64 }
+        ax = ax + 1u64
+    }
+    if bl_pden() != s1den { bad = bad + 1u64 }
+    putchar(65i32) putchar(58i32) sp() e_i64(KA as i64) sp() e_i64(bad as i64) sp() e_i64(bl_pden()) sp() e_i64(s1den) nl()   /* "A: 12 0 <den> <den>" */
+    if bad != 0u64 { return 11u64 }
+    /* palindrome: reverse event i reflects the wall of forward event KA-1-i (the second reversal logs no event) */
+    let mut i : u64 = 0u64
+    while i < (KA - 1u64) { if bl_event(KA + i) != bl_event(KA - 2u64 - i) { return 12u64 }   i = i + 1u64 }
+    /* non-vacuity: >= 4 distinct walls, the slant hit at least once, no consecutive same-wall event */
+    var_seen()
+    i = 0u64
+    let mut slant : u64 = 0u64
+    let mut rept : u64 = 0u64
+    while i < KA {
+        let e : i64 = bl_event(i)
+        mark_seen(e)
+        if e == (wsl as i64) { slant = slant + 1u64 }
+        if i > 0u64 { if bl_event(i) == bl_event(i - 1u64) { rept = rept + 1u64 } }
+        i = i + 1u64
+    }
+    putchar(86i32) putchar(58i32) sp()                                          /* "V: <events...> | seen slant rept" */
+    i = 0u64
+    while i < KA { e_i64(bl_event(i)) sp()   i = i + 1u64 }
+    putchar(124i32) sp() e_i64(seen_count()) sp() e_i64(slant as i64) sp() e_i64(rept as i64) nl()
+    if rept != 0u64 { return 13u64 }
+    if seen_count() < 4i64 { return 13u64 }
+    if slant == 0u64 { return 13u64 }
+    if wx0 < 0i32 { return 13u64 }
+
+    /* ══ ARM B: certified event order vs the Q32.32 twin.  Walls A: x = 100000*sqrt2 ; B: x = 18536379393/131072. */
+    bl_reset()
+    let wa : i32 = bl_wall(1i64, 0i64, 0i64, 0i64, 100000i64, 1i64)
+    let wb : i32 = bl_wall(1i64, 0i64, 0i64, 18536380002i64, 0i64, 131072i64)
+    bl_set(0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 1i64, 1i64, 0i64, 0i64)
+    let r : i32 = bl_step()
+    if r != 1i32 { return 20u64 }
+    let exactpick : i64 = bl_event(0u64)
+    if exactpick != (wb as i64) { return 20u64 }                               /* TRUE order: b < a -> wall B first */
+    /* the fixed-point twin: SQ2FP = floor(sqrt2 * 2^32); t_a = 100000*SQ2FP, t_b = m*2^15 (EXACT, den = 2^17) */
+    let sq2fp : i64 = 6074000999i64
+    let ta_fp : i64 = 100000i64 * sq2fp
+    let tb_fp : i64 = 18536380002i64 * 32768i64
+    let mut twinpick : i64 = wb as i64
+    if ta_fp <= tb_fp { twinpick = wa as i64 }                                 /* the twin's sqrt2 error swallows the gap */
+    putchar(66i32) putchar(58i32) sp() e_i64(exactpick) sp() e_i64(twinpick) sp() e_i64(tb_fp - ta_fp) nl()   /* "B: 1 0 <gap>" */
+    if twinpick == exactpick { return 21u64 }                                  /* witness must actually discriminate */
+
+    /* ══ ARM E: certified corner.  Two walls met at exactly the same time -> honest BL_E_CORNER refusal. */
+    bl_reset()
+    bl_wall(1i64, 0i64, 0i64, 10i64, 0i64, 1i64)
+    bl_wall(0i64, 1i64, 0i64, 10i64, 0i64, 1i64)
+    bl_set(1i64, 0i64, 1i64, 0i64, 5i64, 0i64, 1i64, 1i64, 1i64, 0i64)         /* t_x == t_y == 9 EXACTLY */
+    let rc : i32 = bl_step()
+    putchar(69i32) putchar(58i32) sp() e_i64(rc as i64) nl()                   /* "E: 2" */
+    if rc != 2i32 { return 30u64 }
+
+    return 99u64
+}

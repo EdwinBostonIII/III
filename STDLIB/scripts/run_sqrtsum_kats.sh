@@ -13,6 +13,7 @@ pass=0; fail=0
 "$I2" "$A/sqrt_sum_sign.iii" --compile-only --out "$OUT/sqrt_sum_sign.o" 2>"$OUT/s.log" || { echo "FAIL sqrt_sum_sign compile"; cat "$OUT/s.log"; exit 1; }
 "$I2" "$A/kfield.iii"       --compile-only --out "$OUT/kfield.o"       2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
 "$I2" "$A/exact_surd_value.iii" --compile-only --out "$OUT/exact_surd_value.o" 2>"$OUT/esv.log" || { echo "FAIL exact_surd_value compile"; cat "$OUT/esv.log"; exit 1; }
+"$I2" "$A/billiard.iii" --compile-only --out "$OUT/billiard.o" 2>"$OUT/bil.log" || { echo "FAIL billiard compile"; cat "$OUT/bil.log"; exit 1; }
 "$I2" "$A/ui_exact_big.iii"  --compile-only --out "$OUT/ui_exact_big.o"  2>"$OUT/u.log" || { echo "FAIL ui_exact_big compile"; cat "$OUT/u.log"; exit 1; }
 "$I2" "$A/verb_geom.iii"     --compile-only --out "$OUT/verb_geom.o"     2>"$OUT/v.log" || { echo "FAIL verb_geom compile"; cat "$OUT/v.log"; exit 1; }
 "$I2" "$A/traj_kinematics.iii" --compile-only --out "$OUT/traj_kinematics.o" 2>"$OUT/t.log" || { echo "FAIL traj_kinematics compile"; cat "$OUT/t.log"; exit 1; }
@@ -66,6 +67,7 @@ run 2157_algnum          99   "$OUT/algnum.o" "$OUT/sturm.o" "$OUT/sqrt_sum_sign
 run 2159_kf_weld        99   "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$OUT/exact_surd_value.o" "$LIB"  # THE WELD GATE: kfield Galois-tower sign as Tier 3 -- differential vs the separation-bound oracle (19/39 overflow family -> 39/39 guarded abstains; Pell near-ties DECIDED in pure i64 by the tower; rank-collapse {6,10,15} F2-embed; rank-4 abstain->adaptive fallback).  THEOREM: bounded-rank Galois-tower sign == separation-bound sign
 run 2148_theorem_fuzzer  99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: generative coincidence-fuzzer over kfield (CONSTRUCT/IDENTIFY verbs; identity pairs collide, control does not)
 run 2149_universal_block 99   "$OUT/kfield.o" "$LIB"  # QUOTIENT-KIT landed: the universal block -- kfield four verbs = ONE kernel; addr-coincidence <=> sign-zero (IDENTIFY <=> DECIDE)
+run 2167_billiard_reversal 99 "$OUT/billiard.o" "$OUT/verb_geom.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # EXACT TIME-REVERSIBLE BILLIARDS (charter Phase 1): 12 events forward + reverse = BIT-EXACT return + wall palindrome (irrational 45-deg offset orbit); Q32.32 twin picks the WRONG wall on the certified near-tie; corner tie CERTIFIED and refused
 
 echo "=== SQRT-SUM-SIGN KAT gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

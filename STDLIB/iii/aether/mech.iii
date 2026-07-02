@@ -1143,17 +1143,8 @@ fn syn_pose_fast(a: i64, b: i64, c: i64, d: i64, k: i64) -> i32 {
     let vz : u8 = v_is_zero((&MWV4) as u64)
     if uz == 1u8 { return 0i32 }              /* vertical / degenerate -> slow path */
     if vz == 1u8 { return 0i32 }              /* horizontal radical line -> slow path */
-    /* A(k) = a*(cos,sin), isolate to [lo, lo+1] */
-    i = 0i64
-    while i < 4i64 { let cv : i64 = MW24C[base + i]   MWF4[i] = a * cv   i = i + 1i64 }
-    SFAXL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAXH = SFAXL + 1i64
-    i = 0i64
-    while i < 4i64 { let sv : i64 = MW24S[base + i]   MWF4[i] = a * sv   i = i + 1i64 }
-    SFAYL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAYH = SFAYL + 1i64
-    /* denominator 2(d-Ax) must be provably positive: need d*1e4 > SFAXH */
     let sc : i64 = 10000i64
-    if (d * sc) <= SFAXH { return 0i32 }      /* d-Ax could be <= 0 -> slow path */
-    /* y-quadratic  (U^2+V^2) y^2 + 2VW y + (W^2 - c^2 U^2) */
+    /* y-quadratic  (U^2+V^2) y^2 + 2VW y + (W^2 - c^2 U^2) -- needs only U,V,W (no A isolation) */
     q23_mul((&MWU4) as u64, (&MWU4) as u64, (&MWT4A) as u64)
     q23_mul((&MWV4) as u64, (&MWV4) as u64, (&MWT4B) as u64)
     i = 0i64
@@ -1164,13 +1155,24 @@ fn syn_pose_fast(a: i64, b: i64, c: i64, d: i64, k: i64) -> i32 {
     q23_mul((&MWW4) as u64, (&MWW4) as u64, (&MWF4) as u64)
     i = 0i64
     while i < 4i64 { MWG4[i] = MWF4[i] - ((c * c) * MWT4A[i])   i = i + 1i64 }
-    /* Delta sign */
+    /* Delta sign FIRST -- reject the unreachable majority before the costly A isolation */
     q23_mul((&MWB4) as u64, (&MWB4) as u64, (&MWF4) as u64)
     q23_mul((&MWA4) as u64, (&MWG4) as u64, (&MWD4) as u64)
     i = 0i64
     while i < 4i64 { MWD4[i] = MWF4[i] - (4i64 * MWD4[i])   i = i + 1i64 }
     let dsg : i32 = q23_sign((&MWD4) as u64)
     if dsg < 0i32 { return 0i32 - 1i32 }       /* unreachable */
+    /* A(k) = a*(cos,sin), isolate to [lo, lo+1]  (only now, for reachable candidates) */
+    i = 0i64
+    while i < 4i64 { let cv : i64 = MW24C[base + i]   MWF4[i] = a * cv   i = i + 1i64 }
+    SFAXL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAXH = SFAXL + 1i64
+    i = 0i64
+    while i < 4i64 { let sv : i64 = MW24S[base + i]   MWF4[i] = a * sv   i = i + 1i64 }
+    SFAYL = mv_field_iso((&MWF4) as u64, 4i64, a + 1i64)   SFAYH = SFAYL + 1i64
+    /* denominator 2(d-Ax): fast path OK when its interval is strictly one sign; reject only on straddle. */
+    let dlo0 : i64 = ((2i64 * d) * sc) - (2i64 * SFAXH)
+    let dhi0 : i64 = ((2i64 * d) * sc) - (2i64 * SFAXL)
+    if dlo0 <= 0i64 { if dhi0 >= 0i64 { return 0i32 } }      /* straddles 0 -> slow path */
     /* elbow-up By = larger root */
     sf_iso_hi(c + 1i64)
     /* Bx = (K + 2*By*Ay)/(2(d-Ax)) as a certified interval (scaled 1e4), denom>0.
@@ -1184,10 +1186,15 @@ fn syn_pose_fast(a: i64, b: i64, c: i64, d: i64, k: i64) -> i32 {
     if p4 < plo { plo = p4 }   if p4 > phi { phi = p4 }
     let nlo : i64 = (kk * sc) + (2i64 * idiv_floor(plo, sc))
     let nhi : i64 = (kk * sc) + (2i64 * idiv_ceil(phi, sc))
-    let dlo : i64 = ((2i64 * d) * sc) - (2i64 * SFAXH)     /* > 0 by the guard */
-    let dhi : i64 = ((2i64 * d) * sc) - (2i64 * SFAXL)
-    let nnlo : i64 = nlo * sc
-    let nnhi : i64 = nhi * sc
+    /* normalize to a POSITIVE denominator interval: if 2(d-Ax) is all-negative, use N/D=(-N)/(-D). */
+    let mut nnlo : i64 = nlo * sc
+    let mut nnhi : i64 = nhi * sc
+    let mut dlo : i64 = dlo0
+    let mut dhi : i64 = dhi0
+    if dhi0 < 0i64 {
+        let tn : i64 = nnlo   nnlo = 0i64 - nnhi   nnhi = 0i64 - tn
+        let td : i64 = dlo    dlo = 0i64 - dhi     dhi = 0i64 - td
+    }
     /* 4-corner interval divide by a positive-denominator interval, outward */
     let c1 : i64 = idiv_floor(nnlo, dlo)   let c2 : i64 = idiv_floor(nnlo, dhi)
     let c3 : i64 = idiv_floor(nnhi, dlo)   let c4 : i64 = idiv_floor(nnhi, dhi)

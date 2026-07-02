@@ -223,6 +223,29 @@ fn ch_toi(i: u64, j: u64) -> i32 @export {
     return 1i32
 }
 
+/* contact EXIT time for the same rational perfect-square hit: the LATER root
+ * t = (-B + sqrt(disc))/(2A).  Same guards and refusals as ch_toi.  For a genuine
+ * hit (disc > 0) the exit strictly follows the entry.  1 ok / 0 refused. */
+fn ch_toi_exit(i: u64, j: u64) -> i32 @export {
+    if ch_disc_sign(i, j) != 1i32 { return 0i32 }     /* not two real contacts */
+    ch_build_sep(i, j)
+    if CA1 != 0i64 { return 0i32 }                     /* A must be rational */
+    if CB1 != 0i64 { return 0i32 }                     /* B must be rational */
+    if CC1 != 0i64 { return 0i32 }                     /* C must be rational */
+    if CAD != 1i64 { return 0i32 }
+    if CBD != 1i64 { return 0i32 }
+    if CCD != 1i64 { return 0i32 }
+    let disc : i64 = (CB0 * CB0) - (4i64 * (CA0 * CC0))
+    let sq : i64 = ch_isqrt(disc)
+    if sq < 0i64 { return 0i32 }                        /* not a perfect square -> nested radical */
+    /* t = (-B + sqrt(disc)) / (2A), rational */
+    CH_T0 = (0i64 - CB0) + sq
+    CH_T1 = 0i64
+    CH_TD = 2i64 * CA0
+    if CH_TD < 0i64 { CH_T0 = 0i64 - CH_T0   CH_TD = 0i64 - CH_TD }
+    return 1i32
+}
+
 /* ─── the local + linear elastic response (equal agents): exchange the normal velocity component ─── */
 /* s = ((Vi - Vj) . m) / (m . m), m = Pi - Pj (a Q(sqrt2) vector).  Vi -= s m ; Vj += s m. */
 fn ch_apply(i: u64, j: u64) -> i32 @export {

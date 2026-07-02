@@ -32,6 +32,7 @@ extern @abi(c-msvc-x64) fn lens_disc() -> i64 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_front_sign() -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_depth_vs_rational(d0: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_t_cmp(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp_fast(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_ndotl_sign(lx: i64, ly: i64, lz: i64) -> i32 from "aether_lens.iii"
 extern @abi(c-msvc-x64) fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
@@ -212,6 +213,29 @@ fn main() -> u64 {
     if fpx != frame_px(3u64, 3u64, 8u64) { FAILS = FAILS + 1u64 }
     let lg : i64 = lens_g()
     if lg != lens_g() { FAILS = FAILS + 1u64 }
+
+    /* ── the exact z-buffer compare vs a rational plane + the fast render comparator, welded. ──
+     * Sphere x^2+y^2+z^2-4 from o=(0,0,-10), d=(0,0,1): the near hit is EXACTLY t- = 8, so
+     * depth_vs_rational gives the full trichotomy at d0 = 7 / 8 / 9.  A z-shifted twin sphere
+     * (center (0,0,4)) hits at t- = 12: the FAST comparator must agree with the EXACT lens_t_cmp
+     * in both orders on this non-near-tie pair, and return 0 on the self pair. */
+    lens_set_ray(0i64, 0i64, 0i64 - 10i64, 0i64, 0i64, 1i64)      /* ray FIRST: lens_setup reads it at call time */
+    lens_setup(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64 - 4i64)
+    let za : i64 = lens_a()   let zb : i64 = lens_b()   let zd : i64 = lens_disc()
+    if lens_depth_vs_rational(7i64) != 1i32 { return 80u64 }
+    if lens_depth_vs_rational(8i64) != 0i32 { return 80u64 }
+    if lens_depth_vs_rational(9i64) != (0i32 - 1i32) { return 80u64 }
+    lens_set_ray(0i64, 0i64, 0i64 - 10i64, 0i64, 0i64, 1i64)      /* same ray, twin quadric */
+    lens_setup(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64 - 8i64, 12i64)
+    let wa : i64 = lens_a()   let wb : i64 = lens_b()   let wd : i64 = lens_disc()
+    let f12 : i32 = lens_t_cmp_fast(za, zb, zd, wa, wb, wd)
+    let f21 : i32 = lens_t_cmp_fast(wa, wb, wd, za, zb, zd)
+    let f11 : i32 = lens_t_cmp_fast(za, zb, zd, za, zb, zd)
+    if f12 != lens_t_cmp(za, zb, zd, wa, wb, wd) { return 81u64 }
+    if f21 != lens_t_cmp(wa, wb, wd, za, zb, zd) { return 81u64 }
+    if f12 != (0i32 - 1i32) { return 81u64 }
+    if f21 != 1i32 { return 81u64 }
+    if f11 != 0i32 { return 81u64 }
 
     if FAILA != 0u64 { return 10u64 }
     if FAILC != 0u64 { return 20u64 }

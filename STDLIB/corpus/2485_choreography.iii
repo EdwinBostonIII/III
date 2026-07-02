@@ -31,6 +31,7 @@ extern @abi(c-msvc-x64) fn ch_add_agent(px0: i64, px1: i64, pxd: i64, py0: i64, 
 extern @abi(c-msvc-x64) fn ch_disc_sign(i: u64, j: u64) -> i32 from "choreo.iii"
 extern @abi(c-msvc-x64) fn ch_graze_time(i: u64, j: u64) -> i32 from "choreo.iii"
 extern @abi(c-msvc-x64) fn ch_toi(i: u64, j: u64) -> i32 from "choreo.iii"
+extern @abi(c-msvc-x64) fn ch_toi_exit(i: u64, j: u64) -> i32 from "choreo.iii"
 extern @abi(c-msvc-x64) fn ch_t0() -> i64 from "choreo.iii"
 extern @abi(c-msvc-x64) fn ch_t1() -> i64 from "choreo.iii"
 extern @abi(c-msvc-x64) fn ch_td() -> i64 from "choreo.iii"
@@ -92,6 +93,12 @@ fn main() -> u64 {
     scene4()
     if ch_toi(0u64,1u64) != 1i32 { return 12u64 }
     let ta0 : i64 = ch_t0()   let tad : i64 = ch_td()
+    /* the contact EXIT time strictly follows entry.  NOTE ch_t1() is the sqrt2-COEFFICIENT of the
+     * time triple t = (T0 + T1 sqrt2)/TD, not a second root -- the exit root has its own accessor. */
+    if ch_toi_exit(0u64,1u64) != 1i32 { return 12u64 }
+    let tx0 : i64 = ch_t0()   let txd : i64 = ch_td()
+    if (tx0 * tad) <= (ta0 * txd) { return 12u64 }         /* exit > entry, exact cross-multiply (dens > 0) */
+    if ch_toi(0u64,1u64) != 1i32 { return 12u64 }          /* restore the entry triple for the tie test */
     if ch_toi(2u64,3u64) != 1i32 { return 12u64 }
     let tb0 : i64 = ch_t0()   let tbd : i64 = ch_td()
     /* certified simultaneous: ta0/tad == tb0/tbd (both == 1) */

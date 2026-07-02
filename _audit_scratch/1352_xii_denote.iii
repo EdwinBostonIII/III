@@ -1,9 +1,0 @@
-/* 1352_xii_denote.iii -- THE DENOTATIONAL GATE for IF-lift / equal-branch (harmony item 26).
- * The third independent verification authority: an EVALUATOR over a branch-picking u64 model
- * (per-fusion injective mixes; F.IF denotes environment-keyed branch choice).  99 = the lift law
- * (both positions, all three operators) and the equal-branch law hold POINTWISE across all
- * environments, and the model discriminates (swapped arms / dropped operand / wrong operator /
- * unequal branches all denote differently somewhere). */
-module corpus_1352
-extern @abi(c-msvc-x64) fn xdn_selftest() -> u64 from "xii_denote.iii"
-fn main() -> u64 { return xdn_selftest() }

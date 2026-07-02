@@ -174,6 +174,146 @@ fn p3_escape() -> i32 @export {
     return P3_TRANS
 }
 
+/* ═════════ THE 2-D PHOTONIC CRYSTAL (Turing-next N-2): stack x channel ═════════
+ * Alternating dense/light z-layers of height H (band m = [mH, (m+1)H), DENSE iff m even) between
+ * TIR walls x = 0 and x = W.  The class ALTERNATES L <-> D at every z-plane (the certified integer
+ * Snell identities); walls TIR both classes (+2 / +6).  Because the two classes travel at sqrt2 and
+ * sqrt6 z-speeds, positions live in FULL RANK-4 Q(sqrt2, sqrt3) = span{1, sqrt2, sqrt3, sqrt6}
+ * (sqrt6*sqrt2 = 2*sqrt3 enters at the first wall bounce after a refraction) -- and every event
+ * ordering is decided by q23_sign, the EXISTING rank-4 oracle of the cyclotomic kinematics organ:
+ * the crystal consumes the one sign kernel, no island.  Multiplication by sqrt2 / sqrt6 is an exact
+ * integer slot shuffle: sqrt2*(a,b,c,d) = (2b, a, 2d, c); sqrt6*(a,b,c,d) = (6d, 3c, 2b, a).
+ * One guarded denominator (x2 per L-refraction, x6 per D-refraction, gcd-canonicalized). */
+extern @abi(c-msvc-x64) fn q23_sign(xp: u64) -> i32 from "q23_sign.iii"
+
+var PC_W : i64   var PC_H : i64
+var PC_X : [i64; 4]   var PC_Y : [i64; 4]   var PC_Z : [i64; 4]   var PC_DEN : i64
+var PC_BAND : i64   var PC_CLS : i64                  /* 0 = L (light band), 1 = D (dense band) */
+var PC_SX : i64   var PC_SY : i64   var PC_SZ : i64
+var PC_CERT : i64
+var PC_T : [i64; 4]                                   /* scratch for the sign oracle */
+
+fn pc_sh2(op: u64, rp: u64) -> i32 {                  /* r := sqrt2 * o */
+    let o : *i64 = op as *i64   let r : *i64 = rp as *i64
+    r[0u64] = p3_mul(2i64, o[1u64])   r[1u64] = o[0u64]
+    r[2u64] = p3_mul(2i64, o[3u64])   r[3u64] = o[2u64]
+    return 0i32
+}
+fn pc_sh6(op: u64, rp: u64) -> i32 {                  /* r := sqrt6 * o */
+    let o : *i64 = op as *i64   let r : *i64 = rp as *i64
+    r[0u64] = p3_mul(6i64, o[3u64])   r[1u64] = p3_mul(3i64, o[2u64])
+    r[2u64] = p3_mul(2i64, o[1u64])   r[3u64] = o[0u64]
+    return 0i32
+}
+fn pc_cfg(W: i64, H: i64) -> i32 @export {
+    if W <= 0i64 { return 0i32 - 1i32 }
+    if H <= 0i64 { return 0i32 - 1i32 }
+    PC_W = W   PC_H = H
+    return 0i32
+}
+fn pc_mod2(b: i64) -> i64 { return ((b % 2i64) + 2i64) % 2i64 }
+fn pc_set(x: i64, y: i64, z: i64, band: i64, cls: i64, sx: i64, sy: i64, sz: i64) -> i32 @export {
+    if z <= (band * PC_H) { return 0i32 - 1i32 }
+    if z >= ((band + 1i64) * PC_H) { return 0i32 - 1i32 }
+    let dense : i64 = 1i64 - pc_mod2(band)
+    if cls != dense { return 0i32 - 1i32 }            /* the class-parity invariant, checked at entry */
+    let mut i : u64 = 0u64
+    while i < 4u64 { PC_X[i] = 0i64   PC_Y[i] = 0i64   PC_Z[i] = 0i64   i = i + 1u64 }
+    PC_X[0u64] = x   PC_Y[0u64] = y   PC_Z[0u64] = z   PC_DEN = 1i64
+    PC_BAND = band   PC_CLS = cls
+    PC_SX = sx   PC_SY = sy   PC_SZ = sz   PC_CERT = 0i64   P3_OVF = 0i64
+    return 0i32
+}
+fn pc_canon() -> i32 {
+    let mut g : i64 = PC_DEN
+    let mut i : u64 = 0u64
+    while i < 4u64 { g = p3_gcd(g, p3_gcd(PC_X[i], p3_gcd(PC_Y[i], PC_Z[i])))   i = i + 1u64 }
+    if g > 1i64 {
+        i = 0u64
+        while i < 4u64 { PC_X[i] = PC_X[i] / g   PC_Y[i] = PC_Y[i] / g   PC_Z[i] = PC_Z[i] / g   i = i + 1u64 }
+        PC_DEN = PC_DEN / g
+    }
+    return 0i32
+}
+var PC_DX : [i64; 4]   var PC_DZ : [i64; 4]   var PC_SS : [i64; 4]
+fn pc_step() -> i32 @export {
+    P3_OVF = 0i64
+    /* directioned distances to the x-wall and the z-plane, as rank-4 slot vectors over PC_DEN */
+    let mut xw : i64 = 0i64
+    if PC_SX > 0i64 { xw = PC_W }
+    let mut i : u64 = 0u64
+    while i < 4u64 { PC_DX[i] = 0i64 - PC_X[i]   i = i + 1u64 }
+    PC_DX[0u64] = PC_DX[0u64] + p3_mul(xw, PC_DEN)
+    if PC_SX < 0i64 { i = 0u64   while i < 4u64 { PC_DX[i] = 0i64 - PC_DX[i]   i = i + 1u64 } }
+    let mut plane : i64 = PC_BAND
+    if PC_SZ > 0i64 { plane = PC_BAND + 1i64 }
+    i = 0u64
+    while i < 4u64 { PC_DZ[i] = 0i64 - PC_Z[i]   i = i + 1u64 }
+    PC_DZ[0u64] = PC_DZ[0u64] + p3_mul(p3_mul(plane, PC_H), PC_DEN)
+    if PC_SZ < 0i64 { i = 0u64   while i < 4u64 { PC_DZ[i] = 0i64 - PC_DZ[i]   i = i + 1u64 } }
+    /* order: t_x vs t_z  <=>  sign(k*dx - sqrtk2*dz), k = 2 (L) or 6 (D) -- q23_sign, the one oracle */
+    let mut k : i64 = 2i64
+    if PC_CLS == 1i64 { k = 6i64 }
+    if PC_CLS == 1i64 { pc_sh6((&PC_DZ) as u64, (&PC_SS) as u64) } else { pc_sh2((&PC_DZ) as u64, (&PC_SS) as u64) }
+    i = 0u64
+    while i < 4u64 { PC_T[i] = p3_mul(k, PC_DX[i]) - PC_SS[i]   i = i + 1u64 }
+    if P3_OVF != 0i64 { return P3_OVER }
+    let s : i32 = q23_sign((&PC_T) as u64)
+    if s == 0i32 { return P3_OVER }                   /* an interacting tie: refuse, never round */
+    if s < 0i32 {
+        /* x-wall first: X snaps to the wall exactly; Z advances by (class z-speed)*t, t = dx */
+        if PC_CLS == 1i64 { pc_sh6((&PC_DX) as u64, (&PC_SS) as u64) } else { pc_sh2((&PC_DX) as u64, (&PC_SS) as u64) }
+        i = 0u64
+        while i < 4u64 {
+            PC_Y[i] = PC_Y[i] + p3_mul(PC_SY, PC_DX[i])
+            PC_Z[i] = PC_Z[i] + p3_mul(PC_SZ, PC_SS[i])
+            PC_X[i] = 0i64
+            i = i + 1u64
+        }
+        PC_X[0u64] = p3_mul(xw, PC_DEN)
+        if P3_OVF != 0i64 { return P3_OVER }
+        pc_canon()
+        PC_CERT = p3_cert_tir_l()
+        if PC_CLS == 1i64 { PC_CERT = p3_cert_tir_d() }
+        PC_SX = 0i64 - PC_SX
+        return P3_REFL
+    }
+    /* z-plane first: den scales by k; Z snaps to the plane; the class ALTERNATES, certified */
+    if PC_CLS == 1i64 { pc_sh6((&PC_DZ) as u64, (&PC_SS) as u64) } else { pc_sh2((&PC_DZ) as u64, (&PC_SS) as u64) }
+    i = 0u64
+    while i < 4u64 {
+        PC_X[i] = p3_mul(k, PC_X[i]) + p3_mul(PC_SX, PC_SS[i])
+        PC_Y[i] = p3_mul(k, PC_Y[i]) + p3_mul(PC_SY, PC_SS[i])
+        PC_Z[i] = 0i64
+        i = i + 1u64
+    }
+    PC_DEN = p3_mul(PC_DEN, k)
+    PC_Z[0u64] = p3_mul(p3_mul(plane, PC_H), PC_DEN)
+    if P3_OVF != 0i64 { return P3_OVER }
+    pc_canon()
+    let mut nb : i64 = PC_BAND - 1i64
+    if PC_SZ > 0i64 { nb = PC_BAND + 1i64 }
+    let ndense : i64 = 1i64 - pc_mod2(nb)
+    if PC_CLS == ndense { return P3_OVER }            /* parity broke: unconstructible */
+    if PC_CLS == 0i64 {
+        PC_CERT = p3_cert_refr_ld()
+        PC_CLS = 1i64
+    } else {
+        PC_CERT = p3_cert_trans_dl()
+        PC_CLS = 0i64
+    }
+    PC_BAND = nb
+    return P3_TRANS
+}
+fn pc_x(i: u64) -> i64 @export { return PC_X[i] }
+fn pc_y(i: u64) -> i64 @export { return PC_Y[i] }
+fn pc_z(i: u64) -> i64 @export { return PC_Z[i] }
+fn pc_den() -> i64 @export { return PC_DEN }
+fn pc_cls() -> i64 @export { return PC_CLS }
+fn pc_band() -> i64 @export { return PC_BAND }
+fn pc_cert() -> i64 @export { return PC_CERT }
+fn pc_sxg() -> i64 @export { return PC_SX }
+
 fn p3_x0() -> i64 @export { return P3X0 }
 fn p3_x1() -> i64 @export { return P3X1 }
 fn p3_y0() -> i64 @export { return P3Y0 }

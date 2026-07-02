@@ -1,0 +1,79 @@
+/* 2194_crystal.iii -- GATE for the 2-D PHOTONIC CRYSTAL (Turing-next N-2): stack x channel, rank-4.
+ *
+ * The 10-wide channel with 12-high alternating layers: an L-ray enters band 1 (light) at (3, 0, 15)
+ * heading (1, 1, -sqrt2).  Six events: REFR into the dense band (cert 0), a wall TIR the ray reaches
+ * a RAZOR-THIN 0.05 before the z-plane (+6 -- the ordering decided by q23_sign at rank 3), a REFR
+ * that leaves x at 9.9797 (a SECOND near-tie), two more certified transitions and another +6 TIR.
+ * THE MACHINE-FOUND SUBRING THEOREM (it refuted the drafted rank-4 claim): a Z-deposit made by a
+ * class-c wall bounce is consumed by the NEXT z-plane event, which has the SAME class (the class
+ * changes only AT planes) -- so the shuffle pairing is always sqrt2*sqrt2 or sqrt6*sqrt6 and
+ * sqrt3 = sqrt2*sqrt6 NEVER FORMS: the reachable coordinate ring is the RANK-3 subring
+ * {1, sqrt2, sqrt6}, and the sqrt3 slots are IDENTICALLY ZERO -- asserted here as an invariant.
+ * The q23_sign oracle (rank-4 capable) decides every mixed sqrt2/sqrt6 ordering, including the two
+ * razor-thin calls at e1 (0.05) and e2 (0.02).  Final state pinned EXACTLY.
+ * exit 99 = pass;  10 setup;  11 verdicts;  12 certs;  13 pins/invariant;  14 refusals */
+module corpus_2194_crystal
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pc_cfg(W: i64, H: i64) -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_set(x: i64, y: i64, z: i64, band: i64, cls: i64, sx: i64, sy: i64, sz: i64) -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_step() -> i32 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_x(i: u64) -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_y(i: u64) -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_z(i: u64) -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_den() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_cls() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_band() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn pc_cert() -> i64 from "photon3.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    vg_reset()
+    if pc_cfg(10i64, 12i64) != 0i32 { return 10u64 }
+    if pc_set(3i64, 0i64, 15i64, 1i64, 0i64, 1i64, 1i64, 0i64 - 1i64) != 0i32 { return 10u64 }
+    /* the eight-event verdict/cert tape: the two D-band TIRs carry +6, the L-band TIR at e6 carries +2
+     * (the class-dependent margin, live), every z-transition residue 0 */
+    let mut e : i64 = 0i64
+    while e < 8i64 {
+        let rc : i32 = pc_step()
+        let ct : i64 = pc_cert()
+        putchar(69i32) e_i64(e) putchar(58i32) sp() e_i64(rc as i64) sp() e_i64(ct) sp() e_i64(pc_cls()) sp() e_i64(pc_band()) nl()
+        if e == 0i64 { if rc != 2i32 { return 11u64 }   if ct != 0i64 { return 12u64 } }
+        if e == 1i64 { if rc != 1i32 { return 11u64 }   if ct != 6i64 { return 12u64 } }
+        if e == 2i64 { if rc != 2i32 { return 11u64 }   if ct != 0i64 { return 12u64 } }
+        if e == 3i64 { if rc != 2i32 { return 11u64 }   if ct != 0i64 { return 12u64 } }
+        if e == 4i64 { if rc != 1i32 { return 11u64 }   if ct != 6i64 { return 12u64 } }
+        if e == 5i64 { if rc != 2i32 { return 11u64 }   if ct != 0i64 { return 12u64 } }
+        if e == 6i64 { if rc != 1i32 { return 11u64 }   if ct != 2i64 { return 12u64 } }
+        if e == 7i64 { if rc != 2i32 { return 11u64 }   if ct != 0i64 { return 12u64 } }
+        e = e + 1i64
+    }
+    putchar(88i32) putchar(58i32) sp() e_i64(pc_x(0u64)) sp() e_i64(pc_x(1u64)) sp() e_i64(pc_x(2u64)) sp() e_i64(pc_x(3u64)) nl()
+    putchar(89i32) putchar(58i32) sp() e_i64(pc_y(0u64)) sp() e_i64(pc_y(1u64)) sp() e_i64(pc_y(2u64)) sp() e_i64(pc_y(3u64)) nl()
+    putchar(90i32) putchar(58i32) sp() e_i64(pc_z(0u64)) sp() e_i64(pc_z(1u64)) sp() e_i64(pc_z(2u64)) sp() e_i64(pc_z(3u64)) nl()
+    putchar(68i32) putchar(58i32) sp() e_i64(pc_den()) sp() e_i64(pc_cls()) sp() e_i64(pc_band()) nl()
+    /* exact final-state pins + THE SUBRING INVARIANT (sqrt3 slots identically zero) */
+    if pc_x(0u64) != 74i64 { return 13u64 }
+    if pc_x(1u64) != (0i64 - 27i64) { return 13u64 }
+    if pc_x(2u64) != 0i64 { return 13u64 }             /* the theorem: sqrt3 unreachable */
+    if pc_x(3u64) != (0i64 - 8i64) { return 13u64 }    /* sqrt6 mixing real */
+    if pc_y(1u64) != 27i64 { return 13u64 }
+    if pc_y(2u64) != 0i64 { return 13u64 }             /* the theorem again, on Y */
+    if pc_y(3u64) != 8i64 { return 13u64 }
+    if pc_z(0u64) != (0i64 - 72i64) { return 13u64 }
+    if pc_den() != 2i64 { return 13u64 }
+    if pc_cls() != 1i64 { return 13u64 }
+    if pc_band() != (0i64 - 4i64) { return 13u64 }
+    /* ══ refusals: wrong class parity; boundary start; degenerate box. */
+    let r1 : i32 = pc_set(3i64, 0i64, 15i64, 1i64, 1i64, 1i64, 1i64, 0i64 - 1i64)
+    let r2 : i32 = pc_set(3i64, 0i64, 12i64, 1i64, 0i64, 1i64, 1i64, 0i64 - 1i64)
+    let r3 : i32 = pc_cfg(0i64, 12i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1 as i64) sp() e_i64(r2 as i64) sp() e_i64(r3 as i64) nl()   /* "R: -1 -1 -1" */
+    if r1 != (0i32 - 1i32) { return 14u64 }
+    if r2 != (0i32 - 1i32) { return 14u64 }
+    if r3 != (0i32 - 1i32) { return 14u64 }
+    return 99u64
+}

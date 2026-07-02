@@ -4,7 +4,7 @@
  * reads/observe/positive/governance; F2/F9 writes gated by the target's hexad
  * typing; F5 Descend gated on a reachable action; action-honesty propagates.
  * Exit 99 = all hold; 1..19 = the index of the failing assertion. */
-module corpus_2413_katabasis_cycle_admit
+module corpus_395_katabasis_cycle_admit
 
 extern @abi(c-msvc-x64) fn katabasis_cycle_admit(family: u32, target_kind: u32, target: u64, action_hexad: u16) -> u8 from "cycle_admit.iii"
 

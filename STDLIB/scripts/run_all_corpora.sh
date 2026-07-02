@@ -45,6 +45,7 @@ RUNNERS=(
     "$S/run_bench_corpus.sh"
     "$S/run_autogenesis_corpus.sh"
     "$S/run_nous_corpus.sh"
+    "$S/run_stoma_kats.sh"
     "$III_ROOT/COMPILER/BOOT/stage1_corpus/run_corpus.sh"
 )
 

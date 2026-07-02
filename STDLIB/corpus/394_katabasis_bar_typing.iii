@@ -5,7 +5,7 @@
  * the host kernel.  Any other physical address (host RAM, the LAPIC, the SVM
  * region, the gaps between BARs) is UNREPRESENTABLE.
  * Exit 99 = all hold; 1..16 = the index of the failing assertion. */
-module corpus_2412_katabasis_bar_typing
+module corpus_394_katabasis_bar_typing
 
 extern @abi(c-msvc-x64) fn katabasis_bar_region(phys: u64) -> u32 from "bar_layout.iii"
 extern @abi(c-msvc-x64) fn katabasis_bar_write_admissible(phys: u64) -> u8 from "bar_layout.iii"

@@ -101,7 +101,7 @@ still awaits the first broad seal (F1); the recompute *tool*, however, exists to
 ## Reseal log
 
 **2026-06-03 — K4 BAR-layout re-seal (KAT-strengthening, verification-backed).** Gap-backlog #33
-strengthened the bar_layout **primary KAT** (corpus `2412_katabasis_bar_typing.iii`) with the
+strengthened the bar_layout **primary KAT** (corpus `394_katabasis_bar_typing.iii`) with the
 `katabasis_bar_cycle_admissible` action-parameterized arm (POS-action→admissible, NEG-action→refused,
 POS-action-to-host-RAM→refused). Because the K4 full-spec seal recipe is
 `sha256(iii_bar_layout.def ‖ gen_bar_layout.sh ‖ katabasis/bar_layout.iii ‖ primary-KAT)`, the

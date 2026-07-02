@@ -3,7 +3,7 @@
  * u8/u32/u64: u16 (lossless), i32 (sign round-trip through the inline
  * encoding), and bool.  Proves the generic option__<op><T> monomorphised
  * correctly per type.  Exit 99 = pass. */
-module corpus_394_option_specialize
+module corpus_2412_option_specialize
 
 extern @abi(c-msvc-x64) fn option_u16_some(v: u16) -> u64 from "option.iii"
 extern @abi(c-msvc-x64) fn option_u16_unwrap_or(o: u64, default: u16) -> u64 from "option.iii"

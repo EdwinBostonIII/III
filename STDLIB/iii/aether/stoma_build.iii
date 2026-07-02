@@ -1,0 +1,237 @@
+/* STDLIB/iii/aether/stoma_build.iii -- STOMA organ: native import-closure + `build` (M7).
+ *
+ * The dependency-graph engine STOMA owns in .iii.  Given search directories and a root module, it
+ * indexes each directory's *.iii files (kernel32 FindFirstFileA) and BFS-walks the `from "x.iii"`
+ * import edges to the transitive module CLOSURE -- the same edge set sovbuild.sh and verify_cone.sh
+ * compute by grep, now native.  This closure IS the "impacted set" the ripple heartbeat (M8) needs,
+ * and its parity with sovbuild's closure count is M7's proof.
+ *
+ * We did NOT add a `--deps` mode to iiis-2 (assessed + declined: a load-bearing compiler change
+ * with corpus-regression risk, when the import-scan at sovbuild/cone fidelity already suffices and
+ * is what those tools use).  The `build` verb DRIVES sovbuild.sh for the actual sovereign link
+ * (sovld, no ld) -- reuse the proven path, don't reimplement it.
+ *
+ * Import-edge grammar matched: the literal  from "<name>.iii"  (same as sovbuild/cone).  Comments
+ * are not stripped -- an import inside a comment would over-approximate the closure, which is SAFE
+ * for a ripple (never misses a real dependent); sovbuild/cone share this property.
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_build
+
+extern @abi(c-msvc-x64) fn FindFirstFileA(pat: u64, data: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn FindNextFileA(h: u64, data: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn FindClose(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+const BD_INVALID : u64 = 18446744073709551615u64
+const BD_MAXMOD  : u64 = 512u64        /* index capacity (modules known) */
+const BD_MAXCLO  : u64 = 256u64        /* closure capacity */
+
+/* index: module base-name -> full path, packed */
+var BD_NAME_OFF : [u64; 512]
+var BD_NAME_LEN : [u64; 512]
+var BD_PATH_OFF : [u64; 512]
+var BD_PATH_LEN : [u64; 512]
+var BD_NPOOL    : [u8; 32768]      /* names pool */
+var BD_PPOOL    : [u8; 65536]      /* paths pool */
+var BD_NIDX     : u64 = 0u64
+var BD_NFILL    : u64 = 0u64
+var BD_PFILL    : u64 = 0u64
+
+/* closure: module indices (into the index) discovered, and a frontier */
+var BD_CLO      : [u64; 256]       /* index ids in the closure */
+var BD_CLON     : u64 = 0u64
+var BD_INCLO    : [u8; 512]        /* membership bitmap by index id */
+
+var BD_FIND     : [u8; 320]        /* WIN32_FIND_DATAA */
+var BD_DIRBUF   : [u8; 512]        /* dir glob pattern + path assembly scratch */
+var BD_FILE     : [u8; 262144]     /* module source for import scan */
+var BD_SCR      : [u64; 2]
+
+fn bd_reset() -> i32 @export {
+    BD_NIDX = 0u64
+    BD_NFILL = 0u64
+    BD_PFILL = 0u64
+    BD_CLON = 0u64
+    let mut i : u64 = 0u64
+    while i < BD_MAXMOD { BD_INCLO[i] = 0u8   i = i + 1u64 }
+    return 0i32
+}
+
+/* copy src (NUL-term) to dst, return length */
+fn bd_scpy(dst: u64, src: u64) -> u64 {
+    let s : *u8 = src as *u8
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 { let c : u8 = s[i]   if c == 0u8 { go = 0u32 } else { d[i] = c   i = i + 1u64 } }
+    return i
+}
+
+/* add one module (name without .iii, full path) to the index */
+fn bd_add(name: u64, nlen: u64, path: u64, plen: u64) -> i32 {
+    if BD_NIDX >= BD_MAXMOD { return 0i32 - 1i32 }
+    if BD_NFILL + nlen > 32768u64 { return 0i32 - 1i32 }
+    if BD_PFILL + plen > 65536u64 { return 0i32 - 1i32 }
+    let sn : *u8 = name as *u8
+    let sp : *u8 = path as *u8
+    BD_NAME_OFF[BD_NIDX] = BD_NFILL
+    BD_NAME_LEN[BD_NIDX] = nlen
+    let mut i : u64 = 0u64
+    while i < nlen { BD_NPOOL[BD_NFILL + i] = sn[i]   i = i + 1u64 }
+    BD_NFILL = BD_NFILL + nlen
+    BD_PATH_OFF[BD_NIDX] = BD_PFILL
+    BD_PATH_LEN[BD_NIDX] = plen
+    let mut j : u64 = 0u64
+    while j < plen { BD_PPOOL[BD_PFILL + j] = sp[j]   j = j + 1u64 }
+    BD_PFILL = BD_PFILL + plen
+    BD_NIDX = BD_NIDX + 1u64
+    return 0i32
+}
+
+/* index every *.iii in one directory (NUL-terminated path, no trailing slash). Returns count. */
+fn bd_index_dir(dir: u64) -> u64 @export {
+    /* pattern = dir then slash-star-dot-iii */
+    let dl : u64 = bd_scpy((&BD_DIRBUF) as u64, dir)
+    BD_DIRBUF[dl] = 47u8
+    BD_DIRBUF[dl + 1u64] = 42u8       /* * */
+    BD_DIRBUF[dl + 2u64] = 46u8       /* . */
+    BD_DIRBUF[dl + 3u64] = 105u8      /* i */
+    BD_DIRBUF[dl + 4u64] = 105u8      /* i */
+    BD_DIRBUF[dl + 5u64] = 105u8      /* i */
+    BD_DIRBUF[dl + 6u64] = 0u8
+    let h : u64 = FindFirstFileA((&BD_DIRBUF) as u64, (&BD_FIND) as u64)
+    if h == BD_INVALID { return 0u64 }
+    let mut added : u64 = 0u64
+    let mut more : u32 = 1u32
+    while more == 1u32 {
+        /* cFileName @ +44, e.g. "stoma_gate.iii" */
+        let fnbase : u64 = ((&BD_FIND) as u64) + 44u64
+        let fp : *u8 = fnbase as *u8
+        /* find length + strip ".iii" (4) for the module name */
+        let mut fl : u64 = 0u64
+        let mut go : u32 = 1u32
+        while go == 1u32 {
+            if fl >= 260u64 { go = 0u32 }
+            else { if fp[fl] == 0u8 { go = 0u32 } else { fl = fl + 1u64 } }
+        }
+        if fl > 4u64 {
+            let nlen : u64 = fl - 4u64            /* drop ".iii" */
+            /* build full path = dir + "/" + filename into BD_DIRBUF tail (after pattern is done) */
+            let pl0 : u64 = bd_scpy((&BD_DIRBUF) as u64, dir)
+            BD_DIRBUF[pl0] = 47u8
+            let mut k : u64 = 0u64
+            while k < fl { BD_DIRBUF[pl0 + 1u64 + k] = fp[k]   k = k + 1u64 }
+            let plen : u64 = pl0 + 1u64 + fl
+            BD_DIRBUF[plen] = 0u8
+            bd_add(fnbase, nlen, (&BD_DIRBUF) as u64, plen)
+            added = added + 1u64
+        }
+        if FindNextFileA(h, (&BD_FIND) as u64) == 0i32 { more = 0u32 }
+    }
+    FindClose(h)
+    return added
+}
+
+/* find an index id by module base-name; returns id or BD_MAXMOD if absent */
+fn bd_find_id(name: u64, nlen: u64) -> u64 {
+    let s : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    while i < BD_NIDX {
+        if BD_NAME_LEN[i] == nlen {
+            let off : u64 = BD_NAME_OFF[i]
+            let mut j : u64 = 0u64
+            let mut eq : u32 = 1u32
+            while j < nlen {
+                if BD_NPOOL[off + j] != s[j] { eq = 0u32   j = nlen }
+                else { j = j + 1u64 }
+            }
+            if eq == 1u32 { return i }
+        }
+        i = i + 1u64
+    }
+    return BD_MAXMOD
+}
+
+/* add an index id to the closure if not present */
+fn bd_clo_add(id: u64) -> i32 {
+    if id >= BD_NIDX { return 0i32 }
+    if BD_INCLO[id] == 1u8 { return 0i32 }
+    if BD_CLON >= BD_MAXCLO { return 0i32 }
+    BD_INCLO[id] = 1u8
+    BD_CLO[BD_CLON] = id
+    BD_CLON = BD_CLON + 1u64
+    return 0i32
+}
+
+/* scan module `id`'s source for  from "<name>.iii"  edges; add each resolved dep to the closure */
+fn bd_scan_imports(id: u64) -> i32 {
+    /* open the module file */
+    let poff : u64 = BD_PATH_OFF[id]
+    let plen : u64 = BD_PATH_LEN[id]
+    let mut i : u64 = 0u64
+    while i < plen { BD_DIRBUF[i] = BD_PPOOL[poff + i]   i = i + 1u64 }
+    BD_DIRBUF[plen] = 0u8
+    let h : u64 = CreateFileA((&BD_DIRBUF) as u64, 2147483648u32, 3u32, 0u64, 3u32, 128u32, 0u64)
+    if h == BD_INVALID { return 0i32 }
+    if ReadFile(h, (&BD_FILE) as u64, 262144u32, (&BD_SCR) as u64, 0u64) == 0i32 { CloseHandle(h)   return 0i32 }
+    CloseHandle(h)
+    let n : u64 = BD_SCR[0u64]
+    /* scan for the literal:  from "   (f r o m space ") then read up to ".iii" */
+    if n < 8u64 { return 0i32 }
+    let mut p : u64 = 0u64
+    let lim : u64 = n - 7u64
+    while p < lim {
+        if BD_FILE[p] == 102u8 {          /* 'f' */
+            if BD_FILE[p+1u64]==114u8 { if BD_FILE[p+2u64]==111u8 { if BD_FILE[p+3u64]==109u8 { if BD_FILE[p+4u64]==32u8 { if BD_FILE[p+5u64]==34u8 {
+                /* module name starts at p+6, ends at the closing quote; strip trailing ".iii" */
+                let nstart : u64 = p + 6u64
+                let mut q : u64 = nstart
+                let mut scan : u32 = 1u32
+                while scan == 1u32 {
+                    if q >= n { scan = 0u32 }
+                    else { if BD_FILE[q] == 34u8 { scan = 0u32 } else { q = q + 1u64 } }
+                }
+                /* name span [nstart, q); drop ".iii" (4) if present */
+                let mut span : u64 = q - nstart
+                if span > 4u64 { span = span - 4u64 }
+                let did : u64 = bd_find_id((&BD_FILE) as u64 + nstart, span)
+                if did < BD_NIDX { bd_clo_add(did) }
+                p = q
+            } } } } }
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+
+/* compute the transitive closure of a root module base-name.  Returns closure size (0 if the
+ * root is not in the index). */
+fn bd_closure(root: u64, rlen: u64) -> u64 @export {
+    BD_CLON = 0u64
+    let mut i : u64 = 0u64
+    while i < BD_MAXMOD { BD_INCLO[i] = 0u8   i = i + 1u64 }
+    let rid : u64 = bd_find_id(root, rlen)
+    if rid >= BD_NIDX { return 0u64 }
+    bd_clo_add(rid)
+    /* BFS: process each closure member (the list grows as we scan) */
+    let mut cursor : u64 = 0u64
+    while cursor < BD_CLON {
+        bd_scan_imports(BD_CLO[cursor])
+        cursor = cursor + 1u64
+    }
+    return BD_CLON
+}
+
+fn bd_index_count() -> u64 @export { return BD_NIDX }
+fn bd_closure_count() -> u64 @export { return BD_CLON }
+/* is module base-name in the current closure? */
+fn bd_in_closure(name: u64, nlen: u64) -> u32 @export {
+    let id : u64 = bd_find_id(name, nlen)
+    if id >= BD_NIDX { return 0u32 }
+    if BD_INCLO[id] == 1u8 { return 1u32 }
+    return 0u32
+}

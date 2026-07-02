@@ -1,0 +1,43 @@
+/* 2462_stoma_build.iii -- STOMA M7 gate: native import-closure parity with sovbuild.
+ *
+ * Proves the native dependency engine (the ripple's impacted-set kernel) matches the closure
+ * sovbuild.sh computes by grep:
+ *   1. index STDLIB/iii/aether, then closure("stoma") == 8 modules (sovbuild reported closure=8:
+ *      stoma con line verb shell proc journal gate).
+ *   2. the closure CONTAINS its true deps (stoma_gate, stoma_proc, stoma_journal) and EXCLUDES a
+ *      real aether module stoma does NOT import (aether_fs) -- a cone, not the whole directory.
+ *   3. closure of a leaf (stoma_journal) is smaller than the root's -- deps flow one way.
+ *
+ * Runs from the repo root (the family gate cd's there).  Exit map: 10-12 count; 20-23 membership;
+ * 30 leaf; 99 = pass.  NIH: stoma_build + kernel32. */
+module corpus_2462
+
+extern @abi(c-msvc-x64) fn bd_reset() -> i32 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_index_dir(dir: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_index_count() -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_closure(root: u64, rlen: u64) -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_closure_count() -> u64 from "stoma_build.iii"
+extern @abi(c-msvc-x64) fn bd_in_closure(name: u64, nlen: u64) -> u32 from "stoma_build.iii"
+
+fn main() -> u64 {
+    bd_reset()
+    let idx : u64 = bd_index_dir("STDLIB/iii/aether" as u64)
+    if idx < 8u64 { return 10u64 }              /* the aether dir has many modules */
+    if bd_index_count() != idx { return 11u64 }
+
+    /* closure of stoma == 8 (parity with sovbuild's closure=8) */
+    let c : u64 = bd_closure("stoma" as u64, 5u64)
+    if c != 8u64 { return 12u64 }
+
+    /* membership: true deps in, a non-dep out */
+    if bd_in_closure("stoma_gate" as u64, 10u64) != 1u32 { return 20u64 }
+    if bd_in_closure("stoma_proc" as u64, 10u64) != 1u32 { return 21u64 }
+    if bd_in_closure("stoma_journal" as u64, 13u64) != 1u32 { return 22u64 }
+    if bd_in_closure("aether_fs" as u64, 9u64) != 0u32 { return 23u64 }   /* stoma does NOT import fs */
+
+    /* a leaf's closure is smaller (journal imports nothing STOMA-side) */
+    let cj : u64 = bd_closure("stoma_journal" as u64, 13u64)
+    if cj >= c { return 30u64 }
+
+    return 99u64
+}

@@ -44,3 +44,9 @@ _audit_scratch/
 /_gate_*.log
 /_cov_*.txt
 /_emergence_report.txt
+
+# STOMA KAT scratch (created in cwd by corpus 2459/2460/2461)
+stjt/
+stjt_*.tsv
+stjt_*.txt
+.stoma/

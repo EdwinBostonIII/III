@@ -29,6 +29,9 @@ extern @abi(c-msvc-x64) fn lm2_cellx() -> i64 from "lattice_march.iii"
 extern @abi(c-msvc-x64) fn lm2_celly() -> i64 from "lattice_march.iii"
 extern @abi(c-msvc-x64) fn lm2_crossings() -> i64 from "lattice_march.iii"
 extern @abi(c-msvc-x64) fn lm2_corners() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm2_pz() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm2_cellz() -> i64 from "lattice_march.iii"
+extern @abi(c-msvc-x64) fn lm_cellz() -> i64 from "lattice_march.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
@@ -123,6 +126,18 @@ fn main() -> u64 {
     if c9 != 2i64 { return 15u64 }
     if h16 != 1i32 { return 15u64 }                        /* transverse hit */
     if h4 != 0i32 { return 15u64 }                         /* clean miss: cap */
+
+    /* ══ reunification W0.2 arm: the z-axis read surface.  A PLANAR march (dz = 0) may NEVER
+     * move z: pz and the z cell gauge must be bit-identical across the march -- zero drift
+     * off-plane, whatever the internal scaling.  (lm_cellz is the v1 marcher's z gauge.) */
+    lm2_cfg(10i64, 0i64, 0i64, 0i64)
+    lm2_set(0i64, 0i64, 5i64, 3i64, 4i64, 0i64)
+    let z0 : i64 = lm2_pz()
+    let cz0 : i64 = lm2_cellz()
+    lm2_march(7i64)
+    if lm2_pz() != z0 { return 16u64 }
+    if lm2_cellz() != cz0 { return 16u64 }
+    if lm_cellz() != lm_cellz() { return 16u64 }
 
     return 99u64
 }

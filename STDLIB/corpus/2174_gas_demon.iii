@@ -1,0 +1,139 @@
+/* 2174_gas_demon.iii -- GATE for the SPEED-SELECTIVE MEMBRANE (Program II Vector IV: the exact Maxwell
+ * demon).  A valve plane at x = 20 exists only for particles with |vx| < 3: slow particles are CONFINED to
+ * the left chamber (they bounce off the membrane, exactly), the fast particle passes through freely and
+ * works the far wall.  Because the gate is DIRECTION-BLIND (|v|), the membrane is time-reversal symmetric:
+ * the ensemble SORTS itself in forward time AND the reversal involution still returns it BIT-EXACTLY --
+ * the honest thermodynamic statement (a reversible demon pumps no entropy), stated as gated identities:
+ *   - CONFINEMENT: after 6 events the slow particles' exact positions satisfy x < 20 (rational compare);
+ *     the event log shows the membrane bounced ONLY them (zero membrane events for the fast particle);
+ *   - PASSAGE: the fast particle reached the far wall x = 40 (it crossed the membrane both ways);
+ *   - CONSERVATION: energy sum v^2 == 14 after EVERY event (integer identity, as always);
+ *   - REVERSAL: R.F^5.R.F^5 == id on the whole ensemble, membrane active, bit for bit.
+ * Particles ride separate z-lanes (|dz| = 4 > S = 2) so no pair event can fire: the demon arm is pure.
+ *
+ * exit 99 = pass;  10 forward failed;  11 reversal not bit-exact;  12 confinement broke (a slow particle
+ * escaped);  13 membrane attribution wrong;  14 energy identity broke;  15 the fast particle never crossed */
+module corpus_2174_gas_demon
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gs_reset() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_envelope(S: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_valve(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64, vth: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_step() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_reverse() -> i32 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_energy() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p0(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_p1(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_den() -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_v(p: u64, ax: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_events() -> u64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ek(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ea(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_eb(i: u64) -> i64 from "gas.iii"
+extern @abi(c-msvc-x64) fn gs_ovf() -> u32 from "gas.iii"
+extern @abi(c-msvc-x64) fn vg_reset() -> i32 from "verb_geom.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+const KD : u64 = 6u64
+var S1P0 : [i64; 9]   var S1P1 : [i64; 9]   var S1V : [i64; 9]
+
+fn snap() -> i32 {
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            S1P0[p * 3u64 + ax] = gs_p0(p, ax)   S1P1[p * 3u64 + ax] = gs_p1(p, ax)   S1V[p * 3u64 + ax] = gs_v(p, ax)
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+fn snap_diff() -> i64 {
+    let mut bad : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < 3u64 {
+        let mut ax : u64 = 0u64
+        while ax < 3u64 {
+            if gs_p0(p, ax) != S1P0[p * 3u64 + ax] { bad = bad + 1i64 }
+            if gs_p1(p, ax) != S1P1[p * 3u64 + ax] { bad = bad + 1i64 }
+            if gs_v(p, ax) != S1V[p * 3u64 + ax] { bad = bad + 1i64 }
+            ax = ax + 1u64
+        }
+        p = p + 1u64
+    }
+    return bad
+}
+fn run_checked(n: u64) -> u64 {
+    let mut done : u64 = 0u64
+    while done < n {
+        let r : i32 = gs_step()
+        if r != 1i32 { return 10u64 }
+        if gs_energy() != 14i64 { return 14u64 }
+        done = done + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    vg_reset()
+    gs_reset()
+    gs_envelope(2i64)
+    gs_wall(0i64, 0i64 - 1i64, 0i64, 0i64, 1i64)                  /* 0: x >= 0            */
+    gs_wall(0i64, 1i64, 40i64, 0i64, 1i64)                        /* 1: x <= 40           */
+    gs_wall(1i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(1i64, 1i64, 16i64, 0i64, 1i64)
+    gs_wall(2i64, 0i64 - 1i64, 0i64, 0i64, 1i64)
+    gs_wall(2i64, 1i64, 16i64, 0i64, 1i64)
+    let vl : i32 = gs_valve(0i64, 1i64, 20i64, 0i64, 1i64, 3i64)  /* 6: the membrane, left face  */
+    let vr : i32 = gs_valve(0i64, 0i64 - 1i64, 0i64 - 20i64, 0i64, 1i64, 3i64)   /* 7: right face */
+    gs_part(10i64, 4i64, 4i64, 3i64, 0i64, 0i64)                  /* P0 FAST  (|vx| = 3 >= 3: passes) */
+    gs_part(10i64, 4i64, 8i64, 2i64, 0i64, 0i64)                  /* P1 slow  (bounces at the membrane) */
+    gs_part(4i64, 4i64, 12i64, 1i64, 0i64, 0i64)                  /* P2 slow */
+    if gs_energy() != 14i64 { return 10u64 }
+
+    let r1 : u64 = run_checked(1u64)
+    if r1 != 0u64 { return r1 }
+    snap()
+    let r2 : u64 = run_checked(KD - 1u64)
+    if r2 != 0u64 { return r2 }
+    if gs_ovf() != 0u32 { return 10u64 }
+
+    /* CONFINEMENT + ATTRIBUTION + PASSAGE over the forward log and final state */
+    let den : i64 = gs_den()
+    let p1x0 : i64 = gs_p0(1u64, 0u64)   let p2x0 : i64 = gs_p0(2u64, 0u64)
+    let mut conf : u64 = 0u64
+    if p1x0 > (20i64 * den) { conf = conf + 1u64 }                /* confinement: x <= 20 (ON the membrane = contact, legal) */
+    if p2x0 > (20i64 * den) { conf = conf + 1u64 }
+    let mut vslow : i64 = 0i64   let mut vfast : i64 = 0i64   let mut farw : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < KD {
+        if gs_ek(i) == 0i64 {
+            let wb : i64 = gs_eb(i)   let pa : i64 = gs_ea(i)
+            if wb == (vl as i64) { if pa == 0i64 { vfast = vfast + 1i64 } else { vslow = vslow + 1i64 } }
+            if wb == (vr as i64) { if pa == 0i64 { vfast = vfast + 1i64 } else { vslow = vslow + 1i64 } }
+            if wb == 1i64 { if pa == 0i64 { farw = farw + 1i64 } }
+        }
+        i = i + 1u64
+    }
+    putchar(83i32) putchar(58i32) sp() e_i64(conf as i64) sp() e_i64(vslow) sp() e_i64(vfast) sp() e_i64(farw) sp() e_i64(gs_energy()) nl()   /* "S: 0 2 0 1 14" */
+    if conf != 0u64 { return 12u64 }
+    if vslow < 2i64 { return 13u64 }                              /* the membrane bounced the slow ones */
+    if vfast != 0i64 { return 13u64 }                             /* and never existed for the fast one */
+    if farw < 1i64 { return 15u64 }                               /* which crossed and worked the far wall */
+
+    /* REVERSAL with the membrane active: the direction-blind gate is reversal-symmetric. */
+    gs_reverse()
+    let r3 : u64 = run_checked(KD - 1u64)
+    if r3 != 0u64 { return r3 }
+    gs_reverse()
+    let bad : i64 = snap_diff()
+    putchar(82i32) putchar(58i32) sp() e_i64(bad) sp() e_i64(gs_den()) nl()       /* "R: 0 <den>" */
+    if bad != 0i64 { return 11u64 }
+
+    return 99u64
+}

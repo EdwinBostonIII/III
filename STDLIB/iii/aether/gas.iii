@@ -43,9 +43,14 @@ var GDEN : i64
 var GS_NP : u64
 var GS_S : i64                                                 /* Minkowski contact half-gap: |dp|_inf == S at contact */
 
-/* the boundary: axis walls, outward direction dir (+1 hi / -1 lo), offset (c0 + c1*sqrt2)/cden */
+/* the boundary: axis walls, outward direction dir (+1 hi / -1 lo), offset (c0 + c1*sqrt2)/cden.
+ * GW_VTH > 0 makes the wall a SPEED-SELECTIVE MEMBRANE (Vector IV, the exact Maxwell demon): it exists
+ * only for particles with |v_axis| < vth -- slow particles bounce, fast particles pass through.  The gate
+ * is DIRECTION-BLIND (|v|), so the membrane is time-reversal symmetric: it SORTS the ensemble exactly,
+ * and the reversal involution still holds bit-for-bit -- a reversible demon pumps no entropy; the exact
+ * engine states that as a gated identity instead of a numerical hope. */
 var GW_AX : [i64; 8]   var GW_DIR : [i64; 8]
-var GW_C0 : [i64; 8]   var GW_C1 : [i64; 8]   var GW_CD : [i64; 8]
+var GW_C0 : [i64; 8]   var GW_C1 : [i64; 8]   var GW_CD : [i64; 8]   var GW_VTH : [i64; 8]
 var GS_NW : u64
 
 /* the trajectory (its own witness): kind 0 = wall (a = particle, b = wall), 1 = pair (a,b = particles), ax */
@@ -103,9 +108,15 @@ fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 @export {
     if GS_NW >= GS_MAXW { return 0i32 - 1i32 }
     if cden <= 0i64 { return 0i32 - 1i32 }
     let w : u64 = GS_NW
-    GW_AX[w] = ax   GW_DIR[w] = dir   GW_C0[w] = c0   GW_C1[w] = c1   GW_CD[w] = cden
+    GW_AX[w] = ax   GW_DIR[w] = dir   GW_C0[w] = c0   GW_C1[w] = c1   GW_CD[w] = cden   GW_VTH[w] = 0i64
     GS_NW = w + 1u64
     return w as i32
+}
+/* the speed-selective membrane: solid only for particles with |v_axis| < vth. */
+fn gs_valve(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64, vth: i64) -> i32 @export {
+    let w : i32 = gs_wall(ax, dir, c0, c1, cden)
+    if w >= 0i32 { GW_VTH[w as u64] = vth }
+    return w
 }
 fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 @export {
     if GS_NP >= GS_MAXP { return 0i32 - 1i32 }
@@ -170,7 +181,16 @@ fn gs_cand_walls(p: u64) -> i32 {
     while w < GS_NW {
         let ax : u64 = (GW_AX[w]) as u64
         let dir : i64 = GW_DIR[w]
-        let vn : i64 = gg_mul(dir, GV[p * 3u64 + ax])
+        let vth : i64 = GW_VTH[w]
+        let mut solid : u8 = 1u8
+        if vth > 0i64 {
+            let vax : i64 = GV[p * 3u64 + ax]
+            let mut sp : i64 = vax
+            if sp < 0i64 { sp = 0i64 - sp }
+            if sp >= vth { solid = 0u8 }                           /* fast: the membrane does not exist for it */
+        }
+        let mut vn : i64 = 0i64
+        if solid == 1u8 { vn = gg_mul(dir, GV[p * 3u64 + ax]) }
         if vn > 0i64 {
             let cd : i64 = GW_CD[w]
             let n0 : i64 = gg_sub(gg_mul(GW_C0[w], GDEN), gg_mul(gg_mul(dir, GP_N0[p * 3u64 + ax]), cd))

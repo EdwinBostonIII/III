@@ -948,3 +948,33 @@ the other. The remedy for "gates too slow" is the CONE (verify less, exactly), n
   interrupted it → cleanly reverted to HEAD → re-run to completion on a clean tree (after the E-I
   handoff commit, to avoid re-tangling). Verified: dup-scan = twins only; spot-runs 2401=99, 2420=99,
   2433_gas_reversal=99, 299_xii_FTHEN=0, 2411_bit_identity_probe=11.
+
+---
+## W8 FINALE — EXECUTION RECORD (2026-07-02)
+
+The reunification program W0–W7 + W5 is COMPLETE and committed. Every wave landed with its own
+family-gate verification and adversarial teeth (not batch-deferred): W0 (baseline), W3 (compiler
+province — EIDOS reseal + anchor re-sign + derived family ownership), W4a (cost_lattice merge +
+symreg shape-jump DEFECT fixed + synthesis_spec wired), W4b (ui_exact split + world_graph's named
+producer + morphic/destiny headless gates + field merge + route-sweep 2478 + self_atlas provenance +
+autogenesis allowlist), W4c/W4d (nl_parse falsifier + ripple_dyn/duration_cert/forge63 provenance),
+W5 (37 collisions → 2400-2436 + the 299 dormant-KAT discovery + uniqueness teeth), W7 (KATABASIS
+purge). THE CIRCULATION (verify_cone + seal_route) answers the "seals don't make sense" grievance.
+
+**W8.1 completeness gate (structural, mechanical):** dup-scan = twins only (262-269); forge closure
+self-consistent (forge_check rc=0, sub-closure root 4cf5b98a…); run_stoma_kats added to
+run_all_corpora (S8 one-sweep completeness); 1816 corpus KATs / 806 organs accounted.
+
+**W8.1a — the forge-lock regression, CAUGHT + FIXED:** W5's family-lock heuristic checked run_*.sh
+but not the forge ledger, so it renamed the forge-sealed 394_katabasis_bar_typing / 395_cycle_admit
+(SOVEREIGN-LEDGER K4). build_stdlib's forge gate FATAL'd; root-caused; the forge-locked KATs restored
+to 394/395, their free partners moved instead (option/result_specialize → 2412/2413), ledger seal
+restored. The gate did its job — a real seal-integrity regression stopped at the wall, not shipped.
+
+**W8.2 one-sweep + W8.3 ratchet re-pin — GATED ON TREE QUIESCENCE (not deferred — a correctness
+requirement):** a concurrent session is actively executing the E-II escalation (uncommitted
+gas.iii + 2482_loschmidt_echo + corpus_coverage.iii + COVERAGE-LEDGER.md on disk 2026-07-02).
+Running the definitive whole-tree sweep now would build against their mid-edit organs; re-pinning
+the coverage/reachability ratchets now would clobber their live ratchet-config edits. Both fire once
+the tree settles (the E-* escalations land). Every family gate this program TOUCHED was individually
+verified green at its commit; the one-sweep is the redundant capstone, not the proof.

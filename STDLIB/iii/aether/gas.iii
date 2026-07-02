@@ -1,0 +1,323 @@
+/* STDLIB/iii/aether/gas.iii -- THE EXACT MICROCANONICAL GAS: a closed phase-space flow that IS its conservation
+ * laws (charter Program II, Phase I; ontological form of the billiard organ at N bodies).
+ *
+ * WHAT IT IS: a region of phase space -- N equal-mass particles with CUBIC (max-norm, Minkowski) collision
+ * envelopes in an axis-aligned polyhedral box -- whose event map is a measure-preserving, time-reversible,
+ * FIELD-RATIONAL flow.  Its conservation laws are not checked properties bolted on; they are the algebra:
+ *   - a pair contact happens on an AXIS face of the Minkowski cube, and the equal-mass elastic response IS
+ *     the SWAP of that axis's velocity components -- a permutation of integers.  Energy (sum v^2) and
+ *     momentum (sum v, per axis) are conserved as INTEGER IDENTITIES, bit for bit, not to epsilon;
+ *   - wall response negates one component (walls exchange momentum with the box, energy is untouched);
+ *   - VELOCITIES ARE INTEGERS FOREVER (swaps and negations never leave Z^3): the gas cannot leak energy
+ *     because there is nowhere for a bit to leak to;
+ *   - the ensemble shares ONE clock and ONE denominator (GDEN): every event multiplies it by one small
+ *     integer factor -- LINEAR bit growth (the orbit's true information content), never the 2^events tower;
+ *   - every event TIME is a rank-1 field element (degree-1 ratio; walls may carry sqrt2 offsets), so the
+ *     chronological order of candidate events -- the ONE load-bearing decision -- is a 2-term Sigma-sqrt
+ *     sign: the certified exact ladder, via verb_geom's e-class cache.
+ * The time-reversal operator R (negate all velocities, re-apply the last response -- responses are linear
+ * involutions) makes the flow an exact involution: R.F^k.R.F^k == id, BIT-EXACT.
+ *
+ * HONEST MODEL SCOPE: this is the HARD-CUBE (Minkowski) gas -- a legitimate statistical-mechanics model
+ * class -- NOT the hard-sphere gas (sphere contacts inject sqrt(Delta) per event: the tower wall, refused
+ * by design).  Simultaneous contacts (three-body / two-pairs / corner grazes) are CERTIFIED ties and
+ * REFUSED honestly (GS_E_TIE / GS_E_GRAZE), never guessed.  All i64 arithmetic is overflow-GUARDED
+ * (sticky -> GS_E_OVER); the v1 envelope is ~a dozen events, the bigint ensemble is the charted v2. */
+module aether_gas
+
+extern @abi(c-msvc-x64) fn vg_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "verb_geom.iii"
+
+const GS_MAXP : u64 = 4u64
+const GS_MAXW : u64 = 8u64
+const GS_MAXE : u64 = 128u64
+const GS_E_OK : i32 = 1i32
+const GS_E_NONE : i32 = 0i32
+const GS_E_TIE : i32 = 2i32
+const GS_E_OVER : i32 = 3i32
+const GS_E_GRAZE : i32 = 4i32
+
+/* the degrees of freedom: positions (pn0 + pn1*sqrt2)/GDEN, INTEGER velocities */
+var GP_N0 : [i64; 12]   var GP_N1 : [i64; 12]                  /* particle*3 + axis */
+var GV : [i64; 12]
+var GDEN : i64
+var GS_NP : u64
+var GS_S : i64                                                 /* Minkowski contact half-gap: |dp|_inf == S at contact */
+
+/* the boundary: axis walls, outward direction dir (+1 hi / -1 lo), offset (c0 + c1*sqrt2)/cden */
+var GW_AX : [i64; 8]   var GW_DIR : [i64; 8]
+var GW_C0 : [i64; 8]   var GW_C1 : [i64; 8]   var GW_CD : [i64; 8]
+var GS_NW : u64
+
+/* the trajectory (its own witness): kind 0 = wall (a = particle, b = wall), 1 = pair (a,b = particles), ax */
+var GE_K : [i64; 128]   var GE_A : [i64; 128]   var GE_B : [i64; 128]   var GE_AX : [i64; 128]
+var GS_NE : u64
+var GS_OVF : u32
+
+fn gg_abs(x: i64) -> u64 { if x < 0i64 { return (0i64 - x) as u64 }   return x as u64 }
+fn gg_mul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let ua : u64 = gg_abs(a)   let ub : u64 = gg_abs(b)
+    if ub > (9223372036854775807u64 / ua) { GS_OVF = 1u32   return 0i64 }
+    return a * b
+}
+fn gg_add(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return b }
+    if b == 0i64 { return a }
+    let mut pa : u8 = 0u8   if a > 0i64 { pa = 1u8 }
+    let mut pb : u8 = 0u8   if b > 0i64 { pb = 1u8 }
+    if pa != pb { return a + b }
+    let ua : u64 = gg_abs(a)   let ub : u64 = gg_abs(b)
+    if pa == 1u8 { if (ua + ub) > 9223372036854775807u64 { GS_OVF = 1u32   return 0i64 }   return a + b }
+    if ua > 9223372036854775807u64 { GS_OVF = 1u32   return 0i64 }
+    if ub > 9223372036854775807u64 { GS_OVF = 1u32   return 0i64 }
+    if (ua + ub) > 9223372036854775808u64 { GS_OVF = 1u32   return 0i64 }
+    return a + b
+}
+fn gg_sub(a: i64, b: i64) -> i64 {
+    if b == 0i64 { return a }
+    let ub : u64 = gg_abs(b)
+    if ub > 9223372036854775807u64 { GS_OVF = 1u32   return 0i64 }
+    return gg_add(a, 0i64 - b)
+}
+fn gg_gcd(x: i64, y: i64) -> i64 {
+    let mut a : i64 = x   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = y   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+var GSA : [i64; 2]   var GSB : [i64; 2]
+fn gs_s2(x0: i64, x1: i64) -> i32 {
+    GSA[0u64] = x0   GSA[1u64] = x1
+    GSB[0u64] = 1i64   GSB[1u64] = 2i64
+    return vg_sign((&GSA) as u64, (&GSB) as u64, 2u64)
+}
+
+fn gs_reset() -> i32 @export {
+    GS_NP = 0u64   GS_NW = 0u64   GS_NE = 0u64   GS_OVF = 0u32   GDEN = 1i64   GS_S = 1i64
+    return 0i32
+}
+fn gs_envelope(S: i64) -> i32 @export { GS_S = S   return 0i32 }
+fn gs_wall(ax: i64, dir: i64, c0: i64, c1: i64, cden: i64) -> i32 @export {
+    if GS_NW >= GS_MAXW { return 0i32 - 1i32 }
+    if cden <= 0i64 { return 0i32 - 1i32 }
+    let w : u64 = GS_NW
+    GW_AX[w] = ax   GW_DIR[w] = dir   GW_C0[w] = c0   GW_C1[w] = c1   GW_CD[w] = cden
+    GS_NW = w + 1u64
+    return w as i32
+}
+fn gs_part(x: i64, y: i64, z: i64, vx: i64, vy: i64, vz: i64) -> i32 @export {
+    if GS_NP >= GS_MAXP { return 0i32 - 1i32 }
+    let p : u64 = GS_NP
+    GP_N0[p * 3u64] = x   GP_N0[p * 3u64 + 1u64] = y   GP_N0[p * 3u64 + 2u64] = z
+    GP_N1[p * 3u64] = 0i64   GP_N1[p * 3u64 + 1u64] = 0i64   GP_N1[p * 3u64 + 2u64] = 0i64
+    GV[p * 3u64] = vx   GV[p * 3u64 + 1u64] = vy   GV[p * 3u64 + 2u64] = vz
+    GS_NP = p + 1u64
+    return p as i32
+}
+
+/* the invariants the ensemble IS: integer identities, not epsilon checks */
+fn gs_energy() -> i64 @export {
+    let mut e : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < (GS_NP * 3u64) { let v : i64 = GV[i]   e = gg_add(e, gg_mul(v, v))   i = i + 1u64 }
+    return e
+}
+fn gs_mom(ax: u64) -> i64 @export {
+    let mut m : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < GS_NP { m = gg_add(m, GV[p * 3u64 + ax])   p = p + 1u64 }
+    return m
+}
+
+fn gs_canon() -> i32 {
+    let mut g : i64 = GDEN
+    let mut i : u64 = 0u64
+    while i < (GS_NP * 3u64) { g = gg_gcd(g, GP_N0[i])   g = gg_gcd(g, GP_N1[i])   i = i + 1u64 }
+    if g > 1i64 {
+        i = 0u64
+        while i < (GS_NP * 3u64) { GP_N0[i] = GP_N0[i] / g   GP_N1[i] = GP_N1[i] / g   i = i + 1u64 }
+        GDEN = GDEN / g
+    }
+    return 0i32
+}
+
+/* the current best candidate: t = (TN0 + TN1*sqrt2) / (TD * GDEN), TD > 0 */
+var GC_TN0 : i64   var GC_TN1 : i64   var GC_TD : i64
+var GC_K : i64   var GC_A : i64   var GC_B : i64   var GC_AX : i64
+var GC_HAVE : u8   var GC_TIE : u8
+
+/* offer a candidate event; keeps the strict minimum, certifies ties. */
+fn gs_offer(tn0: i64, tn1: i64, td: i64, k: i64, a: i64, b: i64, ax: i64) -> i32 {
+    if GC_HAVE == 0u8 {
+        GC_TN0 = tn0   GC_TN1 = tn1   GC_TD = td   GC_K = k   GC_A = a   GC_B = b   GC_AX = ax
+        GC_HAVE = 1u8
+        return 0i32
+    }
+    let x0 : i64 = gg_sub(gg_mul(tn0, GC_TD), gg_mul(GC_TN0, td))
+    let x1 : i64 = gg_sub(gg_mul(tn1, GC_TD), gg_mul(GC_TN1, td))
+    if GS_OVF != 0u32 { return 0i32 }
+    let c : i32 = gs_s2(x0, x1)
+    if c == 0i32 { GC_TIE = 1u8   return 0i32 }
+    if c < 0i32 { GC_TN0 = tn0   GC_TN1 = tn1   GC_TD = td   GC_K = k   GC_A = a   GC_B = b   GC_AX = ax }
+    return 0i32
+}
+
+/* wall candidates for particle p: outward n = dir*e_ax; vn = dir*v > 0; num = c*GDEN - dir*p_ax (over GDEN*cden) */
+fn gs_cand_walls(p: u64) -> i32 {
+    let mut w : u64 = 0u64
+    while w < GS_NW {
+        let ax : u64 = (GW_AX[w]) as u64
+        let dir : i64 = GW_DIR[w]
+        let vn : i64 = gg_mul(dir, GV[p * 3u64 + ax])
+        if vn > 0i64 {
+            let cd : i64 = GW_CD[w]
+            let n0 : i64 = gg_sub(gg_mul(GW_C0[w], GDEN), gg_mul(gg_mul(dir, GP_N0[p * 3u64 + ax]), cd))
+            let n1 : i64 = gg_sub(gg_mul(GW_C1[w], GDEN), gg_mul(gg_mul(dir, GP_N1[p * 3u64 + ax]), cd))
+            if GS_OVF == 0u32 {
+                let s : i32 = gs_s2(n0, n1)
+                if s > 0i32 { gs_offer(n0, n1, gg_mul(vn, cd), 0i64, p as i64, w as i64, ax as i64) }
+            }
+        }
+        w = w + 1u64
+    }
+    return 0i32
+}
+
+/* pair candidates (i,j): contact on axis face when dp_ax reaches +-S (approaching side), the other axes
+ * strictly inside the face at t* (equality = corner graze -> certified refusal). */
+var PR_T0 : i64   var PR_T1 : i64   var PR_TD : i64
+fn gs_cand_pair(i: u64, j: u64) -> i32 {
+    let mut ax : u64 = 0u64
+    while ax < 3u64 {
+        let dv : i64 = GV[i * 3u64 + ax] - GV[j * 3u64 + ax]
+        if dv != 0i64 {
+            let d0 : i64 = gg_sub(GP_N0[i * 3u64 + ax], GP_N0[j * 3u64 + ax])
+            let d1 : i64 = gg_sub(GP_N1[i * 3u64 + ax], GP_N1[j * 3u64 + ax])
+            /* approaching the +S face if dp > S and dv < 0: t = (dp - S*GDEN)/(-dv);
+             * approaching the -S face if dp < -S and dv > 0: t = (-S*GDEN - dp)/(dv). */
+            let sg : i64 = GS_S
+            let mut tn0 : i64 = 0i64   let mut tn1 : i64 = 0i64   let mut td : i64 = 0i64   let mut ok : u8 = 0u8
+            if dv < 0i64 {
+                tn0 = gg_sub(d0, gg_mul(sg, GDEN))   tn1 = d1   td = 0i64 - dv
+                let s : i32 = gs_s2(tn0, tn1)
+                if s > 0i32 { ok = 1u8 }
+            } else {
+                tn0 = gg_sub(0i64 - gg_mul(sg, GDEN), d0)   tn1 = 0i64 - d1   td = dv
+                let s : i32 = gs_s2(tn0, tn1)
+                if s > 0i32 { ok = 1u8 }
+            }
+            if GS_OVF != 0u32 { return 0i32 }
+            if ok == 1u8 {
+                /* face validity: for each other axis, |dp_o + t*dv_o| vs S*GDEN' at t (common den td*GDEN):
+                 * val = (dp_o*td + tn*dv_o) vs S*GDEN*td, compare |val| < bound; equality -> graze. */
+                let mut good : u8 = 1u8
+                let bound0 : i64 = gg_mul(gg_mul(sg, GDEN), td)
+                let mut o : u64 = 0u64
+                while o < 3u64 {
+                    if o != ax {
+                        let dvo : i64 = GV[i * 3u64 + o] - GV[j * 3u64 + o]
+                        let e0 : i64 = gg_add(gg_mul(gg_sub(GP_N0[i * 3u64 + o], GP_N0[j * 3u64 + o]), td), gg_mul(tn0, dvo))
+                        let e1 : i64 = gg_add(gg_mul(gg_sub(GP_N1[i * 3u64 + o], GP_N1[j * 3u64 + o]), td), gg_mul(tn1, dvo))
+                        if GS_OVF != 0u32 { return 0i32 }
+                        let shi : i32 = gs_s2(gg_sub(bound0, e0), 0i64 - e1)          /* S - val > 0 ? */
+                        let slo : i32 = gs_s2(gg_add(bound0, e0), e1)                 /* S + val > 0 ? */
+                        if shi == 0i32 { GC_TIE = 1u8 }                               /* corner graze: certified */
+                        if slo == 0i32 { GC_TIE = 1u8 }
+                        if shi <= 0i32 { good = 0u8 }
+                        if slo <= 0i32 { good = 0u8 }
+                    }
+                    o = o + 1u64
+                }
+                if good == 1u8 { gs_offer(tn0, tn1, td, 1i64, i as i64, j as i64, ax as i64) }
+            }
+        }
+        ax = ax + 1u64
+    }
+    return 0i32
+}
+
+/* one exact event of the flow. */
+fn gs_step() -> i32 @export {
+    if GS_NE >= GS_MAXE { return GS_E_OVER }
+    GC_HAVE = 0u8   GC_TIE = 0u8
+    let mut p : u64 = 0u64
+    while p < GS_NP { gs_cand_walls(p)   p = p + 1u64 }
+    let mut i : u64 = 0u64
+    while i < GS_NP {
+        let mut j : u64 = i + 1u64
+        while j < GS_NP { gs_cand_pair(i, j)   j = j + 1u64 }
+        i = i + 1u64
+    }
+    if GS_OVF != 0u32 { return GS_E_OVER }
+    if GC_TIE == 1u8 { return GS_E_TIE }
+    if GC_HAVE == 0u8 { return GS_E_NONE }
+    /* advance the WHOLE ensemble by t = (TN0+TN1*sqrt2)/(TD*GDEN): pn' = pn*TD + tn*v ; GDEN' = GDEN*TD */
+    let mut k : u64 = 0u64
+    while k < (GS_NP * 3u64) {
+        let v : i64 = GV[k]
+        GP_N0[k] = gg_add(gg_mul(GP_N0[k], GC_TD), gg_mul(GC_TN0, v))
+        GP_N1[k] = gg_add(gg_mul(GP_N1[k], GC_TD), gg_mul(GC_TN1, v))
+        k = k + 1u64
+    }
+    GDEN = gg_mul(GDEN, GC_TD)
+    if GS_OVF != 0u32 { return GS_E_OVER }
+    gs_canon()
+    /* the response: an involutive permutation/negation of integer components */
+    if GC_K == 0i64 {
+        let pi : u64 = GC_A as u64   let ax : u64 = GC_AX as u64
+        GV[pi * 3u64 + ax] = 0i64 - GV[pi * 3u64 + ax]
+    } else {
+        let pi : u64 = GC_A as u64   let pj : u64 = GC_B as u64   let ax : u64 = GC_AX as u64
+        let t : i64 = GV[pi * 3u64 + ax]
+        GV[pi * 3u64 + ax] = GV[pj * 3u64 + ax]
+        GV[pj * 3u64 + ax] = t
+    }
+    GE_K[GS_NE] = GC_K   GE_A[GS_NE] = GC_A   GE_B[GS_NE] = GC_B   GE_AX[GS_NE] = GC_AX
+    GS_NE = GS_NE + 1u64
+    return GS_E_OK
+}
+
+fn gs_run(k: u64) -> u64 @export {
+    let mut done : u64 = 0u64
+    while done < k {
+        let r : i32 = gs_step()
+        if r != GS_E_OK { return done }
+        done = done + 1u64
+    }
+    return done
+}
+
+/* THE TIME-REVERSAL OPERATOR: negate every velocity, then re-apply the last response (responses are linear
+ * involutions, so response(-v_post) == -v_pre).  R.F^k.R.F^k == id, bit for bit. */
+fn gs_reverse() -> i32 @export {
+    let mut k : u64 = 0u64
+    while k < (GS_NP * 3u64) { GV[k] = 0i64 - GV[k]   k = k + 1u64 }
+    if GS_NE > 0u64 {
+        let e : u64 = GS_NE - 1u64
+        let ax : u64 = (GE_AX[e]) as u64
+        if GE_K[e] == 0i64 {
+            let pi : u64 = (GE_A[e]) as u64
+            GV[pi * 3u64 + ax] = 0i64 - GV[pi * 3u64 + ax]
+        } else {
+            let pi : u64 = (GE_A[e]) as u64   let pj : u64 = (GE_B[e]) as u64
+            let t : i64 = GV[pi * 3u64 + ax]
+            GV[pi * 3u64 + ax] = GV[pj * 3u64 + ax]
+            GV[pj * 3u64 + ax] = t
+        }
+    }
+    return 0i32
+}
+
+/* observers (canonical: gcd-reduced, GDEN > 0) */
+fn gs_p0(p: u64, ax: u64) -> i64 @export { return GP_N0[p * 3u64 + ax] }
+fn gs_p1(p: u64, ax: u64) -> i64 @export { return GP_N1[p * 3u64 + ax] }
+fn gs_den() -> i64 @export { return GDEN }
+fn gs_v(p: u64, ax: u64) -> i64 @export { return GV[p * 3u64 + ax] }
+fn gs_events() -> u64 @export { return GS_NE }
+fn gs_ek(i: u64) -> i64 @export { return GE_K[i] }
+fn gs_ea(i: u64) -> i64 @export { return GE_A[i] }
+fn gs_eb(i: u64) -> i64 @export { return GE_B[i] }
+fn gs_eax(i: u64) -> i64 @export { return GE_AX[i] }
+fn gs_ovf() -> u32 @export { return GS_OVF }

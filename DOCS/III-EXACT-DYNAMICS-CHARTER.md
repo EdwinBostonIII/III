@@ -112,3 +112,51 @@ increment — [BUILD-next], not needed for exact membership/ray-cast/drilling.
 5. **P2** — measured inside P1/2152 (no island build).
 v2 arcs ([BUILD-next]): bigint billiard state · resultant elimination · boundary-curve objects · bigint
 kfield tower (III-QUOTIENT-WELD Phase 2, domain now narrow).
+
+---
+
+# PROGRAM II (same day): the five-phase scale-up, adjudicated
+
+## II-I  Deep-time ergodic N-body gas — **LANDED (gas.iii, gate 2169)**
+The proposal's key insight VERIFIED: polyhedral (Minkowski) collision ENVELOPES keep pair events
+field-rational — the contact is on an AXIS face, and the equal-mass elastic response IS the swap of that
+axis's integer velocity components.  ATTACK-1 catches (binding): (a) the model is the HARD-CUBE gas, a
+legitimate statistical-mechanics model class, NOT hard spheres (sphere contacts inject √Δ per event — the
+tower); no isotropy claims transfer.  (b) The billiard's primitive-v rescaling is FORBIDDEN with
+interactions (particles share one clock) — solved by integer velocities (swaps/negations never leave ℤ³)
+and ONE shared ensemble denominator (linear growth).  (c) "Observe Poincaré recurrence" is not claimable
+(recurrence times are astronomical); the constructive content IS the measure-preserving reversal, gated.
+Gated: energy Σv² and per-axis momentum as INTEGER IDENTITIES at every event; ensemble involution
+R∘F⁷∘R∘F⁷ == id bit-exact; two-pairs-same-instant CERTIFIED tie refused.  v2: bigint ensemble
+(thousands of events), Maxwell-Boltzmann statistics ON the hard-cube model.
+
+## II-II  4D swept-volume manufacturing leaves — SURVIVES scoped
+A swept-SPHERE (ball-nose) leaf along integer/cyclotomic segments = the parabola-minimum membership
+predicate (collide.iii's swept form; pure guarded integer arithmetic for integer configurations) — a new
+csg_tree leaf KIND, depth-independent like every other leaf.  Spinning-profile/toroidal tools and
+5-axis rotational sweeps = [BUILD-next] (surfaces of revolution swept = degree > 2).  Falsifier: a
+tangent-graze toolpath where a snapshot-sampled twin leaves phantom material.
+
+## II-III  E-graph C-space compiler — SURVIVES with the discreteness lock
+Exact collision states over the DISCRETE cyclotomic configuration lattice, memoized by e-class; exact
+lattice search plans over it.  HONESTY LOCK: "algebraically proves no path" holds for the DISCRETIZED
+C-space only — a continuous-path guarantee needs swept-volume edges (II-II provides them for translation
+steps; rotational sweep certification = [OPEN]).  Composes cyclotomic_se3 + collide + csg_tree +
+lattice_shortest_path + the eidolon keys.  [BUILD-next].
+
+## II-IV  Infinite periodic lattice optics — SURVIVES for reflection/TIR; refraction REFUTED for deep chains
+Cell-boundary traversal is field-rational (planes — the Program-I insight verbatim).  NEW attack finding:
+REFRACTION (Snell) injects √(1−(n₁/n₂)²sin²θ) — a NEW radical PER refraction event — the tower again.
+Honest scope: reflective/TIR lattices unlimited (mirrors, total-internal-reflection traps, bandgap
+skeletons); TIR onset is DECIDED exactly (a sign); refracted rays are bounded-rank (≤3 stacked) or
+per-query.  [BUILD-next on the P4 base.]
+
+## II-V  Dynamic Delaunay / ALE fluids — REFUTED as fluids; SURVIVES as kinematic exact remeshing
+"Vertices from the physics step" of a FLUID are not algebraic (ODE flows leave every fixed field).  The
+sound core: vertices on FIELD-RATIONAL kinematic paths; the flip TIME is a root of the incircle
+polynomial in t (degree ≤ 4 for linear motion) — Sturm-isolated (composes P3), the flip CERTIFIED at its
+exact instant; the no-tangle theorem = orientation predicates never lie.  3D escalation (orient3d/
+insphere3d dets over the ladder) = [BUILD-next].
+
+Execution order: II-I landed; II-II next (smallest, composes collide into csg_tree); then P4/II-IV base,
+P3 (+II-V flip times), II-III last (largest composition).

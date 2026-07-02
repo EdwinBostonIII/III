@@ -924,3 +924,27 @@ the other. The remedy for "gates too slow" is the CONE (verify less, exactly), n
   (first-committed by me, but E-I's numbers extend the exact-geometry 2167-2198 block, so I moved).
   Sibling files untouched. The coverage/reachability ratchets read RED purely from the sibling's
   untracked brep3.iii + stoma arc globbed into the archive — 0 of my exports uncovered (verified).
+
+---
+## W5 EXECUTION RECORD (2026-07-02) — commit 5c1035a0
+
+- **W5.1.4** 1492_mathlib_index_differential: `ident_eq from "ident.iii"` (ghost) → `identifier.iii` (e430decb).
+- **W5.2.3** 37 collisions renumbered into 2400-2436 (34 legacy + 711/713/714). Movers chosen by
+  family-lock (the run_corpus-only file moves; the family-runner-anchored file stays) with the plan's
+  explicit overrides (2169 gas_reversal moves, 1054 q128_ops keeps its W4a.16 coverage role). Per file:
+  git mv + module-name (both `corpus_NNNN` and `corpus_NNNN_name` styles) + EXPECTED key + family
+  runner (only 2169_gas_reversal→2433, run_sqrtsum) + DOC references.
+- **THE 299 DISCOVERY** (the ceremony's real payoff): run_xii dispatches `seq 280 372` with `head -1`,
+  so at the 299 collision it ran ONLY 299_bit_identity_probe and SILENTLY DROPPED 299_xii_FTHEN —
+  a KAT dormant/untested for 5 weeks (since 117d1f54). Resolved by keeping xii_FTHEN at 299 (its
+  F-combinator slot 298-303; run_xii default expected 0; it returns 0=pass — now actually run) and
+  moving bit_identity_probe → 2411 as a core-loop KAT (run_corpus EXPECTED=11). A collision was
+  masking a real coverage hole; resolving it closed the hole.
+- **W5.2.1** twin convention formalized: exactly one N_x/N_neg_x pos/neg pair may share a number
+  (262/263/264/265/267/269), documented at the run_corpus EXPECTED head.
+- **W5.2.4** uniqueness teeth in run_corpus preamble — any non-twin duplicate → FATAL. PROVEN
+  (seeded 9999_a+9999_b aborts; real corpus passes). Catches every future/concurrent collision.
+- The batch was executed twice: first attempt half-ran (17/34) then a tool-result internal error
+  interrupted it → cleanly reverted to HEAD → re-run to completion on a clean tree (after the E-I
+  handoff commit, to avoid re-tangling). Verified: dup-scan = twins only; spot-runs 2401=99, 2420=99,
+  2433_gas_reversal=99, 299_xii_FTHEN=0, 2411_bit_identity_probe=11.

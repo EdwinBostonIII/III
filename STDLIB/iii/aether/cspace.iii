@@ -119,7 +119,17 @@ fn cs_edge_vs(k: i64, wx: i64, wy: i64, wz: i64, dxi: i64, dyi: i64, dzi: i64, c
     CE_T[0u64] = CE_T[0u64] - (((r2 * CS_DEN[k as u64]) * CS_DEN[k as u64]) * dd)
     let sv : i32 = q23_sign((&CE_T) as u64)
     if sv < 0i32 { return 0i32 }
+    if sv == 0i32 { return 2i32 }                     /* the interior minimum is EXACTLY zero: a graze,
+                                                       * legal under contact-is-legal and now NAMED
+                                                       * (the translation formulation sees tangency for
+                                                       * free -- the arc cover needed multiplicity) */
     return 1i32
+}
+/* the named translation-edge verdict vs obstacle 1: 0 blocked / 1 clear / 2 exact graze (N-5) */
+fn cs_edge_probe(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 @export {
+    let bx : i64 = gx * CS_GS   let by : i64 = gy * CS_GS
+    let dxi : i64 = (nx - gx) * CS_GS   let dyi : i64 = (ny - gy) * CS_GS
+    return cs_edge_vs(k, bx, by, 0i64, dxi, dyi, 0i64, CS_C1[0u64], CS_C1[1u64], CS_C1[2u64], CS_R1)
 }
 
 /* world tip-anchor of state (k,gx,gy) is base = (gx*GS, gy*GS, 0); W offset fed as base - C per axis. */

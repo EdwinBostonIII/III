@@ -1,0 +1,43 @@
+/* 2197_edge_graze.iii -- GATE for GRAZE-NAMED TRANSLATION EDGES (Turing-next N-5).
+ *
+ * The translation-edge certificate holds a trichotomy the arc certificate had to earn with
+ * multiplicity: the swept clearance is a parabola, and its interior MINIMUM's exact sign says
+ * everything -- negative = penetration, positive = clear, ZERO = the sweep touches the sphere at
+ * exactly one instant.  The zero case was legal all along (contact-is-legal) but never NAMED and
+ * never gated.  Machine-checked geometry: tip radius 5 at k = 0 sweeping base (0,0) -> (0,1) with
+ * GS = 40 against the sphere (25, 5, 0):
+ *     val = WW*DD - WD^2 - r2*DD  =  680000 - 640000 - 1600*r2/... at r2 = 25: EXACTLY 0 (graze);
+ *     r2 = 24: +1600 (clear);  r2 = 26: -1600 (blocked).  One geometry, +-1600 around zero.
+ * And the planner arm: the graze edge carries a real 1-move plan (legal, certified, exact).
+ *
+ * exit 99 = pass;  10 graze;  11 clear;  12 blocked;  13 planner */
+module corpus_2197_edge_graze
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn cs_compile(GS: i64, AX: i64, c1x: i64, c1y: i64, c1z: i64, r1: i64, c2x: i64, c2y: i64, c2z: i64, r2: i64, GW: i64, GH: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_edge_probe(k: i64, gx: i64, gy: i64, nx: i64, ny: i64) -> i32 from "cspace.iii"
+extern @abi(c-msvc-x64) fn cs_plan(k0: i64, x0: i64, y0: i64, k1: i64, x1: i64, y1: i64, mode: i64) -> i64 from "cspace.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    /* the sweep here is along +y (base (0,0) -> (0,1)); the sphere sits at exact tangent distance:
+     * tip = (5, gy*40, 0); sphere (5 + 5, 20, 0) = (10, 20, 0) -> perpendicular distance 5 at y = 20. */
+    if cs_compile(40i64, 5i64, 10i64, 20i64, 0i64, 25i64, 0i64, 0i64, 0i64, 0i64, 1i64, 2i64) != 0i32 { return 10u64 }
+    let g : i32 = cs_edge_probe(0i64, 0i64, 0i64, 0i64, 1i64)
+    if cs_compile(40i64, 5i64, 10i64, 20i64, 0i64, 24i64, 0i64, 0i64, 0i64, 0i64, 1i64, 2i64) != 0i32 { return 11u64 }
+    let c : i32 = cs_edge_probe(0i64, 0i64, 0i64, 0i64, 1i64)
+    if cs_compile(40i64, 5i64, 10i64, 20i64, 0i64, 26i64, 0i64, 0i64, 0i64, 0i64, 1i64, 2i64) != 0i32 { return 12u64 }
+    let b : i32 = cs_edge_probe(0i64, 0i64, 0i64, 0i64, 1i64)
+    putchar(86i32) putchar(58i32) sp() e_i64(g as i64) sp() e_i64(c as i64) sp() e_i64(b as i64) nl()   /* "V: 2 1 0" */
+    if g != 2i32 { return 10u64 }
+    if c != 1i32 { return 11u64 }
+    if b != 0i32 { return 12u64 }
+    /* the planner crosses the graze edge legally: 1 move */
+    if cs_compile(40i64, 5i64, 10i64, 20i64, 0i64, 25i64, 0i64, 0i64, 0i64, 0i64, 1i64, 2i64) != 0i32 { return 13u64 }
+    let pl : i64 = cs_plan(0i64, 0i64, 0i64, 0i64, 0i64, 1i64, 0i64)
+    putchar(80i32) putchar(58i32) sp() e_i64(pl) nl()                                                  /* "P: 1" */
+    if pl != 1i64 { return 13u64 }
+    return 99u64
+}

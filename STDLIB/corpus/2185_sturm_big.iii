@@ -1,0 +1,75 @@
+/* 2185_sturm_big.iii -- GATE for the BIGINT PRS (Turing-substrate charter V-I.1): root counting past
+ * the i64 chain wall, with the i64 organ's honest garbage as the twin.
+ *
+ * A -- THE WALL, CROSSED: the exact degree-12 polynomial of 2179 (min poly of 2^(1/4)+3^(1/3)).  The
+ *   i64 Sturm chain OVERFLOWS silently (root_count != 2 -- the 2179 finding, now the pinned twin);
+ *   sturm2 counts EXACTLY 2 real roots in [-4,4] and isolates them in (0,1] and (2,3] -- agreeing with
+ *   the independent exact-Horner sign brackets gated in 2179.
+ * B -- THE CRT->PRS WELD: rs_sum_big derives the DEGREE-16 defining polynomial of 2^(1/4) + 3^(1/4)
+ *   in-KAT; sturm2 counts its 4 real roots (+-2^(1/4) +- 3^(1/4)) and isolates 2^(1/4)+3^(1/4) in
+ *   (25/10, 26/10] and 3^(1/4)-2^(1/4) in (1/10, 2/10].  Two charter increments, one pipeline.
+ * C -- MULTIPLICITY AT DEPTH: (x^4-10x^2+1)^2 -- the squared chain overflows i64 (v1 root_mult is
+ *   garbage there, printed); root_mult2 certifies multiplicity 2 at sqrt2+sqrt3 in (31/10, 32/10].
+ * D -- refusal: degree 25 refused (-1), never garbage.
+ *
+ * exit 99 = pass;  10 A twin failed to diverge;  11 A count/brackets;  12 B;  13 C;  14 D */
+module corpus_2185_sturm_big
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn sturm2_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var BP : [i64; 32]   var BF : [i64; 10]   var BG : [i64; 10]
+
+fn main() -> u64 {
+    /* ══ A: the degree-12 wall. */
+    BP[0u64] = 73i64    BP[1u64] = 0i64 - 144i64   BP[2u64] = 0i64 - 540i64   BP[3u64] = 0i64 - 108i64
+    BP[4u64] = 12i64    BP[5u64] = 0i64 - 288i64   BP[6u64] = 54i64           BP[7u64] = 0i64
+    BP[8u64] = 0i64 - 6i64   BP[9u64] = 0i64 - 12i64   BP[10u64] = 0i64   BP[11u64] = 0i64   BP[12u64] = 1i64
+    sturm_build((&BP) as u64, 12i64)
+    let n1 : i64 = root_count(0i64 - 4i64, 1i64, 4i64, 1i64)
+    if sturm2_build((&BP) as u64, 12i64) < 0i64 { return 11u64 }
+    let n2 : i64 = root_count2(0i64 - 4i64, 1i64, 4i64, 1i64)
+    let b1 : i64 = root_count2(0i64, 1i64, 1i64, 1i64)
+    let b2 : i64 = root_count2(2i64, 1i64, 3i64, 1i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(n1) sp() e_i64(n2) sp() e_i64(b1) sp() e_i64(b2) nl()   /* "A: <garbage> 2 1 1" */
+    if n1 == 2i64 { return 10u64 }                          /* the i64 chain must FAIL here (2179 finding) */
+    if n2 != 2i64 { return 11u64 }
+    if b1 != 1i64 { return 11u64 }
+    if b2 != 1i64 { return 11u64 }
+
+    /* ══ B: the CRT -> bigint-PRS pipeline at degree 16. */
+    BF[0u64] = 0i64 - 2i64   BF[1u64] = 0i64   BF[2u64] = 0i64   BF[3u64] = 0i64   BF[4u64] = 1i64
+    BG[0u64] = 0i64 - 3i64   BG[1u64] = 0i64   BG[2u64] = 0i64   BG[3u64] = 0i64   BG[4u64] = 1i64
+    let d16 : i64 = rs_sum_big((&BF) as u64, 4i64, (&BG) as u64, 4i64, (&BP) as u64)
+    if d16 != 16i64 { return 12u64 }
+    if sturm2_build((&BP) as u64, 16i64) < 0i64 { return 12u64 }
+    let m4 : i64 = root_count2(0i64 - 4i64, 1i64, 4i64, 1i64)
+    let g1 : i64 = root_count2(25i64, 10i64, 26i64, 10i64)
+    let g2 : i64 = root_count2(1i64, 10i64, 2i64, 10i64)
+    putchar(66i32) putchar(58i32) sp() e_i64(d16) sp() e_i64(m4) sp() e_i64(g1) sp() e_i64(g2) nl()   /* "B: 16 4 1 1" */
+    if m4 != 4i64 { return 12u64 }
+    if g1 != 1i64 { return 12u64 }
+    if g2 != 1i64 { return 12u64 }
+
+    /* ══ C: multiplicity past the wall -- (x^4-10x^2+1)^2. */
+    BP[0u64] = 1i64   BP[1u64] = 0i64   BP[2u64] = 0i64 - 20i64   BP[3u64] = 0i64   BP[4u64] = 102i64
+    BP[5u64] = 0i64   BP[6u64] = 0i64 - 20i64   BP[7u64] = 0i64   BP[8u64] = 1i64
+    let mb : i64 = root_mult2((&BP) as u64, 8i64, 31i64, 10i64, 32i64, 10i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(mb) nl()                                                /* "C: 2" */
+    if mb != 2i64 { return 13u64 }
+
+    /* ══ D: the envelope refuses. */
+    let rd : i64 = sturm2_build((&BP) as u64, 25i64)
+    putchar(68i32) putchar(58i32) sp() e_i64(rd) nl()                                                /* "D: -1" */
+    if rd != (0i64 - 1i64) { return 14u64 }
+
+    return 99u64
+}

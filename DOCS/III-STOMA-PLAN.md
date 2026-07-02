@@ -199,7 +199,33 @@ record `{code: u32 FULL-width, timed_out: u8, out_seg: u64, err_seg: u64}`.
 - [ ] `stoma.exe` links via **sovbuild** (sovereign artifact from day 1); dev loop may gcc-link but
   the gate runs the sovbuild binary. Gate: transcript family `N/0` + interactive smoke (manual).
 
-### M5 — `stoma_gate.iii` + `stoma_seal.iii` (verdict sovereignty, the keystone)
+### M5 — RECONCILED (2026-07-02): native cockpit over the CONE system
+
+> **Why the change:** mid-M5 the assurance topology was reorganized from BATCH (the `run_*_kats.sh`
+> family runners) to CONE — `verify_cone.sh` computes a dirty-cone + maintains a content-addressed
+> ledger `STDLIB/build/VERIFIED.tsv` (`kat\ttuple\tPASS|WRONG\tutc`), with `seal_route.sh` splitting
+> organ-change (fast `seal_sources.sh` re-pin) from compiler-change (full twin-build). Reimplementing
+> a standalone native seal beside this would be an island. So M5 became: **STOMA is the native
+> COCKPIT over the cone/route system**, adding only what native code does strictly better.
+>
+> **Delivered (`stoma_gate.iii`, corpus 2460, gate 8/0):**
+> - **Full-width verdicts (the keystone).** `gate_run` spawns via `stoma_proc` and reads the TRUE
+>   u32 exit code. Proven live: `exit 300` → bash `$?`=**44** (8-bit mask), stoma_gate=**300**. The
+>   native verdict is RIGHTER — the amended Attrition Law made concrete. `gate_bash_would_see()` /
+>   `gate_full_vs_bash_diverges()` expose the divergence as a visible fact.
+> - **Native ledger reads.** `gate_ledger_load`/`gate_status`/`gate_count_pass|wrong` parse
+>   `VERIFIED.tsv` in `.iii` (no grep/awk in the verdict path).
+> - **`seal` verb = drive `seal_route.sh`** (reuse the proven router; no reimplementation).
+> - **`gate` verb** = native ledger cockpit (`gate` tallies, `gate <kat>` status).
+> - **Connect proof (falsifiable):** `verify_cone.sh --plan stoma_gate.iii` maps to `2460_stoma_gate`
+>   — STOMA lives inside the cone, not an island.
+>
+> **Deferred to their proper milestones (honest scope):** moving the cone WALK native (grep-over-tree)
+> belongs with the ripple watcher (M8); a native trusted-base seal computation was DROPPED as an
+> island (the seal verb drives the existing router instead). The original batch-attrition against
+> `run_field_kats.sh` is superseded by the cone connect-proof.
+
+### M5 (original plan, superseded above) — `stoma_gate.iii` + `stoma_seal.iii`
 - [ ] `gate <family>`: reads a family manifest (`.iii`-declared table, one per migrated family),
   compiles KATs via in-tree iiis-2 spawn, runs each with cap_ms=25000 default, counts natively,
   writes ledger records; prints `PASS name : exit N` lines byte-compatible with today's scripts.

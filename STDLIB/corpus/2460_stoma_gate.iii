@@ -1,0 +1,87 @@
+/* 2460_stoma_gate.iii -- STOMA M5 gate: the native verdict cockpit.
+ *
+ * Proves verdict sovereignty -- the two things native code does better than the bash executive:
+ *   1. FULL-WIDTH verdicts (the keystone): `cmd /c exit 99` -> PASS; `cmd /c exit 1` vs want 99
+ *      -> WRONG; `cmd /c exit 300` -> gate reads the TRUE code 300 (PASS for want 300), while
+ *      bash's $? would report 44 (300 & 0xFF).  gate_full_vs_bash_diverges()==1 and
+ *      gate_bash_would_see()==44 make the trap a visible, adjudicated fact.
+ *   2. NATIVE ledger reads: a synthetic VERIFIED.tsv (the cone system's format) parses to the
+ *      right per-KAT status and PASS/WRONG counts, with PASS-family excluded from the PASS count.
+ *
+ * Exit map: 10-13 full-width verdict; 20-26 ledger reader; 99 = full pass.
+ * NIH: stoma_gate + stoma_proc + kernel32. */
+module corpus_2460
+
+extern @abi(c-msvc-x64) fn gate_run(cmd: u64, want: u32, cap_ms: u32) -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_last_code() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_bash_would_see() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_full_vs_bash_diverges() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_ledger_load(path: u64) -> i32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_status(kat: u64, klen: u64) -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_count_pass() -> u64 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_count_wrong() -> u64 from "stoma_gate.iii"
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, pnw: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+var K_CMD : [u8; 64]
+var K_LED : [u8; 512]
+var K_SCR : [u64; 2]
+var K_LN  : u64 = 0u64
+
+fn k_scpy(lit: u64, n: u32) -> i32 {
+    let s : *u8 = lit as *u8
+    let mut i : u32 = 0u32
+    while i < n { K_CMD[i as u64] = s[i as u64]   i = i + 1u32 }
+    K_CMD[n as u64] = 0u8
+    return 0i32
+}
+
+/* append literal to K_LED */
+fn led_put(lit: u64, n: u64) -> i32 {
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < n { K_LED[K_LN] = s[i]   K_LN = K_LN + 1u64   i = i + 1u64 }
+    return 0i32
+}
+fn led_tab() -> i32 { K_LED[K_LN] = 9u8   K_LN = K_LN + 1u64   return 0i32 }
+fn led_nl() -> i32 { K_LED[K_LN] = 10u8   K_LN = K_LN + 1u64   return 0i32 }
+
+fn main() -> u64 {
+    /* ── 1. full-width verdict executive ── */
+    k_scpy("cmd /c exit 99" as u64, 14u32)
+    if gate_run((&K_CMD) as u64, 99u32, 20000u32) != 1u32 { return 10u64 }
+    if gate_last_code() != 99u32 { return 10u64 }
+
+    k_scpy("cmd /c exit 1" as u64, 13u32)
+    if gate_run((&K_CMD) as u64, 99u32, 20000u32) != 0u32 { return 11u64 }   /* WRONG */
+
+    /* the keystone adjudication: 300 */
+    k_scpy("cmd /c exit 300" as u64, 15u32)
+    if gate_run((&K_CMD) as u64, 300u32, 20000u32) != 1u32 { return 12u64 }  /* PASS full-width */
+    if gate_last_code() != 300u32 { return 12u64 }
+    if gate_bash_would_see() != 44u32 { return 13u64 }                       /* 300 & 0xFF */
+    if gate_full_vs_bash_diverges() != 1u32 { return 13u64 }
+
+    /* ── 2. native ledger reader ── */
+    /* build a synthetic VERIFIED.tsv: 3 rows, statuses PASS / WRONG / PASS-family */
+    K_LN = 0u64
+    led_put("2104_field_kolmogorov" as u64, 21u64)  led_tab()  led_put("aaaa" as u64, 4u64)  led_tab()  led_put("PASS" as u64, 4u64)         led_tab()  led_put("t1" as u64, 2u64)  led_nl()
+    led_put("2178_refract" as u64, 12u64)           led_tab()  led_put("bbbb" as u64, 4u64)  led_tab()  led_put("WRONG" as u64, 5u64)        led_tab()  led_put("t2" as u64, 2u64)  led_nl()
+    led_put("2155_aether_lens" as u64, 16u64)       led_tab()  led_put("cccc" as u64, 4u64)  led_tab()  led_put("PASS-family" as u64, 11u64) led_tab()  led_put("t3" as u64, 2u64)  led_nl()
+    let h : u64 = CreateFileA("stjt_led.tsv" as u64, 1073741824u32, 1u32, 0u64, 2u32, 128u32, 0u64)
+    if h + 1u64 == 0u64 { return 20u64 }
+    WriteFile(h, (&K_LED) as u64, K_LN as u32, (&K_SCR) as u64, 0u64)
+    CloseHandle(h)
+
+    if gate_ledger_load("stjt_led.tsv" as u64) != 0i32 { return 21u64 }
+    if gate_status("2104_field_kolmogorov" as u64, 21u64) != 1u32 { return 22u64 }   /* PASS */
+    if gate_status("2178_refract" as u64, 12u64) != 2u32 { return 23u64 }            /* WRONG */
+    if gate_status("2155_aether_lens" as u64, 16u64) != 3u32 { return 24u64 }        /* PASS-family */
+    if gate_status("2999_nonexistent" as u64, 16u64) != 0u32 { return 25u64 }        /* absent */
+    if gate_count_pass() != 1u64 { return 26u64 }        /* exact PASS only, family excluded */
+    if gate_count_wrong() != 1u64 { return 26u64 }
+
+    return 99u64
+}

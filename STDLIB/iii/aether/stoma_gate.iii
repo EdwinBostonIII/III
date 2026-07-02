@@ -1,0 +1,172 @@
+/* STDLIB/iii/aether/stoma_gate.iii -- STOMA organ: the `gate` verb (M5 of III-STOMA-PLAN.md).
+ *
+ * The NATIVE COCKPIT over the cone-verification system (verify_cone.sh + STDLIB/build/VERIFIED.tsv
+ * + seal_route.sh), NOT a reimplementation of it.  It adds the two things native code does
+ * strictly better than the bash executive:
+ *
+ *   1. FULL-WIDTH verdicts.  bash reads a child's status as `$?` = code & 0xFF, so a KAT that
+ *      exits 300 reads as 44 -- a silent verdict falsehood (the documented 8-bit trap).  gate_run
+ *      spawns via stoma_proc and reads the TRUE u32 exit code, so its PASS/WRONG decision is
+ *      RIGHT where bash is wrong.  This is the amended Attrition Law made concrete: when the
+ *      native verdict and the bash verdict disagree, the trap ledger adjudicates -- and here the
+ *      native one holds.
+ *   2. NATIVE ledger reads.  gate parses VERIFIED.tsv (the cone system's content-addressed
+ *      ledger: <kat>\t<tuple>\t<PASS|WRONG>\t<utc>) in .iii, so STOMA can show/act on verification
+ *      state with no grep/awk in the path.
+ *
+ * Cone COMPUTATION (the tree grep-walk) stays in verify_cone.sh for now; the shell's `gate` verb
+ * SPAWNS it (connect-not-island) and this organ reads the ledger it maintains.  Moving the cone
+ * walk native is a later milestone (it belongs with the ripple watcher, M8).
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 0.95.
+ */
+module stoma_gate
+
+extern @abi(c-msvc-x64) fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_timed_out() -> u32 from "stoma_proc.iii"
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, pnr: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> u32 from "kernel32"
+
+const GT_INVALID : u64 = 18446744073709551615u64
+const GT_CAP     : u64 = 1048576u64        /* 1 MiB ledger buffer */
+
+var GT_LED   : [u8; 1048576]     /* VERIFIED.tsv contents */
+var GT_LEDN  : u64 = 0u64        /* bytes loaded */
+var GT_SCR   : [u64; 2]
+var GT_CODE  : u64 = 0u64        /* last gate_run full-width exit code */
+var GT_TIMED : u32 = 0u32
+
+/* ── native full-width verdict executive ──────────────────────────────────────────────────── */
+
+/* Spawn a command (NUL-terminated) and decide PASS/WRONG against the wanted FULL-WIDTH exit code.
+ * Returns 1 = PASS, 0 = WRONG (wrong code or timed out or spawn failure).  gate_last_code() then
+ * holds the TRUE u32 code -- not bash's 8-bit-masked $?. */
+fn gate_run(cmd: u64, want: u32, cap_ms: u32) -> u32 @export {
+    let rc : i32 = proc_run(cmd, 0u64, cap_ms)
+    GT_CODE = proc_code() as u64
+    GT_TIMED = proc_timed_out()
+    if rc < 0i32 { return 0u32 }              /* could not spawn */
+    if GT_TIMED == 1u32 { return 0u32 }
+    if (GT_CODE as u32) == want { return 1u32 }
+    return 0u32
+}
+fn gate_last_code() -> u32 @export { return GT_CODE as u32 }
+fn gate_last_timed() -> u32 @export { return GT_TIMED }
+
+/* The bash lie: what `$?` WOULD report for the last code (code & 0xFF).  Exposed so the shell can
+ * SHOW the divergence when it exists -- turning the trap into a visible, adjudicated fact. */
+fn gate_bash_would_see() -> u32 @export { return (GT_CODE & 255u64) as u32 }
+fn gate_full_vs_bash_diverges() -> u32 @export {
+    if GT_CODE > 255u64 { return 1u32 }
+    return 0u32
+}
+
+/* ── native VERIFIED.tsv ledger reader ────────────────────────────────────────────────────── */
+
+/* Load the ledger file (NUL-terminated path).  Returns 0 ok, negative on IO. */
+fn gate_ledger_load(path: u64) -> i32 @export {
+    GT_LEDN = 0u64
+    let h : u64 = CreateFileA(path, 2147483648u32, 3u32, 0u64, 3u32, 128u32, 0u64)
+    if h == GT_INVALID { return 0i32 - 1i32 }
+    if ReadFile(h, (&GT_LED) as u64, 1048576u32, (&GT_SCR) as u64, 0u64) == 0i32 {
+        CloseHandle(h)
+        return 0i32 - 1i32
+    }
+    GT_LEDN = GT_SCR[0u64]
+    CloseHandle(h)
+    return 0i32
+}
+
+/* does GT_LED match literal at off? */
+fn gt_match_at(off: u64, lit: u64, n: u64) -> u32 {
+    if off + n > GT_LEDN { return 0u32 }
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if GT_LED[off + i] != s[i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* status field of the row whose first column (up to \t) equals kat[0..klen).
+ * Returns 1 PASS, 2 WRONG, 3 PASS-family, 0 absent.  (Row format: kat\ttuple\tstatus\tutc\n) */
+fn gate_status(kat: u64, klen: u64) -> u32 @export {
+    let k : *u8 = kat as *u8
+    let mut i : u64 = 0u64
+    let mut at_bol : u32 = 1u32
+    while i < GT_LEDN {
+        if at_bol == 1u32 {
+            /* does the row key match kat then a TAB? */
+            if gt_match_at(i, kat, klen) == 1u32 {
+                if i + klen < GT_LEDN {
+                    if GT_LED[i + klen] == 9u8 {
+                        /* walk to the 3rd field (status): skip key\t tuple\t */
+                        let mut p : u64 = i + klen + 1u64
+                        /* skip tuple field to its TAB */
+                        let mut s1 : u32 = 1u32
+                        while s1 == 1u32 {
+                            if p >= GT_LEDN { s1 = 0u32 }
+                            else { if GT_LED[p] == 9u8 { p = p + 1u64   s1 = 0u32 } else { p = p + 1u64 } }
+                        }
+                        /* p now at status field start */
+                        if gt_match_at(p, "PASS-family" as u64, 11u64) == 1u32 { return 3u32 }
+                        if gt_match_at(p, "PASS" as u64, 4u64) == 1u32 { return 1u32 }
+                        if gt_match_at(p, "WRONG" as u64, 5u64) == 1u32 { return 2u32 }
+                        return 0u32
+                    }
+                }
+            }
+        }
+        if GT_LED[i] == 10u8 { at_bol = 1u32 } else { at_bol = 0u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* count rows whose status field is exactly PASS (not PASS-family) / WRONG */
+fn gt_count(kind: u32) -> u64 {
+    let mut i : u64 = 0u64
+    let mut at_bol : u32 = 1u32
+    let mut cnt : u64 = 0u64
+    while i < GT_LEDN {
+        if at_bol == 1u32 {
+            /* advance to the 3rd field of this row */
+            let mut p : u64 = i
+            let mut tabs : u32 = 0u32
+            let mut walk : u32 = 1u32
+            while walk == 1u32 {
+                if p >= GT_LEDN { walk = 0u32 }
+                else {
+                    if GT_LED[p] == 10u8 { walk = 0u32 }
+                    else {
+                        if GT_LED[p] == 9u8 { tabs = tabs + 1u32   if tabs == 2u32 { walk = 0u32 } }
+                        p = p + 1u64
+                    }
+                }
+            }
+            if tabs == 2u32 {
+                if kind == 1u32 {
+                    /* exactly "PASS" then TAB (excludes "PASS-family") */
+                    if gt_match_at(p, "PASS" as u64, 4u64) == 1u32 {
+                        if p + 4u64 < GT_LEDN { if GT_LED[p + 4u64] == 9u8 { cnt = cnt + 1u64 } }
+                    }
+                }
+                if kind == 2u32 {
+                    if gt_match_at(p, "WRONG" as u64, 5u64) == 1u32 {
+                        if p + 5u64 < GT_LEDN { if GT_LED[p + 5u64] == 9u8 { cnt = cnt + 1u64 } }
+                    }
+                }
+            }
+        }
+        if GT_LED[i] == 10u8 { at_bol = 1u32 } else { at_bol = 0u32 }
+        i = i + 1u64
+    }
+    return cnt
+}
+fn gate_count_pass() -> u64 @export { return gt_count(1u32) }
+fn gate_count_wrong() -> u64 @export { return gt_count(2u32) }
+fn gate_ledger_bytes() -> u64 @export { return GT_LEDN }

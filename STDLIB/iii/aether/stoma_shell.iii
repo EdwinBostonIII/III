@@ -35,6 +35,17 @@ extern @abi(c-msvc-x64) fn vb_k_plain() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_exit() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_extern() -> u32 from "stoma_verb.iii"
 extern @abi(c-msvc-x64) fn vb_k_err() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_gate() -> u32 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_k_seal() -> u32 from "stoma_verb.iii"
+
+extern @abi(c-msvc-x64) fn gate_ledger_load(path: u64) -> i32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_status(kat: u64, klen: u64) -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_count_pass() -> u64 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_count_wrong() -> u64 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_run(cmd: u64, want: u32, cap_ms: u32) -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_last_code() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_bash_would_see() -> u32 from "stoma_gate.iii"
+extern @abi(c-msvc-x64) fn gate_full_vs_bash_diverges() -> u32 from "stoma_gate.iii"
 
 extern @abi(c-msvc-x64) fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
@@ -137,6 +148,60 @@ fn sh_ls() -> i32 {
     return 0i32
 }
 
+/* gate: native cockpit over the cone system.  `gate` alone shows the VERIFIED.tsv tallies;
+ * `gate <kat>` shows one KAT's ledger status -- all read natively (no grep/awk). */
+fn sh_gate() -> i32 {
+    if gate_ledger_load("STDLIB/build/VERIFIED.tsv" as u64) != 0i32 {
+        vb_emit("gate: no ledger at STDLIB/build/VERIFIED.tsv (run verify_cone.sh first)\n" as u64, 66u64)
+        return 0i32
+    }
+    if vb_ntok() >= 2u64 {
+        let klen : u64 = vb_tok_len(1u64)
+        let st : u32 = gate_status(vb_tok_ptr(1u64), klen)
+        vb_emit("gate " as u64, 5u64)
+        vb_emit(vb_tok_ptr(1u64), klen)
+        vb_emit(": " as u64, 2u64)
+        if st == 1u32 { vb_emit("PASS\n" as u64, 5u64) }
+        else { if st == 2u32 { vb_emit("WRONG\n" as u64, 6u64) }
+        else { if st == 3u32 { vb_emit("PASS-family\n" as u64, 12u64) }
+        else { vb_emit("absent (not yet verified)\n" as u64, 26u64) } } }
+    } else {
+        vb_emit("gate ledger: PASS=" as u64, 18u64)
+        vb_emit_num(gate_count_pass())
+        vb_emit(" WRONG=" as u64, 7u64)
+        vb_emit_num(gate_count_wrong())
+        vb_emit("\n" as u64, 1u64)
+    }
+    return 0i32
+}
+
+/* seal: drive the existing province router (seal_route.sh) -- reuse, don't reimplement.  The
+ * raw line's tail (after "seal ") names the changed files; seal_route decides organ vs compiler. */
+fn sh_seal() -> i32 {
+    /* build "bash STDLIB/scripts/seal_route.sh <tail>" from the raw line after the verb token */
+    let tail_off : u64 = 5u64                    /* len("seal ") when args present */
+    let mut o : u64 = 0u64
+    let pfx : *u8 = "bash STDLIB/scripts/seal_route.sh " as *u8
+    while o < 34u64 { SH_TMP[o] = pfx[o]   o = o + 1u64 }
+    let ll : u64 = vb_line_len()
+    let lp : *u8 = vb_line_ptr() as *u8
+    if ll > tail_off {
+        let mut i : u64 = tail_off
+        while i < ll {
+            if o < 1020u64 { SH_TMP[o] = lp[i]   o = o + 1u64 }
+            i = i + 1u64
+        }
+    }
+    SH_TMP[o] = 0u8
+    let rc : i32 = proc_run((&SH_TMP) as u64, 0u64, 120000u32)
+    if rc < 0i32 { vb_emit("seal: cannot spawn seal_route.sh\n" as u64, 32u64)   return 0i32 }
+    let mut olen : u64 = proc_out_len()
+    if olen > 262144u64 { olen = 262144u64 }
+    proc_out_copy((&SH_STG) as u64, 0u64, olen)
+    vb_emit((&SH_STG) as u64, olen)
+    return 0i32
+}
+
 /* external: run the raw line captured (pipe mode), copy child stdout to transcript + "exit N". */
 fn sh_extern() -> i32 {
     let rc : i32 = proc_run(vb_line_ptr(), 0u64, 60000u32)
@@ -176,8 +241,10 @@ fn shell_feed_line(line: u64, llen: u64) -> u32 @export {
     else { if k == vb_k_help() { vb_do_help() }
     else { if k == vb_k_plain() { SH_PLAIN = 1u32   vb_emit("[plain mode]\n" as u64, 13u64) }
     else { if k == vb_k_exit() { sig = 2u32 }
-    else { sh_extern() }                              /* EXTERN + (M4) gate/seal/build fallthrough */
-    } } } } } } } }
+    else { if k == vb_k_gate() { sh_gate() }
+    else { if k == vb_k_seal() { sh_seal() }
+    else { sh_extern() }                              /* EXTERN + (M4) build fallthrough */
+    } } } } } } } } } }
 
     /* journal the transcript output (verbatim) */
     journal_append(2u32, vb_out_ptr(), vb_out_len())

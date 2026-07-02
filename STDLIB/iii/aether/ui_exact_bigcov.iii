@@ -126,15 +126,8 @@ fn biground(ar: u64, ansg: i64, anm: u64, bnsg: i64, bnm: u64, cnsg: i64, cnm: u
     return lo
 }
 
-/* DEBUG: round the i64-magnitude coeffs (an + bn sqrt dhi + cn sqrt dlo)/den via biground -- to bisect biground
- * against the proven ui_sym_round on identical coefficients. */
-fn ui_bigc_round_i64dbg(an: i64, bn: i64, cn: i64, den: i64, dhi: i64, dlo: i64, sa: i64) -> i64 @export {
-    let ar : u64 = arena_new(1048576u64)
-    let r : i64 = biground(ar, isign64(an), bigint_from_u64(ar, iabs64(an)), isign64(bn), bigint_from_u64(ar, iabs64(bn)), isign64(cn), bigint_from_u64(ar, iabs64(cn)), bigint_from_u64(ar, iabs64(den)), dhi, dlo, sa)
-    bigint_drop_arena(ar)
-    arena_drop(ar)
-    return r
-}
+/* (the biground-vs-ui_sym_round debug bisector ui_bigc_round_i64dbg was removed by the reunification
+ * coverage sweep: zero callers, zero corpus refs, dbg-only surface -- git history preserves it.) */
 
 /* The RAW area-at-crossing numerator pp,qq (G(t)=(pp + b qq sqrt D)/(6 c^4)) computed in BIGINT from the i64 control
  * points + crossing (a,c,dD).  ui_exact's i64 ui_bez_area_at_t builds pp = g1 c^3 a + g2 c^2 (a^2+D) + ... ~ coord^6,

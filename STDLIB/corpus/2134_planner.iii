@@ -16,6 +16,7 @@ extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
 extern @abi(c-msvc-x64) fn re_cmp(eidA: u32, eidB: u32) -> i32 from "ripple_eidolon.iii"
 extern @abi(c-msvc-x64) fn ep_reset() -> i32 from "eid_plan.iii"
 extern @abi(c-msvc-x64) fn ep_add(eid: u32) -> i32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_count() -> u32 from "eid_plan.iii"
 extern @abi(c-msvc-x64) fn ep_build() -> u32 from "eid_plan.iii"
 extern @abi(c-msvc-x64) fn ep_node_at(rank: u32) -> u32 from "eid_plan.iii"
 extern @abi(c-msvc-x64) fn ep_root(out32: u64) -> i32 from "eid_plan.iii"
@@ -34,7 +35,9 @@ fn main() -> u64 {
 
     /* build 1: scrambled input */
     ep_reset()
+    if ep_count() != 0u32 { return 11u64 }                             /* reunification W0.2 arm: gauge resets */
     ep_add(cc)   ep_add(qq)   ep_add(aa)   ep_add(cd)   ep_add(pp)   ep_add(bb)
+    if ep_count() != 6u32 { return 12u64 }                             /* ...and counts every pending add */
     let k : u32 = ep_build()
     if k != 5u32 { return 1u64 }                                       /* 6 inputs deduped to 5 nodes */
     if re_cmp(ep_node_at(0u32), ep_node_at(1u32)) != 1i32 { return 2u64 }

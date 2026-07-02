@@ -20,6 +20,10 @@
  *      reach_verdict flips to COMPLETE, the call graph itself is UNCHANGED (5 edges:
  *      corpus changes move roots, never edges).
  *  (3) THE SEAL -- the 1-dark seal differs from the 0-dark seal; re-audit reproduces.
+ *  (4) APP-SURFACE (reunification W0.2) -- a module whose raw text carries APP-SURFACE-MODULE
+ *      declares its exports app-class: its unreached export is EXCLUDED from the v3 dark census
+ *      (counted by cov_n_appsurface) while v1 semantics are untouched; strip the marker and the
+ *      same export is flagged dark again -- the designation gates exactly the marked module.
  * Exit 99. */
 module corpus_1464
 
@@ -34,6 +38,7 @@ extern @abi(c-msvc-x64) fn cov_unreachable_name(i: u64, out_addr: u64) -> u64 fr
 extern @abi(c-msvc-x64) fn cov_reach_report_write(cap: u64, path: u64) -> i32 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cov_overflow() -> u8 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cov_n_trunc() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_appsurface() -> u64 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cov_seal(out: *u8) -> i32 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
@@ -51,6 +56,7 @@ var P_ROOT : [u8; 64]
 var P_MODS : [u8; 64]
 var P_CORP : [u8; 64]
 var P_G    : [u8; 64]
+var P_A    : [u8; 64]
 var P_T1   : [u8; 64]
 var P_T2   : [u8; 64]
 var P_REP  : [u8; 64]
@@ -122,6 +128,7 @@ fn rname_is(i: u64, lit_addr: u64, n: u64) -> u8 {
 
 fn teardown(cap: u64) {
     fs_delete(cap, (&P_G as u64))
+    fs_delete(cap, (&P_A as u64))
     fs_delete(cap, (&P_T1 as u64))
     fs_delete(cap, (&P_T2 as u64))
     fs_delete(cap, (&P_REP as u64))
@@ -138,6 +145,7 @@ fn main() -> u64 {
     catlit((&P_MODS as u64), (&P_ROOT as u64), ("/mods" as u64), 5u64)
     catlit((&P_CORP as u64), (&P_ROOT as u64), ("/corpus" as u64), 7u64)
     catlit((&P_G  as u64), (&P_MODS as u64), ("/g.iii" as u64), 6u64)
+    catlit((&P_A  as u64), (&P_MODS as u64), ("/a.iii" as u64), 6u64)
     catlit((&P_T1 as u64), (&P_CORP as u64), ("/t1.iii" as u64), 7u64)
     catlit((&P_T2 as u64), (&P_CORP as u64), ("/t2.iii" as u64), 7u64)
     catlit((&P_REP as u64), (&P_ROOT as u64), ("/rreport.txt" as u64), 12u64)
@@ -227,6 +235,28 @@ fn main() -> u64 {
     cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
     if cov_seal((&SEAL_C as u64) as *u8) != 0i32 { teardown(cap)   return 36u64 }
     if cad_eq((&SEAL_B as u64) as *u8, (&SEAL_C as u64) as *u8) != 1u8 { teardown(cap)   return 37u64 }
+
+    /* ============ AUDIT #3: the APP-SURFACE designation gates exactly the marked module ============ */
+    /* a.iii carries the marker in a comment; its lone export a_pump is referenced by NOTHING. */
+    kc_reset()
+    kc_lit(("module a" as u64), 8u64)   kc_nl()
+    kc_lit(("/* APP-SURFACE-MODULE: window pump fixture */" as u64), 45u64)   kc_nl()
+    kc_lit(("fn a_pump(x: u32) -> u32 @export { return x }" as u64), 45u64)   kc_nl()
+    if kc_write(cap, (&P_A as u64)) != 0i32 { teardown(cap)   return 40u64 }
+    let unc3 : u64 = cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_n_exports() != 9u64 { teardown(cap)   return 41u64 }
+    if unc3 != 1u64 { teardown(cap)   return 42u64 }              /* v1 UNTOUCHED: a_pump is unreferenced */
+    if cov_n_unreachable() != 0u64 { teardown(cap)   return 43u64 }   /* v3: excluded by the designation */
+    if cov_n_appsurface() != 1u64 { teardown(cap)   return 44u64 }    /* ...and counted as app-class */
+    /* TEETH: strip the marker -- the same export must be flagged dark again */
+    kc_reset()
+    kc_lit(("module a" as u64), 8u64)   kc_nl()
+    kc_lit(("fn a_pump(x: u32) -> u32 @export { return x }" as u64), 45u64)   kc_nl()
+    if kc_write(cap, (&P_A as u64)) != 0i32 { teardown(cap)   return 45u64 }
+    cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_n_unreachable() != 1u64 { teardown(cap)   return 46u64 }
+    if cov_n_appsurface() != 0u64 { teardown(cap)   return 47u64 }
+    if rname_is(0u64, ("a_pump" as u64), 6u64) != 1u8 { teardown(cap)   return 48u64 }
 
     teardown(cap)
     return 99u64

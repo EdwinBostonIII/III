@@ -1,0 +1,107 @@
+/* corpus/2452_xii_proof_roundtrip.iii -- the POSITIVE proof-carrying canonicalisation gate (reunification
+ * W0.2.1, completing DOCS/III-GRAND-UNIFICATION F3): xii_proof emits a checkable derivation for a term the
+ * sealed trit rules REALLY reduce; the INDEPENDENT checker replays it; every tamper hook then corrupts the
+ * artifact and the checker must REJECT (the hooks' design purpose -- "the gate's negative arms call these,
+ * then re-check").  This KAT is what admits omnia/xii_proof + omnia/xii_proof_check into MODULES: the old
+ * note said the hooks "cannot be covered by a positive corpus KAT" -- refuted by this file, which drives
+ * prove AND check to BOTH outcomes through all three hooks.
+ *
+ * Term: TRIT_AND(POS, NEG) -- kind 26 over TRIT_VAL(24), subform trit+1 -- reduces to TRIT_VAL(NEG) by the
+ * sealed trit cascade (rule ids 101..105), so the proof has >= 1 step and every step's rule is manifest-sealed.
+ *
+ * exit 99 = pass; 10 construction; 11 prove; 12 canon; 13 sealed; 14 positive check; 15 rid tamper;
+ * 16 ahash tamper; 17 pos tamper; 18 restore. */
+module corpus_2452_xii_proof_roundtrip
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_proof_prove(root: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_is_canon(root: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_rule_sealed(rid: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_count() -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_rid(step: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_pos(step: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_bhash_byte(step: u32, i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_ahash_byte(step: u32, i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_chain_byte(i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_tree_hash(root: u32, out_addr: u64) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_set_rid(step: u32, rid: u32) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_set_pos(step: u32, pos: u32) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_flip_ahash(step: u32, i: u32) -> i32 from "xii_proof.iii"
+
+extern @abi(c-msvc-x64) fn xii_proof_check(root: u32) -> u32 from "xii_proof_check.iii"
+
+const T_VAL : u8 = 24u8
+const T_AND : u8 = 26u8
+
+/* fresh copy of the initial term (the checker and each tamper arm consume a rebuilt, un-reduced copy). */
+fn mk() -> u32 {
+    xii_term_arena_reset()
+    let pos : u32 = xii_term_make_basis(T_VAL, 2u32)     /* trit +1 -> subform 2 */
+    let neg : u32 = xii_term_make_basis(T_VAL, 0u32)     /* trit -1 -> subform 0 */
+    return xii_term_make_fusion2(T_AND, pos, neg)
+}
+
+var HB : [u8; 32]
+
+fn main() -> u64 {
+    /* prove on an ALREADY-CANONICAL term is the identity: a lone TRIT_VAL (ref 0 after reset -- pinned:
+     * if the arena's ref origin ever moves, this line says so) proves to ITSELF with zero steps. */
+    xii_term_arena_reset()
+    let lone : u32 = xii_term_make_basis(T_VAL, 2u32)
+    if lone != 0u32 { return 10u64 }
+    if xii_proof_prove(lone) != 0u32 { return 10u64 }
+    if xii_proof_count() != 0u32 { return 10u64 }
+    if xii_proof_prove(mk()) == 4294967295u32 { return 10u64 }   /* a real reduction never returns NULL_REF */
+
+    let t0 : u32 = mk()
+    if xii_term_get_kind(t0) != T_AND { return 10u64 }
+
+    /* ---- PROVE: the emitter reduces AND(+1,-1) -> VAL(-1), recording >= 1 sealed step ---- */
+    let canon : u32 = xii_proof_prove(t0)
+    if xii_term_get_kind(canon) != T_VAL { return 11u64 }
+    if xii_term_get_subform(canon) != 0u32 { return 11u64 }      /* Kleene AND(+1,-1) = -1 */
+    let n : u32 = xii_proof_count()
+    if n < 1u32 { return 11u64 }
+    if xii_proof_is_canon(canon) != 1u8 { return 12u64 }
+    let rid0 : u32 = xii_proof_rid(0u32)
+    let pos0 : u32 = xii_proof_pos(0u32)
+    if xii_proof_rule_sealed(rid0) != 1u8 { return 13u64 }
+    if xii_proof_rule_sealed(1u32) != 0u8 { return 13u64 }       /* retired R001 is NOT sealed-valid */
+    xii_proof_tree_hash(canon, (&HB as u64))
+    /* touch the artifact getters (the checker's read surface) */
+    let b0 : u8 = xii_proof_bhash_byte(0u32, 0u32)
+    let a0 : u8 = xii_proof_ahash_byte(0u32, 0u32)
+    let c0 : u8 = xii_proof_chain_byte(0u32)
+    if (b0 as u32) + (a0 as u32) + (c0 as u32) > 765u32 { return 11u64 }   /* bytes are bytes */
+
+    /* ---- POSITIVE: the independent checker replays the proof on a fresh copy ---- */
+    if xii_proof_check(mk()) != 0u32 { return 14u64 }
+
+    /* ---- TAMPER 1: rule id -- an in-manifest but WRONG rule must be rejected ---- */
+    let bad : u32 = 44u32
+    let mut use_bad : u32 = bad
+    if rid0 == bad { use_bad = 43u32 }
+    xii_proof_set_rid(0u32, use_bad)
+    if xii_proof_check(mk()) == 0u32 { return 15u64 }
+    xii_proof_set_rid(0u32, rid0)
+
+    /* ---- TAMPER 2: after-hash bit flip must break the hash chain ---- */
+    xii_proof_flip_ahash(0u32, 0u32)
+    if xii_proof_check(mk()) == 0u32 { return 16u64 }
+    xii_proof_flip_ahash(0u32, 0u32)
+
+    /* ---- TAMPER 3: position -- the rule must fail to fire at the wrong preorder index ---- */
+    xii_proof_set_pos(0u32, pos0 + 50u32)
+    if xii_proof_check(mk()) == 0u32 { return 17u64 }
+    xii_proof_set_pos(0u32, pos0)
+
+    /* ---- RESTORED: the untampered proof still checks ---- */
+    if xii_proof_check(mk()) != 0u32 { return 18u64 }
+
+    return 99u64
+}

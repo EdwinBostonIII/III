@@ -1,0 +1,177 @@
+/* corpus/2450_au_crush_conform.iii -- THE HOLOGRAPHIC-CONFORMANCE ORGAN'S CORPUS GATE (reunification W0.2.5).
+ *
+ * ser_antiunify's au_ tier (crush ledger -> merkle-sealed report -> TCB genesis gate -> netlist annealing ->
+ * bounded conformance) was gated only by sovir runners whose generated KAT sources died with build/sovir/ --
+ * the organ was SOUND yet corpus-dark (finding: III-REUNIFICATION-PLAN W0 execution record).  This KAT is the
+ * organ's primary corpus witness: a hand-assembled SVIR module (the format au_crush_svir_module itself parses:
+ * [nfunc][params,nresults,blen u16 LE,body]; loop = 0x41 ... 0x51 body 0x50 0x44) is crushed, reported, merkle-
+ * sealed, TCB-admitted; a second module with different geometry must CHANGE the root and be REFUSED by the
+ * genesis gate.  The netlist annealer folds a constant circuit to one wire.  Conformance returns all THREE
+ * verdicts on three bodies: VIOL (delta 7 vs bound 1000 -> breach at iteration 143), OK (delta 0), DEFER (MUL).
+ * The pure tier proves the arithmetic + triangular recurrences and REFUTES the brk-perturbed step (the teeth).
+ *
+ * exit 99 = pass; 10 pure-tier; 11 crucible; 12 netlist; 13 crush/report; 14 merkle; 15 tcb; 16 conform. */
+module corpus_2450_au_crush_conform
+
+extern @abi(c-msvc-x64) fn au_prove_recurrence(op: u32, arg: u64, delta: u64) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic(s0: u64, b: u64, c: u64) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic_gen(s0: u64, b: u64, c: u64, brk: u64) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_amputate_quadratic(b0: u64, c: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crucible_scalar(op: u32, arg: u64, seed: u64, nn: u64) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crucible_stride(base: u64, stride: u64, nn: u64, valbits: u64) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_svir_to_netlist(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_eval() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_fold() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_live() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_out() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_op(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_a(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_b(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_k(i: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crush_svir_module(base: u64, len: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_off(i: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_delta(i: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_hash() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_leaf(i: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_merkle_root() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_merkle_open(target: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_merkle_check(leaf_hash: u64, target: u32, root: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tcb_seal() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tcb_genesis() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tcb_admits() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_bound(base: u64, boff: u64, blen: u64, accum: u32, acc0: u64, bound: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_iter() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_witness() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_delta() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_amputate_stride(base: u64, stride: u64, nn: u64) -> u64 from "ser_antiunify.iii"
+
+const NONE64 : u64 = 18446744073709551615u64   /* AU_NONE64 */
+
+/* fn body (32 bytes): LOOP; [GET0, CONST 100, EQ, BR_IF 0]; body{GET0, CONST d, ADD, SET0}; BR 0; END */
+var M1 : [u8; 37]    /* module: delta 7 */
+var M2 : [u8; 37]    /* module: delta 9 (different geometry) */
+var NB : [u8; 20]    /* netlist: CONST 5, CONST 7, ADD, RET */
+var B7 : [u8; 14]    /* body: acc += 7 */
+var B0 : [u8; 14]    /* body: acc += 0 */
+var BM : [u8; 14]    /* body: acc *= 2 (non-affine) */
+
+fn fill_body(a: u64, delta: u8, opk: u8) {
+    let p : *u8 = a as *u8
+    p[0u64] = 0x10u8   p[1u64] = 0u8                 /* LOCAL_GET 0 */
+    p[2u64] = 0x01u8   p[3u64] = delta               /* CONST delta (LE, high bytes 0) */
+    p[4u64] = 0u8  p[5u64] = 0u8  p[6u64] = 0u8  p[7u64] = 0u8  p[8u64] = 0u8  p[9u64] = 0u8  p[10u64] = 0u8
+    p[11u64] = opk                                    /* 0x20 ADD / 0x22 MUL */
+    p[12u64] = 0x11u8  p[13u64] = 0u8                /* LOCAL_SET 0 */
+}
+fn fill_module(a: u64, delta: u8) {
+    let p : *u8 = a as *u8
+    p[0u64] = 1u8                                     /* nfunc */
+    p[1u64] = 0u8   p[2u64] = 0u8                     /* params, nresults */
+    p[3u64] = 32u8  p[4u64] = 0u8                     /* blen u16 LE = 32 */
+    /* fn body at offset 5 */
+    p[5u64]  = 0x41u8                                 /* LOOP */
+    p[6u64]  = 0x10u8  p[7u64] = 0u8                  /* GET0 */
+    p[8u64]  = 0x01u8  p[9u64] = 100u8                /* CONST 100 */
+    p[10u64] = 0u8  p[11u64] = 0u8  p[12u64] = 0u8  p[13u64] = 0u8  p[14u64] = 0u8  p[15u64] = 0u8  p[16u64] = 0u8
+    p[17u64] = 0x30u8                                 /* EQ */
+    p[18u64] = 0x51u8  p[19u64] = 0u8                 /* BR_IF 0 -> body starts at 20 */
+    fill_body(a + 20u64, delta, 0x20u8)               /* 14-byte body */
+    p[34u64] = 0x50u8  p[35u64] = 0u8                 /* BR 0 (back edge) */
+    p[36u64] = 0x44u8                                 /* END */
+}
+
+fn main() -> u64 {
+    /* ---- pure tier: the recurrence guillotines + the brk teeth ---- */
+    if au_prove_recurrence(0u32, 7u64, 7u64) != 1u8 { return 10u64 }
+    if au_prove_recurrence(0u32, 7u64, 8u64) != 0u8 { return 10u64 }     /* wrong delta REFUTED */
+    if au_prove_quadratic(0u64, 3u64, 2u64) != 1u8 { return 10u64 }
+    if au_prove_quadratic(5u64, 1u64, 4u64) == 0u8 { return 10u64 }            /* another instance must NOT refute */
+    if au_prove_quadratic_gen(0u64, 3u64, 2u64, 0u64) != 1u8 { return 10u64 }  /* unbroken step PROVEN */
+    if au_prove_quadratic_gen(0u64, 3u64, 2u64, 1u64) != 0u8 { return 10u64 }  /* brk-perturbed step REFUTED */
+    if au_amputate_quadratic(3u64, 2u64, 10u64) != 1u32 { return 10u64 }
+
+    /* ---- crucible: affine crushes to its closed form; geometric honestly defers; stride teeth ---- */
+    if au_crucible_scalar(0u32, 7u64, 5u64, 10u64) != 75u64 { return 11u64 }
+    if au_crucible_scalar(1u32, 2u64, 5u64, 10u64) != NONE64 { return 11u64 }
+    let d1 : u64 = au_amputate_stride(100u64, 8u64, 4u64)
+    if d1 == NONE64 { return 11u64 }
+    let r1 : u64 = au_crucible_stride(100u64, 8u64, 4u64, 7u64)
+    let r2 : u64 = au_crucible_stride(100u64, 8u64, 4u64, 7u64)
+    let r3 : u64 = au_crucible_stride(100u64, 16u64, 4u64, 7u64)
+    if r1 == 0u64 { return 11u64 }
+    if r1 != r2 { return 11u64 }                       /* same geometry -> same holographic root */
+    if r1 == r3 { return 11u64 }                       /* different geometry -> different root */
+
+    /* ---- netlist: parse, evaluate, anneal to one wire ---- */
+    let nba : u64 = &NB as u64
+    let p : *u8 = nba as *u8
+    p[0u64] = 0x01u8  p[1u64] = 5u8
+    p[2u64] = 0u8  p[3u64] = 0u8  p[4u64] = 0u8  p[5u64] = 0u8  p[6u64] = 0u8  p[7u64] = 0u8  p[8u64] = 0u8
+    p[9u64] = 0x01u8  p[10u64] = 7u8
+    p[11u64] = 0u8  p[12u64] = 0u8  p[13u64] = 0u8  p[14u64] = 0u8  p[15u64] = 0u8  p[16u64] = 0u8  p[17u64] = 0u8
+    p[18u64] = 0x20u8  p[19u64] = 0x60u8
+    let outn : u32 = au_svir_to_netlist((&NB as u64), 0u64, 20u64)
+    if outn != 2u32 { return 12u64 }
+    if au_nl_n() != 3u32 { return 12u64 }
+    if au_nl_out() != 2u32 { return 12u64 }
+    if au_nl_k(0u32) != 5u64 { return 12u64 }
+    if au_nl_k(1u32) != 7u64 { return 12u64 }
+    if au_nl_a(2u32) != 0u32 { return 12u64 }
+    if au_nl_b(2u32) != 1u32 { return 12u64 }
+    if au_nl_op(2u32) != 0x20u32 { return 12u64 }
+    if au_netlist_eval() != 12u64 { return 12u64 }
+    if au_netlist_fold() != 1u32 { return 12u64 }      /* const+const folds */
+    if au_netlist_live() != 1u32 { return 12u64 }      /* whole circuit collapsed to one wire */
+
+    /* ---- crush a real module: one affine loop, proven and ledgered ---- */
+    fill_module((&M1 as u64), 7u8)
+    fill_module((&M2 as u64), 9u8)
+    let c1 : u32 = au_crush_svir_module((&M1 as u64), 37u64, 0u32)
+    if c1 != 1u32 { return 13u64 }
+    if au_report_n() != 1u32 { return 13u64 }
+    if au_report_verdict(0u32) != 1u32 { return 13u64 }
+    if au_report_delta(0u32) != 7u64 { return 13u64 }
+    if au_report_off(0u32) != 5u64 { return 13u64 }    /* the loop's absolute offset in the module */
+    let h1 : u64 = au_report_hash()
+    if h1 != au_report_hash() { return 13u64 }         /* the ledger hash is stable */
+    /* single-body crush_report on the raw fn body reproduces the same single-loop ledger */
+    let cr : u32 = au_crush_report((&M1 as u64), 5u64, 32u64, 0u32)
+    if cr != 1u32 { return 13u64 }
+
+    /* ---- merkle: open + check, and a flipped leaf must be REJECTED ---- */
+    let c1b : u32 = au_crush_svir_module((&M1 as u64), 37u64, 0u32)
+    if c1b != 1u32 { return 14u64 }
+    let root : u64 = au_report_merkle_root()
+    let leaf : u64 = au_report_leaf(0u32)
+    au_merkle_open(0u32)
+    if au_merkle_check(leaf, 0u32, root) != 1u32 { return 14u64 }
+    if au_merkle_check(leaf ^ 1u64, 0u32, root) == 1u32 { return 14u64 }
+
+    /* ---- tcb: seal genesis, admit; a different module must be refused ---- */
+    let g : u64 = au_tcb_seal()
+    if g != root { return 15u64 }
+    if au_tcb_genesis() != root { return 15u64 }
+    if au_tcb_admits() != 1u32 { return 15u64 }
+    let c2 : u32 = au_crush_svir_module((&M2 as u64), 37u64, 0u32)
+    if c2 != 1u32 { return 15u64 }
+    if au_report_merkle_root() == root { return 15u64 }   /* geometry changed -> root changed */
+    if au_tcb_admits() != 0u32 { return 15u64 }           /* the genesis gate REFUSES the drifted module */
+
+    /* ---- conformance: all three verdicts, closed-form breach pinpoint ---- */
+    fill_body((&B7 as u64), 7u8, 0x20u8)
+    fill_body((&B0 as u64), 0u8, 0x20u8)
+    fill_body((&BM as u64), 2u8, 0x22u8)
+    let v : u32 = au_conform_bound((&B7 as u64), 0u64, 14u64, 0u32, 0u64, 1000u64)
+    if v != 0u32 { return 16u64 }                       /* VIOL */
+    if au_conform_iter() != 143u64 { return 16u64 }     /* first n with 7n >= 1000 */
+    if au_conform_delta() != 7u64 { return 16u64 }
+    au_conform_witness()                                 /* the bit-level breaking state (referenced) */
+    if au_conform_bound((&B0 as u64), 0u64, 14u64, 0u32, 5u64, 1000u64) != 1u32 { return 16u64 }   /* OK */
+    if au_conform_bound((&BM as u64), 0u64, 14u64, 0u32, 5u64, 1000u64) != 2u32 { return 16u64 }   /* DEFER */
+
+    return 99u64
+}

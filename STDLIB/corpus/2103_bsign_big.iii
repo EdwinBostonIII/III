@@ -7,6 +7,7 @@ module corpus_2103_bsign_big
 extern @abi(c-msvc-x64) fn ui_bsign1(u: i64, v: i64, dD: i64) -> i32 from "ui_exact_big.iii"
 extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "ui_exact_big.iii"
 extern @abi(c-msvc-x64) fn ui_arc_cover2d_big(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_big.iii"
+extern @abi(c-msvc-x64) fn ui_bigc_check_coeffs(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact_bigcov.iii"
 
 fn main() -> u64 {
     /* 5e9 - 3.5e9*sqrt2 = 5e9 - 4.9497e9 = +0.0503e9 > 0.  |u|^2=2.5e19 > v^2 D=2.45e19 -> +1.  (i64 would overflow.) */
@@ -44,6 +45,12 @@ fn main() -> u64 {
     if ui_arc_cover2d_big(40i64, 160i64, 140i64, 180i64, 0i64 - 280i64, 280i64, 100i64, 90i64, 255i64) != 255i64 { return 16u64 }
     /* arc below the row [181,182] (f<=180) -> empty (the binary search clamps coverage<0 to 0) */
     if ui_arc_cover2d_big(40i64, 160i64, 140i64, 180i64, 0i64 - 280i64, 280i64, 100i64, 181i64, 255i64) != 0i64 { return 17u64 }
+
+    /* === reunification W0.2 arm: the i64-vs-bigint coefficient CHECKER, both outcomes (gate-stem v2).
+     * On the small assembled curve the two paths must AGREE (mask 0); an out-of-extent pixel must be
+     * refused through the selector (500 + selk 3 = 503), never silently checked. */
+    if ui_bigc_check_coeffs(0i64, 2i64, 2i64, 0i64, 2i64, 0i64 - 2i64, 1i64, 1i64, 255i64) != 0i64 { return 18u64 }
+    if ui_bigc_check_coeffs(0i64, 2i64, 2i64, 0i64, 2i64, 0i64 - 2i64, 100i64, 0i64, 255i64) != 503i64 { return 19u64 }
 
     return 99u64
 }

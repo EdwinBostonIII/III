@@ -1,0 +1,49 @@
+/* corpus/2451_causal_witness.iii -- ser_causal's LAW-WITNESS surface, corpus-gated (reunification W0.2.5).
+ *
+ * The et_/etat_ demonstration exports encode the causal algebra's law instances: the THREE composition
+ * verdicts (superpose 0 / commute 1 / collide 2), epoch crystallization (disjoint regions -> ONE epoch,
+ * an overlap -> TWO), the holographic root's reorder-invariance (commuting writes) vs geometry-sensitivity,
+ * the memory model's soundness lemma WITH teeth (the unguarded same-index reorder must be refutable), the
+ * refinement row (whose wrong-model arm must fail), and seq-equiv memory demonstration pair (reordered
+ * disjoint writes PROVEN equal; a genuinely different effect REFUTED).  They had zero corpus references --
+ * law witnesses no gate was watching.  This KAT asserts every documented verdict.
+ *
+ * exit 99 = pass; 10 commute-verdicts; 11 crystallize; 12 holographic root; 13 mem soundness; 14 refinement;
+ * 15 demo pair. */
+module corpus_2451_causal_witness
+
+extern @abi(c-msvc-x64) fn et_commute_superpose_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_commute_commute_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_commute_collide_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_crystallize_demo() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_crystallize_demo_collide() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_reorder() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_reorder_swapped() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_different() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_mem_sound() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_refines_row() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn etat_mem_demo_reorder() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn etat_mem_demo_diff() -> u8 from "ser_causal.iii"
+
+fn main() -> u64 {
+    if et_commute_superpose_case() != 0u32 { return 10u64 }   /* genuinely ambiguous -> SUPERPOSE */
+    if et_commute_commute_case()   != 1u32 { return 10u64 }   /* disjoint -> COMMUTE */
+    if et_commute_collide_case()   != 2u32 { return 10u64 }   /* overlap -> COLLIDE */
+
+    if et_crystallize_demo()         != 1u32 { return 11u64 } /* 3 disjoint regions -> ONE epoch */
+    if et_crystallize_demo_collide() != 2u32 { return 11u64 } /* an overlap forces a boundary -> TWO */
+
+    let hr : u64 = et_holo_reorder()
+    let hs : u64 = et_holo_reorder_swapped()
+    let hd : u64 = et_holo_different()
+    if hr != hs { return 12u64 }                               /* commuting writes: root reorder-INVARIANT */
+    if hd == hr { return 12u64 }                               /* different geometry: root CHANGES */
+
+    if et_mem_sound() != 1u8 { return 13u64 }                  /* sound AND the unguarded reorder refutable */
+    if et_refines_row() != 1u8 { return 14u64 }                /* row holds AND the wrong model fails */
+
+    if etat_mem_demo_reorder() != 1u8 { return 15u64 }         /* disjoint reorder PROVEN equal at every j */
+    if etat_mem_demo_diff()    != 0u8 { return 15u64 }         /* different effect REFUTED */
+
+    return 99u64
+}

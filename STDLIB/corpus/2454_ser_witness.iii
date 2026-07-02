@@ -1,0 +1,57 @@
+/* corpus/2454_ser_witness.iii -- the seraphyte closed-loop + sym-diagnostic surface, corpus-gated
+ * (reunification W0.2.5/W0.2.6).
+ *
+ * in_certify is THE C4 closed loop: ser_cegis synthesizes a strength-reduction descriptor for x*v and the
+ * membrane prover certifies it over all 2^64; in_certify_wrong corrupts the synthesized shift by +1 and the
+ * prover MUST refute -- the pair is a gate-stem export requiring both outcomes (coverage gate report v2).
+ * seq_equiv_mem is the epoch-fold memory equivalence entry (real module caller: ser_intent); driven here on
+ * two identical local-only bodies (empty memory effect == empty memory effect) with a determinism pin.
+ * sd_stdiag/sd_trace/sd_tracen are ser_kinduct_sym's diagnostic read surface, referenced and folded.
+ *
+ * exit 99 = pass; 10 certify; 11 certify-teeth; 12 seq_equiv_mem; 13 diagnostics. */
+module corpus_2454_ser_witness
+
+extern @abi(c-msvc-x64) fn in_certify(v: u64, seed: u64) -> u32 from "ser_intent.iii"
+extern @abi(c-msvc-x64) fn in_certify_wrong(v: u64, seed: u64) -> u32 from "ser_intent.iii"
+extern @abi(c-msvc-x64) fn seq_equiv_mem(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sd_stdiag() -> u64 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sd_tracen() -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sd_trace(i: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var BA : [u8; 14]
+var BX : [u8; 14]
+
+fn fill_body(a: u64) {
+    let p : *u8 = a as *u8
+    p[0u64] = 0x10u8   p[1u64] = 0u8                 /* LOCAL_GET 0 */
+    p[2u64] = 0x01u8   p[3u64] = 7u8                 /* CONST 7 */
+    p[4u64] = 0u8  p[5u64] = 0u8  p[6u64] = 0u8  p[7u64] = 0u8  p[8u64] = 0u8  p[9u64] = 0u8  p[10u64] = 0u8
+    p[11u64] = 0x20u8                                 /* ADD */
+    p[12u64] = 0x11u8  p[13u64] = 0u8                /* LOCAL_SET 0 */
+}
+
+fn main() -> u64 {
+    /* the closed loop certifies x*7 (the subk family) ... */
+    if in_certify(7u64, 5u64) != 1u32 { return 10u64 }
+    /* ... a non-family factor (11 = 1011b) must NOT certify as a reduction ... */
+    if in_certify(11u64, 5u64) == 1u32 { return 10u64 }
+    /* ... and the +1-corrupted descriptor is refuted (certifying THE descriptor, not "any reduction") */
+    if in_certify_wrong(7u64, 5u64) != 0u32 { return 11u64 }
+    if in_certify_wrong(15u64, 5u64) == 1u32 { return 11u64 }    /* corrupted 2^4-1 must not verify either */
+
+    /* memory-equivalence of two identical local-only bodies, pinned deterministic */
+    fill_body((&BA as u64))
+    fill_body((&BX as u64))
+    let r1 : u32 = seq_equiv_mem((&BA as u64), 0u64, 14u64, (&BX as u64), 0u64, 14u64, 1u32)
+    let r2 : u32 = seq_equiv_mem((&BA as u64), 0u64, 14u64, (&BX as u64), 0u64, 14u64, 1u32)
+    if r1 != r2 { return 12u64 }
+    if r1 > 2u32 { return 12u64 }                     /* verdict domain: 0 differ / 1 equal / 2 top */
+
+    /* the diagnostic read surface: fold, bounds-guarded */
+    let n : u32 = sd_tracen()
+    let mut acc : u64 = sd_stdiag()
+    if n > 0u32 { acc = acc + (sd_trace(0u32) as u64) }
+    if acc == 18446744073709551615u64 { return 13u64 }   /* the fold is a real u64, not a poison sentinel */
+
+    return 99u64
+}

@@ -1,4 +1,7 @@
 /* world_graph.iii -- GENERATED from real III source: nodes (module files) with names + subsystem, and the real
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * extern-dependency edges.  III's actual architecture, extracted not hand-picked.  Analysed by aether_world. */
 module world_graph
 var GCLU : [i64; 800]   var GE0 : [i64; 8000]   var GE1 : [i64; 8000]

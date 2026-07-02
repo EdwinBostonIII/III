@@ -7,6 +7,7 @@ module corpus_2129_epoch
 extern @abi(c-msvc-x64) fn epoch_reset() -> i32 from "epoch.iii"
 extern @abi(c-msvc-x64) fn epoch_submit(verb: u32, a_ptr: u64, b_ptr: u64) -> i32 from "epoch.iii"
 extern @abi(c-msvc-x64) fn epoch_seal(out_root: u64) -> u32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn epoch_count() -> u32 from "epoch.iii"
 
 var AA : [u8; 32]   var BB : [u8; 32]   var CC : [u8; 32]
 var RA : [u8; 32]   var RB : [u8; 32]   var RC : [u8; 32]   var RD : [u8; 32]
@@ -33,6 +34,14 @@ fn main() -> u64 {
     /* a DIFFERENT set: only R1,R2 */
     epoch_reset()   submit_R1()   submit_R2()   epoch_seal((&RC[0u64]) as u64)
     if eq32((&RC[0u64]) as u64, (&RA[0u64]) as u64) == 1u32 { return 3u64 }       /* distinct set -> distinct root */
+
+    /* reunification W0.2 arm: the pending gauge tracks submissions exactly. */
+    epoch_reset()
+    if epoch_count() != 0u32 { return 4u64 }
+    submit_R1()
+    if epoch_count() != 1u32 { return 5u64 }
+    submit_R2()
+    if epoch_count() != 2u32 { return 6u64 }
 
     return 99u64
 }

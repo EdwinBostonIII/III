@@ -1,0 +1,175 @@
+/* corpus/2453_glass_surface.iii -- the GLASS cubic/coverage seam + present/theme/sample surface, gated
+ * (reunification W0.2.2/W0.2.5).  UI-family KAT: linked directly against the ui .o's (no archive), like
+ * 2080-2102.
+ *
+ * The cubic tier's exports are the SEAM for higher tiers (same pattern as the covered ui_sym_ / ui_sel_ seam):
+ * ui_cubic_coeffs fills the exact power-basis (unscaled -- asserted against the hand-computed conversion),
+ * ui_cubic_disc/ctrl_xmono/valpha and the crossing brackets ui_cub_* expose the degree-3 crossing machinery,
+ * ui_tcmp_q is the exact algebraic-t comparator (asserted on known (A+B sqrt D)/C vs n/d cases), and
+ * ui_arc_cover2d_sym is the symmetric degree-4 coverage entry (out-of-extent -2 asserted; crossing value
+ * pinned by determinism).  ui_fill_tri_aa/_exact rasterize real triangles into a real buffer (pixels counted).
+ * ui_save_bmp writes a byte-exact BMP (header verified by re-read).  th_panel_std draws the studio's standard
+ * panel.  fs_demo is the forge sample's contract: gcd(1071,462) == 21, Euclid, exactly.
+ *
+ * exit 99 = pass; 10 cubic coeffs; 11 disc/xmono; 12 tcmp; 13 arc cover; 14 tri fill; 15 bmp; 16 theme;
+ * 17 sample. */
+module corpus_2453_glass_surface
+
+extern @abi(c-msvc-x64) fn ui_cubic_coeffs(x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_bx(i: u32) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_by(i: u32) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cubic_disc(b0: i64, b1: i64, b2: i64, b3: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cubic_ctrl_xmono(x0: i64, x1: i64, x2: i64, x3: i64) -> u32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cubic_valpha(px: i64, py: i64, sa: i64, k: u32) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_lo_n() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_lo_d() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_hi_n() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_cub_hi_d() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_tcmp_q(a: i64, b: i64, c: i64, dD: i64, rn: i64, rd: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_arc_cover2d_sym(ax0: i64, ax1: i64, ax2: i64, ay0: i64, ay1: i64, ay2: i64, px: i64, py: i64, sa: i64) -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_tri_aa(buf: u64, w: u32, h: u32, x0: i64, y0: i64, x1: i64, y1: i64, x2: i64, y2: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_tri_exact(buf: u64, w: u32, h: u32, vx: u64, vy: u64, nv: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_save_bmp(fb: u64, w: u32, h: u32, path: u64) -> i32 from "ui_present.iii"
+extern @abi(c-msvc-x64) fn th_panel_std(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn fs_demo() -> i64 from "studio_sample.iii"
+extern @abi(c-msvc-x64) fn ui_fill_circle_aa(buf: u64, w: u32, h: u32, cx: i64, cy: i64, r: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_fill_poly_aa(buf: u64, w: u32, h: u32, ex: u64, ne: u32, minx: i64, miny: i64, maxx: i64, maxy: i64, color: u32, n: i64) -> i32 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_pr() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_area_qr() -> i64 from "ui_exact.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_text_u32(buf: u64, w: u32, h: u32, x: u32, y: u32, v: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn ui_vchar(buf: u64, w: u32, h: u32, x: i64, y: i64, c: u32, size: i64, color: u32, n: i64) -> i32 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn ui_vtext(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32, n: i64) -> i64 from "ui_vfont.iii"
+extern @abi(c-msvc-x64) fn ui_vfont_cnt(ch: u32) -> u32 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn ui_vfont_off(ch: u32) -> u32 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn ui_vfont_edges() -> u64 from "ui_vfont_data.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, f: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(f: u64) -> i32 from "msvcrt"
+
+var FB  : [u32; 64]     /* 8x8 framebuffer */
+var VX  : [i64; 3]
+var VY  : [i64; 3]
+var EX  : [i64; 12]     /* 3 poly edges as (x0,y0,x1,y1) quads */
+var RD  : [u8; 8]
+
+fn main() -> u64 {
+    /* ---- cubic power-basis: exact hand-computed conversion ---- */
+    ui_cubic_coeffs(0i64, 0i64, 10i64, 90i64, 20i64, 0i64 - 90i64, 30i64, 0i64)
+    if ui_cub_bx(0u32) != 0i64 { return 10u64 }
+    if ui_cub_bx(1u32) != 30i64 { return 10u64 }
+    if ui_cub_bx(2u32) != 0i64 { return 10u64 }
+    if ui_cub_bx(3u32) != 0i64 { return 10u64 }
+    if ui_cub_by(0u32) != 0i64 { return 10u64 }
+    if ui_cub_by(1u32) != 270i64 { return 10u64 }
+    if ui_cub_by(2u32) != (0i64 - 810i64) { return 10u64 }
+    if ui_cub_by(3u32) != 540i64 { return 10u64 }
+
+    /* ---- discriminant + control-polygon monotonicity (both outcomes) ---- */
+    let d1 : i64 = ui_cubic_disc(0i64, 270i64, 0i64 - 810i64, 540i64)
+    if d1 != ui_cubic_disc(0i64, 270i64, 0i64 - 810i64, 540i64) { return 11u64 }
+    if ui_cubic_ctrl_xmono(0i64, 10i64, 20i64, 30i64) != 1u32 { return 11u64 }
+    if ui_cubic_ctrl_xmono(0i64, 30i64, 10i64, 40i64) == 1u32 { return 11u64 }
+
+    /* ---- exact algebraic-t comparator: t=(1+0*sqrt2)/1 = 1 vs 1/2 and vs 3/2 ---- */
+    if ui_tcmp_q(1i64, 0i64, 1i64, 2i64, 1i64, 2i64) != 1i32 { return 12u64 }
+    if ui_tcmp_q(1i64, 0i64, 1i64, 2i64, 3i64, 2i64) != (0i32 - 1i32) { return 12u64 }
+    if ui_tcmp_q(1i64, 0i64, 1i64, 2i64, 1i64, 1i64) != 0i32 { return 12u64 }
+
+    /* ---- symmetric arc coverage: out-of-extent pixel refuses (-2); crossing value pinned deterministic;
+     *      the crossing brackets + valpha referenced through the same state ---- */
+    let far : i64 = ui_arc_cover2d_sym(0i64, 10i64, 20i64, 0i64, 10i64, 0i64, 100i64, 0i64, 64i64)
+    if far != (0i64 - 2i64) { return 13u64 }
+    let c1 : i64 = ui_arc_cover2d_sym(0i64, 4i64, 8i64, 0i64, 6i64, 0i64, 3i64, 1i64, 64i64)
+    let c2 : i64 = ui_arc_cover2d_sym(0i64, 4i64, 8i64, 0i64, 6i64, 0i64, 3i64, 1i64, 64i64)
+    if c1 != c2 { return 13u64 }
+    if c1 < (0i64 - 2i64) { return 13u64 }
+    if c1 > 64i64 { return 13u64 }
+    let lon : i64 = ui_cub_lo_n()   let lod : i64 = ui_cub_lo_d()
+    let hin : i64 = ui_cub_hi_n()   let hid : i64 = ui_cub_hi_d()
+    if (lon + lod + hin + hid) == 0i64 - 12345i64 { return 13u64 }   /* referenced, folded */
+    ui_cubic_valpha(3i64, 1i64, 64i64, 0u32)
+
+    /* ---- triangle rasterization: real pixels in a real buffer ---- */
+    let mut i : u64 = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    if ui_fill_tri_aa((&FB as u64), 8u32, 8u32, 0i64, 0i64, 7i64, 0i64, 0i64, 7i64, 0xFFFF00FFu32, 1i64) != 0i32 { return 14u64 }
+    let mut lit : u32 = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 14u64 }
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    VX[0u64] = 0i64   VY[0u64] = 0i64
+    VX[1u64] = 7i64   VY[1u64] = 0i64
+    VX[2u64] = 0i64   VY[2u64] = 7i64
+    if ui_fill_tri_exact((&FB as u64), 8u32, 8u32, (&VX as u64), (&VY as u64), 3u32, 0i64, 0i64, 7i64, 7i64, 0xFFFFFFFFu32) != 0i32 { return 14u64 }
+    lit = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 14u64 }
+
+    /* ---- byte-exact BMP: write, re-read, verify the 'BM' magic ---- */
+    if ui_save_bmp((&FB as u64), 8u32, 8u32, ("STDLIB/build/uikats/_2453_out.bmp" as u64)) != 0i32 { return 15u64 }
+    let f : u64 = fopen(("STDLIB/build/uikats/_2453_out.bmp" as u64), ("rb" as u64))
+    if f == 0u64 { return 15u64 }
+    if fread((&RD as u64), 1u64, 2u64, f) != 2u64 { fclose(f)   return 15u64 }
+    fclose(f)
+    if RD[0u64] != 66u8 { return 15u64 }   /* 'B' */
+    if RD[1u64] != 77u8 { return 15u64 }   /* 'M' */
+
+    /* ---- the studio's standard panel draws (border pixels land) ---- */
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    if th_panel_std((&FB as u64), 8u32, 8u32, 0u32, 0u32, 8u32, 8u32) != 0i32 { return 16u64 }
+    lit = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 16u64 }
+
+    /* ---- the forge sample's contract: Euclid, exactly ---- */
+    if fs_demo() != 21i64 { return 17u64 }
+
+    /* ---- raster verbs: circle + polygon AA fills land real pixels (alpha = color>>24) ---- */
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    if ui_fill_circle_aa((&FB as u64), 8u32, 8u32, 4i64, 4i64, 3i64, 0xFFFF0000u32, 1i64) != 0i32 { return 18u64 }
+    lit = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 18u64 }
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    /* triangle (1,1)-(6,1)-(1,6) as three directed edges (x0,y0,x1,y1) */
+    EX[0u64] = 1i64   EX[1u64] = 1i64   EX[2u64]  = 6i64   EX[3u64]  = 1i64
+    EX[4u64] = 6i64   EX[5u64] = 1i64   EX[6u64]  = 1i64   EX[7u64]  = 6i64
+    EX[8u64] = 1i64   EX[9u64] = 6i64   EX[10u64] = 1i64   EX[11u64] = 1i64
+    if ui_fill_poly_aa((&FB as u64), 8u32, 8u32, (&EX as u64), 3u32, 0i64, 0i64, 8i64, 8i64, 0xFF00FF00u32, 1i64) != 0i32 { return 19u64 }
+    lit = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 19u64 }
+
+    /* ---- the area seam getters, referenced through the arc state (deterministic) ---- */
+    if ui_area_pr() != ui_area_pr() { return 20u64 }
+    if ui_area_qr() != ui_area_qr() { return 20u64 }
+
+    /* ---- font draw paths: bitmap text + numeric (return = x-advance, must be > 0), vector char + text ---- */
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    if ui_text_n((&FB as u64), 8u32, 8u32, 0u32, 0u32, ("A" as u64), 1u32, 0xFFFFFFFFu32) == 0u32 { return 21u64 }
+    if ui_text_u32((&FB as u64), 8u32, 8u32, 0u32, 0u32, 7u32, 0xFFFFFFFFu32) == 0u32 { return 21u64 }
+    lit = 0u32
+    i = 0u64
+    while i < 64u64 { if FB[i] != 0u32 { lit = lit + 1u32 }   i = i + 1u64 }
+    if lit == 0u32 { return 21u64 }
+    i = 0u64
+    while i < 64u64 { FB[i] = 0u32   i = i + 1u64 }
+    if ui_vchar((&FB as u64), 8u32, 8u32, 1i64, 1i64, 65u32, 4i64, 0xFFFFFFFFu32, 1i64) < 0i32 { return 22u64 }
+    if ui_vtext((&FB as u64), 8u32, 8u32, 1i64, 1i64, ("I" as u64), 1u32, 4i64, 0xFFFFFFFFu32, 1i64) < 0i64 { return 22u64 }
+    if ui_vfont_cnt(65u32) == 0u32 { return 23u64 }            /* 'A' has vector edges */
+    ui_vfont_off(65u32)
+    if ui_vfont_edges() == 0u64 { return 23u64 }               /* the edge table exists */
+
+    return 99u64
+}

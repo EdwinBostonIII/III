@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/iii_studio.iii -- III STUDIO: the sovereign exact-mathematics IDE.  ONE window (ui_win), ONE
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
  * 1280x800 framebuffer, ONE visual identity (studio_theme), SIX live workspaces -- each a real instrument wired
  * to the real system, none decorative:
  *   HOME    -- the system's own numbers + a launcher that spawns real sibling binaries

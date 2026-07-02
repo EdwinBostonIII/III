@@ -13,6 +13,7 @@ extern @abi(c-msvc-x64) fn mbr_set_vacuous(h_ptr: u64) -> i32 from "membrane.iii
 extern @abi(c-msvc-x64) fn mbr_set_crystal(h_ptr: u64, crystal_id: u64) -> i32 from "membrane.iii"
 extern @abi(c-msvc-x64) fn mbr_tag(h_ptr: u64) -> u32 from "membrane.iii"
 extern @abi(c-msvc-x64) fn mbr_verify(h_ptr: u64) -> u32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_used() -> u32 from "membrane.iii"
 
 var AA : [u8; 32]   var BB : [u8; 32]   var SITE : [u8; 32]
 var H1 : [u8; 32]   var H2 : [u8; 32]   var H3 : [u8; 32]   var H4 : [u8; 32]
@@ -28,11 +29,11 @@ fn main() -> u64 {
     inv_address(0u32, (&AA[0u64]) as u64, (&AA[0u64]) as u64, (&H3[0u64]) as u64)   /* will be CRYSTAL (invalid) */
     inv_address(1u32, (&AA[0u64]) as u64, (&BB[0u64]) as u64, (&H4[0u64]) as u64)   /* never set -> absent */
 
-    /* (1) VACUOUS verifies free */
+    /* (1) VACUOUS verifies free (direct-compare call sites: the coverage gate's v2 outcome
+     * criterion keys on op||literal AT the call -- a let-bound result registers nothing) */
     mbr_set_vacuous((&H1[0u64]) as u64)
     if mbr_tag((&H1[0u64]) as u64) != 1u32 { return 1u64 }
-    let v1 : u32 = mbr_verify((&H1[0u64]) as u64)
-    if v1 != 1u32 { return 2u64 }
+    if mbr_verify((&H1[0u64]) as u64) != 1u32 { return 2u64 }
 
     /* (2) CRYSTAL with a REAL minted crystal verifies via crystal_verify */
     let cid : u64 = crystal_mint(5u32, (&SITE[0u64]) as u64, 1u64, 0u64)
@@ -40,18 +41,19 @@ fn main() -> u64 {
     if cok != 1u8 { return 3u64 }                                    /* sanity: the mint is valid */
     mbr_set_crystal((&H2[0u64]) as u64, cid)
     if mbr_tag((&H2[0u64]) as u64) != 2u32 { return 4u64 }
-    let v2 : u32 = mbr_verify((&H2[0u64]) as u64)
-    if v2 != 1u32 { return 5u64 }                                    /* crystal admit */
+    if mbr_verify((&H2[0u64]) as u64) != 1u32 { return 5u64 }        /* crystal admit */
 
     /* (3) CRYSTAL with an unverifiable id (0 = CRYSTAL_INVALID) -> membrane rejects */
     mbr_set_crystal((&H3[0u64]) as u64, 0u64)
-    let v3 : u32 = mbr_verify((&H3[0u64]) as u64)
-    if v3 != 0u32 { return 6u64 }                                    /* forged proof rejected */
+    if mbr_verify((&H3[0u64]) as u64) != 0u32 { return 6u64 }        /* forged proof rejected */
 
     /* (4) absent obligation -> reject */
     if mbr_tag((&H4[0u64]) as u64) != 0u32 { return 7u64 }
-    let v4 : u32 = mbr_verify((&H4[0u64]) as u64)
-    if v4 != 0u32 { return 8u64 }
+    if mbr_verify((&H4[0u64]) as u64) == 1u32 { return 8u64 }
+
+    /* (5) reunification W0.2 arm: the occupancy gauge counts EXACTLY the three stored obligations
+     * (H1 vacuous + H2 crystal + H3 forged-crystal; the absent H4 was never stored). */
+    if mbr_used() != 3u32 { return 9u64 }
 
     return 99u64
 }

@@ -824,3 +824,29 @@ organ edit although organ edits cannot possibly break compiler-province sovereig
 being smarter than a KAT is the argument FOR the falsifier, not against it — introspective confidence is
 exactly what a built-binary refutation test exists to check. The two are complementary; neither replaces
 the other. The remedy for "gates too slow" is the CONE (verify less, exactly), not fewer gates.
+
+---
+## W3 EXECUTION RECORD (2026-07-02)
+
+**All compiler-province gates discharged; two latent defects found and repaired (commit dc921acd):**
+
+1. **Seed identity**: seed_text_identity_gate 60/60 byte-identical (recorded at W3 open).
+2. **Trusted base**: trusted_base_check OK; def-drift via build_stdlib + forge_check OK.
+3. **Fixpoint**: `build_iiis2 --check-corpus` -- iiis-2 mhash 853b2fbb…, corpus equivalence
+   60 passed / 0 failed; rm2 + cg_r0 width gates 11/0.
+4. **XII**: `build_xii.sh` surfaced TWO latent reds, both root-caused and repaired:
+   - **iiis-1 mhash drift** -- iiis-1 links libiii_native.a (the EIDOS lift, by design), so
+     committed STDLIB work legitimately moves its bytes. Chain re-verified end-to-end, then
+     golden re-sealed (precedent: 46f884db).
+   - **Founders-Anchor signature INVALID** -- 46f884db regenerated xii_manifest.bin without
+     re-signing (proved: 117d1f54's manifest verifies VALID, 46f884db's INVALID, signed regions
+     differ from byte 81). TESTONLY seed does NOT own the anchor (derived pub 9065b371… ≠
+     20bdf0d4…); the vault key (SEALED_OPERATOR_SECRET, its documented one-time purpose) re-signed
+     the manifest: signature VALID, golden updated, **anti-drift 8/8**.
+5. **Corpus-dispatch FATAL class killed**: the S8 core loop FATAL'd on 2160_bigint_supersedes_i64
+   -- the hand-enumerated family skip arms ended at 2159 while the runners own through 2198
+   (latent: earlier background sweeps died before reaching 2160). Fix: **derived family
+   ownership** -- run_corpus.sh parses the manifest-declared runners' `run NNNN` lines at startup
+   and skips those KATs with the owner named; probe over the full corpus: residual orphans 0,
+   EXPECTED∩family double-coverage 0. + corpus_families.txt gains the sibling's run_stoma_kats.sh
+   line (their KATs stay uncommitted with their arc).

@@ -160,3 +160,44 @@ insphere3d dets over the ladder) = [BUILD-next].
 
 Execution order: II-I landed; II-II next (smallest, composes collide into csg_tree); then P4/II-IV base,
 P3 (+II-V flip times), II-III last (largest composition).
+
+---
+
+# PROGRAM III (same day): the unbounded-substrate vectors, adjudicated
+
+## VI  Rotational arc-sweeps — **LANDED (arc_sweep.iii + cspace upgrade, gate 2175, commit b6fa1837)**
+The Weierstrass substitution u = tan(theta/2) makes the 15-degree tip arc vs a sphere a DEGREE-4 INTEGER
+polynomial; root_count == 0 on a covering u-interval is the continuous clearance certificate.  Discharged:
+the theta=180 singularity (EXACT R(180) = diag(-1,-1,1) chart: every arc lands in |u| <= 1) and the
+irrational tan(k*7.5deg) endpoints (machine-derived /1000 covers, +-2 padding -- conservative supersets).
+LESSON WITH TEETH: sturm's homogenized evaluation overflows i64 at denominator 1e5 x degree 4 -- the /1000
+covers are not a compromise but the exact envelope; an apparent "stricter plan" (12 vs 10) was THIS
+overflow's artifact and was reverted when the fix landed.  C-space rotation edges: endpoint-only -> fully
+certified.  Tangency-inside-arc refuses (touch vs cross needs multiplicity work -- [BUILD-next]).
+
+## V  Trans-envelope thermodynamics — SURVIVES scoped; [BUILD-next] with the spec fixed
+Poincare-recurrence observation and Landauer verification are STRIPPED (astronomical times; information
+accounting not gate-able).  The honest core: velocities STAY small integers (swaps/negations never grow
+them) -- only positions/GDEN migrate to bigint (rank-1 pairs over one bigint denominator); event-time
+comparisons are ui_bigsign2 1-surd queries (already in the kernel); per-event SUB-ARENAS with only the
+final state persisted (the adaptive_big recipe); the demon gate compares |v| in i64 unchanged.  Teeth:
+a scenario the i64 gas REFUSES (GS_E_OVER) at event k, continued by the bigint ensemble to >= 3k events
+with the energy identity and the reversal involution intact.
+
+## VII  Resultant elimination (algebraic closure of +) — SURVIVES scoped; [BUILD-next] with the spec fixed
+gamma = alpha + beta via Res_x(f(x), g(gamma - x)): evaluate the resultant at deg(f)*deg(g)+1 integer
+gamma-points as INTEGER Bareiss determinants (fraction-free; i64-guarded, bigint when needed), then
+Lagrange-interpolate the INTEGER coefficients.  Teeth: derive the classical minimal polynomial of
+cbrt(2) + sqrt(3) (x^6 - 9x^4 - 4x^3 + 27x^2 - 36x - 23) COEFFICIENT-FOR-COEFFICIENT, then Sturm-isolate
+and algnum-bracket its two real roots.  Product/inverse and B-Rep intersection curves compose after.
+
+## VIII  Bounded-rank refraction — SURVIVES scoped; [BUILD-next] with the spec fixed
+Refraction closes over a DESIGNED direction-class pair: index ratio n1/n2 = sqrt2 maps the 45-degree class
+{(+-1,+-1)-scaled} to the 30-degree class {(+-sqrt3,+-1)-scaled} and back -- a finite exact class map, each
+transition CERTIFIED by the kernel identity (n1 sin theta1)^2 == (n2 sin theta2)^2 with the sign; TIR onset
+is an exact sign.  March state: rank-1 Q(sqrt3) positions (linear den growth, guarded), the billiard/gas
+pattern.  Teeth: the exact slab (45 in -> 30 inside -> 45 out with the EXACT lateral shift in Q(sqrt3));
+a beyond-critical arm certified TIR; the class-map identity certified, not assumed.
+
+STATE AT CLOSE: sqrtsum gate 37/0; organs landed this program: arc_sweep (+ cspace rotation upgrade).
+V, VII, VIII are fully specified above with falsifiers -- the next session builds them in that order.

@@ -134,18 +134,38 @@ fn rs_res_at(fp: u64, degf: i64, degg: i64) -> i64 {
     return rs_det(n)
 }
 
-/* gamma = alpha + beta: out[0..m*n] gets the integer defining polynomial (leading coefficient positive).
+/* h(x) = x^degg * g(t/x)  (the PRODUCT composition): coefficient of x^k is g_{degg-k} * t^(degg-k).
+ * True x-degree degg requires g(0) != 0 (checked by the rs_prod wrapper). */
+fn rs_shift_prod(gp: u64, degg: i64, t: i64) -> i32 {
+    let g : *i64 = gp as *i64
+    let mut k : i64 = 0i64
+    while k <= degg {
+        RS_H[k as u64] = rs_mul(g[(degg - k) as u64], rs_powi(t, degg - k))
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* gamma = alpha OP beta: out[0..m*n] gets the integer defining polynomial (leading coefficient positive).
+ * op 0 = SUM (h = g(t-x)), op 1 = PRODUCT (h = x^degg g(t/x)).
  * Returns the degree m*n, or -1 refused (overflow / non-integer interpolation / degree too large). */
 var RS_R : [i64; 10]
-fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+fn rs_gamma(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i64 {
     RS_OVF = 0i64
     let D : i64 = degf * degg
     if D < 1i64 { return 0i64 - 1i64 }
     if D > 8i64 { return 0i64 - 1i64 }
     if (degf + degg) > 8i64 { return 0i64 - 1i64 }
+    let fchk : *i64 = fp as *i64
+    let gchk : *i64 = gp as *i64
+    let flead : i64 = fchk[degf as u64]
+    let glead : i64 = gchk[degg as u64]
+    if flead == 0i64 { return 0i64 - 1i64 }                /* a zero lead degenerates the Sylvester */
+    if glead == 0i64 { return 0i64 - 1i64 }
     let mut t : i64 = 0i64
     while t <= D {
-        rs_shift(gp, degg, t)
+        if op == 0i64 { rs_shift(gp, degg, t) }
+        if op == 1i64 { rs_shift_prod(gp, degg, t) }
         RS_R[t as u64] = rs_res_at(fp, degf, degg)
         t = t + 1i64
     }
@@ -183,6 +203,59 @@ fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
     }
     return D
 }
+fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    return rs_gamma(fp, degf, gp, degg, outp, 0i64)
+}
+fn rs_prod(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    let g : *i64 = gp as *i64
+    let g0 : i64 = g[0u64]
+    if g0 == 0i64 { return 0i64 - 1i64 }                   /* x | g: true x-degree would collapse */
+    return rs_gamma(fp, degf, gp, degg, outp, 1i64)
+}
+
+/* gamma = 1/alpha: the reversed polynomial x^degf * f(1/x), lead normalized positive.  Exact, no
+ * engine: the roots of the reversal are exactly the inverses.  Refuses f(0) == 0 (0 among conjugates). */
+fn rs_inv(fp: u64, degf: i64, outp: u64) -> i64 @export {
+    let f : *i64 = fp as *i64
+    let out : *i64 = outp as *i64
+    let f0 : i64 = f[0u64]
+    if f0 == 0i64 { return 0i64 - 1i64 }
+    if degf < 1i64 { return 0i64 - 1i64 }
+    let mut i : i64 = 0i64
+    while i <= degf { out[i as u64] = f[(degf - i) as u64]   i = i + 1i64 }
+    let ld : i64 = out[degf as u64]
+    if ld < 0i64 {
+        i = 0i64
+        while i <= degf { out[i as u64] = 0i64 - out[i as u64]   i = i + 1i64 }
+    }
+    return degf
+}
+
+fn rs_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0   if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let r : i64 = a % b   a = b   b = r }
+    return a
+}
+
+/* strip the integer content (rational scaling introduces it: e.g. alpha * 1/2 yields content 4);
+ * lead normalized positive.  Returns the content stripped, or -1 on a zero polynomial. */
+fn rs_primitive(outp: u64, deg: i64) -> i64 @export {
+    let out : *i64 = outp as *i64
+    let mut c : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= deg { c = rs_gcd(c, out[i as u64])   i = i + 1i64 }
+    if c == 0i64 { return 0i64 - 1i64 }
+    i = 0i64
+    while i <= deg { out[i as u64] = out[i as u64] / c   i = i + 1i64 }
+    let ld : i64 = out[deg as u64]
+    if ld < 0i64 {
+        i = 0i64
+        while i <= deg { out[i as u64] = 0i64 - out[i as u64]   i = i + 1i64 }
+    }
+    return c
+}
+
 fn rs_powi(b: i64, e: i64) -> i64 {
     let mut r : i64 = 1i64
     let mut q : i64 = 0i64
@@ -347,8 +420,19 @@ fn rs_bigmod(id: u64, p: i64) -> i64 {
     return r as i64
 }
 
-/* gamma = alpha + beta beyond the i64 envelope.  Same ABI as rs_sum; returns deg m*n or -1 refused. */
-fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+fn rs_shift_prod_mod(gp: u64, degg: i64, t: i64, p: i64) -> i32 {
+    let g : *i64 = gp as *i64
+    let mut k : i64 = 0i64
+    while k <= degg {
+        let gm : i64 = rs_modp(g[(degg - k) as u64], p)
+        RS_HM[k as u64] = (gm * rs_powmod(t, degg - k, p)) % p
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* gamma = alpha OP beta beyond the i64 envelope.  op 0 = SUM, op 1 = PRODUCT. */
+fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i64 {
     rs_pinit()
     let f : *i64 = fp as *i64
     let g : *i64 = gp as *i64
@@ -370,22 +454,32 @@ fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export 
     while j <= degf { let mut av : i64 = f[j as u64]   if av < 0i64 { av = 0i64 - av }   frow = rs_add(frow, av)   j = j + 1i64 }
     let mut hrow : i64 = 0i64
     let mut i : i64 = 0i64
-    while i <= degg {
-        let mut hi : i64 = 0i64
-        j = i
-        while j <= degg {
-            let mut binom : i64 = 1i64
-            let mut q : i64 = 0i64
-            while q < i { binom = binom * (j - q)   q = q + 1i64 }
-            q = 1i64
-            while q <= i { binom = binom / q   q = q + 1i64 }
-            let mut gv : i64 = g[j as u64]
-            if gv < 0i64 { gv = 0i64 - gv }
-            hi = rs_add(hi, rs_mul(gv, binom))
-            j = j + 1i64
+    if op == 0i64 {
+        while i <= degg {
+            let mut hi : i64 = 0i64
+            j = i
+            while j <= degg {
+                let mut binom : i64 = 1i64
+                let mut q : i64 = 0i64
+                while q < i { binom = binom * (j - q)   q = q + 1i64 }
+                q = 1i64
+                while q <= i { binom = binom / q   q = q + 1i64 }
+                let mut gv : i64 = g[j as u64]
+                if gv < 0i64 { gv = 0i64 - gv }
+                hi = rs_add(hi, rs_mul(gv, binom))
+                j = j + 1i64
+            }
+            hrow = rs_add(hrow, hi)
+            i = i + 1i64
         }
-        hrow = rs_add(hrow, hi)
-        i = i + 1i64
+    }
+    if op == 1i64 {                                        /* prod entry x^k = g_{degg-k} t^(degg-k): 1-norm |g| */
+        while i <= degg {
+            let mut gv : i64 = g[i as u64]
+            if gv < 0i64 { gv = 0i64 - gv }
+            hrow = rs_add(hrow, gv)
+            i = i + 1i64
+        }
     }
     if RS_OVF != 0i64 { return 0i64 - 1i64 }
     let bnd : i64 = (degg * rs_bits(frow)) + (degf * rs_bits(hrow))
@@ -397,7 +491,8 @@ fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export 
         let p : i64 = RS_PRIMES[l as u64]
         let mut t : i64 = 0i64
         while t <= D {
-            rs_shift_mod(gp, degg, t, p)
+            if op == 0i64 { rs_shift_mod(gp, degg, t, p) }
+            if op == 1i64 { rs_shift_prod_mod(gp, degg, t, p) }
             let n : i64 = degf + degg
             let mut r : i64 = 0i64
             while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 20i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
@@ -515,4 +610,13 @@ fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export 
     i = 0i64
     while i <= D { out[i as u64] = RS_Q[i as u64]   i = i + 1i64 }
     return D
+}
+fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    return rs_gamma_big(fp, degf, gp, degg, outp, 0i64)
+}
+fn rs_prod_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
+    let g : *i64 = gp as *i64
+    let g0 : i64 = g[0u64]
+    if g0 == 0i64 { return 0i64 - 1i64 }
+    return rs_gamma_big(fp, degf, gp, degg, outp, 1i64)
 }

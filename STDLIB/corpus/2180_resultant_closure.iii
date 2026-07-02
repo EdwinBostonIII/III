@@ -1,0 +1,131 @@
+/* 2180_resultant_closure.iii -- GATE for the resultant CLOSURE VERBS (charter increment 2): the exact
+ * substrate's roots are now closed under +, *, and inverse, with rational scaling via content strip.
+ *
+ * P1  sqrt2 * sqrt3:   Res_x(x^2-2, x^2 g(t/x)) == (t^2-6)^2  -- the norm form, multiplicity included.
+ * P2  cbrt2 * sqrt3:   t^6 - 108  (2^2 * 27; e-symmetric functions of the cubes vanish).
+ * P3  2^(1/4)*3^(1/3): D = 12 -- v1 GUARD-REFUSES; rs_prod_big derives t^12 - 648 (gamma^12 = 2^3 3^4,
+ *     an exact integer identity pinning every coefficient).
+ * I1  1/(sqrt2+sqrt3): the reversal of x^4-10x^2+1 is ITSELF (self-reversed: the inverse is sqrt3-sqrt2,
+ *     a conjugate) -- palindrome equality, element for element.
+ * I2  1/cbrt2: reversal of x^3-2 normalizes to 2x^3-1... lead-positive form [-1,0,0,2].
+ * I3  refusals: rs_inv with f(0)=0 (0 among conjugates) and rs_prod with g(0)=0 both -1.
+ * G   THE GOLDEN RATIO, composed: phi = (1 + sqrt5) * (1/2) -- rs_sum(x-1, x^2-5) = t^2-2t-4, then
+ *     rs_prod(-, 2x-1) = 4t^2-4t-4, then rs_primitive strips content 4 -> t^2 - t - 1, and sturm counts
+ *     one root in [1,2] (phi) and one in [-1,0] (-1/phi).  Three verbs, one exact object.
+ *
+ * exit 99 = pass;  10 P1;  11 P2;  12 P3;  13 I1/I2;  14 refusals;  15 G chain;  16 G sturm */
+module corpus_2180_resultant_closure
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rs_sum(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_prod(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_prod_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_inv(fp: u64, degf: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_primitive(outp: u64, deg: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var WF : [i64; 10]   var WG : [i64; 10]   var WO : [i64; 20]   var WO2 : [i64; 10]
+
+fn main() -> u64 {
+    /* ══ P1: sqrt2 * sqrt3 -> (t^2-6)^2. */
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 1i64
+    WG[0u64] = 0i64 - 3i64   WG[1u64] = 0i64   WG[2u64] = 1i64
+    let p1 : i64 = rs_prod((&WF) as u64, 2i64, (&WG) as u64, 2i64, (&WO) as u64)
+    putchar(80i32) putchar(49i32) putchar(58i32) sp() e_i64(p1)
+    let mut i : u64 = 0u64
+    while i <= 4u64 { sp() e_i64(WO[i])   i = i + 1u64 }
+    nl()                                                                     /* "P1: 4 36 0 -12 0 1" */
+    if p1 != 4i64 { return 10u64 }
+    if WO[0u64] != 36i64 { return 10u64 }
+    if WO[1u64] != 0i64 { return 10u64 }
+    if WO[2u64] != (0i64 - 12i64) { return 10u64 }
+    if WO[3u64] != 0i64 { return 10u64 }
+    if WO[4u64] != 1i64 { return 10u64 }
+
+    /* ══ P2: cbrt2 * sqrt3 -> t^6 - 108. */
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 0i64   WF[3u64] = 1i64
+    let p2 : i64 = rs_prod((&WF) as u64, 3i64, (&WG) as u64, 2i64, (&WO) as u64)
+    putchar(80i32) putchar(50i32) putchar(58i32) sp() e_i64(p2) sp() e_i64(WO[0u64]) sp() e_i64(WO[6u64]) nl()   /* "P2: 6 -108 1" */
+    if p2 != 6i64 { return 11u64 }
+    if WO[0u64] != (0i64 - 108i64) { return 11u64 }
+    let mut k : u64 = 1u64
+    while k <= 5u64 { if WO[k] != 0i64 { return 11u64 }   k = k + 1u64 }
+    if WO[6u64] != 1i64 { return 11u64 }
+
+    /* ══ P3: 2^(1/4) * 3^(1/3), D = 12 -- v1 refuses, the big engine derives t^12 - 648. */
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 0i64   WF[3u64] = 0i64   WF[4u64] = 1i64
+    WG[0u64] = 0i64 - 3i64   WG[1u64] = 0i64   WG[2u64] = 0i64   WG[3u64] = 1i64
+    let p3a : i64 = rs_prod((&WF) as u64, 4i64, (&WG) as u64, 3i64, (&WO) as u64)
+    let p3b : i64 = rs_prod_big((&WF) as u64, 4i64, (&WG) as u64, 3i64, (&WO) as u64)
+    putchar(80i32) putchar(51i32) putchar(58i32) sp() e_i64(p3a) sp() e_i64(p3b) sp() e_i64(WO[0u64]) sp() e_i64(WO[12u64]) nl()   /* "P3: -1 12 -648 1" */
+    if p3a != (0i64 - 1i64) { return 12u64 }
+    if p3b != 12i64 { return 12u64 }
+    if WO[0u64] != (0i64 - 648i64) { return 12u64 }
+    k = 1u64
+    while k <= 11u64 { if WO[k] != 0i64 { return 12u64 }   k = k + 1u64 }
+    if WO[12u64] != 1i64 { return 12u64 }
+
+    /* ══ I1: 1/(sqrt2+sqrt3) -- x^4-10x^2+1 is SELF-reversed. */
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 1i64
+    WG[0u64] = 0i64 - 3i64   WG[1u64] = 0i64   WG[2u64] = 1i64               /* restore x^2 - 3 after P3 */
+    let s1 : i64 = rs_sum((&WF) as u64, 2i64, (&WG) as u64, 2i64, (&WO) as u64)
+    if s1 != 4i64 { return 13u64 }
+    let v1 : i64 = rs_inv((&WO) as u64, 4i64, (&WO2) as u64)
+    if v1 != 4i64 { return 13u64 }
+    let mut ok : i64 = 1i64
+    i = 0u64
+    while i <= 4u64 { if WO2[i] != WO[i] { ok = 0i64 }   i = i + 1u64 }
+    putchar(73i32) putchar(49i32) putchar(58i32) sp() e_i64(ok) nl()          /* "I1: 1" */
+    if ok != 1i64 { return 13u64 }
+
+    /* ══ I2: 1/cbrt2 -> lead-positive [-1, 0, 0, 2]. */
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 0i64   WF[3u64] = 1i64
+    let v2 : i64 = rs_inv((&WF) as u64, 3i64, (&WO2) as u64)
+    putchar(73i32) putchar(50i32) putchar(58i32) sp() e_i64(v2) sp() e_i64(WO2[0u64]) sp() e_i64(WO2[3u64]) nl()   /* "I2: 3 -1 2" */
+    if v2 != 3i64 { return 13u64 }
+    if WO2[0u64] != (0i64 - 1i64) { return 13u64 }
+    if WO2[1u64] != 0i64 { return 13u64 }
+    if WO2[2u64] != 0i64 { return 13u64 }
+    if WO2[3u64] != 2i64 { return 13u64 }
+
+    /* ══ I3: certified refusals -- f(0)=0 for inverse, g(0)=0 for product. */
+    WF[0u64] = 0i64   WF[1u64] = 1i64
+    let r1 : i64 = rs_inv((&WF) as u64, 1i64, (&WO2) as u64)
+    WG[0u64] = 0i64   WG[1u64] = 0i64   WG[2u64] = 1i64
+    WF[0u64] = 0i64 - 2i64   WF[1u64] = 0i64   WF[2u64] = 1i64
+    let r2 : i64 = rs_prod((&WF) as u64, 2i64, (&WG) as u64, 2i64, (&WO) as u64)
+    putchar(82i32) putchar(58i32) sp() e_i64(r1) sp() e_i64(r2) nl()          /* "R: -1 -1" */
+    if r1 != (0i64 - 1i64) { return 14u64 }
+    if r2 != (0i64 - 1i64) { return 14u64 }
+
+    /* ══ G: THE GOLDEN RATIO -- (1 + sqrt5) * (1/2) via three verbs. */
+    WF[0u64] = 0i64 - 1i64   WF[1u64] = 1i64                                 /* x - 1 */
+    WG[0u64] = 0i64 - 5i64   WG[1u64] = 0i64   WG[2u64] = 1i64               /* x^2 - 5 */
+    let g1 : i64 = rs_sum((&WF) as u64, 1i64, (&WG) as u64, 2i64, (&WO) as u64)
+    if g1 != 2i64 { return 15u64 }
+    if WO[0u64] != (0i64 - 4i64) { return 15u64 }                            /* t^2 - 2t - 4 */
+    if WO[1u64] != (0i64 - 2i64) { return 15u64 }
+    if WO[2u64] != 1i64 { return 15u64 }
+    WF[0u64] = WO[0u64]   WF[1u64] = WO[1u64]   WF[2u64] = WO[2u64]
+    WG[0u64] = 0i64 - 1i64   WG[1u64] = 2i64                                 /* 2x - 1: the exact 1/2 */
+    let g2 : i64 = rs_prod((&WF) as u64, 2i64, (&WG) as u64, 1i64, (&WO) as u64)
+    if g2 != 2i64 { return 15u64 }
+    let ct : i64 = rs_primitive((&WO) as u64, 2i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(ct) sp() e_i64(WO[0u64]) sp() e_i64(WO[1u64]) sp() e_i64(WO[2u64]) nl()   /* "G: 4 -1 -1 1" */
+    if ct != 4i64 { return 15u64 }
+    if WO[0u64] != (0i64 - 1i64) { return 15u64 }                            /* t^2 - t - 1 */
+    if WO[1u64] != (0i64 - 1i64) { return 15u64 }
+    if WO[2u64] != 1i64 { return 15u64 }
+    if sturm_build((&WO) as u64, 2i64) < 0i64 { return 16u64 }
+    let n1 : i64 = root_count(1i64, 1i64, 2i64, 1i64)
+    let n2 : i64 = root_count(0i64 - 1i64, 1i64, 0i64, 1i64)
+    putchar(83i32) putchar(58i32) sp() e_i64(n1) sp() e_i64(n2) nl()          /* "S: 1 1" */
+    if n1 != 1i64 { return 16u64 }
+    if n2 != 1i64 { return 16u64 }
+
+    return 99u64
+}

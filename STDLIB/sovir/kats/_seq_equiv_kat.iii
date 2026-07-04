@@ -1,0 +1,66 @@
+/* _seq_equiv_kat.iii -- Leg-A foundation gate (reconstructed 2026-07-04 into the TRACKED kats/ dir;
+ * the originals lived untracked in build/sovir and were swept as build litter -- never gate from a
+ * build directory again).
+ *
+ * seq_equiv is the SVIR<->SVIR equivalence prover: it denotes each straight-line body to a bv_bits
+ * node over the shared symbolic inputs and bit-blasts equality over all 2^64.  This gate proves the
+ * canonical strength-reduction identity the whole autopoietic Leg A rests on -- x+x == x*2 -- from
+ * two DIFFERENT SVIR bodies, and shows the prover REFUTES a corruption (x+x vs x*3).
+ *
+ * SVIR body encoding (sovir svir_asm opcodes): 0x01 CONST +8 LE bytes ; 0x10 LOCAL +slot ;
+ *   0x20 ADD ; 0x22 MUL ; 0x60 RET.  Param 0 is symbolic input x (bb_var 0).
+ *
+ *   A = LOCAL0 LOCAL0 ADD RET            (x + x)
+ *   B = LOCAL0 CONST(2) MUL RET          (x * 2)
+ *   C = LOCAL0 CONST(3) MUL RET          (x * 3)  -- the refutation control
+ *
+ * seq_equiv(A,B) == 1 (PROVEN) ; seq_equiv(A,C) == 0 (REFUTED).  exit 99 = both; 10 A==B not proven;
+ * 11 A==C not refuted. */
+module corpus_seq_equiv_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var BA : [u8; 32]   var BB : [u8; 32]   var BC : [u8; 32]
+
+/* write an 8-byte LE constant at buf[off..off+8); return off+8 */
+fn w8(buf: u64, off: u64, v: u64) -> u64 {
+    let b : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 { b[off + i] = (x & 255u64) as u8   x = x >> 8u64   i = i + 1u64 }
+    return off + 8u64
+}
+fn wb(buf: u64, off: u64, byte: u8) -> u64 { let b : *u8 = buf as *u8   b[off] = byte   return off + 1u64 }
+
+fn main() -> u64 {
+    /* A = x + x */
+    let mut pa : u64 = 0u64
+    pa = wb((&BA) as u64, pa, 0x10u8)  pa = wb((&BA) as u64, pa, 0u8)   /* LOCAL 0 */
+    pa = wb((&BA) as u64, pa, 0x10u8)  pa = wb((&BA) as u64, pa, 0u8)   /* LOCAL 0 */
+    pa = wb((&BA) as u64, pa, 0x20u8)                                   /* ADD */
+    pa = wb((&BA) as u64, pa, 0x60u8)                                   /* RET */
+
+    /* B = x * 2 */
+    let mut pb : u64 = 0u64
+    pb = wb((&BB) as u64, pb, 0x10u8)  pb = wb((&BB) as u64, pb, 0u8)   /* LOCAL 0 */
+    pb = wb((&BB) as u64, pb, 0x01u8)  pb = w8((&BB) as u64, pb, 2u64)  /* CONST 2 */
+    pb = wb((&BB) as u64, pb, 0x22u8)                                   /* MUL */
+    pb = wb((&BB) as u64, pb, 0x60u8)                                   /* RET */
+
+    /* C = x * 3  (the corruption control) */
+    let mut pc : u64 = 0u64
+    pc = wb((&BC) as u64, pc, 0x10u8)  pc = wb((&BC) as u64, pc, 0u8)   /* LOCAL 0 */
+    pc = wb((&BC) as u64, pc, 0x01u8)  pc = w8((&BC) as u64, pc, 3u64)  /* CONST 3 */
+    pc = wb((&BC) as u64, pc, 0x22u8)                                   /* MUL */
+    pc = wb((&BC) as u64, pc, 0x60u8)                                   /* RET */
+
+    let ab : u32 = seq_equiv((&BA) as u64, 0u64, pa, (&BB) as u64, 0u64, pb, 1u32)
+    let ac : u32 = seq_equiv((&BA) as u64, 0u64, pa, (&BC) as u64, 0u64, pc, 1u32)
+    putchar(65i32) putchar(66i32) putchar(58i32) putchar((48u32 + ab) as i32)   /* "AB:1" */
+    putchar(32i32) putchar(65i32) putchar(67i32) putchar(58i32) putchar((48u32 + ac) as i32) putchar(10i32)  /* "AC:0" */
+
+    if ab != 1u32 { return 10u64 }        /* x+x == x*2 must PROVE */
+    if ac != 0u32 { return 11u64 }        /* x+x == x*3 must REFUTE (teeth) */
+    return 99u64
+}

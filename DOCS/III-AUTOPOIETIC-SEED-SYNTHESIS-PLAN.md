@@ -928,8 +928,8 @@ background daemon + residue-rewrite proposers** (MCMC-over-residue = the open sy
 exact-fold minimizer is; Epoch III's **constraint-language front-end** (the UI to *state* invariants) is not built — the
 synthesis+certify engine underneath it is; Epoch IV today covers the **combinational/crushed fragment** (a full
 SVIR→synthesizable-Verilog for sequential/memory ops remains). Each core is real, gated, and reddens under mutation;
-each frontier is a genuine campaign, not a toggle. `run_legA.sh` = **25 KATs ALL GREEN** (the loop-crush family
-through the geometric rung + the symbolic-freedom soundness gate; aggregated by `run_membrane_gates.sh`).
+each frontier is a genuine campaign, not a toggle. `run_legA.sh` = **26 KATs ALL GREEN** (the loop-crush family
+through the geometric and quadratic rungs + the symbolic-freedom soundness gate; aggregated by `run_membrane_gates.sh`).
 
 ## SOUNDNESS AUDIT 2026-07-04 — the frozen-local false crush (found, demonstrated, closed)
 
@@ -989,3 +989,37 @@ a crush KIND (ADD delta / MUL ratio), folded into both the FNV fingerprint and t
 (ser_antiunify.iii:1349 — the conformance intersect is the affine fragment by charter; a ratio is
 never misread as an additive delta; `_au_conform_kat` case 3 is the live regression); au_crush_nested
 requires an ADD-kind flattened outer (:960 — its splice is additive by construction).
+
+## THE QUADRATIC RUNG 2026-07-04 — the second-difference guillotine (arithmetic sums crush on real ccsv output)
+
+Two more ladder steps, same day, same conscience line:
+
+**Constant shifts denote** (`597ea602`): the symbolic stack carries a shadow const-flag; SHL/SHR by a
+DIRECT constant lower to bv_bits' zero-clause remaps (`amount & 63`, the concrete interpreter's exact
+semantics), so `acc <<= 1` now crushes by the CROSS-FORM miter (shl circuit == mul circuit over 2^64,
+kind MUL ratio 2 — syntax immunity across shift/multiply spelling).  Variable shift amounts stay out of
+the fragment (defer).  `_au_topo_kat` B6/B7/B8 pin crush / no-fit-defer / fragment-defer.
+
+**The quadratic rung** — an arithmetic-sum loop's step depends on a coupled local (`acc += i; i += 1`),
+so no single-pass law `acc' = f(acc)` exists.  The discharge avoids identifying the coupled local
+entirely: denote the body TWICE over one carried symbolic state (`au_sym_pass` composed) and prove
+
+    A2(X) + acc(X) == 2*A1(X) + c        for ALL entry states X  (every read local a fresh bb_var)
+
+— the accumulator's second difference is state-invariant.  Then along any orbit
+diff_{k+1} − diff_k = c (each reachable state satisfies the proven identity), so
+**acc_N = acc_0 + d1·N + c·tri(N)** exactly over Z/2^64: d1 = the entry state's first increment (ONE
+concrete body pass, O(body) not O(N)); tri(N) = N(N−1)/2 exact by the parity-safe halving whose Gauss
+recurrence `au_prove_quadratic_gen` already gates (width-independent).  The trace only PROPOSES c
+(`au_quad_c`); the miter disposes.  Realization: `au_topo_amputate` rung 3 (ser_antiunify.iii, RUNG 3
+block), kind `AU_K_QUAD` = 2 in the ledger (hash + Merkle leaves fold kind, so a QUAD certificate is
+distinct from ADD/MUL at the same offset/parameter).
+
+*Falsifier (executed green)*: `_au_quadwalk_kat` = 99 — TRI crushes (kind QUAD, proven c = 1); the
+MASKED adversary `acc += (i & 3)` fits the sampled window (2nd diffs 1,1,1 at i = 0..3) but the miter
+finds i = 3 (((i+1)&3) − (i&3) is not state-invariant) → REFUTED, never crushed — the same
+sampled-window blindness the symfree audit closed, now defeated on the quadratic rung too; TRIDOWN
+(`acc += i; i -= 1`) records kind QUAD with wrap-ring curvature c = 2^64−1 in the ledger.
+On REAL ccsv output the ghost report reads: `add d=5 / mul r=2 / qad q=1 / DEFER(residue)` —
+loops=4 crushed=3 deferred=1; the ratchet DRIFT-ABORTED (rc=1 against 91470249305de7af) and was
+resealed by the authorized act to **accfc05092d3597c**.  Verdict: PROVEN-IN-CODE.

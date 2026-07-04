@@ -16,8 +16,9 @@ SRC="${2:-$S/seed_loops_corpus.c}"
 [ -f "$SRC" ] || cat > "$SRC" <<'CEOF'
 int affine()  { int acc = 0; int i = 0; while (i < 10) { acc = acc + 5; i = i + 1; } return acc; }
 int geo()     { int acc = 1; int i = 0; while (i < 10) { acc = acc * 2; i = i + 1; } return acc; }
+int tri()     { int acc = 0; int i = 0; while (i < 10) { acc = acc + i; i = i + 1; } return acc; }
 int chaotic() { int acc = 1; int i = 0; while (i < 10) { acc = acc * acc + 1; i = i + 1; } return acc; }
-int main()    { return affine() + geo() + chaotic(); }
+int main()    { return affine() + geo() + tri() + chaotic(); }
 CEOF
 cp "$W/ccsv.exe" "$W/ccsv.run.exe"; timeout 20 "$W/ccsv.run.exe" "$SRC" > "$W/seed_svir.iii" 2>/dev/null; rm -f "$W/ccsv.run.exe"
 "$IIIS" "$W/seed_svir.iii" --compile-only --out "$W/seed_svir.o" >/dev/null 2>&1 || { say "FAIL ccsv SVIR"; exit 2; }
@@ -31,8 +32,8 @@ int main(){
   unsigned crushed = au_crush_svir_module(svir_ptr(), svir_len(), 0);
   unsigned n = au_report_n();
   for(unsigned i=0;i<n;i++) printf("  loop@%-3llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
-    au_report_verdict(i)?(au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
+    au_report_verdict(i)?(au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
+    au_report_verdict(i)?(au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
   printf("loops=%u crushed=%u deferred=%u\n", n, crushed, n-crushed);
   printf("REPORT_HASH=%016llx\n", au_report_hash());
   return 0;

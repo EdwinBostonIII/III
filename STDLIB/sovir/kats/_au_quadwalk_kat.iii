@@ -1,0 +1,57 @@
+module au_quadwalk_kat
+
+/* THE QUADRATIC RUNG IN THE WALK LADDER (the second-difference guillotine, 2026-07-04).
+ *
+ * An arithmetic-sum loop's step DEPENDS on a coupled local (acc += i; i += 1), so no single-pass
+ * step law "acc' = f(acc)" exists.  The sound discharge avoids naming the coupled local entirely:
+ * denote the body TWICE over one carried symbolic state (au_sym_pass composed) and prove
+ *
+ *     A2(X) + acc(X) == 2*A1(X) + c        over ALL entry states X (every read local a fresh var)
+ *
+ * i.e. the SECOND DIFFERENCE of the accumulator is the state-invariant constant c.  Then along any
+ * orbit diff_{k+1} - diff_k = c (each reachable state satisfies the proven identity), so
+ * acc_N = acc_0 + d1*N + c*tri(N) EXACTLY over Z/2^64 -- d1 is the entry state's first increment
+ * (one concrete body pass, O(body) not O(N)), tri(N)=N(N-1)/2 exact by the parity-safe halving whose
+ * Gauss recurrence au_prove_quadratic_gen already gates.  The trace only PROPOSES c; the miter disposes.
+ *
+ *   (1) TRI       acc += i; i += 1        -> CRUSHED, kind QUAD, proven c = 1
+ *   (2) MASKED    acc += (i & 3); i += 1  -> trace-fits c=1 (i=0..3 window!) but ((i+1)&3)-(i&3) is
+ *                                            NOT state-invariant (dies at i=3) -> REFUTED, never crushed
+ *   (3) TRIDOWN   while i!=0 { acc += i; i -= 1 }  -> whole-module walk: ledger records kind QUAD with
+ *                                            c = 2^64-1 (negative curvature, exact in the wrap ring)
+ *
+ * exit 99 = all; 1..3 = rung contract broken at that number (10+ = ledger field wrong). */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_param() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_kind(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_delta(i: u32) -> u64 from "ser_antiunify.iii"
+
+/* TRI: acc = acc + i ; i = i + 1     (GET0 GET1 ADD SET0  GET1 CONST1 ADD SET1; 21 bytes) */
+var TRI : [u8; 21] = [16u8,0u8, 16u8,1u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* MASKED: acc = acc + (i & 3) ; i = i + 1   -- the sampled-window adversary (31 bytes) */
+var MASKED : [u8; 31] = [16u8,0u8, 16u8,1u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* TRIDOWN: while i!=0 { acc += i; i -= 1 }   (shell + 21-byte body; 41 bytes) */
+var TRIDOWN : [u8; 41] = [64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 16u8,1u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    /* (1) TRI crushes on the quadratic rung: second difference proven == 1 over ALL states */
+    if au_topo_amputate(&TRI as u64, 0u64, 21u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 2u32 { return 10u64 }                       /* kind = QUAD                 */
+    if au_last_param() != 1u64 { return 11u64 }                      /* the proven curvature c = 1  */
+
+    /* (2) THE TEETH: MASKED fits the trace (i=0..3 gives 2nd diffs 1,1,1) but the miter finds i=3 */
+    if au_topo_amputate(&MASKED as u64, 0u64, 31u64, 0u32, 7u64) != 0u32 { return 2u64 }
+
+    /* (3) whole-module walk: the ledger records the QUAD certificate with wrap-ring curvature -1 */
+    if au_crush_report(&TRIDOWN as u64, 0u64, 41u64, 0u32) != 1u32 { return 3u64 }
+    if au_report_n() != 1u32 { return 12u64 }
+    if au_report_verdict(0u32) != 1u32 { return 13u64 }
+    if au_report_kind(0u32) != 2u32 { return 14u64 }                 /* kind QUAD in the ledger      */
+    if au_report_delta(0u32) != 18446744073709551615u64 { return 15u64 }  /* c = -1 mod 2^64         */
+    return 99u64
+}

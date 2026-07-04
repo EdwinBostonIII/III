@@ -12,8 +12,9 @@ gcc "$W/ccsv.o" -o "$W/ccsv.exe" 2>/dev/null || { say "FAIL link ccsv (oracle gc
 cat > "$W/seed_demo.c" <<'CEOF'
 int affine()  { int acc = 0; int i = 0; while (i < 10) { acc = acc + 5; i = i + 1; } return acc; }
 int geo()     { int acc = 1; int i = 0; while (i < 10) { acc = acc * 2; i = i + 1; } return acc; }
+int tri()     { int acc = 0; int i = 0; while (i < 10) { acc = acc + i; i = i + 1; } return acc; }
 int chaotic() { int acc = 1; int i = 0; while (i < 10) { acc = acc * acc + 1; i = i + 1; } return acc; }
-int main()    { return affine() + geo() + chaotic(); }
+int main()    { return affine() + geo() + tri() + chaotic(); }
 CEOF
 cp "$W/ccsv.exe" "$W/ccsv.run.exe"; timeout 20 "$W/ccsv.run.exe" "$W/seed_demo.c" > "$W/seed_svir.iii" 2>/dev/null; rm -f "$W/ccsv.run.exe"
 "$IIIS" "$W/seed_svir.iii" --compile-only --out "$W/seed_svir.o" >/dev/null 2>&1 || { say "FAIL ccsv SVIR output"; exit 1; }
@@ -29,11 +30,11 @@ int main(){
   printf("=== SER_CRUSH_REPORT (real C -> ccsv -> SVIR) ===\n");
   printf("loops=%u crushed=%u deferred(residue)=%u report_hash=%016llx\n", n, crushed, n-crushed, au_report_hash());
   for(unsigned i=0;i<n;i++) printf("  loop@%-3llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
-    au_report_verdict(i)?(au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
-  return (n==3 && crushed==2) ? 99 : 1;
+    au_report_verdict(i)?(au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
+    au_report_verdict(i)?(au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
+  return (n==4 && crushed==3) ? 99 : 1;
 }
 GEOF
 gcc "$W/seed_ghost.c" "$W/seed_svir.o" "$A/au.o" "$A/causal.o" "$A/absint.o" "$A/sks.o" "$A/bb.o" "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$W/sghost.exe" 2>/dev/null || { say "FAIL link ghost"; exit 1; }
 cp "$W/sghost.exe" "$W/sghost.run.exe"; timeout 60 "$W/sghost.run.exe"; gv=$?; rm -f "$W/sghost.run.exe"
-if [ $gv -eq 99 ]; then say "GHOST-BUILD GREEN: ccsv affine loop CRUSHED(add d5), geometric loop CRUSHED(mul r2), chaotic loop DEFERRED as residue, report fingerprinted."; else say "GHOST-BUILD RED ($gv)"; exit 1; fi
+if [ $gv -eq 99 ]; then say "GHOST-BUILD GREEN: ccsv affine CRUSHED(add d5), geometric CRUSHED(mul r2), triangular CRUSHED(qad q1), chaotic DEFERRED as residue, report fingerprinted."; else say "GHOST-BUILD RED ($gv)"; exit 1; fi

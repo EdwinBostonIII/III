@@ -717,17 +717,22 @@ fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export 
 
 /* THE AGNOSTIC TOPOLOGICAL AMPUTATION: fuzz the black box (au_svir_exec) for the accum trace, then walk the
  * crush LADDER -- rung 1 AFFINE (constant first difference -> prove step == acc+delta), rung 2 GEOMETRIC
- * (constant ratio -> prove step == acc*r) -- each rung's fit is only a CONJECTURE; its guillotine bit-blasts
- * the REAL denoted body over ALL 2^64 states of every read local.  1 = PROVEN (kind/ratio in au_last_kind /
- * au_last_ratio; affine -> acc_0+N*delta, geometric -> acc_0*r^N) ; 0 = some fitted conjecture was REFUTED by
- * the symbolic body (no false crush) ; AU_DEFER = fits nothing / non-denotable / poisoned decision.  NO opcode
- * pattern-matching -- pure behavioral resonance. */
-const AU_K_ADD : u32 = 0u32   /* crush kind: additive (affine / nested net effect) */
-const AU_K_MUL : u32 = 1u32   /* crush kind: multiplicative (geometric)            */
-var AU_LKIND  : u32 = 0u32    /* kind of the last successful au_topo_amputate      */
-var AU_LRATIO : u64 = 0u64    /* proven ratio of the last geometric crush          */
+ * (constant ratio -> prove step == acc*r), rung 3 QUADRATIC (constant SECOND difference c -> prove, over the
+ * TWICE-COMPOSED denotation, A2(X) + acc(X) == 2*A1(X) + c for ALL entry states X; then along any orbit
+ * diff_{k+1} - diff_k = c, so acc_N = acc_0 + d1*N + c*tri(N) exactly, d1 measured by one body pass at the
+ * consumer's entry state, tri exact by the gated Gauss recurrence).  Each rung's fit is only a CONJECTURE;
+ * its guillotine bit-blasts the REAL denoted body over ALL 2^64 states of every read local.  1 = PROVEN
+ * (kind in au_last_kind; parameter -- delta / ratio / curvature -- in au_last_param) ; 0 = some fitted
+ * conjecture was REFUTED by the symbolic body (no false crush) ; AU_DEFER = fits nothing / non-denotable /
+ * poisoned decision.  NO opcode pattern-matching -- pure behavioral resonance. */
+const AU_K_ADD  : u32 = 0u32  /* crush kind: additive (affine / nested net effect)          */
+const AU_K_MUL  : u32 = 1u32  /* crush kind: multiplicative (geometric)                     */
+const AU_K_QUAD : u32 = 2u32  /* crush kind: quadratic (state-invariant second difference)  */
+var AU_LKIND  : u32 = 0u32    /* kind of the last successful au_topo_amputate               */
+var AU_LRATIO : u64 = 0u64    /* the proven step parameter: ratio (MUL) / curvature c (QUAD) */
 fn au_last_kind()  -> u32 @export { return AU_LKIND }
-fn au_last_ratio() -> u64 @export { return AU_LRATIO }
+fn au_last_ratio() -> u64 @export { return AU_LRATIO }   /* MUL-specific reader (same cell as au_last_param) */
+fn au_last_param() -> u64 @export { return AU_LRATIO }   /* the general proven-parameter reader              */
 fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
     AU_LKIND = AU_K_ADD
     AU_LRATIO = 0u64
@@ -763,6 +768,27 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
             let vd2 : u8 = bb_equal(step2, bb_mul(v02, bb_const(r)))    /* step(acc,others)==acc*r, ALL states */
             if vd2 == 1u8 { AU_LKIND = AU_K_MUL  AU_LRATIO = r  return 1u32 }
             if vd2 == 0u8 { refuted = 1u32 }
+        }
+    }
+    if au_is_quadratic() == 1u32 {                                 /* RUNG 3: QUADRATIC (const 2nd difference) */
+        let c : u64 = au_quad_c()                                  /* the trace-proposed curvature (conjecture) */
+        bb_reset(64u64)
+        au_sym_init(accum)
+        let a1 : u32 = au_sym_pass(base, boff, blen, accum)        /* A1(X): acc after ONE pass, state carried  */
+        if a1 != TP_SYMTOP {
+            let a2 : u32 = au_sym_pass(base, boff, blen, accum)    /* A2(X): acc after the SECOND composed pass */
+            if a2 != TP_SYMTOP {
+                let x0  : u32 = bb_var(0u32)
+                let lhs : u32 = bb_add(a2, x0)                     /* A2(X) + acc(X)                            */
+                let rhs : u32 = bb_add(bb_add(a1, a1), bb_const(c))/* 2*A1(X) + c                               */
+                let vd3 : u8 = bb_equal(lhs, rhs)                  /* 2nd difference == c over ALL entry states:
+                                                                    * then along ANY orbit diff_{k+1}-diff_k = c,
+                                                                    * so acc_N = acc_0 + d1*N + c*tri(N) exactly
+                                                                    * (d1 = the entry state's first increment;
+                                                                    * tri identity gated by au_prove_quadratic_gen). */
+                if vd3 == 1u8 { AU_LKIND = AU_K_QUAD  AU_LRATIO = c  return 1u32 }
+                if vd3 == 0u8 { refuted = 1u32 }
+            }
         }
     }
     if refuted == 1u32 { return 0u32 }                             /* a conjectured law died at the miter */
@@ -1309,7 +1335,7 @@ fn au_crush_walk(base: u64, boff: u64, blen: u64, accum: u32) {
                     if au_topo_amputate(base, boff + bo, bl, accum, 7u64) == 1u32 {
                         verd = 1u32
                         knd = AU_LKIND
-                        if AU_LKIND == AU_K_MUL { dlt = AU_LRATIO }           /* geometric: the proven ratio  */
+                        if AU_LKIND != AU_K_ADD { dlt = AU_LRATIO }           /* MUL ratio / QUAD curvature   */
                         if AU_LKIND == AU_K_ADD { dlt = au_arith_delta() }    /* affine:    the proven delta  */
                     }
                 }

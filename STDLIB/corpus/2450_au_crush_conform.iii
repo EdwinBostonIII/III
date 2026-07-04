@@ -7,7 +7,8 @@
  * [nfunc][params,nresults,blen u16 LE,body]; loop = 0x41 ... 0x51 body 0x50 0x44) is crushed, reported, merkle-
  * sealed, TCB-admitted; a second module with different geometry must CHANGE the root and be REFUSED by the
  * genesis gate.  The netlist annealer folds a constant circuit to one wire.  Conformance returns all THREE
- * verdicts on three bodies: VIOL (delta 7 vs bound 1000 -> breach at iteration 143), OK (delta 0), DEFER (MUL).
+ * verdicts on three bodies: VIOL (delta 7 vs bound 1000 -> breach at iteration 143), OK (delta 0), DEFER (a
+ * MUL body crushes kind-geometric, and the conformance intersect is the AFFINE fragment by charter).
  * The pure tier proves the arithmetic + triangular recurrences and REFUTES the brk-perturbed step (the teeth).
  *
  * exit 99 = pass; 10 pure-tier; 11 crucible; 12 netlist; 13 crush/report; 14 merkle; 15 tcb; 16 conform. */
@@ -94,9 +95,10 @@ fn main() -> u64 {
     if au_prove_quadratic_gen(0u64, 3u64, 2u64, 1u64) != 0u8 { return 10u64 }  /* brk-perturbed step REFUTED */
     if au_amputate_quadratic(3u64, 2u64, 10u64) != 1u32 { return 10u64 }
 
-    /* ---- crucible: affine crushes to its closed form; geometric honestly defers; stride teeth ---- */
+    /* ---- crucible: affine + geometric crush to their closed forms; XOR fits no rung (defer); stride teeth ---- */
     if au_crucible_scalar(0u32, 7u64, 5u64, 10u64) != 75u64 { return 11u64 }
-    if au_crucible_scalar(1u32, 2u64, 5u64, 10u64) != NONE64 { return 11u64 }
+    if au_crucible_scalar(1u32, 2u64, 5u64, 10u64) != 5120u64 { return 11u64 }   /* geometric CRUSHED: 5 * 2^10 */
+    if au_crucible_scalar(2u32, 3u64, 1u64, 10u64) != NONE64 { return 11u64 }    /* XOR flip fits NO rung -> DEFER */
     let d1 : u64 = au_amputate_stride(100u64, 8u64, 4u64)
     if d1 == NONE64 { return 11u64 }
     let r1 : u64 = au_crucible_stride(100u64, 8u64, 4u64, 7u64)

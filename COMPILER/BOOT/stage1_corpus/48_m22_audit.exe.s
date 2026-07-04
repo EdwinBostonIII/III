@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiclosure.iiimandate.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "closure.iiimandate.iii\0"
+    .ascii "closure.iii\0"
 L_str_2:
     .ascii "mandate.iii\0"
     .section .bss

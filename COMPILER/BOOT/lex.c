@@ -1245,7 +1245,12 @@ static int iii_scan_string_inner(iii_lex_state_t *st, iii_token_t *out,
         }
     }
 
-    uint8_t *payload = iii_arena_alloc(&st->arena, decoded_len);
+    /* +1: NUL-terminate each payload IN THE ARENA (2026-07-04, twin-parity seed fix, the
+     * 58-charter sanctioned path).  cg_r3's .rodata emitter walks payloads by NUL; with no
+     * terminator, two ADJACENT arena entries bleed together (L_str_0 printed "msvcrtmsvcrt"
+     * for a two-extern module) -- zero-init only saved the non-adjacent cases.  The ported
+     * .iii lexer terminates its payloads; this aligns the C seed byte-for-byte. */
+    uint8_t *payload = iii_arena_alloc(&st->arena, decoded_len + 1u);
     if (payload == NULL) {
         return iii_record_error(st, III_LEX_E_OOM, "string-payload arena alloc failed");
     }
@@ -1300,6 +1305,7 @@ static int iii_scan_string_inner(iii_lex_state_t *st, iii_token_t *out,
             iii_advance(st);
         }
     }
+    payload[out_pos] = 0;   /* the arena NUL terminator (alloc reserved +1 above) */
     /* Consume closing quote. */
     iii_advance(st);
 

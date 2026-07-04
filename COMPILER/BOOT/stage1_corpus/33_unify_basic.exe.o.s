@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "unify.iiiunify.iiiunify.iiiunify.iiiunify.iiiarena.iii\0"
+    .ascii "unify.iii\0"
 L_str_1:
-    .ascii "unify.iiiunify.iiiunify.iiiunify.iiiarena.iii\0"
+    .ascii "unify.iii\0"
 L_str_2:
-    .ascii "unify.iiiunify.iiiunify.iiiarena.iii\0"
+    .ascii "unify.iii\0"
 L_str_3:
-    .ascii "unify.iiiunify.iiiarena.iii\0"
+    .ascii "unify.iii\0"
 L_str_4:
-    .ascii "unify.iiiarena.iii\0"
+    .ascii "unify.iii\0"
 L_str_5:
     .ascii "arena.iii\0"
     .section .iii.ring3,"n"

@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiarena.iiitransform.iiicall_context.iiicall_context.iiicall_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "arena.iiitransform.iiicall_context.iiicall_context.iiicall_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "transform.iiicall_context.iiicall_context.iiicall_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "transform.iii\0"
 L_str_3:
-    .ascii "call_context.iiicall_context.iiicall_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "call_context.iiicall_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "call_context.iii\0"
 L_str_5:
-    .ascii "call_context.iiitransform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "call_context.iii\0"
 L_str_6:
-    .ascii "transform_form.iiitransform_form.iiitransform_form.iii\0"
+    .ascii "transform_form.iii\0"
 L_str_7:
-    .ascii "transform_form.iiitransform_form.iii\0"
+    .ascii "transform_form.iii\0"
 L_str_8:
     .ascii "transform_form.iii\0"
     .section .data

@@ -104,6 +104,31 @@ by exactly the two leaks this doc predicted plus their measured repair:
 
 Remaining after this update: **author-diversity** (item 2) and the irreducible TCB (item 3) only.
 
+## UPDATE (2026-07-04, second) — item 2's ENFORCEABLE half is closed and gated
+
+Author-diversity closes wherever implementations of independent authorship witness the same bytes.
+Every such joint that exists on this host is now ENFORCED by `STDLIB/scripts/author_diversity_gate.sh`
+(rc=0, first run):
+
+- **A — compiler lineages:** GNU-gcc-built vs Microsoft-MSVC-built seeds, zero divergence
+  (seed_ddc_msvc, re-run inside the gate).
+- **B — the witness triangle:** three SHA-256 implementations of three independent authorships —
+  III's numera/cad (via the new `sovhash` CLI), GNU coreutils, Microsoft certutil — agree
+  byte-for-byte on every sealed trust anchor (iiis-0/1/2.exe, xii_manifest.bin) AND match the
+  committed goldens. A lie in any one implementation is exposed by the other two.
+- **C — consumer witnesses:** GNU binutils structurally parses each anchor PE; Microsoft's loader
+  executes the III-built tool.
+- **D — external vectors:** corpus 665_cad (NIST-authored FIPS vectors) gates the hasher itself;
+  sovhash additionally reproduces the NIST canonical empty-input digest and the published
+  single-byte digest.
+
+**What remains of item 2 is exactly its social core, unchanged in nature:** a second .iii→SVIR
+emitter AUTHORED BY AN INDEPENDENT TEAM. No amount of work by this repo's own author-process can
+create that — an author cannot be their own diversity. What IS delivered is the complete mechanism
+that makes such a contribution instantly judgeable: the canonical encoding spec, run_ddc's
+byte-exact conformance harness, and this gate. Item 3 (CPU/microcode/loader TCB) is permanent by
+nature, as originally stated.
+
 **Honest remaining scope (precise, not a headline — 2026-06 text, item 1a since closed above).** (1) The rigorous proof is at the **`.o` level** — fixed
 output paths, back-to-back per-source compiles, so it is drift- and timestamp-clean. (1a) A **full `iiis-1.exe`
 binary** comparison was attempted and found **confounded by build non-determinism in this environment, not by any

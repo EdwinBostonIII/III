@@ -127,9 +127,17 @@ box half-width returns 0 (τ is load-bearing); a target point moved off the curv
 whole-curve match is far more constraining than two points: matching all ~24 points is a strong
 condition, so when the target is itself a mechanism's curve, the source is typically the *only* tight
 fit (measured: over a 640-candidate grid at τ = 0.05, only the source mechanism fits its own curve).
-Approximate synthesis — fitting a target whose exact mechanism is outside the grid — is supported but
-needs a substantially larger τ, and the achievable τ is found by raising it until the first mechanism
-appears. Runtime ≈ (curve points) × the per-candidate cost, with early-out on the first missed angle.
+Approximate synthesis — fitting a target whose exact mechanism is outside the grid — is supported,
+but a *full* ζ₂₄ loop is a very demanding target: matching all 24 points simultaneously is so strong
+that no ≤6-link mechanism fits a specific 7-link mechanism's whole curve even at τ = 0.3 (measured,
+2160 candidates). Fewer target points is a strictly weaker constraint (the matches are a superset),
+which is why the two-point `synth` mode finds solutions where a full curve does not; provide only the
+`k` lines you care about and unlisted angles are unconstrained. Note that whether *distinct*
+alternative mechanisms actually appear still depends on the target's geometry and τ — the target
+points must be reachable by the grid's link lengths at all, and near-neighbours only surface once τ
+exceeds the spread between candidate curves. The tool reports exactly what fits and, when nothing
+does, says so. Runtime ≈ (curve points) × the per-candidate cost, with early-out on the first missed
+angle.
 
 ## Guarantees and honest limits
 

@@ -102,6 +102,35 @@ Verified by plant-and-recover: targets computed from a known mechanism are searc
 mechanism is recovered uniquely; a target perturbed off the real curve returns 0; a grid excluding
 the answer returns 0.
 
+### `mech gen <a> <b> <c> <d> <un ud vn vd>` — emit a coupler curve as a target file
+Prints the mechanism's coupler curve as target lines `k xn 10000 yn 10000` (the certified box
+midpoint per reachable ζ₂₄ pose) to stdout. Redirect to a file to build a target curve from a
+prototype mechanism: `mech gen 1 3 3 3 1 2 1 2 > ref.curve`.
+
+### `mech fit <d> <lim> <curve-file> <tn td>` — fit a WHOLE target curve
+Reads a target curve (lines `k xn xd yn yd`, k a ζ₂₄ crank-angle index, target (xn/xd, yn/yd);
+`#` comments allowed) and finds every mechanism (a,b,c in 1..lim; u,v grid; ground d) whose
+certified coupler box is **L∞ within τ = tn/td** of the target at *every* sampled angle. The test is
+exact and sound — the whole certified box must lie inside [target−τ, target+τ] (integer comparison,
+no float), so a reported mechanism's true coupler point is guaranteed within τ of the entire target
+curve. Timing is prescribed: each target point is tied to its crank angle, and a candidate that
+cannot reach a target angle fails (it can't trace a point it can't reach).
+```
+$ mech gen 1 3 3 3 1 2 1 2 > ref.curve       # 24-point target
+$ mech fit 3 3 ref.curve 5 10000
+target curve: 24 points
+  FIT: a=1 b=3 c=3 d=3  u=1/2 v=1/2
+searched 270 candidates; 1 fit the whole curve within tol
+```
+Verified: gen→fit round-trip recovers the source mechanism uniquely; a tolerance below the certified
+box half-width returns 0 (τ is load-bearing); a target point moved off the curve returns 0. A
+whole-curve match is far more constraining than two points: matching all ~24 points is a strong
+condition, so when the target is itself a mechanism's curve, the source is typically the *only* tight
+fit (measured: over a 640-candidate grid at τ = 0.05, only the source mechanism fits its own curve).
+Approximate synthesis — fitting a target whose exact mechanism is outside the grid — is supported but
+needs a substantially larger τ, and the achievable τ is found by raising it until the first mechanism
+appears. Runtime ≈ (curve points) × the per-candidate cost, with early-out on the first missed angle.
+
 ## Guarantees and honest limits
 
 - **Exact:** no floating point in any computation. Rationals are reduced; surds carry a certified

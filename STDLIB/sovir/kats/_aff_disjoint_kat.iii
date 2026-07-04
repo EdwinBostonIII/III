@@ -1,0 +1,50 @@
+/* _aff_disjoint_kat.iii -- Leg-A aliasing oracle gate (reconstructed 2026-07-04 into tracked kats/).
+ *
+ * ETAT mechanism 1: ai_disjoint is the O(1) affine alias decision that prunes ABOVE the SAT solver.
+ * It is SOUND ONE-SIDED -- it may only ever return 1 (PROVEN_DISJOINT) when the address sets truly
+ * cannot intersect; on any doubt it must return 0 (MAY_ALIAS) and defer.  A FALSE disjoint is the
+ * highest-risk failure in the whole autopoietic stack (it would let a real aliasing write commute),
+ * so the load-bearing arm here is the OVERLAP case: it MUST return 0.
+ *
+ *   RULE A (stride-congruence): a[2k]  vs a[2k+1]  -- same stride 2, offsets incongruent mod 2 ->
+ *           PROVEN DISJOINT (the even/odd lattices never meet, any range).
+ *   RULE B (interval separation): base 0 stride 1 k in [0,9]  vs base 100 stride 1 k in [0,9] ->
+ *           spans [0,9] and [100,109] don't overlap -> PROVEN DISJOINT.
+ *   TEETH (overlap): base 0 stride 1 k in [0,9]  vs base 5 stride 1 k in [0,9] -> spans [0,9] and
+ *           [5,14] OVERLAP -> MUST be MAY_ALIAS (0).  A 1 here would be unsound.
+ *
+ * exit 99 = all three correct; 10 rule A; 11 rule B; 12 overlap not deferred (UNSOUND). */
+module corpus_aff_disjoint_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn aff_reset() -> i32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn aff_of(base: u64, stride: u64, lo: u64, hi: u64, c: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_disjoint(p: u64, q: u64) -> u32 from "ser_absint.iii"
+
+fn main() -> u64 {
+    /* RULE A: even vs odd, stride 2 */
+    aff_reset()
+    let ev : u64 = aff_of(0u64, 2u64, 0u64, 100u64, 0u64)    /* 0,2,4,... */
+    let od : u64 = aff_of(0u64, 2u64, 0u64, 100u64, 1u64)    /* 1,3,5,... */
+    let ra : u32 = ai_disjoint(ev, od)                        /* want 1 */
+
+    /* RULE B: separated unit-stride intervals */
+    aff_reset()
+    let lo : u64 = aff_of(0u64,   1u64, 0u64, 9u64, 0u64)     /* [0,9]     */
+    let hi : u64 = aff_of(100u64, 1u64, 0u64, 9u64, 0u64)     /* [100,109] */
+    let rb : u32 = ai_disjoint(lo, hi)                        /* want 1 */
+
+    /* TEETH: overlapping unit-stride intervals must NOT be proven disjoint */
+    aff_reset()
+    let x : u64 = aff_of(0u64, 1u64, 0u64, 9u64, 0u64)        /* [0,9]  */
+    let y : u64 = aff_of(5u64, 1u64, 0u64, 9u64, 0u64)        /* [5,14] */
+    let rc : u32 = ai_disjoint(x, y)                          /* MUST be 0 */
+
+    putchar(68i32) putchar(58i32)                             /* "D:" */
+    putchar((48u32 + ra) as i32) putchar((48u32 + rb) as i32) putchar((48u32 + rc) as i32) putchar(10i32)
+
+    if ra != 1u32 { return 10u64 }        /* stride-congruence disjoint */
+    if rb != 1u32 { return 11u64 }        /* interval-separation disjoint */
+    if rc != 0u32 { return 12u64 }        /* overlap MUST defer -- the soundness tooth */
+    return 99u64
+}

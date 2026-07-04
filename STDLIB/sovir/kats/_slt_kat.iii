@@ -1,0 +1,37 @@
+/* _slt_kat.iii -- Leg-A signed-compare gate (reconstructed 2026-07-04 into tracked kats/).
+ *
+ * The SVIR equivalence prover must model SIGNED < correctly (0x32 LT_S), or every loop-bound and
+ * every "safe-for-all-t" QE proof is unsound.  sd_slt_eval is the concrete validation hook: it
+ * bit-blasts (a <s b) and returns 0/1.  This gate pins the signed semantics at the four corners
+ * that a naive UNSIGNED compare gets wrong -- specifically neg < pos (the sign-bit case an unsigned
+ * compare inverts).
+ *
+ *   -1 <s 1     -> 1   (unsigned would say 0xFFFF... > 1)
+ *    1 <s -1    -> 0
+ *   -5 <s -3    -> 1   (both negative)
+ *    3 <s 3     -> 0
+ *
+ * exit 99 = all four correct; 10..13 = the failing corner. */
+module corpus_slt_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sd_slt_eval(a: u64, b: u64) -> u64 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    let neg1 : u64 = 18446744073709551615u64   /* -1 */
+    let neg3 : u64 = 18446744073709551613u64   /* -3 */
+    let neg5 : u64 = 18446744073709551611u64   /* -5 */
+
+    let a : u64 = sd_slt_eval(neg1, 1u64)       /* want 1 */
+    let b : u64 = sd_slt_eval(1u64, neg1)       /* want 0 */
+    let c : u64 = sd_slt_eval(neg5, neg3)       /* want 1 */
+    let d : u64 = sd_slt_eval(3u64, 3u64)       /* want 0 */
+    putchar(83i32) putchar(58i32)               /* "S:" */
+    putchar((48u64 + a) as i32) putchar((48u64 + b) as i32) putchar((48u64 + c) as i32) putchar((48u64 + d) as i32) putchar(10i32)
+
+    if a != 1u64 { return 10u64 }
+    if b != 0u64 { return 11u64 }
+    if c != 1u64 { return 12u64 }
+    if d != 0u64 { return 13u64 }
+    return 99u64
+}

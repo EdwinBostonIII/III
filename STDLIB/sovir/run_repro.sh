@@ -20,11 +20,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 fail=0; say(){ echo "[repro] $*"; }
 
-# --- HOST context (characterized, not re-measured fragilely): mingw-ld needs -Wl,--no-insert-timestamp even for a
-#     trivial program, and STILL produces non-reproducible iiis-1 at scale -- 425 bytes vary across same-seed builds,
-#     scattered 4-byte RVA pointers before source-filename strings (ld places sections at different addresses per
-#     build).  See DOCS/SVIR-DDC-RESIDUAL.md.  That is the host linker; III's own back-end is measured below.
-say "HOST gcc/mingw-ld : non-reproducible for iiis-1 at scale (timestamp + ld layout variance) -- documented"
+# --- HOST context, RESOLVED 2026-07-04 (was: 425 bytes varied across same-seed iiis-1 builds --
+#     scattered RVA pointers before source-filename strings).  Root cause was TWO leaks compounding:
+#     the PE TimeDateStamps (fixed: -Wl,--no-insert-timestamp in build_iiis1) AND gcc's MIXED-form
+#     (C:/...) __FILE__/debug paths never matching the msys-form (/c/...) prefix-map keys on this
+#     spaced host path (fixed: both forms mapped).  Measured after the fix: same-seed builds
+#     BYTE-IDENTICAL, and the gcc-seed vs MSVC-seed whole iiis-1.exe BYTE-IDENTICAL (the binary-level
+#     DDC, SVIR-DDC-RESIDUAL update 2026-07-04).
+say "HOST gcc/mingw-ld : iiis-1 byte-reproducible since 2026-07-04 (timestamp zeroed + both path forms mapped) -- and cross-lineage byte-identical"
 
 # --- III FRONT-END reproducibility (ccsv -> iiis-2 -> svir_x86 -> .s), run TWICE FROM SCRATCH and diff EVERY stage.
 #     The front-end emits timestamp-free assembly TEXT, so it is genuinely diffable (unlike the host PE link).  This
@@ -61,9 +64,9 @@ if [ $fail -eq 0 ]; then
   say "         OUTPUT determinism -- DISTINCT from tool-BINARY reproducibility: the tools themselves (ccsv.exe,"
   say "         iiis-2.exe, tx_tn_*.exe) are gcc-LINKED and NOT byte-reproducible.  Demonstrated, and it CUTS FOR"
   say "         the thesis: tx_tn_a.exe != tx_tn_b.exe (host PE-timestamp) yet they emit byte-IDENTICAL .s -- so"
-  say "         output-determinism survives non-reproducible host tooling.  The only non-reproducible SHIPPED"
-  say "         artifact is the gcc-LINKED iiis-1 (PE-link variance at scale, SVIR-DDC-RESIDUAL.md) -- a HOST"
-  say "         property; routing iiis-1 through the sovereign back-end removes it.  (Scope: output determinism"
-  say "         shown for one input over two runs on one host; the .o-level seed-DDC is the rigorous part.)"
+  say "         output-determinism survives non-reproducible host tooling.  Since 2026-07-04 iiis-1 is ALSO"
+  say "         byte-reproducible (build_iiis1: timestamp zeroed + both path forms mapped) and the WHOLE-BINARY"
+  say "         gcc-seed vs MSVC-seed compare is byte-identical (SVIR-DDC-RESIDUAL.md update) -- the seed-DDC"
+  say "         now holds at the full-binary level, not just the .o level.  (Scope: two runs, one host.)"
 fi
 exit $fail

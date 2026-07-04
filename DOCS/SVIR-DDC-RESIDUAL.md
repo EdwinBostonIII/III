@@ -77,7 +77,34 @@ carry.** The deepest residual hurdle — a *seed* backdoor invisible to frontend
 and refuted at the iiis-0 → iiis-1 codegen step, across a wide, diverse witness set (an attacker's backdoor would
 have to be byte-invisible across all ~50 programs *and* present identically in both gcc and MSVC lineages).
 
-**Honest remaining scope (precise, not a headline).** (1) The rigorous proof is at the **`.o` level** — fixed
+## UPDATE (2026-07-04) — item 1a CLOSED: the binary-level DDC is now byte-for-byte
+
+The build non-determinism that confounded the whole-binary compare is fixed in `build_iiis1.sh`
+by exactly the two leaks this doc predicted plus their measured repair:
+
+- **Path-form mismatch**: gcc-on-Windows records `__FILE__`/debug paths in the MIXED form
+  (`C:/Users/...`) while the prefix-maps carried only the msys form (`/c/Users/...`) — on this
+  spaced host path the mixed-form strings never matched a map key. Fix: map both forms
+  (`cygpath -m` variants added).
+- **PE clock leak**: the link carried no `--no-insert-timestamp`; the COFF/export TimeDateStamps
+  took the wall clock. Fix: `-Wl,--no-insert-timestamp`.
+
+**Measured (2026-07-04):**
+- Same-seed determinism: two back-to-back `build_iiis1.sh` runs → **BYTE-IDENTICAL** iiis-1.exe
+  (previously 425 varying bytes under the same reproducible env).
+- **Cross-lineage whole-binary DDC**: iiis-1 built with the gcc-lineage seed vs the MSVC-lineage
+  seed (`IIIS0=build/_msvcddc/iiis-0_msvc.exe`, env override added) → **BYTE-IDENTICAL**. The
+  claim this section could previously make only at the `.o` level now holds for the ENTIRE
+  stage-1 compiler binary: a seed-lineage backdoor would have to produce identical whole-binary
+  bytes through two unrelated compiler lineages.
+- Functional sanity: the deterministic binary builds OK; the `--check-corpus` twin gate shows the
+  SAME 33/27 verdict as the unmodified script (verified side-by-side) — that red is the separate,
+  deliberate `58_udiv_highbit` falsifier tracking the cg_r3.c seed-emitter backport, not a
+  determinism artifact.
+
+Remaining after this update: **author-diversity** (item 2) and the irreducible TCB (item 3) only.
+
+**Honest remaining scope (precise, not a headline — 2026-06 text, item 1a since closed above).** (1) The rigorous proof is at the **`.o` level** — fixed
 output paths, back-to-back per-source compiles, so it is drift- and timestamp-clean. (1a) A **full `iiis-1.exe`
 binary** comparison was attempted and found **confounded by build non-determinism in this environment, not by any
 seed divergence**: two *same-seed* `build_iiis1.sh` runs produce *different* binaries even under the reproducible

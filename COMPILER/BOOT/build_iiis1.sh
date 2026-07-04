@@ -53,7 +53,10 @@ esac
 
 MODE="release"
 OUT_BIN="$OUT_DIR/iiis-1${BIN_SUFFIX}"
-IIIS0_BIN="$OUT_DIR/iiis-0${BIN_SUFFIX}"
+# IIIS0 env override (2026-07-04, same pattern as run_corpus's IIIS): lets the binary-level DDC
+# build iiis-1 through the MSVC-LINEAGE seed (build/_msvcddc/iiis-0_msvc.exe) for the whole-binary
+# cross-lineage byte-compare (SVIR-DDC-RESIDUAL).  Unset => the sealed gcc-lineage seed, unchanged.
+IIIS0_BIN="${IIIS0:-$OUT_DIR/iiis-0${BIN_SUFFIX}}"
 DO_CHECK_CORPUS=0
 DO_CLEAN=0
 
@@ -131,6 +134,14 @@ CFLAGS_COMMON=(
     -I"$BOOT_DIR"
     -I"$III_ROOT"
 )
+# BINARY-DETERMINISM (SVIR-DDC-RESIDUAL item 1a, 2026-07-04): gcc on Windows records __FILE__ /
+# debug paths in the MIXED form (C:/Users/...), while the two maps above carry the msys form
+# (/c/Users/...) -- on a host path WITH A SPACE the mixed-form paths never matched a map key and
+# leaked into the objects, making two same-seed builds differ.  Map the mixed forms too.
+if command -v cygpath >/dev/null 2>&1; then
+    CFLAGS_COMMON+=( "-ffile-prefix-map=$(cygpath -m "$BOOT_DIR")=." )
+    CFLAGS_COMMON+=( "-ffile-prefix-map=$(cygpath -m "$III_ROOT")=." )
+fi
 
 # Build a regex of basenames-without-.c that are ported.
 PORTED_RE="^($(IFS='|'; echo "${PORTED_TUS[*]}"))\.c\$"
@@ -203,7 +214,9 @@ phase link
 STDLIB_LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
 [[ -f "$STDLIB_LIB" ]] || die "$III_EXIT_LINK" "stdlib archive not found: $STDLIB_LIB (run build_stdlib.sh first)"
 log "link -> $OUT_BIN (with EIDOS optimizer archive)"
-"$CC" -o "$OUT_BIN" "${OBJS[@]}" "$STDLIB_LIB" \
+# -Wl,--no-insert-timestamp: zero the PE TimeDateStamp (COFF header + export dir) so two
+# same-seed links are byte-identical (SVIR-DDC-RESIDUAL item 1a -- the clock leaked here).
+"$CC" -Wl,--no-insert-timestamp -o "$OUT_BIN" "${OBJS[@]}" "$STDLIB_LIB" \
   || die "$III_EXIT_LINK" "link failed: $OUT_BIN"
 
 # ----- mhash + witness -----------------------------------------------------

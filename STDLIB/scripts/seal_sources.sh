@@ -119,6 +119,37 @@ printf '[seal_sources] SOURCES.mhash = %s\n' "$SOURCES_HASH"
 printf '[seal_sources] CLOSURE = %s\n' "$CLOSURE_LINE"
 printf '[seal_sources] modules sealed: %s\n' "$SOURCES_LINES"
 
+# AUTHOR-DIVERSITY AT SEAL TIME (2026-07-04): the closure root above was computed by ONE
+# authorship (GNU sha256sum).  Recompute it with the other two vertices of the witness
+# triangle -- III's numera/cad (sovhash) and Microsoft's certutil -- and REQUIRE agreement:
+# a seal is only born when three independent authorships say the same bytes.  Soft
+# dependency (mirrors forge_manifest_keccak.sh): skipped, never failed, when the in-tree
+# toolchain/lib or certutil is unavailable (e.g. a fresh checkout before first build).
+ROOT_DIR="$(cd "$STDLIB_DIR/.." && pwd)"
+ADV_IIIS="$ROOT_DIR/COMPILED/iiis-2.exe"
+ADV_LIB="$BUILD_DIR/iii/libiii_native.a"
+if [[ -x "$ADV_IIIS" && -f "$ADV_LIB" ]] && command -v certutil >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1; then
+    ADV_W="$(mktemp -d)"
+    if "$ADV_IIIS" "$ROOT_DIR/STDLIB/iii/aether/sovhash.iii" --compile-only --out "$ADV_W/sovhash.o" >/dev/null 2>&1 \
+       && gcc "$ADV_W/sovhash.o" "$ADV_LIB" -lws2_32 -lkernel32 -o "$ADV_W/sovhash.exe" >/dev/null 2>&1; then
+        ADV_III="$("$ADV_W/sovhash.exe" "$SOURCES_OUT" | tr -d '\r')"
+        ADV_MS="$(certutil -hashfile "$(cygpath -w "$SOURCES_OUT")" SHA256 2>/dev/null | sed -n 2p | tr -d ' \r' | tr 'A-F' 'a-f')"
+        if [[ -n "$ADV_III" && "$ADV_III" == "$SOURCES_HASH" && "$ADV_MS" == "$SOURCES_HASH" ]]; then
+            printf '[seal_sources] closure root TRIANGLE-VERIFIED (III/cad + GNU + Microsoft agree)\n'
+        else
+            printf '[seal_sources] FATAL: closure-root triangle DISAGREES (iii=%s gnu=%s ms=%s)\n' \
+                   "$ADV_III" "$SOURCES_HASH" "$ADV_MS" >&2
+            rm -rf "$ADV_W"
+            exit 5
+        fi
+    else
+        printf '[seal_sources] triangle: sovhash build unavailable -- skipped (soft dep)\n'
+    fi
+    rm -rf "$ADV_W"
+else
+    printf '[seal_sources] triangle: toolchain or certutil absent -- skipped (soft dep)\n'
+fi
+
 # Optional determinism verification (Contract C3 NO-DRIFT-VERIFY analogue).
 if [[ "$DO_VERIFY" -eq 1 ]]; then
     VERIFY_TMP_SOURCES="$BUILD_DIR/.SOURCES.mhash.verify.$$.tmp"

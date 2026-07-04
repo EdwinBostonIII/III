@@ -5,8 +5,8 @@
 # authorizes a new golden; an optional 2nd arg is the C corpus to crush.  gcc is ccsv's oracle assembler ONLY.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/_seqprobe"
-GOLDEN="$S/_residue_manifest.golden"; MANIFEST="$S/_residue_manifest.txt"
+IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/_seqprobe"; mkdir -p "$W"
+GOLDEN="$S/_residue_manifest.golden"; MANIFEST="$W/_residue_manifest.txt"   # regenerable -> build probe dir (never dirties sovir/)
 RESEAL=0; [ "${1:-}" = "--reseal" ] && RESEAL=1
 say(){ echo "[residue] $*"; }
 "$IIIS" "$S/ccsv.iii" --compile-only --out "$W/ccsv.o" >/dev/null 2>&1 || { say "FAIL ccsv"; exit 2; }

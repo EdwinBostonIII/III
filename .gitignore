@@ -18,6 +18,9 @@ STDLIB/build/**/*.clog
 STDLIB/build/**/*.lerr
 STDLIB/build/**/*.lderr
 STDLIB/build/**/*.err
+STDLIB/build/**/*.linkerr
+STDLIB/build/**/*.bmp
+STDLIB/build/**/*.ans
 
 # Session probe/scratch artifacts (regenerable; not part of the sovereign source tree)
 /....

@@ -14,7 +14,9 @@
 #   run_ghost.sh         -- the ghost-build over REAL ccsv output (affine CRUSHED(add d5),
 #                           geometric CRUSHED(mul r2), triangular CRUSHED(qad q1), chaotic
 #                           deferred as residue, report fingerprinted)
-#   run_residue_gate.sh  -- the residue-stability RATCHET (report hash vs sealed golden)
+#   run_residue_gate.sh  -- the residue-stability RATCHET (toy corpus report hash vs sealed golden)
+#   run_residue_real.sh  -- the REAL-SEED residue ratchet (ccsv(sha256.c): the at-scale crush/defer map;
+#                           at introduction 4/4 loops are memory-fragment residue -- the honest boundary)
 #
 # A SOURCE-TRACKING TEETH is asserted first: every run_legA KAT source must be git-tracked, so the
 # "swept from a build dir" failure mode cannot recur silently -- if a gate source is untracked, this
@@ -57,10 +59,11 @@ runchild(){  # $1 = script basename
 runchild run_legA.sh
 runchild run_ghost.sh
 runchild run_residue_gate.sh
+runchild run_residue_real.sh
 
 echo "============================================================"
 if [ "$fail" -eq 0 ]; then
-    say "ALL MEMBRANE GATES GREEN -- Leg A (26) + ghost-build + residue ratchet, sources tracked."
+    say "ALL MEMBRANE GATES GREEN -- Leg A (26) + ghost-build + toy ratchet + real-seed ratchet, sources tracked."
     exit 0
 fi
 say "MEMBRANE GATES: RED"

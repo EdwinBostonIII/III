@@ -1932,15 +1932,15 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             SKIP=$((SKIP+1)); continue
             ;;
     esac
-    # SAT-HEAVY convergence KATs: gil/gilr forge a width-64 multiplier miter
-    # (1751 has been seen spinning 34000+ CPU-sec).  Pre-existingly slow, NOT
-    # regressions, and authoritatively validated by the FAST proof KATs that
-    # share the same bb_* primitives (1755/1759/1761/1762).  The conformance
-    # compile below has no per-test timeout, so these would block the whole
-    # sweep indefinitely; delegate like XII/bench above -- do not spin.
+    # SAT-HEAVY convergence KAT: 1763's weave-interfile search genuinely exceeds the budget
+    # (>9.8 min solo, measured 2026-07-04) -- pre-existingly slow, NOT a regression, and
+    # authoritatively validated by the FAST proof KATs sharing the same bb_* primitives
+    # (1755/1759/1761/1762).  1751 and 1764 were RESTORED to this loop on 2026-07-04: their pole
+    # was gilr_proves' bit-blast miter, replaced by the bv_ring congruence judge in the whole-tree
+    # sweep (2165733e) -- measured 1751 = 99 in 1s (was 34000+ CPU-sec), 1764 = 99 in 28s.
     case "$base" in
-        1751_*|1763_*|1764_*)
-            RESULTS+=("SKIP  $base : SAT-heavy width-64 forge -- validated by fast proof KATs (1755/1759/1761/1762)")
+        1763_*)
+            RESULTS+=("SKIP  $base : SAT-heavy weave-interfile search -- validated by fast proof KATs (1755/1759/1761/1762)")
             SKIP=$((SKIP+1)); continue
             ;;
     esac
@@ -2051,8 +2051,9 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     # for a code bug; it is a workaround for a path-based AV policy.
     staged_exe="/tmp/run_$$_$RANDOM${BIN_SUFFIX}"
     cp "$exe" "$staged_exe"
-    # Generous hang-backstop (600s = the max), NOT a perf gate: the genuinely near-infinite tests are
-    # SKIP-delegated above (1751/1763/1764); this only catches an UNKNOWN runaway loop.  A tight bound
+    # Generous hang-backstop (600s = the max), NOT a perf gate: the genuinely near-infinite test is
+    # SKIP-delegated above (1763; 1751/1764 restored 2026-07-04 after the bv_ring congruence judge
+    # landed); this only catches an UNKNOWN runaway loop.  A tight bound
     # mis-fires under the full sweep's memory pressure (which inflates runtimes) -- a 120s value turned
     # valid compute-heavy tests (the 400-tick sovereign optimizer 1206/1411, the full Seraphyte
     # k-induction pipeline 2036, subk-discover 2016) into false rc=124 FAILs.  Enlarging the bound can

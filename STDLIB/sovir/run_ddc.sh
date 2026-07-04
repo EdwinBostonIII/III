@@ -42,6 +42,6 @@ for p in indep_toolchain indep_ops indep_bignum; do
 done
 
 if [ $fail -eq 0 ]; then
-  say "DDC FRONTEND-CLOSED -- two implementation-independent emitters (precedence-climbing vs shunting-yard) emit BYTE-IDENTICAL canonical SVIR for all real programs, verifier-accepted, still x86(sovereign)+wasm == 99.  RESIDUAL: seed (gcc-iiis-0) + author-diversity NOT closed (see SVIR-DDC-RESIDUAL.md)."
+  say "DDC FRONTEND-CLOSED -- two implementation-independent emitters (precedence-climbing vs shunting-yard) emit BYTE-IDENTICAL canonical SVIR for all real programs, verifier-accepted, still x86(sovereign)+wasm == 99.  RESIDUAL: author-diversity (the seed-LINEAGE axis is CLOSED at the .o level by seed_ddc_msvc.sh -- gcc vs MSVC lineages byte-identical on the full chain + broad witness; binary-level DDC awaits PE-timestamp/path build-determinism -- see SVIR-DDC-RESIDUAL.md)."
 fi
 exit $fail

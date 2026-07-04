@@ -67,6 +67,8 @@ and byte-compares the object output, in two phases:
 - **CHAIN** — every iiis-1 ported source (the TUs `iiis-1` itself is built from): **23/23 byte-identical, 0 diverged.**
 - **BROAD WITNESS** — every other reachable `.iii` (BOOT + STDLIB/sovir): **50/50 byte-identical, 0 diverged**
   (7 unsupported by the minimal stage-0 seed, legitimately — not divergences).
+- *(2026-07-04 re-run: the reachable witness set has grown with the tree — now **105/105 byte-identical,
+  0 diverged** (8 unsupported); rc=0. The closure tracks the living tree, not a frozen snapshot.)*
 
 **Result: ~50 diverse programs, two independent compiler lineages, IDENTICAL object code, zero divergence —
 reproducible, exit 0.** This is precisely "the seed compiled by an independent toolchain and the outputs verified

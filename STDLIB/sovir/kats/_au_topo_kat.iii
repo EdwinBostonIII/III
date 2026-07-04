@@ -19,6 +19,12 @@ var B3 : [u8; 24] = [16u8,0u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,5
 var B4 : [u8; 14] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8]
 /* acc = acc ^ 7                 (GET0 CONST7 XOR SET0) -- period-2 flip: fits NO rung */
 var B5 : [u8; 14] = [16u8,0u8, 1u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 39u8, 17u8,0u8]
+/* acc = acc << 1                (GET0 CONST1 SHL SET0) -- a SHIFT-written geometric (cross-form) */
+var B6 : [u8; 14] = [16u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 40u8, 17u8,0u8]
+/* acc = (acc << 1) | 1          (GET0 CONST1 SHL CONST1 OR SET0) -- fits NO rung */
+var B7 : [u8; 24] = [16u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 40u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 38u8, 17u8,0u8]
+/* acc = acc << i                (GET0 GET1 SHL SET0) -- VARIABLE shift: out of the denotable fragment */
+var B8 : [u8; 7]  = [16u8,0u8, 16u8,1u8, 40u8, 17u8,0u8]
 
 fn main() -> u64 {
     if au_topo_amputate(&B1 as u64, 0u64, 14u64, 0u32, 7u64) != 1u32 { return 1u64 }   /* acc+=5 extracted from behavior + PROVEN */
@@ -29,5 +35,10 @@ fn main() -> u64 {
     if au_last_kind() != 1u32 { return 6u64 }                                          /* kind = MUL                               */
     if au_last_ratio() != 2u64 { return 7u64 }                                         /* the proven ratio r = 2                   */
     if au_topo_amputate(&B5 as u64, 0u64, 14u64, 0u32, 1u64) != 2u32 { return 8u64 }   /* acc^=7 fits NEITHER rung -> DEFER (residue witness) */
+    if au_topo_amputate(&B6 as u64, 0u64, 14u64, 0u32, 1u64) != 1u32 { return 9u64 }   /* acc<<=1 -> CROSS-FORM proof: shl body == s*2 over 2^64 */
+    if au_last_kind() != 1u32 { return 10u64 }                                         /* kind = MUL (syntax immunity across shl/mul) */
+    if au_last_ratio() != 2u64 { return 11u64 }                                        /* the proven ratio r = 2 */
+    if au_topo_amputate(&B7 as u64, 0u64, 24u64, 0u32, 7u64) != 2u32 { return 12u64 }  /* (acc<<1)|1 fits NO rung -> DEFER */
+    if au_topo_amputate(&B8 as u64, 0u64, 7u64, 0u32, 7u64) != 2u32 { return 13u64 }   /* VARIABLE shift -> out of fragment -> DEFER */
     return 99u64
 }

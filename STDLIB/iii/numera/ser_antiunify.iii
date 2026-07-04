@@ -272,6 +272,7 @@ extern @abi(c-msvc-x64) fn sks_ult(x: u32, c: u64) -> u32 from "ser_kinduct_sym.
 extern @abi(c-msvc-x64) fn sks_eq(a: u32, b: u32) -> u32 from "ser_kinduct_sym.iii"
 extern @abi(c-msvc-x64) fn sks_not1(a: u32) -> u32 from "ser_kinduct_sym.iii"
 extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn sks_prove(p_x: u32, p_tx: u32, statevar: u32, init: u64) -> u8 from "ser_kinduct_sym.iii"
 extern @abi(c-msvc-x64) fn sks_counterexample(p_x: u32, p_tx: u32, statevar: u32) -> u64 from "ser_kinduct_sym.iii"
 extern @abi(c-msvc-x64) fn sks_mask_eq(x: u32, mask: u64, val: u64) -> u32 from "ser_kinduct_sym.iii"
@@ -624,23 +625,35 @@ var TP_STK_SYM : [u32; 256]   /* symbolic value stack (bv_bits node ids) */
 var TP_SP_SYM  : u32 = 0u32
 var TP_LOC_SYM : [u32; 256]   /* symbolic locals (TP_SYMTOP = never touched yet) */
 var TP_NEXTVAR : u32 = 0u32   /* next fresh bv_bits input index for a first-READ local (accum = 0) */
-/* SYMBOLIC denotation of one pass of the black box: locals[accum] starts as bb_var(0); every OTHER local is
- * materialised as a FRESH bb_var on its first READ (lazily, input indices 1..7), so the guillotine's proof
- * quantifies over ALL entry states of every local the body reads -- pinning them to a constant let a body
- * like acc+=5+(i&~3) prove "acc+=5" (the frozen-local false crush, closed 2026-07-04; _au_symfree_kat).
- * Returns the bv_bits node of locals[accum] AFTER the body (the body's symbolic step), or TP_SYMTOP if out
- * of the denotable fragment (shift/memory/control) or past the 8-input budget (capacity defers, honestly). */
-fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
+var TP_STK_ISC : [u8; 256]    /* shadow: 1 iff the stack slot is a DIRECT compile-time constant */
+var TP_STK_CV  : [u64; 256]   /* shadow: that constant's value (valid iff the ISC flag is 1) */
+/* initialise the symbolic state for a denotation: every local untouched, the accumulator = bb_var(0).
+ * Caller owns bb_reset.  Split from the pass so the quadratic rung can COMPOSE passes over one state. */
+fn au_sym_init(accum: u32) {
     let mut s : u32 = 0u32
     while s < 256u32 { TP_LOC_SYM[s as u64] = TP_SYMTOP  s = s + 1u32 }
     TP_LOC_SYM[accum as u64] = bb_var(0u32)
     TP_NEXTVAR = 1u32
+}
+/* ONE symbolic pass of the black box over the CURRENT TP_LOC_SYM state (locals persist across passes --
+ * that is what lets the quadratic guillotine denote the twice-composed body).  Every local first READ is
+ * materialised as a FRESH bb_var (indices 1..7), so proofs quantify over ALL entry states -- pinning them
+ * to a constant let acc+=5+(i&~3) prove "acc+=5" (the frozen-local false crush, closed 2026-07-04;
+ * _au_symfree_kat).  SHL/SHR by a DIRECT constant amount denote via bb_shl/bb_shr (amount & 63, exactly
+ * the concrete interpreter's semantics); a VARIABLE shift amount is out of the fragment (defer, honest).
+ * Returns the bv_bits node of locals[accum] AFTER the pass, or TP_SYMTOP if out of the denotable
+ * fragment (variable shift/div/memory/control) or past the 8-input budget (capacity defers, honestly). */
+fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
     TP_SP_SYM = 0u32
     let mut p : u64 = 0u64
     while p < blen {
         let op : u32 = tpb(base, boff + p)  p = p + 1u64
         let mut handled : u32 = 0u32
-        if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p)  p = p + 8u64  if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = bb_const(v)  TP_SP_SYM = TP_SP_SYM + 1u32 }  handled = 1u32 }
+        if op == 0x01u32 {
+            let v : u64 = tp_rd8(base, boff + p)  p = p + 8u64
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = bb_const(v)  TP_STK_ISC[TP_SP_SYM as u64] = 1u8  TP_STK_CV[TP_SP_SYM as u64] = v  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            handled = 1u32
+        }
         if op == 0x10u32 {
             let sl : u32 = tpb(base, boff + p)  p = p + 1u64
             let mut nd : u32 = TP_LOC_SYM[sl as u64]
@@ -650,7 +663,7 @@ fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export 
                 TP_NEXTVAR = TP_NEXTVAR + 1u32
                 TP_LOC_SYM[sl as u64] = nd
             }
-            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = nd  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = nd  TP_STK_ISC[TP_SP_SYM as u64] = 0u8  TP_SP_SYM = TP_SP_SYM + 1u32 }
             handled = 1u32
         }
         if op == 0x11u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  TP_LOC_SYM[sl as u64] = TP_STK_SYM[TP_SP_SYM as u64]  handled = 1u32 }
@@ -666,15 +679,40 @@ fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export 
             if op == 0x25u32 { r = bb_and(a, b) }
             if op == 0x26u32 { r = bb_or(a, b) }
             if op == 0x27u32 { r = bb_xor(a, b) }
-            if r == TP_SYMTOP { return TP_SYMTOP }                 /* SDIV/SREM/shift -> not denotable here */
-            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            if r == TP_SYMTOP { return TP_SYMTOP }                 /* SDIV/SREM -> not denotable here */
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_STK_ISC[TP_SP_SYM as u64] = 0u8  TP_SP_SYM = TP_SP_SYM + 1u32 }
             handled = 1u32
         } }
+        if op == 0x28u32 {                                         /* SHL by a DIRECT const amount: zero-clause remap */
+            if TP_SP_SYM < 2u32 { return TP_SYMTOP }
+            if TP_STK_ISC[(TP_SP_SYM - 1u32) as u64] != 1u8 { return TP_SYMTOP }   /* variable shift -> defer */
+            let k : u64 = TP_STK_CV[(TP_SP_SYM - 1u32) as u64] & 63u64             /* exec semantics: a << (b & 63) */
+            let a : u32 = TP_STK_SYM[(TP_SP_SYM - 2u32) as u64]
+            TP_SP_SYM = TP_SP_SYM - 2u32
+            let r : u32 = bb_shl(a, k)
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_STK_ISC[TP_SP_SYM as u64] = 0u8  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            handled = 1u32
+        }
+        if op == 0x29u32 {                                         /* SHR by a DIRECT const amount */
+            if TP_SP_SYM < 2u32 { return TP_SYMTOP }
+            if TP_STK_ISC[(TP_SP_SYM - 1u32) as u64] != 1u8 { return TP_SYMTOP }   /* variable shift -> defer */
+            let k : u64 = TP_STK_CV[(TP_SP_SYM - 1u32) as u64] & 63u64
+            let a : u32 = TP_STK_SYM[(TP_SP_SYM - 2u32) as u64]
+            TP_SP_SYM = TP_SP_SYM - 2u32
+            let r : u32 = bb_shr(a, k)
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_STK_ISC[TP_SP_SYM as u64] = 0u8  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            handled = 1u32
+        }
         if op == 0x60u32 { return TP_LOC_SYM[accum as u64] }       /* RETURN */
         if op == 0x72u32 { if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  handled = 1u32 }
         if handled == 0u32 { return TP_SYMTOP }
     }
     return TP_LOC_SYM[accum as u64]
+}
+/* SYMBOLIC denotation of one pass from a FRESH state (init + one pass) -- the exported single-step form. */
+fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
+    au_sym_init(accum)
+    return au_sym_pass(base, boff, blen, accum)
 }
 
 /* THE AGNOSTIC TOPOLOGICAL AMPUTATION: fuzz the black box (au_svir_exec) for the accum trace, then walk the

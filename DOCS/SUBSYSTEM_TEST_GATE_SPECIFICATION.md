@@ -1,5 +1,14 @@
 # Subsystem Test Gate Specification
 
+> **Current state (2026-07-04).** The R1 C subsystem provinces this spec inventories
+> (TYPES/HEXAD/LEXICON/…) were amputated in the C→.iii port era — their directories no
+> longer exist, so clause (c) is satisfied by honest emptiness (the gate prints the
+> amputation instead of a vacuous 0/0, and still executes any exe that reappears). The
+> `.iii` corpora are the successors. The driver moved to `STDLIB/scripts/run_all_corpora.sh`;
+> the gate's stale root path was fixed the same day (its exit-127 had been mislabeled
+> "127 failed tests" — the gate had never actually judged the corpora before then).
+> The inventory below is retained as the historical V1 record.
+
 Authority for the V1→V2 transition gate: no V2 phase begins until every V1
 subsystem passes its threshold. Grounded in the **real** subsystem test exes
 (`<SUBSYS>/build/iii_<name>_test.exe`) and the existing driver

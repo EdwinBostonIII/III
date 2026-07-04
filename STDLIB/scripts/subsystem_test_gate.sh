@@ -44,17 +44,22 @@ if [ "$DO_BUILD" -eq 1 ]; then
     fi
 fi
 
-# 1. .iii corpora (stdlib correctness + bench correctness + stage1) via the
-#    canonical driver. Exit code is the count of failed tests (0 = all pass).
+# 1. .iii corpora (stdlib correctness + bench correctness + stage1) via the canonical driver.
+#    PATH FIXED (2026-07-04): the one-sweep moved to STDLIB/scripts/ (its header records the move);
+#    this gate still invoked it at repo root -- exit 127 (not-found) was then mislabeled "127
+#    failed tests" and the gate had NEVER actually judged the corpora from here.
 echo "[gate] run_all_corpora.sh ..."
 if [ "$QUIET" -eq 1 ]; then
-    bash "$ROOT/run_all_corpora.sh" --quiet >/dev/null 2>&1
+    bash "$ROOT/STDLIB/scripts/run_all_corpora.sh" --quiet >/dev/null 2>&1
 else
-    bash "$ROOT/run_all_corpora.sh" --quiet
+    bash "$ROOT/STDLIB/scripts/run_all_corpora.sh" --quiet
 fi
 corpora_rc=$?
-if [ "$corpora_rc" -ne 0 ]; then
-    echo "[gate] FAIL: .iii corpora reported $corpora_rc failed test(s)"
+if [ "$corpora_rc" -eq 126 ] || [ "$corpora_rc" -eq 127 ]; then
+    echo "[gate] FAIL: .iii corpora driver did not run (spawn rc=$corpora_rc) -- a harness fault, not a test count"
+    FAILED="$FAILED iii-corpora-spawn($corpora_rc)"
+elif [ "$corpora_rc" -ne 0 ]; then
+    echo "[gate] FAIL: .iii corpora red (driver rc=$corpora_rc)"
     FAILED="$FAILED iii-corpora($corpora_rc)"
 fi
 
@@ -78,7 +83,15 @@ done < <(find . -name 'iii_*_test.exe' -type f -not -path '*/.claude/*' 2>/dev/n
 # process-spawn load (30 exes -> 6), which under the post-1GB-witness-corpus commit pressure was the
 # documented source of a transient iii_lex_test teardown segfault (the binary passes 77/77 + 40/40 in
 # isolation). Mirrors the carto-gate .claude skip.
-echo "[gate] subsystem exes: $((ss_total - ss_fail))/$ss_total passed"
+if [ "$ss_total" -eq 0 ]; then
+    # HONEST EMPTINESS (2026-07-04): the R1 C subsystem provinces (TYPES/HEXAD/LEXICON/...) were
+    # AMPUTATED in the C->.iii port era -- their directories no longer exist, so zero exes is the
+    # tree's truth, not missing coverage; the .iii corpora above are the successors.  The find
+    # still judges any exe that reappears (drift would be executed and checked, never vacuous).
+    echo "[gate] subsystem exes: 0 present (R1 C provinces amputated; .iii corpora are the successors)"
+else
+    echo "[gate] subsystem exes: $((ss_total - ss_fail))/$ss_total passed"
+fi
 
 # 3. Sovereign Forge closure meta-gate (SOVEREIGN_FORGE.md §2). TRUE function:
 #    forge_check.sh recomputes every K1-K6 full-spec seal + the descent sub-closure

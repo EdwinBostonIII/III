@@ -1,0 +1,79 @@
+module au_symfree_kat
+
+/* SYMBOLIC FREEDOM (the frozen-local soundness hole, closed) -- AUDIT 2026-07-04.
+ *
+ * THE HOLE: au_svir_step_sym denoted every non-accum local as bb_const(0), while the concrete fuzz
+ * (au_topo_amputate) lets those locals EVOLVE across its 4 sampled passes.  Both filters therefore
+ * pass on a body whose accum update depends on another local in a way that is invisible both at the
+ * sampled window (i = 0..3) and at the pinned point (i = 0):
+ *
+ *     ADV:  acc = acc + 5 + (i & ~3) ; i = i + 1
+ *
+ * fuzz trace 7,12,17,22,27 (i&~3 == 0 for i<4)  ->  affine fit delta=5;
+ * old symbolic step at i:=0  ->  s + 5 + (0 & ~3) == s + 5  ->  bb_equal PROVES it  ->  FALSE CRUSH.
+ * The real orbit adds 5 + (i&~3) from i=4 on: acc(5) = 7 + 5*5 + 4 = 36, but the "proven" closed
+ * form says cf(5) = 7 + 5*5 = 32.  Demonstrated RED against the pre-fix crusher (this KAT exited 1;
+ * the orbit-truth check (0) passed, so the divergence is real, and (1) caught verdict==1).
+ *
+ * THE FIX: au_svir_step_sym materialises each first-READ local as a FRESH bb_var (accum = var 0,
+ * others lazily var 1..7) -- the guillotine now quantifies over ALL entry states of every local the
+ * body reads, so an i-dependent contribution symbolically survives and the miter REFUTES the affine
+ * conjecture.  bv_bits carries BB_MAX_INPUTS = 8 shared input words; a body reading more than 7
+ * non-accum locals is HONESTLY DEFERRED (capacity is a defer, never a verdict), and a poisoned
+ * decision (bb_equal = 0xFF) likewise maps to DEFER, never to "refuted" and never to a crush.
+ *
+ *   (0) ORBIT TRUTH   : 5 concrete passes of ADV from acc=7,i=0 end at 36 (== 32 refutes the KAT itself)
+ *   (1) NO FALSE CRUSH: ADV must be REFUTED (0) -- the fuzz-affine conjecture dies at the miter
+ *   (2) NO REGRESSION : acc+=5 with a live counter local still crushes (1) -- extra vars don't weaken truth
+ *   (3) CAPACITY HONESTY: a body reading accum + 8 other locals exceeds the 8-input budget -> DEFER (2)
+ *
+ * exit 99 = all four; 10 = the orbit itself is wrong; 1/2/3 = the corresponding contract broken. */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_get(slot: u32) -> u64 from "ser_antiunify.iii"
+
+/* ADV: acc = acc + 5 + (i & 0xFFFFFFFFFFFFFFFC) ; i = i + 1   (acc=L0, i=L1; 41 bytes)
+ * GET0 CONST5 ADD GET1 CONST(~3) AND ADD SET0  GET1 CONST1 ADD SET1 */
+var ADV : [u8; 41] = [
+  16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8,
+  16u8,1u8, 1u8,252u8,255u8,255u8,255u8,255u8,255u8,255u8,255u8, 37u8, 32u8, 17u8,0u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+/* AFF: acc = acc + 5 ; i = i - 1   (the classic affine-with-counter body; 28 bytes) */
+var AFF : [u8; 28] = [
+  16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8]
+
+/* WIDE: acc = acc + L1 + L2 + ... + L8   (9 distinct locals read > 8 input budget; 28 bytes) */
+var WIDE : [u8; 28] = [
+  16u8,0u8,
+  16u8,1u8, 32u8, 16u8,2u8, 32u8, 16u8,3u8, 32u8, 16u8,4u8, 32u8,
+  16u8,5u8, 32u8, 16u8,6u8, 32u8, 16u8,7u8, 32u8, 16u8,8u8, 32u8,
+  17u8,0u8]
+
+fn main() -> u64 {
+    /* (0) ORBIT TRUTH: the divergence the old "proof" missed is REAL.  5 passes from acc=7, i=0:
+     * passes at i=0..3 add 5 each, the pass at i=4 adds 5+4 -> 7 + 25 + 4 = 36 (cf claimed 32). */
+    let mut z : u32 = 0u32
+    while z < 16u32 { au_tp_set(z, 0u64)  z = z + 1u32 }
+    au_tp_set(0u32, 7u64)
+    let mut p : u32 = 0u32
+    while p < 5u32 {
+        if au_svir_exec(&ADV as u64, 0u64, 41u64) != 0u32 { return 10u64 }
+        p = p + 1u32
+    }
+    if au_tp_get(0u32) != 36u64 { return 10u64 }
+
+    /* (1) NO FALSE CRUSH: the guillotine must REFUTE the affine conjecture on ADV (0), never prove it. */
+    if au_topo_amputate(&ADV as u64, 0u64, 41u64, 0u32, 7u64) != 0u32 { return 1u64 }
+
+    /* (2) NO REGRESSION: the honest affine body (with its counter local live) still crushes. */
+    if au_topo_amputate(&AFF as u64, 0u64, 28u64, 0u32, 7u64) != 1u32 { return 2u64 }
+
+    /* (3) CAPACITY HONESTY: 9 distinct read locals exceed the 8-input budget -> DEFER, never a verdict. */
+    if au_topo_amputate(&WIDE as u64, 0u64, 28u64, 0u32, 7u64) != 2u32 { return 3u64 }
+
+    return 99u64
+}

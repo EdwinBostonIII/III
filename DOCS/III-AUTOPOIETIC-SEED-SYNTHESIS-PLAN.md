@@ -929,3 +929,27 @@ exact-fold minimizer is; Epoch III's **constraint-language front-end** (the UI t
 synthesis+certify engine underneath it is; Epoch IV today covers the **combinational/crushed fragment** (a full
 SVIR→synthesizable-Verilog for sequential/memory ops remains). Each core is real, gated, and reddens under mutation;
 each frontier is a genuine campaign, not a toggle. `run_legA.sh` = **23 KATs ALL GREEN**.
+
+## SOUNDNESS AUDIT 2026-07-04 — the frozen-local false crush (found, demonstrated, closed)
+
+**The hole (au_svir_step_sym):** the symbolic denoter pinned every non-accum local to `bb_const(0)`
+while the concrete fuzz (au_topo_amputate) samples only 4 passes with locals EVOLVING from 0.  A body
+whose accum update depends on another local — invisibly at the sampled window AND at the pinned point —
+passed both filters:  `acc = acc + 5 + (i & ~3); i = i + 1` fuzzes 7,12,17,22,27 (affine, delta 5) and
+symbolically reduces to `s + 5` at `i := 0`, so `bb_equal` PROVED the affine conjecture.  The real orbit
+adds `5 + (i&~3)` from i=4 on: acc(5) = 36 against the "proven" cf(5) = 32.  This violated the module's
+central claim ("a fuzz mis-extraction is REFUTED, never crushed").
+
+**Demonstrated by execution (pre-fix):** `_au_symfree_kat` exit **1** — its orbit-truth check (0) passed
+(36, the divergence is real) and check (1) caught `au_topo_amputate(ADV) == 1` (FALSE CRUSH).
+
+**The fix:** the denoter now materialises each first-READ local as a FRESH `bb_var` (accum = var 0,
+others lazily 1..7) — the guillotine quantifies over ALL entry states of every local the body reads
+(bv_bits carries `BB_MAX_INPUTS = 8` shared input words).  More than 7 non-accum read locals → honest
+DEFER (capacity is never a verdict); a poisoned `bb_equal` (0xFF) also maps to DEFER, never to
+"refuted", never to a crush.  Affine crushes whose accum cone ignores the other locals are UNCHANGED
+(the extra vars appear on neither side of the miter), so the residue ledger fingerprint
+`327748354ab7847c` must remain byte-identical after this fix — verified by `run_residue_gate.sh`.
+
+**Post-fix gate:** `_au_symfree_kat` = 99 (orbit truth; ADV refuted; affine-with-counter still crushes;
+9-local body defers), joined to `run_legA.sh`.

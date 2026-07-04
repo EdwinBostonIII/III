@@ -543,22 +543,37 @@ fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {
 const TP_SYMTOP : u32 = 4294967295u32
 var TP_STK_SYM : [u32; 256]   /* symbolic value stack (bv_bits node ids) */
 var TP_SP_SYM  : u32 = 0u32
-var TP_LOC_SYM : [u32; 256]   /* symbolic locals */
-/* SYMBOLIC denotation of one pass of the black box: locals[accum] starts as bb_var(0), the rest at 0; returns the
- * bv_bits node of locals[accum] AFTER the body (the body's symbolic step), or TP_SYMTOP if out of the denotable
- * fragment (shift/memory/control). */
+var TP_LOC_SYM : [u32; 256]   /* symbolic locals (TP_SYMTOP = never touched yet) */
+var TP_NEXTVAR : u32 = 0u32   /* next fresh bv_bits input index for a first-READ local (accum = 0) */
+/* SYMBOLIC denotation of one pass of the black box: locals[accum] starts as bb_var(0); every OTHER local is
+ * materialised as a FRESH bb_var on its first READ (lazily, input indices 1..7), so the guillotine's proof
+ * quantifies over ALL entry states of every local the body reads -- pinning them to a constant let a body
+ * like acc+=5+(i&~3) prove "acc+=5" (the frozen-local false crush, closed 2026-07-04; _au_symfree_kat).
+ * Returns the bv_bits node of locals[accum] AFTER the body (the body's symbolic step), or TP_SYMTOP if out
+ * of the denotable fragment (shift/memory/control) or past the 8-input budget (capacity defers, honestly). */
 fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export {
-    let z : u32 = bb_const(0u64)
     let mut s : u32 = 0u32
-    while s < 256u32 { TP_LOC_SYM[s as u64] = z  s = s + 1u32 }
+    while s < 256u32 { TP_LOC_SYM[s as u64] = TP_SYMTOP  s = s + 1u32 }
     TP_LOC_SYM[accum as u64] = bb_var(0u32)
+    TP_NEXTVAR = 1u32
     TP_SP_SYM = 0u32
     let mut p : u64 = 0u64
     while p < blen {
         let op : u32 = tpb(base, boff + p)  p = p + 1u64
         let mut handled : u32 = 0u32
         if op == 0x01u32 { let v : u64 = tp_rd8(base, boff + p)  p = p + 8u64  if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = bb_const(v)  TP_SP_SYM = TP_SP_SYM + 1u32 }  handled = 1u32 }
-        if op == 0x10u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = TP_LOC_SYM[sl as u64]  TP_SP_SYM = TP_SP_SYM + 1u32 }  handled = 1u32 }
+        if op == 0x10u32 {
+            let sl : u32 = tpb(base, boff + p)  p = p + 1u64
+            let mut nd : u32 = TP_LOC_SYM[sl as u64]
+            if nd == TP_SYMTOP {
+                if TP_NEXTVAR >= 8u32 { return TP_SYMTOP }         /* > 8 read locals: past the input budget -> defer */
+                nd = bb_var(TP_NEXTVAR)
+                TP_NEXTVAR = TP_NEXTVAR + 1u32
+                TP_LOC_SYM[sl as u64] = nd
+            }
+            if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = nd  TP_SP_SYM = TP_SP_SYM + 1u32 }
+            handled = 1u32
+        }
         if op == 0x11u32 { let sl : u32 = tpb(base, boff + p)  p = p + 1u64  if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  TP_LOC_SYM[sl as u64] = TP_STK_SYM[TP_SP_SYM as u64]  handled = 1u32 }
         if op >= 0x20u32 { if op <= 0x27u32 {
             if TP_SP_SYM < 2u32 { return TP_SYMTOP }
@@ -605,8 +620,10 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
     let step : u32 = au_svir_step_sym(base, boff, blen, accum)     /* THE GUILLOTINE against the black box */
     if step == TP_SYMTOP { return AU_DEFER }
     let v0 : u32 = bb_var(0u32)
-    if bb_equal(step, bb_add(v0, bb_const(delta))) == 1u8 { return 1u32 }   /* step(acc)==acc+delta over 2^64 */
-    return 0u32                                                    /* fuzz-affine but symbolically REFUTED */
+    let vd : u8 = bb_equal(step, bb_add(v0, bb_const(delta)))      /* step(acc,others)==acc+delta over ALL states */
+    if vd == 1u8 { return 1u32 }
+    if vd == 0u8 { return 0u32 }                                   /* fuzz-affine but symbolically REFUTED */
+    return AU_DEFER                                                /* poisoned decision (0xFF capacity) -> honest defer */
 }
 
 /* ============================================================================================================

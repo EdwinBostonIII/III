@@ -1,0 +1,41 @@
+/* _etat_mem_kat.iii -- Leg-A memory-equivalence gate B2/B4 (reconstructed 2026-07-04, tracked kats/).
+ *
+ * ETAT's memory model proves program-memory equivalence WITHOUT McCarthy array axioms: writes are
+ * events on a causal log; a read folds them newest-first (B0-proven sound); PROVEN-DISJOINT writes
+ * COMMUTE and collapse into one unordered epoch, so equivalence is an epoch comparison, never a
+ * quadratic alias sweep.  This gate pins the collapse soundness and its full teeth:
+ *
+ *   et_mem_commute_sound     : no DISJOINT write pair ever differs under reorder  -> 1
+ *   et_mem_commute_unguarded : WITHOUT the guard a same-index reorder DIVERGES    -> 0 (teeth)
+ *   et_mem_sound             : the assembled lemma (sound AND unguarded-refutable) -> 1
+ *   etat_mem_demo_reorder    : A=[10<-v1,20<-v2] vs B reordered -> disjoint -> equal at all j -> 1
+ *   etat_mem_demo_diff       : B writes 10 twice (never 20) -> diverges at j=20 -> REFUTED -> 0 (teeth)
+ *
+ * exit 99 = all five; 10 commute-sound; 11 unguarded didn't diverge (vacuous); 12 lemma;
+ *   13 reorder-demo; 14 diff-demo didn't refute (vacuous). */
+module corpus_etat_mem_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn et_mem_commute_sound() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_mem_commute_unguarded() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_mem_sound() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn etat_mem_demo_reorder() -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn etat_mem_demo_diff() -> u8 from "ser_causal.iii"
+
+fn main() -> u64 {
+    let cs : u8 = et_mem_commute_sound()
+    let cu : u8 = et_mem_commute_unguarded()   /* MUST be 0 */
+    let ms : u8 = et_mem_sound()
+    let dr : u8 = etat_mem_demo_reorder()
+    let dd : u8 = etat_mem_demo_diff()         /* MUST be 0 */
+
+    putchar(77i32) putchar(58i32)              /* "M:" */
+    putchar((48u8 + cs) as i32) putchar((48u8 + cu) as i32) putchar((48u8 + ms) as i32) putchar((48u8 + dr) as i32) putchar((48u8 + dd) as i32) putchar(10i32)
+
+    if cs != 1u8 { return 10u64 }        /* disjoint writes commute */
+    if cu != 0u8 { return 11u64 }        /* TEETH: unguarded same-index reorder diverges */
+    if ms != 1u8 { return 12u64 }        /* the assembled epoch-collapse lemma */
+    if dr != 1u8 { return 13u64 }        /* reordered disjoint program == original */
+    if dd != 0u8 { return 14u64 }        /* TEETH: a genuinely different memory effect is refuted */
+    return 99u64
+}

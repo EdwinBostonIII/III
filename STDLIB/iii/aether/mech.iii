@@ -50,6 +50,10 @@ extern @abi(c-msvc-x64) fn ui_win_pump() -> u32 from "ui_win.iii"
 extern @abi(c-msvc-x64) fn ui_getkey() -> u32 from "ui_win.iii"
 extern @abi(c-msvc-x64) fn ui_sleep(ms: u32) -> i32 from "ui_win.iii"
 
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, read: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
 var MXDIG : [u8; 32]
 var MXPD  : [i64; 8]
 var MXS   : i64        /* square part s of the last sqfree() call: n = s^2 * r */
@@ -1282,6 +1286,173 @@ fn syn_uv_tab() -> i32 {
     return 0i32
 }
 
+/* ------------------------------------------------ full target-curve synthesis ----------------- */
+/* `mech gen a b c d un ud vn vd` prints the coupler curve as target lines "k mx 10000 my 10000"
+ * (box midpoints per reachable pose) -- redirect to a file to build a target curve. */
+fn gen(a: i64, b: i64, c: i64, d: i64, un: i64, ud: i64, vn: i64, vd: i64) -> u64 {
+    sw_tab()
+    let mut k : i64 = 0i64
+    while k < 24i64 {
+        let r : i32 = syn_box(a, b, c, d, k, un, ud, vn, vd)
+        if r == 1i32 {
+            let mx : i64 = (SYNPXL + SYNPXH) / 2i64
+            let my : i64 = (SYNPYL + SYNPYH) / 2i64
+            pint(k)   pch(32i32)   pint(mx)   pstr(" 10000 ~")   pint(my)   pstr(" 10000~")   pnl()
+        }
+        k = k + 1i64
+    }
+    return 0u64
+}
+
+/* target-curve store (one point per zeta-24 angle) + a file reader. */
+var FITBUF : [u8; 16384]
+var FITLEN : i64   var FITPOS : i64   var FIT_EOF : i64
+var TGT_HAS : [i64; 24]   var TGT_XN : [i64; 24]   var TGT_XD : [i64; 24]   var TGT_YN : [i64; 24]   var TGT_YD : [i64; 24]
+var FIT_NREAD : [u32; 1]
+
+/* scan the next signed integer from FITBUF, skipping spaces/tabs/newlines and '#' comment lines. */
+fn fit_scan_int() -> i64 {
+    FIT_EOF = 0i64
+    let mut skipping : u8 = 1u8
+    while skipping == 1u8 {
+        if FITPOS >= FITLEN { FIT_EOF = 1i64   return 0i64 }
+        let c : u8 = FITBUF[FITPOS]
+        if c == 35u8 {
+            let mut inco : u8 = 1u8
+            while inco == 1u8 {
+                if FITPOS >= FITLEN { inco = 0u8 } else {
+                    let d0 : u8 = FITBUF[FITPOS]   FITPOS = FITPOS + 1i64
+                    if d0 == 10u8 { inco = 0u8 }
+                }
+            }
+        } else {
+            if c == 32u8 { FITPOS = FITPOS + 1i64 } else {
+            if c == 9u8 { FITPOS = FITPOS + 1i64 } else {
+            if c == 10u8 { FITPOS = FITPOS + 1i64 } else {
+            if c == 13u8 { FITPOS = FITPOS + 1i64 } else { skipping = 0u8 } } } }
+        }
+    }
+    let mut neg : u8 = 0u8
+    if FITBUF[FITPOS] == 45u8 { neg = 1u8   FITPOS = FITPOS + 1i64 }
+    let mut v : i64 = 0i64
+    let mut got : u8 = 0u8
+    let mut reading : u8 = 1u8
+    while reading == 1u8 {
+        if FITPOS >= FITLEN { reading = 0u8 } else {
+            let c : u8 = FITBUF[FITPOS]
+            if c < 48u8 { reading = 0u8 } else {
+                if c > 57u8 { reading = 0u8 } else {
+                    v = (v * 10i64) + ((c - 48u8) as i64)   got = 1u8   FITPOS = FITPOS + 1i64
+                }
+            }
+        }
+    }
+    if got == 0u8 { FIT_EOF = 1i64   return 0i64 }
+    if neg == 1u8 { return 0i64 - v }
+    return v
+}
+
+/* read a target-curve file (lines "k xn xd yn yd") into TGT_*; returns point count, or -1 on open/read fail. */
+fn fit_read(path: u64) -> i64 {
+    let h : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 0u32, 0u64)
+    if h == 18446744073709551615u64 { return 0i64 - 1i64 }
+    let ok : i32 = ReadFile(h, (&FITBUF) as u64, 16384u32, (&FIT_NREAD) as u64, 0u64)
+    CloseHandle(h)
+    if ok == 0i32 { return 0i64 - 1i64 }
+    FITLEN = FIT_NREAD[0u64] as i64
+    FITPOS = 0i64
+    let mut i : i64 = 0i64
+    while i < 24i64 { TGT_HAS[i] = 0i64   i = i + 1i64 }
+    let mut cnt : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let k : i64 = fit_scan_int()
+        if FIT_EOF == 1i64 { going = 0u8 } else {
+            let xn : i64 = fit_scan_int()   let xd : i64 = fit_scan_int()
+            let yn : i64 = fit_scan_int()   let yd : i64 = fit_scan_int()
+            if FIT_EOF == 1i64 { going = 0u8 } else {
+                if k >= 0i64 { if k < 24i64 { if xd > 0i64 { if yd > 0i64 {
+                    TGT_HAS[k] = 1i64   TGT_XN[k] = xn   TGT_XD[k] = xd   TGT_YN[k] = yn   TGT_YD[k] = yd
+                    cnt = cnt + 1i64
+                } } } }
+            }
+        }
+    }
+    return cnt
+}
+
+/* exact L-inf within-tau test: whole box [pl,ph] (scaled 1e4) inside [cn/cd - tn/td, cn/cd + tn/td]. */
+fn fit_within(pl: i64, ph: i64, cn: i64, cd: i64, tn: i64, td: i64) -> u8 {
+    let lhs_lo : i64 = (pl * cd) * td
+    let rhs_lo : i64 = ((cn * td) - (tn * cd)) * 10000i64
+    if lhs_lo < rhs_lo { return 0u8 }
+    let lhs_hi : i64 = (ph * cd) * td
+    let rhs_hi : i64 = ((cn * td) + (tn * cd)) * 10000i64
+    if lhs_hi > rhs_hi { return 0u8 }
+    return 1u8
+}
+
+/* fit: every mechanism (a,b,c in 1..lim; u,v grid; ground d) whose coupler box is within tau of the
+ * WHOLE target curve at every sampled angle.  Sound + exact; early-out on the first missed angle. */
+fn fit(d: i64, lim: i64, tn: i64, td: i64) -> u64 {
+    pstr("III MECH -- exact full-curve fit (ground d=~")   pint(d)   pstr(", links 1..~")   pint(lim)
+    pstr(", tol ~")   pfrac(tn, td)   pstr(" L-inf)~")   pnl()
+    sw_tab()
+    syn_uv_tab()
+    let mut np : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 24i64 { if TGT_HAS[i] == 1i64 { np = np + 1i64 }   i = i + 1i64 }
+    pstr("target curve: ~")   pint(np)   pstr(" points~")   pnl()
+    let mut found : i64 = 0i64
+    let mut shown : i64 = 0i64
+    let mut searched : i64 = 0i64
+    let mut a : i64 = 1i64
+    while a <= lim {
+        let mut b : i64 = 1i64
+        while b <= lim {
+            let mut c : i64 = 1i64
+            while c <= lim {
+                let mut ui : i64 = 0i64
+                while ui < 10i64 {
+                    let un : i64 = SYNUV[ui * 2i64]
+                    let vn : i64 = SYNUV[(ui * 2i64) + 1i64]
+                    searched = searched + 1i64
+                    let mut allok : u8 = 1u8
+                    let mut ki : i64 = 0i64
+                    while ki < 24i64 {
+                        if allok == 1u8 { if TGT_HAS[ki] == 1i64 {
+                            let r : i32 = syn_box(a, b, c, d, ki, un, 2i64, vn, 2i64)
+                            if r == 0i32 { allok = 0u8 } else {
+                                if fit_within(SYNPXL, SYNPXH, TGT_XN[ki], TGT_XD[ki], tn, td) == 0u8 { allok = 0u8 } else {
+                                    if fit_within(SYNPYL, SYNPYH, TGT_YN[ki], TGT_YD[ki], tn, td) == 0u8 { allok = 0u8 }
+                                }
+                            }
+                        } }
+                        ki = ki + 1i64
+                    }
+                    if allok == 1u8 {
+                        found = found + 1i64
+                        if shown < 16i64 {
+                            pstr("  FIT: a=~")   pint(a)   pstr(" b=~")   pint(b)   pstr(" c=~")   pint(c)
+                            pstr(" d=~")   pint(d)   pstr("  u=~")   pfrac(un,2i64)   pstr(" v=~")   pfrac(vn,2i64)   pnl()
+                            shown = shown + 1i64
+                        }
+                    }
+                    ui = ui + 1i64
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    pstr("searched ~")   pint(searched)   pstr(" candidates; ~")   pint(found)   pstr(" fit the whole curve within tol~")
+    if found > shown { pstr(" (showing first ~")   pint(shown)   pstr(")~") }
+    pnl()
+    if found == 0i64 { pstr("(none within tol -- raise <tn>/<td> to widen the match)~")   pnl() }
+    return 0u64
+}
+
 /* synth: find every mechanism (a,b,c in 1..LIM, u,v in the grid; ground d fixed) whose certified
  * coupler box at k1 holds target1 AND at k2 holds target2.  Exact; reports the count searched. */
 fn synth(d: i64, lim: i64,
@@ -1401,6 +1572,8 @@ fn usage() -> u64 {
     pstr("  mech show <a> <b> <c> <d> [n]     LIVE window animating the exact cycle (ESC/q quits; n frames cap)~")   pnl()
     pstr("  mech curve <a> <b> <c> <d> <un ud vn vd>  certified coupler-point path P=A+(un/ud)(B-A)+(vn/vd)perp(B-A)~")   pnl()
     pstr("  mech synth <d> <lim> <k1 x1n x1d y1n y1d> <k2 x2n x2d y2n y2d>  find mechanisms whose coupler hits 2 precision points~")   pnl()
+    pstr("  mech gen <a> <b> <c> <d> <un ud vn vd>    print the coupler curve as a target file (k xn xd yn yd)~")   pnl()
+    pstr("  mech fit <d> <lim> <curve-file> <tn td>   find mechanisms whose coupler fits a WHOLE target curve within tol~")   pnl()
     return 2u64
 }
 
@@ -1498,6 +1671,40 @@ fn main(argc: i32, argv: u64) -> u64 {
             if c > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
             if d > 40i64 { pstr("REFUSED: sweep envelope is 1..40 (keeps Delta certificates in i64)~")   pnl()   return 3u64 }
             return sweep(a, b, c, d)
+        }
+        if fb == 103u8 {
+            /* gen a b c d un ud vn vd -- print the coupler curve as a target file */
+            if argc != 10i32 { return usage() }
+            let ga : i64 = parse_u(pp[2u64])   let gb : i64 = parse_u(pp[3u64])
+            let gc : i64 = parse_u(pp[4u64])   let gd : i64 = parse_u(pp[5u64])
+            let gun : i64 = parse_u(pp[6u64])  let gud : i64 = parse_u(pp[7u64])
+            let gvn : i64 = parse_u(pp[8u64])  let gvd : i64 = parse_u(pp[9u64])
+            if ga < 1i64 { return usage() }
+            if gb < 1i64 { return usage() }
+            if gc < 1i64 { return usage() }
+            if gd < 1i64 { return usage() }
+            if gud < 1i64 { return usage() }
+            if gvd < 1i64 { return usage() }
+            if ga > 40i64 { pstr("REFUSED: gen envelope is 1..40~")   pnl()   return 3u64 }
+            if gb > 40i64 { pstr("REFUSED: gen envelope is 1..40~")   pnl()   return 3u64 }
+            if gc > 40i64 { pstr("REFUSED: gen envelope is 1..40~")   pnl()   return 3u64 }
+            if gd > 40i64 { pstr("REFUSED: gen envelope is 1..40~")   pnl()   return 3u64 }
+            return gen(ga, gb, gc, gd, gun, gud, gvn, gvd)
+        }
+        if fb == 102u8 {
+            /* fit d lim <path> tn td -- fit a whole target curve */
+            if argc != 7i32 { return usage() }
+            let fd : i64 = parse_u(pp[2u64])   let fl : i64 = parse_u(pp[3u64])
+            let ftn : i64 = parse_u(pp[5u64])  let ftd : i64 = parse_u(pp[6u64])
+            if fd < 1i64 { return usage() }
+            if fl < 1i64 { return usage() }
+            if fd > 40i64 { pstr("REFUSED: envelope 1..40~")   pnl()   return 3u64 }
+            if fl > 20i64 { pstr("REFUSED: search bound capped at 20~")   pnl()   return 3u64 }
+            if ftd < 1i64 { return usage() }
+            let nt : i64 = fit_read(pp[4u64])
+            if nt < 0i64 { pstr("REFUSED: cannot open the target-curve file~")   pnl()   return 4u64 }
+            if nt == 0i64 { pstr("REFUSED: no target points parsed (lines: k xn xd yn yd)~")   pnl()   return 3u64 }
+            return fit(fd, fl, ftn, ftd)
         }
         if fb == 99u8 {
             /* curve: 4 links + u (un ud) + v (vn vd) */

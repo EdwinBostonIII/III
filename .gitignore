@@ -68,3 +68,4 @@ STDLIB/build/probe2179/
 STDLIB/build/VERIFIED.tsv
 STDLIB/build/worldgraph.*.nodes
 STDLIB/build/worldgraph.*.edges
+/*.curve

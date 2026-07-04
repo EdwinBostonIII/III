@@ -1,0 +1,44 @@
+/* _etat_b2_kat.iii -- Leg-A causal-tensorization gate (reconstructed 2026-07-04 into tracked kats/).
+ *
+ * B2 crushes time into spatial geometry via the MAY-ALIAS CASCADE (the answer to the aliasing
+ * bottleneck): (1) ai_disjoint -- O(1) affine abstract -- proves separation -> COMMUTE; (2) a
+ * concrete fuzz witness -> COLLIDE (serialize); (3) neither -> SUPERPOSE (the always-sound B0 fold).
+ * The holographic epoch hash is REORDER-INVARIANT for commuting writes yet GEOMETRY-SENSITIVE (a
+ * real hash collision on stride was fixed by folding stride into the root).
+ *
+ *   et_commute_commute_case    -> 1 (ETC_COMMUTE: [0,9] vs [100,109] disjoint)
+ *   et_commute_collide_case    -> 2 (ETC_COLLIDE: [0,9] vs [5,14] concrete overlap)
+ *   et_commute_superpose_case  -> 0 (ETC_SUPERPOSE: strides 6 vs 9, ranges overlap, no settle)
+ *   et_holo_reorder == et_holo_reorder_swapped   (order-independent)
+ *   et_holo_different != et_holo_reorder         (geometry-sensitive)
+ *
+ * exit 99 = all; 10 commute; 11 collide; 12 superpose; 13 hash not reorder-invariant;
+ *   14 hash not geometry-sensitive (a collision -- the bug that was fixed). */
+module corpus_etat_b2_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn et_commute_commute_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_commute_collide_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_commute_superpose_case() -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_reorder() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_reorder_swapped() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn et_holo_different() -> u64 from "ser_causal.iii"
+
+fn main() -> u64 {
+    let cm : u32 = et_commute_commute_case()      /* 1 */
+    let co : u32 = et_commute_collide_case()      /* 2 */
+    let su : u32 = et_commute_superpose_case()    /* 0 */
+    let h1 : u64 = et_holo_reorder()
+    let h2 : u64 = et_holo_reorder_swapped()
+    let hd : u64 = et_holo_different()
+
+    putchar(66i32) putchar(50i32) putchar(58i32)  /* "B2:" */
+    putchar((48u32 + cm) as i32) putchar((48u32 + co) as i32) putchar((48u32 + su) as i32) putchar(10i32)
+
+    if cm != 1u32 { return 10u64 }        /* disjoint -> COMMUTE */
+    if co != 2u32 { return 11u64 }        /* concrete overlap -> COLLIDE */
+    if su != 0u32 { return 12u64 }        /* unsettleable -> SUPERPOSE (sound fallback) */
+    if h1 != h2 { return 13u64 }          /* commuting reorder -> SAME holographic root */
+    if hd == h1 { return 14u64 }          /* different geometry -> DIFFERENT root (collision-free) */
+    return 99u64
+}

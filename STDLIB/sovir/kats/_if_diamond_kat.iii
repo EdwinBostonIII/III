@@ -1,0 +1,72 @@
+/* _if_diamond_kat.iii -- Leg-A control-flow gate (reconstructed 2026-07-04 into tracked kats/).
+ *
+ * Amputation 1 (Algebraic Path Superposition): the SVIR prover lifts a structured IF/ELSE/END
+ * diamond to a branch-free sd_mux inside sd_denote, so control flow enters the equivalence miter as
+ * pure algebra.  This gate proves an IF-diamond equals its INVERTED-CONDITION twin from two
+ * different SVIR bodies -- if control weren't modeled as a value-mux, seq_equiv would return
+ * UNDECIDED (SEQ_TOP=2), not 1.
+ *
+ * SVIR: 0x10 LOCAL+slot ; 0x01 CONST+8LE ; 0x30 EQ ; 0x42 IF ; 0x43 ELSE ; 0x44 END ; 0x60 RET.
+ *
+ *   A = c ? 10 : 20        (LOCAL0 IF CONST10 ELSE CONST20 END RET)
+ *   B = (c==0) ? 20 : 10   (LOCAL0 CONST0 EQ IF CONST20 ELSE CONST10 END RET)   -- same function
+ *   C = c ? 10 : 21        (corruption control -- must refute against A)
+ *
+ * seq_equiv(A,B) == 1 (PROVEN, both = c!=0?10:20) ; seq_equiv(A,C) == 0 (REFUTED).
+ * exit 99 = both; 10 A==B not proven (control not modeled); 11 A==C not refuted. */
+module corpus_if_diamond_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var BA : [u8; 48]   var BB : [u8; 48]   var BC : [u8; 48]
+
+fn wb(buf: u64, off: u64, byte: u8) -> u64 { let b : *u8 = buf as *u8   b[off] = byte   return off + 1u64 }
+fn w8(buf: u64, off: u64, v: u64) -> u64 {
+    let b : *u8 = buf as *u8   let mut i : u64 = 0u64   let mut x : u64 = v
+    while i < 8u64 { b[off + i] = (x & 255u64) as u8   x = x >> 8u64   i = i + 1u64 }
+    return off + 8u64
+}
+
+fn main() -> u64 {
+    /* A = c ? 10 : 20 */
+    let mut a : u64 = 0u64
+    a = wb((&BA) as u64, a, 0x10u8)  a = wb((&BA) as u64, a, 0u8)   /* LOCAL 0 = c */
+    a = wb((&BA) as u64, a, 0x42u8)                                 /* IF */
+    a = wb((&BA) as u64, a, 0x01u8)  a = w8((&BA) as u64, a, 10u64) /* CONST 10 (THEN) */
+    a = wb((&BA) as u64, a, 0x43u8)                                 /* ELSE */
+    a = wb((&BA) as u64, a, 0x01u8)  a = w8((&BA) as u64, a, 20u64) /* CONST 20 (ELSE) */
+    a = wb((&BA) as u64, a, 0x44u8)                                 /* END */
+    a = wb((&BA) as u64, a, 0x60u8)                                 /* RET */
+
+    /* B = (c==0) ? 20 : 10 */
+    let mut b : u64 = 0u64
+    b = wb((&BB) as u64, b, 0x10u8)  b = wb((&BB) as u64, b, 0u8)   /* LOCAL 0 = c */
+    b = wb((&BB) as u64, b, 0x01u8)  b = w8((&BB) as u64, b, 0u64)  /* CONST 0 */
+    b = wb((&BB) as u64, b, 0x30u8)                                 /* EQ -> c==0 */
+    b = wb((&BB) as u64, b, 0x42u8)                                 /* IF */
+    b = wb((&BB) as u64, b, 0x01u8)  b = w8((&BB) as u64, b, 20u64) /* CONST 20 (THEN) */
+    b = wb((&BB) as u64, b, 0x43u8)                                 /* ELSE */
+    b = wb((&BB) as u64, b, 0x01u8)  b = w8((&BB) as u64, b, 10u64) /* CONST 10 (ELSE) */
+    b = wb((&BB) as u64, b, 0x44u8)                                 /* END */
+    b = wb((&BB) as u64, b, 0x60u8)                                 /* RET */
+
+    /* C = c ? 10 : 21  (corruption) */
+    let mut c : u64 = 0u64
+    c = wb((&BC) as u64, c, 0x10u8)  c = wb((&BC) as u64, c, 0u8)
+    c = wb((&BC) as u64, c, 0x42u8)
+    c = wb((&BC) as u64, c, 0x01u8)  c = w8((&BC) as u64, c, 10u64)
+    c = wb((&BC) as u64, c, 0x43u8)
+    c = wb((&BC) as u64, c, 0x01u8)  c = w8((&BC) as u64, c, 21u64)   /* 21, not 20 */
+    c = wb((&BC) as u64, c, 0x44u8)
+    c = wb((&BC) as u64, c, 0x60u8)
+
+    let ab : u32 = seq_equiv((&BA) as u64, 0u64, a, (&BB) as u64, 0u64, b, 1u32)
+    let ac : u32 = seq_equiv((&BA) as u64, 0u64, a, (&BC) as u64, 0u64, c, 1u32)
+    putchar(73i32) putchar(70i32) putchar(58i32)   /* "IF:" */
+    putchar((48u32 + ab) as i32) putchar(32i32) putchar((48u32 + ac) as i32) putchar(10i32)
+
+    if ab != 1u32 { return 10u64 }        /* the diamond and its inverted twin PROVE equal */
+    if ac != 0u32 { return 11u64 }        /* the corrupted arm REFUTES (teeth) */
+    return 99u64
+}

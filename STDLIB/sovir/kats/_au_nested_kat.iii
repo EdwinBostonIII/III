@@ -1,0 +1,25 @@
+module au_nested_kat
+
+/* NESTED loops (Task F2b honest boundary): while i!=0 { while k!=0 { acc+=1; k-=1 }; i-=1 }  (acc=L0,i=L1,k=L2).
+ * The nesting-aware locator finds BOTH loops.  The INNER (straight-line body) crushes.  The OUTER's body CONTAINS
+ * the inner loop's control flow, so au_svir_exec (a straight-line interpreter) cannot trace it as one transition
+ * -> the outer HONESTLY DEFERS.  No false crush: loops_total=2, loops_crushed=1, verdict=0 (residue).  The full
+ * outer-crush needs a partial-eval interpreter that EXECUTES the inner loop (or byte-rewrites its closed form into
+ * the outer body) -- a real subsystem, named, not faked. */
+extern @abi(c-msvc-x64) fn au_crush_module(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_loops_total() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_loops_crushed() -> u32 from "ser_antiunify.iii"
+
+var NESTED : [u8; 82] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  64u8,65u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,2u8, 80u8,0u8, 68u8,68u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    let v : u32 = au_crush_module(&NESTED as u64, 0u64, 82u64, 0u32)
+    if v != 0u32 { return 1u64 }                      /* outer survives -> verdict 0 (NOT a false zero-loop claim) */
+    if au_loops_total() != 2u32 { return 2u64 }       /* BOTH loops found by the nesting-aware locator */
+    if au_loops_crushed() != 1u32 { return 3u64 }     /* exactly the INNER crushed; the outer honestly deferred */
+    return 99u64
+}

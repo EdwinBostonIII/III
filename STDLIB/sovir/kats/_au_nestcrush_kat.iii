@@ -1,0 +1,25 @@
+module au_nestcrush_kat
+
+/* COMPOSITIONAL AMPUTATION (Task F2b complete): the OUTER loop of a nest is crushed by substituting the inner
+ * loop's proven net effect, then proving the flattened outer affine over 2^64.  A constant-trip inner (k reset
+ * each outer iteration) crushes; a varying-trip inner (k not reset) is REJECTED by the differential teeth. */
+extern @abi(c-msvc-x64) fn au_crush_nested(base: u64, boff: u64, blen: u64, accum: u32) -> u64 from "ser_antiunify.iii"
+
+const NONE64 : u64 = 18446744073709551615u64
+
+/* OUTER BODY of  while i { k=2; while k { acc+=3; k-=1 }; i-=1 }  -- inner runs CONSTANT 2x -> net +6 (acc=L0,i=L1,k=L2) */
+var OBODY_RESET : [u8; 73] = [
+  1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 17u8,2u8,
+  64u8,65u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,2u8, 80u8,0u8, 68u8,68u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8]
+
+/* OUTER BODY with NO k reset -- inner runs k_initial times (VARYING) -> net depends on state -> must DEFER */
+var OBODY_NORESET : [u8; 62] = [
+  64u8,65u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,2u8, 80u8,0u8, 68u8,68u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8]
+
+fn main() -> u64 {
+    if au_crush_nested(&OBODY_RESET as u64, 0u64, 73u64, 0u32) != 6u64 { return 1u64 }       /* nest -> outer delta 6, PROVEN */
+    if au_crush_nested(&OBODY_NORESET as u64, 0u64, 62u64, 0u32) != NONE64 { return 2u64 }   /* varying inner trip -> DEFER (teeth) */
+    return 99u64
+}

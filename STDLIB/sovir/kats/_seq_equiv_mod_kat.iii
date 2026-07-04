@@ -1,0 +1,17 @@
+module seq_equiv_mod_kat
+
+/* Module-level Leg A: a full SVIR module (header + 2 functions) is (a) structurally valid per the trust anchor
+ * svir_verify, and (b) fn0 (x*8) is PROVEN observationally equivalent to fn1 (x<<3) over all 2^64. */
+extern @abi(c-msvc-x64) fn seq_equiv_mod(ma: u64, la: u64, fa: u32, mb: u64, lb: u64, fb: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn svir_verify(src: u64, len: u64) -> u64 from "svir_verify.iii"
+
+/* [nfunc=2]  fn0{params1,nres1,blen12, GET0 CONST8 MUL}  fn1{params1,nres1,blen12, GET0 CONST3 SHL} */
+var MOD : [u8; 33] = [2u8,
+    1u8,1u8,12u8,0u8, 16u8,0u8, 1u8,8u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8,
+    1u8,1u8,12u8,0u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 40u8]
+
+fn main() -> u64 {
+    if svir_verify(&MOD as u64, 33u64) != 0u64 { return 1u64 }                              /* trust anchor: valid */
+    if seq_equiv_mod(&MOD as u64, 33u64, 0u32, &MOD as u64, 33u64, 1u32) != 1u32 { return 2u64 }  /* x*8 == x<<3 PROVEN */
+    return 99u64
+}

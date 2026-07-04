@@ -1,0 +1,18 @@
+module au_crush_kat
+
+/* THE WHOLE-PROGRAM DRIVER (Task F1): walk a real SVIR while-loop module, locate each loop structurally, crush
+ * its body via agnostic topological extraction, ASSERT the zero-loop invariant.  An affine loop is fully crushed
+ * (1); a non-affine loop survives as honest C-backed residue (0).  No semantic parsing -- behavioral resonance. */
+extern @abi(c-msvc-x64) fn au_crush_module(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+
+/* while i!=0 { acc = acc + 5; i = i - 1 }   (acc=local0, i=local1)
+ * BLOCK LOOP  GET1 CONST0 EQ BR_IF1  [GET0 CONST5 ADD SET0  GET1 CONST1 SUB SET1]  BR0  END END */
+var AFFINE : [u8; 48] = [64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+/* while i!=0 { acc = acc * 2; i = i - 1 }   -- NON-affine accumulator (geometric) */
+var NONAFF : [u8; 48] = [64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    if au_crush_module(&AFFINE as u64, 0u64, 48u64, 0u32) != 1u32 { return 1u64 }   /* affine while -> ZERO LOOPS REMAIN */
+    if au_crush_module(&NONAFF as u64, 0u64, 48u64, 0u32) != 0u32 { return 2u64 }   /* geometric while survives -> residue (teeth) */
+    return 99u64
+}

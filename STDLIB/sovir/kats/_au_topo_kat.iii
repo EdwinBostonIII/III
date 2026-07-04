@@ -1,0 +1,24 @@
+module au_topo_kat
+
+/* AGNOSTIC TOPOLOGICAL EXTRACTION: the loop body is a BLACK BOX -- executed, not parsed.  Three differently-
+ * WRITTEN bodies that all compute acc+=5 extract the SAME delta and prove (syntax immunity); a body that LOOKS
+ * affine on a degenerate fuzz seed (acc*2 at 0 -> +0) is REFUTED by the symbolic guillotine (no false crush). */
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+
+/* acc = acc + 5                 (GET0 CONST5 ADD SET0)                     */
+var B1 : [u8; 14] = [16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]
+/* acc = acc + 2 + 3             (GET0 CONST2 ADD CONST3 ADD SET0) -- different syntax, same behavior */
+var B2 : [u8; 24] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]
+/* acc = (acc + 10) - 5          (GET0 CONST10 ADD CONST5 SUB SET0) -- different syntax, same behavior */
+var B3 : [u8; 24] = [16u8,0u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,0u8]
+/* acc = acc * 2                 (GET0 CONST2 MUL SET0) -- NOT affine */
+var B4 : [u8; 14] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8]
+
+fn main() -> u64 {
+    if au_topo_amputate(&B1 as u64, 0u64, 14u64, 0u32, 7u64) != 1u32 { return 1u64 }   /* acc+=5 extracted from behavior + PROVEN */
+    if au_topo_amputate(&B2 as u64, 0u64, 24u64, 0u32, 7u64) != 1u32 { return 2u64 }   /* SYNTAX IMMUNITY: acc+2+3 == acc+5       */
+    if au_topo_amputate(&B3 as u64, 0u64, 24u64, 0u32, 7u64) != 1u32 { return 3u64 }   /* SYNTAX IMMUNITY: (acc+10)-5 == acc+5    */
+    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 0u64) != 0u32 { return 4u64 }   /* TEETH: acc*2 @seed 0 fuzzes +0, REFUTED */
+    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 1u64) != 2u32 { return 5u64 }   /* acc*2 @seed 1 -> non-affine -> DEFER     */
+    return 99u64
+}

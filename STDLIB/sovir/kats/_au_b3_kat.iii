@@ -1,0 +1,35 @@
+/* _au_b3_kat.iii -- Leg-A loop-amputation gate B3 (reconstructed 2026-07-04 into tracked kats/).
+ *
+ * B3 HOLOGRAPHIC ORBIT AMPUTATION: fuzz the loop's accumulator transition (au_fuzz_transition
+ * PROPOSES a finite-difference delta) -> SYMBOLIC GUILLOTINE (au_prove_recurrence DISPOSES:
+ * bb_equal(step(s), s+delta) over ALL 2^64).  Amputate IFF the SYMBOLIC step proves, never the
+ * fuzz -- that is the CEGIS soundness, and its visible teeth is AU_T_PIECE: s<100?s+5:s+7 fuzzes
+ * arithmetic (0,5,10,15 on the small sweep) yet the symbolic step REFUTES (counterexample s=100),
+ * so it is NEVER amputated.
+ *
+ *   AU_T_ADD arg=5  -> 1 (PROVEN deletable, delta 5)
+ *   AU_T_MUL arg=2  -> AU_DEFER=2 (geometric, no arithmetic fit)
+ *   AU_T_XOR arg=7  -> AU_DEFER=2 (not arithmetic)
+ *   AU_T_PIECE      -> 0 (fuzzes arithmetic, symbolic REFUTES -- the CEGIS teeth)
+ *
+ * exit 99 = all four; 10 add; 11 mul; 12 xor; 13 piecewise falsely amputated (UNSOUND). */
+module corpus_au_b3_kat
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn au_amputate_linear(op: u32, arg: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+
+fn main() -> u64 {
+    let add : u32 = au_amputate_linear(0u32, 5u64, 0u64)    /* AU_T_ADD  -> 1 */
+    let mul : u32 = au_amputate_linear(1u32, 2u64, 3u64)    /* AU_T_MUL  -> 2 (DEFER) */
+    let xor : u32 = au_amputate_linear(2u32, 7u64, 1u64)    /* AU_T_XOR  -> 2 (DEFER) */
+    let pce : u32 = au_amputate_linear(3u32, 0u64, 0u64)    /* AU_T_PIECE -> 0 (REFUTED) */
+
+    putchar(66i32) putchar(51i32) putchar(58i32)            /* "B3:" */
+    putchar((48u32 + add) as i32) putchar((48u32 + mul) as i32) putchar((48u32 + xor) as i32) putchar((48u32 + pce) as i32) putchar(10i32)
+
+    if add != 1u32 { return 10u64 }        /* arithmetic accumulator PROVEN crushable */
+    if mul != 2u32 { return 11u64 }        /* geometric -> honest DEFER */
+    if xor != 2u32 { return 12u64 }        /* non-arithmetic -> honest DEFER */
+    if pce != 0u32 { return 13u64 }        /* TEETH: fuzz-arithmetic but symbolic-refuted -> NOT crushed */
+    return 99u64
+}

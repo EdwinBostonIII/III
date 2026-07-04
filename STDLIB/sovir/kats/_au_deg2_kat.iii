@@ -1,0 +1,19 @@
+module au_deg2_kat
+
+/* B3 Degree-2: Gauss's trick mechanized.  Second finite difference -> cf(N)=S_0+b*N+c*N(N-1)/2; the 2-state
+ * inductive step proves the arithmetic-sum loop preserves it over all states.  Degree-1 is NOT misclassified;
+ * an off-by-one step is refuted. */
+extern @abi(c-msvc-x64) fn au_amputate_quadratic(b0: u64, c: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_closed_quadratic(nn: u64) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic(s0: u64, b: u64, c: u64) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_quadratic_gen(s0: u64, b: u64, c: u64, brk: u64) -> u8 from "ser_antiunify.iii"
+
+fn main() -> u64 {
+    if au_amputate_quadratic(0u64, 1u64, 0u64) != 1u32 { return 1u64 }       /* triangular sum 0,0,1,3,6,10 -> PROVEN */
+    if au_closed_quadratic(10u64) != 45u64 { return 2u64 }                   /* Sum_{0..9} = 45 (Gauss's N(N-1)/2)  */
+    if au_amputate_quadratic(3u64, 2u64, 5u64) != 1u32 { return 3u64 }       /* general arithmetic series -> PROVEN  */
+    if au_amputate_quadratic(5u64, 0u64, 7u64) != 2u32 { return 4u64 }       /* degree-1 -> NOT quadratic -> DEFER   */
+    if au_prove_quadratic(0u64, 0u64, 1u64) != 1u8 { return 5u64 }           /* correct 2-state step preserved      */
+    if au_prove_quadratic_gen(0u64, 0u64, 1u64, 1u64) != 0u8 { return 6u64 } /* off-by-one accumulation REFUTED (TEETH) */
+    return 99u64
+}

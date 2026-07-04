@@ -1,0 +1,19 @@
+module synth_prove_kat
+
+/* THE CLOSED LOOP (closes EIDOS-retro C4): ser_cegis PROPOSES the strength reduction, ser_kinduct_sym/seq_equiv
+ * PROVES it sound over all 2^64 -- and REFUTES a corrupted proposal.  The synthesizer drives a CERTIFIED rewrite. */
+extern @abi(c-msvc-x64) fn in_certify(v: u64, seed: u64) -> u32 from "ser_intent.iii"
+extern @abi(c-msvc-x64) fn in_certify_wrong(v: u64, seed: u64) -> u32 from "ser_intent.iii"
+
+fn main() -> u64 {
+    /* synth proposes + prover certifies over 2^64, for five distinct multipliers across all three grammar forms */
+    if in_certify(8u64, 1u64)    != 1u32 { return 1u64 }   /* x*8    -> x<<3        (form 0) */
+    if in_certify(16u64, 1u64)   != 1u32 { return 2u64 }   /* x*16   -> x<<4        (form 0) */
+    if in_certify(1024u64, 1u64) != 1u32 { return 3u64 }   /* x*1024 -> x<<10       (form 0) */
+    if in_certify(5u64, 1u64)    != 1u32 { return 4u64 }   /* x*5    -> (x<<2)+x    (form 1) */
+    if in_certify(7u64, 1u64)    != 1u32 { return 5u64 }   /* x*7    -> (x<<3)-x    (form 2) */
+    /* TEETH: a corrupted shift (k+1) makes the rewrite WRONG -> the prover must REFUTE the synthesizer */
+    if in_certify_wrong(8u64, 1u64) != 0u32 { return 6u64 }
+    if in_certify_wrong(5u64, 1u64) != 0u32 { return 7u64 }
+    return 99u64
+}

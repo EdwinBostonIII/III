@@ -1,0 +1,26 @@
+module au_cf_kat
+
+/* THE PARTIAL-EVAL FOUNDATION (Task F2b): the concrete structured-control interpreter EXECUTES a nested loop,
+ * following back-edges as real control flow.  while i!=0 { k=2; while k!=0 { acc+=3; k-=1 }; i-=1 }  with i=4
+ * runs the inner loop 2x per outer iteration over 4 outer iterations -> acc = 4*2*3 = 24.  The inner loop is RUN,
+ * not matched.  (acc=L0, i=L1, k=L2) */
+extern @abi(c-msvc-x64) fn au_svir_exec_cf(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_get(slot: u32) -> u64 from "ser_antiunify.iii"
+
+var NEST : [u8; 93] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 17u8,2u8,
+  64u8,65u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,2u8, 80u8,0u8, 68u8,68u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    au_tp_set(0u32, 0u64)                                          /* acc = 0 */
+    au_tp_set(1u32, 4u64)                                          /* i   = 4 */
+    au_tp_set(2u32, 0u64)                                          /* k   = 0 (reset to 2 inside the loop) */
+    if au_svir_exec_cf(&NEST as u64, 0u64, 93u64) != 0u32 { return 1u64 }   /* executed cleanly (terminated) */
+    if au_tp_get(0u32) != 24u64 { return 2u64 }                   /* the nested loop's true result */
+    if au_tp_get(1u32) != 0u64  { return 3u64 }                   /* outer counter fully drained */
+    return 99u64
+}

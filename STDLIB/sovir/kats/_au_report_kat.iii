@@ -1,0 +1,27 @@
+module au_report_kat
+
+/* THE WHOLE-PROGRAM DRIVER + SER_CRUSH_REPORT (Task F2c operational core): walk a module with THREE loops --
+ * affine, nested, non-affine -- and produce the honest crush/defer ledger.  Affine + nested CRUSH (proven);
+ * non-affine is DEFERRED as residue (logged, never forced).  This is the end-state: every loop crushed or witnessed. */
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_delta(i: u32) -> u64 from "ser_antiunify.iii"
+
+/* [A] while i{acc+=5;i-=1}(48)  ++  [B] while i{k=2;while k{acc+=3;k-=1};i-=1}(93)  ++  [C] while i{acc*=2;i-=1}(48) */
+var MODULE : [u8; 189] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 17u8,2u8, 64u8,65u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,2u8, 80u8,0u8, 68u8,68u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    let crushed : u32 = au_crush_report(&MODULE as u64, 0u64, 189u64, 0u32)
+    if crushed != 2u32 { return 1u64 }                 /* 2 of 3 loops crushed */
+    if au_report_n() != 3u32 { return 2u64 }           /* 3 loops found */
+    if au_report_verdict(0u32) != 1u32 { return 3u64 } /* A affine -> CRUSHED */
+    if au_report_delta(0u32)   != 5u64 { return 4u64 } /*   delta 5 */
+    if au_report_verdict(1u32) != 1u32 { return 5u64 } /* B nested -> CRUSHED (compositional) */
+    if au_report_delta(1u32)   != 6u64 { return 6u64 } /*   outer delta 6 */
+    if au_report_verdict(2u32) != 0u32 { return 7u64 } /* C non-affine -> DEFERRED (residue, honest) */
+    return 99u64
+}

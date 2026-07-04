@@ -1,0 +1,34 @@
+module au_rhash_kat
+
+/* THE RESIDUE-STABILITY INVARIANT (Task F2c advice #1): the crush-report fingerprint is DETERMINISTIC for a
+ * fixed module, and MOVES under any delta change or verdict flip (affine<->residue).  A seed-DDC gate bound to
+ * this hash reddens the instant the residue drifts -- the deferral set is versioned, not silently mutable. */
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_hash() -> u64 from "ser_antiunify.iii"
+
+/* MODULE_A: while i{acc+=5;i-=1} ++ while i{acc+=3;i-=1}  -> [crushed d5][crushed d3] */
+var MOD_A : [u8; 96] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+/* MODULE_B: first loop's delta is 7 (not 5) -> [crushed d7][crushed d3]  (DELTA change) */
+var MOD_B : [u8; 96] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+/* MODULE_C: first loop is non-affine acc*=2 (MUL) -> [DEFERRED][crushed d3]  (VERDICT flip: affine->residue) */
+var MOD_C : [u8; 96] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    au_crush_report(&MOD_A as u64, 0u64, 96u64, 0u32)
+    let ha : u64 = au_report_hash()
+    au_crush_report(&MOD_A as u64, 0u64, 96u64, 0u32)
+    let ha2 : u64 = au_report_hash()
+    if ha != ha2 { return 1u64 }                       /* DETERMINISTIC (stable anchor) */
+    if ha == 0u64 { return 2u64 }                      /* nonzero fingerprint */
+    au_crush_report(&MOD_B as u64, 0u64, 96u64, 0u32)
+    if au_report_hash() == ha { return 3u64 }          /* DELTA change -> hash moves */
+    au_crush_report(&MOD_C as u64, 0u64, 96u64, 0u32)
+    if au_report_hash() == ha { return 4u64 }          /* VERDICT flip (affine->residue) -> hash moves */
+    return 99u64
+}

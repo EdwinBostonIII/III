@@ -116,6 +116,32 @@ if [ -f "$ROOT/COMPILER/BOOT/forge_manifest_keccak.sh" ] && [ -f "$ROOT/STDLIB/b
     fi
 fi
 
+# 4. AUTHOR-DIVERSITY (2026-07-04): every joint where independently-authored implementations
+#    can witness the same bytes, enforced -- compiler lineages (gcc vs MSVC seeds), the hash
+#    witness triangle (III/cad + GNU + Microsoft) on every sealed anchor + committed golden,
+#    consumer witnesses (binutils parse, OS-loader execute), NIST vectors on the hasher.
+#    Soft dependency like 3b: skipped on a checkout without the built toolchain.
+if [ -f "$ROOT/STDLIB/scripts/author_diversity_gate.sh" ] && [ -f "$ROOT/STDLIB/build/iii/libiii_native.a" ]; then
+    echo "[gate] author_diversity_gate.sh (independent-authorship witnesses) ..."
+    if ! bash "$ROOT/STDLIB/scripts/author_diversity_gate.sh" >/dev/null 2>&1; then
+        echo "[gate] FAIL: author-diversity gate -- an independent-authorship joint disagrees"
+        FAILED="$FAILED author-diversity"
+    fi
+fi
+
+# 5. AUTOPOIETIC MEMBRANE (2026-07-04): the Leg-A proof gates (SVIR<->SVIR equivalence prover,
+#    aliasing oracle, ETAT B0/B2 memory, control-as-mux, loop-crush family, Merkle TCB, netlist)
+#    + ghost-build over real ccsv + residue ratchet, WITH the source-tracking teeth.  This closes
+#    the "gate nobody runs" recursion: run_membrane_gates protects Leg-A; the belt (the tree's
+#    top-level advance gate) protects run_membrane_gates.  Soft dependency like the legs above.
+if [ -f "$ROOT/STDLIB/sovir/run_membrane_gates.sh" ] && [ -f "$ROOT/STDLIB/build/iii/libiii_native.a" ]; then
+    echo "[gate] run_membrane_gates.sh (autopoietic Leg-A membrane) ..."
+    if ! bash "$ROOT/STDLIB/sovir/run_membrane_gates.sh" >/dev/null 2>&1; then
+        echo "[gate] FAIL: membrane gates -- a Leg-A proof gate is red or a KAT source is untracked"
+        FAILED="$FAILED membrane"
+    fi
+fi
+
 echo "============================================================"
 if [ -n "$FAILED" ]; then
     echo "[gate] GATE FAILED:$FAILED"

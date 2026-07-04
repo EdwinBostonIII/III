@@ -1,0 +1,33 @@
+module au_fold_kat
+
+/* EPOCH II -- AUTOPOIETIC ANNEALING (proof-carrying minimizer).  A fully-constant circuit `(2*3)+5` cools to a
+ * SINGLE wire (value 11) -- equivalence preserved by exact algebraic folds.  A mixed circuit `i*(2+3)` folds its
+ * constant sub-expression (2+3 -> 5) while the input path stays, and i*5 is preserved over every input. */
+extern @abi(c-msvc-x64) fn au_svir_to_netlist(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_eval() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_fold() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_live() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+
+/* (2*3)+5 : CONST2 CONST3 MUL CONST5 ADD SET0 GET0 RET  (all constant) */
+var CST : [u8; 34] = [1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,0u8, 96u8]
+/* i*(2+3) : GET1 CONST2 CONST3 ADD MUL SET0 GET0 RET */
+var MIX : [u8; 27] = [16u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 34u8, 17u8,0u8, 16u8,0u8, 96u8]
+
+fn main() -> u64 {
+    au_svir_to_netlist(&CST as u64, 0u64, 34u64)
+    let before : u64 = au_netlist_eval()
+    if before != 11u64 { return 1u64 }
+    if au_netlist_fold() < 1u32 { return 2u64 }                   /* annealed at least one gate */
+    if au_netlist_eval() != before { return 3u64 }               /* equivalence PRESERVED (11==11) */
+    if au_netlist_live() != 1u32 { return 4u64 }                 /* collapsed to ONE wire */
+    au_svir_to_netlist(&MIX as u64, 0u64, 27u64)
+    au_tp_set(1u32, 7u64)
+    if au_netlist_eval() != 35u64 { return 5u64 }                /* 7*(2+3)=35 */
+    if au_netlist_fold() < 1u32 { return 6u64 }                  /* the 2+3 folded to 5 */
+    au_tp_set(1u32, 7u64)
+    if au_netlist_eval() != 35u64 { return 7u64 }                /* i*5 preserved after annealing */
+    au_tp_set(1u32, 9u64)
+    if au_netlist_eval() != 45u64 { return 8u64 }                /* and for another input */
+    return 99u64
+}

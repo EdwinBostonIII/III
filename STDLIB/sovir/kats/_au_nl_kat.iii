@@ -1,0 +1,32 @@
+module au_nl_kat
+
+/* EPOCH IV -- SVIR -> HARDWARE NETLIST.  A crushed straight-line body (acc = i*3 + 5) lowers to a combinational
+ * gate DAG; the netlist evaluator computes the SAME function as the SVIR interpreter over every input -- the
+ * circuit IS the algorithm.  This is the basis for direct Verilog/VHDL emission (the algorithm becomes the chip). */
+extern @abi(c-msvc-x64) fn au_svir_to_netlist(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_netlist_eval() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_nl_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_get(slot: u32) -> u64 from "ser_antiunify.iii"
+
+/* acc = i*3 + 5 ; return acc   (acc=L0, i=L1): GET1 CONST3 MUL CONST5 ADD SET0 GET0 RET */
+var EXPR : [u8; 27] = [16u8,1u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,0u8, 96u8]
+
+fn main() -> u64 {
+    let out : u32 = au_svir_to_netlist(&EXPR as u64, 0u64, 27u64)
+    if out == 4294967295u32 { return 1u64 }                       /* lowered to a combinational netlist */
+    if au_nl_n() < 5u32 { return 2u64 }                           /* real gates: input,const,mul,const,add */
+    let mut i : u64 = 2u64
+    while i < 9u64 {
+        au_tp_set(0u32, 0u64)  au_tp_set(1u32, i)
+        let nl : u64 = au_netlist_eval()                          /* circuit output */
+        au_tp_set(0u32, 0u64)  au_tp_set(1u32, i)
+        au_svir_exec(&EXPR as u64, 0u64, 27u64)
+        let ex : u64 = au_tp_get(0u32)                            /* code output */
+        if nl != ex { return 3u64 }                              /* circuit == code (faithful synthesis) */
+        if nl != (i * 3u64 + 5u64) { return 4u64 }               /* == the true function */
+        i = i + 1u64
+    }
+    return 99u64
+}

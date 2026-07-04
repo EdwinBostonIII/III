@@ -1,0 +1,56 @@
+/* _au_conform_kat.iii -- HOLOGRAPHIC CONFORMANCE gate teeth (Phase 3+4 of the zero-runtime debugger, affine
+ * fragment).  Three SVIR modules vs the architecture invariant "accum < bound":
+ *   CONFORM  : a body that leaves accum unchanged (delta 0)        -> PROVEN conform (AU_CONF_OK).
+ *   VIOLATE  : a body acc += 5                                     -> VIOLATES, breach iteration = ceil(bound/5).
+ *   NONAFFINE: a body acc *= 2 (geometric, does not crush)         -> HONEST DEFER (never a false conform).
+ * Returns 99 iff every verdict + the closed-form breach iteration is exactly right -- a SOUND O(1) conformance
+ * check (the SMT intersect + the breach pinpoint, no runtime execution of the modules). */
+module au_conform_kat
+extern @abi(c-msvc-x64) fn au_conform_bound(base: u64, boff: u64, blen: u64, accum: u32, acc0: u64, bound: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_iter()  -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_conform_delta() -> u64 from "ser_antiunify.iii"
+
+const AU_CONF_OK    : u32 = 1u32
+const AU_CONF_VIOL  : u32 = 0u32
+const AU_CONF_DEFER : u32 = 2u32
+const AU_NONE64     : u64 = 18446744073709551615u64
+
+var MOD_CONFORM : [u8; 4]  = [16u8,0u8, 17u8,0u8]                                                 /* GET0 SET0 -> delta 0 */
+var MOD_VIOLATE : [u8; 14] = [16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]      /* GET0 CONST5 ADD SET0 -> acc+=5 */
+var MOD_NONAFF  : [u8; 14] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8]      /* GET0 CONST2 MUL SET0 -> acc*=2 */
+var MOD_DECR    : [u8; 14] = [16u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,0u8]      /* GET0 CONST1 SUB SET0 -> acc-=1 (delta = 2^64-1, WRAP regime) */
+
+fn main() -> u64 {
+    /* (1) conforming module (accum unchanged) vs bound 100, acc0 5 -> PROVEN conform */
+    let c : u32 = au_conform_bound(&MOD_CONFORM as u64, 0u64, 4u64, 0u32, 5u64, 100u64)
+    if c != AU_CONF_OK { return 1u64 }
+
+    /* (2) violating module (acc += 5) vs bound 100, acc0 0 -> VIOLATES, breach at iteration 20 (5*20=100) */
+    let v : u32 = au_conform_bound(&MOD_VIOLATE as u64, 0u64, 14u64, 0u32, 0u64, 100u64)
+    if v != AU_CONF_VIOL { return 2u64 }
+    if au_conform_iter() != 20u64 { return 3u64 }
+    if au_conform_delta() != 5u64 { return 4u64 }
+
+    /* (3) non-affine module (acc *= 2) -> HONEST DEFER (the conscience line: never falsely 'conforms') */
+    let d : u32 = au_conform_bound(&MOD_NONAFF as u64, 0u64, 14u64, 0u32, 7u64, 1000000u64)
+    if d != AU_CONF_DEFER { return 5u64 }
+
+    /* (4) a non-multiple bound: acc += 5, acc0 0, bound 103 -> breach at 21 (ceil(103/5), 5*21=105>=103) */
+    let v2 : u32 = au_conform_bound(&MOD_VIOLATE as u64, 0u64, 14u64, 0u32, 0u64, 103u64)
+    if v2 != AU_CONF_VIOL { return 6u64 }
+    if au_conform_iter() != 21u64 { return 7u64 }
+
+    /* (5) violating module with a nonzero start: acc += 5, acc0 30, bound 100 -> breach at 14 (30+14*5=100) */
+    let v3 : u32 = au_conform_bound(&MOD_VIOLATE as u64, 0u64, 14u64, 0u32, 30u64, 100u64)
+    if v3 != AU_CONF_VIOL { return 8u64 }
+    if au_conform_iter() != 14u64 { return 9u64 }
+
+    /* (6) WRAP-REGIME teeth (advisor): acc -= 1 (delta = 2^64-1), acc0 50, bound 100.  It DOES violate (the
+     * value decreases to 0 then wraps to 2^64-1 >= 100) -- sks_prove proves it -- but the integer ceil would
+     * give a WRONG iteration.  The guard must report VIOL with the iteration DEFERRED (AU_NONE64), not a number. */
+    let v4 : u32 = au_conform_bound(&MOD_DECR as u64, 0u64, 14u64, 0u32, 50u64, 100u64)
+    if v4 != AU_CONF_VIOL { return 10u64 }
+    if au_conform_iter() != AU_NONE64 { return 11u64 }
+
+    return 99u64
+}

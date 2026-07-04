@@ -11,7 +11,8 @@ extern @abi(c-msvc-x64) fn au_merkle_check(leaf_hash: u64, target: u32, root: u6
 extern @abi(c-msvc-x64) fn au_tcb_seal() -> u64 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_tcb_admits() -> u32 from "ser_antiunify.iii"
 
-/* MOD_A: two affine loops (acc+=5 ; acc+=3) ; MOD_C: non-affine acc*=2 then affine acc+=3 (a different profile) */
+/* MOD_A: two affine loops (acc+=5 ; acc+=3) ; MOD_C: geometric acc*=2 (crushes kind-MUL, ratio 2) then affine
+ * acc+=3 -- a different certificate profile either way, so its root must NOT be admitted under MOD_A's seal */
 var MOD_A : [u8; 96] = [
   64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8,
   64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8, 16u8,0u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8, 16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8, 80u8,0u8, 68u8,68u8]

@@ -462,6 +462,80 @@ fn au_amputate_quadratic(b0: u64, c: u64, seed: u64) -> u32 @export {
 }
 
 /* ============================================================================================================
+ * B3 GEOMETRIC -- THE MULTIPLICATIVE RUNG (the crush ladder past affine/quadratic; 2026-07-04).  A loop whose
+ * step is T(s) = s*r has the O(1) destiny  cf(N) = S_0 * r^N  over Z/2^64 -- EXACT for every trip count by
+ * induction (acc_{k+1} = acc_k*r), because multiplication mod 2^64 is the ring product: no wrap-edge exclusion
+ * is needed (contrast the triangular halving, which had to split parity).  Binary exponentiation computes the
+ * same ring product.  THE CONSCIENCE LINE (unbroken): the trace only PROPOSES r; the guillotine bit-blasts
+ * step(s) == s*r over ALL 2^64 (the 64-bit var*const multiplier miter discharges in ~1s through numera/sat) --
+ * a wrong or aliased proposal is REFUTED, never crushed.  What fits NEITHER rung (XOR flips, piecewise,
+ * quadratic maps like acc*acc+1) stays honest residue: the deferral list remains the roadmap. */
+
+/* Newton inverse of an ODD a over Z/2^64: x <- x*(2 - a*x); x_0 = a is a^{-1} mod 8 already (a*a == 1 mod 8
+ * for every odd a), correct bits DOUBLE per step -> 5 steps reach mod 2^96 superset of 2^64; 6 for margin. */
+fn au_modinv_odd(a: u64) -> u64 {
+    let mut x : u64 = a
+    let mut k : u32 = 0u32
+    while k < 6u32 { x = x * (2u64 - a * x)  k = k + 1u32 }
+    return x
+}
+/* r^n over Z/2^64 by binary exponentiation (pure ring product under wrap; r^0 = 1). */
+fn au_pow_wrap(r: u64, n: u64) -> u64 {
+    let mut acc : u64 = 1u64
+    let mut b : u64 = r
+    let mut e : u64 = n
+    while e != 0u64 {
+        if (e & 1u64) == 1u64 { acc = acc * b }
+        b = b * b
+        e = e >> 1u64
+    }
+    return acc
+}
+/* RECURRENCE SINGULARITY (geometric): does the trace satisfy obs_{k+1} == obs_k * r for ONE constant r?
+ * The proposal needs obs_0 ODD (invertible over Z/2^64): r = obs_1 * obs_0^{-1}; every consecutive pair is
+ * then CHECKED multiplicatively (no division anywhere).  obs_0 even (incl. 0) -> no proposal -- the honest
+ * boundary of the EXTRACTOR, not of the theorem (the drivers fuzz from odd seeds, so real bodies propose). */
+fn au_is_geometric() -> u32 @export {
+    let n : u32 = sp_obs_count()
+    if n < 3u32 { return 0u32 }
+    let s0 : u64 = sp_obs_at(0u32)
+    if (s0 & 1u64) == 0u64 { return 0u32 }
+    let r : u64 = sp_obs_at(1u32) * au_modinv_odd(s0)
+    let mut i : u32 = 0u32
+    while i < (n - 1u32) {
+        if sp_obs_at(i + 1u32) != (sp_obs_at(i) * r) { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+fn au_geo_r() -> u64 @export {
+    if sp_obs_count() < 2u32 { return 0u64 }
+    let s0 : u64 = sp_obs_at(0u32)
+    if (s0 & 1u64) == 0u64 { return 0u64 }
+    return sp_obs_at(1u32) * au_modinv_odd(s0)
+}
+/* the loop's O(1) destiny: cf(N) = S_0 * r^N over Z/2^64 -- exact for EVERY N. */
+fn au_closed_geometric(nn: u64) -> u64 @export { return sp_obs_at(0u32) * au_pow_wrap(au_geo_r(), nn) }
+/* THE GEOMETRIC GUILLOTINE (toy transitions): prove the loop's REAL step T(s) == s*r over ALL 2^64. */
+fn au_prove_recurrence_mul(op: u32, arg: u64, r: u64) -> u8 @export {
+    bb_reset(64u64)
+    let s  : u32 = bb_var(0u32)
+    let ts : u32 = au_step_sym(op, arg, s)
+    return bb_equal(ts, bb_mul(s, bb_const(r)))
+}
+/* THE FULL GEOMETRIC PIPELINE: fuzz -> ratio generalize -> discharge.  1 = PROVEN deletable
+ * (cf(N) = S_0*r^N) ; 0 = conjecture refuted by the symbolic step ; AU_DEFER = no geometric fit / poisoned. */
+fn au_amputate_geometric(op: u32, arg: u64, seed: u64) -> u32 @export {
+    au_fuzz_transition(op, arg, seed, 3u32)
+    if au_is_geometric() == 0u32 { return AU_DEFER }
+    let r : u64 = au_geo_r()
+    let vd : u8 = au_prove_recurrence_mul(op, arg, r)
+    if vd == 1u8 { return 1u32 }
+    if vd == 0u8 { return 0u32 }
+    return AU_DEFER
+}
+
+/* ============================================================================================================
  * THE CRUCIBLE (Phase 2/3 integration: B3 (x) B2): a strided-write loop  for k in [0,N): mem[base + stride*k]=v
  * is CRUSHED to a single O(1) HOLOGRAPHIC TENSOR object -- no loop, no branch survives.  The PROVE-THEN-BUILD
  * order (the creative key that dissolves the bb_reset clobber): au_amputate_stride PROVES the address
@@ -479,9 +553,14 @@ fn au_crucible_stride(base: u64, stride: u64, nn: u64, valbits: u64) -> u64 @exp
     etat_write_aff(v, v, d)                                    /* B2/B4: the whole loop's memory as ONE tensor write */
     return et_epoch_hash()                                     /* B2: the holographic root (the crushed O(1) object) */
 }
-/* a SCALAR-accumulator loop crush: an affine `acc += delta` loop is crushed to its closed-form value (no loop),
- * a NON-affine (geometric/chaotic) loop honestly DEFERS (returns AU_NONE64).  op: 0=ADD(affine) 1=MUL(geometric). */
+/* a SCALAR-accumulator loop crush: an affine `acc += delta` loop crushes to S_0 + N*delta, a geometric
+ * `acc *= r` loop crushes to S_0 * r^N (both PROVEN by their guillotines), and what fits NEITHER rung
+ * (XOR flip, piecewise) honestly DEFERS (returns AU_NONE64).  op: 0=ADD(affine) 1=MUL(geometric). */
 fn au_crucible_scalar(op: u32, arg: u64, seed: u64, nn: u64) -> u64 @export {
+    if op == AU_T_MUL {
+        if au_amputate_geometric(op, arg, seed) != 1u32 { return AU_NONE64 }   /* not proven geometric -> defer */
+        return au_closed_geometric(nn)                                          /* O(1) destiny: S_0 * r^N */
+    }
     if au_amputate_linear(op, arg, seed) != 1u32 { return AU_NONE64 }   /* not affine -> defer (no crush) */
     return au_closed_linear(nn)                                          /* the loop's O(1) destiny */
 }
@@ -598,11 +677,22 @@ fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export 
     return TP_LOC_SYM[accum as u64]
 }
 
-/* THE AGNOSTIC TOPOLOGICAL AMPUTATION: fuzz the black box (au_svir_exec) for the accum trace -> finite-difference
- * extract delta -> PROVE the symbolic body step == acc+delta over 2^64.  1 = PROVEN (the loop is acc+=delta,
- * crushable to acc_0 + N*delta) ; 0 = the fuzz-extracted delta is REFUTED by the symbolic body (no false crush) ;
- * AU_DEFER = non-affine behavior or non-denotable.  NO opcode pattern-matching -- pure behavioral resonance. */
+/* THE AGNOSTIC TOPOLOGICAL AMPUTATION: fuzz the black box (au_svir_exec) for the accum trace, then walk the
+ * crush LADDER -- rung 1 AFFINE (constant first difference -> prove step == acc+delta), rung 2 GEOMETRIC
+ * (constant ratio -> prove step == acc*r) -- each rung's fit is only a CONJECTURE; its guillotine bit-blasts
+ * the REAL denoted body over ALL 2^64 states of every read local.  1 = PROVEN (kind/ratio in au_last_kind /
+ * au_last_ratio; affine -> acc_0+N*delta, geometric -> acc_0*r^N) ; 0 = some fitted conjecture was REFUTED by
+ * the symbolic body (no false crush) ; AU_DEFER = fits nothing / non-denotable / poisoned decision.  NO opcode
+ * pattern-matching -- pure behavioral resonance. */
+const AU_K_ADD : u32 = 0u32   /* crush kind: additive (affine / nested net effect) */
+const AU_K_MUL : u32 = 1u32   /* crush kind: multiplicative (geometric)            */
+var AU_LKIND  : u32 = 0u32    /* kind of the last successful au_topo_amputate      */
+var AU_LRATIO : u64 = 0u64    /* proven ratio of the last geometric crush          */
+fn au_last_kind()  -> u32 @export { return AU_LKIND }
+fn au_last_ratio() -> u64 @export { return AU_LRATIO }
 fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
+    AU_LKIND = AU_K_ADD
+    AU_LRATIO = 0u64
     let mut s : u32 = 0u32
     while s < 256u32 { TP_LOC[s as u64] = 0u64  s = s + 1u32 }
     TP_LOC[accum as u64] = seed
@@ -614,27 +704,42 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         sp_obs_push(TP_LOC[accum as u64])
         i = i + 1u32
     }
-    if au_is_arith() == 0u32 { return AU_DEFER }                   /* non-affine trajectory -> defer */
-    let delta : u64 = au_arith_delta()
-    bb_reset(64u64)
-    let step : u32 = au_svir_step_sym(base, boff, blen, accum)     /* THE GUILLOTINE against the black box */
-    if step == TP_SYMTOP { return AU_DEFER }
-    let v0 : u32 = bb_var(0u32)
-    let vd : u8 = bb_equal(step, bb_add(v0, bb_const(delta)))      /* step(acc,others)==acc+delta over ALL states */
-    if vd == 1u8 { return 1u32 }
-    if vd == 0u8 { return 0u32 }                                   /* fuzz-affine but symbolically REFUTED */
-    return AU_DEFER                                                /* poisoned decision (0xFF capacity) -> honest defer */
+    let mut refuted : u32 = 0u32
+    if au_is_arith() == 1u32 {                                     /* RUNG 1: AFFINE */
+        let delta : u64 = au_arith_delta()
+        bb_reset(64u64)
+        let step : u32 = au_svir_step_sym(base, boff, blen, accum)
+        if step != TP_SYMTOP {
+            let v0 : u32 = bb_var(0u32)
+            let vd : u8 = bb_equal(step, bb_add(v0, bb_const(delta)))   /* step(acc,others)==acc+delta, ALL states */
+            if vd == 1u8 { return 1u32 }
+            if vd == 0u8 { refuted = 1u32 }                        /* fuzz-affine but symbolically REFUTED */
+        }
+    }
+    if au_is_geometric() == 1u32 {                                 /* RUNG 2: GEOMETRIC */
+        let r : u64 = au_geo_r()
+        bb_reset(64u64)
+        let step2 : u32 = au_svir_step_sym(base, boff, blen, accum)
+        if step2 != TP_SYMTOP {
+            let v02 : u32 = bb_var(0u32)
+            let vd2 : u8 = bb_equal(step2, bb_mul(v02, bb_const(r)))    /* step(acc,others)==acc*r, ALL states */
+            if vd2 == 1u8 { AU_LKIND = AU_K_MUL  AU_LRATIO = r  return 1u32 }
+            if vd2 == 0u8 { refuted = 1u32 }
+        }
+    }
+    if refuted == 1u32 { return 0u32 }                             /* a conjectured law died at the miter */
+    return AU_DEFER                                                /* fits nothing / non-denotable / poisoned */
 }
 
 /* ============================================================================================================
  * THE WHOLE-PROGRAM DRIVER (Task F1) -- the ZERO-LOOP / ZERO-BRANCH INVARIANT.  Walks a real SVIR body opcode-
  * aware; at each LOOP it locates the per-iteration straight-line body STRUCTURALLY (between the condition's
  * BR_IF and the back-edge BR -- a trivial nesting scan, NOT semantic pattern-matching), feeds it to the proven
- * agnostic extractor au_topo_amputate, and counts it CRUSHED iff the orbit amputation is PROVEN.  Returns 1 iff
- * EVERY loop crushed (no back-edge survives -- the invariant holds), 0 iff a loop survives (non-affine -> honest
- * C-backed residue, NEVER a false "proven"), 2 iff the body has no loops.  THE TEETH: a surviving loop fails the
- * invariant -- the driver does not pretend the artifact is gone.  Operand-aware so a CONST value byte can never
- * be mistaken for an opcode. */
+ * agnostic extractor au_topo_amputate (the affine+geometric crush ladder), and counts it CRUSHED iff the orbit
+ * amputation is PROVEN.  Returns 1 iff EVERY loop crushed (no back-edge survives -- the invariant holds), 0 iff
+ * a loop survives (fits no proven rung -> honest C-backed residue, NEVER a false "proven"), 2 iff the body has
+ * no loops.  THE TEETH: a surviving loop fails the invariant -- the driver does not pretend the artifact is
+ * gone.  Operand-aware so a CONST value byte can never be mistaken for an opcode. */
 fn au_op_width(op: u32) -> u64 {
     if op == 0x01u32 { return 8u64 }   /* CONST_I64 + 8 LE */
     if op == 0x10u32 { return 1u64 }   /* LOCAL_GET + slot */
@@ -852,6 +957,8 @@ fn au_crush_nested(base: u64, boff: u64, blen: u64, accum: u32) -> u64 @export {
     let sb   : u64 = &TP_SCRATCH as u64
     /* (3) PROVE the flattened outer affine over 2^64 */
     if au_topo_amputate(sb, 0u64, flen, accum, 7u64) != 1u32 { return AU_NONE64 }
+    if AU_LKIND != AU_K_ADD { return AU_NONE64 }                   /* the splice is ADDITIVE by construction; a
+                                                                    * geometric flat outer is out of this charter */
     /* (4) TEETH: original-outer vs flattened-outer must agree on accum over several seeds */
     let mut seed : u64 = 3u64
     let mut t : u32 = 0u32
@@ -888,29 +995,34 @@ fn au_body_has_loop(base: u64, boff: u64, blen: u64) -> u32 {
 /* ============================================================================================================
  * THE WHOLE-PROGRAM DRIVER + SER_CRUSH_REPORT (Task F2c operational core) -- walk a real SVIR module; for EACH
  * top-level loop, dispatch: a body with an inner loop -> au_crush_nested (compositional), else -> au_topo_amputate
- * (simple affine).  RECORD every loop in a ledger: offset, verdict (1=CRUSHED/AMPUTATED_PROVEN, 0=DEFER/residue),
- * and the proven delta.  After crushing a loop, SKIP past its body so inner loops are never double-counted.  This
- * is the HONEST end-state: every loop is either crushed (proven) or witnessed as residue (logged, never forced).
- * Returns the crushed count.  The deferral list IS the roadmap-to-residue (read via au_report_*). */
+ * (the affine+geometric crush ladder).  RECORD every loop in a ledger: offset, verdict (1=CRUSHED/AMPUTATED_PROVEN,
+ * 0=DEFER/residue), crush KIND (ADD delta / MUL ratio), and the proven step parameter.  After crushing a loop,
+ * SKIP past its body so inner loops are never double-counted.  This is the HONEST end-state: every loop is either
+ * crushed (proven) or witnessed as residue (logged, never forced).  Returns the crushed count.  The deferral list
+ * IS the roadmap-to-residue (read via au_report_*). */
 var RPT_OFF   : [u64; 256]
 var RPT_VERD  : [u32; 256]
-var RPT_DELTA : [u64; 256]
+var RPT_KIND  : [u32; 256]   /* crush kind per loop: AU_K_ADD (affine/nested net) or AU_K_MUL (geometric) */
+var RPT_DELTA : [u64; 256]   /* the proven step parameter: delta for ADD-kind, ratio for MUL-kind */
 var RPT_N : u32 = 0u32
 fn au_report_n()              -> u32 @export { return RPT_N }
 fn au_report_off(i: u32)      -> u64 @export { if i < 256u32 { return RPT_OFF[i as u64] }  return 0u64 }
 fn au_report_verdict(i: u32)  -> u32 @export { if i < 256u32 { return RPT_VERD[i as u64] }  return 0u32 }
+fn au_report_kind(i: u32)     -> u32 @export { if i < 256u32 { return RPT_KIND[i as u64] }  return 0u32 }
 fn au_report_delta(i: u32)    -> u64 @export { if i < 256u32 { return RPT_DELTA[i as u64] }  return 0u64 }
 /* THE RESIDUE-STABILITY INVARIANT (Task F2c, advice #1): an FNV-1a fingerprint of the WHOLE crush ledger -- every
- * loop's offset, verdict (CRUSHED/residue), and proven delta.  Same module -> same hash (the stable ANCHOR a
- * seed-DDC gate binds to).  Any verdict flip (affine<->residue) or delta change moves the root, so the gate
- * reddens the moment the residue drifts -- you focus engineering on the CRUSHABLE fraction while the residue
- * stays Frozen/Verified.  The deferral set is versioned, not silently mutable. */
+ * loop's offset, verdict (CRUSHED/residue), crush KIND, and proven step parameter.  Same module -> same hash (the
+ * stable ANCHOR a seed-DDC gate binds to).  Any verdict flip (crushed<->residue), KIND flip (an acc+=2 loop
+ * becoming acc*=2 carries the same numeric parameter -- without the kind fold the fingerprint would be BLIND to
+ * that semantic change), or parameter change moves the root, so the gate reddens the moment the residue drifts.
+ * The deferral set is versioned, not silently mutable. */
 fn au_report_hash() -> u64 @export {
     let mut acc : u64 = 14695981039346656037u64                    /* FNV-1a offset basis */
     let mut i : u32 = 0u32
     while i < RPT_N {
         acc = (acc ^ RPT_OFF[i as u64])         * 1099511628211u64
         acc = (acc ^ (RPT_VERD[i as u64] as u64)) * 1099511628211u64
+        acc = (acc ^ (RPT_KIND[i as u64] as u64)) * 1099511628211u64
         acc = (acc ^ RPT_DELTA[i as u64])       * 1099511628211u64
         i = i + 1u32
     }
@@ -932,7 +1044,7 @@ fn au_h2(a: u64, b: u64) -> u64 {                                  /* 2-to-1 com
 }
 fn au_report_leaf(i: u32) -> u64 @export {
     if i >= RPT_N { return 0u64 }
-    return au_h2(au_h2(RPT_OFF[i as u64], RPT_VERD[i as u64] as u64), RPT_DELTA[i as u64])
+    return au_h2(au_h2(au_h2(RPT_OFF[i as u64], RPT_VERD[i as u64] as u64), RPT_KIND[i as u64] as u64), RPT_DELTA[i as u64])
 }
 var MK_LV : [u64; 512]                                             /* in-place Merkle level buffer */
 fn au_report_merkle_root() -> u64 @export {
@@ -1150,14 +1262,20 @@ fn au_crush_walk(base: u64, boff: u64, blen: u64, accum: u32) {
                 let bl : u64 = AU_BODY_LEN
                 let mut verd : u32 = 0u32
                 let mut dlt  : u64 = 0u64
+                let mut knd  : u32 = 0u32
                 if au_body_has_loop(base, boff + bo, bl) == 1u32 {            /* NESTED -> compositional crush */
                     let net : u64 = au_crush_nested(base, boff + bo, bl, accum)
-                    if net != AU_NONE64 { verd = 1u32  dlt = net }
+                    if net != AU_NONE64 { verd = 1u32  dlt = net }            /* nested net is ADDITIVE (kind ADD) */
                 }
-                if au_body_has_loop(base, boff + bo, bl) == 0u32 {           /* SIMPLE -> agnostic affine crush */
-                    if au_topo_amputate(base, boff + bo, bl, accum, 7u64) == 1u32 { verd = 1u32  dlt = au_arith_delta() }
+                if au_body_has_loop(base, boff + bo, bl) == 0u32 {           /* SIMPLE -> the crush ladder */
+                    if au_topo_amputate(base, boff + bo, bl, accum, 7u64) == 1u32 {
+                        verd = 1u32
+                        knd = AU_LKIND
+                        if AU_LKIND == AU_K_MUL { dlt = AU_LRATIO }           /* geometric: the proven ratio  */
+                        if AU_LKIND == AU_K_ADD { dlt = au_arith_delta() }    /* affine:    the proven delta  */
+                    }
                 }
-                if RPT_N < 256u32 { RPT_OFF[RPT_N as u64] = boff + p  RPT_VERD[RPT_N as u64] = verd  RPT_DELTA[RPT_N as u64] = dlt  RPT_N = RPT_N + 1u32 }
+                if RPT_N < 256u32 { RPT_OFF[RPT_N as u64] = boff + p  RPT_VERD[RPT_N as u64] = verd  RPT_KIND[RPT_N as u64] = knd  RPT_DELTA[RPT_N as u64] = dlt  RPT_N = RPT_N + 1u32 }
                 p = bo + bl                                          /* skip past the body -> inner loops not re-counted */
                 adv = 0u32
             }
@@ -1224,8 +1342,11 @@ fn au_conform_witness() -> u64 @export { return AU_CONF_WIT }
 fn au_conform_delta()   -> u64 @export { return AU_CONF_DELTA }
 fn au_conform_bound(base: u64, boff: u64, blen: u64, accum: u32, acc0: u64, bound: u64) -> u32 @export {
     AU_CONF_ITER = 0u64  AU_CONF_WIT = 0u64  AU_CONF_DELTA = 0u64
-    /* (1) PROJECT: crush M to acc' = acc + delta, PROVEN over 2^64 (else non-affine -> honest DEFER) */
+    /* (1) PROJECT: crush M to acc' = acc + delta, PROVEN over 2^64 (else non-affine -> honest DEFER).
+     * The conformance intersect is the AFFINE fragment BY CHARTER: a geometric crush (kind MUL) is a
+     * different closed form, so it DEFERS here -- never misread as an additive delta. */
     if au_topo_amputate(base, boff, blen, accum, acc0) != 1u32 { return AU_CONF_DEFER }
+    if AU_LKIND != AU_K_ADD { return AU_CONF_DEFER }
     let delta : u64 = au_arith_delta()
     AU_CONF_DELTA = delta
     /* (2) INTERSECT: prove the architecture invariant "accum < bound" 1-inductive over the crushed transition */

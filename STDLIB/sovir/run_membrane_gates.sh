@@ -7,10 +7,12 @@
 # driver runs all three under real rc capture so ANY one going red reddens ONE sweep.  Each child
 # carries its own teeth; this only composes their verdicts.
 #
-#   run_legA.sh          -- 24 Leg-A unit gates (SVIR<->SVIR prover, aliasing oracle, ETAT B0/B2
-#                           memory, control-as-mux, loop-crush family, Merkle TCB, fold, netlist)
-#   run_ghost.sh         -- the ghost-build over REAL ccsv output (affine loop crushed, geometric
-#                           deferred as residue, report fingerprinted)
+#   run_legA.sh          -- 25 Leg-A unit gates (SVIR<->SVIR prover, aliasing oracle, ETAT B0/B2
+#                           memory, control-as-mux, loop-crush family incl. the geometric rung and
+#                           the symbolic-freedom soundness gate, Merkle TCB, fold, netlist)
+#   run_ghost.sh         -- the ghost-build over REAL ccsv output (affine loop CRUSHED(add d5),
+#                           geometric loop CRUSHED(mul r2), chaotic deferred as residue,
+#                           report fingerprinted)
 #   run_residue_gate.sh  -- the residue-stability RATCHET (report hash vs sealed golden)
 #
 # A SOURCE-TRACKING TEETH is asserted first: every run_legA KAT source must be git-tracked, so the
@@ -57,7 +59,7 @@ runchild run_residue_gate.sh
 
 echo "============================================================"
 if [ "$fail" -eq 0 ]; then
-    say "ALL MEMBRANE GATES GREEN -- Leg A (24) + ghost-build + residue ratchet, sources tracked."
+    say "ALL MEMBRANE GATES GREEN -- Leg A (25) + ghost-build + residue ratchet, sources tracked."
     exit 0
 fi
 say "MEMBRANE GATES: RED"

@@ -2,8 +2,12 @@ module au_topo_kat
 
 /* AGNOSTIC TOPOLOGICAL EXTRACTION: the loop body is a BLACK BOX -- executed, not parsed.  Three differently-
  * WRITTEN bodies that all compute acc+=5 extract the SAME delta and prove (syntax immunity); a body that LOOKS
- * affine on a degenerate fuzz seed (acc*2 at 0 -> +0) is REFUTED by the symbolic guillotine (no false crush). */
+ * affine on a degenerate fuzz seed (acc*2 at 0 -> +0) is REFUTED by the symbolic guillotine (no false crush);
+ * acc*2 from an odd seed CRUSHES on the GEOMETRIC rung (kind MUL, proven ratio 2); an XOR flip fits NEITHER
+ * rung and stays honest residue (DEFER) -- the ladder crushes more, the conscience line is unmoved. */
 extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_ratio() -> u64 from "ser_antiunify.iii"
 
 /* acc = acc + 5                 (GET0 CONST5 ADD SET0)                     */
 var B1 : [u8; 14] = [16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]
@@ -11,14 +15,19 @@ var B1 : [u8; 14] = [16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0
 var B2 : [u8; 24] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8]
 /* acc = (acc + 10) - 5          (GET0 CONST10 ADD CONST5 SUB SET0) -- different syntax, same behavior */
 var B3 : [u8; 24] = [16u8,0u8, 1u8,10u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,0u8]
-/* acc = acc * 2                 (GET0 CONST2 MUL SET0) -- NOT affine */
+/* acc = acc * 2                 (GET0 CONST2 MUL SET0) -- geometric */
 var B4 : [u8; 14] = [16u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 17u8,0u8]
+/* acc = acc ^ 7                 (GET0 CONST7 XOR SET0) -- period-2 flip: fits NO rung */
+var B5 : [u8; 14] = [16u8,0u8, 1u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 39u8, 17u8,0u8]
 
 fn main() -> u64 {
     if au_topo_amputate(&B1 as u64, 0u64, 14u64, 0u32, 7u64) != 1u32 { return 1u64 }   /* acc+=5 extracted from behavior + PROVEN */
     if au_topo_amputate(&B2 as u64, 0u64, 24u64, 0u32, 7u64) != 1u32 { return 2u64 }   /* SYNTAX IMMUNITY: acc+2+3 == acc+5       */
     if au_topo_amputate(&B3 as u64, 0u64, 24u64, 0u32, 7u64) != 1u32 { return 3u64 }   /* SYNTAX IMMUNITY: (acc+10)-5 == acc+5    */
-    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 0u64) != 0u32 { return 4u64 }   /* TEETH: acc*2 @seed 0 fuzzes +0, REFUTED */
-    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 1u64) != 2u32 { return 5u64 }   /* acc*2 @seed 1 -> non-affine -> DEFER     */
+    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 0u64) != 0u32 { return 4u64 }   /* TEETH: acc*2 @seed 0 fuzzes +0, REFUTED (even seed: no geo proposal either) */
+    if au_topo_amputate(&B4 as u64, 0u64, 14u64, 0u32, 1u64) != 1u32 { return 5u64 }   /* acc*2 @seed 1 -> GEOMETRIC rung, PROVEN  */
+    if au_last_kind() != 1u32 { return 6u64 }                                          /* kind = MUL                               */
+    if au_last_ratio() != 2u64 { return 7u64 }                                         /* the proven ratio r = 2                   */
+    if au_topo_amputate(&B5 as u64, 0u64, 14u64, 0u32, 1u64) != 2u32 { return 8u64 }   /* acc^=7 fits NEITHER rung -> DEFER (residue witness) */
     return 99u64
 }

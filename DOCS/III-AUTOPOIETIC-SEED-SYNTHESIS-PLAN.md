@@ -928,7 +928,8 @@ background daemon + residue-rewrite proposers** (MCMC-over-residue = the open sy
 exact-fold minimizer is; Epoch III's **constraint-language front-end** (the UI to *state* invariants) is not built — the
 synthesis+certify engine underneath it is; Epoch IV today covers the **combinational/crushed fragment** (a full
 SVIR→synthesizable-Verilog for sequential/memory ops remains). Each core is real, gated, and reddens under mutation;
-each frontier is a genuine campaign, not a toggle. `run_legA.sh` = **23 KATs ALL GREEN**.
+each frontier is a genuine campaign, not a toggle. `run_legA.sh` = **25 KATs ALL GREEN** (the loop-crush family
+through the geometric rung + the symbolic-freedom soundness gate; aggregated by `run_membrane_gates.sh`).
 
 ## SOUNDNESS AUDIT 2026-07-04 — the frozen-local false crush (found, demonstrated, closed)
 
@@ -953,3 +954,38 @@ DEFER (capacity is never a verdict); a poisoned `bb_equal` (0xFF) also maps to D
 
 **Post-fix gate:** `_au_symfree_kat` = 99 (orbit truth; ADV refuted; affine-with-counter still crushes;
 9-local body defers), joined to `run_legA.sh`.
+
+## THE GEOMETRIC RUNG 2026-07-04 — loop@geo moves from DEFER(residue) to CRUSHED(mul), with proof
+
+The crush ladder gains its multiplicative rung.  The seed's `geo()` loop (`acc = acc * 2`), carried as
+DEFER(residue) in every ghost/ratchet report since F2c, is now CRUSHED on real ccsv output —
+`loop@131 CRUSHED(mul) r=2` — and a new `chaotic()` seed function (`acc = acc*acc + 1`, a quadratic
+map with no low-degree closed form) keeps the DEFER path witnessed (`loop@218`).  Ledger entries carry
+a crush KIND (ADD delta / MUL ratio), folded into both the FNV fingerprint and the Merkle leaves.
+
+**The theorem-to-machine obligation (iii_math_rigor), discharged:**
+- *Statement*: for all S₀, r, N in Z/2^64: if the loop's one-step transition satisfies T(s) = s·r for
+  ALL s (mod 2^64), then acc_N = S₀·r^N (mod 2^64), r^N by binary exponentiation in the wrap ring.
+- *Hypotheses*: (H1) T(s) = s·r over ALL 2^64 states of the accumulator AND all entry states of every
+  other read local; (H2) r constant across iterations; (H3) multiplication mod 2^64 is the associative/
+  commutative ring product (Z → Z/2^64 ring homomorphism), so induction acc_{k+1} = acc_k·r composes
+  exactly — no wrap-edge exclusion (contrast au_tri's parity split).
+- *Discharge*: H1 = the SAT miter `bb_equal(step2, bb_mul(v02, bb_const(r)))` over the DENOTED body
+  with every read local a fresh bb_var — ser_antiunify.iii:725 (svir path) and :520-526
+  (au_prove_recurrence_mul, toy path); H2 = r is one compile-time constant proposed once
+  (:498-517, au_is_geometric/au_geo_r — proposal only, never trusted); H3 = au_pow_wrap :483-496
+  computes the same ring product (`*` is the machine's mod-2^64 multiply).
+- *Realization*: au_closed_geometric :518 (cf evaluator), au_amputate_geometric :528 (toy pipeline),
+  au_topo_amputate rung 2 :715-729 (black-box pipeline), au_crucible_scalar MUL arm.
+- *Falsifier (all executed green 2026-07-04)*: `_au_crucible_kat` pins cf(10) = 1·3¹⁰ = 59049 (=99);
+  `_au_topo_kat` pins acc*2@seed1 → CRUSHED kind-MUL ratio-2, acc*2@seed0 → REFUTED (the aliased
+  +0 proposal dies at the miter), acc^=7 → DEFER (=99); `_au_rhash_kat` pins the PURE-KIND teeth —
+  affine acc+=2 vs geometric acc*=2 at identical offsets with the same parameter hash APART (=99);
+  the residue ratchet DRIFT-ABORTED on the strengthened recipe (rc=1 against golden 327748354ab7847c)
+  and was resealed by the authorized act to 91470249305de7af.
+- *Verdict*: PROVEN-IN-CODE.
+
+**Charter guards (honesty preserved):** au_conform_bound defers on a MUL-kind crush
+(ser_antiunify.iii:1349 — the conformance intersect is the affine fragment by charter; a ratio is
+never misread as an additive delta; `_au_conform_kat` case 3 is the live regression); au_crush_nested
+requires an ADD-kind flattened outer (:960 — its splice is additive by construction).

@@ -18,6 +18,25 @@ path is sovereign at the bottom (no gcc compiling the seed).
 Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
 
+**NESTED-BRACE struct-local init (2026-07-05, fix #28): floor 33→28 — ast 8→3 in one stroke (the zipper/walk cluster, the decoded target).**
+`iii_zipper_collect_t c = { {0}, 0 };` (ast.c:2033 and the walk_state/serialize family) — the brace-init
+struct-local walker fed the sub-`{` to ebin (desync → rc=8). Seed census measured FIRST: exactly ONE nested
+shape in all six modules, depth-1 only. The walker now handles a sub-brace per field: an ARRAY field's elements
+store at `fof + j*SFEL` with C partial-init ZERO-FILL to SFSZ; an EMBEDDED-struct field's sub-fields store at
+`fof + SFOFF_sub` with a zero tail; scalar-in-braces `{v}` (legal C) takes the value; a sub-brace at an
+overflow position is skipped balanced (no emit). Flat inits byte-identical. Falsifier `_nb1.c` RED
+(`# 1 1 8 8`, interp 0) → GREEN (`# 1 0 0 0`, interp 99, gcc 99); promoted to `test_nestedinit.c` (cfeat
+all-4). run_ccsv EXIT=0 (zero FAIL lines); fn-ptr gate ALL PASS; **floor 28** (lex 0 · sema 4 · emit 3 ·
+ast 3 · cg_r3 2 · parse 16) — cleared: zipper_descend/sibling, walk_state_create/step/deserialize.
+**The remaining 28, decoded**: parse 16 = the CROSS-MODULE EXTERN-CALL class (fn68's trace: the args to
+`iii_ast_get_mut(st->ast,n)` — defined in ast.c — emit then DROP with NO CALL; the old "cross-file
+hypothesis", refuted at floor-85 when intra-file gaps sat in front, is now the exposed blocker); ast 3 +
+emit 3 = the STDIO class (`tmpfile/ftell/fwrite/FILE*` in serialize_buf/deserialize_buf/walk_state_deserialize
++ write_sanctum_script/render_witness/emit_link) — a sovereign runtime-library stroke; sema 4
+(decode_hexad_args rc=2, local_lookup, aggregate_dynamic_impact, iii_sema_run); cg_r3 2 (emit_field_label,
+emit_function). Shadow-stack prologue/epilogue + sret + &frame-local all visibly healthy in the fn68 trace
+(Boss-1/2 machinery live in real seed code).
+
 **TABLES (2026-07-05, fix #27): pointer-field [k] deref + extern struct-array registration — floor 34→33 (sema fn31, the decoded target).**
 Two roots, both measured before fixed. (1) **[k] on a scalar-POINTER field**: all four chain walkers' final-[k]
 arm assumed an INLINE array (`addr + k*elem`) — `TBL[i].name[0]` indexed the FIELD ADDRESS instead of loading the

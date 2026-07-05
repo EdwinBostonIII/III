@@ -1224,7 +1224,28 @@ fn pstmt() {
                     if cp(Q_LP)==1u32 { if TK[(C+1u32) as u64]==1u32 { if ispat(C+2u32,Q_RP)==1u32 { if ispat(C+3u32,Q_LB)==1u32 { if stidx(C+1u32)>=0i32 { C=C+3u32 } } } } }   /* `(T){..}` COMPOUND-LITERAL -> skip the redundant `(T)` so it falls into the brace-init (per-field store; ANY size) */
                     if cp(Q_LB)==1u32 { C=C+1u32  let fb:u32=STFB[stc as u64]  let nf:u32=STNF[stc as u64]  let mut bi:u32=0u32
                         if cp(Q_RB)==0u32 { let mut go:u32=1u32  while go==1u32 {
-                            if bi<nf { let fi:u32=fb+bi  emit_vbase_s(s, SFOFF[fi as u64] as i64)  ebin(0u32)  estore(SFEL[fi as u64]) } else { ebin(0u32)  eb(0x72u32) }
+                            if bi<nf { let fi:u32=fb+bi  let fof:i64=SFOFF[fi as u64] as i64
+                                if cp(Q_LB)==1u32 { C=C+1u32   /* NESTED sub-brace for THIS field (the ast shape `{ {0}, 0 }`; seed census: depth 1 only) */
+                                    if SFAR[fi as u64]==1u32 {   /* array field { v.. } : elements at fof+j*el; C partial-init ZERO-FILLS the rest (SFSZ = total field bytes) */
+                                        let fel:i64=SFEL[fi as u64]  let ftot:i64=SFSZ[fi as u64]  let mut j:i64=0i64
+                                        if cp(Q_RB)==0u32 { let mut g4:u32=1u32  while g4==1u32 {
+                                            emit_vbase_s(s, fof + (j*fel))  ebin(0u32)  estore(fel)  j=j+1i64
+                                            if cp(Q_COM)==1u32 { C=C+1u32 } else { g4=0u32 } } }
+                                        eat(Q_RB)
+                                        while (j*fel)<ftot { emit_vbase_s(s, fof + (j*fel))  econst(0i64)  estore(fel)  j=j+1i64 }
+                                    } else { let fptn:i32=SFPT[fi as u64]
+                                        if fptn>=0i32 {   /* embedded-struct field { v.. } : per-sub-field stores + zero the un-given tail */
+                                            let sfb:u32=STFB[fptn as u64]  let snf:u32=STNF[fptn as u64]  let mut sj:u32=0u32
+                                            if cp(Q_RB)==0u32 { let mut g5:u32=1u32  while g5==1u32 {
+                                                if sj<snf { let sfi:u32=sfb+sj  emit_vbase_s(s, fof + (SFOFF[sfi as u64] as i64))  ebin(0u32)  estore(SFEL[sfi as u64]) } else { ebin(0u32)  eb(0x72u32) }
+                                                sj=sj+1u32  if cp(Q_COM)==1u32 { C=C+1u32 } else { g5=0u32 } } }
+                                            eat(Q_RB)
+                                            while sj<snf { let sfi:u32=sfb+sj  emit_vbase_s(s, fof + (SFOFF[sfi as u64] as i64))  econst(0i64)  estore(SFEL[sfi as u64])  sj=sj+1u32 }
+                                        } else {   /* scalar field with braces `{v}` (legal C) : first value stored, extras dropped */
+                                            if cp(Q_RB)==0u32 { emit_vbase_s(s, fof)  ebin(0u32)  estore(SFEL[fi as u64])  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  eb(0x72u32) } }
+                                            eat(Q_RB) } }
+                                } else { emit_vbase_s(s, fof)  ebin(0u32)  estore(SFEL[fi as u64]) }
+                            } else { if cp(Q_LB)==1u32 { C=C+1u32  let mut d6:i32=1i32  let mut g6:u32=1u32  while g6==1u32 { if TK[C as u64]==0u32 {g6=0u32} else { if ispat(C,Q_LB)==1u32 {d6=d6+1i32}  if ispat(C,Q_RB)==1u32 { d6=d6-1i32  if d6==0i32 {g6=0u32} }  C=C+1u32 } } } else { ebin(0u32)  eb(0x72u32) } }   /* overflow position: a sub-brace is SKIPPED balanced (no emit); a scalar is dropped */
                             bi=bi+1u32  if cp(Q_COM)==1u32 { C=C+1u32 } else { go=0u32 } } }
                         eat(Q_RB)
                         while bi<nf { let fi:u32=fb+bi  emit_vbase_s(s, SFOFF[fi as u64] as i64)  econst(0i64)  estore(SFEL[fi as u64])  bi=bi+1u32 } }   /* `Foo h={e0,..}` brace-init: per-field store + zero tail (NO eat(;)/return -> loop continues for `, b=..`) */

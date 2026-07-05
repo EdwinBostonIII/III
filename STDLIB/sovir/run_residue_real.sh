@@ -3,11 +3,14 @@
 # The toy corpus (seed_loops_corpus.c) witnesses each rung; THIS gate witnesses the AT-SCALE truth: ccsv
 # compiles sha256.c (real crypto C) to SVIR and the whole-module walk records every loop's verdict.  Measured
 # at introduction: loops=4 crushed=0 deferred=4 -- every sha256 loop is a MEMORY-fragment loop (w[] schedule,
-# rounds, byte packing), and the scalar ladder's interpreter honestly refuses memory opcodes BEFORE any fit,
-# so the whole population is residue.  That is the roadmap: the next capability that crushes a real-seed loop
-# (the B2 stride lift composed into the walk) MOVES this fingerprint, and this gate says so.  The slot sweep
-# at introduction showed the ledger is accum-slot-invariant on this module (all 8 slots -> the same hash);
-# the gate pins accum=0.  --reseal authorizes a new golden; an optional 2nd arg swaps the C seed.
+# rounds, byte packing), and the scalar ladder's interpreter honestly refused memory opcodes BEFORE any fit,
+# so the whole population was residue.  SAME DAY, the STORE rung landed and this gate did its job: the
+# M[i]=0 loop (loop@458) flipped to CRUSHED(sto) (stride 4, value 0, width 4 -- the affine constant-write
+# family, three miters over the twice-composed denotation), the fingerprint MOVED, the gate ABORTED, and
+# the reseal was the authorized act.  The remaining residue: the W[t]=M[t] copy (the load boundary -- the
+# named next rung) and the data-dependent schedule/rounds loops (honest residue).  The slot sweep at
+# introduction showed the ledger is accum-slot-invariant on this module; the gate pins accum=0.
+# --reseal authorizes a new golden; an optional 2nd arg swaps the C seed.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/_seqprobe"; mkdir -p "$W"
@@ -30,8 +33,8 @@ int main(){
   unsigned crushed = au_crush_svir_module(svir_ptr(), svir_len(), 0);
   unsigned n = au_report_n();
   for(unsigned i=0;i<n;i++) printf("  loop@%-4llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
-    au_report_verdict(i)?(au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
+    au_report_verdict(i)?(au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
+    au_report_verdict(i)?(au_report_kind(i)==3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
   printf("loops=%u crushed=%u deferred=%u\n", n, crushed, n-crushed);
   printf("REPORT_HASH=%016llx\n", au_report_hash());
   return 0;
@@ -44,5 +47,5 @@ cat "$MANIFEST"
 if [ $RESEAL -eq 1 ]; then echo "$HASH" > "$GOLDEN"; say "RESEALED golden=$HASH (authorized)"; exit 0; fi
 if [ ! -f "$GOLDEN" ]; then echo "$HASH" > "$GOLDEN"; say "SEALED (first run) golden=$HASH"; exit 0; fi
 GOLD=$(cat "$GOLDEN")
-if [ "$HASH" = "$GOLD" ]; then say "REAL-SEED RESIDUE STABLE $HASH -- sha256's loop population is memory-fragment residue; the scalar ladder's honest boundary, witnessed."; exit 0
+if [ "$HASH" = "$GOLD" ]; then say "REAL-SEED RESIDUE STABLE $HASH -- the certified fraction (M[i]=0 CRUSHED(sto) since 2026-07-04) frozen; the load/data-dependent residue witnessed."; exit 0
 else say "REAL-SEED RESIDUE DRIFT: $HASH != golden $GOLD -- a real-seed loop verdict CHANGED (a rung reached the real seed, or a regression). BUILD ABORT."; exit 1; fi

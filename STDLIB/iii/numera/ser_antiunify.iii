@@ -584,9 +584,40 @@ fn tp_rd8(base: u64, i: u64) -> u64 {
     while k < 8u64 { v = v | ((tpb(base, i + k) as u64) << (k * 8u64))  k = k + 1u64 }
     return v
 }
-/* CONCRETE black-box execution of ONE pass of a straight-line SVIR body over TP_LOC.  0=ok, 1=out-of-fragment. */
+/* THE CONCRETE FUZZ HEAP (the memory fragment, 2026-07-04): a bounded 64KB linear memory the black box
+ * runs against, zeroed per amputation.  Loads are width-faithful (zero-extend 8/16U/32U/64, SIGN-extend
+ * 16S/32S -- the exec must match ccsv's emitted semantics exactly); stores truncate to width.  An address
+ * past the heap is OUT OF FRAGMENT (defer), never wrapped or clamped -- no falsified semantics.  Every
+ * store this pass is COUNTED and the first one's (addr, value, width) recorded -- the behavioral proposal
+ * side of the STORE rung, and the store-presence gate that keeps a storing body off the scalar rungs. */
+const TP_MEM_SZ : u64 = 65536u64
+var TP_MEM : [u8; 65536]
+var TP_ST_CNT : u32 = 0u32    /* stores executed THIS pass */
+var TP_ST_ADDR : u64 = 0u64   /* first store's address     */
+var TP_ST_VAL  : u64 = 0u64   /* first store's value       */
+var TP_ST_W    : u32 = 0u32   /* first store's width (bytes) */
+fn au_mem_zero() { let mut i : u64 = 0u64  while i < TP_MEM_SZ { TP_MEM[i] = 0u8  i = i + 1u64 } }
+fn au_mem_rd(addr: u64, w: u32) -> u64 {
+    let mut v : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < (w as u64) { v = v | ((TP_MEM[addr + k] as u64) << (k * 8u64))  k = k + 1u64 }
+    return v
+}
+fn au_mem_wr(addr: u64, w: u32, v: u64) {
+    let mut k : u64 = 0u64
+    while k < (w as u64) { TP_MEM[addr + k] = ((v >> (k * 8u64)) & 255u64) as u8  k = k + 1u64 }
+}
+fn au_sext(v: u64, w: u32) -> u64 {                                /* sign-extend a w-byte value to 64 */
+    let bits : u64 = (w as u64) * 8u64
+    let sbit : u64 = 1u64 << (bits - 1u64)
+    if (v & sbit) != 0u64 { return v | (0u64 - (sbit << 1u64)) }   /* set all bits above width */
+    return v
+}
+/* CONCRETE black-box execution of ONE pass of a straight-line SVIR body over TP_LOC + TP_MEM.
+ * 0=ok, 1=out-of-fragment. */
 fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {
     TP_SP = 0u32
+    TP_ST_CNT = 0u32
     let mut p : u64 = 0u64
     while p < blen {
         let op : u32 = tpb(base, boff + p)  p = p + 1u64
@@ -613,9 +644,44 @@ fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {
             if TP_SP < 256u32 { TP_STK[TP_SP as u64] = r  TP_SP = TP_SP + 1u32 }
             handled = 1u32
         } }
+        if op >= 0x80u32 { if op <= 0x89u32 {                      /* THE MEMORY FRAGMENT */
+            let mut lw : u32 = 0u32                                /* load width (bytes), 0 = not a load  */
+            let mut ls : u32 = 0u32                                /* load sign-extends                   */
+            let mut sw : u32 = 0u32                                /* store width (bytes), 0 = not a store */
+            if op == 0x80u32 { lw = 1u32 }                         /* LOAD8            */
+            if op == 0x82u32 { lw = 8u32 }                         /* LOAD64           */
+            if op == 0x84u32 { lw = 2u32 }                         /* LOAD16_U         */
+            if op == 0x85u32 { lw = 2u32  ls = 1u32 }              /* LOAD16_S         */
+            if op == 0x86u32 { lw = 4u32 }                         /* LOAD32_U         */
+            if op == 0x87u32 { lw = 4u32  ls = 1u32 }              /* LOAD32_S         */
+            if op == 0x81u32 { sw = 1u32 }                         /* STORE8           */
+            if op == 0x83u32 { sw = 8u32 }                         /* STORE64          */
+            if op == 0x88u32 { sw = 2u32 }                         /* STORE16          */
+            if op == 0x89u32 { sw = 4u32 }                         /* STORE32          */
+            if lw != 0u32 {
+                if TP_SP < 1u32 { return 1u32 }
+                let addr : u64 = TP_STK[(TP_SP - 1u32) as u64]
+                if addr + (lw as u64) > TP_MEM_SZ { return 1u32 }  /* past the fuzz heap -> out of fragment */
+                let mut v : u64 = au_mem_rd(addr, lw)
+                if ls == 1u32 { v = au_sext(v, lw) }
+                TP_STK[(TP_SP - 1u32) as u64] = v
+                handled = 1u32
+            }
+            if sw != 0u32 {
+                if TP_SP < 2u32 { return 1u32 }
+                let val  : u64 = TP_STK[(TP_SP - 1u32) as u64]
+                let addr : u64 = TP_STK[(TP_SP - 2u32) as u64]
+                TP_SP = TP_SP - 2u32
+                if addr + (sw as u64) > TP_MEM_SZ { return 1u32 }  /* past the fuzz heap -> out of fragment */
+                au_mem_wr(addr, sw, val)
+                if TP_ST_CNT == 0u32 { TP_ST_ADDR = addr  TP_ST_VAL = val  TP_ST_W = sw }
+                TP_ST_CNT = TP_ST_CNT + 1u32
+                handled = 1u32
+            }
+        } }
         if op == 0x60u32 { return 0u32 }                          /* RETURN: stop */
         if op == 0x72u32 { if TP_SP < 1u32 { return 1u32 }  TP_SP = TP_SP - 1u32  handled = 1u32 }
-        if handled == 0u32 { return 1u32 }                        /* control/memory/call -> out of fragment */
+        if handled == 0u32 { return 1u32 }                        /* control/call -> out of fragment */
     }
     return 0u32
 }
@@ -627,6 +693,9 @@ var TP_LOC_SYM : [u32; 256]   /* symbolic locals (TP_SYMTOP = never touched yet)
 var TP_NEXTVAR : u32 = 0u32   /* next fresh bv_bits input index for a first-READ local (accum = 0) */
 var TP_STK_ISC : [u8; 256]    /* shadow: 1 iff the stack slot is a DIRECT compile-time constant */
 var TP_STK_CV  : [u64; 256]   /* shadow: that constant's value (valid iff the ISC flag is 1) */
+var SY_ST_CNT  : u32 = 0u32   /* symbolic stores captured THIS pass */
+var SY_ST_ADDR : u32 = 0u32   /* the (first) store's ADDRESS node   */
+var SY_ST_VAL  : u32 = 0u32   /* the (first) store's VALUE node     */
 /* initialise the symbolic state for a denotation: every local untouched, the accumulator = bb_var(0).
  * Caller owns bb_reset.  Split from the pass so the quadratic rung can COMPOSE passes over one state. */
 fn au_sym_init(accum: u32) {
@@ -645,6 +714,7 @@ fn au_sym_init(accum: u32) {
  * fragment (variable shift/div/memory/control) or past the 8-input budget (capacity defers, honestly). */
 fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
     TP_SP_SYM = 0u32
+    SY_ST_CNT = 0u32
     let mut p : u64 = 0u64
     while p < blen {
         let op : u32 = tpb(base, boff + p)  p = p + 1u64
@@ -703,6 +773,19 @@ fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
             if TP_SP_SYM < 256u32 { TP_STK_SYM[TP_SP_SYM as u64] = r  TP_STK_ISC[TP_SP_SYM as u64] = 0u8  TP_SP_SYM = TP_SP_SYM + 1u32 }
             handled = 1u32
         }
+        if op >= 0x80u32 { if op <= 0x89u32 {                      /* MEMORY in the symbolic pass */
+            if op == 0x81u32 { handled = 2u32 }                    /* STORE8  */
+            if op == 0x83u32 { handled = 2u32 }                    /* STORE64 */
+            if op == 0x88u32 { handled = 2u32 }                    /* STORE16 */
+            if op == 0x89u32 { handled = 2u32 }                    /* STORE32 */
+            if handled != 2u32 { return TP_SYMTOP }                /* a symbolic LOAD: past this rung -> defer */
+            if TP_SP_SYM < 2u32 { return TP_SYMTOP }
+            SY_ST_VAL  = TP_STK_SYM[(TP_SP_SYM - 1u32) as u64]     /* capture THE store's value node */
+            SY_ST_ADDR = TP_STK_SYM[(TP_SP_SYM - 2u32) as u64]     /* ... and its address node       */
+            TP_SP_SYM = TP_SP_SYM - 2u32
+            SY_ST_CNT = SY_ST_CNT + 1u32
+            handled = 1u32                                         /* a store leaves the LOCALS untouched */
+        } }
         if op == 0x60u32 { return TP_LOC_SYM[accum as u64] }       /* RETURN */
         if op == 0x72u32 { if TP_SP_SYM < 1u32 { return TP_SYMTOP }  TP_SP_SYM = TP_SP_SYM - 1u32  handled = 1u32 }
         if handled == 0u32 { return TP_SYMTOP }
@@ -725,17 +808,30 @@ fn au_svir_step_sym(base: u64, boff: u64, blen: u64, accum: u32) -> u32 @export 
  * (kind in au_last_kind; parameter -- delta / ratio / curvature -- in au_last_param) ; 0 = some fitted
  * conjecture was REFUTED by the symbolic body (no false crush) ; AU_DEFER = fits nothing / non-denotable /
  * poisoned decision.  NO opcode pattern-matching -- pure behavioral resonance. */
-const AU_K_ADD  : u32 = 0u32  /* crush kind: additive (affine / nested net effect)          */
-const AU_K_MUL  : u32 = 1u32  /* crush kind: multiplicative (geometric)                     */
-const AU_K_QUAD : u32 = 2u32  /* crush kind: quadratic (state-invariant second difference)  */
+const AU_K_ADD   : u32 = 0u32 /* crush kind: additive (affine / nested net effect)          */
+const AU_K_MUL   : u32 = 1u32 /* crush kind: multiplicative (geometric)                     */
+const AU_K_QUAD  : u32 = 2u32 /* crush kind: quadratic (state-invariant second difference)  */
+const AU_K_STORE : u32 = 3u32 /* crush kind: strided constant write (the memory rung)       */
 var AU_LKIND  : u32 = 0u32    /* kind of the last successful au_topo_amputate               */
-var AU_LRATIO : u64 = 0u64    /* the proven step parameter: ratio (MUL) / curvature c (QUAD) */
+var AU_LRATIO : u64 = 0u64    /* the proven parameter: ratio (MUL) / curvature (QUAD) / cert digest (STORE) */
+var AU_LS_S : u64 = 0u64      /* STORE cert: the proven address stride                      */
+var AU_LS_V : u64 = 0u64      /* STORE cert: the proven constant value (raw, pre-truncation) */
+var AU_LS_W : u32 = 0u32      /* STORE cert: the store width in bytes                       */
 fn au_last_kind()  -> u32 @export { return AU_LKIND }
 fn au_last_ratio() -> u64 @export { return AU_LRATIO }   /* MUL-specific reader (same cell as au_last_param) */
 fn au_last_param() -> u64 @export { return AU_LRATIO }   /* the general proven-parameter reader              */
+fn au_last_store_stride() -> u64 @export { return AU_LS_S }
+fn au_last_store_value()  -> u64 @export { return AU_LS_V }
+fn au_last_store_width()  -> u32 @export { return AU_LS_W }
+var AU_FZC : [u32; 4]   /* per-fuzz-pass store count            */
+var AU_FZA : [u64; 4]   /* per-fuzz-pass first-store address    */
+var AU_FZV : [u64; 4]   /* per-fuzz-pass first-store value (raw) */
+var AU_FZW : [u32; 4]   /* per-fuzz-pass first-store width      */
 fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
     AU_LKIND = AU_K_ADD
     AU_LRATIO = 0u64
+    AU_LS_S = 0u64  AU_LS_V = 0u64  AU_LS_W = 0u32
+    au_mem_zero()
     let mut s : u32 = 0u32
     while s < 256u32 { TP_LOC[s as u64] = 0u64  s = s + 1u32 }
     TP_LOC[accum as u64] = seed
@@ -744,8 +840,64 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
     let mut i : u32 = 0u32
     while i < 4u32 {
         if au_svir_exec(base, boff, blen) != 0u32 { return AU_DEFER }
+        AU_FZC[i as u64] = TP_ST_CNT  AU_FZA[i as u64] = TP_ST_ADDR  AU_FZV[i as u64] = TP_ST_VAL  AU_FZW[i as u64] = TP_ST_W
         sp_obs_push(TP_LOC[accum as u64])
         i = i + 1u32
+    }
+    let mut stores : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < 4u32 { if AU_FZC[k as u64] > 0u32 { stores = 1u32 }  k = k + 1u32 }
+    if stores == 1u32 {
+        /* RUNG 4: THE STORE RUNG.  A body that writes memory can NEVER crush on a scalar rung (a scalar
+         * certificate would say nothing about the memory effect); only THIS rung's certificate covers it:
+         * the loop's sole memory effect is the affine constant-write family (stride S, value V, width W) --
+         * addresses advance by the proven S per iteration for ALL entry states, the value is the proven
+         * constant V for ALL entry states.  cf: N iterations from entry state X write exactly
+         * { A(X) + S*k : k in [0,N) } with value V -- B2's aff_of geometry, behaviorally extracted,
+         * symbolically discharged.  Loads are past this rung (the denoter defers on them). */
+        if AU_FZC[0u64] != 1u32 { return AU_DEFER }                /* exactly ONE store per pass, every pass */
+        if AU_FZC[1u64] != 1u32 { return AU_DEFER }
+        if AU_FZC[2u64] != 1u32 { return AU_DEFER }
+        if AU_FZC[3u64] != 1u32 { return AU_DEFER }
+        if AU_FZW[1u64] != AU_FZW[0u64] { return AU_DEFER }        /* one width */
+        if AU_FZW[2u64] != AU_FZW[0u64] { return AU_DEFER }
+        if AU_FZW[3u64] != AU_FZW[0u64] { return AU_DEFER }
+        let vv : u64 = AU_FZV[0u64]                                /* proposed constant value (conjecture) */
+        if AU_FZV[1u64] != vv { return AU_DEFER }
+        if AU_FZV[2u64] != vv { return AU_DEFER }
+        if AU_FZV[3u64] != vv { return AU_DEFER }
+        let ss : u64 = AU_FZA[1u64] - AU_FZA[0u64]                 /* proposed stride (conjecture) */
+        if (AU_FZA[2u64] - AU_FZA[1u64]) != ss { return AU_DEFER }
+        if (AU_FZA[3u64] - AU_FZA[2u64]) != ss { return AU_DEFER }
+        bb_reset(64u64)
+        au_sym_init(accum)
+        let p1 : u32 = au_sym_pass(base, boff, blen, accum)        /* pass 1: capture the store's nodes */
+        if p1 == TP_SYMTOP { return AU_DEFER }
+        if SY_ST_CNT != 1u32 { return AU_DEFER }
+        let n1a : u32 = SY_ST_ADDR
+        let n1v : u32 = SY_ST_VAL
+        let p2 : u32 = au_sym_pass(base, boff, blen, accum)        /* pass 2 over the CARRIED state */
+        if p2 == TP_SYMTOP { return AU_DEFER }
+        if SY_ST_CNT != 1u32 { return AU_DEFER }
+        let n2a : u32 = SY_ST_ADDR
+        let n2v : u32 = SY_ST_VAL
+        let sda : u8 = bb_equal(n2a, bb_add(n1a, bb_const(ss)))    /* ADDR2 == ADDR1 + S over ALL states */
+        let sd1 : u8 = bb_equal(n1v, bb_const(vv))                 /* VAL1 == V over ALL states          */
+        let sd2 : u8 = bb_equal(n2v, bb_const(vv))                 /* VAL2 == V over ALL states          */
+        if sda == 1u8 { if sd1 == 1u8 { if sd2 == 1u8 {
+            AU_LKIND = AU_K_STORE
+            AU_LS_S = ss  AU_LS_V = vv  AU_LS_W = AU_FZW[0u64]
+            let mut dg : u64 = 14695981039346656037u64             /* the cert digest = FNV(S, V, W) */
+            dg = (dg ^ ss) * 1099511628211u64
+            dg = (dg ^ vv) * 1099511628211u64
+            dg = (dg ^ (AU_FZW[0u64] as u64)) * 1099511628211u64
+            AU_LRATIO = dg
+            return 1u32
+        } } }
+        if sda == 0u8 { return 0u32 }                              /* a fitted conjecture died at a miter */
+        if sd1 == 0u8 { return 0u32 }
+        if sd2 == 0u8 { return 0u32 }
+        return AU_DEFER                                            /* poisoned decision -> honest defer */
     }
     let mut refuted : u32 = 0u32
     if au_is_arith() == 1u32 {                                     /* RUNG 1: AFFINE */

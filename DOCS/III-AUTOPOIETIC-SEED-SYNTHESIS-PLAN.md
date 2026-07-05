@@ -1023,3 +1023,27 @@ sampled-window blindness the symfree audit closed, now defeated on the quadratic
 On REAL ccsv output the ghost report reads: `add d=5 / mul r=2 / qad q=1 / DEFER(residue)` —
 loops=4 crushed=3 deferred=1; the ratchet DRIFT-ABORTED (rc=1 against 91470249305de7af) and was
 resealed by the authorized act to **accfc05092d3597c**.  Verdict: PROVEN-IN-CODE.
+
+## THE STORE RUNG 2026-07-04 — the memory fragment's first rung; the real-seed ratchet fires
+
+The at-scale map said the real seed's loops are MEMORY loops; same day, the first memory rung landed.
+A body whose sole memory effect is ONE store per iteration, address advancing by a constant stride,
+value constant, IS the affine constant-write family — B2's `aff_of` geometry, behaviorally extracted
+(a 64KB zeroed fuzz heap in the concrete interpreter, width-faithful loads incl. sign-extension,
+per-pass store capture) and symbolically discharged over ALL entry states by three miters on the
+twice-composed denotation:  ADDR2(X) == ADDR1(X) + S,  VAL1(X) == V,  VAL2(X) == V.
+cf: N iterations from entry X write exactly { A(X) + S·k : k < N } with value V.
+
+**The honesty gate**: a body that stores can NEVER crush on a scalar rung — a scalar certificate says
+nothing about the memory effect (without this gate, executing stores would have let the counter orbit
+"crush" store-loops).  Loads are past this rung: the denoter defers on them, so a copy-shaped body
+whose zeroed-heap fuzz LOOKS like a constant store still defers (`_au_storewalk_kat` case 6 pins it).
+
+*Falsifiers (executed green)*: `_au_storewalk_kat` = 99 (memset family crushes, certificate components
++ digest binding pinned; sampled-window value AND address adversaries REFUTED at the miters; no-fit /
+two-store / load-boundary defers).  legA 27/27.  **The payoff, measured**: on real ccsv(sha256.c) the
+`M[i]=0` loop flipped — `loop@458 CRUSHED(sto)` (stride 4, value 0, width 4) — the real-seed ratchet
+DRIFT-ABORTED (rc=1 against 45b11a82e112591e) exactly as built, and the authorized reseal moved the
+golden to **d82d059e9b1ca497**.  Toy ratchet + ghost byte-stable (no stores in the toy corpus).
+Remaining real residue: the `W[t]=M[t]` copy (the load boundary — the named next rung: affine copy)
+and the data-dependent schedule/rounds loops (honest residue).

@@ -52,6 +52,7 @@ cc "$III/STDLIB/sovir/kats/_au_conform_kat.iii"     "$O/conform.o"
 cc "$III/STDLIB/sovir/kats/_au_symfree_kat.iii"     "$O/symfree.o"
 cc "$III/STDLIB/sovir/kats/_au_quadwalk_kat.iii"    "$O/quadwalk.o"
 cc "$III/STDLIB/sovir/kats/_au_storewalk_kat.iii"   "$O/storewalk.o"
+cc "$III/STDLIB/sovir/kats/_au_copywalk_kat.iii"    "$O/copywalk.o"
 run "$O/seqkat.exe"  "$O/kat.o"    "$O/sks.o" "$O/bb.o"
 run "$O/modkat.exe"  "$O/modkat.o" "$O/sks.o" "$O/bb.o" "$O/svf.o"
 run "$O/sltkat.exe"  "$O/sltkat.o" "$O/sks.o" "$O/bb.o"
@@ -79,4 +80,5 @@ run "$O/aukat.exe"   "$O/aukat.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks
  run "$O/symfree.exe" "$O/symfree.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
  run "$O/quadwalk.exe" "$O/quadwalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
  run "$O/storewalk.exe" "$O/storewalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/copywalk.exe" "$O/copywalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
 if [ "$fail" -eq 0 ]; then echo "[legA] ALL GREEN -- Leg A + IF-diamond + ETAT(mech1+B0+B2 memory) + closed synthesis loop, teeth live"; exit 0; else echo "[legA] RED"; exit 1; fi

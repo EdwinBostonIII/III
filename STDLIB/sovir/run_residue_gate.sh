@@ -32,8 +32,8 @@ int main(){
   unsigned crushed = au_crush_svir_module(svir_ptr(), svir_len(), 0);
   unsigned n = au_report_n();
   for(unsigned i=0;i<n;i++) printf("  loop@%-3llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
-    au_report_verdict(i)?(au_report_kind(i)==3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
+    au_report_verdict(i)?(au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
+    au_report_verdict(i)?(au_report_kind(i)>=3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
   printf("loops=%u crushed=%u deferred=%u\n", n, crushed, n-crushed);
   printf("REPORT_HASH=%016llx\n", au_report_hash());
   return 0;

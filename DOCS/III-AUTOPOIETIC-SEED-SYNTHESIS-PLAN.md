@@ -1047,3 +1047,33 @@ DRIFT-ABORTED (rc=1 against 45b11a82e112591e) exactly as built, and the authoriz
 golden to **d82d059e9b1ca497**.  Toy ratchet + ghost byte-stable (no stores in the toy corpus).
 Remaining real residue: the `W[t]=M[t]` copy (the load boundary — the named next rung: affine copy)
 and the data-dependent schedule/rounds loops (honest residue).
+
+## THE COPY RUNG 2026-07-04 — the pass-through copy certificate; half the real seed's loops carry certs
+
+Rung 5, same day.  A body whose sole memory effect is ONE unsigned load + ONE store per iteration, same
+element width, is the AFFINE PASS-THROUGH COPY family when five miters discharge over the twice-composed
+denotation — each loaded value denoted as a FRESH input var (quantified over ALL heap contents):
+SADDR2==SADDR1+S, LADDR2==LADDR1+S, SADDR1−LADDR1==D, and the pass-through **mod the store width**
+(SVAL ≡ LDVAR mod 2^{8W}, both passes).  cf: N iterations copy { L(X)+S·k → L(X)+D+S·k : k<N }, width W.
+The honest B2 split: this certifies per-iteration geometry; bulk equivalence for a concrete N needs
+region non-overlap, discharged by the CONSUMER via ai_disjoint over the aff_of extents — recorded as
+(S, D, W), never claimed past it.
+
+**Two root-causes closed mid-stroke, both measured**: (1) the twice-composed copy denotation built FOUR
+64-bit multiplier circuits (~140K clauses) and overflowed BB_STREAM_CAP → 0xFF → false defers; fix: the
+denoter encodes mul-by-2^k as bb_shl — bit-identical mod 2^64, ZERO clauses (ccsv's element strides are
+always 1/2/4/8), and the geometric miter becomes the already-demonstrated cross-form shl-vs-mul shape.
+(2) hexdump of the REAL loop@604 body showed ccsv's assignment normalization inserts `& 0xFFFFFFFF`
+before STORE32, so a raw pass-through miter rejects a semantically verbatim copy; fix: both memory
+rungs' value miters now compare modulo the store width — the certificate speaks EXACTLY about the
+written bytes (a store truncates; higher bits are not an observable effect).
+
+*Falsifiers (executed green)*: `_au_copywalk_kat` = 99 (uniform strided copy crushes, S=4 D=1000 W=4 +
+digest binding; window-source-address adversary REFUTED; gather (unequal strides) defers; module walk
+records kind COPY); `_au_storewalk_kat` strengthened = 99 (the stride-0 copy body now CRUSHES with its
+certificate — case 6's old defer was the rung's own boundary; a TRANSFORMED value (+1) REFUTED; a
+sign-extending load DEFERS — the rung's honest boundary).  legA **28/28**.  **The measured payoff**:
+real ccsv(sha256.c) `loop@604 CRUSHED(cpy) c=4770580737139109271` — the ratchet DRIFT-ABORTED (rc=1
+against d82d059e9b1ca497), authorized reseal → **2a822ee9954efc29**.  The real seed now reads:
+`sto / cpy / DEFER / DEFER` — 2 of 4 loops certified; the schedule and rounds loops are data-dependent
+honest residue (the recurrence/reduction frontier, a genuine campaign).

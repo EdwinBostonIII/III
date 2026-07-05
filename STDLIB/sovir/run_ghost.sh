@@ -30,7 +30,7 @@ int main(){
   printf("=== SER_CRUSH_REPORT (real C -> ccsv -> SVIR) ===\n");
   printf("loops=%u crushed=%u deferred(residue)=%u report_hash=%016llx\n", n, crushed, n-crushed, au_report_hash());
   for(unsigned i=0;i<n;i++) printf("  loop@%-3llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)==5?"CRUSHED(map)  ":au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
+    au_report_verdict(i)?(au_report_kind(i)==6?"CRUSHED(sca)  ":au_report_kind(i)==5?"CRUSHED(map)  ":au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
     au_report_verdict(i)?(au_report_kind(i)>=3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
   return (n==4 && crushed==3) ? 99 : 1;
 }

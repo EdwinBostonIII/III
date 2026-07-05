@@ -1131,3 +1131,30 @@ w = (b0<<24)|(b1<<16)|(b2<<8)|b3 -- CRUSHED(map) nloads=4; the real-seed ratchet
 ceiling d4a1f4a95816a212.  **Population now 13 of 33 loops certified.**  The last multi shape --
 hmac@3844 (4-store/4-load) -- is a multi-STORE body (not the single-store family); a genuinely distinct
 rung, evidenced when built.
+
+## THE MULTI-STORE SCATTER RUNG 2026-07-05 — the last multi shape; 14 of 33 real loops certified
+
+hmac@3844 (measured, hexdumped) is a word->bytes big-endian UNPACK: word = src32[818+4L]; then four
+byte-stores out[2738+4L+j] = (word >> (24-8j)) & 0xff (ccsv re-loads the word once per byte -> 4 loads,
+4 stores).  The inverse of ceiling's PACK, and a multi-STORE body the single-store family does not cover.
+
+Rung 7 (au_scatter_guillotine): a body of ns stores + nl loads per iteration is certified an AFFINE
+SCATTER  { dst_s[k] = g_s(src0[k], .., src{nl-1}[k]) : s<ns }  when EVERY store address is affine (its
+own stride), EVERY load address is affine, and EVERY store value is a PURE function of the nl loaded
+values (each value's dependence cone touches only the load vars, never the induction var).  The ns=1
+family (STORE/COPY/MAP/PACK) is untouched -- this is the ns>=2 generalization, added additively so the
+sealed ns=1 goldens do not move.  Each g_s is unconstrained; the ns structures are folded (per-store
+separator) into ONE digest, so a different scatter (byte order, op) carries a different cert.  Routing
+dispatches by per-pass store count: ns>=2 -> scatter, ns==1 -> the load-count dispatch.
+
+*Falsifiers (executed green)*: `_au_scatterwalk_kat` = 99 -- a 4-store word->bytes unpack crushes
+(ns=4, nl=1, store strides 4); a 2-store big-endian unpack and its shift-swapped variant crush with
+DISTINCT digests (structure teeth); a 2-store constant scatter crushes (ns=2, nl=0); a store value
+that reads the index DEFER[memfit] via the purity cone.  `_au_storewalk_kat` updated: its two-store
+body now correctly ROUTES to the scatter rung (constant addrs = stride 0 -> a degenerate-but-valid
+affine scatter, CRUSHED kind SCATTER) -- multi-store is no longer residue.  legA **32/32**.
+**The measured payoff**: real ccsv hmac_sha256.c loop@3844 -> CRUSHED(sca) ns=4 nl=4; the ratchet
+DRIFT-ABORTED (hmac 3->4 crushed; every other file byte-stable), authorized reseal ->
+hmac bc45d06c85c73db5.  **Population now 14 of 33 loops certified.**  The residue that remains is the
+data-dependent compute/rounds class -- the permanent honest residue (cryptographic diffusion), witnessed
+by the census (refut / frag / nest), not a rung waiting to be built.

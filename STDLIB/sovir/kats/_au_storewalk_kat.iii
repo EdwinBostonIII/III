@@ -59,7 +59,8 @@ var QADDR : [u8; 39] = [
   1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 16u8,1u8, 34u8, 32u8,
   1u8,42u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 137u8,
   16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
-/* two stores per pass -- not a single-store family */
+/* two stores per pass -- NOT the single-store family; the store rung ROUTES it to the SCATTER rung
+ * (constant addresses = stride 0, constant values -> a degenerate-but-valid affine scatter). */
 var TWOSTORE : [u8; 38] = [
   1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 129u8,
   1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 129u8]
@@ -100,11 +101,13 @@ fn main() -> u64 {
     if au_topo_amputate(&WINADDR as u64, 0u64, 49u64, 0u32, 7u64) != 0u32 { return 3u64 }
     if au_last_why() != 3u32 { return 24u64 }
 
-    /* (4)(5) the honest defers with their census reasons: fit mismatch / multi-effect */
+    /* (4) the honest defer: non-affine store address -> MEMFIT */
     if au_topo_amputate(&QADDR as u64, 0u64, 39u64, 0u32, 7u64) != 2u32 { return 4u64 }
     if au_last_why() != 7u32 { return 25u64 }                      /* non-affine stride -> MEMFIT */
-    if au_topo_amputate(&TWOSTORE as u64, 0u64, 38u64, 0u32, 7u64) != 2u32 { return 5u64 }
-    if au_last_why() != 6u32 { return 26u64 }                      /* two stores per pass -> MULTI */
+    /* (5) TWO stores per pass: the store rung routes it to the SCATTER rung; two constant-addr constant
+     * stores are a degenerate-but-valid affine scatter (stride 0) -> CRUSHED kind SCATTER, ns=2, nl=0. */
+    if au_topo_amputate(&TWOSTORE as u64, 0u64, 38u64, 0u32, 7u64) != 1u32 { return 5u64 }
+    if au_last_kind() != 6u32 { return 26u64 }                     /* kind SCATTER */
 
     /* (6) the stride-0 copy family crushes on the COPY rung with its full certificate */
     if au_topo_amputate(&COPY as u64, 0u64, 20u64, 0u32, 7u64) != 1u32 { return 6u64 }

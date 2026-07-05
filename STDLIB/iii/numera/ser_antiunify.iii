@@ -598,6 +598,8 @@ var TP_ST_CNT : u32 = 0u32    /* stores executed THIS pass */
 var TP_ST_ADDR : u64 = 0u64   /* first store's address     */
 var TP_ST_VAL  : u64 = 0u64   /* first store's value       */
 var TP_ST_W    : u32 = 0u32   /* first store's width (bytes) */
+var TP_ST_ADDRS : [u64; 8]    /* per-SLOT store addresses this pass (body order; the multi-store SCATTER shape) */
+var TP_ST_WS    : [u32; 8]    /* per-SLOT store widths this pass  */
 var TP_LD_CNT : u32 = 0u32    /* loads executed THIS pass  */
 var TP_LD_ADDR : u64 = 0u64   /* first load's address      */
 var TP_LD_W    : u32 = 0u32   /* first load's width (bytes) */
@@ -695,6 +697,7 @@ fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {
                 if addr + (sw as u64) > TP_MEM_SZ { return 1u32 }  /* past the fuzz heap -> out of fragment */
                 au_mem_wr(addr, sw, val)
                 if TP_ST_CNT == 0u32 { TP_ST_ADDR = addr  TP_ST_VAL = val & au_wmask(sw)  TP_ST_W = sw }
+                if TP_ST_CNT < 8u32 { TP_ST_ADDRS[TP_ST_CNT as u64] = addr  TP_ST_WS[TP_ST_CNT as u64] = sw }   /* per-slot (the multi-store SCATTER shape) */
                 TP_ST_CNT = TP_ST_CNT + 1u32                       /* value recorded AS WRITTEN (width-masked) */
                 handled = 1u32
             }
@@ -716,6 +719,8 @@ var TP_STK_CV  : [u64; 256]   /* shadow: that constant's value (valid iff the IS
 var SY_ST_CNT  : u32 = 0u32   /* symbolic stores captured THIS pass */
 var SY_ST_ADDR : u32 = 0u32   /* the (first) store's ADDRESS node   */
 var SY_ST_VAL  : u32 = 0u32   /* the (first) store's VALUE node     */
+var SY_ST_ADDRS : [u32; 8]    /* per-SLOT store ADDRESS nodes this pass (SCATTER) */
+var SY_ST_VALS  : [u32; 8]    /* per-SLOT store VALUE nodes this pass             */
 var SY_LD_CNT  : u32 = 0u32   /* symbolic loads captured THIS pass  */
 var SY_LD_ADDR : u32 = 0u32   /* the (first) load's ADDRESS node    */
 var SY_LD_VAR  : u32 = 0u32   /* the (first) load's fresh VALUE var (quantified over ALL heap contents) */
@@ -838,6 +843,7 @@ fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
                 if TP_SP_SYM < 2u32 { return TP_SYMTOP }
                 SY_ST_VAL  = TP_STK_SYM[(TP_SP_SYM - 1u32) as u64] /* capture THE store's value node */
                 SY_ST_ADDR = TP_STK_SYM[(TP_SP_SYM - 2u32) as u64] /* ... and its address node       */
+                if SY_ST_CNT < 8u32 { SY_ST_ADDRS[SY_ST_CNT as u64] = SY_ST_ADDR  SY_ST_VALS[SY_ST_CNT as u64] = SY_ST_VAL }   /* per-slot (SCATTER) */
                 TP_SP_SYM = TP_SP_SYM - 2u32
                 SY_ST_CNT = SY_ST_CNT + 1u32
                 handled = 1u32                                     /* a store leaves the LOCALS untouched */
@@ -890,6 +896,7 @@ const AU_K_QUAD  : u32 = 2u32 /* crush kind: quadratic (state-invariant second d
 const AU_K_STORE : u32 = 3u32 /* crush kind: strided constant write (the memory rung)       */
 const AU_K_COPY  : u32 = 4u32 /* crush kind: affine pass-through copy (load -> store, verbatim) */
 const AU_K_MAP2  : u32 = 5u32 /* crush kind: binary MAP dst[k]=g(src0[k],src1[k]) (2 loads -> 1 store) */
+const AU_K_SCATTER : u32 = 6u32 /* crush kind: multi-store SCATTER -- ns affine stores, each a pure fn of nl affine loads (word<->bytes pack/unpack) */
 /* DEFER-REASON codes (the residue CENSUS): why a loop did not crush.  DIAGNOSTIC, not a certified
  * claim -- deliberately NOT folded into au_report_hash / the Merkle leaves, so refining the classifier
  * never moves a sealed golden.  The census is what turns the deferral list into an actionable roadmap. */
@@ -925,6 +932,12 @@ fn au_last_map_w()  -> u32 @export { return AU_LM_W }
 fn au_last_map_g()  -> u64 @export { return AU_LM_G }
 fn au_last_map_nloads() -> u32 @export { return AU_LM_NL }
 fn au_last_map_stride(s: u32) -> u64 @export { if s < 8u32 { return AU_MSTR[s as u64] }  return 0u64 }
+var AU_LX_NS : u32 = 0u32     /* SCATTER cert: store count */
+var AU_LX_NL : u32 = 0u32     /* SCATTER cert: load count  */
+var AU_SSTR : [u64; 8]        /* SCATTER: per-store-slot address stride */
+fn au_last_scatter_ns() -> u32 @export { return AU_LX_NS }
+fn au_last_scatter_nl() -> u32 @export { return AU_LX_NL }
+fn au_last_scatter_stride(s: u32) -> u64 @export { if s < 8u32 { return AU_SSTR[s as u64] }  return 0u64 }
 fn au_last_kind()  -> u32 @export { return AU_LKIND }
 fn au_last_ratio() -> u64 @export { return AU_LRATIO }   /* MUL-specific reader (same cell as au_last_param) */
 fn au_last_param() -> u64 @export { return AU_LRATIO }   /* the general proven-parameter reader              */
@@ -943,6 +956,8 @@ var AU_FZLA : [u64; 4]  /* per-fuzz-pass first-load address     */
 var AU_FZLW : [u32; 4]  /* per-fuzz-pass first-load width       */
 var AU_FZLAM : [u64; 32] /* per-pass x per-SLOT load address matrix [pass*8 + slot] (the k-load MAP/PACK shape) */
 var AU_FZLWM : [u32; 32] /* per-pass x per-SLOT load width matrix                                              */
+var AU_FZSAM : [u64; 32] /* per-pass x per-SLOT STORE address matrix (the multi-store SCATTER shape)           */
+var AU_FZSWM : [u32; 32] /* per-pass x per-SLOT store width matrix                                             */
 /* census instrumentation (read-only probes of the last amputation's fuzz observations + the locator --
  * the multi-effect class's SHAPE (k stores? j loads? widths?) is what names the next rung's certificate) */
 fn au_fz_stores(k: u32) -> u32 @export { if k < 4u32 { return AU_FZC[k as u64] }  return 0u32 }
@@ -1054,6 +1069,9 @@ var AU_MSTR : [u64; 8]   /* per-slot proposed load stride (module scratch -- cg_
 var AU_MN1A : [u32; 8]   /* pass-1 per-slot load ADDRESS node */
 var AU_MN2A : [u32; 8]   /* pass-2 per-slot load ADDRESS node */
 var AU_MVID : [u32; 8]   /* per-slot load VALUE var input index */
+var AU_XN1SA : [u32; 8]  /* SCATTER pass-1 per-store-slot ADDRESS node */
+var AU_XN2SA : [u32; 8]  /* SCATTER pass-2 per-store-slot ADDRESS node */
+var AU_XN1SV : [u32; 8]  /* SCATTER pass-1 per-store-slot VALUE node   */
 /* THE nl-LOAD PURE-MAP GUILLOTINE (the memory MAP/PACK family, generalized).  A body whose sole memory
  * effect is ONE store + `nl` unsigned loads per iteration is certified an AFFINE PURE MAP  dst[k] =
  * g(src0[k], .., src{nl-1}[k])  when the geometry is affine over the twice-composed denotation (store
@@ -1146,6 +1164,123 @@ fn au_puremap_guillotine(base: u64, boff: u64, blen: u64, accum: u32, nl: u32) -
     AU_LWHY = AU_W_CRUSH
     return 1u32
 }
+/* RUNG 7: THE MULTI-STORE SCATTER GUILLOTINE.  A body whose memory effect is `ns` stores + `nl` loads
+ * per iteration is certified an AFFINE SCATTER  { dst_s[k] = g_s(src0[k], .., src{nl-1}[k]) : s<ns }
+ * when EVERY store address is affine (its own stride), EVERY load address is affine, and EVERY store
+ * value is a PURE function of the nl loaded values (each value's dependence cone touches only the load
+ * vars, never the induction var).  This is the ns>=2 generalization of the pure map: STORE(ns=1,nl=0),
+ * COPY(ns=1,nl=1), MAP/PACK(ns=1,nl=k) are the ns=1 family; a word->bytes UNPACK (hmac: 4 byte-stores,
+ * each = (word >> 8j) & 0xff) is ns=4.  Each g_s is unconstrained; the ns structures are folded (with a
+ * per-store separator) into ONE digest, so a different scatter (byte order, op) carries a different cert.
+ * cf: N iterations perform, for each store slot s, { dst_s0 + Sd_s*k <- g_s(loads) : k<N }.  Bulk
+ * non-overlap of the ns dst extents (and vs the loads) stays the CONSUMER's ai_disjoint obligation. */
+fn au_scatter_guillotine(base: u64, boff: u64, blen: u64, accum: u32, ns: u32, nl: u32) -> u32 {
+    AU_LWHY = AU_W_MULTI
+    if ns < 2u32 { return AU_DEFER }
+    if ns > 8u32 { return AU_DEFER }
+    if nl > 8u32 { return AU_DEFER }
+    let mut k : u32 = 0u32
+    while k < 4u32 { if AU_FZC[k as u64] != ns { return AU_DEFER }  if AU_FZLC[k as u64] != nl { return AU_DEFER }  k = k + 1u32 }
+    AU_LWHY = AU_W_MEMFIT
+    let mut s : u32 = 0u32
+    while s < ns {                                                 /* per-store-slot: consistent width + affine stride */
+        let w0 : u32 = AU_FZSWM[s as u64]
+        if AU_FZSWM[(8u32 + s) as u64] != w0 { return AU_DEFER }
+        if AU_FZSWM[(16u32 + s) as u64] != w0 { return AU_DEFER }
+        if AU_FZSWM[(24u32 + s) as u64] != w0 { return AU_DEFER }
+        let a0 : u64 = AU_FZSAM[s as u64]
+        let a1 : u64 = AU_FZSAM[(8u32 + s) as u64]
+        let a2 : u64 = AU_FZSAM[(16u32 + s) as u64]
+        let a3 : u64 = AU_FZSAM[(24u32 + s) as u64]
+        let ss : u64 = a1 - a0
+        if (a2 - a1) != ss { return AU_DEFER }
+        if (a3 - a2) != ss { return AU_DEFER }
+        AU_SSTR[s as u64] = ss
+        s = s + 1u32
+    }
+    let mut l : u32 = 0u32
+    while l < nl {                                                 /* per-load-slot: consistent width + affine stride */
+        let w0 : u32 = AU_FZLWM[l as u64]
+        if AU_FZLWM[(8u32 + l) as u64] != w0 { return AU_DEFER }
+        if AU_FZLWM[(16u32 + l) as u64] != w0 { return AU_DEFER }
+        if AU_FZLWM[(24u32 + l) as u64] != w0 { return AU_DEFER }
+        let a0 : u64 = AU_FZLAM[l as u64]
+        let a1 : u64 = AU_FZLAM[(8u32 + l) as u64]
+        let a2 : u64 = AU_FZLAM[(16u32 + l) as u64]
+        let a3 : u64 = AU_FZLAM[(24u32 + l) as u64]
+        let ss : u64 = a1 - a0
+        if (a2 - a1) != ss { return AU_DEFER }
+        if (a3 - a2) != ss { return AU_DEFER }
+        AU_MSTR[l as u64] = ss
+        l = l + 1u32
+    }
+    AU_LWHY = AU_W_SYMTOP
+    bb_reset(64u64)
+    au_sym_init(accum)
+    let p1 : u32 = au_sym_pass(base, boff, blen, accum)            /* pass 1: capture store + load nodes */
+    if p1 == TP_SYMTOP { return AU_DEFER }
+    if SY_ST_CNT != ns { return AU_DEFER }
+    if SY_LD_CNT != nl { return AU_DEFER }
+    let mut cs : u32 = 0u32
+    while cs < ns { AU_XN1SA[cs as u64] = SY_ST_ADDRS[cs as u64]  AU_XN1SV[cs as u64] = SY_ST_VALS[cs as u64]  cs = cs + 1u32 }
+    let mut cl : u32 = 0u32
+    while cl < nl { AU_MN1A[cl as u64] = SY_LD_ADDRS[cl as u64]  AU_MVID[cl as u64] = SY_LD_VIDX[cl as u64]  cl = cl + 1u32 }
+    let p2 : u32 = au_sym_pass(base, boff, blen, accum)            /* pass 2 over the CARRIED state */
+    if p2 == TP_SYMTOP { return AU_DEFER }
+    if SY_ST_CNT != ns { return AU_DEFER }
+    if SY_LD_CNT != nl { return AU_DEFER }
+    let mut ds : u32 = 0u32
+    while ds < ns { AU_XN2SA[ds as u64] = SY_ST_ADDRS[ds as u64]  ds = ds + 1u32 }
+    let mut dl : u32 = 0u32
+    while dl < nl { AU_MN2A[dl as u64] = SY_LD_ADDRS[dl as u64]  dl = dl + 1u32 }
+    /* geometry: every store address and every load address advances by its own stride, all entry states */
+    let mut allowed : u64 = 0u64
+    let mut gl : u32 = 0u32
+    while gl < nl {
+        let mv : u8 = bb_equal(AU_MN2A[gl as u64], bb_add(AU_MN1A[gl as u64], bb_const(AU_MSTR[gl as u64])))
+        if mv == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
+        if mv != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
+        allowed = allowed | (1u64 << (AU_MVID[gl as u64] as u64))
+        gl = gl + 1u32
+    }
+    let mut gs : u32 = 0u32
+    while gs < ns {
+        let mv : u8 = bb_equal(AU_XN2SA[gs as u64], bb_add(AU_XN1SA[gs as u64], bb_const(AU_SSTR[gs as u64])))
+        if mv == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
+        if mv != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
+        gs = gs + 1u32
+    }
+    /* PURITY: every store value depends ONLY on the nl load vars (position-invariant g_s per store). */
+    let mut ps : u32 = 0u32
+    while ps < ns {
+        let mask : u64 = bb_cone_var_mask(AU_XN1SV[ps as u64])
+        if (mask & (allowed ^ 18446744073709551615u64)) != 0u64 { AU_LWHY = AU_W_MEMFIT  return AU_DEFER }
+        ps = ps + 1u32
+    }
+    /* the scatter's combined structural fingerprint: fold each store value's structure with a separator. */
+    let mut g : u64 = 14695981039346656037u64
+    let mut fs : u32 = 0u32
+    while fs < ns {
+        let slen : u32 = bb_struct_into(AU_XN1SV[fs as u64], &MAP_SBUF as *u8, 1024u32)
+        let mut q : u32 = 0u32
+        while q < slen { g = (g ^ (MAP_SBUF[q as u64] as u64)) * 1099511628211u64  q = q + 1u32 }
+        g = (g ^ 255u64) * 1099511628211u64                        /* per-store separator */
+        fs = fs + 1u32
+    }
+    AU_LKIND = AU_K_SCATTER
+    AU_LX_NS = ns  AU_LX_NL = nl  AU_LM_G = g  AU_LM_W = AU_FZSWM[0u64]
+    let mut dg : u64 = 14695981039346656037u64                    /* cert = FNV(ns, store strides.., nl, load strides.., g) */
+    dg = (dg ^ (ns as u64)) * 1099511628211u64
+    let mut a : u32 = 0u32
+    while a < ns { dg = (dg ^ AU_SSTR[a as u64]) * 1099511628211u64  a = a + 1u32 }
+    dg = (dg ^ (nl as u64)) * 1099511628211u64
+    let mut b : u32 = 0u32
+    while b < nl { dg = (dg ^ AU_MSTR[b as u64]) * 1099511628211u64  b = b + 1u32 }
+    dg = (dg ^ g) * 1099511628211u64
+    AU_LRATIO = dg
+    AU_LWHY = AU_W_CRUSH
+    return 1u32
+}
 fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
     AU_LKIND = AU_K_ADD
     AU_LRATIO = 0u64
@@ -1164,17 +1299,25 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         AU_FZC[i as u64] = TP_ST_CNT  AU_FZA[i as u64] = TP_ST_ADDR  AU_FZV[i as u64] = TP_ST_VAL  AU_FZW[i as u64] = TP_ST_W
         AU_FZLC[i as u64] = TP_LD_CNT  AU_FZLA[i as u64] = TP_LD_ADDR  AU_FZLW[i as u64] = TP_LD_W
         let mut sl : u32 = 0u32
-        while sl < 8u32 { AU_FZLAM[(i * 8u32 + sl) as u64] = TP_LD_ADDRS[sl as u64]  AU_FZLWM[(i * 8u32 + sl) as u64] = TP_LD_WS[sl as u64]  sl = sl + 1u32 }
+        while sl < 8u32 {
+            AU_FZLAM[(i * 8u32 + sl) as u64] = TP_LD_ADDRS[sl as u64]  AU_FZLWM[(i * 8u32 + sl) as u64] = TP_LD_WS[sl as u64]
+            AU_FZSAM[(i * 8u32 + sl) as u64] = TP_ST_ADDRS[sl as u64]  AU_FZSWM[(i * 8u32 + sl) as u64] = TP_ST_WS[sl as u64]
+            sl = sl + 1u32
+        }
         sp_obs_push(TP_LOC[accum as u64])
         i = i + 1u32
     }
-    let mut stores : u32 = 0u32
-    let ldc : u32 = AU_FZLC[0u64]                                   /* per-pass load count (dispatch key) */
-    let mut ldcons : u32 = 1u32                                     /* same load count every pass? */
+    let mut hasstore : u32 = 0u32
+    let stc : u32 = AU_FZC[0u64]                                    /* per-pass store count (dispatch key) */
+    let ldc : u32 = AU_FZLC[0u64]                                   /* per-pass load count  (dispatch key) */
+    let mut stcons : u32 = 1u32                                     /* same store count every pass? */
+    let mut ldcons : u32 = 1u32                                     /* same load count every pass?  */
     let mut k : u32 = 0u32
-    while k < 4u32 { if AU_FZC[k as u64] > 0u32 { stores = 1u32 }  if AU_FZLC[k as u64] != ldc { ldcons = 0u32 }  k = k + 1u32 }
-    if stores == 1u32 {
-        if ldcons == 0u32 { AU_LWHY = AU_W_MULTI  return AU_DEFER }               /* irregular load count -> residue */
+    while k < 4u32 { if AU_FZC[k as u64] > 0u32 { hasstore = 1u32 }  if AU_FZC[k as u64] != stc { stcons = 0u32 }  if AU_FZLC[k as u64] != ldc { ldcons = 0u32 }  k = k + 1u32 }
+    if hasstore == 1u32 {
+        if stcons == 0u32 { AU_LWHY = AU_W_MULTI  return AU_DEFER }               /* irregular store count -> residue */
+        if ldcons == 0u32 { AU_LWHY = AU_W_MULTI  return AU_DEFER }               /* irregular load count  -> residue */
+        if stc >= 2u32 { return au_scatter_guillotine(base, boff, blen, accum, stc, ldc) }  /* RUNG 7: ns stores + nl loads -> SCATTER */
         if ldc >= 2u32 { return au_puremap_guillotine(base, boff, blen, accum, ldc) }  /* RUNG 6: 1 store + k loads -> the pure MAP/PACK */
         if ldc == 1u32 { return au_copy_guillotine(base, boff, blen, accum) }     /* RUNG 5: 1 load + 1 store -> the copy family */
         /* RUNG 4: THE STORE RUNG.  A body that writes memory can NEVER crush on a scalar rung (a scalar

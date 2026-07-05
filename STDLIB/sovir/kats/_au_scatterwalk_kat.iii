@@ -1,0 +1,90 @@
+module au_scatterwalk_kat
+
+/* THE MULTI-STORE SCATTER (rung 7, 2026-07-05): a body whose memory effect is ns stores + nl loads per
+ * iteration, EVERY store/load address affine, and EVERY store value a PURE function of the nl loaded
+ * values (its dependence cone touching only the load vars, never the induction var).  This is the ns>=2
+ * generalization of the pure map -- a word->bytes UNPACK is ns=4 (each byte-store = (word >> 8j) & 0xff),
+ * the inverse of the ns=1 byte PACK.  Each store's g_s is unconstrained; the ns structures are folded
+ * (with a per-store separator) into ONE digest, so a different scatter (byte order, op) carries a
+ * different cert (the teeth).
+ *
+ *   (1) UNPACK4  w=src32[1000+4i]; out8[2000+4i+j]=(w>>(24-8j))&0xff  -> CRUSHED kind SCATTER ns=4 nl=1
+ *   (2) BE2      2-byte big-endian unpack (shifts 24,16)             -> CRUSHED ns=2 nl=1, digest gBE
+ *   (3) LE2      2-byte, shifts swapped (16,24)                      -> CRUSHED, digest != gBE (structure teeth)
+ *   (4) IDX2     BE2 with store-1 value XOR'd with the index i       -> DEFER[memfit] via the purity cone
+ *
+ * exit 99 = all; 1..4 = the numbered contract broken (10+ = a certificate field wrong). */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_why() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_scatter_ns() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_scatter_nl() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_scatter_stride(s: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_g() -> u64 from "ser_antiunify.iii"
+
+/* UNPACK4 (263 bytes): prefix(25) w=load32u(src[1000+4i]),SET2 ; 4x store(56) out8[2000+4i+j]=(w>>sh)&0xff ; suffix(14) i++ */
+var UNPACK4 : [u8; 263] = [
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 17u8,2u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,24u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,16u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,8u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+/* BE2 (151 bytes): prefix(25) ; store0(56) out8[2000+4i]=(w>>24)&0xff ; store1(56) out8[2000+4i+1]=(w>>16)&0xff ; suffix(14) */
+var BE2 : [u8; 151] = [
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 17u8,2u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,24u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,16u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+/* LE2 (151 bytes): BE2 with the two shift amounts SWAPPED (16 then 24) -> a different combining structure */
+var LE2 : [u8; 151] = [
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 17u8,2u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,16u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,2u8, 1u8,24u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 41u8, 1u8,255u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 37u8, 129u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+/* IDXMIN (81 bytes): a 2-store CONSTANT scatter (nl=0) where store-1's value reads the induction var i.
+ * store0 out8[3000+2i]=0 (const, pure); store1 out8[3000+2i+1]=i (reads i -> cone has the index). */
+var IDXMIN : [u8; 81] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 129u8,
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 16u8,1u8, 129u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* CScat (88 bytes): a 2-store constant scatter that CRUSHES -- out8[3000+2i]=7 ; out8[3000+2i+1]=9 */
+var CScat : [u8; 88] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 129u8,
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 1u8,9u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 129u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+fn main() -> u64 {
+    /* (1) the 4-store word->bytes unpack crushes as a SCATTER */
+    if au_topo_amputate(&UNPACK4 as u64, 0u64, 263u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 6u32 { return 10u64 }
+    if au_last_scatter_ns() != 4u32 { return 11u64 }
+    if au_last_scatter_nl() != 1u32 { return 12u64 }
+    if au_last_scatter_stride(0u32) != 4u64 { return 13u64 }
+    if au_last_scatter_stride(3u32) != 4u64 { return 14u64 }
+
+    /* (2) the 2-store big-endian unpack crushes; capture its combined structural digest */
+    if au_topo_amputate(&BE2 as u64, 0u64, 151u64, 0u32, 7u64) != 1u32 { return 2u64 }
+    if au_last_kind() != 6u32 { return 15u64 }
+    if au_last_scatter_ns() != 2u32 { return 16u64 }
+    let gbe : u64 = au_last_map_g()
+
+    /* (3) the shift-swapped variant crushes too, with a DIFFERENT digest (structure teeth) */
+    if au_topo_amputate(&LE2 as u64, 0u64, 151u64, 0u32, 7u64) != 1u32 { return 3u64 }
+    if au_last_map_g() == gbe { return 17u64 }
+
+    /* (4) a 2-store CONSTANT scatter (nl=0) crushes -- multi-store geometry + constant-value purity */
+    if au_topo_amputate(&CScat as u64, 0u64, 88u64, 0u32, 7u64) != 1u32 { return 4u64 }
+    if au_last_kind() != 6u32 { return 19u64 }
+    if au_last_scatter_ns() != 2u32 { return 20u64 }
+    if au_last_scatter_nl() != 0u32 { return 21u64 }
+
+    /* (5) a store value that reads the index -> the purity cone catches it -> DEFER[memfit] */
+    if au_topo_amputate(&IDXMIN as u64, 0u64, 81u64, 0u32, 7u64) != 2u32 { return 5u64 }
+    if au_last_why() != 7u32 { return 22u64 }
+    return 99u64
+}

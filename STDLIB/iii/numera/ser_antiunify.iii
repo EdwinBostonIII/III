@@ -755,7 +755,7 @@ fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
             let sl : u32 = tpb(base, boff + p)  p = p + 1u64
             let mut nd : u32 = TP_LOC_SYM[sl as u64]
             if nd == TP_SYMTOP {
-                if TP_NEXTVAR >= 8u32 { return TP_SYMTOP }         /* > 8 read locals: past the input budget -> defer */
+                if TP_NEXTVAR >= 16u32 { return TP_SYMTOP }        /* past the 16-input budget -> defer */
                 nd = bb_var(TP_NEXTVAR)
                 TP_NEXTVAR = TP_NEXTVAR + 1u32
                 TP_LOC_SYM[sl as u64] = nd
@@ -848,7 +848,7 @@ fn au_sym_pass(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
                  * verbatim copy for EVERY memory state.  Sign-extending loads (0x85/0x87) stay past the
                  * rung (the fall-through below defers them, honestly). */
                 if TP_SP_SYM < 1u32 { return TP_SYMTOP }
-                if TP_NEXTVAR >= 8u32 { return TP_SYMTOP }         /* past the 8-input budget -> defer */
+                if TP_NEXTVAR >= 16u32 { return TP_SYMTOP }        /* past the 16-input budget -> defer */
                 SY_LD_ADDR = TP_STK_SYM[(TP_SP_SYM - 1u32) as u64] /* capture the load's ADDRESS node */
                 if SY_LD_CNT < 8u32 { SY_LD_ADDRS[SY_LD_CNT as u64] = SY_LD_ADDR }
                 let fv : u32 = bb_var(TP_NEXTVAR)
@@ -916,12 +916,15 @@ var AU_LM_SD : u64 = 0u64     /* MAP2 cert: store address stride                
 var AU_LM_S0 : u64 = 0u64     /* MAP2 cert: source-0 address stride                         */
 var AU_LM_S1 : u64 = 0u64     /* MAP2 cert: source-1 address stride                         */
 var AU_LM_W  : u32 = 0u32     /* MAP2 cert: store element width                             */
-var AU_LM_G  : u64 = 0u64     /* MAP2 cert: the combining function's STRUCTURAL digest (FNV of bb_struct_into) */
+var AU_LM_G  : u64 = 0u64     /* MAP cert: the combining function's STRUCTURAL digest (FNV of bb_struct_into) */
+var AU_LM_NL : u32 = 0u32     /* MAP cert: the source count (2 = binary map, 4 = byte pack, ...)  */
 fn au_last_map_sd() -> u64 @export { return AU_LM_SD }
 fn au_last_map_s0() -> u64 @export { return AU_LM_S0 }
 fn au_last_map_s1() -> u64 @export { return AU_LM_S1 }
 fn au_last_map_w()  -> u32 @export { return AU_LM_W }
 fn au_last_map_g()  -> u64 @export { return AU_LM_G }
+fn au_last_map_nloads() -> u32 @export { return AU_LM_NL }
+fn au_last_map_stride(s: u32) -> u64 @export { if s < 8u32 { return AU_MSTR[s as u64] }  return 0u64 }
 fn au_last_kind()  -> u32 @export { return AU_LKIND }
 fn au_last_ratio() -> u64 @export { return AU_LRATIO }   /* MUL-specific reader (same cell as au_last_param) */
 fn au_last_param() -> u64 @export { return AU_LRATIO }   /* the general proven-parameter reader              */
@@ -938,10 +941,8 @@ var AU_FZW : [u32; 4]   /* per-fuzz-pass first-store width      */
 var AU_FZLC : [u32; 4]  /* per-fuzz-pass load count             */
 var AU_FZLA : [u64; 4]  /* per-fuzz-pass first-load address     */
 var AU_FZLW : [u32; 4]  /* per-fuzz-pass first-load width       */
-var AU_FZLA0 : [u64; 4] /* per-pass load-SLOT-0 address (the 2-load MAP shape) */
-var AU_FZLA1 : [u64; 4] /* per-pass load-SLOT-1 address                        */
-var AU_FZLW0 : [u32; 4] /* per-pass load-SLOT-0 width                          */
-var AU_FZLW1 : [u32; 4] /* per-pass load-SLOT-1 width                          */
+var AU_FZLAM : [u64; 32] /* per-pass x per-SLOT load address matrix [pass*8 + slot] (the k-load MAP/PACK shape) */
+var AU_FZLWM : [u32; 32] /* per-pass x per-SLOT load width matrix                                              */
 /* census instrumentation (read-only probes of the last amputation's fuzz observations + the locator --
  * the multi-effect class's SHAPE (k stores? j loads? widths?) is what names the next rung's certificate) */
 fn au_fz_stores(k: u32) -> u32 @export { if k < 4u32 { return AU_FZC[k as u64] }  return 0u32 }
@@ -1049,75 +1050,96 @@ fn au_copy_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
  * N iterations map { (src0+S0*k, src1+S1*k) -> dst+Sd*k : k<N } through g, element width W.  The bulk
  * disjointness (dst vs each src extent) is the CONSUMER's ai_disjoint obligation, as for copy. */
 var MAP_SBUF : [u8; 1024]
-fn au_map2_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
+var AU_MSTR : [u64; 8]   /* per-slot proposed load stride (module scratch -- cg_r3 local-slot discipline) */
+var AU_MN1A : [u32; 8]   /* pass-1 per-slot load ADDRESS node */
+var AU_MN2A : [u32; 8]   /* pass-2 per-slot load ADDRESS node */
+var AU_MVID : [u32; 8]   /* per-slot load VALUE var input index */
+/* THE nl-LOAD PURE-MAP GUILLOTINE (the memory MAP/PACK family, generalized).  A body whose sole memory
+ * effect is ONE store + `nl` unsigned loads per iteration is certified an AFFINE PURE MAP  dst[k] =
+ * g(src0[k], .., src{nl-1}[k])  when the geometry is affine over the twice-composed denotation (store
+ * addr +Sd, each load slot +its own stride) AND the store value is a PURE function of the nl loaded
+ * values -- its dependence cone (bb_cone_var_mask) touching ONLY the nl load vars, never the induction/
+ * accumulator var.  That positional independence is the map-vs-arbitrary line (a value reading the index
+ * is REFUSED).  g is unconstrained; its STRUCTURE is fingerprinted (bb_struct_into->FNV), so different
+ * combining functions carry different certs (the teeth).  nl=2 is the binary MAP (aes/chacha); nl=4 the
+ * byte-PACK (a big-endian word load).  cf: N iterations map { (src_s + S_s*k) -> dst + Sd*k : k<N }
+ * through g.  Bulk disjointness stays the CONSUMER's ai_disjoint obligation.  The nl=2 cert digest is
+ * byte-identical to the original MAP2 (FNV order sd, s0, s1, W, g), so the sealed goldens do not move. */
+fn au_puremap_guillotine(base: u64, boff: u64, blen: u64, accum: u32, nl: u32) -> u32 {
     AU_LWHY = AU_W_MULTI
     if AU_FZC[0u64] != 1u32 { return AU_DEFER }                    /* exactly ONE store per pass */
     if AU_FZC[1u64] != 1u32 { return AU_DEFER }
     if AU_FZC[2u64] != 1u32 { return AU_DEFER }
     if AU_FZC[3u64] != 1u32 { return AU_DEFER }
+    if nl < 2u32 { return AU_DEFER }
+    if nl > 8u32 { return AU_DEFER }                               /* the 8-input budget bounds the fan-in */
     AU_LWHY = AU_W_MEMFIT
     if AU_FZW[1u64] != AU_FZW[0u64] { return AU_DEFER }            /* one store width */
     if AU_FZW[2u64] != AU_FZW[0u64] { return AU_DEFER }
     if AU_FZW[3u64] != AU_FZW[0u64] { return AU_DEFER }
-    if AU_FZLW0[1u64] != AU_FZLW0[0u64] { return AU_DEFER }        /* consistent load-0 width */
-    if AU_FZLW0[2u64] != AU_FZLW0[0u64] { return AU_DEFER }
-    if AU_FZLW0[3u64] != AU_FZLW0[0u64] { return AU_DEFER }
-    if AU_FZLW1[1u64] != AU_FZLW1[0u64] { return AU_DEFER }        /* consistent load-1 width */
-    if AU_FZLW1[2u64] != AU_FZLW1[0u64] { return AU_DEFER }
-    if AU_FZLW1[3u64] != AU_FZLW1[0u64] { return AU_DEFER }
     let sd : u64 = AU_FZA[1u64] - AU_FZA[0u64]                     /* proposed store stride */
     if (AU_FZA[2u64] - AU_FZA[1u64]) != sd { return AU_DEFER }
     if (AU_FZA[3u64] - AU_FZA[2u64]) != sd { return AU_DEFER }
-    let s0 : u64 = AU_FZLA0[1u64] - AU_FZLA0[0u64]                 /* proposed src-0 stride */
-    if (AU_FZLA0[2u64] - AU_FZLA0[1u64]) != s0 { return AU_DEFER }
-    if (AU_FZLA0[3u64] - AU_FZLA0[2u64]) != s0 { return AU_DEFER }
-    let s1 : u64 = AU_FZLA1[1u64] - AU_FZLA1[0u64]                 /* proposed src-1 stride */
-    if (AU_FZLA1[2u64] - AU_FZLA1[1u64]) != s1 { return AU_DEFER }
-    if (AU_FZLA1[3u64] - AU_FZLA1[2u64]) != s1 { return AU_DEFER }
+    let mut s : u32 = 0u32
+    while s < nl {                                                 /* per-slot: consistent width + affine stride */
+        let w0 : u32 = AU_FZLWM[s as u64]
+        if AU_FZLWM[(8u32 + s) as u64] != w0 { return AU_DEFER }
+        if AU_FZLWM[(16u32 + s) as u64] != w0 { return AU_DEFER }
+        if AU_FZLWM[(24u32 + s) as u64] != w0 { return AU_DEFER }
+        let a0 : u64 = AU_FZLAM[s as u64]
+        let a1 : u64 = AU_FZLAM[(8u32 + s) as u64]
+        let a2 : u64 = AU_FZLAM[(16u32 + s) as u64]
+        let a3 : u64 = AU_FZLAM[(24u32 + s) as u64]
+        let ss : u64 = a1 - a0
+        if (a2 - a1) != ss { return AU_DEFER }
+        if (a3 - a2) != ss { return AU_DEFER }
+        AU_MSTR[s as u64] = ss
+        s = s + 1u32
+    }
     AU_LWHY = AU_W_SYMTOP
     bb_reset(64u64)
     au_sym_init(accum)
     let p1 : u32 = au_sym_pass(base, boff, blen, accum)            /* pass 1: capture nodes + load var indices */
     if p1 == TP_SYMTOP { return AU_DEFER }
     if SY_ST_CNT != 1u32 { return AU_DEFER }
-    if SY_LD_CNT != 2u32 { return AU_DEFER }
+    if SY_LD_CNT != nl { return AU_DEFER }
     let n1sa : u32 = SY_ST_ADDR
     let n1sv : u32 = SY_ST_VAL
-    let n1la0 : u32 = SY_LD_ADDRS[0u64]
-    let n1la1 : u32 = SY_LD_ADDRS[1u64]
-    let vidx0 : u32 = SY_LD_VIDX[0u64]                             /* the two load vars' INPUT indices */
-    let vidx1 : u32 = SY_LD_VIDX[1u64]
-    let p2 : u32 = au_sym_pass(base, boff, blen, accum)            /* pass 2 over the CARRIED state */
+    let mut t : u32 = 0u32
+    while t < nl { AU_MN1A[t as u64] = SY_LD_ADDRS[t as u64]  AU_MVID[t as u64] = SY_LD_VIDX[t as u64]  t = t + 1u32 }
+    let p2 : u32 = au_sym_pass(base, boff, blen, accum)            /* pass 2 over the CARRIED state (2*nl load vars total -> the 16-input budget) */
     if p2 == TP_SYMTOP { return AU_DEFER }
     if SY_ST_CNT != 1u32 { return AU_DEFER }
-    if SY_LD_CNT != 2u32 { return AU_DEFER }
+    if SY_LD_CNT != nl { return AU_DEFER }
     let n2sa : u32 = SY_ST_ADDR
-    let n2la0 : u32 = SY_LD_ADDRS[0u64]
-    let n2la1 : u32 = SY_LD_ADDRS[1u64]
+    let mut u : u32 = 0u32
+    while u < nl { AU_MN2A[u as u64] = SY_LD_ADDRS[u as u64]  u = u + 1u32 }
     let ma : u8 = bb_equal(n2sa, bb_add(n1sa, bb_const(sd)))       /* store addr advances by Sd */
-    let m0 : u8 = bb_equal(n2la0, bb_add(n1la0, bb_const(s0)))     /* src-0 addr advances by S0 */
-    let m1 : u8 = bb_equal(n2la1, bb_add(n1la1, bb_const(s1)))     /* src-1 addr advances by S1 */
     if ma == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
-    if m0 == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
-    if m1 == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
     if ma != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
-    if m0 != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
-    if m1 != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
-    /* THE PURITY CERTIFICATE: the store value depends ONLY on the two load vars (position-invariant g). */
+    let mut allowed : u64 = 0u64
+    let mut v : u32 = 0u32
+    while v < nl {                                                 /* each load slot advances by its stride */
+        let mv : u8 = bb_equal(AU_MN2A[v as u64], bb_add(AU_MN1A[v as u64], bb_const(AU_MSTR[v as u64])))
+        if mv == 0u8 { AU_LWHY = AU_W_REFUT  return 0u32 }
+        if mv != 1u8 { AU_LWHY = AU_W_POISON  return AU_DEFER }
+        allowed = allowed | (1u64 << (AU_MVID[v as u64] as u64))
+        v = v + 1u32
+    }
+    /* THE PURITY CERTIFICATE: the store value depends ONLY on the nl load vars (position-invariant g). */
     let mask : u64 = bb_cone_var_mask(n1sv)
-    let allowed : u64 = (1u64 << (vidx0 as u64)) | (1u64 << (vidx1 as u64))
     if (mask & (allowed ^ 18446744073709551615u64)) != 0u64 { AU_LWHY = AU_W_MEMFIT  return AU_DEFER }  /* value reads the index / another var -> not a pure map */
-    /* the combining function's structural fingerprint (XOR-map != ADD-map -> distinct cert) */
+    /* the combining function's structural fingerprint (different g -> distinct cert) */
     let slen : u32 = bb_struct_into(n1sv, &MAP_SBUF as *u8, 1024u32)
     let mut g : u64 = 14695981039346656037u64
     let mut q : u32 = 0u32
     while q < slen { g = (g ^ (MAP_SBUF[q as u64] as u64)) * 1099511628211u64  q = q + 1u32 }
     AU_LKIND = AU_K_MAP2
-    AU_LM_SD = sd  AU_LM_S0 = s0  AU_LM_S1 = s1  AU_LM_W = AU_FZW[0u64]  AU_LM_G = g
-    let mut dg : u64 = 14695981039346656037u64                    /* cert digest = FNV(Sd, S0, S1, W, gstruct) */
+    AU_LM_SD = sd  AU_LM_S0 = AU_MSTR[0u64]  AU_LM_S1 = AU_MSTR[1u64]  AU_LM_W = AU_FZW[0u64]  AU_LM_G = g  AU_LM_NL = nl
+    let mut dg : u64 = 14695981039346656037u64                    /* cert digest = FNV(Sd, per-slot strides.., W, gstruct) */
     dg = (dg ^ sd) * 1099511628211u64
-    dg = (dg ^ s0) * 1099511628211u64
-    dg = (dg ^ s1) * 1099511628211u64
+    let mut d : u32 = 0u32
+    while d < nl { dg = (dg ^ AU_MSTR[d as u64]) * 1099511628211u64  d = d + 1u32 }
     dg = (dg ^ (AU_FZW[0u64] as u64)) * 1099511628211u64
     dg = (dg ^ g) * 1099511628211u64
     AU_LRATIO = dg
@@ -1141,19 +1163,20 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         if au_svir_exec(base, boff, blen) != 0u32 { AU_LWHY = AU_W_FRAG  return AU_DEFER }
         AU_FZC[i as u64] = TP_ST_CNT  AU_FZA[i as u64] = TP_ST_ADDR  AU_FZV[i as u64] = TP_ST_VAL  AU_FZW[i as u64] = TP_ST_W
         AU_FZLC[i as u64] = TP_LD_CNT  AU_FZLA[i as u64] = TP_LD_ADDR  AU_FZLW[i as u64] = TP_LD_W
-        AU_FZLA0[i as u64] = TP_LD_ADDRS[0u64]  AU_FZLA1[i as u64] = TP_LD_ADDRS[1u64]     /* the two-load MAP shape */
-        AU_FZLW0[i as u64] = TP_LD_WS[0u64]     AU_FZLW1[i as u64] = TP_LD_WS[1u64]
+        let mut sl : u32 = 0u32
+        while sl < 8u32 { AU_FZLAM[(i * 8u32 + sl) as u64] = TP_LD_ADDRS[sl as u64]  AU_FZLWM[(i * 8u32 + sl) as u64] = TP_LD_WS[sl as u64]  sl = sl + 1u32 }
         sp_obs_push(TP_LOC[accum as u64])
         i = i + 1u32
     }
     let mut stores : u32 = 0u32
-    let mut loads : u32 = 0u32
-    let mut ld2 : u32 = 1u32                                        /* every pass has exactly 2 loads? */
+    let ldc : u32 = AU_FZLC[0u64]                                   /* per-pass load count (dispatch key) */
+    let mut ldcons : u32 = 1u32                                     /* same load count every pass? */
     let mut k : u32 = 0u32
-    while k < 4u32 { if AU_FZC[k as u64] > 0u32 { stores = 1u32 }  if AU_FZLC[k as u64] > 0u32 { loads = 1u32 }  if AU_FZLC[k as u64] != 2u32 { ld2 = 0u32 }  k = k + 1u32 }
+    while k < 4u32 { if AU_FZC[k as u64] > 0u32 { stores = 1u32 }  if AU_FZLC[k as u64] != ldc { ldcons = 0u32 }  k = k + 1u32 }
     if stores == 1u32 {
-        if ld2 == 1u32 { return au_map2_guillotine(base, boff, blen, accum) }     /* RUNG 6: 1 store + 2 loads -> the binary MAP */
-        if loads == 1u32 { return au_copy_guillotine(base, boff, blen, accum) }   /* RUNG 5: load+store -> the copy family */
+        if ldcons == 0u32 { AU_LWHY = AU_W_MULTI  return AU_DEFER }               /* irregular load count -> residue */
+        if ldc >= 2u32 { return au_puremap_guillotine(base, boff, blen, accum, ldc) }  /* RUNG 6: 1 store + k loads -> the pure MAP/PACK */
+        if ldc == 1u32 { return au_copy_guillotine(base, boff, blen, accum) }     /* RUNG 5: 1 load + 1 store -> the copy family */
         /* RUNG 4: THE STORE RUNG.  A body that writes memory can NEVER crush on a scalar rung (a scalar
          * certificate would say nothing about the memory effect); only THIS rung's certificate covers it:
          * the loop's sole memory effect is the affine constant-write family (stride S, value V, width W) --

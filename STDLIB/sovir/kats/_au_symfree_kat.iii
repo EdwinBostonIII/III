@@ -46,11 +46,13 @@ var AFF : [u8; 28] = [
   16u8,0u8, 1u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,0u8,
   16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 33u8, 17u8,1u8]
 
-/* WIDE: acc = acc + L1 + L2 + ... + L8   (9 distinct locals read > 8 input budget; 28 bytes) */
-var WIDE : [u8; 28] = [
+/* WIDE: acc = acc + L1 + L2 + ... + L16   (17 distinct locals read > 16 input budget; 52 bytes) */
+var WIDE : [u8; 52] = [
   16u8,0u8,
   16u8,1u8, 32u8, 16u8,2u8, 32u8, 16u8,3u8, 32u8, 16u8,4u8, 32u8,
   16u8,5u8, 32u8, 16u8,6u8, 32u8, 16u8,7u8, 32u8, 16u8,8u8, 32u8,
+  16u8,9u8, 32u8, 16u8,10u8, 32u8, 16u8,11u8, 32u8, 16u8,12u8, 32u8,
+  16u8,13u8, 32u8, 16u8,14u8, 32u8, 16u8,15u8, 32u8, 16u8,16u8, 32u8,
   17u8,0u8]
 
 fn main() -> u64 {
@@ -72,8 +74,8 @@ fn main() -> u64 {
     /* (2) NO REGRESSION: the honest affine body (with its counter local live) still crushes. */
     if au_topo_amputate(&AFF as u64, 0u64, 28u64, 0u32, 7u64) != 1u32 { return 2u64 }
 
-    /* (3) CAPACITY HONESTY: 9 distinct read locals exceed the 8-input budget -> DEFER, never a verdict. */
-    if au_topo_amputate(&WIDE as u64, 0u64, 28u64, 0u32, 7u64) != 2u32 { return 3u64 }
+    /* (3) CAPACITY HONESTY: 17 distinct read locals exceed the 16-input budget -> DEFER, never a verdict. */
+    if au_topo_amputate(&WIDE as u64, 0u64, 52u64, 0u32, 7u64) != 2u32 { return 3u64 }
 
     return 99u64
 }

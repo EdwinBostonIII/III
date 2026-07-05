@@ -1104,3 +1104,30 @@ ratchet DRIFT-ABORTED (aes+chacha ledgers moved), authorized reseal -> aes128 ed
 chacha20 5fa4195c2ac15d0a.  Toy + ghost byte-stable.  **Population now 12 of 33 loops certified**
 (add/mul/qad scalar + sto/cpy/map memory).  Remaining multi: hmac@3844 (4-store/4-load) and
 ceiling@1487 (4-load/1-store byte-pack) -- distinct shapes, separately evidenced when built.
+
+## THE PACK GENERALIZATION 2026-07-04 — one pure-map law for k sources; 13 of 33 real loops certified
+
+The binary MAP was the nl=2 instance of a general law: ONE affine store whose value is a pure function
+of `nl` affinely-addressed loads.  au_map2_guillotine is generalized to au_puremap_guillotine(.., nl):
+per-slot affine geometry (each of nl load addresses advances by its own stride, all proven over the
+twice-composed denotation) + the same purity cone (store value depends ONLY on the nl load vars) + the
+same g-structure fingerprint.  The nl=2 cert digest is byte-identical to the original MAP2 (FNV order
+Sd, s0, s1, W, g), so the sealed aes/chacha goldens do NOT move -- verified.  Routing dispatches by the
+per-pass load count: 0->STORE, 1->COPY, k>=2->the pure map/pack.
+
+MEASURED ROOT-CAUSE (dbg=4, not theorized): the twice-composed proof allocates 2*nl load vars, so a 4-
+load pack (8 load vars + the address locals ~= 10) overran bv_bits' 8-input budget at pass 2's second
+load.  Fix: BB_MAX_INPUTS 8 -> 16 (BB_INBASE[16]; the two denoter budget checks -> 16) -- a bounded
+capacity bump, no soundness change (more input words, same encoding for the low indices).  The
+frozen-local capacity KAT moved with it (_au_symfree WIDE now reads 17 locals to exceed 16).
+
+*Falsifiers (executed green)*: `_au_packwalk_kat` = 99 -- a 3-source XOR map crushes (nloads=3, per-slot
+strides pinned); a 4-source XOR map crushes (nloads=4, needs the 16-budget) with a g-digest DISTINCT
+from the 3-way (structure teeth); a value XOR'd with the index DEFER[memfit] via the cone.
+`_au_mapwalk_kat` (nl=2) still 99; `_au_symfree_kat` capacity teeth re-pinned at 16.  legA **31/31**.
+**The measured payoff**: real ccsv ceiling_sha_core.c loop@1487 -- a big-endian byte pack
+w = (b0<<24)|(b1<<16)|(b2<<8)|b3 -- CRUSHED(map) nloads=4; the real-seed ratchet DRIFT-ABORTED
+(ceiling ledger 1->2 crushed; aes/chacha/toy/ghost byte-stable), authorized reseal ->
+ceiling d4a1f4a95816a212.  **Population now 13 of 33 loops certified.**  The last multi shape --
+hmac@3844 (4-store/4-load) -- is a multi-STORE body (not the single-store family); a genuinely distinct
+rung, evidenced when built.

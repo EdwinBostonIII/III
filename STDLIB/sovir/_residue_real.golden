@@ -4,4 +4,4 @@ chacha20.c 5fa4195c2ac15d0a loops=3 crushed=2 deferred=1
 hmac_sha256.c 7e47a8bf743d41c1 loops=10 crushed=3 deferred=7
 sha256_full.c a5b70c574e2013b8 loops=3 crushed=1 deferred=2
 sha256_generic.c 3bac471f2bb49550 loops=3 crushed=1 deferred=2
-ceiling_sha_core.c e75714ef39fdd24e loops=4 crushed=1 deferred=3
+ceiling_sha_core.c d4a1f4a95816a212 loops=4 crushed=2 deferred=2

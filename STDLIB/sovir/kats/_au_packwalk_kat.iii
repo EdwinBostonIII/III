@@ -1,0 +1,72 @@
+module au_packwalk_kat
+
+/* THE k-SOURCE PURE MAP / PACK (rung 6 generalized, 2026-07-04): dst[k] = g(src0[k], .., src{nl-1}[k])
+ * for nl > 2 -- the same certificate the binary MAP proves, generalized over the source count.  The
+ * twice-composed geometry proof allocates 2*nl load vars, so nl=4 (byte pack: a big-endian word load)
+ * needs the raised 16-input budget in bv_bits.  The purity cert is unchanged: the store value's cone
+ * touches ONLY the nl load vars (a value reading the index is REFUSED), and g's structure is
+ * fingerprinted so different combining functions carry different certs.
+ *
+ *   (1) XOR3   dst32[3000+4i] = s0 ^ s1 ^ s2       (3 loads)  -> CRUSHED kind MAP, nloads=3, Sd=4
+ *   (2) XOR4   dst32 = s0 ^ s1 ^ s2 ^ s3           (4 loads)  -> CRUSHED, nloads=4, g-digest != XOR3
+ *   (3) IDX3   dst = (s0 ^ s1 ^ s2) ^ i            (value reads i) -> DEFER[memfit] via the cone
+ *
+ * exit 99 = all; 1..3 = the numbered contract broken (10+ = a certificate field wrong). */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_why() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_nloads() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_sd() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_stride(s: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_g() -> u64 from "ser_antiunify.iii"
+
+/* XOR3: dst32[3000+4i] = s32[1000+4i] ^ s32[1200+4i] ^ s32[1400+4i] ; i++   (108 bytes)
+ * store-addr(22) + s0(23) + s1(24) + s2(24) + STORE32(1) + i++(14) */
+var XOR3 : [u8; 108] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,176u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  1u8,120u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* XOR4: XOR3 plus a fourth source s32[1600+4i]  (108 + 24 = 132 bytes) */
+var XOR4 : [u8; 132] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,176u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  1u8,120u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  1u8,64u8,6u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* IDX3: XOR3 with the value XOR'd against the induction var i before the store  (108 + 3 = 111 bytes) */
+var IDX3 : [u8; 111] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,176u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  1u8,120u8,5u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8, 39u8,
+  16u8,1u8, 39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+fn main() -> u64 {
+    /* (1) the 3-source XOR map crushes */
+    if au_topo_amputate(&XOR3 as u64, 0u64, 108u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 5u32 { return 10u64 }
+    if au_last_map_nloads() != 3u32 { return 11u64 }
+    if au_last_map_sd() != 4u64 { return 12u64 }
+    if au_last_map_stride(0u32) != 4u64 { return 13u64 }
+    if au_last_map_stride(2u32) != 4u64 { return 14u64 }
+    let g3 : u64 = au_last_map_g()
+
+    /* (2) the 4-source XOR map crushes -- needs the 16-input budget (8 load vars twice-composed) */
+    if au_topo_amputate(&XOR4 as u64, 0u64, 132u64, 0u32, 7u64) != 1u32 { return 2u64 }
+    if au_last_kind() != 5u32 { return 15u64 }
+    if au_last_map_nloads() != 4u32 { return 16u64 }
+    if au_last_map_g() == g3 { return 17u64 }                      /* g-structure teeth: 4-way != 3-way */
+
+    /* (3) the value reads the index -> the purity cone catches it -> DEFER[memfit] */
+    if au_topo_amputate(&IDX3 as u64, 0u64, 111u64, 0u32, 7u64) != 2u32 { return 3u64 }
+    if au_last_why() != 7u32 { return 18u64 }
+    return 99u64
+}

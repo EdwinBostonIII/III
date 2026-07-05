@@ -32,6 +32,7 @@ extern @abi(c-msvc-x64) fn au_last_store_width() -> u32 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_last_copy_stride() -> u64 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_last_copy_offset() -> u64 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_last_copy_width() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_why() -> u32 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
@@ -93,13 +94,17 @@ fn main() -> u64 {
     dg = (dg ^ 4u64) * 1099511628211u64
     if au_last_param() != dg { return 14u64 }
 
-    /* (2)(3) the sampled-window adversaries die at the miters, never crushed */
+    /* (2)(3) the sampled-window adversaries die at the miters, never crushed -- census: REFUTED */
     if au_topo_amputate(&WINVAL as u64, 0u64, 49u64, 0u32, 7u64) != 0u32 { return 2u64 }
+    if au_last_why() != 3u32 { return 23u64 }
     if au_topo_amputate(&WINADDR as u64, 0u64, 49u64, 0u32, 7u64) != 0u32 { return 3u64 }
+    if au_last_why() != 3u32 { return 24u64 }
 
-    /* (4)(5) the honest defers: no fit / two stores */
+    /* (4)(5) the honest defers with their census reasons: fit mismatch / multi-effect */
     if au_topo_amputate(&QADDR as u64, 0u64, 39u64, 0u32, 7u64) != 2u32 { return 4u64 }
+    if au_last_why() != 7u32 { return 25u64 }                      /* non-affine stride -> MEMFIT */
     if au_topo_amputate(&TWOSTORE as u64, 0u64, 38u64, 0u32, 7u64) != 2u32 { return 5u64 }
+    if au_last_why() != 6u32 { return 26u64 }                      /* two stores per pass -> MULTI */
 
     /* (6) the stride-0 copy family crushes on the COPY rung with its full certificate */
     if au_topo_amputate(&COPY as u64, 0u64, 20u64, 0u32, 7u64) != 1u32 { return 6u64 }
@@ -110,7 +115,9 @@ fn main() -> u64 {
 
     /* (8)(9) the copy rung's teeth and boundary: a transformed value REFUTES; a sign-extending load DEFERS */
     if au_topo_amputate(&TRANS as u64, 0u64, 30u64, 0u32, 7u64) != 0u32 { return 8u64 }
+    if au_last_why() != 3u32 { return 27u64 }                      /* pass-through miter died -> REFUTED */
     if au_topo_amputate(&SEXT as u64, 0u64, 20u64, 0u32, 7u64) != 2u32 { return 9u64 }
+    if au_last_why() != 4u32 { return 28u64 }                      /* sign-extending load -> the denoter boundary */
 
     /* (7) the whole-module walk records the STORE certificate in the ledger */
     if au_crush_report(&WMOD as u64, 0u64, 66u64, 0u32) != 1u32 { return 7u64 }

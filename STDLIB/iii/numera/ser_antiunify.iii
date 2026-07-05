@@ -879,6 +879,20 @@ const AU_K_MUL   : u32 = 1u32 /* crush kind: multiplicative (geometric)         
 const AU_K_QUAD  : u32 = 2u32 /* crush kind: quadratic (state-invariant second difference)  */
 const AU_K_STORE : u32 = 3u32 /* crush kind: strided constant write (the memory rung)       */
 const AU_K_COPY  : u32 = 4u32 /* crush kind: affine pass-through copy (load -> store, verbatim) */
+/* DEFER-REASON codes (the residue CENSUS): why a loop did not crush.  DIAGNOSTIC, not a certified
+ * claim -- deliberately NOT folded into au_report_hash / the Merkle leaves, so refining the classifier
+ * never moves a sealed golden.  The census is what turns the deferral list into an actionable roadmap. */
+const AU_W_CRUSH  : u32 = 0u32  /* crushed (no defer)                                        */
+const AU_W_FRAG   : u32 = 1u32  /* concrete exec out of fragment (call/control/heap range)   */
+const AU_W_NOFIT  : u32 = 2u32  /* no rung's behavioral fit matched the trace                */
+const AU_W_REFUT  : u32 = 3u32  /* a fitted conjecture DIED at a miter (recorded verdict 0)  */
+const AU_W_SYMTOP : u32 = 4u32  /* denoter boundary (sext load / variable shift / >8 vars)   */
+const AU_W_POISON : u32 = 5u32  /* a decision poisoned (bb capacity 0xFF) -> honest defer    */
+const AU_W_MULTI  : u32 = 6u32  /* store/load count per pass != 1 (the multi-effect class)   */
+const AU_W_MEMFIT : u32 = 7u32  /* memory-family fit mismatch (width / stride / value / off) */
+const AU_W_NESTED : u32 = 8u32  /* nested compositional crush did not discharge              */
+var AU_LWHY : u32 = 0u32        /* reason of the last au_topo_amputate outcome               */
+fn au_last_why() -> u32 @export { return AU_LWHY }
 var AU_LKIND  : u32 = 0u32    /* kind of the last successful au_topo_amputate               */
 var AU_LRATIO : u64 = 0u64    /* the proven parameter: ratio (MUL) / curvature (QUAD) / cert digest (STORE/COPY) */
 var AU_LS_S : u64 = 0u64      /* STORE cert: the proven address stride                      */
@@ -915,6 +929,7 @@ var AU_FZLW : [u32; 4]  /* per-fuzz-pass first-load width       */
  * the extents (ser_absint's ai_disjoint on aff_of(src,N)/aff_of(dst,N)) -- recorded here as (S, D, W),
  * never claimed beyond it.  1 = certified ; 0 = a fitted conjecture died at a miter ; AU_DEFER else. */
 fn au_copy_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
+    AU_LWHY = AU_W_MULTI
     if AU_FZC[0u64] != 1u32 { return AU_DEFER }                    /* exactly ONE store per pass */
     if AU_FZC[1u64] != 1u32 { return AU_DEFER }
     if AU_FZC[2u64] != 1u32 { return AU_DEFER }
@@ -923,6 +938,7 @@ fn au_copy_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
     if AU_FZLC[1u64] != 1u32 { return AU_DEFER }
     if AU_FZLC[2u64] != 1u32 { return AU_DEFER }
     if AU_FZLC[3u64] != 1u32 { return AU_DEFER }
+    AU_LWHY = AU_W_MEMFIT
     if AU_FZW[1u64] != AU_FZW[0u64] { return AU_DEFER }            /* one store width            */
     if AU_FZW[2u64] != AU_FZW[0u64] { return AU_DEFER }
     if AU_FZW[3u64] != AU_FZW[0u64] { return AU_DEFER }
@@ -940,6 +956,7 @@ fn au_copy_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
     if (AU_FZA[1u64] - AU_FZLA[1u64]) != dd { return AU_DEFER }
     if (AU_FZA[2u64] - AU_FZLA[2u64]) != dd { return AU_DEFER }
     if (AU_FZA[3u64] - AU_FZLA[3u64]) != dd { return AU_DEFER }
+    AU_LWHY = AU_W_SYMTOP
     bb_reset(64u64)
     au_sym_init(accum)
     let p1 : u32 = au_sym_pass(base, boff, blen, accum)
@@ -977,18 +994,22 @@ fn au_copy_guillotine(base: u64, boff: u64, blen: u64, accum: u32) -> u32 {
         dg = (dg ^ dd) * 1099511628211u64
         dg = (dg ^ (AU_FZW[0u64] as u64)) * 1099511628211u64
         AU_LRATIO = dg
+        AU_LWHY = AU_W_CRUSH
         return 1u32
     } } } } }
+    AU_LWHY = AU_W_REFUT
     if ma == 0u8 { return 0u32 }                                   /* a fitted conjecture died at a miter */
     if ml == 0u8 { return 0u32 }
     if md == 0u8 { return 0u32 }
     if m1 == 0u8 { return 0u32 }
     if m2 == 0u8 { return 0u32 }
+    AU_LWHY = AU_W_POISON
     return AU_DEFER                                                /* poisoned decision -> honest defer */
 }
 fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 @export {
     AU_LKIND = AU_K_ADD
     AU_LRATIO = 0u64
+    AU_LWHY = AU_W_NOFIT
     AU_LS_S = 0u64  AU_LS_V = 0u64  AU_LS_W = 0u32
     AU_LC_S = 0u64  AU_LC_D = 0u64  AU_LC_W = 0u32
     au_mem_zero()
@@ -999,7 +1020,7 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
     sp_obs_push(TP_LOC[accum as u64])
     let mut i : u32 = 0u32
     while i < 4u32 {
-        if au_svir_exec(base, boff, blen) != 0u32 { return AU_DEFER }
+        if au_svir_exec(base, boff, blen) != 0u32 { AU_LWHY = AU_W_FRAG  return AU_DEFER }
         AU_FZC[i as u64] = TP_ST_CNT  AU_FZA[i as u64] = TP_ST_ADDR  AU_FZV[i as u64] = TP_ST_VAL  AU_FZW[i as u64] = TP_ST_W
         AU_FZLC[i as u64] = TP_LD_CNT  AU_FZLA[i as u64] = TP_LD_ADDR  AU_FZLW[i as u64] = TP_LD_W
         sp_obs_push(TP_LOC[accum as u64])
@@ -1018,10 +1039,12 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
          * constant V for ALL entry states.  cf: N iterations from entry state X write exactly
          * { A(X) + S*k : k in [0,N) } with value V -- B2's aff_of geometry, behaviorally extracted,
          * symbolically discharged.  Loads are past this rung (the denoter defers on them). */
+        AU_LWHY = AU_W_MULTI
         if AU_FZC[0u64] != 1u32 { return AU_DEFER }                /* exactly ONE store per pass, every pass */
         if AU_FZC[1u64] != 1u32 { return AU_DEFER }
         if AU_FZC[2u64] != 1u32 { return AU_DEFER }
         if AU_FZC[3u64] != 1u32 { return AU_DEFER }
+        AU_LWHY = AU_W_MEMFIT
         if AU_FZW[1u64] != AU_FZW[0u64] { return AU_DEFER }        /* one width */
         if AU_FZW[2u64] != AU_FZW[0u64] { return AU_DEFER }
         if AU_FZW[3u64] != AU_FZW[0u64] { return AU_DEFER }
@@ -1032,6 +1055,7 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         let ss : u64 = AU_FZA[1u64] - AU_FZA[0u64]                 /* proposed stride (conjecture) */
         if (AU_FZA[2u64] - AU_FZA[1u64]) != ss { return AU_DEFER }
         if (AU_FZA[3u64] - AU_FZA[2u64]) != ss { return AU_DEFER }
+        AU_LWHY = AU_W_SYMTOP
         bb_reset(64u64)
         au_sym_init(accum)
         let p1 : u32 = au_sym_pass(base, boff, blen, accum)        /* pass 1: capture the store's nodes */
@@ -1059,11 +1083,14 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
             dg = (dg ^ vv) * 1099511628211u64
             dg = (dg ^ (AU_FZW[0u64] as u64)) * 1099511628211u64
             AU_LRATIO = dg
+            AU_LWHY = AU_W_CRUSH
             return 1u32
         } } }
+        AU_LWHY = AU_W_REFUT
         if sda == 0u8 { return 0u32 }                              /* a fitted conjecture died at a miter */
         if sd1 == 0u8 { return 0u32 }
         if sd2 == 0u8 { return 0u32 }
+        AU_LWHY = AU_W_POISON
         return AU_DEFER                                            /* poisoned decision -> honest defer */
     }
     let mut refuted : u32 = 0u32
@@ -1071,22 +1098,26 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         let delta : u64 = au_arith_delta()
         bb_reset(64u64)
         let step : u32 = au_svir_step_sym(base, boff, blen, accum)
+        if step == TP_SYMTOP { AU_LWHY = AU_W_SYMTOP }
         if step != TP_SYMTOP {
             let v0 : u32 = bb_var(0u32)
             let vd : u8 = bb_equal(step, bb_add(v0, bb_const(delta)))   /* step(acc,others)==acc+delta, ALL states */
-            if vd == 1u8 { return 1u32 }
+            if vd == 1u8 { AU_LWHY = AU_W_CRUSH  return 1u32 }
             if vd == 0u8 { refuted = 1u32 }                        /* fuzz-affine but symbolically REFUTED */
+            if vd == 255u8 { AU_LWHY = AU_W_POISON }
         }
     }
     if au_is_geometric() == 1u32 {                                 /* RUNG 2: GEOMETRIC */
         let r : u64 = au_geo_r()
         bb_reset(64u64)
         let step2 : u32 = au_svir_step_sym(base, boff, blen, accum)
+        if step2 == TP_SYMTOP { AU_LWHY = AU_W_SYMTOP }
         if step2 != TP_SYMTOP {
             let v02 : u32 = bb_var(0u32)
             let vd2 : u8 = bb_equal(step2, bb_mul(v02, bb_const(r)))    /* step(acc,others)==acc*r, ALL states */
-            if vd2 == 1u8 { AU_LKIND = AU_K_MUL  AU_LRATIO = r  return 1u32 }
+            if vd2 == 1u8 { AU_LKIND = AU_K_MUL  AU_LRATIO = r  AU_LWHY = AU_W_CRUSH  return 1u32 }
             if vd2 == 0u8 { refuted = 1u32 }
+            if vd2 == 255u8 { AU_LWHY = AU_W_POISON }
         }
     }
     if au_is_quadratic() == 1u32 {                                 /* RUNG 3: QUADRATIC (const 2nd difference) */
@@ -1094,8 +1125,10 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
         bb_reset(64u64)
         au_sym_init(accum)
         let a1 : u32 = au_sym_pass(base, boff, blen, accum)        /* A1(X): acc after ONE pass, state carried  */
+        if a1 == TP_SYMTOP { AU_LWHY = AU_W_SYMTOP }
         if a1 != TP_SYMTOP {
             let a2 : u32 = au_sym_pass(base, boff, blen, accum)    /* A2(X): acc after the SECOND composed pass */
+            if a2 == TP_SYMTOP { AU_LWHY = AU_W_SYMTOP }
             if a2 != TP_SYMTOP {
                 let x0  : u32 = bb_var(0u32)
                 let lhs : u32 = bb_add(a2, x0)                     /* A2(X) + acc(X)                            */
@@ -1105,13 +1138,15 @@ fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u
                                                                     * so acc_N = acc_0 + d1*N + c*tri(N) exactly
                                                                     * (d1 = the entry state's first increment;
                                                                     * tri identity gated by au_prove_quadratic_gen). */
-                if vd3 == 1u8 { AU_LKIND = AU_K_QUAD  AU_LRATIO = c  return 1u32 }
+                if vd3 == 1u8 { AU_LKIND = AU_K_QUAD  AU_LRATIO = c  AU_LWHY = AU_W_CRUSH  return 1u32 }
                 if vd3 == 0u8 { refuted = 1u32 }
+                if vd3 == 255u8 { AU_LWHY = AU_W_POISON }
             }
         }
     }
-    if refuted == 1u32 { return 0u32 }                             /* a conjectured law died at the miter */
-    return AU_DEFER                                                /* fits nothing / non-denotable / poisoned */
+    if refuted == 1u32 { AU_LWHY = AU_W_REFUT  return 0u32 }       /* a conjectured law died at the miter */
+    return AU_DEFER                                                /* fits nothing / non-denotable / poisoned
+                                                                    * (AU_LWHY carries the sticky reason)     */
 }
 
 /* ============================================================================================================
@@ -1387,11 +1422,14 @@ var RPT_OFF   : [u64; 256]
 var RPT_VERD  : [u32; 256]
 var RPT_KIND  : [u32; 256]   /* crush kind per loop: AU_K_ADD (affine/nested net) or AU_K_MUL (geometric) */
 var RPT_DELTA : [u64; 256]   /* the proven step parameter: delta for ADD-kind, ratio for MUL-kind */
+var RPT_WHY   : [u32; 256]   /* the defer-reason CENSUS (AU_W_*): diagnostic roadmap annotation --
+                              * deliberately NOT folded into au_report_hash / the Merkle leaves */
 var RPT_N : u32 = 0u32
 fn au_report_n()              -> u32 @export { return RPT_N }
 fn au_report_off(i: u32)      -> u64 @export { if i < 256u32 { return RPT_OFF[i as u64] }  return 0u64 }
 fn au_report_verdict(i: u32)  -> u32 @export { if i < 256u32 { return RPT_VERD[i as u64] }  return 0u32 }
 fn au_report_kind(i: u32)     -> u32 @export { if i < 256u32 { return RPT_KIND[i as u64] }  return 0u32 }
+fn au_report_why(i: u32)      -> u32 @export { if i < 256u32 { return RPT_WHY[i as u64] }  return 0u32 }
 fn au_report_delta(i: u32)    -> u64 @export { if i < 256u32 { return RPT_DELTA[i as u64] }  return 0u64 }
 /* THE RESIDUE-STABILITY INVARIANT (Task F2c, advice #1): an FNV-1a fingerprint of the WHOLE crush ledger -- every
  * loop's offset, verdict (CRUSHED/residue), crush KIND, and proven step parameter.  Same module -> same hash (the
@@ -1646,9 +1684,10 @@ fn au_crush_walk(base: u64, boff: u64, blen: u64, accum: u32) {
                 let mut verd : u32 = 0u32
                 let mut dlt  : u64 = 0u64
                 let mut knd  : u32 = 0u32
+                let mut why  : u32 = AU_W_NESTED
                 if au_body_has_loop(base, boff + bo, bl) == 1u32 {            /* NESTED -> compositional crush */
                     let net : u64 = au_crush_nested(base, boff + bo, bl, accum)
-                    if net != AU_NONE64 { verd = 1u32  dlt = net }            /* nested net is ADDITIVE (kind ADD) */
+                    if net != AU_NONE64 { verd = 1u32  dlt = net  why = AU_W_CRUSH }   /* nested net is ADDITIVE */
                 }
                 if au_body_has_loop(base, boff + bo, bl) == 0u32 {           /* SIMPLE -> the crush ladder */
                     if au_topo_amputate(base, boff + bo, bl, accum, 7u64) == 1u32 {
@@ -1657,8 +1696,9 @@ fn au_crush_walk(base: u64, boff: u64, blen: u64, accum: u32) {
                         if AU_LKIND != AU_K_ADD { dlt = AU_LRATIO }           /* MUL ratio / QUAD curvature   */
                         if AU_LKIND == AU_K_ADD { dlt = au_arith_delta() }    /* affine:    the proven delta  */
                     }
+                    why = AU_LWHY                                             /* the census annotation        */
                 }
-                if RPT_N < 256u32 { RPT_OFF[RPT_N as u64] = boff + p  RPT_VERD[RPT_N as u64] = verd  RPT_KIND[RPT_N as u64] = knd  RPT_DELTA[RPT_N as u64] = dlt  RPT_N = RPT_N + 1u32 }
+                if RPT_N < 256u32 { RPT_OFF[RPT_N as u64] = boff + p  RPT_VERD[RPT_N as u64] = verd  RPT_KIND[RPT_N as u64] = knd  RPT_DELTA[RPT_N as u64] = dlt  RPT_WHY[RPT_N as u64] = why  RPT_N = RPT_N + 1u32 }
                 p = bo + bl                                          /* skip past the body -> inner loops not re-counted */
                 adv = 0u32
             }

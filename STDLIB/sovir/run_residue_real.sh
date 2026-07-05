@@ -28,13 +28,19 @@ cat > "$W/real_gate.c" <<'GEOF'
 extern unsigned long long svir_ptr(); extern unsigned long long svir_len();
 extern unsigned au_crush_svir_module(unsigned long long, unsigned long long, unsigned);
 extern unsigned au_report_n(); extern unsigned au_report_verdict(unsigned); extern unsigned au_report_kind(unsigned);
+extern unsigned au_report_why(unsigned);
 extern unsigned long long au_report_delta(unsigned), au_report_off(unsigned), au_report_hash();
+static const char*WHY[9]={"crush","frag ","nofit","refut","symtp","poisn","multi","memft","nest "};
 int main(){
   unsigned crushed = au_crush_svir_module(svir_ptr(), svir_len(), 0);
   unsigned n = au_report_n();
-  for(unsigned i=0;i<n;i++) printf("  loop@%-4llu %s %s=%llu\n", au_report_off(i),
-    au_report_verdict(i)?(au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  "):"DEFER(residue)",
-    au_report_verdict(i)?(au_report_kind(i)>=3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d"):"d", au_report_delta(i));
+  for(unsigned i=0;i<n;i++){
+    unsigned w = au_report_why(i); if (w > 8) w = 0;
+    if (au_report_verdict(i)) printf("  loop@%-4llu %s %s=%llu\n", au_report_off(i),
+      au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  ",
+      au_report_kind(i)>=3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d", au_report_delta(i));
+    else printf("  loop@%-4llu DEFER[%s]   d=%llu\n", au_report_off(i), WHY[w], au_report_delta(i));
+  }
   printf("loops=%u crushed=%u deferred=%u\n", n, crushed, n-crushed);
   printf("REPORT_HASH=%016llx\n", au_report_hash());
   return 0;

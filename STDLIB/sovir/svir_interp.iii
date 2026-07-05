@@ -30,6 +30,7 @@ var DLEN_G : u64 = 0u64
 var CUR_FN : u32 = 0u32
 var BADW_N : u32 = 0u32   var BADW_A : [u64; 64]   var BADW_V : [u64; 64]   var BADW_F : [u32; 64]
 var OOB_IND : u32 = 0u32   /* count of out-of-range CALL_INDIRECT indices -> the oracle reflects safe (no-silent-dispatch) semantics */
+var UNRES_IMP : u32 = 0u32   /* count of CALLs that landed on an IMPORT-decl body [0x8A][nl][name] (cross-module fn, unresolved single-file) -> trap sentinel 198, never execute the NAME BYTES as opcodes (the silent-wrongness class); resolution is the P3 linker's job */
 var PDEC_D : [u8; 24]
 fn pdec(v0: u64) { if v0==0u64 { putchar(48i32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { PDEC_D[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  putchar(PDEC_D[n as u64] as i32) } }
 fn pstr2(a:u32,b:u32){ putchar(a as i32) putchar(b as i32) }
@@ -86,6 +87,7 @@ fn match_else(boff: u64, blen: u64, q: u64) -> u64 {
 fn exec_fn(fnidx: u32, depth: u32) -> u64 {
     let boff : u64 = FN_OFF[fnidx as u64]
     let blen : u64 = FN_BLEN[fnidx as u64]
+    if blen > 0u64 { if ib(boff) == 0x8Au32 { UNRES_IMP = UNRES_IMP + 1u32  return 0u64 } }   /* IMPORT decl [0x8A][nl][name] (svir_verify:49): a CALL reached an unresolved cross-module fn -> record + defined-zero, sentinel 198 at exit (mirrors OOB_IND; without this the name bytes would EXECUTE as opcodes) */
     let lb   : u64 = (depth as u64) * 256u64        /* locals base */
     let cb   : u64 = (depth as u64) * 64u64         /* control-stack base */
     let mut csp : u32 = 0u32
@@ -180,5 +182,6 @@ fn main() -> u64 {
         putchar(10i32)  pstr2(78u32,61u32) pdec(BADW_N as u64) putchar(10i32)   /* "N=<total>" */
     }
     if OOB_IND > 0u32 { return 199u64 }   /* an out-of-range indirect call fired -> distinct sentinel (teeth for the CALL_INDIRECT bounds-check) */
+    if UNRES_IMP > 0u32 { return 198u64 }   /* a CALL reached an IMPORT-decl body (unresolved cross-module fn) -> distinct sentinel (teeth: single-file execution of an import-bearing call path must never read as green) */
     return r
 }

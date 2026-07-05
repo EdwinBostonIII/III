@@ -670,6 +670,18 @@ fn fn_ret_sval(ft:u32) -> i32 {   /* struct-VALUE return (`StructType` / `struct
     let si:i32=stidx(q)  if si>=0i32 { if ispat(q+1u32,Q_MUL)==0u32 { if STSZ[si as u64]>8u64 { return si } } }
     return 0i32-1i32
 }
+fn fn_ret_psz(ft:u32) -> i64 {   /* scalar-POINTER return (`[quals] dtype * name(` incl `T **`): the POINTEE width, for call()[i] indexing (UPDATE-61; cg_r3's `iii_ast_source_buf(cg->ast)[off+i]`).  -1 if not a scalar-pointer return -- struct pointers are fn_ret_struct's domain, sret values fn_ret_sval's. */
+    let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }
+    if dtype(q)==0u32 { return 0i64-1i64 }
+    if ispat(q+1u32,Q_MUL)==0u32 { return 0i64-1i64 }
+    if ispat(q+2u32,Q_MUL)==1u32 { return 8i64 }   /* T ** -> the pointee is itself a pointer */
+    return type_size(q)
+}
+fn fn_ret_psg(ft:u32) -> u32 {   /* sign companion of fn_ret_psz (a T** pointee is an unsigned 8B pointer) */
+    let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }
+    if ispat(q+2u32,Q_MUL)==1u32 { return 0u32 }
+    return type_signed(q)
+}
 fn emit_sret_copy(li:u32) {   /* copy CUR_SRETSZ bytes from struct-value LOCAL slot `li` (frame-aware via emit_vbase_s -> recursion-safe at SHADOW_ON=1, byte-identical at OFF) to *(slot CUR_SRET) : 8-byte chunks + 4-byte tail */
     let sz:i64=CUR_SRETSZ  let mut off:i64=0i64
     while off+8i64<=sz { eu8(0x10u32,CUR_SRET as u32)  if off>0i64 {econst(off)  eb(0x20u32)}  emit_vbase_s(li, off)  eb(0x82u32)  eb(0x83u32)  off=off+8i64 }   /* *(sret+off) = *(r+off)  [64] */
@@ -841,6 +853,8 @@ fn eprim() {
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac)
+                if cp(Q_LBR)==1u32 { let cps:i64=fn_ret_psz(FNT[fi as u64])   /* call()[i] READ (UPDATE-61; cg_r3 `iii_ast_source_buf(cg->ast)[name.offset+i]`, sites 979/989/3332): the call left a scalar POINTER on the stack -> +i*pointee, typed load.  Works for defined AND import callees (both fidx-routed).  A struct-ptr `call()[i]` (no seed site) stays out of scope -> the `[` dangles VISIBLY (verify-fail), never a silent wrong load; `call()[i]=e` stores likewise. */
+                    if cps>0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(cps)  eb(0x20u32)  eload(cps, fn_ret_psg(FNT[fi as u64]))  return } }
                 let mut cur:i32=fn_ret_struct(FNT[fi as u64])  let mut gc:u32=1u32  if cur<0i32 {gc=0u32}  if cp(Q_ARROW)==0u32 {gc=0u32}   /* call()->field READ : the call leaves a `StructType *` -> resolve the trailing ->/. member chain (iiip_peek2(st)->kind ; iii_ast_get(..)->u.list.count).  3 modes, the MIRROR of pstmt's call-base STORE walker: ARROW-next = pointer-field deref hop (LOAD64) ; DOT-next into an embedded/union member (fieldpt>=0) = offset-only hop ; else = the FINAL field -> typed load.  (Was ARROW-only: `->u.a` loaded 8 raw bytes at `u` and left `.a` dangling -> desync -> the rc=8 class the _cs1 falsifier pins.) */
                 while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)  let np:i32=fieldpt(cur,ftc)
                     let mut cm:u32=0u32  if cp(Q_ARROW)==1u32 {cm=1u32} else { if cp(Q_DOT)==1u32 { if np>=0i32 {cm=2u32} } }
@@ -1609,13 +1623,33 @@ fn proto_called(nm: u32) -> u32 {   /* is a fn with name==nm's called anywhere (
     while t<NT { if TK[t as u64]==1u32 { if ispat(t+1u32,Q_LP)==1u32 { if neq(TO[t as u64],TL[t as u64],TO[nm as u64],TL[nm as u64])==1u32 { return 1u32 } } }  t=t+1u32 }
     return 0u32
 }
-fn prescan_imports() {   /* AFTER prescan (defs registered): register each CALLED, declared-not-defined prototype as an IMPORT (index after defs -> the interp exec_fn / def index-space is preserved). fn-ptrs (no prototype) + builtins (system <hdr> skipped) are excluded by construction. */
+fn is_call_builtin(nm:u32) -> u32 {   /* names the eprim call handler lowers as BUILTINS (762-800 + 842): their calls NEVER emit CALL fidx, so an import entry for them would be unreachable dead weight that still reshapes the module (the test_fnptr2.c putchar-prototype lesson: a manually-declared builtin passed every prescan_imports guard). Mirror the exact kw set of the call path. */
+    if kw(nm,"putchar" as u64,7u32)==1u32 { return 1u32 }
+    if kw(nm,"memcpy" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"memset" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"strcmp" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"strncmp" as u64,7u32)==1u32 { return 1u32 }
+    if kw(nm,"strlen" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"memcmp" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"malloc" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"calloc" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"free" as u64,4u32)==1u32 { return 1u32 }
+    if kw(nm,"realloc" as u64,7u32)==1u32 { return 1u32 }
+    if kw(nm,"va_start" as u64,8u32)==1u32 { return 1u32 }
+    if kw(nm,"va_arg" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"va_end" as u64,6u32)==1u32 { return 1u32 }
+    if kw(nm,"vsnprintf" as u64,9u32)==1u32 { return 1u32 }
+    if kw(nm,"vsprintf" as u64,8u32)==1u32 { return 1u32 }
+    if kw(nm,"snprintf" as u64,8u32)==1u32 { return 1u32 }
+    return 0u32
+}
+fn prescan_imports() {   /* AFTER prescan (defs registered): register each CALLED, declared-not-defined prototype as an IMPORT (index after defs -> the interp exec_fn / def index-space is preserved). fn-ptrs (no prototype) are excluded by construction; builtins are excluded BOTH by construction (system <hdr> skipped -> no prototype tokens) AND by name (is_call_builtin -- a KAT may declare `int putchar(int);` manually). */
     let mut t:u32=0u32
     while t<NT {
         if is_proto(t)==1u32 { let nm:u32=fn_nametok(t)
-            if fidx(nm)<0i32 { if dtype(nm)==0u32 { if stidx(nm)<0i32 { if proto_called(nm)==1u32 {   /* defense-in-depth: not defined, not a base type, not a struct/typedef name -> a real external fn */
+            if fidx(nm)<0i32 { if dtype(nm)==0u32 { if stidx(nm)<0i32 { if proto_called(nm)==1u32 { if is_call_builtin(nm)==0u32 {   /* defense-in-depth: not defined, not a base type, not a struct/typedef name, not a call-path builtin -> a real external fn */
                 FNO[FN as u64]=TO[nm as u64]  FNL[FN as u64]=TL[nm as u64]  FNP[FN as u64]=fn_named(nm)  FVAR[FN as u64]=0u32  FNT[FN as u64]=t  FRM[FN as u64]=fn_retmask(t)  IMP[FN as u64]=1u32  FN=FN+1u32
-            } } } }
+            } } } } }
         }
         t=t+1u32
     }
@@ -2123,7 +2157,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
-    lex()  prescan()  prescan_str()   /* prescan_imports() COMPLETE but WIRED-OFF; re-enable experiment RE-MEASURED 2026-07-05 at floor-28 (post #26/#27/#28): ON = 36 fails/845 fns vs OFF = 28/488 -- STILL a net +8, so the parked rule ("re-enable together with the downstream fixes for a NET drop") holds.  What ON changes, measured: parse_break/continue/return/use_decl/parse_stmt + 1 sema fn CLEAR (their iii_ast_* calls become real 0x8A imports); ~9 parser-core fns newly EXPOSE the struct-value-from-call class (arg_list/postfix/cast/expr_prec/param_list/fn_decl/... -- the iii_token_t-by-value-from-extern-sret family).  The standing falsifier for the re-enable stroke: an extern proto + call + ->field store/read repro (RED at OFF: args emitted then dropped, no CALL -- the parse fn68 trace).  See DOCS/III-SEED-FLOOR-PROGRESS.md fix #28 tail + DOCS/CCSV-LEX-RUNTIME-AUDIT.md */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
+    lex()  prescan()  prescan_str()  prescan_imports()   /* PERMANENTLY ON (2026-07-05): the parked rule ("re-enable together with the downstream fixes for a NET drop") is DISCHARGED -- measured ON = 14 fails/845 fns vs OFF = 23/488 (net -9; the old 36-vs-28 numbers predate fix #29, whose reverse-loop guard was the real blocker of the predicted "sret-family exposure" -- those ~9 parser-core fns are GREEN under ON).  What ON buys, measured: the extern-call class clears (parse break/continue/return/use_decl/stmt + iii_sema_run) and with call()[i] (fn_ret_psz path) cg_r3.c reaches STRUCTURAL ZERO.  Builtin names never register (is_call_builtin -- the test_fnptr2.c manual-putchar-prototype lesson).  ALL FIVE SVIR consumers know 0x8A: verify:49 net-0, dis skip, interp UNRES_IMP->198, x86 ExitProcess(198) stub, wasm `unreachable` stub; gates test_import.c/test_importtrap.c (198/198/1, never silent).  Cross-module RESOLUTION = P3 (sovld link-by-name). */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
     if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
         pstr("# STN=~" as u64) pdec(STN as u64) pstr(" SFN=~" as u64) pdec(SFN as u64) pstr(" AN=~" as u64) pdec(AN as u64) pstr(" CN=~" as u64) pdec(CN as u64) pstr(" FN=~" as u64) pdec(FN as u64) pstr(" MTOP=~" as u64) pdec(MTOP) pc(10u32)
         let mut sk:u32=0u32

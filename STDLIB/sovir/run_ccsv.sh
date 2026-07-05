@@ -152,6 +152,33 @@ gcc "$W/svir_interp.o" "$W/g_xt.o" -o "$W/in_xt.exe" 2>/dev/null; "$W/in_xt.exe"
 if [ "$xtv" = "99" ] && [ "$xti" = "99" ]; then say "ccsv SEED-DDC : EXTERN struct-array tables (extern const T X[]; + extern const size_t X_COUNT; -- the seed's III_IRPD_METHODS, defined in sid.c) REGISTER with one zero element so member access emits; the zero-storage COUNT gates table loops dead single-file (verifier=99 interp=99; cross-module data = the P3 linker phase)."; else say "FAIL externtable (vf=$xtv interp=$xti)"; fail=1; fi
 rf1=$(cfeat test_fnptr.c); rf2=$(cfeat test_fnptr2.c)
 if [ "$rf1" = "ok" ] && [ "$rf2" = "ok" ]; then say "ccsv SEED-DDC : FUNCTION POINTERS all-4 (INC-3) -- fn-name-as-value + indirect call of a fn-ptr local/param (CALL_INDIRECT) + field-indirect statement calls (G.audit_fn(...); / st->sink(...);) + 8B fn-ptr typedef fields, on the SOVEREIGN backends: x86 = __svci switchboard (cmpq/jz tail-dispatch, OOB -> ExitProcess(199)) ; wasm = native call_indirect over a funcref table (slot k = func k+IC, OOB = engine trap).  add/sub INDEX-SPACE-AGREEMENT teeth run on every executor; test_fnptr2's putchar pins the IC=1 import-shift composition.  Deeper teeth in run_fnptr_gate.sh (svir_interp arm + OOB trap vehicle)."; else say "FAIL fn-ptr: inc1=$rf1 inc2=$rf2"; fail=1; fi
+rci=$(cfeat test_calli.c)
+if [ "$rci" = "ok" ]; then say "ccsv SEED-DDC : call()[i] -- index a call's returned pointer DIRECTLY (UPDATE-61; cg_r3's emit_field_label/emit_function shape iii_ast_source_buf(cg->ast)[name.offset+i]): +i*pointee, typed load, byte (stride 1) + u32 (stride 4) + expression index, value teeth pin address+width -> all 99.  Struct-ptr call()[i] and call()[i]=e stores stay VISIBLY out of scope (dangle -> verify-fail, never silent)."; else say "FAIL calli: $rci"; fail=1; fi
+# IMPORTS (0x8A): gcc cannot LINK a referenced-undefined extern single-file (test_externtable.c's
+# documented reason), so the arms are the four SVIR-side executors.  POSITIVE (test_import.c, every
+# import call guarded DEAD): an import-bearing module must BUILD + RUN normally everywhere.  TRAP
+# (test_importtrap.c, an import call EXECUTES; every C path returns 99): pinned interp=198 +
+# x86=198 (UNRES_IMP sentinel / ExitProcess stub) + wasm=1 (stub `unreachable`, native trap),
+# mirroring the CALL_INDIRECT OOB gate 199/199/1 -- silent execution must never read green.
+imp_arm(){ # $1 = test basename ; echoes "vf ir xr wr" (verify_main ; svir_interp ; sovereign x86 ; wasm)
+  rm -f "$W/vf_$1.exe" "$W/in_$1.exe" "$W/tx_$1.exe" "$W/$1.s" "$W/$1.o2" "$W/$1.x86.exe" "$W/tw_$1.exe" "$W/$1.wasm"
+  "$W/ccsv.exe" "$S/$1" > "$W/g_$1.iii" 2>/dev/null
+  "$IIIS" "$W/g_$1.iii" --compile-only --out "$W/g_$1.o" >/dev/null 2>&1
+  gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/g_$1.o" -o "$W/vf_$1.exe" 2>/dev/null; "$W/vf_$1.exe" >/dev/null 2>&1; local vf=$?
+  gcc "$W/svir_interp.o" "$W/g_$1.o" -o "$W/in_$1.exe" 2>/dev/null; "$W/in_$1.exe" >/dev/null 2>&1; local ir=$?
+  gcc "$W/svir_x86.o" "$W/g_$1.o" -o "$W/tx_$1.exe" 2>/dev/null; "$W/tx_$1.exe" > "$W/$1.s" 2>/dev/null
+  timeout 20 "$BOOT/sovas_main.exe" "$W/$1.s" > "$W/$1.o2" 2>/dev/null
+  timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/$1.o2" > "$W/$1.x86.exe" 2>/dev/null
+  timeout 10 "$W/$1.x86.exe" >/dev/null 2>&1; local xr=$?
+  gcc "$W/svir_wasm.o" "$W/g_$1.o" -o "$W/tw_$1.exe" 2>/dev/null; "$W/tw_$1.exe" > "$W/$1.wasm" 2>/dev/null
+  node "$S/run_wasm.mjs" "$W/$1.wasm" >/dev/null 2>&1; local wr=$?
+  echo "$vf $ir $xr $wr"
+}
+read -r pv pi px pw <<< "$(imp_arm test_import.c)"
+read -r tv ti tx tw <<< "$(imp_arm test_importtrap.c)"
+if [ "$pv" = "99" ] && [ "$pi" = "99" ] && [ "$px" = "99" ] && [ "$pw" = "99" ] && [ "$tv" = "99" ] && [ "$ti" = "198" ] && [ "$tx" = "198" ] && [ "$tw" = "1" ]; then
+  say "ccsv SEED-DDC : IMPORTS (0x8A) -- prescan_imports registers CALLED declared-not-defined prototypes (builtin names excluded by is_call_builtin); cfn emits [0x8A][len][name] decl bodies; ALL FIVE consumers know the rule (svir_verify:49 net-0, svir_dis skip, svir_interp UNRES_IMP->198, svir_x86 ExitProcess(198) stub, svir_wasm `unreachable` stub).  POSITIVE: an import-bearing module (scalar + sret-struct + call()[i] import shapes, guarded dead) builds+runs 99 on verify/interp/x86/wasm.  TRAP: an executed import call reads 198/198/1, never silent (pre-fix x86 executed the NAME BYTES and segfaulted).  Cross-module RESOLUTION is the P3 linker phase, not claimed."
+else say "FAIL imports (pos vf=$pv interp=$pi x86=$px wasm=$pw ; trap vf=$tv interp=$ti x86=$tx wasm=$tw)"; fail=1; fi
 if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ] && [ "$ri" = "ok" ] && [ "$rn" = "ok" ] && [ "$rr" = "ok" ] && [ "$rw" = "ok" ] && [ "$ra" = "ok" ]; then
   say "ccsv C TIERS : arrays+char+pointers + structs + typedef/union/p->f + enum/#define/typedef-ptr + #include + nested/diamond include-once + HEX/for/++/--/static/const/unsigned/stdint (test_real, from real iiis-0 gaps) -> sovereign x86 + wasm + verifier + gcc, all 99."
 else say "FAIL tiers: ptr=$rp struct=$rs td=$rt enum=$re include=$ri nest=$rn real=$rr"; fail=1; fi

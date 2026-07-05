@@ -14,9 +14,40 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 34 seed verify-failures (149 cleared, 81%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr feature COMPLETE (INC-1+2+3, all-4)
-Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
-emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+## Verified state: 183 → 14 seed verify-failures — lex.c AND cg_r3.c at STRUCTURAL ZERO; IMPORTS-ON PERMANENT; BOTH BOSSES CLOSED; fn-ptr COMPLETE
+Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 2 ·
+emit 3 · ast 3 · cg_r3 0 · parse 6** = **14 over 845 functions** (imports-ON counts each 0x8A import decl as a fn).
+**`lex.c` and `cg_r3.c` are at structural zero.** The pre-imports OFF floor history (23/488) is below.
+
+**IMPORTS-ON PERMANENT + call()[i] (2026-07-05, fix #30): floor 23→14 — cg_r3.c is the SECOND module at STRUCTURAL ZERO; the extern-call campaign RETIRED.**
+The parked rule ("re-enable with the downstream fixes for a NET drop") discharged by MEASUREMENT, not by building
+the predicted fixes: ON measured **16/845 before any new fix** vs OFF 23/488 — the parked 36-vs-28 numbers predate
+fix #29, whose reverse-loop guard was the ACTUAL blocker of the predicted `iii_token_t`-from-extern-sret exposure
+(those ~9 parser-core fns measure GREEN under ON; positive-armed: `_imp_sret.c` `# 4 0 0 0`+runs-99, and the old
+standing falsifier `_xc1.c` — RED `# 2 1 8 8` at OFF — is verify-clean with an honest 198 trap on its live path).
+What DID remain: (a) **call()[i]** (the UPDATE-61 gap; cg_r3's `iii_ast_source_buf(cg->ast)[name.offset+i]` at
+979/989/3332): eprim's fidx call path now handles a trailing `[` on a scalar-POINTER return (`fn_ret_psz/psg`
+mirror fn_retmask's walk; `T**` pointee=8B) → `+i*pointee`, typed load — defined AND import callees. Falsifier
+`_calli.c` RED (`# 4 2 8 8`, interp=1) → GREEN (`# 4 0 0 0`, interp=99); promoted `test_calli.c` (cfeat all-4:
+byte + u32-stride + expression-index value teeth). Struct-ptr `call()[i]` and `call()[i]=e` stores stay VISIBLY
+out of scope (dangle → verify-fail, never silent). (b) **the 0x8A rule in ALL FIVE consumers** — verify:49 + dis:34
+had it; added **svir_interp** (entry check → `UNRES_IMP` → sentinel **198**; pre-fix the import's NAME BYTES
+executed as opcodes), **svir_x86** (`ExitProcess(198)` stub; pre-fix the name bytes ASSEMBLED and SEGFAULTED —
+`_imp_trap.c` x86=139 — the silent-wrongness class in the flesh) and **svir_wasm** (`unreachable` stub +
+`[nl][name]` skips in every scanner: a name byte `'q'`(0x71)/`'s'`(0x73) forged a phantom putc import / phantom
+call_indirect type). **Additive proven**: HEAD-vs-new backends byte-identical `.s`/`.wasm` on import-free sha256
+(31340/2519). (c) **builtin-name exclusion in prescan_imports** (`is_call_builtin`, the 17 call-path-lowered
+names): a manual `int putchar(int);` (test_fnptr2.c) passed every registration guard and shipped a dead 0x8A that
+reshaped the module — caught by the fn-ptr gate's IC-composition tooth (x86=127/wasm=1), exactly the tooth's
+purpose. Durable gates wired into `run_ccsv.sh`: `test_import.c` (an import-bearing module — scalar + sret +
+call()[i] shapes guarded dead — must BUILD+RUN 99 on verify/interp/x86/wasm) + `test_importtrap.c` (an EXECUTED
+import call reads **198/198/1**, mirroring the OOB gate 199/199/1; every C path returns 99 so only a trap can
+read not-99). Gates: run_ccsv EXIT=0 (zero FAIL), fn-ptr gate ALL PASS, determinism byte-identical, 3 seed
+controls green. **The remaining 14, named**: **STDIO 6** (emit write_sanctum_script/render_witness/emit_link +
+ast walk_state_deserialize/serialize_buf/deserialize_buf — the tmpfile/ftell/fwrite/FILE* sovereign-runtime
+campaign); **parse 6** (witness_commit, recover_follow, parse_primary, parse_pattern, grammar_mhash,
+parse_unregister — fresh decode now that the extern-call mask is off); **sema 2** (decode_hexad_args = the
+struct-by-value-params tail; aggregate_dynamic_impact — did NOT clear under ON, fresh decode).
 
 **EMPTY for-increment clause (2026-07-05, fix #29): floor 28→23 from a ONE-LINE guard — sema 4→3, parse 16→12.**
 `for (size_t i = st->count; i-- > 0; )` — the reverse-loop idiom (the decrement lives in the COND; the incr

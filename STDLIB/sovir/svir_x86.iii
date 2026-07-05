@@ -56,6 +56,11 @@ fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
 }
 fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
     CS_N = 0u32
+    if blen > 0u64 { let ip0 : *u8 = (base + boff) as *u8  if (ip0[0u64] as u32) == 0x8Au32 {   /* IMPORT decl [0x8A][nl][name] (svir_verify:49): emit a TRAP STUB, never the name bytes as instructions (pre-fix those ASSEMBLED and segfaulted -- the _imp_trap.c x86=139 reading).  Reaching the stub = a single-file execution of an unresolved cross-module call -> ExitProcess(198), the UNRES_IMP sentinel svir_interp returns; resolution is the P3 linker's job.  __svci's jz-chain + direct CALLs both land here honestly. */
+        if fidx == 0u32 { ez(".global main\nmain:\n~" as u64) } else { ez("Lfn~" as u64)  edec(fidx as u64)  ez(":\n~" as u64) }
+        ez("andq $-16, %rsp\nsubq $32, %rsp\nmovq $198, %rcx\ncallq ExitProcess\n~" as u64)
+        return
+    } }
     if fidx == 0u32 { ez(".global main\nmain:\n~" as u64) } else { ez("Lfn~" as u64)  edec(fidx as u64)  ez(":\n~" as u64) }
     let ml : u32 = max_local(base, boff, blen)  let need : u32 = ((((16u32 + (8u32*(ml+1u32))) + 64u32) + 15u32) / 16u32) * 16u32   /* locals region (16-aligned) + slack */
     let mut fsz : u32 = need  if fsz < 512u32 { fsz = 512u32 }   /* never below the historical 512 */
@@ -176,6 +181,7 @@ fn mod_has_print(base: u64) -> u32 {
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
             if o == 0x73u32 { s = s + 1u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x71 ('q') must not read as PRINT_CHAR (svir_dis:34) */
         }
         off = off + 4u64 + blen
         i = i + 1u32
@@ -201,6 +207,7 @@ fn mod_has_ci(base: u64) -> u32 {
             if o == 0x50u32 { s = s + 1u64 }
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x73 ('s') must not read as CALL_INDIRECT */
         }
         off = off + 4u64 + blen
         i = i + 1u32
@@ -231,6 +238,7 @@ fn mod_has_mem(base: u64) -> u32 {
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
             if o == 0x73u32 { s = s + 1u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte in 0x80..0x89 must not read as a memory op */
         }
         off = off + 4u64 + blen
         i = i + 1u32

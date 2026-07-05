@@ -53,6 +53,10 @@ fn c_leb_s64(v0: i64) {
 }
 
 fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
+    if blen > 0u64 { let ip0 : *u8 = (base + boff) as *u8  if (ip0[0u64] as u32) == 0x8Au32 {   /* IMPORT decl [0x8A][nl][name] (svir_verify:49): emit a TRAP-STUB body -- 0 locals ; `unreachable` ; end.  `unreachable` is stack-polymorphic so the stub validates against the fn's declared type; executing it (a single-file call of an unresolved cross-module fn) is a native RuntimeError (node rc=1), mirroring the CALL_INDIRECT OOB gate.  Walking the name bytes instead registered PHANTOM call_indirect arg-counts (a name byte 0x73 's') and produced an invalid module (the _imp_dead.c wasm=1 pre-fix reading). */
+        c_emit(0x00u32)  c_emit(0x00u32)  c_emit(0x0Bu32)
+        return
+    } }
     let mut nloc : u32 = params
     let mut s : u64 = 0u64
     while s < blen {
@@ -136,6 +140,7 @@ fn body_has_print(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x71 ('q') must not force a phantom putc import (IC) */
     }
     return 0u32
 }
@@ -156,6 +161,7 @@ fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte in 0x80..0x89 must not read as a memory op */
     }
     return 0u32
 }

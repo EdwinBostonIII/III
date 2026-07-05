@@ -293,7 +293,7 @@ fn ppc_num() -> i64 { let mut v:i64=0i64  let c0:u32=sb(PPC)  let mut hf:u32=0u3
 fn ppc_ident() -> i64 { let o:u64=PPC  let mut g:u32=1u32  while g==1u32 { if PPC>=SLEN {g=0u32} else { if idc(sb(PPC))==1u32 {PPC=PPC+1u64} else {g=0u32} } }  let l:u32=(PPC-o) as u32
     let mut k:u32=0u32  while k<CN { if neq(CNO[k as u64],CNL[k as u64],o as u32,l)==1u32 {return CNV[k as u64]}  k=k+1u32 }  return 0i64 }
 fn ppc_peekop() -> u32 { if PPC>=SLEN {return 0u32}  let c:u32=sb(PPC)  let c2:u32=sb(PPC+1u64)
-    if c==43u32 {return 17u32}  if c==45u32 {return 33u32}  if c==42u32 {return 49u32}  if c==47u32 {return 65u32}  if c==37u32 {return 81u32}
+    if c==43u32 {return 17u32}  if c==45u32 {return 33u32}  if c==42u32 {return 49u32}  if c==47u32 { if c2==42u32 {return 0u32}  if c2==47u32 {return 0u32}  return 65u32 }  if c==37u32 {return 81u32}   /* slash-star or slash-slash after the value = a TRAILING COMMENT, not division -- ast.h's `#define III_AST_POOL_SMALL 1u` with a trailing block comment read as `1u DIV star...` and the div-guard yielded 0, collapsing every pool constant (the _astharness divergence's root) */
     if c==60u32 { if c2==60u32 {return 98u32} }  if c==62u32 { if c2==62u32 {return 114u32} }
     if c==38u32 { if c2!=38u32 {return 129u32} }  if c==124u32 { if c2!=124u32 {return 145u32} }  if c==94u32 {return 161u32}
     return 0u32 }

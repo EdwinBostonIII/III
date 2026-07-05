@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# run_residue_real.sh -- the REAL-SEED residue ratchet (2026-07-04): the crush ladder against a REAL C file.
-# The toy corpus (seed_loops_corpus.c) witnesses each rung; THIS gate witnesses the AT-SCALE truth: ccsv
-# compiles sha256.c (real crypto C) to SVIR and the whole-module walk records every loop's verdict.  Measured
-# at introduction: loops=4 crushed=0 deferred=4 -- every sha256 loop is a MEMORY-fragment loop (w[] schedule,
-# rounds, byte packing), and the scalar ladder's interpreter honestly refused memory opcodes BEFORE any fit,
-# so the whole population was residue.  SAME DAY, the STORE rung landed and this gate did its job: the
-# M[i]=0 loop (loop@458) flipped to CRUSHED(sto) (stride 4, value 0, width 4 -- the affine constant-write
-# family, three miters over the twice-composed denotation), the fingerprint MOVED, the gate ABORTED, and
-# the reseal was the authorized act.  The remaining residue: the W[t]=M[t] copy (the load boundary -- the
-# named next rung -- LANDED same day: loop@604 CRUSHED(cpy), the width-masked pass-through certificate)
-# and the data-dependent schedule/rounds loops (honest residue).  The gate pins accum=0.
-# --reseal authorizes a new golden; an optional 2nd arg swaps the C seed.
+# run_residue_real.sh -- the REAL-SEED residue ratchet (2026-07-04): the crush ladder against the WHOLE
+# real-C population in sovir/.  The toy corpus witnesses each rung; THIS gate witnesses the AT-SCALE truth:
+# ccsv compiles every real C file below to SVIR and the whole-module walk records every loop's verdict.
+#
+# History of this gate doing its job (each drift -> BUILD ABORT -> authorized reseal):
+#   intro     : sha256.c only, 4/4 loops DEFER (memory fragment untouched)      golden 45b11a82e112591e
+#   STORE rung: M[i]=0    -> CRUSHED(sto) s4 v0 w4                              golden d82d059e9b1ca497
+#   COPY rung : W[t]=M[t] -> CRUSHED(cpy) s4 d1000... width-masked pass-through golden 2a822ee9954efc29
+#   population: the gate now covers EVERY ccsv-compilable real C file; the golden is the per-file hash
+#               MANIFEST (one line per file), so a drift names exactly WHICH file's ledger moved.
+#
+# The schedule/rounds loops are PERMANENT honest residue: cryptographic diffusion has no low-degree
+# closed form (a "crushable" SHA round would be a break, not a rung).  The gate pins accum=0.
+# --reseal authorizes a new golden.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/_seqprobe"; mkdir -p "$W"
-GOLDEN="$S/_residue_real.golden"; MANIFEST="$W/_residue_real.txt"
+GOLDEN="$S/_residue_real.golden"; SUMMARY="$W/_residue_real_summary.txt"
 RESEAL=0; [ "${1:-}" = "--reseal" ] && RESEAL=1
-SRC="${2:-$S/sha256.c}"
+FILES="sha256.c aes128.c chacha20.c hmac_sha256.c sha256_full.c sha256_generic.c ceiling_sha_core.c"
 say(){ echo "[residue-real] $*"; }
 "$IIIS" "$S/ccsv.iii" --compile-only --out "$W/ccsv.o" >/dev/null 2>&1 || { say "FAIL ccsv"; exit 2; }
 gcc "$W/ccsv.o" -o "$W/ccsv.exe" 2>/dev/null
 "$IIIS" "$ROOT/STDLIB/iii/numera/ser_antiunify.iii" --compile-only --out "$W/au.o" >/dev/null 2>&1
-cp "$W/ccsv.exe" "$W/ccsv.rr.exe"; timeout 60 "$W/ccsv.rr.exe" "$SRC" > "$W/real_svir.iii" 2>/dev/null; rm -f "$W/ccsv.rr.exe"
-"$IIIS" "$W/real_svir.iii" --compile-only --out "$W/real_svir.o" >/dev/null 2>&1 || { say "FAIL ccsv SVIR"; exit 2; }
 cat > "$W/real_gate.c" <<'GEOF'
 #include <stdio.h>
 extern unsigned long long svir_ptr(); extern unsigned long long svir_len();
@@ -40,12 +40,25 @@ int main(){
   return 0;
 }
 GEOF
-gcc "$W/real_gate.c" "$W/real_svir.o" "$W/au.o" "$W/causal.o" "$W/absint.o" "$W/sks.o" "$W/bb.o" "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$W/rgate.exe" 2>/dev/null || { say "FAIL link"; exit 2; }
-cp "$W/rgate.exe" "$W/rgate.run.exe"; timeout 120 "$W/rgate.run.exe" > "$MANIFEST" 2>/dev/null; rm -f "$W/rgate.run.exe"
-HASH=$(grep REPORT_HASH "$MANIFEST" | head -1 | cut -d= -f2)
-cat "$MANIFEST"
-if [ $RESEAL -eq 1 ]; then echo "$HASH" > "$GOLDEN"; say "RESEALED golden=$HASH (authorized)"; exit 0; fi
-if [ ! -f "$GOLDEN" ]; then echo "$HASH" > "$GOLDEN"; say "SEALED (first run) golden=$HASH"; exit 0; fi
-GOLD=$(cat "$GOLDEN")
-if [ "$HASH" = "$GOLD" ]; then say "REAL-SEED RESIDUE STABLE $HASH -- the certified fraction (M[i]=0 CRUSHED(sto), W[t]=M[t] CRUSHED(cpy)) frozen; the data-dependent residue witnessed."; exit 0
-else say "REAL-SEED RESIDUE DRIFT: $HASH != golden $GOLD -- a real-seed loop verdict CHANGED (a rung reached the real seed, or a regression). BUILD ABORT."; exit 1; fi
+: > "$SUMMARY"
+for f in $FILES; do
+    cp "$W/ccsv.exe" "$W/ccsv.rr.exe"; timeout 60 "$W/ccsv.rr.exe" "$S/$f" > "$W/real_svir.iii" 2>/dev/null; rm -f "$W/ccsv.rr.exe"
+    "$IIIS" "$W/real_svir.iii" --compile-only --out "$W/real_svir.o" >/dev/null 2>&1 || { say "FAIL ccsv SVIR for $f"; exit 2; }
+    gcc "$W/real_gate.c" "$W/real_svir.o" "$W/au.o" "$W/causal.o" "$W/absint.o" "$W/sks.o" "$W/bb.o" "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$W/rgate.exe" 2>/dev/null || { say "FAIL link for $f"; exit 2; }
+    cp "$W/rgate.exe" "$W/rgate.run.exe"; timeout 240 "$W/rgate.run.exe" > "$W/_rr_one.txt" 2>/dev/null; rc=$?; rm -f "$W/rgate.run.exe"
+    if [ $rc -ne 0 ]; then say "FAIL crush run for $f (rc=$rc)"; exit 2; fi
+    echo "== $f =="
+    cat "$W/_rr_one.txt"
+    H=$(grep REPORT_HASH "$W/_rr_one.txt" | head -1 | cut -d= -f2)
+    L=$(grep "^loops=" "$W/_rr_one.txt" | head -1)
+    echo "$f $H $L" >> "$SUMMARY"
+done
+if [ $RESEAL -eq 1 ]; then cp "$SUMMARY" "$GOLDEN"; say "RESEALED golden manifest (authorized):"; sed 's/^/[residue-real]   /' "$GOLDEN"; exit 0; fi
+if [ ! -f "$GOLDEN" ]; then cp "$SUMMARY" "$GOLDEN"; say "SEALED (first run) golden manifest:"; sed 's/^/[residue-real]   /' "$GOLDEN"; exit 0; fi
+if cmp -s "$SUMMARY" "$GOLDEN"; then
+    say "REAL-SEED RESIDUE STABLE ($(wc -l < "$SUMMARY" | tr -d ' ') files) -- the certified fraction frozen, the data-dependent residue witnessed."
+    exit 0
+fi
+say "REAL-SEED RESIDUE DRIFT -- a real-seed ledger CHANGED (a rung reached a file, or a regression).  BUILD ABORT.  Diff:"
+diff "$GOLDEN" "$SUMMARY" | sed 's/^/[residue-real]   /'
+exit 1

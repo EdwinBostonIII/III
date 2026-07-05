@@ -1,1 +1,7 @@
-2a822ee9954efc29
+sha256.c 2a822ee9954efc29 loops=4 crushed=2 deferred=2
+aes128.c 579cf89ba7adb45a loops=6 crushed=1 deferred=5
+chacha20.c cf4875a201ebb31e loops=3 crushed=1 deferred=2
+hmac_sha256.c 7e47a8bf743d41c1 loops=10 crushed=3 deferred=7
+sha256_full.c a5b70c574e2013b8 loops=3 crushed=1 deferred=2
+sha256_generic.c 3bac471f2bb49550 loops=3 crushed=1 deferred=2
+ceiling_sha_core.c e75714ef39fdd24e loops=4 crushed=1 deferred=3

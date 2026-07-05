@@ -18,6 +18,20 @@ path is sovereign at the bottom (no gcc compiling the seed).
 Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
 
+**THE IMPORTS RE-ENABLE EXPERIMENT (2026-07-05, measured and parked): ON = 36/845 vs OFF = 28/488 — still net +8; the parked rule holds.**
+`prescan_imports()` (complete since the recovery set: CALLED, declared-not-defined prototypes register as
+IMPORTs; cfn emits `[0x8A][len][name]` declaration bodies, link-by-name = P3; calls flow the normal fidx path)
+was WIRED-OFF at floor-34 because enabling it exposed downstream struct-value-from-call gaps (34→43). After
+#26/#27/#28 the experiment was RE-RUN: **ON clears** parse_break/continue/return/use_decl/parse_stmt + 1 sema fn
+(their `iii_ast_*` calls become real — the fn68 dropped-args trace class is GONE under ON) **but newly exposes**
+~9 parser-core fns (arg_list/postfix/cast/expr_prec/param_list/fn_decl/bracket_init/struct_decl/type_decl/
+schema_decl/parse_module joined the fail set) — the `iii_token_t`-by-value-from-extern-sret family. Net 36 vs 28
+→ OFF restored (comment at the pipeline line carries the numbers). **The next stroke is now precisely scoped**:
+fix the struct-value-from-call class under ON until ON is a NET drop, then the re-enable is permanent — that
+stroke ALSO retires the biggest remaining block (parse) since its 16-at-OFF are dominated by the same dropped-
+call masking. Standing falsifier: extern proto + call + `->field` store/read (RED at OFF: args emitted then
+DROPPED, no CALL — `# 2 1 8 8`).
+
 **NESTED-BRACE struct-local init (2026-07-05, fix #28): floor 33→28 — ast 8→3 in one stroke (the zipper/walk cluster, the decoded target).**
 `iii_zipper_collect_t c = { {0}, 0 };` (ast.c:2033 and the walk_state/serialize family) — the brace-init
 struct-local walker fed the sub-`{` to ebin (desync → rc=8). Seed census measured FIRST: exactly ONE nested

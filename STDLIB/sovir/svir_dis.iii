@@ -30,6 +30,7 @@ fn step(base: u64, boff: u64) {
     if op == 0x51u32 { M_P = M_P + 1u64  M_DEPTH = M_DEPTH - 1i64  return }      /* BR_IF */
     if op == 0x60u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* RETURN */
     if op == 0x70u32 { let ac:u32=vb(base, boff + M_P + 1u64)  M_P = M_P + 2u64  M_DEPTH = M_DEPTH - (ac as i64) + 1i64  return }   /* CALL */
+    if op == 0x73u32 { let ac:u32=vb(base, boff + M_P)  M_P = M_P + 1u64  M_DEPTH = M_DEPTH - (ac as i64)  return }   /* CALL_INDIRECT: pops index + ac args, pushes result -> net -ac */
     if op == 0x71u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* PRINT_CHAR */
     if op == 0x72u32 { M_DEPTH = M_DEPTH - 1i64  return }                        /* DROP */
     if op == 0x81u32 { M_DEPTH = M_DEPTH - 2i64  return }                        /* STORE8 */

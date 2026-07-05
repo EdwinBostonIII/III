@@ -1,7 +1,11 @@
 /* svir_wasm.iii -- TRANSLATOR #2 (SVIR v1): a multi-function .wasm module to stdout.
  * v1 module: [u8 func_count] then per func [u8 params][u8 nresults][u16 LE body_len][body].
  * PRINT_CHAR -> call an imported env.putc (the host does I/O); imports shift the func index space, so a module
- * that prints gets import_count=1 and every CALL/main/export index is offset by 1.  Independent of svir_x86. */
+ * that prints gets import_count=1 and every CALL/main/export index is offset by 1.  Independent of svir_x86.
+ * CALL_INDIRECT -> i32.wrap_i64 (the popped SVIR index) + native call_indirect over a funcref table whose
+ * slot k holds defined func k (wasm index k+IC) -- SVIR's index space verbatim, so the engine's own bounds
+ * check traps an OOB index natively; the per-arg-count (ac x i64)->i64 types are appended after the per-fn
+ * types at indices IC+FN_N+j.  Table/elem/extra types are emitted ONLY when a 0x73 occurs (byte-stable). */
 module svir_wasm
 
 extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
@@ -21,6 +25,15 @@ var IC : u32 = 0u32                 /* import count (1 if any PRINT_CHAR -> env.
 
 var CBUF : [u8; 4194304]            /* all functions' wasm bodies concatenated -- seed modules reach 100+ fns */
 var CLEN : u64 = 0u64
+/* CALL_INDIRECT support: the distinct arg-counts seen at 0x73 sites (first-seen order, deterministic).
+ * ci type j lives at type index IC+FN_N+j; ac is a u8 so 256 slots is total (no silent cap). */
+var CI_ACS : [u32; 256]
+var CI_NAC : u32 = 0u32
+fn ci_type_pos(ac: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < CI_NAC { if CI_ACS[i as u64] == ac { return i }  i = i + 1u32 }
+    CI_ACS[CI_NAC as u64] = ac  let s : u32 = CI_NAC  CI_NAC = CI_NAC + 1u32  return s
+}
 var FN_COFF : [u64; 4096]
 var FN_CLEN : [u64; 4096]
 fn c_emit(byte: u32) { if CLEN < 4194303u64 { CBUF[CLEN] = (byte & 0xFFu32) as u8  CLEN = CLEN + 1u64 } }
@@ -50,6 +63,7 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if o == 0x50u32 { s = s + 1u64 }
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
     }
     let extra : u32 = nloc - params
     if extra == 0u32 { c_emit(0x00u32) } else { c_emit(0x01u32)  c_leb_u(extra as u64)  c_emit(0x7Eu32) }
@@ -92,6 +106,8 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  p = p + 1u64  c_emit(0xA7u32)  c_emit(0x0Du32)  c_leb_u(dp[0u64] as u64) }
         if op == 0x60u32 { c_emit(0x0Fu32) }
         if op == 0x70u32 { let fp : *u8 = (base + boff + p) as *u8  let f : u32 = fp[0u64] as u32  p = p + 2u64  c_emit(0x10u32)  c_leb_u((f + IC) as u64) }   /* CALL -> call (funcidx + imports) */
+        if op == 0x73u32 { let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32  p = p + 1u64   /* CALL_INDIRECT ac : SVIR index on TOP (i64) */
+            c_emit(0xA7u32)  c_emit(0x11u32)  c_leb_u((FN_N + IC + ci_type_pos(ac)) as u64)  c_emit(0x00u32) }    /* i32.wrap_i64 ; call_indirect (ac-type) (table 0) -- engine bounds-check traps OOB */
         if op == 0x71u32 { c_emit(0x10u32)  c_leb_u(0u64) }   /* PRINT_CHAR -> call $putc (import 0) */
         if op == 0x72u32 { c_emit(0x1Au32) }                  /* DROP */
         if op == 0x80u32 { c_emit(0xA7u32)  c_emit(0x31u32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* LOAD8: i32.wrap_i64 ; i64.load8_u a0 o0 */
@@ -119,6 +135,7 @@ fn body_has_print(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x50u32 { s = s + 1u64 }
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
     }
     return 0u32
 }
@@ -138,6 +155,7 @@ fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x50u32 { s = s + 1u64 }
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
     }
     return 0u32
 }
@@ -176,25 +194,36 @@ fn main() -> u64 {
     if off < total { let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64) }
     if dlen > 0u64 { UM = 1u32 }
 
-    /* build every function body into CBUF */
+    /* build every function body into CBUF (registers every CALL_INDIRECT arg-count into CI_ACS) */
     CLEN = 0u64
+    CI_NAC = 0u32
     let mut f : u32 = 0u32
     while f < FN_N { FN_COFF[f as u64] = CLEN  build_body(base, FN_BOFF[f as u64], FN_BLEN[f as u64], FN_PARAMS[f as u64])  FN_CLEN[f as u64] = CLEN - FN_COFF[f as u64]  f = f + 1u32 }
 
     /* ---- emit module ---- */
     pc(0x00u32) pc(0x61u32) pc(0x73u32) pc(0x6Du32) pc(0x01u32) pc(0x00u32) pc(0x00u32) pc(0x00u32)
-    /* Type section: [putc (i64)->() if IC] + one type per function */
-    let ntypes : u64 = (FN_N as u64) + (IC as u64)
+    /* Type section: [putc (i64)->() if IC] + one type per function + one (ac x i64)->i64 per distinct
+     * CALL_INDIRECT arg-count (indices IC+FN_N+j -- what build_body's call_indirect references) */
+    let ntypes : u64 = (FN_N as u64) + (IC as u64) + (CI_NAC as u64)
     let mut tlen : u64 = leblen_u(ntypes)
     if IC == 1u32 { tlen = tlen + 4u64 }                      /* 0x60 01 7e 00 */
     let mut t : u32 = 0u32
     while t < FN_N { tlen = tlen + 1u64 + leblen_u(FN_PARAMS[t as u64] as u64) + (FN_PARAMS[t as u64] as u64) + 2u64  t = t + 1u32 }
+    t = 0u32
+    while t < CI_NAC { tlen = tlen + 1u64 + leblen_u(CI_ACS[t as u64] as u64) + (CI_ACS[t as u64] as u64) + 2u64  t = t + 1u32 }
     pc(0x01u32)  pleb_u(tlen)  pleb_u(ntypes)
     if IC == 1u32 { pc(0x60u32)  pc(0x01u32)  pc(0x7Eu32)  pc(0x00u32) }   /* putc: (i64)->() */
     t = 0u32
     while t < FN_N {
         pc(0x60u32)  pleb_u(FN_PARAMS[t as u64] as u64)
         let mut a : u32 = 0u32  while a < FN_PARAMS[t as u64] { pc(0x7Eu32)  a = a + 1u32 }
+        pc(0x01u32)  pc(0x7Eu32)
+        t = t + 1u32
+    }
+    t = 0u32
+    while t < CI_NAC {
+        pc(0x60u32)  pleb_u(CI_ACS[t as u64] as u64)
+        let mut a2 : u32 = 0u32  while a2 < CI_ACS[t as u64] { pc(0x7Eu32)  a2 = a2 + 1u32 }
         pc(0x01u32)  pc(0x7Eu32)
         t = t + 1u32
     }
@@ -205,6 +234,12 @@ fn main() -> u64 {
     let mut g : u32 = 0u32  while g < FN_N { flen = flen + leblen_u((g + IC) as u64)  g = g + 1u32 }
     pc(0x03u32)  pleb_u(flen)  pleb_u(FN_N as u64)
     g = 0u32  while g < FN_N { pleb_u((g + IC) as u64)  g = g + 1u32 }
+    /* Table section (id 4): one funcref table, min=max=FN_N -- slot k = defined func k (SVIR's index space
+     * verbatim; the wasm engine's own bounds check traps an OOB indirect index).  Only when 0x73 occurs. */
+    if CI_NAC > 0u32 {
+        let tblen : u64 = 3u64 + (2u64 * leblen_u(FN_N as u64))
+        pc(0x04u32)  pleb_u(tblen)  pleb_u(1u64)  pc(0x70u32)  pc(0x01u32)  pleb_u(FN_N as u64)  pleb_u(FN_N as u64)
+    }
     /* Memory section (id 5): 64 pages (4 MiB -- static data + bump heap).  Global section (id 6): one mutable i64 scratch. */
     if UM == 1u32 {
         pc(0x05u32) pc(0x03u32) pc(0x01u32) pc(0x00u32) pc(0x40u32)
@@ -212,6 +247,17 @@ fn main() -> u64 {
     }
     /* Export section: "main" -> func index IC (defined func 0, after imports) */
     pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32)  pleb_u(IC as u64)
+    /* Elem section (id 9): one active segment filling table 0 slots 0..FN_N-1 with defined funcs IC..IC+FN_N-1
+     * (SVIR fidx k -> wasm func k+IC, registration order verbatim = index-space agreement).  Only when 0x73 occurs. */
+    if CI_NAC > 0u32 {
+        let mut eln : u64 = 5u64 + leblen_u(FN_N as u64)          /* count=1 ; flags ; i32.const 0 ; end ; vec-count */
+        let mut e : u32 = 0u32
+        while e < FN_N { eln = eln + leblen_u((e + IC) as u64)  e = e + 1u32 }
+        pc(0x09u32)  pleb_u(eln)  pleb_u(1u64)
+        pc(0x00u32)  pc(0x41u32)  pc(0x00u32)  pc(0x0Bu32)  pleb_u(FN_N as u64)
+        e = 0u32
+        while e < FN_N { pleb_u((e + IC) as u64)  e = e + 1u32 }
+    }
     /* Code section */
     let mut clen : u64 = leblen_u(FN_N as u64)
     let mut h : u32 = 0u32

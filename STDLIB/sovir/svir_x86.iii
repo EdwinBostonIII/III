@@ -1,6 +1,9 @@
 /* svir_x86.iii -- TRANSLATOR #1 (SVIR v1): a multi-function x86-64 AT&T .s to stdout.
  * Stack machine on the native stack; locals at -(16+8*slot)(%rbp); -8(%rbp) reserved as the call rsp-save slot.
  * Win64 call lowering for CALL: args -> %rcx/%rdx/%r8/%r9, 16-byte align + 32B shadow, then restore the eval stack.
+ * CALL_INDIRECT: pop the runtime fn-index to %r10, set args up exactly like CALL, `callq __svci` -- the
+ * per-module switchboard (cmpq $k,%r10 ; jz <fn_k> chain) tail-jumps to the target, so it sees a direct
+ * call's stack; no match falls through to the OOB trap ExitProcess(199) (matches svir_interp's sentinel).
  * Func 0 -> `main` (the entry); funcs 1.. -> `Lfn<idx>` (local).  Assembled sovereignly by sovas+sovld.
  * Mnemonics matched to sovas Tier-1: retq / .global / callq. */
 module svir_x86
@@ -47,6 +50,7 @@ fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x50u32 { s = s + 1u64 }
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
     }
     return mx
 }
@@ -136,6 +140,20 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
             ez("callq ~" as u64)  if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
             ez("\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)
         }
+        if op == 0x73u32 {                                                    /* CALL_INDIRECT argcount : runtime fn-index on the eval-stack TOP (above the args) */
+            let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 1u64
+            ez("popq %r10\n~" as u64)                                         /* index -> %r10 ; the arg setup below never touches r10, and __svci reads it */
+            /* after the pop the stack is exactly a CALL's entry state (arg_{ac-1} on top) -- the setup is byte-for-byte CALL's */
+            ez("movq %rsp, %r11\nleaq ~" as u64)  edec((8u32*ac) as u64)  ez("(%rsp), %rax\nmovq %rax, -8(%rbp)\nandq $-16, %rsp\n~" as u64)
+            let mut stackargs:u32=0u32  if ac>4u32 { stackargs=ac-4u32 }  let fsz:u32=(((32u32+(8u32*stackargs))+15u32)/16u32)*16u32
+            ez("subq $~" as u64)  edec(fsz as u64)  ez(", %rsp\n~" as u64)
+            let mut nreg:u32=ac  if nreg>4u32 {nreg=4u32}  let mut j:u32=0u32
+            while j<nreg { ez("movq ~" as u64)  edec((8u32*(ac-1u32-j)) as u64)  ez("(%r11), ~" as u64)  arg_reg(j)  ez("\n~" as u64)  j=j+1u32 }
+            let mut i:u32=4u32
+            while i<ac { ez("movq ~" as u64)  edec((8u32*(ac-1u32-i)) as u64)  ez("(%r11), %rax\nmovq %rax, ~" as u64)  edec((32u32+(8u32*(i-4u32))) as u64)  ez("(%rsp)\n~" as u64)  i=i+1u32 }
+            ez("callq __svci\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)     /* __svci jz-dispatches on %r10 (tail-jump: the target sees a direct call's stack) */
+        }
     }
 }
 
@@ -151,6 +169,32 @@ fn mod_has_print(base: u64) -> u32 {
         while s < blen {
             let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
             if o == 0x71u32 { return 1u32 }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }
+            if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }
+            if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }
+            if o == 0x73u32 { s = s + 1u64 }
+        }
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* does the module use CALL_INDIRECT anywhere? -> emit the __svci switchboard */
+fn mod_has_ci(base: u64) -> u32 {
+    let hp : *u8 = base as *u8  let nf : u32 = hp[0u64] as u32
+    let mut off : u64 = 1u64  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x73u32 { return 1u32 }
             if o == 0x01u32 { s = s + 8u64 }
             if o == 0x10u32 { s = s + 1u64 }
             if o == 0x11u32 { s = s + 1u64 }
@@ -186,6 +230,7 @@ fn mod_has_mem(base: u64) -> u32 {
             if o == 0x50u32 { s = s + 1u64 }
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
+            if o == 0x73u32 { s = s + 1u64 }
         }
         off = off + 4u64 + blen
         i = i + 1u32
@@ -213,6 +258,21 @@ fn main() -> u64 {
     /* the byte-output helper: __putc(char in %rcx) -> GetStdHandle(-11) + WriteFile (kernel32, raw bytes) */
     if mod_has_print(base) == 1u32 {
         ez("__putc:\npushq %rbp\nmovq %rsp, %rbp\nsubq $64, %rsp\nmovb %cl, -1(%rbp)\nmovq $-11, %rcx\ncallq GetStdHandle\nmovq %rax, %rcx\nleaq -1(%rbp), %rdx\nmovq $1, %r8\nleaq -16(%rbp), %r9\nxorl %eax, %eax\nmovq %rax, 32(%rsp)\ncallq WriteFile\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64)
+    }
+    /* the CALL_INDIRECT switchboard: fn-index in %r10 (call-clobbered, never an arg reg), args already in
+     * Win64 position.  jz = a TAIL-jump, so the dispatched target sees exactly a direct call's stack (the
+     * caller's `callq __svci` return address on top).  An index matching NO function falls through -> the
+     * OOB trap ExitProcess(199), the same sentinel svir_interp returns (its :123 comment names this gate). */
+    if mod_has_ci(base) == 1u32 {
+        ez("__svci:\n~" as u64)
+        let mut k : u32 = 0u32
+        while k < nfunc {
+            ez("cmpq $~" as u64)  edec(k as u64)  ez(", %r10\njz ~" as u64)
+            if k == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(k as u64) }
+            ez("\n~" as u64)
+            k = k + 1u32
+        }
+        ez("andq $-16, %rsp\nsubq $32, %rsp\nmovq $199, %rcx\ncallq ExitProcess\n~" as u64)
     }
     /* SVIR linear memory (64 KiB).  A trailing data section [u16 len][bytes] (after the last function) initialises
      * svir_mem byte-packed (.data); else a zero .bss. */

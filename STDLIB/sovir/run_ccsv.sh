@@ -46,7 +46,9 @@ if [ $bv -eq 99 ] && [ "$gold" = "YES" ] && [ "$gccm" = "YES" ]; then
 else say "FAIL bignum: exit=$bv golden=$gold gcc=$gccm"; fail=1; fi
 
 # C feature tiers: compile a .c via ccsv -> SVIR -> sovereign x86 + wasm, verifier-accepted, gcc-agreed (all 99).
-cfeat(){  # $1 = test file basename (in $S)
+cfeat(){  # $1 = test file basename (in $S).  Artifacts rm -f'd first: a failed producer must yield a
+          # MISSING artifact (rc 127), never a stale green from a prior run (the stale-exe mask class).
+  rm -f "$W/vf_$1.exe" "$W/tx_$1.exe" "$W/$1.s" "$W/$1.o2" "$W/$1.x86.exe" "$W/tw_$1.exe" "$W/$1.wasm" "$W/gcc_$1.exe"
   "$W/ccsv.exe" "$S/$1" > "$W/g_$1.iii" 2>/dev/null
   "$IIIS" "$W/g_$1.iii" --compile-only --out "$W/g_$1.o" >/dev/null 2>&1
   gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/g_$1.o" -o "$W/vf_$1.exe" 2>/dev/null; "$W/vf_$1.exe" >/dev/null 2>&1; local vf=$?
@@ -131,6 +133,8 @@ if [ "$cc" = "ok" ]; then say "*** ccsv CRYPTO BREADTH : ChaCha20 (RFC 8439 bloc
 if [ "$hm" = "ok" ]; then say "*** ccsv CRYPTO COMPOSITION : HMAC-SHA256 (RFC 2104) in C -> ccsv -> SOVEREIGN x86 + wasm + verifier + gcc, all 99 == the RFC 4231 #2 vector (5bdcc146...64ec3843).  COMPOSES the sovereign SHA-256 into a real keyed MAC -- proves TRUE BYTE BUFFERS: uint8_t arrays (stride-1) + uint8_t* byte pointers + array->pointer decay, byte data flowing through functions. ***"; else say "FAIL CRYPTO-COMPOSITION hmac: $hm"; fail=1; fi
 aes=$(cfeat aes128.c)
 if [ "$aes" = "ok" ]; then say "*** ccsv BLOCK CIPHER : AES-128 (FIPS-197) in C -> ccsv -> SOVEREIGN x86 + wasm + verifier + gcc, all 99 == the FIPS-197 C.1 vector (69c4e0d8...70b4c55a).  Completes the SYMMETRIC SUITE (hash+stream+MAC+block); exercises a 256-byte S-box TABLE (byte-array initializer + lookup by computed index), GF(2^8) MixColumns, the key schedule. ***"; else say "FAIL BLOCK-CIPHER aes128: $aes"; fail=1; fi
+rf1=$(cfeat test_fnptr.c); rf2=$(cfeat test_fnptr2.c)
+if [ "$rf1" = "ok" ] && [ "$rf2" = "ok" ]; then say "ccsv SEED-DDC : FUNCTION POINTERS all-4 (INC-3) -- fn-name-as-value + indirect call of a fn-ptr local/param (CALL_INDIRECT) + field-indirect statement calls (G.audit_fn(...); / st->sink(...);) + 8B fn-ptr typedef fields, on the SOVEREIGN backends: x86 = __svci switchboard (cmpq/jz tail-dispatch, OOB -> ExitProcess(199)) ; wasm = native call_indirect over a funcref table (slot k = func k+IC, OOB = engine trap).  add/sub INDEX-SPACE-AGREEMENT teeth run on every executor; test_fnptr2's putchar pins the IC=1 import-shift composition.  Deeper teeth in run_fnptr_gate.sh (svir_interp arm + OOB trap vehicle)."; else say "FAIL fn-ptr: inc1=$rf1 inc2=$rf2"; fail=1; fi
 if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ] && [ "$ri" = "ok" ] && [ "$rn" = "ok" ] && [ "$rr" = "ok" ] && [ "$rw" = "ok" ] && [ "$ra" = "ok" ]; then
   say "ccsv C TIERS : arrays+char+pointers + structs + typedef/union/p->f + enum/#define/typedef-ptr + #include + nested/diamond include-once + HEX/for/++/--/static/const/unsigned/stdint (test_real, from real iiis-0 gaps) -> sovereign x86 + wasm + verifier + gcc, all 99."
 else say "FAIL tiers: ptr=$rp struct=$rs td=$rt enum=$re include=$ri nest=$rn real=$rr"; fail=1; fi

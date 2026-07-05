@@ -14,9 +14,30 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 34 seed verify-failures (149 cleared, 81%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr INC-1 + INC-2 landed
-Per module now (re-measured **2026-06-30**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
+## Verified state: 183 → 34 seed verify-failures (149 cleared, 81%) — lex.c STRUCTURAL ZERO; BOTH BOSSES CLOSED; fn-ptr feature COMPLETE (INC-1+2+3, all-4)
+Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
+
+**fn-ptr Increment 3 LANDED (2026-07-05, fix #25): CALL_INDIRECT on the SOVEREIGN backends — the feature is all-4.**
+The one calibration INC-1/INC-2 carried ("NOT all-4 — x86/wasm computed-call = INC-3") is discharged. **x86**
+(`svir_x86.iii`): the site pops the runtime index to `%r10` (never an arg reg; the arg setup — byte-for-byte CALL's
+after the pop — doesn't touch it) and `callq __svci`, the per-module switchboard: `cmpq $k,%r10 ; jz <fn_k>` per
+function (a TAIL-jump — the target sees a direct call's stack), fall-through = OOB → `ExitProcess(199)` (the chain IS
+the bounds check; no address table, no new reloc kind; ExitProcess was already in sovld's import table). **wasm**
+(`svir_wasm.iii`): `i32.wrap_i64` + native `call_indirect` (typeidx `IC+FN_N+j` — one appended `(ac×i64)→i64` type
+per distinct arg-count) over a funcref table (id 4, min=max=FN_N) with an elem segment (id 9) mapping slot k → func
+k+IC — SVIR's index space verbatim, engine bounds-check traps OOB natively. All six opcode-walk scanners (x86
+max_local/mod_has_print/mod_has_mem, wasm nloc/body_has_print/body_has_mem) learned `0x73 → skip 1`. **Falsifier-first,
+measured:** the gate was extended BEFORE the edits and read RED — KATs `x86=1/0 wasm=1`, and the OOB vehicle
+(`_svir_ci_oob.iii`, built to complete cleanly at 99 if not trapped) read **x86=99 wasm=99 = the silent-dispatch
+false-accept**; post-change: both KATs **all-5** (`svir_verify=0 svir_interp=99 x86=99 wasm=99 gcc=99`) and
+**oob-trap interp=199 / x86=199 / wasm=1(native)**. `test_fnptr2.c` gained `putchar(107)` — the IC=1 import-shift
+composition tooth (elem/type indices must follow the shift; the ACC teeth catch an off-by-one dispatch). **Additive
+proven:** `ccsv(sha256.c)` `.s` and `.wasm` byte-identical before/after (`cmp` clean, 31340/2519 bytes). Both KATs
+now wired into `run_ccsv` cfeat (the same all-4 standard as every other C construct); the deeper teeth (interp arm +
+OOB vehicle) stay in `run_fnptr_gate.sh`. Honest boundaries in `_fnptr_inc3_audit.md` (wasm additionally type-checks
+ac≠params — stricter on out-of-contract SVIR only; __svci at 100+-fn scale runs the day seed modules run
+behaviorally). Floor unchanged at 34 (this is a backend increment, not a ccsv one — re-measured).
 
 **fn-ptr Increment 2 LANDED (2026-06-30, fix #24): floor 37→34.** Field-indirect calls — the seed's
 `G_EMIT.audit_fn(...);` / `st->witness_sink(...);` / `st->pratt_trace(...);`. Cleared exactly those 3 (emit_audit +

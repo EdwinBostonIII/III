@@ -1,0 +1,27 @@
+/* _svir_ci_oob.iii -- the OOB-indirect-index TRAP teeth (the "hard Layer-3 gate" svir_interp.iii:123 names):
+ * a hand-laid 2-function SVIR module whose fn0 does  CONST 5 ; CALL_INDIRECT ac=0  with nfunc=2 --
+ * index 5 is out of range.  The body is built to COMPLETE CLEANLY at 99 if the executor does NOT trap
+ * (DROP the bogus result, CONST 99, RET), so a backend that silently dispatches or skips reads GREEN-99
+ * and this gate REDDENS it.  Expected: svir_interp = 199 (OOB_IND sentinel) ; sovereign x86 = 199
+ * (__svci compare-chain falls through to ExitProcess(199)) ; wasm = native table-bounds trap (node
+ * uncaught -> nonzero, pinned in run_fnptr_gate.sh).  fn1 exists so the module has a real second
+ * target (nfunc=2, both nres=1 like real ccsv output).
+ *
+ * Layout: [nfunc=2]
+ *   fn0: [params=0][nres=1][blen=22 LE]  01 imm64(5) | 73 00 | 72 | 01 imm64(99) | 60
+ *   fn1: [params=0][nres=1][blen=10 LE]  01 imm64(7) | 60                                  = 41 bytes */
+module svir_ci_oob
+
+var SVIR : [u8; 41] = [2u8,
+    0u8, 1u8, 22u8, 0u8,
+        1u8, 5u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
+        115u8, 0u8,
+        114u8,
+        1u8, 99u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
+        96u8,
+    0u8, 1u8, 10u8, 0u8,
+        1u8, 7u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
+        96u8]
+
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 41u64 }

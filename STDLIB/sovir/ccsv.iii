@@ -863,7 +863,12 @@ fn eprim() {
                     while gc0==1u32 { C=C+1u32  let ft0:u32=C  C=C+1u32  acc0=acc0+fieldoff(cur0,ft0)  let np0:i32=fieldpt(cur0,ft0)
                         let mut more0:u32=0u32  if np0>=0i32 { if cp(Q_DOT)==1u32 {more0=1u32} }
                         if more0==1u32 { cur0=np0 }
-                        else { if acc0>0i64 {econst(acc0)  eb(0x20u32)}  let fe0:i64=fieldelem(cur0,ft0)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe0)  eb(0x20u32) }  eload(fe0, fieldsign(cur0,ft0))  gc0=0u32 } }
+                        else { if acc0>0i64 {econst(acc0)  eb(0x20u32)}  let fe0:i64=fieldelem(cur0,ft0)  let mut done0:u32=0u32
+                            if cp(Q_LBR)==1u32 { let pp0:i64=fieldptsz(cur0,ft0)   /* [k] on the final field: a SCALAR-POINTER field derefs (LOAD64 the pointer, +k*pointee -- TBL[i].name[0]); an INLINE array stays addr+k*elem (byte-identical) */
+                                if fieldisarr(cur0,ft0)==0u32 { if pp0>0i64 { eb(0x82u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(pp0)  eb(0x20u32)  eload(pp0, fieldptsg(cur0,ft0))  done0=1u32 } }
+                                if done0==0u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe0)  eb(0x20u32)  eload(fe0, fieldsign(cur0,ft0))  done0=1u32 } }
+                            if done0==0u32 { eload(fe0, fieldsign(cur0,ft0)) }
+                            gc0=0u32 } }
                     return } }
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),0u32,1u32)  return }   /* arr[i]++ */
                 if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),1u32,1u32)  return }   /* arr[i]-- */
@@ -878,7 +883,12 @@ fn eprim() {
                     while gcp==1u32 { C=C+1u32  let ftpir:u32=C  C=C+1u32  accp=accp+fieldoff(curp,ftpir)  let npp:i32=fieldpt(curp,ftpir)
                         let mut morep:u32=0u32  if npp>=0i32 { if cp(Q_DOT)==1u32 {morep=1u32} }
                         if morep==1u32 { curp=npp }
-                        else { if accp>0i64 {econst(accp) eb(0x20u32)}  let fepir:i64=fieldelem(curp,ftpir)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fepir)  eb(0x20u32) }  eload(fepir, fieldsign(curp,ftpir))  gcp=0u32 } }
+                        else { if accp>0i64 {econst(accp) eb(0x20u32)}  let fepir:i64=fieldelem(curp,ftpir)  let mut donep:u32=0u32
+                            if cp(Q_LBR)==1u32 { let ppp:i64=fieldptsz(curp,ftpir)   /* [k] final-field: pointer field derefs; inline array byte-identical (mirror of the T[i] arm) */
+                                if fieldisarr(curp,ftpir)==0u32 { if ppp>0i64 { eb(0x82u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(ppp)  eb(0x20u32)  eload(ppp, fieldptsg(curp,ftpir))  donep=1u32 } }
+                                if donep==0u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fepir)  eb(0x20u32)  eload(fepir, fieldsign(curp,ftpir))  donep=1u32 } }
+                            if donep==0u32 { eload(fepir, fieldsign(curp,ftpir)) }
+                            gcp=0u32 } }
                     return } }
                 eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
@@ -1448,7 +1458,12 @@ fn pstmt() {
                 while gc1==1u32 { C=C+1u32  let ft1:u32=C  C=C+1u32  acc1=acc1+fieldoff(cur1,ft1)  let np1:i32=fieldpt(cur1,ft1)
                     let mut more1:u32=0u32  if np1>=0i32 { if cp(Q_DOT)==1u32 {more1=1u32} }
                     if more1==1u32 { cur1=np1 }
-                    else { if acc1>0i64 {econst(acc1)  eb(0x20u32)}  let fe1:i64=fieldelem(cur1,ft1)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe1)  eb(0x20u32) }  emit_av(fe1, fieldsign(cur1,ft1), fieldmask(cur1,ft1))  eat(Q_SEMI)  gc1=0u32 } }
+                    else { if acc1>0i64 {econst(acc1)  eb(0x20u32)}  let fe1:i64=fieldelem(cur1,ft1)  let mut done1:u32=0u32
+                        if cp(Q_LBR)==1u32 { let pp1:i64=fieldptsz(cur1,ft1)   /* [k] final-field STORE: pointer field derefs (LOAD64 + k*pointee) then stores at the pointee width; inline array byte-identical */
+                            if fieldisarr(cur1,ft1)==0u32 { if pp1>0i64 { eb(0x82u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(pp1)  eb(0x20u32)  emit_av(pp1, fieldptsg(cur1,ft1), 0i64)  done1=1u32 } }
+                            if done1==0u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe1)  eb(0x20u32)  emit_av(fe1, fieldsign(cur1,ft1), fieldmask(cur1,ft1))  done1=1u32 } }
+                        if done1==0u32 { emit_av(fe1, fieldsign(cur1,ft1), fieldmask(cur1,ft1)) }
+                        eat(Q_SEMI)  gc1=0u32 } }
                 return } }
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]++ ; (statement: eval + DROP) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]-- ; */
@@ -1463,7 +1478,12 @@ fn pstmt() {
                 while gcs==1u32 { C=C+1u32  let ftpis:u32=C  C=C+1u32  accs=accs+fieldoff(curs,ftpis)  let nps:i32=fieldpt(curs,ftpis)
                     let mut mores:u32=0u32  if nps>=0i32 { if cp(Q_DOT)==1u32 {mores=1u32} }
                     if mores==1u32 { curs=nps }
-                    else { if accs>0i64 {econst(accs) eb(0x20u32)}  let fes:i64=fieldelem(curs,ftpis)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fes)  eb(0x20u32) }  emit_av(fes, fieldsign(curs,ftpis), fieldmask(curs,ftpis))  eat(Q_SEMI)  gcs=0u32 } }
+                    else { if accs>0i64 {econst(accs) eb(0x20u32)}  let fes:i64=fieldelem(curs,ftpis)  let mut dones:u32=0u32
+                        if cp(Q_LBR)==1u32 { let pps:i64=fieldptsz(curs,ftpis)   /* [k] final-field STORE through a pointer field vs inline array (mirror of the T[i] store arm) */
+                            if fieldisarr(curs,ftpis)==0u32 { if pps>0i64 { eb(0x82u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(pps)  eb(0x20u32)  emit_av(pps, fieldptsg(curs,ftpis), 0i64)  dones=1u32 } }
+                            if dones==0u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fes)  eb(0x20u32)  emit_av(fes, fieldsign(curs,ftpis), fieldmask(curs,ftpis))  dones=1u32 } }
+                        if dones==0u32 { emit_av(fes, fieldsign(curs,ftpis), fieldmask(curs,ftpis)) }
+                        eat(Q_SEMI)  gcs=0u32 } }
                 return } }
             emit_av(psz, psg, 0i64)   /* pointee width: direct read, pli */
             eat(Q_SEMI)  return }
@@ -1599,10 +1619,13 @@ fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]
                 let nt:u32=t+1u32  let esz:i64=STSZ[si as u64] as i64  let eszu:u64=esz as u64  let base:u64=MTOP
                 let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32
                 if TK[(nt+2u32) as u64]==2u32 { n=TV[(nt+2u32) as u64] as u64  if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32  have=1u32 } } }
-                else { if ispat(nt+2u32,Q_RBR)==1u32 { if ispat(nt+3u32,Q_ASN)==1u32 { if ispat(nt+4u32,Q_LB)==1u32 {
-                    brc=nt+5u32  have=1u32  let mut cq:u32=brc  let mut dd:i32=0i32  let mut gg:u32=1u32
-                    while gg==1u32 { if ispat(cq,Q_LB)==1u32 { if dd==0i32 {n=n+1u64}  dd=dd+1i32 } else { if ispat(cq,Q_RB)==1u32 { if dd==0i32 {gg=0u32} else {dd=dd-1i32} } }  if TK[cq as u64]==0u32 {gg=0u32}  if gg==1u32 {cq=cq+1u32} }
-                } } } }
+                else { if ispat(nt+2u32,Q_RBR)==1u32 {
+                    if ispat(nt+3u32,Q_ASN)==1u32 { if ispat(nt+4u32,Q_LB)==1u32 {
+                        brc=nt+5u32  have=1u32  let mut cq:u32=brc  let mut dd:i32=0i32  let mut gg:u32=1u32
+                        while gg==1u32 { if ispat(cq,Q_LB)==1u32 { if dd==0i32 {n=n+1u64}  dd=dd+1i32 } else { if ispat(cq,Q_RB)==1u32 { if dd==0i32 {gg=0u32} else {dd=dd-1i32} } }  if TK[cq as u64]==0u32 {gg=0u32}  if gg==1u32 {cq=cq+1u32} }
+                    } }
+                    else { n=1u64 }   /* `StructName NAME[];` with NO initializer = an extern-elsewhere table (the seed's `extern const iii_irpd_method_t III_IRPD_METHODS[];`, defined in sid.c).  Register ONE zero element so member access EMITS (avtype/base known; was n=0 -> unregistered -> `[i].field` emitted NOTHING -> the fn31 rc=8 class).  Single-file semantics: the extern COUNT is zero-storage too, so seed loops over the table are dead at runtime; the REAL cross-module data is the P3 linker phase (named residue), not this stroke's claim. */
+                } }
                 if n>0u64 { if esz>0i64 {
                     AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=si  AW[AN as u64]=0i64  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=0u32  AISC[AN as u64]=0u32  MTOP=MTOP+(n*eszu)  AN=AN+1u32
                     if have==1u32 {

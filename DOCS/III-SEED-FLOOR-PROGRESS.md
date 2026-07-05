@@ -18,6 +18,25 @@ path is sovereign at the bottom (no gcc compiling the seed).
 Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
 
+**TABLES (2026-07-05, fix #27): pointer-field [k] deref + extern struct-array registration — floor 34→33 (sema fn31, the decoded target).**
+Two roots, both measured before fixed. (1) **[k] on a scalar-POINTER field**: all four chain walkers' final-[k]
+arm assumed an INLINE array (`addr + k*elem`) — `TBL[i].name[0]` indexed the FIELD ADDRESS instead of loading the
+pointer (rc=5 discriminator probe; pre-existing in the old single-hop code too). Now: `fieldisarr==0 &&
+fieldptsz>0` → LOAD64 the pointer, `+k*pointee`, typed pointee load/store — the same discipline eprim:939's
+p->ptr[i] arm already had; inline arrays byte-identical. (2) **extern struct-array tables**: sema fn31
+(`sema_is_irpd_method`) decoded to `strcmp(name, III_IRPD_METHODS[i].name)` where the table is
+`extern const iii_irpd_method_t []` **defined in sid.c** — another TU. `prescan_structarr`'s empty-`[]` arm
+required `= {`, so the extern decl registered NOTHING and `[i].name` emitted nothing (the arg-SET underflow in
+the trace). Now a no-init `T NAME[];` registers with ONE zero element — member access emits; the extern COUNT is
+zero-storage too, so seed table-loops are dead single-file (honest semantics; the cross-module DATA belongs to
+the P3 linker phase and is NOT claimed). Static-init struct tables (`static const entry_t TBL[3]={{"n",v},..}`)
+were already registered+initialized by prescan_structarr — verified by data-section decode (strings at 16/22/27,
+{ptr,code} cells at 49). KATs: `test_tables.c` (static table + pointer-field [k], cfeat all-4) and
+`test_externtable.c` (the exact seed shape incl `size_t` count; verify=99 + interp=99, gcc can't link an
+undefined extern — reason documented in the harness). run_ccsv EXIT=0; fn-ptr gate ALL PASS;
+**floor 33** (lex 0 · sema 4 · emit 3 · ast 8 · cg_r3 2 · parse 16). Remaining sema: decode_hexad_args (rc=2),
+local_lookup, aggregate_dynamic_impact, iii_sema_run.
+
 **MEMBER-CHAIN walkers + struct-ptr stride (2026-07-05, fix #26): six single-hop walkers made chain-capable; a latent stride miscompile killed.**
 Decoded live from the 34 (tracer, not memory): the `call()->u.a` READ walker (eprim, the fix-#5 arrow chain) was
 ARROW-only — `->u.a` loaded 8 raw bytes at the embedded member and left `.a` dangling (rc=8; the seed's

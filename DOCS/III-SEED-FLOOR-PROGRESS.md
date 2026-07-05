@@ -18,6 +18,21 @@ path is sovereign at the bottom (no gcc compiling the seed).
 Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
 
+**EMPTY for-increment clause (2026-07-05, fix #29): floor 28→23 from a ONE-LINE guard — sema 4→3, parse 16→12.**
+`for (size_t i = st->count; i-- > 0; )` — the reverse-loop idiom (the decrement lives in the COND; the incr
+clause is EMPTY). `one_incr`'s fallback ran `ebin + DROP` on the bare `)` — ebin parsed nothing, the DROP hit an
+empty stack (rc=8). Decoded from sema_local_lookup's trace tail (`… 60 44 72@-1 <<<` — a DROP right after the
+if-block END). Guard: `if cp(Q_RP) return` at one_incr entry. Cleared FIVE seed fns in one line:
+sema_local_lookup + parse's recover_to/arg-adjacent family. KAT `test_forempty.c` (cfeat all-4) pins the
+reverse loop AND `for (;;) { … break; }`. **Floor 23** (lex 0 · sema 3 · emit 3 · ast 3 · cg_r3 2 · parse 12).
+**The 23 fully mapped**: parse break/continue/return/use_decl/stmt (+ likely witness_commit/grammar_mhash/
+unregister) = the extern-call class — clears under imports-ON (measured, the U75 experiment); ast 3 + emit 3 =
+STDIO; sema decode_hexad_args (rc=2) = the struct-by-value-PARAMS tail (8B `iii_ast_list_t` by value + an
+array-member decay arg — the Boss-2 named residual); sema aggregate_dynamic_impact + iii_sema_run + cg_r3
+emit_field_label/emit_function + parse primary/pattern/wavefront/recover_follow — undecoded singles, several
+plausibly extern-call. The bounded-singles well at OFF is dry: the three campaigns (extern-sret under ON,
+STDIO, struct-by-value params) are the frontier.
+
 **THE IMPORTS RE-ENABLE EXPERIMENT (2026-07-05, measured and parked): ON = 36/845 vs OFF = 28/488 — still net +8; the parked rule holds.**
 `prescan_imports()` (complete since the recovery set: CALLED, declared-not-defined prototypes register as
 IMPORTs; cfn emits `[0x8A][len][name]` declaration bodies, link-by-name = P3; calls flow the normal fidx path)

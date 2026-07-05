@@ -1065,7 +1065,8 @@ fn for_init() {   /* the for-loop's init clause (no trailing ;): `T i=0[, j=1]` 
         if cp(Q_COM)==1u32 { C=C+1u32  m2=1u32 } else { m2=0u32 }
     }
 }
-fn one_incr() {   /* one for-incr clause: i++ / i-- / i = e / expr */
+fn one_incr() {   /* one for-incr clause: i++ / i-- / i = e / expr / EMPTY */
+    if cp(Q_RP)==1u32 { return }   /* EMPTY incr `for (init; cond; )` -- the reverse-loop idiom `i-- > 0;` puts the decrement in the COND; the ebin+DROP fallback on `)` parsed nothing and emitted a bare DROP -> underflow (sema_local_lookup's trace) */
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_INC)==1u32 { let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x20u32)  emit_lset(li as u32) }  C=C+2u32  return } }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_DEC)==1u32 { let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x21u32)  emit_lset(li as u32) }  C=C+2u32  return } }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ASN)==1u32 { let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  return } }

@@ -28,6 +28,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Explicit host-I/O prototypes (redundant with <stdio.h> — legal, identical C).
+ * The Stage-1 bootstrap compiler skips system headers, so these make each
+ * CALLED host fn visible to its cross-module IMPORT registration (link-by-name
+ * at the host boundary); without them the calls have no declaration in the
+ * token stream at all. */
+int    fclose(FILE *f);
+int    fprintf(FILE *f, const char *fmt, ...);
+int    fputc(int c, FILE *f);
+int    fputs(const char *s, FILE *f);
+size_t fread(void *p, size_t sz, size_t n, FILE *f);
+long   ftell(FILE *f);
+size_t fwrite(const void *p, size_t sz, size_t n, FILE *f);
+void   rewind(FILE *f);
+FILE  *tmpfile(void);
+
 /* ─── SHA-256 (FIPS 180-4) — used for A1 / Q1 / D1 ────────────────── */
 
 typedef struct {

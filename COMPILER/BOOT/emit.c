@@ -27,6 +27,29 @@
 /* putenv lives in <stdlib.h> on POSIX and is exposed via the same
  * header (with a `_putenv` alias) on MinGW.  We use the POSIX name. */
 
+/* Explicit host-I/O prototypes (redundant with <stdio.h>/<stdlib.h> — legal,
+ * identical C).  The Stage-1 bootstrap compiler skips system headers, so these
+ * make each CALLED host fn visible to its cross-module IMPORT registration
+ * (link-by-name at the host boundary); without them the calls have no
+ * declaration in the token stream at all. */
+FILE  *fopen(const char *path, const char *mode);
+int    fclose(FILE *f);
+int    fseek(FILE *f, long off, int whence);
+long   ftell(FILE *f);
+size_t fread(void *p, size_t sz, size_t n, FILE *f);
+size_t fwrite(const void *p, size_t sz, size_t n, FILE *f);
+int    fprintf(FILE *f, const char *fmt, ...);
+char  *fgets(char *s, int n, FILE *f);
+FILE  *popen(const char *cmd, const char *mode);
+int    pclose(FILE *f);
+int    system(const char *cmd);
+/* stdio whence values — identical redefinitions are legal C (ISO C 6.10.3p2);
+ * the bootstrap compiler reads `#define NAME <number>` from the source, and the
+ * <stdio.h> originals live in a skipped system header. */
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 /* ════════════════════════════════════════════════════════════════════
  * D8/D11/D12/D13: SHA-256 — NIH FIPS-180-4 (mirrors link.c).
  * ════════════════════════════════════════════════════════════════ */

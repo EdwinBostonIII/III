@@ -42,6 +42,16 @@ fn ids(c: u32) -> u32 { if c==95u32 {return 1u32} if c>=65u32 { if c<=90u32 {ret
 fn sb(i: u64) -> u32 { let p : *u8 = ((&SRC as u64) + i) as *u8  return p[0u64] as u32 }
 fn pt(k: u32, v: i64, o: u32, l: u32) { if NT < 262143u32 { TK[NT as u64]=k  TV[NT as u64]=v  TO[NT as u64]=o  TL[NT as u64]=l  NT=NT+1u32 } }   /* token cap = the TK[262144] array (was 8192 -> silently truncated the seed core's tens of thousands of tokens) */
 
+fn subst_strdefs() {   /* rewrite each IDENT occurrence of a STRING-valued #define into a STRING token pointing at the macro's literal CONTENT bytes (recorded during lex).  Runs BEFORE prescan_str so adjacency packing sees the FINAL stream: `"a" MACRO "b"` concatenates into one packed literal, and a bare MACRO argument (emit.c's strstr(line, III_EMIT_SANCTUM_SECTION)) becomes a normal literal. */
+    if SDN_N==0u32 { return }
+    let mut t:u32=0u32
+    while t<NT {
+        if TK[t as u64]==1u32 { let mut k:u32=0u32
+            while k<SDN_N { if neq(TO[t as u64],TL[t as u64],SDNO[k as u64],SDNL[k as u64])==1u32 { TK[t as u64]=4u32  TV[t as u64]=0i64  TO[t as u64]=SDVO[k as u64]  TL[t as u64]=SDVL[k as u64]  k=SDN_N } else {k=k+1u32} }
+        }
+        t=t+1u32
+    }
+}
 fn lex() {
     NT = 0u32
     let mut i : u64 = 0u64
@@ -77,6 +87,11 @@ fn lex() {
                         } }
                     }
                 }
+                if i<SLEN { if sb(i)==34u32 {   /* #define NAME "string" -> a STRING macro: record name -> the literal's CONTENT range (escape-aware like the string lexer); subst_strdefs (post-lex) rewrites occurrences into STRING tokens, so concatenation `"a" MACRO "b"` and bare-argument uses both flow prescan_str's normal path */
+                    let qo:u64=i+1u64  let mut qe:u64=qo  let mut gq:u32=1u32
+                    while gq==1u32 { if qe>=SLEN {gq=0u32} else { if sb(qe)==34u32 {gq=0u32} else { if sb(qe)==92u32 {qe=qe+2u64} else {qe=qe+1u64} } } }
+                    if SDN_N<32u32 { SDNO[SDN_N as u64]=no as u32  SDNL[SDN_N as u64]=nl as u32  SDVO[SDN_N as u64]=qo as u32  SDVL[SDN_N as u64]=(qe-qo) as u32  SDN_N=SDN_N+1u32 }
+                } }
                 if i<SLEN {
                     let c0:u32=sb(i)  let mut doev:u32=0u32
                     if dg(c0)==1u32 {doev=1u32}  if c0==40u32 {doev=1u32}  if c0==45u32 {doev=1u32}  if c0==126u32 {doev=1u32}   /* number / ( / - / ~ -> a constant EXPRESSION (e.g. (64u*1024u)) */
@@ -243,6 +258,7 @@ fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { emit_fram
 var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AROW : [i64; 1024]  var APSZ : [i64; 1024]  var APSG : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* APSZ/APSG = POINTEE byte size+sign for a global scalar POINTER (0 = not a scalar pointer) -> enables `*gp` rvalue deref-read at the right width */   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
 fn aisc(t: u32) -> u32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AISC[k as u64]}  k=k+1u32 }  return 0u32 }   /* is t a global scalar? */
 var DCM_MO:[u32;128]  var DCM_ML:[u32;128]  var DCM_AO:[u32;128]  var DCM_AL:[u32;128]  var DCM_N:u32=0u32   /* deferred array-count macros: `#define N (sizeof(ARR)/sizeof(ARR[0]))` -> resolve N to ALEN(ARR) at the USE site (ARR registered by then) */
+var SDNO:[u32;32]  var SDNL:[u32;32]  var SDVO:[u32;32]  var SDVL:[u32;32]  var SDN_N:u32=0u32   /* STRING-valued #defines (`#define NAME "lit"` -- emit.h's III_EMIT_SANCTUM_SECTION/SOURCE_DATE_EPOCH): name -> the literal's CONTENT byte range; subst_strdefs rewrites occurrence IDENTs into STRING tokens */
 fn alen_by_name(o:u32, l:u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],o,l)==1u32 {return ALEN[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn dcm_resolve(t:u32) -> i64 { let mut k:u32=0u32  while k<DCM_N { if neq(DCM_MO[k as u64],DCM_ML[k as u64],TO[t as u64],TL[t as u64])==1u32 { return alen_by_name(DCM_AO[k as u64], DCM_AL[k as u64]) }  k=k+1u32 }  return 0i64-1i64 }
 fn abase(t: u32) -> i64 { let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u64]  if vt>=0i32 { return LVB[lv as u64] }  return 0i64-1i64 }   /* a LOCAL shadows: struct-value -> LVB, else -1 (no value base).  NEVER the reg_var AB global below (a local/param named like a global struct must NOT resolve to that global) */
@@ -393,7 +409,12 @@ fn esizeof() {
                       let ti:i32=stidx(C)
                       if ti>=0i32 { sz=STSZ[ti as u64] as i64  C=C+1u32  let mut g4:u32=1u32  while g4==1u32 { if cp(Q_MUL)==1u32 {sz=8i64  C=C+1u32} else {g4=0u32} } }
                       else { let vt:i32=avtype(C)  let ab:i64=abase(C)
-                          if vt>=0i32 { if ispat(C+1u32,Q_LBR)==1u32 { sz=aesize(C)  C=C+2u32  let mut g7:u32=1u32  while g7==1u32 { if cp(Q_RBR)==1u32 {g7=0u32} else { if TK[C as u64]==0u32 {g7=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else { let alv:i64=alen(C) as i64  if alv>1i64 { sz=alv*aesize(C) } else { sz=STSZ[vt as u64] as i64 }  C=C+1u32 } }   /* struct-typed A* entry: `arr[i]` -> ONE element (aesize) ; bare multi-element struct ARRAY -> count*elem (the `sizeof(ENTS)/sizeof(ENTS[0])` idiom) ; scalar struct-value (or 1-elem) -> STSZ */
+                          if vt>=0i32 { if ispat(C+1u32,Q_DOT)==1u32 {   /* sizeof(v.field[.f..][i]) : the field's whole byte size (fieldbytes, arrays included) / with a trailing [i] the ELEMENT-or-pointee size -- the DOT-on-struct-value complement of sizeof(p->field) (emit_link's `sizeof G_EMIT.witness_json`); works paren-free too (hasp=0) */
+                              C=C+1u32  let mut curS:i32=vt  let mut fbS:i64=0i64  let mut lastfS:u32=0u32  let mut gD:u32=1u32
+                              while gD==1u32 { C=C+1u32  lastfS=C  C=C+1u32  fbS=fieldbytes(curS,lastfS)  let npS:i32=fieldpt(curS,lastfS)  let mut moreS:u32=0u32  if npS>=0i32 { if cp(Q_DOT)==1u32 {moreS=1u32} }  if moreS==1u32 {curS=npS} else {gD=0u32} }
+                              if fbS>0i64 {sz=fbS}
+                              if cp(Q_LBR)==1u32 { let epS:i32=fieldpt(curS,lastfS)  if epS>=0i32 {sz=STSZ[epS as u64] as i64} else {sz=fieldelem(curS,lastfS)}  let mut gE:u32=1u32  while gE==1u32 { if cp(Q_RBR)==1u32 {gE=0u32} else { if TK[C as u64]==0u32 {gE=0u32} else {C=C+1u32} } }  eat(Q_RBR) }
+                          } else { if ispat(C+1u32,Q_LBR)==1u32 { sz=aesize(C)  C=C+2u32  let mut g7:u32=1u32  while g7==1u32 { if cp(Q_RBR)==1u32 {g7=0u32} else { if TK[C as u64]==0u32 {g7=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else { let alv:i64=alen(C) as i64  if alv>1i64 { sz=alv*aesize(C) } else { sz=STSZ[vt as u64] as i64 }  C=C+1u32 } } }   /* struct-typed A* entry: `arr[i]` -> ONE element (aesize) ; bare multi-element struct ARRAY -> count*elem (the `sizeof(ENTS)/sizeof(ENTS[0])` idiom) ; scalar struct-value (or 1-elem) -> STSZ */
                           else { if ab>=0i64 {
                               if ispat(C+1u32,Q_LBR)==1u32 { sz=aesize(C)  C=C+2u32  let mut g5:u32=1u32  while g5==1u32 { if cp(Q_RBR)==1u32 {g5=0u32} else { if TK[C as u64]==0u32 {g5=0u32} else {C=C+1u32} } }  eat(Q_RBR) }
                               else { sz=(alen(C) as i64)*aesize(C)  C=C+1u32 } }
@@ -713,7 +734,12 @@ fn eprim() {
         if TK[C as u64]==1u32 { let at:u32=C
             let vt:i32=avtype(at)  if vt>=0i32 { if ispat(at+1u32,Q_DOT)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(vt,ft)  C=C+3u32  emit_vbase(at, foff)  return } }   /* &v.field : struct-value field address = base+offset (frame-aware) */
             let ptt:i32=lpt(at)  if ptt>=0i32 { if ispat(at+1u32,Q_ARROW)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(at)  let eltp:i32=fieldpt(ptt,ft)
-                if ispat(at+3u32,Q_LBR)==1u32 { if eltp>=0i32 { let fe:i64=fieldelem(ptt,ft)  let esz:i64=STSZ[eltp as u64] as i64  C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  emit_lget(pl as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  if fe==8i64 {eb(0x82u32)}  eb(0x20u32)  return } }   /* &p->arrfield[i] : i*STSZ + [*](p+foff) */
+                if ispat(at+3u32,Q_LBR)==1u32 { if eltp>=0i32 { let fe:i64=fieldelem(ptt,ft)  let esz:i64=STSZ[eltp as u64] as i64  C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  emit_lget(pl as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  if fe==8i64 {eb(0x82u32)}  eb(0x20u32)   /* &p->arrfield[i] : i*STSZ + [*](p+foff) */
+                    if cp(Q_DOT)==1u32 { let mut curB:i32=eltp  let mut accB:i64=0i64  let mut gcB:u32=1u32  let mut feB:i64=0i64   /* &p->ptrfield[i].sub[.sub..] : + the member-chain offset after the element address (walk_state_deserialize's memcpy(&ws->stack[i].depth,..) -- the trailing member dangled -> the memcpy temp-SETs underflowed) */
+                        while gcB==1u32 { C=C+1u32  let nfB:u32=C  C=C+1u32  accB=accB+fieldoff(curB,nfB)  let npB:i32=fieldpt(curB,nfB)  feB=fieldelem(curB,nfB)  let mut moreB:u32=0u32  if npB>=0i32 { if cp(Q_DOT)==1u32 {moreB=1u32} }  if moreB==1u32 {curB=npB} else {gcB=0u32} }
+                        if accB>0i64 { econst(accB)  eb(0x20u32) }
+                        if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(feB)  eb(0x20u32) } }   /* trailing [j] on a final INLINE-array member: + j*elem (the &ws->stack[i].children[j] shape) */
+                    return } }
                 if eltp>=0i32 { if ispat(at+3u32,Q_DOT)==1u32 {   /* &p->f1.f2.. : address of a field nested through struct/UNION members (union members at +0) -- the seed's `&n->u.<variant>.<field>`; the old code returned after `&p->u` leaving `.member.field` unconsumed -> residue */
                     C=C+3u32  let mut curA:i32=eltp  let mut accA:i64=foff  let mut gcA:u32=1u32  let mut feL:i64=0i64  let mut npL:i32=0i32-1i32
                     while gcA==1u32 { C=C+1u32  let nfA:u32=C  C=C+1u32  let nfoA:i64=fieldoff(curA,nfA)  accA=accA+nfoA  let nptA:i32=fieldpt(curA,nfA)  feL=fieldelem(curA,nfA)  npL=nptA  let mut moreA:u32=0u32  if nptA>=0i32 { if cp(Q_DOT)==1u32 {moreA=1u32} }  if moreA==1u32 {curA=nptA} else {gcA=0u32} }
@@ -2234,7 +2260,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
-    lex()  prescan()  prescan_str()  prescan_imports()   /* PERMANENTLY ON (2026-07-05): the parked rule ("re-enable together with the downstream fixes for a NET drop") is DISCHARGED -- measured ON = 14 fails/845 fns vs OFF = 23/488 (net -9; the old 36-vs-28 numbers predate fix #29, whose reverse-loop guard was the real blocker of the predicted "sret-family exposure" -- those ~9 parser-core fns are GREEN under ON).  What ON buys, measured: the extern-call class clears (parse break/continue/return/use_decl/stmt + iii_sema_run) and with call()[i] (fn_ret_psz path) cg_r3.c reaches STRUCTURAL ZERO.  Builtin names never register (is_call_builtin -- the test_fnptr2.c manual-putchar-prototype lesson).  ALL FIVE SVIR consumers know 0x8A: verify:49 net-0, dis skip, interp UNRES_IMP->198, x86 ExitProcess(198) stub, wasm `unreachable` stub; gates test_import.c/test_importtrap.c (198/198/1, never silent).  Cross-module RESOLUTION = P3 (sovld link-by-name). */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
+    lex()  subst_strdefs()  prescan()  prescan_str()  prescan_imports()   /* subst_strdefs BEFORE prescan_str: string-macro occurrences must be STRING tokens when adjacency packs.  imports PERMANENTLY ON (2026-07-05): the parked rule ("re-enable together with the downstream fixes for a NET drop") is DISCHARGED -- measured ON = 14 fails/845 fns vs OFF = 23/488 (net -9; the old 36-vs-28 numbers predate fix #29, whose reverse-loop guard was the real blocker of the predicted "sret-family exposure" -- those ~9 parser-core fns are GREEN under ON).  What ON buys, measured: the extern-call class clears (parse break/continue/return/use_decl/stmt + iii_sema_run) and with call()[i] (fn_ret_psz path) cg_r3.c reaches STRUCTURAL ZERO.  Builtin names never register (is_call_builtin -- the test_fnptr2.c manual-putchar-prototype lesson).  ALL FIVE SVIR consumers know 0x8A: verify:49 net-0, dis skip, interp UNRES_IMP->198, x86 ExitProcess(198) stub, wasm `unreachable` stub; gates test_import.c/test_importtrap.c (198/198/1, never silent).  Cross-module RESOLUTION = P3 (sovld link-by-name). */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
     if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
         pstr("# STN=~" as u64) pdec(STN as u64) pstr(" SFN=~" as u64) pdec(SFN as u64) pstr(" AN=~" as u64) pdec(AN as u64) pstr(" CN=~" as u64) pdec(CN as u64) pstr(" FN=~" as u64) pdec(FN as u64) pstr(" MTOP=~" as u64) pdec(MTOP) pc(10u32)
         let mut sk:u32=0u32

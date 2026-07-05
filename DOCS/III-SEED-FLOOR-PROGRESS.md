@@ -14,11 +14,37 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 6 seed verify-failures — FOUR modules at STRUCTURAL ZERO (lex, sema, cg_r3, parse); ONLY the STDIO class remains
-Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 0 ·
-emit 3 · ast 3 · cg_r3 0 · parse 0** = **6 over 845 functions** (imports-ON counts each 0x8A import decl as a fn).
-The remaining 6 are ONE campaign: **STDIO** (emit write_sanctum_script/render_witness/emit_link + ast
-walk_state_deserialize/serialize_buf/deserialize_buf — tmpfile/ftell/fwrite/FILE*, the sovereign-runtime stroke).
+## ★★★ Verified state: 183 → **0** — THE WHOLE iiis-0 SEED IS AT STRUCTURAL ZERO (verify_fail 0/865, all six modules)
+Re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green: **lex 0/71 · sema 0/205 ·
+emit 0/52 · ast 0/124 · cg_r3 0/209 · parse 0/204 = 0 over 865 functions.**  Every function of the seed that
+ccsv emits is structurally-valid SVIR.  ★ CALIBRATION UNCHANGED (U72): the structural floor is a NO-UNDERFLOW
+metric, NOT runtime correctness — Φ1's real exit gate remains "sovereign iiis-0 byte-matches gcc on
+stage1_corpus"; the next campaign is per-module behavioral diff (`ccsv→interp mhash == gcc mhash`) then P3
+cross-module linking (sovld link-by-name over the 0x8A imports).
+
+**THE ZERO STROKE (2026-07-05, fix #32): floor 6→0 — emit.c and ast.c close; three roots, none of them "FILE* semantics".**
+The census's "STDIO class" label decomposed under fresh decode: (a) **called-but-undeclared host fns** — the
+real class for five of six: fopen/fprintf/fwrite/tmpfile/ftell/popen/… have NO prototype in the token stream
+(system headers are skipped), so prescan_imports never saw them and the calls dropped their args.  Adjustment-1:
+explicit host-I/O prototype blocks in emit.c (11 fns) + ast.c (9 fns) — redundant-with-<stdio.h> IDENTICAL
+declarations (legal C), routing the calls into the PROVEN 0x8A import machinery (single-file = trap 198;
+resolution = the P3 host boundary).  Plus `#define SEEK_SET 0 / SEEK_CUR 1 / SEEK_END 2` (identical
+redefinitions, ISO C 6.10.3p2 — slurp's fseek args were empty).  (b) **STRING-valued #define macros**
+(`III_EMIT_SANCTUM_SECTION ".xii_sanctum.text"` / `III_EMIT_SOURCE_DATE_EPOCH "0"`): used INSIDE literal
+concatenation (write_sanctum_script's ld-script fprintf, render_witness's JSON snprintf) and as a bare arg
+(strstr).  ccsv: the lexer's #define arm records `NAME -> the literal's CONTENT byte range` (SDN tables), and
+`subst_strdefs` (post-lex, BEFORE prescan_str) rewrites occurrence IDENTs into STRING tokens — adjacency
+packing then concatenates `"a" MACRO "b"` naturally and bare uses are plain literals.  (c) **`&p->ptrfield[i].sub`
+and `sizeof(v.field)`** — two walker tails: the &-index arm gained the member-chain + trailing-inline-[j]
+extension (walk_state_deserialize's memcpy destinations, incl children[j]); esizeof's identifier arm gained the
+DOT case (whole fieldbytes / chained / element[i]; emit_link's `sizeof G_EMIT.witness_json`, paren-free form
+included).  Falsifiers `_asi1/_szg1.c` RED (`# 1 1 8 8`) → GREEN; promoted `test_addrsub.c` + `test_sizeofgl.c`
+(cfeat all-4).  emit_link was pinned by REDUCE-BY-REMOVAL on a scratch copy (trace-tail decode was ambiguous)
+— ★ method traps hit + recorded: a python text-cut FLIPPED LINE ENDINGS globally (the no-Python law's teeth;
+redone with the Edit tool) and a probe copied OUTSIDE the seed dir mis-resolves `#include "emit.h"` (19 phantom
+fails — probe IN COMPILER/BOOT, deleted after).  Gates: run_ccsv EXIT=0 zero-FAIL, fn-ptr ALL PASS,
+determinism — ccsv(sha256.c) byte-identical across the ENTIRE session's fixes (#30→#32 all additive), 3
+controls green.
 
 **THE PARSE/SEMA ZERO STROKE (2026-07-05, fix #31): floor 14→8→6 — parse.c AND sema.c reach STRUCTURAL ZERO; four construct classes + one &-chain arm, each falsifier-first.**
 Fresh-decoded the post-#30 parse-6 + sema-1 with svir_dis (all six shared the terminal signature `72@-1` — a bare

@@ -964,6 +964,34 @@ fn bb_node_gate_count(root: u32) -> u32 @export {
     }
     return c
 }
+/* THE DEPENDENCE CONE (a structural purity query): bit i set iff INPUT VAR i is in root's transitive fan-in.
+ * Reuses the same high-to-low mark sweep (operands always precede their node).  A consumer proving "this value
+ * depends ONLY on inputs S" checks (mask & ~S)==0 -- e.g. a memory MAP writes g(load0,load1) iff the store
+ * value's cone touches only the two load vars, never the induction/accumulator var.  Sound and clause-free. */
+fn bb_cone_var_mask(root: u32) -> u64 @export {
+    if root >= BB_NN { return 0u64 }
+    let mut i : u32 = 0u32
+    while i < BB_NN { BB_GC_MARK[i as u64] = 0u8  i = i + 1u32 }
+    BB_GC_MARK[root as u64] = 1u8
+    let mut idx : u32 = root + 1u32
+    while idx > 0u32 {
+        idx = idx - 1u32
+        if BB_GC_MARK[idx as u64] == 1u8 {
+            let k : u32 = BB_NKIND[idx as u64]
+            if k == EK_NOT { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHL { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHR { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if bb_kind_arity2(k) == 1u8 { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8  BB_GC_MARK[BB_NB[idx as u64] as u64] = 1u8 }
+        }
+    }
+    let mut mask : u64 = 0u64
+    let mut n : u32 = 0u32
+    while n < BB_NN {
+        if BB_GC_MARK[n as u64] == 1u8 { if BB_NKIND[n as u64] == EK_VAR { mask = mask | (1u64 << (BB_NA[n as u64] as u64)) } }
+        n = n + 1u32
+    }
+    return mask
+}
 
 /* PER-CIRCUIT COST under a selectable METRIC.  metric 0 = total gate count (byte-identical to bb_node_gate_count);
  * metric 1 = NONLINEAR-gate count -- the count of AND and OR gates, which are the GF(2)-NONLINEAR operations (XOR and

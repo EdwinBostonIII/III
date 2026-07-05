@@ -1077,3 +1077,30 @@ real ccsv(sha256.c) `loop@604 CRUSHED(cpy) c=4770580737139109271` — the ratche
 against d82d059e9b1ca497), authorized reseal → **2a822ee9954efc29**.  The real seed now reads:
 `sto / cpy / DEFER / DEFER` — 2 of 4 loops certified; the schedule and rounds loops are data-dependent
 honest residue (the recurrence/reduction frontier, a genuine campaign).
+
+## THE BINARY MAP RUNG 2026-07-04 — the multi-effect class opens; 12 of 33 real loops certified
+
+The census named the multi-effect class (5 loops) as the next rung; the SHAPE probe (au_probe_* +
+au_fz_* instrumentation) measured it: three of the five are the SAME shape -- 1 store, TWO loads per
+pass (aes@2201/2333 byte-width, chacha@1287 32-bit).  That is a BINARY MAP  dst[k] = g(src0[k], src1[k])
+(AES AddRoundKey / XOR, chacha add).
+
+Rung 6 (au_map2_guillotine): the geometry is proven affine over the twice-composed denotation (store
+addr +Sd, each load addr +S0/S1, all entry states); the value law is a PURITY CERTIFICATE -- the store
+value's dependence cone (new bv_bits query bb_cone_var_mask: bit i set iff input var i is in the node's
+transitive fan-in) touches ONLY the two load vars, never the induction/accumulator var.  That positional
+independence is exactly the map-vs-arbitrary-computation line: dst[k]=src0[k]^k reads the index -> k in
+the cone -> REFUSED (never a false map).  g itself is unconstrained; its STRUCTURE is fingerprinted
+(bb_struct_into -> FNV) so XOR-map and ADD-map carry distinct certs (the teeth).  Kind AU_K_MAP2=5,
+cert (Sd, S0, S1, W, gstruct).  Bulk src/dst disjointness stays the CONSUMER's ai_disjoint obligation.
+
+*Falsifiers (executed green)*: `_au_mapwalk_kat` = 99 -- XOR-map crushes (Sd=S0=S1=4 W=4); ADD-map same
+geometry, DIFFERENT g-digest (structure teeth); IDXMAP (value reads i) DEFER[memfit] via the cone;
+GATHER (unequal strides) defers; module walk records kind MAP.  legA **30/30**.  **The measured payoff**:
+real ccsv output -- aes128 loop@2201 and chacha20 loop@1287 both CRUSHED(map); aes128 loop@2333 (same
+shape) HONESTLY REFUTED -- one of its three address families is not affine over all symbolic states
+though the 4-sample fuzz proposed a stride (the conscience line at population scale).  The real-seed
+ratchet DRIFT-ABORTED (aes+chacha ledgers moved), authorized reseal -> aes128 edcfddbd967f0557,
+chacha20 5fa4195c2ac15d0a.  Toy + ghost byte-stable.  **Population now 12 of 33 loops certified**
+(add/mul/qad scalar + sto/cpy/map memory).  Remaining multi: hmac@3844 (4-store/4-load) and
+ceiling@1487 (4-load/1-store byte-pack) -- distinct shapes, separately evidenced when built.

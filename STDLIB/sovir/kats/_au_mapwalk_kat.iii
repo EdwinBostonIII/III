@@ -1,0 +1,107 @@
+module au_mapwalk_kat
+
+/* THE BINARY MAP RUNG (rung 6, 2026-07-04): dst[k] = g(src0[k], src1[k]) -- two loads, one store per
+ * iteration, affine geometry, and a PURITY certificate: the stored value depends ONLY on the two loaded
+ * values (its dependence cone touches neither the induction var nor any other local), so g is the SAME
+ * combining function at every position.  g itself is unconstrained; its STRUCTURE is fingerprinted, so
+ * an XOR-map and an ADD-map carry distinct certs (the teeth).  The map-vs-arbitrary line is the cone:
+ * dst[k]=src0[k]^k reads the index -> k in the cone -> REFUSED (never a false map).
+ *
+ *   (1) XORMAP   mem32[3000+4i] = mem32[1000+4i] ^ mem32[2000+4i]   -> CRUSHED kind MAP, Sd=S0=S1=4 W=4
+ *   (2) ADDMAP   ... + ... (same geometry, different g)             -> CRUSHED, cert digest DIFFERS from XOR
+ *   (3) IDXMAP   dst = src0 ^ src1 ^ i                              -> value reads the index -> DEFER[memfit]
+ *   (4) GATHER   src1 stride 8 (!= dst/src0 stride 4)               -> not affine-uniform -> DEFER (refut)
+ *   (5) the module walk records kind MAP with the bound digest
+ *
+ * exit 99 = all; 1..5 = the numbered contract broken (10+ = a certificate field wrong). */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_why() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_sd() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_s0() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_s1() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_w() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_map_g() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_kind(i: u32) -> u32 from "ser_antiunify.iii"
+
+/* mem32[3000+4i] = mem32[1000+4i] ^ mem32[2000+4i] ; i++
+ * addr3000 : GET_dst = CONST3000 GET1 CONST4 MUL ADD
+ * val      : CONST1000 GET1 CONST4 MUL ADD LOAD32U  CONST2000 GET1 CONST4 MUL ADD LOAD32U  XOR
+ * STORE32  ; i++ */
+var XORMAP : [u8; 96] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* ADDMAP: identical geometry, g = ADD (0x20) instead of XOR (0x27) */
+var ADDMAP : [u8; 96] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  32u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* IDXMAP: dst = (src0 ^ src1) ^ i -- the value READS the induction var -> not a pure map */
+var IDXMAP : [u8; 100] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  16u8,1u8, 39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* GATHER: src1 uses stride 8 while dst and src0 use stride 4 -- not the uniform map family */
+var GATHER : [u8; 96] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,8u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* while i!=0 { XORMAP body } : shell 16 + 96 + 4 = 116 */
+var WMOD : [u8; 116] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    /* (1) the XOR binary map crushes with the full geometry certificate */
+    if au_topo_amputate(&XORMAP as u64, 0u64, 96u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 5u32 { return 10u64 }
+    if au_last_map_sd() != 4u64 { return 11u64 }
+    if au_last_map_s0() != 4u64 { return 12u64 }
+    if au_last_map_s1() != 4u64 { return 13u64 }
+    if au_last_map_w() != 4u32 { return 14u64 }
+    let gx : u64 = au_last_map_g()
+    if gx == 0u64 { return 15u64 }
+
+    /* (2) the ADD map: same geometry, DIFFERENT combining function -> distinct structural digest */
+    if au_topo_amputate(&ADDMAP as u64, 0u64, 96u64, 0u32, 7u64) != 1u32 { return 2u64 }
+    if au_last_kind() != 5u32 { return 16u64 }
+    if au_last_map_g() == gx { return 17u64 }                      /* g-structure teeth: ADD != XOR */
+
+    /* (3) the value reads the index -> the purity cone catches it -> DEFER[memfit], never a false map */
+    if au_topo_amputate(&IDXMAP as u64, 0u64, 100u64, 0u32, 7u64) != 2u32 { return 3u64 }
+    if au_last_why() != 7u32 { return 18u64 }
+
+    /* (4) a gather (unequal strides) is not the uniform map family -> honest defer */
+    if au_topo_amputate(&GATHER as u64, 0u64, 96u64, 0u32, 7u64) != 2u32 { return 4u64 }
+
+    /* (5) the whole-module walk records the MAP certificate in the ledger */
+    if au_crush_report(&WMOD as u64, 0u64, 116u64, 0u32) != 1u32 { return 5u64 }
+    if au_report_n() != 1u32 { return 19u64 }
+    if au_report_verdict(0u32) != 1u32 { return 20u64 }
+    if au_report_kind(0u32) != 5u32 { return 21u64 }
+    return 99u64
+}

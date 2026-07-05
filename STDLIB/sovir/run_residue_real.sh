@@ -37,7 +37,7 @@ int main(){
   for(unsigned i=0;i<n;i++){
     unsigned w = au_report_why(i); if (w > 8) w = 0;
     if (au_report_verdict(i)) printf("  loop@%-4llu %s %s=%llu\n", au_report_off(i),
-      au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  ",
+      au_report_kind(i)==5?"CRUSHED(map)  ":au_report_kind(i)==4?"CRUSHED(cpy)  ":au_report_kind(i)==3?"CRUSHED(sto)  ":au_report_kind(i)==2?"CRUSHED(qad)  ":au_report_kind(i)?"CRUSHED(mul)  ":"CRUSHED(add)  ",
       au_report_kind(i)>=3?"c":au_report_kind(i)==2?"q":au_report_kind(i)?"r":"d", au_report_delta(i));
     else printf("  loop@%-4llu DEFER[%s]   d=%llu\n", au_report_off(i), WHY[w], au_report_delta(i));
   }

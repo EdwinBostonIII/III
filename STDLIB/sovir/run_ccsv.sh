@@ -174,6 +174,8 @@ imp_arm(){ # $1 = test basename ; echoes "vf ir xr wr" (verify_main ; svir_inter
   node "$S/run_wasm.mjs" "$W/$1.wasm" >/dev/null 2>&1; local wr=$?
   echo "$vf $ir $xr $wr"
 }
+rea=$(cfeat test_enumarr.c); rpa=$(cfeat test_ptrarr.c); rca=$(cfeat test_chainasn.c); rac=$(cfeat test_addrchain.c)
+if [ "$rea" = "ok" ] && [ "$rpa" = "ok" ] && [ "$rca" = "ok" ] && [ "$rac" = "ok" ]; then say "ccsv SEED-DDC : the parse/sema ZERO strokes -- ENUM-TYPEDEF local arrays kind_t buf[16] + static const fallback[]={..} (4B elements; parse_primary/parse_pattern/recover_follow), POINTER-element local arrays T *tables[3]={&..} (8B elements + the tbl=tables[t] hoist idiom; grammar_mhash), CHAINED array-element assignment b[2]=b[3]=b[4]=0 (store AND leave value; witness_commit), and &p->emb.ptrfield[i] (LOAD64 the pointer field at the END of a DOT chain + i*STSZ; sema aggregate_dynamic_impact's &s->annos.items[i]) -> all 99.  With these + call()[i] + imports-ON: lex/sema/cg_r3/parse ALL at structural ZERO."; else say "FAIL parse-zero strokes: enumarr=$rea ptrarr=$rpa chainasn=$rca addrchain=$rac"; fail=1; fi
 read -r pv pi px pw <<< "$(imp_arm test_import.c)"
 read -r tv ti tx tw <<< "$(imp_arm test_importtrap.c)"
 if [ "$pv" = "99" ] && [ "$pi" = "99" ] && [ "$px" = "99" ] && [ "$pw" = "99" ] && [ "$tv" = "99" ] && [ "$ti" = "198" ] && [ "$tx" = "198" ] && [ "$tw" = "1" ]; then

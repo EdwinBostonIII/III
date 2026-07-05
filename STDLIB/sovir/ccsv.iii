@@ -715,8 +715,10 @@ fn eprim() {
             let ptt:i32=lpt(at)  if ptt>=0i32 { if ispat(at+1u32,Q_ARROW)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(at)  let eltp:i32=fieldpt(ptt,ft)
                 if ispat(at+3u32,Q_LBR)==1u32 { if eltp>=0i32 { let fe:i64=fieldelem(ptt,ft)  let esz:i64=STSZ[eltp as u64] as i64  C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  emit_lget(pl as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  if fe==8i64 {eb(0x82u32)}  eb(0x20u32)  return } }   /* &p->arrfield[i] : i*STSZ + [*](p+foff) */
                 if eltp>=0i32 { if ispat(at+3u32,Q_DOT)==1u32 {   /* &p->f1.f2.. : address of a field nested through struct/UNION members (union members at +0) -- the seed's `&n->u.<variant>.<field>`; the old code returned after `&p->u` leaving `.member.field` unconsumed -> residue */
-                    C=C+3u32  let mut curA:i32=eltp  let mut accA:i64=foff  let mut gcA:u32=1u32
-                    while gcA==1u32 { C=C+1u32  let nfA:u32=C  C=C+1u32  let nfoA:i64=fieldoff(curA,nfA)  accA=accA+nfoA  let nptA:i32=fieldpt(curA,nfA)  let mut moreA:u32=0u32  if nptA>=0i32 { if cp(Q_DOT)==1u32 {moreA=1u32} }  if moreA==1u32 {curA=nptA} else {gcA=0u32} }
+                    C=C+3u32  let mut curA:i32=eltp  let mut accA:i64=foff  let mut gcA:u32=1u32  let mut feL:i64=0i64  let mut npL:i32=0i32-1i32
+                    while gcA==1u32 { C=C+1u32  let nfA:u32=C  C=C+1u32  let nfoA:i64=fieldoff(curA,nfA)  accA=accA+nfoA  let nptA:i32=fieldpt(curA,nfA)  feL=fieldelem(curA,nfA)  npL=nptA  let mut moreA:u32=0u32  if nptA>=0i32 { if cp(Q_DOT)==1u32 {moreA=1u32} }  if moreA==1u32 {curA=nptA} else {gcA=0u32} }
+                    if cp(Q_LBR)==1u32 { if npL>=0i32 {   /* &p->emb.ptrfield[i] (sema `&s->annos.items[i]`): LOAD64 the pointer field at p+acc then +i*STSZ(pointee); an INLINE struct-array field (fe!=8) stays p+acc+i*STSZ -- the 716 discipline at the END of a DOT chain */
+                        let eszL:i64=STSZ[npL as u64] as i64  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(eszL)  emit_lget(pl as u32)  if accA>0i64 {econst(accA)  eb(0x20u32)}  if feL==8i64 {eb(0x82u32)}  eb(0x20u32)  return } }
                     emit_lget(pl as u32)  if accA>0i64 {econst(accA)  eb(0x20u32)}  return } }
                 C=C+3u32  emit_lget(pl as u32)  if foff>0i64 {econst(foff)  eb(0x20u32)}  return } }   /* &p->field : ptr + field offset */
             let ab:i64=abase(at)
@@ -1036,6 +1038,18 @@ fn ebin(minp: u32) {
             eu8(0x11u32,tmp3)  eu8(0x10u32,tmp3)  estore(fe)  eu8(0x10u32,tmp3)  return   /* SET tmp; GET tmp; STORE; GET tmp -> store + leave value */
         }
     } } } } }
+    if minp==0u32 { if TK[C as u64]==1u32 { if ispat(C+1u32,Q_LBR)==1u32 { let abx:i64=abase(C)  if abx>=0i64 { if aisc(C)==0u32 { if arow(C)==0i64 {   /* arr[idx] = rhs : ARRAY-ELEMENT assignment EXPRESSION -> store AND LEAVE the value (chains `buf[20]=buf[21]=buf[22]=0` fold -- witness_commit's shape; the ARRAY complement of the field handlers above).  1D registered arrays only (aisc excludes global scalar-pointers, arow excludes 2D rows); a `[` whose matching `]` is NOT followed by `=` falls through untouched. */
+        let mut q:u32=C+2u32  let mut dq:i32=1i32  let mut gq:u32=1u32
+        while gq==1u32 { if TK[q as u64]==0u32 {gq=0u32} else { if ispat(q,Q_LBR)==1u32 {dq=dq+1i32} else { if ispat(q,Q_RBR)==1u32 { dq=dq-1i32  if dq==0i32 {gq=0u32} } }  if gq==1u32 {q=q+1u32} } }
+        if ispat(q+1u32,Q_ASN)==1u32 {
+            let esz:i64=aesize(C)  let am:i64=awmask(C)
+            C=C+2u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  if abx>0i64 { econst(abx)  eb(0x20u32) }   /* addr = base + idx*esz */
+            C=C+1u32  ebin(0u32)                                             /* rhs (right-assoc recurse -> the chain folds) */
+            if am!=0i64 {econst(am)  eb(0x25u32)}
+            let tmp4:u32=LN  if LN<255u32 {LN=LN+1u32}
+            eu8(0x11u32,tmp4)  eu8(0x10u32,tmp4)  estore(esz)  eu8(0x10u32,tmp4)  return   /* SET tmp; GET tmp; STORE; GET tmp -> store + leave value */
+        }
+    } } } } } }
     eprim()  let mut go:u32=1u32
     while go==1u32 {
         if TK[C as u64]!=3u32 { go=0u32 }
@@ -1224,7 +1238,9 @@ fn pstmt() {
     }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_MUL { let stc:i32=stidx(C)  if stc>=0i32 {   /* TypedefName *p / **p [= e] ; -> struct-pointer local */
         C=C+1u32  let mut nstar:u32=0u32  while cp(Q_MUL)==1u32 { C=C+1u32  nstar=nstar+1u32 }   /* consume ALL `*` -- the old code assumed ONE, so `node_t **arr = pool_array(..)` (the seed's iii_pool_grow) landed on the 2nd `*`, dropped the init -> residue */
-        let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)
+        let nt:u32=C  C=C+1u32
+        if cp(Q_LBR)==1u32 { if abase(nt)>=0i64 { larr_decl_tail(nt)  return } }   /* `T *NAME[N] [= {&..,..}] ;` -> POINTER-ELEMENT local array (8B elements; prescan_structarr's ptr-elem arm -- grammar_mhash/parse_unregister tables[3]), NOT an SVIR scalar local.  Runtime element stores handle &param-rooted inits. */
+        let s:u32=ladd(nt)
         if nstar<=1u32 { LPT[s as u64]=stc } else { LPSZ[s as u64]=8i64  LPSG[s as u64]=0u32 }   /* `T *p` -> struct ptr (p->field) ; `T **p`+ -> a plain ptr whose pointee is an 8B pointer (`*p` = LOAD64, exactly `*arr = nodes_p`) */
         if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(s) }
         eat(Q_SEMI)  return
@@ -1287,6 +1303,7 @@ fn pstmt() {
         if stidx(C)<0i32 { if lidx(C)<0i32 { if abase(C)<0i64 { if cidx(C)<0i32 {
             if ispat(C+2u32,Q_SEMI)==1u32 { C=C+1u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LW[s as u64]=0i64  LSZ[s as u64]=8i64  LSG[s as u64]=0u32  eat(Q_SEMI)  return }   /* `T x ;` -> register the scalar local, emit NOTHING */
             if ispat(C+2u32,Q_ASN)==1u32 { C=C+1u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LW[s as u64]=0i64  LSZ[s as u64]=8i64  LSG[s as u64]=0u32  C=C+1u32  ebin(0u32)  emit_lset(s)  eat(Q_SEMI)  return }   /* `T x = e ;` -> scalar local + init store */
+            if ispat(C+2u32,Q_LBR)==1u32 { if abase(C+1u32)>=0i64 { C=C+1u32  let arrnt:u32=C  C=C+1u32  larr_decl_tail(arrnt)  return } }   /* `T NAME[..] [= {..}] ;` -> enum-typedef LOCAL ARRAY (4B elements; registered by prescan_structarr's enum-elem arm -- parse_primary/parse_pattern trits[6], recover_follow buf/fallback).  abase-guarded: unregistered shapes keep the old visible failure, never a silent wrong path. */
         } } } }
     } } } }
     let mut uovs:i32=0i32-1i32  let mut usk:u32=0u32                /* leading unsigned/signed prefix (bare `unsigned` = unsigned int) */
@@ -1660,7 +1677,32 @@ fn prescan() {
     t=0u32
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
 }
-fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]` -> a struct ARRAY (prescan_arr skips these: the element type isn't a dtype).  Runs AFTER prescan_struct (STSZ) + prescan_arr (MTOP continues). */
+fn declctx(t:u32) -> u32 {   /* can a DECLARATION start at token t?  Preceded by `;` `{` `}` or a qualifier (const/static/..) -- kills expression false-matches: in `x = a * b[0];` the `a` is preceded by `=`, so `IDENT * IDENT [` never registers a phantom array over a local pointer (the abase-shadow hazard). */
+    if t==0u32 { return 1u32 }
+    let p:u32=t-1u32
+    if ispat(p,Q_SEMI)==1u32 { return 1u32 }
+    if ispat(p,Q_LB)==1u32 { return 1u32 }
+    if ispat(p,Q_RB)==1u32 { return 1u32 }
+    if isqual(p)==1u32 { return 1u32 }
+    return 0u32
+}
+fn larr_decl_tail(arrnt:u32) {   /* pstmt tail for a LOCAL-ARRAY declarator whose NAME token is arrnt and C sits at its first `[`: skip the [dims], then `= { e0, e1, .. }` -> RUNTIME element stores (base/elem/mask from the prescan registration; expression inits fine, re-inits each call -- the 1317 dtype-array discipline, shared by the enum-typedef and struct-ptr-element routes). */
+    C=C+1u32  let mut gd:u32=1u32  while gd==1u32 { if cp(Q_RBR)==1u32 {gd=0u32} else { if TK[C as u64]==0u32 {gd=0u32} else {C=C+1u32} } }  eat(Q_RBR)
+    let mut g2d:u32=1u32  while g2d==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  let mut gx:u32=1u32  while gx==1u32 { if cp(Q_RBR)==1u32 {gx=0u32} else { if TK[C as u64]==0u32 {gx=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else {g2d=0u32} }
+    if cp(Q_ASN)==1u32 { C=C+1u32
+        if cp(Q_LB)==1u32 { C=C+1u32
+            let ab:i64=abase(arrnt)  let esz:i64=aesize(arrnt)  let am:i64=awmask(arrnt)  let mut k:i64=0i64  let mut ge:u32=1u32
+            while ge==1u32 {
+                if cp(Q_RB)==1u32 {ge=0u32} else { if TK[C as u64]==0u32 {ge=0u32}
+                else { econst(ab + (k*esz))  ebin(0u32)  if am!=0i64 {econst(am)  eb(0x25u32)}  estore(esz)  k=k+1i64
+                       if cp(Q_COM)==1u32 {C=C+1u32} } }
+            }
+            eat(Q_RB)
+        } else { ebin(0u32)  eb(0x72u32) }
+    }
+    eat(Q_SEMI)
+}
+fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]` -> a struct ARRAY (prescan_arr skips these: the element type isn't a dtype).  Runs AFTER prescan_struct (STSZ) + prescan_arr (MTOP continues).  ALSO registers (same walk, disjoint guards): ENUM-TYPEDEF-element arrays `kind_t buf[16]` (4B elements -- parse_primary/parse_pattern trits[6], recover_follow buf/fallback) and STRUCT-TYPEDEF-POINTER-element arrays `T *tables[3]` (8B elements -- grammar_mhash/parse_unregister), both local-or-global, declctx-guarded. */
     let mut t:u32=0u32  let mut pd:u32=0u32
     while t<NT {
         if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* params live at pd>0, NOT global arrays */
@@ -1705,6 +1747,41 @@ fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]
                     }
                 } }
             } } } }
+            if si<0i32 { if pd==0u32 { if declctx(t)==1u32 { if TK[t as u64]==1u32 { if dtype(t)==0u32 { if isqual(t)==0u32 { if is_label_kw(t)==0u32 { if cidx(t)<0i32 { if fidx(t)<0i32 {
+                if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LBR)==1u32 {   /* ENUM-TYPEDEF-element array `kind_t NAME[N|CONST|empty] [= {consts}]` -> 4B signed int elements (C enum ABI).  The parse_primary/parse_pattern `iii_ast_trit_t trits[6]` + recover_follow `iii_token_kind_t buf[16]` / `static const iii_token_kind_t fallback[] = {..}` class.  declctx kills expression false-matches. */
+                    let nt:u32=t+1u32  let base:u64=MTOP  let mut n:u64=0u64  let mut brc:u32=0u32
+                    if TK[(nt+2u32) as u64]==2u32 { n=TV[(nt+2u32) as u64] as u64  if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32 } } }
+                    else { let nci:i32=cidx(nt+2u32)  if nci>=0i32 { n=CNV[nci as u64] as u64  if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32 } } }
+                    else { if ispat(nt+2u32,Q_RBR)==1u32 { if ispat(nt+3u32,Q_ASN)==1u32 { if ispat(nt+4u32,Q_LB)==1u32 {   /* [] = {..} -> size from init count */
+                        brc=nt+5u32  let mut cq:u32=brc  let mut cg:u32=1u32
+                        while cg==1u32 { if ispat(cq,Q_RB)==1u32 {cg=0u32} else { if TK[cq as u64]==0u32 {cg=0u32} else { if ispat(cq,Q_COM)==1u32 {cq=cq+1u32} else { n=n+1u64  cq=cq+1u32 } } } }
+                    } } } } }
+                    if n>0u64 {
+                        AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=4294967295i64  AESZ[AN as u64]=4i64  ALEN[AN as u64]=n  ASGN[AN as u64]=1u32  AISC[AN as u64]=0u32  AROW[AN as u64]=0i64  MTOP=MTOP+(n*4u64)  AN=AN+1u32
+                        if brc>0u32 { let mut p2:u32=brc  let mut ix:u64=0u64  let mut gi:u32=1u32   /* constant inits (numeric / enum-member) -> data section; runtime re-stores at the decl (pstmt) write the same values */
+                            while gi==1u32 { if ispat(p2,Q_RB)==1u32 {gi=0u32} else { if TK[p2 as u64]==0u32 {gi=0u32}
+                                else { if TK[p2 as u64]==2u32 { data_putn(4i64, base+ix*4u64, TV[p2 as u64])  ix=ix+1u64 } else { let ci2:i32=cidx(p2)  if ci2>=0i32 { data_putn(4i64, base+ix*4u64, CNV[ci2 as u64])  ix=ix+1u64 } }  p2=p2+1u32
+                                       if ispat(p2,Q_COM)==1u32 {p2=p2+1u32} } } }
+                            let de2:u64=base+ix*4u64  if de2>DEND {DEND=de2}
+                        }
+                    }
+                } }
+            } } } } } } } } }
+            if pd==0u32 { if declctx(t)==1u32 { if TK[t as u64]==1u32 { if dtype(t)==0u32 { if isqual(t)==0u32 { if is_label_kw(t)==0u32 { if cidx(t)<0i32 { if fidx(t)<0i32 {
+                if ispat(t+1u32,Q_MUL)==1u32 {   /* STRUCT/OPAQUE-TYPEDEF POINTER-element array `T *NAME[N|CONST|empty]` -> 8B elements (the grammar_mhash/parse_unregister `iiip_reg_table_t *tables[3] = {&..}` class; the type may be a REGISTERED struct typedef (si>=0) or opaque; dtype-element `int *a[]` stays prescan_arr's).  Inits are RUNTIME stores at the decl (pstmt larr_decl_tail) -- &param-rooted addresses aren't compile-time data. */
+                    let mut nt2:u32=t+1u32  let mut gs2:u32=1u32  while gs2==1u32 { if ispat(nt2,Q_MUL)==1u32 {nt2=nt2+1u32} else { if isqual(nt2)==1u32 {nt2=nt2+1u32} else {gs2=0u32} } }
+                    if TK[nt2 as u64]==1u32 { if ispat(nt2+1u32,Q_LBR)==1u32 {
+                        let base3:u64=MTOP  let mut n3:u64=0u64
+                        if TK[(nt2+2u32) as u64]==2u32 { n3=TV[(nt2+2u32) as u64] as u64 }
+                        else { let nci3:i32=cidx(nt2+2u32)  if nci3>=0i32 { n3=CNV[nci3 as u64] as u64 }
+                        else { if ispat(nt2+2u32,Q_RBR)==1u32 { if ispat(nt2+3u32,Q_ASN)==1u32 { if ispat(nt2+4u32,Q_LB)==1u32 {
+                            let mut cq3:u32=nt2+5u32  let mut cg3:u32=1u32
+                            while cg3==1u32 { if ispat(cq3,Q_RB)==1u32 {cg3=0u32} else { if TK[cq3 as u64]==0u32 {cg3=0u32} else { if ispat(cq3,Q_COM)==1u32 {cq3=cq3+1u32} else { n3=n3+1u64  cq3=cq3+1u32 } } } }
+                        } } } } }
+                        if n3>0u64 { AO[AN as u64]=TO[nt2 as u64]  AL[AN as u64]=TL[nt2 as u64]  AB[AN as u64]=base3  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=0i64  AESZ[AN as u64]=8i64  ALEN[AN as u64]=n3  ASGN[AN as u64]=0u32  AISC[AN as u64]=0u32  AROW[AN as u64]=0i64  MTOP=MTOP+(n3*8u64)  AN=AN+1u32 }
+                    } }
+                }
+            } } } } } } } }
         }
         if adv==1u32 {t=t+1u32}
     }

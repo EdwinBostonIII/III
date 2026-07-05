@@ -3801,10 +3801,11 @@ bool iii_parse_unregister(iii_parse_state_t *st, uint32_t reg_handle)
         &st->reg_decl, &st->reg_stmt, &st->reg_primary
     };
     for (uint32_t t = 0; t < 3u; t++) {
+        iiip_reg_table_t *tbl = tables[t];   /* hoisted loop-invariant -- the same idiom iii_parse_grammar_mhash's registry fold uses */
         for (uint32_t i = 0; i < III_PARSE_REG_CAP; i++) {
-            if (tables[t]->entries[i].handle == reg_handle) {
-                memset(&tables[t]->entries[i], 0, sizeof(tables[t]->entries[i]));
-                if (tables[t]->count > 0u) tables[t]->count -= 1u;
+            if (tbl->entries[i].handle == reg_handle) {
+                memset(&tbl->entries[i], 0, sizeof(tbl->entries[i]));
+                if (tbl->count > 0u) tbl->count -= 1u;
                 return true;
             }
         }

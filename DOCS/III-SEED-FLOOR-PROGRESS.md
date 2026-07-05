@@ -14,10 +14,41 @@ path is sovereign at the bottom (no gcc compiling the seed).
 - `ccsv file.c dbg` now dumps STN/SFN/AN/CN/FN counts + per-STRUCT field metadata + the fn name-map — the
   ground-truth localizer that solved the prior session's 38-round HARD-STOP.
 
-## Verified state: 183 → 14 seed verify-failures — lex.c AND cg_r3.c at STRUCTURAL ZERO; IMPORTS-ON PERMANENT; BOTH BOSSES CLOSED; fn-ptr COMPLETE
-Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 2 ·
-emit 3 · ast 3 · cg_r3 0 · parse 6** = **14 over 845 functions** (imports-ON counts each 0x8A import decl as a fn).
-**`lex.c` and `cg_r3.c` are at structural zero.** The pre-imports OFF floor history (23/488) is below.
+## Verified state: 183 → 6 seed verify-failures — FOUR modules at STRUCTURAL ZERO (lex, sema, cg_r3, parse); ONLY the STDIO class remains
+Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 0 ·
+emit 3 · ast 3 · cg_r3 0 · parse 0** = **6 over 845 functions** (imports-ON counts each 0x8A import decl as a fn).
+The remaining 6 are ONE campaign: **STDIO** (emit write_sanctum_script/render_witness/emit_link + ast
+walk_state_deserialize/serialize_buf/deserialize_buf — tmpfile/ftell/fwrite/FILE*, the sovereign-runtime stroke).
+
+**THE PARSE/SEMA ZERO STROKE (2026-07-05, fix #31): floor 14→8→6 — parse.c AND sema.c reach STRUCTURAL ZERO; four construct classes + one &-chain arm, each falsifier-first.**
+Fresh-decoded the post-#30 parse-6 + sema-1 with svir_dis (all six shared the terminal signature `72@-1` — a bare
+DROP at statement position = pstmt's expr-fallback on an unrecognized DECLARATION):
+**(A) enum-typedef local ARRAYS** `iii_ast_trit_t trits[6];` / `iii_token_kind_t buf[16];` (parse_primary:1927,
+parse_pattern:2186, recover_follow:1196) — fix #22 covered the scalar (`kind_t x;`), the ARRAY declarator fell
+through everything; **(C) static-const local table** `static const iii_token_kind_t fallback[] = {..}`
+(recover_follow:1190) — skipquals reduces it to (A); runtime re-init per call is value-identical for a const
+table; **(B) pointer-element local arrays** `iiip_reg_table_t *tables[3] = {&st->reg_decl,..}` (grammar_mhash:3724,
+parse_unregister:3800) — the `TypedefName *p` handler consumed the name and left `[3] = {..}` dangling;
+**(D) chained array-element assignment** `buf[20]=buf[21]=buf[22]=buf[23]=0;` (witness_commit:1076) — fix #23's
+DOT-chain lesson, array complement.  FIXES: prescan_structarr gained two `declctx`-guarded registration arms
+(enum-elem 4B with constant data-inits; ptr-elem 8B — declctx requires the decl to be preceded by `;`/`{`/`}`/qual,
+killing the `x = a * b[0]` expression false-match that would phantom-register a local pointer); pstmt routes both
+shapes through the shared `larr_decl_tail` (dims skip + `= {..}` runtime element stores — &param-rooted inits
+compile as expressions); ebin minp==0 gained the `arr[idx] = rhs` EXPRESSION-assign (store AND leave value; aisc
+excludes global scalar-pointers, arow excludes 2D).  Falsifiers `_eta1/_eta2/_pta1/_cha1.c` each RED
+(`# 1 1 8 8`, interp=1) → GREEN (0-fail, interp=99).  parse 6→1, sema 2→1 — and the sema drop was
+decode_hexad_args (the "struct-params tail" was ACTUALLY one of these classes, not struct-params).  The two
+survivors: **sema_aggregate_dynamic_impact** decoded to **(E) `&p->emb.ptrfield[i]`** (`&s->annos.items[i]` —
+the &-DOT-chain walker summed offsets but had no deref+index arm at the FINAL field; added the 716 discipline:
+LOAD64(p+acc) + i*STSZ(pointee), inline arrays stay offset-only; falsifier `_ani1.c` RED→GREEN) — and
+**iii_parse_unregister**, whose un-hoisted `tables[t]->entries[i]` chains would need four new ptr-elem-array
+walkers for ONE fn → **Adjustment-1**: hoisted `iiip_reg_table_t *tbl = tables[t];` in parse.c (the exact
+loop-invariant idiom grammar_mhash's own registry fold already uses; gcc-clean, behavior identical by
+construction).  KATs promoted + wired (cfeat all-4): `test_enumarr.c` (A+C), `test_ptrarr.c` (B + the hoist
+idiom), `test_chainasn.c` (D), `test_addrchain.c` (E).  Gates: run_ccsv EXIT=0 zero-FAIL, fn-ptr gate ALL PASS,
+determinism — ccsv(sha256.c) byte-identical ACROSS the fix (additive for existing programs), 3 controls green.
+Found-but-parked (not seed-blocking, falsifier artifact): comma-declared struct GLOBALS `static box_t g1, g2, g3;`
+register only g1 (the _pta1 first-draft reading `01:32@1 83@-1` — &g2 emitted nothing).
 
 **IMPORTS-ON PERMANENT + call()[i] (2026-07-05, fix #30): floor 23→14 — cg_r3.c is the SECOND module at STRUCTURAL ZERO; the extern-call campaign RETIRED.**
 The parked rule ("re-enable with the downstream fixes for a NET drop") discharged by MEASUREMENT, not by building

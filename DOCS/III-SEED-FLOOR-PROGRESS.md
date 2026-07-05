@@ -25,13 +25,15 @@ empty stack (rc=8). Decoded from sema_local_lookup's trace tail (`… 60 44 72@-
 if-block END). Guard: `if cp(Q_RP) return` at one_incr entry. Cleared FIVE seed fns in one line:
 sema_local_lookup + parse's recover_to/arg-adjacent family. KAT `test_forempty.c` (cfeat all-4) pins the
 reverse loop AND `for (;;) { … break; }`. **Floor 23** (lex 0 · sema 3 · emit 3 · ast 3 · cg_r3 2 · parse 12).
-**The 23 fully mapped**: parse break/continue/return/use_decl/stmt (+ likely witness_commit/grammar_mhash/
-unregister) = the extern-call class — clears under imports-ON (measured, the U75 experiment); ast 3 + emit 3 =
-STDIO; sema decode_hexad_args (rc=2) = the struct-by-value-PARAMS tail (8B `iii_ast_list_t` by value + an
-array-member decay arg — the Boss-2 named residual); sema aggregate_dynamic_impact + iii_sema_run + cg_r3
-emit_field_label/emit_function + parse primary/pattern/wavefront/recover_follow — undecoded singles, several
-plausibly extern-call. The bounded-singles well at OFF is dry: the three campaigns (extern-sret under ON,
-STDIO, struct-by-value params) are the frontier.
+**The 23 fully mapped — ZERO undecoded residue** (cg_r3's two traced last: `emit_field_label`/`emit_function`
+both die at `iii_ast_source_buf(cg->ast)[…]` — the extern-call class AGAIN, compounded with `call()[i]`
+index-a-call-result, the UPDATE-61 named gap; identical trace signatures). The full census: **extern-call
+family** (parse break/continue/return/use_decl/stmt + witness/recover/grammar/unregister shapes, sema
+aggregate_dynamic_impact + iii_sema_run, cg_r3 ×2 — clears under imports-ON per the U75 measurement, with the
+struct-value-from-extern-sret and call()[i] sub-constructs to build there); **STDIO** (ast 3 + emit 3 —
+tmpfile/ftell/fwrite/FILE*); **struct-by-value-PARAMS tail** (sema decode_hexad_args rc=2 — 8B
+`iii_ast_list_t` by value + array-member decay arg, the Boss-2 named residual). The bounded-singles well at
+OFF is dry; the three campaigns are the frontier, each with its falsifier on disk and its first hour scripted.
 
 **THE IMPORTS RE-ENABLE EXPERIMENT (2026-07-05, measured and parked): ON = 36/845 vs OFF = 28/488 — still net +8; the parked rule holds.**
 `prescan_imports()` (complete since the recovery set: CALLED, declared-not-defined prototypes register as

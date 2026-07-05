@@ -7,7 +7,7 @@
 # driver runs all three under real rc capture so ANY one going red reddens ONE sweep.  Each child
 # carries its own teeth; this only composes their verdicts.
 #
-#   run_legA.sh          -- 28 Leg-A unit gates (SVIR<->SVIR prover, aliasing oracle, ETAT B0/B2
+#   run_legA.sh          -- 29 Leg-A unit gates (SVIR<->SVIR prover, aliasing oracle, ETAT B0/B2
 #                           memory, control-as-mux, loop-crush family through the geometric and
 #                           quadratic rungs, the STORE + COPY rungs (memory fragment), + the symbolic-freedom soundness gate, Merkle TCB,
 #                           fold, netlist)
@@ -63,7 +63,7 @@ runchild run_residue_real.sh
 
 echo "============================================================"
 if [ "$fail" -eq 0 ]; then
-    say "ALL MEMBRANE GATES GREEN -- Leg A (28) + ghost-build + toy ratchet + real-seed ratchet, sources tracked."
+    say "ALL MEMBRANE GATES GREEN -- Leg A (29) + ghost-build + toy ratchet + real-seed ratchet, sources tracked."
     exit 0
 fi
 say "MEMBRANE GATES: RED"

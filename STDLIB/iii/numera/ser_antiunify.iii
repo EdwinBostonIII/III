@@ -620,6 +620,11 @@ fn au_wmask(w: u32) -> u64 {                                       /* the w-byte
     if w >= 8u32 { return 18446744073709551615u64 }
     return (1u64 << ((w as u64) * 8u64)) - 1u64
 }
+/* fuzz-heap instrumentation (the EXECUTION-WITNESS surface): a certificate is a law over states; these
+ * let a KAT replay the ACTUAL loop on the heap and byte-compare against what the certificate predicts. */
+fn au_mem_clear() -> i32 @export { au_mem_zero()  return 0i32 }
+fn au_mem_get(addr: u64, w: u32) -> u64 @export { if addr + (w as u64) > TP_MEM_SZ { return 0u64 }  return au_mem_rd(addr, w) }
+fn au_mem_put(addr: u64, w: u32, v: u64) -> i32 @export { if addr + (w as u64) > TP_MEM_SZ { return 1i32 }  au_mem_wr(addr, w, v)  return 0i32 }
 /* CONCRETE black-box execution of ONE pass of a straight-line SVIR body over TP_LOC + TP_MEM.
  * 0=ok, 1=out-of-fragment. */
 fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 @export {

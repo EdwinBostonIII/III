@@ -1,0 +1,99 @@
+module au_certexec_kat
+
+/* THE EXECUTION WITNESS (2026-07-04): the memory-rung certificates are laws discharged by miters; THIS
+ * gate shows the laws mean what they say on REAL BYTES.  For each certified family, run the ACTUAL SVIR
+ * loop body N times on the fuzz heap, then verify every cell the certificate PREDICTS -- and that the
+ * neighbours stayed untouched (no phantom writes).
+ *
+ *   STORE: crush the memset body (cert S=4 V=42 W=4), replay 10 iterations from i=0 ->
+ *          mem32[1000+4k]==42 for k<10, mem32[996]==0, mem32[1040]==0.
+ *   COPY : crush the strided copy body (cert S=4 D=1000 W=4); seed src cells with 0x11110000+k;
+ *          replay 10 iterations -> dst[k]==src pattern for k<10 verbatim, dst edge cells untouched,
+ *          src cells UNCHANGED (a copy reads, never writes, its source).
+ *          The expected dst addresses are recomputed FROM the certificate accessors (A0 + D + S*k),
+ *          binding the cert numbers to the observed bytes -- not to the KAT author's arithmetic.
+ *
+ * exit 99 = the laws hold on the bytes; 1..8 = the numbered check broke. */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_store_stride() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_store_value() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_store_width() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_copy_stride() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_copy_offset() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_copy_width() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_svir_exec(base: u64, boff: u64, blen: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_tp_set(slot: u32, val: u64) -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_mem_clear() -> i32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_mem_get(addr: u64, w: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_mem_put(addr: u64, w: u32, v: u64) -> i32 from "ser_antiunify.iii"
+
+/* mem32[1000 + 4*i] = 42 ; i++   (the storewalk MEMSET body) */
+var MEMSET : [u8; 46] = [
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,42u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* mem32[2000+4i] = mem32[1000+4i] ; i++   (the copywalk UCOPY body) */
+var UCOPY : [u8; 60] = [
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+
+fn zero_locals() {
+    let mut z : u32 = 0u32
+    while z < 16u32 { au_tp_set(z, 0u64)  z = z + 1u32 }
+}
+
+fn main() -> u64 {
+    /* ---- STORE: certify, then replay 10 iterations and check every predicted cell ---- */
+    if au_topo_amputate(&MEMSET as u64, 0u64, 46u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 3u32 { return 1u64 }
+    let ss : u64 = au_last_store_stride()
+    let sv : u64 = au_last_store_value()
+    let sw : u32 = au_last_store_width()
+    au_mem_clear()
+    zero_locals()                                                  /* entry: i = 0 -> A0 = 1000 */
+    let mut n : u32 = 0u32
+    while n < 10u32 {
+        if au_svir_exec(&MEMSET as u64, 0u64, 46u64) != 0u32 { return 2u64 }
+        n = n + 1u32
+    }
+    let mut k : u64 = 0u64
+    while k < 10u64 {
+        if au_mem_get(1000u64 + ss * k, sw) != sv { return 3u64 }  /* every predicted cell holds V */
+        k = k + 1u64
+    }
+    if au_mem_get(996u64, 4u32) != 0u64 { return 4u64 }            /* no phantom write below the family */
+    if au_mem_get(1000u64 + ss * 10u64, sw) != 0u64 { return 4u64 }/* ... nor past its end */
+
+    /* ---- COPY: certify, seed the source, replay, check verbatim transfer + source integrity ---- */
+    if au_topo_amputate(&UCOPY as u64, 0u64, 60u64, 0u32, 7u64) != 1u32 { return 5u64 }
+    if au_last_kind() != 4u32 { return 5u64 }
+    let cs : u64 = au_last_copy_stride()
+    let cd : u64 = au_last_copy_offset()
+    let cw : u32 = au_last_copy_width()
+    au_mem_clear()
+    let mut j : u64 = 0u64
+    while j < 10u64 {
+        if au_mem_put(1000u64 + cs * j, cw, 286326784u64 + j) != 0i32 { return 6u64 }   /* src[k] = 0x11110000+k */
+        j = j + 1u64
+    }
+    zero_locals()                                                  /* entry: i = 0 -> src A0 = 1000 */
+    n = 0u32
+    while n < 10u32 {
+        if au_svir_exec(&UCOPY as u64, 0u64, 60u64) != 0u32 { return 6u64 }
+        n = n + 1u32
+    }
+    k = 0u64
+    while k < 10u64 {
+        let src : u64 = 1000u64 + cs * k
+        let dst : u64 = src + cd                                   /* the cert's OWN geometry: dst = src + D */
+        if au_mem_get(dst, cw) != (286326784u64 + k) { return 7u64 }   /* verbatim transfer          */
+        if au_mem_get(src, cw) != (286326784u64 + k) { return 8u64 }   /* the source is NEVER written */
+        k = k + 1u64
+    }
+    if au_mem_get(1000u64 + cd + cs * 10u64, cw) != 0u64 { return 7u64 }   /* nothing past the family */
+    return 99u64
+}

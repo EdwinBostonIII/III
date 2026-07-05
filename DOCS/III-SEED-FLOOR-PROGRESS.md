@@ -18,6 +18,30 @@ path is sovereign at the bottom (no gcc compiling the seed).
 Per module now (re-measured **2026-07-05**, `run_seed_verify.sh`, deterministic, 3 controls green): **lex 0 · sema 5 ·
 emit 3 · ast 8 · cg_r3 2 · parse 16** = 34 over 488 functions. **`lex.c` is the first seed module at structural zero.**
 
+**MEMBER-CHAIN walkers + struct-ptr stride (2026-07-05, fix #26): six single-hop walkers made chain-capable; a latent stride miscompile killed.**
+Decoded live from the 34 (tracer, not memory): the `call()->u.a` READ walker (eprim, the fix-#5 arrow chain) was
+ARROW-only — `->u.a` loaded 8 raw bytes at the embedded member and left `.a` dangling (rc=8; the seed's
+`iii_ast_get(..)->u.list.count` accessor class); the ARR[i]/p[i] element READ walkers and both their STORE twins
+were single-field — `POOL[i].u.b = 42` wrote 8 bytes at `u`, CLOBBERING both members (runtime-wrong, verify-blind);
+and STRUCT-pointer `p[i]` strode by the LPSZ default 8 over 16-byte elements on BOTH the read and store sides —
+**index 0 masked it** (0·8 = 0·16; the sampled-blindness class again, exposed the moment the falsifier dialed
+index 1 — vf=99 x86=1 wasm=1 gcc=99, two independent backends agreeing on the same wrong bytes). All six walkers
+now run the same 3-mode chain (ARROW = pointer-field deref hop, DOT into fieldpt>=0 = compile-time offset hop,
+else final field → typed load / emit_av store; offsets accumulate, the final field keeps its optional [k]);
+the two `p[i]` sites stride by STSZ[LPT] when the pointee is a struct. Single-hop emission byte-identical by
+construction. The call-rooted STORE (`iii_ast_get_mut(..)->u.break_.reserved = 0`) already existed in pstmt —
+the tracer proved it live and the READ side was the actual gap (three in-session premises stood or fell by
+decode, none by recall). **Falsifier `test_callchain.c`** (wired into run_ccsv cfeat, the all-4 standard) pins
+every rooting: call-rooted store+read chains, ARR[i]/p[i] read+store chains, and the p[1]/p[3] stride at
+non-zero indices; RED pre-fix (`# 2 1 8 8`, then the rc=2 clobber probe), GREEN after (`# 2 0 0 0`,
+interp/x86/wasm/gcc all 99). run_ccsv EXIT=0; fn-ptr gate 3/3 PASS; **floor 34 unchanged** — these fns'
+first blockers are elsewhere (the fixes are runtime-correctness in already-structurally-passing code paths;
+UPDATE-72's verify≠runtime calibration cutting the other way). NEXT (decoded, falsifiers on disk):
+the TABLE class — `static const entry_t TBL[] = { {"name", v}, ... }` never registers its element type nor
+initializes data, so `TBL[i].field` emits NOTHING (seed_sema fn31's pinned root: the strcmp-table idiom;
+`_tbl1.c`) — and the NESTED-BRACE class — `iii_zipper_collect_t c = { {0}, 0 }` (ast's zipper/walk cluster;
+`_nb1.c`).
+
 **fn-ptr Increment 3 LANDED (2026-07-05, fix #25): CALL_INDIRECT on the SOVEREIGN backends — the feature is all-4.**
 The one calibration INC-1/INC-2 carried ("NOT all-4 — x86/wasm computed-call = INC-3") is discharged. **x86**
 (`svir_x86.iii`): the site pops the runtime index to `%r10` (never an arg reg; the arg setup — byte-for-byte CALL's

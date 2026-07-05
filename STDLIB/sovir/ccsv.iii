@@ -841,8 +841,12 @@ fn eprim() {
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac)
-                let mut cur:i32=fn_ret_struct(FNT[fi as u64])  let mut gc:u32=1u32  if cur<0i32 {gc=0u32}  if cp(Q_ARROW)==0u32 {gc=0u32}   /* call()->field : the call leaves a `StructType *` -> resolve a trailing -> chain (parsers: iiip_peek2(st)->kind) */
-                while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)  let np:i32=fieldpt(cur,ftc)  if cp(Q_ARROW)==1u32 { if np>=0i32 { if fo>0i64 {econst(fo) eb(0x20u32)}  eb(0x82u32)  cur=np } else {gc=0u32} } else { if fo>0i64 {econst(fo) eb(0x20u32)}  eload(fieldelem(cur,ftc), fieldsign(cur,ftc))  gc=0u32 } }
+                let mut cur:i32=fn_ret_struct(FNT[fi as u64])  let mut gc:u32=1u32  if cur<0i32 {gc=0u32}  if cp(Q_ARROW)==0u32 {gc=0u32}   /* call()->field READ : the call leaves a `StructType *` -> resolve the trailing ->/. member chain (iiip_peek2(st)->kind ; iii_ast_get(..)->u.list.count).  3 modes, the MIRROR of pstmt's call-base STORE walker: ARROW-next = pointer-field deref hop (LOAD64) ; DOT-next into an embedded/union member (fieldpt>=0) = offset-only hop ; else = the FINAL field -> typed load.  (Was ARROW-only: `->u.a` loaded 8 raw bytes at `u` and left `.a` dangling -> desync -> the rc=8 class the _cs1 falsifier pins.) */
+                while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)  let np:i32=fieldpt(cur,ftc)
+                    let mut cm:u32=0u32  if cp(Q_ARROW)==1u32 {cm=1u32} else { if cp(Q_DOT)==1u32 { if np>=0i32 {cm=2u32} } }
+                    if cm==1u32 { if np>=0i32 { if fo>0i64 {econst(fo) eb(0x20u32)}  eb(0x82u32)  cur=np } else {gc=0u32} }
+                    else { if cm==2u32 { if fo>0i64 {econst(fo) eb(0x20u32)}  cur=np }
+                    else { if fo>0i64 {econst(fo) eb(0x20u32)}  eload(fieldelem(cur,ftc), fieldsign(cur,ftc))  gc=0u32 } } }
             } else { let lci:i32=lidx(t)  if lci>=0i32 { emit_lget(lci as u32)  eb(0x73u32)  eb(ac) } } }   /* fn-ptr INC-1: indirect call fp(args) -- fp a LOCAL/PARAM (fidx<0, lidx>=0) holding a fn-index; args already emitted above; push the index (local value) then CALL_INDIRECT ac (soundness: fidx==exec_fn index, discharged @1982/_fnptr_inc1_audit.md) */
             return
         }
@@ -854,15 +858,28 @@ fn eprim() {
                     return }
                 C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
                 estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
-                let vt0:i32=avtype(t)  if vt0>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft0:u32=C  C=C+1u32  let foff0:i64=fieldoff(vt0,ft0)  if foff0>0i64 {econst(foff0)  eb(0x20u32)}  let fe0:i64=fieldelem(vt0,ft0)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe0)  eb(0x20u32) }  eload(fe0, fieldsign(vt0,ft0))  return } }   /* T[i].field [/ T[i].arrayfield[k]] : struct-array element field READ -- the `[k]` adds k*fieldelem to the field address (a[i]+foff0), else `[k]` was left unconsumed -> emitted 0x00 (rc=2) + read the wrong cell */
+                let vt0:i32=avtype(t)  if vt0>=0i32 { if cp(Q_DOT)==1u32 {   /* T[i].f1[.f2..][k] : struct-array element MEMBER-CHAIN read -- embedded/union hops (fieldpt>=0, DOT-next) accumulate offsets at compile time; the FINAL field keeps its optional [k] element index.  (Was single-field: POOL[i].u.a loaded 8 raw bytes at `u` and left `.a` dangling -> desync; the _cs1 falsifier pins it.) */
+                    let mut cur0:i32=vt0  let mut acc0:i64=0i64  let mut gc0:u32=1u32
+                    while gc0==1u32 { C=C+1u32  let ft0:u32=C  C=C+1u32  acc0=acc0+fieldoff(cur0,ft0)  let np0:i32=fieldpt(cur0,ft0)
+                        let mut more0:u32=0u32  if np0>=0i32 { if cp(Q_DOT)==1u32 {more0=1u32} }
+                        if more0==1u32 { cur0=np0 }
+                        else { if acc0>0i64 {econst(acc0)  eb(0x20u32)}  let fe0:i64=fieldelem(cur0,ft0)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe0)  eb(0x20u32) }  eload(fe0, fieldsign(cur0,ft0))  gc0=0u32 } }
+                    return } }
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),0u32,1u32)  return }   /* arr[i]++ */
                 if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),1u32,1u32)  return }   /* arr[i]-- */
                 eload(sz, sg)  return }                 /* arr[i] : i*esz (+base) ; LOADn */
             let pli:i32=lidx(t)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)
-                estride(psz)  eb(0x20u32)
+                let mut pstr:i64=psz  let lptR:i32=LPT[pli as u64]  if lptR>=0i32 { pstr=STSZ[lptR as u64] as i64 }   /* STRUCT-ptr p[i]: the element stride is the STRUCT size, not LPSZ (which stays the 8 default -- p[1].k read POOL+8 not POOL+16; index 0 masked it) */
+                estride(pstr)  eb(0x20u32)
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,0u32,1u32)  return }   /* p[i]++ */
                 if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,1u32,1u32)  return }   /* p[i]-- */
-                let lptpir:i32=LPT[pli as u64]  if lptpir>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ftpir:u32=C  C=C+1u32  let fopir:i64=fieldoff(lptpir,ftpir)  if fopir>0i64 {econst(fopir) eb(0x20u32)}  let fepir:i64=fieldelem(lptpir,ftpir)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fepir)  eb(0x20u32) }  eload(fepir, fieldsign(lptpir,ftpir))  return } }   /* p[i].field [/ p[i].arrayfield[k]] : pointer-indexed struct-element field READ -- the seed's `ast->hashcons[i].mhash[k]`; the `[k]` adds k*fieldelem (else left unconsumed -> 0x00) */
+                let lptpir:i32=LPT[pli as u64]  if lptpir>=0i32 { if cp(Q_DOT)==1u32 {   /* p[i].f1[.f2..][k] : pointer-indexed struct-element MEMBER-CHAIN read (the seed's ast->hashcons[i].mhash[k] + nested sub-fields) -- same chain walk as the T[i] handler above */
+                    let mut curp:i32=lptpir  let mut accp:i64=0i64  let mut gcp:u32=1u32
+                    while gcp==1u32 { C=C+1u32  let ftpir:u32=C  C=C+1u32  accp=accp+fieldoff(curp,ftpir)  let npp:i32=fieldpt(curp,ftpir)
+                        let mut morep:u32=0u32  if npp>=0i32 { if cp(Q_DOT)==1u32 {morep=1u32} }
+                        if morep==1u32 { curp=npp }
+                        else { if accp>0i64 {econst(accp) eb(0x20u32)}  let fepir:i64=fieldelem(curp,ftpir)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fepir)  eb(0x20u32) }  eload(fepir, fieldsign(curp,ftpir))  gcp=0u32 } }
+                    return } }
                 eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
@@ -1426,15 +1443,28 @@ fn pstmt() {
                 eat(Q_SEMI)  return }
             C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
             estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
-            let vt1:i32=avtype(nt)  if vt1>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft1:u32=C  C=C+1u32  let foff1:i64=fieldoff(vt1,ft1)  if foff1>0i64 {econst(foff1)  eb(0x20u32)}  let fe1:i64=fieldelem(vt1,ft1)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe1)  eb(0x20u32) }  emit_av(fe1, fieldsign(vt1,ft1), fieldmask(vt1,ft1))  eat(Q_SEMI)  return } }   /* T[i].field [/ T[i].arrayfield[k]] = e : struct-array element field STORE -- the `[k]` adds k*fieldelem to the field address (else the store hit the wrong cell -> read-back 0) */
+            let vt1:i32=avtype(nt)  if vt1>=0i32 { if cp(Q_DOT)==1u32 {   /* T[i].f1[.f2..][k] = e : struct-array element MEMBER-CHAIN store (embedded/union hops accumulate; the final field keeps its optional [k]) -- the STORE twin of the eprim chain read; was single-field: POOL[i].u.b=42 wrote 8 bytes at `u`, clobbering both members (the _cs2 rc=2 probe) */
+                let mut cur1:i32=vt1  let mut acc1:i64=0i64  let mut gc1:u32=1u32
+                while gc1==1u32 { C=C+1u32  let ft1:u32=C  C=C+1u32  acc1=acc1+fieldoff(cur1,ft1)  let np1:i32=fieldpt(cur1,ft1)
+                    let mut more1:u32=0u32  if np1>=0i32 { if cp(Q_DOT)==1u32 {more1=1u32} }
+                    if more1==1u32 { cur1=np1 }
+                    else { if acc1>0i64 {econst(acc1)  eb(0x20u32)}  let fe1:i64=fieldelem(cur1,ft1)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe1)  eb(0x20u32) }  emit_av(fe1, fieldsign(cur1,ft1), fieldmask(cur1,ft1))  eat(Q_SEMI)  gc1=0u32 } }
+                return } }
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]++ ; (statement: eval + DROP) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]-- ; */
             emit_av(sz, sg, am)  eat(Q_SEMI)  return }
         let pli:i32=lidx(nt)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
-            estride(psz)  eb(0x20u32)
+            let mut pstrS:i64=psz  let lptW:i32=LPT[pli as u64]  if lptW>=0i32 { pstrS=STSZ[lptW as u64] as i64 }   /* STRUCT-ptr p[i] store: element stride = STRUCT size (the read-side twin @871; LPSZ stays 8 for struct ptrs) */
+            estride(pstrS)  eb(0x20u32)
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* p[i]++ ; */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* p[i]-- ; */
-            let lptpis:i32=LPT[pli as u64]  if lptpis>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ftpis:u32=C  C=C+1u32  let fopis:i64=fieldoff(lptpis,ftpis)  if fopis>0i64 {econst(fopis) eb(0x20u32)}  let fes:i64=fieldelem(lptpis,ftpis)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fes)  eb(0x20u32) }  emit_av(fes, fieldsign(lptpis,ftpis), fieldmask(lptpis,ftpis))  eat(Q_SEMI)  return } }   /* p[i].field [/ p[i].arrayfield[k]] = e : pointer-indexed struct-element field STORE -- the seed's `ast->hashcons[i].mhash[k] = ..`; the `[k]` adds k*fieldelem (else the store hit the wrong cell) */
+            let lptpis:i32=LPT[pli as u64]  if lptpis>=0i32 { if cp(Q_DOT)==1u32 {   /* p[i].f1[.f2..][k] = e : pointer-indexed struct-element MEMBER-CHAIN store (the seed's ast->hashcons[i].mhash[k]=.. + nested sub-fields) -- same chain walk as the T[i] store above */
+                let mut curs:i32=lptpis  let mut accs:i64=0i64  let mut gcs:u32=1u32
+                while gcs==1u32 { C=C+1u32  let ftpis:u32=C  C=C+1u32  accs=accs+fieldoff(curs,ftpis)  let nps:i32=fieldpt(curs,ftpis)
+                    let mut mores:u32=0u32  if nps>=0i32 { if cp(Q_DOT)==1u32 {mores=1u32} }
+                    if mores==1u32 { curs=nps }
+                    else { if accs>0i64 {econst(accs) eb(0x20u32)}  let fes:i64=fieldelem(curs,ftpis)  if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fes)  eb(0x20u32) }  emit_av(fes, fieldsign(curs,ftpis), fieldmask(curs,ftpis))  eat(Q_SEMI)  gcs=0u32 } }
+                return } }
             emit_av(psz, psg, 0i64)   /* pointee width: direct read, pli */
             eat(Q_SEMI)  return }
     } } }

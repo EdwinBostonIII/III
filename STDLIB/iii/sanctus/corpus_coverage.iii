@@ -972,6 +972,54 @@ fn cv_walk(cap_id: u64, root_addr: u64, phase: u32) {
     }
 }
 
+/* === multi-root corpus walking ===
+ * corpus_root may be a ';'-separated list (e.g. "STDLIB/corpus;STDLIB/sovir/kats"):
+ * each segment is walked in order for the given phase.  A plain single root is the
+ * degenerate one-segment case -- byte-identical to cv_walk on that root, so the
+ * fixture-driven KAT (1391_corpus_coverage) is unaffected.  RATIONALE (2026-07-06):
+ * the crusher campaign's executed KATs live under STDLIB/sovir/kats and are the
+ * real consumers of ser_antiunify's au_* observability surface; a reference/reach
+ * scan blind to that corpus reported 32 phantom-uncovered exports on a pristine
+ * clone (found by bootstrap_from_clean.sh stage 2).  Exports still derive ONLY
+ * from the modules root: extra reference roots can mark surface covered, never
+ * add surface -- the safe direction for a down-only ratchet. */
+var CV_ROOTSEG : [u8; 512]
+
+fn cv_walk_root_segment(cap_id: u64, roots_addr: u64, s: u64, e: u64, phase: u32) {
+    let cap : u64 = cap_id
+    if e > s {
+        let len : u64 = e - s
+        if len < 512u64 {
+            let src : *u8 = (roots_addr + s) as *u8
+            let dst : *u8 = (&CV_ROOTSEG as u64) as *u8
+            let mut k : u64 = 0u64
+            while k < len { dst[k] = src[k]   k = k + 1u64 }
+            dst[len] = 0u8
+            cv_walk(cap, (&CV_ROOTSEG as u64), phase)
+        }
+    }
+}
+
+fn cv_walk_roots(cap_id: u64, roots_addr: u64, phase: u32) {
+    let cap : u64 = cap_id
+    let ra : *u8 = roots_addr as *u8
+    let mut seg0 : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let c : u8 = ra[i]
+        if c == 0x3Bu8 {
+            cv_walk_root_segment(cap, roots_addr, seg0, i, phase)
+            seg0 = i + 1u64
+        }
+        if c == 0u8 {
+            cv_walk_root_segment(cap, roots_addr, seg0, i, phase)
+            go = 0u8
+        }
+        i = i + 1u64
+    }
+}
+
 /* === the audit === */
 
 fn cov_reset() @export {
@@ -1161,6 +1209,8 @@ fn cv_finalize_reach() {
  * from modules_root + corpus_root; pass 3 captures gate OUTCOMES + reach ROOTS from the
  * corpus root ONLY (production use is not proof); pass 4 builds the module call graph;
  * the reach fixpoint then finds the dark surface; finalize sorts all three censuses.
+ * corpus_root may be a ';'-separated multi-root list (see cv_walk_roots); every
+ * segment counts as executed-corpus space for passes 2 and 3.
  * Returns the uncovered count (the census number that previously rotted in prose). */
 fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     let cap : u64 = cap_id
@@ -1169,8 +1219,8 @@ fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     cov_reset()
     cv_walk(cap, mr, 1u32)
     cv_walk(cap, mr, 2u32)
-    cv_walk(cap, cr, 2u32)
-    cv_walk(cap, cr, 3u32)
+    cv_walk_roots(cap, cr, 2u32)
+    cv_walk_roots(cap, cr, 3u32)
     cv_walk(cap, mr, 4u32)
     cv_finalize()
     cv_finalize_gates()

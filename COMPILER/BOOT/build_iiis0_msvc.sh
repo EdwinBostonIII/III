@@ -27,8 +27,10 @@ WINBOOT="C:\\Users\\Edwin Boston\\OneDrive\\Desktop\\III\\COMPILER\\BOOT"
 WINOUT="C:\\Users\\Edwin Boston\\OneDrive\\Desktop\\III\\build\\_msvcddc"
 mkdir -p "$OUT"
 
-# 1. the iiis-0 TU set (same filter as build_iiis0.sh)
+# 1. the iiis-0 TU set (same filter as build_iiis0.sh; _*.c = standalone
+#    behavioral-harness probes with their own main(), never link TUs)
 TUS=$(cd "$BOOT" && find . -maxdepth 1 -type f -name '*.c' \
+        ! -name '_*.c' \
         ! -name '*_impl.c' ! -name '*xii*.c' ! -name 'gen_*.c' ! -name 'sign_*.c' \
         ! -name 'verify_*.c' ! -name 'iiis1_*.c' ! -name 'rm2_driver.c' \
         | sed 's|^\./||; s|\.c$||' | LC_ALL=C sort)

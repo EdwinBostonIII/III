@@ -1,0 +1,10 @@
+# Byte-faithful checkouts, ALWAYS.  This tree is wall-to-wall byte-compared:
+# drift gates byte-diff generated sections (gen_svm_layout.sh --check et al.),
+# mhash seals hash sources, corpus goldens are byte-exact.  Git-for-Windows
+# ships a SYSTEM-level core.autocrlf=true, which smudges LF blobs to CRLF on a
+# fresh clone and reddens the stdlib drift gates before a single tool runs
+# (this repo's local core.autocrlf=false does NOT travel with clones).
+# `-text` disables end-of-line conversion in BOTH directions for every path,
+# at every config scope, on every host: what is committed is what checks out.
+# (Found by bootstrap_from_clean.sh stage 2 on a pristine clone, 2026-07-06.)
+* -text

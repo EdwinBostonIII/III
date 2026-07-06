@@ -139,7 +139,11 @@ STDLIB_LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
 # Build a regex of basenames-without-.c that are ported.
 PORTED_RE="^($(IFS='|'; echo "${PORTED_TUS[*]}"))\.c\$"
 
+# _*.c = standalone behavioral-harness probes (own main(), #include a production
+# TU wholesale; ccsv Phi1 convention) — never link TUs.  With every production TU
+# ported at this stage, the probes would otherwise be the ONLY C files swept in.
 ALL_C="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
+            ! -name '_*.c' \
             ! -name 'gen_*.c' \
             ! -name 'sign_*.c' \
             ! -name 'verify_*.c' \

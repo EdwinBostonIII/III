@@ -20,7 +20,7 @@ extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
 
 var MODS : [u8; 32]
-var CORP : [u8; 32]
+var CORP : [u8; 64]
 var REPT : [u8; 32]
 var GREP : [u8; 32]
 var RREP : [u8; 32]
@@ -37,7 +37,9 @@ fn main() -> u64 {
     let env : u64 = cap_env_init()
     let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
     setl((&MODS as u64), ("STDLIB/iii" as u64), 10u64)
-    setl((&CORP as u64), ("STDLIB/corpus" as u64), 13u64)
+    /* multi-root executed-corpus space: the stdlib corpus + the crusher/sovir
+     * KATs (the real consumers of ser_antiunify's au_* surface) */
+    setl((&CORP as u64), ("STDLIB/corpus;STDLIB/sovir/kats" as u64), 31u64)
     setl((&REPT as u64), ("./_cov_report.txt" as u64), 17u64)
     setl((&GREP as u64), ("./_cov_gate_report.txt" as u64), 22u64)
     setl((&RREP as u64), ("./_cov_reach_report.txt" as u64), 23u64)

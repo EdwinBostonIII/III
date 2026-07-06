@@ -57,6 +57,7 @@ cc "$III/STDLIB/sovir/kats/_au_certexec_kat.iii"    "$O/certexec.o"
 cc "$III/STDLIB/sovir/kats/_au_mapwalk_kat.iii"     "$O/mapwalk.o"
 cc "$III/STDLIB/sovir/kats/_au_packwalk_kat.iii"    "$O/packwalk.o"
 cc "$III/STDLIB/sovir/kats/_au_scatterwalk_kat.iii" "$O/scatterwalk.o"
+cc "$III/STDLIB/sovir/kats/_au_observability_kat.iii" "$O/obsv.o"
 run "$O/seqkat.exe"  "$O/kat.o"    "$O/sks.o" "$O/bb.o"
 run "$O/modkat.exe"  "$O/modkat.o" "$O/sks.o" "$O/bb.o" "$O/svf.o"
 run "$O/sltkat.exe"  "$O/sltkat.o" "$O/sks.o" "$O/bb.o"
@@ -89,4 +90,5 @@ run "$O/aukat.exe"   "$O/aukat.o"  "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks
  run "$O/mapwalk.exe" "$O/mapwalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
  run "$O/packwalk.exe" "$O/packwalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
  run "$O/scatterwalk.exe" "$O/scatterwalk.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
+ run "$O/obsv.exe" "$O/obsv.o" "$O/au.o" "$O/causal.o" "$O/absint.o" "$O/sks.o" "$O/bb.o"
 if [ "$fail" -eq 0 ]; then echo "[legA] ALL GREEN -- Leg A + IF-diamond + ETAT(mech1+B0+B2 memory) + closed synthesis loop, teeth live"; exit 0; else echo "[legA] RED"; exit 1; fi

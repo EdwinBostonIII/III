@@ -1,0 +1,137 @@
+module au_observability_kat
+
+/* THE OBSERVABILITY-SURFACE KAT (2026-07-06): pins the au_* introspection API the other
+ * rung KATs leave unread -- the per-fuzz-pass counters (au_fz_stores/loads/store_w/load_w),
+ * the loop-body locator wrappers (au_probe_locate/body_off/body_len), and the defer-reason
+ * census reader (au_report_why).  Found by bootstrap_from_clean.sh: these 8 exports were
+ * the coverage ledger's last phantom-uncovered names, consumed until now only by ephemeral
+ * script-generated probes under build/ that a pristine clone never has.
+ *
+ * The locate path follows the DESIGNED probe flow (the wrapper's own doc): run the census,
+ * take the ledger loop's ABSOLUTE offset from au_report_off(i), hand it to au_probe_locate.
+ * (lp is the offset OF the LOOP opcode; these wrapped modules open BLOCK(0x40) LOOP(0x41),
+ * so the loop sits at offset 1 -- and lp=0, the BLOCK, is the honest not-found path: at
+ * THAT level there is no BR_IF/BR pair, the inner loop's own pair sits at depth 1.)
+ *
+ * Two-path throughout (no tautologies):
+ *   fz      a binary MAP body (2 loads/pass) vs a COPY body (1 load/pass) -- the SAME
+ *           getters read DIFFERENT counts; widths pinned at 4 on both
+ *   locate  found at off=16 with len 84 (map) vs len 60 (copy); the BLOCK-level probe
+ *           honestly reports absent
+ *   why     a DEFER entry carries its reason (7 = memfit: the value reads the induction
+ *           var) vs a CRUSHED entry which carries none (0)
+ *
+ * exit 99 = all contracts hold; 1..26 = the numbered contract broken. */
+
+extern @abi(c-msvc-x64) fn au_topo_amputate(base: u64, boff: u64, blen: u64, accum: u32, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_last_kind() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_fz_stores(k: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_fz_loads(k: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_fz_store_w(k: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_fz_load_w(k: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_probe_locate(base: u64, blen: u64, lp: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_probe_body_off() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_probe_body_len() -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_crush_report(base: u64, boff: u64, blen: u64, accum: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_n() -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_off(i: u32) -> u64 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_verdict(i: u32) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_report_why(i: u32) -> u32 from "ser_antiunify.iii"
+
+/* mem32[3000+4i] = mem32[1000+4i] ^ mem32[2000+4i] ; i++   (the mapwalk XORMAP body) */
+var XORMAP : [u8; 96] = [
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* mem32[2000+4i] = mem32[1000+4i] ; i++   (the copywalk UCOPY body: ONE load per pass) */
+var UCOPY : [u8; 60] = [
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8]
+/* while i!=0 { XORMAP } : BLOCK LOOP shell 16 + 84 literal body bytes + 4 tail (+12 zero
+ * pad to the declared 116) -- LOOP at 1; the located body is off 16, len 84 (the depth-0
+ * back-edge BR sits right after the 84 real opcode bytes) */
+var WMAP : [u8; 116] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+/* while i!=0 { UCOPY } : shell 16 + 60 + 4 = 80 (LOOP at 1; body off 16 len 60) */
+var WCOPY : [u8; 80] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+/* while i!=0 { dst = (src0^src1)^i } : shell 16 + IDXMAP 100 + 4 = 120 -- the value reads
+ * the induction var, so the loop DEFERS with why = 7 (memfit) in the census */
+var WIDX : [u8; 120] = [
+  64u8,65u8, 16u8,1u8, 1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 48u8, 81u8,1u8,
+  1u8,184u8,11u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8,
+  1u8,232u8,3u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  1u8,208u8,7u8,0u8,0u8,0u8,0u8,0u8,0u8, 16u8,1u8, 1u8,4u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 34u8, 32u8, 134u8,
+  39u8,
+  16u8,1u8, 39u8,
+  137u8,
+  16u8,1u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 32u8, 17u8,1u8,
+  80u8,0u8, 68u8,68u8]
+
+fn main() -> u64 {
+    /* (1) the binary MAP crushes; every fuzz pass counted 1 store + 2 loads, both width 4 */
+    if au_topo_amputate(&XORMAP as u64, 0u64, 96u64, 0u32, 7u64) != 1u32 { return 1u64 }
+    if au_last_kind() != 5u32 { return 2u64 }
+    let mut k : u32 = 0u32
+    while k < 4u32 {
+        if au_fz_stores(k) != 1u32 { return 10u64 }
+        if au_fz_loads(k) != 2u32 { return 11u64 }
+        if au_fz_store_w(k) != 4u32 { return 12u64 }
+        if au_fz_load_w(k) != 4u32 { return 13u64 }
+        k = k + 1u32
+    }
+
+    /* (2) the COPY crushes; the SAME getters now read ONE load per pass -- the teeth */
+    if au_topo_amputate(&UCOPY as u64, 0u64, 60u64, 0u32, 7u64) != 1u32 { return 3u64 }
+    if au_last_kind() != 4u32 { return 4u64 }
+    k = 0u32
+    while k < 4u32 {
+        if au_fz_loads(k) != 1u32 { return 14u64 }
+        if au_fz_stores(k) != 1u32 { return 15u64 }
+        if au_fz_load_w(k) != 4u32 { return 16u64 }
+        k = k + 1u32
+    }
+
+    /* (3) census -> locate, the designed probe flow: the MAP module's one loop CRUSHES
+     * (carrying no defer-reason), its ledger offset feeds the locator, the body extent
+     * is exactly the shell geometry */
+    if au_crush_report(&WMAP as u64, 0u64, 116u64, 0u32) != 1u32 { return 20u64 }
+    if au_report_n() != 1u32 { return 21u64 }
+    if au_report_why(0u32) != 0u32 { return 22u64 }
+    let lpm : u64 = au_report_off(0u32)
+    if au_probe_locate(&WMAP as u64, 116u64, lpm) != 1u32 { return 5u64 }
+    if au_probe_body_off() != 16u64 { return 6u64 }
+    if au_probe_body_len() != 84u64 { return 7u64 }
+    /* the COPY module: same shell, DIFFERENT body length -- the len teeth */
+    if au_crush_report(&WCOPY as u64, 0u64, 80u64, 0u32) != 1u32 { return 23u64 }
+    let lpc : u64 = au_report_off(0u32)
+    if au_probe_locate(&WCOPY as u64, 80u64, lpc) != 1u32 { return 17u64 }
+    if au_probe_body_off() != 16u64 { return 18u64 }
+    if au_probe_body_len() != 60u64 { return 19u64 }
+    /* the BLOCK-level probe (lp=0, not a LOOP): the inner pair sits at depth 1 -> absent */
+    if au_probe_locate(&WMAP as u64, 116u64, 0u64) != 0u32 { return 8u64 }
+
+    /* (4) the why census: the index-reading loop DEFERS and carries reason 7 (memfit) */
+    if au_crush_report(&WIDX as u64, 0u64, 120u64, 0u32) == 1u32 { return 9u64 }
+    if au_report_n() != 1u32 { return 24u64 }
+    if au_report_verdict(0u32) != 0u32 { return 25u64 }   /* census verdicts are binary: 1 crushed, 0 not */
+    if au_report_why(0u32) != 7u32 { return 26u64 }
+    return 99u64
+}

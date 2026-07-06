@@ -128,6 +128,11 @@ CFLAGS_COMMON=(
     -Wno-unused-parameter
     -Wno-unused-function
     -Wno-unused-variable
+    # gcc>=15 (MinGW) flags the seed's bare popen/pclose prototypes (emit.c:43-44,
+    # load-bearing for ccsv host-import registration) as -Werror=attributes
+    # (dropped dllimport).  Optimisation hint only; link identical without it.
+    # Same rationale + wording as build_iiis0.sh.
+    -Wno-attributes
     -fno-strict-aliasing
     "-ffile-prefix-map=${BOOT_DIR}=."
     "-ffile-prefix-map=${III_ROOT}=."
@@ -167,7 +172,12 @@ PORTED_RE="^($(IFS='|'; echo "${PORTED_TUS[*]}"))\.c\$"
 # byte-equivalent (1262 LOC) CLI orchestrator and @exports `main` (the only
 # global main_impl.c provided; the rest were static).  The self-host front-end
 # (lex+ast+parse+main) is now fully .iii.
+# _*.c (leading underscore) are STANDALONE behavioral-harness probes (own main(),
+# #include a production TU wholesale — _lexharness.c/_astharness.c, ccsv Phi1).
+# Linking one duplicates main + every iii_lex_*/iii_ast_* symbol the .iii ports
+# already @export.  Excluded as a convention, present and future.
 ALL_C="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
+            ! -name '_*.c' \
             ! -name '*xii*.c' ! -name 'gen_*.c' ! -name 'sign_*.c' \
             ! -name 'lex_impl.c' ! -name 'ast_impl.c' ! -name 'parse_impl.c' \
             ! -name 'main_impl.c' ! -name 'rm2_driver.c' \

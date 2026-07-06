@@ -186,6 +186,14 @@ do_build() {
         -Wno-unused-parameter
         -Wno-unused-function
         -Wno-unused-variable
+        # gcc>=15 (MinGW): <stdio.h> maps popen->_popen carrying dllimport; the
+        # seed's deliberate bare prototypes (load-bearing for ccsv host-import
+        # registration — see emit.c:30-34) then "drop" the attribute, which is
+        # -Werror=attributes.  dllimport is a call-site optimisation hint only:
+        # the link resolves identically without it (every sealed build predating
+        # gcc-15 shipped attribute-less).  Silence the class rather than perturb
+        # the frozen seed source.
+        -Wno-attributes
         -fno-strict-aliasing
         "-ffile-prefix-map=${BOOT_DIR}=."
         "-ffile-prefix-map=${III_ROOT}=."
@@ -216,7 +224,13 @@ do_build() {
     # STDLIB/iii/omnia/xii_*.iii).  The generator binaries (gen_xii_*.c)
     # are standalone tools invoked from build_xii.sh, not linked into
     # iiis-0.  All XII files are skipped via the !xii name pattern.
+    # _*.c (leading underscore) are STANDALONE behavioral-harness probes (own
+    # main(), #include a production TU wholesale — e.g. _lexharness.c /
+    # _astharness.c from the ccsv Phi1 campaign).  Linking one would duplicate
+    # main + every symbol of the included TU.  The _*.c pattern excludes the
+    # whole probe convention, present and future.
     _all_c="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
+                 ! -name '_*.c' \
                  ! -name '*_impl.c' \
                  ! -name '*xii*.c' \
                  ! -name 'gen_*.c' \
@@ -324,10 +338,13 @@ ENV_MHASH="$(
       | sha256sum | cut -d' ' -f1
 )"
 
+# This filter MUST mirror do_build's _all_c filter exactly — the witness
+# attests the source list that was actually compiled+linked.
 SRC_LIST_JSON="$(
-    cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' ! -name '*_impl.c' \
+    cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' ! -name '_*.c' \
+                  ! -name '*_impl.c' \
                   ! -name '*xii*.c' ! -name 'gen_*.c' ! -name 'sign_*.c' \
-                  ! -name 'iiis1_*.c' \
+                  ! -name 'verify_*.c' ! -name 'iiis1_*.c' ! -name 'rm2_driver.c' \
         | sed 's|^\./||' | LC_ALL=C sort -V \
         | awk 'BEGIN{printf "["} { if(NR>1)printf ","; printf "\"%s\"",$0 } END{printf "]"}'
 )"

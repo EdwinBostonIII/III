@@ -91,9 +91,14 @@ fi
 W="$(mktemp -d "${TMPDIR:-/tmp}/seed-id.XXXXXX")"
 trap '[ -n "${W:-}" ] && rm -rf "$W"' EXIT
 
-# Compile $1=binary $2=relpath(from BOOT) $3=outfile ; one retry defeats transient resource failures.
-compile(){ ( cd "$BOOT" && { timeout 25 "$1" "$2" --compile-only --out "$3" >/dev/null 2>&1 \
-                          || timeout 25 "$1" "$2" --compile-only --out "$3" >/dev/null 2>&1; } ); }
+# Compile $1=binary $2=relpath(from BOOT) $3=outfile.o ; emits $3.s (the CODEGEN, assembly text).
+# ASSEMBLER-AGNOSTIC: we compare the .o.s (what the compiler actually EMITS) not the post-assembly .o, so
+# the gate proves "iiis-0 and iiis-2 emit identical codegen" DIRECTLY -- and it survives the sovereign-default
+# flip (C4), where iiis-2's .o is sovas-assembled (no .pdata, inline-resolved relocs) but its .o.s is
+# byte-identical to iiis-0's.  --emit-asm-only stops after codegen so it also needs NO gcc.  One retry
+# defeats transient resource failures.
+compile(){ ( cd "$BOOT" && { timeout 25 "$1" "$2" --emit-asm-only --out "$3" >/dev/null 2>&1 \
+                          || timeout 25 "$1" "$2" --emit-asm-only --out "$3" >/dev/null 2>&1; } ); }
 
 # Section name list of an object (column-2 of objdump -h rows).
 sections(){ objdump -h "$1" 2>/dev/null | awk '/^[[:space:]]+[0-9]+[[:space:]]/{print $2}'; }
@@ -106,74 +111,58 @@ secsha(){ local f="$1" s="$2" b="$W/sec.bin"
 # Normalised relocation dump (drop the filename header line so only records remain).
 relocs(){ objdump -r "$1" 2>/dev/null | sed '1,2d'; }
 
-# Compare two objects under the trust-bearing invariant.  Echoes a verdict token; return 0=benign, 1=REAL diverge.
-# NOTE: seed_obj_equiv.sh is the CANONICAL single-definition oracle, and is exactly what build_iiis1.sh --check-corpus
-# runs per program.  This gate INLINES the same logic on purpose: delegating to a per-program subprocess adds ~400
-# Windows process spawns over the 60-program corpus (minutes -> timeout).  Keep the two in sync; oracle is the truth.
-#   TEXTDIFF -> .text differs [fatal] | RELOCDIFF -> relocs differ [fatal] | SECSET -> section sets differ [fatal]
-#   SECDIFF:S -> non-.rodata section S differs [fatal] | RODATAREF -> a divergent .rodata IS referenced [fatal]
-#   RODATA -> only inert .rodata differs [ok] | IDENTICAL -> whole object byte-identical [ok]
-compare(){ local o0="$1" o2="$2"
-  if cmp -s "$o0" "$o2"; then echo "IDENTICAL"; return 0; fi
-  if [ "$(secsha "$o0" .text)" != "$(secsha "$o2" .text)" ]; then echo "TEXTDIFF"; return 1; fi
-  if [ "$(relocs "$o0")" != "$(relocs "$o2")" ]; then echo "RELOCDIFF"; return 1; fi
-  local s0 s2; s0="$(sections "$o0" | grep -vx '.rodata' | sort)"; s2="$(sections "$o2" | grep -vx '.rodata' | sort)"
-  if [ "$s0" != "$s2" ]; then echo "SECSET"; return 1; fi
-  local s
-  while IFS= read -r s; do
-    [ -z "$s" ] && continue
-    if [ "$(secsha "$o0" "$s")" != "$(secsha "$o2" "$s")" ]; then echo "SECDIFF:$s"; return 1; fi
-  done <<< "$s0"
-  if   objdump -r "$o0" 2>/dev/null | awk 'NF>=3{print $3}' | grep -q 'rodata' \
-    || objdump -r "$o2" 2>/dev/null | awk 'NF>=3{print $3}' | grep -q 'rodata'; then echo "RODATAREF"; return 1; fi
-  echo "RODATA"; return 0
+# Compare the CODEGEN of two compilers on one program: cmp their emitted .o.s (assembly text).  This is the
+# source-of-truth drift check -- STRONGER than a post-assembly .o comparison (which an assembler's own
+# conventions, e.g. gcc's .pdata/.xdata SEH tables or reloc encoding, can confound).  If the .o.s is
+# byte-identical the compilers emit identical code+data+rodata; any difference IS a real codegen drift.
+#   $1,$2 = the .o paths passed to compile(); the actual codegen is at $1.s / $2.s.
+#   IDENTICAL [ok] | CODEGENDIFF [fatal] | NOASM [fatal: a compiler emitted no .o.s]
+compare(){ local s0="$1.s" s2="$2.s"
+  if [ ! -f "$s0" ] || [ ! -f "$s2" ]; then echo "NOASM"; return 1; fi
+  if cmp -s "$s0" "$s2"; then echo "IDENTICAL"; return 0; fi
+  echo "CODEGENDIFF"; return 1
 }
 
 if [ "$SELFTEST" -eq 1 ]; then
-  log "selftest: proving the .text comparison has teeth (two DIFFERENT programs must report TEXTDIFF)"
+  log "selftest: proving the codegen comparison has teeth (two DIFFERENT programs must report CODEGENDIFF)"
   compile "$I0" "stage1_corpus/01_return_const.iii" "$W/st_a.o" || { log "selftest compile A failed"; exit 2; }
   compile "$I0" "stage1_corpus/30_byte_index.iii"   "$W/st_b.o" || { log "selftest compile B failed"; exit 2; }
   v="$(compare "$W/st_a.o" "$W/st_b.o")"; rc=$?
-  if [ "$v" = "TEXTDIFF" ] && [ $rc -ne 0 ]; then
+  if [ "$v" = "CODEGENDIFF" ] && [ $rc -ne 0 ]; then
     log "selftest PASS: comparator reports '$v' (rc=$rc) on two different programs -- the gate is not vacuous."
     exit 0
   else
-    log "selftest FAIL: expected TEXTDIFF/rc!=0, got '$v'/rc=$rc -- the .text check is broken."
+    log "selftest FAIL: expected CODEGENDIFF/rc!=0, got '$v'/rc=$rc -- the codegen check is broken."
     exit 1
   fi
 fi
 
-n=0; textsame=0; rodata=0; identical=0; fails=0
+n=0; identical=0; fails=0
 FAILED=""
 for prog in "$CORPUS"/*.iii; do
   name="$(basename "$prog" .iii)"; n=$((n+1))
   o0="$W/$name.0.o"; o2="$W/$name.2.o"
   if ! compile "$I0" "stage1_corpus/$name.iii" "$o0"; then log "WARN: iiis-0 could not compile $name (skipped)"; continue; fi
   if ! compile "$I2" "stage1_corpus/$name.iii" "$o2"; then log "WARN: iiis-2 could not compile $name (skipped)"; continue; fi
-  # keystone: .text identical regardless of verdict path
-  [ "$(secsha "$o0" .text)" = "$(secsha "$o2" .text)" ] && textsame=$((textsame+1))
   v="$(compare "$o0" "$o2")"; rc=$?
   case "$v" in
     IDENTICAL) identical=$((identical+1)) ;;
-    RODATA)    rodata=$((rodata+1)); [ "$VERBOSE" -eq 1 ] && log "ok   $name : divergence confined to inert .rodata" ;;
     *)         fails=$((fails+1)); FAILED="$FAILED $name($v)"; log "FAIL $name : $v" ;;
   esac
 done
 
 log "-------------------------------------------------------------"
-log "stage1_corpus programs compiled by both : $n"
-log ".text (code) byte-identical iiis-0==iiis-2 : $textsame / $n"
-log "whole-object identical                     : $identical"
-log "divergence confined to inert .rodata       : $rodata"
-log "REAL (non-.rodata) divergences             : $fails"
+log "stage1_corpus programs compiled by both     : $n"
+log "codegen (.o.s) byte-identical iiis-0==iiis-2 : $identical / $n"
+log "codegen divergences                          : $fails"
 if [ "$fails" -ne 0 ]; then
-  log "GATE FAIL -- a trust-bearing section or relocation diverged:$FAILED"
+  log "GATE FAIL -- iiis-0 and iiis-2 codegen diverged:$FAILED"
   exit 1
 fi
-if [ "$textsame" -ne "$n" ]; then
-  log "GATE FAIL -- .text not identical on all programs ($textsame/$n)"
+if [ "$identical" -ne "$n" ]; then
+  log "GATE FAIL -- codegen not identical on all programs ($identical/$n)"
   exit 1
 fi
-log "GATE PASS -- iiis-0 and iiis-2 emit byte-identical code+data+relocs for all $n stage1_corpus programs;"
-log "             the only divergence is the inert .rodata provenance string pool (unreachable by running code)."
+log "GATE PASS -- iiis-0 and iiis-2 emit byte-identical CODEGEN (.o.s) for all $n stage1_corpus programs;"
+log "             assembler-agnostic, so it holds whether iiis-2's .o is gcc- or sovas-assembled (C4 flip)."
 exit 0

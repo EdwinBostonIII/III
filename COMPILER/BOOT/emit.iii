@@ -91,7 +91,7 @@ extern @abi(c-msvc-x64) fn sovld_link_finish() -> i32 from "sovld.iii"
  * built compiler still defaults to witness; the sovereign functions exist + are gated. */
 const III_EMIT_MODE_SOVEREIGN : u32 = 0u32
 const III_EMIT_MODE_WITNESS   : u32 = 1u32
-var G_EMIT_MODE : u32 = 1u32   /* C2/C3 land as source with witness default; C4 flips to 0 + re-seals */
+var G_EMIT_MODE : u32 = 0u32   /* C4: SOVEREIGN is the DEFAULT emit (in-process sovas assemble); gcc is the --emit=witness opt-out.  III has no exception model, so the .pdata/.xdata SEH metadata gcc-as emits is dead for III binaries -- sovas omits it and the whole sovereign toolchain self-hosts + runs without it. */
 fn iii_emit_set_mode(m: u32) -> u32 @export { if m > 1u32 { return III_EMIT_E_BAD_FORMAT }  G_EMIT_MODE = m  return III_EMIT_OK }
 fn iii_emit_get_mode() -> u32 @export { return G_EMIT_MODE }
 

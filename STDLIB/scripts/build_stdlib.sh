@@ -1841,11 +1841,21 @@ if [[ $FAIL -eq 0 ]]; then
         sleep 1
     done
     echo "[build_stdlib] aggregated -> $BUILD_DIR/libiii_native.a"
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$BUILD_DIR/libiii_native.a" > "$BUILD_DIR/libiii_native.a.mhash"
-        echo "[build_stdlib] mhash:"
-        cat "$BUILD_DIR/libiii_native.a.mhash"
-    fi
+    # SEAL AUTHORSHIP (basal law): the archive seal is REQUIRED (the old soft
+    # `if command -v sha256sum` skip is gone) and sovereign-primary -- III's own
+    # FIPS-KAT'd SHA-256 (aether/sovhash over numera/cad) authors it, GNU is the
+    # veto-witness (COMPILER/BOOT/mhash_lib.sh).  The hasher mints against the
+    # very archive it seals: the witness-triangle argument (seal_sources.sh:122)
+    # makes a self-serving lie unexpressible -- III and GNU must agree
+    # byte-for-byte or the build FAILS.
+    . "$STDLIB_DIR/../COMPILER/BOOT/mhash_lib.sh"
+    mhash_init --require-sovereign \
+        || { echo "[build_stdlib] FATAL: sovereign seal authorship unavailable (rc=$?)"; exit 1; }
+    ARCH_MHASH="$(mhash_file "$BUILD_DIR/libiii_native.a")" \
+        || { echo "[build_stdlib] FATAL: archive seal hash failed"; exit 1; }
+    printf '%s  %s\n' "$ARCH_MHASH" "$BUILD_DIR/libiii_native.a" > "$BUILD_DIR/libiii_native.a.mhash"
+    echo "[build_stdlib] mhash (sovereign-authored, GNU-witnessed):"
+    cat "$BUILD_DIR/libiii_native.a.mhash"
 fi
 
 # --- Coverage ratchet gate (sanctus/corpus_coverage: the executable ledger) -------------

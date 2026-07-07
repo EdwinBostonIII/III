@@ -30,6 +30,13 @@ if [[ ! -f "$CCL" || ! -f "$TC" ]]; then
     exit 2
 fi
 
+# SEAL AUTHORSHIP (basal law): the trusted-base root is an ATTESTATION, so it is
+# sovereign-authored + GNU-witnessed (mhash_lib.sh).  Soft init: a fresh checkout
+# before the first stdlib build falls back to GNU, loudly; every built tree
+# computes this root with III's own crypto.
+. "$ROOT_DIR/COMPILER/BOOT/mhash_lib.sh"
+mhash_init || { echo "[trusted_base_check] FATAL: mhash init failed (rc=$?)" >&2; exit 2; }
+
 # tc_to_ccl spans from `fn tc_to_ccl(` to the first column-0 `}` (the function's close;
 # its inner braces are indented, so `^}` matches only the closing brace).
 extract_tc_to_ccl() {
@@ -37,10 +44,11 @@ extract_tc_to_ccl() {
 }
 
 compute_root() {
-    { cat "$CCL"; extract_tc_to_ccl; } | sha256sum | cut -d' ' -f1
+    { cat "$CCL"; extract_tc_to_ccl; } | mhash_stdin
 }
 
 CUR="$(compute_root)"
+[[ "$CUR" =~ ^[0-9a-f]{64}$ ]] || { echo "[trusted_base_check] FATAL: root computation failed" >&2; exit 2; }
 
 case "${1:---check}" in
     --print)

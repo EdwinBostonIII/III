@@ -57,10 +57,18 @@ esac; done
 log(){ printf '[seed-id] %s\n' "$*" >&2; }
 command -v objcopy >/dev/null 2>&1 || { log "FAIL: objcopy not found (need binutils)"; exit 2; }
 command -v objdump >/dev/null 2>&1 || { log "FAIL: objdump not found (need binutils)"; exit 2; }
-command -v sha256sum >/dev/null 2>&1 || { log "FAIL: sha256sum not found"; exit 2; }
+command -v sha256sum >/dev/null 2>&1 || { log "FAIL: sha256sum not found (required as the seal WITNESS)"; exit 2; }
 [ -x "$I0" ] || { log "FAIL: missing $I0"; exit 2; }
 [ -x "$I2" ] || { log "FAIL: missing $I2"; exit 2; }
 [ -d "$CORPUS" ] || { log "FAIL: missing corpus $CORPUS"; exit 2; }
+
+# SEAL AUTHORSHIP (basal law): the seed seal-drift check below is an ATTESTATION,
+# so it is sovereign-authored + GNU-witnessed (mhash_lib.sh).  REQUIRED: this gate
+# runs after the stdlib exists (bootstrap stage 5), so the hasher is mintable.
+# The per-SECTION hashes further down are equality PROBES for diff diagnosis,
+# not seals -- they stay authorship-neutral (the documented boundary).
+. "$BOOT/mhash_lib.sh"
+mhash_init --require-sovereign || { log "FAIL: sovereign seal authorship unavailable"; exit 2; }
 
 # --- EVERGREEN SEED-SEAL HYGIENE -------------------------------------------------------------------------------
 # The seed's binary hash is build-variant-sensitive (different builds of iiis-0 emit IDENTICAL codegen but DIFFER
@@ -70,10 +78,11 @@ command -v sha256sum >/dev/null 2>&1 || { log "FAIL: sha256sum not found"; exit 
 # catches -- the seal can never be allowed to silently lie about which binary it covers.
 I0_MHASH="$I0.mhash"
 if [ -f "$I0_MHASH" ]; then
-  sealed="$(cut -d' ' -f1 "$I0_MHASH")"; actual="$(sha256sum "$I0" | cut -d' ' -f1)"
+  sealed="$(cut -d' ' -f1 "$I0_MHASH")"
+  actual="$(mhash_file "$I0")" || { log "FAIL: sovereign hash of the seed failed"; exit 2; }
   if [ "$sealed" != "$actual" ]; then
     log "FAIL: seed seal-drift -- iiis-0.exe ($actual) != its .mhash seal ($sealed)."
-    log "      After confirming codegen-equivalence (below), re-seal:  (cd COMPILED && printf '%s  iiis-0.exe\\n' \"\$(sha256sum iiis-0.exe|cut -d' ' -f1)\" > iiis-0.exe.mhash)"
+    log "      After confirming codegen-equivalence (below), re-seal sovereignly:  (. COMPILER/BOOT/mhash_lib.sh && cd COMPILED && printf '%s  iiis-0.exe\\n' \"\$(mhash_file iiis-0.exe)\" > iiis-0.exe.mhash)"
     exit 1
   fi
   [ "$VERBOSE" -eq 1 ] && log "seed seal: consistent ($actual)"

@@ -36,7 +36,7 @@ L_str_14:
 L_str_15:
     .ascii "STDLIB/iii\0"
 L_str_16:
-    .ascii "STDLIB/corpus\0"
+    .ascii "STDLIB/corpus;STDLIB/sovir/kats\0"
 L_str_17:
     .ascii "./_cov_report.txt\0"
 L_str_18:
@@ -49,7 +49,7 @@ L_MODS:
     .zero 256
     .global L_CORP
 L_CORP:
-    .zero 256
+    .zero 512
     .global L_REPT
 L_REPT:
     .zero 256
@@ -204,7 +204,7 @@ main:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0xd, %rax
+    movabsq $0x1f, %rax
     pushq %rax
     leaq L_str_16(%rip), %rax
     pushq %rax

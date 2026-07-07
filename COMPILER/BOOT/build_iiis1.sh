@@ -104,8 +104,14 @@ fi
 
 CC="${CC:-gcc}"
 command -v "$CC"     >/dev/null 2>&1 || die "$III_EXIT_ENV" "compiler not found: $CC"
-command -v sha256sum >/dev/null 2>&1 || die "$III_EXIT_ENV" "sha256sum not found"
+command -v sha256sum >/dev/null 2>&1 || die "$III_EXIT_ENV" "sha256sum not found (required as the seal WITNESS)"
 [[ -x "$IIIS0_BIN"   ]] || die "$III_EXIT_ENV" "iiis-0 binary not found: $IIIS0_BIN  (run build_iiis0.sh first)"
+
+# SEAL AUTHORSHIP (basal law): sovereign-primary, GNU as veto-witness
+# (mhash_lib.sh).  REQUIRED here: iiis-1 cannot link without the stdlib archive,
+# so the sovereign hasher is mintable wherever this script can succeed at all.
+. "$BOOT_DIR/mhash_lib.sh"
+mhash_init --require-sovereign || die "$III_EXIT_ENV" "sovereign seal authorship unavailable (rc=$?)"
 
 case "$MODE" in
     release) CFLAGS_OPT=(-O2 -DNDEBUG) ;;
@@ -229,9 +235,9 @@ log "link -> $OUT_BIN (with EIDOS optimizer archive)"
 "$CC" -Wl,--no-insert-timestamp -o "$OUT_BIN" "${OBJS[@]}" "$STDLIB_LIB" \
   || die "$III_EXIT_LINK" "link failed: $OUT_BIN"
 
-# ----- mhash + witness -----------------------------------------------------
+# ----- mhash + witness (sovereign-authored, GNU-witnessed) ------------------
 phase verify
-MHASH="$( sha256sum "$OUT_BIN" | cut -d' ' -f1 )"
+MHASH="$( mhash_file "$OUT_BIN" )" || die "$III_EXIT_VERIFY" "seal hash failed: $OUT_BIN"
 log "mhash: $MHASH"
 printf '%s  %s\n' "$MHASH" "$(basename "$OUT_BIN")" > "${OUT_BIN}.mhash" \
     || die "$III_EXIT_IO" "failed to write ${OUT_BIN}.mhash"

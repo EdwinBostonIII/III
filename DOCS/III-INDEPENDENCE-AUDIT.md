@@ -34,6 +34,7 @@ is **small, enumerable, and closable** — it is not a rewrite.
 |---|---|---|
 | Does the self-hosted compiler exist and run? | **Yes** | `iiis-2.exe --help` → exit 0 |
 | Is the self-host a true fixed point? | **Yes** | `iiis-2.exe` ≡ `iiis-3.exe` **byte-identical** (sha256 `853b2f…cf3b`) |
+| Who AUTHORS the seals the chain trusts? | **III itself** (2026-07-06, Phase ⊥) | `COMPILER/BOOT/mhash_lib.sh`: FIPS-KAT'd `sovhash` (numera/cad) authors every spine `.mhash`; GNU demoted to veto-witness (disagreement rc 97); enforced by `basal_census_gate.sh` = bootstrap stage 7, teeth-proven |
 | Did the self-host introduce codegen drift vs the C seed? | **No** | `seed_text_identity_gate.sh` → **60/60** byte-identical .text+data+relocs; selftest confirms the gate can go red |
 | Is there a real gcc-free assembler + linker? | **Yes** | `sovas.iii` (39 KB) + `sovld.iii`/`sovcoff.iii`; `run_fixpoint.sh` → **ALL PASS** (13/13 self-host, byte-identical to gas/ld) |
 | Can a program be built end-to-end with **no gcc in the link path**? | **Yes (opt-in)** | `sovbuild.sh prog_sat.iii` → PE32+ 20,992 B, route manifest **sovereign=2 witness=0**, runs **exit 99** |

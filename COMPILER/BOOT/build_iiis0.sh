@@ -141,7 +141,16 @@ bash "$BOOT_DIR/gen_compositions.sh" >&2 || die "$III_EXIT_COMPILE" "gen_composi
 CC="${CC:-gcc}"
 LD="${LD:-ld}"
 command -v "$CC"        >/dev/null 2>&1 || die "$III_EXIT_ENV" "compiler not found: $CC"
-command -v sha256sum    >/dev/null 2>&1 || die "$III_EXIT_ENV" "sha256sum not found (POSIX coreutils required)"
+command -v sha256sum    >/dev/null 2>&1 || die "$III_EXIT_ENV" "sha256sum not found (required as the seal WITNESS)"
+
+# SEAL AUTHORSHIP (basal law): III's own FIPS-KAT'd SHA-256 (aether/sovhash over
+# numera/cad) AUTHORS every seal below; GNU sha256sum is the cross-witness that
+# can veto but not author (mhash_lib.sh).  SOFT init here only because a pristine
+# clone has no stdlib archive before bootstrap stage 2 -- that one GNU-only window
+# is retro-attested sovereignly by bootstrap stage 2b.  A minted-but-KAT-failing
+# hasher is fatal in BOTH modes.
+. "$BOOT_DIR/mhash_lib.sh"
+mhash_init || die "$III_EXIT_ENV" "mhash_lib init failed (rc=$?)"
 
 GCC_VERSION="$("$CC" --version | head -n1)"
 if command -v "$LD" >/dev/null 2>&1; then
@@ -283,10 +292,11 @@ do_build() {
     "$CC" -o "$_out_bin" "${_objs[@]}" \
         || die "$III_EXIT_LINK" "link failed: $_out_bin"
 
-    # --- mhash ------------------------------------------------------------
+    # --- mhash (sovereign-authored, GNU-witnessed; mhash_lib.sh) ------------
     phase verify
     local _mhash
-    _mhash="$( sha256sum "$_out_bin" | cut -d' ' -f1 )"
+    _mhash="$( mhash_file "$_out_bin" )" \
+        || die "$III_EXIT_VERIFY" "seal hash failed: $_out_bin"
     printf '%s\n' "$_mhash"
 }
 
@@ -326,7 +336,8 @@ fi
 # --- build witness sidecar ---------------------------------------------------
 COMMIT="$( git -C "$III_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown" )"
 
-# Deterministic env mhash: hash the sorted (key=value) reproducibility env.
+# Deterministic env mhash: hash the sorted (key=value) reproducibility env
+# (sovereign-authored via mhash_stdin, same authorship as every other seal).
 ENV_MHASH="$(
     printf '%s\n' \
         "CCACHE_DISABLE=$CCACHE_DISABLE" \
@@ -335,8 +346,9 @@ ENV_MHASH="$(
         "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
         "TZ=$TZ" \
       | LC_ALL=C sort \
-      | sha256sum | cut -d' ' -f1
+      | mhash_stdin
 )"
+[[ "$ENV_MHASH" =~ ^[0-9a-f]{64}$ ]] || die "$III_EXIT_IO" "env mhash computation failed"
 
 # This filter MUST mirror do_build's _all_c filter exactly — the witness
 # attests the source list that was actually compiled+linked.

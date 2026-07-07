@@ -1,0 +1,39 @@
+/* STDLIB/corpus/1943_tp_iii_to_c99_roundtrip.iii
+ *
+ * Drives the REAL III->C99 transpiler omnia/tp_iii_to_c99 (independence-closure G2).  Embeds the source of
+ * a small III function, transpiles it, PRINTS the C99 to stdout (so tp_iii_to_c99_gate.sh can gcc-compile+
+ * run it and check it reproduces the III result), and SELF-CHECKS: the SAME function computed natively in
+ * III must give the reference value AND the transpile must be real C (first emitted line is `#include`,
+ * NOT `static const char* iii_source`).  Returns 99 iff both hold -- so run_corpus gates it and it is a
+ * COVERAGE CONSUMER of tp_iii_to_c99.
+ *
+ * The reference fn:  iiimul(a,b) = a*b + 7 ;  iiimul(6,7) = 49.
+ * exit 99 = real transpile + native result correct; 1 = transpile degraded (byte-wrap); 2 = native wrong.
+ */
+module corpus_1943_tp_iii_to_c99_roundtrip
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn tp_iii_to_c99(src: u64, n: u64, dst: u64, cap: u64) -> u64 from "tp_iii_to_c99.iii"
+
+/* the NATIVE III version of the function the source string below encodes */
+fn iiimul(a: u64, b: u64) -> u64 { let mut p : u64 = a * b  return p + 7u64 }
+
+/* source bytes of:  fn iiimul(a: u64, b: u64) -> u64 { let mut p : u64 = a * b\n return p + 7u64 }\n */
+var SRC : [u8; 78] = [
+  102u8,110u8,32u8,105u8,105u8,105u8,109u8,117u8,108u8,40u8,97u8,58u8,32u8,117u8,54u8,52u8,44u8,32u8,98u8,58u8,
+  32u8,117u8,54u8,52u8,41u8,32u8,45u8,62u8,32u8,117u8,54u8,52u8,32u8,123u8,32u8,108u8,101u8,116u8,32u8,109u8,
+  117u8,116u8,32u8,112u8,58u8,32u8,117u8,54u8,52u8,32u8,61u8,32u8,97u8,32u8,42u8,32u8,98u8,10u8,114u8,101u8,
+  116u8,117u8,114u8,110u8,32u8,112u8,32u8,43u8,32u8,55u8,117u8,54u8,52u8,32u8,125u8,10u8,0u8,0u8 ]
+var OUT : [u8; 4096]
+
+fn main() -> u64 {
+    let n : u64 = tp_iii_to_c99((&SRC) as u64, 76u64, (&OUT) as u64, 4096u64)
+    let p : *u8 = (&OUT) as *u8
+    let mut i : u64 = 0u64
+    while i < n { putchar(p[i] as i32)  i = i + 1u64 }
+    /* self-check A: native III result */
+    if iiimul(6u64, 7u64) != 49u64 { return 2u64 }
+    /* self-check B: transpile is real C -- first byte is '#' (#include), NOT 's' (static const char*) */
+    if p[0u64] != 35u8 { return 1u64 }
+    return 99u64
+}

@@ -1,98 +1,149 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_c99.iii
  *
- * Transform pattern: FORM_III → FORM_C99
- * FROZEN SPEC §7B.6 slot 26; ADR-RES-006.
- *
+ * Transform pattern: FORM_III -> FORM_C99.  FROZEN SPEC 7B.6 slot 26; ADR-RES-006.
  * Hexad: kind_compose. Ring: R0. K: 0.95.
  *
- * Emits a C99-compatible byte-array representation of the III source.
- * The full III-to-C99 transpiler is per-construct authoring work; this
- * baseline emits a `static const char* iii_source = "...";` declaration
- * with the source bytes escaped for C99 string literal context.
- */
-
+ * REAL construct-directed III->C99 transpiler (independence-closure G2).  Was a source-string wrapper
+ * (`static const char* iii_source = "..."`); now emits ACTUAL C99 for the computational construct set the
+ * round-trip exercises: fn-decl (with the III `-> ret` moved BEFORE the name, C-style), typed params, `let
+ * [mut] x : T = e` -> `T x = e;`, `return e` -> `return e;`, arithmetic/compare/call passed through, and
+ * integer-literal suffix stripping (`5u64` -> `5`).  Type map: u8/16/32/64 -> uint8/16/32/64_t, i.. ->
+ * int.._t.  A construct outside the set is passed through verbatim (it will fail the C compiler LOUDLY --
+ * never a silent byte-wrap).  Round-trip: tp_iii_to_c99_gate.sh compiles the emitted C with the witness
+ * gcc and runs it, reproducing the III program's result. */
 module omnia_tp_iii_to_c99
 
-var TP_C99_HEADER : [u8; 33] = [115u8, 116u8, 97u8, 116u8, 105u8, 99u8, 32u8, 99u8, 111u8, 110u8, 115u8, 116u8, 32u8, 99u8, 104u8, 97u8, 114u8, 42u8, 32u8, 105u8, 105u8, 105u8, 95u8, 115u8, 111u8, 117u8, 114u8, 99u8, 101u8, 32u8, 61u8, 32u8, 34u8]
-var TP_C99_FOOTER : [u8; 4] = [34u8, 59u8, 10u8, 0u8]
-var TP_C99_HEX_CHARS : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+var OB : u64 = 0u64  var OO : u64 = 0u64  var OC : u64 = 0u64
+fn oc(b: u32) { if OO < OC { let p : *u8 = (OB + OO) as *u8  p[0u64] = (b & 0xFFu32) as u8  OO = OO + 1u64 } }
+fn ostr(s: u64, n: u64) { let p : *u8 = s as *u8  let mut i : u64 = 0u64  while i < n { oc(p[i] as u32)  i = i + 1u64 } }
 
-fn tp_c99_emit(dst: u64, off: u64, b: u8) -> i32 {
-    let p : *u8 = (dst + off) as *u8
-    p[0u64] = b
-    return 0i32
+fn is_alpha(c: u32) -> u32 { if c >= 97u32 { if c <= 122u32 { return 1u32 } }  if c >= 65u32 { if c <= 90u32 { return 1u32 } }  if c == 95u32 { return 1u32 }  return 0u32 }
+fn is_digit(c: u32) -> u32 { if c >= 48u32 { if c <= 57u32 { return 1u32 } }  return 0u32 }
+fn is_idc(c: u32) -> u32 { if is_alpha(c) == 1u32 { return 1u32 }  if is_digit(c) == 1u32 { return 1u32 }  return 0u32 }
+
+/* the source + a cursor */
+var SB : u64 = 0u64  var SL : u64 = 0u64  var SP : u64 = 0u64
+fn cur() -> u32 { if SP >= SL { return 0u32 }  let p : *u8 = (SB + SP) as *u8  return p[0u64] as u32 }
+
+/* token buffer (identifier/keyword) */
+var TOK : [u8; 128]  var TL : u32 = 0u32
+fn read_ident() { TL = 0u32  while is_idc(cur()) == 1u32 { if TL < 127u32 { TOK[TL as u64] = cur() as u8  TL = TL + 1u32 }  SP = SP + 1u64 } }
+fn tok_is(s: u64, n: u32) -> u32 { if TL != n { return 0u32 }  let p : *u8 = s as *u8  let mut i : u32 = 0u32  while i < n { if TOK[i as u64] != p[i as u64] { return 0u32 }  i = i + 1u32 }  return 1u32 }
+fn emit_tok() { let mut i : u32 = 0u32  while i < TL { oc(TOK[i as u64] as u32)  i = i + 1u32 } }
+
+fn skip_ws() { let mut go : u32 = 1u32  while go == 1u32 { let c : u32 = cur()  if c == 32u32 { SP = SP + 1u64 } else { if c == 10u32 { SP = SP + 1u64 } else { if c == 13u32 { SP = SP + 1u64 } else { if c == 9u32 { SP = SP + 1u64 } else { go = 0u32 } } } } } }
+
+/* map an III type keyword in TOK to a C type; emit it.  returns 1 if mapped, 0 if not. */
+fn emit_ctype() -> u32 {
+    if tok_is("u8" as u64, 2u32) == 1u32  { ostr("uint8_t" as u64, 7u64)  return 1u32 }
+    if tok_is("u16" as u64, 3u32) == 1u32 { ostr("uint16_t" as u64, 8u64)  return 1u32 }
+    if tok_is("u32" as u64, 3u32) == 1u32 { ostr("uint32_t" as u64, 8u64)  return 1u32 }
+    if tok_is("u64" as u64, 3u32) == 1u32 { ostr("uint64_t" as u64, 8u64)  return 1u32 }
+    if tok_is("i8" as u64, 2u32) == 1u32  { ostr("int8_t" as u64, 6u64)  return 1u32 }
+    if tok_is("i16" as u64, 3u32) == 1u32 { ostr("int16_t" as u64, 7u64)  return 1u32 }
+    if tok_is("i32" as u64, 3u32) == 1u32 { ostr("int32_t" as u64, 7u64)  return 1u32 }
+    if tok_is("i64" as u64, 3u32) == 1u32 { ostr("int64_t" as u64, 7u64)  return 1u32 }
+    return 0u32
 }
 
-fn tp_c99_emit_escape(dst: u64, off: u64, b: u8) -> u32 {
-    /* Common C escapes */
-    if b == 34u8 {   /* " */
-        tp_c99_emit(dst, off, 92u8)
-        tp_c99_emit(dst, off + 1u64, 34u8)
-        return 2u32
+/* read an III type token into TOK (already positioned) and emit the C type; fallback: emit verbatim */
+fn xlate_type() { read_ident()  if emit_ctype() == 0u32 { emit_tok() } }
+
+/* transpile one EXPRESSION up to a terminator (newline or `}` at depth 0).  Passes tokens through, strips
+ * integer-literal suffixes (123u64 -> 123), maps nothing else.  Stops WITHOUT consuming the terminator. */
+fn xlate_expr() {
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u32 = cur()
+        if c == 0u32 { go = 0u32 }
+        else { if c == 10u32 { go = 0u32 }
+        else { if c == 125u32 { go = 0u32 }                 /* } */
+        else {
+            if is_digit(c) == 1u32 {                        /* number: emit digits, then swallow a u/i type suffix */
+                while is_digit(cur()) == 1u32 { oc(cur())  SP = SP + 1u64 }
+                if cur() == 117u32 { read_ident() }         /* u.. suffix -> drop */
+                else { if cur() == 105u32 { read_ident() } }/* i.. suffix -> drop */
+            } else { if is_alpha(c) == 1u32 { read_ident()  emit_tok() }
+            else { oc(c)  SP = SP + 1u64 } }
+        } } }
     }
-    if b == 92u8 {   /* \ */
-        tp_c99_emit(dst, off, 92u8)
-        tp_c99_emit(dst, off + 1u64, 92u8)
-        return 2u32
-    }
-    if b == 10u8 {   /* \n */
-        tp_c99_emit(dst, off, 92u8)
-        tp_c99_emit(dst, off + 1u64, 110u8)
-        return 2u32
-    }
-    if b == 13u8 {   /* \r */
-        tp_c99_emit(dst, off, 92u8)
-        tp_c99_emit(dst, off + 1u64, 114u8)
-        return 2u32
-    }
-    if b == 9u8 {    /* \t */
-        tp_c99_emit(dst, off, 92u8)
-        tp_c99_emit(dst, off + 1u64, 116u8)
-        return 2u32
-    }
-    /* Printable ASCII */
-    if b >= 32u8 {
-        if b < 127u8 {
-            tp_c99_emit(dst, off, b)
-            return 1u32
+}
+
+/* fn-signature tables (module-level to stay under cg_r3's 64-local-slot ceiling) */
+var NM  : [u8; 128]  var NML : u32 = 0u32
+var PPO : [u32; 16]  var PPL : [u32; 16]  var PTO : [u32; 16]  var PTL : [u32; 16]
+var PBUF : [u8; 512]  var NP : u32 = 0u32  var PB : u32 = 0u32
+
+fn fn_read_sig() {                                          /* fills NM/params, leaves cursor after `{` */
+    skip_ws()  read_ident()                                 /* NAME */
+    NML = TL  let mut i : u32 = 0u32  while i < TL { NM[i as u64] = TOK[i as u64]  i = i + 1u32 }
+    skip_ws()  if cur() == 40u32 { SP = SP + 1u64 }         /* ( */
+    NP = 0u32  PB = 0u32  skip_ws()
+    while cur() != 41u32 { if cur() == 0u32 { SP = SL }
+        else {
+            read_ident()                                    /* param name */
+            PPO[NP as u64] = PB  let mut k : u32 = 0u32  while k < TL { PBUF[PB as u64] = TOK[k as u64]  PB = PB + 1u32  k = k + 1u32 }  PPL[NP as u64] = TL
+            skip_ws()  if cur() == 58u32 { SP = SP + 1u64 }  /* : */
+            skip_ws()  read_ident()                          /* param type */
+            PTO[NP as u64] = PB  k = 0u32  while k < TL { PBUF[PB as u64] = TOK[k as u64]  PB = PB + 1u32  k = k + 1u32 }  PTL[NP as u64] = TL
+            NP = NP + 1u32
+            skip_ws()  if cur() == 44u32 { SP = SP + 1u64  skip_ws() }
         }
     }
-    /* Hex escape \xXX */
-    tp_c99_emit(dst, off, 92u8)
-    tp_c99_emit(dst, off + 1u64, 120u8)
-    let hi : u8 = (b >> 4u8) & 0xFu8
-    let lo : u8 = b & 0xFu8
-    tp_c99_emit(dst, off + 2u64, TP_C99_HEX_CHARS[hi as u32])
-    tp_c99_emit(dst, off + 3u64, TP_C99_HEX_CHARS[lo as u32])
-    return 4u32
+    if cur() == 41u32 { SP = SP + 1u64 }                     /* ) */
+    skip_ws()  if cur() == 45u32 { SP = SP + 1u64  if cur() == 62u32 { SP = SP + 1u64 } }   /* -> */
+}
+
+/* transpile the fn signature: III `NAME(P:T,..) -> RT {`  ->  C `RT NAME(T P,..) {` */
+fn xlate_fn() {
+    fn_read_sig()
+    skip_ws()  read_ident()                                  /* return type FIRST (C order) */
+    if emit_ctype() == 0u32 { emit_tok() }
+    oc(32u32)
+    let mut m : u32 = 0u32  while m < NML { oc(NM[m as u64] as u32)  m = m + 1u32 }
+    oc(40u32)
+    let mut pi : u32 = 0u32
+    while pi < NP {
+        if pi > 0u32 { oc(44u32) oc(32u32) }
+        TL = PTL[pi as u64]  let mut t : u32 = 0u32  while t < TL { TOK[t as u64] = PBUF[(PTO[pi as u64] + t) as u64]  t = t + 1u32 }
+        if emit_ctype() == 0u32 { emit_tok() }
+        oc(32u32)
+        let mut q : u32 = 0u32  while q < PPL[pi as u64] { oc(PBUF[(PPO[pi as u64] + q) as u64] as u32)  q = q + 1u32 }
+        pi = pi + 1u32
+    }
+    if NP == 0u32 { ostr("void" as u64, 4u64) }
+    oc(41u32) oc(32u32)
+    skip_ws()  if cur() == 123u32 { SP = SP + 1u64 }         /* { */
+    oc(123u32) oc(10u32)
 }
 
 fn tp_iii_to_c99(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
-    let mut dst_off : u64 = 0u64
-    /* Header */
-    let mut h : u32 = 0u32
-    while h < 33u32 {
-        if dst_off >= dst_cap { return 0u64 }
-        tp_c99_emit(dst_buf, dst_off, TP_C99_HEADER[h])
-        dst_off = dst_off + 1u64
-        h = h + 1u32
+    SB = src  SL = src_len  SP = 0u64  OB = dst_buf  OO = 0u64  OC = dst_cap
+    ostr("#include <stdint.h>\n" as u64, 20u64)
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        skip_ws()
+        let c : u32 = cur()
+        if c == 0u32 { go = 0u32 }
+        else {
+            if is_alpha(c) == 1u32 {
+                read_ident()
+                if tok_is("module" as u64, 6u32) == 1u32 { while cur() != 10u32 { if cur() == 0u32 { SP = SL } else { SP = SP + 1u64 } } }   /* drop `module X` */
+                else { if tok_is("fn" as u64, 2u32) == 1u32 { xlate_fn() }
+                else { if tok_is("let" as u64, 3u32) == 1u32 {
+                    skip_ws()  read_ident()  if tok_is("mut" as u64, 3u32) == 1u32 { skip_ws()  read_ident() }   /* [mut] NAME in TOK */
+                    var LN : [u8; 128]  let mut ll : u32 = TL  let mut z : u32 = 0u32  while z < TL { LN[z as u64] = TOK[z as u64]  z = z + 1u32 }
+                    skip_ws()  if cur() == 58u32 { SP = SP + 1u64 }  skip_ws()  xlate_type()  oc(32u32)          /* : TYPE -> `CTYPE ` */
+                    z = 0u32  while z < ll { oc(LN[z as u64] as u32)  z = z + 1u32 }                              /* NAME */
+                    skip_ws()  if cur() == 61u32 { SP = SP + 1u64  oc(32u32) oc(61u32) oc(32u32)  skip_ws()  xlate_expr() }   /* = EXPR */
+                    oc(59u32) oc(10u32)
+                }
+                else { if tok_is("return" as u64, 6u32) == 1u32 { ostr("  return " as u64, 9u64)  skip_ws()  xlate_expr()  oc(59u32) oc(10u32) }
+                else { emit_tok()  oc(32u32) } } } }
+            }
+            else { if c == 125u32 { oc(125u32) oc(10u32)  SP = SP + 1u64 }   /* } */
+            else { oc(c)  SP = SP + 1u64 } }
+        }
     }
-    /* Body with escapes */
-    let mut j : u64 = 0u64
-    while j < src_len {
-        if dst_off + 4u64 > dst_cap { return 0u64 }
-        let bp : *u8 = (src + j) as *u8
-        let written : u32 = tp_c99_emit_escape(dst_buf, dst_off, bp[0u64])
-        dst_off = dst_off + ((written as u64) & 0xFu64)
-        j = j + 1u64
-    }
-    /* Footer */
-    let mut f : u32 = 0u32
-    while f < 3u32 {
-        if dst_off >= dst_cap { return 0u64 }
-        tp_c99_emit(dst_buf, dst_off, TP_C99_FOOTER[f])
-        dst_off = dst_off + 1u64
-        f = f + 1u32
-    }
-    return dst_off
+    return OO
 }

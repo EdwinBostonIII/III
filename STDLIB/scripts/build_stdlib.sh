@@ -1709,6 +1709,39 @@ for mod in "${MODULES[@]}"; do
     fi
 done
 
+# sovtc: the sovereign toolchain enters the archive (independence plan C1) --
+# emit.iii calls sov_*/sovparse_*/sovcoff_*/sovld_* IN-PROCESS (C2/C3), so the
+# compiler itself becomes the sovereign emitter.  LIBRARY modules only: the
+# *_main tools keep their own main() and stay out (corpus links use
+# --whole-archive; a second main would collide).  Names are prefixed sovtc_ in
+# the archive.  Collision-scanned against STDLIB/iii exports (183 exports, 0
+# collisions, 2026-07-06).
+SOVTC_DIR="$STDLIB_DIR/sovtc"
+SOVTC_MODULES=( sovas sovparse sovcoff sovld )
+for mod in "${SOVTC_MODULES[@]}"; do
+    name="sovtc_${mod}"
+    src="$SOVTC_DIR/${mod}.iii"
+    obj="$BUILD_DIR/${name}.iii.o"
+    if [[ ! -f "$src" ]]; then
+        echo "[build_stdlib] MISSING $src"
+        FAIL=$((FAIL+1)); FAILED+=("sovtc/$mod (missing)")
+        continue
+    fi
+    _crc=1
+    for _ca in 1 2 3; do
+        rm -f "$obj"
+        if "$IIIS" "$src" --compile-only --out "$obj" 2>"$BUILD_DIR/${name}.build.log"; then _crc=0; break; fi
+        sleep 1
+    done
+    if [[ $_crc -eq 0 ]]; then
+        echo "[build_stdlib] OK   sovtc/$mod -> $obj"
+        PASS=$((PASS+1))
+    else
+        echo "[build_stdlib] FAIL sovtc/$mod (see $BUILD_DIR/${name}.build.log)"
+        FAIL=$((FAIL+1)); FAILED+=("sovtc/$mod")
+    fi
+done
+
 echo ""
 echo "============================================================"
 echo " STDLIB native module build"
@@ -1729,6 +1762,9 @@ if [[ $FAIL -eq 0 ]]; then
     OBJS=()
     for mod in "${MODULES[@]}"; do
         OBJS+=("$BUILD_DIR/${mod//\//_}.iii.o")
+    done
+    for mod in "${SOVTC_MODULES[@]}"; do
+        OBJS+=("$BUILD_DIR/sovtc_${mod}.iii.o")
     done
 
     # Phase C.4: assemble Software Resolution Unit hand-written asm.

@@ -86,7 +86,28 @@ fn sov_reloc_n() -> u32 @export { return REL_N }
 fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sec(i: u32) -> u32 @export { if i < REL_N { return REL_SEC[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sym(i: u32) -> u32 @export { if i < REL_N { return REL_SYM[i as u64] }  return 0xFFFFFFFFu32 }
-fn sov_rec_reloc(sec: u32) { if REL_N < 65536u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = 0xFFFFFFFFu32  REL_N = REL_N + 1u32 } }
+/* When a rip-relative operand names an UNDEFINED EXTERNAL symbol (sovparse's SEC_OTHER = 9 -- not a local
+ * data symbol and not a .text label of this object), the reloc must target that NAMED external, NOT a
+ * section symbol.  sovparse interns the name and stashes its extern slot here before emitting the
+ * instruction; sov_rec_reloc reads it for the sec==9 case.  Without this, `leaq externfn(%rip)` (taking the
+ * ADDRESS of a cross-module function) recorded a reloc against .text+0, so every such address collapsed to
+ * the referencing object's .text base -- distinct functions compared equal, breaking fn-pointer IDENTITY
+ * (the resolver/registry claim tests; callq-through-extern was always correct via sov_call_ext). */
+var SOV_EXTRELOC_SLOT : u32 = 0xFFFFFFFFu32
+fn sov_set_extreloc_slot(s: u32) -> i32 @export { SOV_EXTRELOC_SLOT = s  return 0i32 }
+fn sov_rec_reloc(sec: u32) {
+    if REL_N < 65536u32 {
+        REL_OFF[REL_N as u64] = SOV_LEN
+        if sec == 9u32 {                                    /* SEC_OTHER: undefined external -> NAMED reloc */
+            REL_SEC[REL_N as u64] = 0u32                     /* 0 = named (sovcoff: 2*NS + NEXP + slot) */
+            REL_SYM[REL_N as u64] = SOV_EXTRELOC_SLOT
+        } else {
+            REL_SEC[REL_N as u64] = sec                      /* 1/2/3 = data section symbol */
+            REL_SYM[REL_N as u64] = 0xFFFFFFFFu32
+        }
+        REL_N = REL_N + 1u32
+    }
+}
 /* LINKER: record a reloc at an explicit .text offset (not SOV_LEN) -- merged-image data relocs + import calls. */
 fn sov_rec_reloc_at(off: u32, sec: u32, sym: u32) -> i32 @export { if REL_N < 65536u32 { REL_OFF[REL_N as u64] = off  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = sym  REL_N = REL_N + 1u32 }  return 0i32 }
 

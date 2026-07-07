@@ -1249,8 +1249,8 @@ fn r3_pack_hexad_expr(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 
 fn r3_pack_hexad_pat(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_pat_hexad_trit_at(R3_G_AST, node, i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
 
 /* ─────────────── modifier scanning ─────────────── */
-fn r3_fn_or_cycle_mod_count(node: u32, kind: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_modifier_count(R3_G_AST, node) }; return iii_ast_fn_modifier_count(R3_G_AST, node) }
-fn r3_fn_or_cycle_mod_at(node: u32, kind: u32, i: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_modifier_at(R3_G_AST, node, i) }; return iii_ast_fn_modifier_at(R3_G_AST, node, i) }
+fn r3_fn_or_cycle_mod_count(node: u32, kind: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_modifier_count(R3_G_AST, node) }; if kind == R3_K_VAR_DECL { return iii_ast_var_decl_modifier_count(R3_G_AST, node) }; return iii_ast_fn_modifier_count(R3_G_AST, node) }
+fn r3_fn_or_cycle_mod_at(node: u32, kind: u32, i: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_modifier_at(R3_G_AST, node, i) }; if kind == R3_K_VAR_DECL { return iii_ast_var_decl_modifier_at(R3_G_AST, node, i) }; return iii_ast_fn_modifier_at(R3_G_AST, node, i) }
 
 fn r3_mod_find(node: u32, kind: u32, name_addr: u64, name_len: u64) -> u32 { let mc: u32 = r3_fn_or_cycle_mod_count(node, kind); let mut i: u32 = 0u32; while i < mc { let m: u32 = r3_fn_or_cycle_mod_at(node, kind, i); let no: u32 = iii_ast_modifier_name_offset(R3_G_AST, m); let nl: u32 = iii_ast_modifier_name_length(R3_G_AST, m); if r3_name_eq_lit(no, nl, name_addr, name_len) == 1u32 { return m }; i = i + 1u32 }; return 0u32 }
 
@@ -2449,6 +2449,8 @@ extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "
 extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_modifier_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
 
@@ -3636,6 +3638,16 @@ fn r3_emit_local_decl_label(off: u32, len: u32) -> u32 {
     return R3_OK
 }
 
+/* A module-level `var` is module-LOCAL by default (same as const); it emits a `.global` symbol ONLY
+ * when it carries `@export`.  This keeps the flat L_<name> namespace collision-free -- private state
+ * stays local, and only the handful of vars a hand-asm consumer (resolver_hot.s) reads cross-module
+ * are exported.  Before this gate, EVERY module var was `.global`, so short names (SB/OC/NM/...) shared
+ * between a test and a stdlib module collided at link once both were pulled in. */
+fn r3_emit_var_decl_label_gated(node: u32, off: u32, len: u32) -> u32 {
+    if r3_decl_is_exported(node, R3_K_VAR_DECL) == 1u32 { return r3_emit_global_decl_label(off, len) }
+    return r3_emit_local_decl_label(off, len)
+}
+
 /* helper: select byte-exact .<dir> 0x prefix matching gas width */
 fn r3_emit_gas_data_hex(width: u32) -> u32 {
     if width == 1u32 { r3_emit_arr(&R3_K_BYTE0X as u64, R3_K_BYTE0X_LEN); return R3_OK }
@@ -3729,7 +3741,7 @@ fn r3_emit_data_decls() -> u32 {
                     let mut ew: u32 = 8u32
                     if vt != 0u32 { let tk: u32 = iii_ast_node_kind(R3_G_AST, vt); if tk == R3_K_TYPE_ARR { ew = r3_array_elem_byte_size(vt) } }
                     if current_section != 2u32 { r3_emit_arr(&R3_K_DATA as u64, R3_K_DATA_LEN); current_section = 2u32 }
-                    r3_emit_global_decl_label(vno, vnl)
+                    r3_emit_var_decl_label_gated(d, vno, vnl)
                     let bc2: u32 = iii_ast_parallel_branch_count(R3_G_AST, init)
                     let mut k2: u32 = 0u32
                     while k2 < bc2 { let eid2: u32 = iii_ast_parallel_branch_at(R3_G_AST, init, k2); r3_lit_u64_compute(eid2); r3_emit_gas_data_hex(ew); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN); k2 = k2 + 1u32 }
@@ -3738,7 +3750,7 @@ fn r3_emit_data_decls() -> u32 {
                     let okv2: u32 = r3_lit_u64_compute(init)
                     if okv2 == 1u32 {
                         if current_section != 2u32 { r3_emit_arr(&R3_K_DATA as u64, R3_K_DATA_LEN); current_section = 2u32 }
-                        r3_emit_global_decl_label(vno, vnl)
+                        r3_emit_var_decl_label_gated(d, vno, vnl)
                         r3_emit_arr(&R3_K_QUAD0X as u64, R3_K_QUAD0X_LEN); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
                         handled = 1u32
                     }
@@ -3748,7 +3760,7 @@ fn r3_emit_data_decls() -> u32 {
                 let mut bs: u64 = 8u64
                 if vt != 0u32 { let tk: u32 = iii_ast_node_kind(R3_G_AST, vt); if tk == R3_K_TYPE_ARR { bs = (iii_ast_type_array_count(R3_G_AST, vt) as u64) * 8u64 } }
                 if current_section != 3u32 { r3_emit_arr(&R3_K_BSS as u64, R3_K_BSS_LEN); current_section = 3u32 }
-                r3_emit_global_decl_label(vno, vnl)
+                r3_emit_var_decl_label_gated(d, vno, vnl)
                 r3_emit_arr(&R3_K_ZERO_PFX as u64, R3_K_ZERO_PFX_LEN); r3_emit_dec(bs); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
             }
         }

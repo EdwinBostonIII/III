@@ -44,19 +44,14 @@ L_str_18:
 L_str_19:
     .ascii "./_cov_reach_report.txt\0"
     .section .bss
-    .global L_MODS
 L_MODS:
     .zero 256
-    .global L_CORP
 L_CORP:
     .zero 512
-    .global L_REPT
 L_REPT:
     .zero 256
-    .global L_GREP
 L_GREP:
     .zero 256
-    .global L_RREP
 L_RREP:
     .zero 256
     .section .iii.ring3,"n"

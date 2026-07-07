@@ -49,9 +49,9 @@ const PF_EFFECTS_MASK        : u32 = 136u32
 const PF_SPECIALISATION_OF   : u32 = 144u32
 const PF_PROOF_ID            : u32 = 152u32
 
-var g_pattern_table       : [u8; 688128]
+var g_pattern_table       : [u8; 688128] @export
 var g_pattern_table_used  : u32 = 0u32
-var g_pattern_table_sealed: u8  = 0u8
+var g_pattern_table_sealed: u8  = 0u8 @export
 var g_global_pattern_set  : [u8; 512]   /* 4096 bits */
 /* W4.3 test affordance: when 1, pattern_register fails (returns 0) without writing -- lets a
  * falsifier drive resolution_init's failure-propagation path.  Defaults 0; production unaffected. */

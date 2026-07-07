@@ -23,11 +23,11 @@ const KCHAIN_FULL        : u64 = 1000000000u64       /* 1.00 * 1e9 */
 const KCHAIN_INVALID     : u64 = 0xFFFFFFFFFFFFFFFFu64
 const KCHAIN_MAX         : u32 = 32u32
 
-var KCHAIN_FLOOR_FX : [u64; 32]
-var KCHAIN_CURRENT  : [u64; 32]
-var KCHAIN_UNDERFLOW: [u8;  32]
+var KCHAIN_FLOOR_FX : [u64; 32] @export
+var KCHAIN_CURRENT  : [u64; 32] @export
+var KCHAIN_UNDERFLOW: [u8;  32] @export
 var KCHAIN_READMITS : [u32; 32]
-var KCHAIN_LIVE     : [u8;  32]
+var KCHAIN_LIVE     : [u8;  32] @export
 
 fn kchain_new(custom_floor: u64) -> u64 @export {
     let mut i : u32 = 0u32

@@ -2045,6 +2045,10 @@ fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 @export { return ast_kind
 fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CONST_DECL, 20u64) }
 fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 16u64) }
 fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 20u64) }
+/* module-var modifier list (offset 28 = packed list handle, high 32 = count at offset 32); mirrors the
+ * fn_decl modifier accessors.  Lets cg_r3 gate a var's `.global` on @export (module-local by default). */
+fn iii_ast_var_decl_modifier_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 32u64) }
+fn iii_ast_var_decl_modifier_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_VAR_DECL, 28u64, i) }
 fn iii_ast_sizeof_target_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_SIZEOF, 8u64) }
 fn iii_ast_sizeof_resolved(ast: u64, node: u32) -> u64 @export { return ast_kind_child_u64(ast, node, III_AST_EXPR_SIZEOF, 16u64) }
 fn iii_ast_str_payload_idx(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_STR, 8u64) }

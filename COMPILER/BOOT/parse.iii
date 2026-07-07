@@ -3172,6 +3172,12 @@ fn iiip_parse_var_decl(st: u64) -> u32 {
         if vd_brk == 1u32 { init = iiip_parse_bracket_init(st) }
         if vd_brk == 0u32 { init = iiip_parse_expr(st) }
     }
+    /* module-level var: optional trailing modifier list (`var X : T @export`).  A module var is
+     * module-LOCAL by default (like const) -- only an @export'd var emits a `.global` symbol.  This
+     * keeps the flat L_<name> namespace collision-free: private state stays local, and only the few
+     * vars a hand-asm consumer (resolver_hot.s) references cross-module are exported.  Local vars
+     * (in fn bodies) go through iiip_parse_let, NOT here, so they are unaffected. */
+    let mods: u64 = iiip_parse_modifier_list(st)
     st_kw_pos(kw_s, kw_e, kw_l, kw_c)
     let ast: u64 = iii_lex_read_u64_c(st, PS_AST)
     let n: u32 = iiip_alloc_node(st, PA_AST_VAR_DECL, &NP_A as u64)
@@ -3180,6 +3186,7 @@ fn iiip_parse_var_decl(st: u64) -> u32 {
         iii_lex_write_u64_c(nn, 8u64, nm)
         iii_lex_write_u32_c(nn, 16u64, t)
         iii_lex_write_u32_c(nn, 20u64, init)
+        iii_lex_write_u64_c(nn, 28u64, mods)
     }
     return n
 }

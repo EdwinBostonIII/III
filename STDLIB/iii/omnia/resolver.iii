@@ -209,13 +209,13 @@ var RES_LAST_DISPATCH_FP : u64 = 0u64
  * not ctx itself), so the cache is safe across the resolve hot path.
  * The cache key is a *u64 stored in a 1-element array so taking its
  * address is well-defined under iiis-0's documented byte-array rule. */
-var RES_CTX_CACHE_PTR : [u64; 1]
-var RES_CTX_CACHE_DIG : [u8; 32]
+var RES_CTX_CACHE_PTR : [u64; 1] @export
+var RES_CTX_CACHE_DIG : [u8; 32] @export
 
 /* Phase C.5 diagnostic: counts how many times the memo-hit fast path
  * fires.  Useful for bench corpora to verify the fast path is actually
  * exercised (vs silently falling through to the slow path). */
-var RES_FAST_PATH_HITS : [u64; 1]
+var RES_FAST_PATH_HITS : [u64; 1] @export
 
 /* [composite] native-recursion depth for the IF/THEN/UNDER/WITH interception (below).  Bounds
  * nested composites so a pathological intent tree cannot blow the native stack. */

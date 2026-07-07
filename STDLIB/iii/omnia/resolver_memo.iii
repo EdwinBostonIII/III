@@ -32,11 +32,11 @@ const MEMO_E_BAD_INPUT    : i32 = -1i32
 const MEMO_NOT_FOUND      : u32 = 0xFFFFFFFFu32
 
 /* Storage. 4096 entries, ~112 KiB total BSS. */
-var MEMO_KEY_HASH    : [u64; 4096]
-var MEMO_PATTERN_ID  : [u32; 4096]
-var MEMO_DISPATCH_FP : [u64; 4096]
+var MEMO_KEY_HASH    : [u64; 4096] @export
+var MEMO_PATTERN_ID  : [u32; 4096] @export
+var MEMO_DISPATCH_FP : [u64; 4096] @export
 var MEMO_SEQ         : [u64; 4096]
-var MEMO_LIVE        : [u8;  4096]
+var MEMO_LIVE        : [u8;  4096] @export
 var MEMO_CURRENT_SEQ : u64  = 0u64
 var MEMO_USED        : u32  = 0u32
 

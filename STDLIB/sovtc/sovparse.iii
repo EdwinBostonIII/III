@@ -91,6 +91,8 @@ extern @abi(c-msvc-x64) fn sov_cpuid() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_xgetbv() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_intern_pub() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_set_extreloc_slot(s: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_ext() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_reg(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_test_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
@@ -404,6 +406,13 @@ fn sp_operand() {
             } else { i = i + 1u32 }
         }
         if OPSEC == SEC_TEXT { let lo : u32 = lbl_find(SYM_N, nlen)  if lo != 0xFFFFFFFFu32 { OPOFF = lo as i32 } }   /* .text label: real offset from LBL table (SYM_OFF is a 0 placeholder) */
+        if OPSEC == SEC_OTHER {   /* undefined external symbol: intern its NAME so any rip-sym reloc targets the
+                                   * named external, not a section (leaq externfn(%rip) = address-of cross-module fn). */
+            sov_cn_clear()
+            let mut ei : u32 = 0u32
+            while ei < nlen { sov_cn_push(SYM_NAME[((SYM_N * 64u32) + ei) as u64] as u32)  ei = ei + 1u32 }
+            sov_set_extreloc_slot(sov_ext_intern_pub())
+        }
         if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  sp_reg()  if sp_ch() == C_RP { sp_adv() } }
         return
     }

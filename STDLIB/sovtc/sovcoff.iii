@@ -7,8 +7,9 @@
  * Windows) via putchar; the caller redirects stdout to out.o.
  *
  * SYMBOL TABLE ORDER (the contract the relocs index into): section symbols first (.text/.data/.rodata/.bss,
- * each a symbol + 1 aux record), then exported functions, then extern (undefined) symbols.  A data reloc
- * (REL_SEC 1/2/3) -> its section symbol's index; a named reloc (REL_SEC 0) -> (2*NS + NEXP + slot).
+ * each a symbol + 1 aux record), then exported symbols (.text functions AND data/bss module-var globals),
+ * then extern (undefined) symbols.  A data reloc (REL_SEC 1/2/3) -> its section symbol's index; a named
+ * reloc (REL_SEC 0) -> (2*NS + NEXP + slot).
  *
  * NIH; reads sovas (.text/.data/relocs/externs) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
  */
@@ -31,6 +32,7 @@ extern @abi(c-msvc-x64) fn sp_export_n() -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_off(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namelen(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namebyte(i: u32, j: u32) -> u32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sp_export_sec(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn sov_putbyte(c: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_out_is_buffer() -> u32 from "sovas.iii"
@@ -41,7 +43,7 @@ var SEC_RAWLEN  : [u32; 4]
 var SEC_RAWPTR  : [u32; 4]
 var SEC_SYMIDX  : [u32; 4]
 var NS    : u32 = 0u32   /* number of present sections */
-var NEXP  : u32 = 0u32   /* emitted exports (.text functions, offset resolved) */
+var NEXP  : u32 = 0u32   /* emitted exports (offset resolved + section present: .text fns AND data/bss module-var globals) */
 
 var STR_BUF : [u8; 8192]
 var STR_LEN : u32 = 0u32
@@ -95,6 +97,15 @@ fn reloc_symidx(i: u32) -> u32 {
     return SEC_SYMIDX[s as u64]                                       /* data: the target section's symbol */
 }
 
+/* an export is EMITTED iff its offset resolved AND its section is present in this object.  ONE predicate for
+ * BOTH the NEXP count and the emit loop: the named-reloc index contract (2*NS + NEXP + slot) requires the
+ * two sites to agree exactly, so they must share this decision. */
+fn exp_ok(e: u32) -> u32 {
+    if sp_export_off(e) == 0xFFFFFFFFu32 { return 0u32 }
+    if SEC_PRESENT[sp_export_sec(e) as u64] == 1u32 { return 1u32 }
+    return 0u32
+}
+
 fn sovcoff_emit() -> i32 @export {
     if sov_out_is_buffer() == 0u32 { _setmode(1i32, 0x8000i32) }   /* only touch stdout when actually writing to it */
     STR_LEN = 0u32
@@ -112,7 +123,7 @@ fn sovcoff_emit() -> i32 @export {
     while id < 4u32 { if SEC_PRESENT[id as u64] == 1u32 { NS = NS + 1u32 }  id = id + 1u32 }
     NEXP = 0u32
     let mut e : u32 = 0u32
-    while e < sp_export_n() { if sp_export_off(e) != 0xFFFFFFFFu32 { NEXP = NEXP + 1u32 }  e = e + 1u32 }
+    while e < sp_export_n() { if exp_ok(e) == 1u32 { NEXP = NEXP + 1u32 }  e = e + 1u32 }
     let next : u32 = sov_ext_n()
     let nsym : u32 = ((2u32 * NS) + NEXP) + next
     let nreloc : u32 = sov_reloc_n()
@@ -179,12 +190,14 @@ fn sovcoff_emit() -> i32 @export {
         }
         id = id + 1u32
     }
-    /* exported function symbols (in .text) */
+    /* exported symbols: .text functions AND .data/.rodata/.bss module-var globals.  SectionNumber + Value
+     * come from the export's OWN section (Value is section-relative); EXTERNAL storage class either way. */
     e = 0u32
     while e < sp_export_n() {
-        if sp_export_off(e) != 0xFFFFFFFFu32 {
+        if exp_ok(e) == 1u32 {
+            let esec : u32 = sp_export_sec(e)
             w_symname(0u32, e)
-            w32(sp_export_off(e))  w16((SEC_SYMIDX[0u64] / 2u32) + 1u32)  w16(0u32)  w8(2u32)  w8(0u32)   /* Sec=.text, EXTERNAL */
+            w32(sp_export_off(e))  w16((SEC_SYMIDX[esec as u64] / 2u32) + 1u32)  w16(0u32)  w8(2u32)  w8(0u32)   /* EXTERNAL */
         }
         e = e + 1u32
     }

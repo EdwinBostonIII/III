@@ -1750,6 +1750,10 @@ declare -A EXPECTED=(
     [2488_tp_x86_disasm_roundtrip]=99   # real x86-64 decoder (independence G1) -- real mnemonics, not .byte
     [2489_tp_iii_to_c99_roundtrip]=99   # real III->C99 transpiler (independence G2) -- native result 49
     [2490_mlkem_c2sp_kat]=99            # official C2SP FIPS-203 ML-KEM-768 accumulated KAT (independence F; ~30-60s)
+    [2494_slhdsa_shake192s_fips205]=99  # NIST ACVP SLH-DSA-SHAKE-192s internal det sigGen, byte-exact + flip-reject (~110s)
+    [2495_slhdsa_shake256s_fips205]=99  # NIST ACVP SLH-DSA-SHAKE-256s internal det sigGen, byte-exact + flip-reject (~100s)
+    [2496_slhdsa_sha2_192s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-192s cat-3 (SHA-512 H/T + HMAC/MGF1-SHA-512 layer), byte-exact (~60s)
+    [2497_slhdsa_sha2_256s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-256s cat-5, byte-exact + flip-reject (~55s)
 )
 
 PASS=0

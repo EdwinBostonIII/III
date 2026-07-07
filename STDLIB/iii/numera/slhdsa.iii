@@ -38,6 +38,14 @@ extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update(input: u64, len: u64) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+/* SHA-512 layer: FIPS-205 SLH-DSA-SHA2 at security categories 3/5 (n=24/32) switches
+ * H/T to SHA-512 (128-byte padded prefix), PRF_msg to HMAC-SHA-512 and H_msg to
+ * MGF1-SHA-512; F and PRF stay SHA-256 at every category (FIPS-205 sec. 10.2-10.3). */
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_finalize_internal() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_digest_byte(i: u32) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_oneshot(input: *u8, len: u64, out_64: *u8) -> u32 from "sha512.iii"
 
 /* APOTHEOSIS C.1 (ADR-C1): hash-family suite for the strict FIPS-205 split.
  * 0 = SHAKE -> strict FIPS-205 SLH-DSA-SHAKE (H_n/PRF/PRF_msg/H_msg SHAKE-256);
@@ -56,11 +64,12 @@ var SLH_HASH_SUITE : u8 = 0u8
 
 /* SHA-2 family scratch (caller-owned fixed .bss; the schemes are single-thread
  * sequential so one set is safe -- same discipline as SLH_HBUF/SLH_KST). */
-var SLH_HIPAD   : [u8; 64]    /* HMAC key ^ 0x36 (block-padded)              */
-var SLH_HOPAD   : [u8; 64]    /* HMAC key ^ 0x5c                             */
-var SLH_HIH     : [u8; 32]    /* HMAC inner hash                             */
-var SLH_MGFSEED : [u8; 80]    /* MGF1 seed = R(n) || PK.seed(n) || inner(32) */
+var SLH_HIPAD   : [u8; 128]   /* HMAC key ^ 0x36 (block-padded; 64B SHA-256 cat-1 / 128B SHA-512 cat-3/5) */
+var SLH_HOPAD   : [u8; 128]   /* HMAC key ^ 0x5c                             */
+var SLH_HIH     : [u8; 64]    /* HMAC inner hash (32B SHA-256 / 64B SHA-512) */
+var SLH_MGFSEED : [u8; 128]   /* MGF1 seed = R(n) || PK.seed(n) || inner(32 or 64): max 32+32+64 */
 var SLH_MGFCTR  : [u8; 4]     /* MGF1 4-byte big-endian counter             */
+var SLH_H64     : [u8; 64]    /* SHA-512 output scratch                      */
 
 /* Build the SHA-2 hash prefix PK.seed || 0^(64-seedlen) || ADRSc(22) into
  * SLH_HBUF[0..86]; returns 86 (the caller appends the message then sha256s).
@@ -79,6 +88,52 @@ fn slh_sha2_prefix(pkseed: u64, seedlen: u64, adrs_slot: u64) -> u64 {
     j = 0u64
     while j < 12u64 { hb[74u64 + j] = SLH_ADRS[ab + 20u64 + j] ; j = j + 1u64 }
     return 86u64
+}
+
+/* Build the SHA-512 hash prefix PK.seed || 0^(128-seedlen) || ADRSc(22) into
+ * SLH_HBUF[0..150]; returns 150 (FIPS-205 cat-3/5 H/T: the pad grows to the
+ * SHA-512 block, the compressed address is unchanged). */
+fn slh_sha2_prefix512(pkseed: u64, seedlen: u64, adrs_slot: u64) -> u64 {
+    let hb : *u8 = &SLH_HBUF as *u8
+    let pk : *u8 = pkseed as *u8
+    let mut i : u64 = 0u64
+    while i < seedlen { hb[i] = pk[i] ; i = i + 1u64 }
+    while i < 128u64 { hb[i] = 0u8 ; i = i + 1u64 }
+    let ab : u64 = adrs_slot * 32u64
+    hb[128u64] = SLH_ADRS[ab + 3u64]
+    let mut j : u64 = 0u64
+    while j < 8u64 { hb[129u64 + j] = SLH_ADRS[ab + 8u64 + j] ; j = j + 1u64 }
+    hb[137u64] = SLH_ADRS[ab + 19u64]
+    j = 0u64
+    while j < 12u64 { hb[138u64 + j] = SLH_ADRS[ab + 20u64 + j] ; j = j + 1u64 }
+    return 150u64
+}
+
+/* MGF1-SHA-512(seed[seedlen]) -> out[outlen] (cat-3/5 H_msg). */
+fn slh_mgf1_sha512(seed_addr: u64, seedlen: u64, out: u64, outlen: u64) -> i32 {
+    let op : *u8 = out as *u8
+    let mut produced : u64 = 0u64
+    let mut ctr : u32 = 0u32
+    while produced < outlen {
+        sha512_init()
+        sha512_update(seed_addr as *u8, seedlen)
+        SLH_MGFCTR[0u64] = ((ctr >> 24u32) & 0xFFu32) as u8
+        SLH_MGFCTR[1u64] = ((ctr >> 16u32) & 0xFFu32) as u8
+        SLH_MGFCTR[2u64] = ((ctr >> 8u32) & 0xFFu32) as u8
+        SLH_MGFCTR[3u64] = (ctr & 0xFFu32) as u8
+        sha512_update(&SLH_MGFCTR as *u8, 4u64)
+        sha512_finalize_internal()
+        let mut k : u64 = 0u64
+        while k < 64u64 {
+            if produced < outlen {
+                op[produced] = (sha512_digest_byte(k as u32) & 0xFFu32) as u8
+                produced = produced + 1u64
+            }
+            k = k + 1u64
+        }
+        ctr = ctr + 1u32
+    }
+    return 0i32
 }
 
 /* MGF1-SHA-256(seed[seedlen]) -> out[outlen]. */
@@ -174,6 +229,21 @@ var SLH_H32  : [u8; 32]     /* SHA-256 output */
 /* H_n(out, n, seed[seedlen], adrs_slot, msg[msglen]) = SHA256(seed||adrs||msg)[0..n] */
 fn slh_H_n(out: u64, n: u64, seed: u64, seedlen: u64, adrs_slot: u64, msg: u64, msglen: u64) -> i32 {
     if SLH_HASH_SUITE == SLH_SUITE_SHA2 {
+        /* FIPS-205 sec.10.2-10.3: category 1 (n=16) hashes everything with SHA-256; categories 3/5
+         * keep F (msglen == n: one chain/leaf block) and PRF on SHA-256 but compute H (two children,
+         * msglen == 2n) and T_l (l*n) with SHA-512 over the 128-byte-padded prefix. */
+        if n > 16u64 { if msglen > n {
+            let pfx5 : u64 = slh_sha2_prefix512(seed, seedlen, adrs_slot)
+            let hb5 : *u8 = &SLH_HBUF as *u8
+            let mp5 : *u8 = msg as *u8
+            let mut q5 : u64 = 0u64
+            while q5 < msglen { hb5[pfx5 + q5] = mp5[q5] ; q5 = q5 + 1u64 }
+            sha512_oneshot(&SLH_HBUF as *u8, pfx5 + msglen, &SLH_H64 as *u8)
+            let op5 : *u8 = out as *u8
+            q5 = 0u64
+            while q5 < n { op5[q5] = SLH_H64[q5] ; q5 = q5 + 1u64 }
+            return 0i32
+        } }
         let pfx : u64 = slh_sha2_prefix(seed, seedlen, adrs_slot)
         let hb2 : *u8 = &SLH_HBUF as *u8
         let mp2 : *u8 = msg as *u8
@@ -245,7 +315,36 @@ fn slh_PRF(out: u64, n: u64, pkseed: u64, skseed: u64, adrs_slot: u64) -> i32 {
 /* PRF_msg(out, n, skprf, opt_rand, msg[msglen]) = SHA256(skprf||opt_rand||msg)[0..n] */
 fn slh_PRF_msg(out: u64, n: u64, skprf: u64, opt_rand: u64, msg: u64, msglen: u64) -> i32 {
     if SLH_HASH_SUITE == SLH_SUITE_SHA2 {
-        /* HMAC-SHA-256(skprf, opt_rand || msg) truncated to n (block size 64). */
+        /* cat 3/5 (n>16): HMAC-SHA-512(skprf, opt_rand || msg) trunc n (block 128, digest 64). */
+        if n > 16u64 {
+            let kp5 : *u8 = skprf as *u8
+            let ip5 : *u8 = &SLH_HIPAD as *u8
+            let op5 : *u8 = &SLH_HOPAD as *u8
+            let mut q5 : u64 = 0u64
+            while q5 < 128u64 {
+                let mut kb5 : u8 = 0u8
+                if q5 < n { kb5 = kp5[q5] }
+                ip5[q5] = kb5 ^ 0x36u8
+                op5[q5] = kb5 ^ 0x5Cu8
+                q5 = q5 + 1u64
+            }
+            sha512_init()
+            sha512_update(&SLH_HIPAD as *u8, 128u64)
+            sha512_update(opt_rand as *u8, n)
+            sha512_update(msg as *u8, msglen)
+            sha512_finalize_internal()
+            q5 = 0u64
+            while q5 < 64u64 { SLH_HIH[q5] = (sha512_digest_byte(q5 as u32) & 0xFFu32) as u8 ; q5 = q5 + 1u64 }
+            sha512_init()
+            sha512_update(&SLH_HOPAD as *u8, 128u64)
+            sha512_update(&SLH_HIH as *u8, 64u64)
+            sha512_finalize_internal()
+            let o5 : *u8 = out as *u8
+            q5 = 0u64
+            while q5 < n { o5[q5] = (sha512_digest_byte(q5 as u32) & 0xFFu32) as u8 ; q5 = q5 + 1u64 }
+            return 0i32
+        }
+        /* cat 1: HMAC-SHA-256(skprf, opt_rand || msg) truncated to n (block size 64). */
         let kp2 : *u8 = skprf as *u8
         let ip2 : *u8 = &SLH_HIPAD as *u8
         let op3 : *u8 = &SLH_HOPAD as *u8
@@ -323,7 +422,27 @@ fn slh_sh_finish(out: u64, outlen: u64) -> i32 {
 }
 fn slh_H_msg(out: u64, outlen: u64, r: u64, n: u64, pk: u64, pklen: u64, msg: u64, msglen: u64) -> i32 {
     if SLH_HASH_SUITE == SLH_SUITE_SHA2 {
-        /* inner = SHA-256(R || PK.seed||PK.root || M); H_msg = MGF1-SHA-256(R || PK.seed || inner, outlen) */
+        /* cat 3/5 (n>16): inner = SHA-512(R || PK.seed||PK.root || M);
+         * H_msg = MGF1-SHA-512(R || PK.seed || inner(64), outlen). */
+        if n > 16u64 {
+            sha512_init()
+            sha512_update(r as *u8, n)
+            sha512_update(pk as *u8, pklen)
+            sha512_update(msg as *u8, msglen)
+            sha512_finalize_internal()
+            let ms5 : *u8 = &SLH_MGFSEED as *u8
+            let rp5 : *u8 = r as *u8
+            let pkp5 : *u8 = pk as *u8
+            let mut q5 : u64 = 0u64
+            while q5 < n { ms5[q5] = rp5[q5] ; q5 = q5 + 1u64 }
+            q5 = 0u64
+            while q5 < n { ms5[n + q5] = pkp5[q5] ; q5 = q5 + 1u64 }
+            q5 = 0u64
+            while q5 < 64u64 { ms5[2u64*n + q5] = (sha512_digest_byte(q5 as u32) & 0xFFu32) as u8 ; q5 = q5 + 1u64 }
+            slh_mgf1_sha512(&SLH_MGFSEED as u64, 2u64*n + 64u64, out, outlen)
+            return 0i32
+        }
+        /* cat 1: inner = SHA-256(R || PK.seed||PK.root || M); H_msg = MGF1-SHA-256(R || PK.seed || inner, outlen) */
         sha256_init()
         sha256_update(r, n)
         sha256_update(pk, pklen)

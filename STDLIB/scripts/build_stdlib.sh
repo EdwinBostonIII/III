@@ -1977,4 +1977,21 @@ if [[ $FAIL -eq 0 ]]; then
     fi
 fi
 
+# --- Emit symbol-consistency gate (the teeth stage1_corpus lacked) -----------------------
+# The sovereign emitter's two outputs must AGREE on exports: every `.global` in <mod>.iii.o.s
+# must be a DEFINED symbol in <mod>.iii.o.  The 2026-07-07 regression (module-var .global
+# exports dropped -> EVERY corpus KAT link-red while bootstrap stayed green, because
+# stage1_corpus is compile-only) is exactly the class this catches at BUILD time.
+# Root cause + fix: DOCS/III-SOVEREIGN-EMIT-SYMBOL-REGRESSION.md.  ~2.5 min full-tree.
+# III_SKIP_EMIT_SYMBOL_GATE=1 skips (iteration aid ONLY -- anchor/CI runs must not set it).
+if [[ "${III_SKIP_EMIT_SYMBOL_GATE:-0}" != "1" ]]; then
+    if bash "$SCRIPT_DIR/emit_symbol_consistency_gate.sh" > "$BUILD_DIR/emit_symbol_gate.log" 2>&1; then
+        echo "[build_stdlib] emit symbol-consistency gate OK (.o.s .global set == .o exported set)"
+    else
+        echo "[build_stdlib] EMIT SYMBOL-CONSISTENCY GATE FAIL (see build/iii/emit_symbol_gate.log)"
+        tail -5 "$BUILD_DIR/emit_symbol_gate.log"
+        FAIL=$((FAIL+1))
+    fi
+fi
+
 exit $FAIL

@@ -205,6 +205,7 @@ var FPTDO : [u32; 256]  var FPTDL : [u32; 256]  var FPTDN : u32 = 0u32   /* INC-
 fn is_fptd(t:u32) -> u32 { let mut k:u32=0u32  while k<FPTDN { if neq(FPTDO[k as u64],FPTDL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return 1u32}  k=k+1u32 }  return 0u32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]  var LPP : [i64; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed ; LPP=ULTIMATE element size (base type) for `(*pp)[i]` on a multi-level pointer */
+var LROW : [i64; 256]   /* pointer-to-ARRAY locals `T (**name)[N]` (stars>=2): N*base row bytes -- `(*name)[i]` is the i-th ARRAY, an ADDRESS at stride LROW (alloc_node's memset((*mh)[slot],0,32)); 0 = not this shape */
 var LVT : [i32; 256]  var LVB : [i64; 256]   /* local struct-VALUE: LVT=struct type (-1=not a struct value) ; LVB=its inline frame base (STSZ bytes reserved) -> `p.field` via abase/avtype */
 var LVF : [u32; 256]   /* Boss-2: LVB-is-FRAME flag. 1 = LVB is a shadow-FRAME offset (struct-value LOCAL @SHADOW_ON=1, recursion-safe) -> emit_frame_addr ; 0 = LVB is a fixed MTOP address (OFF, or a struct-value PARAM) -> econst */
 var LOVF : u32 = 0u32                                  /* LOUD local-overflow flag: the SVIR LOCAL_GET/SET operand is ONE byte, so >256 locals/fn would silently collide (slot 256&0xFF=0); set this instead, fail the whole compile clearly */
@@ -275,6 +276,7 @@ fn byc(ty: u32) -> u32 { if aesz_of(ty)==1i64 {return 1u32}  return 0u32 }   /* 
  * mem) + AVT (struct type index of that entry, -1 for plain arrays). */
 var STNO:[u32;1024]  var STNL:[u32;1024]  var STFB:[u32;1024]  var STNF:[u32;1024]  var STSZ:[u64;1024]  var STN:u32=0u32  var STBODY:[u32;1024]  var STUNION:[u32;1024]   /* STBODY/STUNION: per-slot field-body token + union flag, so reg_fields can RE-FILL a slot (BUG-B forward-ref fixpoint) */
 var SFO:[u32;8192]  var SFL:[u32;8192]  var SFOFF:[u64;8192]  var SFEL:[i64;8192]  var SFAR:[u32;8192]  var SFMASK:[i64;8192]  var SFSGN:[u32;8192]  var SFPT:[i32;8192]  var SFSZ:[i64;8192]  var SFPSZ:[i64;8192]  var SFPSG:[u32;8192]  var SFN:u32=0u32  var AVT:[i32;1024]   /* SFEL=elem size {1,2,4,8} ; SFAR=array? ; SFMASK=field width-mask ; SFSGN=field signed ; SFPT=field's pointed-to/embedded STRUCT type (-1 if scalar) -> chained lvalue p->arr[i].subfield */
+var SFROW:[i64;8192]   /* pointer-to-ARRAY fields `T (*name)[N]`: N*base row bytes -- `p->field[k]` is the k-th ARRAY's ADDRESS (LOAD64 + k*SFROW, NO element load; node_mhash's `ast->small_mhash[slot]`); 0 = not this shape */
 fn fieldpt(sti:i32, ft:u32)->i32 { if sti<0i32 {return 0i32-1i32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFPT[fi as u64]}  k=k+1u32 }  return 0i32-1i32 }   /* the struct type a field points to / embeds */
 /* named integer constants: enum members + object-like #define <number>.  Resolved in eprim -> econst. */
 var CNO:[u32;16384]  var CNL:[u32;16384]  var CNV:[i64;16384]  var CN:u32=0u32
@@ -318,6 +320,7 @@ fn avtype(t:u32)->i32 { let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u
 fn fieldoff(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64-1i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFOFF[fi as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn fieldelem(sti:i32, ft:u32)->i64 { if sti<0i32 {return 8i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFEL[fi as u64]}  k=k+1u32 }  return 8i64 }   /* element size of a (possibly array) field */
 fn fieldptsz(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFPSZ[fi as u64]}  k=k+1u32 }  return 0i64 }   /* POINTEE byte-size of a scalar-pointer field (0 = not a scalar pointer) -> p->ptrfield[i] index-deref */
+fn fieldrow(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFROW[fi as u64]}  k=k+1u32 }  return 0i64 }   /* row bytes of a pointer-to-ARRAY field (0 = not this shape) -> p->field[k] = the k-th array's ADDRESS */
 fn fieldptsg(sti:i32, ft:u32)->u32 { if sti<0i32 {return 0u32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFPSG[fi as u64]}  k=k+1u32 }  return 0u32 }   /* POINTEE sign of a scalar-pointer field */
 fn fieldbytes(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 { let s:i64=SFSZ[fi as u64]  if s>0i64 {return s}  return SFEL[fi as u64] }  k=k+1u32 }  return 0i64 }   /* total byte size of a field (array field -> count*elem via SFSZ; else SFEL) -- for sizeof(p->field) */
 fn fieldisarr(sti:i32, ft:u32)->u32 { if sti<0i32 {return 0u32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFAR[fi as u64]}  k=k+1u32 }  return 0u32 }   /* is this field an array? (bare access decays to address) */
@@ -730,7 +733,7 @@ fn eprim() {
     if cp(Q_AND)==1u32 {                                            /* &arr[i] / &arr : address-of (no load) */
         C=C+1u32
         if cp(Q_LP)==1u32 { if ispat(C+1u32,Q_MUL)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_RP)==1u32 { if ispat(C+4u32,Q_LBR)==1u32 {   /* &(*pp)[i] : address of elem i of the dereffed inner pointer -- the seed pool accessor `&(*pf)[slot]` */
-            let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let st:i64=LPP[li as u64]  emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(st)  eb(0x20u32)  return } } } } } }
+            let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let mut st:i64=LPP[li as u64]  let rw2:i64=LROW[li as u64]  if rw2>0i64 {st=rw2}  emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(st)  eb(0x20u32)  return } } } } } }
         if TK[C as u64]==1u32 { let at:u32=C
             let vt:i32=avtype(at)  if vt>=0i32 { if ispat(at+1u32,Q_DOT)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(vt,ft)  C=C+3u32  emit_vbase(at, foff)  return } }   /* &v.field : struct-value field address = base+offset (frame-aware) */
             let ptt:i32=lpt(at)  if ptt>=0i32 { if ispat(at+1u32,Q_ARROW)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(at)  let eltp:i32=fieldpt(ptt,ft)
@@ -777,7 +780,9 @@ fn eprim() {
         } else { CLOVF=1u32  C=C+3u32  eat(Q_LB)  let mut gbd:i32=1i32  while gbd>0i32 { if cp(Q_LB)==1u32 {gbd=gbd+1i32} else { if cp(Q_RB)==1u32 {gbd=gbd-1i32} }  if TK[C as u64]==0u32 {gbd=0i32}  C=C+1u32 }  econst(0i64)  return }   /* >8B compound literal in a NON-direct context (ternary/arg): UNSUPPORTED -> LOUD hard-stop (CLOVF -> fatal at module emit; never a silent-wrong binary). Direct-init `T x=(T){..}` is handled correctly in the local-init. */
         } } } }
         if ispat(C+1u32,Q_MUL)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_RP)==1u32 { if ispat(C+4u32,Q_LBR)==1u32 {   /* (*pp)[i] rvalue : deref the inner pointer, index by base-elem stride, load */
-            let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let st:i64=LPP[li as u64]  let sg:u32=LPSG[li as u64]  emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(st)  eb(0x20u32)  eload(st,sg)  return } } } } }
+            let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let rw:i64=LROW[li as u64]
+                if rw>0i64 { emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(rw)  eb(0x20u32)  return }   /* (**name)[N] pointee is an ARRAY: (*mh)[slot] = the slot-th array's ADDRESS at LROW stride, NO load (alloc_node's memset dst; pre-fix this loaded LPP=0 bytes at stride 0 -> dst 0 -> the @0..31 writes) */
+                let st:i64=LPP[li as u64]  let sg:u32=LPSG[li as u64]  emit_lget(li as u32)  eb(0x82u32)  C=C+5u32  ebin(0u32)  eat(Q_RBR)  estride(st)  eb(0x20u32)  eload(st,sg)  return } } } } }
         if ispat(C+1u32,Q_MUL)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_RP)==1u32 { let mut isd:u32=2u32  if ispat(C+4u32,Q_INC)==1u32 {isd=0u32} else { if ispat(C+4u32,Q_DEC)==1u32 {isd=1u32} }  if isd<2u32 { let idn:u32=C+2u32  let li:i32=lidx(idn)  if li>=0i32 { let st:i64=LPSZ[li as u64]  let sg:u32=LPSG[li as u64]  let t:u32=LN  if LN<255u32 {LN=LN+1u32}  emit_lget(li as u32)  eload(st,sg)  eu8(0x11u32,t)  emit_lget(li as u32)  eu8(0x10u32,t)  econst(1i64)  if isd==1u32 {eb(0x21u32)} else {eb(0x20u32)}  estore(st)  eu8(0x10u32,t)  C=C+5u32  return } } } } }   /* (*p)++ / (*p)-- : post-incr/decr the pointee (leave OLD value) -- the seed `slot = (*count_p)++` */
         if is_type_start(C+1u32)==1u32 { C=C+1u32  let cu:u32=cast_is_unsigned(C)  let mut cm:i64=cast_mask()
             if cp(Q_LP)==1u32 { cm=0i64                            /* `(Type (*)[N])expr` : pointer-to-array CAST -> a pointer (8B, no narrowing mask); skip the (*)[N] declarator */
@@ -988,7 +993,9 @@ fn eprim() {
                             eload(se, ssg)  return
                         }
                     }
-                    C=C+1u32  ebin(0u32)  eat(Q_RBR)  let pesz:i64=fieldptsz(ptt,ft)  let mut uesz:i64=fe  let mut uesg:u32=fsg
+                    C=C+1u32  ebin(0u32)  eat(Q_RBR)  let prow:i64=fieldrow(ptt,ft)
+                    if prow>0i64 { estride(prow)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32)  return }   /* POINTER-TO-ARRAY field p->rows[k] : LOAD64 the table pointer + k*ROW -> the k-th array's ADDRESS, no element load (node_mhash's `ast->small_mhash[slot]`) */
+                    let pesz:i64=fieldptsz(ptt,ft)  let mut uesz:i64=fe  let mut uesg:u32=fsg
                     if pesz>0i64 { uesz=pesz  uesg=fieldptsg(ptt,ft)  estride(pesz)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32) } else { estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)} }   /* SCALAR-POINTER field p->ptr[i] : LOAD64 the field pointer then +i*pointee ; else INLINE array p+foff+i*elem (byte-identical to before) */
                     if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(uesz,uesg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(uesz,uesg,fm,1u32,1u32)  return }   /* p->field[i]++ */
                     eload(uesz, uesg)  return }
@@ -1347,9 +1354,10 @@ fn pstmt() {
                else { bsz=type_size(C)  tym=type_mask(C)  bsg=type_signed(C) } } }
         let isc:u32=byc(tt)  C=C+adv  let mut more:u32=1u32
         if cp(Q_LP)==1u32 {                                        /* `Type (*+name)[N] [= e]` : pointer-to-ARRAY declarator (uint8_t (**mh)[32]) -> an 8-byte pointer local (the seed uses it via realloc/memset/ptr-arith; stride approximated) */
-            C=C+1u32  let mut gpp:u32=1u32  while gpp==1u32 { if cp(Q_MUL)==1u32 {C=C+1u32} else {gpp=0u32} }   /* ( then *+ */
+            C=C+1u32  let mut nst4:u32=0u32  let mut gpp:u32=1u32  while gpp==1u32 { if cp(Q_MUL)==1u32 {C=C+1u32  nst4=nst4+1u32} else {gpp=0u32} }   /* ( then *+ (count the stars: >=2 -> the deref-index (*name)[i] is an ARRAY ADDRESS at LROW stride) */
             let pnt:u32=C  C=C+1u32  let ps:u32=ladd(pnt)  LPSZ[ps as u64]=8i64  LPSG[ps as u64]=0u32
             let mut grp:u32=1u32  while grp==1u32 { if cp(Q_RP)==1u32 {grp=0u32} else { if TK[C as u64]==0u32 {grp=0u32} else {C=C+1u32} } }  eat(Q_RP)   /* to ) */
+            if nst4>=2u32 { if cp(Q_LBR)==1u32 { if TK[(C+1u32) as u64]==2u32 { LROW[ps as u64]=(TV[(C+1u32) as u64])*bsz } } }   /* (**name)[N]: row bytes = N*base (uint8_t (**mh)[32] -> 32) */
             let mut gbr:u32=1u32  while gbr==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  let mut gx:u32=1u32  while gx==1u32 { if cp(Q_RBR)==1u32 {gx=0u32} else { if TK[C as u64]==0u32 {gx=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else {gbr=0u32} }   /* skip [N] dims */
             if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(ps) }   /* = e */
             eat(Q_SEMI)  return
@@ -1923,17 +1931,26 @@ fn reg_fields(si:u32) {   /* fill slot si's fields from its stored body (STBODY/
               if scl==1u32 { sesz=type_size(q)  smask=type_mask(q)  ssgn=type_signed(q) }
               else { if sawspec==1u32 { if ispat(q,Q_MUL)==0u32 { if TK[(q) as u64]==1u32 { scl=1u32  sesz=specsz  smask=0i64  ssgn=0u32  sq=q } } } }   /* bare type-SPECIFIER field: skipquals ATE the `unsigned`/`signed`/`long`/`short`, so q is the NAME (sq=q) and the size came from specsz (the seed's sema `unsigned ring_mask`=4B); `unsigned int` etc. still hit dtype(q) above */
               if scl==1u32 {
-            let mut esz:i64=sesz  let mut fmask:i64=smask  let mut fsgn:u32=ssgn  let mut fpsz:i64=0i64  let mut fpsg:u32=0u32  let mut fq:u32=sq  if ispat(fq,Q_MUL)==1u32 { let mut nst:u32=0u32  while ispat(fq,Q_MUL)==1u32 { fq=fq+1u32  nst=nst+1u32 }  esz=8i64  fmask=0i64  fsgn=0u32  if nst>=2u32 { fpsz=8i64  fpsg=0u32 } else { fpsz=sesz  fpsg=ssgn } }  else { if ispat(fq,Q_LP)==1u32 { if ispat(fq+1u32,Q_MUL)==1u32 { fq=fq+2u32  esz=8i64  fmask=0i64  fsgn=0u32 } } }   /* fpsz/fpsg = POINTEE size+sign for a scalar-pointer field (single * -> base type ; ** -> 8B ptr ; 0 = not a scalar pointer) -> enables p->ptrfield[i] index-deref */   /* `TYPE *field` / `TYPE **field` (consume ALL `*` -- a DOUBLE-ptr field `const uint8_t **string_payloads` was registered with the 2nd `*` AS the name, so `ast->string_payloads` could not be found -> the assign mis-compiled, iii_ast_create rc=8) -> 8B ptr ; ALSO `TYPE (*field)[N]` POINTER-TO-ARRAY field -> 8B ptr (name after `(*`) -- the seed's ast `uint8_t (*small_mhash)[32]`, else mis-sized as TYPE(1B) + every later field mis-offset */
+            let mut dq:u32=sq  let mut gdcl:u32=1u32   /* COMMA-DECLARATOR loop: `uint32_t small_count, small_cap;` registered only the FIRST name -> 16B struct-size loss + every later field shifted + the dropped names mis-addressing (the ast layer-2 behavioral root).  Each declarator carries its OWN `*` prefix (C binds the star per-name); the `(*name)[N]` pointer-to-array form stays first-declarator-only (no comma shape in the seed). */
+            while gdcl==1u32 {
+            let mut esz:i64=sesz  let mut fmask:i64=smask  let mut fsgn:u32=ssgn  let mut fpsz:i64=0i64  let mut fpsg:u32=0u32  let mut frow:i64=0i64  let mut fq:u32=dq  if ispat(fq,Q_MUL)==1u32 { let mut nst:u32=0u32  while ispat(fq,Q_MUL)==1u32 { fq=fq+1u32  nst=nst+1u32 }  esz=8i64  fmask=0i64  fsgn=0u32  if nst>=2u32 { fpsz=8i64  fpsg=0u32 } else { fpsz=sesz  fpsg=ssgn } }  else { if ispat(fq,Q_LP)==1u32 { if ispat(fq+1u32,Q_MUL)==1u32 { fq=fq+2u32  esz=8i64  fmask=0i64  fsgn=0u32  gdcl=0u32
+                if ispat(fq+2u32,Q_LBR)==1u32 { if TK[(fq+3u32) as u64]==2u32 { frow=(TV[(fq+3u32) as u64])*sesz } }   /* `T (*name)[N]` -> row bytes N*base: p->field[k] = the k-th ARRAY's address (node_mhash's small_mhash[slot]) */
+            } } }   /* fpsz/fpsg = POINTEE size+sign for a scalar-pointer field (single * -> base type ; ** -> 8B ptr ; 0 = not a scalar pointer) -> enables p->ptrfield[i] index-deref */   /* `TYPE *field` / `TYPE **field` (consume ALL `*` -- a DOUBLE-ptr field `const uint8_t **string_payloads` was registered with the 2nd `*` AS the name, so `ast->string_payloads` could not be found -> the assign mis-compiled, iii_ast_create rc=8) -> 8B ptr ; ALSO `TYPE (*field)[N]` POINTER-TO-ARRAY field -> 8B ptr (name after `(*`) -- the seed's ast `uint8_t (*small_mhash)[32]`, else mis-sized as TYPE(1B) + every later field mis-offset */
             let mut isarr:u32=0u32  if ispat(fq+1u32,Q_LBR)==1u32 { isarr=1u32 }
             let al:u64=esz as u64  if is_union==0u32 { let r:u64=off & (al - 1u64)  if r!=0u64 { off=off+(al-r) } }   /* C natural alignment: align off up to the element/scalar size */
             if al>maxal { maxal=al }
-            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmask  SFSGN[SFN as u64]=fsgn  SFPT[SFN as u64]=0i32-1i32  SFPSZ[SFN as u64]=fpsz  SFPSG[SFN as u64]=fpsg
+            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmask  SFSGN[SFN as u64]=fsgn  SFPT[SFN as u64]=0i32-1i32  SFPSZ[SFN as u64]=fpsz  SFPSG[SFN as u64]=fpsg  SFROW[SFN as u64]=frow
             let mut fsz:u64=esz as u64                                                          /* scalar field size */
             if isarr==1u32 { if TK[(fq+2u32) as u64]==2u32 { fsz=(TV[(fq+2u32) as u64] as u64)*(esz as u64) } }   /* array field: NUM*elem */
             SFSZ[SFN as u64]=fsz as i64                                                            /* total field bytes (sizeof(p->field)) */
             if fsz>maxsz {maxsz=fsz}
             SFN=SFN+1u32  nf=nf+1u32
             if is_union==0u32 { off=off+fsz }
+            if gdcl==1u32 { let mut adq:u32=fq+1u32                                             /* advance past this declarator: optional [..] then a `,` continues */
+                if isarr==1u32 { adq=adq+1u32  let mut gsk2:u32=1u32  while gsk2==1u32 { if ispat(adq,Q_RBR)==1u32 {gsk2=0u32  adq=adq+1u32} else { if TK[adq as u64]==0u32 {gsk2=0u32} else {adq=adq+1u32} } } }
+                if ispat(adq,Q_COM)==1u32 { dq=adq+1u32 } else { gdcl=0u32 }
+            }
+            }
             let mut g2:u32=1u32  while g2==1u32 { if ispat(q,Q_SEMI)==1u32 {g2=0u32} else { if TK[q as u64]==0u32 {g2=0u32} else {q=q+1u32} } }  q=q+1u32
         } else {
             /* struct-typed field: `struct TAG [*]f ;` / `union TAG [*]f ;` / `TypedefName [*]f ;` (the dtype branch only handles scalar fields) */
@@ -2101,7 +2118,7 @@ fn cfn(fk: u32) {
     }
     let ft:u32=FNT[fk as u64]  C=fn_nametok(ft)  C=C+1u32  eat(Q_LP)   /* [quals] type [*] NAME ( -> at ( */
     CUR_RMASK=FRM[fk as u64]
-    LN=0u32  NLOC=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  LVT[lz as u64]=0i32-1i32  LVB[lz as u64]=0i64  LVF[lz as u64]=0u32  LL[lz as u64]=0u64  lz=lz+1u32 }   /* reset per-fn local flags + control-depth + the NAME table (LL=0=nameless): lidx searches 0..LN, and the sret reserve bumps LN past slot 0 WITHOUT a ladd -> a leftover prev-fn name at slot 0 would false-match the first real param into the sret slot (span's `p` aliased bump's `p`) */
+    LN=0u32  NLOC=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  LPP[lz as u64]=0i64  LROW[lz as u64]=0i64  LVT[lz as u64]=0i32-1i32  LVB[lz as u64]=0i64  LVF[lz as u64]=0u32  LL[lz as u64]=0u64  lz=lz+1u32 }   /* reset per-fn local flags + control-depth + the NAME table (LL=0=nameless): lidx searches 0..LN, and the sret reserve bumps LN past slot 0 WITHOUT a ladd -> a leftover prev-fn name at slot 0 would false-match the first real param into the sret slot (span's `p` aliased bump's `p`) */
     let mut params:u32=0u32  let mut go:u32=1u32  CUR_VAPTR=0i32-1i32  ADN_N=0u32  PARAMVAL_BYTES=0i64   /* clear &-taken set BEFORE the param loop: ladd(param) must see THIS fn's ADN (empty until prescan_addrof), not the caller's -- else `f(&x)` in the caller spuriously spills f's param x (read from an un-stored spill slot) */
     let SRETI:i32=fn_ret_sval(ft)  CUR_SRET=0i32-1i32  CUR_SRETSZ=0i64  if SRETI>=0i32 { CUR_SRET=0i32  CUR_SRETSZ=STSZ[SRETI as u64] as i64  LN=1u32  params=1u32 }   /* struct-VALUE return (>8B) -> hidden sret pointer in slot 0 ; real params shift to 1..N ; nparams emits params(incl sret).  Wired COMPLETE with the return-copy + receive-site below. */
     if kw(C,"void" as u64,4u32)==1u32 { if ispat(C+1u32,Q_RP)==1u32 { C=C+1u32 } }   /* (void) = ZERO params: skip the `void` so the loop sees `)` */
@@ -2247,6 +2264,169 @@ fn preprocess() {
     }
     SLEN=wi
 }
+/* ---- FUNCTION-LIKE #define expansion (real cpp semantics, byte-level, pre-lex) ----
+ * The seed's III_AST_NODE_MAKE/POOL/SLOT (expression), V/VL (do-while statement, enclosing-scope
+ * capture) and EMIT_POOL/READ_POOL (multi-line, ## token pasting) previously parsed as
+ * unknown-call-then-paren-comma: STRUCTURALLY balanced, floor-blind, runtime-WRONG (MK(2,3)
+ * evaluated to 3 -- the _fm1.c falsifier).  Pass A records `#define NAME(params) body`
+ * (NAME( with NO space -- the C rule; body spans \-continuations).  Pass B rewrites SRC->RAW:
+ * fn-like define lines DROPPED, uses expanded (param idents -> arg byte-ranges, ## eaten =
+ * adjacency pasting, \-newline -> space), strings/chars/comments copied verbatim; then RAW
+ * copies back to SRC.  SINGLE-PASS (no rescan): none of the seed's bodies use another fn-like
+ * macro; # stringize unsupported (no seed use).  Overflow -> FMOVF -> LOUD refusal (CLOVF's
+ * discipline, never a silent-wrong binary). */
+var FMN:u32=0u32  var FMNO:[u64;16]  var FMNL:[u64;16]  var FMPC:[u32;16]  var FMPO:[u64;64]  var FMPL:[u64;64]  var FMBO:[u64;16]  var FMBL:[u64;16]
+var FMWI:u64=0u64  var FMOVF:u32=0u32  var FMAO:[u64;4]  var FMAL:[u64;4]
+fn fmw(b:u32) { if FMWI<1048575u64 { let p:*u8=((&RAW as u64)+FMWI) as *u8  p[0u64]=(b & 0xFFu32) as u8  FMWI=FMWI+1u64 } else { FMOVF=1u32 } }
+fn fm_true_end(ls:u64) -> u64 {   /* the byte AFTER this line's terminating newline, folding `\`-continuations */
+    let mut i:u64=ls  let mut g:u32=1u32
+    while g==1u32 { if i>=SLEN {g=0u32} else { let c:u32=sb(i)
+        if c==92u32 { i=i+1u64  if i<SLEN { if sb(i)==13u32 {i=i+1u64} }  if i<SLEN { if sb(i)==10u32 {i=i+1u64} } }
+        else { if c==10u32 { i=i+1u64  g=0u32 } else { i=i+1u64 } } } }
+    return i
+}
+fn fm_match(o:u64, l:u64) -> i32 { let mut k:u32=0u32  while k<FMN { if l==FMNL[k as u64] { let mut j:u64=0u64  let mut ok:u32=1u32  while j<l { let sa:u32=sb(o+j)  let sc:u32=sb(FMNO[k as u64]+j)  if sa!=sc {ok=0u32  j=l} else {j=j+1u64} }  if ok==1u32 { return k as i32 } }  k=k+1u32 }  return 0i32-1i32 }
+fn fm_scan() {   /* pass A */
+    FMN=0u32
+    let mut i:u64=0u64
+    while i<SLEN {
+        let ls:u64=i  let te:u64=fm_true_end(ls)
+        let ds:u64=pp_skipws(ls, te)
+        if ds<te { if sb(ds)==35u32 {
+            let dk:u64=pp_skipws(ds+1u64, te)
+            if pp_kw(dk,"define" as u64,6u64)==1u32 {
+                let no:u64=pp_skipws(dk+6u64, te)  let nl:u64=pp_namelen(no)
+                if nl>0u64 { if sb(no+nl)==40u32 { if FMN<16u32 {
+                    FMNO[FMN as u64]=no  FMNL[FMN as u64]=nl
+                    let mut p:u64=pp_skipws(no+nl+1u64, te)  let mut pc2:u32=0u32
+                    if sb(p)==41u32 { } else { let mut gp:u32=1u32
+                        while gp==1u32 {
+                            let po:u64=p  let pl:u64=pp_namelen(po)
+                            if pc2<4u32 { FMPO[(((FMN*4u32)+pc2)) as u64]=po  FMPL[(((FMN*4u32)+pc2)) as u64]=pl }
+                            pc2=pc2+1u32
+                            p=pp_skipws(po+pl, te)
+                            if sb(p)==44u32 { p=pp_skipws(p+1u64, te) } else { gp=0u32 }
+                        } }
+                    FMPC[FMN as u64]=pc2
+                    let bo:u64=pp_skipws(p+1u64, te)
+                    let mut be:u64=te  if be>bo { if sb(be-1u64)==10u32 {be=be-1u64} }  if be>bo { if sb(be-1u64)==13u32 {be=be-1u64} }
+                    FMBO[FMN as u64]=bo  let mut bl0:u64=0u64  if be>bo { bl0=be-bo }  FMBL[FMN as u64]=bl0
+                    FMN=FMN+1u32
+                } } }
+            }
+        } }
+        i=te
+    }
+}
+fn fm_param_of(bwo:u64, bwe:u64, mi:i32) -> i32 {   /* the param index this body word names, or -1 */
+    let mut k:u32=0u32  let pc3:u32=FMPC[mi as u64]
+    while k<pc3 { if k<4u32 { let po:u64=FMPO[(((mi as u32)*4u32)+k) as u64]  let pl:u64=FMPL[(((mi as u32)*4u32)+k) as u64]
+        if (bwe-bwo)==pl { let mut j:u64=0u64  let mut ok:u32=1u32  while j<pl { let ba:u32=sb(bwo+j)  let bb:u32=sb(po+j)  if ba!=bb {ok=0u32  j=pl} else {j=j+1u64} }
+            if ok==1u32 { return k as i32 } } }
+        k=k+1u32 }
+    return 0i32-1i32
+}
+fn fm_arg_safe(k:u32) -> u32 {   /* arg is a pure POSTFIX-PRIMARY chain (idents/digits, `.`, `->`, [..], ws) ->
+    * parens around it in the body are redundant by C precedence, so they may be ELIDED.  Anything else
+    * (operators, calls, strings, casts) keeps its parens -- value semantics unchanged. */
+    let ao:u64=FMAO[k as u64]  let al:u64=FMAL[k as u64]
+    if al==0u64 { return 0u32 }
+    let mut j:u64=0u64
+    while j<al {
+        let c:u32=sb(ao+j)
+        let mut ok:u32=0u32
+        if idc(c)==1u32 { ok=1u32 }
+        if c==46u32 { ok=1u32 }                      /* . */
+        if c==91u32 { ok=1u32 }  if c==93u32 { ok=1u32 }   /* [ ] */
+        if c==32u32 { ok=1u32 }  if c==9u32  { ok=1u32 }
+        if c==45u32 { if (j+1u64)<al { if sb(ao+(j+1u64))==62u32 { ok=1u32  j=j+1u64 } } }   /* -> (consumes both; a bare - or > stays unsafe) */
+        if ok==0u32 { return 0u32 }
+        j=j+1u64
+    }
+    return 1u32
+}
+fn fm_emit_word_or_param(bwo:u64, bwe:u64, mi:i32) {   /* body ident: a PARAM name -> splice the recorded arg bytes, else copy */
+    let k:i32=fm_param_of(bwo, bwe, mi)
+    if k>=0i32 { let ao:u64=FMAO[k as u64]  let al:u64=FMAL[k as u64]  let mut m2:u64=0u64  while m2<al { fmw(sb(ao+m2))  m2=m2+1u64 }  return }
+    let mut cw:u64=bwo  while cw<bwe { fmw(sb(cw))  cw=cw+1u64 }
+}
+fn fm_expand() {   /* pass B: SRC -> RAW; fn-like define lines dropped; uses expanded; back-copy */
+    FMWI=0u64
+    let mut r:u64=0u64  let mut atls:u32=1u32
+    while r<SLEN {
+        let mut handled:u32=0u32
+        if atls==1u32 {
+            let te:u64=fm_true_end(r)
+            let ds:u64=pp_skipws(r, te)
+            let mut drop:u32=0u32
+            if ds<te { if sb(ds)==35u32 { let dk:u64=pp_skipws(ds+1u64, te)
+                if pp_kw(dk,"define" as u64,6u64)==1u32 { let no:u64=pp_skipws(dk+6u64, te)  let nl:u64=pp_namelen(no)
+                    if nl>0u64 { if sb(no+nl)==40u32 { drop=1u32 } } } } }
+            atls=0u32
+            if drop==1u32 { r=te  atls=1u32  handled=1u32 }
+        }
+        if handled==0u32 { if r<SLEN {
+        let c:u32=sb(r)
+        if c==10u32 { fmw(c)  r=r+1u64  atls=1u32 }
+        else { if c==34u32 { fmw(c)  r=r+1u64  let mut gs:u32=1u32  while gs==1u32 { if r>=SLEN {gs=0u32} else { let d:u32=sb(r)  fmw(d)  r=r+1u64  if d==92u32 { if r<SLEN { fmw(sb(r))  r=r+1u64 } } else { if d==34u32 {gs=0u32} } } } }
+        else { if c==39u32 { fmw(c)  r=r+1u64  let mut gq:u32=1u32  while gq==1u32 { if r>=SLEN {gq=0u32} else { let d:u32=sb(r)  fmw(d)  r=r+1u64  if d==92u32 { if r<SLEN { fmw(sb(r))  r=r+1u64 } } else { if d==39u32 {gq=0u32} } } } }
+        else { if c==47u32 { let c2x:u32=sb(r+1u64)
+            if c2x==42u32 { fmw(47u32)  fmw(42u32)  r=r+2u64  let mut gm:u32=1u32  while gm==1u32 { if r>=SLEN {gm=0u32} else { if sb(r)==42u32 { if sb(r+1u64)==47u32 { fmw(42u32)  fmw(47u32)  r=r+2u64  gm=0u32 } else { fmw(42u32)  r=r+1u64 } } else { fmw(sb(r))  r=r+1u64 } } } }
+            else { if c2x==47u32 { let mut gl:u32=1u32  while gl==1u32 { if r>=SLEN {gl=0u32} else { let d:u32=sb(r)  fmw(d)  r=r+1u64  if d==10u32 {gl=0u32  atls=1u32} } } }
+            else { fmw(c)  r=r+1u64 } } }
+        else { let isid:u32=idc(c)  let isdg:u32=dg(c)
+            if isid==1u32 { if isdg==0u32 {
+                let wo:u64=r  let mut we:u64=r  let mut gw:u32=1u32  while gw==1u32 { if we>=SLEN {gw=0u32} else { if idc(sb(we))==1u32 {we=we+1u64} else {gw=0u32} } }
+                let mi:i32=fm_match(wo, we-wo)
+                let mut ex:u32=0u32  let mut ap:u64=0u64
+                if mi>=0i32 { ap=pp_skipws(we, SLEN)  if sb(ap)==40u32 { ex=1u32 } }
+                if ex==1u32 {
+                    let mut q3:u64=ap+1u64  let mut dep:i32=1i32  let mut ai:u32=0u32
+                    FMAO[0u64]=pp_skipws(q3, SLEN)  FMAL[0u64]=0u64  FMAO[1u64]=0u64  FMAL[1u64]=0u64  FMAO[2u64]=0u64  FMAL[2u64]=0u64  FMAO[3u64]=0u64  FMAL[3u64]=0u64
+                    let mut ga:u32=1u32
+                    while ga==1u32 { if q3>=SLEN {ga=0u32} else { let d3:u32=sb(q3)
+                        if d3==34u32 { q3=q3+1u64  let mut g5:u32=1u32  while g5==1u32 { if q3>=SLEN {g5=0u32} else { let e5:u32=sb(q3)  q3=q3+1u64  if e5==92u32 { q3=q3+1u64 } else { if e5==34u32 {g5=0u32} } } } }
+                        else { if d3==40u32 { dep=dep+1i32  q3=q3+1u64 }
+                        else { if d3==41u32 { dep=dep-1i32  if dep==0i32 { if ai<4u32 { FMAL[ai as u64]=q3-FMAO[ai as u64] }  q3=q3+1u64  ga=0u32 } else { q3=q3+1u64 } }
+                        else { if d3==44u32 { if dep==1i32 { if ai<4u32 { FMAL[ai as u64]=q3-FMAO[ai as u64] }  ai=ai+1u32  if ai<4u32 { FMAO[ai as u64]=pp_skipws(q3+1u64, SLEN) }  q3=q3+1u64 } else { q3=q3+1u64 } }
+                        else { q3=q3+1u64 } } } } } }
+                    let bo:u64=FMBO[mi as u64]  let bl:u64=FMBL[mi as u64]  let mut b:u64=bo
+                    while b<(bo+bl) { let cb:u32=sb(b)
+                        if cb==92u32 { let nb:u32=sb(b+1u64)  if nb==13u32 { fmw(32u32)  b=b+2u64  if sb(b)==10u32 {b=b+1u64} } else { if nb==10u32 { fmw(32u32)  b=b+2u64 } else { fmw(cb)  b=b+1u64 } } }
+                        else { if cb==35u32 { if sb(b+1u64)==35u32 { b=b+2u64  let mut gws:u32=1u32  while gws==1u32 { let wsc:u32=sb(b)  if wsc==32u32 {b=b+1u64} else { if wsc==9u32 {b=b+1u64} else {gws=0u32} } } } else { fmw(cb)  b=b+1u64 } }
+                        else { if cb==34u32 { fmw(cb)  b=b+1u64  let mut g6:u32=1u32  while g6==1u32 { if b>=(bo+bl) {g6=0u32} else { let e6:u32=sb(b)  fmw(e6)  b=b+1u64  if e6==92u32 { if b<(bo+bl) { fmw(sb(b))  b=b+1u64 } } else { if e6==34u32 {g6=0u32} } } } }
+                        else { if cb==40u32 {   /* body `(param)` + a postfix-primary-safe arg -> ELIDE the body parens:
+                            * `(list).count` splices to `n->u.x.mods.count` -- the plain member chain the parser already
+                            * compiles ((EXPR).field has no general handler; the seed's ONE occurrence is this VL body).
+                            * A non-safe arg (operators/calls/strings) keeps its parens = unchanged value semantics. */
+                            let mut pw:u64=b+1u64  let mut gpw:u32=1u32  while gpw==1u32 { if pw>=(bo+bl) {gpw=0u32} else { let w2:u32=sb(pw)  if w2==32u32 {pw=pw+1u64} else { if w2==9u32 {pw=pw+1u64} else {gpw=0u32} } } }
+                            let pwo:u64=pw  let mut pwe:u64=pw  let mut gpe:u32=1u32  while gpe==1u32 { if pwe>=(bo+bl) {gpe=0u32} else { if idc(sb(pwe))==1u32 {pwe=pwe+1u64} else {gpe=0u32} } }
+                            let mut cr:u64=pwe  let mut gcr:u32=1u32  while gcr==1u32 { if cr>=(bo+bl) {gcr=0u32} else { let w3:u32=sb(cr)  if w3==32u32 {cr=cr+1u64} else { if w3==9u32 {cr=cr+1u64} else {gcr=0u32} } } }
+                            let mut pk:i32=0i32-1i32
+                            if pwe>pwo { if cr<(bo+bl) { if sb(cr)==41u32 { pk=fm_param_of(pwo, pwe, mi) } } }
+                            let mut done4:u32=0u32
+                            if pk>=0i32 { if fm_arg_safe(pk as u32)==1u32 {
+                                let ao2:u64=FMAO[pk as u64]  let al2:u64=FMAL[pk as u64]  let mut m3:u64=0u64  while m3<al2 { fmw(sb(ao2+m3))  m3=m3+1u64 }
+                                b=cr+1u64  done4=1u32
+                            } }
+                            if done4==0u32 { fmw(cb)  b=b+1u64 }
+                        }
+                        else { let bid:u32=idc(cb)  let bdg:u32=dg(cb)
+                            if bid==1u32 { if bdg==0u32 { let bwo:u64=b  let mut bwe:u64=b  let mut gbw:u32=1u32  while gbw==1u32 { if bwe>=(bo+bl) {gbw=0u32} else { if idc(sb(bwe))==1u32 {bwe=bwe+1u64} else {gbw=0u32} } }  fm_emit_word_or_param(bwo, bwe, mi)  b=bwe }
+                            else { fmw(cb)  b=b+1u64 } }
+                            else { fmw(cb)  b=b+1u64 } } } } }
+                    }
+                    r=q3
+                } else { let mut cw:u64=wo  while cw<we { fmw(sb(cw))  cw=cw+1u64 }  r=we }
+            } else { fmw(c)  r=r+1u64 } }
+            else { fmw(c)  r=r+1u64 } }
+        } } }
+        } }
+    }
+    let mut k2:u64=0u64  while k2<FMWI { let p2:*u8=((&SRC as u64)+k2) as *u8  let q2:*u8=((&RAW as u64)+k2) as *u8  p2[0u64]=q2[0u64]  k2=k2+1u64 }
+    SLEN=FMWI
+}
+fn expand_fnmacros() { fm_scan()  if FMN>0u32 { fm_expand() } }
 fn main(argc: i32, argv: u64) -> u64 {
     if argc < 2i32 { return 2u64 }
     let pp : *u64 = argv as *u64
@@ -2260,6 +2440,8 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
+    expand_fnmacros()                                              /* FUNCTION-LIKE #define expansion (byte-level; V/VL/EMIT_POOL/READ_POOL/NODE_MAKE class) -- RAW is dead after flatten, reused as the rewrite buffer */
+    if FMOVF==1u32 { pstr("!!!CCSV_MACRO_OVERFLOW!!!" as u64)  pc(10u32)  return 9u64 }   /* expansion exceeded the 1MB source cap -> LOUD refusal, never a silent-wrong binary */
     lex()  subst_strdefs()  prescan()  prescan_str()  prescan_imports()   /* subst_strdefs BEFORE prescan_str: string-macro occurrences must be STRING tokens when adjacency packs.  imports PERMANENTLY ON (2026-07-05): the parked rule ("re-enable together with the downstream fixes for a NET drop") is DISCHARGED -- measured ON = 14 fails/845 fns vs OFF = 23/488 (net -9; the old 36-vs-28 numbers predate fix #29, whose reverse-loop guard was the real blocker of the predicted "sret-family exposure" -- those ~9 parser-core fns are GREEN under ON).  What ON buys, measured: the extern-call class clears (parse break/continue/return/use_decl/stmt + iii_sema_run) and with call()[i] (fn_ret_psz path) cg_r3.c reaches STRUCTURAL ZERO.  Builtin names never register (is_call_builtin -- the test_fnptr2.c manual-putchar-prototype lesson).  ALL FIVE SVIR consumers know 0x8A: verify:49 net-0, dis skip, interp UNRES_IMP->198, x86 ExitProcess(198) stub, wasm `unreachable` stub; gates test_import.c/test_importtrap.c (198/198/1, never silent).  Cross-module RESOLUTION = P3 (sovld link-by-name). */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
     if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
         pstr("# STN=~" as u64) pdec(STN as u64) pstr(" SFN=~" as u64) pdec(SFN as u64) pstr(" AN=~" as u64) pdec(AN as u64) pstr(" CN=~" as u64) pdec(CN as u64) pstr(" FN=~" as u64) pdec(FN as u64) pstr(" MTOP=~" as u64) pdec(MTOP) pc(10u32)

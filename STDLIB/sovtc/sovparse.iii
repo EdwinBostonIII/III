@@ -243,18 +243,20 @@ fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the 
 var EXP_NAME : [u8; 131072]   /* 2048 slots * 64 */
 var EXP_NLEN : [u32; 2048]
 var EXP_OFF  : [u32; 2048]
+var EXP_SEC  : [u32; 2048]   /* section id per export (TEXT=0 DATA=1 RODATA=2 BSS=3): cg_r3 marks every module-var .global, so data globals are REAL COFF exports, not only .text fns */
 var EXP_N    : u32 = 0u32
 fn exp_record(slot: u32, slen2: u32) {
     if EXP_N < 2048u32 {   /* match the EXP array size (was a 32 dev-scaffold cap; cg_r3 has 340 .global) */
         let mut j : u32 = 0u32
         while j < slen2 { EXP_NAME[((EXP_N * 64u32) + j) as u64] = SYM_NAME[((slot * 64u32) + j) as u64]  j = j + 1u32 }
-        EXP_NLEN[EXP_N as u64] = slen2  EXP_N = EXP_N + 1u32
+        EXP_NLEN[EXP_N as u64] = slen2  EXP_SEC[EXP_N as u64] = 0u32  EXP_N = EXP_N + 1u32   /* sec fixed up after layout; explicit 0 clears stale cross-run state */
     }
 }
 fn sp_export_n() -> u32 @export { return EXP_N }
 fn sp_export_off(i: u32) -> u32 @export { if i < EXP_N { return EXP_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sp_export_namelen(i: u32) -> u32 @export { if i < EXP_N { return EXP_NLEN[i as u64] }  return 0u32 }
 fn sp_export_namebyte(i: u32, j: u32) -> u32 @export { if i < EXP_N { if j < EXP_NLEN[i as u64] { return EXP_NAME[((i * 64u32) + j) as u64] as u32 } }  return 0u32 }
+fn sp_export_sec(i: u32) -> u32 @export { if i < EXP_N { return EXP_SEC[i as u64] }  return 0u32 }
 /* LINKER: register an export named "main" at off, so sovld's find_main_off picks up the merged entry point. */
 fn sp_export_inject(off: u32) -> i32 @export {
     if EXP_N < 2048u32 {
@@ -262,7 +264,7 @@ fn sp_export_inject(off: u32) -> i32 @export {
         EXP_NAME[((EXP_N * 64u32) + 1u32) as u64] = 97u8
         EXP_NAME[((EXP_N * 64u32) + 2u32) as u64] = 105u8
         EXP_NAME[((EXP_N * 64u32) + 3u32) as u64] = 110u8
-        EXP_NLEN[EXP_N as u64] = 4u32  EXP_OFF[EXP_N as u64] = off  EXP_N = EXP_N + 1u32
+        EXP_NLEN[EXP_N as u64] = 4u32  EXP_OFF[EXP_N as u64] = off  EXP_SEC[EXP_N as u64] = 0u32  EXP_N = EXP_N + 1u32
     }
     return 0i32
 }
@@ -1055,12 +1057,28 @@ fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
         iter = iter + 1u32
         if iter > 8u32 { go = 0u32 }
     }
-    /* resolve each export's .text offset now that the layout (incl. relaxation) is stable */
+    /* resolve each export's offset now that the layout (incl. relaxation) is stable.  A .text global
+     * resolves via the label table; a DATA global (.data/.rodata/.bss module var) resolves via the pass-D
+     * data-symbol table to (section, section-relative offset).  Without the data fallback, module-var
+     * globals resolved 0xFFFFFFFF and sovcoff silently dropped them from the COFF symbol table -> external
+     * refs (resolver_hot.s) failed to link (DOCS/III-SOVEREIGN-EMIT-SYMBOL-REGRESSION.md). */
     let mut e : u32 = 0u32
     while e < EXP_N {
+        let elen : u32 = EXP_NLEN[e as u64]
         let mut j : u32 = 0u32
-        while j < EXP_NLEN[e as u64] { SYM_NAME[((SYM_N * 64u32) + j) as u64] = EXP_NAME[((e * 64u32) + j) as u64]  j = j + 1u32 }
-        EXP_OFF[e as u64] = lbl_find(SYM_N, EXP_NLEN[e as u64])
+        while j < elen { SYM_NAME[((SYM_N * 64u32) + j) as u64] = EXP_NAME[((e * 64u32) + j) as u64]  j = j + 1u32 }
+        EXP_OFF[e as u64] = lbl_find(SYM_N, elen)
+        EXP_SEC[e as u64] = 0u32
+        if EXP_OFF[e as u64] == 0xFFFFFFFFu32 {
+            let mut si : u32 = 0u32
+            while si < SYM_N {
+                if sp_names_eq(SYM_N, elen, si, SYM_NLEN[si as u64]) == 1u32 {
+                    let ssec : u32 = SYM_SEC[si as u64]
+                    if ssec >= 1u32 { if ssec <= 3u32 { EXP_OFF[e as u64] = SYM_OFF[si as u64]  EXP_SEC[e as u64] = ssec } }
+                    si = SYM_N
+                } else { si = si + 1u32 }
+            }
+        }
         e = e + 1u32
     }
     BR_IDX = 0u32

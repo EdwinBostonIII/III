@@ -1,0 +1,163 @@
+/* FIPS-205 SLH-DSA-SHAKE-192s INTEROP conformance (extends KAT 770 to security category 3).
+ * The strict SHAKE family must reproduce the NIST ACVP deterministic internal signature
+ * BYTE-FOR-BYTE (checked via sha256(sig) == embedded ACVP-sig digest), verify must ACCEPT
+ * it, and a single flipped signature byte must be REJECTED (non-vacuity).
+ * Vector: NIST ACVP SLH-DSA-sigGen-FIPS205 internalProjection, tg35 tc299, det, msg=1B. */
+module corpus_c2494
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha256.iii"
+
+var SK : [u8; 96]
+var MSG : [u8; 1]
+var EXP : [u8; 32]
+var DIG : [u8; 32]
+var SLB : u64 = 0u64
+
+fn main() -> u64 {
+    SK[0u64] = 0xCBu8
+    SK[1u64] = 0x3Eu8
+    SK[2u64] = 0xC7u8
+    SK[3u64] = 0x29u8
+    SK[4u64] = 0x6Au8
+    SK[5u64] = 0x28u8
+    SK[6u64] = 0x4Du8
+    SK[7u64] = 0x81u8
+    SK[8u64] = 0x47u8
+    SK[9u64] = 0xA4u8
+    SK[10u64] = 0x98u8
+    SK[11u64] = 0x85u8
+    SK[12u64] = 0x23u8
+    SK[13u64] = 0x45u8
+    SK[14u64] = 0x20u8
+    SK[15u64] = 0x35u8
+    SK[16u64] = 0xACu8
+    SK[17u64] = 0x9Du8
+    SK[18u64] = 0x41u8
+    SK[19u64] = 0x2Eu8
+    SK[20u64] = 0x77u8
+    SK[21u64] = 0x8Du8
+    SK[22u64] = 0xEAu8
+    SK[23u64] = 0xFFu8
+    SK[24u64] = 0xDCu8
+    SK[25u64] = 0x72u8
+    SK[26u64] = 0x8Bu8
+    SK[27u64] = 0x13u8
+    SK[28u64] = 0x2Bu8
+    SK[29u64] = 0x6Du8
+    SK[30u64] = 0xD8u8
+    SK[31u64] = 0x8Au8
+    SK[32u64] = 0x59u8
+    SK[33u64] = 0x44u8
+    SK[34u64] = 0x5Fu8
+    SK[35u64] = 0x56u8
+    SK[36u64] = 0xFCu8
+    SK[37u64] = 0x31u8
+    SK[38u64] = 0x57u8
+    SK[39u64] = 0xD8u8
+    SK[40u64] = 0x95u8
+    SK[41u64] = 0x23u8
+    SK[42u64] = 0x5Cu8
+    SK[43u64] = 0x20u8
+    SK[44u64] = 0xF1u8
+    SK[45u64] = 0x90u8
+    SK[46u64] = 0x5Bu8
+    SK[47u64] = 0x4Au8
+    SK[48u64] = 0x21u8
+    SK[49u64] = 0xF1u8
+    SK[50u64] = 0xA7u8
+    SK[51u64] = 0x67u8
+    SK[52u64] = 0x2Eu8
+    SK[53u64] = 0x4Bu8
+    SK[54u64] = 0xB0u8
+    SK[55u64] = 0xFDu8
+    SK[56u64] = 0xD8u8
+    SK[57u64] = 0x8Bu8
+    SK[58u64] = 0xACu8
+    SK[59u64] = 0xB1u8
+    SK[60u64] = 0xD3u8
+    SK[61u64] = 0x2Cu8
+    SK[62u64] = 0xC2u8
+    SK[63u64] = 0xACu8
+    SK[64u64] = 0x37u8
+    SK[65u64] = 0xA1u8
+    SK[66u64] = 0x16u8
+    SK[67u64] = 0xD4u8
+    SK[68u64] = 0x54u8
+    SK[69u64] = 0xB4u8
+    SK[70u64] = 0x9Cu8
+    SK[71u64] = 0xFEu8
+    SK[72u64] = 0x7Au8
+    SK[73u64] = 0xFAu8
+    SK[74u64] = 0xD4u8
+    SK[75u64] = 0x42u8
+    SK[76u64] = 0x7Bu8
+    SK[77u64] = 0x9Fu8
+    SK[78u64] = 0xDAu8
+    SK[79u64] = 0xCEu8
+    SK[80u64] = 0x8Au8
+    SK[81u64] = 0xD0u8
+    SK[82u64] = 0x5Cu8
+    SK[83u64] = 0x84u8
+    SK[84u64] = 0x0Cu8
+    SK[85u64] = 0x6Fu8
+    SK[86u64] = 0x8Au8
+    SK[87u64] = 0x43u8
+    SK[88u64] = 0xA3u8
+    SK[89u64] = 0xFBu8
+    SK[90u64] = 0x9Eu8
+    SK[91u64] = 0x35u8
+    SK[92u64] = 0xA8u8
+    SK[93u64] = 0xECu8
+    SK[94u64] = 0xCFu8
+    SK[95u64] = 0x8Cu8
+    MSG[0u64] = 0x3Au8
+    EXP[0u64] = 0x36u8
+    EXP[1u64] = 0x82u8
+    EXP[2u64] = 0x1Cu8
+    EXP[3u64] = 0x90u8
+    EXP[4u64] = 0x50u8
+    EXP[5u64] = 0x93u8
+    EXP[6u64] = 0xACu8
+    EXP[7u64] = 0x16u8
+    EXP[8u64] = 0xABu8
+    EXP[9u64] = 0xF7u8
+    EXP[10u64] = 0xFDu8
+    EXP[11u64] = 0xE5u8
+    EXP[12u64] = 0x5Bu8
+    EXP[13u64] = 0x00u8
+    EXP[14u64] = 0x17u8
+    EXP[15u64] = 0x5Bu8
+    EXP[16u64] = 0xDAu8
+    EXP[17u64] = 0x83u8
+    EXP[18u64] = 0xEAu8
+    EXP[19u64] = 0xFFu8
+    EXP[20u64] = 0xC8u8
+    EXP[21u64] = 0x24u8
+    EXP[22u64] = 0x78u8
+    EXP[23u64] = 0xF3u8
+    EXP[24u64] = 0xC0u8
+    EXP[25u64] = 0x18u8
+    EXP[26u64] = 0x68u8
+    EXP[27u64] = 0x30u8
+    EXP[28u64] = 0x27u8
+    EXP[29u64] = 0x81u8
+    EXP[30u64] = 0x25u8
+    EXP[31u64] = 0x20u8
+    let sig : *u8 = malloc(16288u64)
+    let sr : i32 = iii_slhdsa_sign(1u64, &SK as u64, &MSG as u64, 1u64, sig as u64, &SLB as u64)
+    if sr != 0i32 { return 10u64 }
+    if SLB != 16224u64 { return 11u64 }
+    sha256_oneshot(sig as u64, 16224u64, &DIG as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 { if DIG[i] != EXP[i] { return 20u64 }  i = i + 1u64 }
+    let pk : u64 = (&SK as u64) + 48u64   /* pk = pkseed||root = sk+2n */
+    let vr : i32 = iii_slhdsa_verify(1u64, pk, &MSG as u64, 1u64, sig as u64, 16224u64)
+    if vr != 0i32 { return 30u64 }
+    sig[100u64] = sig[100u64] ^ 1u8   /* non-vacuity: one flipped byte must be rejected */
+    let vb : i32 = iii_slhdsa_verify(1u64, pk, &MSG as u64, 1u64, sig as u64, 16224u64)
+    if vb == 0i32 { return 40u64 }
+    return 99u64
+}

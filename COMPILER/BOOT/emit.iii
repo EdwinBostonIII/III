@@ -67,6 +67,32 @@ extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, nmemb: u64, stream: u64) -
 extern @abi(c-msvc-x64) fn malloc(n: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: u64) -> u64 from "msvcrt"
 
+/* ── SOVEREIGN emit surface (sovtc, in libiii_native.a since C1) ────────────────────────────────
+ * These let emit.iii ASSEMBLE + LINK in-process with NO gcc/ld: sovparse_full drives the sovas
+ * encoder over the .o.s text; sovcoff_emit / sovld_emit route their bytes to a memory buffer (the
+ * shared output sink) that emit.iii then writes with its own file helper.  Referencing these pulls
+ * the 4 sovtc archive members into iiis-1/2/3 (the golden move re-sealed in C4). */
+extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_to_buffer(buf: u64, cap: u64) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_to_stdout() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_len() -> u64 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: u64, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+/* Emit MODE (independence plan C2/C3): 0 = SOVEREIGN (in-process sovas/sovld, the DEFAULT once C4
+ * flips it), 1 = WITNESS (gcc/ld, the differential-audit opt-out).  Until C4 re-seals the chain the
+ * built compiler still defaults to witness; the sovereign functions exist + are gated. */
+const III_EMIT_MODE_SOVEREIGN : u32 = 0u32
+const III_EMIT_MODE_WITNESS   : u32 = 1u32
+var G_EMIT_MODE : u32 = 1u32   /* C2/C3 land as source with witness default; C4 flips to 0 + re-seals */
+fn iii_emit_set_mode(m: u32) -> u32 @export { if m > 1u32 { return III_EMIT_E_BAD_FORMAT }  G_EMIT_MODE = m  return III_EMIT_OK }
+fn iii_emit_get_mode() -> u32 @export { return G_EMIT_MODE }
+
+/* the in-process COFF/PE staging buffer (a big-enough .o/.exe: the seed compiler TUs' .o reach ~1-2 MB) */
+const III_EMIT_SOVBUF_CAP : u64 = 33554432u64   /* 32 MiB */
+var G_SOVBUF : [u8; 33554432]
+
 var EMIT_M_WB  : [u8; 3] = [119u8, 98u8, 0u8]
 var EMIT_M_RB  : [u8; 3] = [114u8, 98u8, 0u8]
 var EMIT_M_R   : [u8; 2] = [114u8, 0u8]
@@ -868,8 +894,63 @@ fn iii_emit_get_witness_json() -> u64 @export {
     return &G_WITNESS_JSON as u64
 }
 
-/* ??? iii_emit_assemble ?????????????????????????????????????????????? */
+/* ??? iii_emit_assemble_sovereign ??????????????????????????????????????
+ * The in-process sovereign assembler: read the .o.s text, drive sovparse_full (the sovas encoder)
+ * over it, emit COFF into the shared sink buffer via sovcoff_emit, write the buffer to the .o with
+ * emit.iii's own file helper.  NO gcc, NO stdout.  Byte-identical .o to the gcc path's on the whole
+ * compiler (sov_preflight.sh: 54/54 + the 6 mulq modules == gas).  Absorbs sovas_main.iii's flow. */
+fn iii_emit_assemble_sovereign(asm_path: u64, out_obj_path: u64) -> u32 @export {
+    if asm_path == 0u64 { return III_EMIT_E_NULL_ARG }
+    if out_obj_path == 0u64 { return III_EMIT_E_NULL_ARG }
+    /* read the assembly text */
+    G_BUFADDR = 0u64
+    G_BUFLEN  = 0u64
+    let rc : i32 = iii_emit_read_file_c(asm_path, &G_BUFADDR as u64, &G_BUFLEN as u64)
+    if rc != 0i32 { return III_EMIT_E_IO }
+    /* clean encoder state, target the in-process buffer, assemble, emit COFF */
+    sov_reset()
+    sov_data_reset()
+    sov_out_to_buffer(&G_SOVBUF as u64, III_EMIT_SOVBUF_CAP)
+    let pr : i32 = sovparse_full(G_BUFADDR, G_BUFLEN as u32)
+    iii_emit_free_c(G_BUFADDR)
+    if pr != 0i32 { sov_out_to_stdout()  return III_EMIT_E_GCC_FAIL }   /* a construct sovas can't encode -> loud, never a silent-wrong .o */
+    sovcoff_emit()
+    let olen : u64 = sov_out_len()
+    sov_out_to_stdout()
+    if olen == 0u64 { return III_EMIT_E_INTERNAL }
+    if olen >= III_EMIT_SOVBUF_CAP { return III_EMIT_E_CMD_OVERFLOW }   /* .o exceeded the staging buffer */
+    let wr : i32 = iii_emit_write_file_c(out_obj_path, &G_SOVBUF as u64, olen)
+    if wr != 0i32 { return III_EMIT_E_IO }
+    return III_EMIT_OK
+}
+
+/* count of modules that fell back to the gcc WITNESS assembler (a Tier-2 SIMD/AES-NI mnemonic sovas cannot
+ * yet encode -- e.g. aes_gcm's AES-NI).  The manifest-honest "witness=N" number; a gate can assert it. */
+var G_WITNESS_ASM_COUNT : u32 = 0u32
+fn iii_emit_witness_asm_count() -> u32 @export { return G_WITNESS_ASM_COUNT }
+
+/* ??? iii_emit_assemble (MODE DISPATCHER) ???????????????????????????????
+ * SOVEREIGN (default once C4 flips G_EMIT_MODE): try in-process sovas; if sovas REFUSES a mnemonic
+ * (III_EMIT_E_GCC_FAIL from the sovereign path == a Tier-2 form outside its encoder), fall back to the
+ * gcc WITNESS for THAT module only and count it -- the sovbuild.sh per-module route model, so the default
+ * flip is safe on the whole tree (846/847 sovereign + aes_gcm witness, measured by sov_preflight.sh).
+ * WITNESS mode: straight to gcc (the differential-audit opt-out). */
 fn iii_emit_assemble(asm_path: u64, out_obj_path: u64) -> u32 @export {
+    if G_EMIT_MODE == III_EMIT_MODE_SOVEREIGN {
+        let r : u32 = iii_emit_assemble_sovereign(asm_path, out_obj_path)
+        if r == III_EMIT_OK { return III_EMIT_OK }
+        if r == III_EMIT_E_GCC_FAIL {                       /* sovas refused a mnemonic -> witness this ONE module */
+            let w : u32 = iii_emit_assemble_witness(asm_path, out_obj_path)
+            if w == III_EMIT_OK { G_WITNESS_ASM_COUNT = G_WITNESS_ASM_COUNT + 1u32 }
+            return w
+        }
+        return r                                            /* IO/overflow -> a real error, not a mnemonic gap */
+    }
+    return iii_emit_assemble_witness(asm_path, out_obj_path)
+}
+
+/* ??? iii_emit_assemble_witness (the gcc opt-out, unchanged) ????????????? */
+fn iii_emit_assemble_witness(asm_path: u64, out_obj_path: u64) -> u32 @export {
     if asm_path == 0u64 { return III_EMIT_E_NULL_ARG }
     if out_obj_path == 0u64 { return III_EMIT_E_NULL_ARG }
     iii_emit_force_env()

@@ -79,6 +79,12 @@ extern @abi(c-msvc-x64) fn sov_out_to_stdout() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_out_len() -> u64 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sovparse_full(ptr: u64, len: u32) -> i32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+/* in-process multi-object LINK driver (folded into sovld.iii, C3): reset -> add each loose COFF .o -> finish
+ * (resolves cross-module relocs, picks the entry, emits the PE to the sink).  Proven byte-identical to the
+ * pre-fold linker by run_fixpoint. */
+extern @abi(c-msvc-x64) fn sovld_link_reset() -> i32 from "sovld.iii"
+extern @abi(c-msvc-x64) fn sovld_link_add_obj(buf: u64, len: u32) -> i32 from "sovld.iii"
+extern @abi(c-msvc-x64) fn sovld_link_finish() -> i32 from "sovld.iii"
 
 /* Emit MODE (independence plan C2/C3): 0 = SOVEREIGN (in-process sovas/sovld, the DEFAULT once C4
  * flips it), 1 = WITNESS (gcc/ld, the differential-audit opt-out).  Until C4 re-seals the chain the
@@ -989,8 +995,58 @@ fn iii_emit_assemble_witness(asm_path: u64, out_obj_path: u64) -> u32 @export {
     return III_EMIT_OK
 }
 
-/* ??? iii_emit_link ?????????????????????????????????????????????????? */
+/* ??? iii_emit_link_sovereign ??????????????????????????????????????????
+ * In-process sovereign link of LOOSE COFF objects, NO gcc/ld: read each .o, drive the sovld_link_*
+ * merge driver (folded into sovld.iii, C3; proven byte-identical by run_fixpoint), emit the PE into the
+ * sink buffer, write it out.  Consumes loose objects (the from-scratch sovereign build model); an ar
+ * ARCHIVE input is NOT a loose COFF and must go through the witness path (scoped residual -- the compiler's
+ * default program-link still passes libiii_native.a; a loose-object build model is the follow-on). */
+fn iii_emit_link_sovereign(obj_paths: u64, obj_count: u64, out_path: u64) -> u32 @export {
+    if obj_paths == 0u64 { return III_EMIT_E_NULL_ARG }
+    if obj_count == 0u64 { return III_EMIT_E_NULL_ARG }
+    if out_path == 0u64  { return III_EMIT_E_NULL_ARG }
+    sovld_link_reset()
+    let mut i : u64 = 0u64
+    while i < obj_count {
+        let p_addr : u64 = obj_paths + i * 8u64
+        let p0 : u32 = iii_emit_buf_read_u8_c(p_addr, 0u64)   let p1 : u32 = iii_emit_buf_read_u8_c(p_addr, 1u64)
+        let p2 : u32 = iii_emit_buf_read_u8_c(p_addr, 2u64)   let p3 : u32 = iii_emit_buf_read_u8_c(p_addr, 3u64)
+        let p4 : u32 = iii_emit_buf_read_u8_c(p_addr, 4u64)   let p5 : u32 = iii_emit_buf_read_u8_c(p_addr, 5u64)
+        let p6 : u32 = iii_emit_buf_read_u8_c(p_addr, 6u64)   let p7 : u32 = iii_emit_buf_read_u8_c(p_addr, 7u64)
+        let pp : u64 = iii_emit_pack8_c(p0, p1, p2, p3, p4, p5, p6, p7)
+        G_BUFADDR = 0u64  G_BUFLEN = 0u64
+        let rc : i32 = iii_emit_read_file_c(pp, &G_BUFADDR as u64, &G_BUFLEN as u64)
+        if rc != 0i32 { return III_EMIT_E_IO }
+        sovld_link_add_obj(G_BUFADDR, G_BUFLEN as u32)
+        iii_emit_free_c(G_BUFADDR)
+        i = i + 1u64
+    }
+    sov_out_to_buffer(&G_SOVBUF as u64, III_EMIT_SOVBUF_CAP)
+    sovld_link_finish()
+    let olen : u64 = sov_out_len()
+    sov_out_to_stdout()
+    if olen == 0u64 { return III_EMIT_E_INTERNAL }
+    if olen >= III_EMIT_SOVBUF_CAP { return III_EMIT_E_CMD_OVERFLOW }
+    let wr : i32 = iii_emit_write_file_c(out_path, &G_SOVBUF as u64, olen)
+    if wr != 0i32 { return III_EMIT_E_IO }
+    return III_EMIT_OK
+}
+
+/* ??? iii_emit_link (MODE DISPATCHER) ????????????????????????????????????
+ * SOVEREIGN: loose-object in-process link (no linker script / no archive input); WITNESS or a linked
+ * script / sanctum format -> the gcc/ld path below (the compiler's archive-based default link stays here
+ * until a loose-object program-build model lands -- the scoped C3 residual). */
 fn iii_emit_link(fmt: u32, obj_paths: u64, obj_count: u64, out_path: u64, linker_script_or_null: u64) -> u32 @export {
+    if G_EMIT_MODE == III_EMIT_MODE_SOVEREIGN {
+        if fmt == III_EMIT_FORMAT_PE_EXE { if linker_script_or_null == 0u64 {
+            return iii_emit_link_sovereign(obj_paths, obj_count, out_path)
+        } }
+    }
+    return iii_emit_link_witness(fmt, obj_paths, obj_count, out_path, linker_script_or_null)
+}
+
+/* ??? iii_emit_link_witness (the gcc/ld opt-out, unchanged) ?????????????? */
+fn iii_emit_link_witness(fmt: u32, obj_paths: u64, obj_count: u64, out_path: u64, linker_script_or_null: u64) -> u32 @export {
     if obj_paths == 0u64 { return III_EMIT_E_NULL_ARG }
     if obj_count == 0u64 { return III_EMIT_E_NULL_ARG }
     if out_path == 0u64  { return III_EMIT_E_NULL_ARG }

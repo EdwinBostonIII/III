@@ -1,0 +1,103 @@
+/* STDLIB/corpus/1944_mlkem_c2sp_kat.iii
+ *
+ * ML-KEM-768 (FIPS 203) gated on the OFFICIAL C2SP/CCTV accumulated known-answer test -- the de-facto
+ * FIPS-203 conformance vector (the same one Go crypto, BoringSSL, et al. gate on).  Independence-closure F.
+ *
+ * Method (C2SP/CCTV ML-KEM "accumulated" strategy, github.com/C2SP/CCTV/ML-KEM):
+ *   DRBG   = SHAKE-128(empty), squeezed continuously (its stream starts 7f9c2ba4e88f827d..., verified).
+ *   For each of 10000 iterations, draw d(32) z(32) m(32) ct(1088) from the DRBG, then:
+ *     keygen(d||z) -> ek,dk ; encaps(ek, m) -> ct',k1 ; decaps(dk, ct[random]) -> k2
+ *   and absorb ek, dk, ct', k1, k2 into a running SHAKE-128 accumulator.
+ *   The 32-byte accumulator output MUST equal the published ML-KEM-768 digest:
+ *     f7db260e1137a742e05fe0db9525012812b004d29040a5b606aad3d134b548d3   (10000 tests)
+ *
+ * exit 99 = the module reproduces the official accumulated digest byte-for-byte;
+ *        1 = digest MISMATCH (the module diverges from FIPS 203);  2 = a keygen/encaps/decaps error.
+ * TEETH: this is a real KAT -- perturbing any output byte of any op changes the accumulator digest.
+ */
+module corpus_1944_mlkem_c2sp_kat
+
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+
+const RATE : u32 = 168u32          /* SHAKE-128 rate */
+/* DRBG state */
+var DS : [u8; 200]  var DPOS : u32 = 168u32   /* force a permute-before-first-read after finalize */
+/* accumulator state */
+var AS : [u8; 200]  var APOS : u32 = 0u32
+/* ML-KEM-768 buffers */
+var SEED : [u8; 64]  var MM : [u8; 32]  var CTR : [u8; 1088]
+var EK : [u8; 1184]  var DK : [u8; 2400]  var CTE : [u8; 1088]  var K1 : [u8; 32]  var K2 : [u8; 32]
+var DIG : [u8; 32]
+var WANT : [u8; 32] = [
+  0xf7u8,0xdbu8,0x26u8,0x0eu8,0x11u8,0x37u8,0xa7u8,0x42u8,0xe0u8,0x5fu8,0xe0u8,0xdbu8,0x95u8,0x25u8,0x01u8,0x28u8,
+  0x12u8,0xb0u8,0x04u8,0xd2u8,0x90u8,0x40u8,0xa5u8,0xb6u8,0x06u8,0xaau8,0xd3u8,0xd1u8,0x34u8,0xb5u8,0x48u8,0xd3u8 ]
+
+/* --- DRBG: SHAKE-128(empty) initialised, then continuous squeeze --- */
+fn drbg_init() {
+    let s : *u8 = (&DS) as *u8
+    let mut i : u32 = 0u32  while i < 200u32 { s[i as u64] = 0u8  i = i + 1u32 }
+    s[0u64] = 0x1Fu8                        /* empty msg -> domain byte at position 0 */
+    s[(RATE - 1u32) as u64] = s[(RATE - 1u32) as u64] ^ 0x80u8
+    keccak_f1600((&DS) as u64)
+    DPOS = 0u32
+}
+fn drbg_squeeze(dst: u64, n: u64) {
+    let s : *u8 = (&DS) as *u8
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if DPOS >= RATE { keccak_f1600((&DS) as u64)  DPOS = 0u32 }
+        d[i] = s[DPOS as u64]
+        DPOS = DPOS + 1u32
+        i = i + 1u64
+    }
+}
+
+/* --- accumulator: incremental SHAKE-128 absorb, then finalize+squeeze --- */
+fn acc_absorb(src: u64, n: u64) {
+    let s : *u8 = (&AS) as *u8
+    let m : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        s[APOS as u64] = s[APOS as u64] ^ m[i]
+        APOS = APOS + 1u32
+        if APOS >= RATE { keccak_f1600((&AS) as u64)  APOS = 0u32 }
+        i = i + 1u64
+    }
+}
+fn acc_final(out: u64) {
+    let s : *u8 = (&AS) as *u8
+    s[APOS as u64] = s[APOS as u64] ^ 0x1Fu8
+    s[(RATE - 1u32) as u64] = s[(RATE - 1u32) as u64] ^ 0x80u8
+    keccak_f1600((&AS) as u64)
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64  while i < 32u64 { o[i] = s[i]  i = i + 1u64 }
+}
+
+fn main() -> u64 {
+    drbg_init()
+    let mut it : u32 = 0u32
+    while it < 10000u32 {
+        drbg_squeeze((&SEED) as u64, 64u64)        /* d(32) || z(32) */
+        drbg_squeeze((&MM) as u64, 32u64)          /* m */
+        drbg_squeeze((&CTR) as u64, 1088u64)       /* random ct (decaps input) */
+        if iii_mlkem_keygen(3u64, (&SEED) as u64, (&EK) as u64, (&DK) as u64) != 0i32 { return 2u64 }
+        if iii_mlkem_encaps(3u64, (&EK) as u64, (&MM) as u64, (&CTE) as u64, (&K1) as u64) != 0i32 { return 2u64 }
+        if iii_mlkem_decaps(3u64, (&DK) as u64, (&CTR) as u64, (&K2) as u64) != 0i32 { return 2u64 }
+        acc_absorb((&EK) as u64, 1184u64)
+        acc_absorb((&DK) as u64, 2400u64)
+        acc_absorb((&CTE) as u64, 1088u64)
+        acc_absorb((&K1) as u64, 32u64)
+        acc_absorb((&K2) as u64, 32u64)
+        it = it + 1u32
+    }
+    acc_final((&DIG) as u64)
+    let d : *u8 = (&DIG) as *u8
+    let w : *u8 = (&WANT) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if d[i] != w[i] { return 1u64 }  i = i + 1u64 }
+    return 99u64
+}

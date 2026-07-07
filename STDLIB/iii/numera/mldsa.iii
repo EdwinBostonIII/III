@@ -13,7 +13,10 @@
  * NTT/invNTT run on a dedicated WORK slot (the verbatim proven probe code,
  * no slot-offset) with copy-in/out; per-coeff ops are slot-indexed directly.
  *
- * Public surface (byte-identical to the C ref for cross-KAT):
+ * Public surface (byte-FIPS-204-FINAL, gated on the official C2SP/CCTV accumulated
+ * vectors -- corpus 2491/2492/2493.  2026-07-07: the round-3 leftovers were fixed:
+ * rhoprime gained the rnd=0^32 field, c~ became lambda/4 (32/48/64) so ML-DSA-65/87
+ * signatures are 3309/4627 bytes, SampleInBall absorbs the full c~):
  *   iii_mldsa_keygen(level, seed, pk, sk) -> i32
  *   iii_mldsa_sign(level, sk, msg, msglen, sig, siglen_ptr) -> i32
  *   iii_mldsa_verify(level, pk, msg, msglen, sig, siglen) -> i32
@@ -264,6 +267,8 @@ fn mldsa_beta(level: u64) -> u64 { return mldsa_tau(level) * mldsa_eta(level) }
 fn mldsa_polyz_packed(level: u64) -> u64 { if level == 2u64 { return 576u64 } return 640u64 }
 fn mldsa_polyw1_packed(level: u64) -> u64 { if level == 2u64 { return 192u64 } return 128u64 }
 fn mldsa_polyeta_packed(level: u64) -> u64 { if level == 3u64 { return 128u64 } return 96u64 }
+/* FIPS-204 FINAL commitment-hash length |c~| = lambda/4: 32/48/64 by level (round-3 fixed it at 32). */
+fn mldsa_ctilde(level: u64) -> u64 { if level == 2u64 { return 32u64 } if level == 3u64 { return 48u64 } return 64u64 }
 
 /* ---- Rounding / hint (value fns, unsigned mod-q -- verbatim §4.4.1-proven).
  * decompose() writes its low part (mod-q) to DEC_A0[0] and returns a1. ---- */
@@ -722,10 +727,13 @@ fn mldsa_poly_uniform_gamma1(slot: u64, seed_addr: u64, nonce: u64, gamma1: u64)
     let buf : *u8 = &MLDSA_SBUF as *u8
     let base : u64 = slot * 256u64
     if gamma1 == 131072u64 {
-        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_SBUF as u64, 1152u64, 136u32)
+        /* 18-bit coeffs: 4 per 9-byte group (FIPS-204 ExpandMask consumes the stream
+         * CONTIGUOUSLY -- the ported stride of 18 skipped every other 9-byte block,
+         * a self-consistent-but-nonconformant sampler; fixed 2026-07-07). */
+        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_SBUF as u64, 576u64, 136u32)
         let mut g : u64 = 0u64
         while g < 64u64 {
-            let p : u64 = 18u64 * g
+            let p : u64 = 9u64 * g
             let b0 : u64 = buf[p + 0u64] as u64
             let b1 : u64 = buf[p + 1u64] as u64
             let b2 : u64 = buf[p + 2u64] as u64
@@ -746,10 +754,11 @@ fn mldsa_poly_uniform_gamma1(slot: u64, seed_addr: u64, nonce: u64, gamma1: u64)
             g = g + 1u64
         }
     } else {
-        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_SBUF as u64, 1280u64, 136u32)
+        /* 20-bit coeffs: 4 per 10-byte group, contiguous stream (same stride fix). */
+        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_SBUF as u64, 640u64, 136u32)
         let mut g : u64 = 0u64
         while g < 64u64 {
-            let p : u64 = 20u64 * g
+            let p : u64 = 10u64 * g
             let b0 : u64 = buf[p + 0u64] as u64
             let b1 : u64 = buf[p + 1u64] as u64
             let b2 : u64 = buf[p + 2u64] as u64
@@ -774,10 +783,11 @@ fn mldsa_poly_uniform_gamma1(slot: u64, seed_addr: u64, nonce: u64, gamma1: u64)
     return 0i32
 }
 
-/* challenge: tau coeffs in {-1,+1} (mod q: q-1 / 1), rest 0; SampleInBall. */
-fn mldsa_challenge(slot: u64, seed_addr: u64, tau: u64) -> i32 {
+/* challenge: tau coeffs in {-1,+1} (mod q: q-1 / 1), rest 0; SampleInBall.
+ * FIPS-204 FINAL absorbs the FULL c~ (clen = lambda/4 bytes); round-3 absorbed a fixed 32. */
+fn mldsa_challenge(slot: u64, seed_addr: u64, tau: u64, clen: u64) -> i32 {
     keccak_state_zero(&MLDSA_SST as u64)
-    keccak_absorb(&MLDSA_SST as u64, seed_addr, 32u64, keccak_pack_rate_dom(136u32, 0x1Fu8))
+    keccak_absorb(&MLDSA_SST as u64, seed_addr, clen, keccak_pack_rate_dom(136u32, 0x1Fu8))
     keccak_squeeze(&MLDSA_SST as u64, &MLDSA_SBUF as u64, 264u64, 136u32)
     let buf : *u8 = &MLDSA_SBUF as *u8
     let base : u64 = slot * 256u64
@@ -955,8 +965,8 @@ fn mldsa_chknorm(s: u64, n: u64, bound: u64) -> u64 {
  * w=93, w1p=101, w0p/H=109, cs1=117, cs2=124, ct0=132, r0=140, chat=148) */
 var MLDSA_MU    : [u8; 64]
 var MLDSA_RHOP  : [u8; 64]
-var MLDSA_RPIN  : [u8; 96]
-var MLDSA_CSEED : [u8; 32]
+var MLDSA_RPIN  : [u8; 128]     /* K(32) || rnd(32) || mu(64) -- FIPS-204 Sign_internal */
+var MLDSA_CSEED : [u8; 64]      /* c~ scratch, lambda/4 <= 64 */
 var MLDSA_CSIN  : [u8; 1664]
 
 /* APOTHEOSIS C.1 sealed ABI: the signature-length output is an EXPLICIT *u64
@@ -976,6 +986,7 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
     let omega : u64 = mldsa_omega(level)
     let pzp : u64 = mldsa_polyz_packed(level)
     let pwp : u64 = mldsa_polyw1_packed(level)
+    let ctl : u64 = mldsa_ctilde(level)
     /* unpack sk: rho=sk[0..32], K=sk[32..64], tr=sk[64..128], s1/s2/t0 */
     let rho_addr : u64 = sk
     let mut off : u64 = 128u64
@@ -992,16 +1003,19 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
     mldsa_sh_absorb(sk + 64u64, 64u64)
     mldsa_sh_absorb(msg, msglen)
     mldsa_sh_finish(&MLDSA_MU as u64, 64u64)
-    /* rhoprime = SHAKE256(K || mu) */
+    /* rhoprime = SHAKE256(K || rnd || mu) -- FIPS-204 Sign_internal.  This module is the
+     * DETERMINISTIC variant: rnd = 32 zero bytes (round-3 had NO rnd field at all). */
     let rp : *u8 = &MLDSA_RPIN as *u8
     let skp : *u8 = sk as *u8
     let mup : *u8 = &MLDSA_MU as *u8
     i = 0u64
     while i < 32u64 { rp[i] = skp[32u64 + i] ; i = i + 1u64 }
     i = 0u64
-    while i < 64u64 { rp[32u64 + i] = mup[i] ; i = i + 1u64 }
+    while i < 32u64 { rp[32u64 + i] = 0u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 64u64 { rp[64u64 + i] = mup[i] ; i = i + 1u64 }
     keccak_state_zero(&MLDSA_SST as u64)
-    keccak_absorb(&MLDSA_SST as u64, &MLDSA_RPIN as u64, 96u64, keccak_pack_rate_dom(136u32, 0x1Fu8))
+    keccak_absorb(&MLDSA_SST as u64, &MLDSA_RPIN as u64, 128u64, keccak_pack_rate_dom(136u32, 0x1Fu8))
     keccak_squeeze(&MLDSA_SST as u64, &MLDSA_RHOP as u64, 64u64, 136u32)
     /* s1hat/s2hat/t0hat = NTT in place */
     mldsa_vec_ntt(56u64, l)
@@ -1038,7 +1052,7 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
             }
             i = i + 1u64
         }
-        /* c_seed = SHAKE256(mu || polyw1_pack(w1p)) */
+        /* c~ = SHAKE256(mu || polyw1_pack(w1p), lambda/4) -- FIPS-204 commitment hash */
         let ci : *u8 = &MLDSA_CSIN as *u8
         i = 0u64
         while i < 64u64 { ci[i] = mup[i] ; i = i + 1u64 }
@@ -1046,9 +1060,9 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
         while i < k { mldsa_polyw1_pack(101u64 + i, &MLDSA_CSIN as u64, 64u64 + i*pwp, gamma2) ; i = i + 1u64 }
         keccak_state_zero(&MLDSA_SST as u64)
         keccak_absorb(&MLDSA_SST as u64, &MLDSA_CSIN as u64, 64u64 + k*pwp, keccak_pack_rate_dom(136u32, 0x1Fu8))
-        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_CSEED as u64, 32u64, 136u32)
+        keccak_squeeze(&MLDSA_SST as u64, &MLDSA_CSEED as u64, ctl, 136u32)
         /* c = challenge (148), chat = NTT(c) */
-        mldsa_challenge(148u64, &MLDSA_CSEED as u64, tau)
+        mldsa_challenge(148u64, &MLDSA_CSEED as u64, tau, ctl)
         mldsa_ntt(148u64)
         /* cs1 = invNTT(chat * s1hat) (117..); z = y + cs1 (z at 86) */
         i = 0u64
@@ -1091,14 +1105,14 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
             }
             if hsum > omega { bad = 1u64 }
             if bad == 0u64 {
-                /* pack sig = c_seed || polyz_pack(z) || hint_encode(H) */
+                /* pack sig = c~(lambda/4) || polyz_pack(z) || hint_encode(H) */
                 let sp : *u8 = sig as *u8
                 let cs : *u8 = &MLDSA_CSEED as *u8
                 i = 0u64
-                while i < 32u64 { sp[i] = cs[i] ; i = i + 1u64 }
+                while i < ctl { sp[i] = cs[i] ; i = i + 1u64 }
                 i = 0u64
-                while i < l { mldsa_polyz_pack(86u64 + i, sig, 32u64 + i*pzp, gamma1) ; i = i + 1u64 }
-                let hoff : u64 = 32u64 + l*pzp
+                while i < l { mldsa_polyz_pack(86u64 + i, sig, ctl + i*pzp, gamma1) ; i = i + 1u64 }
+                let hoff : u64 = ctl + l*pzp
                 i = 0u64
                 while i < omega + k { sp[hoff + i] = 0u8 ; i = i + 1u64 }
                 let mut idx : u64 = 0u64
@@ -1113,7 +1127,7 @@ fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u
                     sp[hoff + omega + i] = (idx & 0xFFu64) as u8
                     i = i + 1u64
                 }
-                let total : u64 = 32u64 + l*pzp + omega + k
+                let total : u64 = ctl + l*pzp + omega + k
                 sig_len_out[0u64] = total   /* typed *u64 store: lands in the caller-owned u64 */
                 return 0i32
             }
@@ -1143,19 +1157,20 @@ fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen
     let omega : u64 = mldsa_omega(level)
     let pzp : u64 = mldsa_polyz_packed(level)
     let pwp : u64 = mldsa_polyw1_packed(level)
+    let ctl : u64 = mldsa_ctilde(level)
     let pkbytes : u64 = 32u64 + 320u64 * k
-    let sigbytes : u64 = 32u64 + l*pzp + omega + k
+    let sigbytes : u64 = ctl + l*pzp + omega + k
     if siglen != sigbytes { return 0i32 - 1i32 }
     /* unpack t1 from pk (56..) */
     let mut i : u64 = 0u64
     while i < k { mldsa_polyt1_unpack(56u64 + i, pk, 32u64 + 320u64*i) ; i = i + 1u64 }
     /* unpack z from sig (64..), bound check */
     i = 0u64
-    while i < l { mldsa_polyz_unpack(64u64 + i, sig, 32u64 + i*pzp, gamma1) ; i = i + 1u64 }
+    while i < l { mldsa_polyz_unpack(64u64 + i, sig, ctl + i*pzp, gamma1) ; i = i + 1u64 }
     if mldsa_chknorm(64u64, l, gamma1 - beta) != 0u64 { return 0i32 - 1i32 }
     /* decode hint -> h (103..); validate monotonic + bounds */
     let sp : *u8 = sig as *u8
-    let hoff : u64 = 32u64 + l*pzp
+    let hoff : u64 = ctl + l*pzp
     i = 0u64
     while i < k {
         let hb : u64 = (103u64 + i) * 256u64
@@ -1188,8 +1203,8 @@ fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen
         if sp[hoff + j2] != 0u8 { return 0i32 - 1i32 }
         j2 = j2 + 1u64
     }
-    /* chat = NTT(challenge(c_seed)) at 71 */
-    mldsa_challenge(71u64, sig, tau)
+    /* chat = NTT(challenge(c~ = sig[0..lambda/4])) at 71 */
+    mldsa_challenge(71u64, sig, tau, ctl)
     mldsa_ntt(71u64)
     /* A from rho (pk[0..32]) */
     mldsa_matrix_expand(0u64, pk, k, l)
@@ -1246,11 +1261,11 @@ fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen
     while i < k { mldsa_polyw1_pack(111u64 + i, &MLDSA_CSIN as u64, 64u64 + i*pwp, gamma2) ; i = i + 1u64 }
     keccak_state_zero(&MLDSA_SST as u64)
     keccak_absorb(&MLDSA_SST as u64, &MLDSA_CSIN as u64, 64u64 + k*pwp, keccak_pack_rate_dom(136u32, 0x1Fu8))
-    keccak_squeeze(&MLDSA_SST as u64, &MLDSA_CSEED as u64, 32u64, 136u32)
+    keccak_squeeze(&MLDSA_SST as u64, &MLDSA_CSEED as u64, ctl, 136u32)
     let cc : *u8 = &MLDSA_CSEED as *u8
     let mut diff : u64 = 0u64
     i = 0u64
-    while i < 32u64 {
+    while i < ctl {
         let d : u64 = (cc[i] as u64) ^ (sp[i] as u64)
         diff = diff | d
         i = i + 1u64

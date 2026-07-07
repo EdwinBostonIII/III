@@ -1,0 +1,113 @@
+/* STDLIB/corpus/2492_mldsa65_c2sp_kat.iii
+ *
+ * ML-DSA-65 (FIPS 204) gated on the OFFICIAL C2SP/CCTV accumulated known-answer vectors.
+ * Sibling of corpus/2491 (ML-DSA-44) -- see its header for the full protocol; identical
+ * harness, level-3 parameters.  ML-DSA-65 exercises what 44 cannot: c~ = lambda/4 = 48
+ * bytes (not 32), eta = 4 sampling, and the FIPS-204 signature size 3309 (round-3
+ * Dilithium3 was 3293 -- the 16-byte delta IS the c~ growth this KAT pins).
+ *
+ * exit 99 = both official digests reproduced byte-for-byte
+ *      11 = 100-iteration digest mismatch      12 = 10000-iteration digest mismatch
+ *       2 = keygen error   3 = sign error   4 = wrong siglen   5 = verify rejected a genuine sig
+ */
+module corpus_2492_mldsa65_c2sp_kat
+
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+const RATE  : u32 = 168u32         /* SHAKE-128 rate */
+const LEVEL : u64 = 3u64           /* ML-DSA-65 */
+const PKB   : u64 = 1952u64
+const SIGB  : u64 = 3309u64        /* FIPS-204: lambda/4=48 + 5*640 + 55 + 6 */
+
+var DS : [u8; 200]  var DPOS : u32 = 168u32
+var AS : [u8; 200]  var APOS : u32 = 0u32
+var AS2 : [u8; 200]
+var SEED : [u8; 32]
+var PK  : [u8; 1952]  var SK : [u8; 4032]  var SIG : [u8; 3309]
+var SLQ : [u64; 1]
+var MPRIME : [u8; 2]               /* M' for msg="" ctx="": 0x00 || 0x00 */
+var DIG : [u8; 32]
+/* official C2SP/CCTV ML-DSA-65 accumulated digests */
+var W100 : [u8; 32] = [
+  0x83u8,0x58u8,0xa1u8,0x84u8,0x32u8,0x20u8,0x19u8,0x44u8,0x17u8,0xcau8,0xdbu8,0xc2u8,0x65u8,0x12u8,0x95u8,0xcdu8,
+  0x8fu8,0xc6u8,0x51u8,0x25u8,0xb5u8,0xa5u8,0xc1u8,0xa2u8,0x39u8,0xa1u8,0x6du8,0xc8u8,0xb5u8,0x7cu8,0xa1u8,0x99u8 ]
+var W10K : [u8; 32] = [
+  0x5fu8,0xf5u8,0xe1u8,0x96u8,0xf0u8,0xb8u8,0x30u8,0xc3u8,0xb1u8,0x0au8,0x9eu8,0xb5u8,0x35u8,0x8eu8,0x7cu8,0x98u8,
+  0xa3u8,0xa2u8,0x01u8,0x36u8,0xcbu8,0x67u8,0x7fu8,0x3au8,0xe3u8,0xb9u8,0x01u8,0x75u8,0xc3u8,0xacu8,0xe3u8,0x29u8 ]
+
+fn drbg_init() {
+    let s : *u8 = (&DS) as *u8
+    let mut i : u32 = 0u32  while i < 200u32 { s[i as u64] = 0u8  i = i + 1u32 }
+    s[0u64] = 0x1Fu8
+    s[(RATE - 1u32) as u64] = s[(RATE - 1u32) as u64] ^ 0x80u8
+    keccak_f1600((&DS) as u64)
+    DPOS = 0u32
+}
+fn drbg_squeeze(dst: u64, n: u64) {
+    let s : *u8 = (&DS) as *u8
+    let d : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if DPOS >= RATE { keccak_f1600((&DS) as u64)  DPOS = 0u32 }
+        d[i] = s[DPOS as u64]
+        DPOS = DPOS + 1u32
+        i = i + 1u64
+    }
+}
+fn acc_absorb(src: u64, n: u64) {
+    let s : *u8 = (&AS) as *u8
+    let m : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        s[APOS as u64] = s[APOS as u64] ^ m[i]
+        APOS = APOS + 1u32
+        if APOS >= RATE { keccak_f1600((&AS) as u64)  APOS = 0u32 }
+        i = i + 1u64
+    }
+}
+fn acc_final(out: u64) {
+    let s : *u8 = (&AS) as *u8
+    s[APOS as u64] = s[APOS as u64] ^ 0x1Fu8
+    s[(RATE - 1u32) as u64] = s[(RATE - 1u32) as u64] ^ 0x80u8
+    keccak_f1600((&AS) as u64)
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64  while i < 32u64 { o[i] = s[i]  i = i + 1u64 }
+}
+fn acc_check_copy(want: u64) -> u64 {
+    let s : *u8 = (&AS) as *u8
+    let c : *u8 = (&AS2) as *u8
+    let mut i : u64 = 0u64  while i < 200u64 { c[i] = s[i]  i = i + 1u64 }
+    c[APOS as u64] = c[APOS as u64] ^ 0x1Fu8
+    c[(RATE - 1u32) as u64] = c[(RATE - 1u32) as u64] ^ 0x80u8
+    keccak_f1600((&AS2) as u64)
+    let w : *u8 = want as *u8
+    i = 0u64
+    while i < 32u64 { if c[i] != w[i] { return 1u64 }  i = i + 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    drbg_init()
+    MPRIME[0] = 0u8  MPRIME[1] = 0u8
+    let mut it : u32 = 0u32
+    while it < 10000u32 {
+        drbg_squeeze((&SEED) as u64, 32u64)
+        if iii_mldsa_keygen(LEVEL, (&SEED) as u64, (&PK) as u64, (&SK) as u64) != 0i32 { return 2u64 }
+        acc_absorb((&PK) as u64, PKB)
+        if iii_mldsa_sign_sealed(LEVEL, (&SK) as u64, (&MPRIME) as u64, 2u64, (&SIG) as *u8, (&SLQ) as *u64) != 0i32 { return 3u64 }
+        if SLQ[0] != SIGB { return 4u64 }
+        if iii_mldsa_verify(LEVEL, (&PK) as u64, (&MPRIME) as u64, 2u64, (&SIG) as u64, SIGB) != 0i32 { return 5u64 }
+        acc_absorb((&SIG) as u64, SIGB)
+        it = it + 1u32
+        if it == 100u32 { if acc_check_copy((&W100) as u64) != 0u64 { return 11u64 } }
+    }
+    acc_final((&DIG) as u64)
+    let d : *u8 = (&DIG) as *u8
+    let w : *u8 = (&W10K) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if d[i] != w[i] { return 12u64 }  i = i + 1u64 }
+    return 99u64
+}

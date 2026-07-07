@@ -68,6 +68,7 @@ STDLIB/build/sovbuild/
 STDLIB/build/sovir/
 STDLIB/build/uikats/
 STDLIB/build/probe2179/
+STDLIB/build/probe_mldsa204/
 STDLIB/build/VERIFIED.tsv
 STDLIB/build/worldgraph.*.nodes
 STDLIB/build/worldgraph.*.edges

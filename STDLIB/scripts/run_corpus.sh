@@ -1749,6 +1749,7 @@ declare -A EXPECTED=(
     [2487_xii_lattice_live]=99          # XII @lattice LIVE (independence E) -- fires the cg_r3 XII codegen path
     [2488_tp_x86_disasm_roundtrip]=99   # real x86-64 decoder (independence G1) -- real mnemonics, not .byte
     [2489_tp_iii_to_c99_roundtrip]=99   # real III->C99 transpiler (independence G2) -- native result 49
+    [2490_mlkem_c2sp_kat]=99            # official C2SP FIPS-203 ML-KEM-768 accumulated KAT (independence F; ~30-60s)
 )
 
 PASS=0
@@ -1944,6 +1945,17 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     case "$base" in
         1763_*)
             RESULTS+=("SKIP  $base : SAT-heavy weave-interfile search -- validated by fast proof KATs (1755/1759/1761/1762)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+    esac
+    # Official C2SP FIPS-204 ML-DSA accumulated KATs (10000 iterations each): measured 2026-07-07 at
+    # ~305s (44) / ~8-15 min (65/87) solo -- ML-DSA-87 genuinely exceeds the 600s per-test budget,
+    # and all three are executed on every bootstrap anchor run as stage 11.  OWNED by
+    # mldsa_c2sp_kat_gate.sh (same delegation discipline as the bench KATs above); 2490 (ML-KEM,
+    # ~30-60s) stays in this loop.
+    case "$base" in
+        2491_mldsa44_c2sp_kat|2492_mldsa65_c2sp_kat|2493_mldsa87_c2sp_kat)
+            RESULTS+=("SKIP  $base : official FIPS-204 C2SP KAT (10k iters) -- owned by mldsa_c2sp_kat_gate.sh (bootstrap stage 11)")
             SKIP=$((SKIP+1)); continue
             ;;
     esac

@@ -34,12 +34,21 @@ closure(){ local r="$1"; declare -A seen=(); local work=("$r") out=()
       < <(grep -oE 'from "[a-z0-9_]+\.iii"' "${FILEOF[$m]}" | sed -E 's/from "([a-z0-9_]+)\.iii"/\1/')
   done; printf '%s\n' "${out[@]}"; }
 
+# ensure the gen1 tools exist.  SEALED SEED first (no gcc -- the tools ARE the sealed seed binaries);
+# gcc only when the seed is absent.  Codegen uses --emit-asm-only so it needs NO gcc either.  (Independence D1.)
 ensure_tools(){
   for m in sovas sovparse sovcoff sovld sovas_main sovlink_main crt0; do
-    [ -f "$BOOT/$m.o.s" ] || "$IIIS" "$SOVTC/$m.iii" --compile-only --out "$BOOT/$m.o" >/dev/null 2>&1
+    [ -f "$BOOT/$m.o.s" ] || "$IIIS" "$SOVTC/$m.iii" --emit-asm-only --out "$BOOT/$m.o" >/dev/null 2>&1
   done
-  [ -s "$BOOT/sovas_main.exe" ]   || gcc "$BOOT/sovas_main.o" "$BOOT/sovparse.o" "$BOOT/sovcoff.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovas_main.exe" 2>/dev/null
-  [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
+  local SEED="$SOVTC/seed"
+  if [ -x "$SEED/sovas_main.seed.exe" ] && [ -x "$SEED/sovlink_main.seed.exe" ]; then
+    [ -s "$BOOT/sovas_main.exe" ]   || cp "$SEED/sovas_main.seed.exe"   "$BOOT/sovas_main.exe"
+    [ -s "$BOOT/sovlink_main.exe" ] || cp "$SEED/sovlink_main.seed.exe" "$BOOT/sovlink_main.exe"
+  elif command -v gcc >/dev/null 2>&1; then
+    for m in sovas sovparse sovcoff sovld sovas_main sovlink_main; do gcc -c -x assembler "$BOOT/$m.o.s" -o "$BOOT/$m.o" 2>/dev/null; done
+    [ -s "$BOOT/sovas_main.exe" ]   || gcc "$BOOT/sovas_main.o" "$BOOT/sovparse.o" "$BOOT/sovcoff.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovas_main.exe" 2>/dev/null
+    [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
+  fi
   [ -s "$BOOT/crt0_sov.o" ]       || timeout 30 "$BOOT/sovas_main.exe" "$BOOT/crt0.o.s" > "$BOOT/crt0_sov.o" 2>/dev/null
 }
 
@@ -48,7 +57,7 @@ mapfile -t MODS < <(closure "$ROOTMOD")
 say "program=$ROOTMOD  closure=${#MODS[@]} modules"
 OBJS=("$BOOT/crt0_sov.o"); NSOV=0; NWIT=0; WIT=""
 for m in "${MODS[@]}"; do
-  "$IIIS" "${FILEOF[$m]}" --compile-only --out "$WORK/$m.o" >/dev/null 2>&1 || { say "  COMPILE-FAIL $m"; exit 3; }
+  "$IIIS" "${FILEOF[$m]}" --emit-asm-only --out "$WORK/$m.o" >/dev/null 2>&1 || { say "  COMPILE-FAIL $m"; exit 3; }
   timeout 40 "$BOOT/sovas_main.exe" "$WORK/$m.o.s" > "$WORK/${m}.o.sov" 2>/dev/null; ec=$?
   if [ $ec -eq 0 ] && [ -s "$WORK/${m}.o.sov" ]; then
     OBJS+=("$WORK/${m}.o.sov"); NSOV=$((NSOV+1)); printf '  %-26s SOVEREIGN (sovas)\n' "$m"

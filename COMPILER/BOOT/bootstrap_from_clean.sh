@@ -26,6 +26,9 @@
 #   stage 8  witness_zero_gate.sh           the crypto closure (sha256/sha3/sha512) assembles
 #                                           through sovas with ZERO gcc-as (route manifest
 #                                           witness=0) -- sovas encodes every mnemonic it emits
+#   stage 9  run_fixpoint.sh (gcc OFF PATH) the sovereign toolchain self-mints from the sealed gen-0
+#                                           SEED with NO gcc/ld anywhere: gen2==gen1, linker
+#                                           reproduces itself bit-for-bit (Independence D1)
 #
 # SEAL AUTHORSHIP (basal law, mhash_lib.sh): every .mhash above is AUTHORED by
 # III's own FIPS-KAT'd SHA-256 (aether/sovhash over numera/cad); GNU sha256sum
@@ -43,8 +46,8 @@
 # P1 (sovas/sovld as default emit) and P2 (close the gcc-as witness).
 #
 # Usage:  bash bootstrap_from_clean.sh [-h|--help]
-# Exit:   0 = GATE GREEN (all eight stages)
-#         N = 1..8, the first red stage
+# Exit:   0 = GATE GREEN (all nine stages)
+#         N = 1..9, the first red stage
 #         99 = environment/prerequisite error
 set -uo pipefail
 umask 022
@@ -140,6 +143,16 @@ stage7_census() {
 stage8_witness_zero() {
     bash "$III_ROOT/STDLIB/sovtc/witness_zero_gate.sh"
 }
+stage9_fixpoint_gccoff() {
+    # Prove the sovereign toolchain self-mints with NO gcc/ld: strip every MinGW/gcc dir from PATH,
+    # then run the fixpoint (it bootstraps gen1 from the sealed seed, no gcc).  rc captured directly.
+    local cleanpath
+    cleanpath="$(printf '%s' "$PATH" | tr ':' '\n' | grep -viE 'mingw|/gcc' | paste -sd: -)"
+    PATH="$cleanpath" bash -c '
+        command -v gcc >/dev/null 2>&1 && { echo "[stage9] gcc STILL on PATH -- strip failed"; exit 2; }
+        bash "'"$III_ROOT"'/STDLIB/sovtc/run_fixpoint.sh"
+    '
+}
 
 run_stage 1 "seed rebuild (build_iiis0.sh)"                 "$LOGDIR/1_iiis0.log"    stage1_seed
 run_stage 2 "stdlib from scratch (build_stdlib.sh)"         "$LOGDIR/2_stdlib.log"   stage2_stdlib
@@ -152,6 +165,7 @@ run_stage 5 "seed<->self-host identity gate"                "$LOGDIR/5_identity.
 run_stage 6 "iiis-3 fixpoint + corpus (build_iiis3.sh)"     "$LOGDIR/6_iiis3.log"    stage6_fixpoint
 run_stage 7 "basal law census (basal_census_gate.sh)"       "$LOGDIR/7_census.log"   stage7_census
 run_stage 8 "crypto-closure witness-zero (witness_zero_gate.sh)" "$LOGDIR/8_witness0.log" stage8_witness_zero
+run_stage 9 "sovereign toolchain self-mint, gcc OFF PATH (run_fixpoint.sh)" "$LOGDIR/9_fixpoint_gccoff.log" stage9_fixpoint_gccoff
 
-log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green, crypto closure witness-zero (logs: $LOGDIR)"
+log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green, crypto closure witness-zero, sovereign toolchain self-mints gcc-free (logs: $LOGDIR)"
 exit 0

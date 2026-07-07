@@ -628,6 +628,19 @@ static void emit_decl_label(iii_cg_r3_state_t *cg, iii_src_text_t name)
     emit_raw_symbol(cg, name);
 }
 
+/* A module-level `var` is module-LOCAL by default (like const); it emits `.global` ONLY when @export'd.
+ * The self-hosted cg_r3.iii gates on the var's @export modifier; the seed's iii_var_decl_payload_t has no
+ * modifiers field (and no BOOT/stage1_corpus module uses @export var), so decl_is_exported returns false
+ * for a var here -> local, byte-identically to what cg_r3.iii emits for those (non-exported) seed vars.
+ * This keeps the flat L_<name> namespace collision-free (private state stays local). */
+static void emit_var_global_marker(iii_cg_r3_state_t *cg, uint32_t did, iii_src_text_t name)
+{
+    if (!decl_is_exported(cg, did)) return;
+    cg_write_str(cg, "    .global ");
+    emit_decl_label(cg, name);
+    cg_write_str(cg, "\n");
+}
+
 /* ─── D7: defining-label uniqueness set ───────────────────────────── */
 
 static int label_define(iii_cg_r3_state_t *cg, uint32_t lbl)
@@ -3759,9 +3772,7 @@ int iii_cg_r3_emit_module(iii_cg_r3_state_t *cg, FILE *out)
                             cg_write_str(cg, "    .section .data\n");
                             current_section = 2;
                         }
-                        cg_write_str(cg, "    .global ");
-                        emit_decl_label(cg, d->u.var_decl.name);
-                        cg_write_str(cg, "\n");
+                        emit_var_global_marker(cg, did, d->u.var_decl.name);
                         emit_decl_label(cg, d->u.var_decl.name);
                         cg_writef(cg, ":\n    .quad 0x%llx\n", (unsigned long long)lit);
                         continue;
@@ -3775,9 +3786,7 @@ int iii_cg_r3_emit_module(iii_cg_r3_state_t *cg, FILE *out)
                         uint32_t ew_d = (vt_d && vt_d->kind == III_AST_TYPE_ARRAY)
                                         ? array_elem_byte_size(cg, vt_d) : 8u;
                         const char *dir_d = gas_data_directive(ew_d);
-                        cg_write_str(cg, "    .global ");
-                        emit_decl_label(cg, d->u.var_decl.name);
-                        cg_write_str(cg, "\n");
+                        emit_var_global_marker(cg, did, d->u.var_decl.name);
                         emit_decl_label(cg, d->u.var_decl.name);
                         cg_write_str(cg, ":\n");
                         for (uint32_t k = 0; k < v->u.parallel.branches.count; k++) {
@@ -3812,9 +3821,7 @@ int iii_cg_r3_emit_module(iii_cg_r3_state_t *cg, FILE *out)
                 if (vt && vt->kind == III_AST_TYPE_ARRAY) {
                     byte_size = (uint64_t)vt->u.type_array.count * 8u;
                 }
-                cg_write_str(cg, "    .global ");
-                emit_decl_label(cg, d->u.var_decl.name);
-                cg_write_str(cg, "\n");
+                emit_var_global_marker(cg, did, d->u.var_decl.name);
                 emit_decl_label(cg, d->u.var_decl.name);
                 cg_writef(cg, ":\n    .zero %llu\n", (unsigned long long)byte_size);
             }

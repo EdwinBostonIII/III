@@ -22,12 +22,30 @@ extern @abi(c-msvc-x64) fn sov_vpsrlq_y(dst: u32, src: u32, imm: u32) -> i32 fro
 extern @abi(c-msvc-x64) fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_vzeroupper() -> i32 from "sovas.iii"
+/* EVEX / AVX-512 */
+extern @abi(c-msvc-x64) fn sov_vpxord(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpxorq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpandq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpmuludq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpmullq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpermq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprold(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprord(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprolq(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrlq_e(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpternlogq(dst: u32, src1: u32, src2: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpbroadcastq(dst: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu64_load(dst: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu64_store(src: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
 
 var EXP : [u32; 16]
 var EXPN : u32 = 0u32
 fn p3(a: u32, b: u32, c: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXPN=3u32 }
 fn p4(a: u32, b: u32, c: u32, d: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXPN=4u32 }
 fn p5(a: u32, b: u32, c: u32, d: u32, e: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXPN=5u32 }
+fn p6(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXP[5u64]=f EXPN=6u32 }
+fn p7(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXP[5u64]=f EXP[6u64]=g EXPN=7u32 }
 fn chk() -> u32 {
     if sov_len() != EXPN { return 0u32 }
     let mut i : u32 = 0u32
@@ -62,5 +80,25 @@ fn main() -> u64 {
     sov_reset()  sov_vmovdqu_vstore(1u32,2u32,0i32,1u32)     p4(0xC5u32,0xFEu32,0x7Fu32,0x0Au32)          if chk()!=1u32 { return 27u64 }
     /* vzeroupper (no operands) */
     sov_reset()  sov_vzeroupper()  p3(0xC5u32,0xF8u32,0x77u32)                                if chk()!=1u32 { return 28u64 }
+
+    /* ── EVEX / AVX-512 (ll: xmm=0 ymm=1 zmm=2) ── */
+    sov_reset()  sov_vpxord(3u32,2u32,1u32,0u32)   p6(0x62u32,0xF1u32,0x6Du32,0x08u32,0xEFu32,0xD9u32)          if chk()!=1u32 { return 30u64 }   /* vpxord %xmm */
+    sov_reset()  sov_vpxorq(3u32,2u32,1u32,1u32)   p6(0x62u32,0xF1u32,0xEDu32,0x28u32,0xEFu32,0xD9u32)          if chk()!=1u32 { return 31u64 }   /* vpxorq %ymm */
+    sov_reset()  sov_vpandq(3u32,2u32,1u32,2u32)   p6(0x62u32,0xF1u32,0xEDu32,0x48u32,0xDBu32,0xD9u32)          if chk()!=1u32 { return 32u64 }   /* vpandq %zmm */
+    sov_reset()  sov_vpaddq_e(3u32,2u32,1u32,2u32) p6(0x62u32,0xF1u32,0xEDu32,0x48u32,0xD4u32,0xD9u32)          if chk()!=1u32 { return 33u64 }   /* vpaddq %zmm */
+    sov_reset()  sov_vpmuludq(3u32,2u32,1u32,2u32) p6(0x62u32,0xF1u32,0xEDu32,0x48u32,0xF4u32,0xD9u32)          if chk()!=1u32 { return 34u64 }   /* vpmuludq %zmm */
+    sov_reset()  sov_vpmullq(3u32,2u32,1u32,2u32)  p6(0x62u32,0xF2u32,0xEDu32,0x48u32,0x40u32,0xD9u32)          if chk()!=1u32 { return 35u64 }   /* vpmullq %zmm (0F38) */
+    sov_reset()  sov_vpermq_e(3u32,2u32,1u32,2u32) p6(0x62u32,0xF2u32,0xEDu32,0x48u32,0x36u32,0xD9u32)          if chk()!=1u32 { return 36u64 }   /* vpermq %zmm (0F38) */
+    sov_reset()  sov_vprold(2u32,1u32,7u32,0u32)   p7(0x62u32,0xF1u32,0x6Du32,0x08u32,0x72u32,0xC9u32,0x07u32)  if chk()!=1u32 { return 37u64 }   /* vprold $7,%xmm (/1) */
+    sov_reset()  sov_vprord(2u32,1u32,0x0Bu32,0u32) p7(0x62u32,0xF1u32,0x6Du32,0x08u32,0x72u32,0xC1u32,0x0Bu32) if chk()!=1u32 { return 38u64 }   /* vprord $11,%xmm (/0) */
+    sov_reset()  sov_vprolq(2u32,1u32,0x0Du32,1u32) p7(0x62u32,0xF1u32,0xEDu32,0x28u32,0x72u32,0xC9u32,0x0Du32) if chk()!=1u32 { return 39u64 }   /* vprolq $13,%ymm (/1 W1) */
+    sov_reset()  sov_vpsrlq_e(2u32,1u32,0x0Bu32,2u32) p7(0x62u32,0xF1u32,0xEDu32,0x48u32,0x73u32,0xD1u32,0x0Bu32) if chk()!=1u32 { return 40u64 } /* vpsrlq $11,%zmm (/2 W1) */
+    sov_reset()  sov_vpternlogq(3u32,2u32,1u32,0x96u32,2u32) p7(0x62u32,0xF3u32,0xEDu32,0x48u32,0x25u32,0xD9u32,0x96u32) if chk()!=1u32 { return 41u64 }  /* vpternlogq (0F3A ib) */
+    sov_reset()  sov_vpbroadcastq(5u32,0u32,8i32,2u32) p7(0x62u32,0xF2u32,0xFDu32,0x48u32,0x59u32,0x68u32,0x01u32) if chk()!=1u32 { return 42u64 }  /* vpbroadcastq 8(%rax) N=8 */
+    sov_reset()  sov_vpbroadcastq(5u32,1u32,0i32,2u32) p6(0x62u32,0xF2u32,0xFDu32,0x48u32,0x59u32,0x29u32)     if chk()!=1u32 { return 43u64 }   /* vpbroadcastq (%rcx) */
+    sov_reset()  sov_vmovdqu64_load(4u32,0u32,64i32,2u32) p7(0x62u32,0xF1u32,0xFEu32,0x48u32,0x6Fu32,0x60u32,0x01u32) if chk()!=1u32 { return 44u64 }  /* vmovdqu64 64(%rax) disp8=1 (N=64) */
+    sov_reset()  sov_vmovdqu64_store(5u32,2u32,128i32,2u32) p7(0x62u32,0xF1u32,0xFEu32,0x48u32,0x7Fu32,0x6Au32,0x02u32) if chk()!=1u32 { return 45u64 }  /* vmovdqu64 %zmm5,128(%rdx) */
+    sov_reset()  sov_vmovdqu64_load(4u32,1u32,0i32,2u32) p6(0x62u32,0xF1u32,0xFEu32,0x48u32,0x6Fu32,0x21u32)   if chk()!=1u32 { return 46u64 }   /* vmovdqu64 (%rcx),%zmm4 */
+    sov_reset()  sov_vmovdqu64_store(4u32,2u32,0i32,2u32) p6(0x62u32,0xF1u32,0xFEu32,0x48u32,0x7Fu32,0x22u32)  if chk()!=1u32 { return 47u64 }   /* vmovdqu64 %zmm4,(%rdx) */
     return 99u64
 }

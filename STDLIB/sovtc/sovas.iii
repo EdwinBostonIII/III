@@ -394,6 +394,65 @@ fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 @export { re
 fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 @export { return sov_vex_mem(0x7Fu32, src, base, disp, l) }
 fn sov_vzeroupper() -> i32 @export { sov_vex2(0u32, 0u32, 0u32, 0u32)  sov_emit(0x77u32)  return 0i32 }                                     /* VEX.128.0F.WIG 77 */
 
+/* ── EVEX / AVX-512 (the crypto tree's MEASURED EVEX set) ──────────────────────────────────────────────
+ * EVEX = 62 [R̄ X̄ B̄ R̄' 0 0 mm] [W v̄vvv 1 pp] [z L'L b V̄' aaa].  Every measured form: no mask (aaa=0,z=0),
+ * regs 0..15 (R'=0 so R̄'=1; V4=0 so V̄'=1), no SIB index (X̄=1), broadcast bit only for vpbroadcastq.
+ *   mm(map): 0F=1 0F38=2 0F3A=3   pp: none=0 66=1 F3=2 F2=3   ll(L'L): 128=0 256=1 512=2
+ * Memory uses EVEX compressed disp8: the encoded disp8 = disp / N where N is the tuple size (full-vector
+ * 64B for zmm moves, broadcast-element 8B for vpbroadcastq).  gas-byte-pinned (test_vex.iii EVEX battery)
+ * + differentially gated on all 7 SIMD modules (run_fixpoint.sh). */
+fn sov_evex_p(r: u32, b: u32, mm: u32, w: u32, vvvv: u32, pp: u32, ll: u32, bc: u32) {
+    sov_emit(0x62u32)
+    sov_emit(((1u32 - (r & 1u32)) << 7u32) | 0x40u32 | ((1u32 - (b & 1u32)) << 5u32) | 0x10u32 | (mm & 3u32))   /* X̄=1 R̄'=1 baked */
+    sov_emit(((w & 1u32) << 7u32) | (((15u32 - (vvvv & 15u32)) & 15u32) << 3u32) | 4u32 | (pp & 3u32))          /* bit2=1 */
+    sov_emit(((ll & 3u32) << 5u32) | ((bc & 1u32) << 4u32) | 8u32)                                              /* z=0 V̄'=1 aaa=0 */
+}
+/* EVEX memory operand disp(%base) with compressed disp8 (disp = disp8 * n).  Bases rax/rcx/rdx (measured);
+ * rbp/rsp SIB edge not emitted by the crypto tree -> the fixpoint diff would flag it (kept lean). */
+fn sov_evex_membase(reg: u32, base: u32, disp: i32, n: u32) {
+    if disp == 0i32 { sov_modrm(0u32, reg, base)  return }
+    let ni : i32 = n as i32
+    let q : i32 = disp / ni
+    if (q * ni) == disp { if q >= -128i32 { if q <= 127i32 { sov_modrm(1u32, reg, base)  sov_emit((q as u32) & 0xFFu32)  return } } }
+    sov_modrm(2u32, reg, base)  sov_imm((disp as u32) as u64, 4u32)
+}
+/* 3-operand reg: reg=dst vvvv=src1 rm=src2 */
+fn sov_evex_rrr(op: u32, dst: u32, src1: u32, src2: u32, mm: u32, w: u32, pp: u32, ll: u32) -> i32 @export {
+    sov_evex_p(sov_hi(dst), sov_hi(src2), mm, w, src1, pp, ll, 0u32)
+    sov_emit(op)  sov_modrm(3u32, dst, src2)  return 0i32
+}
+/* 3-operand reg + imm8 (vpternlogq): reg=dst vvvv=src1 rm=src2 imm8 */
+fn sov_evex_rrri(op: u32, dst: u32, src1: u32, src2: u32, imm: u32, mm: u32, w: u32, pp: u32, ll: u32) -> i32 @export {
+    sov_evex_p(sov_hi(dst), sov_hi(src2), mm, w, src1, pp, ll, 0u32)
+    sov_emit(op)  sov_modrm(3u32, dst, src2)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* shift-by-imm (vprold/vprord/vprolq/vpsrlq-zmm): reg=/ext vvvv=dst rm=src imm8 (66 0F map) */
+fn sov_evex_shift(op: u32, ext: u32, dst: u32, src: u32, imm: u32, w: u32, ll: u32) -> i32 @export {
+    sov_evex_p(0u32, sov_hi(src), 1u32, w, dst, 1u32, ll, 0u32)
+    sov_emit(op)  sov_modrm(3u32, ext, src)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* memory op (vmovdqu64 load/store, vpbroadcastq): reg=the zmm vvvv=none rm=disp(%base) */
+fn sov_evex_mem(op: u32, reg: u32, base: u32, disp: i32, mm: u32, w: u32, pp: u32, ll: u32, n: u32) -> i32 @export {
+    sov_evex_p(sov_hi(reg), sov_hi(base), mm, w, 0u32, pp, ll, 0u32)
+    sov_emit(op)  sov_evex_membase(reg, base, disp, n)  return 0i32
+}
+/* ── the measured EVEX mnemonic wrappers (ll = the L'L width code from the operand register) ── */
+fn sov_vpxord(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0xEFu32, dst, src1, src2, 1u32, 0u32, 1u32, ll) }   /* 66 0F W0 EF */
+fn sov_vpxorq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0xEFu32, dst, src1, src2, 1u32, 1u32, 1u32, ll) }   /* 66 0F W1 EF */
+fn sov_vpandq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0xDBu32, dst, src1, src2, 1u32, 1u32, 1u32, ll) }   /* 66 0F W1 DB */
+fn sov_vpaddq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0xD4u32, dst, src1, src2, 1u32, 1u32, 1u32, ll) }  /* 66 0F W1 D4 (zmm) */
+fn sov_vpmuludq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0xF4u32, dst, src1, src2, 1u32, 1u32, 1u32, ll) }  /* 66 0F W1 F4 */
+fn sov_vpmullq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0x40u32, dst, src1, src2, 2u32, 1u32, 1u32, ll) }   /* 66 0F38 W1 40 */
+fn sov_vpermq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 @export { return sov_evex_rrr(0x36u32, dst, src1, src2, 2u32, 1u32, 1u32, ll) }  /* 66 0F38 W1 36 */
+fn sov_vprold(dst: u32, src: u32, imm: u32, ll: u32) -> i32 @export { return sov_evex_shift(0x72u32, 1u32, dst, src, imm, 0u32, ll) }            /* 66 0F W0 72 /1 */
+fn sov_vprord(dst: u32, src: u32, imm: u32, ll: u32) -> i32 @export { return sov_evex_shift(0x72u32, 0u32, dst, src, imm, 0u32, ll) }            /* 66 0F W0 72 /0 */
+fn sov_vprolq(dst: u32, src: u32, imm: u32, ll: u32) -> i32 @export { return sov_evex_shift(0x72u32, 1u32, dst, src, imm, 1u32, ll) }            /* 66 0F W1 72 /1 */
+fn sov_vpsrlq_e(dst: u32, src: u32, imm: u32, ll: u32) -> i32 @export { return sov_evex_shift(0x73u32, 2u32, dst, src, imm, 1u32, ll) }          /* 66 0F W1 73 /2 (zmm) */
+fn sov_vpternlogq(dst: u32, src1: u32, src2: u32, imm: u32, ll: u32) -> i32 @export { return sov_evex_rrri(0x25u32, dst, src1, src2, imm, 3u32, 1u32, 1u32, ll) }  /* 66 0F3A W1 25 /r ib */
+fn sov_vpbroadcastq(dst: u32, base: u32, disp: i32, ll: u32) -> i32 @export { return sov_evex_mem(0x59u32, dst, base, disp, 2u32, 1u32, 1u32, ll, 8u32) }          /* 66 0F38 W1 59, N=8 */
+fn sov_vmovdqu64_load(dst: u32, base: u32, disp: i32, ll: u32) -> i32 @export { return sov_evex_mem(0x6Fu32, dst, base, disp, 1u32, 1u32, 2u32, ll, 64u32) }       /* F3 0F W1 6F, N=64 */
+fn sov_vmovdqu64_store(src: u32, base: u32, disp: i32, ll: u32) -> i32 @export { return sov_evex_mem(0x7Fu32, src, base, disp, 1u32, 1u32, 2u32, ll, 64u32) }      /* F3 0F W1 7F, N=64 */
+
 /* ALU $imm,%reg : gcc uses the SHORT form 83 /ext ib (imm8 sign-extended) when imm fits a signed byte,
  * else 81 /ext id (imm32).  Matching this exactly is REQUIRED for .text byte-identity (caught by the
  * gcc-independent gate: add $0x10 is 48 83 c0 10, NOT 48 81 c0 10 00 00 00).  (add=/0 sub=/5 cmp=/7) */
@@ -517,6 +576,33 @@ fn sov_call_reg(reg: u32) -> i32 @export {
 }
 fn sov_shl_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(4u32, reg, imm)  return 0i32 }
 fn sov_shr_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(5u32, reg, imm)  return 0i32 }
+
+/* ── 32-bit integer forms the crypto SIMD modules emit that Tier-1 missed (no REX.W; REX.B only for r8d+) ──
+ * movl $imm,%reg = B8+r id ; 32-bit shift = C1 /ext ib (D1 for by-1) ; decl/incl = FF /1 or /0 ;
+ * addl $imm,disp(%base) = 83 /0 ib (imm8) | 81 /0 id.  gas-byte-pinned (test_encode.iii int32 battery). */
+fn sov_movl_imm(reg: u32, imm: i32) -> i32 @export {
+    if reg >= 8u32 { sov_emit(0x41u32) }
+    sov_emit(0xB8u32 + (reg & 7u32))  sov_imm((imm as u32) as u64, 4u32)  return 0i32
+}
+fn sov_shift32_imm8(ext: u32, reg: u32, imm: u32) {
+    if reg >= 8u32 { sov_rex(0u32, 0u32, 0u32, 1u32) }
+    if (imm & 0xFFu32) == 1u32 { sov_emit(0xD1u32)  sov_modrm(3u32, ext, reg) }
+    else { sov_emit(0xC1u32)  sov_modrm(3u32, ext, reg)  sov_emit(imm & 0xFFu32) }
+}
+fn sov_shll_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift32_imm8(4u32, reg, imm)  return 0i32 }
+fn sov_shrl_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift32_imm8(5u32, reg, imm)  return 0i32 }
+fn sov_sarl_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift32_imm8(7u32, reg, imm)  return 0i32 }
+fn sov_decl_r(reg: u32) -> i32 @export { if reg >= 8u32 { sov_rex(0u32,0u32,0u32,1u32) }  sov_emit(0xFFu32)  sov_modrm(3u32, 1u32, reg)  return 0i32 }
+fn sov_incl_r(reg: u32) -> i32 @export { if reg >= 8u32 { sov_rex(0u32,0u32,0u32,1u32) }  sov_emit(0xFFu32)  sov_modrm(3u32, 0u32, reg)  return 0i32 }
+fn sov_alu32_imm_mem(ext: u32, base: u32, disp: i32, imm: i32) -> i32 @export {
+    if base >= 8u32 { sov_rex(0u32,0u32,0u32,1u32) }
+    let mut fits : u32 = 0u32
+    if imm >= -128i32 { if imm <= 127i32 { fits = 1u32 } }
+    if fits == 1u32 { sov_emit(0x83u32)  sov_membase_modrm(ext, base, disp)  sov_emit((imm as u32) & 0xFFu32) }
+    else { sov_emit(0x81u32)  sov_membase_modrm(ext, base, disp)  sov_imm((imm as u32) as u64, 4u32) }
+    return 0i32
+}
+fn sov_addl_imm_mem(base: u32, disp: i32, imm: i32) -> i32 @export { return sov_alu32_imm_mem(0u32, base, disp, imm) }
 
 /* ── set/movzx ── */
 /* setCC %reg8 : 0F 90+cc /0   (cc: b=2 ae=3 e=4 ne=5 be=6 a=7 l=12 ge=13 le=14 g=15) */
@@ -691,3 +777,7 @@ fn sov_rdseed(reg: u32) -> i32 @export {
     let mut b : u32 = 0u32  if reg >= 8u32 { b = 1u32 }
     sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0x0Fu32)  sov_emit(0xC7u32)  sov_modrm(3u32, 7u32, reg)  return 0i32
 }
+/* cpuid : 0F A2 (no operands) -- CPU feature discovery (cpuid_helper.s, cpufeat's AVX gate) */
+fn sov_cpuid() -> i32 @export { sov_emit(0x0Fu32)  sov_emit(0xA2u32)  return 0i32 }
+/* xgetbv : 0F 01 D0 (no operands) -- read XCR0 (OSXSAVE gate for AVX state) */
+fn sov_xgetbv() -> i32 @export { sov_emit(0x0Fu32)  sov_emit(0x01u32)  sov_emit(0xD0u32)  return 0i32 }

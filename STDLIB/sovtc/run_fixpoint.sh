@@ -35,6 +35,19 @@ for m in crt0 sovas_main sovparse sovcoff sovas sovld sovlink_main; do
   if cmp -s "$OUT/_a.t" "$OUT/_b.t"; then say "PASS sov-assemble $m .text == gas"; else say "FAIL sov-assemble $m differs from gas"; fail=1; fi
 done
 
+# --- Tier-2 SIMD differential: the 7 crypto modules emitting VEX/EVEX must sov-assemble .text == gas.
+#     This is what makes the sovereign path witness-free on the crypto closure (audit P2a). ---
+for m in bigint blake2s chacha20 keccak poly1305 sha256 sha512; do
+  f=$(find "$ROOT/STDLIB/iii/numera" -name "$m.iii" | head -1)
+  if [ -z "$f" ]; then say "FAIL simd $m (source not found)"; fail=1; continue; fi
+  "$IIIS" "$f" --compile-only --out "$OUT/simd_$m.o" >/dev/null 2>&1 || { say "FAIL simd $m (iiis-2 compile)"; fail=1; continue; }
+  timeout 40 "$OUT/sovas_main.exe" "$OUT/simd_$m.o.s" > "$OUT/simd_${m}_sov.o" 2>/dev/null
+  gcc -c -x assembler "$OUT/simd_$m.o.s" -o "$OUT/simd_${m}_g.o" 2>/dev/null
+  objcopy -O binary --only-section=.text "$OUT/simd_${m}_sov.o" "$OUT/_sa.t" 2>/dev/null
+  objcopy -O binary --only-section=.text "$OUT/simd_${m}_g.o" "$OUT/_sb.t" 2>/dev/null
+  if cmp -s "$OUT/_sa.t" "$OUT/_sb.t" && [ -s "$OUT/_sa.t" ]; then say "PASS sov-assemble $m .text == gas (Tier-2 VEX/EVEX)"; else say "FAIL sov-assemble $m SIMD differs from gas"; fail=1; fi
+done
+
 # --- ASSEMBLER self-host: gen2 sovas, then gen2==gen1 byte-for-byte on all inputs ---
 timeout 60 "$OUT/sovlink_main.exe" "$OUT/crt0_sov.o" "$OUT/sovas_main_sov.o" "$OUT/sovparse_sov.o" "$OUT/sovcoff_sov.o" "$OUT/sovas_sov.o" > "$OUT/sovas_self.exe" 2>/dev/null
 ident=0; tot=0

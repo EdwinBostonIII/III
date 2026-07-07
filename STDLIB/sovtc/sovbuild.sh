@@ -63,10 +63,15 @@ done
 # to real code instead of sovld import-thunking them into a bogus msvcrt import (-> runtime crash). ----
 HELP=""
 for m in "${MODS[@]}"; do if [ "$m" = "cpufeat" ]; then
-  gcc -c "$ROOT_DIR/COMPILER/BOOT/cpuid_helper.s" -o "$WORK/cpuid_helper.o" 2>/dev/null \
-    && { OBJS+=("$WORK/cpuid_helper.o"); HELP="$HELP cpuid_helper.s"; }
+  # sovas now encodes cpuid (0F A2) + xgetbv (0F 01 D0), so the helper assembles SOVEREIGNLY (no gcc-as).
+  if timeout 30 "$BOOT/sovas_main.exe" "$ROOT_DIR/COMPILER/BOOT/cpuid_helper.s" > "$WORK/cpuid_helper.o" 2>/dev/null && [ -s "$WORK/cpuid_helper.o" ]; then
+    OBJS+=("$WORK/cpuid_helper.o"); HELP="$HELP cpuid_helper.s(SOVEREIGN)"
+  else
+    gcc -c "$ROOT_DIR/COMPILER/BOOT/cpuid_helper.s" -o "$WORK/cpuid_helper.o" 2>/dev/null \
+      && { OBJS+=("$WORK/cpuid_helper.o"); HELP="$HELP cpuid_helper.s(gcc-witness)"; NWIT=$((NWIT+1)); WIT="$WIT cpuid_helper.s"; }
+  fi
 fi; done
-[ -n "$HELP" ] && say "asm helpers (gcc-as witness):${HELP}"
+[ -n "$HELP" ] && say "asm helpers:${HELP}"
 
 say "ROUTE MANIFEST: sovereign=$NSOV  witness=$NWIT [${WIT# }]"
 timeout 90 "$BOOT/sovlink_main.exe" "${OBJS[@]}" > "$OUT" 2>"$WORK/_link.err"; lrc=$?

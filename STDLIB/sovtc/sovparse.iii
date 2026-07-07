@@ -42,6 +42,22 @@ extern @abi(c-msvc-x64) fn sov_vpsrlq_y(dst: u32, src: u32, imm: u32) -> i32 fro
 extern @abi(c-msvc-x64) fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_vzeroupper() -> i32 from "sovas.iii"
+/* EVEX / AVX-512 encoders */
+extern @abi(c-msvc-x64) fn sov_vpxord(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpxorq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpandq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpmuludq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpmullq(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpermq_e(dst: u32, src1: u32, src2: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprold(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprord(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vprolq(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrlq_e(dst: u32, src: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpternlogq(dst: u32, src1: u32, src2: u32, imm: u32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpbroadcastq(dst: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu64_load(dst: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu64_store(src: u32, base: u32, disp: i32, ll: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
@@ -71,6 +87,8 @@ extern @abi(c-msvc-x64) fn sov_lea_rip_local(reg: u32, off: i32) -> i32 from "so
 extern @abi(c-msvc-x64) fn sov_lea_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_rdrand(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_rdseed(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cpuid() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_xgetbv() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_ext() -> i32 from "sovas.iii"
@@ -95,6 +113,13 @@ extern @abi(c-msvc-x64) fn sov_shr_imm8(reg: u32, imm: u32) -> i32 from "sovas.i
 extern @abi(c-msvc-x64) fn sov_shl_cl(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shr_cl(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_xorl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movl_imm(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shll_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shrl_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sarl_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_decl_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_incl_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_addl_imm_mem(base: u32, disp: i32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_addl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_subl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_andl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
@@ -474,6 +499,20 @@ fn sp_relax_check() -> u32 {
     return changed
 }
 
+/* a line beginning with '.' is EITHER a gas local label (.Lxxx:) OR a directive (.text/.byte/...).  Peek:
+ * read the token after the dot; if a ':' follows it is a .text local label (recorded dot-dropped, so a
+ * `jnz .Lxxx` reference matches); otherwise rewind and dispatch as a directive.  Handles the metal{}-block
+ * AVX loops (blake2s/chacha20) that use `.Lb2s_avx_rnd:` gas-idiom labels. */
+fn sp_dot_line() {
+    sp_adv()                                               /* consume '.' */
+    let save : u32 = IN_POS
+    let dlen : u32 = sp_read_name_into(SYM_N)
+    if sp_ch() == C_COLON {
+        sp_adv()
+        if SP_PASS == 1u32 { if CUR_SEC == SEC_TEXT { lbl_record(SYM_N, dlen) } }
+    } else { IN_POS = save  sp_dir1() }
+}
+
 /* branch: jmp/jCC L_x -> opcode + computed rel8/rel32 (relaxed), no reloc.  Returns 1 if MN was a branch. */
 fn sp_try_branch() -> u32 {
     let mut isbr : u32 = 0u32  let mut isjmp : u32 = 0u32  let mut cc : u32 = 0u32
@@ -493,6 +532,7 @@ fn sp_try_branch() -> u32 {
     if isbr == 0u32 { return 0u32 }
     let id : u32 = BR_IDX  BR_IDX = BR_IDX + 1u32
     sp_skip_ws()
+    if sp_ch() == C_DOT { sp_adv() }                       /* gas local label `.Lxxx` -> drop the dot (matches lbl_record) */
     let nlen : u32 = sp_read_name_into(SYM_N)
     if SP_PASS == 1u32 {                                   /* LAYOUT: record site + target; placeholder at the chosen size */
         BR_SITE[id as u64] = sov_len()
@@ -532,6 +572,18 @@ fn sp_three_ops() {
     sp_operand()
 }
 
+/* four-operand reader (vpternlogq $imm,%src2,%src1,%dst): F1I=imm F2R=src2(rm) F3R=src1(vvvv) OP=dst(reg). */
+var F1I : i64 = 0i64  var F2R : u32 = 0u32  var F3R : u32 = 0u32
+fn sp_four_ops() {
+    sp_operand()  F1I = OPI
+    sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+    sp_operand()  F2R = OPR
+    sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+    sp_operand()  F3R = OPR
+    sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+    sp_operand()
+}
+
 /* VEX (Tier-2 SIMD) dispatch -- returns 1 if MN was a recognized VEX mnemonic (even if it set PARSE_ERR).
  * AT&T 3-operand order is `op src2,src1,dst` so T1=src2, T2=src1, OP=dst.  EVEX-only mnemonics + zmm-width
  * vpaddq/vpsrlq are NOT handled here (return 0, or PARSE_ERR) -> routed to the EVEX dispatch (Task B3).
@@ -543,20 +595,49 @@ fn sp_try_vec() -> u32 {
     if mn_is(118u32,112u32,111u32,114u32,4u32) == 1u32 { sp_three_ops()  sov_vpor(OPR, T2R, T1R)  return 1u32 }             /* vpor */
     if mn_is(118u32,112u32,97u32,100u32,6u32) == 1u32 {                                                                     /* vpadd? */
         if MN[5u64] == 100u32 { sp_three_ops()  if T1K == 2u32 { sov_vpaddd_mem(OPR, T2R, T1R, T1D) } else { sov_vpaddd(OPR, T2R, T1R) }  return 1u32 }   /* vpaddd (reg/mem) */
-        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpaddq_y(OPR, T2R, T1R)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }                /* vpaddq: ymm->VEX; zmm->B3 */
+        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpaddq_y(OPR, T2R, T1R)  return 1u32 }  if VW == 2u32 { sov_vpaddq_e(OPR, T2R, T1R, 2u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }   /* vpaddq: ymm=VEX zmm=EVEX */
         PARSE_ERR = 1u32  return 1u32
     }
     if mn_is(118u32,112u32,115u32,104u32,7u32) == 1u32 { if MN[6u64] == 100u32 { sp_three_ops()  sov_vpshufd(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }   /* vpshufd (guard vpshufb) */
     if mn_is(118u32,112u32,115u32,108u32,6u32) == 1u32 { if MN[5u64] == 100u32 { sp_three_ops()  sov_vpslld(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }    /* vpslld (guard vpsllq) */
     if mn_is(118u32,112u32,115u32,114u32,6u32) == 1u32 {                                                                    /* vpsr?? */
         if MN[5u64] == 100u32 { sp_three_ops()  sov_vpsrld(OPR, T2R, T1I as u32)  return 1u32 }                             /* vpsrld */
-        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpsrlq_y(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }         /* vpsrlq: ymm->VEX; zmm->B3 */
+        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpsrlq_y(OPR, T2R, T1I as u32)  return 1u32 }  if VW == 2u32 { sov_vpsrlq_e(OPR, T2R, T1I as u32, 2u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }   /* vpsrlq: ymm=VEX zmm=EVEX */
         PARSE_ERR = 1u32  return 1u32
     }
     if mn_is(118u32,109u32,111u32,118u32,7u32) == 1u32 {                                                                    /* vmovdqu (len7; vmovdqu64 len9 falls through) */
         sp_two_ops()
         if S1K == 2u32 { if OPK == 0u32 { sov_vmovdqu_vload(OPR, S1R, S1D, VW)  return 1u32 } }                             /* load  disp(%base),%reg */
         if S1K == 0u32 { if OPK == 2u32 { sov_vmovdqu_vstore(S1R, OPR, OPD, VW)  return 1u32 } }                            /* store %reg,disp(%base) */
+        PARSE_ERR = 1u32  return 1u32
+    }
+    /* ── EVEX-only mnemonics (width from VW: xmm=0 ymm=1 zmm=2; ll = VW) ── */
+    if mn_is(118u32,112u32,120u32,111u32,6u32) == 1u32 {                                                                    /* vpxord / vpxorq */
+        sp_three_ops()
+        if MN[5u64] == 100u32 { sov_vpxord(OPR, T2R, T1R, VW)  return 1u32 }
+        if MN[5u64] == 113u32 { sov_vpxorq(OPR, T2R, T1R, VW)  return 1u32 }
+        PARSE_ERR = 1u32  return 1u32
+    }
+    if mn_is(118u32,112u32,97u32,110u32,6u32) == 1u32 { sp_three_ops()  sov_vpandq(OPR, T2R, T1R, VW)  return 1u32 }        /* vpandq */
+    if mn_is(118u32,112u32,109u32,117u32,8u32) == 1u32 { sp_three_ops()  sov_vpmuludq(OPR, T2R, T1R, VW)  return 1u32 }     /* vpmuludq */
+    if mn_is(118u32,112u32,109u32,117u32,7u32) == 1u32 { sp_three_ops()  sov_vpmullq(OPR, T2R, T1R, VW)  return 1u32 }      /* vpmullq */
+    if mn_is(118u32,112u32,101u32,114u32,6u32) == 1u32 { sp_three_ops()  sov_vpermq_e(OPR, T2R, T1R, VW)  return 1u32 }     /* vpermq */
+    if mn_is(118u32,112u32,114u32,111u32,6u32) == 1u32 {                                                                    /* vprold / vprord / vprolq (rotate $imm) */
+        sp_three_ops()
+        if MN[4u64] == 108u32 { if MN[5u64] == 100u32 { sov_vprold(OPR, T2R, T1I as u32, VW)  return 1u32 }  if MN[5u64] == 113u32 { sov_vprolq(OPR, T2R, T1I as u32, VW)  return 1u32 } }
+        if MN[4u64] == 114u32 { if MN[5u64] == 100u32 { sov_vprord(OPR, T2R, T1I as u32, VW)  return 1u32 } }
+        PARSE_ERR = 1u32  return 1u32
+    }
+    if mn_is(118u32,112u32,116u32,101u32,10u32) == 1u32 { sp_four_ops()  sov_vpternlogq(OPR, F3R, F2R, F1I as u32, VW)  return 1u32 }   /* vpternlogq $imm,%s2,%s1,%d */
+    if mn_is(118u32,112u32,98u32,114u32,12u32) == 1u32 {                                                                    /* vpbroadcastq disp(%base),%zmm */
+        sp_two_ops()
+        if S1K == 2u32 { if OPK == 0u32 { sov_vpbroadcastq(OPR, S1R, S1D, VW)  return 1u32 } }
+        PARSE_ERR = 1u32  return 1u32
+    }
+    if mn_is(118u32,109u32,111u32,118u32,9u32) == 1u32 {                                                                    /* vmovdqu64 load/store */
+        sp_two_ops()
+        if S1K == 2u32 { if OPK == 0u32 { sov_vmovdqu64_load(OPR, S1R, S1D, VW)  return 1u32 } }
+        if S1K == 0u32 { if OPK == 2u32 { sov_vmovdqu64_store(S1R, OPR, OPD, VW)  return 1u32 } }
         PARSE_ERR = 1u32  return 1u32
     }
     return 0u32
@@ -568,9 +649,12 @@ fn sp_dispatch_instr() {
     if mn_is(112u32,117u32,115u32,104u32,5u32) == 1u32 { sp_operand()  sov_push_r(OPR)  return }   /* pushq */
     if mn_is(112u32,111u32,112u32,113u32,4u32) == 1u32 { sp_operand()  sov_pop_r(OPR)  return }    /* popq */
     if mn_is(114u32,101u32,116u32,113u32,4u32) == 1u32 { sov_ret()  return }                       /* retq */
+    if mn_is(114u32,101u32,116u32,0u32,3u32) == 1u32 { sov_ret()  return }                          /* ret (bare; hand-written asm) */
     if mn_is(99u32,113u32,116u32,111u32,4u32) == 1u32 { sov_cqto()  return }                        /* cqto (48 99) */
     if mn_is(114u32,100u32,114u32,97u32,6u32) == 1u32 { sp_operand()  sov_rdrand(OPR)  return }      /* rdrand %reg */
     if mn_is(114u32,100u32,115u32,101u32,6u32) == 1u32 { sp_operand()  sov_rdseed(OPR)  return }     /* rdseed %reg */
+    if mn_is(99u32,112u32,117u32,105u32,5u32) == 1u32 { sov_cpuid()  return }                        /* cpuid (0F A2) */
+    if mn_is(120u32,103u32,101u32,116u32,6u32) == 1u32 { sov_xgetbv()  return }                      /* xgetbv (0F 01 D0) */
     if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {                                            /* movq */
         sp_two_ops()
         if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }
@@ -603,6 +687,7 @@ fn sp_dispatch_instr() {
         if S1K == 4u32 { if OPK == 0u32 { sov_movl_load_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return } }    /* movl disp(b,i,s),%r */
         if S1K == 3u32 { if OPK == 0u32 { sov_movl_load_rip_sym(OPR, S1SEC, S1OFF)  return } }              /* movl sym(%rip), %reg */
         if S1K == 0u32 { if OPK == 3u32 { sov_movl_store_rip_sym(S1R, OPSEC, OPOFF)  return } }             /* movl %reg, sym(%rip) */
+        if S1K == 1u32 { if OPK == 0u32 { sov_movl_imm(OPR, S1I as i32)  return } }                         /* movl $imm32, %reg (B8+r) */
         PARSE_ERR = 1u32  return
     }
     if mn_is(109u32,111u32,118u32,98u32,4u32) == 1u32 {                                              /* movb (8-bit) */
@@ -715,9 +800,15 @@ fn sp_dispatch_instr() {
     /* shift $imm8,%reg */
     if mn_is(115u32,104u32,108u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shl_imm8(OPR, S1I as u32) } else { sov_shl_cl(OPR) }  return }  /* shlq $imm|%cl */
     if mn_is(115u32,104u32,114u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shr_imm8(OPR, S1I as u32) } else { sov_shr_cl(OPR) }  return }  /* shrq $imm|%cl */
+    /* 32-bit shifts (shll/shrl/sarl $imm,%reg) + dec/inc + addl $imm,mem -- crypto-SIMD integer forms */
+    if mn_is(115u32,104u32,108u32,108u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shll_imm8(OPR, S1I as u32)  return }  PARSE_ERR = 1u32  return }   /* shll $imm,%reg */
+    if mn_is(115u32,104u32,114u32,108u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shrl_imm8(OPR, S1I as u32)  return }  PARSE_ERR = 1u32  return }   /* shrl */
+    if mn_is(115u32,97u32,114u32,108u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_sarl_imm8(OPR, S1I as u32)  return }  PARSE_ERR = 1u32  return }    /* sarl */
+    if mn_is(100u32,101u32,99u32,108u32,4u32) == 1u32 { sp_operand()  sov_decl_r(OPR)  return }                                                              /* decl %reg */
+    if mn_is(105u32,110u32,99u32,108u32,4u32) == 1u32 { sp_operand()  sov_incl_r(OPR)  return }                                                              /* incl %reg */
     /* 32-bit reg-reg ALU -- sov_op32_rr/sov_xorl_rr existed but were never dispatched; xorl %eax,%eax zeroing dominates (122 modules) */
     if mn_is(120u32,111u32,114u32,108u32,4u32) == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_xorl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* xorl */
-    if mn_is(97u32,100u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_addl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* addl */
+    if mn_is(97u32,100u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_addl_rr(OPR, S1R)  return } }  if S1K == 1u32 { if OPK == 2u32 { sov_addl_imm_mem(OPR, OPD, S1I as i32)  return } }  PARSE_ERR = 1u32  return }   /* addl reg,reg | $imm,disp(%base) */
     if mn_is(115u32,117u32,98u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_subl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* subl */
     if mn_is(97u32,110u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_andl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* andl */
     if mn_is(111u32,114u32,108u32,0u32,3u32)   == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_orl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* orl */
@@ -770,7 +861,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
         if c == C_NL { sp_adv() }
         else { if c == C_CR { sp_adv() }
         else { if c == 0u32 { sp_adv() }
-        else { if c == C_DOT { sp_adv()  sp_dir1()  sp_skip_line() }   /* directive: track CUR_SEC */
+        else { if c == C_DOT { sp_dot_line()  sp_skip_line() }   /* directive (track CUR_SEC) OR a .Lxxx: local label */
         else { if c == C_HASH { sp_skip_line() }    /* comment */
         else {
             if is_ident_start(c) == 1u32 {
@@ -874,6 +965,10 @@ fn sp_dir1() {
     if mn_is(98u32,115u32,115u32,0u32,3u32) == 1u32 { CUR_SEC = SEC_BSS  return }         /* .bss */
     if mn_is(114u32,111u32,100u32,97u32,6u32) == 1u32 { CUR_SEC = SEC_RODATA  return }    /* .rodata */
     if mn_is(103u32,108u32,111u32,98u32,6u32) == 1u32 {   /* .global <name> -> an exported COFF symbol */
+        if SP_PASS == 0u32 { sp_skip_ws()  let gl : u32 = sp_read_name_into(SYM_N)  exp_record(SYM_N, gl) }
+        return
+    }
+    if mn_is(103u32,108u32,111u32,98u32,5u32) == 1u32 {   /* .globl <name> (gas short spelling; hand-written cpuid_helper.s) */
         if SP_PASS == 0u32 { sp_skip_ws()  let gl : u32 = sp_read_name_into(SYM_N)  exp_record(SYM_N, gl) }
         return
     }

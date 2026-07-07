@@ -51,7 +51,7 @@ elif ! gcc "$OUT/test_dllroute.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovld.o
 else timeout 25 "$OUT/test_dllroute.exe" >/dev/null 2>&1; rc=$?
   if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS dllroute (ext_dll_of 5-DLL id table, exit 99)"; else echo "[sovtc] FAIL dllroute (exit $rc)"; fail=1; fi
 fi
-for l in sov_drivel:lpe:ret-only sov_drivel2:lpe2:data-global sov_drivel3:lpe3:import sov_drivel4:lpe4:import2 sov_drivel5:lpe5:multidll sov_drivel6:lpe6:msvcrt-only sov_drivel7:lpe7:relax sov_drivel8:lpe8:dlltable; do
+for l in sov_drivel:lpe:ret-only sov_drivel2:lpe2:data-global sov_drivel3:lpe3:import sov_drivel4:lpe4:import2 sov_drivel5:lpe5:multidll sov_drivel6:lpe6:msvcrt-only sov_drivel7:lpe7:relax sov_drivel8:lpe8:dlltable sov_drivel9:lpe9:ws2-ndll; do
     SRC="${l%%:*}"; rest="${l#*:}"; EXE="${rest%%:*}"; LBL="${rest#*:}"
     if ! "$IIIS" "$SOVTC/$SRC.iii" --compile-only --out "$OUT/$SRC.o" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL ($SRC compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$SRC.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovld.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$EXE-drv.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL (driver build)"; fail=1; continue; fi

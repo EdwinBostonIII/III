@@ -40,11 +40,15 @@ var TEXTBUF : [u8; 8388608]   /* the whole .text, loaded for reloc patching -- s
 var EXT_DLL    : [u32; 4096]   /* DLL id per import -- indexed by k=sov_ext_n() ; seed modules have 100s of symbols (was 64 -> overflow at k>64) */
 var EXT_HNRVA  : [u32; 4096]   /* hint/name RVA per import */
 var EXT_IATRVA : [u32; 4096]   /* IAT-entry RVA per import */
-var DLL_USED   : [u32; 4]
-var DLL_COUNT  : [u32; 4]
-var DLL_ILTRVA : [u32; 4]
-var DLL_IATRVA : [u32; 4]
-var DLL_NAMERVA: [u32; 4]
+/* per-DLL import layout, indexed by DLL id 0..NDLL-1 (kernel32 msvcrt user32 gdi32 ws2_32).  Sized [u32;8]
+ * (headroom to 8) -- id 4 (ws2_32) overran the old [u32;4]; a program using user32/gdi32/ws2_32 needs all. */
+const NDLL : u32 = 5u32
+var DLL_USED   : [u32; 8]
+var DLL_COUNT  : [u32; 8]
+var DLL_ILTRVA : [u32; 8]
+var DLL_IATRVA : [u32; 8]
+var DLL_NAMERVA: [u32; 8]
+var DLL_FILL   : [u32; 8]   /* running per-DLL import rank while assigning IAT-entry RVAs */
 
 fn p8(b: u32) { putchar((b & 0xFFu32) as i32)  LDPOS = LDPOS + 1u32 }
 fn p16(v: u32) { p8(v)  p8(v >> 8u32) }
@@ -153,10 +157,19 @@ fn ext_dll_of(slot: u32) -> u32 {
 /* LINKER/KAT surface: the DLL-routing decision for an interned import slot, exported so a routing gate can
  * assert it (kernel32=0 msvcrt=1 user32=2 gdi32=3 ws2_32=4) without laying out a whole PE. */
 fn sovld_ext_dll_of_pub(slot: u32) -> u32 @export { return ext_dll_of(slot) }
-fn dll_name_len(d: u32) -> u32 { if d == 0u32 { return 13u32 }  return 11u32 }   /* kernel32.dll\0 / msvcrt.dll\0 */
+/* DLL-name string bytes + length by id: 0 kernel32.dll(13) 1 msvcrt.dll(11) 2 user32.dll(11) 3 gdi32.dll(10)
+ * 4 ws2_32.dll(11) -- all NUL-terminated (lengths include the \0). */
+fn dll_name_len(d: u32) -> u32 {
+    if d == 0u32 { return 13u32 }   /* kernel32.dll\0 */
+    if d == 3u32 { return 10u32 }   /* gdi32.dll\0 */
+    return 11u32                    /* msvcrt.dll\0 / user32.dll\0 / ws2_32.dll\0 */
+}
 fn emit_dll_name(d: u32) {
-    if d == 0u32 { p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32) }
-    else { p8(109u32) p8(115u32) p8(118u32) p8(99u32) p8(114u32) p8(116u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32) }
+    if d == 0u32 { p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)  return }   /* kernel32.dll */
+    if d == 1u32 { p8(109u32) p8(115u32) p8(118u32) p8(99u32) p8(114u32) p8(116u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)  return }                        /* msvcrt.dll */
+    if d == 2u32 { p8(117u32) p8(115u32) p8(101u32) p8(114u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)  return }                         /* user32.dll */
+    if d == 3u32 { p8(103u32) p8(100u32) p8(105u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)  return }                                    /* gdi32.dll */
+    p8(119u32) p8(115u32) p8(50u32) p8(95u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)                                                    /* ws2_32.dll */
 }
 
 fn sovld_emit() -> i32 @export {
@@ -193,27 +206,30 @@ fn sovld_emit() -> i32 @export {
     if has_idata == 1u32 {
         idata_rva = cur_rva
         idt_rva = idata_rva
-        DLL_USED[0u64] = 0u32  DLL_USED[1u64] = 0u32  DLL_COUNT[0u64] = 0u32  DLL_COUNT[1u64] = 0u32
+        let mut d : u32 = 0u32                                  /* zero ALL NDLL slots (id 2/3/4 must start clean) */
+        while d < NDLL { DLL_USED[d as u64] = 0u32  DLL_COUNT[d as u64] = 0u32  DLL_FILL[d as u64] = 0u32  d = d + 1u32 }
         i = 0u32
-        while i < k { let d : u32 = ext_dll_of(i)  EXT_DLL[i as u64] = d  DLL_USED[d as u64] = 1u32  DLL_COUNT[d as u64] = DLL_COUNT[d as u64] + 1u32  i = i + 1u32 }
-        dnum = DLL_USED[0u64] + DLL_USED[1u64]
+        while i < k { let dm : u32 = ext_dll_of(i)  EXT_DLL[i as u64] = dm  DLL_USED[dm as u64] = 1u32  DLL_COUNT[dm as u64] = DLL_COUNT[dm as u64] + 1u32  i = i + 1u32 }
+        dnum = 0u32                                             /* count of DISTINCT used DLLs (summed, not hardcoded 2) */
+        d = 0u32
+        while d < NDLL { dnum = dnum + DLL_USED[d as u64]  d = d + 1u32 }
         let mut cur : u32 = idata_rva + ((dnum + 1u32) * 20u32)
-        let mut d : u32 = 0u32                                  /* ILTs */
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_ILTRVA[d as u64] = cur  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
-        iat_dir_rva = cur                                       /* IAT data-directory base = first IAT RVA */
-        d = 0u32                                                /* IATs (contiguous) */
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_IATRVA[d as u64] = cur  iat_total = iat_total + ((DLL_COUNT[d as u64] + 1u32) * 8u32)  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
-        let mut p0 : u32 = 0u32  let mut p1 : u32 = 0u32        /* per-import IAT-entry RVA */
-        i = 0u32
+        d = 0u32                                                /* ILTs, in id order */
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 { DLL_ILTRVA[d as u64] = cur  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
+        iat_dir_rva = cur                                       /* IAT data-directory base = first used DLL's IAT RVA */
+        d = 0u32                                                /* IATs (contiguous, id order) */
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 { DLL_IATRVA[d as u64] = cur  iat_total = iat_total + ((DLL_COUNT[d as u64] + 1u32) * 8u32)  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
+        i = 0u32                                                /* per-import IAT-entry RVA = its DLL's IAT + rank*8 */
         while i < k {
-            if EXT_DLL[i as u64] == 0u32 { EXT_IATRVA[i as u64] = DLL_IATRVA[0u64] + (p0 * 8u32)  p0 = p0 + 1u32 }
-            else { EXT_IATRVA[i as u64] = DLL_IATRVA[1u64] + (p1 * 8u32)  p1 = p1 + 1u32 }
+            let dm : u32 = EXT_DLL[i as u64]
+            EXT_IATRVA[i as u64] = DLL_IATRVA[dm as u64] + (DLL_FILL[dm as u64] * 8u32)
+            DLL_FILL[dm as u64] = DLL_FILL[dm as u64] + 1u32
             i = i + 1u32
         }
         i = 0u32                                                /* hint/name RVAs */
         while i < k { EXT_HNRVA[i as u64] = cur  cur = cur + alignup(2u32 + sov_ext_namelen(i) + 1u32, 2u32)  i = i + 1u32 }
-        d = 0u32                                                /* DLL-name RVAs */
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_NAMERVA[d as u64] = cur  cur = cur + dll_name_len(d) }  d = d + 1u32 }
+        d = 0u32                                                /* DLL-name RVAs, id order */
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 { DLL_NAMERVA[d as u64] = cur  cur = cur + dll_name_len(d) }  d = d + 1u32 }
         idata_len = cur - idata_rva
         cur_rva = cur_rva + alignup(idata_len, 0x1000u32)
     }
@@ -305,19 +321,19 @@ fn sovld_emit() -> i32 @export {
         ppad(data_fileptr + data_raw)
     }
     if has_idata == 1u32 {
-        /* IDT: one descriptor per used DLL (order 0,1), then a null descriptor */
+        /* IDT: one descriptor per used DLL (id order 0..NDLL-1), then a null descriptor */
         let mut d : u32 = 0u32
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { p32(DLL_ILTRVA[d as u64])  p32(0u32)  p32(0u32)  p32(DLL_NAMERVA[d as u64])  p32(DLL_IATRVA[d as u64]) }  d = d + 1u32 }
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 { p32(DLL_ILTRVA[d as u64])  p32(0u32)  p32(0u32)  p32(DLL_NAMERVA[d as u64])  p32(DLL_IATRVA[d as u64]) }  d = d + 1u32 }
         p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)
         /* ILTs: per used DLL, its imports' hint/name RVAs + null */
         d = 0u32
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 {
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 {
             i = 0u32  while i < k { if EXT_DLL[i as u64] == d { p64(EXT_HNRVA[i as u64], 0u32) }  i = i + 1u32 }
             p64(0u32, 0u32)
         } d = d + 1u32 }
         /* IATs: identical (loader overwrites) */
         d = 0u32
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 {
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 {
             i = 0u32  while i < k { if EXT_DLL[i as u64] == d { p64(EXT_HNRVA[i as u64], 0u32) }  i = i + 1u32 }
             p64(0u32, 0u32)
         } d = d + 1u32 }
@@ -332,9 +348,9 @@ fn sovld_emit() -> i32 @export {
             if ((2u32 + nl + 1u32) & 1u32) == 1u32 { p8(0u32) }
             i = i + 1u32
         }
-        /* DLL name strings (per used DLL, order 0,1) */
+        /* DLL name strings (per used DLL, id order 0..NDLL-1) */
         d = 0u32
-        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { emit_dll_name(d) }  d = d + 1u32 }
+        while d < NDLL { if DLL_USED[d as u64] == 1u32 { emit_dll_name(d) }  d = d + 1u32 }
         ppad(idata_fileptr + idata_raw)
     }
     return 0i32

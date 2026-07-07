@@ -1,0 +1,25 @@
+/* sov_drivel9.iii  --  the N-DLL (ws2_32) sovld gate (Phase A / audit P2b).  Assembles a PE that imports from
+ * ws2_32 (WSAStartup, WSACleanup) AND kernel32 (ExitProcess) -- a THIRD DLL id (4) beyond the historical
+ * kernel32/msvcrt pair.  Before the .idata builder is table-driven, DLL id 4 overruns the [u32;4] DLL_* arrays
+ * and the `< 2` descriptor/ILT/IAT loops never emit ws2_32's import descriptor -> WSAStartup is unresolved ->
+ * the loader rejects the image (exit != 99).  With NDLL=5 + [u32;8] + summed loops, both DLLs are emitted, the
+ * loader binds ws2_32, main initialises Winsock and exits 99.  NO gcc, NO ld.
+ *
+ * Alignment: entry RSP is 8 (mod 16); `subq $552` (552 = 8 mod 16) makes RSP 0 (mod 16) at each callq -- the
+ * x64 ABI alignment WSAStartup's SSE use requires.  552 bytes covers the ~408-byte WSADATA (at rsp+64, past the
+ * 32-byte shadow) with headroom.  WSAStartup(MAKEWORD(2,2)=0x0202, &wsadata); WSACleanup(); ExitProcess(99).
+ */
+module sovtc_drivel9
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  subq $552, %rsp\n  movabsq $0x202, %rcx\n  leaq 64(%rsp), %rdx\n  callq WSAStartup\n  callq WSACleanup\n  movabsq $99, %rcx\n  callq ExitProcess\n  addq $552, %rsp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

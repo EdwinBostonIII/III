@@ -11,13 +11,13 @@ RAW_SHA_MAX=38
 # BVRING_MIN: bv_ring-proven emit-plan sites in cg_r3.iii (mul-by-const magic +
 # shl+add strength reduction, certified over bv_ring/SAT).  Floor, not ceiling.
 BVRING_MIN=3
-# BREACH_MAX: entries in the island-breach ledger below.
-BREACH_MAX=5
+# BREACH_MAX: entries in the island-breach ledger below.  Was 5; DISCHARGED xii-lattice-dead-branch
+# (Phase E: STDLIB/corpus/1936_xii_lattice_live.iii + xii_live_gate.sh make the cg_r3 XII branch LIVE) -> 4.
+BREACH_MAX=4
 #
 # THE ISLAND-BREACH LEDGER -- sound exact organs the trusted path does not yet
 # consume.  Each line: name | organ=<existence-checked path[:line]> | discharge=<the sanctioned weld>.
 # Discharging one = wire it, delete its line, lower BREACH_MAX, cite the gate.
-BREACH: xii-lattice-dead-branch | organ=COMPILER/BOOT/cg_r3.iii | discharge=INDEPENDENCE-CLOSURE-PLAN Phase E (@lattice corpus program + xii_live_gate.sh)
 BREACH: au-conform-island | organ=STDLIB/iii/numera/ser_antiunify.iii | discharge=a non-KAT consumer of au_conform_bound in the autopoietic crush path (REUNIFICATION W-rows)
 BREACH: ser-membrane-kat-only | organ=STDLIB/iii/numera/ser_membrane.iii | discharge=a live gate consuming BMC/k-induction verdicts on a spine invariant
 BREACH: zkvm-kat-only | organ=STDLIB/iii/numera/zk_air.iii | discharge=a gate that emits+verifies one real STARK proof of a spine artifact

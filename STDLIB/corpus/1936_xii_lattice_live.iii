@@ -1,0 +1,30 @@
+/* STDLIB/corpus/1936_xii_lattice_live.iii
+ *
+ * XII @lattice -- LIVE (independence-closure Phase E; discharges basal-census breach #1).
+ *
+ * Before this program NO source in the tree carried @lattice, so cg_r3.iii's XII gate
+ * (cg_r3.iii:3574 -- `sema_xii_anno_has_in_ast(...LATTICE)`) was NEVER taken: a dead branch,
+ * flagged by the systems-map audit and pinned as an island breach.  This program carries
+ * @lattice on `latwork`, so compiling it DRIVES the whole XII codegen pipeline:
+ *   r3_pe_canonicalise -> r3_compute_circ -> r3_pe_lattice_emit
+ * which emits, INSTEAD of the legacy block, a multi-byte-NOP LDIL placeholder into .text plus
+ * a 24-byte call-site descriptor into the `.iii_xii_calls` section (the LDIL fill target).
+ *
+ * COMPILE-TIME proof (xii_live_gate.sh): the compiled .o.s contains `.section .iii_xii_calls`
+ * with a non-empty descriptor AND the @lattice fn's body is the NOP placeholder, not `x+1`.
+ * RUN proof: main ignores latwork's (placeholder) result and returns the sentinel 99, so the
+ * program links + runs sovereignly -- the XII branch is exercised without the program's exit
+ * depending on the not-yet-runtime-filled placeholder.
+ *
+ * exit 99 = ok.
+ */
+module corpus_1936_xii_lattice_live
+
+/* @lattice: dispatch this fn's body to the XII lattice codegen pipeline (NOP placeholder +
+ * call-site descriptor).  The annotation goes after the return type, before the body. */
+fn latwork(x: u64) -> u64 @lattice { return x + 1u64 }
+
+fn main() -> u64 {
+    latwork(5u64)      /* fires the XII gate at compile time; result is the LDIL placeholder */
+    return 99u64
+}

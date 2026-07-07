@@ -1764,12 +1764,15 @@ fn r3_decl_is_exported(node: u32, kind: u32) -> u32 { if r3_mod_find(node, kind,
 
 /* XII Phase XII-θ: detect @lattice on a FN_DECL or CYCLE_DECL.
  * Returns 1 if the decl carries `@lattice`, 0 otherwise.  When 1,
- * the function body would route through the XII canonicalisation /
- * Lattice-fetched-bytes pipeline (cg_r3_xii.c + xii_ldil.c) instead of
- * the legacy r3_emit_block path.  Pipeline wiring is staged: this
- * detection is the prerequisite, and downstream emission requires the
- * AST→XII-term mapper and sealed-Lattice-cell-store to land first.
- * Until then no source file uses @lattice and this returns 0. */
+ * the function body routes through the XII canonicalisation /
+ * Lattice-fetched-bytes pipeline (cg_r3_xii.iii + xii_ldil.iii) instead of
+ * the legacy r3_emit_block path.  LIVE (independence Phase E): the active
+ * gate is the sema-AST predicate at :3574 (sema_xii_anno_has_in_ast); it
+ * fires on STDLIB/corpus/1936_xii_lattice_live.iii, emitting the LDIL NOP
+ * placeholder + the 24-byte .iii_xii_calls descriptor -- proven by
+ * COMPILER/BOOT/xii_live_gate.sh (with teeth: no @lattice => no descriptor).
+ * (This r3_decl_has_lattice AST-modifier variant is the legacy detector,
+ * superseded by the sema predicate; kept for the CYCLE_DECL path.) */
 fn r3_decl_has_lattice(node: u32, kind: u32) -> u32 { if r3_mod_find(node, kind, &R3_MOD_LATTICE as u64, R3_MOD_LATTICE_LEN) != 0u32 { return 1u32 }; return 0u32 }
 
 /* Extract @fusion_budget(N) as u32.  Returns the integer argument of

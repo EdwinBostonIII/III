@@ -2,6 +2,28 @@
 
 > **For agentic workers:** this plan executes in a SINGLE context — recorded III feedback: **no subagents on this tree**. Steps use checkbox (`- [ ]`) syntax for tracking. Every `.iii`/`.sh`/`.py` edit is preceded by the CRASH-DEBUGGING read discipline where it applies (compiler-spine changes especially).
 
+> **EXECUTION LEDGER (2026-07-06, single session, each item committed + gated).** What is DONE vs
+> what REMAINS, with the evidence and — where a step is blocked — the precise reason (no faked greens):
+>
+> | Phase | State | Evidence / precise residual |
+> |---|---|---|
+> | ⊥ BASAL LAW | **DONE** | `mhash_lib.sh` (III authors seals), `basal_census_gate.sh` = anchor stage 7; teeth rc3/95/97 |
+> | A sovld multi-DLL | **DONE (prior session)** | 5-DLL id table + N-DLL `.idata`; ws2_32 app runs 99 |
+> | B sovas VEX/EVEX | **DONE (prior session)** | crypto closure `witness=0`; + **sovas `mulq` (F7/4) this session** → sovas now encodes EVERY compiler mnemonic (846/847 tree modules assemble sovereignly, 844 byte-identical to gas; only aes_gcm→witness) |
+> | C1 sovtc in archive | **DONE** | golden-NEUTRAL (iiis-1 mhash `8449a980` unmoved); collision-scanned 0/183 |
+> | C2 in-process assemble | **DONE** | `iii_emit_assemble_sovereign` + per-module witness fallback; `emit_sovereign_gate.sh` GREEN (prog_sat/cg_r3/main/emit `.text`==gas) |
+> | C3 in-process link | **DONE (loose-object)** | merge folded into `sovld.iii` (one definition; `sovlink_main` a thin shell), `iii_emit_link_sovereign`; run_fixpoint byte-identical; prog_sat→99. **Residual:** the compiler's default program-link passes the `.a` ARCHIVE (not loose COFF) → a loose-object build model is the follow-on |
+> | C4 RE-SEAL | **DONE** | the C2/C3 fold makes the compiler EMBED the sovereign toolchain (emit.iii references sov_*/sovld_link_* → the archive members are pulled into iiis-1/2/3), so the goldens MOVED: iiis-1 `8449a980`→`d3a6751d`, iiis-2/iiis-3 `853b2f…`→`e786b820` (fixpoint HOLDS, corpus 60/0, deterministic twice, sovereign-authored seals). Re-sealed + audit fixpoint-hash updated. The compiler now CONTAINS its own gcc-free assembler+linker |
+> | C4 default FLIP | **SCOPED — not flipped** | precise blocker MEASURED: sovereign `.o` `.text`+`.data` are byte-identical to gcc, but `.reloc` RECORDS differ in encoding, so `seed_text_identity_gate.sh` (which diffs relocs) would red on a flip. The flip needs that gate reworked to compare codegen (`.text`/`.data`/`.o.s`) not assembler-specific reloc encoding — a change to a trust anchor, deliberately not rushed. Default stays WITNESS; the sovereign path is IN the binary, one `G_EMIT_MODE` flip + gate-rework away |
+> | D1 self-mint tools | **REMAINS** | seal gen-0 `sovas_main`/`sovlink_main` seeds via `mhash_file`; unblocks run_fixpoint gcc-off |
+> | D2 anchor stages | **PARTIAL** | stage 8 `witness_zero_gate` WIRED + green; stage 9 (run_fixpoint gcc-off) blocked on D1 |
+> | E XII @lattice LIVE | **DONE** | corpus 1936 + `xii_live_gate.sh` (teeth); **census breach #1 discharged (ledger 5→4)** |
+> | F PQ NIST KATs | **BLOCKED (named)** | mlkem/mldsa/slhdsa have the KAT-shaped surface + internal roundtrip/determinism corpus tests, but official ACVP vectors are multi-MB (fetch caps 10 MB; the summariser won't transcribe thousands of hex bytes verbatim). Bounded external-data acquisition remains |
+> | G1/G2 codecs | **REMAINS** | `tp_x86_disasm` (74 ln) + `tp_iii_to_c99` (98 ln) still degenerate; self-contained rewrites |
+> | H provenance | **PARTIAL** | 742 phantom tags PINNED down-only (`provenance_gate.sh`, teeth); FALSIFIED the plan's premise (tag is emitted as an `.ascii` string → codegen-neutral but golden-moving), so the bulk rewrite rides the C4 re-seal |
+>
+> Anchor grew 6→8 stages (seal-authorship 2b + basal census 7 + witness-zero 8), each green.
+
 **Goal:** Make every claim in `DOCS/III-INDEPENDENCE-AUDIT.md` literally true — the default emit path is sovereign (in-process `sovas`/`sovld`, gcc a demoted opt-out witness), `sovas` encodes the VEX/EVEX the crypto modules actually emit (witness→0), `sovld` routes any Win32 DLL, the sovereign tools self-mint from a sealed seed (no gcc bootstrap), XII is the operative optimizer it is documented as (not a dead branch), PQ crypto is gated on official NIST vectors, the two degenerate codecs become a real transpiler and a real decoder, and the 779 stale `from "*.c"` provenance tags tell the truth.
 
 **Architecture:** One spine, closed end to end. `iiis-2` already compiles `.iii → .o.s` (assembly text); the sovereign toolchain (`sovas`/`sovld`) already turns that into a PE with no gcc/ld — but only as an *out-of-compiler orchestrator* (`sovbuild.sh`) and only for the integer + legacy-SSE instruction tier. This plan **completes the sovereign path (VEX/EVEX + multi-DLL), folds it into `emit.iii` so the compiler itself IS the sovereign emitter, then re-seals the bootstrap chain** so `bootstrap_from_clean.sh` proves the whole thing on a host with no gcc/ld/gas on PATH. XII, PQ-KATs, codecs, and provenance are independent truth-restorations that ride the same "wired to an existing gate, ratcheted down-only" discipline.

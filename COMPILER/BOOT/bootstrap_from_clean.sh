@@ -23,6 +23,9 @@
 #                                           are load-bearing in the trusted path (seal
 #                                           authorship sovereign, algebra in codegen,
 #                                           island-breach ledger down-only)
+#   stage 8  witness_zero_gate.sh           the crypto closure (sha256/sha3/sha512) assembles
+#                                           through sovas with ZERO gcc-as (route manifest
+#                                           witness=0) -- sovas encodes every mnemonic it emits
 #
 # SEAL AUTHORSHIP (basal law, mhash_lib.sh): every .mhash above is AUTHORED by
 # III's own FIPS-KAT'd SHA-256 (aether/sovhash over numera/cad); GNU sha256sum
@@ -40,8 +43,8 @@
 # P1 (sovas/sovld as default emit) and P2 (close the gcc-as witness).
 #
 # Usage:  bash bootstrap_from_clean.sh [-h|--help]
-# Exit:   0 = GATE GREEN (all seven stages)
-#         N = 1..7, the first red stage
+# Exit:   0 = GATE GREEN (all eight stages)
+#         N = 1..8, the first red stage
 #         99 = environment/prerequisite error
 set -uo pipefail
 umask 022
@@ -134,6 +137,9 @@ stage6_fixpoint() {
 stage7_census() {
     bash "$BOOT/basal_census_gate.sh"
 }
+stage8_witness_zero() {
+    bash "$III_ROOT/STDLIB/sovtc/witness_zero_gate.sh"
+}
 
 run_stage 1 "seed rebuild (build_iiis0.sh)"                 "$LOGDIR/1_iiis0.log"    stage1_seed
 run_stage 2 "stdlib from scratch (build_stdlib.sh)"         "$LOGDIR/2_stdlib.log"   stage2_stdlib
@@ -145,6 +151,7 @@ run_stage 4 "iiis-2 rebuild + corpus (build_iiis2.sh)"      "$LOGDIR/4_iiis2.log
 run_stage 5 "seed<->self-host identity gate"                "$LOGDIR/5_identity.log" stage5_identity
 run_stage 6 "iiis-3 fixpoint + corpus (build_iiis3.sh)"     "$LOGDIR/6_iiis3.log"    stage6_fixpoint
 run_stage 7 "basal law census (basal_census_gate.sh)"       "$LOGDIR/7_census.log"   stage7_census
+run_stage 8 "crypto-closure witness-zero (witness_zero_gate.sh)" "$LOGDIR/8_witness0.log" stage8_witness_zero
 
-log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green (logs: $LOGDIR)"
+log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green, crypto closure witness-zero (logs: $LOGDIR)"
 exit 0

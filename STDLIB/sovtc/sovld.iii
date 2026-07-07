@@ -79,9 +79,43 @@ fn name_eq(slot: u32, lit: *u8, litlen: u32) -> u32 {
     while j < litlen { if sov_ext_namebyte(slot, j) != (lit[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
     return 1u32
 }
-/* DLL of an import (kernel32=0, msvcrt=1).  A TABLE of known functions (exact -- notably the lowercase
- * kernel32 lstr* functions a case-heuristic mis-routes), then the case heuristic as a fallback for the rest. */
+/* DLL of an import (kernel32=0 msvcrt=1 user32=2 gdi32=3 ws2_32=4).  A TABLE of known functions (exact --
+ * notably the lowercase kernel32 lstr* and the lowercase Winsock set a case-heuristic mis-routes), then the
+ * case heuristic as a fallback for the rest.  The table is the MEASURED import surface of the tree's modules
+ * (aether/net.iii sockets, aether/ui_win.iii + aether_world.iii + aether_lens_win.iii windows/GDI). */
 fn ext_dll_of(slot: u32) -> u32 {
+    /* ws2_32 (Winsock; all-lowercase names the heuristic would send to msvcrt) */
+    if name_eq(slot, "WSAStartup" as *u8, 10u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "WSACleanup" as *u8, 10u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "socket" as *u8, 6u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "closesocket" as *u8, 11u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "connect" as *u8, 7u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "send" as *u8, 4u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "recv" as *u8, 4u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "htons" as *u8, 5u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "bind" as *u8, 4u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "listen" as *u8, 6u32) == 1u32 { return 4u32 }
+    if name_eq(slot, "accept" as *u8, 6u32) == 1u32 { return 4u32 }
+    /* user32 (window/message surface; incl. GetDC/ReleaseDC, whose Win32 home is user32 NOT gdi32) */
+    if name_eq(slot, "CreateWindowExA" as *u8, 15u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "DefWindowProcA" as *u8, 14u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "DispatchMessageA" as *u8, 16u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "GetClientRect" as *u8, 13u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "GetDC" as *u8, 5u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "ReleaseDC" as *u8, 9u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "LoadCursorA" as *u8, 11u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "PeekMessageA" as *u8, 12u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "PostQuitMessage" as *u8, 15u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "RegisterClassA" as *u8, 14u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "RegisterClassExA" as *u8, 16u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "SetWindowTextA" as *u8, 14u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "ShowWindow" as *u8, 10u32) == 1u32 { return 2u32 }
+    if name_eq(slot, "TranslateMessage" as *u8, 16u32) == 1u32 { return 2u32 }
+    /* gdi32 (device-context drawing surface) */
+    if name_eq(slot, "SetBkMode" as *u8, 9u32) == 1u32 { return 3u32 }
+    if name_eq(slot, "SetTextColor" as *u8, 12u32) == 1u32 { return 3u32 }
+    if name_eq(slot, "StretchDIBits" as *u8, 13u32) == 1u32 { return 3u32 }
+    if name_eq(slot, "TextOutA" as *u8, 8u32) == 1u32 { return 3u32 }
     /* kernel32 (incl. lowercase lstr* the heuristic would wrongly send to msvcrt) */
     if name_eq(slot, "lstrlenA" as *u8, 8u32) == 1u32 { return 0u32 }
     if name_eq(slot, "lstrcpyA" as *u8, 8u32) == 1u32 { return 0u32 }
@@ -116,6 +150,9 @@ fn ext_dll_of(slot: u32) -> u32 {
     if c0 >= 65u32 { if c0 <= 90u32 { return 0u32 } }
     return 1u32
 }
+/* LINKER/KAT surface: the DLL-routing decision for an interned import slot, exported so a routing gate can
+ * assert it (kernel32=0 msvcrt=1 user32=2 gdi32=3 ws2_32=4) without laying out a whole PE. */
+fn sovld_ext_dll_of_pub(slot: u32) -> u32 @export { return ext_dll_of(slot) }
 fn dll_name_len(d: u32) -> u32 { if d == 0u32 { return 13u32 }  return 11u32 }   /* kernel32.dll\0 / msvcrt.dll\0 */
 fn emit_dll_name(d: u32) {
     if d == 0u32 { p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32) }

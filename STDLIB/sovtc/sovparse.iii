@@ -29,6 +29,19 @@ extern @abi(c-msvc-x64) fn sov_movdqu_store_base(src: u32, base: u32, disp: i32)
 extern @abi(c-msvc-x64) fn sov_movdqu_load_rip_sym(dst: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movdqu_load_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movdqu_store_sib(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
+/* AVX/VEX (Tier-2 SIMD) encoders */
+extern @abi(c-msvc-x64) fn sov_vpxor(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpor(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddd(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddd_mem(dst: u32, src1: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddq_y(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpshufd(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpslld(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrld(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrlq_y(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vzeroupper() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
@@ -155,6 +168,7 @@ var OPSEC : u32 = 0u32    /* sym(%rip): resolved target section */
 var OPOFF : i32 = 0i32    /* sym(%rip): resolved offset within that section (the disp32 addend) */
 var OPINDEX : u32 = 0u32  /* SIB (OPK=4): index register */
 var OPSCALE : u32 = 1u32  /* SIB: scale (1/2/4/8) */
+var VW : u32 = 0u32       /* vector-register width of the last %xmm/%ymm/%zmm parsed: 0=xmm(128) 1=ymm(256) 2=zmm(512) */
 
 /* the data-symbol table (pass 1).  section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 OTHER=9. */
 const SEC_TEXT : u32 = 0u32
@@ -319,6 +333,7 @@ fn sp_reg() -> u32 {
         let mut isv : u32 = 0u32
         if rn0 == 120u32 { isv = 1u32 }  if rn0 == 121u32 { isv = 1u32 }  if rn0 == 122u32 { isv = 1u32 }
         if isv == 1u32 {
+            if rn0 == 120u32 { VW = 0u32 }  if rn0 == 121u32 { VW = 1u32 }  if rn0 == 122u32 { VW = 2u32 }   /* x=128 y=256 z=512 */
             let mut xv : u32 = 0u32
             while is_digit(sp_ch()) == 1u32 { xv = (xv * 10u32) + (sp_ch() - 48u32)  sp_adv() }
             return xv
@@ -505,15 +520,46 @@ fn sp_two_ops() {
     sp_operand()
 }
 
-/* three-operand reader (SIMD imm/implicit forms): op1 -> T1*, op2 -> T2*, op3 -> OP*. */
-var T1K : u32 = 0u32  var T1R : u32 = 0u32  var T1I : i64 = 0i64
+/* three-operand reader (SIMD imm/implicit forms): op1 -> T1*, op2 -> T2*, op3 -> OP*.
+ * T1D carries op1's memory displacement (VEX mem-source forms: `vpaddd disp(%base),%src1,%dst`). */
+var T1K : u32 = 0u32  var T1R : u32 = 0u32  var T1I : i64 = 0i64  var T1D : i32 = 0i32
 var T2K : u32 = 0u32  var T2R : u32 = 0u32
 fn sp_three_ops() {
-    sp_operand()  T1K = OPK  T1R = OPR  T1I = OPI
+    sp_operand()  T1K = OPK  T1R = OPR  T1I = OPI  T1D = OPD
     sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
     sp_operand()  T2K = OPK  T2R = OPR
     sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
     sp_operand()
+}
+
+/* VEX (Tier-2 SIMD) dispatch -- returns 1 if MN was a recognized VEX mnemonic (even if it set PARSE_ERR).
+ * AT&T 3-operand order is `op src2,src1,dst` so T1=src2, T2=src1, OP=dst.  EVEX-only mnemonics + zmm-width
+ * vpaddq/vpsrlq are NOT handled here (return 0, or PARSE_ERR) -> routed to the EVEX dispatch (Task B3).
+ * Near-miss guards (MN[5]/MN[6]) keep vpsllq/vpshufb from mis-encoding as vpslld/vpshufd. */
+fn sp_try_vec() -> u32 {
+    if MN[0u64] != 118u32 { return 0u32 }               /* fast reject: all vector mnemonics begin with 'v' */
+    if mn_is(118u32,122u32,101u32,114u32,10u32) == 1u32 { sov_vzeroupper()  return 1u32 }                                  /* vzeroupper */
+    if mn_is(118u32,112u32,120u32,111u32,5u32) == 1u32 { sp_three_ops()  sov_vpxor(OPR, T2R, T1R)  return 1u32 }            /* vpxor */
+    if mn_is(118u32,112u32,111u32,114u32,4u32) == 1u32 { sp_three_ops()  sov_vpor(OPR, T2R, T1R)  return 1u32 }             /* vpor */
+    if mn_is(118u32,112u32,97u32,100u32,6u32) == 1u32 {                                                                     /* vpadd? */
+        if MN[5u64] == 100u32 { sp_three_ops()  if T1K == 2u32 { sov_vpaddd_mem(OPR, T2R, T1R, T1D) } else { sov_vpaddd(OPR, T2R, T1R) }  return 1u32 }   /* vpaddd (reg/mem) */
+        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpaddq_y(OPR, T2R, T1R)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }                /* vpaddq: ymm->VEX; zmm->B3 */
+        PARSE_ERR = 1u32  return 1u32
+    }
+    if mn_is(118u32,112u32,115u32,104u32,7u32) == 1u32 { if MN[6u64] == 100u32 { sp_three_ops()  sov_vpshufd(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }   /* vpshufd (guard vpshufb) */
+    if mn_is(118u32,112u32,115u32,108u32,6u32) == 1u32 { if MN[5u64] == 100u32 { sp_three_ops()  sov_vpslld(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }    /* vpslld (guard vpsllq) */
+    if mn_is(118u32,112u32,115u32,114u32,6u32) == 1u32 {                                                                    /* vpsr?? */
+        if MN[5u64] == 100u32 { sp_three_ops()  sov_vpsrld(OPR, T2R, T1I as u32)  return 1u32 }                             /* vpsrld */
+        if MN[5u64] == 113u32 { sp_three_ops()  if VW == 1u32 { sov_vpsrlq_y(OPR, T2R, T1I as u32)  return 1u32 }  PARSE_ERR = 1u32  return 1u32 }         /* vpsrlq: ymm->VEX; zmm->B3 */
+        PARSE_ERR = 1u32  return 1u32
+    }
+    if mn_is(118u32,109u32,111u32,118u32,7u32) == 1u32 {                                                                    /* vmovdqu (len7; vmovdqu64 len9 falls through) */
+        sp_two_ops()
+        if S1K == 2u32 { if OPK == 0u32 { sov_vmovdqu_vload(OPR, S1R, S1D, VW)  return 1u32 } }                             /* load  disp(%base),%reg */
+        if S1K == 0u32 { if OPK == 2u32 { sov_vmovdqu_vstore(S1R, OPR, OPD, VW)  return 1u32 } }                            /* store %reg,disp(%base) */
+        PARSE_ERR = 1u32  return 1u32
+    }
+    return 0u32
 }
 
 /* dispatch one instruction (MN = mnemonic).  Early-return form: each branch reads operands only when it
@@ -702,6 +748,8 @@ fn sp_dispatch_instr() {
         if S1K == 0u32 { if OPK == 4u32 { sov_movdqu_store_sib(S1R, OPR, OPINDEX, OPSCALE, OPD)  return } }                                 /* movdqu %src,disp(b,i,s) */
         PARSE_ERR = 1u32  return
     } }
+    /* VEX SIMD (vpxor/vpaddd/vmovdqu/... ) -- Tier-2 crypto set */
+    if sp_try_vec() == 1u32 { return }
     /* branches (jmp/jcc to a .text label) -- resolved via the two-pass */
     if sp_try_branch() == 1u32 { return }
     PARSE_ERR = 1u32    /* unknown mnemonic -> loud, located failure */

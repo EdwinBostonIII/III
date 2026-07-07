@@ -1,0 +1,30 @@
+/* test_vexparse.iii  --  S1 VEX PARSER GATE (Phase B2): sovparse must route the VEX mnemonics to the
+ * encoders and reproduce gcc-as's exact .text.  Assembles a small VEX .s and byte-compares the whole .text
+ * to gas's output (STDLIB/build/_vexmeasure/oracle.s).  exit 99 = the parser dispatch is byte-exact.
+ */
+module sovtc_test_vexparse
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+/* gcc-as .text bytes for the six instructions below, concatenated (25 bytes) */
+var GOLD : [u8; 25] = [
+  0xC5u8,0xE9u8,0xEFu8,0xD9u8,                 /* vpxor  %xmm1,%xmm2,%xmm3 */
+  0xC5u8,0xD1u8,0xFEu8,0xF4u8,                 /* vpaddd %xmm4,%xmm5,%xmm6 */
+  0xC5u8,0xF9u8,0x70u8,0xD1u8,0x1Bu8,          /* vpshufd $0x1b,%xmm1,%xmm2 */
+  0xC5u8,0xE9u8,0x72u8,0xF1u8,0x07u8,          /* vpslld $7,%xmm1,%xmm2 */
+  0xC5u8,0xFAu8,0x6Fu8,0x38u8,                 /* vmovdqu (%rax),%xmm7 */
+  0xC5u8,0xF8u8,0x77u8 ]                       /* vzeroupper */
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  vpxor %xmm1, %xmm2, %xmm3\n  vpaddd %xmm4, %xmm5, %xmm6\n  vpshufd $0x1b, %xmm1, %xmm2\n  vpslld $7, %xmm1, %xmm2\n  vmovdqu (%rax), %xmm7\n  vzeroupper\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }    /* parse error -> a VEX mnemonic went unhandled */
+    if sov_len() != 25u32 { return 2u64 }
+    let mut i : u32 = 0u32
+    while i < 25u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (10u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

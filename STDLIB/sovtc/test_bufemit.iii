@@ -1,0 +1,64 @@
+/* test_bufemit.iii  --  proves the IN-PROCESS sovereign assemble path (Phase C precondition): sovcoff emits a
+ * COFF into a MEMORY BUFFER (not stdout), which the caller writes to a file with its own helper -- exactly what
+ * emit.iii's iii_emit_assemble_sovereign does.  Reads a .s (argv[1]), assembles via sovparse_full, captures the
+ * COFF via sov_out_to_buffer, writes it to argv[2], exits 0.  gcc-linked here ONLY to drive it (the CAPABILITY
+ * -- in-buffer COFF emission with no stdout -- is what matters; run_fixpoint proves byte-identity vs gas).
+ * Exit: 2 no argv, 3 read fail, 4 assemble error, 5 write fail, 0 ok. */
+module sovtc_test_bufemit
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+extern @abi(c-msvc-x64) fn sov_out_to_buffer(buf: u64, cap: u64) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_to_stdout() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_len() -> u64 from "sovas.iii"
+
+const GENERIC_READ  : u32 = 0x80000000u32
+const GENERIC_WRITE : u32 = 0x40000000u32
+const OPEN_EXISTING : u32 = 3u32
+const CREATE_ALWAYS : u32 = 2u32
+const INVALID_H     : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var SBUF  : [u8; 16777216]     /* the .s input */
+var OBUF  : [u8; 16777216]     /* the COFF output buffer (emit.iii uses malloc; a fixed pool suffices here) */
+var NX    : [u8; 8]
+
+fn read_file(path: *u8) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0x80u32, 0u64)
+    if h == INVALID_H { return 0u32 }
+    let mut off : u32 = 0u32  let mut go : u32 = 1u32
+    while go == 1u32 {
+        let dst : *u8 = ((&SBUF as u64) + (off as u64)) as *u8
+        let ok  : i32 = ReadFile(h, dst, 16777216u32 - off, (&NX) as u64, 0u64)
+        if ok == 0i32 { go = 0u32 }
+        else { let p : *u32 = (&NX) as *u32  let nr : u32 = p[0u64]  if nr == 0u32 { go = 0u32 } else { off = off + nr } }
+    }
+    CloseHandle(h)
+    return off
+}
+fn write_file(path: *u8, len: u32) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_WRITE, 0u32, 0u64, CREATE_ALWAYS, 0x80u32, 0u64)
+    if h == INVALID_H { return 0u32 }
+    let ok : i32 = WriteFile(h, (&OBUF) as *u8, len, (&NX) as u64, 0u64)
+    CloseHandle(h)
+    if ok == 0i32 { return 0u32 }
+    let p : *u32 = (&NX) as *u32
+    return p[0u64]
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { return 2u64 }
+    let pp : *u64 = argv as *u64
+    let n : u32 = read_file(pp[1u64] as *u8)
+    if n == 0u32 { return 3u64 }
+    if sovparse_full((&SBUF) as *u8, n) != 0i32 { return 4u64 }
+    sov_out_to_buffer((&OBUF) as u64, 16777216u64)     /* redirect the COFF into OBUF, not stdout */
+    sovcoff_emit()
+    let coff_len : u64 = sov_out_len()
+    sov_out_to_stdout()
+    if write_file(pp[2u64] as *u8, coff_len as u32) != (coff_len as u32) { return 5u64 }
+    return 0u64
+}

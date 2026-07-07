@@ -31,8 +31,9 @@ extern @abi(c-msvc-x64) fn sp_export_n() -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_off(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namelen(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namebyte(i: u32, j: u32) -> u32 from "sovparse.iii"
-extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sov_putbyte(c: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_is_buffer() -> u32 from "sovas.iii"
 
 /* per-section (id 0=.text 1=.data 2=.rodata 3=.bss) layout, computed in the prologue */
 var SEC_PRESENT : [u32; 4]
@@ -45,7 +46,7 @@ var NEXP  : u32 = 0u32   /* emitted exports (.text functions, offset resolved) *
 var STR_BUF : [u8; 8192]
 var STR_LEN : u32 = 0u32
 
-fn w8(b: u32) { putchar((b & 0xFFu32) as i32) }
+fn w8(b: u32) { sov_putbyte(b) }
 fn w16(v: u32) { w8(v)  w8(v >> 8u32) }
 fn w32(v: u32) { w8(v)  w8(v >> 8u32)  w8(v >> 16u32)  w8(v >> 24u32) }
 
@@ -95,7 +96,7 @@ fn reloc_symidx(i: u32) -> u32 {
 }
 
 fn sovcoff_emit() -> i32 @export {
-    _setmode(1i32, 0x8000i32)
+    if sov_out_is_buffer() == 0u32 { _setmode(1i32, 0x8000i32) }   /* only touch stdout when actually writing to it */
     STR_LEN = 0u32
     sov_text_pad16()                          /* gas-match: pad .text to a 16-byte boundary (NOP) before layout */
 

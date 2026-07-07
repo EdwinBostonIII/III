@@ -14,9 +14,33 @@
  */
 module sovtc_sovas
 
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
 const SOV_CAP : u32 = 1048576u32
 var SOV_BUF : [u8; 1048576]
 var SOV_LEN : u32 = 0u32
+
+/* ── shared OUTPUT sink (S1/S2 back-ends route final bytes here) ──────────────────────────────────────
+ * Default sink is STDOUT via putchar (the file-driven tools redirect stdout to the .o/.exe).  When a caller
+ * (emit.iii's in-process sovereign path) sets a buffer, bytes accumulate there instead -- so sovcoff/sovld
+ * can emit a COFF/PE into memory the compiler then writes with its own file helper, NO stdout, NO gcc.
+ * The stdout path is byte-identical to before (sov_putbyte with SOUT_BUF==0 == the old putchar), so the
+ * fixpoint .text==gas + self-host gates stay green. */
+var SOUT_BUF : u64 = 0u64
+var SOUT_CAP : u64 = 0u64
+var SOUT_LEN : u64 = 0u64
+fn sov_out_to_buffer(buf: u64, cap: u64) -> i32 @export { SOUT_BUF = buf  SOUT_CAP = cap  SOUT_LEN = 0u64  return 0i32 }
+fn sov_out_to_stdout() -> i32 @export { SOUT_BUF = 0u64  SOUT_CAP = 0u64  SOUT_LEN = 0u64  return 0i32 }
+fn sov_out_len() -> u64 @export { return SOUT_LEN }
+fn sov_out_is_buffer() -> u32 @export { if SOUT_BUF != 0u64 { return 1u32 }  return 0u32 }   /* sovcoff/sovld skip _setmode when buffering */
+fn sov_putbyte(c: u32) -> i32 @export {
+    if SOUT_BUF != 0u64 {
+        if SOUT_LEN < SOUT_CAP { let p : *u8 = (SOUT_BUF + SOUT_LEN) as *u8  p[0u64] = (c & 0xFFu32) as u8  SOUT_LEN = SOUT_LEN + 1u64 }
+        return 0i32
+    }
+    putchar((c & 0xFFu32) as i32)
+    return 0i32
+}
 
 /* relocation table: each rip-relative reference to a symbol records one REL32 reloc.
  * section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 (match cg_r3's .section names). */

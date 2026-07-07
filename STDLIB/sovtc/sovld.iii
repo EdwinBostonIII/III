@@ -32,8 +32,9 @@ extern @abi(c-msvc-x64) fn sp_export_n() -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_off(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namelen(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namebyte(i: u32, j: u32) -> u32 from "sovparse.iii"
-extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sov_putbyte(c: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_out_is_buffer() -> u32 from "sovas.iii"
 
 var LDPOS : u32 = 0u32
 var TEXTBUF : [u8; 8388608]   /* the whole .text, loaded for reloc patching -- seed modules reach 150-200KB code (was 16384) */
@@ -50,7 +51,7 @@ var DLL_IATRVA : [u32; 8]
 var DLL_NAMERVA: [u32; 8]
 var DLL_FILL   : [u32; 8]   /* running per-DLL import rank while assigning IAT-entry RVAs */
 
-fn p8(b: u32) { putchar((b & 0xFFu32) as i32)  LDPOS = LDPOS + 1u32 }
+fn p8(b: u32) { sov_putbyte(b)  LDPOS = LDPOS + 1u32 }
 fn p16(v: u32) { p8(v)  p8(v >> 8u32) }
 fn p32(v: u32) { p8(v)  p8(v >> 8u32)  p8(v >> 16u32)  p8(v >> 24u32) }
 fn p64(lo: u32, hi: u32) { p32(lo)  p32(hi) }
@@ -173,7 +174,7 @@ fn emit_dll_name(d: u32) {
 }
 
 fn sovld_emit() -> i32 @export {
-    _setmode(1i32, 0x8000i32)
+    if sov_out_is_buffer() == 0u32 { _setmode(1i32, 0x8000i32) }   /* only touch stdout when actually writing to it */
     LDPOS = 0u32
     let textlen : u32 = sov_len()
     let mut i : u32 = 0u32

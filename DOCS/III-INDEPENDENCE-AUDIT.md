@@ -296,20 +296,36 @@ used it, because stage 4's golden mhash must REPRODUCE that exact binary (the lo
 closure).  *Independence you don't continuously reproduce is independence you don't have* —
 run this gate after any seed/BOOT/stdlib-wide change.
 
-**P1 — Make the sovereign toolchain the DEFAULT emit path, not opt-in (days).**
-Add an `--emit=sovereign` mode (and flip the default once green) so `iii_emit_assemble`/
-`iii_emit_link` route through in-process `sovas`/`sovld` instead of `system("gcc")`. The
-codegen already produces the `.o.s` both consume; this is a routing change in `emit.iii`
-plus linking `sovas`/`sovld` as libraries into `iiis-2`. Gate: rebuild `build_stdlib` +
-`run_corpus` with gcc **removed from PATH**; every program must still compile, link, and
-hit its expected exit.
+**P1 — Make the sovereign toolchain the DEFAULT emit path, not opt-in. 🟡 IN PROGRESS (2026-07-06).**
+The enabling primitive is landed and proven: `sovas`'s output layer now has a buffer sink
+(`sov_out_to_buffer`) so `sovcoff`/`sovld` emit a COFF/PE **in-process to memory** — no stdout,
+no gcc. `STDLIB/sovtc/inproc_emit_gate.sh` proves in-process COFF == the stdout tool == gcc-as
+`.text` on prog_sat/sovas/sovparse; seal-safe (fixpoint 17/17 + sovtc 35/35 stay green because
+the stdout path is byte-identical). **Remaining:** fold `iii_emit_assemble_sovereign`/
+`iii_emit_link_sovereign` into `emit.iii` behind `--emit=sovereign|witness` (default sovereign),
+link `sovtc` into `iiis-2`, and **re-seal** the iiis-1/2/3 goldens — then the gate is
+`build_stdlib` + `run_corpus` with gcc **removed from PATH**. (The re-seal is the one hard-to-
+reverse step; it changes the sealed compiler identity and must reproduce green from clean.)
 
-**P2 — Close sovas Tier-2 (SIMD/SHA-NI/AES-NI/AVX-512) so the gcc-as witness disappears
-(days–weeks).** Extend `sovas.iii`'s encoder to the VEX/EVEX + SHA/AES mnemonics the crypto
-modules emit; port `cpuid_helper.s`/`bench_helpers.s` to sovas-encodable form or emit them
-from `.iii`. Gate: `sovbuild.sh` on the full crypto closure reports **witness=0**, and each
-sovereign `.text` stays byte-identical to gas (extend `run_fixpoint.sh`'s cmp to the SIMD
-modules).
+**P2 — Close sovas Tier-2 (VEX/EVEX SIMD). ✅ DONE 2026-07-06.**
+`sovas.iii` now encodes the **complete VEX + EVEX set the 7 crypto SIMD modules emit**
+(`numera/{bigint,blake2s,chacha20,keccak,poly1305,sha256,sha512}`) — measured from the tree,
+byte-identical to gas: 22 VEX/EVEX mnemonics (vpxor/vpaddd/vpshufd/vmovdqu/vzeroupper and the
+EVEX tail vpxord/vpternlogq/vmovdqu64/vpbroadcastq/…), plus the 32-bit integer forms they hit
+(`movl $imm`, `shll/shrl/sarl`, `decl/incl`, `addl $imm,mem`), gas `.Lxxx:` local labels (the
+`metal{}` AVX loops), `.globl`, bare `ret`, and `cpuid`/`xgetbv`.  `run_fixpoint.sh` extended:
+**all 7 SIMD modules sov-assemble `.text == gas` (17/17)**; `cpuid_helper.s` now sov-assembles
+(last gcc-as call gone); `witness_zero_gate.sh` shows **witness=0** on sha256/sha3/keccak
+closures.  Unit teeth: `test_vex.iii` (36 forms) + `test_vexparse.iii` (10). `bench_helpers.s`
+was not needed (not in the crypto closure).
+
+**P2b — `sovld` routes any Win32 DLL (was kernel32/msvcrt-only). ✅ DONE 2026-07-06.**
+`sovld.iii` DLL routing is now a **5-DLL id table** (kernel32/msvcrt/user32/gdi32/ws2_32) built
+from the tree's MEASURED import surface, and the `.idata` builder is **N-DLL table-driven**
+(NDLL=5, `[u32;8]` arrays).  A real ws2_32 network program (`corpus/1078_net_cap_deny.iii`)
+builds through `sovbuild.sh` **sovereign=4 witness=0** and **runs to exit 99** — the loader
+binds ws2_32 + kernel32 from a sovld-emitted import table (objdump-confirmed).  Gates:
+`test_dllroute.iii`, `sov_drivel9.iii` in `run_sovtc.sh` (35/35).
 
 **P3 — Bootstrap the sovereign tools without gcc (days).** Replace the one-time `gcc … -o
 sovas_main.exe` with a self-hosted mint: sov-assemble + sov-link the tool sources using the
@@ -365,10 +381,20 @@ are accounted for by class + scan + sampling, and stated as such.
 1. **No hidden external-process anywhere but `emit.iii`.** `system|popen|exec|CreateProcess`
    across all `.iii` matches only the *word* "system" in comments/UI. Nothing in the stdlib
    or compiler secretly invokes gcc/python/a shell.
-2. **The C-accessor "dependency" is phantom.** 766+ `from "*.c"` tags reference
+2. **The C-accessor "dependency" is phantom AT THE LINK LEVEL — but the tag string is NOT
+   codegen-inert (corrected 2026-07-06).** 779 `from "*.c"` tags reference
    `ast_accessors.c`/`sema_accessors.c`/`lex_runtime.c`/`emit_accessors.c` etc. — **none of
-   which exist on disk**; the symbols are `@export`-defined in `.iii` (`lex_rt.iii`, `ast.iii`)
-   and resolved by name. The active compiler+stdlib need **no C accessor layer**.
+   which exist on disk**; the symbols are `@export`-defined in `.iii` (`lex_rt.iii`, `ast.iii`,
+   `sema.iii`, `cg_r3_xii.iii`) and **resolved by name at link** (linking works regardless of
+   the string, so there is no real C dependency).  HOWEVER, an earlier claim here — that the
+   compiler "does not open" the string and it is purely advisory — is **wrong**: the compiler
+   **embeds each extern's `from "X"` string as a `.rodata` string literal** (proven: rewriting
+   `sema.iii`'s `from "ast.c"`→`from "ast.iii"`, CRLF-preserved, changed `sema.o.s`'s `.rodata`
+   from `.ascii "ast.c\0"` to `.ascii "ast.iii\0"`, +8 bytes).  These strings feed the emit
+   witness manifest, which therefore **names non-existent `.c` files** — the real source-honesty
+   defect.  Correcting the 779 tags to their true `.iii` providers is mechanical BUT changes
+   every affected compiler module's codegen, so it is **coupled to a compiler re-seal** (bundle
+   with P1's re-seal), not the independent one-line rewrite previously assumed.
 3. **Only external runtime surface = standard Windows** (kernel32/user32/gdi32) + msvcrt.
    No third-party libraries.
 4. **Void of Claude is TOTAL and structural.** No AI/LLM/network-inference call site exists

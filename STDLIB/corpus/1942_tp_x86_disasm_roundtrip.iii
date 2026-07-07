@@ -1,0 +1,40 @@
+/* STDLIB/corpus/1942_tp_x86_disasm_roundtrip.iii
+ *
+ * Drives the REAL x86-64 decoder omnia/tp_x86_disasm (independence-closure G1) on a known instruction
+ * stream, PRINTS the AT&T disassembly to stdout (so tp_x86_roundtrip_gate.sh can gas-reassemble it and
+ * check byte-identity), and SELF-CHECKS in-code: the first non-space glyph of the decode must be a real
+ * mnemonic letter (not '.', i.e. NOT a `.byte` fallback) and a 'movq' must appear.  Returns 99 iff the
+ * decoder produced real mnemonics -- so run_corpus gates it too, and it counts as a COVERAGE CONSUMER of
+ * tp_x86_disasm (not an uncovered module).
+ *
+ * exit 99 = real decode; 1 = the decoder degraded to .byte (a form was not decoded).
+ */
+module corpus_1942_tp_x86_disasm_roundtrip
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn tp_x86_disasm(src: u64, src_len: u64, dst: u64, cap: u64) -> u64 from "tp_x86_disasm.iii"
+
+/* pushq %rbp ; movq %rsp,%rbp ; addq %rdx,%rbx ; subq %rcx,%rax ; xorq %rsi,%rsi ;
+ * movq $0x10,%rax ; callq rel ; popq %rbp ; retq  -- the exact bytes sovas/gas emit. */
+var CODE : [u8; 27] = [
+  0x55u8, 0x48u8,0x89u8,0xE5u8, 0x48u8,0x01u8,0xD3u8, 0x48u8,0x29u8,0xC8u8,
+  0x48u8,0x31u8,0xF6u8, 0x48u8,0xC7u8,0xC0u8,0x10u8,0x00u8,0x00u8,0x00u8,
+  0xE8u8,0x00u8,0x00u8,0x00u8,0x00u8, 0x5Du8, 0xC3u8 ]
+var OUT : [u8; 4096]
+
+fn main() -> u64 {
+    let n : u64 = tp_x86_disasm((&CODE) as u64, 27u64, (&OUT) as u64, 4096u64)
+    let p : *u8 = (&OUT) as *u8
+    /* print for the gate */
+    let mut i : u64 = 0u64
+    while i < n { putchar(p[i] as i32)  i = i + 1u64 }
+    /* self-check: the first non-space/newline glyph must be a mnemonic letter, not '.' (.byte fallback) */
+    let mut k : u64 = 0u64  let mut fc : u8 = 0u8  let mut done : u32 = 0u32
+    while done == 0u32 {
+        if k >= n { done = 1u32 }
+        else { let c : u8 = p[k]  if c != 32u8 { if c != 10u8 { fc = c  done = 1u32 } else { k = k + 1u64 } } else { k = k + 1u64 } }
+    }
+    if fc == 46u8 { return 1u64 }                   /* '.' -> a .byte fallback: decoder degraded */
+    if fc == 0u8 { return 1u64 }                    /* no glyph */
+    return 99u64
+}

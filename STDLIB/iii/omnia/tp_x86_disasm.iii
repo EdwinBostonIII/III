@@ -1,74 +1,150 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_x86_disasm.iii
  *
- * Transform pattern: FORM_X86_BYTES → FORM_X86_ASM
- * FROZEN SPEC §7B.6 slot 28; ADR-RES-006.
- *
+ * Transform pattern: FORM_X86_BYTES -> FORM_X86_ASM.  FROZEN SPEC 7B.6 slot 28; ADR-RES-006.
  * Hexad: kind_compose. Ring: R0. K: 0.95.
  *
- * Baseline disassembler: emits `db 0xNN, 0xNN, ...` lines (8 bytes per line).
- * A full x86-64 instruction-decoder is multi-thousand LOC; this baseline
- * emits valid GAS-compatible byte-directive output that round-trips
- * through tp_x86_assemble.
+ * REAL x86-64 length-decoder + AT&T mnemonic printer (independence-closure G1).  Was a `.byte` dumper;
+ * now decodes the integer forms the tree's codegen emits -- the INVERSE of sovas's encoder:
+ *   REX prefix (W/R/X/B) | push/pop r64 | retq | nop | syscall | callq/jmp rel32 | movabs imm64
+ *   | reg-reg ModRM (mod=3): movq/addq/subq/cmpq/andq/orq/xorq/testq %src,%dst | leaq/movq mem forms
+ * Each instruction's TOTAL length is computed (REX + opcode + ModRM + SIB + disp + imm) so the decoder
+ * advances exactly one instruction at a time.  A form outside the set degrades to a single `.byte 0xNN`
+ * (graceful -- it never MIS-decodes; the length stays correct at 1 byte).  Register set 0..15 =
+ * rax rcx rdx rbx rsp rbp rsi rdi r8..r15.  Round-trip gated by tp_x86_roundtrip_gate.sh.
  */
-
 module omnia_tp_x86_disasm
 
-var TP_DISASM_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
-/* "    .byte 0x" 13 bytes */
-var TP_DISASM_PREFIX : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 121u8, 116u8, 101u8, 32u8, 48u8, 120u8, 0u8]
-/* ", 0x" 4 bytes */
-var TP_DISASM_SEP : [u8; 4] = [44u8, 32u8, 48u8, 120u8]
+var HEX : [u8; 16] = [48u8,49u8,50u8,51u8,52u8,53u8,54u8,55u8,56u8,57u8,97u8,98u8,99u8,100u8,101u8,102u8]
+/* register names, 3 chars each padded (r8..r15 use 4; store len separately) */
+var REGN : [u8; 64] = [
+  114u8,97u8,120u8,0u8,  114u8,99u8,120u8,0u8,  114u8,100u8,120u8,0u8,  114u8,98u8,120u8,0u8,
+  114u8,115u8,112u8,0u8, 114u8,98u8,112u8,0u8,  114u8,115u8,105u8,0u8,  114u8,100u8,105u8,0u8,
+  114u8,56u8,0u8,0u8,    114u8,57u8,0u8,0u8,     114u8,49u8,48u8,0u8,    114u8,49u8,49u8,0u8,
+  114u8,49u8,50u8,0u8,   114u8,49u8,51u8,0u8,    114u8,49u8,52u8,0u8,    114u8,49u8,53u8,0u8 ]
 
-fn tp_disasm_emit(dst: u64, off: u64, b: u8) -> i32 {
-    let p : *u8 = (dst + off) as *u8
-    p[0u64] = b
-    return 0i32
+var DB : u64 = 0u64    /* dst buffer base */
+var DO : u64 = 0u64    /* dst offset */
+var DC : u64 = 0u64    /* dst cap */
+
+fn emitb(b: u32) { if DO < DC { let p : *u8 = (DB + DO) as *u8  p[0u64] = (b & 0xFFu32) as u8  DO = DO + 1u64 } }
+fn emit_reg(r: u32) {   /* "%rXX" */
+    emitb(37u32)                                  /* % */
+    let base : u32 = (r & 15u32) * 4u32
+    let mut j : u32 = 0u32
+    while j < 4u32 { let c : u32 = REGN[(base + j) as u64] as u32  if c != 0u32 { emitb(c) }  j = j + 1u32 }
 }
+fn emit_hex_u32(v: u32) {   /* "0x" + minimal hex */
+    emitb(48u32) emitb(120u32)
+    let mut started : u32 = 0u32
+    let mut sh : i32 = 28i32
+    while sh >= 0i32 {
+        let nyb : u32 = (v >> (sh as u32)) & 15u32
+        if nyb != 0u32 { started = 1u32 }
+        if started == 1u32 { emitb(HEX[nyb as u64] as u32) }
+        sh = sh - 4i32
+    }
+    if started == 0u32 { emitb(48u32) }           /* value 0 -> "0x0" */
+}
+fn emit_str3(a: u32, b: u32, c: u32) { emitb(a) if b != 0u32 { emitb(b) } if c != 0u32 { emitb(c) } }
+fn emit_byte_fallback(b: u32) {   /* "    .byte 0xNN\n" */
+    emitb(32u32) emitb(32u32) emitb(32u32) emitb(32u32)
+    emitb(46u32) emitb(98u32) emitb(121u32) emitb(116u32) emitb(101u32) emitb(32u32)
+    emitb(48u32) emitb(120u32) emitb(HEX[((b >> 4u32) & 15u32) as u64] as u32) emitb(HEX[(b & 15u32) as u64] as u32)
+    emitb(10u32)
+}
+fn indent() { emitb(32u32) emitb(32u32) emitb(32u32) emitb(32u32) }
 
-fn tp_disasm_emit_byte_hex(dst: u64, off: u64, b: u8) -> u32 {
-    let hi : u8 = (b >> 4u8) & 0xFu8
-    let lo : u8 = b & 0xFu8
-    tp_disasm_emit(dst, off, TP_DISASM_HEX[hi as u32])
-    tp_disasm_emit(dst, off + 1u64, TP_DISASM_HEX[lo as u32])
-    return 2u32
+/* read helpers over the source */
+fn rd8(src: u64, o: u64) -> u32 { let p : *u8 = (src + o) as *u8  return p[0u64] as u32 }
+fn rd32(src: u64, o: u64) -> u32 { return rd8(src,o) | (rd8(src,o+1u64) << 8u32) | (rd8(src,o+2u64) << 16u32) | (rd8(src,o+3u64) << 24u32) }
+
+/* is op a known reg-reg ModRM ALU/mov opcode? (peek, no emit) */
+fn is_alu_op(op: u32) -> u32 {
+    if op == 0x89u32 { return 1u32 }  if op == 0x8Bu32 { return 1u32 }  if op == 0x01u32 { return 1u32 }
+    if op == 0x29u32 { return 1u32 }  if op == 0x39u32 { return 1u32 }  if op == 0x21u32 { return 1u32 }
+    if op == 0x09u32 { return 1u32 }  if op == 0x31u32 { return 1u32 }  if op == 0x85u32 { return 1u32 }
+    return 0u32
+}
+/* emit the ALU/mov mnemonic name (assumes is_alu_op(op)==1) */
+fn emit_alu_name(op: u32) {
+    if op == 0x89u32 { emit_str3(109u32,111u32,118u32) emitb(113u32) return }   /* movq */
+    if op == 0x8Bu32 { emit_str3(109u32,111u32,118u32) emitb(113u32) return }   /* movq */
+    if op == 0x01u32 { emit_str3(97u32,100u32,100u32) emitb(113u32) return }    /* addq */
+    if op == 0x29u32 { emit_str3(115u32,117u32,98u32) emitb(113u32) return }    /* subq */
+    if op == 0x39u32 { emit_str3(99u32,109u32,112u32) emitb(113u32) return }    /* cmpq */
+    if op == 0x21u32 { emit_str3(97u32,110u32,100u32) emitb(113u32) return }    /* andq */
+    if op == 0x09u32 { emit_str3(111u32,114u32,0u32) emitb(113u32) return }     /* orq */
+    if op == 0x31u32 { emit_str3(120u32,111u32,114u32) emitb(113u32) return }   /* xorq */
+    emit_str3(116u32,101u32,115u32) emit_str3(116u32,113u32,0u32)               /* testq (0x85) */
+}
+fn emit_hex8(v: u32) { let mut sh : i32 = 28i32  while sh >= 0i32 { emitb(HEX[((v >> (sh as u32)) & 15u32) as u64] as u32)  sh = sh - 4i32 } }
+
+/* decode ONE instruction at src+off; emit its AT&T text; return TOTAL byte length consumed (>=1). */
+fn decode_one(src: u64, off: u64, len: u64) -> u64 {
+    let mut o : u64 = off
+    let mut rexW : u32 = 0u32  let mut rexR : u32 = 0u32  let mut rexB : u32 = 0u32
+    let mut have_rex : u32 = 0u32
+    let b0 : u32 = rd8(src, o)
+    if b0 >= 0x40u32 { if b0 <= 0x4Fu32 {          /* REX prefix */
+        have_rex = 1u32
+        rexW = (b0 >> 3u32) & 1u32  rexR = (b0 >> 2u32) & 1u32  rexB = b0 & 1u32
+        o = o + 1u64
+    } }
+    if o >= len { emit_byte_fallback(b0) return o - off + 1u64 }
+    let op : u32 = rd8(src, o)
+
+    /* push/pop r64 (no ModRM) */
+    if op >= 0x50u32 { if op <= 0x57u32 { indent() emit_str3(112u32,117u32,115u32) emitb(104u32) emitb(113u32) emitb(32u32) emit_reg((op - 0x50u32) | (rexB << 3u32)) emitb(10u32) return o - off + 1u64 } }
+    if op >= 0x58u32 { if op <= 0x5Fu32 { indent() emit_str3(112u32,111u32,112u32) emitb(113u32) emitb(32u32) emit_reg((op - 0x58u32) | (rexB << 3u32)) emitb(10u32) return o - off + 1u64 } }
+    if op == 0xC3u32 { indent() emit_str3(114u32,101u32,116u32) emitb(113u32) emitb(10u32) return o - off + 1u64 }   /* retq */
+    if op == 0x90u32 { if have_rex == 0u32 { indent() emit_str3(110u32,111u32,112u32) emitb(10u32) return 1u64 } }   /* nop */
+    if op == 0x0Fu32 { if rd8(src, o+1u64) == 0x05u32 { indent() emit_str3(115u32,121u32,115u32) emit_str3(99u32,97u32,108u32) emit_str3(108u32,0u32,0u32) emitb(10u32) return o - off + 2u64 } }
+    /* movabs $imm64,%reg : REX.W B8+r io  ($0x + full 16 hex digits, hi32 then lo32) */
+    if op >= 0xB8u32 { if op <= 0xBFu32 { if rexW == 1u32 {
+        indent() emit_str3(109u32,111u32,118u32) emit_str3(97u32,98u32,115u32) emitb(32u32) emitb(36u32) emitb(48u32) emitb(120u32)
+        emit_hex8(rd32(src, o+1u64+4u64)) emit_hex8(rd32(src, o+1u64))
+        emitb(44u32) emitb(32u32) emit_reg((op - 0xB8u32) | (rexB << 3u32)) emitb(10u32)
+        return o - off + 9u64
+    } } }
+    /* callq / jmp rel32 */
+    if op == 0xE8u32 { indent() emit_str3(99u32,97u32,108u32) emit_str3(108u32,113u32,0u32) emitb(32u32) emit_hex_u32(rd32(src, o+1u64)) emitb(10u32) return o - off + 5u64 }
+    if op == 0xE9u32 { indent() emit_str3(106u32,109u32,112u32) emitb(32u32) emit_hex_u32(rd32(src, o+1u64)) emitb(10u32) return o - off + 5u64 }
+    /* movq $imm32,%rm : REX.W C7 /0 id (reg-direct only here) */
+    if op == 0xC7u32 { if rexW == 1u32 {
+        let modrm : u32 = rd8(src, o+1u64)
+        if (modrm >> 6u32) == 3u32 {
+            indent() emit_str3(109u32,111u32,118u32) emitb(113u32) emitb(32u32) emitb(36u32) emit_hex_u32(rd32(src, o+2u64))
+            emitb(44u32) emitb(32u32) emit_reg((modrm & 7u32) | (rexB << 3u32)) emitb(10u32)
+            return o - off + 6u64
+        }
+    } }
+    /* reg-reg ModRM ALU/mov (mod=3): op /r, REX.W */
+    if is_alu_op(op) == 1u32 {
+        let modrm : u32 = rd8(src, o+1u64)
+        if (modrm >> 6u32) == 3u32 {
+            let reg : u32 = ((modrm >> 3u32) & 7u32) | (rexR << 3u32)
+            let rm  : u32 = (modrm & 7u32) | (rexB << 3u32)
+            indent() emit_alu_name(op) emitb(32u32)
+            /* AT&T: op %reg,%rm (src=reg,dst=rm for 0x89/01/29/...; 0x8B load is rm->reg) */
+            if op == 0x8Bu32 { emit_reg(rm) emitb(44u32) emit_reg(reg) }
+            else { emit_reg(reg) emitb(44u32) emit_reg(rm) }
+            emitb(10u32)
+            return o - off + 2u64
+        }
+        /* memory ModRM form: decoded length unknown here -> graceful .byte on the opcode */
+    }
+    /* unknown / unhandled form: one byte, graceful */
+    emit_byte_fallback(op)
+    return o - off + 1u64
 }
 
 fn tp_x86_disasm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
-    let mut src_off : u64 = 0u64
-    let mut dst_off : u64 = 0u64
-    while src_off < src_len {
-        if dst_off + 96u64 > dst_cap { return 0u64 }
-        /* Emit prefix "    .byte 0x" */
-        let mut p : u32 = 0u32
-        while p < 12u32 {
-            tp_disasm_emit(dst_buf, dst_off, TP_DISASM_PREFIX[p])
-            dst_off = dst_off + 1u64
-            p = p + 1u32
-        }
-        /* First byte */
-        let bp : *u8 = (src + src_off) as *u8
-        dst_off = dst_off + (tp_disasm_emit_byte_hex(dst_buf, dst_off, bp[0u64]) as u64)
-        src_off = src_off + 1u64
-        /* Up to 7 more bytes per line */
-        let mut col : u32 = 1u32
-        while col < 8u32 {
-            if src_off >= src_len { col = 8u32 }
-            if col < 8u32 {
-                /* Separator ", 0x" */
-                let mut s : u32 = 0u32
-                while s < 4u32 {
-                    tp_disasm_emit(dst_buf, dst_off, TP_DISASM_SEP[s])
-                    dst_off = dst_off + 1u64
-                    s = s + 1u32
-                }
-                let bp2 : *u8 = (src + src_off) as *u8
-                dst_off = dst_off + (tp_disasm_emit_byte_hex(dst_buf, dst_off, bp2[0u64]) as u64)
-                src_off = src_off + 1u64
-                col = col + 1u32
-            }
-        }
-        tp_disasm_emit(dst_buf, dst_off, 10u8)
-        dst_off = dst_off + 1u64
+    DB = dst_buf  DO = 0u64  DC = dst_cap
+    let mut off : u64 = 0u64
+    while off < src_len {
+        if DO + 96u64 > DC { return 0u64 }
+        let n : u64 = decode_one(src, off, src_len)
+        if n == 0u64 { off = off + 1u64 } else { off = off + n }
     }
-    return dst_off
+    return DO
 }

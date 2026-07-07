@@ -1,0 +1,7 @@
+# provenance_pin.txt -- the phantom `from "*.c"` tag census (provenance_gate.sh), down-only.
+# 742 phantom tags today (6 nonexistent .c files: ast_accessors/sema_accessors/lex_runtime/
+# emit_accessors/cg_r3_xii/sema_xii_adapter).  Rewriting them to their real .iii providers is
+# codegen-neutral but golden-moving (the tag is emitted as an .ascii string), so it rides the
+# sovereign-default re-seal.  Lower this pin as the rewrite lands; target 0.  PROVENANCE_PIN_FILE
+# overrides this path (teeth-testing).
+PHANTOM_C_TAGS_MAX=742

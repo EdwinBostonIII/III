@@ -1,4 +1,4 @@
-/* STDLIB/corpus/1942_tp_x86_disasm_roundtrip.iii
+/* STDLIB/corpus/2488_tp_x86_disasm_roundtrip.iii
  *
  * Drives the REAL x86-64 decoder omnia/tp_x86_disasm (independence-closure G1) on a known instruction
  * stream, PRINTS the AT&T disassembly to stdout (so tp_x86_roundtrip_gate.sh can gas-reassemble it and
@@ -9,7 +9,7 @@
  *
  * exit 99 = real decode; 1 = the decoder degraded to .byte (a form was not decoded).
  */
-module corpus_1942_tp_x86_disasm_roundtrip
+module corpus_2488_tp_x86_disasm_roundtrip
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn tp_x86_disasm(src: u64, src_len: u64, dst: u64, cap: u64) -> u64 from "tp_x86_disasm.iii"

@@ -22,7 +22,7 @@ say(){ printf '[tp-disasm] %s\n' "$*"; }
 command -v gcc >/dev/null 2>&1 || { say "SKIP: gcc absent (witness assembler needed for round-trip)"; exit 0; }
 
 "$IIIS" "$ROOT/STDLIB/iii/omnia/tp_x86_disasm.iii"              --compile-only --out "$W/d.o"   >/dev/null 2>&1 || { say "FAIL: decoder compile"; exit 1; }
-"$IIIS" "$ROOT/STDLIB/corpus/1942_tp_x86_disasm_roundtrip.iii" --compile-only --out "$W/drv.o" >/dev/null 2>&1 || { say "FAIL: driver compile"; exit 1; }
+"$IIIS" "$ROOT/STDLIB/corpus/2488_tp_x86_disasm_roundtrip.iii" --compile-only --out "$W/drv.o" >/dev/null 2>&1 || { say "FAIL: driver compile"; exit 1; }
 gcc "$W/drv.o" "$W/d.o" -lmsvcrt -o "$W/drv.exe" 2>/dev/null || { say "FAIL: driver link"; exit 1; }
 "$W/drv.exe" > "$W/dis.s" 2>/dev/null; drc=$?
 [ "$drc" -eq 99 ] || { say "FAIL: driver self-check exit=$drc (expected 99 -- decoder degraded to .byte)"; sed 's/^/    /' "$W/dis.s"; exit 1; }

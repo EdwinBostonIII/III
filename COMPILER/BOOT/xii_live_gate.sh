@@ -2,7 +2,7 @@
 # xii_live_gate.sh -- proves XII @lattice is LIVE (independence Phase E; discharges census breach #1).
 #
 # The cg_r3.iii XII gate (@lattice -> r3_pe_canonicalise/compute_circ/pe_lattice_emit) was a DEAD branch:
-# no source used @lattice, so it never fired.  This gate compiles STDLIB/corpus/1936_xii_lattice_live.iii
+# no source used @lattice, so it never fired.  This gate compiles STDLIB/corpus/2487_xii_lattice_live.iii
 # and asserts the XII codegen pipeline actually ran:
 #   1. the .o.s carries `.section .iii_xii_calls` with a non-empty 24-byte descriptor  (only pe_lattice_emit emits it)
 #   2. the @lattice fn body is the multi-byte-NOP LDIL placeholder (0f 1f 84 ...), NOT the legacy `addq $1` codegen
@@ -15,7 +15,7 @@ set -u
 export LC_ALL=C
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"
-PROG="$ROOT/STDLIB/corpus/1936_xii_lattice_live.iii"
+PROG="$ROOT/STDLIB/corpus/2487_xii_lattice_live.iii"
 W="$(mktemp -d "${TMPDIR:-/tmp}/xiilive.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 say(){ printf '[xii-live] %s\n' "$*"; }

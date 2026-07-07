@@ -1746,6 +1746,9 @@ declare -A EXPECTED=(
     [2472_spec_wired_synth]=99
     [2475_nl_parse_roles]=99
     [2478_route_sweep]=99
+    [2487_xii_lattice_live]=99          # XII @lattice LIVE (independence E) -- fires the cg_r3 XII codegen path
+    [2488_tp_x86_disasm_roundtrip]=99   # real x86-64 decoder (independence G1) -- real mnemonics, not .byte
+    [2489_tp_iii_to_c99_roundtrip]=99   # real III->C99 transpiler (independence G2) -- native result 49
 )
 
 PASS=0

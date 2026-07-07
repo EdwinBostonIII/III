@@ -29,6 +29,9 @@
 #   stage 9  run_fixpoint.sh (gcc OFF PATH) the sovereign toolchain self-mints from the sealed gen-0
 #                                           SEED with NO gcc/ld anywhere: gen2==gen1, linker
 #                                           reproduces itself bit-for-bit (Independence D1)
+#   stage 10 mlkem_c2sp_kat_gate.sh         ML-KEM-768 reproduces the OFFICIAL C2SP/CCTV FIPS-203
+#                                           accumulated digest over 10000 keygen+encaps+decaps iters
+#                                           (byte-FIPS-203-compatible; Independence F)
 #
 # SEAL AUTHORSHIP (basal law, mhash_lib.sh): every .mhash above is AUTHORED by
 # III's own FIPS-KAT'd SHA-256 (aether/sovhash over numera/cad); GNU sha256sum
@@ -46,8 +49,8 @@
 # P1 (sovas/sovld as default emit) and P2 (close the gcc-as witness).
 #
 # Usage:  bash bootstrap_from_clean.sh [-h|--help]
-# Exit:   0 = GATE GREEN (all nine stages)
-#         N = 1..9, the first red stage
+# Exit:   0 = GATE GREEN (all ten stages)
+#         N = 1..10, the first red stage
 #         99 = environment/prerequisite error
 set -uo pipefail
 umask 022
@@ -153,6 +156,9 @@ stage9_fixpoint_gccoff() {
         bash "'"$III_ROOT"'/STDLIB/sovtc/run_fixpoint.sh"
     '
 }
+stage10_mlkem_c2sp() {
+    bash "$III_ROOT/STDLIB/scripts/mlkem_c2sp_kat_gate.sh"
+}
 
 run_stage 1 "seed rebuild (build_iiis0.sh)"                 "$LOGDIR/1_iiis0.log"    stage1_seed
 run_stage 2 "stdlib from scratch (build_stdlib.sh)"         "$LOGDIR/2_stdlib.log"   stage2_stdlib
@@ -166,6 +172,7 @@ run_stage 6 "iiis-3 fixpoint + corpus (build_iiis3.sh)"     "$LOGDIR/6_iiis3.log
 run_stage 7 "basal law census (basal_census_gate.sh)"       "$LOGDIR/7_census.log"   stage7_census
 run_stage 8 "crypto-closure witness-zero (witness_zero_gate.sh)" "$LOGDIR/8_witness0.log" stage8_witness_zero
 run_stage 9 "sovereign toolchain self-mint, gcc OFF PATH (run_fixpoint.sh)" "$LOGDIR/9_fixpoint_gccoff.log" stage9_fixpoint_gccoff
+run_stage 10 "ML-KEM-768 official C2SP FIPS-203 KAT (mlkem_c2sp_kat_gate.sh)" "$LOGDIR/10_mlkem_c2sp.log" stage10_mlkem_c2sp
 
-log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green, crypto closure witness-zero, sovereign toolchain self-mints gcc-free (logs: $LOGDIR)"
+log "GATE GREEN: full toolchain regenerated from clean, sovereignly sealed, basal census green, crypto closure witness-zero, sovereign toolchain self-mints gcc-free, ML-KEM byte-FIPS-203-conformant (logs: $LOGDIR)"
 exit 0

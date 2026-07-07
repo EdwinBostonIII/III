@@ -1,4 +1,4 @@
-/* STDLIB/corpus/1944_mlkem_c2sp_kat.iii
+/* STDLIB/corpus/2490_mlkem_c2sp_kat.iii
  *
  * ML-KEM-768 (FIPS 203) gated on the OFFICIAL C2SP/CCTV accumulated known-answer test -- the de-facto
  * FIPS-203 conformance vector (the same one Go crypto, BoringSSL, et al. gate on).  Independence-closure F.
@@ -15,7 +15,7 @@
  *        1 = digest MISMATCH (the module diverges from FIPS 203);  2 = a keygen/encaps/decaps error.
  * TEETH: this is a real KAT -- perturbing any output byte of any op changes the accumulator digest.
  */
-module corpus_1944_mlkem_c2sp_kat
+module corpus_2490_mlkem_c2sp_kat
 
 extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
 extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"

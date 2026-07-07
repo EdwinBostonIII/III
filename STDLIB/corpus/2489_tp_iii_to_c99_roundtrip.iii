@@ -1,4 +1,4 @@
-/* STDLIB/corpus/1943_tp_iii_to_c99_roundtrip.iii
+/* STDLIB/corpus/2489_tp_iii_to_c99_roundtrip.iii
  *
  * Drives the REAL III->C99 transpiler omnia/tp_iii_to_c99 (independence-closure G2).  Embeds the source of
  * a small III function, transpiles it, PRINTS the C99 to stdout (so tp_iii_to_c99_gate.sh can gcc-compile+
@@ -10,7 +10,7 @@
  * The reference fn:  iiimul(a,b) = a*b + 7 ;  iiimul(6,7) = 49.
  * exit 99 = real transpile + native result correct; 1 = transpile degraded (byte-wrap); 2 = native wrong.
  */
-module corpus_1943_tp_iii_to_c99_roundtrip
+module corpus_2489_tp_iii_to_c99_roundtrip
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn tp_iii_to_c99(src: u64, n: u64, dst: u64, cap: u64) -> u64 from "tp_iii_to_c99.iii"

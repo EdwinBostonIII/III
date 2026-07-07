@@ -1,4 +1,4 @@
-/* STDLIB/corpus/1936_xii_lattice_live.iii
+/* STDLIB/corpus/2487_xii_lattice_live.iii
  *
  * XII @lattice -- LIVE (independence-closure Phase E; discharges basal-census breach #1).
  *
@@ -18,7 +18,7 @@
  *
  * exit 99 = ok.
  */
-module corpus_1936_xii_lattice_live
+module corpus_2487_xii_lattice_live
 
 /* @lattice: dispatch this fn's body to the XII lattice codegen pipeline (NOP placeholder +
  * call-site descriptor).  The annotation goes after the return type, before the body. */

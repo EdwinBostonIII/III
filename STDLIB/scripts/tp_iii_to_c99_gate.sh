@@ -21,7 +21,7 @@ say(){ printf '[tp-c99] %s\n' "$*"; }
 command -v gcc >/dev/null 2>&1 || { say "SKIP: gcc absent (witness compiler needed for the round-trip)"; exit 0; }
 
 "$IIIS" "$ROOT/STDLIB/iii/omnia/tp_iii_to_c99.iii"              --compile-only --out "$W/t.o"   >/dev/null 2>&1 || { say "FAIL: transpiler compile"; exit 1; }
-"$IIIS" "$ROOT/STDLIB/corpus/1943_tp_iii_to_c99_roundtrip.iii"  --compile-only --out "$W/drv.o" >/dev/null 2>&1 || { say "FAIL: driver compile"; exit 1; }
+"$IIIS" "$ROOT/STDLIB/corpus/2489_tp_iii_to_c99_roundtrip.iii"  --compile-only --out "$W/drv.o" >/dev/null 2>&1 || { say "FAIL: driver compile"; exit 1; }
 gcc "$W/drv.o" "$W/t.o" -lmsvcrt -o "$W/drv.exe" 2>/dev/null || { say "FAIL: driver link"; exit 1; }
 "$W/drv.exe" > "$W/out.c" 2>/dev/null; drc=$?
 [ "$drc" -eq 99 ] || { say "FAIL: driver self-check exit=$drc (2=native wrong, 1=byte-wrap not real C)"; sed 's/^/    /' "$W/out.c"; exit 1; }

@@ -330,6 +330,70 @@ fn sov_movdqu_store_sib(src: u32, base: u32, index: u32, scale: u32, disp: i32) 
     sov_movdqu_mempre(src, base, index)  sov_emit(0x0Fu32)  sov_emit(0x7Fu32)  sov_sib_modrm_disp(src, base, index, scale, disp)  return 0i32
 }
 
+/* ── AVX / VEX (Tier-2 SIMD; the crypto tree's MEASURED VEX set) ──────────────────────────────────────
+ * VEX.2B = C5 [~R vvvv L pp] ;  VEX.3B = C4 [~R ~X ~B mmmmm] [W vvvv L pp].
+ *   pp: none=0 66=1 F3=2 F2=3   mmmmm: 0F=1 0F38=2 0F3A=3   L: 128=0 256=1
+ *   The stored vvvv field is the 1's-complement (15-vvvv); an op with NO vvvv operand (vpshufd/vmovdqu/
+ *   vzeroupper) passes vvvv=0 so the stored field is 1111 (the reserved encoding gas emits).
+ * 2-byte form is used exactly when gas uses it: X=0 && B=0 && W=0 && mmmmm=1 (else 3-byte).  Every encoder
+ * here is gas-byte-pinned (STDLIB/sovtc/test_vex.iii) + differentially gated over the 7 SIMD modules
+ * (run_fixpoint.sh).  AT&T 3-operand order `op %src2,%src1,%dst` -> reg=dst, vvvv=src1, rm=src2. */
+fn sov_hi(reg: u32) -> u32 { if reg >= 8u32 { return 1u32 }  return 0u32 }
+fn sov_vex2(r: u32, vvvv: u32, l: u32, pp: u32) {
+    sov_emit(0xC5u32)
+    sov_emit(((1u32 - (r & 1u32)) << 7u32) | (((15u32 - (vvvv & 15u32)) & 15u32) << 3u32) | ((l & 1u32) << 2u32) | (pp & 3u32))
+}
+fn sov_vex3(r: u32, x: u32, b: u32, mmmmm: u32, w: u32, vvvv: u32, l: u32, pp: u32) {
+    sov_emit(0xC4u32)
+    sov_emit(((1u32 - (r & 1u32)) << 7u32) | ((1u32 - (x & 1u32)) << 6u32) | ((1u32 - (b & 1u32)) << 5u32) | (mmmmm & 31u32))
+    sov_emit(((w & 1u32) << 7u32) | (((15u32 - (vvvv & 15u32)) & 15u32) << 3u32) | ((l & 1u32) << 2u32) | (pp & 3u32))
+}
+/* pick the short (2B) prefix when gas would, else the long (3B) */
+fn sov_vex_pfx(r: u32, x: u32, b: u32, mmmmm: u32, w: u32, vvvv: u32, l: u32, pp: u32) {
+    if x == 0u32 { if b == 0u32 { if w == 0u32 { if mmmmm == 1u32 {
+        sov_vex2(r, vvvv, l, pp)  return
+    } } } }
+    sov_vex3(r, x, b, mmmmm, w, vvvv, l, pp)
+}
+/* 3-operand reg-reg-reg: reg=dst vvvv=src1 rm=src2 */
+fn sov_vex_rrr(op: u32, dst: u32, src1: u32, src2: u32, l: u32, pp: u32, mmmmm: u32, w: u32) -> i32 @export {
+    sov_vex_pfx(sov_hi(dst), 0u32, sov_hi(src2), mmmmm, w, src1, l, pp)
+    sov_emit(op)  sov_modrm(3u32, dst, src2)  return 0i32
+}
+/* 3-operand mem source: reg=dst vvvv=src1 rm=disp(%base) */
+fn sov_vex_rm(op: u32, dst: u32, src1: u32, base: u32, disp: i32, l: u32, pp: u32, mmmmm: u32, w: u32) -> i32 @export {
+    sov_vex_pfx(sov_hi(dst), 0u32, sov_hi(base), mmmmm, w, src1, l, pp)
+    sov_emit(op)  sov_membase_modrm(dst, base, disp)  return 0i32
+}
+/* 2-operand + imm8 (vpshufd): reg=dst vvvv=none rm=src imm8 */
+fn sov_vex_ri(op: u32, dst: u32, src: u32, imm: u32, l: u32) -> i32 @export {
+    sov_vex_pfx(sov_hi(dst), 0u32, sov_hi(src), 1u32, 0u32, 0u32, l, 1u32)
+    sov_emit(op)  sov_modrm(3u32, dst, src)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* shift-by-imm (vpslld/vpsrld/vpsrlq): reg=/ext vvvv=dst rm=src imm8 (the NDD form; dst goes in vvvv) */
+fn sov_vex_shift(op: u32, ext: u32, dst: u32, src: u32, imm: u32, l: u32) -> i32 @export {
+    sov_vex_pfx(0u32, 0u32, sov_hi(src), 1u32, 0u32, dst, l, 1u32)
+    sov_emit(op)  sov_modrm(3u32, ext, src)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* vmovdqu load(6F)/store(7F): reg=the xmm/ymm vvvv=none rm=disp(%base) ; pp=F3 (2) */
+fn sov_vex_mem(op: u32, xreg: u32, base: u32, disp: i32, l: u32) -> i32 @export {
+    sov_vex_pfx(sov_hi(xreg), 0u32, sov_hi(base), 1u32, 0u32, 0u32, l, 2u32)
+    sov_emit(op)  sov_membase_modrm(xreg, base, disp)  return 0i32
+}
+/* ── the measured VEX mnemonic wrappers (128-bit unless _y = 256) ── */
+fn sov_vpxor(dst: u32, src1: u32, src2: u32) -> i32 @export { return sov_vex_rrr(0xEFu32, dst, src1, src2, 0u32, 1u32, 1u32, 0u32) }        /* VEX.128.66.0F.WIG EF */
+fn sov_vpor(dst: u32, src1: u32, src2: u32)  -> i32 @export { return sov_vex_rrr(0xEBu32, dst, src1, src2, 0u32, 1u32, 1u32, 0u32) }        /* VEX.128.66.0F.WIG EB */
+fn sov_vpaddd(dst: u32, src1: u32, src2: u32) -> i32 @export { return sov_vex_rrr(0xFEu32, dst, src1, src2, 0u32, 1u32, 1u32, 0u32) }       /* VEX.128.66.0F.WIG FE */
+fn sov_vpaddd_mem(dst: u32, src1: u32, base: u32, disp: i32) -> i32 @export { return sov_vex_rm(0xFEu32, dst, src1, base, disp, 0u32, 1u32, 1u32, 0u32) }
+fn sov_vpaddq_y(dst: u32, src1: u32, src2: u32) -> i32 @export { return sov_vex_rrr(0xD4u32, dst, src1, src2, 1u32, 1u32, 1u32, 0u32) }     /* VEX.256.66.0F.WIG D4 */
+fn sov_vpshufd(dst: u32, src: u32, imm: u32) -> i32 @export { return sov_vex_ri(0x70u32, dst, src, imm, 0u32) }                            /* VEX.128.66.0F.WIG 70 /r ib */
+fn sov_vpslld(dst: u32, src: u32, imm: u32) -> i32 @export { return sov_vex_shift(0x72u32, 6u32, dst, src, imm, 0u32) }                    /* VEX.128.66.0F.WIG 72 /6 ib */
+fn sov_vpsrld(dst: u32, src: u32, imm: u32) -> i32 @export { return sov_vex_shift(0x72u32, 2u32, dst, src, imm, 0u32) }                    /* VEX.128.66.0F.WIG 72 /2 ib */
+fn sov_vpsrlq_y(dst: u32, src: u32, imm: u32) -> i32 @export { return sov_vex_shift(0x73u32, 2u32, dst, src, imm, 1u32) }                  /* VEX.256.66.0F.WIG 73 /2 ib */
+fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 @export { return sov_vex_mem(0x6Fu32, dst, base, disp, l) }
+fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 @export { return sov_vex_mem(0x7Fu32, src, base, disp, l) }
+fn sov_vzeroupper() -> i32 @export { sov_vex2(0u32, 0u32, 0u32, 0u32)  sov_emit(0x77u32)  return 0i32 }                                     /* VEX.128.0F.WIG 77 */
+
 /* ALU $imm,%reg : gcc uses the SHORT form 83 /ext ib (imm8 sign-extended) when imm fits a signed byte,
  * else 81 /ext id (imm32).  Matching this exactly is REQUIRED for .text byte-identity (caught by the
  * gcc-independent gate: add $0x10 is 48 83 c0 10, NOT 48 81 c0 10 00 00 00).  (add=/0 sub=/5 cmp=/7) */

@@ -1,0 +1,66 @@
+/* test_vex.iii  --  S1 VEX GATE (Phase B): sovas's VEX encoders must produce gcc-as's EXACT bytes.
+ *
+ * Every expected byte string is gcc-as's real output (objdump of a .s assembled by gcc; STDLIB/build/
+ * _vexmeasure/oracle.s).  A distinct failure code per instruction localizes any wrong byte.  This is the
+ * unit half of the VEX gate; run_fixpoint.sh's per-module .text==gas diff is the whole-module half.
+ * exit 99 = the VEX-128/256 encoder is byte-identical to gcc across the measured crypto-tree set.
+ */
+module sovtc_test_vex
+
+extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpxor(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpor(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddd(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddd_mem(dst: u32, src1: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpaddq_y(dst: u32, src1: u32, src2: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpshufd(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpslld(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrld(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vpsrlq_y(dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu_vload(dst: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vmovdqu_vstore(src: u32, base: u32, disp: i32, l: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_vzeroupper() -> i32 from "sovas.iii"
+
+var EXP : [u32; 16]
+var EXPN : u32 = 0u32
+fn p3(a: u32, b: u32, c: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXPN=3u32 }
+fn p4(a: u32, b: u32, c: u32, d: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXPN=4u32 }
+fn p5(a: u32, b: u32, c: u32, d: u32, e: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXPN=5u32 }
+fn chk() -> u32 {
+    if sov_len() != EXPN { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < EXPN { if sov_at(i) != EXP[i as u64] { return 0u32 }  i = i + 1u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* vpxor: 2-byte prefix (low regs), 3-byte prefix (src2>=8 -> B=1), 2-byte with dst>=8 (R in C5) */
+    sov_reset()  sov_vpxor(3u32,2u32,1u32)   p4(0xC5u32,0xE9u32,0xEFu32,0xD9u32)              if chk()!=1u32 { return 11u64 }
+    sov_reset()  sov_vpxor(3u32,2u32,9u32)   p5(0xC4u32,0xC1u32,0x69u32,0xEFu32,0xD9u32)      if chk()!=1u32 { return 12u64 }
+    sov_reset()  sov_vpxor(11u32,2u32,1u32)  p4(0xC5u32,0x69u32,0xEFu32,0xD9u32)              if chk()!=1u32 { return 13u64 }
+    /* vpaddd reg + mem source (disp8, disp0) */
+    sov_reset()  sov_vpaddd(6u32,5u32,4u32)         p4(0xC5u32,0xD1u32,0xFEu32,0xF4u32)               if chk()!=1u32 { return 14u64 }
+    sov_reset()  sov_vpaddd_mem(6u32,5u32,0u32,16i32) p5(0xC5u32,0xD1u32,0xFEu32,0x70u32,0x10u32)     if chk()!=1u32 { return 15u64 }
+    sov_reset()  sov_vpaddd_mem(6u32,5u32,2u32,0i32)  p4(0xC5u32,0xD1u32,0xFEu32,0x32u32)             if chk()!=1u32 { return 16u64 }
+    /* vpor */
+    sov_reset()  sov_vpor(3u32,2u32,1u32)    p4(0xC5u32,0xE9u32,0xEBu32,0xD9u32)              if chk()!=1u32 { return 17u64 }
+    /* vpshufd $imm (2-op) */
+    sov_reset()  sov_vpshufd(2u32,1u32,0x1Bu32)  p5(0xC5u32,0xF9u32,0x70u32,0xD1u32,0x1Bu32)  if chk()!=1u32 { return 18u64 }
+    /* vpslld/vpsrld $imm (dst in vvvv, /6 & /2) */
+    sov_reset()  sov_vpslld(2u32,1u32,7u32)      p5(0xC5u32,0xE9u32,0x72u32,0xF1u32,0x07u32)  if chk()!=1u32 { return 19u64 }
+    sov_reset()  sov_vpsrld(2u32,1u32,0x19u32)   p5(0xC5u32,0xE9u32,0x72u32,0xD1u32,0x19u32)  if chk()!=1u32 { return 20u64 }
+    /* vpaddq ymm (L=1) + vpsrlq ymm $imm (73 /2, L=1) */
+    sov_reset()  sov_vpaddq_y(3u32,2u32,1u32)    p4(0xC5u32,0xEDu32,0xD4u32,0xD9u32)          if chk()!=1u32 { return 21u64 }
+    sov_reset()  sov_vpsrlq_y(2u32,1u32,0x0Bu32) p5(0xC5u32,0xEDu32,0x73u32,0xD1u32,0x0Bu32)  if chk()!=1u32 { return 22u64 }
+    /* vmovdqu load/store, xmm (L=0) + ymm (L=1) */
+    sov_reset()  sov_vmovdqu_vload(0u32,0u32,0x20i32,0u32)   p5(0xC5u32,0xFAu32,0x6Fu32,0x40u32,0x20u32)  if chk()!=1u32 { return 23u64 }
+    sov_reset()  sov_vmovdqu_vstore(0u32,2u32,0x30i32,0u32)  p5(0xC5u32,0xFAu32,0x7Fu32,0x42u32,0x30u32)  if chk()!=1u32 { return 24u64 }
+    sov_reset()  sov_vmovdqu_vload(7u32,0u32,0i32,0u32)      p4(0xC5u32,0xFAu32,0x6Fu32,0x38u32)          if chk()!=1u32 { return 25u64 }
+    sov_reset()  sov_vmovdqu_vload(1u32,0u32,0x40i32,1u32)   p5(0xC5u32,0xFEu32,0x6Fu32,0x48u32,0x40u32)  if chk()!=1u32 { return 26u64 }
+    sov_reset()  sov_vmovdqu_vstore(1u32,2u32,0i32,1u32)     p4(0xC5u32,0xFEu32,0x7Fu32,0x0Au32)          if chk()!=1u32 { return 27u64 }
+    /* vzeroupper (no operands) */
+    sov_reset()  sov_vzeroupper()  p3(0xC5u32,0xF8u32,0x77u32)                                if chk()!=1u32 { return 28u64 }
+    return 99u64
+}

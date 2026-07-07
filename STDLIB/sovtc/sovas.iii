@@ -567,6 +567,11 @@ fn sov_f7(ext: u32, reg: u32) {
 }
 fn sov_not_r(reg: u32)  -> i32 @export { sov_f7(2u32, reg)  return 0i32 }
 fn sov_neg_r(reg: u32)  -> i32 @export { sov_f7(3u32, reg)  return 0i32 }
+/* one-operand UNSIGNED mul: REX.W F7 /4 (RDX:RAX = RAX * r/m64).  cg_r3/main/cg_r0/affine_audit/emit_sanctum
+ * all emit `mulq %rcx` for u64*u64 high-half products (mulhi, 128-bit intermediates); the /4 slot was listed
+ * in sov_f7's comment but never wrapped -> sovas errored on it, the ONLY unhandled compiler mnemonic (C4
+ * preflight, 6/6 failures identical).  Distinct from imul (/5, signed) and imul_rr (two-operand). */
+fn sov_mul_r(reg: u32)  -> i32 @export { sov_f7(4u32, reg)  return 0i32 }
 fn sov_imul_r(reg: u32) -> i32 @export { sov_f7(5u32, reg)  return 0i32 }
 /* two-operand imul: REX.W 0F AF /r (dst = dst * src; modrm reg=dst rm=src).  cg_r3's canonical multiply is
  * `imulq %src,%dst` (1796 sites, all two-operand) -- the one-operand F7/5 form above is WRONG for it (it

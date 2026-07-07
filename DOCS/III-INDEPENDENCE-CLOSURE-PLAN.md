@@ -20,8 +20,9 @@
 > | D1 self-mint tools | **REMAINS** | seal gen-0 `sovas_main`/`sovlink_main` seeds via `mhash_file`; unblocks run_fixpoint gcc-off |
 > | D2 anchor stages | **PARTIAL** | stage 8 `witness_zero_gate` WIRED + green; stage 9 (run_fixpoint gcc-off) blocked on D1 |
 > | E XII @lattice LIVE | **DONE** | corpus 1936 + `xii_live_gate.sh` (teeth); **census breach #1 discharged (ledger 5→4)** |
-> | F PQ NIST KATs | **BLOCKED (named)** | mlkem/mldsa/slhdsa have the KAT-shaped surface + internal roundtrip/determinism corpus tests, but official ACVP vectors are multi-MB (fetch caps 10 MB; the summariser won't transcribe thousands of hex bytes verbatim). Bounded external-data acquisition remains |
-> | G1/G2 codecs | **REMAINS** | `tp_x86_disasm` (74 ln) + `tp_iii_to_c99` (98 ln) still degenerate; self-contained rewrites |
+> | F PQ NIST KAT | **KAT BUILT + verified; module DIVERGES** | corpus/1944 is the official C2SP/CCTV FIPS-203 ML-KEM-768 accumulated KAT (the de-facto conformance test); harness VERIFIED correct (DRBG stream `7f9c2ba4…` == C2SP, inline SHAKE == numera/shake128, protocol verbatim, sizes confirmed, keygen has the k-byte domain sep). It RUNS clean but the module's digest DIVERGES from official `f7db260e…` → functional-but-not-byte FIPS-203 (the audit's suspicion, now PROVEN). `mlkem_c2sp_kat_gate.sh` is the acceptance test; localizing the byte divergence needs a reference (seed→ek) vector (fetch blocker) |
+> | G1 disasm | **DONE** | `tp_x86_disasm` is a real x86-64 length-decoder + AT&T printer; corpus/1942 + `tp_x86_roundtrip_gate.sh` (real mnemonics, gas round-trips to identical bytes) |
+> | G2 transpiler | **DONE** | `tp_iii_to_c99` is a real construct-directed transpiler (fn-sig reorder, typed locals, return, suffix-strip); corpus/1943 + `tp_iii_to_c99_gate.sh` (semantic round-trip: emitted C compiles+runs to the III result 49) |
 > | H provenance | **PARTIAL** | 742 phantom tags PINNED down-only (`provenance_gate.sh`, teeth); FALSIFIED the plan's premise (tag is emitted as an `.ascii` string → codegen-neutral but golden-moving), so the bulk rewrite rides the C4 re-seal |
 >
 > Anchor grew 6→8 stages (seal-authorship 2b + basal census 7 + witness-zero 8), each green.

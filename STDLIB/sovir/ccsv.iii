@@ -1104,7 +1104,11 @@ fn eprim() {
                 emit_lget(lidx(t) as u32)  let mut cur:i32=ptt  let mut gc:u32=1u32
                 while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)
                     if cp(Q_ARROW)==1u32 { if fo>0i64 {econst(fo)  eb(0x20u32)}  eb(0x82u32)  cur=fieldpt(cur,ftc) }   /* intermediate `->` : load the pointer */
-                    else { if fo>0i64 {econst(fo)  eb(0x20u32)}  if fieldisarr(cur,ftc)==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let ae:i64=fieldelem(cur,ftc)  estride(ae)  eb(0x20u32)  eload(ae, fieldsign(cur,ftc)) } } else { eload(fieldelem(cur,ftc), fieldsign(cur,ftc)) }  gc=0u32 } }   /* last field : ARRAY -> DECAY to address (a->head->data ; optional [i] -> element load) ; scalar -> typed load */
+                    else { if fo>0i64 {econst(fo)  eb(0x20u32)}  if fieldisarr(cur,ftc)==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let ae:i64=fieldelem(cur,ftc)  estride(ae)  eb(0x20u32)  eload(ae, fieldsign(cur,ftc)) } }
+                        else { let pzc:i64=fieldptsz(cur,ftc)  let mut donc:u32=0u32
+                            if pzc>0i64 { if cp(Q_LBR)==1u32 { eb(0x82u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(pzc)  eb(0x20u32)  eload(pzc, fieldptsg(cur,ftc))  donc=1u32 } }   /* last field is a scalar POINTER + [i]: deref the pointer, +i*pointee, typed load -- cg->ast->source_buf[off+i] (the emit_*_label class; was: eload'd the pointer VALUE and left `[..]` dangling -> rc=8) */
+                            if donc==0u32 { eload(fieldelem(cur,ftc), fieldsign(cur,ftc)) } }
+                        gc=0u32 } }   /* last field : ARRAY -> DECAY to address (a->head->data ; optional [i] -> element load) ; scalar-ptr + [i] -> pointer-subscript ; scalar -> typed load */
                 return
             } }
             C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)

@@ -77,6 +77,12 @@ fn shim_call(boff: u64, lb: u64) -> u64 {
     if nm_is(no, nl, "rewind" as u64, 6u32)==1u32 { rewind(a0)  return 0u64 }
     if nm_is(no, nl, "fgets"  as u64, 5u32)==1u32 { let r:u64=fgets(m2h(a0), a1 as i32, a2)  if r==0u64 { return 0u64 }  return a0 }   /* host buf-ptr maps back to the SVIR offset */
     if nm_is(no, nl, "clock"  as u64, 5u32)==1u32 { return (clock()) as u64 }
+    if nm_is(no, nl, "fprintf" as u64, 7u32)==1u32 { return 0u64 }   /* stderr diagnostics: dropped (the seed's error text goes to stderr; the interp is a stdout oracle) -- a no-op so error paths don't 198 */
+    if nm_is(no, nl, "fputc"  as u64, 5u32)==1u32 { return 0u64 }
+    if nm_is(no, nl, "fputs"  as u64, 5u32)==1u32 { return 0u64 }
+    if nm_is(no, nl, "fflush" as u64, 6u32)==1u32 { return 0u64 }
+    if nm_is(no, nl, "signal" as u64, 6u32)==1u32 { return 0u64 }   /* iii_install_signals: no signal handling in the interp */
+    if nm_is(no, nl, "getenv" as u64, 6u32)==1u32 { return 0u64 }   /* SOURCE_DATE_EPOCH: NULL -> default 0 (deterministic) */
     SHIM_HIT = 0u32
     return 0u64
 }

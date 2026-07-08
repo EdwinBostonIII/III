@@ -50,9 +50,12 @@ for f in "$ROOT/STDLIB/sovir"/*.iii "$ROOT/STDLIB/sovtc"/*.iii; do
     # crt0 is the RUNTIME SHIM (the cstart argv bridge every sovereign exe links), not a standalone
     # program -- sovbuilding it "as a program" would be a category error, not a claim.
     if [ "$name" = "crt0" ]; then continue; fi
-    # leading-underscore files are probe VEHICLES by tree convention (_vprobe, _svir_ci_oob, ...):
-    # they link against harness-provided modules (gen_svir etc.) and are owned by their own gates.
+    # PROBE VEHICLES by tree convention: leading-underscore (_vprobe, _svir_ci_oob) OR a _probe suffix
+    # (eidos_ripple_probe -> a cg_r3 driver returning a DIAGNOSTIC 0; zk_ext4_probe -> 200).  A probe
+    # emits a diagnostic code, not the 99 gate convention, and is owned by its subsystem gate
+    # (run_eidos_svir.sh, run_zk.sh); scoring it against 99 is a category error.
     case "$name" in _*) continue;; esac
+    case "$name" in *_probe) continue;; esac
     # *_w files are WAIST-SUBSET sources (the iiisv dialect: suffix-less literals, svir_putc builtin)
     # compiled BY iiisv into anchor-verified SVIR -- not win64 standalone programs.  Their gate is
     # run_retarget.sh (a Γ leg below): anchor + byte-match + fixpoint, on every host route.

@@ -136,6 +136,52 @@ if [ $xgrc -eq 99 ] && [ "$xdd" = "ok" ] && [ $xrun -eq 99 ]; then
   say "A6 CROSS GERM : x86-64 Linux germ REGREW sum's AArch64 ELF byte-identically ON LINUX; the regrown binary runs at oracle under qemu (rc=99).  Toolchain-for-ISA-B carried as SVIR, regrown on ISA-A."
 else say "FAIL A6 cross-germ (emit=$xgrc ddc=$xdd run=$xrun)"; fail=1; fi
 
+# ---- RV: the RISC-V toolchain as a waist object (Γ3 × Γ2d, THIRD ISA) ----------
+"$W/iiisv.exe" "$S/svir_riscv_w.iii" > "$W/rv_w_gen.iii" 2>/dev/null
+"$IIIS" "$W/rv_w_gen.iii" --compile-only --out "$W/rv_w_gen.o" >/dev/null 2>&1 || { say "FAIL compile rv_w_gen"; fail=1; }
+gcc "$W/svir_dump.o" "$W/rv_w_gen.o" -o "$W/sd_rvw.exe" 2>/dev/null
+"$W/sd_rvw.exe" > "$W/rvw.svbin"
+gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/rv_w_gen.o" -o "$W/v_rvw.exe" 2>/dev/null
+"$W/v_rvw.exe" >/dev/null 2>&1; rvv=$?
+if [ $rvv -eq 99 ]; then say "rv translator : svir_riscv_w = $(stat -c%s "$W/rvw.svbin") B of SVIR, ANCHOR-ACCEPTED"
+else say "FAIL anchor(rvw) rc=$rvv"; fail=1; fi
+for l in $PROGS; do
+  "$W/svir_compose.exe" "$W/rvw.svbin" "$SP/svir/$l.svir" > "$W/compr_$l.iii" 2>/dev/null
+  "$IIIS" "$W/compr_$l.iii" --compile-only --out "$W/compr_$l.o" >/dev/null 2>&1 || { say "FAIL compile compr_$l"; fail=1; continue; }
+  gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/compr_$l.o" -o "$W/v_compr_$l.exe" 2>/dev/null
+  "$W/v_compr_$l.exe" >/dev/null 2>&1; rrarc=$?
+  waist_emit "$W/compr_$l.o" "$W/rgr_$l.rv.elf" "r$l"; rrwrc=$?
+  "$W/mx_tr_$l.exe" > "$W/native_$l.rv.elf" 2>/dev/null
+  rverdict="ok"
+  [ $rrarc -eq 99 ] || rverdict="RED(anchor=$rrarc)"
+  [ $rrwrc -eq 99 ] || rverdict="RED(run=$rrwrc)"
+  cmp -s "$W/rgr_$l.rv.elf" "$W/native_$l.rv.elf" || rverdict="RED(byte-match)"
+  [ "$rverdict" = "ok" ] || fail=1
+  say "$(printf 'rv:%-9s anchor=%-3s run=%-3s byte-match=%s' "$l" "$rrarc" "$rrwrc" "$rverdict")"
+done
+QEMU72R='export LD_LIBRARY_PATH=/opt/q72/usr/lib/x86_64-linux-gnu; /opt/q72/usr/bin/qemu-riscv64'
+for l in isqrt cioob; do
+  MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72R '$WSLW/rgr_$l.rv.elf'" >/dev/null 2>&1; qrc=$?
+  wr=$(want_rc $l)
+  if [ $qrc -eq "$wr" ]; then say "RV exec $l  : rc=$qrc (oracle, qemu-riscv64)"; else say "FAIL RV exec $l rc=$qrc want=$wr"; fail=1; fi
+done
+# cross-ISA germ #2: an x86-64 Linux ELF that regrows RISC-V binaries on Linux
+gcc "$W/svir_dump.o" "$W/compr_sum.o" -o "$W/sd_compr_sum.exe" 2>/dev/null
+"$W/sd_compr_sum.exe" > "$W/compr_sum.svbin"
+gcc "$W/svir_elf.o" "$W/compr_sum.o" -o "$W/te_compr_sum.exe" 2>/dev/null
+"$W/te_compr_sum.exe" > "$W/rgerm_native.elf" 2>/dev/null
+"$W/svir_compose.exe" "$W/elfw.svbin" "$W/compr_sum.svbin" > "$W/comp2r_sum.iii" 2>/dev/null
+"$IIIS" "$W/comp2r_sum.iii" --compile-only --out "$W/comp2r_sum.o" >/dev/null 2>&1
+waist_emit "$W/comp2r_sum.o" "$W/rgerm_waist.elf" "rself"; rgsrc=$?
+if cmp -s "$W/rgerm_native.elf" "$W/rgerm_waist.elf"; then say "RV6 X-FIXPOINT: elf_w(elf-of-(rvw+sum)) == native  [$(stat -c%s "$W/rgerm_waist.elf") B]"
+else say "FAIL RV6 x-fixpoint"; fail=1; fi
+MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e "$WSLW/rgerm_waist.elf" > "$W/rxregrown_sum.rv.elf" 2>/dev/null; rxgrc=$?
+cmp -s "$W/rxregrown_sum.rv.elf" "$W/native_sum.rv.elf" && rxdd=ok || rxdd=RED
+MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72R '$WSLW/rxregrown_sum.rv.elf'" >/dev/null 2>&1; rxrun=$?
+if [ $rxgrc -eq 99 ] && [ "$rxdd" = "ok" ] && [ $rxrun -eq 99 ]; then
+  say "RV6 CROSS GERM: x86-64 Linux germ REGREW sum's RISC-V ELF byte-identically ON LINUX; regrown binary runs at oracle under qemu-riscv64 (rc=99).  A THIRD ISA's toolchain carried as SVIR, regrown on x86-64."
+else say "FAIL RV6 cross-germ (emit=$rxgrc ddc=$rxdd run=$rxrun)"; fail=1; fi
+
 # ---- W: Γ2b leg -- the SAME translator modules on the WASM route (third independent host) ----
 # One translator SVIR, three executing substrates (PE-native, wasm-under-node, and via T4 Linux-native):
 # stdout bytes must be IDENTICAL everywhere.  node's harness writes putc bytes raw to fd 1.
@@ -149,8 +195,12 @@ for l in sum fact isqrt; do
   "$W/tw_ca$l.exe" > "$W/compa_$l.wasm" 2>/dev/null
   timeout 30 node "$S/run_wasm.mjs" "$W/compa_$l.wasm" > "$W/rgw_$l.a64.elf" 2>/dev/null
   cmp -s "$W/rgw_$l.a64.elf" "$W/native_$l.a64.elf" || { say "FAIL W byte-match(a64) $l"; wfail=1; }
+  gcc "$W/svir_wasm.o" "$W/compr_$l.o" -o "$W/tw_cr$l.exe" 2>/dev/null || { wfail=1; continue; }
+  "$W/tw_cr$l.exe" > "$W/compr_$l.wasm" 2>/dev/null
+  timeout 30 node "$S/run_wasm.mjs" "$W/compr_$l.wasm" > "$W/rgw_$l.rv.elf" 2>/dev/null
+  cmp -s "$W/rgw_$l.rv.elf" "$W/native_$l.rv.elf" || { say "FAIL W byte-match(rv) $l"; wfail=1; }
 done
-if [ $wfail -eq 0 ]; then say "W WASM ROUTE  : translator modules emitted IDENTICAL bytes under node (x86+a64 targets, 3 programs) -- one waist object, three independent executing substrates"
+if [ $wfail -eq 0 ]; then say "W WASM ROUTE  : all THREE translator ISAs emitted IDENTICAL bytes under node (x86+a64+rv targets, 3 programs) -- one waist object, three independent executing substrates"
 else fail=1; fi
 
 # ---- T5: teeth -- flip one data byte in a composed module ----------------------
@@ -165,6 +215,6 @@ if cmp -s "$W/rg_p.elf" "$W/rg_sum.elf"; then say "FAIL T5: perturbed input prod
 else say "T5 TEETH      : one flipped input byte -> different/red emission (rc=$prc)"; fi
 
 if [ $fail -eq 0 ]; then
-  say "RETARGETING CLOSURE GREEN -- BOTH translators (SVIR->ELF64-x86 AND SVIR->ELF64-AArch64) are anchor-verified waist objects: 20/20 composed modules anchor-accepted with waist emission BYTE-IDENTICAL to the native emitters; emitted binaries run at oracle on Linux and qemu; the elf translator SELF-TRANSLATES to a byte-exact fixpoint; the self-translated Linux germ regrows x86 ELFs and the CROSS-ISA germ regrows AArch64 ELFs -- all on Linux, zero Windows, zero PE toolchain, zero foreign toolchain.  Γ3: a host's entire retargeting capability travels as ~12.5 KB of anchor-verified SVIR."
+  say "RETARGETING CLOSURE GREEN -- ALL THREE translators (SVIR->ELF64 for x86-64, AArch64, AND RV64IM) are anchor-verified waist objects: 30/30 composed modules anchor-accepted with waist emission BYTE-IDENTICAL to the native emitters; emitted binaries run at oracle on Linux + both qemu ISAs; all three ISAs emit identical bytes on the wasm route too; the elf translator SELF-TRANSLATES to a byte-exact fixpoint; and TWO cross-ISA germs (x86-64 Linux ELFs) regrow AArch64 AND RISC-V binaries byte-identically ON LINUX -- zero Windows, zero PE toolchain, zero foreign toolchain.  Γ3: a host's entire retargeting capability (any of 3 ISAs) travels as ~12-13 KB of anchor-verified SVIR."
 fi
 exit $fail

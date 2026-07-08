@@ -79,7 +79,7 @@ fi
 
 if [ "$MODE" = "--germinate-lin" ]; then
   PX="$2"; cd "$PX" || exit 2; fail=0
-  QEMU="/opt/q72/usr/bin/qemu-aarch64"; export LD_LIBRARY_PATH=/opt/q72/usr/lib/x86_64-linux-gnu
+  QEMU="/opt/q72/usr/bin/qemu-aarch64"; QEMUR="/opt/q72/usr/bin/qemu-riscv64"; export LD_LIBRARY_PATH=/opt/q72/usr/lib/x86_64-linux-gnu
   sha256sum -c --quiet MANIFEST.sha256 >/dev/null 2>&1 \
     && say "L1 integrity : MANIFEST ok on the Linux virgin prefix" \
     || { say "L1 FAIL integrity"; exit 3; }
@@ -100,6 +100,13 @@ if [ "$MODE" = "--germinate-lin" ]; then
       [ $r -eq "$(want_rc $l)" ] || { say "L3 FAIL a64 $l rc=$r"; fail=1; }
     done
     [ $fail -eq 0 ] && say "L3 a64-exec  : 10/10 carried AArch64 ELFs run under qemu (oracle rc + fact bytes)"
+    for pair in $PROGS; do l="${pair%%:*}"
+      if [ "$l" = "fact" ]; then "$QEMUR" "grown/$l.rv.elf" > "lr_$l.out" 2>/dev/null; r=$?
+        cmp -s "lr_$l.out" oracle/fact.gold || { say "L3 FAIL fact stdout(rv) != oracle"; fail=1; }
+      else "$QEMUR" "grown/$l.rv.elf" >/dev/null 2>&1; r=$?; fi
+      [ $r -eq "$(want_rc $l)" ] || { say "L3 FAIL rv $l rc=$r"; fail=1; }
+    done
+    [ $fail -eq 0 ] && say "L3 rv-exec   : 10/10 carried RISC-V ELFs run under qemu-riscv64 (oracle rc + fact bytes)"
   else say "L3 FAIL: qemu 7.2 executor missing at /opt/q72"; fail=1; fi
   # L4 -- Γ3 REGROWTH ON LINUX: the self-translated germs re-emit every per-host binary, byte-DDC vs parent
   l4fail=0
@@ -108,13 +115,16 @@ if [ "$MODE" = "--germinate-lin" ]; then
     cmp -s "lx_rg_$l.elf" "grown/$l.elf" || { say "L4 FAIL x86-regrow $l (rc=$g1)"; l4fail=1; }
     "./germs/linux/lgerm_a_$l.elf" > "lx_rg_$l.a64.elf" 2>/dev/null; g2=$?
     cmp -s "lx_rg_$l.a64.elf" "grown/$l.a64.elf" || { say "L4 FAIL a64-regrow $l (rc=$g2)"; l4fail=1; }
+    "./germs/linux/lgerm_r_$l.elf" > "lx_rg_$l.rv.elf" 2>/dev/null; g3=$?
+    cmp -s "lx_rg_$l.rv.elf" "grown/$l.rv.elf" || { say "L4 FAIL rv-regrow $l (rc=$g3)"; l4fail=1; }
   done
-  if [ $l4fail -eq 0 ]; then say "L4 regrowth  : 20/20 per-host binaries (x86 + AArch64) REGROWN ON LINUX from waist-translator germs, byte-DDC == parent (zero Windows, zero PE toolchain)"
+  if [ $l4fail -eq 0 ]; then say "L4 regrowth  : 30/30 per-host binaries (x86 + AArch64 + RISC-V) REGROWN ON LINUX from waist-translator germs, byte-DDC == parent (zero Windows, zero PE toolchain, 3 ISAs)"
   else fail=1; fi
-  chmod +x "lx_rg_isqrt.a64.elf" 2>/dev/null   # regrown via shell redirect = 0644; qemu enforces the x bit
+  chmod +x "lx_rg_isqrt.a64.elf" "lx_rg_isqrt.rv.elf" 2>/dev/null   # regrown via shell redirect = 0644; qemu enforces the x bit
   "$QEMU" "lx_rg_isqrt.a64.elf" >/dev/null 2>&1; l5=$?
-  if [ $l5 -eq 99 ]; then say "L5 regrown-run: a Linux-REGROWN AArch64 binary executes at oracle under qemu (rc=99)"
-  else say "L5 FAIL regrown a64 isqrt rc=$l5"; fail=1; fi
+  "$QEMUR" "lx_rg_isqrt.rv.elf" >/dev/null 2>&1; l5r=$?
+  if [ $l5 -eq 99 ] && [ $l5r -eq 99 ]; then say "L5 regrown-run: Linux-REGROWN AArch64 AND RISC-V binaries execute at oracle under qemu (rc=99 both)"
+  else say "L5 FAIL regrown a64=$l5 rv=$l5r"; fail=1; fi
   exit $fail
 fi
 
@@ -136,30 +146,32 @@ fail=0
 rm -rf "$SP"; mkdir -p "$SP/anchor" "$SP/svir" "$SP/germs/verify" "$SP/germs/dump" "$SP/germs/emit" "$SP/germs/toolchain" "$SP/germs/linux" "$SP/grown" "$SP/oracle"
 [ -s "$W/svir_dump.o" ] || "$IIIS" "$S/svir_dump.iii" --compile-only --out "$W/svir_dump.o" >/dev/null 2>&1
 for pair in $PROGS; do l="${pair%%:*}"; o="${pair#*:}"
-  for need in "$W/mx_v_$l.exe" "$W/mx_tx_$l.exe" "$W/mx_te_$l.exe" "$W/mx_ta_$l.exe" "$W/mx_$l.x86.exe" "$W/mx_$l.elf" "$W/mx_$l.a64.elf"; do
+  for need in "$W/mx_v_$l.exe" "$W/mx_tx_$l.exe" "$W/mx_te_$l.exe" "$W/mx_ta_$l.exe" "$W/mx_tr_$l.exe" "$W/mx_$l.x86.exe" "$W/mx_$l.elf" "$W/mx_$l.a64.elf" "$W/mx_$l.rv.elf"; do
     [ -s "$need" ] || { say "PACK missing $need -- run run_host_matrix.sh first"; exit 4; }
   done
   [ -s "$W/sd_$l.exe" ] || gcc "$W/svir_dump.o" "$W/$o.o" -o "$W/sd_$l.exe" 2>/dev/null || { say "PACK FAIL dump-germ $l"; exit 4; }
   "$W/sd_$l.exe" > "$SP/svir/$l.svir" 2>/dev/null; [ -s "$SP/svir/$l.svir" ] || { say "PACK FAIL dump $l"; exit 4; }
   cp "$W/mx_v_$l.exe"  "$SP/germs/verify/"
   cp "$W/sd_$l.exe"    "$SP/germs/dump/"
-  cp "$W/mx_tx_$l.exe" "$W/mx_te_$l.exe" "$W/mx_ta_$l.exe" "$SP/germs/emit/"
+  cp "$W/mx_tx_$l.exe" "$W/mx_te_$l.exe" "$W/mx_ta_$l.exe" "$W/mx_tr_$l.exe" "$SP/germs/emit/"
   cp "$W/mx_$l.x86.exe" "$SP/grown/$l.x86.exe"
   cp "$W/mx_$l.elf"     "$SP/grown/$l.elf"
   cp "$W/mx_$l.a64.elf" "$SP/grown/$l.a64.elf"
+  cp "$W/mx_$l.rv.elf"  "$SP/grown/$l.rv.elf"
 done
-# Γ3 members: translator SVIRs (first-class) + per-program Linux-native regrowth germs for BOTH ISAs
-for t in elfw a64w; do
+# Γ3 members: translator SVIRs (first-class) + per-program Linux-native regrowth germs for ALL THREE ISAs
+for t in elfw a64w rvw; do
   [ -s "$W/$t.svbin" ] || { say "PACK missing $W/$t.svbin -- run run_retarget.sh first"; exit 4; }
   cp "$W/$t.svbin" "$SP/svir/$t.svbin"
 done
 for pair in $PROGS; do l="${pair%%:*}"
-  for c in comp compa; do
+  for c in comp compa compr; do
     [ -s "$W/${c}_$l.o" ] || { say "PACK missing ${c}_$l.o -- run run_retarget.sh first"; exit 4; }
   done
   gcc "$W/svir_elf.o" "$W/comp_$l.o"  -o "$W/te_g_$l.exe"  2>/dev/null && "$W/te_g_$l.exe"  > "$SP/germs/linux/lgerm_$l.elf"   2>/dev/null
   gcc "$W/svir_elf.o" "$W/compa_$l.o" -o "$W/te_ga_$l.exe" 2>/dev/null && "$W/te_ga_$l.exe" > "$SP/germs/linux/lgerm_a_$l.elf" 2>/dev/null
-  [ -s "$SP/germs/linux/lgerm_$l.elf" ] && [ -s "$SP/germs/linux/lgerm_a_$l.elf" ] || { say "PACK FAIL linux germ $l"; exit 4; }
+  gcc "$W/svir_elf.o" "$W/compr_$l.o" -o "$W/te_gr_$l.exe" 2>/dev/null && "$W/te_gr_$l.exe" > "$SP/germs/linux/lgerm_r_$l.elf" 2>/dev/null
+  [ -s "$SP/germs/linux/lgerm_$l.elf" ] && [ -s "$SP/germs/linux/lgerm_a_$l.elf" ] && [ -s "$SP/germs/linux/lgerm_r_$l.elf" ] || { say "PACK FAIL linux germ $l"; exit 4; }
 done
 chmod +x "$SP/grown/"*.elf "$SP/germs/"*/*.exe "$SP/germs/linux/"*.elf 2>/dev/null
 cp "$S/svir_verify.iii" "$SP/anchor/"
@@ -212,6 +224,6 @@ if [ $brc -eq 0 ]; then say "FAIL FALSIFIER B: perturbed parent binary passes by
 else say "FALSIFIER B : flipped parent-binary byte -> regrowth DDC rc=$brc != 0 (hash-independent teeth)"; fi
 
 if [ $fail -eq 0 ]; then
-  say "GERMINATION GREEN -- Σ0+Γ3 the self-carrying spore: ONE reproducible tar that, on a VIRGIN prefix with no repo/gcc/node/iiis, re-verifies itself under the carried 97-line anchor, REGROWS all 30 per-host binaries on the win64 prefix AND all 20 target binaries (x86-64 + AArch64) ON THE LINUX PREFIX from waist-translator germs -- byte-identical to the parent everywhere -- re-derives its own SVIR members, and matches the carried oracle on win64-native + sysv-native + arm64-qemu.  The spore carries its own retargeting toolchains as ~12.5 KB anchor-verified SVIR modules each."
+  say "GERMINATION GREEN -- Σ0+Γ3 the self-carrying spore: ONE reproducible tar that, on a VIRGIN prefix with no repo/gcc/node/iiis, re-verifies itself under the carried 97-line anchor, REGROWS all 30 per-host binaries on the win64 prefix AND all 30 target binaries (x86-64 + AArch64 + RISC-V) ON THE LINUX PREFIX from waist-translator germs -- byte-identical to the parent everywhere -- re-derives its own SVIR members, and matches the carried oracle on win64-native + sysv-native + arm64-qemu + riscv-qemu.  The spore carries its own retargeting toolchains for THREE ISAs as ~12-13 KB anchor-verified SVIR modules each."
 fi
 exit $fail

@@ -1,9 +1,13 @@
-# III — Γ2c + Γ4/Σ0 + Γ3: arm64 host, the spore, retargeting closure (EXECUTED)
+# III — Γ2c/Γ2d + Γ4/Σ0 + Γ3: arm64 & RISC-V hosts, the spore, retargeting closure (EXECUTED)
 
 > **STATUS: EXECUTED, ALL GATES GREEN (2026-07-08).** This ledger records the session that took the
-> GERMINATION map (`III-GERMINATION-MAP.md`) from ANALYSIS to three executed rungs. Every claim below is
-> backed by a gate that ran `rc=0` this day on this machine; logs in `COMPILED/_mx2.log`,
-> `_retgt3.log`, `_germ5.log` (final regression sweep, all three in sequence, rebuilt assembler).
+> GERMINATION map (`III-GERMINATION-MAP.md`) from ANALYSIS to executed rungs across THREE native ISAs.
+> Every claim below is backed by a gate that ran `rc=0` this day on this machine.
+>
+> **Final state:** host matrix = **6 routes / 3 native ISAs** (`_mx3.log`); retargeting closure =
+> **3 waist translators, 30/30 byte-match, 2 cross-ISA germs** (`_retgt5.log`); spore = **151 members,
+> regrows 30 win64 + 30 Linux binaries across 3 ISAs, reproducible** (`_germ6.log`); evergreen absorbs
+> all three Γ legs (`_evergreen_final.log`).
 
 ## 1. What landed
 
@@ -73,13 +77,39 @@ sink (text/data/rodata), `sovas_main` exits 5 instead of emitting a truncated ob
 arms: `.zero 5000000` → rc=5, no object; `.zero 4194215` → rc=0, 4,194,446-byte object. Full
 three-gate regression after rebuild: matrix rc=0, retarget rc=0, germinate rc=0.
 
+### Γ2d — RISC-V host (`svir_riscv.iii`, ~430 ln; sixth route in `run_host_matrix.sh`)
+A THIRD native ISA (RV64IM), first-try green. The genuinely different parts vs x86/arm64:
+- **fixed 8-instruction `li64`** (lui+addiw+slli+srli + lui+addiw+slli+or) — any 64-bit constant in a
+  constant number of bytes, so pass-1 positions == pass-2; `MEMBASE` 0xA00000 and ESP-top 0x900000 are
+  each a single `lui` (both == imm<<12);
+- **B-type branches are only ±4 KiB** — too short for large bodies, so every conditional is a fixed
+  2-instruction **branch-over-jal** (`B<inv> rs,+8 ; JAL x0,target`) using JAL's ±1 MiB range;
+- scattered B/J immediate bit-packing written out explicitly; software eval stack in x18 (s2);
+- `PRINT_CHAR` = `write(1,&ch,1)` via `ecall` (a7=64 — the generic Linux syscall ABI it *shares* with
+  AArch64), exit via a7=93.
+Matrix: 6 routes agree on all 10 programs; fact's 20! byte-identical across **three native ISAs**;
+OOB traps 199 uniform; perturbed-RV-code-byte (offset 300, past the 232-byte 3-PT_LOAD header) → SIGILL
+132; anchor grew ZERO lines. Executor: same qemu-7.2/`/opt/q72` bootstrap (qemu-riscv64 was in the bundle).
+
+### Γ3 extended to the third ISA (`svir_riscv_w.iii`, 13,250 B SVIR)
+All THREE translators are now anchor-verified waist objects. `run_retarget.sh`: **30/30** composed
+modules anchor-accepted, waist emission BYTE-IDENTICAL to native across x86/arm64/rv; a **second
+cross-ISA germ** (x86-64 Linux ELF regrows RISC-V binaries byte-identically on Linux, runs at oracle
+under qemu-riscv64); all three ISAs emit identical bytes on the wasm route too. Spore (`run_germinate.sh`)
+carries `rvw.svbin` + per-program RISC-V Linux regrowth germs; the Linux prefix now regrows **30/30**
+target binaries (3 ISAs) byte-identically and runs regrown a64 + rv at oracle.
+
 ## 2. New capabilities (none existed this morning)
-1. III programs run natively on a second ISA (AArch64) through a one-stage sovereign translator.
+1. III programs run natively on TWO new ISAs (AArch64 **and RISC-V RV64IM**) through one-stage sovereign
+   translators — a differential oracle of 6 routes / 3 ISAs per program.
 2. III exists as a single reproducible artifact that regrows and re-verifies itself on virgin
    prefixes on two OSes — the release form.
-3. A host's retargeting toolchain travels as ~12.5 KB of anchor-verified SVIR and regrows ON that
-   host (including cross-ISA), answering trusting-trust at the host level with byte-exact fixpoints.
+3. A host's retargeting toolchain (any of THREE ISAs) travels as ~12-13 KB of anchor-verified SVIR and
+   regrows ON that host (including two proven cross-ISA germs), answering trusting-trust at the host
+   level with byte-exact fixpoints.
 4. The sovereign assembler can carry a full 4 MiB svir_mem image and can no longer truncate silently.
+5. The Φ7 evergreen gate is honest for the first time: payload-consumer libraries and probe vehicles are
+   classified out (they have dedicated gates), and the three Γ legs run as the living invariant.
 
 ## 3. Environment traps recorded (for the standing ledger)
 - qemu ≥ 8 unusable under WSL1 (MAP_FIXED_NOREPLACE → EOPNOTSUPP → "in use"); qemu 7.2 works.
@@ -89,7 +119,19 @@ three-gate regression after rebuild: matrix rc=0, retarget rc=0, germinate rc=0.
   give WSL legs their own capture file and `cat` it.
 - MSYS tar records no x-bit for `.elf` files; force `--mode=a+rx,u+w` in deterministic tars.
 
-## 4. Standing frontier (unchanged by this session, next in the queue)
+## 4. Standing frontier (the ONE thing not advanced this session)
 Γ0/Λ0 S4: parse.c error-recording corruption when main.c is the entry TU (`III-LAMBDA0-LINK-CAMPAIGN.md`)
-→ run_completion 8/8. Γ1 body-onto-waist at corpus scale; Γ2b wasm first-class at corpus scale;
-Γ5 evergreen extension (germinate + retarget wired into run_evergreen).
+→ run_completion 8/8. This is a deep main.c-specific parse bug (4 sessions in) and is INDEPENDENT of the
+host-closure axis (the map's measured scheduling fact) — the entire Γ2/Γ3/Γ4 lattice above was built and
+gated green without touching it. It is the next rock; it needs the full crash-path read (CLAUDE.md
+protocol), not a host-closure move.
+
+Γ2b (wasm) and Γ5 (evergreen extension) were CLOSED this session (wasm leg in run_retarget; the three Γ
+legs run inside run_evergreen). Γ1 body-onto-waist at full corpus scale remains open (needs the cg_r3
+SVIR backend beside its x86 emitter — a large piece, not a translator-class one).
+
+## 5. Frontier arithmetic (the thesis, now measured twice)
+"One more host ≈ one ~430-line encoder OR ~13 KB of carried SVIR" — MEASURED on two independent new ISAs
+this session (AArch64: 429 ln / 12.6 KB; RISC-V: ~430 ln / 13.3 KB), each landing green with the anchor
+UNCHANGED. The differential oracle grew {win64,wasm} → 6 routes / 3 ISAs; every program's behavior (and
+fact's exact 20! bytes) now agrees across all of them. The R3 germination loop is live: diversity is fuel.

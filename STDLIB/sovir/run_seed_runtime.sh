@@ -54,16 +54,22 @@ for row in "${MODULES[@]}"; do
   else say "FAIL $m : ccsv-interp[${ci:-<none>}] != gcc[${cg:-<none>}] -- ccsv miscompiles $m at RUNTIME"; fail=1; fi
 done
 
-say "=== TEETH (falsifier): the pre-recovery df7ef796 ccsv MUST diverge from gcc on lex ==="
-git -C "$ROOT" show df7ef796:STDLIB/sovir/ccsv.iii > "$W/_rt_ccsv_old.iii" 2>/dev/null
+say "=== TEETH (falsifier): the pre-recovery ccsv (in-tree fixture) MUST diverge from gcc on lex ==="
+# The teeth are pinned to an IN-TREE FIXTURE, not a git ref: the original pin (commit df7ef796) was erased by
+# the 2026-07-01 reorg-rewind (the "reorg-rewind casualties" of eea0fe8e) and this gate sat permanently red --
+# a ref can vanish from history; committed bytes cannot.  The fixture is the REAL pre-recovery ccsv from
+# surviving commit 036ce6c8 (fn-ptr Increment 2, 2026-06-30): measured 2026-07-08, it builds under current
+# iiis-2 and produces the historic lex NULL (EMPTY mhash) vs gcc 4bddb768... .  Works on a pristine clone AND
+# a history-less source copy.
+cp "$S/_ccsv_prerecovery_lexnull.iii" "$W/_rt_ccsv_old.iii" 2>/dev/null || { say "FAIL: teeth fixture _ccsv_prerecovery_lexnull.iii missing"; fail=1; }
 if build_ccsv "$W/_rt_ccsv_old.iii" "$W/_rt_ccsv_old.exe"; then
   cg=$(gcc_mhash "$BOOT/_lexharness.c"); co=$(ccsv_mhash "$W/_rt_ccsv_old.exe" "$BOOT/_lexharness.c")
-  if [ "$co" != "$cg" ]; then say "teeth OK : df7ef796 ccsv lex mhash=[${co:-<NULL/none>}] != gcc[${cg:0:16}...] -- the gate REDDENS on the real bug"
-  else say "TEETH BROKEN : df7ef796 ccsv MATCHED gcc -- the gate has no teeth (a green would be worthless)"; fail=1; fi
-else say "FAIL build df7ef796 ccsv (teeth control could not run)"; fail=1; fi
+  if [ "$co" != "$cg" ]; then say "teeth OK : pre-recovery ccsv lex mhash=[${co:-<NULL/none>}] != gcc[${cg:0:16}...] -- the gate REDDENS on the real bug"
+  else say "TEETH BROKEN : pre-recovery ccsv MATCHED gcc -- the gate has no teeth (a green would be worthless)"; fail=1; fi
+else say "FAIL build pre-recovery ccsv (teeth control could not run)"; fail=1; fi
 
 if [ "$fail" = "0" ]; then
   say "SEED-RUNTIME GREEN -- lex.c ccsv->interp == gcc (runtime-correct, STRONGER than the structural floor);"
-  say "                     teeth proven (the pre-fix df7ef796 ccsv reddens it).  SCOPE: lex only -- add MODULES rows as harnesses land."
+  say "                     teeth proven (the pre-fix fixture ccsv reddens it).  SCOPE: lex only -- add MODULES rows as harnesses land."
 fi
 exit $fail

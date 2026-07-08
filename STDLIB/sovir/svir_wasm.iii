@@ -1,5 +1,7 @@
-/* svir_wasm.iii -- TRANSLATOR #2 (SVIR v1): a multi-function .wasm module to stdout.
+/* svir_wasm.iii -- TRANSLATOR #2 (SVIR v1/v2): a multi-function .wasm module to stdout.
  * v1 module: [u8 func_count] then per func [u8 params][u8 nresults][u16 LE body_len][body].
+ * v2 module: first byte 0x00 (illegal in v1) then [func_count:u16 LE], funcs from offset 3; data length u32.
+ * CALL2 = 0x74 [fi:u16 LE][ac:u8] -> the same `call` lowering as CALL, wide index (LEB carries it natively).
  * PRINT_CHAR -> call an imported env.putc (the host does I/O); imports shift the func index space, so a module
  * that prints gets import_count=1 and every CALL/main/export index is offset by 1.  Independent of svir_x86.
  * CALL_INDIRECT -> i32.wrap_i64 (the popped SVIR index) + native call_indirect over a funcref table whose
@@ -68,6 +70,7 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
     }
     let extra : u32 = nloc - params
     if extra == 0u32 { c_emit(0x00u32) } else { c_emit(0x01u32)  c_leb_u(extra as u64)  c_emit(0x7Eu32) }
@@ -110,6 +113,7 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  p = p + 1u64  c_emit(0xA7u32)  c_emit(0x0Du32)  c_leb_u(dp[0u64] as u64) }
         if op == 0x60u32 { c_emit(0x0Fu32) }
         if op == 0x70u32 { let fp : *u8 = (base + boff + p) as *u8  let f : u32 = fp[0u64] as u32  p = p + 2u64  c_emit(0x10u32)  c_leb_u((f + IC) as u64) }   /* CALL -> call (funcidx + imports) */
+        if op == 0x74u32 { let f0 : *u8 = (base + boff + p) as *u8  let f1 : *u8 = (base + boff + p + 1u64) as *u8  let f : u32 = (f0[0u64] as u32) | ((f1[0u64] as u32) << 8u32)  p = p + 3u64  c_emit(0x10u32)  c_leb_u((f + IC) as u64) }   /* CALL2 [fi:u16][ac] -> the same `call` (LEB funcidx) */
         if op == 0x73u32 { let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32  p = p + 1u64   /* CALL_INDIRECT ac : SVIR index on TOP (i64) */
             c_emit(0xA7u32)  c_emit(0x11u32)  c_leb_u((FN_N + IC + ci_type_pos(ac)) as u64)  c_emit(0x00u32) }    /* i32.wrap_i64 ; call_indirect (ac-type) (table 0) -- engine bounds-check traps OOB */
         if op == 0x71u32 { c_emit(0x10u32)  c_leb_u(0u64) }   /* PRINT_CHAR -> call $putc (import 0) */
@@ -140,6 +144,7 @@ fn body_has_print(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
         if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x71 ('q') must not force a phantom putc import (IC) */
     }
     return 0u32
@@ -161,6 +166,7 @@ fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
         if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte in 0x80..0x89 must not read as a memory op */
     }
     return 0u32
@@ -170,10 +176,12 @@ fn main() -> u64 {
     _setmode(1i32, 0x8000i32)
     let base : u64 = svir_ptr()
 
-    /* parse module header */
+    /* parse module header (v1 [nfunc:u8]@1 ; v2 0x00 [nfunc:u16 LE]@3) */
     let hp : *u8 = base as *u8
     FN_N = hp[0u64] as u32
     let mut off : u64 = 1u64
+    let mut v2 : u32 = 0u32
+    if FN_N == 0u32 { FN_N = (hp[1u64] as u32) | ((hp[2u64] as u32) << 8u32)  off = 3u64  v2 = 1u32 }
     let mut i : u32 = 0u32
     while i < FN_N {
         let pp : *u8 = (base + off) as *u8
@@ -194,10 +202,15 @@ fn main() -> u64 {
         if body_has_mem(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { UM = 1u32 }
         pf = pf + 1u32
     }
-    /* trailing data section [u16 len][bytes] after the last function -> byte-packed initial linear memory */
+    /* trailing data section (v1 [u16 len] ; v2 [u32 len]) after the last function -> byte-packed initial linear memory */
     let total : u64 = svir_len()
     let mut dlen : u64 = 0u64
-    if off < total { let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64) }
+    let mut dhd : u64 = 2u64
+    if v2 == 1u32 { dhd = 4u64 }
+    if off < total {
+        let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64)
+        if v2 == 1u32 { let d2:*u8=(base+off+2u64) as *u8  let d3:*u8=(base+off+3u64) as *u8  dlen = dlen | ((d2[0u64] as u64) << 16u64) | ((d3[0u64] as u64) << 24u64) }
+    }
     if dlen > 0u64 { UM = 1u32 }
 
     /* build every function body into CBUF (registers every CALL_INDIRECT arg-count into CI_ACS) */
@@ -281,7 +294,7 @@ fn main() -> u64 {
         let seglen : u64 = 4u64 + leblen_u(dlen) + dlen          /* 0x00 0x41 0x00 0x0B + lenLEB + bytes */
         pc(0x0Bu32)  pleb_u(1u64 + seglen)  pleb_u(1u64)         /* section id, len, count=1 */
         pc(0x00u32)  pc(0x41u32)  pc(0x00u32)  pc(0x0Bu32)  pleb_u(dlen)   /* flags=0 ; i32.const 0 ; end ; len */
-        let mut d:u64=0u64  while d < dlen { let dp:*u8=(base+off+2u64+d) as *u8  pc(dp[0u64] as u32)  d=d+1u64 }
+        let mut d:u64=0u64  while d < dlen { let dp:*u8=(base+off+dhd+d) as *u8  pc(dp[0u64] as u32)  d=d+1u64 }
     }
     return 0u64
 }

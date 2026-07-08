@@ -356,8 +356,12 @@ fn prescan_str() {
 }
 
 var BD : [u8; 262144]  var BL : u64 = 0u64
+var V2M : u32 = 0u32   /* 1 = emit the SVIR v2 container (0x00 [nfunc:u16] + CALL2 + u32 data length); set when FN>255 */
 fn eb(b: u32) { if BL<262143u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }
 fn econst(v: i64) { eb(0x01u32)  let mut k:u32=0u32  while k<8u32 { eb(((v as u64) >> (8u64*(k as u64))) as u32)  k=k+1u32 } }
+/* CALL emit -- v1 [0x70][fi:u8][ac] ; v2 [0x74][fi:u16 LE][ac] (V2M when FN>255, main.c = 334 fns).  A single
+ * helper so every call site (variadic / sret / normal / multi-decl) picks the right width -- no truncation. */
+fn ecall(fi: u32, ac: u32) { if V2M==1u32 { eb(0x74u32)  eb(fi & 0xFFu32)  eb((fi >> 8u32) & 0xFFu32)  eb(ac) } else { eb(0x70u32)  eb(fi)  eb(ac) } }
 /* Boss-2: emit the ADDRESS of struct-value `t`'s byte at offset `off`.  A struct-VALUE LOCAL (LVT/LVB) ->
  * emit_frame_addr(LVB+off): frame-relative at SHADOW_ON=1 (recursion-safe), BYTE-IDENTICAL to econst(LVB+off)
  * at OFF (no regression).  A global struct-value (or fallback) -> econst(abase+off).  Replaces the bare
@@ -854,7 +858,7 @@ fn eprim() {
                         if cp(Q_COM)==1u32 { C=C+1u32 } else { g=0u32 }
                     }
                 }
-                eat(Q_RP)  econst(VA_BUF)  eb(0x70u32)  eb(fvi as u32)  eb(nn+1u32)  return   /* CALL fi (named args + va-ptr) */
+                eat(Q_RP)  econst(VA_BUF)  ecall(fvi as u32, nn+1u32)  return   /* CALL fi (named args + va-ptr) */
             } }
             /* call(...).field where the callee returns a struct-VALUE (sret, >8B): the bare-call path leaves NO
              * hidden dest, so a trailing `.field` dangles (the call result is unconsumed -> residue -> the seed's
@@ -869,7 +873,7 @@ fn eprim() {
                     let tb:i64=MTOP as i64  MTOP=MTOP+STSZ[svr as u64]                                      /* fresh sret destination buffer */
                     econst(tb)                                                                              /* arg0 = &buffer (dest-first) */
                     let mut acs:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  acs=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  acs=acs+1u32 } }  eat(Q_RP)
-                    eb(0x70u32)  eb(fisv as u32)  eb(acs+1u32)  eb(0x72u32)                                 /* CALL fi (dest+args) ; DROP the dummy result */
+                    ecall(fisv as u32, acs+1u32)  eb(0x72u32)                                 /* CALL fi (dest+args) ; DROP the dummy result */
                     let mut cur:i32=svr  let mut acc:i64=tb  let mut gc:u32=1u32                            /* load .field / inline .f.f chain from the buffer */
                     while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)  acc=acc+fo  let np:i32=fieldpt(cur,ftc)  let mut more:u32=0u32  if np>=0i32 { if cp(Q_DOT)==1u32 {more=1u32} }  if more==1u32 {cur=np} else { econst(acc)  eload(fieldelem(cur,ftc), fieldsign(cur,ftc))  gc=0u32 } }
                     return
@@ -878,14 +882,14 @@ fn eprim() {
                     let tb:i64=MTOP as i64  MTOP=MTOP+STSZ[svr as u64]                                      /* fresh sret destination buffer (distinct per site, like the .field path above; safe for consume-within-statement -- the seed's of()/span() are leaves) */
                     econst(tb)                                                                              /* arg0 = &buffer (dest-first) */
                     let mut acs:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  acs=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  acs=acs+1u32 } }  eat(Q_RP)
-                    eb(0x70u32)  eb(fisv as u32)  eb(acs+1u32)  eb(0x72u32)                                 /* CALL fi (dest+args) ; DROP the dummy result */
+                    ecall(fisv as u32, acs+1u32)  eb(0x72u32)                                 /* CALL fi (dest+args) ; DROP the dummy result */
                     econst(tb)                                                                              /* leave &buffer as the rvalue: a >8B struct arg is passed BY ADDRESS (929 copy-in), and `T x = f(g())` copies from it */
                     return
                 }
             }
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
-            else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac)
+            else { let fi:i32=fidx(t)  if fi>=0i32 { ecall(fi as u32, ac)
                 if cp(Q_LBR)==1u32 { let cps:i64=fn_ret_psz(FNT[fi as u64])   /* call()[i] READ (UPDATE-61; cg_r3 `iii_ast_source_buf(cg->ast)[name.offset+i]`, sites 979/989/3332): the call left a scalar POINTER on the stack -> +i*pointee, typed load.  Works for defined AND import callees (both fidx-routed).  A struct-ptr `call()[i]` (no seed site) stays out of scope -> the `[` dangles VISIBLY (verify-fail), never a silent wrong load; `call()[i]=e` stores likewise. */
                     if cps>0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(cps)  eb(0x20u32)  eload(cps, fn_ret_psg(FNT[fi as u64]))  return } }
                 let mut cur:i32=fn_ret_struct(FNT[fi as u64])  let mut gc:u32=1u32  if cur<0i32 {gc=0u32}  if cp(Q_ARROW)==0u32 {gc=0u32}   /* call()->field READ : the call leaves a `StructType *` -> resolve the trailing ->/. member chain (iiip_peek2(st)->kind ; iii_ast_get(..)->u.list.count).  3 modes, the MIRROR of pstmt's call-base STORE walker: ARROW-next = pointer-field deref hop (LOAD64) ; DOT-next into an embedded/union member (fieldpt>=0) = offset-only hop ; else = the FINAL field -> typed load.  (Was ARROW-only: `->u.a` loaded 8 raw bytes at `u` and left `.a` dangling -> desync -> the rc=8 class the _cs1 falsifier pins.) */
@@ -1227,7 +1231,7 @@ fn pstmt() {
                 if isst==1u32 {
                     C=ct  C=C+1u32  eat(Q_LP)
                     let mut cac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  cac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  cac=cac+1u32 } }  eat(Q_RP)
-                    eb(0x70u32)  eb(cft as u32)  eb(cac)
+                    ecall(cft as u32, cac)
                     let mut ccur:i32=crs  let mut cgc:u32=1u32
                     while cgc==1u32 { C=C+1u32  let cfc:u32=C  C=C+1u32  let cfo:i64=fieldoff(ccur,cfc)  let cnp:i32=fieldpt(ccur,cfc)
                         let mut cmode:u32=0u32  if cp(Q_ARROW)==1u32 {cmode=1u32} else { if cp(Q_DOT)==1u32 { if cnp>=0i32 {cmode=2u32} } }
@@ -1315,7 +1319,7 @@ fn pstmt() {
                         while bi<nf { let fi:u32=fb+bi  emit_vbase_s(s, SFOFF[fi as u64] as i64)  econst(0i64)  estore(SFEL[fi as u64])  bi=bi+1u32 } }   /* `Foo h={e0,..}` brace-init: per-field store + zero tail (NO eat(;)/return -> loop continues for `, b=..`) */
                     else { if szc<=8i64 { emit_vbase_s(s, 0i64)  ebin(0u32)  eb(0x83u32) }   /* `= <expr>` (<=8B): packed value -> STORE64 (ebin stops at `,`/`;`) */
                         else { let fi:i32=fidx(C)  let mut rsv:i32=0i32-1i32  if fi>=0i32 { rsv=fn_ret_sval(FNT[fi as u64]) }
-                            if rsv>=0i32 { emit_vbase_s(s, 0i64)  C=C+1u32  eat(Q_LP)  let mut nn:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  nn=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  nn=nn+1u32 } }  eat(Q_RP)  eb(0x70u32)  eb(fi as u32)  eb(nn+1u32)  eb(0x72u32) }   /* `= f(args)` struct-returning call -> sret(&s) FIRST -- THE multi-decl case `T a=mk(),b=mk()` */
+                            if rsv>=0i32 { emit_vbase_s(s, 0i64)  C=C+1u32  eat(Q_LP)  let mut nn:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  nn=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  nn=nn+1u32 } }  eat(Q_RP)  ecall(fi as u32, nn+1u32)  eb(0x72u32) }   /* `= f(args)` struct-returning call -> sret(&s) FIRST -- THE multi-decl case `T a=mk(),b=mk()` */
                                 else { let srcvt:i32=avtype(C)
                                     if srcvt>=0i32 { let ds:u32=ispat(C+1u32,Q_SEMI)  let dc:u32=ispat(C+1u32,Q_COM)  if ds==1u32 { let srcsl:i32=lidx(C)  let mut bc:i64=0i64  while bc<szc { emit_vbase_s(s, bc)  emit_vbase_s(srcsl as u32, bc)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+1u32 } else { if dc==1u32 { let srcsl:i32=lidx(C)  let mut bc:i64=0i64  while bc<szc { emit_vbase_s(s, bc)  emit_vbase_s(srcsl as u32, bc)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+1u32 } else { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } } } }   /* `= otherStructVar` (>8B): frame-aware per-byte copy (term `;` OR `,`) */
                                     else { let stsl:i32=lidx(C)  let stpt:i32=lpt(C)  let mut donf:u32=0u32  if stsl>=0i32 { if stpt>=0i32 { if ispat(C+1u32,Q_ARROW)==1u32 { if TK[(C+2u32) as u64]==1u32 { let ts:u32=ispat(C+3u32,Q_SEMI)  let tcm:u32=ispat(C+3u32,Q_COM)  if ts==1u32 { let foff:i64=fieldoff(stpt, C+2u32)  let mut bc:i64=0i64  while bc<szc { emit_vbase_s(s, bc)  emit_lget(stsl as u32)  econst(foff+bc)  eb(0x20u32)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+3u32  donf=1u32 } else { if tcm==1u32 { let foff:i64=fieldoff(stpt, C+2u32)  let mut bc:i64=0i64  while bc<szc { emit_vbase_s(s, bc)  emit_lget(stsl as u32)  econst(foff+bc)  eb(0x20u32)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+3u32  donf=1u32 } } } } } }  if donf==0u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } } } } } }
@@ -2177,11 +2181,13 @@ var DB : [u8; 24]
 fn pdec(v0: u64) { if v0==0u64 { pc(48u32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { DB[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  pc(DB[n as u64] as u32) } }
 fn emit_module() {
     let total:u64=ML+1u64
-    pstr("module gen_svir\nvar SVIR : [u8; ~" as u64)  pdec(total)  pstr("] = [\n~" as u64)
-    pdec(FN as u64)  pstr("u8~" as u64)
+    let hdr:u64=total+2u64  let mut tot2:u64=total  if V2M==1u32 { tot2=hdr }   /* v2 header is 3 bytes (0x00 lo hi) vs v1's 1 -> +2 array slots */
+    pstr("module gen_svir\nvar SVIR : [u8; ~" as u64)  pdec(tot2)  pstr("] = [\n~" as u64)
+    if V2M==1u32 { pstr("0u8,~" as u64)  pdec((FN & 0xFFu32) as u64)  pstr("u8,~" as u64)  pdec(((FN >> 8u32) & 0xFFu32) as u64)  pstr("u8~" as u64) }
+    else { pdec(FN as u64)  pstr("u8~" as u64) }
     let mut i:u64=0u64  while i<ML { pc(44u32)  pdec(MO[i] as u64)  pstr("u8~" as u64)  i=i+1u64 }
     pstr("\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)
-    pdec(total)  pstr("u64 }\n~" as u64)
+    pdec(tot2)  pstr("u64 }\n~" as u64)
 }
 
 fn bb(base:u64, i:u64) -> u32 { let p:*u8=(base+i) as *u8  return p[0u64] as u32 }
@@ -2455,11 +2461,13 @@ fn main(argc: i32, argv: u64) -> u64 {
         let mut fk:u32=0u32  while fk<FN { pdec(fk as u64)  pc(58u32)  pc(32u32)  let mut ci:u32=0u32  while ci<FNL[fk as u64] { pc(sb((FNO[fk as u64]+ci) as u64))  ci=ci+1u32 }  pc(10u32)  fk=fk+1u32 }
         return 0u64
     }
+    V2M = 0u32  if FN > 255u32 { V2M = 1u32 }                       /* >255 fns (main.c=334) -> SVIR v2 container + CALL2 + u32 data length */
     ML=0u64
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }
-    if DEND > 0u64 {                                                /* append the SVIR data section [u16 len][bytes] (strings + array inits) */
+    if DEND > 0u64 {                                                /* append the SVIR data section [len][bytes] (v1 u16 / v2 u32) (strings + array inits) */
         mb((DEND & 0xFFu64) as u32)  mb(((DEND >> 8u64) & 0xFFu64) as u32)
+        if V2M==1u32 { mb(((DEND >> 16u64) & 0xFFu64) as u32)  mb(((DEND >> 24u64) & 0xFFu64) as u32) }
         let mut d:u64=0u64  while d<DEND { mb(SDAT[d] as u32)  d=d+1u64 }
     }
     if LOVF==1u32 { pstr("// FATAL ccsv: a function exceeds the 256 SVIR-local cap -- needs LEB-encoded local indices (the silent slot-256->0 collision is refused).\n!!!CCSV_LOCAL_OVERFLOW!!!\n" as u64)  return 7u64 }   /* LOUD: emit unparseable iii + nonzero exit, never silently-corrupt SVIR */

@@ -1,8 +1,8 @@
-/* svir_interp.iii -- the REFERENCE SVIR v1 interpreter (the value-tracer): a 3rd, INDEPENDENT executor of a
+/* svir_interp.iii -- the REFERENCE SVIR v1/v2 interpreter (the value-tracer): a 3rd, INDEPENDENT executor of a
  * linked `gen_svir` module, sharing NO code with svir_x86 / svir_wasm.  It executes SVIR SEMANTICS faithfully
  * (per DOCS/SVIR-V1-CANONICAL.md + the svir_x86 ABI: func 0 = main; flat `svir_mem` byte memory with direct
- * mem[addr] LOAD/STORE; trailing [u16 len][bytes] data section byte-packed at offset 0; CALL = pop argcount
- * args -> callee locals 0..n-1, push the RETURN result) and PRINTS the program's output via putchar.
+ * mem[addr] LOAD/STORE; trailing data section byte-packed at offset 0 (v1 [u16 len] / v2 [u32 len]); CALL/CALL2
+ * = pop argcount args -> callee locals 0..n-1, push the RETURN result) and PRINTS the output via putchar.
  *
  * PURPOSE (Boss-1): a faithful reference executor is the ground-truth oracle for ANY SVIR-vs-backend question.
  * If it reproduces the SHADOW_ON=1 wrong SHA digest, the SVIR is semantically wrong (ccsv codegen) -- a 3rd
@@ -19,7 +19,8 @@ var VS   : [u64; 16384]   var VSP : u32 = 0u32      /* the shared eval (value) s
 var LOC  : [u64; 131072]                 /* per-call locals: frame `depth` owns LOC[depth*256 .. +256] (512 frames) */
 var CK   : [u32; 16384]   var CP : [u64; 16384]   var CE : [u64; 16384]   /* per-call control stack: depth*64 + csp */
 
-var FN_OFF   : [u64; 2048]   var FN_BLEN : [u64; 2048]   var NFUNC : u32 = 0u32
+var FN_OFF   : [u64; 4096]   var FN_BLEN : [u64; 4096]   var NFUNC : u32 = 0u32   /* 4096: the linked whole-seed is ~2,300 fns (v2 container) */
+var V2G : u32 = 0u32                     /* 1 = v2 container (0x00 [nfunc:u16 LE]; data length u32) */
 const STEP_CAP : u64 = 4000000000u64     /* global step budget (a non-terminating module refuses, never hangs) */
 var STEPS : u64 = 0u64
 
@@ -56,7 +57,7 @@ fn mst(a: u64, w: u32, v: u64) {
 fn vpush(v: u64) { if VSP < 16384u32 { VS[VSP as u64] = v  VSP = VSP + 1u32 } }
 fn vpop() -> u64 { if VSP > 0u32 { VSP = VSP - 1u32  return VS[VSP as u64] }  return 0u64 }
 
-fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  if op==0x73u32 {return 1u64}  return 0u64 }   /* 0x73 CALL_INDIRECT ac (1 imm byte); needed so match_end/match_else skip it correctly */
+fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  if op==0x73u32 {return 1u64}  if op==0x74u32 {return 3u64}  return 0u64 }   /* 0x73 CALL_INDIRECT ac (1 imm byte) + 0x74 CALL2 [fi:u16 LE][ac] (3 imm bytes); needed so match_end/match_else skip them correctly */
 
 /* find, for the construct opening at body-offset q (BLOCK/LOOP/IF), its matching END position (opcode-aware). */
 fn match_end(boff: u64, blen: u64, q: u64) -> u64 {
@@ -118,6 +119,10 @@ fn exec_fn(fnidx: u32, depth: u32) -> u64 {
             let nb : u64 = ((depth+1u32) as u64) * 256u64
             let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }
             vpush(exec_fn(fi, depth + 1u32)) }
+        if op == 0x74u32 { adv=0u32  let fi:u32=(iu16(boff+p+1u64)) as u32  let ac:u32=ib(boff+p+3u64)  p=p+4u64   /* CALL2 [fi:u16 LE][ac] */
+            let nb : u64 = ((depth+1u32) as u64) * 256u64
+            let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }
+            vpush(exec_fn(fi, depth + 1u32)) }
         if op == 0x73u32 { adv=0u32  let ac:u32=ib(boff+p+1u64)  p=p+2u64   /* CALL_INDIRECT ac : fn-index is on TOP of the eval stack (pushed after the args) */
             let fi:u32 = vpop() as u32                                       /* pop the index first */
             let nb : u64 = ((depth+1u32) as u64) * 256u64
@@ -158,15 +163,22 @@ fn exec_fn(fnidx: u32, depth: u32) -> u64 {
 fn load_module() {
     NFUNC = ib(0u64)
     let mut p : u64 = 1u64  let mut fi : u32 = 0u32
+    if NFUNC == 0u32 { NFUNC = (iu16(1u64)) as u32  p = 3u64  V2G = 1u32 }   /* v2: 0x00 [nfunc:u16 LE], funcs from offset 3 */
     while fi < NFUNC {
         let bl : u64 = iu16(p + 2u64)
         FN_OFF[fi as u64] = p + 4u64  FN_BLEN[fi as u64] = bl
         p = p + 4u64 + bl
         fi = fi + 1u32
     }
-    /* trailing data section [u16 len][bytes] -> byte-packed into MEM at offset 0 */
+    /* trailing data section (v1 [u16 len] ; v2 [u32 len]) -> byte-packed into MEM at offset 0 */
     let total : u64 = svir_len()
-    if p < total { let dl : u64 = iu16(p)  DLEN_G = dl  let mut k : u64 = 0u64  while k < dl { MEM[k] = ib(p + 2u64 + k) as u8  k=k+1u64 } }
+    if p < total {
+        let mut dl : u64 = iu16(p)
+        let mut db : u64 = p + 2u64
+        if V2G == 1u32 { dl = dl | (iu16(p + 2u64) << 16u64)  db = p + 4u64 }
+        DLEN_G = dl
+        let mut k : u64 = 0u64  while k < dl { MEM[k] = ib(db + k) as u8  k=k+1u64 }
+    }
 }
 
 fn main() -> u64 {

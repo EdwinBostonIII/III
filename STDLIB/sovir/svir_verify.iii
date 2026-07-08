@@ -1,7 +1,11 @@
-/* svir_verify.iii -- the auditable SVIR v1 verifier (the trust anchor).  Validates a SVIR module against
+/* svir_verify.iii -- the auditable SVIR v1/v2 verifier (the trust anchor).  Validates a SVIR module against
  * DOCS/SVIR-V1-CANONICAL.md: header consistency, every opcode known, operands in range, structured control
  * balanced, a conservative eval-stack never underflows, and each body is consumed EXACTLY.  Returns 0 if valid,
  * else a nonzero error code.  Small + readable on purpose -- the whole system's trust anchors here.
+ *
+ * v2 container (additive; v1 saturates at 255 fns -- main.c alone registers 334): first byte 0x00 (illegal
+ * in v1) then [nfunc:u16 LE], funcs from offset 3; the data-section length widens u16 -> u32.  CALL2 =
+ * 0x74 [fi:u16 LE][ac:u8], same stack discipline as CALL.  v1 modules are byte-unchanged.
  *
  * Error codes: 1 bad header  2 unknown opcode  4 body length mismatch  5 control unbalanced
  *   6 ELSE without IF  7 BR/BR_IF depth out of range  8 eval-stack underflow  9 CALL funcidx out of range */
@@ -36,6 +40,7 @@ fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 @export {
         if op == 0x71u32 { depth = depth - 1i64  known = 1u32 }                               /* PRINT_CHAR */
         if op == 0x72u32 { depth = depth - 1i64  known = 1u32 }                               /* DROP */
         if op == 0x73u32 { let ac : u32 = vb(base, boff + p)  p = p + 1u64  depth = depth - (ac as i64)  known = 1u32 }   /* CALL_INDIRECT ac : pops ac args + 1 stack fn-index, pushes 1 result -> net -ac. The index is runtime, so (unlike CALL 0x70) there is NO static funcidx check here; an out-of-range index MUST be trapped at EXECUTION -- enforced in svir_interp (bounds-check), and a HARD Layer-3 teeth gate for the x86/wasm backends (a deliberately-OOB index must trap, never silently call fn0). */
+        if op == 0x74u32 { let fi : u32 = vb(base, boff + p) | (vb(base, boff + p + 1u64) << 8u32)  let ac : u32 = vb(base, boff + p + 2u64)  p = p + 3u64  if fi >= nfunc { return 9u64 }  depth = depth - (ac as i64) + 1i64  known = 1u32 }   /* CALL2 [fi:u16 LE][ac] -- the >255-function call form; stack discipline == CALL */
         if op == 0x80u32 { known = 1u32 }                                                     /* LOAD8: net 0 */
         if op == 0x81u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE8 */
         if op == 0x82u32 { known = 1u32 }                                                     /* LOAD64: net 0 */
@@ -57,9 +62,16 @@ fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 @export {
 
 fn svir_verify(src: u64, len: u64) -> u64 @export {
     if len < 1u64 { return 1u64 }
-    let nfunc : u32 = vb(src, 0u64)
-    if nfunc == 0u32 { return 1u64 }
+    let mut nfunc : u32 = vb(src, 0u64)
     let mut off : u64 = 1u64
+    let mut v2 : u32 = 0u32
+    if nfunc == 0u32 {                          /* v2 marker: 0x00 [nfunc:u16 LE], funcs from offset 3 */
+        if len < 3u64 { return 1u64 }
+        nfunc = vb(src, 1u64) | (vb(src, 2u64) << 8u32)
+        off = 3u64
+        v2 = 1u32
+    }
+    if nfunc == 0u32 { return 1u64 }
     let mut i : u32 = 0u32
     while i < nfunc {
         if (off + 4u64) > len { return 1u64 }
@@ -71,10 +83,13 @@ fn svir_verify(src: u64, len: u64) -> u64 @export {
         off = boff + blen
         i = i + 1u32
     }
-    if off < len {                              /* optional trailing data section [u16 len][bytes] */
-        if (off + 2u64) > len { return 1u64 }
-        let dl : u64 = (vb(src, off) as u64) | ((vb(src, off + 1u64) as u64) << 8u64)
-        if (off + 2u64 + dl) != len { return 1u64 }   /* data section must consume the rest exactly */
+    if off < len {                              /* optional trailing data section: v1 [u16 len] ; v2 [u32 len] */
+        let mut hd : u64 = 2u64
+        if v2 == 1u32 { hd = 4u64 }
+        if (off + hd) > len { return 1u64 }
+        let mut dl : u64 = (vb(src, off) as u64) | ((vb(src, off + 1u64) as u64) << 8u64)
+        if v2 == 1u32 { dl = dl | ((vb(src, off + 2u64) as u64) << 16u64) | ((vb(src, off + 3u64) as u64) << 24u64) }
+        if (off + hd + dl) != len { return 1u64 }   /* data section must consume the rest exactly */
         return 0u64
     }
     if off != len { return 1u64 }

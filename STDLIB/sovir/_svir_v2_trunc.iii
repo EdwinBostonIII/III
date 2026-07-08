@@ -1,0 +1,25 @@
+/* _svir_v2_trunc.iii -- v2 HEADER-CONSISTENCY teeth: the header claims nfunc=300 but only fn0's bytes
+ * follow -> svir_verify MUST return 1 (bad header / truncated), never walk off the buffer. */
+module svir_v2_trunc
+
+var SV : [u8; 64]
+var N  : u64 = 0u64
+
+fn eb(b: u32) { SV[N] = (b & 255u32) as u8  N = N + 1u64 }
+fn e16(v: u32) { eb(v & 255u32)  eb((v >> 8u32) & 255u32) }
+fn ec64(v: u64) {
+    eb(1u32)
+    let mut k : u32 = 0u32
+    let mut x : u64 = v
+    while k < 8u32 { eb((x & 255u64) as u32)  x = x >> 8u64  k = k + 1u32 }
+}
+
+fn build() {
+    eb(0u32)  e16(300u32)                     /* claims 300 functions */
+    eb(0u32)  eb(1u32)  e16(10u32)            /* ...but only one 10-byte body is present */
+    ec64(99u64)
+    eb(0x60u32)
+}
+
+fn svir_ptr() -> u64 @export { if N == 0u64 { build() }  return &SV as u64 }
+fn svir_len() -> u64 @export { if N == 0u64 { build() }  return N }

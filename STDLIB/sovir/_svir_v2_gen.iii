@@ -1,0 +1,51 @@
+/* _svir_v2_gen.iii -- SVIR v2 CONTAINER + CALL2 mechanism KAT (the >255-function enabler, Phi1/Lambda0).
+ *
+ * WHY: the v1 container header is [nfunc:u8] and CALL is [0x70][fi:u8][ac:u8] -- both saturate at 255
+ * functions.  main.c alone registers FN=334 (78 defs + 256 imports), so its container TRUNCATES (334&0xFF=78)
+ * and every CALL to fi>=256 wraps (the rc=9 class measured 2026-07-08).  The linked whole-seed (~2,300 fns)
+ * is impossible without a wider form.  v2 (additive, versioned): first byte 0x00 (ILLEGAL in v1: nfunc==0
+ * is rc=1 there) then [nfunc:u16 LE]; funcs from offset 3; per-func header unchanged; data section length
+ * widens u16->u32.  CALL2 = 0x74 [fi:u16 LE][ac:u8], same stack discipline as CALL.  v1 modules are
+ * byte-UNTOUCHED (every existing golden stays golden); emitters choose v2 only when they must.
+ *
+ * THIS module hand-builds a 300-function v2 module: fn0 (entry) = CALL2 fi=299 ac=0 ; CONST 92 ; ADD ;
+ * RETURN -> 7+92 = 99.  fns 1..299 = CONST k ; RETURN (fn299 returns 7).  Consumed by svir_verify (=0),
+ * svir_interp (=99), svir_x86 (sovereign PE =99), svir_wasm (node =99), svir_dis (clean walk).
+ * Falsifiers live in _svir_v2_oob.iii (CALL2 fi=300 -> rc=9) and _svir_v2_trunc.iii (header claims 300,
+ * bodies stop early -> rc=1). */
+module svir_v2_gen
+
+var SV : [u8; 8192]
+var N  : u64 = 0u64
+
+fn eb(b: u32) { SV[N] = (b & 255u32) as u8  N = N + 1u64 }
+fn e16(v: u32) { eb(v & 255u32)  eb((v >> 8u32) & 255u32) }
+fn ec64(v: u64) {   /* CONST v : 0x01 + 8-byte LE immediate */
+    eb(1u32)
+    let mut k : u32 = 0u32
+    let mut x : u64 = v
+    while k < 8u32 { eb((x & 255u64) as u32)  x = x >> 8u64  k = k + 1u32 }
+}
+
+fn build() {
+    eb(0u32)  e16(300u32)                     /* v2 marker + nfunc=300 (u16 LE) */
+    /* fn0: params=0 nres=1 blen=15 : CALL2 299,0 (4) ; CONST 92 (9) ; ADD (1) ; RETURN (1) */
+    eb(0u32)  eb(1u32)  e16(15u32)
+    eb(0x74u32)  e16(299u32)  eb(0u32)
+    ec64(92u64)
+    eb(0x20u32)
+    eb(0x60u32)
+    /* fns 1..299: params=0 nres=1 blen=10 : CONST k ; RETURN  (fn299 returns 7 so 7+92=99) */
+    let mut f : u32 = 1u32
+    while f < 300u32 {
+        eb(0u32)  eb(1u32)  e16(10u32)
+        let mut v : u64 = f as u64
+        if f == 299u32 { v = 7u64 }
+        ec64(v)
+        eb(0x60u32)
+        f = f + 1u32
+    }
+}
+
+fn svir_ptr() -> u64 @export { if N == 0u64 { build() }  return &SV as u64 }
+fn svir_len() -> u64 @export { if N == 0u64 { build() }  return N }

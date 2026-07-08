@@ -1,0 +1,37 @@
+/* _svir_v2_oob.iii -- CALL2 out-of-range TEETH (falsifier for the v2 mechanism, mirrors rc=9 on v1 CALL).
+ * Identical to _svir_v2_gen.iii except fn0's CALL2 names fi=300 with nfunc=300 -> svir_verify MUST return 9.
+ * A verifier that accepts this has no static call-target check on the wide form -> the gate REDDENS. */
+module svir_v2_oob
+
+var SV : [u8; 8192]
+var N  : u64 = 0u64
+
+fn eb(b: u32) { SV[N] = (b & 255u32) as u8  N = N + 1u64 }
+fn e16(v: u32) { eb(v & 255u32)  eb((v >> 8u32) & 255u32) }
+fn ec64(v: u64) {
+    eb(1u32)
+    let mut k : u32 = 0u32
+    let mut x : u64 = v
+    while k < 8u32 { eb((x & 255u64) as u32)  x = x >> 8u64  k = k + 1u32 }
+}
+
+fn build() {
+    eb(0u32)  e16(300u32)
+    eb(0u32)  eb(1u32)  e16(15u32)
+    eb(0x74u32)  e16(300u32)  eb(0u32)        /* fi == nfunc -> out of range -> rc=9 */
+    ec64(92u64)
+    eb(0x20u32)
+    eb(0x60u32)
+    let mut f : u32 = 1u32
+    while f < 300u32 {
+        eb(0u32)  eb(1u32)  e16(10u32)
+        let mut v : u64 = f as u64
+        if f == 299u32 { v = 7u64 }
+        ec64(v)
+        eb(0x60u32)
+        f = f + 1u32
+    }
+}
+
+fn svir_ptr() -> u64 @export { if N == 0u64 { build() }  return &SV as u64 }
+fn svir_len() -> u64 @export { if N == 0u64 { build() }  return N }

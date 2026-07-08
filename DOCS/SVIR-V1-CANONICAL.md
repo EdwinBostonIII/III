@@ -85,3 +85,46 @@ nested expressions in array sizes, an output primitive other than via the runtim
 
 A canonical emitter is a pure function of the source bytes: same `.iii` in → same SVIR bytes out, every run.
 (Verified for `iiisv`: byte-identical ×2 on `indep_toolchain`/`indep_ops`/`indep_bignum` — see SVIR-DDC-FINDINGS.)
+
+## 6. Post-v1 growth (2026-06→07): the living ISA + the v2 container
+
+§0–§5 are the **frozen v1 contract** (the DDC frontend-closure scope, 2026-06-23) and stay authoritative for
+it. The set below was added by the Φ1 seed campaign; the anchor (`STDLIB/sovir/svir_verify.iii`, 97 lines) is
+normative — this section transcribes it.
+
+### 6.1 Opcodes added since v1 (implemented in all five consumers: verify / interp / x86 / wasm / dis)
+
+| Op | Byte | Operands | Stack effect / rule |
+|---|---|---|---|
+| `CALL_INDIRECT` | `0x73` | u8 argcount | pop fn-index (stack top, pushed after the args), pop argcount args → push result (net −argcount). The index is runtime data, so there is **no static check**: an out-of-range index must **trap at execution** (interp bounds-check → 199; x86 `__svci` switchboard; wasm native `call_indirect` over a funcref table). `run_fnptr_gate.sh` pins the OOB trap on every executor. |
+| `LOAD64 / STORE64` | `0x82 / 0x83` | — | pop addr → push 8-byte LE load (net 0) / pop value, pop addr → store 8 bytes (net −2) |
+| `LOAD16_U LOAD16_S LOAD32_U LOAD32_S` | `0x84 0x85 0x86 0x87` | — | pop addr → push zero-/sign-extended load (net 0) |
+| `STORE16 / STORE32` | `0x88 / 0x89` | — | pop value, pop addr → store low 2 / 4 bytes (net −2) |
+| `IMPORT` | `0x8A` | u8 namelen, name bytes | net 0. The whole body of a **declared-not-defined** external function is exactly this decl; a `CALL`/`CALL2` to its funcidx resolves **by name at link** (the sovld phase). Executing an unresolved import fails LOUDLY (interp 198, x86 `ExitProcess(198)` stub, wasm `unreachable`) — never silently. Body scanners must skip the name bytes (a name byte that collides with an opcode must not be decoded). |
+| `CALL2` | `0x74` | u16 LE funcidx, u8 argcount | `CALL`'s discipline with a wide index: pop argcount args → push result (net −argcount+1). Static `funcidx < func_count` check (error 9). The >255-function call form. |
+
+### 6.2 The v2 container (additive — v1 saturates at 255 functions)
+
+`COMPILER/BOOT/main.c` alone registers 334 functions (78 defs + 256 imports) — the v1 `[u8 func_count]`
+header cannot carry it (the pre-v2 emitter wrote the literal `334u8`, which the downstream `.iii` compile
+silently wrapped to 78 — the measured rc=9 class), and the linked whole-seed (~2,300 fns) is out of reach
+entirely. v2 widens only the module envelope:
+
+```
+[0x00]                ; version marker — illegal as v1 (v1 rejects func_count==0, error 1)
+[u16 LE func_count]   ; functions from offset 3; per-function header UNCHANGED (§1)
+… functions …
+[u32 LE data_len][data bytes]   ; the optional trailing data section length widens u16 → u32
+```
+
+Rules: **(a)** every v1 module is byte-untouched — measured 2026-07-08 by the two-path regression: the
+HEAD ccsv and the v2 ccsv emit **byte-identical** modules for all six ≤255-fn seed modules
+(lex/sema/emit/ast/cg_r3/parse.c) plus four control programs, while main.c gains exactly the v2 header
+(`0u8,78u8,1u8` = marker + LE16(334)); **(b)** an emitter chooses v2 only when a count demands it (ccsv:
+`FN > 255`); **(c)** `CALL2` is legal in v1 and v2 bodies alike — the verifier checks its index against the
+container's func_count either way; **(d)** teeth (`run_svir_v2.sh`): a v2 header whose function bytes stop
+early is error 1; a `CALL2` funcidx ≥ func_count is error 9; the 300-fn generator module must run 99 on
+verify + interp + sovereign x86 (kernel32-only) + wasm.
+
+Anchor cost of the entire post-v1 set: `svir_verify.iii` 82 → 97 lines — within the one-sitting audit
+budget (ADR-1).

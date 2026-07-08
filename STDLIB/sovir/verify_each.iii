@@ -29,8 +29,9 @@ fn main() -> u64 {
     let base : u64 = svir_ptr()
     let len  : u64 = svir_len()
     if len < 1u64 { pc(35u32) pc(10u32)  return 1u64 }
-    let nfunc : u32 = vb(base, 0u64)
+    let mut nfunc : u32 = vb(base, 0u64)
     let mut off : u64 = 1u64
+    if nfunc == 0u32 { nfunc = vb(base, 1u64) | (vb(base, 2u64) << 8u32)  off = 3u64 }   /* v2: 0x00 [nfunc:u16 LE] (mirrors svir_verify's outer walk) */
     let mut i : u32 = 0u32
     let mut fail : u32 = 0u32
     let mut firstnz : u64 = 0u64

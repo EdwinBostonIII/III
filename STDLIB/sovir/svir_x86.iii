@@ -1,4 +1,6 @@
-/* svir_x86.iii -- TRANSLATOR #1 (SVIR v1): a multi-function x86-64 AT&T .s to stdout.
+/* svir_x86.iii -- TRANSLATOR #1 (SVIR v1/v2): a multi-function x86-64 AT&T .s to stdout.
+ * v2 container: first byte 0x00 (illegal in v1) then [nfunc:u16 LE], funcs from offset 3; data length u32.
+ * CALL2 = 0x74 [fi:u16 LE][ac:u8] -- identical lowering to CALL, wide index (the >255-fn seed enabler).
  * Stack machine on the native stack; locals at -(16+8*slot)(%rbp); -8(%rbp) reserved as the call rsp-save slot.
  * Win64 call lowering for CALL: args -> %rcx/%rdx/%r8/%r9, 16-byte align + 32B shadow, then restore the eval stack.
  * CALL_INDIRECT: pop the runtime fn-index to %r10, set args up exactly like CALL, `callq __svci` -- the
@@ -31,6 +33,10 @@ fn arg_reg(j: u32) {                                                          /*
     if j == 3u32 { ez("%r9~"  as u64) }
 }
 
+/* v1/v2 header: v1 = [nfunc:u8] funcs@1 ; v2 = 0x00 [nfunc:u16 LE] funcs@3 (v1 saturates at 255 fns) */
+fn hdr_nfunc(base: u64) -> u32 { let hp : *u8 = base as *u8  let n : u32 = hp[0u64] as u32  if n == 0u32 { return (hp[1u64] as u32) | ((hp[2u64] as u32) << 8u32) }  return n }
+fn hdr_off(base: u64) -> u64 { let hp : *u8 = base as *u8  if (hp[0u64] as u32) == 0u32 { return 3u64 }  return 1u64 }
+
 var CS_KIND : [u32; 4096]
 var CS_TGT  : [u32; 4096]
 var CS_ELSE : [u32; 4096]
@@ -51,6 +57,7 @@ fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x51u32 { s = s + 1u64 }
         if o == 0x70u32 { s = s + 2u64 }
         if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
     }
     return mx
 }
@@ -145,6 +152,21 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
             ez("callq ~" as u64)  if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
             ez("\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)
         }
+        if op == 0x74u32 {                                                    /* CALL2 [fi:u16 LE][ac] -- CALL's lowering with a wide index */
+            let f0 : *u8 = (base + boff + p) as *u8  let f1 : *u8 = (base + boff + p + 1u64) as *u8
+            let fi : u32 = (f0[0u64] as u32) | ((f1[0u64] as u32) << 8u32)
+            let ap2 : *u8 = (base + boff + p + 2u64) as *u8  let ac : u32 = ap2[0u64] as u32
+            p = p + 3u64
+            ez("movq %rsp, %r11\nleaq ~" as u64)  edec((8u32*ac) as u64)  ez("(%rsp), %rax\nmovq %rax, -8(%rbp)\nandq $-16, %rsp\n~" as u64)
+            let mut stackargs:u32=0u32  if ac>4u32 { stackargs=ac-4u32 }  let fsz:u32=(((32u32+(8u32*stackargs))+15u32)/16u32)*16u32
+            ez("subq $~" as u64)  edec(fsz as u64)  ez(", %rsp\n~" as u64)
+            let mut nreg:u32=ac  if nreg>4u32 {nreg=4u32}  let mut j:u32=0u32
+            while j<nreg { ez("movq ~" as u64)  edec((8u32*(ac-1u32-j)) as u64)  ez("(%r11), ~" as u64)  arg_reg(j)  ez("\n~" as u64)  j=j+1u32 }
+            let mut i:u32=4u32
+            while i<ac { ez("movq ~" as u64)  edec((8u32*(ac-1u32-i)) as u64)  ez("(%r11), %rax\nmovq %rax, ~" as u64)  edec((32u32+(8u32*(i-4u32))) as u64)  ez("(%rsp)\n~" as u64)  i=i+1u32 }
+            ez("callq ~" as u64)  if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
+            ez("\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)
+        }
         if op == 0x73u32 {                                                    /* CALL_INDIRECT argcount : runtime fn-index on the eval-stack TOP (above the args) */
             let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32
             p = p + 1u64
@@ -164,8 +186,8 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
 
 /* does the module use PRINT_CHAR anywhere? -> emit the __putc helper */
 fn mod_has_print(base: u64) -> u32 {
-    let hp : *u8 = base as *u8  let nf : u32 = hp[0u64] as u32
-    let mut off : u64 = 1u64  let mut i : u32 = 0u32
+    let nf : u32 = hdr_nfunc(base)
+    let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
     while i < nf {
         let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
         let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
@@ -181,6 +203,7 @@ fn mod_has_print(base: u64) -> u32 {
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
             if o == 0x73u32 { s = s + 1u64 }
+            if o == 0x74u32 { s = s + 3u64 }
             if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x71 ('q') must not read as PRINT_CHAR (svir_dis:34) */
         }
         off = off + 4u64 + blen
@@ -191,8 +214,8 @@ fn mod_has_print(base: u64) -> u32 {
 
 /* does the module use CALL_INDIRECT anywhere? -> emit the __svci switchboard */
 fn mod_has_ci(base: u64) -> u32 {
-    let hp : *u8 = base as *u8  let nf : u32 = hp[0u64] as u32
-    let mut off : u64 = 1u64  let mut i : u32 = 0u32
+    let nf : u32 = hdr_nfunc(base)
+    let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
     while i < nf {
         let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
         let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
@@ -207,6 +230,7 @@ fn mod_has_ci(base: u64) -> u32 {
             if o == 0x50u32 { s = s + 1u64 }
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
+            if o == 0x74u32 { s = s + 3u64 }
             if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte 0x73 ('s') must not read as CALL_INDIRECT */
         }
         off = off + 4u64 + blen
@@ -217,8 +241,8 @@ fn mod_has_ci(base: u64) -> u32 {
 
 /* does the module use LOAD8/STORE8? -> emit the .bss memory buffer */
 fn mod_has_mem(base: u64) -> u32 {
-    let hp : *u8 = base as *u8  let nf : u32 = hp[0u64] as u32
-    let mut off : u64 = 1u64  let mut i : u32 = 0u32
+    let nf : u32 = hdr_nfunc(base)
+    let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
     while i < nf {
         let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
         let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
@@ -238,6 +262,7 @@ fn mod_has_mem(base: u64) -> u32 {
             if o == 0x51u32 { s = s + 1u64 }
             if o == 0x70u32 { s = s + 2u64 }
             if o == 0x73u32 { s = s + 1u64 }
+            if o == 0x74u32 { s = s + 3u64 }
             if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }   /* IMPORT decl: skip [nl][name] -- a name byte in 0x80..0x89 must not read as a memory op */
         }
         off = off + 4u64 + blen
@@ -250,10 +275,10 @@ fn main() -> u64 {
     _setmode(1i32, 0x8000i32)
     let base : u64 = svir_ptr()
     LBLCTR = 0u32
-    let hp : *u8 = base as *u8
-    let nfunc : u32 = hp[0u64] as u32
+    let nfunc : u32 = hdr_nfunc(base)
+    let v2 : u64 = hdr_off(base) - 1u64          /* 2 = v2 container (funcs@3, data length u32) ; 0 = v1 */
     ez(".text\n~" as u64)
-    let mut off : u64 = 1u64
+    let mut off : u64 = hdr_off(base)
     let mut i : u32 = 0u32
     while i < nfunc {
         let pp : *u8 = (base + off) as *u8  let params : u32 = pp[0u64] as u32
@@ -286,12 +311,17 @@ fn main() -> u64 {
      * svir_mem byte-packed (.data); else a zero .bss. */
     let total : u64 = svir_len()
     let mut dlen : u64 = 0u64
-    if off < total { let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64) }
+    let mut dhd : u64 = 2u64
+    if v2 == 2u64 { dhd = 4u64 }
+    if off < total {
+        let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64)
+        if v2 == 2u64 { let d2:*u8=(base+off+2u64) as *u8  let d3:*u8=(base+off+3u64) as *u8  dlen = dlen | ((d2[0u64] as u64) << 16u64) | ((d3[0u64] as u64) << 24u64) }
+    }
     if mod_has_mem(base) == 1u32 {
         if dlen > 0u64 {
             ez(".section .data\n.global svir_mem\nsvir_mem:\n.byte ~" as u64)
             let mut d:u64=0u64
-            while d < dlen { if d > 0u64 { ez(",~" as u64) }  let dp:*u8=(base+off+2u64+d) as *u8  edec(dp[0u64] as u64)  d=d+1u64 }
+            while d < dlen { if d > 0u64 { ez(",~" as u64) }  let dp:*u8=(base+off+dhd+d) as *u8  edec(dp[0u64] as u64)  d=d+1u64 }
             ez("\n.zero ~" as u64)  edec(4194304u64 - dlen)  ez("\n~" as u64)
         } else {
             ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 4194304\n~" as u64)

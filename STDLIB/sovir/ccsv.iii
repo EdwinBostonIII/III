@@ -310,6 +310,7 @@ fn fidx_byname(nm:u64, ln:u64) -> i32 {   /* FN-table lookup by NAME BYTES (the 
     return 0i32-1i32
 }
 var D_RES:u32=0u32  var D_ADDX:i32=0i32-1i32  var D_SUBX:i32=0i32-1i32  var D_MULX:i32=0i32-1i32  var D_DIVX:i32=0i32-1i32  var D_FRIX:i32=0i32-1i32
+var FNVN:u32=0u32  var FNVF:[u32;1024]  var FNVFN:[u32;1024]  var FNVOFF:[u64;1024]  var CURFNK:u32=0u32  var VMAP:u32=0u32   /* FNV manifest: every fn-name-as-VALUE emission (fidx, emitting fn, body offset of the 0x01 op) -- the linker's exact fn-ptr index-space rewrite set ; VMAP=1 appends it as //V lines */
 fn dfid(w:u32) -> i32 {
     if D_RES==0u32 { D_RES=1u32
         D_ADDX=fidx_byname("iii_d_add" as u64, 9u64)  D_SUBX=fidx_byname("iii_d_sub" as u64, 9u64)
@@ -1147,7 +1148,7 @@ fn eprim() {
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_local(li as u32,1u32,1u32)  return }   /* i-- (postfix) */
             if LDB[li as u64]==1u32 { EV_DBL=1u32 }   /* a `double` local's value is its bit pattern */
-            emit_lget(li as u32) } else { let fnv:i32=fidx(t)  if fnv>=0i32 { econst(fnv as i64) } }   /* fn-ptr INC-1: a function NAME used as a VALUE (not called) -> CONST(fidx) ; locals/globals/enums checked first so they shadow it ; builtins have fidx<0 -> unchanged */
+            emit_lget(li as u32) } else { let fnv:i32=fidx(t)  if fnv>=0i32 { if FNVN<1024u32 { FNVF[FNVN as u64]=fnv as u32  FNVFN[FNVN as u64]=CURFNK  FNVOFF[FNVN as u64]=BL  FNVN=FNVN+1u32 }  econst(fnv as i64) } }   /* fn-ptr INC-1: a function NAME used as a VALUE (not called) -> CONST(fidx), RECORDED in the FNV manifest (fn-index constants are unrelocatable bytes -- the Lambda-0 linker rewrites exactly these sites to GLOBAL indices; dbg prints them as `V emit-fn body-off fidx`) ; locals/globals/enums checked first so they shadow it ; builtins have fidx<0 -> unchanged */
         return
     }
     C=C+1u32
@@ -2253,6 +2254,7 @@ fn prescan_structval() {   /* Boss-2: does the body declare a struct-VALUE local
     }
 }
 fn cfn(fk: u32) {
+    CURFNK=fk   /* FNV manifest: fn-value emissions record their owning fn */
     if IMP[fk as u64]==1u32 {   /* IMPORT: emit the cross-module declaration body [0x8A][namelen][name] (resolved by name at link; svir_verify accepts 0x8A net-0). The CALL to it (fi = this index < FN) is emitted by the normal fidx path. */
         let inl:u32=FNL[fk as u64]  let iblen:u64=2u64+(inl as u64)
         mb(FNP[fk as u64])  mb(1u32)  mb((iblen & 0xFFu64) as u32)  mb(((iblen >> 8u64) & 0xFFu64) as u32)
@@ -2595,6 +2597,15 @@ fn expand_fnmacros() { fm_scan()  if FMN>0u32 { fm_expand() } }
 fn main(argc: i32, argv: u64) -> u64 {
     if argc < 2i32 { return 2u64 }
     let pp : *u64 = argv as *u64
+    let mut dbgm:u32=0u32                                          /* argv[2..]: literal "dbg" -> the debug listing ; "vmap" -> emit + FNV manifest ; ALL-DIGITS -> membase (module memory relocation for the Lambda-0 link: statics start at N, so 7 linked TUs share one flat memory without address collisions).  Both may appear: `ccsv f.c <base> vmap`. */
+    let mut aix:i32=2i32
+    while aix<argc { let a2:*u8=pp[aix as u64] as *u8
+        if (a2[0u64] as u32)==100u32 { if (a2[1u64] as u32)==98u32 { if (a2[2u64] as u32)==103u32 { if (a2[3u64] as u32)==0u32 { dbgm=1u32 } } } }
+        if (a2[0u64] as u32)==118u32 { if (a2[1u64] as u32)==109u32 { if (a2[2u64] as u32)==97u32 { if (a2[3u64] as u32)==112u32 { if (a2[4u64] as u32)==0u32 { VMAP=1u32 } } } } }
+        let mut di:u64=0u64  let mut alld:u32=1u32  let mut mb:u64=0u64
+        while (a2[di] as u32)!=0u32 { let dc:u32=a2[di] as u32  if dg(dc)==1u32 { mb=(mb*10u64)+((dc-48u32) as u64) } else { alld=0u32 }  di=di+1u64 }
+        if di>0u64 { if alld==1u32 { MTOP=mb } }
+        aix=aix+1i32 }
     let f : u64 = fopen(pp[1u64], &MODE_RB as u64)
     if f == 0u64 { return 3u64 }
     RLEN = fread(&RAW as u64, 1u64, 1048575u64, f)
@@ -2609,7 +2620,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     if FMOVF==1u32 { pstr("!!!CCSV_MACRO_OVERFLOW!!!" as u64)  pc(10u32)  return 9u64 }
     if src_has_double()==1u32 { rt_tail() }                        /* the TU uses `double` (comment/string-aware) -> append the iii_d_* soft-float runtime + clock prototype + CLOCKS_PER_SEC before lex, so the whole thing compiles as ONE translation unit */   /* expansion exceeded the 1MB source cap -> LOUD refusal, never a silent-wrong binary */
     lex()  subst_strdefs()  prescan()  prescan_str()  prescan_imports()   /* subst_strdefs BEFORE prescan_str: string-macro occurrences must be STRING tokens when adjacency packs.  imports PERMANENTLY ON (2026-07-05): the parked rule ("re-enable together with the downstream fixes for a NET drop") is DISCHARGED -- measured ON = 14 fails/845 fns vs OFF = 23/488 (net -9; the old 36-vs-28 numbers predate fix #29, whose reverse-loop guard was the real blocker of the predicted "sret-family exposure" -- those ~9 parser-core fns are GREEN under ON).  What ON buys, measured: the extern-call class clears (parse break/continue/return/use_decl/stmt + iii_sema_run) and with call()[i] (fn_ret_psz path) cg_r3.c reaches STRUCTURAL ZERO.  Builtin names never register (is_call_builtin -- the test_fnptr2.c manual-putchar-prototype lesson).  ALL FIVE SVIR consumers know 0x8A: verify:49 net-0, dis skip, interp UNRES_IMP->198, x86 ExitProcess(198) stub, wasm `unreachable` stub; gates test_import.c/test_importtrap.c (198/198/1, never silent).  Cross-module RESOLUTION = P3 (sovld link-by-name). */  prescan_enum()  prescan_arr()  prescan_struct()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
-    if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
+    if dbgm==1u32 {   /* DEBUG: `ccsv file.c dbg` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
         pstr("# STN=~" as u64) pdec(STN as u64) pstr(" SFN=~" as u64) pdec(SFN as u64) pstr(" AN=~" as u64) pdec(AN as u64) pstr(" CN=~" as u64) pdec(CN as u64) pstr(" FN=~" as u64) pdec(FN as u64) pstr(" MTOP=~" as u64) pdec(MTOP) pc(10u32)
         let mut sk:u32=0u32
         while sk<STN {
@@ -2635,5 +2646,9 @@ fn main(argc: i32, argv: u64) -> u64 {
     if FLOVF==1u32 { pstr("// FATAL ccsv: a floating literal outside the exact u64 window (scientific notation, >18 fraction digits, or magnitude) -- refused rather than silently approximate.\n!!!CCSV_FLOAT_LITERAL_OVERFLOW!!!\n" as u64)  return 10u64 }
     if FDBL==1u32 { pstr("// FATAL ccsv: a double operation without an exact lowering (compare/%/bitop on doubles, double->int cast, or the iii_d_* runtime missing) -- refused rather than emit wrong bits.\n!!!CCSV_DOUBLE_LOWERING!!!\n" as u64)  return 12u64 }   /* LOUD: the Latent-Axiom Guillotine -- a future seed edit that uses an unsupported >8B compound literal fails the BUILD, never a corrupted binary */
     emit_module()
+    if VMAP==1u32 {   /* `ccsv file.c vmap` -> append the FNV manifest as //V comments (fn body-off fidx): the linker's exact fn-ptr rewrite set.  Normal builds omit it -> module text stays byte-identical. */
+        let mut vk:u32=0u32
+        while vk<FNVN { pstr("//V ~" as u64)  pdec(FNVFN[vk as u64] as u64)  pc(32u32)  pdec(FNVOFF[vk as u64])  pc(32u32)  pdec(FNVF[vk as u64] as u64)  pc(10u32)  vk=vk+1u32 }
+    }
     return 0u64
 }

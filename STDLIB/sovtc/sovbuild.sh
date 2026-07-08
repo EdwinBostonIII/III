@@ -22,9 +22,16 @@ WORK="$ROOT_DIR/STDLIB/build/sovbuild"; mkdir -p "$WORK" "$BOOT"
 say(){ echo "[sovbuild] $*"; }
 
 # ---- module file index (bare name -> path) ----
+# STDLIB/iii FIRST (stdlib names keep winning any basename collision -- the only dupes live INSIDE
+# iii/ subtrees: eidos/numera/omnia/sanctus/forcefield), then the sovtc + sovir module homes.
+# Before those two were indexed, a toolchain harness's own imports (sov_drive -> sovparse/sovcoff,
+# linkmain -> linklib) were SILENTLY dropped from the closure: sovld import-thunked the unresolved
+# externs into bogus msvcrt imports and the PE failed at LOAD time (rc=127) -- 20 evergreen
+# programs red.  An import the index cannot resolve is a LOUD failure below (the silent-truncation
+# class), never a runtime surprise.
 declare -A FILEOF
 while IFS= read -r f; do b="$(basename "$f" .iii)"; [ -z "${FILEOF[$b]+x}" ] && FILEOF[$b]="$f"; done \
-  < <(find "$ROOT_DIR/STDLIB/iii" -name '*.iii'; echo "$SRC")
+  < <(find "$ROOT_DIR/STDLIB/iii" "$ROOT_DIR/STDLIB/sovtc" "$ROOT_DIR/STDLIB/sovir" -name '*.iii'; echo "$SRC")
 ROOTMOD="$(basename "$SRC" .iii)"; FILEOF[$ROOTMOD]="$SRC"
 
 closure(){ local r="$1"; declare -A seen=(); local work=("$r") out=()
@@ -54,6 +61,14 @@ ensure_tools(){
 
 ensure_tools
 mapfile -t MODS < <(closure "$ROOTMOD")
+# every from-import of every closure module must resolve in the index: an unresolved one would be
+# import-thunked into a bogus DLL import and fail at PE LOAD (not link) time.  Fail LOUD, name it.
+MISS=""
+for m in "${MODS[@]}"; do
+  while IFS= read -r d; do [ -z "${FILEOF[$d]+x}" ] && MISS="$MISS $m->$d"; done \
+    < <(grep -oE 'from "[a-z0-9_]+\.iii"' "${FILEOF[$m]}" | sed -E 's/from "([a-z0-9_]+)\.iii"/\1/' | sort -u)
+done
+if [ -n "$MISS" ]; then say "CLOSURE-FAIL: unresolved module imports:$MISS"; exit 6; fi
 say "program=$ROOTMOD  closure=${#MODS[@]} modules"
 OBJS=("$BOOT/crt0_sov.o"); NSOV=0; NWIT=0; WIT=""
 for m in "${MODS[@]}"; do

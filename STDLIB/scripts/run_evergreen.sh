@@ -28,7 +28,29 @@ TO="${EVERGREEN_TIMEOUT_S:-900}"
 OUTDIR="$ROOT/STDLIB/build/evergreen"; mkdir -p "$OUTDIR"
 
 # measured non-99 legitimate exits: "name|rc|reason"  (populated from observed first-run reality)
+# The sov_drive*/sov_drivel* family are the sovereign-toolchain UNIT DRIVERS: each embeds a real
+# cg_r3 .s, assembles (sovparse/sovcoff) or links (sovld) it IN-PROCESS, and EMITS the artifact
+# (COFF to stdout / PE) -- "Exit 0 = emitted" is their documented convention, and the emitted
+# artifact's byte-exactness/behavior is owned by run_sovtc.sh (drives all 16 by name).  Every row
+# below is the OBSERVED rc after the 2026-07-08 sovbuild module-index fix (before it, all 16
+# loaded-failed at 127: their sovparse/sovcoff/sovld imports were silently dropped from the closure).
 OVERRIDES=(
+    "sov_drive|0|COFF emitter: Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive2|0|COFF emitter: Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive3|0|COFF emitter (extern putchar reloc): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive4|0|COFF emitter: Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive5|0|COFF emitter: Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive6|0|COFF emitter: Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drive7|0|COFF emitter (movzbq SIB gate): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel|0|sovld PE emitter: Exit 0 = emitted; image run owned by run_sovtc.sh"
+    "sov_drivel2|0|sovld PE emitter (.data reloc): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel3|0|sovld PE emitter (import): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel4|0|sovld PE emitter (import2): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel5|0|sovld PE emitter (multi-DLL): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel6|0|sovld PE emitter (msvcrt-only): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel7|0|sovld PE emitter (relax): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel8|0|sovld PE emitter (DLL table): Exit 0 = emitted; owned by run_sovtc.sh"
+    "sov_drivel9|0|sovld PE emitter (ws2_32 N-DLL): Exit 0 = emitted; owned by run_sovtc.sh"
 )
 override_rc() { local n="$1"; local o; for o in "${OVERRIDES[@]}"; do [ "${o%%|*}" = "$n" ] && { echo "$o" | cut -d'|' -f2; return 0; }; done; return 1; }
 
@@ -100,9 +122,11 @@ for f in "$ROOT/STDLIB/sovir"/*.iii "$ROOT/STDLIB/sovtc"/*.iii; do
     rc=$?
     if [ "$mode" = "driver" ]; then
         # a sovereign-built argv tool on empty argv must EXIT DELIBERATELY (usage/refusal), never
-        # crash (SIGSEGV 139 / SIGABRT 134 / SIGFPE 136 / SIGILL 132) or hang (timeout 124/143).
+        # crash (SIGSEGV 139 / SIGABRT 134 / SIGFPE 136 / SIGILL 132), hang (timeout 124/143), or
+        # fail to LOAD (127 = an unresolved import thunked to a bogus DLL export, the closure-drop
+        # signature the sovbuild module-index fix killed -- a LINKAGE red, never a deliberate exit).
         case "$rc" in
-            124|132|134|136|139|143)
+            124|127|132|134|136|139|143)
                 printf '[evergreen] FAIL %-32s (driver crashed/hung bare: rc=%s)\n' "$name" "$rc"
                 fail=$((fail+1)); REDS+=("$name driver-crash rc=$rc") ;;
             *)

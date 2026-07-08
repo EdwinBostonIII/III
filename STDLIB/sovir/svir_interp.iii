@@ -29,6 +29,8 @@ extern @abi(c-msvc-x64) fn ftell(f: u64) -> i64 from "msvcrt"
 extern @abi(c-msvc-x64) fn rewind(f: u64) -> i64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fgets(buf: u64, n: i32, f: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn clock() -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putenv(nv: u64) -> i32 from "msvcrt"
 
 var MEM  : [u8; 4194304]                 /* svir_mem: flat linear memory (4 MiB) */
 var VS   : [u64; 16384]   var VSP : u32 = 0u32      /* the shared eval (value) stack */
@@ -83,6 +85,8 @@ fn shim_call(boff: u64, lb: u64) -> u64 {
     if nm_is(no, nl, "fflush" as u64, 6u32)==1u32 { return 0u64 }
     if nm_is(no, nl, "signal" as u64, 6u32)==1u32 { return 0u64 }   /* iii_install_signals: no signal handling in the interp */
     if nm_is(no, nl, "getenv" as u64, 6u32)==1u32 { return 0u64 }   /* SOURCE_DATE_EPOCH: NULL -> default 0 (deterministic) */
+    if nm_is(no, nl, "system" as u64, 6u32)==1u32 { return (system(m2h(a0))) as u64 }   /* iiis-0 emit.c shells `gcc -c` to assemble the .s (written via fopen/fwrite shims) into the .o */
+    if nm_is(no, nl, "putenv" as u64, 6u32)==1u32 { return (putenv(m2h(a0))) as u64 }   /* D1/D5/D6 forced env (SOURCE_DATE_EPOCH=0, LC_ALL=C) -> visible to the gcc child = byte-identical to gcc iiis-0 */
     SHIM_HIT = 0u32
     return 0u64
 }

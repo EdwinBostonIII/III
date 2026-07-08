@@ -196,3 +196,48 @@ CALL2/fn-ptr remap that only the +356-fn main.c pushes parse.c over) that corrup
 while leaving the source buffer intact. Attack: instrument parse.c's first recorded error IN the seed
 (minimal perturbation) to see if it's the same t.kind=0 class at a second struct-copy site, or a new
 class; and diff the linked parse.c body (4-TU vs 19-TU link) for a CALL/CALL2 that remaps differently.
+
+## S4 UNBLOCKED (session 5, 2026-07-08): parse WORKS — frontier moved 11→16
+
+The "parse.c runtime divergence" was a MISDIAGNOSIS. The real chain, found by bisection (place a TU at a
+high membase, probe a string literal `"rb"` through the interp — it read 0; traced svbin→svir_ld→linked
+.iii all CORRECT, but `ib()` in the interp read 0; `objdump -h linked.o` showed `.data` = **0x000FFFFF**
+(1,048,575) while the array is `[u8; 1,236,822]`):
+
+1. **STALE iiis-2 / 1 MiB sovas truncation (THE root S4 blocker).** `COMPILED/iiis-2.exe` (built 07-07
+   23:46, commit f0247b0e era) linked an OLD `STDLIB/sovtc/sovas.iii` whose `DATA_BUF` was `[u8; 1048576]`
+   with `if DATA_LEN < 1048575` and **no overflow flag** — it SILENTLY truncated `.data` at 0xFFFFF. The
+   4 MiB fix (`[u8; 4194368]`, LOUD `SOV_OVF`) was committed LATER (c9c4d733, 07-08 15:22), so the binary
+   lagged the source. The linked seed's data above container offset ~1.07 M — i.e. every TU at membase ≳
+   287 K: **jit_emit, lex@367394, link, parse@419628, sema, sid, witness_alloc** — read as ZERO. lex's
+   `III_KEYWORDS` table was zeroed → `module` lexed as an identifier (k4) not a keyword (k12) → parse
+   failed → rc=11. **Fix:** `build_stdlib.sh` (FAIL=0) → `build_iiis2.sh` rebuilt the chain with the 4 MiB
+   sovas. Verified: `[u8;1236822]` array now emits `.data`=0x12df56 (full); corpus determinism HELD 12/12
+   (iiis-1 == iiis-2 — the sovas buffer size is irrelevant to sub-1 MiB programs). rc 11 → 198.
+
+2. **ccsv crt_tail only triggered on `fopen` (a real ccsv bug).** After the truncation fix the seed hit an
+   UNRESOLVED IMPORT (198). First: `system` — iiis-0's `emit.c` is a gcc/ld DRIVER: it shells
+   `gcc -c -x assembler … -o out.o out.s` via C `system()` after `putenv`-forcing SOURCE_DATE_EPOCH=0/LC_ALL=C.
+   Added `system`/`putenv` interp shims (the .s is written through the fopen/fwrite shims; system() runs
+   host gcc). rc 198 → 16. Then the .s was written EMPTY: `cg_write_bytes` calls `fwrite`, but ccsv appends
+   the CRT import prototypes (`crt_tail`) only when a TU uses `fopen` — the codegen TUs (cg_r3/cg_r0/cg_rm1/
+   cg_rm2/…) write the .s via `fwrite` and NEVER call `fopen`, so their `fwrite` was UNDECLARED → compiled
+   to a call that never reached the shim (FW=0). **Fix:** `crt_tail` now triggers on `fwrite` OR `fopen`
+   (ccsv.iii ~line 2766). The cg header now writes (FW=5, 155 B, byte-matches gcc's header).
+
+**Remaining S4 frontier — a VALUE-level garbage-high-32 codegen bug in the cg path (NOT address).**
+Instrumenting exec_fn by global fn-index pinned it precisely: on `module sovcap\nfn main()->u64{return
+7u64}` the cg calls `cg_write_bytes` exactly **5×** (the 5 header lines: the two `#` comments, `.att_syntax`,
+`.file`, `.section .rodata`) and then **`emit_function` (cg_r3 G310) is NEVER called** (`ef=0, cg_writef=0,
+emit_stmt=0`). So the cg writes the header and the module decl/function loop then skips the `FN_DECL` case —
+`mod->u.module_.decls.count` reads 0 or `d->kind` mismatches. Crucially this is TRUE EVEN WITH interp
+address-masking (`a & 0xFFFFFFFF` → DR 88→0): masking clean addresses does NOT make `emit_function` run.
+So the fault is a **value**-level garbage-high-32 bug, not an address one — some computed value in the cg's
+decl/function loop (a count or an AST-node-kind) carries junk in bits 32..63 (e.g. `iii_history_append`
+stores `history_count = (7<<32)|4`), and `msb`/address-masking can't repair a *value* that flows through a
+comparison. Note: several earlier "garbage" reads (a=token-addr, v=`(7<<32)|4`) turned out to be LEGIT
+8-byte struct-copy chunks of two adjacent u32 token fields — NOT the bug; the real defect is narrower.
+Root = a ccsv (or interp) op that fails to zero-extend a 32-bit intermediate before it's stored/compared
+as 64-bit — exercised for the FIRST time now the full compile runs. Next: trace the exact value the cg's
+`for i<decls.count` / `switch(d->kind)` reads (fn indices: iii_ast_root_module G108, iii_ast_get G132,
+iii_ast_list_at G136, cg_r3 emit_function G310). S4 = rc 16 (was 11).

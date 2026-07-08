@@ -13,10 +13,18 @@
 #     S3  no-arg parity : interp(linked, no argv) rc == gcc iiis-0 no-arg rc            [GREEN]
 #     S4  compile parity: interp(linked) compiles a .iii == gcc iiis-0's .o (byte-match) [FRONTIER]
 #
-#   S4 today: a bare `module M` decl compiles; a `fn ... { body }` reddens at PARSE_FAIL (11) --
-#   parse.c is at STRUCTURAL zero but has no behavioral harness, so full-pipeline execution exposes a
-#   parse-runtime divergence (the documented "necessary but not sufficient" gap).  When S4 goes green
-#   this arc closes run_completion.sh's seed_sovereign member.
+#   S4 today (2026-07-08): PARSE now WORKS -- the frontier advanced from PARSE_FAIL(11) to EMIT_FAIL(16).
+#   Three blockers were cleared: (1) iiis-2 embedded a STALE 1 MiB sovas DATA_BUF that silently truncated
+#   the linked seed's 1.24 MB .data at 0xFFFFF -> lex/parse's high-membase keyword tables read ZERO ->
+#   `module` lexed as an identifier -> parse failed.  Fixed by rebuild (stdlib+iiis-2 pick up the committed
+#   4 MiB sovas; determinism held 12/12).  (2) ccsv appended the CRT import prototypes (crt_tail) only for
+#   TUs using `fopen`; the codegen TUs write the .s via `fwrite` WITHOUT fopen -> fwrite was undeclared ->
+#   mis-dispatched -> the cg's output silently dropped.  Fixed: crt_tail now triggers on fwrite too.
+#   (3) the compile path shells `gcc -c` (emit.c system()) + putenv -> interp shims added.  NOW: the seed
+#   parses, runs the full pipeline, writes the .s HEADER, then STOPS mid-codegen -- pointers in the cg path
+#   acquire garbage high-32 bits (e.g. st->history = (56<<32)|offset), so cg_writef's function emission
+#   diverges.  That pointer-high-bits codegen corruption is the remaining S4 frontier.  When it closes and
+#   the .o goes byte-identical, this arc closes run_completion.sh's seed_sovereign member.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/sovlink"
@@ -66,7 +74,7 @@ timeout 60 "$W/seed.exe" "$W/_sov_fn.iii" --compile-only --out "$W/_sov_fn_s.o" 
 if [ "$f_s" -eq "$f_g" ] && [ -f "$W/_sov_fn_s.o" ] && cmp -s "$W/_sov_fn_s.o" "$W/_sov_fn_g.o"; then
     say "S4 compile parity : GREEN -- interp(linked) .o BYTE-IDENTICAL to gcc iiis-0.  THE SOVEREIGN SEED COMPILES."
 else
-    say "S4 FRONTIER (red): interp=$f_s (11=PARSE_FAIL) vs gcc=$f_g -- parse.c runtime divergence (structural-zero, no harness).  run_completion's seed_sovereign stays open until byte-identical."
+    say "S4 FRONTIER (red): interp=$f_s (16=EMIT_FAIL: parse+sema+cg-header now WORK; cg stops mid-emit on pointer-high-bits corruption) vs gcc=$f_g -- run_completion's seed_sovereign stays open until byte-identical."
     fail=1
 fi
 

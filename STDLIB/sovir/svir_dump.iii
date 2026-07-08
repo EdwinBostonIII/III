@@ -1,0 +1,19 @@
+/* svir_dump.iii -- write the linked gen_svir module's RAW container bytes to stdout (.svbin extractor).
+ * The Λ0 link driver compiles each seed TU (ccsv -> gen_svir .iii -> iiis-2 .o), links THIS dumper against
+ * it, and captures stdout as the module's byte-exact .svbin -- the input format of svir_ld.  20 lines on
+ * purpose: the extractor is part of the trust path (bytes in == bytes out, nothing interpreted). */
+module svir_dump
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+
+fn main() -> u64 {
+    _setmode(1i32, 0x8000i32)                     /* binary stdout: no LF->CRLF mangling of container bytes */
+    let b : u64 = svir_ptr()
+    let n : u64 = svir_len()
+    let p : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < n { putchar(p[i] as i32)  i = i + 1u64 }
+    return 0u64
+}

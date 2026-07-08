@@ -48,7 +48,7 @@ say "=== INSTRUMENT VALIDATED (3 controls + self-check armed). Measuring the see
 
 # --- SEED MEASUREMENT ---
 total=0; totfn=0
-for m in lex sema emit ast cg_r3 parse; do
+for m in lex sema emit ast cg_r3 parse main; do
   "$W/ccsv.exe" "$SEED/$m.c" > "$W/seed_$m.iii" 2>/dev/null
   "$IIIS" "$W/seed_$m.iii" --compile-only --out "$W/seed_$m.o" >/dev/null 2>&1 || { say "$m.c: FAIL iiis-2 compile of ccsv output (cannot measure)"; fail=1; continue; }
   "$W/ccsv.exe" "$SEED/$m.c" dbg > "$W/names_$m.txt" 2>/dev/null    # "idx: name"
@@ -59,5 +59,9 @@ for m in lex sema emit ast cg_r3 parse; do
   say "$m.c: nfunc=$nfn verify_fail=$ffail firstnz=$fnz whole=$whole [$sc]"
   total=$((total+${ffail:-0})); totfn=$((totfn+${nfn:-0}))
 done
-say "================ SEED TOTAL: verify_fail=$total over nfunc=$totfn functions (6 modules) ================"
+say "================ SEED TOTAL: verify_fail=$total over nfunc=$totfn functions (7 modules -- the WHOLE iiis-0 seed incl. main.c) ================"
+# STRUCTURAL-ZERO RATCHET (2026-07-08): the whole seed reached verify_fail=0 (866 module fns + 344
+# main.c fns incl. the appended double runtime).  Down-only: any future ccsv/seed edit that reopens a
+# structural failure reddens this gate -- 0 is the pin, not a hope.
+if [ "$total" != "0" ]; then say "RATCHET RED: verify_fail=$total (pin is 0)"; fail=1; fi
 exit $fail

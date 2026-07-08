@@ -200,4 +200,26 @@ scon="NO"; cmp -s "$W/out_str.txt" "$W/out_str_gcc.txt" && scon="YES"
 if [ $sv -eq 99 ] && [ $sg -eq 99 ] && [ "$scon" = "YES" ]; then
   say "ccsv STRING LITERALS : char *s=\"...\"; s[i] -> sovereign x86 prints [$(cat "$W/out_str.txt" | tr -d '\n')] == gcc(content)=$scon -> 99.  BYTE-PACKED via a SVIR DATA SECTION (real C layout, initialised memory) + char* stride-1 LOAD8."
 else say "FAIL string: sovereign=$sv gcc=$sg content=$scon"; fail=1; fi
+
+# EXACT IEEE-754 DOUBLES: ccsv lowers `double` to i64 BIT PATTERNS + an APPENDED integer soft-float
+# runtime (iii_d_* as C source, compiled by ccsv itself); test_double.c prints the 64-bit pattern of
+# 22 results (literals incl. 0.1/pi, int->double conversions, + - * /, cancellation, mixed operands).
+# The sovereign x86 route AND the wasm route must print BIT-IDENTICAL hex to gcc's HARDWARE doubles --
+# byte equality here == the soft-float is exactly round-to-nearest-even on every exercised path.
+rm -f "$W/vf_dbl.exe" "$W/tx_dbl.exe" "$W/dbl.s" "$W/dbl.o2" "$W/dbl.x86.exe" "$W/tw_dbl.exe" "$W/dbl.wasm" "$W/dbl_gcc.exe"
+"$W/ccsv.exe" "$S/test_double.c" > "$W/g_dbl.iii" 2>/dev/null
+"$IIIS" "$W/g_dbl.iii" --compile-only --out "$W/g_dbl.o" >/dev/null 2>&1 || { say "FAIL iiis-2 compile of ccsv(test_double.c)"; fail=1; }
+gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/g_dbl.o" -o "$W/vf_dbl.exe" 2>/dev/null; "$W/vf_dbl.exe" >/dev/null 2>&1; dv=$?
+gcc "$W/svir_x86.o" "$W/g_dbl.o" -o "$W/tx_dbl.exe" 2>/dev/null; "$W/tx_dbl.exe" > "$W/dbl.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/dbl.s" > "$W/dbl.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/dbl.o2" > "$W/dbl.x86.exe" 2>/dev/null
+timeout 10 "$W/dbl.x86.exe" > "$W/out_dbl_x86.txt" 2>/dev/null; dx=$?
+gcc "$W/svir_wasm.o" "$W/g_dbl.o" -o "$W/tw_dbl.exe" 2>/dev/null; "$W/tw_dbl.exe" > "$W/dbl.wasm" 2>/dev/null
+node "$S/run_wasm.mjs" "$W/dbl.wasm" > "$W/out_dbl_wasm.txt" 2>/dev/null; dw=$?
+gcc "$S/test_double.c" -o "$W/dbl_gcc.exe" 2>/dev/null; "$W/dbl_gcc.exe" > "$W/_dg.txt" 2>/dev/null; dg=$?; tr -d '\r' < "$W/_dg.txt" > "$W/out_dbl_gcc.txt"
+dxc="NO"; cmp -s "$W/out_dbl_x86.txt" "$W/out_dbl_gcc.txt" && dxc="YES"
+dwc="NO"; cmp -s "$W/out_dbl_wasm.txt" "$W/out_dbl_gcc.txt" && dwc="YES"
+if [ $dv -eq 99 ] && [ $dx -eq 0 ] && [ $dw -eq 0 ] && [ $dg -eq 0 ] && [ "$dxc" = "YES" ] && [ "$dwc" = "YES" ]; then
+  say "ccsv EXACT DOUBLES : 22-case IEEE-754 battery -> sovereign x86 bits==gcc-hardware=$dxc ; wasm bits==gcc=$dwc ; verify=99.  Soft-float (integer-only, RNE) appended as C source and compiled by ccsv itself -- SVIR stays i64-only."
+else say "FAIL doubles: verify=$dv x86rc=$dx wasmrc=$dw gccrc=$dg x86bits=$dxc wasmbits=$dwc"; fail=1; fi
 exit $fail

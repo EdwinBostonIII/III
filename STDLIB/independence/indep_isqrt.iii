@@ -1,0 +1,27 @@
+/* Independence proof — INTEGER SQUARE ROOT (the Γ2a organ-class watch item: real algorithmic compute
+ * through the frontend onto every host route).  Newton's method on u64 (values < 2^63 so SDIV/LT_S are
+ * exact); edge cases 0/1; boundary pairs (n²-1, n²) at three scales.  Returns 99 iff ALL hold.
+ * Pure III; compiled by iiisv (.iii -> SVIR) -> x86-win64 + SysV-ELF + WASM + interp. */
+module indep_isqrt
+
+fn isqrt(n: u64) -> u64 {
+    if n < 2u64 { return n }
+    let mut x : u64 = n
+    let mut y : u64 = (x + 1u64) / 2u64
+    while y < x {
+        x = y
+        y = (x + (n / x)) / 2u64
+    }
+    return x
+}
+
+fn main() -> u64 {
+    if isqrt(0u64) != 0u64 { return 1u64 }
+    if isqrt(1u64) != 1u64 { return 2u64 }
+    if isqrt(9024u64) != 94u64 { return 3u64 }
+    if isqrt(9025u64) != 95u64 { return 4u64 }
+    if isqrt(4294967295u64) != 65535u64 { return 5u64 }
+    if isqrt(4294967296u64) != 65536u64 { return 6u64 }
+    if isqrt(999999999999u64) != 999999u64 { return 7u64 }
+    return 99u64
+}

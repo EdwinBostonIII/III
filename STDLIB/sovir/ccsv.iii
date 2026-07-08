@@ -2231,6 +2231,15 @@ fn prescan_addrof() {
                 let pv:u32=sc-1u32  let mut isaddr:u32=1u32
                 if TK[pv as u64]==1u32 {isaddr=0u32}  if TK[pv as u64]==2u32 {isaddr=0u32}
                 if TK[pv as u64]==3u32 { if TV[pv as u64]==Q_RBR {isaddr=0u32}  if TV[pv as u64]==Q_RP {isaddr=0u32} }
+                if isaddr==0u32 { if TK[pv as u64]==3u32 { if TV[pv as u64]==Q_RP {   /* `) & NAME`: binary UNLESS the parens are a CAST -- `(const char *)&b` (iii_emit_ch).  Walk back to the matching `(`; a type-start (or NAME followed by only *s) inside = cast -> address-of after all. */
+                    let mut bq:u32=pv  let mut bd:i32=0i32  let mut gb2:u32=1u32
+                    while gb2==1u32 { if ispat(bq,Q_RP)==1u32 {bd=bd+1i32} else { if ispat(bq,Q_LP)==1u32 { bd=bd-1i32  if bd==0i32 {gb2=0u32} } }  if gb2==1u32 { if bq==0u32 {gb2=0u32} else {bq=bq-1u32} } }
+                    if ispat(bq,Q_LP)==1u32 { let t0:u32=bq+1u32
+                        if is_type_start(t0)==1u32 { isaddr=1u32 }
+                        else { if TK[t0 as u64]==1u32 { if lidx(t0)<0i32 { let mut sq:u32=t0+1u32  let mut allm:u32=1u32
+                            while sq<pv { if ispat(sq,Q_MUL)==0u32 { allm=0u32  sq=pv } else { sq=sq+1u32 } }
+                            if allm==1u32 { if pv>t0 { isaddr=1u32 } } } } } }
+                } } }
                 if isaddr==1u32 { if TK[(sc+1u32) as u64]==1u32 { if ADN_N<128u32 { ADN_O[ADN_N as u64]=TO[(sc+1u32) as u64]  ADN_L[ADN_N as u64]=TL[(sc+1u32) as u64]  ADN_N=ADN_N+1u32 } } }
             } } }
             sc=sc+1u32

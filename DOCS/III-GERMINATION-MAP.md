@@ -1,11 +1,14 @@
 # III — THE GERMINATION MAP (Γ): the biggest ambition above the waist lift
 
-> **EXECUTION STATUS (2026-07-08, same day):** Γ2a EXECUTED (`run_host_matrix.sh`, commit 3fc553b3) ·
-> **Γ2c EXECUTED** (arm64 host in the matrix, qemu-7.2-under-WSL1 executor) · **Γ4/Σ0 EXECUTED**
-> (`run_germinate.sh`: the self-carrying spore, virgin-prefix regrowth on win64 AND Linux) ·
-> **Γ3 EXECUTED at host-closure scale** (`run_retarget.sh`: BOTH translators as anchor-verified waist
-> objects, 20/20 byte-match, self-translation fixpoint, cross-ISA Linux germs).  Ledger:
-> `III-GAMMA-RETARGET-SPORE.md`.  Still open: Γ0 S4 parse frontier; Γ1/Γ2b at corpus scale; Γ5.
+> **EXECUTION STATUS (2026-07-08, same day):** Γ2a EXECUTED (`run_host_matrix.sh`, 3fc553b3) ·
+> **Γ2c + Γ2d EXECUTED** — host matrix is now **6 routes / 3 native ISAs** (x86-64, AArch64, RISC-V
+> RV64IM), qemu-7.2-under-WSL1 executor · **Γ4/Σ0 EXECUTED** (`run_germinate.sh`: the self-carrying
+> spore, 151 members, regrows 30 win64 + 30 Linux binaries across 3 ISAs, reproducible) ·
+> **Γ3 EXECUTED across all three ISAs** (`run_retarget.sh`: 3 translators as anchor-verified waist
+> objects, 30/30 byte-match, self-translation fixpoint, TWO cross-ISA Linux germs) · **Γ2b + Γ5
+> CLOSED** (wasm leg in retarget; the three Γ legs run inside `run_evergreen.sh`).  Ledger:
+> `III-GAMMA-RETARGET-SPORE.md`.  Still open: **Γ0 S4 parse frontier** (deep, independent) and Γ1
+> body-onto-waist at full corpus scale (needs the cg_r3 SVIR backend).
 >
 > **STATUS: ANALYSIS (LOCATED, not executed).** A systems-map pass (2026-07-08) answering one question:
 > *what is the largest unification effort III can take on — beyond the waist lift already located — to make

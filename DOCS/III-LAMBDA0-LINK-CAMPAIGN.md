@@ -30,11 +30,11 @@ zero immediately** (the class-fix corpus generalizes). Remaining 21 fails:
 |---|---|---|---|
 | acc.c | ~~1~~ **0** | ~~iii_acc_emit_audit~~ | **FIXED**: `prescan_fptd_globals()` (file-scope fn-ptr-typedef globals = 8B scalars; must run AFTER prescan_struct which fills FPTD) + indirect-call-through-GLOBAL arm (LOAD64 cell → CALL_INDIRECT) |
 | cg_r0.c | ~~5~~ **0** | — | **FIXED** by two classes: (a) `(cast)&local` — prescan_addrof called `)`-then-`&` binary; now walks back to the matching `(` and recognizes casts → the local spills (probe p_castaddr, interp==gcc==71); (b) chained-arrow POINTER-SUBSCRIPT tail `cg->ast->source_buf[off+i]` (probe p_label2, interp==gcc==198) |
-| cg_rm1.c | ~~4~~ **1** | emit_vmexit_dispatch_table | (a)+(b) fixed 3; the last: `x = <nothing>` post-if — undiagnosed, dis tail `60 44 11:3@-1` |
-| jit_emit.c | 7 | iii_jit_self_test (**rc=2 unknown-opcode!**), swap_crystal, linear_owned_check, trampoline_{code_ptr,code_size,version,reset} | `G_STRUCTARR[i].field` rvalue (global struct-array element FIELD read) emits nothing; self_test emits an unknown byte (separate; inspect) |
+| cg_rm1.c | ~~4~~ **0** | — | **ZERO**: the last was the ENUM-CONST array dimension (`T slots[III_HV_...]`) — prescan_structarr now cidx-sizes it |
+| jit_emit.c | ~~7~~ **1** | iii_jit_self_test (**rc=2 unknown-opcode**) | the trampoline six were the enum-dim class (G_JIT_TRAMPOLINE) — FIXED; self_test emits an unknown byte — inspect |
 | link.c | ~~4~~ **3** | iii_link_cmp_entry, iii_link_sort_entries, iii_link_build_manifest | sha256_final **FIXED** by the COMMA-STATEMENT class (`h->buf[56+i]=v, bits>>=8;` → stmt_end() recurses into pstmt for each clause; probe p_link f2, interp==gcc==79). cmp_entry trio: NOT the cast-decl shape (probe f1 passes) — re-diagnose (memcmp/strcmp chains? `(a->f, b->f, 32)` arg shapes?) |
 
-Standing: **2,569 fns / 11 fails = 99.6% structural.** Landed this session: 46e6b7e2 (v2/CALL2),
+Standing: **2,569 fns / 4 fails = 99.84% structural** (jit_emit 1 rc=2; link 3 re-diagnosis pending — the cast-decl-pair probe PASSES, so cmp_entry trio is a different shape). Landed this session: 46e6b7e2 (v2/CALL2),
 98ade8e1 (teeth), 311a81fb (witness), ff061807 (doubles + 7-TU zero), 6fa6cec0 (link-prep),
 4091e375 ((cast)& + ledger), + the chained-arrow / fptd-global / comma-statement classes.
 

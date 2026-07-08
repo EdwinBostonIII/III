@@ -8,11 +8,27 @@
  * If it reproduces the SHADOW_ON=1 wrong SHA digest, the SVIR is semantically wrong (ccsv codegen) -- a 3rd
  * independent confirmation -- AND it can be instrumented to trace the exact diverging memory/slot.
  *
- * NIH: libc putchar only.  No island: it is the SVIR reference semantics, the same ISA svir_verify validates. */
+ * NIH: libc putchar only.  No island: it is the SVIR reference semantics, the same ISA svir_verify validates.
+ *
+ * HOST-BOUNDARY SHIMS (Lambda-0, the linked whole-seed): a CALL landing on an IMPORT body whose name is on
+ * the CRT WHITELIST (fopen fclose fread fwrite fseek ftell rewind fgets clock) dispatches to the HOST CRT --
+ * SVIR addresses marshal as &MEM[off] (NULL passes through), FILE* returns flow back as opaque i64 handles
+ * (the seed never dereferences them), fgets' return maps back to the SVIR buffer offset.  Anything else
+ * stays the LOUD 198 sentinel.  argv: the interp's own argv[1..] stages into MEM at ARGV_TAB (argv[0] =
+ * "iiis-0") so the linked seed's main(argc, argv) sees a real command line. */
 module svir_interp
 extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
 extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(f: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, f: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(buf: u64, sz: u64, n: u64, f: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fseek(f: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ftell(f: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rewind(f: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fgets(buf: u64, n: i32, f: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn clock() -> i64 from "msvcrt"
 
 var MEM  : [u8; 4194304]                 /* svir_mem: flat linear memory (4 MiB) */
 var VS   : [u64; 16384]   var VSP : u32 = 0u32      /* the shared eval (value) stack */
@@ -36,6 +52,34 @@ var PDEC_D : [u8; 24]
 fn pdec(v0: u64) { if v0==0u64 { putchar(48i32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { PDEC_D[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  putchar(PDEC_D[n as u64] as i32) } }
 fn pstr2(a:u32,b:u32){ putchar(a as i32) putchar(b as i32) }
 
+/* ---- Lambda-0 HOST SHIMS: import-name dispatch to the CRT (whitelist only) ---- */
+var SHIM_HIT : u32 = 0u32
+var ARGV_DBG : u32 = 0u32   /* TEMP */
+fn m2h(off: u64) -> u64 { if off==0u64 { return 0u64 }  return (&MEM as u64) + off }   /* SVIR addr -> host ptr (NULL passes) */
+fn nm_is(no: u64, nl: u32, s: u64, sl: u32) -> u32 {   /* import name bytes (module) == the .iii literal */
+    if nl != sl { return 0u32 }
+    let p : *u8 = s as *u8
+    let mut j : u32 = 0u32
+    while j < nl { if ib(no + (j as u64)) != (p[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+fn shim_call(boff: u64, lb: u64) -> u64 {
+    SHIM_HIT = 1u32
+    let nl : u32 = ib(boff + 1u64)
+    let no : u64 = boff + 2u64
+    let a0 : u64 = LOC[lb]  let a1 : u64 = LOC[lb + 1u64]  let a2 : u64 = LOC[lb + 2u64]  let a3 : u64 = LOC[lb + 3u64]
+    if nm_is(no, nl, "fopen"  as u64, 5u32)==1u32 { return fopen(m2h(a0), m2h(a1)) }
+    if nm_is(no, nl, "fclose" as u64, 6u32)==1u32 { return (fclose(a0)) as u64 }
+    if nm_is(no, nl, "fread"  as u64, 5u32)==1u32 { return fread(m2h(a0), a1, a2, a3) }
+    if nm_is(no, nl, "fwrite" as u64, 6u32)==1u32 { return fwrite(m2h(a0), a1, a2, a3) }
+    if nm_is(no, nl, "fseek"  as u64, 5u32)==1u32 { return (fseek(a0, a1 as i64, a2 as i32)) as u64 }
+    if nm_is(no, nl, "ftell"  as u64, 5u32)==1u32 { return (ftell(a0)) as u64 }
+    if nm_is(no, nl, "rewind" as u64, 6u32)==1u32 { rewind(a0)  return 0u64 }
+    if nm_is(no, nl, "fgets"  as u64, 5u32)==1u32 { let r:u64=fgets(m2h(a0), a1 as i32, a2)  if r==0u64 { return 0u64 }  return a0 }   /* host buf-ptr maps back to the SVIR offset */
+    if nm_is(no, nl, "clock"  as u64, 5u32)==1u32 { return (clock()) as u64 }
+    SHIM_HIT = 0u32
+    return 0u64
+}
 fn ib(i: u64) -> u32 { let p : *u8 = (svir_ptr() + i) as *u8  return p[0u64] as u32 }   /* a byte of the SVIR module */
 fn ird8(i: u64) -> u64 { let mut v:u64=0u64  let mut k:u64=0u64  while k<8u64 { v = v | ((ib(i+k)) as u64 << (k*8u64))  k=k+1u64 }  return v }   /* 8-byte LE from the module body */
 fn iu16(i: u64) -> u64 { return (ib(i) as u64) | ((ib(i+1u64) as u64) << 8u64) }
@@ -88,7 +132,10 @@ fn match_else(boff: u64, blen: u64, q: u64) -> u64 {
 fn exec_fn(fnidx: u32, depth: u32) -> u64 {
     let boff : u64 = FN_OFF[fnidx as u64]
     let blen : u64 = FN_BLEN[fnidx as u64]
-    if blen > 0u64 { if ib(boff) == 0x8Au32 { UNRES_IMP = UNRES_IMP + 1u32  return 0u64 } }   /* IMPORT decl [0x8A][nl][name] (svir_verify:49): a CALL reached an unresolved cross-module fn -> record + defined-zero, sentinel 198 at exit (mirrors OOB_IND; without this the name bytes would EXECUTE as opcodes) */
+    if blen > 0u64 { if ib(boff) == 0x8Au32 {   /* IMPORT decl [0x8A][nl][name]: WHITELISTED CRT names dispatch to the HOST (Lambda-0 shims); everything else stays the LOUD 198 sentinel (mirrors OOB_IND; the name bytes must never EXECUTE as opcodes) */
+        let sr : u64 = shim_call(boff, (depth as u64) * 256u64)
+        if SHIM_HIT == 1u32 { return sr }
+        UNRES_IMP = UNRES_IMP + 1u32  return 0u64 } }
     let lb   : u64 = (depth as u64) * 256u64        /* locals base */
     let cb   : u64 = (depth as u64) * 64u64         /* control-stack base */
     let mut csp : u32 = 0u32
@@ -181,9 +228,34 @@ fn load_module() {
     }
 }
 
-fn main() -> u64 {
+fn main(argc: i32, argv: u64) -> u64 {
     load_module()
     let mut s : u32 = 0u32  while s < 256u32 { LOC[s as u64] = 0u64  s = s + 1u32 }   /* main's locals start 0 */
+    /* Lambda-0 argv staging: the linked seed's main(argc, argv) reads a REAL command line.  The seed's
+     * memory map is statics[0..~477K) / shadow-stack(grows DOWN from 917,504) / VA+FMT(~983K) /
+     * heap(UP from 1,048,576) -- so argv must live ABOVE the heap's reach.  MEM is 4 MiB; the table +
+     * strings sit at the TOP (MEM[4,190,000..]), clear of a small-input compile's heap growth (the
+     * stage1_corpus programs are tiny).  8B table slots; argv[0]="iiis-0"; argv[1..]=THIS interp's
+     * argv[1..].  No args -> argc=1 -> the seed's usage path (rc parity). */
+    let pp : *u64 = argv as *u64
+    let tb : u64 = 4190000u64
+    let mut scur : u64 = 4190256u64
+    MEM[scur]=105u8 MEM[scur+1u64]=105u8 MEM[scur+2u64]=105u8 MEM[scur+3u64]=115u8 MEM[scur+4u64]=45u8 MEM[scur+5u64]=48u8 MEM[scur+6u64]=0u8   /* "iiis-0" */
+    let mut k8 : u64 = 0u64  while k8 < 8u64 { MEM[tb+k8] = ((scur >> (8u64*k8)) & 255u64) as u8  k8=k8+1u64 }
+    scur = scur + 7u64
+    let mut ai : u64 = 1u64
+    while ai < (argc as u64) {
+        let sp2 : *u8 = pp[ai] as *u8
+        let ent : u64 = tb + ai*8u64
+        let mut k9 : u64 = 0u64  while k9 < 8u64 { MEM[ent+k9] = ((scur >> (8u64*k9)) & 255u64) as u8  k9=k9+1u64 }
+        let mut ci : u64 = 0u64
+        while (sp2[ci] as u32) != 0u32 { MEM[scur] = sp2[ci]  scur=scur+1u64  ci=ci+1u64 }
+        MEM[scur]=0u8  scur=scur+1u64
+        ai = ai + 1u64
+    }
+    LOC[0u64] = argc as u64                       /* the seed's argc (prog name + args) */
+    LOC[1u64] = tb                                /* the seed's argv */
+    if ARGV_DBG == 1u32 { return MEM[4190256u64] as u64 }   /* DEBUG: prove the staged byte survives to exec */
     let r : u64 = exec_fn(0u32, 0u32)            /* func 0 = main (the entry); prints via PRINT_CHAR */
     if BADW_N > 0u32 {                            /* CONST-DATA CORRUPTION detected -> print the offending writes */
         putchar(10i32)  pstr2(66u32,87u32)  putchar(58i32)  putchar(32i32)   /* "BW: " */

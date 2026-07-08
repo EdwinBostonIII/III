@@ -102,3 +102,33 @@ Bugs the link surfaced and fixed en route:
 2. argv delivery into the linked seed under the interp (main(argc, argv) locals).
 3. `run_seed_sovereign.sh`: linked seed compiles stage1_corpus; emitted artifacts byte-match
    gcc-built iiis-0's. Then run_completion.sh 8/8.
+
+## THE SEED EXECUTES — and the parse-runtime frontier (2026-07-08, session 3)
+
+The linked whole-seed now RUNS as a compiler (commit 76901783). Proven working end-to-end:
+- **Host shims** (svir_interp): fopen/fclose/fread/fwrite/fseek/ftell/rewind/fgets/clock dispatch to
+  the CRT by import-name; a full fseek/ftell/fread read-path round-trips a file byte-exact.
+- **argv delivery**: interp stages argv into MEM[4,190,000..] (top — the first try at 900,000 collided
+  with the shadow stack descending from 917,504); argv pointer, indexing, string content, strcmp exact.
+- **char\*\* width fix** (latent ccsv bug argv exposed): a `char **argv` PARAM gave `argv[i]` char-width
+  (1) not pointer-width (8) → the pointer truncated to its low 16 bits. Param loop now tracks pointer
+  depth. 19-TU structural zero HELD (2,569/0), lex behavioral IDENTICAL, re-link verify=VALID.
+
+**The frontier (S4 of run_seed_sovereign.sh):** the seed lexes correctly (never LEX_FAIL=10) but
+`iii_parse_module` returns **false on even a bare `module m`** (PARSE_FAIL=11 vs gcc's 0). Because rc
+is 11 not 198, *no fprintf import was hit* → parse returned false while recording ZERO errors: a
+parse.c runtime bug on the simplest path. parse.c is at structural zero but has **no behavioral
+harness**, so this is the first time it has ever executed — the documented "structural zero is
+necessary but not sufficient." Input bisection (all vs gcc):
+
+| input | seed | gcc |
+|---|---|---|
+| `module m` | 11 | 0 |
+| `module m` + `fn f() -> u64 { }` | 11 | 0 |
+
+**Next campaign (task #4 finish):** build a parse.c behavioral harness (like _lexharness), run
+`iii_parse_module` on `module m` through ccsv→interp vs gcc, trace the diverging op. The most likely
+suspects, in order: (1) the lex→parse token hand-off wiring in iii_run_pipeline through the interp;
+(2) a parse.c internal state-machine op that structural-zero can't see (an uninit read, a wrong
+branch); (3) a residual ccsv codegen bug in a construct parse.c uses that lex.c doesn't. Then S4 goes
+byte-identical and run_completion.sh's seed_sovereign member closes.

@@ -334,7 +334,7 @@ fn fidx_byname(nm:u64, ln:u64) -> i32 {   /* FN-table lookup by NAME BYTES (the 
 }
 var D_RES:u32=0u32  var D_ADDX:i32=0i32-1i32  var D_SUBX:i32=0i32-1i32  var D_MULX:i32=0i32-1i32  var D_DIVX:i32=0i32-1i32  var D_FRIX:i32=0i32-1i32
 var FNVN:u32=0u32  var FNVF:[u32;1024]  var FNVFN:[u32;1024]  var FNVOFF:[u64;1024]  var CURFNK:u32=0u32  var VMAP:u32=0u32   /* FNV manifest: every fn-name-as-VALUE emission (fidx, emitting fn, body offset of the 0x01 op) -- the linker's exact fn-ptr index-space rewrite set ; VMAP=1 appends it as //V lines */
-var DVN:u32=0u32  var DVO:[u64;256]  var DVF:[u32;256]   /* DATA-FNV manifest: fn indices BAKED into the data section by struct-array initializers (`//D addr fidx` under vmap) */
+var DVN:u32=0u32  var DVO:[u64;256]  var DVF:[u32;256]  var DVB:[u64;256]  var DVE:[u64;256]  var DVFO:[u64;256]   /* DATA-FNV manifest: fn indices BAKED into the data section by struct-array initializers (`//D addr fidx base ei foff` under vmap; forensic tail fields) */
 fn dfid(w:u32) -> i32 {
     if D_RES==0u32 { D_RES=1u32
         D_ADDX=fidx_byname("iii_d_add" as u64, 9u64)  D_SUBX=fidx_byname("iii_d_sub" as u64, 9u64)
@@ -470,15 +470,16 @@ fn fieldsign(sti:i32, ft:u32)->u32 { if sti<0i32 {return 0u32}  let b:u32=STFB[s
 /* string literals: a BYTE-PACKED region at the START of svir_mem (real C layout), emitted as a SVIR DATA SECTION
  * (initialised linear memory -- no main-entry STORE init).  char *s = "..."; s[i] -> LOAD8 at s+i (stride 1, via
  * the char* flag LCH).  Each STRING token's TV becomes its byte address; arrays/structs follow (prescan_arr MTOP=DLEN). */
-var SDAT:[u8;262144]  var DLEN:u64=0u64  var DEND:u64=0u64   /* SDAT = the SVIR data section: byte-packed strings [0..DLEN] + array initializers; DEND = total initialised extent */
-fn sbyte(v:u32) { if DLEN<262143u64 { SDAT[DLEN]=(v & 0xFFu32) as u8  DLEN=DLEN+1u64 } }
-fn data_put64(off:u64, v:i64) { let mut b:u64=0u64  while b<8u64 { if (off+b)<262144u64 { let p:*u8=((&SDAT as u64)+off+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 8-byte LE store into the data section */
-fn data_put8(off:u64, v:i64) { if off<262144u64 { let p:*u8=((&SDAT as u64)+off) as *u8  p[0u64]=((v as u64) & 0xFFu64) as u8 } }   /* 1-byte store (byte-array initializer) */
-fn data_put16(off:u64, v:i64) { let mut b:u64=0u64  while b<2u64 { if (off+b)<262144u64 { let p:*u8=((&SDAT as u64)+off+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 2-byte LE */
-fn data_put32(off:u64, v:i64) { let mut b:u64=0u64  while b<4u64 { if (off+b)<262144u64 { let p:*u8=((&SDAT as u64)+off+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 4-byte LE */
+var SDAT:[u8;262144]  var DLEN:u64=0u64  var DEND:u64=0u64   /* SDAT = the SVIR data section: byte-packed strings [0..DLEN] + array initializers; DEND = total initialised extent (ABSOLUTE addresses; SDAT indexes are addr-MEMBASE) */
+var MEMBASE:u64=0u64   /* Lambda-0 link relocation: statics/strings allocate from MEMBASE (argv digits); every baked ADDRESS is absolute, while SDAT stays local-indexed -- the linker places each TU's data AT its membase.  0 = the standalone default (byte-identical emission). */
+fn sbyte(v:u32) { let li:u64=DLEN-MEMBASE  if li<262143u64 { SDAT[li]=(v & 0xFFu32) as u8  DLEN=DLEN+1u64 } }
+fn data_put64(off:u64, v:i64) { let o2:u64=off-MEMBASE  let mut b:u64=0u64  while b<8u64 { if (o2+b)<262144u64 { let p:*u8=((&SDAT as u64)+o2+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 8-byte LE store into the data section */
+fn data_put8(off:u64, v:i64) { let o2:u64=off-MEMBASE  if o2<262144u64 { let p:*u8=((&SDAT as u64)+o2) as *u8  p[0u64]=((v as u64) & 0xFFu64) as u8 } }   /* 1-byte store (byte-array initializer) */
+fn data_put16(off:u64, v:i64) { let o2:u64=off-MEMBASE  let mut b:u64=0u64  while b<2u64 { if (o2+b)<262144u64 { let p:*u8=((&SDAT as u64)+o2+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 2-byte LE */
+fn data_put32(off:u64, v:i64) { let o2:u64=off-MEMBASE  let mut b:u64=0u64  while b<4u64 { if (o2+b)<262144u64 { let p:*u8=((&SDAT as u64)+o2+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 4-byte LE */
 fn data_putn(esz:i64, off:u64, v:i64) { if esz==1i64 { data_put8(off,v)  return }  if esz==2i64 { data_put16(off,v)  return }  if esz==4i64 { data_put32(off,v)  return }  data_put64(off,v) }   /* width-typed initializer store (real C stride) */
 fn prescan_str() {
-    DLEN=16u64  let mut t:u32=0u32   /* reserve [0..15] for NULL: address 0 must be distinct from any real string/array/data pointer (the seed checks `if(p)` / `p==NULL` on first-allocated objects -- e.g. &"firststring") */
+    DLEN=MEMBASE+16u64  let mut t:u32=0u32   /* reserve [base..base+15] for NULL padding: address 0 must be distinct from any real string/array/data pointer (the seed checks `if(p)` / `p==NULL` on first-allocated objects -- e.g. &"firststring"); under a link membase the cursor starts shifted */
     while t<NT {
         if TK[t as u64]==4u32 {
             TV[t as u64]=DLEN as i64                          /* address = byte offset in the packed region */
@@ -1998,7 +1999,7 @@ fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]
                                                 let mut v:i64=0i64  let mut hv2:u32=0u32
                                                 if TK[p as u64]==2u32 {v=TV[p as u64]  hv2=1u32}  if TK[p as u64]==4u32 {v=TV[p as u64]  hv2=1u32}  if hv2==0u32 { let ci:i32=cidx(p)  if ci>=0i32 {v=CNV[ci as u64]  hv2=1u32} }
                                                 if hv2==0u32 { let gv2:i64=abase(p)  if gv2>=0i64 { v=gv2  hv2=1u32 } }   /* GLOBAL name initializer -> its ADDRESS (array decay; membase-correct at compile time) -- jit's E_* expected-bytes tables */
-                                                if hv2==0u32 { let fv2:i32=fidx(p)  if fv2>=0i32 { v=fv2 as i64  hv2=1u32  if DVN<256u32 { DVO[DVN as u64]=addr  DVF[DVN as u64]=fv2 as u32  DVN=DVN+1u32 } } }   /* FN-NAME initializer -> its fn INDEX, recorded in the DATA-FNV manifest (`//D addr fidx` under vmap) so the linker rewrites the baked index to the GLOBAL one -- jit's g_emit_* golden vectors */
+                                                if hv2==0u32 { let fv2:i32=fidx(p)  if fv2>=0i32 { v=fv2 as i64  hv2=1u32  if DVN<256u32 { DVO[DVN as u64]=addr  DVF[DVN as u64]=fv2 as u32  DVB[DVN as u64]=base  DVE[DVN as u64]=ei  DVFO[DVN as u64]=foff  DVN=DVN+1u32 } } }   /* FN-NAME initializer -> its fn INDEX, recorded in the DATA-FNV manifest (`//D addr fidx [base ei foff]` under vmap; the linker reads the first two) so the baked index rewrites to the GLOBAL one -- jit's g_emit_* golden vectors */
                                                 if hv2==1u32 { data_putn(fsz, addr, v) } }
                                           fj=fj+1u32  p=p+1u32 } } }
                                 }
@@ -2049,7 +2050,7 @@ fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]
     }
 }
 fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SVIR linear memory (after strings) + init data */
-    AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>16u64 {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32  let mut bd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
+    AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>(MEMBASE+16u64) {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32  let mut bd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
     while t<NT {
         if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* paren depth: params live at pd>0, NOT global arrays */
         if ispat(t,Q_LB)==1u32 {bd=bd+1u32}  if ispat(t,Q_RB)==1u32 { if bd>0u32 {bd=bd-1u32} }   /* brace depth: a SCALAR global lives at bd==0 (outside any fn body); struct bodies are jumped past, so their braces don't count */
@@ -2705,7 +2706,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         if (a2[0u64] as u32)==118u32 { if (a2[1u64] as u32)==109u32 { if (a2[2u64] as u32)==97u32 { if (a2[3u64] as u32)==112u32 { if (a2[4u64] as u32)==0u32 { VMAP=1u32 } } } } }
         let mut di:u64=0u64  let mut alld:u32=1u32  let mut mb:u64=0u64
         while (a2[di] as u32)!=0u32 { let dc:u32=a2[di] as u32  if dg(dc)==1u32 { mb=(mb*10u64)+((dc-48u32) as u64) } else { alld=0u32 }  di=di+1u64 }
-        if di>0u64 { if alld==1u32 { MTOP=mb } }
+        if di>0u64 { if alld==1u32 { MEMBASE=mb } }
         aix=aix+1i32 }
     let f : u64 = fopen(pp[1u64], &MODE_RB as u64)
     if f == 0u64 { return 3u64 }
@@ -2734,13 +2735,15 @@ fn main(argc: i32, argv: u64) -> u64 {
         return 0u64
     }
     V2M = 0u32  if FN > 255u32 { V2M = 1u32 }                       /* >255 fns (main.c=334) -> SVIR v2 container + CALL2 + u32 data length */
+    if DEND > 0u64 { if (DEND-MEMBASE) > 65535u64 { V2M = 1u32 } }   /* data section past the v1 u16 length -> v2 (jit_emit at a link membase: ~132 KB locals-image silently TRUNCATED to mod-65536 before this guard) */
     ML=0u64
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }
-    if DEND > 0u64 {                                                /* append the SVIR data section [len][bytes] (v1 u16 / v2 u32) (strings + array inits) */
-        mb((DEND & 0xFFu64) as u32)  mb(((DEND >> 8u64) & 0xFFu64) as u32)
-        if V2M==1u32 { mb(((DEND >> 16u64) & 0xFFu64) as u32)  mb(((DEND >> 24u64) & 0xFFu64) as u32) }
-        let mut d:u64=0u64  while d<DEND { mb(SDAT[d] as u32)  d=d+1u64 }
+    if DEND > 0u64 {                                                /* append the SVIR data section [len][bytes] (v1 u16 / v2 u32) (strings + array inits); under a membase the section is the LOCAL image [0..DEND-MEMBASE) -- the linker places it AT the base */
+        let ldl:u64=DEND-MEMBASE
+        mb((ldl & 0xFFu64) as u32)  mb(((ldl >> 8u64) & 0xFFu64) as u32)
+        if V2M==1u32 { mb(((ldl >> 16u64) & 0xFFu64) as u32)  mb(((ldl >> 24u64) & 0xFFu64) as u32) }
+        let mut d:u64=0u64  while d<ldl { mb(SDAT[d] as u32)  d=d+1u64 }
     }
     if LOVF==1u32 { pstr("// FATAL ccsv: a function exceeds the 256 SVIR-local cap -- needs LEB-encoded local indices (the silent slot-256->0 collision is refused).\n!!!CCSV_LOCAL_OVERFLOW!!!\n" as u64)  return 7u64 }   /* LOUD: emit unparseable iii + nonzero exit, never silently-corrupt SVIR */
     if CLOVF==1u32 { pstr("// FATAL ccsv: a >8B compound literal in a non-direct context (ternary/arg) needs a temp+address path not yet built -- refused rather than emit a silently-corrupted value.\n!!!CCSV_COMPOUND_LITERAL_OVERFLOW!!!\n" as u64)  return 9u64 }
@@ -2751,7 +2754,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         let mut vk:u32=0u32
         while vk<FNVN { pstr("//V ~" as u64)  pdec(FNVFN[vk as u64] as u64)  pc(32u32)  pdec(FNVOFF[vk as u64])  pc(32u32)  pdec(FNVF[vk as u64] as u64)  pc(10u32)  vk=vk+1u32 }
         let mut dk:u32=0u32
-        while dk<DVN { pstr("//D ~" as u64)  pdec(DVO[dk as u64])  pc(32u32)  pdec(DVF[dk as u64] as u64)  pc(10u32)  dk=dk+1u32 }
+        while dk<DVN { pstr("//D ~" as u64)  pdec(DVO[dk as u64])  pc(32u32)  pdec(DVF[dk as u64] as u64)  pc(32u32)  pdec(DVB[dk as u64])  pc(32u32)  pdec(DVE[dk as u64])  pc(32u32)  pdec(DVFO[dk as u64])  pc(10u32)  dk=dk+1u32 }
     }
     return 0u64
 }

@@ -12,8 +12,8 @@
 | ccsv EXACT DOUBLES + opaque-cast + fm variadic/stringize | **LANDED** ff061807 — 22-case KAT bit-exact vs gcc hardware on interp/x86/wasm |
 | 7-TU structural zero (1,210 fns) + ratchet pin | **LANDED** ff061807 (run_seed_verify: main.c added, `verify_fail=0` is a hard pin) |
 | ccsv link-prep: `vmap` FNV manifest + `--membase` + strict `dbg` | **LANDED** 6fa6cec0 |
-| 19-TU frontier measurement | **DONE** (below) — 2,569 fns, 21 fails in 5 TUs |
-| svir_ld.iii (the linker) | **NOT STARTED** — design frozen (below) |
+| 19-TU frontier | **CLOSED 9cc9597c** — 0 fails / 2,569 fns, ALL NINETEEN TUs at structural zero |
+| svir_ld.iii + run_seed_link.sh | **GREEN** — 19 TUs -> ONE v2 module (1,214,998 B); G1 svir_verify=VALID; G2 statics 476,928 < 917,504; G3 no-arg parity interp==gcc==2 |
 | run_seed_sovereign.sh (capstone arc Φ1) | ABSENT (the honest RED) |
 
 ## The 19-TU truth (build_iiis0.sh's own filter)
@@ -74,3 +74,31 @@ stage1_corpus byte-match (task #4, run_seed_sovereign.sh).
 
 ccsv_d.exe (current ccsv), {main,lex,sema,emit,ast,cg_r3,parse}.{svbin,names,imports,defnames,vmap},
 nx_*.{iii,o,names} (the 12 new TUs), svan.awk (container analyzer), unresolved.txt, td_* (double KAT).
+
+## THE LINK IS GREEN (2026-07-08, second session)
+
+`run_seed_link.sh` end-to-end: per-TU extraction at cumulative membases (main first; total statics
+476,928 B — 52% of the 917,504 ceiling), `svir_ld` resolves 19 containers into ONE v2 module of
+**1,214,998 bytes** — and the 97-line anchor verifies it: **svir_verify(whole seed) = VALID**.
+First execution: `interp(linked, no argv)` exits **2 == gcc iiis-0's no-arg rc** — the usage path
+crosses no resolved import (undeclared stdio = compile-time no-ops; stderr TEXT is dropped, the
+exit CODE is the contract at this rung).
+
+Bugs the link surfaced and fixed en route:
+- ccsv membase now shifts DLEN/strings/statics as one cursor (prescan_arr's `MTOP=DLEN` had
+  obliterated the base) while SDAT stays local-indexed (`data_put*` subtract MEMBASE); the emitted
+  data section is the LOCAL image, placed at the TU's base by the linker.
+- **v1 u16 data-length overflow**: a >64 KB data image silently truncated mod 65,536 — jit_emit's
+  140 KB image was truncated EVEN STANDALONE (pre-existing, invisible to the structural floor).
+  The container now switches to v2 when `data > 65,535` as well as when `FN > 255`.  jit standalone
+  re-verified `# 93 0 0 0` with v2 data.
+- svir_ld //D sanity forensics (`want/got` + base/ei/foff tail fields in the manifest) — how the
+  truncation was found.
+
+## Next (task #4 road)
+
+1. Host-shim rung: svir_interp dispatches the 16-name CRT whitelist (fopen/fread/fwrite/fclose/
+   clock/...) to the host — upgrades G3 from exit-code parity to REAL compile runs.
+2. argv delivery into the linked seed under the interp (main(argc, argv) locals).
+3. `run_seed_sovereign.sh`: linked seed compiles stage1_corpus; emitted artifacts byte-match
+   gcc-built iiis-0's. Then run_completion.sh 8/8.

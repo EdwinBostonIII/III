@@ -127,8 +127,7 @@ fn parse_names(tu: u32, no: u64, nl: u64) {
         if j == nl+1u64 { j = i + (nd as u64) }
         if nd > 0u32 { if ab(no+j)==58u32 { if ab(no+j+1u64)==32u32 {
             let nmst : u64 = no+j+2u64  let mut ne : u64 = nmst
-            while ne < no+nl { if ab(ne)==10u32 { ne=ne+0u64  } else { ne=ne+1u64  } if ab(ne)==10u32 { } }   /* scan to newline */
-            ne = nmst  let mut g:u32=1u32  while g==1u32 { if ne>=no+nl {g=0u32} else { if ab(ne)==10u32 {g=0u32} else { if ab(ne)==13u32 {g=0u32} else {ne=ne+1u64} } } }
+            let mut g:u32=1u32  while g==1u32 { if ne>=no+nl {g=0u32} else { if ab(ne)==10u32 {g=0u32} else { if ab(ne)==13u32 {g=0u32} else {ne=ne+1u64} } } }   /* name ends at CR/LF/EOF */
             if v < (nf as u64) { let k:u64=(base as u64)+v  F_NMO[k]=nmst  F_NML[k]=ne-nmst }
         } } }
         /* advance to next line */
@@ -328,7 +327,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         /* sanity: the current 8-byte slot equals the OLD local index */
         let p4:*u8=((&DATB as u64)+ad) as *u8
         let old4:u64=(p4[0u64] as u64) | ((p4[1u64] as u64)<<8u64) | ((p4[2u64] as u64)<<16u64) | ((p4[3u64] as u64)<<24u64)
-        if old4 != (D_FI[dk as u64] as u64) { perr("svir_ld: //D slot mismatch\n~" as u64)  return 3u64 }
+        if old4 != (D_FI[dk as u64] as u64) { perr("svir_ld: //D slot mismatch tu=~" as u64)  pdec(tu4 as u64)  perr(" addr=~" as u64)  pdec(ad)  perr(" want=~" as u64)  pdec(D_FI[dk as u64] as u64)  perr(" got=~" as u64)  pdec(old4)  pc(10u32)  return 3u64 }
         let mut q5:u32=0u32  while q5<8u32 { p4[q5 as u64]=(((gi4 as u64) >> ((8u32*q5) as u64)) & 255u64) as u8  q5=q5+1u32 }
         if (ad+8u64) > DMAX { DMAX = ad+8u64 }
         dk=dk+1u32 }

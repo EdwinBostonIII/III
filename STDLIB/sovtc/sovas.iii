@@ -61,15 +61,20 @@ var CN_LEN   : u32 = 0u32
 
 /* data-section assembly: .data/.rodata raw bytes + .bss size.  Built in PASS D and PERSISTS across the two
  * .text encode passes -- so sov_reset (per encode pass) does NOT clear these; sov_data_reset does, once. */
-var DATA_BUF   : [u8; 1048576]
+var DATA_BUF   : [u8; 4194368]   /* 4 MiB + slack = the SVIR memory-model max (a full svir_mem image as .data).
+                                  * History of this cap: 8192 truncated seed tables; 1 MiB SILENTLY truncated a
+                                  * 4 MiB svir_mem .data (composed waist-translator PEs segfaulted at offsets
+                                  * past 0xFFFFF).  Now sized to the model max AND overflow is LOUD (SOV_OVF). */
 var DATA_LEN   : u32 = 0u32
-var RODATA_BUF : [u8; 1048576]
+var RODATA_BUF : [u8; 4194368]
 var RODATA_LEN : u32 = 0u32
 var BSS_SIZE   : u32 = 0u32
-fn sov_data_reset() -> i32 @export { DATA_LEN = 0u32  RODATA_LEN = 0u32  BSS_SIZE = 0u32  return 0i32 }
+var SOV_OVF    : u32 = 0u32      /* ANY sink overflow (text/data/rodata) -> the assemble must FAIL, never truncate */
+fn sov_ovf() -> u32 @export { return SOV_OVF }
+fn sov_data_reset() -> i32 @export { DATA_LEN = 0u32  RODATA_LEN = 0u32  BSS_SIZE = 0u32  SOV_OVF = 0u32  return 0i32 }
 fn sov_data_emit(sec: u32, b: u32) -> i32 @export {   /* sec 1=.data 2=.rodata */
-    if sec == 1u32 { if DATA_LEN < 1048575u32 { DATA_BUF[DATA_LEN as u64] = (b & 0xFFu32) as u8  DATA_LEN = DATA_LEN + 1u32 } }   /* = the 1MB DATA_BUF (was 8192 -> seed data/rodata tables truncated) */
-    if sec == 2u32 { if RODATA_LEN < 1048575u32 { RODATA_BUF[RODATA_LEN as u64] = (b & 0xFFu32) as u8  RODATA_LEN = RODATA_LEN + 1u32 } }
+    if sec == 1u32 { if DATA_LEN < 4194367u32 { DATA_BUF[DATA_LEN as u64] = (b & 0xFFu32) as u8  DATA_LEN = DATA_LEN + 1u32 } else { SOV_OVF = 1u32 } }
+    if sec == 2u32 { if RODATA_LEN < 4194367u32 { RODATA_BUF[RODATA_LEN as u64] = (b & 0xFFu32) as u8  RODATA_LEN = RODATA_LEN + 1u32 } else { SOV_OVF = 1u32 } }
     return 0i32
 }
 fn sov_bss_add(n: u32) -> i32 @export { BSS_SIZE = BSS_SIZE + n  return 0i32 }
@@ -149,7 +154,7 @@ fn sov_at(i: u32) -> u32 @export { if i < SOV_LEN { return SOV_BUF[i] as u32 }  
 
 /* --- internal emit primitives (not exported) --- */
 fn sov_emit(b: u32) {
-    if SOV_LEN < SOV_CAP { SOV_BUF[SOV_LEN] = (b & 0xFFu32) as u8  SOV_LEN = SOV_LEN + 1u32 }
+    if SOV_LEN < SOV_CAP { SOV_BUF[SOV_LEN] = (b & 0xFFu32) as u8  SOV_LEN = SOV_LEN + 1u32 } else { SOV_OVF = 1u32 }
 }
 /* multi-object LINKER surface: append a .text byte (@export wrapper) + patch an already-emitted .text byte. */
 fn sov_text_emit(b: u32) -> i32 @export { sov_emit(b)  return 0i32 }

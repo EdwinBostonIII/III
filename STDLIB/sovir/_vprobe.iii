@@ -1,0 +1,26 @@
+/* _vprobe.iii -- throwaway: per-function verify_body walk; prints "<idx> rc=<r> blen=<n>" per failing fn */
+module _vprobe
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 from "svir_verify.iii"
+
+var DBUF : [u8; 24]
+fn pcc(c: u32) { putchar((c & 0xFFu32) as i32) }
+fn pdec(v0: u64) { if v0 == 0u64 { pcc(48u32)  return }  let mut v : u64 = v0  let mut n : u32 = 0u32  while v > 0u64 { DBUF[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }  while n > 0u32 { n = n - 1u32  pcc(DBUF[n as u64] as u32) } }
+fn vb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64] as u32 }
+
+fn main() -> u64 {
+    let base : u64 = svir_ptr()
+    let nfunc : u32 = vb(base, 0u64)
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let blen : u64 = (vb(base, off + 2u64) as u64) | ((vb(base, off + 3u64) as u64) << 8u64)
+        let r : u64 = verify_body(base, off + 4u64, blen, nfunc)
+        if r != 0u64 { pdec(i as u64)  pcc(32u32)  pcc(114u32)  pcc(99u32)  pcc(61u32)  pdec(r)  pcc(32u32)  pdec(blen)  pcc(10u32) }
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    return 0u64
+}

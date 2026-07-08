@@ -1,0 +1,389 @@
+/* svir_arm64_w.iii -- svir_arm64 AS A WAIST OBJECT (Γ3 × Γ2c): the SVIR->ELF64-AArch64 translator in the
+ * iiisv subset.  Same memory contract as svir_elf_w (PLEN_[16..23] input length, INP[24..) input bytes),
+ * same byte-match law: output must be BYTE-IDENTICAL to native svir_arm64 for every program.  With this,
+ * the AArch64 toolchain itself travels as anchor-verified SVIR: an x86-64 Linux germ (svir_elf translation
+ * of THIS module) regrows AArch64 binaries on a host that has no ARM hardware and no foreign toolchain.
+ * Logic is svir_arm64.iii line-for-line: software eval stack in x28, MOVZ+MOVK*3 constants, svc write/exit. */
+module svir_arm64_w
+
+var PLEN_ : [u8; 8]
+var INP : [u8; 262144]
+
+var LBL : [u64; 16384]
+var FSTART : [u64; 1024]
+var CS_KIND : [u64; 1024]
+var CS_TGT  : [u64; 1024]
+var CS_ELSE : [u64; 1024]
+var CS_ELSEEN : [u64; 1024]
+
+var PASS : u64 = 0
+var CUR  : u64 = 0
+var CS_N : u64 = 0
+var LBLCTR : u64 = 0
+var SVCIADDR : u64 = 0
+
+fn ob(b: u64) { svir_putc(b & 255) }
+fn o16(v: u64) { ob(v & 255)  ob((v >> 8) & 255) }
+fn o32(v: u64) { o16(v & 65535)  o16((v >> 16) & 65535) }
+fn o64(v: u64) { o32(v & 4294967295)  o32(v >> 32) }
+
+fn w32(w: u64) {
+    if PASS == 2 { ob(w & 255)  ob((w >> 8) & 255)  ob((w >> 16) & 255)  ob((w >> 24) & 255) }
+    CUR = CUR + 4
+}
+
+fn relf(target: u64, bits: u64) -> u64 {
+    let here : u64 = CUR
+    let modulus : u64 = 1 << bits
+    let mask : u64 = modulus - 1
+    if target >= here { return ((target - here) / 4) & mask }
+    return (modulus - ((here - target) / 4)) & mask
+}
+
+fn a_movz(rd: u64, imm16: u64, hw: u64) { w32(0xD2800000 | (hw << 21) | ((imm16 & 0xFFFF) << 5) | rd) }
+fn a_movk(rd: u64, imm16: u64, hw: u64) { w32(0xF2800000 | (hw << 21) | ((imm16 & 0xFFFF) << 5) | rd) }
+fn movimm(rd: u64, imm: u64) {
+    a_movz(rd, imm & 0xFFFF, 0)
+    a_movk(rd, (imm >> 16) & 0xFFFF, 1)
+    a_movk(rd, (imm >> 32) & 0xFFFF, 2)
+    a_movk(rd, (imm >> 48) & 0xFFFF, 3)
+}
+fn a_push(rs: u64) { w32(0xF8000C00 | (0x1F8 << 12) | (28 << 5) | rs) }
+fn a_pop(rd: u64)  { w32(0xF8400400 | (8 << 12) | (28 << 5) | rd) }
+fn a_ldrloc(rd: u64, uoff: u64) { w32(0xF9400000 | ((uoff / 8) << 10) | (29 << 5) | rd) }
+fn a_strloc(rs: u64, uoff: u64) { w32(0xF9000000 | ((uoff / 8) << 10) | (29 << 5) | rs) }
+fn a_ldr_x28(rd: u64, uoff: u64) { w32(0xF9400000 | ((uoff / 8) << 10) | (28 << 5) | rd) }
+fn a_str_sp(rs: u64, uoff: u64) { w32(0xF9000000 | ((uoff / 8) << 10) | (31 << 5) | rs) }
+fn a_addimm(rd: u64, rn: u64, imm12: u64) { w32(0x91000000 | ((imm12 & 0xFFF) << 10) | (rn << 5) | rd) }
+fn a_subimm(rd: u64, rn: u64, imm12: u64) { w32(0xD1000000 | ((imm12 & 0xFFF) << 10) | (rn << 5) | rd) }
+fn a_addreg(rd: u64, rn: u64, rm: u64) { w32(0x8B000000 | (rm << 16) | (rn << 5) | rd) }
+fn a_subreg(rd: u64, rn: u64, rm: u64) { w32(0xCB000000 | (rm << 16) | (rn << 5) | rd) }
+fn a_mul(rd: u64, rn: u64, rm: u64) { w32(0x9B000000 | (rm << 16) | (31 << 10) | (rn << 5) | rd) }
+fn a_sdiv(rd: u64, rn: u64, rm: u64) { w32(0x9AC00C00 | (rm << 16) | (rn << 5) | rd) }
+fn a_udiv(rd: u64, rn: u64, rm: u64) { w32(0x9AC00800 | (rm << 16) | (rn << 5) | rd) }
+fn a_msub(rd: u64, rn: u64, rm: u64, ra: u64) { w32(0x9B008000 | (rm << 16) | (ra << 10) | (rn << 5) | rd) }
+fn a_and(rd: u64, rn: u64, rm: u64) { w32(0x8A000000 | (rm << 16) | (rn << 5) | rd) }
+fn a_orr(rd: u64, rn: u64, rm: u64) { w32(0xAA000000 | (rm << 16) | (rn << 5) | rd) }
+fn a_eor(rd: u64, rn: u64, rm: u64) { w32(0xCA000000 | (rm << 16) | (rn << 5) | rd) }
+fn a_lslv(rd: u64, rn: u64, rm: u64) { w32(0x9AC02000 | (rm << 16) | (rn << 5) | rd) }
+fn a_lsrv(rd: u64, rn: u64, rm: u64) { w32(0x9AC02400 | (rm << 16) | (rn << 5) | rd) }
+fn a_cmp(rn: u64, rm: u64) { w32(0xEB000000 | (rm << 16) | (rn << 5) | 31) }
+fn a_cset(rd: u64, ccfield: u64) { w32(0x9A9F07E0 | (ccfield << 12) | rd) }
+fn a_b(target: u64)  { w32(0x14000000 | relf(target, 26)) }
+fn a_bl(target: u64) { w32(0x94000000 | relf(target, 26)) }
+fn a_cbz(rt: u64, target: u64)  { w32(0xB4000000 | (relf(target, 19) << 5) | rt) }
+fn a_cbnz(rt: u64, target: u64) { w32(0xB5000000 | (relf(target, 19) << 5) | rt) }
+fn a_ret()  { w32(0xD65F03C0) }
+fn a_svc()  { w32(0xD4000001) }
+fn a_stp_fp()  { w32(0xA9007BFD) }
+fn a_ldp_fp()  { w32(0xA9407BFD) }
+fn a_mov_fp_sp()  { w32(0x910003FD) }
+fn a_mov_sp_fp()  { w32(0x910003BF) }
+fn a_sturb(rt: u64, negoff: u64) { w32(0x38000000 | (((4294967296 - negoff) & 0x1FF) << 12) | (28 << 5) | rt) }
+fn a_ldrb(rt: u64, rn: u64)  { w32(0x39400000 | (rn << 5) | rt) }
+fn a_strb(rt: u64, rn: u64)  { w32(0x39000000 | (rn << 5) | rt) }
+fn a_ldrh(rt: u64, rn: u64)  { w32(0x79400000 | (rn << 5) | rt) }
+fn a_strh(rt: u64, rn: u64)  { w32(0x79000000 | (rn << 5) | rt) }
+fn a_ldrw(rt: u64, rn: u64)  { w32(0xB9400000 | (rn << 5) | rt) }
+fn a_strw(rt: u64, rn: u64)  { w32(0xB9000000 | (rn << 5) | rt) }
+fn a_ldrsh(rt: u64, rn: u64) { w32(0x79800000 | (rn << 5) | rt) }
+fn a_ldrsw(rt: u64, rn: u64) { w32(0xB9800000 | (rn << 5) | rt) }
+fn a_ldrx(rt: u64, rn: u64)  { w32(0xF9400000 | (rn << 5) | rt) }
+fn a_strx(rt: u64, rn: u64)  { w32(0xF9000000 | (rn << 5) | rt) }
+
+fn e_exit_imm(code: u64) { movimm(0, code)  movimm(8, 93)  a_svc() }
+fn e_membase9() { a_movz(9, 0xA0, 1) }
+
+fn hdr_nfunc() -> u64 { let n : u64 = INP[0]  if n == 0 { return INP[1] | (INP[2] << 8) }  return n }
+fn hdr_off() -> u64 { if INP[0] == 0 { return 3 }  return 1 }
+
+fn lbl_here(id: u64) { if PASS == 1 { LBL[id] = CUR } }
+fn loc_off(slot: u64) -> u64 { return 16 + (8 * slot) }
+
+fn max_local(boff: u64, blen: u64) -> u64 {
+    let mut mx : u64 = 0  let mut s : u64 = 0
+    while s < blen {
+        let o : u64 = INP[boff + s]  s = s + 1
+        if o == 1 { s = s + 8 }
+        if o == 16 { let li : u64 = INP[boff + s]  if li > mx { mx = li }  s = s + 1 }
+        if o == 17 { let li : u64 = INP[boff + s]  if li > mx { mx = li }  s = s + 1 }
+        if o == 80 { s = s + 1 }
+        if o == 81 { s = s + 1 }
+        if o == 112 { s = s + 2 }
+        if o == 115 { s = s + 1 }
+        if o == 116 { s = s + 3 }
+    }
+    return mx
+}
+
+fn e_call_seq(ac: u64, kind: u64, tgt: u64) {
+    let mut stackargs : u64 = 0  if ac > 8 { stackargs = ac - 8 }
+    let ssz : u64 = (((8 * stackargs) + 15) / 16) * 16
+    if ssz > 0 { a_subimm(31, 31, ssz) }
+    let mut i : u64 = 8
+    while i < ac {
+        a_ldr_x28(13, 8 * ((ac - 1) - i))
+        a_str_sp(13, 8 * (i - 8))
+        i = i + 1
+    }
+    let mut nreg : u64 = ac  if nreg > 8 { nreg = 8 }
+    let mut j : u64 = 0
+    while j < nreg { a_ldr_x28(j, 8 * ((ac - 1) - j))  j = j + 1 }
+    if kind == 0 { a_bl(tgt) } else { a_bl(SVCIADDR) }
+    if ssz > 0 { a_addimm(31, 31, ssz) }
+    a_addimm(28, 28, 8 * ac)
+    a_push(0)
+}
+
+fn gen_function(boff: u64, blen: u64, params: u64) {
+    CS_N = 0
+    if blen > 0 { if INP[boff] == 138 { e_exit_imm(198)  return 0 } }
+    let ml : u64 = max_local(boff, blen)
+    let need : u64 = ((((16 + (8 * (ml + 1))) + 64) + 15) / 16) * 16
+    let mut fsz : u64 = need  if fsz < 512 { fsz = 512 }
+    a_subimm(31, 31, fsz)
+    a_stp_fp()
+    a_mov_fp_sp()
+    let mut j : u64 = 0
+    while j < params {
+        if j < 8 { a_strloc(j, loc_off(j)) }
+        else { a_ldrloc(9, fsz + (8 * (j - 8)))  a_strloc(9, loc_off(j)) }
+        j = j + 1
+    }
+    let mut p : u64 = 0
+    while p < blen {
+        let op : u64 = INP[boff + p]  p = p + 1
+        if op == 1 {
+            let mut imm : u64 = 0  let mut k : u64 = 0
+            while k < 8 { imm = imm | (INP[boff + p + k] << (8 * k))  k = k + 1 }
+            p = p + 8
+            movimm(0, imm)  a_push(0)
+        }
+        if op == 16 { let slot : u64 = INP[boff + p]  p = p + 1  a_ldrloc(0, loc_off(slot))  a_push(0) }
+        if op == 17 { let slot : u64 = INP[boff + p]  p = p + 1  a_pop(0)  a_strloc(0, loc_off(slot)) }
+        if op == 32 { a_pop(1)  a_pop(0)  a_addreg(0, 0, 1)  a_push(0) }
+        if op == 33 { a_pop(1)  a_pop(0)  a_subreg(0, 0, 1)  a_push(0) }
+        if op == 34 { a_pop(1)  a_pop(0)  a_mul(0, 0, 1)  a_push(0) }
+        if op == 35 { a_pop(1)  a_pop(0)  a_sdiv(0, 0, 1)  a_push(0) }
+        if op == 36 { a_pop(1)  a_pop(0)  a_sdiv(2, 0, 1)  a_msub(0, 2, 1, 0)  a_push(0) }
+        if op == 42 { a_pop(1)  a_pop(0)  a_udiv(0, 0, 1)  a_push(0) }
+        if op == 43 { a_pop(1)  a_pop(0)  a_udiv(2, 0, 1)  a_msub(0, 2, 1, 0)  a_push(0) }
+        if op == 37 { a_pop(1)  a_pop(0)  a_and(0, 0, 1)  a_push(0) }
+        if op == 38 { a_pop(1)  a_pop(0)  a_orr(0, 0, 1)  a_push(0) }
+        if op == 39 { a_pop(1)  a_pop(0)  a_eor(0, 0, 1)  a_push(0) }
+        if op == 40 { a_pop(1)  a_pop(0)  a_lslv(0, 0, 1)  a_push(0) }
+        if op == 41 { a_pop(1)  a_pop(0)  a_lsrv(0, 0, 1)  a_push(0) }
+        if op == 48 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 1)  a_push(0) }
+        if op == 49 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 0)  a_push(0) }
+        if op == 50 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 10)  a_push(0) }
+        if op == 51 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 11)  a_push(0) }
+        if op == 52 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 12)  a_push(0) }
+        if op == 53 { a_pop(1)  a_pop(0)  a_cmp(0, 1)  a_cset(0, 13)  a_push(0) }
+        if op == 64 { CS_KIND[CS_N] = 0  CS_TGT[CS_N] = LBLCTR  LBLCTR = LBLCTR + 1  CS_N = CS_N + 1 }
+        if op == 65 { let id : u64 = LBLCTR  LBLCTR = LBLCTR + 1  lbl_here(id)  CS_KIND[CS_N] = 1  CS_TGT[CS_N] = id  CS_N = CS_N + 1 }
+        if op == 66 {
+            let endid : u64 = LBLCTR  LBLCTR = LBLCTR + 1
+            let elsid : u64 = LBLCTR  LBLCTR = LBLCTR + 1
+            a_pop(0)  a_cbz(0, LBL[elsid])
+            CS_KIND[CS_N] = 2  CS_TGT[CS_N] = endid  CS_ELSE[CS_N] = elsid  CS_ELSEEN[CS_N] = 0  CS_N = CS_N + 1
+        }
+        if op == 67 { let tt : u64 = CS_N - 1  a_b(LBL[CS_TGT[tt]])  lbl_here(CS_ELSE[tt])  CS_ELSEEN[tt] = 1 }
+        if op == 68 {
+            CS_N = CS_N - 1
+            let kind : u64 = CS_KIND[CS_N]
+            if kind == 0 { lbl_here(CS_TGT[CS_N]) }
+            if kind == 2 { if CS_ELSEEN[CS_N] == 0 { lbl_here(CS_ELSE[CS_N]) }  lbl_here(CS_TGT[CS_N]) }
+        }
+        if op == 80 { let depth : u64 = INP[boff + p]  p = p + 1  a_b(LBL[CS_TGT[(CS_N - 1) - depth]]) }
+        if op == 81 { let depth : u64 = INP[boff + p]  p = p + 1  a_pop(0)  a_cbnz(0, LBL[CS_TGT[(CS_N - 1) - depth]]) }
+        if op == 128 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrb(0, 10)  a_push(0) }
+        if op == 129 { a_pop(1)  a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_strb(1, 10) }
+        if op == 130 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrx(0, 10)  a_push(0) }
+        if op == 131 { a_pop(1)  a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_strx(1, 10) }
+        if op == 132 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrh(0, 10)  a_push(0) }
+        if op == 133 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrsh(0, 10)  a_push(0) }
+        if op == 134 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrw(0, 10)  a_push(0) }
+        if op == 135 { a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_ldrsw(0, 10)  a_push(0) }
+        if op == 136 { a_pop(1)  a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_strh(1, 10) }
+        if op == 137 { a_pop(1)  a_pop(0)  e_membase9()  a_addreg(10, 9, 0)  a_strw(1, 10) }
+        if op == 114 { a_addimm(28, 28, 8) }
+        if op == 113 {
+            a_pop(9)
+            a_sturb(9, 8)
+            a_subimm(1, 28, 8)
+            movimm(0, 1)
+            movimm(2, 1)
+            movimm(8, 64)
+            a_svc()
+        }
+        if op == 96 { a_pop(0)  a_mov_sp_fp()  a_ldp_fp()  a_addimm(31, 31, fsz)  a_ret() }
+        if op == 112 {
+            let fi : u64 = INP[boff + p]
+            let ac : u64 = INP[boff + p + 1]
+            p = p + 2
+            e_call_seq(ac, 0, FSTART[fi])
+        }
+        if op == 116 {
+            let fi : u64 = INP[boff + p] | (INP[boff + p + 1] << 8)
+            let ac : u64 = INP[boff + p + 2]
+            p = p + 3
+            e_call_seq(ac, 0, FSTART[fi])
+        }
+        if op == 115 {
+            let ac : u64 = INP[boff + p]
+            p = p + 1
+            a_pop(15)
+            e_call_seq(ac, 1, 0)
+        }
+    }
+    return 0
+}
+
+fn mod_has_ci() -> u64 {
+    let nf : u64 = hdr_nfunc()
+    let mut off : u64 = hdr_off()  let mut i : u64 = 0
+    while i < nf {
+        let blen : u64 = INP[off + 2] | (INP[off + 3] << 8)
+        let boff : u64 = off + 4
+        let mut s : u64 = 0
+        while s < blen {
+            let o : u64 = INP[boff + s]  s = s + 1
+            if o == 115 { return 1 }
+            if o == 1 { s = s + 8 }
+            if o == 16 { s = s + 1 }
+            if o == 17 { s = s + 1 }
+            if o == 80 { s = s + 1 }
+            if o == 81 { s = s + 1 }
+            if o == 112 { s = s + 2 }
+            if o == 116 { s = s + 3 }
+            if o == 138 { s = s + 1 + INP[boff + s] }
+        }
+        off = off + 4 + blen
+        i = i + 1
+    }
+    return 0
+}
+fn mod_has_mem() -> u64 {
+    let nf : u64 = hdr_nfunc()
+    let mut off : u64 = hdr_off()  let mut i : u64 = 0
+    while i < nf {
+        let blen : u64 = INP[off + 2] | (INP[off + 3] << 8)
+        let boff : u64 = off + 4
+        let mut s : u64 = 0
+        while s < blen {
+            let o : u64 = INP[boff + s]  s = s + 1
+            if o == 128 { return 1 }
+            if o == 129 { return 1 }
+            if o == 130 { return 1 }
+            if o == 131 { return 1 }
+            if o >= 132 { if o <= 137 { return 1 } }
+            if o == 1 { s = s + 8 }
+            if o == 16 { s = s + 1 }
+            if o == 17 { s = s + 1 }
+            if o == 80 { s = s + 1 }
+            if o == 81 { s = s + 1 }
+            if o == 112 { s = s + 2 }
+            if o == 115 { s = s + 1 }
+            if o == 116 { s = s + 3 }
+            if o == 138 { s = s + 1 + INP[boff + s] }
+        }
+        off = off + 4 + blen
+        i = i + 1
+    }
+    return 0
+}
+
+fn gen_svci_real(nfunc: u64) {
+    let mut k : u64 = 0
+    while k < nfunc {
+        a_movz(14, k & 0xFFFF, 0)
+        a_movk(14, (k >> 16) & 0xFFFF, 1)
+        a_cmp(15, 14)
+        w32(0x54000000 | (relf(FSTART[k], 19) << 5) | 0)
+        k = k + 1
+    }
+    e_exit_imm(199)
+}
+
+fn text_pass(nfunc: u64, hasci: u64) {
+    LBLCTR = 0
+    a_movz(28, 0x90, 1)
+    a_bl(FSTART[0])
+    movimm(8, 93)
+    a_svc()
+    let mut off : u64 = hdr_off()
+    let mut i : u64 = 0
+    while i < nfunc {
+        if PASS == 1 { FSTART[i] = CUR }
+        let params : u64 = INP[off]
+        let blen : u64 = INP[off + 2] | (INP[off + 3] << 8)
+        gen_function(off + 4, blen, params)
+        off = off + 4 + blen
+        i = i + 1
+    }
+    if hasci == 1 { if PASS == 1 { SVCIADDR = CUR }  gen_svci_real(nfunc) }
+}
+
+fn main() -> u64 {
+    let mut total : u64 = 0  let mut tk : u64 = 0
+    while tk < 8 { total = total | (PLEN_[tk] << (8 * tk))  tk = tk + 1 }
+    let nfunc : u64 = hdr_nfunc()
+    let mut isv2 : u64 = 0  if INP[0] == 0 { isv2 = 1 }
+    let hasci : u64 = mod_has_ci()
+    let hasmem : u64 = mod_has_mem()
+    let mut off : u64 = hdr_off()
+    let mut i : u64 = 0
+    while i < nfunc {
+        let blen : u64 = INP[off + 2] | (INP[off + 3] << 8)
+        off = off + 4 + blen
+        i = i + 1
+    }
+    let mut dlen : u64 = 0
+    let mut dhd : u64 = 2
+    if isv2 == 1 { dhd = 4 }
+    if off < total {
+        dlen = INP[off] | (INP[off + 1] << 8)
+        if isv2 == 1 { dlen = dlen | (INP[off + 2] << 16) | (INP[off + 3] << 24) }
+    }
+    let baseva : u64 = 4194304
+    let mut phnum : u64 = 2  if hasmem == 1 { phnum = 3 }
+    let t0 : u64 = 64 + (56 * phnum)
+    let start : u64 = baseva + t0
+    PASS = 1  CUR = start
+    text_pass(nfunc, hasci)
+    let textend : u64 = CUR
+    let fsz1 : u64 = textend - baseva
+    let d0off : u64 = ((fsz1 + 4095) / 4096) * 4096
+    ob(127)  ob(69)  ob(76)  ob(70)
+    ob(2)  ob(1)  ob(1)  ob(0)
+    o64(0)
+    o16(2)
+    o16(183)
+    o32(1)
+    o64(start)
+    o64(64)
+    o64(0)
+    o32(0)
+    o16(64)  o16(56)  o16(phnum)
+    o16(0)  o16(0)  o16(0)
+    o32(1)  o32(5)
+    o64(0)  o64(baseva)  o64(baseva)
+    o64(fsz1)  o64(fsz1)  o64(4096)
+    o32(1)  o32(6)
+    o64(0)  o64(8388608)  o64(8388608)
+    o64(0)  o64(1048576)  o64(4096)
+    if hasmem == 1 {
+        o32(1)  o32(6)
+        o64(d0off)  o64(10485760)  o64(10485760)
+        o64(dlen)  o64(4194304)  o64(4096)
+    }
+    PASS = 2  CUR = start
+    text_pass(nfunc, hasci)
+    if hasmem == 1 { if dlen > 0 {
+        let mut z : u64 = fsz1
+        while z < d0off { ob(0)  z = z + 1 }
+        let mut d : u64 = 0
+        while d < dlen { ob(INP[off + dhd + d])  d = d + 1 }
+    } }
+    return 99
+}

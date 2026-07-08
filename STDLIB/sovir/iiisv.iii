@@ -15,14 +15,14 @@ extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u6
 extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 
-var SRC : [u8; 65536]
+var SRC : [u8; 262144]
 var SLEN : u64 = 0u64
 var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
 
-var TK_KIND : [u32; 8192]
-var TK_VAL  : [i64; 8192]
-var TK_OFF  : [u32; 8192]
-var TK_LEN  : [u32; 8192]
+var TK_KIND : [u32; 32768]
+var TK_VAL  : [i64; 32768]
+var TK_OFF  : [u32; 32768]
+var TK_LEN  : [u32; 32768]
 var NTOK : u32 = 0u32
 var TP : u32 = 0u32
 
@@ -39,7 +39,8 @@ fn is_dig(c: u32) -> u32 { if c >= 48u32 { if c <= 57u32 { return 1u32 } } retur
 fn is_idc(c: u32) -> u32 { if c == 95u32 { return 1u32 } if c >= 48u32 { if c <= 57u32 { return 1u32 } } if c >= 65u32 { if c <= 90u32 { return 1u32 } } if c >= 97u32 { if c <= 122u32 { return 1u32 } } return 0u32 }
 fn is_ids(c: u32) -> u32 { if c == 95u32 { return 1u32 } if c >= 65u32 { if c <= 90u32 { return 1u32 } } if c >= 97u32 { if c <= 122u32 { return 1u32 } } return 0u32 }
 fn sbyte(i: u64) -> u32 { let p : *u8 = ((&SRC as u64) + i) as *u8  return p[0u64] as u32 }
-fn add_tok(kind: u32, val: i64, off: u32, len: u32) { if NTOK < 8192u32 { TK_KIND[NTOK as u64] = kind  TK_VAL[NTOK as u64] = val  TK_OFF[NTOK as u64] = off  TK_LEN[NTOK as u64] = len  NTOK = NTOK + 1u32 } }
+fn add_tok(kind: u32, val: i64, off: u32, len: u32) { if NTOK < 32768u32 { TK_KIND[NTOK as u64] = kind  TK_VAL[NTOK as u64] = val  TK_OFF[NTOK as u64] = off  TK_LEN[NTOK as u64] = len  NTOK = NTOK + 1u32 } }
+fn hexv(c: u32) -> i64 { if c >= 48u32 { if c <= 57u32 { return (c - 48u32) as i64 } }  if c >= 97u32 { if c <= 102u32 { return (c - 87u32) as i64 } }  if c >= 65u32 { if c <= 70u32 { return (c - 55u32) as i64 } }  return 0i64 - 1i64 }
 
 fn lex() {
     NTOK = 0u32
@@ -59,7 +60,13 @@ fn lex() {
             add_tok(1u32, 0i64, off as u32, (i - off) as u32)
         }
         else { if is_dig(c) == 1u32 {
-            let mut v : i64 = 0i64  let mut g : u32 = 1u32
+            let mut v : i64 = 0i64
+            if c == 48u32 { if sbyte(i + 1u64) == 120u32 {   /* 0x hex literal */
+                i = i + 2u64
+                let mut gh : u32 = 1u32
+                while gh == 1u32 { if i >= SLEN { gh = 0u32 } else { let hv : i64 = hexv(sbyte(i))  if hv >= 0i64 { v = (v * 16i64) + hv  i = i + 1u64 } else { gh = 0u32 } } }
+            } }
+            let mut g : u32 = 1u32
             while g == 1u32 { if i >= SLEN { g = 0u32 } else { if is_dig(sbyte(i)) == 1u32 { v = (v * 10i64) + ((sbyte(i) - 48u32) as i64)  i = i + 1u64 } else { g = 0u32 } } }
             let mut g2 : u32 = 1u32
             while g2 == 1u32 { if i >= SLEN { g2 = 0u32 } else { if is_idc(sbyte(i)) == 1u32 { i = i + 1u64 } else { g2 = 0u32 } } }
@@ -122,16 +129,32 @@ fn fn_index(t: u32) -> i32 {
     return 0i32 - 1i32
 }
 
-/* module-level arrays -> SVIR linear memory (var NAME : [T; SIZE]) */
+/* module-level arrays -> SVIR linear memory (var NAME : [T; SIZE]) ; T in {u8(width 1), u64(width 8)} */
 var ARR_OFF : [u32; 64]
 var ARR_LEN : [u32; 64]
 var ARR_BASE : [u64; 64]
+var ARR_W : [u32; 64]
 var ARR_N : u32 = 0u32
 var MEM_TOP : u64 = 0u64
 fn arr_base(t: u32) -> i64 {   /* base offset if t names an array, else -1 */
     let mut k : u32 = 0u32
     while k < ARR_N { if names_eq(ARR_OFF[k as u64], ARR_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return ARR_BASE[k as u64] as i64 }  k = k + 1u32 }
     return 0i64 - 1i64
+}
+fn arr_width(t: u32) -> u32 {
+    let mut k : u32 = 0u32
+    while k < ARR_N { if names_eq(ARR_OFF[k as u64], ARR_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return ARR_W[k as u64] }  k = k + 1u32 }
+    return 1u32
+}
+/* module-level mutable scalars (var NAME : T = 0) -> one 8-byte linear-memory cell (SVIR memory zero-inits) */
+var VAR_OFF : [u32; 64]
+var VAR_LEN : [u32; 64]
+var VAR_ADDR : [u64; 64]
+var VAR_N : u32 = 0u32
+fn var_index(t: u32) -> i32 {
+    let mut k : u32 = 0u32
+    while k < VAR_N { if names_eq(VAR_OFF[k as u64], VAR_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
 }
 
 /* module-level constants (const NAME : T = LIT) -> compile-time literal substitution at reference sites */
@@ -153,11 +176,14 @@ fn loc_index(t: u32) -> i32 {
     while k < LOC_N { if names_eq(LOC_OFF[k as u64], LOC_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return k as i32 }  k = k + 1u32 }
     return 0i32 - 1i32
 }
-fn loc_add(t: u32) -> u32 { let s : u32 = LOC_N  if LOC_N < 256u32 { LOC_OFF[LOC_N as u64] = TK_OFF[t as u64]  LOC_LEN[LOC_N as u64] = TK_LEN[t as u64]  LOC_N = LOC_N + 1u32 }  return s }
+fn loc_add(t: u32) -> u32 {   /* flat function scope: re-declaring a name binds the SAME slot (arm-local `let x` pairs) */
+    let ex : i32 = loc_index(t)
+    if ex >= 0i32 { return ex as u32 }
+    let s : u32 = LOC_N  if LOC_N < 256u32 { LOC_OFF[LOC_N as u64] = TK_OFF[t as u64]  LOC_LEN[LOC_N as u64] = TK_LEN[t as u64]  LOC_N = LOC_N + 1u32 }  return s }
 
-var BODY : [u8; 16384]
+var BODY : [u8; 32768]
 var BLEN : u64 = 0u64
-fn eb(b: u32) { if BLEN < 16384u64 { BODY[BLEN] = (b & 0xFFu32) as u8  BLEN = BLEN + 1u64 } }
+fn eb(b: u32) { if BLEN < 32768u64 { BODY[BLEN] = (b & 0xFFu32) as u8  BLEN = BLEN + 1u64 } }
 /* SV_LAST_OP = the last OPCODE emitted into BODY (operand bytes via eb do NOT change it).  compile_fn uses it to
  * emit the trailing default return ONLY on fall-through -- so a function already ending in an unconditional RETURN
  * (0x60) gets no dead trailing return, making iiisv's SVIR byte-identical to ccsv's (the cross-language DDC). */
@@ -167,9 +193,9 @@ fn e_op(o: u32) { SV_LAST_OP = o  eb(o) }
 fn e_u8(o: u32, a: u32) { SV_LAST_OP = o  eb(o)  eb(a) }
 fn e_call(f: u32, ac: u32) { SV_LAST_OP = 0x70u32  eb(0x70u32)  eb(f)  eb(ac) }
 
-var MOD : [u8; 32768]
+var MOD : [u8; 131072]
 var MLEN : u64 = 0u64
-fn mb(b: u32) { if MLEN < 32768u64 { MOD[MLEN] = (b & 0xFFu32) as u8  MLEN = MLEN + 1u64 } }
+fn mb(b: u32) { if MLEN < 131072u64 { MOD[MLEN] = (b & 0xFFu32) as u8  MLEN = MLEN + 1u64 } }
 
 fn op_prec(p: i64) -> u32 {
     if p == PU_MUL { return 9u32 } if p == PU_DIV { return 9u32 } if p == PU_MOD { return 9u32 }
@@ -204,15 +230,25 @@ fn parse_atom() {
                 while cur_punct(PU_COM) == 1u32 { TP = TP + 1u32  parse_bin(0u32)  ac = ac + 1u32 }
             }
             eat(PU_RP)
+            if tok_kw(t, "svir_putc" as u64, 9u32) == 1u32 { e_op(0x71u32)  e_const(0i64)  return }   /* builtin: PRINT_CHAR (pops arg) + dummy result (call-shaped depth) */
             let fi : i32 = fn_index(t)
             if fi >= 0i32 { e_call(fi as u32, ac) }
             return
         }
-        if cur_punct(PU_LBR) == 1u32 { let ab : i64 = arr_base(t)  if ab >= 0i64 { TP = TP + 1u32  parse_bin(0u32)  eat(PU_RBR)  if ab > 0i64 { e_const(ab)  e_op(0x20u32) }  e_op(0x80u32)  return } }   /* array load: addr=index(+base) ; LOAD8 */
+        if cur_punct(PU_LBR) == 1u32 { let ab : i64 = arr_base(t)  if ab >= 0i64 {
+            let w : u32 = arr_width(t)
+            TP = TP + 1u32  parse_bin(0u32)  eat(PU_RBR)
+            if w == 8u32 { e_const(8i64)  e_op(0x22u32) }
+            if ab > 0i64 { e_const(ab)  e_op(0x20u32) }
+            if w == 8u32 { e_op(0x82u32) } else { e_op(0x80u32) }
+            return
+        } }   /* array load: addr=index*width(+base) ; LOAD8/LOAD64 */
         let li : i32 = loc_index(t)
         if li >= 0i32 { e_u8(0x10u32, li as u32)  return }
         let ci : i32 = con_index(t)
-        if ci >= 0i32 { e_const(CON_VAL[ci as u64]) }
+        if ci >= 0i32 { e_const(CON_VAL[ci as u64])  return }
+        let vi : i32 = var_index(t)
+        if vi >= 0i32 { e_const(VAR_ADDR[vi as u64] as i64)  e_op(0x82u32) }   /* scalar var load */
         return
     }
     TP = TP + 1u32
@@ -243,7 +279,7 @@ fn parse_stmt() {
         e_u8(0x11u32, s)
         return
     }
-    if tok_kw(TP, "return" as u64, 6u32) == 1u32 { TP = TP + 1u32  parse_bin(0u32)  e_op(0x60u32)  return }
+    if tok_kw(TP, "return" as u64, 6u32) == 1u32 { TP = TP + 1u32  if cur_punct(PU_RB) == 1u32 { e_const(0i64) } else { parse_bin(0u32) }  e_op(0x60u32)  return }   /* bare `return` before } = return 0 (RETURN always pops one value) */
     if tok_kw(TP, "if" as u64, 2u32) == 1u32 {
         TP = TP + 1u32  parse_bin(0u32)  e_op(0x42u32)
         parse_block()
@@ -263,15 +299,22 @@ fn parse_stmt() {
     if TK_KIND[TP as u64] == 1u32 { if TK_KIND[(TP + 1u32) as u64] == 3u32 { if TK_VAL[(TP + 1u32) as u64] == PU_LBR {   /* array store: NAME [ index ] = value */
         let nt : u32 = TP  let ab : i64 = arr_base(nt)
         if ab >= 0i64 {
+            let w : u32 = arr_width(nt)
             TP = TP + 2u32  parse_bin(0u32)  eat(PU_RBR)
+            if w == 8u32 { e_const(8i64)  e_op(0x22u32) }
             if ab > 0i64 { e_const(ab)  e_op(0x20u32) }
-            eat(PU_ASSIGN)  parse_bin(0u32)  e_op(0x81u32)
+            eat(PU_ASSIGN)  parse_bin(0u32)
+            if w == 8u32 { e_op(0x83u32) } else { e_op(0x81u32) }
             return
         }
     } } }
     if TK_KIND[TP as u64] == 1u32 { if TK_KIND[(TP + 1u32) as u64] == 3u32 { if TK_VAL[(TP + 1u32) as u64] == PU_ASSIGN {
-        let nt : u32 = TP  TP = TP + 2u32  parse_bin(0u32)
-        let li : i32 = loc_index(nt)  if li >= 0i32 { e_u8(0x11u32, li as u32) }
+        let nt : u32 = TP  TP = TP + 2u32
+        let li : i32 = loc_index(nt)
+        if li >= 0i32 { parse_bin(0u32)  e_u8(0x11u32, li as u32)  return }
+        let vi : i32 = var_index(nt)
+        if vi >= 0i32 { e_const(VAR_ADDR[vi as u64] as i64)  parse_bin(0u32)  e_op(0x83u32)  return }   /* scalar var store */
+        parse_bin(0u32)
         return
     } } }
     parse_bin(0u32)  e_op(0x72u32)
@@ -306,19 +349,30 @@ fn prescan() {   /* main FIRST (SVIR func 0 = the entry), then the others in sou
     t = 0u32
     while t < NTOK { if tok_kw(t, "fn" as u64, 2u32) == 1u32 { if tok_kw(t + 1u32, "main" as u64, 4u32) == 0u32 { record_fn(t) } }  t = t + 1u32 }
 }
-fn prescan_arrays() {   /* var NAME : [ T ; SIZE ]  -> assign a base offset in SVIR linear memory */
-    ARR_N = 0u32  MEM_TOP = 16u64   /* reserve [0..15] for NULL -- match ccsv's data origin so address 0 is never a real object (cross-language byte-DDC + correct NULL semantics) */
+fn prescan_arrays() {   /* var NAME : [ T ; SIZE ] -> memory region ; var NAME : T = 0 -> 8-byte scalar cell */
+    ARR_N = 0u32  VAR_N = 0u32  MEM_TOP = 16u64   /* reserve [0..15] for NULL -- match ccsv's data origin so address 0 is never a real object (cross-language byte-DDC + correct NULL semantics) */
     let mut t : u32 = 0u32
     while t < NTOK {
         if tok_kw(t, "var" as u64, 3u32) == 1u32 {
             let nt : u32 = t + 1u32
             if cur_punct_at(nt + 2u32, PU_LBR) == 1u32 {       /* NAME : [ T ; NUM ] */
                 if TK_KIND[(nt + 5u32) as u64] == 2u32 {
-                    ARR_OFF[ARR_N as u64] = TK_OFF[nt as u64]  ARR_LEN[ARR_N as u64] = TK_LEN[nt as u64]  ARR_BASE[ARR_N as u64] = MEM_TOP
-                    MEM_TOP = MEM_TOP + (TK_VAL[(nt + 5u32) as u64] as u64)
+                    let mut w : u32 = 1u32
+                    if tok_kw(nt + 3u32, "u64" as u64, 3u32) == 1u32 { w = 8u32 }
+                    if tok_kw(nt + 3u32, "i64" as u64, 3u32) == 1u32 { w = 8u32 }
+                    if w == 8u32 { MEM_TOP = ((MEM_TOP + 7u64) / 8u64) * 8u64 }
+                    ARR_OFF[ARR_N as u64] = TK_OFF[nt as u64]  ARR_LEN[ARR_N as u64] = TK_LEN[nt as u64]  ARR_BASE[ARR_N as u64] = MEM_TOP  ARR_W[ARR_N as u64] = w
+                    MEM_TOP = MEM_TOP + ((TK_VAL[(nt + 5u32) as u64] as u64) * (w as u64))
                     ARR_N = ARR_N + 1u32
                 }
-            }
+            } else { if cur_punct_at(nt + 3u32, PU_ASSIGN) == 1u32 { if TK_KIND[(nt + 4u32) as u64] == 2u32 {   /* NAME : T = LIT (cell zero-inits; subset requires LIT == 0) */
+                if VAR_N < 64u32 {
+                    MEM_TOP = ((MEM_TOP + 7u64) / 8u64) * 8u64
+                    VAR_OFF[VAR_N as u64] = TK_OFF[nt as u64]  VAR_LEN[VAR_N as u64] = TK_LEN[nt as u64]  VAR_ADDR[VAR_N as u64] = MEM_TOP
+                    MEM_TOP = MEM_TOP + 8u64
+                    VAR_N = VAR_N + 1u32
+                }
+            } } }
         }
         t = t + 1u32
     }

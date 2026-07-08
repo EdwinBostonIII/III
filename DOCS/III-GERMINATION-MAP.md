@@ -1,5 +1,12 @@
 # III — THE GERMINATION MAP (Γ): the biggest ambition above the waist lift
 
+> **EXECUTION STATUS (2026-07-08, same day):** Γ2a EXECUTED (`run_host_matrix.sh`, commit 3fc553b3) ·
+> **Γ2c EXECUTED** (arm64 host in the matrix, qemu-7.2-under-WSL1 executor) · **Γ4/Σ0 EXECUTED**
+> (`run_germinate.sh`: the self-carrying spore, virgin-prefix regrowth on win64 AND Linux) ·
+> **Γ3 EXECUTED at host-closure scale** (`run_retarget.sh`: BOTH translators as anchor-verified waist
+> objects, 20/20 byte-match, self-translation fixpoint, cross-ISA Linux germs).  Ledger:
+> `III-GAMMA-RETARGET-SPORE.md`.  Still open: Γ0 S4 parse frontier; Γ1/Γ2b at corpus scale; Γ5.
+>
 > **STATUS: ANALYSIS (LOCATED, not executed).** A systems-map pass (2026-07-08) answering one question:
 > *what is the largest unification effort III can take on — beyond the waist lift already located — to make
 > the system independently functional in all contexts, evergreen, production ready.*

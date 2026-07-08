@@ -1,0 +1,429 @@
+/* svir_arm64.iii -- TRANSLATOR #5 (SVIR v1/v2): a COMPLETE static ELF64 AArch64-SysV executable to stdout.
+ * THE GAMMA-2c RUNG: a SECOND native non-win64 host, a genuinely DIFFERENT ISA (fixed 32-bit instructions,
+ * AAPCS64), proving host closure is an encoder swap -- the framework (two-pass direct emit, ELF container,
+ * eval-stack machine, trap sentinels, __putc/__svci helpers) is svir_elf.iii's verbatim; only the machine
+ * code changes.  Like svir_elf: ONE sovereign stage, imports NOTHING, no assembler/linker/libc.
+ *
+ * ISA MODEL (why it differs from the x86 routes):
+ *  - No push/pop.  A SOFTWARE eval stack in x28 (a callee-saved reg) into a dedicated RW segment at
+ *    0x800000 (1 MiB); x28 starts at 0x900000 and grows DOWN.  push=STR Xt,[x28,#-8]! ; pop=LDR Xt,[x28],#8.
+ *    This sidesteps AArch64's SP-16-alignment fault entirely (sp only ever moves by a 16-aligned frame size).
+ *  - x29 = frame pointer; locals at [x29,#(16+8*slot)] (16 reserves the saved x29/x30 pair).
+ *  - Args in x0..x7 (8 regs), stack args 9+ at [sp+8*(i-8)] by the caller, read at [x29+FSZ+8*(i-8)].
+ *  - PRINT_CHAR = write(1,&ch,1) via svc #0 (x8=64) ; RET-of-fn0 -> exit(x0) (x8=93).  Traps: exit(198)
+ *    (unresolved import) / exit(199) (__svci OOB) -- the SAME sentinels every other III host uses.
+ *  - CONST materialises with MOVZ+MOVK*3 (always 4 instrs, so pass1 byte-positions == pass2).
+ * ELF: ET_EXEC, EM_AARCH64(183), entry _start.  PT_LOAD#1 text R+X @0x400000 ; PT_LOAD#2 eval-stack RW
+ * @0x800000 (bss, memsz 1 MiB) ; PT_LOAD#3 svir_mem RW @0xA00000 (memsz 4 MiB, filesz=dlen) when used. */
+module svir_arm64
+
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+
+var PASS : u32 = 0u32
+var CUR  : u64 = 0u64
+
+/* header bytes (v1/v2) : always printed */
+fn ob(b: u32) { putchar((b & 0xFFu32) as i32) }
+fn o16(v: u64) { ob((v & 0xFFu64) as u32)  ob(((v >> 8u64) & 0xFFu64) as u32) }
+fn o32(v: u64) { o16(v & 0xFFFFu64)  o16((v >> 16u64) & 0xFFFFu64) }
+fn o64(v: u64) { o32(v & 0xFFFFFFFFu64)  o32(v >> 32u64) }
+
+/* one AArch64 instruction word (4 bytes LE) : printed only in pass 2 ; CUR advances in both */
+fn w32(w: u64) {
+    if PASS == 2u32 { ob((w & 0xFFu64) as u32)  ob(((w >> 8u64) & 0xFFu64) as u32)  ob(((w >> 16u64) & 0xFFu64) as u32)  ob(((w >> 24u64) & 0xFFu64) as u32) }
+    CUR = CUR + 4u64
+}
+
+/* branch/call relative field (in instruction words), two's-complement to `bits` width */
+fn relf(target: u64, bits: u32) -> u64 {
+    let here : u64 = CUR
+    let modulus : u64 = 1u64 << (bits as u64)
+    let mask : u64 = modulus - 1u64
+    if target >= here { return ((target - here) / 4u64) & mask }
+    return (modulus - ((here - target) / 4u64)) & mask
+}
+
+/* ---- instruction emitters (opcode arithmetic; regs are u32 0..31) ---- */
+fn a_movz(rd: u32, imm16: u32, hw: u32) { w32(0xD2800000u64 | ((hw as u64) << 21u64) | (((imm16 & 0xFFFFu32) as u64) << 5u64) | (rd as u64)) }
+fn a_movk(rd: u32, imm16: u32, hw: u32) { w32(0xF2800000u64 | ((hw as u64) << 21u64) | (((imm16 & 0xFFFFu32) as u64) << 5u64) | (rd as u64)) }
+fn movimm(rd: u32, imm: u64) {
+    a_movz(rd, (imm & 0xFFFFu64) as u32, 0u32)
+    a_movk(rd, ((imm >> 16u64) & 0xFFFFu64) as u32, 1u32)
+    a_movk(rd, ((imm >> 32u64) & 0xFFFFu64) as u32, 2u32)
+    a_movk(rd, ((imm >> 48u64) & 0xFFFFu64) as u32, 3u32)
+}
+fn a_push(rs: u32) { w32(0xF8000C00u64 | (0x1F8u64 << 12u64) | (28u64 << 5u64) | (rs as u64)) }   /* STR Xs,[x28,#-8]! */
+fn a_pop(rd: u32)  { w32(0xF8400400u64 | (8u64 << 12u64) | (28u64 << 5u64) | (rd as u64)) }        /* LDR Xd,[x28],#8   */
+fn a_ldrloc(rd: u32, uoff: u32) { w32(0xF9400000u64 | (((uoff / 8u32) as u64) << 10u64) | (29u64 << 5u64) | (rd as u64)) }   /* LDR Xd,[x29,#uoff] */
+fn a_strloc(rs: u32, uoff: u32) { w32(0xF9000000u64 | (((uoff / 8u32) as u64) << 10u64) | (29u64 << 5u64) | (rs as u64)) }
+fn a_ldr_x28(rd: u32, uoff: u32) { w32(0xF9400000u64 | (((uoff / 8u32) as u64) << 10u64) | (28u64 << 5u64) | (rd as u64)) } /* LDR Xd,[x28,#uoff] (call arg peek) */
+fn a_ldr_sp(rd: u32, uoff: u32) { w32(0xF9400000u64 | (((uoff / 8u32) as u64) << 10u64) | (31u64 << 5u64) | (rd as u64)) }
+fn a_str_sp(rs: u32, uoff: u32) { w32(0xF9000000u64 | (((uoff / 8u32) as u64) << 10u64) | (31u64 << 5u64) | (rs as u64)) }
+fn a_addimm(rd: u32, rn: u32, imm12: u32) { w32(0x91000000u64 | (((imm12 & 0xFFFu32) as u64) << 10u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_subimm(rd: u32, rn: u32, imm12: u32) { w32(0xD1000000u64 | (((imm12 & 0xFFFu32) as u64) << 10u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_addreg(rd: u32, rn: u32, rm: u32) { w32(0x8B000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_subreg(rd: u32, rn: u32, rm: u32) { w32(0xCB000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_mul(rd: u32, rn: u32, rm: u32) { w32(0x9B000000u64 | ((rm as u64) << 16u64) | (31u64 << 10u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_sdiv(rd: u32, rn: u32, rm: u32) { w32(0x9AC00C00u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_udiv(rd: u32, rn: u32, rm: u32) { w32(0x9AC00800u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_msub(rd: u32, rn: u32, rm: u32, ra: u32) { w32(0x9B008000u64 | ((rm as u64) << 16u64) | ((ra as u64) << 10u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_and(rd: u32, rn: u32, rm: u32) { w32(0x8A000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_orr(rd: u32, rn: u32, rm: u32) { w32(0xAA000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_eor(rd: u32, rn: u32, rm: u32) { w32(0xCA000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_lslv(rd: u32, rn: u32, rm: u32) { w32(0x9AC02000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_lsrv(rd: u32, rn: u32, rm: u32) { w32(0x9AC02400u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | (rd as u64)) }
+fn a_cmp(rn: u32, rm: u32) { w32(0xEB000000u64 | ((rm as u64) << 16u64) | ((rn as u64) << 5u64) | 31u64) }
+fn a_cset(rd: u32, ccfield: u32) { w32(0x9A9F07E0u64 | ((ccfield as u64) << 12u64) | (rd as u64)) }   /* CSINC Xd,xzr,xzr,inv(cc) */
+fn a_b(target: u64)  { w32(0x14000000u64 | relf(target, 26u32)) }
+fn a_bl(target: u64) { w32(0x94000000u64 | relf(target, 26u32)) }
+fn a_cbz(rt: u32, target: u64)  { w32(0xB4000000u64 | (relf(target, 19u32) << 5u64) | (rt as u64)) }
+fn a_cbnz(rt: u32, target: u64) { w32(0xB5000000u64 | (relf(target, 19u32) << 5u64) | (rt as u64)) }
+fn a_ret()  { w32(0xD65F03C0u64) }
+fn a_svc()  { w32(0xD4000001u64) }
+fn a_stp_fp()  { w32(0xA9007BFDu64) }   /* stp x29,x30,[sp]     */
+fn a_ldp_fp()  { w32(0xA9407BFDu64) }   /* ldp x29,x30,[sp]     */
+fn a_mov_fp_sp()  { w32(0x910003FDu64) }   /* add x29,sp,#0 (mov x29,sp) */
+fn a_mov_sp_fp()  { w32(0x910003BFu64) }   /* add sp,x29,#0 (mov sp,x29) */
+fn a_sturb(rt: u32, negoff: u32) { w32(0x38000000u64 | ((((4294967296u64 - (negoff as u64)) & 0x1FFu64)) << 12u64) | (28u64 << 5u64) | (rt as u64)) }   /* STURB Wt,[x28,#-negoff] */
+fn a_ldrb(rt: u32, rn: u32)  { w32(0x39400000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_strb(rt: u32, rn: u32)  { w32(0x39000000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_ldrh(rt: u32, rn: u32)  { w32(0x79400000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_strh(rt: u32, rn: u32)  { w32(0x79000000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_ldrw(rt: u32, rn: u32)  { w32(0xB9400000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_strw(rt: u32, rn: u32)  { w32(0xB9000000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_ldrsh(rt: u32, rn: u32) { w32(0x79800000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_ldrsw(rt: u32, rn: u32) { w32(0xB9800000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_ldrx(rt: u32, rn: u32)  { w32(0xF9400000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+fn a_strx(rt: u32, rn: u32)  { w32(0xF9000000u64 | ((rn as u64) << 5u64) | (rt as u64)) }
+
+fn e_exit_imm(code: u32) { movimm(0u32, code as u64)  movimm(8u32, 93u64)  a_svc() }
+fn e_membase9() { a_movz(9u32, 0xA0u32, 1u32) }   /* movz x9,#0xA0,LSL#16  -> 0xA00000 (MEMBASE) */
+
+/* ---- header + label/control state (identical shape to svir_elf) ---- */
+fn hdr_nfunc(base: u64) -> u32 { let hp : *u8 = base as *u8  let n : u32 = hp[0u64] as u32  if n == 0u32 { return (hp[1u64] as u32) | ((hp[2u64] as u32) << 8u32) }  return n }
+fn hdr_off(base: u64) -> u64 { let hp : *u8 = base as *u8  if (hp[0u64] as u32) == 0u32 { return 3u64 }  return 1u64 }
+
+var LBL : [u64; 65536]
+var FSTART : [u64; 4096]
+var CS_KIND : [u32; 4096]
+var CS_TGT  : [u32; 4096]
+var CS_ELSE : [u32; 4096]
+var CS_ELSEEN : [u32; 4096]
+var CS_N : u32 = 0u32
+var LBLCTR : u32 = 0u32
+var PUTCADDR : u64 = 0u64
+var SVCIADDR : u64 = 0u64
+
+fn lbl_here(id: u32) { if PASS == 1u32 { LBL[id as u64] = CUR } }
+fn loc_off(slot: u32) -> u32 { return 16u32 + (8u32 * slot) }
+
+fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut mx : u32 = 0u32  let mut s : u64 = 0u64
+    while s < blen {
+        let op : *u8 = (base + boff + s) as *u8  let o : u32 = op[0u64] as u32  s = s + 1u64
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x11u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+        if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
+    }
+    return mx
+}
+
+/* the shared CALL choreography (AAPCS64).  kind 0 = direct (tgt) ; 1 = __svci (index preloaded in x15) */
+fn e_call_seq(ac: u32, kind: u32, tgt: u64) {
+    let mut stackargs : u32 = 0u32  if ac > 8u32 { stackargs = ac - 8u32 }
+    let ssz : u32 = (((8u32 * stackargs) + 15u32) / 16u32) * 16u32
+    if ssz > 0u32 { a_subimm(31u32, 31u32, ssz) }
+    let mut i : u32 = 8u32
+    while i < ac {
+        a_ldr_x28(13u32, 8u32 * ((ac - 1u32) - i))          /* peek arg_i (x28 not yet moved) */
+        a_str_sp(13u32, 8u32 * (i - 8u32))
+        i = i + 1u32
+    }
+    let mut nreg : u32 = ac  if nreg > 8u32 { nreg = 8u32 }
+    let mut j : u32 = 0u32
+    while j < nreg { a_ldr_x28(j, 8u32 * ((ac - 1u32) - j))  j = j + 1u32 }   /* reg args LAST */
+    if kind == 0u32 { a_bl(tgt) } else { a_bl(SVCIADDR) }
+    if ssz > 0u32 { a_addimm(31u32, 31u32, ssz) }
+    a_addimm(28u32, 28u32, 8u32 * ac)                        /* consume args off the eval stack */
+    a_push(0u32)                                             /* push result */
+}
+
+fn gen_function(base: u64, boff: u64, blen: u64, params: u32) {
+    CS_N = 0u32
+    if blen > 0u64 { let ip0 : *u8 = (base + boff) as *u8  if (ip0[0u64] as u32) == 0x8Au32 { e_exit_imm(198u32)  return } }
+    let ml : u32 = max_local(base, boff, blen)
+    let need : u32 = ((((16u32 + (8u32 * (ml + 1u32))) + 64u32) + 15u32) / 16u32) * 16u32
+    let mut fsz : u32 = need  if fsz < 512u32 { fsz = 512u32 }
+    a_subimm(31u32, 31u32, fsz)                              /* sub sp,sp,#fsz */
+    a_stp_fp()                                               /* stp x29,x30,[sp] */
+    a_mov_fp_sp()                                            /* mov x29,sp */
+    let mut j : u32 = 0u32
+    while j < params {
+        if j < 8u32 { a_strloc(j, loc_off(j)) }
+        else { a_ldrloc(9u32, fsz + (8u32 * (j - 8u32)))  a_strloc(9u32, loc_off(j)) }
+        j = j + 1u32
+    }
+    let mut p : u64 = 0u64
+    while p < blen {
+        let opp : *u8 = (base + boff + p) as *u8  let op : u32 = opp[0u64] as u32  p = p + 1u64
+        if op == 0x01u32 {
+            let mut imm : u64 = 0u64  let mut k : u64 = 0u64
+            while k < 8u64 { let bp : *u8 = (base + boff + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
+            p = p + 8u64
+            movimm(0u32, imm)  a_push(0u32)
+        }
+        if op == 0x10u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  a_ldrloc(0u32, loc_off(slot))  a_push(0u32) }
+        if op == 0x11u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  a_pop(0u32)  a_strloc(0u32, loc_off(slot)) }
+        if op == 0x20u32 { a_pop(1u32)  a_pop(0u32)  a_addreg(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x21u32 { a_pop(1u32)  a_pop(0u32)  a_subreg(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x22u32 { a_pop(1u32)  a_pop(0u32)  a_mul(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x23u32 { a_pop(1u32)  a_pop(0u32)  a_sdiv(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x24u32 { a_pop(1u32)  a_pop(0u32)  a_sdiv(2u32, 0u32, 1u32)  a_msub(0u32, 2u32, 1u32, 0u32)  a_push(0u32) }   /* SREM */
+        if op == 0x2Au32 { a_pop(1u32)  a_pop(0u32)  a_udiv(0u32, 0u32, 1u32)  a_push(0u32) }   /* DIV_U */
+        if op == 0x2Bu32 { a_pop(1u32)  a_pop(0u32)  a_udiv(2u32, 0u32, 1u32)  a_msub(0u32, 2u32, 1u32, 0u32)  a_push(0u32) }   /* REM_U */
+        if op == 0x25u32 { a_pop(1u32)  a_pop(0u32)  a_and(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x26u32 { a_pop(1u32)  a_pop(0u32)  a_orr(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x27u32 { a_pop(1u32)  a_pop(0u32)  a_eor(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x28u32 { a_pop(1u32)  a_pop(0u32)  a_lslv(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x29u32 { a_pop(1u32)  a_pop(0u32)  a_lsrv(0u32, 0u32, 1u32)  a_push(0u32) }
+        if op == 0x30u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 1u32)  a_push(0u32) }    /* EQ  (inv=NE=1) */
+        if op == 0x31u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 0u32)  a_push(0u32) }    /* NE  (inv=EQ=0) */
+        if op == 0x32u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 10u32)  a_push(0u32) }   /* LT_S (inv of LT=11 ->10) */
+        if op == 0x33u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 11u32)  a_push(0u32) }   /* GE_S (inv of GE=10 ->11) */
+        if op == 0x34u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 12u32)  a_push(0u32) }   /* LE_S (inv of LE=13 ->12) */
+        if op == 0x35u32 { a_pop(1u32)  a_pop(0u32)  a_cmp(0u32, 1u32)  a_cset(0u32, 13u32)  a_push(0u32) }   /* GT_S (inv of GT=12 ->13) */
+        if op == 0x40u32 { CS_KIND[CS_N as u64] = 0u32  CS_TGT[CS_N as u64] = LBLCTR  LBLCTR = LBLCTR + 1u32  CS_N = CS_N + 1u32 }
+        if op == 0x41u32 { let id : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32  lbl_here(id)  CS_KIND[CS_N as u64] = 1u32  CS_TGT[CS_N as u64] = id  CS_N = CS_N + 1u32 }
+        if op == 0x42u32 {
+            let endid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
+            let elsid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
+            a_pop(0u32)  a_cbz(0u32, LBL[elsid as u64])
+            CS_KIND[CS_N as u64] = 2u32  CS_TGT[CS_N as u64] = endid  CS_ELSE[CS_N as u64] = elsid  CS_ELSEEN[CS_N as u64] = 0u32  CS_N = CS_N + 1u32
+        }
+        if op == 0x43u32 { let tt : u32 = CS_N - 1u32  a_b(LBL[CS_TGT[tt as u64] as u64])  lbl_here(CS_ELSE[tt as u64])  CS_ELSEEN[tt as u64] = 1u32 }
+        if op == 0x44u32 {
+            CS_N = CS_N - 1u32
+            let kind : u32 = CS_KIND[CS_N as u64]
+            if kind == 0u32 { lbl_here(CS_TGT[CS_N as u64]) }
+            if kind == 2u32 { if CS_ELSEEN[CS_N as u64] == 0u32 { lbl_here(CS_ELSE[CS_N as u64]) }  lbl_here(CS_TGT[CS_N as u64]) }
+        }
+        if op == 0x50u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  a_b(LBL[CS_TGT[((CS_N - 1u32) - depth) as u64] as u64]) }
+        if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  a_pop(0u32)  a_cbnz(0u32, LBL[CS_TGT[((CS_N - 1u32) - depth) as u64] as u64]) }
+        if op == 0x80u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrb(0u32, 10u32)  a_push(0u32) }
+        if op == 0x81u32 { a_pop(1u32)  a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_strb(1u32, 10u32) }
+        if op == 0x82u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrx(0u32, 10u32)  a_push(0u32) }
+        if op == 0x83u32 { a_pop(1u32)  a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_strx(1u32, 10u32) }
+        if op == 0x84u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrh(0u32, 10u32)  a_push(0u32) }
+        if op == 0x85u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrsh(0u32, 10u32)  a_push(0u32) }
+        if op == 0x86u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrw(0u32, 10u32)  a_push(0u32) }
+        if op == 0x87u32 { a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_ldrsw(0u32, 10u32)  a_push(0u32) }
+        if op == 0x88u32 { a_pop(1u32)  a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_strh(1u32, 10u32) }
+        if op == 0x89u32 { a_pop(1u32)  a_pop(0u32)  e_membase9()  a_addreg(10u32, 9u32, 0u32)  a_strw(1u32, 10u32) }
+        if op == 0x72u32 { a_addimm(28u32, 28u32, 8u32) }                 /* DROP */
+        if op == 0x71u32 {                                               /* PRINT_CHAR -> write(1,&ch,1) */
+            a_pop(9u32)                                                   /* char -> x9 ; x28 now +8 */
+            a_sturb(9u32, 8u32)                                           /* sturb w9,[x28,#-8] (scratch just below top) */
+            a_subimm(1u32, 28u32, 8u32)                                   /* x1 = &ch = x28-8 */
+            movimm(0u32, 1u64)                                            /* x0 = fd 1 */
+            movimm(2u32, 1u64)                                            /* x2 = len 1 */
+            movimm(8u32, 64u64)                                           /* x8 = SYS_write */
+            a_svc()
+        }
+        if op == 0x60u32 { a_pop(0u32)  a_mov_sp_fp()  a_ldp_fp()  a_addimm(31u32, 31u32, fsz)  a_ret() }
+        if op == 0x70u32 {
+            let fp : *u8 = (base + boff + p) as *u8  let fi : u32 = fp[0u64] as u32
+            let ap : *u8 = (base + boff + p + 1u64) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 2u64
+            e_call_seq(ac, 0u32, FSTART[fi as u64])
+        }
+        if op == 0x74u32 {
+            let f0 : *u8 = (base + boff + p) as *u8  let f1 : *u8 = (base + boff + p + 1u64) as *u8
+            let fi : u32 = (f0[0u64] as u32) | ((f1[0u64] as u32) << 8u32)
+            let ap2 : *u8 = (base + boff + p + 2u64) as *u8  let ac : u32 = ap2[0u64] as u32
+            p = p + 3u64
+            e_call_seq(ac, 0u32, FSTART[fi as u64])
+        }
+        if op == 0x73u32 {
+            let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 1u64
+            a_pop(15u32)                                                  /* index -> x15 (dispatch reg) */
+            e_call_seq(ac, 1u32, 0u64)
+        }
+    }
+}
+
+/* mod_has_* : svir_elf's scans verbatim */
+fn mod_has_print(base: u64) -> u32 {
+    let nf : u32 = hdr_nfunc(base)  let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)  let boff : u64 = off + 4u64  let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x71u32 { return 1u32 }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }  if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }  if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }  if o == 0x73u32 { s = s + 1u64 }  if o == 0x74u32 { s = s + 3u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }
+        }
+        off = off + 4u64 + blen  i = i + 1u32
+    }
+    return 0u32
+}
+fn mod_has_ci(base: u64) -> u32 {
+    let nf : u32 = hdr_nfunc(base)  let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)  let boff : u64 = off + 4u64  let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x73u32 { return 1u32 }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }  if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }  if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }  if o == 0x74u32 { s = s + 3u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }
+        }
+        off = off + 4u64 + blen  i = i + 1u32
+    }
+    return 0u32
+}
+fn mod_has_mem(base: u64) -> u32 {
+    let nf : u32 = hdr_nfunc(base)  let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)  let boff : u64 = off + 4u64  let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x80u32 { return 1u32 }  if o == 0x81u32 { return 1u32 }
+            if o == 0x82u32 { return 1u32 }  if o == 0x83u32 { return 1u32 }
+            if o >= 0x84u32 { if o <= 0x89u32 { return 1u32 } }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }  if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }  if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }  if o == 0x73u32 { s = s + 1u64 }  if o == 0x74u32 { s = s + 3u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }
+        }
+        off = off + 4u64 + blen  i = i + 1u32
+    }
+    return 0u32
+}
+
+/* __svci: index in x15 ; cmp against each k, b.eq to fn_k ; OOB -> exit(199).  Emitted with real targets. */
+fn gen_svci_real(base: u64, nfunc: u32) {
+    let mut k : u32 = 0u32
+    while k < nfunc {
+        a_movz(14u32, k & 0xFFFFu32, 0u32)
+        a_movk(14u32, (k >> 16u32) & 0xFFFFu32, 1u32)
+        a_cmp(15u32, 14u32)
+        /* b.eq fn_k : B.cond cond=EQ(0) */
+        w32(0x54000000u64 | (relf(FSTART[k as u64], 19u32) << 5u64) | 0u64)
+        k = k + 1u32
+    }
+    e_exit_imm(199u32)
+}
+
+fn text_pass(base: u64, nfunc: u32, hasci: u32) {
+    LBLCTR = 0u32
+    a_movz(28u32, 0x90u32, 1u32)                                         /* _start: x28 = 0x900000 (ESP top) */
+    a_bl(FSTART[0u64])                                                   /* bl fn0 */
+    movimm(8u32, 93u64)                                                  /* x8 = SYS_exit */
+    a_svc()                                                              /* exit(x0) */
+    let mut off : u64 = hdr_off(base)
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        if PASS == 1u32 { FSTART[i as u64] = CUR }
+        let pp : *u8 = (base + off) as *u8  let params : u32 = pp[0u64] as u32
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        gen_function(base, off + 4u64, blen, params)
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    if hasci == 1u32 { if PASS == 1u32 { SVCIADDR = CUR }  gen_svci_real(base, nfunc) }
+}
+
+fn main() -> u64 {
+    _setmode(1i32, 0x8000i32)
+    let base : u64 = svir_ptr()
+    let total : u64 = svir_len()
+    let nfunc : u32 = hdr_nfunc(base)
+    let mut isv2 : u32 = 0u32  let hp : *u8 = base as *u8  if (hp[0u64] as u32) == 0u32 { isv2 = 1u32 }
+    let hasci : u32 = mod_has_ci(base)
+    let hasmem : u32 = mod_has_mem(base)
+    let mut off : u64 = hdr_off(base)
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    let mut dlen : u64 = 0u64
+    let mut dhd : u64 = 2u64
+    if isv2 == 1u32 { dhd = 4u64 }
+    if off < total {
+        let d0 : *u8 = (base + off) as *u8  let d1 : *u8 = (base + off + 1u64) as *u8
+        dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64)
+        if isv2 == 1u32 { let d2 : *u8 = (base + off + 2u64) as *u8  let d3 : *u8 = (base + off + 3u64) as *u8
+            dlen = dlen | ((d2[0u64] as u64) << 16u64) | ((d3[0u64] as u64) << 24u64) }
+    }
+    let baseva : u64 = 4194304u64                                        /* 0x400000 */
+    /* phnum: text + eval-stack (always) + svir_mem (if used) */
+    let mut phnum : u64 = 2u64  if hasmem == 1u32 { phnum = 3u64 }
+    let t0 : u64 = 64u64 + (56u64 * phnum)
+    let start : u64 = baseva + t0
+    /* PASS 1: measure */
+    PASS = 1u32  CUR = start
+    text_pass(base, nfunc, hasci)
+    let textend : u64 = CUR
+    let fsz1 : u64 = textend - baseva
+    let d0off : u64 = ((fsz1 + 4095u64) / 4096u64) * 4096u64
+    /* ---- ELF header ---- */
+    ob(0x7Fu32)  ob(0x45u32)  ob(0x4Cu32)  ob(0x46u32)
+    ob(2u32)  ob(1u32)  ob(1u32)  ob(0u32)
+    o64(0u64)
+    o16(2u64)                                                            /* ET_EXEC */
+    o16(183u64)                                                          /* EM_AARCH64 */
+    o32(1u64)
+    o64(start)
+    o64(64u64)
+    o64(0u64)
+    o32(0u64)
+    o16(64u64)  o16(56u64)  o16(phnum)
+    o16(0u64)  o16(0u64)  o16(0u64)
+    /* PT_LOAD #1: headers+text R+X */
+    o32(1u64)  o32(5u64)
+    o64(0u64)  o64(baseva)  o64(baseva)
+    o64(fsz1)  o64(fsz1)  o64(4096u64)
+    /* PT_LOAD #2: eval stack RW (bss, 1 MiB) */
+    o32(1u64)  o32(6u64)
+    o64(0u64)  o64(8388608u64)  o64(8388608u64)                          /* 0x800000 */
+    o64(0u64)  o64(1048576u64)  o64(4096u64)                             /* filesz 0, memsz 1 MiB */
+    /* PT_LOAD #3: svir_mem RW (4 MiB) */
+    if hasmem == 1u32 {
+        o32(1u64)  o32(6u64)
+        o64(d0off)  o64(10485760u64)  o64(10485760u64)                   /* 0xA00000 */
+        o64(dlen)  o64(4194304u64)  o64(4096u64)
+    }
+    /* PASS 2: emit text */
+    PASS = 2u32  CUR = start
+    text_pass(base, nfunc, hasci)
+    /* data: pad then initialised svir_mem prefix */
+    if hasmem == 1u32 { if dlen > 0u64 {
+        let mut z : u64 = fsz1
+        while z < d0off { ob(0u32)  z = z + 1u64 }
+        let mut d : u64 = 0u64
+        while d < dlen { let dp : *u8 = (base + off + dhd + d) as *u8  ob(dp[0u64] as u32)  d = d + 1u64 }
+    } }
+    return 0u64
+}

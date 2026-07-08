@@ -10,6 +10,7 @@ extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u
 extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+extern @abi(c-msvc-x64) fn sov_ovf() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn sov_err_pos() -> u32 from "sovparse.iii"
 /* DIAGNOSTIC: on a parse error, print the failing source line (from sov_err_pos's line-start offset) to stdout
@@ -63,6 +64,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let n    : u32  = read_file(path)
     if n == 0u32 { return 3u64 }
     if sovparse_full((&SBUF) as *u8, n) != 0i32 { sm_print_fail()  return 4u64 }
+    if sov_ovf() != 0u32 { return 5u64 }   /* a sink overflowed (text/data/rodata): FAIL LOUDLY, never emit a truncated .o */
     sovcoff_emit()
     return 0u64
 }

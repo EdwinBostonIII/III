@@ -1,0 +1,51 @@
+/* svir_compose.iii -- Γ3 composer: translator-SVIR + program-SVIR -> ONE runnable waist module.
+ * argv[1] = translator .svbin (container, functions only)  argv[2] = program .svbin (the INPUT)
+ * stdout  = a gen_svir wrapper .iii whose SVIR = translator ++ [dlen:u16 LE] ++ DATA, where
+ *           DATA = [16 NULL-guard zeros][plen:u64 LE][program bytes]  (svir_elf_w's memory contract:
+ *           PLEN_ at mem[16..23], INP at mem[24..)).  The composed module IS the retargeting germ:
+ *           anchor-verified, runnable on every host route, emitting the program's target binary. */
+module svir_compose
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var TBUF : [u8; 131072]
+var PBUF : [u8; 65536]
+var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
+var DBUF : [u8; 24]
+
+fn pcc(c: u32) { putchar((c & 0xFFu32) as i32) }
+fn pstr(s: u64) { let mut i : u64 = 0u64  let mut go : u32 = 1u32  while go == 1u32 { let p : *u8 = (s + i) as *u8  let b : u32 = p[0u64] as u32  if b == 126u32 { go = 0u32 } else { pcc(b)  i = i + 1u64 } } }
+fn pdec(v0: u64) { if v0 == 0u64 { pcc(48u32)  return }  let mut v : u64 = v0  let mut n : u32 = 0u32  while v > 0u64 { DBUF[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }  while n > 0u32 { n = n - 1u32  pcc(DBUF[n as u64] as u32) } }
+fn pbyte(v: u64) { pcc(44u32)  pdec(v)  pstr("u8~" as u64) }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { return 2u64 }
+    let pp : *u64 = argv as *u64
+    let ft : u64 = fopen(pp[1u64], &MODE_RB as u64)
+    if ft == 0u64 { return 3u64 }
+    let tlen : u64 = fread(&TBUF as u64, 1u64, 131071u64, ft)
+    fclose(ft)
+    let fp : u64 = fopen(pp[2u64], &MODE_RB as u64)
+    if fp == 0u64 { return 4u64 }
+    let plen : u64 = fread(&PBUF as u64, 1u64, 65535u64, fp)
+    fclose(fp)
+    let dl : u64 = 24u64 + plen                       /* data = 16 guard + 8 plen + program */
+    let total : u64 = tlen + 2u64 + dl
+    pstr("module gen_svir\nvar SVIR : [u8; ~" as u64)  pdec(total)  pstr("] = [\n~" as u64)
+    pdec(TBUF[0u64] as u64)  pstr("u8~" as u64)
+    let mut i : u64 = 1u64
+    while i < tlen { pbyte(TBUF[i] as u64)  i = i + 1u64 }
+    pbyte(dl & 0xFFu64)  pbyte((dl >> 8u64) & 0xFFu64)
+    let mut z : u64 = 0u64
+    while z < 16u64 { pbyte(0u64)  z = z + 1u64 }
+    let mut k : u64 = 0u64
+    while k < 8u64 { pbyte((plen >> (8u64 * k)) & 0xFFu64)  k = k + 1u64 }
+    let mut d : u64 = 0u64
+    while d < plen { pbyte(PBUF[d] as u64)  d = d + 1u64 }
+    pstr("\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)
+    pdec(total)  pstr("u64 }\n~" as u64)
+    return 0u64
+}

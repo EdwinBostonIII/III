@@ -7,6 +7,7 @@
 #   wasm   : svir_wasm -> node                                            (host #2, browser-class)
 #   sysv   : svir_elf -> ONE-STAGE static ELF64, ZERO libc/imports        (native host #3: Linux)
 #   arm64  : svir_arm64 -> ONE-STAGE static ELF64 AArch64, ZERO imports   (host #4: FOREIGN ISA, qemu-run)
+#   riscv  : svir_riscv -> ONE-STAGE static ELF64 RV64IM, ZERO imports    (host #5: THIRD ISA, qemu-run)
 # Programs: 5 hand-authored SVIR modules + 4 iiisv-compiled .iii programs (incl. the isqrt organ) +
 # the OOB CALL_INDIRECT trap vehicle (negative tooth: every executor must TRAP=199, not complete=99).
 # fact's stdout (20!) must be BYTE-IDENTICAL across interp, win64, sysv, arm64, and a node golden.
@@ -33,7 +34,7 @@ else
 fi
 
 # ---- tools ------------------------------------------------------------------
-for m in svir_x86 svir_wasm svir_elf svir_arm64 svir_interp svir_verify verify_main iiisv; do
+for m in svir_x86 svir_wasm svir_elf svir_arm64 svir_riscv svir_interp svir_verify verify_main iiisv; do
   [ -s "$W/$m.o" ] || "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }
 done
 [ -s "$W/iiisv.exe" ] || gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
@@ -43,9 +44,11 @@ done
 sysv_ok=1
 MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e /bin/true >/dev/null 2>&1 || sysv_ok=0
 node -e "process.exit(0)" >/dev/null 2>&1; wasm_ok=$((1-$?))
-# arm64: qemu-user 7.2 extracted at /opt/q72 inside the distro (see header for the WSL1/qemu>=8 quirk)
+# arm64/riscv: qemu-user 7.2 extracted at /opt/q72 inside the distro (see header for the WSL1/qemu>=8 quirk)
 QEMU72='export LD_LIBRARY_PATH=/opt/q72/usr/lib/x86_64-linux-gnu; /opt/q72/usr/bin/qemu-aarch64'
+QEMU72R='export LD_LIBRARY_PATH=/opt/q72/usr/lib/x86_64-linux-gnu; /opt/q72/usr/bin/qemu-riscv64'
 a64_ok(){ MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72 --version >/dev/null 2>&1"; }
+rv_ok(){ MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72R --version >/dev/null 2>&1"; }
 arm64_bootstrap(){
   local HC="$ROOT/COMPILED/_hostcache"; mkdir -p "$HC"
   [ -s "$HC/qemu-user72.deb" ] || curl.exe -sLo "$HC/qemu-user72.deb" "https://deb.debian.org/debian/pool/main/q/qemu/qemu-user_7.2+dfsg-7+deb12u18+b3_amd64.deb"
@@ -53,17 +56,19 @@ arm64_bootstrap(){
   local HCW="/mnt/c${HC#/c}"
   MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e sh -c "mkdir -p /opt/q72 && dpkg -x '$HCW/qemu-user72.deb' /opt/q72 && dpkg -x '$HCW/capstone4.deb' /opt/q72 && apt-get install -y libgnutls30t64 libnuma1 liburing2 libglib2.0-0t64 >/dev/null 2>&1"
 }
-arm64_ok=1
+arm64_ok=1; riscv_ok=1
 if [ $sysv_ok -eq 1 ]; then
   a64_ok || { say "arm64 executor missing -- bootstrapping qemu 7.2 into /opt/q72"; arm64_bootstrap; a64_ok || arm64_ok=0; }
-else arm64_ok=0; fi
+  rv_ok  || { say "riscv executor missing -- bootstrapping qemu 7.2 into /opt/q72"; arm64_bootstrap; rv_ok || riscv_ok=0; }
+else arm64_ok=0; riscv_ok=0; fi
 PIN="$S/HOSTS.pin"
-if [ ! -f "$PIN" ]; then printf "win64\nsysv-elf\nwasm\ninterp\narm64\n" > "$PIN"; say "HOSTS.pin created: win64 sysv-elf wasm interp arm64"; fi
+if [ ! -f "$PIN" ]; then printf "win64\nsysv-elf\nwasm\ninterp\narm64\nriscv\n" > "$PIN"; say "HOSTS.pin created: win64 sysv-elf wasm interp arm64 riscv"; fi
 while read -r h; do
   case "$h" in
     sysv-elf) [ $sysv_ok -eq 1 ] || { say "FAIL RATCHET: pinned host sysv-elf not executable here"; fail=1; } ;;
     wasm)     [ $wasm_ok -eq 1 ] || { say "FAIL RATCHET: pinned host wasm (node) not executable here"; fail=1; } ;;
     arm64)    [ $arm64_ok -eq 1 ] || { say "FAIL RATCHET: pinned host arm64 (qemu 7.2) not executable here"; fail=1; } ;;
+    riscv)    [ $riscv_ok -eq 1 ] || { say "FAIL RATCHET: pinned host riscv (qemu 7.2) not executable here"; fail=1; } ;;
   esac
 done < "$PIN"
 
@@ -102,6 +107,9 @@ r_sysv(){ local o="$1" l="$2"; rm -f "$W/mx_te_$l.exe"; gcc "$W/svir_elf.o" "$o"
 r_arm64(){ local o="$1" l="$2"; rm -f "$W/mx_ta_$l.exe"; gcc "$W/svir_arm64.o" "$o" -o "$W/mx_ta_$l.exe" 2>/dev/null || return 250
   "$W/mx_ta_$l.exe" > "$W/mx_$l.a64.elf" 2>/dev/null
   MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72 '$WSLW/mx_$l.a64.elf'" > "$W/mx_$l.a64.out" 2>/dev/null; return $?; }
+r_riscv(){ local o="$1" l="$2"; rm -f "$W/mx_tr_$l.exe"; gcc "$W/svir_riscv.o" "$o" -o "$W/mx_tr_$l.exe" 2>/dev/null || return 250
+  "$W/mx_tr_$l.exe" > "$W/mx_$l.rv.elf" 2>/dev/null
+  MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72R '$WSLW/mx_$l.rv.elf'" > "$W/mx_$l.rv.out" 2>/dev/null; return $?; }
 
 # ---- the matrix ---------------------------------------------------------------
 run_row(){ # $1=label $2=object $3=expected-rc
@@ -112,6 +120,7 @@ run_row(){ # $1=label $2=object $3=expected-rc
   r_wasm   "$o" "$l"; local wr=$?
   r_sysv   "$o" "$l"; local sr=$?
   r_arm64  "$o" "$l"; local ar=$?
+  r_riscv  "$o" "$l"; local rr=$?
   local verdict="ok"
   [ $v -eq 99 ] || verdict="RED(verify=$v)"
   if [ "$l" = "cioob" ]; then
@@ -120,6 +129,7 @@ run_row(){ # $1=label $2=object $3=expected-rc
     [ $xr -eq 199 ] || verdict="RED(win64=$xr)"
     [ $sr -eq 199 ] || verdict="RED(sysv=$sr)"
     [ $ar -eq 199 ] || verdict="RED(arm64=$ar)"
+    [ $rr -eq 199 ] || verdict="RED(riscv=$rr)"
     if [ $wr -eq 99 ] || [ $wr -eq 0 ]; then verdict="RED(wasm=$wr)"; fi
   else
     [ $ir -eq "$want" ] || verdict="RED(interp=$ir)"
@@ -127,9 +137,10 @@ run_row(){ # $1=label $2=object $3=expected-rc
     [ $wr -eq "$want" ] || verdict="RED(wasm=$wr)"
     [ $sr -eq "$want" ] || verdict="RED(sysv=$sr)"
     [ $ar -eq "$want" ] || verdict="RED(arm64=$ar)"
+    [ $rr -eq "$want" ] || verdict="RED(riscv=$rr)"
   fi
   [ "$verdict" = "ok" ] || fail=1
-  say "$(printf '%-10s verify=%-3s interp=%-3s win64=%-3s wasm=%-3s sysv=%-3s arm64=%-3s  %s' "$l" "$v" "$ir" "$xr" "$wr" "$sr" "$ar" "$verdict")"
+  say "$(printf '%-10s verify=%-3s interp=%-3s win64=%-3s wasm=%-3s sysv=%-3s arm64=%-3s riscv=%-3s  %s' "$l" "$v" "$ir" "$xr" "$wr" "$sr" "$ar" "$rr" "$verdict")"
 }
 
 for pair in $HAND; do lbl="${pair%%:*}"; m="${pair#*:}"; run_row "$lbl" "$W/$m.o" 99; done
@@ -141,7 +152,7 @@ for pair in $GEN;  do lbl="${pair%%:*}";                run_row "$lbl" "$W/${lbl
 # runs in Windows console TEXT mode (LF->CRLF); it is not a shipped host, so its row is compared CR-normalized
 # (the digit stream must still match exactly -- only the line terminator representation is text-mode).
 node -e 'let f=1n;for(let i=1n;i<=20n;i++)f*=i;process.stdout.write(f.toString()+"\n")' > "$W/mx_fact.gold.out" 2>/dev/null
-for pairing in "win64:$W/mx_fact.win64.out" "sysv:$W/mx_fact.sysv.out" "arm64:$W/mx_fact.a64.out"; do
+for pairing in "win64:$W/mx_fact.win64.out" "sysv:$W/mx_fact.sysv.out" "arm64:$W/mx_fact.a64.out" "riscv:$W/mx_fact.rv.out"; do
   nm="${pairing%%:*}"; f="${pairing#*:}"
   if cmp -s "$W/mx_fact.gold.out" "$f"; then say "fact stdout $nm == golden 20! (byte-identical, raw host bytes)"
   else say "FAIL fact stdout $nm != golden"; fail=1; fi
@@ -161,8 +172,14 @@ printf '\x90' | dd of="$W/mx_sum_perturb.a64.elf" bs=1 seek=200 count=1 conv=not
 MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72 '$WSLW/mx_sum_perturb.a64.elf'" >/dev/null 2>&1; prc2=$?
 if [ $prc2 -eq 99 ]; then say "FAIL FALSIFIER: perturbed AArch64 ELF still returns 99 (no teeth)"; fail=1
 else say "FALSIFIER perturbed-a64-byte -> rc=$prc2 != 99 (teeth confirmed)"; fi
+# riscv perturbation lands in CODE (offset 300; rv sum has 3 PT_LOADs -> a 232-byte header, so <232 is phdr)
+cp "$W/mx_sum.rv.elf" "$W/mx_sum_perturb.rv.elf"
+printf '\xFF' | dd of="$W/mx_sum_perturb.rv.elf" bs=1 seek=300 count=1 conv=notrunc 2>/dev/null
+MSYS_NO_PATHCONV=1 timeout 60 "$WSL" -d "$WSLDIST" -u root -e sh -c "$QEMU72R '$WSLW/mx_sum_perturb.rv.elf'" >/dev/null 2>&1; prc3=$?
+if [ $prc3 -eq 99 ]; then say "FAIL FALSIFIER: perturbed RV64 ELF still returns 99 (no teeth)"; fail=1
+else say "FALSIFIER perturbed-rv-byte -> rc=$prc3 != 99 (teeth confirmed)"; fi
 
 if [ $fail -eq 0 ]; then
-  say "HOST MATRIX GREEN -- one SVIR program set, FIVE execution routes (win64-native, sysv-elf-native, arm64-qemu, wasm, interp) + the anchor, same behavior everywhere; fact stdout byte-identical cross-host incl. a FOREIGN ISA; OOB trap uniform (199); both ELF routes are ONE sovereign stage with ZERO imports and ZERO anchor growth.  Γ2c: the host set grew {win64,wasm,sysv-elf} -> {win64,wasm,sysv-elf,arm64}."
+  say "HOST MATRIX GREEN -- one SVIR program set, SIX execution routes (win64-native, sysv-elf-native, arm64-qemu, riscv-qemu, wasm, interp) + the anchor, same behavior everywhere; fact stdout byte-identical across THREE native ISAs (x86-64, AArch64, RV64); OOB trap uniform (199); all THREE ELF routes are ONE sovereign stage with ZERO imports and ZERO anchor growth.  Γ2d: the host set grew {win64,wasm,sysv-elf,arm64} -> +riscv (3 ISAs)."
 fi
 exit $fail

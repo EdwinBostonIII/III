@@ -1,0 +1,386 @@
+/* svir_riscv.iii -- TRANSLATOR #6 (SVIR v1/v2): a COMPLETE static ELF64 RISC-V (RV64IM) executable to stdout.
+ * THE GAMMA-2d RUNG: a THIRD ISA and FIFTH native host route -- proving "one more host == one ~430-line
+ * encoder" a SECOND time, on a load/store ISA whose immediate encodings are genuinely different from both
+ * x86 and AArch64.  Like svir_elf / svir_arm64: ONE sovereign stage, imports NOTHING, no assembler/linker/
+ * libc.  Same eval-stack machine, same trap sentinels (198/199), same two-pass direct emit.
+ *
+ * ISA MODEL (RV64IM, the deltas that matter):
+ *  - No push/pop.  SOFTWARE eval stack in x18 (s2, callee-saved) into a dedicated RW segment at 0x800000
+ *    (1 MiB); x18 starts at 0x900000 and grows DOWN.  push = addi x18,x18,-8 ; sd rs,0(x18).
+ *  - sp (x2) is the kernel C stack (frames/spills); x8 unused; locals at (16+8*slot)(sp).
+ *  - args in a0..a7 (x10..x17); stack args 9+ at (sp+8*(i-8)); incoming read at (fsz+8*(j-8))(sp)
+ *    (RISC-V jal does NOT push a return slot -- so no +8 skew, unlike x86).
+ *  - CONST: a FIXED 8-instruction li64 (lui+addiw+slli+srli + lui+addiw+slli+or) so pass1 byte positions
+ *    == pass2 for ANY value.  MEMBASE 0xA00000 and ESP-top 0x900000 are single `lui` (both == imm<<12).
+ *  - BRANCH is only +/-4 KiB (B-type imm12), too short for big function bodies -> every conditional is a
+ *    2-instruction "branch-over-jal" (B<inv> rs,+8 ; JAL x0,target), fixed length, JAL's +/-1 MiB range.
+ *  - PRINT_CHAR = write(1,&ch,1) via ecall (a7=64) ; RET-of-fn0 -> exit(a0) (a7=93).  ecall = 0x00000073.
+ * ELF: ET_EXEC, EM_RISCV(243), e_flags=0 (soft-float, no RVC).  PT_LOAD#1 text R+X @0x400000 ; #2 eval
+ * stack RW @0x800000 (bss 1 MiB) ; #3 svir_mem RW @0xA00000 (memsz 4 MiB, filesz=dlen) when used. */
+module svir_riscv
+
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+
+var PASS : u32 = 0u32
+var CUR  : u64 = 0u64
+
+fn ob(b: u32) { putchar((b & 0xFFu32) as i32) }
+fn o16(v: u64) { ob((v & 0xFFu64) as u32)  ob(((v >> 8u64) & 0xFFu64) as u32) }
+fn o32(v: u64) { o16(v & 0xFFFFu64)  o16((v >> 16u64) & 0xFFFFu64) }
+fn o64(v: u64) { o32(v & 0xFFFFFFFFu64)  o32(v >> 32u64) }
+
+/* one RV instruction word (4 bytes LE) : printed only in pass 2 ; CUR advances in both */
+fn w32(w: u64) {
+    if PASS == 2u32 { ob((w & 0xFFu64) as u32)  ob(((w >> 8u64) & 0xFFu64) as u32)  ob(((w >> 16u64) & 0xFFu64) as u32)  ob(((w >> 24u64) & 0xFFu64) as u32) }
+    CUR = CUR + 4u64
+}
+
+/* ---- RV encoders (register numbers 0..31) ---- */
+fn rv_r(funct7: u64, rs2: u64, rs1: u64, funct3: u64, rd: u64, opc: u64) { w32((funct7 << 25u64) | (rs2 << 20u64) | (rs1 << 15u64) | (funct3 << 12u64) | (rd << 7u64) | opc) }
+fn rv_i(imm12: u64, rs1: u64, funct3: u64, rd: u64, opc: u64) { w32(((imm12 & 0xFFFu64) << 20u64) | (rs1 << 15u64) | (funct3 << 12u64) | (rd << 7u64) | opc) }
+fn rv_s(imm12: u64, rs2: u64, rs1: u64, funct3: u64, opc: u64) { w32((((imm12 >> 5u64) & 0x7Fu64) << 25u64) | (rs2 << 20u64) | (rs1 << 15u64) | (funct3 << 12u64) | ((imm12 & 0x1Fu64) << 7u64) | opc) }
+fn rv_u(imm20: u64, rd: u64, opc: u64) { w32(((imm20 & 0xFFFFFu64) << 12u64) | (rd << 7u64) | opc) }
+fn rv_b(imm: u64, rs2: u64, rs1: u64, funct3: u64) {   /* B-type, opcode 0x63 ; imm is a signed byte offset */
+    let b12 : u64 = (imm >> 12u64) & 1u64  let b11 : u64 = (imm >> 11u64) & 1u64
+    let b10_5 : u64 = (imm >> 5u64) & 0x3Fu64  let b4_1 : u64 = (imm >> 1u64) & 0xFu64
+    w32((b12 << 31u64) | (b10_5 << 25u64) | (rs2 << 20u64) | (rs1 << 15u64) | (funct3 << 12u64) | (b4_1 << 8u64) | (b11 << 7u64) | 0x63u64)
+}
+fn rv_j(imm: u64, rd: u64) {   /* J-type JAL, opcode 0x6F ; imm signed byte offset */
+    let b20 : u64 = (imm >> 20u64) & 1u64  let b10_1 : u64 = (imm >> 1u64) & 0x3FFu64
+    let b11 : u64 = (imm >> 11u64) & 1u64  let b19_12 : u64 = (imm >> 12u64) & 0xFFu64
+    w32((b20 << 31u64) | (b10_1 << 21u64) | (b11 << 20u64) | (b19_12 << 12u64) | (rd << 7u64) | 0x6Fu64)
+}
+
+/* fixed 8-instruction 64-bit load into rd (scratch x31=t6 ; rd must != 31) */
+fn hi20(x: u64) -> u64 { return ((x + 0x800u64) >> 12u64) & 0xFFFFFu64 }
+fn lo12(x: u64) -> u64 { return x & 0xFFFu64 }
+fn li64(rd: u64, imm: u64) {
+    let lo : u64 = imm & 0xFFFFFFFFu64
+    let hi : u64 = (imm >> 32u64) & 0xFFFFFFFFu64
+    rv_u(hi20(lo), rd, 0x37u64)                 /* lui  rd, hi20(lo) */
+    rv_i(lo12(lo), rd, 0u64, rd, 0x1Bu64)       /* addiw rd, rd, lo12(lo) */
+    rv_i(32u64, rd, 1u64, rd, 0x13u64)          /* slli rd, rd, 32 */
+    rv_i(32u64, rd, 5u64, rd, 0x13u64)          /* srli rd, rd, 32  (zero-extend lo32) */
+    rv_u(hi20(hi), 31u64, 0x37u64)              /* lui  t6, hi20(hi) */
+    rv_i(lo12(hi), 31u64, 0u64, 31u64, 0x1Bu64) /* addiw t6, t6, lo12(hi) */
+    rv_i(32u64, 31u64, 1u64, 31u64, 0x13u64)    /* slli t6, t6, 32 */
+    rv_r(0u64, 31u64, rd, 6u64, rd, 0x33u64)    /* or   rd, rd, t6 */
+}
+
+/* eval-stack push/pop (x18=s2 is ESP; grows down) */
+fn e_push(rs: u64) { rv_i(4294967288u64, 18u64, 0u64, 18u64, 0x13u64)  rv_s(0u64, rs, 18u64, 3u64, 0x23u64) }   /* addi x18,x18,-8 ; sd rs,0(x18) */
+fn e_pop(rd: u64)  { rv_i(0u64, 18u64, 3u64, rd, 0x03u64)  rv_i(8u64, 18u64, 0u64, 18u64, 0x13u64) }             /* ld rd,0(x18) ; addi x18,x18,8 */
+fn e_membase(rd: u64) { rv_u(0xA00u64, rd, 0x37u64) }   /* lui rd, 0xA00 -> 0xA00000 */
+
+/* local load/store: (16+8*slot)(sp) */
+fn ld_loc(rd: u64, uoff: u64) { rv_i(uoff, 2u64, 3u64, rd, 0x03u64) }
+fn sd_loc(rs: u64, uoff: u64) { rv_s(uoff, rs, 2u64, 3u64, 0x23u64) }
+
+fn e_exit_imm(code: u64) { li64(10u64, code)  li64(17u64, 93u64)  w32(0x00000073u64) }   /* a0=code ; a7=93 ; ecall */
+
+fn hdr_nfunc(base: u64) -> u32 { let hp : *u8 = base as *u8  let n : u32 = hp[0u64] as u32  if n == 0u32 { return (hp[1u64] as u32) | ((hp[2u64] as u32) << 8u32) }  return n }
+fn hdr_off(base: u64) -> u64 { let hp : *u8 = base as *u8  if (hp[0u64] as u32) == 0u32 { return 3u64 }  return 1u64 }
+
+var LBL : [u64; 65536]
+var FSTART : [u64; 4096]
+var CS_KIND : [u32; 4096]
+var CS_TGT  : [u32; 4096]
+var CS_ELSE : [u32; 4096]
+var CS_ELSEEN : [u32; 4096]
+var CS_N : u32 = 0u32
+var LBLCTR : u32 = 0u32
+var SVCIADDR : u64 = 0u64
+
+fn lbl_here(id: u32) { if PASS == 1u32 { LBL[id as u64] = CUR } }
+fn loc_off(slot: u32) -> u64 { return 16u64 + (8u64 * (slot as u64)) }
+
+/* unconditional jump to label; conditional far-branch via branch-over-jal (fixed 2 instr) */
+fn j_to(id: u32) { let t : u64 = LBL[id as u64]  rv_j(t - CUR, 0u64) }
+fn br_if_zero_to(rs: u64, id: u32) { rv_b(8u64, 0u64, rs, 1u64)  let t : u64 = LBL[id as u64]  rv_j(t - CUR, 0u64) }   /* bne rs,x0,+8 ; j id  => if rs==0 goto id */
+fn br_if_nz_to(rs: u64, id: u32)   { rv_b(8u64, 0u64, rs, 0u64)  let t : u64 = LBL[id as u64]  rv_j(t - CUR, 0u64) }   /* beq rs,x0,+8 ; j id  => if rs!=0 goto id */
+
+fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut mx : u32 = 0u32  let mut s : u64 = 0u64
+    while s < blen {
+        let op : *u8 = (base + boff + s) as *u8  let o : u32 = op[0u64] as u32  s = s + 1u64
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x11u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+        if o == 0x70u32 { s = s + 2u64 }
+        if o == 0x73u32 { s = s + 1u64 }
+        if o == 0x74u32 { s = s + 3u64 }
+    }
+    return mx
+}
+
+/* CALL choreography (RV64 ABI).  kind 0 = direct (tgt) ; 1 = __svci (index preloaded in x29=t4) */
+fn e_call_seq(ac: u32, kind: u32, tgt: u64) {
+    let mut stackargs : u32 = 0u32  if ac > 8u32 { stackargs = ac - 8u32 }
+    let ssz : u32 = (((8u32 * stackargs) + 15u32) / 16u32) * 16u32
+    if ssz > 0u32 { rv_i(4294967296u64 - (ssz as u64), 2u64, 0u64, 2u64, 0x13u64) }        /* addi sp,sp,-ssz */
+    let mut i : u32 = 8u32
+    while i < ac {
+        rv_i(8u64 * (((ac - 1u32) - i) as u64), 18u64, 3u64, 5u64, 0x03u64)                /* ld t0, off(x18) (peek) */
+        rv_s(8u64 * ((i - 8u32) as u64), 5u64, 2u64, 3u64, 0x23u64)                        /* sd t0, off(sp) */
+        i = i + 1u32
+    }
+    let mut nreg : u32 = ac  if nreg > 8u32 { nreg = 8u32 }
+    let mut j : u32 = 0u32
+    while j < nreg { rv_i(8u64 * (((ac - 1u32) - j) as u64), 18u64, 3u64, (10u32 + j) as u64, 0x03u64)  j = j + 1u32 }   /* ld a_j, off(x18) */
+    if kind == 0u32 { rv_j(tgt - CUR, 1u64) } else { rv_j(SVCIADDR - CUR, 1u64) }          /* jal ra, target */
+    if ssz > 0u32 { rv_i(ssz as u64, 2u64, 0u64, 2u64, 0x13u64) }                          /* addi sp,sp,+ssz */
+    rv_i(8u64 * (ac as u64), 18u64, 0u64, 18u64, 0x13u64)                                  /* addi x18,x18,8*ac (consume args) */
+    e_push(10u64)                                                                          /* push a0 (result) */
+}
+
+fn gen_function(base: u64, boff: u64, blen: u64, params: u32) {
+    CS_N = 0u32
+    if blen > 0u64 { let ip0 : *u8 = (base + boff) as *u8  if (ip0[0u64] as u32) == 0x8Au32 { e_exit_imm(198u64)  return } }
+    let ml : u32 = max_local(base, boff, blen)
+    let need : u32 = ((((16u32 + (8u32 * (ml + 1u32))) + 64u32) + 15u32) / 16u32) * 16u32
+    let mut fsz : u32 = need  if fsz < 512u32 { fsz = 512u32 }
+    rv_i(4294967296u64 - (fsz as u64), 2u64, 0u64, 2u64, 0x13u64)                          /* addi sp,sp,-fsz */
+    rv_s((fsz - 8u32) as u64, 1u64, 2u64, 3u64, 0x23u64)                                   /* sd ra,(fsz-8)(sp) */
+    let mut j : u32 = 0u32
+    while j < params {
+        if j < 8u32 { sd_loc((10u32 + j) as u64, loc_off(j)) }
+        else { rv_i((fsz as u64) + (8u64 * ((j - 8u32) as u64)), 2u64, 3u64, 5u64, 0x03u64)  sd_loc(5u64, loc_off(j)) }   /* ld t0,(fsz+..)(sp) ; sd t0,loc */
+        j = j + 1u32
+    }
+    let mut p : u64 = 0u64
+    while p < blen {
+        let opp : *u8 = (base + boff + p) as *u8  let op : u32 = opp[0u64] as u32  p = p + 1u64
+        if op == 0x01u32 {
+            let mut imm : u64 = 0u64  let mut k : u64 = 0u64
+            while k < 8u64 { let bp : *u8 = (base + boff + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
+            p = p + 8u64
+            li64(5u64, imm)  e_push(5u64)
+        }
+        if op == 0x10u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  ld_loc(5u64, loc_off(slot))  e_push(5u64) }
+        if op == 0x11u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  e_pop(5u64)  sd_loc(5u64, loc_off(slot)) }
+        if op == 0x20u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 0u64, 5u64, 0x33u64)  e_push(5u64) }     /* add */
+        if op == 0x21u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0x20u64, 6u64, 5u64, 0u64, 5u64, 0x33u64)  e_push(5u64) }  /* sub */
+        if op == 0x22u32 { e_pop(6u64)  e_pop(5u64)  rv_r(1u64, 6u64, 5u64, 0u64, 5u64, 0x33u64)  e_push(5u64) }     /* mul */
+        if op == 0x23u32 { e_pop(6u64)  e_pop(5u64)  rv_r(1u64, 6u64, 5u64, 4u64, 5u64, 0x33u64)  e_push(5u64) }     /* div (signed) */
+        if op == 0x24u32 { e_pop(6u64)  e_pop(5u64)  rv_r(1u64, 6u64, 5u64, 6u64, 5u64, 0x33u64)  e_push(5u64) }     /* rem (signed) */
+        if op == 0x2Au32 { e_pop(6u64)  e_pop(5u64)  rv_r(1u64, 6u64, 5u64, 5u64, 5u64, 0x33u64)  e_push(5u64) }     /* divu */
+        if op == 0x2Bu32 { e_pop(6u64)  e_pop(5u64)  rv_r(1u64, 6u64, 5u64, 7u64, 5u64, 0x33u64)  e_push(5u64) }     /* remu */
+        if op == 0x25u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 7u64, 5u64, 0x33u64)  e_push(5u64) }     /* and */
+        if op == 0x26u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 6u64, 5u64, 0x33u64)  e_push(5u64) }     /* or */
+        if op == 0x27u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 4u64, 5u64, 0x33u64)  e_push(5u64) }     /* xor */
+        if op == 0x28u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 1u64, 5u64, 0x33u64)  e_push(5u64) }     /* sll */
+        if op == 0x29u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 5u64, 5u64, 0x33u64)  e_push(5u64) }     /* srl */
+        if op == 0x30u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0x20u64, 6u64, 5u64, 0u64, 5u64, 0x33u64)  rv_i(1u64, 5u64, 3u64, 5u64, 0x13u64)  e_push(5u64) }   /* EQ: sub; sltiu t0,t0,1 */
+        if op == 0x31u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0x20u64, 6u64, 5u64, 0u64, 5u64, 0x33u64)  rv_r(0u64, 5u64, 0u64, 3u64, 5u64, 0x33u64)  e_push(5u64) }   /* NE: sub; sltu t0,x0,t0 */
+        if op == 0x32u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 2u64, 5u64, 0x33u64)  e_push(5u64) }     /* LT_S: slt t0,t0,t1 */
+        if op == 0x33u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 6u64, 5u64, 2u64, 5u64, 0x33u64)  rv_i(1u64, 5u64, 4u64, 5u64, 0x13u64)  e_push(5u64) }   /* GE_S: slt; xori 1 */
+        if op == 0x34u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 5u64, 6u64, 2u64, 5u64, 0x33u64)  rv_i(1u64, 5u64, 4u64, 5u64, 0x13u64)  e_push(5u64) }   /* LE_S: slt t0,t1,t0; xori 1 */
+        if op == 0x35u32 { e_pop(6u64)  e_pop(5u64)  rv_r(0u64, 5u64, 6u64, 2u64, 5u64, 0x33u64)  e_push(5u64) }     /* GT_S: slt t0,t1,t0 */
+        if op == 0x40u32 { CS_KIND[CS_N as u64] = 0u32  CS_TGT[CS_N as u64] = LBLCTR  LBLCTR = LBLCTR + 1u32  CS_N = CS_N + 1u32 }
+        if op == 0x41u32 { let id : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32  lbl_here(id)  CS_KIND[CS_N as u64] = 1u32  CS_TGT[CS_N as u64] = id  CS_N = CS_N + 1u32 }
+        if op == 0x42u32 {
+            let endid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
+            let elsid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
+            e_pop(5u64)  br_if_zero_to(5u64, elsid)
+            CS_KIND[CS_N as u64] = 2u32  CS_TGT[CS_N as u64] = endid  CS_ELSE[CS_N as u64] = elsid  CS_ELSEEN[CS_N as u64] = 0u32  CS_N = CS_N + 1u32
+        }
+        if op == 0x43u32 { let tt : u32 = CS_N - 1u32  j_to(CS_TGT[tt as u64])  lbl_here(CS_ELSE[tt as u64])  CS_ELSEEN[tt as u64] = 1u32 }
+        if op == 0x44u32 {
+            CS_N = CS_N - 1u32
+            let kind : u32 = CS_KIND[CS_N as u64]
+            if kind == 0u32 { lbl_here(CS_TGT[CS_N as u64]) }
+            if kind == 2u32 { if CS_ELSEEN[CS_N as u64] == 0u32 { lbl_here(CS_ELSE[CS_N as u64]) }  lbl_here(CS_TGT[CS_N as u64]) }
+        }
+        if op == 0x50u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  j_to(CS_TGT[((CS_N - 1u32) - depth) as u64]) }
+        if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  e_pop(5u64)  br_if_nz_to(5u64, CS_TGT[((CS_N - 1u32) - depth) as u64]) }
+        if op == 0x80u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 4u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD8: add t3,t2,t0 ; lbu t0,0(t3) */
+        if op == 0x81u32 { e_pop(6u64)  e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_s(0u64, 6u64, 28u64, 0u64, 0x23u64) }     /* STORE8: sb t1,0(t3) */
+        if op == 0x82u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 3u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD64: ld */
+        if op == 0x83u32 { e_pop(6u64)  e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_s(0u64, 6u64, 28u64, 3u64, 0x23u64) }     /* STORE64: sd */
+        if op == 0x84u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 5u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD16_U: lhu */
+        if op == 0x85u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 1u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD16_S: lh */
+        if op == 0x86u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 6u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD32_U: lwu */
+        if op == 0x87u32 { e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_i(0u64, 28u64, 2u64, 5u64, 0x03u64)  e_push(5u64) }    /* LOAD32_S: lw (sign-extends) */
+        if op == 0x88u32 { e_pop(6u64)  e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_s(0u64, 6u64, 28u64, 1u64, 0x23u64) }     /* STORE16: sh */
+        if op == 0x89u32 { e_pop(6u64)  e_pop(5u64)  e_membase(7u64)  rv_r(0u64, 5u64, 7u64, 0u64, 28u64, 0x33u64)  rv_s(0u64, 6u64, 28u64, 2u64, 0x23u64) }     /* STORE32: sw */
+        if op == 0x72u32 { rv_i(8u64, 18u64, 0u64, 18u64, 0x13u64) }                                                                                            /* DROP: addi x18,x18,8 */
+        if op == 0x71u32 {                                                                                                                                      /* PRINT_CHAR */
+            e_pop(5u64)                                                                    /* char -> t0 */
+            rv_s(4294967288u64, 5u64, 18u64, 0u64, 0x23u64)                                /* sb t0,-8(x18) (scratch) */
+            rv_i(4294967288u64, 18u64, 0u64, 11u64, 0x13u64)                               /* addi a1,x18,-8 (&ch) */
+            li64(10u64, 1u64)                                                              /* a0 = 1 (fd) */
+            li64(12u64, 1u64)                                                              /* a2 = 1 (len) */
+            li64(17u64, 64u64)                                                             /* a7 = write */
+            w32(0x00000073u64)                                                             /* ecall */
+        }
+        if op == 0x60u32 {
+            e_pop(10u64)                                                                   /* result -> a0 */
+            rv_i((fsz - 8u32) as u64, 2u64, 3u64, 1u64, 0x03u64)                           /* ld ra,(fsz-8)(sp) */
+            rv_i(fsz as u64, 2u64, 0u64, 2u64, 0x13u64)                                    /* addi sp,sp,fsz */
+            rv_i(0u64, 1u64, 0u64, 0u64, 0x67u64)                                          /* jalr x0,0(ra) (ret) */
+        }
+        if op == 0x70u32 {
+            let fp : *u8 = (base + boff + p) as *u8  let fi : u32 = fp[0u64] as u32
+            let ap : *u8 = (base + boff + p + 1u64) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 2u64
+            e_call_seq(ac, 0u32, FSTART[fi as u64])
+        }
+        if op == 0x74u32 {
+            let f0 : *u8 = (base + boff + p) as *u8  let f1 : *u8 = (base + boff + p + 1u64) as *u8
+            let fi : u32 = (f0[0u64] as u32) | ((f1[0u64] as u32) << 8u32)
+            let ap2 : *u8 = (base + boff + p + 2u64) as *u8  let ac : u32 = ap2[0u64] as u32
+            p = p + 3u64
+            e_call_seq(ac, 0u32, FSTART[fi as u64])
+        }
+        if op == 0x73u32 {
+            let ap : *u8 = (base + boff + p) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 1u64
+            e_pop(29u64)                                                                   /* index -> t4 (x29) */
+            e_call_seq(ac, 1u32, 0u64)
+        }
+    }
+}
+
+fn mod_has_ci(base: u64) -> u32 {
+    let nf : u32 = hdr_nfunc(base)  let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)  let boff : u64 = off + 4u64  let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x73u32 { return 1u32 }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }  if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }  if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }  if o == 0x74u32 { s = s + 3u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }
+        }
+        off = off + 4u64 + blen  i = i + 1u32
+    }
+    return 0u32
+}
+fn mod_has_mem(base: u64) -> u32 {
+    let nf : u32 = hdr_nfunc(base)  let mut off : u64 = hdr_off(base)  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)  let boff : u64 = off + 4u64  let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x80u32 { return 1u32 }  if o == 0x81u32 { return 1u32 }
+            if o == 0x82u32 { return 1u32 }  if o == 0x83u32 { return 1u32 }
+            if o >= 0x84u32 { if o <= 0x89u32 { return 1u32 } }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }  if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }  if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }  if o == 0x73u32 { s = s + 1u64 }  if o == 0x74u32 { s = s + 3u64 }
+            if o == 0x8Au32 { let np : *u8 = (base + boff + s) as *u8  s = s + 1u64 + (np[0u64] as u64) }
+        }
+        off = off + 4u64 + blen  i = i + 1u32
+    }
+    return 0u32
+}
+
+/* __svci: index in t4(x29) ; li64 t5,k ; if t4==t5 -> jal fn_k ; OOB -> exit(199) */
+fn gen_svci_real(base: u64, nfunc: u32) {
+    let mut k : u32 = 0u32
+    while k < nfunc {
+        li64(30u64, k as u64)
+        rv_b(8u64, 30u64, 29u64, 1u64)                          /* bne t4,t5,+8 */
+        rv_j(FSTART[k as u64] - CUR, 0u64)                      /* j fn_k */
+        k = k + 1u32
+    }
+    e_exit_imm(199u64)
+}
+
+fn text_pass(base: u64, nfunc: u32, hasci: u32) {
+    LBLCTR = 0u32
+    rv_u(0x900u64, 18u64, 0x37u64)                              /* _start: lui x18,0x900 -> ESP=0x900000 */
+    rv_j(FSTART[0u64] - CUR, 1u64)                              /* jal ra, fn0 */
+    li64(17u64, 93u64)                                          /* a7 = exit */
+    w32(0x00000073u64)                                          /* ecall (a0 holds fn0's result) */
+    let mut off : u64 = hdr_off(base)
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        if PASS == 1u32 { FSTART[i as u64] = CUR }
+        let pp : *u8 = (base + off) as *u8  let params : u32 = pp[0u64] as u32
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        gen_function(base, off + 4u64, blen, params)
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    if hasci == 1u32 { if PASS == 1u32 { SVCIADDR = CUR }  gen_svci_real(base, nfunc) }
+}
+
+fn main() -> u64 {
+    _setmode(1i32, 0x8000i32)
+    let base : u64 = svir_ptr()
+    let total : u64 = svir_len()
+    let nfunc : u32 = hdr_nfunc(base)
+    let mut isv2 : u32 = 0u32  let hp : *u8 = base as *u8  if (hp[0u64] as u32) == 0u32 { isv2 = 1u32 }
+    let hasci : u32 = mod_has_ci(base)
+    let hasmem : u32 = mod_has_mem(base)
+    let mut off : u64 = hdr_off(base)
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    let mut dlen : u64 = 0u64
+    let mut dhd : u64 = 2u64
+    if isv2 == 1u32 { dhd = 4u64 }
+    if off < total {
+        let d0 : *u8 = (base + off) as *u8  let d1 : *u8 = (base + off + 1u64) as *u8
+        dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64)
+        if isv2 == 1u32 { let d2 : *u8 = (base + off + 2u64) as *u8  let d3 : *u8 = (base + off + 3u64) as *u8
+            dlen = dlen | ((d2[0u64] as u64) << 16u64) | ((d3[0u64] as u64) << 24u64) }
+    }
+    let baseva : u64 = 4194304u64
+    let mut phnum : u64 = 2u64  if hasmem == 1u32 { phnum = 3u64 }
+    let t0 : u64 = 64u64 + (56u64 * phnum)
+    let start : u64 = baseva + t0
+    PASS = 1u32  CUR = start
+    text_pass(base, nfunc, hasci)
+    let textend : u64 = CUR
+    let fsz1 : u64 = textend - baseva
+    let d0off : u64 = ((fsz1 + 4095u64) / 4096u64) * 4096u64
+    ob(0x7Fu32)  ob(0x45u32)  ob(0x4Cu32)  ob(0x46u32)
+    ob(2u32)  ob(1u32)  ob(1u32)  ob(0u32)
+    o64(0u64)
+    o16(2u64)                                                  /* ET_EXEC */
+    o16(243u64)                                                /* EM_RISCV */
+    o32(1u64)
+    o64(start)
+    o64(64u64)
+    o64(0u64)
+    o32(0u64)                                                  /* e_flags = 0 (soft-float, no RVC) */
+    o16(64u64)  o16(56u64)  o16(phnum)
+    o16(0u64)  o16(0u64)  o16(0u64)
+    o32(1u64)  o32(5u64)
+    o64(0u64)  o64(baseva)  o64(baseva)
+    o64(fsz1)  o64(fsz1)  o64(4096u64)
+    o32(1u64)  o32(6u64)
+    o64(0u64)  o64(8388608u64)  o64(8388608u64)
+    o64(0u64)  o64(1048576u64)  o64(4096u64)
+    if hasmem == 1u32 {
+        o32(1u64)  o32(6u64)
+        o64(d0off)  o64(10485760u64)  o64(10485760u64)
+        o64(dlen)  o64(4194304u64)  o64(4096u64)
+    }
+    PASS = 2u32  CUR = start
+    text_pass(base, nfunc, hasci)
+    if hasmem == 1u32 { if dlen > 0u64 {
+        let mut z : u64 = fsz1
+        while z < d0off { ob(0u32)  z = z + 1u64 }
+        let mut d : u64 = 0u64
+        while d < dlen { let dp : *u8 = (base + off + dhd + d) as *u8  ob(dp[0u64] as u32)  d = d + 1u64 }
+    } }
+    return 0u64
+}

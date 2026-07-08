@@ -3,3 +3,4 @@ sysv-elf
 wasm
 interp
 arm64
+riscv

@@ -157,3 +157,42 @@ error-struct write (the 0x111790 code suggests a wrong field offset or a pointer
 `int code` belongs). The `_parseharness` differential makes each hypothesis a ~90s rebuild-and-compare.
 When ec matches (0) and the compile is byte-identical, run_seed_sovereign S4 goes green and
 run_completion.sh's seed_sovereign member closes — FULL CAPABILITIES in the plan-of-record sense.
+
+## S4 campaign (session 4): FOUR bugs fixed, the seed reads its source
+
+Pushing run_seed_sovereign S4 (the linked seed compiles a .iii byte-identical to gcc iiis-0). Built the
+_parseharness differential (lex→ast→parse, token-dump + per-error codes, static/heap/file-read modes)
+and a svir_ld `map` mode (global symbol table). Chain of bugs found and fixed:
+
+1. **`T t = *fn()` struct-copy** (e6893a9e): parse-primary's `iii_token_t t = *iiip_peek(st)` read
+   `t.kind=0` (direct deref read 5) → switch default → spurious EXPECTED_EXPR. ccsv's struct-value
+   local init handled `=call()`, `=var`, `=p->field` but NOT `= *ptrExpr`. FIXED. Parse harness closed
+   (interp `ok=1 ec=0 nd=1` == gcc), 19-TU structural zero held.
+
+2. **SEEK/EOF constants** (ec31f85b): `<stdio.h>` skipped → `SEEK_SET/CUR/END`, `EOF` undefined in
+   main.c → `fseek` garbage whence → `ftell` returned 83 for a 45-byte file. ccsv now predefines them.
+
+3. **CRT stdio imports** (ec31f85b): fopen/fseek/ftell/fread/fclose/fwrite/fgets from `<stdio.h>`
+   (skipped) had no prototype → prescan_imports never registered them → their CALLs mis-dispatched in
+   the linked seed (fopen returned garbage; only `clock` worked, declared by the double-runtime). ccsv
+   now appends a CRT prototype prelude (`crt_tail`, via `src_has_word "fopen"`) — non-varargs file-I/O
+   only (fprintf/fputc/fputs OMITTED: varargs mis-shape breaks 12 fns; stderr-only, not on the success
+   path). Interp shims fprintf/fputc/fputs/fflush/signal/getenv as no-ops.
+
+4. (char** element width, from session 3, 76901783 — same class.)
+
+**MEASURED milestone:** the linked sovereign seed now READS ITS SOURCE correctly (traced `LN=45
+module aa\nfn foo…` — was garbage `LEN=83`). rc advanced 11(parse)→2(read)→11(parse). 19-TU structural
+ZERO holds (0/2,578).
+
+**The remaining frontier (S4 still red):** with correct source reaching parse, the full 19-TU seed
+STILL returns PARSE_FAIL — yet BOTH the 4-TU parse harness AND the 18-TU harness (all seed TUs except
+main.c, using the harness's own main) parse the same input correctly (`ok=1`). So the divergence is
+SPECIFIC to main.c being the entry TU. Ruled out (each tested): membase (harness at 350K passes),
+cross-TU static collision (18-TU harness passes), the read path (source reaches parse intact),
+iii_argv_canon_mhash and the source mhash (disabled, no change). The suspect set narrows to main.c's
+`main()`/`iii_run_pipeline` env: a memory interaction (heap/AST-arena layout, or a high-global-index
+CALL2/fn-ptr remap that only the +356-fn main.c pushes parse.c over) that corrupts parse's execution
+while leaving the source buffer intact. Attack: instrument parse.c's first recorded error IN the seed
+(minimal perturbation) to see if it's the same t.kind=0 class at a second struct-copy site, or a new
+class; and diff the linked parse.c body (4-TU vs 19-TU link) for a CALL/CALL2 that remaps differently.

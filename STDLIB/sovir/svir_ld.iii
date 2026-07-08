@@ -1,0 +1,375 @@
+/* svir_ld.iii -- THE SVIR CROSS-MODULE LINKER (Lambda-0): N per-TU containers -> ONE verified v2 module.
+ *
+ * Inputs (argv[1] = a RESPONSE file; one TU per line, RELATIVE paths, main.c's TU FIRST):
+ *     name.svbin  name.names  name.vmap  membase
+ *   .svbin = raw container bytes (svir_dump) built at `membase` (ccsv --membase pass-2, so every baked
+ *   address -- econst AND data-section pointer slots -- is already globally correct).
+ *   .names = ccsv dbg listing ("N: name" lines; S-blocks/header skipped) -- the DEF symbol table.
+ *   .vmap  = the //V (fn bodyoff fidx: fn-name-as-VALUE const sites) and //D (sdat-addr fidx: fn indices
+ *   BAKED into data by initializers) manifests -- the exact fn-ptr index-space rewrite sets.
+ *
+ * Link rules (DOCS/III-LAMBDA0-LINK-CAMPAIGN.md, frozen):
+ *   defs keep per-TU order and link BY POSITION (global fn 0 = TU0's fn 0 = main);
+ *   imports ([0x8A][len][name] bodies) resolve BY NAME against the def table -- an import name matching
+ *   MORE THAN ONE def is a HARD ERROR (measured zero today; statics are TU-private and imported by nobody);
+ *   still-unresolved names (the CRT boundary) dedup into a shared import tail (executors stay LOUD/shimmable).
+ *   Bodies re-emit op-walked: CALL/CALL2 remap to global (0x70 if gi<256 else 0x74 -- deterministic);
+ *   //V sites rewrite the CONST_I64 operand; //D sites rewrite 8-byte data slots.  Data sections copy to
+ *   their membase (holes stay zero).  Output: a gen_svir .iii text (v2 container) on stdout.
+ *
+ * Exit: 0 ok ; 2 usage/io ; 3 manifest/operand mismatch ; 4 ambiguous import ; 5 table overflow. */
+module svir_ld
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+
+var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
+
+/* ---- arena: all input files land here ---- */
+var ARENA : [u8; 12582912]
+var AP : u64 = 0u64
+fn ab(i: u64) -> u32 { let p:*u8=((&ARENA as u64)+i) as *u8  return p[0u64] as u32 }
+fn aw(i: u64, b: u32) { let p:*u8=((&ARENA as u64)+i) as *u8  p[0u64]=(b & 0xFFu32) as u8 }
+
+/* read a NUL-terminated path (from PATHBUF) into the arena; returns length or 0 */
+var PATHBUF : [u8; 512]
+fn rdfile() -> u64 {
+    let f : u64 = fopen(&PATHBUF as u64, &MODE_RB as u64)
+    if f == 0u64 { return 0u64 }
+    let n : u64 = fread((&ARENA as u64)+AP, 1u64, 4194304u64, f)
+    fclose(f)
+    return n
+}
+
+/* ---- output helpers (gen_svir .iii text) ---- */
+fn pc(c: u32) { putchar(c as i32) }
+fn pstr(s: u64) { let p:*u8=s as *u8  let mut j:u64=0u64  while (p[j] as u32)!=126u32 { pc(p[j] as u32)  j=j+1u64 } }
+fn pdec(v0: u64) { var D:[u8;24]  let mut v:u64=v0  let mut n:u64=0u64
+    if v==0u64 { pc(48u32)  return }
+    while v>0u64 { D[n]=((v % 10u64)+48u64) as u8  v=v/10u64  n=n+1u64 }
+    while n>0u64 { n=n-1u64  pc(D[n] as u32) } }
+fn perr(s: u64) { pstr(s) }   /* errors go to stdout too (the driver captures + fails on rc) */
+
+/* ---- per-TU tables ---- */
+var TUN : u32 = 0u32
+var TV_SVO : [u64; 24]   var TV_SVL : [u64; 24]      /* svbin arena off/len */
+var TV_NMO : [u64; 24]   var TV_NML : [u64; 24]      /* names text */
+var TV_VMO : [u64; 24]   var TV_VML : [u64; 24]      /* vmap text */
+var TV_MB  : [u64; 24]                                /* membase */
+var TV_FTB : [u32; 24]   var TV_NF : [u32; 24]        /* fn-table base + count */
+var TV_DOF : [u64; 24]   var TV_DLN : [u64; 24]       /* data-section arena off + len */
+
+/* ---- flattened fn tables (<=6144 fns across TUs) ---- */
+var F_PAR : [u32; 6144]  var F_NRES : [u32; 6144]
+var F_BOF : [u64; 6144]  var F_BLN : [u64; 6144]      /* body arena off + len */
+var F_IMP : [u32; 6144]                                /* 1 = import decl */
+var F_INO : [u64; 6144]  var F_INL : [u64; 6144]       /* import name (arena, from the container body) */
+var F_GI  : [u32; 6144]                                /* resolved GLOBAL index */
+var F_NMO : [u64; 6144]  var F_NML : [u64; 6144]       /* fn NAME from the .names listing (defs + imports) */
+var FTOT : u32 = 0u32
+
+/* ---- manifests (flattened) ---- */
+var V_TU : [u32; 2048]  var V_FN : [u32; 2048]  var V_OF : [u64; 2048]  var V_FI : [u32; 2048]  var VN : u32 = 0u32
+var D_TU : [u32; 1024]  var D_AD : [u64; 1024]  var D_FI : [u32; 1024]  var DN : u32 = 0u32
+
+/* ---- unresolved-import (CRT boundary) dedup table ---- */
+var U_NO : [u64; 512]  var U_NL : [u64; 512]  var U_GI : [u32; 512]  var UN : u32 = 0u32
+
+var NDEF : u32 = 0u32                                  /* total global defs */
+
+fn nameq(ao: u64, al: u64, bo: u64, bl: u64) -> u32 {
+    if al != bl { return 0u32 }
+    let mut j:u64=0u64  while j<al { if ab(ao+j) != ab(bo+j) { return 0u32 }  j=j+1u64 }
+    return 1u32
+}
+
+/* ---- parse one container at arena[so..so+sl) into the flattened fn tables ---- */
+fn parse_container(tu: u32, so: u64, sl: u64) -> u32 {
+    let mut nf : u32 = ab(so)
+    let mut off : u64 = 1u64
+    if nf == 0u32 { nf = ab(so+1u64) | (ab(so+2u64) << 8u32)  off = 3u64 }   /* v2 */
+    TV_FTB[tu as u64] = FTOT  TV_NF[tu as u64] = nf
+    let mut i : u32 = 0u32
+    while i < nf {
+        if FTOT >= 6144u32 { return 5u32 }
+        let k : u64 = FTOT as u64
+        F_PAR[k] = ab(so+off)  F_NRES[k] = ab(so+off+1u64)
+        let bl : u64 = (ab(so+off+2u64) as u64) | ((ab(so+off+3u64) as u64) << 8u64)
+        F_BOF[k] = so+off+4u64  F_BLN[k] = bl
+        F_IMP[k] = 0u32  F_INO[k] = 0u64  F_INL[k] = 0u64  F_NMO[k] = 0u64  F_NML[k] = 0u64
+        if bl >= 2u64 { if ab(so+off+4u64) == 0x8Au32 { if bl == (2u64 + (ab(so+off+5u64) as u64)) {
+            F_IMP[k] = 1u32  F_INO[k] = so+off+6u64  F_INL[k] = ab(so+off+5u64) as u64 } } }
+        FTOT = FTOT + 1u32
+        off = off + 4u64 + bl
+        i = i + 1u32
+    }
+    /* trailing data section: v1 [u16] / v2 [u32] */
+    TV_DOF[tu as u64] = 0u64  TV_DLN[tu as u64] = 0u64
+    if off < sl {
+        let mut hd:u64=2u64  let mut dl:u64=(ab(so+off) as u64) | ((ab(so+off+1u64) as u64) << 8u64)
+        if ab(so)==0u32 { hd=4u64  dl = dl | ((ab(so+off+2u64) as u64) << 16u64) | ((ab(so+off+3u64) as u64) << 24u64) }
+        TV_DOF[tu as u64] = so+off+hd  TV_DLN[tu as u64] = dl
+    }
+    return 0u32
+}
+
+/* ---- parse the .names listing: lines "N: name" -> F_NMO/F_NML for TU-local fn N ---- */
+fn parse_names(tu: u32, no: u64, nl: u64) {
+    let base : u32 = TV_FTB[tu as u64]  let nf : u32 = TV_NF[tu as u64]
+    let mut i : u64 = 0u64
+    while i < nl {
+        /* line start: digits ':' ' ' name */
+        let mut j : u64 = i  let mut v : u64 = 0u64  let mut nd : u32 = 0u32
+        while j < nl { let c:u32=ab(no+j)  if c>=48u32 { if c<=57u32 { v=v*10u64+((c-48u32) as u64)  nd=nd+1u32  j=j+1u64 } else { j=nl+1u64 } } else { j=nl+1u64 } }
+        if j == nl+1u64 { j = i + (nd as u64) }
+        if nd > 0u32 { if ab(no+j)==58u32 { if ab(no+j+1u64)==32u32 {
+            let nmst : u64 = no+j+2u64  let mut ne : u64 = nmst
+            while ne < no+nl { if ab(ne)==10u32 { ne=ne+0u64  } else { ne=ne+1u64  } if ab(ne)==10u32 { } }   /* scan to newline */
+            ne = nmst  let mut g:u32=1u32  while g==1u32 { if ne>=no+nl {g=0u32} else { if ab(ne)==10u32 {g=0u32} else { if ab(ne)==13u32 {g=0u32} else {ne=ne+1u64} } } }
+            if v < (nf as u64) { let k:u64=(base as u64)+v  F_NMO[k]=nmst  F_NML[k]=ne-nmst }
+        } } }
+        /* advance to next line */
+        let mut e : u64 = i
+        let mut g2:u32=1u32  while g2==1u32 { if e>=nl {g2=0u32} else { if ab(no+e)==10u32 {g2=0u32} else {e=e+1u64} } }
+        i = e + 1u64
+    }
+}
+
+/* ---- parse the .vmap: "//V fn off fidx" + "//D addr fidx" lines ---- */
+fn parse_vmap(tu: u32, vo: u64, vl: u64) {
+    let mut i : u64 = 0u64
+    while i < vl {
+        if (i+3u64) < vl { if ab(vo+i)==47u32 { if ab(vo+i+1u64)==47u32 {
+            let kind : u32 = ab(vo+i+2u64)
+            if ab(vo+i+3u64)==32u32 { if kind==86u32 { }  if kind==68u32 { } }
+            if kind==86u32 { let mut p:u64=i+4u64  let mut a:u64=0u64  let mut b:u64=0u64  let mut c:u64=0u64
+                while ab(vo+p)!=32u32 { a=a*10u64+((ab(vo+p)-48u32) as u64)  p=p+1u64 }  p=p+1u64
+                while ab(vo+p)!=32u32 { b=b*10u64+((ab(vo+p)-48u32) as u64)  p=p+1u64 }  p=p+1u64
+                while p<vl { let cc:u32=ab(vo+p)  if cc>=48u32 { if cc<=57u32 { c=c*10u64+((cc-48u32) as u64)  p=p+1u64 } else {p=vl} } else {p=vl} }
+                if VN<2048u32 { V_TU[VN as u64]=tu  V_FN[VN as u64]=a as u32  V_OF[VN as u64]=b  V_FI[VN as u64]=c as u32  VN=VN+1u32 } }
+            if kind==68u32 { let mut p2:u64=i+4u64  let mut a2:u64=0u64  let mut c2:u64=0u64
+                while ab(vo+p2)!=32u32 { a2=a2*10u64+((ab(vo+p2)-48u32) as u64)  p2=p2+1u64 }  p2=p2+1u64
+                while p2<vl { let cc2:u32=ab(vo+p2)  if cc2>=48u32 { if cc2<=57u32 { c2=c2*10u64+((cc2-48u32) as u64)  p2=p2+1u64 } else {p2=vl} } else {p2=vl} }
+                if DN<1024u32 { D_TU[DN as u64]=tu  D_AD[DN as u64]=a2  D_FI[DN as u64]=c2 as u32  DN=DN+1u32 } }
+        } } }
+        let mut e:u64=i  let mut g:u32=1u32  while g==1u32 { if e>=vl {g=0u32} else { if ab(vo+e)==10u32 {g=0u32} else {e=e+1u64} } }
+        i = e + 1u64
+    }
+}
+
+/* ---- op width for the body walker (the anchor's table) ---- */
+fn opw(op: u32) -> i64 {
+    if op==0x01u32 {return 8i64}
+    if op==0x10u32 {return 1i64}  if op==0x11u32 {return 1i64}
+    if op==0x50u32 {return 1i64}  if op==0x51u32 {return 1i64}
+    if op==0x70u32 {return 2i64}  if op==0x73u32 {return 1i64}  if op==0x74u32 {return 3i64}
+    if op==0x8Au32 {return 0i64-1i64}   /* variable: 1+namelen (caller reads) */
+    return 0i64
+}
+
+/* map TU-local fn index -> global (assumes resolution done) */
+fn gmap(tu: u32, fi: u32) -> u32 { return F_GI[((TV_FTB[tu as u64] + fi) as u64)] }
+
+/* ---- rewritten body LENGTH of def k in tu (CALL width changes) ---- */
+fn body_len2(tu: u32, k: u64) -> u64 {
+    let bo:u64=F_BOF[k]  let bl:u64=F_BLN[k]
+    let mut p:u64=0u64  let mut out:u64=0u64
+    while p<bl {
+        let op:u32=ab(bo+p)  p=p+1u64  out=out+1u64
+        let w:i64=opw(op)
+        if op==0x70u32 { let fi:u32=ab(bo+p)  let gi:u32=gmap(tu, fi)  p=p+2u64  if gi<256u32 { out=out+2u64 } else { out=out+3u64 } }
+        else { if op==0x74u32 { let fi2:u32=ab(bo+p) | (ab(bo+p+1u64)<<8u32)  let gi2:u32=gmap(tu, fi2)  p=p+3u64  if gi2<256u32 { out=out+2u64 } else { out=out+3u64 } }
+        else { if op==0x8Au32 { let nl:u64=1u64+(ab(bo+p) as u64)  p=p+nl  out=out+nl }
+        else { if w>0i64 { p=p+(w as u64)  out=out+(w as u64) } } } }
+    }
+    return out
+}
+
+/* emit a byte of the linked container as ",Nu8" */
+fn ob(b: u32) { pc(44u32)  pdec((b & 0xFFu32) as u64)  pstr("u8~" as u64) }
+
+/* ---- emit the rewritten body of def k (tu): CALL remap + //V patches ---- */
+fn emit_body(tu: u32, lfi: u32, k: u64) {
+    let bo:u64=F_BOF[k]  let bl:u64=F_BLN[k]
+    let mut p:u64=0u64
+    while p<bl {
+        let op:u32=ab(bo+p)
+        /* //V patch: a CONST_I64 at input offset p whose operand is a FN INDEX -> global */
+        if op==0x01u32 { let mut vk:u32=0u32  let mut hit:u32=0u32
+            while vk<VN { if V_TU[vk as u64]==tu { if V_FN[vk as u64]==lfi { if V_OF[vk as u64]==p {
+                let gi:u32=gmap(tu, V_FI[vk as u64])
+                /* sanity: the old 8-byte operand equals the manifest fidx */
+                let old:u64=(ab(bo+p+1u64) as u64) | ((ab(bo+p+2u64) as u64)<<8u64) | ((ab(bo+p+3u64) as u64)<<16u64) | ((ab(bo+p+4u64) as u64)<<24u64)
+                if old != (V_FI[vk as u64] as u64) { perr("svir_ld: //V operand mismatch\n~" as u64) }
+                ob(0x01u32)  let mut q:u32=0u32  while q<8u32 { ob(((gi as u64) >> ((8u32*q) as u64)) as u32)  q=q+1u32 }
+                p=p+9u64  hit=1u32  vk=VN } } }
+                vk=vk+1u32 }
+            if hit==1u32 { } else { ob(0x01u32)  let mut q2:u64=1u64  while q2<=8u64 { ob(ab(bo+p+q2))  q2=q2+1u64 }  p=p+9u64 } }
+        else { if op==0x70u32 { let fi:u32=ab(bo+p+1u64)  let ac:u32=ab(bo+p+2u64)  let gi:u32=gmap(tu, fi)  p=p+3u64
+            if gi<256u32 { ob(0x70u32)  ob(gi)  ob(ac) } else { ob(0x74u32)  ob(gi & 255u32)  ob((gi>>8u32)&255u32)  ob(ac) } }
+        else { if op==0x74u32 { let fi2:u32=ab(bo+p+1u64) | (ab(bo+p+2u64)<<8u32)  let ac2:u32=ab(bo+p+3u64)  let gi2:u32=gmap(tu, fi2)  p=p+4u64
+            if gi2<256u32 { ob(0x70u32)  ob(gi2)  ob(ac2) } else { ob(0x74u32)  ob(gi2 & 255u32)  ob((gi2>>8u32)&255u32)  ob(ac2) } }
+        else { if op==0x8Au32 { let nl:u64=ab(bo+p+1u64) as u64  let mut q3:u64=0u64  while q3<(2u64+nl) { ob(ab(bo+p+q3))  q3=q3+1u64 }  p=p+2u64+nl }
+        else { let w:i64=opw(op)  ob(op)  p=p+1u64
+            if w>0i64 { let mut q4:u64=0u64  while q4<(w as u64) { ob(ab(bo+p+q4))  q4=q4+1u64 }  p=p+(w as u64) } } } } }
+    }
+}
+
+/* linked DATA image (holes zero) */
+var DATB : [u8; 1048576]
+var DMAX : u64 = 0u64
+
+fn main(argc: i32, argv: u64) -> u64 {
+    _setmode(1i32, 0x8000i32)
+    if argc < 2i32 { perr("usage: svir_ld <response-file>\n~" as u64)  return 2u64 }
+    let pp : *u64 = argv as *u64
+
+    /* read the response file */
+    let rp : *u8 = pp[1u64] as *u8
+    let mut ri : u64 = 0u64
+    while (rp[ri] as u32) != 0u32 { PATHBUF[ri] = rp[ri]  ri=ri+1u64 }
+    PATHBUF[ri] = 0u8
+    let rlo : u64 = AP
+    let rll : u64 = rdfile()
+    if rll == 0u64 { perr("svir_ld: cannot read response file\n~" as u64)  return 2u64 }
+    AP = AP + rll
+
+    /* parse response lines: svbin names vmap membase */
+    let mut i : u64 = 0u64
+    while i < rll {
+        /* skip blank/short lines */
+        let mut e : u64 = i
+        let mut g : u32 = 1u32
+        while g==1u32 { if e>=rll {g=0u32} else { if ab(rlo+e)==10u32 {g=0u32} else {e=e+1u64} } }
+        if (e-i) > 4u64 {
+            if TUN >= 24u32 { perr("svir_ld: too many TUs\n~" as u64)  return 5u64 }
+            let tu : u32 = TUN
+            /* field 1: svbin path */
+            let mut p : u64 = i  let mut w : u64 = 0u64
+            while ab(rlo+p)!=32u32 { PATHBUF[w]=(ab(rlo+p) & 255u32) as u8  w=w+1u64  p=p+1u64 }  PATHBUF[w]=0u8  p=p+1u64
+            TV_SVO[tu as u64]=AP  TV_SVL[tu as u64]=rdfile()  AP=AP+TV_SVL[tu as u64]
+            if TV_SVL[tu as u64]==0u64 { perr("svir_ld: cannot read a .svbin\n~" as u64)  return 2u64 }
+            /* field 2: names path */
+            w=0u64  while ab(rlo+p)!=32u32 { PATHBUF[w]=(ab(rlo+p) & 255u32) as u8  w=w+1u64  p=p+1u64 }  PATHBUF[w]=0u8  p=p+1u64
+            TV_NMO[tu as u64]=AP  TV_NML[tu as u64]=rdfile()  AP=AP+TV_NML[tu as u64]
+            /* field 3: vmap path */
+            w=0u64  while ab(rlo+p)!=32u32 { PATHBUF[w]=(ab(rlo+p) & 255u32) as u8  w=w+1u64  p=p+1u64 }  PATHBUF[w]=0u8  p=p+1u64
+            TV_VMO[tu as u64]=AP  TV_VML[tu as u64]=rdfile()  AP=AP+TV_VML[tu as u64]
+            /* field 4: membase (digits to EOL) */
+            let mut mb : u64 = 0u64
+            while p < e { let c:u32=ab(rlo+p)  if c>=48u32 { if c<=57u32 { mb=mb*10u64+((c-48u32) as u64) } }  p=p+1u64 }
+            TV_MB[tu as u64]=mb
+            TUN = TUN + 1u32
+        }
+        i = e + 1u64
+    }
+    if TUN == 0u32 { perr("svir_ld: empty response\n~" as u64)  return 2u64 }
+
+    /* parse containers + names + vmaps */
+    let mut t : u32 = 0u32
+    while t < TUN {
+        let rc : u32 = parse_container(t, TV_SVO[t as u64], TV_SVL[t as u64])
+        if rc != 0u32 { perr("svir_ld: container overflow\n~" as u64)  return 5u64 }
+        parse_names(t, TV_NMO[t as u64], TV_NML[t as u64])
+        parse_vmap(t, TV_VMO[t as u64], TV_VML[t as u64])
+        t = t + 1u32
+    }
+
+    /* pass 1: global indices for DEFS (by position, TU order) */
+    NDEF = 0u32
+    t = 0u32
+    while t < TUN { let base:u32=TV_FTB[t as u64]  let nf:u32=TV_NF[t as u64]  let mut fi:u32=0u32
+        while fi < nf { let k:u64=(base+fi) as u64
+            if F_IMP[k]==0u32 { F_GI[k]=NDEF  NDEF=NDEF+1u32 }
+            fi=fi+1u32 }
+        t=t+1u32 }
+
+    /* pass 2: resolve imports by NAME against defs (ambiguity = hard error); leftovers dedup to the tail */
+    t = 0u32
+    while t < TUN { let base2:u32=TV_FTB[t as u64]  let nf2:u32=TV_NF[t as u64]  let mut fj:u32=0u32
+        while fj < nf2 { let k2:u64=(base2+fj) as u64
+            if F_IMP[k2]==1u32 {
+                let ino:u64=F_INO[k2]  let inl:u64=F_INL[k2]
+                let mut found:u32=0u32  let mut fg:u32=0u32
+                let mut s:u32=0u32
+                while s < TUN { let b3:u32=TV_FTB[s as u64]  let n3:u32=TV_NF[s as u64]  let mut f3:u32=0u32
+                    while f3 < n3 { let k3:u64=(b3+f3) as u64
+                        if F_IMP[k3]==0u32 { if F_NML[k3]>0u64 { if nameq(ino, inl, F_NMO[k3], F_NML[k3])==1u32 {
+                            found=found+1u32  fg=F_GI[k3] } } }
+                        f3=f3+1u32 }
+                    s=s+1u32 }
+                if found>1u32 { perr("svir_ld: AMBIGUOUS import: ~" as u64)
+                    let mut z:u64=0u64  while z<inl { pc(ab(ino+z))  z=z+1u64 }  pc(10u32)  return 4u64 }
+                if found==1u32 { F_GI[k2]=fg }
+                else {
+                    /* unresolved -> shared tail import (dedup by name) */
+                    let mut u:u32=0u32  let mut hit2:u32=0u32
+                    while u < UN { if nameq(ino, inl, U_NO[u as u64], U_NL[u as u64])==1u32 { F_GI[k2]=U_GI[u as u64]  hit2=1u32  u=UN } else {u=u+1u32} }
+                    if hit2==0u32 { if UN>=512u32 { perr("svir_ld: unresolved overflow\n~" as u64)  return 5u64 }
+                        U_NO[UN as u64]=ino  U_NL[UN as u64]=inl  U_GI[UN as u64]=NDEF+UN  F_GI[k2]=NDEF+UN  UN=UN+1u32 }
+                }
+            }
+            fj=fj+1u32 }
+        t=t+1u32 }
+
+    /* data image: copy each TU's data AT its membase; then //D patches (8B LE global fn index) */
+    t = 0u32
+    while t < TUN { let dl:u64=TV_DLN[t as u64]
+        if dl>0u64 { let doo:u64=TV_DOF[t as u64]  let mb2:u64=TV_MB[t as u64]
+            if (mb2+dl) > 1048576u64 { perr("svir_ld: data image overflow\n~" as u64)  return 5u64 }
+            let mut d:u64=0u64  while d<dl { DATB[mb2+d]=(ab(doo+d) & 255u32) as u8  d=d+1u64 }
+            if (mb2+dl) > DMAX { DMAX = mb2+dl } }
+        t=t+1u32 }
+    let mut dk:u32=0u32
+    while dk < DN { let tu4:u32=D_TU[dk as u64]  let ad:u64=D_AD[dk as u64]  let gi4:u32=gmap(tu4, D_FI[dk as u64])
+        /* sanity: the current 8-byte slot equals the OLD local index */
+        let p4:*u8=((&DATB as u64)+ad) as *u8
+        let old4:u64=(p4[0u64] as u64) | ((p4[1u64] as u64)<<8u64) | ((p4[2u64] as u64)<<16u64) | ((p4[3u64] as u64)<<24u64)
+        if old4 != (D_FI[dk as u64] as u64) { perr("svir_ld: //D slot mismatch\n~" as u64)  return 3u64 }
+        let mut q5:u32=0u32  while q5<8u32 { p4[q5 as u64]=(((gi4 as u64) >> ((8u32*q5) as u64)) & 255u64) as u8  q5=q5+1u32 }
+        if (ad+8u64) > DMAX { DMAX = ad+8u64 }
+        dk=dk+1u32 }
+
+    /* ---- SIZE pass: total container length ---- */
+    let ntot : u32 = NDEF + UN
+    let mut total : u64 = 3u64                                   /* v2 header: 0x00 nfunc16 */
+    t = 0u32
+    while t < TUN { let b5:u32=TV_FTB[t as u64]  let n5:u32=TV_NF[t as u64]  let mut f5:u32=0u32
+        while f5 < n5 { let k5:u64=(b5+f5) as u64
+            if F_IMP[k5]==0u32 { total = total + 4u64 + body_len2(t, k5) }
+            f5=f5+1u32 }
+        t=t+1u32 }
+    let mut u2:u32=0u32
+    while u2 < UN { total = total + 4u64 + 2u64 + U_NL[u2 as u64]  u2=u2+1u32 }
+    if DMAX > 0u64 { total = total + 4u64 + DMAX }
+
+    /* ---- EMIT the gen_svir .iii text ---- */
+    pstr("module gen_svir\nvar SVIR : [u8; ~" as u64)  pdec(total)  pstr("] = [\n0u8~" as u64)
+    ob(ntot & 255u32)  ob((ntot >> 8u32) & 255u32)
+    t = 0u32
+    while t < TUN { let b6:u32=TV_FTB[t as u64]  let n6:u32=TV_NF[t as u64]  let mut f6:u32=0u32
+        while f6 < n6 { let k6:u64=(b6+f6) as u64
+            if F_IMP[k6]==0u32 {
+                let bl2:u64=body_len2(t, k6)
+                ob(F_PAR[k6])  ob(F_NRES[k6])  ob((bl2 & 255u64) as u32)  ob(((bl2 >> 8u64) & 255u64) as u32)
+                emit_body(t, f6, k6)
+            }
+            f6=f6+1u32 }
+        t=t+1u32 }
+    u2=0u32
+    while u2 < UN { let unl:u64=U_NL[u2 as u64]
+        ob(0u32)  ob(1u32)  ob(((2u64+unl) & 255u64) as u32)  ob((((2u64+unl) >> 8u64) & 255u64) as u32)
+        ob(0x8Au32)  ob((unl & 255u64) as u32)
+        let mut z2:u64=0u64  while z2<unl { ob(ab(U_NO[u2 as u64]+z2))  z2=z2+1u64 }
+        u2=u2+1u32 }
+    if DMAX > 0u64 {
+        ob((DMAX & 255u64) as u32)  ob(((DMAX>>8u64) & 255u64) as u32)  ob(((DMAX>>16u64) & 255u64) as u32)  ob(((DMAX>>24u64) & 255u64) as u32)
+        let mut d2:u64=0u64  while d2<DMAX { ob(DATB[d2] as u32)  d2=d2+1u64 }
+    }
+    pstr("\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)
+    pdec(total)  pstr("u64 }\n~" as u64)
+    return 0u64
+}

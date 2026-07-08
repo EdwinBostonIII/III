@@ -70,6 +70,20 @@ else
     fail=1
 fi
 
+# --- S4-loc: parse.c behavioral differential (localizes S4's parse-runtime divergence) ---
+# _parseharness runs lex->ast->parse on a fixed snippet and prints "PARSE ok/ec/nd".  gcc (separate
+# objects) vs ccsv-per-TU->svir_ld->interp.  Today: gcc "ok=1 ec=0 nd=1" ; interp "ok=0 ec=2 nd=1" --
+# the AST builds correctly (nd matches) but parse records 2 SPURIOUS errors (deterministic, first code
+# a corrupted 0x111790).  This is the sharp localizer for the S4 frontier: the bug is in parse.c's
+# error-recording path, NOT lex, NOT the ast, NOT the link.
+if [ -f "$ROOT/COMPILER/BOOT/_parseharness.c" ]; then
+    gcc -I "$ROOT/COMPILER/BOOT" "$ROOT/COMPILER/BOOT/_parseharness.c" \
+        "$ROOT/COMPILER/BOOT/lex.c" "$ROOT/COMPILER/BOOT/ast.c" "$ROOT/COMPILER/BOOT/parse.c" \
+        -o "$W/_ph_gcc.exe" 2>/dev/null
+    phg=$("$W/_ph_gcc.exe" 2>/dev/null | head -1)
+    say "S4-loc parse-diff : gcc[$phg] -- the interp target; parse-harness differential is the frontier's microscope (see DOCS/III-LAMBDA0-LINK-CAMPAIGN.md)"
+fi
+
 if [ "$fail" -eq 0 ]; then say "SEED-SOVEREIGN GREEN -- the linked whole-seed compiles byte-for-byte as gcc iiis-0."
-else say "SEED-SOVEREIGN: S1-S3 PROVEN (link+verify, host boundary, no-arg parity); S4 is the named open frontier (parse-runtime)."; fi
+else say "SEED-SOVEREIGN: S1-S3 PROVEN (link+verify, host boundary, no-arg parity); S4 is the named open frontier (parse.c error-recording runtime; _parseharness isolates it)."; fi
 exit $fail

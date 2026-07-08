@@ -132,3 +132,28 @@ suspects, in order: (1) the lex→parse token hand-off wiring in iii_run_pipelin
 (2) a parse.c internal state-machine op that structural-zero can't see (an uninit read, a wrong
 branch); (3) a residual ccsv codegen bug in a construct parse.c uses that lex.c doesn't. Then S4 goes
 byte-identical and run_completion.sh's seed_sovereign member closes.
+
+## Parse-runtime frontier LOCALIZED (session 3, cont.) — _parseharness differential
+
+Built `COMPILER/BOOT/_parseharness.c` (the parse twin of _lexharness): runs lex→ast→parse on a fixed
+snippet, prints `PARSE ok=<0|1> ec=<errcount> nd=<ndecl>` + per-error `code/line/col/saw`. Uses the
+public headers (separate objects) so the per-TU static sha256 helpers don't collide. Differential:
+
+| route | output |
+|---|---|
+| gcc (lex.c+ast.c+parse.c) | `PARSE ok=1 ec=0 nd=1` |
+| ccsv-per-TU → svir_ld → interp | `PARSE ok=0 ec=2 nd=1` + `err[0] code=1118864 line=0 col=0 saw=0` + `err[1] code=2 ...` |
+
+**Pinpointed:** the AST builds correctly through the interp (`nd=1` matches gcc), so lex, ast, and the
+link are all fine. parse.c records **2 spurious errors** that gcc doesn't — `err[0]`'s code is a
+DETERMINISTIC garbage `0x111790` (a corrupted struct field, stable across runs → a layout/logic bug,
+not an uninit read). The bug is isolated to **parse.c's error-recording path**, exercised only at full
+parse execution (structural-zero can't see it; lex.c's harness passes; this is the first time parse.c
+has ever run).
+
+**The next campaign (S4 close):** dis-trace which parse.c op records the two errors on
+`module m\nfn f() -> u64 { return 7u64 }` — likely the decl-loop termination / EOF handling or the
+error-struct write (the 0x111790 code suggests a wrong field offset or a pointer written where the
+`int code` belongs). The `_parseharness` differential makes each hypothesis a ~90s rebuild-and-compare.
+When ec matches (0) and the compile is byte-identical, run_seed_sovereign S4 goes green and
+run_completion.sh's seed_sovereign member closes — FULL CAPABILITIES in the plan-of-record sense.

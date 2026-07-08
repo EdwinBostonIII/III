@@ -136,6 +136,23 @@ if [ $xgrc -eq 99 ] && [ "$xdd" = "ok" ] && [ $xrun -eq 99 ]; then
   say "A6 CROSS GERM : x86-64 Linux germ REGREW sum's AArch64 ELF byte-identically ON LINUX; the regrown binary runs at oracle under qemu (rc=99).  Toolchain-for-ISA-B carried as SVIR, regrown on ISA-A."
 else say "FAIL A6 cross-germ (emit=$xgrc ddc=$xdd run=$xrun)"; fail=1; fi
 
+# ---- W: Γ2b leg -- the SAME translator modules on the WASM route (third independent host) ----
+# One translator SVIR, three executing substrates (PE-native, wasm-under-node, and via T4 Linux-native):
+# stdout bytes must be IDENTICAL everywhere.  node's harness writes putc bytes raw to fd 1.
+wfail=0
+for l in sum fact isqrt; do
+  gcc "$W/svir_wasm.o" "$W/comp_$l.o" -o "$W/tw_c$l.exe" 2>/dev/null || { wfail=1; continue; }
+  "$W/tw_c$l.exe" > "$W/comp_$l.wasm" 2>/dev/null
+  timeout 30 node "$S/run_wasm.mjs" "$W/comp_$l.wasm" > "$W/rgw_$l.elf" 2>/dev/null
+  cmp -s "$W/rgw_$l.elf" "$W/native_$l.elf" || { say "FAIL W byte-match(x86) $l"; wfail=1; }
+  gcc "$W/svir_wasm.o" "$W/compa_$l.o" -o "$W/tw_ca$l.exe" 2>/dev/null || { wfail=1; continue; }
+  "$W/tw_ca$l.exe" > "$W/compa_$l.wasm" 2>/dev/null
+  timeout 30 node "$S/run_wasm.mjs" "$W/compa_$l.wasm" > "$W/rgw_$l.a64.elf" 2>/dev/null
+  cmp -s "$W/rgw_$l.a64.elf" "$W/native_$l.a64.elf" || { say "FAIL W byte-match(a64) $l"; wfail=1; }
+done
+if [ $wfail -eq 0 ]; then say "W WASM ROUTE  : translator modules emitted IDENTICAL bytes under node (x86+a64 targets, 3 programs) -- one waist object, three independent executing substrates"
+else fail=1; fi
+
 # ---- T5: teeth -- flip one data byte in a composed module ----------------------
 "$W/svir_compose.exe" "$W/elfw.svbin" "$SP/svir/sum.svir" > "$W/comp_p.iii" 2>/dev/null
 # flip one program byte inside the .iii wrapper is brittle; flip the .svir input instead and recompose

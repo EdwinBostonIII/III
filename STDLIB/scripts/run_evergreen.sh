@@ -50,6 +50,22 @@ for f in "$ROOT/STDLIB/sovir"/*.iii "$ROOT/STDLIB/sovtc"/*.iii; do
     # crt0 is the RUNTIME SHIM (the cstart argv bridge every sovereign exe links), not a standalone
     # program -- sovbuilding it "as a program" would be a category error, not a claim.
     if [ "$name" = "crt0" ]; then continue; fi
+    # leading-underscore files are probe VEHICLES by tree convention (_vprobe, _svir_ci_oob, ...):
+    # they link against harness-provided modules (gen_svir etc.) and are owned by their own gates.
+    case "$name" in _*) continue;; esac
+    # *_w files are WAIST-SUBSET sources (the iiisv dialect: suffix-less literals, svir_putc builtin)
+    # compiled BY iiisv into anchor-verified SVIR -- not win64 standalone programs.  Their gate is
+    # run_retarget.sh (a Γ leg below): anchor + byte-match + fixpoint, on every host route.
+    case "$name" in *_w) continue;; esac
+    # PAYLOAD CONSUMERS: modules whose main() consumes the SVIR payload contract (extern svir_ptr/
+    # svir_len/verify_body, or a "svir_prog.iii"/"gen_svir.iii" companion).  They are main-bearing
+    # LIBRARIES -- a translator/dumper/verifier/interp is meaningless without a payload module linked
+    # in, so building one standalone leaves those externs unresolved and it exits 127.  Their REAL
+    # gates link them WITH a real payload and prove them byte-exact: run_host_matrix.sh (6 routes) and
+    # run_retarget.sh (byte-match + fixpoint) -- both Γ legs below.  Excluding them here is the same
+    # category call as crt0 (a shim, not a program), and it is what makes the FULL gate honest: before
+    # this rule the unfiltered run was RED on svir_x86/svir_elf/... (127!=99), a discovery over-reach.
+    if grep -qE 'extern[^\n]*fn (svir_ptr|svir_len|verify_body)|from "(svir_prog|gen_svir)\.iii"' "$f"; then continue; fi
     printf '%s' "$name" | grep -qE "$FILTER" || continue
     ran=$((ran+1))
     # Modes: kat (bare-run must exit 99) / driver (argv tool: must LOAD + exit DELIBERATELY on empty
@@ -104,11 +120,27 @@ for f in "$ROOT/STDLIB/sovir"/*.iii "$ROOT/STDLIB/sovtc"/*.iii; do
 done
 
 echo "-------------------------------------------------------------"
+# ---- Γ legs (Γ5, the living-invariant extension; full runs only, not filtered iterations):
+# host matrix (every route agrees) + retargeting closure (translators self-translate to fixpoint)
+# + germination (the spore regrows on virgin prefixes) -- each a full gate with falsifiers.
+if [ "$FILTER" = "." ]; then
+    for g in sovir/run_host_matrix.sh sovir/run_retarget.sh sovir/run_germinate.sh; do
+        gname="$(basename "$g")"
+        if bash "$ROOT/STDLIB/$g" > "$ROOT/COMPILED/_evg_${gname%.sh}.log" 2>&1; then
+            printf '[evergreen] PASS %-32s (Γ gate green)\n' "$gname"; pass=$((pass+1))
+        else
+            printf '[evergreen] FAIL %-32s (Γ gate red; log COMPILED/_evg_%s.log)\n' "$gname" "${gname%.sh}"
+            fail=$((fail+1)); REDS+=("$gname Γ-gate")
+        fi
+        ran=$((ran+1))
+    done
+    echo "-------------------------------------------------------------"
+fi
 echo "[evergreen] programs: ran=$ran pass=$pass fail=$fail"
 if [ "$fail" -gt 0 ]; then
     printf '[evergreen] RED: %s\n' "${REDS[@]}"
     echo "EVERGREEN: FAIL"
     exit 1
 fi
-echo "EVERGREEN: PASS -- every standalone program self-builds sovereignly (witness=0) + no stubs."
+echo "EVERGREEN: PASS -- every standalone program self-builds sovereignly (witness=0) + no stubs + the Γ living invariant (host matrix, retargeting fixpoint, spore germination) holds."
 exit 0

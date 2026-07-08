@@ -223,8 +223,11 @@ var DMAX : u64 = 0u64
 
 fn main(argc: i32, argv: u64) -> u64 {
     _setmode(1i32, 0x8000i32)
-    if argc < 2i32 { perr("usage: svir_ld <response-file>\n~" as u64)  return 2u64 }
+    if argc < 2i32 { perr("usage: svir_ld <response-file> [map]\n~" as u64)  return 2u64 }
     let pp : *u64 = argv as *u64
+    let mut mapmode : u32 = 0u32                    /* argv[2]=="map" -> emit the SYMBOL MAP (G gidx tu name / U gidx name) instead of the module: the debugging companion for interp call-traces */
+    if argc >= 3i32 { let a2:*u8=pp[2u64] as *u8
+        if (a2[0u64] as u32)==109u32 { if (a2[1u64] as u32)==97u32 { if (a2[2u64] as u32)==112u32 { if (a2[3u64] as u32)==0u32 { mapmode=1u32 } } } } }
 
     /* read the response file */
     let rp : *u8 = pp[1u64] as *u8
@@ -313,6 +316,20 @@ fn main(argc: i32, argv: u64) -> u64 {
             }
             fj=fj+1u32 }
         t=t+1u32 }
+
+    if mapmode == 1u32 {   /* SYMBOL MAP: every def's global index + TU + name (from .names), then the unresolved tail */
+        t = 0u32
+        while t < TUN { let bm:u32=TV_FTB[t as u64]  let nm2:u32=TV_NF[t as u64]  let mut fm:u32=0u32
+            while fm < nm2 { let km:u64=(bm+fm) as u64
+                if F_IMP[km]==0u32 { pstr("G ~" as u64)  pdec(F_GI[km] as u64)  pc(32u32)  pdec(t as u64)  pc(32u32)
+                    let mut zm:u64=0u64  while zm<F_NML[km] { pc(ab(F_NMO[km]+zm))  zm=zm+1u64 }  pc(10u32) }
+                fm=fm+1u32 }
+            t=t+1u32 }
+        let mut um:u32=0u32
+        while um < UN { pstr("U ~" as u64)  pdec(U_GI[um as u64] as u64)  pc(32u32)
+            let mut zu:u64=0u64  while zu<U_NL[um as u64] { pc(ab(U_NO[um as u64]+zu))  zu=zu+1u64 }  pc(10u32)  um=um+1u32 }
+        return 0u64
+    }
 
     /* data image: copy each TU's data AT its membase; then //D patches (8B LE global fn index) */
     t = 0u32

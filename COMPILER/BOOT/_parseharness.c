@@ -22,10 +22,49 @@ static void put_u(unsigned int v) {
 }
 static void put_s(const char *s) { int i = 0; while (s[i] != 0) { putchar(s[i]); i = i + 1; } }
 
-int main(void) {
-    const char *src = "module m\nfn f() -> u64 { return 7u64 }\n";
-    unsigned long len = 0;
-    while (src[len] != 0) len = len + 1;
+extern void *malloc(unsigned long);
+extern int fopen(const char *, const char *);
+extern long fread(void *, long, long, int);
+extern int fclose(int);
+extern int fseek(int, long, int);
+extern long ftell(int);
+
+int main(int argc, char **argv) {
+    /* Read source from argv[1] via the SEED'S EXACT read path (fopen/fseek/ftell/rewind-via-fseek/
+     * fread into a malloc'd heap buffer).  If multi-char parsing fails HERE but not with a static
+     * literal, the read path (fread shim / heap position) is the culprit -- else it's the 19-TU env. */
+    if (argc < 2) { put_s("noarg\n"); return 2; }
+    int f = fopen(argv[1], "rb");
+    if (!f) { put_s("noopen\n"); return 3; }
+    fseek(f, 0, 2);
+    long len = ftell(f);
+    fseek(f, 0, 0);
+    char *src = (char *)malloc((unsigned long)len + 1);
+    long got = fread(src, 1, len, f);
+    fclose(f);
+    src[got] = 0;
+    len = got;
+
+    /* TOKEN-STREAM DUMP: an independent lex pass over the SAME source, printing each token's
+     * kind + int_value.  gcc vs interp must be IDENTICAL -- if they diverge, the bug is lex (or the
+     * token struct read); if identical, it's parse-logic reading a correct token wrong. */
+    {
+        iii_lex_state_t *lx2 = iii_lex_create((const unsigned char *)src, len, "t.iii");
+        if (lx2) {
+            iii_token_t tk; int g = 0; int rc = 1;
+            put_s("TOKS");
+            /* iii_lex_next: 1=success(not EOF), 0=clean EOF, -1=error */
+            while (g < 64) {
+                rc = iii_lex_next(lx2, &tk);
+                if (rc < 0) { put_s(" LERR"); break; }
+                put_s(" k="); put_u((unsigned int)tk.kind);
+                if (tk.int_value != 0) { put_s("v"); put_u((unsigned int)tk.int_value); }
+                if (rc == 0) break;   /* EOF token emitted, stop */
+                g = g + 1;
+            }
+            putchar('\n');
+        }
+    }
 
     iii_lex_state_t *lex = iii_lex_create((const unsigned char *)src, len, "t.iii");
     if (!lex) { put_s("Lnull\n"); return 1; }

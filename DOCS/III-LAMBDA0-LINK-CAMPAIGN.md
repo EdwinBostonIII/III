@@ -241,3 +241,44 @@ Root = a ccsv (or interp) op that fails to zero-extend a 32-bit intermediate bef
 as 64-bit — exercised for the FIRST time now the full compile runs. Next: trace the exact value the cg's
 `for i<decls.count` / `switch(d->kind)` reads (fn indices: iii_ast_root_module G108, iii_ast_get G132,
 iii_ast_list_at G136, cg_r3 emit_function G310). S4 = rc 16 (was 11).
+
+## S4 ROOT CAUSE PINNED (session 6, 2026-07-08): ccsv mis-compiles `p->arr[p->cnt++] = v` — the AST arena append
+
+The session-5 "Next" was executed with an instrumented interp (`STDLIB/build/_s4probe/svir_interp_tr.iii`:
+per-G call counters gated on the first cg fwrite + arg/ret rings on G132/G136).  Measured, on the repro
+`module sovcap / fn main() -> u64 { return 7u64 }` (seed_rc=16, fw=5, exactly as session 5):
+
+- `c108=2 c132=4 c136=2 c310=0` — the cg's TWO module fetches ran, **the decl loops DID iterate**, and
+  `emit_function` was never dispatched.
+- G136 (list_at) received the decls list as the by-value chunk `4294967297` = `{offset=1, count=1}` —
+  **`decls.count` is CORRECT**; the garbage-high-32 / count-reads-0 hypotheses are DEAD at this level.
+- G136 **returned 48** — and G132 then received `a=48` (pool 0, slot 48: not a node index; the sentinel
+  path swallows it, `d->kind` matches nothing, the loop ends silently; rc=16 from the empty emission).
+  The module node itself is `805306372` = 0x30000004 (pool 3, slot 4) — 48 = 0x30 is its POOL BYTE.
+- The full-run ring `d=0:48 ×4, d=5:48 ×2` (fw-phase:ret for every list_at on THAT list): **48 from the
+  first pre-cg read** — the arena slot was corrupt from PARSE-time write.  Corollary: sema's "green" was
+  VACUOUS — sema.c:832's walk got the same 48, iii_ast_get'd the sentinel, and `continue`d past the one
+  decl; it type-checked NOTHING and reported no errors.
+
+The write site is `ast.c:1227` — `ast->list_arena[ast->list_used++] = node_index;` — and the C SHAPE
+mis-compiles, reproduced OUTSIDE the seed (falsifiers COMMITTED as `STDLIB/sovir/_s4_probe4.c` /
+`_s4_probe4b.c`; scratch copies + the instrumented interp in `STDLIB/build/_s4probe/`, recreatable
+from the hook description above):
+- `probe4b.c` (the EXACT shape: helper `app(A *ast, unsigned v) { ast->arena[ast->used++] = v; }`):
+  gcc=99 ; ccsv->interp=**7** ; ccsv->svir_x86->sovereign-exe=**7**.  Both sovereign routes agree ->
+  the defect is in CCSV'S EMITTED SVIR (the interp is exonerated; the two independent executors
+  faithfully run the same wrong ops).  used++ advances; the STORED VALUE reads back wrong.
+- `probe4.c` (dot-variant on globals: `g.arena[g.used++] = v`): gcc=99, ccsv->interp=**20** — the
+  post-increment on the index FIELD is LOST entirely (used stays 1).  A sibling handler, differently
+  broken.
+- Contrast probes that PASS both routes (the shapes the cg loop itself uses): `probe1.c` (depth-3 union
+  chain in a loop condition + chain-to-struct by-value arg) = 99/99; `probe2.c` (+ nested-call-arg,
+  const, call-init pointer) = 99/99/99.  The READ side (`arena[list.offset + i]`, ast.c:1409) scales
+  correctly — only the append's indexed-store-with-member-post-increment shape corrupts.
+
+**Class**: ccsv pointer-FIELD indexed STORE where the index is a MEMBER POST-INCREMENT — the store
+misses/mis-scales the element write (48 = the value's top byte visible at the correct element offset =
+a ~3-byte-low landing), and in the dot-variant the ++ never lands.  The fix belongs in ccsv's pstmt
+store walker (the `p->arr[i] = v` family, index-expression = `member++`); falsifiers = probe4/probe4b
++ rerun run_seed_sovereign S4 (rc must move past 16) + the _tr trace (list_at must return 0x30000003-
+class indices and c310 must go >0).  NOT YET FIXED — next session's first edit.

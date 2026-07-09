@@ -537,3 +537,33 @@ MEM grows 4 MiB -> 128 MiB (decl + mb/msb bounds), argv staging relocates to the
 HEAP_BASE=1MiB) untouched.  x86/wasm backend memory models are NOT yet grown -- they never execute
 the seed (KATs only); ledgered as the germination-side follow-up when a sovereign-native seed run
 lands.
+
+### Session 8, the 12-class bisect state (LIVE frontier — precise flip pair secured)
+
+The mhash/membase leads were RIG ARTIFACTS: ccsv resolves `#include "lex.h"` relative to the MAIN
+FILE's directory — probes built in the scratch dir silently DROP the include and every lex/parse
+call compiles as an undeclared no-op returning its LAST ARG (the "TOKS k=0 / rc=&tk=917000" class).
+ccsv should fail LOUDLY on an unresolved local include (improvement, not yet landed).  All rig
+files must live in COMPILER/BOOT.
+
+Honest facts (all re-measured with in-BOOT rigs, 24_var_global, 19-TU links):
+- The seed's LEXER is correct (lookahead.kind store-watch = the clean harness's token stream).
+- sema records: 1× "duplicate declaration of 'main'" + 3× "parser produced an error node"
+  (records dumped from sema state @heap; the messages' byte-2 corruption is cosmetic).
+- _parseharness (±mhash, ±argv-parse, 4-TU/19-TU/20-TU-with-main-passenger): ALL CLEAN.
+- main.c verbatim with ONLY the iii_run_pipeline call redirected to a reconstructed pipeline
+  (bis_pipeline, same 8-arg signature, same statements incl. sema..emit graft): CLEAN end-to-end.
+- Variant algebra on iii_run_pipeline (true text, in place): prologue+parse only (P) = GREEN;
+  +ring (R) = GREEN; +sema/sid (Q, S, even with the hexad/acc/ceil inits dropped) = RED 12;
+  fn moved to file end (T) = RED (position exonerated).
+- THE ANTIDOTE: the reconstruction's report block (`ec = iii_parse_error_count(p); nd; mod =
+  iii_ast_get(root); 4 put-calls; putchar`) inserted between parse and sema masks the defect
+  (U2 GREEN); removing it (U3) or leaving only the ec line (U4) = RED.  One ~7-line insertion
+  in ONE function flips the sema verdict — a compile-state boundary inside ccsv's cfn for this
+  fn (NOT temp-slot saturation: pstmt resets LN=NLOC per statement).
+
+NEXT (fresh context): diff the compiled fn bodies of the U2(green) vs U4(red) single-TU modules
+(m_gen__mainprobe.iii in the scratch kit) — the first structural divergence inside
+iii_run_pipeline's body names the miscompiled construct directly.  Recipes for every variant are
+in the session transcript; the scratch kit (ccsv_fix.exe, m_B.rsp chain, svir_interp_dbg5) rebuilds
+from the committed tree.

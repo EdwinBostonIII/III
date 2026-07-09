@@ -1,0 +1,8 @@
+/* sq03 -- the ATTESTABLE cell: a straight-line expression in the exact
+ * shape zk_iiisv_attest soundly proves (CONST 5, CONST 257, MUL, CONST 7,
+ * ADD, RETURN).  The square asserts N=E=S on it; run_meaning_zk.sh then
+ * STARK-attests THE SAME emitted bytes with forgery rejection -- the
+ * meaning the three bearers agree on becomes a zk-proven execution. */
+module sq03
+
+fn main() -> i64 { return 5 * 257 + 7 }

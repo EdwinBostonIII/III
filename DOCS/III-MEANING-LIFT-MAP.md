@@ -211,6 +211,15 @@ spore. Stated as horizon with named unknowns (proof-engineering scale), not sche
 > differential (run_meaning) then holds evaluator ≡ native ≡ kernel on these vectors forever.
 > Deeper step-laws (symbolic theorems over eval's AST) remain the named proof-engineering horizon.
 >
+> **Θ5(c) rung 0 EXECUTED (2026-07-09 s2): ATTESTED MEANING.** `run_meaning_zk.sh` over
+> `sq03_line` (the attestable straight-line cell): ONE iiisv2 emission feeds both arms — (1) the
+> commuting square holds on it (N=E=S rc=12), (2) `zk_iiisv_attest` parses THE SAME gen_svir bytes
+> and STARK-proves the execution (honest accepted; a forged stack-top REJECTED BY THE MATH).
+> Verdict: `[mzk] GREEN`. An execution whose meaning all three bearers pin is now zk-proven —
+> byte-shared by construction. Named residual (the gadget's own header): straight-line only;
+> locals/loops arithmetization is the zkVM frontier, and corpus-wide attestation rides Γ1 with Θ2.
+> The square gate itself now sweeps 3/3 (sq01 arith+loops, sq02 memory, sq03 the attested cell).
+>
 > **Θ2 rung 0 (2026-07-09 s2): the square opens WITHOUT waiting for Γ1.** Route S exists today:
 > `iiisv2` (.iii→SVIR, the DDC shunting-yard emitter) → `gen_svir` module → `svir_interp` (the SVIR
 > reference executor) — an execution path forking at the SOURCE, sharing nothing below the front.

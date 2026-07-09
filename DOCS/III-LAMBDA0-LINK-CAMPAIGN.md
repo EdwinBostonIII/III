@@ -567,3 +567,63 @@ NEXT (fresh context): diff the compiled fn bodies of the U2(green) vs U4(red) si
 iii_run_pipeline's body names the miscompiled construct directly.  Recipes for every variant are
 in the session transcript; the scratch kit (ccsv_fix.exe, m_B.rsp chain, svir_interp_dbg5) rebuilds
 from the committed tree.
+
+### Session 8c (THE 12-class ROOT CAUSE): `structptr + N` used stride 1, aliasing sema's arena
+
+The 12-class (≈30 of 54 corpus reds, rc=12 SEMA_FAIL) is ONE ccsv codegen bug, found by a
+descend-the-abstraction hunt with non-perturbing observation.
+
+**Localization chain (each step MEASURED, rigs in COMPILER/BOOT so `#include "lex.h"` resolves):**
+1. `_semharness.c` (lex→ast→parse→SEMA, the _parseharness successor) reproduced it minimally:
+   PARSE ok=1 ec=0 nd=2 (correct) but SEMA ok=0 ec=4.  Dropped 10 TUs (9-TU link) — same error,
+   so intrinsic to the sema path, not membase.
+2. The decl walk is byte-identical to gcc (D0 kind=74, D1 kind=4) — parse's AST is correct; sema
+   alone errs.  Instrumenting sema_emit_error (a DIFFERENT fn, non-perturbing to sema_pass1_module)
+   caught the 4: `code=1 "duplicate declaration of 'main'"` + 3× `code=2` (IDENT_UNRESOLVED, the
+   three `counter` refs).  All cascade from D0 (var counter) registering under the name 'main'.
+3. sema_decl_name returns the CORRECT names (counter/main).  sema_src_text_dup RECEIVES the correct
+   names.  Yet sema_decl_table_lookup("main") for D1 finds a stored entry ALREADY named 'main' —
+   D0's "counter" was overwritten.  Adding ANY local to sema_pass1_module made it pass (a Heisenbug
+   — shadow-frame layout shift), confirming a data corruption, not a logic error.
+4. The overwrite is the ARENA: sema_arena_strdup returns the same address each call, so D1's "main"
+   clobbers D0's "counter".  Faithful heap-arena reproducers pinned it to
+   `nc->base = (uint8_t*)(nc + 1)`: **`nc + 1` computed nc + 1 BYTE, not nc + sizeof(chunk_t)**, so
+   base overlapped the chunk header (`used`), and every alloc returned base+used with a corrupted
+   `used`.
+
+**Root cause (ccsv eprim, one line):** `EV_PSZ` (pointer-arithmetic stride) was set from `LPSZ`
+only.  The `TypedefName *p` local-decl arm sets `LPT` (so `p->field` resolves) but leaves `LPSZ=0`,
+so a struct-typedef pointer's `p + N` scaled by 0→1.  (`p[i]` indexing was fine — separate estride
+path with the struct size; only explicit `+`/`-` arithmetic broke.)  **Fix:** in the local-value
+eprim tail, when `LPSZ==0` and `LPT>=0` (a struct pointer), set `EV_PSZ = STSZ(LPT)`.  Deref (`*p`)
+and field (`p->f`) use LPT/fieldoff not EV_PSZ, so unaffected; covers locals AND params.
+
+**Falsifier `_s4_probe15.c`** (the faithful arena: three strings interned into one chunk must be
+byte-ADJACENT and all readable — adjacency defeats a fresh-chunk false-pass): gcc 99 / pre-fix ccsv
+≠99 / post-fix 99.  `_semharness.c` on 24_var_global: SEMA ok=0 ec=4 → **ok=1 ec=0**.  Probes 8-14
+all hold; floor + fnptr green.  (A separate residual — the pointer-DIFFERENCE `(uint8_t*)(p+1) −
+(uint8_t*)p` and direct `p->ptrfield[i]` field-index store — is ledgered but the seed's arena uses
+neither on its hot path.)
+
+### Session 8c, the EV_PSZ triad (struct-ptr stride) — and its two seed-relapse follow-ons
+
+The struct-pointer stride fix (struct-typedef pointer reads set EV_PSZ=STSZ) fixed the corpus
+12-class but relapsed S4: the trivial `return 7` emitted `movabsq $0x37` (55 = ASCII '7').  EV_PSZ
+is a sticky global (set by eprim, consumed by ebin's ptr-arith scaling); making struct pointers
+carry a NON-ZERO stride exposed two places that never reset it (harmless while struct-ptr EV_PSZ
+was 0):
+
+1. **Casts** didn't set EV_PSZ.  `(uint8_t*)structptr + N` kept the struct's STSZ stride instead of
+   1.  Fix: `cast_pointee(t)` computes the cast target's pointee size (single `*` → base/STSZ ; `**`
+   → 8 ; no `*` → 0) and the `(TYPE)expr` arm sets `EV_PSZ=cpsz`; the opaque-pointer and enum cast
+   arms set `EV_PSZ=0`.
+2. **Function-call results** didn't reset EV_PSZ.  Reading a struct-pointer ARG (`iii_peek_byte(st)`)
+   set EV_PSZ=STSZ; the call left it there, so `iii_peek_byte(st) - '0'` scaled `'0'`(48) by STSZ —
+   the seed's digit lexer returned garbage, so `7` reached codegen as 55.  Fix: after `ecall`, set
+   `EV_PSZ = fn_ret_psz(FNT[fi])` (the callee's RETURN pointee, 0 for a scalar-returning fn).
+
+Both are the CORRECT C semantics (a cast/ call result's pointee stride is the target/return type's,
+never the operand's), latent until struct pointers first carried a stride.  Sanity probes:
+`(uint8_t*)structptr + 8` → 8 (stride 1); `getb(structptr) - 48` → 7.  With all three:
+**S4 GREEN (byte-identical), SEED-SOVEREIGN GREEN**, probes 8-15 all hold, ccsv.o + ccsv(sema.c)
+run-to-run deterministic.

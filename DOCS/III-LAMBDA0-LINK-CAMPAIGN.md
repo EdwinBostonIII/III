@@ -322,3 +322,69 @@ Still open (falsifiers committed, non-blocking for S4): the dot-global pointer-f
 (`g.arena[1]` → inline-array mangle; _s4_probe4b rc=7) and dot-global indexed STORE with member
 post-inc (`g.arena[g.used++]=v` loses the ++; _s4_probe4 rc=20) — the seed never uses these shapes;
 `sizeof(unsigned int)` evaluates as 8 (two-token type; `sizeof(uint32_t)`=4 is correct).
+
+## S4 CLOSED (session 7, 2026-07-08): the sovereign seed compiles BYTE-IDENTICAL — 4 defects, each probe-pinned
+
+**THE GATE PRINTS**: `S4 compile parity : GREEN -- interp(linked) .o BYTE-IDENTICAL to gcc iiis-0.
+THE SOVEREIGN SEED COMPILES.` (`run_seed_sovereign.sh` rc=0, all four stages green; the interp'd,
+ccsv-compiled, svir_ld-linked 19-TU seed compiles `fn main() -> u64 { return 7u64 }` to a 706-byte .o
+that `cmp`s equal to gcc-built iiis-0's, .s byte-identical too, exit codes 0==0.)
+
+Session 6b left rc=16 with `.text` 0x0 + `main` symbol missing.  The .s diff (both survive as
+`_sov_fn_{g,s}.o.s`) split the symptom in two: the name-bearing strings were EMPTY and every
+FORMATTED instruction line was a bare newline while `cg_write_str` literals landed intact.  Four
+root causes, in discovery order:
+
+1. **ccsv vsnprintf/vsprintf/snprintf returned constant 0** (`econst(0)` after `emit_fmt`) — read
+   directly from the builtin's lowering.  cg_r3's `emit_line`/`cg_writef` copy `buf[0..n)` with
+   `n = vsnprintf(..)`, so every formatted line wrote 0 bytes + `'\n'`.  Fix: a `t0` temp captures
+   the dst start; the builtins return `td_final − t0` (the written count, C semantics).  `emit_fmt`
+   also gained the `%l+` length-modifier skip (`%llx/%llu/%lld` → `%x/%u/%d`; they were emitting
+   `lx`/`lu` literals).  Falsifier `_s4_probe8.c` (the emit_line shape: 2 named + varargs,
+   `sizeof buf` paren-less, n gating the copy): baseline interp=60, now 99.
+2. **Struct-valued ASSIGNMENT was missing** — the decl-INIT forms (`T t = p->field` / `= f()` /
+   `= *p` / `= var`, ccsv 1577-1587) existed; the bare ASSIGN statements fell through to scalar
+   paths: `t = st->lookahead` clobbered a slot (frame bytes stayed zero), `*out = t` stored 8 bytes
+   of the RHS *address* (`emit_av(8)` on a >8B pointee), `nn->u.fn_decl.name = iiip_text_of(&name)`
+   and `g_name = f()` were parsed then DROPPED (line-1872 fallback / aisc≠1 skip).  parse.c's token
+   flow (advance → expect `*out=t` → `text_of` → fn_decl store, plus the lookahead2 promote
+   `st->lookahead = st->lookahead2`) is EXACTLY these shapes — the fn name was zero IN THE AST, so
+   emit honestly wrote `.asciz ""`, no `.global main`, label `L_`.  Fix: `srhs_ok` (pure predicate)
+   + `emit_srhs_addr` (RHS address into a temp: var / `*ptrExpr` / `p->field`) + `emit_scopy_to`
+   (byte-loop copy, mirrors `emit_bcopy_v`), grafted into FOUR dest sites — assign (≤8B packed
+   STORE64 for any rvalue incl. calls/ternaries + >8B copy + `= f()` sret), deref-dest, plain
+   arrow-field (≤8B packed / >8B copy / sret; `fieldptsz==0` excludes struct-POINTER fields —
+   those stay 8B scalar stores), arrow-dot-chain final-field.  Falsifiers `_s4_probe9/9b/10/10b/10c.c`
+   (read side was already green — 9/9b pinned that; 10=91, 10b=50, 10c=40 baselines) — all 99 now.
+3. **`cg->pe_static_fp[i] = NULL` wrote byte 0 AT ADDRESS i** — `const char *pe_static_fp[128]`
+   is an INLINE ARRAY of pointers; `fieldptsz>0` (char pointee = 1) sent `p->field[i]` store AND
+   read through the scalar-POINTER deref arm (LOAD64 the field, +i×1, 1-byte access).  emit_function
+   (G310)'s reset loop swept [0,127] with zeros — measured live by the interp value-tracer
+   (`LW=128[0,127]`) — wiping main.c's low data image incl. the `"rb"` mode literal at addr 63 used
+   by `iii_mhash_file`'s read-back `fopen` → `fopen(path, "")` → NULL → **silent EMIT_FAIL 16 with a
+   byte-correct .o already on disk** (both error fprintfs are unregistered no-ops).  The four
+   chain-`[k]` sites already carried `fieldisarr` guards; the two DIRECT `p->field[i]` arms (store
+   1862, read 1275) now do too.  Falsifier `_s4_probe11.c` (pointer-array field: reset loop +
+   neighbor integrity + element round-trip + low-memory canary): all 99.
+4. **`ferror` was unregistered + unshimmed** — `iii_mhash_file` calls it on every read-back (706 <
+   8192 → first fread iteration).  Registered in ccsv's `crt_tail` (import 0x8A), shimmed in
+   `svir_interp` (host passthrough).
+
+**The microscope that found #3/#4** (now a permanent gated instrument, `FPRINTF_DBG` in
+svir_interp.iii, OFF by default — the ARGV_DBG precedent): silent-fprintf fmt dump, per-fopen
+path+mode+result, system/ferror rc traces, low-address write watch with `LW=count[min,max]`
+extent, and the startup data-image window.  The decisive traces: `FO=_s7f.o,63=:0` (mode string
+EMPTY at a KNOWN-carried address) then `W!=310@0+1=0 … LW=128[0,127]` (the writer + exact extent).
+
+**Verification (all measured this session)**: probes 8/9/9b/10/10b/10c/11 = **99 on gcc + interp +
+svir_verify + sovereign-x86-native** (sovas+sovlink, 4-way each); `run_ccsv.sh` rc=0 with the
+whole-seed floor **verify_fail 0/865** (twice: after the struct/vsnprintf fixes, again after
+crt_tail+fieldisarr); `run_fnptr_gate.sh` ALL PASS (the edited interp's teeth);
+`run_seed_sovereign.sh` **rc=0, S1-S4 ALL GREEN** — S4 stays in the gate as regression teeth.
+
+Open (ledgered, seed-unused, falsifiers named): global `char *X = "lit";` pointer-init reads wrong
+(probe11's first draft hit it; the seed has ZERO such globals — grep-verified across all 19 TUs);
+the session-6b dot-global leftovers above; `%0Nx`-style width pads in emit_fmt (main.c diagnostics
+only — never on the compile-success path); the interp's BADW const-image watchdog counts the seed's
+legitimate writable statics (g_orch etc.) because ccsv carries them INSIDE the data image — a
+layout-classification refinement, not a correctness defect (the byte-identical .o is the proof).

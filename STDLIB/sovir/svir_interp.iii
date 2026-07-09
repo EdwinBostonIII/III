@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn fwrite(buf: u64, sz: u64, n: u64, f: u64) -> u64 from
 extern @abi(c-msvc-x64) fn fseek(f: u64, off: i64, whence: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn ftell(f: u64) -> i64 from "msvcrt"
 extern @abi(c-msvc-x64) fn rewind(f: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ferror(f: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn fgets(buf: u64, n: i32, f: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn clock() -> i64 from "msvcrt"
 extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
@@ -57,6 +58,8 @@ fn pstr2(a:u32,b:u32){ putchar(a as i32) putchar(b as i32) }
 /* ---- Lambda-0 HOST SHIMS: import-name dispatch to the CRT (whitelist only) ---- */
 var SHIM_HIT : u32 = 0u32
 var ARGV_DBG : u32 = 0u32   /* TEMP */
+var FPRINTF_DBG : u32 = 0u32   /* S4 microscope (OFF by default): 1 -> trace silent-fprintf fmt strings, fopen path+mode+result, system/ferror rcs, low-address write sweeps (LW=count[min,max]).  Session 7 used it to pin `cg->pe_static_fp[i]=NULL` writing byte 0 AT ADDRESS i -- the "rb"-literal wipe behind the silent EMIT_FAIL 16. */
+var LOWW_N : u32 = 0u32   var LOWW_MIN : u64 = 999999999u64   var LOWW_MAX : u64 = 0u64   /* TEMP S4: low-address write sweep extent */
 fn m2h(off: u64) -> u64 { if off==0u64 { return 0u64 }  return (&MEM as u64) + off }   /* SVIR addr -> host ptr (NULL passes) */
 fn nm_is(no: u64, nl: u32, s: u64, sl: u32) -> u32 {   /* import name bytes (module) == the .iii literal */
     if nl != sl { return 0u32 }
@@ -70,22 +73,30 @@ fn shim_call(boff: u64, lb: u64) -> u64 {
     let nl : u32 = ib(boff + 1u64)
     let no : u64 = boff + 2u64
     let a0 : u64 = LOC[lb]  let a1 : u64 = LOC[lb + 1u64]  let a2 : u64 = LOC[lb + 2u64]  let a3 : u64 = LOC[lb + 3u64]
-    if nm_is(no, nl, "fopen"  as u64, 5u32)==1u32 { return fopen(m2h(a0), m2h(a1)) }
+    if nm_is(no, nl, "fopen"  as u64, 5u32)==1u32 { let fo9:u64=fopen(m2h(a0), m2h(a1))  if FPRINTF_DBG==1u32 { putchar(10i32) putchar(70i32) putchar(79i32) putchar(61i32)   /* "FO=" path bytes , mode@addr bytes , :0/:1 */
+        let mut pj:u64=0u64  let pp9:*u8=m2h(a0) as *u8  while pj<80u64 { let pb9:u32=pp9[pj] as u32  if pb9==0u32 {pj=80u64} else { if pb9>=32u32 {putchar(pb9 as i32)}  pj=pj+1u64 } }
+        putchar(44i32)  pdec(a1)  putchar(61i32)
+        let mut mj:u64=0u64  let mm9:*u8=m2h(a1) as *u8  while mj<8u64 { let mb9:u32=mm9[mj] as u32  if mb9==0u32 {mj=8u64} else { if mb9>=32u32 {putchar(mb9 as i32)} else {putchar(63i32)}  mj=mj+1u64 } }
+        putchar(58i32)  if fo9==0u64 {putchar(48i32)} else {putchar(49i32)}  putchar(10i32) }
+        return fo9 }
     if nm_is(no, nl, "fclose" as u64, 6u32)==1u32 { return (fclose(a0)) as u64 }
     if nm_is(no, nl, "fread"  as u64, 5u32)==1u32 { return fread(m2h(a0), a1, a2, a3) }
     if nm_is(no, nl, "fwrite" as u64, 6u32)==1u32 { return fwrite(m2h(a0), a1, a2, a3) }
     if nm_is(no, nl, "fseek"  as u64, 5u32)==1u32 { return (fseek(a0, a1 as i64, a2 as i32)) as u64 }
     if nm_is(no, nl, "ftell"  as u64, 5u32)==1u32 { return (ftell(a0)) as u64 }
     if nm_is(no, nl, "rewind" as u64, 6u32)==1u32 { rewind(a0)  return 0u64 }
+    if nm_is(no, nl, "ferror" as u64, 6u32)==1u32 { let fe9:i32=ferror(a0)  if FPRINTF_DBG==1u32 { putchar(10i32) putchar(70i32) putchar(69i32) putchar(61i32) pdec(fe9 as u64) putchar(10i32) }  return fe9 as u64 }   /* main.c's iii_mhash_file read-back check: unshimmed it mis-read as truthy -> silent EMIT_FAIL 16 with a byte-correct .o (S4 session 7's last delta) ; FE=<rc> trace under FPRINTF_DBG */
     if nm_is(no, nl, "fgets"  as u64, 5u32)==1u32 { let r:u64=fgets(m2h(a0), a1 as i32, a2)  if r==0u64 { return 0u64 }  return a0 }   /* host buf-ptr maps back to the SVIR offset */
     if nm_is(no, nl, "clock"  as u64, 5u32)==1u32 { return (clock()) as u64 }
-    if nm_is(no, nl, "fprintf" as u64, 7u32)==1u32 { return 0u64 }   /* stderr diagnostics: dropped (the seed's error text goes to stderr; the interp is a stdout oracle) -- a no-op so error paths don't 198 */
+    if nm_is(no, nl, "fprintf" as u64, 7u32)==1u32 { if FPRINTF_DBG==1u32 { putchar(10i32) putchar(70i32) putchar(80i32) putchar(33i32) putchar(32i32)   /* "\nFP! " + the fmt bytes: WHICH silent stderr diagnostic fired */
+        let mut fj:u64=0u64  let fp9:*u8=m2h(a1) as *u8  while fj<120u64 { let fb9:u32=fp9[fj] as u32  if fb9==0u32 {fj=120u64} else { if fb9>=32u32 {putchar(fb9 as i32)}  fj=fj+1u64 } }  putchar(10i32) }
+        return 0u64 }   /* stderr diagnostics: dropped (the seed's error text goes to stderr; the interp is a stdout oracle) -- a no-op so error paths don't 198 */
     if nm_is(no, nl, "fputc"  as u64, 5u32)==1u32 { return 0u64 }
     if nm_is(no, nl, "fputs"  as u64, 5u32)==1u32 { return 0u64 }
     if nm_is(no, nl, "fflush" as u64, 6u32)==1u32 { return 0u64 }
     if nm_is(no, nl, "signal" as u64, 6u32)==1u32 { return 0u64 }   /* iii_install_signals: no signal handling in the interp */
     if nm_is(no, nl, "getenv" as u64, 6u32)==1u32 { return 0u64 }   /* SOURCE_DATE_EPOCH: NULL -> default 0 (deterministic) */
-    if nm_is(no, nl, "system" as u64, 6u32)==1u32 { return (system(m2h(a0))) as u64 }   /* iiis-0 emit.c shells `gcc -c` to assemble the .s (written via fopen/fwrite shims) into the .o */
+    if nm_is(no, nl, "system" as u64, 6u32)==1u32 { let sy9:i32=system(m2h(a0))  if FPRINTF_DBG==1u32 { putchar(10i32) putchar(83i32) putchar(89i32) putchar(61i32) pdec(sy9 as u64) putchar(10i32) }  return sy9 as u64 }   /* iiis-0 emit.c shells `gcc -c` to assemble the .s (written via fopen/fwrite shims) into the .o ; SY=<rc> trace under FPRINTF_DBG */
     if nm_is(no, nl, "putenv" as u64, 6u32)==1u32 { return (putenv(m2h(a0))) as u64 }   /* D1/D5/D6 forced env (SOURCE_DATE_EPOCH=0, LC_ALL=C) -> visible to the gcc child = byte-identical to gcc iiis-0 */
     SHIM_HIT = 0u32
     return 0u64
@@ -105,6 +116,8 @@ fn mld(a: u64, w: u32, sgn: u32) -> u64 {                 /* load w bytes (1/2/4
 }
 fn mst(a: u64, w: u32, v: u64) {
     if a < DLEN_G { if BADW_N < 64u32 { BADW_A[BADW_N as u64]=a  BADW_V[BADW_N as u64]=v  BADW_F[BADW_N as u64]=CUR_FN  BADW_N=BADW_N+1u32 } }   /* WRITE into the const data section = the codegen bug */
+    if FPRINTF_DBG==1u32 { if a<300u64 { if LOWW_N<3u32 { putchar(10i32) putchar(87i32) putchar(33i32) putchar(61i32) pdec(CUR_FN as u64) putchar(64i32) pdec(a) putchar(43i32) pdec(w as u64) putchar(61i32) pdec(v) putchar(10i32) }
+        LOWW_N=LOWW_N+1u32  if a<LOWW_MIN {LOWW_MIN=a}  if a>LOWW_MAX {LOWW_MAX=a} } }   /* TEMP S4: first-3 low writes verbatim + min/max/count summary at exit */
     let mut k : u64 = 0u64  while k < (w as u64) { msb(a+k, ((v >> (k*8u64)) & 255u64) as u32)  k=k+1u64 }
 }
 
@@ -265,6 +278,8 @@ fn main(argc: i32, argv: u64) -> u64 {
     }
     LOC[0u64] = argc as u64                       /* the seed's argc (prog name + args) */
     LOC[1u64] = tb                                /* the seed's argv */
+    if FPRINTF_DBG==1u32 { putchar(10i32) putchar(68i32) putchar(73i32) putchar(61i32)   /* "DI=" data-image bytes 55..95 at startup: is literal@63 carried? */
+        let mut dk:u64=55u64  while dk<95u64 { let db9:u32=MEM[dk] as u32  if db9>=32u32 { if db9<127u32 {putchar(db9 as i32)} else {putchar(46i32)} } else {putchar(46i32)}  dk=dk+1u64 }  putchar(10i32) }
     if ARGV_DBG == 1u32 { return MEM[4190256u64] as u64 }   /* DEBUG: prove the staged byte survives to exec */
     let r : u64 = exec_fn(0u32, 0u32)            /* func 0 = main (the entry); prints via PRINT_CHAR */
     if BADW_N > 0u32 {                            /* CONST-DATA CORRUPTION detected -> print the offending writes */
@@ -275,6 +290,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         }  i = i + 1u32 }
         putchar(10i32)  pstr2(78u32,61u32) pdec(BADW_N as u64) putchar(10i32)   /* "N=<total>" */
     }
+    if FPRINTF_DBG==1u32 { if LOWW_N>0u32 { putchar(10i32) putchar(76i32) putchar(87i32) putchar(61i32) pdec(LOWW_N as u64) putchar(91i32) pdec(LOWW_MIN) putchar(44i32) pdec(LOWW_MAX) putchar(93i32) putchar(10i32) } }   /* TEMP S4: "LW=count[min,max]" low-write sweep extent */
     if OOB_IND > 0u32 { return 199u64 }   /* an out-of-range indirect call fired -> distinct sentinel (teeth for the CALL_INDIRECT bounds-check) */
     if UNRES_IMP > 0u32 { return 198u64 }   /* a CALL reached an IMPORT-decl body (unresolved cross-module fn) -> distinct sentinel (teeth: single-file execution of an import-bearing call path must never read as green) */
     return r

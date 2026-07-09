@@ -426,7 +426,7 @@ fn crt_tail() {
      * deliberately OMITTED: they are varargs (a fixed prototype mis-shapes their many-arg calls -> the
      * 12-fn structural break), stderr-only, and NOT executed when compiling valid input; they stay
      * unregistered (their CALLs verify clean + never fire on the success path). */
-    rts("\nchar *fopen(char *p, char *m);\nint fclose(long f);\nlong fread(char *b, long s, long n, long f);\nlong fwrite(char *b, long s, long n, long f);\nint fseek(long f, long o, int w);\nlong ftell(long f);\nvoid rewind(long f);\nchar *fgets(char *b, int n, long f);\n~" as u64)
+    rts("\nchar *fopen(char *p, char *m);\nint fclose(long f);\nlong fread(char *b, long s, long n, long f);\nlong fwrite(char *b, long s, long n, long f);\nint fseek(long f, long o, int w);\nlong ftell(long f);\nvoid rewind(long f);\nchar *fgets(char *b, int n, long f);\nint ferror(long f);\n~" as u64)
 }
 fn emit_lset(slot:u32) { let m:i64=LW[slot as u64]  if m!=0i64 { econst(m)  eb(0x25u32) }   /* [AND width-mask] ; then spilled -> STORE64 to mem (via a temp), else LOCAL_SET */
     let mem:i64=LMEM[slot as u64]
@@ -704,6 +704,42 @@ fn emit_bcopy_v(dt: u32, st: u32, n: i64) {   /* Boss-2: frame-aware struct-valu
     eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
     eb(0x44u32)  eb(0x44u32)
 }
+/* S4 struct-ASSIGN family (x=e / *p=e / p->f=e / p->f0.f1=e with a STRUCT dest).  The decl-INIT forms
+ * (1577-1587) had struct RHS handling; the ASSIGN forms fell to the scalar path (slot store / eval+DROP),
+ * so parse.c's `st->lookahead = st->lookahead2`, `*out = t`, and `nn->u.fn_decl.name = iiip_text_of(&name)`
+ * silently zeroed/garbaged -- the seed's fn NAME read EMPTY at emit (.text 0x0, no `main` symbol).
+ * srhs_ok = pure PREDICATE (no emission, C unmoved): is the RHS at `at` a copyable struct rvalue?
+ * emit_srhs_addr = the matching EMITTER: leave the RHS ADDRESS in temp `ts`, C on the terminator.
+ * emit_scopy_to = *(tdst+i)=*(tsrc+i) byte loop 0..n (mirrors emit_bcopy_v, but ADDRESS-temp based so
+ * arrow-field/deref/global sources compose).  >8B `= f(args)` routes through sret at each site instead. */
+fn srhs_ok(at:u32) -> u32 {
+    if ispat(at,Q_MUL)==1u32 { return 1u32 }
+    if avtype(at)>=0i32 { if ispat(at+1u32,Q_SEMI)==1u32 { return 1u32 }  if ispat(at+1u32,Q_COM)==1u32 { return 1u32 } }
+    let pl:i32=lidx(at)  if pl>=0i32 { if lpt(at)>=0i32 { if ispat(at+1u32,Q_ARROW)==1u32 { if TK[(at+2u32) as u64]==1u32 {
+        let mut t9:u32=0u32  if ispat(at+3u32,Q_SEMI)==1u32 {t9=1u32}  if ispat(at+3u32,Q_COM)==1u32 {t9=1u32}
+        if t9==1u32 { return 1u32 } } } } }
+    return 0u32
+}
+fn emit_srhs_addr(ts:u32) -> u32 {
+    if cp(Q_MUL)==1u32 { C=C+1u32  ebin(0u32)  eu8(0x11u32,ts)  return 1u32 }   /* = *ptrExpr : the pointer value IS the source address */
+    let av:i32=avtype(C)
+    if av>=0i32 { let mut tv:u32=0u32  if ispat(C+1u32,Q_SEMI)==1u32 {tv=1u32}  if ispat(C+1u32,Q_COM)==1u32 {tv=1u32}
+        if tv==1u32 { emit_vbase(C,0i64)  eu8(0x11u32,ts)  C=C+1u32  return 1u32 } }   /* = structVar (local frame-aware / global) */
+    let pl:i32=lidx(C)  let pt:i32=lpt(C)
+    if pl>=0i32 { if pt>=0i32 { if ispat(C+1u32,Q_ARROW)==1u32 { if TK[(C+2u32) as u64]==1u32 {
+        let mut term:u32=0u32  if ispat(C+3u32,Q_SEMI)==1u32 {term=1u32}  if ispat(C+3u32,Q_COM)==1u32 {term=1u32}
+        if term==1u32 { let fo:i64=fieldoff(pt,C+2u32)  emit_lget(pl as u32)  if fo>0i64 { econst(fo)  eb(0x20u32) }  eu8(0x11u32,ts)  C=C+3u32  return 1u32 } } } } }   /* = p->field : base + field offset */
+    return 0u32
+}
+fn emit_scopy_to(tdst:u32, tsrc:u32, n:i64) {
+    let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
+    econst(0i64)  eu8(0x11u32,ti)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ti)  econst(n)  eb(0x33u32)  eu8(0x51u32,1u32)        /* if ti>=n break */
+    eu8(0x10u32,tdst)  eu8(0x10u32,ti)  eb(0x20u32)  eu8(0x10u32,tsrc)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eb(0x81u32)   /* *(tdst+ti) = *(tsrc+ti) */
+    eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)
+}
 /* libc string builtins (no libc on the sovereign target) -- inline loops, result left on the stack.
  * Verifier-safe: results held in a temp, loops break via BR_IF (no IF-with-break). */
 fn emit_strcmp() {   /* strcmp(a,b) -> (unsigned char)*a - *b at the first difference (0 if equal) */
@@ -786,6 +822,11 @@ fn emit_fmt(td:u32, tf:u32, tap:u32) {
         eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)                /* tf++ */
         eu8(0x10u32,tf)  eb(0x80u32)  eu8(0x11u32,tsp)                            /* tsp = *tf */
         eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)                /* tf++ */
+        eb(0x40u32)  eb(0x41u32)                                                  /* skip `l` length modifiers: %llx/%llu/%lld -> %x/%u/%d (everything is 64-bit in SVIR; cg_r3's movabsq $0x%llx / .zero %llu emitted "lx"/"lu" literals without this) */
+        eu8(0x10u32,tsp)  econst(108i64)  eb(0x31u32)  eu8(0x51u32,1u32)          /* if tsp != 'l' break */
+        eu8(0x10u32,tf)  eb(0x80u32)  eu8(0x11u32,tsp)                            /* tsp = *tf */
+        eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)  eu8(0x50u32,0u32)   /* tf++ ; loop */
+        eb(0x44u32)  eb(0x44u32)
         eu8(0x10u32,tsp)  econst(115i64)  eb(0x30u32)  eb(0x42u32)                /* %s */
             eu8(0x10u32,tap)  eb(0x82u32)  eu8(0x11u32,ts)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)   /* ts = va_arg */
             eb(0x40u32)  eb(0x41u32)
@@ -1030,21 +1071,21 @@ fn eprim() {
                 return
             }
             if kw(t,"va_end" as u64,6u32)==1u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)  econst(0i64)  return }   /* va_end -> no-op */
-            if kw(t,"vsnprintf" as u64,9u32)==1u32 {   /* vsnprintf(buf, size, fmt, ap) -> format ap into buf */
-                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
-                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
-                emit_fmt(td, tf, tap)  econst(0i64)  return
+            if kw(t,"vsnprintf" as u64,9u32)==1u32 {   /* vsnprintf(buf, size, fmt, ap) -> format ap into buf ; RETURNS the WRITTEN byte count (td_final - buf).  Was econst(0): cg_r3's emit_line/cg_writef gate fwrite on n -> every FORMATTED .s line emitted as a bare newline (.text EMPTY, the S4 blank-body) */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}  let t0:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eu8(0x10u32,td)  eu8(0x11u32,t0)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
+                emit_fmt(td, tf, tap)  eu8(0x10u32,td)  eu8(0x10u32,t0)  eb(0x21u32)  return
             }
-            if kw(t,"vsprintf" as u64,8u32)==1u32 {    /* vsprintf(buf, fmt, ap) (no size) */
-                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
-                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
-                emit_fmt(td, tf, tap)  econst(0i64)  return
+            if kw(t,"vsprintf" as u64,8u32)==1u32 {    /* vsprintf(buf, fmt, ap) (no size) ; returns the written count */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}  let t0:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eu8(0x10u32,td)  eu8(0x11u32,t0)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
+                emit_fmt(td, tf, tap)  eu8(0x10u32,td)  eu8(0x10u32,t0)  eb(0x21u32)  return
             }
-            if kw(t,"snprintf" as u64,8u32)==1u32 {    /* snprintf(buf, size, fmt, ...) -> varargs to VA_BUF, format */
-                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
-                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)
+            if kw(t,"snprintf" as u64,8u32)==1u32 {    /* snprintf(buf, size, fmt, ...) -> varargs to VA_BUF, format ; returns the written count */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}  let t0:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eu8(0x10u32,td)  eu8(0x11u32,t0)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)
                 let mut k:i64=0i64  if cp(Q_COM)==1u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_COM)==1u32 { C=C+1u32  econst(VA_BUF + (8i64*k))  ebin(0u32)  eb(0x83u32)  k=k+1i64 } else {g=0u32} } }
-                eat(Q_RP)  econst(VA_BUF)  eu8(0x11u32,tap)  emit_fmt(td, tf, tap)  econst(0i64)  return
+                eat(Q_RP)  econst(VA_BUF)  eu8(0x11u32,tap)  emit_fmt(td, tf, tap)  eu8(0x10u32,td)  eu8(0x10u32,t0)  eb(0x21u32)  return
             }
             let fvi:i32=fidx(t)
             if fvi>=0i32 { if FVAR[fvi as u64]==1u32 {   /* VARIADIC call: named args -> the call ; varargs -> VA_BUF ; pass VA_BUF as the hidden last arg */
@@ -1230,8 +1271,8 @@ fn eprim() {
                     }
                     C=C+1u32  ebin(0u32)  eat(Q_RBR)  let prow:i64=fieldrow(ptt,ft)
                     if prow>0i64 { estride(prow)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32)  return }   /* POINTER-TO-ARRAY field p->rows[k] : LOAD64 the table pointer + k*ROW -> the k-th array's ADDRESS, no element load (node_mhash's `ast->small_mhash[slot]`) */
-                    let pesz:i64=fieldptsz(ptt,ft)  let mut uesz:i64=fe  let mut uesg:u32=fsg
-                    if pesz>0i64 { uesz=pesz  uesg=fieldptsg(ptt,ft)  estride(pesz)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32) } else { estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)} }   /* SCALAR-POINTER field p->ptr[i] : LOAD64 the field pointer then +i*pointee ; else INLINE array p+foff+i*elem (byte-identical to before) */
+                    let mut pesz:i64=fieldptsz(ptt,ft)  if fieldisarr(ptt,ft)==1u32 {pesz=0i64}  let mut uesz:i64=fe  let mut uesg:u32=fsg
+                    if pesz>0i64 { uesz=pesz  uesg=fieldptsg(ptt,ft)  estride(pesz)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32) } else { estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)} }   /* SCALAR-POINTER field p->ptr[i] : LOAD64 the field pointer then +i*pointee ; an INLINE array (incl. an array OF POINTERS: read mirror of the [i]=e store fix) stays p+foff+i*elem */
                     if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(uesz,uesg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(uesz,uesg,fm,1u32,1u32)  return }   /* p->field[i]++ */
                     eload(uesz, uesg)  return }
                 if fieldisarr(ptt,ft)==1u32 { emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  return }   /* bare array field -> p+foff (decay) */
@@ -1507,6 +1548,14 @@ fn pstmt() {
         C=C+1u32
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
             let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]  let psg:u32=LPSG[dli as u64]   /* read into immutable lets BEFORE eprim (direct read, multi-use dli -> spilled) */
+            if lp>=0i32 { let spz:i64=STSZ[lp as u64] as i64  if spz>8i64 { if ispat(C+1u32,Q_ASN)==1u32 {   /* *out = <struct> ; (>8B pointee).  Was emit_av(8) = stored 8 bytes of the RHS *ADDRESS* -- iiip_expect's `*out = t` filled the token with pointer garbage (S4 probe10b link C) */
+                if srhs_ok(C+2u32)==1u32 {   /* RHS var / q->field / *ptr -> address + byte copy */
+                    let td0:u32=LN  if LN<255u32 {LN=LN+1u32}  let ts0:u32=LN  if LN<255u32 {LN=LN+1u32}
+                    emit_lget(dli as u32)  eu8(0x11u32,td0)  C=C+2u32
+                    if emit_srhs_addr(ts0)==1u32 { emit_scopy_to(td0,ts0,spz)  stmt_end()  return }
+                    C=C-2u32 }
+                let fi0:i32=fidx(C+2u32)  if fi0>=0i32 { if ispat(C+3u32,Q_LP)==1u32 { let rs0:i32=fn_ret_sval(FNT[fi0 as u64])  if rs0>=0i32 {   /* *out = f(args) -> sret(*out) */
+                    emit_lget(dli as u32)  C=C+3u32  eat(Q_LP)  let mut na0:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  na0=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  na0=na0+1u32 } }  eat(Q_RP)  ecall(fi0 as u32, na0+1u32)  eb(0x72u32)  stmt_end()  return } } } } } }
             eprim()                                                 /* store ADDRESS: *p (or *p++ -> old p, advance) */
             if lp<0i32 { emit_av(psz, psg, 0i64) } else { emit_av(8i64, 0u32, 0i64) }   /* = or op= (compound) via the unified store */
             eat(Q_SEMI)  return } }
@@ -1796,14 +1845,30 @@ fn pstmt() {
             emit_lget(lidx(C) as u32)  let foff0d:i64=fieldoff(pt0d,C+2u32)  C=C+3u32   /* p ; C at the first `.` ; acc starts at f0's offset */
             let mut curd:i32=f0d  let mut accd:i64=foff0d  let mut gcd:u32=1u32
             while gcd==1u32 { C=C+1u32  let nfd:u32=C  C=C+1u32  let nfod:i64=fieldoff(curd,nfd)  accd=accd+nfod  let nptd:i32=fieldpt(curd,nfd)  let mut mored:u32=0u32  if nptd>=0i32 { if cp(Q_DOT)==1u32 {mored=1u32} }
-                if mored==1u32 { curd=nptd } else { if accd>0i64 {econst(accd)  eb(0x20u32)}  emit_av(fieldelem(curd,nfd), fieldsign(curd,nfd), fieldmask(curd,nfd))  stmt_end()  gcd=0u32 } }
+                if mored==1u32 { curd=nptd } else {
+                    let mut donec:u32=0u32
+                    if nptd>=0i32 { if fieldptsz(curd,nfd)<=0i64 { if fieldisarr(curd,nfd)==0u32 { if cp(Q_ASN)==1u32 { let fszc:i64=fieldbytes(curd,nfd)   /* FINAL field is an EMBEDDED struct: nn->u.fn_decl.name = iiip_text_of(&tok) (S4: the fn NAME store) */
+                        if fszc<=8i64 { C=C+1u32  if accd>0i64 {econst(accd)  eb(0x20u32)}  ebin(0u32)  eb(0x83u32)  stmt_end()  donec=1u32  gcd=0u32 }   /* <=8B: packed rvalue STORE64 */
+                        else { if srhs_ok(C+1u32)==1u32 { let tdc:u32=LN  if LN<255u32 {LN=LN+1u32}  let tsc:u32=LN  if LN<255u32 {LN=LN+1u32}
+                            if accd>0i64 {econst(accd)  eb(0x20u32)}  eu8(0x11u32,tdc)  C=C+1u32
+                            if emit_srhs_addr(tsc)==1u32 { emit_scopy_to(tdc,tsc,fszc)  stmt_end()  donec=1u32  gcd=0u32 } } } } } } }
+                    if donec==0u32 { if accd>0i64 {econst(accd)  eb(0x20u32)}  emit_av(fieldelem(curd,nfd), fieldsign(curd,nfd), fieldmask(curd,nfd))  stmt_end()  gcd=0u32 } } }
             return
         } }
     } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
         if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)  let fm:i64=fieldmask(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)
-            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  let pesz:i64=fieldptsz(ptt,ft)  if pesz>0i64 { estride(pesz)  emit_lget(pl as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32)  emit_av(pesz, fieldptsg(ptt,ft), 0i64) } else { estride(fe)  emit_lget(pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  emit_av(fe, fsg, fm) }  stmt_end()  return }   /* SCALAR-POINTER field p->ptr[i]=e : LOAD64 the field pointer then +i*pointee (store-side mirror of eprim:914) ; else INLINE array (byte-identical) */
+            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  let mut pesz:i64=fieldptsz(ptt,ft)  if fieldisarr(ptt,ft)==1u32 {pesz=0i64}  if pesz>0i64 { estride(pesz)  emit_lget(pl as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eb(0x82u32)  eb(0x20u32)  emit_av(pesz, fieldptsg(ptt,ft), 0i64) } else { estride(fe)  emit_lget(pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  emit_av(fe, fsg, fm) }  stmt_end()  return }   /* SCALAR-POINTER field p->ptr[i]=e : LOAD64 the field pointer then +i*pointee (store-side mirror of eprim:914) ; an INLINE array (incl. an array OF POINTERS -- cg->pe_static_fp[i]=NULL wrote 1 byte AT ADDRESS i, wiping data [0,128) incl. the mhash "rb" literal: S4 session 7) stays p+foff+i*elem */
+            let fpt7:i32=fieldpt(ptt,ft)  if fpt7>=0i32 { if fieldptsz(ptt,ft)<=0i64 { if fieldisarr(ptt,ft)==0u32 { if ispat(C+3u32,Q_ASN)==1u32 { let fsz7:i64=fieldbytes(ptt,ft)   /* EMBEDDED-struct field dest (fieldptsz==0 excludes struct-POINTER fields: those are 8B scalars below) */
+                if fsz7<=8i64 { C=C+4u32  emit_lget(pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  ebin(0u32)  eb(0x83u32)  stmt_end()  return }   /* p->sfield = <packed rvalue> (<=8B embedded struct) */
+                if srhs_ok(C+4u32)==1u32 {   /* >8B p->bigfield = var / q->field / *ptr : the parse.c lookahead-promote `st->lookahead = st->lookahead2` (S4) */
+                    let td7:u32=LN  if LN<255u32 {LN=LN+1u32}  let ts7:u32=LN  if LN<255u32 {LN=LN+1u32}
+                    emit_lget(pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  eu8(0x11u32,td7)  C=C+4u32
+                    if emit_srhs_addr(ts7)==1u32 { emit_scopy_to(td7,ts7,fsz7)  stmt_end()  return }
+                    C=C-4u32 }
+                let fi7:i32=fidx(C+4u32)  if fi7>=0i32 { if ispat(C+5u32,Q_LP)==1u32 { let rs7:i32=fn_ret_sval(FNT[fi7 as u64])  if rs7>=0i32 {   /* >8B p->bigfield = f(args) -> sret(&field) */
+                    emit_lget(pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  C=C+5u32  eat(Q_LP)  let mut na7:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  na7=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  na7=na7+1u32 } }  eat(Q_RP)  ecall(fi7 as u32, na7+1u32)  eb(0x72u32)  stmt_end()  return } } } } } } }
             C=C+3u32  emit_lget(pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  emit_av(fe, fsg, fm)  stmt_end()  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
@@ -1863,8 +1928,17 @@ fn pstmt() {
     } } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* x = e ; */
         let nt:u32=C  let bvt:i32=avtype(nt)
-        if bvt>=0i32 { let at:u32=C+2u32  let avt:i32=avtype(at)  if avt>=0i32 {   /* struct VAR = struct VAR -> byte copy (STSZ bytes) */
+        if bvt>=0i32 { let at:u32=C+2u32  let avt:i32=avtype(at)  if avt>=0i32 { if ispat(at+1u32,Q_SEMI)==1u32 {   /* struct VAR = struct VAR -> byte copy (STSZ bytes) */
             C=C+3u32  emit_bcopy_v(nt, at, STSZ[bvt as u64] as i64)  eat(Q_SEMI)  return } }   /* struct-value copy b=a (frame-aware) */
+            let szb:i64=STSZ[bvt as u64] as i64
+            if szb<=8i64 { C=C+2u32  emit_vbase(nt,0i64)  ebin(0u32)  eb(0x83u32)  stmt_end()  return }   /* <=8B struct dest = ANY packed rvalue (call/ternary/compound-literal/var) -> STORE64.  Was eval+DROP for globals / slot-clobber for locals: g_name = text_of(..) never landed (S4 probe10c) */
+            let fi9:i32=fidx(at)  if fi9>=0i32 { if ispat(at+1u32,Q_LP)==1u32 { let rsv9:i32=fn_ret_sval(FNT[fi9 as u64])  if rsv9>=0i32 {   /* >8B x = f(args) -> sret(&x): dest addr as the hidden last arg (assign twin of the 1584 decl-init) */
+                emit_vbase(nt,0i64)  C=C+3u32  eat(Q_LP)  let mut na9:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  na9=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  na9=na9+1u32 } }  eat(Q_RP)  ecall(fi9 as u32, na9+1u32)  eb(0x72u32)  eat(Q_SEMI)  return } } }
+            if srhs_ok(at)==1u32 {   /* >8B x = p->field / *ptr / var-with-`,` -> address + byte copy (assign twin of the 1578/1586/1587 decl-inits; probe10b link A) */
+                let td9:u32=LN  if LN<255u32 {LN=LN+1u32}  let ts9:u32=LN  if LN<255u32 {LN=LN+1u32}
+                emit_vbase(nt,0i64)  eu8(0x11u32,td9)  C=C+2u32
+                if emit_srhs_addr(ts9)==1u32 { emit_scopy_to(td9,ts9,szb)  stmt_end()  return }
+                C=C-2u32 } }
         let li:i32=lidx(nt)
         if li>=0i32 { C=C+2u32  ebin(0u32)  if LDB[li as u64]==1u32 { if EV_DBL==0u32 { edop(4u32) } }  emit_lset(li as u32)  if cp(Q_COM)==1u32 { C=C+1u32  pstmt()  return }  eat(Q_SEMI)  return }   /* local scalar ; double lvalue = intexpr -> fromi64 ; `a=x, more...;` comma-STATEMENT -> recurse (link.c sha256_final) */
         let gb:i64=abase(nt)  if gb>=0i64 { if aisc(nt)==1u32 {                                                              /* global SCALAR = e -> STORE */

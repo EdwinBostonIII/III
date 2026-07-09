@@ -7,24 +7,26 @@
 #   inputs (stage1_corpus).  This gate stages the chain so PROGRESS is visible and every rung has a
 #   falsifier -- it does NOT fake a green: the open frontier reddens it, by construction.
 #
-#   Stages (each a real exit code; S4 is the current frontier):
-#     S1  link+verify   : svir_ld links 19 TUs; svir_verify(linked) = VALID          [GREEN]
-#     S2  host boundary : fopen/fseek/ftell/fread/fclose shim round-trips a file       [GREEN]
-#     S3  no-arg parity : interp(linked, no argv) rc == gcc iiis-0 no-arg rc            [GREEN]
-#     S4  compile parity: interp(linked) compiles a .iii == gcc iiis-0's .o (byte-match) [FRONTIER]
+#   Stages (each a real exit code; ALL FOUR GREEN since 2026-07-08 session 7):
+#     S1  link+verify   : svir_ld links 19 TUs; svir_verify(linked) = VALID            [GREEN]
+#     S2  host boundary : fopen/fseek/ftell/fread/fclose shim round-trips a file        [GREEN]
+#     S3  no-arg parity : interp(linked, no argv) rc == gcc iiis-0 no-arg rc             [GREEN]
+#     S4  compile parity: interp(linked) compiles a .iii == gcc iiis-0's .o (byte-match)  [GREEN]
 #
-#   S4 today (2026-07-08): PARSE now WORKS -- the frontier advanced from PARSE_FAIL(11) to EMIT_FAIL(16).
-#   Three blockers were cleared: (1) iiis-2 embedded a STALE 1 MiB sovas DATA_BUF that silently truncated
-#   the linked seed's 1.24 MB .data at 0xFFFFF -> lex/parse's high-membase keyword tables read ZERO ->
-#   `module` lexed as an identifier -> parse failed.  Fixed by rebuild (stdlib+iiis-2 pick up the committed
-#   4 MiB sovas; determinism held 12/12).  (2) ccsv appended the CRT import prototypes (crt_tail) only for
-#   TUs using `fopen`; the codegen TUs write the .s via `fwrite` WITHOUT fopen -> fwrite was undeclared ->
-#   mis-dispatched -> the cg's output silently dropped.  Fixed: crt_tail now triggers on fwrite too.
-#   (3) the compile path shells `gcc -c` (emit.c system()) + putenv -> interp shims added.  NOW: the seed
-#   parses, runs the full pipeline, writes the .s HEADER, then STOPS mid-codegen -- pointers in the cg path
-#   acquire garbage high-32 bits (e.g. st->history = (56<<32)|offset), so cg_writef's function emission
-#   diverges.  That pointer-high-bits codegen corruption is the remaining S4 frontier.  When it closes and
-#   the .o goes byte-identical, this arc closes run_completion.sh's seed_sovereign member.
+#   S4 CLOSED (2026-07-08 session 7; history in DOCS/III-LAMBDA0-LINK-CAMPAIGN.md): after session 6b's
+#   EV_PSZ pointer arithmetic, FOUR more defects separated the seed from byte-parity -- (1) ccsv's
+#   vsnprintf/vsprintf/snprintf builtins formatted but returned CONSTANT 0, so cg_r3's emit_line/cg_writef
+#   (which gate fwrite on n) emitted every FORMATTED .s line as a bare newline (.text EMPTY) + emit_fmt
+#   lacked the %ll length-modifier skip; (2) struct-valued ASSIGNMENT was missing (decl-INIT had it):
+#   `t = st->lookahead`, `*out = t`, `nn->u.fn_decl.name = iiip_text_of(&name)`, `g = f()` fell to
+#   scalar/eval+DROP paths -- the fn NAME was zero IN THE AST, so emit honestly wrote .asciz "" and no
+#   .global main; (3) `cg->pe_static_fp[i] = NULL` (a POINTER-ARRAY field) took the scalar-pointer-deref
+#   arm (SFPSZ>0) and wrote byte 0 AT ADDRESS i for i=0..127, wiping low module data incl. the mhash "rb"
+#   literal -> fopen(mode="") -> NULL -> silent EMIT_FAIL 16 with a byte-correct .o (fieldisarr now gates
+#   the deref arm, store+read); (4) ferror (main.c's iii_mhash_file read-back check) was unregistered +
+#   unshimmed -> registered in crt_tail, shimmed in svir_interp.  Falsifiers: _s4_probe8..11.c, all 99 on
+#   gcc + interp + verifier + sovereign-x86-native.  This arc now holds run_completion.sh's seed_sovereign
+#   member green.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/sovlink"
@@ -62,19 +64,18 @@ timeout 30 "$W/seed.exe" >/dev/null 2>&1; s3=$?
 if [ "$s3" -eq "$g3" ]; then say "S3 no-arg parity : GREEN (interp=$s3 == gcc iiis-0=$g3)"
 else say "S3 FAIL: interp=$s3 != gcc=$g3"; fail=1; fi
 
-# --- S4: compile parity (THE FRONTIER) ---
-# The linked seed must compile a real .iii to a .o byte-identical to gcc-built iiis-0.  Today it runs
-# lex correctly (LEX_FAIL=10 is NOT what we see) but reds at PARSE_FAIL=11 on any function-bearing
-# input -- parse.c is at STRUCTURAL zero yet has no behavioral harness, so full-pipeline execution
-# exposes a parse-runtime divergence.  This is the single honest frontier; when it goes byte-identical
-# the arc closes.  A `git bisect`-style narrowing lives in DOCS/III-LAMBDA0-LINK-CAMPAIGN.md.
+# --- S4: compile parity (CLOSED 2026-07-08 session 7) ---
+# The linked seed compiles a real .iii to a .o byte-identical to gcc-built iiis-0, with exit-code
+# parity.  The stage stays in the gate as the REGRESSION TEETH for the whole chain (ccsv struct
+# assignment + varargs count + pointer-array fields + the interp CRT shims); any relapse reddens it.
+# The defect-by-defect history lives in DOCS/III-LAMBDA0-LINK-CAMPAIGN.md.
 printf 'module sovcap\nfn main() -> u64 { return 7u64 }\n' > "$W/_sov_fn.iii"
 timeout 60 "$W/seed.exe" "$W/_sov_fn.iii" --compile-only --out "$W/_sov_fn_s.o" >/dev/null 2>&1; f_s=$?
 "$ROOT/COMPILED/iiis-0.exe"  "$W/_sov_fn.iii" --compile-only --out "$W/_sov_fn_g.o" >/dev/null 2>&1; f_g=$?
 if [ "$f_s" -eq "$f_g" ] && [ -f "$W/_sov_fn_s.o" ] && cmp -s "$W/_sov_fn_s.o" "$W/_sov_fn_g.o"; then
     say "S4 compile parity : GREEN -- interp(linked) .o BYTE-IDENTICAL to gcc iiis-0.  THE SOVEREIGN SEED COMPILES."
 else
-    say "S4 FRONTIER (red): interp=$f_s (16=EMIT_FAIL: parse+sema+cg-header now WORK; cg stops mid-emit on pointer-high-bits corruption) vs gcc=$f_g -- run_completion's seed_sovereign stays open until byte-identical."
+    say "S4 REGRESSION (red): interp=$f_s vs gcc=$f_g (or .o bytes diverged) -- S4 CLOSED 2026-07-08; a red here is a RELAPSE in ccsv struct-assign/varargs/ptr-array or the interp CRT shims (see DOCS/III-LAMBDA0-LINK-CAMPAIGN.md session 7)."
     fail=1
 fi
 
@@ -93,5 +94,5 @@ if [ -f "$ROOT/COMPILER/BOOT/_parseharness.c" ]; then
 fi
 
 if [ "$fail" -eq 0 ]; then say "SEED-SOVEREIGN GREEN -- the linked whole-seed compiles byte-for-byte as gcc iiis-0."
-else say "SEED-SOVEREIGN: S1-S3 PROVEN (link+verify, host boundary, no-arg parity); S4 is the named open frontier (parse.c error-recording runtime; _parseharness isolates it)."; fi
+else say "SEED-SOVEREIGN: RED -- S1-S4 were ALL GREEN 2026-07-08 (S4 CLOSED); any red above is a REGRESSION -- bisect against DOCS/III-LAMBDA0-LINK-CAMPAIGN.md session 7."; fi
 exit $fail

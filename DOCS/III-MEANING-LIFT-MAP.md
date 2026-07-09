@@ -14,6 +14,15 @@
 > differential run** — divergence ledger row 1 (signed `>>` is LOGICAL) is the first machine-pinned
 > semantic fact of the .iii language.
 >
+> **SESSION 2 (2026-07-09, same day): the instrument's compiler-side catches FIXED.** Ledger rows
+> 6 (partial-init global-array tail aliasing) and 7 (const-array addressing SIGSEGV) closed in
+> cg_r3; the sovereign assembler gained the missing `.short` arm (u16 data was silently dropped).
+> Landing discipline: full chain green — stdlib · iiis-1 · iiis-2 `--check-corpus` 60/60 ·
+> **self-host fixpoint iiis-2 ≡ iiis-3 byte-identical** (mhash `20d4ea59…`) · run_corpus **1594/0**
+> · meaning gate **probes 17/17** (p16 tails re-asserted + new p17: widths 1/2/4/8, var+const arms)
+> · corpus differential 110/112 · 0 divergence · ratchet 110. The evaluator learned const arrays
+> (world objects, var-style) — a Θ1 prerequisite landed early.
+>
 > **STATUS: LOCATED + Θ0 EXECUTED (2026-07-09).** A systems-map pass answering one
 > question: *what is the largest NIH unification above Γ — the most ambitious enhancement the tree can
 > take that is not already located by an existing map?* Every number marked **[measured]** was produced
@@ -105,6 +114,19 @@ printed — the run_seed_corpus "honest frontier" pattern [recorded: S8].
 *Exit gate:* ratchet strictly monotone; every skip named with its missing capability.
 *Falsifier:* a KAT that diverges reddens; de-listing a covered KAT reddens.
 
+> **Θ1 design (2026-07-09 session 2, measured).** Corpus: 1,830 KATs; 1,708 with externs;
+> **1,363 pure-.iii-extern** (loader alone covers them); the entire C/DLL boundary of the remaining
+> 345 is **malloc(260) / free(213) / putchar(72)** + 4 one-offs [measured]. `from "X"` is provenance,
+> not linkage — resolution is flat by symbol (proof: the tree's `from "lex_runtime.c"` externs resolve
+> against lex_rt.iii's exports; the file lex_runtime.c no longer exists). Loader law: load `from
+> "X.iii"` by basename search {importer dir, COMPILER/BOOT, STDLIB/iii/*/}, transitively; bind extern
+> fns by NAME against the flat fn table (the linker's namespace law); vars/consts/types stay
+> module-LOCAL (Stage 3.18). Mechanics: module registry (ast, src, len) per module id; fn-table entry
+> gains a module id (the spare u32 at +12); glob/type tables gain a parallel module-id column;
+> cross-buffer name compare (ev_name_eq_x); EV_AST/EV_SRC/EV_CURMOD switch per call frame.
+> Shims are eval-BUILTINS: msvcrt malloc → world bump alloc (bounds-checked), free → no-op,
+> putchar → real stdout write; any other C/DLL extern = clean UNSUPPORTED naming the symbol.
+
 **Θ2 — THE COMMUTING SQUARE (absorbs Γ1's oracle).** When the cg_r3 SVIR backend lands (Γ1, the open
 arc), the gate becomes three-route: `eval(src) ≡ native(src) ≡ svir_interp(cg_svir(src))` per KAT.
 Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator} — the microscope the
@@ -125,6 +147,19 @@ STUDIO as the interactive mouth of the language (consumers already live [recorde
 *Exit gate:* divergence ledger has zero OPEN rows at seal time. *Falsifier:* an unledgered divergence
 found by sweep reddens.
 
+> **Θ4 design (2026-07-09 session 2).** (a) THE PROTOCOL, stated as standing law: every gate-red
+> divergence (rc axis or output axis) gets its ledger row IN THE SAME SESSION it fires; a row is
+> either *compiler-incumbent* (evaluator conforms; the behavior becomes a documented language fact
+> pinned by a probe in BOTH routes) or *compiler-defect* (a fix campaign with its own regression
+> discipline — rows 6/7 are the precedents). A seal requires zero OPEN rows. (b) THE MOUTH:
+> `iii_eval --repl` — line loop over stdin (`__acrt_iob_func(0)` direct extern, no lex_rt touch);
+> declarations accumulate as module text; an expression line wraps as `fn _repl_N() -> u64` and the
+> accumulated module re-lexes/re-parses whole (trivial at REPL scale), evaluates, prints `= 0x…`;
+> `:load <file.iii>` pulls modules through the Θ1 loader; errors print the named eval codes.
+> Consumer: STOMA verb. *Exit gate:* a scripted REPL transcript KAT (stdin script → full stdout
+> byte-compare vs pinned .rexp). *Falsifier:* transcript drift reddens; an unledgered divergence
+> found by sweep reddens.
+
 **Θ5 — THE JUDGED STEP (kernel + zk + spore; the horizon rung).** Connect the meaning object to the
 truth machines: (a) evaluator step-laws for the arithmetic fragment stated against the CIC kernel's
 BV64 model (the kernel already speaks mod-2^64 with `refl` certificates [recorded]); (b) the
@@ -133,6 +168,10 @@ translation certificates; (c) `run_zk.sh`-class attestation of evaluator runs; (
 the evaluator + gate so every germinated host re-verifies MEANING, not just bytes — the self-evident
 spore. Stated as horizon with named unknowns (proof-engineering scale), not scheduled flat.
 *Falsifier per leg:* kernel rejection / attestation mismatch / spore-regrowth meaning-gate red.
+> **Θ5d dependency (measured 2026-07-09 s2):** the Σ0 spore carries SVIR bytes + fused germs — no
+> .iii sources, no compiler (`run_germinate.sh` header). iii_eval joins the spore only once it is
+> routed through the SVIR waist ⇒ Θ5d waits on Γ1, exactly like Θ2. The Γ1-independent Θ5 legs are
+> (a) kernel step-laws and (c) zk attestation of evaluator runs.
 
 **Scheduling fact:** Θ0 touches ONLY new files + one new gate script — the live Γ0/Λ0 bisect state
 (ccsv, session 8b) is untouched and can burn in parallel. Θ2 waits on Γ1; nothing else serializes.
@@ -146,7 +185,55 @@ spore. Stated as horizon with named unknowns (proof-engineering scale), not sche
 | 3 | 2026-07-09 | (build) | — | **front-end facts** recovered by construction: parser drops literal suffixes (evaluator re-reads them from source via position records); local `var` parses as STMT_LET with null value; `iii_parse_module` returns 1-on-success; bracket-init `[a,b,…]` = EXPR_PARALLEL and exists at MODULE scope only (`iiip_parse_let` has no bracket path) | Recorded here so no future consumer re-derives them the hard way. |
 | 4 | 2026-07-09 | 887/895 | 213 vs 99 | **compiler is incumbent** → evaluator conformed | bool → int is a legal adaptation (`return 5u64 == 5u64` from a `-> u64` fn yields 0/1). |
 | 5 | 2026-07-09 | 895 | 213 vs 99 | **compiler is incumbent** → evaluator conformed | if/while conditions accept INTEGER operands; truth = nonzero (`if ON` with `ON : u32`). |
-| 6 | 2026-07-09 | p16 partial-init arm | 6 vs 99 | **OPEN — candidate cg_r3 defect** (the arm was designed to adjudicate exactly this) | A partially-initialized global array (`var P : [u32;4] = [7u32, 9u32]`) is emitted at **listed** size, so its tail **aliases the next global** — measured: packed observer returns `P[3] ≡ Q[1] = 13`. Any program writing past the listed elements silently corrupts a neighbor. Fix belongs in cg_r3 `.data` sizing (declared count × elem size) and MUST land with its own corpus-regression + determinism sweep (it moves every binary's layout); the probe's tail checks are de-asserted until the law is chosen, then re-assert. Evaluator keeps the zeroed-tail meaning meanwhile. |
+| 6 | 2026-07-09 | p16 partial-init arm | 6 vs 99 | **CLOSED (session 2, same day) — compiler defect, FIXED** | A partially-initialized global array (`var P : [u32;4] = [7u32, 9u32]`) was emitted at **listed** size, so its tail **aliased the next global** (RED arm, machine bytes: `.data` = 16 B, `P[3] ≡ Q[1]`, repro rc 223 vs eval 0). Fix: both PARALLEL arms of `r3_emit_data_decls` emit `.zero (N−listed)×sizeof(elem)` — the declared-extent law, = the evaluator's meaning. GREEN arm proven: `.data` = 24 B with zeroed tail, repro rc 0 ≡ eval, p16 tail checks re-asserted (probe floor 17/17). Swept: stage1 equivalence 60/60 · **self-host fixpoint iiis-2 ≡ iiis-3 BYTE-IDENTICAL** · run_corpus **1594/0** · meaning gate 110/112, 0 divergence, ratchet 110. Goldens iiis-{1,2,3}.mhash re-sealed (intentional-change law). |
+
+| 7 | 2026-07-09 | constidx repro (session 2) | 139 (SIGSEGV) vs 8 | **compiler defect — found by hand-probe while building p17** | Const-ARRAY addressing never worked: `r3_emit_global_ident`'s CONST_DECL arm value-loaded the first quad of `.rodata` and the index path dereferenced it as a base pointer (machine proof: `mov 0x0(%rip),%rax` + `mov (%rax,%rcx,8)`); `r3_index_obj_elem_kind` also lacked a CONST_DECL arm (stride 8 regardless of element). Fixed in the same pass as row 6: const-array ident → `leaq` + element-width stride, mirroring the var-array arms. Evaluator side widened symmetrically (const arrays were UNSUP_TYPE; now var-style world objects — required by Θ1's theater regardless). p17 pins var+const arms at widths 1/2/4/8. |
+
+**WATCH (named suspect, not yet probed):** the ADDR-of-INDEX path (`&arr[i]`, cg_r3.iii ≈2514)
+emits only scales 1 and 8 — `&u32arr[i]` / `&u16arr[i]` would compute base + i×8, disagreeing with
+the width-aware load/store path. Needs its own probe + fix pass (p18 candidate).
+
+**STALE GATE (found + measured this session):** `build_iiis1.sh --check-corpus` (iiis-0 ↔ iiis-1
+byte-equivalence) has been incomparable since the sovereign-emit overhaul: the .iii lineage writes
+minimal COFF (empty sections skipped), frozen iiis-0 writes gcc-as-style full COFF. 0/60 is its
+steady state — proven by three-way hash: old-iiis-1 (git HEAD) ≡ fresh-iiis-1 ≡ pinned-iiis-2, all
+`40a18e…` on 01_return_const, vs iiis-0's 706-byte full-COFF object. The LIVE equivalence gate is
+`build_iiis2.sh --check-corpus` (iiis-1 ↔ iiis-2, both sovereign). An honest cross-divide oracle
+would compare link+run BEHAVIOR, not bytes — future work, named here.
+
+### Row-6 fix audit (2026-07-09 session 2, written BEFORE the edit — evidence-before-action)
+
+**Defect sites (read in full).** `cg_r3.iii r3_emit_data_decls`: const-PARALLEL arm (≈3714-3722)
+and var-PARALLEL arm (≈3740-3748) both emit one data directive per **listed** branch and ignore the
+declared count. The `.bss` arm (≈3759-3764) already sizes by count (×8 — a **recorded deliberate**
+stage-0 stride paranoia, per the cg_r3.c twin's comment at its ≈3808; its rationale is stale — r3
+indexing is width-aware via `r3_index_obj_elem_kind` — but the direction is safe-fat; untouched).
+
+**The law being landed.** A module-scope bracket-init array `[T; N] = [e…]` emits **exactly
+N × sizeof(T) bytes**: listed elements, then `.zero (N−listed)×sizeof(T)` when N > listed. This is
+the evaluator's pinned meaning (`ev_fill_array`: pre-zeroed region; overfill → UNSUPPORTED).
+
+**Measured couplings (all [measured] this session).**
+- Tree-wide exposure: **1,425** module-scope bracket-inits; **zero underfilled** outside probe p16 →
+  the fix is **layout-neutral for everything that exists**; only new programs gain tails.
+- Frozen seed: `cg_r3.c` carries the same listed-size law; it is NOT touched (Λ0's live ccsv
+  substrate + DDC seals). Safe because `build_iiis1.sh --check-corpus` (iiis-0 ↔ iiis-1) and
+  `build_iiis2.sh --check-corpus` (iiis-1 ↔ iiis-2) compare emissions on `stage1_corpus`, which has
+  **zero partial inits** [measured] — byte-equivalence unaffected. Seed divergence recorded here,
+  same pattern as the CLAUDE.md seed-trap ledger.
+- Assembler (same law, second gap): `sovparse.iii sp_dir1` handles `.quad/.long/.byte/.zero/.ascii`
+  — **no `.short`** — while `r3_emit_gas_data_hex(width==2)` emits `.short` for `[u16;N]` inits →
+  silently dropped bytes. Measured: **zero** u16/i16 bracket-inits tree-wide, **zero** `.short` in
+  any built `.s` → adding the handler is layout-neutral. Fix: `.short` arm (OFF+=2, `sp_emit_val(…,2)`),
+  mirroring `.long`. `.zero` semantics verified correct in ALL sections (data: real zero bytes;
+  bss: reserve) at sovparse.iii:1020-1027.
+- **Overfill finding** (new, this audit): `emit.iii:264 STR_LDSCRIPT_HDR : [u8;64]` lists **66**;
+  `STDLIB/iii/omnia/xii_curated_riscv.iii:41 XCR_H058_RISCV : [u8;16]` lists **20**. Both *depend*
+  on listed-size over-emission today; the pad-only fix leaves them byte-identical. Declarations are
+  lies — queued for truth-restoration after consumer-length check (separate, zero-emission-delta).
+- Rebuild chain (sovparse lives in `libiii_native.a`; cg_r3.iii is a PORTED_TU):
+  `build_stdlib.sh` → `build_iiis1.sh` → `build_iiis2.sh --check-corpus` → `run_corpus.sh` →
+  `build_iii_eval.sh` → `run_meaning.sh` (p16 tails re-asserted + new p17 u16-init probe).
 
 ---
 

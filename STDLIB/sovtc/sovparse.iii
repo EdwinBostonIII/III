@@ -1013,6 +1013,10 @@ fn sp_dir1() {
             SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 4u32
             if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_skip_ws()  sp_emit_val(sp_num(), 4u32) } }
         }
+        if mn_is(115u32,104u32,111u32,114u32,5u32) == 1u32 {       /* .short (u16 data -- cg_r3 [u16;N] bracket-init; was silently dropped) */
+            SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 2u32
+            if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_skip_ws()  sp_emit_val(sp_num(), 2u32) } }
+        }
         if mn_is(98u32,121u32,116u32,101u32,4u32) == 1u32 {        /* .byte */
             SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + sp_count_bytes()
             if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_emit_bytes() } }

@@ -1,0 +1,35 @@
+/* p17 -- data-emission law at every width, var AND const arms:
+ *   (a) .short through the sovereign assembler (pre-fix sovparse silently
+ *       DROPPED .short, so [u16;N] bracket-init globals lost their bytes);
+ *   (b) row-6 declared-extent law: partial bracket-init zero-fills the tail
+ *       (never aliases the next symbol) at widths 2/1/8/4;
+ *   (c) row-7 const-array addressing: a const array ident is an ADDRESS
+ *       (leaq) with element-width stride (the value-load form SIGSEGV'd).
+ * 258 = 0x0102 pins byte order + element width bit-exactly. */
+module mp17
+
+var W : [u16; 4] = [258u16, 3u16]
+var V : [u16; 2] = [65535u16, 40u16]
+var B : [u8; 5] = [17u8, 34u8]
+var T : [u64; 3] = [4096u64]
+const CR : [u32; 3] = [9u32, 8u32]
+
+fn main() -> u64 {
+    if W[0u64] != 258u16 { return 1u64 }
+    if W[1u64] != 3u16 { return 2u64 }
+    if W[2u64] != 0u16 { return 3u64 }
+    if W[3u64] != 0u16 { return 4u64 }
+    if V[0u64] != 65535u16 { return 5u64 }
+    if V[1u64] != 40u16 { return 6u64 }
+    if B[0u64] != 17u8 { return 7u64 }
+    if B[1u64] != 34u8 { return 8u64 }
+    if B[2u64] != 0u8 { return 9u64 }
+    if B[4u64] != 0u8 { return 10u64 }
+    if T[0u64] != 4096u64 { return 11u64 }
+    if T[1u64] != 0u64 { return 12u64 }
+    if T[2u64] != 0u64 { return 13u64 }
+    if CR[0u64] != 9u32 { return 14u64 }
+    if CR[1u64] != 8u32 { return 15u64 }
+    if CR[2u64] != 0u32 { return 16u64 }
+    return 99u64
+}

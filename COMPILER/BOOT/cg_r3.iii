@@ -1228,7 +1228,17 @@ fn r3_emit_global_ident(node: u32, off: u32, len: u32) -> u32 {
     }
     let bk: u32 = iii_ast_node_kind(R3_G_AST, bid)
     if bk == R3_K_CONST_DECL {
-        r3_emit_global_load_with_type(off, len, iii_ast_const_decl_type(R3_G_AST, bid)); r3_push_rax(); return R3_OK
+        /* meaning-lift row 7: a const ARRAY ident is an ADDRESS (leaq), exactly
+         * like the var-array arm below -- the value-load form fetched the first
+         * quad of .rodata and dereferenced it as a base pointer (SIGSEGV). */
+        let ct: u32 = iii_ast_const_decl_type(R3_G_AST, bid)
+        if ct != 0u32 {
+            let ctk: u32 = iii_ast_node_kind(R3_G_AST, ct)
+            if ctk == R3_K_TYPE_ARR {
+                r3_emit_global_leaq(off, len); r3_push_rax(); return R3_OK
+            }
+        }
+        r3_emit_global_load_with_type(off, len, ct); r3_push_rax(); return R3_OK
     }
     if bk == R3_K_VAR_DECL {
         let vt: u32 = iii_ast_var_decl_type(R3_G_AST, bid)
@@ -2053,6 +2063,7 @@ fn r3_index_obj_elem_kind(obj_node: u32) -> u32 {
             if bk == R3_K_STMT_LET { tnode = iii_ast_let_type(R3_G_AST, bid) }
             if bk == R3_K_PARAM { tnode = iii_ast_param_type(R3_G_AST, bid) }
             if bk == R3_K_VAR_DECL { tnode = iii_ast_var_decl_type(R3_G_AST, bid) }
+            if bk == R3_K_CONST_DECL { tnode = iii_ast_const_decl_type(R3_G_AST, bid) }   /* row 7: const arrays stride by ELEMENT width, same as var */
         }
     }
     if tnode == 0u32 { return 0u32 }
@@ -3720,6 +3731,9 @@ fn r3_emit_data_decls() -> u32 {
                 let bc: u32 = iii_ast_parallel_branch_count(R3_G_AST, v)
                 let mut k: u32 = 0u32
                 while k < bc { let eid: u32 = iii_ast_parallel_branch_at(R3_G_AST, v, k); r3_lit_u64_compute(eid); r3_emit_gas_data_hex(ew); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN); k = k + 1u32 }
+                /* meaning-lift row 6: the array occupies its DECLARED extent -- a partial
+                 * bracket-init zero-fills the tail so it can never alias the next symbol. */
+                if vt != 0u32 { let tk2: u32 = iii_ast_node_kind(R3_G_AST, vt); if tk2 == R3_K_TYPE_ARR { let dn: u64 = iii_ast_type_array_count(R3_G_AST, vt); if dn > (bc as u64) { r3_emit_arr(&R3_K_ZERO_PFX as u64, R3_K_ZERO_PFX_LEN); r3_emit_dec((dn - (bc as u64)) * (ew as u64)); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN) } } }
             } else {
                 let okv: u32 = r3_lit_u64_compute(v)
                 if okv == 1u32 {
@@ -3745,6 +3759,8 @@ fn r3_emit_data_decls() -> u32 {
                     let bc2: u32 = iii_ast_parallel_branch_count(R3_G_AST, init)
                     let mut k2: u32 = 0u32
                     while k2 < bc2 { let eid2: u32 = iii_ast_parallel_branch_at(R3_G_AST, init, k2); r3_lit_u64_compute(eid2); r3_emit_gas_data_hex(ew); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN); k2 = k2 + 1u32 }
+                    /* meaning-lift row 6: declared extent, zero tail (see const arm). */
+                    if vt != 0u32 { let tk3: u32 = iii_ast_node_kind(R3_G_AST, vt); if tk3 == R3_K_TYPE_ARR { let dn2: u64 = iii_ast_type_array_count(R3_G_AST, vt); if dn2 > (bc2 as u64) { r3_emit_arr(&R3_K_ZERO_PFX as u64, R3_K_ZERO_PFX_LEN); r3_emit_dec((dn2 - (bc2 as u64)) * (ew as u64)); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN) } } }
                     handled = 1u32
                 } else {
                     let okv2: u32 = r3_lit_u64_compute(init)

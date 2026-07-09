@@ -16,13 +16,13 @@ fn main() -> u64 {
     if D[2u64] != 65536u64 { return 3u64 }
     if P[0u64] != 7u32 { return 4u64 }
     if P[1u64] != 9u32 { return 5u64 }
-    /* THE INSTRUMENT'S FIRST COMPILER-SIDE CATCH (2026-07-09, ledger row 6):
-     * natively P[2]/P[3] are NOT zero -- the array is emitted at LISTED
-     * size (8 bytes), so its tail ALIASES the next global (measured:
-     * P[3] == Q[1] == 13 via a packed-return observer).  Tail checks are
-     * de-asserted until the cg_r3 .data sizing decision lands with its own
-     * corpus-regression sweep; then this probe re-asserts the chosen law. */
+    /* Row 6 CLOSED (2026-07-09 session 2): the declared-extent law landed in
+     * cg_r3 (.zero tail after listed elements) -- the tail is now asserted
+     * zero in BOTH routes, forever.  These two checks are the teeth that
+     * redden if the aliasing class ever returns. */
     if P[0u64] + P[1u64] != 16u32 { return 6u64 }
+    if P[2u64] != 0u32 { return 14u64 }
+    if P[3u64] != 0u32 { return 15u64 }
     /* (pinned front-end fact: bracket-init exists at MODULE scope only --
      * iiip_parse_let has no bracket path; a local `= [...]` is a parse
      * error.  Local arrays fill by assignment.) */

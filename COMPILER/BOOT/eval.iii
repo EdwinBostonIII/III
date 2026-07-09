@@ -1501,18 +1501,46 @@ fn ev_collect(root: u32) -> u32 {
             let rc: u32 = ev_type_add(iii_ast_struct_decl_name_off(EV_AST, d), iii_ast_struct_decl_name_len(EV_AST, d), d, 1u32)
             if rc != EVS_OK { return rc }
         } else { if k == EVK_CONST_DECL {
+            let tn: u32 = iii_ast_const_decl_type(EV_AST, d)
+            let mut isarr: u32 = 0u32
+            if tn != 0u32 {
+                let rct: u32 = ev_type_tag(tn)
+                if rct != EVS_OK { EV_ERRN = d ; return rct }
+                isarr = EV_TARR
+            }
+            if isarr == 1u32 {
+                /* const array: a read-only global -- same world layout as a
+                 * var array (row-6 law: declared extent, zero tail).  Copy
+                 * the type outs BEFORE filling (element exprs may re-enter
+                 * ev_type_tag via casts). */
+                let cet: u64 = EV_TELEM
+                let csz: u64 = EV_TSZ
+                let ctt: u64 = EV_TT
+                let ccnt: u64 = EV_TCNT
+                let mut cns: u64 = csz
+                if cns == 0u64 { cns = 8u64 }
+                let cslot: u64 = ev_galloc(cns)
+                if cslot == 0u64 { return EV_ERRC }
+                iii_lex_memset_c(cslot, 0u32, cns)
+                let cino: u32 = iii_ast_const_decl_value(EV_AST, d)
+                if cino != 0u32 {
+                    let rcf: u32 = ev_fill_array(cslot, cet, ccnt, cino)
+                    if rcf != EVS_OK { return rcf }
+                }
+                let rcg: u32 = ev_glob_add(iii_ast_const_decl_name_off(EV_AST, d), iii_ast_const_decl_name_len(EV_AST, d), cslot, ctt)
+                if rcg != EVS_OK { return rcg }
+                ev_glob_meta(1u64 + (cet << 8u64), csz)
+            } else {
             let vn: u32 = iii_ast_const_decl_value(EV_AST, d)
             let rc: u32 = ev_eval_expr(vn)
             if rc != EVS_OK { EV_ERRN = d ; return rc }
             ev_pop()
             let v: u64 = EV_POPV
             let vt: u64 = EV_POPT
-            let tn: u32 = iii_ast_const_decl_type(EV_AST, d)
             let mut want: u64 = vt
             if tn != 0u32 {
                 let rc2: u32 = ev_type_tag(tn)
                 if rc2 != EVS_OK { EV_ERRN = d ; return rc2 }
-                if EV_TARR == 1u32 { EV_ERRN = d ; EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
                 want = EV_TT
             } else {
                 if ev_t_class(want) == EVC_INT { if ev_t_width(want) == 0u64 { want = ev_mk_int(8u64, 0u64) } }
@@ -1526,6 +1554,7 @@ fn ev_collect(root: u32) -> u32 {
             if EV_ERRC != 0u32 { return EV_ERRC }
             let rc4: u32 = ev_glob_add(iii_ast_const_decl_name_off(EV_AST, d), iii_ast_const_decl_name_len(EV_AST, d), slot, want)
             if rc4 != EVS_OK { return rc4 }
+            }
         } else { if k == EVK_VAR_DECL {
             let tn: u32 = iii_ast_var_decl_type(EV_AST, d)
             let rc: u32 = ev_type_tag(tn)

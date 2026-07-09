@@ -33,7 +33,7 @@ extern @abi(c-msvc-x64) fn clock() -> i64 from "msvcrt"
 extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn putenv(nv: u64) -> i32 from "msvcrt"
 
-var MEM  : [u8; 4194304]                 /* svir_mem: flat linear memory (4 MiB) */
+var MEM  : [u8; 134217728]               /* svir_mem: flat linear memory (128 MiB -- iii_link_state_t is ~85MB ONCE FIELD ARRAYS SIZE CORRECTLY (modules[1024] x dep_names[64][256]+exports[256]); main.c calloc's one even under --compile-only, and gcc hosts that trivially, so the interp's world must too.  4 MiB silently dropped the 85MB memset's writes (mb/msb bounds) -> deterministic corruption, corpus 0/60) */
 var VS   : [u64; 16384]   var VSP : u32 = 0u32      /* the shared eval (value) stack */
 var LOC  : [u64; 131072]                 /* per-call locals: frame `depth` owns LOC[depth*256 .. +256] (512 frames) */
 var CK   : [u32; 16384]   var CP : [u64; 16384]   var CE : [u64; 16384]   /* per-call control stack: depth*64 + csp */
@@ -105,8 +105,8 @@ fn ib(i: u64) -> u32 { let p : *u8 = (svir_ptr() + i) as *u8  return p[0u64] as 
 fn ird8(i: u64) -> u64 { let mut v:u64=0u64  let mut k:u64=0u64  while k<8u64 { v = v | ((ib(i+k)) as u64 << (k*8u64))  k=k+1u64 }  return v }   /* 8-byte LE from the module body */
 fn iu16(i: u64) -> u64 { return (ib(i) as u64) | ((ib(i+1u64) as u64) << 8u64) }
 
-fn mb(a: u64) -> u32 { if a < 4194304u64 { return MEM[a] as u32 }  return 0u32 }
-fn msb(a: u64, v: u32) { if a < 4194304u64 { MEM[a] = (v & 255u32) as u8 } }
+fn mb(a: u64) -> u32 { if a < 134217728u64 { return MEM[a] as u32 }  return 0u32 }
+fn msb(a: u64, v: u32) { if a < 134217728u64 { MEM[a] = (v & 255u32) as u8 } }
 fn mld(a: u64, w: u32, sgn: u32) -> u64 {                 /* load w bytes (1/2/4/8) from MEM, sign- or zero-extend */
     let mut v : u64 = 0u64  let mut k : u64 = 0u64
     while k < (w as u64) { v = v | ((mb(a+k)) as u64 << (k*8u64))  k=k+1u64 }
@@ -256,13 +256,14 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut s : u32 = 0u32  while s < 256u32 { LOC[s as u64] = 0u64  s = s + 1u32 }   /* main's locals start 0 */
     /* Lambda-0 argv staging: the linked seed's main(argc, argv) reads a REAL command line.  The seed's
      * memory map is statics[0..~477K) / shadow-stack(grows DOWN from 917,504) / VA+FMT(~983K) /
-     * heap(UP from 1,048,576) -- so argv must live ABOVE the heap's reach.  MEM is 4 MiB; the table +
-     * strings sit at the TOP (MEM[4,190,000..]), clear of a small-input compile's heap growth (the
-     * stage1_corpus programs are tiny).  8B table slots; argv[0]="iiis-0"; argv[1..]=THIS interp's
-     * argv[1..].  No args -> argc=1 -> the seed's usage path (rc parity). */
+     * heap(UP from 1,048,576) -- so argv must live ABOVE the heap's reach.  MEM is 128 MiB (the seed
+     * calloc's one ~85MB iii_link_state_t even under --compile-only); the table + strings sit at the
+     * TOP (MEM[134,213,424..]), clear of the link-state + compile heap growth.  8B table slots;
+     * argv[0]="iiis-0"; argv[1..]=THIS interp's argv[1..].  No args -> argc=1 -> the seed's usage
+     * path (rc parity). */
     let pp : *u64 = argv as *u64
-    let tb : u64 = 4190000u64
-    let mut scur : u64 = 4190256u64
+    let tb : u64 = 134213424u64
+    let mut scur : u64 = 134213680u64
     MEM[scur]=105u8 MEM[scur+1u64]=105u8 MEM[scur+2u64]=105u8 MEM[scur+3u64]=115u8 MEM[scur+4u64]=45u8 MEM[scur+5u64]=48u8 MEM[scur+6u64]=0u8   /* "iiis-0" */
     let mut k8 : u64 = 0u64  while k8 < 8u64 { MEM[tb+k8] = ((scur >> (8u64*k8)) & 255u64) as u8  k8=k8+1u64 }
     scur = scur + 7u64
@@ -280,7 +281,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     LOC[1u64] = tb                                /* the seed's argv */
     if FPRINTF_DBG==1u32 { putchar(10i32) putchar(68i32) putchar(73i32) putchar(61i32)   /* "DI=" data-image bytes 55..95 at startup: is literal@63 carried? */
         let mut dk:u64=55u64  while dk<95u64 { let db9:u32=MEM[dk] as u32  if db9>=32u32 { if db9<127u32 {putchar(db9 as i32)} else {putchar(46i32)} } else {putchar(46i32)}  dk=dk+1u64 }  putchar(10i32) }
-    if ARGV_DBG == 1u32 { return MEM[4190256u64] as u64 }   /* DEBUG: prove the staged byte survives to exec */
+    if ARGV_DBG == 1u32 { return MEM[134213680u64] as u64 }   /* DEBUG: prove the staged byte survives to exec */
     let r : u64 = exec_fn(0u32, 0u32)            /* func 0 = main (the entry); prints via PRINT_CHAR */
     if BADW_N > 0u32 {                            /* CONST-DATA CORRUPTION detected -> print the offending writes */
         putchar(10i32)  pstr2(66u32,87u32)  putchar(58i32)  putchar(32i32)   /* "BW: " */

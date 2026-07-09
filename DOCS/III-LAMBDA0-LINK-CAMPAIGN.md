@@ -388,3 +388,152 @@ the session-6b dot-global leftovers above; `%0Nx`-style width pads in emit_fmt (
 only — never on the compile-success path); the interp's BADW const-image watchdog counts the seed's
 legitimate writable statics (g_orch etc.) because ccsv carries them INSIDE the data image — a
 layout-classification refinement, not a correctness defect (the byte-identical .o is the proof).
+
+## CORPUS-SCALE PARITY (session 8, 2026-07-08): the next rung after S4
+
+S4 proved ONE trivial module.  The rung: every `COMPILER/BOOT/stage1_corpus/*.iii` (60 programs,
+the same set `build_iiis1.sh --check-corpus` pins iiis-1 with) through seed.exe vs gcc iiis-0 —
+rc parity + byte-identical .o, both compilers invoked from BOOT_DIR with the same relative input.
+
+**The first sweep failed 50/50 — and the harness itself was the trigger.**  File 01 passed a
+hand-run (rc=0, byte-identical) yet failed the sweep at EMIT_FAIL 16; the only delta was the
+sweep's LONGER --out basename.  Bisect: out-path ≤76 chars green, ≥77 red — i.e. the assemble
+command crossing **256 chars** (`cmd(L) = 3L + 29`; 255 pass / 258 fail).
+
+**Root cause (ccsv, function-scope resolution missing)**: prescan_arr registers every local array
+into the A-table with NO scope key, and every accessor (abase/aesize/alen/avtype/…) resolved
+first-match-by-NAME across the whole TU.  emit.c declares `char cmd[256]` (audit, line 333),
+`cmd[1024]` (387), `cmd[2048]` (iii_emit_assemble, 568), `cmd[16384]` (link, 625) — so assemble's
+`sizeof cmd` read **256** (the FIRST registration), `iii_emit_appendf` saw `n=258 ≥ cap−off=256`,
+returned −1 → E_CMD_OVERFLOW → "assemble failed" → 16, with a COMPLETE byte-correct .s on disk and
+system() never called.  The shim-call stream (SC:/CL: tracer added to the FPRINTF_DBG microscope)
+pinned it: the pass run reaches `SC:system(cmd,238)`; the fail run's last emit-phase shim is the
+PHASE_END clock (its printed args are stale locals-frame residue — `176754,256` = cmd's address +
+strlen, initially misread as a corrupted dispatch).
+
+**Fix 1 — function-scoped A-table (ccsv.iii)**: `map_bodies()` (one post-lex pass; per-token
+TOP-LEVEL brace-body id, file scope = 0) + `ABID` column stamped at all EIGHT A-append sites
+(prescan_arr ×3, prescan_structarr ×3, file-scope scalars, reg_var) + `aidx(t)` — a same-body
+entry wins, else the first FILE-SCOPE entry, a local of another body never matches (C scope) —
+replacing the name loop in all 11 accessors (alen_by_name keeps name-only but prefers ABID==0).
+
+**Fix 2 — the fix's own regression, root-caused to a PRE-EXISTING phantom generator**: probe9b
+99→78 under scoping.  ccsv dbg (extended with an A-table dump: name/base/esz/avt/**bid**) showed
+main's body full of phantom `SRC`/`POOL` struct-array entries (avt = the ANONYMOUS union's index,
+n = the USE-SITE indices 3,4,5,6!).  Mechanism: anonymous aggregates register with a ZERO-LENGTH
+name; punctuation tokens carry TL=0; `neq(0-len, 0-len)` compares zero bytes → MATCH — so
+`stidx(';')==the-anon` and every `; NAME [ i ]` statement prescan_structarr'd a phantom
+struct-array at MTOP.  Benign for years under first-match order (registered AFTER the real
+entries); ACTIVE the moment same-body entries win.  Fix: `stidx` zero-length guard BOTH ways
+(a TL=0 token never matches; an STNL=0 type is never found by name — anons are anon_lookup's).
+Phantom storage gone shrank the linked seed image 1317177 → 1297209 bytes.
+
+**Falsifier `_s4_probe12.c`** (two-path proven: gcc 99 / pre-fix ccsv 61): same-named `cmd[64]`
+then `cmd[512]` in different fns — sizeof through both (paren + paren-less), the appendf shape
+crossing 256 formatted chars, same-named-local storage isolation across a call, local-shadows-
+global with the global's bytes intact.  Post-fix: **99 on ALL FIVE executors** (gcc, interp,
+svir_verify=0, sovereign-x86-native via sovas+sovlink, wasm).
+
+**Verification (all measured this session)**: probes 8/9/9b/10/10b/10c/11/12 all 99 via interp;
+`run_ccsv.sh` rc=0, FAIL=0 (whole-seed floor holds); `run_fnptr_gate.sh` ALL PASS (5 executors +
+OOB teeth); `run_seed_sovereign.sh` rc=0 S1–S4 ALL GREEN with the re-linked seed; ccsv.o and
+ccsv(emit.c) output both run-to-run byte-deterministic.  New gate: `run_seed_corpus.sh` — all 60
+corpus programs, LONG out names kept deliberately as this defect's permanent teeth.
+
+Open (ledgered, this session): (a) on the pre-fix ERROR path, `fprintf(stderr, "assemble failed")`
+never reached the interp's fprintf shim (no FP!/SC trace) — error-path-only, invisible to rc/.o
+parity, unresolved; (b) `static char X[32]`-style quals cause a DOUBLE A-registration (one per
+decl-prefix token; first-match hides it, one dead storage span per qualified global array); (c) the
+dbg mode now dumps the A-table (name/base/esz/n/avt/bid) and struct STNO/STNL — permanent
+instruments.
+
+### Session 8, defect 2: bare GLOBAL struct var passed BY VALUE sent its ADDRESS
+
+The post-fix corpus map (pass=6 fail=54) split by signature: ~30× rc=12 (SEMA_FAIL, incl. plain
+`24_var_global`), 4× rc=14 (CG), 6× rc=124 (hang), 3× rc=199 (the interp's OOB CALL_INDIRECT trap —
+55/56/57_..._form_runtime), 4× byte-diverge.  The 199s prove out-of-range fn-ptr indices at runtime;
+CI-tracing 24_var_global showed ONE indirect call `CI:44/5@735` (caller = cg_r3's local_lookup_slot,
+target = main.c's iii_d_mul!) then a clean unwind to 12 — initially read as a missed //V rewrite.
+
+Minimal-repro discipline caught two false trails: (1) the first minis initialized via
+`G.locals[i].f = v` — the LEDGERED session-6b dot-global-chained-store gap (seed-unused) — so they
+failed for a reason unrelated to the seed; re-built with pointer stores (`cg->locals[i].f = v`) the
+seed-exact lookup STILL failed 61 with ZERO indirect calls (the rogue CI is a downstream symptom,
+not the root).  (2) The atom (probe ladder mini7-9): `r_param(txt_t name){return name.length;}`
+called with a BARE GLOBAL struct var — `r_param(NM)` — returned garbage at ANY arg position, while
+deref (`*nm`), arrow-field (`l1->name`), and local-copy passes were all correct.
+
+Root cause: eprim's global-ident tail had two arms — `aisc==1` (scalar → LOAD) and the decay arm
+(`econst(base)` → ADDRESS, right for bare ARRAYS).  A reg_var'd struct VAR (avtype≥0, ALEN==0)
+fell into decay: its ADDRESS went into the by-value arg slot, so the callee's field reads decoded
+an address (length = addr>>32).  Every sema/parse lookup keyed on a global `txt_t` passed by value
+failed — the whole 12-class.  The LOCAL analog (line ~1315) already did this right (≤8B → LOAD64
+packed; >8B → address, the aliased convention).  Fix: the global tail now mirrors it — avtype≥0 &&
+ALEN==0 && STSZ∈{1,2,4,8} → `econst(base); eload(STSZ)`; struct ARRAYS (ALEN≥1) still decay; >8B
+struct vars keep the aliased pass-by-pointer convention.  Falsifier `_s4_probe13.c` (bitmask over
+five pass modes; gcc=32): pre-fix ccsv = 49 (bits 0+4 = bare-global at positions 1 and 2), post-fix
+= 32 on gcc + interp.  Probes 8–12 all hold 99.
+
+### Session 8, defect 3 (THE corpus killer): field arrays dimensioned by NAMED CONSTANTS collapsed to ONE element
+
+The by-value fix (defect 2) changed NOTHING on the corpus — identical 54-fail signatures, identical
+seed image size: the seed never passes a bare global struct by value (probe13 caught a REAL ccsv
+defect but a PROXY of the corpus failure — the ledgered proxy-repro trap, hit live).  The honest
+chain that followed, all MEASURED:
+
+- run_seed_link.sh's own comment resolved the fprintf mystery: **undeclared stdio calls in TUs
+  without crt_tail are compile-time no-ops** — sema.c/parse.c diagnostics DROP by design; only
+  main.c's crt_tail'd fprintf reaches the shim.  So silent 12s carry recorded-but-unprintable errors.
+- The at-exit memory dump of sema state (deterministic heap @1119112) read **error_count=4** with
+  ER0 = "duplicate declaration of..." and ER1..3 = code 2 "parser produced an error node" —
+  sema was reacting HONESTLY to a corrupted PARSE.
+- The 4-TU _parseharness (ccsv→svir_ld→interp) parses 24_var_global CLEAN (ok=1 ec=0 nd=2) — same
+  code, same input as the 19-TU seed which mangles it: an environment-emergent defect.
+- A store-watch on the parse-state block (deterministic @1090792, 536B) caught the writer:
+  **iiip_bc_push stored 0x4_0000_002C — the packed iii_src_text_t {offset=44,length=4} = the token
+  'main' — at st+416 = pratt_trace**.  parse.c declares
+  `iiip_prod_id_t bc_stack[III_PARSE_BREADCRUMB_CAP]` and
+  `iii_src_text_t bc_detail[III_PARSE_BREADCRUMB_CAP]`: ccsv's reg_fields resolved [NAMED_CONST]
+  dims ONLY in the scalar-dtype arm (the old link.c sym[III_LINK_SYM_CAP] fix); the STRUCT-TYPED
+  and ENUM/FWD-TYPEDEF field arms accepted only NUMERIC dims — both breadcrumb arrays registered
+  as ONE element, so every bc_push beyond depth 0 overlaid witness_ctx/witness_committed/
+  witness_sink/pratt_trace/reg_decl/reg_stmt/reg_primary.  The overlay explains the whole failure
+  spectrum: garbage pratt_trace → CALL_INDIRECT 44 (in-range wrong dispatch, the rc=12 sema class
+  via clobbered reg tables + error nodes), other spray values → rc=124 hangs and rc=199 OOB traps
+  (55/56/57).  Fields BEFORE +264 (errors/error_count/depth) stay safe — why the shallow harness
+  verdict passed and why S4's trivial module never tripped it.
+- Fix: the cidx([NAMED_CONST]) fallback added to BOTH remaining field arms + `SFSZ` (total field
+  bytes) now STORED in those arms (it never was — sizeof(p->field) on struct/enum-element arrays
+  returned the ELEMENT size).  Falsifier `_s4_probe14.c` (enum-elem stack[#define CAP] +
+  struct-elem detail[enum ECAP], sizeof-ratio + element round-trip + neighbor guards): gcc 99 /
+  pre-fix ccsv 60 / post-fix 99.  Probes 8-13 all hold.
+
+### Session 8, defect 4: `typedef struct TAG ALIAS;` reg_var'd the ALIAS as a struct VARIABLE
+
+Round-3 gates: floor rc=0 FAIL=0 and fnptr ALL PASS with the field-array fix — but the seed LINK
+went red: G2 statics 89,162,168 >> 917,504 ("svir_ld: data image overflow"), link.c's membase
+jumping +88.7MB.  The A-dump showed an entry literally named `iii_link_state_t` (avt=96, file
+scope): prescan_struct's `struct TAG NAME` arm has no typedef guard, so link.h's forward typedef
+`typedef struct iii_link_state iii_link_state_t;` parsed as `struct TAG varname;` and reg_var'd a
+phantom static of STSZ bytes.  It ALWAYS did — the phantom was ~90KB while field arrays collapsed
+(defect 3 masked it under the ceiling); correct sizing exposed it (iii_link_state_t truly is
+~85MB: modules[1024] × ~87KB dep_names/exports — gcc parks the real instance on the HEAP via
+calloc; only the phantom was static).  Fix: both struct/union `TAG NAME` arms skip when t-1 is
+`typedef` (the TypedefName arm already had the istk(t-1) guard).  link.c MTOP 88,729,661 → 23,045;
+probes 8-14 all hold.  Also this session: SFSZ (total field bytes) was never STORED by the
+struct-typed and enum-typedef field arms — sizeof(p->field) on those returned the ELEMENT size —
+now stored (the layout offsets were right; only the sizeof read was short).
+
+### Session 8, consequence: the interp's world grows to 128 MiB
+
+With field arrays truly sized, round 4 went 0/60 -- WORSE -- including 01_return_const (rc=14):
+`iii_link_state_t` is genuinely ~85MB and main.c calloc's ONE unconditionally even under
+--compile-only.  gcc hosts that allocation trivially (heap); the interp's 4 MiB MEM could not --
+the bump heap ran past the top and mb/msb's bounds checks silently DROPPED every write beyond 4 MiB
+(deterministic corruption, not a crash; ccsv's calloc is bump-fresh-zero so no 85MB write loop
+exists).  The seed source is frozen (seed-identity); the interp's memory model is Lambda-0 tooling:
+MEM grows 4 MiB -> 128 MiB (decl + mb/msb bounds), argv staging relocates to the new top
+(134,213,424/134,213,680), seed-side compile-time layout (statics<917504 / shadow / VA_BUF /
+HEAP_BASE=1MiB) untouched.  x86/wasm backend memory models are NOT yet grown -- they never execute
+the seed (KATs only); ledgered as the germination-side follow-up when a sovereign-native seed run
+lands.

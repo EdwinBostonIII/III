@@ -627,3 +627,20 @@ never the operand's), latent until struct pointers first carried a stride.  Sani
 `(uint8_t*)structptr + 8` → 8 (stride 1); `getb(structptr) - 48` → 7.  With all three:
 **S4 GREEN (byte-identical), SEED-SOVEREIGN GREEN**, probes 8-15 all hold, ccsv.o + ccsv(sema.c)
 run-to-run deterministic.
+
+### Session 8c corpus result + the DOWNSTREAM frontier (handoff)
+
+`run_seed_corpus.sh` with the EV_PSZ triad: **pass=9 fail=51** (was 6/54).  The sema 12-class
+collapsed (rc12 30 -> 1); 3 files fully cleared, but ~26 that previously fail-fast at sema now
+reach the next stage and HANG (rc124: 6 -> 34, the dominant remaining class).  Signature: 34
+rc124 (hang) + 10 rc14 (CG) + 6 byte-diverge + 1 rc12.
+
+Downstream localization (measured): parse/sema/sid all pass on the hang files (the `_semharness` /
+`_sidharness` / `_cgharness` scratch chain; sid harness rc=0 on 33_unify_basic).  `seed --asm-only`
+returns fast; `seed --compile-only` hangs at rc124 and leaves a `.s` TRUNCATED at ~32 lines (ends
+mid-function, `gcc -c` -> "missing .seh_endproc").  So cg_r3 is stuck mid-emission in the full
+pipeline.  It does NOT reproduce in `_cgharness` (parse->sema->sid->walloc->cg direct, cg returns
+rc=1 fast) -- the harness SKIPS `iii_ring_autodetect` (main.c runs it between parse and sema), so
+the frontier is ring-autodetect's AST effect feeding a cg_r3 loop (or a cg_r3 loop on the
+pattern/unify shapes 33-57 carry).  NEXT rung: the same descend-the-abstraction method on cg_r3,
+starting from a `_cgharness` that includes ring_autodetect.  The 12-class (sema) is CLOSED.

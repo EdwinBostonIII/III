@@ -1,0 +1,19 @@
+/* signed division / modulo / negation (C truncation semantics) */
+module mp11
+
+fn main() -> u64 {
+    let a : i64 = 0i64 - 7i64
+    let b : i64 = 2i64
+    if a / b != 0i64 - 3i64 { return 1u64 }    /* -7/2 = -3 trunc */
+    if a % b != 0i64 - 1i64 { return 2u64 }    /* -7%2 = -1 */
+    let c : i64 = 7i64
+    let d : i64 = 0i64 - 2i64
+    if c / d != 0i64 - 3i64 { return 3u64 }
+    if c % d != 1i64 { return 4u64 }
+    let e : i32 = 0i32 - 100i32
+    if e / 3i32 != 0i32 - 33i32 { return 5u64 }
+    let f : i64 = 0i64 - 5i64
+    let g : i64 = 0i64 - f
+    if g != 5i64 { return 6u64 }
+    return 99u64
+}

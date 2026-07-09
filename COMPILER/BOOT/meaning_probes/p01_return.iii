@@ -1,0 +1,5 @@
+module mp01
+
+fn main() -> u64 {
+    return 99u64
+}

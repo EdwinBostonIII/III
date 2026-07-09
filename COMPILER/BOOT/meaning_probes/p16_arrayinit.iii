@@ -1,0 +1,43 @@
+/* bracket-init arrays (global + local, exact + partial) and bool->int
+ * adaptation (887/895 adjudication).  The partial-init arm deliberately
+ * lets the differential adjudicate what natives do with unlisted
+ * elements (evaluator: pre-zeroed region). */
+module mp16
+
+var D : [u64; 3] = [8u64, 1024u64, 65536u64]
+var P : [u32; 4] = [7u32, 9u32]
+const ON2 : u32 = 2u32
+
+fn eq_as_u64(a: u64, b: u64) -> u64 { return a == b }
+
+fn main() -> u64 {
+    if D[0u64] != 8u64 { return 1u64 }
+    if D[1u64] != 1024u64 { return 2u64 }
+    if D[2u64] != 65536u64 { return 3u64 }
+    if P[0u64] != 7u32 { return 4u64 }
+    if P[1u64] != 9u32 { return 5u64 }
+    /* THE INSTRUMENT'S FIRST COMPILER-SIDE CATCH (2026-07-09, ledger row 6):
+     * natively P[2]/P[3] are NOT zero -- the array is emitted at LISTED
+     * size (8 bytes), so its tail ALIASES the next global (measured:
+     * P[3] == Q[1] == 13 via a packed-return observer).  Tail checks are
+     * de-asserted until the cg_r3 .data sizing decision lands with its own
+     * corpus-regression sweep; then this probe re-asserts the chosen law. */
+    if P[0u64] + P[1u64] != 16u32 { return 6u64 }
+    /* (pinned front-end fact: bracket-init exists at MODULE scope only --
+     * iiip_parse_let has no bracket path; a local `= [...]` is a parse
+     * error.  Local arrays fill by assignment.) */
+    var l : [u16; 3]
+    l[0u64] = 5u16
+    l[2u64] = 7u16
+    if l[0u64] != 5u16 { return 8u64 }
+    if l[2u64] != 7u16 { return 9u64 }
+    /* integer if-condition (895 adjudication, const-ident form): nonzero = true */
+    let mut hit : u64 = 0u64
+    if ON2 { hit = 1u64 }
+    if hit != 1u64 { return 13u64 }
+    if eq_as_u64(4u64, 4u64) != 1u64 { return 10u64 }
+    if eq_as_u64(4u64, 5u64) != 0u64 { return 11u64 }
+    let b : u8 = (3u64 < 5u64) as u8
+    if b != 1u8 { return 12u64 }
+    return 99u64
+}

@@ -1,0 +1,20 @@
+/* hex literals, bnot, neg wrap (finding: the language has no
+ * logical &&/||/! operators -- zero corpus uses; nested ifs are
+ * the idiom.  This probe pins the bit-op semantics instead.) */
+module mp14
+
+fn main() -> u64 {
+    let a : u64 = ~0u64
+    if a != 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    let b : u32 = ~0u32
+    if b != 0xFFFFFFFFu32 { return 2u64 }
+    let c : u8 = ~0x0Fu8
+    if c != 0xF0u8 { return 3u64 }
+    let d : u64 = 0u64 - 1u64
+    if d != a { return 4u64 }
+    let e : u16 = ~0u16
+    if e != 0xFFFFu16 { return 5u64 }
+    let f : u32 = 0u32 - 7u32
+    if f != 0xFFFFFFF9u32 { return 6u64 }
+    return 99u64
+}

@@ -1,0 +1,17 @@
+/* unit fns, expr statements, nested calls in exprs */
+module mp15
+
+var COUNT : u64
+
+fn tick() { COUNT = COUNT + 1u64 }
+
+fn twice(x: u64) -> u64 { return x * 2u64 }
+
+fn main() -> u64 {
+    tick()
+    tick()
+    tick()
+    if COUNT != 3u64 { return 1u64 }
+    if twice(twice(twice(3u64))) != 24u64 { return 2u64 }
+    return 99u64
+}

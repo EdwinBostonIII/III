@@ -1,0 +1,24 @@
+/* shift semantics: widths, count edges, signed shr */
+module mp10
+
+fn main() -> u64 {
+    if 1u64 << 0u64 != 1u64 { return 1u64 }
+    if 1u64 << 63u64 != 0x8000000000000000u64 { return 2u64 }
+    if 0x8000000000000000u64 >> 63u64 != 1u64 { return 3u64 }
+    let a : u32 = 0x80000000u32
+    if a >> 31u32 != 1u32 { return 4u64 }
+    if 3u32 << 30u32 != 0xC0000000u32 { return 5u64 }
+    let b : u8 = 0x80u8
+    if b >> 7u8 != 1u8 { return 6u64 }
+    if 1u8 << 7u8 != 0x80u8 { return 7u64 }
+    /* PINNED FACT (first meaning-gate divergence, adjudicated 2026-07-09):
+     * `>>` on SIGNED types is LOGICAL in .iii -- (-8 as bits) >> 1 is the
+     * huge positive pattern, NOT -4.  Teeth in BOTH routes. */
+    let c : i64 = 0i64 - 8i64
+    if (c >> 1i64) as u64 != 0x7FFFFFFFFFFFFFFCu64 { return 8u64 }
+    let mut i : u64 = 0u64
+    let mut acc : u64 = 0u64
+    while i < 8u64 { acc = acc | (1u64 << i)  i = i + 1u64 }
+    if acc != 255u64 { return 9u64 }
+    return 99u64
+}

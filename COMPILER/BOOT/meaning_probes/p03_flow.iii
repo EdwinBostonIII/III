@@ -1,0 +1,16 @@
+/* let mut / assign / while / nested blocks / scoping */
+module mp03
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    let mut s : u64 = 0u64
+    while i < 10u64 { s = s + i  i = i + 1u64 }
+    if s != 45u64 { return 1u64 }
+    let mut n : u64 = 100u64
+    {
+        let n2 : u64 = 5u64
+        n = n + n2
+    }
+    if n != 105u64 { return 2u64 }
+    return 99u64
+}

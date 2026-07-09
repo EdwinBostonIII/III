@@ -1,0 +1,23 @@
+/* loop / break / continue */
+module mp12
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    let mut s : u64 = 0u64
+    loop {
+        i = i + 1u64
+        if i > 10u64 { break }
+        if i % 2u64 == 0u64 { continue }
+        s = s + i
+    }
+    if s != 25u64 { return 1u64 }              /* 1+3+5+7+9 */
+    let mut j : u64 = 0u64
+    let mut t : u64 = 0u64
+    while j < 100u64 {
+        j = j + 1u64
+        if j == 7u64 { break }
+        t = t + 1u64
+    }
+    if t != 6u64 { return 2u64 }
+    return 99u64
+}

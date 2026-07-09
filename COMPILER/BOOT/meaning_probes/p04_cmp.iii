@@ -1,0 +1,23 @@
+/* compares: unsigned vs signed orderings, bools, if/else chains */
+module mp04
+
+fn main() -> u64 {
+    let a : u64 = 0xFFFFFFFFFFFFFFFFu64
+    if a < 1u64 { return 1u64 }              /* unsigned: max > 1 */
+    let b : i64 = 0i64 - 1i64
+    if b > 0i64 { return 2u64 }              /* signed: -1 < 0 */
+    if b >= 0i64 { return 3u64 }
+    let c : i32 = 0i32 - 5i32
+    let d : i32 = 3i32
+    if c > d { return 4u64 }
+    let t : bool = true
+    let f : bool = false
+    if t == f { return 5u64 }
+    if t != true { return 6u64 }
+    let mut r : u64 = 0u64
+    if 5u64 < 3u64 { r = 1u64 } else { if 2u64 < 3u64 { r = 7u64 } else { r = 2u64 } }
+    if r != 7u64 { return 7u64 }
+    if 3u64 <= 3u64 { } else { return 8u64 }
+    if 3u64 >= 4u64 { return 9u64 }
+    return 99u64
+}

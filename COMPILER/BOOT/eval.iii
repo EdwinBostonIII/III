@@ -1,0 +1,1626 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\eval.iii
+ *
+ * III — THE DEFINITIONAL EVALUATOR (Theta-0, the Meaning Lift rung 0).
+ *
+ * Executes a .iii module DIRECTLY from the parse-AST — lex.iii + parse.iii +
+ * ast.iii are its ONLY compiler inputs.  sema, sid, cg_*, emit, link are
+ * deliberately NOT consumed: this TU is the independent meaning-bearer that
+ * the compiled route is differentially pinned against (run_meaning.sh).
+ * A divergence between this evaluator and the compiled binary is, by
+ * construction, a defect in exactly one of {evaluator, sema, cg_r3, emit,
+ * link} — the adjudication protocol is DOCS/III-MEANING-LIFT-MAP.md Theta-4.
+ *
+ * Value discipline (dynamic tags, sema-free):
+ *   tag u64 = class | width<<8 | signed<<16 | pw<<24 | psg<<32 | pcl<<40
+ *   class: 0 unit, 1 bool, 2 int, 3 ptr.  width 0 = suffixless literal
+ *   (adaptive: adopts the typed operand's width; defaults to u64 at binding).
+ *   Integers are stored NORMALIZED: unsigned masked to width, signed
+ *   sign-extended to 64 bits.  Literal suffixes are re-read from the SOURCE
+ *   BYTES via the node's physical position record (the parser drops them).
+ *
+ * Memory model: one flat world (malloc'd, zeroed).  Globals+strings, a
+ * locals data stack (so &local is a real address), an operand stack, symbol
+ * tables.  Program pointers are absolute host addresses inside the world;
+ * every load/store is bounds-checked (an escape is TRAP 113, never UB).
+ *
+ * Coverage (rung 0, evidence-sized against the 122 extern-free corpus KATs):
+ *   decls  : fn, const, var (scalar + [T;N] array), type alias; struct
+ *            registered-but-unsupported (0 uses in theater)
+ *   stmts  : let / let mut, local var, assign, expr, if/else, while, loop,
+ *            break, continue, return, nested block
+ *   exprs  : int/hex (suffix-typed), bool, string (payload address), ident,
+ *            call (direct, recursion ok), index (array or pointer stride),
+ *            field->UNSUPPORTED, binary (arith/bit/shift/cmp/logical
+ *            short-circuit), unary (neg/not/bnot/deref/addr), paren, cast,
+ *            sizeof (parser-resolved)
+ *   for / match / metal / wavefront etc. -> clean UNSUPPORTED status with
+ *   the node kind recorded (the gate prints it; the ratchet names its gaps).
+ */
+
+module eval
+
+/* ── C-side runtime helpers (the same surface every BOOT TU links) ────── */
+extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memset_c(dst: u64, v: u32, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "lex_runtime.c"
+
+/* ── the AST accessor surface consumed (parse output ONLY) ────────────── */
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_position_first(ast: u64, node_index: u32, out: u64) -> i32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_return_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_decl_rhs_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_decl_for_name(ast: u64, name_offset: u32, name_length: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_struct_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_struct_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_cond(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_loop_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_sizeof_resolved(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hex_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_bool_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_str_payload_idx(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_str_string_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_addr_c(ast: u64, idx: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_ptr_inner(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_inner(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+
+/* ── AST node kinds consumed (ast.iii canon, probe-verified 79) ───────── */
+const EVK_FN_DECL: u32 = 4u32
+const EVK_TYPE_DECL: u32 = 5u32
+const EVK_CONST_DECL: u32 = 6u32
+const EVK_EXTERN_DECL: u32 = 7u32
+const EVK_TYPE_REF: u32 = 15u32
+const EVK_TYPE_PTR: u32 = 16u32
+const EVK_TYPE_ARRAY: u32 = 17u32
+const EVK_STMT_LET: u32 = 20u32
+const EVK_STMT_RETURN: u32 = 26u32
+const EVK_STMT_ASSIGN: u32 = 27u32
+const EVK_STMT_EXPR: u32 = 28u32
+const EVK_EXPR_INT: u32 = 37u32
+const EVK_EXPR_HEX: u32 = 38u32
+const EVK_EXPR_STR: u32 = 40u32
+const EVK_EXPR_BOOL: u32 = 41u32
+const EVK_EXPR_UNIT: u32 = 44u32
+const EVK_EXPR_IDENT: u32 = 45u32
+const EVK_EXPR_CALL: u32 = 46u32
+const EVK_EXPR_FIELD: u32 = 47u32
+const EVK_EXPR_INDEX: u32 = 48u32
+const EVK_EXPR_BINARY: u32 = 49u32
+const EVK_EXPR_UNARY: u32 = 50u32
+const EVK_EXPR_BLOCK: u32 = 51u32
+const EVK_EXPR_PAREN: u32 = 53u32
+const EVK_STMT_IF: u32 = 69u32
+const EVK_STMT_WHILE: u32 = 70u32
+const EVK_EXPR_CAST: u32 = 72u32
+const EVK_EXPR_SIZEOF: u32 = 73u32
+const EVK_VAR_DECL: u32 = 74u32
+const EVK_STRUCT_DECL: u32 = 75u32
+const EVK_STMT_LOOP: u32 = 76u32
+const EVK_STMT_BREAK: u32 = 77u32
+const EVK_STMT_CONTINUE: u32 = 78u32
+const EVK_EXPR_PARALLEL: u32 = 61u32    /* bracket-init [a, b, c] parses as EXPR_PARALLEL */
+
+/* binary / unary op enums (ast.iii canon) */
+const EVB_ADD: u32 = 1u32
+const EVB_SUB: u32 = 2u32
+const EVB_MUL: u32 = 3u32
+const EVB_DIV: u32 = 4u32
+const EVB_MOD: u32 = 5u32
+const EVB_AND: u32 = 6u32
+const EVB_OR: u32 = 7u32
+const EVB_XOR: u32 = 8u32
+const EVB_SHL: u32 = 9u32
+const EVB_SHR: u32 = 10u32
+const EVB_EQ: u32 = 11u32
+const EVB_NEQ: u32 = 12u32
+const EVB_LT: u32 = 13u32
+const EVB_LE: u32 = 14u32
+const EVB_GT: u32 = 15u32
+const EVB_GE: u32 = 16u32
+const EVB_LAND: u32 = 17u32
+const EVB_LOR: u32 = 18u32
+const EVU_NEG: u32 = 1u32
+const EVU_NOT: u32 = 2u32
+const EVU_BNOT: u32 = 3u32
+const EVU_DEREF: u32 = 4u32
+const EVU_ADDR: u32 = 5u32
+
+/* position record field offsets (ast.iii canon) */
+const EVP_KIND: u64 = 0u64
+const EVP_START: u64 = 4u64
+const EVP_END: u64 = 8u64
+
+/* ── value tags ───────────────────────────────────────────────────────── */
+const EVC_UNIT: u64 = 0u64
+const EVC_BOOL: u64 = 1u64
+const EVC_INT: u64 = 2u64
+const EVC_PTR: u64 = 3u64
+const EVT_UNIT: u64 = 0u64
+const EVT_BOOL: u64 = 257u64            /* 1 | 1<<8 */
+const EVT_UNTYPED: u64 = 2u64           /* int, width 0 = adaptive literal */
+const EVT_U64: u64 = 2050u64            /* 2 | 8<<8 */
+const EVT_I64: u64 = 67586u64           /* 2 | 8<<8 | 1<<16 */
+
+/* ── world layout ─────────────────────────────────────────────────────── */
+const EVW_CAP: u64 = 67108864u64        /* 64 MiB flat world */
+const EVG_BASE: u64 = 0u64              /* globals + string payloads (bump) */
+const EVG_CAP: u64 = 16777216u64
+const EVD_BASE: u64 = 16777216u64       /* locals data stack (bump/restore) */
+const EVD_CAP: u64 = 33554432u64
+const EVO_BASE: u64 = 50331648u64       /* operand stack, 16B cells */
+const EVO_CELLS: u64 = 524288u64
+const EVL_BASE: u64 = 58720256u64       /* locals symbol stack, 40B entries */
+const EVL_CELLS: u64 = 104857u64
+const EVGT_BASE: u64 = 62914560u64      /* global symbols, 40B entries */
+const EVGT_CELLS: u64 = 8192u64
+const EVFT_BASE: u64 = 63242240u64      /* fn table, 16B entries */
+const EVFT_CELLS: u64 = 4096u64
+const EVTT_BASE: u64 = 63307776u64      /* type-alias/struct table, 16B */
+const EVTT_CELLS: u64 = 2048u64
+const EVSC_BASE: u64 = 63340544u64      /* scope stack, 16B (lsp,dtop) */
+const EVSC_CELLS: u64 = 8192u64
+const EVSM_BASE: u64 = 63471616u64      /* string payload idx -> addr, 8B */
+const EVSM_CELLS: u64 = 8192u64
+
+/* ── statuses ─────────────────────────────────────────────────────────── */
+const EVS_OK: u32 = 0u32
+const EVS_RET: u32 = 1u32
+const EVS_BRK: u32 = 2u32
+const EVS_CONT: u32 = 3u32
+const EVE_UNSUP_KIND: u32 = 100u32
+const EVE_UNKNOWN_IDENT: u32 = 101u32
+const EVE_TYPE: u32 = 102u32
+const EVE_UNSUP_OP: u32 = 103u32
+const EVE_OOM: u32 = 104u32
+const EVE_LVALUE: u32 = 105u32
+const EVE_DIV0: u32 = 106u32
+const EVE_UNKNOWN_FN: u32 = 107u32
+const EVE_ARGC: u32 = 108u32
+const EVE_DEPTH: u32 = 109u32
+const EVE_UNSUP_TYPE: u32 = 110u32
+const EVE_INTERNAL: u32 = 111u32
+const EVE_SUFFIX: u32 = 112u32
+const EVE_MEMOOB: u32 = 113u32
+const EVE_EXTERN: u32 = 114u32
+const EVE_NOPOS: u32 = 115u32
+const EVE_CAP: u32 = 116u32
+
+/* ── evaluator state ──────────────────────────────────────────────────── */
+var EV_AST : u64
+var EV_W : u64
+var EV_SRC : u64
+var EV_SRCLEN : u64
+var EV_GTOP : u64
+var EV_DTOP : u64
+var EV_OSP : u64
+var EV_LSP : u64
+var EV_LBASE : u64
+var EV_GCOUNT : u64
+var EV_FCOUNT : u64
+var EV_TCOUNT : u64
+var EV_SCSP : u64
+var EV_DEPTH : u64
+var EV_RETV : u64
+var EV_RETT : u64
+var EV_RESULT : u64
+var EV_ERRC : u32
+var EV_ERRN : u32
+var EV_ERRK : u32
+var EV_POPV : u64
+var EV_POPT : u64
+var EV_TT : u64
+var EV_TSZ : u64
+var EV_TCNT : u64
+var EV_TARR : u32
+var EV_TELEM : u64
+var EV_LVA : u64
+var EV_LVT : u64
+var EV_LVARR : u32
+var EV_SYMA : u64
+var EV_SYMT : u64
+var EV_SYMM : u64
+var EV_SYMS : u64
+var EV_SYMK : u32
+var EV_LIT : u64
+var EV_POSBUF : [u8; 64]
+var EV_ARGBUF : [u8; 512]
+
+/* ═══════════════════ tag helpers ══════════════════════════════════════ */
+
+fn ev_t_class(t: u64) -> u64 { return t & 255u64 }
+fn ev_t_width(t: u64) -> u64 { return (t >> 8u64) & 255u64 }
+fn ev_t_signed(t: u64) -> u64 { return (t >> 16u64) & 1u64 }
+fn ev_mk_int(w: u64, sg: u64) -> u64 { return EVC_INT + (w << 8u64) + (sg << 16u64) }
+
+/* pointer tag carrying its pointee's (class,width,signed) */
+fn ev_mk_ptr(pointee: u64) -> u64 {
+    let pc: u64 = pointee & 255u64
+    let pw: u64 = (pointee >> 8u64) & 255u64
+    let ps: u64 = (pointee >> 16u64) & 1u64
+    return EVC_PTR + (8u64 << 8u64) + (pw << 24u64) + (ps << 32u64) + (pc << 40u64)
+}
+fn ev_pointee(t: u64) -> u64 {
+    let pw: u64 = (t >> 24u64) & 255u64
+    let ps: u64 = (t >> 32u64) & 1u64
+    let pc: u64 = (t >> 40u64) & 255u64
+    return pc + (pw << 8u64) + (ps << 16u64)
+}
+
+fn ev_mask(w: u64) -> u64 {
+    if w == 8u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if w == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return (1u64 << (w * 8u64)) - 1u64
+}
+
+/* sign-extend v from width w bytes to 64 bits */
+fn ev_sext(v: u64, w: u64) -> u64 {
+    if w == 8u64 { return v }
+    if w == 0u64 { return v }
+    let m: u64 = 1u64 << (w * 8u64 - 1u64)
+    let mv: u64 = v & ev_mask(w)
+    return (mv ^ m) - m
+}
+
+/* normalize a raw 64-bit value to its tag's canonical representation */
+fn ev_norm(v: u64, t: u64) -> u64 {
+    let c: u64 = ev_t_class(t)
+    if c == EVC_BOOL { if v != 0u64 { return 1u64 } return 0u64 }
+    if c != EVC_INT { return v }
+    let w: u64 = ev_t_width(t)
+    if w == 0u64 { return v }
+    if ev_t_signed(t) == 1u64 { return ev_sext(v, w) }
+    return v & ev_mask(w)
+}
+
+/* ═══════════════════ world access (bounds-checked) ════════════════════ */
+
+fn ev_chk(addr: u64, n: u64) -> u32 {
+    if addr < EV_W { return 1u32 }
+    if addr > 0xFFFFFFFFFFFF0000u64 { return 1u32 }
+    if addr + n > EV_W + EVW_CAP { return 1u32 }
+    return 0u32
+}
+
+/* load w bytes at addr, extended per sg; EV_ERRC on OOB */
+fn ev_ld(addr: u64, w: u64, sg: u64) -> u64 {
+    if ev_chk(addr, w) != 0u32 { EV_ERRC = EVE_MEMOOB ; return 0u64 }
+    let mut v: u64 = 0u64
+    if w == 1u64 { v = iii_lex_read_u8_at_c(addr, 0u64) as u64 }
+    if w == 2u64 {
+        let lo: u64 = iii_lex_read_u8_at_c(addr, 0u64) as u64
+        let hi: u64 = iii_lex_read_u8_at_c(addr, 1u64) as u64
+        v = lo + (hi << 8u64)
+    }
+    if w == 4u64 { v = iii_lex_read_u32_c(addr, 0u64) as u64 }
+    if w == 8u64 { v = iii_lex_read_u64_c(addr, 0u64) }
+    if sg == 1u64 { return ev_sext(v, w) }
+    return v
+}
+
+fn ev_st(addr: u64, w: u64, v: u64) -> u32 {
+    if ev_chk(addr, w) != 0u32 { EV_ERRC = EVE_MEMOOB ; return EVE_MEMOOB }
+    if w == 1u64 { iii_lex_write_u8_at_c(addr, 0u64, (v & 255u64) as u32) }
+    if w == 2u64 {
+        iii_lex_write_u8_at_c(addr, 0u64, (v & 255u64) as u32)
+        iii_lex_write_u8_at_c(addr, 1u64, ((v >> 8u64) & 255u64) as u32)
+    }
+    if w == 4u64 { iii_lex_write_u32_c(addr, 0u64, (v & 0xFFFFFFFFu64) as u32) }
+    if w == 8u64 { iii_lex_write_u64_c(addr, 0u64, v) }
+    return EVS_OK
+}
+
+/* bump-allocate n bytes (8-aligned) in the globals region */
+fn ev_galloc(n: u64) -> u64 {
+    let a: u64 = (EV_GTOP + 7u64) & 0xFFFFFFFFFFFFFFF8u64
+    if a + n > EVG_BASE + EVG_CAP { EV_ERRC = EVE_OOM ; return 0u64 }
+    EV_GTOP = a + n
+    return EV_W + a
+}
+
+/* bump-allocate n bytes (8-aligned) in the locals data stack */
+fn ev_dalloc(n: u64) -> u64 {
+    let a: u64 = (EV_DTOP + 7u64) & 0xFFFFFFFFFFFFFFF8u64
+    if a + n > EVD_BASE + EVD_CAP { EV_ERRC = EVE_OOM ; return 0u64 }
+    EV_DTOP = a + n
+    return EV_W + a
+}
+
+/* ═══════════════════ operand stack ════════════════════════════════════ */
+
+fn ev_push(v: u64, t: u64) -> u32 {
+    if EV_OSP >= EVO_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let a: u64 = EV_W + EVO_BASE + EV_OSP * 16u64
+    iii_lex_write_u64_c(a, 0u64, v)
+    iii_lex_write_u64_c(a, 8u64, t)
+    EV_OSP = EV_OSP + 1u64
+    return EVS_OK
+}
+
+/* pop into EV_POPV/EV_POPT -- caller MUST copy to locals before any
+ * further evaluation (module-scope outs are clobbered by recursion). */
+fn ev_pop() -> u32 {
+    if EV_OSP == 0u64 { EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
+    EV_OSP = EV_OSP - 1u64
+    let a: u64 = EV_W + EVO_BASE + EV_OSP * 16u64
+    EV_POPV = iii_lex_read_u64_c(a, 0u64)
+    EV_POPT = iii_lex_read_u64_c(a, 8u64)
+    return EVS_OK
+}
+
+/* ═══════════════════ names ════════════════════════════════════════════ */
+
+/* source-slice (off,len) equals literal bytes (lit,llen)? */
+fn ev_name_is(off: u32, len: u32, lit: u64, llen: u64) -> u32 {
+    if (len as u64) != llen { return 0u32 }
+    if iii_lex_memcmp_c(EV_SRC + (off as u64), lit, llen) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+/* two source slices hold identical bytes? */
+fn ev_name_eq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 {
+    if l1 != l2 { return 0u32 }
+    if iii_lex_memcmp_c(EV_SRC + (o1 as u64), EV_SRC + (o2 as u64), l1 as u64) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+/* ═══════════════════ symbol tables ════════════════════════════════════ */
+/* entry (40B): +0 name_off u32, +4 name_len u32, +8 addr u64, +16 tag u64,
+ * +24 meta u64 (bit0 = array; elem tag << 8), +32 size u64 */
+
+fn ev_sym_write(base: u64, off: u32, len: u32, addr: u64) -> u32 {
+    iii_lex_write_u32_c(base, 0u64, off)
+    iii_lex_write_u32_c(base, 4u64, len)
+    iii_lex_write_u64_c(base, 8u64, addr)
+    return EVS_OK
+}
+
+fn ev_glob_add(off: u32, len: u32, addr: u64, tag: u64) -> u32 {
+    if EV_GCOUNT >= EVGT_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let e: u64 = EV_W + EVGT_BASE + EV_GCOUNT * 40u64
+    ev_sym_write(e, off, len, addr)
+    iii_lex_write_u64_c(e, 16u64, tag)
+    iii_lex_write_u64_c(e, 24u64, 0u64)
+    iii_lex_write_u64_c(e, 32u64, 0u64)
+    EV_GCOUNT = EV_GCOUNT + 1u64
+    return EVS_OK
+}
+
+fn ev_glob_meta(meta: u64, size: u64) -> u32 {
+    let e: u64 = EV_W + EVGT_BASE + (EV_GCOUNT - 1u64) * 40u64
+    iii_lex_write_u64_c(e, 24u64, meta)
+    iii_lex_write_u64_c(e, 32u64, size)
+    return EVS_OK
+}
+
+fn ev_local_add(off: u32, len: u32, addr: u64, tag: u64) -> u32 {
+    if EV_LSP >= EVL_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let e: u64 = EV_W + EVL_BASE + EV_LSP * 40u64
+    ev_sym_write(e, off, len, addr)
+    iii_lex_write_u64_c(e, 16u64, tag)
+    iii_lex_write_u64_c(e, 24u64, 0u64)
+    iii_lex_write_u64_c(e, 32u64, 0u64)
+    EV_LSP = EV_LSP + 1u64
+    return EVS_OK
+}
+
+fn ev_local_meta(meta: u64, size: u64) -> u32 {
+    let e: u64 = EV_W + EVL_BASE + (EV_LSP - 1u64) * 40u64
+    iii_lex_write_u64_c(e, 24u64, meta)
+    iii_lex_write_u64_c(e, 32u64, size)
+    return EVS_OK
+}
+
+fn ev_fn_add(off: u32, len: u32, node: u32) -> u32 {
+    if EV_FCOUNT >= EVFT_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let e: u64 = EV_W + EVFT_BASE + EV_FCOUNT * 16u64
+    iii_lex_write_u32_c(e, 0u64, off)
+    iii_lex_write_u32_c(e, 4u64, len)
+    iii_lex_write_u32_c(e, 8u64, node)
+    iii_lex_write_u32_c(e, 12u64, 0u32)
+    EV_FCOUNT = EV_FCOUNT + 1u64
+    return EVS_OK
+}
+
+fn ev_type_add(off: u32, len: u32, node: u32, is_struct: u32) -> u32 {
+    if EV_TCOUNT >= EVTT_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let e: u64 = EV_W + EVTT_BASE + EV_TCOUNT * 16u64
+    iii_lex_write_u32_c(e, 0u64, off)
+    iii_lex_write_u32_c(e, 4u64, len)
+    iii_lex_write_u32_c(e, 8u64, node)
+    iii_lex_write_u32_c(e, 12u64, is_struct)
+    EV_TCOUNT = EV_TCOUNT + 1u64
+    return EVS_OK
+}
+
+/* find a fn by name; returns node or 0 */
+fn ev_fn_find(off: u32, len: u32) -> u32 {
+    let mut i: u64 = 0u64
+    while i < EV_FCOUNT {
+        let e: u64 = EV_W + EVFT_BASE + i * 16u64
+        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+        if ev_name_eq(off, len, fo, fl) == 1u32 { return iii_lex_read_u32_c(e, 8u64) }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* find a type alias/struct by name; returns entry addr or 0 */
+fn ev_type_find(off: u32, len: u32) -> u64 {
+    let mut i: u64 = 0u64
+    while i < EV_TCOUNT {
+        let e: u64 = EV_W + EVTT_BASE + i * 16u64
+        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+        if ev_name_eq(off, len, fo, fl) == 1u32 { return e }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* lookup ident: locals (top-down, frame-scoped) then globals.
+ * out: EV_SYMA/EV_SYMT/EV_SYMM/EV_SYMS + EV_SYMK (0 none, 1 var, 2 fn). */
+fn ev_lookup(off: u32, len: u32) -> u32 {
+    let mut i: u64 = EV_LSP
+    while i > EV_LBASE {
+        i = i - 1u64
+        let e: u64 = EV_W + EVL_BASE + i * 40u64
+        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+        if ev_name_eq(off, len, fo, fl) == 1u32 {
+            EV_SYMA = iii_lex_read_u64_c(e, 8u64)
+            EV_SYMT = iii_lex_read_u64_c(e, 16u64)
+            EV_SYMM = iii_lex_read_u64_c(e, 24u64)
+            EV_SYMS = iii_lex_read_u64_c(e, 32u64)
+            EV_SYMK = 1u32
+            return 1u32
+        }
+    }
+    i = 0u64
+    while i < EV_GCOUNT {
+        let e: u64 = EV_W + EVGT_BASE + i * 40u64
+        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+        if ev_name_eq(off, len, fo, fl) == 1u32 {
+            EV_SYMA = iii_lex_read_u64_c(e, 8u64)
+            EV_SYMT = iii_lex_read_u64_c(e, 16u64)
+            EV_SYMM = iii_lex_read_u64_c(e, 24u64)
+            EV_SYMS = iii_lex_read_u64_c(e, 32u64)
+            EV_SYMK = 1u32
+            return 1u32
+        }
+        i = i + 1u64
+    }
+    let fnode: u32 = ev_fn_find(off, len)
+    if fnode != 0u32 { EV_SYMK = 2u32 ; EV_SYMA = fnode as u64 ; return 1u32 }
+    EV_SYMK = 0u32
+    return 0u32
+}
+
+/* ═══════════════════ scopes / frames ══════════════════════════════════ */
+
+fn ev_scope_push() -> u32 {
+    if EV_SCSP >= EVSC_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+    let a: u64 = EV_W + EVSC_BASE + EV_SCSP * 16u64
+    iii_lex_write_u64_c(a, 0u64, EV_LSP)
+    iii_lex_write_u64_c(a, 8u64, EV_DTOP)
+    EV_SCSP = EV_SCSP + 1u64
+    return EVS_OK
+}
+
+fn ev_scope_pop() -> u32 {
+    if EV_SCSP == 0u64 { EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
+    EV_SCSP = EV_SCSP - 1u64
+    let a: u64 = EV_W + EVSC_BASE + EV_SCSP * 16u64
+    EV_LSP = iii_lex_read_u64_c(a, 0u64)
+    EV_DTOP = iii_lex_read_u64_c(a, 8u64)
+    return EVS_OK
+}
+
+/* ═══════════════════ literal suffix typing ════════════════════════════ */
+/* The parser stores only the value; the suffix (u8..u64/i8..i64/usize/
+ * isize) is re-read from the SOURCE BYTES via the node's first physical
+ * position record.  No suffix -> EVT_UNTYPED (adaptive). */
+
+fn ev_lit_tag(node: u32) -> u32 {
+    EV_LIT = EVT_UNTYPED
+    if iii_ast_position_first(EV_AST, node, &EV_POSBUF as u64) != 1i32 { EV_ERRC = EVE_NOPOS ; return EVE_NOPOS }
+    if iii_lex_read_u32_c(&EV_POSBUF as u64, EVP_KIND) != 0u32 { return EVS_OK }
+    let s: u64 = iii_lex_read_u32_c(&EV_POSBUF as u64, EVP_START) as u64
+    let e: u64 = iii_lex_read_u32_c(&EV_POSBUF as u64, EVP_END) as u64
+    if e <= s { return EVS_OK }
+    if e > EV_SRCLEN { return EVS_OK }
+    /* find first 'u'(117) or 'i'(105) at index >= 1 of the literal text */
+    let mut p: u64 = s + 1u64
+    let mut sfx: u64 = 0u64
+    while p < e {
+        let ch: u32 = iii_lex_read_u8_at_c(EV_SRC, p)
+        if sfx == 0u64 { if ch == 117u32 { sfx = p } }
+        if sfx == 0u64 { if ch == 105u32 { sfx = p } }
+        p = p + 1u64
+    }
+    if sfx == 0u64 { return EVS_OK }
+    let so: u32 = sfx as u32
+    let sl: u32 = (e - sfx) as u32
+    if ev_name_is(so, sl, "u8" as u64, 2u64) == 1u32 { EV_LIT = ev_mk_int(1u64, 0u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "u16" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(2u64, 0u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "u32" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(4u64, 0u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "u64" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(8u64, 0u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "usize" as u64, 5u64) == 1u32 { EV_LIT = ev_mk_int(8u64, 0u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "i8" as u64, 2u64) == 1u32 { EV_LIT = ev_mk_int(1u64, 1u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "i16" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(2u64, 1u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "i32" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(4u64, 1u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "i64" as u64, 3u64) == 1u32 { EV_LIT = ev_mk_int(8u64, 1u64) ; return EVS_OK }
+    if ev_name_is(so, sl, "isize" as u64, 5u64) == 1u32 { EV_LIT = ev_mk_int(8u64, 1u64) ; return EVS_OK }
+    EV_ERRN = node
+    EV_ERRC = EVE_SUFFIX
+    return EVE_SUFFIX
+}
+
+/* ═══════════════════ type nodes -> tags ═══════════════════════════════ */
+/* out: EV_TT (tag), EV_TSZ (byte size), EV_TARR (1 = array), EV_TELEM
+ * (elem tag when array), EV_TCNT (elem count when array).  Alias chains
+ * resolve through the type table, depth-capped. */
+
+fn ev_type_ref_tag(off: u32, len: u32, depth: u32) -> u32 {
+    if ev_name_is(off, len, "u8" as u64, 2u64) == 1u32 { EV_TT = ev_mk_int(1u64, 0u64) ; EV_TSZ = 1u64 ; return EVS_OK }
+    if ev_name_is(off, len, "u16" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(2u64, 0u64) ; EV_TSZ = 2u64 ; return EVS_OK }
+    if ev_name_is(off, len, "u32" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(4u64, 0u64) ; EV_TSZ = 4u64 ; return EVS_OK }
+    if ev_name_is(off, len, "u64" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(8u64, 0u64) ; EV_TSZ = 8u64 ; return EVS_OK }
+    if ev_name_is(off, len, "usize" as u64, 5u64) == 1u32 { EV_TT = ev_mk_int(8u64, 0u64) ; EV_TSZ = 8u64 ; return EVS_OK }
+    if ev_name_is(off, len, "i8" as u64, 2u64) == 1u32 { EV_TT = ev_mk_int(1u64, 1u64) ; EV_TSZ = 1u64 ; return EVS_OK }
+    if ev_name_is(off, len, "i16" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(2u64, 1u64) ; EV_TSZ = 2u64 ; return EVS_OK }
+    if ev_name_is(off, len, "i32" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(4u64, 1u64) ; EV_TSZ = 4u64 ; return EVS_OK }
+    if ev_name_is(off, len, "i64" as u64, 3u64) == 1u32 { EV_TT = ev_mk_int(8u64, 1u64) ; EV_TSZ = 8u64 ; return EVS_OK }
+    if ev_name_is(off, len, "isize" as u64, 5u64) == 1u32 { EV_TT = ev_mk_int(8u64, 1u64) ; EV_TSZ = 8u64 ; return EVS_OK }
+    if ev_name_is(off, len, "bool" as u64, 4u64) == 1u32 { EV_TT = EVT_BOOL ; EV_TSZ = 1u64 ; return EVS_OK }
+    if ev_name_is(off, len, "unit" as u64, 4u64) == 1u32 { EV_TT = EVT_UNIT ; EV_TSZ = 0u64 ; return EVS_OK }
+    /* user type: alias resolves, struct is (rung-0) unsupported */
+    let te: u64 = ev_type_find(off, len)
+    if te == 0u64 { EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+    if iii_lex_read_u32_c(te, 12u64) == 1u32 { EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+    if depth >= 8u32 { EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+    let rhs: u32 = iii_ast_type_decl_rhs_type(EV_AST, iii_lex_read_u32_c(te, 8u64))
+    return ev_type_tag_d(rhs, depth + 1u32)
+}
+
+fn ev_type_tag_d(tnode: u32, depth: u32) -> u32 {
+    EV_TARR = 0u32
+    EV_TELEM = 0u64
+    EV_TCNT = 0u64
+    if tnode == 0u32 { EV_TT = EVT_UNIT ; EV_TSZ = 0u64 ; return EVS_OK }
+    let k: u32 = iii_ast_node_kind(EV_AST, tnode)
+    if k == EVK_TYPE_REF {
+        let off: u32 = iii_ast_type_ref_name_off(EV_AST, tnode)
+        let len: u32 = iii_ast_type_ref_name_len(EV_AST, tnode)
+        return ev_type_ref_tag(off, len, depth)
+    }
+    if k == EVK_TYPE_PTR {
+        let inner: u32 = iii_ast_type_ptr_inner(EV_AST, tnode)
+        let rc: u32 = ev_type_tag_d(inner, depth + 1u32)
+        if rc != EVS_OK { return rc }
+        let it: u64 = EV_TT
+        EV_TT = ev_mk_ptr(it)
+        EV_TSZ = 8u64
+        EV_TARR = 0u32
+        return EVS_OK
+    }
+    if k == EVK_TYPE_ARRAY {
+        let inner: u32 = iii_ast_type_array_inner(EV_AST, tnode)
+        let cnt: u64 = iii_ast_type_array_count(EV_AST, tnode)
+        let rc: u32 = ev_type_tag_d(inner, depth + 1u32)
+        if rc != EVS_OK { return rc }
+        if EV_TARR == 1u32 { EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+        let et: u64 = EV_TT
+        let esz: u64 = EV_TSZ
+        EV_TARR = 1u32
+        EV_TELEM = et
+        EV_TCNT = cnt
+        EV_TSZ = esz * cnt
+        EV_TT = ev_mk_ptr(et)
+        return EVS_OK
+    }
+    EV_ERRN = tnode
+    EV_ERRK = k
+    EV_ERRC = EVE_UNSUP_TYPE
+    return EVE_UNSUP_TYPE
+}
+
+fn ev_type_tag(tnode: u32) -> u32 { return ev_type_tag_d(tnode, 0u32) }
+
+fn ev_width_size(t: u64) -> u64 {
+    let c: u64 = ev_t_class(t)
+    if c == EVC_BOOL { return 1u64 }
+    if c == EVC_PTR { return 8u64 }
+    let w: u64 = ev_t_width(t)
+    if w == 0u64 { return 8u64 }
+    return w
+}
+
+/* ═══════════════════ adaptation / casts ═══════════════════════════════ */
+
+/* value (v,t) arriving where `want` is required (store/arg/return).
+ * untyped adopts; equal-shape passes; anything else is EVE_TYPE.
+ * result value in EV_POPV (reused as the adapt out), tag = want. */
+fn ev_adapt(v: u64, t: u64, want: u64) -> u32 {
+    let wc: u64 = ev_t_class(want)
+    let tc: u64 = ev_t_class(t)
+    /* PINNED FACT (887/895 adjudication, 2026-07-09): a comparison result
+     * adapts to integer contexts -- `return 5u64 == 5u64` from a -> u64 fn
+     * compiles natively to 0/1.  bool -> int is a legal adaptation. */
+    if wc == EVC_INT { if tc == EVC_BOOL { EV_POPV = ev_norm(v, want) ; return EVS_OK } }
+    if wc == EVC_INT { if tc == EVC_INT {
+        if ev_t_width(t) == 0u64 { EV_POPV = ev_norm(v, want) ; return EVS_OK }
+        if ev_t_width(want) == 0u64 { EV_POPV = v ; return EVS_OK }
+        if ev_t_width(t) == ev_t_width(want) { if ev_t_signed(t) == ev_t_signed(want) { EV_POPV = v ; return EVS_OK } }
+        EV_ERRC = EVE_TYPE
+        return EVE_TYPE
+    } }
+    if wc == tc {
+        if wc == EVC_PTR { EV_POPV = v ; return EVS_OK }
+        if wc == EVC_BOOL { EV_POPV = v ; return EVS_OK }
+        if wc == EVC_UNIT { EV_POPV = 0u64 ; return EVS_OK }
+    }
+    /* pointers may absorb an untyped-int zero-class value (rare; casts
+     * dominate) -- refuse everything else loudly. */
+    if wc == EVC_PTR { if tc == EVC_INT { if ev_t_width(t) == 0u64 { EV_POPV = v ; return EVS_OK } } }
+    EV_ERRC = EVE_TYPE
+    return EVE_TYPE
+}
+
+/* `as` conversion: C-style value conversion between scalar shapes */
+fn ev_cast(v: u64, t: u64, want: u64) -> u32 {
+    let wc: u64 = ev_t_class(want)
+    let tc: u64 = ev_t_class(t)
+    if wc == EVC_INT {
+        if tc == EVC_INT { EV_POPV = ev_norm(v, want) ; return EVS_OK }
+        if tc == EVC_PTR { EV_POPV = ev_norm(v, want) ; return EVS_OK }
+        if tc == EVC_BOOL { EV_POPV = ev_norm(v, want) ; return EVS_OK }
+    }
+    if wc == EVC_PTR {
+        if tc == EVC_INT { EV_POPV = v ; return EVS_OK }
+        if tc == EVC_PTR { EV_POPV = v ; return EVS_OK }
+    }
+    if wc == EVC_BOOL { if tc == EVC_BOOL { EV_POPV = v ; return EVS_OK } }
+    EV_ERRC = EVE_UNSUP_OP
+    return EVE_UNSUP_OP
+}
+
+/* ═══════════════════ arithmetic core ══════════════════════════════════ */
+
+/* unify two int operand tags: untyped adopts the typed side.
+ * returns unified tag, or 0xFFFFFFFFFFFFFFFF on mismatch. */
+fn ev_unify(ta: u64, tb: u64) -> u64 {
+    let wa: u64 = ev_t_width(ta)
+    let wb: u64 = ev_t_width(tb)
+    if wa == 0u64 { if wb == 0u64 { return EVT_UNTYPED } return tb }
+    if wb == 0u64 { return ta }
+    if wa == wb { if ev_t_signed(ta) == ev_t_signed(tb) { return ta } }
+    return 0xFFFFFFFFFFFFFFFFu64
+}
+
+/* signed division helpers (C truncation semantics) on sign-extended u64 */
+fn ev_sdiv(a: u64, b: u64) -> u64 {
+    let sa: u64 = a >> 63u64
+    let sb: u64 = b >> 63u64
+    let mut ma: u64 = a
+    if sa == 1u64 { ma = 0u64 - a }
+    let mut mb: u64 = b
+    if sb == 1u64 { mb = 0u64 - b }
+    let mut q: u64 = ma / mb
+    if sa != sb { q = 0u64 - q }
+    return q
+}
+
+fn ev_smod(a: u64, b: u64) -> u64 {
+    let q: u64 = ev_sdiv(a, b)
+    return a - q * b
+}
+
+/* ordered compare: 1 if a<b under tag t's signedness (operands normalized) */
+fn ev_lt(a: u64, b: u64, t: u64) -> u64 {
+    if ev_t_signed(t) == 1u64 {
+        let ba: u64 = a ^ 0x8000000000000000u64
+        let bb: u64 = b ^ 0x8000000000000000u64
+        if ba < bb { return 1u64 }
+        return 0u64
+    }
+    if a < b { return 1u64 }
+    return 0u64
+}
+
+/* shift-count mask follows the operand width (x86 semantics: 32-bit ops
+ * mask by 31, 64-bit by 63; narrower ops execute in 32-bit registers).
+ * Differential probes pin this against the compiled route. */
+fn ev_shmask(w: u64) -> u64 {
+    if w == 8u64 { return 63u64 }
+    if w == 0u64 { return 63u64 }
+    return 31u64
+}
+
+/* binary op on popped operands; pushes result */
+fn ev_binop(op: u32, av: u64, at: u64, bv: u64, bt: u64) -> u32 {
+    let ac: u64 = ev_t_class(at)
+    let bc: u64 = ev_t_class(bt)
+    /* bool: only eq/neq (logicals are short-circuited by the caller) */
+    if ac == EVC_BOOL { if bc == EVC_BOOL {
+        if op == EVB_EQ { if av == bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+        if op == EVB_NEQ { if av != bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+        EV_ERRC = EVE_TYPE
+        return EVE_TYPE
+    } }
+    /* pointer compares (eq/neq/order as unsigned addresses) */
+    if ac == EVC_PTR { if bc == EVC_PTR {
+        if op == EVB_EQ { if av == bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+        if op == EVB_NEQ { if av != bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+        if op == EVB_LT { return ev_push(ev_lt(av, bv, EVT_U64), EVT_BOOL) }
+        if op == EVB_LE { return ev_push(1u64 - ev_lt(bv, av, EVT_U64), EVT_BOOL) }
+        if op == EVB_GT { return ev_push(ev_lt(bv, av, EVT_U64), EVT_BOOL) }
+        if op == EVB_GE { return ev_push(1u64 - ev_lt(av, bv, EVT_U64), EVT_BOOL) }
+        EV_ERRC = EVE_TYPE
+        return EVE_TYPE
+    } }
+    if ac != EVC_INT { EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+    if bc != EVC_INT { EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+    /* shifts unify value-side only: the count may be any int width */
+    if op == EVB_SHL {
+        let w: u64 = ev_t_width(at)
+        let c: u64 = bv & ev_shmask(w)
+        return ev_push(ev_norm(av << c, at), at)
+    }
+    if op == EVB_SHR {
+        /* PINNED SEMANTIC FACT (differential probe p10, 2026-07-09): .iii
+         * `>>` is a LOGICAL shift for ALL integer types -- the compiled
+         * route emits SHR (not SAR) for signed operands too.  First fact
+         * pinned by the meaning gate; if the language ever decides SAR,
+         * cg_r3 changes and probe p10 reddens in the other direction. */
+        let w: u64 = ev_t_width(at)
+        let c: u64 = bv & ev_shmask(w)
+        let mv: u64 = av & ev_mask(w)
+        return ev_push(ev_norm(mv >> c, at), at)
+    }
+    let ut: u64 = ev_unify(at, bt)
+    if ut == 0xFFFFFFFFFFFFFFFFu64 { EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+    let a: u64 = ev_norm(av, ut)
+    let b: u64 = ev_norm(bv, ut)
+    if op == EVB_ADD { return ev_push(ev_norm(a + b, ut), ut) }
+    if op == EVB_SUB { return ev_push(ev_norm(a - b, ut), ut) }
+    if op == EVB_MUL { return ev_push(ev_norm(a * b, ut), ut) }
+    if op == EVB_DIV {
+        if b == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
+        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_sdiv(a, b), ut), ut) }
+        return ev_push(ev_norm((a & ev_mask(ev_t_width(ut))) / (b & ev_mask(ev_t_width(ut))), ut), ut)
+    }
+    if op == EVB_MOD {
+        if b == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
+        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_smod(a, b), ut), ut) }
+        return ev_push(ev_norm((a & ev_mask(ev_t_width(ut))) % (b & ev_mask(ev_t_width(ut))), ut), ut)
+    }
+    if op == EVB_AND { return ev_push(ev_norm(a & b, ut), ut) }
+    if op == EVB_OR { return ev_push(ev_norm(a | b, ut), ut) }
+    if op == EVB_XOR { return ev_push(ev_norm(a ^ b, ut), ut) }
+    if op == EVB_EQ { if a == b { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+    if op == EVB_NEQ { if a != b { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+    if op == EVB_LT { return ev_push(ev_lt(a, b, ut), EVT_BOOL) }
+    if op == EVB_LE { return ev_push(1u64 - ev_lt(b, a, ut), EVT_BOOL) }
+    if op == EVB_GT { return ev_push(ev_lt(b, a, ut), EVT_BOOL) }
+    if op == EVB_GE { return ev_push(1u64 - ev_lt(a, b, ut), EVT_BOOL) }
+    EV_ERRC = EVE_UNSUP_OP
+    EV_ERRK = op
+    return EVE_UNSUP_OP
+}
+
+/* fill an array from a bracket-init `[e0, e1, ...]` (EXPR_PARALLEL);
+ * unlisted trailing elements stay zero (the region is pre-zeroed). */
+fn ev_fill_array(base: u64, et: u64, cnt: u64, ino: u32) -> u32 {
+    let ik: u32 = iii_ast_node_kind(EV_AST, ino)
+    if ik != EVK_EXPR_PARALLEL { EV_ERRN = ino ; EV_ERRK = ik ; EV_ERRC = EVE_UNSUP_KIND ; return EVE_UNSUP_KIND }
+    let n: u32 = iii_ast_parallel_branch_count(EV_AST, ino)
+    if (n as u64) > cnt { EV_ERRN = ino ; EV_ERRC = EVE_UNSUP_KIND ; return EVE_UNSUP_KIND }
+    let esz: u64 = ev_width_size(et)
+    let mut i: u32 = 0u32
+    while i < n {
+        let e: u32 = iii_ast_parallel_branch_at(EV_AST, ino, i)
+        let rc: u32 = ev_eval_expr(e)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        let rc2: u32 = ev_adapt(EV_POPV, EV_POPT, et)
+        if rc2 != EVS_OK { EV_ERRN = e ; return rc2 }
+        ev_st(base + (i as u64) * esz, esz, EV_POPV)
+        if EV_ERRC != 0u32 { return EV_ERRC }
+        i = i + 1u32
+    }
+    return EVS_OK
+}
+
+/* ═══════════════════ lvalues ══════════════════════════════════════════ */
+/* out: EV_LVA (address), EV_LVT (element/slot tag), EV_LVARR (ident names
+ * a whole array).  Callers copy outs immediately (recursion clobbers). */
+
+fn ev_lvalue(node: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(EV_AST, node)
+    if k == EVK_EXPR_PAREN { return ev_lvalue(iii_ast_paren_inner(EV_AST, node)) }
+    if k == EVK_EXPR_IDENT {
+        let off: u32 = iii_ast_ident_name_offset(EV_AST, node)
+        let len: u32 = iii_ast_ident_name_length(EV_AST, node)
+        if ev_lookup(off, len) == 0u32 { EV_ERRN = node ; EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+        if EV_SYMK != 1u32 { EV_ERRN = node ; EV_ERRC = EVE_LVALUE ; return EVE_LVALUE }
+        EV_LVA = EV_SYMA
+        if (EV_SYMM & 1u64) == 1u64 {
+            EV_LVT = EV_SYMM >> 8u64
+            EV_LVARR = 1u32
+            return EVS_OK
+        }
+        EV_LVT = EV_SYMT
+        EV_LVARR = 0u32
+        return EVS_OK
+    }
+    if k == EVK_EXPR_INDEX {
+        let obj: u32 = iii_ast_index_object(EV_AST, node)
+        let idxn: u32 = iii_ast_index_index(EV_AST, node)
+        /* base: an array ident indexes in place; anything else must
+         * evaluate to a pointer (its tag supplies the stride). */
+        let mut base: u64 = 0u64
+        let mut et: u64 = 0u64
+        let mut have: u32 = 0u32
+        if iii_ast_node_kind(EV_AST, obj) == EVK_EXPR_IDENT {
+            let oo: u32 = iii_ast_ident_name_offset(EV_AST, obj)
+            let ol: u32 = iii_ast_ident_name_length(EV_AST, obj)
+            if ev_lookup(oo, ol) == 0u32 { EV_ERRN = obj ; EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+            if EV_SYMK != 1u32 { EV_ERRN = obj ; EV_ERRC = EVE_LVALUE ; return EVE_LVALUE }
+            if (EV_SYMM & 1u64) == 1u64 {
+                base = EV_SYMA
+                et = EV_SYMM >> 8u64
+                have = 1u32
+            } else {
+                if ev_t_class(EV_SYMT) != EVC_PTR { EV_ERRN = obj ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+                base = ev_ld(EV_SYMA, 8u64, 0u64)
+                if EV_ERRC != 0u32 { return EV_ERRC }
+                et = ev_pointee(EV_SYMT)
+                have = 1u32
+            }
+        }
+        if have == 0u32 {
+            let rc: u32 = ev_eval_expr(obj)
+            if rc != EVS_OK { return rc }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_PTR { EV_ERRN = obj ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            base = EV_POPV
+            et = ev_pointee(EV_POPT)
+        }
+        let rc2: u32 = ev_eval_expr(idxn)
+        if rc2 != EVS_OK { return rc2 }
+        ev_pop()
+        if ev_t_class(EV_POPT) != EVC_INT { EV_ERRN = idxn ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+        let stride: u64 = ev_width_size(et)
+        EV_LVA = base + EV_POPV * stride
+        EV_LVT = et
+        EV_LVARR = 0u32
+        return EVS_OK
+    }
+    if k == EVK_EXPR_UNARY {
+        if iii_ast_unary_op(EV_AST, node) == EVU_DEREF {
+            let opn: u32 = iii_ast_unary_operand(EV_AST, node)
+            let rc: u32 = ev_eval_expr(opn)
+            if rc != EVS_OK { return rc }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_PTR { EV_ERRN = opn ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            EV_LVA = EV_POPV
+            EV_LVT = ev_pointee(EV_POPT)
+            EV_LVARR = 0u32
+            return EVS_OK
+        }
+    }
+    EV_ERRN = node
+    EV_ERRK = k
+    EV_ERRC = EVE_LVALUE
+    return EVE_LVALUE
+}
+
+/* ═══════════════════ expressions ══════════════════════════════════════ */
+
+fn ev_eval_expr(node: u32) -> u32 {
+    if node == 0u32 { EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
+    let k: u32 = iii_ast_node_kind(EV_AST, node)
+    if k == EVK_EXPR_INT {
+        let rc: u32 = ev_lit_tag(node)
+        if rc != EVS_OK { return rc }
+        let t: u64 = EV_LIT
+        return ev_push(ev_norm(iii_ast_expr_int_u64(EV_AST, node), t), t)
+    }
+    if k == EVK_EXPR_HEX {
+        let rc: u32 = ev_lit_tag(node)
+        if rc != EVS_OK { return rc }
+        let t: u64 = EV_LIT
+        return ev_push(ev_norm(iii_ast_expr_hex_u64(EV_AST, node), t), t)
+    }
+    if k == EVK_EXPR_BOOL { return ev_push(iii_ast_bool_value(EV_AST, node) as u64, EVT_BOOL) }
+    if k == EVK_EXPR_UNIT { return ev_push(0u64, EVT_UNIT) }
+    if k == EVK_EXPR_STR {
+        let idx: u32 = iii_ast_str_payload_idx(EV_AST, node)
+        let len: u32 = iii_ast_str_string_len(EV_AST, node)
+        if (idx as u64) >= EVSM_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
+        let me: u64 = EV_W + EVSM_BASE + (idx as u64) * 8u64
+        let mut addr: u64 = iii_lex_read_u64_c(me, 0u64)
+        if addr == 0u64 {
+            addr = ev_galloc((len as u64) + 1u64)
+            if addr == 0u64 { return EV_ERRC }
+            let pay: u64 = iii_ast_string_payload_addr_c(EV_AST, idx)
+            if pay != 0u64 { iii_lex_memcpy_c(addr, pay, len as u64) }
+            iii_lex_write_u8_at_c(addr, len as u64, 0u32)
+            iii_lex_write_u64_c(me, 0u64, addr)
+        }
+        return ev_push(addr, ev_mk_ptr(ev_mk_int(1u64, 0u64)))
+    }
+    if k == EVK_EXPR_PAREN { return ev_eval_expr(iii_ast_paren_inner(EV_AST, node)) }
+    if k == EVK_EXPR_IDENT {
+        let off: u32 = iii_ast_ident_name_offset(EV_AST, node)
+        let len: u32 = iii_ast_ident_name_length(EV_AST, node)
+        if ev_lookup(off, len) == 0u32 { EV_ERRN = node ; EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+        if EV_SYMK == 2u32 { EV_ERRN = node ; EV_ERRC = EVE_UNSUP_OP ; return EVE_UNSUP_OP }
+        if (EV_SYMM & 1u64) == 1u64 {
+            /* whole-array rvalue decays to a pointer to its first element */
+            return ev_push(EV_SYMA, ev_mk_ptr(EV_SYMM >> 8u64))
+        }
+        let t: u64 = EV_SYMT
+        let v: u64 = ev_ld(EV_SYMA, ev_width_size(t), ev_t_signed(t))
+        if EV_ERRC != 0u32 { return EV_ERRC }
+        return ev_push(v, t)
+    }
+    if k == EVK_EXPR_BINARY {
+        let op: u32 = iii_ast_binary_op(EV_AST, node)
+        let lhs: u32 = iii_ast_binary_lhs(EV_AST, node)
+        let rhs: u32 = iii_ast_binary_rhs(EV_AST, node)
+        if op == EVB_LAND {
+            let rc: u32 = ev_eval_expr(lhs)
+            if rc != EVS_OK { return rc }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_BOOL { EV_ERRN = lhs ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            if EV_POPV == 0u64 { return ev_push(0u64, EVT_BOOL) }
+            let rc2: u32 = ev_eval_expr(rhs)
+            if rc2 != EVS_OK { return rc2 }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_BOOL { EV_ERRN = rhs ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            return ev_push(EV_POPV, EVT_BOOL)
+        }
+        if op == EVB_LOR {
+            let rc: u32 = ev_eval_expr(lhs)
+            if rc != EVS_OK { return rc }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_BOOL { EV_ERRN = lhs ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            if EV_POPV == 1u64 { return ev_push(1u64, EVT_BOOL) }
+            let rc2: u32 = ev_eval_expr(rhs)
+            if rc2 != EVS_OK { return rc2 }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_BOOL { EV_ERRN = rhs ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            return ev_push(EV_POPV, EVT_BOOL)
+        }
+        let rc: u32 = ev_eval_expr(lhs)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        let av: u64 = EV_POPV
+        let at: u64 = EV_POPT
+        let rc2: u32 = ev_eval_expr(rhs)
+        if rc2 != EVS_OK { return rc2 }
+        ev_pop()
+        let rc3: u32 = ev_binop(op, av, at, EV_POPV, EV_POPT)
+        if rc3 != EVS_OK { EV_ERRN = node }
+        return rc3
+    }
+    if k == EVK_EXPR_UNARY {
+        let op: u32 = iii_ast_unary_op(EV_AST, node)
+        let opn: u32 = iii_ast_unary_operand(EV_AST, node)
+        if op == EVU_ADDR {
+            let rc: u32 = ev_lvalue(opn)
+            if rc != EVS_OK { return rc }
+            return ev_push(EV_LVA, ev_mk_ptr(EV_LVT))
+        }
+        if op == EVU_DEREF {
+            let rc: u32 = ev_eval_expr(opn)
+            if rc != EVS_OK { return rc }
+            ev_pop()
+            if ev_t_class(EV_POPT) != EVC_PTR { EV_ERRN = opn ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            let pt: u64 = ev_pointee(EV_POPT)
+            let v: u64 = ev_ld(EV_POPV, ev_width_size(pt), ev_t_signed(pt))
+            if EV_ERRC != 0u32 { return EV_ERRC }
+            return ev_push(v, pt)
+        }
+        let rc: u32 = ev_eval_expr(opn)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        let v: u64 = EV_POPV
+        let t: u64 = EV_POPT
+        if op == EVU_NEG {
+            if ev_t_class(t) != EVC_INT { EV_ERRN = node ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            return ev_push(ev_norm(0u64 - v, t), t)
+        }
+        if op == EVU_NOT {
+            if ev_t_class(t) != EVC_BOOL { EV_ERRN = node ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            return ev_push(1u64 - v, EVT_BOOL)
+        }
+        if op == EVU_BNOT {
+            if ev_t_class(t) != EVC_INT { EV_ERRN = node ; EV_ERRC = EVE_TYPE ; return EVE_TYPE }
+            return ev_push(ev_norm(0xFFFFFFFFFFFFFFFFu64 ^ v, t), t)
+        }
+        EV_ERRN = node
+        EV_ERRK = op
+        EV_ERRC = EVE_UNSUP_OP
+        return EVE_UNSUP_OP
+    }
+    if k == EVK_EXPR_INDEX {
+        let rc: u32 = ev_lvalue(node)
+        if rc != EVS_OK { return rc }
+        let t: u64 = EV_LVT
+        let v: u64 = ev_ld(EV_LVA, ev_width_size(t), ev_t_signed(t))
+        if EV_ERRC != 0u32 { return EV_ERRC }
+        return ev_push(v, t)
+    }
+    if k == EVK_EXPR_CAST {
+        let vn: u32 = iii_ast_cast_value(EV_AST, node)
+        let tn: u32 = iii_ast_cast_target_type(EV_AST, node)
+        let rc: u32 = ev_eval_expr(vn)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        let v: u64 = EV_POPV
+        let t: u64 = EV_POPT
+        let rc2: u32 = ev_type_tag(tn)
+        if rc2 != EVS_OK { EV_ERRN = node ; return rc2 }
+        if EV_TARR == 1u32 { EV_ERRN = node ; EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+        let want: u64 = EV_TT
+        let rc3: u32 = ev_cast(v, t, want)
+        if rc3 != EVS_OK { EV_ERRN = node ; return rc3 }
+        return ev_push(EV_POPV, want)
+    }
+    if k == EVK_EXPR_SIZEOF { return ev_push(iii_ast_sizeof_resolved(EV_AST, node), ev_mk_int(8u64, 0u64)) }
+    if k == EVK_EXPR_CALL { return ev_eval_call(node) }
+    if k == EVK_EXPR_BLOCK {
+        /* a block in expression position (bare-block statement wraps here):
+         * execute; its value is unit.  RET/BRK/CONT statuses propagate. */
+        let bs: u32 = ev_exec_block(node)
+        if bs != EVS_OK { return bs }
+        return ev_push(0u64, EVT_UNIT)
+    }
+    EV_ERRN = node
+    EV_ERRK = k
+    EV_ERRC = EVE_UNSUP_KIND
+    return EVE_UNSUP_KIND
+}
+
+/* ═══════════════════ calls ════════════════════════════════════════════ */
+
+fn ev_eval_call(node: u32) -> u32 {
+    let callee: u32 = iii_ast_call_callee(EV_AST, node)
+    if iii_ast_node_kind(EV_AST, callee) != EVK_EXPR_IDENT { EV_ERRN = node ; EV_ERRC = EVE_UNSUP_OP ; return EVE_UNSUP_OP }
+    let off: u32 = iii_ast_ident_name_offset(EV_AST, callee)
+    let len: u32 = iii_ast_ident_name_length(EV_AST, callee)
+    let fnode: u32 = ev_fn_find(off, len)
+    if fnode == 0u32 {
+        EV_ERRN = node
+        EV_ERRC = EVE_UNKNOWN_FN
+        return EVE_UNKNOWN_FN
+    }
+    let argc: u32 = iii_ast_call_arg_count(EV_AST, node)
+    let parc: u32 = iii_ast_fn_param_count(EV_AST, fnode)
+    if argc != parc { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+    if (argc as u64) > 32u64 { EV_ERRN = node ; EV_ERRC = EVE_CAP ; return EVE_CAP }
+    /* evaluate args left-to-right onto the operand stack */
+    let mut i: u32 = 0u32
+    while i < argc {
+        let an: u32 = iii_ast_call_arg_at(EV_AST, node, i)
+        let vexpr: u32 = iii_ast_arg_value(EV_AST, an)
+        let rc: u32 = ev_eval_expr(vexpr)
+        if rc != EVS_OK { return rc }
+        i = i + 1u32
+    }
+    return ev_do_call(fnode, argc)
+}
+
+/* args are the top `argc` operand cells (left-to-right).  Binds a new
+ * frame, runs the body, restores, pushes the (adapted) return value. */
+fn ev_do_call(fnode: u32, argc: u32) -> u32 {
+    if EV_DEPTH >= 2048u64 { EV_ERRC = EVE_DEPTH ; return EVE_DEPTH }
+    /* pop args (right-to-left) into the arg scratch (no recursion between
+     * here and param binding, so module scratch is safe) */
+    let mut i: u32 = argc
+    while i > 0u32 {
+        i = i - 1u32
+        ev_pop()
+        iii_lex_write_u64_c(&EV_ARGBUF as u64, (i as u64) * 16u64, EV_POPV)
+        iii_lex_write_u64_c(&EV_ARGBUF as u64, (i as u64) * 16u64 + 8u64, EV_POPT)
+    }
+    let save_lbase: u64 = EV_LBASE
+    let save_lsp: u64 = EV_LSP
+    let save_dtop: u64 = EV_DTOP
+    EV_LBASE = EV_LSP
+    /* bind params */
+    let mut st: u32 = EVS_OK
+    i = 0u32
+    while i < argc {
+        if st == EVS_OK {
+            let pn: u32 = iii_ast_fn_param_at(EV_AST, fnode, i)
+            let rc: u32 = ev_type_tag(iii_ast_param_type(EV_AST, pn))
+            if rc != EVS_OK { st = rc }
+            if st == EVS_OK { if EV_TARR == 1u32 { EV_ERRC = EVE_UNSUP_TYPE ; st = EVE_UNSUP_TYPE } }
+            if st == EVS_OK {
+                let pt: u64 = EV_TT
+                let av: u64 = iii_lex_read_u64_c(&EV_ARGBUF as u64, (i as u64) * 16u64)
+                let at: u64 = iii_lex_read_u64_c(&EV_ARGBUF as u64, (i as u64) * 16u64 + 8u64)
+                let rc2: u32 = ev_adapt(av, at, pt)
+                if rc2 != EVS_OK { st = rc2 }
+                if st == EVS_OK {
+                    let slot: u64 = ev_dalloc(8u64)
+                    if slot == 0u64 { st = EV_ERRC }
+                    if st == EVS_OK {
+                        ev_st(slot, ev_width_size(pt), EV_POPV)
+                        if EV_ERRC != 0u32 { st = EV_ERRC }
+                    }
+                    if st == EVS_OK {
+                        let po: u32 = iii_ast_param_name_off(EV_AST, pn)
+                        let pl: u32 = iii_ast_param_name_len(EV_AST, pn)
+                        let rc3: u32 = ev_local_add(po, pl, slot, pt)
+                        if rc3 != EVS_OK { st = rc3 }
+                    }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    /* fn return tag */
+    let mut rett: u64 = EVT_UNIT
+    if st == EVS_OK {
+        let rc4: u32 = ev_type_tag(iii_ast_fn_return_type(EV_AST, fnode))
+        if rc4 != EVS_OK { st = rc4 }
+        if st == EVS_OK { rett = EV_TT }
+    }
+    /* run body */
+    if st == EVS_OK {
+        EV_DEPTH = EV_DEPTH + 1u64
+        EV_RETV = 0u64
+        EV_RETT = EVT_UNIT
+        let bs: u32 = ev_exec_block(iii_ast_fn_body(EV_AST, fnode))
+        EV_DEPTH = EV_DEPTH - 1u64
+        if bs == EVS_RET { st = EVS_OK } else {
+            if bs == EVS_OK { EV_RETV = 0u64 ; EV_RETT = EVT_UNIT } else {
+                if bs == EVS_BRK { st = EVE_INTERNAL ; EV_ERRC = EVE_INTERNAL }
+                if bs == EVS_CONT { st = EVE_INTERNAL ; EV_ERRC = EVE_INTERNAL }
+                if bs > 3u32 { st = bs }
+            }
+        }
+    }
+    /* restore frame */
+    EV_LBASE = save_lbase
+    EV_LSP = save_lsp
+    EV_DTOP = save_dtop
+    if st != EVS_OK { return st }
+    /* adapt the returned value to the declared return type */
+    if ev_t_class(rett) == EVC_UNIT { return ev_push(0u64, EVT_UNIT) }
+    let rc5: u32 = ev_adapt(EV_RETV, EV_RETT, rett)
+    if rc5 != EVS_OK { EV_ERRN = fnode ; return rc5 }
+    return ev_push(EV_POPV, rett)
+}
+
+/* ═══════════════════ statements ═══════════════════════════════════════ */
+
+fn ev_exec_stmt(node: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(EV_AST, node)
+    if k == EVK_STMT_LET {
+        let tn: u32 = iii_ast_let_type(EV_AST, node)
+        let vn: u32 = iii_ast_let_value(EV_AST, node)
+        if vn == 0u32 {
+            /* `var NAME : T` (a LET with no value): zero-initialized slot;
+             * an array type here is the function-local array declaration. */
+            if tn == 0u32 { EV_ERRN = node ; EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
+            let rc0: u32 = ev_type_tag(tn)
+            if rc0 != EVS_OK { EV_ERRN = node ; return rc0 }
+            let isarr: u32 = EV_TARR
+            let et: u64 = EV_TELEM
+            let sz: u64 = EV_TSZ
+            let tt: u64 = EV_TT
+            let mut nsz: u64 = sz
+            if nsz == 0u64 { nsz = 8u64 }
+            let slot: u64 = ev_dalloc(nsz)
+            if slot == 0u64 { return EV_ERRC }
+            iii_lex_memset_c(slot, 0u32, nsz)
+            let rca: u32 = ev_local_add(iii_ast_let_name_off(EV_AST, node), iii_ast_let_name_len(EV_AST, node), slot, tt)
+            if rca != EVS_OK { return rca }
+            if isarr == 1u32 { ev_local_meta(1u64 + (et << 8u64), sz) }
+            return EVS_OK
+        }
+        /* a typed ARRAY with a bracket-init value: allocate + fill in place
+         * (local `var x : [T;N] = [..]` arrives here as LET type=array). */
+        if tn != 0u32 {
+            let rct: u32 = ev_type_tag(tn)
+            if rct != EVS_OK { EV_ERRN = node ; return rct }
+            if EV_TARR == 1u32 {
+                let aet: u64 = EV_TELEM
+                let asz: u64 = EV_TSZ
+                let acnt: u64 = EV_TCNT
+                let aslot: u64 = ev_dalloc(asz)
+                if aslot == 0u64 { return EV_ERRC }
+                iii_lex_memset_c(aslot, 0u32, asz)
+                let rcf: u32 = ev_fill_array(aslot, aet, acnt, vn)
+                if rcf != EVS_OK { return rcf }
+                let rcl: u32 = ev_local_add(iii_ast_let_name_off(EV_AST, node), iii_ast_let_name_len(EV_AST, node), aslot, ev_mk_ptr(aet))
+                if rcl != EVS_OK { return rcl }
+                ev_local_meta(1u64 + (aet << 8u64), asz)
+                return EVS_OK
+            }
+        }
+        let rc: u32 = ev_eval_expr(vn)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        let v: u64 = EV_POPV
+        let vt: u64 = EV_POPT
+        let mut want: u64 = vt
+        if tn != 0u32 {
+            let rc2: u32 = ev_type_tag(tn)
+            if rc2 != EVS_OK { EV_ERRN = node ; return rc2 }
+            if EV_TARR == 1u32 { EV_ERRN = node ; EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+            want = EV_TT
+        } else {
+            /* suffixless literal binds as u64 */
+            if ev_t_class(want) == EVC_INT { if ev_t_width(want) == 0u64 { want = ev_mk_int(8u64, 0u64) } }
+        }
+        let rc3: u32 = ev_adapt(v, vt, want)
+        if rc3 != EVS_OK { EV_ERRN = node ; return rc3 }
+        let nv: u64 = EV_POPV
+        let slot: u64 = ev_dalloc(8u64)
+        if slot == 0u64 { return EV_ERRC }
+        ev_st(slot, ev_width_size(want), nv)
+        if EV_ERRC != 0u32 { return EV_ERRC }
+        return ev_local_add(iii_ast_let_name_off(EV_AST, node), iii_ast_let_name_len(EV_AST, node), slot, want)
+    }
+    if k == EVK_VAR_DECL {
+        let tn: u32 = iii_ast_var_decl_type(EV_AST, node)
+        let rc: u32 = ev_type_tag(tn)
+        if rc != EVS_OK { EV_ERRN = node ; return rc }
+        let isarr: u32 = EV_TARR
+        let et: u64 = EV_TELEM
+        let sz: u64 = EV_TSZ
+        let tt: u64 = EV_TT
+        let mut n: u64 = sz
+        if n == 0u64 { n = 8u64 }
+        let slot: u64 = ev_dalloc(n)
+        if slot == 0u64 { return EV_ERRC }
+        iii_lex_memset_c(slot, 0u32, n)
+        let ino: u32 = iii_ast_var_decl_init(EV_AST, node)
+        if ino != 0u32 {
+            if isarr == 1u32 {
+                let rcf: u32 = ev_fill_array(slot, et, EV_TCNT, ino)
+                if rcf != EVS_OK { return rcf }
+            } else {
+                let rc2: u32 = ev_eval_expr(ino)
+                if rc2 != EVS_OK { return rc2 }
+                ev_pop()
+                let rc3: u32 = ev_adapt(EV_POPV, EV_POPT, tt)
+                if rc3 != EVS_OK { EV_ERRN = node ; return rc3 }
+                ev_st(slot, ev_width_size(tt), EV_POPV)
+                if EV_ERRC != 0u32 { return EV_ERRC }
+            }
+        }
+        let rc4: u32 = ev_local_add(iii_ast_var_decl_name_off(EV_AST, node), iii_ast_var_decl_name_len(EV_AST, node), slot, tt)
+        if rc4 != EVS_OK { return rc4 }
+        if isarr == 1u32 { ev_local_meta(1u64 + (et << 8u64), sz) }
+        return EVS_OK
+    }
+    if k == EVK_STMT_ASSIGN {
+        let lv: u32 = iii_ast_assign_lvalue(EV_AST, node)
+        let rc: u32 = ev_lvalue(lv)
+        if rc != EVS_OK { return rc }
+        if EV_LVARR == 1u32 { EV_ERRN = node ; EV_ERRC = EVE_LVALUE ; return EVE_LVALUE }
+        let addr: u64 = EV_LVA
+        let lt: u64 = EV_LVT
+        let rc2: u32 = ev_eval_expr(iii_ast_assign_value(EV_AST, node))
+        if rc2 != EVS_OK { return rc2 }
+        ev_pop()
+        let rc3: u32 = ev_adapt(EV_POPV, EV_POPT, lt)
+        if rc3 != EVS_OK { EV_ERRN = node ; return rc3 }
+        ev_st(addr, ev_width_size(lt), EV_POPV)
+        if EV_ERRC != 0u32 { return EV_ERRC }
+        return EVS_OK
+    }
+    if k == EVK_STMT_EXPR {
+        let rc: u32 = ev_eval_expr(iii_ast_expr_stmt_expr(EV_AST, node))
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        return EVS_OK
+    }
+    if k == EVK_STMT_RETURN {
+        let vn: u32 = iii_ast_return_value(EV_AST, node)
+        if vn == 0u32 { EV_RETV = 0u64 ; EV_RETT = EVT_UNIT ; return EVS_RET }
+        let rc: u32 = ev_eval_expr(vn)
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        EV_RETV = EV_POPV
+        EV_RETT = EV_POPT
+        return EVS_RET
+    }
+    if k == EVK_STMT_IF {
+        let rc: u32 = ev_eval_expr(iii_ast_if_cond(EV_AST, node))
+        if rc != EVS_OK { return rc }
+        ev_pop()
+        /* PINNED FACT (895 adjudication, 2026-07-09): if-conditions accept
+         * INTEGERS -- `if ON` with ON:u32 compiles natively; truth = nonzero. */
+        let cc: u64 = ev_t_class(EV_POPT)
+        if cc != EVC_BOOL { if cc != EVC_INT { EV_ERRN = node ; EV_ERRC = EVE_TYPE ; return EVE_TYPE } }
+        if EV_POPV != 0u64 { return ev_exec_block_or_stmt(iii_ast_if_then(EV_AST, node)) }
+        let en: u32 = iii_ast_if_else(EV_AST, node)
+        if en == 0u32 { return EVS_OK }
+        return ev_exec_block_or_stmt(en)
+    }
+    if k == EVK_STMT_WHILE {
+        let cond: u32 = iii_ast_while_cond(EV_AST, node)
+        let body: u32 = iii_ast_while_body(EV_AST, node)
+        let mut go: u32 = 1u32
+        let mut st: u32 = EVS_OK
+        while go == 1u32 {
+            let rc: u32 = ev_eval_expr(cond)
+            if rc != EVS_OK { go = 0u32 ; st = rc }
+            if go == 1u32 {
+                ev_pop()
+                let cc: u64 = ev_t_class(EV_POPT)
+                if cc != EVC_BOOL { if cc != EVC_INT { EV_ERRN = node ; EV_ERRC = EVE_TYPE ; go = 0u32 ; st = EVE_TYPE } }
+            }
+            if go == 1u32 { if EV_POPV == 0u64 { go = 0u32 } }
+            if go == 1u32 {
+                let bs: u32 = ev_exec_block_or_stmt(body)
+                if bs == EVS_BRK { go = 0u32 }
+                if bs == EVS_RET { go = 0u32 ; st = EVS_RET }
+                if bs > 3u32 { go = 0u32 ; st = bs }
+            }
+        }
+        return st
+    }
+    if k == EVK_STMT_LOOP {
+        let body: u32 = iii_ast_loop_body(EV_AST, node)
+        let mut go: u32 = 1u32
+        let mut st: u32 = EVS_OK
+        while go == 1u32 {
+            let bs: u32 = ev_exec_block_or_stmt(body)
+            if bs == EVS_BRK { go = 0u32 }
+            if bs == EVS_RET { go = 0u32 ; st = EVS_RET }
+            if bs > 3u32 { go = 0u32 ; st = bs }
+        }
+        return st
+    }
+    if k == EVK_STMT_BREAK { return EVS_BRK }
+    if k == EVK_STMT_CONTINUE { return EVS_CONT }
+    if k == EVK_EXPR_BLOCK { return ev_exec_block(node) }
+    EV_ERRN = node
+    EV_ERRK = k
+    EV_ERRC = EVE_UNSUP_KIND
+    return EVE_UNSUP_KIND
+}
+
+/* a then/else/while body may be a block or a single statement (else-if) */
+fn ev_exec_block_or_stmt(node: u32) -> u32 {
+    if node == 0u32 { return EVS_OK }
+    if iii_ast_node_kind(EV_AST, node) == EVK_EXPR_BLOCK { return ev_exec_block(node) }
+    return ev_exec_stmt(node)
+}
+
+fn ev_exec_block(node: u32) -> u32 {
+    if node == 0u32 { return EVS_OK }
+    let rc0: u32 = ev_scope_push()
+    if rc0 != EVS_OK { return rc0 }
+    let n: u32 = iii_ast_block_stmt_count(EV_AST, node)
+    let mut i: u32 = 0u32
+    let mut st: u32 = EVS_OK
+    while i < n {
+        if st == EVS_OK {
+            let s: u32 = iii_ast_block_stmt_at(EV_AST, node, i)
+            st = ev_exec_stmt(s)
+        }
+        i = i + 1u32
+    }
+    ev_scope_pop()
+    return st
+}
+
+/* ═══════════════════ module init + entry ══════════════════════════════ */
+
+/* collect decls + evaluate module-scope const/var initializers in order */
+fn ev_collect(root: u32) -> u32 {
+    let n: u32 = iii_ast_module_decl_count(EV_AST, root)
+    let mut i: u32 = 0u32
+    while i < n {
+        let d: u32 = iii_ast_module_decl_at(EV_AST, root, i)
+        let k: u32 = iii_ast_node_kind(EV_AST, d)
+        if k == EVK_FN_DECL {
+            let rc: u32 = ev_fn_add(iii_ast_fn_name_off(EV_AST, d), iii_ast_fn_name_len(EV_AST, d), d)
+            if rc != EVS_OK { return rc }
+        } else { if k == EVK_TYPE_DECL {
+            let rc: u32 = ev_type_add(iii_ast_decl_name_offset(EV_AST, d), iii_ast_decl_name_length(EV_AST, d), d, 0u32)
+            if rc != EVS_OK { return rc }
+        } else { if k == EVK_STRUCT_DECL {
+            let rc: u32 = ev_type_add(iii_ast_struct_decl_name_off(EV_AST, d), iii_ast_struct_decl_name_len(EV_AST, d), d, 1u32)
+            if rc != EVS_OK { return rc }
+        } else { if k == EVK_CONST_DECL {
+            let vn: u32 = iii_ast_const_decl_value(EV_AST, d)
+            let rc: u32 = ev_eval_expr(vn)
+            if rc != EVS_OK { EV_ERRN = d ; return rc }
+            ev_pop()
+            let v: u64 = EV_POPV
+            let vt: u64 = EV_POPT
+            let tn: u32 = iii_ast_const_decl_type(EV_AST, d)
+            let mut want: u64 = vt
+            if tn != 0u32 {
+                let rc2: u32 = ev_type_tag(tn)
+                if rc2 != EVS_OK { EV_ERRN = d ; return rc2 }
+                if EV_TARR == 1u32 { EV_ERRN = d ; EV_ERRC = EVE_UNSUP_TYPE ; return EVE_UNSUP_TYPE }
+                want = EV_TT
+            } else {
+                if ev_t_class(want) == EVC_INT { if ev_t_width(want) == 0u64 { want = ev_mk_int(8u64, 0u64) } }
+            }
+            let rc3: u32 = ev_adapt(v, vt, want)
+            if rc3 != EVS_OK { EV_ERRN = d ; return rc3 }
+            let nv: u64 = EV_POPV
+            let slot: u64 = ev_galloc(8u64)
+            if slot == 0u64 { return EV_ERRC }
+            ev_st(slot, ev_width_size(want), nv)
+            if EV_ERRC != 0u32 { return EV_ERRC }
+            let rc4: u32 = ev_glob_add(iii_ast_const_decl_name_off(EV_AST, d), iii_ast_const_decl_name_len(EV_AST, d), slot, want)
+            if rc4 != EVS_OK { return rc4 }
+        } else { if k == EVK_VAR_DECL {
+            let tn: u32 = iii_ast_var_decl_type(EV_AST, d)
+            let rc: u32 = ev_type_tag(tn)
+            if rc != EVS_OK { EV_ERRN = d ; return rc }
+            let isarr: u32 = EV_TARR
+            let et: u64 = EV_TELEM
+            let sz: u64 = EV_TSZ
+            let tt: u64 = EV_TT
+            let mut nsz: u64 = sz
+            if nsz == 0u64 { nsz = 8u64 }
+            let slot: u64 = ev_galloc(nsz)
+            if slot == 0u64 { return EV_ERRC }
+            iii_lex_memset_c(slot, 0u32, nsz)
+            let ino: u32 = iii_ast_var_decl_init(EV_AST, d)
+            if ino != 0u32 {
+                if isarr == 1u32 {
+                    let rcf: u32 = ev_fill_array(slot, et, EV_TCNT, ino)
+                    if rcf != EVS_OK { return rcf }
+                } else {
+                    let rc2: u32 = ev_eval_expr(ino)
+                    if rc2 != EVS_OK { EV_ERRN = d ; return rc2 }
+                    ev_pop()
+                    let rc3: u32 = ev_adapt(EV_POPV, EV_POPT, tt)
+                    if rc3 != EVS_OK { EV_ERRN = d ; return rc3 }
+                    ev_st(slot, ev_width_size(tt), EV_POPV)
+                    if EV_ERRC != 0u32 { return EV_ERRC }
+                }
+            }
+            let rc4: u32 = ev_glob_add(iii_ast_var_decl_name_off(EV_AST, d), iii_ast_var_decl_name_len(EV_AST, d), slot, tt)
+            if rc4 != EVS_OK { return rc4 }
+            if isarr == 1u32 { ev_glob_meta(1u64 + (et << 8u64), sz) }
+        } else { if k == EVK_EXTERN_DECL {
+            /* extern-free theater: an extern in scope is a named,
+             * clean unsupported -- recorded, not silently skipped */
+            EV_ERRN = d
+            EV_ERRK = k
+            EV_ERRC = EVE_EXTERN
+            return EVE_EXTERN
+        } } } } } }
+        i = i + 1u32
+    }
+    return EVS_OK
+}
+
+fn iii_ev_init(ast: u64) -> u32 @export {
+    EV_AST = ast
+    EV_SRC = iii_ast_source_buf(ast)
+    EV_SRCLEN = iii_ast_source_len(ast)
+    EV_W = iii_lex_malloc_c(EVW_CAP)
+    if EV_W == 0u64 { EV_ERRC = EVE_OOM ; return EVE_OOM }
+    iii_lex_memset_c(EV_W, 0u32, EVW_CAP)
+    EV_GTOP = 8u64
+    EV_DTOP = EVD_BASE
+    EV_OSP = 0u64
+    EV_LSP = 0u64
+    EV_LBASE = 0u64
+    EV_GCOUNT = 0u64
+    EV_FCOUNT = 0u64
+    EV_TCOUNT = 0u64
+    EV_SCSP = 0u64
+    EV_DEPTH = 0u64
+    EV_ERRC = 0u32
+    EV_ERRN = 0u32
+    EV_ERRK = 0u32
+    let root: u32 = iii_ast_root_module(ast)
+    if root == 0u32 { EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
+    return ev_collect(root)
+}
+
+/* run fn main() -> u64; result in iii_ev_result() */
+fn iii_ev_run(dummy: u32) -> u32 @export {
+    let fnode: u32 = ev_fn_find_lit("main" as u64, 4u64)
+    if fnode == 0u32 { EV_ERRC = EVE_UNKNOWN_FN ; return EVE_UNKNOWN_FN }
+    if iii_ast_fn_param_count(EV_AST, fnode) != 0u32 { EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+    let st: u32 = ev_do_call(fnode, 0u32)
+    if st != EVS_OK { return st }
+    ev_pop()
+    EV_RESULT = EV_POPV
+    return EVS_OK
+}
+
+/* find a fn whose name equals the literal bytes (for the entry lookup) */
+fn ev_fn_find_lit(lit: u64, llen: u64) -> u32 {
+    let mut i: u64 = 0u64
+    while i < EV_FCOUNT {
+        let e: u64 = EV_W + EVFT_BASE + i * 16u64
+        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+        if ev_name_is(fo, fl, lit, llen) == 1u32 { return iii_lex_read_u32_c(e, 8u64) }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn iii_ev_result(dummy: u32) -> u64 @export { return EV_RESULT }
+fn iii_ev_err_code(dummy: u32) -> u32 @export { return EV_ERRC }
+fn iii_ev_err_node(dummy: u32) -> u32 @export { return EV_ERRN }
+fn iii_ev_err_kind(dummy: u32) -> u32 @export { return EV_ERRK }

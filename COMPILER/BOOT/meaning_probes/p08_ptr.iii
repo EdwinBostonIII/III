@@ -1,0 +1,21 @@
+/* pointer casts, strides, address-of global array (1109 pattern) */
+module mp08
+
+var ARR : [u8; 8]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { ARR[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let p : u64 = &ARR as u64
+    let mut sum : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < 8u64 { sum = sum + ((p as *u8)[j] as u64)  j = j + 1u64 }
+    if sum != 36u64 { return 1u64 }
+    /* u32 stride through the same bytes: [1,2,3,4] LE = 0x04030201 */
+    let q : u32 = (p as *u32)[0u64]
+    if q != 0x04030201u32 { return 2u64 }
+    /* u64 stride */
+    let r : u64 = (p as *u64)[0u64]
+    if r != 0x0807060504030201u64 { return 3u64 }
+    return 99u64
+}

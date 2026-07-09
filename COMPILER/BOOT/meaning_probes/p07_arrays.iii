@@ -1,0 +1,27 @@
+/* local + global arrays, runtime index, widths, non-overlap */
+module mp07
+
+var GA : [u32; 6]
+
+fn main() -> u64 {
+    var a : [u64; 8]
+    let mut i : u64 = 0u64
+    while i < 8u64 { a[i] = i * 3u64  i = i + 1u64 }
+    let mut s : u64 = 0u64
+    i = 0u64
+    while i < 8u64 { s = s + a[i]  i = i + 1u64 }
+    if s != 84u64 { return 1u64 }
+    var b : [u8; 16]
+    i = 0u64
+    while i < 16u64 { b[i] = ((i * 7u64) & 255u64) as u8  i = i + 1u64 }
+    if b[15u64] != 105u8 { return 2u64 }
+    i = 0u64
+    while i < 6u64 { GA[i] = (i * 1000u64) as u32  i = i + 1u64 }
+    if GA[5u64] != 5000u32 { return 3u64 }
+    /* writing b must not clobber a */
+    s = 0u64
+    i = 0u64
+    while i < 8u64 { s = s + a[i]  i = i + 1u64 }
+    if s != 84u64 { return 4u64 }
+    return 99u64
+}

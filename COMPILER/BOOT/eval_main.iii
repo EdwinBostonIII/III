@@ -1,0 +1,191 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\eval_main.iii
+ *
+ * iii_eval — driver for THE DEFINITIONAL EVALUATOR (Theta-0).
+ *
+ *   iii_eval <file.iii>
+ *
+ * Pipeline: read source -> lex -> parse -> eval (NO sema, NO cg: the
+ * whole point).  Output protocol (stdout; extern-free programs cannot
+ * print, so the channel is clean):
+ *
+ *   III_EVAL_OK ret=0x<16-hex>\n      process rc = (u32)ret  (crt-identical)
+ *   III_EVAL_PARSE_FAIL rc=<n>\n      process rc = 212
+ *   III_EVAL_FAIL code=<n> node=<n> kind=<n>\n   process rc = 213
+ *   III_EVAL_READ_FAIL / III_EVAL_USAGE           rc = 211 / 210
+ *
+ * The gate (run_meaning.sh) asserts BOTH the OK marker and rc equality
+ * with the natively compiled route, observed through the same channel.
+ */
+
+module eval_main
+
+extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_free_c(p: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fopen_c(path: u64, mode: u32) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fread_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fclose_c(file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stdout_c() -> u64 from "lex_runtime.c"
+
+extern @abi(c-msvc-x64) fn iii_lex_create(bytes: u64, len: u64, src: u64) -> u64 from "lex.iii"
+extern @abi(c-msvc-x64) fn iii_ast_create(bytes: u64, len: u64, src: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_parse_create(lex: u64, ast: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_parse_module(p: u64) -> u32 from "parse.iii"
+
+extern @abi(c-msvc-x64) fn iii_ev_init(ast: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_run(dummy: u32) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_result(dummy: u32) -> u64 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_err_code(dummy: u32) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_err_node(dummy: u32) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_err_kind(dummy: u32) -> u32 from "eval.iii"
+
+const FOPEN_RB: u32 = 0u32
+const SRC_CAP: u64 = 8388608u64
+
+var DEC_BUF : [u8; 24]
+
+fn em_lit(lit: u64, len: u64) -> u32 {
+    iii_lex_fwrite_c(lit, len, iii_lex_stdout_c())
+    return 0u32
+}
+
+fn em_hex16(v: u64) -> u32 {
+    let o: u64 = iii_lex_stdout_c()
+    let mut i: u64 = 0u64
+    while i < 16u64 {
+        let nib: u64 = (v >> ((15u64 - i) * 4u64)) & 15u64
+        let mut ch: u64 = nib + 48u64
+        if nib > 9u64 { ch = nib + 87u64 }
+        iii_lex_fputc_c(ch as u32, o)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn em_dec(n: u64) -> u32 {
+    let o: u64 = iii_lex_stdout_c()
+    if n == 0u64 { iii_lex_fputc_c(48u32, o) ; return 0u32 }
+    let mut v: u64 = n
+    let mut i: u64 = 0u64
+    while v > 0u64 {
+        iii_lex_write_u8_dec(i, (v % 10u64) + 48u64)
+        v = v / 10u64
+        i = i + 1u64
+    }
+    while i > 0u64 {
+        i = i - 1u64
+        iii_lex_fputc_c(iii_lex_read_u8_dec(i) as u32, o)
+    }
+    return 0u32
+}
+
+/* DEC_BUF byte helpers (module array, no extern needed) */
+fn iii_lex_write_u8_dec(i: u64, v: u64) -> u32 {
+    DEC_BUF[i] = (v & 255u64) as u8
+    return 0u32
+}
+fn iii_lex_read_u8_dec(i: u64) -> u64 {
+    return DEC_BUF[i] as u64
+}
+
+fn em_nl() -> u32 {
+    iii_lex_fputc_c(10u32, iii_lex_stdout_c())
+    return 0u32
+}
+
+fn main(argc: u32, argv: u64) -> u32 @export {
+    if argc < 2u32 {
+        em_lit("III_EVAL_USAGE" as u64, 14u64)
+        em_nl()
+        return 210u32
+    }
+    let path: u64 = iii_lex_read_u64_c(argv, 8u64)
+    let file: u64 = iii_lex_fopen_c(path, FOPEN_RB)
+    if file == 0u64 {
+        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
+        em_nl()
+        return 211u32
+    }
+    let buf: u64 = iii_lex_malloc_c(SRC_CAP)
+    if buf == 0u64 {
+        iii_lex_fclose_c(file)
+        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
+        em_nl()
+        return 211u32
+    }
+    let mut total: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        if total + 65536u64 > SRC_CAP {
+            go = 0u32
+        } else {
+            let n: u64 = iii_lex_fread_c(buf + total, 65536u64, file)
+            total = total + n
+            if n < 65536u64 { go = 0u32 }
+        }
+    }
+    iii_lex_fclose_c(file)
+    if total == 0u64 {
+        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
+        em_nl()
+        return 211u32
+    }
+    let lex: u64 = iii_lex_create(buf, total, path)
+    if lex == 0u64 {
+        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
+        em_dec(9999u64)
+        em_nl()
+        return 212u32
+    }
+    let ast: u64 = iii_ast_create(buf, total, path)
+    if ast == 0u64 {
+        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
+        em_dec(9998u64)
+        em_nl()
+        return 212u32
+    }
+    let p: u64 = iii_parse_create(lex, ast)
+    if p == 0u64 {
+        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
+        em_dec(9997u64)
+        em_nl()
+        return 212u32
+    }
+    /* iii_parse_module returns 1 on success, 0 on failure (main.iii canon) */
+    let prc: u32 = iii_parse_module(p)
+    if prc == 0u32 {
+        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
+        em_dec(prc as u64)
+        em_nl()
+        return 212u32
+    }
+    let irc: u32 = iii_ev_init(ast)
+    if irc != 0u32 {
+        em_lit("III_EVAL_FAIL code=" as u64, 19u64)
+        em_dec(irc as u64)
+        em_lit(" node=" as u64, 6u64)
+        em_dec(iii_ev_err_node(0u32) as u64)
+        em_lit(" kind=" as u64, 6u64)
+        em_dec(iii_ev_err_kind(0u32) as u64)
+        em_nl()
+        return 213u32
+    }
+    let rrc: u32 = iii_ev_run(0u32)
+    if rrc != 0u32 {
+        em_lit("III_EVAL_FAIL code=" as u64, 19u64)
+        em_dec(rrc as u64)
+        em_lit(" node=" as u64, 6u64)
+        em_dec(iii_ev_err_node(0u32) as u64)
+        em_lit(" kind=" as u64, 6u64)
+        em_dec(iii_ev_err_kind(0u32) as u64)
+        em_nl()
+        return 213u32
+    }
+    let ret: u64 = iii_ev_result(0u32)
+    em_lit("III_EVAL_OK ret=0x" as u64, 18u64)
+    em_hex16(ret)
+    em_nl()
+    return (ret & 0xFFFFFFFFu64) as u32
+}

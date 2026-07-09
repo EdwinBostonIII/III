@@ -1,0 +1,18 @@
+/* u16 loads/stores/wraps (the width with no native read helper) */
+module mp13
+
+var W : [u16; 4]
+
+fn main() -> u64 {
+    W[0u64] = 65535u16
+    W[1u64] = 258u16
+    W[0u64] = W[0u64] + 2u16                   /* wrap to 1 */
+    if W[0u64] != 1u16 { return 1u64 }
+    if W[1u64] != 258u16 { return 2u64 }
+    let p : u64 = &W as u64
+    let b0 : u8 = (p as *u8)[2u64]             /* 258 LE = 02 01 */
+    let b1 : u8 = (p as *u8)[3u64]
+    if b0 != 2u8 { return 3u64 }
+    if b1 != 1u8 { return 4u64 }
+    return 99u64
+}

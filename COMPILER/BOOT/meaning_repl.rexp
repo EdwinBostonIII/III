@@ -1,0 +1,7 @@
+III MEANING REPL (Theta-4) -- decls accumulate; expressions evaluate; :quit ends
+iii> = 0x000000000000002a
+iii> (ok)
+iii> = 0x0000000000000090
+iii> (ok)
+iii> = 0x0000000000000068
+iii> 

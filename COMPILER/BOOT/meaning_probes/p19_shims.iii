@@ -1,0 +1,24 @@
+/* p19 -- THE C BOUNDARY TIER (Theta-1): msvcrt malloc/free/putchar as
+ * evaluator builtins (world bump-alloc / no-op / real stdout).  putchar
+ * makes this the OUTPUT-COMPARISON probe: both routes must emit the same
+ * three bytes, byte-for-byte. */
+module mp19
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: u64) -> u32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: u32) -> u32 from "msvcrt"
+
+fn main() -> u64 {
+    let p: u64 = malloc(64u64)
+    if p == 0u64 { return 1u64 }
+    let b: *u8 = p as *u8
+    b[0] = 77u8
+    b[63] = 33u8
+    if b[0] != 77u8 { return 2u64 }
+    if b[63] != 33u8 { return 3u64 }
+    putchar(b[0] as u32)
+    putchar(69u32)
+    putchar(10u32)
+    free(p)
+    return 99u64
+}

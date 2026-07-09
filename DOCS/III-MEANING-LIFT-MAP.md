@@ -114,6 +114,23 @@ printed — the run_seed_corpus "honest frontier" pattern [recorded: S8].
 *Exit gate:* ratchet strictly monotone; every skip named with its missing capability.
 *Falsifier:* a KAT that diverges reddens; de-listing a covered KAT reddens.
 
+> **Θ1 EXECUTED + SEALED (2026-07-09 session 2): THE LOADER LIVES.** Verdict (final green sweep):
+> selftest 4 arms (incl. the OUTPUT-DIVERGE tooth) · REPL transcript byte-pinned · probe floor
+> **19/19** (p18 multi-module + p19 shims/output joined) · corpus **595/1,819 pass · 0 divergence
+> on BOTH axes** (rc + program-output bytes) · **ratchet 110 → 595** (up-only, 5.4×) · frontier
+> named in full: 1,038 unsupported (663 poison-extern calls · 254 type-adaptation gaps · 113
+> world-capacity · 7 misc), 56 eval-timeouts (solver islands), 130 native-skips (dedicated-runner
+> families whose extra objects live outside the archive link universe — future per-family table).
+> Mechanics landed: module registry + per-module symbol columns + flat fn table with extern ALIASES
+> (linker-faithful), EV_AST/EV_SRC context switch per call frame, four-phase driver
+> (load/collect/bind/run — binds after loads because stdlib closures have REAL cycles: ccl↔typecheck),
+> builtin tier msvcrt {malloc,free,putchar} + kernel32 {VirtualAlloc,VirtualFree,Sleep} with
+> world-arena semantics, poison externs erroring only at CALL. Gate v2: whole corpus, native-verdict
+> cache keyed on sealed identities (mhash+mhash+sha, incl. LFAIL/NTIME verdicts), eval-verdict cache
+> keyed per-binary (selftest fake routes can never collide), OUTPUT comparison axis, 8-way cache
+> warmer. First production catches of the OUTPUT axis: 2488/2489 — adjudicated as COMPARATOR
+> artifacts (rows 8-9 below), fixed + toothed.
+>
 > **Θ1 design (2026-07-09 session 2, measured).** Corpus: 1,830 KATs; 1,708 with externs;
 > **1,363 pure-.iii-extern** (loader alone covers them); the entire C/DLL boundary of the remaining
 > 345 is **malloc(260) / free(213) / putchar(72)** + 4 one-offs [measured]. `from "X"` is provenance,
@@ -147,6 +164,15 @@ STUDIO as the interactive mouth of the language (consumers already live [recorde
 *Exit gate:* divergence ledger has zero OPEN rows at seal time. *Falsifier:* an unledgered divergence
 found by sweep reddens.
 
+> **Θ4 EXECUTED (2026-07-09 session 2): THE MOUTH LIVES.** `iii_eval --repl` — decls accumulate
+> (an `extern … from "x.iii"` line IS the import syntax; the Θ1 loader resolves it — no invented
+> REPL commands), expressions evaluate in a fresh world per line, values print as `= 0x<16-hex>`.
+> First session: `7u64*6u64`→0x2a, `fn sq…` (ok), `sq(12u64)`→0x90, `const KK…` (ok),
+> `KK + sq(2u64)`→0x68. Exit gate LIVE: `run_repl_kat.sh` byte-compares the full transcript against
+> the pinned `meaning_repl.rexp`, wired into run_meaning.sh; falsifier two-path-proven (sabotaged
+> pin → RED + diff; re-pin → GREEN). The adjudication protocol below is the standing law (rows 6/7
+> executed it). STOMA verb = named follow-up.
+>
 > **Θ4 design (2026-07-09 session 2).** (a) THE PROTOCOL, stated as standing law: every gate-red
 > divergence (rc axis or output axis) gets its ledger row IN THE SAME SESSION it fires; a row is
 > either *compiler-incumbent* (evaluator conforms; the behavior becomes a documented language fact
@@ -200,6 +226,9 @@ steady state — proven by three-way hash: old-iiis-1 (git HEAD) ≡ fresh-iiis-
 `40a18e…` on 01_return_const, vs iiis-0's 706-byte full-COFF object. The LIVE equivalence gate is
 `build_iiis2.sh --check-corpus` (iiis-1 ↔ iiis-2, both sovereign). An honest cross-divide oracle
 would compare link+run BEHAVIOR, not bytes — future work, named here.
+
+| 8 | 2026-07-09 | 2488/2489 (output axis, first firing) | rc equal; 156B vs 148B / 104B vs 100B | **comparator defect — the instrument's OWN extraction was asymmetric** | msys sed strips `\r` from lines it rewrites: the eval side's protocol-strip pass lost CRLF while the native side kept it → false OUT_DIVERGE on any multi-line output. Adjudicated by raw-byte proof (both routes emit identical CRLF streams; symmetric `tr -d '\r'` normalization → byte-identical). Fixed on BOTH sides + the (d2) selftest arm hardened to multi-line output so the class has a permanent tooth. Comparison is now CR-insensitive + trailing-newline-insensitive — the two NAMED softnesses of the output axis. |
+| 9 | 2026-07-09 | probe floor flake (p01/p08/p18, sweep 1) | stochastic, 3 distinct codes | **gate-environment defect — OneDrive stale read-after-write** | Rapidly-rewritten scratch files under the OneDrive tree served STALE content (measured 1/40 on the exact gate invocation shape): the probes' eval output read back as prior-run bytes → misclassification. The read-side sibling of the staged-exec trap. Fixed: every same-invocation read-back file lives in /tmp; the cache dir stays on OneDrive because its reads are settled (written whole runs earlier); fresh-branch rc is kept live instead of re-read. |
 
 ### Row-6 fix audit (2026-07-09 session 2, written BEFORE the edit — evidence-before-action)
 

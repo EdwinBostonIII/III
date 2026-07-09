@@ -43,6 +43,8 @@ module eval
 extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stdout_c() -> u64 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
@@ -206,26 +208,38 @@ const EVT_UNTYPED: u64 = 2u64           /* int, width 0 = adaptive literal */
 const EVT_U64: u64 = 2050u64            /* 2 | 8<<8 */
 const EVT_I64: u64 = 67586u64           /* 2 | 8<<8 | 1<<16 */
 
-/* ── world layout ─────────────────────────────────────────────────────── */
-const EVW_CAP: u64 = 67108864u64        /* 64 MiB flat world */
-const EVG_BASE: u64 = 0u64              /* globals + string payloads (bump) */
-const EVG_CAP: u64 = 16777216u64
-const EVD_BASE: u64 = 16777216u64       /* locals data stack (bump/restore) */
-const EVD_CAP: u64 = 33554432u64
-const EVO_BASE: u64 = 50331648u64       /* operand stack, 16B cells */
-const EVO_CELLS: u64 = 524288u64
-const EVL_BASE: u64 = 58720256u64       /* locals symbol stack, 40B entries */
-const EVL_CELLS: u64 = 104857u64
-const EVGT_BASE: u64 = 62914560u64      /* global symbols, 40B entries */
-const EVGT_CELLS: u64 = 8192u64
-const EVFT_BASE: u64 = 63242240u64      /* fn table, 16B entries */
-const EVFT_CELLS: u64 = 4096u64
-const EVTT_BASE: u64 = 63307776u64      /* type-alias/struct table, 16B */
-const EVTT_CELLS: u64 = 2048u64
-const EVSC_BASE: u64 = 63340544u64      /* scope stack, 16B (lsp,dtop) */
-const EVSC_CELLS: u64 = 8192u64
-const EVSM_BASE: u64 = 63471616u64      /* string payload idx -> addr, 8B */
-const EVSM_CELLS: u64 = 8192u64
+/* ── world layout (Θ1: 256 MiB — whole-closure multi-module theaters) ─── */
+const EVW_CAP: u64 = 268435456u64       /* 256 MiB flat world */
+const EVG_BASE: u64 = 0u64              /* globals + strings + builtin heap (bump) */
+const EVG_CAP: u64 = 100663296u64       /* 96 MiB */
+const EVD_BASE: u64 = 100663296u64      /* locals data stack (bump/restore) */
+const EVD_CAP: u64 = 67108864u64        /* 64 MiB */
+const EVO_BASE: u64 = 167772160u64      /* operand stack, 16B cells (32 MiB) */
+const EVO_CELLS: u64 = 2097152u64
+const EVL_BASE: u64 = 201326592u64      /* locals symbol stack, 40B entries */
+const EVL_CELLS: u64 = 419430u64
+const EVGT_BASE: u64 = 218103808u64     /* global symbols, 40B entries */
+const EVGT_CELLS: u64 = 65536u64
+const EVFT_BASE: u64 = 220725248u64     /* fn table, 16B: off,len,node,(nmod<<16|xmod) */
+const EVFT_CELLS: u64 = 32768u64
+const EVTT_BASE: u64 = 221249536u64     /* type-alias/struct table, 16B */
+const EVTT_CELLS: u64 = 16384u64
+const EVSC_BASE: u64 = 221511680u64     /* scope stack, 16B (lsp,dtop) */
+const EVSC_CELLS: u64 = 32768u64
+const EVSM_BASE: u64 = 222035968u64     /* string memo: (mod*4096+idx)*8, per-module */
+const EVSM_CELLS: u64 = 4096u64         /* payload-idx cap PER MODULE (loud EVE_CAP) */
+const EVGM_BASE: u64 = 226230272u64     /* glob module column, u32 per EVGT entry */
+const EVTM_BASE: u64 = 226492416u64     /* type module column, u32 per EVTT entry */
+const EVMR_BASE: u64 = 226557952u64     /* module registry, 32B: ast,src,srclen,flags */
+const EVMR_CELLS: u64 = 128u64
+/* builtin fn sentinels (node ids far above any real ast node) */
+const EVFN_BI_MALLOC: u32 = 0xFFFF0001u32
+const EVFN_BI_FREE: u32 = 0xFFFF0002u32
+const EVFN_BI_PUTCHAR: u32 = 0xFFFF0003u32
+const EVFN_BI_VALLOC: u32 = 0xFFFF0004u32   /* kernel32 VirtualAlloc: world alloc (MEM_COMMIT zero-fill ≡ pre-zeroed world) */
+const EVFN_BI_VFREE: u32 = 0xFFFF0005u32    /* kernel32 VirtualFree: no-op (world is an arena) */
+const EVFN_BI_SLEEP: u32 = 0xFFFF0006u32    /* kernel32 Sleep: no-op (no observable memory effect) */
+const EVFN_POISON: u32 = 0xFFFFFFFEu32  /* unresolved extern: EVE_EXTERN at CALL, named */
 
 /* ── statuses ─────────────────────────────────────────────────────────── */
 const EVS_OK: u32 = 0u32
@@ -255,6 +269,9 @@ var EV_AST : u64
 var EV_W : u64
 var EV_SRC : u64
 var EV_SRCLEN : u64
+var EV_CURMOD : u64                     /* Θ1: module context (registry index) */
+var EV_MCOUNT : u64                     /* Θ1: registered module count */
+var EV_FMOD : u64                       /* Θ1: exec-module of the last ev_fn_find hit */
 var EV_GTOP : u64
 var EV_DTOP : u64
 var EV_OSP : u64
@@ -428,6 +445,42 @@ fn ev_name_eq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 {
     return 0u32
 }
 
+/* Θ1: cross-buffer name compare — (src_a, name_a) vs (src_b, name_b).
+ * Needed wherever a name in ONE module's source is matched against a
+ * name recorded from ANOTHER module's source (extern binding). */
+fn ev_name_eq_x(sa: u64, o1: u32, l1: u32, sb: u64, o2: u32, l2: u32) -> u32 {
+    if l1 != l2 { return 0u32 }
+    if iii_lex_memcmp_c(sa + (o1 as u64), sb + (o2 as u64), l1 as u64) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+/* ═══════════════════ Θ1: module registry ══════════════════════════════ */
+
+fn ev_mod_ast(m: u64) -> u64 { return iii_lex_read_u64_c(EV_W + EVMR_BASE + m * 32u64, 0u64) }
+fn ev_mod_src(m: u64) -> u64 { return iii_lex_read_u64_c(EV_W + EVMR_BASE + m * 32u64, 8u64) }
+fn ev_mod_srclen(m: u64) -> u64 { return iii_lex_read_u64_c(EV_W + EVMR_BASE + m * 32u64, 16u64) }
+
+fn ev_mod_add(ast: u64) -> u64 {
+    if EV_MCOUNT >= EVMR_CELLS { EV_ERRC = EVE_CAP ; return 0xFFFFFFFFu64 }
+    let e: u64 = EV_W + EVMR_BASE + EV_MCOUNT * 32u64
+    iii_lex_write_u64_c(e, 0u64, ast)
+    iii_lex_write_u64_c(e, 8u64, iii_ast_source_buf(ast))
+    iii_lex_write_u64_c(e, 16u64, iii_ast_source_len(ast))
+    iii_lex_write_u64_c(e, 24u64, 0u64)
+    let m: u64 = EV_MCOUNT
+    EV_MCOUNT = EV_MCOUNT + 1u64
+    return m
+}
+
+/* switch the evaluation context to module m (caller saves/restores) */
+fn ev_mod_enter(m: u64) -> u32 {
+    EV_CURMOD = m
+    EV_AST = ev_mod_ast(m)
+    EV_SRC = ev_mod_src(m)
+    EV_SRCLEN = ev_mod_srclen(m)
+    return EVS_OK
+}
+
 /* ═══════════════════ symbol tables ════════════════════════════════════ */
 /* entry (40B): +0 name_off u32, +4 name_len u32, +8 addr u64, +16 tag u64,
  * +24 meta u64 (bit0 = array; elem tag << 8), +32 size u64 */
@@ -446,6 +499,8 @@ fn ev_glob_add(off: u32, len: u32, addr: u64, tag: u64) -> u32 {
     iii_lex_write_u64_c(e, 16u64, tag)
     iii_lex_write_u64_c(e, 24u64, 0u64)
     iii_lex_write_u64_c(e, 32u64, 0u64)
+    /* Θ1: module column — globals are module-LOCAL (Stage 3.18) */
+    iii_lex_write_u32_c(EV_W + EVGM_BASE, EV_GCOUNT * 4u64, EV_CURMOD as u32)
     EV_GCOUNT = EV_GCOUNT + 1u64
     return EVS_OK
 }
@@ -475,15 +530,31 @@ fn ev_local_meta(meta: u64, size: u64) -> u32 {
     return EVS_OK
 }
 
-fn ev_fn_add(off: u32, len: u32, node: u32) -> u32 {
+/* Θ1 fn-table entry: off,len,node, (name_mod<<16 | exec_mod).
+ * name_mod = the module whose SOURCE holds the name bytes (the filter key —
+ * calls resolve module-locally, the linker's law); exec_mod = the module
+ * whose AST owns `node` (the context ev_do_call switches to).  A plain fn
+ * has name_mod == exec_mod; an extern ALIAS points across (name in the
+ * importer, body in the provider). */
+fn ev_fn_add_m(off: u32, len: u32, node: u32, name_mod: u64, exec_mod: u64) -> u32 {
     if EV_FCOUNT >= EVFT_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
     let e: u64 = EV_W + EVFT_BASE + EV_FCOUNT * 16u64
     iii_lex_write_u32_c(e, 0u64, off)
     iii_lex_write_u32_c(e, 4u64, len)
     iii_lex_write_u32_c(e, 8u64, node)
-    iii_lex_write_u32_c(e, 12u64, 0u32)
+    iii_lex_write_u32_c(e, 12u64, (((name_mod & 0xFFFFu64) << 16u64) | (exec_mod & 0xFFFFu64)) as u32)
     EV_FCOUNT = EV_FCOUNT + 1u64
     return EVS_OK
+}
+
+fn ev_fn_add(off: u32, len: u32, node: u32) -> u32 {
+    return ev_fn_add_m(off, len, node, EV_CURMOD, EV_CURMOD)
+}
+
+/* extern alias: name lives in the CURRENT module's source; the body (or a
+ * builtin/poison sentinel) belongs to exec_mod.  Injected by the bind pass. */
+fn ev_fn_alias(off: u32, len: u32, node: u32, exec_mod: u64) -> u32 {
+    return ev_fn_add_m(off, len, node, EV_CURMOD, exec_mod)
 }
 
 fn ev_type_add(off: u32, len: u32, node: u32, is_struct: u32) -> u32 {
@@ -493,18 +564,25 @@ fn ev_type_add(off: u32, len: u32, node: u32, is_struct: u32) -> u32 {
     iii_lex_write_u32_c(e, 4u64, len)
     iii_lex_write_u32_c(e, 8u64, node)
     iii_lex_write_u32_c(e, 12u64, is_struct)
+    /* Θ1: module column — type names are module-LOCAL */
+    iii_lex_write_u32_c(EV_W + EVTM_BASE, EV_TCOUNT * 4u64, EV_CURMOD as u32)
     EV_TCOUNT = EV_TCOUNT + 1u64
     return EVS_OK
 }
 
-/* find a fn by name; returns node or 0 */
+/* find a fn by name IN THE CURRENT MODULE (plain fns + extern aliases both
+ * carry name_mod == the declaring module — the linker's locality law).
+ * Sets EV_FMOD to the exec module of the hit.  Returns node or 0. */
 fn ev_fn_find(off: u32, len: u32) -> u32 {
     let mut i: u64 = 0u64
     while i < EV_FCOUNT {
         let e: u64 = EV_W + EVFT_BASE + i * 16u64
-        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
-        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
-        if ev_name_eq(off, len, fo, fl) == 1u32 { return iii_lex_read_u32_c(e, 8u64) }
+        let mm: u32 = iii_lex_read_u32_c(e, 12u64)
+        if ((mm >> 16u32) as u64) == EV_CURMOD {
+            let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+            let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+            if ev_name_eq(off, len, fo, fl) == 1u32 { EV_FMOD = (mm & 0xFFFFu32) as u64 ; return iii_lex_read_u32_c(e, 8u64) }
+        }
         i = i + 1u64
     }
     return 0u32
@@ -515,9 +593,11 @@ fn ev_type_find(off: u32, len: u32) -> u64 {
     let mut i: u64 = 0u64
     while i < EV_TCOUNT {
         let e: u64 = EV_W + EVTT_BASE + i * 16u64
-        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
-        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
-        if ev_name_eq(off, len, fo, fl) == 1u32 { return e }
+        if (iii_lex_read_u32_c(EV_W + EVTM_BASE, i * 4u64) as u64) == EV_CURMOD {
+            let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+            let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+            if ev_name_eq(off, len, fo, fl) == 1u32 { return e }
+        }
         i = i + 1u64
     }
     return 0u64
@@ -544,15 +624,18 @@ fn ev_lookup(off: u32, len: u32) -> u32 {
     i = 0u64
     while i < EV_GCOUNT {
         let e: u64 = EV_W + EVGT_BASE + i * 40u64
-        let fo: u32 = iii_lex_read_u32_c(e, 0u64)
-        let fl: u32 = iii_lex_read_u32_c(e, 4u64)
-        if ev_name_eq(off, len, fo, fl) == 1u32 {
-            EV_SYMA = iii_lex_read_u64_c(e, 8u64)
-            EV_SYMT = iii_lex_read_u64_c(e, 16u64)
-            EV_SYMM = iii_lex_read_u64_c(e, 24u64)
-            EV_SYMS = iii_lex_read_u64_c(e, 32u64)
-            EV_SYMK = 1u32
-            return 1u32
+        /* Θ1: globals are module-LOCAL — filter by the module column */
+        if (iii_lex_read_u32_c(EV_W + EVGM_BASE, i * 4u64) as u64) == EV_CURMOD {
+            let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+            let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+            if ev_name_eq(off, len, fo, fl) == 1u32 {
+                EV_SYMA = iii_lex_read_u64_c(e, 8u64)
+                EV_SYMT = iii_lex_read_u64_c(e, 16u64)
+                EV_SYMM = iii_lex_read_u64_c(e, 24u64)
+                EV_SYMS = iii_lex_read_u64_c(e, 32u64)
+                EV_SYMK = 1u32
+                return 1u32
+            }
         }
         i = i + 1u64
     }
@@ -1005,7 +1088,8 @@ fn ev_eval_expr(node: u32) -> u32 {
         let idx: u32 = iii_ast_str_payload_idx(EV_AST, node)
         let len: u32 = iii_ast_str_string_len(EV_AST, node)
         if (idx as u64) >= EVSM_CELLS { EV_ERRC = EVE_CAP ; return EVE_CAP }
-        let me: u64 = EV_W + EVSM_BASE + (idx as u64) * 8u64
+        if (idx as u64) >= EVSM_CELLS { EV_ERRN = node ; EV_ERRC = EVE_CAP ; return EVE_CAP }
+        let me: u64 = EV_W + EVSM_BASE + (EV_CURMOD * EVSM_CELLS + (idx as u64)) * 8u64
         let mut addr: u64 = iii_lex_read_u64_c(me, 0u64)
         if addr == 0u64 {
             addr = ev_galloc((len as u64) + 1u64)
@@ -1164,9 +1248,24 @@ fn ev_eval_call(node: u32) -> u32 {
         EV_ERRC = EVE_UNKNOWN_FN
         return EVE_UNKNOWN_FN
     }
+    /* Θ1: copy the exec module OUT immediately — argument evaluation below
+     * may contain calls that clobber EV_FMOD. */
+    let fmod: u64 = EV_FMOD
+    if fnode == EVFN_POISON {
+        /* an extern that resolved to nothing loadable: clean, NAMED unsupported */
+        EV_ERRN = node
+        EV_ERRC = EVE_EXTERN
+        return EVE_EXTERN
+    }
     let argc: u32 = iii_ast_call_arg_count(EV_AST, node)
-    let parc: u32 = iii_ast_fn_param_count(EV_AST, fnode)
-    if argc != parc { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+    if fnode < 0xFFFF0000u32 {
+        /* param count read under the CALLEE's ast (builtins check their own argc) */
+        let save_ast: u64 = EV_AST
+        EV_AST = ev_mod_ast(fmod)
+        let parc: u32 = iii_ast_fn_param_count(EV_AST, fnode)
+        EV_AST = save_ast
+        if argc != parc { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+    }
     if (argc as u64) > 32u64 { EV_ERRN = node ; EV_ERRC = EVE_CAP ; return EVE_CAP }
     /* evaluate args left-to-right onto the operand stack */
     let mut i: u32 = 0u32
@@ -1177,12 +1276,68 @@ fn ev_eval_call(node: u32) -> u32 {
         if rc != EVS_OK { return rc }
         i = i + 1u32
     }
-    return ev_do_call(fnode, argc)
+    if fnode >= 0xFFFF0000u32 { return ev_builtin_call(fnode, argc, node) }
+    return ev_do_call(fnode, argc, fmod)
+}
+
+/* ── Θ1 builtins: the sanctioned C boundary (msvcrt tier) ──────────────
+ * malloc → world bump alloc (16-aligned, bounds-checked like all world
+ * memory); free → no-op (the world is an arena); putchar → REAL stdout
+ * (the gate's output-comparison axis observes it). */
+fn ev_builtin_call(bi: u32, argc: u32, node: u32) -> u32 {
+    if bi == EVFN_BI_MALLOC {
+        if argc != 1u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop()
+        let n: u64 = EV_POPV
+        let a: u64 = ev_galloc((n + 15u64) & (0u64 - 16u64))
+        if a == 0u64 { return EV_ERRC }
+        return ev_push(a, EVT_U64)
+    }
+    if bi == EVFN_BI_FREE {
+        if argc != 1u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop()
+        return ev_push(0u64, ev_mk_int(4u64, 0u64))
+    }
+    if bi == EVFN_BI_PUTCHAR {
+        if argc != 1u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop()
+        let c: u64 = EV_POPV
+        iii_lex_fputc_c((c & 0xFFu64) as u32, iii_lex_stdout_c())
+        return ev_push(c & 0xFFu64, ev_mk_int(4u64, 0u64))
+    }
+    if bi == EVFN_BI_VALLOC {
+        /* VirtualAlloc(addr, size, alloc_type, protect) -> zeroed pages;
+         * the world region IS pre-zeroed, so the contract carries. */
+        if argc != 4u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop()                          /* protect */
+        ev_pop()                          /* alloc_type */
+        ev_pop()
+        let vsz: u64 = EV_POPV            /* size */
+        ev_pop()                          /* addr hint (ignored) */
+        let va: u64 = ev_galloc((vsz + 4095u64) & (0u64 - 4096u64))
+        if va == 0u64 { return EV_ERRC }
+        return ev_push(va, ev_mk_ptr(ev_mk_int(1u64, 0u64)))
+    }
+    if bi == EVFN_BI_VFREE {
+        if argc != 3u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop() ; ev_pop() ; ev_pop()
+        return ev_push(1u64, ev_mk_int(4u64, 1u64))
+    }
+    if bi == EVFN_BI_SLEEP {
+        if argc != 1u32 { EV_ERRN = node ; EV_ERRC = EVE_ARGC ; return EVE_ARGC }
+        ev_pop()
+        return ev_push(0u64, EVT_UNIT)
+    }
+    EV_ERRN = node
+    EV_ERRC = EVE_EXTERN
+    return EVE_EXTERN
 }
 
 /* args are the top `argc` operand cells (left-to-right).  Binds a new
- * frame, runs the body, restores, pushes the (adapted) return value. */
-fn ev_do_call(fnode: u32, argc: u32) -> u32 {
+ * frame, runs the body, restores, pushes the (adapted) return value.
+ * Θ1: fmod = the callee's module — the WHOLE frame (param types, body,
+ * string payloads, ident names) evaluates under that module's context. */
+fn ev_do_call(fnode: u32, argc: u32, fmod: u64) -> u32 {
     if EV_DEPTH >= 2048u64 { EV_ERRC = EVE_DEPTH ; return EVE_DEPTH }
     /* pop args (right-to-left) into the arg scratch (no recursion between
      * here and param binding, so module scratch is safe) */
@@ -1196,6 +1351,11 @@ fn ev_do_call(fnode: u32, argc: u32) -> u32 {
     let save_lbase: u64 = EV_LBASE
     let save_lsp: u64 = EV_LSP
     let save_dtop: u64 = EV_DTOP
+    let save_mod: u64 = EV_CURMOD
+    let save_ast: u64 = EV_AST
+    let save_src: u64 = EV_SRC
+    let save_srclen: u64 = EV_SRCLEN
+    ev_mod_enter(fmod)
     EV_LBASE = EV_LSP
     /* bind params */
     let mut st: u32 = EVS_OK
@@ -1252,10 +1412,14 @@ fn ev_do_call(fnode: u32, argc: u32) -> u32 {
             }
         }
     }
-    /* restore frame */
+    /* restore frame + module context */
     EV_LBASE = save_lbase
     EV_LSP = save_lsp
     EV_DTOP = save_dtop
+    EV_CURMOD = save_mod
+    EV_AST = save_ast
+    EV_SRC = save_src
+    EV_SRCLEN = save_srclen
     if st != EVS_OK { return st }
     /* adapt the returned value to the declared return type */
     if ev_t_class(rett) == EVC_UNIT { return ev_push(0u64, EVT_UNIT) }
@@ -1485,21 +1649,37 @@ fn ev_exec_block(node: u32) -> u32 {
 /* ═══════════════════ module init + entry ══════════════════════════════ */
 
 /* collect decls + evaluate module-scope const/var initializers in order */
+/* TWO-PASS collect (Θ3): pass 1 registers fns/types/structs so that pass
+ * 2's const/var INITIALIZERS may forward-reference any module fn — module
+ * decls are order-free, and comptime (CTFE) needs exactly this. */
 fn ev_collect(root: u32) -> u32 {
     let n: u32 = iii_ast_module_decl_count(EV_AST, root)
+    let mut p1: u32 = 0u32
+    while p1 < n {
+        let d1: u32 = iii_ast_module_decl_at(EV_AST, root, p1)
+        let k1: u32 = iii_ast_node_kind(EV_AST, d1)
+        if k1 == EVK_FN_DECL {
+            let rc1: u32 = ev_fn_add(iii_ast_fn_name_off(EV_AST, d1), iii_ast_fn_name_len(EV_AST, d1), d1)
+            if rc1 != EVS_OK { return rc1 }
+        } else { if k1 == EVK_TYPE_DECL {
+            let rc2: u32 = ev_type_add(iii_ast_decl_name_offset(EV_AST, d1), iii_ast_decl_name_length(EV_AST, d1), d1, 0u32)
+            if rc2 != EVS_OK { return rc2 }
+        } else { if k1 == EVK_STRUCT_DECL {
+            let rc3: u32 = ev_type_add(iii_ast_struct_decl_name_off(EV_AST, d1), iii_ast_struct_decl_name_len(EV_AST, d1), d1, 1u32)
+            if rc3 != EVS_OK { return rc3 }
+        } } }
+        p1 = p1 + 1u32
+    }
     let mut i: u32 = 0u32
     while i < n {
         let d: u32 = iii_ast_module_decl_at(EV_AST, root, i)
         let k: u32 = iii_ast_node_kind(EV_AST, d)
         if k == EVK_FN_DECL {
-            let rc: u32 = ev_fn_add(iii_ast_fn_name_off(EV_AST, d), iii_ast_fn_name_len(EV_AST, d), d)
-            if rc != EVS_OK { return rc }
+            /* registered in pass 1 */
         } else { if k == EVK_TYPE_DECL {
-            let rc: u32 = ev_type_add(iii_ast_decl_name_offset(EV_AST, d), iii_ast_decl_name_length(EV_AST, d), d, 0u32)
-            if rc != EVS_OK { return rc }
+            /* registered in pass 1 */
         } else { if k == EVK_STRUCT_DECL {
-            let rc: u32 = ev_type_add(iii_ast_struct_decl_name_off(EV_AST, d), iii_ast_struct_decl_name_len(EV_AST, d), d, 1u32)
-            if rc != EVS_OK { return rc }
+            /* registered in pass 1 */
         } else { if k == EVK_CONST_DECL {
             let tn: u32 = iii_ast_const_decl_type(EV_AST, d)
             let mut isarr: u32 = 0u32
@@ -1587,22 +1767,20 @@ fn ev_collect(root: u32) -> u32 {
             if rc4 != EVS_OK { return rc4 }
             if isarr == 1u32 { ev_glob_meta(1u64 + (et << 8u64), sz) }
         } else { if k == EVK_EXTERN_DECL {
-            /* extern-free theater: an extern in scope is a named,
-             * clean unsupported -- recorded, not silently skipped */
-            EV_ERRN = d
-            EV_ERRK = k
-            EV_ERRC = EVE_EXTERN
-            return EVE_EXTERN
+            /* Θ1: externs are BOUND by the driver's bind pass after every
+             * module is registered+collected (loader / builtin / poison).
+             * An extern that stays unbound and is then CALLED errors as
+             * EVE_EXTERN with its node — named, never silent. */
         } } } } } }
         i = i + 1u32
     }
     return EVS_OK
 }
 
-fn iii_ev_init(ast: u64) -> u32 @export {
-    EV_AST = ast
-    EV_SRC = iii_ast_source_buf(ast)
-    EV_SRCLEN = iii_ast_source_len(ast)
+/* Θ1: world creation, module registration, and per-module collection are
+ * SEPARATE so the loader can register the ROOT as module 0 (discovery
+ * order) while collecting in dependency post-order. */
+fn iii_ev_world_init(dummy: u32) -> u32 @export {
     EV_W = iii_lex_malloc_c(EVW_CAP)
     if EV_W == 0u64 { EV_ERRC = EVE_OOM ; return EVE_OOM }
     iii_lex_memset_c(EV_W, 0u32, EVW_CAP)
@@ -1616,34 +1794,137 @@ fn iii_ev_init(ast: u64) -> u32 @export {
     EV_TCOUNT = 0u64
     EV_SCSP = 0u64
     EV_DEPTH = 0u64
+    EV_MCOUNT = 0u64
+    EV_CURMOD = 0u64
+    EV_FMOD = 0u64
     EV_ERRC = 0u32
     EV_ERRN = 0u32
     EV_ERRK = 0u32
-    let root: u32 = iii_ast_root_module(ast)
+    return EVS_OK
+}
+
+fn iii_ev_module_register(ast: u64) -> u64 @export { return ev_mod_add(ast) }
+
+fn iii_ev_module_collect(m: u64) -> u32 @export {
+    ev_mod_enter(m)
+    let root: u32 = iii_ast_root_module(EV_AST)
     if root == 0u32 { EV_ERRC = EVE_INTERNAL ; return EVE_INTERNAL }
     return ev_collect(root)
 }
 
+/* bind pass exports (driver-driven; name offsets live in mod's OWN src).
+ * NOTE the export-modifier check is deliberately absent: a non-@export
+ * provider fn fails the NATIVE link, so the KAT never reaches comparison —
+ * the gate structure itself prevents a false PASS (named in the map). */
+fn iii_ev_bind_fn_alias(mod: u64, noff: u32, nlen: u32, provider: u64) -> u32 @export {
+    let isrc: u64 = ev_mod_src(mod)
+    let psrc: u64 = ev_mod_src(provider)
+    let mut i: u64 = 0u64
+    while i < EV_FCOUNT {
+        let e: u64 = EV_W + EVFT_BASE + i * 16u64
+        let mm: u32 = iii_lex_read_u32_c(e, 12u64)
+        if ((mm >> 16u32) as u64) == provider {
+            let fo: u32 = iii_lex_read_u32_c(e, 0u64)
+            let fl: u32 = iii_lex_read_u32_c(e, 4u64)
+            if ev_name_eq_x(isrc, noff, nlen, psrc, fo, fl) == 1u32 {
+                let save: u64 = EV_CURMOD
+                EV_CURMOD = mod
+                let rc: u32 = ev_fn_alias(noff, nlen, iii_lex_read_u32_c(e, 8u64), (mm & 0xFFFFu32) as u64)
+                EV_CURMOD = save
+                return rc
+            }
+        }
+        i = i + 1u64
+    }
+    let save2: u64 = EV_CURMOD
+    EV_CURMOD = mod
+    let rc2: u32 = ev_fn_alias(noff, nlen, EVFN_POISON, mod)
+    EV_CURMOD = save2
+    return rc2
+}
+
+fn iii_ev_bind_builtin(mod: u64, noff: u32, nlen: u32, bi: u64) -> u32 @export {
+    let save: u64 = EV_CURMOD
+    EV_CURMOD = mod
+    let rc: u32 = ev_fn_alias(noff, nlen, bi as u32, mod)
+    EV_CURMOD = save
+    return rc
+}
+
+fn iii_ev_bind_poison(mod: u64, noff: u32, nlen: u32) -> u32 @export {
+    let save: u64 = EV_CURMOD
+    EV_CURMOD = mod
+    let rc: u32 = ev_fn_alias(noff, nlen, EVFN_POISON, mod)
+    EV_CURMOD = save
+    return rc
+}
+
+/* ═══ Θ3 — COMPTIME: the compiler asks the evaluator ════════════════════
+ * One-shot const-value query for cg_r3: initialize a private world over
+ * the COMPILER'S OWN ast (cached per ast handle), collect the module
+ * (two-pass, so const initializers may call any module fn), then read the
+ * named const/var slot.  0 = value written to out_addr (8 bytes); else
+ * the eval error code — the caller treats failure as "not comptime-
+ * evaluable" and REJECTS the program loudly (the silent-bss wart dies). */
+var EV_CTFE_AST : u64 = 0u64
+
+fn iii_ev_const_value(ast: u64, name_off: u32, name_len: u32, out_addr: u64) -> u32 @export {
+    if ast != EV_CTFE_AST {
+        let rc0: u32 = iii_ev_world_init(0u32)
+        if rc0 != EVS_OK { return rc0 }
+        let m: u64 = ev_mod_add(ast)
+        if m == 0xFFFFFFFFu64 { return EV_ERRC }
+        let rc1: u32 = iii_ev_module_collect(m)
+        if rc1 != EVS_OK { return rc1 }
+        EV_CTFE_AST = ast
+    }
+    ev_mod_enter(0u64)
+    if ev_lookup(name_off, name_len) == 0u32 { EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+    if EV_SYMK != 1u32 { EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+    let v: u64 = ev_ld(EV_SYMA, ev_width_size(EV_SYMT), ev_t_signed(EV_SYMT))
+    if EV_ERRC != 0u32 { return EV_ERRC }
+    iii_lex_write_u64_c(out_addr, 0u64, v)
+    return EVS_OK
+}
+
+fn iii_ev_init(ast: u64) -> u32 @export {
+    let rc0: u32 = iii_ev_world_init(0u32)
+    if rc0 != EVS_OK { return rc0 }
+    let m: u64 = ev_mod_add(ast)
+    if m == 0xFFFFFFFFu64 { return EV_ERRC }
+    return iii_ev_module_collect(m)
+}
+
 /* run fn main() -> u64; result in iii_ev_result() */
-fn iii_ev_run(dummy: u32) -> u32 @export {
-    let fnode: u32 = ev_fn_find_lit("main" as u64, 4u64)
+/* Θ4: run any zero-arg ROOT-module fn by name (the REPL's `_repl_N`
+ * cells use this; `main` is the plain-program special case). */
+fn iii_ev_run_fn(nameptr: u64, namelen: u64) -> u32 @export {
+    ev_mod_enter(0u64)                    /* Θ1: the entry is the ROOT module */
+    let fnode: u32 = ev_fn_find_lit(nameptr, namelen)
     if fnode == 0u32 { EV_ERRC = EVE_UNKNOWN_FN ; return EVE_UNKNOWN_FN }
+    let fmod: u64 = EV_FMOD
     if iii_ast_fn_param_count(EV_AST, fnode) != 0u32 { EV_ERRC = EVE_ARGC ; return EVE_ARGC }
-    let st: u32 = ev_do_call(fnode, 0u32)
+    let st: u32 = ev_do_call(fnode, 0u32, fmod)
     if st != EVS_OK { return st }
     ev_pop()
     EV_RESULT = EV_POPV
     return EVS_OK
 }
 
-/* find a fn whose name equals the literal bytes (for the entry lookup) */
+fn iii_ev_run(dummy: u32) -> u32 @export { return iii_ev_run_fn("main" as u64, 4u64) }
+
+/* find a fn whose name equals the literal bytes (entry lookup: ROOT module
+ * only — module 0 is the program; a dependency's `main` is not an entry).
+ * Sets EV_FMOD like ev_fn_find. */
 fn ev_fn_find_lit(lit: u64, llen: u64) -> u32 {
     let mut i: u64 = 0u64
     while i < EV_FCOUNT {
         let e: u64 = EV_W + EVFT_BASE + i * 16u64
+        let mm: u32 = iii_lex_read_u32_c(e, 12u64)
+        if (mm >> 16u32) != 0u32 { i = i + 1u64 ; continue }
         let fo: u32 = iii_lex_read_u32_c(e, 0u64)
         let fl: u32 = iii_lex_read_u32_c(e, 4u64)
-        if ev_name_is(fo, fl, lit, llen) == 1u32 { return iii_lex_read_u32_c(e, 8u64) }
+        if ev_name_is(fo, fl, lit, llen) == 1u32 { EV_FMOD = (mm & 0xFFFFu32) as u64 ; return iii_lex_read_u32_c(e, 8u64) }
         i = i + 1u64
     }
     return 0u32

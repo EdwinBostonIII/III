@@ -1,0 +1,10 @@
+/* provider module for p18 -- exports two fns; its const table is
+ * module-LOCAL state readable only through the exported getter (Stage
+ * 3.18), and it is PARTIALLY initialized so the row-6 declared-extent
+ * law is asserted ACROSS a module boundary. */
+module mp18lib
+
+const P18T : [u32; 4] = [11u32, 22u32]
+
+fn p18_mix(a: u64, b: u64) -> u64 @export { return a * 3u64 + b }
+fn p18_tab(i: u64) -> u32 @export { return P18T[i] }

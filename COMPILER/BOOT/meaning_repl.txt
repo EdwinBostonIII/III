@@ -1,0 +1,6 @@
+7u64 * 6u64
+fn sq(x: u64) -> u64 { return x * x }
+sq(12u64)
+const KK : u64 = 100u64
+KK + sq(2u64)
+:quit

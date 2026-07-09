@@ -1,20 +1,34 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\eval_main.iii
  *
- * iii_eval — driver for THE DEFINITIONAL EVALUATOR (Theta-0).
+ * iii_eval — driver for THE DEFINITIONAL EVALUATOR (Theta-0 core, Theta-1 loader).
  *
  *   iii_eval <file.iii>
  *
  * Pipeline: read source -> lex -> parse -> eval (NO sema, NO cg: the
- * whole point).  Output protocol (stdout; extern-free programs cannot
- * print, so the channel is clean):
+ * whole point).  Theta-1: `extern @abi fn X(...) from "Y.iii"` closures
+ * resolve the way the LINKER does — flat symbol namespace, module-local
+ * everything else — via a four-phase driver:
  *
+ *   L  load    DFS over from-strings: read+lex+parse+register each module
+ *              once (textual-path dedupe; the ROOT is module 0).  Import
+ *              CYCLES are legal (ccl<->typecheck class): loading only
+ *              records; nothing resolves yet.
+ *   C  collect every module's fns/types/globals (order-free: module-scope
+ *              initializers are self-contained).
+ *   B  bind    every extern: .iii target -> provider fn ALIAS (by name,
+ *              cross-buffer); msvcrt malloc/free/putchar -> BUILTINS;
+ *              anything else -> POISON (errors only when CALLED, named).
+ *   R  run     root main() under module-0 context.
+ *
+ * From-string layout authority: parse.iii iiip_parse_extern_decl stores the
+ * interned payload INDEX at node+32 (accessor lands with the Theta-3
+ * compiler batch; until then the driver raw-reads via iii_ast_get).
+ *
+ * Output protocol (stdout; the gate also byte-compares program output):
  *   III_EVAL_OK ret=0x<16-hex>\n      process rc = (u32)ret  (crt-identical)
  *   III_EVAL_PARSE_FAIL rc=<n>\n      process rc = 212
  *   III_EVAL_FAIL code=<n> node=<n> kind=<n>\n   process rc = 213
  *   III_EVAL_READ_FAIL / III_EVAL_USAGE           rc = 211 / 210
- *
- * The gate (run_meaning.sh) asserts BOTH the OK marker and rc equality
- * with the natively compiled route, observed through the same channel.
  */
 
 module eval_main
@@ -22,6 +36,9 @@ module eval_main
 extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_free_c(p: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_fopen_c(path: u64, mode: u32) -> u64 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_fread_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_fclose_c(file: u64) -> u32 from "lex_runtime.c"
@@ -33,9 +50,24 @@ extern @abi(c-msvc-x64) fn iii_lex_create(bytes: u64, len: u64, src: u64) -> u64
 extern @abi(c-msvc-x64) fn iii_ast_create(bytes: u64, len: u64, src: u64) -> u64 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_parse_create(lex: u64, ast: u64) -> u64 from "parse.iii"
 extern @abi(c-msvc-x64) fn iii_parse_module(p: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_ast_get(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_addr_c(ast: u64, idx: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
 
-extern @abi(c-msvc-x64) fn iii_ev_init(ast: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_world_init(dummy: u32) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_module_register(ast: u64) -> u64 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_module_collect(m: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_bind_fn_alias(mod: u64, noff: u32, nlen: u32, provider: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_bind_builtin(mod: u64, noff: u32, nlen: u32, bi: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_bind_poison(mod: u64, noff: u32, nlen: u32) -> u32 from "eval.iii"
 extern @abi(c-msvc-x64) fn iii_ev_run(dummy: u32) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_run_fn(nameptr: u64, namelen: u64) -> u32 from "eval.iii"
 extern @abi(c-msvc-x64) fn iii_ev_result(dummy: u32) -> u64 from "eval.iii"
 extern @abi(c-msvc-x64) fn iii_ev_err_code(dummy: u32) -> u32 from "eval.iii"
 extern @abi(c-msvc-x64) fn iii_ev_err_node(dummy: u32) -> u32 from "eval.iii"
@@ -43,9 +75,41 @@ extern @abi(c-msvc-x64) fn iii_ev_err_kind(dummy: u32) -> u32 from "eval.iii"
 
 const FOPEN_RB: u32 = 0u32
 const SRC_CAP: u64 = 8388608u64
+const EM_EXTERN_KIND: u32 = 7u32        /* III_AST_EXTERN_DECL */
+const MODP_MAX: u64 = 128u64
+const PATH_CAP: u64 = 260u64
+const EXT_MAX: u64 = 4096u64
+const BI_MALLOC: u64 = 0xFFFF0001u64
+const BI_FREE: u64 = 0xFFFF0002u64
+const BI_PUTCHAR: u64 = 0xFFFF0003u64
+const BI_VALLOC: u64 = 0xFFFF0004u64
+const BI_VFREE: u64 = 0xFFFF0005u64
+const BI_SLEEP: u64 = 0xFFFF0006u64
 
 var DEC_BUF : [u8; 24]
 
+/* module registry (driver slot index == engine module id, both assigned
+ * only on successful parse+register, in the same order) */
+var MOD_PATHS : [u8; 33280]             /* 128 x 260, NUL-terminated */
+var MOD_ASTS : [u64; 128]
+var MOD_N : u64 = 0u64
+
+/* pending externs recorded during L, bound during B */
+var EXT_MOD : [u32; 4096]
+var EXT_NODE : [u32; 4096]
+var EXT_PROV : [u32; 4096]              /* provider mod id | 0xFFFFFFFE builtin | 0xFFFFFFFF poison */
+var EXT_BI : [u32; 4096]                /* builtin id low half when builtin */
+var EXT_N : u64 = 0u64
+
+var PBUF : [u8; 520]                    /* candidate path scratch */
+var RBUF : [u8; 128]                    /* rel-prefix scratch */
+
+/* subsphere names, NUL-packed; the zero TAIL (row-6 law) ends the scan:
+ * aether eidos forcefield intent katabasis memoria nous numera omnia
+ * sanctus tempora verba */
+var SUBSPHERES : [u8; 96] = [97u8,101u8,116u8,104u8,101u8,114u8,0u8, 101u8,105u8,100u8,111u8,115u8,0u8, 102u8,111u8,114u8,99u8,101u8,102u8,105u8,101u8,108u8,100u8,0u8, 105u8,110u8,116u8,101u8,110u8,116u8,0u8, 107u8,97u8,116u8,97u8,98u8,97u8,115u8,105u8,115u8,0u8, 109u8,101u8,109u8,111u8,114u8,105u8,97u8,0u8, 110u8,111u8,117u8,115u8,0u8, 110u8,117u8,109u8,101u8,114u8,97u8,0u8, 111u8,109u8,110u8,105u8,97u8,0u8, 115u8,97u8,110u8,99u8,116u8,117u8,115u8,0u8, 116u8,101u8,109u8,112u8,111u8,114u8,97u8,0u8, 118u8,101u8,114u8,98u8,97u8,0u8]
+
+/* ── protocol emit helpers ─────────────────────────────────────────────── */
 fn em_lit(lit: u64, len: u64) -> u32 {
     iii_lex_fwrite_c(lit, len, iii_lex_stdout_c())
     return 0u32
@@ -70,24 +134,15 @@ fn em_dec(n: u64) -> u32 {
     let mut v: u64 = n
     let mut i: u64 = 0u64
     while v > 0u64 {
-        iii_lex_write_u8_dec(i, (v % 10u64) + 48u64)
+        DEC_BUF[i] = (((v % 10u64) + 48u64) & 255u64) as u8
         v = v / 10u64
         i = i + 1u64
     }
     while i > 0u64 {
         i = i - 1u64
-        iii_lex_fputc_c(iii_lex_read_u8_dec(i) as u32, o)
+        iii_lex_fputc_c(DEC_BUF[i] as u32, o)
     }
     return 0u32
-}
-
-/* DEC_BUF byte helpers (module array, no extern needed) */
-fn iii_lex_write_u8_dec(i: u64, v: u64) -> u32 {
-    DEC_BUF[i] = (v & 255u64) as u8
-    return 0u32
-}
-fn iii_lex_read_u8_dec(i: u64) -> u64 {
-    return DEC_BUF[i] as u64
 }
 
 fn em_nl() -> u32 {
@@ -95,26 +150,119 @@ fn em_nl() -> u32 {
     return 0u32
 }
 
-fn main(argc: u32, argv: u64) -> u32 @export {
-    if argc < 2u32 {
-        em_lit("III_EVAL_USAGE" as u64, 14u64)
-        em_nl()
-        return 210u32
+/* ── byte/path helpers ─────────────────────────────────────────────────── */
+fn cstr_len(p: u64) -> u64 {
+    let mut n: u64 = 0u64
+    while iii_lex_read_u8_at_c(p, n) != 0u32 { n = n + 1u64 ; if n > 4096u64 { return 4096u64 } }
+    return n
+}
+
+fn cstr_eq(a: u64, b: u64) -> u32 {
+    let mut i: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        let ca: u32 = iii_lex_read_u8_at_c(a, i)
+        let cb: u32 = iii_lex_read_u8_at_c(b, i)
+        if ca != cb { return 0u32 }
+        if ca == 0u32 { return 1u32 }
+        i = i + 1u64
     }
-    let path: u64 = iii_lex_read_u64_c(argv, 8u64)
+    return 0u32
+}
+
+fn ends_iii(p: u64) -> u32 {
+    let n: u64 = cstr_len(p)
+    if n < 4u64 { return 0u32 }
+    if iii_lex_read_u8_at_c(p, n - 4u64) != 46u32 { return 0u32 }
+    if iii_lex_read_u8_at_c(p, n - 3u64) != 105u32 { return 0u32 }
+    if iii_lex_read_u8_at_c(p, n - 2u64) != 105u32 { return 0u32 }
+    if iii_lex_read_u8_at_c(p, n - 1u64) != 105u32 { return 0u32 }
+    return 1u32
+}
+
+fn name_is(src: u64, off: u32, len: u32, lit: u64, llen: u64) -> u32 {
+    if (len as u64) != llen { return 0u32 }
+    let mut i: u64 = 0u64
+    while i < llen {
+        if iii_lex_read_u8_at_c(src + (off as u64), i) != iii_lex_read_u8_at_c(lit, i) { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* PBUF := dir(base) + rel + frm  (NUL-terminated; empty on overflow) */
+fn build_candidate(base: u64, rel: u64, frm: u64) -> u64 {
+    let mut o: u64 = 0u64
+    let bl: u64 = cstr_len(base)
+    let mut lastslash: u64 = 0u64
+    let mut i: u64 = 0u64
+    while i < bl {
+        let c: u32 = iii_lex_read_u8_at_c(base, i)
+        if c == 47u32 { lastslash = i + 1u64 }
+        if c == 92u32 { lastslash = i + 1u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < lastslash { PBUF[o] = (iii_lex_read_u8_at_c(base, i) & 255u32) as u8 ; o = o + 1u64 ; i = i + 1u64 }
+    i = 0u64
+    while iii_lex_read_u8_at_c(rel, i) != 0u32 {
+        PBUF[o] = (iii_lex_read_u8_at_c(rel, i) & 255u32) as u8 ; o = o + 1u64 ; i = i + 1u64
+        if o > 500u64 { PBUF[0u64] = 0u8 ; return &PBUF as u64 }
+    }
+    i = 0u64
+    while iii_lex_read_u8_at_c(frm, i) != 0u32 {
+        PBUF[o] = (iii_lex_read_u8_at_c(frm, i) & 255u32) as u8 ; o = o + 1u64 ; i = i + 1u64
+        if o > 500u64 { PBUF[0u64] = 0u8 ; return &PBUF as u64 }
+    }
+    PBUF[o] = 0u8
+    return &PBUF as u64
+}
+
+fn compose_rel(prefix: u64, sub: u64) -> u64 {
+    let mut o: u64 = 0u64
+    let mut i: u64 = 0u64
+    while iii_lex_read_u8_at_c(prefix, i) != 0u32 { RBUF[o] = (iii_lex_read_u8_at_c(prefix, i) & 255u32) as u8 ; o = o + 1u64 ; i = i + 1u64 }
+    i = 0u64
+    while iii_lex_read_u8_at_c(sub, i) != 0u32 { RBUF[o] = (iii_lex_read_u8_at_c(sub, i) & 255u32) as u8 ; o = o + 1u64 ; i = i + 1u64 }
+    RBUF[o] = 47u8
+    RBUF[o + 1u64] = 0u8
+    return &RBUF as u64
+}
+
+/* try the linker-faithful candidate order; 1 = PBUF holds an openable path */
+fn resolve_from(importer_path: u64, frm: u64) -> u32 {
+    let c1: u64 = build_candidate(importer_path, "" as u64, frm)
+    let f1: u64 = iii_lex_fopen_c(c1, FOPEN_RB)
+    if f1 != 0u64 { iii_lex_fclose_c(f1) ; return 1u32 }
+    let mut si: u64 = 0u64
+    while si < 96u64 {
+        if SUBSPHERES[si] != 0u8 {
+            let sl: u64 = cstr_len(&SUBSPHERES as u64 + si)
+            let r2: u64 = compose_rel("../iii/" as u64, &SUBSPHERES as u64 + si)
+            let c2: u64 = build_candidate(importer_path, r2, frm)
+            let f2: u64 = iii_lex_fopen_c(c2, FOPEN_RB)
+            if f2 != 0u64 { iii_lex_fclose_c(f2) ; return 1u32 }
+            let r3: u64 = compose_rel("../../STDLIB/iii/" as u64, &SUBSPHERES as u64 + si)
+            let c3: u64 = build_candidate(importer_path, r3, frm)
+            let f3: u64 = iii_lex_fopen_c(c3, FOPEN_RB)
+            if f3 != 0u64 { iii_lex_fclose_c(f3) ; return 1u32 }
+            si = si + sl + 1u64
+        } else { si = si + 1u64 }
+    }
+    let c4: u64 = build_candidate(importer_path, "../../COMPILER/BOOT/" as u64, frm)
+    let f4: u64 = iii_lex_fopen_c(c4, FOPEN_RB)
+    if f4 != 0u64 { iii_lex_fclose_c(f4) ; return 1u32 }
+    return 0u32
+}
+
+/* read whole file into a fresh buffer; 0 on failure; length in RD_LEN */
+var RD_LEN : u64 = 0u64
+fn read_file(path: u64) -> u64 {
+    RD_LEN = 0u64
     let file: u64 = iii_lex_fopen_c(path, FOPEN_RB)
-    if file == 0u64 {
-        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
-        em_nl()
-        return 211u32
-    }
+    if file == 0u64 { return 0u64 }
     let buf: u64 = iii_lex_malloc_c(SRC_CAP)
-    if buf == 0u64 {
-        iii_lex_fclose_c(file)
-        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
-        em_nl()
-        return 211u32
-    }
+    if buf == 0u64 { iii_lex_fclose_c(file) ; return 0u64 }
     let mut total: u64 = 0u64
     let mut go: u32 = 1u32
     while go == 1u32 {
@@ -127,51 +275,321 @@ fn main(argc: u32, argv: u64) -> u32 @export {
         }
     }
     iii_lex_fclose_c(file)
-    if total == 0u64 {
-        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
-        em_nl()
-        return 211u32
+    if total == 0u64 { return 0u64 }
+    RD_LEN = total
+    return buf
+}
+
+fn mod_path_addr(m: u64) -> u64 { return &MOD_PATHS as u64 + m * PATH_CAP }
+
+/* ── phase L: recursive load (parse+register only; cycles legal) ───────── */
+fn load_module(path: u64) -> u64 {
+    let mut m: u64 = 0u64
+    while m < MOD_N {
+        if cstr_eq(path, mod_path_addr(m)) == 1u32 { return m }
+        m = m + 1u64
     }
-    let lex: u64 = iii_lex_create(buf, total, path)
-    if lex == 0u64 {
-        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
-        em_dec(9999u64)
-        em_nl()
-        return 212u32
-    }
-    let ast: u64 = iii_ast_create(buf, total, path)
-    if ast == 0u64 {
-        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
-        em_dec(9998u64)
-        em_nl()
-        return 212u32
-    }
+    if MOD_N >= MODP_MAX { return 0xFFFFFFFFu64 }
+    let buf: u64 = read_file(path)
+    if buf == 0u64 { return 0xFFFFFFFFu64 }
+    return load_buffer(buf, RD_LEN, path)
+}
+
+/* register + walk a module already in memory (files AND the Θ4 REPL cell) */
+fn load_buffer(buf: u64, blen: u64, path: u64) -> u64 {
+    /* claim the slot: record the path FIRST so self/cyclic imports dedupe */
+    let mymod: u64 = MOD_N
+    let pl: u64 = cstr_len(path)
+    if pl >= PATH_CAP { return 0xFFFFFFFFu64 }
+    let mut i: u64 = 0u64
+    while i <= pl { MOD_PATHS[mymod * PATH_CAP + i] = (iii_lex_read_u8_at_c(path, i) & 255u32) as u8 ; i = i + 1u64 }
+    let lex: u64 = iii_lex_create(buf, blen, path)
+    if lex == 0u64 { return 0xFFFFFFFFu64 }
+    let ast: u64 = iii_ast_create(buf, blen, path)
+    if ast == 0u64 { return 0xFFFFFFFFu64 }
     let p: u64 = iii_parse_create(lex, ast)
-    if p == 0u64 {
-        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
-        em_dec(9997u64)
-        em_nl()
-        return 212u32
+    if p == 0u64 { return 0xFFFFFFFFu64 }
+    if iii_parse_module(p) == 0u32 { return 0xFFFFFFFFu64 }
+    let em: u64 = iii_ev_module_register(ast)
+    if em != mymod { return 0xFFFFFFFFu64 }   /* driver slot == engine id, by construction */
+    MOD_ASTS[mymod] = ast
+    MOD_N = MOD_N + 1u64
+    /* walk decls: recurse .iii externs, record every extern for phase B */
+    let root: u32 = iii_ast_root_module(ast)
+    let dc: u32 = iii_ast_module_decl_count(ast, root)
+    let mut di: u32 = 0u32
+    while di < dc {
+        let d: u32 = iii_ast_module_decl_at(ast, root, di)
+        if iii_ast_node_kind(ast, d) == EM_EXTERN_KIND {
+            if EXT_N < EXT_MAX {
+                /* CLAIM the pending row BEFORE any recursion: load_module(child)
+                 * below appends the child's own externs, advancing EXT_N —
+                 * writing through the global index after that would corrupt
+                 * the table.  All writes go through the claimed `myx`. */
+                let myx: u64 = EXT_N
+                EXT_N = EXT_N + 1u64
+                /* from-string: interned payload idx at node+32 (parse.iii:3675) */
+                let nn: u64 = iii_ast_get(ast, d)
+                let pidx: u32 = iii_lex_read_u32_c(nn, 32u64)
+                let fromp: u64 = iii_ast_string_payload_addr_c(ast, pidx)
+                EXT_MOD[myx] = mymod as u32
+                EXT_NODE[myx] = d
+                EXT_PROV[myx] = 0xFFFFFFFFu32            /* poison unless classified */
+                EXT_BI[myx] = 0u32
+                if fromp != 0u64 {
+                    if ends_iii(fromp) == 1u32 {
+                        /* PBUF ordering invariant: resolve_from fills PBUF and
+                         * load_module(&PBUF) copies it into the child's slot
+                         * BEFORE any nested resolve_from can clobber it.  The
+                         * parent's own `path` param is never read after this
+                         * point (its bytes were copied into MOD_PATHS at entry). */
+                        if resolve_from(mod_path_addr(mymod), fromp) == 1u32 {
+                            let child: u64 = load_module(&PBUF as u64)
+                            if child != 0xFFFFFFFFu64 { EXT_PROV[myx] = child as u32 }
+                        }
+                    } else {
+                        let src: u64 = iii_ast_source_buf(ast)
+                        let noff: u32 = iii_ast_decl_name_offset(ast, d)
+                        let nlen: u32 = iii_ast_decl_name_length(ast, d)
+                        if name_is(src, noff, nlen, "malloc" as u64, 6u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_MALLOC & 0xFFFFFFFFu64) as u32 }
+                        if name_is(src, noff, nlen, "free" as u64, 4u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_FREE & 0xFFFFFFFFu64) as u32 }
+                        if name_is(src, noff, nlen, "putchar" as u64, 7u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_PUTCHAR & 0xFFFFFFFFu64) as u32 }
+                        if name_is(src, noff, nlen, "VirtualAlloc" as u64, 12u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_VALLOC & 0xFFFFFFFFu64) as u32 }
+                        if name_is(src, noff, nlen, "VirtualFree" as u64, 11u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_VFREE & 0xFFFFFFFFu64) as u32 }
+                        if name_is(src, noff, nlen, "Sleep" as u64, 5u64) == 1u32 { EXT_PROV[myx] = 0xFFFFFFFEu32 ; EXT_BI[myx] = (BI_SLEEP & 0xFFFFFFFFu64) as u32 }
+                    }
+                }
+            }
+        }
+        di = di + 1u32
     }
-    /* iii_parse_module returns 1 on success, 0 on failure (main.iii canon) */
-    let prc: u32 = iii_parse_module(p)
-    if prc == 0u32 {
-        em_lit("III_EVAL_PARSE_FAIL rc=" as u64, 23u64)
-        em_dec(prc as u64)
-        em_nl()
-        return 212u32
+    return mymod
+}
+
+/* ═══ Θ4 — THE MOUTH: iii_eval --repl ═══════════════════════════════════
+ * Line loop over REAL stdin (__acrt_iob_func(0)).  DECLARATION lines
+ * (fn/const/var/type/struct/extern) accumulate as module text — an
+ * `extern … from "x.iii"` line IS the import syntax (the Θ1 loader
+ * resolves it; no invented REPL commands).  Any other line is an
+ * EXPRESSION: the accumulated module + `fn _repl() -> u64 { return
+ * (<line>) }` re-lexes/re-parses whole (trivial at REPL scale), a fresh
+ * world evaluates it, and the value prints as `= 0x<16-hex>`.  Errors
+ * print `! code=<n> node=<n> kind=<n>` (the eval error codes, named in
+ * eval.iii).  `:quit` or EOF ends the session.  Run from the repo root
+ * (the REPL cell resolves imports as if it lived in COMPILER/BOOT). */
+
+extern @abi(c-msvc-x64) fn __acrt_iob_func(idx: u32) -> u64 from "msvcrt"
+
+const RS_CAP: u64 = 65536u64
+const RL_CAP: u64 = 2048u64
+var RS : [u8; 65536]                    /* accumulated declaration text */
+var RS_N : u64 = 0u64
+var RLINE : [u8; 2048]
+var RCOMP : u64 = 0u64                  /* compose buffer (malloc'd once) */
+
+fn repl_read_line() -> u64 {            /* len, or 0xFFFFFFFF on EOF-with-empty */
+    let sin: u64 = __acrt_iob_func(0u32)
+    let mut n: u64 = 0u64
+    let mut go: u32 = 1u32
+    var CH : [u8; 8]
+    while go == 1u32 {
+        let got: u64 = iii_lex_fread_c(&CH as u64, 1u64, sin)
+        if got == 0u64 {
+            if n == 0u64 { return 0xFFFFFFFFu64 }
+            go = 0u32
+        } else {
+            let c: u32 = CH[0u64] as u32
+            if c == 10u32 { go = 0u32 }
+            else { if c != 13u32 { if n < (RL_CAP - 2u64) { RLINE[n] = (c & 255u32) as u8 ; n = n + 1u64 } } }
+        }
     }
-    let irc: u32 = iii_ev_init(ast)
-    if irc != 0u32 {
-        em_lit("III_EVAL_FAIL code=" as u64, 19u64)
-        em_dec(irc as u64)
+    RLINE[n] = 0u8
+    return n
+}
+
+fn repl_line_is(lit: u64, llen: u64) -> u32 {
+    let mut i: u64 = 0u64
+    while i < llen {
+        if (RLINE[i] as u32) != iii_lex_read_u8_at_c(lit, i) { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn repl_is_decl() -> u32 {
+    if repl_line_is("fn " as u64, 3u64) == 1u32 { return 1u32 }
+    if repl_line_is("const " as u64, 6u64) == 1u32 { return 1u32 }
+    if repl_line_is("var " as u64, 4u64) == 1u32 { return 1u32 }
+    if repl_line_is("type " as u64, 5u64) == 1u32 { return 1u32 }
+    if repl_line_is("struct " as u64, 7u64) == 1u32 { return 1u32 }
+    if repl_line_is("extern " as u64, 7u64) == 1u32 { return 1u32 }
+    return 0u32
+}
+
+fn rc_append(o: u64, lit: u64, llen: u64) -> u64 {
+    let mut i: u64 = 0u64
+    let mut oo: u64 = o
+    while i < llen { iii_lex_write_u8_at_c(RCOMP, oo, iii_lex_read_u8_at_c(lit, i)) ; oo = oo + 1u64 ; i = i + 1u64 }
+    return oo
+}
+
+/* evaluate `expr_text` (NUL-terminated) against the accumulated decls;
+ * prints the value or the error (quiet=1 suppresses all printing — the
+ * declaration-validation trial).  Returns 0 if the CYCLE ran (even with
+ * an eval error), 1 if the module failed to load/parse. */
+fn repl_cycle(expr_text: u64, quiet: u32) -> u32 {
+    if RCOMP == 0u64 { RCOMP = iii_lex_malloc_c(131072u64) ; if RCOMP == 0u64 { return 1u32 } }
+    let mut o: u64 = 0u64
+    o = rc_append(o, "module repl\n" as u64, 12u64)
+    let mut i: u64 = 0u64
+    while i < RS_N { iii_lex_write_u8_at_c(RCOMP, o, RS[i] as u32) ; o = o + 1u64 ; i = i + 1u64 }
+    o = rc_append(o, "fn _repl() -> u64 { return (" as u64, 28u64)
+    o = rc_append(o, expr_text, cstr_len(expr_text))
+    o = rc_append(o, ") }\n" as u64, 4u64)
+    /* fresh world + fresh driver tables each cycle */
+    if iii_ev_world_init(0u32) != 0u32 { return 1u32 }
+    MOD_N = 0u64
+    EXT_N = 0u64
+    let rm: u64 = load_buffer(RCOMP, o, "COMPILER/BOOT/_repl.iii" as u64)
+    if rm == 0xFFFFFFFFu64 { return 1u32 }
+    let mut m: u64 = 0u64
+    while m < MOD_N { if iii_ev_module_collect(m) != 0u32 { return 1u32 } ; m = m + 1u64 }
+    let mut x: u64 = 0u64
+    while x < EXT_N {
+        let xm: u64 = EXT_MOD[x] as u64
+        let xd: u32 = EXT_NODE[x]
+        let ast2: u64 = MOD_ASTS[xm]
+        let noff: u32 = iii_ast_decl_name_offset(ast2, xd)
+        let nlen: u32 = iii_ast_decl_name_length(ast2, xd)
+        let prov: u32 = EXT_PROV[x]
+        if prov == 0xFFFFFFFFu32 { iii_ev_bind_poison(xm, noff, nlen) }
+        else { if prov == 0xFFFFFFFEu32 { iii_ev_bind_builtin(xm, noff, nlen, (EXT_BI[x] as u64) | 0xFFFF0000u64) }
+        else { iii_ev_bind_fn_alias(xm, noff, nlen, prov as u64) } }
+        x = x + 1u64
+    }
+    let rrc: u32 = iii_ev_run_fn("_repl" as u64, 5u64)
+    if quiet == 1u32 { return 0u32 }
+    if rrc != 0u32 {
+        em_lit("! code=" as u64, 7u64)
+        em_dec(rrc as u64)
         em_lit(" node=" as u64, 6u64)
         em_dec(iii_ev_err_node(0u32) as u64)
         em_lit(" kind=" as u64, 6u64)
         em_dec(iii_ev_err_kind(0u32) as u64)
         em_nl()
+        return 0u32
+    }
+    em_lit("= 0x" as u64, 4u64)
+    em_hex16(iii_ev_result(0u32))
+    em_nl()
+    return 0u32
+}
+
+fn repl_loop() -> u32 {
+    em_lit("III MEANING REPL (Theta-4) -- decls accumulate; expressions evaluate; :quit ends" as u64, 80u64)
+    em_nl()
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        em_lit("iii> " as u64, 5u64)
+        let n: u64 = repl_read_line()
+        if n == 0xFFFFFFFFu64 { go = 0u32 }
+        else { if n == 0u64 { }
+        else { if repl_line_is(":quit" as u64, 5u64) == 1u32 { go = 0u32 }
+        else { if repl_is_decl() == 1u32 {
+            /* append + validate by a trivial cycle; revert on parse failure */
+            let save_n: u64 = RS_N
+            let mut i: u64 = 0u64
+            let mut ok: u32 = 1u32
+            while i < n { if RS_N < (RS_CAP - 2u64) { RS[RS_N] = RLINE[i] ; RS_N = RS_N + 1u64 } else { ok = 0u32 } ; i = i + 1u64 }
+            RS[RS_N] = 10u8
+            RS_N = RS_N + 1u64
+            if ok == 1u32 { if repl_cycle("0u64" as u64, 1u32) != 0u32 { ok = 0u32 } }
+            if ok == 0u32 {
+                RS_N = save_n
+                em_lit("(rejected: declaration did not parse)" as u64, 37u64)
+                em_nl()
+            } else {
+                em_lit("(ok)" as u64, 4u64)
+                em_nl()
+            }
+        } else {
+            if repl_cycle(&RLINE as u64, 0u32) != 0u32 {
+                em_lit("(rejected: expression did not parse)" as u64, 36u64)
+                em_nl()
+            }
+        } } } }
+    }
+    return 0u32
+}
+
+fn main(argc: u32, argv: u64) -> u32 @export {
+    if argc < 2u32 {
+        em_lit("III_EVAL_USAGE" as u64, 14u64)
+        em_nl()
+        return 210u32
+    }
+    let path: u64 = iii_lex_read_u64_c(argv, 8u64)
+    if cstr_eq(path, "--repl" as u64) == 1u32 { return repl_loop() }
+    let irc0: u32 = iii_ev_world_init(0u32)
+    if irc0 != 0u32 {
+        em_lit("III_EVAL_FAIL code=" as u64, 19u64)
+        em_dec(irc0 as u64)
+        em_lit(" node=0 kind=0" as u64, 14u64)
+        em_nl()
         return 213u32
     }
+    /* L */
+    let rootm: u64 = load_module(path)
+    if rootm == 0xFFFFFFFFu64 {
+        em_lit("III_EVAL_READ_FAIL" as u64, 18u64)
+        em_nl()
+        return 211u32
+    }
+    /* C */
+    let mut m: u64 = 0u64
+    while m < MOD_N {
+        let crc: u32 = iii_ev_module_collect(m)
+        if crc != 0u32 {
+            em_lit("III_EVAL_FAIL code=" as u64, 19u64)
+            em_dec(crc as u64)
+            em_lit(" node=" as u64, 6u64)
+            em_dec(iii_ev_err_node(0u32) as u64)
+            em_lit(" kind=" as u64, 6u64)
+            em_dec(iii_ev_err_kind(0u32) as u64)
+            em_nl()
+            return 213u32
+        }
+        m = m + 1u64
+    }
+    /* B */
+    let mut x: u64 = 0u64
+    while x < EXT_N {
+        let xm: u64 = EXT_MOD[x] as u64
+        let xd: u32 = EXT_NODE[x]
+        let ast: u64 = MOD_ASTS[xm]
+        let noff: u32 = iii_ast_decl_name_offset(ast, xd)
+        let nlen: u32 = iii_ast_decl_name_length(ast, xd)
+        let prov: u32 = EXT_PROV[x]
+        let mut brc: u32 = 0u32
+        if prov == 0xFFFFFFFFu32 {
+            brc = iii_ev_bind_poison(xm, noff, nlen)
+        } else { if prov == 0xFFFFFFFEu32 {
+            brc = iii_ev_bind_builtin(xm, noff, nlen, (EXT_BI[x] as u64) | 0xFFFF0000u64)
+        } else {
+            brc = iii_ev_bind_fn_alias(xm, noff, nlen, prov as u64)
+        } }
+        if brc != 0u32 {
+            em_lit("III_EVAL_FAIL code=" as u64, 19u64)
+            em_dec(brc as u64)
+            em_lit(" node=" as u64, 6u64)
+            em_dec(xd as u64)
+            em_lit(" kind=7" as u64, 7u64)
+            em_nl()
+            return 213u32
+        }
+        x = x + 1u64
+    }
+    /* R */
     let rrc: u32 = iii_ev_run(0u32)
     if rrc != 0u32 {
         em_lit("III_EVAL_FAIL code=" as u64, 19u64)

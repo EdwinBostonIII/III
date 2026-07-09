@@ -3708,6 +3708,20 @@ fn r3_lit_u64_compute(node: u32) -> u32 {
     return 0u32
 }
 
+/* ═══ Θ3 COMPTIME ═══ the definitional evaluator (eval.iii, the Meaning
+ * Lift's second meaning-bearer) is the compiler's const-expression engine:
+ * a module-scope initializer that is not a bare literal is EVALUATED at
+ * compile time over this ast; comptime/runtime divergence is structurally
+ * impossible for the evaluated slice because both meanings are pinned to
+ * the same object by run_meaning.sh.  Failure = loud reject (the silent
+ * emit-nothing / zero-.bss wart is dead). */
+extern @abi(c-msvc-x64) fn iii_ev_const_value(ast: u64, name_off: u32, name_len: u32, out_addr: u64) -> u32 from "eval.iii"
+var R3_CTFE_VAL : u64 = 0u64
+
+fn r3_ctfe_value(no: u32, nl: u32) -> u32 {
+    return iii_ev_const_value(R3_G_AST, no, nl, &R3_CTFE_VAL as u64)
+}
+
 fn r3_emit_data_decls() -> u32 {
     let root: u32 = iii_ast_root_module(R3_G_AST); if root == 0u32 { return R3_OK }
     let dc: u32 = iii_ast_module_decl_count(R3_G_AST, root)
@@ -3740,6 +3754,16 @@ fn r3_emit_data_decls() -> u32 {
                     if current_section != 1u32 { r3_emit_arr(&R3_K_RODATA as u64, R3_K_RODATA_LEN); current_section = 1u32 }
                     r3_emit_local_decl_label(no, nl)
                     r3_emit_arr(&R3_K_QUAD0X as u64, R3_K_QUAD0X_LEN); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
+                } else {
+                    /* Θ3 comptime const */
+                    let crc: u32 = r3_ctfe_value(no, nl)
+                    if crc == 0u32 {
+                        if current_section != 1u32 { r3_emit_arr(&R3_K_RODATA as u64, R3_K_RODATA_LEN); current_section = 1u32 }
+                        r3_emit_local_decl_label(no, nl)
+                        r3_emit_arr(&R3_K_QUAD0X as u64, R3_K_QUAD0X_LEN); r3_emit_hex(R3_CTFE_VAL); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
+                    } else {
+                        R3_G_LAST_ERROR = R3_E_INTERNAL; R3_G_ERROR_COUNT = R3_G_ERROR_COUNT + 1u32
+                    }
                 }
             }
         }
@@ -3768,6 +3792,17 @@ fn r3_emit_data_decls() -> u32 {
                         if current_section != 2u32 { r3_emit_arr(&R3_K_DATA as u64, R3_K_DATA_LEN); current_section = 2u32 }
                         r3_emit_var_decl_label_gated(d, vno, vnl)
                         r3_emit_arr(&R3_K_QUAD0X as u64, R3_K_QUAD0X_LEN); r3_emit_hex(R3_LIT_VALUE); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
+                        handled = 1u32
+                    } else {
+                        /* Θ3 comptime var initializer (was: silently ignored -> zero .bss) */
+                        let crc2: u32 = r3_ctfe_value(vno, vnl)
+                        if crc2 == 0u32 {
+                            if current_section != 2u32 { r3_emit_arr(&R3_K_DATA as u64, R3_K_DATA_LEN); current_section = 2u32 }
+                            r3_emit_var_decl_label_gated(d, vno, vnl)
+                            r3_emit_arr(&R3_K_QUAD0X as u64, R3_K_QUAD0X_LEN); r3_emit_hex(R3_CTFE_VAL); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
+                        } else {
+                            R3_G_LAST_ERROR = R3_E_INTERNAL; R3_G_ERROR_COUNT = R3_G_ERROR_COUNT + 1u32
+                        }
                         handled = 1u32
                     }
                 }

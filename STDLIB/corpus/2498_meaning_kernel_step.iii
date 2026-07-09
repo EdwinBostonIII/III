@@ -1,0 +1,58 @@
+/* 2498 -- Θ5(a) THE JUDGED STEP, rung 0 (DOCS/III-MEANING-LIFT-MAP.md):
+ * the meaning-bearer's ARITHMETIC FRAGMENT pinned to the CIC kernel's
+ * BV64 machine-int model at closed vectors.
+ *
+ * Each check computes one side in THIS PROGRAM's own arithmetic --
+ * executed by whichever meaning-bearer is running (native cg_r3 code, or
+ * the definitional evaluator via the Θ1 loader, which pulls typecheck.iii
+ * itself into the world and evaluates the KERNEL too) -- and the other
+ * side inside the kernel (BV64 iota-fold), judged by tc_conv.  A
+ * meaning-bearer whose add/mul/sub/and/or/xor/shl disagrees with the
+ * kernel's mod-2^64 model cannot return 99.  Vectors deliberately sit on
+ * the semantic edges Θ0 pinned: wraparound, underflow, and the x86
+ * shift-count mask (x<<64 == x in ALL THREE truth systems).
+ *
+ * run_meaning.sh runs this through BOTH routes: the meaning object and
+ * the truth machine agree through the standing differential, forever. */
+module corpus_2498
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+
+fn main() -> u64 {
+    tc_reset()
+    /* (1) wraparound add: MAX + 1 == 0 in the kernel AND in this program */
+    let mx: u64 = 18446744073709551615u64
+    let one: u64 = 1u64
+    if tc_conv(tc_bvadd(tc_bvlit_u64(mx), tc_bvlit_u64(one)), tc_bvlit_u64(mx + one)) != 1u8 { return 1u64 }
+    /* (2) wraparound mul: 2^32 * 2^32 == 0 (mod 2^64) */
+    let p32: u64 = 4294967296u64
+    if tc_conv(tc_bvmul(tc_bvlit_u64(p32), tc_bvlit_u64(p32)), tc_bvlit_u64(p32 * p32)) != 1u8 { return 2u64 }
+    /* (3) underflow sub: 0 - 1 == MAX */
+    let z: u64 = 0u64
+    if tc_conv(tc_bvsub(tc_bvlit_u64(z), tc_bvlit_u64(one)), tc_bvlit_u64(z - one)) != 1u8 { return 3u64 }
+    /* (4-6) bitwise triple on mixed-bit vectors */
+    let x: u64 = 0x123456789ABCDEF0u64
+    let y: u64 = 0x0FEDCBA987654321u64
+    if tc_conv(tc_bvand(tc_bvlit_u64(x), tc_bvlit_u64(y)), tc_bvlit_u64(x & y)) != 1u8 { return 4u64 }
+    if tc_conv(tc_bvor(tc_bvlit_u64(x), tc_bvlit_u64(y)), tc_bvlit_u64(x | y)) != 1u8 { return 5u64 }
+    if tc_conv(tc_bvxor(tc_bvlit_u64(x), tc_bvlit_u64(y)), tc_bvlit_u64(x ^ y)) != 1u8 { return 6u64 }
+    /* (7) shift into the high half */
+    let k13: u64 = 13u64
+    if tc_conv(tc_bvshl(tc_bvlit_u64(x), tc_bvlit_u64(k13)), tc_bvlit_u64(x << k13)) != 1u8 { return 7u64 }
+    /* (8) THE x86 COUNT MASK: x<<64 == x -- kernel k&63, native SHL cl-mask,
+     * evaluator's pinned mask semantics: all three meet here */
+    let k64: u64 = 64u64
+    if tc_conv(tc_bvshl(tc_bvlit_u64(x), tc_bvlit_u64(k64)), tc_bvlit_u64(x << k64)) != 1u8 { return 8u64 }
+    /* (9) negative arm: the kernel must REFUSE a wrong fold */
+    if tc_conv(tc_bvadd(tc_bvlit_u64(2u64), tc_bvlit_u64(2u64)), tc_bvlit_u64(5u64)) == 1u8 { return 9u64 }
+    return 99u64
+}

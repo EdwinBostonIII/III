@@ -198,6 +198,27 @@ spore. Stated as horizon with named unknowns (proof-engineering scale), not sche
 > .iii sources, no compiler (`run_germinate.sh` header). iii_eval joins the spore only once it is
 > routed through the SVIR waist ⇒ Θ5d waits on Γ1, exactly like Θ2. The Γ1-independent Θ5 legs are
 > (a) kernel step-laws and (c) zk attestation of evaluator runs.
+>
+> **Θ5(a) rung 0 EXECUTED (2026-07-09 s2): THE JUDGED STEP opens.** Measured first: the sealed Θ1
+> sweep shows `1213_bv_kernel` **PASS** — the definitional evaluator EXECUTES THE CIC KERNEL
+> (typecheck+ccl pulled through the loader) and reproduces all 32 BV64 vectors including the
+> soundness negatives. On that measured base, `2498_meaning_kernel_step.iii` states the JOINT law:
+> nine vectors each computed once in the PROGRAM'S OWN arithmetic (executed by whichever
+> meaning-bearer runs it) and once inside the kernel (BV64 iota-fold), judged by `tc_conv`, with a
+> negative arm (the kernel must refuse 2+2≡5). Vectors sit on the pinned semantic edges: wraparound
+> add/mul, underflow, bitwise triple, high-half shift, and THE x86 COUNT MASK (x<<64 == x — where
+> kernel k&63, native SHL cl-mask, and the evaluator's pinned mask semantics all meet). The standing
+> differential (run_meaning) then holds evaluator ≡ native ≡ kernel on these vectors forever.
+> Deeper step-laws (symbolic theorems over eval's AST) remain the named proof-engineering horizon.
+>
+> **Θ2 rung 0 (2026-07-09 s2): the square opens WITHOUT waiting for Γ1.** Route S exists today:
+> `iiisv2` (.iii→SVIR, the DDC shunting-yard emitter) → `gen_svir` module → `svir_interp` (the SVIR
+> reference executor) — an execution path forking at the SOURCE, sharing nothing below the front.
+> `run_meaning_square.sh` + `square_probes/` assert three-route rc agreement; a pairwise split
+> NAMES its axis (N≠E,E=S → compiled route; E alone → evaluator; S alone → SVIR emitter/interp).
+> HONEST THEATER LIMIT: SVIR v1 drops width suffixes (all i64, SVIR-V1-CANONICAL §3.3), so route S
+> runs only the explicit width-free probe theater until Γ1's width-faithful backend absorbs the
+> oracle corpus-wide.
 
 **Scheduling fact:** Θ0 touches ONLY new files + one new gate script — the live Γ0/Λ0 bisect state
 (ccsv, session 8b) is untouched and can burn in parallel. Θ2 waits on Γ1; nothing else serializes.
@@ -229,6 +250,11 @@ would compare link+run BEHAVIOR, not bytes — future work, named here.
 
 | 8 | 2026-07-09 | 2488/2489 (output axis, first firing) | rc equal; 156B vs 148B / 104B vs 100B | **comparator defect — the instrument's OWN extraction was asymmetric** | msys sed strips `\r` from lines it rewrites: the eval side's protocol-strip pass lost CRLF while the native side kept it → false OUT_DIVERGE on any multi-line output. Adjudicated by raw-byte proof (both routes emit identical CRLF streams; symmetric `tr -d '\r'` normalization → byte-identical). Fixed on BOTH sides + the (d2) selftest arm hardened to multi-line output so the class has a permanent tooth. Comparison is now CR-insensitive + trailing-newline-insensitive — the two NAMED softnesses of the output axis. |
 | 9 | 2026-07-09 | probe floor flake (p01/p08/p18, sweep 1) | stochastic, 3 distinct codes | **gate-environment defect — OneDrive stale read-after-write** | Rapidly-rewritten scratch files under the OneDrive tree served STALE content (measured 1/40 on the exact gate invocation shape): the probes' eval output read back as prior-run bytes → misclassification. The read-side sibling of the staged-exec trap. Fixed: every same-invocation read-back file lives in /tmp; the cache dir stays on OneDrive because its reads are settled (written whole runs earlier); fresh-branch rc is kept live instead of re-read. |
+| 10 | 2026-07-09 | sq02 (the square's FIRST catch) | E=213 vs N=S=196 | **evaluator STRICTER than incumbent → conformed** (two laws) | (10) ADAPTATION: the compiled route adapts ANY int to ANY int slot by width-renormalization (narrowing stores truncate movb/movw/movl; widening re-extends by target signedness) — ev_adapt's same-width+same-sign-only arm was the named root of the code=102 frontier class; now `ev_norm(v, want)` universally. (10b) BINARY UNIFY: mixed-WIDTH operands take the WIDER tag — natively the narrow side loads extended per its OWN signedness and the op runs wide; evaluator values are stored pre-normalized so no transformation needed. Equal-width mixed-SIGN stays refused until a differential adjudicates it. Θ2-0's square fired on its FIRST run and localized the axis to E alone — the instrument naming its own softness. |
+
+**Θ2 rung 0 VERDICT (2026-07-09 s2): `[square] GREEN: 2/2 three-route agreement` — the commuting
+square HOLDS (sq01 N=E=S=61; sq02 N=E=S=196 after rows 10/10b). Three independent executions of
+.iii source — sema+cg_r3+x86, the definitional evaluator, and iiisv2→SVIR→svir_interp — agree.**
 
 ### Row-6 fix audit (2026-07-09 session 2, written BEFORE the edit — evidence-before-action)
 

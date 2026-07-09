@@ -1,0 +1,16 @@
+module sq02
+var D : [u8; 16]
+fn main() -> i64 {
+    let mut i : i64 = 0
+    while i < 8 {
+        D[i] = i * 7
+        i = i + 1
+    }
+    let mut s : i64 = 0
+    i = 0
+    while i < 8 {
+        s = s + D[i]
+        i = i + 1
+    }
+    return s
+}

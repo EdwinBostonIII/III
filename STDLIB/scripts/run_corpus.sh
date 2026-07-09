@@ -1754,6 +1754,7 @@ declare -A EXPECTED=(
     [2495_slhdsa_shake256s_fips205]=99  # NIST ACVP SLH-DSA-SHAKE-256s internal det sigGen, byte-exact + flip-reject (~100s)
     [2496_slhdsa_sha2_192s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-192s cat-3 (SHA-512 H/T + HMAC/MGF1-SHA-512 layer), byte-exact (~60s)
     [2497_slhdsa_sha2_256s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-256s cat-5, byte-exact + flip-reject (~55s)
+    [2498_meaning_kernel_step]=99       # Θ5(a) THE JUDGED STEP rung 0: program arithmetic ≡ CIC-kernel BV64 iota-fold at 9 closed vectors (wraparound/underflow/bitwise/shift + x86 count-mask) + a refusal negative; both meaning-bearers via run_meaning (eval ≡ native ≡ kernel)
 )
 
 PASS=0

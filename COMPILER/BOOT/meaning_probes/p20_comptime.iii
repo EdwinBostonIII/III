@@ -1,0 +1,21 @@
+/* p20 -- Θ3 COMPTIME: module-scope initializers beyond bare literals are
+ * evaluated at compile time BY THE DEFINITIONAL EVALUATOR (cg_r3 asks
+ * eval.iii's iii_ev_const_value); comptime/runtime divergence is
+ * structurally impossible for this slice because both meanings are the
+ * same object.  The pre-Θ3 behavior (const: emitted NOTHING -> link
+ * break; var: initializer silently IGNORED -> zero .bss) is dead.
+ * MOVE INTO meaning_probes/ ONLY after the Θ3 compiler chain lands. */
+module mp20
+
+const BASE : u64 = 40u64
+const K : u64 = BASE + 2u64
+fn triple(x: u64) -> u64 { return x * 3u64 }
+const T9 : u64 = triple(3u64)
+var G : u64 = K * 2u64
+
+fn main() -> u64 {
+    if K != 42u64 { return 1u64 }
+    if T9 != 9u64 { return 2u64 }
+    if G != 84u64 { return 3u64 }
+    return 99u64
+}

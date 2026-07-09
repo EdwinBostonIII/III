@@ -310,8 +310,14 @@ EMITS a .o (632 B).  Every session-6 falsifier bar MET.
 
 **Frontier MOVED (still rc=16, much deeper)**: the emitted .o differs from gcc-iiis-0's: 17 vs 16
 COFF symbols + section-size deltas, and the seed exits 16 (the D11 keep-walking error path: some
-emit_function sub-step records an error while emission continues).  Next microscope: diff the .s
-texts / `objdump -t` the two .o's — find the EXTRA SYMBOL and the erroring emit sub-step.
+emit_function sub-step records an error while emission continues).  `objdump -t` diff (measured):
+the seed's `.text` scnlen = **0x0** (ref 0x30 — the body never emitted), the **`main` symbol is
+MISSING**, and two data sections are exactly 4 bytes short (0x5→0x1, 0xc→0x8 — the ".asciz name"
+is EMPTY).  One cause fits all three: **the fn NAME (`d->u.fn_decl.name`, an iii_src_text_t) reads
+back EMPTY at emit time** (offset/length pair zero or the source-buf read fails) → no label, no
+.globl, empty ring3 string, body emission errors (rc 16).  Next microscope: dump the seed-written
+.s TEXT and trace the name.offset/length values through emit_function's source-buf reads
+(`iii_ast_source_buf(cg->ast)[name.offset+i]` — the call()[i] shape).
 Still open (falsifiers committed, non-blocking for S4): the dot-global pointer-field indexed READ
 (`g.arena[1]` → inline-array mangle; _s4_probe4b rc=7) and dot-global indexed STORE with member
 post-inc (`g.arena[g.used++]=v` loses the ++; _s4_probe4 rc=20) — the seed never uses these shapes;

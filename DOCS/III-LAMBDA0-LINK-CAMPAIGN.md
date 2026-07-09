@@ -282,3 +282,37 @@ a ~3-byte-low landing), and in the dot-variant the ++ never lands.  The fix belo
 store walker (the `p->arr[i] = v` family, index-expression = `member++`); falsifiers = probe4/probe4b
 + rerun run_seed_sovereign S4 (rc must move past 16) + the _tr trace (list_at must return 0x30000003-
 class indices and c310 must go >0).  NOT YET FIXED — next session's first edit.
+
+## S4 FIX LANDED (session 6b, same day): C POINTER ARITHMETIC — EV_PSZ stride scaling in ccsv
+
+The session-6 store-walker hypothesis was REFINED by op-dumping the emitted SVIR (probe-only
+`svir_opdump.iii`): the arrow append `ast->arena[ast->used++] = v` compiles CORRECTLY (probe4b's F1:
+temps, ++, ×4, deref, STORE32 all right — its rc=7 came from the CHECKER's dot-global read, a
+separate defect).  The REAL killer, found by op-dumping the LINKED SEED's fn 127
+(`iii_ast_open_list_commit`): the memcpy dest **`ast->list_arena + ast->list_used`** compiled as a
+RAW byte ADD — ccsv had NO C pointer arithmetic (`LOAD64 arena; LOAD32 used; ADD` — no ×4).  With
+used=1 the appended index `[NN 00 00 30]` landed at arena bytes 1..4, so the element read at bytes
+4..7 returned 48.  Parse corrupted its OWN arena through the open-list commit; the append/read
+functions were innocent.
+
+**Fix (ccsv.iii)**: `EV_PSZ` — pointee-stride side-channel mirroring EV_SGN/EV_DBL.  Set by pointer
+prims (pointer LOCAL via LPSZ — now RESET per-slot in ladd, stale-slot leakage killed; global
+scalar-pointer via apsz; ARRAY DECAY = aesize; `p->ptrfield` read via fieldptsz).  Consumed by
+ebin's additive ops: ptr+int / ptr−int scale the INT by estride(pointee); int+ptr mirrors through a
+temp; ptr−ptr divides back to an element count.  char* = stride 1 = estride no-op (byte-identical).
+
+**Proof (all measured)**: `_s4_probe7.c` (4-class battery: local ptr+int / FIELD ptr+int / ptr−ptr /
+int+ptr) gcc=99, interp=99, sovereign-x86=99.  `_s4_probe6.c` (the FULL ast.c push/grow/realloc
+sequence) 99/99/99.  probes 1/2/5 stay 99.  `run_ccsv.sh` ALL strokes green including the whole-seed
+verify_fail 0/865 floor.  THE SEED (19-TU relink, fresh): trace now shows `list_at -> 805306371`
+(0x30000003, the REAL fn-decl node), `emit_function RUNS` (c310=1), fw 5→32 writes, and the seed
+EMITS a .o (632 B).  Every session-6 falsifier bar MET.
+
+**Frontier MOVED (still rc=16, much deeper)**: the emitted .o differs from gcc-iiis-0's: 17 vs 16
+COFF symbols + section-size deltas, and the seed exits 16 (the D11 keep-walking error path: some
+emit_function sub-step records an error while emission continues).  Next microscope: diff the .s
+texts / `objdump -t` the two .o's — find the EXTRA SYMBOL and the erroring emit sub-step.
+Still open (falsifiers committed, non-blocking for S4): the dot-global pointer-field indexed READ
+(`g.arena[1]` → inline-array mangle; _s4_probe4b rc=7) and dot-global indexed STORE with member
+post-inc (`g.arena[g.used++]=v` loses the ++; _s4_probe4 rc=20) — the seed never uses these shapes;
+`sizeof(unsigned int)` evaluates as 8 (two-token type; `sizeof(uint32_t)`=4 is correct).

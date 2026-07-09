@@ -291,6 +291,12 @@ fn cast_is_unsigned(t0:u32) -> u32 { let mut t:u32=t0  let mut g:u32=1u32  while
  * (saturate to 0), no inf/nan arithmetic (pack clamps), no scientific notation (LOUD), compares/%
  * on doubles LOUD-refused (FDBL) until a seed use exists. */
 var EV_DBL:u32=0u32                                    /* value most-recently produced by eprim is a double bit-pattern */
+var EV_PSZ:i64=0i64   /* pointee byte size of the value most-recently produced by eprim (0 = not a pointer).  Set by
+ * pointer-producing prims (pointer local / global scalar-pointer / array decay / p->ptrfield read); consumed by
+ * ebin's additive ops: C POINTER ARITHMETIC scales the integer operand by the pointee (ptr+int, ptr-int) and
+ * divides a ptr-ptr difference back to an element count.  Before this, `ast->list_arena + ast->list_used`
+ * (ast.c:1316 memcpy dest, the open-list commit) added RAW BYTES -> the appended node index landed 3 bytes low
+ * -> the arena element read back 48 (the pool byte) -> sema walked nothing, cg emitted nothing (S4 EMIT_FAIL 16). */
 var LDB:[u32;256]                                      /* per-local: declared double (parallel to LSG/LSZ; reset per fn) */
 var CUR_FRD:u32=0u32                                   /* current fn returns double */
 var FLOVF:u32=0u32                                     /* LOUD float-literal window overflow (scientific / >18 frac digits / magnitude) */
@@ -429,7 +435,7 @@ fn emit_lset(slot:u32) { let m:i64=LW[slot as u64]  if m!=0i64 { econst(m)  eb(0
 fn emit_frame_addr(off:i64) { if SHADOW_ON==1u32 { eu8(0x10u32, CUR_FB as u32)  if off!=0i64 { econst(off)  eb(0x20u32) } } else { econst(off) } }   /* ON: fb_local + off (runtime frame addr) ; OFF: econst(off) where off=the fixed MTOP addr (the old behavior) */
 fn emit_ret() { if HAS_SPILL==1u32 { econst(SSP_CELL)  eu8(0x10u32, CUR_FB as u32)  econst(CUR_FRAME_SZ)  eb(0x20u32)  eb(0x83u32) }  eb(0x60u32) }   /* epilogue: restore *(SSP_CELL)=fb+FRAME_SZ (stack-neutral) before RETURN ; fb is per-call so a missed restore LEAKS, never clobbers */
 fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  return LPT[li as u64] }
-fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { if SHADOW_ON==1u32 { LMEM[LN as u64]=CUR_FRAMEOFF as i64  CUR_FRAMEOFF=CUR_FRAMEOFF+8u64 } else { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 } }  LN=LN+1u32  if LN>NLOC {NLOC=LN} } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
+fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  LPSZ[LN as u64]=0i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { if SHADOW_ON==1u32 { LMEM[LN as u64]=CUR_FRAMEOFF as i64  CUR_FRAMEOFF=CUR_FRAMEOFF+8u64 } else { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 } }  LN=LN+1u32  if LN>NLOC {NLOC=LN} } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
 fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { emit_frame_addr(mem)  eload(LSZ[slot as u64], LSG[slot as u64]) } else { eu8(0x10u32, slot) } }   /* spilled local -> typed LOAD from its memory addr ; else LOCAL_GET (byte-identical for non-spilled) */
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
 var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AROW : [i64; 1024]  var APSZ : [i64; 1024]  var APSG : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* APSZ/APSG = POINTEE byte size+sign for a global scalar POINTER (0 = not a scalar pointer) -> enables `*gp` rvalue deref-read at the right width */   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
@@ -895,6 +901,7 @@ fn emit_sret_copy(li:u32) {   /* copy CUR_SRETSZ bytes from struct-value LOCAL s
 fn eprim() {
     EV_SGN=1u32   /* default signed; an unsigned cast (below) sets 0 -> drives DIV_U/REM_U in ebin */
     EV_DBL=0u32   /* default integer; set by double literal / double local / double-returning call / (double) cast */
+    EV_PSZ=0i64   /* default not-a-pointer; pointer prims set the pointee stride (ebin's +/- scaling) */
     if cp(Q_INC)==1u32 { C=C+1u32  elvalinc(0u32,0u32)  return }   /* ++lvalue (prefix, leave NEW) */
     if cp(Q_DEC)==1u32 { C=C+1u32  elvalinc(1u32,0u32)  return }   /* --lvalue (prefix) */
     if cp(Q_MUL)==1u32 { C=C+1u32                                  /* *p : pointer deref (typed by pointee width) */
@@ -1230,7 +1237,7 @@ fn eprim() {
                 if fieldisarr(ptt,ft)==1u32 { emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  return }   /* bare array field -> p+foff (decay) */
                 emit_lget(lidx(t) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* p->field++ */
-                eload(fe, fsg)  return }
+                eload(fe, fsg)  let fpz:i64=fieldptsz(ptt,ft)  if fpz>0i64 { EV_PSZ=fpz }  return }
         }
         if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
         if kw(t,"UINT8_MAX" as u64,9u32)==1u32 { econst(255i64)  return }  if kw(t,"UINT16_MAX" as u64,10u32)==1u32 { econst(65535i64)  return }  if kw(t,"UINT32_MAX" as u64,10u32)==1u32 { econst(4294967295i64)  return }  if kw(t,"UINT64_MAX" as u64,10u32)==1u32 { econst(0i64-1i64)  return }  if kw(t,"SIZE_MAX" as u64,8u32)==1u32 { econst(0i64-1i64)  return }   /* stdint limit macros (ccsv ignores <stdint.h>) */
@@ -1238,7 +1245,7 @@ fn eprim() {
         if kw(t,"SEEK_SET" as u64,8u32)==1u32 { econst(0i64)  return }  if kw(t,"SEEK_CUR" as u64,8u32)==1u32 { econst(1i64)  return }  if kw(t,"SEEK_END" as u64,8u32)==1u32 { econst(2i64)  return }   /* <stdio.h> fseek whence (ccsv skips system headers) -- iii_read_file's fseek(f,0,SEEK_END/SET); an UNDEFINED SEEK_END fell to the unknown-ident path -> wrong whence -> ftell garbage -> the whole seed read a corrupt source (the seed-sovereign S4 blocker) */
         if kw(t,"EOF" as u64,3u32)==1u32 { econst(0i64-1i64)  return }   /* <stdio.h> EOF */
         let ad:i64=abase(t)  if ad>=0i64 { let lck:i32=lidx(t)  if lck<0i32 {   /* (a shadowing local wins -> fall through to lidx) */
-            if aisc(t)==1u32 { econst(ad)  eload(aesize(t), asign(t)) } else { econst(ad) }  return } }   /* global SCALAR -> LOAD value ; bare array -> &arr[0] (decay) */
+            if aisc(t)==1u32 { econst(ad)  eload(aesize(t), asign(t))  let gpz:i64=apsz(t)  if gpz>0i64 { EV_PSZ=gpz } } else { econst(ad)  EV_PSZ=aesize(t) }  return } }   /* global SCALAR -> LOAD value (a pointer global carries its pointee stride) ; bare array -> &arr[0] (decay = pointer-to-elem) */
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */
         let dcv:i64=dcm_resolve(t)  if dcv>=0i64 { econst(dcv)  return }   /* array-count macro N = sizeof(ARR)/sizeof(ARR[0]) -> ALEN(ARR) */
         let li:i32=lidx(t)  if li>=0i32 {
@@ -1246,6 +1253,7 @@ fn eprim() {
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_local(li as u32,1u32,1u32)  return }   /* i-- (postfix) */
             if LDB[li as u64]==1u32 { EV_DBL=1u32 }   /* a `double` local's value is its bit pattern */
+            if LPSZ[li as u64]>0i64 { EV_PSZ=LPSZ[li as u64] }   /* pointer local -> pointee stride (char* = 1 -> estride no-op, byte-identical) */
             emit_lget(li as u32) } else { let fnv:i32=fidx(t)  if fnv>=0i32 { if FNVN<1024u32 { FNVF[FNVN as u64]=fnv as u32  FNVFN[FNVN as u64]=CURFNK  FNVOFF[FNVN as u64]=BL  FNVN=FNVN+1u32 }  econst(fnv as i64) } }   /* fn-ptr INC-1: a function NAME used as a VALUE (not called) -> CONST(fidx), RECORDED in the FNV manifest (fn-index constants are unrelocatable bytes -- the Lambda-0 linker rewrites exactly these sites to GLOBAL indices; dbg prints them as `V emit-fn body-off fidx`) ; locals/globals/enums checked first so they shadow it ; builtins have fidx<0 -> unchanged */
         return
     }
@@ -1319,7 +1327,7 @@ fn ebin(minp: u32) {
     while go==1u32 {
         if TK[C as u64]!=3u32 { go=0u32 }
         else { let p:i64=TV[C as u64]  let pr:u32=prec(p)
-            if pr==0u32 { go=0u32 } else { if pr<minp { go=0u32 } else { let lsgn:u32=EV_SGN  let ldb:u32=EV_DBL  C=C+1u32  ebin(pr+1u32)  let rsgn:u32=EV_SGN  let rdb:u32=EV_DBL
+            if pr==0u32 { go=0u32 } else { if pr<minp { go=0u32 } else { let lsgn:u32=EV_SGN  let ldb:u32=EV_DBL  let lpsz:i64=EV_PSZ  C=C+1u32  ebin(pr+1u32)  let rsgn:u32=EV_SGN  let rdb:u32=EV_DBL  let rpsz:i64=EV_PSZ
                 let mut dop:u32=0u32  if ldb==1u32 {dop=1u32}  if rdb==1u32 {dop=1u32}
                 if dop==1u32 {   /* DOUBLE arithmetic: route + - * / to the iii_d_* runtime; C usual-conversion lifts the int side via fromi64 (RHS on TOS directly; LHS through a temp) */
                     let mut wh:u32=99u32  if p==Q_ADD {wh=0u32}  if p==Q_SUB {wh=1u32}  if p==Q_MUL {wh=2u32}  if p==Q_DIV {wh=3u32}
@@ -1329,7 +1337,13 @@ fn ebin(minp: u32) {
                         else { if ldb==0u32 { let tmpd:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,tmpd)  edop(4u32)  eu8(0x10u32,tmpd) } }
                         edop(wh)  EV_DBL=1u32 }
                     EV_SGN=1u32 }
-                else { let mut oc:u32=opc(p)  let mut ru:u32=0u32  if lsgn==0u32 {ru=1u32}  if rsgn==0u32 {ru=1u32}  if ru==1u32 { if p==Q_DIV {oc=0x2Au32}  if p==Q_MOD {oc=0x2Bu32} }  eb(oc)  EV_DBL=0u32  if ru==1u32 {EV_SGN=0u32} else {EV_SGN=1u32} } } } }   /* C arithmetic-conversion sign: result UNSIGNED iff either operand unsigned -> SDIV(0x23)/SREM(0x24) become DIV_U(0x2A)/REM_U(0x2B) */
+                else { let mut oc:u32=opc(p)  let mut ru:u32=0u32  if lsgn==0u32 {ru=1u32}  if rsgn==0u32 {ru=1u32}  if ru==1u32 { if p==Q_DIV {oc=0x2Au32}  if p==Q_MOD {oc=0x2Bu32} }
+                    let mut rpz:i64=0i64   /* C POINTER ARITHMETIC: ptr+int / ptr-int scale the INT by the pointee stride (the ast.c:1316 memcpy-dest class); int+ptr mirrors through a temp (ADD commutes); ptr-ptr = byte diff / stride = element count.  ptr+ptr (not C) stays raw. */
+                    if p==Q_ADD { if lpsz>0i64 { if rpsz==0i64 { estride(lpsz)  rpz=lpsz } } else { if rpsz>0i64 { let tpz:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,tpz)  estride(rpsz)  eu8(0x10u32,tpz)  rpz=rpsz } } }
+                    if p==Q_SUB { if lpsz>0i64 { if rpsz==0i64 { estride(lpsz)  rpz=lpsz } } }
+                    eb(oc)
+                    if p==Q_SUB { if lpsz>0i64 { if rpsz>0i64 { if lpsz>1i64 { econst(lpsz)  eb(0x2Au32) } } } }   /* ptr-ptr -> element count (unsigned divide) */
+                    EV_PSZ=rpz  EV_DBL=0u32  if ru==1u32 {EV_SGN=0u32} else {EV_SGN=1u32} } } } }   /* C arithmetic-conversion sign: result UNSIGNED iff either operand unsigned -> SDIV(0x23)/SREM(0x24) become DIV_U(0x2A)/REM_U(0x2B) */
     }
     if minp==0u32 {
         eland_tail()                                     /* && (binds tighter than ||) */

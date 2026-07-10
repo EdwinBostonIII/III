@@ -851,15 +851,15 @@ fn ev_unify(ta: u64, tb: u64) -> u64 {
     let wb: u64 = ev_t_width(tb)
     if wa == 0u64 { if wb == 0u64 { return EVT_UNTYPED } return tb }
     if wb == 0u64 { return ta }
-    if wa == wb { if ev_t_signed(ta) == ev_t_signed(tb) { return ta } return 0xFFFFFFFFFFFFFFFFu64 }
-    /* Θ4 row 10b (sq02 adjudication): MIXED-WIDTH binary ops take the WIDER
-     * operand's tag — natively the narrow side is loaded EXTENDED per its own
-     * signedness (movzbq/movsbq/movzwq/…) and the op runs wide; evaluator
-     * values are stored pre-normalized per their tags, so no transformation
-     * is needed.  Equal-width mixed-SIGN stays refused until a differential
-     * adjudicates it (the instrument decides, not intent). */
-    if wa > wb { return ta }
-    return tb
+    /* Θ4 rows 13/13b (mx01-mx36, 2026-07-09/10; refines 10b): width = the
+     * WIDER side; signedness = SIGNED-IF-EITHER at ANY width pair (the
+     * incumbent's own r3_either_is_signed law, measured at every width
+     * pairing).  Values are NOT transformed: ops consume each side's own
+     * §W normal form; only RESULTS renormalize to the unified tag. */
+    let mut w: u64 = wa
+    if wb > wa { w = wb }
+    let s: u64 = ev_t_signed(ta) | ev_t_signed(tb)
+    return ev_mk_int(w, s)
 }
 
 /* signed division helpers (C truncation semantics) on sign-extended u64 */
@@ -948,30 +948,33 @@ fn ev_binop(op: u32, av: u64, at: u64, bv: u64, bt: u64) -> u32 {
     }
     let ut: u64 = ev_unify(at, bt)
     if ut == 0xFFFFFFFFFFFFFFFFu64 { EV_ERRC = EVE_TYPE ; return EVE_TYPE }
-    let a: u64 = ev_norm(av, ut)
-    let b: u64 = ev_norm(bv, ut)
-    if op == EVB_ADD { return ev_push(ev_norm(a + b, ut), ut) }
-    if op == EVB_SUB { return ev_push(ev_norm(a - b, ut), ut) }
-    if op == EVB_MUL { return ev_push(ev_norm(a * b, ut), ut) }
+    /* Θ4 rows 13/13b: ops consume operands in their OWN §W wide normal forms
+     * -- NO cross-adaptation (the deleted pre-norms truncated literals and
+     * re-signed operands the incumbent consumes raw: mx17 eq, u8<300-class
+     * compares, u8var/300-class div); only the RESULT renormalizes to ut.
+     * eq/ne compare the raw wide forms (-1i32 != 4294967295u32 natively). */
+    if op == EVB_ADD { return ev_push(ev_norm(av + bv, ut), ut) }
+    if op == EVB_SUB { return ev_push(ev_norm(av - bv, ut), ut) }
+    if op == EVB_MUL { return ev_push(ev_norm(av * bv, ut), ut) }
     if op == EVB_DIV {
-        if b == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
-        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_sdiv(a, b), ut), ut) }
-        return ev_push(ev_norm((a & ev_mask(ev_t_width(ut))) / (b & ev_mask(ev_t_width(ut))), ut), ut)
+        if bv == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
+        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_sdiv(av, bv), ut), ut) }
+        return ev_push(ev_norm(av / bv, ut), ut)
     }
     if op == EVB_MOD {
-        if b == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
-        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_smod(a, b), ut), ut) }
-        return ev_push(ev_norm((a & ev_mask(ev_t_width(ut))) % (b & ev_mask(ev_t_width(ut))), ut), ut)
+        if bv == 0u64 { EV_ERRC = EVE_DIV0 ; return EVE_DIV0 }
+        if ev_t_signed(ut) == 1u64 { return ev_push(ev_norm(ev_smod(av, bv), ut), ut) }
+        return ev_push(ev_norm(av % bv, ut), ut)
     }
-    if op == EVB_AND { return ev_push(ev_norm(a & b, ut), ut) }
-    if op == EVB_OR { return ev_push(ev_norm(a | b, ut), ut) }
-    if op == EVB_XOR { return ev_push(ev_norm(a ^ b, ut), ut) }
-    if op == EVB_EQ { if a == b { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
-    if op == EVB_NEQ { if a != b { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
-    if op == EVB_LT { return ev_push(ev_lt(a, b, ut), EVT_BOOL) }
-    if op == EVB_LE { return ev_push(1u64 - ev_lt(b, a, ut), EVT_BOOL) }
-    if op == EVB_GT { return ev_push(ev_lt(b, a, ut), EVT_BOOL) }
-    if op == EVB_GE { return ev_push(1u64 - ev_lt(a, b, ut), EVT_BOOL) }
+    if op == EVB_AND { return ev_push(ev_norm(av & bv, ut), ut) }
+    if op == EVB_OR { return ev_push(ev_norm(av | bv, ut), ut) }
+    if op == EVB_XOR { return ev_push(ev_norm(av ^ bv, ut), ut) }
+    if op == EVB_EQ { if av == bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+    if op == EVB_NEQ { if av != bv { return ev_push(1u64, EVT_BOOL) } return ev_push(0u64, EVT_BOOL) }
+    if op == EVB_LT { return ev_push(ev_lt(av, bv, ut), EVT_BOOL) }
+    if op == EVB_LE { return ev_push(1u64 - ev_lt(bv, av, ut), EVT_BOOL) }
+    if op == EVB_GT { return ev_push(ev_lt(bv, av, ut), EVT_BOOL) }
+    if op == EVB_GE { return ev_push(1u64 - ev_lt(av, bv, ut), EVT_BOOL) }
     EV_ERRC = EVE_UNSUP_OP
     EV_ERRK = op
     return EVE_UNSUP_OP

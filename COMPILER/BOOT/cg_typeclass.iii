@@ -177,3 +177,104 @@ fn iii_tc_expr_is_signed(ast: u64, node: u32) -> u32 @export {
     if c == TC_ISIZE { return 1u32 }
     return 0u32
 }
+
+/* ═══ Θ4 rows 13/13b/14 (2026-07-10): THE UNIFIED-TAG WALK ═══
+ * Packed integer tag: (byte_size << 1) | signed;  0 = untyped/unknown.
+ * BINARY unifies children per the incumbent's own flat law -- width = the
+ * WIDER side, SIGNED-IF-EITHER -- except shifts, whose tag is the VALUE
+ * side's alone (ev_binop's shift arms: the count does not participate).
+ * CALL classifies the FULL return class (tc_call_dispatch_class's narrow
+ * filter is a POLICY for is_signed/is_u64 consumers; the narrow-return
+ * renorm hole is row 14's (d) defect).  INDEX resolves an IDENT-bound
+ * declared [T; N]'s element type; *T-cast subscripts stay unknown (wide)
+ * -- the incumbent's current model, a named corner beside mx35.  bool
+ * stays unknown: compare results are 0/1 in any width, renorm-free.
+ * iii_tc_expr_is_signed / iii_tc_expr_is_u64 are UNTOUCHED: cg_r0 and
+ * sanctum keep their byte-stable policies; cg_r3 alone consumes this. */
+const TC_K_EXPR_STR    : u32 = 40u32
+const TC_K_EXPR_INDEX  : u32 = 48u32
+const TC_K_TYPE_ARRAY  : u32 = 17u32
+const TC_B_SHL : u32 = 9u32
+const TC_B_SHR : u32 = 10u32
+
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+fn tc_class_utag(c: u32) -> u32 {
+    if c == TC_U8 { return 2u32 }
+    if c == TC_I8 { return 3u32 }
+    if c == TC_U16 { return 4u32 }
+    if c == TC_I16 { return 5u32 }
+    if c == TC_U32 { return 8u32 }
+    if c == TC_I32 { return 9u32 }
+    if c == TC_U64 { return 16u32 }
+    if c == TC_I64 { return 17u32 }
+    if c == TC_USIZE { return 16u32 }
+    if c == TC_ISIZE { return 17u32 }
+    return 0u32
+}
+
+fn iii_tc_utag_unify(a: u32, b: u32) -> u32 @export {
+    if a == 0u32 { return b }
+    if b == 0u32 { return a }
+    let wa: u32 = a >> 1u32
+    let wb: u32 = b >> 1u32
+    let mut w: u32 = wa
+    if wb > wa { w = wb }
+    return (w << 1u32) | ((a & 1u32) | (b & 1u32))
+}
+
+fn tc_binder_type(ast: u64, bid: u32) -> u32 {
+    let bk: u32 = iii_ast_node_kind(ast, bid)
+    if bk == TC_K_STMT_LET { return iii_ast_let_type(ast, bid) }
+    if bk == TC_K_PARAM { return iii_ast_param_type(ast, bid) }
+    if bk == TC_K_VAR_DECL { return iii_ast_var_decl_type(ast, bid) }
+    if bk == TC_K_CONST_DECL { return iii_ast_const_decl_type(ast, bid) }
+    return 0u32
+}
+
+fn iii_tc_expr_utag(ast: u64, node: u32) -> u32 @export {
+    if node == 0u32 { return 0u32 }
+    let nk: u32 = iii_ast_node_kind(ast, node)
+    if nk == TC_K_EXPR_PAREN { return iii_tc_expr_utag(ast, iii_ast_paren_inner(ast, node)) }
+    if nk == TC_K_EXPR_CAST { return tc_class_utag(iii_tref_typeclass(ast, iii_ast_cast_target_type(ast, node))) }
+    if nk == TC_K_EXPR_CALL {
+        let callee: u32 = iii_ast_call_callee(ast, node)
+        if callee == 0u32 { return 0u32 }
+        let bid: u32 = iii_ast_node_binder_id(ast, callee)
+        if bid == 0u32 { return 0u32 }
+        let bk: u32 = iii_ast_node_kind(ast, bid)
+        if bk == TC_K_FN_DECL { return tc_class_utag(iii_tref_typeclass(ast, iii_ast_fn_return_type(ast, bid))) }
+        if bk == TC_K_EXTERN_DECL { return tc_class_utag(iii_tref_typeclass(ast, iii_ast_extern_return_type(ast, bid))) }
+        return 0u32
+    }
+    if nk == TC_K_EXPR_BINARY {
+        let op: u32 = iii_ast_binary_op(ast, node)
+        let lt: u32 = iii_tc_expr_utag(ast, iii_ast_binary_lhs(ast, node))
+        if op == TC_B_SHL { return lt }
+        if op == TC_B_SHR { return lt }
+        return iii_tc_utag_unify(lt, iii_tc_expr_utag(ast, iii_ast_binary_rhs(ast, node)))
+    }
+    if nk == TC_K_EXPR_UNARY { return iii_tc_expr_utag(ast, iii_ast_unary_operand(ast, node)) }
+    if nk == TC_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(ast, node)
+        if bid == 0u32 { return 0u32 }
+        return tc_class_utag(iii_tref_typeclass(ast, tc_binder_type(ast, bid)))
+    }
+    if nk == TC_K_EXPR_INDEX {
+        let mut obj: u32 = iii_ast_index_object(ast, node)
+        if obj == 0u32 { return 0u32 }
+        let mut ok: u32 = iii_ast_node_kind(ast, obj)
+        while ok == TC_K_EXPR_PAREN { obj = iii_ast_paren_inner(ast, obj)  ok = iii_ast_node_kind(ast, obj) }
+        if ok == TC_K_EXPR_STR { return 2u32 }
+        if ok != TC_K_EXPR_IDENT { return 0u32 }
+        let bid: u32 = iii_ast_node_binder_id(ast, obj)
+        if bid == 0u32 { return 0u32 }
+        let tn: u32 = tc_binder_type(ast, bid)
+        if tn == 0u32 { return 0u32 }
+        if iii_ast_node_kind(ast, tn) != TC_K_TYPE_ARRAY { return 0u32 }
+        return tc_class_utag(iii_tref_typeclass(ast, iii_ast_type_array_inner(ast, tn)))
+    }
+    return 0u32
+}

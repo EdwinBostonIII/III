@@ -408,16 +408,19 @@ fn sv_type_tag_d(tnode: u32, depth: u32) -> u32 {
 }
 fn sv_type_tag(tnode: u32) -> u32 { return sv_type_tag_d(tnode, 0u32) }
 
-/* ── unify (transcribed ev_unify: untyped adopts; wider wins; equal-width
- *    mixed-sign REFUSED until the instrument adjudicates it) ─────────────── */
+/* ── unify (transcribed ev_unify, Θ4 rows 13/13b): untyped adopts; width =
+ *    the WIDER side; SIGNED-IF-EITHER at any width pair.  Values stay in
+ *    their own §W normal forms -- no operand bytes, ever.  mk_int(w, s|s)
+ *    is bit-identical to the wider operand's tag when signs agree, so every
+ *    pre-row-13 shape keeps its exact bytes. ─────────────────────────────── */
 fn sv_unify(ta: u64, tb: u64) -> u64 {
     let wa: u64 = t_w(ta)
     let wb: u64 = t_w(tb)
     if wa == 0u64 { if wb == 0u64 { return T_UNTYPED } return tb }
     if wb == 0u64 { return ta }
-    if wa == wb { if t_s(ta) == t_s(tb) { return ta } return T_BAD }
-    if wa > wb { return ta }
-    return tb
+    let mut w: u64 = wa
+    if wb > wa { w = wb }
+    return mk_int(w, t_s(ta) | t_s(tb))
 }
 
 /* ── lookups ───────────────────────────────────────────────────────────── */
@@ -561,6 +564,15 @@ fn sv_e_call(node: u32) -> u64 {
     return FRT[fi as u64]
 }
 
+/* and/or/xor closure holds ONLY when both operands are typed same-sign
+ * normal forms; untyped operands (raw wide values -- mx37: `(u8|511)` keeps
+ * 0x1FF at the temp) and mixed signs break it -- the RESULT renorms to the
+ * unified tag (rows 13/14).  e_renorm itself no-ops on untyped/wide ut. */
+fn sv_bit_renorm(ta: u64, tb: u64, ut: u64) {
+    if t_w(ta) != 0u64 { if t_w(tb) != 0u64 { if t_s(ta) == t_s(tb) { return } } }
+    e_renorm(ut)
+}
+
 fn sv_e_binop(node: u32) -> u64 {
     let op: u32 = iii_ast_binary_op(SV_AST, node)
     let ln: u32 = iii_ast_binary_lhs(SV_AST, node)
@@ -609,9 +621,11 @@ fn sv_e_binop(node: u32) -> u64 {
         return T_BAD
     }
     if tb0 != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
-    /* int×int: unify per eval's law; operand renorms to the unified tag are
-     * IDENTITIES on normal-form values (narrow->wider keeps the extension),
-     * so no operand bytes are ever emitted — only op + result-renorm. */
+    /* int×int: unify per eval's law (rows 13/13b: signed-if-either at any
+     * width pair).  Operands are NEVER adapted across the seam — each is
+     * consumed in its own §W normal form (same-sign narrow->wider keeps the
+     * extension AS the wide form; mixed-sign operands stay raw BY LAW);
+     * only op + result-renorm bytes are emitted. */
     if op == B_LT { return sv_e_cmp(ta, rn, node, 0x32u32) }
     if op == B_LE { return sv_e_cmp(ta, rn, node, 0x34u32) }
     if op == B_GT { return sv_e_cmp(ta, rn, node, 0x35u32) }
@@ -627,9 +641,9 @@ fn sv_e_binop(node: u32) -> u64 {
     if op == B_ADD { eb(0x20u32)  e_renorm(ut)  return ut }
     if op == B_SUB { eb(0x21u32)  e_renorm(ut)  return ut }
     if op == B_MUL { eb(0x22u32)  e_renorm(ut)  return ut }
-    if op == B_AND { eb(0x25u32)  return ut }             /* bitops are closed under normal forms */
-    if op == B_OR  { eb(0x26u32)  return ut }
-    if op == B_XOR { eb(0x27u32)  return ut }
+    if op == B_AND { eb(0x25u32)  sv_bit_renorm(ta, tb, ut)  return ut }   /* closed only both-typed-same-sign (mx37) */
+    if op == B_OR  { eb(0x26u32)  sv_bit_renorm(ta, tb, ut)  return ut }
+    if op == B_XOR { eb(0x27u32)  sv_bit_renorm(ta, tb, ut)  return ut }
     if op == B_DIV {
         if t_s(ut) == 1u64 { eb(0x23u32)  if t_w(ut) < 8u64 { e_renorm(ut) }  return ut }
         eb(0x2Au32)                                       /* DIV_U: unsigned + untyped (ev_binop's unsigned arm) */

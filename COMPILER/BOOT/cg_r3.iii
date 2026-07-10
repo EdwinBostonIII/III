@@ -210,6 +210,8 @@ extern @abi(c-msvc-x64) fn iii_ast_type_param_name_len(ast: u64, node: u32) -> u
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_tc_expr_is_signed(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
+extern @abi(c-msvc-x64) fn iii_tc_expr_utag(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
+extern @abi(c-msvc-x64) fn iii_tc_utag_unify(a: u32, b: u32) -> u32 from "cg_typeclass.iii"
 /* Path C: the strength-reduction EMISSION law, factored into a single source the STDLIB certifier kernel-proves. */
 extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
@@ -1859,6 +1861,33 @@ fn r3_expr_is_u32(node: u32) -> u32 {
     return 0u32
 }
 
+/* Θ4 row 14 (mx26-41, 2026-07-09/10): narrow-temp renorm by the UNIFIED
+ * tag's §W normal form -- sign-aware extension at every width -- replacing
+ * the unconditional `movl %eax,%eax` that zero-extended i32 temps (mx26
+ * wrong-code), skipped u8/u16 wraps (mx28/29), truncated u32+u64 (mx33),
+ * and was blind to CALL results, INDEX elements (d), unary neg/bnot (e:
+ * mx40/41) and untyped-operand bitwise (mx37).  Tag = (bytesize<<1)|signed,
+ * 0 = untyped/unknown (no renorm -- wide).  R3_STR_EXT_MOVL is byte-
+ * identical to R3_STR_MOVL_EE, so every u32 site this replaces keeps
+ * byte-identical output. */
+fn r3_expr_utag(node: u32) -> u32 { return iii_tc_expr_utag(R3_G_AST, node) }
+fn r3_utag_renorm(ut: u32) -> u32 {
+    let w: u32 = ut >> 1u32
+    if w == 0u32 { return R3_OK }
+    if w >= 8u32 { return R3_OK }
+    let s: u32 = ut & 1u32
+    if w == 1u32 { if s == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSBQ as u64, R3_STR_EXT_MOVSBQ_LEN) } else { r3_emit_arr(&R3_STR_MOVZBQ_AL_RAX as u64, R3_STR_MOVZBQ_AL_RAX_LEN) }; return R3_OK }
+    if w == 2u32 { if s == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSWQ as u64, R3_STR_EXT_MOVSWQ_LEN) } else { r3_emit_arr(&R3_STR_EXT_MOVZWQ as u64, R3_STR_EXT_MOVZWQ_LEN) }; return R3_OK }
+    if s == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSLQ as u64, R3_STR_EXT_MOVSLQ_LEN) } else { r3_emit_arr(&R3_STR_EXT_MOVL as u64, R3_STR_EXT_MOVL_LEN) }
+    return R3_OK
+}
+/* bitwise closure: only both-typed-same-sign operands are provably normal-
+ * closed (mx37 measured: untyped operands are raw wide values). */
+fn r3_bit_renorm(lut: u32, rut: u32, ut: u32) -> u32 {
+    if lut != 0u32 { if rut != 0u32 { if (lut & 1u32) == (rut & 1u32) { return R3_OK } } }
+    return r3_utag_renorm(ut)
+}
+
 /* Dispatch a signed-aware setcc for the four ordering operators. */
 fn r3_emit_setcc_lt(signed: u32) -> u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_SETL_S as u64, R3_STR_SETL_S_LEN); return R3_OK }; r3_emit_arr(&R3_STR_SETL as u64, R3_STR_SETL_LEN); return R3_OK }
 fn r3_emit_setcc_le(signed: u32) -> u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_SETLE_S as u64, R3_STR_SETLE_S_LEN); return R3_OK }; r3_emit_arr(&R3_STR_SETLE as u64, R3_STR_SETLE_LEN); return R3_OK }
@@ -2559,6 +2588,11 @@ fn r3_emit_expr(node: u32) -> u32 {
         if op == 2u32 { r3_emit_arr(&R3_STR_TESTRSTE as u64, R3_STR_TESTRSTE_LEN) }
         if op == 3u32 { r3_emit_arr(&R3_STR_NOTQ as u64, R3_STR_NOTQ_LEN) }
         if op == 4u32 { r3_emit_arr(&R3_STR_DEREF_RAX as u64, R3_STR_DEREF_RAX_LEN) }
+        /* Θ4 row 14(e) (mx40/41): narrow NEG/BNOT temps renorm -- negq on
+         * INT_MIN escapes wide, notq re-signs zx values; logical-test (op 2)
+         * yields 0/1 and DEREF (op 4) is the *T width model, both untouched. */
+        if op == 1u32 { r3_utag_renorm(r3_expr_utag(inner)) }
+        if op == 3u32 { r3_utag_renorm(r3_expr_utag(inner)) }
         r3_push_rax(); return R3_OK
     }
     if k == R3_K_EXPR_SIZEOF {
@@ -2630,7 +2664,7 @@ fn r3_emit_expr(node: u32) -> u32 {
                         r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
                     }
                     /* pkind == 6 (IDENT, x*1): x already in rax -- emit nothing. */
-                    if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+                    r3_utag_renorm(r3_expr_utag(lhs))
                     r3_push_rax(); return R3_OK
                 }
             }
@@ -2652,10 +2686,14 @@ fn r3_emit_expr(node: u32) -> u32 {
             r3_emit_expr(lhs); r3_pop_rax()
             if op == 9u32 {
                 r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(shk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
-                if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+                r3_utag_renorm(r3_expr_utag(lhs))
             }
             if op == 10u32 {
                 r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(shk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                /* row 12: narrow SIGNED shr renorms (extension bits shifted in);
+                 * unsigned narrow is closed (zx high zeros shift right). */
+                let sut: u32 = r3_expr_utag(lhs)
+                if (sut & 1u32) == 1u32 { r3_utag_renorm(sut) }
             }
             r3_push_rax(); return R3_OK
         }
@@ -2665,7 +2703,7 @@ fn r3_emit_expr(node: u32) -> u32 {
          * r3_div_pow2_k below; cg_r3.c keeps general divq (magic never fires on stage1 -> byte-check safe). ===== */
         if op == 4u32 {
             if iii_ast_node_kind(R3_G_AST, rhs) == R3_K_EXPR_INT {
-                if r3_either_is_signed(lhs, rhs) == 0u32 {
+                if (iii_tc_utag_unify(r3_expr_utag(lhs), r3_expr_utag(rhs)) & 1u32) == 0u32 {
                     if r3_expr_is_u32(lhs) == 0u32 {
                         let dv: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
                         let dplan: u64 = seg_div_plan(dv)
@@ -2685,7 +2723,7 @@ fn r3_emit_expr(node: u32) -> u32 {
         }
         let dpk: u32 = r3_div_pow2_k(op, rhs)
         if dpk != 0u32 {
-            if r3_either_is_signed(lhs, rhs) == 0u32 {
+            if (iii_tc_utag_unify(r3_expr_utag(lhs), r3_expr_utag(rhs)) & 1u32) == 0u32 {
                 /* [EMITTED] DIVIDE-BY-POW2 (the live self-optimizer; dual-implemented byte-identically in
                  * cg_r3.c): UNSIGNED x/2^k becomes an immediate shr -- emit only the lhs, skip loading the
                  * divisor + the divq.  Sound: for unsigned x, x/2^k == x>>k (floor division == logical shift).
@@ -2697,7 +2735,7 @@ fn r3_emit_expr(node: u32) -> u32 {
         }
         let mmask: u64 = r3_mod_pow2_mask(op, rhs)
         if mmask != 0u64 {
-            if r3_either_is_signed(lhs, rhs) == 0u32 {
+            if (iii_tc_utag_unify(r3_expr_utag(lhs), r3_expr_utag(rhs)) & 1u32) == 0u32 {
                 /* [EMITTED] UNSIGNED MODULO-BY-POW2 -> AND mask: x % 2^k == x & (2^k-1) -- the low k bits ARE the
                  * unsigned remainder.  Emit the lhs, then AND the mask -- skip the divumod entirely.  The symmetric
                  * partner of the divide-by-pow2 fold above; cg_r3 had NO modulo strength reduction.  Reuses the
@@ -2716,22 +2754,30 @@ fn r3_emit_expr(node: u32) -> u32 {
              * constant + the op.  Byte-identical RESULT to the general path (op with the identity element +
              * the u32 truncation).  Reuses only twin-verified emit primitives, so iiis-0 == iiis-2 holds. */
             r3_emit_expr(lhs); r3_pop_rax()
-            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+            r3_utag_renorm(r3_expr_utag(lhs))
             r3_push_rax(); return R3_OK
         }
-        let signed: u32 = r3_either_is_signed(lhs, rhs)
+        /* Θ4 rows 13/14: op-selection signedness + result renorm both come
+         * from the ONE unified-tag walk (signed-if-either at any widths) --
+         * identical to r3_either_is_signed on flat operands, closes the
+         * nested-mixed seam where the lhs-else-rhs walk contradicts the
+         * incumbent's own flat law. */
+        let lut: u32 = r3_expr_utag(lhs)
+        let rut: u32 = r3_expr_utag(rhs)
+        let ut: u32 = iii_tc_utag_unify(lut, rut)
+        let signed: u32 = ut & 1u32
         r3_emit_expr(lhs); r3_emit_expr(rhs); r3_pop_rcx(); r3_pop_rax()
-        if op == 1u32 { r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
-        if op == 2u32 { r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
-        if op == 3u32 { r3_emit_arr(&R3_STR_IMULQ as u64, R3_STR_IMULQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
-        if op == 4u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIV as u64, R3_STR_IDIV_LEN) } else { r3_emit_arr(&R3_STR_DIVU as u64, R3_STR_DIVU_LEN) } }
-        if op == 5u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIVMOD as u64, R3_STR_IDIVMOD_LEN) } else { r3_emit_arr(&R3_STR_DIVUMOD as u64, R3_STR_DIVUMOD_LEN) } }
-        if op == 6u32 { r3_emit_arr(&R3_STR_ANDQ as u64, R3_STR_ANDQ_LEN) }
-        if op == 7u32 { r3_emit_arr(&R3_STR_ORQ as u64, R3_STR_ORQ_LEN) }
-        if op == 8u32 { r3_emit_arr(&R3_STR_XORQ as u64, R3_STR_XORQ_LEN) }
+        if op == 1u32 { r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN); r3_utag_renorm(ut) }
+        if op == 2u32 { r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN); r3_utag_renorm(ut) }
+        if op == 3u32 { r3_emit_arr(&R3_STR_IMULQ as u64, R3_STR_IMULQ_LEN); r3_utag_renorm(ut) }
+        if op == 4u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIV as u64, R3_STR_IDIV_LEN); r3_utag_renorm(ut) } else { r3_emit_arr(&R3_STR_DIVU as u64, R3_STR_DIVU_LEN) } }
+        if op == 5u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIVMOD as u64, R3_STR_IDIVMOD_LEN); r3_utag_renorm(ut) } else { r3_emit_arr(&R3_STR_DIVUMOD as u64, R3_STR_DIVUMOD_LEN) } }
+        if op == 6u32 { r3_emit_arr(&R3_STR_ANDQ as u64, R3_STR_ANDQ_LEN); r3_bit_renorm(lut, rut, ut) }
+        if op == 7u32 { r3_emit_arr(&R3_STR_ORQ as u64, R3_STR_ORQ_LEN); r3_bit_renorm(lut, rut, ut) }
+        if op == 8u32 { r3_emit_arr(&R3_STR_XORQ as u64, R3_STR_XORQ_LEN); r3_bit_renorm(lut, rut, ut) }
         if op == 9u32 { r3_emit_arr(&R3_STR_SHLQ as u64, R3_STR_SHLQ_LEN) }
-        if op == 9u32 { if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
-        if op == 10u32 { r3_emit_arr(&R3_STR_SHRQ as u64, R3_STR_SHRQ_LEN) }
+        if op == 9u32 { r3_utag_renorm(lut) }
+        if op == 10u32 { r3_emit_arr(&R3_STR_SHRQ as u64, R3_STR_SHRQ_LEN); if (lut & 1u32) == 1u32 { r3_utag_renorm(lut) } }
         if op == 11u32 { r3_emit_arr(&R3_STR_CMP_RCX_RAX as u64, R3_STR_CMP_RCX_RAX_LEN); r3_emit_arr(&R3_STR_SETE as u64, R3_STR_SETE_LEN) }
         if op == 12u32 { r3_emit_arr(&R3_STR_CMP_RCX_RAX as u64, R3_STR_CMP_RCX_RAX_LEN); r3_emit_arr(&R3_STR_SETNE as u64, R3_STR_SETNE_LEN) }
         if op == 13u32 { r3_emit_arr(&R3_STR_CMP_RCX_RAX as u64, R3_STR_CMP_RCX_RAX_LEN); r3_emit_setcc_lt(signed) }

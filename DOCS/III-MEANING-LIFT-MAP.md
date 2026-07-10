@@ -218,6 +218,59 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > svir-gate A1 6/6 + A2 goldens 5/5 NO-DRIFT + square 9/9 (sq11 first run), iiisv2 square 6/6,
 > meaning GREEN (597/1820, 0 divergence, ratchet 597 HELD), and THE SECOND CENSUS GREEN:
 > pass=100, diverge=0 — 251→PASS the SOLE movement. Ratchet PINNED at 100 (up-only from here).**
+>
+> **ROWS 13/13b (2026-07-10, mx01-mx41): THE MIXED-SIGN LAW — eval CONFORMS, ALL THREE ROUTES.**
+> 34-probe adjudication through the pinned compiler: binops consume operands in their OWN §W wide
+> normal forms (NO cross-adaptation); div/mod and ordered compares run SIGNED IFF EITHER operand is
+> signed, at ANY width pair (the incumbent's own `r3_either_is_signed` + signed setcc constants ARE
+> the law in source); `==`/`!=` compare the RAW WIDE FORMS (`-1i32 != 4294967295u32` natively);
+> unified result tag = (max width, signed-if-either). Row 13 retires eval's equal-width mixed-sign
+> refusal; row 13b REFINES 10b — wider-TAG-wins is wrong when signs differ (falsifiers mx30
+> N=223/E=0, mx31 N=2/E=1, mx32 N=1/E=2: eval was measurably wrong on u64⊗i32 shapes). ev_binop's
+> operand pre-norm and unsigned div/mod pre-mask DELETED — the same narrow-register extrapolation
+> class as ev_shmask's dead &31 (they truncated literals and re-signed operands the incumbent
+> consumes raw: mx17 eq, `u8 < 300`-class, `u8var / 300`-class). sq09_mixsign squared rc=93 N≡E≡S
+> on its first three-route run.
+>
+> **ROW 14(a-e) (same campaign): cg_r3 NARROW-TEMP RENORM DEFECT — WRONG-CODE, adjudicated AGAINST
+> the incumbent on internal incoherence.** The renorm after narrow add/sub/mul/shl was
+> `movl %eax,%eax` whenever the lhs walk said size-4 (i32 INCLUDED) and ABSENT for u8/u16, shr,
+> unary neg/bnot and untyped-operand bitwise: (a) i32 temps zero-extended — `(a+b) < 0i32` with
+> a=-2,b=1 returned FALSE natively while the NAMED spelling returned TRUE (mx26/27: referential
+> transparency breached, two spellings of one expression disagreeing); (b) `255u8+1u8 != 0u8`
+> natively (mx28/29); (c) the lhs-u32 gate TRUNCATED u32+u64 sums (mx33); (d) blind to CALL
+> results and INDEX elements; (e) unary NEG/BNOT never renormed — `(~0u8) as u64` kept wide -1
+> (mx40, named/temp split) and `-INT_MIN` escaped positive (mx41); bitwise closure holds ONLY
+> both-typed-same-sign (mx37: `(u8|511)` kept 0x1FF at the temp, named/temp split). FIX: the ONE
+> unified-tag walk (`iii_tc_expr_utag`/`iii_tc_utag_unify` in cg_typeclass — the R2 single-source
+> law; `iii_tc_expr_is_signed`/`is_u64` untouched, cg_r0+sanctum byte-stable) + sign-aware §W
+> renorm (`r3_utag_renorm` reusing the EXISTING extension strings; R3_STR_EXT_MOVL is
+> byte-identical to R3_STR_MOVL_EE so every u32 site keeps byte-identical output). Renorm arms:
+> add/sub/mul/shl = ut-narrow any sign; div/mod = ut-narrow signed; shr = ut-narrow signed (row
+> 12); and/or/xor = ut-narrow unless both-typed-same-sign; unary neg/bnot = operand-tag narrow.
+> Op-selection signedness (div/mod/setcc + the three unsigned fold gates) switched to the unified
+> walk — identical on flat operands, closes the NESTED-mixed seam. NAMED OPEN CORNER (mx35,
+> permanent falsifier): suffixed-LITERAL temps skip renorm natively — the parser drops suffixes;
+> fix = suffix records in the AST, batched with the front-end touch. sq10_renorm squared rc=97
+> N≡E≡S (14 teeth); p21 joined the meaning floor (21/21).
+>
+> **ROW 15b — THE A2 ARM VERIFIED NOTHING (the third IFS bite).** The golden-pin loader ran
+> `read -r gname ghash` under the gate's global IFS=newline+tab — no space-split, gname swallowed
+> whole lines, the pin map loaded EMPTY, and every svir-gate run since the goldens file existed
+> reported GOLDEN-NEW inside a GREEN verdict while verifying nothing. Caught when chain v3's run
+> showed all five pinned names as NEW with hashes IDENTICAL to their pins (the no-drift prediction
+> held; only the verification was hollow). FIX: local IFS on the read + a loader self-check that
+> FATALs when the file has pin lines but zero parse + GOLDEN-MISS-with-existing-file is RED
+> (pin-rot is loud). LAW: any space-splitting `read` under the gates' global IFS must set LOCAL
+> IFS. sq10's first authoring also hit the var-init frontier class through route S (nonzero-init
+> module array — dry-validation had only run N/E): zero-init + runtime element stores; the
+> S-route probe discipline is now "emit through cg_svir BEFORE landing".
+>
+> **CHAIN v3 SEALED (2026-07-10): fixpoint eca48370 (7th; iiis-1 b6369881), corpus 1595/0 with
+> ZERO recorded-under-defect reds, svir-gate A1 6/6 + A2 7/7 (REAL verification, 7 pins incl.
+> sq09 4e619b03/sq10 ec93651a) + square 11/11 N≡E≡S, iiisv2 square 6/6, meaning 21/21 probes +
+> 597/1820 + 0 divergence + ratchet 597 HELD through the full eval re-sweep with the new law
+> live, census pass=100 diverge=0 s-defect=0 ratchet=100 HELD, mixed-sign census rows = 0.**
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

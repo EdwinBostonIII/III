@@ -1,0 +1,70 @@
+/* sq10 -- ROW 14: narrow binop RESULTS live in the SW normal form -- the
+ * temp and the named-variable spellings of the same expression AGREE
+ * (referential transparency restored; mx26-class wrong-code dead), narrow
+ * wraps hold at the TEMP (not only the store seam), mixed-width results
+ * keep the WIDER width, call-results and array elements classify.
+ * 97 = the incumbent's own renorm is SW-faithful. */
+module sq10
+
+fn idu32(x: u32) -> u32 { return x }
+
+/* zero-init + runtime stores: nonzero-init module arrays are the var-init
+ * S-frontier class (route S refuses them by design) -- the element-store
+ * path is SW-supported and keeps the INDEX-classification tooth intact. */
+var GA : [u32; 2]
+
+fn main() -> i64 {
+    /* mx26/mx27: temp and named spellings agree on (a+b) < 0 */
+    let a : i32 = 0i32 - 2i32
+    let b : i32 = 1i32
+    if (a + b) < 0i32 { } else { return 81 }
+    let d : i32 = a + b
+    if d < 0i32 { } else { return 82 }
+    /* mx28/mx29: u8/u16 wrap at the TEMP */
+    let e : u8 = 255u8
+    let f : u8 = 1u8
+    if (e + f) != 0u8 { return 83 }
+    let g : u16 = 65535u16
+    let h : u16 = 1u16
+    if (g + h) != 0u16 { return 84 }
+    /* mx18: cast of a signed narrow temp sign-extends */
+    let k : u64 = (a + b) as u64
+    if ((k >> 32u64) & 255u64) != 255u64 { return 85 }
+    /* mx25-class: temp into wide shr behaves like the var spelling */
+    if ((a + b) >> 1u32) != (0i32 - 1i32) { return 86 }
+    /* mx30/31/32: mixed-width mixed-sign signed-if-either */
+    let m : u64 = 100u64
+    let n : i32 = 0i32 - 3i32
+    if ((m / n) & 255u64) != 223u64 { return 87 }
+    let p : u64 = 1u64
+    let q : i32 = 0i32 - 1i32
+    if p < q { return 88 }
+    let r : i16 = 0i16 - 1i16
+    if r < p { } else { return 89 }
+    /* mx33: u32 + u64 keeps the WIDE sum (no lhs-u32 truncation) */
+    let t : u32 = 4294967295u32
+    let u : u64 = 2u64
+    if (((t + u) >> 32u64) & 255u64) != 1u64 { return 90 }
+    /* call-result classifies: u32 wrap at the temp */
+    if (idu32(4294967295u32) + 1u32) != 0u32 { return 91 }
+    /* array-element classifies: u32 wrap at the temp */
+    GA[0u64] = 4294967295u32
+    GA[1u64] = 1u32
+    if (GA[0u64] + GA[1u64]) != 0u32 { return 92 }
+    /* mixed-sign bitwise renorm: (i32 -1) & (u32 2^31) is the SW i32 form */
+    let w1 : i32 = 0i32 - 1i32
+    let w2 : u32 = 2147483648u32
+    if ((((w1 & w2) as u64) >> 32u64) & 255u64) != 255u64 { return 93 }
+    /* mx37c: bitwise with an untyped out-of-range literal renorms at the
+     * TEMP -- named and temp spellings agree (RT; natively split pre-fix) */
+    let x1 : u8 = 15u8
+    let x2 : u8 = x1 | 511
+    if ((x1 | 511) as u64) != (x2 as u64) { return 94 }
+    /* mx40/41: unary temps renorm -- ~0u8 is 255 (not wide -1) and
+     * -INT_MIN wraps back to INT_MIN (stays negative) */
+    let y1 : u8 = 0u8
+    if ((~y1) as u64) != 255u64 { return 95 }
+    let y2 : i32 = 0i32 - 2147483647i32 - 1i32
+    if (-y2) < 0i32 { } else { return 96 }
+    return 97
+}

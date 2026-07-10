@@ -221,3 +221,24 @@ SV_UNSUP poisons the module).  The corpus sweep census
 
 Both already live in svir_interp (Λ0); this section admits them to the
 canonical emitter surface.  iiisv2 (width-free) never emits them.
+
+### W.7 (§W.mix) — the mixed-sign unification law (Θ4 rows 13/13b, 2026-07-10)
+
+Unified tag for a binary op = (max(width_a, width_b), signed_a OR signed_b);
+untyped adopts the typed side; shifts take the VALUE side's tag alone.
+Operand values are NEVER adapted across the seam — each is consumed in its
+own §W normal form; only the RESULT renormalizes to the unified tag.
+Sign-sensitive ops (DIV/REM, ordered compares) select the SIGNED opcode iff
+the unified tag is signed.  EQ/NE compare the raw wide forms.
+
+Emitter consequences: sv_unify constructs mk_int(max-width, either-signed)
+— bit-identical to the wider operand's tag when signs AGREE (every
+pre-row-13 golden byte-unchanged, verified across all 7 pins); the
+SVU_MIXED_SIGN refusal retires (guards remain, dead).  and/or/xor gain a
+result renorm whenever the unified tag is narrow UNLESS both operands are
+TYPED SAME-SIGN — the only provably-closed case (mx37 measured: untyped
+operands are raw wide values; `(u8|511)` keeps 0x1FF at the temp and the
+named/temp spellings split natively; closure under normal forms requires
+both sides IN normal form).  Same law rung: unary NEG/BNOT results renorm
+to the operand's tag (mx40/41 — negq on INT_MIN escapes wide; notq
+re-signs zx values).

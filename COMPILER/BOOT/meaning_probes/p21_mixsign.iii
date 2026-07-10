@@ -1,0 +1,49 @@
+/* p21 -- rows 13/13b/14 in the run_meaning floor: the mixed-sign law and the
+ * narrow-temp renorm, differential eval-vs-native (rc equality IS the oracle).
+ * Fuses sq09/sq10's teeth minus the square-only shapes.  99 = law holds. */
+module p21
+
+fn idu32(x: u32) -> u32 { return x }
+
+var GA : [u32; 2] = [4294967295u32, 1u32]
+
+fn main() -> u64 {
+    /* signed-if-either, both orders, div+mod */
+    let a : i64 = 0i64 - 7i64
+    let b : u64 = 3u64
+    if ((a / b) & 255u64) != 254u64 { return 81u64 }
+    let c : u64 = 100u64
+    let d : i64 = 0i64 - 3i64
+    if ((c % d) & 255u64) != 1u64 { return 82u64 }
+    /* ordered compares signed both orders */
+    let e : i64 = 0i64 - 1i64
+    let f : u64 = 1u64
+    if e < f { } else { return 83u64 }
+    if f < e { return 84u64 }
+    /* equal-width narrow mixed-sign; eq compares WIDE forms */
+    let g : i32 = 0i32 - 1i32
+    let h : u32 = 1u32
+    if g < h { } else { return 85u64 }
+    let k : u32 = 4294967295u32
+    if g == k { return 86u64 }
+    /* row 14: temp/named agreement + narrow wraps at the temp */
+    let m : i32 = 0i32 - 2i32
+    let n : i32 = 1i32
+    if (m + n) < 0i32 { } else { return 87u64 }
+    let p : u8 = 255u8
+    let q : u8 = 1u8
+    if (p + q) != 0u8 { return 88u64 }
+    /* mixed-width keeps the wide sum */
+    let t : u32 = 4294967295u32
+    let u : u64 = 2u64
+    if (((t + u) >> 32u64) & 255u64) != 1u64 { return 89u64 }
+    /* call-result + array-element classify (u32 wrap at the temp) */
+    if (idu32(4294967295u32) + 1u32) != 0u32 { return 90u64 }
+    if (GA[0u64] + GA[1u64]) != 0u32 { return 91u64 }
+    /* unary temps renorm (rows 14e): ~0u8 = 255, -INT_MIN stays negative */
+    let y1 : u8 = 0u8
+    if ((~y1) as u64) != 255u64 { return 92u64 }
+    let y2 : i32 = 0i32 - 2147483647i32 - 1i32
+    if (-y2) < 0i32 { } else { return 93u64 }
+    return 99u64
+}

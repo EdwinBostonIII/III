@@ -35,6 +35,9 @@ IIIS="${IIIS:-$III_ROOT/COMPILED/iiis-2${BIN_SUFFIX}}"
 EVAL_BIN="${EVAL_BIN:-$III_ROOT/COMPILED/iii_eval${BIN_SUFFIX}}"
 LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
 [[ -x "$IIIS" && -f "$LIB" ]] || { echo "[svir-gate] FATAL: missing toolchain"; exit 2; }
+# route E is a REQUIRED leg of the square: a missing evaluator must not
+# silently degrade arm B to N≡S (RCE defaulted to RCN below) — FATAL instead.
+[[ -x "$EVAL_BIN" ]] || { echo "[svir-gate] FATAL: no iii_eval at $EVAL_BIN — the square needs all three routes"; exit 2; }
 
 say() { printf '%s\n' "$*"; }
 mk() {
@@ -89,11 +92,20 @@ say "[svir-gate] == (A2) golden mhash (typed canonical bytes, §W) =="
 GOLDN=0; GOLD_MISS=0
 declare -A GOLD_PIN
 if [[ -f "$GOLD" ]]; then
-    while read -r gname ghash; do
+    # IFS is newline+tab globally -- `read` would NOT split on the space
+    # between name and hash (gname swallowed whole lines; every pin lookup
+    # missed and the arm verified NOTHING while reporting GOLDEN-NEW inside
+    # a GREEN gate -- the third IFS bite of this campaign).  Split locally.
+    while IFS=' ' read -r gname ghash; do
         [[ -n "$gname" && "${gname:0:1}" != "#" ]] && GOLD_PIN["$gname"]="$ghash"
     done < "$GOLD"
+    NPINLINES=$(grep -cEv '^\s*(#|$)' "$GOLD" || true)
+    if [[ ${NPINLINES:-0} -gt 0 && ${#GOLD_PIN[@]} -eq 0 ]]; then
+        echo "[svir-gate] FATAL: golden file has $NPINLINES pin lines but loader parsed 0 -- silence is not green"
+        exit 2
+    fi
 fi
-A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR")
+A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR" "sq09_mixsign:$SQ_DIR" "sq10_renorm:$SQ_DIR")
 : > "$W/goldens_measured.txt"
 for entry in "${A2_LIST[@]}"; do
     name="${entry%%:*}"; dir="${entry##*:}"
@@ -117,8 +129,15 @@ for entry in "${A2_LIST[@]}"; do
         FAIL=1
     fi
 done
-if [[ $GOLD_MISS -gt 0 && ! -f "$GOLD" ]]; then
-    say "[svir-gate] no golden file yet -- measured pins in $W/goldens_measured.txt"
+if [[ $GOLD_MISS -gt 0 ]]; then
+    if [[ -f "$GOLD" ]]; then
+        # a measured name with no pin while the golden file EXISTS is pin-rot,
+        # not a bootstrap state -- loud red (pin from goldens_measured.txt).
+        say "[svir-gate] GOLDEN-MISS RED: $GOLD_MISS measured name(s) unpinned in existing $GOLD"
+        FAIL=1
+    else
+        say "[svir-gate] no golden file yet -- measured pins in $W/goldens_measured.txt"
+    fi
 fi
 
 # ═══ (B) COMMUTING SQUARE: native ≡ eval ≡ cg_svir→interp (ALL probes) ═════

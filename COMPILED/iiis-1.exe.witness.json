@@ -1,8 +1,8 @@
 {
   "tool": "build_iiis1.sh",
-  "ported_tus": "acc,affine_audit,ast,ceiling,cg_r0,cg_r3,cg_rm1,cg_rm2,cg_sha,cg_typeclass,emit,emit_sanctum,hexad_check,jit_emit,lex,lex_rt,link,main,parse,proof,sema,sid,witness_alloc",
+  "ported_tus": "acc,affine_audit,ast,ceiling,cg_r0,cg_r3,cg_rm1,cg_rm2,cg_sha,cg_svir,cg_typeclass,emit,emit_sanctum,eval,hexad_check,jit_emit,lex,lex_rt,link,main,parse,proof,sema,sid,witness_alloc",
   "mode": "release",
   "iiis0_used": "iiis-0.exe",
   "output": "iiis-1.exe",
-  "output_mhash": "236cd6919035f1d09dedd573f9c5719fb77085fb0eb488570f26ae1779431365"
+  "output_mhash": "b6369881b157415f702e6005a6e0b6d1a459087050d6c1f2997de616211dd6c9"
 }

@@ -1,0 +1,37 @@
+/* sq09 -- ROWS 13/13b: equal-width AND mixed-width MIXED-SIGN binops.
+ * Unified tag = (max width, signed-if-either); operands consumed in their
+ * OWN wide normal forms (no cross-adaptation); div/mod/ordered compares run
+ * SIGNED iff either side is signed; eq compares the WIDE FORMS.
+ * Adjudicated from the incumbent (mx01-mx36, 2026-07-09).  93 = law holds. */
+module sq09
+
+fn main() -> i64 {
+    /* i64 / u64 runs SIGNED: -7/3 = -2 (not the huge unsigned quotient) */
+    let a : i64 = 0i64 - 7i64
+    let b : u64 = 3u64
+    if ((a / b) & 255u64) != 254u64 { return 81 }
+    /* u64 / i64, order flipped, still signed: 100/-3 = -33 */
+    let c : u64 = 100u64
+    let d : i64 = 0i64 - 3i64
+    if ((c / d) & 255u64) != 223u64 { return 82 }
+    /* mod both orders: -7%3 = -1 ; 100%-3 = 1 (C truncation pair) */
+    if ((a % b) & 255u64) != 255u64 { return 83 }
+    if ((c % d) & 255u64) != 1u64 { return 84 }
+    /* ordered compares are SIGNED both orders: -1 < 1u is TRUE */
+    let e : i64 = 0i64 - 1i64
+    let f : u64 = 1u64
+    if e < f { } else { return 85 }
+    if f < e { return 86 }
+    /* equal-width narrow: i32 vs u32 compare is signed */
+    let g : i32 = 0i32 - 1i32
+    let h : u32 = 1u32
+    if g < h { } else { return 87 }
+    /* EQUALITY compares the WIDE forms: -1i32 != 4294967295u32 */
+    let k : u32 = 4294967295u32
+    if g == k { return 88 }
+    /* i16 / u16 signed: -7/3 = -2 */
+    let m : i16 = 0i16 - 7i16
+    let n : u16 = 3u16
+    if ((m / n) & 255u64) != 254u64 { return 89 }
+    return 93
+}

@@ -1914,6 +1914,34 @@ fn iii_ev_const_value(ast: u64, name_off: u32, name_len: u32, out_addr: u64) -> 
     return EVS_OK
 }
 
+/* Θ3⊗Γ1 slice 2: read ONE ELEMENT of a collected module ARRAY slot -- the
+ * world already holds the fully-initialized array after collect
+ * (ev_fill_array ran, CTFE included), so an emitter can transcribe the
+ * language-defined bytes element by element.  Same world cache as
+ * iii_ev_const_value.  Array symbols carry meta bit0=1 with the element
+ * tag at meta>>8 (ev_lvalue's layout). */
+fn iii_ev_elem_value(ast: u64, name_off: u32, name_len: u32, idx: u64, out_addr: u64) -> u32 @export {
+    if ast != EV_CTFE_AST {
+        let rc0: u32 = iii_ev_world_init(0u32)
+        if rc0 != EVS_OK { return rc0 }
+        let m: u64 = ev_mod_add(ast)
+        if m == 0xFFFFFFFFu64 { return EV_ERRC }
+        let rc1: u32 = iii_ev_module_collect(m)
+        if rc1 != EVS_OK { return rc1 }
+        EV_CTFE_AST = ast
+    }
+    ev_mod_enter(0u64)
+    if ev_lookup(name_off, name_len) == 0u32 { EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+    if EV_SYMK != 1u32 { EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+    if (EV_SYMM & 1u64) != 1u64 { EV_ERRC = EVE_UNKNOWN_IDENT ; return EVE_UNKNOWN_IDENT }
+    let et: u64 = EV_SYMM >> 8u64
+    let esz: u64 = ev_width_size(et)
+    let v: u64 = ev_ld(EV_SYMA + idx * esz, esz, ev_t_signed(et))
+    if EV_ERRC != 0u32 { return EV_ERRC }
+    iii_lex_write_u64_c(out_addr, 0u64, v)
+    return EVS_OK
+}
+
 fn iii_ev_init(ast: u64) -> u32 @export {
     let rc0: u32 = iii_ev_world_init(0u32)
     if rc0 != EVS_OK { return rc0 }

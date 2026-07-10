@@ -107,7 +107,7 @@ if [[ -f "$GOLD" ]]; then
         exit 2
     fi
 fi
-A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR" "sq09_mixsign:$SQ_DIR" "sq10_renorm:$SQ_DIR" "sq12_comptime:$SQ_DIR")
+A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR" "sq09_mixsign:$SQ_DIR" "sq10_renorm:$SQ_DIR" "sq12_comptime:$SQ_DIR" "sq13_varinit:$SQ_DIR")
 : > "$W/goldens_measured.txt"
 for entry in "${A2_LIST[@]}"; do
     name="${entry%%:*}"; dir="${entry##*:}"

@@ -155,6 +155,7 @@ const T_BAD: u64 = 0xFFFFFFFFFFFFFFFFu64
 /* Θ3⊗Γ1 (S-frontier slice 1): the definitional evaluator is this backend's
  * const-expression engine too -- same export cg_r3's comptime uses. */
 extern @abi(c-msvc-x64) fn iii_ev_const_value(ast: u64, name_off: u32, name_len: u32, out_addr: u64) -> u32 from "eval.iii"
+extern @abi(c-msvc-x64) fn iii_ev_elem_value(ast: u64, name_off: u32, name_len: u32, idx: u64, out_addr: u64) -> u32 from "eval.iii"
 var SV_CTFE_VAL : u64 = 0u64
 
 /* refusal classes (the S-frontier census names) */
@@ -194,6 +195,7 @@ var FNODE : [u32; 256]  var FRT : [u64; 256]  var FNC : u32 = 0u32
 var ARRO : [u32; 128]  var ARRL : [u32; 128]  var ARRB : [u64; 128]
 var ARRT : [u64; 128]  var ARRZ : [u64; 128]  var ARRK : [u32; 128]   /* elem tag / elem size / 1=array 0=scalar */
 var ARRN : u32 = 0u32  var MTOP : u64 = 0u64
+var AINIT : [u32; 128]  var ACNT : [u64; 128]   /* slice 2: 1 = nonzero-initialized (preamble); element count */
 
 /* module-level literal consts (INT/HEX; value normalized per declared type) */
 var CO : [u32; 128]  var CL : [u32; 128]  var CV : [u64; 128]  var CT : [u64; 128]  var CNN : u32 = 0u32
@@ -1006,6 +1008,36 @@ fn sv_block(node: u32) {
     }
 }
 
+/* §W.8 (slice 2): THE CANONICAL INIT PREAMBLE -- module cells with nonzero
+ * initializers store their language-defined values (read from the
+ * evaluator's collected world: the ONE meaning object, CTFE included) at
+ * the ENTRY fn's head; declaration order, elements ascending, ZERO values
+ * SKIPPED (the interp world is pre-zeroed -- minimal canonical bytes, the
+ * declared-extent zero law's dual).  Unevaluable inits refuse loudly. */
+fn sv_init_preamble() {
+    let mut i: u32 = 0u32
+    while i < ARRN {
+        if SV_UNSUP != 0u32 { return }
+        if AINIT[i as u64] == 1u32 {
+            let esz: u64 = ARRZ[i as u64]
+            let mut j: u64 = 0u64
+            while j < ACNT[i as u64] {
+                let mut rc: u32 = 0u32
+                if ARRK[i as u64] == 0u32 { rc = iii_ev_const_value(SV_AST, ARRO[i as u64], ARRL[i as u64], &SV_CTFE_VAL as u64) }
+                else { rc = iii_ev_elem_value(SV_AST, ARRO[i as u64], ARRL[i as u64], j, &SV_CTFE_VAL as u64) }
+                if rc != 0u32 { sv_refuse(SVU_VAR_INIT, i)  return }
+                if SV_CTFE_VAL != 0u64 {
+                    econst(ARRB[i as u64] + j * esz)
+                    econst(SV_CTFE_VAL)
+                    e_store(esz)
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u32
+    }
+}
+
 /* ── one function -> append its v1 record to MO ────────────────────────── */
 fn sv_fn(k: u32) {
     let fn_: u32 = FNODE[k as u64]
@@ -1022,6 +1054,7 @@ fn sv_fn(k: u32) {
         i = i + 1u32
     }
     BLN = 0u64  SV_LAST_OP = 0u32
+    if k == 0u32 { sv_init_preamble()  if SV_UNSUP != 0u32 { return } }
     sv_block(iii_ast_fn_body(SV_AST, fn_))
     if SV_UNSUP != 0u32 { return }
     if SV_LAST_OP != 0x60u32 { econst(0u64)  eb(0x60u32) }   /* trailing default return on fall-through only */
@@ -1076,11 +1109,14 @@ fn sv_prescan_const(d: u32) {
 }
 
 fn sv_prescan_var(d: u32) {
-    if iii_ast_var_decl_init(SV_AST, d) != 0u32 { sv_refuse(SVU_VAR_INIT, d)  return }   /* zero-init only (data section is a later rung) */
     let t: u32 = iii_ast_var_decl_type(SV_AST, d)
     if t == 0u32 { sv_refuse(SVU_TYPE, d)  return }
     if sv_type_tag(t) != 0u32 { return }
     if ARRN >= 128u32 { sv_refuse(SVU_CAP, 7u32)  return }
+    /* slice 2 (§W.8): nonzero-initialized cells no longer refuse -- the
+     * ENTRY fn's canonical init preamble stores the language-defined
+     * values (read from the evaluator's collected world). */
+    if iii_ast_var_decl_init(SV_AST, d) != 0u32 { AINIT[ARRN as u64] = 1u32 } else { AINIT[ARRN as u64] = 0u32 }
     ARRO[ARRN as u64] = iii_ast_var_decl_name_off(SV_AST, d)
     ARRL[ARRN as u64] = iii_ast_var_decl_name_len(SV_AST, d)
     ARRB[ARRN as u64] = MTOP
@@ -1088,6 +1124,7 @@ fn sv_prescan_var(d: u32) {
         ARRK[ARRN as u64] = 1u32
         ARRT[ARRN as u64] = SVT_ELEM
         ARRZ[ARRN as u64] = SVT_SZ / SVT_CNT
+        ACNT[ARRN as u64] = SVT_CNT
         MTOP = MTOP + SVT_SZ
     } else {
         if t_class(SVT_TT) != TC_INT { if t_class(SVT_TT) != TC_BOOL { sv_refuse(SVU_TYPE, d)  return } }
@@ -1096,6 +1133,7 @@ fn sv_prescan_var(d: u32) {
         let mut sz: u64 = SVT_SZ
         if sz == 0u64 { sz = 8u64 }
         ARRZ[ARRN as u64] = sz
+        ACNT[ARRN as u64] = 1u64
         MTOP = MTOP + sz
     }
     ARRN = ARRN + 1u32

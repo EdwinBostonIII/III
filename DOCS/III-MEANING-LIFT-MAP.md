@@ -285,6 +285,23 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > census GREEN ratchet=100 HELD with **const-expr 35 → 0 (class EXTINCT)** — all 35 re-blocked on
 > deeper frontiers (none flipped PASS; the honest delta). Burn-down ledger now: extern-fn 1276 /
 > ptr 225 / var-init 84 / local-array 3.
+>
+> **S-FRONTIER SLICE 2 (2026-07-10, chain v5): var-init RETIRED — §W.8 THE CANONICAL INIT
+> PREAMBLE.** Nonzero-initialized module cells store their language-defined values at the ENTRY
+> fn's head (fn 0, main-first): declaration order, elements ascending, ZERO values SKIPPED (the
+> interp world is pre-zeroed — minimal canonical bytes, the declared-extent zero law's dual),
+> store shape byte-identical to the assignment lowering. The VALUES come from the definitional
+> evaluator's collected world — `iii_ev_const_value` for scalars (it reads var slots; the p20
+> precedent) plus the NEW export `iii_ev_elem_value` for per-element array reads (same
+> per-AST-cached CTFE world) — so every route folds module data through the ONE meaning object,
+> CTFE initializers included. NO interp change (cells are world addresses; the world is
+> pre-zeroed). sq13_varinit proven three-route 97≡97≡97 PRE-LANDING (scalar / CTFE scalar /
+> mixed-zero u32 array / u16 widths / post-init mutation); golden pinned 28b63f97; A2 9 pins.
+> Chain v5 sealed: 9th BYTE-IDENTICAL fixpoint, corpus 1595/0, A2 9/9 + square 13/13 N≡E≡S,
+> meaning 21/21 + ratchet 597 HELD, census GREEN **pass=103 — THE FIRST RATCHET RISE (100→103,
+> pinned)**: three KATs' only blocker was their module-data init and they now run route S
+> end-to-end; **var-init 84 → 0 (class EXTINCT — the second retired in two slices)**. Burn-down
+> ledger now THREE classes: extern-fn 1338 / ptr 244 / local-array 3.
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

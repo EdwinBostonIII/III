@@ -242,3 +242,19 @@ named/temp spellings split natively; closure under normal forms requires
 both sides IN normal form).  Same law rung: unary NEG/BNOT results renorm
 to the operand's tag (mx40/41 — negq on INT_MIN escapes wide; notq
 re-signs zx values).
+
+### W.8 — the canonical init preamble (S-frontier slice 2, 2026-07-10)
+
+Module cells (scalars and typed arrays) with NONZERO initializers hold
+their language-defined values through a canonical preamble at the ENTRY
+fn's head (fn 0 — main-first order): declaration order, array elements
+ascending, each store = CONST(cell-address) CONST(value) width-store —
+byte-identical shape to the assignment lowering.  ZERO values are SKIPPED:
+the interp world is pre-zeroed, so the zero-skip is semantics-free and
+keeps canonical bytes minimal (the declared-extent zero law's dual).
+The VALUES are read from the definitional evaluator's collected world
+(iii_ev_const_value for scalars, iii_ev_elem_value per array element —
+CTFE initializers included), so every route folds module data through the
+ONE meaning object.  Unevaluable initializers refuse (var-init class,
+loud).  iiisv2 (width-free) never emits the preamble; the A1 parity set
+contains no initialized cells.

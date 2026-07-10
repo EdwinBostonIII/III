@@ -1,0 +1,23 @@
+/* sq06 -- nested while + two arrays + accumulation (base offsets >0). */
+module sq06
+var A : [u8; 12]
+var B : [u8; 12]
+fn main() -> i64 {
+    let mut i : i64 = 0
+    while i < 10 {
+        A[i] = i * 2
+        B[i] = i + 3
+        i = i + 1
+    }
+    let mut s : i64 = 0
+    let mut j : i64 = 0
+    while j < 10 {
+        let mut k : i64 = 0
+        while k < 2 {
+            s = s + A[j] + B[j]
+            k = k + 1
+        }
+        j = j + 1
+    }
+    return s
+}

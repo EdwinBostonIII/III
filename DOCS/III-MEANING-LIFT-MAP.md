@@ -150,6 +150,22 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 Λ0 campaign builds by hand today [recorded: S8 flip-pair method], made permanent and mechanical.
 *Exit gate:* three-route agreement on the covered set. *Falsifier:* any pairwise split reddens its axis.
 
+> **Γ1 EXECUTED (2026-07-09 s2d): THE SVIR BACKEND OF THE PRODUCTION COMPILER LIVES.**
+> `COMPILER/BOOT/cg_svir.iii` (a new compiler TU, in PORTED_TUS ×3) consumes the PRODUCTION parse-AST
+> (lex.iii + parse.iii — the same front-end feeding cg_r3's x86 backend) and emits canonical SVIR v1.
+> The insight that made it small: iiisv2 hand-rolls a shunting-yard because it has its own parser, but
+> the production parser ALREADY resolved precedence into the binary-expr tree, so canonical postfix is
+> a plain POSTORDER walk (eval.iii was the exact walk template). Wired as `iiis --emit-svir` in
+> main.iii (early-exit after parse; no sema/cg/emit/link). **Gate `run_svir_backend_gate.sh` GREEN:**
+> (A) CANONICAL — cg_svir ≡ iiisv2 BYTE-IDENTICAL on the full DDC independence corpus (indep_toolchain
+> 1321B / indep_ops 893B / indep_bignum 2819B) proving cg_svir is a conformant SVIR-V1-CANONICAL
+> emitter; (B) THE COMMUTING SQUARE now runs route S = the PRODUCTION backend (cg_svir, shares
+> lex+parse with route N) — N(sema+cg_r3+x86) ≡ E(eval) ≡ S(cg_svir→svir_interp) on all 6 square
+> probes, each also cg_svir≡iiisv2. Falsifier two-path-proven: an ADD→SUB opcode mutation reddens
+> BOTH axes (parity + square) and the square LOCALIZES the fault to S alone (N=E=55, S=127); restore →
+> green. Θ2 is no longer Γ1-blocked: the square's route S is now the compiler's own SVIR backend, so
+> fault-localization is {front-end+eval | cg_x86 | cg_svir} for real.
+
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the
 definitional evaluator — the known const-expr-init wart [recorded: LENS/STUDIO trap ledger] dies not

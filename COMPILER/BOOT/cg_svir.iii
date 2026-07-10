@@ -1,0 +1,410 @@
+/* COMPILER/BOOT/cg_svir.iii — Γ1: THE SVIR BACKEND of the PRODUCTION compiler.
+ *
+ * Consumes the production parse-AST (lex.iii + parse.iii, the SAME front-end
+ * that feeds cg_r3's x86 backend) and emits a canonical SVIR v1 module —
+ * BYTE-IDENTICAL to iiisv2 (DOCS/SVIR-V1-CANONICAL.md) for every accepted
+ * program.  This is what makes the Θ2 commuting square THREE-route corpus-wide:
+ * routes N (sema+cg_r3+x86) and S (cg_svir→SVIR→svir_interp) share lex+parse
+ * but fork at codegen, so a pairwise split localizes the fault to a single
+ * translator.  Unlike iiisv2 (its own lexer + shunting-yard), cg_svir needs
+ * NO precedence engine: the production parser already resolved precedence into
+ * the binary-expr tree, so canonical postfix is a plain POSTORDER walk.
+ *
+ * Independence: consumes AST only — NO sema, NO sid, NO cg_r*, NO emit/link.
+ * Output form: the `gen_svir.iii` module text (var SVIR = [...] + svir_ptr/
+ * svir_len), identical to iiisv2's emit_module, so svir_interp runs it and the
+ * DDC byte-gate compares it unchanged.
+ */
+module cg_svir
+
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_cond(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 from "ast.iii"
+
+/* AST node kinds + binary op enum (ast.iii canon, shared with eval.iii) */
+const K_FN_DECL: u32 = 4u32
+const K_CONST_DECL: u32 = 6u32
+const K_TYPE_ARRAY: u32 = 17u32
+const K_STMT_LET: u32 = 20u32
+const K_STMT_RETURN: u32 = 26u32
+const K_STMT_ASSIGN: u32 = 27u32
+const K_STMT_EXPR: u32 = 28u32
+const K_EXPR_INT: u32 = 37u32
+const K_EXPR_IDENT: u32 = 45u32
+const K_EXPR_CALL: u32 = 46u32
+const K_EXPR_INDEX: u32 = 48u32
+const K_EXPR_BINARY: u32 = 49u32
+const K_EXPR_PAREN: u32 = 53u32
+const K_STMT_IF: u32 = 69u32
+const K_STMT_WHILE: u32 = 70u32
+const K_EXPR_CAST: u32 = 72u32
+const K_VAR_DECL: u32 = 74u32
+
+const B_ADD: u32 = 1u32   const B_SUB: u32 = 2u32   const B_MUL: u32 = 3u32
+const B_DIV: u32 = 4u32   const B_MOD: u32 = 5u32   const B_AND: u32 = 6u32
+const B_OR: u32 = 7u32    const B_XOR: u32 = 8u32   const B_SHL: u32 = 9u32
+const B_SHR: u32 = 10u32  const B_EQ: u32 = 11u32   const B_NEQ: u32 = 12u32
+const B_LT: u32 = 13u32   const B_LE: u32 = 14u32   const B_GT: u32 = 15u32
+const B_GE: u32 = 16u32
+
+/* ── state ─────────────────────────────────────────────────────────────── */
+var SV_AST : u64 = 0u64
+var SV_SRC : u64 = 0u64
+
+/* function ordering (main first, then source order) — mirrors iiisv2.prescan */
+var FNODE : [u32; 256]  var FNC : u32 = 0u32
+
+/* module-level array bases (declaration order; MTOP starts at 16) */
+var ARRO : [u32; 64]  var ARRL : [u32; 64]  var ARRB : [u64; 64]  var ARRN : u32 = 0u32  var MTOP : u64 = 0u64
+
+/* module-level int-literal consts (name -> value) */
+var CO : [u32; 128]  var CL : [u32; 128]  var CV : [u64; 128]  var CNN : u32 = 0u32
+
+/* per-function local slots (params first, then lets in encounter order) */
+var LO : [u32; 256]  var LL : [u32; 256]  var LNN : u32 = 0u32
+
+/* current function body byte buffer */
+var BD : [u8; 16384]  var BLN : u64 = 0u64
+var SV_LAST_OP : u32 = 0u32
+
+/* the assembled module bytes (v1 envelope) */
+var MO : [u8; 65536]  var MLN : u64 = 0u64
+
+/* ── name compare against the production source buffer ─────────────────── */
+fn sv_neq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 {
+    if l1 != l2 { return 0u32 }
+    let mut j: u32 = 0u32
+    while j < l1 {
+        if iii_lex_read_u8_at_c(SV_SRC, (o1 + j) as u64) != iii_lex_read_u8_at_c(SV_SRC, (o2 + j) as u64) { return 0u32 }
+        j = j + 1u32
+    }
+    return 1u32
+}
+
+/* ── body byte emitters (mirror iiisv2 erb/eb/econst/eu8) ─────────────── */
+fn erb(b: u32) { if BLN < 16384u64 { BD[BLN] = (b & 0xFFu32) as u8  BLN = BLN + 1u64 } }
+fn eb(b: u32) { SV_LAST_OP = b & 0xFFu32  erb(b) }
+fn econst(v: u64) { eb(0x01u32)  let mut k: u32 = 0u32  while k < 8u32 { erb((v >> (8u64 * (k as u64))) as u32)  k = k + 1u32 } }
+fn eu8(o: u32, a: u32) { eb(o)  erb(a) }
+
+fn mo(b: u32) { if MLN < 65536u64 { MO[MLN] = (b & 0xFFu32) as u8  MLN = MLN + 1u64 } }
+
+/* ── lookups ───────────────────────────────────────────────────────────── */
+fn fidx(off: u32, len: u32) -> i32 {
+    let mut k: u32 = 0u32
+    while k < FNC {
+        let fn_: u32 = FNODE[k as u64]
+        if sv_neq(iii_ast_fn_name_off(SV_AST, fn_), iii_ast_fn_name_len(SV_AST, fn_), off, len) == 1u32 { return k as i32 }
+        k = k + 1u32
+    }
+    return 0i32 - 1i32
+}
+fn arr_base(off: u32, len: u32) -> i64 {
+    let mut k: u32 = 0u32
+    while k < ARRN { if sv_neq(ARRO[k as u64], ARRL[k as u64], off, len) == 1u32 { return ARRB[k as u64] as i64 }  k = k + 1u32 }
+    return 0i64 - 1i64
+}
+fn const_val(off: u32, len: u32) -> i64 {
+    let mut k: u32 = 0u32
+    while k < CNN { if sv_neq(CO[k as u64], CL[k as u64], off, len) == 1u32 { return CV[k as u64] as i64 }  k = k + 1u32 }
+    return 0i64 - 1i64
+}
+fn lidx(off: u32, len: u32) -> i32 {
+    let mut k: u32 = 0u32
+    while k < LNN { if sv_neq(LO[k as u64], LL[k as u64], off, len) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
+}
+fn ladd(off: u32, len: u32) -> u32 {
+    let s: u32 = LNN
+    if LNN < 256u32 { LO[LNN as u64] = off  LL[LNN as u64] = len  LNN = LNN + 1u32 }
+    return s
+}
+
+/* op-byte per SVIR-V1-CANONICAL §2 (must match iiisv2.opc) */
+fn opbyte(op: u32) -> u32 {
+    if op == B_MUL { return 0x22u32 }  if op == B_DIV { return 0x23u32 }  if op == B_MOD { return 0x24u32 }
+    if op == B_ADD { return 0x20u32 }  if op == B_SUB { return 0x21u32 }
+    if op == B_SHL { return 0x28u32 }  if op == B_SHR { return 0x29u32 }
+    if op == B_LT { return 0x32u32 }   if op == B_GT { return 0x35u32 }   if op == B_LE { return 0x34u32 }   if op == B_GE { return 0x33u32 }
+    if op == B_EQ { return 0x30u32 }   if op == B_NEQ { return 0x31u32 }
+    if op == B_AND { return 0x25u32 }  if op == B_XOR { return 0x27u32 }  if op == B_OR { return 0x26u32 }
+    return 0u32
+}
+
+/* ── expression emission (POSTORDER = canonical postfix, precedence already
+ *    resolved in the production tree) ──────────────────────────────────── */
+fn sv_expr(node: u32) {
+    let k: u32 = iii_ast_node_kind(SV_AST, node)
+    if k == K_EXPR_PAREN { sv_expr(iii_ast_paren_inner(SV_AST, node))  return }
+    if k == K_EXPR_CAST { sv_expr(iii_ast_cast_value(SV_AST, node))  return }
+    if k == K_EXPR_INT { econst(iii_ast_expr_int_u64(SV_AST, node))  return }
+    if k == K_EXPR_BINARY {
+        sv_expr(iii_ast_binary_lhs(SV_AST, node))
+        sv_expr(iii_ast_binary_rhs(SV_AST, node))
+        eb(opbyte(iii_ast_binary_op(SV_AST, node)))
+        return
+    }
+    if k == K_EXPR_CALL {
+        let callee: u32 = iii_ast_call_callee(SV_AST, node)
+        let off: u32 = iii_ast_ident_name_offset(SV_AST, callee)
+        let len: u32 = iii_ast_ident_name_length(SV_AST, callee)
+        let ac: u32 = iii_ast_call_arg_count(SV_AST, node)
+        let mut i: u32 = 0u32
+        while i < ac { sv_expr(iii_ast_arg_value(SV_AST, iii_ast_call_arg_at(SV_AST, node, i)))  i = i + 1u32 }
+        let fi: i32 = fidx(off, len)
+        if fi >= 0i32 { eb(0x70u32)  erb(fi as u32)  erb(ac) }
+        return
+    }
+    if k == K_EXPR_INDEX {
+        let obj: u32 = iii_ast_index_object(SV_AST, node)
+        let oo: u32 = iii_ast_ident_name_offset(SV_AST, obj)
+        let ol: u32 = iii_ast_ident_name_length(SV_AST, obj)
+        let ab: i64 = arr_base(oo, ol)
+        if ab >= 0i64 {
+            sv_expr(iii_ast_index_index(SV_AST, node))
+            if ab > 0i64 { econst(ab as u64)  eb(0x20u32) }
+            eb(0x80u32)
+        }
+        return
+    }
+    if k == K_EXPR_IDENT {
+        let off: u32 = iii_ast_ident_name_offset(SV_AST, node)
+        let len: u32 = iii_ast_ident_name_length(SV_AST, node)
+        let li: i32 = lidx(off, len)
+        if li >= 0i32 { eu8(0x10u32, li as u32)  return }
+        let cv: i64 = const_val(off, len)
+        if cv >= 0i64 { econst(cv as u64) }
+        return
+    }
+}
+
+/* ── statement emission ────────────────────────────────────────────────── */
+fn sv_block(node: u32) {
+    let n: u32 = iii_ast_block_stmt_count(SV_AST, node)
+    let mut i: u32 = 0u32
+    while i < n { sv_stmt(iii_ast_block_stmt_at(SV_AST, node, i))  i = i + 1u32 }
+}
+
+fn sv_stmt(node: u32) {
+    let k: u32 = iii_ast_node_kind(SV_AST, node)
+    if k == K_STMT_LET {
+        sv_expr(iii_ast_let_value(SV_AST, node))
+        let s: u32 = ladd(iii_ast_let_name_off(SV_AST, node), iii_ast_let_name_len(SV_AST, node))
+        eu8(0x11u32, s)
+        return
+    }
+    if k == K_STMT_RETURN { sv_expr(iii_ast_return_value(SV_AST, node))  eb(0x60u32)  return }
+    if k == K_STMT_IF {
+        sv_expr(iii_ast_if_cond(SV_AST, node))
+        eb(0x42u32)
+        sv_block(iii_ast_if_then(SV_AST, node))
+        let el: u32 = iii_ast_if_else(SV_AST, node)
+        if el != 0u32 { eb(0x43u32)  sv_block(el) }
+        eb(0x44u32)
+        return
+    }
+    if k == K_STMT_WHILE {
+        eb(0x40u32)  eb(0x41u32)
+        sv_expr(iii_ast_while_cond(SV_AST, node))
+        econst(0u64)  eb(0x30u32)  eu8(0x51u32, 1u32)
+        sv_block(iii_ast_while_body(SV_AST, node))
+        eu8(0x50u32, 0u32)  eb(0x44u32)  eb(0x44u32)
+        return
+    }
+    if k == K_STMT_ASSIGN {
+        let lv: u32 = iii_ast_assign_lvalue(SV_AST, node)
+        let lk: u32 = iii_ast_node_kind(SV_AST, lv)
+        if lk == K_EXPR_INDEX {
+            let obj: u32 = iii_ast_index_object(SV_AST, lv)
+            let oo: u32 = iii_ast_ident_name_offset(SV_AST, obj)
+            let ol: u32 = iii_ast_ident_name_length(SV_AST, obj)
+            let ab: i64 = arr_base(oo, ol)
+            if ab >= 0i64 {
+                sv_expr(iii_ast_index_index(SV_AST, lv))
+                if ab > 0i64 { econst(ab as u64)  eb(0x20u32) }
+                sv_expr(iii_ast_assign_value(SV_AST, node))
+                eb(0x81u32)
+            }
+            return
+        }
+        /* ident lvalue: value then LOCAL_SET slot */
+        let off: u32 = iii_ast_ident_name_offset(SV_AST, lv)
+        let len: u32 = iii_ast_ident_name_length(SV_AST, lv)
+        sv_expr(iii_ast_assign_value(SV_AST, node))
+        let li: i32 = lidx(off, len)
+        if li >= 0i32 { eu8(0x11u32, li as u32) }
+        return
+    }
+    if k == K_STMT_EXPR {
+        /* bare expression statement (e.g. a call for effect) -> <e> DROP */
+        sv_expr(iii_ast_expr_stmt_expr(SV_AST, node))
+        eb(0x72u32)
+        return
+    }
+}
+
+/* ── one function -> append its v1 record to MO ────────────────────────── */
+fn sv_fn(fn_: u32) {
+    LNN = 0u32
+    let params: u32 = iii_ast_fn_param_count(SV_AST, fn_)
+    let mut i: u32 = 0u32
+    while i < params {
+        let p: u32 = iii_ast_fn_param_at(SV_AST, fn_, i)
+        ladd(iii_ast_param_name_off(SV_AST, p), iii_ast_param_name_len(SV_AST, p))
+        i = i + 1u32
+    }
+    BLN = 0u64  SV_LAST_OP = 0u32
+    sv_block(iii_ast_fn_body(SV_AST, fn_))
+    if SV_LAST_OP != 0x60u32 { econst(0u64)  eb(0x60u32) }   /* trailing default return on fall-through only */
+    mo(params)  mo(1u32)  mo((BLN & 0xFFu64) as u32)  mo(((BLN >> 8u64) & 0xFFu64) as u32)
+    let mut j: u64 = 0u64
+    while j < BLN { mo(BD[j] as u32)  j = j + 1u64 }
+}
+
+/* ── prescans (declaration order; main-first fn order) ─────────────────── */
+fn sv_prescan(root: u32) {
+    FNC = 0u32  ARRN = 0u32  MTOP = 16u64  CNN = 0u32
+    let dc: u32 = iii_ast_module_decl_count(SV_AST, root)
+    /* consts first: name -> int-literal value (v1 subset: bare INT only) */
+    let mut i: u32 = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
+        if iii_ast_node_kind(SV_AST, d) == K_CONST_DECL {
+            let v: u32 = iii_ast_const_decl_value(SV_AST, d)
+            if iii_ast_node_kind(SV_AST, v) == K_EXPR_INT { if CNN < 128u32 {
+                CO[CNN as u64] = iii_ast_const_decl_name_off(SV_AST, d)
+                CL[CNN as u64] = iii_ast_const_decl_name_len(SV_AST, d)
+                CV[CNN as u64] = iii_ast_expr_int_u64(SV_AST, v)
+                CNN = CNN + 1u32
+            } }
+        }
+        i = i + 1u32
+    }
+    /* module arrays: base offset in declaration order, MTOP from 16 */
+    i = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
+        if iii_ast_node_kind(SV_AST, d) == K_VAR_DECL {
+            let t: u32 = iii_ast_var_decl_type(SV_AST, d)
+            if t != 0u32 { if iii_ast_node_kind(SV_AST, t) == K_TYPE_ARRAY { if ARRN < 64u32 {
+                ARRO[ARRN as u64] = iii_ast_var_decl_name_off(SV_AST, d)
+                ARRL[ARRN as u64] = iii_ast_var_decl_name_len(SV_AST, d)
+                ARRB[ARRN as u64] = MTOP
+                MTOP = MTOP + iii_ast_type_array_count(SV_AST, t)
+                ARRN = ARRN + 1u32
+            } } }
+        }
+        i = i + 1u32
+    }
+    /* fn order: main FIRST, then remaining in source order (matches iiisv2.prescan) */
+    i = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
+        if iii_ast_node_kind(SV_AST, d) == K_FN_DECL {
+            if sv_name_is_main(d) == 1u32 { if FNC < 256u32 { FNODE[FNC as u64] = d  FNC = FNC + 1u32 } }
+        }
+        i = i + 1u32
+    }
+    i = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
+        if iii_ast_node_kind(SV_AST, d) == K_FN_DECL {
+            if sv_name_is_main(d) == 0u32 { if FNC < 256u32 { FNODE[FNC as u64] = d  FNC = FNC + 1u32 } }
+        }
+        i = i + 1u32
+    }
+}
+
+var MAIN_LIT : [u8; 4] = [109u8, 97u8, 105u8, 110u8]
+fn sv_name_is_main(d: u32) -> u32 {
+    let off: u32 = iii_ast_fn_name_off(SV_AST, d)
+    let len: u32 = iii_ast_fn_name_len(SV_AST, d)
+    if len != 4u32 { return 0u32 }
+    let mut j: u32 = 0u32
+    while j < 4u32 { if iii_lex_read_u8_at_c(SV_SRC, (off + j) as u64) != (MAIN_LIT[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+
+/* ── gen_svir.iii text emit (byte-identical to iiisv2.emit_module) ─────── */
+fn sv_pc(f: u64, c: u32) { iii_lex_fputc_c(c & 0xFFu32, f) }
+fn sv_pstr(f: u64, s: u64) {
+    let mut i: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 { let b: u32 = iii_lex_read_u8_at_c(s, i)  if b == 126u32 { go = 0u32 } else { sv_pc(f, b)  i = i + 1u64 } }
+}
+var SVDB : [u8; 24]
+fn sv_pdec(f: u64, v0: u64) {
+    if v0 == 0u64 { sv_pc(f, 48u32)  return }
+    let mut v: u64 = v0  let mut n: u32 = 0u32
+    while v > 0u64 { SVDB[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }
+    while n > 0u32 { n = n - 1u32  sv_pc(f, SVDB[n as u64] as u32) }
+}
+
+/* THE ENTRY (harness + main.iii both call this): emit gen_svir.iii to `out`. */
+fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
+    SV_AST = ast
+    SV_SRC = iii_ast_source_buf(ast)
+    MLN = 0u64
+    let root: u32 = iii_ast_root_module(ast)
+    if root == 0u32 { return 1u32 }
+    sv_prescan(root)
+    let mut k: u32 = 0u32
+    while k < FNC { sv_fn(FNODE[k as u64])  k = k + 1u32 }
+    /* module text — the exact ~-delimited shape of iiisv2.emit_module */
+    let total: u64 = MLN + 1u64
+    sv_pstr(out, "module gen_svir\nvar SVIR : [u8; ~" as u64)  sv_pdec(out, total)  sv_pstr(out, "] = [\n~" as u64)
+    sv_pdec(out, FNC as u64)  sv_pstr(out, "u8~" as u64)
+    let mut i: u64 = 0u64
+    while i < MLN { sv_pc(out, 44u32)  sv_pdec(out, MO[i] as u64)  sv_pstr(out, "u8~" as u64)  i = i + 1u64 }
+    sv_pstr(out, "\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)
+    sv_pdec(out, total)  sv_pstr(out, "u64 }\n~" as u64)
+    return 0u32
+}

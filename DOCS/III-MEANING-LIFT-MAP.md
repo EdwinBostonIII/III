@@ -166,6 +166,59 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > green. Θ2 is no longer Γ1-blocked: the square's route S is now the compiler's own SVIR backend, so
 > fault-localization is {front-end+eval | cg_x86 | cg_svir} for real.
 
+> **Γ1 rung 2 EXECUTED (2026-07-09 s2d): THE BACKEND BECOMES WIDTH-FAITHFUL — Θ2-FULL OPENS.**
+> cg_svir grows THE NORMAL-FORM LOWERING (SVIR-V1-CANONICAL **§W**): every stack/local value held in
+> eval's canonical 64-bit form (unsigned zero-extended, signed sign-extended), type tags derived from
+> the parse AST exactly as eval derives them (suffixes, declared types, ev_unify's wider-wins,
+> ev_adapt's renorm-at-seams with literal folding), and the width law emitted precisely where
+> ev_binop/ev_adapt apply it: zx/sx renorm after narrow add/sub/mul/shl and signed div/mod/shr,
+> bias-XOR pairs for u64/untyped ordered compares (LHS bias byte-INSERTED post-hoc — the postorder
+> walk learns the law only after the RHS tag), DIV_U/REM_U (0x2A/0x2B, already in svir_interp since
+> Λ0) for unsigned division, width-typed loads/stores (0x80-0x89) with esz-scaled indexing for typed
+> module arrays and scalar cells, loop/break/continue via an emitter control-frame stack that mirrors
+> the interp's runtime frames (ELSE arms excluded — 0x43 pops the IF frame), and EXPLICIT REFUSAL
+> classes for everything outside the fragment (`svir-unsup class=… kind=…` on stderr; NO silent
+> miscompiles — the rung-1 silent-skip poison is dead). On the width-free fragment the lowering
+> DEGENERATES to iiisv2's exact bytes — gate arm (A1) live-parity 6/6 held on the FIRST run.
+> Typed canonical bytes are pinned by golden mhash (arm A2, `svir_backend_goldens.txt`: DDC ×3 +
+> sq07/sq08). THE SQUARE GREW WIDTH TEETH: sq07 (u64 bias/DIV_U discriminators with exactly one
+> bit63-set side, narrow wrap, wide-count law, i8/u32 element cells, narrowing casts) and sq08
+> (row-10b mixed-width seams) — 8/8 N≡E≡S. Falsifier two-path: bias law disabled → sq07 splits
+> N=E=90 S=61, localized to S; restore → green. (First falsifier draft did NOT fire — check 61
+> compared two bit63-set values, where signed≡unsigned; the probe was STRENGTHENED to discriminate.
+> A gate arm that ran EMPTY under IFS=newline-tab was likewise caught and now FATALs — silence is
+> not green.) Authoring sq07 adjudicated TWO unpinned semantic corners (ledger rows 11/12: narrow
+> shifts run WIDE &63; narrow signed `>>` is arithmetic-in-effect via the wide normal form) — the
+> width theater found real meaning-law gaps before route S ever gated, and E+S agreeing on BOTH wrong
+> models until native entered the theater is the measured proof that three routes — with the
+> incumbent among them — are what break common-mode blindness. Re-embed chain v2 sealed the rung:
+> fixpoint c2b8ac78 (5th of the session), corpus, all gates, warm, meaning gate, and THE FIRST
+> CORPUS-SQUARE CENSUS (run_svir_corpus_gate.sh: rc-axis N≡S per non-negative KAT, S-frontier census
+> as the named burn-down ledger, up-only PASS ratchet in svir_corpus_ratchet.txt).
+>
+> **LEDGER ROW 15 — THE CENSUS'S MAIDEN CATCH (2026-07-10).** The first corpus-wide sweep FIRED:
+> 251_newline_else split N=99/S=4; route E adjudicated 99 with the incumbent (2-vs-1) → route-S
+> defect. Hand-decoding the emitted 57-byte module showed the `else if` arm's compare and both tail
+> arms ABSENT: sv_s_if fed the else arm to sv_block, and block_stmt_count on a NON-block (an
+> else-if arm is a bare STMT_IF node) reads 0 — the arm emitted EMPTY with no refusal, and the
+> fall-through default-return synthesizer masked the hole with `return 0`. Rung 2's named-refusal
+> discipline had killed the expression-level silent skips; this was the last STATEMENT-arm seam.
+> FIX: `sv_arm` transcribes eval's definitional `ev_exec_block_or_stmt` dispatch (block → sv_block,
+> statement → sv_stmt, unknown kinds → LOUD SVU_STMT_KIND) for BOTH if-arms; sq11_elseif joins the
+> square (3-arm chain, nested else-if in a loop, corpus-251's newline shape; pre-fix S=2 measured).
+> NO existing theater could have seen it — sq01–08 audited clean of else-if, DDC clean, iiisv2
+> cannot parse the form (pblock after `else` expects `{`) — only the corpus-wide census had the
+> reach. The first census (RED, sealed as evidence): total=1820 pass=99 diverge=1 unsup=1588
+> s-timeout=2 s-defect=0 native-skip=130; S-frontier first-blocker classes extern-fn 1246 /
+> ptr ≈218 / var-init ≈85 / const-expr 35 / local-array 3. ZERO S_DEFECTs corpus-wide: the backend
+> refused, never broke — except the one semantic drop the instrument existed to catch. Census-key
+> wart for the next cg_svir chain: ptr/var-init rows key on raw NODE handles (kind=5368…/8053…),
+> splintering the ledger; normalize the refusal payload to the AST kind. **Chain v2b (the sv_arm
+> fix aboard, fixpoint d0cfe5b6 — the campaign's 6th) re-sealed every phase: corpus 1595/0,
+> svir-gate A1 6/6 + A2 goldens 5/5 NO-DRIFT + square 9/9 (sq11 first run), iiisv2 square 6/6,
+> meaning GREEN (597/1820, 0 divergence, ratchet 597 HELD), and THE SECOND CENSUS GREEN:
+> pass=100, diverge=0 — 251→PASS the SOLE movement. Ratchet PINNED at 100 (up-only from here).**
+
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the
 definitional evaluator — the known const-expr-init wart [recorded: LENS/STUDIO trap ledger] dies not
@@ -276,6 +329,8 @@ would compare link+run BEHAVIOR, not bytes — future work, named here.
 | 8 | 2026-07-09 | 2488/2489 (output axis, first firing) | rc equal; 156B vs 148B / 104B vs 100B | **comparator defect — the instrument's OWN extraction was asymmetric** | msys sed strips `\r` from lines it rewrites: the eval side's protocol-strip pass lost CRLF while the native side kept it → false OUT_DIVERGE on any multi-line output. Adjudicated by raw-byte proof (both routes emit identical CRLF streams; symmetric `tr -d '\r'` normalization → byte-identical). Fixed on BOTH sides + the (d2) selftest arm hardened to multi-line output so the class has a permanent tooth. Comparison is now CR-insensitive + trailing-newline-insensitive — the two NAMED softnesses of the output axis. |
 | 9 | 2026-07-09 | probe floor flake (p01/p08/p18, sweep 1) | stochastic, 3 distinct codes | **gate-environment defect — OneDrive stale read-after-write** | Rapidly-rewritten scratch files under the OneDrive tree served STALE content (measured 1/40 on the exact gate invocation shape): the probes' eval output read back as prior-run bytes → misclassification. The read-side sibling of the staged-exec trap. Fixed: every same-invocation read-back file lives in /tmp; the cache dir stays on OneDrive because its reads are settled (written whole runs earlier); fresh-branch rc is kept live instead of re-read. |
 | 10 | 2026-07-09 | sq02 (the square's FIRST catch) | E=213 vs N=S=196 | **evaluator STRICTER than incumbent → conformed** (two laws) | (10) ADAPTATION: the compiled route adapts ANY int to ANY int slot by width-renormalization (narrowing stores truncate movb/movw/movl; widening re-extends by target signedness) — ev_adapt's same-width+same-sign-only arm was the named root of the code=102 frontier class; now `ev_norm(v, want)` universally. (10b) BINARY UNIFY: mixed-WIDTH operands take the WIDER tag — natively the narrow side loads extended per its OWN signedness and the op runs wide; evaluator values are stored pre-normalized so no transformation needed. Equal-width mixed-SIGN stays refused until a differential adjudicates it. Θ2-0's square fired on its FIRST run and localized the axis to E alone — the instrument naming its own softness. |
+| 11 | 2026-07-09 | sq07 check 66 (authoring pass, N=66 E=90) | `5u32<<33`: N=0, E(model)=10 | **evaluator model EXTRAPOLATION → conformed** | NARROW SHIFTS RUN WIDE: the compiled route executes every shift in the 64-bit unit (count &63) and the operand width renormalizes the RESULT — `5u32<<33 == 0`, not `5<<(33&31)`. ev_shmask's &31 arm modeled "narrow ops in 32-bit registers", extrapolating beyond p10's pins — p10's counts are all IN-RANGE, where the two masks cannot be told apart. Measured u8/u16/u32 with out-of-range counts (shp1-3): the wide law is uniform. ev_shmask → 63 universally; §W lowers narrow shifts BARE + renorm. |
+| 12 | 2026-07-09 | sq07 check 68 (post-11 pass, N=68 E=S=90) | `(-5i32)>>1`: N=-3, E=S(model)=0x7FFFFFFD | **evaluator pre-mask arm → conformed (p10 REFINED, not overturned)** | ONE SHIFT LAW: the WIDE normal-form value shifts logically; at w=8 that IS p10's logical shr (no extension bits), but NARROW SIGNED operands see their sign-extension bits shift in — arithmetic **in effect** — because the incumbent shifts the sign-extended 64-bit pattern and truncates. eval's `mv = av & mask(w)` pre-mask modeled a narrow-register shift the incumbent never performs; deleted. §W's `>>` row lowers to bare 0x29 + signed renorm — and route S agreed with E on BOTH wrong models before the fix, proving the common-mode blindness Θ0 warned about is broken ONLY by the three-route square with native in the theater. |
 
 **Θ2 rung 0 VERDICT (2026-07-09 s2): `[square] GREEN: 2/2 three-route agreement` — the commuting
 square HOLDS (sq01 N=E=S=61; sq02 N=E=S=196 after rows 10/10b). Three independent executions of

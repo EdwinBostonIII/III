@@ -44,7 +44,10 @@ for _la in 1 2 3; do rm -f "$RUN_DIR/iiisv2$BIN_SUFFIX"; gcc "$RUN_DIR/iiisv2.o"
 [[ -x "$RUN_DIR/iiisv2$BIN_SUFFIX" ]] || { echo "[square] FATAL: iiisv2 link"; exit 2; }
 
 FAIL=0; N=0
-for src in "$SQ_DIR"/sq*.iii; do
+# WIDTH-FREE probes only (sq01-06): route S here is iiisv2, which DROPS
+# width by design (§3.3).  The TYPED theater (sq07+) runs through the
+# production backend's gate (run_svir_backend_gate.sh, §W) instead.
+for src in "$SQ_DIR"/sq0[1-6]*.iii; do
     [[ -f "$src" ]] || continue
     N=$((N+1)); base="$(basename "$src" .iii)"
     # route N

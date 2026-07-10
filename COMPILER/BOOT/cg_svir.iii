@@ -1,48 +1,68 @@
 /* COMPILER/BOOT/cg_svir.iii — Γ1: THE SVIR BACKEND of the PRODUCTION compiler.
  *
  * Consumes the production parse-AST (lex.iii + parse.iii, the SAME front-end
- * that feeds cg_r3's x86 backend) and emits a canonical SVIR v1 module —
- * BYTE-IDENTICAL to iiisv2 (DOCS/SVIR-V1-CANONICAL.md) for every accepted
- * program.  This is what makes the Θ2 commuting square THREE-route corpus-wide:
- * routes N (sema+cg_r3+x86) and S (cg_svir→SVIR→svir_interp) share lex+parse
- * but fork at codegen, so a pairwise split localizes the fault to a single
- * translator.  Unlike iiisv2 (its own lexer + shunting-yard), cg_svir needs
- * NO precedence engine: the production parser already resolved precedence into
- * the binary-expr tree, so canonical postfix is a plain POSTORDER walk.
+ * that feeds cg_r3's x86 backend) and emits an SVIR v1 module.  Two laws:
+ *
+ *   CANONICAL   — for the width-free fragment (i64/untyped scalars, u8 module
+ *                 arrays: everything iiisv2 can express) the emission is
+ *                 BYTE-IDENTICAL to iiisv2 (DOCS/SVIR-V1-CANONICAL.md).
+ *   FAITHFUL    — for width-carrying programs (Θ2-full rung 2) the emission
+ *                 implements THE DEFINITIONAL LAW (eval.iii, square-proven):
+ *                 values live on the SVIR stack in eval's NORMAL FORM
+ *                 (unsigned: zero-extended, signed: sign-extended to 64) and
+ *                 every op renormalizes exactly where ev_binop/ev_adapt do —
+ *                 masks after narrow add/sub/mul/shl, bias-XOR for u64/ptr-
+ *                 free unsigned ordered compares, DIV_U/REM_U (0x2A/0x2B)
+ *                 for unsigned division, &31 shift counts below 64 bits
+ *                 (ev_shmask), logical `>>` for ALL int types (pinned p10).
+ *
+ * Everything outside the supported fragment is REFUSED LOUDLY with a named
+ * class (`svir-unsup class=... kind=...` on stderr, nonzero return) — the
+ * corpus sweep's S-frontier census.  NO SILENT MISCOMPILES.
  *
  * Independence: consumes AST only — NO sema, NO sid, NO cg_r*, NO emit/link.
- * Output form: the `gen_svir.iii` module text (var SVIR = [...] + svir_ptr/
- * svir_len), identical to iiisv2's emit_module, so svir_interp runs it and the
- * DDC byte-gate compares it unchanged.
+ * (Types come from declarations + suffixes + eval's unify law, the same
+ * derivation the definitional evaluator performs; sema stays out of route S.)
  */
 module cg_svir
 
 extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stderr_c() -> u64 from "lex_runtime.c"
 
 extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_position_first(ast: u64, node: u32, out: u64) -> i32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_fn_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_fn_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_return_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_decl_for_name(ast: u64, name_offset: u32, name_length: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_decl_rhs_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast.iii"
@@ -53,9 +73,12 @@ extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "ast
 extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_loop_body(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast.iii"
@@ -64,29 +87,51 @@ extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "a
 extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hex_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_bool_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_sizeof_resolved(ast: u64, node: u32) -> u64 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_inner(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 from "ast.iii"
 
-/* AST node kinds + binary op enum (ast.iii canon, shared with eval.iii) */
+/* AST node kinds + op enums (ast.iii canon, shared with eval.iii) */
 const K_FN_DECL: u32 = 4u32
+const K_TYPE_DECL: u32 = 5u32
 const K_CONST_DECL: u32 = 6u32
+const K_EXTERN_DECL: u32 = 7u32
+const K_TYPE_REF: u32 = 15u32
+const K_TYPE_PTR: u32 = 16u32
 const K_TYPE_ARRAY: u32 = 17u32
 const K_STMT_LET: u32 = 20u32
 const K_STMT_RETURN: u32 = 26u32
 const K_STMT_ASSIGN: u32 = 27u32
 const K_STMT_EXPR: u32 = 28u32
+const K_EXPR_BLOCK: u32 = 51u32                           /* fn/while/if bodies; else-if arms are BARE STMT_IF */
 const K_EXPR_INT: u32 = 37u32
+const K_EXPR_HEX: u32 = 38u32
+const K_EXPR_STR: u32 = 40u32
+const K_EXPR_BOOL: u32 = 41u32
 const K_EXPR_IDENT: u32 = 45u32
 const K_EXPR_CALL: u32 = 46u32
+const K_EXPR_FIELD: u32 = 47u32
 const K_EXPR_INDEX: u32 = 48u32
 const K_EXPR_BINARY: u32 = 49u32
+const K_EXPR_UNARY: u32 = 50u32
 const K_EXPR_PAREN: u32 = 53u32
 const K_STMT_IF: u32 = 69u32
 const K_STMT_WHILE: u32 = 70u32
 const K_EXPR_CAST: u32 = 72u32
+const K_EXPR_SIZEOF: u32 = 73u32
 const K_VAR_DECL: u32 = 74u32
+const K_STMT_LOOP: u32 = 76u32
+const K_STMT_BREAK: u32 = 77u32
+const K_STMT_CONTINUE: u32 = 78u32
+const K_STRUCT_DECL: u32 = 75u32
 
 const B_ADD: u32 = 1u32   const B_SUB: u32 = 2u32   const B_MUL: u32 = 3u32
 const B_DIV: u32 = 4u32   const B_MOD: u32 = 5u32   const B_AND: u32 = 6u32
@@ -94,29 +139,121 @@ const B_OR: u32 = 7u32    const B_XOR: u32 = 8u32   const B_SHL: u32 = 9u32
 const B_SHR: u32 = 10u32  const B_EQ: u32 = 11u32   const B_NEQ: u32 = 12u32
 const B_LT: u32 = 13u32   const B_LE: u32 = 14u32   const B_GT: u32 = 15u32
 const B_GE: u32 = 16u32
+const U_NEG: u32 = 1u32   const U_NOT: u32 = 2u32   const U_BNOT: u32 = 3u32
+const U_DEREF: u32 = 4u32 const U_ADDR: u32 = 5u32
+
+/* type tags — eval.iii's exact encoding: class | width<<8 | signed<<16 */
+const TC_UNIT: u64 = 0u64
+const TC_BOOL: u64 = 1u64
+const TC_INT: u64 = 2u64
+const TC_PTR: u64 = 3u64
+const T_UNIT: u64 = 0u64
+const T_BOOL: u64 = 257u64
+const T_UNTYPED: u64 = 2u64
+const T_BAD: u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* refusal classes (the S-frontier census names) */
+const SVU_NONE: u32 = 0u32
+const SVU_STRUCT: u32 = 1u32
+const SVU_PTR: u32 = 2u32
+const SVU_STRING: u32 = 3u32
+const SVU_EXTERN_FN: u32 = 4u32
+const SVU_FNPTR: u32 = 5u32
+const SVU_MIXED_SIGN: u32 = 6u32
+const SVU_TYPE: u32 = 7u32
+const SVU_CONST_EXPR: u32 = 8u32
+const SVU_VAR_INIT: u32 = 9u32
+const SVU_LOCAL_ARRAY: u32 = 10u32
+const SVU_CONST_ARRAY: u32 = 11u32
+const SVU_EXPR_KIND: u32 = 12u32
+const SVU_STMT_KIND: u32 = 13u32
+const SVU_CAP: u32 = 14u32
+const SVU_SUFFIX: u32 = 15u32
+const SVU_IDENT: u32 = 16u32
+const SVU_LVALUE: u32 = 17u32
+const SVU_BOOL_OP: u32 = 18u32
+const SVU_UNIT_VALUE: u32 = 19u32
+const SVU_DECL_KIND: u32 = 20u32
 
 /* ── state ─────────────────────────────────────────────────────────────── */
 var SV_AST : u64 = 0u64
 var SV_SRC : u64 = 0u64
+var SV_SRCLEN : u64 = 0u64
+var SV_UNSUP : u32 = 0u32       /* first refusal class (sticky) */
+var SV_UKIND : u32 = 0u32       /* offending node kind / detail */
 
 /* function ordering (main first, then source order) — mirrors iiisv2.prescan */
-var FNODE : [u32; 256]  var FNC : u32 = 0u32
+var FNODE : [u32; 256]  var FRT : [u64; 256]  var FNC : u32 = 0u32
 
-/* module-level array bases (declaration order; MTOP starts at 16) */
-var ARRO : [u32; 64]  var ARRL : [u32; 64]  var ARRB : [u64; 64]  var ARRN : u32 = 0u32  var MTOP : u64 = 0u64
+/* module-level cells (arrays AND zero-init scalars); base offsets from 16 */
+var ARRO : [u32; 128]  var ARRL : [u32; 128]  var ARRB : [u64; 128]
+var ARRT : [u64; 128]  var ARRZ : [u64; 128]  var ARRK : [u32; 128]   /* elem tag / elem size / 1=array 0=scalar */
+var ARRN : u32 = 0u32  var MTOP : u64 = 0u64
 
-/* module-level int-literal consts (name -> value) */
-var CO : [u32; 128]  var CL : [u32; 128]  var CV : [u64; 128]  var CNN : u32 = 0u32
+/* module-level literal consts (INT/HEX; value normalized per declared type) */
+var CO : [u32; 128]  var CL : [u32; 128]  var CV : [u64; 128]  var CT : [u64; 128]  var CNN : u32 = 0u32
 
 /* per-function local slots (params first, then lets in encounter order) */
-var LO : [u32; 256]  var LL : [u32; 256]  var LNN : u32 = 0u32
+var LO : [u32; 256]  var LL : [u32; 256]  var LT : [u64; 256]  var LNN : u32 = 0u32
+var CUR_FRT : u64 = 0u64        /* current fn's return tag */
+
+/* emitter control-frame stack (mirrors the interp's runtime csp): kinds
+ * 0=BLOCK(loop exit) 1=LOOP(header) 2=IF(then-arm live).  Break targets the
+ * nearest BLOCK, continue the nearest LOOP; the ELSE arm of an IF runs with
+ * its frame POPPED at runtime (0x43 pops, then jumps past END), so sv_s_if
+ * pops the frame before emitting the else arm. */
+var CTLK : [u32; 64]  var CTLN : u32 = 0u32
 
 /* current function body byte buffer */
-var BD : [u8; 16384]  var BLN : u64 = 0u64
+var BD : [u8; 65536]  var BLN : u64 = 0u64
 var SV_LAST_OP : u32 = 0u32
 
 /* the assembled module bytes (v1 envelope) */
-var MO : [u8; 65536]  var MLN : u64 = 0u64
+var MO : [u8; 262144]  var MLN : u64 = 0u64
+
+/* literal position scratch (iii_ast_position_first out-buffer) */
+var SV_POSBUF : [u8; 64]
+var SV_LIT : u64 = 0u64
+
+/* type-tag outs (transcribed ev_type_tag) */
+var SVT_TT : u64 = 0u64   var SVT_SZ : u64 = 0u64
+var SVT_ARR : u32 = 0u32  var SVT_ELEM : u64 = 0u64  var SVT_CNT : u64 = 0u64
+
+/* ── tag helpers (eval encoding) ───────────────────────────────────────── */
+fn t_class(t: u64) -> u64 { return t & 255u64 }
+fn t_w(t: u64) -> u64 { return (t >> 8u64) & 255u64 }
+fn t_s(t: u64) -> u64 { return (t >> 16u64) & 1u64 }
+fn mk_int(w: u64, sg: u64) -> u64 { return TC_INT + (w << 8u64) + (sg << 16u64) }
+
+fn sv_mask(w: u64) -> u64 {
+    if w == 8u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if w == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let full: u64 = w * 8u64
+    let mut m: u64 = 1u64
+    m = m << full
+    return m - 1u64
+}
+fn sv_sext(v: u64, w: u64) -> u64 {
+    if w == 8u64 { return v }
+    if w == 0u64 { return v }
+    let m: u64 = 1u64 << (w * 8u64 - 1u64)
+    let mv: u64 = v & sv_mask(w)
+    return (mv ^ m) - m
+}
+/* eval's ev_norm: canonical 64-bit form of value v under tag t */
+fn sv_normv(v: u64, t: u64) -> u64 {
+    let c: u64 = t_class(t)
+    if c == TC_BOOL { if v != 0u64 { return 1u64 } return 0u64 }
+    if c != TC_INT { return v }
+    let w: u64 = t_w(t)
+    if w == 0u64 { return v }
+    if t_s(t) == 1u64 { return sv_sext(v, w) }
+    return v & sv_mask(w)
+}
+
+fn sv_refuse(cls: u32, kind: u32) {
+    if SV_UNSUP == 0u32 { SV_UNSUP = cls  SV_UKIND = kind }
+}
 
 /* ── name compare against the production source buffer ─────────────────── */
 fn sv_neq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 {
@@ -128,14 +265,160 @@ fn sv_neq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 {
     }
     return 1u32
 }
+/* source-range vs literal text (literal ends at '~', the .iii string law) */
+fn sv_name_is(off: u32, len: u32, s: u64, sl: u64) -> u32 {
+    if (len as u64) != sl { return 0u32 }
+    let mut j: u64 = 0u64
+    while j < sl {
+        let p: *u8 = (s + j) as *u8
+        if iii_lex_read_u8_at_c(SV_SRC, (off as u64) + j) != (p[0u64] as u32) { return 0u32 }
+        j = j + 1u64
+    }
+    return 1u32
+}
 
-/* ── body byte emitters (mirror iiisv2 erb/eb/econst/eu8) ─────────────── */
-fn erb(b: u32) { if BLN < 16384u64 { BD[BLN] = (b & 0xFFu32) as u8  BLN = BLN + 1u64 } }
+/* ── body byte emitters (canonical shapes; mirror iiisv2 erb/eb/econst) ── */
+fn erb(b: u32) { if BLN < 65536u64 { BD[BLN] = (b & 0xFFu32) as u8  BLN = BLN + 1u64 } else { sv_refuse(SVU_CAP, 1u32) } }
 fn eb(b: u32) { SV_LAST_OP = b & 0xFFu32  erb(b) }
 fn econst(v: u64) { eb(0x01u32)  let mut k: u32 = 0u32  while k < 8u32 { erb((v >> (8u64 * (k as u64))) as u32)  k = k + 1u32 } }
 fn eu8(o: u32, a: u32) { eb(o)  erb(a) }
+fn mo(b: u32) { if MLN < 262144u64 { MO[MLN] = (b & 0xFFu32) as u8  MLN = MLN + 1u64 } else { sv_refuse(SVU_CAP, 2u32) } }
 
-fn mo(b: u32) { if MLN < 65536u64 { MO[MLN] = (b & 0xFFu32) as u8  MLN = MLN + 1u64 } }
+/* width-law synth sequences (SVIR-V1-CANONICAL §width-lowering) */
+/* insert the 10-byte bias prologue (CONST 2^63 ; XOR) at body offset `at`,
+ * shifting [at..BLN) up — the ordered-compare lowering learns it needs the
+ * LHS biased only after the RHS's tag is known (postorder), and the
+ * canonical byte shape keeps the bias adjacent to its operand. */
+fn e_insert_bias_at(at: u64) {
+    if BLN + 10u64 > 65536u64 { sv_refuse(SVU_CAP, 1u32)  return }
+    let mut j: u64 = BLN
+    while j > at { j = j - 1u64  BD[j + 10u64] = BD[j] }
+    BD[at] = 0x01u8
+    let mut k: u64 = 0u64
+    let bv: u64 = 0x8000000000000000u64
+    while k < 8u64 { BD[at + 1u64 + k] = ((bv >> (8u64 * k)) & 255u64) as u8  k = k + 1u64 }
+    BD[at + 9u64] = 0x27u8
+    BLN = BLN + 10u64
+}
+fn e_zx(w: u64) { econst(sv_mask(w))  eb(0x25u32) }
+fn e_sx(w: u64) {
+    let sb: u64 = 1u64 << (w * 8u64 - 1u64)
+    econst(sv_mask(w))  eb(0x25u32)
+    econst(sb)  eb(0x27u32)
+    econst(sb)  eb(0x21u32)
+}
+/* renormalize stack-top to tag t (the emitted image of ev_norm) */
+fn e_renorm(t: u64) {
+    if t_class(t) != TC_INT { return }
+    let w: u64 = t_w(t)
+    if w == 0u64 { return }
+    if w == 8u64 { return }
+    if t_s(t) == 1u64 { e_sx(w) } else { e_zx(w) }
+}
+fn e_bias() { econst(0x8000000000000000u64)  eb(0x27u32) }
+
+/* ── literal typing (transcribed ev_lit_tag: suffix scan of source text) ── */
+fn sv_lit_tag(node: u32) -> u32 {
+    SV_LIT = T_UNTYPED
+    if iii_ast_position_first(SV_AST, node, &SV_POSBUF as u64) != 1i32 { return 0u32 }
+    if iii_lex_read_u32_c(&SV_POSBUF as u64, 0u64) != 0u32 { return 0u32 }
+    let s: u64 = iii_lex_read_u32_c(&SV_POSBUF as u64, 4u64) as u64
+    let e: u64 = iii_lex_read_u32_c(&SV_POSBUF as u64, 8u64) as u64
+    if e <= s { return 0u32 }
+    if e > SV_SRCLEN { return 0u32 }
+    let mut p: u64 = s + 1u64
+    let mut sfx: u64 = 0u64
+    while p < e {
+        let ch: u32 = iii_lex_read_u8_at_c(SV_SRC, p)
+        if sfx == 0u64 { if ch == 117u32 { sfx = p } }
+        if sfx == 0u64 { if ch == 105u32 { sfx = p } }
+        p = p + 1u64
+    }
+    if sfx == 0u64 { return 0u32 }
+    let so: u32 = sfx as u32
+    let sl: u64 = e - sfx
+    if sv_name_is(so, sl as u32, "u8" as u64, 2u64) == 1u32 { SV_LIT = mk_int(1u64, 0u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "u16" as u64, 3u64) == 1u32 { SV_LIT = mk_int(2u64, 0u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "u32" as u64, 3u64) == 1u32 { SV_LIT = mk_int(4u64, 0u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "u64" as u64, 3u64) == 1u32 { SV_LIT = mk_int(8u64, 0u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "usize" as u64, 5u64) == 1u32 { SV_LIT = mk_int(8u64, 0u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "i8" as u64, 2u64) == 1u32 { SV_LIT = mk_int(1u64, 1u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "i16" as u64, 3u64) == 1u32 { SV_LIT = mk_int(2u64, 1u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "i32" as u64, 3u64) == 1u32 { SV_LIT = mk_int(4u64, 1u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "i64" as u64, 3u64) == 1u32 { SV_LIT = mk_int(8u64, 1u64)  return 0u32 }
+    if sv_name_is(so, sl as u32, "isize" as u64, 5u64) == 1u32 { SV_LIT = mk_int(8u64, 1u64)  return 0u32 }
+    sv_refuse(SVU_SUFFIX, iii_ast_node_kind(SV_AST, node))
+    return 1u32
+}
+
+/* ── type nodes -> tags (transcribed ev_type_tag; aliases via AST scan) ─── */
+fn sv_type_find_rhs(off: u32, len: u32) -> u32 {
+    let d: u32 = iii_ast_type_decl_for_name(SV_AST, off, len)
+    if d == 0u32 { return 0u32 }
+    if iii_ast_node_kind(SV_AST, d) == K_STRUCT_DECL { sv_refuse(SVU_STRUCT, K_STRUCT_DECL)  return 0u32 }
+    return iii_ast_type_decl_rhs_type(SV_AST, d)
+}
+
+fn sv_type_ref_tag(off: u32, len: u32, depth: u32) -> u32 {
+    if sv_name_is(off, len, "u8" as u64, 2u64) == 1u32 { SVT_TT = mk_int(1u64, 0u64)  SVT_SZ = 1u64  return 0u32 }
+    if sv_name_is(off, len, "u16" as u64, 3u64) == 1u32 { SVT_TT = mk_int(2u64, 0u64)  SVT_SZ = 2u64  return 0u32 }
+    if sv_name_is(off, len, "u32" as u64, 3u64) == 1u32 { SVT_TT = mk_int(4u64, 0u64)  SVT_SZ = 4u64  return 0u32 }
+    if sv_name_is(off, len, "u64" as u64, 3u64) == 1u32 { SVT_TT = mk_int(8u64, 0u64)  SVT_SZ = 8u64  return 0u32 }
+    if sv_name_is(off, len, "usize" as u64, 5u64) == 1u32 { SVT_TT = mk_int(8u64, 0u64)  SVT_SZ = 8u64  return 0u32 }
+    if sv_name_is(off, len, "i8" as u64, 2u64) == 1u32 { SVT_TT = mk_int(1u64, 1u64)  SVT_SZ = 1u64  return 0u32 }
+    if sv_name_is(off, len, "i16" as u64, 3u64) == 1u32 { SVT_TT = mk_int(2u64, 1u64)  SVT_SZ = 2u64  return 0u32 }
+    if sv_name_is(off, len, "i32" as u64, 3u64) == 1u32 { SVT_TT = mk_int(4u64, 1u64)  SVT_SZ = 4u64  return 0u32 }
+    if sv_name_is(off, len, "i64" as u64, 3u64) == 1u32 { SVT_TT = mk_int(8u64, 1u64)  SVT_SZ = 8u64  return 0u32 }
+    if sv_name_is(off, len, "isize" as u64, 5u64) == 1u32 { SVT_TT = mk_int(8u64, 1u64)  SVT_SZ = 8u64  return 0u32 }
+    if sv_name_is(off, len, "bool" as u64, 4u64) == 1u32 { SVT_TT = T_BOOL  SVT_SZ = 1u64  return 0u32 }
+    if sv_name_is(off, len, "unit" as u64, 4u64) == 1u32 { SVT_TT = T_UNIT  SVT_SZ = 0u64  return 0u32 }
+    if depth >= 8u32 { sv_refuse(SVU_TYPE, 0u32)  return 1u32 }
+    let rhs: u32 = sv_type_find_rhs(off, len)
+    if rhs == 0u32 { sv_refuse(SVU_TYPE, 0u32)  return 1u32 }
+    return sv_type_tag_d(rhs, depth + 1u32)
+}
+
+fn sv_type_tag_d(tnode: u32, depth: u32) -> u32 {
+    SVT_ARR = 0u32
+    SVT_ELEM = 0u64
+    SVT_CNT = 0u64
+    if tnode == 0u32 { SVT_TT = T_UNIT  SVT_SZ = 0u64  return 0u32 }
+    let k: u32 = iii_ast_node_kind(SV_AST, tnode)
+    if k == K_TYPE_REF {
+        return sv_type_ref_tag(iii_ast_type_ref_name_off(SV_AST, tnode), iii_ast_type_ref_name_len(SV_AST, tnode), depth)
+    }
+    if k == K_TYPE_PTR { sv_refuse(SVU_PTR, k)  return 1u32 }
+    if k == K_TYPE_ARRAY {
+        let inner: u32 = iii_ast_type_array_inner(SV_AST, tnode)
+        let cnt: u64 = iii_ast_type_array_count(SV_AST, tnode)
+        let rc: u32 = sv_type_tag_d(inner, depth + 1u32)
+        if rc != 0u32 { return rc }
+        if SVT_ARR == 1u32 { sv_refuse(SVU_TYPE, k)  return 1u32 }
+        if t_class(SVT_TT) != TC_INT { sv_refuse(SVU_TYPE, k)  return 1u32 }
+        let et: u64 = SVT_TT
+        let esz: u64 = SVT_SZ
+        SVT_ARR = 1u32
+        SVT_ELEM = et
+        SVT_CNT = cnt
+        SVT_SZ = esz * cnt
+        return 0u32
+    }
+    sv_refuse(SVU_TYPE, k)
+    return 1u32
+}
+fn sv_type_tag(tnode: u32) -> u32 { return sv_type_tag_d(tnode, 0u32) }
+
+/* ── unify (transcribed ev_unify: untyped adopts; wider wins; equal-width
+ *    mixed-sign REFUSED until the instrument adjudicates it) ─────────────── */
+fn sv_unify(ta: u64, tb: u64) -> u64 {
+    let wa: u64 = t_w(ta)
+    let wb: u64 = t_w(tb)
+    if wa == 0u64 { if wb == 0u64 { return T_UNTYPED } return tb }
+    if wb == 0u64 { return ta }
+    if wa == wb { if t_s(ta) == t_s(tb) { return ta } return T_BAD }
+    if wa > wb { return ta }
+    return tb
+}
 
 /* ── lookups ───────────────────────────────────────────────────────────── */
 fn fidx(off: u32, len: u32) -> i32 {
@@ -147,209 +430,676 @@ fn fidx(off: u32, len: u32) -> i32 {
     }
     return 0i32 - 1i32
 }
-fn arr_base(off: u32, len: u32) -> i64 {
+fn arr_idx(off: u32, len: u32) -> i32 {
     let mut k: u32 = 0u32
-    while k < ARRN { if sv_neq(ARRO[k as u64], ARRL[k as u64], off, len) == 1u32 { return ARRB[k as u64] as i64 }  k = k + 1u32 }
-    return 0i64 - 1i64
+    while k < ARRN { if sv_neq(ARRO[k as u64], ARRL[k as u64], off, len) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
 }
-fn const_val(off: u32, len: u32) -> i64 {
+fn const_idx(off: u32, len: u32) -> i32 {
     let mut k: u32 = 0u32
-    while k < CNN { if sv_neq(CO[k as u64], CL[k as u64], off, len) == 1u32 { return CV[k as u64] as i64 }  k = k + 1u32 }
-    return 0i64 - 1i64
+    while k < CNN { if sv_neq(CO[k as u64], CL[k as u64], off, len) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
 }
 fn lidx(off: u32, len: u32) -> i32 {
     let mut k: u32 = 0u32
     while k < LNN { if sv_neq(LO[k as u64], LL[k as u64], off, len) == 1u32 { return k as i32 }  k = k + 1u32 }
     return 0i32 - 1i32
 }
-fn ladd(off: u32, len: u32) -> u32 {
+fn ladd(off: u32, len: u32, t: u64) -> u32 {
     let s: u32 = LNN
-    if LNN < 256u32 { LO[LNN as u64] = off  LL[LNN as u64] = len  LNN = LNN + 1u32 }
+    if LNN < 256u32 { LO[LNN as u64] = off  LL[LNN as u64] = len  LT[LNN as u64] = t  LNN = LNN + 1u32 }
+    else { sv_refuse(SVU_CAP, 3u32) }
     return s
 }
 
-/* op-byte per SVIR-V1-CANONICAL §2 (must match iiisv2.opc) */
-fn opbyte(op: u32) -> u32 {
-    if op == B_MUL { return 0x22u32 }  if op == B_DIV { return 0x23u32 }  if op == B_MOD { return 0x24u32 }
-    if op == B_ADD { return 0x20u32 }  if op == B_SUB { return 0x21u32 }
-    if op == B_SHL { return 0x28u32 }  if op == B_SHR { return 0x29u32 }
-    if op == B_LT { return 0x32u32 }   if op == B_GT { return 0x35u32 }   if op == B_LE { return 0x34u32 }   if op == B_GE { return 0x33u32 }
-    if op == B_EQ { return 0x30u32 }   if op == B_NEQ { return 0x31u32 }
-    if op == B_AND { return 0x25u32 }  if op == B_XOR { return 0x27u32 }  if op == B_OR { return 0x26u32 }
-    return 0u32
+/* typed memory ops per element (elem tag, elem size) */
+fn e_load(et: u64, esz: u64) {
+    if esz == 1u64 {
+        eb(0x80u32)
+        if t_s(et) == 1u64 { e_sx(1u64) }        /* no 1-byte signed load op: synth */
+        return
+    }
+    if esz == 2u64 { if t_s(et) == 1u64 { eb(0x85u32) } else { eb(0x84u32) }  return }
+    if esz == 4u64 { if t_s(et) == 1u64 { eb(0x87u32) } else { eb(0x86u32) }  return }
+    eb(0x82u32)
+}
+fn e_store(esz: u64) {
+    if esz == 1u64 { eb(0x81u32)  return }
+    if esz == 2u64 { eb(0x88u32)  return }
+    if esz == 4u64 { eb(0x89u32)  return }
+    eb(0x83u32)
 }
 
-/* ── expression emission (POSTORDER = canonical postfix, precedence already
- *    resolved in the production tree) ──────────────────────────────────── */
-fn sv_expr(node: u32) {
+/* ── expression emission: postorder walk computing tags while emitting.
+ *    Returns the expression's tag; on refusal returns T_BAD with SV_UNSUP
+ *    set (emission already garbage past this point — the caller bails). ── */
+
+/* literal emission with adapt folding: eval evaluates the literal then
+ * ev_adapt-norms it into the target slot; the canonical byte image folds
+ * that norm into the CONST payload (same final value, minimal bytes). */
+fn sv_e_lit(node: u32, want: u64) -> u64 {
     let k: u32 = iii_ast_node_kind(SV_AST, node)
-    if k == K_EXPR_PAREN { sv_expr(iii_ast_paren_inner(SV_AST, node))  return }
-    if k == K_EXPR_CAST { sv_expr(iii_ast_cast_value(SV_AST, node))  return }
-    if k == K_EXPR_INT { econst(iii_ast_expr_int_u64(SV_AST, node))  return }
-    if k == K_EXPR_BINARY {
-        sv_expr(iii_ast_binary_lhs(SV_AST, node))
-        sv_expr(iii_ast_binary_rhs(SV_AST, node))
-        eb(opbyte(iii_ast_binary_op(SV_AST, node)))
-        return
+    let mut v: u64 = 0u64
+    if k == K_EXPR_INT { v = iii_ast_expr_int_u64(SV_AST, node) }
+    if k == K_EXPR_HEX { v = iii_ast_expr_hex_u64(SV_AST, node) }
+    if sv_lit_tag(node) != 0u32 { return T_BAD }
+    let mut t: u64 = SV_LIT
+    let mut ev: u64 = sv_normv(v, t)                     /* eval pushes norm(v, suffix-tag) */
+    if t_class(want) == TC_INT {
+        if t_w(want) != 0u64 { ev = sv_normv(ev, want)  t = want }   /* the folded adapt */
     }
-    if k == K_EXPR_CALL {
-        let callee: u32 = iii_ast_call_callee(SV_AST, node)
-        let off: u32 = iii_ast_ident_name_offset(SV_AST, callee)
-        let len: u32 = iii_ast_ident_name_length(SV_AST, callee)
-        let ac: u32 = iii_ast_call_arg_count(SV_AST, node)
-        let mut i: u32 = 0u32
-        while i < ac { sv_expr(iii_ast_arg_value(SV_AST, iii_ast_call_arg_at(SV_AST, node, i)))  i = i + 1u32 }
-        let fi: i32 = fidx(off, len)
-        if fi >= 0i32 { eb(0x70u32)  erb(fi as u32)  erb(ac) }
-        return
-    }
-    if k == K_EXPR_INDEX {
-        let obj: u32 = iii_ast_index_object(SV_AST, node)
-        let oo: u32 = iii_ast_ident_name_offset(SV_AST, obj)
-        let ol: u32 = iii_ast_ident_name_length(SV_AST, obj)
-        let ab: i64 = arr_base(oo, ol)
-        if ab >= 0i64 {
-            sv_expr(iii_ast_index_index(SV_AST, node))
-            if ab > 0i64 { econst(ab as u64)  eb(0x20u32) }
-            eb(0x80u32)
-        }
-        return
-    }
-    if k == K_EXPR_IDENT {
-        let off: u32 = iii_ast_ident_name_offset(SV_AST, node)
-        let len: u32 = iii_ast_ident_name_length(SV_AST, node)
-        let li: i32 = lidx(off, len)
-        if li >= 0i32 { eu8(0x10u32, li as u32)  return }
-        let cv: i64 = const_val(off, len)
-        if cv >= 0i64 { econst(cv as u64) }
-        return
-    }
+    econst(ev)
+    return t
 }
 
-/* ── statement emission ────────────────────────────────────────────────── */
-fn sv_block(node: u32) {
-    let n: u32 = iii_ast_block_stmt_count(SV_AST, node)
+fn sv_e_ident(node: u32) -> u64 {
+    let off: u32 = iii_ast_ident_name_offset(SV_AST, node)
+    let len: u32 = iii_ast_ident_name_length(SV_AST, node)
+    let li: i32 = lidx(off, len)
+    if li >= 0i32 { eu8(0x10u32, li as u32)  return LT[li as u64] }
+    let ci: i32 = const_idx(off, len)
+    if ci >= 0i32 { econst(CV[ci as u64])  return CT[ci as u64] }
+    let ai: i32 = arr_idx(off, len)
+    if ai >= 0i32 {
+        if ARRK[ai as u64] == 1u32 { sv_refuse(SVU_LVALUE, K_EXPR_IDENT)  return T_BAD }   /* bare array ident */
+        econst(ARRB[ai as u64])
+        e_load(ARRT[ai as u64], ARRZ[ai as u64])         /* module scalar cell */
+        return ARRT[ai as u64]
+    }
+    sv_refuse(SVU_IDENT, K_EXPR_IDENT)
+    return T_BAD
+}
+
+/* index address: emit idx expr, scale by esz, add base.  Returns 1 ok. */
+fn sv_e_index_addr(node: u32) -> u32 {
+    let obj: u32 = iii_ast_index_object(SV_AST, node)
+    if iii_ast_node_kind(SV_AST, obj) != K_EXPR_IDENT { sv_refuse(SVU_PTR, iii_ast_node_kind(SV_AST, obj))  return 0u32 }
+    let ai: i32 = arr_idx(iii_ast_ident_name_offset(SV_AST, obj), iii_ast_ident_name_length(SV_AST, obj))
+    if ai < 0i32 { sv_refuse(SVU_IDENT, K_EXPR_INDEX)  return 0u32 }
+    if ARRK[ai as u64] != 1u32 { sv_refuse(SVU_LVALUE, K_EXPR_INDEX)  return 0u32 }
+    let it: u64 = sv_expr(iii_ast_index_index(SV_AST, node))
+    if SV_UNSUP != 0u32 { return 0u32 }
+    if t_class(it) != TC_INT { sv_refuse(SVU_TYPE, K_EXPR_INDEX)  return 0u32 }
+    let esz: u64 = ARRZ[ai as u64]
+    if esz > 1u64 { econst(esz)  eb(0x22u32) }
+    let ab: u64 = ARRB[ai as u64]
+    if ab > 0u64 { econst(ab)  eb(0x20u32) }
+    SVT_ELEM = ARRT[ai as u64]
+    SVT_SZ = esz
+    return 1u32
+}
+
+fn sv_e_call(node: u32) -> u64 {
+    let callee: u32 = iii_ast_call_callee(SV_AST, node)
+    if iii_ast_node_kind(SV_AST, callee) != K_EXPR_IDENT { sv_refuse(SVU_FNPTR, iii_ast_node_kind(SV_AST, callee))  return T_BAD }
+    let off: u32 = iii_ast_ident_name_offset(SV_AST, callee)
+    let len: u32 = iii_ast_ident_name_length(SV_AST, callee)
+    let fi: i32 = fidx(off, len)
+    if fi < 0i32 {
+        if lidx(off, len) >= 0i32 { sv_refuse(SVU_FNPTR, K_EXPR_CALL)  return T_BAD }
+        sv_refuse(SVU_EXTERN_FN, K_EXPR_CALL)
+        return T_BAD
+    }
+    let fnode: u32 = FNODE[fi as u64]
+    let pc: u32 = iii_ast_fn_param_count(SV_AST, fnode)
+    let ac: u32 = iii_ast_call_arg_count(SV_AST, node)
     let mut i: u32 = 0u32
-    while i < n { sv_stmt(iii_ast_block_stmt_at(SV_AST, node, i))  i = i + 1u32 }
+    while i < ac {
+        let av: u32 = iii_ast_arg_value(SV_AST, iii_ast_call_arg_at(SV_AST, node, i))
+        let mut want: u64 = T_UNTYPED
+        if i < pc {
+            let p: u32 = iii_ast_fn_param_at(SV_AST, fnode, i)
+            if sv_type_tag(iii_ast_param_type(SV_AST, p)) != 0u32 { return T_BAD }
+            if SVT_ARR == 1u32 { sv_refuse(SVU_TYPE, K_EXPR_CALL)  return T_BAD }
+            want = SVT_TT
+        }
+        sv_emit_adapted(av, want)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        i = i + 1u32
+    }
+    eb(0x70u32)  erb(fi as u32)  erb(ac)
+    return FRT[fi as u64]
+}
+
+fn sv_e_binop(node: u32) -> u64 {
+    let op: u32 = iii_ast_binary_op(SV_AST, node)
+    let ln: u32 = iii_ast_binary_lhs(SV_AST, node)
+    let rn: u32 = iii_ast_binary_rhs(SV_AST, node)
+    /* SHIFTS unify value-side only (ev_binop): count may be any int width.
+     * NARROW SHIFTS RUN WIDE (sq07 adjudication, 2026-07-09): the count is
+     * masked &63 by the op itself — 0x28/0x29's own law IS the language's —
+     * and the operand width renormalizes the result. */
+    if op == B_SHL {
+        let ta: u64 = sv_expr(ln)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(ta) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        let tb: u64 = sv_expr(rn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(tb) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        eb(0x28u32)
+        e_renorm(ta)
+        return ta
+    }
+    if op == B_SHR {
+        let ta: u64 = sv_expr(ln)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(ta) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        let tb: u64 = sv_expr(rn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(tb) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        /* the WIDE normal form shifts directly (sq07 refinement of p10):
+         * signed narrow operands see their extension bits shift in --
+         * arithmetic in effect -- and the renorm re-signs the w-bit result */
+        eb(0x29u32)
+        if t_s(ta) == 1u64 { e_renorm(ta) }
+        return ta
+    }
+    /* bool×bool: eq/neq only (logicals are short-circuited by the parser
+     * into if-shapes before this backend ever sees them) */
+    let ta: u64 = sv_expr(ln)
+    if SV_UNSUP != 0u32 { return T_BAD }
+    let tb0: u64 = t_class(ta)
+    if tb0 == TC_BOOL {
+        let tb: u64 = sv_expr(rn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(tb) != TC_BOOL { sv_refuse(SVU_BOOL_OP, node)  return T_BAD }
+        if op == B_EQ { eb(0x30u32)  return T_BOOL }
+        if op == B_NEQ { eb(0x31u32)  return T_BOOL }
+        sv_refuse(SVU_BOOL_OP, node)
+        return T_BAD
+    }
+    if tb0 != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+    /* int×int: unify per eval's law; operand renorms to the unified tag are
+     * IDENTITIES on normal-form values (narrow->wider keeps the extension),
+     * so no operand bytes are ever emitted — only op + result-renorm. */
+    if op == B_LT { return sv_e_cmp(ta, rn, node, 0x32u32) }
+    if op == B_LE { return sv_e_cmp(ta, rn, node, 0x34u32) }
+    if op == B_GT { return sv_e_cmp(ta, rn, node, 0x35u32) }
+    if op == B_GE { return sv_e_cmp(ta, rn, node, 0x33u32) }
+    let tb: u64 = sv_expr(rn)
+    /* (ordered compares handled above; from here: eq/neq/arith/bit/div) */
+    if SV_UNSUP != 0u32 { return T_BAD }
+    if t_class(tb) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+    let ut: u64 = sv_unify(ta, tb)
+    if ut == T_BAD { sv_refuse(SVU_MIXED_SIGN, node)  return T_BAD }
+    if op == B_EQ { eb(0x30u32)  return T_BOOL }
+    if op == B_NEQ { eb(0x31u32)  return T_BOOL }
+    if op == B_ADD { eb(0x20u32)  e_renorm(ut)  return ut }
+    if op == B_SUB { eb(0x21u32)  e_renorm(ut)  return ut }
+    if op == B_MUL { eb(0x22u32)  e_renorm(ut)  return ut }
+    if op == B_AND { eb(0x25u32)  return ut }             /* bitops are closed under normal forms */
+    if op == B_OR  { eb(0x26u32)  return ut }
+    if op == B_XOR { eb(0x27u32)  return ut }
+    if op == B_DIV {
+        if t_s(ut) == 1u64 { eb(0x23u32)  if t_w(ut) < 8u64 { e_renorm(ut) }  return ut }
+        eb(0x2Au32)                                       /* DIV_U: unsigned + untyped (ev_binop's unsigned arm) */
+        return ut
+    }
+    if op == B_MOD {
+        if t_s(ut) == 1u64 { eb(0x24u32)  if t_w(ut) < 8u64 { e_renorm(ut) }  return ut }
+        eb(0x2Bu32)
+        return ut
+    }
+    sv_refuse(SVU_EXPR_KIND, node)
+    return T_BAD
+}
+
+/* ordered compare (ev_lt's emitted image).  The LHS is already on the
+ * stack (tag ta, bytes end at the current BLN); emit the RHS, unify, then:
+ *   signed unified tag        -> bare signed op (0x32-0x35)
+ *   unsigned narrow (w 1/2/4) -> bare (normal forms are positive in i64)
+ *   unsigned 64-bit / untyped -> bias BOTH operands (LHS bias is INSERTED
+ *                                at the recorded offset — the postorder walk
+ *                                only learns the law after the RHS's tag)
+ * then the signed op.  (a XOR 2^63) <signed (b XOR 2^63)  ==  a <u b. */
+fn sv_e_cmp(ta: u64, rn: u32, node: u32, opb: u32) -> u64 {
+    let mark: u64 = BLN
+    let tb: u64 = sv_expr(rn)
+    if SV_UNSUP != 0u32 { return T_BAD }
+    if t_class(tb) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+    let ut: u64 = sv_unify(ta, tb)
+    if ut == T_BAD { sv_refuse(SVU_MIXED_SIGN, node)  return T_BAD }
+    if t_s(ut) == 0u64 {
+        let w: u64 = t_w(ut)
+        let mut need: u32 = 0u32
+        if w == 8u64 { need = 1u32 }
+        if w == 0u64 { need = 1u32 }                      /* untyped compares are unsigned (ev_lt, signed=0) */
+        if need == 1u32 {
+            e_insert_bias_at(mark)                        /* LHS bias, before the RHS bytes */
+            if SV_UNSUP != 0u32 { return T_BAD }
+            e_bias()                                      /* RHS bias */
+        }
+    }
+    eb(opb)
+    return T_BOOL
+}
+
+fn sv_e_unary(node: u32) -> u64 {
+    let op: u32 = iii_ast_unary_op(SV_AST, node)
+    let opn: u32 = iii_ast_unary_operand(SV_AST, node)
+    if op == U_DEREF { sv_refuse(SVU_PTR, node)  return T_BAD }
+    if op == U_ADDR { sv_refuse(SVU_PTR, node)  return T_BAD }
+    if op == U_NEG {
+        econst(0u64)                                      /* 0 - v, then renorm (ev law) */
+        let t: u64 = sv_expr(opn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(t) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        eb(0x21u32)
+        e_renorm(t)
+        return t
+    }
+    if op == U_NOT {
+        econst(1u64)                                      /* 1 - v on bool */
+        let t: u64 = sv_expr(opn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(t) != TC_BOOL { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        eb(0x21u32)
+        return T_BOOL
+    }
+    if op == U_BNOT {
+        let t: u64 = sv_expr(opn)
+        if SV_UNSUP != 0u32 { return T_BAD }
+        if t_class(t) != TC_INT { sv_refuse(SVU_TYPE, node)  return T_BAD }
+        econst(0xFFFFFFFFFFFFFFFFu64)  eb(0x27u32)
+        e_renorm(t)
+        return t
+    }
+    sv_refuse(SVU_EXPR_KIND, node)
+    return T_BAD
+}
+
+fn sv_e_cast(node: u32) -> u64 {
+    let vn: u32 = iii_ast_cast_value(SV_AST, node)
+    let tn: u32 = iii_ast_cast_target_type(SV_AST, node)
+    if sv_type_tag(tn) != 0u32 { return T_BAD }
+    if SVT_ARR == 1u32 { sv_refuse(SVU_TYPE, node)  return T_BAD }
+    let want: u64 = SVT_TT
+    if t_class(want) != TC_INT {
+        if t_class(want) == TC_BOOL { } else { sv_refuse(SVU_TYPE, node)  return T_BAD }
+    }
+    /* literal cast folds entirely (ev_cast = ev_norm on the value) */
+    let vk: u32 = iii_ast_node_kind(SV_AST, vn)
+    if vk == K_EXPR_INT { return sv_e_lit(vn, want) }
+    if vk == K_EXPR_HEX { return sv_e_lit(vn, want) }
+    let t: u64 = sv_expr(vn)
+    if SV_UNSUP != 0u32 { return T_BAD }
+    let tc: u64 = t_class(t)
+    if t_class(want) == TC_INT {
+        if tc == TC_INT { e_renorm(want)  return want }   /* 64-bit targets: e_renorm emits nothing */
+        if tc == TC_BOOL { e_renorm(want)  return want }
+        sv_refuse(SVU_PTR, node)
+        return T_BAD
+    }
+    if tc == TC_BOOL { return T_BOOL }                    /* bool as bool */
+    sv_refuse(SVU_TYPE, node)
+    return T_BAD
+}
+
+fn sv_e_index(node: u32) -> u64 {
+    if sv_e_index_addr(node) == 0u32 { return T_BAD }
+    let et: u64 = SVT_ELEM
+    e_load(et, SVT_SZ)
+    return et
+}
+
+fn sv_expr(node: u32) -> u64 {
+    if SV_UNSUP != 0u32 { return T_BAD }
+    let k: u32 = iii_ast_node_kind(SV_AST, node)
+    if k == K_EXPR_PAREN { return sv_expr(iii_ast_paren_inner(SV_AST, node)) }
+    if k == K_EXPR_INT { return sv_e_lit(node, T_UNTYPED) }
+    if k == K_EXPR_HEX { return sv_e_lit(node, T_UNTYPED) }
+    if k == K_EXPR_BOOL { econst(iii_ast_bool_value(SV_AST, node) as u64)  return T_BOOL }
+    if k == K_EXPR_SIZEOF { econst(iii_ast_sizeof_resolved(SV_AST, node))  return mk_int(8u64, 0u64) }
+    if k == K_EXPR_BINARY { return sv_e_binop(node) }
+    if k == K_EXPR_UNARY { return sv_e_unary(node) }
+    if k == K_EXPR_CALL { return sv_e_call(node) }
+    if k == K_EXPR_INDEX { return sv_e_index(node) }
+    if k == K_EXPR_IDENT { return sv_e_ident(node) }
+    if k == K_EXPR_CAST { return sv_e_cast(node) }
+    if k == K_EXPR_STR { sv_refuse(SVU_STRING, k)  return T_BAD }
+    if k == K_EXPR_FIELD { sv_refuse(SVU_STRUCT, k)  return T_BAD }
+    sv_refuse(SVU_EXPR_KIND, k)
+    return T_BAD
+}
+
+/* emit `node` adapted into a `want` slot (ev_adapt's emitted image):
+ * literals fold; bool->int is legal (norm); int->int renorm fires only for
+ * narrow targets whose tag differs (normal-form identity otherwise). */
+fn sv_emit_adapted(node: u32, want: u64) {
+    let k: u32 = iii_ast_node_kind(SV_AST, node)
+    if t_class(want) == TC_INT {
+        if k == K_EXPR_INT { sv_e_lit(node, want)  return }
+        if k == K_EXPR_HEX { sv_e_lit(node, want)  return }
+    }
+    let t: u64 = sv_expr(node)
+    if SV_UNSUP != 0u32 { return }
+    let wc: u64 = t_class(want)
+    let tc: u64 = t_class(t)
+    if wc == TC_INT {
+        if tc == TC_BOOL { return }                       /* bool 0/1 is already int-normal */
+        if tc == TC_INT {
+            if t_w(want) == 0u64 { return }
+            if t == want { return }
+            if t_w(want) < 8u64 { e_renorm(want) }        /* 64-bit want: normal-form identity */
+            return
+        }
+        sv_refuse(SVU_TYPE, node)
+        return
+    }
+    if wc == tc { return }                                /* bool<-bool, unit<-unit */
+    sv_refuse(SVU_TYPE, node)
+}
+
+/* ── statements ────────────────────────────────────────────────────────── */
+fn ctl_push(k: u32) { if CTLN < 64u32 { CTLK[CTLN as u64] = k  CTLN = CTLN + 1u32 } else { sv_refuse(SVU_CAP, 4u32) } }
+fn ctl_pop() { if CTLN > 0u32 { CTLN = CTLN - 1u32 } }
+/* depth (in live RUNTIME frames) from the innermost frame to the nearest
+ * frame of kind `want` (0=BLOCK for break, 1=LOOP for continue).  Kind 3
+ * (an IF whose ELSE arm is being emitted) is NOT a runtime frame — the
+ * interp's 0x43 pops the IF frame before jumping into the else arm — so it
+ * neither matches nor counts toward the depth. */
+fn ctl_depth_to(want: u32) -> i32 {
+    let mut d: u32 = 0u32
+    let mut k: u32 = CTLN
+    while k > 0u32 {
+        k = k - 1u32
+        let fk: u32 = CTLK[k as u64]
+        if fk == want { return d as i32 }
+        if fk != 3u32 { d = d + 1u32 }
+    }
+    return 0i32 - 1i32
+}
+
+fn sv_s_let(node: u32) {
+    let tn: u32 = iii_ast_let_type(SV_AST, node)
+    let vn: u32 = iii_ast_let_value(SV_AST, node)
+    let mut want: u64 = T_UNTYPED
+    if tn != 0u32 {
+        if sv_type_tag(tn) != 0u32 { return }
+        if SVT_ARR == 1u32 { sv_refuse(SVU_LOCAL_ARRAY, node)  return }
+        want = SVT_TT
+        if t_class(want) == TC_INT { } else { if t_class(want) == TC_BOOL { } else { sv_refuse(SVU_TYPE, node)  return } }
+    }
+    if vn == 0u32 {
+        /* `var NAME : T` local: zero-initialized slot (eval's law) */
+        if tn == 0u32 { sv_refuse(SVU_STMT_KIND, node)  return }
+        econst(0u64)
+        let s0: u32 = ladd(iii_ast_let_name_off(SV_AST, node), iii_ast_let_name_len(SV_AST, node), want)
+        eu8(0x11u32, s0)
+        return
+    }
+    let mut ft: u64 = want
+    if tn != 0u32 {
+        sv_emit_adapted(vn, want)
+    } else {
+        ft = sv_expr(vn)                                  /* untyped let adopts the value's tag */
+        if t_class(ft) == TC_UNIT { sv_refuse(SVU_UNIT_VALUE, node)  return }
+        /* eval's let law: an UNTYPED int value widens the slot to u64 */
+        if t_class(ft) == TC_INT { if t_w(ft) == 0u64 { ft = mk_int(8u64, 0u64) } }
+    }
+    if SV_UNSUP != 0u32 { return }
+    let s: u32 = ladd(iii_ast_let_name_off(SV_AST, node), iii_ast_let_name_len(SV_AST, node), ft)
+    eu8(0x11u32, s)
+}
+
+fn sv_s_assign(node: u32) {
+    let lv: u32 = iii_ast_assign_lvalue(SV_AST, node)
+    let lk: u32 = iii_ast_node_kind(SV_AST, lv)
+    if lk == K_EXPR_INDEX {
+        if sv_e_index_addr(lv) == 0u32 { return }
+        let esz: u64 = SVT_SZ
+        let et: u64 = SVT_ELEM
+        let vt: u64 = sv_expr(iii_ast_assign_value(SV_AST, node))
+        if SV_UNSUP != 0u32 { return }
+        let mut ok: u32 = 0u32
+        if t_class(vt) == TC_INT { ok = 1u32 }
+        if t_class(vt) == TC_BOOL { if t_class(et) == TC_INT { ok = 1u32 } }
+        if ok == 0u32 { sv_refuse(SVU_TYPE, node)  return }
+        e_store(esz)                                      /* the width store IS the norm (row 10) */
+        return
+    }
+    if lk == K_EXPR_IDENT {
+        let off: u32 = iii_ast_ident_name_offset(SV_AST, lv)
+        let len: u32 = iii_ast_ident_name_length(SV_AST, lv)
+        let li: i32 = lidx(off, len)
+        if li >= 0i32 {
+            sv_emit_adapted(iii_ast_assign_value(SV_AST, node), LT[li as u64])
+            if SV_UNSUP != 0u32 { return }
+            eu8(0x11u32, li as u32)
+            return
+        }
+        let ai: i32 = arr_idx(off, len)
+        if ai >= 0i32 { if ARRK[ai as u64] == 0u32 {
+            econst(ARRB[ai as u64])                       /* module scalar cell: addr, value, width store */
+            let vt: u64 = sv_expr(iii_ast_assign_value(SV_AST, node))
+            if SV_UNSUP != 0u32 { return }
+            let mut ok: u32 = 0u32
+            if t_class(vt) == TC_INT { ok = 1u32 }
+            if t_class(vt) == TC_BOOL { ok = 1u32 }
+            if ok == 0u32 { sv_refuse(SVU_TYPE, node)  return }
+            e_store(ARRZ[ai as u64])
+            return
+        } }
+        sv_refuse(SVU_IDENT, node)
+        return
+    }
+    sv_refuse(SVU_LVALUE, lk)
+}
+
+/* an if ARM is a brace BLOCK or (else-if chaining) a single nested
+ * statement -- eval's ev_exec_block_or_stmt is the definitional dispatch
+ * (eval.iii:1646).  sv_block on a NON-block ran EMPTY (block_stmt_count
+ * reads 0) = the silent-arm drop the first corpus census caught (row 15,
+ * KAT 251); unknown arm kinds now fall to sv_stmt's LOUD refusal. */
+fn sv_arm(node: u32) {
+    if node == 0u32 { return }
+    if iii_ast_node_kind(SV_AST, node) == K_EXPR_BLOCK { sv_block(node)  return }
+    sv_stmt(node)
+}
+
+fn sv_s_if(node: u32) {
+    let ct: u64 = sv_expr(iii_ast_if_cond(SV_AST, node))
+    if SV_UNSUP != 0u32 { return }
+    if t_class(ct) != TC_BOOL { if t_class(ct) != TC_INT { sv_refuse(SVU_TYPE, node)  return } }
+    eb(0x42u32)
+    ctl_push(2u32)                                        /* IF frame lives through the THEN arm */
+    sv_arm(iii_ast_if_then(SV_AST, node))
+    let el: u32 = iii_ast_if_else(SV_AST, node)
+    if el != 0u32 {
+        eb(0x43u32)
+        ctl_pop()                                         /* runtime: 0x43 pops the IF frame before the else arm */
+        ctl_push(3u32)                                    /* placeholder frame kind 3: NOT live at runtime */
+        sv_arm(el)
+        ctl_pop()
+    } else {
+        ctl_pop()
+    }
+    eb(0x44u32)
+}
+
+fn sv_s_while(node: u32) {
+    eb(0x40u32)  ctl_push(0u32)
+    eb(0x41u32)  ctl_push(1u32)
+    let ct: u64 = sv_expr(iii_ast_while_cond(SV_AST, node))
+    if SV_UNSUP != 0u32 { ctl_pop()  ctl_pop()  return }
+    if t_class(ct) != TC_BOOL { if t_class(ct) != TC_INT { sv_refuse(SVU_TYPE, node)  ctl_pop()  ctl_pop()  return } }
+    econst(0u64)  eb(0x30u32)  eu8(0x51u32, 1u32)
+    sv_block(iii_ast_while_body(SV_AST, node))
+    eu8(0x50u32, 0u32)  eb(0x44u32)  eb(0x44u32)
+    ctl_pop()  ctl_pop()
+}
+
+fn sv_s_loop(node: u32) {
+    eb(0x40u32)  ctl_push(0u32)
+    eb(0x41u32)  ctl_push(1u32)
+    sv_block(iii_ast_loop_body(SV_AST, node))
+    eu8(0x50u32, 0u32)  eb(0x44u32)  eb(0x44u32)
+    ctl_pop()  ctl_pop()
 }
 
 fn sv_stmt(node: u32) {
+    if SV_UNSUP != 0u32 { return }
     let k: u32 = iii_ast_node_kind(SV_AST, node)
-    if k == K_STMT_LET {
-        sv_expr(iii_ast_let_value(SV_AST, node))
-        let s: u32 = ladd(iii_ast_let_name_off(SV_AST, node), iii_ast_let_name_len(SV_AST, node))
-        eu8(0x11u32, s)
+    if k == K_STMT_LET { sv_s_let(node)  return }
+    if k == K_STMT_RETURN {
+        let rv: u32 = iii_ast_return_value(SV_AST, node)
+        if rv == 0u32 { econst(0u64)  eb(0x60u32)  return }   /* bare `return` (unit fn): callee must push a value */
+        sv_emit_adapted(rv, CUR_FRT)
+        if SV_UNSUP != 0u32 { return }
+        eb(0x60u32)
         return
     }
-    if k == K_STMT_RETURN { sv_expr(iii_ast_return_value(SV_AST, node))  eb(0x60u32)  return }
-    if k == K_STMT_IF {
-        sv_expr(iii_ast_if_cond(SV_AST, node))
-        eb(0x42u32)
-        sv_block(iii_ast_if_then(SV_AST, node))
-        let el: u32 = iii_ast_if_else(SV_AST, node)
-        if el != 0u32 { eb(0x43u32)  sv_block(el) }
-        eb(0x44u32)
+    if k == K_STMT_IF { sv_s_if(node)  return }
+    if k == K_STMT_WHILE { sv_s_while(node)  return }
+    if k == K_STMT_LOOP { sv_s_loop(node)  return }
+    if k == K_STMT_BREAK {
+        let d: i32 = ctl_depth_to(0u32)
+        if d < 0i32 { sv_refuse(SVU_STMT_KIND, k)  return }
+        eu8(0x50u32, d as u32)
         return
     }
-    if k == K_STMT_WHILE {
-        eb(0x40u32)  eb(0x41u32)
-        sv_expr(iii_ast_while_cond(SV_AST, node))
-        econst(0u64)  eb(0x30u32)  eu8(0x51u32, 1u32)
-        sv_block(iii_ast_while_body(SV_AST, node))
-        eu8(0x50u32, 0u32)  eb(0x44u32)  eb(0x44u32)
+    if k == K_STMT_CONTINUE {
+        let d: i32 = ctl_depth_to(1u32)
+        if d < 0i32 { sv_refuse(SVU_STMT_KIND, k)  return }
+        eu8(0x50u32, d as u32)
         return
     }
-    if k == K_STMT_ASSIGN {
-        let lv: u32 = iii_ast_assign_lvalue(SV_AST, node)
-        let lk: u32 = iii_ast_node_kind(SV_AST, lv)
-        if lk == K_EXPR_INDEX {
-            let obj: u32 = iii_ast_index_object(SV_AST, lv)
-            let oo: u32 = iii_ast_ident_name_offset(SV_AST, obj)
-            let ol: u32 = iii_ast_ident_name_length(SV_AST, obj)
-            let ab: i64 = arr_base(oo, ol)
-            if ab >= 0i64 {
-                sv_expr(iii_ast_index_index(SV_AST, lv))
-                if ab > 0i64 { econst(ab as u64)  eb(0x20u32) }
-                sv_expr(iii_ast_assign_value(SV_AST, node))
-                eb(0x81u32)
-            }
-            return
-        }
-        /* ident lvalue: value then LOCAL_SET slot */
-        let off: u32 = iii_ast_ident_name_offset(SV_AST, lv)
-        let len: u32 = iii_ast_ident_name_length(SV_AST, lv)
-        sv_expr(iii_ast_assign_value(SV_AST, node))
-        let li: i32 = lidx(off, len)
-        if li >= 0i32 { eu8(0x11u32, li as u32) }
-        return
-    }
+    if k == K_STMT_ASSIGN { sv_s_assign(node)  return }
     if k == K_STMT_EXPR {
-        /* bare expression statement (e.g. a call for effect) -> <e> DROP */
+        /* the interp's CALL always vpushes the callee's result (unit fns
+         * return the CONST 0 of their bare-return/fallthrough) -> DROP
+         * unconditionally, exactly like iiisv2 */
         sv_expr(iii_ast_expr_stmt_expr(SV_AST, node))
+        if SV_UNSUP != 0u32 { return }
         eb(0x72u32)
         return
+    }
+    sv_refuse(SVU_STMT_KIND, k)
+}
+
+fn sv_block(node: u32) {
+    let n: u32 = iii_ast_block_stmt_count(SV_AST, node)
+    let mut i: u32 = 0u32
+    while i < n {
+        if SV_UNSUP != 0u32 { return }
+        sv_stmt(iii_ast_block_stmt_at(SV_AST, node, i))
+        i = i + 1u32
     }
 }
 
 /* ── one function -> append its v1 record to MO ────────────────────────── */
-fn sv_fn(fn_: u32) {
+fn sv_fn(k: u32) {
+    let fn_: u32 = FNODE[k as u64]
     LNN = 0u32
+    CTLN = 0u32
+    CUR_FRT = FRT[k as u64]
     let params: u32 = iii_ast_fn_param_count(SV_AST, fn_)
     let mut i: u32 = 0u32
     while i < params {
         let p: u32 = iii_ast_fn_param_at(SV_AST, fn_, i)
-        ladd(iii_ast_param_name_off(SV_AST, p), iii_ast_param_name_len(SV_AST, p))
+        if sv_type_tag(iii_ast_param_type(SV_AST, p)) != 0u32 { return }
+        if SVT_ARR == 1u32 { sv_refuse(SVU_TYPE, K_FN_DECL)  return }
+        ladd(iii_ast_param_name_off(SV_AST, p), iii_ast_param_name_len(SV_AST, p), SVT_TT)
         i = i + 1u32
     }
     BLN = 0u64  SV_LAST_OP = 0u32
     sv_block(iii_ast_fn_body(SV_AST, fn_))
+    if SV_UNSUP != 0u32 { return }
     if SV_LAST_OP != 0x60u32 { econst(0u64)  eb(0x60u32) }   /* trailing default return on fall-through only */
+    if BLN > 65535u64 { sv_refuse(SVU_CAP, 5u32)  return }   /* v1 body length is u16 */
     mo(params)  mo(1u32)  mo((BLN & 0xFFu64) as u32)  mo(((BLN >> 8u64) & 0xFFu64) as u32)
     let mut j: u64 = 0u64
     while j < BLN { mo(BD[j] as u32)  j = j + 1u64 }
 }
 
 /* ── prescans (declaration order; main-first fn order) ─────────────────── */
+fn sv_prescan_const(d: u32) {
+    let v: u32 = iii_ast_const_decl_value(SV_AST, d)
+    let vk: u32 = iii_ast_node_kind(SV_AST, v)
+    let mut raw: u64 = 0u64
+    if vk == K_EXPR_INT { raw = iii_ast_expr_int_u64(SV_AST, v) }
+    else { if vk == K_EXPR_HEX { raw = iii_ast_expr_hex_u64(SV_AST, v) }
+    else { sv_refuse(SVU_CONST_EXPR, vk)  return } }
+    if sv_lit_tag(v) != 0u32 { return }
+    let mut t: u64 = SV_LIT
+    let mut val: u64 = sv_normv(raw, t)
+    let tn: u32 = iii_ast_const_decl_type(SV_AST, d)
+    if tn != 0u32 {
+        if sv_type_tag(tn) != 0u32 { return }
+        if SVT_ARR == 1u32 { sv_refuse(SVU_CONST_ARRAY, d)  return }
+        if t_class(SVT_TT) != TC_INT { sv_refuse(SVU_TYPE, d)  return }
+        val = sv_normv(val, SVT_TT)                       /* declared type folds (ev_collect_const's adapt) */
+        t = SVT_TT
+    }
+    if CNN < 128u32 {
+        CO[CNN as u64] = iii_ast_const_decl_name_off(SV_AST, d)
+        CL[CNN as u64] = iii_ast_const_decl_name_len(SV_AST, d)
+        CV[CNN as u64] = val
+        CT[CNN as u64] = t
+        CNN = CNN + 1u32
+    } else { sv_refuse(SVU_CAP, 6u32) }
+}
+
+fn sv_prescan_var(d: u32) {
+    if iii_ast_var_decl_init(SV_AST, d) != 0u32 { sv_refuse(SVU_VAR_INIT, d)  return }   /* zero-init only (data section is a later rung) */
+    let t: u32 = iii_ast_var_decl_type(SV_AST, d)
+    if t == 0u32 { sv_refuse(SVU_TYPE, d)  return }
+    if sv_type_tag(t) != 0u32 { return }
+    if ARRN >= 128u32 { sv_refuse(SVU_CAP, 7u32)  return }
+    ARRO[ARRN as u64] = iii_ast_var_decl_name_off(SV_AST, d)
+    ARRL[ARRN as u64] = iii_ast_var_decl_name_len(SV_AST, d)
+    ARRB[ARRN as u64] = MTOP
+    if SVT_ARR == 1u32 {
+        ARRK[ARRN as u64] = 1u32
+        ARRT[ARRN as u64] = SVT_ELEM
+        ARRZ[ARRN as u64] = SVT_SZ / SVT_CNT
+        MTOP = MTOP + SVT_SZ
+    } else {
+        if t_class(SVT_TT) != TC_INT { if t_class(SVT_TT) != TC_BOOL { sv_refuse(SVU_TYPE, d)  return } }
+        ARRK[ARRN as u64] = 0u32
+        ARRT[ARRN as u64] = SVT_TT
+        let mut sz: u64 = SVT_SZ
+        if sz == 0u64 { sz = 8u64 }
+        ARRZ[ARRN as u64] = sz
+        MTOP = MTOP + sz
+    }
+    ARRN = ARRN + 1u32
+}
+
+fn sv_rec_fn(d: u32) {
+    if FNC >= 256u32 { sv_refuse(SVU_CAP, 8u32)  return }   /* v1 CALL fi is u8 */
+    if sv_type_tag(iii_ast_fn_return_type(SV_AST, d)) != 0u32 { return }
+    if SVT_ARR == 1u32 { sv_refuse(SVU_TYPE, d)  return }
+    FNODE[FNC as u64] = d
+    FRT[FNC as u64] = SVT_TT
+    FNC = FNC + 1u32
+}
+
 fn sv_prescan(root: u32) {
     FNC = 0u32  ARRN = 0u32  MTOP = 16u64  CNN = 0u32
     let dc: u32 = iii_ast_module_decl_count(SV_AST, root)
-    /* consts first: name -> int-literal value (v1 subset: bare INT only) */
     let mut i: u32 = 0u32
     while i < dc {
+        if SV_UNSUP != 0u32 { return }
         let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
-        if iii_ast_node_kind(SV_AST, d) == K_CONST_DECL {
-            let v: u32 = iii_ast_const_decl_value(SV_AST, d)
-            if iii_ast_node_kind(SV_AST, v) == K_EXPR_INT { if CNN < 128u32 {
-                CO[CNN as u64] = iii_ast_const_decl_name_off(SV_AST, d)
-                CL[CNN as u64] = iii_ast_const_decl_name_len(SV_AST, d)
-                CV[CNN as u64] = iii_ast_expr_int_u64(SV_AST, v)
-                CNN = CNN + 1u32
-            } }
-        }
+        let k: u32 = iii_ast_node_kind(SV_AST, d)
+        let mut h: u32 = 0u32
+        if k == K_CONST_DECL { sv_prescan_const(d)  h = 1u32 }
+        if k == K_VAR_DECL { sv_prescan_var(d)  h = 1u32 }
+        if k == K_STRUCT_DECL { sv_refuse(SVU_STRUCT, k)  h = 1u32 }
+        if k == K_EXTERN_DECL { h = 1u32 }   /* decls are harmless; CALLS to extern names refuse at the call site */
+        if k == K_FN_DECL { h = 1u32 }
+        if k == K_TYPE_DECL { h = 1u32 }
+        if h == 0u32 { sv_refuse(SVU_DECL_KIND, k) }
         i = i + 1u32
     }
-    /* module arrays: base offset in declaration order, MTOP from 16 */
-    i = 0u32
-    while i < dc {
-        let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
-        if iii_ast_node_kind(SV_AST, d) == K_VAR_DECL {
-            let t: u32 = iii_ast_var_decl_type(SV_AST, d)
-            if t != 0u32 { if iii_ast_node_kind(SV_AST, t) == K_TYPE_ARRAY { if ARRN < 64u32 {
-                ARRO[ARRN as u64] = iii_ast_var_decl_name_off(SV_AST, d)
-                ARRL[ARRN as u64] = iii_ast_var_decl_name_len(SV_AST, d)
-                ARRB[ARRN as u64] = MTOP
-                MTOP = MTOP + iii_ast_type_array_count(SV_AST, t)
-                ARRN = ARRN + 1u32
-            } } }
-        }
-        i = i + 1u32
-    }
-    /* fn order: main FIRST, then remaining in source order (matches iiisv2.prescan) */
+    if SV_UNSUP != 0u32 { return }
+    /* fn order: main FIRST, then remaining in source order (iiisv2.prescan) */
     i = 0u32
     while i < dc {
         let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
         if iii_ast_node_kind(SV_AST, d) == K_FN_DECL {
-            if sv_name_is_main(d) == 1u32 { if FNC < 256u32 { FNODE[FNC as u64] = d  FNC = FNC + 1u32 } }
+            if sv_name_is_main(d) == 1u32 { sv_rec_fn(d) }
         }
         i = i + 1u32
     }
@@ -357,7 +1107,7 @@ fn sv_prescan(root: u32) {
     while i < dc {
         let d: u32 = iii_ast_module_decl_at(SV_AST, root, i)
         if iii_ast_node_kind(SV_AST, d) == K_FN_DECL {
-            if sv_name_is_main(d) == 0u32 { if FNC < 256u32 { FNODE[FNC as u64] = d  FNC = FNC + 1u32 } }
+            if sv_name_is_main(d) == 0u32 { sv_rec_fn(d) }
         }
         i = i + 1u32
     }
@@ -388,16 +1138,58 @@ fn sv_pdec(f: u64, v0: u64) {
     while n > 0u32 { n = n - 1u32  sv_pc(f, SVDB[n as u64] as u32) }
 }
 
-/* THE ENTRY (harness + main.iii both call this): emit gen_svir.iii to `out`. */
+/* refusal report: `svir-unsup class=<name> kind=<n>` on stderr */
+fn sv_class_str(c: u32) -> u64 {
+    if c == SVU_STRUCT { return "struct~" as u64 }
+    if c == SVU_PTR { return "ptr~" as u64 }
+    if c == SVU_STRING { return "string~" as u64 }
+    if c == SVU_EXTERN_FN { return "extern-fn~" as u64 }
+    if c == SVU_FNPTR { return "fnptr~" as u64 }
+    if c == SVU_MIXED_SIGN { return "mixed-sign~" as u64 }
+    if c == SVU_TYPE { return "type~" as u64 }
+    if c == SVU_CONST_EXPR { return "const-expr~" as u64 }
+    if c == SVU_VAR_INIT { return "var-init~" as u64 }
+    if c == SVU_LOCAL_ARRAY { return "local-array~" as u64 }
+    if c == SVU_CONST_ARRAY { return "const-array~" as u64 }
+    if c == SVU_EXPR_KIND { return "expr-kind~" as u64 }
+    if c == SVU_STMT_KIND { return "stmt-kind~" as u64 }
+    if c == SVU_CAP { return "cap~" as u64 }
+    if c == SVU_SUFFIX { return "suffix~" as u64 }
+    if c == SVU_IDENT { return "ident~" as u64 }
+    if c == SVU_LVALUE { return "lvalue~" as u64 }
+    if c == SVU_BOOL_OP { return "bool-op~" as u64 }
+    if c == SVU_UNIT_VALUE { return "unit-value~" as u64 }
+    if c == SVU_DECL_KIND { return "decl-kind~" as u64 }
+    return "unknown~" as u64
+}
+fn sv_report_unsup() {
+    let e: u64 = iii_lex_stderr_c()
+    sv_pstr(e, "svir-unsup class=~" as u64)
+    sv_pstr(e, sv_class_str(SV_UNSUP))
+    sv_pstr(e, " kind=~" as u64)
+    sv_pdec(e, SV_UKIND as u64)
+    sv_pc(e, 10u32)
+}
+
+/* THE ENTRY (harness + main.iii both call this): emit gen_svir.iii to `out`.
+ * Returns 0 ok | 1 no-module | 2 refused (class reported on stderr). */
 fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
     SV_AST = ast
     SV_SRC = iii_ast_source_buf(ast)
+    SV_SRCLEN = iii_ast_source_len(ast)
+    SV_UNSUP = 0u32
+    SV_UKIND = 0u32
     MLN = 0u64
     let root: u32 = iii_ast_root_module(ast)
     if root == 0u32 { return 1u32 }
     sv_prescan(root)
     let mut k: u32 = 0u32
-    while k < FNC { sv_fn(FNODE[k as u64])  k = k + 1u32 }
+    while k < FNC {
+        if SV_UNSUP != 0u32 { sv_report_unsup()  return 2u32 }
+        sv_fn(k)
+        k = k + 1u32
+    }
+    if SV_UNSUP != 0u32 { sv_report_unsup()  return 2u32 }
     /* module text — the exact ~-delimited shape of iiisv2.emit_module */
     let total: u64 = MLN + 1u64
     sv_pstr(out, "module gen_svir\nvar SVIR : [u8; ~" as u64)  sv_pdec(out, total)  sv_pstr(out, "] = [\n~" as u64)

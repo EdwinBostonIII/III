@@ -892,13 +892,15 @@ fn ev_lt(a: u64, b: u64, t: u64) -> u64 {
     return 0u64
 }
 
-/* shift-count mask follows the operand width (x86 semantics: 32-bit ops
- * mask by 31, 64-bit by 63; narrower ops execute in 32-bit registers).
- * Differential probes pin this against the compiled route. */
+/* PINNED SEMANTIC FACT (sq07 adjudication, 2026-07-09 s2d): NARROW SHIFTS
+ * RUN WIDE -- the compiled route executes every shift in the 64-bit unit
+ * (count masked &63) and the operand width renormalizes the RESULT, so
+ * `5u32 << 33` is 0, not `5 << (33&31)`.  Measured on u8/u16/u32 with
+ * out-of-range counts; the old &31 arm was model extrapolation beyond
+ * p10's in-range pins (in-range counts cannot discriminate the masks). */
 fn ev_shmask(w: u64) -> u64 {
-    if w == 8u64 { return 63u64 }
     if w == 0u64 { return 63u64 }
-    return 31u64
+    return 63u64
 }
 
 /* binary op on popped operands; pushes result */
@@ -932,15 +934,17 @@ fn ev_binop(op: u32, av: u64, at: u64, bv: u64, bt: u64) -> u32 {
         return ev_push(ev_norm(av << c, at), at)
     }
     if op == EVB_SHR {
-        /* PINNED SEMANTIC FACT (differential probe p10, 2026-07-09): .iii
-         * `>>` is a LOGICAL shift for ALL integer types -- the compiled
-         * route emits SHR (not SAR) for signed operands too.  First fact
-         * pinned by the meaning gate; if the language ever decides SAR,
-         * cg_r3 changes and probe p10 reddens in the other direction. */
-        let w: u64 = ev_t_width(at)
-        let c: u64 = bv & ev_shmask(w)
-        let mv: u64 = av & ev_mask(w)
-        return ev_push(ev_norm(mv >> c, at), at)
+        /* PINNED SEMANTIC FACTS (p10 2026-07-09; refined by sq07 s2d): every
+         * shift RUNS WIDE on the 64-bit NORMAL-FORM value (count &63) and the
+         * operand width renormalizes the RESULT.  At w=8 that is p10's
+         * logical shr.  For NARROW SIGNED operands the sign-extension bits
+         * shift IN from above -- arithmetic-in-effect -- because the
+         * compiled route shifts the sign-extended wide pattern and
+         * truncates: (-5i32) >> 1 == -3i32, NOT 0x7FFFFFFD.  The old
+         * pre-mask (mv = av & mask(w)) modeled a narrow-register shift the
+         * incumbent does not perform. */
+        let c: u64 = bv & 63u64
+        return ev_push(ev_norm(av >> c, at), at)
     }
     let ut: u64 = ev_unify(at, bt)
     if ut == 0xFFFFFFFFFFFFFFFFu64 { EV_ERRC = EVE_TYPE ; return EVE_TYPE }

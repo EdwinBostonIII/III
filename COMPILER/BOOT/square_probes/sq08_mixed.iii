@@ -1,0 +1,41 @@
+/* sq08 -- ROW 10b: mixed-width binops take the WIDER tag; untyped literals
+ * adopt; bool adapts to int slots; adaptation renormalizes at every seam
+ * (let / assign / call arg / return).  92 = all seams hold. */
+module sq08
+
+fn take8(x: u8) -> u64 { return x as u64 }
+fn wide(x: u64) -> u64 { return x + 1u64 }
+
+fn main() -> i64 {
+    /* u8 + u64 -> u64 (wider wins; the u8 arrives zero-extended) */
+    let a : u8 = 200u8
+    let b : u64 = 1000u64
+    let c : u64 = a + b
+    if c != 1200u64 { return 71 }
+    /* i16 + i64 -> i64 (narrow side arrives sign-extended) */
+    let d : i16 = 0i16 - 300i16
+    let e : i64 = 1000i64
+    let f : i64 = d + e
+    if f != 700i64 { return 72 }
+    /* typed narrow arithmetic wraps at the let seam: 200+100 = 44 in u8 */
+    let g : u8 = a + 100u8
+    if g != 44u8 { return 73 }
+    /* mixed-width ordered compare unifies to u64 (bias law fires):
+     * u64-max <= 200 is FALSE unsigned but TRUE under a signed lowering */
+    let mut h : u64 = 0u64
+    h = h - 1u64
+    if h <= a { return 74 }
+    /* call-arg seam carries the wrapped u8: take8(200+100) = 44 */
+    if take8(a + 100u8) != 44u64 { return 75 }
+    /* comparison result adapts to an integer slot (887/895 law) */
+    let k : u64 = (a == 200u8) as u64
+    if k != 1u64 { return 76 }
+    /* untyped let widens to u64 and flows through a u64 call seam */
+    let m = 41
+    if wide(m) != 42u64 { return 77 }
+    /* assignment seam renormalizes a wider value into a narrow local */
+    let mut n : u16 = 0u16
+    n = (70000u32 + 0u32) as u16
+    if n != 4464u16 { return 78 }
+    return 92
+}

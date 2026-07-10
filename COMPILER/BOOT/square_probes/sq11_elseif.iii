@@ -1,0 +1,38 @@
+/* sq11 -- row 15: `else if` chains lower COMPLETELY (the census's maiden
+ * catch: the else-if arm was silently dropped by route S).  Exercises
+ * every arm of a 3-arm chain + a nested else-if inside a while body +
+ * newline-separated `}` `else` formatting (corpus 251's shape).
+ * 95 = every arm fired. */
+module sq11
+
+fn ch(x: u64) -> u64 {
+    if x == 1u64 {
+        return 100u64
+    }
+    else if x == 2u64 {
+        return 200u64
+    }
+    else {
+        return 999u64
+    }
+}
+
+fn acc(n: u64) -> u64 {
+    let mut i: u64 = 0u64
+    let mut s: u64 = 0u64
+    while i < n {
+        if i == 0u64 { s = s + 1u64 }
+        else if i == 1u64 { s = s + 10u64 }
+        else { s = s + 100u64 }
+        i = i + 1u64
+    }
+    return s
+}
+
+fn main() -> u64 {
+    if ch(1u64) != 100u64 { return 1u64 }
+    if ch(2u64) != 200u64 { return 2u64 }
+    if ch(7u64) != 999u64 { return 3u64 }
+    if acc(4u64) != 211u64 { return 4u64 }
+    return 95u64
+}

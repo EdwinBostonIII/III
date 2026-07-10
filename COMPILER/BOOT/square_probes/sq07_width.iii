@@ -1,0 +1,68 @@
+/* sq07 -- THE WIDTH LAW: every rung-2 synth on discriminating values.
+ * Each check returns a distinct code on failure; 90 = all laws hold.
+ * Discriminators are chosen so the WRONG lowering (signed-for-unsigned,
+ * unmasked narrow wrap, &63 narrow shift counts, arithmetic >>) FAILS. */
+module sq07
+
+var A : [i8; 4]
+var B : [u32; 4]
+var CNT : u64
+
+fn main() -> i64 {
+    /* u64 ordered compare needs the bias: exactly ONE side has bit63 set,
+     * so unsigned (max > 100) and signed (-1 > 100) DISAGREE */
+    let mut a : u64 = 0u64
+    a = a - 1u64
+    if a <= 100u64 { return 61 }
+    /* u64 division is DIV_U: max/3 has bit63 clear and a huge quotient */
+    let q : u64 = a / 3u64
+    if q != 0x5555555555555555u64 { return 62 }
+    let r : u64 = a % 7u64
+    if r != 1u64 { return 63 }
+    /* u8 wrap: 200+100 = 44 mod 256 */
+    let mut b : u8 = 200u8
+    b = b + 100u8
+    if b != 44u8 { return 64 }
+    /* u16 mul wrap: 300*300 = 90000 & 0xFFFF = 24464 */
+    let mut c : u16 = 300u16
+    c = c * 300u16
+    if c != 24464u16 { return 65 }
+    /* NARROW SHIFTS RUN WIDE (sq07 adjudication, 2026-07-09): the count
+     * masks &63 — the 64-bit op's own law — and the width renormalizes the
+     * result.  5u32 << 33 = (5 << 33) & 0xFFFFFFFF = 0, NOT 5 << (33&31). */
+    let sc : u32 = 33u32
+    let mut d : u32 = 5u32
+    d = d << sc
+    if d != 0u32 { return 66 }
+    /* in-range narrow count still shifts normally */
+    d = 5u32
+    d = d << 3u32
+    if d != 40u32 { return 74 }
+    /* i32 division truncates toward zero on negatives */
+    let mut e : i32 = 0i32
+    e = e - 5i32
+    let f : i32 = e / 2i32
+    if f != 0i32 - 2i32 { return 67 }
+    /* shifts run WIDE on the sign-extended normal form (sq07 adjudication):
+     * narrow signed `>>` sees extension bits shift in -- arithmetic in
+     * effect -- so (-5:i32) >> 1 == -3, while i64 `>>` stays logical (p10) */
+    let g : i32 = e >> 1u32
+    if g != 0i32 - 3i32 { return 68 }
+    /* i8 element load sign-extends: A[0] = -3 reads back negative */
+    A[0u64] = 0i8 - 3i8
+    if A[0u64] != 0i8 - 3i8 { return 69 }
+    /* u32 element store/load round-trips the full width */
+    B[1u64] = 0xDEADBEEFu32
+    if B[1u64] != 0xDEADBEEFu32 { return 70 }
+    /* narrowing cast masks: 300 as u8 = 44 */
+    let h : u64 = 300u64
+    if (h as u8) != 44u8 { return 71 }
+    /* u64 module scalar cell round-trips */
+    CNT = a
+    if CNT != 0xFFFFFFFFFFFFFFFFu64 { return 72 }
+    /* u8 sub underflow wraps: 3 - 5 = 254 */
+    let mut i : u8 = 3u8
+    i = i - 5u8
+    if i != 254u8 { return 73 }
+    return 90
+}

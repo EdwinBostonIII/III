@@ -128,3 +128,96 @@ verify + interp + sovereign x86 (kernel32-only) + wasm.
 
 Anchor cost of the entire post-v1 set: `svir_verify.iii` 82 → 97 lines — within the one-sitting audit
 budget (ADR-1).
+
+## §W — WIDTH LOWERING (Θ2-full rung 2: the faithful typed fragment)
+
+SVIR v1 values are width-free 64-bit cells.  The typed fragment of .iii is
+lowered onto them by THE NORMAL-FORM INVARIANT, transcribed from the
+definitional evaluator (eval.iii, the square-adjudicated law):
+
+> Every value on the SVIR stack and in every local slot is held in eval's
+> canonical 64-bit form for its static tag: **unsigned w-byte values are
+> zero-extended** (high bits 0), **signed w-byte values are sign-extended**,
+> untyped literal values are raw, bool is 0/1.
+
+Static tags follow eval exactly: literal suffixes; declared types on
+let/param/const/var/return; `ev_unify` for binops (untyped adopts the typed
+side; equal width + equal sign passes; equal width + MIXED SIGN is REFUSED
+[class mixed-sign] until the instrument adjudicates it; mixed width takes the
+WIDER tag — row 10b); casts take the target; comparison results are bool.
+
+### W.1 op lowering (ut = unified tag, w = width(ut))
+
+| .iii op | lowering |
+|---|---|
+| `+ - *` | `0x20/0x21/0x22`, then RENORM(ut) if w<8 |
+| `& \| ^` | `0x25/0x26/0x27` bare (bitops are closed under normal forms) |
+| `/ %` signed | `0x23/0x24`, then RENORM(ut) if w<8 |
+| `/ %` unsigned or untyped | `0x2A/0x2B` (DIV_U/REM_U), no renorm |
+| `<<` | `0x28` bare, then RENORM(lhs tag).  NARROW SHIFTS RUN WIDE (sq07 adjudication 2026-07-09): the count masks &63 — the op's own law is the language's; `5u32<<33 == 0`, not `5<<1`.  (ev_shmask's old &31 arm was model extrapolation beyond p10's in-range pins.) |
+| `>>` | `0x29` bare on the WIDE normal form, then RENORM(lhs tag) if signed.  ONE LAW (p10 + sq07): the 64-bit normal-form value shifts logically with count &63; at w=8 that is p10's logical shr, while NARROW SIGNED operands see their sign-extension bits shift in — arithmetic in effect — `(-5i32)>>1 == -3`, and the renorm re-signs the w-bit pattern. |
+| `== !=` | `0x30/0x31` bare (normal forms are equal iff values are equal) |
+| `< <= > >=` signed | `0x32/0x34/0x35/0x33` bare (operands are sign-extended) |
+| `< <= > >=` unsigned w∈{1,2,4} | bare (normal forms are positive in i64) |
+| `< <= > >=` unsigned w=8 or untyped | BIAS both operands — `CONST 0x8000000000000000; XOR` inserted after the LHS bytes and appended after the RHS bytes — then the signed op.  (a^2^63) <ₛ (b^2^63) ⇔ a <ᵤ b |
+| unary `-` | `CONST 0` before the operand, `0x21`, RENORM(t) |
+| unary `~` | operand, `CONST -1, 0x27`, RENORM(t) |
+| unary `!` (bool) | `CONST 1` before the operand, `0x21` |
+
+RENORM(t) for w<8: unsigned → `CONST mask(w); AND` (zx); signed →
+`CONST mask(w); AND; CONST 2^(8w-1); XOR; CONST 2^(8w-1); SUB` (sx).
+RENORM emits NOTHING for w=8, w=0 (untyped), bool, or class-identical seams —
+minimal emission is part of the canonical byte definition.
+
+### W.2 seams (ev_adapt's emitted image)
+
+let/assign-to-local/call-arg/return adapt the value to the slot's tag:
+renorm fires only when the slot is narrow (w<8) AND the value's tag differs.
+An INT/HEX literal adapts by FOLDING: the CONST payload carries
+norm(value, slot-tag) and no renorm bytes are emitted.  bool adapts to any
+int slot bare (already 0/1).  A width STORE truncates by itself (row 10:
+narrowing stores ARE the renorm) — index/module-cell stores emit no renorm.
+Untyped `let` slots widen to u64 (eval's let law).
+
+### W.3 memory cells
+
+Module `var` cells sit at MTOP offsets (from 16), stride = element size.
+Loads extend per the ELEMENT's signedness: 1B `0x80` (+sx(1) if i8 — v1 has
+no signed byte load), 2B `0x84/0x85`, 4B `0x86/0x87`, 8B `0x82`.
+Stores truncate: `0x81/0x88/0x89/0x83`.  Array index scales:
+`idx; CONST esz; MUL` (esz>1), then `CONST base; ADD` (base>0).
+
+### W.4 canonicity domains
+
+* **Width-free fragment** (i64/untyped scalars + u8 arrays — everything
+  iiisv2 expresses): the lowering above degenerates to iiisv2's exact bytes
+  (all renorms/biases/masks vanish; i64 div/mod/compares are the bare signed
+  ops; `>>` is bare 0x29 by the logical-shr law).  iiisv2 remains the live
+  canonicity witness here (gate arm A1).
+* **Typed fragment**: canonical bytes are defined by THIS section and pinned
+  by golden mhash ratchet (gate arm A2) — iiisv2 cannot see types by design.
+* Known byte-forks from rung 1 on typed programs (semantic fixes, adjudicated
+  by the three-route square): u64/untyped ordered compares gain the bias
+  pair; unsigned/untyped `/ %` move 0x23/0x24 → 0x2A/0x2B; narrow arithmetic
+  gains renorms; typed element cells gain width ops and esz scaling.
+
+### W.5 refusal law
+
+Everything outside the fragment REFUSES with a named class on stderr
+(`svir-unsup class=<name> kind=<n>`, emit rc 2 → `iiis --emit-svir` exits 16):
+struct, ptr, string, extern-fn (call sites), fnptr, mixed-sign, type,
+const-expr, var-init, local-array, const-array, expr-kind, stmt-kind, cap,
+suffix, ident, lvalue, bool-op, unit-value, decl-kind.  NO SILENT
+MISCOMPILES: an unknown construct can never emit partial bytes (sticky
+SV_UNSUP poisons the module).  The corpus sweep census
+(run_svir_corpus_gate.sh) is the burn-down ledger for these classes.
+
+### W.6 unsigned division ops (v1 op-table addendum)
+
+| op | name | semantics |
+|---|---|---|
+| 0x2A | DIV_U | pop b, a; push a÷b unsigned; b=0 → 0 |
+| 0x2B | REM_U | pop b, a; push a mod b unsigned; b=0 → 0 |
+
+Both already live in svir_interp (Λ0); this section admits them to the
+canonical emitter surface.  iiisv2 (width-free) never emits them.

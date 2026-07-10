@@ -271,6 +271,20 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > sq09 4e619b03/sq10 ec93651a) + square 11/11 N≡E≡S, iiisv2 square 6/6, meaning 21/21 probes +
 > 597/1820 + 0 divergence + ratchet 597 HELD through the full eval re-sweep with the new law
 > live, census pass=100 diverge=0 s-defect=0 ratchet=100 HELD, mixed-sign census rows = 0.**
+>
+> **S-FRONTIER SLICE 1 (2026-07-10, chain v4): const-expr RETIRED — Θ3's engine joins Γ1's
+> backend.** `sv_prescan_const`'s non-literal arm now asks `iii_ev_const_value` — the SAME
+> definitional-evaluator export cg_r3's comptime uses — so all three routes fold module consts
+> through ONE meaning object by construction; the value arrives already slot-normal; unevaluable
+> initializers refuse loudly as before. The svir-gate harness grew eval.o (8 TUs — an
+> undefined-symbol catch made BEFORE the chain by the row-15b pre-landing discipline, which also
+> proved sq12_comptime 96≡96≡96 three-route pre-landing via a fresh harness and pinned its golden
+> ad25504b). PINNED GRAMMAR FACT (from an rc=5 parse-fail bisect): module-level `const` REQUIRES
+> its type annotation — `const N = expr` does not parse. Chain v4 sealed: fixpoint 8th
+> BYTE-IDENTICAL, corpus 1595/0, A2 8/8, square 12/12 N≡E≡S, meaning 21/21 + ratchet 597 HELD,
+> census GREEN ratchet=100 HELD with **const-expr 35 → 0 (class EXTINCT)** — all 35 re-blocked on
+> deeper frontiers (none flipped PASS; the honest delta). Burn-down ledger now: extern-fn 1276 /
+> ptr 225 / var-init 84 / local-array 3.
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

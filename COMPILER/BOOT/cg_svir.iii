@@ -152,6 +152,11 @@ const T_BOOL: u64 = 257u64
 const T_UNTYPED: u64 = 2u64
 const T_BAD: u64 = 0xFFFFFFFFFFFFFFFFu64
 
+/* Θ3⊗Γ1 (S-frontier slice 1): the definitional evaluator is this backend's
+ * const-expression engine too -- same export cg_r3's comptime uses. */
+extern @abi(c-msvc-x64) fn iii_ev_const_value(ast: u64, name_off: u32, name_len: u32, out_addr: u64) -> u32 from "eval.iii"
+var SV_CTFE_VAL : u64 = 0u64
+
 /* refusal classes (the S-frontier census names) */
 const SVU_NONE: u32 = 0u32
 const SVU_STRUCT: u32 = 1u32
@@ -1031,12 +1036,28 @@ fn sv_prescan_const(d: u32) {
     let v: u32 = iii_ast_const_decl_value(SV_AST, d)
     let vk: u32 = iii_ast_node_kind(SV_AST, v)
     let mut raw: u64 = 0u64
+    let mut ctfe: u32 = 0u32
     if vk == K_EXPR_INT { raw = iii_ast_expr_int_u64(SV_AST, v) }
     else { if vk == K_EXPR_HEX { raw = iii_ast_expr_hex_u64(SV_AST, v) }
-    else { sv_refuse(SVU_CONST_EXPR, vk)  return } }
-    if sv_lit_tag(v) != 0u32 { return }
-    let mut t: u64 = SV_LIT
-    let mut val: u64 = sv_normv(raw, t)
+    else {
+        /* Θ3⊗Γ1 (slice 1, 2026-07-10): a non-literal const initializer is
+         * EVALUATED by the definitional evaluator over this same ast --
+         * two-pass collect, so initializers may call any module fn; the
+         * value arrives already in the slot's §W normal form.  Unevaluable
+         * (extern-calling etc.) refuses loudly exactly as before. */
+        let cno: u32 = iii_ast_const_decl_name_off(SV_AST, d)
+        let cnl: u32 = iii_ast_const_decl_name_len(SV_AST, d)
+        if iii_ev_const_value(SV_AST, cno, cnl, &SV_CTFE_VAL as u64) != 0u32 { sv_refuse(SVU_CONST_EXPR, vk)  return }
+        raw = SV_CTFE_VAL
+        ctfe = 1u32
+    } }
+    let mut t: u64 = T_UNTYPED
+    let mut val: u64 = raw                                /* CTFE value: already slot-normal */
+    if ctfe == 0u32 {
+        if sv_lit_tag(v) != 0u32 { return }
+        t = SV_LIT
+        val = sv_normv(raw, t)
+    }
     let tn: u32 = iii_ast_const_decl_type(SV_AST, d)
     if tn != 0u32 {
         if sv_type_tag(tn) != 0u32 { return }

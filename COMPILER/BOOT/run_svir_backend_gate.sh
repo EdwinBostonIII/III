@@ -51,11 +51,13 @@ mk() {
     return 1
 }
 
-# ── build the cg_svir harness (production front-end + SVIR backend) ────────
-for tu in cg_sha lex_rt lex ast parse cg_svir cg_svir_main; do
+# ── build the cg_svir harness (production front-end + SVIR backend;
+#    eval.iii aboard since slice 1 -- cg_svir's const-expr CTFE fold calls
+#    iii_ev_const_value, the same engine cg_r3's comptime uses) ────────────
+for tu in cg_sha lex_rt lex ast parse eval cg_svir cg_svir_main; do
     "$IIIS" "$SCRIPT_DIR/$tu.iii" --compile-only --out "$W/$tu.o" >/dev/null 2>&1 || { echo "[svir-gate] FATAL: compile $tu"; exit 2; }
 done
-mk "$W/cg_svir$BIN_SUFFIX" "$W/cg_sha.o" "$W/lex_rt.o" "$W/lex.o" "$W/ast.o" "$W/parse.o" "$W/cg_svir.o" "$W/cg_svir_main.o" || { echo "[svir-gate] FATAL: link cg_svir"; exit 2; }
+mk "$W/cg_svir$BIN_SUFFIX" "$W/cg_sha.o" "$W/lex_rt.o" "$W/lex.o" "$W/ast.o" "$W/parse.o" "$W/eval.o" "$W/cg_svir.o" "$W/cg_svir_main.o" || { echo "[svir-gate] FATAL: link cg_svir"; exit 2; }
 "$IIIS" "$SOVIR/iiisv2.iii" --compile-only --out "$W/iiisv2.o" >/dev/null 2>&1 || { echo "[svir-gate] FATAL: compile iiisv2"; exit 2; }
 mk "$W/iiisv2$BIN_SUFFIX" "$W/iiisv2.o" || { echo "[svir-gate] FATAL: link iiisv2"; exit 2; }
 "$IIIS" "$SOVIR/svir_interp.iii" --compile-only --out "$W/svir_interp.o" >/dev/null 2>&1 || { echo "[svir-gate] FATAL: compile svir_interp"; exit 2; }
@@ -105,7 +107,7 @@ if [[ -f "$GOLD" ]]; then
         exit 2
     fi
 fi
-A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR" "sq09_mixsign:$SQ_DIR" "sq10_renorm:$SQ_DIR")
+A2_LIST=("indep_toolchain:$IND_DIR" "indep_ops:$IND_DIR" "indep_bignum:$IND_DIR" "sq07_width:$SQ_DIR" "sq08_mixed:$SQ_DIR" "sq09_mixsign:$SQ_DIR" "sq10_renorm:$SQ_DIR" "sq12_comptime:$SQ_DIR")
 : > "$W/goldens_measured.txt"
 for entry in "${A2_LIST[@]}"; do
     name="${entry%%:*}"; dir="${entry##*:}"

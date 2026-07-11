@@ -303,3 +303,22 @@ refuse until the svir_ld closure-link rung.  NAMED UNPINNED CORNER
 (sq14's class): reads of never-written malloc memory are 0 on E/S
 (zeroed worlds) but garbage on N (CRT malloc) — probes test defined
 behavior only.
+
+### W.11 — addresses without SVIR v2 (2026-07-11)
+
+World-resident lvalues have canonical u64 addresses, and the width ops
+already take addresses from the stack — so pointers need ZERO new
+opcodes.  Pointer tags transcribe eval's ev_mk_ptr packing verbatim:
+TC_PTR + (8<<8) + (pointee-width<<24) + (pointee-signed<<32) +
+(pointee-class<<40); a pointer is a width-8 value, arithmetic runs wide.
+Lowering: `&arr[i]` = the index choke-point's address bytes WITHOUT the
+load; `&module-cell` / `&module-arr` / `&local-arr` = the cell base
+(CONST or ABASE+offset); `*p` = width-load by the pointee; `p[i]` =
+idx*esz(pointee) + slot-load + ADD through the same choke point (loads
+AND stores); `*p = v` = address, value adapted to the pointee, width
+store.  Casts and seams follow ev_adapt/ev_norm: int and ptr flow into
+*T AS-IS; ptr into int renorms by target width.  BOTH-PTR eq/neq compare
+raw addresses.  REFUSED (named corners): &local-SCALAR (SVIR locals are
+slots, not world — eval's are world-resident; the slot→arena promotion
+increment lands it), ordered ptr compares (measure first), ptr⊗int
+compares (eval refuses), fnptr, ptr-to-array.

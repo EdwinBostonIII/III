@@ -1,0 +1,68 @@
+/* sq16 -- SW.11: ADDRESSES WITHOUT SVIR v2 -- world-resident lvalues have
+ * canonical u64 addresses; pointer locals carry the pointee tag; deref
+ * and ptr-index run through the width ops.  Teeth: address-of module
+ * cell round-trip, address-of arr[i] + ptr-index walk, address-of
+ * local-array[0] + deref, width fidelity through ONE buffer viewed at
+ * byte width, manual address arithmetic vs ptr-index, a pointer through
+ * a CALL arg (callee stores, caller observes), pointer eq and neq.
+ * EXCLUDED (named corners): address-of local SCALAR (slot model), null
+ * deref, ordered pointer compares (measure separately), fnptr.
+ * NOTE: no star-slash type spellings in this comment -- the lexer
+ * depth-counts nested comments and "slash star" inside prose OPENS one.
+ * 97 = the address model holds. */
+module sq16
+
+var CELL : u64
+var TAB : [u32; 4]
+
+fn bump(p: *u64) -> u64 {
+    p[0u64] = p[0u64] + 5u64
+    return p[0u64]
+}
+
+fn main() -> u64 {
+    /* &module-cell round-trip through *u64 */
+    let pc0 : *u64 = &CELL
+    pc0[0u64] = 40u64
+    if CELL != 40u64 { return 81u64 }
+    CELL = 41u64
+    if pc0[0u64] != 41u64 { return 82u64 }
+    /* &arr[i] + ptr-index walk */
+    TAB[0u64] = 7u32
+    TAB[1u64] = 8u32
+    TAB[2u64] = 9u32
+    let pt : *u32 = &TAB[1u64]
+    if pt[0u64] != 8u32 { return 83u64 }
+    if pt[1u64] != 9u32 { return 84u64 }
+    pt[1u64] = 90u32
+    if TAB[2u64] != 90u32 { return 85u64 }
+    /* &local-array[0] + deref */
+    var buf : [u16; 4]
+    buf[0u64] = 300u16
+    buf[3u64] = 400u16
+    let pb : *u16 = &buf[0u64]
+    if pb[0u64] != 300u16 { return 86u64 }
+    if pb[3u64] != 400u16 { return 87u64 }
+    /* width fidelity: one local u64 array viewed as *u8 */
+    var one : [u64; 1]
+    one[0u64] = 0x1122334455667788u64
+    let p8 : *u8 = &one[0u64] as *u8
+    if p8[0u64] != 0x88u8 { return 88u64 }
+    if p8[7u64] != 0x11u8 { return 89u64 }
+    p8[7u64] = 0xEEu8
+    if (one[0u64] >> 56u64) != 0xEEu64 { return 90u64 }
+    /* manual address arithmetic vs ptr-index */
+    let a1 : u64 = (&TAB[0u64]) as u64
+    let a2 : u64 = (&TAB[2u64]) as u64
+    if a2 != a1 + 8u64 { return 91u64 }
+    /* ptr through a call arg: callee mutates, caller observes */
+    CELL = 10u64
+    if bump(&CELL) != 15u64 { return 92u64 }
+    if CELL != 15u64 { return 93u64 }
+    /* ptr eq/neq */
+    let q1 : *u64 = &CELL
+    let q2 : *u64 = &CELL
+    if q1 != q2 { return 94u64 }
+    if (q1 as u64) == a1 { return 95u64 }
+    return 97u64
+}

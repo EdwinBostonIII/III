@@ -2353,6 +2353,13 @@ var R3_STR_LEAQ_RCX1 : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 1
 const R3_STR_LEAQ_RCX1_LEN : u64 = 29u64
 var R3_STR_LEAQ_RCX8 : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R3_STR_LEAQ_RCX8_LEN : u64 = 29u64
+/* Θ4 row 16 (sq16 authoring, 2026-07-11): the &arr[i] leaq scale must be
+ * the ELEMENT size — the is_byte 1/8 dispatch mis-addressed u16/u32
+ * elements (&u32arr[i] landed at i*8; the WATCH note's suspect, measured). */
+var R3_STR_LEAQ_RCX2 : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 50u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R3_STR_LEAQ_RCX2_LEN : u64 = 29u64
+var R3_STR_LEAQ_RCX4 : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 52u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R3_STR_LEAQ_RCX4_LEN : u64 = 29u64
 /* iiis-1 width-aware indexed load/store constants — mirrors cg_r3.c's
  * pointer_element_width dispatch.  Each is "    <mnemonic> ..." with
  * scale and reg matching the C-side emit_line output. */
@@ -2555,7 +2562,7 @@ fn r3_emit_expr(node: u32) -> u32 {
             if ik2 == R3_K_EXPR_INDEX {
                 let iobj: u32 = iii_ast_index_object(R3_G_AST, inner)
                 let iidx: u32 = iii_ast_index_index(R3_G_AST, inner)
-                let bb: u32 = r3_index_obj_is_byte(iobj)
+                let iek: u32 = r3_index_obj_elem_kind(iobj)   /* row 16: FULL elem-size scale */
                 let iok: u32 = iii_ast_node_kind(R3_G_AST, iobj)
                 if iok == R3_K_EXPR_IDENT {
                     let ioff: u32 = iii_ast_ident_name_offset(R3_G_AST, iobj)
@@ -2573,8 +2580,18 @@ fn r3_emit_expr(node: u32) -> u32 {
                 }
                 r3_emit_expr(iidx)
                 r3_pop_rcx(); r3_pop_rax()
-                if bb == 1u32 { r3_emit_arr(&R3_STR_LEAQ_RCX1 as u64, R3_STR_LEAQ_RCX1_LEN) }
-                else { r3_emit_arr(&R3_STR_LEAQ_RCX8 as u64, R3_STR_LEAQ_RCX8_LEN) }
+                /* flat dispatch (seed parse-recursion cap: no deep else-if chains) */
+                let mut isc: u32 = 8u32
+                if iek == 1u32 { isc = 1u32 }
+                if iek == 2u32 { isc = 1u32 }
+                if iek == 3u32 { isc = 2u32 }
+                if iek == 4u32 { isc = 2u32 }
+                if iek == 5u32 { isc = 4u32 }
+                if iek == 6u32 { isc = 4u32 }
+                if isc == 1u32 { r3_emit_arr(&R3_STR_LEAQ_RCX1 as u64, R3_STR_LEAQ_RCX1_LEN) }
+                if isc == 2u32 { r3_emit_arr(&R3_STR_LEAQ_RCX2 as u64, R3_STR_LEAQ_RCX2_LEN) }
+                if isc == 4u32 { r3_emit_arr(&R3_STR_LEAQ_RCX4 as u64, R3_STR_LEAQ_RCX4_LEN) }
+                if isc == 8u32 { r3_emit_arr(&R3_STR_LEAQ_RCX8 as u64, R3_STR_LEAQ_RCX8_LEN) }
                 r3_push_rax()
                 return R3_OK
             }

@@ -345,6 +345,25 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > load, deref = the width ops — zero new opcodes, zero eval/cg_r3/interp edits expected; ONE
 > model corner named at design time (&local-SCALAR: SVIR locals are slots vs eval's
 > world-resident locals — refuses in S until the slot→arena promotion increment).
+>
+> **§W.11 SEALED (2026-07-11, chain v8b): THE PTR CLASS COLLAPSED 244 → 5 — THIRD RATCHET RISE
+> (106→112).** Pointers landed with ZERO new opcodes: tags transcribe ev_mk_ptr verbatim
+> (width-8 values, pointee at bits 24/32/40), &lvalue = the index choke-point's address bytes
+> without the load, deref/p[i] = the width ops, *p=v = address+adapted-value+width-store, casts
+> and seams follow ev_adapt/ev_norm, BOTH-PTR eq/neq compare raw addresses. THE PROBE LOOP
+> CAUGHT THREE MORE ARMS (sv_s_let/sv_e_cast/sv_e_binop ptr gates) AND **ROW 16 — A NATIVE
+> DEFECT, the WATCH note's suspect FIRED**: cg_r3's &arr[i] leaq scales were 1/8-only, so
+> &u32arr[i] landed at i*8 (sq16 tooth 83: N=83 vs E=97, adjudicated by the evaluator); FIX =
+> full elem-kind scale dispatch (LEAQ_RCX2/RCX4 join). TWO probe-authoring traps recorded:
+> slash-star prose in block comments OPENS nested comments (the depth-counting lexer — all
+> three routes lex-failed identically), and the SEED's parse-recursion cap killed a 7-deep
+> else-if chain at chain v8's first launch (rc=3 in 7s) → **NEW LAW: compiler-TU pre-flights
+> run under BOTH iiis-0 and iiis-2**. Chain v8b sealed: 12th BYTE-IDENTICAL fixpoint, corpus
+> 1595/0 (zero recorded-under-defect reds for row 16 — the scale shape appears in no corpus
+> expectation), A2 12/12 + square 16/16 N≡E≡S (sq16 rc=97 all routes incl. the FIXED native),
+> meaning 21/21 + 597 HELD + 0 divergence, census pass=112 diverge=0 s-defect=0. Frontier now:
+> **extern-fn 1564 (the svir_ld closure rung's mass — grew as ptr-declaring use-importers
+> re-classified) / ptr residue 5 / string 7 (surfaced from behind ptr declarations)**.
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

@@ -49,6 +49,7 @@ var STEPS : u64 = 0u64
 var DLEN_G : u64 = 0u64
 var CUR_FN : u32 = 0u32
 var BADW_N : u32 = 0u32   var BADW_A : [u64; 64]   var BADW_V : [u64; 64]   var BADW_F : [u32; 64]
+var AB : [u64; 512]   var ARENA_TOP : u64 = 8388608u64   /* SW.9 frame arenas: local [T;N] extents grow UP from 8 MiB (module cells live at 16..MTOP, far below; every exec frame save/restores ARENA_TOP so recursion isolates); 0x8B ARENA [u16 ext] reserves+ZEROES (eval's fresh-world law), 0x8C ABASE pushes the frame's base */
 var OOB_IND : u32 = 0u32   /* count of out-of-range CALL_INDIRECT indices -> the oracle reflects safe (no-silent-dispatch) semantics */
 var UNRES_IMP : u32 = 0u32   /* count of CALLs that landed on an IMPORT-decl body [0x8A][nl][name] (cross-module fn, unresolved single-file) -> trap sentinel 198, never execute the NAME BYTES as opcodes (the silent-wrongness class); resolution is the P3 linker's job */
 var PDEC_D : [u8; 24]
@@ -124,7 +125,7 @@ fn mst(a: u64, w: u32, v: u64) {
 fn vpush(v: u64) { if VSP < 16384u32 { VS[VSP as u64] = v  VSP = VSP + 1u32 } }
 fn vpop() -> u64 { if VSP > 0u32 { VSP = VSP - 1u32  return VS[VSP as u64] }  return 0u64 }
 
-fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  if op==0x73u32 {return 1u64}  if op==0x74u32 {return 3u64}  return 0u64 }   /* 0x73 CALL_INDIRECT ac (1 imm byte) + 0x74 CALL2 [fi:u16 LE][ac] (3 imm bytes); needed so match_end/match_else skip them correctly */
+fn op_w(op: u32) -> u64 { if op==0x01u32 {return 8u64}  if op==0x10u32 {return 1u64}  if op==0x11u32 {return 1u64}  if op==0x50u32 {return 1u64}  if op==0x51u32 {return 1u64}  if op==0x70u32 {return 2u64}  if op==0x73u32 {return 1u64}  if op==0x74u32 {return 3u64}  if op==0x8Bu32 {return 2u64}  return 0u64 }   /* 0x73 CALL_INDIRECT ac (1) + 0x74 CALL2 (3) + 0x8B ARENA [u16] (2); needed so match_end/match_else skip them correctly */
 
 /* find, for the construct opening at body-offset q (BLOCK/LOOP/IF), its matching END position (opcode-aware). */
 fn match_end(boff: u64, blen: u64, q: u64) -> u64 {
@@ -151,8 +152,17 @@ fn match_else(boff: u64, blen: u64, q: u64) -> u64 {
 }
 
 /* execute function `fnidx` at call-frame `depth` (locals base = depth*256, control base = depth*64).
- * args are already placed in LOC[depth*256 .. +argcount] by the caller.  Returns the RETURN value. */
+ * args are already placed in LOC[depth*256 .. +argcount] by the caller.  Returns the RETURN value.
+ * SW.9: the wrapper save/restores ARENA_TOP around every activation (all return paths covered),
+ * so a frame's local-array arena dies with it and recursion gets fresh isolated extents. */
 fn exec_fn(fnidx: u32, depth: u32) -> u64 {
+    let saved_at : u64 = ARENA_TOP
+    let r : u64 = exec_fn_body(fnidx, depth)
+    ARENA_TOP = saved_at
+    return r
+}
+
+fn exec_fn_body(fnidx: u32, depth: u32) -> u64 {
     let boff : u64 = FN_OFF[fnidx as u64]
     let blen : u64 = FN_BLEN[fnidx as u64]
     if blen > 0u64 { if ib(boff) == 0x8Au32 {   /* IMPORT decl [0x8A][nl][name]: WHITELISTED CRT names dispatch to the HOST (Lambda-0 shims); everything else stays the LOUD 198 sentinel (mirrors OOB_IND; the name bytes must never EXECUTE as opcodes) */
@@ -198,6 +208,11 @@ fn exec_fn(fnidx: u32, depth: u32) -> u64 {
             let nb : u64 = ((depth+1u32) as u64) * 256u64
             let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  LOC[nb + (j as u64)] = vpop() }   /* then pop ac args -> callee locals */
             if fi < NFUNC { vpush(exec_fn(fi, depth + 1u32)) } else { OOB_IND = OOB_IND + 1u32  vpush(0u64) } }   /* OOB runtime index: defined-safe (no FN_OFF OOB, no silent mis-dispatch) + recorded; a real x86/wasm backend MUST TRAP here (hard Layer-3 gate) */
+        if op == 0x8Bu32 { adv=0u32  let ext:u64=iu16(boff+p+1u64)  p=p+3u64                  /* SW.9 ARENA [u16 ext]: reserve+ZERO this frame's local-array extent */
+            AB[depth as u64] = ARENA_TOP
+            let mut z:u64=0u64  while z < ext { msb(ARENA_TOP + z, 0u32)  z=z+1u64 }
+            ARENA_TOP = ARENA_TOP + ext }
+        if op == 0x8Cu32 { vpush(AB[depth as u64]) }                                          /* SW.9 ABASE */
         if op >= 0x80u32 { if op <= 0x89u32 {                                                 /* typed memory */
             if op==0x80u32 { let a:u64=vpop()  vpush(mld(a,1u32,0u32)) }
             if op==0x82u32 { let a:u64=vpop()  vpush(mld(a,8u32,0u32)) }

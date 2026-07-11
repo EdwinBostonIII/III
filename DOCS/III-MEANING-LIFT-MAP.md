@@ -302,6 +302,28 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > pinned)**: three KATs' only blocker was their module-data init and they now run route S
 > end-to-end; **var-init 84 → 0 (class EXTINCT — the second retired in two slices)**. Burn-down
 > ledger now THREE classes: extern-fn 1338 / ptr 244 / local-array 3.
+>
+> **S-FRONTIER SLICE 3 (2026-07-10, chain v6): local-array RETIRED — §W.9 THE FRAME ARENA.**
+> Local `var x : [T; N]` lives in a per-activation arena: ops 0x8B ARENA [u16 ext] (save the mark
+> into the frame, reserve, ZERO — eval's fresh-world law — advance) and 0x8C ABASE (push the
+> frame's base); 0x8A untouched (the Λ0 IMPORT marker). Arena base 8 MiB; EVERY exec activation
+> save/restores the mark (wrapper split exec_fn→exec_fn_body covers all return paths) so
+> recursion gets fresh isolated extents. The emitter pre-walks the statement tree for the extent
+> (same traversal order as emission), emits 0x8B iff nonzero before the §W.8 preamble, and
+> addresses elements as idx*esz + ABASE + offset through the ONE index-address choke point
+> (loads and stores both). sq14 proven 98≡98≡98 PRE-LANDING including the RECURSION-ISOLATION
+> tooth; golden e7481e98; A2 10 pins. **THE PRE-LANDING DISCIPLINE FIRED A THIRD TIME**: the
+> first draft's zero-read tooth split N=90 vs E=S=98 — FIRST-READ of a never-written local array
+> is 0 on E/S (world/arena law) but STACK GARBAGE on N; the corpus never pinned it (191/256/1089
+> all write-then-read) — NAMED OPEN CORNER, adjudication deferred, probes test defined behavior
+> only. The census-key normalization rode along (sv_refuse resolves node-handle payloads to AST
+> kinds): the ledger collapsed from ~50 splintered rows to FOUR readable lines. Chain v6 sealed:
+> 10th BYTE-IDENTICAL fixpoint, corpus 1595/0, A2 10/10 + square 14/14 N≡E≡S, meaning 21/21 +
+> ratchet 597 HELD, census GREEN **pass=106 — SECOND RATCHET RISE (103→106, pinned): all three
+> local-array KATs flipped straight to PASS; local-array 3 → 0 (THIRD class EXTINCT in three
+> slices)**. The frontier is TWO classes: **extern-fn@CALL 1338 / ptr@{TYPE 193, UNARY 50,
+> PAREN 1}** — and the extern-fn mass's true rung is named: route S linking each KAT's
+> use-closure through svir_ld (Λ0's linker) into whole-program SVIR — gate v3, the next summit.
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

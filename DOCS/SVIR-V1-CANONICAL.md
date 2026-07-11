@@ -258,3 +258,27 @@ CTFE initializers included), so every route folds module data through the
 ONE meaning object.  Unevaluable initializers refuse (var-init class,
 loud).  iiisv2 (width-free) never emits the preamble; the A1 parity set
 contains no initialized cells.
+
+### W.9 — the frame arena (S-frontier slice 3, 2026-07-10)
+
+Local `var x : [T; N]` lives in a PER-ACTIVATION arena in linear memory.
+Two ops join the executable surface:
+
+| op | name | semantics |
+|---|---|---|
+| 0x8B | ARENA [u16 ext] | save the arena mark into this frame; reserve ext bytes at the mark; ZERO them (eval's fresh-world law); advance the mark |
+| 0x8C | ABASE | push this frame's arena base |
+
+(0x8A stays the Λ0 IMPORT-body marker — never an executed op.)  The arena
+grows UP from 8 MiB (module cells live at 16..MTOP, far below).  EVERY
+activation save/restores the arena mark (the exec wrapper), so a frame's
+arrays die with it and recursion gets fresh isolated extents.  The
+emitter computes the extent by a statement pre-walk (same traversal order
+as emission → same total), emits 0x8B iff extent > 0 (before the entry
+preamble), assigns offsets in encounter order, and addresses elements as
+idx*esz + ABASE + offset — the module-array shape with 0x8C for the base.
+Bare local-array idents refuse (lvalue class), bracket-init locals are
+not grammar.  NAMED OPEN CORNER (adjudication deferred): FIRST-READ of a
+never-written local array is 0 on E/S (world/arena zero law) but stack
+garbage on N — the corpus never pinned it; probes test only defined
+behavior until a Θ4 row adjudicates.

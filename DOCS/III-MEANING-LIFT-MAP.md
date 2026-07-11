@@ -364,6 +364,21 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > meaning 21/21 + 597 HELD + 0 divergence, census pass=112 diverge=0 s-defect=0. Frontier now:
 > **extern-fn 1564 (the svir_ld closure rung's mass — grew as ptr-declaring use-importers
 > re-classified) / ptr residue 5 / string 7 (surfaced from behind ptr declarations)**.
+>
+> **§W.11b SEALED (2026-07-11, chain v9): THE CAST-FORM SUBSCRIPT — FOURTH RATCHET RISE
+> (112→114); the pre-closure frontier is EXHAUSTED.** The three ptr@PAREN rows were one shape —
+> `(p as *u8)[j]` (corpus 1109/1092/1111, the q3_ptrcast idiom) — landed as ONE arm: the index
+> choke point paren-skips its object and accepts ANY ptr-tagged object EXPRESSION (obj +
+> idx*esz(pointee), obj-first canonical order; reads AND writes). sq17 96≡96≡96 FIRST RUN with
+> the two-compiler pre-flight green; golden f36572c4; A2 13 pins. Chain v9 sealed: 13th
+> BYTE-IDENTICAL fixpoint, corpus 1595/0, A2 13/13 + square 17/17 N≡E≡S, meaning 21/21 + 597
+> HELD, census pass=114 diverge=0 s-defect=0 (two cast-subscript KATs flipped PASS; one
+> re-blocked extern-fn). **THE LEDGER'S FINAL PRE-CLOSURE FORM: extern-fn 1565 (THE CLOSURE
+> RUNG — gate v3 via svir_ld, designs grounded and staged) / ptr@UNARY 2 (fnptr-adjacent, named
+> refusals by design) / string 7 (closure-gated — use-imports behind the literals). Every
+> tractable single-file class is retired: 6 slices, 4 ratchet rises (100→114), the square grew
+> from 6 to 17 probes, and the S-frontier census did exactly what it was built to do — name
+> every gap, adjudicate every split, and burn down to the one true summit.**
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

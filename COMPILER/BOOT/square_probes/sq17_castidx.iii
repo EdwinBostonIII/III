@@ -1,0 +1,23 @@
+/* sq17 -- SW.11b: the cast-form subscript -- an INDEX object may be ANY
+ * ptr-tagged EXPRESSION (paren-skipped), addressing obj + idx*esz of the
+ * pointee.  Teeth: byte-packed u64 read via the corpus-1109 shape, write
+ * through the cast form, and a parenthesized address-arithmetic object.
+ * (No slash-star type prose in this comment: nested-comment lexer law.)
+ * 96 = the cast-form subscript holds. */
+module sq17
+
+var ARR : [u64; 2]
+
+fn main() -> u64 {
+    ARR[0u64] = 0x0807060504030201u64
+    let p : u64 = (&ARR[0u64]) as u64
+    let mut sum : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < 8u64 { sum = sum + ((p as *u8)[j] as u64)  j = j + 1u64 }
+    if sum != 36u64 { return 81u64 }
+    (p as *u8)[1u64] = 0xFFu8
+    if ((ARR[0u64] >> 8u64) & 255u64) != 255u64 { return 82u64 }
+    ARR[1u64] = 0xAABBu64
+    if ((p + 8u64) as *u16)[0u64] != 0xAABBu16 { return 83u64 }
+    return 96u64
+}

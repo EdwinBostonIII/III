@@ -322,3 +322,11 @@ raw addresses.  REFUSED (named corners): &local-SCALAR (SVIR locals are
 slots, not world — eval's are world-resident; the slot→arena promotion
 increment lands it), ordered ptr compares (measure first), ptr⊗int
 compares (eval refuses), fnptr, ptr-to-array.
+
+### W.11b — the cast-form subscript (2026-07-11)
+
+An INDEX object may be ANY ptr-tagged EXPRESSION (paren-skipped): the
+address is obj + idx*esz(pointee), obj-first byte order (this arm's
+canonical form; the IDENT arms keep theirs).  Covers the corpus-1109
+shape `(p as *u8)[j]` for reads AND writes through the one choke point.
+Non-ptr non-ident objects still refuse.

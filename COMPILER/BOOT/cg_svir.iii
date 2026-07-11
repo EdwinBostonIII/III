@@ -602,10 +602,30 @@ fn sv_e_ident(node: u32) -> u64 {
 }
 
 /* index address: emit idx expr, scale by esz, add base.  Returns 1 ok.
- * §W.9: LOCAL arrays address as idx*esz + ABASE(0x8C) + arena-offset. */
+ * §W.9: LOCAL arrays address as idx*esz + ABASE(0x8C) + arena-offset.
+ * §W.11b: ANY ptr-tagged object EXPRESSION (the cast-form subscript
+ * `(p as *u8)[j]`, paren-skipped) addresses as obj + idx*esz(pointee) —
+ * obj-first byte order is this arm's canonical form. */
 fn sv_e_index_addr(node: u32) -> u32 {
-    let obj: u32 = iii_ast_index_object(SV_AST, node)
-    if iii_ast_node_kind(SV_AST, obj) != K_EXPR_IDENT { sv_refuse(SVU_PTR, iii_ast_node_kind(SV_AST, obj))  return 0u32 }
+    let mut obj: u32 = iii_ast_index_object(SV_AST, node)
+    let mut objk: u32 = iii_ast_node_kind(SV_AST, obj)
+    while objk == K_EXPR_PAREN { obj = iii_ast_paren_inner(SV_AST, obj)  objk = iii_ast_node_kind(SV_AST, obj) }
+    if objk != K_EXPR_IDENT {
+        let obt: u64 = sv_expr(obj)
+        if SV_UNSUP != 0u32 { return 0u32 }
+        if t_class(obt) != TC_PTR { sv_refuse(SVU_PTR, objk)  return 0u32 }
+        let obe: u64 = sv_pointee(obt)
+        let obit: u64 = sv_expr(iii_ast_index_index(SV_AST, node))
+        if SV_UNSUP != 0u32 { return 0u32 }
+        if t_class(obit) != TC_INT { sv_refuse(SVU_TYPE, K_EXPR_INDEX)  return 0u32 }
+        let mut obes: u64 = t_w(obe)
+        if obes == 0u64 { obes = 8u64 }
+        if obes > 1u64 { econst(obes)  eb(0x22u32) }
+        eb(0x20u32)
+        SVT_ELEM = obe
+        SVT_SZ = obes
+        return 1u32
+    }
     let ai: i32 = arr_idx(iii_ast_ident_name_offset(SV_AST, obj), iii_ast_ident_name_length(SV_AST, obj))
     if ai < 0i32 {
         /* §W.11: p[i] on a ptr-typed LOCAL — idx*esz(pointee) + slot-load p + ADD */

@@ -282,3 +282,24 @@ not grammar.  NAMED OPEN CORNER (adjudication deferred): FIRST-READ of a
 never-written local array is 0 on E/S (world/arena zero law) but stack
 garbage on N — the corpus never pinned it; probes test only defined
 behavior until a Θ4 row adjudicates.
+
+### W.10 — the CRT tier (S-frontier slice 4, 2026-07-10)
+
+Tier-whitelisted extern declarations lower to IMPORT records — the Λ0
+form [params][1][bodylen:u16 LE][0x8A][namelen][name bytes] — appended
+after the real fn records (v1 fncount is a u8: the total caps at 255);
+calls emit as plain CALL to the import's index.  THE TIER (Θ1's
+adjudicated builtin law, one list both routes cite): malloc = zeroed
+bump allocation returning an SVIR OFFSET (tier memory lives IN linear
+memory and flows through the width ops — NOT a host pointer); free =
+noop; putchar = real stdout, returns its char (C law); VirtualAlloc =
+bump (MEM_COMMIT zero-fill ≡ the pre-zeroed world); VirtualFree = TRUE;
+Sleep = noop.  The interp's tier heap grows UP from 64 MiB (disjoint:
+module cells < 1 MiB, seed heap 1→8 MiB, §W.9 arenas 8 MiB+, argv near
+the top).  The EMITTER whitelists — sentinel 198 (unresolved import)
+stays unreachable from conformant modules; non-tier externs (including
+`use`-imports: single-file emission makes cross-module fns externs)
+refuse until the svir_ld closure-link rung.  NAMED UNPINNED CORNER
+(sq14's class): reads of never-written malloc memory are 0 on E/S
+(zeroed worlds) but garbage on N (CRT malloc) — probes test defined
+behavior only.

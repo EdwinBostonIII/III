@@ -158,6 +158,41 @@ extern @abi(c-msvc-x64) fn iii_ev_const_value(ast: u64, name_off: u32, name_len:
 extern @abi(c-msvc-x64) fn iii_ev_elem_value(ast: u64, name_off: u32, name_len: u32, idx: u64, out_addr: u64) -> u32 from "eval.iii"
 var SV_CTFE_VAL : u64 = 0u64
 
+/* §W.10 (slice 4): THE CRT TIER — tier-whitelisted extern decls become
+ * IMPORT records ([0x8A][nl][name], the Λ0 form the interp's shim_call
+ * dispatches); the tier is Θ1's adjudicated builtin list, one law both
+ * routes cite.  Non-tier externs (incl. use-imports — single-file emission
+ * makes cross-module fns externs) keep refusing until the linker rung. */
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_extern_param_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_extern_return_type(ast: u64, node: u32) -> u32 from "ast.iii"
+var EXO : [u32; 32]  var EXL : [u32; 32]  var EXP : [u32; 32]  var EXRT : [u64; 32]
+var EXTN : u32 = 0u32
+
+fn sv_name_lit(off: u32, len: u32, lit: u64, litlen: u32) -> u32 {
+    if len != litlen { return 0u32 }
+    let p: *u8 = lit as *u8
+    let s: *u8 = (SV_SRC + (off as u64)) as *u8
+    let mut j: u32 = 0u32
+    while j < len { if (s[j as u64] as u32) != (p[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+fn sv_tier(off: u32, len: u32) -> u32 {
+    if sv_name_lit(off, len, "malloc~" as u64, 6u32) == 1u32 { return 1u32 }
+    if sv_name_lit(off, len, "free~" as u64, 4u32) == 1u32 { return 1u32 }
+    if sv_name_lit(off, len, "putchar~" as u64, 7u32) == 1u32 { return 1u32 }
+    if sv_name_lit(off, len, "VirtualAlloc~" as u64, 12u32) == 1u32 { return 1u32 }
+    if sv_name_lit(off, len, "VirtualFree~" as u64, 11u32) == 1u32 { return 1u32 }
+    if sv_name_lit(off, len, "Sleep~" as u64, 5u32) == 1u32 { return 1u32 }
+    return 0u32
+}
+fn ext_idx(off: u32, len: u32) -> i32 {
+    let mut k: u32 = 0u32
+    while k < EXTN { if sv_neq(EXO[k as u64], EXL[k as u64], off, len) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
+}
+
 /* refusal classes (the S-frontier census names) */
 const SVU_NONE: u32 = 0u32
 const SVU_STRUCT: u32 = 1u32
@@ -585,6 +620,24 @@ fn sv_e_call(node: u32) -> u64 {
     let fi: i32 = fidx(off, len)
     if fi < 0i32 {
         if lidx(off, len) >= 0i32 { sv_refuse(SVU_FNPTR, K_EXPR_CALL)  return T_BAD }
+        /* §W.10: tier import — args emit UNTYPED-adapted (the tier is
+         * u64-shaped; the shim reads raw LOC slots), CALL/CALL2 to the
+         * import record at FNC + ei, result = the declared return tag. */
+        let ei: i32 = ext_idx(off, len)
+        if ei >= 0i32 {
+            let eac: u32 = iii_ast_call_arg_count(SV_AST, node)
+            let mut q: u32 = 0u32
+            while q < eac {
+                let eav: u32 = iii_ast_arg_value(SV_AST, iii_ast_call_arg_at(SV_AST, node, q))
+                sv_emit_adapted(eav, T_UNTYPED)
+                if SV_UNSUP != 0u32 { return T_BAD }
+                q = q + 1u32
+            }
+            let efi: u32 = FNC + (ei as u32)
+            if efi > 255u32 { sv_refuse(SVU_CAP, 11u32)  return T_BAD }   /* v1 fncount is u8 */
+            eb(0x70u32)  erb(efi)  erb(eac)
+            return EXRT[ei as u64]
+        }
         sv_refuse(SVU_EXTERN_FN, K_EXPR_CALL)
         return T_BAD
     }
@@ -1239,7 +1292,7 @@ fn sv_rec_fn(d: u32) {
 }
 
 fn sv_prescan(root: u32) {
-    FNC = 0u32  ARRN = 0u32  MTOP = 16u64  CNN = 0u32
+    FNC = 0u32  ARRN = 0u32  MTOP = 16u64  CNN = 0u32  EXTN = 0u32
     let dc: u32 = iii_ast_module_decl_count(SV_AST, root)
     let mut i: u32 = 0u32
     while i < dc {
@@ -1250,7 +1303,27 @@ fn sv_prescan(root: u32) {
         if k == K_CONST_DECL { sv_prescan_const(d)  h = 1u32 }
         if k == K_VAR_DECL { sv_prescan_var(d)  h = 1u32 }
         if k == K_STRUCT_DECL { sv_refuse(SVU_STRUCT, k)  h = 1u32 }
-        if k == K_EXTERN_DECL { h = 1u32 }   /* decls are harmless; CALLS to extern names refuse at the call site */
+        if k == K_EXTERN_DECL {
+            h = 1u32
+            /* §W.10: tier-whitelisted externs register as imports; anything
+             * else stays an inert decl (calls refuse at the site).  The
+             * type probe must NOT poison the module for an uncalled decl —
+             * save/restore the refusal state around it. */
+            let xno: u32 = iii_ast_decl_name_offset(SV_AST, d)
+            let xnl: u32 = iii_ast_decl_name_length(SV_AST, d)
+            if sv_tier(xno, xnl) == 1u32 { if EXTN < 32u32 {
+                let sv0: u32 = SV_UNSUP
+                let sk0: u32 = SV_UKIND
+                if sv_type_tag(iii_ast_extern_return_type(SV_AST, d)) != 0u32 { SV_UNSUP = sv0  SV_UKIND = sk0 }
+                else { if SVT_ARR == 1u32 { } else {
+                    EXO[EXTN as u64] = xno
+                    EXL[EXTN as u64] = xnl
+                    EXP[EXTN as u64] = iii_ast_extern_param_count(SV_AST, d)
+                    EXRT[EXTN as u64] = SVT_TT
+                    EXTN = EXTN + 1u32
+                } }
+            } }
+        }
         if k == K_FN_DECL { h = 1u32 }
         if k == K_TYPE_DECL { h = 1u32 }
         if h == 0u32 { sv_refuse(SVU_DECL_KIND, k) }
@@ -1353,10 +1426,25 @@ fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
         k = k + 1u32
     }
     if SV_UNSUP != 0u32 { sv_report_unsup()  return 2u32 }
+    /* §W.10: tier import records appended AFTER the real fns — the Λ0 form
+     * [params][1][bodylen:u16 LE][0x8A][namelen][name bytes] the interp's
+     * shim_call dispatches.  v1 fncount is a u8: cap the total. */
+    if FNC + EXTN > 255u32 { sv_refuse(SVU_CAP, 11u32)  sv_report_unsup()  return 2u32 }
+    let mut x: u32 = 0u32
+    while x < EXTN {
+        let xbl: u32 = 2u32 + EXL[x as u64]
+        mo(EXP[x as u64])  mo(1u32)  mo(xbl & 0xFFu32)  mo((xbl >> 8u32) & 0xFFu32)
+        mo(0x8Au32)  mo(EXL[x as u64])
+        let mut xj: u32 = 0u32
+        let xs: *u8 = (SV_SRC + (EXO[x as u64] as u64)) as *u8
+        while xj < EXL[x as u64] { mo(xs[xj as u64] as u32)  xj = xj + 1u32 }
+        x = x + 1u32
+    }
+    if SV_UNSUP != 0u32 { sv_report_unsup()  return 2u32 }
     /* module text — the exact ~-delimited shape of iiisv2.emit_module */
     let total: u64 = MLN + 1u64
     sv_pstr(out, "module gen_svir\nvar SVIR : [u8; ~" as u64)  sv_pdec(out, total)  sv_pstr(out, "] = [\n~" as u64)
-    sv_pdec(out, FNC as u64)  sv_pstr(out, "u8~" as u64)
+    sv_pdec(out, (FNC + EXTN) as u64)  sv_pstr(out, "u8~" as u64)
     let mut i: u64 = 0u64
     while i < MLN { sv_pc(out, 44u32)  sv_pdec(out, MO[i] as u64)  sv_pstr(out, "u8~" as u64)  i = i + 1u64 }
     sv_pstr(out, "\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)

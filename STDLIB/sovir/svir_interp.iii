@@ -50,6 +50,7 @@ var DLEN_G : u64 = 0u64
 var CUR_FN : u32 = 0u32
 var BADW_N : u32 = 0u32   var BADW_A : [u64; 64]   var BADW_V : [u64; 64]   var BADW_F : [u32; 64]
 var AB : [u64; 512]   var ARENA_TOP : u64 = 8388608u64   /* SW.9 frame arenas: local [T;N] extents grow UP from 8 MiB (module cells live at 16..MTOP, far below; every exec frame save/restores ARENA_TOP so recursion isolates); 0x8B ARENA [u16 ext] reserves+ZEROES (eval's fresh-world law), 0x8C ABASE pushes the frame's base */
+var SHIM_HEAP : u64 = 67108864u64   /* SW.10 CRT-tier heap: malloc/VirtualAlloc bump UP from 64 MiB (pre-zeroed MEM = zeroed allocs; returns SVIR offsets) */
 var OOB_IND : u32 = 0u32   /* count of out-of-range CALL_INDIRECT indices -> the oracle reflects safe (no-silent-dispatch) semantics */
 var UNRES_IMP : u32 = 0u32   /* count of CALLs that landed on an IMPORT-decl body [0x8A][nl][name] (cross-module fn, unresolved single-file) -> trap sentinel 198, never execute the NAME BYTES as opcodes (the silent-wrongness class); resolution is the P3 linker's job */
 var PDEC_D : [u8; 24]
@@ -99,6 +100,18 @@ fn shim_call(boff: u64, lb: u64) -> u64 {
     if nm_is(no, nl, "getenv" as u64, 6u32)==1u32 { return 0u64 }   /* SOURCE_DATE_EPOCH: NULL -> default 0 (deterministic) */
     if nm_is(no, nl, "system" as u64, 6u32)==1u32 { let sy9:i32=system(m2h(a0))  if FPRINTF_DBG==1u32 { putchar(10i32) putchar(83i32) putchar(89i32) putchar(61i32) pdec(sy9 as u64) putchar(10i32) }  return sy9 as u64 }   /* iiis-0 emit.c shells `gcc -c` to assemble the .s (written via fopen/fwrite shims) into the .o ; SY=<rc> trace under FPRINTF_DBG */
     if nm_is(no, nl, "putenv" as u64, 6u32)==1u32 { return (putenv(m2h(a0))) as u64 }   /* D1/D5/D6 forced env (SOURCE_DATE_EPOCH=0, LC_ALL=C) -> visible to the gcc child = byte-identical to gcc iiis-0 */
+    /* SW.10 THE CRT TIER (slice 4) -- the Theta-1 loader's adjudicated law
+     * transcribed: malloc = zeroed bump (MEM pre-zeroed; returns an SVIR
+     * OFFSET, not a host pointer -- tier memory lives IN the world and
+     * flows through mld/mst); free/VirtualFree/Sleep = noop-ish; putchar =
+     * real stdout.  Heap at 64 MiB: disjoint from module cells (<1 MiB),
+     * the seed heap (1->8 MiB), SW.9 arenas (8 MiB+), argv (~top). */
+    if nm_is(no, nl, "malloc" as u64, 6u32)==1u32 { let r9:u64=SHIM_HEAP  SHIM_HEAP=SHIM_HEAP+((a0+7u64)&0xFFFFFFFFFFFFFFF8u64)  return r9 }
+    if nm_is(no, nl, "free" as u64, 4u32)==1u32 { return 0u64 }
+    if nm_is(no, nl, "putchar" as u64, 7u32)==1u32 { putchar((a0 & 255u64) as i32)  return a0 & 255u64 }
+    if nm_is(no, nl, "VirtualAlloc" as u64, 12u32)==1u32 { let r8:u64=SHIM_HEAP  SHIM_HEAP=SHIM_HEAP+((a1+7u64)&0xFFFFFFFFFFFFFFF8u64)  return r8 }
+    if nm_is(no, nl, "VirtualFree" as u64, 11u32)==1u32 { return 1u64 }
+    if nm_is(no, nl, "Sleep" as u64, 5u32)==1u32 { return 0u64 }
     SHIM_HIT = 0u32
     return 0u64
 }

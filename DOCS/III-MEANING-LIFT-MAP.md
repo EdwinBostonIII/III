@@ -324,6 +324,27 @@ Divergence localizes the fault to {front-end+eval | cg_x86 | cg_svir/translator}
 > slices)**. The frontier is TWO classes: **extern-fn@CALL 1338 / ptr@{TYPE 193, UNARY 50,
 > PAREN 1}** — and the extern-fn mass's true rung is named: route S linking each KAT's
 > use-closure through svir_ld (Λ0's linker) into whole-program SVIR — gate v3, the next summit.
+>
+> **S-FRONTIER SLICE 4 (2026-07-11, chain v7): §W.10 THE CRT TIER — the import plumbing gate v3
+> requires, proven three-route.** Tier-whitelisted externs (malloc/free/putchar/VirtualAlloc/
+> VirtualFree/Sleep — Θ1's adjudicated law, ONE list both routes cite) lower to Λ0-form IMPORT
+> records ([params][1][bl:u16][0x8A][nl][name], fncount u8-capped) and the interp's shim_call
+> answers: malloc = zeroed bump at 64 MiB returning SVIR OFFSETS (tier memory lives IN the
+> world), free noop, putchar char-law, VirtualAlloc ≡ MEM_COMMIT-zero bump. Registration probes
+> save/restore the refusal state (an uncalled decl must not poison). TWO probe traps self-caught
+> pre-landing: the first sq15 draft's deref teeth were ptr-class (malloc memory is only
+> reachable through pointers — the NEXT rung), and zero-read teeth would split N (CRT garbage)
+> from E/S (zeroed worlds) — the sq14 unpinned-corner class. sq15 rewritten pointer-free
+> (putchar char-law, malloc align/disjoint/monotone, free callable): 96≡96≡96 FIRST RUN;
+> golden ab5b5cdd; A2 11 pins. Chain v7 sealed: 11th BYTE-IDENTICAL fixpoint, corpus 1595/0,
+> A2 11/11 + square 15/15 N≡E≡S, meaning 21/21 + ratchet 597 HELD, census GREEN ratchet=106
+> HELD with the ledger BYTE-UNCHANGED (extern-fn 1338 / ptr 193+50+1): every extern-fn
+> first-blocker is a `use`-import — the HONEST zero, exactly the forecast; the tier's value is
+> the plumbing the closure link consumes. §W.11 (addresses without SVIR v2) opens next: ptr
+> tags = eval's ev_mk_ptr packing verbatim, U_ADDR = the index choke-point's bytes without the
+> load, deref = the width ops — zero new opcodes, zero eval/cg_r3/interp edits expected; ONE
+> model corner named at design time (&local-SCALAR: SVIR locals are slots vs eval's
+> world-resident locals — refuses in S until the slot→arena promotion increment).
 
 **Θ3 — COMPTIME (the language grows a feature from its own meaning).** The evaluator becomes the
 compiler's const-expression engine: `const X: T = f(...)` evaluated at compile time by the

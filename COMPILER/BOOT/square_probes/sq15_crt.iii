@@ -1,0 +1,35 @@
+/* sq15 -- S-frontier slice 4 (§W.10): the CRT tier -- tier externs lower
+ * as IMPORT records ([0x8A][nl][name]) and every route answers with the
+ * Θ1-adjudicated law.  rc-axis teeth, POINTER-FREE (deref is the ptr
+ * rung): putchar returns its char; malloc returns nonzero 8-aligned
+ * DISJOINT blocks (address arithmetic only); free is callable (noop law).
+ * NO zero/deref/garbage teeth (sq14-class unpinned corners).
+ * 96 = the tier holds. */
+module sq15
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: u64) -> u64 from "msvcrt"
+
+fn main() -> u64 {
+    if putchar(65u64) != 65u64 { return 81u64 }
+    if putchar(10u64) != 10u64 { return 82u64 }
+    let a: u64 = malloc(64u64)
+    if a == 0u64 { return 83u64 }
+    if (a & 7u64) != 0u64 { return 84u64 }
+    let b: u64 = malloc(32u64)
+    if b == 0u64 { return 85u64 }
+    if (b & 7u64) != 0u64 { return 86u64 }
+    if a == b { return 87u64 }
+    let mut lo: u64 = a
+    let mut hi: u64 = b
+    if b < a { lo = b  hi = a }
+    if hi < lo + 32u64 { return 88u64 }
+    free(a)
+    free(b)
+    let c: u64 = malloc(8u64)
+    if c == 0u64 { return 89u64 }
+    if (c & 7u64) != 0u64 { return 90u64 }
+    if c == a { if c == b { return 91u64 } }
+    return 96u64
+}

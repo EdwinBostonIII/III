@@ -31,6 +31,9 @@ extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) ->
 extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
 extern @abi(c-msvc-x64) fn iii_lex_stderr_c() -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fopen_c(path: u64, mode: u32) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fclose_c(file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
 
 extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.iii"
@@ -170,6 +173,41 @@ extern @abi(c-msvc-x64) fn iii_ast_extern_param_count(ast: u64, node: u32) -> u3
 extern @abi(c-msvc-x64) fn iii_ast_extern_return_type(ast: u64, node: u32) -> u32 from "ast.iii"
 var EXO : [u32; 32]  var EXL : [u32; 32]  var EXP : [u32; 32]  var EXRT : [u64; 32]
 var EXTN : u32 = 0u32
+
+/* THE CLOSURE RUNG (gate v3): per-TU emission for svir_ld.  closure mode
+ * registers ALL extern decls as imports (the linker resolves them by name
+ * against the other TUs' defs; the CRT tail stays shimmable); membase
+ * relocates this TU's module cells (the ccsv --membase architecture). */
+var SV_CLOSURE : u32 = 0u32
+var SV_MEMBASE : u64 = 16u64
+var SV_RAWH : [u8; 1]
+fn iii_cg_svir_set_mode(closure: u32, membase: u64) -> u32 @export {
+    SV_CLOSURE = closure
+    SV_MEMBASE = membase
+    if SV_MEMBASE < 16u64 { SV_MEMBASE = 16u64 }
+    return 0u32
+}
+fn iii_cg_svir_names(out: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    while k < FNC {
+        sv_pdec(out, k as u64)
+        sv_pstr(out, ": ~" as u64)
+        let f2: u32 = FNODE[k as u64]
+        iii_lex_fwrite_c(SV_SRC + (iii_ast_fn_name_off(SV_AST, f2) as u64), iii_ast_fn_name_len(SV_AST, f2) as u64, out)
+        sv_pc(out, 10u32)
+        k = k + 1u32
+    }
+    return 0u32
+}
+fn iii_cg_svir_raw(path: u64) -> u32 @export {
+    let f: u64 = iii_lex_fopen_c(path, 1u32)
+    if f == 0u64 { return 1u32 }
+    SV_RAWH[0u64] = ((FNC + EXTN) & 0xFFu32) as u8
+    iii_lex_fwrite_c(&SV_RAWH as u64, 1u64, f)
+    iii_lex_fwrite_c(&MO as u64, MLN, f)
+    iii_lex_fclose_c(f)
+    return 0u32
+}
 
 fn sv_name_lit(off: u32, len: u32, lit: u64, litlen: u32) -> u32 {
     if len != litlen { return 0u32 }
@@ -351,7 +389,65 @@ fn sv_name_is(off: u32, len: u32, s: u64, sl: u64) -> u32 {
 
 /* ── body byte emitters (canonical shapes; mirror iiisv2 erb/eb/econst) ── */
 fn erb(b: u32) { if BLN < 65536u64 { BD[BLN] = (b & 0xFFu32) as u8  BLN = BLN + 1u64 } else { sv_refuse(SVU_CAP, 1u32) } }
-fn eb(b: u32) { SV_LAST_OP = b & 0xFFu32  erb(b) }
+
+/* [MATHESIS Xi0 -- ADMITTED THEOREM, DOCS/III-MATHESIS-MAP.md s7] AND-const-chain fold:
+ *   (x & c1) & c2 == x & (c1 & c2)   for ALL x, c1, c2 in Z/2^64.
+ * PROVEN by the disposer (corpus/2601: ONE symbolic seq_equiv call -- constants as parameters -- over all
+ * 2^64 assignments, + the bit-local truth-table second engine, R1 dual); MEASURED 78 live windows in route-S
+ * emission with 0 on the walked stage1 surface (corpus/2602's opcode-sync instrument); the door is
+ * corpus/2600.  Emission-time fold at the eb(0x25) choke point.  ELIGIBILITY IS DUAL: the 3-slot event
+ * history (opcode + emit offset) AND the exact byte shape must BOTH match -- a byte coincidence inside a
+ * CONST immediate has no event record, an event record displaced by other emission has no byte match, so
+ * neither alone can fire.  Collapses [CONST c1][AND][CONST c2] + AND -> [CONST c1&c2] + AND (10 bytes per
+ * window; cascades on longer chains).  Branch operands are depth-indexed, so the shrink is offset-safe (the
+ * e_insert_bias_at surgery precedent).  History resets at body start and at raw-surgery sites. */
+var SV_H_OP  : [u32; 3]
+var SV_H_OFF : [u64; 3]
+fn e_hist_reset() {
+    SV_H_OP[0u64] = 0u32  SV_H_OFF[0u64] = 0u64
+    SV_H_OP[1u64] = 0u32  SV_H_OFF[1u64] = 0u64
+    SV_H_OP[2u64] = 0u32  SV_H_OFF[2u64] = 0u64
+}
+fn e_hist_push(op: u32) {
+    SV_H_OP[2u64] = SV_H_OP[1u64]   SV_H_OFF[2u64] = SV_H_OFF[1u64]
+    SV_H_OP[1u64] = SV_H_OP[0u64]   SV_H_OFF[1u64] = SV_H_OFF[0u64]
+    SV_H_OP[0u64] = op              SV_H_OFF[0u64] = BLN
+}
+fn e_and_chain_fold() -> u32 {
+    if BLN < 19u64 { return 0u32 }
+    if SV_H_OP[0u64] != 0x01u32 { return 0u32 }
+    if SV_H_OFF[0u64] != BLN - 9u64 { return 0u32 }
+    if SV_H_OP[1u64] != 0x25u32 { return 0u32 }
+    if SV_H_OFF[1u64] != BLN - 10u64 { return 0u32 }
+    if SV_H_OP[2u64] != 0x01u32 { return 0u32 }
+    if SV_H_OFF[2u64] != BLN - 19u64 { return 0u32 }
+    if (BD[BLN - 19u64] as u32) != 0x01u32 { return 0u32 }
+    if (BD[BLN - 10u64] as u32) != 0x25u32 { return 0u32 }
+    if (BD[BLN - 9u64] as u32) != 0x01u32 { return 0u32 }
+    let mut c1 : u64 = 0u64
+    let mut c2 : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        c1 = c1 | ((BD[BLN - 18u64 + k] as u64) << (8u64 * k))
+        c2 = c2 | ((BD[BLN - 8u64 + k] as u64) << (8u64 * k))
+        k = k + 1u64
+    }
+    let f : u64 = c1 & c2
+    k = 0u64
+    while k < 8u64 { BD[BLN - 18u64 + k] = ((f >> (8u64 * k)) & 255u64) as u8  k = k + 1u64 }
+    BLN = BLN - 10u64
+    SV_H_OP[0u64] = 0x01u32  SV_H_OFF[0u64] = BLN - 9u64
+    SV_H_OP[1u64] = 0u32     SV_H_OFF[1u64] = 0u64
+    SV_H_OP[2u64] = 0u32     SV_H_OFF[2u64] = 0u64
+    return 1u32
+}
+fn eb(b: u32) {
+    let op : u32 = b & 0xFFu32
+    if op == 0x25u32 { e_and_chain_fold() }
+    e_hist_push(op)
+    SV_LAST_OP = op
+    erb(b)
+}
 fn econst(v: u64) { eb(0x01u32)  let mut k: u32 = 0u32  while k < 8u32 { erb((v >> (8u64 * (k as u64))) as u32)  k = k + 1u32 } }
 fn eu8(o: u32, a: u32) { eb(o)  erb(a) }
 fn mo(b: u32) { if MLN < 262144u64 { MO[MLN] = (b & 0xFFu32) as u8  MLN = MLN + 1u64 } else { sv_refuse(SVU_CAP, 2u32) } }
@@ -362,6 +458,7 @@ fn mo(b: u32) { if MLN < 262144u64 { MO[MLN] = (b & 0xFFu32) as u8  MLN = MLN + 
  * LHS biased only after the RHS's tag is known (postorder), and the
  * canonical byte shape keeps the bias adjacent to its operand. */
 fn e_insert_bias_at(at: u64) {
+    e_hist_reset()   /* raw surgery displaces recorded offsets -- the fold history must not survive it */
     if BLN + 10u64 > 65536u64 { sv_refuse(SVU_CAP, 1u32)  return }
     let mut j: u64 = BLN
     while j > at { j = j - 1u64  BD[j + 10u64] = BD[j] }
@@ -1337,7 +1434,7 @@ fn sv_fn(k: u32) {
         ladd(iii_ast_param_name_off(SV_AST, p), iii_ast_param_name_len(SV_AST, p), SVT_TT)
         i = i + 1u32
     }
-    BLN = 0u64  SV_LAST_OP = 0u32
+    BLN = 0u64  SV_LAST_OP = 0u32  e_hist_reset()
     /* §W.9: frame arena — extent from the statement pre-walk; 0x8B first
      * (frame setup), then the entry preamble (main), then the body. */
     LAN = 0u32  AEXT = 0u64
@@ -1440,7 +1537,7 @@ fn sv_rec_fn(d: u32) {
 }
 
 fn sv_prescan(root: u32) {
-    FNC = 0u32  ARRN = 0u32  MTOP = 16u64  CNN = 0u32  EXTN = 0u32
+    FNC = 0u32  ARRN = 0u32  MTOP = SV_MEMBASE  CNN = 0u32  EXTN = 0u32
     let dc: u32 = iii_ast_module_decl_count(SV_AST, root)
     let mut i: u32 = 0u32
     while i < dc {
@@ -1459,7 +1556,9 @@ fn sv_prescan(root: u32) {
              * save/restore the refusal state around it. */
             let xno: u32 = iii_ast_decl_name_offset(SV_AST, d)
             let xnl: u32 = iii_ast_decl_name_length(SV_AST, d)
-            if sv_tier(xno, xnl) == 1u32 { if EXTN < 32u32 {
+            let mut xreg: u32 = sv_tier(xno, xnl)
+            if SV_CLOSURE == 1u32 { xreg = 1u32 }             /* closure mode: ALL externs are link-resolvable imports */
+            if xreg == 1u32 { if EXTN < 32u32 {
                 let sv0: u32 = SV_UNSUP
                 let sk0: u32 = SV_UKIND
                 if sv_type_tag(iii_ast_extern_return_type(SV_AST, d)) != 0u32 { SV_UNSUP = sv0  SV_UKIND = sk0 }

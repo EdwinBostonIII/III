@@ -1236,6 +1236,14 @@ MODULES=(
     "numera/ser_causal"
     "numera/ser_tdriver"
     "numera/ser_kinduct_sym"
+    # mathesis_admit -- THE MATHESIS LIBRARY DOOR (Xi0-T1, DOCS/III-MATHESIS-MAP.md s6): the strict four-clause
+    # admission conjunction (PROVEN/NOVEL/USEFUL/WITNESSED) + canonical schema theorem_id + the tamper-evident
+    # mhash chain for MATH_LIBRARY.sealed.  Composes numera/cad only.  Gate: corpus/2600. -> LIBNATIVE.
+    "numera/mathesis_admit"
+    # mathesis_measure -- THE MATHESIS MEASURE INSTRUMENT (Xi0-T2): opcode-synchronous window census over
+    # real emitted gen_svir containers; picks the seed schema (measure-first law) + discharges USEFUL's
+    # occurrence>0.  Width law mirrors sovir/svir_interp op_w.  Gate: corpus/2602. -> LIBNATIVE.
+    "numera/mathesis_measure"
     # ser_eidos -- THE RESEAL DECISION WITNESSED ON THE REAL eidos/field substrate (not dome, the superseded
     # POC). The autopoietic accept/rollback was CLAIMED event-driven/on-EIDOS but ran on nothing III consumes;
     # this records the driver's REAL gate verdict on the field: ACCEPT -> a witnessed field_record; REFUTE ->

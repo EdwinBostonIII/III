@@ -1,0 +1,119 @@
+/* STDLIB/corpus/2602_mathesis_measure.iii -- THE MEASURE INSTRUMENT gate (Xi0-T2, III-MATHESIS-MAP.md s7).
+ *
+ * Builds synthetic SVIR containers byte-by-byte and proves the walker: (a) seeded windows are counted in
+ * the right class exactly once; (b) a clean body counts zero; (c) the over-range SHL chain (c1+c2 > 63) is
+ * NOT counted (the R2 domain-quantifier tooth lives in the instrument itself); (d) THE OPCODE-SYNC ARM: a
+ * body whose CONST immediates contain a byte-perfect fake window (a byte-grep scanner would count 1) counts
+ * ZERO -- the walker decodes, never greps; (e) an unknown opcode makes the body honestly unwalkable (counted,
+ * never garbage); (f) the v2 container ([0x00][nfunc:u16]) parses; (g) malformed/truncated containers are
+ * rejected; (h) counts are deterministic across reset+rescan.  99 == the instrument is trustworthy. */
+module corpus_2602_mathesis_measure
+
+extern @abi(c-msvc-x64) fn mxm_reset() -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_scan(base: u64, len: u64) -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_count(class: u64) -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_fns() -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_unwalkable() -> u64 from "mathesis_measure.iii"
+
+var BUF  : [u8; 160]
+var BUF2 : [u8; 40]
+var P    : [u64; 1]
+
+fn w8(b: u32) -> u32 { BUF[P[0u64]] = b as u8  P[0u64] = P[0u64] + 1u64  return 1u32 }
+fn wc(v: u64) -> u32 {
+    w8(0x01u32)
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 { w8((x & 0xFFu64) as u32)  x = x >> 8u64  i = i + 1u64 }
+    return 1u32
+}
+fn whdr(params: u32, nres: u32, blen: u64) -> u32 {
+    w8(params)  w8(nres)  w8((blen & 0xFFu64) as u32)  w8(((blen >> 8u64) & 0xFFu64) as u32)
+    return 1u32
+}
+
+fn build_m1() -> u64 {
+    P[0u64] = 0u64
+    w8(6u32)                                  /* v1 container: nfunc=6 */
+    /* fn0: (x & 5) & 7 -> ONE class-1 window (23 bytes) */
+    whdr(1u32, 1u32, 23u64)
+    w8(0x10u32) w8(0u32)  wc(5u64) w8(0x25u32)  wc(7u64) w8(0x25u32)  w8(0x60u32)
+    /* fn1: x + 1 -> clean, zero windows (13 bytes) */
+    whdr(1u32, 1u32, 13u64)
+    w8(0x10u32) w8(0u32)  wc(1u64) w8(0x20u32)  w8(0x60u32)
+    /* fn2: (x >> 3) << 3 -> ONE class-6 align-down window (23 bytes) */
+    whdr(1u32, 1u32, 23u64)
+    w8(0x10u32) w8(0u32)  wc(3u64) w8(0x29u32)  wc(3u64) w8(0x28u32)  w8(0x60u32)
+    /* fn3: (x << 40) << 30 -> OVER-RANGE (70 > 63): must NOT count as class 4 (23 bytes) */
+    whdr(1u32, 1u32, 23u64)
+    w8(0x10u32) w8(0u32)  wc(40u64) w8(0x28u32)  wc(30u64) w8(0x28u32)  w8(0x60u32)
+    /* fn4: THE PHANTOM (30 bytes): three consts whose immediates embed a byte-perfect fake class-1
+     * window at byte offset 8 (b[8]=0x01, b[17]=0x25, b[18]=0x01 the real const C, b[27]=0x25 the real
+     * AND) -- a byte-grep counts 1; the opcode-sync walk counts 0. */
+    whdr(0u32, 1u32, 30u64)
+    wc(0x0100000000000000u64)                 /* A: imm byte 8 (abs 8) = 0x01 */
+    wc(0x2500000000000000u64)                 /* B: imm byte 8 (abs 17) = 0x25 */
+    wc(0u64)                                  /* C: opcode 0x01 at abs 18 */
+    w8(0x25u32)                               /* real AND at abs 27 */
+    w8(0x72u32)  w8(0x60u32)
+    /* fn5: unknown opcode 0xEE -> the body is honestly unwalkable (2 bytes) */
+    whdr(0u32, 1u32, 2u64)
+    w8(0xEEu32)  w8(0x60u32)
+    return P[0u64]
+}
+
+fn build_m2() -> u64 {
+    P[0u64] = 0u64
+    /* v2 container: 0x00 [nfunc=1 u16 LE], then fn0: (x | 5) | 7 -> ONE class-2 window */
+    BUF2[0u64] = 0u8  BUF2[1u64] = 1u8  BUF2[2u64] = 0u8
+    BUF2[3u64] = 1u8  BUF2[4u64] = 1u8  BUF2[5u64] = 23u8  BUF2[6u64] = 0u8
+    let mut q : u64 = 7u64
+    BUF2[q] = 0x10u8  q = q + 1u64
+    BUF2[q] = 0u8     q = q + 1u64
+    BUF2[q] = 0x01u8  q = q + 1u64
+    BUF2[q] = 5u8     q = q + 1u64
+    let mut i : u64 = 0u64
+    while i < 7u64 { BUF2[q] = 0u8  q = q + 1u64  i = i + 1u64 }
+    BUF2[q] = 0x26u8  q = q + 1u64
+    BUF2[q] = 0x01u8  q = q + 1u64
+    BUF2[q] = 7u8     q = q + 1u64
+    i = 0u64
+    while i < 7u64 { BUF2[q] = 0u8  q = q + 1u64  i = i + 1u64 }
+    BUF2[q] = 0x26u8  q = q + 1u64
+    BUF2[q] = 0x60u8  q = q + 1u64
+    return q
+}
+
+fn main() -> u64 {
+    let m1len : u64 = build_m1()
+    if m1len != 139u64 { return 9u64 }                       /* the builder itself is measured */
+
+    if mxm_reset() != 1u32 { return 8u64 }
+    if mxm_scan(&BUF as u64, m1len) != 1u32 { return 10u64 }
+    if mxm_count(1u64) != 1u64 { return 11u64 }              /* AND-chain seeded once */
+    if mxm_count(6u64) != 1u64 { return 12u64 }              /* align-down seeded once */
+    if mxm_count(4u64) != 0u64 { return 13u64 }              /* over-range SHL chain NOT counted (R2 tooth) */
+    if mxm_count(2u64) != 0u64 { return 14u64 }              /* no OR-chain -- and the PHANTOM counted zero */
+    if mxm_count(3u64) != 0u64 { return 15u64 }
+    if mxm_count(5u64) != 0u64 { return 16u64 }
+    if mxm_count(7u64) != 0u64 { return 17u64 }
+    if mxm_fns() != 6u64 { return 18u64 }
+    if mxm_unwalkable() != 1u64 { return 19u64 }             /* the 0xEE body, honestly abstained */
+
+    if mxm_reset() != 1u32 { return 8u64 }                   /* determinism: same module, same counts */
+    if mxm_scan(&BUF as u64, m1len) != 1u32 { return 20u64 }
+    if mxm_count(1u64) != 1u64 { return 20u64 }
+
+    let m2len : u64 = build_m2()
+    if m2len != 30u64 { return 9u64 }
+    if mxm_reset() != 1u32 { return 8u64 }
+    if mxm_scan(&BUF2 as u64, m2len) != 1u32 { return 21u64 }  /* v2 container parses */
+    if mxm_count(2u64) != 1u64 { return 22u64 }               /* OR-chain seeded once */
+    if mxm_count(1u64) != 0u64 { return 23u64 }
+
+    if mxm_scan(&BUF as u64, 0u64) != 0u32 { return 24u64 }   /* malformed: empty */
+    if mxm_scan(0u64, 10u64) != 0u32 { return 25u64 }         /* malformed: null */
+    if mxm_scan(&BUF as u64, 20u64) != 0u32 { return 26u64 }  /* truncated: fn0 overruns len */
+
+    return 99u64
+}

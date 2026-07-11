@@ -1,0 +1,151 @@
+/* STDLIB/corpus/2601_mathesis_dispose.iii -- THE DISPOSER gate (Xi0-T3, III-MATHESIS-MAP.md s3a-P2/s7).
+ *
+ * Routes the candidate theorem SCHEMAS through the real disposer (seq_equiv: 1 PROVEN / 0 REFUTED /
+ * 2 SEQ_TOP), R4-first:
+ *   (a) THE FALSE IDENTITY FIRST: a+b == a|b must be REFUTED (0) -- never proven, never abstained;
+ *   (b) SYMBOLIC-SCHEMA route: constants-as-parameters -- ONE call proves the whole forall-schema
+ *       (x OP c1) OP c2 == x OP (c1 fold c2) over ALL 2^64 assignments of x, c1, c2, for OP in AND/OR/XOR;
+ *   (c) HONEST ABSTAIN: an out-of-fragment body (CALL) yields SEQ_TOP (2) -- catalogued, never admitted;
+ *   (d) RANGE-SWEEP route: the shift-count-parametric families discharge per-instance over the ENTIRE
+ *       declared range k=1..63 (S1: a param may not sit in a shift-count position, so the sweep IS the
+ *       quantifier): align-down (x>>k)<<k == x & ~(2^k-1) and mask-low (x<<k)>>k == x & (2^(64-k)-1);
+ *   (e) THE WIDTH TOOTH (R2): (x<<32)>>32 == x is FALSE at width 64 and must be REFUTED (0);
+ *   (f) ENGINE 2 (R1 dual disposer): the bitwise ops are bit-local, so the 2^3 truth-table per op is a
+ *       COMPLETE independent proof of the chain schemas; the shift families re-check over all k x a
+ *       12-value diverse vector.  99 == the disposer holds the door's PROVEN clause. */
+module corpus_2601_mathesis_dispose
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var CF : [u8; 12]
+var CG : [u8; 12]
+var FF : [u8; 8]
+var FG : [u8; 8]
+var TF : [u8; 8]
+var AF : [u8; 24]
+var AG : [u8; 16]
+var XS : [u64; 12]
+
+fn build_chain(op: u32) -> u32 {
+    /* f: (x OP c1) OP c2   with x=local0, c1=local1, c2=local2 (the constants ARE parameters) */
+    CF[0u64] = 0x10u8  CF[1u64] = 0u8
+    CF[2u64] = 0x10u8  CF[3u64] = 1u8
+    CF[4u64] = op as u8
+    CF[5u64] = 0x10u8  CF[6u64] = 2u8
+    CF[7u64] = op as u8
+    CF[8u64] = 0x60u8
+    /* g: x OP (c1 OP c2) */
+    CG[0u64] = 0x10u8  CG[1u64] = 0u8
+    CG[2u64] = 0x10u8  CG[3u64] = 1u8
+    CG[4u64] = 0x10u8  CG[5u64] = 2u8
+    CG[6u64] = op as u8
+    CG[7u64] = op as u8
+    CG[8u64] = 0x60u8
+    return 1u32
+}
+
+fn wc_at(bufsel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if bufsel == 0u32 { AF[pos] = 0x01u8 }
+    if bufsel == 1u32 { AG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if bufsel == 0u32 { AF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if bufsel == 1u32 { AG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+
+/* f: (x >>|<< k) <<|>> k  (op1 then op2);  g: x & mask.  Returns via seq_equiv. */
+fn sweep_pair(op1: u32, op2: u32, k: u64, mask: u64) -> u32 {
+    AF[0u64] = 0x10u8  AF[1u64] = 0u8
+    let mut p : u64 = wc_at(0u32, 2u64, k)
+    AF[p] = op1 as u8  p = p + 1u64
+    p = wc_at(0u32, p, k)
+    AF[p] = op2 as u8  p = p + 1u64
+    AF[p] = 0x60u8
+    let flen : u64 = p + 1u64
+    AG[0u64] = 0x10u8  AG[1u64] = 0u8
+    let mut q : u64 = wc_at(1u32, 2u64, mask)
+    AG[q] = 0x25u8  q = q + 1u64
+    AG[q] = 0x60u8
+    let glen : u64 = q + 1u64
+    return seq_equiv(&AF as u64, 0u64, flen, &AG as u64, 0u64, glen, 1u32)
+}
+
+fn main() -> u64 {
+    /* ---- (a) R4 FIRST: the false identity a+b == a|b must be REFUTED ---- */
+    FF[0u64] = 0x10u8  FF[1u64] = 0u8  FF[2u64] = 0x10u8  FF[3u64] = 1u8  FF[4u64] = 0x20u8  FF[5u64] = 0x60u8
+    FG[0u64] = 0x10u8  FG[1u64] = 0u8  FG[2u64] = 0x10u8  FG[3u64] = 1u8  FG[4u64] = 0x26u8  FG[5u64] = 0x60u8
+    if seq_equiv(&FF as u64, 0u64, 6u64, &FG as u64, 0u64, 6u64, 2u32) != 0u32 { return 10u64 }
+
+    /* ---- (c) honest abstain: an out-of-fragment body (CALL 0x70) yields SEQ_TOP ---- */
+    TF[0u64] = 0x70u8  TF[1u64] = 0u8  TF[2u64] = 0u8  TF[3u64] = 0x60u8
+    if seq_equiv(&TF as u64, 0u64, 4u64, &TF as u64, 0u64, 4u64, 1u32) != 2u32 { return 11u64 }
+
+    /* ---- (b) THE SYMBOLIC SCHEMA ROUTE: one call proves each forall x,c1,c2 chain schema ---- */
+    build_chain(0x25u32)
+    if seq_equiv(&CF as u64, 0u64, 9u64, &CG as u64, 0u64, 9u64, 3u32) != 1u32 { return 20u64 }
+    build_chain(0x26u32)
+    if seq_equiv(&CF as u64, 0u64, 9u64, &CG as u64, 0u64, 9u64, 3u32) != 1u32 { return 21u64 }
+    build_chain(0x27u32)
+    if seq_equiv(&CF as u64, 0u64, 9u64, &CG as u64, 0u64, 9u64, 3u32) != 1u32 { return 22u64 }
+
+    /* ---- (e) THE WIDTH TOOTH: (x<<32)>>32 == x is FALSE at width 64 -> REFUTED ---- */
+    AG[0u64] = 0x10u8  AG[1u64] = 0u8  AG[2u64] = 0x60u8
+    AF[0u64] = 0x10u8  AF[1u64] = 0u8
+    let mut p : u64 = wc_at(0u32, 2u64, 32u64)
+    AF[p] = 0x28u8  p = p + 1u64
+    p = wc_at(0u32, p, 32u64)
+    AF[p] = 0x29u8  p = p + 1u64
+    AF[p] = 0x60u8
+    if seq_equiv(&AF as u64, 0u64, p + 1u64, &AG as u64, 0u64, 3u64, 1u32) != 0u32 { return 23u64 }
+
+    /* ---- (d) THE RANGE-SWEEP ROUTE: every k in the declared range, both shift idioms ---- */
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        let alignmask : u64 = 0xFFFFFFFFFFFFFFFFu64 << k          /* ~(2^k - 1), const-count shl is exact */
+        if sweep_pair(0x29u32, 0x28u32, k, alignmask) != 1u32 { return 1000u64 + k }
+        let lowmask : u64 = 0xFFFFFFFFFFFFFFFFu64 >> k            /* 2^(64-k) - 1 */
+        if sweep_pair(0x28u32, 0x29u32, k, lowmask) != 1u32 { return 2000u64 + k }
+        k = k + 1u64
+    }
+
+    /* ---- (f) ENGINE 2, R1 dual: bit-local truth tables are a COMPLETE independent proof ---- */
+    let mut xb : u64 = 0u64
+    while xb < 2u64 {
+        let mut c1 : u64 = 0u64
+        while c1 < 2u64 {
+            let mut c2 : u64 = 0u64
+            while c2 < 2u64 {
+                if ((xb & c1) & c2) != (xb & (c1 & c2)) { return 30u64 }
+                if ((xb | c1) | c2) != (xb | (c1 | c2)) { return 30u64 }
+                if ((xb ^ c1) ^ c2) != (xb ^ (c1 ^ c2)) { return 30u64 }
+                c2 = c2 + 1u64
+            }
+            c1 = c1 + 1u64
+        }
+        xb = xb + 1u64
+    }
+    XS[0u64] = 0u64                      XS[1u64] = 1u64
+    XS[2u64] = 2u64                      XS[3u64] = 3u64
+    XS[4u64] = 7u64                      XS[5u64] = 0x101u64
+    XS[6u64] = 0xFFFFu64                 XS[7u64] = 0xFFFFFFFFu64
+    XS[8u64] = 0x100000001u64            XS[9u64] = 0xDEADBEEFCAFEBABEu64
+    XS[10u64] = 0x8000000000000000u64    XS[11u64] = 0xFFFFFFFFFFFFFFFFu64
+    k = 1u64
+    while k <= 63u64 {
+        let mut i : u64 = 0u64
+        while i < 12u64 {
+            let x : u64 = XS[i]
+            if ((x >> k) << k) != (x & (0xFFFFFFFFFFFFFFFFu64 << k)) { return 31u64 }
+            if ((x << k) >> k) != (x & (0xFFFFFFFFFFFFFFFFu64 >> k)) { return 32u64 }
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+
+    return 99u64
+}

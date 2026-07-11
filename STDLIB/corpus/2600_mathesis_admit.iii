@@ -1,0 +1,115 @@
+/* STDLIB/corpus/2600_mathesis_admit.iii -- THE MATHESIS LIBRARY DOOR gate (Xi0-T1, III-MATHESIS-MAP.md s6/s7).
+ *
+ * Proves the admission tactic's mechanics with the negative arms FIRST (RED-first law): (a) the strict
+ * four-clause conjunction rejects each single-false clause AND a non-1 "truthy" value; (b) a malformed
+ * descriptor (wrong magic / bad family op / bad width / inverted range / zero shape) gets NO theorem_id
+ * (the degenerate-pass arm); (c) theorem_id is deterministic, CONTENT-addressed (same words at a different
+ * address -> same id), and statement-sensitive (one word flipped -> different id; restored -> same id);
+ * (d) the chain is deterministic, advances (H2 != H1), and is tamper-evident (one flipped entry byte
+ * changes the head).  99 == the door holds. */
+module corpus_2600_mathesis_admit
+
+extern @abi(c-msvc-x64) fn mx_desc_valid(desc: u64) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_entry_hash(entry: u64, len: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+
+var D   : [u64; 8]
+var D2  : [u64; 8]
+var IDA : [u8; 32]
+var IDB : [u8; 32]
+var G   : [u8; 32]
+var EH  : [u8; 32]
+var EH2 : [u8; 32]
+var H1  : [u8; 32]
+var H1B : [u8; 32]
+var H2  : [u8; 32]
+var ENT : [u8; 24]
+
+fn mk_valid_desc() -> u32 {
+    D[0u64] = 0x4D583031u64   /* MX_MAGIC */
+    D[1u64] = 0x25u64         /* family: AND */
+    D[2u64] = 1u64            /* pattern shape: const-chain */
+    D[3u64] = 1u64            /* replacement shape: single-op fold */
+    D[4u64] = 64u64           /* width */
+    D[5u64] = 0u64            /* unsigned */
+    D[6u64] = 0u64            /* full-domain */
+    D[7u64] = 0u64
+    return 1u32
+}
+
+fn main() -> u64 {
+    mk_valid_desc()
+
+    /* ---- (a) the DOOR: negative arms FIRST -- each clause single-false must reject ---- */
+    if mx_admit(0u32, 1u32, 1u32, 1u32) != 0u32 { return 10u64 }   /* not PROVEN     */
+    if mx_admit(1u32, 0u32, 1u32, 1u32) != 0u32 { return 11u64 }   /* not NOVEL      */
+    if mx_admit(1u32, 1u32, 0u32, 1u32) != 0u32 { return 12u64 }   /* not USEFUL     */
+    if mx_admit(1u32, 1u32, 1u32, 0u32) != 0u32 { return 13u64 }   /* not WITNESSED  */
+    if mx_admit(2u32, 1u32, 1u32, 1u32) != 0u32 { return 14u64 }   /* strictness: 2 is not 1 */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 15u64 }   /* the one admitting tuple */
+
+    /* ---- (b) malformed descriptors get NO id (degenerate-pass arm) ---- */
+    let mut i : u64 = 0u64
+    while i < 8u64 { D2[i] = D[i]  i = i + 1u64 }
+    D2[0u64] = 0x4D583030u64                                        /* wrong magic */
+    if mx_desc_valid(&D2 as u64) != 0u32 { return 20u64 }
+    if mx_theorem_id(&D2 as u64, &IDA as u64) != -3i32 { return 21u64 }
+    D2[0u64] = D[0u64]
+    D2[1u64] = 0x99u64                                              /* bad family op */
+    if mx_desc_valid(&D2 as u64) != 0u32 { return 22u64 }
+    D2[1u64] = D[1u64]
+    D2[4u64] = 33u64                                                /* bad width */
+    if mx_desc_valid(&D2 as u64) != 0u32 { return 23u64 }
+    D2[4u64] = D[4u64]
+    D2[6u64] = 5u64  D2[7u64] = 3u64                                /* inverted range */
+    if mx_desc_valid(&D2 as u64) != 0u32 { return 24u64 }
+    D2[6u64] = 0u64  D2[7u64] = 0u64
+    D2[2u64] = 0u64                                                 /* zero shape (the genesis reserve) */
+    if mx_desc_valid(&D2 as u64) != 0u32 { return 26u64 }
+    D2[2u64] = D[2u64]
+    if mx_desc_valid(&D as u64) != 1u32 { return 25u64 }            /* the valid descriptor IS valid */
+    if mx_theorem_id(0u64, &IDA as u64) != -1i32 { return 27u64 }   /* null desc */
+    if mx_theorem_id(&D as u64, 0u64) != -1i32 { return 28u64 }     /* null out */
+
+    /* ---- (c) theorem_id: deterministic, content-addressed, statement-sensitive ---- */
+    if mx_theorem_id(&D as u64, &IDA as u64) != 0i32 { return 30u64 }
+    if mx_theorem_id(&D as u64, &IDB as u64) != 0i32 { return 30u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 1u32 { return 31u64 }  /* deterministic */
+    if mx_theorem_id(&D2 as u64, &IDB as u64) != 0i32 { return 32u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 1u32 { return 33u64 }  /* CONTENT-addressed: same words,
+                                                                       different address -> same id */
+    D[1u64] = 0x26u64                                               /* AND -> OR: a DIFFERENT theorem */
+    if mx_theorem_id(&D as u64, &IDB as u64) != 0i32 { return 34u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 0u32 { return 35u64 }  /* statement-sensitive */
+    D[1u64] = 0x25u64                                               /* restore */
+    if mx_theorem_id(&D as u64, &IDB as u64) != 0i32 { return 36u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 1u32 { return 37u64 }  /* restored -> same id again */
+
+    /* ---- (d) the chain: deterministic, advancing, tamper-evident ---- */
+    if mx_chain_genesis(&G as u64) != 0i32 { return 40u64 }
+    let mut acc : u32 = 0u32
+    i = 0u64
+    while i < 32u64 { acc = acc | (G[i] as u32)  i = i + 1u64 }
+    if acc == 0u32 { return 41u64 }                                 /* genesis is not the zero digest */
+    i = 0u64
+    while i < 24u64 { ENT[i] = (65u64 + i) as u8  i = i + 1u64 }    /* a rendered entry's bytes */
+    if mx_entry_hash(&ENT as u64, 24u64, &EH as u64) != 0i32 { return 42u64 }
+    if mx_chain_step(&G as u64, &EH as u64, &H1 as u64) != 0i32 { return 43u64 }
+    if mx_chain_step(&G as u64, &EH as u64, &H1B as u64) != 0i32 { return 44u64 }
+    if mx_id_eq(&H1 as u64, &H1B as u64) != 1u32 { return 45u64 }   /* chain deterministic */
+    ENT[0u64] = ENT[0u64] ^ 1u8                                     /* TAMPER one entry byte */
+    if mx_entry_hash(&ENT as u64, 24u64, &EH2 as u64) != 0i32 { return 46u64 }
+    if mx_chain_step(&G as u64, &EH2 as u64, &H1B as u64) != 0i32 { return 47u64 }
+    if mx_id_eq(&H1 as u64, &H1B as u64) != 0u32 { return 48u64 }   /* tamper CHANGES the head */
+    ENT[0u64] = ENT[0u64] ^ 1u8
+    if mx_chain_step(&H1 as u64, &EH as u64, &H2 as u64) != 0i32 { return 49u64 }
+    if mx_id_eq(&H2 as u64, &H1 as u64) != 0u32 { return 50u64 }    /* the chain ADVANCES (no fixpoint) */
+    if mx_chain_step(0u64, &EH as u64, &H2 as u64) != -1i32 { return 51u64 }
+    if mx_entry_hash(&ENT as u64, 0u64, &EH as u64) != -1i32 { return 52u64 }
+
+    return 99u64
+}

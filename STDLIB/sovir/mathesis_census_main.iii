@@ -1,0 +1,60 @@
+/* STDLIB/sovir/mathesis_census_main.iii -- THE MATHESIS CENSUS DRIVER (Xi0-T2, III-MATHESIS-MAP.md s7).
+ *
+ * Links against one emitted gen_svir module (route S's own container: svir_ptr/svir_len) + the measure
+ * instrument, walks it opcode-synchronously, and prints ONE machine-readable census line:
+ *
+ *   MXM fns=<n> ops=<n> unw=<n> c1=<and> c2=<or> c3=<xor> c4=<shl> c5=<shr> c6=<align> c7=<mask>
+ *
+ * run_mathesis.sh runs this per corpus/stage1 file (emit gen_svir.iii -> compile -> link THIS -> run) and
+ * folds the lines into the census that PICKS the seed schema (measure-first law) and certifies the R6
+ * no-fire condition on the stage1 surface.  Exit: 0 census printed | 2 scan refused (malformed module). */
+module mathesis_census_main
+
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn mxm_reset() -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_scan(base: u64, len: u64) -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_count(class: u64) -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_fns() -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_unwalkable() -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_ops() -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u32 = p[i] as u32
+        if c == 126u32 { go = 0u32 }                 /* '~' terminates the literal */
+        if go == 1u32 { putchar(c as i32)  i = i + 1u64 }
+    }
+    return 1u32
+}
+var D : [u8; 24]   /* digit scratch at module scope (the local-array &-of/first-read corner, avoided) */
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { D[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(D[k] as i32) }
+    return 1u32
+}
+fn pc(label: u64, class: u64) -> u32 { ps(label)  pd(mxm_count(class))  return 1u32 }
+
+fn main() -> u64 {
+    mxm_reset()
+    if mxm_scan(svir_ptr(), svir_len()) != 1u32 { ps("MXM SCANFAIL~" as u64)  putchar(10i32)  return 2u64 }
+    ps("MXM fns=~" as u64)  pd(mxm_fns())
+    ps(" ops=~" as u64)     pd(mxm_ops())
+    ps(" unw=~" as u64)     pd(mxm_unwalkable())
+    pc(" c1=~" as u64, 1u64)
+    pc(" c2=~" as u64, 2u64)
+    pc(" c3=~" as u64, 3u64)
+    pc(" c4=~" as u64, 4u64)
+    pc(" c5=~" as u64, 5u64)
+    pc(" c6=~" as u64, 6u64)
+    pc(" c7=~" as u64, 7u64)
+    putchar(10i32)
+    return 0u64
+}

@@ -1,0 +1,151 @@
+/* numera/mathesis_measure.iii -- THE MATHESIS MEASURE INSTRUMENT (Xi0-T2, DOCS/III-MATHESIS-MAP.md s3a-P4).
+ *
+ * The engine's first act is to LOOK: this organ walks a REAL emitted SVIR module (the gen_svir container
+ * route S produces) and counts, opcode-synchronously, the two-op const-chain windows a candidate theorem
+ * schema would collapse.  The census it produces is what PICKS the Xi0 seed schema (measure-first law: no
+ * hand-picked identities) and what discharges the USEFUL clause's occurrence>0 requirement.
+ *
+ * OPCODE-SYNC LAW: a byte-grep over SVIR is WRONG -- a CONST's 8-byte immediate can contain opcode bytes.
+ * The walk decodes op-by-op using the immediate-width law mirrored from the reference executor
+ * (sovir/svir_interp.iii:141 op_w -- the same table its own match_end uses).  An opcode outside the known
+ * ISA stops THAT body and counts it unwalkable (honest abstain, never garbage counts).  An IMPORT-decl body
+ * ([0x8A][nl][name]) is skipped whole -- name bytes must never be scanned as opcodes (the interp's own law).
+ *
+ * WINDOW = [0x01 c1:8][op1][0x01 c2:8][op2] at an op-synchronous offset (19 bytes), i.e. (x op1 c1) op2 c2.
+ * Classes (the candidate schema families):
+ *   1 AND-chain  (op1==op2==0x25)                      -> x & (c1&c2)      : always foldable
+ *   2 OR-chain   (op1==op2==0x26)                      -> x | (c1|c2)
+ *   3 XOR-chain  (op1==op2==0x27)                      -> x ^ (c1^c2)
+ *   4 SHL-chain  (op1==op2==0x28, c1+c2 <= 63)          -> x << (c1+c2)     : R2 range-quantified
+ *   5 SHR-chain  (op1==op2==0x29, c1+c2 <= 63)          -> x >> (c1+c2)
+ *   6 align-down (op1==0x29, op2==0x28, c1==c2 in 1..63) -> x & ~(2^k - 1)
+ *   7 mask-low   (op1==0x28, op2==0x29, c1==c2 in 1..63) -> x & (2^(64-k)-1)
+ * Container: v1 [nfunc:u8] | v2 [0x00][nfunc:u16 LE]; per-fn [params:u8][nres:u8][blen:u16 LE][body].
+ *
+ * Gate: corpus/2602_mathesis_measure (seeded counts + clean-body zero + the phantom-const opcode-sync arm +
+ * unknown-opcode honest-abstain + v2 container + the shift range tooth).  EXIT=99.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: self-contained walker; width law mirrors svir_interp.
+ */
+module numera_mathesis_measure
+
+const MXM_CLASSES : u64 = 8u64
+
+var MXM_CNT : [u64; 8]
+var MXM_FNS : [u64; 1]
+var MXM_UNW : [u64; 1]
+var MXM_OPS : [u64; 1]
+
+fn mxm_reset() -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < MXM_CLASSES { MXM_CNT[i] = 0u64  i = i + 1u64 }
+    MXM_FNS[0u64] = 0u64
+    MXM_UNW[0u64] = 0u64
+    MXM_OPS[0u64] = 0u64
+    return 1u32
+}
+fn mxm_count(class: u64) -> u64 @export { if class >= MXM_CLASSES { return 0u64 }  return MXM_CNT[class] }
+fn mxm_fns() -> u64 @export { return MXM_FNS[0u64] }
+fn mxm_unwalkable() -> u64 @export { return MXM_UNW[0u64] }
+fn mxm_ops() -> u64 @export { return MXM_OPS[0u64] }
+
+fn mxm_b(base: u64, off: u64) -> u32 {
+    let p : *u8 = base as *u8
+    return p[off] as u32
+}
+fn mxm_rd8(base: u64, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((mxm_b(base, off + i) as u64) << (i * 8u64))  i = i + 1u64 }
+    return v
+}
+
+/* the reference immediate-width law (svir_interp.iii:141 op_w, + 0x74 CALL2 3, 0x8B ARENA 2). */
+fn mxm_w(op: u32) -> u64 {
+    if op == 0x01u32 { return 8u64 }
+    if op == 0x10u32 { return 1u64 }
+    if op == 0x11u32 { return 1u64 }
+    if op == 0x50u32 { return 1u64 }
+    if op == 0x51u32 { return 1u64 }
+    if op == 0x70u32 { return 2u64 }
+    if op == 0x73u32 { return 1u64 }
+    if op == 0x74u32 { return 3u64 }
+    if op == 0x8Bu32 { return 2u64 }
+    return 0u64
+}
+/* the known ISA (the reference executor's dispatch surface).  Outside -> honest unwalkable. */
+fn mxm_known(op: u32) -> u32 {
+    if op == 0x01u32 { return 1u32 }
+    if op >= 0x10u32 { if op <= 0x11u32 { return 1u32 } }
+    if op >= 0x20u32 { if op <= 0x2Bu32 { return 1u32 } }
+    if op >= 0x30u32 { if op <= 0x35u32 { return 1u32 } }
+    if op >= 0x40u32 { if op <= 0x44u32 { return 1u32 } }
+    if op >= 0x50u32 { if op <= 0x51u32 { return 1u32 } }
+    if op == 0x60u32 { return 1u32 }
+    if op >= 0x70u32 { if op <= 0x74u32 { return 1u32 } }
+    if op >= 0x80u32 { if op <= 0x8Cu32 { return 1u32 } }
+    return 0u32
+}
+
+/* classify a window (op1,c1)(op2,c2); 0 = not a schema window.  Shift classes carry their R2 range. */
+fn mxm_class(op1: u32, c1: u64, op2: u32, c2: u64) -> u64 {
+    if op1 == op2 {
+        if op1 == 0x25u32 { return 1u64 }
+        if op1 == 0x26u32 { return 2u64 }
+        if op1 == 0x27u32 { return 3u64 }
+        if op1 == 0x28u32 { if c1 + c2 <= 63u64 { return 4u64 }  return 0u64 }
+        if op1 == 0x29u32 { if c1 + c2 <= 63u64 { return 5u64 }  return 0u64 }
+        return 0u64
+    }
+    if op1 == 0x29u32 { if op2 == 0x28u32 { if c1 == c2 { if c1 >= 1u64 { if c1 <= 63u64 { return 6u64 } } } }  return 0u64 }
+    if op1 == 0x28u32 { if op2 == 0x29u32 { if c1 == c2 { if c1 >= 1u64 { if c1 <= 63u64 { return 7u64 } } } }  return 0u64 }
+    return 0u64
+}
+
+/* walk one body opcode-synchronously; count windows.  1 = walked clean, 0 = hit an unknown op (counted). */
+fn mxm_scan_body(base: u64, boff: u64, blen: u64) -> u32 {
+    if blen > 0u64 { if mxm_b(base, boff) == 0x8Au32 { return 1u32 } }   /* IMPORT decl: skip whole (name bytes never scanned) */
+    let mut q : u64 = 0u64
+    while q < blen {
+        let op : u32 = mxm_b(base, boff + q)
+        if mxm_known(op) == 0u32 { MXM_UNW[0u64] = MXM_UNW[0u64] + 1u64  return 0u32 }
+        MXM_OPS[0u64] = MXM_OPS[0u64] + 1u64
+        /* window peek: [0x01 c1:8][op1][0x01 c2:8][op2] = 20 bytes, op2 at q+19, fully inside the body */
+        if op == 0x01u32 { if q + 20u64 <= blen {
+            let op1 : u32 = mxm_b(base, boff + q + 9u64)
+            if mxm_b(base, boff + q + 10u64) == 0x01u32 {
+                let op2 : u32 = mxm_b(base, boff + q + 19u64)
+                let c1 : u64 = mxm_rd8(base, boff + q + 1u64)
+                let c2 : u64 = mxm_rd8(base, boff + q + 11u64)
+                let cl : u64 = mxm_class(op1, c1, op2, c2)
+                if cl != 0u64 { MXM_CNT[cl] = MXM_CNT[cl] + 1u64 }
+            }
+        } }
+        q = q + 1u64 + mxm_w(op)
+    }
+    return 1u32
+}
+
+/* walk a whole gen_svir container.  1 ok / 0 malformed header.  Unwalkable bodies counted, never fatal. */
+fn mxm_scan(base: u64, len: u64) -> u32 @export {
+    if base == 0u64 { return 0u32 }
+    if len < 1u64 { return 0u32 }
+    let mut nfunc : u64 = mxm_b(base, 0u64) as u64
+    let mut off : u64 = 1u64
+    if nfunc == 0u64 {                                   /* v2: 0x00 [nfunc:u16 LE], funcs from 3 */
+        if len < 3u64 { return 0u32 }
+        nfunc = (mxm_b(base, 1u64) as u64) | ((mxm_b(base, 2u64) as u64) << 8u64)
+        off = 3u64
+    }
+    let mut i : u64 = 0u64
+    while i < nfunc {
+        if off + 4u64 > len { return 0u32 }
+        let blen : u64 = (mxm_b(base, off + 2u64) as u64) | ((mxm_b(base, off + 3u64) as u64) << 8u64)
+        if off + 4u64 + blen > len { return 0u32 }
+        mxm_scan_body(base, off + 4u64, blen)
+        MXM_FNS[0u64] = MXM_FNS[0u64] + 1u64
+        off = off + 4u64 + blen
+        i = i + 1u64
+    }
+    return 1u32
+}

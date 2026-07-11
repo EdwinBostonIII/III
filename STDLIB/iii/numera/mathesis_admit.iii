@@ -1,0 +1,156 @@
+/* numera/mathesis_admit.iii -- THE MATHESIS LIBRARY DOOR (Xi0-T1, DOCS/III-MATHESIS-MAP.md section 6).
+ *
+ * The admission tactic MATH_LIBRARY_QUEUE.md waited on, as a real organ: a discovered theorem SCHEMA is
+ * admissible iff PROVEN and NOVEL and USEFUL and WITNESSED -- this module IS that door.  It does not decide
+ * the four clauses (the disposer decides PROVEN, the saturation gate NOVEL, the measure instrument USEFUL,
+ * the witness chain WITNESSED -- three-organ separation, no self-grading); it is the strict conjunction they
+ * all pass through, plus the content-addressing that makes every admitted schema a first-class, tamper-evident
+ * mathematical object:
+ *
+ *   theorem_id  = SHA-256( canonical LE serialisation of the 8-word schema descriptor )
+ *   chain       = H_i = Keccak-256( H_{i-1} || entry_hash_i )   (cad_compose -- append-only, tamper-evident)
+ *
+ * The schema descriptor (8 u64 words, canonical, fixed preorder):
+ *   [0] MX_MAGIC (descriptor version tag -- in-band domain separation)
+ *   [1] family op       : the SVIR opcode of the pattern family (0x20..0x29 ALU set)
+ *   [2] pattern shape   : >=1 (1 = const-chain (x OP c1) OP c2)
+ *   [3] replacement shape: >=1 (1 = single-op x OP fold(c1,c2))
+ *   [4] width tag       : 8 | 16 | 32 | 64          (R2: every schema carries its domain quantifier)
+ *   [5] signedness      : 0 unsigned | 1 signed | 2 both
+ *   [6] param range lo  : 0 for full-domain symbolic params
+ *   [7] param range hi  : 0 for full-domain symbolic params (else lo <= hi)
+ *
+ * A malformed descriptor gets NO id (the degenerate-pass negative arm): validation precedes hashing.
+ * The genesis link hashes the RESERVED descriptor (shape 0 + tag ~0), unreachable by any valid schema --
+ * in-band domain separation without a second hash suite.  mx_chain_step is aliasing-safe (out may be prev:
+ * cad_compose copies both inputs to its scratch before writing out).
+ *
+ * Gate: corpus/2600_mathesis_admit (four single-false rejection arms + strictness + malformed-descriptor +
+ * id determinism/sensitivity/content-addressing + chain tamper-evidence).  EXIT=99.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes numera/cad.iii (the one content-address) only.
+ */
+module numera_mathesis_admit
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const MX_MAGIC   : u64 = 0x4D583031u64      /* "MX01" -- descriptor version tag */
+const MX_GENTAG  : u64 = 0xFFFFFFFFFFFFFFFFu64
+const MX_SUITE   : u32 = 0u32               /* CAD_SUITE_SHA256 */
+const MX_OK      : i32 = 0i32
+const MX_E_NULL  : i32 = -1i32
+const MX_E_DESC  : i32 = -3i32
+const MX_DWORDS  : u64 = 8u64
+const MX_SERLEN  : u64 = 64u64
+
+var MX_SER : [u8; 64]
+var MX_GDESC : [u64; 8]   /* genesis descriptor scratch (module-scope: the local-array &-of corner is avoided) */
+
+/* descriptor validity: the schema quantifier is well-formed (R2).  1 valid / 0 malformed. */
+fn mx_desc_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MX_MAGIC { return 0u32 }
+    let op : u64 = d[1u64]
+    let mut opok : u32 = 0u32
+    if op == 0x20u64 { opok = 1u32 }   /* ADD */
+    if op == 0x21u64 { opok = 1u32 }   /* SUB */
+    if op == 0x22u64 { opok = 1u32 }   /* MUL */
+    if op == 0x25u64 { opok = 1u32 }   /* AND */
+    if op == 0x26u64 { opok = 1u32 }   /* OR  */
+    if op == 0x27u64 { opok = 1u32 }   /* XOR */
+    if op == 0x28u64 { opok = 1u32 }   /* SHL */
+    if op == 0x29u64 { opok = 1u32 }   /* SHR */
+    if opok == 0u32 { return 0u32 }
+    if d[2u64] < 1u64 { return 0u32 }
+    if d[3u64] < 1u64 { return 0u32 }
+    let w : u64 = d[4u64]
+    let mut wok : u32 = 0u32
+    if w == 8u64 { wok = 1u32 }
+    if w == 16u64 { wok = 1u32 }
+    if w == 32u64 { wok = 1u32 }
+    if w == 64u64 { wok = 1u32 }
+    if wok == 0u32 { return 0u32 }
+    if d[5u64] > 2u64 { return 0u32 }
+    if d[6u64] > d[7u64] { return 0u32 }
+    return 1u32
+}
+
+/* canonical serialisation: the 8 words as 64 explicit LE bytes (preorder, layout-independent). */
+fn mx_serialize(desc: u64) -> u32 {
+    let d : *u64 = desc as *u64
+    let mut i : u64 = 0u64
+    while i < MX_DWORDS {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            MX_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* theorem_id = SHA-256(canonical serialisation).  Malformed descriptor -> MX_E_DESC, NO id. */
+fn mx_theorem_id(desc: u64, out32: u64) -> i32 @export {
+    if desc == 0u64 { return MX_E_NULL }
+    if out32 == 0u64 { return MX_E_NULL }
+    if mx_desc_valid(desc) != 1u32 { return MX_E_DESC }
+    mx_serialize(desc)
+    return cad_oneshot(MX_SUITE, (&MX_SER as u64) as *u8, MX_SERLEN, out32 as *u8)
+}
+
+/* THE DOOR: strict four-clause conjunction.  Each clause must be EXACTLY 1 (a 2 is as rejected as a 0 --
+ * no truthiness, no degenerate pass).  PROVEN comes from the disposer, NOVEL from the saturation gate,
+ * USEFUL from the measure instrument, WITNESSED from the witness chain -- never from this module. */
+fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 @export {
+    if proven != 1u32 { return 0u32 }
+    if novel != 1u32 { return 0u32 }
+    if useful != 1u32 { return 0u32 }
+    if witnessed != 1u32 { return 0u32 }
+    return 1u32
+}
+
+/* entry hash: SHA-256 over the rendered library-entry bytes (statement + tactic + witness roots). */
+fn mx_entry_hash(entry: u64, len: u64, out32: u64) -> i32 @export {
+    if entry == 0u64 { return MX_E_NULL }
+    if out32 == 0u64 { return MX_E_NULL }
+    if len == 0u64 { return MX_E_NULL }
+    return cad_oneshot(MX_SUITE, entry as *u8, len, out32 as *u8)
+}
+
+/* genesis link: SHA-256 of the RESERVED descriptor {MAGIC, 0, 0(shape -- invalid for any schema), 0, 0, 0,
+ * 0, ~0(gentag)} -- a preimage no valid theorem_id can share (mx_desc_valid rejects shape 0). */
+fn mx_chain_genesis(out32: u64) -> i32 @export {
+    if out32 == 0u64 { return MX_E_NULL }
+    MX_GDESC[0u64] = MX_MAGIC
+    MX_GDESC[1u64] = 0u64
+    MX_GDESC[2u64] = 0u64
+    MX_GDESC[3u64] = 0u64
+    MX_GDESC[4u64] = 0u64
+    MX_GDESC[5u64] = 0u64
+    MX_GDESC[6u64] = 0u64
+    MX_GDESC[7u64] = MX_GENTAG
+    mx_serialize(&MX_GDESC as u64)
+    return cad_oneshot(MX_SUITE, (&MX_SER as u64) as *u8, MX_SERLEN, out32 as *u8)
+}
+
+/* chain link: H_i = Keccak-256(H_{i-1} || entry_hash_i).  Aliasing-safe (out32 may be prev32). */
+fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 @export {
+    if prev32 == 0u64 { return MX_E_NULL }
+    if entry32 == 0u64 { return MX_E_NULL }
+    if out32 == 0u64 { return MX_E_NULL }
+    return cad_compose(prev32 as *u8, entry32 as *u8, out32 as *u8)
+}
+
+/* 32-byte id equality (delegates the one content-address's comparator). */
+fn mx_id_eq(a: u64, b: u64) -> u32 @export {
+    if a == 0u64 { return 0u32 }
+    if b == 0u64 { return 0u32 }
+    if cad_eq(a as *u8, b as *u8) == 1u8 { return 1u32 }
+    return 0u32
+}

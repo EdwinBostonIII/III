@@ -1755,6 +1755,10 @@ declare -A EXPECTED=(
     [2496_slhdsa_sha2_192s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-192s cat-3 (SHA-512 H/T + HMAC/MGF1-SHA-512 layer), byte-exact (~60s)
     [2497_slhdsa_sha2_256s_fips205]=99  # NIST ACVP SLH-DSA-SHA2-256s cat-5, byte-exact + flip-reject (~55s)
     [2498_meaning_kernel_step]=99       # Θ5(a) THE JUDGED STEP rung 0: program arithmetic ≡ CIC-kernel BV64 iota-fold at 9 closed vectors (wraparound/underflow/bitwise/shift + x86 count-mask) + a refusal negative; both meaning-bearers via run_meaning (eval ≡ native ≡ kernel)
+    [2600_mathesis_admit]=99            # Ξ0-T1 THE MATHESIS LIBRARY DOOR (III-MATHESIS-MAP.md §6): four-clause admission conjunction + schema theorem_id + tamper-evident chain; negative arms first
+    [2602_mathesis_measure]=99          # Ξ0-T2 THE MEASURE INSTRUMENT: opcode-sync SVIR window census (seeded counts + phantom-const anti-grep arm + R2 range tooth + unknown-op honest abstain)
+    [2601_mathesis_dispose]=99          # Ξ0-T3 THE DISPOSER: R4 false-identity REFUTED first; one-call ∀x,c1,c2 chain schemas (AND/OR/XOR); k=1..63 range sweeps (align-down + mask-low); width-64 tooth; SEQ_TOP honest abstain; truth-table second engine (R1)
+    [2603_mathesis_seal]=99             # Ξ0-T5 MATHESIS-THEOREM-0001 replay seal: descriptor re-hashes to the pinned theorem_id; tamper breaks it; genesis→head chain replays; the door conjunction holds
 )
 
 PASS=0

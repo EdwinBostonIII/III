@@ -21,6 +21,36 @@ extern @abi(c-msvc-x64) fn iii_ast_create(bytes: u64, len: u64, src: u64) -> u64
 extern @abi(c-msvc-x64) fn iii_parse_create(lex: u64, ast: u64) -> u64 from "parse.iii"
 extern @abi(c-msvc-x64) fn iii_parse_module(p: u64) -> u32 from "parse.iii"
 extern @abi(c-msvc-x64) fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 from "cg_svir.iii"
+extern @abi(c-msvc-x64) fn iii_cg_svir_set_mode(closure: u32, membase: u64) -> u32 from "cg_svir.iii"
+extern @abi(c-msvc-x64) fn iii_cg_svir_names(out: u64) -> u32 from "cg_svir.iii"
+extern @abi(c-msvc-x64) fn iii_cg_svir_raw(path: u64) -> u32 from "cg_svir.iii"
+
+/* closure-mode CLI helpers: NUL-terminated argv string ops */
+fn arg_eq(s: u64, lit: u64) -> u32 {
+    let a: *u8 = s as *u8
+    let b: *u8 = lit as *u8
+    let mut j: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        let ca: u32 = a[j] as u32
+        let cb: u32 = b[j] as u32
+        if cb == 126u32 { if ca == 0u32 { return 1u32 }  return 0u32 }
+        if ca != cb { return 0u32 }
+        j = j + 1u64
+    }
+    return 0u32
+}
+fn arg_dec(s: u64) -> u64 {
+    let p: *u8 = s as *u8
+    let mut v: u64 = 0u64
+    let mut j: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        let c: u32 = p[j] as u32
+        if c < 48u32 { go = 0u32 } else { if c > 57u32 { go = 0u32 } else { v = v * 10u64 + ((c - 48u32) as u64)  j = j + 1u64 } }
+    }
+    return v
+}
 
 const FOPEN_RB: u32 = 0u32
 const SRC_CAP: u64 = 8388608u64
@@ -51,6 +81,20 @@ fn main(argc: u32, argv: u64) -> u32 @export {
     let p: u64 = iii_parse_create(lex, ast)
     if p == 0u64 { return 4u32 }
     if iii_parse_module(p) == 0u32 { return 5u32 }
+    /* closure mode (gate v3): cg_svir <file> --closure <membase> <out.svbin> <out.names>
+     * -> ALL externs become imports, cells at membase, raw container +
+     * names listing to files (text module still prints to stdout). */
+    if argc >= 6u32 { if arg_eq(iii_lex_read_u64_c(argv, 16u64), "--closure~" as u64) == 1u32 {
+        iii_cg_svir_set_mode(1u32, arg_dec(iii_lex_read_u64_c(argv, 24u64)))
+        let crc: u32 = iii_cg_svir_emit(ast, iii_lex_stdout_c())
+        if crc != 0u32 { return crc }
+        if iii_cg_svir_raw(iii_lex_read_u64_c(argv, 32u64)) != 0u32 { return 6u32 }
+        let nf: u64 = iii_lex_fopen_c(iii_lex_read_u64_c(argv, 40u64), 1u32)
+        if nf == 0u64 { return 6u32 }
+        iii_cg_svir_names(nf)
+        iii_lex_fclose_c(nf)
+        return 0u32
+    } }
     let rc: u32 = iii_cg_svir_emit(ast, iii_lex_stdout_c())
     return rc
 }

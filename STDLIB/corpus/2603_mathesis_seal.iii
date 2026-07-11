@@ -1,0 +1,85 @@
+/* STDLIB/corpus/2603_mathesis_seal.iii -- THE FIRST SEALED THEOREM's replay gate (Xi0-T5, III-MATHESIS-MAP.md s6).
+ *
+ * MATHESIS-THEOREM-0001  (x & c1) & c2 == x & (c1 & c2)   forall x,c1,c2 in Z/2^64
+ *   theorem_id fc729f523ba4c70193b71e25f8ac0ea8fc1c6c0e33855a71482bcd7d6a48237b
+ *   PROVEN    : corpus/2601 (ONE symbolic seq_equiv call, constants-as-parameters, over all 2^64
+ *               assignments; second engine: the bit-local truth-table -- R1 dual)
+ *   NOVEL     : ser_egraph's grammar is {VAR,CONST,ADD,SUB,MUL,SHL} -- AND is not derivable by the
+ *               current rule set (the grammar-closure gap, III-MATHESIS-MAP.md s3); no cgopt arm covers it
+ *   USEFUL    : measured 78 live windows across the route-S corpus + 0 on the walked stage1 surface
+ *               (corpus/2602's instrument); assimilated fold measured sq08_mixed 494->484 bytes,
+ *               126->124 ops, windows 1->0; commuting square N===E===S held (rc=92)
+ *   WITNESSED : svir_backend_goldens.txt sq08 reseal (adjudicated); the discovering build's mhash pins
+ *               (COMPILED iiis-2.exe.mhash chain); the sealed library head below
+ *
+ * This gate REPLAYS the seal from the pins: the canonical descriptor must re-hash to the pinned
+ * theorem_id (statement <-> code binding, the replay law P5); a tampered descriptor must NOT; the
+ * genesis -> entry chain must re-derive the pinned head; the door conjunction must hold.  99 == the
+ * first machine-discovered theorem in III's library is REAL, replayable, and tamper-evident. */
+module corpus_2603_mathesis_seal
+
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_desc_valid(desc: u64) -> u32 from "mathesis_admit.iii"
+
+var D    : [u64; 8]
+var ID   : [u8; 32]
+var PIN  : [u8; 32]
+var G    : [u8; 32]
+var HD   : [u8; 32]
+var PHD  : [u8; 32]
+
+var W : [u64; 4]   /* module scope (the local-array corner, avoided) */
+fn put32(dst: u64, w0: u64, w1: u64, w2: u64, w3: u64) -> u32 {
+    let p : *u8 = dst as *u8
+    W[0u64] = w0  W[1u64] = w1  W[2u64] = w2  W[3u64] = w3
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut x : u64 = W[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 { p[(i * 8u64) + b] = (x & 0xFFu64) as u8  x = x >> 8u64  b = b + 1u64 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* the canonical descriptor of MATHESIS-THEOREM-0001 */
+    D[0u64] = 0x4D583031u64   /* MX01 */
+    D[1u64] = 0x25u64         /* family: AND */
+    D[2u64] = 1u64            /* pattern: const-chain */
+    D[3u64] = 1u64            /* replacement: single-op fold */
+    D[4u64] = 64u64           /* width */
+    D[5u64] = 0u64            /* unsigned */
+    D[6u64] = 0u64  D[7u64] = 0u64
+    if mx_desc_valid(&D as u64) != 1u32 { return 9u64 }
+
+    /* pinned theorem_id (LE words of fc729f52...237b) */
+    put32(&PIN as u64, 0x01C7A43B529F72FCu64, 0xA80EACF8251EB793u64, 0x715A85330E6C1CFCu64, 0x7B23486A7DCD2B48u64)
+    /* pinned chain head (genesis compose id) 88dbee16...df58 */
+    put32(&PHD as u64, 0x9529707316EEDB88u64, 0x6A406F476684C7ACu64, 0xF7300394920EB9F1u64, 0x58DF476D28F711E3u64)
+
+    /* (1) REPLAY: the descriptor re-hashes to the sealed id (statement <-> code binding) */
+    if mx_theorem_id(&D as u64, &ID as u64) != 0i32 { return 10u64 }
+    if mx_id_eq(&ID as u64, &PIN as u64) != 1u32 { return 10u64 }
+
+    /* (2) TAMPER: one word flipped (AND -> OR) must break the seal */
+    D[1u64] = 0x26u64
+    if mx_theorem_id(&D as u64, &ID as u64) != 0i32 { return 11u64 }
+    if mx_id_eq(&ID as u64, &PIN as u64) != 0u32 { return 11u64 }
+    D[1u64] = 0x25u64
+    if mx_theorem_id(&D as u64, &ID as u64) != 0i32 { return 11u64 }
+
+    /* (3) THE CHAIN REPLAYS: genesis -> step(id) == the pinned head */
+    if mx_chain_genesis(&G as u64) != 0i32 { return 12u64 }
+    if mx_chain_step(&G as u64, &ID as u64, &HD as u64) != 0i32 { return 12u64 }
+    if mx_id_eq(&HD as u64, &PHD as u64) != 1u32 { return 12u64 }
+
+    /* (4) THE DOOR: the four clauses (each discharged by its own gate -- header) admit exactly */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 13u64 }
+
+    return 99u64
+}

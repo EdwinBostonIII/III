@@ -23,10 +23,50 @@ fenced block and the discharging tactic on the final line.
 
 ## Entries
 
-(No entries committed yet. The §4 crypto KATs that already pass — corpus tests
-198–209 in `STDLIB/corpus/` — are candidate entries to be formalized here when
-the math-library admission tactic is defined; recorded as forward reference #10
-in `DOCS/FORWARD_REFERENCES.md`.)
+(The math-library admission tactic is now DEFINED — `numera/mathesis_admit.iii`
+(PROVEN ∧ NOVEL ∧ USEFUL ∧ WITNESSED, corpus/2600) per `DOCS/III-MATHESIS-MAP.md`
+§6 — and the first machine-discovered entry is sealed below.  The §4 crypto KATs
+(corpus 198–209) remain candidate entries for formalization through the same
+door; forward reference #10 in `DOCS/FORWARD_REFERENCES.md`.)
+
+### fc729f523ba4c70193b71e25f8ac0ea8fc1c6c0e33855a71482bcd7d6a48237b
+
+MATHESIS-THEOREM-0001 — the first theorem III discovered about its own
+compilation, proved against its own disposer, and folded back into its own
+compiler (Ξ0 seed cycle, `DOCS/III-MATHESIS-MAP.md` §7).
+
+```
+∀ x, c1, c2 ∈ ℤ/2^64 :   (x & c1) & c2  ≡  x & (c1 & c2)
+
+canonical descriptor (numera/mathesis_admit.iii layout, hashed to the id above):
+  { MX01, family=0x25 (AND), pattern=const-chain(1), replacement=single-fold(1),
+    width=64, signedness=unsigned(0), range=full-domain(0,0) }
+```
+
+- **Discharging tactic:** symbolic-schema route — ONE `seq_equiv` call
+  (`numera/ser_kinduct_sym.iii:607`) with the constants as bv parameters, PROVEN
+  (1) over all 2^64 assignments of x, c1, c2; second engine (R1 dual): the
+  bit-local truth table (AND is bit-independent — 2^3 cases are a complete
+  proof).  Gate: `corpus/2601_mathesis_dispose` (with the R4 false-identity
+  `a+b ≡ a|b` REFUTED first, the width-64 tooth `(x<<32)>>32 ≢ x` REFUTED, and
+  SEQ_TOP honest-abstain arms).
+- **Discovery (measure-first):** the opcode-synchronous census
+  (`numera/mathesis_measure.iii`, gate `corpus/2602`) over 55 route-S-emitted
+  real modules: 349 fns, 27,134 ops, 0 unwalkable — **78 live AND-const-chain
+  windows** (every other candidate class 0); stage1 surface: 0 (the R6 no-fire
+  condition, measured).
+- **Assimilation:** emission-time fold at cg_svir's `eb(0x25)` choke point
+  (`COMPILER/BOOT/cg_svir.iii` `e_and_chain_fold`, dual event-history +
+  byte-shape eligibility).  Measured on `sq08_mixed`: **494→484 bytes,
+  126→124 ops, windows 1→0**; commuting square N≡E≡S held (rc=92); A1 iiisv2
+  parity held (6/6); golden `sq08_mixed` resealed (the sanctioned
+  emission-law-change class, `COMPILER/BOOT/svir_backend_goldens.txt`).
+- **Witness chain:** genesis
+  `2aaed09140f0f69fea23e0f5529c64534981f15e79beb7bc9ae34248e630f676` →
+  head `88dbee1673702995acc78466476f406af1b90e92940330f7e311f7286d47df58`
+  (= Keccak-256(genesis ‖ theorem_id), `mx_chain_step`).  Replay gate:
+  `corpus/2603_mathesis_seal` — the descriptor re-hashes to this id, tampering
+  breaks it, the chain re-derives this head.
 
 ### XII rewrite-rule confluence theorems (V1 Stage 6)
 

@@ -4,7 +4,12 @@ indep_toolchain 48e379a16d5ba853f8f4d95c6ea45731ca5061cb5562208356b3f63c40a6247b
 indep_ops a9eb5813cf9ab413e2b44c410163e3a408cd076f00ee7213fd0af5e27fbecac3
 indep_bignum 9458b6be8ad3b353ef3c41e64d8f24d488fdfb2e78b0dfd7601a6946ad9473d3
 sq07_width cc6d70a906fafef6eb77a902ad4c8812363150e9ebc34a7b85e004cc4a94505f
-sq08_mixed a0a0a7f5ee4835b8caf1404ff290f32c6e8cd557a1c2cb983e1c863746b8a5d4
+sq08_mixed 8c26fdb37c47045838fac4ea3f03affac2b1ed019919aef929530eb83753b88f
+# ^ resealed 2026-07-11: MATHESIS Xi0 admitted theorem (x&c1)&c2==x&(c1&c2) -- the AND-const-chain emission
+#   fold (cg_svir eb/e_and_chain_fold).  Adjudication: PROVEN corpus/2601 (symbolic seq_equiv over all 2^64
+#   assignments + the truth-table dual engine); square N===E===S held on sq08 itself (rc=92); measured
+#   494->484 bytes / 126->124 ops / c1 windows 1->0 on this exact probe.  Emission-LAW change: the one
+#   sanctioned reseal class (line 2).
 sq09_mixsign 4e619b030f2f1846e39f703b5b71f96a8dc004e9847091e29664b186eb156639
 sq10_renorm ec93651a1eb4ebffdf628e620ac7721cbfa911639b19917a3870113a5a6e50be
 sq12_comptime ad25504bb27c254923e3684af16618715bed1608b3af46f55ba3aabdfe93bbb7

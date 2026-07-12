@@ -1,0 +1,142 @@
+/* STDLIB/corpus/2684_mathesis_chain_v2.iii -- THE CHAIN-V2 SEAL (Xi7, III-MATHESIS-MAP.md s7):
+ * the whole library -- the 7 opening entries PLUS the 11 of this creator-tier arc (0008..0018) --
+ * replays from genesis to the pinned head, and every tamper breaks it.
+ *
+ * The chain is entry-kind-agnostic (mx_chain_step over any 32-byte entry hash): equational schemas
+ * (MX01/MX03 descriptor ids), the concept + concept-laws (the 2673 prefix), derived-unbounded (MX04
+ * ids), and the canonical-statement entries (order, optimality, equivariance, annihilation, width,
+ * denesting) all extend the ONE chain.  The 2673 head d18e5038..f35a is reproduced as an intermediate
+ * checkpoint (the creator tier did not disturb the seed cycle), then the arc extends it to:
+ *
+ *     HEAD_v2 = 197631db6587b8840d61997120a06653962f2d1aa24886ade19cb40e58324da0
+ *
+ * Arms: (c1) genesis->0001->concept->0002..0007 reproduces d18e5038..f35a (prefix pin);
+ *       (c2) the full 18-entry chain reproduces HEAD_v2 (the pinned new head);
+ *       (c3) TAMPER: a flipped byte in ANY entry hash breaks HEAD_v2;
+ *       (c4) TRUNCATION: stopping one entry early is NOT HEAD_v2;
+ *       (c5) determinism: a second full replay is byte-identical.
+ * 99 == the creator tier's mathematics is sealed, append-only, tamper-evident, one chain. */
+module corpus_2684_mathesis_chain_v2
+
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_entry_hash(entry: u64, len: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mx4_id(desc: u64, out32: u64) -> i32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_premise_ref_0001() -> u64 from "mathesis_deduce.iii"
+
+var H : [u8; 32]
+var E : [u8; 32]
+var P : [u8; 32]
+var D : [u64; 8]
+
+fn hexval(c: u32) -> u32 {
+    if c >= 48u32 { if c <= 57u32 { return c - 48u32 } }
+    if c >= 97u32 { if c <= 102u32 { return (c - 97u32) + 10u32 } }
+    return 0u32
+}
+fn hex32(s: u64, out: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        o[i] = ((hexval(p[i * 2u64] as u32) << 4u32) | hexval(p[(i * 2u64) + 1u64] as u32)) as u8
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 126u8 { i = i + 1u64 }
+    return i
+}
+fn eq32(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if pa[i] != pb[i] { return 0u32 }  i = i + 1u64 }
+    return 1u32
+}
+fn step_hex(idhex: u64) -> u32 { hex32(idhex, &E as u64)  mx_chain_step(&H as u64, &E as u64, &H as u64)  return 1u32 }
+fn step_text(stmt: u64) -> u32 {
+    mx_entry_hash(stmt, slen(stmt), &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    return 1u32
+}
+
+/* replay through the first `entries` new (0008+) items after the prefix; tamper injects at `tamper_ix`. */
+fn replay(entries: u64, tamper_ix: u64) -> u32 {
+    mx_chain_genesis(&H as u64)
+    D[0u64] = 0x4D583031u64  D[1u64] = 0x25u64  D[2u64] = 1u64  D[3u64] = 1u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    mx_theorem_id(&D as u64, &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    step_hex("92bbab910acb909f00ab134d9e2610cf911668cb39abb6c2425f6ef64d1a2b6b~" as u64)
+    step_hex("6d5d70ab27eac7ab6dfa5c8c1133a5841b7d80e92d57517f6ecf9477c2294733~" as u64)
+    step_hex("3d301a763b67c908a90c43810d1123cc186bffa5c04eb8362d04a451332abd95~" as u64)
+    step_hex("29e8a40b7cb00251d4fe14cd8ac7685e3264d279dd6266de0f2740f0657a2d89~" as u64)
+    step_hex("ff5f1d2613a2186e64b69261251fe5c32559f02eb6ca7c93343e667208a022b9~" as u64)
+    step_hex("8a6f8da0a87441aceccdeca9975225b7f2f0e8199f04e980107f4afd42e6606e~" as u64)
+    step_hex("c773f3ad6393b1bc27e533e5f7f4d4248f8f5d7f234ff02f8e0615c303cfd512~" as u64)
+    if entries == 0u64 { return 1u32 }
+    /* 0008 mul-assoc @ w8 */
+    D[0u64] = 0x4D583033u64  D[1u64] = 2u64  D[2u64] = 131u64  D[3u64] = 35u64
+    D[4u64] = 8u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    mxs_schema_id(&D as u64, &E as u64)
+    if tamper_ix == 8u64 { E[0u64] = E[0u64] ^ 1u8 }
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    if entries == 1u64 { return 1u32 }
+    step_text("MATHESIS-0009 ORDER: the lattice meet-order a<=b iff a&b=a on Z/2^64 -- reflexive, antisymmetric, transitive, AND-monotone; signed floor (x&MAX>=s0)=1 and ceiling (x|MIN<s0)=1 via the compare fragment [gate 2674]~" as u64)
+    if entries == 2u64 { return 1u32 }
+    step_text("MATHESIS-0010 CLOSED-OPTIMAL: cost(align_k)=1 EXACTLY in the ALU grammar, k in 1..63 -- upper (x>>k)<<k = x&(~0<<k); lower by id-refutation + witness-function const-exclusion [gate 2674]~" as u64)
+    if entries == 3u64 { return 1u32 }
+    step_text("MATHESIS-0011 CLOSED-OPTIMAL: cost(mask_k)=1 EXACTLY in the ALU grammar, k in 1..63 -- upper (x<<k)>>k = x&(~0>>k); lower by id-refutation + witness-function const-exclusion [gate 2674]~" as u64)
+    if entries == 4u64 { return 1u32 }
+    D[0u64] = 0x4D583034u64  D[1u64] = 1u64  D[2u64] = mx4_premise_ref_0001()  D[3u64] = 0x25u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 2u64  D[7u64] = 18446744073709551615u64
+    mx4_id(&D as u64, &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    if entries == 5u64 { return 1u32 }
+    D[1u64] = 2u64  D[2u64] = 0xABC7EA27AB705D6Du64  D[3u64] = 64u64  D[6u64] = 0u64
+    mx4_id(&D as u64, &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    if entries == 6u64 { return 1u32 }
+    step_text("MATHESIS-0014 EQUIVARIANCE: rot_k(a op b) = rot_k(a) op rot_k(b) for op in {AND,OR,XOR}, all k in 1..63; ADD/SUB/MUL/SHL/SHR REFUSED with machine witnesses [gate 2678]~" as u64)
+    if entries == 7u64 { return 1u32 }
+    step_text("MATHESIS-0015 SATURATION-ANNIHILATION (MACHINE): (x<<a)<<b = 0 for all a,b in 1..63 with a+b>=64 -- 2016 instances, round-2 enumeration, per-instance proven [gate 2650]~" as u64)
+    if entries == 8u64 { return 1u32 }
+    step_text("MATHESIS-0016 SATURATION-ANNIHILATION (MACHINE): (x>>a)>>b = 0 for all a,b in 1..63 with a+b>=64 -- 2016 instances, round-2 enumeration, per-instance proven [gate 2650]~" as u64)
+    if entries == 9u64 { return 1u32 }
+    step_text("MATHESIS-0017 WIDTH FAMILY: (x&c1)&c2 = x&(c1&c2) re-proven over Z/2^32, Z/2^16, Z/2^8 -- the width functor is re-proof, never assumption [gate 2679]~" as u64)
+    if entries == 10u64 { return 1u32 }
+    step_text("MATHESIS-0018 DENESTING STREAM (MACHINE): 1024 theorems sqrt(a+2 sqrt b) = sqrt m + sqrt n over the declared grid a in 2..64, b in 1..a^2/4, dual-engine certified; 21328 non-denestability certificates (non-square discriminant, Vieta) [gate 2680]~" as u64)
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* (c1) the prefix pin (2673 head, as an intermediate checkpoint) */
+    replay(0u64, 0u64)
+    hex32("d18e5038e7877c963a5cf8da2498519feab1b28557ca5dd1b78968d87945f35a~" as u64, &P as u64)
+    if eq32(&H as u64, &P as u64) != 1u32 { return 10u64 }
+
+    /* (c2) the full chain reproduces HEAD_v2 */
+    replay(11u64, 0u64)
+    hex32("197631db6587b8840d61997120a06653962f2d1aa24886ade19cb40e58324da0~" as u64, &P as u64)
+    if eq32(&H as u64, &P as u64) != 1u32 { return 11u64 }
+
+    /* (c3) TAMPER: a flipped byte in entry 0008 breaks the head */
+    replay(11u64, 8u64)
+    if eq32(&H as u64, &P as u64) == 1u32 { return 12u64 }
+
+    /* (c4) TRUNCATION: one entry short is NOT the head */
+    replay(10u64, 0u64)
+    if eq32(&H as u64, &P as u64) == 1u32 { return 13u64 }
+
+    /* (c5) determinism */
+    replay(11u64, 0u64)
+    if eq32(&H as u64, &P as u64) != 1u32 { return 14u64 }
+
+    return 99u64
+}

@@ -1,0 +1,85 @@
+/* STDLIB/corpus/2650_mathesis_loop.iii -- THE STANDING ENGINE'S ROUNDS (Xi5-T1/Xi13,
+ * III-MATHESIS-MAP.md s7).
+ *
+ * The engine's second discovery round and its convergence, in-process, deterministic:
+ *
+ *   ROUND 2 (THE SHIFT TIER, provenance MACHINE): the whole declared 8,064-instance space swept
+ *   per-instance through the disposer (S1 honoured -- no symbolic shift counts anywhere):
+ *       shl-chain 1953 + shr-chain 1953   [cost 2->1; ALREADY TAUGHT (2613) => rediscoveries,
+ *                                          correctly REFUSED by the novelty oracle]
+ *       shl-annihilation 2016 + shr-annihilation 2016
+ *                                         [a+b >= 64 saturates to const-0; cost 2->0; in NO rule set
+ *                                          (the 2613 rules are range-guarded) => THE ROUND-2 HARVEST:
+ *                                          two NEW machine-found range-family theorems]
+ *       align 63 + mask 63                [cost 2->1; taught => rediscoveries]
+ *   EVERY instance PROVEN (8064/8064, zero abstentions -- the declared space is exhausted, printed).
+ *
+ *   THE NOVELTY SPLIT, machine-computed: the taught e-graph DERIVES a chain/align/mask instance
+ *   (rediscovery) and CANNOT derive an annihilation instance (novel) -- knowledge accounting live.
+ *
+ *   CONVERGENCE (K=2 dry): the second sweep reproduces the counts EXACTLY and surfaces nothing beyond
+ *   the six declared families -- the space is dry; the engine converges instead of thrashing.
+ *
+ *   H10 / NO-REVERT: the Xi0-landed capability re-asserts inside the loop (the AND-chain still
+ *   derivable; the door still strict).
+ * 99 == the standing engine grows, refuses rediscoveries, and knows when it is done. */
+module corpus_2650_mathesis_loop
+
+extern @abi(c-msvc-x64) fn mxs_run_shifts() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs2_count(fam: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs2_tested() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs2_space() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_shl(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_and(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_same_class(a: u64, b: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+
+fn main() -> u64 {
+    /* ---- ROUND 2: the whole declared space, disposed ---- */
+    if mxs2_space() != 8064u64 { return 10u64 }
+    let tot1 : u64 = mxs_run_shifts()
+    if tot1 != 8064u64 { return 11u64 }                 /* every instance PROVEN, zero abstained */
+    if mxs2_tested() != 8064u64 { return 12u64 }
+    if mxs2_count(0u64) != 1953u64 { return 13u64 }     /* shl-chain (rediscovery) */
+    if mxs2_count(1u64) != 1953u64 { return 14u64 }     /* shr-chain (rediscovery) */
+    if mxs2_count(2u64) != 2016u64 { return 15u64 }     /* shl-annihilation: THE HARVEST */
+    if mxs2_count(3u64) != 2016u64 { return 16u64 }     /* shr-annihilation: THE HARVEST */
+    if mxs2_count(4u64) != 63u64 { return 17u64 }       /* align (rediscovery) */
+    if mxs2_count(5u64) != 63u64 { return 18u64 }       /* mask (rediscovery) */
+
+    /* ---- THE NOVELTY SPLIT, machine-computed on the e-graph ---- */
+    seg_reset()
+    let x : u64 = seg_var()
+    let ch : u64 = seg_shl(seg_shl(x, seg_const(10u64)), seg_const(20u64))
+    let chg : u64 = seg_shl(x, seg_const(30u64))
+    let an : u64 = seg_shl(seg_shl(x, seg_const(40u64)), seg_const(40u64))
+    let ang : u64 = seg_const(0u64)
+    seg_saturate()
+    if seg_same_class(ch, chg) != 1u32 { return 20u64 }     /* chain: DERIVABLE => rediscovery */
+    if seg_same_class(an, ang) == 1u32 { return 21u64 }     /* annihilation: NOT derivable => NOVEL */
+
+    /* ---- the two new family admissions (strict cost decrease 2->0; novelty computed above;
+     *      assimilation stays CLOSED -- zero censused occurrences, the anti-bloat law prints it) ---- */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 22u64 }
+
+    /* ---- CONVERGENCE: the second sweep is byte-identical -- the space is DRY ---- */
+    let tot2 : u64 = mxs_run_shifts()
+    if tot2 != tot1 { return 23u64 }
+    if mxs2_count(2u64) != 2016u64 { return 24u64 }
+    if mxs2_count(3u64) != 2016u64 { return 25u64 }
+
+    /* ---- H10 / NO-REVERT inside the loop: the Xi0 capability stands ---- */
+    seg_reset()
+    let x2 : u64 = seg_var()
+    let a1 : u64 = seg_and(seg_and(x2, seg_const(0xFF00u64)), seg_const(0x0FF0u64))
+    let g1 : u64 = seg_and(x2, seg_const(0x0F00u64))
+    seg_saturate()
+    if seg_same_class(a1, g1) != 1u32 { return 26u64 }
+    if mx_admit(1u32, 0u32, 1u32, 1u32) != 0u32 { return 27u64 }   /* the door is still strict */
+
+    return 99u64
+}

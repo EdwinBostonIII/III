@@ -1,0 +1,81 @@
+/* STDLIB/corpus/2676_mathesis_derive.iii -- THE DEDUCTION ORGAN's integrity gate (Xi10-T1,
+ * III-MATHESIS-MAP.md s7b).
+ *
+ * Theorems-from-theorems only under total scrutiny.  Negative arms FIRST:
+ *   (n1) THE STEP-GAP: an induction whose step lacks the hypothesis is UNTYPEABLE -- the CIC kernel
+ *        itself refuses the composition (not a convention: tc_infer = 0);
+ *   (n2) TAMPERED PREMISE: a derivation citing a premise ref that does not re-derive from the sealed
+ *        entry's canonical descriptor is REJECTED (content addressing bites: one flipped bit kills it);
+ *   (n3) WRONG CONCLUSION: a conclusion whose ground instances are false (n-fold collapse with the
+ *        WRONG fold operator) is REFUTED by the two-path ground leg at every n -- deduction never
+ *        outruns decision;
+ *   (n4) malformed MX04 descriptors get NO id; ids are deterministic + statement-sensitive.
+ * Positive: the full rule-1 derivation (kernel + premise-rederived + base + step + grounds) ADMITS.
+ * 99 == the deduction organ is sound, tamper-evident, and kernel-checked. */
+module corpus_2676_mathesis_derive
+
+extern @abi(c-msvc-x64) fn mx4_kernel_induction() -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_kernel_stepgap() -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_premise_ref_0001() -> u64 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_derive_r1(premise_ref: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_r1_ground_wrongop(n: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_valid(desc: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_id(desc: u64, out32: u64) -> i32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+
+var D1 : [u64; 8]
+var D2 : [u64; 8]
+var IDA : [u8; 32]
+var IDB : [u8; 32]
+var IDC : [u8; 32]
+
+fn mkdesc(d: u64, rule: u64, pref: u64, aux: u64, nlo: u64, nhi: u64) -> u32 {
+    let p : *u64 = d as *u64
+    p[0u64] = 0x4D583034u64
+    p[1u64] = rule
+    p[2u64] = pref
+    p[3u64] = aux
+    p[4u64] = 64u64
+    p[5u64] = 0u64
+    p[6u64] = nlo
+    p[7u64] = nhi
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ---- (n1) THE STEP-GAP: the kernel refuses the hypothesis-free induction ---- */
+    if mx4_kernel_stepgap() != 1u32 { return 10u64 }
+    /* and the honest principle types (the P3 eliminator) */
+    if mx4_kernel_induction() != 1u32 { return 11u64 }
+
+    /* ---- (n2) TAMPERED PREMISE: one flipped bit in the ref => REJECTED ---- */
+    let ref01 : u64 = mx4_premise_ref_0001()
+    if ref01 == 0u64 { return 12u64 }
+    if mx4_derive_r1(ref01 ^ 1u64) != 0u32 { return 13u64 }
+    if mx4_derive_r1(0u64) != 0u32 { return 14u64 }
+
+    /* ---- (n3) WRONG CONCLUSION: the OR-fold claim is REFUTED at every ground n ---- */
+    let mut n : u64 = 3u64
+    while n <= 7u64 {
+        if mx4_r1_ground_wrongop(n) != 0u32 { return 15u64 }
+        n = n + 1u64
+    }
+
+    /* ---- (n4) descriptor law: malformed => NO id; ids deterministic + statement-sensitive ---- */
+    mkdesc(&D1 as u64, 3u64, ref01, 0x25u64, 2u64, 18446744073709551615u64)   /* rule 3: invalid */
+    if mx4_valid(&D1 as u64) != 0u32 { return 16u64 }
+    if mx4_id(&D1 as u64, &IDA as u64) == 0i32 { return 17u64 }
+    mkdesc(&D1 as u64, 1u64, ref01, 0x25u64, 2u64, 18446744073709551615u64)
+    if mx4_valid(&D1 as u64) != 1u32 { return 18u64 }
+    if mx4_id(&D1 as u64, &IDA as u64) != 0i32 { return 19u64 }
+    if mx4_id(&D1 as u64, &IDB as u64) != 0i32 { return 20u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 1u32 { return 21u64 }            /* deterministic */
+    mkdesc(&D2 as u64, 1u64, ref01, 0x25u64, 3u64, 18446744073709551615u64)   /* different n-lo */
+    if mx4_id(&D2 as u64, &IDC as u64) != 0i32 { return 22u64 }
+    if mx_id_eq(&IDA as u64, &IDC as u64) != 0u32 { return 23u64 }            /* statement-sensitive */
+
+    /* ---- the honest derivation ADMITS (kernel + premise + base + step + grounds) ---- */
+    if mx4_derive_r1(ref01) != 1u32 { return 30u64 }
+
+    return 99u64
+}

@@ -1,0 +1,129 @@
+/* STDLIB/build/mathesis/probe_chainhead.iii -- W11 chain-extension probe (repo-local, NOT corpus).
+ * Replays the sealed prefix genesis -> 0001 -> CONCEPT-0001 -> 0002..0007 (must reproduce the 2673
+ * pinned head d18e5038..f35a), then extends with the 11 new entries of this arc and prints each
+ * entry hash + the NEW head.  Gate 2684 pins what this prints; DOCS/MATH_LIBRARY_QUEUE.md mirrors it. */
+module probe_chainhead
+
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_entry_hash(entry: u64, len: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mx4_id(desc: u64, out32: u64) -> i32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_premise_ref_0001() -> u64 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var H : [u8; 32]
+var E : [u8; 32]
+var P : [u8; 32]
+var D : [u64; 8]
+
+fn hexval(c: u32) -> u32 {
+    if c >= 48u32 { if c <= 57u32 { return c - 48u32 } }
+    if c >= 97u32 { if c <= 102u32 { return (c - 97u32) + 10u32 } }
+    return 0u32
+}
+fn hex32(s: u64, out: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        o[i] = ((hexval(p[i * 2u64] as u32) << 4u32) | hexval(p[(i * 2u64) + 1u64] as u32)) as u8
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn phex(a: u64) -> u32 {
+    let p : *u8 = a as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let b : u32 = p[i] as u32
+        let hi : u32 = b >> 4u32
+        let lo : u32 = b & 15u32
+        if hi < 10u32 { putchar((48u32 + hi) as i32) } else { putchar((87u32 + hi) as i32) }
+        if lo < 10u32 { putchar((48u32 + lo) as i32) } else { putchar((87u32 + lo) as i32) }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 126u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 126u8 { i = i + 1u64 }
+    return i
+}
+fn step_hex(idhex: u64) -> u32 {
+    hex32(idhex, &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    return 1u32
+}
+fn step_text(stmt: u64, label: u64) -> u32 {
+    mx_entry_hash(stmt, slen(stmt), &E as u64)
+    ps(label)
+    phex(&E as u64)
+    putchar(10i32)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* the sealed prefix */
+    mx_chain_genesis(&H as u64)
+    D[0u64] = 0x4D583031u64  D[1u64] = 0x25u64  D[2u64] = 1u64  D[3u64] = 1u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    mx_theorem_id(&D as u64, &E as u64)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    step_hex("92bbab910acb909f00ab134d9e2610cf911668cb39abb6c2425f6ef64d1a2b6b~" as u64)
+    step_hex("6d5d70ab27eac7ab6dfa5c8c1133a5841b7d80e92d57517f6ecf9477c2294733~" as u64)
+    step_hex("3d301a763b67c908a90c43810d1123cc186bffa5c04eb8362d04a451332abd95~" as u64)
+    step_hex("29e8a40b7cb00251d4fe14cd8ac7685e3264d279dd6266de0f2740f0657a2d89~" as u64)
+    step_hex("ff5f1d2613a2186e64b69261251fe5c32559f02eb6ca7c93343e667208a022b9~" as u64)
+    step_hex("8a6f8da0a87441aceccdeca9975225b7f2f0e8199f04e980107f4afd42e6606e~" as u64)
+    step_hex("c773f3ad6393b1bc27e533e5f7f4d4248f8f5d7f234ff02f8e0615c303cfd512~" as u64)
+    hex32("d18e5038e7877c963a5cf8da2498519feab1b28557ca5dd1b78968d87945f35a~" as u64, &P as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if H[i] != P[i] { ps("PREFIX MISMATCH~" as u64)  putchar(10i32)  return 2u64 }
+        i = i + 1u64
+    }
+    ps("PREFIX OK d18e5038..f35a reproduced~" as u64)
+    putchar(10i32)
+
+    /* 0008: mul-assoc @ width 8 (MX03 descriptor, tier=2 f=131 g=35, width 8) */
+    D[0u64] = 0x4D583033u64  D[1u64] = 2u64  D[2u64] = 131u64  D[3u64] = 35u64
+    D[4u64] = 8u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    mxs_schema_id(&D as u64, &E as u64)
+    ps("0008 ~" as u64)  phex(&E as u64)  putchar(10i32)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+
+    /* 0009..0011, 0014..0018: canonical statement lines (the gate re-hashes these EXACT bytes) */
+    step_text("MATHESIS-0009 ORDER: the lattice meet-order a<=b iff a&b=a on Z/2^64 -- reflexive, antisymmetric, transitive, AND-monotone; signed floor (x&MAX>=s0)=1 and ceiling (x|MIN<s0)=1 via the compare fragment [gate 2674]~" as u64, "0009 ~" as u64)
+    step_text("MATHESIS-0010 CLOSED-OPTIMAL: cost(align_k)=1 EXACTLY in the ALU grammar, k in 1..63 -- upper (x>>k)<<k = x&(~0<<k); lower by id-refutation + witness-function const-exclusion [gate 2674]~" as u64, "0010 ~" as u64)
+    step_text("MATHESIS-0011 CLOSED-OPTIMAL: cost(mask_k)=1 EXACTLY in the ALU grammar, k in 1..63 -- upper (x<<k)>>k = x&(~0>>k); lower by id-refutation + witness-function const-exclusion [gate 2674]~" as u64, "0011 ~" as u64)
+    /* 0012/0013: the unbounded citizens (MX04 descriptors) */
+    D[0u64] = 0x4D583034u64  D[1u64] = 1u64  D[2u64] = mx4_premise_ref_0001()  D[3u64] = 0x25u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 2u64  D[7u64] = 18446744073709551615u64
+    mx4_id(&D as u64, &E as u64)
+    ps("0012 ~" as u64)  phex(&E as u64)  putchar(10i32)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    D[1u64] = 2u64  D[2u64] = 0xABC7EA27AB705D6Du64  D[3u64] = 64u64  D[6u64] = 0u64
+    mx4_id(&D as u64, &E as u64)
+    ps("0013 ~" as u64)  phex(&E as u64)  putchar(10i32)
+    mx_chain_step(&H as u64, &E as u64, &H as u64)
+    step_text("MATHESIS-0014 EQUIVARIANCE: rot_k(a op b) = rot_k(a) op rot_k(b) for op in {AND,OR,XOR}, all k in 1..63; ADD/SUB/MUL/SHL/SHR REFUSED with machine witnesses [gate 2678]~" as u64, "0014 ~" as u64)
+    step_text("MATHESIS-0015 SATURATION-ANNIHILATION (MACHINE): (x<<a)<<b = 0 for all a,b in 1..63 with a+b>=64 -- 2016 instances, round-2 enumeration, per-instance proven [gate 2650]~" as u64, "0015 ~" as u64)
+    step_text("MATHESIS-0016 SATURATION-ANNIHILATION (MACHINE): (x>>a)>>b = 0 for all a,b in 1..63 with a+b>=64 -- 2016 instances, round-2 enumeration, per-instance proven [gate 2650]~" as u64, "0016 ~" as u64)
+    step_text("MATHESIS-0017 WIDTH FAMILY: (x&c1)&c2 = x&(c1&c2) re-proven over Z/2^32, Z/2^16, Z/2^8 -- the width functor is re-proof, never assumption [gate 2679]~" as u64, "0017 ~" as u64)
+    step_text("MATHESIS-0018 DENESTING STREAM (MACHINE): 1024 theorems sqrt(a+2 sqrt b) = sqrt m + sqrt n over the declared grid a in 2..64, b in 1..a^2/4, dual-engine certified; 21328 non-denestability certificates (non-square discriminant, Vieta) [gate 2680]~" as u64, "0018 ~" as u64)
+
+    ps("HEAD ~" as u64)
+    phex(&H as u64)
+    putchar(10i32)
+    return 0u64
+}

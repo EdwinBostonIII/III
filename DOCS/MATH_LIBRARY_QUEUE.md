@@ -156,6 +156,50 @@ MATHESIS-THEOREM-0007 — XOR involution — **MACHINE-SYNTHESIZED** (same run, 
 (= step(step(…step(H_0001, concept)…), involution), `mx_chain_step` throughout; replay gate:
 `corpus/2673_mathesis_concept_seal` — a flipped descriptor word or a truncated chain breaks it).
 
+### 65cea5101440e0e1629d48e815d074d3279601c90f6958954bd8eb7292dc156d
+
+MATHESIS-THEOREM-0008 — mul-associativity at width 8 — **MACHINE** (Ξ1 frontier promotion, Ξ12/R7):
+the round-1 sweep FRONTIERED all 1,386 mul-mul pairs; the frontier queue's live width-indexed R7 retry
+PROVES the associativity schema over ALL of ℤ/2⁸ by complete native exhaustion (2²⁴ triples — the SAT
+mul-vs-mul miter is resolution-hard even at width 8, MEASURED), with the bit-blast symbolic route as the
+R1 dual on sampled instances.
+
+```
+∀ x, c1, c2 ∈ ℤ/2^8 :   (x * c1) * c2  ≡  x * (c1 * c2)        [synth tier=2 f=131 g=35, width 8]
+```
+
+- **Provenance: MACHINE.**  Gate: `corpus/2612_mathesis_frontier` (the width-64 question stays queued;
+  the wall recedes exactly one width).  Kernel-certified at 8 vectors in `corpus/2640`.
+
+### the creator-tier arc, entries 0009–0018 (canonical statements, one appended chain)
+
+The remaining creator-tier theorems are sealed by their canonical statement bytes (order / optimality /
+equivariance / annihilation / width / denesting) — `mx_entry_hash` over the exact statement line, chained
+by the same `mx_chain_step`.  The full 18-entry replay and the pinned head are gated by
+`corpus/2684_mathesis_chain_v2`; the entry ids are printed by `STDLIB/build/mathesis/probe_chainhead.iii`.
+
+| id (short) | theorem | provenance | gate |
+|---|---|---|---|
+| `f8def81d…` | **0009** ORDER: `a ⊑ b :⇔ a&b≡a` — reflexive, antisymmetric, transitive, AND-monotone; signed floor/ceiling via the compare fragment | human-method / MACHINE-proven | 2674 |
+| `13b293c0…` | **0010** CLOSED-OPTIMAL: `cost(align_k)=1` exactly, k∈1..63 (1-op upper + witness-function lower) | human-method / MACHINE-proven | 2674 |
+| `873e5def…` | **0011** CLOSED-OPTIMAL: `cost(mask_k)=1` exactly, k∈1..63 | human-method / MACHINE-proven | 2674 |
+| `725e0015…` | **0012** `∀n≥2`: n-fold AND-chain collapse `(..(x&c1)&..&cn) ≡ x&(c1&..&cn)` (induction, kernel-checked) | human-method / MACHINE-proven | 2677 |
+| `d89a0fab…` | **0013** `∀n∈ℕ`: `rot_1ⁿ(x) ≡ rot_{n mod 64}(x)` (the C₆₄ Cayley row as the step) | human-method / MACHINE-proven | 2677 |
+| `7eba3069…` | **0014** EQUIVARIANCE: `rot_k(a∘b) ≡ rot_k(a)∘rot_k(b)` for ∘∈{AND,OR,XOR}, k∈1..63; ADD/SUB/MUL/SHL/SHR refused-with-witness | human-method / MACHINE-proven | 2678 |
+| `413b05ed…` | **0015** SATURATION-ANNIHILATION — **MACHINE**: `(x<<a)<<b ≡ 0` ∀a,b∈1..63, a+b≥64 (2016 instances, round-2 enumeration) | MACHINE | 2650 |
+| `1c11eb51…` | **0016** SATURATION-ANNIHILATION — **MACHINE**: `(x>>a)>>b ≡ 0` ∀a,b∈1..63, a+b≥64 (2016 instances) | MACHINE | 2650 |
+| `0f76759d…` | **0017** WIDTH FAMILY: `(x&c1)&c2 ≡ x&(c1&c2)` re-proven over ℤ/2³², ℤ/2¹⁶, ℤ/2⁸ (the width functor is re-proof) | human-method / MACHINE-proven | 2679 |
+| `03db076c…` | **0018** DENESTING STREAM — **MACHINE**: 1,024 theorems `√(a+2√b)=√m+√n` over the declared grid (a∈2..64, b∈1..a²/4), dual-engine certified; 21,328 non-denestability certificates | MACHINE | 2680 |
+
+**Chain (after 0018): HEAD_v2 =**
+`197631db6587b8840d61997120a06653962f2d1aa24886ade19cb40e58324da0`
+(= genesis→0001→CONCEPT-0001→0002..0007 [=`d18e5038…f35a`, checkpoint]→0008..0018; `mx_chain_step`
+throughout; replay gate `corpus/2684_mathesis_chain_v2` — tamper + truncation arms break it).  The
+`MATHESIS_CERT` (`run_mathesis.sh` stage [8]) binds this head to the sealed round-1 stream (183) and the
+round-2 verdict (8064, DRY).  Discovery-ratchet provenance (the PROVENANCE law, §10.13): **MACHINE**
+entries are 0006, 0007, 0008, 0015, 0016, 0018 — the six the engine synthesized without any supplied
+candidate.  The rest are human-conjectured / machine-proven method exhibits and infrastructure.
+
 ### XII rewrite-rule confluence theorems (V1 Stage 6)
 
 Reviewed in `DOCS/XII_RULE_REVIEW.md` (all 44 match/apply read + confirmed).

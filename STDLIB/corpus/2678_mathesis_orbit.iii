@@ -1,0 +1,152 @@
+/* STDLIB/corpus/2678_mathesis_orbit.iii -- SYMMETRY TRANSPORT I: THE ROT-CONJUGATION ORBIT (Xi11/P9,
+ * III-MATHESIS-MAP.md s3b BREAK C4).
+ *
+ * Analogy as a VERIFIED FUNCTOR, never a guess.  The transporter T_k(f)(x) = rot_k(f(rot_{64-k}(x)))
+ * carries a theorem to its whole symmetry orbit -- LEGAL exactly where the operations commute with
+ * rotation.  Equivariance is a CHECKED PRECONDITION, and each claimed equivariance/non-equivariance is
+ * itself machine-proven here:
+ *
+ *   (e1) THE EQUIVARIANCE TABLE, positive half: for EVERY k in 1..63 and o in {AND, OR, XOR}:
+ *            rot_k(a o b) == rot_k(a) o rot_k(b)      (189 symbolic calls, each over all 2^128 pairs)
+ *   (e2) THE NEGATIVE HALF (the transport-refusing witnesses, one per refused op): at k = 1,
+ *            rot_1(a + b)  != rot_1(a) + rot_1(b)     (carry wraps)      -- REFUTED
+ *            rot_1(a - b)  != rot_1(a) - rot_1(b)     (borrow wraps)     -- REFUTED
+ *            rot_1(a * b)  != rot_1(a) * rot_1(b)                        -- REFUTED
+ *            rot_1(a << c) != rot_1(a) << c   (const c = 1)              -- REFUTED
+ *            rot_1(a >> c) != rot_1(a) >> c   (const c = 1)              -- REFUTED
+ *        A statement bearing any refused op is REFUSED transport; the arms prove the refusal is
+ *        grounded in the algebra, not a convention.
+ *   (e3) THE ORBIT, spot-verified (two-path): the MACHINE-synthesized absorption (0006) transported to
+ *        k in {1, 17, 32, 63}: (x | rot_k(c)) & rot_k(c) == rot_k(c) at concrete c -- each conjugated
+ *        instance re-proven DIRECTLY by the judge (the transported theorem is not assumed, it is
+ *        re-witnessed); same for involution (0007).
+ * 99 == one proof, an orbit of theorems -- every edge of the functor machine-checked. */
+module corpus_2678_mathesis_orbit
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var WF : [u8; 160]
+var WG : [u8; 160]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+/* rot_k of the value in slot s, appended at pos (pushes the rotated value). */
+fn emit_rot_slot(sel: u32, pos0: u64, slot: u32, k: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, k)
+    p = wb(sel, p, 0x28u32)
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, 64u64 - k)
+    p = wb(sel, p, 0x29u32)
+    p = wb(sel, p, 0x26u32)
+    return p
+}
+/* rot_k of the value currently ON THE STACK: stash to slot 3, then rot from the slot. */
+fn emit_rot_tos(sel: u32, pos0: u64, k: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(sel, p, 0x11u32)  p = wb(sel, p, 3u32)
+    return emit_rot_slot(sel, p, 3u32, k)
+}
+
+/* f: rot_k(a OP b);  g: rot_k(a) OP rot_k(b).  1 iff equivariant (PROVEN), 0 refuted. */
+fn equivariance(op: u32, k: u64) -> u32 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, op)
+    p = emit_rot_tos(0u32, p, k)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = emit_rot_slot(1u32, 0u64, 0u32, k)
+    q = emit_rot_slot(1u32, q, 1u32, k)
+    q = wb(1u32, q, op)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 2u32)
+}
+
+/* shift non-equivariance: rot_1(a << 1) vs rot_1(a) << 1 (and >>). */
+fn shift_nonequiv(shop: u32) -> u32 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, 1u64)
+    p = wb(0u32, p, shop)
+    p = emit_rot_tos(0u32, p, 1u64)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = emit_rot_slot(1u32, 0u64, 0u32, 1u64)
+    q = wc(1u32, q, 1u64)
+    q = wb(1u32, q, shop)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32)
+}
+
+fn rot_native(x: u64, k: u64) -> u64 {
+    let hi : u64 = x << k
+    let mut lo : u64 = 0u64
+    if k > 0u64 { lo = x >> (64u64 - k) }
+    return hi | lo
+}
+
+fn main() -> u64 {
+    /* ---- (e2) THE NEGATIVE HALF FIRST: the refused operations, each refusal machine-grounded ---- */
+    if equivariance(0x20u32, 1u64) != 0u32 { return 10u64 }    /* ADD: REFUTED */
+    if equivariance(0x21u32, 1u64) != 0u32 { return 11u64 }    /* SUB: REFUTED */
+    if equivariance(0x22u32, 1u64) != 0u32 { return 12u64 }    /* MUL: REFUTED */
+    if shift_nonequiv(0x28u32) != 0u32 { return 13u64 }        /* SHL: REFUTED */
+    if shift_nonequiv(0x29u32) != 0u32 { return 14u64 }        /* SHR: REFUTED */
+
+    /* ---- (e1) THE POSITIVE HALF: the whole table, k = 1..63 x {AND, OR, XOR} ---- */
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        if equivariance(0x25u32, k) != 1u32 { return 20u64 }
+        if equivariance(0x26u32, k) != 1u32 { return 21u64 }
+        if equivariance(0x27u32, k) != 1u32 { return 22u64 }
+        k = k + 1u64
+    }
+
+    /* ---- (e3) THE ORBIT of the MACHINE entries, spot-verified at k in {1,17,32,63} ---- */
+    let cbase : u64 = 0xDEADBEEFCAFE1234u64
+    let mut ki : u64 = 0u64
+    while ki < 4u64 {
+        let mut kk : u64 = 1u64
+        if ki == 1u64 { kk = 17u64 }
+        if ki == 2u64 { kk = 32u64 }
+        if ki == 3u64 { kk = 63u64 }
+        let ck : u64 = rot_native(cbase, kk)
+        /* absorption orbit instance: (x | ck) & ck == ck */
+        let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+        p = wc(0u32, p, ck)
+        p = wb(0u32, p, 0x26u32)
+        p = wc(0u32, p, ck)
+        p = wb(0u32, p, 0x25u32)
+        p = wb(0u32, p, 0x60u32)
+        let mut q : u64 = wc(1u32, 0u64, ck)
+        q = wb(1u32, q, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32) != 1u32 { return 30u64 }
+        /* involution orbit instance: (x ^ ck) ^ ck == x */
+        p = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+        p = wc(0u32, p, ck)
+        p = wb(0u32, p, 0x27u32)
+        p = wc(0u32, p, ck)
+        p = wb(0u32, p, 0x27u32)
+        p = wb(0u32, p, 0x60u32)
+        WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 1u32) != 1u32 { return 31u64 }
+        ki = ki + 1u64
+    }
+
+    return 99u64
+}

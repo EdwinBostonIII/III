@@ -1,0 +1,80 @@
+/* STDLIB/corpus/2680_mathesis_denest.iii -- MACHINE-FOUND DENESTING THEOREMS (Xi12,
+ * III-MATHESIS-MAP.md s3b BREAK C4): the telescope's discovery sweep, dual-verified.
+ *
+ *   (d0) R4 FIRST: the WRONG denesting sqrt(3+2 sqrt2) = 1 + sqrt3 is REFUTED by the exact web
+ *        (sign != 0) -- the telescope cannot manufacture a coincidence; and the TRUE denesting of the
+ *        same radical is re-DISCOVERED end-to-end (engine 2 finds m=2, n=1; engine 1 certifies 0);
+ *   (d1) the classical family rediscovered by enumeration, each dual-certified:
+ *        sqrt(5+2 sqrt6) = sqrt3 + sqrt2,  sqrt(7+2 sqrt12) = 2 + sqrt3,  sqrt(8+2 sqrt15) = sqrt5 + sqrt3;
+ *   (d2) NEGATIVE KNOWLEDGE with certificate: disc = a^2 - 4b non-square => NO denesting in the
+ *        sqrt-m + sqrt-n class, rational or integer (monic Vieta argument in the organ header);
+ *   (d3) THE SWEEP, bounds printed as law: the WHOLE declared grid a in 2..64, b in 1..floor(a^2/4)
+ *        (22,352 candidates) decides EVERY candidate: 1,024 denesting theorems FOUND (machine-
+ *        enumerated, provenance MACHINE), 21,328 non-denestability certificates; every finding with
+ *        a <= 32 (256 of them) verified by BOTH engines in-sweep (any disagreement aborts the sweep);
+ *   (d4) determinism: the sweep re-runs to the identical packed count.
+ * 99 == the machine finds real denesting theorems and proves every one -- or refuses. */
+module corpus_2680_mathesis_denest
+
+extern @abi(c-msvc-x64) fn mxt_denest(a: u64, b: u64) -> u32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_m() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_n() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_verify_web(m: u64, n: u64, a: u64, b: u64) -> i32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_issq(v: u64) -> u32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_sweep(amax: u64, dual_amax: u64) -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn denest_r1(a: i64, b: i64, d: i64) -> i32 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_x() -> i64 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_y() -> i64 from "exact_denest.iii"
+
+fn main() -> u64 {
+    /* ---- (d0) R4 FIRST: the wrong claim REFUTED; the true one re-discovered ---- */
+    if mxt_verify_web(1u64, 3u64, 3u64, 2u64) == 0i32 { return 10u64 }
+    if mxt_denest(3u64, 2u64) != 1u32 { return 11u64 }
+    if mxt_m() != 2u64 { return 12u64 }
+    if mxt_n() != 1u64 { return 13u64 }
+    if mxt_verify_web(2u64, 1u64, 3u64, 2u64) != 0i32 { return 14u64 }
+
+    /* ---- (d1) the classical family, dual-certified ---- */
+    if mxt_denest(5u64, 6u64) != 1u32 { return 20u64 }
+    if mxt_m() != 3u64 { return 21u64 }
+    if mxt_n() != 2u64 { return 22u64 }
+    if mxt_verify_web(3u64, 2u64, 5u64, 6u64) != 0i32 { return 23u64 }
+    if mxt_denest(7u64, 12u64) != 1u32 { return 24u64 }
+    if mxt_m() != 4u64 { return 25u64 }
+    if mxt_n() != 3u64 { return 26u64 }
+    if mxt_verify_web(4u64, 3u64, 7u64, 12u64) != 0i32 { return 27u64 }
+    if mxt_denest(8u64, 15u64) != 1u32 { return 28u64 }
+    if mxt_m() != 5u64 { return 29u64 }
+    if mxt_n() != 3u64 { return 30u64 }
+    if mxt_verify_web(5u64, 3u64, 8u64, 15u64) != 0i32 { return 31u64 }
+
+    /* ---- (d2) negative knowledge with certificate ---- */
+    if mxt_denest(5u64, 3u64) != 0u32 { return 40u64 }
+    if mxt_issq(5u64 * 5u64 - 4u64 * 3u64) == 1u32 { return 41u64 }    /* disc 13: the cert is real */
+    if mxt_denest(4u64, 2u64) != 0u32 { return 42u64 }
+    if mxt_issq(4u64 * 4u64 - 4u64 * 2u64) == 1u32 { return 43u64 }    /* disc 8 */
+
+    /* ---- (d2b) THE REDUNDANCY AUDIT, machine-checked: the telescope and exact_denest answer
+     *      DIFFERENT questions.  OVERLAP (n a perfect square => the root stays IN Q(sqrt d)):
+     *      3+2sqrt2 = (1+sqrt2)^2 -- THREE engines agree (Vieta m=2,n=1; the web; denest_r1 x=1,y=1).
+     *      NON-OVERLAP: 5+2sqrt6 = (sqrt3+sqrt2)^2 but sqrt3+sqrt2 has degree 4 over Q -- the
+     *      telescope DENESTS it while denest_r1 correctly reports NOT-a-square-in-Q(sqrt6):
+     *      complementary organs, proven complementary. ---- */
+    if denest_r1(3i64, 2i64, 2i64) != 1i32 { return 44u64 }
+    if denest_x() != 1i64 { return 45u64 }
+    if denest_y() != 1i64 { return 46u64 }
+    if mxt_denest(5u64, 6u64) != 1u32 { return 47u64 }         /* the telescope denests (quartic)... */
+    if denest_r1(5i64, 2i64, 6i64) == 1i32 { return 48u64 }    /* ...where the in-field organ must not */
+
+    /* ---- (d3) THE SWEEP: the whole declared grid, counts pinned ---- */
+    let r1 : u64 = mxt_sweep(64u64, 32u64)
+    if r1 == 0u64 { return 50u64 }
+    if (r1 >> 32u64) != 1024u64 { return 51u64 }             /* the 1,024 machine-found theorems */
+    if (r1 & 4294967295u64) != 21328u64 { return 52u64 }     /* the 21,328 certificates */
+
+    /* ---- (d4) determinism ---- */
+    let r2 : u64 = mxt_sweep(64u64, 32u64)
+    if r2 != r1 { return 53u64 }
+
+    return 99u64
+}

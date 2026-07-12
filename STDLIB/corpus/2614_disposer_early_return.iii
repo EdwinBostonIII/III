@@ -1,0 +1,265 @@
+/* STDLIB/corpus/2614_disposer_early_return.iii -- THE EARLY-RETURN SOUNDNESS GATE.
+ *
+ * THE BUG THIS PINS SHUT (found 2026-07-12 by pointing the standing prover, COMPILED/iii-prove, at
+ * ordinary user code -- the corpus never hit it because every gate hand-writes SVIR bodies with a
+ * single trailing RET):
+ *
+ * The compiler lowers  `if c { return b }  return a`  to
+ *      [LGET c][CONST 0][NE][IF][LGET b][RET][END][LGET a][RET]
+ * -- a RET *inside* an if-frame, with no ELSE.  sd_denote's RET handler used to do
+ * `return SD_STK[SP-1]` immediately, so it denoted that whole body as **b alone**: the condition and
+ * the `return a` path simply vanished.
+ *
+ * That is not a conservative abstraction, it is a WRONG one, and it could manufacture a FALSE PROVEN --
+ * the one unrecoverable outcome the disposer exists to prevent:
+ *      f(c) = if c { return 1 } return 2       and       g(c) = if c { return 1 } return 3
+ * both collapsed to the constant 1, so seq_equiv would have called them EQUAL.  They are not: at c = 0
+ * one is 2 and the other is 3.
+ *
+ * THE ARMS (negative first, per campaign law 1):
+ *   (a) THE FALSE-PROVEN ARM: the f/g pair above must be REFUTED (0).  Under the old handler this gate
+ *       returns 10 -- the bug is REPRODUCED by this test, so the test can never silently pass again.
+ *   (b) the guard shape is DENOTABLE at all (not SD_TOP) -- the fix does not merely refuse everything.
+ *   (c) SEMANTIC TRUTH, both ways: the branchy select `if c { return b } return a` is PROVEN EQUAL to
+ *       the branchless mask select, and REFUTED against a select with the arms SWAPPED.
+ *   (d) MULTI-RETURN CHAINS: a three-way guard ladder is proven equal to its nested if/else form.
+ *   (e) FIRST-RETURN-WINS: `if c1 { return 1 } if c2 { return 2 } return 3` is REFUTED against the
+ *       ladder with the two guards reordered (they differ exactly where c1 & c2 both hold) -- proving
+ *       the accumulator honours precedence and does not just OR the paths together.
+ *   (f) TOTALITY IS CHECKED: a body that can fall off the end (a guard with no final return) is
+ *       REFUSED as SEQ_TOP -- never assigned an invented value.
+ *   (g) NO REGRESSION: a straight-line body still denotes to its exact value (the fast path), and the
+ *       classic if/else-VALUE form still muxes -- the sealed library's verdicts are untouched.
+ * 99 == the disposer reads early returns the way the machine actually executes them. */
+module corpus_2614_disposer_early_return
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const ONES : u64 = 18446744073709551615u64
+
+var WF : [u8; 192]
+var WG : [u8; 192]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+fn lg(sel: u32, pos: u64, s: u32) -> u64 {
+    let p : u64 = wb(sel, pos, 0x10u32)
+    return wb(sel, p, s)
+}
+
+/* the EXACT shape cg_svir emits for `if <slot g> != 0 { return <then> } return <else>`,
+ * where `then`/`else` are either a local slot (kind 0) or a constant (kind 1). */
+fn guard(sel: u32, pos0: u64, gslot: u32, tkind: u32, tval: u64, ekind: u32, eval: u64) -> u64 {
+    let mut p : u64 = lg(sel, pos0, gslot)
+    p = wc(sel, p, 0u64)
+    p = wb(sel, p, 0x31u32)                    /* NE(g, 0) */
+    p = wb(sel, p, 0x42u32)                    /* IF */
+    if tkind == 0u32 { p = lg(sel, p, tval as u32) } else { p = wc(sel, p, tval) }
+    p = wb(sel, p, 0x60u32)                    /* RET  (inside the if-frame -- the bug's home) */
+    p = wb(sel, p, 0x44u32)                    /* END  (no ELSE) */
+    if ekind == 0u32 { p = lg(sel, p, eval as u32) } else { p = wc(sel, p, eval) }
+    p = wb(sel, p, 0x60u32)                    /* RET */
+    return p
+}
+
+fn main() -> u64 {
+    /* ---- (a) THE FALSE-PROVEN ARM, FIRST: f(c)= if c {1} else 2 ; g(c)= if c {1} else 3 ---- */
+    let f1 : u64 = guard(0u32, 0u64, 0u32, 1u32, 1u64, 1u32, 2u64)
+    let g1 : u64 = guard(1u32, 0u64, 0u32, 1u32, 1u64, 1u32, 3u64)
+    if seq_equiv(&WF as u64, 0u64, f1, &WG as u64, 0u64, g1, 1u32) != 0u32 { return 10u64 }
+
+    /* ---- (b) the guard shape is DENOTABLE: it is equal to ITSELF (not SEQ_TOP) ---- */
+    let f2 : u64 = guard(0u32, 0u64, 0u32, 0u32, 2u64, 0u32, 1u64)   /* if c { return b } return a */
+    let g2 : u64 = guard(1u32, 0u64, 0u32, 0u32, 2u64, 0u32, 1u64)
+    if seq_equiv(&WF as u64, 0u64, f2, &WG as u64, 0u64, g2, 3u32) != 1u32 { return 11u64 }
+
+    /* ---- (c) SEMANTIC TRUTH: branchy select == branchless mask select ----
+     * g = (b & m) | (a & ~m)  with  m = 0 - ((c | (0-c)) >> 63)   [all-ones iff c != 0] */
+    let f3 : u64 = guard(0u32, 0u64, 0u32, 0u32, 2u64, 0u32, 1u64)
+    /* m = 0 - ((c | (0-c)) >> 63)   -- all-ones iff c != 0, zero iff c == 0 */
+    let mut q : u64 = wc(1u32, 0u64, 0u64)           /* 0 */
+    q = lg(1u32, q, 0u32)                            /* c */
+    q = wc(1u32, q, 0u64)                            /* 0 */
+    q = lg(1u32, q, 0u32)                            /* c */
+    q = wb(1u32, q, 0x21u32)                         /* (0 - c) */
+    q = wb(1u32, q, 0x26u32)                         /* c | (0-c) */
+    q = wc(1u32, q, 63u64)
+    q = wb(1u32, q, 0x29u32)                         /* >> 63 */
+    q = wb(1u32, q, 0x21u32)                         /* m = 0 - (...) */
+    q = wb(1u32, q, 0x11u32)  q = wb(1u32, q, 3u32)  /* slot3 = m */
+    q = lg(1u32, q, 2u32)                            /* b */
+    q = lg(1u32, q, 3u32)                            /* m */
+    q = wb(1u32, q, 0x25u32)                         /* b & m */
+    q = lg(1u32, q, 1u32)                            /* a */
+    q = lg(1u32, q, 3u32)                            /* m */
+    q = wc(1u32, q, ONES)
+    q = wb(1u32, q, 0x27u32)                         /* ~m */
+    q = wb(1u32, q, 0x25u32)                         /* a & ~m */
+    q = wb(1u32, q, 0x26u32)                         /* | */
+    q = wb(1u32, q, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, f3, &WG as u64, 0u64, q, 3u32) != 1u32 { return 12u64 }
+
+    /* ...and REFUTED against the select with the arms SWAPPED (a real difference, caught) */
+    let f4 : u64 = guard(0u32, 0u64, 0u32, 0u32, 1u64, 0u32, 2u64)   /* if c { return a } return b */
+    if seq_equiv(&WF as u64, 0u64, f4, &WG as u64, 0u64, q, 3u32) != 0u32 { return 13u64 }
+
+    /* ---- (d)+(e) MULTI-RETURN LADDER: if c1 {1} if c2 {2} 3  -- precedence is honoured ---- */
+    let mut p : u64 = lg(0u32, 0u64, 0u32)           /* c1 */
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x42u32)
+    p = wc(0u32, p, 1u64)
+    p = wb(0u32, p, 0x60u32)
+    p = wb(0u32, p, 0x44u32)
+    p = lg(0u32, p, 1u32)                            /* c2 */
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x42u32)
+    p = wc(0u32, p, 2u64)
+    p = wb(0u32, p, 0x60u32)
+    p = wb(0u32, p, 0x44u32)
+    p = wc(0u32, p, 3u64)
+    p = wb(0u32, p, 0x60u32)
+    /* the SAME ladder with the guards REORDERED: differs exactly where c1 & c2 both hold */
+    let mut r : u64 = lg(1u32, 0u64, 1u32)           /* c2 first */
+    r = wc(1u32, r, 0u64)
+    r = wb(1u32, r, 0x31u32)
+    r = wb(1u32, r, 0x42u32)
+    r = wc(1u32, r, 2u64)
+    r = wb(1u32, r, 0x60u32)
+    r = wb(1u32, r, 0x44u32)
+    r = lg(1u32, r, 0u32)                            /* then c1 */
+    r = wc(1u32, r, 0u64)
+    r = wb(1u32, r, 0x31u32)
+    r = wb(1u32, r, 0x42u32)
+    r = wc(1u32, r, 1u64)
+    r = wb(1u32, r, 0x60u32)
+    r = wb(1u32, r, 0x44u32)
+    r = wc(1u32, r, 3u64)
+    r = wb(1u32, r, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, r, 2u32) != 0u32 { return 14u64 }
+    /* the ladder IS equal to itself (denotable, and precedence-stable) */
+    let mut p2 : u64 = lg(1u32, 0u64, 0u32)
+    p2 = wc(1u32, p2, 0u64)
+    p2 = wb(1u32, p2, 0x31u32)
+    p2 = wb(1u32, p2, 0x42u32)
+    p2 = wc(1u32, p2, 1u64)
+    p2 = wb(1u32, p2, 0x60u32)
+    p2 = wb(1u32, p2, 0x44u32)
+    p2 = lg(1u32, p2, 1u32)
+    p2 = wc(1u32, p2, 0u64)
+    p2 = wb(1u32, p2, 0x31u32)
+    p2 = wb(1u32, p2, 0x42u32)
+    p2 = wc(1u32, p2, 2u64)
+    p2 = wb(1u32, p2, 0x60u32)
+    p2 = wb(1u32, p2, 0x44u32)
+    p2 = wc(1u32, p2, 3u64)
+    p2 = wb(1u32, p2, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, p2, 2u32) != 1u32 { return 15u64 }
+
+    /* ---- (f) TOTALITY IS CHECKED: a guard with NO final return REFUSES (SEQ_TOP), never invents ---- */
+    let mut t : u64 = lg(0u32, 0u64, 0u32)
+    t = wc(0u32, t, 0u64)
+    t = wb(0u32, t, 0x31u32)
+    t = wb(0u32, t, 0x42u32)
+    t = wc(0u32, t, 7u64)
+    t = wb(0u32, t, 0x60u32)
+    t = wb(0u32, t, 0x44u32)                         /* ...and then nothing: c==0 falls off the end */
+    if seq_equiv(&WF as u64, 0u64, t, &WG as u64, 0u64, p2, 2u32) != 2u32 { return 16u64 }
+
+    /* ---- (h) THE DIVISION FRAGMENT: DIV_U/REM_U by a CONSTANT POWER OF TWO is exactly a shift/mask.
+     * Real code is full of `(x + 7) / 8 * 8` and `x % 16`; without these the prover abstains on the
+     * commonest alignment idioms there are.  A non-pow2 or SYMBOLIC divisor stays REFUSED -- the
+     * general divider is the SAT wall, and this engine abstains rather than approximate. ---- */
+    /* (x / 8) * 8  ==  x & ~7   -- align-down, PROVEN */
+    let mut d : u64 = lg(0u32, 0u64, 0u32)
+    d = wc(0u32, d, 8u64)
+    d = wb(0u32, d, 0x2Au32)                         /* DIV_U */
+    d = wc(0u32, d, 8u64)
+    d = wb(0u32, d, 0x22u32)                         /* * 8 */
+    d = wb(0u32, d, 0x60u32)
+    let mut e : u64 = lg(1u32, 0u64, 0u32)
+    e = wc(1u32, e, ONES - 7u64)                     /* ~7 */
+    e = wb(1u32, e, 0x25u32)
+    e = wb(1u32, e, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, d, &WG as u64, 0u64, e, 1u32) != 1u32 { return 20u64 }
+    /* x % 16  ==  x & 15   -- PROVEN */
+    let mut m : u64 = lg(0u32, 0u64, 0u32)
+    m = wc(0u32, m, 16u64)
+    m = wb(0u32, m, 0x2Bu32)                         /* REM_U */
+    m = wb(0u32, m, 0x60u32)
+    let mut m2 : u64 = lg(1u32, 0u64, 0u32)
+    m2 = wc(1u32, m2, 15u64)
+    m2 = wb(1u32, m2, 0x25u32)
+    m2 = wb(1u32, m2, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, m, &WG as u64, 0u64, m2, 1u32) != 1u32 { return 21u64 }
+    /* THE TOOTH: x / 8 is NOT x >> 2 (a wrong shift is caught, not waved through) */
+    let mut w : u64 = lg(1u32, 0u64, 0u32)
+    w = wc(1u32, w, 2u64)
+    w = wb(1u32, w, 0x29u32)
+    w = wb(1u32, w, 0x60u32)
+    let mut w2 : u64 = lg(0u32, 0u64, 0u32)
+    w2 = wc(0u32, w2, 8u64)
+    w2 = wb(0u32, w2, 0x2Au32)
+    w2 = wb(0u32, w2, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, w2, &WG as u64, 0u64, w, 1u32) != 0u32 { return 22u64 }
+    /* THE ABSTENTION: a NON-power-of-two divisor is REFUSED (SEQ_TOP), never approximated */
+    let mut n3 : u64 = lg(0u32, 0u64, 0u32)
+    n3 = wc(0u32, n3, 3u64)
+    n3 = wb(0u32, n3, 0x2Au32)                       /* x / 3 -- the general divider: out of fragment */
+    n3 = wb(0u32, n3, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, n3, &WG as u64, 0u64, m2, 1u32) != 2u32 { return 23u64 }
+    /* THE SYMBOLIC-DIVISOR ABSTENTION: x / y (y a parameter) is REFUSED */
+    let mut sd : u64 = lg(0u32, 0u64, 0u32)
+    sd = lg(0u32, sd, 1u32)
+    sd = wb(0u32, sd, 0x2Au32)
+    sd = wb(0u32, sd, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, sd, &WG as u64, 0u64, m2, 2u32) != 2u32 { return 24u64 }
+    /* SVIR's defined divide-by-zero: x / 0 == 0 (spec 0x2A), modelled EXACTLY */
+    let mut z : u64 = lg(0u32, 0u64, 0u32)
+    z = wc(0u32, z, 0u64)
+    z = wb(0u32, z, 0x2Au32)
+    z = wb(0u32, z, 0x60u32)
+    let mut z2 : u64 = wc(1u32, 0u64, 0u64)
+    z2 = wb(1u32, z2, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, z, &WG as u64, 0u64, z2, 1u32) != 1u32 { return 25u64 }
+
+    /* ---- (g) NO REGRESSION: straight-line fast path + the classic if/else-VALUE mux ---- */
+    let mut s : u64 = lg(0u32, 0u64, 0u32)
+    s = lg(0u32, s, 1u32)
+    s = wb(0u32, s, 0x25u32)
+    s = wb(0u32, s, 0x60u32)                         /* x & y */
+    let mut s2 : u64 = lg(1u32, 0u64, 1u32)
+    s2 = lg(1u32, s2, 0u32)
+    s2 = wb(1u32, s2, 0x25u32)
+    s2 = wb(1u32, s2, 0x60u32)                       /* y & x  (AND commutes) */
+    if seq_equiv(&WF as u64, 0u64, s, &WG as u64, 0u64, s2, 2u32) != 1u32 { return 17u64 }
+    /* the value-if:  (if c { a } else { b })  ==  the same, both arms pushing values, no RET inside */
+    let mut v : u64 = lg(0u32, 0u64, 0u32)
+    v = wb(0u32, v, 0x42u32)
+    v = lg(0u32, v, 1u32)
+    v = wb(0u32, v, 0x43u32)
+    v = lg(0u32, v, 2u32)
+    v = wb(0u32, v, 0x44u32)
+    v = wb(0u32, v, 0x60u32)
+    let f5 : u64 = guard(1u32, 0u64, 0u32, 0u32, 1u64, 0u32, 2u64)   /* if c { return a } return b */
+    if seq_equiv(&WF as u64, 0u64, v, &WG as u64, 0u64, f5, 3u32) != 1u32 { return 18u64 }
+
+    return 99u64
+}

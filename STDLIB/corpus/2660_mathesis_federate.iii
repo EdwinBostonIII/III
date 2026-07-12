@@ -1,0 +1,216 @@
+/* STDLIB/corpus/2660_mathesis_federate.iii -- FEDERATION: MATHEMATICS PROPAGATES BY PROOF (Xi6,
+ * III-MATHESIS-MAP.md s7).
+ *
+ * A theorem bundle = { canonical descriptor (64B) || theorem_id (32B) || proof-route tag (8B) }.
+ * It ships over the REAL sealed channel (x25519 handshake -> ChaCha20-Poly1305, the aether organ)
+ * signed by an ML-DSA-44 quorum -- and the receiver TRUSTS NONE OF IT:
+ *
+ *   1. the id is RE-DERIVED from the descriptor (content addressing; a forged statement byte kills it);
+ *   2. the statement is RE-PROVEN by the receiver's OWN disposer (the family-keyed chain-fold schema
+ *      through seq_equiv) -- propagate-by-proof: a FALSE statement with a perfectly valid envelope,
+ *      valid id, and valid signatures is STILL REJECTED because the receiver's re-proof REFUTES it;
+ *   3. the ML-DSA quorum is 2f+1 = 3 with f = 1: one corrupted signature is tolerated (2 valid),
+ *      two corrupted signatures reject the bundle (1 valid < 2).
+ *
+ * Arms: (b1) the honest bundle transports + verifies + ACCEPTS end-to-end; (b2) a forged statement
+ * byte => id mismatch => REJECT; (b3) THE FALSE THEOREM with a valid envelope (SUB chain-fold --
+ * (x-c1)-c2 == x-(c1-c2) is FALSE) => the re-proof REFUTES => REJECT; (b4) a flipped ciphertext
+ * byte => the Poly1305 tag fails => transport REJECT; (b5) the quorum arms (f=1 accept, f=2 reject).
+ * 99 == theorems move between machines only by carrying their own re-checkable proof. */
+module corpus_2660_mathesis_federate
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const LEVEL : u64 = 2u64
+const SIGB : u64 = 2420u64
+const BLEN : u64 = 104u64          /* 64 desc + 32 id + 8 route tag */
+
+var D : [u64; 8]
+var ID : [u8; 32]
+var ID2 : [u8; 32]
+var BUNDLE : [u8; 104]
+var WIRE : [u8; 104]
+var PRISTINE : [u8; 104]
+var TAG : [u8; 16]
+var SEED : [u8; 32]
+var PK0 : [u8; 1312]
+var PK1 : [u8; 1312]
+var PK2 : [u8; 1312]
+var SK0 : [u8; 2560]
+var SK1 : [u8; 2560]
+var SK2 : [u8; 2560]
+var SG0 : [u8; 2420]
+var SG1 : [u8; 2420]
+var SG2 : [u8; 2420]
+var SLQ : [u64; 1]
+var WF : [u8; 64]
+var WG : [u8; 64]
+
+fn copy(dst: u64, src: u64, n: u64) -> u32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return 1u32
+}
+
+/* the canonical bundle for family op `fam`: descriptor + re-derived id + route tag. */
+fn build_bundle(fam: u64) -> u32 {
+    D[0u64] = 0x4D583031u64  D[1u64] = fam  D[2u64] = 1u64  D[3u64] = 1u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    if mx_theorem_id(&D as u64, &ID as u64) != 0i32 { return 0u32 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = D[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 { BUNDLE[(i * 8u64) + b] = (w & 0xFFu64) as u8  w = w >> 8u64  b = b + 1u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 32u64 { BUNDLE[64u64 + i] = ID[i]  i = i + 1u64 }
+    /* route tag "SEQV0001": the discharge is one symbolic seq_equiv chain-fold call */
+    BUNDLE[96u64] = 0x53u8  BUNDLE[97u64] = 0x45u8  BUNDLE[98u64] = 0x51u8  BUNDLE[99u64] = 0x56u8
+    BUNDLE[100u64] = 0x30u8  BUNDLE[101u64] = 0x30u8  BUNDLE[102u64] = 0x30u8  BUNDLE[103u64] = 0x31u8
+    return 1u32
+}
+
+/* THE RECEIVER: re-derive the id, RE-PROVE the statement, count quorum.  1 ACCEPT / 0 REJECT. */
+fn receiver_verify(bp: u64, nsig_valid_needed: u64, s0ok: u32, s1ok: u32, s2ok: u32) -> u32 {
+    let p : *u8 = bp as *u8
+    /* 1. parse + re-derive the id from the descriptor */
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = 0u64
+        let mut b : u64 = 0u64
+        while b < 8u64 { w = w | ((p[(i * 8u64) + b] as u64) << (b * 8u64))  b = b + 1u64 }
+        D[i] = w
+        i = i + 1u64
+    }
+    if mx_theorem_id(&D as u64, &ID2 as u64) != 0i32 { return 0u32 }
+    i = 0u64
+    while i < 32u64 {
+        if ID2[i] != p[64u64 + i] { return 0u32 }              /* forged statement: id mismatch */
+        i = i + 1u64
+    }
+    /* 2. RE-PROVE with the receiver's own judge: the family chain-fold schema */
+    let fam : u32 = (D[1u64] & 0xFFu64) as u32
+    WF[0u64] = 0x10u8  WF[1u64] = 0u8
+    WF[2u64] = 0x10u8  WF[3u64] = 1u8
+    WF[4u64] = fam as u8
+    WF[5u64] = 0x10u8  WF[6u64] = 2u8
+    WF[7u64] = fam as u8
+    WF[8u64] = 0x60u8
+    WG[0u64] = 0x10u8  WG[1u64] = 0u8
+    WG[2u64] = 0x10u8  WG[3u64] = 1u8
+    WG[4u64] = 0x10u8  WG[5u64] = 2u8
+    WG[6u64] = fam as u8
+    WG[7u64] = fam as u8
+    WG[8u64] = 0x60u8
+    if seq_equiv(&WF as u64, 0u64, 9u64, &WG as u64, 0u64, 9u64, 3u32) != 1u32 { return 0u32 }
+    /* 3. the ML-DSA quorum (the caller passes each signature's live verify verdict) */
+    let mut nvalid : u64 = 0u64
+    if s0ok == 1u32 { nvalid = nvalid + 1u64 }
+    if s1ok == 1u32 { nvalid = nvalid + 1u64 }
+    if s2ok == 1u32 { nvalid = nvalid + 1u64 }
+    if nvalid < nsig_valid_needed { return 0u32 }
+    return 1u32
+}
+
+fn vsig(pk: u64, sig: u64) -> u32 {
+    if iii_mldsa_verify(LEVEL, pk, &WIRE as u64, BLEN, sig, SIGB) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* ---- the three signers ---- */
+    let mut s : u64 = 0u64
+    while s < 32u64 { SEED[s] = (s + 1u64) as u8  s = s + 1u64 }
+    if iii_mldsa_keygen(LEVEL, &SEED as u64, &PK0 as u64, &SK0 as u64) != 0i32 { return 10u64 }
+    SEED[0u64] = 0xA5u8
+    if iii_mldsa_keygen(LEVEL, &SEED as u64, &PK1 as u64, &SK1 as u64) != 0i32 { return 11u64 }
+    SEED[0u64] = 0x5Au8
+    if iii_mldsa_keygen(LEVEL, &SEED as u64, &PK2 as u64, &SK2 as u64) != 0i32 { return 12u64 }
+
+    /* ---- the honest bundle (AND chain-fold, THEOREM-0001) signed by all three ---- */
+    if build_bundle(0x25u64) != 1u32 { return 13u64 }
+    if iii_mldsa_sign_sealed(LEVEL, &SK0 as u64, &BUNDLE as u64, BLEN, (&SG0) as *u8, (&SLQ) as *u64) != 0i32 { return 14u64 }
+    if SLQ[0u64] != SIGB { return 15u64 }
+    if iii_mldsa_sign_sealed(LEVEL, &SK1 as u64, &BUNDLE as u64, BLEN, (&SG1) as *u8, (&SLQ) as *u64) != 0i32 { return 16u64 }
+    if iii_mldsa_sign_sealed(LEVEL, &SK2 as u64, &BUNDLE as u64, BLEN, (&SG2) as *u8, (&SLQ) as *u64) != 0i32 { return 17u64 }
+
+    /* ---- the sealed channel: alice -> bob ---- */
+    sc_reset_all()
+    let bp : *u8 = malloc(32u64)
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8  z = z + 1u64 }
+    let ask : *u8 = malloc(32u64)
+    let bsk : *u8 = malloc(32u64)
+    let mut a : u64 = 0u64
+    while a < 32u64 { ask[a] = ((a + 7u64) & 0xFFu64) as u8  bsk[a] = ((0x55u64 + a) & 0xFFu64) as u8  a = a + 1u64 }
+    let apk : *u8 = malloc(32u64)
+    let bpk : *u8 = malloc(32u64)
+    if x25519(apk, ask, bp) != 0i32 { return 20u64 }
+    if x25519(bpk, bsk, bp) != 0i32 { return 21u64 }
+    let ach : u64 = sc_handshake_init(bpk as u64, ask as u64)
+    let bch : u64 = sc_handshake_init(apk as u64, bsk as u64)
+    if ach == 0u64 { return 22u64 }
+    if bch == 0u64 { return 23u64 }
+
+    /* ---- (b1) transport + verify + ACCEPT ---- */
+    copy(&WIRE as u64, &BUNDLE as u64, BLEN)
+    if sc_send(ach, &WIRE as u64, BLEN as u32, &TAG as u64) != 0i32 { return 24u64 }
+    copy(&PRISTINE as u64, &WIRE as u64, BLEN)                       /* the ciphertext snapshot */
+    if sc_recv(bch, &WIRE as u64, BLEN as u32, &TAG as u64) != 0i32 { return 25u64 }
+    let mut i : u64 = 0u64
+    while i < BLEN {
+        if WIRE[i] != BUNDLE[i] { return 26u64 }                     /* decrypted == the original */
+        i = i + 1u64
+    }
+    if receiver_verify(&WIRE as u64, 2u64, vsig(&PK0 as u64, &SG0 as u64),
+                       vsig(&PK1 as u64, &SG1 as u64), vsig(&PK2 as u64, &SG2 as u64)) != 1u32 { return 27u64 }
+
+    /* ---- (b2) a forged statement byte: id mismatch => REJECT ---- */
+    WIRE[1u64] = WIRE[1u64] ^ 0x04u8                                 /* flip a descriptor bit (family word) */
+    if receiver_verify(&WIRE as u64, 2u64, 1u32, 1u32, 1u32) != 0u32 { return 30u64 }
+    WIRE[1u64] = WIRE[1u64] ^ 0x04u8
+
+    /* ---- (b3) THE FALSE THEOREM with a valid envelope: the re-proof REFUTES => REJECT ----
+     * SUB chain-fold (x-c1)-c2 == x-(c1-c2) is FALSE; its descriptor is VALID, its id derives, its
+     * signatures would verify -- the RECEIVER'S OWN PROOF is the thing that says no. */
+    if build_bundle(0x21u64) != 1u32 { return 31u64 }
+    copy(&WIRE as u64, &BUNDLE as u64, BLEN)
+    if receiver_verify(&WIRE as u64, 0u64, 1u32, 1u32, 1u32) != 0u32 { return 32u64 }
+
+    /* ---- (b4) transport tamper: a flipped ciphertext byte fails the Poly1305 tag ---- */
+    if build_bundle(0x25u64) != 1u32 { return 33u64 }
+    copy(&WIRE as u64, &BUNDLE as u64, BLEN)
+    if sc_send(ach, &WIRE as u64, BLEN as u32, &TAG as u64) != 0i32 { return 34u64 }
+    WIRE[10u64] = WIRE[10u64] ^ 1u8
+    if sc_recv(bch, &WIRE as u64, BLEN as u32, &TAG as u64) == 0i32 { return 35u64 }
+
+    /* ---- (b5) the quorum arms: f=1 tolerated, f=2 rejected ---- */
+    copy(&WIRE as u64, &BUNDLE as u64, BLEN)
+    let v0 : u32 = vsig(&PK0 as u64, &SG0 as u64)
+    let v1 : u32 = vsig(&PK1 as u64, &SG1 as u64)
+    SG2[0u64] = SG2[0u64] ^ 1u8                                      /* corrupt signer 2 */
+    let v2bad : u32 = vsig(&PK2 as u64, &SG2 as u64)
+    if v2bad == 1u32 { return 40u64 }
+    if receiver_verify(&WIRE as u64, 2u64, v0, v1, v2bad) != 1u32 { return 41u64 }   /* 2 valid: ACCEPT */
+    SG1[0u64] = SG1[0u64] ^ 1u8                                      /* corrupt signer 1 too */
+    let v1bad : u32 = vsig(&PK1 as u64, &SG1 as u64)
+    if v1bad == 1u32 { return 42u64 }
+    if receiver_verify(&WIRE as u64, 2u64, v0, v1bad, v2bad) != 0u32 { return 43u64 }   /* 1 valid: REJECT */
+
+    return 99u64
+}

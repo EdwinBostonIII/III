@@ -1,0 +1,122 @@
+/* STDLIB/corpus/2640_mathesis_certify.iii -- THE KERNEL CERTIFICATION LEG (Xi4-T1,
+ * III-MATHESIS-MAP.md s7 Xi4): every sealed equational entry cross-judged by the CIC kernel.
+ *
+ * THE THIRD MEANING-BEARER: the library's forall-proofs are discharged by the bit-blast judge
+ * (seq_equiv) with its own duals; this gate adds the KERNEL's independent BV64 iota-fold model
+ * (numera/typecheck.iii, the 2498 mold) as the standing instance-level cross-check: for every sealed
+ * equational statement, both sides are ENCODED AS KERNEL TERMS and judged by tc_conv at witness
+ * vectors chosen on the semantic edges (all-ones, sign bit, alternating masks).  A kernel whose
+ * BV model disagreed with the disposer's -- or a sealed statement whose sides the kernel refuses to
+ * equate -- reddens this gate forever.
+ *
+ * KERNEL-SEMANTICS BOUNDARY (honest, load-bearing): the kernel's shift model is the x86 count-mask
+ * (x << 64 == x), SVIR's is saturating (x << 64 == 0) -- so shift-bearing statements are certified
+ * here strictly at counts 1..63, where the two models PROVABLY coincide; the count-64 edge is owned
+ * by the disposer alone (2601's width tooth).  This boundary is exactly why the kernel is a genuine
+ * INDEPENDENT engine and not a re-skin of the same semantics.
+ *
+ * Certified entries (8 semantic-edge vectors each unless noted):
+ *   0001 chain-fold      (x&c1)&c2 == x&(c1&c2)         0006 absorption   (x|c)&c == c
+ *   0007 involution      (x^c)^c == x                   order MLB         (x&m)&x == x&m
+ *   align_k, k in {1,32,63}   (x>>k)<<k == x&(~0<<k)    [kernel LSHR/SHL at counts < 64]
+ *   C64 Cayley instance  rot_17(rot_32(x)) == rot_49(x) [counts in 1..63]
+ *   mul-assoc @ width 8  ((x*c1)*c2)&0xFF == (x*(c1*c2))&0xFF   [the 2612 frontier promotion]
+ *   forall-n instance    n=4 chain == its fold           [the 2677 unbounded citizen, grounded]
+ * Negative arms: the kernel REFUSES a wrong fold (2+2==5), a wrong absorption, and an ILL-TYPED
+ * statement (BV + Bool) gets NO type (tc_infer = 0) -- flawed terms cannot be certified.
+ * 99 == every sealed equation carries a kernel certificate; the kernel can refuse. */
+module corpus_2640_mathesis_certify
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+
+const ONES : u64 = 18446744073709551615u64
+
+var VX : [u64; 8]
+var VC : [u64; 8]
+var VD : [u64; 8]
+
+fn vecs() -> u32 {
+    VX[0u64] = 0u64                     VC[0u64] = 0u64                     VD[0u64] = ONES
+    VX[1u64] = 1u64                     VC[1u64] = ONES                     VD[1u64] = 1u64
+    VX[2u64] = ONES                     VC[2u64] = 0xF0F0F0F0F0F0F0F0u64    VD[2u64] = 0x0F0F0F0F0F0F0F0Fu64
+    VX[3u64] = 0x8000000000000000u64    VC[3u64] = 0x7FFFFFFFFFFFFFFFu64    VD[3u64] = 0x8000000000000001u64
+    VX[4u64] = 0x0123456789ABCDEFu64    VC[4u64] = 0xFEDCBA9876543210u64    VD[4u64] = 0xDEADBEEFCAFE1234u64
+    VX[5u64] = 0xAAAAAAAAAAAAAAAAu64    VC[5u64] = 0x5555555555555555u64    VD[5u64] = 0xAAAAAAAAAAAAAAAAu64
+    VX[6u64] = 0xFFFFFFFF00000000u64    VC[6u64] = 0x00000000FFFFFFFFu64    VD[6u64] = 0xFFFF0000FFFF0000u64
+    VX[7u64] = 3u64                     VC[7u64] = 251u64                   VD[7u64] = 17u64
+    return 1u32
+}
+
+/* rot_k as a kernel term over the literal x (k in 1..63 -- the coinciding count range). */
+fn krot(x: u32, k: u64) -> u32 {
+    return tc_bvor(tc_bvshl(x, tc_bvlit_u64(k)), tc_bvlshr(x, tc_bvlit_u64(64u64 - k)))
+}
+
+fn main() -> u64 {
+    tc_reset()
+    vecs()
+
+    /* ---- negative arms FIRST: the kernel can refuse ---- */
+    if tc_conv(tc_bvadd(tc_bvlit_u64(2u64), tc_bvlit_u64(2u64)), tc_bvlit_u64(5u64)) == 1u8 { return 10u64 }
+    /* wrong absorption: (x|c)&c == x at x=ONES, c=1 must REFUSE (it is 1, not ONES) */
+    let xb : u32 = tc_bvlit_u64(ONES)
+    let cb : u32 = tc_bvlit_u64(1u64)
+    if tc_conv(tc_bvand(tc_bvor(xb, cb), cb), xb) == 1u8 { return 11u64 }
+    /* ill-typed statement: BV + Bool has NO type -- flawed terms cannot be certified */
+    if tc_infer(tc_bvadd(tc_bvlit_u64(1u64), tc_true())) != 0u32 { return 12u64 }
+
+    /* ---- the sealed equations, kernel-judged at every semantic-edge vector ---- */
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let x : u32 = tc_bvlit_u64(VX[i])
+        let c1 : u32 = tc_bvlit_u64(VC[i])
+        let c2 : u32 = tc_bvlit_u64(VD[i])
+        /* 0001: (x&c1)&c2 == x&(c1&c2) */
+        if tc_conv(tc_bvand(tc_bvand(x, c1), c2), tc_bvand(x, tc_bvand(c1, c2))) != 1u8 { return 20u64 }
+        /* 0006: (x|c1)&c1 == c1 */
+        if tc_conv(tc_bvand(tc_bvor(x, c1), c1), c1) != 1u8 { return 21u64 }
+        /* 0007: (x^c1)^c1 == x */
+        if tc_conv(tc_bvxor(tc_bvxor(x, c1), c1), x) != 1u8 { return 22u64 }
+        /* order MLB: (x&c1)&x == x&c1 */
+        if tc_conv(tc_bvand(tc_bvand(x, c1), x), tc_bvand(x, c1)) != 1u8 { return 23u64 }
+        /* mul-assoc @ width 8 (the 2612 promotion): ((x*c1)*c2)&0xFF == (x*(c1*c2))&0xFF */
+        let m8 : u32 = tc_bvlit_u64(255u64)
+        if tc_conv(tc_bvand(tc_bvmul(tc_bvmul(x, c1), c2), m8),
+                   tc_bvand(tc_bvmul(x, tc_bvmul(c1, c2)), m8)) != 1u8 { return 24u64 }
+        /* the forall-n citizen grounded at n=4: ((x&c1)&c2)&c1 == x&((c1&c2)&c1) */
+        if tc_conv(tc_bvand(tc_bvand(tc_bvand(x, c1), c2), c1),
+                   tc_bvand(x, tc_bvand(tc_bvand(c1, c2), c1))) != 1u8 { return 25u64 }
+        /* C64 Cayley instance: rot_17(rot_32(x)) == rot_49(x)  [counts 17,32,47,15,49 all in 1..63] */
+        if tc_conv(krot(krot(x, 32u64), 17u64), krot(x, 49u64)) != 1u8 { return 26u64 }
+        i = i + 1u64
+    }
+
+    /* ---- align_k at k in {1,32,63}: (x>>k)<<k == x&(~0<<k), kernel LSHR/SHL (counts < 64) ---- */
+    let mut kk : u64 = 0u64
+    while kk < 3u64 {
+        let mut k : u64 = 1u64
+        if kk == 1u64 { k = 32u64 }
+        if kk == 2u64 { k = 63u64 }
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let x : u32 = tc_bvlit_u64(VX[j])
+            let kt : u32 = tc_bvlit_u64(k)
+            if tc_conv(tc_bvshl(tc_bvlshr(x, kt), kt), tc_bvand(x, tc_bvlit_u64(ONES << k))) != 1u8 { return 27u64 }
+            j = j + 1u64
+        }
+        kk = kk + 1u64
+    }
+
+    return 99u64
+}

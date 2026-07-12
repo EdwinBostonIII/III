@@ -1,0 +1,37 @@
+# MATHESIS-RATCHET v1 — the standing engine's down/up-only ledger (Ξ5/P1 + Ξ13, III-MATHESIS-MAP.md)
+# Enforced in EXECUTABLE form by corpus/2651 (any capability revert reddens it) and re-measured by
+# run_mathesis.sh's census stage.  Numbers move ONLY in their lawful direction.  2026-07-12.
+
+[UP-ONLY: knowledge]
+schemas_sealed              = 17     # 0001..0007 (v3 opening) + 0008..0017 (this arc; see MATH_LIBRARY_QUEUE.md)
+machine_provenance_entries  = 5      # 0006 absorption, 0007 involution, 0008 mul-assoc@w8, 0015/0016 annihilation families
+concepts_minted             = 1      # ROTL64 (INERT-honest, census-measured)
+statement_kinds_live        = 6      # equational, definition, order, nonexistence, optimality, derived-unbounded
+unbounded_theorems          = 2      # ∀n≥2 n-fold chain; ∀n∈ℕ rot-power (gate 2677)
+closed_optimal_families     = 2      # align_k, mask_k: cost EXACTLY 1, k∈1..63 (gate 2674)
+equivariance_table_rows     = 8      # AND/OR/XOR equivariant (k=1..63 proven); ADD/SUB/MUL/SHL/SHR refused-with-witness (2678)
+
+[PINNED: discovery streams (byte-sealed records)]
+round1_space                = 18522  # DOCS/MATHESIS-SYNTH-ROUND1.log: tested=17136 frontier=1386 found=183
+round2_space                = 8064   # the shift tier (gate 2650): chains 1953+1953 (rediscovered, refused),
+                                     # SATURATION-ANNIHILATION 2016+2016 (THE HARVEST), align 63 + mask 63 (rediscovered)
+round2_verdict              = DRY    # second sweep byte-identical; the declared space is exhausted; K=2 convergence
+
+[DOWN-ONLY: the compiler's measured surface]
+teach_gap_named_four        = 0      # AND, OR, XOR, SHR all TAUGHT (gate 2613; was 4 at map v2)
+selfhost_walked_ops         = 26978  # 55 route-S modules / 349 fns (post-0001-fold after-census)
+selfhost_c1_windows         = 0      # was 78 pre-Ξ0; the fold keeps it 0 (runner stage [5])
+stage1_fire                 = 0      # R6: every arm no-fire on stage1_corpus (A1 parity surface)
+
+[FRONTIER: open, blockers named (the queue organ carries these; R7 retries live)]
+mul-mul @ width 64          = 1386  # blocker: bit-blast mul equality; RECEDED to width 8 (2612: proven Z/2^8
+                                     # by complete exhaustion + symbolic dual); ring/kernel route = next retry
+rot 2-op expressibility     = open   # blocker 3 (2674); decides cost(rot_k) ∈ {2,3} exactly
+annihilation-teach          = open   # the round-2 harvest is sealed knowledge; e-graph teach + assimilation
+                                     # await measured demand (census 0 — the anti-bloat law, printed)
+MUX operator                = open   # the grammar's next named rung beyond the original four
+
+[NEXT-VALUE (the agenda's standing verdict, 2683's law: occurrences × cost-delta)]
+census demand is ZERO everywhere post-Ξ0 (the compiler is at its measured fixpoint for known classes);
+the engine's open value lies in the frontier retries and the exact face (Ξ12) — the agenda prints this
+verdict rather than inventing demand.  Ax D3 holds: nothing here is ranked by belief.

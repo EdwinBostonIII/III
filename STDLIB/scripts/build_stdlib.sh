@@ -1256,6 +1256,33 @@ MODULES=(
     # MACHINE-PROVEN forall-schema mathematics (Ax D3: structure only).  Composes ser_kinduct_sym + cad.
     # Gate: corpus/2610. -> LIBNATIVE.
     "numera/mathesis_synth"
+    # mathesis_novel -- THE NOVELTY + SEMANTIC-DEDUP ORGAN (Xi1-T2, R3): the library holds PROPOSITIONS --
+    # commutative-canon + fingerprint-bucketed seq_equiv dedup of the discovery stream, and the COMPUTED
+    # novelty verdict (taught-e-graph derivability; mul-bearing/cap-saturated => honest abstain, never a
+    # certificate).  Composes mathesis_synth + ser_kinduct_sym + ser_egraph.  Gate: corpus/2611. -> LIBNATIVE.
+    "numera/mathesis_novel"
+    # mathesis_frontier -- THE FRONTIER QUEUE (Xi1-T3/P5/R7): abstained pairs catalogued with blockers NAMED,
+    # counted, and RETRIED -- the live width-indexed R7 retry (bb_reset(w)+sd_denote, mul-assoc proven at
+    # w=8/16 while the w=64 wall stays queued; a false pair REFUTED; poison => abstain).  Composes
+    # mathesis_synth + ser_kinduct_sym + bv_bits.  Gate: corpus/2612. -> LIBNATIVE.
+    "numera/mathesis_frontier"
+    # mathesis_deduce -- THE DEDUCTION ORGAN (Xi10): theorems-from-theorems -- forall-n-in-NAT entries by
+    # induction whose EVERY leg is machine-checked (natrec eliminator typed by the CIC kernel; premise ids
+    # re-derived from canonical descriptors; base+step re-discharged by the finite judge; two-path ground
+    # instances).  Composes typecheck + ser_kinduct_sym + mathesis_admit + cad.  Gates: corpus/2676+2677.
+    # -> LIBNATIVE.
+    "numera/mathesis_deduce"
+    # mathesis_agenda -- THE RESEARCH AGENDA (Xi13): intent as measured value (occurrences x cost-delta),
+    # deterministic total order, FNV reproducibility fingerprint; an unmeasured item is REFUSED (auditable
+    # intent, Ax D3-clean).  A sorter over the other organs' measurements -- no new measurement source, no
+    # belief.  Gate: corpus/2683. -> LIBNATIVE.
+    "numera/mathesis_agenda"
+    # mathesis_telescope -- THE EMPIRICAL TELESCOPE (Xi12): machine-found denesting theorems over the
+    # declared sqrt(a+2 sqrt b) grid -- integer Vieta decision (engine 2) + the Sigma-sqrt exact web
+    # (engine 1, ui_sqrt_sum_sign) dual-certifying every finding; non-square disc = the non-denestability
+    # certificate; out-of-envelope = honest abstain.  Composes aether/sqrt_sum_sign only.  Gates:
+    # corpus/2680+2681. -> LIBNATIVE.
+    "numera/mathesis_telescope"
     # ser_eidos -- THE RESEAL DECISION WITNESSED ON THE REAL eidos/field substrate (not dome, the superseded
     # POC). The autopoietic accept/rollback was CLAIMED event-driven/on-EIDOS but ran on nothing III consumes;
     # this records the driver's REAL gate verdict on the field: ACCEPT -> a witnessed field_record; REFUTE ->

@@ -1,0 +1,115 @@
+/* numera/mathesis_telescope.iii -- THE EMPIRICAL TELESCOPE (Xi12, III-MATHESIS-MAP.md s3b BREAK C4):
+ * Ramanujan mode on the DECIDABLE exact substrate -- machine-found DENESTING THEOREMS.
+ *
+ * The engine's second domain.  The telescope ENUMERATES the declared nested-radical family
+ *     sqrt(a + 2*sqrt(b)),   a in 2..MXT_AMAX, b in 1..floor(a^2/4)   (bounds PRINTED, never silent)
+ * and DECIDES each candidate coincidence EXACTLY -- no approximation anywhere:
+ *
+ *   ENGINE 2 (integer Vieta): sqrt(a+2 sqrt b) = sqrt m + sqrt n  (m >= n >= 1 integers)
+ *       forces m+n = a and mn = b (square both sides; match rational and radical parts), so m,n are
+ *       the roots of t^2 - a t + b: they exist iff disc = a^2-4b is a PERFECT SQUARE -- an exact
+ *       integer decision (isqrt + re-square).  Non-square disc = the NON-DENESTABILITY CERTIFICATE
+ *       (no rational denesting either: monic integer polynomial => rational roots are integers).
+ *   ENGINE 1 (the Sigma-sqrt exact web, R1 dual): the equality of the SQUARES as an exact sign:
+ *       sign( (m+n-a)*sqrt(1) + 2*sqrt(mn) - 2*sqrt(b) ) == 0   via ui_sqrt_sum_sign (separation
+ *       bound, bigint, certifies EXACT ZEROS) -- independent machinery from the integer route.
+ *   THE POSITIVITY BRIDGE (stated, machine-checked): both sides are nonnegative reals (m,n,a,b >= 0),
+ *       and equal squares of nonnegative reals are equal -- so the squared decision IS the decision.
+ *
+ * THE ENVELOPE (2681): a > MXT_AMAX or b > MXT_BMAX is REFUSED (verdict 2, honest abstain) -- the
+ * telescope never leaves its declared, separation-bound-safe domain.
+ *
+ * Gates: corpus/2680_mathesis_denest (the sweep: every finding dual-verified, the R4 wrong-denesting
+ * REFUTED, counts pinned), corpus/2681_mathesis_envelope (out-of-envelope abstains).
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes aether/sqrt_sum_sign (the exact web) only.
+ */
+module numera_mathesis_telescope
+
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+const MXT_AMAX : u64 = 64u64
+const MXT_BMAX : u64 = 1024u64      /* = MXT_AMAX^2/4: the declared radicand ceiling */
+
+var MXT_CA : [i64; 3]
+var MXT_CB : [i64; 3]
+var MXT_M : [u64; 1]
+var MXT_N : [u64; 1]
+
+/* integer sqrt (Newton, monotone-safe for u64). */
+fn mxt_isqrt(v: u64) -> u64 @export {
+    if v < 2u64 { return v }
+    let mut x : u64 = v
+    let mut y : u64 = (x + 1u64) / 2u64
+    while y < x {
+        x = y
+        y = (x + v / x) / 2u64
+    }
+    return x
+}
+fn mxt_issq(v: u64) -> u32 @export {
+    let r : u64 = mxt_isqrt(v)
+    if r * r == v { return 1u32 }
+    return 0u32
+}
+
+/* ENGINE 2: the integer Vieta decision.  1 denests (MXT_M/N set), 0 non-denestable (cert = non-square
+ * disc, readable via mxt_isqrt), 2 out-of-envelope ABSTAIN. */
+fn mxt_denest(a: u64, b: u64) -> u32 @export {
+    if a < 2u64 { return 2u32 }
+    if a > MXT_AMAX { return 2u32 }
+    if b < 1u64 { return 2u32 }
+    if b > MXT_BMAX { return 2u32 }
+    if a * a < 4u64 * b { return 0u32 }              /* disc < 0: no real m,n -- certified non-denestable */
+    let disc : u64 = a * a - 4u64 * b
+    if mxt_issq(disc) != 1u32 { return 0u32 }        /* the non-denestability certificate */
+    let s : u64 = mxt_isqrt(disc)
+    let m : u64 = (a + s) / 2u64
+    let n : u64 = (a - s) / 2u64
+    if m + n != a { return 0u32 }
+    if m * n != b { return 0u32 }
+    if n < 1u64 { return 0u32 }                      /* n=0 degenerates to sqrt(a): not this class */
+    MXT_M[0u64] = m
+    MXT_N[0u64] = n
+    return 1u32
+}
+fn mxt_m() -> u64 @export { return MXT_M[0u64] }
+fn mxt_n() -> u64 @export { return MXT_N[0u64] }
+
+/* ENGINE 1: the exact-web sign of the squared difference for a CLAIMED denesting (m,n):
+ * sign((m+n-a) sqrt1 + 2 sqrt(mn) - 2 sqrt(b)).  0 iff the claim holds (with the positivity bridge). */
+fn mxt_verify_web(m: u64, n: u64, a: u64, b: u64) -> i32 @export {
+    let mn : u64 = m * n
+    let rat : i64 = ((m + n) as i64) - (a as i64)
+    MXT_CA[0u64] = rat            MXT_CB[0u64] = 1i64
+    MXT_CA[1u64] = 2i64           MXT_CB[1u64] = mn as i64
+    MXT_CA[2u64] = 0i64 - 2i64    MXT_CB[2u64] = b as i64
+    return ui_sqrt_sum_sign(&MXT_CA as u64, &MXT_CB as u64, 3u64)
+}
+
+/* THE SWEEP over the whole declared grid.  Every found denesting is verified by BOTH engines; any
+ * disagreement aborts with 0.  Returns (found << 32) | nondenest_count if the dual-verified subsweep
+ * (a <= dual_amax) agrees everywhere, else 0.  Bounds are the CALLER's printed law. */
+fn mxt_sweep(amax: u64, dual_amax: u64) -> u64 @export {
+    if amax > MXT_AMAX { return 0u64 }
+    let mut found : u64 = 0u64
+    let mut nond : u64 = 0u64
+    let mut a : u64 = 2u64
+    while a <= amax {
+        let bmax : u64 = (a * a) / 4u64
+        let mut b : u64 = 1u64
+        while b <= bmax {
+            let v : u32 = mxt_denest(a, b)
+            if v == 2u32 { return 0u64 }             /* the declared grid never abstains */
+            if v == 1u32 {
+                found = found + 1u64
+                if a <= dual_amax {
+                    if mxt_verify_web(MXT_M[0u64], MXT_N[0u64], a, b) != 0i32 { return 0u64 }
+                }
+            }
+            if v == 0u32 { nond = nond + 1u64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return (found << 32u64) | nond
+}

@@ -1,0 +1,370 @@
+/* numera/mathesis_novel.iii -- THE NOVELTY + SEMANTIC-DEDUP ORGAN (Xi1-T2, III-MATHESIS-MAP.md s7 Xi1, R3).
+ *
+ * Two jobs the round-1 stream exposed, both statistic-blind (Ax D3):
+ *
+ *  (1) TWO-LEVEL DEDUP -- the stream's redundancy has TWO honest grains, and conflating them is a lie in
+ *      one direction or the other:
+ *        - STRUCTURAL (the rewrite-library grain): schemas identical up to the commutative pattern normal
+ *          form are one deployable rule.  (x&c1)&c2 and its (c1&x) twin fold; (x+c1)-c1 and (x-c1)+c1 stay
+ *          DISTINCT (different patterns match different code).
+ *        - SEMANTIC (the knowledge-ratchet grain): schemas whose two sides are pairwise co-denotational
+ *          state the SAME EQUATION about the same functions.  (x+c1)-c1==x, (x-c1)+c1==x, (x^c1)^c1==x are
+ *          all the one proposition "this form denotes the identity" -- counted ONCE by the discovery
+ *          ratchet.  Bucketing is a deterministic 8-vector native fingerprint; every bucket collision is
+ *          CONFIRMED by seq_equiv (the judge itself) -- equal functions have equal fingerprints, so nothing
+ *          distinct is merged, and nothing is merged on the fingerprint's word alone.
+ *
+ *  (2) COMPUTED NOVELTY (R3) -- "the current rule set does not already derive S", decided by the MACHINE:
+ *      f and g are built as terms of the TAUGHT e-graph (ser_egraph, gate 2613); if saturation lands them
+ *      in one class, S is a REDISCOVERY (novel=0).  Constants become fixed sentinels (0x1111.., 0x2222..):
+ *      sound for the bit-parallel fragment because every taught rule is constant-generic in exactly the
+ *      folded position.  MUL-bearing pairs are REFUSED here (verdict 2, honest abstain): concrete-constant
+ *      mul saturation decomposes to shift-adds and can prove the INSTANCE, which says nothing about the
+ *      SCHEMA -- and a capacity-saturated graph must never masquerade as a verdict (the cap guard).
+ *
+ * Gate: corpus/2611_mathesis_novel.  EXIT=99.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes mathesis_synth (the one body builder),
+ * ser_kinduct_sym (the judge), ser_egraph (the taught grammar), cad (ids) only.
+ */
+module numera_mathesis_novel
+
+extern @abi(c-msvc-x64) fn mxs_build_f1(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_f2(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_g(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_fbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_gbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_add(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_sub(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_mul(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_and(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_or(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_xor(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_same_class(a: u64, b: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_node_count() -> u32 from "ser_egraph.iii"
+
+const MXN_MAX  : u64 = 512u64          /* representative store: (tier,f,g,fpF,fpG) per entry */
+const MXN_C1   : u64 = 1229782938247303441u64    /* 0x1111111111111111 -- the c1 sentinel */
+const MXN_C2   : u64 = 2459565876494606882u64    /* 0x2222222222222222 -- the c2 sentinel */
+const FNV_OFF  : u64 = 14695981039346656037u64
+const FNV_PRM  : u64 = 1099511628211u64
+const MXN_EGCAP : u32 = 512u32
+
+var MXN_T   : [u64; 512]
+var MXN_F   : [u64; 512]
+var MXN_G   : [u64; 512]
+var MXN_FPF : [u64; 512]
+var MXN_FPG : [u64; 512]
+var MXN_N   : [u64; 1]
+var MXN_FA  : [u8; 64]     /* body copies (the shared synth buffers get overwritten between builds) */
+var MXN_GA  : [u8; 64]
+var MXN_FB  : [u8; 64]
+var MXN_GB  : [u8; 64]
+
+fn mxn_count() -> u64 @export { return MXN_N[0u64] }
+fn mxn_reset() -> u32 @export { MXN_N[0u64] = 0u64  return 1u32 }
+
+/* ---- structural canonicalization: commutative pattern normal form -------------------------------------
+ * tier-1 f (code = op*3 + pat): pat 2 (c1,x) -> pat 1 (x,c1) when op commutes (ADD/MUL/AND/OR/XOR; not SUB).
+ * tier-2 f (code = op1*54 + op2*9 + pat*3 + w): same normalization on op1's pattern.
+ * g one-op forms (code 3..20): same.  Fold forms and atoms are already canonical. */
+fn mxn_op_commutes(opidx: u64) -> u32 {
+    if opidx == 1u64 { return 0u32 }   /* SUB */
+    return 1u32                        /* ADD MUL AND OR XOR */
+}
+fn mxn_canon_f(tier: u64, code: u64) -> u64 @export {
+    if tier == 1u64 {
+        let op : u64 = code / 3u64
+        let pat : u64 = code % 3u64
+        if pat == 2u64 { if mxn_op_commutes(op) == 1u32 { return (op * 3u64) + 1u64 } }
+        return code
+    }
+    let op1 : u64 = code / 54u64
+    let r1 : u64 = code % 54u64
+    let op2 : u64 = r1 / 9u64
+    let r2 : u64 = r1 % 9u64
+    let pat : u64 = r2 / 3u64
+    let w : u64 = r2 % 3u64
+    if pat == 2u64 { if mxn_op_commutes(op1) == 1u32 { return (op1 * 54u64) + (op2 * 9u64) + 3u64 + w } }
+    return code
+}
+fn mxn_canon_g(code: u64) -> u64 @export {
+    if code < 3u64 { return code }
+    if code <= 20u64 {
+        let c : u64 = code - 3u64
+        let op : u64 = c / 3u64
+        let pat : u64 = c % 3u64
+        if pat == 2u64 { if mxn_op_commutes(op) == 1u32 { return 3u64 + (op * 3u64) + 1u64 } }
+        return code
+    }
+    return code
+}
+
+/* ---- the deterministic 8-vector native fingerprint (bucket key, never a verdict) ---------------------- */
+var MXN_VX : [u64; 8]
+var MXN_V1 : [u64; 8]
+var MXN_V2 : [u64; 8]
+fn mxn_vecinit() -> u32 {
+    MXN_VX[0u64] = 0u64                       MXN_V1[0u64] = 0u64                       MXN_V2[0u64] = 0u64
+    MXN_VX[1u64] = 1u64                       MXN_V1[1u64] = 18446744073709551615u64    MXN_V2[1u64] = 1u64
+    MXN_VX[2u64] = 18446744073709551615u64    MXN_V1[2u64] = 1u64                       MXN_V2[2u64] = 18446744073709551615u64
+    MXN_VX[3u64] = 9223372036854775808u64     MXN_V1[3u64] = 9223372036854775807u64     MXN_V2[3u64] = 2u64
+    MXN_VX[4u64] = 6148914691236517205u64     MXN_V1[4u64] = 12297829382473034410u64    MXN_V2[4u64] = 255u64
+    MXN_VX[5u64] = 81985529216486895u64       MXN_V1[5u64] = 1229782938247303441u64     MXN_V2[5u64] = 2459565876494606882u64
+    MXN_VX[6u64] = 3u64                       MXN_V1[6u64] = 7u64                       MXN_V2[6u64] = 4294967296u64
+    MXN_VX[7u64] = 1024u64                    MXN_V1[7u64] = 65535u64                   MXN_V2[7u64] = 9223372036854775809u64
+    return 1u32
+}
+/* native f evaluation from the coordinates (the same decode the builder uses; ground arithmetic). */
+fn mxn_apply(opidx: u64, a: u64, b: u64) -> u64 {
+    if opidx == 0u64 { return a + b }
+    if opidx == 1u64 { return a - b }
+    if opidx == 2u64 { return a * b }
+    if opidx == 3u64 { return a & b }
+    if opidx == 4u64 { return a | b }
+    return a ^ b
+}
+fn mxn_eval_f(tier: u64, code: u64, x: u64, c1: u64, c2: u64) -> u64 @export {
+    if tier == 1u64 {
+        let op : u64 = code / 3u64
+        let pat : u64 = code % 3u64
+        let mut u : u64 = x
+        let mut v : u64 = x
+        if pat == 1u64 { v = c1 }
+        if pat == 2u64 { u = c1  v = x }
+        return mxn_apply(op, u, v)
+    }
+    let op1 : u64 = code / 54u64
+    let r1 : u64 = code % 54u64
+    let op2 : u64 = r1 / 9u64
+    let r2 : u64 = r1 % 9u64
+    let pat : u64 = r2 / 3u64
+    let w : u64 = r2 % 3u64
+    let mut u : u64 = x
+    let mut v : u64 = x
+    if pat == 1u64 { v = c1 }
+    if pat == 2u64 { u = c1  v = x }
+    let t : u64 = mxn_apply(op1, u, v)
+    let mut ww : u64 = x
+    if w == 1u64 { ww = c1 }
+    if w == 2u64 { ww = c2 }
+    return mxn_apply(op2, t, ww)
+}
+fn mxn_eval_g(code: u64, x: u64, c1: u64, c2: u64) -> u64 @export {
+    if code == 0u64 { return x }
+    if code == 1u64 { return c1 }
+    if code == 2u64 { return 0u64 }
+    if code <= 20u64 {
+        let c : u64 = code - 3u64
+        let op : u64 = c / 3u64
+        let pat : u64 = c % 3u64
+        let mut u : u64 = x
+        let mut v : u64 = x
+        if pat == 1u64 { v = c1 }
+        if pat == 2u64 { u = c1  v = x }
+        return mxn_apply(op, u, v)
+    }
+    let c : u64 = code - 21u64
+    let op2 : u64 = c / 6u64
+    let op3 : u64 = c % 6u64
+    return mxn_apply(op2, x, mxn_apply(op3, c1, c2))
+}
+fn mxn_fp_f(tier: u64, code: u64) -> u64 {
+    mxn_vecinit()
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        h = (h ^ mxn_eval_f(tier, code, MXN_VX[i], MXN_V1[i], MXN_V2[i])) * FNV_PRM
+        i = i + 1u64
+    }
+    return h
+}
+fn mxn_fp_g(code: u64) -> u64 {
+    mxn_vecinit()
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        h = (h ^ mxn_eval_g(code, MXN_VX[i], MXN_V1[i], MXN_V2[i])) * FNV_PRM
+        i = i + 1u64
+    }
+    return h
+}
+
+/* ---- the judge-confirmed pair equality (bucket collisions only) ---------------------------------------- */
+fn mxn_copy(dst: u64, src: u64, n: u64) -> u32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return 1u32
+}
+fn mxn_build_f_into(tier: u64, code: u64, dst: u64) -> u64 {
+    let mut l : u64 = 0u64
+    if tier == 1u64 { l = mxs_build_f1(code) }
+    if tier == 2u64 { l = mxs_build_f2(code) }
+    if l == 0u64 { return 0u64 }
+    mxn_copy(dst, mxs_fbuf(), l)
+    return l
+}
+fn mxn_build_g_into(code: u64, dst: u64) -> u64 {
+    let l : u64 = mxs_build_g(code)
+    if l == 0u64 { return 0u64 }
+    mxn_copy(dst, mxs_gbuf(), l)
+    return l
+}
+/* 1 iff (fA,gA) and (fB,gB) are the SAME PROPOSITION: ⟦fA⟧=⟦fB⟧ and ⟦gA⟧=⟦gB⟧ (each one seq_equiv call). */
+fn mxn_sem_dup(tA: u64, fA: u64, gA: u64, tB: u64, fB: u64, gB: u64) -> u32 @export {
+    let la : u64 = mxn_build_f_into(tA, fA, &MXN_FA as u64)
+    let lb : u64 = mxn_build_f_into(tB, fB, &MXN_FB as u64)
+    if la == 0u64 { return 0u32 }
+    if lb == 0u64 { return 0u32 }
+    if seq_equiv(&MXN_FA as u64, 0u64, la, &MXN_FB as u64, 0u64, lb, 3u32) != 1u32 { return 0u32 }
+    let ga : u64 = mxn_build_g_into(gA, &MXN_GA as u64)
+    let gb : u64 = mxn_build_g_into(gB, &MXN_GB as u64)
+    if ga == 0u64 { return 0u32 }
+    if gb == 0u64 { return 0u32 }
+    if seq_equiv(&MXN_GA as u64, 0u64, ga, &MXN_GB as u64, 0u64, gb, 3u32) != 1u32 { return 0u32 }
+    return 1u32
+}
+
+/* ---- THE STRUCTURAL DEDUP DOOR (rewrite-library grain): canonical-code equality.
+ * 1 = NEW canonical schema (recorded), 0 = duplicate spelling, 2 = store full. */
+fn mxn_dedup_add(tier: u64, fcode: u64, gcode: u64) -> u32 @export {
+    if MXN_N[0u64] >= MXN_MAX { return 2u32 }
+    let cf : u64 = mxn_canon_f(tier, fcode)
+    let cg : u64 = mxn_canon_g(gcode)
+    let n : u64 = MXN_N[0u64]
+    let mut i : u64 = 0u64
+    while i < n {
+        if MXN_T[i] == tier { if MXN_F[i] == cf { if MXN_G[i] == cg { return 0u32 } } }
+        i = i + 1u64
+    }
+    MXN_T[n] = tier  MXN_F[n] = cf  MXN_G[n] = cg
+    MXN_N[0u64] = n + 1u64
+    return 1u32
+}
+
+/* ---- THE SEMANTIC-CLASS DOOR (knowledge-ratchet grain): pairwise co-denotation.
+ * 1 = NEW semantic equation (recorded), 0 = an already-counted equation, 2 = store full. */
+var MXN_ST  : [u64; 512]
+var MXN_SF  : [u64; 512]
+var MXN_SG  : [u64; 512]
+var MXN_SN  : [u64; 1]
+fn mxn_sem_count() -> u64 @export { return MXN_SN[0u64] }
+fn mxn_sem_reset() -> u32 @export { MXN_SN[0u64] = 0u64  return 1u32 }
+fn mxn_sem_add(tier: u64, fcode: u64, gcode: u64) -> u32 @export {
+    if MXN_SN[0u64] >= MXN_MAX { return 2u32 }
+    let cf : u64 = mxn_canon_f(tier, fcode)
+    let cg : u64 = mxn_canon_g(gcode)
+    let ff : u64 = mxn_fp_f(tier, cf)
+    let fg : u64 = mxn_fp_g(cg)
+    let n : u64 = MXN_SN[0u64]
+    let mut i : u64 = 0u64
+    while i < n {
+        if MXN_FPF[i] == ff { if MXN_FPG[i] == fg {
+            /* bucket hit: the judge confirms or splits */
+            if mxn_sem_dup(MXN_ST[i], MXN_SF[i], MXN_SG[i], tier, cf, cg) == 1u32 { return 0u32 }
+        } }
+        i = i + 1u64
+    }
+    MXN_ST[n] = tier  MXN_SF[n] = cf  MXN_SG[n] = cg  MXN_FPF[n] = ff  MXN_FPG[n] = fg
+    MXN_SN[0u64] = n + 1u64
+    return 1u32
+}
+
+/* ---- COMPUTED NOVELTY (R3): does the taught e-graph already derive the schema? ------------------------
+ * verdict: 0 = NOT derivable (novel), 1 = derivable (rediscovery), 2 = honest abstain (mul-bearing or cap). */
+fn mxn_f_has_mul(tier: u64, code: u64) -> u32 {
+    if tier == 1u64 { if code / 3u64 == 2u64 { return 1u32 }  return 0u32 }
+    if code / 54u64 == 2u64 { return 1u32 }
+    if (code % 54u64) / 9u64 == 2u64 { return 1u32 }
+    return 0u32
+}
+fn mxn_g_has_mul(code: u64) -> u32 {
+    if code <= 2u64 { return 0u32 }
+    if code <= 20u64 { if (code - 3u64) / 3u64 == 2u64 { return 1u32 }  return 0u32 }
+    let c : u64 = code - 21u64
+    if c / 6u64 == 2u64 { return 1u32 }
+    if c % 6u64 == 2u64 { return 1u32 }
+    return 0u32
+}
+fn mxn_eg_apply(opidx: u64, a: u64, b: u64) -> u64 {
+    if opidx == 0u64 { return seg_add(a, b) }
+    if opidx == 1u64 { return seg_sub(a, b) }
+    if opidx == 2u64 { return seg_mul(a, b) }
+    if opidx == 3u64 { return seg_and(a, b) }
+    if opidx == 4u64 { return seg_or(a, b) }
+    return seg_xor(a, b)
+}
+fn mxn_eg_f(tier: u64, code: u64, x: u64, c1n: u64, c2n: u64) -> u64 {
+    if tier == 1u64 {
+        let op : u64 = code / 3u64
+        let pat : u64 = code % 3u64
+        let mut u : u64 = x
+        let mut v : u64 = x
+        if pat == 1u64 { v = c1n }
+        if pat == 2u64 { u = c1n  v = x }
+        return mxn_eg_apply(op, u, v)
+    }
+    let op1 : u64 = code / 54u64
+    let r1 : u64 = code % 54u64
+    let op2 : u64 = r1 / 9u64
+    let r2 : u64 = r1 % 9u64
+    let pat : u64 = r2 / 3u64
+    let w : u64 = r2 % 3u64
+    let mut u : u64 = x
+    let mut v : u64 = x
+    if pat == 1u64 { v = c1n }
+    if pat == 2u64 { u = c1n  v = x }
+    let t : u64 = mxn_eg_apply(op1, u, v)
+    let mut ww : u64 = x
+    if w == 1u64 { ww = c1n }
+    if w == 2u64 { ww = c2n }
+    return mxn_eg_apply(op2, t, ww)
+}
+fn mxn_eg_g(code: u64, x: u64, c1n: u64, c2n: u64, c1v: u64, c2v: u64) -> u64 {
+    if code == 0u64 { return x }
+    if code == 1u64 { return c1n }
+    if code == 2u64 { return seg_const(0u64) }
+    if code <= 20u64 {
+        let c : u64 = code - 3u64
+        let op : u64 = c / 3u64
+        let pat : u64 = c % 3u64
+        let mut u : u64 = x
+        let mut v : u64 = x
+        if pat == 1u64 { v = c1n }
+        if pat == 2u64 { u = c1n  v = x }
+        return mxn_eg_apply(op, u, v)
+    }
+    let c : u64 = code - 21u64
+    let op2 : u64 = c / 6u64
+    let op3 : u64 = c % 6u64
+    /* the fold form: c1 op3 c2 FOLDS at emission -- in the e-graph it is the folded CONST (the emission
+     * cost model's own shape; the sentinels make the fold concrete). */
+    let folded : u64 = seg_const(mxn_apply(op3, c1v, c2v))
+    return mxn_eg_apply(op2, x, folded)
+}
+fn mxn_known(tier: u64, fcode: u64, gcode: u64) -> u32 @export {
+    if mxn_f_has_mul(tier, fcode) == 1u32 { return 2u32 }
+    if mxn_g_has_mul(gcode) == 1u32 { return 2u32 }
+    seg_reset()
+    let x : u64 = seg_var()
+    let c1n : u64 = seg_const(MXN_C1)
+    let c2n : u64 = seg_const(MXN_C2)
+    let fnode : u64 = mxn_eg_f(tier, fcode, x, c1n, c2n)
+    let gnode : u64 = mxn_eg_g(gcode, x, c1n, c2n, MXN_C1, MXN_C2)
+    seg_saturate()
+    if seg_node_count() >= MXN_EGCAP { return 2u32 }   /* capacity-saturated graph is never a verdict */
+    if seg_same_class(fnode, gnode) == 1u32 { return 1u32 }
+    return 0u32
+}
+/* the door's NOVEL clause, strict: 1 ONLY on a definite not-derivable verdict. */
+fn mxn_novel(tier: u64, fcode: u64, gcode: u64) -> u32 @export {
+    if mxn_known(tier, fcode, gcode) == 0u32 { return 1u32 }
+    return 0u32
+}

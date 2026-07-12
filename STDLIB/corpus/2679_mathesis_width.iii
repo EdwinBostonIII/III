@@ -1,0 +1,138 @@
+/* STDLIB/corpus/2679_mathesis_width.iii -- SYMMETRY TRANSPORT II: THE WIDTH FUNCTORS (Xi11/P9,
+ * III-MATHESIS-MAP.md s3b BREAK C4).
+ *
+ * Width transport is a RE-PROOF, never an assumption -- in EITHER direction.  The functor's law:
+ * a statement moves from width W to width w only by re-discharging at w (bb_reset(w) + the same
+ * denotation engine); statements bearing shift counts >= w are REFUSED before any re-proof (their
+ * syntax does not even mean the same thing at w).
+ *
+ *   (t1) THE PINNED TOOTH (the refusing witness, kept red forever): (x<<32)>>32 == x is REFUTED at
+ *        width 64 -- the classic width-64 falsehood;
+ *   (t2) DOWNWARD REFUSAL, machine-grounded: mask-low at k=32 -- (x<<32)>>32 == x & 0xFFFFFFFF, TRUE
+ *        at width 64 (re-proven here) -- transported naively to width 32 becomes FALSE: at w=32 the
+ *        left side saturates to 0 while the right side is x.  The would-be transport is REFUTED at
+ *        w=32 by the same engine (count >= w: the functor must and does refuse);
+ *   (t3) UPWARD REFUSAL, machine-grounded: x<<8 == 0 is TRUE at width 8 (PROVEN at w=8) and FALSE at
+ *        width 64 (REFUTED at w=64) -- truths do not travel up either;
+ *   (t4) A VALID TRANSPORT: the Xi0 AND-chain schema (no shift counts -- width-generic syntax)
+ *        re-proven at widths 32, 16, 8: an honest width-FAMILY (R2 quantifiers per width);
+ *   (t5) determinism: the w=32 family member re-proves identically.
+ * 99 == width functors move theorems only through re-proof; both refusals are algebra, not policy. */
+module corpus_2679_mathesis_width
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const SD_TOP : u32 = 4294967295u32
+
+var WF : [u8; 96]
+var WG : [u8; 96]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* the width-w judge: 1 proven at Z/2^w, 0 refuted, 2 abstain (fragment/poison). */
+fn equiv_at(w: u64, fl: u64, gl: u64, np: u32) -> u32 {
+    bb_reset(w)
+    let ra : u32 = sd_denote(&WF as u64, 0u64, fl, np)
+    if ra == SD_TOP { return 2u32 }
+    let rb : u32 = sd_denote(&WG as u64, 0u64, gl, np)
+    if rb == SD_TOP { return 2u32 }
+    let e : u8 = bb_equal(ra, rb)
+    if e == 1u8 { return 1u32 }
+    if e == 0u8 { return 0u32 }
+    return 2u32
+}
+
+/* mask-low k=32 bodies: f = (x<<32)>>32 ; g0 = x ; g1 = x & 0xFFFFFFFF */
+fn build_masklow32_f() -> u64 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, 32u64)
+    p = wb(0u32, p, 0x28u32)
+    p = wc(0u32, p, 32u64)
+    p = wb(0u32, p, 0x29u32)
+    p = wb(0u32, p, 0x60u32)
+    return p
+}
+fn build_id_g() -> u64 { WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8  return 3u64 }
+fn build_mask_g() -> u64 {
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wc(1u32, q, 4294967295u64)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    return q
+}
+/* the AND-chain bodies (width-generic syntax): f = (x&c1)&c2 ; g = x&(c1&c2) */
+fn build_chain() -> u64 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 1u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 2u32)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    return (p << 32u64) | q
+}
+
+fn main() -> u64 {
+    /* ---- (t1) THE PINNED TOOTH at width 64: (x<<32)>>32 == x REFUTED ---- */
+    let fl : u64 = build_masklow32_f()
+    let g0 : u64 = build_id_g()
+    if seq_equiv(&WF as u64, 0u64, fl, &WG as u64, 0u64, g0, 1u32) != 0u32 { return 10u64 }
+
+    /* ---- (t2) the k=32 mask-low TRUTH at 64 ... ---- */
+    let g1 : u64 = build_mask_g()
+    if seq_equiv(&WF as u64, 0u64, fl, &WG as u64, 0u64, g1, 1u32) != 1u32 { return 11u64 }
+    /* ... REFUSED + REFUTED at width 32 (count >= w: the naive transport is FALSE there) */
+    let g1b : u64 = build_mask_g()
+    if equiv_at(32u64, fl, g1b, 1u32) != 0u32 { return 12u64 }
+
+    /* ---- (t3) UPWARD refusal: x<<8 == 0 TRUE at w=8, FALSE at w=64 ---- */
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, 8u64)
+    p = wb(0u32, p, 0x28u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wc(1u32, 0u64, 0u64)
+    q = wb(1u32, q, 0x60u32)
+    if equiv_at(8u64, p, q, 1u32) != 1u32 { return 13u64 }
+    if equiv_at(64u64, p, q, 1u32) != 0u32 { return 14u64 }
+
+    /* ---- (t4) A VALID TRANSPORT: the AND-chain re-proven at 32 / 16 / 8 (the width family) ---- */
+    let pq : u64 = build_chain()
+    let cf : u64 = pq >> 32u64
+    let cg : u64 = pq & 4294967295u64
+    if equiv_at(32u64, cf, cg, 3u32) != 1u32 { return 15u64 }
+    let pq2 : u64 = build_chain()
+    if equiv_at(16u64, pq2 >> 32u64, pq2 & 4294967295u64, 3u32) != 1u32 { return 16u64 }
+    let pq3 : u64 = build_chain()
+    if equiv_at(8u64, pq3 >> 32u64, pq3 & 4294967295u64, 3u32) != 1u32 { return 17u64 }
+
+    /* ---- (t5) determinism ---- */
+    let pq4 : u64 = build_chain()
+    if equiv_at(32u64, pq4 >> 32u64, pq4 & 4294967295u64, 3u32) != 1u32 { return 18u64 }
+
+    return 99u64
+}

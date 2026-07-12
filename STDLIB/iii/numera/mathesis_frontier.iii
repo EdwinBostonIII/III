@@ -1,0 +1,237 @@
+/* numera/mathesis_frontier.iii -- THE FRONTIER QUEUE (Xi1-T3 / P5 / R7, III-MATHESIS-MAP.md s3a).
+ *
+ * "The frontier is a queue, not a graveyard": an abstained pair is CATALOGUED with its blocker NAMED,
+ * counted, and RETRIED when the disposer grows.  This organ is that queue, and it carries the first live
+ * R7 retry route: WIDTH-INDEXED re-proof.  A pair blocked at width 64 (mul-vs-mul bit-blast equality --
+ * the round-1 wall) is re-disposed at a narrower width w by the SAME denotation engine over a w-bit
+ * bit-blast (bb_reset(w) + sd_denote both sides + bb_equal): a PROVEN verdict is an honest theorem about
+ * Z/2^w (R2: the width tag rides the descriptor), the width-64 entry STAYS QUEUED.  The retry can also
+ * REFUTE (a false pair stays false at every width where its counterexample lives) -- the retry cannot
+ * manufacture truth, and a poisoned bb (capacity) maps to honest abstain, never a verdict.
+ *
+ * BLOCKER CODES (printed, first-class):
+ *   1 = mul-mul-bitblast   (symbolic mul-vs-mul equality; retry: width-indexed here, ring/kernel later)
+ *   2 = shift-count-param  (S1: a parameter in shift-count position; retry: range-sweep organ)
+ *   3 = rot-2op-sweep      (the 2-op nonexistence space for rot_k; retry: witness-function tier 2)
+ *   4 = novelty-abstain    (the novelty oracle abstained; retry: after the next grammar teach)
+ *
+ * Gate: corpus/2612_mathesis_frontier.  EXIT=99.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes mathesis_synth (the one body builder),
+ * ser_kinduct_sym's sd_denote + bv_bits (the one bit-blast engine) only.
+ */
+module numera_mathesis_frontier
+
+extern @abi(c-msvc-x64) fn mxs_build_f1(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_f2(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_g(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_fbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_gbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_f_has_mul(tier: u64, code: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_g_has_mul(code: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_f(tier: u64, code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_g(code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const MXF_MAX : u64 = 2048u64
+const SD_TOP : u32 = 4294967295u32
+
+var MXF_T : [u64; 2048]
+var MXF_F : [u64; 2048]
+var MXF_G : [u64; 2048]
+var MXF_B : [u64; 2048]     /* blocker code */
+var MXF_R : [u64; 2048]     /* retry ledger: bit w set = proven at width w (w in 1..63); bit 0 = refuted */
+var MXF_N : [u64; 1]
+var MXF_FA : [u8; 64]
+var MXF_GA : [u8; 64]
+
+fn mxf_reset() -> u32 @export { MXF_N[0u64] = 0u64  return 1u32 }
+fn mxf_count() -> u64 @export { return MXF_N[0u64] }
+fn mxf_count_blocker(b: u64) -> u64 @export {
+    let n : u64 = MXF_N[0u64]
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n { if MXF_B[i] == b { c = c + 1u64 }  i = i + 1u64 }
+    return c
+}
+fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 @export {
+    if blocker < 1u64 { return 0u32 }
+    if blocker > 4u64 { return 0u32 }
+    if MXF_N[0u64] >= MXF_MAX { return 0u32 }
+    let n : u64 = MXF_N[0u64]
+    MXF_T[n] = tier  MXF_F[n] = fcode  MXF_G[n] = gcode  MXF_B[n] = blocker  MXF_R[n] = 0u64
+    MXF_N[0u64] = n + 1u64
+    return 1u32
+}
+fn mxf_tier(i: u64) -> u64 @export { if i >= MXF_N[0u64] { return 0u64 }  return MXF_T[i] }
+fn mxf_fcode(i: u64) -> u64 @export { if i >= MXF_N[0u64] { return 0u64 }  return MXF_F[i] }
+fn mxf_gcode(i: u64) -> u64 @export { if i >= MXF_N[0u64] { return 0u64 }  return MXF_G[i] }
+fn mxf_blocker(i: u64) -> u64 @export { if i >= MXF_N[0u64] { return 0u64 }  return MXF_B[i] }
+fn mxf_retry_ledger(i: u64) -> u64 @export { if i >= MXF_N[0u64] { return 0u64 }  return MXF_R[i] }
+
+fn mxf_copy(dst: u64, src: u64, n: u64) -> u32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return 1u32
+}
+
+/* THE R7 RETRY at width w.  Two routes, dispatched by what the pair IS:
+ *
+ *   MUL-MUL pairs at w=8 -- COMPLETE NATIVE EXHAUSTION of the whole domain: all 2^24 (x,c1,c2) triples
+ *   over Z/2^8 (the R1 "exhaustive small-width brute" 2601 already sanctions; a bit-blast mul-vs-mul
+ *   miter is resolution-hard even at width 8 -- measured, not assumed: the SAT route timed out where
+ *   this route is sub-second and EXHAUSTIVE, never sampled).  At w=16 the domain is 2^48 and the SAT
+ *   wall stands: honest abstain -- the blocker recedes exactly one width and no further.
+ *
+ *   non-mul pairs at w in {8,16,32} -- the symbolic route: bb_reset(w) + sd_denote both + bb_equal.
+ *
+ * Verdict: 1 PROVEN over ALL of Z/2^w (ledger bit w set), 0 REFUTED (ledger bit 0 -- a concrete
+ * counterexample exists at width w), 2 honest abstain (bounds / width refused / fragment / poison). */
+fn mxf_retry_width(i: u64, w: u64) -> u32 @export {
+    if i >= MXF_N[0u64] { return 2u32 }
+    if w != 8u64 { if w != 16u64 { if w != 32u64 { return 2u32 } } }
+    let tier : u64 = MXF_T[i]
+    let mut mulmul : u32 = 0u32
+    if mxs_f_has_mul(tier, MXF_F[i]) == 1u32 { if mxs_g_has_mul(MXF_G[i]) == 1u32 { mulmul = 1u32 } }
+    if mulmul == 1u32 {
+        if w != 8u64 { return 2u32 }              /* the SAT wall stands above width 8: honest abstain */
+        let mut x : u64 = 0u64
+        while x <= 255u64 {
+            let mut c1 : u64 = 0u64
+            while c1 <= 255u64 {
+                let mut c2 : u64 = 0u64
+                while c2 <= 255u64 {
+                    let fv : u64 = mxn_eval_f(tier, MXF_F[i], x, c1, c2) & 0xFFu64
+                    let gv : u64 = mxn_eval_g(MXF_G[i], x, c1, c2) & 0xFFu64
+                    if fv != gv { MXF_R[i] = MXF_R[i] | 1u64  return 0u32 }
+                    c2 = c2 + 1u64
+                }
+                c1 = c1 + 1u64
+            }
+            x = x + 1u64
+        }
+        MXF_R[i] = MXF_R[i] | (1u64 << w)
+        return 1u32
+    }
+    let mut fl : u64 = 0u64
+    if tier == 1u64 { fl = mxs_build_f1(MXF_F[i]) }
+    if tier == 2u64 { fl = mxs_build_f2(MXF_F[i]) }
+    if fl == 0u64 { return 2u32 }
+    mxf_copy(&MXF_FA as u64, mxs_fbuf(), fl)
+    let gl : u64 = mxs_build_g(MXF_G[i])
+    if gl == 0u64 { return 2u32 }
+    mxf_copy(&MXF_GA as u64, mxs_gbuf(), gl)
+    bb_reset(w)
+    let ra : u32 = sd_denote(&MXF_FA as u64, 0u64, fl, 3u32)
+    if ra == SD_TOP { return 2u32 }
+    let rb : u32 = sd_denote(&MXF_GA as u64, 0u64, gl, 3u32)
+    if rb == SD_TOP { return 2u32 }
+    let e : u8 = bb_equal(ra, rb)
+    if e == 1u8 { MXF_R[i] = MXF_R[i] | (1u64 << w)  return 1u32 }
+    if e == 0u8 { MXF_R[i] = MXF_R[i] | 1u64  return 0u32 }
+    return 2u32   /* bb poison (capacity) -> honest abstain, never a verdict */
+}
+
+/* THE R1 DUAL for a width-8 mul-mul PROVEN verdict: ONE (c1,c2) instance re-proven SYMBOLICALLY --
+ * consts instantiated into the bodies, so each side is mul-BY-CONST (gated rows collapse: SAT-easy),
+ * x symbolic over all of Z/2^8.  The gate samples instances; exhaustion is the complete primary,
+ * this is the independent-machinery cross-check (bit-blast + CDCL vs the CPU's multiplier). */
+var MXF_FB : [u8; 96]
+var MXF_GB : [u8; 96]
+fn mxf_wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { MXF_FB[pos] = 0x01u8 }
+    if sel == 1u32 { MXF_GB[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { MXF_FB[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { MXF_GB[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn mxf_wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { MXF_FB[pos] = b as u8 }
+    if sel == 1u32 { MXF_GB[pos] = b as u8 }
+    return pos + 1u64
+}
+fn mxf_opb(idx: u64) -> u32 {
+    if idx == 0u64 { return 0x20u32 }
+    if idx == 1u64 { return 0x21u32 }
+    if idx == 2u64 { return 0x22u32 }
+    if idx == 3u64 { return 0x25u32 }
+    if idx == 4u64 { return 0x26u32 }
+    return 0x27u32
+}
+/* build tier-2 f with c1,c2 INSTANTIATED (x stays param 0): (u op1 v) op2 w. */
+fn mxf_build_f2_inst(code: u64, c1: u64, c2: u64) -> u64 {
+    let op1 : u64 = code / 54u64
+    let r1 : u64 = code % 54u64
+    let op2 : u64 = r1 / 9u64
+    let r2 : u64 = r1 % 9u64
+    let pat : u64 = r2 / 3u64
+    let w : u64 = r2 % 3u64
+    let mut p : u64 = 0u64
+    if pat == 2u64 { p = mxf_wc(0u32, p, c1) } else { p = mxf_wb(0u32, p, 0x10u32)  p = mxf_wb(0u32, p, 0u32) }
+    if pat == 1u64 { p = mxf_wc(0u32, p, c1) } else { if pat == 0u64 { p = mxf_wb(0u32, p, 0x10u32)  p = mxf_wb(0u32, p, 0u32) } else { p = mxf_wb(0u32, p, 0x10u32)  p = mxf_wb(0u32, p, 0u32) } }
+    p = mxf_wb(0u32, p, mxf_opb(op1))
+    if w == 0u64 { p = mxf_wb(0u32, p, 0x10u32)  p = mxf_wb(0u32, p, 0u32) }
+    if w == 1u64 { p = mxf_wc(0u32, p, c1) }
+    if w == 2u64 { p = mxf_wc(0u32, p, c2) }
+    p = mxf_wb(0u32, p, mxf_opb(op2))
+    p = mxf_wb(0u32, p, 0x60u32)
+    return p
+}
+/* build g with c1,c2 INSTANTIATED (fold forms fold concretely). */
+fn mxf_build_g_inst(code: u64, c1: u64, c2: u64) -> u64 {
+    if code == 0u64 { let mut p : u64 = mxf_wb(1u32, 0u64, 0x10u32)  p = mxf_wb(1u32, p, 0u32)  p = mxf_wb(1u32, p, 0x60u32)  return p }
+    if code == 1u64 { let mut p : u64 = mxf_wc(1u32, 0u64, c1)  p = mxf_wb(1u32, p, 0x60u32)  return p }
+    if code == 2u64 { let mut p : u64 = mxf_wc(1u32, 0u64, 0u64)  p = mxf_wb(1u32, p, 0x60u32)  return p }
+    if code <= 20u64 {
+        let c : u64 = code - 3u64
+        let op : u64 = c / 3u64
+        let pat : u64 = c % 3u64
+        let mut p : u64 = 0u64
+        if pat == 2u64 { p = mxf_wc(1u32, p, c1) } else { p = mxf_wb(1u32, p, 0x10u32)  p = mxf_wb(1u32, p, 0u32) }
+        if pat == 1u64 { p = mxf_wc(1u32, p, c1) } else { p = mxf_wb(1u32, p, 0x10u32)  p = mxf_wb(1u32, p, 0u32) }
+        p = mxf_wb(1u32, p, mxf_opb(op))
+        p = mxf_wb(1u32, p, 0x60u32)
+        return p
+    }
+    let c : u64 = code - 21u64
+    let op2 : u64 = c / 6u64
+    let op3 : u64 = c % 6u64
+    let mut folded : u64 = 0u64
+    if op3 == 0u64 { folded = c1 + c2 }
+    if op3 == 1u64 { folded = c1 - c2 }
+    if op3 == 2u64 { folded = c1 * c2 }
+    if op3 == 3u64 { folded = c1 & c2 }
+    if op3 == 4u64 { folded = c1 | c2 }
+    if op3 == 5u64 { folded = c1 ^ c2 }
+    let mut p : u64 = mxf_wb(1u32, 0u64, 0x10u32)
+    p = mxf_wb(1u32, p, 0u32)
+    p = mxf_wc(1u32, p, folded)
+    p = mxf_wb(1u32, p, mxf_opb(op2))
+    p = mxf_wb(1u32, p, 0x60u32)
+    return p
+}
+/* 1 = the (c1,c2) instance PROVEN symbolically at width w over all x; 0 refuted; 2 abstain. */
+fn mxf_retry_dual8(i: u64, c1: u64, c2: u64) -> u32 @export {
+    if i >= MXF_N[0u64] { return 2u32 }
+    if MXF_T[i] != 2u64 { return 2u32 }
+    let fl : u64 = mxf_build_f2_inst(MXF_F[i], c1, c2)
+    let gl : u64 = mxf_build_g_inst(MXF_G[i], c1, c2)
+    bb_reset(8u64)
+    let ra : u32 = sd_denote(&MXF_FB as u64, 0u64, fl, 1u32)
+    if ra == SD_TOP { return 2u32 }
+    let rb : u32 = sd_denote(&MXF_GB as u64, 0u64, gl, 1u32)
+    if rb == SD_TOP { return 2u32 }
+    let e : u8 = bb_equal(ra, rb)
+    if e == 1u8 { return 1u32 }
+    if e == 0u8 { return 0u32 }
+    return 2u32
+}

@@ -1,0 +1,101 @@
+/* numera/mathesis_agenda.iii -- THE RESEARCH AGENDA (Xi13, III-MATHESIS-MAP.md s3b BREAK C4 / s7b).
+ *
+ * INTENT AS MEASURED VALUE, never belief (Ax D3): the engine chooses its own next problem by ordering
+ * the open work -- frontier retries, grammar-gap operators, census hot classes, consumer inner loops --
+ * by MEASURED value.  The value law is printed and auditable:
+ *
+ *     value(item) = measured_occurrences x cost_delta_potential
+ *
+ * where occurrences come from the census instrument (mathesis_measure) or the frontier queue's counts
+ * (mathesis_frontier) -- NEVER from frequency-as-belief, NEVER from a learned score.  An item WITHOUT
+ * its measurement is REFUSED (the auditable-intent law: every choice logged with its measurement).
+ * The order is a deterministic TOTAL order: value descending, then kind ascending, then ident
+ * ascending -- reproducible from the printed measurements alone (gate 2683's reproducibility pin:
+ * the FNV fingerprint of the ordered list).
+ *
+ * Item kinds: 1 = frontier-retry (per blocker)   2 = grammar-gap operator (teach candidate)
+ *             3 = census window class            4 = consumer KAT inner loop
+ *
+ * Gate: corpus/2683_mathesis_agenda.  EXIT=99.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: a sorter over the other organs' measurements; no
+ * new measurement source, no belief. */
+module numera_mathesis_agenda
+
+const MXA_MAX : u64 = 128u64
+const FNV_OFF : u64 = 14695981039346656037u64
+const FNV_PRM : u64 = 1099511628211u64
+
+var MXA_K : [u64; 128]     /* kind */
+var MXA_I : [u64; 128]     /* ident (class id / blocker code / op byte) */
+var MXA_O : [u64; 128]     /* measured occurrences */
+var MXA_D : [u64; 128]     /* cost-delta potential (ops saved per occurrence) */
+var MXA_V : [u64; 128]     /* value = O * D */
+var MXA_N : [u64; 1]
+
+fn mxa_reset() -> u32 @export { MXA_N[0u64] = 0u64  return 1u32 }
+fn mxa_count() -> u64 @export { return MXA_N[0u64] }
+
+/* add an item WITH its measurement; measured != 1 is REFUSED (auditable intent, no unmeasured choice). */
+fn mxa_add(kind: u64, ident: u64, occurrences: u64, cost_delta: u64, measured: u32) -> u32 @export {
+    if measured != 1u32 { return 0u32 }
+    if kind < 1u64 { return 0u32 }
+    if kind > 4u64 { return 0u32 }
+    if MXA_N[0u64] >= MXA_MAX { return 0u32 }
+    let n : u64 = MXA_N[0u64]
+    MXA_K[n] = kind  MXA_I[n] = ident  MXA_O[n] = occurrences  MXA_D[n] = cost_delta
+    MXA_V[n] = occurrences * cost_delta
+    MXA_N[0u64] = n + 1u64
+    return 1u32
+}
+
+/* the deterministic total order: value DESC, kind ASC, ident ASC (selection sort, stable by law). */
+fn mxa_before(a: u64, b: u64) -> u32 {
+    if MXA_V[a] > MXA_V[b] { return 1u32 }
+    if MXA_V[a] < MXA_V[b] { return 0u32 }
+    if MXA_K[a] < MXA_K[b] { return 1u32 }
+    if MXA_K[a] > MXA_K[b] { return 0u32 }
+    if MXA_I[a] < MXA_I[b] { return 1u32 }
+    return 0u32
+}
+fn mxa_swap(a: u64, b: u64) -> u32 {
+    let tk : u64 = MXA_K[a]  MXA_K[a] = MXA_K[b]  MXA_K[b] = tk
+    let ti : u64 = MXA_I[a]  MXA_I[a] = MXA_I[b]  MXA_I[b] = ti
+    let to : u64 = MXA_O[a]  MXA_O[a] = MXA_O[b]  MXA_O[b] = to
+    let td : u64 = MXA_D[a]  MXA_D[a] = MXA_D[b]  MXA_D[b] = td
+    let tv : u64 = MXA_V[a]  MXA_V[a] = MXA_V[b]  MXA_V[b] = tv
+    return 1u32
+}
+fn mxa_order() -> u32 @export {
+    let n : u64 = MXA_N[0u64]
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut best : u64 = i
+        let mut j : u64 = i + 1u64
+        while j < n {
+            if mxa_before(j, best) == 1u32 { best = j }
+            j = j + 1u64
+        }
+        if best != i { mxa_swap(i, best) }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn mxa_kind(i: u64) -> u64 @export { if i >= MXA_N[0u64] { return 0u64 }  return MXA_K[i] }
+fn mxa_ident(i: u64) -> u64 @export { if i >= MXA_N[0u64] { return 0u64 }  return MXA_I[i] }
+fn mxa_occ(i: u64) -> u64 @export { if i >= MXA_N[0u64] { return 0u64 }  return MXA_O[i] }
+fn mxa_value(i: u64) -> u64 @export { if i >= MXA_N[0u64] { return 0u64 }  return MXA_V[i] }
+
+/* the reproducibility pin: FNV-1a over the ORDERED (kind, ident, occ, delta) stream. */
+fn mxa_fingerprint() -> u64 @export {
+    let n : u64 = MXA_N[0u64]
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < n {
+        h = (h ^ MXA_K[i]) * FNV_PRM
+        h = (h ^ MXA_I[i]) * FNV_PRM
+        h = (h ^ MXA_O[i]) * FNV_PRM
+        h = (h ^ MXA_D[i]) * FNV_PRM
+        i = i + 1u64
+    }
+    return h
+}

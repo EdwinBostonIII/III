@@ -1,0 +1,93 @@
+/* STDLIB/corpus/2612_mathesis_frontier.iii -- THE FRONTIER QUEUE gate (Xi1-T3 / P5 / R7,
+ * III-MATHESIS-MAP.md s3a).
+ *
+ * The round-1 sweep FRONTIERED 1386 mul-mul pairs with the blocker named ("bit-blast mul equality").
+ * This gate proves the frontier is a QUEUE, not a graveyard:
+ *   (a) entries carry their blocker (invalid codes REFUSED; counts by blocker printed law);
+ *   (b) THE R7 RETRY IS LIVE at width 8: mul-associativity (x*c1)*c2 == x*(c1*c2) -- the exact pair
+ *       the 64-bit sweep GROUND on -- is PROVEN over ALL of Z/2^8 by COMPLETE native exhaustion
+ *       (2^24 triples, the R1 small-width-brute route 2601 sanctions; the bit-blast mul-vs-mul miter
+ *       is resolution-hard even at width 8 -- MEASURED: the SAT route timed out, so the organ routes
+ *       mul-mul retries to exhaustion and abstains above width 8: the wall recedes exactly one width);
+ *   (b2) THE R1 DUAL on the proven verdict: sampled (c1,c2) instances re-proven SYMBOLICALLY (consts
+ *       instantiated => mul-by-const bit-blast, x symbolic over Z/2^8) -- independent machinery
+ *       (CDCL + Tseitin vs the CPU multiplier) agreeing on the same theorem;
+ *   (c) THE RETRY CANNOT MANUFACTURE TRUTH: the false mul pair (x*x)+c2 == x*(c1+c2) is REFUTED
+ *       at width 8 (a concrete counterexample lives there; the dual refutes its instance too);
+ *   (d) the width-64 entry STAYS QUEUED after the retry (blocker intact -- the wall is still the wall);
+ *   (e) bounds + walls refused: retry at 64 is the blocked question itself; mul-mul at 16/32 abstains;
+ *   (f) the queue mirrors the synthesizer's own frontier verdicts (mxs_test == 3 -> push);
+ *   (g) determinism: retry twice -> same verdict, ledger idempotent.
+ * 99 == abstention is catalogued, named, and RETRIED -- honestly, with the dual engine agreeing. */
+module corpus_2612_mathesis_frontier
+
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_count() -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_count_blocker(b: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_blocker(i: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_tier(i: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_fcode(i: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_gcode(i: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_ledger(i: u64) -> u64 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_width(i: u64, w: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_dual8(i: u64, c1: u64, c2: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxs_reset() -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_test(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_synth.iii"
+
+fn main() -> u64 {
+    /* ---- (a) blocker validation + counts ---- */
+    mxf_reset()
+    if mxf_push(2u64, 131u64, 35u64, 0u64) != 0u32 { return 10u64 }   /* invalid blocker: REFUSED */
+    if mxf_push(2u64, 131u64, 35u64, 9u64) != 0u32 { return 11u64 }
+    if mxf_count() != 0u64 { return 12u64 }
+    if mxf_push(2u64, 131u64, 35u64, 1u64) != 1u32 { return 13u64 }   /* mul-assoc, blocker=mul-mul */
+    if mxf_push(2u64, 110u64, 33u64, 1u64) != 1u32 { return 14u64 }   /* the false mul pair */
+    if mxf_count() != 2u64 { return 15u64 }
+    if mxf_count_blocker(1u64) != 2u64 { return 16u64 }
+    if mxf_count_blocker(3u64) != 0u64 { return 17u64 }
+    /* the queue entries are FAITHFULLY recorded (the accessors the standing engine/monograph query) */
+    if mxf_tier(0u64) != 2u64 { return 45u64 }
+    if mxf_fcode(0u64) != 131u64 { return 46u64 }
+    if mxf_gcode(0u64) != 35u64 { return 47u64 }
+    if mxf_tier(1u64) != 2u64 { return 48u64 }
+    if mxf_fcode(1u64) != 110u64 { return 49u64 }
+    if mxf_gcode(1u64) != 33u64 { return 50u64 }
+
+    /* ---- (f) the queue mirrors the synthesizer's own frontier verdict ---- */
+    mxs_reset()
+    if mxs_test(2u64, 131u64, 35u64) != 3u32 { return 18u64 }         /* FRONTIERED by policy */
+    if mxs_test(2u64, 110u64, 33u64) != 3u32 { return 19u64 }
+
+    /* ---- (b) THE R7 RETRY: mul-associativity PROVEN over ALL of Z/2^8 (complete exhaustion) ---- */
+    if mxf_retry_width(0u64, 8u64) != 1u32 { return 20u64 }
+    if (mxf_retry_ledger(0u64) & 256u64) != 256u64 { return 21u64 }   /* bit 8 set */
+
+    /* ---- (b2) THE R1 DUAL: sampled instances re-proven symbolically (independent machinery) ---- */
+    if mxf_retry_dual8(0u64, 3u64, 5u64) != 1u32 { return 22u64 }
+    if mxf_retry_dual8(0u64, 85u64, 128u64) != 1u32 { return 23u64 }
+    if mxf_retry_dual8(0u64, 255u64, 255u64) != 1u32 { return 33u64 }
+
+    /* ---- (c) the retry cannot manufacture truth: the false pair REFUTED at width 8 ---- */
+    if mxf_retry_width(1u64, 8u64) != 0u32 { return 24u64 }
+    if (mxf_retry_ledger(1u64) & 1u64) != 1u64 { return 25u64 }       /* refuted bit set */
+    if mxf_retry_dual8(1u64, 0u64, 1u64) != 0u32 { return 34u64 }     /* the dual refutes the instance too */
+
+    /* ---- (d) the width-64 question is still queued, blocker intact ---- */
+    if mxf_count() != 2u64 { return 26u64 }
+    if mxf_blocker(0u64) != 1u64 { return 27u64 }
+
+    /* ---- (e) bounds + walls refused: 64 is the blocked question; mul-mul above 8 abstains ---- */
+    if mxf_retry_width(99u64, 8u64) != 2u32 { return 28u64 }
+    if mxf_retry_width(0u64, 64u64) != 2u32 { return 29u64 }
+    if mxf_retry_width(0u64, 7u64) != 2u32 { return 30u64 }
+    if mxf_retry_width(0u64, 16u64) != 2u32 { return 35u64 }
+    if mxf_retry_width(0u64, 32u64) != 2u32 { return 36u64 }
+
+    /* ---- (g) determinism + ledger idempotence ---- */
+    let led : u64 = mxf_retry_ledger(0u64)
+    if mxf_retry_width(0u64, 8u64) != 1u32 { return 31u64 }
+    if mxf_retry_ledger(0u64) != led { return 32u64 }
+
+    return 99u64
+}

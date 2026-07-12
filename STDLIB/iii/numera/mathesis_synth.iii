@@ -49,7 +49,7 @@ var MXS_T   : [u64; 1]                    /* pairs tested */
 var MXS_FR  : [u64; 1]                    /* pairs FRONTIERED (mul-mul: blocker = bit-blast mul equality) */
 var MXS_OPS : [u64; 6]
 
-fn mxs_opbyte(idx: u64) -> u32 {
+fn mxs_opbyte(idx: u64) -> u32 @export {
     MXS_OPS[0u64] = 0x20u64  MXS_OPS[1u64] = 0x21u64  MXS_OPS[2u64] = 0x22u64
     MXS_OPS[3u64] = 0x25u64  MXS_OPS[4u64] = 0x26u64  MXS_OPS[5u64] = 0x27u64
     if idx >= MXS_NOPS { return 0u32 }
@@ -82,8 +82,14 @@ fn mxs_put(sel: u32, pos: u64, b: u32) -> u64 {
     return pos + 1u64
 }
 
+/* the enumerated-body buffers + builders are EXPORTED: the novelty organ (mathesis_novel, 2611) and the
+ * frontier queue (mathesis_frontier, 2612) must rebuild the EXACT bodies the sweep tested -- one builder,
+ * three consumers, no re-derivation drift. */
+fn mxs_fbuf() -> u64 @export { return &MXS_F as u64 }
+fn mxs_gbuf() -> u64 @export { return &MXS_G as u64 }
+
 /* build f tier 1 (code = op*3 + pat): u op v, pat 0 (x,x) 1 (x,c1) 2 (c1,x).  Returns body len. */
-fn mxs_build_f1(code: u64) -> u64 {
+fn mxs_build_f1(code: u64) -> u64 @export {
     let op : u64 = code / 3u64
     let pat : u64 = code % 3u64
     let mut u : u64 = 0u64
@@ -98,7 +104,7 @@ fn mxs_build_f1(code: u64) -> u64 {
 }
 
 /* build f tier 2 (code = op1*54 + op2*9 + pat*3 + w): (u op1 v) op2 w, w 0=x 1=c1 2=c2. */
-fn mxs_build_f2(code: u64) -> u64 {
+fn mxs_build_f2(code: u64) -> u64 @export {
     let op1 : u64 = code / 54u64
     let r1 : u64 = code % 54u64
     let op2 : u64 = r1 / 9u64
@@ -119,7 +125,7 @@ fn mxs_build_f2(code: u64) -> u64 {
 }
 
 /* build g (code 0..56).  0 x | 1 c1 | 2 const0 | 3..20 one-op | 21..56 fold form x op2 (c1 op3 c2). */
-fn mxs_build_g(code: u64) -> u64 {
+fn mxs_build_g(code: u64) -> u64 @export {
     if code <= 2u64 {
         let mut a : u64 = code
         if code == 2u64 { a = 3u64 }
@@ -166,13 +172,13 @@ fn mxs_reset() -> u32 @export { MXS_N[0u64] = 0u64  MXS_T[0u64] = 0u64  MXS_FR[0
  * bit-blast disposer's practical reach (symbolic mul-vs-mul equality -- the one TRUE schema in that
  * sub-space is mul-associativity (x*c1)*c2 == x*(c1*c2)).  Such pairs are FRONTIERED with the blocker
  * named, counted, and auto-retried when a ring-axiom/kernel route lands (R7).  1386 of 18522 pairs. */
-fn mxs_f_has_mul(tier: u64, code: u64) -> u32 {
+fn mxs_f_has_mul(tier: u64, code: u64) -> u32 @export {
     if tier == 1u64 { if code / 3u64 == 2u64 { return 1u32 }  return 0u32 }
     if code / 54u64 == 2u64 { return 1u32 }
     if (code % 54u64) / 9u64 == 2u64 { return 1u32 }
     return 0u32
 }
-fn mxs_g_has_mul(code: u64) -> u32 {
+fn mxs_g_has_mul(code: u64) -> u32 @export {
     if code <= 2u64 { return 0u32 }
     if code <= 20u64 { if (code - 3u64) / 3u64 == 2u64 { return 1u32 }  return 0u32 }
     let c : u64 = code - 21u64
@@ -240,6 +246,104 @@ fn mxs_run_range(with_t1: u32, f2lo: u64, f2hi: u64) -> u64 @export {
         }
     }
     return MXS_N[0u64] - n0
+}
+
+/* ============================================================================================================
+ * ROUND 2 -- THE SHIFT TIER (S1 honoured: shift counts are never symbolic; the declared space is swept
+ * PER-INSTANCE, range-exhaustion, the P2 range-sweep route).  The declared space, printed, never capped:
+ *   for shop in {SHL 0x28, SHR 0x29}, (a,b) in 1..63 x 1..63:
+ *     a+b <= 63 :  f = (x shop a) shop b   vs  g = x shop (a+b)    [cost 2 -> 1: the chain families]
+ *     a+b >= 64 :  f = (x shop a) shop b   vs  g = const-0         [cost 2 -> 0: SATURATION-ANNIHILATION]
+ *   for shop pairs (0x29,0x28)/(0x28,0x29) with equal counts k in 1..63:
+ *     f = (x >> k) << k  vs  g = x & (~0 << k)   /   f = (x << k) >> k  vs  g = x & (~0 >> k)
+ * Chain + align/mask families are ALREADY TAUGHT (2613) -- round 2 re-derives them and the novelty organ
+ * correctly REFUSES them (rediscovery accounting).  The annihilation families are the round-2 HARVEST:
+ * enumerated, per-instance proven, in NO rule set (the 2613 rules are range-guarded to a+b<=63) => NOVEL,
+ * provenance MACHINE.  Family counts are the pinned stream (gate 2650). */
+var MXS2_CNT : [u64; 6]     /* 0 shl-chain 1 shr-chain 2 shl-annihil 3 shr-annihil 4 align 5 mask (proven) */
+var MXS2_TST : [u64; 1]
+fn mxs2_count(fam: u64) -> u64 @export { if fam >= 6u64 { return 0u64 }  return MXS2_CNT[fam] }
+fn mxs2_tested() -> u64 @export { return MXS2_TST[0u64] }
+fn mxs2_space() -> u64 @export { return (63u64 * 63u64 * 2u64) + 126u64 }   /* 8064: the declared bound */
+fn mxs2_reset() -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < 6u64 { MXS2_CNT[i] = 0u64  i = i + 1u64 }
+    MXS2_TST[0u64] = 0u64
+    return 1u32
+}
+fn mxs2_wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { MXS_F[pos] = 0x01u8 }
+    if sel == 1u32 { MXS_G[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { MXS_F[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { MXS_G[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+/* one round-2 instance through the disposer; returns 1 iff PROVEN (and counts it), else 0. */
+fn mxs2_test(shop1: u32, a: u64, shop2: u32, b: u64, gkind: u64, fam: u64) -> u32 {
+    let mut p : u64 = mxs_atom(0u32, 0u64, 0u64)          /* x (param 0) */
+    p = mxs2_wc(0u32, p, a)
+    p = mxs_put(0u32, p, shop1)
+    p = mxs2_wc(0u32, p, b)
+    p = mxs_put(0u32, p, shop2)
+    p = mxs_put(0u32, p, 0x60u32)
+    let mut q : u64 = 0u64
+    if gkind == 0u64 {                                    /* g = x shop (a+b) */
+        q = mxs_atom(1u32, 0u64, 0u64)
+        q = mxs2_wc(1u32, q, a + b)
+        q = mxs_put(1u32, q, shop1)
+        q = mxs_put(1u32, q, 0x60u32)
+    }
+    if gkind == 1u64 {                                    /* g = const-0 */
+        q = mxs2_wc(1u32, 0u64, 0u64)
+        q = mxs_put(1u32, q, 0x60u32)
+    }
+    if gkind == 2u64 {                                    /* g = x & mask (mask passed via b slot abuse: recompute) */
+        q = mxs_atom(1u32, 0u64, 0u64)
+        let mut mask : u64 = 18446744073709551615u64 << a
+        if shop1 == 0x28u32 { mask = 18446744073709551615u64 >> a }
+        q = mxs2_wc(1u32, q, mask)
+        q = mxs_put(1u32, q, 0x25u32)
+        q = mxs_put(1u32, q, 0x60u32)
+    }
+    MXS2_TST[0u64] = MXS2_TST[0u64] + 1u64
+    let r : u32 = seq_equiv(&MXS_F as u64, 0u64, p, &MXS_G as u64, 0u64, q, 1u32)
+    if r == 1u32 { MXS2_CNT[fam] = MXS2_CNT[fam] + 1u64  return 1u32 }
+    return 0u32
+}
+/* THE ROUND-2 SWEEP: the whole declared space, canonical order.  Returns total PROVEN. */
+fn mxs_run_shifts() -> u64 @export {
+    mxs2_reset()
+    let mut a : u64 = 1u64
+    while a <= 63u64 {
+        let mut b : u64 = 1u64
+        while b <= 63u64 {
+            if a + b <= 63u64 {
+                mxs2_test(0x28u32, a, 0x28u32, b, 0u64, 0u64)
+                mxs2_test(0x29u32, a, 0x29u32, b, 0u64, 1u64)
+            } else {
+                mxs2_test(0x28u32, a, 0x28u32, b, 1u64, 2u64)
+                mxs2_test(0x29u32, a, 0x29u32, b, 1u64, 3u64)
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        mxs2_test(0x29u32, k, 0x28u32, k, 2u64, 4u64)     /* align: (x>>k)<<k == x & (~0<<k) */
+        mxs2_test(0x28u32, k, 0x29u32, k, 2u64, 5u64)     /* mask:  (x<<k)>>k == x & (~0>>k) */
+        k = k + 1u64
+    }
+    let mut tot : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { tot = tot + MXS2_CNT[i]  i = i + 1u64 }
+    return tot
 }
 
 /* copy discovery i's 8-word descriptor to out. */

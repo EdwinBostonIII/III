@@ -1,0 +1,91 @@
+/* STDLIB/corpus/2682_mathesis_autonomy.iii -- THE AUTONOMY INVARIANT, in-process half (Xi13/P10,
+ * III-MATHESIS-MAP.md s3c; gate law s10.12).
+ *
+ * "The engine is a program, not a prompt."  Two halves, split honestly:
+ *   - the RUNNER half (run_mathesis.sh's audit stage) asserts the shell tree invokes only
+ *     sovereign-built binaries + POSIX sh;
+ *   - THIS gate is the in-process half: ONE binary, from CONSTANTS ONLY, replays the library's
+ *     genesis-to-head chain and runs a complete discover->prove->discriminate cycle with NO
+ *     subprocess, NO operator, NO file, NO network:
+ *
+ *   (a1) COLD-START CHAIN REPLAY: genesis re-derived from the reserved descriptor; THEOREM-0001's id
+ *        re-derived from its canonical descriptor; the chain head H = Keccak(genesis || id) recomputed
+ *        and matched against the PINNED head 88dbee16..df58 (the 2603 seal's pin) -- byte for byte;
+ *        a flipped pin byte REFUSES (the tamper tooth, in-process);
+ *   (a2) THE CYCLE: the synthesizer's tier-1 block re-discovers its four laws from nothing (no
+ *        candidates); the novelty oracle classifies a rediscovery vs a boundary case; the door
+ *        discriminates -- all in this one process;
+ *   (a3) DETERMINISM: the whole gate is a pure function of its constants (re-run inside = identical).
+ * 99 == a bare binary reproduces the mathematics from genesis; nothing pilots it. */
+module corpus_2682_mathesis_autonomy
+
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mxs_reset() -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_run_range(with_t1: u32, f2lo: u64, f2hi: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxn_known(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_novel(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+
+var GEN : [u8; 32]
+var ID : [u8; 32]
+var HEAD : [u8; 32]
+var PIN : [u8; 32]
+var D : [u64; 8]
+
+/* the 2603 pin: head-after-0001 = Keccak-256(genesis || theorem-0001-id)
+ * 88dbee1673702995acc78466476f406af1b90e92940330f7e311f7286d47df58 */
+fn pin_head() -> u32 {
+    PIN[0u64] = 0x88u8   PIN[1u64] = 0xDBu8   PIN[2u64] = 0xEEu8   PIN[3u64] = 0x16u8
+    PIN[4u64] = 0x73u8   PIN[5u64] = 0x70u8   PIN[6u64] = 0x29u8   PIN[7u64] = 0x95u8
+    PIN[8u64] = 0xACu8   PIN[9u64] = 0xC7u8   PIN[10u64] = 0x84u8  PIN[11u64] = 0x66u8
+    PIN[12u64] = 0x47u8  PIN[13u64] = 0x6Fu8  PIN[14u64] = 0x40u8  PIN[15u64] = 0x6Au8
+    PIN[16u64] = 0xF1u8  PIN[17u64] = 0xB9u8  PIN[18u64] = 0x0Eu8  PIN[19u64] = 0x92u8
+    PIN[20u64] = 0x94u8  PIN[21u64] = 0x03u8  PIN[22u64] = 0x30u8  PIN[23u64] = 0xF7u8
+    PIN[24u64] = 0xE3u8  PIN[25u64] = 0x11u8  PIN[26u64] = 0xF7u8  PIN[27u64] = 0x28u8
+    PIN[28u64] = 0x6Du8  PIN[29u64] = 0x47u8  PIN[30u64] = 0xDFu8  PIN[31u64] = 0x58u8
+    return 1u32
+}
+
+fn autonomy_cycle() -> u64 {
+    /* (a1) COLD-START: genesis + 0001 id + head, from constants only */
+    if mx_chain_genesis(&GEN as u64) != 0i32 { return 10u64 }
+    D[0u64] = 0x4D583031u64  D[1u64] = 0x25u64  D[2u64] = 1u64  D[3u64] = 1u64
+    D[4u64] = 64u64  D[5u64] = 0u64  D[6u64] = 0u64  D[7u64] = 0u64
+    if mx_theorem_id(&D as u64, &ID as u64) != 0i32 { return 11u64 }
+    if mx_chain_step(&GEN as u64, &ID as u64, &HEAD as u64) != 0i32 { return 12u64 }
+    pin_head()
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if HEAD[i] != PIN[i] { return 13u64 }
+        i = i + 1u64
+    }
+    /* the tamper tooth: a flipped pin byte must NOT match */
+    PIN[0u64] = PIN[0u64] ^ 1u8
+    let mut same : u32 = 1u32
+    i = 0u64
+    while i < 32u64 {
+        if HEAD[i] != PIN[i] { same = 0u32 }
+        i = i + 1u64
+    }
+    if same == 1u32 { return 14u64 }
+
+    /* (a2) THE CYCLE: discover (no candidates) -> classify -> discriminate */
+    mxs_reset()
+    if mxs_run_range(1u32, 0u64, 0u64) != 4u64 { return 15u64 }        /* tier-1: exactly its 4 laws */
+    if mxn_known(2u64, 194u64, 42u64) != 1u32 { return 16u64 }         /* rediscovery classified */
+    if mxn_novel(2u64, 5u64, 21u64) != 1u32 { return 17u64 }           /* boundary classified */
+    if mx_admit(1u32, 0u32, 1u32, 1u32) != 0u32 { return 18u64 }       /* rediscovery REFUSED */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 19u64 }       /* novelty ADMITTED */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r1 : u64 = autonomy_cycle()
+    if r1 != 0u64 { return r1 }
+    /* (a3) determinism: the whole cycle re-runs identically in this same process */
+    let r2 : u64 = autonomy_cycle()
+    if r2 != 0u64 { return 90u64 }
+    return 99u64
+}

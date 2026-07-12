@@ -1,0 +1,290 @@
+/* STDLIB/corpus/2613_mathesis_grammar.iii -- THE GRAMMAR RATCHET TEACH (Xi5/P1, III-MATHESIS-MAP.md s3/s3a).
+ *
+ * The campaign's measured number: teach-grammar had {VAR,CONST,ADD,SUB,MUL,SHL}; the disposer proves over
+ * {ADD,SUB,MUL,AND,OR,XOR,SHL,SHR}.  This gate certifies the e-graph LEARNED the four missing operators --
+ * and that every new rewrite rule is a SEALED LIBRARY SCHEMA (the library teaches the compiler's e-graph;
+ * provenance in ser_egraph.iii comments), and that the teach left every mul/div emit plan BYTE-IDENTICAL
+ * (cg_r3's consult surface -- the R5/R6 protection, pinned as an FNV-1a-64 sweep hash).
+ *
+ * Arms, negative-first (campaign law 1/2):
+ *   (t1) FALSE identities never merge: AND(x,c) !~ OR(x,c); XOR-chain with c1!=c2 !~ x; absorption with
+ *        mismatched constants does NOT fire; SHL-chain a+b>63 does NOT fold.
+ *   (pin) the mul/div plan sweep hash == 3193290898309574260 (computed pre-teach; the teach may not move it).
+ *   (d1..) each sealed schema is DERIVED by saturation (class-merge), the e-graph path of the two-path law:
+ *        AND-chain [THEOREM-0001], OR/XOR-chain [round-1 stream], absorption [THEOREM-0006],
+ *        involution [THEOREM-0007], idempotence/annihilation [round-1 tier-1], constant identities,
+ *        shift-chains (a+b<=63), align-down/mask-low bridges [corpus/2601 range proofs, k=1..63].
+ *   (tp) THE TWO-PATH LAW for the newly-ruled shift-chain families: the FULL declared range a+b<=63 is
+ *        re-proven through seq_equiv per instance (1953 SHL pairs + 1953 SHR pairs) -- the disposer path.
+ *   (cg) the congruence tooth: the mul decomposition still merges ADD(MUL(x,8),MUL(x,2)) ~ ADD(SHL...).
+ *   (det) determinism: a re-run yields the same verdicts.
+ * 99 == the grammar gap closed AND the compiler's emit surface provably untouched. */
+module corpus_2613_mathesis_grammar
+
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_add(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_sub(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_mul(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_shl(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_and(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_or(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_xor(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_shr(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_same_class(a: u64, b: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_mul_plan(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const PIN : u64 = 3193290898309574260u64
+const FNV_OFF : u64 = 14695981039346656037u64
+const FNV_PRM : u64 = 1099511628211u64
+const ONES : u64 = 18446744073709551615u64
+
+var H : [u64; 1]
+var EDGE : [u64; 10]
+var WF : [u8; 64]
+var WG : [u8; 64]
+
+fn mix(v: u64) -> u32 { H[0u64] = (H[0u64] ^ v) * FNV_PRM  return 1u32 }
+fn mix_mul(v: u64) -> u32 { return mix(seg_mul_plan(v)) }
+fn mix_div(d: u64) -> u32 {
+    let p : u64 = seg_div_plan(d)
+    mix(p)
+    if (p & 0xFFu64) == 2u64 { mix(seg_div_magic_m())  mix(seg_div_shift()) }
+    return 1u32
+}
+
+/* the plan sweep (byte-for-byte the probe that minted the PIN) */
+fn plan_hash() -> u64 {
+    EDGE[0u64] = 9223372036854775808u64
+    EDGE[1u64] = 9223372036854775809u64
+    EDGE[2u64] = 18446744073709551615u64
+    EDGE[3u64] = 18446744073709551614u64
+    EDGE[4u64] = 9223372036854775807u64
+    EDGE[5u64] = 12297829382473034410u64
+    EDGE[6u64] = 6148914691236517205u64
+    EDGE[7u64] = 18446744069414584320u64
+    EDGE[8u64] = 4294967295u64
+    EDGE[9u64] = 9223372036854775809u64
+    H[0u64] = FNV_OFF
+    let mut v : u64 = 0u64
+    while v <= 4096u64 { mix_mul(v)  v = v + 1u64 }
+    let mut e : u64 = 0u64
+    while e < 10u64 { mix_mul(EDGE[e])  e = e + 1u64 }
+    let mut d : u64 = 0u64
+    while d <= 4096u64 { mix_div(d)  d = d + 1u64 }
+    e = 0u64
+    while e < 10u64 { mix_div(EDGE[e])  e = e + 1u64 }
+    return H[0u64]
+}
+
+/* SVIR body helpers (the 2675 mold) for the two-path shift sweeps */
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* f = (x shOP a) shOP b ; g = x shOP (a+b) ; PROVEN must return 1 */
+fn shift_chain_proven(shop: u32, a: u64, b: u64) -> u32 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, a)
+    p = wb(0u32, p, shop)
+    p = wc(0u32, p, b)
+    p = wb(0u32, p, shop)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wc(1u32, q, a + b)
+    q = wb(1u32, q, shop)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32)
+}
+
+/* one full teach scenario built + saturated; sel picks the assertion probed (determinism re-run uses same) */
+fn teach_round() -> u64 {
+    /* ---- (t1) FALSE identities first: must NOT merge ---- */
+    seg_reset()
+    let x : u64 = seg_var()
+    let c1 : u64 = seg_const(0xF0u64)
+    let c2 : u64 = seg_const(0x0Fu64)
+    let fa : u64 = seg_and(x, c1)
+    let fo : u64 = seg_or(x, c1)
+    let xc : u64 = seg_xor(seg_xor(x, c1), c2)          /* c1 != c2: !~ x */
+    let ab : u64 = seg_and(seg_or(x, c1), c2)           /* mismatched absorption: !~ c2 */
+    let s40 : u64 = seg_const(40u64)
+    let sl : u64 = seg_shl(seg_shl(x, s40), s40)        /* a+b=80 > 63: no fold */
+    seg_saturate()
+    if seg_same_class(fa, fo) == 1u32 { return 10u64 }
+    if seg_same_class(xc, x) == 1u32 { return 11u64 }
+    if seg_same_class(ab, c2) == 1u32 { return 12u64 }
+    if seg_same_class(sl, x) == 1u32 { return 13u64 }
+    if seg_same_class(sl, seg_shl(x, seg_const(80u64))) == 1u32 { return 14u64 }
+
+    /* ---- (d1) AND-chain fold [THEOREM-0001]: (x&c1)&c2 ~ x&(c1&c2) ---- */
+    seg_reset()
+    let x1 : u64 = seg_var()
+    let a1 : u64 = seg_and(seg_and(x1, seg_const(0xFF00u64)), seg_const(0x0FF0u64))
+    let g1 : u64 = seg_and(x1, seg_const(0xFF00u64 & 0x0FF0u64))
+    seg_saturate()
+    if seg_same_class(a1, g1) != 1u32 { return 20u64 }
+
+    /* ---- (d2) OR-chain fold [round-1 stream]: (x|c1)|c2 ~ x|(c1|c2) ---- */
+    seg_reset()
+    let x2 : u64 = seg_var()
+    let a2 : u64 = seg_or(seg_or(x2, seg_const(0xAAu64)), seg_const(0x55u64))
+    let g2 : u64 = seg_or(x2, seg_const(0xFFu64))
+    seg_saturate()
+    if seg_same_class(a2, g2) != 1u32 { return 21u64 }
+
+    /* ---- (d3) XOR-chain fold [round-1 stream]: (x^c1)^c2 ~ x^(c1^c2) ---- */
+    seg_reset()
+    let x3 : u64 = seg_var()
+    let a3 : u64 = seg_xor(seg_xor(x3, seg_const(0xFFFFu64)), seg_const(0x00FFu64))
+    let g3 : u64 = seg_xor(x3, seg_const(0xFF00u64))
+    seg_saturate()
+    if seg_same_class(a3, g3) != 1u32 { return 22u64 }
+
+    /* ---- (d4) absorption [THEOREM-0006]: (x|c)&c ~ c ---- */
+    seg_reset()
+    let x4 : u64 = seg_var()
+    let cc : u64 = seg_const(0xDEADu64)
+    let a4 : u64 = seg_and(seg_or(x4, cc), cc)
+    seg_saturate()
+    if seg_same_class(a4, cc) != 1u32 { return 23u64 }
+
+    /* ---- (d5) involution [THEOREM-0007]: (x^c)^c ~ x ---- */
+    seg_reset()
+    let x5 : u64 = seg_var()
+    let c5 : u64 = seg_const(0xBEEFu64)
+    let a5 : u64 = seg_xor(seg_xor(x5, c5), c5)
+    seg_saturate()
+    if seg_same_class(a5, x5) != 1u32 { return 24u64 }
+
+    /* ---- (d6) idempotence + annihilation [round-1 tier-1] ---- */
+    seg_reset()
+    let x6 : u64 = seg_var()
+    let ai : u64 = seg_and(x6, x6)
+    let oi : u64 = seg_or(x6, x6)
+    let xa : u64 = seg_xor(x6, x6)
+    let sa : u64 = seg_sub(x6, x6)
+    let z6 : u64 = seg_const(0u64)
+    seg_saturate()
+    if seg_same_class(ai, x6) != 1u32 { return 25u64 }
+    if seg_same_class(oi, x6) != 1u32 { return 26u64 }
+    if seg_same_class(xa, z6) != 1u32 { return 27u64 }
+    if seg_same_class(sa, z6) != 1u32 { return 28u64 }
+
+    /* ---- (d7) constant identities (bit-algebra unit/annihilator laws) ---- */
+    seg_reset()
+    let x7 : u64 = seg_var()
+    let z7 : u64 = seg_const(0u64)
+    let f7 : u64 = seg_const(ONES)
+    let o0 : u64 = seg_or(x7, z7)
+    let e0 : u64 = seg_xor(x7, z7)
+    let az : u64 = seg_and(x7, z7)
+    let af : u64 = seg_and(x7, f7)
+    let of : u64 = seg_or(x7, f7)
+    seg_saturate()
+    if seg_same_class(o0, x7) != 1u32 { return 29u64 }
+    if seg_same_class(e0, x7) != 1u32 { return 30u64 }
+    if seg_same_class(az, z7) != 1u32 { return 31u64 }
+    if seg_same_class(af, x7) != 1u32 { return 32u64 }
+    if seg_same_class(of, f7) != 1u32 { return 33u64 }
+
+    /* ---- (d8) shift-chains inside the declared range ---- */
+    seg_reset()
+    let x8 : u64 = seg_var()
+    let l8 : u64 = seg_shl(seg_shl(x8, seg_const(20u64)), seg_const(23u64))
+    let lg : u64 = seg_shl(x8, seg_const(43u64))
+    let r8 : u64 = seg_shr(seg_shr(x8, seg_const(9u64)), seg_const(54u64))
+    let rg : u64 = seg_shr(x8, seg_const(63u64))
+    seg_saturate()
+    if seg_same_class(l8, lg) != 1u32 { return 34u64 }
+    if seg_same_class(r8, rg) != 1u32 { return 35u64 }
+
+    /* ---- (d9) align-down / mask-low bridges [corpus/2601 range proofs k=1..63] ---- */
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        let mut probe : u32 = 0u32
+        if k == 1u64 { probe = 1u32 }
+        if k == 7u64 { probe = 1u32 }
+        if k == 32u64 { probe = 1u32 }
+        if k == 63u64 { probe = 1u32 }
+        if probe == 1u32 {
+            seg_reset()
+            let x9 : u64 = seg_var()
+            let kc : u64 = seg_const(k)
+            let al : u64 = seg_shl(seg_shr(x9, kc), kc)
+            let am : u64 = seg_and(x9, seg_const(ONES << k))
+            let ml : u64 = seg_shr(seg_shl(x9, kc), kc)
+            let mm : u64 = seg_and(x9, seg_const(ONES >> k))
+            seg_saturate()
+            if seg_same_class(al, am) != 1u32 { return 36u64 }
+            if seg_same_class(ml, mm) != 1u32 { return 37u64 }
+        }
+        k = k + 1u64
+    }
+
+    /* ---- (cg) the congruence tooth: existing mul behavior preserved ---- */
+    seg_reset()
+    let xa2 : u64 = seg_var()
+    let m8 : u64 = seg_mul(xa2, seg_const(8u64))
+    let m2 : u64 = seg_mul(xa2, seg_const(2u64))
+    let s3 : u64 = seg_shl(xa2, seg_const(3u64))
+    let s1 : u64 = seg_shl(xa2, seg_const(1u64))
+    let lhs : u64 = seg_add(m8, m2)
+    let rhs : u64 = seg_add(s3, s1)
+    seg_saturate()
+    if seg_same_class(lhs, rhs) != 1u32 { return 38u64 }
+
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* THE PIN FIRST: the teach may not move a single emit plan (R5/R6 protection). */
+    if plan_hash() != PIN { return 40u64 }
+
+    let r1 : u64 = teach_round()
+    if r1 != 0u64 { return r1 }
+
+    /* ---- (tp) THE TWO-PATH LAW: the full declared shift-chain ranges through the DISPOSER ---- */
+    let mut a : u64 = 1u64
+    while a <= 62u64 {
+        let mut b : u64 = 1u64
+        while a + b <= 63u64 {
+            if shift_chain_proven(0x28u32, a, b) != 1u32 { return 50u64 }
+            if shift_chain_proven(0x29u32, a, b) != 1u32 { return 51u64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    /* boundary note (definite-verdict tooth): at a+b=64 BOTH sides are 0 under SVIR's saturating shifts,
+     * so the disposer PROVES the pair -- the e-graph rule nonetheless stays range-guarded to a+b<=63
+     * because an emitted count must be < 64 (arm 14 above proves the rule refuses to fold past range).
+     * Here we only demand a DEFINITE verdict (no SEQ_TOP poison masquerade). */
+    if shift_chain_proven(0x28u32, 32u64, 32u64) != 1u32 { return 52u64 }
+
+    /* ---- (det) determinism: the whole teach round re-runs to the same verdicts ---- */
+    let r2 : u64 = teach_round()
+    if r2 != 0u64 { return 60u64 }
+
+    return 99u64
+}

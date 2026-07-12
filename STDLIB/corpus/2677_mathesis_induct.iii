@@ -1,0 +1,85 @@
+/* STDLIB/corpus/2677_mathesis_induct.iii -- THE FIRST UNBOUNDED QUANTIFIERS (Xi10-T2,
+ * III-MATHESIS-MAP.md s3b BREAK C2).
+ *
+ * The two first citizens of the infinite domain -- forall-statements over ALL of NAT, which NO
+ * enumeration could ever have produced -- land end-to-end, every leg machine-checked:
+ *
+ *   THEOREM (rule 1):  forall n >= 2, forall x, c_1..c_n in Z/2^64:
+ *                          (..((x & c1) & c2) .. & c_n)  ==  x & (c1 & .. & c_n)
+ *       base = MATHESIS-THEOREM-0001 (premise ref re-derived from its canonical descriptor);
+ *       step = the same schema with y := the folded chain (one symbolic call);
+ *       kernel = the natrec eliminator typed; grounds = n = 3..7 explicit chains, each over all 2^64.
+ *
+ *   THEOREM (rule 2):  forall n in NAT, forall x in Z/2^64:  rot_1^n(x) == rot_{n mod 64}(x)
+ *       base = rot_1^0 == rot_0 (identity, THEOREM-0003's edge); step = the whole 64-residue Cayley
+ *       row a=1 (THEOREM-0002, re-discharged by exhaustion -- 64 symbolic calls); grounds = symbolic
+ *       n = 2..6 composed towers + native iteration to n = 200 on 4 witness vectors.
+ *
+ * THE FALSE INDUCTION DIES (R4 of the infinite tier): the claim rot_1^n == rot_{n mod 63} fails its
+ * OWN ground leg (rot_1^63 = rot_63 != rot_0 = x) and the door refuses the wrong modulus outright.
+ * The premise-ref cross-derivation arm re-verifies the organ's pinned 0002 ref against mxd_ref_of of
+ * the full pinned 32-byte id (the LE-transcription trap, gated).
+ * 99 == the library's language now includes NAT: the list became a THEORY. */
+module corpus_2677_mathesis_induct
+
+extern @abi(c-msvc-x64) fn mx4_derive_r1(premise_ref: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_derive_r2(premise_ref: u64, modulus: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_premise_ref_0001() -> u64 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_r2_ground_native(lim: u64, modulus: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_valid(desc: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_id(desc: u64, out32: u64) -> i32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mxd_ref_of(id32: u64) -> u64 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+
+const REF_0002 : u64 = 0xABC7EA27AB705D6Du64
+
+var ID02 : [u8; 32]
+var D : [u64; 8]
+var ID : [u8; 32]
+
+/* MATHESIS-THEOREM-0002's pinned 32-byte id (DOCS/MATH_LIBRARY_QUEUE.md; 2673 replays the chain it
+ * anchors every run): 6d5d70ab27eac7ab6dfa5c8c1133a5841b7d80e92d57517f6ecf9477c2294733 */
+fn pin_id02() -> u32 {
+    ID02[0u64] = 0x6Du8   ID02[1u64] = 0x5Du8   ID02[2u64] = 0x70u8   ID02[3u64] = 0xABu8
+    ID02[4u64] = 0x27u8   ID02[5u64] = 0xEAu8   ID02[6u64] = 0xC7u8   ID02[7u64] = 0xABu8
+    ID02[8u64] = 0x6Du8   ID02[9u64] = 0xFAu8   ID02[10u64] = 0x5Cu8  ID02[11u64] = 0x8Cu8
+    ID02[12u64] = 0x11u8  ID02[13u64] = 0x33u8  ID02[14u64] = 0xA5u8  ID02[15u64] = 0x84u8
+    ID02[16u64] = 0x1Bu8  ID02[17u64] = 0x7Du8  ID02[18u64] = 0x80u8  ID02[19u64] = 0xE9u8
+    ID02[20u64] = 0x2Du8  ID02[21u64] = 0x57u8  ID02[22u64] = 0x51u8  ID02[23u64] = 0x7Fu8
+    ID02[24u64] = 0x6Eu8  ID02[25u64] = 0xCFu8  ID02[26u64] = 0x94u8  ID02[27u64] = 0x77u8
+    ID02[28u64] = 0xC2u8  ID02[29u64] = 0x29u8  ID02[30u64] = 0x47u8  ID02[31u64] = 0x33u8
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ---- the 0002 ref cross-derivation (the LE-transcription trap, gated) ---- */
+    pin_id02()
+    if mxd_ref_of(&ID02 as u64) != REF_0002 { return 10u64 }
+
+    /* ---- THE FALSE INDUCTION DIES FIRST (R4): modulus 63 fails ground + door ---- */
+    if mx4_r2_ground_native(64u64, 63u64) != 0u32 { return 11u64 }
+    if mx4_derive_r2(REF_0002, 63u64) != 0u32 { return 12u64 }
+    if mx4_derive_r2(REF_0002 ^ 128u64, 64u64) != 0u32 { return 13u64 }   /* tampered premise ref */
+
+    /* ---- CITIZEN 1: forall n>=2 n-fold AND-chain collapse ---- */
+    if mx4_derive_r1(mx4_premise_ref_0001()) != 1u32 { return 20u64 }
+
+    /* ---- CITIZEN 2: forall n in NAT: rot_1^n == rot_{n mod 64} ---- */
+    if mx4_derive_r2(REF_0002, 64u64) != 1u32 { return 21u64 }
+
+    /* ---- the MX04 descriptors for both citizens: valid, addressable, distinct ---- */
+    let p : *u64 = &D as u64 as *u64
+    p[0u64] = 0x4D583034u64  p[1u64] = 1u64  p[2u64] = mx4_premise_ref_0001()  p[3u64] = 0x25u64
+    p[4u64] = 64u64  p[5u64] = 0u64  p[6u64] = 2u64  p[7u64] = 18446744073709551615u64
+    if mx4_valid(&D as u64) != 1u32 { return 22u64 }
+    if mx4_id(&D as u64, &ID as u64) != 0i32 { return 23u64 }
+    p[1u64] = 2u64  p[2u64] = REF_0002  p[3u64] = 64u64  p[6u64] = 0u64
+    if mx4_valid(&D as u64) != 1u32 { return 24u64 }
+    if mx4_id(&D as u64, &ID as u64) != 0i32 { return 25u64 }
+
+    /* ---- the door admits both (PROVEN by the organ's five legs; NOVEL: no unbounded entry exists;
+     *      USEFUL: the n-fold family is the assimilated fold's own generalisation; WITNESSED: chain) ---- */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 26u64 }
+
+    return 99u64
+}

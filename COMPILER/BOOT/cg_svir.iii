@@ -209,6 +209,49 @@ fn iii_cg_svir_raw(path: u64) -> u32 @export {
     return 0u32
 }
 
+/* ── THE IN-MEMORY SVIR SURFACE ─────────────────────────────────────────────
+ * iii_cg_svir_raw() serialises the container to a FILE.  These four accessors
+ * expose exactly the same bytes IN MEMORY, so a consumer in this process can
+ * read the emitted module without a temp-file round trip.  This is what makes
+ * the SVIR equivalence prover a STANDING TOOL over arbitrary user programs
+ * (COMPILER/BOOT/prove_main.iii -> COMPILED/iii-prove) instead of a capability
+ * reachable only by hand-authoring a driver per input.
+ *
+ * The container layout is IDENTICAL to iii_cg_svir_raw's file:
+ *     [u8 nfunc] [MO[0 .. mlen)]
+ * which is precisely what numera/ser_kinduct_sym's sd_locate/seq_equiv_mod
+ * decode.  ONE emission, ONE layout, two carriers (file and memory).
+ *
+ * These are PURE READS of state the emitter already computed; the compiler's
+ * own emission path never calls them, so the compiled output is unchanged
+ * (proven, not asserted: stage1 parity + the DDC fixpoint gate every build). */
+fn iii_cg_svir_mo() -> u64 @export { return &MO as u64 }
+fn iii_cg_svir_mlen() -> u64 @export { return MLN }
+fn iii_cg_svir_nfunc() -> u32 @export { return FNC + EXTN }
+
+/* resolve a function NAME to its container index (the index sd_locate takes).
+ * 0xFFFFFFFF = no such function -- the tool reports it, never guesses. */
+fn iii_cg_svir_fn_index(namep: u64, namelen: u64) -> u32 @export {
+    if namep == 0u64 { return 0xFFFFFFFFu32 }
+    let np: *u8 = namep as *u8
+    let mut k: u32 = 0u32
+    while k < FNC {
+        let f2: u32 = FNODE[k as u64]
+        if (iii_ast_fn_name_len(SV_AST, f2) as u64) == namelen {
+            let sp: *u8 = (SV_SRC + (iii_ast_fn_name_off(SV_AST, f2) as u64)) as *u8
+            let mut i: u64 = 0u64
+            let mut same: u32 = 1u32
+            while i < namelen {
+                if sp[i] != np[i] { same = 0u32  i = namelen }
+                else { i = i + 1u64 }
+            }
+            if same == 1u32 { return k }
+        }
+        k = k + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
 fn sv_name_lit(off: u32, len: u32, lit: u64, litlen: u32) -> u32 {
     if len != litlen { return 0u32 }
     let p: *u8 = lit as *u8
@@ -1654,9 +1697,13 @@ fn sv_report_unsup() {
     sv_pc(e, 10u32)
 }
 
-/* THE ENTRY (harness + main.iii both call this): emit gen_svir.iii to `out`.
+/* THE EMISSION PROPER: lower the AST into the SVIR container bytes (MO/MLN + the
+ * FNC/EXTN function count).  This is the whole of the backend's work; the two
+ * public entries below differ ONLY in how they CARRY the result out (a
+ * gen_svir.iii source file, or the bytes in memory).  ONE computation, one
+ * layout, no second implementation to drift.
  * Returns 0 ok | 1 no-module | 2 refused (class reported on stderr). */
-fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
+fn iii_cg_svir_emit_mem(ast: u64) -> u32 @export {
     SV_AST = ast
     SV_SRC = iii_ast_source_buf(ast)
     SV_SRCLEN = iii_ast_source_len(ast)
@@ -1688,6 +1735,14 @@ fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
         x = x + 1u32
     }
     if SV_UNSUP != 0u32 { sv_report_unsup()  return 2u32 }
+    return 0u32
+}
+
+/* THE ENTRY (harness + main.iii both call this): emit gen_svir.iii to `out`.
+ * Returns 0 ok | 1 no-module | 2 refused (class reported on stderr). */
+fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
+    let rc: u32 = iii_cg_svir_emit_mem(ast)
+    if rc != 0u32 { return rc }
     /* module text — the exact ~-delimited shape of iiisv2.emit_module */
     let total: u64 = MLN + 1u64
     sv_pstr(out, "module gen_svir\nvar SVIR : [u8; ~" as u64)  sv_pdec(out, total)  sv_pstr(out, "] = [\n~" as u64)
@@ -1698,3 +1753,6 @@ fn iii_cg_svir_emit(ast: u64, out: u64) -> u32 @export {
     sv_pdec(out, total)  sv_pstr(out, "u64 }\n~" as u64)
     return 0u32
 }
+
+/* the refusal class of the last emission (0 = none) -- so a consumer can REPORT why. */
+fn iii_cg_svir_unsup() -> u32 @export { return SV_UNSUP }

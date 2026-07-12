@@ -1,0 +1,39 @@
+/* The same user's "clever" bit-twiddling rewrites -- the ones you'd never merge without a proof.
+ * Some of these are genuinely equal to userA's; at least one is SUBTLY WRONG.  The prover decides. */
+module userB
+
+/* the classic overflow-safe average (Hacker's Delight).  Is it == (a+b)/2 for EVERY a,b?
+ * (On u64 wraparound arithmetic this is NOT the same function -- the prover will say so.) */
+fn avg(a: u64, b: u64) -> u64 {
+    return (a & b) + ((a ^ b) >> 1u64)
+}
+
+/* absdiff, branchless via the sign-mask trick */
+fn absdiff(a: u64, b: u64) -> u64 {
+    let d : u64 = a - b
+    let m : u64 = 0u64 - ((a - b) >> 63u64)
+    return (d ^ m) - m
+}
+
+/* pow2 test, written the other common way */
+fn is_pow2(x: u64) -> u64 {
+    if x == 0u64 { return 0u64 }
+    if (x & (0u64 - x)) == x { return 1u64 }
+    return 0u64
+}
+
+/* align-up with the mask idiom (no division) */
+fn align8(x: u64) -> u64 {
+    return (x + 7u64) & 18446744073709551608u64
+}
+
+/* halves swap via rotate-by-32 */
+fn swap32(x: u64) -> u64 {
+    return (x << 32u64) | (x >> 32u64)
+}
+
+/* branchless select via a mask */
+fn pick(flag: u64, a: u64, b: u64) -> u64 {
+    let m : u64 = 0u64 - ((flag | (0u64 - flag)) >> 63u64)
+    return (b & m) | (a & (18446744073709551615u64 - m))
+}

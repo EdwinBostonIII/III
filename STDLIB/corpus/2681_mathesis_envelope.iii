@@ -1,0 +1,44 @@
+/* STDLIB/corpus/2681_mathesis_envelope.iii -- THE TELESCOPE'S ENVELOPE (Xi12/R2,
+ * III-MATHESIS-MAP.md s9: "stay on the island by construction").
+ *
+ * The telescope decides EXACTLY inside its declared domain and ABSTAINS outside -- silence is the
+ * only dishonest abstain, so the abstention is a VERDICT (2), printed and gated:
+ *   (e0) out-of-envelope inputs ABSTAIN: a > 64, b > 1024, a < 2, b < 1 -- each refused as 2,
+ *        never a fabricated 0/1;
+ *   (e1) the boundary is EXACT: (a,b) = (64, 1024) is IN-envelope and correctly denests
+ *        (disc = 0 => m = n = 32: sqrt(128) = 2 sqrt(32)), dual-certified by the web;
+ *   (e2) the guard is load-bearing on the SWEEP too: a sweep bounded beyond the envelope REFUSES
+ *        outright (returns 0) -- removing the guard would be a red gate, not a silent overflow;
+ *   (e3) a small in-envelope sweep re-pins its exact counts (a in 2..8: 16 found / 34 certificates).
+ * 99 == the exact face never leaves the island, and the island's edge is machine-checked. */
+module corpus_2681_mathesis_envelope
+
+extern @abi(c-msvc-x64) fn mxt_denest(a: u64, b: u64) -> u32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_m() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_n() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_verify_web(m: u64, n: u64, a: u64, b: u64) -> i32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_sweep(amax: u64, dual_amax: u64) -> u64 from "mathesis_telescope.iii"
+
+fn main() -> u64 {
+    /* ---- (e0) out-of-envelope: honest abstain, never a verdict ---- */
+    if mxt_denest(65u64, 10u64) != 2u32 { return 10u64 }
+    if mxt_denest(64u64, 1025u64) != 2u32 { return 11u64 }
+    if mxt_denest(1u64, 1u64) != 2u32 { return 12u64 }
+    if mxt_denest(10u64, 0u64) != 2u32 { return 13u64 }
+
+    /* ---- (e1) the boundary is exact: (64, 1024) is inside and denests ---- */
+    if mxt_denest(64u64, 1024u64) != 1u32 { return 20u64 }
+    if mxt_m() != 32u64 { return 21u64 }
+    if mxt_n() != 32u64 { return 22u64 }
+    if mxt_verify_web(32u64, 32u64, 64u64, 1024u64) != 0i32 { return 23u64 }
+
+    /* ---- (e2) the sweep refuses to leave the island ---- */
+    if mxt_sweep(65u64, 2u64) != 0u64 { return 30u64 }
+
+    /* ---- (e3) a small in-envelope sweep re-pins exactly ---- */
+    let r : u64 = mxt_sweep(8u64, 8u64)
+    if (r >> 32u64) != 16u64 { return 31u64 }
+    if (r & 4294967295u64) != 34u64 { return 32u64 }
+
+    return 99u64
+}

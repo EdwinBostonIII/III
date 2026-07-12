@@ -1,5 +1,13 @@
 /* STDLIB/iii/numera/ser_egraph.iii -- ARBITRARY-IR EQUALITY SATURATION: the grammar lifted past shl+OP.
  *
+ * THE GRAMMAR RATCHET CLOSED (Xi5/P1, DOCS/III-MATHESIS-MAP.md s3, gate corpus/2613): the grammar is now
+ * {VAR, CONST, ADD, SUB, MUL, SHL, AND, OR, XOR, SHR} -- the four operators the sealed mathesis library
+ * proved but the e-graph could not represent are TAUGHT, each rewrite rule citing the sealed entry that
+ * proves it (THEOREM-0001 chain-fold, 0006 absorption, 0007 involution, the round-1 tier-1 laws, the
+ * 2601/2613 range-proven shift families).  The mul/div emit-plan surface consulted by cg_r3 is PIN-verified
+ * untouched by the teach (2613's FNV sweep hash).  The e-graph is also the R3 novelty oracle: a schema its
+ * saturation already derives is a REDISCOVERY (corpus/2611).
+ *
  * The CEGIS/abstract faculties decided ONE multiply at a time.  This is the general engine: an e-graph over
  * ARBITRARY expression trees (VAR, CONST, ADD, SUB, MUL, SHL), saturated with the rewrite rules ALL AT ONCE,
  * then a deterministic fixed-cost extraction walks the cheapest equivalent form.  No rule-ordering guess: the
@@ -28,6 +36,15 @@ const EG_ADD : u32 = 2u32
 const EG_SUB : u32 = 3u32
 const EG_MUL : u32 = 4u32
 const EG_SHL : u32 = 5u32
+/* THE GRAMMAR RATCHET (Xi5/P1, DOCS/III-MATHESIS-MAP.md s3): the four operators the disposer could prove
+ * but the e-graph could not represent -- TAUGHT by the sealed mathesis library (gate corpus/2613; the
+ * mul/div emit-plan surface is pin-verified untouched there).  Every rewrite rule below on these kinds
+ * cites the sealed entry or gate that proves it; the e-graph never asserts an unproven identity. */
+const EG_AND : u32 = 6u32
+const EG_OR  : u32 = 7u32
+const EG_XOR : u32 = 8u32
+const EG_SHR : u32 = 9u32
+const EG_ONES : u64 = 18446744073709551615u64
 
 /* node capacity raised 64 -> 512 so the synthesis engine handles arbitrary-popcount constants (a 64-bit
  * constant's full shift-decomposition needs up to ~4*popcount nodes).  No down-scaling. */
@@ -63,6 +80,16 @@ fn seg_intern(op: u32, a: u64, b: u64) -> u64 @export {
 fn seg_var() -> u64 @export { return seg_intern(EG_VAR, 0u64, 0u64) }
 fn seg_const(v: u64) -> u64 @export { return seg_intern(EG_CONST, v, 0u64) }
 
+/* the taught-grammar term builders (one per operator; SHL/SHR take the count as a CONST node). */
+fn seg_add(a: u64, b: u64) -> u64 @export { return seg_intern(EG_ADD, a, b) }
+fn seg_sub(a: u64, b: u64) -> u64 @export { return seg_intern(EG_SUB, a, b) }
+fn seg_mul(a: u64, b: u64) -> u64 @export { return seg_intern(EG_MUL, a, b) }
+fn seg_shl(a: u64, b: u64) -> u64 @export { return seg_intern(EG_SHL, a, b) }
+fn seg_and(a: u64, b: u64) -> u64 @export { return seg_intern(EG_AND, a, b) }
+fn seg_or(a: u64, b: u64) -> u64 @export { return seg_intern(EG_OR, a, b) }
+fn seg_xor(a: u64, b: u64) -> u64 @export { return seg_intern(EG_XOR, a, b) }
+fn seg_shr(a: u64, b: u64) -> u64 @export { return seg_intern(EG_SHR, a, b) }
+
 /* read-only introspection over the node arrays -- lets a consumer (e.g. the III-GLASS e-graph view) WALK the
  * saturated graph: every node's op, its two children/value, and (via seg_find) its e-class.  No logic touched. */
 fn seg_node_count() -> u32 @export { return EG_N[0u64] }
@@ -82,6 +109,11 @@ fn seg_union(x: u64, y: u64) -> u32 @export {
     /* lower id becomes the rep (determinism) */
     if rx < ry { EG_PARENT[ry] = rx } else { EG_PARENT[rx] = ry }
     return 1u32
+}
+/* class-equality: the derivability verdict consumers (novelty gate R3, corpus/2611+2613) read. */
+fn seg_same_class(a: u64, b: u64) -> u32 @export {
+    if seg_find(a) == seg_find(b) { return 1u32 }
+    return 0u32
 }
 
 fn seg_subk_k(v: u64) -> u64 {
@@ -192,6 +224,132 @@ fn seg_saturate_pass() -> u32 {
         if op == EG_SUB {
             let bch : u64 = EG_B[i as u64]
             if EG_OP[bch] == EG_CONST { if EG_A[bch] == 0u64 { if seg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } } }
+            /* annihilation SUB(a,a) ~ 0  [round-1 tier-1 stream: x-x==0, corpus/2610] */
+            if seg_find(EG_A[i as u64]) == seg_find(bch) {
+                if seg_union(i as u64, seg_const(0u64)) == 1u32 { changed = 1u32 }
+            }
+        }
+        /* ==== THE TAUGHT OPERATORS (Xi5/P1, gate corpus/2613) -- every rule is a sealed library
+         * schema or a 2601/2613-range-proven family; the e-graph never asserts an unproven identity.
+         * None of these kinds ever appears in a mul/div plan flow (pin-verified in 2613). ==== */
+        if op == EG_AND {
+            let ach : u64 = EG_A[i as u64]
+            let bch : u64 = EG_B[i as u64]
+            /* idempotence AND(a,a) ~ a  [round-1 tier-1: x&x==x] */
+            if seg_find(ach) == seg_find(bch) { if seg_union(i as u64, ach) == 1u32 { changed = 1u32 } }
+            if EG_OP[bch] == EG_CONST {
+                let c2 : u64 = EG_A[bch]
+                /* annihilator AND(a,0) ~ 0 ; unit AND(a,~0) ~ a  [bit-unit laws, gate 2613] */
+                if c2 == 0u64 { if seg_union(i as u64, bch) == 1u32 { changed = 1u32 } }
+                if c2 == EG_ONES { if seg_union(i as u64, ach) == 1u32 { changed = 1u32 } }
+                /* chain-fold (x&c1)&c2 ~ x&(c1&c2)  [MATHESIS-THEOREM-0001] */
+                if EG_OP[ach] == EG_AND {
+                    let ich : u64 = EG_B[ach]
+                    if EG_OP[ich] == EG_CONST {
+                        let fold : u64 = seg_intern(EG_AND, EG_A[ach], seg_const(EG_A[ich] & c2))
+                        if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                    }
+                }
+                /* absorption (x|c)&c ~ c  [MATHESIS-THEOREM-0006, MACHINE-synthesized] */
+                if EG_OP[ach] == EG_OR {
+                    if EG_B[ach] == bch { if seg_union(i as u64, bch) == 1u32 { changed = 1u32 } }
+                }
+            }
+        }
+        if op == EG_OR {
+            let ach : u64 = EG_A[i as u64]
+            let bch : u64 = EG_B[i as u64]
+            /* idempotence OR(a,a) ~ a  [round-1 tier-1: x|x==x] */
+            if seg_find(ach) == seg_find(bch) { if seg_union(i as u64, ach) == 1u32 { changed = 1u32 } }
+            if EG_OP[bch] == EG_CONST {
+                let c2 : u64 = EG_A[bch]
+                /* unit OR(a,0) ~ a ; annihilator OR(a,~0) ~ ~0  [gate 2613] */
+                if c2 == 0u64 { if seg_union(i as u64, ach) == 1u32 { changed = 1u32 } }
+                if c2 == EG_ONES { if seg_union(i as u64, bch) == 1u32 { changed = 1u32 } }
+                /* chain-fold (x|c1)|c2 ~ x|(c1|c2)  [round-1 stream, 2601 family] */
+                if EG_OP[ach] == EG_OR {
+                    let ich : u64 = EG_B[ach]
+                    if EG_OP[ich] == EG_CONST {
+                        let fold : u64 = seg_intern(EG_OR, EG_A[ach], seg_const(EG_A[ich] | c2))
+                        if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                    }
+                }
+            }
+        }
+        if op == EG_XOR {
+            let ach : u64 = EG_A[i as u64]
+            let bch : u64 = EG_B[i as u64]
+            /* annihilation XOR(a,a) ~ 0  [round-1 tier-1: x^x==0] */
+            if seg_find(ach) == seg_find(bch) {
+                if seg_union(i as u64, seg_const(0u64)) == 1u32 { changed = 1u32 }
+            }
+            if EG_OP[bch] == EG_CONST {
+                let c2 : u64 = EG_A[bch]
+                /* unit XOR(a,0) ~ a  [gate 2613; involution 0007 = chain-fold + this unit] */
+                if c2 == 0u64 { if seg_union(i as u64, ach) == 1u32 { changed = 1u32 } }
+                /* chain-fold (x^c1)^c2 ~ x^(c1^c2)  [round-1 stream; MATHESIS-THEOREM-0007] */
+                if EG_OP[ach] == EG_XOR {
+                    let ich : u64 = EG_B[ach]
+                    if EG_OP[ich] == EG_CONST {
+                        let fold : u64 = seg_intern(EG_XOR, EG_A[ach], seg_const(EG_A[ich] ^ c2))
+                        if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                    }
+                }
+            }
+        }
+        if op == EG_SHL {
+            let ach : u64 = EG_A[i as u64]
+            let bch : u64 = EG_B[i as u64]
+            if EG_OP[bch] == EG_CONST {
+                let kb : u64 = EG_A[bch]
+                /* shift-chain (x<<a)<<b ~ x<<(a+b), a+b<=63  [gate 2613 two-path range proof] */
+                if EG_OP[ach] == EG_SHL {
+                    let ich : u64 = EG_B[ach]
+                    if EG_OP[ich] == EG_CONST {
+                        let ka : u64 = EG_A[ich]
+                        if ka + kb <= 63u64 {
+                            let fold : u64 = seg_intern(EG_SHL, EG_A[ach], seg_const(ka + kb))
+                            if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                        }
+                    }
+                }
+                /* align-down (x>>k)<<k ~ x & (~0<<k), k in 1..63  [corpus/2601 range proof] */
+                if EG_OP[ach] == EG_SHR {
+                    if EG_B[ach] == bch {
+                        if kb >= 1u64 { if kb <= 63u64 {
+                            let fold : u64 = seg_intern(EG_AND, EG_A[ach], seg_const(EG_ONES << kb))
+                            if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                        } }
+                    }
+                }
+            }
+        }
+        if op == EG_SHR {
+            let ach : u64 = EG_A[i as u64]
+            let bch : u64 = EG_B[i as u64]
+            if EG_OP[bch] == EG_CONST {
+                let kb : u64 = EG_A[bch]
+                /* shift-chain (x>>a)>>b ~ x>>(a+b), a+b<=63  [gate 2613 two-path range proof] */
+                if EG_OP[ach] == EG_SHR {
+                    let ich : u64 = EG_B[ach]
+                    if EG_OP[ich] == EG_CONST {
+                        let ka : u64 = EG_A[ich]
+                        if ka + kb <= 63u64 {
+                            let fold : u64 = seg_intern(EG_SHR, EG_A[ach], seg_const(ka + kb))
+                            if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                        }
+                    }
+                }
+                /* mask-low (x<<k)>>k ~ x & (~0>>k), k in 1..63  [corpus/2601 range proof] */
+                if EG_OP[ach] == EG_SHL {
+                    if EG_B[ach] == bch {
+                        if kb >= 1u64 { if kb <= 63u64 {
+                            let fold : u64 = seg_intern(EG_AND, EG_A[ach], seg_const(EG_ONES >> kb))
+                            if seg_union(i as u64, fold) == 1u32 { changed = 1u32 }
+                        } }
+                    }
+                }
+            }
         }
         i = i + 1u32
     }
@@ -238,6 +396,10 @@ fn seg_op_cost(op: u32) -> u32 {
     if op == EG_SHL { return 1u32 }
     if op == EG_ADD { return 1u32 }
     if op == EG_SUB { return 1u32 }
+    if op == EG_AND { return 1u32 }   /* the taught operators (Xi5/P1): unit ALU cost, like ADD/SUB/SHL */
+    if op == EG_OR  { return 1u32 }
+    if op == EG_XOR { return 1u32 }
+    if op == EG_SHR { return 1u32 }
     return 0u32   /* VAR, CONST */
 }
 

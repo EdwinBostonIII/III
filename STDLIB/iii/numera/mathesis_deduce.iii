@@ -1,0 +1,350 @@
+/* numera/mathesis_deduce.iii -- THE DEDUCTION ORGAN (Xi10, III-MATHESIS-MAP.md s3b BREAK C2 / s7b).
+ *
+ * THE UNBOUNDED QUANTIFIER: v2's PROVEN meant finite discharge (symbolic 2^64, exhausted ranges).  This
+ * organ composes SEALED entries into theorems over an INFINITE domain -- forall n in NAT -- by induction
+ * whose every leg is machine-checked (P8: derivation is cheaper than decision, but decision remains the
+ * arbiter of last resort):
+ *
+ *   KERNEL LEG    the induction PRINCIPLE is a typed term: the generic eliminator
+ *                 lam(P: Nat->U0). lam(z: P 0). lam(s: Pi(k:Nat). P k -> P(S k)). lam(n: Nat). natrec(P,z,s,n)
+ *                 type-checked by the CIC kernel (numera/typecheck.iii, the p5_kat_natrec P3 mold).  A
+ *                 STEP-GAP (a step not of type Pi k. P k -> P(S k)) is UNTYPEABLE -- the composition rule
+ *                 itself is machine-validated, not assumed.
+ *   PREMISE LEG   the base cites a SEALED entry by content address: the organ re-derives the premise's
+ *                 theorem_id from its canonical descriptor (mathesis_admit's serialisation) and REFUSES a
+ *                 derivation whose premise ref does not match -- citing a tampered/absent entry is REJECTED.
+ *   BASE LEG      the base instance is re-discharged by the finite judge NOW (one seq_equiv call).
+ *   STEP LEG      the inductive step is a forall-schema re-discharged by the finite judge NOW
+ *                 (rule 1: one symbolic call; rule 2: the whole 64-residue row, exhaustion).
+ *   GROUND LEG    the two-path law: explicit instances of the CONCLUSION at n=2..6 are re-proven
+ *                 symbolically (each over ALL 2^64 inputs) + native iteration cross-checks -- a wrong
+ *                 conclusion fails here even if every other leg passes.
+ *
+ * DERIVED-THEOREM DESCRIPTOR (MX04, 8 u64 words, canonical LE serialisation, content-addressed):
+ *   [0] MX04 magic  [1] rule (1 = n-fold const-chain induction, 2 = rot-power induction)
+ *   [2] premise ref (first 8 LE bytes of the sealed premise's id)  [3] aux (op byte / modulus)
+ *   [4] width (R2)  [5] signedness  [6] n-lo  [7] n-hi (ONES = unbounded -- THE INFINITE QUANTIFIER)
+ *
+ * The two first citizens (sealed on admission):
+ *   rule 1:  forall n>=2, forall x,c_1..c_n in Z/2^64:  (..((x&c1)&c2)..&cn) == x & (c1&..&cn)
+ *            [MATHESIS-THEOREM-0001 as base AND step]
+ *   rule 2:  forall n in NAT, forall x in Z/2^64:       rot_1^n(x) == rot_{n mod 64}(x)
+ *            [MATHESIS-THEOREM-0002 (the C64 Cayley row a=1) as step; 0003 (identity) as base]
+ *
+ * Gates: corpus/2676_mathesis_derive (premise integrity + wrong-conclusion rejection + step-gap),
+ *        corpus/2677_mathesis_induct (both citizens admitted end-to-end; a false induction REJECTED).
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes typecheck (the kernel), ser_kinduct_sym (the
+ * judge), mathesis_admit (ids/chain), cad only.
+ */
+module numera_mathesis_deduce
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sort(l: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const MX4_MAGIC : u64 = 0x4D583034u64      /* "MX04" -- derived-theorem descriptor tag */
+const MX4_ONES  : u64 = 18446744073709551615u64
+/* MATHESIS-THEOREM-0002's pinned id, first 8 LE bytes (the sealed library head 2673 replays each run):
+ * 6d 5d 70 ab 27 ea c7 ab ...  ->  0xABC7EA27AB705D6D (the gate cross-derives this via mxd_ref_of
+ * from the full pinned 32-byte id -- the LE-transcription trap is gated, not trusted). */
+const MX4_REF_0002 : u64 = 0xABC7EA27AB705D6Du64
+
+var MX4_SER : [u8; 64]
+var MX4_D01 : [u64; 8]      /* THEOREM-0001's canonical descriptor (rebuilt, re-hashed -- never trusted) */
+var MX4_ID01 : [u8; 32]
+var WF : [u8; 256]
+var WG : [u8; 64]
+
+/* ---- descriptor validity + content address (the admit mold) ---------------------------------------- */
+fn mx4_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MX4_MAGIC { return 0u32 }
+    if d[1u64] < 1u64 { return 0u32 }
+    if d[1u64] > 2u64 { return 0u32 }
+    if d[2u64] == 0u64 { return 0u32 }
+    let w : u64 = d[4u64]
+    let mut wok : u32 = 0u32
+    if w == 8u64 { wok = 1u32 }
+    if w == 16u64 { wok = 1u32 }
+    if w == 32u64 { wok = 1u32 }
+    if w == 64u64 { wok = 1u32 }
+    if wok == 0u32 { return 0u32 }
+    if d[5u64] > 2u64 { return 0u32 }
+    if d[6u64] > d[7u64] { return 0u32 }
+    return 1u32
+}
+fn mx4_id(desc: u64, out32: u64) -> i32 @export {
+    if desc == 0u64 { return -1i32 }
+    if out32 == 0u64 { return -1i32 }
+    if mx4_valid(desc) != 1u32 { return -3i32 }
+    let d : *u64 = desc as *u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            MX4_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return cad_oneshot(0u32, (&MX4_SER as u64) as *u8, 64u64, out32 as *u8)
+}
+
+/* ---- THE KERNEL LEG: the induction principle as a typed term (p5_kat_natrec P3 mold) --------------- */
+fn mx4_kernel_induction() -> u32 @export {
+    tc_reset()
+    let pty : u32 = tc_pi(tc_nat(), tc_sort(0u32))                  /* P : Nat -> U0 */
+    let zty : u32 = tc_app(tc_var(0u32), tc_zero())                 /* P 0            (ctx [P])        */
+    let ih  : u32 = tc_app(tc_var(2u32), tc_var(0u32))              /* P k            (ctx [P,z,k])    */
+    let conc : u32 = tc_app(tc_var(3u32), tc_succ(tc_var(1u32)))    /* P (S k)        (ctx [P,z,k,ih]) */
+    let sty : u32 = tc_pi(tc_nat(), tc_pi(ih, conc))                /* Pi k. P k -> P (S k) */
+    let body : u32 = tc_natrec(tc_var(3u32), tc_var(2u32), tc_var(1u32), tc_var(0u32))
+    let elim : u32 = tc_lam(pty, tc_lam(zty, tc_lam(sty, tc_lam(tc_nat(), body))))
+    if tc_infer(elim) == 0u32 { return 0u32 }
+    return 1u32
+}
+/* THE STEP-GAP ARM: a step lacking the induction hypothesis is UNTYPEABLE (the kernel refuses). */
+fn mx4_kernel_stepgap() -> u32 @export {
+    tc_reset()
+    let bad_p : u32 = tc_lam(tc_nat(), tc_bool())
+    let bad_s : u32 = tc_lam(tc_nat(), tc_false())                  /* Nat -> Bool: NO ih argument */
+    let r : u32 = tc_natrec(bad_p, tc_false(), bad_s, tc_zero())
+    if tc_infer(r) != 0u32 { return 0u32 }                          /* typing it would be the failure */
+    return 1u32
+}
+
+/* ---- body writers (the 2675 mold) ------------------------------------------------------------------ */
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+/* [0x10 s][0x01 k][0x28][0x10 s][0x01 64-k][0x29][0x26] -- ROTL64's definiens on slot s (0 <= k <= 63). */
+fn emit_rot(sel: u32, pos0: u64, slot: u32, k: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, k)
+    p = wb(sel, p, 0x28u32)
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, 64u64 - k)
+    p = wb(sel, p, 0x29u32)
+    p = wb(sel, p, 0x26u32)
+    return p
+}
+
+/* ---- THE PREMISE LEG: re-derive THEOREM-0001's id from its canonical descriptor ------------------- */
+fn mx4_premise_ref_0001() -> u64 @export {
+    MX4_D01[0u64] = 0x4D583031u64   /* MX01 */
+    MX4_D01[1u64] = 0x25u64         /* AND family */
+    MX4_D01[2u64] = 1u64            /* const-chain pattern */
+    MX4_D01[3u64] = 1u64            /* single-fold replacement */
+    MX4_D01[4u64] = 64u64
+    MX4_D01[5u64] = 0u64
+    MX4_D01[6u64] = 0u64
+    MX4_D01[7u64] = 0u64
+    if mx_theorem_id(&MX4_D01 as u64, &MX4_ID01 as u64) != 0i32 { return 0u64 }
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((MX4_ID01[i] as u64) << (i * 8u64))  i = i + 1u64 }
+    return v
+}
+
+/* ---- THE BASE + STEP + GROUND LEGS per rule -------------------------------------------------------- */
+/* rule 1 base/step: the 0001 schema itself, re-discharged: (y&d1)&d2 == y&(d1&d2), one symbolic call. */
+fn mx4_r1_schema() -> u32 {
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 1u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 2u32)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 3u32)
+}
+/* rule 1 ground at n (3..7): the explicit n-chain vs the n-fold, (n) params, ALL 2^64 each. */
+fn mx4_r1_ground(n: u64) -> u32 {
+    if n < 3u64 { return 0u32 }
+    if n > 7u64 { return 0u32 }
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    let mut j : u64 = 1u64
+    while j < n {
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, j as u32)
+        p = wb(0u32, p, 0x25u32)
+        j = j + 1u64
+    }
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 1u32)
+    j = 2u64
+    while j < n {
+        q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, j as u32)
+        q = wb(1u32, q, 0x25u32)
+        j = j + 1u64
+    }
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, n as u32)
+}
+/* rule 2 base: rot_1^0 = x == rot_0(x), one call. */
+fn mx4_r2_base() -> u32 {
+    WF[0u64] = 0x10u8  WF[1u64] = 0u8  WF[2u64] = 0x60u8
+    let mut q : u64 = emit_rot(1u32, 0u64, 0u32, 0u64)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, 3u64, &WG as u64, 0u64, q, 1u32)
+}
+/* rule 2 step at residue r: rot_1(rot_r(x)) == rot_{(r+1) mod 64}(x), one call (caller sweeps r=0..63). */
+fn mx4_r2_step(r: u64) -> u32 {
+    if r > 63u64 { return 0u32 }
+    let mut p : u64 = emit_rot(0u32, 0u64, 0u32, r)
+    p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)          /* slot1 = rot_r(x) */
+    p = emit_rot(0u32, p, 1u32, 1u64)                        /* rot_1(slot1) */
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = emit_rot(1u32, 0u64, 0u32, (r + 1u64) % 64u64)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32)
+}
+/* rule 2 symbolic ground at n (2..6): rot_1 composed n times vs rot_{n mod 64}, one call each. */
+fn mx4_r2_ground_sym(n: u64) -> u32 {
+    if n < 2u64 { return 0u32 }
+    if n > 6u64 { return 0u32 }
+    let mut p : u64 = emit_rot(0u32, 0u64, 0u32, 1u64)
+    p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)
+    let mut j : u64 = 1u64
+    while j < n {
+        p = emit_rot(0u32, p, 1u32, 1u64)
+        p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)
+        j = j + 1u64
+    }
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = emit_rot(1u32, 0u64, 0u32, n % 64u64)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32)
+}
+/* rule 2 native ground: iterate rot_1 n times on witness vectors vs rot_{n mod modulus}, n = 0..lim. */
+var MX4_VEC : [u64; 4]
+fn mx4_vecinit() -> u32 {
+    MX4_VEC[0u64] = 1u64
+    MX4_VEC[1u64] = 0x8000000000000001u64
+    MX4_VEC[2u64] = 0x0123456789ABCDEFu64
+    MX4_VEC[3u64] = 0xFFFFFFFFFFFFFFFFu64
+    return 1u32
+}
+fn rot_native(x: u64, k: u64) -> u64 {
+    let hi : u64 = x << k
+    let mut lo : u64 = 0u64
+    if k > 0u64 { lo = x >> (64u64 - k) }
+    return hi | lo
+}
+fn mx4_r2_ground_native(lim: u64, modulus: u64) -> u32 @export {
+    if modulus == 0u64 { return 0u32 }
+    mx4_vecinit()
+    let mut vi : u64 = 0u64
+    while vi < 4u64 {
+        let v0 : u64 = MX4_VEC[vi]
+        let mut acc : u64 = v0
+        let mut n : u64 = 0u64
+        while n <= lim {
+            if acc != rot_native(v0, n % modulus) { return 0u32 }
+            acc = rot_native(acc, 1u64)
+            n = n + 1u64
+        }
+        vi = vi + 1u64
+    }
+    return 1u32
+}
+
+/* ---- THE DERIVATION DOOR: every leg or nothing ------------------------------------------------------ */
+/* rule 1 (forall n>=2 n-fold const-chain): kernel + premise(0001, re-derived) + base + step + ground. */
+fn mx4_derive_r1(premise_ref: u64) -> u32 @export {
+    if mx4_kernel_induction() != 1u32 { return 0u32 }
+    if premise_ref != mx4_premise_ref_0001() { return 0u32 }    /* tampered/absent premise: REJECTED */
+    if mx4_r1_schema() != 1u32 { return 0u32 }                  /* base (n=2) re-discharged */
+    if mx4_r1_schema() != 1u32 { return 0u32 }                  /* step (the same schema, y := chain) */
+    let mut n : u64 = 3u64
+    while n <= 7u64 {
+        if mx4_r1_ground(n) != 1u32 { return 0u32 }             /* two-path ground instances */
+        n = n + 1u64
+    }
+    return 1u32
+}
+/* rule 2 (forall n in NAT rot-power): kernel + premise(0002, pinned) + base + 64-residue step + ground.
+ * modulus parameterised so the FALSE claim (mod 63) exercises the same code path and DIES here. */
+fn mx4_derive_r2(premise_ref: u64, modulus: u64) -> u32 @export {
+    if mx4_kernel_induction() != 1u32 { return 0u32 }
+    if premise_ref != MX4_REF_0002 { return 0u32 }
+    /* a claimed modulus other than the group order dies at its own ground leg (the gate exercises
+     * mx4_r2_ground_native(64, 63) == 0 directly); the door refuses it outright here. */
+    if modulus != 64u64 { return 0u32 }
+    if mx4_r2_base() != 1u32 { return 0u32 }
+    let mut r : u64 = 0u64
+    while r <= 63u64 {
+        if mx4_r2_step(r) != 1u32 { return 0u32 }
+        r = r + 1u64
+    }
+    let mut n : u64 = 2u64
+    while n <= 6u64 {
+        if mx4_r2_ground_sym(n) != 1u32 { return 0u32 }
+        n = n + 1u64
+    }
+    if mx4_r2_ground_native(200u64, 64u64) != 1u32 { return 0u32 }
+    return 1u32
+}
+/* the WRONG-CONCLUSION arm's tool: rule-1 ground with the WRONG fold op (OR instead of AND) must REFUTE. */
+fn mx4_r1_ground_wrongop(n: u64) -> u32 @export {
+    if n < 3u64 { return 0u32 }
+    if n > 7u64 { return 0u32 }
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    let mut j : u64 = 1u64
+    while j < n {
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, j as u32)
+        p = wb(0u32, p, 0x25u32)
+        j = j + 1u64
+    }
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 1u32)
+    j = 2u64
+    while j < n {
+        q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, j as u32)
+        q = wb(1u32, q, 0x26u32)                               /* the WRONG fold: OR */
+        j = j + 1u64
+    }
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    return seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, n as u32)
+}

@@ -46,6 +46,18 @@ Each layer above the floor is checkable, and the check is named:
 
 So the trusted-by-assertion set is exactly R0. Everything else is trusted-by-audit, and each audit has a gate.
 
+**The MATHESIS engine adds ZERO to the floor (Ξ7, 2026-07-12).** The creator tier grows the *library's
+language* (concepts, theorem kinds, methods, questions) but its trusted components are all already in R0–R4:
+the disposer `seq_equiv` (R1's bit-blast anchor over bv_bits/sat), the CIC kernel `typecheck.iii` (R3), the
+content-address `cad.iii` and the seal chain (the basal law), the zk AIR (`zk_air.iii`), and the sealed
+channel + ML-DSA (the crypto fabric, already KAT-gated). The *proposer* (the synthesizer, the miner, the
+telescope) is **untrusted by construction** — three-organ separation means a wrong proposal is caught by the
+disposer, never admitted; and the conservativity law refuses any candidate that would need a new *axiom*. So
+the engine is trusted-by-audit end to end: `MATHESIS_CERT = sha256(HEAD_v2 ‖ round1_root ‖ round2_families ‖
+ratchet)` (`run_mathesis.sh` stage [8]) binds the sealed mathematics to the sealed discovery streams, and the
+autonomy invariant (gate `corpus/2682` + the runner's process-tree audit) proves a bare sovereign binary
+reproduces the whole library from genesis — no LLM, no operator, anywhere in the engine's process tree.
+
 ---
 
 ## 3. Minimisation — what has been pushed out of the floor, and what remains

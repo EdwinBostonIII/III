@@ -1,0 +1,62 @@
+/* STDLIB/build/mathesis/probe_mulplan.iii -- W1 pin probe (repo-local, NOT corpus).
+ * FNV-1a-64 (u64-at-a-time variant) over the COMPLETE seg_mul_plan / seg_div_plan behavior on the
+ * declared sweep (v,d in 0..4096 + the edge set).  The printed hash is the PIN gate 2613 holds forever:
+ * teaching the e-graph AND/OR/XOR/SHR must leave every mul/div emit plan byte-identical. */
+module probe_mulplan
+
+extern @abi(c-msvc-x64) fn seg_mul_plan(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var DG : [u8; 24]
+var EDGE : [u64; 10]
+
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { DG[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DG[k] as i32) }
+    return 1u32
+}
+
+const FNV_OFF : u64 = 14695981039346656037u64
+const FNV_PRM : u64 = 1099511628211u64
+
+var H : [u64; 1]
+fn mix(v: u64) -> u32 { H[0u64] = (H[0u64] ^ v) * FNV_PRM  return 1u32 }
+
+fn mix_mul(v: u64) -> u32 { return mix(seg_mul_plan(v)) }
+fn mix_div(d: u64) -> u32 {
+    let p : u64 = seg_div_plan(d)
+    mix(p)
+    if (p & 0xFFu64) == 2u64 { mix(seg_div_magic_m())  mix(seg_div_shift()) }
+    return 1u32
+}
+
+fn main() -> u64 {
+    EDGE[0u64] = 9223372036854775808u64      /* 2^63 */
+    EDGE[1u64] = 9223372036854775809u64      /* 2^63+1 */
+    EDGE[2u64] = 18446744073709551615u64     /* 2^64-1 */
+    EDGE[3u64] = 18446744073709551614u64     /* 2^64-2 */
+    EDGE[4u64] = 9223372036854775807u64      /* 2^63-1 */
+    EDGE[5u64] = 12297829382473034410u64     /* 0xAAAA... */
+    EDGE[6u64] = 6148914691236517205u64      /* 0x5555... */
+    EDGE[7u64] = 18446744069414584320u64     /* 0xFFFFFFFF00000000 */
+    EDGE[8u64] = 4294967295u64               /* 0x00000000FFFFFFFF */
+    EDGE[9u64] = 9223372036854775809u64      /* 2^63+1 (repeat harmless) */
+    H[0u64] = FNV_OFF
+    let mut v : u64 = 0u64
+    while v <= 4096u64 { mix_mul(v)  v = v + 1u64 }
+    let mut e : u64 = 0u64
+    while e < 10u64 { mix_mul(EDGE[e])  e = e + 1u64 }
+    let mut d : u64 = 0u64
+    while d <= 4096u64 { mix_div(d)  d = d + 1u64 }
+    e = 0u64
+    while e < 10u64 { mix_div(EDGE[e])  e = e + 1u64 }
+    pd(H[0u64])
+    putchar(10i32)
+    return 0u64
+}

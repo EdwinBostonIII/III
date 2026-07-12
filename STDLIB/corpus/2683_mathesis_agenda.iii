@@ -1,0 +1,131 @@
+/* STDLIB/corpus/2683_mathesis_agenda.iii -- MEASURED INTENT (Xi13, III-MATHESIS-MAP.md s3b BREAK C4).
+ *
+ * The engine chooses its next problem by MEASURED VALUE -- and the choice is auditable:
+ *   (u1) an item WITHOUT its measurement is REFUSED (no unmeasured choice, ever);
+ *   (u2) the measurements are LIVE: the census instrument counts a seeded body's windows (the same
+ *        opcode-synchronous walker the corpus census uses) and the frontier queue counts its blockers
+ *        -- the agenda consumes ORGANS, not opinions;
+ *   (u3) the ordering law (value desc, kind asc, ident asc) puts the one measured-demand item FIRST
+ *        and the zero-demand knowledge items after, deterministically;
+ *   (u4) REPRODUCIBILITY: the agenda's fingerprint is a pure function of the measurements --
+ *        rebuilding in a DIFFERENT insertion order yields the SAME fingerprint (the order comes from
+ *        the measurements, not the operator); a DIFFERENT measurement yields a DIFFERENT fingerprint
+ *        (a shuffled/forged agenda cannot masquerade).
+ * 99 == intent is measurement, ordered by law, reproducible by anyone. */
+module corpus_2683_mathesis_agenda
+
+extern @abi(c-msvc-x64) fn mxa_reset() -> u32 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_add(kind: u64, ident: u64, occurrences: u64, cost_delta: u64, measured: u32) -> u32 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_order() -> u32 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_count() -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_kind(i: u64) -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_ident(i: u64) -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_value(i: u64) -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_occ(i: u64) -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxa_fingerprint() -> u64 from "mathesis_agenda.iii"
+extern @abi(c-msvc-x64) fn mxm_reset() -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_scan(base: u64, len: u64) -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_count(class: u64) -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_ops() -> u64 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_count_blocker(b: u64) -> u64 from "mathesis_frontier.iii"
+
+var BODY : [u8; 128]
+var BP : [u64; 1]
+
+fn b(v: u32) -> u32 { BODY[BP[0u64]] = v as u8  BP[0u64] = BP[0u64] + 1u64  return 1u32 }
+fn c8(v: u64) -> u32 {
+    b(0x01u32)
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 { b((x & 0xFFu64) as u32)  x = x >> 8u64  i = i + 1u64 }
+    return 1u32
+}
+
+/* a seeded v1 container: 1 fn whose body holds TWO live AND-chain windows. */
+fn build_seeded() -> u64 {
+    BP[0u64] = 0u64
+    b(1u32)                       /* nfunc = 1 */
+    b(1u32)  b(1u32)              /* params, nresults */
+    b(0u32)  b(0u32)              /* blen u16 LE -- patched below */
+    let body0 : u64 = BP[0u64]
+    b(0x10u32)  b(0u32)           /* x */
+    c8(0xFF00u64)  b(0x25u32)     /* & c1 */
+    c8(0x0FF0u64)  b(0x25u32)     /* & c2   <- window 1 */
+    c8(0x00F0u64)  b(0x25u32)     /* & c3   <- window 2 (chain continues) */
+    b(0x60u32)
+    let blen : u64 = BP[0u64] - body0
+    BODY[3u64] = (blen & 0xFFu64) as u8
+    BODY[4u64] = ((blen >> 8u64) & 0xFFu64) as u8
+    return BP[0u64]
+}
+
+/* build the LIVE agenda from organ measurements; returns its fingerprint (0 on any failure). */
+fn build_agenda(order_variant: u32) -> u64 {
+    /* live census: the seeded body yields its window count */
+    mxm_reset()
+    let len : u64 = build_seeded()
+    if mxm_scan(&BODY as u64, len) != 1u32 { return 0u64 }
+    let occ1 : u64 = mxm_count(1u64)
+    if occ1 != 2u64 { return 0u64 }
+    /* the census walked real opcodes -- the measured-demand value is grounded in ops, not opinion */
+    if mxm_ops() < occ1 { return 0u64 }
+    /* live frontier: two mul-mul entries + the rot-2op family */
+    mxf_reset()
+    if mxf_push(2u64, 131u64, 35u64, 1u64) != 1u32 { return 0u64 }
+    if mxf_push(2u64, 110u64, 33u64, 1u64) != 1u32 { return 0u64 }
+    if mxf_push(0u64, 0u64, 0u64, 3u64) != 1u32 { return 0u64 }
+    mxa_reset()
+    if order_variant == 0u32 {
+        if mxa_add(3u64, 1u64, occ1, 1u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(1u64, 1u64, mxf_count_blocker(1u64), 0u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(1u64, 3u64, mxf_count_blocker(3u64), 0u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(2u64, 0x2Au64, 0u64, 1u64, 1u32) != 1u32 { return 0u64 }
+    } else {
+        /* the SAME measurements in a DIFFERENT insertion order */
+        if mxa_add(2u64, 0x2Au64, 0u64, 1u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(1u64, 3u64, mxf_count_blocker(3u64), 0u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(1u64, 1u64, mxf_count_blocker(1u64), 0u64, 1u32) != 1u32 { return 0u64 }
+        if mxa_add(3u64, 1u64, occ1, 1u64, 1u32) != 1u32 { return 0u64 }
+    }
+    if mxa_order() != 1u32 { return 0u64 }
+    return mxa_fingerprint()
+}
+
+fn main() -> u64 {
+    /* ---- (u1) no unmeasured choice, no invalid kind ---- */
+    mxa_reset()
+    if mxa_add(3u64, 1u64, 5u64, 1u64, 0u32) != 0u32 { return 10u64 }
+    if mxa_add(0u64, 1u64, 5u64, 1u64, 1u32) != 0u32 { return 11u64 }
+    if mxa_add(5u64, 1u64, 5u64, 1u64, 1u32) != 0u32 { return 12u64 }
+    if mxa_count() != 0u64 { return 13u64 }
+
+    /* ---- (u2 + u3) the live agenda: measured demand first, zero-demand after ---- */
+    let fp1 : u64 = build_agenda(0u32)
+    if fp1 == 0u64 { return 20u64 }
+    if mxa_count() != 4u64 { return 21u64 }
+    if mxa_kind(0u64) != 3u64 { return 22u64 }        /* the measured census class leads */
+    if mxa_value(0u64) != 2u64 { return 23u64 }
+    if mxa_occ(0u64) != 2u64 { return 51u64 }         /* its occurrence count is the live census reading */
+    if mxa_value(1u64) != 0u64 { return 24u64 }       /* zero-demand items follow */
+    if mxa_kind(1u64) != 1u64 { return 25u64 }        /* tie-broken: kind asc ... */
+    if mxa_ident(1u64) != 1u64 { return 26u64 }       /* ... then ident asc (blocker 1 before 3) */
+    if mxa_ident(2u64) != 3u64 { return 27u64 }
+    if mxa_kind(3u64) != 2u64 { return 28u64 }
+
+    /* ---- (u4) reproducibility: different insertion order, SAME fingerprint ---- */
+    let fp2 : u64 = build_agenda(1u32)
+    if fp2 == 0u64 { return 30u64 }
+    if fp1 != fp2 { return 31u64 }
+    /* a DIFFERENT measurement cannot masquerade: perturb one occurrence -> different fingerprint */
+    mxa_reset()
+    if mxa_add(3u64, 1u64, 3u64, 1u64, 1u32) != 1u32 { return 32u64 }
+    if mxa_add(1u64, 1u64, 2u64, 0u64, 1u32) != 1u32 { return 33u64 }
+    if mxa_add(1u64, 3u64, 1u64, 0u64, 1u32) != 1u32 { return 34u64 }
+    if mxa_add(2u64, 0x2Au64, 0u64, 1u64, 1u32) != 1u32 { return 35u64 }
+    if mxa_order() != 1u32 { return 36u64 }
+    if mxa_fingerprint() == fp1 { return 37u64 }
+
+    return 99u64
+}

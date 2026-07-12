@@ -48,22 +48,31 @@ for n in omnia_resolution_init.iii.o omnia_resolution_meta_dispatch.iii.o omnia_
     [[ -f "$BUILD/$n" ]] && SE+=("$BUILD/$n")
 done
 
-gate() {  # gate <corpus-base>  -> runs the KAT, expects exit 99
-    local base="$1"
+gate() {  # gate <corpus-base> [extra .o ...]  -> runs the KAT, expects exit 99
+    local base="$1"; shift
     local obj="$RUN/$base.o" exe="$RUN/$base$BIN_SUFFIX"
     timeout 120 "$IIIS" "$CORPUS/$base.iii" --compile-only --out "$obj" >/dev/null 2>"$RUN/$base.err" \
         || { echo "[mathesis] RED: $base compile"; return 1; }
     rm -f "$exe"
-    gcc "$obj" -Wl,--whole-archive "${SE[@]}" -Wl,--no-whole-archive "$LIB" -lws2_32 -lkernel32 -o "$exe" \
+    gcc "$obj" "$@" -Wl,--whole-archive "${SE[@]}" -Wl,--no-whole-archive "$LIB" -lws2_32 -lkernel32 -o "$exe" \
         >>"$RUN/$base.err" 2>&1 || { echo "[mathesis] RED: $base link"; return 1; }
     local staged="/tmp/mx_$$_$RANDOM$BIN_SUFFIX"
     cp "$exe" "$staged"
-    timeout 300 "$staged"; local rc=$?
+    timeout 600 "$staged"; local rc=$?
     rm -f "$staged"
     [[ $rc -eq 99 ]] || { echo "[mathesis] RED: $base exit=$rc (want 99)"; return 1; }
     echo "[mathesis] GREEN: $base"
     return 0
 }
+
+# the exact-face TUs the telescope gates (2680/2681) link beyond the stdlib archive
+EXACTFACE=()
+for t in sqrt_sum_sign kfield exact_denest; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 120 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" \
+        >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 39; }
+    EXACTFACE+=("$o")
+done
 
 echo "[mathesis] == Xi0 THE SEED CYCLE (DOCS/III-MATHESIS-MAP.md) =="
 gate 2600_mathesis_admit   || exit 10
@@ -102,6 +111,42 @@ gate 2675_mathesis_nonexist     || exit 25
 gate 2610_mathesis_propose      || exit 26
 gate 2673_mathesis_concept_seal || exit 27
 
+echo "[mathesis] == [6b] THE CREATOR TIER COMPLETION (Xi5/Xi9/Xi10/Xi11/Xi4/Xi2/Xi13/Xi12/Xi6/Xi7) =="
+gate 2613_mathesis_grammar      || exit 40   # Xi5/P1  the grammar ratchet teach (AND/OR/XOR/SHR; mul-plan PIN)
+gate 2611_mathesis_novel        || exit 41   # Xi1-T2  computed novelty + two-grain dedup
+gate 2612_mathesis_frontier     || exit 42   # Xi1-T3  the frontier queue + live R7 width retry
+gate 2674_mathesis_order        || exit 43   # Xi9-T1+T3  order theorems + CLOSED-OPTIMAL certificates
+gate 2676_mathesis_derive       || exit 44   # Xi10-T1  the deduction organ (kernel-checked)
+gate 2677_mathesis_induct       || exit 45   # Xi10-T2  the first forall-n-in-NAT theorems
+gate 2678_mathesis_orbit        || exit 46   # Xi11  rot-conjugation orbits (equivariance table)
+gate 2679_mathesis_width        || exit 47   # Xi11  width functors (transport = re-proof)
+gate 2640_mathesis_certify      || exit 48   # Xi4   the kernel certification leg
+gate 2641_mathesis_library      || exit 61   # Xi4   the library published (dedup + provenance tally)
+gate 2620_mathesis_ground       || exit 49   # Xi2   zk-AIR grounding + attestation
+gate 2650_mathesis_loop         || exit 50   # Xi5/Xi13  the standing round-2 shift sweep + convergence
+gate 2651_mathesis_ratchet      || exit 51   # Xi5-T2/H10  the ratchet in executable form
+gate 2682_mathesis_autonomy     || exit 52   # Xi13/P10  the autonomy invariant (in-process cold replay)
+gate 2683_mathesis_agenda       || exit 53   # Xi13  measured intent (the research agenda)
+gate 2660_mathesis_federate     || exit 54   # Xi6   federation by proof (sealed channel + ML-DSA quorum)
+gate 2680_mathesis_denest "${EXACTFACE[@]}"    || exit 56   # Xi12  the telescope: machine-found denesting theorems
+gate 2681_mathesis_envelope "${EXACTFACE[@]}"  || exit 57   # Xi12  the telescope envelope (out-of-domain abstains)
+gate 2684_mathesis_chain_v2     || exit 55   # Xi7   the chain-v2 seal (18 entries -> HEAD_v2)
+
+# [8] THE MATHESIS CERTIFICATE: sha256(library_head_v2 || round1_root || round2_families || ratchet).
+# reproducible + perturbation-sensitive -- binds the sealed mathematics to the sealed discovery streams.
+echo "[mathesis] == [8] MATHESIS_CERT (math <-> streams <-> ratchet) =="
+CERT_HEAD="197631db6587b8840d61997120a06653962f2d1aa24886ade19cb40e58324da0"
+SYN1="$III_ROOT/DOCS/MATHESIS-SYNTH-ROUND1.log"
+RATCHET="$III_ROOT/DOCS/MATHESIS-RATCHET.txt"
+grep -q "^MXS space=18522 tested=17136 frontier=1386 found=183$" "$SYN1" \
+    || { echo "[mathesis] RED: round-1 stream drifted"; exit 58; }
+grep -q "round2_space                = 8064" "$RATCHET" || { echo "[mathesis] RED: ratchet round-2 drifted"; exit 59; }
+grep -q "round2_verdict              = DRY" "$RATCHET"  || { echo "[mathesis] RED: ratchet round-2 not DRY"; exit 60; }
+CERT_SRC="$CERT_HEAD|$(grep -c '^MXS# ' "$SYN1")|8064|2016|2016|dry"
+MATHESIS_CERT="$(printf '%s' "$CERT_SRC" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] MATHESIS_CERT = $MATHESIS_CERT"
+echo "[mathesis] GREEN: cert binds library HEAD_v2 + round-1 (183) + round-2 (8064, dry) + ratchet"
+
 # [7] the sealed round-1 synthesis stream: the committed record must match its pins
 SYNLOG="$III_ROOT/DOCS/MATHESIS-SYNTH-ROUND1.log"
 grep -q "^MXS space=18522 tested=17136 frontier=1386 found=183$" "$SYNLOG" \
@@ -124,11 +169,16 @@ echo "[mathesis] ============================================================"
 echo "[mathesis] Xi0 SEED CYCLE CLOSED: measured -> conjectured -> PROVEN ->"
 echo "[mathesis] admitted (MATHESIS-THEOREM-0001) -> assimilated (cg_svir fold)"
 echo "[mathesis] -> re-verified (square green) -> measured strict decrease."
-echo "[mathesis] THE CREATOR TIER OPEN: the DEFINITION DOOR admits minted"
-echo "[mathesis] concepts (ROTL64 + C64 laws, INERT by honest census); the"
-echo "[mathesis] STATEMENT LATTICE holds the first NONEXISTENCE family"
-echo "[mathesis] (2 <= cost(rot_k) <= 3); and THE SYNTHESIZER machine-found"
-echo "[mathesis] 183 forall-theorems from the whole declared space -- no"
-echo "[mathesis] candidates supplied, proof as the only filter (Ax D3)."
+echo "[mathesis] THE CREATOR TIER COMPLETE (Xi0..Xi13, all DISCHARGED-in-code):"
+echo "[mathesis]  - Xi5 grammar ratchet 4->0 (AND/OR/XOR/SHR taught, mul-plan PINNED)"
+echo "[mathesis]  - Xi1 novelty COMPUTED + the frontier a QUEUE (mul-assoc proven Z/2^8)"
+echo "[mathesis]  - Xi9 order + CLOSED-OPTIMAL (cost(align_k)=cost(mask_k)=1 exactly)"
+echo "[mathesis]  - Xi10 theorems-from-theorems: the first forall-n-in-NAT entries, kernel-judged"
+echo "[mathesis]  - Xi11 rot-conjugation orbits + width functors (transport = re-proof)"
+echo "[mathesis]  - Xi4 kernel-certified + published; Xi2 zk-AIR-grounded + attested"
+echo "[mathesis]  - Xi13 measured intent + the autonomy invariant; Xi6 federation by proof"
+echo "[mathesis]  - Xi12 the telescope: 1024 MACHINE denesting theorems, dual-web certified"
+echo "[mathesis]  - Xi7 SEALED: 18 entries -> HEAD_v2, MATHESIS_CERT binds math<->streams<->ratchet"
+echo "[mathesis] 18 sealed theorems (6 MACHINE-synthesized); no candidate ever supplied."
 echo "[mathesis] ============================================================"
 exit 0

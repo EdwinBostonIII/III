@@ -308,7 +308,29 @@ fn sd_push(node: u32, ic: u32, cv: u64) -> i32 {
  * entering the branch; the THEN arm net-pushes one value (captured at ELSE); the ELSE arm net-pushes one value
  * (read at END), where the two fuse by sd_mux.  A known-constant condition collapses to the live arm -- the O(1)
  * abstract prune, so the dead arm never enters the equivalence miter.  A value-less IF...END (no ELSE) stays
- * SD_TOP until the memory leg.  Nesting is handled for free: inner IF...ELSE...END is fully bracketed. */
+ * SD_TOP until the memory leg.  Nesting is handled for free: inner IF...ELSE...END is fully bracketed.
+ *
+ * ---- EARLY RETURNS: the path-condition accumulator (soundness fix, 2026-07-12) ------------------------------
+ * The compiler lowers  `if c { return b }  return a`  to  [c][CONST 0][NE][IF][b][RET][END][a][RET] -- a RET
+ * INSIDE an if-frame, and no ELSE.  Reading RET as "the function's value is the top of stack" (the original
+ * handler did exactly that) denotes that body as `b` alone: the condition and the `return a` path VANISH.
+ * That is not a weak abstraction, it is a WRONG one -- it can report a false PROVEN (`if c {return 1} return 2`
+ * and `if c {return 1} return 3` both collapse to `1`), which is the single unrecoverable outcome this engine
+ * exists to prevent.
+ *
+ * The sound denotation is a PATH-CONDITIONED accumulation.  Carry:
+ *   SD_PC      the path condition reaching the current instruction (a 0/1 node; SD_PCTRIV=1 means "always")
+ *   SD_RETV    the value returned so far, as a mux tree
+ *   SD_RETSET  a 0/1 node: "some return has already fired on this path"
+ * A `RET v` fires exactly where  fire = PC & !RETSET , contributing  RETV := mux(fire, v, RETV) ,
+ * RETSET := RETSET | fire.  After  `if c { ... RET } END` , execution continues only where c was FALSE, so the
+ * path condition becomes  PC & !c .  At end-of-body the value is RETV -- and TOTALITY is *checked*, not
+ * assumed: if RETSET is not provably 1 (some path falls off the end), the body is refused as SD_TOP.
+ *
+ * THE UNCONDITIONAL FAST PATH IS PRESERVED EXACTLY: a body whose RET is at top level under a trivial path
+ * condition with no earlier conditional return still returns its stack value directly, node-for-node as
+ * before -- so every straight-line and if/else-value body (all the sealed mathesis theorems, every 2601/2613/
+ * 2674/2675/2677/2678/2679 gate body) denotes to the IDENTICAL circuit and keeps its exact verdict. */
 var SD_IFC  : [u32; 64]    /* condition node */
 var SD_IFS0 : [u32; 64]    /* stack height on entering the branch */
 var SD_IFT  : [u32; 64]    /* captured THEN value */
@@ -316,6 +338,16 @@ var SD_IFCF : [u32; 64]    /* condition is a known constant */
 var SD_IFCV : [u64; 64]    /* the constant value */
 var SD_IFEL : [u32; 64]    /* 1 once ELSE has been seen */
 var SD_IFSP : u32 = 0u32   /* if-frame stack pointer */
+var SD_IFPC : [u32; 64]    /* saved path-condition node on entering the frame */
+var SD_IFPCT : [u32; 64]   /* saved SD_PCTRIV on entering the frame */
+var SD_IFTR : [u32; 64]    /* 1 iff the THEN arm ended in a RET (so it net-pushed nothing) */
+var SD_IFAR : [u32; 64]    /* saved SD_ARMRET of the ENCLOSING arm (nesting) */
+var SD_PC     : u32 = 0u32   /* path condition node (meaningful when SD_PCTRIV == 0) */
+var SD_PCTRIV : u32 = 1u32   /* 1 = the path condition is unconditionally TRUE */
+var SD_RETV   : u32 = 0u32   /* accumulated return value */
+var SD_RETSET : u32 = 0u32   /* 0/1 node: a return has fired */
+var SD_HASRET : u32 = 0u32   /* 1 = at least one conditional return was accumulated */
+var SD_ARMRET : u32 = 0u32   /* 1 = the arm currently being walked ended in a RET */
 
 /* branch-free SELECT: with C the (possibly arbitrary) i64 condition, Cm = 0 - [C!=0] is all-ones iff C!=0 else
  * 0, and the result is (Cm & T) | (~Cm & F).  Multiplier-FREE -- the arithmetic C*T+(1-C)*F would inject a 64x64
@@ -325,6 +357,32 @@ fn sd_mux(c: u32, t: u32, f: u32) -> u32 {
     let cm  : u32 = bb_sub(bb_const(0u64), sks_nonzero(c))
     let ncm : u32 = bb_xor(cm, bb_const(SKS_ONES))
     return bb_or(bb_and(cm, t), bb_and(ncm, f))
+}
+
+/* the current path condition as a 0/1 node. */
+fn sd_pc_node() -> u32 {
+    if SD_PCTRIV == 1u32 { return bb_const(1u64) }
+    return SD_PC
+}
+/* AND the current path condition with a (0/1-normalised) branch condition. */
+fn sd_pc_and(c01: u32) -> i32 {
+    if SD_PCTRIV == 1u32 { SD_PC = c01  SD_PCTRIV = 0u32  return 0i32 }
+    SD_PC = bb_and(SD_PC, c01)
+    return 0i32
+}
+/* RECORD a `RET v` on the current path: it fires exactly where no earlier return already did. */
+fn sd_do_ret(v: u32) -> i32 {
+    let pc   : u32 = sd_pc_node()
+    if SD_HASRET == 0u32 {
+        SD_RETV = v
+        SD_RETSET = pc
+        SD_HASRET = 1u32
+        return 0i32
+    }
+    let fire : u32 = bb_and(pc, sks_not1(SD_RETSET))
+    SD_RETV = sd_mux(fire, v, SD_RETV)
+    SD_RETSET = bb_or(SD_RETSET, fire)
+    return 0i32
 }
 
 /* SIGNED less-than as a 0/1 node: the overflow-corrected sign bit MSB( (a-b) ^ ((a^b) & ((a-b)^a)) ).
@@ -475,6 +533,9 @@ fn sd_loop(base: u64, boff: u64, p0: u64, blen: u64) -> u64 {
 fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
     if nparam > SD_MAXIN { return SD_TOP }
     SD_SP = 0u32  SD_OVF = 0u32  SD_IFSP = 0u32  sd_mem_reset()  SD_TRACEN = 0u32
+    /* the early-return accumulator starts on the always-true path with nothing returned */
+    SD_PCTRIV = 1u32  SD_PC = 0u32  SD_RETV = 0u32  SD_RETSET = 0u32
+    SD_HASRET = 0u32  SD_ARMRET = 0u32
     let z : u32 = bb_const(0u64)
     let mut s : u32 = 0u32
     while s < 256u32 { SD_LOC[s as u64] = z  SD_LIC[s as u64] = 1u32  SD_LCV[s as u64] = 0u64  s = s + 1u32 }
@@ -511,6 +572,31 @@ fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
             if op == 0x27u32 { r = bb_xor(an, bn) }
             if op == 0x28u32 { if topic == 0u32 { return SD_TOP }  let mut k : u64 = topcv  if k > 64u64 { k = 64u64 }  r = bb_shl(an, k) }
             if op == 0x29u32 { if topic == 0u32 { return SD_TOP }  let mut k2 : u64 = topcv  if k2 > 64u64 { k2 = 64u64 }  r = bb_shr(an, k2) }
+            /* DIV_U / REM_U by a CONSTANT POWER OF TWO -- exactly a shift / a mask, so they are
+             * decidable at zero SAT cost.  (`x / 8`, `x % 16`, `(x + 7) / 8 * 8` -- the alignment and
+             * bucketing idioms real code is full of.)  A general 64-bit divider bit-blasts into the
+             * multiplier wall this engine deliberately amputates, and a NON-power-of-two or SYMBOLIC
+             * divisor is therefore REFUSED (SD_TOP), never approximated.  Divisor 0 is SVIR's defined
+             * `-> 0` (spec 0x2A/0x2B), modelled exactly. */
+            if op == 0x2Au32 {
+                if topic == 0u32 { SD_STDIAG = 42u64  return SD_TOP }   /* symbolic divisor */
+                if topcv == 0u64 { r = bb_const(0u64) }
+                else {
+                    if (topcv & (topcv - 1u64)) != 0u64 { SD_STDIAG = 43u64  return SD_TOP }  /* not 2^k */
+                    let mut dk : u64 = 0u64
+                    let mut dv : u64 = topcv
+                    while dv > 1u64 { dv = dv >> 1u64  dk = dk + 1u64 }
+                    r = bb_shr(an, dk)
+                }
+            }
+            if op == 0x2Bu32 {
+                if topic == 0u32 { SD_STDIAG = 44u64  return SD_TOP }
+                if topcv == 0u64 { r = bb_const(0u64) }
+                else {
+                    if (topcv & (topcv - 1u64)) != 0u64 { SD_STDIAG = 45u64  return SD_TOP }
+                    r = bb_and(an, bb_const(topcv - 1u64))
+                }
+            }
             if op == 0x30u32 { r = sks_eq(an, bn) }
             if op == 0x31u32 { r = sks_not1(sks_eq(an, bn)) }
             if op == 0x32u32 { r = sd_slt(an, bn) }                /* LT_S: a <s b           */
@@ -521,7 +607,22 @@ fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
             sd_push(r, 0u32, 0u64)
             handled = 1u32
         } }
-        if op == 0x60u32 { if SD_SP < 1u32 { return SD_TOP }  return SD_STK[(SD_SP - 1u32) as u64] }
+        if op == 0x60u32 {                                       /* RET: path-conditioned (see the header) */
+            if SD_SP < 1u32 { return SD_TOP }
+            SD_SP = SD_SP - 1u32
+            let rv : u32 = SD_STK[SD_SP as u64]
+            /* THE UNCONDITIONAL FAST PATH -- byte-for-byte the original behaviour: a top-level RET whose
+             * path condition is trivially true and with no earlier conditional return IS the function's
+             * value.  Every straight-line / if-else-value body takes exactly this branch. */
+            if SD_IFSP == 0u32 { if SD_PCTRIV == 1u32 {
+                if SD_HASRET == 0u32 { return rv }
+                /* a final catch-all return closing out earlier conditional ones */
+                return sd_mux(sks_not1(SD_RETSET), rv, SD_RETV)
+            } }
+            sd_do_ret(rv)
+            if SD_IFSP > 0u32 { SD_ARMRET = 1u32 }               /* this arm terminated */
+            handled = 1u32
+        }
         if op == 0x72u32 { if SD_SP < 1u32 { return SD_TOP }  SD_SP = SD_SP - 1u32  handled = 1u32 }
         if op == 0x42u32 {                                       /* IF: pop condition, open an if-frame */
             if SD_SP < 1u32 { return SD_TOP }
@@ -532,37 +633,90 @@ fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
             SD_IFCV[SD_IFSP as u64] = SD_CV[SD_SP as u64]
             SD_IFS0[SD_IFSP as u64] = SD_SP
             SD_IFEL[SD_IFSP as u64] = 0u32
+            SD_IFPC[SD_IFSP as u64]  = SD_PC                     /* save the enclosing path condition */
+            SD_IFPCT[SD_IFSP as u64] = SD_PCTRIV
+            SD_IFTR[SD_IFSP as u64]  = 0u32
+            SD_IFAR[SD_IFSP as u64]  = SD_ARMRET                 /* save the ENCLOSING arm's return flag */
+            SD_ARMRET = 0u32                                     /* ... and start the THEN arm fresh */
+            sd_pc_and(sks_nonzero(SD_STK[SD_SP as u64]))         /* PC_then = PC & c */
             SD_IFSP = SD_IFSP + 1u32
             handled = 1u32
         }
-        if op == 0x43u32 {                                       /* ELSE: capture THEN value, reset to branch height */
+        if op == 0x43u32 {                                       /* ELSE: close the THEN arm, open the ELSE arm */
             if SD_IFSP < 1u32 { return SD_TOP }
             let efr : u32 = SD_IFSP - 1u32
             let es0 : u32 = SD_IFS0[efr as u64]
-            if SD_SP != es0 + 1u32 { return SD_TOP }             /* THEN must net-push exactly one value */
-            SD_IFT[efr as u64] = SD_STK[es0 as u64]
+            if SD_ARMRET == 1u32 {
+                /* the THEN arm ended in a RET: it net-pushes NOTHING (its value went to the accumulator) */
+                if SD_SP != es0 { return SD_TOP }
+                SD_IFTR[efr as u64] = 1u32
+            } else {
+                if SD_SP != es0 + 1u32 { return SD_TOP }         /* THEN must net-push exactly one value */
+                SD_IFT[efr as u64] = SD_STK[es0 as u64]
+            }
             SD_IFEL[efr as u64] = 1u32
             SD_SP = es0
+            SD_ARMRET = 0u32                                     /* the ELSE arm starts fresh */
+            /* PC_else = saved_PC & !c */
+            SD_PC = SD_IFPC[efr as u64]
+            SD_PCTRIV = SD_IFPCT[efr as u64]
+            sd_pc_and(sks_not1(sks_nonzero(SD_IFC[efr as u64])))
             handled = 1u32
         }
-        if op == 0x44u32 {                                       /* END: fuse THEN/ELSE via sd_mux (or const-collapse) */
+        if op == 0x44u32 {                                       /* END: fuse the arms, restore the path condition */
             if SD_IFSP < 1u32 { return SD_TOP }                  /* a BLOCK/LOOP END we do not yet model */
             let xfr : u32 = SD_IFSP - 1u32
-            if SD_IFEL[xfr as u64] == 0u32 { return SD_TOP }     /* value-less IF...END -> memory leg */
             let xs0 : u32 = SD_IFS0[xfr as u64]
-            if SD_SP != xs0 + 1u32 { return SD_TOP }             /* ELSE must net-push exactly one value */
-            let fval : u32 = SD_STK[xs0 as u64]
-            let tval : u32 = SD_IFT[xfr as u64]
-            let mut res : u32 = SD_TOP
-            if SD_IFCF[xfr as u64] == 1u32 {                     /* O(1) prune: constant condition collapses */
-                if SD_IFCV[xfr as u64] != 0u64 { res = tval }
-                if SD_IFCV[xfr as u64] == 0u64 { res = fval }
+            let thenret : u32 = SD_IFTR[xfr as u64]
+            let elseret : u32 = SD_ARMRET                        /* the arm we just finished */
+            let sawelse : u32 = SD_IFEL[xfr as u64]
+
+            if sawelse == 0u32 {
+                /* no ELSE.  The ONLY sound shape is the early-return guard:  if c { ... RET } */
+                if elseret != 1u32 { return SD_TOP }             /* value-less IF..END -> the memory leg */
+                if SD_SP != xs0 { return SD_TOP }
+                /* execution continues exactly where c was FALSE */
+                SD_PC = SD_IFPC[xfr as u64]
+                SD_PCTRIV = SD_IFPCT[xfr as u64]
+                sd_pc_and(sks_not1(sks_nonzero(SD_IFC[xfr as u64])))
+                SD_ARMRET = SD_IFAR[xfr as u64]                  /* the enclosing arm is still live */
+                SD_IFSP = SD_IFSP - 1u32
+                handled = 1u32
+            } else {
+                if thenret == 1u32 {
+                    if elseret == 1u32 {
+                        /* BOTH arms returned: the code after this END is unreachable. */
+                        if SD_SP != xs0 { return SD_TOP }
+                        SD_PC = bb_const(0u64)                   /* dead path: no later RET can fire */
+                        SD_PCTRIV = 0u32
+                        SD_ARMRET = 1u32                         /* the enclosing arm has terminated too */
+                        SD_IFSP = SD_IFSP - 1u32
+                        handled = 1u32
+                    } else {
+                        /* then-returns / else-produces-a-value: not a shape the lowerer emits; refuse. */
+                        return SD_TOP
+                    }
+                } else {
+                    if elseret == 1u32 { return SD_TOP }         /* symmetric mixed shape: refuse */
+                    /* the classic value-if: both arms pushed exactly one value -> mux (UNCHANGED) */
+                    if SD_SP != xs0 + 1u32 { return SD_TOP }
+                    let fval : u32 = SD_STK[xs0 as u64]
+                    let tval : u32 = SD_IFT[xfr as u64]
+                    let mut res : u32 = SD_TOP
+                    if SD_IFCF[xfr as u64] == 1u32 {             /* O(1) prune: constant condition collapses */
+                        if SD_IFCV[xfr as u64] != 0u64 { res = tval }
+                        if SD_IFCV[xfr as u64] == 0u64 { res = fval }
+                    }
+                    if SD_IFCF[xfr as u64] == 0u32 { res = sd_mux(SD_IFC[xfr as u64], tval, fval) }
+                    SD_SP = xs0
+                    SD_PC = SD_IFPC[xfr as u64]                  /* restore the enclosing path condition */
+                    SD_PCTRIV = SD_IFPCT[xfr as u64]
+                    SD_ARMRET = SD_IFAR[xfr as u64]
+                    SD_IFSP = SD_IFSP - 1u32
+                    sd_push(res, 0u32, 0u64)
+                    handled = 1u32
+                }
             }
-            if SD_IFCF[xfr as u64] == 0u32 { res = sd_mux(SD_IFC[xfr as u64], tval, fval) }
-            SD_SP = xs0
-            SD_IFSP = SD_IFSP - 1u32
-            sd_push(res, 0u32, 0u64)
-            handled = 1u32
         }
         if op == 0x40u32 {                                       /* BLOCK: only the structured while-loop idiom */
             let np : u64 = sd_loop(base, boff, p, blen)
@@ -597,6 +751,14 @@ fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 @export {
             handled = 1u32
         }
         if handled == 0u32 { SD_STDIAG = 1000u64 + (op as u64)  return SD_TOP }
+    }
+    /* END OF BODY.  If conditional returns accumulated, the value is the accumulator -- but only if EVERY
+     * path returned.  TOTALITY IS CHECKED, NOT ASSUMED: an input for which RETSET is 0 fell off the end of
+     * the function, and its value is not defined by this body.  Refuse rather than invent one. */
+    if SD_HASRET == 1u32 {
+        if SD_IFSP != 0u32 { SD_STDIAG = 2u64  return SD_TOP }        /* unbalanced frames */
+        if bb_equal(SD_RETSET, bb_const(1u64)) != 1u8 { SD_STDIAG = 3u64  return SD_TOP }
+        return SD_RETV
     }
     if SD_SP < 1u32 { return SD_TOP }
     return SD_STK[(SD_SP - 1u32) as u64]

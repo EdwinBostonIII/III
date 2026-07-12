@@ -1,0 +1,289 @@
+/* STDLIB/corpus/2674_mathesis_order.iii -- THE STATEMENT LATTICE COMPLETED: ORDER + OPTIMALITY
+ * (Xi9-T1 + Xi9-T3, III-MATHESIS-MAP.md s3b BREAK C3 / s7b).
+ *
+ * THE REDUCTION LAW (s10.10): a statement kind enters the library ONLY by exhibiting its reduction to the
+ * standing judgment.  Order statements reduce equationally (a (= b :<=> a&b == a) and through the compare
+ * fragment (the 0x32..0x35 bit proven == const 1); optimality certificates are a matched pair of sealed
+ * ids (upper form + lower bound) -- the CLOSED-OPTIMAL marker.
+ *
+ * Negative arms FIRST (R4-order):
+ *   (n1) forall x: x >=s 0            -- REFUTED (x = -1);
+ *   (n2) forall x,m: x (= x&m         -- the FALSE converse of meet-lower-bound, REFUTED;
+ *   (n3) (a(=b & b(=c) => a==c       -- the FALSE "transitivity collapses", REFUTED.
+ * THE ORDER THEOREMS (each ONE symbolic seq_equiv call over the whole domain):
+ *   (o1) reflexivity      forall x:      x&x == x                        [tier-1 idempotence, re-proven]
+ *   (o2) meet-lower-bound forall x,m:    (x&m)&x == x&m                  [x&m (= x, equationally]
+ *   (o3) antisymmetry     forall a,b:    [a(=b & b(=a & a!=b] == 0
+ *   (o4) transitivity     forall a,b,c:  [a(=b & b(=c & !(a(=c)] == 0
+ *   (o5) AND-monotonicity forall a,b,m:  [a(=b & !((a&m)(=(b&m))] == 0
+ *   (o6) signed floor     forall x:      (x & 0x7FF..F) >=s 0  == 1      [the 0x33 bit == const 1]
+ *   (o7) signed ceiling   forall x:      (x | 0x800..0) <s  0  == 1      [the 0x32 bit == const 1]
+ * THE FIRST CLOSED-OPTIMAL CERTIFICATES (Xi9-T3) -- for EVERY k in 1..63, BOTH directions machine-proven:
+ *   UPPER (cost<=1): (x>>k)<<k == x & (~0<<k)   and   (x<<k)>>k == x & (~0>>k)     [the 1-op AND form]
+ *   LOWER (cost>=1): the 0-op candidates are EXCLUDED -- the id program REFUTED symbolically per k; the
+ *                    const program excluded by the witness-function method (w(c) = mux(c==0, 2^k|1, 0):
+ *                    one forall-c symbolic call per k -- the 2675 mold, s10.10 reduction).
+ *   => cost(align_k) = cost(mask_k) = EXACTLY 1 in the ALU grammar: the problem class is CLOSED, and the
+ *      proven-irreducible census classes become search-exempt (anti-bloat now has POSITIVE closure too).
+ * Plus the rot-2op question QUEUED on the frontier organ (blocker 3) -- the standing engine's named rung.
+ * 99 == the statement lattice holds order + optimality, negative arms firing. */
+module corpus_2674_mathesis_order
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_count_blocker(b: u64) -> u64 from "mathesis_frontier.iii"
+
+const ONES : u64 = 18446744073709551615u64
+const IMAX : u64 = 9223372036854775807u64    /* 0x7FFF...F */
+const IMIN : u64 = 9223372036854775808u64    /* 0x8000...0 */
+
+var WF : [u8; 160]
+var WG : [u8; 32]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+fn param(pos: u64, s: u32) -> u64 { let mut p : u64 = wb(0u32, pos, 0x10u32)  return wb(0u32, p, s) }
+
+/* g bodies: const 0 / const 1 */
+fn build_const_g(v: u64) -> u64 {
+    let mut p : u64 = wc(1u32, 0u64, v)
+    return wb(1u32, p, 0x60u32)
+}
+
+/* (= as a 0/1 bit: push a; push b; AND; push a; EQ  ==  (a&b) == a */
+fn emit_le(pos: u64, sa: u32, sb: u32) -> u64 {
+    let mut p : u64 = param(pos, sa)
+    p = param(p, sb)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, sa)
+    p = wb(0u32, p, 0x30u32)
+    return p
+}
+
+fn main() -> u64 {
+    let g0 : u64 = build_const_g(0u64)     /* WG holds const-0 body */
+
+    /* ---- (n1) R4-order FIRST: forall x: x >=s 0 must be REFUTED ---- */
+    let mut p : u64 = param(0u64, 0u32)
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x33u32)
+    p = wb(0u32, p, 0x60u32)
+    let g1 : u64 = build_const_g(1u64)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, g1, 1u32) != 0u32 { return 10u64 }
+
+    /* ---- (n2) the FALSE converse: forall x,m: x (= x&m  (i.e. x&(x&m) == x) REFUTED ---- */
+    p = param(0u64, 0u32)
+    p = param(p, 0u32)
+    p = param(p, 1u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 2u32) != 0u32 { return 11u64 }
+
+    /* ---- (n3) the FALSE collapse: (a(=b & b(=c & a!=c) == 0 must be REFUTED (it is satisfiable) ---- */
+    p = emit_le(0u64, 0u32, 1u32)
+    p = emit_le(p, 1u32, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, 0u32)
+    p = param(p, 2u32)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    let gz : u64 = build_const_g(0u64)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, gz, 3u32) != 0u32 { return 12u64 }
+
+    /* ---- (o1) reflexivity: x&x == x ---- */
+    p = param(0u64, 0u32)
+    p = param(p, 0u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 1u32) != 1u32 { return 20u64 }
+
+    /* ---- (o2) meet-lower-bound: (x&m)&x == x&m  (x&m (= x, equationally) ---- */
+    p = param(0u64, 0u32)
+    p = param(p, 1u32)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, 0u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wb(1u32, q, 0x10u32)  q = wb(1u32, q, 1u32)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 2u32) != 1u32 { return 21u64 }
+
+    /* ---- (o3) antisymmetry: [a(=b & b(=a & a!=b] == 0 ---- */
+    p = emit_le(0u64, 0u32, 1u32)
+    p = emit_le(p, 1u32, 0u32)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, 0u32)
+    p = param(p, 1u32)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    let g00 : u64 = build_const_g(0u64)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, g00, 2u32) != 1u32 { return 22u64 }
+
+    /* ---- (o4) transitivity: [a(=b & b(=c & !(a(=c)] == 0 ---- */
+    p = emit_le(0u64, 0u32, 1u32)
+    p = emit_le(p, 1u32, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = emit_le(p, 0u32, 2u32)
+    p = wc(0u32, p, 1u64)
+    p = wb(0u32, p, 0x27u32)                /* NOT of the 0/1 bit: t ^ 1 */
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, g00, 3u32) != 1u32 { return 23u64 }
+
+    /* ---- (o5) AND-monotonicity: [a(=b & !((a&m)(=(b&m))] == 0 ---- */
+    p = emit_le(0u64, 0u32, 1u32)
+    /* (a&m)&(b&m) == (a&m) */
+    p = param(p, 0u32)
+    p = param(p, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, 1u32)
+    p = param(p, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x25u32)
+    p = param(p, 0u32)
+    p = param(p, 2u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x30u32)
+    p = wc(0u32, p, 1u64)
+    p = wb(0u32, p, 0x27u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, g00, 3u32) != 1u32 { return 24u64 }
+
+    /* ---- (o6) signed floor: (x & IMAX) >=s 0 == 1 ---- */
+    p = param(0u64, 0u32)
+    p = wc(0u32, p, IMAX)
+    p = wb(0u32, p, 0x25u32)
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x33u32)
+    p = wb(0u32, p, 0x60u32)
+    let gone : u64 = build_const_g(1u64)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, gone, 1u32) != 1u32 { return 25u64 }
+
+    /* ---- (o7) signed ceiling: (x | IMIN) <s 0 == 1 ---- */
+    p = param(0u64, 0u32)
+    p = wc(0u32, p, IMIN)
+    p = wb(0u32, p, 0x26u32)
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x32u32)
+    p = wb(0u32, p, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, gone, 1u32) != 1u32 { return 26u64 }
+
+    /* ---- THE CLOSED-OPTIMAL SWEEP: for every k in 1..63, upper + both lower legs, both families ---- */
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        /* align UPPER: (x>>k)<<k == x & (ONES<<k) */
+        p = param(0u64, 0u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x29u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x28u32)
+        p = wb(0u32, p, 0x60u32)
+        q = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+        q = wc(1u32, q, ONES << k)
+        q = wb(1u32, q, 0x25u32)
+        q = wb(1u32, q, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32) != 1u32 { return 30u64 }
+        /* align LOWER leg 1: the id program is NOT align_k: (x>>k)<<k == x REFUTED */
+        WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 1u32) != 0u32 { return 31u64 }
+        /* align LOWER leg 2 (witness-function): w(c)=mux(c==0, 2^k, 0); NE(c, align_k(w)) == 1
+         * (const-1 g REBUILT here: the upper/id legs above overwrote the shared WG buffer). */
+        let ga1 : u64 = build_const_g(1u64)
+        p = param(0u64, 0u32)
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x30u32)
+        p = wb(0u32, p, 0x42u32)               /* IF c==0 */
+        p = wc(0u32, p, 1u64 << k)
+        p = wb(0u32, p, 0x43u32)               /* ELSE */
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x44u32)               /* END */
+        p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)   /* slot1 = w */
+        p = param(p, 0u32)                     /* the candidate const program: c itself */
+        p = param(p, 1u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x29u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x28u32)               /* align_k(w) */
+        p = wb(0u32, p, 0x31u32)               /* NE */
+        p = wb(0u32, p, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ga1, 1u32) != 1u32 { return 32u64 }
+
+        /* mask UPPER: (x<<k)>>k == x & (ONES>>k) */
+        p = param(0u64, 0u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x28u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x29u32)
+        p = wb(0u32, p, 0x60u32)
+        q = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+        q = wc(1u32, q, ONES >> k)
+        q = wb(1u32, q, 0x25u32)
+        q = wb(1u32, q, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32) != 1u32 { return 33u64 }
+        /* mask LOWER leg 1: id REFUTED */
+        WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 1u32) != 0u32 { return 34u64 }
+        /* mask LOWER leg 2: w(c)=mux(c==0, 1, 0); NE(c, mask_k(w)) == 1 (const-1 g rebuilt again) */
+        let gm1 : u64 = build_const_g(1u64)
+        p = param(0u64, 0u32)
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x30u32)
+        p = wb(0u32, p, 0x42u32)
+        p = wc(0u32, p, 1u64)
+        p = wb(0u32, p, 0x43u32)
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x44u32)
+        p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)
+        p = param(p, 0u32)
+        p = param(p, 1u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x28u32)
+        p = wc(0u32, p, k)
+        p = wb(0u32, p, 0x29u32)               /* mask_k(w) */
+        p = wb(0u32, p, 0x31u32)
+        p = wb(0u32, p, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, gm1, 1u32) != 1u32 { return 35u64 }
+
+        k = k + 1u64
+    }
+
+    /* ---- the rot-2op question lands on the frontier queue (blocker 3), the named next rung ---- */
+    mxf_reset()
+    if mxf_push(0u64, 0u64, 0u64, 3u64) != 1u32 { return 40u64 }
+    if mxf_count_blocker(3u64) != 1u64 { return 41u64 }
+
+    /* ---- determinism: the lattice block re-proves identically ---- */
+    p = param(0u64, 0u32)
+    p = param(p, 0u32)
+    p = wb(0u32, p, 0x25u32)
+    p = wb(0u32, p, 0x60u32)
+    WG[0u64] = 0x10u8  WG[1u64] = 0u8  WG[2u64] = 0x60u8
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, 3u64, 1u32) != 1u32 { return 50u64 }
+
+    return 99u64
+}

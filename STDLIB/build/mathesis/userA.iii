@@ -1,0 +1,36 @@
+/* A user's "obvious" implementations -- written the readable way. */
+module userA
+
+/* average of two u64 without caring about overflow */
+fn avg(a: u64, b: u64) -> u64 {
+    return (a + b) / 2u64
+}
+
+/* absolute difference */
+fn absdiff(a: u64, b: u64) -> u64 {
+    if a > b { return a - b }
+    return b - a
+}
+
+/* is x a power of two? (1 = yes) */
+fn is_pow2(x: u64) -> u64 {
+    if x == 0u64 { return 0u64 }
+    if (x & (x - 1u64)) == 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* round x up to the next multiple of 8 */
+fn align8(x: u64) -> u64 {
+    return ((x + 7u64) / 8u64) * 8u64
+}
+
+/* swap the low and high 32-bit halves */
+fn swap32(x: u64) -> u64 {
+    return (x >> 32u64) | (x << 32u64)
+}
+
+/* select b if flag != 0 else a  (branchy) */
+fn pick(flag: u64, a: u64, b: u64) -> u64 {
+    if flag != 0u64 { return b }
+    return a
+}

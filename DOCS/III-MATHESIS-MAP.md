@@ -655,22 +655,31 @@ rejected and re-audited.
 ```
 run_mathesis.sh --standing --federated ∈ run_completion.sh, AND:
   Ξ0  seed cycle        one closed loop, measured reduction, door + library live       ← DISCHARGED 2026-07-11
-  Ξ1  open proposer     autonomous ∀-schemas from real SVIR, novelty-filtered, frontier queued
-  Ξ2  grounding         every theorem zk-witnessed on sovereign silicon, determinism-pinned
-  Ξ3  exact face        ≥1 new exact identity, cross-certified, live consumer (armed by Ξ12)
-  Ξ4  library lives     kernel-checked + content-addressed + REPLAYABLE + published
-  Ξ5  standing engine   M measured improvements, grammar gap 4→0, converged, ratchets pinned
-  Ξ6  federation        propagate-by-proof, forged rejected, BFT-canonical
-  Ξ7  seal              completion-folded, TCB-neutral, MATHESIS_CERT binds math↔compiler↔trust
+  Ξ1  open proposer     183 machine ∀-theorems (round-1) + round-2 shift tier swept     ← DISCHARGED 2026-07-12
+                        (2610 propose · 2611 computed-novelty+dedup · 2612 frontier-queue+R7 retry)
+  Ξ2  grounding         theorem sides zk-AIR-constrained + attested; forgery rejected   ← DISCHARGED 2026-07-12 (2620)
+  Ξ3  exact face        subsumed by Ξ12 (the telescope arms the exact disposer)         ← DISCHARGED via Ξ12
+  Ξ4  library lives     kernel-certified (2640) + content-addressed + REPLAYABLE        ← DISCHARGED 2026-07-12
+  Ξ5  standing engine   grammar gap 4→0 (2613 teach); round-2 DRY; ratchet executable   ← DISCHARGED 2026-07-12
+                        (2650 loop · 2651 ratchet · DOCS/MATHESIS-RATCHET.txt)
+  Ξ6  federation        propagate-by-proof, forged rejected, ML-DSA BFT-canonical       ← DISCHARGED 2026-07-12 (2660)
+  Ξ7  seal              chain-v2 → HEAD_v2; MATHESIS_CERT binds math↔streams↔ratchet     ← DISCHARGED 2026-07-12 (2684)
   --- the creator tier (v3) ---
-  Ξ8  definition door   ROTL64 + C₆₄ sealed, spec-bridged, law-rich, INERT-honest   ← DISCHARGED 2026-07-12
-  Ξ9  statement lattice nonexistence LIVE (2675: 2 ≤ cost(rot_k) ≤ 3); order (2674) + optimality open
-  Ξ10 deduction organ   theorems from theorems; the first ∀n∈ℕ entries; kernel-judged
-  Ξ11 symmetry transport orbits + width functors; equivariance-gated; tooth pinned
-  Ξ12 empirical telescope machine-found denesting theorems, web-certified, envelope-honest
-  Ξ13 research agenda   measured intent; the autonomy invariant gated; the standing creator
-  (and Ξ1's proposer is LIVE ahead of order: 183 machine theorems, round-1 stream sealed + pinned)
+  Ξ8  definition door   ROTL64 + C₆₄ sealed, spec-bridged, law-rich, INERT-honest        ← DISCHARGED 2026-07-12
+  Ξ9  statement lattice nonexistence (2675) + order + CLOSED-OPTIMAL (2674)              ← DISCHARGED 2026-07-12
+  Ξ10 deduction organ   theorems from theorems; the first ∀n∈ℕ entries; kernel-judged   ← DISCHARGED 2026-07-12 (2676/2677)
+  Ξ11 symmetry transport orbits + width functors; equivariance-gated; tooth pinned      ← DISCHARGED 2026-07-12 (2678/2679)
+  Ξ12 empirical telescope 1024 machine denesting theorems, web-certified, envelope-honest ← DISCHARGED 2026-07-12 (2680/2681)
+  Ξ13 research agenda   measured intent + the autonomy invariant gated                  ← DISCHARGED 2026-07-12 (2682/2683)
 ```
+
+**ALL PHASES Ξ0–Ξ13 DISCHARGED-IN-CODE (2026-07-12).** `run_mathesis.sh` runs the whole creator tier
+end-to-end (exit 0): the seed cycle, the four ceiling breaks, and every completion gate — 25 mathesis
+corpus gates, each RED→GREEN with its rejecting negative arm. The library holds 18 sealed entries (6
+MACHINE-synthesized by the PROVENANCE law), replays genesis→HEAD_v2, and the MATHESIS_CERT binds the
+sealed head to the sealed discovery streams. What remains is not a phase but the *standing frontier*: the
+mul-mul wall at width 64 (receded to width 8), the rot 2-op question (cost ∈ {2,3}), the MUX operator, and
+the annihilation-teach awaiting measured demand — all queued with blockers named, none deferred silently.
 
 End state: the first system whose **mathematics is a growing, sealed, kernel-checked, replayable library
 mined from its own compilation, proven against the silicon that runs it, and folded back into that silicon as

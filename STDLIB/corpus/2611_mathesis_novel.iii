@@ -1,0 +1,98 @@
+/* STDLIB/corpus/2611_mathesis_novel.iii -- THE NOVELTY + SEMANTIC-DEDUP gate (Xi1-T2, R3;
+ * III-MATHESIS-MAP.md s7 Xi1).
+ *
+ * 2610 proved the DOOR discriminates when handed a novelty verdict; this gate proves the verdict is
+ * COMPUTED BY THE MACHINE -- no human flag anywhere -- and that the stream's redundancy is counted at
+ * BOTH honest grains (conflating them lies in one direction or the other):
+ *   (a) STRUCTURAL DEDUP (rewrite grain): (x&c1)&c2 and its commutative twin (c1&x)&c2 are ONE
+ *       deployable schema (canonical pattern normal form);
+ *   (b) THE TWO GRAINS SPLIT: (x+c1)-c1==x and (x-c1)+c1==x are DIFFERENT rewrite schemas (different
+ *       patterns match different code: both recorded structurally) yet ONE semantic equation (both
+ *       sides co-denotational -- fingerprint bucket + the judge (seq_equiv) confirming, never the
+ *       fingerprint's word alone): the knowledge ratchet counts it ONCE;
+ *   (c) involution (x^c1)^c1==x joins the SAME semantic equation class (its f also denotes the
+ *       identity) while absorption opens a genuinely NEW class -- distinct knowledge stays distinct;
+ *   (d) COMPUTED NON-NOVELTY (R3 live, upgraded from 2610's passed-in flag): the Xi0 AND-chain schema
+ *       is DERIVED by the taught e-graph (gate 2613) => rediscovery => novel=0; absorption and
+ *       involution -- ADMITTED as novel in the round-1 run -- are NOW derivable (the rules the library
+ *       taught the e-graph) => the door would refuse a re-proposal: KNOWLEDGE ACCUMULATED;
+ *   (e) THE KNOWLEDGE BOUNDARY: the ADD-chain fold (true, in the stream, NOT yet taught) is computed
+ *       NOVEL -- the oracle tracks exactly what the rule set derives, not what is true;
+ *   (f) HONEST ABSTAIN: a mul-bearing pair gets verdict 2 (not a novelty certificate) -- a
+ *       capacity-saturated or instance-only derivation may never masquerade as a schema verdict;
+ *   (g) DETERMINISM: the whole dedup sequence re-runs to identical verdicts.
+ * 99 == novelty is a computed, honest, knowledge-tracking judgment at both grains. */
+module corpus_2611_mathesis_novel
+
+extern @abi(c-msvc-x64) fn mxn_reset() -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_count() -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_dedup_add(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_sem_reset() -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_sem_count() -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_sem_add(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_canon_f(tier: u64, code: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_canon_g(code: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_sem_dup(tA: u64, fA: u64, gA: u64, tB: u64, fB: u64, gB: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_known(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_novel(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+
+fn dedup_round() -> u64 {
+    mxn_reset()
+    mxn_sem_reset()
+    /* (a) STRUCTURAL: the Xi0 schema + its commutative twin (f 197 = pat-2 spelling of f 194) */
+    if mxn_dedup_add(2u64, 194u64, 42u64) != 1u32 { return 10u64 }
+    if mxn_canon_f(2u64, 197u64) != 194u64 { return 11u64 }
+    if mxn_dedup_add(2u64, 197u64, 42u64) != 0u32 { return 12u64 }
+    if mxn_count() != 1u64 { return 13u64 }
+    if mxn_sem_add(2u64, 194u64, 42u64) != 1u32 { return 14u64 }
+    if mxn_sem_add(2u64, 197u64, 42u64) != 0u32 { return 15u64 }
+    if mxn_sem_count() != 1u64 { return 16u64 }
+    /* (b) THE TWO GRAINS SPLIT: different rewrite schemas, one semantic equation */
+    if mxn_canon_f(2u64, 13u64) == mxn_canon_f(2u64, 58u64) { return 17u64 }   /* canon does NOT collapse */
+    if mxn_sem_dup(2u64, 13u64, 0u64, 2u64, 58u64, 0u64) != 1u32 { return 18u64 }
+    if mxn_dedup_add(2u64, 13u64, 0u64) != 1u32 { return 19u64 }               /* both recorded structurally */
+    if mxn_dedup_add(2u64, 58u64, 0u64) != 1u32 { return 20u64 }
+    if mxn_count() != 3u64 { return 21u64 }
+    if mxn_sem_add(2u64, 13u64, 0u64) != 1u32 { return 22u64 }                 /* the id=id equation: NEW */
+    if mxn_sem_add(2u64, 58u64, 0u64) != 0u32 { return 23u64 }                 /* ...counted ONCE */
+    if mxn_sem_count() != 2u64 { return 24u64 }
+    /* (c) involution joins the id=id class; absorption opens a new one */
+    if mxn_dedup_add(2u64, 319u64, 0u64) != 1u32 { return 25u64 }
+    if mxn_sem_add(2u64, 319u64, 0u64) != 0u32 { return 26u64 }                /* same equation class */
+    if mxn_dedup_add(2u64, 247u64, 1u64) != 1u32 { return 27u64 }
+    if mxn_sem_add(2u64, 247u64, 1u64) != 1u32 { return 28u64 }                /* genuinely new knowledge */
+    if mxn_count() != 5u64 { return 29u64 }
+    if mxn_sem_count() != 3u64 { return 30u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r1 : u64 = dedup_round()
+    if r1 != 0u64 { return r1 }
+
+    /* (d) COMPUTED non-novelty -- the taught e-graph derives what the library taught it */
+    if mxn_known(2u64, 194u64, 42u64) != 1u32 { return 40u64 }     /* Xi0 AND-chain: REDISCOVERY */
+    if mxn_novel(2u64, 194u64, 42u64) != 0u32 { return 41u64 }
+    if mxn_known(2u64, 247u64, 1u64) != 1u32 { return 42u64 }      /* absorption: now known */
+    if mxn_known(2u64, 319u64, 0u64) != 1u32 { return 43u64 }      /* involution: now known */
+    /* the door end-to-end with the COMPUTED verdict: a rediscovery is REFUSED */
+    if mx_admit(1u32, mxn_novel(2u64, 194u64, 42u64), 1u32, 1u32) != 0u32 { return 44u64 }
+
+    /* (e) the knowledge boundary: ADD-chain is true + in the stream + NOT derivable yet => NOVEL */
+    if mxn_known(2u64, 5u64, 21u64) != 0u32 { return 45u64 }
+    if mxn_novel(2u64, 5u64, 21u64) != 1u32 { return 46u64 }
+    /* OR-chain and XOR-chain ARE taught => rediscoveries */
+    if mxn_known(2u64, 257u64, 49u64) != 1u32 { return 47u64 }     /* (x|c1)|c2 == x|(c1|c2) */
+    if mxn_known(2u64, 320u64, 56u64) != 1u32 { return 48u64 }     /* (x^c1)^c2 == x^(c1^c2) */
+
+    /* (f) honest abstain on mul-bearing pairs: never a novelty certificate */
+    if mxn_known(2u64, 131u64, 35u64) != 2u32 { return 49u64 }
+    if mxn_novel(2u64, 131u64, 35u64) != 0u32 { return 50u64 }
+
+    /* (g) determinism */
+    let r2 : u64 = dedup_round()
+    if r2 != 0u64 { return 60u64 }
+
+    return 99u64
+}

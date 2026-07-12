@@ -1,0 +1,141 @@
+/* STDLIB/corpus/2651_mathesis_ratchet.iii -- THE RATCHET IS DOWN/UP-ONLY (Xi5-T2/H10,
+ * III-MATHESIS-MAP.md s7; the pinned ledger lives in DOCS/MATHESIS-RATCHET.txt).
+ *
+ * "Deleting a theorem, widening the gap, or regressing cost reddens."  This gate is that law in
+ * EXECUTABLE form: every landed capability of the campaign re-asserts, so ANY revert -- a deleted
+ * e-graph rule, a weakened disposer, a lost induction, a reopened optimality -- turns this gate red:
+ *
+ *   (r1) THE TEACH-GAP STAYS CLOSED (P1: the named four operators): AND, OR, XOR, SHR each remain
+ *        DERIVABLE by the e-graph (chain folds + absorption + involution + shift-chain + align bridge);
+ *   (r2) THE UNBOUNDED CITIZENS STAY DERIVED: both Xi10 inductions re-run their full five-leg
+ *        derivation (kernel + premise + base + step + grounds);
+ *   (r3) THE CLOSED-OPTIMAL CERTIFICATES STAND: align_k upper + witness-function lower re-proven at
+ *        k in {1, 32, 63} -- reopening a closed problem reddens;
+ *   (r4) THE FRONTIER RETRY CAPABILITY STANDS: mul-assoc re-proves at width 8 from a fresh queue;
+ *   (r5) THE DOOR STAYS STRICT: any single-false clause still rejects.
+ * 99 == nothing landed has been un-landed; the ratchet holds. */
+module corpus_2651_mathesis_ratchet
+
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_and(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_or(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_xor(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_shl(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_shr(a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_same_class(a: u64, b: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn mx4_derive_r1(premise_ref: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_derive_r2(premise_ref: u64, modulus: u64) -> u32 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn mx4_premise_ref_0001() -> u64 from "mathesis_deduce.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_width(i: u64, w: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+
+const ONES : u64 = 18446744073709551615u64
+const REF_0002 : u64 = 0xABC7EA27AB705D6Du64
+
+var WF : [u8; 96]
+var WG : [u8; 32]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* align_k CLOSED-OPTIMAL re-assertion (upper + witness lower), one k. */
+fn align_closed(k: u64) -> u32 {
+    /* upper: (x>>k)<<k == x & (ONES<<k) */
+    let mut p : u64 = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, k)
+    p = wb(0u32, p, 0x29u32)
+    p = wc(0u32, p, k)
+    p = wb(0u32, p, 0x28u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q : u64 = wb(1u32, 0u64, 0x10u32)  q = wb(1u32, q, 0u32)
+    q = wc(1u32, q, ONES << k)
+    q = wb(1u32, q, 0x25u32)
+    q = wb(1u32, q, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q, 1u32) != 1u32 { return 0u32 }
+    /* lower (witness): w(c)=mux(c==0,2^k,0); NE(c, align_k(w)) == 1 */
+    p = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x30u32)
+    p = wb(0u32, p, 0x42u32)
+    p = wc(0u32, p, 1u64 << k)
+    p = wb(0u32, p, 0x43u32)
+    p = wc(0u32, p, 0u64)
+    p = wb(0u32, p, 0x44u32)
+    p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wc(0u32, p, k)
+    p = wb(0u32, p, 0x29u32)
+    p = wc(0u32, p, k)
+    p = wb(0u32, p, 0x28u32)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x60u32)
+    let mut q1 : u64 = wc(1u32, 0u64, 1u64)
+    q1 = wb(1u32, q1, 0x60u32)
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, q1, 1u32) != 1u32 { return 0u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ---- (r1) the teach-gap stays closed: the four operators remain derivable ---- */
+    seg_reset()
+    let x : u64 = seg_var()
+    let andc : u64 = seg_and(seg_and(x, seg_const(0xF0F0u64)), seg_const(0x0FF0u64))
+    let andg : u64 = seg_and(x, seg_const(0xF0F0u64 & 0x0FF0u64))
+    let orc : u64 = seg_or(seg_or(x, seg_const(0xAAu64)), seg_const(0x55u64))
+    let org : u64 = seg_or(x, seg_const(0xFFu64))
+    let xoc : u64 = seg_xor(seg_xor(x, seg_const(0xBEEFu64)), seg_const(0xBEEFu64))
+    let shc : u64 = seg_shr(seg_shr(x, seg_const(5u64)), seg_const(6u64))
+    let shg : u64 = seg_shr(x, seg_const(11u64))
+    let alb : u64 = seg_shl(seg_shr(x, seg_const(7u64)), seg_const(7u64))
+    let alg : u64 = seg_and(x, seg_const(ONES << 7u64))
+    seg_saturate()
+    if seg_same_class(andc, andg) != 1u32 { return 10u64 }
+    if seg_same_class(orc, org) != 1u32 { return 11u64 }
+    if seg_same_class(xoc, x) != 1u32 { return 12u64 }
+    if seg_same_class(shc, shg) != 1u32 { return 13u64 }
+    if seg_same_class(alb, alg) != 1u32 { return 14u64 }
+
+    /* ---- (r2) the unbounded citizens stay derived (all five legs each) ---- */
+    if mx4_derive_r1(mx4_premise_ref_0001()) != 1u32 { return 20u64 }
+    if mx4_derive_r2(REF_0002, 64u64) != 1u32 { return 21u64 }
+
+    /* ---- (r3) the CLOSED-OPTIMAL certificates stand at k in {1, 32, 63} ---- */
+    if align_closed(1u64) != 1u32 { return 30u64 }
+    if align_closed(32u64) != 1u32 { return 31u64 }
+    if align_closed(63u64) != 1u32 { return 32u64 }
+
+    /* ---- (r4) the frontier retry capability stands ---- */
+    mxf_reset()
+    if mxf_push(2u64, 131u64, 35u64, 1u64) != 1u32 { return 40u64 }
+    if mxf_retry_width(0u64, 8u64) != 1u32 { return 41u64 }
+
+    /* ---- (r5) the door stays strict ---- */
+    if mx_admit(0u32, 1u32, 1u32, 1u32) != 0u32 { return 50u64 }
+    if mx_admit(1u32, 1u32, 1u32, 0u32) != 0u32 { return 51u64 }
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 52u64 }
+
+    return 99u64
+}

@@ -1,0 +1,112 @@
+/* STDLIB/corpus/2610_mathesis_propose.iii -- THE SYNTHESIZER gate (Xi1-T1, III-MATHESIS-MAP.md s7 Xi1).
+ *
+ * The proposer is the WHOLE declared space in canonical order -- no human supplies candidates.  This gate
+ * verifies the stream's soundness properties WITHOUT feeding the synthesizer anything:
+ *   (a) STRICTNESS: a non-decreasing pair is refused untested (cost law);
+ *   (b) the tier-1 block machine-discovers EXACTLY the four laws that exist there
+ *       (x&x==x, x|x==x, x^x==0, x-x==0) -- found by enumeration, verified by count;
+ *   (c) A FALSE PAIR is never recorded (the disposer filters; the stream contains zero REFUTED);
+ *   (d) THE Xi0 REDISCOVERY + THE NOVELTY ARM (R3): the block containing (x&c1)&c2 re-derives
+ *       x&(c1&c2) by pure enumeration -- and because that schema is ALREADY assimilated
+ *       (MATHESIS-THEOREM-0001 / e_and_chain_fold), the door with novel=0 REFUSES it (rediscovery
+ *       is vacuity, live);
+ *   (e) A GENUINELY NEW LAW: the block containing (x|c1)&c1 machine-discovers absorption == c1
+ *       (in NO existing rule set: cgopt is div/mod/mul, the e-graph grammar lacks OR/AND), and the
+ *       door with novel=1 ADMITS it;
+ *   (f) INVOLUTION discovered: (x^c1)^c1 == x in its block;
+ *   (g) DETERMINISM: re-running a block yields the same count and byte-identical descriptor ids.
+ * 99 == the machine synthesizes; the proof filters; the door discriminates. */
+module corpus_2610_mathesis_propose
+
+extern @abi(c-msvc-x64) fn mxs_reset() -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_run_range(with_t1: u32, f2lo: u64, f2hi: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_test(tier: u64, fcode: u64, gcode: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_found() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_tested() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_frontier() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_space() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_desc(i: u64, out8: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mx_admit(proven: u32, novel: u32, useful: u32, witnessed: u32) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+
+var DD  : [u64; 8]
+var DE  : [u64; 8]
+var IDA : [u8; 32]
+var IDB : [u8; 32]
+
+/* find a recorded discovery with the given coordinates; returns 1 if present. */
+fn has(tier: u64, fc: u64, gc: u64) -> u32 {
+    let n : u64 = mxs_found()
+    let mut i : u64 = 0u64
+    while i < n {
+        mxs_desc(i, &DD as u64)
+        if DD[1u64] == tier { if DD[2u64] == fc { if DD[3u64] == gc { return 1u32 } } }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* ---- (a) STRICTNESS FIRST: cost(g) == cost(f) is refused untested ---- */
+    mxs_reset()
+    if mxs_test(1u64, 0u64, 3u64) != 1u32 { return 10u64 }     /* 1-op f vs 1-op g: not strict */
+    if mxs_tested() != 0u64 { return 11u64 }                   /* refused BEFORE the disposer */
+    if mxs_space() != 18522u64 { return 12u64 }                /* the declared bound is printed law */
+
+    /* ---- (c) a FALSE pair is never recorded ---- */
+    if mxs_test(2u64, 5u64, 42u64) != 1u32 { return 13u64 }    /* (x+c1)+c2 == x&(c1&c2): REFUTED */
+    if mxs_found() != 0u64 { return 14u64 }
+
+    /* ---- (b) the tier-1 block: exactly the four laws that exist there, none invented ---- */
+    mxs_reset()
+    let f1 : u64 = mxs_run_range(1u32, 0u64, 0u64)
+    if f1 != 4u64 { return 15u64 }
+    if has(1u64, 9u64, 0u64) != 1u32 { return 16u64 }          /* x&x == x   (AND pat0, g=x) */
+    if has(1u64, 12u64, 0u64) != 1u32 { return 17u64 }         /* x|x == x */
+    if has(1u64, 15u64, 2u64) != 1u32 { return 18u64 }         /* x^x == 0 */
+    if has(1u64, 3u64, 2u64) != 1u32 { return 19u64 }          /* x-x == 0 */
+
+    /* ---- (d) THE Xi0 REDISCOVERY + the live novelty refusal ---- */
+    mxs_reset()
+    let f3 : u64 = mxs_run_range(0u32, 194u64, 195u64)
+    if f3 < 1u64 { return 20u64 }
+    if has(2u64, 194u64, 42u64) != 1u32 { return 21u64 }       /* (x&c1)&c2 == x&(c1&c2), re-derived */
+    if mx_admit(1u32, 0u32, 1u32, 1u32) != 0u32 { return 22u64 }   /* ALREADY KNOWN -> the door REFUSES */
+
+    /* ---- (e) the genuinely NEW law: absorption, admitted through the door ---- */
+    mxs_reset()
+    let f4 : u64 = mxs_run_range(0u32, 247u64, 248u64)
+    if f4 < 1u64 { return 23u64 }
+    if has(2u64, 247u64, 1u64) != 1u32 { return 24u64 }        /* (x|c1)&c1 == c1 (absorption) */
+    if mx_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 25u64 }
+
+    /* ---- (f) involution discovered in its block ---- */
+    mxs_reset()
+    let f5 : u64 = mxs_run_range(0u32, 319u64, 320u64)
+    if f5 < 1u64 { return 26u64 }
+    if has(2u64, 319u64, 0u64) != 1u32 { return 27u64 }        /* (x^c1)^c1 == x */
+
+    /* ---- THE FRONTIER ARM: mul-mul pairs are FRONTIERED (blocker named), never ground, never faked ----
+     * (x*c1)*c2 == x*(c1*c2) IS true -- but mul-vs-mul bit-blast equality is beyond practical reach, so
+     * the pair lands on the printed frontier for the R7 ring-axiom retry; it must NOT be silently proven,
+     * refuted, or dropped. */
+    mxs_reset()
+    if mxs_test(2u64, 131u64, 35u64) != 3u32 { return 32u64 }   /* the mul-assoc schema: FRONTIERED */
+    if mxs_test(2u64, 110u64, 33u64) != 3u32 { return 33u64 }   /* (x*x)+c2 vs x*(c1+c2): mul-mul class */
+    if mxs_found() != 0u64 { return 34u64 }
+    if mxs_frontier() != 2u64 { return 35u64 }
+    if mxs_tested() != 0u64 { return 36u64 }                    /* frontiered BEFORE the disposer */
+
+    /* ---- (g) determinism: same block twice -> same count, byte-identical ids ---- */
+    mxs_desc(0u64, &DD as u64)
+    if mxs_schema_id(&DD as u64, &IDA as u64) != 0i32 { return 28u64 }
+    mxs_reset()
+    let f6 : u64 = mxs_run_range(0u32, 319u64, 320u64)
+    if f6 != f5 { return 29u64 }
+    mxs_desc(0u64, &DE as u64)
+    if mxs_schema_id(&DE as u64, &IDB as u64) != 0i32 { return 30u64 }
+    if mx_id_eq(&IDA as u64, &IDB as u64) != 1u32 { return 31u64 }
+
+    return 99u64
+}

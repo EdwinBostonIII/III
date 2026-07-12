@@ -20,6 +20,11 @@
  *   5 SHR-chain  (op1==op2==0x29, c1+c2 <= 63)          -> x >> (c1+c2)
  *   6 align-down (op1==0x29, op2==0x28, c1==c2 in 1..63) -> x & ~(2^k - 1)
  *   7 mask-low   (op1==0x28, op2==0x29, c1==c2 in 1..63) -> x & (2^(64-k)-1)
+ *   8 ROT window (Xi8, the minted-concept class): the ROTL64 definiens shape anchored at an op-synchronous
+ *     [0x10 s][0x01 a:8][0x28][0x10 s][0x01 b:8][0x29][0x26] (rotl-spelled) or its 0x29-first mirror
+ *     (rotr-spelled), SAME slot s, a in 1..63, a+b == 64 -- 25 bytes.  Counted for the concept census
+ *     (P6 MEASURED); NEVER rewritten (corpus/2675 proves rot_k has no cheaper 1-op form: 2 <= cost <= 3,
+ *     so anti-bloat keeps these windows irreducible-by-theorem).
  * Container: v1 [nfunc:u8] | v2 [0x00][nfunc:u16 LE]; per-fn [params:u8][nres:u8][blen:u16 LE][body].
  *
  * Gate: corpus/2602_mathesis_measure (seeded counts + clean-body zero + the phantom-const opcode-sync arm +
@@ -29,9 +34,9 @@
  */
 module numera_mathesis_measure
 
-const MXM_CLASSES : u64 = 8u64
+const MXM_CLASSES : u64 = 9u64
 
-var MXM_CNT : [u64; 8]
+var MXM_CNT : [u64; 9]
 var MXM_FNS : [u64; 1]
 var MXM_UNW : [u64; 1]
 var MXM_OPS : [u64; 1]
@@ -120,6 +125,28 @@ fn mxm_scan_body(base: u64, boff: u64, blen: u64) -> u32 {
                 let cl : u64 = mxm_class(op1, c1, op2, c2)
                 if cl != 0u64 { MXM_CNT[cl] = MXM_CNT[cl] + 1u64 }
             }
+        } }
+        /* ROT window peek (class 8): [0x10 s][0x01 a:8][SH1][0x10 s][0x01 b:8][SH2][0x26] = 25 bytes,
+         * SH1/SH2 = 0x28/0x29 (rotl-spelled) or 0x29/0x28 (rotr-spelled), same slot, a in 1..63, a+b == 64 */
+        if op == 0x10u32 { if q + 25u64 <= blen {
+            if mxm_b(base, boff + q + 2u64) == 0x01u32 { if mxm_b(base, boff + q + 12u64) == 0x10u32 {
+                if mxm_b(base, boff + q + 13u64) == mxm_b(base, boff + q + 1u64) {
+                    if mxm_b(base, boff + q + 14u64) == 0x01u32 { if mxm_b(base, boff + q + 24u64) == 0x26u32 {
+                        let sh1 : u32 = mxm_b(base, boff + q + 11u64)
+                        let sh2 : u32 = mxm_b(base, boff + q + 23u64)
+                        let mut rotpair : u32 = 0u32
+                        if sh1 == 0x28u32 { if sh2 == 0x29u32 { rotpair = 1u32 } }
+                        if sh1 == 0x29u32 { if sh2 == 0x28u32 { rotpair = 1u32 } }
+                        if rotpair == 1u32 {
+                            let ra : u64 = mxm_rd8(base, boff + q + 3u64)
+                            let rb : u64 = mxm_rd8(base, boff + q + 15u64)
+                            if ra >= 1u64 { if ra <= 63u64 { if ra + rb == 64u64 {
+                                MXM_CNT[8u64] = MXM_CNT[8u64] + 1u64
+                            } } }
+                        }
+                    } }
+                }
+            } }
         } }
         q = q + 1u64 + mxm_w(op)
     }

@@ -1,0 +1,145 @@
+/* numera/mathesis_define.iii -- THE MATHESIS DEFINITION DOOR (Xi8-T1, DOCS/III-MATHESIS-MAP.md s3b/s7b).
+ *
+ * The creator tier's first organ: the library learns to admit DEFINITIONS -- minted concepts -- under the
+ * concept-tier door SPEC-BRIDGED and LAW-RICH and MEASURED and WITNESSED (P6).  A definition is a
+ * CONSERVATIVE extension: it adds vocabulary, never axioms (the conservativity law, s10.11) -- every concept
+ * unfolds away, so the door adds zero trust.  A definition with no proven law about it is a macro, not a
+ * concept, and is REFUSED (the macro arm).  This module does not decide the four clauses (the disposer
+ * decides the laws, the spec bridge is proven in the law gate, the census measures, the chain witnesses);
+ * it is the strict conjunction they pass through plus the content-addressing that makes every concept and
+ * every concept-law a first-class tamper-evident object.
+ *
+ * Two descriptor kinds, both 8 u64 words serialised as 64 canonical LE bytes (the mathesis_admit mold),
+ * domain-separated IN-BAND by the magic word (an MXD1 preimage can never collide an MX02 or MX01 one):
+ *
+ *   MXD1 CONCEPT descriptor:                       MX02 CONCEPT-LAW theorem descriptor:
+ *    [0] MXD_MAGIC "MXD1"                            [0] MXL_MAGIC "MX02"
+ *    [1] name tag (8 ASCII bytes LE, != 0)           [1] concept ref (first 8 LE bytes of concept id, != 0)
+ *    [2] value arity        >= 1                     [2] law kind 1..5 (1 identity elem, 2 inverse family,
+ *    [3] definiens shape id >= 1                         3 homomorphism/composition, 4 spec bridge,
+ *    [4] width 8|16|32|64   (R2)                         5 nonexistence/lower-bound)
+ *    [5] signedness <= 2                             [3] law parameter (e.g. modulus 64)
+ *    [6] family-param range lo                       [4] width 8|16|32|64   [5] signedness <= 2
+ *    [7] family-param range hi (lo <= hi)            [6] range lo           [7] range hi (lo <= hi)
+ *
+ * concept_id / law_id = SHA-256(canonical 64-byte serialisation); the chain law is SHARED with the theorem
+ * tier by construction (the same cad_compose Keccak-256 step extends the 0001 head -- one library, one
+ * chain, many entry kinds, append-only).
+ *
+ * Gate: corpus/2670_mathesis_define (malformed-no-id arms incl. untouched-output, law-ref arms, THE MACRO
+ * ARM, id determinism/content-addressing/sensitivity, cross-kind domain separation, chain continuity +
+ * tamper).  EXIT=99.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes numera/cad.iii (the one content-address) only.
+ */
+module numera_mathesis_define
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const MXD_MAGIC  : u64 = 0x4D584431u64      /* "MXD1" -- concept descriptor version tag */
+const MXL_MAGIC  : u64 = 0x4D583032u64      /* "MX02" -- concept-law theorem descriptor version tag */
+const MXD_SUITE  : u32 = 0u32               /* CAD_SUITE_SHA256 */
+const MXD_E_NULL : i32 = -1i32
+const MXD_E_DESC : i32 = -3i32
+const MXD_DWORDS : u64 = 8u64
+const MXD_SERLEN : u64 = 64u64
+
+var MXD_SER : [u8; 64]   /* canonical serialisation scratch (module scope: the local-array &-of corner) */
+
+/* concept descriptor validity: the minted concept's quantifier is well-formed.  1 valid / 0 malformed. */
+fn mxd_concept_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MXD_MAGIC { return 0u32 }
+    if d[1u64] == 0u64 { return 0u32 }
+    if d[2u64] < 1u64 { return 0u32 }
+    if d[3u64] < 1u64 { return 0u32 }
+    let w : u64 = d[4u64]
+    let mut wok : u32 = 0u32
+    if w == 8u64 { wok = 1u32 }
+    if w == 16u64 { wok = 1u32 }
+    if w == 32u64 { wok = 1u32 }
+    if w == 64u64 { wok = 1u32 }
+    if wok == 0u32 { return 0u32 }
+    if d[5u64] > 2u64 { return 0u32 }
+    if d[6u64] > d[7u64] { return 0u32 }
+    return 1u32
+}
+
+/* concept-law descriptor validity.  1 valid / 0 malformed. */
+fn mxd_law_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MXL_MAGIC { return 0u32 }
+    if d[1u64] == 0u64 { return 0u32 }
+    let kind : u64 = d[2u64]
+    if kind < 1u64 { return 0u32 }
+    if kind > 5u64 { return 0u32 }
+    let w : u64 = d[4u64]
+    let mut wok : u32 = 0u32
+    if w == 8u64 { wok = 1u32 }
+    if w == 16u64 { wok = 1u32 }
+    if w == 32u64 { wok = 1u32 }
+    if w == 64u64 { wok = 1u32 }
+    if wok == 0u32 { return 0u32 }
+    if d[5u64] > 2u64 { return 0u32 }
+    if d[6u64] > d[7u64] { return 0u32 }
+    return 1u32
+}
+
+/* canonical serialisation: the 8 words as 64 explicit LE bytes (preorder, layout-independent). */
+fn mxd_serialize(desc: u64) -> u32 {
+    let d : *u64 = desc as *u64
+    let mut i : u64 = 0u64
+    while i < MXD_DWORDS {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            MXD_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* concept_id = SHA-256(canonical serialisation).  Malformed descriptor -> MXD_E_DESC, NO id, out untouched. */
+fn mxd_concept_id(desc: u64, out32: u64) -> i32 @export {
+    if desc == 0u64 { return MXD_E_NULL }
+    if out32 == 0u64 { return MXD_E_NULL }
+    if mxd_concept_valid(desc) != 1u32 { return MXD_E_DESC }
+    mxd_serialize(desc)
+    return cad_oneshot(MXD_SUITE, (&MXD_SER as u64) as *u8, MXD_SERLEN, out32 as *u8)
+}
+
+/* law_id = SHA-256(canonical serialisation).  Malformed descriptor -> MXD_E_DESC, NO id, out untouched. */
+fn mxd_law_id(desc: u64, out32: u64) -> i32 @export {
+    if desc == 0u64 { return MXD_E_NULL }
+    if out32 == 0u64 { return MXD_E_NULL }
+    if mxd_law_valid(desc) != 1u32 { return MXD_E_DESC }
+    mxd_serialize(desc)
+    return cad_oneshot(MXD_SUITE, (&MXD_SER as u64) as *u8, MXD_SERLEN, out32 as *u8)
+}
+
+/* the canonical concept-ref word: the first 8 LE bytes of a 32-byte concept id (ONE derivation site). */
+fn mxd_ref_of(id32: u64) -> u64 @export {
+    if id32 == 0u64 { return 0u64 }
+    let p : *u8 = id32 as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((p[i] as u64) << (i * 8u64))  i = i + 1u64 }
+    return v
+}
+
+/* THE CONCEPT DOOR: strict four-clause conjunction (P6).  Each clause must be EXACTLY 1 -- a 2 is as
+ * rejected as a 0 (no truthiness).  SPEC-BRIDGED comes from the law gate's dual-engine bridge, LAW-RICH
+ * from >=1 disposer-proven law (a lawless definition is a macro -> REFUSED), MEASURED from the census
+ * instrument (the count is recorded; zero occurrences admits-but-inert per P6), WITNESSED from the chain. */
+fn mxd_admit(spec_bridged: u32, law_rich: u32, measured: u32, witnessed: u32) -> u32 @export {
+    if spec_bridged != 1u32 { return 0u32 }
+    if law_rich != 1u32 { return 0u32 }
+    if measured != 1u32 { return 0u32 }
+    if witnessed != 1u32 { return 0u32 }
+    return 1u32
+}

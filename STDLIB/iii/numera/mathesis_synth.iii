@@ -1,0 +1,276 @@
+/* numera/mathesis_synth.iii -- THE MATHESIS SYNTHESIZER (Xi1 pulled forward; III-MATHESIS-MAP.md s7 Xi1,
+ * s3b).  THE ORGAN THAT ANSWERS "hardcoded demos are worthless": no human supplies candidates.  It
+ * ENUMERATES the ENTIRE declared expression space in canonical order, pairs every expression with every
+ * strictly-cheaper one, and asks the disposer.  What survives is MACHINE-SYNTHESIZED, MACHINE-PROVEN
+ * mathematics: the conjecture set is the whole space, the filter is proof, the ranking is cost -- no
+ * statistics, no frequency, no belief (Ax D3), no hand-picked seeds (P4).
+ *
+ * THE DECLARED SPACE (round 1 -- printed, never silently capped):
+ *   ops        : idx 0..5 = {ADD 0x20, SUB 0x21, MUL 0x22, AND 0x25, OR 0x26, XOR 0x27}
+ *                (shift ops are S1-blocked for symbolic counts; they live on the printed frontier)
+ *   atoms      : x (param 0), c1 (param 1), c2 (param 2), const-0
+ *   f (LHS)    : tier 1: u op v            over pat 0..2 = {(x,x), (x,c1), (c1,x)}     -> 18 shapes
+ *                tier 2: (u op1 v) op2 w   over pat, w in {x, c1, c2}                  -> 324 shapes
+ *   g (RHS)    : gcode 0 = x | 1 = c1 | 2 = const-0                       emission cost 0
+ *                gcode 3..20  = u op v (the 18 one-op shapes)             emission cost 1
+ *                gcode 21..56 = x op2 (c1 op3 c2)  (the 36 fold forms --
+ *                               const op const FOLDS at emission)         emission cost 1
+ *   pair law   : test f == g iff emission_cost(g) < emission_cost(f); strict decrease only.
+ *
+ * EMISSION COST is the honest metric (it is what the assimilator pays): an op between two params folds to
+ * one immediate at emission, so x op2 (c1 op3 c2) costs 1 -- exactly why Xi0's AND-chain fold was a win.
+ *
+ * The disposer is seq_equiv (numera/ser_kinduct_sym.iii:607): every PROVEN is a forall-x,c1,c2 theorem over
+ * all 2^64 assignments; REFUTED pairs vanish; SEQ_TOP cannot occur in this fragment (no shifts).  Every
+ * discovery records its (tier, f_code, g_code) coordinates + an MX03 content-addressed descriptor id.
+ *
+ * Gate: corpus/2610_mathesis_propose (the canonical Xi1 number): machine-discovers the known-true
+ * checkpoints WITHOUT being told them (idempotence, annihilation, involution, the Xi0 chain
+ * RE-derivation -- the novelty gate's rediscovery exhibit), zero REFUTED in the output, determinism.
+ * Full-space sweep: run_mathesis.sh --synth (writes the whole discovery stream).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes ser_kinduct_sym (the disposer) + cad only.
+ */
+module numera_mathesis_synth
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const MXS_MAGIC : u64 = 0x4D583033u64     /* "MX03" -- synthesized-schema descriptor tag */
+const MXS_MAX   : u64 = 512u64            /* discovery store capacity (full round-1 space fits) */
+const MXS_NOPS  : u64 = 6u64
+
+var MXS_F   : [u8; 48]
+var MXS_G   : [u8; 48]
+var MXS_SER : [u8; 64]
+var MXS_D   : [u64; 4096]                 /* MXS_MAX x 8-word descriptors */
+var MXS_N   : [u64; 1]                    /* discoveries recorded */
+var MXS_T   : [u64; 1]                    /* pairs tested */
+var MXS_FR  : [u64; 1]                    /* pairs FRONTIERED (mul-mul: blocker = bit-blast mul equality) */
+var MXS_OPS : [u64; 6]
+
+fn mxs_opbyte(idx: u64) -> u32 {
+    MXS_OPS[0u64] = 0x20u64  MXS_OPS[1u64] = 0x21u64  MXS_OPS[2u64] = 0x22u64
+    MXS_OPS[3u64] = 0x25u64  MXS_OPS[4u64] = 0x26u64  MXS_OPS[5u64] = 0x27u64
+    if idx >= MXS_NOPS { return 0u32 }
+    return MXS_OPS[idx] as u32
+}
+
+/* push atom a (0=x 1=c1 2=c2 3=const0) into F (sel 0) or G (sel 1) at pos. */
+fn mxs_atom(sel: u32, pos: u64, a: u64) -> u64 {
+    let mut p : u64 = pos
+    if a <= 2u64 {
+        if sel == 0u32 { MXS_F[p] = 0x10u8  MXS_F[p + 1u64] = a as u8 }
+        if sel == 1u32 { MXS_G[p] = 0x10u8  MXS_G[p + 1u64] = a as u8 }
+        return p + 2u64
+    }
+    if sel == 0u32 { MXS_F[p] = 0x01u8 }
+    if sel == 1u32 { MXS_G[p] = 0x01u8 }
+    p = p + 1u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        if sel == 0u32 { MXS_F[p] = 0u8 }
+        if sel == 1u32 { MXS_G[p] = 0u8 }
+        p = p + 1u64
+        i = i + 1u64
+    }
+    return p
+}
+fn mxs_put(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { MXS_F[pos] = b as u8 }
+    if sel == 1u32 { MXS_G[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* build f tier 1 (code = op*3 + pat): u op v, pat 0 (x,x) 1 (x,c1) 2 (c1,x).  Returns body len. */
+fn mxs_build_f1(code: u64) -> u64 {
+    let op : u64 = code / 3u64
+    let pat : u64 = code % 3u64
+    let mut u : u64 = 0u64
+    let mut v : u64 = 0u64
+    if pat == 1u64 { v = 1u64 }
+    if pat == 2u64 { u = 1u64  v = 0u64 }
+    let mut p : u64 = mxs_atom(0u32, 0u64, u)
+    p = mxs_atom(0u32, p, v)
+    p = mxs_put(0u32, p, mxs_opbyte(op))
+    p = mxs_put(0u32, p, 0x60u32)
+    return p
+}
+
+/* build f tier 2 (code = op1*54 + op2*9 + pat*3 + w): (u op1 v) op2 w, w 0=x 1=c1 2=c2. */
+fn mxs_build_f2(code: u64) -> u64 {
+    let op1 : u64 = code / 54u64
+    let r1 : u64 = code % 54u64
+    let op2 : u64 = r1 / 9u64
+    let r2 : u64 = r1 % 9u64
+    let pat : u64 = r2 / 3u64
+    let w : u64 = r2 % 3u64
+    let mut u : u64 = 0u64
+    let mut v : u64 = 0u64
+    if pat == 1u64 { v = 1u64 }
+    if pat == 2u64 { u = 1u64  v = 0u64 }
+    let mut p : u64 = mxs_atom(0u32, 0u64, u)
+    p = mxs_atom(0u32, p, v)
+    p = mxs_put(0u32, p, mxs_opbyte(op1))
+    p = mxs_atom(0u32, p, w)
+    p = mxs_put(0u32, p, mxs_opbyte(op2))
+    p = mxs_put(0u32, p, 0x60u32)
+    return p
+}
+
+/* build g (code 0..56).  0 x | 1 c1 | 2 const0 | 3..20 one-op | 21..56 fold form x op2 (c1 op3 c2). */
+fn mxs_build_g(code: u64) -> u64 {
+    if code <= 2u64 {
+        let mut a : u64 = code
+        if code == 2u64 { a = 3u64 }
+        let mut p : u64 = mxs_atom(1u32, 0u64, a)
+        p = mxs_put(1u32, p, 0x60u32)
+        return p
+    }
+    if code <= 20u64 {
+        let c : u64 = code - 3u64
+        let op : u64 = c / 3u64
+        let pat : u64 = c % 3u64
+        let mut u : u64 = 0u64
+        let mut v : u64 = 0u64
+        if pat == 1u64 { v = 1u64 }
+        if pat == 2u64 { u = 1u64  v = 0u64 }
+        let mut p : u64 = mxs_atom(1u32, 0u64, u)
+        p = mxs_atom(1u32, p, v)
+        p = mxs_put(1u32, p, mxs_opbyte(op))
+        p = mxs_put(1u32, p, 0x60u32)
+        return p
+    }
+    let c : u64 = code - 21u64
+    let op2 : u64 = c / 6u64
+    let op3 : u64 = c % 6u64
+    let mut p : u64 = mxs_atom(1u32, 0u64, 0u64)      /* x */
+    p = mxs_atom(1u32, p, 1u64)                       /* c1 */
+    p = mxs_atom(1u32, p, 2u64)                       /* c2 */
+    p = mxs_put(1u32, p, mxs_opbyte(op3))             /* c1 op3 c2  (const op const: folds at emission) */
+    p = mxs_put(1u32, p, mxs_opbyte(op2))             /* x op2 (...) */
+    p = mxs_put(1u32, p, 0x60u32)
+    return p
+}
+
+/* emission cost of g: 0 for atoms, 1 for one-op and fold forms.  f tier1 = 1, tier2 = 2. */
+fn mxs_gcost(code: u64) -> u64 { if code <= 2u64 { return 0u64 }  return 1u64 }
+
+fn mxs_found() -> u64 @export { return MXS_N[0u64] }
+fn mxs_tested() -> u64 @export { return MXS_T[0u64] }
+fn mxs_frontier() -> u64 @export { return MXS_FR[0u64] }
+fn mxs_space() -> u64 @export { return (18u64 * 3u64) + (324u64 * 57u64) }   /* the declared bound: 18522 */
+fn mxs_reset() -> u32 @export { MXS_N[0u64] = 0u64  MXS_T[0u64] = 0u64  MXS_FR[0u64] = 0u64  return 1u32 }
+
+/* THE ROUND-1 FRONTIER LAW (printed, never silent): a pair where BOTH sides bear MUL is beyond the
+ * bit-blast disposer's practical reach (symbolic mul-vs-mul equality -- the one TRUE schema in that
+ * sub-space is mul-associativity (x*c1)*c2 == x*(c1*c2)).  Such pairs are FRONTIERED with the blocker
+ * named, counted, and auto-retried when a ring-axiom/kernel route lands (R7).  1386 of 18522 pairs. */
+fn mxs_f_has_mul(tier: u64, code: u64) -> u32 {
+    if tier == 1u64 { if code / 3u64 == 2u64 { return 1u32 }  return 0u32 }
+    if code / 54u64 == 2u64 { return 1u32 }
+    if (code % 54u64) / 9u64 == 2u64 { return 1u32 }
+    return 0u32
+}
+fn mxs_g_has_mul(code: u64) -> u32 {
+    if code <= 2u64 { return 0u32 }
+    if code <= 20u64 { if (code - 3u64) / 3u64 == 2u64 { return 1u32 }  return 0u32 }
+    let c : u64 = code - 21u64
+    if c / 6u64 == 2u64 { return 1u32 }
+    if c % 6u64 == 2u64 { return 1u32 }
+    return 0u32
+}
+
+fn mxs_record(tier: u64, fcode: u64, gcode: u64) -> u32 {
+    if MXS_N[0u64] >= MXS_MAX { return 0u32 }
+    let base : u64 = MXS_N[0u64] * 8u64
+    MXS_D[base] = MXS_MAGIC
+    MXS_D[base + 1u64] = tier
+    MXS_D[base + 2u64] = fcode
+    MXS_D[base + 3u64] = gcode
+    MXS_D[base + 4u64] = 64u64
+    MXS_D[base + 5u64] = 0u64
+    MXS_D[base + 6u64] = 0u64
+    MXS_D[base + 7u64] = 0u64
+    MXS_N[0u64] = MXS_N[0u64] + 1u64
+    return 1u32
+}
+
+/* test one (tier, f, g) pair through the disposer.
+ * 2 = PROVEN+recorded, 1 = refuted/abstain, 3 = FRONTIERED (mul-mul), 0 = error. */
+fn mxs_test(tier: u64, fcode: u64, gcode: u64) -> u32 @export {
+    if mxs_gcost(gcode) >= tier { return 1u32 }       /* strict emission-cost decrease only */
+    if mxs_f_has_mul(tier, fcode) == 1u32 { if mxs_g_has_mul(gcode) == 1u32 {
+        MXS_FR[0u64] = MXS_FR[0u64] + 1u64
+        return 3u32
+    } }
+    let mut fl : u64 = 0u64
+    if tier == 1u64 { fl = mxs_build_f1(fcode) }
+    if tier == 2u64 { fl = mxs_build_f2(fcode) }
+    if fl == 0u64 { return 0u32 }
+    let gl : u64 = mxs_build_g(gcode)
+    MXS_T[0u64] = MXS_T[0u64] + 1u64
+    let r : u32 = seq_equiv(&MXS_F as u64, 0u64, fl, &MXS_G as u64, 0u64, gl, 3u32)
+    if r == 1u32 {
+        if mxs_record(tier, fcode, gcode) != 1u32 { return 0u32 }
+        return 2u32
+    }
+    return 1u32
+}
+
+/* run tier-1 f (18 shapes) x atom g; then tier-2 f codes [f2lo, f2hi) x ALL g (57).  Canonical order,
+ * deterministic.  Returns discoveries recorded THIS run (mxs_reset first for a fresh stream). */
+fn mxs_run_range(with_t1: u32, f2lo: u64, f2hi: u64) -> u64 @export {
+    let n0 : u64 = MXS_N[0u64]
+    if with_t1 == 1u32 {
+        let mut fc : u64 = 0u64
+        while fc < 18u64 {
+            let mut gc : u64 = 0u64
+            while gc < 3u64 { mxs_test(1u64, fc, gc)  gc = gc + 1u64 }
+            fc = fc + 1u64
+        }
+    }
+    let mut f2 : u64 = f2lo
+    while f2 < f2hi {
+        if f2 >= 324u64 { f2 = f2hi }
+        if f2 < f2hi {
+            let mut gc : u64 = 0u64
+            while gc < 57u64 { mxs_test(2u64, f2, gc)  gc = gc + 1u64 }
+            f2 = f2 + 1u64
+        }
+    }
+    return MXS_N[0u64] - n0
+}
+
+/* copy discovery i's 8-word descriptor to out. */
+fn mxs_desc(i: u64, out8: u64) -> u32 @export {
+    if i >= MXS_N[0u64] { return 0u32 }
+    if out8 == 0u64 { return 0u32 }
+    let o : *u64 = out8 as *u64
+    let base : u64 = i * 8u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { o[k] = MXS_D[base + k]  k = k + 1u64 }
+    return 1u32
+}
+
+/* content-address a synthesized-schema descriptor (the MX03 id; canonical 64-byte LE serialisation). */
+fn mxs_schema_id(desc8: u64, out32: u64) -> i32 @export {
+    if desc8 == 0u64 { return -1i32 }
+    if out32 == 0u64 { return -1i32 }
+    let d : *u64 = desc8 as *u64
+    if d[0u64] != MXS_MAGIC { return -3i32 }
+    if d[1u64] < 1u64 { return -3i32 }
+    if d[1u64] > 2u64 { return -3i32 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            MXS_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return cad_oneshot(0u32, (&MXS_SER as u64) as *u8, 64u64, out32 as *u8)
+}

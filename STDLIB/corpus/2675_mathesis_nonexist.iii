@@ -1,0 +1,243 @@
+/* STDLIB/corpus/2675_mathesis_nonexist.iii -- THE FIRST NONEXISTENCE THEOREMS (Xi9-T2, III-MATHESIS-MAP.md
+ * s3b BREAK C3 / s7b).
+ *
+ * THE WITNESS-FUNCTION METHOD: a lower bound "no 1-op SVIR program computes rot_k" is a forall-exists
+ * statement (for every program, some input differs).  It REDUCES to the standing trusted judgment by
+ * constructing a WITNESS CIRCUIT w(c) (a mux on the special constants, total by construction) and proving
+ * the single forall-c statement  [ shape(c)(w(c)) != rot_k(w(c)) ] == const 1  -- one symbolic seq_equiv
+ * call per (shape, k).  No new prover; the judge never widens (the reduction law, s10.10).
+ *
+ * THE THEOREM (per k in 1..63): NO one-operation SVIR expression over {x, one constant c, one ALU op}
+ * computes rot_k.  The 1-op shape space and its discharge routes:
+ *   id (x)                : REFUTED symbolically, per k
+ *   const (c)             : witness circuit w(c) = mux(c==0, 1, 0): c=0 -> rot(1)=2^k != 0; else rot(0)=0 != c
+ *   x op c, op in {ADD,SUB,MUL,AND,OR,XOR}: witness circuits (MUL's special constant is 2^k; AND's is ~0)
+ *   c - x  (SUB2)         : witness circuit (the one non-commutative non-shift c-orientation)
+ *   x op x (6 ALU forms)  : REFUTED symbolically, per k
+ *   x << c / x >> c       : count c=0 is the id shape; c=64.. saturates to the const-0 program (excluded by
+ *                           the const shape at c=0); c in 1..63 by the NATIVE witness family x=2^63 / x=1
+ *                           (native and SVIR shift semantics AGREE on counts 1..63) -- complete exhaustion
+ *   c << x / c >> x       : c=0 by the native ground witness x=1 (0 != 2^k); c != 0 by the k-independent
+ *                           symbolic circuit  EQ(c,0) OR NE(c<<0, 0) == 1  (the x=0 witness: c != 0 = rot(0))
+ *
+ * R4 FIRST -- THE FALSE-NONEXISTENCE ARM: the same witness-circuit shape claiming
+ * "forall c exists x: (x & c) != (x & 0xFF)" must come out REFUTED (at c=0xFF the shapes coincide), proving
+ * the method cannot manufacture a lower bound where none exists.
+ *
+ * With the 3-op definiens (corpus/2671) this seals: 2 <= cost(rot_k) <= 3 in the ALU grammar -- the
+ * library's first NEGATIVE knowledge, and the reason anti-bloat never rewrites a rot window.
+ * 99 == the lower-bound family holds and the method is honest. */
+module corpus_2675_mathesis_nonexist
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var WF : [u8; 128]
+var WG : [u8; 128]
+
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { WF[pos] = 0x01u8 }
+    if sel == 1u32 { WG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { WF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { WG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { WF[pos] = b as u8 }
+    if sel == 1u32 { WG[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* [0x10 s][0x01 k][0x28][0x10 s][0x01 64-k][0x29][0x26] -- the ROTL64 definiens on slot s. */
+fn emit_rot(sel: u32, pos0: u64, slot: u32, k: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, k)
+    p = wb(sel, p, 0x28u32)
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, 64u64 - k)
+    p = wb(sel, p, 0x29u32)
+    p = wb(sel, p, 0x26u32)
+    return p
+}
+
+/* w(c) = mux(c == special, alt, main), stored to slot 1.  Returns pos. */
+fn emit_witness(pos0: u64, special: u64, alt: u64, main: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wc(0u32, p, special)
+    p = wb(0u32, p, 0x30u32)                 /* EQ(c, special) */
+    p = wb(0u32, p, 0x42u32)                 /* IF */
+    p = wc(0u32, p, alt)                     /*   THEN: the special-case witness */
+    p = wb(0u32, p, 0x43u32)                 /* ELSE */
+    p = wc(0u32, p, main)                    /*   the main witness */
+    p = wb(0u32, p, 0x44u32)                 /* END -> w on stack */
+    p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)   /* slot1 = w */
+    return p
+}
+
+/* the const-1 comparison body. */
+fn build_one() -> u64 {
+    let mut p : u64 = wc(1u32, 0u64, 1u64)
+    p = wb(1u32, p, 0x60u32)
+    return p
+}
+
+/* claim circuit for shape (x OP c) or (c OP x) vs target rot_k:
+ *   w; lhs = w OP c (corient=0) | c OP w (corient=1); rot_k(w); NE; ret  == const 1. */
+fn build_claim(op: u32, corient: u32, special: u64, alt: u64, main: u64, k: u64) -> u64 {
+    let mut p : u64 = emit_witness(0u64, special, alt, main)
+    if corient == 0u32 {
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+    }
+    if corient == 1u32 {
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    }
+    p = wb(0u32, p, op)                      /* lhs on stack */
+    p = emit_rot(0u32, p, 1u32, k)           /* rot_k(w) on stack */
+    p = wb(0u32, p, 0x31u32)                 /* NE(lhs, rot) */
+    p = wb(0u32, p, 0x60u32)
+    return p
+}
+
+/* claim circuit for the const shape (program == c): w; c; rot_k(w); NE; ret. */
+fn build_claim_const(k: u64) -> u64 {
+    let mut p : u64 = emit_witness(0u64, 0u64, 1u64, 0u64)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = emit_rot(0u32, p, 1u32, k)
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x60u32)
+    return p
+}
+
+fn rot_native(x: u64, k: u64) -> u64 {
+    let hi : u64 = x << k
+    let mut lo : u64 = 0u64
+    if k > 0u64 { lo = x >> (64u64 - k) }
+    return hi | lo
+}
+
+fn main() -> u64 {
+    /* ---- R4 FIRST: the FALSE nonexistence "forall c exists x: (x&c) != (x & 0xFF)" must REFUTE ----
+     * (at c=0xFF the program x&c IS x&0xFF: the method must fail to prove the false lower bound). */
+    let mut p : u64 = emit_witness(0u64, 0xFFFFFFFFFFFFFFFFu64, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+    p = wb(0u32, p, 0x25u32)                          /* lhs = w & c */
+    p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 1u32)
+    p = wc(0u32, p, 0xFFu64)
+    p = wb(0u32, p, 0x25u32)                          /* target = w & 0xFF */
+    p = wb(0u32, p, 0x31u32)
+    p = wb(0u32, p, 0x60u32)
+    let onelen : u64 = build_one()
+    if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, onelen, 1u32) != 0u32 { return 10u64 }
+
+    /* ---- the k-independent SHL2/SHR2 circuits: EQ(c,0) OR NE(c shift-by-0, 0) == 1 ---- */
+    let mut sop : u32 = 0x28u32
+    while sop <= 0x29u32 {
+        p = wb(0u32, 0u64, 0x10u32)  p = wb(0u32, p, 0u32)
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x30u32)                      /* EQ(c,0) */
+        p = wb(0u32, p, 0x10u32)  p = wb(0u32, p, 0u32)
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, sop)                          /* c shift 0 */
+        p = wc(0u32, p, 0u64)
+        p = wb(0u32, p, 0x31u32)                      /* NE(c shift 0, 0) */
+        p = wb(0u32, p, 0x26u32)                      /* OR */
+        p = wb(0u32, p, 0x60u32)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, onelen, 1u32) != 1u32 { return 21u64 }
+        sop = sop + 1u32
+    }
+
+    /* ---- the per-k family ---- */
+    let mut k : u64 = 1u64
+    while k <= 63u64 {
+        /* rot_k body for the refutation arms */
+        let mut rl : u64 = emit_rot(1u32, 0u64, 0u32, k)
+        rl = wb(1u32, rl, 0x60u32)
+
+        /* id shape: x == rot_k(x) REFUTED */
+        WF[0u64] = 0x10u8  WF[1u64] = 0u8  WF[2u64] = 0x60u8
+        if seq_equiv(&WF as u64, 0u64, 3u64, &WG as u64, 0u64, rl, 1u32) != 0u32 { return 11u64 }
+
+        /* x op x shapes (6 ALU forms): REFUTED */
+        let mut xop : u32 = 0x20u32
+        while xop <= 0x27u32 {
+            let mut skip : u32 = 0u32
+            if xop == 0x23u32 { skip = 1u32 }
+            if xop == 0x24u32 { skip = 1u32 }
+            if skip == 0u32 {
+                WF[0u64] = 0x10u8  WF[1u64] = 0u8
+                WF[2u64] = 0x10u8  WF[3u64] = 0u8
+                WF[4u64] = xop as u8
+                WF[5u64] = 0x60u8
+                if seq_equiv(&WF as u64, 0u64, 6u64, &WG as u64, 0u64, rl, 1u32) != 0u32 { return 20u64 }
+            }
+            xop = xop + 1u32
+        }
+
+        /* rebuild the const-1 body in WG (rot body above overwrote it) */
+        let ol : u64 = build_one()
+
+        /* const shape */
+        p = build_claim_const(k)
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 12u64 }
+
+        /* x op c shapes: ADD SUB MUL AND OR XOR (witness circuits, one symbolic call each) */
+        p = build_claim(0x20u32, 0u32, 0u64, 1u64, 0u64, k)                                   /* ADD */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 13u64 }
+        p = build_claim(0x21u32, 0u32, 0u64, 1u64, 0u64, k)                                   /* SUB  x-c */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 14u64 }
+        p = build_claim(0x22u32, 0u32, 1u64 << k, 0xFFFFFFFFFFFFFFFFu64, 1u64, k)             /* MUL */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 15u64 }
+        p = build_claim(0x25u32, 0u32, 0xFFFFFFFFFFFFFFFFu64, 1u64, 0xFFFFFFFFFFFFFFFFu64, k) /* AND */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 16u64 }
+        p = build_claim(0x26u32, 0u32, 0u64, 1u64, 0u64, k)                                   /* OR */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 17u64 }
+        p = build_claim(0x27u32, 0u32, 0u64, 1u64, 0u64, k)                                   /* XOR */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 18u64 }
+        p = build_claim(0x21u32, 1u32, 0u64, 1u64, 0u64, k)                                   /* SUB2 c-x */
+        if seq_equiv(&WF as u64, 0u64, p, &WG as u64, 0u64, ol, 1u32) != 1u32 { return 19u64 }
+
+        /* x << c / x >> c, c in 1..63: the native witness family (native == SVIR on counts 1..63) */
+        let mut c : u64 = 1u64
+        while c <= 63u64 {
+            if (0x8000000000000000u64 << c) != 0u64 { return 22u64 }
+            if (1u64 >> c) != 0u64 { return 23u64 }
+            c = c + 1u64
+        }
+        if rot_native(0x8000000000000000u64, k) == 0u64 { return 22u64 }
+        if rot_native(1u64, k) == 0u64 { return 23u64 }
+
+        /* x << x / x >> x: native ground witness search (small values, no count edge) */
+        let mut found : u32 = 0u32
+        let mut xw : u64 = 0u64
+        while xw < 16u64 {
+            if (xw << xw) != rot_native(xw, k) { found = 1u32 }
+            xw = xw + 1u64
+        }
+        if found != 1u32 { return 24u64 }
+        found = 0u32
+        xw = 0u64
+        while xw < 16u64 {
+            if (xw >> xw) != rot_native(xw, k) { found = 1u32 }
+            xw = xw + 1u64
+        }
+        if found != 1u32 { return 24u64 }
+
+        /* c << x / c >> x at c=0: the ground witness x=1 (0 shift 1 = 0 != 2^k = rot_k(1)) */
+        if rot_native(1u64, k) == (0u64 << 1u64) { return 25u64 }
+        if rot_native(1u64, k) == (0u64 >> 1u64) { return 25u64 }
+
+        k = k + 1u64
+    }
+
+    return 99u64
+}

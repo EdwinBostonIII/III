@@ -1,0 +1,177 @@
+/* STDLIB/corpus/2670_mathesis_define.iii -- THE DEFINITION DOOR gate (Xi8-T1, III-MATHESIS-MAP.md s7b).
+ *
+ * Proves the concept tier's mechanics, negative arms FIRST (RED-first law):
+ *   (a) malformed CONCEPT descriptors (wrong magic / zero name / zero arity / zero shape / bad width /
+ *       bad signedness / inverted range) get NO id -- rc MXD_E_DESC AND the output buffer is untouched
+ *       (the degenerate-pass arm: a 0xAA sentinel survives every rejected call);
+ *   (b) malformed LAW descriptors (wrong magic / zero concept ref / kind 0 / kind 6 / inverted range)
+ *       are invalid;
+ *   (c) THE MACRO ARM: the concept door rejects each single-false clause -- above all LAW-RICH=0 (a
+ *       definition with no proven law is a macro, never a concept) -- and rejects non-1 "truthy" values;
+ *   (d) ids are deterministic, CONTENT-addressed (same words at a different address -> same id), and
+ *       statement-sensitive (flip the name word -> different id; restore -> same id);
+ *   (e) CROSS-KIND DOMAIN SEPARATION: a concept descriptor and a law descriptor with identical non-magic
+ *       words produce DIFFERENT ids (the magic word is in-band separation -- MXD1/MX02/MX01 never collide);
+ *   (f) CHAIN CONTINUITY across modules: the concept id extends the THEOREM-tier chain via the SAME
+ *       mx_chain_genesis/mx_chain_step law (one library, one chain, many entry kinds); the step is
+ *       deterministic and a tampered entry hash breaks it;
+ *   (g) mxd_ref_of derives the concept-ref word from the id's first 8 LE bytes (the one derivation site)
+ *       and a law descriptor built with it is valid.
+ * 99 == the definition door holds. */
+module corpus_2670_mathesis_define
+
+extern @abi(c-msvc-x64) fn mxd_concept_valid(desc: u64) -> u32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_law_valid(desc: u64) -> u32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_concept_id(desc: u64, out32: u64) -> i32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_law_id(desc: u64, out32: u64) -> i32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_ref_of(id32: u64) -> u64 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_admit(spec_bridged: u32, law_rich: u32, measured: u32, witnessed: u32) -> u32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+
+const ROTL64_NAME : u64 = 0x000034364C544F52u64   /* "ROTL64" packed LE */
+
+var DA  : [u64; 8]
+var DB  : [u64; 8]
+var DL  : [u64; 8]
+var ID1 : [u8; 32]
+var ID2 : [u8; 32]
+var ID3 : [u8; 32]
+var H0  : [u8; 32]
+var H1  : [u8; 32]
+var H2  : [u8; 32]
+
+fn set_concept(name: u64, arity: u64, shape: u64, width: u64, sign: u64, lo: u64, hi: u64) -> u32 {
+    DA[0u64] = 0x4D584431u64
+    DA[1u64] = name
+    DA[2u64] = arity
+    DA[3u64] = shape
+    DA[4u64] = width
+    DA[5u64] = sign
+    DA[6u64] = lo
+    DA[7u64] = hi
+    return 1u32
+}
+fn set_law(cref: u64, kind: u64, param: u64, width: u64, sign: u64, lo: u64, hi: u64) -> u32 {
+    DL[0u64] = 0x4D583032u64
+    DL[1u64] = cref
+    DL[2u64] = kind
+    DL[3u64] = param
+    DL[4u64] = width
+    DL[5u64] = sign
+    DL[6u64] = lo
+    DL[7u64] = hi
+    return 1u32
+}
+fn sentinel_fill() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ID1[i] = 0xAAu8  i = i + 1u64 }
+    return 1u32
+}
+fn sentinel_intact() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { if ID1[i] != 0xAAu8 { return 0u32 }  i = i + 1u64 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ---- (a) NEGATIVE FIRST: malformed concept descriptors -> no id, output untouched ---- */
+    set_concept(ROTL64_NAME, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)
+    DA[0u64] = 0x4D583031u64                    /* wrong magic (the MX01 THEOREM tag, not MXD1) */
+    sentinel_fill()
+    if mxd_concept_id(&DA as u64, &ID1 as u64) != -3i32 { return 10u64 }
+    if sentinel_intact() != 1u32 { return 11u64 }
+    set_concept(0u64, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)          /* zero name */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 12u64 }
+    set_concept(ROTL64_NAME, 0u64, 1u64, 64u64, 0u64, 0u64, 63u64)   /* zero arity */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 13u64 }
+    set_concept(ROTL64_NAME, 1u64, 0u64, 64u64, 0u64, 0u64, 63u64)   /* zero definiens shape */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 14u64 }
+    set_concept(ROTL64_NAME, 1u64, 1u64, 33u64, 0u64, 0u64, 63u64)   /* width 33 */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 15u64 }
+    set_concept(ROTL64_NAME, 1u64, 1u64, 64u64, 3u64, 0u64, 63u64)   /* signedness 3 */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 16u64 }
+    set_concept(ROTL64_NAME, 1u64, 1u64, 64u64, 0u64, 63u64, 0u64)   /* inverted range */
+    if mxd_concept_valid(&DA as u64) != 0u32 { return 17u64 }
+    sentinel_fill()
+    if mxd_concept_id(&DA as u64, &ID1 as u64) != -3i32 { return 18u64 }
+    if sentinel_intact() != 1u32 { return 19u64 }
+    if mxd_concept_id(0u64, &ID1 as u64) != -1i32 { return 20u64 }
+
+    /* ---- (b) malformed law descriptors ---- */
+    set_law(1u64, 3u64, 64u64, 64u64, 0u64, 0u64, 63u64)
+    DL[0u64] = 0x4D584431u64                    /* wrong magic (concept tag on a law) */
+    if mxd_law_valid(&DL as u64) != 0u32 { return 30u64 }
+    set_law(0u64, 3u64, 64u64, 64u64, 0u64, 0u64, 63u64)             /* zero concept ref */
+    if mxd_law_valid(&DL as u64) != 0u32 { return 31u64 }
+    set_law(1u64, 0u64, 64u64, 64u64, 0u64, 0u64, 63u64)             /* kind 0 */
+    if mxd_law_valid(&DL as u64) != 0u32 { return 32u64 }
+    set_law(1u64, 6u64, 64u64, 64u64, 0u64, 0u64, 63u64)             /* kind 6 */
+    if mxd_law_valid(&DL as u64) != 0u32 { return 33u64 }
+    set_law(1u64, 3u64, 64u64, 64u64, 0u64, 5u64, 4u64)              /* inverted range */
+    if mxd_law_valid(&DL as u64) != 0u32 { return 34u64 }
+    sentinel_fill()
+    if mxd_law_id(&DL as u64, &ID1 as u64) != -3i32 { return 35u64 }
+    if sentinel_intact() != 1u32 { return 36u64 }
+
+    /* ---- (c) THE MACRO ARM: the concept door's strict conjunction ---- */
+    if mxd_admit(0u32, 1u32, 1u32, 1u32) != 0u32 { return 40u64 }    /* no spec bridge */
+    if mxd_admit(1u32, 0u32, 1u32, 1u32) != 0u32 { return 41u64 }    /* LAWLESS = MACRO -> REFUSED */
+    if mxd_admit(1u32, 1u32, 0u32, 1u32) != 0u32 { return 42u64 }    /* unmeasured */
+    if mxd_admit(1u32, 1u32, 1u32, 0u32) != 0u32 { return 43u64 }    /* unwitnessed */
+    if mxd_admit(2u32, 1u32, 1u32, 1u32) != 0u32 { return 44u64 }    /* truthy 2 rejected */
+    if mxd_admit(1u32, 1u32, 1u32, 2u32) != 0u32 { return 45u64 }
+    if mxd_admit(1u32, 1u32, 1u32, 1u32) != 1u32 { return 46u64 }    /* all four -> admitted */
+
+    /* ---- (d) id determinism + content-addressing + statement sensitivity ---- */
+    set_concept(ROTL64_NAME, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)
+    if mxd_concept_valid(&DA as u64) != 1u32 { return 50u64 }
+    if mxd_concept_id(&DA as u64, &ID1 as u64) != 0i32 { return 51u64 }
+    if mxd_concept_id(&DA as u64, &ID2 as u64) != 0i32 { return 52u64 }
+    if mx_id_eq(&ID1 as u64, &ID2 as u64) != 1u32 { return 53u64 }   /* deterministic */
+    let mut i : u64 = 0u64
+    while i < 8u64 { DB[i] = DA[i]  i = i + 1u64 }
+    if mxd_concept_id(&DB as u64, &ID2 as u64) != 0i32 { return 54u64 }
+    if mx_id_eq(&ID1 as u64, &ID2 as u64) != 1u32 { return 55u64 }   /* CONTENT-addressed, not location */
+    DA[1u64] = ROTL64_NAME + 1u64                                    /* flip the statement (name word) */
+    if mxd_concept_id(&DA as u64, &ID2 as u64) != 0i32 { return 56u64 }
+    if mx_id_eq(&ID1 as u64, &ID2 as u64) != 0u32 { return 57u64 }   /* sensitive */
+    DA[1u64] = ROTL64_NAME                                           /* restore */
+    if mxd_concept_id(&DA as u64, &ID2 as u64) != 0i32 { return 58u64 }
+    if mx_id_eq(&ID1 as u64, &ID2 as u64) != 1u32 { return 59u64 }
+
+    /* ---- (e) CROSS-KIND DOMAIN SEPARATION: same non-magic words, different kind -> different id ---- */
+    set_concept(0x1111u64, 2u64, 1u64, 64u64, 0u64, 0u64, 63u64)     /* valid concept: arity 2, shape 1 */
+    set_law(0x1111u64, 2u64, 1u64, 64u64, 0u64, 0u64, 63u64)         /* valid law: kind 2, param 1 */
+    if mxd_concept_valid(&DA as u64) != 1u32 { return 60u64 }
+    if mxd_law_valid(&DL as u64) != 1u32 { return 61u64 }
+    if mxd_concept_id(&DA as u64, &ID2 as u64) != 0i32 { return 62u64 }
+    if mxd_law_id(&DL as u64, &ID3 as u64) != 0i32 { return 63u64 }
+    if mx_id_eq(&ID2 as u64, &ID3 as u64) != 0u32 { return 64u64 }   /* magic separates the kinds */
+
+    /* ---- (f) CHAIN CONTINUITY: the concept id extends the theorem-tier chain (same law) ---- */
+    if mx_chain_genesis(&H0 as u64) != 0i32 { return 70u64 }
+    if mx_chain_step(&H0 as u64, &ID1 as u64, &H1 as u64) != 0i32 { return 71u64 }
+    if mx_id_eq(&H0 as u64, &H1 as u64) != 0u32 { return 72u64 }     /* the chain advances */
+    if mx_chain_step(&H0 as u64, &ID1 as u64, &H2 as u64) != 0i32 { return 73u64 }
+    if mx_id_eq(&H1 as u64, &H2 as u64) != 1u32 { return 74u64 }     /* deterministic */
+    ID1[0u64] = ID1[0u64] ^ 1u8                                      /* tamper the entry hash */
+    if mx_chain_step(&H0 as u64, &ID1 as u64, &H2 as u64) != 0i32 { return 75u64 }
+    if mx_id_eq(&H1 as u64, &H2 as u64) != 0u32 { return 76u64 }     /* tamper-evident */
+    ID1[0u64] = ID1[0u64] ^ 1u8                                      /* restore */
+
+    /* ---- (g) the concept-ref derivation + a law bound to a real concept id ---- */
+    let cref : u64 = mxd_ref_of(&ID1 as u64)
+    if cref == 0u64 { return 80u64 }
+    let mut chk : u64 = 0u64
+    i = 0u64
+    while i < 8u64 { chk = chk | ((ID1[i] as u64) << (i * 8u64))  i = i + 1u64 }
+    if cref != chk { return 81u64 }                                  /* first 8 LE bytes, exactly */
+    set_law(cref, 3u64, 64u64, 64u64, 0u64, 0u64, 63u64)             /* the C64 homomorphism law shape */
+    if mxd_law_valid(&DL as u64) != 1u32 { return 82u64 }
+    if mxd_law_id(&DL as u64, &ID3 as u64) != 0i32 { return 83u64 }
+    if mxd_ref_of(0u64) != 0u64 { return 84u64 }
+
+    return 99u64
+}

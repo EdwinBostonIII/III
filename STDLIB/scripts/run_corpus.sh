@@ -1759,6 +1759,12 @@ declare -A EXPECTED=(
     [2602_mathesis_measure]=99          # Ξ0-T2 THE MEASURE INSTRUMENT: opcode-sync SVIR window census (seeded counts + phantom-const anti-grep arm + R2 range tooth + unknown-op honest abstain)
     [2601_mathesis_dispose]=99          # Ξ0-T3 THE DISPOSER: R4 false-identity REFUTED first; one-call ∀x,c1,c2 chain schemas (AND/OR/XOR); k=1..63 range sweeps (align-down + mask-low); width-64 tooth; SEQ_TOP honest abstain; truth-table second engine (R1)
     [2603_mathesis_seal]=99             # Ξ0-T5 MATHESIS-THEOREM-0001 replay seal: descriptor re-hashes to the pinned theorem_id; tamper breaks it; genesis→head chain replays; the door conjunction holds
+    [2670_mathesis_define]=99           # Ξ8-T1 THE DEFINITION DOOR (creator tier): MXD1/MX02 descriptors, malformed-no-id + untouched-output arms, THE MACRO ARM (lawless definition REFUSED), content-addressed statement-sensitive ids, cross-kind domain separation, cross-module chain continuity + tamper
+    [2671_mathesis_rot]=99              # Ξ8-T2 THE ROT CONCEPT: R4 false law REFUTED first; the bit-permutation spec bridge (49,152 native checks, R1 dual); identity + 63 inverses + the WHOLE C64 Cayley table (4096 symbolic seq_equiv proofs over all 2^64 x) (~30s)
+    [2610_mathesis_propose]=99          # Ξ1-T1 THE SYNTHESIZER: machine-synthesizes laws from the whole declared space (no candidates given); tier-1 exact-4 count; Ξ0 REdiscovered ⇒ door REFUSES (R3 live); absorption discovered ⇒ ADMITTED; involution; strictness + false-pair + determinism arms
+    [2672_mathesis_rot_census]=99       # Ξ8-T3 THE ROT-WINDOW CENSUS: class 8 (rotl+rotr spellings, same-slot, a+b=64, a∈1..63); the PHANTOM arm (flat grep fooled, opcode-sync walker not); teeth + determinism
+    [2675_mathesis_nonexist]=99         # Ξ9-T2 THE FIRST NONEXISTENCE THEOREMS (witness-function method): false-nonexistence arm REFUTED first; per k∈1..63 the whole 1-op shape space excluded (8 ∀c witness circuits + id/x∘x refutations + native shift exhaustion) ⇒ 2 ≤ cost(rot_k) ≤ 3
+    [2673_mathesis_concept_seal]=99     # Ξ8-T4 THE CONCEPT-TIER SEAL: genesis→0001→CONCEPT-0001(ROTL64)→0002..0005→0006/0007(MACHINE-SYNTHESIZED) replays to the pinned head d18e5038…; flipped-word + truncated-chain tamper arms break it
 )
 
 PASS=0

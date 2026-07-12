@@ -1,0 +1,119 @@
+/* STDLIB/corpus/2673_mathesis_concept_seal.iii -- THE CONCEPT-TIER SEAL replay gate (Xi8-T4,
+ * III-MATHESIS-MAP.md s7b).
+ *
+ * The library's second sealing, replayed END TO END from pins -- one chain, three entry kinds:
+ *
+ *   genesis -> MATHESIS-THEOREM-0001 (MX01, Xi0)                                      = H1 (pinned)
+ *           -> MATHESIS-CONCEPT-0001 ROTL64 (MXD1; INERT: census c8=0 everywhere)     = H2
+ *           -> THEOREM-0002 C64 homomorphism | 0003 identity | 0004 inverses (MX02)
+ *           -> THEOREM-0005 the 1-op nonexistence lower bound (MX02 kind 5)
+ *           -> THEOREM-0006 absorption | 0007 involution (MX03, MACHINE-SYNTHESIZED)  = HEAD (pinned)
+ *
+ * Every id re-derives from its canonical descriptor through the REAL organs (mx_theorem_id /
+ * mxd_concept_id / mxd_law_id / mxs_schema_id); the chain re-walks with mx_chain_step; the final head
+ * must equal the pin.  TAMPER ARMS: one flipped descriptor word changes the concept id AND breaks the
+ * head; a truncated chain (skipping one entry) breaks the head.  PROVENANCE is part of the sealed record:
+ * 0002..0005 are human-conjectured/machine-proven; 0006/0007 are MACHINE-synthesized AND machine-proven
+ * (corpus/2610's enumeration, no candidate given).  99 == the sealed library replays. */
+module corpus_2673_mathesis_concept_seal
+
+extern @abi(c-msvc-x64) fn mx_theorem_id(desc: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_genesis(out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_chain_step(prev32: u64, entry32: u64, out32: u64) -> i32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mx_id_eq(a: u64, b: u64) -> u32 from "mathesis_admit.iii"
+extern @abi(c-msvc-x64) fn mxd_concept_id(desc: u64, out32: u64) -> i32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_law_id(desc: u64, out32: u64) -> i32 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxd_ref_of(id32: u64) -> u64 from "mathesis_define.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+
+var D    : [u64; 8]
+var CID  : [u8; 32]
+var EID  : [u8; 32]
+var H    : [u8; 32]
+var PIN  : [u8; 32]
+
+fn setpin(w0: u64, w1: u64, w2: u64, w3: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        PIN[i]         = ((w0 >> (i * 8u64)) & 0xFFu64) as u8
+        PIN[i + 8u64]  = ((w1 >> (i * 8u64)) & 0xFFu64) as u8
+        PIN[i + 16u64] = ((w2 >> (i * 8u64)) & 0xFFu64) as u8
+        PIN[i + 24u64] = ((w3 >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn d8(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64) -> u32 {
+    D[0u64] = a  D[1u64] = b  D[2u64] = c  D[3u64] = d
+    D[4u64] = e  D[5u64] = f  D[6u64] = g  D[7u64] = h
+    return 1u32
+}
+
+/* derive a law/synth id into EID and step the chain H = step(H, EID). */
+fn step_law() -> u32 {
+    if mxd_law_id(&D as u64, &EID as u64) != 0i32 { return 0u32 }
+    if mx_chain_step(&H as u64, &EID as u64, &H as u64) != 0i32 { return 0u32 }
+    return 1u32
+}
+fn step_syn() -> u32 {
+    if mxs_schema_id(&D as u64, &EID as u64) != 0i32 { return 0u32 }
+    if mx_chain_step(&H as u64, &EID as u64, &H as u64) != 0i32 { return 0u32 }
+    return 1u32
+}
+
+/* replay the WHOLE chain from genesis; skip_entry = 0 none | 5 = skip thm5 (the truncation arm). */
+fn replay(skip5: u32) -> u32 {
+    if mx_chain_genesis(&H as u64) != 0i32 { return 0u32 }
+    /* MATHESIS-THEOREM-0001 (the Xi0 MX01 descriptor) */
+    d8(0x4D583031u64, 0x25u64, 1u64, 1u64, 64u64, 0u64, 0u64, 0u64)
+    if mx_theorem_id(&D as u64, &EID as u64) != 0i32 { return 0u32 }
+    if mx_chain_step(&H as u64, &EID as u64, &H as u64) != 0i32 { return 0u32 }
+    /* MATHESIS-CONCEPT-0001 ROTL64 */
+    d8(0x4D584431u64, 0x000034364C544F52u64, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)
+    if mxd_concept_id(&D as u64, &CID as u64) != 0i32 { return 0u32 }
+    if mx_chain_step(&H as u64, &CID as u64, &H as u64) != 0i32 { return 0u32 }
+    let cref : u64 = mxd_ref_of(&CID as u64)
+    /* 0002 homomorphism, 0003 identity, 0004 inverses, 0005 nonexistence */
+    d8(0x4D583032u64, cref, 3u64, 64u64, 64u64, 0u64, 0u64, 63u64)
+    if step_law() != 1u32 { return 0u32 }
+    d8(0x4D583032u64, cref, 1u64, 0u64, 64u64, 0u64, 0u64, 0u64)
+    if step_law() != 1u32 { return 0u32 }
+    d8(0x4D583032u64, cref, 2u64, 64u64, 64u64, 0u64, 1u64, 63u64)
+    if step_law() != 1u32 { return 0u32 }
+    if skip5 == 0u32 {
+        d8(0x4D583032u64, cref, 5u64, 1u64, 64u64, 0u64, 1u64, 63u64)
+        if step_law() != 1u32 { return 0u32 }
+    }
+    /* 0006 absorption (2,247,1), 0007 involution (2,319,0) -- MACHINE-SYNTHESIZED */
+    d8(0x4D583033u64, 2u64, 247u64, 1u64, 64u64, 0u64, 0u64, 0u64)
+    if step_syn() != 1u32 { return 0u32 }
+    d8(0x4D583033u64, 2u64, 319u64, 0u64, 64u64, 0u64, 0u64, 0u64)
+    if step_syn() != 1u32 { return 0u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ---- the concept id re-derives to its pin ---- */
+    d8(0x4D584431u64, 0x000034364C544F52u64, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)
+    if mxd_concept_id(&D as u64, &CID as u64) != 0i32 { return 10u64 }
+    setpin(0x9f90cb0a91abbb92u64, 0xcf10269e4d13ab00u64, 0xc2b6ab39cb681691u64, 0x6b2b1a4df66e5f42u64)
+    if mx_id_eq(&CID as u64, &PIN as u64) != 1u32 { return 11u64 }
+
+    /* ---- the full chain replays from genesis to the pinned HEAD ---- */
+    if replay(0u32) != 1u32 { return 12u64 }
+    setpin(0x967c87e738508ed1u64, 0x9f519824daf85c3au64, 0xd15dca5785b2b1eau64, 0x5af34579d86889b7u64)
+    if mx_id_eq(&H as u64, &PIN as u64) != 1u32 { return 13u64 }
+
+    /* ---- TAMPER ARM 1: one flipped descriptor word breaks the head ---- */
+    if replay(0u32) != 1u32 { return 14u64 }
+    d8(0x4D584431u64, 0x000034364C544F53u64, 1u64, 1u64, 64u64, 0u64, 0u64, 63u64)   /* name+1 */
+    if mxd_concept_id(&D as u64, &EID as u64) != 0i32 { return 15u64 }
+    if mx_id_eq(&EID as u64, &CID as u64) != 0u32 { return 16u64 }                   /* id changes */
+
+    /* ---- TAMPER ARM 2: a truncated chain (thm5 skipped) misses the pinned head ---- */
+    if replay(1u32) != 1u32 { return 17u64 }
+    if mx_id_eq(&H as u64, &PIN as u64) != 0u32 { return 18u64 }
+
+    return 99u64
+}

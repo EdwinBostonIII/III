@@ -1,0 +1,144 @@
+/* STDLIB/corpus/2672_mathesis_rot_census.iii -- THE ROT-WINDOW CENSUS gate (Xi8-T3, III-MATHESIS-MAP.md s7b).
+ *
+ * Proves the concept census class (8): (a) a rotl-spelled definiens window counts exactly once and a
+ * rotr-spelled mirror counts too; (b) THE PHANTOM ARM: a byte-perfect rot window threaded through const
+ * IMMEDIATES (the flat byte string contains it; this gate's own naive scanner finds it) counts ZERO --
+ * the walker decodes, never greps; (c) the R2 teeth: a+b != 64 not counted, different slots not counted,
+ * a = 0 (or 64) not counted; (d) determinism across reset+rescan; (e) clean bodies count zero.
+ * 99 == the concept-tier MEASURED clause has a trustworthy instrument. */
+module corpus_2672_mathesis_rot_census
+
+extern @abi(c-msvc-x64) fn mxm_reset() -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_scan(base: u64, len: u64) -> u32 from "mathesis_measure.iii"
+extern @abi(c-msvc-x64) fn mxm_count(class: u64) -> u64 from "mathesis_measure.iii"
+
+var C : [u8; 256]
+var CL : [u64; 1]
+
+fn emit8(pos: u64, v: u64) -> u64 {
+    C[pos] = 0x01u8
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 { C[pos + 1u64 + i] = (x & 0xFFu64) as u8  x = x >> 8u64  i = i + 1u64 }
+    return pos + 9u64
+}
+fn b(pos: u64, v: u32) -> u64 { C[pos] = v as u8  return pos + 1u64 }
+
+/* one-function v1 container around a body written by the builder fns below; body starts at 5. */
+fn hdr(blen: u64) -> u32 {
+    C[0u64] = 1u8                       /* nfunc = 1 */
+    C[1u64] = 1u8                       /* params */
+    C[2u64] = 1u8                       /* nresults */
+    C[3u64] = (blen & 0xFFu64) as u8    /* blen LE */
+    C[4u64] = ((blen >> 8u64) & 0xFFu64) as u8
+    CL[0u64] = 5u64 + blen
+    return 1u32
+}
+
+/* rot-shaped body: [0x10 s1][0x01 a][sh1][0x10 s2][0x01 bimm][sh2][0x26][0x60] */
+fn build_rotbody(s1: u32, a: u64, sh1: u32, s2: u32, bimm: u64, sh2: u32) -> u32 {
+    let mut p : u64 = 5u64
+    p = b(p, 0x10u32)  p = b(p, s1)
+    p = emit8(p, a)
+    p = b(p, sh1)
+    p = b(p, 0x10u32)  p = b(p, s2)
+    p = emit8(p, bimm)
+    p = b(p, sh2)
+    p = b(p, 0x26u32)
+    p = b(p, 0x60u32)
+    hdr(p - 5u64)
+    return 1u32
+}
+
+/* THE PHANTOM: real code [0x01 A][0x01 B][0x28][0x10 0][0x01 C][0x29][0x26][0x72][0x01 0][0x60] whose
+ * FLAT bytes contain a complete rot window starting INSIDE A's immediate (A6=0x10 A7=0x00, then B's real
+ * 0x01 opcode serves as the window's first const marker, B = a = 19, the real 0x28, the real [0x10 0],
+ * the real [0x01 C=45], the real 0x29 0x26 complete it).  Opcode-synchronously it is nothing. */
+fn build_phantom() -> u32 {
+    let mut p : u64 = 5u64
+    p = emit8(p, 0x0010AAAAAAAAAAAAu64)   /* A: bytes .. AA AA 10 00 (A6=0x10, A7=0x00) */
+    p = emit8(p, 19u64)                   /* B = 19 -> the phantom's a-immediate */
+    p = b(p, 0x28u32)
+    p = b(p, 0x10u32)  p = b(p, 0u32)
+    p = emit8(p, 45u64)                   /* C = 45 -> the phantom's b-immediate */
+    p = b(p, 0x29u32)
+    p = b(p, 0x26u32)                     /* stack: (A<<B), (x>>45) -> OR */
+    p = b(p, 0x72u32)                     /* drop */
+    p = emit8(p, 0u64)
+    p = b(p, 0x60u32)
+    hdr(p - 5u64)
+    return 1u32
+}
+
+/* the naive flat byte-grep a WRONG instrument would use: finds any 25-byte rot pattern at ANY offset. */
+fn naive_rot_grep(base: u64, len: u64) -> u64 {
+    let ptr : *u8 = base as *u8
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    if len < 25u64 { return 0u64 }
+    while i + 25u64 <= len {
+        if ptr[i] == 0x10u8 { if ptr[i + 2u64] == 0x01u8 { if ptr[i + 12u64] == 0x10u8 {
+            if ptr[i + 13u64] == ptr[i + 1u64] { if ptr[i + 14u64] == 0x01u8 { if ptr[i + 24u64] == 0x26u8 {
+                let s1 : u32 = ptr[i + 11u64] as u32
+                let s2 : u32 = ptr[i + 23u64] as u32
+                let mut pair : u32 = 0u32
+                if s1 == 0x28u32 { if s2 == 0x29u32 { pair = 1u32 } }
+                if s1 == 0x29u32 { if s2 == 0x28u32 { pair = 1u32 } }
+                if pair == 1u32 {
+                    let mut a : u64 = 0u64
+                    let mut bb : u64 = 0u64
+                    let mut j : u64 = 0u64
+                    while j < 8u64 {
+                        a = a | ((ptr[i + 3u64 + j] as u64) << (j * 8u64))
+                        bb = bb | ((ptr[i + 15u64 + j] as u64) << (j * 8u64))
+                        j = j + 1u64
+                    }
+                    if a >= 1u64 { if a <= 63u64 { if a + bb == 64u64 { n = n + 1u64 } } }
+                }
+            } } }
+        } } }
+        i = i + 1u64
+    }
+    return n
+}
+
+fn scan_c8() -> u64 {
+    mxm_reset()
+    if mxm_scan(&C as u64, CL[0u64]) != 1u32 { return 0xFFFFu64 }
+    return mxm_count(8u64)
+}
+
+fn main() -> u64 {
+    /* ---- (e) clean body counts zero ---- */
+    build_rotbody(0u32, 19u64, 0x28u32, 0u32, 44u64, 0x29u32)   /* a+b=63: NOT a rot */
+    if scan_c8() != 0u64 { return 10u64 }
+
+    /* ---- (a) the rotl-spelled window counts exactly once; the rotr mirror counts too ---- */
+    build_rotbody(0u32, 19u64, 0x28u32, 0u32, 45u64, 0x29u32)
+    if scan_c8() != 1u64 { return 11u64 }
+    if naive_rot_grep(&C as u64, CL[0u64]) != 1u64 { return 12u64 }   /* sync window: both see it */
+    build_rotbody(0u32, 45u64, 0x29u32, 0u32, 19u64, 0x28u32)         /* rotr-spelled */
+    if scan_c8() != 1u64 { return 13u64 }
+
+    /* ---- (c) the teeth: different slots / a=0 / a=64 are NOT rot windows ---- */
+    build_rotbody(0u32, 19u64, 0x28u32, 1u32, 45u64, 0x29u32)
+    if scan_c8() != 0u64 { return 14u64 }
+    build_rotbody(0u32, 0u64, 0x28u32, 0u32, 64u64, 0x29u32)
+    if scan_c8() != 0u64 { return 15u64 }
+    build_rotbody(0u32, 64u64, 0x28u32, 0u32, 0u64, 0x29u32)
+    if scan_c8() != 0u64 { return 16u64 }
+
+    /* ---- (b) THE PHANTOM ARM: the flat grep finds it; the opcode-synchronous walker refuses ---- */
+    build_phantom()
+    if naive_rot_grep(&C as u64, CL[0u64]) != 1u64 { return 17u64 }   /* the naive scanner IS fooled */
+    if scan_c8() != 0u64 { return 18u64 }                             /* the walker is NOT */
+
+    /* ---- (d) determinism across reset+rescan ---- */
+    build_rotbody(0u32, 7u64, 0x28u32, 0u32, 57u64, 0x29u32)
+    let r1 : u64 = scan_c8()
+    let r2 : u64 = scan_c8()
+    if r1 != 1u64 { return 19u64 }
+    if r1 != r2 { return 20u64 }
+
+    return 99u64
+}

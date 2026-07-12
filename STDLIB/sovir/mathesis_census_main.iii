@@ -55,6 +55,7 @@ fn main() -> u64 {
     pc(" c5=~" as u64, 5u64)
     pc(" c6=~" as u64, 6u64)
     pc(" c7=~" as u64, 7u64)
+    pc(" c8=~" as u64, 8u64)
     putchar(10i32)
     return 0u64
 }

@@ -1,11 +1,16 @@
-# III — THE MATHESIS ENGINE (Ξ, v2): the summit where III generates its own mathematics
+# III — THE MATHESIS CREATOR (Ξ, v3): concepts, theorems, and theories from the machine — creation without new axioms
 
-> **STATUS: v2 REFINED + EXECUTION OPENED (2026-07-11).** v1 located the loop and its organs. v2 is written
-> after reading the organs' actual code, and it is **more ambitious in mechanism, not in rhetoric**: the loop
-> does not merely *add rules* — it **grows its own assimilation grammar toward its prover's algebra** (a
-> measured, monotone ratchet), admits **∀-quantified theorem schemas** (not ground facts), assimilates by
-> **deterministic source emission** into kernel-certified rule TUs (the already-live Path-C mold), and keeps a
-> **replayable** sealed library whose every entry re-proves from scratch on demand. Companions:
+> **STATUS: v3 — THE CREATOR TIER OPENED (2026-07-11; Ξ0 DISCHARGED same day).** v1 located the loop. v2 made
+> it mechanically ambitious and Ξ0 closed the seed cycle (MATHESIS-THEOREM-0001 sealed + assimilated +
+> measured). v3 answers the ceiling critique honestly and then breaks every ceiling that is belief rather than
+> physics: v2's engine could only *find equivalences in a fixed language*. v3 gives the engine the four moves
+> by which real mathematics actually grows — **new DEFINITIONS** (conservative extension: vocabulary, never
+> axioms — Ξ8), **new STATEMENT KINDS** (order, nonexistence, optimality — all reduced to the one trusted
+> judgment — Ξ9), **new PROOF METHODS** (deduction from the library, induction to unbounded quantifiers —
+> Ξ10; verified-morphism transport — Ξ11; exact-evidence conjecture — Ξ12), and **its own QUESTIONS** (the
+> measured research agenda — Ξ13). The walls that are physics stay walls (B3, Gödel, Richardson,
+> transcendentals). The v2 pillars, requirements R1–R7, and phases Ξ0–Ξ7 remain in force below — v3 layers the
+> creator tier on top of them, gates 2670–2699. Companions:
 > `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ — the semantic witness this campaign consumes),
 > `III-GRAND-UNIFICATION-MASTER-PLAN.md` (Ω/Σ — the skeleton this campaign completes),
 > `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`,
@@ -34,6 +39,21 @@ evaluator, and measures that it got strictly smaller — while the **teach-gramm
 operator by operator, toward the **prove-algebra** of its own disposer. No famous-open problem claimed; every
 discovery individually disposed; every admitted rule earning a measured gate.
 
+**And v3 states the summit above that (the creator thesis).** An engine that only finds cheaper equivalents is
+an optimizer wearing a mathematician's coat. What working mathematics actually consists of is four moves —
+*define* a concept worth naming, *state* propositions in a growing language, *prove* by composing what is
+already proven (not only by re-deciding from raw bits), and *choose* what to work on next — and **none of the
+four requires new axioms, statistics, or undecidable territory**. Definitional extension is conservative
+(vocabulary grows, the foundation's strength does not); richer statement kinds reduce by construction to the
+one judgment the disposer already renders; deduction and induction are kernel-checked composition of sealed
+entries; and intent is measured demand, never learned belief. So the creator tier adds **zero trusted
+components** while removing the four ceilings the honest critique named: the frozen grammar (Ξ8 mints
+concepts — the ISA is frozen, the *language* never was), the finite-only quantifier (Ξ10 proves ∀n∈ℕ by
+induction — theorems no enumeration can reach), the single statement form (Ξ9 admits order, nonexistence, and
+optimality — lower bounds proven by witness-function circuits), and the intuition ban (Ξ11/Ξ12/Ξ13 mechanize
+analogy, empirical conjecture, and intent as *verified transport, exact evidence, and measured value*). III
+stops being a system that has mathematics done to it and becomes the thing that does mathematics.
+
 ---
 
 ## 0a. The conscience verdict this map is written under (honest, up-front)
@@ -46,7 +66,7 @@ verified compiler upgrades"*:
 | 1 STATEMENT | formalised in §6 (the schema + novelty + cost + witness predicate) |
 | 2 HYPOTHESES | enumerated in §5 (R1 dual-disposer … R7 replay-on-disposer-growth) |
 | 3 DISCHARGE | **each hypothesis has a real file:line** — `sd_denote` `numera/ser_kinduct_sym.iii:475`, `seq_equiv` `:607`; `seg_mul_plan` consult `cg_r3.iii:2652`; the certified-family mold `cg_opt_rules.iii` + `forcefield/cg_opt_cert.iii` + `STDLIB/scripts/cg_optrules_bind_gate.sh`; the meaning witness `COMPILER/BOOT/eval.iii` (`run_meaning.sh`); the fixpoint `STDLIB/sovir/run_ddc.sh` |
-| 4 REALIZATION | **Ξ0 LANDED (2026-07-11)**: the door `numera/mathesis_admit.iii` (gate 2600), the disposer route `corpus/2601` (∀-schemas in one symbolic seq_equiv call + R4 + width tooth + abstain), the instrument `numera/mathesis_measure.iii` (gate 2602, census: 78 AND-chain windows / 55 real modules / stage1=0), the seal `corpus/2603` (MATHESIS-THEOREM-0001 replays from pins), the assimilated fold (`cg_svir.iii` `e_and_chain_fold`, sq08 494→484 bytes, square N≡E≡S green, golden resealed), and `run_mathesis.sh` (the never-built `run_self_improve.sh`, ADR-Ξ5). Ξ1–Ξ7 remain to build |
+| 4 REALIZATION | **Ξ0 LANDED (2026-07-11)**: the door `numera/mathesis_admit.iii` (gate 2600), the disposer route `corpus/2601` (∀-schemas in one symbolic seq_equiv call + R4 + width tooth + abstain), the instrument `numera/mathesis_measure.iii` (gate 2602, census: 78 AND-chain windows / 55 real modules / stage1=0), the seal `corpus/2603` (MATHESIS-THEOREM-0001 replays from pins), the assimilated fold (`cg_svir.iii` `e_and_chain_fold`, sq08 494→484 bytes, square N≡E≡S green, golden resealed), and `run_mathesis.sh` (the never-built `run_self_improve.sh`, ADR-Ξ5). **CREATOR TIER OPENED (2026-07-12)**: Ξ8 DISCHARGED — the definition door `numera/mathesis_define.iii` (2670), ROTL64 + the whole C₆₄ Cayley table machine-proven (2671: 4160 symbolic proofs + the 49,152-check spec bridge), the rot census class (2672, phantom-armed) rendering the honest INERT verdict (c8=0 everywhere), the seal 2673 (chain genesis→…→`d18e5038…`); Ξ9 OPENED — the first NONEXISTENCE family by the witness-function method (2675: rot_k not 1-op expressible ⇒ 2 ≤ cost ≤ 3); **Ξ1's PROPOSER LIVE — `numera/mathesis_synth.iii` (2610): the whole 18,522-pair declared space swept, 183 MACHINE-SYNTHESIZED ∀-theorems sealed (`DOCS/MATHESIS-SYNTH-ROUND1.log`), 1386 mul-mul pairs frontiered with blocker named, the Ξ0 schema re-derived and REFUSED as non-novel (R3 live)**. Ξ2–Ξ7, Ξ10–Ξ13, 2611/2612/2674 remain |
 | 5 FALSIFIER | live and firing: the false identity is REFUTED at 2601/2600; tamper breaks the 2603 seal; the width tooth REFUTES `(x<<32)>>32 ≡ x`; the phantom-const arm defeats byte-grep counting; a meaning change reddens `run_meaning.sh`; a determinism break reddens the fixpoint |
 | 6 VERDICT | **Ξ0: DISCHARGED-IN-CODE** (first machine-discovered theorem sealed + assimilated + measured); **Ξ1–Ξ7: STATED-NOT-DISCHARGED** — the map's remaining job |
 
@@ -168,6 +188,99 @@ not papered over.
     not drift under the theorems it once proved.
   - **The monograph**: `--report` renders the sealed library human-readable (statement, proof route, witness
     roots, measured effect) — III publishes its mathematics.
+
+---
+
+## 3b. THE CREATOR BREAKS (v3) — four ceilings, each shown to be belief, not physics
+
+The external ceiling critique of v2 was accurate about v2. Quoted fairly, it said: *(C1)* "it can never
+invent the concept of population count — it cannot invent abstractions, only arrange fixed operators";
+*(C2)* "it is trapped in the discrete and finite — it does not have the language for universal mathematics";
+*(C3)* "its only trick is proving A≡B — it finds equivalences, not new kinds of statements"; *(C4)* "without
+statistical intuition the structural search drowns — Ax D3 is its greatest weakness." v3 breaks all four
+**with organs already in the tree**, and concedes exactly what is physics:
+
+**BREAK C1 — THE DEFINITION DOOR (Ξ8): the ISA is frozen; the language never was.** Mathematics has always
+grown by *conservative definitional extension*: name a recurring structure, prove its characterizing laws,
+then reason at the concept level — no new gate was ever added to reality when humans defined "group." A
+minted concept is a library DEFINITION entry: a name-hash, an arity, an SVIR **definiens**, a **spec bridge**
+(the definiens proven to agree with an independent abstract specification — e.g. rotation's bit-permutation
+semantics), and ≥1 **proven law about it** (a lawless definition is a macro and is REFUSED — the concept-tier
+anti-bloat clause). Conservativity means the door adds zero trust: every concept unfolds away. The first
+minted concept is **ROTL64** — `rot_k(x) := (x<<k)|(x>>(64−k))` — absent from the ISA, absent from the
+e-graph grammar, latent in every crypto inner loop the tree owns; its law family (identity, inverses, the
+homomorphism `rot_a∘rot_b ≡ rot_{(a+b) mod 64}`) is the machine constructing and verifying **the cyclic
+group C₆₄ acting on its own word type** — the direct, executable refutation of "it cannot invent
+abstractions." POPCNT and its SWAR laws follow the same door when the census demands them.
+
+**BREAK C2 — THE UNBOUNDED QUANTIFIER (Ξ10): induction reaches where enumeration cannot.** v2's PROVEN meant
+finite discharge (symbolic 2⁶⁴ or exhausted ranges). But the tree already holds a k-induction engine
+(`ser_kinduct_sym.iii` — it is in the *name*), a live CIC kernel (`numera/typecheck.iii`+`ccl.iii`, judging
+program arithmetic since gate 2498), and a lemma-discovery organ (`nous_conjecture_lemma`). The deduction
+organ composes **admitted entries** into new theorems by rewriting and by induction over ℕ-parameters — base
+and step each discharged by the finite engines, the composition checked by the kernel, ground instances
+spot-re-verified at the bit level (the two-path law). First unbounded citizens: the n-fold const-chain
+`∀n≥2` (THEOREM-0001 as the inductive step) and `∀n∈ℕ: rot_1ⁿ ≡ rot_{n mod 64}` (the homomorphism law as the
+step). These are **∀-statements over an infinite domain** — the first entries no enumeration could ever have
+produced, and the moment the library stops being a list and becomes a *theory*.
+
+**BREAK C3 — THE STATEMENT LATTICE (Ξ9): new statement kinds, the same one judge.** The reduction law
+(binding): a statement kind may enter the library **only** by exhibiting its reduction to the standing
+trusted judgment — *predicate-as-circuit ≡ const-1* through `seq_equiv`, or kernel-checked composition of
+sealed entries. Under that law the language grows without the judge widening: **order theorems** (the
+Boolean-lattice order `a ⊑ b :⇔ a&b ≡ a`, equationally; signed-order facts through the 0x32–0x35 compare
+fragment — the compare *bit* proven ≡ 1); **NONEXISTENCE theorems by the witness-function method** — to prove
+"no program of shape S(c) computes t," exhibit a witness circuit `w(c)` (mux on the special constants; total
+by construction) and prove the single ∀c-statement `[S(c)(w(c)) ≠ t(w(c))] ≡ 1` — an ∀∃ lower bound
+**reduced to one symbolic equivalence call**; and **OPTIMALITY certificates** — a matched admitted upper form
+plus a proven lower bound closes a problem *forever* (`t requires exactly n ops in grammar G`): the Strassen
+shape, machine-proven end to end, and the engine's negative knowledge feeds anti-bloat (a proven-irreducible
+window is exempt from all future search — the engine now knows *why not*).
+
+**BREAK C4 — MECHANIZED INTUITION (Ξ11/Ξ12/Ξ13): structure and measurement, never belief.** The critique
+assumed intuition must be statistical. Three statistic-clean intuition engines refute that: **analogy as a
+verified functor** (Ξ11) — the rot group acts on theorems by conjugation, so one proof spawns its whole
+symmetry orbit, each instance transported along a *proof-carrying map*, and width-truncation morphisms carry
+bit-parallel laws across widths structurally; **the empirical telescope** (Ξ12) — Ramanujan mode on the exact
+substrate: enumerate nested-radical families inside the decidable envelope, decide candidate coincidences
+EXACTLY (the agreement web `Sturm ≡ Σ√ ≡ tower` is a decision procedure, not an approximation), and every
+detected coincidence becomes a conjecture the exact disposer proves or refutes — machine-found **denesting
+theorems** (the `√(3+2√2) = 1+√2` class); **intent as measured value** (Ξ13) — the agenda orders open work by
+measured census demand × cost-delta potential × consumer KAT impact, every choice logged with its
+measurement. Ax D3 stands untouched: nothing anywhere ranks by frequency-as-belief.
+
+**What v3 still refuses to claim (the physics).** No new logics; no self-consistency claim (Gödel); no
+famous-open problems (B3, pre-registered); no transcendental zero-testing (Richardson); no completeness of
+any rule set or of the library; and **the conservativity law**: any candidate whose admission would require a
+new *axiom* (not a definition, not a theorem) is REFUSED as a B3-class event. The creator grows vocabulary,
+theorems, methods, and questions — never foundations. That is not the ceiling the critique thought it was;
+it is how Bourbaki grew mathematics too.
+
+---
+
+## 3c. The v3 ambition pillars P6–P10 (layered on v2's P1–P5)
+
+**P6 — CONCEPTS ARE BUNDLES, NOT NAMES.** A DEFINITION admits only as
+`(definiens, spec-bridge proof, ≥1 proven law, census measurement, chain witness)` — the door's concept-tier
+conjunction `SPEC-BRIDGED ∧ LAW-RICH ∧ MEASURED ∧ WITNESSED`. Zero-law concepts REFUSED; zero-occurrence
+concepts admit on law-richness but are *marked inert* (assimilation stays closed until a consumer measures).
+
+**P7 — THE REDUCTION LAW.** Every statement kind reduces to the standing judgment (circuit ≡ const /
+`seq_equiv` verdict / kernel-checked composition). One judge, forever; N statement kinds; zero new provers.
+
+**P8 — DERIVATION IS CHEAPER THAN DECISION.** The deduction organ prefers composing sealed entries (kernel
+work, milliseconds) over re-deciding from raw bits (bb work); the bit-level engine remains the arbiter via
+mandatory ground-instance spot checks. Knowledge accumulating = proofs getting *cheaper* over time — the
+measurable signature that the library is a theory, not a cache.
+
+**P9 — EVERY THEOREM CARRIES ITS ORBIT.** Admission computes the statement's symmetry class under the
+verified transport maps (rot conjugation, width functors): the orbit is stored, not re-proved; a theorem's
+id names its class representative. One proof, sixty-three siblings, zero extra trust.
+
+**P10 — THE AUTONOMY INVARIANT (binding, gated).** The transitive process tree of
+`run_mathesis.sh --standing` contains ONLY sovereign-built binaries + POSIX sh — no LLM, no network, no
+operator, anywhere, ever. The engine is a program, not a prompt; a bare clone + one command reproduces the
+entire library from genesis. (This was already true of Ξ0; v3 makes it a gated law — gate 2682.)
 
 ---
 
@@ -350,6 +463,116 @@ perturbation changes the cert.
 
 ---
 
+## 7b. THE CREATOR TIER Ξ8 → Ξ13 (v3; gates 2670–2699)
+
+**v3 execution order.** The creator tier does not wait behind Ξ1–Ξ7: Ξ8→Ξ9 run first (they change what the
+Ξ1 proposer can even *say*), then Ξ1 proposes over the concept-enriched language, then Ξ10→Ξ11→Ξ12, with
+Ξ2 (zk grounding) and Ξ13 folding into Ξ5's standing engine and Ξ6/Ξ7 sealing last. Every phase keeps the
+v2 skeleton: objective · verified state · gap · tasks (files + gates) · acceptance · falsifier, R1–R7 + the
+reduction/conservativity/autonomy laws binding throughout.
+
+### Ξ8 — THE DEFINITION DOOR: the language grows (concept minting) ← IN EXECUTION
+**Objective.** The library admits DEFINITIONS under the concept-tier door
+`SPEC-BRIDGED ∧ LAW-RICH ∧ MEASURED ∧ WITNESSED` (P6); the first minted concept is ROTL64 with its C₆₄ law
+family — the executable refutation of "it cannot invent abstractions."
+**Verified state.** The chain is entry-kind-agnostic (`mx_entry_hash`→`mx_chain_step`); `sd_denote` covers
+the full rot fragment (shift counts constant, saturating at 64 — `ser_kinduct_sym.iii:512-513`); locals
+0x10/0x11 let a rot compose with itself; the 2601 mold drives thousands of `seq_equiv` calls in one gate.
+**Gap.** No DEFINITION descriptor kind; no concept door; no rot census class; no concept seal.
+**Tasks.**
+- Ξ8-T1 — `STDLIB/iii/numera/mathesis_define.iii`: the MXD1 **concept descriptor** (name-hash, arity,
+  definiens shape, width, k-range) + the MX02 **concept-law theorem descriptor** (concept id + law kind +
+  law parameters) + validity + canonical serialise + content-addressed ids; the concept-tier door
+  `mxd_admit(spec_bridged, law_rich, measured, witnessed)` strict-1 conjunction; chain reuse from
+  `mathesis_admit`. *Gate:* `2670_mathesis_define` — malformed descriptors get NO id; a law descriptor
+  referencing an invalid concept id is REJECTED; a **lawless definition is REJECTED** (the macro arm);
+  ids deterministic + statement-sensitive; the concept chain extends without disturbing the 0001 head.
+- Ξ8-T2 — THE ROT CONCEPT through the real disposer, R4-first: the **false law**
+  `rot_a(rot_b(x)) ≡ x  at a+b=63` must be REFUTED before anything positive; the **spec bridge** — the
+  definiens agrees with the independent bit-permutation semantics (bit i of rot_k(x) = bit (i−k) mod 64 of
+  x) natively over all k × a diverse vector (engine 2, R1 dual); **identity** `rot_0 ≡ x` (1 call);
+  **inverses** `rot_k∘rot_{64−k} ≡ x`, k=1..63 (63 calls); **the homomorphism**
+  `rot_a∘rot_b ≡ rot_{(a+b) mod 64}` over ALL (a,b) ∈ 0..63² (4096 calls — exhaustion of the declared
+  domain, not sampling). *Gate:* `2671_mathesis_rot`. EXIT=99.
+- Ξ8-T3 — the census learns the concept's shape: `mathesis_measure` gains the opcode-synchronous rot-window
+  class (`[0x10 s][0x01 a][0x28][0x10 s][0x01 b][0x29][0x26]`, same slot, a+b=64) + the phantom-const
+  negative arm (a byte-perfect fake window inside a CONST immediate must count ZERO). *Gate:*
+  `2672_mathesis_rot_census`; the corpus-wide run prints the real occurrence count + the stage1 no-fire.
+- Ξ8-T4 — the seal: MATHESIS-CONCEPT-0001 (ROTL64: definiens + spec-bridge + laws) and
+  MATHESIS-THEOREM-0002/0003/0004 (homomorphism family / identity / inverses) appended to
+  `MATH_LIBRARY_QUEUE.md`, chain extended from the 0001 head. *Gate:* `2673_mathesis_concept_seal` —
+  descriptors re-hash to the pinned ids; the chain replays genesis→…→new head; tamper breaks it.
+  `run_mathesis.sh` gains the `--concepts` stage.
+**Acceptance.** All four gates green with negative arms firing; the library holds its first DEFINITION and
+first theorems-about-a-concept; the C₆₄ Cayley homomorphism verified whole. **Falsifier.** A lawless
+definition admitted ⇒ 2670 red; the false law proven ⇒ 2671 red; a phantom window counted ⇒ 2672 red;
+tamper ⇒ 2673 red. **No compiler TU is touched in this phase** (rot has no cheaper in-ISA form — see Ξ9's
+lower bound — so anti-bloat correctly keeps assimilation closed; the phase's value is the language).
+
+### Ξ9 — THE STATEMENT LATTICE: order, nonexistence, optimality
+**Objective.** New statement kinds under the reduction law (P7): order theorems, witness-function
+nonexistence theorems, optimality certificates.
+**Tasks.**
+- Ξ9-T1 — order theorems: the lattice order equationally (`x&m ⊑ x` as `(x&m)&x ≡ x&m`, one symbolic call)
+  and signed-order facts via the compare fragment (`∀x: (x & 0x7FF…F) ≥s 0` — the 0x33 bit proven ≡ const
+  1). R4-order arm: `∀x: x ≥s 0` must be REFUTED. *Gate:* `2674_mathesis_order`.
+- Ξ9-T2 — THE FIRST NONEXISTENCE THEOREMS: for k∈1..63, op∈{ADD,SUB,MUL,AND,OR,XOR}:
+  `∀c ∃x: (x op c) ≠ rot_k(x)`, proven as ONE symbolic call per (op,k) — the witness circuit `w(c)` (mux on
+  the special constant, total by construction) with the NE-bit proven ≡ 1. SHL/SHR excluded per-count over
+  the saturating range c∈0..64 (the semantics' own clamp exhausts the behaviour classes). R4 arm: the
+  method must FAIL on a *satisfiable* claim (a shape that DOES compute the target must yield NOT-PROVEN).
+  *Gate:* `2675_mathesis_nonexist`. Corollary sealed with Ξ8's definiens: **rot_k requires ≥2 ALU ops** —
+  the library's first negative knowledge; the 2-op frontier is the standing engine's named next rung.
+- Ξ9-T3 — optimality certificates as first-class entries (upper form id + lower bound id ⇒ CLOSED-OPTIMAL
+  marker); proven-irreducible census classes become search-exempt (measured search savings printed).
+**Acceptance.** ≥3 statement kinds live in the library, each with a rejecting negative arm; the first
+nonexistence family sealed. **Falsifier.** A witness circuit with a hole cannot exist by construction (mux
+totality); the R4 satisfiable arm proves the method refuses false nonexistence; an order claim whose bit is
+not constant-1 lands REFUTED/frontier, never admitted.
+
+### Ξ10 — THE DEDUCTION ORGAN: theorems from theorems; ∀n∈ℕ
+**Objective.** New entries proven by composing sealed entries — rewriting with library equations, induction
+over ℕ-parameters — kernel-checked (`tc_check`), ground-instance spot-verified (two-path law, P8).
+**First derived theorems.** `∀n≥2`: the n-fold const-chain collapse (THEOREM-0001 as step);
+`∀n∈ℕ: rot_1ⁿ ≡ rot_{n mod 64}` (THEOREM-0002 as step) — the library's first unbounded quantifiers.
+**Gates.** `2676_mathesis_derive` (a valid derivation admits; citing a tampered/absent entry REJECTED; a
+conclusion failing its bit-level ground spot check REJECTED); `2677_mathesis_induct` (base+step+conclusion
+checked; a step-gap arm reddens). **Falsifier.** A derivation from a deleted premise ⇒ 2676 red; induction
+with an unproven step ⇒ 2677 red.
+
+### Ξ11 — SYMMETRY TRANSPORT: one proof, an orbit of theorems
+**Objective.** Verified structure-preserving maps as theorem transporters (P9): rot-conjugation orbits over
+the bit-parallel fragment; width-truncation functors 64→32/16/8. Equivariance is a checked precondition —
+statements bearing shift counts or width-crossing constants are REFUSED transport (the negative arm), the
+width-64 tooth `(x<<32)>>32 ≢ x` pinned as the non-transportable witness. **Gates.** `2678_mathesis_orbit`
+(transport + spot-verify; non-equivariant REFUSED), `2679_mathesis_width` (a width-64 truth does NOT
+transport downward unchecked; the functor direction enforced). **Falsifier.** A transported instance whose
+spot check fails ⇒ red; the tooth transported ⇒ red.
+
+### Ξ12 — THE EMPIRICAL TELESCOPE: machine-found denesting theorems (the exact face, armed)
+**Objective.** Ramanujan mode on the decidable exact substrate: enumerate structured nested-radical
+families (rank ≤ 3, the 19/39 magnitude envelope); detect candidate equalities EXACTLY (the agreement web
+IS the decision procedure); every coincidence → conjecture → the exact disposer proves or refutes →
+machine-found **denesting theorems** (`√(a+2√b) = √m+√n` classes and beyond) sealed with dual-web receipts.
+Subsumes v2-Ξ3 (which had the disposer but no discovery engine). **Gates.** `2680_mathesis_denest` (a
+seeded known denesting re-discovered end-to-end; a proven-non-denestable radical lands frontier, never
+library), `2681_mathesis_envelope` (out-of-envelope ABSTAINS; guard removed ⇒ the overflow regression
+reddens). **Falsifier.** A wrong denesting must be REFUTED by the web's second member; envelope breach ⇒
+red.
+
+### Ξ13 — THE RESEARCH AGENDA: intent, the standing creator, no operator anywhere
+**Objective.** The engine chooses its own next problem by measured value: agenda = frontier queue ∪
+grammar-gap operators ∪ census hot classes ∪ consumer KAT inner loops, ordered by measured cost-delta
+potential; every choice logged with its measurement (auditable intent, Ax D3-clean). `--standing` runs the
+full creator loop (define / state / deduce / transport / telescope as rounds) to K-dry convergence; the
+aggregate ratchet gains `{concepts ↑, statement kinds live ↑, unbounded theorems ↑}`. **THE AUTONOMY
+INVARIANT gated (P10):** `2682_mathesis_autonomy` — the process-tree audit (sovereign binaries + sh only) +
+a bare-clone cold-start replay reproduces the library from genesis; `2683_mathesis_agenda` — the agenda
+ordering is reproducible from the printed measurements (a shuffled agenda reddens). **Falsifier.** Any
+non-sovereign process in the tree ⇒ 2682 red; an agenda choice without its measurement ⇒ 2683 red.
+
+---
+
 ## 8. Flagship theorem targets (v2 — honest about what is already taken)
 
 Already fossilised (NOT novel, the novelty gate rejects them): mul-by-constant plans (`seg_mul_plan`),
@@ -364,6 +587,11 @@ identity elements (`x*1`, `x+0`). The open targets:
 | **crypto arithmetic** | Montgomery/NTT/field-reduction identities shortening a real KAT-gated inner loop | `seq_equiv_mod` + KAT cross-check |
 | **exact Σ√ / bounded-rank** | new tier-shortcuts + separation bounds (the 2157/2159 family, machine-grown) | the agreement web (R1 exact) |
 | **4D exact geometry** | orientation/incidence predicates in ℚ(√…) deciding what floats get wrong | exact ladder + IDENTIFY⟺DECIDE |
+| **minted concepts (v3)** | ROTL64 + the C₆₄ law family (Ξ8); POPCNT/SWAR laws when the census demands | spec bridge + symbolic/sweep + dual engine |
+| **nonexistence / optimality (v3)** | `rot_k is not 1-op expressible` (the first lower-bound family); matched-bound CLOSED-OPTIMAL certificates | witness-function circuits (∀∃→∀) + count-sweep |
+| **derived / unbounded (v3)** | `∀n≥2` n-fold chain collapse; `∀n∈ℕ: rot_1ⁿ ≡ rot_{n mod 64}` | kernel-checked deduction/induction + ground spot checks |
+| **denesting (v3)** | machine-found `√(a+2√b) = √m+√n`-class identities in the rank-≤3 envelope | the telescope + the agreement web |
+| **orbit families (v3)** | every admitted bit-parallel theorem × its rot-conjugation + width-functor orbit | verified transport + spot checks |
 
 **Pre-registered abstentions (B3 + v2 additions).** P vs NP; poly parity/μ; general superoptimization
 completeness; a complete rule set; decidable confluence for general TRS; transcendental zero-testing; **and
@@ -386,6 +614,12 @@ rejected and re-audited.
 - **Determinism above cleverness**: R5/R6; the C seed frozen; emitted source committed; the compiler never
   reads the library at compile time.
 - **No grandiosity**: §8's table is the claimable universe; B3 + Gödel abstentions pre-registered.
+- **Conservativity (v3)**: definitions add vocabulary, never axioms; any candidate needing a new axiom is
+  REFUSED as a B3-class event. The creator grows language, theorems, methods, questions — never foundations.
+- **The reduction law (v3)**: statement kinds enter only by reduction to the standing judgment or
+  kernel-checked composition — one judge forever, zero new provers.
+- **Derivation never outruns decision (v3)**: every deduced/transported entry carries mandatory bit-level
+  ground-instance spot checks; the finite engines stay the arbiter of last resort.
 
 ---
 
@@ -403,6 +637,16 @@ rejected and re-audited.
 7. **NIH / no-Python / no-subagents-on-III / no-placeholders / no-ML (Ax D3)** — hard locks.
 8. **No deferral** — a named gap is built this cycle or lands on the printed frontier with its blocker.
 9. **Count landed schemas + measured bytes, not intentions.**
+10. **THE REDUCTION LAW (v3)** — no statement kind without its exhibited reduction to the standing judgment.
+11. **THE CONSERVATIVITY LAW (v3)** — definitions only; a needed axiom is a REFUSED B3-class event.
+12. **THE AUTONOMY INVARIANT (v3)** — sovereign binaries + sh only in the engine's process tree; a bare
+    clone + one command reproduces the library from genesis. No LLM operates any stage, ever.
+13. **THE PROVENANCE LAW (v3, binding since the creator tier opened)** — every library entry names its
+    conjecture source: `MACHINE` (synthesized by enumeration/mining — the only kind that counts toward the
+    engine's discovery ratchet) vs `human-conjectured / machine-proven` (method exhibits and
+    infrastructure). Hand-picked demos may never masquerade as discoveries; the synthesizer receives no
+    candidate lists, only space bounds — and its bounds are printed, its remainders frontiered with
+    blockers named.
 
 ---
 
@@ -410,14 +654,22 @@ rejected and re-audited.
 
 ```
 run_mathesis.sh --standing --federated ∈ run_completion.sh, AND:
-  Ξ0  seed cycle        one closed loop, measured reduction, door + library live       ← IN EXECUTION
+  Ξ0  seed cycle        one closed loop, measured reduction, door + library live       ← DISCHARGED 2026-07-11
   Ξ1  open proposer     autonomous ∀-schemas from real SVIR, novelty-filtered, frontier queued
   Ξ2  grounding         every theorem zk-witnessed on sovereign silicon, determinism-pinned
-  Ξ3  exact face        ≥1 new exact identity, cross-certified, live consumer
+  Ξ3  exact face        ≥1 new exact identity, cross-certified, live consumer (armed by Ξ12)
   Ξ4  library lives     kernel-checked + content-addressed + REPLAYABLE + published
   Ξ5  standing engine   M measured improvements, grammar gap 4→0, converged, ratchets pinned
   Ξ6  federation        propagate-by-proof, forged rejected, BFT-canonical
   Ξ7  seal              completion-folded, TCB-neutral, MATHESIS_CERT binds math↔compiler↔trust
+  --- the creator tier (v3) ---
+  Ξ8  definition door   ROTL64 + C₆₄ sealed, spec-bridged, law-rich, INERT-honest   ← DISCHARGED 2026-07-12
+  Ξ9  statement lattice nonexistence LIVE (2675: 2 ≤ cost(rot_k) ≤ 3); order (2674) + optimality open
+  Ξ10 deduction organ   theorems from theorems; the first ∀n∈ℕ entries; kernel-judged
+  Ξ11 symmetry transport orbits + width functors; equivariance-gated; tooth pinned
+  Ξ12 empirical telescope machine-found denesting theorems, web-certified, envelope-honest
+  Ξ13 research agenda   measured intent; the autonomy invariant gated; the standing creator
+  (and Ξ1's proposer is LIVE ahead of order: 183 machine theorems, round-1 stream sealed + pinned)
 ```
 
 End state: the first system whose **mathematics is a growing, sealed, kernel-checked, replayable library
@@ -440,6 +692,12 @@ first move is the library door (`mathesis_admit.iii`), because everything else w
 | Assimilation thrash | Med | Med | H10 stamps + append-only grammar + Ξ5 convergence gate (both arms) |
 | Rebuild-chain cost per rule | Med | Med | batch admission: the library accumulates; assimilation batches N schemas per rebuild |
 | OneDrive/AV contamination | Med | Med | repo-local probes, /tmp staging (the corpus runner's own pattern), rm-first relinks |
+| Concept noise (macro-minting inflates the library) (v3) | Med | Med | P6: lawless ⇒ REFUSED; zero-occurrence ⇒ marked inert; compression measured |
+| Witness-function subtlety (a hole in the mux cases) (v3) | Low | High | totality by construction (mux covers all c); the R4 satisfiable arm proves the method refuses false nonexistence |
+| Homomorphism sweep timing (4096 calls > gate budget) (v3) | Med | Low | timing probe first; kill-switch: split the (a,b) plane across two gates; never sample |
+| Deduction unsoundness (derive from a wrong premise) (v3) | Low | **Critical** | premises are sealed chain entries only; kernel checks the composition; mandatory bit-level ground spot checks (two-path) |
+| Transport unsoundness (non-equivariant statement moved) (v3) | Low | High | equivariance is a checked precondition; the width-64 tooth pinned as the refusing witness |
+| Telescope cost explosion (radical family enumeration) (v3) | Med | Med | rank/magnitude envelope caps; enumeration bounded per round; frontier the remainder |
 
 ---
 
@@ -460,6 +718,23 @@ first move is the library door (`mathesis_admit.iii`), because everything else w
 - **ADR-Ξ9 (v2, NEW)** — **the grammar-closure ratchet is the campaign's measured ambition**: teach-grammar
   climbs to prove-algebra (4 named operators). Alternative (open-ended "find identities") rejected as
   unfalsifiable ambition; this one has a number that must go to zero.
+- **ADR-Ξ10 (v3, NEW)** — **creation = conservative definitional extension.** Concepts are minted as
+  definitions (unfoldable, zero new trust), never as axioms or ISA changes. Alternative (extend the formal
+  system / add opcodes) rejected: the first is an unsound door, the second confuses language with hardware.
+- **ADR-Ξ11 (v3, NEW)** — **the reduction law.** New statement kinds reduce to the standing judgment
+  (circuit ≡ const / kernel composition). Alternative (a bespoke prover per kind) rejected: N provers = N
+  soundness frontiers; here the judge never widens.
+- **ADR-Ξ12 (v3, NEW)** — **lower bounds by witness-function circuits** (∀∃ → ∀ via a constructed total
+  witness map, one symbolic call). Alternative (a QBF engine) rejected: a new trusted engine + an
+  undecidability pull, for no gain at this shape class.
+- **ADR-Ξ13 (v3, NEW)** — **intuition = verified transport + exact evidence + measured value.** Analogy is a
+  proof-carrying functor; conjecture comes from exactly-decided coincidences; intent from printed
+  measurements. Learned/frequency heuristics stay banned (Ax D3) — the search is guided by structure the
+  library itself proves.
+- **ADR-Ξ14 (v3, NEW)** — **the creator tier changes the library's language, never the compiler's trusted
+  path.** Assimilation remains schema-only through P3's emission mold; a concept reaches the compiler only
+  as a proven fold/unfold rule with a measured consumer. The DDC fixpoint outranks every clever idea,
+  including v3's.
 
 ---
 

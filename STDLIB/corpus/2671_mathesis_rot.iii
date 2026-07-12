@@ -1,0 +1,149 @@
+/* STDLIB/corpus/2671_mathesis_rot.iii -- THE ROT CONCEPT gate (Xi8-T2, III-MATHESIS-MAP.md s3b/s7b).
+ *
+ * The first minted concept, disposed by the real prover.  ROTL64(k): rot_k(x) := (x<<k)|(x>>(64-k)),
+ * k in 0..63, over SVIR's saturating shift semantics (ser_kinduct_sym.iii:512-513 -- count > 64 clamps
+ * to 64; shr by 64 yields 0, so the k=0 definiens instance is exact identity).  Arms, R4 FIRST:
+ *
+ *   (a) THE FALSE LAW FIRST: rot_31(rot_32(x)) == x (a+b = 63, not 0 mod 64) must be REFUTED (0);
+ *   (b) THE SPEC BRIDGE (engine 2, R1 dual): the definiens agrees with the INDEPENDENT bit-permutation
+ *       specification -- bit j of rot_k(x) = bit ((j+64-k) & 63) of x -- natively, all 64 k x 12-value
+ *       diverse vector x all 64 bits (49,152 checks).  The definiens is the implementation; the bit
+ *       permutation is the mathematics; their agreement is the concept's soundness bridge;
+ *   (c) IDENTITY: rot_0(x) == x PROVEN symbolically (also witnesses the saturating shr-64 edge);
+ *   (d) INVERSES: rot_{64-k}(rot_k(x)) == x for every k in 1..63 (63 symbolic proofs);
+ *   (e) THE HOMOMORPHISM (the C64 Cayley law): rot_a(rot_b(x)) == rot_{(a+b) & 63}(x) for ALL
+ *       (a,b) in 0..63 x 0..63 -- 4096 symbolic proofs, the ENTIRE composition table (exhaustion of the
+ *       declared domain, never sampling).  Identity element, inverses, and closure onto (Z/64,+) TOGETHER
+ *       verify the cyclic-group structure of rotation acting on the machine's own word type.
+ *
+ * Every positive proof is a seq_equiv PROVEN (1) over all 2^64 values of x; the false law REFUTES first.
+ * 99 == ROTL64 is a sound concept with a verified group-law family. */
+module corpus_2671_mathesis_rot
+
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+var RF : [u8; 64]
+var RG : [u8; 64]
+var XS : [u64; 12]
+
+/* write [0x01 imm:8LE] into RF (sel 0) or RG (sel 1) at pos; returns pos+9. */
+fn wc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { RF[pos] = 0x01u8 }
+    if sel == 1u32 { RG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { RF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { RG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+fn wb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { RF[pos] = b as u8 }
+    if sel == 1u32 { RG[pos] = b as u8 }
+    return pos + 1u64
+}
+
+/* emit the ROTL64 definiens on slot s with count k: [0x10 s][0x01 k][0x28][0x10 s][0x01 64-k][0x29][0x26].
+ * k=0 emits shl 0 / shr 64: under the saturating law the shr contributes 0 and the OR restores x. */
+fn emit_rot(sel: u32, pos0: u64, slot: u32, k: u64) -> u64 {
+    let mut p : u64 = pos0
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, k)
+    p = wb(sel, p, 0x28u32)
+    p = wb(sel, p, 0x10u32)  p = wb(sel, p, slot)
+    p = wc(sel, p, 64u64 - k)
+    p = wb(sel, p, 0x29u32)
+    p = wb(sel, p, 0x26u32)
+    return p
+}
+
+/* f := rot_a(rot_b(x)) as a body: rot_b on slot 0, store slot 1, rot_a on slot 1, ret.  Returns len. */
+fn build_compose(a: u64, b: u64) -> u64 {
+    let mut p : u64 = emit_rot(0u32, 0u64, 0u32, b)
+    p = wb(0u32, p, 0x11u32)  p = wb(0u32, p, 1u32)
+    p = emit_rot(0u32, p, 1u32, a)
+    p = wb(0u32, p, 0x60u32)
+    return p
+}
+/* g := rot_m(x), ret.  Returns len. */
+fn build_rot(m: u64) -> u64 {
+    let mut p : u64 = emit_rot(1u32, 0u64, 0u32, m)
+    p = wb(1u32, p, 0x60u32)
+    return p
+}
+/* g := x, ret.  Returns len. */
+fn build_id() -> u64 {
+    RG[0u64] = 0x10u8  RG[1u64] = 0u8  RG[2u64] = 0x60u8
+    return 3u64
+}
+
+/* the native definiens (no count-64 edge: the k=0 low part is taken as 0 directly). */
+fn rot_native(x: u64, k: u64) -> u64 {
+    let hi : u64 = x << k
+    let mut lo : u64 = 0u64
+    if k > 0u64 { lo = x >> (64u64 - k) }
+    return hi | lo
+}
+
+fn main() -> u64 {
+    /* ---- (a) R4 FIRST: the false law rot_31(rot_32(x)) == x must be REFUTED ---- */
+    let flen : u64 = build_compose(31u64, 32u64)
+    let glen : u64 = build_id()
+    if seq_equiv(&RF as u64, 0u64, flen, &RG as u64, 0u64, glen, 1u32) != 0u32 { return 10u64 }
+
+    /* ---- (b) THE SPEC BRIDGE: definiens == bit-permutation spec, natively, exhaustive over k ---- */
+    XS[0u64] = 0u64                      XS[1u64] = 1u64
+    XS[2u64] = 2u64                      XS[3u64] = 3u64
+    XS[4u64] = 7u64                      XS[5u64] = 0x101u64
+    XS[6u64] = 0xFFFFu64                 XS[7u64] = 0xFFFFFFFFu64
+    XS[8u64] = 0x100000001u64            XS[9u64] = 0xDEADBEEFCAFEBABEu64
+    XS[10u64] = 0x8000000000000000u64    XS[11u64] = 0xFFFFFFFFFFFFFFFFu64
+    let mut k : u64 = 0u64
+    while k < 64u64 {
+        let mut i : u64 = 0u64
+        while i < 12u64 {
+            let x : u64 = XS[i]
+            let r : u64 = rot_native(x, k)
+            let mut j : u64 = 0u64
+            while j < 64u64 {
+                let sb : u64 = (x >> ((j + 64u64 - k) & 63u64)) & 1u64
+                if ((r >> j) & 1u64) != sb { return 11u64 }
+                j = j + 1u64
+            }
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+
+    /* ---- (c) IDENTITY: rot_0 == x, proven symbolically (the saturating shr-64 edge witnessed) ---- */
+    let ilen : u64 = build_rot(0u64)
+    RF[0u64] = 0x10u8  RF[1u64] = 0u8  RF[2u64] = 0x60u8
+    if seq_equiv(&RG as u64, 0u64, ilen, &RF as u64, 0u64, 3u64, 1u32) != 1u32 { return 12u64 }
+
+    /* ---- (d) INVERSES: rot_{64-k}(rot_k(x)) == x for every k in 1..63 ---- */
+    k = 1u64
+    while k <= 63u64 {
+        let fl : u64 = build_compose(64u64 - k, k)
+        let gl : u64 = build_id()
+        if seq_equiv(&RF as u64, 0u64, fl, &RG as u64, 0u64, gl, 1u32) != 1u32 { return 13u64 }
+        k = k + 1u64
+    }
+
+    /* ---- (e) THE HOMOMORPHISM: the WHOLE C64 composition table, 4096 symbolic proofs ---- */
+    let mut a : u64 = 0u64
+    while a < 64u64 {
+        let mut b : u64 = 0u64
+        while b < 64u64 {
+            let fl : u64 = build_compose(a, b)
+            let gl : u64 = build_rot((a + b) & 63u64)
+            if seq_equiv(&RF as u64, 0u64, fl, &RG as u64, 0u64, gl, 1u32) != 1u32 { return 14u64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+
+    return 99u64
+}

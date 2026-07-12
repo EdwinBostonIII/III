@@ -1244,6 +1244,18 @@ MODULES=(
     # real emitted gen_svir containers; picks the seed schema (measure-first law) + discharges USEFUL's
     # occurrence>0.  Width law mirrors sovir/svir_interp op_w.  Gate: corpus/2602. -> LIBNATIVE.
     "numera/mathesis_measure"
+    # mathesis_define -- THE MATHESIS DEFINITION DOOR (Xi8-T1, the creator tier, III-MATHESIS-MAP.md s3b):
+    # concept (MXD1) + concept-law (MX02) descriptors, content-addressed ids, the strict concept-tier
+    # conjunction (SPEC-BRIDGED/LAW-RICH/MEASURED/WITNESSED -- a lawless definition is a macro, REFUSED);
+    # shares the theorem tier's chain law (conservative extension: vocabulary, never axioms).  Composes
+    # numera/cad only.  Gate: corpus/2670. -> LIBNATIVE.
+    "numera/mathesis_define"
+    # mathesis_synth -- THE MATHESIS SYNTHESIZER (Xi1 pulled forward): NO human candidates -- enumerates
+    # the ENTIRE declared expression space (18,522 pairs, printed bound) in canonical order, strict
+    # emission-cost decrease, every pair through seq_equiv; what survives is MACHINE-SYNTHESIZED,
+    # MACHINE-PROVEN forall-schema mathematics (Ax D3: structure only).  Composes ser_kinduct_sym + cad.
+    # Gate: corpus/2610. -> LIBNATIVE.
+    "numera/mathesis_synth"
     # ser_eidos -- THE RESEAL DECISION WITNESSED ON THE REAL eidos/field substrate (not dome, the superseded
     # POC). The autopoietic accept/rollback was CLAIMED event-driven/on-EIDOS but ran on nothing III consumes;
     # this records the driver's REAL gate verdict on the field: ACCEPT -> a witnessed field_record; REFUTE ->

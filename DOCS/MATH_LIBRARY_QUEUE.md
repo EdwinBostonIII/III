@@ -68,6 +68,94 @@ canonical descriptor (numera/mathesis_admit.iii layout, hashed to the id above):
   `corpus/2603_mathesis_seal` — the descriptor re-hashes to this id, tampering
   breaks it, the chain re-derives this head.
 
+### 92bbab910acb909f00ab134d9e2610cf911668cb39abb6c2425f6ef64d1a2b6b
+
+MATHESIS-CONCEPT-0001 — **ROTL64**, the first DEFINITION the library admits (Ξ8, the creator tier,
+`DOCS/III-MATHESIS-MAP.md` §3b): a minted concept, conservative extension (vocabulary, never axioms).
+
+```
+ROTL64: rot_k(x) := (x << k) | (x >> (64 - k)),  k ∈ 0..63, over SVIR's saturating shifts
+descriptor { MXD1, name="ROTL64", arity=1, definiens-shape=1, width=64, unsigned, k-range 0..63 }
+```
+
+- **Provenance:** conjectured session-side (human); spec-bridge + every law MACHINE-PROVEN (2671).
+- **Spec bridge (R1 dual):** the definiens agrees with the independent bit-permutation semantics
+  (bit j of rot_k(x) = bit ((j+64−k) & 63) of x) — 49,152 native checks, all 64 k × 12-vector × 64 bits.
+- **Status: INERT (P6, honest census).** The rot-window census (class 8, `corpus/2672`, phantom-arm-proven)
+  found **c8 = 0** across all 55 route-S corpus modules, the stage1 surface, and fe25519's 3,427 walked
+  ops.  No assimilation; the concept's value is the language and its theorems.  Gates: 2670 (the door),
+  2671 (the laws), 2672 (the census), 2673 (this seal).
+
+### 6d5d70ab27eac7ab6dfa5c8c1133a5841b7d80e92d57517f6ecf9477c2294733
+
+MATHESIS-THEOREM-0002 — the C₆₄ Cayley homomorphism (law kind 3 on CONCEPT-0001):
+
+```
+∀ x ∈ ℤ/2^64, ∀ (a,b) ∈ 0..63 × 0..63 :   rot_a(rot_b(x))  ≡  rot_{(a+b) mod 64}(x)
+```
+
+- **Provenance:** human-conjectured, MACHINE-PROVEN — 4096 symbolic `seq_equiv` proofs (the ENTIRE
+  composition table; exhaustion, not sampling), each over all 2^64 x.  With 0003/0004 this verifies the
+  cyclic-group structure of rotation acting on the word type.  Gate: `corpus/2671` (R4 false law
+  `rot_31(rot_32(x)) ≡ x` REFUTED first).
+
+### 3d301a763b67c908a90c43810d1123cc186bffa5c04eb8362d04a451332abd95
+
+MATHESIS-THEOREM-0003 — the identity element (law kind 1): `∀x: rot_0(x) ≡ x` — PROVEN symbolically
+(also witnesses the saturating shr-64 edge).  Gate: 2671.
+
+### 29e8a40b7cb00251d4fe14cd8ac7685e3264d279dd6266de0f2740f0657a2d89
+
+MATHESIS-THEOREM-0004 — the inverse family (law kind 2): `∀x, ∀k ∈ 1..63: rot_{64−k}(rot_k(x)) ≡ x` —
+63 symbolic proofs.  Gate: 2671.
+
+### ff5f1d2613a2186e64b69261251fe5c32559f02eb6ca7c93343e667208a022b9
+
+MATHESIS-THEOREM-0005 — the library's first NONEXISTENCE (lower-bound) family (law kind 5, Ξ9's
+witness-function method — the ∀∃ statement reduced to the standing judgment by a constructed total
+witness circuit):
+
+```
+∀ k ∈ 1..63 :  NO one-operation SVIR expression over {x, one constant c, one ALU op} computes rot_k
+                (with the 3-op definiens: 2 ≤ cost(rot_k) ≤ 3 in the ALU grammar)
+```
+
+- **Provenance:** method human-designed, every proof MACHINE — per k: 8 ∀c witness circuits PROVEN in one
+  symbolic call each + id/x∘x refutations + native exhaustion of the shift counts.  The false-nonexistence
+  arm (a satisfiable shape) is REFUTED first: the method cannot manufacture lower bounds.  Gate:
+  `corpus/2675`.  This is the anti-bloat theorem: rot windows are irreducible-by-proof.
+
+### 8a6f8da0a87441aceccdeca9975225b7f2f0e8199f04e980107f4afd42e6606e
+
+MATHESIS-THEOREM-0006 — absorption — **MACHINE-SYNTHESIZED** (Ξ1, `numera/mathesis_synth.iii`): found by
+exhaustive canonical enumeration of the declared 18,522-pair space, NO candidate supplied by anyone:
+
+```
+∀ x, c1 ∈ ℤ/2^64 :   (x | c1) & c1  ≡  c1        [synth coordinates tier=2 f=247 g=1]
+```
+
+- **Provenance: MACHINE (conjecture = the whole space; filter = proof).**  In no prior rule set (cgopt is
+  div/mod/mul; the e-graph grammar lacks OR/AND) ⇒ NOVEL ⇒ admitted through the door live in
+  `corpus/2610`.  Discharge: one symbolic `seq_equiv` PROVEN over all 2^64 assignments of x, c1.
+
+### c773f3ad6393b1bc27e533e5f7f4d4248f8f5d7f234ff02f8e0615c303cfd512
+
+MATHESIS-THEOREM-0007 — XOR involution — **MACHINE-SYNTHESIZED** (same run, no candidate supplied):
+
+```
+∀ x, c1 ∈ ℤ/2^64 :   (x ^ c1) ^ c1  ≡  x         [synth coordinates tier=2 f=319 g=0]
+```
+
+- **Provenance: MACHINE.**  Discharge: one symbolic `seq_equiv` PROVEN.  Gate: `corpus/2610`
+  (determinism arm: byte-identical ids across reruns).  The full round-1 discovery stream (tier-1
+  idempotence/annihilation laws, the chain-fold families re-derived, the mul-mul frontier with its
+  blocker named) is sealed in `DOCS/MATHESIS-SYNTH-ROUND1.log`.
+
+**Chain (after 0007):** head =
+`d18e5038e7877c963a5cf8da2498519feab1b28557ca5dd1b78968d87945f35a`
+(= step(step(…step(H_0001, concept)…), involution), `mx_chain_step` throughout; replay gate:
+`corpus/2673_mathesis_concept_seal` — a flipped descriptor word or a truncated chain breaks it).
+
 ### XII rewrite-rule confluence theorems (V1 Stage 6)
 
 Reviewed in `DOCS/XII_RULE_REVIEW.md` (all 44 match/apply read + confirmed).

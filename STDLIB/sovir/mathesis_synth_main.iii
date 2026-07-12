@@ -1,0 +1,110 @@
+/* STDLIB/sovir/mathesis_synth_main.iii -- THE SYNTHESIZER's full-space driver (Xi1, III-MATHESIS-MAP.md).
+ *
+ * Runs the WHOLE declared round-1 space (18,522 pairs -- printed, never silently capped) through the
+ * disposer and prints the machine's complete discovery stream, one line per PROVEN forall-schema:
+ *
+ *   MXS# <i> tier=<1|2> f=<code> g=<code> id=<64 hex>
+ *
+ * then the summary line: MXS space=<n> tested=<n> found=<n>.  The stream is the round-1 record sealed
+ * into DOCS/MATHESIS-SYNTH-ROUND1.log -- machine-synthesized, machine-proven, provenance MACHINE.
+ * Exit: 0 stream printed | 2 organ error. */
+module mathesis_synth_main
+
+extern @abi(c-msvc-x64) fn mxs_reset() -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_run_range(with_t1: u32, f2lo: u64, f2hi: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_found() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_tested() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_frontier() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_space() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_desc(i: u64, out8: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_schema_id(desc8: u64, out32: u64) -> i32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var D  : [u64; 8]
+var ID : [u8; 32]
+var DG : [u8; 24]
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u32 = p[i] as u32
+        if c == 126u32 { go = 0u32 }
+        if go == 1u32 { putchar(c as i32)  i = i + 1u64 }
+    }
+    return 1u32
+}
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { DG[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DG[k] as i32) }
+    return 1u32
+}
+fn phex32(a: u64) -> u32 {
+    let p : *u8 = a as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let b : u32 = p[i] as u32
+        let hi : u32 = b >> 4u32
+        let lo : u32 = b & 15u32
+        if hi < 10u32 { putchar((48u32 + hi) as i32) }
+        if hi >= 10u32 { putchar((87u32 + hi) as i32) }
+        if lo < 10u32 { putchar((48u32 + lo) as i32) }
+        if lo >= 10u32 { putchar((87u32 + lo) as i32) }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* print discoveries [base..n) then a block line; returns n.  Incremental: a killed run keeps its blocks. */
+fn flush_block(label: u64, base: u64) -> u64 {
+    let n : u64 = mxs_found()
+    let mut i : u64 = base
+    while i < n {
+        if mxs_desc(i, &D as u64) != 1u32 { return base }
+        ps("MXS# ~" as u64)      pd(i)
+        ps(" tier=~" as u64)     pd(D[1u64])
+        ps(" f=~" as u64)        pd(D[2u64])
+        ps(" g=~" as u64)        pd(D[3u64])
+        ps(" id=~" as u64)
+        if mxs_schema_id(&D as u64, &ID as u64) != 0i32 { return base }
+        phex32(&ID as u64)
+        putchar(10i32)
+        i = i + 1u64
+    }
+    ps("MXSBLK op1=~" as u64)  pd(label)
+    ps(" found=~" as u64)      pd(n)
+    ps(" tested=~" as u64)     pd(mxs_tested())
+    ps(" frontier=~" as u64)   pd(mxs_frontier())
+    putchar(10i32)
+    return n
+}
+
+fn main() -> u64 {
+    mxs_reset()
+    /* tier-1 first; then op1 blocks with MUL (op1=2, f2 108..162) LAST so a slow tail never
+     * costs the completed blocks (each block's stream is flushed before the next starts). */
+    mxs_run_range(1u32, 0u64, 0u64)
+    let mut b : u64 = flush_block(99u64, 0u64)          /* 99 = the tier-1 block label */
+    mxs_run_range(0u32, 0u64, 54u64)
+    b = flush_block(0u64, b)
+    mxs_run_range(0u32, 54u64, 108u64)
+    b = flush_block(1u64, b)
+    mxs_run_range(0u32, 162u64, 216u64)
+    b = flush_block(3u64, b)
+    mxs_run_range(0u32, 216u64, 270u64)
+    b = flush_block(4u64, b)
+    mxs_run_range(0u32, 270u64, 324u64)
+    b = flush_block(5u64, b)
+    mxs_run_range(0u32, 108u64, 162u64)
+    b = flush_block(2u64, b)
+    ps("MXS space=~" as u64)    pd(mxs_space())
+    ps(" tested=~" as u64)      pd(mxs_tested())
+    ps(" frontier=~" as u64)    pd(mxs_frontier())
+    ps(" found=~" as u64)       pd(b)
+    putchar(10i32)
+    return 0u64
+}

@@ -94,9 +94,41 @@ echo "[mathesis] == backend gate (parity + goldens + square) =="
 bash "$III_ROOT/COMPILER/BOOT/run_svir_backend_gate.sh" >/dev/null 2>&1 || { echo "[mathesis] RED: backend gate"; exit 21; }
 echo "[mathesis] GREEN: backend gate (A1 parity + A2 goldens + N=E=S square)"
 
+echo "[mathesis] == [6] THE CREATOR TIER (Xi8 definitions / Xi9 statements / Xi1 SYNTHESIS) =="
+gate 2670_mathesis_define       || exit 22
+gate 2671_mathesis_rot          || exit 23
+gate 2672_mathesis_rot_census   || exit 24
+gate 2675_mathesis_nonexist     || exit 25
+gate 2610_mathesis_propose      || exit 26
+gate 2673_mathesis_concept_seal || exit 27
+
+# [7] the sealed round-1 synthesis stream: the committed record must match its pins
+SYNLOG="$III_ROOT/DOCS/MATHESIS-SYNTH-ROUND1.log"
+grep -q "^MXS space=18522 tested=17136 frontier=1386 found=183$" "$SYNLOG" \
+    || { echo "[mathesis] RED: synth round-1 summary drifted from the pins"; exit 28; }
+[[ "$(grep -c '^MXS# ' "$SYNLOG")" -eq 183 ]] || { echo "[mathesis] RED: synth stream count != 183"; exit 29; }
+echo "[mathesis] GREEN: round-1 synthesis stream sealed (183 machine theorems; 1386 frontiered, blocker named)"
+
+# --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
+if [[ "${1:-}" == "--synth" ]]; then
+    SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"
+    [[ -x "$SWEEP" ]] || { echo "[mathesis] RED: no sweep driver (compile STDLIB/sovir/mathesis_synth_main.iii)"; exit 30; }
+    staged="/tmp/mxsw_$$$BIN_SUFFIX"; cp "$SWEEP" "$staged"
+    timeout 1800 "$staged" > "$RUN/synth_replay.log"; rc=$?; rm -f "$staged"
+    [[ $rc -eq 0 ]] || { echo "[mathesis] RED: synth replay rc=$rc"; exit 31; }
+    cmp -s "$RUN/synth_replay.log" "$SYNLOG" || { echo "[mathesis] RED: synth replay diverges from the sealed log"; exit 32; }
+    echo "[mathesis] GREEN: full synth sweep REPLAYED byte-identical (18,522 pairs)"
+fi
+
 echo "[mathesis] ============================================================"
 echo "[mathesis] Xi0 SEED CYCLE CLOSED: measured -> conjectured -> PROVEN ->"
 echo "[mathesis] admitted (MATHESIS-THEOREM-0001) -> assimilated (cg_svir fold)"
 echo "[mathesis] -> re-verified (square green) -> measured strict decrease."
+echo "[mathesis] THE CREATOR TIER OPEN: the DEFINITION DOOR admits minted"
+echo "[mathesis] concepts (ROTL64 + C64 laws, INERT by honest census); the"
+echo "[mathesis] STATEMENT LATTICE holds the first NONEXISTENCE family"
+echo "[mathesis] (2 <= cost(rot_k) <= 3); and THE SYNTHESIZER machine-found"
+echo "[mathesis] 183 forall-theorems from the whole declared space -- no"
+echo "[mathesis] candidates supplied, proof as the only filter (Ax D3)."
 echo "[mathesis] ============================================================"
 exit 0

@@ -412,6 +412,277 @@ fn mcx_chain_add(desc: u64) -> i32 @export {
 fn mcx_head_byte(i: i64) -> u64 @export { return MCX_HD[i as u64] as u64 }
 fn mcx_chain_len() -> i64 @export { return MCX_CN }
 
+/* ---- THE GROUP ENGINE (campaign Tau: the machine constructs beyond the sweep) -----------------
+ * A plane cubic F(u,v,w) = 0 carries chord-tangent structure: the line through two rational
+ * points meets the curve in a THIRD rational point, and the tangent at a point meets it in one
+ * more.  Both are EXACT INTEGER computations, machine-derivable with no field arithmetic:
+ * parametrize the line R(s,t) = s*P + t*Q; F(R) is a binary cubic with the known roots s = 0 and
+ * t = 0, so F(R) = s*t*(A*s + B*t) (chord; P double for the tangent: t^2*(A*s + B*t)); A and B
+ * fall out of TWO evaluations G(1,1), G(1,-1) (integer parity checked -- an odd residue is a
+ * self-detected defect); the third point is B*P - A*Q, gcd-reduced.  Every output is re-checked
+ * ON THE CURVE (F == 0 exactly) and every nontrivial output is a CONSTRUCTED radical identity,
+ * verified end-to-end through the judge like any swept find -- structure-made, not searched.
+ * Heights are capped (coords <= 4096: the i64 envelope, printed); past-cap outputs are counted,
+ * never silently dropped. */
+var MCG_P : [i64; 192]     /* closure pool: point i at (i*3 .. i*3+2), cap 64 */
+var MCG_N : i64
+var MCG_OVER : i64         /* outputs past the height cap (counted, not dropped silently) */
+var MCG_CW : i64           /* which component grid is the curve: 2 = P2 (curve A), 1 = P1 (curve B) */
+
+fn mcg_f(u: i64, v: i64, w: i64) -> i64 { return mcv_eval(MCG_CW, u, v, w) }
+
+/* exact gradient of the selected component at (u,v,w) -> MCG_GU/GV/GW */
+var MCG_GU : i64   var MCG_GV : i64   var MCG_GW : i64
+fn mcg_grad(u: i64, v: i64, w: i64) -> i32 {
+    MCG_GU = 0i64   MCG_GV = 0i64   MCG_GW = 0i64
+    let mut a : i64 = 0i64
+    while a < 64i64 {
+        let mut cf : i64 = 0i64
+        if MCG_CW == 1i64 { cf = MCV_P1[a as u64] }
+        if MCG_CW == 2i64 { cf = MCV_P2[a as u64] }
+        if cf != 0i64 {
+            let ea : i64 = a / 16i64
+            let eb : i64 = (a / 4i64) % 4i64
+            let ec : i64 = a % 4i64
+            let mut pu : i64 = 1i64
+            let mut pv : i64 = 1i64
+            let mut pw : i64 = 1i64
+            let mut pum : i64 = 1i64
+            let mut pvm : i64 = 1i64
+            let mut pwm : i64 = 1i64
+            let mut k : i64 = 0i64
+            while k < ea { if k > 0i64 { pum = pum * u }   pu = pu * u   k = k + 1i64 }
+            k = 0i64
+            while k < eb { if k > 0i64 { pvm = pvm * v }   pv = pv * v   k = k + 1i64 }
+            k = 0i64
+            while k < ec { if k > 0i64 { pwm = pwm * w }   pw = pw * w   k = k + 1i64 }
+            if ea > 0i64 { MCG_GU = MCG_GU + (cf * ea * pum * pv * pw) }
+            if eb > 0i64 { MCG_GV = MCG_GV + (cf * eb * pu * pvm * pw) }
+            if ec > 0i64 { MCG_GW = MCG_GW + (cf * ec * pu * pv * pwm) }
+        }
+        a = a + 1i64
+    }
+    return 0i32
+}
+
+fn mcg_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0
+    let mut b : i64 = b0
+    if a < 0i64 { a = 0i64 - a }
+    if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* reduce a projective triple in place (gcd + first-nonzero-positive); result in MCG_RU/RV/RW.
+ * 1 ok, 0 the zero triple, -1 past the height cap (counted by the caller). */
+var MCG_RU : i64   var MCG_RV : i64   var MCG_RW : i64
+fn mcg_reduce(u: i64, v: i64, w: i64) -> i64 {
+    if u == 0i64 { if v == 0i64 { if w == 0i64 { return 0i64 } } }
+    let g : i64 = mcg_gcd(mcg_gcd(u, v), w)
+    let mut ru : i64 = u / g
+    let mut rv : i64 = v / g
+    let mut rw : i64 = w / g
+    let mut fnz : i64 = ru
+    if fnz == 0i64 { fnz = rv }
+    if fnz == 0i64 { fnz = rw }
+    if fnz < 0i64 { ru = 0i64 - ru   rv = 0i64 - rv   rw = 0i64 - rw }
+    MCG_RU = ru   MCG_RV = rv   MCG_RW = rw
+    if ru > 4096i64 { return 0i64 - 1i64 }
+    if ru < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    if rv > 4096i64 { return 0i64 - 1i64 }
+    if rv < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    if rw > 4096i64 { return 0i64 - 1i64 }
+    if rw < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    return 1i64
+}
+
+/* the third intersection of the line through P and Q (chord; Q = tangent direction when tg = 1).
+ * Writes MCG_RU/RV/RW.  1 ok, 0 degenerate, -1 past cap, -2 self-detected defect. */
+fn mcg_third(pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64, tg: i64) -> i64 {
+    let g11 : i64 = mcg_f(pu + qu, pv + qv, pw + qw)
+    let g1m : i64 = mcg_f(pu - qu, pv - qv, pw - qw)
+    let mut a : i64 = 0i64
+    let mut b : i64 = 0i64
+    if tg == 1i64 {
+        /* tangent: G = t^2 (A s + B t): G(1,1) = A + B, G(1,-1) = A - B */
+        if (((g11 + g1m) % 2i64) != 0i64) { return 0i64 - 2i64 }
+        a = (g11 + g1m) / 2i64
+        b = (g11 - g1m) / 2i64
+    } else {
+        /* chord: G = s t (A s + B t): G(1,1) = A + B, G(1,-1) = B - A */
+        if (((g11 - g1m) % 2i64) != 0i64) { return 0i64 - 2i64 }
+        a = (g11 - g1m) / 2i64
+        b = (g11 + g1m) / 2i64
+    }
+    if a == 0i64 { if b == 0i64 { return 0i64 } }
+    let ru : i64 = (b * pu) - (a * qu)
+    let rv : i64 = (b * pv) - (a * qv)
+    let rw : i64 = (b * pw) - (a * qw)
+    let rc : i64 = mcg_reduce(ru, rv, rw)
+    if rc != 1i64 { return rc }
+    /* ON THE CURVE, exactly -- or the engine is broken */
+    if mcg_f(MCG_RU, MCG_RV, MCG_RW) != 0i64 { return 0i64 - 2i64 }
+    return 1i64
+}
+
+/* chord of pool points i, j (i != j) or tangent at i (j == i).  Adds a NEW in-cap point to the
+ * pool.  Returns 1 added, 0 nothing new, -1 pool full, -2 defect. */
+fn mcg_step(i: i64, j: i64) -> i64 {
+    let pu : i64 = MCG_P[(i * 3i64) as u64]
+    let pv : i64 = MCG_P[((i * 3i64) + 1i64) as u64]
+    let pw : i64 = MCG_P[((i * 3i64) + 2i64) as u64]
+    let mut r : i64 = 0i64
+    if i == j {
+        /* tangent: direction T with grad(P) . T = 0, T not proportional to P */
+        mcg_grad(pu, pv, pw)
+        let mut tu : i64 = 0i64
+        let mut tv : i64 = 0i64
+        let mut tw : i64 = 0i64
+        if MCG_GV != 0i64 { tu = 0i64   tv = MCG_GW   tw = 0i64 - MCG_GV }
+        else { if MCG_GU != 0i64 { tu = MCG_GW   tv = 0i64   tw = 0i64 - MCG_GU }
+        else { if MCG_GW != 0i64 { tu = MCG_GV   tv = 0i64 - MCG_GU   tw = 0i64 } else { return 0i64 } } }
+        if tu == 0i64 { if tv == 0i64 { if tw == 0i64 { return 0i64 } } }
+        /* T proportional to P would degenerate the parametrization */
+        if ((tu * pv) - (tv * pu)) == 0i64 { if ((tv * pw) - (tw * pv)) == 0i64 { return 0i64 } }
+        let rr : i64 = mcg_reduce(tu, tv, tw)
+        if rr != 1i64 { if rr == 0i64 { return 0i64 } }
+        if rr == (0i64 - 1i64) { MCG_OVER = MCG_OVER + 1i64   return 0i64 }
+        r = mcg_third(pu, pv, pw, MCG_RU, MCG_RV, MCG_RW, 1i64)
+    } else {
+        let qu : i64 = MCG_P[(j * 3i64) as u64]
+        let qv : i64 = MCG_P[((j * 3i64) + 1i64) as u64]
+        let qw : i64 = MCG_P[((j * 3i64) + 2i64) as u64]
+        r = mcg_third(pu, pv, pw, qu, qv, qw, 0i64)
+    }
+    if r == (0i64 - 2i64) { return 0i64 - 2i64 }
+    if r == (0i64 - 1i64) { MCG_OVER = MCG_OVER + 1i64   return 0i64 }
+    if r != 1i64 { return 0i64 }
+    /* already present (either sign)? */
+    let mut k : i64 = 0i64
+    while k < MCG_N {
+        let xu : i64 = MCG_P[(k * 3i64) as u64]
+        let xv : i64 = MCG_P[((k * 3i64) + 1i64) as u64]
+        let xw : i64 = MCG_P[((k * 3i64) + 2i64) as u64]
+        if xu == MCG_RU { if xv == MCG_RV { if xw == MCG_RW { return 0i64 } } }
+        if xu == (0i64 - MCG_RU) { if xv == (0i64 - MCG_RV) { if xw == (0i64 - MCG_RW) { return 0i64 } } }
+        k = k + 1i64
+    }
+    if MCG_N >= 64i64 { return 0i64 - 1i64 }
+    MCG_P[(MCG_N * 3i64) as u64] = MCG_RU
+    MCG_P[((MCG_N * 3i64) + 1i64) as u64] = MCG_RV
+    MCG_P[((MCG_N * 3i64) + 2i64) as u64] = MCG_RW
+    MCG_N = MCG_N + 1i64
+    return 1i64
+}
+
+/* THE CLOSURE: seed with the trivial rays (+ the catalogue finds for (d, curve) when seedmode = 1),
+ * then close under chords and tangents to a fixed pass count.  Returns the pool size, -1 pool
+ * refusal, -2 self-detected defect. */
+fn mcg_closure(d: i64, curve: i64, seedmode: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    MCG_CW = 2i64
+    if curve == 2i64 { MCG_CW = 1i64 }
+    MCG_N = 0i64   MCG_OVER = 0i64
+    MCG_P[0u64] = 1i64   MCG_P[1u64] = 0i64   MCG_P[2u64] = 0i64
+    MCG_P[3u64] = 0i64   MCG_P[4u64] = 1i64   MCG_P[5u64] = 0i64
+    MCG_P[6u64] = 0i64   MCG_P[7u64] = 0i64   MCG_P[8u64] = 1i64
+    MCG_N = 3i64
+    if seedmode == 1i64 {
+        let mut i : i64 = 0i64
+        while i < MCV_N {
+            if MCV_D[i as u64] == d { if MCV_C[i as u64] == curve {
+                if MCG_N < 64i64 {
+                    MCG_P[(MCG_N * 3i64) as u64] = MCV_U[i as u64]
+                    MCG_P[((MCG_N * 3i64) + 1i64) as u64] = MCV_V[i as u64]
+                    MCG_P[((MCG_N * 3i64) + 2i64) as u64] = MCV_W[i as u64]
+                    MCG_N = MCG_N + 1i64
+                }
+            } }
+            i = i + 1i64
+        }
+    }
+    let mut pass : i64 = 0i64
+    while pass < 4i64 {
+        let n0 : i64 = MCG_N
+        let mut i2 : i64 = 0i64
+        while i2 < n0 {
+            let mut j2 : i64 = i2
+            while j2 < n0 {
+                let st : i64 = mcg_step(i2, j2)
+                if st == (0i64 - 2i64) { return 0i64 - 2i64 }
+                j2 = j2 + 1i64
+            }
+            i2 = i2 + 1i64
+        }
+        if MCG_N == n0 { pass = 4i64 }
+        pass = pass + 1i64
+    }
+    return MCG_N
+}
+fn mcg_count() -> i64 @export { return MCG_N }
+fn mcg_over() -> i64 @export { return MCG_OVER }
+
+/* test door: one chord step on EXPLICIT points (the gate's defect-detector arm: an off-curve
+ * input must come back -2 -- the on-curve recheck is load-bearing). */
+fn mcg_third_test(d: i64, curve: i64, pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+    MCG_CW = 2i64
+    if curve == 2i64 { MCG_CW = 1i64 }
+    MCG_OVER = 0i64
+    return mcg_third(pu, pv, pw, qu, qv, qw, 0i64)
+}
+fn mcg_pt_u(i: i64) -> i64 @export { return MCG_P[(i * 3i64) as u64] }
+fn mcg_pt_v(i: i64) -> i64 @export { return MCG_P[((i * 3i64) + 1i64) as u64] }
+fn mcg_pt_w(i: i64) -> i64 @export { return MCG_P[((i * 3i64) + 2i64) as u64] }
+
+/* is the ray (u,v,w) in the pool (either sign)?  1 yes, 0 no. */
+fn mcg_has(u: i64, v: i64, w: i64) -> i64 @export {
+    let mut k : i64 = 0i64
+    while k < MCG_N {
+        let xu : i64 = MCG_P[(k * 3i64) as u64]
+        let xv : i64 = MCG_P[((k * 3i64) + 1i64) as u64]
+        let xw : i64 = MCG_P[((k * 3i64) + 2i64) as u64]
+        if xu == u { if xv == v { if xw == w { return 1i64 } } }
+        if xu == (0i64 - u) { if xv == (0i64 - v) { if xw == (0i64 - w) { return 1i64 } } }
+        k = k + 1i64
+    }
+    return 0i64
+}
+
+/* THE LOCAL PROBE: projective point count of the selected curve mod p (p prime, p <= 64).
+ * Counts affine nonzero solutions and divides by (p-1) -- exact for p prime.  More than the
+ * three trivial rays mod p  =>  no naive local obstruction at p. */
+fn mcv_local(d: i64, curve: i64, p: i64) -> i64 @export {
+    if p < 2i64 { return 0i64 - 1i64 }
+    if p > 64i64 { return 0i64 - 1i64 }
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    let mut which : i64 = 2i64
+    if curve == 2i64 { which = 1i64 }
+    let mut cnt : i64 = 0i64
+    let mut u : i64 = 0i64
+    while u < p {
+        let mut v : i64 = 0i64
+        while v < p {
+            let mut w : i64 = 0i64
+            while w < p {
+                let mut nz : i64 = 0i64
+                if u != 0i64 { nz = 1i64 }
+                if v != 0i64 { nz = 1i64 }
+                if w != 0i64 { nz = 1i64 }
+                if nz == 1i64 {
+                    let fv : i64 = mcv_eval(which, u, v, w)
+                    if (((fv % p) + p) % p) == 0i64 { cnt = cnt + 1i64 }
+                }
+                w = w + 1i64
+            }
+            v = v + 1i64
+        }
+        u = u + 1i64
+    }
+    return cnt / (p - 1i64)
+}
+
 /* chain the whole round: class-1 point rows (d, curve, u,v,w biased) in store order, then one
  * class-2 completeness row per (d, curve) swept (d, curve, H, finds, degenerates).  -1 refusal. */
 fn mcx_chain_round(hmax: i64, dsp: u64, nds: i64) -> i64 @export {

@@ -1,0 +1,180 @@
+/* 2708_mathesis_group_tau.iii -- GATE for THE GROUP ENGINE + THE QUESTION ATTACKED (campaign Tau).
+ * The machine's own open question (which d collapse on which curve, and why is d=5 empty?) is
+ * attacked with more reality, and the machine DISCOVERS chord-tangent structure on its own
+ * curves -- exact integer arithmetic, every output re-checked ON the curve, every nontrivial
+ * point re-verified as a radical identity through the judge.
+ *
+ * D -- DEFECT-DETECTOR FIRST: a chord step fed an OFF-CURVE point returns -2 (the on-curve
+ *      recheck is load-bearing); a legal chord on two trivial points returns an on-curve ray.
+ * F -- THE HEIGHT ESCALATION: d=5 swept to height 200 on BOTH curves -- still EMPTY (the
+ *      nonexistence inventory extends from 226,980 rays to 7,761,354 without a single hit).
+ * E -- THE EXTENDED PATTERN: d in {10,11,12,13,17} at height 60 -- d=12 curve A carries SIX
+ *      identities (exemplar (3,-1,1): (3 - cbrt12 + cbrt144)^3 = 117*cbrt12 - 57, judge-verified
+ *      inside the hunt); d=10,11,13,17 are EMPTY both curves.  The pattern is now
+ *      {2,6,7,12} -> A, {3} -> B, {5,10,11,13,17} -> neither: the question SHARPENED.
+ * K -- THE CLOSURE STRUCTURE (machine-discovered): the trivial triangle is chord-tangent CLOSED
+ *      (3 points, 0 escapes) and does NOT generate the Ramanujan point (the sigma-points are
+ *      independent of the trivial configuration); {trivials + Ramanujan orbit} is EXACTLY
+ *      closed at 6 (0 escapes -- a torsion-flavored configuration); d=3 curve B's 9-point
+ *      configuration is NOT closed -- 12 constructions escape the height envelope (counted,
+ *      never silently dropped); d=5 trivial closures stay trivial on both curves.  Every
+ *      nontrivial pool point re-verified as an identity through the judge.
+ * L -- THE LOCAL ASYMMETRY (machine-found): projective point counts mod p for d=5 --
+ *      curve B mod 7 has EXACTLY 3 points (the bare trivial minimum) while curve A has 12;
+ *      the full table pinned (p = 2,3,5,7,11,13).  A local fact aligned with the global
+ *      emptiness, recorded as certified evidence on the open question.
+ *
+ * exit 99 pass; 10 D; 11 F; 12 E-counts; 13 E-row; 14 K; 15 K-verify; 16 L. */
+module corpus_2708_mathesis_group_tau
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_verify(d: i64, curve: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_closure(d: i64, curve: i64, seedmode: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_count() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_over() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_pt_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_pt_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_pt_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_has(u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_third_test(d: i64, curve: i64, pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_local(d: i64, curve: i64, p: i64) -> i64 from "mathesis_curve.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var XD : [i64; 5]   var PS : [i64; 6]
+var LA : [i64; 6]   var LB : [i64; 6]
+var DBAD : i64   var DOKC : i64
+var F51 : i64   var F52 : i64
+var K0 : i64   var M0 : i64   var K1 : i64   var O1 : i64   var K3 : i64   var O3 : i64
+var K5A : i64   var K5B : i64
+var VOK : i64
+
+/* re-verify every nontrivial pool point as an identity through the judge. 1 all green, 0 not. */
+fn pool_verified(d: i64, curve: i64) -> i64 {
+    let mut ok : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < mcg_count() {
+        let u : i64 = mcg_pt_u(i)
+        let v : i64 = mcg_pt_v(i)
+        let w : i64 = mcg_pt_w(i)
+        let mut nz : i64 = 0i64
+        if u != 0i64 { nz = nz + 1i64 }
+        if v != 0i64 { nz = nz + 1i64 }
+        if w != 0i64 { nz = nz + 1i64 }
+        if nz >= 2i64 {
+            mcv_derive(d)
+            let mut e : i64 = 0i64
+            if curve == 1i64 { e = mcv_eval(1i64, u, v, w) }
+            if curve == 2i64 { e = mcv_eval(2i64, u, v, w) }
+            let mut cu : i64 = u
+            let mut cv : i64 = v
+            let mut cw : i64 = w
+            if e < 0i64 { cu = 0i64 - u   cv = 0i64 - v   cw = 0i64 - w   e = 0i64 - e }
+            if e != 0i64 {
+                let f : i64 = mcv_eval(0i64, cu, cv, cw)
+                if mcv_verify(d, curve, cu, cv, cw, e, f) != 1i64 { ok = 0i64 }
+            }
+        }
+        i = i + 1i64
+    }
+    return ok
+}
+
+fn main() -> u64 {
+    /* == D: the defect detector first, then a legal chord. */
+    DBAD = mcg_third_test(2i64, 1i64, 1i64, 1i64, 1i64, 0i64, 1i64, 0i64)   /* (1,1,1) is OFF-curve */
+    DOKC = mcg_third_test(2i64, 1i64, 1i64, 0i64, 0i64, 0i64, 1i64, 0i64)   /* two trivials: legal */
+    putchar(68i32) putchar(58i32) sp() e_i64(DBAD) sp() e_i64(DOKC) nl()    /* "D: -2 1" */
+    if DBAD != (0i64 - 2i64) { return 10u64 }
+    if DOKC != 1i64 { return 10u64 }
+
+    /* == F: d=5 at height 200, both curves. */
+    mcv_hunt_reset()
+    F51 = mcv_hunt(5i64, 1i64, 200i64)
+    F52 = mcv_hunt(5i64, 2i64, 200i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(F51) sp() e_i64(F52) nl()      /* "F: 0 0" */
+    if F51 != 0i64 { return 11u64 }
+    if F52 != 0i64 { return 11u64 }
+
+    /* == E: the extended-d pattern at height 60. */
+    XD[0u64] = 10i64   XD[1u64] = 11i64   XD[2u64] = 12i64   XD[3u64] = 13i64   XD[4u64] = 17i64
+    let mut k : i64 = 0i64
+    let mut e12 : i64 = 0i64
+    let mut eoth : i64 = 0i64
+    while k < 5i64 {
+        let mut cv : i64 = 1i64
+        while cv <= 2i64 {
+            let r : i64 = mcv_hunt(XD[k as u64], cv, 60i64)
+            if r < 0i64 { return 12u64 }
+            if XD[k as u64] == 12i64 { if cv == 1i64 { e12 = r } else { eoth = eoth + r } }
+            else { eoth = eoth + r }
+            cv = cv + 1i64
+        }
+        k = k + 1i64
+    }
+    putchar(69i32) putchar(58i32) sp() e_i64(e12) sp() e_i64(eoth) nl()     /* "E: 6 0" */
+    if e12 != 6i64 { return 12u64 }
+    if eoth != 0i64 { return 12u64 }
+    /* the d=12 exemplar, judge-verified again OUTSIDE the hunt */
+    let vx : i64 = mcv_verify(12i64, 1i64, 3i64, 0i64 - 1i64, 1i64, 117i64, 0i64 - 57i64)
+    putchar(88i32) putchar(58i32) sp() e_i64(vx) nl()                       /* "X: 1" */
+    if vx != 1i64 { return 13u64 }
+
+    /* == K: the closure structure.  Seeds need the catalogue: hunt (2,1) and (3,2) at 60. */
+    mcv_hunt_reset()
+    if mcv_hunt(2i64, 1i64, 60i64) != 3i64 { return 14u64 }
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 14u64 }
+    K0 = mcg_closure(2i64, 1i64, 0i64)
+    M0 = mcg_has(1i64, 0i64 - 1i64, 1i64)
+    K1 = mcg_closure(2i64, 1i64, 1i64)
+    O1 = mcg_over()
+    VOK = pool_verified(2i64, 1i64)
+    K3 = mcg_closure(3i64, 2i64, 1i64)
+    O3 = mcg_over()
+    if pool_verified(3i64, 2i64) != 1i64 { VOK = 0i64 }
+    K5A = mcg_closure(5i64, 1i64, 0i64)
+    K5B = mcg_closure(5i64, 2i64, 0i64)
+    putchar(75i32) putchar(58i32) sp() e_i64(K0) sp() e_i64(M0) sp() e_i64(K1) sp() e_i64(O1) sp() e_i64(K3) sp() e_i64(O3) sp() e_i64(K5A) sp() e_i64(K5B) nl()
+    /* "K: 3 0 6 0 9 12 3 3" */
+    if K0 != 3i64 { return 14u64 }
+    if M0 != 0i64 { return 14u64 }
+    if K1 != 6i64 { return 14u64 }
+    if O1 != 0i64 { return 14u64 }
+    if K3 != 9i64 { return 14u64 }
+    if O3 != 12i64 { return 14u64 }
+    if K5A != 3i64 { return 14u64 }
+    if K5B != 3i64 { return 14u64 }
+    putchar(86i32) putchar(58i32) sp() e_i64(VOK) nl()                      /* "V: 1" */
+    if VOK != 1i64 { return 15u64 }
+
+    /* == L: the local table for d=5 (the mod-7 curve-B bare-minimum). */
+    PS[0u64] = 2i64   PS[1u64] = 3i64   PS[2u64] = 5i64   PS[3u64] = 7i64   PS[4u64] = 11i64   PS[5u64] = 13i64
+    LA[0u64] = 3i64   LA[1u64] = 13i64   LA[2u64] = 11i64   LA[3u64] = 12i64   LA[4u64] = 12i64   LA[5u64] = 9i64
+    LB[0u64] = 3i64   LB[1u64] = 13i64   LB[2u64] = 11i64   LB[3u64] = 3i64    LB[4u64] = 12i64   LB[5u64] = 9i64
+    let mut lok : i64 = 1i64
+    k = 0i64
+    while k < 6i64 {
+        let na : i64 = mcv_local(5i64, 1i64, PS[k as u64])
+        let nb : i64 = mcv_local(5i64, 2i64, PS[k as u64])
+        putchar(76i32) sp() e_i64(PS[k as u64]) sp() e_i64(na) sp() e_i64(nb) nl()
+        if na != LA[k as u64] { lok = 0i64 }
+        if nb != LB[k as u64] { lok = 0i64 }
+        k = k + 1i64
+    }
+    if lok != 1i64 { return 16u64 }
+
+    return 99u64
+}

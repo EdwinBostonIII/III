@@ -1,0 +1,31 @@
+MXG-ROUND1 declared: the open question attacked -- d=5 escalated to height 200 both curves; extended d in {10,11,12,13,17} at height 60; chord-tangent closures (exact integer, on-curve rechecked, height cap 4096, escapes counted); d=5 local projective counts mod p
+MXG F5H200 0 0
+MXG H 10 1 0
+MXG H 10 2 0
+MXG H 11 1 0
+MXG H 11 2 0
+MXG H 12 1 6
+MXG H 12 2 0
+MXG H 13 1 0
+MXG H 13 2 0
+MXG H 17 1 0
+MXG H 17 2 0
+MXG C 12 1 3 -3 1 351 -801 name=SIGMA-d12A-1
+MXG C 12 1 3 -1 1 117 -57 name=SIGMA-d12A-2
+MXG C 12 1 -4 4 1 624 -304 name=SIGMA-d12A-3
+MXG C 12 1 4 1 -1 156 -356 name=SIGMA-d12A-4
+MXG C 12 1 -12 4 1 1872 -4272 name=SIGMA-d12A-5
+MXG C 12 1 12 3 -1 1404 -684 name=SIGMA-d12A-6
+MXG K 2 1 0 3 0
+MXG RAMANUJAN-IN-TRIVIAL-CLOSURE 0
+MXG K 2 1 1 6 0
+MXG K 3 2 1 9 12
+MXG K 5 1 0 3 0
+MXG K 5 2 0 3 0
+MXG L 2 3 3
+MXG L 3 13 13
+MXG L 5 11 11
+MXG L 7 12 3
+MXG L 11 12 12
+MXG L 13 9 9
+MXG pattern: A={2,6,7,12} B={3} empty={5,10,11,13,17}; d=5 empty to H=200; trivial triangle CLOSED and does NOT generate the sigma-points; {trivials+Ramanujan-orbit} EXACTLY CLOSED at 6; d=3B escapes=12 past the height envelope; B5 mod 7 = the bare trivial minimum -- THE OPEN QUESTION STANDS, SHARPENED

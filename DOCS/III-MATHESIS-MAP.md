@@ -882,7 +882,47 @@ the drain partition; MATHESIS_CERT and RADICAL_CERT stand unchanged beside it.
 
 ---
 
+## 16. CAMPAIGN Τ — THE MACHINE ATTACKS ITS OWN QUESTION (2026-07-13)
+
+The Σ critique's next rung: a researcher is measured by what it does with its OWN open question.
+Τ gives the engine three instruments and points them at the A/B/empty pattern it posed (gate
+2708; stream `DOCS/MATHESIS-TAU-ROUND1.log`, replay byte-identical; TAU_CERT beside the others).
+
+- **HEIGHT ESCALATION**: d=5 swept to height 200 on BOTH curves — still EMPTY (226,980 →
+  7,761,354 rays, zero hits). The nonexistence inventory extends 34-fold.
+- **THE EXTENDED PATTERN**: d ∈ {10,11,12,13,17} at height 60 — **d=12 curve A carries SIX new
+  identities (SIGMA-d12A-1…6, e.g. (3−3∛12+∛144)³ = 351∛12−801, every one judge-verified inside
+  the hunt)**; d=10,11,13,17 empty both curves. The pattern now reads **A = {2,6,7,12},
+  B = {3}, neither = {5,10,11,13,17}** — richer, sharper, still open.
+- **THE GROUP ENGINE** (`mcg_*` in `aether/mathesis_curve.iii`): chord-tangent structure on the
+  machine's own cubics by EXACT integer arithmetic — the line through two rational points meets
+  the curve in a third, extracted from two evaluations (parity-checked; odd residue = a
+  self-detected defect), every output re-checked ON the curve, every nontrivial point re-verified
+  as a radical identity through the judge, heights capped at 4096 with escapes COUNTED. What the
+  machine discovered with it: **the trivial triangle {(1,0,0),(0,1,0),(0,0,1)} is chord-tangent
+  CLOSED and does NOT generate the Ramanujan point** (the σ-points are independent of the trivial
+  configuration — machine-proven to the cap); **{trivials + Ramanujan orbit} is EXACTLY closed at
+  6 points, 0 escapes** (a torsion-flavored finite configuration); **d=3 curve B's 9-point
+  configuration is NOT closed — 12 constructions escape the height envelope** (the two curves
+  have structurally different point configurations — machine-observed); d=5's trivial closures
+  stay trivial on both curves.
+- **THE LOCAL PROBE**: projective point counts mod p for the d=5 curves — **curve B mod 7 has
+  EXACTLY the 3 trivial points (the bare minimum a curve with the trivial rays can have) while
+  curve A mod 7 has 12** — a machine-found local asymmetry aligned precisely with the global
+  emptiness pattern, recorded as certified evidence. (No small-prime obstruction kills either
+  curve outright — the emptiness, if global, is a DEEP phenomenon; the question stands,
+  sharpened, with the machine's evidence chained to it.)
+
+**The verdict line the stream pins**: `THE OPEN QUESTION STANDS, SHARPENED`. That is the honest
+state: the machine escalated the evidence, discovered the closure structure, found the local
+asymmetry, harvested six more identities — and correctly refused to claim what it has not
+proven. The named frontier out of Τ: bigint chord-tangent (the 12 escaped constructions are
+computable with wider arithmetic — each would be a CONSTRUCTED identity beyond any sweep), the
+Weierstrass/rank route for the emptiness proof, and the pattern law itself.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
-`DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`.*
+`DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`.*

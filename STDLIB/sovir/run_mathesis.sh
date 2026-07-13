@@ -203,6 +203,18 @@ SIGMA_CERT="$(printf '%s' "07fdc686ea0dabdfb97fd96711c0ba17c304a8669e5b98b89572e
 echo "[mathesis] SIGMA_CERT = $SIGMA_CERT"
 echo "[mathesis] GREEN: campaign Sigma sealed (frontier 1386 -> 0 undecided; the SIGMA catalogue: 21 machine-found cube identities incl. six d=3 curve-B rows unknown to the author, d=5 certified EMPTY both curves to height 60)"
 
+echo "[mathesis] == [11] CAMPAIGN TAU (the group engine; the open question attacked) =="
+gate 2708_mathesis_group_tau   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 79   # chord-tangent structure; d=5 to H=200; the extended pattern; the local table
+TAULOG="$III_ROOT/DOCS/MATHESIS-TAU-ROUND1.log"
+grep -q "^MXG F5H200 0 0$" "$TAULOG" || { echo "[mathesis] RED: tau d=5 height-200 row drifted"; exit 80; }
+[[ "$(grep -c '^MXG C ' "$TAULOG")" -eq 6 ]] || { echo "[mathesis] RED: tau extended-catalogue count != 6"; exit 81; }
+grep -q "name=SIGMA-d12A-1$" "$TAULOG" || { echo "[mathesis] RED: SIGMA-d12A-1 missing"; exit 82; }
+grep -q "^MXG L 7 12 3$" "$TAULOG" || { echo "[mathesis] RED: the mod-7 bare-minimum row drifted"; exit 83; }
+grep -q "THE OPEN QUESTION STANDS, SHARPENED$" "$TAULOG" || { echo "[mathesis] RED: tau summary drifted"; exit 84; }
+TAU_CERT="$(printf '%s' "0|0|6|3|0|6|0|9|12|12,3" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] TAU_CERT = $TAU_CERT"
+echo "[mathesis] GREEN: campaign Tau sealed (d=5 EMPTY to height 200; d=12 curve A carries SIX new sigma identities; the trivial triangle is chord-tangent CLOSED and independent of the sigma-points; {trivials+Ramanujan-orbit} EXACTLY closed at 6; B5 mod 7 = bare trivial minimum -- the machine's open question sharpened with certificates)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

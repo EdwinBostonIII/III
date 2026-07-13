@@ -329,6 +329,29 @@ CHI_CERT="$(printf '%s' "12|64|9|109|20596732|860978|21|178981952|504|62|10|300|
 echo "[mathesis] CHI_CERT = $CHI_CERT"
 echo "[mathesis] GREEN: campaign Chi sealed (the judge's third universe decides the harvested tier and ORDERS the six constructed points; the 4^16 refusal DISCHARGED: 178,981,952 structures, 109 species, 21 citizens, the two ontology organs unified by the carrier-12 product law; the involution class law CONFIRMED over all seven pairs with d=225 delivering the predicted three curve-B identities; units REFUTED as the pattern's driver; the pilot found d=19 (A:4) and head(18) extends the ledger)"
 
+echo "[mathesis] == [16] CAMPAIGN PSI (the universal reach: gamma-orbit completion, the box to 50, THE CENSUS BEYOND ENUMERATION, the width-64 rot settlement, the pilot at 24) =="
+for t in mathesis_census mathesis_rot64; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 130; }
+    RADFACE+=("$o")
+done
+gate 2721_mathesis_orbits  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 131   # d=19 completes to two gamma-orbits of 3 (2 partners CONSTRUCTED beyond hunt height); 271/919 re-surfaced
+gate 2722_mathesis_box50   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 132   # 42 cube-free d, 133 finds; d=20/d=50 collapse on BOTH curves; d=30 carries 18
+gate 2723_mathesis_census  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 133   # Burnside n=5,6,7 in bigint, two routes agree; n=7 = the iso-count of 7^49 operations
+gate 2724_mathesis_rot64   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 134   # cost64(rot_k)<=3 for all 63 (bit-blast); cost8=3 two-evaluator; 818 shape-classes refuted at width 64
+gate_slow 2725_mathesis_pilot24 "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 135   # rounds 18..23: d=20 found (A:9 B:2, first both-curve); prefix law; head(24) pinned twice
+PSILOG="$III_ROOT/DOCS/MATHESIS-PSI-ROUND1.log"
+grep -q "^T5 7 0 0 50976900301814584087291487087214170039$" "$PSILOG" || { echo "[mathesis] RED: the n=7 full census drifted"; exit 136; }
+grep -q "^T5 7 1 0 91267244789189735259$" "$PSILOG" || { echo "[mathesis] RED: the n=7 commutative census drifted"; exit 137; }
+grep -q "^U defn64=63 k1=1 k32=1 k63=1$" "$PSILOG" || { echo "[mathesis] RED: the cost64<=3 theorem row drifted"; exit 138; }
+grep -q "^L rot1 refuted=818 decided=818 undecided=2638 matches=0$" "$PSILOG" || { echo "[mathesis] RED: the width-64 lower-bound row drifted"; exit 139; }
+grep -q "^O 19 1 4 8 8 2 6$" "$PSILOG" || { echo "[mathesis] RED: the d=19 orbit-completion row drifted"; exit 140; }
+grep -q "^D 20 9 2$" "$PSILOG" || { echo "[mathesis] RED: the d=20 both-curve row drifted"; exit 141; }
+# [PSI] THE CERTIFICATE: sha256 over the campaign's pinned facts (census + rot64 + orbit + box + pilot head).
+PSI_CERT="$(printf '%s' "2483527537094825|254429900|30468670170912|91267244789189735259|63|818|2638|311056|4|8|2|42|133|f6d76f9979683613e5025568cde8270e1fd695e60207b50d8e84192397f553f7" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] PSI_CERT = $PSI_CERT"
+echo "[mathesis] GREEN: campaign Psi sealed (THE CENSUS BEYOND ENUMERATION -- the exact iso-count of all binary operations on n=5,6,7 tokens in bigint, two routes agreeing, n=7 counting 7^49 ~ 2.56e41 operations without enumeration; cost64(rot_k)<=3 PROVEN at the machine word for all 63 rotations by III's own SAT solver, cost8=3 total, 818 shape-classes refuted at width 64; d=19's gamma-orbit COMPLETED with two partners constructed beyond hunt height; the box to 50 found d=20/d=50 on both curves and d=30 carrying 18; the norm-prime law generalized with isqrt-certified primality; the pilot found d=20 and extends the ledger to head(24))"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

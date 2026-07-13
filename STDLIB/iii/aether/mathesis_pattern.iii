@@ -62,6 +62,7 @@ extern @abi(c-msvc-x64) fn bj_copy(dst: i64, src: i64) -> i32 from "mathesis_big
 extern @abi(c-msvc-x64) fn bj_c(k: i64, c: i64) -> i64 from "mathesis_bigjudge.iii"
 extern @abi(c-msvc-x64) fn bj_eq(a: i64, b: i64) -> i64 from "mathesis_bigjudge.iii"
 extern @abi(c-msvc-x64) fn bj_qmul(dst: i64, a: i64, b: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_cube(dst: i64, a: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
 extern @abi(c-msvc-x64) fn bj_verify_raw(d: i64, c: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_bigjudge.iii"
 extern @abi(c-msvc-x64) fn bg_res_h(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
 extern @abi(c-msvc-x64) fn bc_iszero(h: i64) -> i64 from "mathesis_bigcurve.iii"
@@ -430,4 +431,224 @@ fn mp_d225(h: i64) -> i64 @export {
         i = i + 1i64
     }
     return (((a + b) * 100i64) + (refused * 10i64)) + bigok
+}
+
+/* ================= THE mp2_ TIER (campaign Psi: orbit completion, the box to 50, the
+ *                   norm-prime law generalized) ================= */
+
+/* ---- Psi-1: GAMMA-ORBIT COMPLETION -- construct the full gamma-orbit of every hunt find,
+ *      including the members whose coordinates EXCEED the hunt height (hunt-free construction),
+ *      each verified ON THE CURVE in exact bigint.
+ *      gamma*(u,v,w) = (d w, u, v);  gamma^2*(u,v,w) = (d v, d w, u).  A collapse point maps to
+ *      a collapse point ((gamma alpha)^3 = d alpha^3), so the orbit stays on the curve. ---- */
+fn mp2_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0   if a < 0i64 { a = 0i64 - a }
+    let mut b : i64 = b0   if b < 0i64 { b = 0i64 - b }
+    while b > 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+var MP2_PU : [i64; 48]
+var MP2_PV : [i64; 48]
+var MP2_PW : [i64; 48]
+var MP2_PORG : [i64; 48]    /* 0 = a hunt find, 1 = reachable only by construction */
+var MP2_PN : i64
+var MP2_CU : [i64; 3]       /* canonical scratch (global: two-local-array codegen hazard) */
+fn mp2_canon(u0: i64, v0: i64, w0: i64) -> i32 {
+    let mut u : i64 = u0
+    let mut v : i64 = v0
+    let mut w : i64 = w0
+    let mut g : i64 = mp2_gcd(mp2_gcd(u, v), w)
+    if g > 0i64 { u = u / g   v = v / g   w = w / g }
+    /* sign-normalize: first nonzero coordinate positive */
+    let mut lead : i64 = 0i64
+    if u != 0i64 { lead = u } else { if v != 0i64 { lead = v } else { lead = w } }
+    if lead < 0i64 { u = 0i64 - u   v = 0i64 - v   w = 0i64 - w }
+    MP2_CU[0u64] = u   MP2_CU[1u64] = v   MP2_CU[2u64] = w
+    return 0i32
+}
+/* find the canonical point in the store; return its index or -1 */
+fn mp2_find_pt() -> i64 {
+    let mut i : i64 = 0i64
+    while i < MP2_PN {
+        if MP2_PU[i as u64] == MP2_CU[0u64] { if MP2_PV[i as u64] == MP2_CU[1u64] { if MP2_PW[i as u64] == MP2_CU[2u64] { return i } } }
+        i = i + 1i64
+    }
+    return 0i64 - 1i64
+}
+fn mp2_add_pt(org: i64) -> i64 {
+    let ex : i64 = mp2_find_pt()
+    if ex >= 0i64 { return ex }
+    if MP2_PN >= 48i64 { return 0i64 - 1i64 }
+    MP2_PU[MP2_PN as u64] = MP2_CU[0u64]
+    MP2_PV[MP2_PN as u64] = MP2_CU[1u64]
+    MP2_PW[MP2_PN as u64] = MP2_CU[2u64]
+    MP2_PORG[MP2_PN as u64] = org
+    MP2_PN = MP2_PN + 1i64
+    return MP2_PN - 1i64
+}
+/* 1 iff (u,v,w) cubes to a collapse element on the given curve (bigint): curve 1 (A) => the
+ * gamma^2 coefficient vanishes; curve 2 (B) => the gamma^1 coefficient vanishes. */
+fn mp2_oncurve(u: i64, v: i64, w: i64, d: i64, curve: i64) -> i64 {
+    bj_set(0i64, u, v, w)
+    if bj_cube(1i64, 0i64, d) < 0i64 { return 0i64 - 1i64 }
+    if curve == 1i64 { return bc_iszero(bj_c(1i64, 2i64)) }
+    return bc_iszero(bj_c(1i64, 1i64))
+}
+var MP2_ORBN : i64          /* distinct points in the completed orbit set */
+var MP2_ORBF : i64          /* of them, from the hunt */
+var MP2_ORBC : i64          /* of them, reachable ONLY by construction (beyond hunt height) */
+var MP2_ORBV : i64          /* constructed points verified on-curve in bigint */
+var MP2_ORBT : i64          /* constructed points total (2 per find) */
+fn mp2_orbn() -> i64 @export { return MP2_ORBN }
+fn mp2_orbf() -> i64 @export { return MP2_ORBF }
+fn mp2_orbc() -> i64 @export { return MP2_ORBC }
+fn mp2_orbv() -> i64 @export { return MP2_ORBV }
+fn mp2_orbt() -> i64 @export { return MP2_ORBT }
+fn mp2_orbit(d: i64, curve: i64) -> i64 @export {
+    mcv_hunt_reset()
+    let n : i64 = mcv_hunt(d, curve, 60i64)
+    if n < 0i64 { return 0i64 - 1i64 }
+    MP2_PN = 0i64
+    let mut i : i64 = 0i64
+    while i < n {
+        mp2_canon(mcv_row_u(i), mcv_row_v(i), mcv_row_w(i))
+        mp2_add_pt(0i64)
+        i = i + 1i64
+    }
+    MP2_ORBF = MP2_PN
+    MP2_ORBV = 0i64
+    MP2_ORBT = 0i64
+    /* construct gamma and gamma^2 of each ORIGINAL find; verify + fold into the store */
+    i = 0i64
+    while i < n {
+        let u : i64 = mcv_row_u(i)
+        let v : i64 = mcv_row_v(i)
+        let w : i64 = mcv_row_w(i)
+        /* gamma: (d w, u, v) */
+        let a1 : i64 = d * w
+        MP2_ORBT = MP2_ORBT + 1i64
+        if mp2_oncurve(a1, u, v, d, curve) == 1i64 { MP2_ORBV = MP2_ORBV + 1i64 }
+        mp2_canon(a1, u, v)
+        mp2_add_pt(1i64)
+        /* gamma^2: (d v, d w, u) */
+        let b1 : i64 = d * v
+        let b2 : i64 = d * w
+        MP2_ORBT = MP2_ORBT + 1i64
+        if mp2_oncurve(b1, b2, u, d, curve) == 1i64 { MP2_ORBV = MP2_ORBV + 1i64 }
+        mp2_canon(b1, b2, u)
+        mp2_add_pt(1i64)
+        i = i + 1i64
+    }
+    MP2_ORBN = MP2_PN
+    MP2_ORBC = 0i64
+    i = 0i64
+    while i < MP2_PN { if MP2_PORG[i as u64] == 1i64 { MP2_ORBC = MP2_ORBC + 1i64 }   i = i + 1i64 }
+    return MP2_ORBN
+}
+
+/* ---- Psi-3: THE NORM-PRIME LAW.  N(u,v,w) = u^3 + d v^3 + d^2 w^3 - 3 d u v w, factored with
+ *      isqrt-certified primality (trial division to floor(sqrt n) -- exact, total, no
+ *      probabilistic step) for |N| <= 10^15.  Tests whether the collapse orbits carry named
+ *      primes (the d=3B law: the two gamma-orbits carry 271 and 919, product 249049). ---- */
+fn mp2_norm(u: i64, v: i64, w: i64, d: i64) -> i64 @export {
+    return ((((u * u) * u) + ((d * v) * (v * v))) + (((d * d) * w) * (w * w))) - ((((3i64 * d) * u) * v) * w)
+}
+fn mp2_isprime(n0: i64) -> i64 @export {
+    let mut n : i64 = n0
+    if n < 0i64 { n = 0i64 - n }
+    if n < 2i64 { return 0i64 }
+    if n < 4i64 { return 1i64 }
+    if (n % 2i64) == 0i64 { return 0i64 }
+    let mut p : i64 = 3i64
+    while (p * p) <= n {
+        if (n % p) == 0i64 { return 0i64 }
+        p = p + 2i64
+    }
+    return 1i64
+}
+/* the primes carried by the finds' norms (distinct, |N|<=10^15 fully factored) */
+var MP2_NPR : [i64; 64]
+var MP2_NPRN : i64
+var MP2_NORMS : [i64; 32]
+var MP2_NORMN : i64
+fn mp2_npr(i: i64) -> i64 @export { return MP2_NPR[i as u64] }
+fn mp2_nprn() -> i64 @export { return MP2_NPRN }
+fn mp2_norm_row(i: i64) -> i64 @export { return MP2_NORMS[i as u64] }
+fn mp2_normn() -> i64 @export { return MP2_NORMN }
+fn mp2_add_prime(p: i64) -> i32 {
+    let mut i : i64 = 0i64
+    while i < MP2_NPRN { if MP2_NPR[i as u64] == p { return 0i32 }   i = i + 1i64 }
+    if MP2_NPRN < 64i64 { MP2_NPR[MP2_NPRN as u64] = p   MP2_NPRN = MP2_NPRN + 1i64 }
+    return 0i32
+}
+/* factor |m| by trial division to isqrt, recording each distinct prime.  m != 0.  0 ok / -1 too big. */
+fn mp2_factor_into(m0: i64) -> i64 {
+    let mut m : i64 = m0
+    if m < 0i64 { m = 0i64 - m }
+    if m < 2i64 { return 0i64 }
+    while (m % 2i64) == 0i64 { mp2_add_prime(2i64)   m = m / 2i64 }
+    let mut p : i64 = 3i64
+    while (p * p) <= m {
+        if (m % p) == 0i64 { mp2_add_prime(p)   while (m % p) == 0i64 { m = m / p } }
+        else { p = p + 2i64 }
+    }
+    if m > 1i64 { mp2_add_prime(m) }        /* the surviving cofactor is prime (p^2 > m) */
+    return 0i64
+}
+/* the norm-prime census over one (d, curve): compute each find's norm, factor it, collect the
+ * distinct primes.  Returns the number of distinct primes carried (mp2_npr* / mp2_norm* read out). */
+fn mp2_normprime(d: i64, curve: i64) -> i64 @export {
+    mcv_hunt_reset()
+    let n : i64 = mcv_hunt(d, curve, 60i64)
+    if n < 0i64 { return 0i64 - 1i64 }
+    MP2_NPRN = 0i64
+    MP2_NORMN = 0i64
+    let mut i : i64 = 0i64
+    while i < n {
+        let nm : i64 = mp2_norm(mcv_row_u(i), mcv_row_v(i), mcv_row_w(i), d)
+        if MP2_NORMN < 32i64 { MP2_NORMS[MP2_NORMN as u64] = nm   MP2_NORMN = MP2_NORMN + 1i64 }
+        if nm != 0i64 { mp2_factor_into(nm) }
+        i = i + 1i64
+    }
+    return MP2_NPRN
+}
+
+/* ---- Psi-2: THE BOX TO 50 -- the whole cube-free d in [2, hi] hunted at height 60 both curves,
+ *      the extended collapse pattern recorded (A/B counts, refusals). ---- */
+fn mp2_cubefree(d: i64) -> i64 @export {
+    let mut m : i64 = d
+    let mut p : i64 = 2i64
+    while (p * p * p) <= m {
+        while (m % (p * p * p)) == 0i64 { return 0i64 }    /* p^3 | d => not cube-free */
+        p = p + 1i64
+    }
+    return 1i64
+}
+var MP2_BA : [i64; 51]
+var MP2_BB : [i64; 51]
+var MP2_BN : i64
+fn mp2_ba(d: i64) -> i64 @export { return MP2_BA[d as u64] }
+fn mp2_bb(d: i64) -> i64 @export { return MP2_BB[d as u64] }
+fn mp2_bn() -> i64 @export { return MP2_BN }
+fn mp2_box(hi: i64) -> i64 @export {
+    MP2_BN = 0i64
+    let mut total : i64 = 0i64
+    let mut d : i64 = 2i64
+    while d <= hi {
+        MP2_BA[d as u64] = 0i64 - 1i64        /* -1 = not cube-free (skipped) */
+        MP2_BB[d as u64] = 0i64 - 1i64
+        if mp2_cubefree(d) == 1i64 {
+            mcv_hunt_reset()
+            let a : i64 = mcv_hunt(d, 1i64, 60i64)
+            if a < 0i64 { return 0i64 - (100i64 + d) }
+            let b : i64 = mcv_hunt(d, 2i64, 60i64)
+            if b < 0i64 { return 0i64 - (1000i64 + d) }
+            MP2_BA[d as u64] = a
+            MP2_BB[d as u64] = b
+            MP2_BN = MP2_BN + 1i64
+            total = total + a + b
+        }
+        d = d + 1i64
+    }
+    return total
 }

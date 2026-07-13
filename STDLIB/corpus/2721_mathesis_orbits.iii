@@ -1,0 +1,87 @@
+/* 2721_mathesis_orbits.iii -- GATE for GAMMA-ORBIT COMPLETION + THE NORM-PRIME LAW
+ * (campaign Psi, items Psi-1 and Psi-3).
+ *
+ * Psi-1 (mp2_orbit): every hunt find's full gamma-orbit CONSTRUCTED -- including the members whose
+ * coordinates exceed the hunt height -- each verified ON THE CURVE in exact bigint.  Observed
+ * 2026-07-13 (finds / constructed / verified / only-by-construction / distinct):
+ *   d=2  A: 3 / 6 / 6 / 0 / 3     -- the orbit is CLOSED within height 60
+ *   d=3  B: 6 / 12 / 12 / 0 / 6   -- two gamma-orbits of 3, closed
+ *   d=19 A: 4 / 8 / 8 / 2 / 6     -- THE LIFT: the pilot's four finds complete to SIX points; the
+ *                                   TWO missing partners live BEYOND height 60 and are CONSTRUCTED
+ *                                   and bigint-verified -- Chi's "d=19 partners beyond the envelope"
+ *                                   RESOLVED (exactly two gamma-orbits of 3).
+ *   d=15 A: 6 / 12 / 12 / 0 / 6
+ * Every constructed point lands ON the curve in bigint (verified == constructed everywhere).
+ *
+ * Psi-3 (mp2_normprime): each find's norm N = u^3 + d v^3 + d^2 w^3 - 3 d u v w, factored with
+ * isqrt-certified primality.  d=3 curve B re-surfaces the sealed norms [-271, 2757, 919, -2439,
+ * -813, 8271] and the primes {271, 3, 919} through a FRESH norm path (two-path confirmation of
+ * Chi's 271*919 = 249049); the gamma-norm law N(gamma alpha) = d N(alpha) is visible as the
+ * per-step scaling.  d=19 carries the primes {89, 307, 9613, 19}.  EXIT 99. */
+module corpus_2721_mathesis_orbits
+
+extern @abi(c-msvc-x64) fn mp2_orbit(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbf() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbc() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbv() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbt() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_normprime(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_npr(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_nprn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_norm_row(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_normn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_isprime(n: i64) -> i64 from "mathesis_pattern.iii"
+
+/* orbit check: (finds, constructed, verified, onlyConstructed, distinct) */
+fn chk_orbit(d: i64, curve: i64, f: i64, t: i64, v: i64, c: i64, n: i64) -> i64 {
+    if mp2_orbit(d, curve) != n { return 0i64 }
+    if mp2_orbf() != f { return 0i64 }
+    if mp2_orbt() != t { return 0i64 }
+    if mp2_orbv() != v { return 0i64 }
+    if mp2_orbc() != c { return 0i64 }
+    if mp2_orbn() != n { return 0i64 }
+    return 1i64
+}
+/* 1 iff prime p is among the carried primes */
+fn has_prime(p: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < mp2_nprn() { if mp2_npr(i) == p { return 1i64 }   i = i + 1i64 }
+    return 0i64
+}
+/* 1 iff norm value nv is among the row norms */
+fn has_norm(nv: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < mp2_normn() { if mp2_norm_row(i) == nv { return 1i64 }   i = i + 1i64 }
+    return 0i64
+}
+
+fn main() -> i32 {
+    /* [A] Psi-1: gamma-orbit completion -- verified == constructed at every d (all on-curve) */
+    if chk_orbit(2i64, 1i64, 3i64, 6i64, 6i64, 0i64, 3i64) != 1i64 { return 10i32 }
+    if chk_orbit(3i64, 2i64, 6i64, 12i64, 12i64, 0i64, 6i64) != 1i64 { return 11i32 }
+    if chk_orbit(19i64, 1i64, 4i64, 8i64, 8i64, 2i64, 6i64) != 1i64 { return 12i32 }   /* THE LIFT */
+    if chk_orbit(15i64, 1i64, 6i64, 12i64, 12i64, 0i64, 6i64) != 1i64 { return 13i32 }
+    /* [B] Psi-3: d=3 curve B norm-prime structure (a fresh path onto Chi's 271 / 919) */
+    if mp2_normprime(3i64, 2i64) != 3i64 { return 20i32 }        /* three distinct primes carried */
+    if mp2_normn() != 6i64 { return 21i32 }
+    if has_norm(0i64 - 271i64) != 1i64 { return 22i32 }
+    if has_norm(919i64) != 1i64 { return 23i32 }
+    if has_norm(8271i64) != 1i64 { return 24i32 }
+    if has_prime(271i64) != 1i64 { return 25i32 }
+    if has_prime(919i64) != 1i64 { return 26i32 }
+    if has_prime(3i64) != 1i64 { return 27i32 }
+    /* [C] Psi-3: d=19 curve A carries {89, 307, 9613, 19} */
+    if mp2_normprime(19i64, 1i64) != 4i64 { return 30i32 }
+    if mp2_normn() != 4i64 { return 31i32 }
+    if has_prime(89i64) != 1i64 { return 32i32 }
+    if has_prime(307i64) != 1i64 { return 33i32 }
+    if has_prime(9613i64) != 1i64 { return 34i32 }
+    if has_prime(19i64) != 1i64 { return 35i32 }
+    /* [D] the isqrt primality teeth */
+    if mp2_isprime(271i64) != 1i64 { return 40i32 }
+    if mp2_isprime(919i64) != 1i64 { return 41i32 }
+    if mp2_isprime(249049i64) != 0i64 { return 42i32 }          /* 271 * 919 -- composite */
+    if mp2_isprime(1000003i64) != 1i64 { return 43i32 }
+    return 99i32
+}

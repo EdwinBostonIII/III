@@ -1,0 +1,53 @@
+/* 2722_mathesis_box50.iii -- GATE for THE BOX TO 50 (campaign Psi, item Psi-2).
+ *
+ * Every cube-free d in [2, 50] hunted at height 60 on BOTH curves (mp2_box), the extended
+ * collapse pattern recorded.  Observed 2026-07-13, pinned here: 42 cube-free d, 133 total finds.
+ * The collapse rows (d: A-count B-count) -- the NEW territory beyond the Chi 19-box:
+ *
+ *   old box:  2:3/0  3:0/6  4:0/3  6:6/0  7:6/0  9:6/0  12:6/0  15:6/0  18:0/6  19:4/0  36:0/6  49:0/5
+ *   NEW:      20:9/2  <- THE FIRST d TO COLLAPSE ON BOTH CURVES; 22:4/0  26:3/0  28:3/0
+ *             30:18/0 <- the RICHEST collapse in the whole census (eighteen curve-A identities)
+ *             33:6/0  34:4/0  35:2/0  37:2/0  42:6/0  45:0/2  50:2/7  <- d=50 ALSO on both curves
+ *
+ * The gate pins the census totals, the anchors, and the new phenomena; a non-cube-free d (8 = 2^3)
+ * is confirmed SKIPPED (mp2_ba == -1).  EXIT 99. */
+module corpus_2722_mathesis_box50
+
+extern @abi(c-msvc-x64) fn mp2_box(hi: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_ba(d: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_bb(d: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_bn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_cubefree(d: i64) -> i64 from "mathesis_pattern.iii"
+
+fn chk(d: i64, a: i64, b: i64) -> i64 {
+    if mp2_ba(d) != a { return 0i64 }
+    if mp2_bb(d) != b { return 0i64 }
+    return 1i64
+}
+
+fn main() -> i32 {
+    /* cube-free predicate teeth (before the sweep) */
+    if mp2_cubefree(8i64) != 0i64 { return 5i32 }       /* 8 = 2^3 */
+    if mp2_cubefree(27i64) != 0i64 { return 6i32 }      /* 27 = 3^3 */
+    if mp2_cubefree(20i64) != 1i64 { return 7i32 }      /* 20 = 2^2 * 5 is cube-free */
+    /* [A] the census totals */
+    if mp2_box(50i64) != 133i64 { return 10i32 }
+    if mp2_bn() != 42i64 { return 11i32 }
+    /* [B] the old-box anchors reproduced in the wider sweep */
+    if chk(2i64, 3i64, 0i64) != 1i64 { return 20i32 }
+    if chk(3i64, 0i64, 6i64) != 1i64 { return 21i32 }
+    if chk(19i64, 4i64, 0i64) != 1i64 { return 22i32 }
+    if chk(36i64, 0i64, 6i64) != 1i64 { return 23i32 }
+    if chk(49i64, 0i64, 5i64) != 1i64 { return 24i32 }
+    /* [C] THE NEW PHENOMENA */
+    if chk(20i64, 9i64, 2i64) != 1i64 { return 30i32 }      /* first BOTH-curve collapse */
+    if chk(30i64, 18i64, 0i64) != 1i64 { return 31i32 }     /* the richest collapse (18) */
+    if chk(50i64, 2i64, 7i64) != 1i64 { return 32i32 }      /* second both-curve collapse */
+    if chk(22i64, 4i64, 0i64) != 1i64 { return 33i32 }
+    if chk(42i64, 6i64, 0i64) != 1i64 { return 34i32 }
+    if chk(45i64, 0i64, 2i64) != 1i64 { return 35i32 }
+    /* [D] a non-cube-free d is SKIPPED (never hunted) */
+    if mp2_ba(8i64) != (0i64 - 1i64) { return 40i32 }
+    if mp2_ba(16i64) != (0i64 - 1i64) { return 41i32 }
+    return 99i32
+}

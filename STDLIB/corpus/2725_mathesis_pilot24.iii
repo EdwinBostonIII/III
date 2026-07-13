@@ -1,0 +1,95 @@
+/* 2725_mathesis_pilot24.iii -- GATE for THE PILOT'S FOURTH EXTENSION (campaign Psi, item Psi-6:
+ * budget 24 -- the autonomous ledger extends deterministically, forever).
+ *
+ * Rounds 18..23, every experiment a pure function of the round number (observed 2026-07-13):
+ *   r18 NEW-D  d=20 at 60  -> A:9 B:2  -- THE PILOT'S FIFTH AUTONOMOUS DISCOVERY: d=20 is the
+ *              FIRST cube-free d to collapse on BOTH curves (nine curve-A identities and two
+ *              curve-B), a qualitatively new phenomenon the human-piloted rounds never reached
+ *   r19 HEIGHT d=13 at 200 -> EMPTY    (the nonexistence inventory extends)
+ *   r20 LOCAL  (5, 41)     -> 42 / 42
+ *   r21 NEW-D  d=21 at 60  -> A:0 B:0  (empty: 21 = 3*7, neither factor's curve carried)
+ *   r22 HEIGHT d=17 at 200 -> EMPTY
+ *   r23 LOCAL  (5, 43)     -> 57 / 39
+ *
+ * THE PREFIX LAW: head(18) recomputed in-gate equals the SEALED Chi ledger head byte for byte;
+ * head(24) is pinned as the new frontier head and is IDENTICAL across two full runs.  EXIT 99. */
+module corpus_2725_mathesis_pilot24
+
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+
+var H18 : [u64; 32]
+var H24 : [u64; 32]
+var SNAP : [u64; 32]
+
+fn fill_heads() -> i32 {
+    /* the sealed head(18): 18a0495c7556cc3011d64d4aa32b96f1a188773c18acbc7df24524a9539e67a6 */
+    H18[0u64] = 24u64   H18[1u64] = 160u64  H18[2u64] = 73u64   H18[3u64] = 92u64
+    H18[4u64] = 117u64  H18[5u64] = 86u64   H18[6u64] = 204u64  H18[7u64] = 48u64
+    H18[8u64] = 17u64   H18[9u64] = 214u64  H18[10u64] = 77u64  H18[11u64] = 74u64
+    H18[12u64] = 163u64 H18[13u64] = 43u64  H18[14u64] = 150u64 H18[15u64] = 241u64
+    H18[16u64] = 161u64 H18[17u64] = 136u64 H18[18u64] = 119u64 H18[19u64] = 60u64
+    H18[20u64] = 24u64  H18[21u64] = 172u64 H18[22u64] = 188u64 H18[23u64] = 125u64
+    H18[24u64] = 242u64 H18[25u64] = 69u64  H18[26u64] = 36u64  H18[27u64] = 169u64
+    H18[28u64] = 83u64  H18[29u64] = 158u64 H18[30u64] = 103u64 H18[31u64] = 166u64
+    /* the observed head(24): f6d76f9979683613e5025568cde8270e1fd695e60207b50d8e84192397f553f7 */
+    H24[0u64] = 246u64  H24[1u64] = 215u64  H24[2u64] = 111u64  H24[3u64] = 153u64
+    H24[4u64] = 121u64  H24[5u64] = 104u64  H24[6u64] = 54u64   H24[7u64] = 19u64
+    H24[8u64] = 229u64  H24[9u64] = 2u64    H24[10u64] = 85u64  H24[11u64] = 104u64
+    H24[12u64] = 205u64 H24[13u64] = 232u64 H24[14u64] = 39u64  H24[15u64] = 14u64
+    H24[16u64] = 31u64  H24[17u64] = 214u64 H24[18u64] = 149u64 H24[19u64] = 230u64
+    H24[20u64] = 2u64   H24[21u64] = 7u64   H24[22u64] = 181u64 H24[23u64] = 13u64
+    H24[24u64] = 142u64 H24[25u64] = 132u64 H24[26u64] = 25u64  H24[27u64] = 35u64
+    H24[28u64] = 151u64 H24[29u64] = 245u64 H24[30u64] = 83u64  H24[31u64] = 247u64
+    return 0i32
+}
+
+fn chk_round(r: i64, k: i64, p1: i64, p2: i64, r1: i64, r2: i64) -> i64 {
+    if mpl_round(r) != 0i64 { return 0i64 }
+    if mpl_k() != k { return 0i64 }
+    if mpl_p1() != p1 { return 0i64 }
+    if mpl_p2() != p2 { return 0i64 }
+    if mpl_r1() != r1 { return 0i64 }
+    if mpl_r2() != r2 { return 0i64 }
+    return 1i64
+}
+
+fn main() -> i32 {
+    fill_heads()
+    /* [A] the six new rounds, outcome for outcome */
+    if chk_round(18i64, 0i64, 20i64, 60i64, 9i64, 2i64) != 1i64 { return 10i32 }
+    if chk_round(19i64, 1i64, 13i64, 200i64, 0i64, 0i64) != 1i64 { return 11i32 }
+    if chk_round(20i64, 2i64, 5i64, 41i64, 42i64, 42i64) != 1i64 { return 12i32 }
+    if chk_round(21i64, 0i64, 21i64, 60i64, 0i64, 0i64) != 1i64 { return 13i32 }
+    if chk_round(22i64, 1i64, 17i64, 200i64, 0i64, 0i64) != 1i64 { return 14i32 }
+    if chk_round(23i64, 2i64, 5i64, 43i64, 57i64, 39i64) != 1i64 { return 15i32 }
+    /* [B] THE PREFIX LAW: head(18) == the sealed Chi ledger head */
+    if mpl_run(18i64) != 18i64 { return 20i32 }
+    let mut i : i64 = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != H18[i as u64] { return 21i32 }
+        i = i + 1i64
+    }
+    /* [C] head(24): the new frontier head, pinned */
+    if mpl_run(24i64) != 24i64 { return 30i32 }
+    i = 0i64
+    while i < 32i64 {
+        SNAP[i as u64] = mpl_head_byte(i)
+        if mpl_head_byte(i) != H24[i as u64] { return 31i32 }
+        i = i + 1i64
+    }
+    /* [D] determinism EXECUTED: a second full run, the same head */
+    if mpl_run(24i64) != 24i64 { return 40i32 }
+    i = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != SNAP[i as u64] { return 41i32 }
+        i = i + 1i64
+    }
+    return 99i32
+}

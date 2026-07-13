@@ -1,0 +1,52 @@
+/* 2724_mathesis_rot64.iii -- GATE for THE WIDTH-64 ROT SETTLEMENT (campaign Psi, item Psi-5).
+ *
+ * The oldest frontier entry -- "the width-64 rot-2op question STAYS QUEUED" -- taken off the queue
+ * by BIT-BLASTING the machine word with III's own SAT solver (numera/bv_bits -> numera/sat).
+ * Observed 2026-07-13, pinned here:
+ *
+ *   THE UPPER BOUND (machine word): for EVERY rotation k = 1..63, the three spellings of rot_k
+ *   ((x<<k) OR/ADD/XOR (x>>(64-k))) are proven BIT-IDENTICAL at width 64 -- 63/63.  cost_64(rot_k)
+ *   <= 3, a theorem of Z/2^64, not width-8 folklore lifted on faith.
+ *
+ *   THE LOWER BOUND: cost_8(rot_k) = 3 by TOTAL width-8 exhaustion -- 0 rot matches, reproduced
+ *   through TWO evaluators (this organ's mr64_brute AND the standing mr2_sweep), with the NEG
+ *   existence tooth FIRING (311,056 spellings of -x, the machine's own census).  At width 64 the
+ *   NEG tooth is bb-CONFIRMED ((x XOR ~0)+1 == -x), and the per-shape decision refutes 818 of the
+ *   3,456 shape-classes outright (0 admit a 2-op rotation); the residual 2,638 two-constant classes
+ *   are NAMED, never claimed.  cost_64(rot_k) = 3 for the decided classes; 3 by definiens overall.
+ * EXIT 99. */
+module corpus_2724_mathesis_rot64
+
+extern @abi(c-msvc-x64) fn mr64_defn_theorem(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_defn_all() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_brute(target: i64, w: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_neg64() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_check64(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, tk: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_lb64(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_dec() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_match() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
+
+fn main() -> i32 {
+    /* [A] THE UPPER BOUND: cost64(rot_k) <= 3 for all 63 rotations */
+    if mr64_defn_all() != 63i64 { return 10i32 }
+    if mr64_defn_theorem(1i64) != 1i64 { return 11i32 }
+    if mr64_defn_theorem(63i64) != 1i64 { return 12i32 }
+    /* [B] cost8 = 3 by total exhaustion, TWO evaluators, + the NEG census */
+    if mr64_brute(0i64, 8i64) != 0i64 { return 20i32 }          /* rot: 0 matches at width 8 */
+    if mr64_brute(1i64, 8i64) != 311056i64 { return 21i32 }     /* NEG: the machine's census */
+    if mr2_sweep(0i64) != 0i64 { return 22i32 }                 /* the standing evaluator agrees */
+    if mr2_sweep(1i64) != 311056i64 { return 23i32 }
+    /* [C] the NEG existence tooth CONFIRMED at width 64 */
+    if mr64_neg64() != 1i64 { return 30i32 }
+    /* [D] explicit width-64 refutations (the decision engine bites): natural rot_1 near-misses */
+    if mr64_check64(0i64, 6i64, 4i64, 0i64, 1i64, 0i64, 1u64, 0u64, 1i64) != 0i64 { return 40i32 }   /* (x<<1)|x != rot_1 */
+    if mr64_check64(0i64, 2i64, 0i64, 0i64, 1i64, 2i64, 3u64, 0u64, 1i64) != 0i64 { return 41i32 }   /* (x*3)+0 != rot_1 */
+    /* [E] the width-64 LOWER BOUND sweep for rot_1: 818 shape-classes decided-refuted, 0 matches */
+    if mr64_lb64(1i64) != 818i64 { return 50i32 }
+    if mr64_match() != 0i64 { return 51i32 }                    /* NO 2-op rotation among decided */
+    if mr64_dec() != 818i64 { return 52i32 }
+    if mr64_und() != 2638i64 { return 53i32 }                   /* named residual: 818 + 2638 = 3456 */
+    return 99i32
+}

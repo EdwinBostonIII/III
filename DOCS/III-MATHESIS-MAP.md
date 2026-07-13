@@ -1127,9 +1127,75 @@ citizens; the pilot's ledger past 18.
 
 ---
 
+## 21. CAMPAIGN Ψ — THE UNIVERSAL REACH (gates 2721–2725, stage [16], PSI_CERT)
+
+Every frontier item Χ named — attacked, and settled, constructed, counted, or bit-blasted with
+III alone.  The Φ4/Χ pattern (compose standing organs into a new instrument) made the campaign.
+
+- **Ψ4 — THE CENSUS BEYOND ENUMERATION** (`aether/mathesis_census.iii`, gate 2723; composes the
+  `bc_*` limb core): the exact number of binary operations on n tokens up to isomorphism (and the
+  commutative sub-count), for **n = 5, 6, 7**, by Burnside's lemma over Sₙ in exact bigint along
+  **TWO INDEPENDENT ROUTES** that agree to the digit — route 1 the permutation FLOOD (|Fix(σ)| =
+  the product over σ-orbits of the n²/symmetric grid of |Fix(σ^L)|, the exact generalization of Χ's
+  `mt4f_burnside_full`), route 2 the cycle-type PARTITION ARITHMETIC (Σ size(λ)·fix(λ), no grid
+  flooded).  **n=5: 2,483,527,537,094,825 (comm 254,429,900); n=6: 14,325,590,003,318,891,522,275,680
+  (comm 30,468,670,170,912); n=7: 50,976,900,301,814,584,087,291,487,087,214,170,039 (comm
+  91,267,244,789,189,735,259)** — n=7 full counts the iso-classes of **7⁴⁹ ≈ 2.56·10⁴¹** operations
+  WITHOUT enumerating them.  TRIPLE-ANCHORED: n≤4 == the sealed paid exhaustions (10/3,330/178,981,952
+  full == the live `mt4f_burnside_full`; 4/129/43,968 commutative).  The exact limb divider
+  (`bc_divexact` by n!) makes a nonzero residue a self-detected defect, never a rounded answer.
+- **Ψ5 — THE WIDTH-64 ROT SETTLEMENT** (`aether/mathesis_rot64.iii`, gate 2724; composes
+  `numera/bv_bits` → `numera/sat` + the standing `mathesis_rot2`): the oldest frontier entry (Φ1
+  kept the width-64 rot question queued) taken off the queue by BIT-BLASTING the machine word.
+  **THE UPPER BOUND, MACHINE-WORD PROVEN: cost₆₄(rot_k) ≤ 3 for ALL 63 rotations** — the three
+  spellings (x≪k) OR/ADD/XOR (x≫(64−k)) proven BIT-IDENTICAL at width 64 by III's own CDCL solver
+  (63/63).  **THE LOWER BOUND: cost₈(rot_k) = 3 by TOTAL exhaustion** (0 rot matches, reproduced
+  through TWO evaluators — this organ's native sweep AND `mr2_sweep` — with the NEG existence tooth
+  firing, 311,056 spellings of −x), the NEG tooth bb-CONFIRMED at width 64, and a per-shape decision
+  that **refutes 818 of the 3,456 shape-classes outright at width 64 (0 admit a 2-op rotation)**, the
+  residual 2,638 two-constant classes NAMED and priced.  The first machine-word bit-blast of the
+  rotation cost in the tree.
+- **Ψ1 — GAMMA-ORBIT COMPLETION** (the `mp2_orbit` tier of `mathesis_pattern`, gate 2721): every
+  hunt find's full γ-orbit CONSTRUCTED (γ·(u,v,w) = (dw,u,v), primitive-reduced), each verified ON
+  THE CURVE in exact bigint.  **d=19 curve A: the pilot's four finds complete to exactly SIX points
+  — two γ-orbits of 3 — with the TWO missing partners (coordinates beyond height 60) CONSTRUCTED and
+  bigint-verified (8/8 on-curve): Χ's "d=19 partners beyond the envelope" RESOLVED.**  d=2/d=3/d=15
+  are closed within height 60 (only-by-construction = 0).
+- **Ψ3 — THE NORM-PRIME LAW GENERALIZED** (the `mp2_normprime` tier, gate 2721): each find's norm
+  N = u³ + dv³ + d²w³ − 3duvw factored with **isqrt-certified primality** (trial division to
+  ⌊√n⌋, exact, total, no probabilistic step).  d=3 curve B re-surfaces the sealed norms
+  [−271, 2757, 919, −2439, −813, 8271] and the primes {271, 3, 919} through a FRESH i64 norm path
+  (a two-path confirmation of Χ's 271·919 = 249049); the γ-norm law N(γα) = d·N(α) is visible as
+  the per-step scaling; d=19 carries {89, 307, 9613, 19}.
+- **Ψ2 — THE BOX TO 50** (the `mp2_box` tier, gate 2722): every cube-free d in [2,50] hunted at
+  height 60 both curves — 42 cube-free d, 133 finds.  **NEW: d=20 (A:9, B:2) and d=50 (A:2, B:7)
+  are the FIRST cube-free d to collapse on BOTH curves; d=30 carries EIGHTEEN curve-A identities**
+  (the richest in the whole census); new A-collapses at 22, 26, 28, 33, 34, 35, 37, 42; new
+  B-collapse at 45.
+- **Ψ6 — THE PILOT AT 24** (gate 2725): rounds 18–23 purely from the schedule — **round 18 (NEW-D)
+  chose d=20 and found A:9 B:2, the pilot's FIFTH autonomous discovery and the first d collapsing on
+  both curves**; the prefix law held (head(18) == the sealed Χ head byte-for-byte) and head(24) =
+  f6d76f99… pinned across two full runs.
+
+**ENVELOPES LIFTED BY NAME**: the census past all possible enumeration (n≤4 exhaustion → n=5,6,7 by
+analytic Burnside, two routes); the width-64 rot cost from "queued" to "≤3 machine-word-proven, ≥3
+total at width 8 and decided for 818 classes at 64"; d=19's partners from "beyond the envelope" to
+CONSTRUCTED; the norm-prime law from d=3 to a general isqrt-certified census; the collapse box 19→50.
+**Named frontier out of Ψ**: the residual 2,638 two-constant width-64 rot classes (a SAT-synthesis
+question); the WHY of the both-curve d=20/d=50 collapses; d=30's eighteen; the census at n=8 (the
+partition arithmetic scales — only the anchor gets expensive); the pilot's ledger past 24.
+
+**NEW .iii facts confirmed this campaign (2026-07-13)**: `bc_render` stores ASCII digit CHARACTERS
+(48+digit), not raw digit values — `bg_digat` returns the char, print it directly; `bc_mul`/`bc_muli`
+FORBID destination-aliasing (`d` must not be `a`) — accumulate through a temp then `bc_copy`; the
+`numera/bv_bits` bit-blaster decides ∀-equivalence at width ≤ 64 exactly but has no ∃-synthesis door,
+so a full width-64 lower bound over free constants needs a SAT model (priced, not free).
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
 `DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`,
 `DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`, `DOCS/MATHESIS-ONTO-ROUND1.log`,
-`DOCS/MATHESIS-PHI-ROUND1.log`, `DOCS/MATHESIS-CHI-ROUND1.log`.*
+`DOCS/MATHESIS-PHI-ROUND1.log`, `DOCS/MATHESIS-CHI-ROUND1.log`, `DOCS/MATHESIS-PSI-ROUND1.log`.*

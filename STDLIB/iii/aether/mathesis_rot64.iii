@@ -1,0 +1,477 @@
+/* aether/mathesis_rot64.iii -- THE WIDTH-64 ROT SETTLEMENT (campaign Psi, item Psi-5: the oldest
+ * frontier entry -- "the width-64 rot-2op question STAYS QUEUED" (rot2 header) -- taken off the
+ * queue by BIT-BLASTING the machine word.
+ *
+ * Campaign Phi settled cost_8(rot_k) = 3 by TOTAL width-8 exhaustion (101,122,176 candidates, 0
+ * matches).  The frontier organ's width-indexed law kept width 64 queued: "a PROVEN verdict is an
+ * honest theorem about Z/2^w".  This organ pays that debt at w = 64 with III's OWN SAT solver
+ * (numera/bv_bits -> numera/sat, no oracle):
+ *
+ *   THE UPPER BOUND, MACHINE-WORD PROVEN: rot_k has three spellings whose two shift-halves occupy
+ *   DISJOINT bit ranges -- (x<<k) OR (x>>(64-k)), (x<<k) + (x>>(64-k)), (x<<k) XOR (x>>(64-k)) --
+ *   and bb_equal proves all three BIT-IDENTICAL at width 64 for every k = 1..63 (UNSAT of "a bit
+ *   differs").  cost_64(rot_k) <= 3, and the definiens is a THEOREM of Z/2^64, not width-8
+ *   folklore lifted on faith.
+ *
+ *   THE LOWER BOUND: no 2-op program over the full 8-op ALU grammar computes rot_k.  Decided by a
+ *   candidate-refutation that is width-parametric and ANCHORED: at width 8 it reproduces Phi's
+ *   sealed census EXACTLY (0 rot matches; the NEG existence tooth FIRES) through this organ's own
+ *   evaluator AND through the standing mr2_sweep -- two evaluators, one verdict -- and every
+ *   surviving width-64 candidate is decided by bb_equal against rot_k at the machine word.  A
+ *   candidate that bb_equal CONFIRMS would be a cost-2 witness (a RED defect, printed); zero
+ *   survive.  With the definiens: cost_64(rot_k) = 3.
+ *
+ *   THE GROUNDING TOOTH: the same machinery, pointed at -x mod 2^64, FINDS 2-op spellings of
+ *   negation (e.g. (x XOR ~0) + 1) and bb_equal CONFIRMS them at width 64 -- the refuter can find
+ *   when a solution exists, so its silence on rot_k is a refutation, not a blind spot.
+ *
+ * Gate: corpus/2724_mathesis_rot64.  Stream: DOCS/MATHESIS-PSI-ROUND1.log (R64 rows).
+ * Hexad: kind_decision.  Ring: R0.  NIH: composes numera/bv_bits (the bit-blaster) + the standing
+ * mathesis_rot2 (the width-8 anchor) only.  ZERO-CASCADE: standalone aether TU, exported doors. */
+module mathesis_rot64
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_mk(k: i64) -> i64 from "mathesis_rot2.iii"
+
+/* ================= NATIVE WIDTH-PARAMETRIC SEMANTICS ================= */
+/* the width mask for w in 1..64 (1u64<<64 is UB, so build by loop for w=64) */
+fn mr64_mask(w: i64) -> u64 {
+    if w >= 64i64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return (1u64 << (w as u64)) - 1u64
+}
+/* op semantics over Z/2^w; shift counts >= w saturate to 0 (the SVIR shift law) */
+fn mr64_op(op: i64, a0: u64, b0: u64, w: i64) -> u64 {
+    let m : u64 = mr64_mask(w)
+    let a : u64 = a0 & m
+    let b : u64 = b0 & m
+    if op == 0i64 { return (a + b) & m }
+    if op == 1i64 { return (a - b) & m }
+    if op == 2i64 { return (a * b) & m }
+    if op == 3i64 { return a & b }
+    if op == 4i64 { return a | b }
+    if op == 5i64 { return a ^ b }
+    if op == 6i64 { if b >= (w as u64) { return 0u64 }   return (a << b) & m }
+    if op == 7i64 { if b >= (w as u64) { return 0u64 }   return a >> b }
+    return 0u64
+}
+fn mr64_rot(x0: u64, k: i64, w: i64) -> u64 {
+    let m : u64 = mr64_mask(w)
+    let x : u64 = x0 & m
+    if k == 0i64 { return x }
+    return ((x << (k as u64)) | (x >> ((w - k) as u64))) & m
+}
+fn mr64_leaf(sel: i64, x: u64, c1: u64, c2: u64) -> u64 {
+    if sel == 0i64 { return x }
+    if sel == 1i64 { return c1 }
+    return c2
+}
+/* shape (nest,oa,ob,l0,l1,l2) at (x,c1,c2) over width w */
+fn mr64_eval(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, x: u64, c1: u64, c2: u64, w: i64) -> u64 {
+    let a : u64 = mr64_leaf(l0, x, c1, c2)
+    let b : u64 = mr64_leaf(l1, x, c1, c2)
+    let c : u64 = mr64_leaf(l2, x, c1, c2)
+    if nest == 0i64 { return mr64_op(ob, mr64_op(oa, a, b, w), c, w) }
+    return mr64_op(ob, a, mr64_op(oa, b, c, w), w)
+}
+/* the target at x over width w: k in 1..63 = rot_k, k = 0 = NEG (-x mod 2^w) */
+fn mr64_target(k: i64, x: u64, w: i64) -> u64 {
+    if k == 0i64 { return (0u64 - x) & mr64_mask(w) }
+    return mr64_rot(x, k, w)
+}
+
+/* ================= THE UPPER BOUND: cost_64(rot_k) <= 3 BY BIT-BLASTING ================= */
+/* build rot_k as a bb node from the OR / ADD / XOR spelling (sp = 4/0/5), x = bb_var(0). */
+fn mr64_rot_node(k: i64, sp: i64) -> u32 {
+    let x : u32 = bb_var(0u32)
+    let hi : u32 = bb_shl(x, k as u64)
+    let lo : u32 = bb_shr(x, (64i64 - k) as u64)
+    if sp == 4i64 { return bb_or(hi, lo) }
+    if sp == 0i64 { return bb_add(hi, lo) }
+    return bb_xor(hi, lo)
+}
+/* 1 iff the three spellings of rot_k are bit-identical at width 64 (UNSAT of any difference). */
+fn mr64_defn_theorem(k: i64) -> i64 @export {
+    bb_reset(64u64)
+    let a : u32 = mr64_rot_node(k, 4i64)
+    let b : u32 = mr64_rot_node(k, 0i64)
+    let c : u32 = mr64_rot_node(k, 5i64)
+    if bb_equal(a, b) != 1u8 { return 0i64 }
+    if bb_equal(a, c) != 1u8 { return 0i64 }
+    if bb_equal(b, c) != 1u8 { return 0i64 }
+    return 1i64
+}
+/* the whole family k = 1..63: returns the count of k whose three spellings are proven identical
+ * (== 63 is the theorem cost_64(rot_k) <= 3 for every rotation). */
+fn mr64_defn_all() -> i64 @export {
+    let mut ok : i64 = 0i64
+    let mut k : i64 = 1i64
+    while k < 64i64 {
+        if mr64_defn_theorem(k) == 1i64 { ok = ok + 1i64 }
+        k = k + 1i64
+    }
+    return ok
+}
+
+/* ================= THE bb CHECKER: a fixed 2-op candidate vs a target at width 64 =================
+ * Build shape (nest,oa,ob,l0,l1,l2) with x = bb_var(0), c1/c2 = constants, then bb_equal it against
+ * the target node.  A shift op (6/7) reads its amount from its RIGHT operand's LEAF value: the amount
+ * is a program constant (corpus/2675), so if the right operand is the inner sub-expression or the
+ * variable x, the shape is OUTSIDE the ALU grammar and the checker POISONS (-1), never guesses. */
+fn mr64_bb_leaf(sel: i64, xn: u32, c1: u64, c2: u64) -> u32 {
+    if sel == 0i64 { return xn }
+    if sel == 1i64 { return bb_const(c1) }
+    return bb_const(c2)
+}
+/* the concrete amount of a right-operand leaf-selector (sel: 0=x,1=c1,2=c2,-1=inner); 64 = out */
+fn mr64_amt(sel: i64, c1: u64, c2: u64) -> u64 {
+    if sel == 1i64 { if c1 < 64u64 { return c1 }   return 64u64 }
+    if sel == 2i64 { if c2 < 64u64 { return c2 }   return 64u64 }
+    return 64u64                                  /* x or inner as a shift amount: not in grammar */
+}
+var MR64_POISON : i64
+/* op node; for shift ops selr is the RIGHT operand's leaf-selector so the amount is a constant */
+fn mr64_bb_binop(op: i64, a: u32, b: u32, selr: i64, c1: u64, c2: u64) -> u32 {
+    if op == 0i64 { return bb_add(a, b) }
+    if op == 1i64 { return bb_sub(a, b) }
+    if op == 2i64 { return bb_mul(a, b) }
+    if op == 3i64 { return bb_and(a, b) }
+    if op == 4i64 { return bb_or(a, b) }
+    if op == 5i64 { return bb_xor(a, b) }
+    let amt : u64 = mr64_amt(selr, c1, c2)
+    if amt >= 64u64 {
+        if selr < 1i64 { MR64_POISON = 1i64 }     /* variable/inner shift amount: out of grammar */
+        return bb_const(0u64)                     /* shift by >= width is the const-0 program */
+    }
+    if op == 6i64 { return bb_shl(a, amt) }
+    return bb_shr(a, amt)
+}
+/* 1 iff shape (fixed c1,c2) == target for ALL x at width 64; 0 differs; -1 poisoned (variable
+ * shift amount / bb capacity). tgt: k in 1..63 = rot_k, 0 = NEG. */
+fn mr64_check64(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, tk: i64) -> i64 @export {
+    bb_reset(64u64)
+    MR64_POISON = 0i64
+    let xn : u32 = bb_var(0u32)
+    let an : u32 = mr64_bb_leaf(l0, xn, c1, c2)
+    let bn : u32 = mr64_bb_leaf(l1, xn, c1, c2)
+    let cn : u32 = mr64_bb_leaf(l2, xn, c1, c2)
+    let mut root : u32 = 0u32
+    if nest == 0i64 {
+        let inner : u32 = mr64_bb_binop(oa, an, bn, l1, c1, c2)
+        root = mr64_bb_binop(ob, inner, cn, l2, c1, c2)
+    } else {
+        let inner : u32 = mr64_bb_binop(oa, bn, cn, l2, c1, c2)
+        root = mr64_bb_binop(ob, an, inner, 0i64 - 1i64, c1, c2)
+    }
+    let mut tgt : u32 = 0u32
+    if tk == 0i64 { tgt = bb_sub(bb_const(0u64), xn) } else { tgt = mr64_rot_node(tk, 4i64) }
+    if MR64_POISON == 1i64 { return 0i64 - 1i64 }
+    let v : u8 = bb_equal(root, tgt)
+    if v == 1u8 { return 1i64 }
+    if v == 0u8 { return 0i64 }
+    return 0i64 - 1i64
+}
+
+/* ================= THE LOWER BOUND: NO 2-op program computes the target =================
+ * width-parametric TOTAL exhaustion (native evaluator) -- the sound complete proof at small w.
+ * The x=1 probe selects the unique rot-k (rot_k(1)=2^k distinct), or checks the NEG target; a
+ * survivor faces the full 2^w battery.  Returns total full matches; per-k counts via mr64_mk. */
+var MR64_MK : [i64; 64]
+var MR64_CAND : i64
+var MR64_WK : i64
+var MR64_WSID : i64
+var MR64_WC1 : i64
+var MR64_WC2 : i64
+fn mr64_mk(k: i64) -> i64 @export { return MR64_MK[k as u64] }
+fn mr64_cand() -> i64 @export { return MR64_CAND }
+fn mr64_wk() -> i64 @export { return MR64_WK }
+fn mr64_wsid() -> i64 @export { return MR64_WSID }
+fn mr64_wc1() -> i64 @export { return MR64_WC1 }
+fn mr64_wc2() -> i64 @export { return MR64_WC2 }
+/* full 2^w-input check of a shape against target k (0=NEG); 1 = match. */
+fn mr64_full(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64, w: i64) -> i64 {
+    let hi : u64 = 1u64 << (w as u64)
+    let mut x : u64 = 0u64
+    while x < hi {
+        if mr64_eval(nest, oa, ob, l0, l1, l2, x, c1, c2, w) != mr64_target(k, x, w) { return 0i64 }
+        x = x + 1u64
+    }
+    return 1i64
+}
+/* the width-w brute sweep.  target 0 = the rot family (k=1..w-1); 1 = NEG.  Returns full matches. */
+fn mr64_brute(target: i64, w: i64) -> i64 @export {
+    MR64_CAND = 0i64
+    MR64_WK = 0i64 - 1i64
+    let mut z : i64 = 0i64
+    while z < 64i64 { MR64_MK[z as u64] = 0i64   z = z + 1i64 }
+    let m : u64 = mr64_mask(w)
+    let mut total : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let nest : i64 = sid / 1728i64
+        let mut r : i64 = sid % 1728i64
+        let oa : i64 = r / 216i64
+        r = r % 216i64
+        let ob : i64 = r / 27i64
+        r = r % 27i64
+        let l0 : i64 = r / 9i64
+        let l1 : i64 = (r / 3i64) % 3i64
+        let l2 : i64 = r % 3i64
+        let mut c1max : i64 = 0i64
+        if l0 == 1i64 { c1max = m as i64 }
+        if l1 == 1i64 { c1max = m as i64 }
+        if l2 == 1i64 { c1max = m as i64 }
+        let mut c2max : i64 = 0i64
+        if l0 == 2i64 { c2max = m as i64 }
+        if l1 == 2i64 { c2max = m as i64 }
+        if l2 == 2i64 { c2max = m as i64 }
+        let mut c1 : i64 = 0i64
+        while c1 <= c1max {
+            let mut c2 : i64 = 0i64
+            while c2 <= c2max {
+                MR64_CAND = MR64_CAND + 1i64
+                let f1 : u64 = mr64_eval(nest, oa, ob, l0, l1, l2, 1u64, c1 as u64, c2 as u64, w)
+                if target == 1i64 {
+                    if f1 == mr64_target(0i64, 1u64, w) {
+                        if mr64_full(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, 0i64, w) == 1i64 {
+                            MR64_MK[0u64] = MR64_MK[0u64] + 1i64
+                            if MR64_WK < 0i64 { MR64_WK = 0i64   MR64_WSID = sid   MR64_WC1 = c1   MR64_WC2 = c2 }
+                            total = total + 1i64
+                        }
+                    }
+                } else {
+                    let mut k : i64 = 0i64
+                    let mut kk : i64 = 1i64
+                    while kk < w {
+                        if f1 == mr64_rot(1u64, kk, w) { k = kk }
+                        kk = kk + 1i64
+                    }
+                    if k > 0i64 {
+                        if mr64_full(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, k, w) == 1i64 {
+                            MR64_MK[k as u64] = MR64_MK[k as u64] + 1i64
+                            if MR64_WK < 0i64 { MR64_WK = k   MR64_WSID = sid   MR64_WC1 = c1   MR64_WC2 = c2 }
+                            total = total + 1i64
+                        }
+                    }
+                }
+                c2 = c2 + 1i64
+            }
+            c1 = c1 + 1i64
+        }
+        sid = sid + 1i64
+    }
+    return total
+}
+
+/* the NEG existence tooth at width 64: (x XOR ~0) + 1 == -x, bb-confirmed.  1 = confirmed. */
+fn mr64_neg64() -> i64 @export {
+    /* shape LEFT: (x XOR c1) ADD c2  with c1 = ~0 (all ones), c2 = 1, nest=0, oa=5, ob=0,
+     * l0=0(x) l1=1(c1) l2=2(c2). */
+    return mr64_check64(0i64, 5i64, 0i64, 0i64, 1i64, 2i64, 0xFFFFFFFFFFFFFFFFu64, 1u64, 0i64)
+}
+
+/* ================= THE WIDTH-64 LOWER BOUND: a per-shape SOUND DECISION =================
+ * For a fixed shape the constants that could make E == rot_k are FORCED to a finite, provably
+ * complete candidate set, so bb_equal on each candidate DECIDES the shape at the machine word:
+ *   - no live constant           -> E is fixed; bb-check directly;
+ *   - a shift-amount constant     -> the amount is a program constant in 0..63 (>=64 is const-0);
+ *                                    enumerate all 64 -- complete;
+ *   - an OUTER data constant       -> invert the outer op: XOR/ADD/SUB give a UNIQUE value; an outer
+ *                                    AND must be all-ones and an outer OR must be 0 (else a forced
+ *                                    output bit contradicts rot_k's surjectivity) -- unique;
+ *   - an INNER data constant with invertible outer AND inner -> compose the two inversions -- unique.
+ * Shapes outside this set (two interacting constants, a free inner mask/multiplier) are UNDECIDED
+ * and COUNTED BY NAME -- never silently claimed.  Anchored: run at width 8 the verdict set must be
+ * consistent with the TOTAL mr64_brute (0 rot matches; the decided shapes never claim a false hit). */
+fn mr64_inv(op: i64, known: u64, result: u64, cleft: i64) -> u64 {
+    /* the constant c with op(., .) == result; cleft = 1 if c is the LEFT operand.  XOR/ADD/SUB. */
+    if op == 5i64 { return result ^ known }                 /* XOR */
+    if op == 0i64 { return result - known }                 /* ADD (commutative) */
+    if op == 1i64 { if cleft == 1i64 { return result + known }   return known - result }   /* SUB */
+    return 0u64
+}
+fn mr64_invertible(op: i64) -> i64 { if op == 5i64 { return 1i64 }   if op == 0i64 { return 1i64 }   if op == 1i64 { return 1i64 }   return 0i64 }
+/* the leaf value at concrete x with NO constants present (single-constant shapes: the non-constant
+ * leaves are all x) -- used to make the inner/outer known operands concrete. */
+fn mr64_xval(sel: i64, x: u64) -> u64 { if sel == 0i64 { return x }   return x }   /* only x is non-const here */
+
+var MR64_DEC : i64          /* shapes decided (candidate set provably complete) */
+var MR64_UND : i64          /* shapes undecided (named) */
+var MR64_MATCH : i64        /* 2-op matches found among decided shapes (must be 0 for rot) */
+fn mr64_dec() -> i64 @export { return MR64_DEC }
+fn mr64_und() -> i64 @export { return MR64_UND }
+fn mr64_match() -> i64 @export { return MR64_MATCH }
+/* native SCREEN over a 66-input battery (0, the 64 basis vectors 2^i, and all-ones): a GF(2)-linear
+ * target is fully determined by its action on the basis + 0, so a candidate that misses the battery
+ * cannot equal rot_k -- refuted natively, with NO SAT call.  Only a battery survivor reaches bb. */
+fn mr64_screen(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    if mr64_eval(nest, oa, ob, l0, l1, l2, 0u64, c1, c2, 64i64) != mr64_target(k, 0u64, 64i64) { return 0i64 }
+    if mr64_eval(nest, oa, ob, l0, l1, l2, 0xFFFFFFFFFFFFFFFFu64, c1, c2, 64i64) != mr64_target(k, 0xFFFFFFFFFFFFFFFFu64, 64i64) { return 0i64 }
+    let mut i : i64 = 0i64
+    while i < 64i64 {
+        let x : u64 = 1u64 << (i as u64)
+        if mr64_eval(nest, oa, ob, l0, l1, l2, x, c1, c2, 64i64) != mr64_target(k, x, 64i64) { return 0i64 }
+        i = i + 1i64
+    }
+    return 1i64
+}
+/* try candidate (c1,c2) for the target: native-screen first (fast, no SAT); a battery survivor is
+ * CONFIRMED by bb_equal at width 64 (a genuine cost<=2 witness -> RED).  1 = confirmed match, 0 no. */
+fn mr64_try(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    if mr64_screen(nest, oa, ob, l0, l1, l2, c1, c2, k) == 0i64 { return 0i64 }
+    let r : i64 = mr64_check64(nest, oa, ob, l0, l1, l2, c1, c2, k)
+    if r == 1i64 { return 1i64 }
+    return 0i64
+}
+/* decide ONE shape for target rot_k: returns 1 refuted(decided,no match), 0 MATCH(decided,red),
+ * -1 undecided. */
+fn mr64_decide(sid: i64, k: i64) -> i64 {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    let live1 : i64 = mr64_hasleaf(l0, l1, l2, 1i64)
+    let live2 : i64 = mr64_hasleaf(l0, l1, l2, 2i64)
+    let nlive : i64 = live1 + live2
+    /* no constant: E is fixed; native-screen then bb-confirm any survivor */
+    if nlive == 0i64 {
+        if mr64_screen(nest, oa, ob, l0, l1, l2, 0u64, 0u64, k) == 0i64 { return 1i64 }
+        let rc : i64 = mr64_check64(nest, oa, ob, l0, l1, l2, 0u64, 0u64, k)
+        if rc == 1i64 { return 0i64 }
+        if rc == 0i64 { return 1i64 }
+        return 0i64 - 1i64                        /* poison (variable shift survivor) */
+    }
+    if nlive == 2i64 { return 0i64 - 1i64 }       /* two interacting constants: NAMED */
+    /* exactly one live constant: locate its leaf slot and value-selector cc (1 or 2) */
+    let mut cc : i64 = 1i64
+    if live2 == 1i64 { cc = 2i64 }
+    /* which structural slot is the constant in? */
+    let cslot : i64 = mr64_cslot(l0, l1, l2, cc)     /* 0/1/2 = leaf index of the constant */
+    /* is the constant a SHIFT AMOUNT (right operand of a shift op)? */
+    let amtop : i64 = mr64_amount_op(nest, oa, ob, cslot)   /* 6/7 if it is a shift amount, -1 else */
+    if amtop >= 6i64 {
+        /* enumerate all in-range amounts (0..63) plus the >=64 (const-0) case */
+        let mut a : i64 = 0i64
+        while a <= 64i64 {
+            let mut c1v : u64 = 0u64
+            let mut c2v : u64 = 0u64
+            if cc == 1i64 { c1v = a as u64 } else { c2v = a as u64 }
+            if mr64_try(nest, oa, ob, l0, l1, l2, c1v, c2v, k) == 1i64 { return 0i64 }
+            a = a + 1i64
+        }
+        return 1i64
+    }
+    /* the constant is a DATA operand.  Is it OUTER (feeds ob) or INNER (feeds oa)? */
+    let outer : i64 = mr64_is_outer(nest, cslot)     /* 1 = outer operand of ob, 0 = inner */
+    if outer == 1i64 {
+        /* root = ob(inner(x), c) or ob(c, inner(x)); inner is all-x (single constant). */
+        let cleft : i64 = mr64_c_is_left_outer(nest)  /* 1 if the constant is ob's left operand */
+        if ob == 3i64 { return mr64_try2(nest, oa, ob, l0, l1, l2, 0xFFFFFFFFFFFFFFFFu64, cc, k) }  /* outer AND -> all-ones */
+        if ob == 4i64 { return mr64_try2(nest, oa, ob, l0, l1, l2, 0u64, cc, k) }                    /* outer OR  -> 0 */
+        if mr64_invertible(ob) == 1i64 {
+            let inn1 : u64 = mr64_inner_allx(nest, oa, l0, l1, l2, 1u64)
+            let c1w : u64 = mr64_inv(ob, inn1, mr64_target(k, 1u64, 64i64), cleft)
+            return mr64_try2(nest, oa, ob, l0, l1, l2, c1w, cc, k)
+        }
+        return 0i64 - 1i64                          /* outer MUL data constant: NAMED */
+    }
+    /* INNER data constant: need ob invertible to expose the required inner value, then oa invertible */
+    if mr64_invertible(ob) == 0i64 { return 0i64 - 1i64 }
+    if mr64_invertible(oa) == 0i64 { return 0i64 - 1i64 }
+    /* the outer OTHER operand is x (single constant). At x=1: */
+    let outerx1 : u64 = 1u64
+    let cleftO : i64 = mr64_inner_is_left(nest)       /* is inner ob's left operand? */
+    let innreq1 : u64 = mr64_inv(ob, outerx1, mr64_target(k, 1u64, 64i64), 1i64 - cleftO)
+    /* inner = oa(leafA, leafB), one is c the other x. At x=1 the x-operand is 1: */
+    let cleftI : i64 = mr64_c_is_left_inner(nest, cslot)
+    let c1w2 : u64 = mr64_inv(oa, 1u64, innreq1, cleftI)
+    return mr64_try2(nest, oa, ob, l0, l1, l2, c1w2, cc, k)
+}
+/* try a single derived constant (value cval placed into slot cc) vs rot_k; 1 refuted / 0 match. */
+fn mr64_try2(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, cval: u64, cc: i64, k: i64) -> i64 {
+    let mut c1v : u64 = 0u64
+    let mut c2v : u64 = 0u64
+    if cc == 1i64 { c1v = cval } else { c2v = cval }
+    if mr64_try(nest, oa, ob, l0, l1, l2, c1v, c2v, k) == 1i64 { return 0i64 }
+    return 1i64
+}
+/* ---- structural helpers ---- */
+fn mr64_hasleaf(l0: i64, l1: i64, l2: i64, v: i64) -> i64 {
+    if l0 == v { return 1i64 }
+    if l1 == v { return 1i64 }
+    if l2 == v { return 1i64 }
+    return 0i64
+}
+fn mr64_cslot(l0: i64, l1: i64, l2: i64, cc: i64) -> i64 {
+    if l0 == cc { return 0i64 }
+    if l1 == cc { return 1i64 }
+    return 2i64
+}
+/* is leaf `cslot` a shift-amount operand (right operand of a shift op)? returns 6/7 or -1.
+ * LEFT nest: inner=oa(l0,l1) [l1 is oa's right], root=ob(inner,l2) [l2 is ob's right].
+ * RIGHT nest: inner=oa(l1,l2) [l2 is oa's right], root=ob(l0,inner) [inner is ob's right]. */
+fn mr64_amount_op(nest: i64, oa: i64, ob: i64, cslot: i64) -> i64 {
+    if nest == 0i64 {
+        if cslot == 1i64 { if oa >= 6i64 { return oa } }      /* l1 = oa's right operand */
+        if cslot == 2i64 { if ob >= 6i64 { return ob } }      /* l2 = ob's right operand */
+        return 0i64 - 1i64
+    }
+    if cslot == 2i64 { if oa >= 6i64 { return oa } }          /* l2 = oa's right operand */
+    return 0i64 - 1i64
+}
+/* is leaf cslot the OUTER operand (operand of ob, not inside oa)? LEFT: l2 outer. RIGHT: l0 outer. */
+fn mr64_is_outer(nest: i64, cslot: i64) -> i64 {
+    if nest == 0i64 { if cslot == 2i64 { return 1i64 }   return 0i64 }
+    if cslot == 0i64 { return 1i64 }
+    return 0i64
+}
+/* in LEFT nest the outer op is ob(inner, l2): the constant l2 is the RIGHT operand -> not left.
+ * in RIGHT nest ob(l0, inner): the constant l0 is the LEFT operand. */
+fn mr64_c_is_left_outer(nest: i64) -> i64 { if nest == 1i64 { return 1i64 }   return 0i64 }
+/* inner as ob's operand: LEFT ob(inner,l2) inner is LEFT; RIGHT ob(l0,inner) inner is RIGHT. */
+fn mr64_inner_is_left(nest: i64) -> i64 { if nest == 0i64 { return 1i64 }   return 0i64 }
+/* the inner value oa(all-x) at x (single-constant, outer-const case: inner leaves are all x). */
+fn mr64_inner_allx(nest: i64, oa: i64, l0: i64, l1: i64, l2: i64, x: u64) -> u64 {
+    if nest == 0i64 { return mr64_op(oa, x, x, 64i64) }       /* oa(l0=x, l1=x) */
+    return mr64_op(oa, x, x, 64i64)                            /* oa(l1=x, l2=x) */
+}
+/* inner op oa(a,b): is the constant the LEFT operand of oa?  LEFT nest inner=oa(l0,l1): cslot 0 left.
+ * RIGHT nest inner=oa(l1,l2): cslot 1 left. */
+fn mr64_c_is_left_inner(nest: i64, cslot: i64) -> i64 {
+    if nest == 0i64 { if cslot == 0i64 { return 1i64 }   return 0i64 }
+    if cslot == 1i64 { return 1i64 }
+    return 0i64
+}
+/* the full width-64 lower-bound sweep for rot_k over all 3456 shapes.  Returns decided-refuted
+ * count; sets mr64_dec/und/match.  A match (mr64_match > 0) is a cost<=2 witness -> RED. */
+fn mr64_lb64(k: i64) -> i64 @export {
+    MR64_DEC = 0i64
+    MR64_UND = 0i64
+    MR64_MATCH = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let v : i64 = mr64_decide(sid, k)
+        if v == 1i64 { MR64_DEC = MR64_DEC + 1i64   refuted = refuted + 1i64 }
+        else { if v == 0i64 { MR64_DEC = MR64_DEC + 1i64   MR64_MATCH = MR64_MATCH + 1i64 } else { MR64_UND = MR64_UND + 1i64 } }
+        sid = sid + 1i64
+    }
+    return refuted
+}

@@ -1,0 +1,345 @@
+/* aether/mathesis_census.iii -- THE CENSUS BEYOND ENUMERATION (campaign Psi, item Psi-4: the
+ * operation-universe count lifted past ALL possible exhaustion).
+ *
+ * Campaigns Upsilon/Phi/Chi censused every binary operation on n <= 4 tokens by TOTAL
+ * exhaustion -- the paid sweeps (n=4 full: 4,294,967,296 tables, ~17 minutes).  At n=5 there are
+ * 5^25 ~ 3*10^17 operations; at n=6, 6^36 ~ 10^28; at n=7, 7^49 ~ 2.6*10^41.  No machine will
+ * ever enumerate them.  This organ COUNTS THEM ANYWAY -- the exact number of binary operations
+ * on n tokens up to isomorphism (and the commutative sub-count) for n = 5, 6, 7 -- by Burnside's
+ * lemma over S_n, in exact bigint, along TWO INDEPENDENT ROUTES that must agree to the digit:
+ *
+ *   ROUTE 1  (the FLOOD): walk all n! relabelings sigma; for each, |Fix(sigma)| = the number of
+ *            operations commuting with sigma = product over sigma-orbits of the domain cells of
+ *            |Fix_[n](sigma^L)| (L = orbit length) -- computed by literally FLOODING the n^2 cell
+ *            grid (the FULL universe) or the n(n+1)/2 symmetric grid (the COMMUTATIVE universe)
+ *            under (x,y) -> (sigma x, sigma y).  This is the exact generalization of the standing
+ *            mt4f_burnside_full (the n<=4 Chi organ) to arbitrary n and to bigint.
+ *   ROUTE 2  (the PARTITION ARITHMETIC): sum over CYCLE TYPES lambda of size(lambda)*fix(lambda),
+ *            where size = n!/(prod ell^{m_ell} m_ell!) and fix is assembled from the cycle
+ *            lengths analytically (full: prod_i fixP[len_i]^{len_i} * prod_{i<j} fixP[lcm]^{2 gcd};
+ *            comm: prod_i diagfix(len_i) * prod_{i<j} fixP[lcm]^{gcd}) -- a computation that never
+ *            floods a grid.  Independent arithmetic, same theorem.
+ *
+ * Both routes divide the Burnside sum by n! with the EXACT limb divider (bc_divexact: the residue
+ * must vanish -- Burnside guarantees divisibility, and a nonzero residue is a self-detected
+ * defect, never a rounded answer).  The organ ANCHORS at n = 2, 3, 4 against the sealed paid
+ * exhaustions (full 10 / 3,330 / 178,981,952; commutative 4 / 129 / 43,968) -- the gate checks
+ * both routes equal those known integers before trusting the routes at n = 5, 6, 7.
+ *
+ * Gate: corpus/2723_mathesis_census.  Stream: DOCS/MATHESIS-PSI-ROUND1.log (T5 rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes the mathesis_bigcurve limb core (bc_* doors:
+ * seti/copy/add/muli/divexact/eq/render) only.  ZERO-CASCADE: standalone aether TU, exported
+ * doors only.  HANDLES: this organ owns the free slab region 236..247 (bigcurve owns 0..63 +
+ * 104..235, bigjudge owns 64..103); the library scratch it triggers (15 muli, 25/26 divexact,
+ * 27 render) lies in bigcurve's 0..63 and is never live here. */
+module mathesis_census
+
+extern @abi(c-msvc-x64) fn bc_seti(h: i64, v: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_copy(d: i64, s: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_add(d: i64, a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_muli(d: i64, a: i64, v: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_divexact(q: i64, n: i64, g: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_eq(a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_len(h: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_limb(h: i64, i: i64) -> u64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+
+/* ---- handle map (persistent, in the free region) ---- */
+const CE_R1 : i64 = 236i64     /* route-1 final result */
+const CE_T1 : i64 = 237i64     /* route-1 Burnside sum */
+const CE_FX : i64 = 238i64     /* per-relabeling / per-type fix product */
+const CE_R2 : i64 = 239i64     /* route-2 final result */
+const CE_T2 : i64 = 240i64     /* route-2 Burnside sum */
+const CE_TMP : i64 = 242i64    /* multiply temp (bc_muli forbids dst aliasing src) */
+const CE_NF : i64 = 244i64     /* n! as bigint (the exact divider) */
+
+/* ---- small integer helpers ---- */
+fn mce_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0
+    let mut b : i64 = b0
+    while b > 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+fn mce_lcm(a: i64, b: i64) -> i64 { return (a / mce_gcd(a, b)) * b }
+fn mce_fact(k: i64) -> i64 {
+    let mut f : i64 = 1i64
+    let mut i : i64 = 2i64
+    while i <= k { f = f * i   i = i + 1i64 }
+    return f
+}
+
+/* multiply the bigint at handle h by the i64 value v, in place (via the temp) */
+fn mce_mul_in(h: i64, v: i64) -> i64 {
+    if bc_muli(CE_TMP, h, v) < 0i64 { return 0i64 - 1i64 }
+    bc_copy(h, CE_TMP)
+    return 0i64
+}
+
+/* ================= ROUTE 1: THE FLOOD ================= */
+var CE_P : [i64; 8]            /* the working permutation of [0..n-1] */
+var CE_MARK : [i64; 64]        /* cell visitation for the flood (n^2 <= 49) */
+
+/* fixed points of P^L over [0..n-1]: count k with P^L(k) == k */
+fn mce_fixL(n: i64, ell: i64) -> i64 {
+    let mut fp : i64 = 0i64
+    let mut t : i64 = 0i64
+    while t < n {
+        let mut v : i64 = t
+        let mut s : i64 = 0i64
+        while s < ell { v = CE_P[v as u64]   s = s + 1i64 }
+        if v == t { fp = fp + 1i64 }
+        t = t + 1i64
+    }
+    return fp
+}
+
+/* |Fix(P)| into handle CE_FX.  comm = 0 full grid (n^2 cells), 1 symmetric grid (x <= y).
+ * The orbit of a cell under (x,y) -> (Px,Py) is flooded to its length L; the factor is the
+ * fixed-point count of P^L; the product over orbits is |Fix(P)|.  0 ok, -1 limb refusal. */
+fn mce_fixcnt(n: i64, comm: i64) -> i64 {
+    bc_seti(CE_FX, 1i64)
+    let mut i : i64 = 0i64
+    while i < (n * n) { CE_MARK[i as u64] = 0i64   i = i + 1i64 }
+    i = 0i64
+    while i < (n * n) {
+        let cx : i64 = i / n
+        let cy : i64 = i % n
+        if CE_MARK[i as u64] == 0i64 {
+            let mut represents : i64 = 1i64
+            if comm == 1i64 { if cx > cy { represents = 0i64 } }   /* x <= y are the reps */
+            if represents == 0i64 { CE_MARK[i as u64] = 1i64 }
+            else {
+                /* flood the orbit of (cx,cy) (a canonical cell) and count its length */
+                let mut ln : i64 = 0i64
+                let mut ox : i64 = cx
+                let mut oy : i64 = cy
+                let mut guard : i64 = 0i64
+                while guard <= (n * n) {
+                    CE_MARK[((ox * n) + oy) as u64] = 1i64
+                    ln = ln + 1i64
+                    let px : i64 = CE_P[ox as u64]
+                    let py : i64 = CE_P[oy as u64]
+                    ox = px
+                    oy = py
+                    if comm == 1i64 { if ox > oy { let tmp : i64 = ox   ox = oy   oy = tmp } }
+                    if ox == cx { if oy == cy { guard = (n * n) + 2i64 } }
+                    guard = guard + 1i64
+                }
+                let fp : i64 = mce_fixL(n, ln)
+                if mce_mul_in(CE_FX, fp) < 0i64 { return 0i64 - 1i64 }
+            }
+        }
+        i = i + 1i64
+    }
+    return 0i64
+}
+
+/* next lexicographic permutation of CE_P[0..n-1]; returns 0 if wrapped (no next), 1 otherwise */
+fn mce_next_perm(n: i64) -> i64 {
+    let mut pivot : i64 = 0i64 - 1i64
+    let mut i : i64 = n - 2i64
+    while i >= 0i64 {
+        if CE_P[i as u64] < CE_P[(i + 1i64) as u64] { pivot = i   i = 0i64 - 1i64 } else { i = i - 1i64 }
+    }
+    if pivot < 0i64 { return 0i64 }
+    let mut j : i64 = n - 1i64
+    while CE_P[j as u64] <= CE_P[pivot as u64] { j = j - 1i64 }
+    let t : i64 = CE_P[pivot as u64]   CE_P[pivot as u64] = CE_P[j as u64]   CE_P[j as u64] = t
+    let mut lo : i64 = pivot + 1i64
+    let mut hi : i64 = n - 1i64
+    while lo < hi {
+        let s : i64 = CE_P[lo as u64]   CE_P[lo as u64] = CE_P[hi as u64]   CE_P[hi as u64] = s
+        lo = lo + 1i64
+        hi = hi - 1i64
+    }
+    return 1i64
+}
+
+/* route-1 Burnside sum into CE_T1 (NOT yet divided by n!).  0 ok, -1 refusal. */
+fn mce_route1(n: i64, comm: i64) -> i64 {
+    bc_seti(CE_T1, 0i64)
+    let mut i : i64 = 0i64
+    while i < n { CE_P[i as u64] = i   i = i + 1i64 }
+    let mut more : i64 = 1i64
+    while more == 1i64 {
+        if mce_fixcnt(n, comm) < 0i64 { return 0i64 - 1i64 }
+        if bc_add(CE_T1, CE_T1, CE_FX) < 0i64 { return 0i64 - 1i64 }
+        more = mce_next_perm(n)
+    }
+    return 0i64
+}
+
+/* ================= ROUTE 2: THE PARTITION ARITHMETIC ================= */
+var CE_M : [i64; 8]            /* multiplicity vector m[1..n] (m[0] unused) */
+var CE_CL : [i64; 8]           /* the flat cycle-length list for the current type */
+
+/* fixP over the current type (CE_CL[0..c-1]) at exponent L: sum of lengths dividing L */
+fn mce_typeFix(c: i64, ell: i64) -> i64 {
+    let mut s : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < c {
+        let a : i64 = CE_CL[i as u64]
+        if (ell % a) == 0i64 { s = s + a }
+        i = i + 1i64
+    }
+    return s
+}
+
+/* diagfix(a): the within-single-a-cycle symmetric-orbit contribution (comm route).
+ * a odd  -> fixP[a]^{(a+1)/2};  a even -> fixP[a]^{a/2} * fixP[a/2].
+ * Multiplied into CE_FX.  0 ok, -1 refusal. */
+fn mce_diagfix(c: i64, a: i64) -> i64 {
+    let ba : i64 = mce_typeFix(c, a)
+    if (a % 2i64) == 1i64 {
+        let mut e : i64 = 0i64
+        while e < ((a + 1i64) / 2i64) { if mce_mul_in(CE_FX, ba) < 0i64 { return 0i64 - 1i64 }   e = e + 1i64 }
+    } else {
+        let mut e2 : i64 = 0i64
+        while e2 < (a / 2i64) { if mce_mul_in(CE_FX, ba) < 0i64 { return 0i64 - 1i64 }   e2 = e2 + 1i64 }
+        let bh : i64 = mce_typeFix(c, a / 2i64)
+        if mce_mul_in(CE_FX, bh) < 0i64 { return 0i64 - 1i64 }
+    }
+    return 0i64
+}
+
+/* fix product for the current type into CE_FX.  comm = 0 full / 1 commutative.  0 ok / -1. */
+fn mce_typeFixProd(c: i64, comm: i64) -> i64 {
+    bc_seti(CE_FX, 1i64)
+    if comm == 0i64 {
+        /* diagonal i=j blocks: fixP[len_i]^{len_i} */
+        let mut i : i64 = 0i64
+        while i < c {
+            let a : i64 = CE_CL[i as u64]
+            let ba : i64 = mce_typeFix(c, a)
+            let mut e : i64 = 0i64
+            while e < a { if mce_mul_in(CE_FX, ba) < 0i64 { return 0i64 - 1i64 }   e = e + 1i64 }
+            i = i + 1i64
+        }
+        /* off-diagonal ordered i!=j = 2 * (i<j): fixP[lcm]^{2 gcd} */
+        i = 0i64
+        while i < c {
+            let mut j : i64 = i + 1i64
+            while j < c {
+                let g : i64 = mce_gcd(CE_CL[i as u64], CE_CL[j as u64])
+                let l : i64 = mce_lcm(CE_CL[i as u64], CE_CL[j as u64])
+                let bl : i64 = mce_typeFix(c, l)
+                let mut e2 : i64 = 0i64
+                while e2 < (2i64 * g) { if mce_mul_in(CE_FX, bl) < 0i64 { return 0i64 - 1i64 }   e2 = e2 + 1i64 }
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+    } else {
+        /* within-cycle diagonal blocks */
+        let mut i : i64 = 0i64
+        while i < c { if mce_diagfix(c, CE_CL[i as u64]) < 0i64 { return 0i64 - 1i64 }   i = i + 1i64 }
+        /* unordered cross i<j: fixP[lcm]^{gcd} */
+        i = 0i64
+        while i < c {
+            let mut j : i64 = i + 1i64
+            while j < c {
+                let g : i64 = mce_gcd(CE_CL[i as u64], CE_CL[j as u64])
+                let l : i64 = mce_lcm(CE_CL[i as u64], CE_CL[j as u64])
+                let bl : i64 = mce_typeFix(c, l)
+                let mut e : i64 = 0i64
+                while e < g { if mce_mul_in(CE_FX, bl) < 0i64 { return 0i64 - 1i64 }   e = e + 1i64 }
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+    }
+    return 0i64
+}
+
+/* type size = n! / (prod_ell ell^{m_ell} * m_ell!) as i64 (<= n! <= 5040) */
+fn mce_typeSize(n: i64) -> i64 {
+    let mut denom : i64 = 1i64
+    let mut ell : i64 = 1i64
+    while ell <= n {
+        let m : i64 = CE_M[ell as u64]
+        let mut p : i64 = 0i64
+        while p < m { denom = denom * ell   p = p + 1i64 }
+        denom = denom * mce_fact(m)
+        ell = ell + 1i64
+    }
+    return mce_fact(n) / denom
+}
+
+/* build CE_CL from CE_M; returns the cycle count c */
+fn mce_expand(n: i64) -> i64 {
+    let mut c : i64 = 0i64
+    let mut ell : i64 = 1i64
+    while ell <= n {
+        let mut k : i64 = 0i64
+        while k < CE_M[ell as u64] { CE_CL[c as u64] = ell   c = c + 1i64   k = k + 1i64 }
+        ell = ell + 1i64
+    }
+    return c
+}
+
+/* route-2 Burnside sum into CE_T2 by an odometer over multiplicity vectors m[1..n] with
+ * sum ell*m_ell == n.  0 ok, -1 refusal. */
+fn mce_route2(n: i64, comm: i64) -> i64 {
+    bc_seti(CE_T2, 0i64)
+    let mut ell : i64 = 1i64
+    while ell <= n { CE_M[ell as u64] = 0i64   ell = ell + 1i64 }
+    let mut running : i64 = 1i64
+    while running == 1i64 {
+        /* evaluate the current multiplicity vector if it is a valid partition */
+        let mut wsum : i64 = 0i64
+        let mut e : i64 = 1i64
+        while e <= n { wsum = wsum + (e * CE_M[e as u64])   e = e + 1i64 }
+        if wsum == n {
+            let c : i64 = mce_expand(n)
+            let sz : i64 = mce_typeSize(n)
+            if mce_typeFixProd(c, comm) < 0i64 { return 0i64 - 1i64 }
+            if bc_muli(CE_TMP, CE_FX, sz) < 0i64 { return 0i64 - 1i64 }
+            if bc_add(CE_T2, CE_T2, CE_TMP) < 0i64 { return 0i64 - 1i64 }
+        }
+        /* increment the odometer: m[1] fastest, each m_ell in 0..floor(n/ell) */
+        let mut carry : i64 = 1i64
+        let mut pos : i64 = 1i64
+        while carry == 1i64 {
+            if pos > n { carry = 0i64   running = 0i64 }
+            else {
+                CE_M[pos as u64] = CE_M[pos as u64] + 1i64
+                if CE_M[pos as u64] > (n / pos) { CE_M[pos as u64] = 0i64   pos = pos + 1i64 }
+                else { carry = 0i64 }
+            }
+        }
+    }
+    return 0i64
+}
+
+/* ================= THE COMPOSED COUNT ================= */
+/* both routes computed and divided by n!; agreement checked to the digit.
+ * returns 0 = routes agree (result in CE_R1 == CE_R2); -1 refusal; -2 DISAGREEMENT (defect). */
+fn mce_burnside(n: i64, comm: i64) -> i64 @export {
+    if n < 1i64 { return 0i64 - 1i64 }
+    if n > 7i64 { return 0i64 - 1i64 }
+    bc_seti(CE_NF, mce_fact(n))
+    if mce_route1(n, comm) < 0i64 { return 0i64 - 1i64 }
+    if mce_route2(n, comm) < 0i64 { return 0i64 - 1i64 }
+    if bc_divexact(CE_R1, CE_T1, CE_NF) < 0i64 { return 0i64 - 2i64 }   /* residue nonzero = defect */
+    if bc_divexact(CE_R2, CE_T2, CE_NF) < 0i64 { return 0i64 - 2i64 }
+    if bc_eq(CE_R1, CE_R2) != 1i64 { return 0i64 - 2i64 }
+    return 0i64
+}
+
+fn mce_rh() -> i64 @export { return CE_R1 }        /* the result handle (route 1) */
+fn mce_rh2() -> i64 @export { return CE_R2 }       /* the result handle (route 2) */
+
+/* the result as i64 IF it fits in 62 bits (n<=5 comm, n<=5 full all fit); else use render */
+fn mce_fits() -> i64 @export {
+    if bc_len(CE_R1) <= 1i64 { return 1i64 }
+    if bc_len(CE_R1) == 2i64 { if bc_limb(CE_R1, 1i64) < 1073741824u64 { return 1i64 } }
+    return 0i64
+}
+fn mce_i64() -> i64 @export {
+    let mut v : i64 = 0i64
+    if bc_len(CE_R1) >= 1i64 { v = bc_limb(CE_R1, 0i64) as i64 }
+    if bc_len(CE_R1) >= 2i64 { v = v + ((bc_limb(CE_R1, 1i64) as i64) * 4294967296i64) }
+    return v
+}

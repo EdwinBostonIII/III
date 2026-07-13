@@ -1,0 +1,100 @@
+/* 2723_mathesis_census.iii -- GATE for THE CENSUS BEYOND ENUMERATION (campaign Psi, item Psi-4).
+ *
+ * The exact number of binary operations on n tokens up to isomorphism (and the commutative
+ * sub-count), for n = 5, 6, 7 -- counted by Burnside's lemma over S_n in exact bigint along TWO
+ * INDEPENDENT ROUTES (the permutation FLOOD and the cycle-type PARTITION ARITHMETIC) that must
+ * agree to the digit.  Observed 2026-07-13, pinned here:
+ *
+ *   n   ALL binary ops (up to iso)                             COMMUTATIVE ops (up to iso)
+ *   2   10                                                     4
+ *   3   3,330                                                  129
+ *   4   178,981,952                                            43,968
+ *   5   2,483,527,537,094,825                                  254,429,900
+ *   6   14,325,590,003,318,891,522,275,680                    30,468,670,170,912
+ *   7   50,976,900,301,814,584,087,291,487,087,214,170,039    91,267,244,789,189,735,259
+ *
+ * n=7 counts the iso-classes of 7^49 ~ 2.56*10^41 operations WITHOUT enumerating them.  The gate
+ * checks: both routes AGREE (mce_burnside == 0) at every n; the n <= 4 counts equal the sealed
+ * paid exhaustions (10/3,330/178,981,952 full == mt4f_burnside_full, the live Chi door; 4/129/
+ * 43,968 commutative) -- the TRIPLE ANCHOR before the routes are trusted at n = 5, 6, 7.
+ * EXIT 99. */
+module corpus_2723_mathesis_census
+
+extern @abi(c-msvc-x64) fn mce_burnside(n: i64, comm: i64) -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn mce_rh() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn mce_fits() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn mce_i64() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn mt4f_burnside_full(n: i64) -> i64 from "mathesis_tetra.iii"
+
+var EXP : [i64; 40]
+
+/* run mce_burnside(n,comm); require routes agree AND result renders to the digit string in
+ * EXP[0..len-1] (digit VALUES).  returns 1 ok / 0 fail. */
+fn chk(n: i64, comm: i64, len: i64) -> i64 {
+    if mce_burnside(n, comm) != 0i64 { return 0i64 }
+    bc_render(mce_rh(), 41i64)
+    if bg_diglen(41i64) != len { return 0i64 }
+    let mut i : i64 = 0i64
+    while i < len {
+        if bg_digat(41i64, i) != (48i64 + EXP[i as u64]) { return 0i64 }   /* bc_render stores ASCII */
+        i = i + 1i64
+    }
+    return 1i64
+}
+/* run mce_burnside(n,comm); require routes agree AND the i64 value == v (small counts). */
+fn chki(n: i64, comm: i64, v: i64) -> i64 {
+    if mce_burnside(n, comm) != 0i64 { return 0i64 }
+    if mce_fits() != 1i64 { return 0i64 }
+    if mce_i64() != v { return 0i64 }
+    return 1i64
+}
+fn setexp5() -> i32 {   /* not used: n=5 fits i64 */ return 0i32 }
+
+fn main() -> i32 {
+    /* [A] THE TRIPLE ANCHOR at n <= 4 (both flavors), routes agree, full == the live Burnside door */
+    if chki(2i64, 0i64, 10i64) != 1i64 { return 10i32 }
+    if chki(3i64, 0i64, 3330i64) != 1i64 { return 11i32 }
+    if chki(4i64, 0i64, 178981952i64) != 1i64 { return 12i32 }
+    if mt4f_burnside_full(2i64) != 10i64 { return 13i32 }
+    if mt4f_burnside_full(3i64) != 3330i64 { return 14i32 }
+    if mt4f_burnside_full(4i64) != 178981952i64 { return 15i32 }
+    if chki(2i64, 1i64, 4i64) != 1i64 { return 16i32 }
+    if chki(3i64, 1i64, 129i64) != 1i64 { return 17i32 }
+    if chki(4i64, 1i64, 43968i64) != 1i64 { return 18i32 }
+    /* [B] n = 5 (both fit i64) -- the routes AGREE on the new counts */
+    if chki(5i64, 0i64, 2483527537094825i64) != 1i64 { return 20i32 }
+    if chki(5i64, 1i64, 254429900i64) != 1i64 { return 21i32 }
+    /* [C] n = 6 full = 14325590003318891522275680 (26 digits) */
+    EXP[0u64] = 1i64  EXP[1u64] = 4i64  EXP[2u64] = 3i64  EXP[3u64] = 2i64  EXP[4u64] = 5i64
+    EXP[5u64] = 5i64  EXP[6u64] = 9i64  EXP[7u64] = 0i64  EXP[8u64] = 0i64  EXP[9u64] = 0i64
+    EXP[10u64] = 3i64 EXP[11u64] = 3i64 EXP[12u64] = 1i64 EXP[13u64] = 8i64 EXP[14u64] = 8i64
+    EXP[15u64] = 9i64 EXP[16u64] = 1i64 EXP[17u64] = 5i64 EXP[18u64] = 2i64 EXP[19u64] = 2i64
+    EXP[20u64] = 2i64 EXP[21u64] = 7i64 EXP[22u64] = 5i64 EXP[23u64] = 6i64 EXP[24u64] = 8i64
+    EXP[25u64] = 0i64
+    if chk(6i64, 0i64, 26i64) != 1i64 { return 30i32 }
+    /* n = 6 comm = 30468670170912 (14 digits) */
+    EXP[0u64] = 3i64  EXP[1u64] = 0i64  EXP[2u64] = 4i64  EXP[3u64] = 6i64  EXP[4u64] = 8i64
+    EXP[5u64] = 6i64  EXP[6u64] = 7i64  EXP[7u64] = 0i64  EXP[8u64] = 1i64  EXP[9u64] = 7i64
+    EXP[10u64] = 0i64 EXP[11u64] = 9i64 EXP[12u64] = 1i64 EXP[13u64] = 2i64
+    if chk(6i64, 1i64, 14i64) != 1i64 { return 31i32 }
+    /* [D] n = 7 full = 50976900301814584087291487087214170039 (38 digits) */
+    EXP[0u64] = 5i64  EXP[1u64] = 0i64  EXP[2u64] = 9i64  EXP[3u64] = 7i64  EXP[4u64] = 6i64
+    EXP[5u64] = 9i64  EXP[6u64] = 0i64  EXP[7u64] = 0i64  EXP[8u64] = 3i64  EXP[9u64] = 0i64
+    EXP[10u64] = 1i64 EXP[11u64] = 8i64 EXP[12u64] = 1i64 EXP[13u64] = 4i64 EXP[14u64] = 5i64
+    EXP[15u64] = 8i64 EXP[16u64] = 4i64 EXP[17u64] = 0i64 EXP[18u64] = 8i64 EXP[19u64] = 7i64
+    EXP[20u64] = 2i64 EXP[21u64] = 9i64 EXP[22u64] = 1i64 EXP[23u64] = 4i64 EXP[24u64] = 8i64
+    EXP[25u64] = 7i64 EXP[26u64] = 0i64 EXP[27u64] = 8i64 EXP[28u64] = 7i64 EXP[29u64] = 2i64
+    EXP[30u64] = 1i64 EXP[31u64] = 4i64 EXP[32u64] = 1i64 EXP[33u64] = 7i64 EXP[34u64] = 0i64
+    EXP[35u64] = 0i64 EXP[36u64] = 3i64 EXP[37u64] = 9i64
+    if chk(7i64, 0i64, 38i64) != 1i64 { return 40i32 }
+    /* n = 7 comm = 91267244789189735259 (20 digits) */
+    EXP[0u64] = 9i64  EXP[1u64] = 1i64  EXP[2u64] = 2i64  EXP[3u64] = 6i64  EXP[4u64] = 7i64
+    EXP[5u64] = 2i64  EXP[6u64] = 4i64  EXP[7u64] = 4i64  EXP[8u64] = 7i64  EXP[9u64] = 8i64
+    EXP[10u64] = 9i64 EXP[11u64] = 1i64 EXP[12u64] = 8i64 EXP[13u64] = 9i64 EXP[14u64] = 7i64
+    EXP[15u64] = 3i64 EXP[16u64] = 5i64 EXP[17u64] = 2i64 EXP[18u64] = 5i64 EXP[19u64] = 9i64
+    if chk(7i64, 1i64, 20i64) != 1i64 { return 41i32 }
+    return 99i32
+}

@@ -1,0 +1,100 @@
+/* 2701_mathesis_denest_general.iii -- GATE for the GENERALIZED DENESTING SWEEP (campaign Rho,
+ * class D): sqrt(a + b*sqrt(c)) = sqrt(m) + sqrt(n) decided over the DECLARED box a<=32, b<=6,
+ * c<=32 -- every found row a machine theorem DUAL-VERIFIED (forced integer system + the
+ * real-algebraic judge), every non-found row a NONEXISTENCE theorem with its failing clause,
+ * the b == 2 slice consulted against the STANDING telescope and REFUSED as non-novel (R3).
+ *
+ * R -- the FALSE denesting refuted FIRST by the judge: sqrt(3+2*sqrt2) =? sqrt3 + 1 -> DISTINCT
+ *      (the true row is sqrt2 + 1; the judge must separate truth from near-truth).
+ * E -- envelope + classification refusals NAMED: a < 2 refused; c = 4 (a perfect square) is
+ *      OUT OF CLASS (verdict 2, not a theorem); disc < 0 is nonexistence reason 2.
+ * S -- THE SWEEP: counts partition the box exactly (found + nonexistent + skipped == 31*6*31);
+ *      the known row (3,2,2) -> (2,1) is present with novel = 0 (telescope rediscovery);
+ *      a b != 2 row (9,3,8) -> (6,3) is present with novel = 1 (outside every standing organ);
+ *      novelty tallies partition the found set; at least one of each.
+ * X -- the nonexistence certificate is REAL: (3,1,7) has disc = 9-7 = 2, non-square -> reason 3;
+ *      re-checked by re-deriving mrd_denest and the judge REFUTING the nearest integer claim.
+ *
+ * exit 99 pass; 10 R; 11 E; 12 S-counts; 13 S-known-rows; 14 S-novelty; 15 X. */
+module corpus_2701_mathesis_denest_general
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mrd_denest(a: i64, b: i64, c: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_m() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_n() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_reason() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_verify_judge(a: i64, b: i64, c: i64, m: i64, n: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_sweep(amax: i64, bmax: i64, cmax: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_found() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_nonde() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_skip() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_a(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_b(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_c(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_m(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_n(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrd_row_novel(i: i64) -> i64 from "mathesis_radical.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* arm scratch at module scope (the cg_r3 64-local-slot ceiling) */
+var RJ : i64
+var EA : i64   var EB : i64   var EC : i64
+var SF : i64   var SN : i64   var SK : i64
+var HIT1 : i64   var HIT2 : i64   var NV0 : i64   var NV1 : i64
+var XD : i64   var XR : i64   var XJ : i64
+
+fn main() -> u64 {
+    /* == R: the FALSE denesting refuted by the judge FIRST. */
+    RJ = mrd_verify_judge(3i64, 2i64, 2i64, 3i64, 1i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(RJ) nl()                        /* "R: 0" */
+    if RJ != 0i64 { return 10u64 }
+
+    /* == E: refusals + out-of-class, each named. */
+    EA = mrd_denest(1i64, 1i64, 2i64)
+    EB = mrd_denest(5i64, 1i64, 4i64)
+    EC = mrd_denest(2i64, 1i64, 5i64)
+    putchar(69i32) putchar(58i32) sp() e_i64(EA) sp() e_i64(EB) sp() e_i64(EC) sp() e_i64(mrd_reason()) nl()   /* "E: -1 2 0 2" */
+    if EA != (0i64 - 1i64) { return 11u64 }
+    if EB != 2i64 { return 11u64 }
+    if EC != 0i64 { return 11u64 }
+    if mrd_reason() != 2i64 { return 11u64 }
+
+    /* == S: THE SWEEP over the declared box. */
+    let sw : i64 = mrd_sweep(32i64, 6i64, 32i64)
+    if sw < 1i64 { return 12u64 }
+    SF = mrd_found()   SN = mrd_nonde()   SK = mrd_skip()
+    putchar(83i32) putchar(58i32) sp() e_i64(SF) sp() e_i64(SN) sp() e_i64(SK) nl()
+    if (SF + SN + SK) != 5766i64 { return 12u64 }                            /* 31*6*31 */
+    HIT1 = 0i64   HIT2 = 0i64   NV0 = 0i64   NV1 = 0i64
+    let mut i : i64 = 0i64
+    while i < SF {
+        if mrd_row_a(i) == 3i64 { if mrd_row_b(i) == 2i64 { if mrd_row_c(i) == 2i64 {
+            if mrd_row_m(i) == 2i64 { if mrd_row_n(i) == 1i64 { if mrd_row_novel(i) == 0i64 { HIT1 = 1i64 } } }
+        } } }
+        if mrd_row_a(i) == 9i64 { if mrd_row_b(i) == 3i64 { if mrd_row_c(i) == 8i64 {
+            if mrd_row_m(i) == 6i64 { if mrd_row_n(i) == 3i64 { if mrd_row_novel(i) == 1i64 { HIT2 = 1i64 } } }
+        } } }
+        if mrd_row_novel(i) == 0i64 { NV0 = NV0 + 1i64 }
+        if mrd_row_novel(i) == 1i64 { NV1 = NV1 + 1i64 }
+        i = i + 1i64
+    }
+    putchar(72i32) putchar(58i32) sp() e_i64(HIT1) sp() e_i64(HIT2) sp() e_i64(NV0) sp() e_i64(NV1) nl()
+    if HIT1 != 1i64 { return 13u64 }
+    if HIT2 != 1i64 { return 13u64 }
+    if (NV0 + NV1) != SF { return 14u64 }
+    if NV0 < 1i64 { return 14u64 }
+    if NV1 < 1i64 { return 14u64 }
+
+    /* == X: a nonexistence certificate, re-derived + judge-refuting the nearest integer claim. */
+    XD = mrd_denest(3i64, 1i64, 7i64)
+    XR = mrd_reason()
+    XJ = mrd_verify_judge(3i64, 1i64, 7i64, 2i64, 1i64)      /* sqrt(3+sqrt7) =? sqrt2+1: REFUTED */
+    putchar(88i32) putchar(58i32) sp() e_i64(XD) sp() e_i64(XR) sp() e_i64(XJ) nl()   /* "X: 0 3 0" */
+    if XD != 0i64 { return 15u64 }
+    if XR != 3i64 { return 15u64 }
+    if XJ != 0i64 { return 15u64 }
+
+    return 99u64
+}

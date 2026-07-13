@@ -1,0 +1,135 @@
+/* 2703_mathesis_mx04_chain.iii -- GATE for THE MX04 DOOR (campaign Rho): the algebraic domain's
+ * descriptor class on the same cad spine as the bit-vector library door -- validity BEFORE
+ * hashing, content-addressed theorem ids, tamper-evident Keccak chain from a reserved genesis.
+ *
+ * N -- single-false REJECTIONS first: bad magic / class 0 / class 5 / param past range /
+ *      provenance != MACHINE -- each gets NO id (-3), validation precedes hashing.
+ * I -- id determinism (same descriptor -> byte-identical id) + statement SENSITIVITY (one
+ *      param flipped -> a different id).
+ * C -- the chain: genesis -> three entries -> head; byte-identical on REPLAY; a TAMPERED middle
+ *      entry breaks the head; a TRUNCATED chain breaks the head.
+ * D -- the ROUND chain replays deterministically over the real sweep box: two full walks of
+ *      mxr_chain_round over the (12,4,12) sub-box produce byte-identical heads and equal lengths.
+ *
+ * exit 99 pass; 10 N; 11 I; 12 C-replay; 13 C-tamper; 14 C-truncate; 15 D. */
+module corpus_2703_mathesis_mx04_chain
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mxr_desc_valid(desc: u64) -> u32 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_id_of(desc: u64, out32: u64) -> i32 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_genesis() -> i32 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_chain_add(desc: u64) -> i32 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_head_byte(i: i64) -> u64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_chain_len() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mxr_chain_round(amax: i64, bmax: i64, cmax: i64) -> i64 from "mathesis_radical.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+const MXG : u64 = 0x4D583034u64
+
+var D1 : [u64; 8]   var D2 : [u64; 8]   var D3 : [u64; 8]
+var ID1 : [u8; 32]   var ID2 : [u8; 32]
+var HA : [u8; 32]   var HB : [u8; 32]
+var NA : i32   var NB : i32   var NC : i32   var ND : i32   var NE : i32
+var L1 : i64   var L2 : i64
+
+fn mkdesc(dp: u64, cl: u64, p1: u64, p2: u64, p3: u64, p4: u64, p5: u64) -> i32 {
+    let d : *u64 = dp as *u64
+    d[0u64] = MXG   d[1u64] = cl
+    d[2u64] = p1   d[3u64] = p2   d[4u64] = p3   d[5u64] = p4   d[6u64] = p5
+    d[7u64] = 1u64
+    return 0i32
+}
+fn headsave(dp: u64) -> i32 {
+    let d : *u8 = dp as *u8
+    let mut i : i64 = 0i64
+    while i < 32i64 { d[i as u64] = mxr_head_byte(i) as u8   i = i + 1i64 }
+    return 0i32
+}
+fn headeq(dp: u64) -> i64 {
+    let d : *u8 = dp as *u8
+    let mut i : i64 = 0i64
+    while i < 32i64 { if (d[i as u64] as u64) != mxr_head_byte(i) { return 0i64 }   i = i + 1i64 }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* == N: single-false rejections, each -3 with NO id. */
+    mkdesc((&D1) as u64, 1u64, 515u64, 514u64, 514u64, 514u64, 513u64)
+    D1[0u64] = 0x4D583033u64                              /* wrong magic */
+    NA = mxr_id_of((&D1) as u64, (&ID1) as u64)
+    mkdesc((&D1) as u64, 0u64, 515u64, 514u64, 514u64, 514u64, 513u64)   /* class 0 */
+    NB = mxr_id_of((&D1) as u64, (&ID1) as u64)
+    mkdesc((&D1) as u64, 5u64, 515u64, 514u64, 514u64, 514u64, 513u64)   /* class 5 */
+    NC = mxr_id_of((&D1) as u64, (&ID1) as u64)
+    mkdesc((&D1) as u64, 1u64, 2000u64, 514u64, 514u64, 514u64, 513u64)  /* param past range */
+    ND = mxr_id_of((&D1) as u64, (&ID1) as u64)
+    mkdesc((&D1) as u64, 1u64, 515u64, 514u64, 514u64, 514u64, 513u64)
+    D1[7u64] = 0u64                                       /* provenance != MACHINE */
+    NE = mxr_id_of((&D1) as u64, (&ID1) as u64)
+    putchar(78i32) putchar(58i32) sp() e_i64(NA as i64) sp() e_i64(NB as i64) sp() e_i64(NC as i64) sp() e_i64(ND as i64) sp() e_i64(NE as i64) nl()
+    if NA != (0i32 - 3i32) { return 10u64 }
+    if NB != (0i32 - 3i32) { return 10u64 }
+    if NC != (0i32 - 3i32) { return 10u64 }
+    if ND != (0i32 - 3i32) { return 10u64 }
+    if NE != (0i32 - 3i32) { return 10u64 }
+
+    /* == I: determinism + sensitivity. */
+    mkdesc((&D1) as u64, 1u64, 515u64, 514u64, 514u64, 514u64, 513u64)
+    if mxr_id_of((&D1) as u64, (&ID1) as u64) != 0i32 { return 11u64 }
+    if mxr_id_of((&D1) as u64, (&ID2) as u64) != 0i32 { return 11u64 }
+    let mut same : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < 32i64 { if ID1[i as u64] != ID2[i as u64] { same = 0i64 }   i = i + 1i64 }
+    mkdesc((&D2) as u64, 1u64, 516u64, 514u64, 514u64, 514u64, 513u64)   /* one param flipped */
+    if mxr_id_of((&D2) as u64, (&ID2) as u64) != 0i32 { return 11u64 }
+    let mut diff : i64 = 0i64
+    i = 0i64
+    while i < 32i64 { if ID1[i as u64] != ID2[i as u64] { diff = 1i64 }   i = i + 1i64 }
+    putchar(73i32) putchar(58i32) sp() e_i64(same) sp() e_i64(diff) nl()     /* "I: 1 1" */
+    if same != 1i64 { return 11u64 }
+    if diff != 1i64 { return 11u64 }
+
+    /* == C: chain replay / tamper / truncate. */
+    mkdesc((&D1) as u64, 1u64, 515u64, 514u64, 514u64, 514u64, 513u64)
+    mkdesc((&D2) as u64, 2u64, 515u64, 513u64, 519u64, 515u64, 512u64)
+    mkdesc((&D3) as u64, 3u64, 521u64, 503u64, 513u64, 511u64, 513u64)
+    if mxr_genesis() != 0i32 { return 12u64 }
+    if mxr_chain_add((&D1) as u64) != 0i32 { return 12u64 }
+    if mxr_chain_add((&D2) as u64) != 0i32 { return 12u64 }
+    if mxr_chain_add((&D3) as u64) != 0i32 { return 12u64 }
+    headsave((&HA) as u64)
+    if mxr_genesis() != 0i32 { return 12u64 }
+    mxr_chain_add((&D1) as u64)
+    mxr_chain_add((&D2) as u64)
+    mxr_chain_add((&D3) as u64)
+    let rep : i64 = headeq((&HA) as u64)
+    if mxr_genesis() != 0i32 { return 13u64 }
+    mxr_chain_add((&D1) as u64)
+    mkdesc((&D2) as u64, 2u64, 515u64, 513u64, 519u64, 515u64, 511u64)   /* TAMPER one param */
+    mxr_chain_add((&D2) as u64)
+    mxr_chain_add((&D3) as u64)
+    let tam : i64 = headeq((&HA) as u64)
+    if mxr_genesis() != 0i32 { return 14u64 }
+    mxr_chain_add((&D1) as u64)
+    mkdesc((&D2) as u64, 2u64, 515u64, 513u64, 519u64, 515u64, 512u64)   /* restore */
+    mxr_chain_add((&D2) as u64)
+    let trunc : i64 = headeq((&HA) as u64)
+    putchar(67i32) putchar(58i32) sp() e_i64(rep) sp() e_i64(tam) sp() e_i64(trunc) nl()   /* "C: 1 0 0" */
+    if rep != 1i64 { return 12u64 }
+    if tam != 0i64 { return 13u64 }
+    if trunc != 0i64 { return 14u64 }
+
+    /* == D: the ROUND chain replays deterministically over a real sub-box. */
+    L1 = mxr_chain_round(12i64, 4i64, 12i64)
+    headsave((&HB) as u64)
+    L2 = mxr_chain_round(12i64, 4i64, 12i64)
+    let drep : i64 = headeq((&HB) as u64)
+    putchar(68i32) putchar(58i32) sp() e_i64(L1) sp() e_i64(L2) sp() e_i64(drep) nl()
+    if L1 < 1i64 { return 15u64 }
+    if L1 != L2 { return 15u64 }
+    if drep != 1i64 { return 15u64 }
+
+    return 99u64
+}

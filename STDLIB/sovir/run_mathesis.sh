@@ -154,6 +154,30 @@ grep -q "^MXS space=18522 tested=17136 frontier=1386 found=183$" "$SYNLOG" \
 [[ "$(grep -c '^MXS# ' "$SYNLOG")" -eq 183 ]] || { echo "[mathesis] RED: synth stream count != 183"; exit 29; }
 echo "[mathesis] GREEN: round-1 synthesis stream sealed (183 machine theorems; 1386 frontiered, blocker named)"
 
+echo "[mathesis] == [9] THE ALGEBRAIC CREATOR TIER (campaign Rho: the judge's second universe) =="
+# the radical-face TUs: the seven-rung engines + the three Rho organs, compiled per run
+RADFACE=()
+for t in resultant sturm_big mathesis_alg mathesis_radical charpoly; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" \
+        >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 62; }
+    RADFACE+=("$o")
+done
+gate 2700_mathesis_alg_judge      "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 63   # the real-algebraic judge (pair-gcd equality, order, exact zero)
+gate 2701_mathesis_denest_general "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 64   # generalized denesting sweep (dual-verified + nonexistence + R3 novelty)
+gate 2702_mathesis_cube_ramanujan "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 65   # cube identities: Ramanujan RE-FOUND by pure enumeration
+gate 2703_mathesis_mx04_chain     "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 66   # the MX04 domain door + tamper-evident chain
+gate 2704_ripple_spectral         "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 67   # exact spectral certificates of III's OWN module graph
+
+# the sealed radical round-1 stream: the committed record must match its pins
+RADLOG="$III_ROOT/DOCS/MATHESIS-RADICAL-ROUND1.log"
+grep -q "^MXR denest=194 novel=143 redisc=51 nonexist=4828 skip=744 cube_eq=1 cube_tested=1 cube_box=17500 chain=5023 head=2a84e3b73394d86ed00a1146af0bc3c7cb3cd20bd06b83f922cdbfbd9e7ca7f8$" "$RADLOG" \
+    || { echo "[mathesis] RED: radical round-1 summary drifted from the pins"; exit 68; }
+[[ "$(grep -c '^MXR# ' "$RADLOG")" -eq 195 ]] || { echo "[mathesis] RED: radical stream count != 195"; exit 69; }
+RADICAL_CERT="$(printf '%s' "2a84e3b73394d86ed00a1146af0bc3c7cb3cd20bd06b83f922cdbfbd9e7ca7f8|195|5023" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] RADICAL_CERT = $RADICAL_CERT"
+echo "[mathesis] GREEN: radical round-1 stream sealed (5023 chained theorems: 194 denestings incl. 143 NOVEL, 4828 nonexistence certificates, Ramanujan re-found; head pinned)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

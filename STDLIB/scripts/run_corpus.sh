@@ -1937,6 +1937,10 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- owned by run_aether_lens_kats.sh (links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
             SKIP=$((SKIP+1)); continue
             ;;
+        2700_mathesis_alg_judge|2701_mathesis_denest_general|2702_mathesis_cube_ramanujan|2703_mathesis_mx04_chain|2704_ripple_spectral)
+            RESULTS+=("SKIP  $base : THE ALGEBRAIC CREATOR TIER (campaign Rho: real-algebraic judge + radical synthesizer + MX04 chain + exact spectral organ) -- owned by run_mathesis.sh stage [9] (links resultant + sturm_big + mathesis_alg + mathesis_radical + charpoly + the exact-face TUs)")
+            SKIP=$((SKIP+1)); continue
+            ;;
         2126_involution|2127_membrane|2128_involution_closed|2129_epoch|2130_disposers|2131_reactor|2132_eidolon|2133_ripple_eidolon|2134_planner)
             RESULTS+=("SKIP  $base : RIPPLE MERGE -- owned by run_ripple_kats.sh (involution + membrane + epoch + disposer + crystal/ripple_field/logic6)")
             SKIP=$((SKIP+1)); continue

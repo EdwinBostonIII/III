@@ -1,0 +1,632 @@
+/* aether/mathesis_alg.iii -- THE REAL-ALGEBRAIC JUDGE (campaign Rho, DOCS/III-MATHESIS-MAP.md s12).
+ *
+ * The mathesis synthesizer's SECOND judge.  The first judge (seq_equiv) decides the bit-vector
+ * fragment; this organ decides the ordered field of REAL ALGEBRAIC NUMBERS -- equality, order,
+ * sign -- exactly, by COMPOSING the seven-rung exact substrate:
+ *
+ *   representation : a slot = (integer polynomial as sign/limb rows, dyadic window (wn/2^wk, wh/2^wk],
+ *                    ISO flag = the window is CERTIFIED to hold exactly one real root of the poly).
+ *                    The poly need NOT be minimal -- root_count2 == 1 in the window is the whole
+ *                    contract (the c925b611 completeness argument needs nothing more).
+ *   arithmetic     : SUM / PRODUCT via aether/resultant rs_sum_big2 / rs_prod_big2 (the adaptive
+ *                    <=2048-prime window certifies each run's own bound); NEGATION by odd-coefficient
+ *                    sign flip; k-th ROOT by t -> t^k coefficient re-indexing (gamma = alpha^(1/k)
+ *                    satisfies p(t^k) -- substitution, not computation).
+ *   decision       : EQUALITY through the sturm_big PAIR-GCD door (TOTAL: a gcd root in the window
+ *                    overlap is forced to be each side's unique root, so shared-root <=> equal);
+ *                    ORDER by count-preserving dyadic refinement to disjoint windows (equality is
+ *                    decided FIRST, so separation exists and refinement terminates); SIGN by
+ *                    sign-definite refinement with the exact zero case answered by pair-gcd vs t.
+ *
+ * Every verdict is exact or a NAMED refusal (-1 depth / envelope / allocation) -- never a guess.
+ * ENVELOPE (printed, refused past): slot degree <= 64, coefficients <= 16 limbs (1024 bits),
+ * dyadic depth <= 58, i64 coefficient views required by the resultant input ABI (a slot whose
+ * coefficients outgrow i64 refuses composition, never wraps).
+ *
+ * Gate: corpus/2700_mathesis_alg_judge (negative arms FIRST: false identity refuted, protocol and
+ * envelope refusals; then sqrt2 three ways EQUAL, cbrt2*cbrt4 == 2, order rows, sign rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/resultant + aether/sturm_big ONLY -- the
+ * engines' doors do all mathematics; this organ is representation + protocol.
+ */
+module aether_mathesis_alg
+
+extern @abi(c-msvc-x64) fn rs_sum_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_prod_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_sgn(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_len(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn rs_big_limb(i: i64, j: i64) -> u64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_begin(deg: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_pair_stash() -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_pair_gcd() -> i64 from "sturm_big.iii"
+
+const MA_SLOTS : i64 = 8i64
+const MA_MAXD  : i64 = 64i64          /* slot polynomial degree cap */
+const MA_MAXL  : i64 = 16i64          /* limbs per coefficient cap (1024 bits) */
+const MA_KMAX  : i64 = 58i64          /* dyadic window depth cap */
+const MA_ROUNDS : i64 = 96i64         /* refinement round cap (every loop bounded) */
+
+/* slot storage: coefficient i of slot s at row s*65+i; limb j at (s*65+i)*16+j */
+var MA_SGN : [i64; 520]
+var MA_CLN : [i64; 520]
+var MA_LMB : [u64; 8320]
+var MA_DEG : [i64; 8]
+var MA_WN  : [i64; 8]   var MA_WH : [i64; 8]   var MA_WK : [i64; 8]
+var MA_ISO : [i64; 8]
+
+/* i64 views + resultant out scratch (module scope: the local-array &-of corner is avoided) */
+var MA_F : [i64; 130]   var MA_G : [i64; 130]   var MA_O : [i64; 130]
+
+fn ma_reset() -> i32 @export {
+    let mut s : i64 = 0i64
+    while s < MA_SLOTS { MA_DEG[s as u64] = 0i64 - 1i64   MA_ISO[s as u64] = 0i64   s = s + 1i64 }
+    return 0i32
+}
+fn ma_deg(s: i64) -> i64 @export { return MA_DEG[s as u64] }
+fn ma_win_n(s: i64) -> i64 @export { return MA_WN[s as u64] }
+fn ma_win_h(s: i64) -> i64 @export { return MA_WH[s as u64] }
+fn ma_win_k(s: i64) -> i64 @export { return MA_WK[s as u64] }
+
+/* overflow-capped integer power: a^k, or -1 if it would exceed 2^62. */
+fn ma_ipow_capped(a: i64, k: i64) -> i64 @export {
+    if a < 0i64 { return 0i64 - 1i64 }
+    let mut r : i64 = 1i64
+    let mut i : i64 = 0i64
+    let cap : i64 = 4611686018427387904i64      /* 2^62 */
+    while i < k {
+        if a != 0i64 { if r > (cap / a) { return 0i64 - 1i64 } }
+        r = r * a
+        i = i + 1i64
+    }
+    return r
+}
+
+/* floor integer k-th root by binary search (exact: re-multiplied, overflow-capped). */
+fn ma_iroot(m: i64, k: i64) -> i64 @export {
+    if m < 0i64 { return 0i64 - 1i64 }
+    if k < 1i64 { return 0i64 - 1i64 }
+    if m < 2i64 { return m }
+    let mut lo : i64 = 1i64
+    let mut hi : i64 = m
+    if hi > 2097152i64 { hi = 2097152i64 }      /* 2^21: (2^21)^3 = 2^63 -- past any k>=3 need */
+    if k == 1i64 { return m }
+    if k == 2i64 { hi = 3037000499i64 }         /* floor(sqrt(2^63)) */
+    while lo < hi {
+        let mid : i64 = ((lo + hi) + 1i64) / 2i64
+        let p : i64 = ma_ipow_capped(mid, k)
+        let mut fits : i64 = 0i64
+        if p >= 0i64 { if p <= m { fits = 1i64 } }
+        if fits == 1i64 { lo = mid } else { hi = mid - 1i64 }
+    }
+    return lo
+}
+
+/* ---- slot row plumbing ---------------------------------------------------------------------- */
+
+/* write coefficient i of slot s from an i64 value */
+fn ma_row_i64(s: i64, i: i64, v: i64) -> i32 {
+    let r : i64 = (s * 65i64) + i
+    let mut a : i64 = v
+    let mut sg : i64 = 1i64
+    if v == 0i64 { sg = 0i64 }
+    if v < 0i64 { a = 0i64 - v   sg = 0i64 - 1i64 }
+    MA_SGN[r as u64] = sg
+    if sg == 0i64 { MA_CLN[r as u64] = 0i64   return 0i32 }
+    MA_CLN[r as u64] = 1i64
+    MA_LMB[((r * 16i64)) as u64] = a as u64
+    return 0i32
+}
+
+/* i64 view of slot s into dst (MA_F or MA_G).  0 ok, -1 a coefficient is past i64 (NAMED refusal). */
+fn ma_view_i64(s: i64, dstp: u64) -> i32 {
+    let d : *i64 = dstp as *i64
+    let deg : i64 = MA_DEG[s as u64]
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let r : i64 = (s * 65i64) + i
+        let ln : i64 = MA_CLN[r as u64]
+        if ln > 1i64 { return 0i32 - 1i32 }
+        let mut v : i64 = 0i64
+        if ln == 1i64 {
+            let lm : u64 = MA_LMB[(r * 16i64) as u64]
+            if lm > 4611686018427387904u64 { return 0i32 - 1i32 }
+            v = lm as i64
+            let sg : i64 = MA_SGN[r as u64]
+            if sg < 0i64 { v = 0i64 - v }
+        }
+        d[i as u64] = v
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* copy the resultant delivery rows (rs_big_*) into slot s.  -1 = envelope refusal. */
+fn ma_from_rsb(s: i64, deg: i64) -> i32 {
+    if deg < 1i64 { return 0i32 - 1i32 }
+    if deg > MA_MAXD { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let ln : i64 = rs_big_len(i)
+        if ln > MA_MAXL { return 0i32 - 1i32 }
+        let r : i64 = (s * 65i64) + i
+        MA_SGN[r as u64] = rs_big_sgn(i)
+        MA_CLN[r as u64] = ln
+        let mut j : i64 = 0i64
+        while j < ln { MA_LMB[((r * 16i64) + j) as u64] = rs_big_limb(i, j)   j = j + 1i64 }
+        i = i + 1i64
+    }
+    MA_DEG[s as u64] = deg
+    return 0i32
+}
+
+/* load slot s into the sturm_big CUR rows + build the chain.  0 ok, -1 refused. */
+fn ma_load_chain(s: i64) -> i32 {
+    let deg : i64 = MA_DEG[s as u64]
+    if deg < 1i64 { return 0i32 - 1i32 }
+    if sturm2_in_begin(deg) != 0i32 { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let r : i64 = (s * 65i64) + i
+        let ln : i64 = MA_CLN[r as u64]
+        let mut j : i64 = 0i64
+        while j < ln { sturm2_in_limb(i, j, MA_LMB[((r * 16i64) + j) as u64])   j = j + 1i64 }
+        sturm2_in_set(i, MA_SGN[r as u64], ln)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* load slot s into the CUR rows WITHOUT building (the pair-gcd staging shape). */
+fn ma_load_cur(s: i64) -> i32 {
+    let deg : i64 = MA_DEG[s as u64]
+    if deg < 1i64 { return 0i32 - 1i32 }
+    if sturm2_in_begin(deg) != 0i32 { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let r : i64 = (s * 65i64) + i
+        let ln : i64 = MA_CLN[r as u64]
+        let mut j : i64 = 0i64
+        while j < ln { sturm2_in_limb(i, j, MA_LMB[((r * 16i64) + j) as u64])   j = j + 1i64 }
+        sturm2_in_set(i, MA_SGN[r as u64], ln)
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* root count of slot s's poly in its own window (chain rebuilt).  -1 refusal. */
+fn ma_count(s: i64) -> i64 {
+    if ma_load_chain(s) != 0i32 { return 0i64 - 1i64 }
+    let dk : i64 = ma_ipow_capped(2i64, MA_WK[s as u64])
+    if dk < 1i64 { return 0i64 - 1i64 }
+    return root_count2(MA_WN[s as u64], dk, MA_WH[s as u64], dk)
+}
+
+/* one count-preserving bisection step on slot s's window (chain rebuilt inside).  0 ok, -1 refused. */
+fn ma_refine_step(s: i64) -> i32 {
+    if MA_WK[s as u64] >= MA_KMAX { return 0i32 - 1i32 }
+    let wn : i64 = MA_WN[s as u64]
+    let wh : i64 = MA_WH[s as u64]
+    if wn > 2305843009213693952i64 { return 0i32 - 1i32 }
+    if wn < (0i64 - 2305843009213693952i64) { return 0i32 - 1i32 }
+    if wh > 2305843009213693952i64 { return 0i32 - 1i32 }
+    if wh < (0i64 - 2305843009213693952i64) { return 0i32 - 1i32 }
+    let l2 : i64 = wn * 2i64
+    let h2 : i64 = wh * 2i64
+    let mid : i64 = (l2 + h2) / 2i64
+    if mid <= l2 { return 0i32 - 1i32 }
+    if mid >= h2 { return 0i32 - 1i32 }
+    let k2 : i64 = MA_WK[s as u64] + 1i64
+    if ma_load_chain(s) != 0i32 { return 0i32 - 1i32 }
+    let dk : i64 = ma_ipow_capped(2i64, k2)
+    if dk < 1i64 { return 0i32 - 1i32 }
+    let cl : i64 = root_count2(l2, dk, mid, dk)
+    if cl < 0i64 { return 0i32 - 1i32 }
+    MA_WK[s as u64] = k2
+    if cl == 1i64 { MA_WN[s as u64] = l2   MA_WH[s as u64] = mid }
+    else { MA_WN[s as u64] = mid   MA_WH[s as u64] = h2 }
+    return 0i32
+}
+
+/* refine slot s until its window is sign-definite (0 outside).  Returns +1 / -1 the sign, 0 = the
+ * window closed on an exact zero candidate (caller decides), -9 refusal. */
+fn ma_sign_definite(s: i64) -> i64 {
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let wn : i64 = MA_WN[s as u64]
+        let wh : i64 = MA_WH[s as u64]
+        if wn >= 0i64 { return 1i64 }
+        if wh < 0i64 { return 0i64 - 1i64 }
+        if wh == 0i64 {
+            /* alpha <= 0: exactly zero iff c0 == 0 and the window's only root IS 0 */
+            let c0 : i64 = MA_SGN[(s * 65i64) as u64]
+            if c0 != 0i64 { return 0i64 - 1i64 }     /* p(0) != 0 -> alpha < 0 */
+            return 0i64
+        }
+        /* window straddles 0 (wn < 0 <= wh).  THE STRUCTURAL ZERO TEST: if c0 == 0 then 0 is a
+         * root of the poly AND 0 is inside the window, so the ISO invariant (exactly ONE root
+         * here) forces alpha = 0 -- decided without refinement.  (Bisection alone can cycle
+         * (-1,2] -> (-2,1] -> (-1,2] around a zero root forever: midpoints alternate sides of 0
+         * and never land on it -- the gate's C arm caught exactly that spin.) */
+        let c0s : i64 = MA_SGN[(s * 65i64) as u64]
+        if c0s == 0i64 { return 0i64 }
+        if ma_refine_step(s) != 0i32 { return 0i64 - 9i64 }
+        r = r + 1i64
+    }
+    return 0i64 - 9i64
+}
+
+/* ---- leaves ----------------------------------------------------------------------------------- */
+
+/* alpha = p (an integer).  Poly t - p, window (p-1, p].  0 ok, -1 refused. */
+fn ma_leaf_rat(p: i64, s: i64) -> i32 @export {
+    if s < 0i64 { return 0i32 - 1i32 }
+    if s >= MA_SLOTS { return 0i32 - 1i32 }
+    if p > 2305843009213693952i64 { return 0i32 - 1i32 }
+    if p < (0i64 - 2305843009213693952i64) { return 0i32 - 1i32 }
+    ma_row_i64(s, 0i64, 0i64 - p)
+    ma_row_i64(s, 1i64, 1i64)
+    MA_DEG[s as u64] = 1i64
+    MA_WN[s as u64] = p - 1i64   MA_WH[s as u64] = p   MA_WK[s as u64] = 0i64
+    if ma_count(s) != 1i64 { return 0i32 - 1i32 }
+    MA_ISO[s as u64] = 1i64
+    return 0i32
+}
+
+/* alpha = m^(1/k) (m >= 1, 2 <= k <= 6).  Poly t^k - m, window from the exact integer k-th root. */
+fn ma_leaf_root(k: i64, m: i64, s: i64) -> i32 @export {
+    if s < 0i64 { return 0i32 - 1i32 }
+    if s >= MA_SLOTS { return 0i32 - 1i32 }
+    if k < 2i64 { return 0i32 - 1i32 }
+    if k > 6i64 { return 0i32 - 1i32 }
+    if m < 1i64 { return 0i32 - 1i32 }
+    if k > MA_MAXD { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i <= k { ma_row_i64(s, i, 0i64)   i = i + 1i64 }
+    ma_row_i64(s, 0i64, 0i64 - m)
+    ma_row_i64(s, k, 1i64)
+    MA_DEG[s as u64] = k
+    let r : i64 = ma_iroot(m, k)
+    if r < 1i64 { return 0i32 - 1i32 }
+    let p : i64 = ma_ipow_capped(r, k)
+    if p == m { MA_WN[s as u64] = r - 1i64   MA_WH[s as u64] = r }
+    else { MA_WN[s as u64] = r   MA_WH[s as u64] = r + 1i64 }
+    MA_WK[s as u64] = 0i64
+    if ma_count(s) != 1i64 { return 0i32 - 1i32 }
+    MA_ISO[s as u64] = 1i64
+    return 0i32
+}
+
+/* ---- arithmetic ------------------------------------------------------------------------------- */
+
+/* window scale helper: n * 2^sh with overflow refusal (-1 flag via MA_OVF) */
+var MA_OVF : i64
+fn ma_shl_guard(n: i64, sh: i64) -> i64 {
+    let mut v : i64 = n
+    let mut i : i64 = 0i64
+    while i < sh {
+        if v > 2305843009213693952i64 { MA_OVF = 1i64   return 0i64 }
+        if v < (0i64 - 2305843009213693952i64) { MA_OVF = 1i64   return 0i64 }
+        v = v * 2i64
+        i = i + 1i64
+    }
+    return v
+}
+
+/* gamma = alpha_sa + alpha_sb -> slot sd.  0 ok, negative = named refusal. */
+fn ma_sum(sa: i64, sb: i64, sd: i64) -> i32 @export {
+    if MA_ISO[sa as u64] != 1i64 { return 0i32 - 2i32 }
+    if MA_ISO[sb as u64] != 1i64 { return 0i32 - 2i32 }
+    if ma_view_i64(sa, (&MA_F) as u64) != 0i32 { return 0i32 - 4i32 }
+    if ma_view_i64(sb, (&MA_G) as u64) != 0i32 { return 0i32 - 4i32 }
+    let d : i64 = rs_sum_big2((&MA_F) as u64, MA_DEG[sa as u64], (&MA_G) as u64, MA_DEG[sb as u64], (&MA_O) as u64)
+    if d < 1i64 { return 0i32 - 3i32 }
+    if ma_from_rsb(sd, d) != 0i32 { return 0i32 - 3i32 }
+    MA_ISO[sd as u64] = 0i64
+    /* isolate: window = interval sum of the operand windows, refined until count == 1 */
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let mut k : i64 = MA_WK[sa as u64]
+        if MA_WK[sb as u64] > k { k = MA_WK[sb as u64] }
+        MA_OVF = 0i64
+        let lan : i64 = ma_shl_guard(MA_WN[sa as u64], k - MA_WK[sa as u64])
+        let lah : i64 = ma_shl_guard(MA_WH[sa as u64], k - MA_WK[sa as u64])
+        let lbn : i64 = ma_shl_guard(MA_WN[sb as u64], k - MA_WK[sb as u64])
+        let lbh : i64 = ma_shl_guard(MA_WH[sb as u64], k - MA_WK[sb as u64])
+        if MA_OVF != 0i64 { return 0i32 - 1i32 }
+        let wn : i64 = lan + lbn
+        let wh : i64 = lah + lbh
+        MA_WN[sd as u64] = wn   MA_WH[sd as u64] = wh   MA_WK[sd as u64] = k
+        let c : i64 = ma_count(sd)
+        if c == 1i64 { MA_ISO[sd as u64] = 1i64   return 0i32 }
+        if c < 0i64 { return 0i32 - 1i32 }
+        if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+        if ma_refine_step(sb) != 0i32 { return 0i32 - 1i32 }
+        r = r + 1i64
+    }
+    return 0i32 - 1i32
+}
+
+/* strip factors of t (root 0) off slot s -- rs_prod_big2 requires g(0) != 0; gamma != 0 is
+ * certified by the caller (sign-definite window), so stripping never touches gamma's root. */
+fn ma_strip0(s: i64) -> i32 {
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let deg : i64 = MA_DEG[s as u64]
+        if deg < 2i64 { return 0i32 }
+        if MA_SGN[(s * 65i64) as u64] != 0i64 { return 0i32 }
+        /* shift rows down by one */
+        let mut i : i64 = 0i64
+        while i < deg {
+            let rdst : i64 = (s * 65i64) + i
+            let rsrc : i64 = rdst + 1i64
+            MA_SGN[rdst as u64] = MA_SGN[rsrc as u64]
+            MA_CLN[rdst as u64] = MA_CLN[rsrc as u64]
+            let mut j : i64 = 0i64
+            while j < MA_CLN[rsrc as u64] { MA_LMB[((rdst * 16i64) + j) as u64] = MA_LMB[((rsrc * 16i64) + j) as u64]   j = j + 1i64 }
+            i = i + 1i64
+        }
+        MA_DEG[s as u64] = deg - 1i64
+    }
+    return 0i32
+}
+
+/* gamma = alpha_sa * alpha_sb -> slot sd.  Round-1 contract: both operands strictly POSITIVE
+ * (the sweeps' radicals are); negatives compose via ma_neg.  0 ok, negative = named refusal. */
+fn ma_prod(sa: i64, sb: i64, sd: i64) -> i32 @export {
+    if MA_ISO[sa as u64] != 1i64 { return 0i32 - 2i32 }
+    if MA_ISO[sb as u64] != 1i64 { return 0i32 - 2i32 }
+    if ma_sign_definite(sa) != 1i64 { return 0i32 - 5i32 }
+    if ma_sign_definite(sb) != 1i64 { return 0i32 - 5i32 }
+    if ma_strip0(sa) != 0i32 { return 0i32 - 3i32 }
+    if ma_strip0(sb) != 0i32 { return 0i32 - 3i32 }
+    if ma_view_i64(sa, (&MA_F) as u64) != 0i32 { return 0i32 - 4i32 }
+    if ma_view_i64(sb, (&MA_G) as u64) != 0i32 { return 0i32 - 4i32 }
+    let d : i64 = rs_prod_big2((&MA_F) as u64, MA_DEG[sa as u64], (&MA_G) as u64, MA_DEG[sb as u64], (&MA_O) as u64)
+    if d < 1i64 { return 0i32 - 3i32 }
+    if ma_from_rsb(sd, d) != 0i32 { return 0i32 - 3i32 }
+    MA_ISO[sd as u64] = 0i64
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let ka : i64 = MA_WK[sa as u64]
+        let kb : i64 = MA_WK[sb as u64]
+        let lan : i64 = MA_WN[sa as u64]
+        let lah : i64 = MA_WH[sa as u64]
+        let lbn : i64 = MA_WN[sb as u64]
+        let lbh : i64 = MA_WH[sb as u64]
+        /* positive operands: product window (lan*lbn, lah*lbh] at denominator 2^(ka+kb) */
+        let mut ok : i64 = 1i64
+        if lan > 2147483647i64 { ok = 0i64 }
+        if lah > 2147483647i64 { ok = 0i64 }
+        if lbn > 2147483647i64 { ok = 0i64 }
+        if lbh > 2147483647i64 { ok = 0i64 }
+        if (ka + kb) > MA_KMAX { ok = 0i64 }
+        if ok == 0i64 { return 0i32 - 1i32 }
+        MA_WN[sd as u64] = lan * lbn
+        MA_WH[sd as u64] = lah * lbh
+        MA_WK[sd as u64] = ka + kb
+        let c : i64 = ma_count(sd)
+        if c == 1i64 { MA_ISO[sd as u64] = 1i64   return 0i32 }
+        if c < 0i64 { return 0i32 - 1i32 }
+        if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+        if ma_refine_step(sb) != 0i32 { return 0i32 - 1i32 }
+        r = r + 1i64
+    }
+    return 0i32 - 1i32
+}
+
+/* gamma = -alpha_sa -> slot sd (exact mirror: rows copied, odd-index signs flipped).
+ * WINDOW SUBTLETY: negating the half-open (wn, wh] gives -alpha in [-wh, -wn) -- the CLOSED end
+ * flips, and alpha == wh is common (every rational leaf).  The mirror window is therefore the
+ * unit-WIDENED (-wh-1, -wn] (always contains -alpha), count-verified, with the SOURCE refined
+ * whenever the widening sliver admits a second root -- the widening shrinks with 2^-wk, so
+ * distinct roots leave the sliver and the loop terminates. */
+fn ma_neg(sa: i64, sd: i64) -> i32 @export {
+    let deg : i64 = MA_DEG[sa as u64]
+    if deg < 1i64 { return 0i32 - 1i32 }
+    if MA_ISO[sa as u64] != 1i64 { return 0i32 - 2i32 }
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let rs : i64 = (sa * 65i64) + i
+        let rd : i64 = (sd * 65i64) + i
+        let mut sg : i64 = MA_SGN[rs as u64]
+        if (i % 2i64) == 1i64 { sg = 0i64 - sg }
+        MA_SGN[rd as u64] = sg
+        MA_CLN[rd as u64] = MA_CLN[rs as u64]
+        let mut j : i64 = 0i64
+        while j < MA_CLN[rs as u64] { MA_LMB[((rd * 16i64) + j) as u64] = MA_LMB[((rs * 16i64) + j) as u64]   j = j + 1i64 }
+        i = i + 1i64
+    }
+    MA_DEG[sd as u64] = deg
+    MA_ISO[sd as u64] = 0i64
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        MA_WN[sd as u64] = (0i64 - MA_WH[sa as u64]) - 1i64
+        MA_WH[sd as u64] = 0i64 - MA_WN[sa as u64]
+        MA_WK[sd as u64] = MA_WK[sa as u64]
+        let c : i64 = ma_count(sd)
+        if c == 1i64 { MA_ISO[sd as u64] = 1i64   return 0i32 }
+        if c < 0i64 { return 0i32 - 1i32 }
+        if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+        r = r + 1i64
+    }
+    return 0i32 - 1i32
+}
+
+/* gamma = alpha_sa^(1/k) -> slot sd (alpha strictly positive).  Poly p(t^k); window by exact
+ * integer bracketing + power-comparison bisection (all-integer, overflow-guarded). */
+fn ma_kroot(sa: i64, k: i64, sd: i64) -> i32 @export {
+    if k < 2i64 { return 0i32 - 1i32 }
+    if k > 6i64 { return 0i32 - 1i32 }
+    if MA_ISO[sa as u64] != 1i64 { return 0i32 - 2i32 }
+    if ma_sign_definite(sa) != 1i64 { return 0i32 - 5i32 }
+    let dega : i64 = MA_DEG[sa as u64]
+    let degd : i64 = dega * k
+    if degd > MA_MAXD { return 0i32 - 1i32 }
+    /* rows: coefficient i of a lands at i*k of d; the rest zero */
+    let mut i : i64 = 0i64
+    while i <= degd {
+        let rd : i64 = (sd * 65i64) + i
+        MA_SGN[rd as u64] = 0i64   MA_CLN[rd as u64] = 0i64
+        i = i + 1i64
+    }
+    i = 0i64
+    while i <= dega {
+        let rs : i64 = (sa * 65i64) + i
+        let rd : i64 = (sd * 65i64) + (i * k)
+        MA_SGN[rd as u64] = MA_SGN[rs as u64]
+        MA_CLN[rd as u64] = MA_CLN[rs as u64]
+        let mut j : i64 = 0i64
+        while j < MA_CLN[rs as u64] { MA_LMB[((rd * 16i64) + j) as u64] = MA_LMB[((rs * 16i64) + j) as u64]   j = j + 1i64 }
+        i = i + 1i64
+    }
+    MA_DEG[sd as u64] = degd
+    MA_ISO[sd as u64] = 0i64
+    /* integer bracket: alpha in (wn/2^wk, wh/2^wk] => gamma in (floor(ailo^(1/k)), ceil-bound] */
+    let ailo : i64 = MA_WN[sa as u64] / ma_ipow_capped(2i64, MA_WK[sa as u64])
+    let aihi : i64 = (MA_WH[sa as u64] / ma_ipow_capped(2i64, MA_WK[sa as u64])) + 1i64
+    let gl : i64 = ma_iroot(ailo, k)
+    let gh : i64 = ma_iroot(aihi, k) + 1i64
+    if gl < 0i64 { return 0i32 - 1i32 }
+    MA_WN[sd as u64] = gl   MA_WH[sd as u64] = gh   MA_WK[sd as u64] = 0i64
+    /* bisect gamma's window by the EXACT power test gamma > q <=> alpha > q^k (positives),
+     * refining alpha whenever q^k lands inside alpha's window. */
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let c : i64 = ma_count(sd)
+        if c == 1i64 { MA_ISO[sd as u64] = 1i64   return 0i32 }
+        if c < 0i64 { return 0i32 - 1i32 }
+        /* midpoint q = m/2^(kq+1) */
+        let wn : i64 = MA_WN[sd as u64]
+        let wh : i64 = MA_WH[sd as u64]
+        let kq : i64 = MA_WK[sd as u64]
+        if kq >= 20i64 { return 0i32 - 1i32 }
+        let l2 : i64 = wn * 2i64
+        let h2 : i64 = wh * 2i64
+        let m : i64 = (l2 + h2) / 2i64
+        if m <= l2 { return 0i32 - 1i32 }
+        if m >= h2 { return 0i32 - 1i32 }
+        let mk : i64 = ma_ipow_capped(m, k)
+        if mk < 0i64 { return 0i32 - 1i32 }
+        /* q^k = mk / 2^(k*(kq+1)); alpha window (an/2^ak, ah/2^ak]. gamma > q <=> alpha > q^k. */
+        let mut decided : i64 = 0i64
+        let mut inner : i64 = 0i64
+        while inner < MA_ROUNDS {
+            if decided == 1i64 { inner = MA_ROUNDS } else {
+                let ak : i64 = MA_WK[sa as u64]
+                let an : i64 = MA_WN[sa as u64]
+                let ah : i64 = MA_WH[sa as u64]
+                /* compare q^k vs an/2^ak and ah/2^ak by cross-scaling to denominator 2^(k*(kq+1)+ak) */
+                MA_OVF = 0i64
+                let qs : i64 = ma_shl_guard(mk, ak)
+                let ans : i64 = ma_shl_guard(an, k * (kq + 1i64))
+                let ahs : i64 = ma_shl_guard(ah, k * (kq + 1i64))
+                if MA_OVF != 0i64 { return 0i32 - 1i32 }
+                if ans >= qs {
+                    /* alpha > an/2^ak >= q^k -> gamma > q: keep upper half */
+                    MA_WN[sd as u64] = m   MA_WH[sd as u64] = h2   MA_WK[sd as u64] = kq + 1i64
+                    decided = 1i64
+                } else { if ahs <= qs {
+                    /* alpha <= ah/2^ak <= q^k -> gamma <= q: keep lower half */
+                    MA_WN[sd as u64] = l2   MA_WH[sd as u64] = m   MA_WK[sd as u64] = kq + 1i64
+                    decided = 1i64
+                } else {
+                    if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+                } }
+            }
+            inner = inner + 1i64
+        }
+        if decided == 0i64 { return 0i32 - 1i32 }
+        r = r + 1i64
+    }
+    return 0i32 - 1i32
+}
+
+/* ---- decision --------------------------------------------------------------------------------- */
+
+/* window overlap of slots a,b at a common denominator -> MA_OVN/OVH/OVK.  1 nonempty, 0 empty, -1 ovf. */
+var MA_OVN : i64   var MA_OVH : i64   var MA_OVK : i64
+fn ma_overlap(a: i64, b: i64) -> i64 {
+    let mut k : i64 = MA_WK[a as u64]
+    if MA_WK[b as u64] > k { k = MA_WK[b as u64] }
+    MA_OVF = 0i64
+    let lan : i64 = ma_shl_guard(MA_WN[a as u64], k - MA_WK[a as u64])
+    let lah : i64 = ma_shl_guard(MA_WH[a as u64], k - MA_WK[a as u64])
+    let lbn : i64 = ma_shl_guard(MA_WN[b as u64], k - MA_WK[b as u64])
+    let lbh : i64 = ma_shl_guard(MA_WH[b as u64], k - MA_WK[b as u64])
+    if MA_OVF != 0i64 { return 0i64 - 1i64 }
+    let mut n : i64 = lan
+    if lbn > n { n = lbn }
+    let mut h : i64 = lah
+    if lbh < h { h = lbh }
+    if n >= h { return 0i64 }
+    MA_OVN = n   MA_OVH = h   MA_OVK = k
+    return 1i64
+}
+
+/* EQUALITY: 1 equal, 0 distinct, -1 refused.  TOTAL on isolated slots: pair-gcd through the
+ * content-reduced chain; a gcd root in the window overlap is forced to be each side's unique root. */
+fn ma_equal(a: i64, b: i64) -> i64 @export {
+    if MA_ISO[a as u64] != 1i64 { return 0i64 - 1i64 }
+    if MA_ISO[b as u64] != 1i64 { return 0i64 - 1i64 }
+    let ov : i64 = ma_overlap(a, b)
+    if ov < 0i64 { return 0i64 - 1i64 }
+    if ov == 0i64 { return 0i64 }
+    if ma_load_cur(a) != 0i32 { return 0i64 - 1i64 }
+    if sturm2_pair_stash() != 0i32 { return 0i64 - 1i64 }
+    if ma_load_cur(b) != 0i32 { return 0i64 - 1i64 }
+    let g : i64 = sturm2_pair_gcd()
+    if g < 0i64 { return 0i64 - 1i64 }
+    if g == 0i64 { return 0i64 }
+    if sturm2_build_cur() < 0i64 { return 0i64 - 1i64 }
+    let dk : i64 = ma_ipow_capped(2i64, MA_OVK)
+    if dk < 1i64 { return 0i64 - 1i64 }
+    let c : i64 = root_count2(MA_OVN, dk, MA_OVH, dk)
+    if c < 0i64 { return 0i64 - 1i64 }
+    if c >= 1i64 { return 1i64 }
+    return 0i64
+}
+
+/* ORDER: 0 equal, 1 a < b, 2 a > b, -1 refused.  Equality decided FIRST (total), so distinct
+ * operands separate under count-preserving refinement. */
+fn ma_cmp(a: i64, b: i64) -> i64 @export {
+    let e : i64 = ma_equal(a, b)
+    if e < 0i64 { return 0i64 - 1i64 }
+    if e == 1i64 { return 0i64 }
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let ov : i64 = ma_overlap(a, b)
+        if ov < 0i64 { return 0i64 - 1i64 }
+        if ov == 0i64 {
+            /* disjoint: compare at the common denominator */
+            let mut k : i64 = MA_WK[a as u64]
+            if MA_WK[b as u64] > k { k = MA_WK[b as u64] }
+            MA_OVF = 0i64
+            let lah : i64 = ma_shl_guard(MA_WH[a as u64], k - MA_WK[a as u64])
+            let lbn : i64 = ma_shl_guard(MA_WN[b as u64], k - MA_WK[b as u64])
+            if MA_OVF != 0i64 { return 0i64 - 1i64 }
+            if lah <= lbn { return 1i64 }
+            return 2i64
+        }
+        if ma_refine_step(a) != 0i32 { return 0i64 - 1i64 }
+        if ma_refine_step(b) != 0i32 { return 0i64 - 1i64 }
+        r = r + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+/* SIGN: -1 / 0 / +1, or -9 refused.  The exact-zero case is decided by pair-gcd against t. */
+fn ma_sign(s: i64) -> i64 @export {
+    if MA_ISO[s as u64] != 1i64 { return 0i64 - 9i64 }
+    let d : i64 = ma_sign_definite(s)
+    if d == 1i64 { return 1i64 }
+    if d == (0i64 - 1i64) { return 0i64 - 1i64 }
+    if d != 0i64 { return 0i64 - 9i64 }
+    /* zero candidate: c0 == 0 and window's root may be 0 -- alpha == 0 iff its poly shares the
+     * root 0 with t inside the window; c0 == 0 already says t | p, and 0 in (wn/2^wk, 0] with
+     * count 1 (the ISO invariant) forces alpha = 0. */
+    return 0i64
+}

@@ -1,0 +1,113 @@
+/* 2700_mathesis_alg_judge.iii -- GATE for the REAL-ALGEBRAIC JUDGE (campaign Rho, mathesis's second
+ * judge): equality / order / sign of real algebraic numbers decided EXACTLY through the seven-rung
+ * engines (resultant arithmetic closure + sturm_big pair-gcd door), never approximated.
+ *
+ * NEGATIVE ARMS FIRST (the R4 discipline):
+ * R -- the FALSE identity refuted: sqrt2 + sqrt3 =? sqrt10 -- the judge says DISTINCT (0), and
+ *      orders it: sqrt2+sqrt3 < sqrt10 (3.1462.. < 3.1622..), BOTH directions (antisymmetry).
+ * E -- envelope/protocol refusals, each NAMED: k > 6 refused; m < 1 refused; composing an
+ *      UN-isolated slot refused (-2): the ISO invariant is load-bearing, not decorative.
+ *
+ * POSITIVE ARMS (every verdict a theorem):
+ * A -- sqrt2 THREE WAYS EQUAL: t^2-2 vs 8^(1/6) (deg 2 vs deg 6 pair-gcd) and
+ *      2*sqrt2 vs sqrt8 (a CONSTRUCTED product vs a leaf).
+ * B -- cbrt2 * cbrt4 == 2: a degree-9 constructed product judged EQUAL to the rational 2
+ *      (the pair door across degrees; (t-2) divides the norm form).
+ * C -- SIGN including the EXACT ZERO: sqrt2 - sqrt2 == 0 through the CONSTRUCTED sum (the zero
+ *      problem answered structurally: c0 == 0 + the isolated window closes on 0);
+ *      sqrt3 - sqrt2 POSITIVE; sqrt2 - sqrt3 NEGATIVE.
+ *
+ * exit 99 pass; 10 R-refute; 11 R-order; 12 E; 13 A; 14 B; 15 C. */
+module corpus_2700_mathesis_alg_judge
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ma_reset() -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_rat(p: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_root(k: i64, m: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_sum(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_prod(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_neg(sa: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_equal(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_cmp(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_sign(s: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_deg(s: i64) -> i64 from "mathesis_alg.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* arm scratch at module scope (the cg_r3 64-local-slot ceiling) */
+var RQ : i64   var RC1 : i64   var RC2 : i64
+var EA : i32   var EB : i32   var EC : i32
+var AQ1 : i64   var AQ2 : i64
+var BQ : i64   var BD : i64
+var CZ : i64   var CP : i64   var CN : i64
+
+fn main() -> u64 {
+    /* == R: the FALSE identity refuted first, then ordered both ways. */
+    ma_reset()
+    if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 10u64 }     /* sqrt2  -> slot 0 */
+    if ma_leaf_root(2i64, 3i64, 1i64) != 0i32 { return 10u64 }     /* sqrt3  -> slot 1 */
+    if ma_sum(0i64, 1i64, 2i64) != 0i32 { return 10u64 }           /* sqrt2+sqrt3 -> slot 2 (deg 4) */
+    if ma_leaf_root(2i64, 10i64, 3i64) != 0i32 { return 10u64 }    /* sqrt10 -> slot 3 */
+    RQ = ma_equal(2i64, 3i64)
+    RC1 = ma_cmp(2i64, 3i64)
+    RC2 = ma_cmp(3i64, 2i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(RQ) sp() e_i64(RC1) sp() e_i64(RC2) nl()   /* "R: 0 1 2" */
+    if RQ != 0i64 { return 10u64 }
+    if RC1 != 1i64 { return 11u64 }
+    if RC2 != 2i64 { return 11u64 }
+
+    /* == E: envelope + protocol refusals, each NAMED. */
+    EA = ma_leaf_root(7i64, 2i64, 4i64)                            /* k > 6: refused */
+    EB = ma_leaf_root(2i64, 0i64, 4i64)                            /* m < 1: refused */
+    ma_reset()
+    EC = ma_sum(0i64, 1i64, 2i64)                                  /* un-isolated slots: refused -2 */
+    putchar(69i32) putchar(58i32) sp() e_i64(EA as i64) sp() e_i64(EB as i64) sp() e_i64(EC as i64) nl()   /* "E: -1 -1 -2" */
+    if EA != (0i32 - 1i32) { return 12u64 }
+    if EB != (0i32 - 1i32) { return 12u64 }
+    if EC != (0i32 - 2i32) { return 12u64 }
+
+    /* == A: sqrt2 three ways EQUAL. */
+    ma_reset()
+    if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 13u64 }     /* sqrt2 as t^2-2 */
+    if ma_leaf_root(6i64, 8i64, 1i64) != 0i32 { return 13u64 }     /* 8^(1/6) = sqrt2, deg 6 */
+    AQ1 = ma_equal(0i64, 1i64)
+    if ma_leaf_rat(2i64, 2i64) != 0i32 { return 13u64 }
+    if ma_prod(2i64, 0i64, 3i64) != 0i32 { return 13u64 }          /* 2*sqrt2 (constructed, deg 2) */
+    if ma_leaf_root(2i64, 8i64, 4i64) != 0i32 { return 13u64 }     /* sqrt8 */
+    AQ2 = ma_equal(3i64, 4i64)
+    putchar(65i32) putchar(58i32) sp() e_i64(AQ1) sp() e_i64(AQ2) nl()                  /* "A: 1 1" */
+    if AQ1 != 1i64 { return 13u64 }
+    if AQ2 != 1i64 { return 13u64 }
+
+    /* == B: cbrt2 * cbrt4 == 2 (degree-9 product vs the rational). */
+    ma_reset()
+    if ma_leaf_root(3i64, 2i64, 0i64) != 0i32 { return 14u64 }
+    if ma_leaf_root(3i64, 4i64, 1i64) != 0i32 { return 14u64 }
+    if ma_prod(0i64, 1i64, 2i64) != 0i32 { return 14u64 }
+    BD = ma_deg(2i64)
+    if ma_leaf_rat(2i64, 3i64) != 0i32 { return 14u64 }
+    BQ = ma_equal(2i64, 3i64)
+    putchar(66i32) putchar(58i32) sp() e_i64(BD) sp() e_i64(BQ) nl()                    /* "B: 9 1" */
+    if BD != 9i64 { return 14u64 }
+    if BQ != 1i64 { return 14u64 }
+
+    /* == C: sign rows including the EXACT ZERO through a constructed sum. */
+    ma_reset()
+    if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 15u64 }
+    if ma_neg(0i64, 1i64) != 0i32 { return 15u64 }                 /* -sqrt2 */
+    if ma_sum(0i64, 1i64, 2i64) != 0i32 { return 15u64 }           /* sqrt2 - sqrt2 == 0 */
+    CZ = ma_sign(2i64)
+    if ma_leaf_root(2i64, 3i64, 3i64) != 0i32 { return 15u64 }
+    if ma_sum(3i64, 1i64, 4i64) != 0i32 { return 15u64 }           /* sqrt3 - sqrt2 > 0 */
+    CP = ma_sign(4i64)
+    if ma_neg(3i64, 5i64) != 0i32 { return 15u64 }
+    if ma_sum(0i64, 5i64, 6i64) != 0i32 { return 15u64 }           /* sqrt2 - sqrt3 < 0 */
+    CN = ma_sign(6i64)
+    putchar(67i32) putchar(58i32) sp() e_i64(CZ) sp() e_i64(CP) sp() e_i64(CN) nl()     /* "C: 0 1 -1" */
+    if CZ != 0i64 { return 15u64 }
+    if CP != 1i64 { return 15u64 }
+    if CN != (0i64 - 1i64) { return 15u64 }
+
+    return 99u64
+}

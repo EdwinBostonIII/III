@@ -1,0 +1,475 @@
+/* aether/mathesis_radical.iii -- THE RADICAL SYNTHESIZER (campaign Rho, the mathesis pattern in the
+ * judge's second universe: enumerate a DECLARED space, filter by PROOF, admit content-addressed).
+ *
+ * No candidate is ever supplied.  Two declared families (bounds PRINTED by the driver, never silent):
+ *
+ *  CLASS D -- GENERALIZED DENESTING sqrt(a + b*sqrt(c)) = sqrt(m) + sqrt(n):
+ *      the telescope (mathesis_telescope) owns the b == 2 slice; this engine sweeps b >= 1.
+ *      THE FORCED SYSTEM (every step integer-decidable, the whole proof machine-checked):
+ *      c NONSQUARE (isqrt re-square) => sqrt(c) irrational => matching rational parts forces
+ *      m+n = a and 4mn = b^2*c  [suppose sqrt(a+b sqrt c) = sqrt m + sqrt n; then
+ *      2 sqrt(mn) = b sqrt(c) + r with r = a-(m+n) integer; squaring, 2*r*b*sqrt(c) is an
+ *      integer, so r*b = 0, so r = 0].  Existence <=> disc = a^2 - b^2*c is a perfect SQUARE s^2
+ *      with a == s (mod 2) and n = (a-s)/2 >= 1.  A non-satisfying (a,b,c) is therefore a
+ *      NONEXISTENCE THEOREM (no integer pair), with the failing clause as the certificate.
+ *      Every FOUND row is DUAL-VERIFIED: the integer system AND the real-algebraic judge
+ *      (construct both sides through resultant + Sturm, decide by pair-gcd) must agree.
+ *      NOVELTY (R3, computed): b == 2 rows are RE-derivations of the telescope's class -- the
+ *      standing organ is consulted (mxt_denest must agree) and the row is marked novel = 0,
+ *      REFUSED from the discovery count.  b != 2 rows are outside every standing organ: novel = 1.
+ *
+ *  CLASS F -- CUBE IDENTITIES (u + v*cbrt2 + w*cbrt4)^3 = e*cbrt2 + f:
+ *      LHS box e in 1..EMAX, f in -FMAX..FMAX with e*cbrt2 + f > 0 decided EXACTLY by cubing
+ *      (2e^3 + f^3 > 0); RHS box (u,v,w) in [-UMAX..UMAX]^3.  A SOUND integer-window prefilter
+ *      (dyadic brackets of cbrt2/cbrt4 from the exact integer cube root; the RHS envelope cubed)
+ *      discards certainly-unequal pairs; every survivor is JUDGED: gamma_L = (e*cbrt2+f)^(1/3)
+ *      (degree 9 by t -> t^3 substitution) vs gamma_R (degree <= 9 by sum/product composition),
+ *      equality by pair-gcd.  EQUAL survivors are the machine-found identities -- Ramanujan's
+ *      (u,v,w; e,f) = (1,-1,1; 9,-9) [cbrt(cbrt2 - 1) denesting, integer-radicand form] lives in
+ *      this box and must be re-found by pure enumeration.  Judged-DISTINCT survivors are recorded
+ *      too (each a proven refutation).
+ *
+ *  THE MX04 DOOR -- the domain descriptor class (magic "MX04"): 8-word canonical descriptors
+ *      (class 1 denest-found / 2 denest-nonexist / 3 cube-identity / 4 cube-refuted), validity
+ *      BEFORE hashing (malformed gets NO id), theorem_id = SHA-256(64-byte LE serialisation),
+ *      chain H_i = Keccak(H_{i-1} || id_i) from a RESERVED genesis descriptor -- the
+ *      mathesis_admit discipline instantiated for the algebraic domain (the bit-vector door's
+ *      grammar is bit-vector-specific BY DESIGN; a new domain gets its own grammar on the same
+ *      cad spine).  PROVENANCE word: 1 = MACHINE (the only admissible value here -- this organ
+ *      never takes a human candidate).
+ *
+ * Gates: corpus/2701 (denesting sweep), 2702 (cube sweep + Ramanujan re-found), 2703 (the door +
+ * chain).  Driver: sovir/mathesis_radical_main.iii -> DOCS/MATHESIS-RADICAL-ROUND1.log.
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_alg (the judge) + mathesis_telescope
+ * (the standing-library novelty oracle) + cad (ids) only.
+ */
+module aether_mathesis_radical
+
+extern @abi(c-msvc-x64) fn ma_reset() -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_rat(p: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_root(k: i64, m: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_sum(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_prod(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_neg(sa: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_kroot(sa: i64, k: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_equal(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_iroot(m: i64, k: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn mxt_denest(a: u64, b: u64) -> u32 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_m() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn mxt_n() -> u64 from "mathesis_telescope.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+
+const MXR_MAGIC : u64 = 0x4D583034u64      /* "MX04" -- the algebraic-domain descriptor tag */
+const MXR_MAXF  : i64 = 512i64             /* denest found-row store */
+const MXR_MAXC  : i64 = 256i64             /* cube survivor store */
+const MXR_BIAS  : i64 = 512i64             /* signed descriptor params carried as v + 512 */
+
+/* denest rows: (a,b,c,m,n,novel) */
+var MRF_A : [i64; 512]   var MRF_B : [i64; 512]   var MRF_C : [i64; 512]
+var MRF_M : [i64; 512]   var MRF_N : [i64; 512]   var MRF_NV : [i64; 512]
+var MRF_CNT : i64
+var MRD_ND : i64          /* nonexistence rows classified */
+var MRD_SK : i64          /* c-square rows skipped (out of class, not theorems) */
+var MRD_M0 : i64   var MRD_N0 : i64   var MRD_RSN : i64
+
+/* cube rows: (e,f,u,v,w,verdict 1=EQUAL 0=DISTINCT) */
+var MRC_E : [i64; 256]   var MRC_F : [i64; 256]   var MRC_U : [i64; 256]
+var MRC_V : [i64; 256]   var MRC_W : [i64; 256]   var MRC_Q : [i64; 256]
+var MRC_CNT : i64
+var MRC_EQ : i64          /* judged-EQUAL count (the identities) */
+var MRC_TESTED : i64      /* pairs the prefilter passed to the judge */
+var MRC_BOX : i64         /* pairs enumerated */
+
+/* ---- CLASS D: the forced integer system ------------------------------------------------------- */
+
+fn mrd_issq(v: i64) -> i64 @export {
+    if v < 0i64 { return 0i64 }
+    let r : i64 = ma_iroot(v, 2i64)
+    if (r * r) == v { return 1i64 }
+    return 0i64
+}
+
+/* classify one (a,b,c): 1 DENESTS (MRD_M0/N0 set), 0 NONEXISTENT (MRD_RSN = 2 disc<0, 3 disc
+ * nonsquare, 4 parity, 5 n<1), 2 out-of-class (c a perfect square), -1 envelope. */
+fn mrd_denest(a: i64, b: i64, c: i64) -> i64 @export {
+    if a < 2i64 { return 0i64 - 1i64 }
+    if b < 1i64 { return 0i64 - 1i64 }
+    if c < 2i64 { return 0i64 - 1i64 }
+    if a > 4096i64 { return 0i64 - 1i64 }
+    if b > 64i64 { return 0i64 - 1i64 }
+    if c > 4096i64 { return 0i64 - 1i64 }
+    if mrd_issq(c) == 1i64 { return 2i64 }
+    let bbc : i64 = b * b * c
+    let disc : i64 = (a * a) - bbc
+    if disc < 0i64 { MRD_RSN = 2i64   return 0i64 }
+    if mrd_issq(disc) != 1i64 { MRD_RSN = 3i64   return 0i64 }
+    let s : i64 = ma_iroot(disc, 2i64)
+    if ((a + s) % 2i64) != 0i64 { MRD_RSN = 4i64   return 0i64 }
+    let m : i64 = (a + s) / 2i64
+    let n : i64 = (a - s) / 2i64
+    if n < 1i64 { MRD_RSN = 5i64   return 0i64 }
+    MRD_M0 = m   MRD_N0 = n
+    return 1i64
+}
+fn mrd_m() -> i64 @export { return MRD_M0 }
+fn mrd_n() -> i64 @export { return MRD_N0 }
+fn mrd_reason() -> i64 @export { return MRD_RSN }
+
+/* judge-verify one FOUND row: sqrt(a + b*sqrt(c)) == sqrt(m) + sqrt(n), through the engines.
+ * 1 verified, 0 the judge DISAGREES (a defect find -- the sweep aborts), -1 judge refusal. */
+fn mrd_verify_judge(a: i64, b: i64, c: i64, m: i64, n: i64) -> i64 @export {
+    ma_reset()
+    if ma_leaf_rat(a, 0i64) != 0i32 { return 0i64 - 1i64 }
+    if ma_leaf_rat(b, 1i64) != 0i32 { return 0i64 - 1i64 }
+    if ma_leaf_root(2i64, c, 2i64) != 0i32 { return 0i64 - 1i64 }
+    if ma_prod(1i64, 2i64, 3i64) != 0i32 { return 0i64 - 1i64 }        /* b*sqrt(c) */
+    if ma_sum(0i64, 3i64, 4i64) != 0i32 { return 0i64 - 1i64 }         /* a + b*sqrt(c), deg 2 */
+    if ma_kroot(4i64, 2i64, 5i64) != 0i32 { return 0i64 - 1i64 }       /* the nested radical, deg 4 */
+    if ma_leaf_root(2i64, m, 6i64) != 0i32 { return 0i64 - 1i64 }
+    if ma_leaf_root(2i64, n, 1i64) != 0i32 { return 0i64 - 1i64 }
+    if ma_sum(6i64, 1i64, 7i64) != 0i32 { return 0i64 - 1i64 }         /* sqrt m + sqrt n, deg 4 */
+    let q : i64 = ma_equal(5i64, 7i64)
+    return q
+}
+
+fn mrd_found() -> i64 @export { return MRF_CNT }
+fn mrd_nonde() -> i64 @export { return MRD_ND }
+fn mrd_skip() -> i64 @export { return MRD_SK }
+fn mrd_row_a(i: i64) -> i64 @export { return MRF_A[i as u64] }
+fn mrd_row_b(i: i64) -> i64 @export { return MRF_B[i as u64] }
+fn mrd_row_c(i: i64) -> i64 @export { return MRF_C[i as u64] }
+fn mrd_row_m(i: i64) -> i64 @export { return MRF_M[i as u64] }
+fn mrd_row_n(i: i64) -> i64 @export { return MRF_N[i as u64] }
+fn mrd_row_novel(i: i64) -> i64 @export { return MRF_NV[i as u64] }
+
+/* THE SWEEP.  Every found row: forced-system solution + JUDGE agreement + (b == 2) the standing
+ * telescope agrees and the row is marked novel = 0.  Returns found count, or -2 dual-verification
+ * DISAGREEMENT (a defect: two independent engines split), -3 store overflow, -1 envelope. */
+fn mrd_sweep(amax: i64, bmax: i64, cmax: i64) -> i64 @export {
+    if amax > 128i64 { return 0i64 - 1i64 }
+    if bmax > 16i64 { return 0i64 - 1i64 }
+    if cmax > 128i64 { return 0i64 - 1i64 }
+    MRF_CNT = 0i64   MRD_ND = 0i64   MRD_SK = 0i64
+    let mut a : i64 = 2i64
+    while a <= amax {
+        let mut b : i64 = 1i64
+        while b <= bmax {
+            let mut c : i64 = 2i64
+            while c <= cmax {
+                let v : i64 = mrd_denest(a, b, c)
+                if v == 2i64 { MRD_SK = MRD_SK + 1i64 }
+                if v == 0i64 { MRD_ND = MRD_ND + 1i64 }
+                if v == 1i64 {
+                    if MRF_CNT >= MXR_MAXF { return 0i64 - 3i64 }
+                    let m : i64 = MRD_M0
+                    let n : i64 = MRD_N0
+                    let jq : i64 = mrd_verify_judge(a, b, c, m, n)
+                    if jq != 1i64 { return 0i64 - 2i64 }
+                    let mut nv : i64 = 1i64
+                    if b == 2i64 {
+                        /* the telescope's class: beta = b^2*c/4 = c.  Consult the standing organ. */
+                        let tv : u32 = mxt_denest(a as u64, c as u64)
+                        if tv != 1u32 { return 0i64 - 2i64 }
+                        if (mxt_m() as i64) != m { return 0i64 - 2i64 }
+                        if (mxt_n() as i64) != n { return 0i64 - 2i64 }
+                        nv = 0i64                      /* rediscovery: REFUSED from the ratchet */
+                    }
+                    MRF_A[MRF_CNT as u64] = a   MRF_B[MRF_CNT as u64] = b   MRF_C[MRF_CNT as u64] = c
+                    MRF_M[MRF_CNT as u64] = m   MRF_N[MRF_CNT as u64] = n   MRF_NV[MRF_CNT as u64] = nv
+                    MRF_CNT = MRF_CNT + 1i64
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return MRF_CNT
+}
+
+/* ---- CLASS F: the cube-identity box ----------------------------------------------------------- */
+
+/* dyadic brackets of cbrt2 and cbrt4 at denominator 2^P (exact integer cube roots). */
+var MRC_W2L : i64   var MRC_W2H : i64   var MRC_W4L : i64   var MRC_W4H : i64
+fn mrc_brackets(p: i64) -> i32 {
+    /* cbrt(m): l = floor((m * 2^(3P))^(1/3)) => cbrt(m) in (l/2^P, (l+1)/2^P] */
+    let sh : i64 = 3i64 * p
+    let mut m2 : i64 = 2i64
+    let mut i : i64 = 0i64
+    while i < sh { m2 = m2 * 2i64   i = i + 1i64 }
+    let l2 : i64 = ma_iroot(m2, 3i64)
+    MRC_W2L = l2   MRC_W2H = l2 + 1i64
+    let m4 : i64 = m2 * 2i64
+    let l4 : i64 = ma_iroot(m4, 3i64)
+    MRC_W4L = l4   MRC_W4H = l4 + 1i64
+    return 0i32
+}
+
+/* signed-scalar interval product helper: v * (l, h] as a SOUND envelope [lo, hi]. */
+var MRC_TL : i64   var MRC_TH : i64
+fn mrc_scale(v: i64, l: i64, h: i64) -> i32 {
+    if v >= 0i64 { MRC_TL = v * l   MRC_TH = v * h   return 0i32 }
+    MRC_TL = v * h   MRC_TH = v * l
+    return 0i32
+}
+
+fn mrc_count() -> i64 @export { return MRC_CNT }
+fn mrc_equal_count() -> i64 @export { return MRC_EQ }
+fn mrc_tested() -> i64 @export { return MRC_TESTED }
+fn mrc_box() -> i64 @export { return MRC_BOX }
+fn mrc_row_e(i: i64) -> i64 @export { return MRC_E[i as u64] }
+fn mrc_row_f(i: i64) -> i64 @export { return MRC_F[i as u64] }
+fn mrc_row_u(i: i64) -> i64 @export { return MRC_U[i as u64] }
+fn mrc_row_v(i: i64) -> i64 @export { return MRC_V[i as u64] }
+fn mrc_row_w(i: i64) -> i64 @export { return MRC_W[i as u64] }
+fn mrc_row_q(i: i64) -> i64 @export { return MRC_Q[i as u64] }
+
+/* build gamma_R = u + v*cbrt2 + w*cbrt4 in the judge (slot 7).  1 built, 0 refusal. */
+fn mrc_build_rhs(u: i64, v: i64, w: i64) -> i64 @export {
+    ma_reset()
+    if ma_leaf_rat(u, 0i64) != 0i32 { return 0i64 }
+    let mut acc : i64 = 0i64                                   /* slot of the accumulator */
+    if v != 0i64 {
+        let mut av : i64 = v
+        if av < 0i64 { av = 0i64 - av }
+        if ma_leaf_rat(av, 1i64) != 0i32 { return 0i64 }
+        if ma_leaf_root(3i64, 2i64, 2i64) != 0i32 { return 0i64 }
+        if ma_prod(1i64, 2i64, 3i64) != 0i32 { return 0i64 }
+        let mut t : i64 = 3i64
+        if v < 0i64 { if ma_neg(3i64, 4i64) != 0i32 { return 0i64 }   t = 4i64 }
+        if ma_sum(acc, t, 5i64) != 0i32 { return 0i64 }
+        acc = 5i64
+    }
+    if w != 0i64 {
+        let mut aw : i64 = w
+        if aw < 0i64 { aw = 0i64 - aw }
+        if ma_leaf_rat(aw, 1i64) != 0i32 { return 0i64 }
+        if ma_leaf_root(3i64, 4i64, 2i64) != 0i32 { return 0i64 }
+        if ma_prod(1i64, 2i64, 3i64) != 0i32 { return 0i64 }
+        let mut t2 : i64 = 3i64
+        if w < 0i64 { if ma_neg(3i64, 4i64) != 0i32 { return 0i64 }   t2 = 4i64 }
+        if ma_sum(acc, t2, 6i64) != 0i32 { return 0i64 }
+        acc = 6i64
+    }
+    /* land the result in slot 7 exactly (sum with rational 0 relocates without changing the number) */
+    if acc != 7i64 {
+        if ma_leaf_rat(0i64, 1i64) != 0i32 { return 0i64 }
+        if ma_sum(acc, 1i64, 7i64) != 0i32 { return 0i64 }
+    }
+    return 1i64
+}
+
+/* build gamma_L = (e*cbrt2 + f)^(1/3) in the judge (slot 6).  Positivity of the radicand is the
+ * caller's exact filter (2e^3 + f^3 > 0).  1 built, 0 refusal. */
+fn mrc_build_lhs(e: i64, f: i64) -> i64 @export {
+    if ma_leaf_rat(e, 0i64) != 0i32 { return 0i64 }
+    if ma_leaf_root(3i64, 2i64, 1i64) != 0i32 { return 0i64 }
+    if ma_prod(0i64, 1i64, 2i64) != 0i32 { return 0i64 }       /* e*cbrt2 (e >= 1) */
+    if ma_leaf_rat(f, 3i64) != 0i32 { return 0i64 }
+    if ma_sum(2i64, 3i64, 4i64) != 0i32 { return 0i64 }        /* e*cbrt2 + f, deg 3 */
+    if ma_kroot(4i64, 3i64, 6i64) != 0i32 { return 0i64 }      /* deg 9 */
+    return 1i64
+}
+
+/* THE SWEEP.  Prefilter: delta = e*cbrt2+f window vs the CUBE of gamma_R's envelope -- certainly-
+ * disjoint pairs skipped SOUNDLY; survivors judged exactly.  Returns the EQUAL count, -2 a judge
+ * refusal on a survivor (nothing is silently dropped), -3 store overflow, -1 envelope. */
+fn mrc_sweep(emax: i64, fmax: i64, umax: i64) -> i64 @export {
+    if emax > 16i64 { return 0i64 - 1i64 }
+    if fmax > 16i64 { return 0i64 - 1i64 }
+    if umax > 4i64 { return 0i64 - 1i64 }
+    MRC_CNT = 0i64   MRC_EQ = 0i64   MRC_TESTED = 0i64   MRC_BOX = 0i64
+    let pp : i64 = 14i64                                       /* 2^-14 dyadic brackets */
+    let pden : i64 = 16384i64                                  /* 2^14 */
+    let pden2 : i64 = 268435456i64                             /* 2^28 = 2^(2*14) */
+    mrc_brackets(pp)
+    let mut e : i64 = 1i64
+    while e <= emax {
+        let mut f : i64 = 0i64 - fmax
+        while f <= fmax {
+            /* delta = e*cbrt2 + f > 0 exactly: 2e^3 + f^3 > 0 (cubing is monotone) */
+            let dpos : i64 = (2i64 * e * e * e) + (f * f * f)
+            if dpos > 0i64 {
+                /* delta window at 2^-P: (e*W2L + f*2^P, e*W2H + f*2^P] */
+                let dl : i64 = (e * MRC_W2L) + (f * pden)
+                let dh : i64 = (e * MRC_W2H) + (f * pden)
+                let mut u : i64 = 0i64 - umax
+                while u <= umax {
+                    let mut v : i64 = 0i64 - umax
+                    while v <= umax {
+                        let mut w : i64 = 0i64 - umax
+                        while w <= umax {
+                            MRC_BOX = MRC_BOX + 1i64
+                            /* gamma_R envelope [rl, rh] at 2^-P */
+                            let mut rl : i64 = u * pden
+                            let mut rh : i64 = u * pden
+                            mrc_scale(v, MRC_W2L, MRC_W2H)
+                            rl = rl + MRC_TL   rh = rh + MRC_TH
+                            mrc_scale(w, MRC_W4L, MRC_W4H)
+                            rl = rl + MRC_TL   rh = rh + MRC_TH
+                            /* cubing is monotone on ALL reals, so [rl^3, rh^3] envelopes
+                             * gamma_R^3; certainly-disjoint from delta's window => skipped
+                             * SOUNDLY (only gamma_R > 0 candidates can match delta > 0) */
+                            let mut pass : i64 = 0i64
+                            if rh > 0i64 {
+                                let rl3 : i64 = rl * rl * rl
+                                let rh3 : i64 = rh * rh * rh
+                                let dls : i64 = dl * pden2
+                                let dhs : i64 = dh * pden2
+                                if rh3 >= dls { if rl3 <= dhs { pass = 1i64 } }
+                            }
+                            if pass == 1i64 {
+                                MRC_TESTED = MRC_TESTED + 1i64
+                                if mrc_build_rhs(u, v, w) == 1i64 {
+                                    if mrc_build_lhs(e, f) == 1i64 {
+                                        let q : i64 = ma_equal(6i64, 7i64)
+                                        if q < 0i64 { return 0i64 - 2i64 }
+                                        if MRC_CNT >= MXR_MAXC { return 0i64 - 3i64 }
+                                        MRC_E[MRC_CNT as u64] = e   MRC_F[MRC_CNT as u64] = f
+                                        MRC_U[MRC_CNT as u64] = u   MRC_V[MRC_CNT as u64] = v
+                                        MRC_W[MRC_CNT as u64] = w   MRC_Q[MRC_CNT as u64] = q
+                                        MRC_CNT = MRC_CNT + 1i64
+                                        if q == 1i64 { MRC_EQ = MRC_EQ + 1i64 }
+                                    }
+                                }
+                            }
+                            w = w + 1i64
+                        }
+                        v = v + 1i64
+                    }
+                    u = u + 1i64
+                }
+            }
+            f = f + 1i64
+        }
+        e = e + 1i64
+    }
+    return MRC_EQ
+}
+
+/* ---- THE MX04 DOOR ----------------------------------------------------------------------------- */
+
+var MXR_SER : [u8; 64]
+var MXR_GD : [u64; 8]
+var MXR_HD : [u8; 32]      /* the running chain head */
+var MXR_ID : [u8; 32]      /* last computed id */
+var MXR_CN : i64           /* chain length */
+
+/* descriptor validity: [0] magic, [1] class 1..4, [2..6] params in 0..1024 (signed params carried
+ * as v + 512), [7] provenance == 1 (MACHINE -- the only value this organ ever emits). */
+fn mxr_desc_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MXR_MAGIC { return 0u32 }
+    let cl : u64 = d[1u64]
+    if cl < 1u64 { return 0u32 }
+    if cl > 4u64 { return 0u32 }
+    let mut i : u64 = 2u64
+    while i <= 6u64 {
+        if d[i] > 1024u64 { return 0u32 }
+        i = i + 1u64
+    }
+    if d[7u64] != 1u64 { return 0u32 }
+    return 1u32
+}
+
+fn mxr_serialize(desc: u64) -> u32 {
+    let d : *u64 = desc as *u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            MXR_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* theorem_id = SHA-256(canonical serialisation).  Malformed -> -3, NO id. */
+fn mxr_id_of(desc: u64, out32: u64) -> i32 @export {
+    if mxr_desc_valid(desc) != 1u32 { return 0i32 - 3i32 }
+    mxr_serialize(desc)
+    return cad_oneshot(0u32, (&MXR_SER) as *u8, 64u64, out32 as *u8)
+}
+
+/* chain: genesis = SHA-256 of the RESERVED descriptor (class 0, tag ~0) -- unreachable by any
+ * valid schema; then H_i = Keccak(H_{i-1} || id_i) via cad_compose. */
+fn mxr_genesis() -> i32 @export {
+    MXR_GD[0u64] = MXR_MAGIC
+    MXR_GD[1u64] = 0u64
+    let mut i : u64 = 2u64
+    while i <= 6u64 { MXR_GD[i] = 0u64   i = i + 1u64 }
+    MXR_GD[7u64] = 0xFFFFFFFFFFFFFFFFu64
+    mxr_serialize((&MXR_GD) as u64)
+    MXR_CN = 0i64
+    return cad_oneshot(0u32, (&MXR_SER) as *u8, 64u64, (&MXR_HD) as *u8)
+}
+
+/* append one descriptor to the chain.  0 ok, -3 malformed (chain unmoved). */
+fn mxr_chain_add(desc: u64) -> i32 @export {
+    let rc : i32 = mxr_id_of(desc, (&MXR_ID) as u64)
+    if rc != 0i32 { return 0i32 - 3i32 }
+    cad_compose((&MXR_HD) as *u8, (&MXR_ID) as *u8, (&MXR_HD) as *u8)
+    MXR_CN = MXR_CN + 1i64
+    return 0i32
+}
+fn mxr_head_byte(i: i64) -> u64 @export { return MXR_HD[i as u64] as u64 }
+fn mxr_chain_len() -> i64 @export { return MXR_CN }
+
+/* ---- THE ROUND CHAIN: every theorem row of both sweeps, in canonical enumeration order --------- */
+
+var MXR_D : [u64; 8]
+fn mxr_put_desc(cl: u64, p1: i64, p2: i64, p3: i64, p4: i64, p5: i64) -> i32 {
+    MXR_D[0u64] = MXR_MAGIC
+    MXR_D[1u64] = cl
+    MXR_D[2u64] = (p1 + MXR_BIAS) as u64
+    MXR_D[3u64] = (p2 + MXR_BIAS) as u64
+    MXR_D[4u64] = (p3 + MXR_BIAS) as u64
+    MXR_D[5u64] = (p4 + MXR_BIAS) as u64
+    MXR_D[6u64] = (p5 + MXR_BIAS) as u64
+    MXR_D[7u64] = 1u64
+    return 0i32
+}
+
+/* walk the DENEST box in canonical order re-deriving each verdict (no store needed for the
+ * nonexistence rows) and chain: class 1 (a,b,c,m,n) for found, class 2 (a,b,c,reason,0) for
+ * nonexistent.  c-square rows are OUT OF CLASS (no theorem, not chained).  Then the recorded
+ * cube rows: class 3 EQUAL / class 4 refuted (e,f,u,v,w).  Returns chain length, -1 refusal. */
+fn mxr_chain_round(amax: i64, bmax: i64, cmax: i64) -> i64 @export {
+    if mxr_genesis() != 0i32 { return 0i64 - 1i64 }
+    let mut a : i64 = 2i64
+    while a <= amax {
+        let mut b : i64 = 1i64
+        while b <= bmax {
+            let mut c : i64 = 2i64
+            while c <= cmax {
+                let v : i64 = mrd_denest(a, b, c)
+                if v == 1i64 {
+                    mxr_put_desc(1u64, a, b, c, MRD_M0, MRD_N0)
+                    if mxr_chain_add((&MXR_D) as u64) != 0i32 { return 0i64 - 1i64 }
+                }
+                if v == 0i64 {
+                    mxr_put_desc(2u64, a, b, c, MRD_RSN, 0i64)
+                    if mxr_chain_add((&MXR_D) as u64) != 0i32 { return 0i64 - 1i64 }
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    let mut i : i64 = 0i64
+    while i < MRC_CNT {
+        let mut cl : u64 = 4u64
+        if MRC_Q[i as u64] == 1i64 { cl = 3u64 }
+        mxr_put_desc(cl, MRC_E[i as u64], MRC_F[i as u64], MRC_U[i as u64], MRC_V[i as u64], MRC_W[i as u64])
+        if mxr_chain_add((&MXR_D) as u64) != 0i32 { return 0i64 - 1i64 }
+        i = i + 1i64
+    }
+    return MXR_CN
+}

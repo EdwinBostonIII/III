@@ -1,0 +1,84 @@
+/* 2702_mathesis_cube_ramanujan.iii -- GATE for the CUBE-IDENTITY SWEEP (campaign Rho, class F):
+ * (u + v*cbrt2 + w*cbrt4)^3 = e*cbrt2 + f machine-found over the DECLARED box e<=9, |f|<=9,
+ * |u|,|v|,|w|<=2 -- pure enumeration + sound integer-window prefilter + the exact judge; no
+ * candidate ever supplied.
+ *
+ * R -- the FALSE identity refuted FIRST: 1 + cbrt2 + cbrt4 =? cbrt(9*cbrt2 + 9) -> DISTINCT
+ *      (the true Ramanujan form flips two signs; the judge separates them).
+ * E -- the sweep envelope refused by name (emax = 20 past the declared ceiling).
+ * S -- THE SWEEP: at least one EQUAL row; every recorded row carries a definite verdict;
+ *      RAMANUJAN RE-FOUND BY ENUMERATION: (e,f,u,v,w) = (9,-9,1,-1,1) judged EQUAL --
+ *      cbrt(9*cbrt2-9) = 1 - cbrt2 + cbrt4, the integer-radicand form of the classical
+ *      cbrt(cbrt2-1) = cbrt(1/9) - cbrt(2/9) + cbrt(4/9), re-derived by the machine.
+ * V -- REPLAY: the found row re-verified END-TO-END outside the sweep (fresh judge builds,
+ *      fresh pair-gcd) -- determinism observed, not assumed.
+ *
+ * exit 99 pass; 10 R; 11 E; 12 S-sweep; 13 S-ramanujan; 14 V. */
+module corpus_2702_mathesis_cube_ramanujan
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ma_equal(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn mrc_build_rhs(u: i64, v: i64, w: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_build_lhs(e: i64, f: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_sweep(emax: i64, fmax: i64, umax: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_count() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_equal_count() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_tested() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_box() -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_e(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_f(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_u(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_v(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_w(i: i64) -> i64 from "mathesis_radical.iii"
+extern @abi(c-msvc-x64) fn mrc_row_q(i: i64) -> i64 from "mathesis_radical.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* arm scratch at module scope (the cg_r3 64-local-slot ceiling) */
+var RQ : i64   var EE : i64
+var SEQ : i64   var SCN : i64   var STD : i64   var SBX : i64
+var RAM : i64   var VQ : i64
+
+fn main() -> u64 {
+    /* == R: the FALSE identity refuted first. */
+    if mrc_build_rhs(1i64, 1i64, 1i64) != 1i64 { return 10u64 }
+    if mrc_build_lhs(9i64, 9i64) != 1i64 { return 10u64 }
+    RQ = ma_equal(6i64, 7i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(RQ) nl()                        /* "R: 0" */
+    if RQ != 0i64 { return 10u64 }
+
+    /* == E: the envelope refused by name. */
+    EE = mrc_sweep(20i64, 1i64, 1i64)
+    putchar(69i32) putchar(58i32) sp() e_i64(EE) nl()                        /* "E: -1" */
+    if EE != (0i64 - 1i64) { return 11u64 }
+
+    /* == S: THE SWEEP over the declared box. */
+    SEQ = mrc_sweep(9i64, 9i64, 2i64)
+    SCN = mrc_count()   STD = mrc_tested()   SBX = mrc_box()
+    putchar(83i32) putchar(58i32) sp() e_i64(SEQ) sp() e_i64(SCN) sp() e_i64(STD) sp() e_i64(SBX) nl()
+    if SEQ < 1i64 { return 12u64 }
+    if SCN < SEQ { return 12u64 }
+    if STD != SCN { return 12u64 }              /* every judged survivor recorded, none dropped */
+    RAM = 0i64
+    let mut i : i64 = 0i64
+    while i < SCN {
+        if mrc_row_e(i) == 9i64 { if mrc_row_f(i) == (0i64 - 9i64) {
+            if mrc_row_u(i) == 1i64 { if mrc_row_v(i) == (0i64 - 1i64) { if mrc_row_w(i) == 1i64 {
+                if mrc_row_q(i) == 1i64 { RAM = 1i64 }
+            } } }
+        } }
+        i = i + 1i64
+    }
+    putchar(77i32) putchar(58i32) sp() e_i64(RAM) nl()                       /* "M: 1" */
+    if RAM != 1i64 { return 13u64 }
+
+    /* == V: the Ramanujan row replayed END-TO-END outside the sweep. */
+    if mrc_build_rhs(1i64, 0i64 - 1i64, 1i64) != 1i64 { return 14u64 }
+    if mrc_build_lhs(9i64, 0i64 - 9i64) != 1i64 { return 14u64 }
+    VQ = ma_equal(6i64, 7i64)
+    putchar(86i32) putchar(58i32) sp() e_i64(VQ) nl()                        /* "V: 1" */
+    if VQ != 1i64 { return 14u64 }
+
+    return 99u64
+}

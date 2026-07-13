@@ -747,6 +747,86 @@ first move is the library door (`mathesis_admit.iii`), because everything else w
 
 ---
 
+## 14. THE ALGEBRAIC CREATOR TIER (campaign Ρ — the judge's second universe; 2026-07-13)
+
+The seven stride rungs left iii-exact with a COMPLETE decidable theory the synthesizer had never
+been given: the ordered field of real algebraic numbers (chain deg ≤ 3840, the pair-gcd equality
+door, the adaptive ≤2048-prime resultant closure). Campaign Ρ hands the mathesis pattern —
+*enumerate a declared space, filter by proof, admit content-addressed* — that second universe,
+and turns the same engines on III's own body. Three organs, five gates, one sealed stream; every
+organ a STANDALONE aether TU composed of exported engine doors — **zero archive edits, zero
+reseal cascade, zero owner-family obligation** (the engines themselves are byte-unchanged).
+
+- **`aether/mathesis_alg.iii` — THE REAL-ALGEBRAIC JUDGE** (gate 2700). A slot = (integer
+  polynomial as sign/limb rows, dyadic window, ISO = root_count2 == 1 certified). Arithmetic by
+  composition: SUM/PRODUCT via `rs_sum_big2`/`rs_prod_big2`, NEGATION by odd-coefficient flip,
+  k-th ROOT by t → t^k re-indexing (substitution, not computation). EQUALITY total through
+  `sturm2_pair_stash`/`sturm2_pair_gcd` (a gcd root in the window overlap is forced to be each
+  side's unique root); ORDER by count-preserving refinement AFTER equality is decided (so
+  separation exists); SIGN with the exact zero answered STRUCTURALLY (c0 == 0 ∧ 0 interior ∧
+  ISO ⟹ the window's one root IS 0 — bisection alone provably cycles (−1,2] → (−2,1] around a
+  zero root forever; the gate's C arm caught that spin live). Measured: √2 three ways EQUAL
+  (deg 2 vs deg 6 pair), ∛2·∛4 == 2 across a degree-9 pair, √2−√2 EXACTLY ZERO, √2+√3 < √10
+  both directions.
+- **`aether/mathesis_radical.iii` — THE RADICAL SYNTHESIZER + THE MX04 DOOR** (gates 2701/2702/
+  2703; driver `sovir/mathesis_radical_main.iii`; stream `DOCS/MATHESIS-RADICAL-ROUND1.log`,
+  replay BYTE-IDENTICAL). Class D: √(a+b√c) = √m+√n over the printed box a ≤ 32, b ≤ 6, c ≤ 32 —
+  the forced system (c nonsquare ⟹ m+n = a ∧ 4mn = b²c, every step integer-decidable) classifies
+  ALL 5766 rows: **194 denesting theorems** (each DUAL-verified: integer system + the judge
+  through the engines) of which **143 NOVEL** and 51 telescope-slice rediscoveries CONSULTED
+  against the standing organ and REFUSED from the ratchet (R3 computed, two organs agreeing),
+  **4828 nonexistence theorems** each carrying its failing clause, 744 c-square rows out of
+  class. Class F: (u+v∛2+w∛4)³ = e∛2+f over the printed box e ≤ 9, |f| ≤ 9, |uvw| ≤ 2 — 17,500
+  pairs, a SOUND cube-envelope prefilter at 2⁻¹⁴, exactly ONE survivor, judged EQUAL:
+  **Ramanujan's ∛(9∛2−9) = 1−∛2+∛4 re-found by pure enumeration and proven the ONLY identity of
+  its form in the whole box**. The MX04 door: the algebraic domain's 8-word descriptor grammar
+  (class 1 denest / 2 nonexist / 3 cube-identity / 4 cube-refuted; provenance MACHINE only) on
+  the SAME cad spine as the bit-vector door — a new domain gets its own grammar and its own
+  genesis-separated chain rather than an edit to the sealed MX01 door (two doors is one more
+  surface, named; the spine and the four-clause discipline are shared). **5023 theorems chained**,
+  head `2a84e3b7…a7f8`, RADICAL_CERT pinned in `run_mathesis.sh` stage [9]; MATHESIS_CERT and the
+  MX01 chain stand byte-unchanged.
+- **`aether/charpoly.iii` — THE EXACT SPECTRAL ORGAN** (gate 2704). det(tI−A) by the engine's own
+  seven-rehearsed pattern: per-prime node dets (Gauss, partial pivot) at k = 0..n, Lagrange
+  recovery, per-coefficient Garner CRT in dropped arenas, delivery in the `sturm2_in_*` limb
+  shape, and the mod-every-used-prime consistency recheck on the DELIVERED rows; the prime count
+  ADAPTIVE from the matrix's own sound bound (n ≤ 64, |entries| ≤ 2^20 printed envelope; a P_4
+  fixture uses ONE prime). What the rows prove through the chain: **char(A) == t^n ⟺ the digraph
+  is a DAG** (nilpotency — the acyclicity certificate) and **multiplicity of the root 0 of
+  char(Laplacian) == the number of connected components** (the connectivity certificate).
+  Fixtures two-pathed against the gate's OWN Chebyshev-style recurrence (a wrong value REFUTED
+  first). THE REAL ARM: III's own module graph (omnia/self_atlas_data, the machine-generated
+  self-image) — the "ripple"-prefixed subsystem: **n = 12, certified DAG (exact algebra and the
+  gate's own Kahn toposort agree), symmetrized Laplacian zero-multiplicity 5 == union-find 5
+  components**. THE RIPPLE TIE (gate arm W): the same real subsystem fed to the standing
+  `ripple_metric` — a synthetic unused edge raises rm_noise by exactly 1 (the metric PRICES
+  degradation) while the reverse of a real edge flips the acyclicity certificate to NO (the
+  algebra PROVES the break, the toposort agrees): the self-refactoring stack now has an exact
+  spectral integrity dimension available to its deciders.
+
+**Laws learned (paid for by red arms, kept):**
+- **The structural zero test**: deciding sign of an isolated algebraic number by bisection alone
+  livelocks when the number IS zero (midpoints alternate sides of 0 and never land on it); the
+  ISO invariant + c0 == 0 decides it in O(1). Every refinement loop that may straddle an exact
+  zero needs the structural exit.
+- **The interior-bracket law**: a MULTIPLE root at a Sturm bracket endpoint vanishes every chain
+  entry there (the gcd divides the whole chain) and the variation count degenerates — multiple
+  roots must sit INTERIOR to the bracket. Simple roots at the closed endpoint stay correct (p′
+  anchors the count). For Laplacians on ≤ 64 nodes, λ₂ ≥ 2(1−cos(π/64)) > 2⁻⁹ (the Fiedler path
+  bound), so (−2⁻¹³, 2⁻¹³] brackets the zero eigenvalue with 0 interior, always.
+
+**Honest scoping (the Eidolon discipline):** the denesting criterion and the binomial-resultant
+norm forms are classical mathematics; the deliverables here are (1) the MACHINE provenance of
+every row (no candidate supplied, the whole box swept, proof the only filter), (2) the exact
+certificates (nothing floating anywhere in the object), (3) novelty adjudicated against III's
+OWN standing library (computed, two-organ agreement — not a literature claim), and (4) the
+self-referential rows (III's own subsystem spectra), which are new mathematical objects outright.
+The evergreen property: `run_mathesis.sh` stage [9] re-runs the door gates and re-pins the sealed
+stream on every invocation; the sweeps re-run whole through the committed driver — no session, no
+LLM, anywhere in the loop (law 12 holds; the engine's process tree is unchanged).
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
-`III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`.*
+`III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`.*

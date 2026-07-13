@@ -1,0 +1,419 @@
+/* aether/charpoly.iii -- THE EXACT SPECTRAL ORGAN (campaign Rho: the ripple architecture gains a
+ * certified spectral dimension; III measures its own body in exact algebra).
+ *
+ * Computes the EXACT characteristic polynomial det(tI - A) of an integer matrix by the engine's
+ * own seven-rehearsed pattern, then hands the coefficient rows to the bigint Sturm chain:
+ *
+ *   per prime p (the SELF-GENERATED window, rs_prime; the count ADAPTIVE from this matrix's own
+ *   sound coefficient bound |c_k| <= 2^n n^n M^n): evaluate D(k) = det(kI - A) mod p at the n+1
+ *   integer nodes k = 0..n by Gauss elimination with partial pivoting; LAGRANGE-interpolate the
+ *   node values mod p (master polynomial + synthetic division + node weights -- the rs_recover
+ *   shape); GARNER-CRT each coefficient into a centered bigint in a PER-COEFFICIENT dropped
+ *   arena (the rs3_crt_rows law); deliver as sign/limb rows in exactly the sturm2_in_* shape;
+ *   RE-CHECK sum_i c_i k^i == D(k) mod EVERY used prime at EVERY node on the DELIVERED rows
+ *   (Horner; row residues by the 2^64-fold limb walk) -- the engine's own consistency discipline.
+ *
+ * WHAT THE ROWS PROVE (through sturm_big):
+ *   char(A) == t^n  <=>  A nilpotent  <=>  the digraph is a DAG  (the ACYCLICITY CERTIFICATE --
+ *       an exact algebraic identity, cross-checked combinatorially by the gate's own toposort);
+ *   multiplicity of the root 0 of char(Laplacian)  ==  the number of CONNECTED COMPONENTS
+ *       (the CONNECTIVITY CERTIFICATE -- root_mult2_cur at the dyadic window (-1/2, 0]);
+ *   root_count2 windows isolate REAL EIGENVALUES exactly (Perron windows, spectral gaps).
+ *
+ * ENVELOPE (printed, refused past): n <= 64, |entries| <= 2^20, <= 64 used primes (the bound
+ * needs 60 at the corner), coefficients <= 32 limbs.  Refusal -1, never garbage.
+ *
+ * Gate: corpus/2704_ripple_spectral (fixture P_n/C_n vs the gate's OWN Chebyshev-style
+ * recurrence -- two independent paths; the REAL arm on III's own module graph).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/resultant (the prime window) +
+ * aether/sturm_big (the chain) + numera/arena + numera/bigint doors only.
+ */
+module aether_charpoly
+
+extern @abi(c-msvc-x64) fn rs_prime(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_begin(deg: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+const CA_MAXN : i64 = 64i64
+const CA_MAXP : i64 = 64i64          /* used-prime ceiling (60 at the envelope corner) */
+const CA_MAXL : i64 = 32i64          /* delivery limbs per coefficient (2048 bits) */
+const CA_MENT : i64 = 1048576i64     /* |entry| ceiling 2^20 */
+
+var CA_A  : [i64; 4096]              /* the matrix, row-major n x n */
+var CA_W  : [i64; 4096]              /* Gauss scratch */
+var CA_DK : [i64; 4160]              /* node dets: node k, prime l at k*64+l */
+var CA_LM : [i64; 66]                /* Lagrange master polynomial mod p */
+var CA_Q  : [i64; 66]                /* master / (x - k) */
+var CA_CC : [i64; 66]                /* coefficient accumulator mod p */
+var CA_CPR : [i64; 4160]             /* coefficient residues: coeff i, prime l at i*64+l */
+var CA_SGN : [i64; 65]               /* delivered rows */
+var CA_CLN : [i64; 65]
+var CA_LMB : [u64; 2080]             /* coeff i limb j at i*32+j */
+var CA_N : i64
+var CA_NUSE : i64
+
+fn ca_reset(n: i64) -> i32 @export {
+    if n < 1i64 { return 0i32 - 1i32 }
+    if n > CA_MAXN { return 0i32 - 1i32 }
+    CA_N = n
+    let mut i : i64 = 0i64
+    while i < (n * n) { CA_A[i as u64] = 0i64   i = i + 1i64 }
+    return 0i32
+}
+fn ca_set(i: i64, j: i64, v: i64) -> i32 @export {
+    if i < 0i64 { return 0i32 - 1i32 }
+    if j < 0i64 { return 0i32 - 1i32 }
+    if i >= CA_N { return 0i32 - 1i32 }
+    if j >= CA_N { return 0i32 - 1i32 }
+    if v > CA_MENT { return 0i32 - 1i32 }
+    if v < (0i64 - CA_MENT) { return 0i32 - 1i32 }
+    CA_A[((i * CA_N) + j) as u64] = v
+    return 0i32
+}
+fn ca_n() -> i64 @export { return CA_N }
+fn ca_nuse() -> i64 @export { return CA_NUSE }
+fn ca_coeff_sgn(i: i64) -> i64 @export { return CA_SGN[i as u64] }
+fn ca_coeff_len(i: i64) -> i64 @export { return CA_CLN[i as u64] }
+fn ca_coeff_limb(i: i64, j: i64) -> u64 @export { return CA_LMB[((i * 32i64) + j) as u64] }
+
+fn ca_modp(v: i64, p: i64) -> i64 {
+    let m : i64 = v % p
+    if m < 0i64 { return m + p }
+    return m
+}
+fn ca_minv(a0: i64, p: i64) -> i64 {
+    let mut t : i64 = 0i64    let mut nt : i64 = 1i64
+    let mut r : i64 = p       let mut nr : i64 = ca_modp(a0, p)
+    while nr != 0i64 {
+        let q : i64 = r / nr
+        let t2 : i64 = t - (q * nt)   t = nt   nt = t2
+        let r2 : i64 = r - (q * nr)   r = nr   nr = r2
+    }
+    if t < 0i64 { t = t + p }
+    return t
+}
+
+/* det of the n x n matrix in CA_W mod p (destructive, partial pivot) */
+fn ca_det_mod(n: i64, p: i64) -> i64 {
+    let mut det : i64 = 1i64
+    let mut k : i64 = 0i64
+    while k < n {
+        let pkk : i64 = CA_W[((k * n) + k) as u64]
+        if pkk == 0i64 {
+            let mut found : i64 = 0i64 - 1i64
+            let mut r : i64 = k + 1i64
+            while r < n {
+                if found < 0i64 { let v : i64 = CA_W[((r * n) + k) as u64]   if v != 0i64 { found = r } }
+                r = r + 1i64
+            }
+            if found < 0i64 { return 0i64 }
+            let mut c : i64 = 0i64
+            while c < n {
+                let t : i64 = CA_W[((k * n) + c) as u64]
+                CA_W[((k * n) + c) as u64] = CA_W[((found * n) + c) as u64]
+                CA_W[((found * n) + c) as u64] = t
+                c = c + 1i64
+            }
+            det = ca_modp(0i64 - det, p)
+        }
+        let pv : i64 = CA_W[((k * n) + k) as u64]
+        det = (det * pv) % p
+        let inv : i64 = ca_minv(pv, p)
+        let mut i : i64 = k + 1i64
+        while i < n {
+            let fct : i64 = (CA_W[((i * n) + k) as u64] * inv) % p
+            if fct != 0i64 {
+                let mut j : i64 = k
+                while j < n {
+                    let sub : i64 = (fct * CA_W[((k * n) + j) as u64]) % p
+                    CA_W[((i * n) + j) as u64] = ca_modp(CA_W[((i * n) + j) as u64] - sub, p)
+                    j = j + 1i64
+                }
+            }
+            i = i + 1i64
+        }
+        k = k + 1i64
+    }
+    return det
+}
+
+/* node dets D(k) = det(kI - A) mod p_l for k = 0..n */
+fn ca_nodes_prime(l: i64) -> i32 {
+    let n : i64 = CA_N
+    let p : i64 = rs_prime(l)
+    if p < 2i64 { return 0i32 - 1i32 }
+    let mut k : i64 = 0i64
+    while k <= n {
+        let mut i : i64 = 0i64
+        while i < n {
+            let mut j : i64 = 0i64
+            while j < n {
+                let mut v : i64 = 0i64 - CA_A[((i * n) + j) as u64]
+                if i == j { v = v + k }
+                CA_W[((i * n) + j) as u64] = ca_modp(v, p)
+                j = j + 1i64
+            }
+            i = i + 1i64
+        }
+        CA_DK[((k * 64i64) + l) as u64] = ca_det_mod(n, p)
+        k = k + 1i64
+    }
+    return 0i32
+}
+
+/* Lagrange interpolation mod p_l over nodes 0..n (the rs_recover shape): master polynomial by
+ * incremental multiplication, per-node synthetic division + weight, coefficients accumulated. */
+fn ca_lagrange(l: i64) -> i32 {
+    let n : i64 = CA_N
+    let p : i64 = rs_prime(l)
+    /* master M(x) = prod_k (x - k), deg n+1 */
+    CA_LM[0u64] = 1i64
+    let mut d : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k <= n {
+        /* multiply by (x - k): shift + subtract k* */
+        let mut j : i64 = d + 1i64
+        CA_LM[j as u64] = 0i64
+        while j >= 1i64 {
+            let hi : i64 = CA_LM[(j - 1i64) as u64]
+            let lo : i64 = CA_LM[j as u64]
+            CA_LM[j as u64] = ca_modp(hi - ((k % p) * lo) % p, p)
+            j = j - 1i64
+        }
+        CA_LM[0u64] = ca_modp((0i64 - (k % p)) * CA_LM[0u64], p)
+        d = d + 1i64
+        k = k + 1i64
+    }
+    /* accumulate coefficients */
+    let mut i : i64 = 0i64
+    while i <= n { CA_CC[i as u64] = 0i64   i = i + 1i64 }
+    k = 0i64
+    while k <= n {
+        /* Q = M / (x - k) by synthetic division (M has degree n+1) */
+        CA_Q[n as u64] = CA_LM[(n + 1i64) as u64]
+        let mut j2 : i64 = n - 1i64
+        while j2 >= 0i64 {
+            CA_Q[j2 as u64] = ca_modp(CA_LM[(j2 + 1i64) as u64] + ((k % p) * CA_Q[(j2 + 1i64) as u64]) % p, p)
+            j2 = j2 - 1i64
+        }
+        /* d_k = Q(k) by Horner; w = D(k) * inv(d_k) */
+        let mut dk : i64 = 0i64
+        let mut j3 : i64 = n
+        while j3 >= 0i64 { dk = ((dk * (k % p)) + CA_Q[j3 as u64]) % p   j3 = j3 - 1i64 }
+        if dk == 0i64 { return 0i32 - 1i32 }
+        let w : i64 = (CA_DK[((k * 64i64) + l) as u64] * ca_minv(dk, p)) % p
+        let mut j4 : i64 = 0i64
+        while j4 <= n {
+            CA_CC[j4 as u64] = ca_modp(CA_CC[j4 as u64] + ((w * CA_Q[j4 as u64]) % p), p)
+            j4 = j4 + 1i64
+        }
+        k = k + 1i64
+    }
+    i = 0i64
+    while i <= n { CA_CPR[((i * 64i64) + l) as u64] = CA_CC[i as u64]   i = i + 1i64 }
+    return 0i32
+}
+
+/* limb-wise unsigned compare of two bigint handles: -1 a<b, 0 equal, 1 a>b (read-only doors) */
+fn ca_bcmp(a: u64, b: u64) -> i64 {
+    let mut la : i64 = bigint_len_limbs(a) as i64
+    let mut lb : i64 = bigint_len_limbs(b) as i64
+    while la > 0i64 { if bigint_get_limb(a, (la - 1i64) as u64) != 0u64 { la = 0i64 - la } else { la = la - 1i64 } }
+    la = 0i64 - la
+    while lb > 0i64 { if bigint_get_limb(b, (lb - 1i64) as u64) != 0u64 { lb = 0i64 - lb } else { lb = lb - 1i64 } }
+    lb = 0i64 - lb
+    if la < lb { return 0i64 - 1i64 }
+    if la > lb { return 1i64 }
+    let mut i : i64 = la - 1i64
+    while i >= 0i64 {
+        let wa : u64 = bigint_get_limb(a, i as u64)
+        let wb : u64 = bigint_get_limb(b, i as u64)
+        if wa < wb { return 0i64 - 1i64 }
+        if wa > wb { return 1i64 }
+        i = i - 1i64
+    }
+    return 0i64
+}
+
+/* Garner CRT of coefficient i across the used primes into a CENTERED sign/limb row (the
+ * per-coefficient dropped arena law). */
+fn ca_crt_coeff(i: i64) -> i32 {
+    let ar : u64 = arena_new(4194304u64)
+    if ar == 0u64 { return 0i32 - 1i32 }
+    let r0 : i64 = CA_CPR[(i * 64i64) as u64]
+    let mut X : u64 = bigint_from_u64(ar, r0 as u64)
+    let mut P : u64 = bigint_from_u64(ar, rs_prime(0i64) as u64)
+    if X == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+    if P == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+    let mut l : i64 = 1i64
+    while l < CA_NUSE {
+        let p : i64 = rs_prime(l)
+        /* X mod p by the 2^64-fold limb walk */
+        let r64 : i64 = (((0xFFFFFFFFFFFFFFFFu64 % (p as u64)) + 1u64) % (p as u64)) as i64
+        let mut xm : i64 = 0i64
+        let mut j : i64 = bigint_len_limbs(X) as i64
+        while j > 0i64 {
+            j = j - 1i64
+            let lm : u64 = bigint_get_limb(X, j as u64)
+            xm = ((xm * r64) + ((lm % (p as u64)) as i64)) % p
+        }
+        /* P mod p the same way */
+        let mut pm : i64 = 0i64
+        j = bigint_len_limbs(P) as i64
+        while j > 0i64 {
+            j = j - 1i64
+            let lm2 : u64 = bigint_get_limb(P, j as u64)
+            pm = ((pm * r64) + ((lm2 % (p as u64)) as i64)) % p
+        }
+        let rl : i64 = CA_CPR[((i * 64i64) + l) as u64]
+        let t : i64 = ((ca_modp(rl - xm, p)) * ca_minv(pm, p)) % p
+        let tp : u64 = bigint_mul_u64(ar, P, t as u64)
+        if tp == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+        let x2 : u64 = bigint_add(ar, X, tp)
+        if x2 == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+        bigint_drop(tp)
+        bigint_drop(X)
+        X = x2
+        let p2 : u64 = bigint_mul_u64(ar, P, p as u64)
+        if p2 == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+        bigint_drop(P)
+        P = p2
+        l = l + 1i64
+    }
+    /* center: value = X if X <= P - X else -(P - X) */
+    let pmx : u64 = bigint_sub(ar, P, X)
+    if pmx == 0u64 { arena_drop(ar)   return 0i32 - 1i32 }
+    let mut sgn : i64 = 1i64
+    let mut V : u64 = X
+    if ca_bcmp(X, pmx) > 0i64 { sgn = 0i64 - 1i64   V = pmx }
+    if bigint_is_zero(V) == 1u8 { sgn = 0i64 }
+    let mut ln : i64 = bigint_len_limbs(V) as i64
+    while ln > 0i64 {
+        if bigint_get_limb(V, (ln - 1i64) as u64) != 0u64 { CA_CLN[i as u64] = ln   ln = 0i64 - ln } else { ln = ln - 1i64 }
+    }
+    ln = 0i64 - ln
+    if sgn == 0i64 { CA_CLN[i as u64] = 0i64 }
+    if CA_CLN[i as u64] > CA_MAXL { bigint_drop_arena(ar)   arena_drop(ar)   return 0i32 - 1i32 }
+    CA_SGN[i as u64] = sgn
+    let mut j5 : i64 = 0i64
+    while j5 < CA_CLN[i as u64] { CA_LMB[((i * 32i64) + j5) as u64] = bigint_get_limb(V, j5 as u64)   j5 = j5 + 1i64 }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return 0i32
+}
+
+/* consistency: sum_i c_i k^i == D(k) mod EVERY used prime at EVERY node, on the DELIVERED rows */
+fn ca_consist() -> i32 {
+    let n : i64 = CA_N
+    let mut l : i64 = 0i64
+    while l < CA_NUSE {
+        let p : i64 = rs_prime(l)
+        let r64 : i64 = (((0xFFFFFFFFFFFFFFFFu64 % (p as u64)) + 1u64) % (p as u64)) as i64
+        /* row residues once per prime */
+        let mut i : i64 = 0i64
+        while i <= n {
+            let mut rm : i64 = 0i64
+            let mut j : i64 = CA_CLN[i as u64]
+            while j > 0i64 {
+                j = j - 1i64
+                let lm : u64 = CA_LMB[((i * 32i64) + j) as u64]
+                rm = ((rm * r64) + ((lm % (p as u64)) as i64)) % p
+            }
+            if CA_SGN[i as u64] < 0i64 { rm = ca_modp(0i64 - rm, p) }
+            CA_CC[i as u64] = rm
+            i = i + 1i64
+        }
+        let mut k : i64 = 0i64
+        while k <= n {
+            let mut acc : i64 = 0i64
+            let mut j2 : i64 = n
+            while j2 >= 0i64 { acc = ((acc * (k % p)) + CA_CC[j2 as u64]) % p   j2 = j2 - 1i64 }
+            if acc != CA_DK[((k * 64i64) + l) as u64] { return 0i32 - 1i32 }
+            k = k + 1i64
+        }
+        l = l + 1i64
+    }
+    return 0i32
+}
+
+/* THE EXACT CHARACTERISTIC POLYNOMIAL.  0 ok (rows delivered), -1 refused. */
+fn ca_charpoly() -> i32 @export {
+    let n : i64 = CA_N
+    if n < 1i64 { return 0i32 - 1i32 }
+    /* sound coefficient bound: |c_k| <= 2^n n^n M^n -> bits <= n(1 + log2 n + log2 M) + 1 */
+    let mut lgn : i64 = 0i64
+    let mut t : i64 = 1i64
+    while t < n { t = t * 2i64   lgn = lgn + 1i64 }
+    let mut mmax : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < (n * n) {
+        let mut a : i64 = CA_A[i as u64]
+        if a < 0i64 { a = 0i64 - a }
+        if a > mmax { mmax = a }
+        i = i + 1i64
+    }
+    let mut lgm : i64 = 0i64
+    t = 1i64
+    while t < mmax { t = t * 2i64   lgm = lgm + 1i64 }
+    let bnd : i64 = (n * (1i64 + lgn + lgm + 1i64)) + 2i64
+    CA_NUSE = ((bnd + 2i64) / 29i64) + 1i64
+    if CA_NUSE > CA_MAXP { return 0i32 - 1i32 }
+    let mut l : i64 = 0i64
+    while l < CA_NUSE {
+        if ca_nodes_prime(l) != 0i32 { return 0i32 - 1i32 }
+        if ca_lagrange(l) != 0i32 { return 0i32 - 1i32 }
+        l = l + 1i64
+    }
+    i = 0i64
+    while i <= n {
+        if ca_crt_coeff(i) != 0i32 { return 0i32 - 1i32 }
+        i = i + 1i64
+    }
+    if ca_consist() != 0i32 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* load the delivered rows into the sturm_big CUR rows.  build = 1 also builds the chain. */
+fn ca_load_chain(build: i64) -> i32 @export {
+    let n : i64 = CA_N
+    if sturm2_in_begin(n) != 0i32 { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i <= n {
+        let ln : i64 = CA_CLN[i as u64]
+        let mut j : i64 = 0i64
+        while j < ln { sturm2_in_limb(i, j, CA_LMB[((i * 32i64) + j) as u64])   j = j + 1i64 }
+        sturm2_in_set(i, CA_SGN[i as u64], ln)
+        i = i + 1i64
+    }
+    if build == 1i64 {
+        if sturm2_build_cur() < 0i64 { return 0i32 - 1i32 }
+    }
+    return 0i32
+}
+
+/* the acyclicity certificate on the DELIVERED rows: char == t^n exactly (c_n == 1, all lower 0) */
+fn ca_is_tn() -> i64 @export {
+    let n : i64 = CA_N
+    let mut i : i64 = 0i64
+    while i < n {
+        if CA_SGN[i as u64] != 0i64 { return 0i64 }
+        i = i + 1i64
+    }
+    if CA_SGN[n as u64] != 1i64 { return 0i64 }
+    if CA_CLN[n as u64] != 1i64 { return 0i64 }
+    if CA_LMB[(n * 32i64) as u64] != 1u64 { return 0i64 }
+    return 1i64
+}

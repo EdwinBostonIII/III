@@ -1,0 +1,304 @@
+/* aether/mathesis_ontogenesis.iii -- THE ONTOGENESIS (campaign Upsilon-2: the base ontology and
+ * its manipulation, with III alone).
+ *
+ * THE BASE: a carrier of UNLABELED TOKENS and the single primitive notion "a way of combining
+ * two tokens into one".  No numbers are presupposed anywhere: token indices are names, never
+ * magnitudes; no law is assumed; the machine's whole starting ontology is |carrier| <= 3 and
+ * combination.  (The forge already censused this base: every combination, every law profile.)
+ *
+ * THE SELF-SELECTION: the machine's citizens are the species UNIQUE UP TO ISOMORPHISM (iso
+ * count == 1) -- a content-neutral criterion stated as code, not a curated list.
+ *
+ * THE MANIPULATION, and what it forces:
+ *   OPPOSITE  x o' y = y o x.  The machine asks: does my 11-law language DETERMINE the profile
+ *      of the opposite?  It sweeps ALL tables, buckets by (profile, profile-of-opposite), and
+ *      finds WITNESS PAIRS with equal profiles whose opposites' profiles differ -- THE GAP
+ *      THEOREM: the 11-law ontology is not closed under its own simplest manipulation.  The
+ *      machine then EXTENDS ITS LANGUAGE by the mirror law RINVOL ((x o y) o y = x), and
+ *      verifies THE DUALITY LAW over the ENTIRE universe: profile12(opposite(T)) ==
+ *      swap(profile12(T)) for every one of the 19,699 tables at n <= 3 (swap: LCANCEL<->RCANCEL,
+ *      LSDISTR<->RSDISTR, LINVOL<->RINVOL; the six self-dual laws fixed) -- total exhaustion,
+ *      zero exceptions, a universal law of its own ontology.
+ *   PRODUCT  (a,b) o (c,d) = (a o c, b o d) on the token-pair carrier (|A|*|B| <= 9).  Over
+ *      every ordered pair of citizens the machine tests THE PRODUCT LAW:
+ *      profile12(A x B) == profile12(A) AND profile12(B) -- verified pair-for-pair or refuted
+ *      with a witness; nothing assumed.
+ *
+ * Gate: corpus/2711_mathesis_ontogenesis.  Driver: sovir/mathesis_onto_main.iii ->
+ * DOCS/MATHESIS-ONTO-ROUND1.log.  Hexad: kind_essence.  Ring: R0.  NIH: composes
+ * mathesis_forge (the censused base) + cad only.
+ */
+module aether_mathesis_ontogenesis
+
+extern @abi(c-msvc-x64) fn mff_load(idx: i64, n: i64) -> i32 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_op(x: i64, y: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_sweep(n: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_raw(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_iso(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_rep(p: i64) -> i64 from "mathesis_forge.iii"
+
+/* the working table on a carrier of up to 9 tokens */
+var MOG_OP : [i64; 81]
+var MOG_N : i64
+fn mog_set(x: i64, y: i64, v: i64) -> i32 { MOG_OP[((x * MOG_N) + y) as u64] = v   return 0i32 }
+fn mog_get(x: i64, y: i64) -> i64 @export { return MOG_OP[((x * MOG_N) + y) as u64] }
+
+/* load a forge table (index form, carrier n <= 3) into the working table */
+fn mog_load_forge(idx: i64, n: i64) -> i32 @export {
+    mff_load(idx, n)
+    MOG_N = n
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = 0i64
+        while y < n { mog_set(x, y, mff_op(x, y))   y = y + 1i64 }
+        x = x + 1i64
+    }
+    return 0i32
+}
+
+/* the TWELVE-law profile of the working table, by total exhaustion (bit 11 = RINVOL) */
+fn mog_profile() -> i64 @export {
+    let n : i64 = MOG_N
+    let mut p : i64 = 4095i64
+    let mut x : i64 = 0i64
+    while x < n {
+        if mog_get(x, x) != x { p = p & (4095i64 - 4i64) }
+        let mut y : i64 = 0i64
+        while y < n {
+            if mog_get(x, y) != mog_get(y, x) { p = p & (4095i64 - 2i64) }
+            if mog_get(x, mog_get(x, y)) != y { p = p & (4095i64 - 512i64) }
+            if mog_get(mog_get(x, y), y) != x { p = p & (4095i64 - 2048i64) }
+            let mut y2 : i64 = y + 1i64
+            while y2 < n {
+                if mog_get(x, y) == mog_get(x, y2) { p = p & (4095i64 - 32i64) }
+                if mog_get(y, x) == mog_get(y2, x) { p = p & (4095i64 - 64i64) }
+                y2 = y2 + 1i64
+            }
+            let mut z : i64 = 0i64
+            while z < n {
+                if mog_get(mog_get(x, y), z) != mog_get(x, mog_get(y, z)) { p = p & (4095i64 - 1i64) }
+                if mog_get(x, mog_get(y, z)) != mog_get(mog_get(x, y), mog_get(x, z)) { p = p & (4095i64 - 128i64) }
+                if mog_get(mog_get(x, y), z) != mog_get(mog_get(x, z), mog_get(y, z)) { p = p & (4095i64 - 256i64) }
+                let mut w : i64 = 0i64
+                while w < n {
+                    if mog_get(mog_get(x, y), mog_get(z, w)) != mog_get(mog_get(x, z), mog_get(y, w)) { p = p & (4095i64 - 1024i64) }
+                    w = w + 1i64
+                }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    let mut hase : i64 = 0i64
+    let mut hasz : i64 = 0i64
+    let mut e : i64 = 0i64
+    while e < n {
+        let mut ise : i64 = 1i64
+        let mut isz : i64 = 1i64
+        let mut x2 : i64 = 0i64
+        while x2 < n {
+            if mog_get(e, x2) != x2 { ise = 0i64 }
+            if mog_get(x2, e) != x2 { ise = 0i64 }
+            if mog_get(e, x2) != e { isz = 0i64 }
+            if mog_get(x2, e) != e { isz = 0i64 }
+            x2 = x2 + 1i64
+        }
+        if ise == 1i64 { hase = 1i64 }
+        if isz == 1i64 { hasz = 1i64 }
+        e = e + 1i64
+    }
+    if hase == 0i64 { p = p & (4095i64 - 8i64) }
+    if hasz == 0i64 { p = p & (4095i64 - 16i64) }
+    return p
+}
+
+/* replace the working table by its OPPOSITE (transpose) */
+fn mog_opposite() -> i32 @export {
+    let n : i64 = MOG_N
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = x + 1i64
+        while y < n {
+            let t : i64 = mog_get(x, y)
+            mog_set(x, y, mog_get(y, x))
+            mog_set(y, x, t)
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 0i32
+}
+
+/* the swap map on 12-law profiles: 5<->6, 7<->8, 9<->11; the rest fixed */
+fn mog_swap(p: i64) -> i64 @export {
+    let mut q : i64 = p & (4095i64 - 32i64 - 64i64 - 128i64 - 256i64 - 512i64 - 2048i64)
+    if (p & 32i64) != 0i64 { q = q | 64i64 }
+    if (p & 64i64) != 0i64 { q = q | 32i64 }
+    if (p & 128i64) != 0i64 { q = q | 256i64 }
+    if (p & 256i64) != 0i64 { q = q | 128i64 }
+    if (p & 512i64) != 0i64 { q = q | 2048i64 }
+    if (p & 2048i64) != 0i64 { q = q | 512i64 }
+    return q
+}
+
+/* THE GAP THEOREM at 11 laws: sweep every table at carrier n; for each 11-profile record the
+ * FIRST opposite-11-profile seen; a second, DIFFERENT opposite-profile under the same profile
+ * is the witness: the 11-law language does not determine the dual.  Returns the number of
+ * gap-witnessed profiles; the first witness pair is retrievable. */
+var MOG_SEEN : [i64; 2048]     /* first opposite-profile per 11-profile (-1 none) */
+var MOG_FIRST : [i64; 2048]    /* the table that set it */
+var MOG_WA : i64   var MOG_WB : i64   var MOG_WP : i64
+fn mog_gap11(n: i64) -> i64 @export {
+    let mut i : i64 = 0i64
+    while i < 2048i64 { MOG_SEEN[i as u64] = 0i64 - 1i64   MOG_FIRST[i as u64] = 0i64 - 1i64   i = i + 1i64 }
+    MOG_WA = 0i64 - 1i64   MOG_WB = 0i64 - 1i64   MOG_WP = 0i64 - 1i64
+    let mut tot : i64 = 1i64
+    i = 0i64
+    while i < (n * n) { tot = tot * n   i = i + 1i64 }
+    let mut gaps : i64 = 0i64
+    let mut t : i64 = 0i64
+    while t < tot {
+        mog_load_forge(t, n)
+        let p11 : i64 = mog_profile() & 2047i64
+        mog_opposite()
+        let q11 : i64 = mog_profile() & 2047i64
+        if MOG_SEEN[p11 as u64] < 0i64 {
+            MOG_SEEN[p11 as u64] = q11
+            MOG_FIRST[p11 as u64] = t
+        } else {
+            if MOG_SEEN[p11 as u64] != q11 {
+                if MOG_SEEN[p11 as u64] >= 0i64 { if MOG_FIRST[p11 as u64] >= 0i64 {
+                    if MOG_WA < 0i64 { MOG_WA = MOG_FIRST[p11 as u64]   MOG_WB = t   MOG_WP = p11 }
+                    gaps = gaps + 1i64
+                    MOG_SEEN[p11 as u64] = 0i64 - 2i64      /* count each profile once */
+                } }
+            }
+        }
+        t = t + 1i64
+    }
+    return gaps
+}
+fn mog_gap_wa() -> i64 @export { return MOG_WA }
+fn mog_gap_wb() -> i64 @export { return MOG_WB }
+fn mog_gap_wp() -> i64 @export { return MOG_WP }
+
+/* THE DUALITY LAW at 12 laws: profile12(opposite(T)) == swap(profile12(T)) over EVERY table at
+ * carrier n.  Returns the number of tables checked, or -(t+1) at the first counterexample. */
+fn mog_duality(n: i64) -> i64 @export {
+    let mut tot : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < (n * n) { tot = tot * n   i = i + 1i64 }
+    let mut t : i64 = 0i64
+    while t < tot {
+        mog_load_forge(t, n)
+        let p : i64 = mog_profile()
+        mog_opposite()
+        let q : i64 = mog_profile()
+        if q != mog_swap(p) { return 0i64 - (t + 1i64) }
+        t = t + 1i64
+    }
+    return tot
+}
+
+/* THE CITIZENS: species with iso == 1 at carrier n (the forge census must be current for n).
+ * Returns the count; the k-th citizen's profile and representative are retrievable. */
+var MOG_CP : [i64; 64]   var MOG_CR : [i64; 64]   var MOG_CN2 : i64
+fn mog_citizens(n: i64) -> i64 @export {
+    if mff_sweep(n) < 1i64 { return 0i64 - 1i64 }
+    MOG_CN2 = 0i64
+    let mut p : i64 = 0i64
+    while p < 2048i64 {
+        if mff_iso(p) == 1i64 {
+            if MOG_CN2 < 64i64 {
+                MOG_CP[MOG_CN2 as u64] = p
+                MOG_CR[MOG_CN2 as u64] = mff_rep(p)
+                MOG_CN2 = MOG_CN2 + 1i64
+            }
+        }
+        p = p + 1i64
+    }
+    return MOG_CN2
+}
+fn mog_cit_p(k: i64) -> i64 @export { return MOG_CP[k as u64] }
+fn mog_cit_r(k: i64) -> i64 @export { return MOG_CR[k as u64] }
+
+/* the PRODUCT of two forge tables (na, nb <= 3) into the working table on na*nb tokens */
+var MOG_TA : [i64; 9]   var MOG_TB : [i64; 9]
+fn mog_product(ia: i64, na: i64, ib: i64, nb: i64) -> i32 @export {
+    mff_load(ia, na)
+    let mut x : i64 = 0i64
+    while x < na {
+        let mut y : i64 = 0i64
+        while y < na { MOG_TA[((x * na) + y) as u64] = mff_op(x, y)   y = y + 1i64 }
+        x = x + 1i64
+    }
+    mff_load(ib, nb)
+    x = 0i64
+    while x < nb {
+        let mut y : i64 = 0i64
+        while y < nb { MOG_TB[((x * nb) + y) as u64] = mff_op(x, y)   y = y + 1i64 }
+        x = x + 1i64
+    }
+    MOG_N = na * nb
+    let mut a : i64 = 0i64
+    while a < na {
+        let mut b : i64 = 0i64
+        while b < nb {
+            let mut c : i64 = 0i64
+            while c < na {
+                let mut d : i64 = 0i64
+                while d < nb {
+                    let ra : i64 = MOG_TA[((a * na) + c) as u64]
+                    let rb : i64 = MOG_TB[((b * nb) + d) as u64]
+                    mog_set((a * nb) + b, (c * nb) + d, (ra * nb) + rb)
+                    d = d + 1i64
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return 0i32
+}
+
+/* THE PRODUCT LAW over every ordered pair of citizens of carriers (na, nb): tests
+ * profile12(A x B) == profile12(A) & profile12(B).  Returns pairs verified, or -(k+1) at the
+ * first refutation (witness pair retrievable via the counters). */
+var MOG_PA : i64   var MOG_PB : i64
+fn mog_product_law(na: i64, nb: i64) -> i64 @export {
+    let ca : i64 = mog_citizens(na)
+    if ca < 1i64 { return 0i64 - 1000000i64 }
+    let mut AR : i64 = 0i64
+    let mut verified : i64 = 0i64
+    let mut ia : i64 = 0i64
+    while ia < ca {
+        AR = MOG_CR[ia as u64]
+        /* profile of A */
+        mog_load_forge(AR, na)
+        let pa : i64 = mog_profile()
+        let cb : i64 = mog_citizens(nb)
+        if cb < 1i64 { return 0i64 - 1000000i64 }
+        let mut ib : i64 = 0i64
+        while ib < cb {
+            let BR : i64 = MOG_CR[ib as u64]
+            mog_load_forge(BR, nb)
+            let pb : i64 = mog_profile()
+            mog_product(AR, na, BR, nb)
+            let pp : i64 = mog_profile()
+            if pp != (pa & pb) {
+                MOG_PA = AR   MOG_PB = BR
+                return 0i64 - (verified + 1i64)
+            }
+            verified = verified + 1i64
+            ib = ib + 1i64
+        }
+        /* restore the na-citizen list for the outer loop */
+        mog_citizens(na)
+        ia = ia + 1i64
+    }
+    return verified
+}
+fn mog_pl_wa() -> i64 @export { return MOG_PA }
+fn mog_pl_wb() -> i64 @export { return MOG_PB }

@@ -237,6 +237,21 @@ UPSILON_CERT="$(printf '%s' "c28e85ac423faa3945927b9398d358dbaec2ed63901a93d523b
 echo "[mathesis] UPSILON_CERT = $UPSILON_CERT"
 echo "[mathesis] GREEN: campaign Upsilon sealed (the operation-universe census: 3,330 structures / 59 species at n=3, triple-anchored; the pilot's first autonomous rounds found the d=4/d=9 holes and exposed THE INVOLUTION LAW: d <-> d^2 mod cubes swaps curves A and B, predictions d=18/d=25 CONFIRMED)"
 
+echo "[mathesis] == [13] THE ONTOGENESIS (the base ontology, manipulated by III alone) =="
+for t in mathesis_ontogenesis; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 92; }
+    RADFACE+=("$o")
+done
+gate 2711_mathesis_ontogenesis "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 93
+ONTOLOG="$III_ROOT/DOCS/MATHESIS-ONTO-ROUND1.log"
+grep -q "^MOG GAP n=2 0 n=3 40 witness 377 715 1344$" "$ONTOLOG" || { echo "[mathesis] RED: gap theorem drifted"; exit 94; }
+grep -q "^MOG DUALITY 16 19683 exceptions 0$" "$ONTOLOG" || { echo "[mathesis] RED: duality law drifted"; exit 95; }
+grep -q "^MOG PRODUCT-LAW 100 240 240 refuted 0$" "$ONTOLOG" || { echo "[mathesis] RED: product law drifted"; exit 96; }
+ONTO_CERT="$(printf "%s" "40|377|715|1344|19699|580" | sha256sum | cut -d" " -f1)"
+echo "[mathesis] ONTO_CERT = $ONTO_CERT"
+echo "[mathesis] GREEN: THE ONTOGENESIS sealed (the 11-law language PROVEN inadequate under its own manipulation at the third token -- 40 gap profiles, witness 377/715; the mirror law restores closure; DUALITY total over 19,699 tables; PRODUCT total over 580 citizen pairs)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

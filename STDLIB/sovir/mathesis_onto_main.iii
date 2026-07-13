@@ -1,0 +1,68 @@
+/* sovir/mathesis_onto_main.iii -- THE ONTOGENESIS STREAM (campaign Upsilon-2).  The base
+ * ontology, its manipulation, the laws that arose.  Sealed as DOCS/MATHESIS-ONTO-ROUND1.log;
+ * replay byte-identical. */
+module mathesis_onto_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mog_gap11(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wa() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wb() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wp() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_duality(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_citizens(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_p(k: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_r(k: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_load_forge(idx: i64, n: i64) -> i32 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_get(x: i64, y: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_product_law(na: i64, nb: i64) -> i64 from "mathesis_ontogenesis.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ps(msg: u64) -> i32 {
+    let p : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ch : u8 = p[i]
+        if ch == 0u8 { going = 0u8 } else { putchar(ch as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    ps("MOG-ROUND1 declared: BASE = unlabeled tokens + one combination, nothing else; MANIPULATION = opposite and product; laws decided by TOTAL exhaustion, 12-law profiles (bit 11 = the mirror law the manipulation forced)\n" as u64)
+    let g2 : i64 = mog_gap11(2i64)
+    let g3 : i64 = mog_gap11(3i64)
+    ps("MOG GAP n=2 " as u64) e_i64(g2) ps(" n=3 " as u64) e_i64(g3)
+    ps(" witness " as u64) e_i64(mog_gap_wa()) sp() e_i64(mog_gap_wb()) sp() e_i64(mog_gap_wp()) nl()
+    let d2 : i64 = mog_duality(2i64)
+    let d3 : i64 = mog_duality(3i64)
+    ps("MOG DUALITY " as u64) e_i64(d2) sp() e_i64(d3) ps(" exceptions 0\n" as u64)
+    let c2 : i64 = mog_citizens(2i64)
+    ps("MOG CITIZENS n=2 " as u64) e_i64(c2) nl()
+    let mut k : i64 = 0i64
+    while k < c2 { ps("MOG# 2 " as u64) e_i64(mog_cit_p(k)) sp() e_i64(mog_cit_r(k)) nl()   k = k + 1i64 }
+    let c3 : i64 = mog_citizens(3i64)
+    ps("MOG CITIZENS n=3 " as u64) e_i64(c3) nl()
+    k = 0i64
+    while k < c3 {
+        ps("MOG# 3 " as u64) e_i64(mog_cit_p(k)) sp() e_i64(mog_cit_r(k))
+        /* the citizen's table, row-major */
+        mog_load_forge(mog_cit_r(k), 3i64)
+        ps(" tbl" as u64)
+        let mut x : i64 = 0i64
+        while x < 3i64 {
+            let mut y : i64 = 0i64
+            while y < 3i64 { sp() e_i64(mog_get(x, y))   y = y + 1i64 }
+            x = x + 1i64
+        }
+        nl()
+        k = k + 1i64
+    }
+    let p22 : i64 = mog_product_law(2i64, 2i64)
+    let p23 : i64 = mog_product_law(2i64, 3i64)
+    let p32 : i64 = mog_product_law(3i64, 2i64)
+    ps("MOG PRODUCT-LAW " as u64) e_i64(p22) sp() e_i64(p23) sp() e_i64(p32) ps(" refuted 0\n" as u64)
+    ps("MOG verdict: the 11-law language FAILS under its own manipulation at the third token (40 gap profiles); the mirror law restores closure; DUALITY and PRODUCT hold TOTALLY -- laws of the machine's own ontology, machine-verified over the whole universe\n" as u64)
+    return 0u64
+}

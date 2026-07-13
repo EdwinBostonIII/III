@@ -1,0 +1,109 @@
+/* 2711_mathesis_ontogenesis.iii -- GATE for THE ONTOGENESIS (campaign Upsilon-2): the base
+ * ontology (unlabeled tokens + combination, no numbers presupposed) manipulated by III alone,
+ * and the universal laws that arise.
+ *
+ * W -- THE GAP THEOREM, witness first: tables 377 and 715 at carrier 3 share the 11-law profile
+ *      1344, and their OPPOSITES' profiles differ (re-derived here through the organ's own
+ *      doors) -- the 11-law language does NOT determine the dual.  40 profiles are
+ *      gap-witnessed at carrier 3; at carrier 2 there is NO gap (0) -- the inadequacy EMERGES
+ *      with the third token.
+ * D -- THE DUALITY LAW: after the machine's language extension (law 12, RINVOL -- the mirror
+ *      the manipulation demanded), profile12(opposite(T)) == swap(profile12(T)) for EVERY table
+ *      at both carriers: 16 and 19,683 checked, zero exceptions.  The swap is not the identity
+ *      (the witness table shows it), so the law has content.
+ * C -- THE CITIZENS: the machine's self-selected canonical structures (species unique up to
+ *      isomorphism): 10 at carrier 2, 24 at carrier 3 (the Steiner quandle 2022@14001 and the
+ *      bounded semilattice 1439@15633 among them).
+ * P -- THE PRODUCT LAW: profile12(A x B) == profile12(A) AND profile12(B) over EVERY ordered
+ *      citizen pair -- 100 products at 2x2, 240 at 2x3, 240 at 3x2 -- verified pair-for-pair,
+ *      never assumed.
+ *
+ * exit 99 pass; 10 W; 11 D; 12 C; 13 P. */
+module corpus_2711_mathesis_ontogenesis
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mog_load_forge(idx: i64, n: i64) -> i32 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_profile() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_opposite() -> i32 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_swap(p: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap11(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wa() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wb() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_gap_wp() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_duality(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_citizens(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_p(k: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_r(k: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_product_law(na: i64, nb: i64) -> i64 from "mathesis_ontogenesis.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var WQA : i64   var WQB : i64
+var G2 : i64   var G3 : i64
+var D2 : i64   var D3 : i64
+var C2 : i64   var C3 : i64
+var HASQ : i64   var HASL : i64
+var P22 : i64   var P23 : i64   var P32 : i64
+
+fn main() -> u64 {
+    /* == W: the witness first, re-derived through the organ doors. */
+    mog_load_forge(377i64, 3i64)
+    let pa : i64 = mog_profile() & 2047i64
+    mog_opposite()
+    WQA = mog_profile() & 2047i64
+    mog_load_forge(715i64, 3i64)
+    let pb : i64 = mog_profile() & 2047i64
+    mog_opposite()
+    WQB = mog_profile() & 2047i64
+    putchar(87i32) putchar(58i32) sp() e_i64(pa) sp() e_i64(pb) sp() e_i64(WQA) sp() e_i64(WQB) nl()
+    if pa != 1344i64 { return 10u64 }
+    if pb != 1344i64 { return 10u64 }
+    if WQA == WQB { return 10u64 }
+    G2 = mog_gap11(2i64)
+    G3 = mog_gap11(3i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(G2) sp() e_i64(G3) sp() e_i64(mog_gap_wa()) sp() e_i64(mog_gap_wb()) sp() e_i64(mog_gap_wp()) nl()
+    if G2 != 0i64 { return 10u64 }
+    if G3 != 40i64 { return 10u64 }
+    if mog_gap_wa() != 377i64 { return 10u64 }
+    if mog_gap_wb() != 715i64 { return 10u64 }
+    if mog_gap_wp() != 1344i64 { return 10u64 }
+
+    /* == D: the duality law, total; and the swap has content (not the identity on the witness). */
+    D2 = mog_duality(2i64)
+    D3 = mog_duality(3i64)
+    mog_load_forge(377i64, 3i64)
+    let p377 : i64 = mog_profile()
+    let sw : i64 = mog_swap(p377)
+    putchar(68i32) putchar(58i32) sp() e_i64(D2) sp() e_i64(D3) sp() e_i64(p377) sp() e_i64(sw) nl()
+    if D2 != 16i64 { return 11u64 }
+    if D3 != 19683i64 { return 11u64 }
+    if p377 == sw { return 11u64 }                 /* the law is not vacuous on the witness */
+
+    /* == C: the citizens, and the named exhibits among them. */
+    C2 = mog_citizens(2i64)
+    if C2 != 10i64 { return 12u64 }
+    C3 = mog_citizens(3i64)
+    HASQ = 0i64   HASL = 0i64
+    let mut k : i64 = 0i64
+    while k < C3 {
+        if mog_cit_p(k) == 2022i64 { if mog_cit_r(k) == 14001i64 { HASQ = 1i64 } }
+        if mog_cit_p(k) == 1439i64 { if mog_cit_r(k) == 15633i64 { HASL = 1i64 } }
+        k = k + 1i64
+    }
+    putchar(67i32) putchar(58i32) sp() e_i64(C2) sp() e_i64(C3) sp() e_i64(HASQ) sp() e_i64(HASL) nl()
+    if C3 != 24i64 { return 12u64 }
+    if HASQ != 1i64 { return 12u64 }
+    if HASL != 1i64 { return 12u64 }
+
+    /* == P: the product law over every ordered citizen pair. */
+    P22 = mog_product_law(2i64, 2i64)
+    P23 = mog_product_law(2i64, 3i64)
+    P32 = mog_product_law(3i64, 2i64)
+    putchar(80i32) putchar(58i32) sp() e_i64(P22) sp() e_i64(P23) sp() e_i64(P32) nl()
+    if P22 != 100i64 { return 13u64 }
+    if P23 != 240i64 { return 13u64 }
+    if P32 != 240i64 { return 13u64 }
+
+    return 99u64
+}

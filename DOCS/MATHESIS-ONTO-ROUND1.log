@@ -1,0 +1,41 @@
+MOG-ROUND1 declared: BASE = unlabeled tokens + one combination, nothing else; MANIPULATION = opposite and product; laws decided by TOTAL exhaustion, 12-law profiles (bit 11 = the mirror law the manipulation forced)
+MOG GAP n=2 0 n=3 40 witness 377 715 1344
+MOG DUALITY 16 19683 exceptions 0
+MOG CITIZENS n=2 10
+MOG# 2 2 1
+MOG# 2 128 2
+MOG# 2 256 4
+MOG# 2 1344 3
+MOG# 2 1427 0
+MOG# 2 1439 8
+MOG# 2 1477 12
+MOG# 2 1643 6
+MOG# 2 1696 5
+MOG# 2 1957 10
+MOG CITIZENS n=3 24
+MOG# 3 14 14709 tbl 0 1 2 1 1 0 2 0 2
+MOG# 3 40 3855 tbl 0 1 2 1 2 0 2 1 0
+MOG# 3 68 14235 tbl 0 2 0 2 1 1 1 0 2
+MOG# 3 141 15660 tbl 0 0 0 1 1 1 0 1 2
+MOG# 3 144 2559 tbl 0 1 2 1 1 1 0 1 0
+MOG# 3 269 15636 tbl 0 1 0 0 1 1 0 1 2
+MOG# 3 272 3999 tbl 0 1 0 1 1 1 2 1 0
+MOG# 3 548 14007 tbl 0 1 2 2 1 0 1 0 2
+MOG# 3 552 4179 tbl 0 1 2 1 0 2 2 1 0
+MOG# 3 1035 6417 tbl 0 0 2 0 1 2 2 2 0
+MOG# 3 1120 5421 tbl 0 1 2 2 0 1 1 2 0
+MOG# 3 1131 5681 tbl 2 0 1 0 1 2 1 2 0
+MOG# 3 1169 567 tbl 0 0 0 0 1 2 0 0 0
+MOG# 3 1184 5299 tbl 1 2 0 1 2 0 1 2 0
+MOG# 3 1297 4455 tbl 0 0 0 0 1 0 0 2 0
+MOG# 3 1431 13203 tbl 0 0 0 0 1 0 0 0 2
+MOG# 3 1439 15633 tbl 0 0 0 0 1 1 0 1 2
+MOG# 3 1476 14937 tbl 0 2 0 1 1 1 2 0 2
+MOG# 3 1477 19305 tbl 0 0 0 1 1 1 2 2 2
+MOG# 3 1632 4173 tbl 0 2 1 1 0 2 2 1 0
+MOG# 3 1634 4069 tbl 1 0 2 0 2 1 2 1 0
+MOG# 3 1956 14439 tbl 0 1 2 0 1 2 1 0 2
+MOG# 3 1957 15897 tbl 0 1 2 0 1 2 0 1 2
+MOG# 3 2022 14001 tbl 0 2 1 2 1 0 1 0 2
+MOG PRODUCT-LAW 100 240 240 refuted 0
+MOG verdict: the 11-law language FAILS under its own manipulation at the third token (40 gap profiles); the mirror law restores closure; DUALITY and PRODUCT hold TOTALLY -- laws of the machine's own ontology, machine-verified over the whole universe

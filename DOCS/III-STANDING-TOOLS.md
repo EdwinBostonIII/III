@@ -158,6 +158,12 @@ iii-exact --roots "<c0 c1 ... cd>" [lo hi]   isolate ALL real roots of c0+c1*x+.
 iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE root isolated in (lo, hi]
 iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER with DECIDABLE EQUALITY of two
                                          real algebraic numbers (the zero problem, decided)
+iii-exact --alg-add "<A>" <lo> <hi> "<B>" <lo> <hi>   THE ARITHMETIC CLOSURE: construct gamma =
+iii-exact --alg-mul "<A>" <lo> <hi> "<B>" <lo> <hi>   alpha+beta / alpha*beta as (an integer defining
+                                         polynomial, a certified isolating window) -- roots are
+                                         closed under + and * ON THIS SURFACE
+iii-exact --roots-big "<c0 .. cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 24,
+                                         coefficients of ANY size (<= 1300 digits each)
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_exact.sh` → `COMPILED/iii-exact`.
@@ -190,6 +196,26 @@ Exits: `--alg-sign` sign-mode 1/0/2; `--alg-cmp` `1` A<B | `0` EQUAL | `2` A>B (
 both add `4` REFUSED (the interval does not isolate exactly one root) | `5` abstain | `6` a
 cross-check failed.
 
+`--alg-add` / `--alg-mul` are the ARITHMETIC CLOSURE (`aether/resultant`, gates 2177/2179/2180/2186):
+the certified modular-CRT resultant engine CONSTRUCTS γ's integer defining polynomial (16 fixed
+30-bit primes, a certified permanent norm bound, a mod-every-prime consistency re-check, and the
+V-I.2 limb-row ABI so coefficients beyond i64 are DELIVERED, not refused); the CLI then pins WHICH
+root γ is by refining α and β through the overflow-free bigint chain until R has exactly ONE
+root (`root_count2`-certified) in γ's interval-arithmetic window.  When both inputs are principal
+square roots, the Σ√ separation-bound oracle must independently confirm γ's window before anything
+prints.  The product needs nonnegative isolating intervals (a named abstention gives the exact
+p(−x) workaround); a zero operand is detected exactly and answered `PRODUCT: exactly 0`.  The
+output pair (R + window) is itself a legal `--roots`/`--roots-big` input — closure, literally.
+Exits: `0` certified | `3` parse | `4` refused | `5` abstain | `6` a cross-check failed.
+
+`--roots-big` carries isolation PAST the i64 chain wall (gate 2185: the i64 chain honestly
+overflows at degree 12): degree ≤ 24, decimal coefficients to 1300 digits parsed exactly into
+limb rows (the archive bigint engine), counting/bisection/multiplicity all through `sturm_big`'s
+pool-array chain, multiplicity through the new raw-ABI door `root_mult2_cur` (gate 2186's M arm).
+Explicit window required, endpoints |·| ≤ 2⁴⁴; every doubling and rescale is pre-guarded so no
+coordinate ever leaves exact i64 — out-of-guard is a measured abstention, never a rounded value.
+Exits: `0` certified | `3` parse | `5` abstain (envelope / cluster at the 2⁻²⁴ cap) | `6` refuse.
+
 Verified on fresh input:
 
 | input | verdict | why it is right |
@@ -219,6 +245,17 @@ Verified on fresh input:
 | `--alg-sign "-2 0 1" 1 2` / `"-2 0 1" -2 -1` / `"0 1" -1 1` | exit 2 / 1 / 0 | +√2 POSITIVE, −√2 NEGATIVE, the root of x EXACTLY ZERO — each verdict agreed by the counting AND refinement faculties |
 | `--alg-sign "2 -3 1" 0 3` | exit 4 | `REFUSED: (0, 3] holds 2 roots … an algebraic number needs exactly 1 (isolate first: --roots)` |
 | `--alg-sign "1 0 0 0 1" 0 2` | exit 5 | degree 4: outside the gate-proven algnum envelope — ABSTAIN |
+| `--alg-add "-2 0 1" 1 2 "-3 0 1" 1 2` | exit 0 | **√2+√3 → `1 0 -10 0 1` = x⁴−10x²+1 — the classical minimal polynomial, machine-constructed** — isolated in (2, 4], bigint-certified AND Σ√-oracle-confirmed |
+| `--alg-mul "-2 0 1" 1 2 "-3 0 1" 1 2` | exit 0 | √2·√3 → `36 0 -12 0 1` = (t²−6)², the norm form (conjugate pairings coincide — multiplicity carried, the window still pins the ONE root √6) |
+| `--alg-add "-2 0 0 1" 1 2 "-4 0 0 1" 1 2` | exit 0 | ∛2+∛4 → degree 9: `-216 0 0 -108 0 0 -18 0 0 1` (consistent with γ³ = 6+6γ), certified window (2, 4] |
+| `--alg-add "-1 1" 0 2 "-5 0 1" 2 3` then `--alg-mul "-4 -2 1" 3 4 "-1 2" 0 1` | exit 0 both | **THE GOLDEN RATIO, composed across two invocations**: 1+√5 → `-4 -2 1` (t²−2t−4); that printed output fed back with the exact rational 1/2 (2x−1) → `-4 -4 4` = 4t²−4t−4, φ isolated in (0, 4] — the content 4 is visible: a DEFINING polynomial, never claimed minimal |
+| `--roots "1 0 -10 0 1"` | exit 0 | closure the other way: `--alg-add`'s output is a legal `--roots` input — all four conjugates ±√2±√3 isolated, multiplicity 1 each |
+| `--alg-mul "-2 0 1" 1 2 "0 1" -1 1` | exit 0 | `PRODUCT: exactly 0 (B is the zero algebraic number)` — detected exactly, no resultant needed |
+| `--alg-mul "-2 0 1" -2 -1 "-3 0 1" 1 2` | exit 5 | negative interval: the named abstention with the exact p(−x) workaround printed |
+| `--roots-big "<W12 coefficients>" 0 13` | exit 0 | **Wilkinson (x−1)…(x−12) — degree 12 IS past the i64 chain wall — all 12 roots isolated** with multiplicity 1, Σ = 12 = degree, bigint-Sturm certified |
+| `--roots-big "-1208925819614629174706176 1208925819616828197961728 -2199023255553 1" 0 1099511627777` | exit 0 | **(x−2⁴⁰)²(x−1) with an 81-bit constant term: the double root at 2⁴⁰ certified `multiplicity 2 — TOUCHES`** through the raw limb door; root 1 crosses; Σ = 3 = degree |
+| `--roots-big "1125899906842623 -6755399441055744 10133099161583616" 0 1` | exit 5 | roots 1/3 ± 1/(3·2²⁵), gap ≈ 2⁻²⁶: `2 roots certified but only 0 isolated at the dyadic depth cap` — the count stays exact, the isolation refuses honestly |
+| `--roots-big "0 0 … 0 1"` (deg 25) / `"12x 1"` / `"0 0"` / window past 2⁴⁴ | exits 5/3/3/5 | envelope abstention, trailing garbage, the zero polynomial, window envelope — each named |
 
 ---
 
@@ -229,6 +266,10 @@ iii-typecheck <term-file>                      infer the term's type, or refuse
 iii-typecheck --check <term-file> <type-file>  check term : type (bidirectional)
 iii-typecheck --qtt <term-file>                judge QTT usage: every binder within its declared
                                                multiplicity (erased ^0 / linear ^1 / unrestricted)
+iii-typecheck --lek "<c1..c6>" "<b1..b6>"      SOVEREIGNTY AS TYPES: the kernel PROVES (or refuses)
+                                               cost <= budget over your own 6-vectors, by iota
+iii-typecheck --reach <hexad>                  the kernel proves/refuses hexad reachability by
+                                               REDUCTION through its own oracle -- never baked
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_typecheck.sh` → `COMPILED/iii-typecheck`.
@@ -247,8 +288,12 @@ PROVES width-sensitive machine arithmetic by conversion, not by a unary Peano to
 `(lam0 A b)` erased / `(lam1 A b)` linear / `(lamw A b)` unrestricted (same `pi0/pi1/piw`);
 `--qtt` requires well-typedness FIRST (QTT is a layer over infer), then runs the kernel's
 `tc_qtt_ok` usage judgment. Printed types omit the quantities (the kernel carries them — they are
-part of the type's identity for conversion). LEK/REACH certification nodes stay kernel-internal
-by design: they bind in-process cost/budget registries, not files (own gates).
+part of the type's identity for conversion). `--lek` builds the cost/budget registry IN-PROCESS
+from your two 6-vectors (the M13 budget shape) and checks `(refl true) : Id(Bool, LEK(c,b), true)`
+— LEK iota-reduces through `cl_le_product` (the product order over all six components), so
+over-budget is a TYPE error, not a warning. `--reach <h>` checks the Reach proof for hexad h:
+REACH(h) iota-reduces through the kernel's own reachability oracle (`iii_hexad_reachable`) — a
+bricking configuration is UNCONSTRUCTABLE as a type (the mig2 SovVal law, on your arguments).
 
 Verified on fresh input:
 
@@ -279,6 +324,12 @@ Verified on fresh input:
 | `--qtt (lam0 bool true)` / `(lam0 bool (var 0))` | `RESPECTED` exit 0 / `REJECTED` exit 4 — erased means UNUSED at runtime, both arms measured |
 | `--qtt (lam0 (sort 0) (lam1 (var 0) (var 0)))` | `RESPECTED … term : (pi (sort 0) (pi (var 0) (var 1)))`, exit 0 — dependent erasure: the erased type-argument appears ONLY in a type position |
 | `--qtt (lam1 bool (app (var 0) (var 0)))` | `ILL-TYPED: QTT is a layer over typing`, exit 4 — the ill-typed term is refused BEFORE usage is judged |
+| `--lek "1 2 3 4 5 6" "6 6 6 6 6 6"` | `WITHIN BUDGET: the kernel PROVES cost <= budget`, exit 0 |
+| `--lek "1 2 3 4 5 7" "6 6 6 6 6 6"` | `OVER BUDGET: the kernel REFUSES the LeK proof`, exit 4 — ONE component over is enough (product order); **over-budget is a TYPE error** |
+| `--lek "3 3 3 3 3 3" "3 3 3 3 3 3"` / five numbers | exit 0 (≤ is reflexive) / exit 3 (exactly six required) |
+| `--reach 40` | `REACHABLE: hexad 40's Reach proof type-checks`, exit 0 — **40 is the lattice's first reachable id (measured by scan)** |
+| `--reach 0` (…through 5, and every id below 40) | `UNREACHABLE (bricking): no Reach proof exists`, exit 4 — an unreachable configuration is unconstructable as a type |
+| `--reach 70000` | exit 3 — a hexad id is 0..65535; the parse verdict is the tool's |
 
 ---
 
@@ -324,19 +375,21 @@ what survives into a replayable content-addressed library, and folds the useful 
 Named, not hidden. These are real capabilities with real KAT coverage that **do not yet have a standing CLI**,
 and therefore do not yet meet the bar this document sets:
 
-- **Algebraic-number ARITHMETIC** (α+β, α·β via resultants): `--alg-cmp`/`--alg-sign` surface algnum's
-  ORDER structure (sign, total order, decidable equality); the FIELD structure is `algnum.iii`'s stated
-  future work (needs the bigint register tier). `iii-exact` remains the surface.
-- **Beyond-i64 coefficients for `--roots`**: `sturm_big` accepts raw limb-wise bigint coefficients to
-  degree 24 (`sturm2_in_begin/in_limb/in_set` — the resultant-ABI bridge, gate 2185); the CLI's parser
-  is i64. A bigint-coefficient front end is the named extension.
-- **LEK/REACH certification nodes**: kernel-internal BY DESIGN — they bind in-process cost/budget
-  registries, not files (own gates); a file-facing form would need a registry serialization story first.
+- **`--alg-inv` (the field completion)**: `rs_inv` is gated (2180: x⁴−10x²+1 is self-reversed; 1/∛2 →
+  2x³−1) but 1/α's isolating window mirrors half-open orientation ((lo,hi] → [1/hi, 1/lo)) — the
+  surface needs the exact-endpoint rational case answered directly and the cross-denominator window
+  (2ᵏ/h, 2ᵏ/l]. With it, +, ·, ⁻¹ (hence ÷) all stand on the CLI.
+- **Wider envelopes, honestly held**: `--alg-*` inputs stop at degree 3 (the gate-2157-proven algnum
+  register class; degree ≤ 7 is mechanical but unproven); `--roots-big` stops at degree 24 / 64-limb
+  coefficients (`sturm_big`'s pool geometry). Each boundary is an abstention today, an extension when
+  a gate proves the wider class.
 
 (ML-KEM, SLH-DSA, Ed25519, AES-SIV, rank-1 denesting, and the CIC core left this list on 2026-07-12;
-Sturm root isolation + multiplicity (`--roots`, bigint-recertified), the algnum order structure
-(`--alg-sign`/`--alg-cmp`, the zero problem decided), QTT usage judgment (`--qtt`), and the BV64
-machine-arithmetic prover left it the same day — each now a verb on a standing tool above, proven on
-both arms.)
+Sturm isolation + multiplicity, the algnum order structure, QTT, and BV64 left it the same day; and
+the last three named items — **algebraic-number ARITHMETIC** (`--alg-add`/`--alg-mul`: the certified
+resultant closure, the golden ratio composed across two invocations), **beyond-i64 coefficients**
+(`--roots-big`: Wilkinson-12 past the chain wall, an 81-bit-coefficient double root certified through
+the raw limb door), and **LEK/REACH** (`--lek`/`--reach`: sovereignty as types, on your own vectors) —
+left it before that day ended. Every verb proven on both arms, every claimed line observed output.)
 
 Each is a tool of the same shape as `iii-prove`: link the library, take real input, print a real verdict.

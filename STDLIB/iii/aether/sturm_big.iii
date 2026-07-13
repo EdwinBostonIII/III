@@ -372,6 +372,14 @@ fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> 
         sturm2_in_set(i, st2_sgn_i64(c), 1i64)
         i = i + 1i64
     }
+    return root_mult2_cur(an, ad, bn, bd)
+}
+
+/* the same reduce-to-gcd multiplicity loop over WHATEVER the CUR rows hold -- the raw-ABI door
+ * (V-I.2): load coefficients BEYOND i64 via sturm2_in_begin/in_limb/in_set first, then call this.
+ * CONSUMES the CUR rows (each round replaces them with the chain's gcd).  -1 no root, -2 ambiguous
+ * (more than one distinct root in the bracket -- isolate first), else the multiplicity m >= 1. */
+fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
     let mut m : i64 = 0i64
     let mut going : u8 = 1u8
     while going == 1u8 {

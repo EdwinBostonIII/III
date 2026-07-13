@@ -5,6 +5,12 @@
  *   iii-typecheck --qtt <term-file>              judge QTT USAGE: every binder within its declared
  *                                                multiplicity (erased ^0 / linear ^1 / unrestricted ^w).
  *                                                A layer over typing: ill-typed terms are refused first.
+ *   iii-typecheck --lek "<c1..c6>" "<b1..b6>"    SOVEREIGNTY AS TYPES: register the cost and budget
+ *                                                6-vectors in-process and let the kernel decide
+ *                                                cost <= budget (product order) BY IOTA -- over-budget
+ *                                                is a TYPE error (the LeK proof does not check).
+ *   iii-typecheck --reach <hexad>                the kernel PROVES (or refuses) hexad reachability by
+ *                                                reduction through its own oracle -- never baked.
  *
  * The kernel (numera/typecheck: lambda-Pi + predicative universes U0:U1:..., Sigma, Bool, Id/J,
  * Nat/iter/natrec, Unit, Empty, Sum, W-types, BV64, QTT; conversion by the directed CCL oracle) is
@@ -24,8 +30,8 @@
  * inl/inr/sup are CHECKABLE, not inferable (bidirectional): infer refuses them bare; annotate
  * ((ann (inl true) (sum bool nat))) or use --check.  bvudiv by literal 0 is STUCK by design: the
  * kernel will not equate it with anything.  Printed types omit QTT quantities (the kernel carries
- * them internally; they are part of the type's identity for conversion).  LEK/REACH certification
- * nodes stay kernel-internal (they bind in-process cost/budget registries, not files).
+ * them internally; they are part of the type's identity for conversion).  LEK/REACH bind registry
+ * slots built IN-PROCESS from the --lek vectors / the --reach hexad id (not S-expression grammar).
  *
  * exit: 0 = WELL-TYPED / CHECKED / QTT-RESPECTED | 4 = the kernel REFUSED (ill-typed / does not
  *       check / usage violates a declared multiplicity) | 3 = parse error (position printed)
@@ -97,6 +103,12 @@ extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+/* LEK/REACH: sovereignty certification as TYPES.  The cost/budget registry is built IN-PROCESS from
+ * the user's own 6-vectors (the M13 budget shape); the kernel decides by IOTA via cl_le_product /
+ * iii_hexad_reachable -- over-budget and bricking are TYPE errors, not warnings. */
+extern @abi(c-msvc-x64) fn tc_sov_lek(cs: u32, bs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sov_reach(h: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn clek_register(c: u64) -> u32 from "ccl.iii"
 
 const SRCCAP : u64 = 1048576u64
 const INVALID_H : u64 = 18446744073709551615u64
@@ -632,6 +644,38 @@ fn pr_node(t: u32) -> u32 {
     return 1u32
 }
 
+/* parse EXACTLY six whitespace-separated unsigned u64s from an argv string into dst (the M13
+ * 6-vector shape).  1 = ok; trailing garbage / wrong count / overflow are errors. */
+var LEKC : [u64; 6]   var LEKB : [u64; 6]
+fn parse_vec6(str: u64, dst: u64) -> u32 {
+    let p : *u8 = str as *u8
+    let d : *u64 = dst as *u64
+    let mut i : u64 = 0u64
+    let mut n : u64 = 0u64
+    while p[i] != 0u8 {
+        while p[i] == 32u8 { i = i + 1u64 }
+        while p[i] == 9u8 { i = i + 1u64 }
+        if p[i] == 0u8 { i = i }
+        else {
+            if p[i] < 48u8 { return 0u32 }
+            if p[i] > 57u8 { return 0u32 }
+            let mut v : u64 = 0u64
+            while p[i] >= 48u8 { if p[i] <= 57u8 {
+                let dg : u64 = (p[i] as u64) - 48u64
+                if v > 1844674407370955161u64 { return 0u32 }
+                if v == 1844674407370955161u64 { if dg > 5u64 { return 0u32 } }
+                v = v * 10u64 + dg
+                i = i + 1u64
+            } else { return 0u32 } }
+            if n >= 6u64 { return 0u32 }
+            d[n] = v
+            n = n + 1u64
+        }
+    }
+    if n != 6u64 { return 0u32 }
+    return 1u32
+}
+
 fn tk_load_parse(path: u64) -> u32 {
     /* returns node; 0 with PERR/PPOS set on parse error; 0 with PERR=2 on file error */
     let n : u64 = rdfile(path, (&SRC) as u64, SRCCAP)
@@ -653,7 +697,9 @@ fn usage() -> u64 {
     ps("iii-typecheck -- the dependent-type kernel (lambda-Pi + universes), on your terms\n\n" as u64)
     ps("  iii-typecheck <term-file>                    infer the type, or refuse\n" as u64)
     ps("  iii-typecheck --check <term-file> <type-file>  check term : type\n" as u64)
-    ps("  iii-typecheck --qtt <term-file>              judge QTT usage (a layer over typing)\n\n" as u64)
+    ps("  iii-typecheck --qtt <term-file>              judge QTT usage (a layer over typing)\n" as u64)
+    ps("  iii-typecheck --lek \"<c1..c6>\" \"<b1..b6>\"    PROVE cost <= budget as a TYPE (LEK iota)\n" as u64)
+    ps("  iii-typecheck --reach <hexad>                PROVE hexad reachability as a TYPE (REACH iota)\n\n" as u64)
     ps("  grammar (de Bruijn indices; (var 0) is the innermost binder):\n" as u64)
     ps("    (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p)\n" as u64)
     ps("    (ann t T) bool true false (if s t e) (id T a b) (refl a) (j M base proof)\n" as u64)
@@ -694,6 +740,62 @@ fn main(argc: i32, argv: u64) -> u64 {
             ps("QTT USAGE: RESPECTED -- every binder within its declared multiplicity.  term : " as u64)
             if pr_node(qty) == 0u32 { nl()  return 5u64 }
             nl()
+            return 0u64
+        }
+        if a1[2u64] == 108u8 {                              /* "--lek" "<c1..c6>" "<b1..b6>" */
+            if argc < 4i32 { return usage() }
+            if parse_vec6(av[2u64], (&LEKC) as u64) != 1u32 {
+                ps("iii-typecheck: --lek cost must be exactly six unsigned integers\n" as u64)
+                return 3u64
+            }
+            if parse_vec6(av[3u64], (&LEKB) as u64) != 1u32 {
+                ps("iii-typecheck: --lek budget must be exactly six unsigned integers\n" as u64)
+                return 3u64
+            }
+            let cs : u32 = clek_register((&LEKC) as u64)
+            let bs : u32 = clek_register((&LEKB) as u64)
+            let lty : u32 = tc_sov_lek(cs, bs)
+            let lpf : u32 = tc_refl(tc_true())
+            if tc_check(lpf, lty) != 1u8 {
+                ps("OVER BUDGET: the kernel REFUSES the LeK proof -- cost exceeds budget in at least one\n" as u64)
+                ps("  of the six components (product order).  Over-budget is a TYPE error here, not a warning.\n" as u64)
+                return 4u64
+            }
+            ps("WITHIN BUDGET: the kernel PROVES cost <= budget -- LEK(cost, budget) iota-reduces to true\n" as u64)
+            ps("  (cl_le_product over all six components), so (refl true) : Id(Bool, LEK, true) CHECKS.\n" as u64)
+            return 0u64
+        }
+        if a1[2u64] == 114u8 {                              /* "--reach" <hexad> */
+            if argc < 3i32 { return usage() }
+            let hp : *u8 = av[2u64] as *u8
+            let mut hv : u64 = 0u64
+            let mut hi : u64 = 0u64
+            let mut hok : u32 = 1u32
+            if hp[0u64] == 0u8 { hok = 0u32 }
+            while hp[hi] != 0u8 {
+                let c : u8 = hp[hi]
+                if c < 48u8 { hok = 0u32   hi = hi + 1u64 }
+                else { if c > 57u8 { hok = 0u32   hi = hi + 1u64 }
+                else {
+                    hv = hv * 10u64 + ((c as u64) - 48u64)
+                    if hv > 65535u64 { hok = 0u32 }
+                    hi = hi + 1u64
+                } }
+            }
+            if hok != 1u32 {
+                ps("iii-typecheck: --reach needs a hexad id 0..65535\n" as u64)
+                return 3u64
+            }
+            let rty : u32 = tc_sov_reach(hv as u32)
+            let rpf : u32 = tc_refl(tc_true())
+            if tc_check(rpf, rty) != 1u8 {
+                ps("UNREACHABLE (bricking): no Reach proof exists for hexad " as u64)  pd(hv)
+                ps(" -- REACH(h) does not\n  reduce to true; an unreachable configuration is UNCONSTRUCTABLE as a type.\n" as u64)
+                return 4u64
+            }
+            ps("REACHABLE: hexad " as u64)  pd(hv)
+            ps("'s Reach proof type-checks -- REACH(h) iota-reduces to true via the kernel's\n" as u64)
+            ps("  own reachability oracle (verified by reduction, never a baked value).\n" as u64)
             return 0u64
         }
         if a1[2u64] != 99u8 { return usage() }              /* else only --check */

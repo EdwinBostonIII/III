@@ -29,11 +29,28 @@ extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "s
 extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
 var AF : [i64; 10]   var AG : [i64; 10]   var AO : [i64; 20]   var AO2 : [i64; 20]
+
+/* the M-arm polynomial (x - 2^40)^2 (x - 1) as raw limb rows: c0 = -2^80 (two limbs), c1 = 2^80 + 2^41
+ * (two limbs), c2 = -(2^41 + 1), c3 = 1.  Reloadable (build/mult consume the CUR rows). */
+fn m_rows() -> i32 {
+    if sturm2_in_begin(3i64) != 0i32 { return 0i32 - 1i32 }
+    sturm2_in_limb(0i64, 0i64, 0u64)   sturm2_in_limb(0i64, 1i64, 65536u64)
+    sturm2_in_set(0i64, 0i64 - 1i64, 2i64)
+    sturm2_in_limb(1i64, 0i64, 2199023255552u64)   sturm2_in_limb(1i64, 1i64, 65536u64)
+    sturm2_in_set(1i64, 1i64, 2i64)
+    sturm2_in_limb(2i64, 0i64, 2199023255553u64)
+    sturm2_in_set(2i64, 0i64 - 1i64, 1i64)
+    sturm2_in_limb(3i64, 0i64, 1u64)
+    sturm2_in_set(3i64, 1i64, 1i64)
+    return 0i32
+}
 
 fn main() -> u64 {
     /* ══ A: a = 2^40. */
@@ -107,6 +124,26 @@ fn main() -> u64 {
     if AO[12u64] != 1i64 { return 14u64 }
     i = 0i64
     while i <= 12i64 { if rs_big_fit(i) != 1i64 { return 14u64 }   i = i + 1i64 }
+
+    /* ══ M: the raw-ABI MULTIPLICITY door (root_mult2_cur): (x - 2^40)^2 (x - 1) has an 81-bit
+     * constant term (-2^80) the i64 door cannot even carry -- the DOUBLE root at 2^40 and the simple
+     * root at 1 are each certified through the limb rows; the refactored i64 door (root_mult2, now
+     * the same loop behind a loader) is regressed on (x-1)^2 (x-2). */
+    if m_rows() != 0i32 { return 15u64 }
+    if sturm2_build_cur() < 0i64 { return 15u64 }
+    let nN : i64 = 1099511627776i64
+    let mc : i64 = root_count2(0i64, 1i64, nN + 1i64, 1i64)                 /* distinct roots: {1, 2^40} */
+    if m_rows() != 0i32 { return 15u64 }
+    let m2 : i64 = root_mult2_cur(nN - 1i64, 1i64, nN + 1i64, 1i64)         /* the double root at 2^40 */
+    if m_rows() != 0i32 { return 15u64 }
+    let m1 : i64 = root_mult2_cur(0i64, 1i64, 3i64, 2i64)                   /* the simple root at 1 */
+    AF[0u64] = 0i64 - 2i64   AF[1u64] = 5i64   AF[2u64] = 0i64 - 4i64   AF[3u64] = 1i64
+    let mr : i64 = root_mult2((&AF) as u64, 3i64, 0i64, 1i64, 3i64, 2i64)   /* i64 door: (x-1)^2(x-2) */
+    putchar(77i32) putchar(58i32) sp() e_i64(mc) sp() e_i64(m2) sp() e_i64(m1) sp() e_i64(mr) nl()   /* "M: 2 2 1 2" */
+    if mc != 2i64 { return 15u64 }
+    if m2 != 2i64 { return 15u64 }
+    if m1 != 1i64 { return 15u64 }
+    if mr != 2i64 { return 15u64 }
 
     return 99u64
 }

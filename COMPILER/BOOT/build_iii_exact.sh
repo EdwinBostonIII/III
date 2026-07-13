@@ -62,10 +62,12 @@ trap 'rm -rf "$TMP_ROOT" 2>/dev/null || true' EXIT
 mkdir -p "$TMP_ROOT" "$OUT_DIR"
 
 # exact_cli composes aether/sqrt_sum_sign (+ its kfield sibling), aether/exact_denest (--denest),
-# aether/sturm + aether/sturm_big (--roots: i64 propose / bigint certify), and aether/algnum
-# (--alg-sign/--alg-cmp) -- all separate TUs, not archived (their bigint/arena deps ARE archived).
+# aether/sturm + aether/sturm_big (--roots / --roots-big: i64 propose / bigint certify + the
+# past-the-wall tier), aether/algnum (--alg-sign/--alg-cmp), and aether/resultant (--alg-add/
+# --alg-mul: the certified-CRT closure) -- all separate TUs, not archived (their bigint/arena
+# deps ARE archived).
 OBJS=()
-for tu in kfield sqrt_sum_sign exact_denest sturm sturm_big algnum; do
+for tu in kfield sqrt_sum_sign exact_denest sturm sturm_big algnum resultant; do
     o="$TMP_ROOT/${tu}.iii.o"
     log "iiis-2 ${tu}.iii -> ${tu}.iii.o"
     "$IIIS" "$III_ROOT/STDLIB/iii/aether/${tu}.iii" --compile-only --out "$o" || die 3 "iii compile failed: ${tu}.iii"

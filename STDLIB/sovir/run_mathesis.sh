@@ -215,6 +215,28 @@ TAU_CERT="$(printf '%s' "0|0|6|3|0|6|0|9|12|12,3" | sha256sum | cut -d' ' -f1)"
 echo "[mathesis] TAU_CERT = $TAU_CERT"
 echo "[mathesis] GREEN: campaign Tau sealed (d=5 EMPTY to height 200; d=12 curve A carries SIX new sigma identities; the trivial triangle is chord-tangent CLOSED and independent of the sigma-points; {trivials+Ramanujan-orbit} EXACTLY closed at 6; B5 mod 7 = bare trivial minimum -- the machine's open question sharpened with certificates)"
 
+echo "[mathesis] == [12] CAMPAIGN UPSILON (the structure forge; the autonomous pilot) =="
+for t in mathesis_forge mathesis_pilot; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" \
+        >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 85; }
+    RADFACE+=("$o")
+done
+gate 2709_mathesis_forge  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 86   # the operation-universe census: 3 anchors, 3330 structures, the Steiner exhibit
+gate 2710_mathesis_pilot  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 87   # the deterministic researcher: d=4/d=9 holes found, the INVOLUTION LAW confirmed
+FORGELOG="$III_ROOT/DOCS/MATHESIS-FORGE-ROUND1.log"
+grep -q "^MFF n=3 tables=19683 inhabited=59 structures=3330$" "$FORGELOG" \
+    || { echo "[mathesis] RED: forge census drifted"; exit 88; }
+grep -q "^MFF chain=69 head=c28e85ac423faa3945927b9398d358dbaec2ed63901a93d523bc72b017ab978e$" "$FORGELOG" \
+    || { echo "[mathesis] RED: forge chain head drifted"; exit 89; }
+PILOTLOG="$III_ROOT/DOCS/MATHESIS-PILOT-LEDGER.log"
+grep -q "^PILOT# 0 0 4 60 0 3$" "$PILOTLOG" || { echo "[mathesis] RED: pilot round 0 drifted"; exit 90; }
+grep -q "^PILOT rounds=6 head=a2985fa598db8dcd394d7be9f7bca510c93e7cd2c5eed868453deea135eb0ce8$" "$PILOTLOG" \
+    || { echo "[mathesis] RED: pilot ledger head drifted"; exit 91; }
+UPSILON_CERT="$(printf '%s' "c28e85ac423faa3945927b9398d358dbaec2ed63901a93d523bc72b017ab978e|a2985fa598db8dcd394d7be9f7bca510c93e7cd2c5eed868453deea135eb0ce8|3330|59|6" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] UPSILON_CERT = $UPSILON_CERT"
+echo "[mathesis] GREEN: campaign Upsilon sealed (the operation-universe census: 3,330 structures / 59 species at n=3, triple-anchored; the pilot's first autonomous rounds found the d=4/d=9 holes and exposed THE INVOLUTION LAW: d <-> d^2 mod cubes swaps curves A and B, predictions d=18/d=25 CONFIRMED)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

@@ -1,0 +1,65 @@
+/* sovir/mathesis_pilot_main.iii -- THE PILOT LEDGER STREAM (campaign Upsilon: nobody steers).
+ * Replays and extends the autonomous research history: PILOT_ROUNDS (environment; default 6)
+ * is the ONLY input, and it selects nothing -- every experiment is the policy's own choice.
+ * Sealed as DOCS/MATHESIS-PILOT-LEDGER.log at the default budget; growing the budget extends
+ * the ledger deterministically (head(k) is a pure function of k). */
+module mathesis_pilot_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn getenv(name: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ps(msg: u64) -> i32 {
+    let p : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ch : u8 = p[i]
+        if ch == 0u8 { going = 0u8 } else { putchar(ch as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+fn hexnib(v: u64) -> i32 { if v < 10u64 { putchar((48u64 + v) as i32) } else { putchar((87u64 + v) as i32) }   return 0i32 }
+
+fn main() -> u64 {
+    ps("MPL-LEDGER declared: round r -> kind r mod 3 (0 NEW-D canonical cube-free / 1 HEIGHT schedule 120 then 200, refusal past / 2 LOCAL (d,p) row-major); the budget PILOT_ROUNDS is the only input and selects nothing\n" as u64)
+    let mut k : i64 = 6i64
+    let ep : u64 = getenv("PILOT_ROUNDS" as *u8)
+    if ep != 0u64 {
+        let s : *u8 = ep as *u8
+        let mut v : i64 = 0i64
+        let mut i : u64 = 0u64
+        let mut going : u8 = 1u8
+        while going == 1u8 {
+            let ch : u8 = s[i]
+            if ch < 48u8 { going = 0u8 } else { if ch > 57u8 { going = 0u8 } else {
+                v = (v * 10i64) + ((ch - 48u8) as i64)
+                i = i + 1u64
+            } }
+        }
+        if v >= 1i64 { if v <= 64i64 { k = v } }
+    }
+    let mut r : i64 = 0i64
+    while r < k {
+        if mpl_round(r) != 0i64 { return 1u64 }
+        ps("PILOT# " as u64) e_i64(r) sp() e_i64(mpl_k()) sp() e_i64(mpl_p1()) sp() e_i64(mpl_p2()) sp() e_i64(mpl_r1()) sp() e_i64(mpl_r2()) nl()
+        r = r + 1i64
+    }
+    let cn : i64 = mpl_run(k)
+    if cn != k { return 2u64 }
+    ps("PILOT rounds=" as u64) e_i64(k)
+    ps(" head=" as u64)
+    let mut i2 : i64 = 0i64
+    while i2 < 32i64 { hexnib(mpl_head_byte(i2) >> 4u64)   hexnib(mpl_head_byte(i2) & 15u64)   i2 = i2 + 1i64 }
+    nl()
+    return 0u64
+}

@@ -1,0 +1,124 @@
+/* 2709_mathesis_forge.iii -- GATE for THE STRUCTURE FORGE (campaign Upsilon: ontology beyond
+ * numbers).  The complete census of every binary operation on 2- and 3-element carriers, eleven
+ * laws decided by TOTAL exhaustion, classified raw and up to isomorphism, chained.
+ *
+ * T -- the DISCRIMINATION TOOTH first: the Z_3 table (x+y mod 3) carries the group profile;
+ *      corrupting ONE entry kills ASSOC -- the law checker discriminates, it does not bless.
+ * A -- THE ANCHORS (independent closed forms): group-profile raw tables == n!/|Aut(Z_n)| --
+ *      2 at n=2, 3 at n=3 (every group on a prime carrier is cyclic; tables = relabelings);
+ *      iso-classes total 10 at n=2 (the Burnside count (16+4)/2 the gate's own formula spells
+ *      out) and the machine's 3330 at n=3.
+ * C -- THE CENSUS pinned: n=2: 16 tables, 10 inhabited profiles, 10 structures; n=3: 19,683
+ *      tables, 59 inhabited profiles, 3,330 structures -- 1,989 of the 2,048 profiles are
+ *      EMPTY AT n<=3 by exhaustion (machine-posed existence questions, not nonexistence claims).
+ * S -- THE EXHIBITS: profile 1439 (ASSOC+COMM+IDEM+IDENT+ZERO+both-SDISTR+MEDIAL -- the bounded
+ *      semilattices) is inhabited at both n with ONE structure each; profile 2022 (IDEM+COMM+
+ *      both-CANCEL+both-SDISTR+LINVOL+MEDIAL, NON-associative, NO identity) is the UNIQUE
+ *      maximally-lawful non-associative species at n=3 -- one structure, first representative
+ *      table 14001 (the machine's own Steiner-type quasigroup, minted FORGE3-P2022).
+ * H -- the census CHAIN replays byte-identically (69 inhabited rows across both carriers).
+ *
+ * exit 99 pass; 10 T; 11 A; 12 C; 13 S; 14 H. */
+module corpus_2709_mathesis_forge
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mff_load(idx: i64, n: i64) -> i32 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_profile() -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_sweep(n: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_raw(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_iso(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_rep(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_inhabited() -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_total_iso() -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_genesis() -> i32 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_chain_census(n: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_head_byte(i: i64) -> u64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_chain_len() -> i64 from "mathesis_forge.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var HB : [u8; 32]
+var TP : i64   var TC : i64
+var GA2 : i64   var GA3 : i64
+var I2C : i64   var I3C : i64
+var SEMI : i64   var STEIN : i64   var SREP : i64
+
+fn groups() -> i64 {
+    let mut c : i64 = 0i64
+    let mut p : i64 = 0i64
+    while p < 2048i64 {
+        if (p & 105i64) == 105i64 { c = c + mff_raw(p) }
+        p = p + 1i64
+    }
+    return c
+}
+
+fn main() -> u64 {
+    /* == T: the discrimination tooth.  Z_3 table: op[x][y] = (x+y) mod 3 -> index. */
+    let mut idx : i64 = 0i64
+    let mut i : i64 = 8i64
+    while i >= 0i64 {
+        let x : i64 = i / 3i64
+        let y : i64 = i % 3i64
+        idx = (idx * 3i64) + ((x + y) % 3i64)
+        i = i - 1i64
+    }
+    mff_load(idx, 3i64)
+    TP = mff_profile()
+    let mut corrupted : i64 = idx
+    if (idx % 3i64) == 0i64 { corrupted = idx + 1i64 } else { corrupted = idx - 1i64 }
+    mff_load(corrupted, 3i64)
+    TC = mff_profile()
+    putchar(84i32) putchar(58i32) sp() e_i64(TP & 105i64) sp() e_i64(TC & 1i64) nl()   /* "T: 105 0" */
+    if (TP & 105i64) != 105i64 { return 10u64 }
+    if (TC & 1i64) != 0i64 { return 10u64 }
+
+    /* == A + C: the sweeps, anchors, census. */
+    if mff_sweep(2i64) != 16i64 { return 12u64 }
+    GA2 = groups()
+    I2C = mff_inhabited()
+    let ti2 : i64 = mff_total_iso()
+    if mfc_genesis() != 0i32 { return 14u64 }
+    if mfc_chain_census(2i64) < 1i64 { return 14u64 }
+    if mff_sweep(3i64) != 19683i64 { return 12u64 }
+    GA3 = groups()
+    I3C = mff_inhabited()
+    let ti3 : i64 = mff_total_iso()
+    if mfc_chain_census(3i64) < 1i64 { return 14u64 }
+    let cl : i64 = mfc_chain_len()
+    putchar(65i32) putchar(58i32) sp() e_i64(GA2) sp() e_i64(GA3) sp() e_i64(ti2) sp() e_i64(ti3) nl()   /* "A: 2 3 10 3330" */
+    if GA2 != 2i64 { return 11u64 }
+    if GA3 != 3i64 { return 11u64 }
+    if ti2 != ((16i64 + 4i64) / 2i64) { return 11u64 }             /* Burnside at n=2, spelled out */
+    if ti3 != 3330i64 { return 11u64 }
+    putchar(67i32) putchar(58i32) sp() e_i64(I2C) sp() e_i64(I3C) sp() e_i64(2048i64 - I3C) nl()        /* "C: 10 59 1989" */
+    if I2C != 10i64 { return 12u64 }
+    if I3C != 59i64 { return 12u64 }
+
+    /* == S: the exhibits (the n=3 sweep is current). */
+    SEMI = mff_iso(1439i64)
+    STEIN = mff_iso(2022i64)
+    SREP = mff_rep(2022i64)
+    putchar(83i32) putchar(58i32) sp() e_i64(SEMI) sp() e_i64(STEIN) sp() e_i64(SREP) nl()              /* "S: 1 1 14001" */
+    if SEMI != 1i64 { return 13u64 }
+    if STEIN != 1i64 { return 13u64 }
+    if SREP != 14001i64 { return 13u64 }
+
+    /* == H: the chain replays byte-identically. */
+    i = 0i64
+    while i < 32i64 { HB[i as u64] = mfc_head_byte(i) as u8   i = i + 1i64 }
+    if mfc_genesis() != 0i32 { return 14u64 }
+    mff_sweep(2i64)
+    mfc_chain_census(2i64)
+    mff_sweep(3i64)
+    mfc_chain_census(3i64)
+    let mut same : i64 = 1i64
+    i = 0i64
+    while i < 32i64 { if (HB[i as u64] as u64) != mfc_head_byte(i) { same = 0i64 }   i = i + 1i64 }
+    putchar(72i32) putchar(58i32) sp() e_i64(cl) sp() e_i64(mfc_chain_len()) sp() e_i64(same) nl()      /* "H: 69 69 1" */
+    if cl != mfc_chain_len() { return 14u64 }
+    if same != 1i64 { return 14u64 }
+
+    return 99u64
+}

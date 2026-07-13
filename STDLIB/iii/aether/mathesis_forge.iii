@@ -1,0 +1,265 @@
+/* aether/mathesis_forge.iii -- THE STRUCTURE FORGE (campaign Upsilon: ontology beyond numbers).
+ *
+ * The objects here are not numbers: they are OPERATIONS.  The forge enumerates EVERY binary
+ * operation on the carrier {0..n-1} (n^(n^2) tables: 16 at n=2, 19,683 at n=3), decides each
+ * table's LAW PROFILE by total exhaustion -- eleven structural laws, each an exact finite
+ * check, no sampling anywhere:
+ *
+ *   bit 0 ASSOC      (xy)z = x(yz)          bit 6  RCANCEL   xa = ya  =>  x = y
+ *   bit 1 COMM       xy = yx                bit 7  LSDISTR   x(yz) = (xy)(xz)
+ *   bit 2 IDEM       xx = x                 bit 8  RSDISTR   (xy)z = (xz)(yz)
+ *   bit 3 IDENT      some e: ex = xe = x    bit 9  LINVOL    x(xy) = y
+ *   bit 4 ZERO       some z: zx = xz = z    bit 10 MEDIAL    (xy)(zw) = (xz)(yw)
+ *   bit 5 LCANCEL    ax = ay  =>  x = y
+ *
+ * and CLASSIFIES the whole universe: raw counts per profile AND counts up to ISOMORPHISM
+ * (canonical form = the minimum relabeling over all n! carrier permutations -- exact, total).
+ * The census of the full 2^11 profile lattice at n <= 3 is the machine's own complete inventory
+ * of every 2- and 3-element operational species; the lexicographically first representative of
+ * each inhabited profile is MINTED as a named structure (FORGE<n>-P<profile>); profiles empty
+ * at n <= 3 are MACHINE-POSED EXISTENCE QUESTIONS (empty here is PROVEN by exhaustion; empty
+ * everywhere is not claimed).
+ *
+ * TWO-PATH ANCHOR: the group profile (ASSOC & IDENT & LCANCEL & RCANCEL) must count EXACTLY
+ * n!/|Aut(Z_n)| raw tables at prime n (the independent closed form: every group on a prime
+ * carrier is cyclic; distinct tables = relabelings) -- 2 at n=2, 3 at n=3.  A corrupted-table
+ * discrimination tooth guards the law checker itself.
+ *
+ * Gate: corpus/2709_mathesis_forge.  Driver: sovir/mathesis_forge_main.iii ->
+ * DOCS/MATHESIS-FORGE-ROUND1.log (replay byte-identical; census chained on the cad spine,
+ * magic "MX07").  Hexad: kind_essence.  Ring: R0.  NIH: composes cad only -- the forge's
+ * mathematics is pure finite exhaustion, no engine required.
+ */
+module aether_mathesis_forge
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+
+const MFF_MAGIC : u64 = 0x4D583037u64      /* "MX07" -- the structure-domain descriptor tag */
+
+var MFF_OP : [i64; 16]         /* the current table, op[x*n+y], n <= 4 */
+var MFF_T2 : [i64; 16]         /* relabeled table scratch */
+var MFF_PERM : [i64; 4]
+var MFF_RAW : [i64; 2048]      /* raw table count per profile */
+var MFF_ISO : [i64; 2048]      /* canonical-representative count per profile */
+var MFF_REP : [i64; 2048]      /* the FIRST canonical representative index per profile (-1 none) */
+var MFF_N : i64
+var MFF_TOT : i64
+
+fn mff_load(idx: i64, n: i64) -> i32 @export {
+    let mut v : i64 = idx
+    let mut i : i64 = 0i64
+    while i < (n * n) { MFF_OP[i as u64] = v % n   v = v / n   i = i + 1i64 }
+    MFF_N = n
+    return 0i32
+}
+fn mff_op(x: i64, y: i64) -> i64 @export { return MFF_OP[((x * MFF_N) + y) as u64] }
+
+/* the eleven laws by total exhaustion over the CURRENT table */
+fn mff_profile() -> i64 @export {
+    let n : i64 = MFF_N
+    let mut p : i64 = 2047i64            /* start all-true; clear on any counterexample */
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = 0i64
+        while y < n {
+            if mff_op(x, y) != mff_op(y, x) { p = p & (2047i64 - 2i64) }
+            let mut z : i64 = 0i64
+            while z < n {
+                if mff_op(mff_op(x, y), z) != mff_op(x, mff_op(y, z)) { p = p & (2047i64 - 1i64) }
+                if mff_op(x, mff_op(y, z)) != mff_op(mff_op(x, y), mff_op(x, z)) { p = p & (2047i64 - 128i64) }
+                if mff_op(mff_op(x, y), z) != mff_op(mff_op(x, z), mff_op(y, z)) { p = p & (2047i64 - 256i64) }
+                /* MEDIAL needs a 4th variable */
+                let mut w : i64 = 0i64
+                while w < n {
+                    if mff_op(mff_op(x, y), mff_op(z, w)) != mff_op(mff_op(x, z), mff_op(y, w)) { p = p & (2047i64 - 1024i64) }
+                    w = w + 1i64
+                }
+                z = z + 1i64
+            }
+            /* cancellation: op(x, y) == op(x, y2) for y != y2 kills LCANCEL (checked pairwise) */
+            let mut y2 : i64 = y + 1i64
+            while y2 < n {
+                if mff_op(x, y) == mff_op(x, y2) { p = p & (2047i64 - 32i64) }
+                if mff_op(y, x) == mff_op(y2, x) { p = p & (2047i64 - 64i64) }
+                y2 = y2 + 1i64
+            }
+            if mff_op(x, mff_op(x, y)) != y { p = p & (2047i64 - 512i64) }
+            y = y + 1i64
+        }
+        if mff_op(x, x) != x { p = p & (2047i64 - 4i64) }
+        x = x + 1i64
+    }
+    /* identity / zero: existential over the carrier */
+    let mut hase : i64 = 0i64
+    let mut hasz : i64 = 0i64
+    let mut e : i64 = 0i64
+    while e < n {
+        let mut ise : i64 = 1i64
+        let mut isz : i64 = 1i64
+        let mut x2 : i64 = 0i64
+        while x2 < n {
+            if mff_op(e, x2) != x2 { ise = 0i64 }
+            if mff_op(x2, e) != x2 { ise = 0i64 }
+            if mff_op(e, x2) != e { isz = 0i64 }
+            if mff_op(x2, e) != e { isz = 0i64 }
+            x2 = x2 + 1i64
+        }
+        if ise == 1i64 { hase = 1i64 }
+        if isz == 1i64 { hasz = 1i64 }
+        e = e + 1i64
+    }
+    if hase == 0i64 { p = p & (2047i64 - 8i64) }
+    if hasz == 0i64 { p = p & (2047i64 - 16i64) }
+    return p
+}
+
+/* canonical form: the minimum table index over all n! relabelings.  Exact, total. */
+fn mff_canon(n: i64) -> i64 @export {
+    let mut best : i64 = 0i64 - 1i64
+    /* enumerate permutations of {0..n-1} by index (n <= 4: <= 24) */
+    let mut fact : i64 = 1i64
+    let mut i : i64 = 2i64
+    while i <= n { fact = fact * i   i = i + 1i64 }
+    let mut pi : i64 = 0i64
+    while pi < fact {
+        /* decode permutation pi (factorial number system) */
+        let mut avail : i64 = 0i64
+        i = 0i64
+        while i < n { avail = avail | (1i64 << i)   i = i + 1i64 }
+        let mut code : i64 = pi
+        let mut slot : i64 = n - 1i64
+        i = 0i64
+        while i < n {
+            let mut f2 : i64 = 1i64
+            let mut j : i64 = 2i64
+            while j <= slot { f2 = f2 * j   j = j + 1i64 }
+            let mut k : i64 = code / f2
+            code = code % f2
+            /* pick the (k+1)-th available element */
+            let mut m : i64 = 0i64
+            let mut picked : i64 = 0i64 - 1i64
+            while m < n {
+                if picked < 0i64 { if (avail & (1i64 << m)) != 0i64 {
+                    if k == 0i64 { picked = m } else { k = k - 1i64 }
+                } }
+                m = m + 1i64
+            }
+            MFF_PERM[i as u64] = picked
+            avail = avail & (0i64 - 1i64 - (1i64 << picked))
+            slot = slot - 1i64
+            i = i + 1i64
+        }
+        /* relabel: T2[perm[x]][perm[y]] = perm[op(x,y)] */
+        let mut x : i64 = 0i64
+        while x < n {
+            let mut y : i64 = 0i64
+            while y < n {
+                MFF_T2[((MFF_PERM[x as u64] * n) + MFF_PERM[y as u64]) as u64] = MFF_PERM[mff_op(x, y) as u64]
+                y = y + 1i64
+            }
+            x = x + 1i64
+        }
+        /* index of the relabeled table */
+        let mut idx : i64 = 0i64
+        i = (n * n) - 1i64
+        while i >= 0i64 { idx = (idx * n) + MFF_T2[i as u64]   i = i - 1i64 }
+        if best < 0i64 { best = idx }
+        if idx < best { best = idx }
+        pi = pi + 1i64
+    }
+    return best
+}
+
+/* THE SWEEP: the complete census of the n-element operation universe.  Returns total tables. */
+fn mff_sweep(n: i64) -> i64 @export {
+    if n < 2i64 { return 0i64 - 1i64 }
+    if n > 3i64 { return 0i64 - 1i64 }          /* n = 4 is 4^16: a NAMED frontier, not a sweep */
+    let mut i : i64 = 0i64
+    while i < 2048i64 { MFF_RAW[i as u64] = 0i64   MFF_ISO[i as u64] = 0i64   MFF_REP[i as u64] = 0i64 - 1i64   i = i + 1i64 }
+    let mut tot : i64 = 1i64
+    i = 0i64
+    while i < (n * n) { tot = tot * n   i = i + 1i64 }
+    MFF_TOT = tot
+    let mut t : i64 = 0i64
+    while t < tot {
+        mff_load(t, n)
+        let p : i64 = mff_profile()
+        MFF_RAW[p as u64] = MFF_RAW[p as u64] + 1i64
+        let c : i64 = mff_canon(n)
+        if c == t {
+            MFF_ISO[p as u64] = MFF_ISO[p as u64] + 1i64
+            if MFF_REP[p as u64] < 0i64 { MFF_REP[p as u64] = t }
+        }
+        t = t + 1i64
+    }
+    return tot
+}
+fn mff_raw(p: i64) -> i64 @export { return MFF_RAW[p as u64] }
+fn mff_iso(p: i64) -> i64 @export { return MFF_ISO[p as u64] }
+fn mff_rep(p: i64) -> i64 @export { return MFF_REP[p as u64] }
+
+/* inhabited / empty profile counts over the whole lattice */
+fn mff_inhabited() -> i64 @export {
+    let mut c : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 2048i64 { if MFF_RAW[i as u64] > 0i64 { c = c + 1i64 }   i = i + 1i64 }
+    return c
+}
+fn mff_total_iso() -> i64 @export {
+    let mut c : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 2048i64 { c = c + MFF_ISO[i as u64]   i = i + 1i64 }
+    return c
+}
+
+/* ---- the MX07 chain: the census rows, content-addressed ---------------------------------------- */
+var MFC_SER : [u8; 64]
+var MFC_HD : [u8; 32]
+var MFC_ID : [u8; 32]
+var MFC_D : [u64; 8]
+var MFC_CN : i64
+
+fn mfc_serialize() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = MFC_D[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 { MFC_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8   w = w >> 8u64   b = b + 1u64 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn mfc_genesis() -> i32 @export {
+    MFC_D[0u64] = MFF_MAGIC
+    MFC_D[1u64] = 0u64
+    let mut i : u64 = 2u64
+    while i <= 6u64 { MFC_D[i] = 0u64   i = i + 1u64 }
+    MFC_D[7u64] = 0xFFFFFFFFFFFFFFFFu64
+    mfc_serialize()
+    MFC_CN = 0i64
+    return cad_oneshot(0u32, (&MFC_SER) as *u8, 64u64, (&MFC_HD) as *u8)
+}
+/* chain every INHABITED profile row (n, profile, raw, iso, first-rep) in profile order */
+fn mfc_chain_census(n: i64) -> i64 @export {
+    let mut p : i64 = 0i64
+    while p < 2048i64 {
+        if MFF_RAW[p as u64] > 0i64 {
+            MFC_D[0u64] = MFF_MAGIC   MFC_D[1u64] = 1u64
+            MFC_D[2u64] = n as u64
+            MFC_D[3u64] = p as u64
+            MFC_D[4u64] = MFF_RAW[p as u64] as u64
+            MFC_D[5u64] = MFF_ISO[p as u64] as u64
+            MFC_D[6u64] = MFF_REP[p as u64] as u64
+            MFC_D[7u64] = 1u64
+            mfc_serialize()
+            if cad_oneshot(0u32, (&MFC_SER) as *u8, 64u64, (&MFC_ID) as *u8) != 0i32 { return 0i64 - 1i64 }
+            cad_compose((&MFC_HD) as *u8, (&MFC_ID) as *u8, (&MFC_HD) as *u8)
+            MFC_CN = MFC_CN + 1i64
+        }
+        p = p + 1i64
+    }
+    return MFC_CN
+}
+fn mfc_head_byte(i: i64) -> u64 @export { return MFC_HD[i as u64] as u64 }
+fn mfc_chain_len() -> i64 @export { return MFC_CN }

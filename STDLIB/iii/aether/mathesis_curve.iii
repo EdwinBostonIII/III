@@ -271,6 +271,8 @@ var MCV_N : i64
 var MCV_DEG : i64          /* degenerate hits (e == 0: the cube is rational -- trivial family) */
 var MCV_TRIV : i64         /* trivial rays skipped (< 2 nonzero components) */
 var MCV_RAYS : i64         /* primitive canonical rays swept */
+var MCV_REF : i64          /* surface hits whose verification REFUSED (judge envelope) -- counted,
+                            * excluded from the verified store, never conflated with disagreement */
 
 fn mcv_found() -> i64 @export { return MCV_N }
 fn mcv_degenerate() -> i64 @export { return MCV_DEG }
@@ -284,7 +286,8 @@ fn mcv_row_w(i: i64) -> i64 @export { return MCV_W[i as u64] }
 fn mcv_row_e(i: i64) -> i64 @export { return MCV_E[i as u64] }
 fn mcv_row_f(i: i64) -> i64 @export { return MCV_F[i as u64] }
 
-fn mcv_hunt_reset() -> i32 @export { MCV_N = 0i64   MCV_DEG = 0i64   MCV_TRIV = 0i64   MCV_RAYS = 0i64   return 0i32 }
+fn mcv_refused() -> i64 @export { return MCV_REF }
+fn mcv_hunt_reset() -> i32 @export { MCV_N = 0i64   MCV_DEG = 0i64   MCV_TRIV = 0i64   MCV_RAYS = 0i64   MCV_REF = 0i64   return 0i32 }
 
 /* THE HUNT over one (d, curve) at height H: every surface hit judge-verified or the hunt aborts.
  * Returns finds this run, -1 envelope, -2 a judge disagreement (defect), -3 store overflow. */
@@ -338,12 +341,15 @@ fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 @export {
                         if e == 0i64 { MCV_DEG = MCV_DEG + 1i64 } else {
                             let f : i64 = mcv_eval(0i64, cu, cv, cw)
                             let jq : i64 = mcv_verify(d, curve, cu, cv, cw, e, f)
-                            if jq != 1i64 { return 0i64 - 2i64 }
-                            if MCV_N >= MCV_MAXR { return 0i64 - 3i64 }
-                            MCV_D[MCV_N as u64] = d   MCV_C[MCV_N as u64] = curve
-                            MCV_U[MCV_N as u64] = cu   MCV_V[MCV_N as u64] = cv   MCV_W[MCV_N as u64] = cw
-                            MCV_E[MCV_N as u64] = e   MCV_F[MCV_N as u64] = f
-                            MCV_N = MCV_N + 1i64
+                            if jq == 0i64 { return 0i64 - 2i64 }       /* DISAGREEMENT: a defect */
+                            if jq < 0i64 { MCV_REF = MCV_REF + 1i64 }  /* envelope refusal: counted */
+                            if jq == 1i64 {
+                                if MCV_N >= MCV_MAXR { return 0i64 - 3i64 }
+                                MCV_D[MCV_N as u64] = d   MCV_C[MCV_N as u64] = curve
+                                MCV_U[MCV_N as u64] = cu   MCV_V[MCV_N as u64] = cv   MCV_W[MCV_N as u64] = cw
+                                MCV_E[MCV_N as u64] = e   MCV_F[MCV_N as u64] = f
+                                MCV_N = MCV_N + 1i64
+                            }
                         }
                     }
                 }

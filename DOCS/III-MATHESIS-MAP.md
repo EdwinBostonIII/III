@@ -922,7 +922,50 @@ Weierstrass/rank route for the emptiness proof, and the pattern law itself.
 
 ---
 
+## 17. CAMPAIGN Υ — THE AUTONOMOUS PILOT + THE STRUCTURE FORGE (2026-07-13)
+
+The two standing critiques, answered in code (gates 2709/2710; streams
+`DOCS/MATHESIS-FORGE-ROUND1.log` + `DOCS/MATHESIS-PILOT-LEDGER.log`, replay byte-identical;
+UPSILON_CERT beside the other four).
+
+- **"You are still piloting it" → THE PILOT IS CODE** (`aether/mathesis_pilot.iii`): each
+  round's experiment is a pure function of the round number — NEW-D (the canonical cube-free
+  sequence), HEIGHT (a fixed escalation schedule with a NAMED refusal past its envelope), LOCAL
+  (row-major (d,p) probes). The budget (PILOT_ROUNDS, environment) is the only input and selects
+  nothing; the ledger head at round k is a pure function of k (tamper-evident, extendable by any
+  future invocation). **The pilot's FIRST autonomous choice found what every human-piloted round
+  missed: d=4 (three curve-B identities) and d=9 (six curve-A identities) — and those two holes
+  exposed THE INVOLUTION LAW: d ↔ d² (mod cubes) swaps curves A and B** (γ ↔ γ² swaps the
+  collapse lines; counts preserved as point-sets, not heights). The law's predictions were then
+  tested: **d=18 → six curve-B points (partner of d=12), d=25 → EMPTY (partner of d=5) — both
+  CONFIRMED; d=49 carries 5/6 partners inside height 60; d=36 carries six with one oversized hit
+  honestly counted as verification-REFUSED** (the hunt now distinguishes judge refusal from
+  judge disagreement — the conflation was itself found by the d=36 probe and fixed). The A/B
+  half of the open question is thereby REDUCED: the pattern is closed under the involution, so
+  the primitive question is which CUBE-FREE CLASSES {d, d²} collapse at all — {2,4}, {3,9},
+  {6,36}, {7,49}, {12,18} do; {5,25}, {10,100?}, {11,121?}, {13,169?}, {17,289?} do not at the
+  swept heights (the pilot's future canonical rounds will reach the partners).
+- **"Beyond numbers" → THE STRUCTURE FORGE** (`aether/mathesis_forge.iii`): the objects are
+  OPERATIONS. Every binary operation on 2- and 3-element carriers (16 + 19,683 tables), eleven
+  laws each decided by TOTAL exhaustion, classified raw and up to isomorphism (minimum
+  relabeling over the full symmetric group). **The census, triple-anchored**: group-profile
+  tables = n!/|Aut(Z_n)| (2 and 3 — the independent cyclic-group closed form), iso-classes 10 at
+  n=2 (Burnside, spelled out in-gate) and **3,330 at n=3**; **59 inhabited species** of the
+  2,048-profile lattice, 1,989 profiles EMPTY at n ≤ 3 by exhaustion (machine-posed existence
+  questions, not nonexistence claims). Exhibits minted: FORGE3-P1439 (the bounded semilattice,
+  unique) and **FORGE3-P2022 — the unique maximally-lawful NON-associative species at n=3**
+  (idempotent, commutative, doubly self-distributive, involutory, medial, both-cancellative;
+  first representative table 14001) — the machine's own Steiner-type quasigroup, an ontology
+  citizen that is not a number and was never supplied.
+
+**Named frontier out of Υ**: n=4 (4.3·10⁹ tables — a priced sweep, not a gate), bigint
+chord-tangent, the {d,d²}-class law's proof, and the pilot's unbounded ledger (every future
+harness invocation may raise PILOT_ROUNDS; the head extends deterministically).
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
-`DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`.*
+`DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`,
+`DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`.*

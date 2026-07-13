@@ -1937,7 +1937,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- owned by run_aether_lens_kats.sh (links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
             SKIP=$((SKIP+1)); continue
             ;;
-        2700_mathesis_alg_judge|2701_mathesis_denest_general|2702_mathesis_cube_ramanujan|2703_mathesis_mx04_chain|2704_ripple_spectral|2705_mathesis_ring_judge|2706_mathesis_ring_drain|2707_mathesis_curve_hunt|2708_mathesis_group_tau)
+        2700_mathesis_alg_judge|2701_mathesis_denest_general|2702_mathesis_cube_ramanujan|2703_mathesis_mx04_chain|2704_ripple_spectral|2705_mathesis_ring_judge|2706_mathesis_ring_drain|2707_mathesis_curve_hunt|2708_mathesis_group_tau|2709_mathesis_forge|2710_mathesis_pilot)
             RESULTS+=("SKIP  $base : THE ALGEBRAIC CREATOR TIER + CAMPAIGN SIGMA (real-algebraic judge + radical synthesizer + MX04 chain + exact spectral organ + ring judge/frontier drain + surface hunter) -- owned by run_mathesis.sh stages [9]/[10] (links resultant + sturm_big + mathesis_alg + mathesis_radical + charpoly + mathesis_ring + mathesis_curve + the exact-face TUs)")
             SKIP=$((SKIP+1)); continue
             ;;

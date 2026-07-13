@@ -1,0 +1,106 @@
+/* 2710_mathesis_pilot.iii -- GATE for THE AUTONOMOUS PILOT (campaign Upsilon: nobody steers).
+ * The research agenda as deterministic CODE: each round's experiment is a pure function of the
+ * round number; the human supplies at most a round BUDGET and selects nothing.
+ *
+ * P -- THE FIRST SIX SELF-CHOSEN ROUNDS pinned exactly as observed: the pilot's round 0 chose
+ *      d=4 -- a hole every HUMAN-piloted campaign missed -- and found THREE curve-B identities;
+ *      round 3 chose d=9 and found SIX curve-A identities.  Those two holes EXPOSED THE
+ *      INVOLUTION LAW: gamma <-> gamma^2 (d <-> d^2 mod cubes) swaps curves A and B
+ *      (d=2:A(3) <-> d=4:B(3); d=3:B(6) <-> d=9:A(6)).
+ * I -- THE LAW'S PREDICTIONS TESTED: d=18 (= 12^2 mod cubes) must carry curve-B points -> SIX
+ *      found; d=25 (= 5^2) must be EMPTY -> empty.  d=49 (= 7^2) carries FIVE of the six
+ *      partners in the height-60 box (the involution preserves points, not heights); d=36
+ *      (= 6^2) carries SIX verified with the oversized hits counted as REFUSED verification
+ *      (the judge envelope, never conflated with disagreement).
+ * X -- THE POLICY REFUSAL: a HEIGHT round past the schedule refuses BY NAME (kind 9), never
+ *      repeats work, never guesses.
+ * H -- DETERMINISM: two full six-round runs produce ONE chained ledger head.
+ *
+ * exit 99 pass; 10 P; 11 I; 12 X; 13 H. */
+module corpus_2710_mathesis_pilot
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refused() -> i64 from "mathesis_curve.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var XK : [i64; 6]   var XP1 : [i64; 6]   var XP2 : [i64; 6]   var XR1 : [i64; 6]   var XR2 : [i64; 6]
+var HB : [u8; 32]
+var POK : i64   var IOK : i64
+
+fn xinit() -> i32 {
+    XK[0u64] = 0i64   XP1[0u64] = 4i64    XP2[0u64] = 60i64    XR1[0u64] = 0i64    XR2[0u64] = 3i64
+    XK[1u64] = 1i64   XP1[1u64] = 10i64   XP2[1u64] = 120i64   XR1[1u64] = 0i64    XR2[1u64] = 0i64
+    XK[2u64] = 2i64   XP1[2u64] = 5i64    XP2[2u64] = 17i64    XR1[2u64] = 18i64   XR2[2u64] = 18i64
+    XK[3u64] = 0i64   XP1[3u64] = 9i64    XP2[3u64] = 60i64    XR1[3u64] = 6i64    XR2[3u64] = 0i64
+    XK[4u64] = 1i64   XP1[4u64] = 11i64   XP2[4u64] = 120i64   XR1[4u64] = 0i64    XR2[4u64] = 0i64
+    XK[5u64] = 2i64   XP1[5u64] = 5i64    XP2[5u64] = 19i64    XR1[5u64] = 12i64   XR2[5u64] = 21i64
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* == P: the first six self-chosen rounds. */
+    xinit()
+    POK = 1i64
+    let mut r : i64 = 0i64
+    while r < 6i64 {
+        if mpl_round(r) != 0i64 { return 10u64 }
+        if mpl_k() != XK[r as u64] { POK = 0i64 }
+        if mpl_p1() != XP1[r as u64] { POK = 0i64 }
+        if mpl_p2() != XP2[r as u64] { POK = 0i64 }
+        if mpl_r1() != XR1[r as u64] { POK = 0i64 }
+        if mpl_r2() != XR2[r as u64] { POK = 0i64 }
+        r = r + 1i64
+    }
+    putchar(80i32) putchar(58i32) sp() e_i64(POK) nl()                      /* "P: 1" */
+    if POK != 1i64 { return 10u64 }
+
+    /* == I: the involution law's predictions. */
+    IOK = 1i64
+    mcv_hunt_reset()
+    if mcv_hunt(18i64, 1i64, 60i64) != 0i64 { IOK = 0i64 }
+    if mcv_hunt(18i64, 2i64, 60i64) != 6i64 { IOK = 0i64 }
+    mcv_hunt_reset()
+    if mcv_hunt(25i64, 1i64, 60i64) != 0i64 { IOK = 0i64 }
+    if mcv_hunt(25i64, 2i64, 60i64) != 0i64 { IOK = 0i64 }
+    mcv_hunt_reset()
+    if mcv_hunt(49i64, 2i64, 60i64) != 5i64 { IOK = 0i64 }
+    mcv_hunt_reset()
+    let v36 : i64 = mcv_hunt(36i64, 2i64, 60i64)
+    let rf36 : i64 = mcv_refused()
+    putchar(73i32) putchar(58i32) sp() e_i64(IOK) sp() e_i64(v36) sp() e_i64(rf36) nl()
+    if IOK != 1i64 { return 11u64 }
+    if v36 < 6i64 { return 11u64 }
+
+    /* == X: the named policy refusal. */
+    if mpl_round(25i64) != 0i64 { return 12u64 }
+    putchar(88i32) putchar(58i32) sp() e_i64(mpl_k()) sp() e_i64(mpl_p1()) nl()   /* "X: 9 1" */
+    if mpl_k() != 9i64 { return 12u64 }
+    if mpl_p1() != 1i64 { return 12u64 }
+
+    /* == H: determinism -- two full runs, one head. */
+    let c1 : i64 = mpl_run(6i64)
+    let mut i : i64 = 0i64
+    while i < 32i64 { HB[i as u64] = mpl_head_byte(i) as u8   i = i + 1i64 }
+    let c2 : i64 = mpl_run(6i64)
+    let mut same : i64 = 1i64
+    i = 0i64
+    while i < 32i64 { if (HB[i as u64] as u64) != mpl_head_byte(i) { same = 0i64 }   i = i + 1i64 }
+    putchar(72i32) putchar(58i32) sp() e_i64(c1) sp() e_i64(c2) sp() e_i64(same) nl()   /* "H: 6 6 1" */
+    if c1 != 6i64 { return 13u64 }
+    if c2 != 6i64 { return 13u64 }
+    if same != 1i64 { return 13u64 }
+
+    return 99u64
+}

@@ -1,0 +1,184 @@
+/* aether/mathesis_pilot.iii -- THE AUTONOMOUS PILOT (campaign Upsilon: nobody steers).
+ *
+ * The research agenda as CODE: a deterministic POLICY chooses each round's experiment from the
+ * round number alone -- no human picks a box, a d, a height, or a prime, ever again:
+ *
+ *   round r, kind = r mod 3, q = r / 3:
+ *     kind 0  NEW-D    : sweep the q-th UNSWEPT cube-free d (the canonical ascending sequence
+ *                        beyond the sealed base {2,3,5,6,7,10,11,12,13,17}) at height 60, both
+ *                        curves, every find judge-verified inside the hunt.
+ *     kind 1  HEIGHT   : escalate the q-th cell of the schedule -- the sealed-empty
+ *                        {10,11,13,17} at height 120, then the same four at height 200; past
+ *                        the schedule the policy REFUSES BY NAME (the engine's height envelope)
+ *                        rather than repeat or guess.
+ *     kind 2  LOCAL    : probe the q-th (d, p) pair of {5,10,11,13,17} x {17,19,23,29,31,37,41,43}
+ *                        (row-major) -- projective point counts mod p on both curves.
+ *
+ * Every round -- including refusals -- is CHAINED (the MX06 door on the cad spine): the ledger
+ * head at round k is a pure function of k, so any invocation replays the whole research history
+ * byte-identically and extends it by exactly the rounds asked of it.  The harness passes the
+ * round budget through the environment (PILOT_ROUNDS); growing it is the ONLY input, and it
+ * selects nothing.
+ *
+ * Gate: corpus/2710_mathesis_pilot (determinism = two full runs, one head; the refusal arm; the
+ * observed round outcomes pinned).  Driver: sovir/mathesis_pilot_main.iii ->
+ * DOCS/MATHESIS-PILOT-LEDGER.log.  Hexad: kind_essence.  Ring: R0.  NIH: composes
+ * mathesis_curve (the instruments) + cad (the chain) only.
+ */
+module aether_mathesis_pilot
+
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_local(d: i64, curve: i64, p: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+
+const MPL_MAGIC : u64 = 0x4D583036u64      /* "MX06" -- the pilot-round descriptor tag */
+
+/* the sealed base (already in the catalogue's streams) -- the policy never re-runs it */
+var MPL_BASE : [i64; 10]
+fn mpl_base_init() -> i32 {
+    MPL_BASE[0u64] = 2i64    MPL_BASE[1u64] = 3i64    MPL_BASE[2u64] = 5i64
+    MPL_BASE[3u64] = 6i64    MPL_BASE[4u64] = 7i64    MPL_BASE[5u64] = 10i64
+    MPL_BASE[6u64] = 11i64   MPL_BASE[7u64] = 12i64   MPL_BASE[8u64] = 13i64
+    MPL_BASE[9u64] = 17i64
+    return 0i32
+}
+fn mpl_in_base(d: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < 10i64 { if MPL_BASE[i as u64] == d { return 1i64 }   i = i + 1i64 }
+    return 0i64
+}
+fn mpl_cubefree(d: i64) -> i64 {
+    let mut q : i64 = 2i64
+    while (q * q * q) <= d {
+        if (d % (q * q * q)) == 0i64 { return 0i64 }
+        q = q + 1i64
+    }
+    return 1i64
+}
+/* the q-th canonical NEW d: ascending, cube-free, not in the sealed base.  -1 past 4096. */
+fn mpl_next_d(q: i64) -> i64 @export {
+    mpl_base_init()
+    let mut left : i64 = q
+    let mut d : i64 = 2i64
+    while d <= 4096i64 {
+        if mpl_cubefree(d) == 1i64 { if mpl_in_base(d) == 0i64 {
+            if left == 0i64 { return d }
+            left = left - 1i64
+        } }
+        d = d + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+/* one round's experiment, purely from r.  Results in MPL_K/P1/P2/R1/R2 (kind, params, results);
+ * kind 9 = the NAMED policy refusal (still a chained row).  0 ok / -1 internal. */
+var MPL_K : i64   var MPL_P1 : i64   var MPL_P2 : i64   var MPL_R1 : i64   var MPL_R2 : i64
+fn mpl_round(r: i64) -> i64 @export {
+    mpl_base_init()
+    let kind : i64 = r % 3i64
+    let q : i64 = r / 3i64
+    if kind == 0i64 {
+        let d : i64 = mpl_next_d(q)
+        if d < 2i64 { MPL_K = 9i64   MPL_P1 = 0i64   MPL_P2 = q   MPL_R1 = 0i64   MPL_R2 = 0i64   return 0i64 }
+        mcv_hunt_reset()
+        let a : i64 = mcv_hunt(d, 1i64, 60i64)
+        let b : i64 = mcv_hunt(d, 2i64, 60i64)
+        if a < 0i64 { return 0i64 - 1i64 }
+        if b < 0i64 { return 0i64 - 1i64 }
+        MPL_K = 0i64   MPL_P1 = d   MPL_P2 = 60i64   MPL_R1 = a   MPL_R2 = b
+        return 0i64
+    }
+    if kind == 1i64 {
+        /* schedule: {10,11,13,17} at 120, then the same at 200; past that: refusal */
+        if q >= 8i64 { MPL_K = 9i64   MPL_P1 = 1i64   MPL_P2 = q   MPL_R1 = 0i64   MPL_R2 = 0i64   return 0i64 }
+        let mut d2 : i64 = 10i64
+        let qi : i64 = q % 4i64
+        if qi == 1i64 { d2 = 11i64 }
+        if qi == 2i64 { d2 = 13i64 }
+        if qi == 3i64 { d2 = 17i64 }
+        let mut h : i64 = 120i64
+        if q >= 4i64 { h = 200i64 }
+        mcv_hunt_reset()
+        let a2 : i64 = mcv_hunt(d2, 1i64, h)
+        let b2 : i64 = mcv_hunt(d2, 2i64, h)
+        if a2 < 0i64 { return 0i64 - 1i64 }
+        if b2 < 0i64 { return 0i64 - 1i64 }
+        MPL_K = 1i64   MPL_P1 = d2   MPL_P2 = h   MPL_R1 = a2   MPL_R2 = b2
+        return 0i64
+    }
+    /* kind 2: LOCAL -- (d, p) row-major over {5,10,11,13,17} x {17,19,23,29,31,37,41,43} */
+    let di : i64 = q / 8i64
+    let pi : i64 = q % 8i64
+    if di >= 5i64 { MPL_K = 9i64   MPL_P1 = 2i64   MPL_P2 = q   MPL_R1 = 0i64   MPL_R2 = 0i64   return 0i64 }
+    let mut d3 : i64 = 5i64
+    if di == 1i64 { d3 = 10i64 }
+    if di == 2i64 { d3 = 11i64 }
+    if di == 3i64 { d3 = 13i64 }
+    if di == 4i64 { d3 = 17i64 }
+    let mut p : i64 = 17i64
+    if pi == 1i64 { p = 19i64 }
+    if pi == 2i64 { p = 23i64 }
+    if pi == 3i64 { p = 29i64 }
+    if pi == 4i64 { p = 31i64 }
+    if pi == 5i64 { p = 37i64 }
+    if pi == 6i64 { p = 41i64 }
+    if pi == 7i64 { p = 43i64 }
+    let a3 : i64 = mcv_local(d3, 1i64, p)
+    let b3 : i64 = mcv_local(d3, 2i64, p)
+    if a3 < 0i64 { return 0i64 - 1i64 }
+    if b3 < 0i64 { return 0i64 - 1i64 }
+    MPL_K = 2i64   MPL_P1 = d3   MPL_P2 = p   MPL_R1 = a3   MPL_R2 = b3
+    return 0i64
+}
+fn mpl_k() -> i64 @export { return MPL_K }
+fn mpl_p1() -> i64 @export { return MPL_P1 }
+fn mpl_p2() -> i64 @export { return MPL_P2 }
+fn mpl_r1() -> i64 @export { return MPL_R1 }
+fn mpl_r2() -> i64 @export { return MPL_R2 }
+
+/* the chained ledger: head(k) is a pure function of k */
+var MPC_SER : [u8; 64]
+var MPC_HD : [u8; 32]
+var MPC_ID : [u8; 32]
+var MPC_D : [u64; 8]
+var MPC_CN : i64
+fn mpc_serialize() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = MPC_D[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 { MPC_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8   w = w >> 8u64   b = b + 1u64 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn mpl_run(k: i64) -> i64 @export {
+    MPC_D[0u64] = MPL_MAGIC
+    MPC_D[1u64] = 0u64
+    let mut i : u64 = 2u64
+    while i <= 6u64 { MPC_D[i] = 0u64   i = i + 1u64 }
+    MPC_D[7u64] = 0xFFFFFFFFFFFFFFFFu64
+    mpc_serialize()
+    MPC_CN = 0i64
+    if cad_oneshot(0u32, (&MPC_SER) as *u8, 64u64, (&MPC_HD) as *u8) != 0i32 { return 0i64 - 1i64 }
+    let mut r : i64 = 0i64
+    while r < k {
+        if mpl_round(r) != 0i64 { return 0i64 - 1i64 }
+        MPC_D[0u64] = MPL_MAGIC   MPC_D[1u64] = 1u64
+        MPC_D[2u64] = (MPL_K + 512i64) as u64
+        MPC_D[3u64] = (MPL_P1 + 512i64) as u64
+        MPC_D[4u64] = (MPL_P2 + 512i64) as u64
+        MPC_D[5u64] = (MPL_R1 + 512i64) as u64
+        MPC_D[6u64] = (MPL_R2 + 512i64) as u64
+        MPC_D[7u64] = 1u64
+        mpc_serialize()
+        if cad_oneshot(0u32, (&MPC_SER) as *u8, 64u64, (&MPC_ID) as *u8) != 0i32 { return 0i64 - 1i64 }
+        cad_compose((&MPC_HD) as *u8, (&MPC_ID) as *u8, (&MPC_HD) as *u8)
+        MPC_CN = MPC_CN + 1i64
+        r = r + 1i64
+    }
+    return MPC_CN
+}
+fn mpl_head_byte(i: i64) -> u64 @export { return MPC_HD[i as u64] as u64 }

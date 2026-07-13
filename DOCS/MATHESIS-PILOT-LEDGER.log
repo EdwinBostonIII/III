@@ -1,0 +1,8 @@
+MPL-LEDGER declared: round r -> kind r mod 3 (0 NEW-D canonical cube-free / 1 HEIGHT schedule 120 then 200, refusal past / 2 LOCAL (d,p) row-major); the budget PILOT_ROUNDS is the only input and selects nothing
+PILOT# 0 0 4 60 0 3
+PILOT# 1 1 10 120 0 0
+PILOT# 2 2 5 17 18 18
+PILOT# 3 0 9 60 6 0
+PILOT# 4 1 11 120 0 0
+PILOT# 5 2 5 19 12 21
+PILOT rounds=6 head=a2985fa598db8dcd394d7be9f7bca510c93e7cd2c5eed868453deea135eb0ce8

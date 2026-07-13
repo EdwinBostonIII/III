@@ -1,0 +1,61 @@
+/* sovir/mathesis_forge_main.iii -- THE FORGE CENSUS STREAM (campaign Upsilon).  Every inhabited
+ * profile row for n = 2 and n = 3, the chain head, the summary pins.  Sealed as
+ * DOCS/MATHESIS-FORGE-ROUND1.log; replay byte-identical. */
+module mathesis_forge_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mff_sweep(n: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_raw(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_iso(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_rep(p: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_inhabited() -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mff_total_iso() -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_genesis() -> i32 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_chain_census(n: i64) -> i64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_head_byte(i: i64) -> u64 from "mathesis_forge.iii"
+extern @abi(c-msvc-x64) fn mfc_chain_len() -> i64 from "mathesis_forge.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ps(msg: u64) -> i32 {
+    let p : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ch : u8 = p[i]
+        if ch == 0u8 { going = 0u8 } else { putchar(ch as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+fn hexnib(v: u64) -> i32 { if v < 10u64 { putchar((48u64 + v) as i32) } else { putchar((87u64 + v) as i32) }   return 0i32 }
+
+fn main() -> u64 {
+    ps("MFF-ROUND1 declared: every binary operation on {0..n-1}, n in {2,3}; laws ASSOC COMM IDEM IDENT ZERO LCANCEL RCANCEL LSDISTR RSDISTR LINVOL MEDIAL by TOTAL exhaustion; iso-classes by minimum relabeling; species minted FORGE<n>-P<profile>\n" as u64)
+    if mfc_genesis() != 0i32 { return 1u64 }
+    let mut n : i64 = 2i64
+    while n <= 3i64 {
+        let tot : i64 = mff_sweep(n)
+        if tot < 1i64 { return 1u64 }
+        if mfc_chain_census(n) < 1i64 { return 1u64 }
+        let mut p : i64 = 0i64
+        while p < 2048i64 {
+            if mff_raw(p) > 0i64 {
+                ps("MFF# " as u64) e_i64(n) sp() e_i64(p) sp() e_i64(mff_raw(p)) sp() e_i64(mff_iso(p)) sp() e_i64(mff_rep(p))
+                ps(" name=FORGE" as u64) e_i64(n) ps("-P" as u64) e_i64(p) nl()
+            }
+            p = p + 1i64
+        }
+        ps("MFF n=" as u64) e_i64(n)
+        ps(" tables=" as u64) e_i64(tot)
+        ps(" inhabited=" as u64) e_i64(mff_inhabited())
+        ps(" structures=" as u64) e_i64(mff_total_iso())
+        nl()
+        n = n + 1i64
+    }
+    ps("MFF chain=" as u64) e_i64(mfc_chain_len())
+    ps(" head=" as u64)
+    let mut i : i64 = 0i64
+    while i < 32i64 { hexnib(mfc_head_byte(i) >> 4u64)   hexnib(mfc_head_byte(i) & 15u64)   i = i + 1i64 }
+    nl()
+    return 0u64
+}

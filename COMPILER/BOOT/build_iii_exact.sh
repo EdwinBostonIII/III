@@ -55,9 +55,10 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/iii-exact-build.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT" 2>/dev/null || true' EXIT
 mkdir -p "$TMP_ROOT" "$OUT_DIR"
 
-# exact_cli composes aether/sqrt_sum_sign (+ its kfield sibling), which are separate TUs, not archived.
+# exact_cli composes aether/sqrt_sum_sign (+ its kfield sibling) and aether/exact_denest (--denest),
+# which are separate TUs, not archived.
 OBJS=()
-for tu in kfield sqrt_sum_sign; do
+for tu in kfield sqrt_sum_sign exact_denest; do
     o="$TMP_ROOT/${tu}.iii.o"
     log "iiis-2 ${tu}.iii -> ${tu}.iii.o"
     "$IIIS" "$III_ROOT/STDLIB/iii/aether/${tu}.iii" --compile-only --out "$o" || die 3 "iii compile failed: ${tu}.iii"

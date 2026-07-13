@@ -2,11 +2,16 @@
  *
  *   iii-exact "<a1> <b1> <a2> <b2> ...">     decide the sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...  EXACTLY
  *   iii-exact --cmp "<terms A>" "<terms B>"  decide whether (sum A) <, =, or > (sum B), EXACTLY
+ *   iii-exact --denest <a> <b> <d>           is a + b*sqrt(d) a PERFECT SQUARE in Q(sqrt(d))?  If so print
+ *                                            the principal root x + y*sqrt(d), re-verified by exact
+ *                                            re-squaring IN THIS PROCESS; if not, certify the extension.
  *
- * Each term is a signed integer coefficient a_i and a NON-NEGATIVE integer radicand b_i.  The tool prints
- * one of  -1 / 0 / +1  and exits with that sign encoded (see below) -- the EXACT sign of the real number,
+ * Each term is a signed integer coefficient a_i and a NON-NEGATIVE integer radicand b_i.  The sign modes print
+ * one of  -1 / 0 / +1  and exit with that sign encoded (see below) -- the EXACT sign of the real number,
  * with NO floating point anywhere in the decision.  This is the separation-bound engine
- * (aether/sqrt_sum_sign::ui_sqrt_sum_sign, over the bigint arena) made independently useful.
+ * (aether/sqrt_sum_sign::ui_sqrt_sum_sign, over the bigint arena) made independently useful; --denest is the
+ * rank-1 tower denester (aether/exact_denest::denest_r1) on the same terms: it NEVER trusts the norm alone,
+ * only a root that squares back exactly, and it ABSTAINS outside its proven i64 envelope.
  *
  * WHY THIS IS NOT A TOY: floating point gets sign(sum a_i sqrt(b_i)) WRONG near a tie, silently, and every
  * geometry predicate built on it (orientation, in-circle, segment intersection) inherits the error as a
@@ -20,8 +25,11 @@
  *   iii-exact "1 2 1 3 -1 5"      -> -1   (sqrt2 + sqrt3 < sqrt5?  the tool decides EXACTLY)
  *   iii-exact --cmp "5 3" "1 75"  -> 0    (5 sqrt3 == sqrt75, since 75 = 25*3)
  *
- * exit: 1 = value is NEGATIVE | 0 = value is EXACTLY ZERO | 2 = value is POSITIVE | 3 = usage/parse error.
+ * exit (sign modes): 1 = NEGATIVE | 0 = EXACTLY ZERO | 2 = POSITIVE | 3 = usage/parse error.
  * (sign in {-1,0,+1} maps to exit {1,0,2}: a shell can branch `case $? in 0) zero;; 1) neg;; 2) pos;; esac`.)
+ * exit (--denest):   0 = PERFECT SQUARE (root printed, re-verified) | 4 = NOT a square (genuine extension)
+ *                  | 5 = out-of-envelope ABSTAIN | 3 = usage/parse error | 6 = internal refuse (root failed
+ *                    the in-process re-square -- the tool will not print a root it did not re-verify).
  *
  * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/sqrt_sum_sign (which composes numera/bigint + arena).
  */
@@ -29,6 +37,9 @@ module exact_cli
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn denest_r1(a: i64, b: i64, d: i64) -> i32 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_x() -> i64 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_y() -> i64 from "exact_denest.iii"
 
 const MAXTERMS : u64 = 4096u64
 
@@ -77,7 +88,7 @@ fn parse_terms(str: u64, base: u64) -> u64 {
             while p[i] >= 48u8 { if p[i] <= 57u8 {
                 v = (v * 10i64) + ((p[i] as i64) - 48i64)
                 i = i + 1u64
-            } else { i = i } }
+            } else { return PARSEFAIL } }          /* trailing garbage ("1x") is an ERROR, never a hang */
             if neg == 1u32 { v = 0i64 - v }
             /* place: even nints -> coefficient, odd -> radicand */
             if (nints & 1u64) == 0u64 {
@@ -102,20 +113,97 @@ fn emit_sign(sgn: i32) -> u64 {
     return 2u64
 }
 
+/* parse EXACTLY one signed integer (leading/trailing spaces ok, nothing else).  P1_OK = 1 on success. */
+var P1_OK : u32
+fn parse_one(str: u64) -> i64 {
+    let p : *u8 = str as *u8
+    let mut i : u64 = 0u64
+    P1_OK = 0u32
+    while p[i] == 32u8 { i = i + 1u64 }
+    let mut neg : u32 = 0u32
+    if p[i] == 45u8 { neg = 1u32   i = i + 1u64 }
+    else { if p[i] == 43u8 { i = i + 1u64 } }
+    if p[i] < 48u8 { return 0i64 }
+    if p[i] > 57u8 { return 0i64 }
+    let mut v : i64 = 0i64
+    while p[i] >= 48u8 {
+        if p[i] > 57u8 { return 0i64 }              /* trailing garbage is an ERROR, never a hang */
+        v = (v * 10i64) + ((p[i] as i64) - 48i64)
+        i = i + 1u64
+    }
+    while p[i] == 32u8 { i = i + 1u64 }
+    if p[i] != 0u8 { return 0i64 }
+    P1_OK = 1u32
+    if neg == 1u32 { return 0i64 - v }
+    return v
+}
+
+/* print " + v" or " - |v|" */
+fn ppm(v: i64) -> u32 {
+    if v < 0i64 { ps(" - " as u64)  pi(0i64 - v)  return 1u32 }
+    ps(" + " as u64)  pi(v)
+    return 1u32
+}
+
+/* --denest a b d: decide via exact_denest::denest_r1, normalize to the PRINCIPAL root, and RE-VERIFY the
+ * root by exact re-squaring IN THIS PROCESS before printing any claim. */
+fn emit_denest(a: i64, b: i64, d: i64) -> u64 {
+    let v : i32 = denest_r1(a, b, d)
+    if v == 2i32 {
+        ps("ABSTAIN: outside the exact i64 envelope (need |a| < 2^30, |b| < 2^20, 0 < d < 2^20) -- refused, not guessed\n" as u64)
+        return 5u64
+    }
+    if v == 0i32 {
+        ps("NOT A SQUARE in Q(sqrt(" as u64)  pi(d)  ps(")): sqrt(" as u64)  pi(a)  ppm(b)
+        ps("*sqrt(" as u64)  pi(d)  ps(")) forces a genuine field extension (rank +1)\n" as u64)
+        return 4u64
+    }
+    let mut x : i64 = denest_x()
+    let mut y : i64 = denest_y()
+    /* principal root: the engine returns x >= 0; x + y*sqrt(d) is negative iff y < 0 and d*y^2 > x^2 */
+    if y < 0i64 {
+        let dy2 : i64 = d * (y * y)
+        let x2  : i64 = x * x
+        if dy2 > x2 { x = 0i64 - x   y = 0i64 - y }
+    }
+    /* exact re-square: (x + y*sqrt(d))^2 = (x^2 + d*y^2) + (2xy)*sqrt(d) must reproduce (a, b) */
+    let ra : i64 = x * x + d * (y * y)
+    let rb : i64 = 2i64 * x * y
+    if ra != a { ps("INTERNAL REFUSE: recovered root does not square back -- no claim\n" as u64)  return 6u64 }
+    if rb != b { ps("INTERNAL REFUSE: recovered root does not square back -- no claim\n" as u64)  return 6u64 }
+    ps("PERFECT SQUARE:  sqrt(" as u64)  pi(a)  ppm(b)  ps("*sqrt(" as u64)  pi(d)
+    ps("))  =  " as u64)  pi(x)  ppm(y)  ps("*sqrt(" as u64)  pi(d)
+    ps(")   [re-verified exactly: root squared back to the input]\n" as u64)
+    return 0u64
+}
+
 fn main(argc: i32, argv: u64) -> u64 {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-exact -- EXACT sign of a sum of square roots (no floating point anywhere)\n\n" as u64)
         ps("  iii-exact \"<a1> <b1> <a2> <b2> ...\"      sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...\n" as u64)
-        ps("  iii-exact --cmp \"<A terms>\" \"<B terms>\"   sign of (sum A) - (sum B)\n\n" as u64)
+        ps("  iii-exact --cmp \"<A terms>\" \"<B terms>\"   sign of (sum A) - (sum B)\n" as u64)
+        ps("  iii-exact --denest <a> <b> <d>            is a + b*sqrt(d) a perfect square in Q(sqrt(d))?\n\n" as u64)
         ps("  a_i signed integer coefficient, b_i non-negative integer radicand.\n" as u64)
-        ps("  exit: 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
+        ps("  exit (sign modes): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
+        ps("  exit (--denest):   0 square (root printed, re-verified) | 4 extension | 5 abstain | 3 parse.\n" as u64)
         return 3u64
     }
 
-    if argc >= 4i32 {
-        let a0 : *u8 = av[1u64] as *u8
-        if a0[0u64] == 45u8 { if a0[1u64] == 45u8 {    /* "--cmp" */
+    let a0 : *u8 = av[1u64] as *u8
+    if a0[0u64] == 45u8 { if a0[1u64] == 45u8 {
+        if a0[2u64] == 100u8 {                          /* "--denest" <a> <b> <d> */
+            if argc < 5i32 { ps("iii-exact: --denest needs three integers: a b d\n" as u64)  return 3u64 }
+            let da : i64 = parse_one(av[2u64])
+            if P1_OK != 1u32 { ps("iii-exact: parse error in a\n" as u64)  return 3u64 }
+            let db : i64 = parse_one(av[3u64])
+            if P1_OK != 1u32 { ps("iii-exact: parse error in b\n" as u64)  return 3u64 }
+            let dd : i64 = parse_one(av[4u64])
+            if P1_OK != 1u32 { ps("iii-exact: parse error in d\n" as u64)  return 3u64 }
+            return emit_denest(da, db, dd)
+        }
+        if a0[2u64] == 99u8 {                           /* "--cmp" <A> <B> */
+            if argc < 4i32 { ps("iii-exact: --cmp needs two term lists\n" as u64)  return 3u64 }
             /* A into [0,nA), then B with coefficients NEGATED appended -> sign(A - B) in one call */
             let nA : u64 = parse_terms(av[2u64], 0u64)
             if nA == PARSEFAIL { ps("iii-exact: parse error in A\n" as u64)  return 3u64 }
@@ -126,8 +214,10 @@ fn main(argc: i32, argv: u64) -> u64 {
             while j < nAB { AV[j] = 0i64 - AV[j]  j = j + 1u64 }
             let sgn : i32 = ui_sqrt_sum_sign(&AV as u64, &BV as u64, nAB)
             return emit_sign(sgn)
-        } }
-    }
+        }
+        ps("iii-exact: unknown option (know --cmp, --denest)\n" as u64)
+        return 3u64
+    } }
 
     /* single-expression form */
     let n : u64 = parse_terms(av[1u64], 0u64)

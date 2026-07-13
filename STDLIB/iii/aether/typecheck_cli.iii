@@ -1,0 +1,574 @@
+/* STDLIB/iii/aether/typecheck_cli.iii -- iii-typecheck: THE CIC KERNEL AS A STANDING TOOL.
+ *
+ *   iii-typecheck <term-file>                    INFER the term's type; print it, or refuse
+ *   iii-typecheck --check <term-file> <type-file>  CHECK term : type (bidirectional)
+ *
+ * The kernel (numera/typecheck: lambda-Pi + predicative universes U0:U1:..., Sigma, Bool, Id/J,
+ * Nat/iter/natrec, Unit, Empty, Sum, W-types; conversion by the directed CCL oracle) is TRUSTED and
+ * UNCHANGED: this CLI is only an S-expression front end that BUILDS terms through the kernel's own
+ * constructors and prints results by decoding the kernel's own serializer.  The de Bruijn criterion
+ * survives: a parse error is THIS tool's verdict; only the kernel says WELL-TYPED.
+ *
+ * GRAMMAR (S-expressions; binders are de Bruijn -- (var 0) is the innermost):
+ *   (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p) (ann t T)
+ *   bool true false (if s t e) (id T a b) (refl a) (j M base proof) (transp P proof base)
+ *   nat zero (succ n) (iter z s n) (natrec P z s n) unit tt empty (absurd C e)
+ *   (sum A B) (inl v) (inr v) (case C f g s) (w A B) (sup a f) (wrec P s w)
+ * inl/inr/sup are CHECKABLE, not inferable (bidirectional): infer refuses them bare; annotate
+ * ((ann (inl true) (sum bool nat))) or use --check.  QTT quantities and the BV64/LEK/REACH
+ * certification nodes are kernel-internal programmatic surfaces (own gates), not CLI grammar.
+ *
+ * exit: 0 = WELL-TYPED / CHECKED | 4 = the kernel REFUSED (ill-typed / does not check / the
+ *       supplied type is not a universe-classified type) | 3 = parse error (position printed)
+ *       | 2 = file error | 1 = usage | 5 = internal (serializer overflow -- never a silent claim).
+ *
+ * Hexad: kind_cognition.  Ring: R0.  NIH: composes numera/typecheck (+ its ccl/combinator oracles
+ * from the archive); the trusted base is unmoved.
+ */
+module typecheck_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, rd: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sort(l: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sig(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pair(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_fst(p: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_snd(p: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_ann(t: u32, ty: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_if(s: u32, t: u32, e: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_transp(pr: u32, proof: u32, base: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_iter(z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_j(mtv: u32, base: u32, proof: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_unit() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_tt() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_empty() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_absurd(c: u32, e: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sum(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_inl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_inr(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_case(c: u32, f: u32, g: u32, s: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_w(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sup(a: u32, f: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_wrec(p: u32, s: u32, w: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+
+const SRCCAP : u64 = 1048576u64
+const INVALID_H : u64 = 18446744073709551615u64
+const DEPTHCAP : u64 = 200u64
+
+var SRC  : [u8; 1048576]
+var SER  : [u8; 1048576]
+var NIO  : [u32; 2]
+var WORD : [u8; 24]
+var DECB : [u8; 24]
+var TKCUR  : u64
+var TKLEN  : u64
+var PERR : u64          /* 1 = parse error recorded */
+var PPOS : u64          /* error position */
+var PMSG : u64          /* static message ptr */
+var WLEN : u64
+var SPOS : u64          /* serialized-decode cursor */
+var SLEN : u64
+var SBAD : u64          /* 1 = malformed serialization while printing */
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { DECB[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DECB[k] as i32) }
+    return 1u32
+}
+
+fn rdfile(path: u64, buf: u64, cap: u64) -> u64 {
+    let h : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 0u32, 0u64)
+    if h == INVALID_H { return INVALID_H }
+    let mut total : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if total == cap { CloseHandle(h)  return INVALID_H }
+        let mut want : u64 = 65536u64
+        if total + want > cap { want = cap - total }
+        let ok : i32 = ReadFile(h, buf + total, want as u32, (&NIO) as u64, 0u64)
+        if ok == 0i32 { CloseHandle(h)  return INVALID_H }
+        let n : u32 = NIO[0u64]
+        if n == 0u32 { going = 0u8 } else { total = total + (n as u64) }
+    }
+    CloseHandle(h)
+    return total
+}
+
+/* ---------- tokenizer ---------- */
+fn tk_ws(c: u8) -> u32 {
+    if c == 32u8 { return 1u32 }
+    if c == 9u8 { return 1u32 }
+    if c == 10u8 { return 1u32 }
+    if c == 13u8 { return 1u32 }
+    return 0u32
+}
+fn tk_skip() -> u32 {
+    while TKCUR < TKLEN { if tk_ws(SRC[TKCUR]) == 1u32 { TKCUR = TKCUR + 1u64 } else { return 1u32 } }
+    return 1u32
+}
+fn tk_err(msg: u64) -> u32 {
+    if PERR == 0u64 { PERR = 1u64  PPOS = TKCUR  PMSG = msg }
+    return 0u32
+}
+/* read one [a-z0-9-]+ word into WORD; returns length (0 = none) */
+fn tk_word() -> u64 {
+    WLEN = 0u64
+    while TKCUR < TKLEN {
+        let c : u8 = SRC[TKCUR]
+        let mut take : u32 = 0u32
+        if c >= 97u8 { if c <= 122u8 { take = 1u32 } }
+        if c >= 48u8 { if c <= 57u8 { take = 1u32 } }
+        if take == 1u32 {
+            if WLEN < 23u64 { WORD[WLEN] = c  WLEN = WLEN + 1u64 }
+            TKCUR = TKCUR + 1u64
+        } else { WORD[WLEN] = 0u8  return WLEN }
+    }
+    WORD[WLEN] = 0u8
+    return WLEN
+}
+fn tk_weq(lit: u64) -> u32 {
+    let p : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < WLEN {
+        if p[i] == 0u8 { return 0u32 }
+        if p[i] != WORD[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if p[WLEN] != 0u8 { return 0u32 }
+    return 1u32
+}
+var NOK : u64
+fn tk_wnum() -> u32 {
+    NOK = 0u64
+    if WLEN == 0u64 { return 0u32 }
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < WLEN {
+        let c : u8 = WORD[i]
+        if c < 48u8 { return 0u32 }
+        if c > 57u8 { return 0u32 }
+        v = v * 10u64 + ((c as u64) - 48u64)
+        if v > 4294967295u64 { return 0u32 }
+        i = i + 1u64
+    }
+    NOK = 1u64
+    return v as u32
+}
+
+/* ---------- parser: S-expression -> kernel term (returns 0 + PERR on failure) ---------- */
+fn tk_parse(depth: u64) -> u32 {
+    if depth > DEPTHCAP { return tk_err("nesting too deep (cap 200) -- refused" as u64) }
+    tk_skip()
+    if TKCUR >= TKLEN { return tk_err("unexpected end of input" as u64) }
+    if SRC[TKCUR] == 40u8 {                                   /* '(' */
+        TKCUR = TKCUR + 1u64
+        tk_skip()
+        if tk_word() == 0u64 { return tk_err("expected a form name after (" as u64) }
+        let mut node : u32 = 0u32
+        let mut got : u32 = 0u32
+        if tk_weq("sort" as u64) == 1u32 {
+            tk_skip()  tk_word()
+            let lv : u32 = tk_wnum()
+            if NOK == 0u64 { return tk_err("sort needs a number" as u64) }
+            node = tc_sort(lv)  got = 1u32
+        }
+        if got == 0u32 { if tk_weq("var" as u64) == 1u32 {
+            tk_skip()  tk_word()
+            let ix : u32 = tk_wnum()
+            if NOK == 0u64 { return tk_err("var needs a number (de Bruijn index)" as u64) }
+            node = tc_var(ix)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("pi" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_pi(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("lam" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_lam(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("app" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_app(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("sig" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_sig(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("pair" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_pair(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("fst" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_fst(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("snd" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_snd(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("ann" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_ann(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("if" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_if(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("id" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_id(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("refl" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_refl(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("j" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_j(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("transp" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_transp(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("succ" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_succ(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("iter" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_iter(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("natrec" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let d : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_natrec(a, b, c, d)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("absurd" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_absurd(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("sum" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_sum(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("inl" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_inl(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("inr" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_inr(a)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("case" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let d : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_case(a, b, c, d)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("w" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_w(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("sup" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_sup(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("wrec" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_wrec(a, b, c)  got = 1u32
+        } }
+        if got == 0u32 { return tk_err("unknown form (see usage for the grammar)" as u64) }
+        tk_skip()
+        if TKCUR >= TKLEN { return tk_err("missing )" as u64) }
+        if SRC[TKCUR] != 41u8 { return tk_err("missing )" as u64) }
+        TKCUR = TKCUR + 1u64
+        return node
+    }
+    /* bare atom */
+    if tk_word() == 0u64 { return tk_err("expected a term" as u64) }
+    if tk_weq("bool" as u64) == 1u32 { return tc_bool() }
+    if tk_weq("true" as u64) == 1u32 { return tc_true() }
+    if tk_weq("false" as u64) == 1u32 { return tc_false() }
+    if tk_weq("nat" as u64) == 1u32 { return tc_nat() }
+    if tk_weq("zero" as u64) == 1u32 { return tc_zero() }
+    if tk_weq("unit" as u64) == 1u32 { return tc_unit() }
+    if tk_weq("tt" as u64) == 1u32 { return tc_tt() }
+    if tk_weq("empty" as u64) == 1u32 { return tc_empty() }
+    return tk_err("unknown atom (know bool true false nat zero unit tt empty)" as u64)
+}
+
+/* ---------- printer: decode tc_serialize's pre-order encoding -> S-expression ---------- */
+fn pr_byte() -> u8 {
+    if SPOS >= SLEN { SBAD = 1u64  return 0u8 }
+    let b : u8 = SER[SPOS]
+    SPOS = SPOS + 1u64
+    return b
+}
+fn pr_u32() -> u32 {
+    let b0 : u32 = pr_byte() as u32
+    let b1 : u32 = pr_byte() as u32
+    let b2 : u32 = pr_byte() as u32
+    let b3 : u32 = pr_byte() as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+/* tag -> printed name (grammar names; certification nodes get their internal names) */
+fn pr_name(tag: u8) -> u64 {
+    if tag == 3u8 { return "pi" as u64 }
+    if tag == 4u8 { return "lam" as u64 }
+    if tag == 5u8 { return "app" as u64 }
+    if tag == 6u8 { return "sig" as u64 }
+    if tag == 7u8 { return "pair" as u64 }
+    if tag == 8u8 { return "fst" as u64 }
+    if tag == 9u8 { return "snd" as u64 }
+    if tag == 10u8 { return "ann" as u64 }
+    if tag == 11u8 { return "bool" as u64 }
+    if tag == 12u8 { return "true" as u64 }
+    if tag == 13u8 { return "false" as u64 }
+    if tag == 14u8 { return "if" as u64 }
+    if tag == 15u8 { return "id" as u64 }
+    if tag == 16u8 { return "refl" as u64 }
+    if tag == 17u8 { return "transp" as u64 }
+    if tag == 18u8 { return "nat" as u64 }
+    if tag == 19u8 { return "zero" as u64 }
+    if tag == 20u8 { return "succ" as u64 }
+    if tag == 21u8 { return "iter" as u64 }
+    if tag == 22u8 { return "natrec" as u64 }
+    if tag == 23u8 { return "j" as u64 }
+    if tag == 24u8 { return "unit" as u64 }
+    if tag == 25u8 { return "tt" as u64 }
+    if tag == 26u8 { return "empty" as u64 }
+    if tag == 27u8 { return "absurd" as u64 }
+    if tag == 28u8 { return "sum" as u64 }
+    if tag == 29u8 { return "inl" as u64 }
+    if tag == 30u8 { return "inr" as u64 }
+    if tag == 31u8 { return "case" as u64 }
+    if tag == 32u8 { return "w" as u64 }
+    if tag == 33u8 { return "sup" as u64 }
+    if tag == 34u8 { return "wrec" as u64 }
+    if tag == 35u8 { return "reach" as u64 }
+    if tag == 37u8 { return "bv" as u64 }
+    if tag == 39u8 { return "bvadd" as u64 }
+    if tag == 40u8 { return "bvsub" as u64 }
+    if tag == 41u8 { return "bvmul" as u64 }
+    if tag == 42u8 { return "bvand" as u64 }
+    if tag == 43u8 { return "bvor" as u64 }
+    if tag == 44u8 { return "bvxor" as u64 }
+    if tag == 45u8 { return "bvshl" as u64 }
+    if tag == 46u8 { return "bvaddovf" as u64 }
+    if tag == 47u8 { return "bvmulovf" as u64 }
+    if tag == 48u8 { return "bvlshr" as u64 }
+    if tag == 49u8 { return "bvudiv" as u64 }
+    return 0u64
+}
+/* zero-arity tags print bare */
+fn pr_atomic(tag: u8) -> u32 {
+    if tag == 11u8 { return 1u32 }
+    if tag == 12u8 { return 1u32 }
+    if tag == 13u8 { return 1u32 }
+    if tag == 18u8 { return 1u32 }
+    if tag == 19u8 { return 1u32 }
+    if tag == 24u8 { return 1u32 }
+    if tag == 25u8 { return 1u32 }
+    if tag == 26u8 { return 1u32 }
+    if tag == 37u8 { return 1u32 }
+    return 0u32
+}
+fn pr_term(depth: u64) -> u32 {
+    if depth > 240u64 { SBAD = 1u64  return 0u32 }
+    if SBAD == 1u64 { return 0u32 }
+    let m : u8 = pr_byte()
+    if m == 0u8 { ps("_" as u64)  return 1u32 }
+    if m != 1u8 { SBAD = 1u64  return 0u32 }
+    let tag : u8 = pr_byte()
+    if SBAD == 1u64 { return 0u32 }
+    if tag == 1u8 {  /* var */
+        let k : u32 = pr_u32()
+        ps("(var " as u64)  pd(k as u64)  ps(")" as u64)
+        return 1u32
+    }
+    if tag == 2u8 {  /* sort */
+        let l : u32 = pr_u32()
+        ps("(sort " as u64)  pd(l as u64)  ps(")" as u64)
+        return 1u32
+    }
+    if tag == 35u8 {  /* reach: u32 payload */
+        let h : u32 = pr_u32()
+        ps("(reach " as u64)  pd(h as u64)  ps(")" as u64)
+        return 1u32
+    }
+    if tag == 36u8 {  /* lek: two u32 */
+        let a : u32 = pr_u32()
+        let b : u32 = pr_u32()
+        ps("(lek " as u64)  pd(a as u64)  ps(" " as u64)  pd(b as u64)  ps(")" as u64)
+        return 1u32
+    }
+    if tag == 38u8 {  /* bvlit: two u32 = lo, hi */
+        let lo : u32 = pr_u32()
+        let hi : u32 = pr_u32()
+        ps("(bvlit " as u64)  pd(lo as u64)  ps(" " as u64)  pd(hi as u64)  ps(")" as u64)
+        return 1u32
+    }
+    let nm : u64 = pr_name(tag)
+    if nm == 0u64 { SBAD = 1u64  return 0u32 }
+    if pr_atomic(tag) == 1u32 {
+        /* four null child markers follow */
+        let mut i : u64 = 0u64
+        while i < 4u64 { if pr_byte() != 0u8 { SBAD = 1u64  return 0u32 }  i = i + 1u64 }
+        ps(nm)
+        return 1u32
+    }
+    ps("(" as u64)  ps(nm)
+    let mut i2 : u64 = 0u64
+    while i2 < 4u64 {
+        if SPOS >= SLEN { SBAD = 1u64  return 0u32 }
+        if SER[SPOS] == 0u8 { SPOS = SPOS + 1u64 }
+        else { ps(" " as u64)  pr_term(depth + 1u64)  if SBAD == 1u64 { return 0u32 } }
+        i2 = i2 + 1u64
+    }
+    ps(")" as u64)
+    return 1u32
+}
+fn pr_node(t: u32) -> u32 {
+    let n : u64 = tc_serialize(t, (&SER) as *u8, 1048576u64)
+    if n == 18446744073709551615u64 { return 0u32 }
+    SPOS = 0u64  SLEN = n  SBAD = 0u64
+    pr_term(0u64)
+    if SBAD == 1u64 { return 0u32 }
+    return 1u32
+}
+
+fn tk_load_parse(path: u64) -> u32 {
+    /* returns node; 0 with PERR/PPOS set on parse error; 0 with PERR=2 on file error */
+    let n : u64 = rdfile(path, (&SRC) as u64, SRCCAP)
+    if n == INVALID_H { PERR = 2u64  return 0u32 }
+    TKCUR = 0u64  TKLEN = n  PERR = 0u64
+    let t : u32 = tk_parse(0u64)
+    if PERR != 0u64 { return 0u32 }
+    tk_skip()
+    if TKCUR != TKLEN { tk_err("trailing garbage after the term" as u64)  return 0u32 }
+    return t
+}
+fn tk_report(path: u64) -> u64 {
+    if PERR == 2u64 { ps("iii-typecheck: cannot read (or > 1 MiB): " as u64)  ps(path)  nl()  return 2u64 }
+    ps("iii-typecheck: parse error at byte " as u64)  pd(PPOS)  ps(": " as u64)  ps(PMSG)  nl()
+    return 3u64
+}
+
+fn usage() -> u64 {
+    ps("iii-typecheck -- the dependent-type kernel (lambda-Pi + universes), on your terms\n\n" as u64)
+    ps("  iii-typecheck <term-file>                    infer the type, or refuse\n" as u64)
+    ps("  iii-typecheck --check <term-file> <type-file>  check term : type\n\n" as u64)
+    ps("  grammar (de Bruijn indices; (var 0) is the innermost binder):\n" as u64)
+    ps("    (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p)\n" as u64)
+    ps("    (ann t T) bool true false (if s t e) (id T a b) (refl a) (j M base proof)\n" as u64)
+    ps("    (transp P proof base) nat zero (succ n) (iter z s n) (natrec P z s n) unit tt\n" as u64)
+    ps("    empty (absurd C e) (sum A B) (inl v) (inr v) (case C f g s) (w A B) (sup a f) (wrec P s w)\n\n" as u64)
+    ps("  inl/inr/sup are checkable, not inferable: annotate them or use --check.\n" as u64)
+    ps("  exit: 0 well-typed/checked | 4 kernel REFUSED | 3 parse error | 2 file error | 1 usage.\n" as u64)
+    return 1u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    tc_reset()
+
+    let a1 : *u8 = av[1u64] as *u8
+    if a1[0u64] == 45u8 { if a1[1u64] == 45u8 {
+        if a1[2u64] != 99u8 { return usage() }              /* only --check */
+        if argc < 4i32 { return usage() }
+        let t : u32 = tk_load_parse(av[2u64])
+        if PERR != 0u64 { return tk_report(av[2u64]) }
+        let ty : u32 = tk_load_parse(av[3u64])
+        if PERR != 0u64 { return tk_report(av[3u64]) }
+        /* the supplied type must itself be a TYPE: its inferred type must be a universe */
+        let tyty : u32 = tc_infer(ty)
+        if tyty == 0u32 {
+            ps("REJECTED: the supplied type is not itself well-formed\n" as u64)
+            return 4u64
+        }
+        let sn : u64 = tc_serialize(tyty, (&SER) as *u8, 1048576u64)
+        if sn == 18446744073709551615u64 { return 5u64 }
+        if sn < 2u64 { return 5u64 }
+        if SER[1u64] != 2u8 {
+            ps("REJECTED: the supplied 'type' is a term, but its type is not a universe\n" as u64)
+            return 4u64
+        }
+        if tc_check(t, ty) != 1u8 {
+            ps("REJECTED: the term does NOT have the supplied type (kernel verdict)\n" as u64)
+            return 4u64
+        }
+        ps("CHECKED: term : " as u64)
+        if pr_node(ty) == 0u32 { nl()  return 5u64 }
+        ps("   [kernel-checked: lambda-Pi + universes, CCL conversion oracle]\n" as u64)
+        return 0u64
+    } }
+
+    let t : u32 = tk_load_parse(av[1u64])
+    if PERR != 0u64 { return tk_report(av[1u64]) }
+    let ty : u32 = tc_infer(t)
+    if ty == 0u32 {
+        ps("ILL-TYPED: the kernel refused to assign a type (no universe inconsistency, no\n" as u64)
+        ps("  unannotated checkable form, no out-of-scope variable gets a type here)\n" as u64)
+        return 4u64
+    }
+    ps("WELL-TYPED : " as u64)
+    if pr_node(ty) == 0u32 { nl()  return 5u64 }
+    nl()
+    return 0u64
+}

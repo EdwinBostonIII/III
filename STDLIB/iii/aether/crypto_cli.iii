@@ -6,8 +6,32 @@
  *   iii-crypto seal   <key-file> <nonce-file> <file> <out>    ChaCha20-Poly1305 AEAD encrypt
  *   iii-crypto open   <key-file> <nonce-file> <sealed> <out>  AEAD decrypt (exit 0 = AUTHENTIC)
  *   iii-crypto hash   <file>                                  SHA-256 (FIPS 180-4)
+ *   iii-crypto kem-keygen <set> <seed64-file> <ek-out> <dk-out>       ML-KEM keypair (FIPS 203)
+ *   iii-crypto kem-encaps <set> <ek-file> <coins32-file> <ct-out> <ss-out>
+ *   iii-crypto kem-decaps <set> <dk-file> <ct-file> <ss-out>
+ *   iii-crypto slh-keygen <sset> <seed-file> <pk-out> <sk-out>        SLH-DSA keypair (FIPS 205)
+ *   iii-crypto slh-sign   <sset> <sk-file> <file> <sig-out>           hash-based signature (SLOW by design)
+ *   iii-crypto slh-verify <sset> <pk-file> <file> <sig-file>          exit 0 = VALID, 4 = INVALID
+ *   iii-crypto ed-keygen  <seed32-file> <pk-out>                      Ed25519 (RFC 8032; sk IS the seed)
+ *   iii-crypto ed-sign    <seed32-file> <file> <sig-out>
+ *   iii-crypto ed-verify  <pk-file> <file> <sig-file>                 exit 0 = VALID, 4 = INVALID
+ *   iii-crypto siv-seal   <key32> <file> <out> [ad-file]              AES-SIV (RFC 5297): DETERMINISTIC
+ *   iii-crypto siv-open   <key32> <sealed> <out> [ad-file]            exit 0 = AUTHENTIC, 4 = FORGED
  *
  *   level: 2 = ML-DSA-44 | 3 = ML-DSA-65 | 5 = ML-DSA-87
+ *   set:   512 | 768 | 1024 (= ML-KEM-512/-768/-1024, FIPS 203 categories 1/3/5)
+ *   sset:  shake-128s | shake-192s | shake-256s | sha2-128s | sha2-192s | sha2-256s
+ *          (the six FIPS 205 "s" parameter sets, both hash families, ACVP byte-exact; seed = 3n bytes:
+ *           48 / 72 / 96 for 128 / 192 / 256)
+ *
+ * AES-SIV NOTE: SIV is nonce-MISUSE-RESISTANT and deterministic -- there is NO nonce to supply and none
+ * to accidentally reuse; the optional AD file is authenticated but not encrypted.  Same key + same
+ * plaintext + same AD -> the same sealed bytes, by design (that determinism is the tradeoff).
+ *
+ * ML-KEM NOTE (FIPS 203): encaps REJECTS a non-canonical encapsulation key (the sec 7.2 modulus check,
+ * exit 4).  decaps NEVER errors on a tampered ciphertext -- the Fujisaki-Okamoto transform IMPLICITLY
+ * rejects by deriving a DIFFERENT shared secret.  Agreement is proven by comparing the two ss files;
+ * silent divergence on tamper IS the designed negative arm.
  *
  * III's crypto is FIPS/ACVP-conformant and KAT-gated -- and, until now, reachable ONLY by writing a
  * program that links the archive.  A post-quantum signature stack you cannot point at a file is a
@@ -35,6 +59,20 @@ extern @abi(c-msvc-x64) fn GetFileSize(h: u64, hi: u64) -> u32 from "kernel32"
 extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
 extern @abi(c-msvc-x64) fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 from "mldsa.iii"
 extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sign_sealed(lv: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn aes_siv_encrypt(key32: u64, ad: u64, ad_len: u64, pt: u64, pt_len: u64, out: u64) -> i32 from "aes_siv.iii"
+extern @abi(c-msvc-x64) fn aes_siv_decrypt(key32: u64, ad: u64, ad_len: u64, in_buf: u64, in_len: u64, pt_out: u64) -> u8 from "aes_siv.iii"
 extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_init(key: *u8, nonce: *u8) -> i32 from "chacha20_poly1305.iii"
 extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 from "chacha20_poly1305.iii"
 extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 from "chacha20_poly1305.iii"
@@ -63,6 +101,10 @@ var NIO  : [u32; 2]
 var SLQ  : [u64; 1]
 var DEC  : [u8; 24]
 var PROBE: [u8; 4]
+var KSEED: [u8; 96]                     /* ML-KEM seed d||z (64) / SLH-DSA seed 3n (48/72/96) */
+var KSS  : [u8; 32]                     /* ML-KEM shared secret */
+var SLSIG: [u8; 32768]                  /* SLH-DSA signature (max 29792 B at 256s) */
+var ADB  : [u8; 1048576]                /* AES-SIV associated data (1 MiB cap) */
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -181,6 +223,35 @@ fn sig_bytes(level: u64) -> u64 {
     return 0u64
 }
 
+/* FIPS-203 ML-KEM: parameter-set name (512/768/1024) -> module rank k (2/3/4).  0 = unsupported. */
+fn kem_k(set: u64) -> u64 {
+    if set == 512u64 { return 2u64 }
+    if set == 768u64 { return 3u64 }
+    if set == 1024u64 { return 4u64 }
+    return 0u64
+}
+/* ek = 384k+32, dk = 768k+96 (computed inline); ct is (du*k + dv)*32 per set. */
+fn kem_ct_bytes(k: u64) -> u64 {
+    if k == 2u64 { return 768u64 }
+    if k == 3u64 { return 1088u64 }
+    if k == 4u64 { return 1568u64 }
+    return 0u64
+}
+
+/* FIPS-205 SLH-DSA "s" sets: name -> family*3 + lv (family 0 = SHAKE, 1 = SHA2; lv 0/1/2 = n 16/24/32).
+ * 99 = unknown set. */
+fn slh_set(name: u64) -> u64 {
+    if streq(name, "shake-128s" as u64) == 1u32 { return 0u64 }
+    if streq(name, "shake-192s" as u64) == 1u32 { return 1u64 }
+    if streq(name, "shake-256s" as u64) == 1u32 { return 2u64 }
+    if streq(name, "sha2-128s" as u64) == 1u32 { return 3u64 }
+    if streq(name, "sha2-192s" as u64) == 1u32 { return 4u64 }
+    if streq(name, "sha2-256s" as u64) == 1u32 { return 5u64 }
+    return 99u64
+}
+fn slh_nn(lv: u64) -> u64 { if lv == 0u64 { return 16u64 }  if lv == 1u64 { return 24u64 }  return 32u64 }
+fn slh_sigb(lv: u64) -> u64 { if lv == 0u64 { return 7856u64 }  if lv == 1u64 { return 16224u64 }  return 29792u64 }
+
 fn usage() -> u64 {
     ps("iii-crypto -- the post-quantum stack, on real files (FIPS 204 ML-DSA + ChaCha20-Poly1305)\n\n" as u64)
     ps("  iii-crypto keygen <level> <seed-file> <pk-out> <sk-out>\n" as u64)
@@ -188,9 +259,21 @@ fn usage() -> u64 {
     ps("  iii-crypto verify <level> <pk-file> <file> <sig-file>     exit 0 = VALID, 4 = INVALID\n" as u64)
     ps("  iii-crypto seal   <key-file> <nonce-file> <file> <out>\n" as u64)
     ps("  iii-crypto open   <key-file> <nonce-file> <sealed> <out>  exit 0 = AUTHENTIC, 4 = FORGED\n" as u64)
-    ps("  iii-crypto hash   <file>                                  SHA-256\n\n" as u64)
-    ps("  level: 2 = ML-DSA-44 | 3 = ML-DSA-65 | 5 = ML-DSA-87\n" as u64)
-    ps("  seed/key are FILES you supply (32 bytes) -- no hidden RNG to trust.\n" as u64)
+    ps("  iii-crypto hash   <file>                                  SHA-256\n" as u64)
+    ps("  iii-crypto kem-keygen <set> <seed64> <ek-out> <dk-out>    ML-KEM keypair (FIPS 203)\n" as u64)
+    ps("  iii-crypto kem-encaps <set> <ek> <coins32> <ct-out> <ss-out>   exit 4 = ek REJECTED\n" as u64)
+    ps("  iii-crypto kem-decaps <set> <dk> <ct> <ss-out>            tampered ct DIVERGES the ss\n" as u64)
+    ps("  iii-crypto slh-keygen <sset> <seed3n> <pk-out> <sk-out>   SLH-DSA keypair (FIPS 205)\n" as u64)
+    ps("  iii-crypto slh-sign   <sset> <sk> <file> <sig-out>        hash-based, SLOW by design\n" as u64)
+    ps("  iii-crypto slh-verify <sset> <pk> <file> <sig>            exit 0 = VALID, 4 = INVALID\n" as u64)
+    ps("  iii-crypto ed-keygen  <seed32> <pk-out>                   Ed25519 (RFC 8032)\n" as u64)
+    ps("  iii-crypto ed-sign    <seed32> <file> <sig-out>\n" as u64)
+    ps("  iii-crypto ed-verify  <pk> <file> <sig>                   exit 0 = VALID, 4 = INVALID\n" as u64)
+    ps("  iii-crypto siv-seal   <key32> <file> <out> [ad]           AES-SIV: deterministic, no nonce\n" as u64)
+    ps("  iii-crypto siv-open   <key32> <sealed> <out> [ad]         exit 0 = AUTHENTIC, 4 = FORGED\n\n" as u64)
+    ps("  level: 2 = ML-DSA-44 | 3 = ML-DSA-65 | 5 = ML-DSA-87    set: 512 | 768 | 1024 (ML-KEM)\n" as u64)
+    ps("  sset: shake-128s|shake-192s|shake-256s|sha2-128s|sha2-192s|sha2-256s (seed 48/72/96 B)\n" as u64)
+    ps("  seed/key/coins are FILES you supply -- no hidden RNG to trust.\n" as u64)
     ps("  keygen is DETERMINISTIC in the seed: same seed, same keypair, always.\n" as u64)
     return 1u64
 }
@@ -337,6 +420,252 @@ fn main(argc: i32, argv: u64) -> u64 {
         }
         if wrfile(av[5u64], (&CT) as u64, ctlen) != 0u32 { ps("iii-crypto: cannot write\n" as u64)  return 2u64 }
         ps("AUTHENTIC: opened " as u64)  pd(ctlen)  ps(" bytes (Poly1305 tag verified)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- kem-keygen (ML-KEM, FIPS 203) ---------------- */
+    if streq(cmd, "kem-keygen" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        let kk : u64 = kem_k(atou(av[2u64]))
+        if kk == 0u64 { ps("iii-crypto: kem set must be 512, 768 or 1024\n" as u64)  return 1u64 }
+        let sn : u64 = rdfile(av[3u64], (&KSEED) as u64, 64u64)
+        if sn == INVALID_H { ps("iii-crypto: cannot read seed: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if sn != 64u64 {
+            ps("iii-crypto: kem seed must be EXACTLY 64 bytes (d||z) (got " as u64)  pd(sn)  ps(")\n" as u64)
+            return 2u64
+        }
+        if iii_mlkem_keygen(kk, (&KSEED) as u64, (&PK) as u64, (&SK) as u64) != 0i32 { return 3u64 }
+        let ekb : u64 = 384u64 * kk + 32u64
+        let dkb : u64 = 768u64 * kk + 96u64
+        if wrfile(av[4u64], (&PK) as u64, ekb) != 0u32 { ps("iii-crypto: cannot write ek\n" as u64)  return 2u64 }
+        if wrfile(av[5u64], (&SK) as u64, dkb) != 0u32 { ps("iii-crypto: cannot write dk\n" as u64)  return 2u64 }
+        ps("ML-KEM-" as u64)  pd(atou(av[2u64]))  ps(" keypair written: ek " as u64)  pd(ekb)
+        ps(" B, dk " as u64)  pd(dkb)  ps(" B (deterministic in the seed)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- kem-encaps ---------------- */
+    if streq(cmd, "kem-encaps" as u64) == 1u32 {
+        if argc < 7i32 { return usage() }
+        let kk : u64 = kem_k(atou(av[2u64]))
+        if kk == 0u64 { ps("iii-crypto: kem set must be 512, 768 or 1024\n" as u64)  return 1u64 }
+        let ekb : u64 = 384u64 * kk + 32u64
+        let en : u64 = rdfile(av[3u64], (&PK) as u64, 2592u64)
+        if en == INVALID_H { ps("iii-crypto: cannot read ek: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if en != ekb {
+            ps("iii-crypto: ek is " as u64)  pd(en)  ps(" B, ML-KEM-" as u64)  pd(atou(av[2u64]))
+            ps(" expects " as u64)  pd(ekb)  ps(" B (wrong set?)\n" as u64)
+            return 2u64
+        }
+        let cn : u64 = rdfile(av[4u64], (&KSEED) as u64, 32u64)
+        if cn != 32u64 { ps("iii-crypto: coins must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        if iii_mlkem_encaps(kk, (&PK) as u64, (&KSEED) as u64, (&CT) as u64, (&KSS) as u64) != 0i32 {
+            ps("INVALID: encapsulation key REJECTED (FIPS 203 sec 7.2 modulus check: non-canonical ek)\n" as u64)
+            return 4u64
+        }
+        let ctb : u64 = kem_ct_bytes(kk)
+        if wrfile(av[5u64], (&CT) as u64, ctb) != 0u32 { ps("iii-crypto: cannot write ct\n" as u64)  return 2u64 }
+        if wrfile(av[6u64], (&KSS) as u64, 32u64) != 0u32 { ps("iii-crypto: cannot write ss\n" as u64)  return 2u64 }
+        ps("ML-KEM-" as u64)  pd(atou(av[2u64]))  ps(" encaps: ct " as u64)  pd(ctb)
+        ps(" B + 32-B shared secret (the secret is derived, never transmitted)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- kem-decaps ---------------- */
+    if streq(cmd, "kem-decaps" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        let kk : u64 = kem_k(atou(av[2u64]))
+        if kk == 0u64 { ps("iii-crypto: kem set must be 512, 768 or 1024\n" as u64)  return 1u64 }
+        let dkb : u64 = 768u64 * kk + 96u64
+        let dn : u64 = rdfile(av[3u64], (&SK) as u64, 4896u64)
+        if dn == INVALID_H { ps("iii-crypto: cannot read dk: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if dn != dkb {
+            ps("iii-crypto: dk is " as u64)  pd(dn)  ps(" B, ML-KEM-" as u64)  pd(atou(av[2u64]))
+            ps(" expects " as u64)  pd(dkb)  ps(" B (wrong set?)\n" as u64)
+            return 2u64
+        }
+        let ctb : u64 = kem_ct_bytes(kk)
+        let cn : u64 = rdfile(av[4u64], (&CT) as u64, ctb)
+        if cn == INVALID_H { ps("iii-crypto: cannot read ct: " as u64)  ps(av[4u64])  nl()  return 2u64 }
+        if cn != ctb {
+            ps("iii-crypto: ct is " as u64)  pd(cn)  ps(" B, ML-KEM-" as u64)  pd(atou(av[2u64]))
+            ps(" expects " as u64)  pd(ctb)  ps(" B (wrong set?)\n" as u64)
+            return 2u64
+        }
+        if iii_mlkem_decaps(kk, (&SK) as u64, (&CT) as u64, (&KSS) as u64) != 0i32 { return 3u64 }
+        if wrfile(av[5u64], (&KSS) as u64, 32u64) != 0u32 { ps("iii-crypto: cannot write ss\n" as u64)  return 2u64 }
+        ps("ML-KEM-" as u64)  pd(atou(av[2u64]))
+        ps(" decaps: 32-B shared secret written.  FO IMPLICIT REJECTION: a tampered ct\n" as u64)
+        ps("  yields a silently DIFFERENT secret -- prove agreement by comparing the ss files.\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- slh-keygen (SLH-DSA, FIPS 205, "s" sets) ---------------- */
+    if streq(cmd, "slh-keygen" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        let sc : u64 = slh_set(av[2u64])
+        if sc == 99u64 { ps("iii-crypto: sset must be shake-128s|shake-192s|shake-256s|sha2-128s|sha2-192s|sha2-256s\n" as u64)  return 1u64 }
+        let lv : u64 = sc % 3u64
+        let n3 : u64 = 3u64 * slh_nn(lv)
+        let sn : u64 = rdfile(av[3u64], (&KSEED) as u64, 96u64)
+        if sn == INVALID_H { ps("iii-crypto: cannot read seed: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if sn != n3 {
+            ps("iii-crypto: seed for this set must be EXACTLY " as u64)  pd(n3)  ps(" bytes (got " as u64)  pd(sn)  ps(")\n" as u64)
+            return 2u64
+        }
+        let mut kr : i32 = 0i32
+        if sc >= 3u64 { kr = iii_slhdsa_sha2_keygen(lv, (&KSEED) as u64, (&PK) as u64, (&SK) as u64) }
+        else { kr = iii_slhdsa_keygen(lv, (&KSEED) as u64, (&PK) as u64, (&SK) as u64) }
+        if kr != 0i32 { return 3u64 }
+        let pkb : u64 = 2u64 * slh_nn(lv)
+        let skb : u64 = 4u64 * slh_nn(lv)
+        if wrfile(av[4u64], (&PK) as u64, pkb) != 0u32 { ps("iii-crypto: cannot write pk\n" as u64)  return 2u64 }
+        if wrfile(av[5u64], (&SK) as u64, skb) != 0u32 { ps("iii-crypto: cannot write sk\n" as u64)  return 2u64 }
+        ps("SLH-DSA-" as u64)  ps(av[2u64])  ps(" keypair written: pk " as u64)  pd(pkb)
+        ps(" B, sk " as u64)  pd(skb)  ps(" B (deterministic in the seed)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- slh-sign ---------------- */
+    if streq(cmd, "slh-sign" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        let sc : u64 = slh_set(av[2u64])
+        if sc == 99u64 { ps("iii-crypto: unknown sset\n" as u64)  return 1u64 }
+        let lv : u64 = sc % 3u64
+        let skb : u64 = 4u64 * slh_nn(lv)
+        let kn : u64 = rdfile(av[3u64], (&SK) as u64, 4896u64)
+        if kn == INVALID_H { ps("iii-crypto: cannot read sk: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if kn != skb {
+            ps("iii-crypto: sk is " as u64)  pd(kn)  ps(" B, this set expects " as u64)  pd(skb)  ps(" B (wrong set?)\n" as u64)
+            return 2u64
+        }
+        let mn : u64 = rdfile(av[4u64], (&MSG) as u64, MSGCAP)
+        if mn == INVALID_H { ps("iii-crypto: cannot read: " as u64)  ps(av[4u64])  nl()  return 2u64 }
+        let mut sr : i32 = 0i32
+        if sc >= 3u64 { sr = iii_slhdsa_sha2_sign(lv, (&SK) as u64, (&MSG) as u64, mn, (&SLSIG) as u64, (&SLQ) as u64) }
+        else { sr = iii_slhdsa_sign_sealed(lv, (&SK) as u64, (&MSG) as u64, mn, (&SLSIG) as *u8, (&SLQ) as *u64) }
+        if sr != 0i32 { return 3u64 }
+        if SLQ[0u64] != slh_sigb(lv) { return 3u64 }
+        if wrfile(av[5u64], (&SLSIG) as u64, SLQ[0u64]) != 0u32 { ps("iii-crypto: cannot write sig\n" as u64)  return 2u64 }
+        ps("signed " as u64)  pd(mn)  ps(" bytes -> " as u64)  pd(SLQ[0u64])
+        ps("-byte SLH-DSA-" as u64)  ps(av[2u64])  ps(" signature (hash-based: no lattice assumptions)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- slh-verify ---------------- */
+    if streq(cmd, "slh-verify" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        let sc : u64 = slh_set(av[2u64])
+        if sc == 99u64 { ps("iii-crypto: unknown sset\n" as u64)  return 1u64 }
+        let lv : u64 = sc % 3u64
+        let pkb : u64 = 2u64 * slh_nn(lv)
+        let pn : u64 = rdfile(av[3u64], (&PK) as u64, 2592u64)
+        if pn == INVALID_H { ps("iii-crypto: cannot read pk: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if pn != pkb {
+            ps("iii-crypto: pk is " as u64)  pd(pn)  ps(" B, this set expects " as u64)  pd(pkb)  ps(" B (wrong set?)\n" as u64)
+            return 2u64
+        }
+        let mn : u64 = rdfile(av[4u64], (&MSG) as u64, MSGCAP)
+        if mn == INVALID_H { ps("iii-crypto: cannot read: " as u64)  ps(av[4u64])  nl()  return 2u64 }
+        let gn : u64 = rdfile(av[5u64], (&SLSIG) as u64, 32768u64)
+        if gn == INVALID_H { ps("iii-crypto: cannot read sig: " as u64)  ps(av[5u64])  nl()  return 2u64 }
+        if gn != slh_sigb(lv) {
+            ps("INVALID: signature is " as u64)  pd(gn)  ps(" B, this set's signatures are " as u64)  pd(slh_sigb(lv))  ps(" B\n" as u64)
+            return 4u64
+        }
+        let mut vr : i32 = 0i32
+        if sc >= 3u64 { vr = iii_slhdsa_sha2_verify(lv, (&PK) as u64, (&MSG) as u64, mn, (&SLSIG) as u64, gn) }
+        else { vr = iii_slhdsa_verify(lv, (&PK) as u64, (&MSG) as u64, mn, (&SLSIG) as u64, gn) }
+        if vr != 0i32 {
+            ps("INVALID: signature does NOT verify against this key and this file\n" as u64)
+            return 4u64
+        }
+        ps("VALID: SLH-DSA-" as u64)  ps(av[2u64])  ps(" signature verifies (" as u64)  pd(mn)
+        ps(" bytes signed)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- ed-keygen (Ed25519, RFC 8032) ---------------- */
+    if streq(cmd, "ed-keygen" as u64) == 1u32 {
+        if argc < 4i32 { return usage() }
+        let sn : u64 = rdfile(av[2u64], (&SEED) as u64, 32u64)
+        if sn != 32u64 { ps("iii-crypto: seed must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        if ed25519_pubkey((&SEED) as *u8, (&PK) as *u8) != 1u8 { return 3u64 }
+        if wrfile(av[3u64], (&PK) as u64, 32u64) != 0u32 { ps("iii-crypto: cannot write pk\n" as u64)  return 2u64 }
+        ps("Ed25519 public key written (32 B; the 32-byte seed IS the private key -- guard it)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- ed-sign ---------------- */
+    if streq(cmd, "ed-sign" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        let sn : u64 = rdfile(av[2u64], (&SEED) as u64, 32u64)
+        if sn != 32u64 { ps("iii-crypto: seed must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        let mn : u64 = rdfile(av[3u64], (&MSG) as u64, MSGCAP)
+        if mn == INVALID_H { ps("iii-crypto: cannot read: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if ed25519_sign_seed((&SEED) as *u8, (&MSG) as *u8, mn, (&SIG) as *u8) != 1u8 { return 3u64 }
+        if wrfile(av[4u64], (&SIG) as u64, 64u64) != 0u32 { ps("iii-crypto: cannot write sig\n" as u64)  return 2u64 }
+        ps("signed " as u64)  pd(mn)  ps(" bytes -> 64-byte Ed25519 signature (deterministic, RFC 8032)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- ed-verify ---------------- */
+    if streq(cmd, "ed-verify" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        let pn : u64 = rdfile(av[2u64], (&PK) as u64, 32u64)
+        if pn != 32u64 { ps("iii-crypto: pk must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        let mn : u64 = rdfile(av[3u64], (&MSG) as u64, MSGCAP)
+        if mn == INVALID_H { ps("iii-crypto: cannot read: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        let gn : u64 = rdfile(av[4u64], (&SIG) as u64, 64u64)
+        if gn != 64u64 { ps("INVALID: Ed25519 signatures are EXACTLY 64 bytes (got " as u64)  pd(gn)  ps(")\n" as u64)  return 4u64 }
+        if ed25519_verify((&PK) as *u8, (&MSG) as *u8, mn, (&SIG) as *u8) != 1u8 {
+            ps("INVALID: signature does NOT verify against this key and this file\n" as u64)
+            return 4u64
+        }
+        ps("VALID: Ed25519 signature verifies (" as u64)  pd(mn)  ps(" bytes signed)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- siv-seal (AES-SIV, RFC 5297: deterministic, nonce-misuse-resistant) ---------------- */
+    if streq(cmd, "siv-seal" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        let kn : u64 = rdfile(av[2u64], (&KEY) as u64, 32u64)
+        if kn != 32u64 { ps("iii-crypto: key must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        let mn : u64 = rdfile(av[3u64], (&MSG) as u64, MSGCAP - 16u64)
+        if mn == INVALID_H { ps("iii-crypto: cannot read (or file exceeds the 16 MiB - 16 B cap): " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        let mut adn : u64 = 0u64
+        if argc >= 6i32 {
+            adn = rdfile(av[5u64], (&ADB) as u64, 1048576u64)
+            if adn == INVALID_H { ps("iii-crypto: cannot read ad (cap 1 MiB): " as u64)  ps(av[5u64])  nl()  return 2u64 }
+        }
+        if aes_siv_encrypt((&KEY) as u64, (&ADB) as u64, adn, (&MSG) as u64, mn, (&CT) as u64) != 0i32 { return 3u64 }
+        if wrfile(av[4u64], (&CT) as u64, mn + 16u64) != 0u32 { ps("iii-crypto: cannot write\n" as u64)  return 2u64 }
+        ps("sealed " as u64)  pd(mn)  ps(" bytes -> " as u64)  pd(mn + 16u64)
+        ps(" bytes (AES-SIV: 16-byte SIV + ciphertext; DETERMINISTIC -- no nonce to misuse; ad " as u64)
+        pd(adn)  ps(" B)\n" as u64)
+        return 0u64
+    }
+
+    /* ---------------- siv-open ---------------- */
+    if streq(cmd, "siv-open" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        let kn : u64 = rdfile(av[2u64], (&KEY) as u64, 32u64)
+        if kn != 32u64 { ps("iii-crypto: key must be EXACTLY 32 bytes\n" as u64)  return 2u64 }
+        let sn : u64 = rdfile(av[3u64], (&CT) as u64, MSGCAP)
+        if sn == INVALID_H { ps("iii-crypto: cannot read: " as u64)  ps(av[3u64])  nl()  return 2u64 }
+        if sn < 16u64 { ps("INVALID: sealed file is too short to hold a SIV\n" as u64)  return 4u64 }
+        let mut adn : u64 = 0u64
+        if argc >= 6i32 {
+            adn = rdfile(av[5u64], (&ADB) as u64, 1048576u64)
+            if adn == INVALID_H { ps("iii-crypto: cannot read ad (cap 1 MiB): " as u64)  ps(av[5u64])  nl()  return 2u64 }
+        }
+        if aes_siv_decrypt((&KEY) as u64, (&ADB) as u64, adn, (&CT) as u64, sn, (&MSG) as u64) != 1u8 {
+            ps("INVALID: authentication FAILED -- tampered file, wrong key, or wrong AD.\n" as u64)
+            ps("  (no plaintext was written)\n" as u64)
+            return 4u64
+        }
+        if wrfile(av[4u64], (&MSG) as u64, sn - 16u64) != 0u32 { ps("iii-crypto: cannot write\n" as u64)  return 2u64 }
+        ps("AUTHENTIC: opened " as u64)  pd(sn - 16u64)  ps(" bytes (SIV verified)\n" as u64)
         return 0u64
     }
 

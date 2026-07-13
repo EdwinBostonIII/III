@@ -20,7 +20,7 @@
  *   content-reduced chain -- both staging orders, coprime -> 0, an 81-bit-coefficient pair
  *   past the i64 wall, and the protocol refusal.
  * W -- THE SELF-GENERATED PRIME WINDOW: the generator reproduces the historical 16-entry table
- *   EXACTLY (sealed outputs byte-identical), delivers 512 strictly-descending primes in
+ *   EXACTLY (sealed outputs byte-identical), delivers 1024 strictly-descending primes in
  *   (2^29, 2^30), each re-verified by this gate's OWN independent trial division.
  * H -- PAST THE OLD 464-BIT CEILING: a 520-bit-bound sum (x^24 - 10^6) + (x^2 - 999983) the
  *   16-prime window refused is DELIVERED (deg 48, c0 spanning 8 raw limbs) and its root
@@ -62,7 +62,7 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var AF : [i64; 100]   var AG : [i64; 100]   var AO : [i64; 800]   var AO2 : [i64; 800]
+var AF : [i64; 100]   var AG : [i64; 100]   var AO : [i64; 1600]   var AO2 : [i64; 1600]
 var PHIST : [i64; 16]
 
 /* P5/P6/R/N arm scratch at module scope (the cg_r3 64-local-slot ceiling -- exit 14) */
@@ -72,6 +72,8 @@ var RD5 : i64   var RNU : i64   var R0S : i64   var R0L : i64   var R0F : i64
 var RWL : i64   var RLMOK : i64   var RRT : i64   var RAV : i64
 var RARV : u64   var RPW : u64   var RNX : u64
 var NA2 : i64   var NH2 : i64   var GLN : i64   var GJ : i64
+var P7D : i64   var P7N : i64   var P7L : i64   var P7A0 : i64   var P7A1 : i64
+var P7C : i64   var P7B : i64   var P7R : i64
 
 /* the M-arm polynomial (x - 2^40)^2 (x - 1) as raw limb rows: c0 = -2^80 (two limbs), c1 = 2^80 + 2^41
  * (two limbs), c2 = -(2^41 + 1), c3 = 1.  Reloadable (build/mult consume the CUR rows). */
@@ -302,7 +304,7 @@ fn main() -> u64 {
     while i < 16i64 { if rs_prime(i) != PHIST[i as u64] { wh16 = 0i64 }   i = i + 1i64 }
     let mut wall : i64 = 1i64
     i = 0i64
-    while i < 512i64 {
+    while i < 1024i64 {
         let pv : i64 = rs_prime(i)
         if pv <= 536870912i64 { wall = 0i64 }               /* > 2^29 */
         if pv >= 1073741824i64 { wall = 0i64 }              /* < 2^30 */
@@ -316,7 +318,7 @@ fn main() -> u64 {
         }
         i = i + 1i64
     }
-    let w65 : i64 = rs_prime(512i64)                         /* out of range: 0 */
+    let w65 : i64 = rs_prime(1024i64)                        /* out of range: 0 */
     putchar(87i32) putchar(58i32) sp() e_i64(wh16) sp() e_i64(wall) sp() e_i64(w65) nl()   /* "W: 1 1 0" */
     if wh16 != 1i64 { return 19u64 }
     if wall != 1i64 { return 19u64 }
@@ -462,6 +464,43 @@ fn main() -> u64 {
     if P6B != 1i64 { return 25u64 }
     if P6R != 1i64 { return 25u64 }
 
+    /* ══ P7: the WIDENED recovery boundary D = 1536 (deg 32 x deg 48 -- the smallest-Sylvester
+     * factorization, n = 80): 2^(1/32) * 2^(1/48) = 2^(5/96), mu_96 orbit multiplicity 16:
+     * R = (t^96 - 32)^16 -- c0 = 32^16 = 2^80 (TWO raw limbs (0, 65536), past i64: fit 0), the
+     * t^1440 coefficient C(16,15)*(-32) = -512, monic; the deg-1536 output re-enters the WIDENED
+     * chain: exactly ONE root in (1, 2].  ~6 primes under the adaptive window. */
+    i = 0i64
+    while i <= 99i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    AF[0u64] = 0i64 - 2i64   AF[32u64] = 1i64
+    AG[0u64] = 0i64 - 2i64   AG[48u64] = 1i64
+    P7D = rs_prod_big2((&AF) as u64, 32i64, (&AG) as u64, 48i64, (&AO) as u64)
+    if P7D != 1536i64 { putchar(80i32) putchar(55i32) putchar(33i32) sp() e_i64(P7D) nl()   return 27u64 }
+    P7N = rs_nuse()                                        /* bnd = 48*2 + 32*2 = 160 -> ceil(162/29) = 6 */
+    P7L = rs_big_len(0i64)
+    P7A0 = rs_big_limb(0i64, 0i64) as i64
+    P7A1 = rs_big_limb(0i64, 1i64) as i64
+    P7C = rs_big_fit(0i64)
+    P7B = AO[1440u64]
+    if sturm2_in_begin(1536i64) != 0i32 { return 27u64 }
+    i = 0i64
+    while i <= 1536i64 {
+        GLN = rs_big_len(i)
+        GJ = 0i64
+        while GJ < GLN { sturm2_in_limb(i, GJ, rs_big_limb(i, GJ))   GJ = GJ + 1i64 }
+        sturm2_in_set(i, rs_big_sgn(i), GLN)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 27u64 }
+    P7R = root_count2(1i64, 1i64, 2i64, 1i64)
+    putchar(80i32) putchar(55i32) putchar(58i32) sp() e_i64(P7D) sp() e_i64(P7L) sp() e_i64(P7A0) sp() e_i64(P7A1) sp() e_i64(P7C) sp() e_i64(P7B) sp() e_i64(P7R) nl()
+    /* "P7: 1536 2 0 65536 0 -512 1" */
+    if P7L != 2i64 { return 27u64 }
+    if P7A0 != 0i64 { return 27u64 }
+    if P7A1 != 65536i64 { return 27u64 }
+    if P7C != 0i64 { return 27u64 }
+    if P7B != (0i64 - 512i64) { return 27u64 }
+    if P7R != 1i64 { return 27u64 }
+
     /* ══ R: PAST BOTH OLD CEILINGS AT ONCE -- the 3712-bit window bound AND the 64-limb delivery
      * row.  A = x^67 - a, B = x^2 - a with a = 2^60 - 1: bnd = 69 * bits(2^60) = 4209 bits (the
      * 128-prime window REFUSED this class), and R(0) = a^2 * (-a)^67 = -a^69 ~ 2^4140 spans 65
@@ -509,12 +548,13 @@ fn main() -> u64 {
      * primes -- deterministic from its own certified bound: A (bnd 91) -> 4, H (520) -> 18,
      * P5 (80) -> 3, P6 (112) -> 4, R (4209) -> 146.  Capacity (512) is a ceiling, not a price:
      * the D = 768 boundary costs FOUR primes while the deep-window R arm pays for its bound. */
-    putchar(78i32) putchar(58i32) sp() e_i64(NA2) sp() e_i64(NH2) sp() e_i64(P5N) sp() e_i64(P6N) sp() e_i64(RNU) nl()
-    /* "N: 4 18 3 4 146" */
+    putchar(78i32) putchar(58i32) sp() e_i64(NA2) sp() e_i64(NH2) sp() e_i64(P5N) sp() e_i64(P6N) sp() e_i64(P7N) sp() e_i64(RNU) nl()
+    /* "N: 4 18 3 4 6 146" */
     if NA2 != 4i64 { return 26u64 }
     if NH2 != 18i64 { return 26u64 }
     if P5N != 3i64 { return 26u64 }
     if P6N != 4i64 { return 26u64 }
+    if P7N != 6i64 { return 26u64 }
     if RNU != 146i64 { return 26u64 }
 
     return 99u64

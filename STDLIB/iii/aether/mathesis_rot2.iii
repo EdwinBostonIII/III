@@ -1,0 +1,194 @@
+/* aether/mathesis_rot2.iii -- THE ROT-2OP SETTLEMENT (campaign Phi: the frontier drain, item Phi-1).
+ *
+ * THE STANDING QUESTION (frontier blocker 3, "rot-2op-sweep", queued since Xi9; the measure organ's
+ * comment says why it matters: anti-bloat never rewrites a rot window because corpus/2675 proved
+ * 2 <= cost(rot_k) <= 3 in the ALU grammar -- but whether cost is 2 or EXACTLY 3 was open).
+ *
+ * THE INSTRUMENT: total exhaustion at width 8 -- the frontier organ's own width-indexed retry law
+ * ("a PROVEN verdict is an honest theorem about Z/2^w; the width-64 entry STAYS QUEUED").  The
+ * 2-op space over the FULL 8-op ALU grammar {ADD SUB MUL AND OR XOR SHL SHR}:
+ *
+ *   shapes    : LEFT  (l0 opA l1) opB l2   and   RIGHT  l0 opB (l1 opA l2),
+ *               leaves l0,l1,l2 in {x, c1, c2}          -> 2 x 8 x 8 x 27 = 3456 shapes
+ *   constants : c1, c2 swept over the WHOLE width-8 box where the shape reads them (a shape whose
+ *               leaves omit c2 computes a c2-independent function -- one representative decides
+ *               all 256, a structural fact of the evaluator, not a sample)
+ *   semantics : Z/2^8 wrap arithmetic; shift counts >= 8 saturate to 0 (the width-8 projection of
+ *               the SVIR shift law "count >= width is the const-0 program", corpus/2675)
+ *   targets   : rot_k(x) = ((x << k) | (x >> (8-k))) & 255, k in 1..7
+ *
+ * THE SUBSUMPTION: every 0-op and 1-op program embeds exactly in the 2-op space via identity tails
+ * ((f OR 0), (f ADD 0), (f XOR 0), (f SHR 0)) -- so a 2-op nonexistence verdict settles
+ * cost_8(rot_k) = 3 EXACTLY (the upper bound is the definiens itself, three ops).
+ *
+ * TEETH (the method must be able to FIND, and the evaluator must be GROUNDED):
+ *   - the NEG existence tooth: the same sweep pointed at -x mod 256 must find witnesses (e.g.
+ *     (x XOR 255) ADD 1) -- and the machine COUNTS every 2-op spelling of negation at width 8;
+ *   - the rot-power two-path: rot_1 iterated k times == rot_k, and rot_k(rot_{8-k}(x)) == x,
+ *     for ALL x and k -- an independent consistency route through the target family;
+ *   - the bb bridge (gate-side): the native width-8 evaluator's verdicts agree with the standing
+ *     symbolic engine (bb_reset(8) + sd_denote + bb_equal) on shift-free sample pairs.
+ *
+ * Gate: corpus/2712_mathesis_rot2.  Stream: DOCS/MATHESIS-PHI-ROUND1.log (MR2 rows).
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: pure compute; the gate composes bv_bits +
+ * ser_kinduct_sym for the bridge only.  ZERO-CASCADE: standalone aether TU, exported doors only. */
+module mathesis_rot2
+
+/* ---- width-8 semantics ---- */
+
+fn mr2_op(op: i64, a0: u64, b0: u64) -> u64 @export {
+    let a : u64 = a0 & 255u64
+    let b : u64 = b0 & 255u64
+    if op == 0i64 { return (a + b) & 255u64 }
+    if op == 1i64 { return (a - b) & 255u64 }
+    if op == 2i64 { return (a * b) & 255u64 }
+    if op == 3i64 { return a & b }
+    if op == 4i64 { return a | b }
+    if op == 5i64 { return a ^ b }
+    if op == 6i64 { if b >= 8u64 { return 0u64 }   return (a << b) & 255u64 }
+    if op == 7i64 { if b >= 8u64 { return 0u64 }   return a >> b }
+    return 0u64
+}
+
+fn mr2_rot(x0: u64, k: u64) -> u64 @export {
+    let x : u64 = x0 & 255u64
+    if k == 0u64 { return x }
+    return ((x << k) | (x >> (8u64 - k))) & 255u64
+}
+
+fn mr2_leaf(sel: i64, x: u64, c1: u64, c2: u64) -> u64 {
+    if sel == 0i64 { return x }
+    if sel == 1i64 { return c1 }
+    return c2
+}
+
+/* evaluate shape (nest, oa, ob, l0, l1, l2) at (x, c1, c2) -- the one evaluator, used by the
+ * sweep, the witness re-verification, and the teeth. */
+fn mr2_eval(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, x: u64, c1: u64, c2: u64) -> u64 {
+    let a : u64 = mr2_leaf(l0, x, c1, c2)
+    let b : u64 = mr2_leaf(l1, x, c1, c2)
+    let c : u64 = mr2_leaf(l2, x, c1, c2)
+    if nest == 0i64 { return mr2_op(ob, mr2_op(oa, a, b), c) }
+    return mr2_op(ob, a, mr2_op(oa, b, c))
+}
+
+/* the door form: shape by id (0..3455), decoded exactly as the sweep decodes it. */
+fn mr2_eval_id(sid: i64, x: u64, c1: u64, c2: u64) -> u64 @export {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    return mr2_eval(nest, oa, ob, l0, l1, l2, x, c1, c2)
+}
+
+/* ---- the sweep ---- */
+
+var MR2_CAND : i64          /* candidates swept (shape x live-constant pairs) */
+var MR2_MK : [i64; 8]       /* per-k full matches (k = 1..7); index 0 = the NEG-target count */
+var MR2_W : [i64; 256]      /* witness rows (k, sid, c1, c2), cap 64 -- counts are never capped */
+var MR2_WN : i64
+
+fn mr2_cand() -> i64 @export { return MR2_CAND }
+fn mr2_mk(k: i64) -> i64 @export { return MR2_MK[k as u64] }
+fn mr2_wn() -> i64 @export { return MR2_WN }
+fn mr2_w(i: i64, j: i64) -> i64 @export { return MR2_W[((i * 4i64) + j) as u64] }
+
+/* full 256-input check of shape against target (k in 1..7 = rot_k; k = 0 = NEG). */
+fn mr2_full(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    let mut x : i64 = 0i64
+    while x < 256i64 {
+        let fv : u64 = mr2_eval(nest, oa, ob, l0, l1, l2, x as u64, c1, c2)
+        let mut tv : u64 = 0u64
+        if k == 0i64 { tv = (0u64 - (x as u64)) & 255u64 }
+        if k > 0i64 { tv = mr2_rot(x as u64, k as u64) }
+        if fv != tv { return 0i64 }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mr2_hit(k: i64, sid: i64, c1: i64, c2: i64) -> i64 {
+    MR2_MK[k as u64] = MR2_MK[k as u64] + 1i64
+    if MR2_WN < 64i64 {
+        MR2_W[(MR2_WN * 4i64) as u64] = k
+        MR2_W[((MR2_WN * 4i64) + 1i64) as u64] = sid
+        MR2_W[((MR2_WN * 4i64) + 2i64) as u64] = c1
+        MR2_W[((MR2_WN * 4i64) + 3i64) as u64] = c2
+        MR2_WN = MR2_WN + 1i64
+    }
+    return 1i64
+}
+
+/* THE SWEEP.  target 0 = the rot family (k = 1..7 decided per candidate: rot_k(1) = 2^k are
+ * pairwise distinct, so the x=1 probe selects at most ONE k; a survivor faces x=131, then the
+ * full 256).  target 1 = the NEG tooth (-x mod 256; probe -1 = 255, then full).
+ * Returns total full matches. */
+fn mr2_sweep(target: i64) -> i64 @export {
+    MR2_CAND = 0i64
+    MR2_WN = 0i64
+    let mut z : i64 = 0i64
+    while z < 8i64 { MR2_MK[z as u64] = 0i64   z = z + 1i64 }
+    let mut total : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let nest : i64 = sid / 1728i64
+        let mut r : i64 = sid % 1728i64
+        let oa : i64 = r / 216i64
+        r = r % 216i64
+        let ob : i64 = r / 27i64
+        r = r % 27i64
+        let l0 : i64 = r / 9i64
+        let l1 : i64 = (r / 3i64) % 3i64
+        let l2 : i64 = r % 3i64
+        let mut c1max : i64 = 0i64
+        if l0 == 1i64 { c1max = 255i64 }
+        if l1 == 1i64 { c1max = 255i64 }
+        if l2 == 1i64 { c1max = 255i64 }
+        let mut c2max : i64 = 0i64
+        if l0 == 2i64 { c2max = 255i64 }
+        if l1 == 2i64 { c2max = 255i64 }
+        if l2 == 2i64 { c2max = 255i64 }
+        let mut c1 : i64 = 0i64
+        while c1 <= c1max {
+            let mut c2 : i64 = 0i64
+            while c2 <= c2max {
+                MR2_CAND = MR2_CAND + 1i64
+                let f1 : u64 = mr2_eval(nest, oa, ob, l0, l1, l2, 1u64, c1 as u64, c2 as u64)
+                if target == 1i64 {
+                    if f1 == 255u64 {
+                        if mr2_full(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, 0i64) == 1i64 {
+                            total = total + mr2_hit(0i64, sid, c1, c2)
+                        }
+                    }
+                } else {
+                    /* decode the unique k with rot_k(1) = 2^k = f1, if any */
+                    let mut k : i64 = 0i64
+                    if f1 == 2u64 { k = 1i64 }
+                    if f1 == 4u64 { k = 2i64 }
+                    if f1 == 8u64 { k = 3i64 }
+                    if f1 == 16u64 { k = 4i64 }
+                    if f1 == 32u64 { k = 5i64 }
+                    if f1 == 64u64 { k = 6i64 }
+                    if f1 == 128u64 { k = 7i64 }
+                    if k > 0i64 {
+                        let f131 : u64 = mr2_eval(nest, oa, ob, l0, l1, l2, 131u64, c1 as u64, c2 as u64)
+                        if f131 == mr2_rot(131u64, k as u64) {
+                            if mr2_full(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, k) == 1i64 {
+                                total = total + mr2_hit(k, sid, c1, c2)
+                            }
+                        }
+                    }
+                }
+                c2 = c2 + 1i64
+            }
+            c1 = c1 + 1i64
+        }
+        sid = sid + 1i64
+    }
+    return total
+}

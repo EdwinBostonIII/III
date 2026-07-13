@@ -252,6 +252,29 @@ ONTO_CERT="$(printf "%s" "40|377|715|1344|19699|580" | sha256sum | cut -d" " -f1
 echo "[mathesis] ONTO_CERT = $ONTO_CERT"
 echo "[mathesis] GREEN: THE ONTOGENESIS sealed (the 11-law language PROVEN inadequate under its own manipulation at the third token -- 40 gap profiles, witness 377/715; the mirror law restores closure; DUALITY total over 19,699 tables; PRODUCT total over 580 citizen pairs)"
 
+echo "[mathesis] == [14] CAMPAIGN PHI (the frontier drain) =="
+for t in mathesis_rot2 mathesis_bigcurve mathesis_norm mathesis_tetra; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 97; }
+    RADFACE+=("$o")
+done
+gate 2712_mathesis_rot2     "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 98    # cost8(rot_k) = 3 EXACTLY: 101,122,176 candidates, 0 matches; NEG tooth 311,056
+gate 2713_mathesis_bigcurve "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 100   # the 12 escaped constructions harvested in exact bigint; 6 distinct points, growth witnessed
+gate 2714_mathesis_norm     "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 101   # the norm instrument: 3 total laws, the cross-orbit product law, unit-action REFUTED
+gate 2715_mathesis_pilot12  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 102   # the pilot's rounds 6..11: d=15 found, prefix law, head(12) pinned
+gate 2716_mathesis_tetra    "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 103   # the fourth token: 43,968 structures double-counted, 7 citizens incl. Z_4 + V_4
+PHILOG="$III_ROOT/DOCS/MATHESIS-PHI-ROUND1.log"
+grep -q "^MR2 shapes=3456 candidates=101122176 matches=0$" "$PHILOG" || { echo "[mathesis] RED: phi rot-2op row drifted"; exit 104; }
+grep -q "^MPH REPLAY pool=9 over=12 events=12$" "$PHILOG" || { echo "[mathesis] RED: phi replay row drifted"; exit 105; }
+grep -q "^MPH C 0 7497 8400 -5780 3138045143940 -6090322207527$" "$PHILOG" || { echo "[mathesis] RED: the first constructed identity drifted"; exit 106; }
+grep -q "^MNM CATALOGUE rows=27 twopath+mult=27 gamma=27$" "$PHILOG" || { echo "[mathesis] RED: phi norm-law row drifted"; exit 107; }
+grep -q "hits=0 -- REFUTED" "$PHILOG" || { echo "[mathesis] RED: the unit-action refutation drifted"; exit 108; }
+grep -q "^MT4 CENSUS tables=1048576 inhabited=25 structures=43968 burnside=43968 citizens=7$" "$PHILOG" || { echo "[mathesis] RED: the tetra census drifted"; exit 109; }
+grep -q "^MPL rounds=12 head=976d568997e508619cb0eb0e507f608571ca38cb1b969d0322692c4de8b70c7f$" "$PHILOG" || { echo "[mathesis] RED: the pilot head(12) drifted"; exit 110; }
+PHI_CERT="$(printf '%s' "101122176|0|311056|12|6|3|27|156|0|25|43968|7|49|15|976d568997e508619cb0eb0e507f608571ca38cb1b969d0322692c4de8b70c7f" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] PHI_CERT = $PHI_CERT"
+echo "[mathesis] GREEN: campaign Phi sealed (the frontier drained: cost8(rot_k)=3 by 101M-candidate exhaustion; the 12 escaped chord-tangent constructions now EXACT bigint identities on 6 distinct points; the norm instrument's 3 total laws + the cross-orbit product law + the unit-action REFUTATION; the fourth token censused 43,968 structures double-counted with Burnside, Z_4 and V_4 minted as citizens, the product law total at carrier 16; the pilot's rounds 6..11 found d=15 and pinned head(12))"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

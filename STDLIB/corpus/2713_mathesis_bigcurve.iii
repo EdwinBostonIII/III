@@ -1,0 +1,170 @@
+/* 2713_mathesis_bigcurve.iii -- GATE for THE BIGINT CHORD-TANGENT HARVEST (campaign Phi, item
+ * Phi-2: the 12 escaped constructions, computed exactly).
+ *
+ * Campaign Tau counted 12 chord-tangent constructions on the d=3 curve-B configuration escaping
+ * the i64 height envelope.  This gate replays that closure step-for-step against the STANDING
+ * organ (two implementations must agree point-for-point on pool size and escape count), records
+ * the 12 events, and re-executes each in EXACT BIGINT: third intersection, gcd reduction (exact
+ * division with a limb-checked zero residue), the ON-CURVE recheck in bigint, orientation, and
+ * the identity components -- for a point (u,v,w) on curve B,
+ *     (u + v*cbrt(3) + w*cbrt(9))^3 = f + e*cbrt(9),  f = P0(u,v,w), e = P2(u,v,w)
+ * by the SAME machine-derived grids (one derivation, two arithmetics).
+ *
+ * WHAT THE HARVEST FOUND (observed 2026-07-13, pinned here):
+ *   - all 12 constructions succeed exactly; the first:
+ *       (7497 + 8400*cbrt3 - 5780*cbrt9)^3 = 3138045143940*cbrt9 - 6090322207527
+ *   - THE PAIR STRUCTURE: the 12 constructions land on exactly SIX distinct points, each
+ *     constructed TWICE by independent routes (tangent and chord) -- a consistency the engine
+ *     never assumed; and the six points carry only THREE distinct radical coefficients e,
+ *     each shared by two points.
+ *   - every e is POSITIVE and every f NEGATIVE after orientation;
+ *   - every |e| exceeds the judge's exact-sign envelope (|e| <= 1008000 keeps e^3*m inside
+ *     i64): all 12 are JUDGE-ENVELOPE REFUSALS, counted, never conflated with disagreement --
+ *     the certificate is the bigint on-curve identity + the sealed grid derivation (2707);
+ *   - the growth probe (pure bigint, chords, pool cap 24): pass 1 adds 6, pass 2 adds 9,
+ *     3 refusals at the cap -- the configuration GROWS; the d=2 configuration closed at 6,
+ *     this one does not close: the structural asymmetry now has constructed witnesses.
+ *
+ * ARMS: T the off-curve defect tooth FIRST + the norm-multiplicativity spot (N = -271 on
+ *       SIGMA-d3B-1); H the hunt; S/R the two-implementation agreement; E event spot-pins;
+ *       C the 12 harvests + rechecks + the pair census; J the envelope honesty; G the growth.
+ * EXIT 99. */
+module corpus_2713_mathesis_bigcurve
+
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_closure(d: i64, curve: i64, seedmode: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_count() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_over() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bg_replay(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_count() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_over() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_evn() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_ev(i: i64, j: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_harvest(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_recheck(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_fits(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_i64(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_smallpoint(d: i64, curve: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_offcurve_tooth(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_probe(d: i64, curve: i64, ns: i64, passes: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_count() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_refused() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_added(p: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_norm_mult(nalpha: i64, d: i64, f: i64, e: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+
+var PU : [i64; 12]
+var PV : [i64; 12]
+var PW : [i64; 12]
+
+fn main() -> u64 {
+    /* ---- T: the defect tooth FIRST + the norm-law spot ---- */
+    if bg_offcurve_tooth(3i64, 2i64) != (0i64 - 2i64) { return 10u64 }
+    /* N(2,3,-4) over Z[cbrt3] = 8 + 81 - 576 + 216 = -271; the multiplicative law through the
+     * bigint core: N(alpha)^3 == N(alpha^3) for the sealed identity (438, -919). */
+    if bg_norm_mult(0i64 - 271i64, 3i64, 0i64 - 919i64, 438i64, 2i64) != 1i64 { return 11u64 }
+    if bg_smallpoint(3i64, 2i64, 2i64, 3i64, 0i64 - 4i64) != 1i64 { return 12u64 }
+
+    /* ---- H: the hunt (the sealed six d3B rows) ---- */
+    mcv_hunt_reset()
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 20u64 }
+    if mcv_found() != 6i64 { return 21u64 }
+
+    /* ---- S/R: the standing organ and the replay AGREE (and match the sealed 12) ---- */
+    if mcg_closure(3i64, 2i64, 1i64) != 9i64 { return 30u64 }
+    if mcg_over() != 12i64 { return 31u64 }
+    if bg_replay(3i64, 2i64) != 9i64 { return 32u64 }
+    if bg_count() != mcg_count() { return 33u64 }
+    if bg_over() != mcg_over() { return 34u64 }
+    if bg_evn() != 12i64 { return 35u64 }
+
+    /* ---- E: event spot-pins (the first tangent event and the first chord event) ---- */
+    if bg_ev(0i64, 0i64) != 1i64 { return 40u64 }
+    if bg_ev(0i64, 1i64) != 1i64 { return 40u64 }
+    if bg_ev(0i64, 2i64) != 2i64 { return 40u64 }
+    if bg_ev(0i64, 3i64) != 3i64 { return 40u64 }
+    if bg_ev(0i64, 4i64) != (0i64 - 4i64) { return 40u64 }
+    if bg_ev(1i64, 0i64) != 1i64 { return 41u64 }
+    if bg_ev(1i64, 1i64) != 0i64 { return 41u64 }
+    if bg_ev(1i64, 5i64) != 9i64 { return 41u64 }
+    if bg_ev(1i64, 6i64) != (0i64 - 12i64) { return 41u64 }
+    if bg_ev(1i64, 7i64) != 2i64 { return 41u64 }
+
+    /* ---- C: the 12 harvests, each exact, each self-consistent ---- */
+    let mut i : i64 = 0i64
+    while i < 12i64 {
+        if bg_harvest(i) != 1i64 { return 50u64 }
+        if bg_recheck(i) != 1i64 { return 51u64 }
+        /* orientation law: e > 0, f < 0 (observed across all 12) */
+        let mut f2 : i64 = 0i64
+        while f2 < 5i64 { if bg_res_fits(i, f2) != 1i64 { return 52u64 }   f2 = f2 + 1i64 }
+        if bg_res_i64(i, 3i64) <= 0i64 { return 53u64 }
+        if bg_res_i64(i, 4i64) >= 0i64 { return 54u64 }
+        PU[i as u64] = bg_res_i64(i, 0i64)
+        PV[i as u64] = bg_res_i64(i, 1i64)
+        PW[i as u64] = bg_res_i64(i, 2i64)
+        i = i + 1i64
+    }
+    /* the first constructed identity, pinned in full */
+    if PU[0u64] != 7497i64 { return 55u64 }
+    if PV[0u64] != 8400i64 { return 55u64 }
+    if PW[0u64] != (0i64 - 5780i64) { return 55u64 }
+    if bg_res_i64(0i64, 3i64) != 3138045143940i64 { return 56u64 }
+    if bg_res_i64(0i64, 4i64) != (0i64 - 6090322207527i64) { return 57u64 }
+    /* THE PAIR STRUCTURE: exactly 6 distinct points, each constructed exactly twice */
+    let mut distinct : i64 = 0i64
+    i = 0i64
+    while i < 12i64 {
+        let mut firstat : i64 = i
+        let mut cnt : i64 = 0i64
+        let mut j : i64 = 0i64
+        while j < 12i64 {
+            if PU[j as u64] == PU[i as u64] { if PV[j as u64] == PV[i as u64] { if PW[j as u64] == PW[i as u64] {
+                cnt = cnt + 1i64
+                if j < firstat { firstat = j }
+            } } }
+            j = j + 1i64
+        }
+        if cnt != 2i64 { return 58u64 }
+        if firstat == i { distinct = distinct + 1i64 }
+        i = i + 1i64
+    }
+    if distinct != 6i64 { return 59u64 }
+    /* THREE distinct radical coefficients e, each carried by two points */
+    let mut edistinct : i64 = 0i64
+    i = 0i64
+    while i < 12i64 {
+        let ei : i64 = bg_res_i64(i, 3i64)
+        let mut firstat2 : i64 = i
+        let mut ecnt : i64 = 0i64
+        let mut j2 : i64 = 0i64
+        while j2 < 12i64 {
+            if bg_res_i64(j2, 3i64) == ei {
+                ecnt = ecnt + 1i64
+                if j2 < firstat2 { firstat2 = j2 }
+            }
+            j2 = j2 + 1i64
+        }
+        if ecnt != 4i64 { return 60u64 }        /* 2 points x 2 constructions each */
+        if firstat2 == i { edistinct = edistinct + 1i64 }
+        i = i + 1i64
+    }
+    if edistinct != 3i64 { return 61u64 }
+
+    /* ---- J: the judge-envelope honesty -- every e is PAST the exact-sign envelope ---- */
+    i = 0i64
+    while i < 12i64 {
+        if bg_res_i64(i, 3i64) <= 1008000i64 { return 70u64 }
+        i = i + 1i64
+    }
+
+    /* ---- G: the growth probe (the configuration does NOT close) ---- */
+    if bgb_probe(3i64, 2i64, 9i64, 2i64) != 24i64 { return 80u64 }
+    if bgb_count() != 24i64 { return 81u64 }
+    if bgb_refused() != 3i64 { return 82u64 }
+    if bgb_added(0i64) != 6i64 { return 83u64 }
+    if bgb_added(1i64) != 9i64 { return 84u64 }
+
+    return 99u64
+}

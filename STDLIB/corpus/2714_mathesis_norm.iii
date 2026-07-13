@@ -1,0 +1,195 @@
+/* 2714_mathesis_norm.iii -- GATE for THE NORM INSTRUMENT (campaign Phi, item Phi-4).
+ *
+ * The field norm N(u + v g + w g^2) = u^3 + d v^3 + d^2 w^3 - 3duvw lands on the machine's own
+ * catalogue as an exact instrument, and the instrument DISCOVERS:
+ *
+ *   - THE TWO-PATH LAW (27/27): the direct cubic form equals det(M_alpha) computed through the
+ *     STANDING charpoly organ -- two organs, one truth.
+ *   - MULTIPLICATIVITY THROUGH THE COLLAPSE (27/27): N(alpha)^3 == N(f + e*g^k) exactly, cubes
+ *     through the bigint core.
+ *   - THE GAMMA LAW (27/27): gamma*alpha stays on its curve and N(gamma*alpha) == d * N(alpha).
+ *   - THE RAMANUJAN COINCIDENCE: the d=2 orbit is exactly the orbit where e == N == -f
+ *     (9, 18, 36) -- no other catalogue row has it.
+ *   - THE d=3 ENTANGLEMENT: the six d3B rows pair by shared radical coefficient e, and within
+ *     each pair f(alpha) == -N(partner) BOTH WAYS (three pairs, six crossings, all exact).
+ *   - THE CROSS-ORBIT PRODUCT LAW: the six rows form two gamma-orbits (3->7->6 and 5->4->8,
+ *     norms scaling by exactly 3); products of members whose orbit indices sum to 0 mod 3 --
+ *     pairs {3,5}, {4,6}, {7,8} -- MULTIPLY INTO Z + Z*gamma (gamma^2-component EXACTLY zero)
+ *     with N(product) == N(a)*N(b); and the three products are gamma-coherent: ONE fundamental
+ *     product (-73, 36, 0) = alpha_3 * alpha_5, with the other two EQUAL to its 3-fold
+ *     (-219, 108, 0) = gamma^3 * (that product):
+ *         (2,3,-4) x (4,6,-1) = (-73, 36, 0),   N = -249049 = (-271)*(919).
+ *   - THE UNIT CENSUS (h <= 20): d=2 has 18 units (9 of norm +1; the fundamental (1,1,1) and
+ *     its ring-square (5,4,3) both in the census -- group closure witnessed); d=12 has only
+ *     the trivial +-(1,0,0).
+ *   - THE UNIT-ACTION REFUTATION: 156 (unit x catalogue-point) ring products tested -- ZERO
+ *     land on either collapse curve.  Unit multiplication does NOT preserve the collapse; the
+ *     catalogue's symmetry is the gamma-action, not the unit group.  The machine tested the
+ *     hypothesis and refuted it with certificates.
+ *
+ * EXIT 99. */
+module corpus_2714_mathesis_norm
+
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mn_direct(d: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_charpoly(d: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_ringmul(d: i64, u: i64, v: i64, w: i64, p: i64, q: i64, r: i64) -> i32 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_c0() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_c1() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_c2() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_catalogue_laws() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_gamma_law() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_row_norm(i: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_unit_census(d: i64, h: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_total() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_plus() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_nontrivial() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_unit_action(d: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_act_a() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_act_b() -> i64 from "mathesis_norm.iii"
+
+fn ucheck(d: i64, tot: i64, plus: i64, ntr: i64) -> i64 {
+    mn_unit_census(d, 20i64)
+    if mn_units_total() != tot { return 0i64 }
+    if mn_units_plus() != plus { return 0i64 }
+    if mn_units_nontrivial() != ntr { return 0i64 }
+    return 1i64
+}
+
+fn acheck(d: i64, tested: i64) -> i64 {
+    /* census for this d must already be loaded by the caller */
+    if mn_unit_action(d) != tested { return 0i64 }
+    if mn_act_a() != 0i64 { return 0i64 }
+    if mn_act_b() != 0i64 { return 0i64 }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* ---- T: the discrimination tooth FIRST -- a wrong-sign norm form must SPLIT from the
+     * spectral path (the instrument discriminates, it does not bless) ---- */
+    let d0 : i64 = 5i64
+    let nw : i64 = (1i64) + (d0 * 8i64) + (d0 * d0 * 27i64) + (3i64 * d0 * 1i64 * 2i64 * 3i64)
+    let ncp : i64 = mn_charpoly(d0, 1i64, 2i64, 3i64)
+    if nw == ncp { return 10u64 }
+    if mn_direct(d0, 1i64, 2i64, 3i64) != ncp { return 11u64 }
+    /* the fundamental unit of Z[cbrt2] through the spectral path */
+    if mn_charpoly(2i64, 1i64, 1i64, 1i64) != 1i64 { return 12u64 }
+
+    /* ---- H: the five hunts (the standing catalogue, 27 rows) ---- */
+    mcv_hunt_reset()
+    if mcv_hunt(2i64, 1i64, 60i64) != 3i64 { return 20u64 }
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 21u64 }
+    if mcv_hunt(6i64, 1i64, 60i64) != 6i64 { return 22u64 }
+    if mcv_hunt(7i64, 1i64, 60i64) != 6i64 { return 23u64 }
+    if mcv_hunt(12i64, 1i64, 60i64) != 6i64 { return 24u64 }
+    if mcv_found() != 27i64 { return 25u64 }
+
+    /* ---- C: the three total laws over the whole catalogue ---- */
+    if mn_catalogue_laws() != 27i64 { return 30u64 }
+    if mn_gamma_law() != 27i64 { return 31u64 }
+
+    /* ---- R: THE RAMANUJAN COINCIDENCE (d=2 orbit: e == N == -f; rows 0..2) ---- */
+    let mut i : i64 = 0i64
+    while i < 3i64 {
+        let nv : i64 = mn_row_norm(i)
+        if mcv_row_e(i) != nv { return 40u64 }
+        if mcv_row_f(i) != (0i64 - nv) { return 41u64 }
+        i = i + 1i64
+    }
+    if mn_row_norm(0i64) != 9i64 { return 42u64 }
+    if mn_row_norm(1i64) != 36i64 { return 43u64 }
+    if mn_row_norm(2i64) != 18i64 { return 44u64 }
+    /* ...and NO row beyond the d=2 orbit has the coincidence */
+    i = 3i64
+    while i < 27i64 {
+        if mcv_row_e(i) == mn_row_norm(i) { return 45u64 }
+        i = i + 1i64
+    }
+
+    /* ---- P: THE d=3 ENTANGLEMENT + THE PARTNER LAW (rows 3..8, pairs {3,5},{4,7},{6,8}) ---- */
+    var pa : [i64; 3]
+    var pb : [i64; 3]
+    pa[0u64] = 3i64   pb[0u64] = 5i64
+    pa[1u64] = 4i64   pb[1u64] = 7i64
+    pa[2u64] = 6i64   pb[2u64] = 8i64
+    i = 0i64
+    while i < 3i64 {
+        let a : i64 = pa[i as u64]
+        let b : i64 = pb[i as u64]
+        if mcv_row_e(a) != mcv_row_e(b) { return 50u64 }
+        if mcv_row_f(a) != (0i64 - mn_row_norm(b)) { return 51u64 }
+        if mcv_row_f(b) != (0i64 - mn_row_norm(a)) { return 52u64 }
+        i = i + 1i64
+    }
+    /* THE CROSS-ORBIT PRODUCT LAW: pairs {3,5},{4,6},{7,8} collapse into Z + Z*gamma with
+     * multiplicative norms, and the three products are gamma-coherent (one fundamental) */
+    extern_partner_check()
+    if PARTNER_OK != 3i64 { return 53u64 }
+    /* the fundamental product and its 3-fold, pinned exactly */
+    mn_ringmul(3i64, mcv_row_u(3i64), mcv_row_v(3i64), mcv_row_w(3i64),
+               mcv_row_u(5i64), mcv_row_v(5i64), mcv_row_w(5i64))
+    if mn_c0() != (0i64 - 73i64) { return 54u64 }
+    if mn_c1() != 36i64 { return 55u64 }
+    if mn_c2() != 0i64 { return 56u64 }
+    mn_ringmul(3i64, mcv_row_u(4i64), mcv_row_v(4i64), mcv_row_w(4i64),
+               mcv_row_u(6i64), mcv_row_v(6i64), mcv_row_w(6i64))
+    if mn_c0() != (0i64 - 219i64) { return 57u64 }
+    if mn_c1() != 108i64 { return 58u64 }
+    if mn_c2() != 0i64 { return 59u64 }
+
+    /* ---- U: the unit censuses (h <= 20), pinned as observed ---- */
+    if ucheck(2i64, 18i64, 9i64, 16i64) != 1i64 { return 60u64 }
+    if acheck(2i64, 48i64) != 1i64 { return 61u64 }
+    if ucheck(3i64, 10i64, 5i64, 8i64) != 1i64 { return 62u64 }
+    if acheck(3i64, 48i64) != 1i64 { return 63u64 }
+    if ucheck(5i64, 4i64, 2i64, 2i64) != 1i64 { return 64u64 }
+    if acheck(5i64, 0i64) != 1i64 { return 65u64 }
+    if ucheck(6i64, 4i64, 2i64, 2i64) != 1i64 { return 66u64 }
+    if acheck(6i64, 12i64) != 1i64 { return 67u64 }
+    if ucheck(7i64, 10i64, 5i64, 8i64) != 1i64 { return 68u64 }
+    if acheck(7i64, 48i64) != 1i64 { return 69u64 }
+    if ucheck(12i64, 2i64, 1i64, 0i64) != 1i64 { return 70u64 }
+    if acheck(12i64, 0i64) != 1i64 { return 71u64 }
+
+    /* ---- G: the unit-group closure witness: (1,1,1)^2 = (5,4,3) in Z[cbrt2], both units ---- */
+    mn_ringmul(2i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64)
+    if mn_c0() != 5i64 { return 80u64 }
+    if mn_c1() != 4i64 { return 81u64 }
+    if mn_c2() != 3i64 { return 82u64 }
+    if mn_direct(2i64, 5i64, 4i64, 3i64) != 1i64 { return 83u64 }
+
+    return 99u64
+}
+
+/* the partner-law check: for each e-pair, the ring product's gamma^2 component is EXACTLY 0
+ * and the product's norm is the product of the norms. */
+var PARTNER_OK : i64
+fn extern_partner_check() -> i32 {
+    PARTNER_OK = 0i64
+    var xs : [i64; 6]
+    xs[0u64] = 3i64   xs[1u64] = 5i64
+    xs[2u64] = 4i64   xs[3u64] = 6i64
+    xs[4u64] = 7i64   xs[5u64] = 8i64
+    let mut i : i64 = 0i64
+    while i < 3i64 {
+        let a : i64 = xs[(i * 2i64) as u64]
+        let b : i64 = xs[((i * 2i64) + 1i64) as u64]
+        mn_ringmul(3i64,
+            mcv_row_u(a), mcv_row_v(a), mcv_row_w(a),
+            mcv_row_u(b), mcv_row_v(b), mcv_row_w(b))
+        if mn_c2() == 0i64 {
+            if mn_direct(3i64, mn_c0(), mn_c1(), 0i64) == (mn_row_norm(a) * mn_row_norm(b)) {
+                PARTNER_OK = PARTNER_OK + 1i64
+            }
+        }
+        i = i + 1i64
+    }
+    return 0i32
+}

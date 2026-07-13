@@ -964,8 +964,95 @@ harness invocation may raise PILOT_ROUNDS; the head extends deterministically).
 
 ---
 
+## 18. THE ONTOGENESIS (campaign Υ-2 — the base ontology, manipulated by III alone; 2026-07-13)
+
+Gate 2711; stream `DOCS/MATHESIS-ONTO-ROUND1.log` (replay byte-identical, every carrier-3
+citizen's Cayley table printed); stage [13]; ONTO_CERT. The base: unlabeled tokens and ONE
+primitive (combination), |carrier| ≤ 3, no numbers presupposed — indices are names, never
+magnitudes. What arose under the machine's own manipulation: (1) its own taxonomy (the forge's
+19,699-table census re-entered as ontology); (2) its own canonical objects — citizens = species
+unique up to isomorphism, a content-neutral criterion stated as code (10 at two tokens, 24 at
+three); (3) **THE GAP THEOREM**: the 11-law language does NOT determine the profile of the
+OPPOSITE — 40 profiles gap-witnessed at the third token (witness: tables 377 and 715 share
+11-profile 1344, their opposites' profiles differ 1696 vs 1184), and at two tokens there is NO
+gap — the inadequacy EMERGES with the third token; (4) the language extension the manipulation
+demanded — the mirror law RINVOL ((x∘y)∘y = x) — restores closure, and **THE DUALITY LAW**
+verifies over the ENTIRE universe: profile12(opposite(T)) == swap(profile12(T)) for all
+16 + 19,683 tables, zero exceptions; (5) **THE PRODUCT LAW**: profile12(A×B) == profile12(A) AND
+profile12(B) over every ordered citizen pair — 580 products on carriers up to 9, pair-for-pair.
+
+---
+
+## 19. CAMPAIGN Φ — THE FRONTIER DRAIN (2026-07-13)
+
+Every named frontier item, attacked to the campaign standard: settled totally, constructed
+exactly, or extended deterministically (gates 2712–2716; stream `DOCS/MATHESIS-PHI-ROUND1.log`,
+replay byte-identical; stage [14]; PHI_CERT beside the other six).
+
+- **Φ1 — THE ROT-2OP SETTLEMENT** (`aether/mathesis_rot2.iii`, gate 2712): the oldest frontier
+  question (blocker 3, queued since Ξ9). Total width-8 exhaustion of the 2-op space over the
+  FULL 8-op ALU grammar — 3,456 shapes (both nestings, leaves {x,c1,c2}) × the whole live
+  constant box = **101,122,176 candidates: ZERO compute any rot_k** — while the same sweep
+  pointed at −x finds 311,056 witnesses (the existence tooth; the machine also now owns the
+  exact census of 2-op negation spellings). With the identity-tail subsumption and the in-grammar
+  definiens, **cost₈(rot_k) = 3 EXACTLY for k = 1..7**. The evaluator is grounded in the standing
+  symbolic engine (bb bridge at width 8) and the width-64 entry stays queued per the frontier law.
+- **Φ2 — THE BIGINT HARVEST** (`aether/mathesis_bigcurve.iii`, gate 2713): a sign-magnitude
+  limb core (exact mul, binary gcd, EXACT division with limb-checked zero residue, decimal
+  rendering) replays the d=3 curve-B closure step-for-step against the standing organ (pool 9,
+  escapes 12 — two implementations, one truth) and re-executes each escape in exact bigint:
+  **all 12 constructions land, on-curve in bigint, as identities no sweep could reach** — the
+  first: **(7497 + 8400·∛3 − 5780·∛9)³ = 3,138,045,143,940·∛9 − 6,090,322,207,527**. THE PAIR
+  STRUCTURE, machine-observed: the 12 constructions yield exactly **6 distinct points, each
+  constructed twice by independent routes, carrying only 3 distinct radical coefficients e**.
+  All 12 exceed the judge's exact-sign envelope — counted as envelope refusals, certificate =
+  bigint on-curve + the sealed 2707 derivation. The growth probe: chord passes add 6 then 9
+  points (cap 24, 3 refusals) — **the d=3B configuration does NOT close** (the d=2 one closed
+  at 6): the structural asymmetry now has constructed witnesses.
+- **Φ4 — THE NORM INSTRUMENT** (`aether/mathesis_norm.iii`, gate 2714): N(u+vγ+wγ²) = u³+dv³+
+  d²w³−3duvw, computed TWO WAYS (direct form vs det of the multiplication matrix through the
+  STANDING charpoly organ) — equal on all 27 catalogue rows; **multiplicativity N(α)³ == N(α³)
+  through the bigint core, 27/27; the γ-law (γα stays on-curve, N scales by exactly d), 27/27**.
+  Discoveries: **the Ramanujan orbit is the norm-coincidence orbit (e == N == −f on exactly the
+  d=2 rows: 9/18/36)**; the six d3B rows form two γ-orbits with **f(α) == −N(e-partner) crossed,
+  six crossings exact**; **THE CROSS-ORBIT PRODUCT LAW**: pairs with γ-indices summing ≡ 0 (mod 3)
+  multiply into Z + Zγ — one fundamental product (2,3,−4)×(4,6,−1) = (−73,36,0) with
+  N = −249,049 = (−271)(919), the other two collapses equal to its 3-fold (−219,108,0); the unit
+  censuses per d (h ≤ 20; d=2 has 18 incl. the fundamental (1,1,1) and its ring-square (5,4,3);
+  d=12 only the trivial pair); and **THE UNIT-ACTION REFUTATION: 156 unit×point products, ZERO
+  land on either curve** — the collapse pattern's symmetry is the γ-action, NOT the unit group;
+  the machine tested the hypothesis and killed it with certificates.
+- **Φ3 — THE FOURTH TOKEN** (`aether/mathesis_tetra.iii`, gate 2716): the commutative ontology
+  at carrier 4, censused TOTALLY — 4¹⁰ = 1,048,576 symmetric tables, twelve laws by exhaustion:
+  **25 inhabited species, 43,968 structures, 7 citizens**, TRIPLE-ANCHORED (the profile checker
+  equals the standing ontogenesis checker on the whole n ≤ 3 universe; **BURNSIDE computed
+  independently from the 24 relabelings' equivariant-fix counts equals the canonical census:
+  43,968 == 43,968**; the n=2/3 commutative slices equal the forge's own rows 4/129). Citizens
+  minted include **BOTH groups of order four — Z₄ (profile 1131, raw 12 = 24/|Aut|) and the
+  Klein group V₄ (profile 3691, raw 4)** — the machine's own "exactly two commutative group
+  tables on four tokens" (group-profile species carry exactly 2 structures, raw 16) — plus the
+  non-associative cancellative involutory medial citizen 3682 (the Steiner exhibit's sibling).
+  **THE PRODUCT LAW extends to carrier 16: 49/49 ordered citizen pairs verified.** Scope stated
+  exactly: the commutative slice; the full 4¹⁶ stays priced and refused by name.
+- **Φ5 — THE PILOT'S EXTENSION** (gate 2715): budget 12; rounds 6..11 purely from the schedule:
+  d=14 EMPTY at 60 (**both factors 2 and 7 collapse yet 14 does not — the pattern is not
+  multiplicative**), d=13/17 still empty at 120, two new local tables — and **round 9 found
+  d=15: SIX curve-A identities ((−6 + 4·∛15 + ∛225)³ = 882·∛15 − 1191, …) — the pilot's third
+  autonomous discovery**. The pattern now reads **A = {2,6,7,12,15}, B = {3},
+  ∅ = {5,10,11,13,14,17}**. THE PREFIX LAW held in-gate (head(6) == the sealed ledger head) and
+  **head(12) = 976d5689…0c7f** is pinned — the ledger extends deterministically, forever.
+
+**Named frontier out of Φ**: the width-64 rot-2op question (2 ≤ cost₆₄ ≤ 3; width 8 says 3);
+a judge for the harvested heights (the 12 constructions await an exact-sign envelope beyond
+e ≈ 10⁶); the WHY of the cross-orbit product law and the d=3 entanglement; d=225 (the involution
+partner of 15) and the non-multiplicativity of the collapse pattern (14 = 2·7 empty); the
+non-commutative fourth token (4¹⁶, priced); the pilot's ledger past 12.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
 `DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`,
-`DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`.*
+`DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`, `DOCS/MATHESIS-ONTO-ROUND1.log`,
+`DOCS/MATHESIS-PHI-ROUND1.log`.*

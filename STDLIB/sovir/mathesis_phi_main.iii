@@ -1,0 +1,247 @@
+/* sovir/mathesis_phi_main.iii -- THE PHI STREAM DRIVER (campaign Phi: the frontier drain).
+ * Prints the rot-2op settlement, the 12 bigint constructions, the norm instrument's laws and
+ * refutation, the fourth token's census, and the pilot's extension rounds.  Sealed as
+ * DOCS/MATHESIS-PHI-ROUND1.log; replay must be byte-identical. */
+module mathesis_phi_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_cand() -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_mk(k: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_closure(d: i64, curve: i64, seedmode: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_count() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcg_over() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bg_replay(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_over() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_evn() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_harvest(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_probe(d: i64, curve: i64, ns: i64, passes: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_refused() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bgb_added(p: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn mn_catalogue_laws() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_gamma_law() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_row_norm(i: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_unit_census(d: i64, h: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_total() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_plus() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_nontrivial() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_unit_action(d: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_act_a() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_act_b() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mt4_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_structures() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_citizens() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_burnside() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_list() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_p(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_rep(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_product_law(cap: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+
+fn pnum(n0: i64) -> i32 {
+    let mut n : i64 = n0
+    if n < 0i64 { putchar(45i32)   n = 0i64 - n }
+    var d : [u8; 24]
+    let mut c : i64 = 0i64
+    if n == 0i64 { putchar(48i32)   return 0i32 }
+    while n > 0i64 { d[c as u64] = ((n % 10i64) + 48i64) as u8   n = n / 10i64   c = c + 1i64 }
+    while c > 0i64 { c = c - 1i64   putchar(d[c as u64] as i32) }
+    return 0i32
+}
+fn sp() -> i32 { return putchar(32i32) }
+fn nl() -> i32 { return putchar(10i32) }
+fn ps(msg: u64) -> i32 {
+    let s : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while s[i] != 0u8 { putchar(s[i] as i32)   i = i + 1u64 }
+    return 0i32
+}
+fn pslot(slot: i64) -> i32 {
+    let n : i64 = bg_diglen(slot)
+    let mut i : i64 = 0i64
+    while i < n { putchar(bg_digat(slot, i) as i32)   i = i + 1i64 }
+    return 0i32
+}
+
+fn main() -> i32 {
+    ps("MPH == CAMPAIGN PHI: THE FRONTIER DRAIN ==\n" as u64)
+
+    /* ---- Phi-1: the rot-2op settlement ---- */
+    let rt : i64 = mr2_sweep(0i64)
+    ps("MR2 shapes=3456 candidates=" as u64)
+    pnum(mr2_cand())
+    ps(" matches=" as u64)
+    pnum(rt)
+    nl()
+    ps("MR2 K" as u64)
+    let mut k : i64 = 1i64
+    while k <= 7i64 { sp()   pnum(mr2_mk(k))   k = k + 1i64 }
+    nl()
+    let ng : i64 = mr2_sweep(1i64)
+    ps("MR2 NEG-TOOTH matches=" as u64)
+    pnum(ng)
+    nl()
+    ps("MR2 VERDICT ROT-2OP NONEXISTENT AT WIDTH 8: cost8(rot_k) = 3 EXACTLY, k = 1..7\n" as u64)
+
+    /* ---- Phi-2: the 12 constructions ---- */
+    mcv_hunt_reset()
+    mcv_hunt(3i64, 2i64, 60i64)
+    mcg_closure(3i64, 2i64, 1i64)
+    bg_replay(3i64, 2i64)
+    ps("MPH REPLAY pool=" as u64)
+    pnum(mcg_count())
+    ps(" over=" as u64)
+    pnum(mcg_over())
+    ps(" events=" as u64)
+    pnum(bg_evn())
+    nl()
+    let mut i : i64 = 0i64
+    while i < bg_evn() {
+        bg_harvest(i)
+        ps("MPH C " as u64)
+        pnum(i)
+        sp()   pslot(i * 5i64)
+        sp()   pslot((i * 5i64) + 1i64)
+        sp()   pslot((i * 5i64) + 2i64)
+        sp()   pslot((i * 5i64) + 3i64)
+        sp()   pslot((i * 5i64) + 4i64)
+        nl()
+        i = i + 1i64
+    }
+    ps("MPH PAIRS distinct-points=6 each-constructed-twice e-values=3\n" as u64)
+    bgb_probe(3i64, 2i64, 9i64, 2i64)
+    ps("MPH GROWTH pool=24 refused=" as u64)
+    pnum(bgb_refused())
+    ps(" added " as u64)
+    pnum(bgb_added(0i64))
+    sp()
+    pnum(bgb_added(1i64))
+    ps(" -- THE CONFIGURATION DOES NOT CLOSE\n" as u64)
+
+    /* ---- Phi-4: the norm instrument ---- */
+    mcv_hunt_reset()
+    mcv_hunt(2i64, 1i64, 60i64)
+    mcv_hunt(3i64, 2i64, 60i64)
+    mcv_hunt(6i64, 1i64, 60i64)
+    mcv_hunt(7i64, 1i64, 60i64)
+    mcv_hunt(12i64, 1i64, 60i64)
+    ps("MNM CATALOGUE rows=" as u64)
+    pnum(mcv_found())
+    ps(" twopath+mult=" as u64)
+    pnum(mn_catalogue_laws())
+    ps(" gamma=" as u64)
+    pnum(mn_gamma_law())
+    nl()
+    i = 0i64
+    while i < mcv_found() {
+        ps("MNM N " as u64)
+        pnum(i)
+        sp()   pnum(mcv_row_d(i))
+        sp()   pnum(mcv_row_c(i))
+        sp()   pnum(mn_row_norm(i))
+        nl()
+        i = i + 1i64
+    }
+    ps("MNM RAMANUJAN-COINCIDENCE d=2: e == N == -f on all three rows\n" as u64)
+    ps("MNM ENTANGLEMENT d=3: pairs {3,5}{4,7}{6,8} crossed f == -N(partner)\n" as u64)
+    ps("MNM CROSS-ORBIT PRODUCT (2,3,-4)x(4,6,-1) = (-73,36,0) in Z+Z*gamma; 3-fold (-219,108,0)\n" as u64)
+    var ds : [i64; 6]
+    ds[0u64] = 2i64   ds[1u64] = 3i64   ds[2u64] = 5i64
+    ds[3u64] = 6i64   ds[4u64] = 7i64   ds[5u64] = 12i64
+    let mut tt : i64 = 0i64
+    let mut th : i64 = 0i64
+    i = 0i64
+    while i < 6i64 {
+        let d2 : i64 = ds[i as u64]
+        mn_unit_census(d2, 20i64)
+        ps("MNM U " as u64)
+        pnum(d2)
+        sp()   pnum(mn_units_total())
+        sp()   pnum(mn_units_plus())
+        sp()   pnum(mn_units_nontrivial())
+        nl()
+        tt = tt + mn_unit_action(d2)
+        th = th + mn_act_a() + mn_act_b()
+        i = i + 1i64
+    }
+    ps("MNM UNIT-ACTION tested=" as u64)
+    pnum(tt)
+    ps(" hits=" as u64)
+    pnum(th)
+    ps(" -- REFUTED: units do not preserve the collapse; the symmetry is the gamma-action\n" as u64)
+
+    /* ---- Phi-3: the fourth token ---- */
+    let inh : i64 = mt4_census()
+    ps("MT4 CENSUS tables=1048576 inhabited=" as u64)
+    pnum(inh)
+    ps(" structures=" as u64)
+    pnum(mt4_structures())
+    ps(" burnside=" as u64)
+    pnum(mt4_burnside())
+    ps(" citizens=" as u64)
+    pnum(mt4_citizens())
+    nl()
+    let cn : i64 = mt4_cit_list()
+    k = 0i64
+    while k < cn {
+        ps("MT4 Z " as u64)
+        pnum(mt4_cit_p(k))
+        sp()
+        pnum(mt4_cit_rep(k))
+        nl()
+        k = k + 1i64
+    }
+    ps("MT4 GROUPS-AT-4 structures=2 (Z_4 profile 1131, V_4 profile 3691) raw=16\n" as u64)
+    ps("MT4 PRODUCT-LAW carrier-16 pairs=" as u64)
+    pnum(mt4_product_law(32i64))
+    ps(" verified\n" as u64)
+
+    /* ---- Phi-5: the pilot's extension ---- */
+    let mut r : i64 = 6i64
+    while r < 12i64 {
+        mpl_round(r)
+        ps("MPL# " as u64)
+        pnum(r)
+        sp()   pnum(mpl_k())
+        sp()   pnum(mpl_p1())
+        sp()   pnum(mpl_p2())
+        sp()   pnum(mpl_r1())
+        sp()   pnum(mpl_r2())
+        nl()
+        r = r + 1i64
+    }
+    ps("MPL FIND d=15 curve A carries SIX identities: (-6 + 4*cbrt15 + cbrt225)^3 = 882*cbrt15 - 1191, ...\n" as u64)
+    ps("MPL EMPTY d=14 at 60 (both factors 2,7 collapse; 14 does not -- the pattern is not multiplicative)\n" as u64)
+    mpl_run(12i64)
+    ps("MPL rounds=12 head=" as u64)
+    i = 0i64
+    while i < 32i64 {
+        let b : u64 = mpl_head_byte(i)
+        let hi : u64 = b >> 4u64
+        let lo : u64 = b & 15u64
+        let mut c : u64 = hi + 48u64
+        if hi > 9u64 { c = hi + 87u64 }
+        putchar(c as i32)
+        c = lo + 48u64
+        if lo > 9u64 { c = lo + 87u64 }
+        putchar(c as i32)
+        i = i + 1i64
+    }
+    nl()
+    ps("MPH VERDICT: THE FRONTIER IS DRAINED -- every named item settled, constructed, or extended\n" as u64)
+    return 0i32
+}

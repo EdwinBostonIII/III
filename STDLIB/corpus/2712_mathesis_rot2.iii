@@ -1,0 +1,203 @@
+/* 2712_mathesis_rot2.iii -- GATE for THE ROT-2OP SETTLEMENT (campaign Phi, item Phi-1: the oldest
+ * frontier question, blocker 3 "rot-2op-sweep", queued since Xi9).
+ *
+ * THE QUESTION: corpus/2675 sealed 2 <= cost(rot_k) <= 3 in the ALU grammar (width 64).  Is there
+ * a TWO-operation form?  THE INSTRUMENT: total exhaustion at width 8 over the full 2-op space --
+ * 3456 shapes (both nestings, 8 ops, leaves {x,c1,c2}) x the whole live-constant box =
+ * 101,122,176 candidates, each probed at x=1 (rot_k(1) = 2^k are pairwise distinct: at most one
+ * k survives), x=131, then the full 256 inputs.
+ *
+ * THE ANSWER (observed 2026-07-13, pinned here): ZERO candidates compute ANY rot_k --
+ * NONEXISTENCE.  With the identity-tail subsumption (every 0/1-op program embeds as (f OR 0),
+ * (f ADD 0), ...) and the in-grammar 3-op definiens (arm F), this settles
+ *
+ *     cost_8(rot_k) = 3 EXACTLY, for every k in 1..7
+ *
+ * -- an honest theorem about Z/2^8 by the frontier organ's own width-indexed law; the width-64
+ * question keeps its queue entry (2 <= cost_64 <= 3, the width-8 answer says 3).
+ *
+ * ARMS (teeth before trust, R4 discipline):
+ *   A  width-8 semantic teeth: wrap arithmetic + the shift-saturation law spelled out
+ *   B  the rot two-path: rot_1 iterated k times == rot_k; rot_{8-k} o rot_k == id; bijectivity
+ *   C  the NEG existence tooth FIRST: the same sweep pointed at -x mod 256 finds 311,056
+ *      two-op spellings of negation (the machine's own census of them), witnesses re-verified
+ *   D  the bb bridge: native width-8 verdicts agree with the standing symbolic engine
+ *      (bb_reset(8) + sd_denote + bb_equal) on shift-free mul-free sample pairs
+ *   E  THE SETTLEMENT: the full rot sweep -- 101,122,176 candidates, 0 matches, all seven k
+ *   F  the upper bound in-grammar: the 3-op definiens computes rot_k at width 8
+ *
+ * EXIT 99 == the question is settled and every tooth bit. */
+module corpus_2712_mathesis_rot2
+
+extern @abi(c-msvc-x64) fn mr2_op(op: i64, a0: u64, b0: u64) -> u64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_rot(x0: u64, k: u64) -> u64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_eval_id(sid: i64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_cand() -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_mk(k: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn sd_denote(base: u64, boff: u64, blen: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+const SD_TOP : u32 = 4294967295u32
+
+var BF : [u8; 64]
+var BG : [u8; 64]
+
+fn bwb(sel: u32, pos: u64, b: u32) -> u64 {
+    if sel == 0u32 { BF[pos] = b as u8 }
+    if sel == 1u32 { BG[pos] = b as u8 }
+    return pos + 1u64
+}
+fn bwc(sel: u32, pos: u64, v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    if sel == 0u32 { BF[pos] = 0x01u8 }
+    if sel == 1u32 { BG[pos] = 0x01u8 }
+    while i < 8u64 {
+        if sel == 0u32 { BF[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        if sel == 1u32 { BG[pos + 1u64 + i] = (x & 0xFFu64) as u8 }
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return pos + 9u64
+}
+
+/* native width-8 equality of two 1-op-or-2-op bodies given as (op chain over x with consts),
+ * expressed through the organ's own evaluator doors -- the two-path partner of bb_equal. */
+fn nat_eq_p1(opa: i64, ca: u64, opb: i64, cb: u64, opg: i64, cg: u64, two: i64) -> i64 {
+    /* F = (x opa ca) opb cb   (two = 1)   or   F = x opa ca   (two = 0);   G = x opg cg */
+    let mut x : i64 = 0i64
+    while x < 256i64 {
+        let mut fv : u64 = mr2_op(opa, x as u64, ca)
+        if two == 1i64 { fv = mr2_op(opb, fv, cb) }
+        let gv : u64 = mr2_op(opg, x as u64, cg)
+        if fv != gv { return 0i64 }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* ---- A: the width-8 semantic teeth ---- */
+    if mr2_op(0i64, 5u64, 7u64) != 12u64 { return 10u64 }
+    if mr2_op(0i64, 200u64, 100u64) != 44u64 { return 10u64 }      /* 300 mod 256 */
+    if mr2_op(1i64, 3u64, 5u64) != 254u64 { return 11u64 }         /* wrap sub */
+    if mr2_op(2i64, 200u64, 3u64) != 88u64 { return 12u64 }        /* 600 mod 256 */
+    if mr2_op(3i64, 240u64, 60u64) != 48u64 { return 13u64 }
+    if mr2_op(4i64, 240u64, 60u64) != 252u64 { return 13u64 }
+    if mr2_op(5i64, 240u64, 60u64) != 204u64 { return 13u64 }
+    if mr2_op(6i64, 1u64, 3u64) != 8u64 { return 14u64 }
+    if mr2_op(6i64, 255u64, 9u64) != 0u64 { return 15u64 }         /* SATURATION: count >= 8 */
+    if mr2_op(6i64, 255u64, 8u64) != 0u64 { return 15u64 }
+    if mr2_op(7i64, 128u64, 7u64) != 1u64 { return 16u64 }
+    if mr2_op(7i64, 255u64, 8u64) != 0u64 { return 16u64 }
+    if mr2_op(7i64, 7u64, 200u64) != 0u64 { return 16u64 }
+
+    /* ---- B: the rot two-path over the WHOLE domain ---- */
+    let mut k : i64 = 1i64
+    while k <= 7i64 {
+        var seen : [u8; 256]
+        let mut z : i64 = 0i64
+        while z < 256i64 { seen[z as u64] = 0u8   z = z + 1i64 }
+        let mut x : i64 = 0i64
+        while x < 256i64 {
+            /* rot_1 iterated k times == rot_k */
+            let mut acc : u64 = x as u64
+            let mut i : i64 = 0i64
+            while i < k { acc = mr2_rot(acc, 1u64)   i = i + 1i64 }
+            if acc != mr2_rot(x as u64, k as u64) { return 20u64 }
+            /* rot_{8-k}(rot_k(x)) == x */
+            if mr2_rot(mr2_rot(x as u64, k as u64), (8i64 - k) as u64) != (x as u64) { return 21u64 }
+            /* bijectivity: mark the image */
+            let im : u64 = mr2_rot(x as u64, k as u64)
+            if seen[im] != 0u8 { return 22u64 }
+            seen[im] = 1u8
+            x = x + 1i64
+        }
+        k = k + 1i64
+    }
+
+    /* ---- C: the NEG existence tooth FIRST (the sweep can FIND; counts pinned as observed) ---- */
+    let neg : i64 = mr2_sweep(1i64)
+    if neg != 311056i64 { return 30u64 }
+    if mr2_cand() != 101122176i64 { return 31u64 }
+    /* two independent witnesses re-verified by direct evaluation:
+     * sid 39 = (c1 ADD c1) SUB x at c1 = 128:  (256 - x) mod 256 == -x
+     * sid 1085 = (x XOR c1) ADD c2 at (255, 1): the two's-complement identity */
+    let mut x2 : i64 = 0i64
+    while x2 < 256i64 {
+        let t : u64 = (0u64 - (x2 as u64)) & 255u64
+        if mr2_eval_id(39i64, x2 as u64, 128u64, 0u64) != t { return 32u64 }
+        if mr2_eval_id(1085i64, x2 as u64, 255u64, 1u64) != t { return 33u64 }
+        x2 = x2 + 1i64
+    }
+
+    /* ---- D: the bb bridge (native width-8 verdicts vs the standing symbolic engine) ---- */
+    /* pair 1: (x+3)+5 vs x+8 -- EQUAL */
+    let mut p : u64 = bwb(0u32, 0u64, 0x10u32)   p = bwb(0u32, p, 0u32)
+    p = bwc(0u32, p, 3u64)   p = bwb(0u32, p, 0x20u32)
+    p = bwc(0u32, p, 5u64)   p = bwb(0u32, p, 0x20u32)
+    p = bwb(0u32, p, 0x60u32)
+    let mut q : u64 = bwb(1u32, 0u64, 0x10u32)   q = bwb(1u32, q, 0u32)
+    q = bwc(1u32, q, 8u64)   q = bwb(1u32, q, 0x20u32)
+    q = bwb(1u32, q, 0x60u32)
+    bb_reset(8u64)
+    let mut ra : u32 = sd_denote(&BF as u64, 0u64, p, 1u32)
+    if ra == SD_TOP { return 40u64 }
+    let mut rb : u32 = sd_denote(&BG as u64, 0u64, q, 1u32)
+    if rb == SD_TOP { return 40u64 }
+    if bb_equal(ra, rb) != 1u8 { return 41u64 }
+    if nat_eq_p1(0i64, 3u64, 0i64, 5u64, 0i64, 8u64, 1i64) != 1i64 { return 42u64 }
+    /* pair 2: (x^170)^85 vs x^255 -- EQUAL */
+    p = bwb(0u32, 0u64, 0x10u32)   p = bwb(0u32, p, 0u32)
+    p = bwc(0u32, p, 170u64)   p = bwb(0u32, p, 0x27u32)
+    p = bwc(0u32, p, 85u64)   p = bwb(0u32, p, 0x27u32)
+    p = bwb(0u32, p, 0x60u32)
+    q = bwb(1u32, 0u64, 0x10u32)   q = bwb(1u32, q, 0u32)
+    q = bwc(1u32, q, 255u64)   q = bwb(1u32, q, 0x27u32)
+    q = bwb(1u32, q, 0x60u32)
+    bb_reset(8u64)
+    ra = sd_denote(&BF as u64, 0u64, p, 1u32)
+    if ra == SD_TOP { return 43u64 }
+    rb = sd_denote(&BG as u64, 0u64, q, 1u32)
+    if rb == SD_TOP { return 43u64 }
+    if bb_equal(ra, rb) != 1u8 { return 44u64 }
+    if nat_eq_p1(5i64, 170u64, 5i64, 85u64, 5i64, 255u64, 1i64) != 1i64 { return 45u64 }
+    /* pair 3: (x|1) vs (x+1) -- UNEQUAL both ways */
+    p = bwb(0u32, 0u64, 0x10u32)   p = bwb(0u32, p, 0u32)
+    p = bwc(0u32, p, 1u64)   p = bwb(0u32, p, 0x26u32)
+    p = bwb(0u32, p, 0x60u32)
+    q = bwb(1u32, 0u64, 0x10u32)   q = bwb(1u32, q, 0u32)
+    q = bwc(1u32, q, 1u64)   q = bwb(1u32, q, 0x20u32)
+    q = bwb(1u32, q, 0x60u32)
+    bb_reset(8u64)
+    ra = sd_denote(&BF as u64, 0u64, p, 1u32)
+    if ra == SD_TOP { return 46u64 }
+    rb = sd_denote(&BG as u64, 0u64, q, 1u32)
+    if rb == SD_TOP { return 46u64 }
+    if bb_equal(ra, rb) != 0u8 { return 47u64 }
+    if nat_eq_p1(4i64, 1u64, 0i64, 0u64, 0i64, 1u64, 0i64) != 0i64 { return 48u64 }
+
+    /* ---- E: THE SETTLEMENT (the full sweep, in-gate, compared to the observed pins) ---- */
+    let tot : i64 = mr2_sweep(0i64)
+    if tot != 0i64 { return 50u64 }
+    if mr2_cand() != 101122176i64 { return 51u64 }
+    k = 1i64
+    while k <= 7i64 { if mr2_mk(k) != 0i64 { return 52u64 }   k = k + 1i64 }
+
+    /* ---- F: the upper bound, in-grammar: the 3-op definiens computes rot_k at width 8 ---- */
+    k = 1i64
+    while k <= 7i64 {
+        let mut x3 : i64 = 0i64
+        while x3 < 256i64 {
+            let hi : u64 = mr2_op(6i64, x3 as u64, k as u64)
+            let lo : u64 = mr2_op(7i64, x3 as u64, (8i64 - k) as u64)
+            if mr2_op(4i64, hi, lo) != mr2_rot(x3 as u64, k as u64) { return 60u64 }
+            x3 = x3 + 1i64
+        }
+        k = k + 1i64
+    }
+
+    return 99u64
+}

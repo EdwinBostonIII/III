@@ -1,0 +1,112 @@
+/* 2716_mathesis_tetra.iii -- GATE for THE FOURTH TOKEN (campaign Phi, item Phi-3: the
+ * commutative ontology at carrier 4, censused TOTALLY).
+ *
+ * 4^10 = 1,048,576 symmetric tables; twelve laws each decided by exhaustion; classified raw and
+ * up to isomorphism over the full S_4.  Observed 2026-07-13, pinned here:
+ *
+ *   25 inhabited species | 43,968 structures | 7 citizens
+ *
+ * TRIPLE-ANCHORED:
+ *   - the profile checker agrees with the STANDING ontogenesis checker on the ENTIRE n <= 3
+ *     universe (16 + 19,683 tables, every profile bit-identical);
+ *   - BURNSIDE, computed independently in-gate from the 24 relabelings' equivariant-fix
+ *     counts, equals the canonical-minimum census EXACTLY: 43,968 == 43,968;
+ *   - the commutative slice at n=2/n=3 equals the forge's own commutative iso rows (4, 129).
+ *
+ * WHAT THE CENSUS MINTED (the citizens -- species with EXACTLY ONE structure):
+ *   profile 1131 = {ASSOC COMM IDENT LCANCEL RCANCEL MEDIAL}, raw 12 = 24/|Aut| -- Z_4;
+ *   profile 3691 = {... + LINVOL RINVOL}, raw 4 = 24/|Aut| -- THE KLEIN GROUP V_4;
+ *   together: the group-profile species carry EXACTLY TWO structures -- the machine's own
+ *   "there are exactly two commutative group tables on four tokens, up to renaming";
+ *   profile 3682 = {COMM LCANCEL RCANCEL LINVOL RINVOL MEDIAL, NOT assoc} -- the unique
+ *   non-associative cancellative involutory medial citizen (the fourth token's sibling of the
+ *   Steiner exhibit FORGE3-P2022);
+ *   and 4 more, each pinned.
+ *
+ * THE PRODUCT LAW at carrier 16: profile(A x B) == profile(A) AND profile(B) over ALL 7 x 7
+ * ordered citizen pairs -- verified pair-for-pair on 16-token tables, never assumed.
+ *
+ * SCOPE, stated exactly: the commutative slice; the full 4^16 stays priced and refused by name.
+ * EXIT 99. */
+module corpus_2716_mathesis_tetra
+
+extern @abi(c-msvc-x64) fn mt4_twopath(n: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_small_sym_census(n: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_forge_comm_classes(n: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_load_sym(tid: i64) -> i32 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_profile() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_structures() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_citizens() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_burnside() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_raw(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_isoc(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_list() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_p(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_cit_rep(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_product_law(cap: i64) -> i64 from "mathesis_tetra.iii"
+
+fn citchk(k: i64, p: i64, rep: i64) -> i64 {
+    if mt4_cit_p(k) != p { return 0i64 }
+    if mt4_cit_rep(k) != rep { return 0i64 }
+    if mt4_isoc(p) != 1i64 { return 0i64 }
+    return 1i64
+}
+
+fn main() -> u64 {
+    /* ---- T: the two-path bridge over the WHOLE n <= 3 universe ---- */
+    if mt4_twopath(2i64) != 16i64 { return 10u64 }
+    if mt4_twopath(3i64) != 19683i64 { return 11u64 }
+
+    /* ---- X: the commutative-slice cross-anchor (census vs the forge's own rows) ---- */
+    if mt4_small_sym_census(2i64) != 4i64 { return 20u64 }
+    if mt4_forge_comm_classes(2i64) != 4i64 { return 21u64 }
+    if mt4_small_sym_census(3i64) != 129i64 { return 22u64 }
+    if mt4_forge_comm_classes(3i64) != 129i64 { return 23u64 }
+
+    /* ---- D: the discrimination tooth -- one digit off the Z_4 representative and the
+     * checker must NOT return the group profile ---- */
+    mt4_load_sym(194896i64)
+    if mt4_profile() != 1131i64 { return 30u64 }
+    mt4_load_sym(194897i64)
+    if mt4_profile() == 1131i64 { return 31u64 }
+
+    /* ---- C: THE CENSUS, double-counted ---- */
+    if mt4_census() != 25i64 { return 40u64 }
+    if mt4_structures() != 43968i64 { return 41u64 }
+    if mt4_burnside() != 43968i64 { return 42u64 }
+    if mt4_citizens() != 7i64 { return 43u64 }
+
+    /* ---- Z: the seven citizens, pinned ---- */
+    if mt4_cit_list() != 7i64 { return 50u64 }
+    if citchk(0i64, 30i64, 96740i64) != 1i64 { return 51u64 }
+    if citchk(1i64, 1131i64, 194896i64) != 1i64 { return 52u64 }
+    if citchk(2i64, 1410i64, 24532i64) != 1i64 { return 53u64 }
+    if citchk(3i64, 1414i64, 24548i64) != 1i64 { return 54u64 }
+    if citchk(4i64, 1430i64, 93668i64) != 1i64 { return 55u64 }
+    if citchk(5i64, 3682i64, 109789i64) != 1i64 { return 56u64 }
+    if citchk(6i64, 3691i64, 240725i64) != 1i64 { return 57u64 }
+    /* the two groups: raw counts are the orbit sizes 24/|Aut| -- 12 for Z_4, 4 for V_4 */
+    if mt4_raw(1131i64) != 12i64 { return 58u64 }
+    if mt4_raw(3691i64) != 4i64 { return 59u64 }
+    /* THE GROUP CENSUS AT FOUR TOKENS: species carrying the group-axiom bits
+     * (ASSOC + IDENT + both CANCEL) hold EXACTLY TWO structures in total */
+    let gmask : i64 = 1i64 + 8i64 + 32i64 + 64i64
+    let mut gstruct : i64 = 0i64
+    let mut graw : i64 = 0i64
+    let mut p : i64 = 0i64
+    while p < 4096i64 {
+        if (p & gmask) == gmask {
+            gstruct = gstruct + mt4_isoc(p)
+            graw = graw + mt4_raw(p)
+        }
+        p = p + 1i64
+    }
+    if gstruct != 2i64 { return 60u64 }
+    if graw != 16i64 { return 61u64 }
+
+    /* ---- L: THE PRODUCT LAW at carrier 16, ALL ordered citizen pairs ---- */
+    if mt4_product_law(32i64) != 49i64 { return 70u64 }
+
+    return 99u64
+}

@@ -1,0 +1,115 @@
+/* 2715_mathesis_pilot12.iii -- GATE for THE PILOT'S LEDGER EXTENSION (campaign Phi, item Phi-5:
+ * the unbounded ledger, extended by its own schedule).
+ *
+ * The autonomous pilot's budget is raised from 6 to 12 rounds; the policy selects everything.
+ * Rounds 6..11, purely from the round numbers (observed 2026-07-13, pinned here):
+ *
+ *   r=6  NEW-D  d=14 @60  -> EMPTY both curves.  d=14 = 2*7: BOTH factors collapse on curve A,
+ *                            yet 14 does not collapse at height 60 -- the pattern is NOT
+ *                            naively multiplicative; the open question sharpens again.
+ *   r=7  HEIGHT d=13 @120 -> still empty.
+ *   r=8  LOCAL  (5,23)    -> 24 / 24 projective points.
+ *   r=9  NEW-D  d=15 @60  -> THE FIND: curve A carries SIX identities -- the pilot's THIRD
+ *                            autonomous discovery (after d=4 and d=9):
+ *                              (-6 + 4*cbrt15 + cbrt225)^3 = 882*cbrt15 - 1191, ...
+ *                            The pattern now reads A = {2,6,7,12,15}, B = {3},
+ *                            empty = {5,10,11,13,14,17} at the swept heights; the involution
+ *                            predicts the class partner 225 for a future round.
+ *   r=10 HEIGHT d=17 @120 -> still empty.
+ *   r=11 LOCAL  (5,29)    -> 30 / 30.
+ *
+ * THE PREFIX LAW: head(6) recomputed in-gate must equal the SEALED ledger head (the committed
+ * history is byte-stable under extension); head(12) is pinned as the new deterministic frontier
+ * head -- any future invocation extends the same pure function.
+ *
+ * EXIT 99. */
+module corpus_2715_mathesis_pilot12
+
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+
+var H6 : [u64; 32]
+var H12 : [u64; 32]
+
+fn fill_heads() -> i32 {
+    /* the sealed head(6): a2985fa598db8dcd394d7be9f7bca510c93e7cd2c5eed868453deea135eb0ce8 */
+    H6[0u64] = 162u64   H6[1u64] = 152u64   H6[2u64] = 95u64    H6[3u64] = 165u64
+    H6[4u64] = 152u64   H6[5u64] = 219u64   H6[6u64] = 141u64   H6[7u64] = 205u64
+    H6[8u64] = 57u64    H6[9u64] = 77u64    H6[10u64] = 123u64  H6[11u64] = 233u64
+    H6[12u64] = 247u64  H6[13u64] = 188u64  H6[14u64] = 165u64  H6[15u64] = 16u64
+    H6[16u64] = 201u64  H6[17u64] = 62u64   H6[18u64] = 124u64  H6[19u64] = 210u64
+    H6[20u64] = 197u64  H6[21u64] = 238u64  H6[22u64] = 216u64  H6[23u64] = 104u64
+    H6[24u64] = 69u64   H6[25u64] = 61u64   H6[26u64] = 238u64  H6[27u64] = 161u64
+    H6[28u64] = 53u64   H6[29u64] = 235u64  H6[30u64] = 12u64   H6[31u64] = 232u64
+    /* the observed head(12): 976d568997e508619cb0eb0e507f608571ca38cb1b969d0322692c4de8b70c7f */
+    H12[0u64] = 151u64  H12[1u64] = 109u64  H12[2u64] = 86u64   H12[3u64] = 137u64
+    H12[4u64] = 151u64  H12[5u64] = 229u64  H12[6u64] = 8u64    H12[7u64] = 97u64
+    H12[8u64] = 156u64  H12[9u64] = 176u64  H12[10u64] = 235u64 H12[11u64] = 14u64
+    H12[12u64] = 80u64  H12[13u64] = 127u64 H12[14u64] = 96u64  H12[15u64] = 133u64
+    H12[16u64] = 113u64 H12[17u64] = 202u64 H12[18u64] = 56u64  H12[19u64] = 203u64
+    H12[20u64] = 27u64  H12[21u64] = 150u64 H12[22u64] = 157u64 H12[23u64] = 3u64
+    H12[24u64] = 34u64  H12[25u64] = 105u64 H12[26u64] = 44u64  H12[27u64] = 77u64
+    H12[28u64] = 232u64 H12[29u64] = 183u64 H12[30u64] = 12u64  H12[31u64] = 127u64
+    return 0i32
+}
+
+fn rowchk(r: i64, k: i64, p1: i64, p2: i64, r1: i64, r2: i64) -> i64 {
+    if mpl_round(r) != 0i64 { return 0i64 }
+    if mpl_k() != k { return 0i64 }
+    if mpl_p1() != p1 { return 0i64 }
+    if mpl_p2() != p2 { return 0i64 }
+    if mpl_r1() != r1 { return 0i64 }
+    if mpl_r2() != r2 { return 0i64 }
+    return 1i64
+}
+
+fn main() -> u64 {
+    fill_heads()
+
+    /* ---- A: the six extension rounds, re-executed, pinned exactly as observed ---- */
+    if rowchk(6i64, 0i64, 14i64, 60i64, 0i64, 0i64) != 1i64 { return 10u64 }
+    if rowchk(7i64, 1i64, 13i64, 120i64, 0i64, 0i64) != 1i64 { return 11u64 }
+    if rowchk(8i64, 2i64, 5i64, 23i64, 24i64, 24i64) != 1i64 { return 12u64 }
+    if rowchk(9i64, 0i64, 15i64, 60i64, 6i64, 0i64) != 1i64 { return 13u64 }
+    /* the d=15 discovery: six curve-A rows in the store after round 9; the first, in full */
+    if mcv_found() != 6i64 { return 14u64 }
+    if mcv_row_c(0i64) != 1i64 { return 15u64 }
+    if mcv_row_u(0i64) != (0i64 - 6i64) { return 16u64 }
+    if mcv_row_v(0i64) != 4i64 { return 17u64 }
+    if mcv_row_w(0i64) != 1i64 { return 18u64 }
+    if mcv_row_e(0i64) != 882i64 { return 19u64 }
+    if mcv_row_f(0i64) != (0i64 - 1191i64) { return 20u64 }
+    if rowchk(10i64, 1i64, 17i64, 120i64, 0i64, 0i64) != 1i64 { return 21u64 }
+    if rowchk(11i64, 2i64, 5i64, 29i64, 30i64, 30i64) != 1i64 { return 22u64 }
+
+    /* ---- B: THE PREFIX LAW -- head(6) equals the sealed ledger head ---- */
+    if mpl_run(6i64) != 6i64 { return 30u64 }
+    let mut i : i64 = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != H6[i as u64] { return 31u64 }
+        i = i + 1i64
+    }
+
+    /* ---- C: THE EXTENSION -- head(12), the new deterministic frontier head ---- */
+    if mpl_run(12i64) != 12i64 { return 40u64 }
+    i = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != H12[i as u64] { return 41u64 }
+        i = i + 1i64
+    }
+
+    return 99u64
+}

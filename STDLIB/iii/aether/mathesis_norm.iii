@@ -1,0 +1,203 @@
+/* aether/mathesis_norm.iii -- THE NORM INSTRUMENT (campaign Phi, item Phi-4).
+ *
+ * The field norm on Z[gamma], gamma^3 = d:  N(u + v*gamma + w*gamma^2) = u^3 + d v^3 + d^2 w^3
+ * - 3 d u v w -- the machine's exact invariant over its own catalogue, computed TWO WAYS:
+ *
+ *   PATH 1 (direct): the cubic form, i64 exact (catalogue heights keep it far inside the range).
+ *   PATH 2 (spectral): N(alpha) = det(M_alpha) where M_alpha is the multiplication matrix of
+ *     alpha on the basis (1, gamma, gamma^2) -- computed through the STANDING charpoly organ
+ *     (campaign Rho): det = -c0 of char(t).  Two organs, one truth: any disagreement is a
+ *     self-detected defect.
+ *
+ * THE LAWS THE INSTRUMENT DECIDES (total, over the whole standing catalogue):
+ *   - MULTIPLICATIVITY THROUGH THE COLLAPSE: N(alpha)^3 == N(alpha^3), where alpha^3 = f + e*g
+ *     (curve A) or f + e*g^2 (curve B) -- the cubes run through the bigint core (mathesis_
+ *     bigcurve): the collapse identity and the norm cohere exactly.
+ *   - THE GAMMA LAW: gamma-multiplication maps each curve to itself and scales the norm by
+ *     exactly d: N(gamma*alpha) == d * N(alpha), and gamma*alpha stays ON the curve.
+ *   - THE UNIT CENSUS: all units (N = +-1) of height <= 20 per d, the machine's own inventory
+ *     (trivial +-(1,0,0) counted apart from the nontrivial ones).
+ *   - THE UNIT-ACTION OBSERVATION: whether unit multiplication maps catalogue points back onto
+ *     a collapse curve -- the machine TESTS the hypothesis instead of assuming it; a zero is a
+ *     REFUTATION with certificates, not a silence.
+ *
+ * Gate: corpus/2714_mathesis_norm.  Stream: DOCS/MATHESIS-PHI-ROUND1.log (MNM rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes charpoly + mathesis_curve + mathesis_bigcurve
+ * doors only.  ZERO-CASCADE: standalone aether TU, exported doors only. */
+module mathesis_norm
+
+extern @abi(c-msvc-x64) fn ca_reset(n: i64) -> i32 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_set(i: i64, j: i64, v: i64) -> i32 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_charpoly() -> i32 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_coeff_sgn(i: i64) -> i64 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_coeff_len(i: i64) -> i64 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_coeff_limb(i: i64, j: i64) -> u64 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bg_norm_mult(nalpha: i64, d: i64, f: i64, e: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+
+/* ---- PATH 1: the direct cubic form ---- */
+fn mn_direct(d: i64, u: i64, v: i64, w: i64) -> i64 @export {
+    return (u * u * u) + (d * v * v * v) + (d * d * w * w * w) - (3i64 * d * u * v * w)
+}
+
+/* ---- PATH 2: det of the multiplication matrix, through the charpoly organ ---- */
+fn mn_charpoly(d: i64, u: i64, v: i64, w: i64) -> i64 @export {
+    ca_reset(3i64)
+    ca_set(0i64, 0i64, u)   ca_set(1i64, 0i64, v)   ca_set(2i64, 0i64, w)
+    ca_set(0i64, 1i64, d * w)   ca_set(1i64, 1i64, u)   ca_set(2i64, 1i64, v)
+    ca_set(0i64, 2i64, d * v)   ca_set(1i64, 2i64, d * w)   ca_set(2i64, 2i64, u)
+    if ca_charpoly() != 0i32 { return 0i64 - 8888888888i64 }
+    /* det(M) = -c0 (char(t) = det(tI - M); char(0) = det(-M) = -det(M) for n = 3) */
+    if ca_coeff_len(0i64) > 1i64 { return 0i64 - 8888888888i64 }
+    let mut c0 : i64 = 0i64
+    if ca_coeff_len(0i64) == 1i64 { c0 = ca_coeff_limb(0i64, 0i64) as i64 }
+    if ca_coeff_sgn(0i64) < 0i64 { c0 = 0i64 - c0 }
+    return 0i64 - c0
+}
+
+/* ---- the ring product (u,v,w) x (p,q,r) mod gamma^3 = d ---- */
+var MN_C0 : i64   var MN_C1 : i64   var MN_C2 : i64
+fn mn_ringmul(d: i64, u: i64, v: i64, w: i64, p: i64, q: i64, r: i64) -> i32 @export {
+    MN_C0 = (u * p) + (d * ((v * r) + (w * q)))
+    MN_C1 = (u * q) + (v * p) + (d * w * r)
+    MN_C2 = (u * r) + (v * q) + (w * p)
+    return 0i32
+}
+fn mn_c0() -> i64 @export { return MN_C0 }
+fn mn_c1() -> i64 @export { return MN_C1 }
+fn mn_c2() -> i64 @export { return MN_C2 }
+
+/* ---- the catalogue laws, decided over the CURRENT hunt store ---- */
+
+/* two-path + multiplicativity for every stored row: returns rows verified, or negative codes
+ * (-1 two-path split at row, -2 multiplicativity failed, -3 charpoly refusal). */
+fn mn_catalogue_laws() -> i64 @export {
+    let n : i64 = mcv_found()
+    let mut i : i64 = 0i64
+    while i < n {
+        let d : i64 = mcv_row_d(i)
+        let u : i64 = mcv_row_u(i)
+        let v : i64 = mcv_row_v(i)
+        let w : i64 = mcv_row_w(i)
+        let nd : i64 = mn_direct(d, u, v, w)
+        let ncp : i64 = mn_charpoly(d, u, v, w)
+        if ncp == (0i64 - 8888888888i64) { return 0i64 - 3i64 }
+        if nd != ncp { return 0i64 - 1i64 }
+        if bg_norm_mult(nd, d, mcv_row_f(i), mcv_row_e(i), mcv_row_c(i)) != 1i64 { return 0i64 - 2i64 }
+        i = i + 1i64
+    }
+    return n
+}
+
+/* the norm of stored row i (for the stream + pins) */
+fn mn_row_norm(i: i64) -> i64 @export {
+    return mn_direct(mcv_row_d(i), mcv_row_u(i), mcv_row_v(i), mcv_row_w(i))
+}
+
+/* THE GAMMA LAW over the store: gamma*alpha stays on its curve and N scales by exactly d.
+ * Returns rows verified, negative = the row where it broke. */
+fn mn_gamma_law() -> i64 @export {
+    let n : i64 = mcv_found()
+    let mut i : i64 = 0i64
+    while i < n {
+        let d : i64 = mcv_row_d(i)
+        if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+        let mut grid : i64 = 2i64
+        if mcv_row_c(i) == 2i64 { grid = 1i64 }
+        mn_ringmul(d, mcv_row_u(i), mcv_row_v(i), mcv_row_w(i), 0i64, 1i64, 0i64)
+        if mcv_eval(grid, MN_C0, MN_C1, MN_C2) != 0i64 { return 0i64 - (i + 1i64) }
+        if mn_direct(d, MN_C0, MN_C1, MN_C2) != (d * mn_row_norm(i)) { return 0i64 - 100i64 - i }
+        i = i + 1i64
+    }
+    return n
+}
+
+/* ---- THE UNIT CENSUS: all |u|,|v|,|w| <= h with N = +-1 ---- */
+var MN_UT : i64            /* total units found */
+var MN_UP : i64            /* with N = +1 */
+var MN_UNTRIV : i64        /* nontrivial (v != 0 or w != 0) */
+var MN_US : [i64; 96]      /* first 32 nontrivial units */
+var MN_USN : i64
+
+fn mn_units_total() -> i64 @export { return MN_UT }
+fn mn_units_plus() -> i64 @export { return MN_UP }
+fn mn_units_nontrivial() -> i64 @export { return MN_UNTRIV }
+fn mn_unit(i: i64, c: i64) -> i64 @export { return MN_US[((i * 3i64) + c) as u64] }
+fn mn_units_stored() -> i64 @export { return MN_USN }
+
+fn mn_unit_census(d: i64, h: i64) -> i64 @export {
+    MN_UT = 0i64   MN_UP = 0i64   MN_UNTRIV = 0i64   MN_USN = 0i64
+    let mut u : i64 = 0i64 - h
+    while u <= h {
+        let mut v : i64 = 0i64 - h
+        while v <= h {
+            let mut w : i64 = 0i64 - h
+            while w <= h {
+                let nv : i64 = mn_direct(d, u, v, w)
+                let mut hit : i64 = 0i64
+                if nv == 1i64 { hit = 1i64 }
+                if nv == (0i64 - 1i64) { hit = 1i64 }
+                if hit == 1i64 {
+                    MN_UT = MN_UT + 1i64
+                    if nv == 1i64 { MN_UP = MN_UP + 1i64 }
+                    let mut ntr : i64 = 0i64
+                    if v != 0i64 { ntr = 1i64 }
+                    if w != 0i64 { ntr = 1i64 }
+                    if ntr == 1i64 {
+                        MN_UNTRIV = MN_UNTRIV + 1i64
+                        if MN_USN < 32i64 {
+                            MN_US[(MN_USN * 3i64) as u64] = u
+                            MN_US[((MN_USN * 3i64) + 1i64) as u64] = v
+                            MN_US[((MN_USN * 3i64) + 2i64) as u64] = w
+                            MN_USN = MN_USN + 1i64
+                        }
+                    }
+                }
+                w = w + 1i64
+            }
+            v = v + 1i64
+        }
+        u = u + 1i64
+    }
+    return MN_UT
+}
+
+/* ---- THE UNIT-ACTION OBSERVATION: does unit multiplication preserve the collapse? ----
+ * For every stored NONTRIVIAL unit and every catalogue row of the SAME d: beta = alpha * eps;
+ * count betas landing on curve A (P2=0) or curve B (P1=0).  The machine tests, it does not
+ * assume.  Returns pairs tested; hits in the counters. */
+var MN_ACT_A : i64   var MN_ACT_B : i64
+fn mn_act_a() -> i64 @export { return MN_ACT_A }
+fn mn_act_b() -> i64 @export { return MN_ACT_B }
+
+fn mn_unit_action(d: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+    MN_ACT_A = 0i64   MN_ACT_B = 0i64
+    let mut tested : i64 = 0i64
+    let n : i64 = mcv_found()
+    let mut s : i64 = 0i64
+    while s < MN_USN {
+        let mut i : i64 = 0i64
+        while i < n {
+            if mcv_row_d(i) == d {
+                mn_ringmul(d, mcv_row_u(i), mcv_row_v(i), mcv_row_w(i),
+                           MN_US[(s * 3i64) as u64], MN_US[((s * 3i64) + 1i64) as u64], MN_US[((s * 3i64) + 2i64) as u64])
+                tested = tested + 1i64
+                if mcv_eval(2i64, MN_C0, MN_C1, MN_C2) == 0i64 { MN_ACT_A = MN_ACT_A + 1i64 }
+                if mcv_eval(1i64, MN_C0, MN_C1, MN_C2) == 0i64 { MN_ACT_B = MN_ACT_B + 1i64 }
+            }
+            i = i + 1i64
+        }
+        s = s + 1i64
+    }
+    return tested
+}

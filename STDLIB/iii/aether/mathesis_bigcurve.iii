@@ -1,0 +1,1008 @@
+/* aether/mathesis_bigcurve.iii -- THE BIGINT CHORD-TANGENT ENGINE (campaign Phi, item Phi-2:
+ * the 12 escaped constructions harvested).
+ *
+ * Campaign Tau's group engine proved the d=3 curve-B 9-point configuration is NOT closed: 12
+ * chord-tangent constructions escape the i64 height envelope (|coord| <= 4096), each COUNTED as
+ * a future CONSTRUCTED identity awaiting wider arithmetic.  This organ is that arithmetic:
+ *
+ *   THE BIGINT CORE: sign-magnitude, 32-bit limbs in u64 slots, 224 handles x 96 limbs (3072
+ *   bits).  add/sub/mul (schoolbook, exact), binary gcd (shift + subtract, no division), EXACT
+ *   division (Jebelean LSB-first by the divisor's inverse mod 2^32 -- the residue must come out
+ *   ZERO limb-for-limb or the organ self-detects a defect), decimal rendering by repeated
+ *   short division.  Refusal past the limb envelope is a NAMED status, never garbage.
+ *
+ *   ONE DERIVATION, TWO ARITHMETICS: the curve grids come through mcv_coef from the SAME
+ *   quotient-ring cubing the i64 hunt used (gate 2707's machine-checked bridge) -- this organ
+ *   never re-derives a surface.
+ *
+ *   THE REPLAY: the i64 closure (seeds = trivial triangle + the six SIGMA-d3B catalogue rows)
+ *   re-executed step-for-step -- same evaluation, same parity extraction, same gcd reduction,
+ *   same dedup, same pass structure -- with the escape events RECORDED (kind 1: the constructed
+ *   point escaped; kind 2: the tangent direction escaped).  The replay's pool count and escape
+ *   count must MATCH the standing organ's own mcg_closure (two implementations, one truth), and
+ *   the escape count must be the sealed 12.
+ *
+ *   THE HARVEST: each recorded event re-executed in bigint -- the third intersection EXACT, the
+ *   gcd reduction EXACT, the point re-checked ON THE CURVE (P1 = 0 exactly, in bigint), then
+ *   oriented (e > 0) and its identity components extracted: for a point (u,v,w) on curve B,
+ *   (u + v*cbrt(d) + w*cbrt(d^2))^3 = f + e*cbrt(d^2) with f = P0(u,v,w), e = P2(u,v,w) -- the
+ *   derivation identity itself, now with coefficients no sweep could reach.
+ *
+ *   THE GROWTH PROBE: the same closure run in PURE bigint (no height cap, limb budget only)
+ *   for a bounded pass/pool schedule -- the machine OBSERVES whether the configuration closes
+ *   or grows (the d=2 configuration closed at 6; this one is the machine's counterexample).
+ *
+ * Gate: corpus/2713_mathesis_bigcurve.  Stream: DOCS/MATHESIS-PHI-ROUND1.log (MPH rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_curve's doors only (grids, hunt,
+ * closure, judge).  ZERO-CASCADE: standalone aether TU, exported doors only. */
+module mathesis_bigcurve
+
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_coef(which: i64, idx: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+
+/* ================= THE BIGINT CORE ================= */
+
+const BCW : i64 = 96          /* limbs per handle (32-bit limbs => 3072 bits) */
+const BMASK : u64 = 4294967295u64
+
+var BC_L : [u64; 24576]       /* 256 handles x 96 limbs */
+var BC_S : [i64; 256]         /* sign 1 / -1 (a zero value has len 0, sign 1) */
+var BC_N : [i64; 256]         /* limb count (trimmed) */
+var BC_MT : [u64; 200]        /* mul accumulator */
+
+fn bc_zero(h: i64) -> i32 { BC_S[h as u64] = 1i64   BC_N[h as u64] = 0i64   return 0i32 }
+fn bc_len(h: i64) -> i64 @export { return BC_N[h as u64] }
+fn bc_sgn(h: i64) -> i64 @export { if BC_N[h as u64] == 0i64 { return 0i64 }   return BC_S[h as u64] }
+
+fn bc_trim(h: i64) -> i32 {
+    let mut n : i64 = BC_N[h as u64]
+    while n > 0i64 {
+        if BC_L[((h * BCW) + (n - 1i64)) as u64] != 0u64 { BC_N[h as u64] = n   return 0i32 }
+        n = n - 1i64
+    }
+    BC_N[h as u64] = 0i64
+    BC_S[h as u64] = 1i64
+    return 0i32
+}
+
+fn bc_seti(h: i64, v: i64) -> i32 {
+    let mut m : u64 = v as u64
+    BC_S[h as u64] = 1i64
+    if v < 0i64 { BC_S[h as u64] = 0i64 - 1i64   m = (0i64 - v) as u64 }
+    BC_L[(h * BCW) as u64] = m & BMASK
+    BC_L[((h * BCW) + 1i64) as u64] = m >> 32u64
+    BC_N[h as u64] = 2i64
+    return bc_trim(h)
+}
+
+fn bc_copy(d: i64, s: i64) -> i32 {
+    let n : i64 = BC_N[s as u64]
+    let mut i : i64 = 0i64
+    while i < n { BC_L[((d * BCW) + i) as u64] = BC_L[((s * BCW) + i) as u64]   i = i + 1i64 }
+    BC_N[d as u64] = n
+    BC_S[d as u64] = BC_S[s as u64]
+    return 0i32
+}
+
+fn bc_cmpmag(a: i64, b: i64) -> i64 {
+    let na : i64 = BC_N[a as u64]
+    let nb : i64 = BC_N[b as u64]
+    if na > nb { return 1i64 }
+    if na < nb { return 0i64 - 1i64 }
+    let mut i : i64 = na - 1i64
+    while i >= 0i64 {
+        let la : u64 = BC_L[((a * BCW) + i) as u64]
+        let lb : u64 = BC_L[((b * BCW) + i) as u64]
+        if la > lb { return 1i64 }
+        if la < lb { return 0i64 - 1i64 }
+        i = i - 1i64
+    }
+    return 0i64
+}
+
+/* d = a + b (magnitudes).  d may alias a or b.  -1 = limb envelope refusal. */
+fn bc_addmag(d: i64, a: i64, b: i64) -> i64 {
+    let na : i64 = BC_N[a as u64]
+    let nb : i64 = BC_N[b as u64]
+    let mut n : i64 = na
+    if nb > n { n = nb }
+    if n >= BCW { return 0i64 - 1i64 }
+    let mut carry : u64 = 0u64
+    let mut i : i64 = 0i64
+    while i < n {
+        let mut la : u64 = 0u64
+        let mut lb : u64 = 0u64
+        if i < na { la = BC_L[((a * BCW) + i) as u64] }
+        if i < nb { lb = BC_L[((b * BCW) + i) as u64] }
+        let s : u64 = la + lb + carry
+        BC_L[((d * BCW) + i) as u64] = s & BMASK
+        carry = s >> 32u64
+        i = i + 1i64
+    }
+    BC_L[((d * BCW) + n) as u64] = carry
+    BC_N[d as u64] = n + 1i64
+    return bc_trim(d) as i64
+}
+
+/* d = a - b (magnitudes, |a| >= |b| REQUIRED).  d may alias a or b. */
+fn bc_submag(d: i64, a: i64, b: i64) -> i64 {
+    let na : i64 = BC_N[a as u64]
+    let nb : i64 = BC_N[b as u64]
+    let mut borrow : u64 = 0u64
+    let mut i : i64 = 0i64
+    while i < na {
+        let la : u64 = BC_L[((a * BCW) + i) as u64]
+        let mut lb : u64 = 0u64
+        if i < nb { lb = BC_L[((b * BCW) + i) as u64] }
+        let s : u64 = lb + borrow
+        if la >= s { BC_L[((d * BCW) + i) as u64] = la - s   borrow = 0u64 }
+        else { BC_L[((d * BCW) + i) as u64] = (la + 4294967296u64) - s   borrow = 1u64 }
+        i = i + 1i64
+    }
+    BC_N[d as u64] = na
+    return bc_trim(d) as i64
+}
+
+/* d = a + b / a - b, signed.  flip = 0 add, 1 sub.  d may alias.  -1 refusal. */
+fn bc_addsub(d: i64, a: i64, b: i64, flip: i64) -> i64 {
+    let mut sb : i64 = BC_S[b as u64]
+    if flip == 1i64 { sb = 0i64 - sb }
+    if BC_N[b as u64] == 0i64 { sb = 1i64 }
+    let sa0 : i64 = BC_S[a as u64]
+    if sa0 == sb {
+        let sa : i64 = sa0
+        let rc : i64 = bc_addmag(d, a, b)
+        if rc < 0i64 { return rc }
+        BC_S[d as u64] = sa
+        return bc_trim(d) as i64
+    }
+    let c : i64 = bc_cmpmag(a, b)
+    if c == 0i64 { return bc_zero(d) as i64 }
+    if c > 0i64 {
+        let sa : i64 = sa0
+        bc_submag(d, a, b)
+        BC_S[d as u64] = sa
+        return bc_trim(d) as i64
+    }
+    bc_submag(d, b, a)
+    BC_S[d as u64] = sb
+    return bc_trim(d) as i64
+}
+fn bc_add(d: i64, a: i64, b: i64) -> i64 { return bc_addsub(d, a, b, 0i64) }
+fn bc_sub(d: i64, a: i64, b: i64) -> i64 { return bc_addsub(d, a, b, 1i64) }
+
+/* d = a * b (signed, exact).  d must NOT alias a or b.  -1 = limb refusal. */
+fn bc_mul(d: i64, a: i64, b: i64) -> i64 {
+    let na : i64 = BC_N[a as u64]
+    let nb : i64 = BC_N[b as u64]
+    if na == 0i64 { return bc_zero(d) as i64 }
+    if nb == 0i64 { return bc_zero(d) as i64 }
+    if (na + nb) > BCW { return 0i64 - 1i64 }
+    let mut i : i64 = 0i64
+    while i <= (na + nb) { BC_MT[i as u64] = 0u64   i = i + 1i64 }
+    i = 0i64
+    while i < na {
+        let la : u64 = BC_L[((a * BCW) + i) as u64]
+        if la != 0u64 {
+            let mut carry : u64 = 0u64
+            let mut j : i64 = 0i64
+            while j < nb {
+                let cur : u64 = BC_MT[(i + j) as u64] + (la * BC_L[((b * BCW) + j) as u64]) + carry
+                BC_MT[(i + j) as u64] = cur & BMASK
+                carry = cur >> 32u64
+                j = j + 1i64
+            }
+            BC_MT[(i + nb) as u64] = BC_MT[(i + nb) as u64] + carry
+        }
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < (na + nb) { BC_L[((d * BCW) + i) as u64] = BC_MT[i as u64]   i = i + 1i64 }
+    BC_N[d as u64] = na + nb
+    BC_S[d as u64] = BC_S[a as u64] * BC_S[b as u64]
+    return bc_trim(d) as i64
+}
+
+/* d = a * v (i64), via scratch handle 15.  d must not be 15 or a. */
+fn bc_muli(d: i64, a: i64, v: i64) -> i64 {
+    bc_seti(15i64, v)
+    return bc_mul(d, a, 15i64)
+}
+
+fn bc_iszero(h: i64) -> i64 { if BC_N[h as u64] == 0i64 { return 1i64 }   return 0i64 }
+
+fn bc_eq(a: i64, b: i64) -> i64 @export {
+    if BC_N[a as u64] == 0i64 { return bc_iszero(b) }
+    if BC_N[b as u64] == 0i64 { return 0i64 }
+    if BC_S[a as u64] != BC_S[b as u64] { return 0i64 }
+    if bc_cmpmag(a, b) != 0i64 { return 0i64 }
+    return 1i64
+}
+
+/* trailing zero BITS of a nonzero magnitude */
+fn bc_tzbits(h: i64) -> i64 {
+    let n : i64 = BC_N[h as u64]
+    let mut i : i64 = 0i64
+    while i < n {
+        let l : u64 = BC_L[((h * BCW) + i) as u64]
+        if l != 0u64 {
+            let mut t : i64 = 0i64
+            let mut x : u64 = l
+            while (x & 1u64) == 0u64 { x = x >> 1u64   t = t + 1i64 }
+            return (i * 32i64) + t
+        }
+        i = i + 1i64
+    }
+    return 0i64
+}
+
+/* h >>= nb bits, in place */
+fn bc_shr(h: i64, nb: i64) -> i32 {
+    let ls : i64 = nb / 32i64
+    let bs : i64 = nb % 32i64
+    let n : i64 = BC_N[h as u64]
+    let mut i : i64 = 0i64
+    while i < n {
+        let mut cur : u64 = 0u64
+        if (i + ls) < n { cur = BC_L[((h * BCW) + i + ls) as u64] >> (bs as u64) }
+        if bs > 0i64 { if (i + ls + 1i64) < n {
+            cur = cur | ((BC_L[((h * BCW) + i + ls + 1i64) as u64] << ((32i64 - bs) as u64)) & BMASK)
+        } }
+        BC_L[((h * BCW) + i) as u64] = cur
+        i = i + 1i64
+    }
+    return bc_trim(h)
+}
+
+/* h <<= nb bits, in place.  -1 refusal. */
+fn bc_shl(h: i64, nb: i64) -> i64 {
+    let ls : i64 = nb / 32i64
+    let bs : i64 = nb % 32i64
+    let n : i64 = BC_N[h as u64]
+    if n == 0i64 { return 0i64 }
+    if (n + ls + 1i64) >= BCW { return 0i64 - 1i64 }
+    let mut i : i64 = (n + ls)
+    while i >= 0i64 {
+        let mut cur : u64 = 0u64
+        if (i - ls) >= 0i64 { if (i - ls) < n { cur = (BC_L[((h * BCW) + i - ls) as u64] << (bs as u64)) & BMASK } }
+        if bs > 0i64 { if (i - ls - 1i64) >= 0i64 { if (i - ls - 1i64) < n {
+            cur = cur | (BC_L[((h * BCW) + i - ls - 1i64) as u64] >> ((32i64 - bs) as u64))
+        } } }
+        BC_L[((h * BCW) + i) as u64] = cur
+        i = i - 1i64
+    }
+    BC_N[h as u64] = n + ls + 1i64
+    return bc_trim(h) as i64
+}
+
+/* d = gcd(|a|, |b|), binary (handles 23/24 are scratch; d may be any other handle). */
+fn bc_gcdmag(d: i64, a: i64, b: i64) -> i32 {
+    if BC_N[a as u64] == 0i64 { bc_copy(d, b)   BC_S[d as u64] = 1i64   return 0i32 }
+    if BC_N[b as u64] == 0i64 { bc_copy(d, a)   BC_S[d as u64] = 1i64   return 0i32 }
+    bc_copy(23i64, a)   BC_S[23u64] = 1i64
+    bc_copy(24i64, b)   BC_S[24u64] = 1i64
+    let ta : i64 = bc_tzbits(23i64)
+    let tb : i64 = bc_tzbits(24i64)
+    let mut common : i64 = ta
+    if tb < common { common = tb }
+    bc_shr(23i64, ta)
+    bc_shr(24i64, tb)
+    let mut guard : i64 = 0i64
+    while guard < 8192i64 {
+        if BC_N[24u64] == 0i64 {
+            bc_copy(d, 23i64)
+            BC_S[d as u64] = 1i64
+            bc_shl(d, common)
+            return 0i32
+        }
+        let c : i64 = bc_cmpmag(23i64, 24i64)
+        if c == 0i64 {
+            bc_copy(d, 23i64)
+            BC_S[d as u64] = 1i64
+            bc_shl(d, common)
+            return 0i32
+        }
+        if c > 0i64 {
+            bc_submag(23i64, 23i64, 24i64)
+            if BC_N[23u64] > 0i64 { bc_shr(23i64, bc_tzbits(23i64)) }
+        } else {
+            bc_submag(24i64, 24i64, 23i64)
+            if BC_N[24u64] > 0i64 { bc_shr(24i64, bc_tzbits(24i64)) }
+        }
+        guard = guard + 1i64
+    }
+    return 0i32 - 1i32
+}
+
+/* q = n / g EXACT (magnitudes; the division must be exact or -2 is returned: the residue is
+ * checked limb-for-limb).  Jebelean LSB-first.  Scratch: 25 (n working copy), 26 (g working).
+ * q must not be 25/26 and must not alias n or g. */
+fn bc_divexact(q: i64, n: i64, g: i64) -> i64 {
+    if BC_N[n as u64] == 0i64 { bc_zero(q)   return 0i64 }
+    if BC_N[g as u64] == 0i64 { return 0i64 - 2i64 }
+    bc_copy(25i64, n)
+    bc_copy(26i64, g)
+    let tg : i64 = bc_tzbits(26i64)
+    if tg > 0i64 {
+        if bc_tzbits(25i64) < tg { return 0i64 - 2i64 }
+        bc_shr(25i64, tg)
+        bc_shr(26i64, tg)
+    }
+    let g0 : u64 = BC_L[(26i64 * BCW) as u64]
+    /* inverse of odd g0 mod 2^32 by Newton */
+    let mut inv : u64 = g0
+    let mut it : i64 = 0i64
+    while it < 5i64 {
+        inv = (inv * ((2u64 - ((g0 * inv) & BMASK)) & BMASK)) & BMASK
+        it = it + 1i64
+    }
+    let nn : i64 = BC_N[25u64]
+    let ng : i64 = BC_N[26u64]
+    let mut ql : i64 = nn - ng + 1i64
+    if ql < 1i64 { ql = 1i64 }
+    let mut i : i64 = 0i64
+    while i < ql {
+        let cl : u64 = BC_L[((25i64 * BCW) + i) as u64]
+        let qd : u64 = (cl * inv) & BMASK
+        BC_L[((q * BCW) + i) as u64] = qd
+        /* subtract qd * g from the working n at offset i */
+        let mut carry : u64 = 0u64
+        let mut borrow : u64 = 0u64
+        let mut j : i64 = 0i64
+        while j < ng {
+            let p : u64 = (qd * BC_L[((26i64 * BCW) + j) as u64]) + carry
+            carry = p >> 32u64
+            let s : u64 = (p & BMASK) + borrow
+            let t : u64 = BC_L[((25i64 * BCW) + i + j) as u64]
+            if t >= s { BC_L[((25i64 * BCW) + i + j) as u64] = t - s   borrow = 0u64 }
+            else { BC_L[((25i64 * BCW) + i + j) as u64] = (t + 4294967296u64) - s   borrow = 1u64 }
+            j = j + 1i64
+        }
+        /* propagate the tail while inside the working length */
+        let mut kx : i64 = i + ng
+        let mut s2 : u64 = carry + borrow
+        while s2 != 0u64 {
+            if kx >= nn { return 0i64 - 2i64 }
+            let t2 : u64 = BC_L[((25i64 * BCW) + kx) as u64]
+            if t2 >= s2 { BC_L[((25i64 * BCW) + kx) as u64] = t2 - s2   s2 = 0u64 }
+            else { BC_L[((25i64 * BCW) + kx) as u64] = (t2 + 4294967296u64) - s2   s2 = 1u64 }
+            kx = kx + 1i64
+        }
+        i = i + 1i64
+    }
+    /* exactness: the working copy must be all-zero now */
+    i = 0i64
+    while i < nn { if BC_L[((25i64 * BCW) + i) as u64] != 0u64 { return 0i64 - 2i64 }   i = i + 1i64 }
+    BC_N[q as u64] = ql
+    BC_S[q as u64] = 1i64
+    return bc_trim(q)
+}
+
+/* decimal digits of |h| + sign into the digit pool slot (64 bytes: [0]=length, then chars). */
+var BG_DG : [u8; 4096]
+fn bc_render(h: i64, slot: i64) -> i32 {
+    let base : i64 = slot * 64i64
+    var tmpd : [u8; 64]
+    let mut nd : i64 = 0i64
+    bc_copy(27i64, h)
+    if BC_N[27u64] == 0i64 { tmpd[0u64] = 48u8   nd = 1i64 }
+    while BC_N[27u64] > 0i64 {
+        /* short divide the magnitude by 10 (MSB-first), remainder = digit */
+        let mut r : u64 = 0u64
+        let mut j : i64 = BC_N[27u64] - 1i64
+        while j >= 0i64 {
+            let cur : u64 = (r << 32u64) | BC_L[((27i64 * BCW) + j) as u64]
+            BC_L[((27i64 * BCW) + j) as u64] = cur / 10u64
+            r = cur % 10u64
+            j = j - 1i64
+        }
+        tmpd[nd as u64] = (48u64 + r) as u8
+        nd = nd + 1i64
+        bc_trim(27i64)
+    }
+    let mut o : i64 = 1i64
+    if bc_sgn(h) < 0i64 { BG_DG[(base + 1i64) as u64] = 45u8   o = 2i64 }
+    let mut i : i64 = nd - 1i64
+    while i >= 0i64 { BG_DG[(base + o) as u64] = tmpd[i as u64]   o = o + 1i64   i = i - 1i64 }
+    BG_DG[base as u64] = (o - 1i64) as u8
+    return 0i32
+}
+fn bg_diglen(slot: i64) -> i64 @export { return BG_DG[(slot * 64i64) as u64] as i64 }
+fn bg_digat(slot: i64, i: i64) -> i64 @export { return BG_DG[((slot * 64i64) + 1i64 + i) as u64] as i64 }
+
+/* ================= THE GRID EVALUATOR (bigint, over the SAME derived grids) ================= */
+
+/* dst = grid<which>(hu, hv, hw) -- handles; powers in 0..11, acc 12, t 13/14.
+ * dst must be outside 0..15.  0 ok, -1 limb refusal. */
+fn bge_eval(which: i64, hu: i64, hv: i64, hw: i64, dst: i64) -> i64 {
+    bc_seti(0i64, 1i64)   bc_copy(4i64, 0i64)   bc_copy(8i64, 0i64)
+    bc_copy(1i64, hu)   bc_copy(5i64, hv)   bc_copy(9i64, hw)
+    if bc_mul(2i64, 1i64, hu) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(3i64, 2i64, hu) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(6i64, 5i64, hv) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(7i64, 6i64, hv) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(10i64, 9i64, hw) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(11i64, 10i64, hw) < 0i64 { return 0i64 - 1i64 }
+    bc_zero(12i64)
+    let mut a : i64 = 0i64
+    while a < 64i64 {
+        let cf : i64 = mcv_coef(which, a)
+        if cf != 0i64 {
+            let ea : i64 = a / 16i64
+            let eb : i64 = (a / 4i64) % 4i64
+            let ec : i64 = a % 4i64
+            if bc_mul(13i64, ea, 4i64 + eb) < 0i64 { return 0i64 - 1i64 }
+            if bc_mul(14i64, 13i64, 8i64 + ec) < 0i64 { return 0i64 - 1i64 }
+            if bc_muli(13i64, 14i64, cf) < 0i64 { return 0i64 - 1i64 }
+            if bc_add(12i64, 12i64, 13i64) < 0i64 { return 0i64 - 1i64 }
+        }
+        a = a + 1i64
+    }
+    return bc_copy(dst, 12i64) as i64
+}
+
+/* ================= THE i64-FAITHFUL REPLAY (escape events recorded) ================= */
+
+var BG_P : [i64; 192]      /* replay pool, cap 64 triples */
+var BG_N : i64
+var BG_OVER : i64
+var BG_CW : i64
+var BG_EV : [i64; 128]     /* escape events: [kind, tg, pu,pv,pw, qu,qv,qw] x cap 16 */
+var BG_EVN : i64
+var BG_GU : i64   var BG_GV : i64   var BG_GW : i64
+var BG_RU : i64   var BG_RV : i64   var BG_RW : i64
+
+fn bg_evn() -> i64 @export { return BG_EVN }
+fn bg_ev(i: i64, j: i64) -> i64 @export { return BG_EV[((i * 8i64) + j) as u64] }
+fn bg_over() -> i64 @export { return BG_OVER }
+fn bg_count() -> i64 @export { return BG_N }
+
+fn bg_gcd64(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0
+    let mut b : i64 = b0
+    if a < 0i64 { a = 0i64 - a }
+    if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+fn bg_grad(u: i64, v: i64, w: i64) -> i32 {
+    BG_GU = 0i64   BG_GV = 0i64   BG_GW = 0i64
+    let mut a : i64 = 0i64
+    while a < 64i64 {
+        let cf : i64 = mcv_coef(BG_CW, a)
+        if cf != 0i64 {
+            let ea : i64 = a / 16i64
+            let eb : i64 = (a / 4i64) % 4i64
+            let ec : i64 = a % 4i64
+            let mut pu : i64 = 1i64
+            let mut pv : i64 = 1i64
+            let mut pw : i64 = 1i64
+            let mut pum : i64 = 1i64
+            let mut pvm : i64 = 1i64
+            let mut pwm : i64 = 1i64
+            let mut k : i64 = 0i64
+            while k < ea { if k > 0i64 { pum = pum * u }   pu = pu * u   k = k + 1i64 }
+            k = 0i64
+            while k < eb { if k > 0i64 { pvm = pvm * v }   pv = pv * v   k = k + 1i64 }
+            k = 0i64
+            while k < ec { if k > 0i64 { pwm = pwm * w }   pw = pw * w   k = k + 1i64 }
+            if ea > 0i64 { BG_GU = BG_GU + (cf * ea * pum * pv * pw) }
+            if eb > 0i64 { BG_GV = BG_GV + (cf * eb * pu * pvm * pw) }
+            if ec > 0i64 { BG_GW = BG_GW + (cf * ec * pu * pv * pwm) }
+        }
+        a = a + 1i64
+    }
+    return 0i32
+}
+
+fn bg_reduce(u: i64, v: i64, w: i64) -> i64 {
+    if u == 0i64 { if v == 0i64 { if w == 0i64 { return 0i64 } } }
+    let g : i64 = bg_gcd64(bg_gcd64(u, v), w)
+    let mut ru : i64 = u / g
+    let mut rv : i64 = v / g
+    let mut rw : i64 = w / g
+    let mut fnz : i64 = ru
+    if fnz == 0i64 { fnz = rv }
+    if fnz == 0i64 { fnz = rw }
+    if fnz < 0i64 { ru = 0i64 - ru   rv = 0i64 - rv   rw = 0i64 - rw }
+    BG_RU = ru   BG_RV = rv   BG_RW = rw
+    if ru > 4096i64 { return 0i64 - 1i64 }
+    if ru < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    if rv > 4096i64 { return 0i64 - 1i64 }
+    if rv < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    if rw > 4096i64 { return 0i64 - 1i64 }
+    if rw < (0i64 - 4096i64) { return 0i64 - 1i64 }
+    return 1i64
+}
+
+fn bg_f(u: i64, v: i64, w: i64) -> i64 { return mcv_eval(BG_CW, u, v, w) }
+
+fn bg_third(pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64, tg: i64) -> i64 {
+    let g11 : i64 = bg_f(pu + qu, pv + qv, pw + qw)
+    let g1m : i64 = bg_f(pu - qu, pv - qv, pw - qw)
+    let mut a : i64 = 0i64
+    let mut b : i64 = 0i64
+    if tg == 1i64 {
+        if (((g11 + g1m) % 2i64) != 0i64) { return 0i64 - 2i64 }
+        a = (g11 + g1m) / 2i64
+        b = (g11 - g1m) / 2i64
+    } else {
+        if (((g11 - g1m) % 2i64) != 0i64) { return 0i64 - 2i64 }
+        a = (g11 - g1m) / 2i64
+        b = (g11 + g1m) / 2i64
+    }
+    if a == 0i64 { if b == 0i64 { return 0i64 } }
+    let ru : i64 = (b * pu) - (a * qu)
+    let rv : i64 = (b * pv) - (a * qv)
+    let rw : i64 = (b * pw) - (a * qw)
+    let rc : i64 = bg_reduce(ru, rv, rw)
+    if rc != 1i64 { return rc }
+    if bg_f(BG_RU, BG_RV, BG_RW) != 0i64 { return 0i64 - 2i64 }
+    return 1i64
+}
+
+fn bg_record(kind: i64, tg: i64, pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64) -> i32 {
+    if BG_EVN >= 16i64 { return 0i32 }
+    let b : i64 = BG_EVN * 8i64
+    BG_EV[b as u64] = kind
+    BG_EV[(b + 1i64) as u64] = tg
+    BG_EV[(b + 2i64) as u64] = pu
+    BG_EV[(b + 3i64) as u64] = pv
+    BG_EV[(b + 4i64) as u64] = pw
+    BG_EV[(b + 5i64) as u64] = qu
+    BG_EV[(b + 6i64) as u64] = qv
+    BG_EV[(b + 7i64) as u64] = qw
+    BG_EVN = BG_EVN + 1i64
+    return 0i32
+}
+
+fn bg_step(i: i64, j: i64) -> i64 {
+    let pu : i64 = BG_P[(i * 3i64) as u64]
+    let pv : i64 = BG_P[((i * 3i64) + 1i64) as u64]
+    let pw : i64 = BG_P[((i * 3i64) + 2i64) as u64]
+    let mut r : i64 = 0i64
+    let mut tg : i64 = 0i64
+    let mut qu : i64 = 0i64
+    let mut qv : i64 = 0i64
+    let mut qw : i64 = 0i64
+    if i == j {
+        tg = 1i64
+        bg_grad(pu, pv, pw)
+        let mut tu : i64 = 0i64
+        let mut tv : i64 = 0i64
+        let mut tw : i64 = 0i64
+        if BG_GV != 0i64 { tu = 0i64   tv = BG_GW   tw = 0i64 - BG_GV }
+        else { if BG_GU != 0i64 { tu = BG_GW   tv = 0i64   tw = 0i64 - BG_GU }
+        else { if BG_GW != 0i64 { tu = BG_GV   tv = 0i64 - BG_GU   tw = 0i64 } else { return 0i64 } } }
+        if tu == 0i64 { if tv == 0i64 { if tw == 0i64 { return 0i64 } } }
+        if ((tu * pv) - (tv * pu)) == 0i64 { if ((tv * pw) - (tw * pv)) == 0i64 { return 0i64 } }
+        let rr : i64 = bg_reduce(tu, tv, tw)
+        if rr != 1i64 { if rr == 0i64 { return 0i64 } }
+        if rr == (0i64 - 1i64) {
+            BG_OVER = BG_OVER + 1i64
+            bg_record(2i64, 1i64, pu, pv, pw, tu, tv, tw)     /* the DIRECTION escaped (unreduced) */
+            return 0i64
+        }
+        qu = BG_RU   qv = BG_RV   qw = BG_RW
+        r = bg_third(pu, pv, pw, qu, qv, qw, 1i64)
+    } else {
+        qu = BG_P[(j * 3i64) as u64]
+        qv = BG_P[((j * 3i64) + 1i64) as u64]
+        qw = BG_P[((j * 3i64) + 2i64) as u64]
+        r = bg_third(pu, pv, pw, qu, qv, qw, 0i64)
+    }
+    if r == (0i64 - 2i64) { return 0i64 - 2i64 }
+    if r == (0i64 - 1i64) {
+        BG_OVER = BG_OVER + 1i64
+        bg_record(1i64, tg, pu, pv, pw, qu, qv, qw)           /* the CONSTRUCTED POINT escaped */
+        return 0i64
+    }
+    if r != 1i64 { return 0i64 }
+    let mut k : i64 = 0i64
+    while k < BG_N {
+        let xu : i64 = BG_P[(k * 3i64) as u64]
+        let xv : i64 = BG_P[((k * 3i64) + 1i64) as u64]
+        let xw : i64 = BG_P[((k * 3i64) + 2i64) as u64]
+        if xu == BG_RU { if xv == BG_RV { if xw == BG_RW { return 0i64 } } }
+        if xu == (0i64 - BG_RU) { if xv == (0i64 - BG_RV) { if xw == (0i64 - BG_RW) { return 0i64 } } }
+        k = k + 1i64
+    }
+    if BG_N >= 64i64 { return 0i64 - 1i64 }
+    BG_P[(BG_N * 3i64) as u64] = BG_RU
+    BG_P[((BG_N * 3i64) + 1i64) as u64] = BG_RV
+    BG_P[((BG_N * 3i64) + 2i64) as u64] = BG_RW
+    BG_N = BG_N + 1i64
+    return 1i64
+}
+
+/* the replay: seeds = trivials + the standing catalogue rows for (d, curve); the SAME pass
+ * structure as the standing organ.  Returns the pool count, -1 refusal, -2 defect. */
+fn bg_replay(d: i64, curve: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    BG_CW = 2i64
+    if curve == 2i64 { BG_CW = 1i64 }
+    BG_N = 0i64   BG_OVER = 0i64   BG_EVN = 0i64
+    BG_P[0u64] = 1i64   BG_P[1u64] = 0i64   BG_P[2u64] = 0i64
+    BG_P[3u64] = 0i64   BG_P[4u64] = 1i64   BG_P[5u64] = 0i64
+    BG_P[6u64] = 0i64   BG_P[7u64] = 0i64   BG_P[8u64] = 1i64
+    BG_N = 3i64
+    let mut i : i64 = 0i64
+    while i < mcv_found() {
+        if mcv_row_d(i) == d { if mcv_row_c(i) == curve {
+            if BG_N < 64i64 {
+                BG_P[(BG_N * 3i64) as u64] = mcv_row_u(i)
+                BG_P[((BG_N * 3i64) + 1i64) as u64] = mcv_row_v(i)
+                BG_P[((BG_N * 3i64) + 2i64) as u64] = mcv_row_w(i)
+                BG_N = BG_N + 1i64
+            }
+        } }
+        i = i + 1i64
+    }
+    let mut pass : i64 = 0i64
+    while pass < 4i64 {
+        let n0 : i64 = BG_N
+        let mut i2 : i64 = 0i64
+        while i2 < n0 {
+            let mut j2 : i64 = i2
+            while j2 < n0 {
+                let st : i64 = bg_step(i2, j2)
+                if st == (0i64 - 2i64) { return 0i64 - 2i64 }
+                j2 = j2 + 1i64
+            }
+            i2 = i2 + 1i64
+        }
+        if BG_N == n0 { pass = 4i64 }
+        pass = pass + 1i64
+    }
+    return BG_N
+}
+
+/* ================= THE BIGINT HARVEST ================= */
+
+/* result store: event i -> handles 104 + i*5 .. +4 = (u, v, w, e, f); status row */
+var BG_ST : [i64; 16]      /* 1 harvested; negative = named defect */
+
+/* big third-point from i64 parents; results into handles (32,33,34) = (u,v,w).
+ * 1 ok / 0 degenerate / -2 defect / -3 limb refusal.  egrid/fgrid per BG_CW. */
+fn bg_bigthird(tg: i64, pu: i64, pv: i64, pw: i64, qu: i64, qv: i64, qw: i64) -> i64 {
+    bc_seti(16i64, pu + qu)   bc_seti(17i64, pv + qv)   bc_seti(18i64, pw + qw)
+    if bge_eval(BG_CW, 16i64, 17i64, 18i64, 28i64) < 0i64 { return 0i64 - 3i64 }     /* G(1,1) */
+    bc_seti(16i64, pu - qu)   bc_seti(17i64, pv - qv)   bc_seti(18i64, pw - qw)
+    if bge_eval(BG_CW, 16i64, 17i64, 18i64, 29i64) < 0i64 { return 0i64 - 3i64 }     /* G(1,-1) */
+    /* A (handle 30) and B (handle 31) by the parity-checked halving */
+    if tg == 1i64 {
+        if bc_add(30i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+        if BC_N[30u64] > 0i64 { if (BC_L[(30i64 * BCW) as u64] & 1u64) != 0u64 { return 0i64 - 2i64 } }
+        bc_shr(30i64, 1i64)
+        if bc_sub(31i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+        bc_shr(31i64, 1i64)
+    } else {
+        if bc_sub(30i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+        if BC_N[30u64] > 0i64 { if (BC_L[(30i64 * BCW) as u64] & 1u64) != 0u64 { return 0i64 - 2i64 } }
+        bc_shr(30i64, 1i64)
+        if bc_add(31i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+        bc_shr(31i64, 1i64)
+    }
+    if bc_iszero(30i64) == 1i64 { if bc_iszero(31i64) == 1i64 { return 0i64 } }
+    /* R = B*P - A*Q, component-wise (35/36 scratch) */
+    if bc_muli(35i64, 31i64, pu) < 0i64 { return 0i64 - 3i64 }
+    if bc_muli(36i64, 30i64, qu) < 0i64 { return 0i64 - 3i64 }
+    if bc_sub(32i64, 35i64, 36i64) < 0i64 { return 0i64 - 3i64 }
+    if bc_muli(35i64, 31i64, pv) < 0i64 { return 0i64 - 3i64 }
+    if bc_muli(36i64, 30i64, qv) < 0i64 { return 0i64 - 3i64 }
+    if bc_sub(33i64, 35i64, 36i64) < 0i64 { return 0i64 - 3i64 }
+    if bc_muli(35i64, 31i64, pw) < 0i64 { return 0i64 - 3i64 }
+    if bc_muli(36i64, 30i64, qw) < 0i64 { return 0i64 - 3i64 }
+    if bc_sub(34i64, 35i64, 36i64) < 0i64 { return 0i64 - 3i64 }
+    /* primitive: divide by gcd of the three magnitudes */
+    if bc_iszero(32i64) == 1i64 { if bc_iszero(33i64) == 1i64 { if bc_iszero(34i64) == 1i64 { return 0i64 } } }
+    bc_gcdmag(37i64, 32i64, 33i64)
+    bc_gcdmag(38i64, 37i64, 34i64)
+    let mut c : i64 = 32i64
+    while c <= 34i64 {
+        let sgn : i64 = bc_sgn(c)
+        if bc_divexact(39i64, c, 38i64) < 0i64 { return 0i64 - 2i64 }
+        bc_copy(c, 39i64)
+        if sgn < 0i64 { BC_S[c as u64] = 0i64 - 1i64 }
+        c = c + 1i64
+    }
+    /* first-nonzero-positive orientation */
+    let mut lead : i64 = bc_sgn(32i64)
+    if lead == 0i64 { lead = bc_sgn(33i64) }
+    if lead == 0i64 { lead = bc_sgn(34i64) }
+    if lead < 0i64 {
+        c = 32i64
+        while c <= 34i64 { if BC_N[c as u64] > 0i64 { BC_S[c as u64] = 0i64 - BC_S[c as u64] }   c = c + 1i64 }
+    }
+    /* ON THE CURVE, exactly, in bigint -- or the engine is broken */
+    if bge_eval(BG_CW, 32i64, 33i64, 34i64, 40i64) < 0i64 { return 0i64 - 3i64 }
+    if bc_iszero(40i64) != 1i64 { return 0i64 - 2i64 }
+    return 1i64
+}
+
+/* harvest event i: exact point, on-curve check, orientation e > 0, components + decimals.
+ * digit slots: event i uses slots i*5 .. i*5+4 for (u, v, w, e, f). */
+fn bg_harvest(i: i64) -> i64 @export {
+    if i >= BG_EVN { return 0i64 - 9i64 }
+    let b : i64 = i * 8i64
+    let kind : i64 = BG_EV[b as u64]
+    let tg : i64 = BG_EV[(b + 1i64) as u64]
+    let pu : i64 = BG_EV[(b + 2i64) as u64]
+    let pv : i64 = BG_EV[(b + 3i64) as u64]
+    let pw : i64 = BG_EV[(b + 4i64) as u64]
+    let mut qu : i64 = BG_EV[(b + 5i64) as u64]
+    let mut qv : i64 = BG_EV[(b + 6i64) as u64]
+    let mut qw : i64 = BG_EV[(b + 7i64) as u64]
+    if kind == 2i64 {
+        /* the recorded direction is UNREDUCED: reduce it exactly (i64 gcd; no cap this time) */
+        let g : i64 = bg_gcd64(bg_gcd64(qu, qv), qw)
+        if g != 0i64 { qu = qu / g   qv = qv / g   qw = qw / g }
+        let mut fnz : i64 = qu
+        if fnz == 0i64 { fnz = qv }
+        if fnz == 0i64 { fnz = qw }
+        if fnz < 0i64 { qu = 0i64 - qu   qv = 0i64 - qv   qw = 0i64 - qw }
+    }
+    let rc : i64 = bg_bigthird(tg, pu, pv, pw, qu, qv, qw)
+    if rc != 1i64 { BG_ST[i as u64] = rc   return rc }
+    /* components: e-grid = P2 for curve B (CW=1), P1 for curve A (CW=2); f-grid = P0 */
+    let mut eg : i64 = 2i64
+    if BG_CW == 2i64 { eg = 1i64 }
+    if bge_eval(eg, 32i64, 33i64, 34i64, 41i64) < 0i64 { BG_ST[i as u64] = 0i64 - 3i64   return 0i64 - 3i64 }
+    if bge_eval(0i64, 32i64, 33i64, 34i64, 42i64) < 0i64 { BG_ST[i as u64] = 0i64 - 3i64   return 0i64 - 3i64 }
+    if bc_iszero(41i64) == 1i64 { BG_ST[i as u64] = 0i64 - 4i64   return 0i64 - 4i64 }   /* degenerate */
+    if bc_sgn(41i64) < 0i64 {
+        /* orient the identity: negate the point and both components */
+        let mut c2 : i64 = 32i64
+        while c2 <= 34i64 { if BC_N[c2 as u64] > 0i64 { BC_S[c2 as u64] = 0i64 - BC_S[c2 as u64] }   c2 = c2 + 1i64 }
+        if BC_N[41u64] > 0i64 { BC_S[41u64] = 0i64 - BC_S[41u64] }
+        if BC_N[42u64] > 0i64 { BC_S[42u64] = 0i64 - BC_S[42u64] }
+    }
+    /* persist into the result handles + render decimals */
+    let rb : i64 = 104i64 + (i * 5i64)
+    bc_copy(rb, 32i64)   bc_copy(rb + 1i64, 33i64)   bc_copy(rb + 2i64, 34i64)
+    bc_copy(rb + 3i64, 41i64)   bc_copy(rb + 4i64, 42i64)
+    bc_render(rb, i * 5i64)
+    bc_render(rb + 1i64, (i * 5i64) + 1i64)
+    bc_render(rb + 2i64, (i * 5i64) + 2i64)
+    bc_render(rb + 3i64, (i * 5i64) + 3i64)
+    bc_render(rb + 4i64, (i * 5i64) + 4i64)
+    BG_ST[i as u64] = 1i64
+    return 1i64
+}
+
+/* the identity re-check IN BIGINT: for harvested event i, verify the derivation identity
+ * P1(u,v,w) == 0 was already forced; here re-verify the ORIENTATION (e > 0) and that the
+ * stored point still evaluates to the stored (e, f) -- a self-consistency door for the gate. */
+fn bg_recheck(i: i64) -> i64 @export {
+    if BG_ST[i as u64] != 1i64 { return 0i64 }
+    let rb : i64 = 104i64 + (i * 5i64)
+    let mut eg : i64 = 2i64
+    if BG_CW == 2i64 { eg = 1i64 }
+    if bge_eval(BG_CW, rb, rb + 1i64, rb + 2i64, 43i64) < 0i64 { return 0i64 }
+    if bc_iszero(43i64) != 1i64 { return 0i64 }
+    if bge_eval(eg, rb, rb + 1i64, rb + 2i64, 43i64) < 0i64 { return 0i64 }
+    if bc_eq(43i64, rb + 3i64) != 1i64 { return 0i64 }
+    if bc_sgn(rb + 3i64) < 1i64 { return 0i64 }
+    if bge_eval(0i64, rb, rb + 1i64, rb + 2i64, 43i64) < 0i64 { return 0i64 }
+    if bc_eq(43i64, rb + 4i64) != 1i64 { return 0i64 }
+    return 1i64
+}
+
+/* i64 doors onto a harvested result (valid only while it FITS i64; -1 sentinel otherwise --
+ * the gate uses these for the small-point two-path only). */
+fn bg_res_fits(i: i64, f: i64) -> i64 @export {
+    let h : i64 = 104i64 + (i * 5i64) + f
+    if BC_N[h as u64] > 2i64 { return 0i64 }
+    if BC_N[h as u64] == 2i64 { if BC_L[((h * BCW) + 1i64) as u64] > 2147483647u64 { return 0i64 } }
+    return 1i64
+}
+fn bg_res_i64(i: i64, f: i64) -> i64 @export {
+    let h : i64 = 104i64 + (i * 5i64) + f
+    let mut v : i64 = 0i64
+    if BC_N[h as u64] >= 2i64 { v = (BC_L[((h * BCW) + 1i64) as u64] << 32u64) as i64 }
+    if BC_N[h as u64] >= 1i64 { v = v + (BC_L[(h * BCW) as u64] as i64) }
+    if bc_sgn(h) < 0i64 { v = 0i64 - v }
+    return v
+}
+
+/* ================= THE SMALL-POINT TWO-PATH + THE OFF-CURVE TOOTH ================= */
+
+/* run the BIG component extraction on an i64 point and compare with the i64 grid evaluator:
+ * 1 = both components agree (one derivation, two arithmetics, one truth). */
+fn bg_smallpoint(d: i64, curve: i64, u: i64, v: i64, w: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    BG_CW = 2i64
+    if curve == 2i64 { BG_CW = 1i64 }
+    let mut eg : i64 = 2i64
+    if BG_CW == 2i64 { eg = 1i64 }
+    bc_seti(44i64, u)   bc_seti(45i64, v)   bc_seti(46i64, w)
+    if bge_eval(eg, 44i64, 45i64, 46i64, 47i64) < 0i64 { return 0i64 - 1i64 }
+    if bge_eval(0i64, 44i64, 45i64, 46i64, 48i64) < 0i64 { return 0i64 - 1i64 }
+    bc_seti(49i64, mcv_eval(eg, u, v, w))
+    if bc_eq(47i64, 49i64) != 1i64 { return 0i64 }
+    bc_seti(49i64, mcv_eval(0i64, u, v, w))
+    if bc_eq(48i64, 49i64) != 1i64 { return 0i64 }
+    return 1i64
+}
+
+/* the off-curve defect tooth: a chord through an OFF-curve pair must be REJECTED by the
+ * bigint on-curve recheck (-2), never returned as a point. */
+fn bg_offcurve_tooth(d: i64, curve: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+    BG_CW = 2i64
+    if curve == 2i64 { BG_CW = 1i64 }
+    /* (1,1,0) and (0,1,1) are generically OFF these curves; the constructed "third" cannot
+     * land on the curve consistently -- the recheck must fire. */
+    return bg_bigthird(0i64, 1i64, 1i64, 0i64, 0i64, 1i64, 1i64)
+}
+
+/* ================= THE PURE-BIG GROWTH PROBE ================= */
+
+/* big pool: 24 triples at handles 164..235; the closure re-run with NO height cap -- only the
+ * limb envelope refuses.  Counts per pass pinned by the gate. */
+var BGB_N : i64
+var BGB_REF : i64          /* limb-envelope refusals, counted never dropped */
+var BGB_ADD : [i64; 4]     /* points added per pass */
+
+fn bgb_count() -> i64 @export { return BGB_N }
+fn bgb_refused() -> i64 @export { return BGB_REF }
+fn bgb_added(p: i64) -> i64 @export { return BGB_ADD[p as u64] }
+
+fn bgb_handle(i: i64, c: i64) -> i64 { return 164i64 + (i * 3i64) + c }
+
+/* big third-point where parents are BIG pool entries i, j (chords only in the probe: tangent
+ * directions need the big gradient -- priced, not smuggled; chords alone already decide growth). */
+fn bgb_third(i: i64, j: i64) -> i64 {
+    let mut c : i64 = 0i64
+    while c < 3i64 {
+        if bc_add(16i64 + c, bgb_handle(i, c), bgb_handle(j, c)) < 0i64 { return 0i64 - 3i64 }
+        if bc_sub(19i64 + c, bgb_handle(i, c), bgb_handle(j, c)) < 0i64 { return 0i64 - 3i64 }
+        c = c + 1i64
+    }
+    if bge_eval(BG_CW, 16i64, 17i64, 18i64, 28i64) < 0i64 { return 0i64 - 3i64 }
+    if bge_eval(BG_CW, 19i64, 20i64, 21i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+    if bc_sub(30i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+    if BC_N[30u64] > 0i64 { if (BC_L[(30i64 * BCW) as u64] & 1u64) != 0u64 { return 0i64 - 2i64 } }
+    bc_shr(30i64, 1i64)
+    if bc_add(31i64, 28i64, 29i64) < 0i64 { return 0i64 - 3i64 }
+    bc_shr(31i64, 1i64)
+    if bc_iszero(30i64) == 1i64 { if bc_iszero(31i64) == 1i64 { return 0i64 } }
+    c = 0i64
+    while c < 3i64 {
+        if bc_mul(35i64, 31i64, bgb_handle(i, c)) < 0i64 { return 0i64 - 3i64 }
+        if bc_mul(36i64, 30i64, bgb_handle(j, c)) < 0i64 { return 0i64 - 3i64 }
+        if bc_sub(32i64 + c, 35i64, 36i64) < 0i64 { return 0i64 - 3i64 }
+        c = c + 1i64
+    }
+    if bc_iszero(32i64) == 1i64 { if bc_iszero(33i64) == 1i64 { if bc_iszero(34i64) == 1i64 { return 0i64 } } }
+    bc_gcdmag(37i64, 32i64, 33i64)
+    bc_gcdmag(38i64, 37i64, 34i64)
+    c = 32i64
+    while c <= 34i64 {
+        let sgn : i64 = bc_sgn(c)
+        if bc_divexact(39i64, c, 38i64) < 0i64 { return 0i64 - 2i64 }
+        bc_copy(c, 39i64)
+        if sgn < 0i64 { BC_S[c as u64] = 0i64 - 1i64 }
+        c = c + 1i64
+    }
+    let mut lead : i64 = bc_sgn(32i64)
+    if lead == 0i64 { lead = bc_sgn(33i64) }
+    if lead == 0i64 { lead = bc_sgn(34i64) }
+    if lead < 0i64 {
+        c = 32i64
+        while c <= 34i64 { if BC_N[c as u64] > 0i64 { BC_S[c as u64] = 0i64 - BC_S[c as u64] }   c = c + 1i64 }
+    }
+    if bge_eval(BG_CW, 32i64, 33i64, 34i64, 40i64) < 0i64 { return 0i64 - 3i64 }
+    if bc_iszero(40i64) != 1i64 { return 0i64 - 2i64 }
+    return 1i64
+}
+
+/* the probe: seeds from the replay pool's first ns entries (i64), then `passes` chord passes
+ * with pool cap 24.  Returns final pool count; -2 defect. */
+fn bgb_probe(d: i64, curve: i64, ns: i64, passes: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    BG_CW = 2i64
+    if curve == 2i64 { BG_CW = 1i64 }
+    BGB_N = 0i64   BGB_REF = 0i64
+    let mut z : i64 = 0i64
+    while z < 4i64 { BGB_ADD[z as u64] = 0i64   z = z + 1i64 }
+    let mut i : i64 = 0i64
+    while i < ns {
+        bc_seti(bgb_handle(BGB_N, 0i64), BG_P[(i * 3i64) as u64])
+        bc_seti(bgb_handle(BGB_N, 1i64), BG_P[((i * 3i64) + 1i64) as u64])
+        bc_seti(bgb_handle(BGB_N, 2i64), BG_P[((i * 3i64) + 2i64) as u64])
+        BGB_N = BGB_N + 1i64
+        i = i + 1i64
+    }
+    let mut pass : i64 = 0i64
+    while pass < passes {
+        let n0 : i64 = BGB_N
+        let mut i2 : i64 = 0i64
+        while i2 < n0 {
+            let mut j2 : i64 = i2 + 1i64
+            while j2 < n0 {
+                let st : i64 = bgb_third(i2, j2)
+                if st == (0i64 - 2i64) { return 0i64 - 2i64 }
+                if st == (0i64 - 3i64) { BGB_REF = BGB_REF + 1i64 }
+                if st == 1i64 {
+                    /* dedup (either sign) against the big pool */
+                    let mut dup : i64 = 0i64
+                    let mut k : i64 = 0i64
+                    while k < BGB_N {
+                        let mut same : i64 = 1i64
+                        let mut neg : i64 = 1i64
+                        let mut c3 : i64 = 0i64
+                        while c3 < 3i64 {
+                            if bc_eq(32i64 + c3, bgb_handle(k, c3)) != 1i64 { same = 0i64 }
+                            bc_copy(50i64, bgb_handle(k, c3))
+                            if BC_N[50u64] > 0i64 { BC_S[50u64] = 0i64 - BC_S[50u64] }
+                            if bc_eq(32i64 + c3, 50i64) != 1i64 { neg = 0i64 }
+                            c3 = c3 + 1i64
+                        }
+                        if same == 1i64 { dup = 1i64 }
+                        if neg == 1i64 { dup = 1i64 }
+                        k = k + 1i64
+                    }
+                    if dup == 0i64 {
+                        if BGB_N < 24i64 {
+                            bc_copy(bgb_handle(BGB_N, 0i64), 32i64)
+                            bc_copy(bgb_handle(BGB_N, 1i64), 33i64)
+                            bc_copy(bgb_handle(BGB_N, 2i64), 34i64)
+                            BGB_N = BGB_N + 1i64
+                            BGB_ADD[pass as u64] = BGB_ADD[pass as u64] + 1i64
+                        } else { BGB_REF = BGB_REF + 1i64 }
+                    }
+                }
+                j2 = j2 + 1i64
+            }
+            i2 = i2 + 1i64
+        }
+        pass = pass + 1i64
+    }
+    return BGB_N
+}
+
+/* ================= THE NORM DOOR (campaign Phi item Phi-4 composes here) ================= */
+
+/* check N(alpha)^3 == N(alpha^3) where N(a,b,c) = a^3 + d b^3 + d^2 c^3 - 3 d a b c and
+ * alpha^3 = f + e*gamma (curve A: comps (f, e, 0)) or f + e*gamma^2 (curve B: (f, 0, e)).
+ * nalpha, f, e are i64; the cubes are BIG.  1 = the law holds. */
+fn bg_norm_mult(nalpha: i64, d: i64, f: i64, e: i64, curve: i64) -> i64 @export {
+    bc_seti(51i64, nalpha)
+    if bc_mul(52i64, 51i64, 51i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(53i64, 52i64, 51i64) < 0i64 { return 0i64 - 1i64 }        /* N(alpha)^3 */
+    /* N(a,b,c) with (a,b,c) = (f, e, 0) for curve A, (f, 0, e) for curve B */
+    let mut bb : i64 = e
+    let mut cc : i64 = 0i64
+    if curve == 2i64 { bb = 0i64   cc = e }
+    bc_seti(54i64, f)
+    if bc_mul(55i64, 54i64, 54i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(56i64, 55i64, 54i64) < 0i64 { return 0i64 - 1i64 }        /* f^3 */
+    bc_seti(54i64, bb)
+    if bc_mul(55i64, 54i64, 54i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(57i64, 55i64, 54i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(58i64, 57i64, d) < 0i64 { return 0i64 - 1i64 }           /* d b^3 */
+    bc_seti(54i64, cc)
+    if bc_mul(55i64, 54i64, 54i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(57i64, 55i64, 54i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(59i64, 57i64, d * d) < 0i64 { return 0i64 - 1i64 }       /* d^2 c^3 */
+    /* -3 d a b c: with one of b,c zero this is zero, but compute it honestly */
+    bc_seti(54i64, f)
+    if bc_muli(55i64, 54i64, bb) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(57i64, 55i64, cc) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(60i64, 57i64, 0i64 - (3i64 * d)) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(61i64, 56i64, 58i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(62i64, 61i64, 59i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(63i64, 62i64, 60i64) < 0i64 { return 0i64 - 1i64 }        /* N(alpha^3) */
+    return bc_eq(53i64, 63i64)
+}

@@ -171,6 +171,17 @@ fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 @export {
     return acc
 }
 
+/* coefficient read-door (campaign Phi: the bigint engine evaluates the SAME derived grids --
+ * one derivation, two arithmetics; never a re-derived surface). */
+fn mcv_coef(which: i64, idx: i64) -> i64 @export {
+    if idx < 0i64 { return 0i64 }
+    if idx > 63i64 { return 0i64 }
+    if which == 0i64 { return MCV_P0[idx as u64] }
+    if which == 1i64 { return MCV_P1[idx as u64] }
+    if which == 2i64 { return MCV_P2[idx as u64] }
+    return 0i64
+}
+
 /* the machine-checked completeness bridge: d is not a perfect cube (so t^3 - d has no integer
  * root; monic => no rational root; degree 3 => irreducible; {1,g,g^2} independent). */
 fn mcv_noncube(d: i64) -> i64 @export {

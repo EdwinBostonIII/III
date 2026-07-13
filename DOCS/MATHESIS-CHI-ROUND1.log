@@ -1,0 +1,106 @@
+CHI == CAMPAIGN CHI: THE CAPABILITY LIFT (unification of the standing organs) ==
+BJ CATALOGUE rows=9 both-judges-agree=9
+BJ JUDGED constructions=12 of 12
+BJ SIGN positive=12 window-scale=64
+BJ ORDER distinct=6 ascending-events 1 2 3 0 4 5
+BJ I0 (7497 + 8400*cbrt3 -5780*cbrt9)^3 = 3138045143940*cbrt9 -6090322207527
+BJ VERDICT: the 12 judge-envelope refusals are now JUDGED IDENTITIES (third judge,
+BJ   cube-and-compare + grid two-path); the six constructed points carry an EXACT ORDER
+T4F TWOPATH 1048576
+T4F BURNSIDE 10 3330 178981952
+T4F CENSUS tables=4294967296 inhabited=109 lawful=20596732 structures=860978 citizens=21
+T4F SYM 25 43968 7 anchor-mismatches=0
+T4F GROUPS z4-raw=12 v4-raw=4
+T4F CIT 30 4175729664 0 0 0 0 0 1 1 2 0 1 2 3 0 2 3 3
+T4F CIT 157 4242822144 0 0 0 0 0 1 1 1 0 1 2 3 0 3 3 3
+T4F CIT 285 4108637184 0 0 0 0 0 1 1 3 0 1 2 3 0 1 3 3
+T4F CIT 676 3631002852 0 1 2 3 0 1 3 2 0 3 2 1 0 2 1 3
+T4F CIT 1056 2470023993 1 2 3 0 3 0 1 2 1 2 3 0 3 0 1 2
+T4F CIT 1088 2520564585 1 2 2 1 3 0 0 3 0 3 3 0 2 1 1 2
+T4F CIT 1120 2620810185 1 2 0 3 3 0 2 1 2 1 3 0 0 3 1 2
+T4F CIT 1131 1260302820 0 1 2 3 1 0 3 2 2 3 1 0 3 2 0 1
+T4F CIT 1410 3392123056 0 0 3 2 0 0 3 2 3 3 2 0 2 2 0 3
+T4F CIT 1414 3392124080 0 0 3 2 0 1 3 2 3 3 2 0 2 2 0 3
+T4F CIT 1430 3631002624 0 0 0 0 0 1 3 2 0 3 2 1 0 2 1 3
+T4F CIT 1444 3387221220 0 1 2 3 0 1 2 3 0 1 2 3 1 2 0 3
+T4F CIT 1476 4255864320 0 0 0 0 2 1 1 1 3 2 2 2 1 3 3 3
+T4F CIT 1508 3526199160 0 2 3 1 3 1 0 2 1 3 2 0 2 0 1 3
+T4F CIT 1569 1313793252 0 1 2 3 0 1 2 3 2 3 0 1 2 3 0 1
+T4F CIT 1957 3840206052 0 1 2 3 0 1 2 3 0 1 2 3 0 1 2 3
+T4F CIT 2372 3681465600 0 0 0 0 1 1 3 2 2 3 2 1 3 2 1 3
+T4F CIT 3137 1594553760 0 0 2 2 1 1 3 3 2 2 0 0 3 3 1 1
+T4F CIT 3525 4289352960 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3
+T4F CIT 3682 1310450100 0 1 3 2 1 0 2 3 3 2 1 0 2 3 0 1
+T4F CIT 3691 458142180 0 1 2 3 1 0 3 2 2 3 0 1 3 2 1 0
+T4F LAWLESS classes=178120974
+T4F PRODUCT12 pairs=504
+T4F VERDICT: the 4^16 refusal is DISCHARGED -- 178,981,952 structures, 109 species,
+T4F   21 citizens (14 non-commutative, the projection among them); the commutative
+T4F   slice replayed inside it species-for-species; the two ontology organs UNIFIED
+T4F   by the carrier-12 product law
+MP d 2 3 0 0 0
+MP d 3 0 6 0 0
+MP d 4 0 3 0 0
+MP d 5 0 0 0 0
+MP d 6 6 0 0 0
+MP d 7 6 0 0 0
+MP d 9 6 0 0 0
+MP d 10 0 0 0 0
+MP d 11 0 0 0 0
+MP d 12 6 0 0 0
+MP d 13 0 0 0 0
+MP d 14 0 0 0 0
+MP d 15 6 0 0 0
+MP d 17 0 0 0 0
+MP d 18 0 6 0 0
+MP d 25 0 0 0 0
+MP d 36 0 6 0 1
+MP d 49 0 5 0 0
+MP d 225 0 3 0 0
+MP u 2 18 -35 24 3 0 0
+MP u 3 8 -4 -3 -2 0 0
+MP u 4 8 -35 3 12 0 0
+MP u 5 2 -1 4 -2 0 0
+MP u 6 2 -1 6 -3 0 0
+MP u 7 10 -40 -25 24 0 0
+MP u 9 8 -4 -2 -1 0 0
+MP u 10 2 -1 -6 3 0 0
+MP u 11 2 -1 -4 2 0 0
+MP u 12 0 0 0 0 0 0
+MP u 13 2 -4 -3 2 0 0
+MP u 14 4 -29 -12 -5 0 0
+MP u 15 2 -1 30 -12 0 0
+MP u 17 2 -18 7 0 0 0
+MP u 18 2 -1 3 -1 0 0
+MP u 25 0 0 0 0 0 0
+MP u 36 2 -1 -3 1 0 0
+MP u 49 0 0 0 0 0 0
+MP u 225 2 -1 -12 2 0 0
+MP H1 REFUTED witness d=5
+MP H2 REFUTED witness d=2
+MP H3 CONFIRMED-on-box
+MP H4 REFUTED witness d=14
+MP ORBIT-LAW d3B checks=324 d2A checks=81
+MP GAMMA2 d3B vanishing-pairs=3 of 15
+MP BIG-GAMMA2 c2-vanishing=3 c1-vanishing=3 of 15 -- the cross-orbit collapse EXTENDS to the 10^12 tier
+MP FIT signed-permutation matches=0 -- REFUTED: the entanglement is not a coordinate permutation
+MP FACTOR -249049 = 271 919
+MP NORM row0 N=-271 primes 271
+MP NORM row1 N=2757 primes 3 919
+MP NORM row2 N=919 primes 919
+MP NORM row3 N=-2439 primes 3 3 271
+MP NORM row4 N=-813 primes 3 271
+MP NORM row5 N=8271 primes 3 3 919
+MP NORM-LAW: the two d3B gamma-orbits carry the two primes of the fundamental product
+MP   (271 and 919); norms scale by exactly d per gamma-step
+MP D225 h60 code=300
+MPL# 12 0 18 60 0 6
+MPL# 13 1 10 200 0 0
+MPL# 14 2 5 31 21 39
+MPL# 15 0 19 60 4 0
+MPL# 16 1 11 200 0 0
+MPL# 17 2 5 37 39 48
+MPL rounds=18 head=18a0495c7556cc3011d64d4aa32b96f1a188773c18acbc7df24524a9539e67a6
+CHI VERDICT: EVERY NAMED ENVELOPE LIFTED -- the judge decides the harvested tier, the
+CHI   fourth token is censused in FULL, the pattern instrument tests its own laws, and
+CHI   the pilot's ledger extends -- seven certificates stand, the eighth is minted

@@ -1050,9 +1050,86 @@ non-commutative fourth token (4¹⁶, priced); the pilot's ledger past 12.
 
 ---
 
+## 20. CAMPAIGN Χ — THE CAPABILITY LIFT (gates 2717–2720, stage [15], CHI_CERT)
+
+The standing directive — *the most ambitious unification of preexisting systems and enhancement
+of every capability-bound implementation* — answered by LIFTING each named envelope through
+COMPOSITION of standing organs, the Φ4 pattern (organs → instrument) made the campaign's law.
+
+- **Χ1 — THE BIG JUDGE** (`aether/mathesis_bigjudge.iii`, gate 2717): the bigint limb core made
+  a PUBLIC organ surface (the `bc_*` doors exported from `mathesis_bigcurve`, plus `bc_neg`,
+  `bc_limb`, `bge_eval`, `bg_res_h`) and a THIRD judge built on it: elements of Q(∛d) as bigint
+  coefficient triples, the quotient-ring product `bj_qmul` (one door: cubes, γ-action,
+  cross-orbit products), the exact norm, and **`bj_sign` — exact sign at bigint scale**: γ
+  bracketed by a bit-descent integer cube root (the bracket G³ ≤ d·4^s < (G+1)³ VERIFIED each
+  scale), the element evaluated as an exact interval, escalation 64→1000 bits, and TERMINATION
+  A THEOREM (|α| ≥ |N(α)|/B² for nonzero in-envelope elements: a straddle past the schedule is
+  a self-detected defect −8, never an abstention; the coefficient envelope, 12 limbs, refuses
+  −9 BY NAME).  **The 12 harvested constructions are now JUDGED identities** (cube-and-compare
+  by `bj_qmul` AND the machine-derived grids via `bge_eval` — two arithmetics inside the third
+  judge), 9/9 catalogue agreement with judge #2, the perturbation tooth bites, every sign
+  decided at the FIRST window rung (s = 64, the certificate printed), and **THE ORDERING**: the
+  six constructed points carry an exact total order — events 1 < 2 < 3 < 0 < 4 < 5 — a
+  capability neither judge had.
+- **Χ2 — THE FULL FOURTH TOKEN** (the `mt4f_` tier of `aether/mathesis_tetra.iii`, gate 2718):
+  the 4¹⁶ refusal DISCHARGED — all 4,294,967,296 tables, twelve laws each, by total exhaustion
+  (the per-law early-exit checker TWO-PATHED against the standing `mt4_profile` over the whole
+  commutative slice; ~17 minutes, the price printed by the harness, `gate_slow`).  **THE
+  CENSUS: 109 inhabited species, 20,596,732 lawful tables, 860,978 lawful structures, 21
+  citizens** — 14 of them NON-commutative (the right-projection `T(x,y) = y` minted at profile
+  1957 with its exact seven-law set); **BURNSIDE analytic (cell-orbit product formula): n=2 →
+  10, n=3 → 3,330 (the forge's own numbers), n=4 → 178,981,952** — the machine's own count of
+  all binary operations on four tokens up to isomorphism; the lawless classes derived
+  (178,120,974); the sym sub-census equals the sealed Φ3 rows SPECIES-FOR-SPECIES (RAWC/ISOCC
+  == the standing organ's census over all 4096 profiles, zero mismatches); Z₄ raw 12 / V₄ raw
+  4; and **THE CROSS-CARRIER PRODUCT LAW: ontogenesis citizens (n=3) × full-token citizens
+  (n=4) at carrier 12, profile₁₂(A×B) == AND, 24 × 21 = 504 ordered pairs — the two ontology
+  organs UNIFIED by a verified law.**
+- **Χ3 — THE PATTERN INSTRUMENT** (`aether/mathesis_pattern.iii`, gate 2719; composes curve +
+  norm + bigjudge): the 19-d box re-hunted (62 verified finds): **A = {2,6,7,9,12,15},
+  B = {3,4,18,36,49,225}, ∅ = {5,10,11,13,14,17,25}** — and **d = 225, the involution partner
+  of the pilot's d = 15, delivers the predicted THREE curve-B identities at height 60: with it
+  H3, THE INVOLUTION CLASS LAW, is CONFIRMED over all seven in-box pairs {x, x² mod cubes}.**
+  The other hypotheses die with witnesses: H1 (collapse ⟺ unit at h≤40) REFUTED — d=5 has
+  units and no collapse, d=12 collapses with NO unit: after Φ's unit-action refutation, the
+  second machine proof that **the unit group does not drive the pattern**; H2 refuted (d=2);
+  H4 (multiplicativity) refuted at d=14, now a pinned verdict row.  **THE ORBIT LAW** —
+  (γⁱα)(γʲβ) == γ^(i+j)(αβ) — verified through the big judge over every ordered pair, 324/324
+  (d=3B) + 81/81 (d=2A): the mod-3 arithmetic of the cross-orbit product law is EXACT.  **THE
+  γ²-CENSUS**: exactly pairs (0,2), (1,3), (4,5) of the six d=3B rows multiply into Z + Zγ —
+  and AT THE HARVESTED 10¹² TIER the same census gives 3 c₂-vanishing AND 3 c₁-vanishing pairs
+  of 15: the collapse structure EXTENDS to the constructed points.  **THE FIT**: 0 of 384
+  signed-permutation maps relate any two rows — the entanglement is NOT a coordinate
+  permutation (an honest kill).  **THE NORM LAW** (the factor door, trial division to 10⁶,
+  cofactors named): the six d=3B row norms are −271, 2757, 919, −2439, −813, 8271 — **the two
+  γ-orbits carry the two primes 271 and 919 of the fundamental product −249049 = 271·919**,
+  scaled by exactly d = 3 per γ-step.  And **THE COMPOSITION TOOTH**: d=36's refused hit —
+  counted-but-undecidable since Υ — is now RECORDED (`mcv_refrow_*`, the refusal keeps its
+  coordinates) and DECIDED by the big judge (`bj_verify_raw` == 1).
+- **Χ4 — THE PILOT AT 18** (gate 2720): rounds 12–17 purely from the schedule — **round 15
+  found d = 19: FOUR curve-A identities, the pilot's FOURTH autonomous discovery and the first
+  non-{3,6} count** (at least two orbits, partners beyond height 60); round 12 pulled d=18's
+  predicted B:6 into the ledger itself; d=10/11 EMPTY at height 200; two local tables.  The
+  prefix law held (head(12) == the sealed Φ head byte-for-byte) and **head(18) =
+  18a0495c…67a6** pinned across two full runs.
+- **ENVELOPES LIFTED, NAMED**: `mcv_derive` d ≤ 49 → **d ≤ 4096** (the soundness bound printed:
+  6d² ≤ 1.01e8 coefficients, 5.2e16 eval terms at hmax 200); refused hunt hits now RECORDED
+  with coordinates; the judge's exact-sign envelope e ≤ 1,008,000 → 12-limb bigint; and **THE
+  STALE-TU LAW** at the harness head (a cached organ object older than its source is cleared
+  before any stage can reuse it — the #1 ledger trap is dead by construction).
+
+**Named frontier out of Χ**: d=19's missing partners (A:4 = one full orbit + a fragment — the
+γ-partners live above height 60; a priced 120-sweep); the WHY of the norm-prime law (the two
+orbits ↔ the two primes 271/919 — ideal/class structure, priced, not smuggled); the width-64
+rot-2op question (still queued per the frontier law); the lawless iso census computed directly
+(the 4.3e9-table canonical sweep, ~30 min, priced); the non-commutative product law beyond
+citizens; the pilot's ledger past 18.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
 `DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`,
 `DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`, `DOCS/MATHESIS-ONTO-ROUND1.log`,
-`DOCS/MATHESIS-PHI-ROUND1.log`.*
+`DOCS/MATHESIS-PHI-ROUND1.log`, `DOCS/MATHESIS-CHI-ROUND1.log`.*

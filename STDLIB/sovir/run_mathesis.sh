@@ -65,6 +65,35 @@ gate() {  # gate <corpus-base> [extra .o ...]  -> runs the KAT, expects exit 99
     return 0
 }
 
+gate_slow() {  # the same contract with a 2400 s budget -- for the PRICED sweeps (2718 pays
+               # the full 4^16 census, ~17 minutes: the price is printed, never hidden)
+    local base="$1"; shift
+    local obj="$RUN/$base.o" exe="$RUN/$base$BIN_SUFFIX"
+    timeout 240 "$IIIS" "$CORPUS/$base.iii" --compile-only --out "$obj" >/dev/null 2>"$RUN/$base.err" \
+        || { echo "[mathesis] RED: $base compile"; return 1; }
+    rm -f "$exe"
+    gcc "$obj" "$@" -Wl,--whole-archive "${SE[@]}" -Wl,--no-whole-archive "$LIB" -lws2_32 -lkernel32 -o "$exe" \
+        >>"$RUN/$base.err" 2>&1 || { echo "[mathesis] RED: $base link"; return 1; }
+    local staged="/tmp/mx_$$_$RANDOM$BIN_SUFFIX"
+    cp "$exe" "$staged"
+    timeout 2400 "$staged"; local rc=$?
+    rm -f "$staged"
+    [[ $rc -eq 99 ]] || { echo "[mathesis] RED: $base exit=$rc (want 99)"; return 1; }
+    echo "[mathesis] GREEN: $base"
+    return 0
+}
+
+# THE STALE-TU LAW (campaign Chi): a cached organ object older than its source is the #1
+# ledger trap (it struck in Tau; Phi dodged it by hand).  Clear every stale aether object
+# HERE, once, before any stage's [[ -f ]] guard can reuse it.
+for _src in "$III_ROOT"/STDLIB/iii/aether/*.iii; do
+    _b="$(basename "$_src" .iii)"
+    if [[ -f "$RUN/$_b.o" && "$_src" -nt "$RUN/$_b.o" ]]; then
+        echo "[mathesis] stale-TU law: clearing cached $_b.o (source is newer)"
+        rm -f "$RUN/$_b.o"
+    fi
+done
+
 # the exact-face TUs the telescope gates (2680/2681) link beyond the stdlib archive
 EXACTFACE=()
 for t in sqrt_sum_sign kfield exact_denest; do
@@ -274,6 +303,31 @@ grep -q "^MPL rounds=12 head=976d568997e508619cb0eb0e507f608571ca38cb1b969d03226
 PHI_CERT="$(printf '%s' "101122176|0|311056|12|6|3|27|156|0|25|43968|7|49|15|976d568997e508619cb0eb0e507f608571ca38cb1b969d0322692c4de8b70c7f" | sha256sum | cut -d' ' -f1)"
 echo "[mathesis] PHI_CERT = $PHI_CERT"
 echo "[mathesis] GREEN: campaign Phi sealed (the frontier drained: cost8(rot_k)=3 by 101M-candidate exhaustion; the 12 escaped chord-tangent constructions now EXACT bigint identities on 6 distinct points; the norm instrument's 3 total laws + the cross-orbit product law + the unit-action REFUTATION; the fourth token censused 43,968 structures double-counted with Burnside, Z_4 and V_4 minted as citizens, the product law total at carrier 16; the pilot's rounds 6..11 found d=15 and pinned head(12))"
+
+echo "[mathesis] == [15] CAMPAIGN CHI (the capability lift: judge #3, the full fourth token, the pattern instrument, the pilot at 18) =="
+for t in mathesis_bigjudge mathesis_pattern; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 111; }
+    RADFACE+=("$o")
+done
+gate 2717_mathesis_bigjudge   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 112   # the 12 refusals JUDGED; the exact ordering of the six points; 9/9 both-judge agreement
+echo "[mathesis] [15] gate 2718 pays the priced 4^16 sweep in full (~17 min at ~4.2M tables/s) ..."
+gate_slow 2718_mathesis_tetra_full "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 113   # 178,981,952 structures; 109 species; 21 citizens; the carrier-12 product law
+gate 2719_mathesis_pattern    "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 114   # the involution class law CONFIRMED on all 7 pairs (d=225: B(3)); H1/H2/H4 refuted with witnesses
+gate 2720_mathesis_pilot18    "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 115   # rounds 12..17: d=19 found (A:4); prefix law; head(18) pinned twice
+CHILOG="$III_ROOT/DOCS/MATHESIS-CHI-ROUND1.log"
+grep -q "^BJ JUDGED constructions=12 of 12$" "$CHILOG" || { echo "[mathesis] RED: chi judge row drifted"; exit 116; }
+grep -q "^BJ ORDER distinct=6 ascending-events 1 2 3 0 4 5$" "$CHILOG" || { echo "[mathesis] RED: the exact ordering drifted"; exit 117; }
+grep -q "^T4F BURNSIDE 10 3330 178981952$" "$CHILOG" || { echo "[mathesis] RED: the Burnside row drifted"; exit 118; }
+grep -q "^T4F CENSUS tables=4294967296 inhabited=109 lawful=20596732 structures=860978 citizens=21$" "$CHILOG" || { echo "[mathesis] RED: the full census drifted"; exit 119; }
+grep -q "^T4F PRODUCT12 pairs=504$" "$CHILOG" || { echo "[mathesis] RED: the carrier-12 product law drifted"; exit 120; }
+grep -q "^MP d 225 0 3 0 0$" "$CHILOG" || { echo "[mathesis] RED: the d=225 prediction row drifted"; exit 121; }
+grep -q "^MP H3 CONFIRMED-on-box$" "$CHILOG" || { echo "[mathesis] RED: the involution class law drifted"; exit 122; }
+grep -q "^MPL# 15 0 19 60 4 0$" "$CHILOG" || { echo "[mathesis] RED: the pilot's d=19 discovery drifted"; exit 123; }
+grep -q "^MPL rounds=18 head=18a0495c7556cc3011d64d4aa32b96f1a188773c18acbc7df24524a9539e67a6$" "$CHILOG" || { echo "[mathesis] RED: the pilot head(18) drifted"; exit 124; }
+CHI_CERT="$(printf '%s' "12|64|9|109|20596732|860978|21|178981952|504|62|10|300|324|81|3|3|3|0|271|919|4|18a0495c7556cc3011d64d4aa32b96f1a188773c18acbc7df24524a9539e67a6" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] CHI_CERT = $CHI_CERT"
+echo "[mathesis] GREEN: campaign Chi sealed (the judge's third universe decides the harvested tier and ORDERS the six constructed points; the 4^16 refusal DISCHARGED: 178,981,952 structures, 109 species, 21 citizens, the two ontology organs unified by the carrier-12 product law; the involution class law CONFIRMED over all seven pairs with d=225 delivering the predicted three curve-B identities; units REFUTED as the pattern's driver; the pilot found d=19 (A:4) and head(18) extends the ledger)"
 
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then

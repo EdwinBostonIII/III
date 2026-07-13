@@ -1,0 +1,193 @@
+/* 2717_mathesis_bigjudge.iii -- GATE for THE BIG JUDGE (campaign Chi, item Chi-1: the judge's
+ * third universe -- the exact-sign envelope lifted past e ~ 10^6 by unification with the
+ * bigint core).
+ *
+ * Campaign Phi left the 12 constructed d=3B identities as JUDGE-ENVELOPE REFUSALS (judge #2's
+ * exact-sign path keeps e^3*m inside i64, so |e| <= 1,008,000; the constructions carry
+ * e ~ 3*10^12).  This gate proves the lift:
+ *
+ *   - the 9-row catalogue (d=2A Ramanujan orbit + d=3B sigma rows at height 60) is judged by
+ *     BOTH judges -- mcv_verify (judge #2's pair-gcd route) and bj_verify_catrow (the bigjudge
+ *     route: quotient-ring cube AND the machine-derived grids evaluated in bigint) -- and the
+ *     verdicts agree row for row (9/9): THREE arithmetics, one truth;
+ *   - the standing Phi-2 replay + harvest re-runs, and ALL 12 escaped constructions are JUDGED
+ *     end-to-end: cube == (f, 0, e) with the collapse coefficient EXACTLY ZERO in bigint --
+ *     what was a refusal is now a theorem with a judge verdict;
+ *   - every judged alpha is POSITIVE with the sign decided at window scale s = 64 (the
+ *     certificate: gamma bracketed by a verified integer-cube-root bracket, the element
+ *     evaluated as an exact interval, termination guaranteed by |alpha| >= |N|/B^2);
+ *   - THE ORDERING: the six distinct constructed points carry an exact total order,
+ *     events 1 < 2 < 3 < 0 < 4 < 5 -- decided by bj_cmp, a capability neither judge had;
+ *   - teeth FIRST: out-of-envelope coefficients refuse -9 BY NAME; a cube-d refuses; a bumped
+ *     coefficient breaks its identity while the unperturbed row still judges;
+ *   - the small anchors: cbrt2*cbrt4 == 2 by quotient product; sign(1 - cbrt2) == -1;
+ *     N(1 + gamma + gamma^2) == +1 at d=2 (the fundamental unit's norm, rendered "1").
+ *
+ * WHAT THE JUDGE PINNED (observed 2026-07-13): the first judged identity is the sealed
+ *   (7497 + 8400*cbrt3 - 5780*cbrt9)^3 = 3138045143940*cbrt9 - 6090322207527
+ * re-delivered through the judge's own i64 doors.
+ * EXIT 99. */
+module corpus_2717_mathesis_bigjudge
+
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_verify(d: i64, curve: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bg_replay(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_evn() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_harvest(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_recheck(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_h(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_fits(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_i64(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_seti(h: i64, v: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_shl(h: i64, nb: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_eq(a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bj_set(k: i64, u: i64, v: i64, w: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_seth(k: i64, hu: i64, hv: i64, hw: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_c(k: i64, c: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_bump(k: i64, c: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_eq(a: i64, b: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_qmul(dst: i64, a: i64, b: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_cube(dst: i64, a: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_norm(k: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_sign(k: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_sign_s() -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_cmp(a: i64, b: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_catrow(i: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_harvest(i: i64, d: i64, curve: i64) -> i64 from "mathesis_bigjudge.iii"
+
+var DIX : [i64; 12]
+var ORD : [i64; 6]
+
+fn main() -> i32 {
+    /* [T1] TEETH FIRST: the envelope refusal by name (a 16-limb coefficient) */
+    bc_seti(88i64, 1i64)
+    if bc_shl(88i64, 500i64) < 0i64 { return 10i32 }
+    bj_seth(0i64, 88i64, 88i64, 88i64)
+    if bj_sign(0i64, 2i64) != (0i64 - 9i64) { return 11i32 }
+    /* [T2] the cube-d guard: d = 8 must refuse (gamma would be rational) */
+    bj_set(0i64, 1i64, 1i64, 0i64)
+    if bj_sign(0i64, 8i64) != (0i64 - 9i64) { return 12i32 }
+    /* [T3] the small anchors: cbrt2*cbrt4 == 2; sign(1 - cbrt2) == -1; N(1+g+g^2) == 1 at d=2 */
+    bj_set(0i64, 0i64, 1i64, 0i64)
+    bj_set(1i64, 0i64, 0i64, 1i64)
+    if bj_qmul(2i64, 0i64, 1i64, 2i64) != 0i64 { return 13i32 }
+    bj_set(3i64, 2i64, 0i64, 0i64)
+    if bj_eq(2i64, 3i64) != 1i64 { return 14i32 }
+    bj_set(0i64, 1i64, 0i64 - 1i64, 0i64)
+    if bj_sign(0i64, 2i64) != (0i64 - 1i64) { return 15i32 }
+    bj_set(0i64, 1i64, 1i64, 1i64)
+    if bj_norm(0i64, 2i64) != 1i64 { return 16i32 }
+    bc_render(99i64, 60i64)
+    if bg_diglen(60i64) != 1i64 { return 17i32 }
+    if bg_digat(60i64, 0i64) != 49i64 { return 17i32 }
+    /* [H] the catalogue: d=2 A + d=3 B at height 60 */
+    mcv_hunt_reset()
+    if mcv_hunt(2i64, 1i64, 60i64) != 3i64 { return 20i32 }
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 21i32 }
+    if mcv_found() != 9i64 { return 22i32 }
+    /* [A] every row through BOTH judges, verdicts agreeing 9/9 */
+    let mut agree : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 9i64 {
+        let v2 : i64 = mcv_verify(mcv_row_d(i), mcv_row_c(i), mcv_row_u(i), mcv_row_v(i), mcv_row_w(i), mcv_row_e(i), mcv_row_f(i))
+        let vb : i64 = bj_verify_catrow(i)
+        if v2 == 1i64 { if vb == 1i64 { agree = agree + 1i64 } }
+        i = i + 1i64
+    }
+    if agree != 9i64 { return 23i32 }
+    /* [R] the replay + harvest (the sealed Phi-2 flow: pool 9, escapes 12) */
+    if bg_replay(3i64, 2i64) != 9i64 { return 30i32 }
+    if bg_evn() != 12i64 { return 31i32 }
+    let mut judged : i64 = 0i64
+    i = 0i64
+    while i < 12i64 {
+        if bg_harvest(i) != 1i64 { return 32i32 }
+        if bg_recheck(i) != 1i64 { return 33i32 }
+        if bj_verify_harvest(i, 3i64, 2i64) == 1i64 { judged = judged + 1i64 }
+        i = i + 1i64
+    }
+    if judged != 12i64 { return 34i32 }
+    /* [I] the first judged identity through the judge's own i64 doors */
+    if bg_res_fits(0i64, 0i64) != 1i64 { return 35i32 }
+    if bg_res_i64(0i64, 0i64) != 7497i64 { return 36i32 }
+    if bg_res_i64(0i64, 1i64) != 8400i64 { return 36i32 }
+    if bg_res_i64(0i64, 2i64) != (0i64 - 5780i64) { return 36i32 }
+    if bg_res_i64(0i64, 3i64) != 3138045143940i64 { return 36i32 }
+    if bg_res_i64(0i64, 4i64) != (0i64 - 6090322207527i64) { return 36i32 }
+    /* [T4] the perturbation tooth: a bumped coefficient breaks the cube; unperturbed re-judges */
+    bj_seth(2i64, bg_res_h(0i64, 0i64), bg_res_h(0i64, 1i64), bg_res_h(0i64, 2i64))
+    if bj_bump(2i64, 0i64) < 0i64 { return 40i32 }
+    if bj_cube(3i64, 2i64, 3i64) < 0i64 { return 41i32 }
+    if bc_eq(bj_c(3i64, 0i64), bg_res_h(0i64, 4i64)) != 0i64 { return 42i32 }
+    if bj_verify_harvest(0i64, 3i64, 2i64) != 1i64 { return 43i32 }
+    /* [S] every judged alpha POSITIVE, decided at window scale 64 */
+    let mut pos : i64 = 0i64
+    let mut smax : i64 = 0i64
+    i = 0i64
+    while i < 12i64 {
+        bj_seth(5i64, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+        if bj_sign(5i64, 3i64) == 1i64 { pos = pos + 1i64 }
+        if bj_sign_s() > smax { smax = bj_sign_s() }
+        i = i + 1i64
+    }
+    if pos != 12i64 { return 50i32 }
+    if smax != 64i64 { return 51i32 }
+    /* [D] the six distinct points (the sealed pair structure), slots 0..5 */
+    let mut nd : i64 = 0i64
+    i = 0i64
+    while i < 12i64 {
+        bj_seth(7i64, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+        let mut dup : i64 = 0i64
+        let mut k : i64 = 0i64
+        while k < nd {
+            if bj_eq(7i64, k) == 1i64 { dup = 1i64   k = nd }
+            k = k + 1i64
+        }
+        if dup == 0i64 {
+            if nd >= 6i64 { return 60i32 }
+            bj_seth(nd, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+            DIX[nd as u64] = i
+            nd = nd + 1i64
+        }
+        i = i + 1i64
+    }
+    if nd != 6i64 { return 61i32 }
+    /* [O] THE ORDERING: exact total order 1 < 2 < 3 < 0 < 4 < 5 (event indices) */
+    i = 0i64
+    while i < 6i64 { ORD[i as u64] = i   i = i + 1i64 }
+    let mut a : i64 = 0i64
+    while a < 6i64 {
+        let mut best : i64 = a
+        let mut b : i64 = a + 1i64
+        while b < 6i64 {
+            let cr : i64 = bj_cmp(ORD[b as u64], ORD[best as u64], 3i64)
+            if cr == (0i64 - 9i64) { return 62i32 }
+            if cr == (0i64 - 8i64) { return 63i32 }
+            if cr == (0i64 - 1i64) { best = b }
+            b = b + 1i64
+        }
+        let t : i64 = ORD[a as u64]
+        ORD[a as u64] = ORD[best as u64]
+        ORD[best as u64] = t
+        a = a + 1i64
+    }
+    if DIX[ORD[0u64] as u64] != 1i64 { return 64i32 }
+    if DIX[ORD[1u64] as u64] != 2i64 { return 64i32 }
+    if DIX[ORD[2u64] as u64] != 3i64 { return 64i32 }
+    if DIX[ORD[3u64] as u64] != 0i64 { return 64i32 }
+    if DIX[ORD[4u64] as u64] != 4i64 { return 64i32 }
+    if DIX[ORD[5u64] as u64] != 5i64 { return 64i32 }
+    return 99i32
+}

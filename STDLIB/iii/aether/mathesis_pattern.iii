@@ -1,0 +1,433 @@
+/* aether/mathesis_pattern.iii -- THE PATTERN INSTRUMENT (campaign Chi, item Chi-3: the WHY of
+ * the collapse pattern attacked with composed organs -- and the involution's outstanding
+ * prediction, d = 225, executed).
+ *
+ * The standing open question (Sigma -> Tau -> Upsilon -> Phi): which cube-free d collapse on
+ * which curve -- A = {2,6,7,12,15}, B = {3}, involution partners swap, 14 = 2*7 is EMPTY.
+ * This organ turns the WHY into machine-tested structure:
+ *
+ *   THE SCAN        the whole 19-d box {2,3,4,5,6,7,9,10,11,12,13,14,15,17,18,25,36,49,225}
+ *                   re-hunted per d at height 60, both curves, refusals COUNTED AND RECORDED
+ *                   (the mcv_refrow_* store this campaign added -- a refusal keeps its exact
+ *                   coordinates now).
+ *   THE UNIT TABLE  mn_unit_census at height 40 per d: nontrivial-unit existence, the first
+ *                   stored unit, and whether it sits ON either collapse surface.
+ *   THE HYPOTHESES  candidate laws DECIDED over the box, each CONFIRMED or REFUTED with a
+ *                   witness -- never asserted: H1 collapse <=> nontrivial unit; H2 A-collapse
+ *                   <=> unit on the A-surface; H3 the involution class law over all 7 in-box
+ *                   pairs; H4 multiplicativity (the 14 = 2*7 refutation, now a pinned row).
+ *   THE ORBIT LAW   (gamma^i alpha)(gamma^j beta) == gamma^(i+j) (alpha beta) verified through
+ *                   THE BIG JUDGE over every ordered pair of catalogue rows -- the exact
+ *                   arithmetic behind the cross-orbit product law's mod-3 structure.
+ *   THE GAMMA^2 CENSUS  which unordered row-pair products collapse into Z + Z*gamma (the
+ *                   gamma^2 coefficient EXACTLY ZERO in bigint) -- at catalogue scale AND at
+ *                   the harvested 10^12 tier (the six constructed points).
+ *   THE FIT         the exact signed-permutation map between entangled rows searched over all
+ *                   6 x 8 candidates per ordered pair -- pinned or refuted, never guessed.
+ *   THE FACTOR DOOR trial division to 10^6 (partial factorization NAMED, never silent).
+ *   d = 225         the involution partner of the pilot's d = 15 (A): predicted B-collapse;
+ *                   hunted at 60 then 120; every judge-#2 refusal DECIDED by the big judge
+ *                   through bj_verify_raw -- the composition this campaign built.
+ *
+ * Gate: corpus/2719_mathesis_pattern.  Stream: DOCS/MATHESIS-CHI-ROUND1.log (MP rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_curve (hunt, refrows, eval) +
+ * mathesis_norm (unit census) + mathesis_bigjudge (qmul, verify_raw) doors only.
+ * ZERO-CASCADE: standalone aether TU, exported doors only. */
+module mathesis_pattern
+
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refused() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrows() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mn_unit_census(d: i64, h: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_nontrivial() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_units_stored() -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mn_unit(i: i64, c: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn bj_set(k: i64, u: i64, v: i64, w: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_seth(k: i64, hu: i64, hv: i64, hw: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_copy(dst: i64, src: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_c(k: i64, c: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_eq(a: i64, b: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_qmul(dst: i64, a: i64, b: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_raw(d: i64, c: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bg_res_h(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_iszero(h: i64) -> i64 from "mathesis_bigcurve.iii"
+
+/* ---- the box ---- */
+const MP_ND : i64 = 19i64
+var MP_DS : [i64; 19]
+fn mp_init() -> i32 {
+    if MP_DS[0u64] == 2i64 { return 0i32 }
+    MP_DS[0u64] = 2i64    MP_DS[1u64] = 3i64    MP_DS[2u64] = 4i64    MP_DS[3u64] = 5i64
+    MP_DS[4u64] = 6i64    MP_DS[5u64] = 7i64    MP_DS[6u64] = 9i64    MP_DS[7u64] = 10i64
+    MP_DS[8u64] = 11i64   MP_DS[9u64] = 12i64   MP_DS[10u64] = 13i64  MP_DS[11u64] = 14i64
+    MP_DS[12u64] = 15i64  MP_DS[13u64] = 17i64  MP_DS[14u64] = 18i64  MP_DS[15u64] = 25i64
+    MP_DS[16u64] = 36i64  MP_DS[17u64] = 49i64  MP_DS[18u64] = 225i64
+    return 0i32
+}
+fn mp_nd() -> i64 @export { mp_init()   return MP_ND }
+fn mp_d(i: i64) -> i64 @export { mp_init()   return MP_DS[i as u64] }
+
+/* ---- THE SCAN: the whole box at height 60, both curves, per-d fresh store ---- */
+var MP_A : [i64; 19]
+var MP_B : [i64; 19]
+var MP_RA : [i64; 19]
+var MP_RB : [i64; 19]
+fn mp_a(i: i64) -> i64 @export { return MP_A[i as u64] }
+fn mp_b(i: i64) -> i64 @export { return MP_B[i as u64] }
+fn mp_ra(i: i64) -> i64 @export { return MP_RA[i as u64] }
+fn mp_rb(i: i64) -> i64 @export { return MP_RB[i as u64] }
+fn mp_scan() -> i64 @export {
+    mp_init()
+    let mut total : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < MP_ND {
+        let d : i64 = MP_DS[i as u64]
+        mcv_hunt_reset()
+        let a : i64 = mcv_hunt(d, 1i64, 60i64)
+        if a < 0i64 { return 0i64 - (100i64 + i) }
+        let ra : i64 = mcv_refused()
+        let b : i64 = mcv_hunt(d, 2i64, 60i64)
+        if b < 0i64 { return 0i64 - (200i64 + i) }
+        MP_A[i as u64] = a
+        MP_B[i as u64] = b
+        MP_RA[i as u64] = ra
+        MP_RB[i as u64] = mcv_refused() - ra
+        total = total + a + b
+        i = i + 1i64
+    }
+    return total
+}
+
+/* ---- THE UNIT TABLE at height 40 ---- */
+var MP_UT : [i64; 19]      /* nontrivial units found */
+var MP_FU : [i64; 57]      /* first stored unit (u, v, w) per d */
+var MP_ONA : [i64; 19]     /* that unit on the A-surface (P2 == 0)? */
+var MP_ONB : [i64; 19]     /* ... on the B-surface (P1 == 0)? */
+fn mp_ut(i: i64) -> i64 @export { return MP_UT[i as u64] }
+fn mp_fu(i: i64, c: i64) -> i64 @export { return MP_FU[((i * 3i64) + c) as u64] }
+fn mp_ona(i: i64) -> i64 @export { return MP_ONA[i as u64] }
+fn mp_onb(i: i64) -> i64 @export { return MP_ONB[i as u64] }
+fn mp_units(h: i64) -> i64 @export {
+    mp_init()
+    let mut found : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < MP_ND {
+        let d : i64 = MP_DS[i as u64]
+        mn_unit_census(d, h)
+        MP_UT[i as u64] = mn_units_nontrivial()
+        MP_FU[(i * 3i64) as u64] = 0i64
+        MP_FU[((i * 3i64) + 1i64) as u64] = 0i64
+        MP_FU[((i * 3i64) + 2i64) as u64] = 0i64
+        MP_ONA[i as u64] = 0i64
+        MP_ONB[i as u64] = 0i64
+        if mn_units_stored() > 0i64 {
+            let u : i64 = mn_unit(0i64, 0i64)
+            let v : i64 = mn_unit(0i64, 1i64)
+            let w : i64 = mn_unit(0i64, 2i64)
+            MP_FU[(i * 3i64) as u64] = u
+            MP_FU[((i * 3i64) + 1i64) as u64] = v
+            MP_FU[((i * 3i64) + 2i64) as u64] = w
+            if mcv_derive(d) == 0i32 {
+                if mcv_eval(2i64, u, v, w) == 0i64 { MP_ONA[i as u64] = 1i64 }
+                if mcv_eval(1i64, u, v, w) == 0i64 { MP_ONB[i as u64] = 1i64 }
+            }
+            found = found + 1i64
+        }
+        i = i + 1i64
+    }
+    return found
+}
+
+/* ---- THE HYPOTHESES, decided over the box (run mp_scan + mp_units first) ---- */
+var MP_H : [i64; 5]        /* verdict per hypothesis: 1 CONFIRMED-on-box / 0 REFUTED */
+var MP_HW : [i64; 5]       /* the refuting witness d (or -1) */
+fn mp_h(k: i64) -> i64 @export { return MP_H[k as u64] }
+fn mp_hw(k: i64) -> i64 @export { return MP_HW[k as u64] }
+fn mp_idx_of(d: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < MP_ND { if MP_DS[i as u64] == d { return i }   i = i + 1i64 }
+    return 0i64 - 1i64
+}
+fn mp_hypo() -> i64 @export {
+    mp_init()
+    let mut k : i64 = 0i64
+    while k < 5i64 { MP_H[k as u64] = 1i64   MP_HW[k as u64] = 0i64 - 1i64   k = k + 1i64 }
+    /* H1: collapse <=> a nontrivial unit exists at h <= 40 */
+    let mut i : i64 = 0i64
+    while i < MP_ND {
+        let col : i64 = MP_A[i as u64] + MP_B[i as u64]
+        let mut lhs : i64 = 0i64
+        if col > 0i64 { lhs = 1i64 }
+        let mut rhs : i64 = 0i64
+        if MP_UT[i as u64] > 0i64 { rhs = 1i64 }
+        if lhs != rhs { MP_H[1u64] = 0i64   if MP_HW[1u64] < 0i64 { MP_HW[1u64] = MP_DS[i as u64] } }
+        i = i + 1i64
+    }
+    /* H2: A-collapse <=> the first unit is ON the A-surface */
+    i = 0i64
+    while i < MP_ND {
+        let mut lhs2 : i64 = 0i64
+        if MP_A[i as u64] > 0i64 { lhs2 = 1i64 }
+        if lhs2 != MP_ONA[i as u64] { MP_H[2u64] = 0i64   if MP_HW[2u64] < 0i64 { MP_HW[2u64] = MP_DS[i as u64] } }
+        i = i + 1i64
+    }
+    /* H3: the involution class law over the 7 in-box pairs (x, x^2 mod cubes) */
+    var pa : [i64; 7]
+    pa[0u64] = 2i64   pa[1u64] = 3i64   pa[2u64] = 5i64   pa[3u64] = 6i64
+    pa[4u64] = 7i64   pa[5u64] = 12i64   pa[6u64] = 15i64
+    var pb : [i64; 7]
+    pb[0u64] = 4i64   pb[1u64] = 9i64   pb[2u64] = 25i64   pb[3u64] = 36i64
+    pb[4u64] = 49i64   pb[5u64] = 18i64   pb[6u64] = 225i64
+    k = 0i64
+    while k < 7i64 {
+        let xi : i64 = mp_idx_of(pa[k as u64])
+        let yi : i64 = mp_idx_of(pb[k as u64])
+        let mut ax : i64 = 0i64
+        if MP_A[xi as u64] > 0i64 { ax = 1i64 }
+        let mut by : i64 = 0i64
+        if MP_B[yi as u64] > 0i64 { by = 1i64 }
+        if ax != by { MP_H[3u64] = 0i64   if MP_HW[3u64] < 0i64 { MP_HW[3u64] = pa[k as u64] } }
+        let mut bx : i64 = 0i64
+        if MP_B[xi as u64] > 0i64 { bx = 1i64 }
+        let mut ay : i64 = 0i64
+        if MP_A[yi as u64] > 0i64 { ay = 1i64 }
+        if bx != ay { MP_H[3u64] = 0i64   if MP_HW[3u64] < 0i64 { MP_HW[3u64] = pa[k as u64] } }
+        k = k + 1i64
+    }
+    /* H4: multiplicativity -- 2 and 7 collapse, so 14 must: the box refutes it */
+    let i2 : i64 = mp_idx_of(2i64)
+    let i7 : i64 = mp_idx_of(7i64)
+    let i14 : i64 = mp_idx_of(14i64)
+    if (MP_A[i2 as u64] + MP_B[i2 as u64]) > 0i64 {
+        if (MP_A[i7 as u64] + MP_B[i7 as u64]) > 0i64 {
+            if (MP_A[i14 as u64] + MP_B[i14 as u64]) == 0i64 { MP_H[4u64] = 0i64   MP_HW[4u64] = 14i64 }
+        }
+    }
+    return (MP_H[1u64] * 1000i64) + (MP_H[2u64] * 100i64) + (MP_H[3u64] * 10i64) + MP_H[4u64]
+}
+
+/* ---- THE ORBIT LAW through the big judge: hunts (d, curve), then verifies
+ *      (g^i a)(g^j b) == g^(i+j) (a b) for every ordered row pair, i, j in 0..2.
+ *      Returns checks verified; negative = the first failure encoded. ---- */
+fn mp_orbit_law(d: i64, curve: i64) -> i64 @export {
+    mcv_hunt_reset()
+    let n : i64 = mcv_hunt(d, curve, 60i64)
+    if n < 0i64 { return 0i64 - 1i64 }
+    if n < 1i64 { return 0i64 }
+    bj_set(0i64, 0i64, 1i64, 0i64)                 /* gamma */
+    let mut checks : i64 = 0i64
+    let mut r : i64 = 0i64
+    while r < n {
+        let mut s : i64 = 0i64
+        while s < n {
+            bj_set(1i64, mcv_row_u(r), mcv_row_v(r), mcv_row_w(r))
+            bj_set(2i64, mcv_row_u(s), mcv_row_v(s), mcv_row_w(s))
+            if bj_qmul(7i64, 1i64, 2i64, d) < 0i64 { return 0i64 - 2i64 }     /* alpha beta */
+            let mut i : i64 = 0i64
+            while i < 3i64 {
+                let mut j : i64 = 0i64
+                while j < 3i64 {
+                    bj_copy(3i64, 1i64)
+                    let mut k : i64 = 0i64
+                    while k < i { if bj_qmul(3i64, 3i64, 0i64, d) < 0i64 { return 0i64 - 2i64 }   k = k + 1i64 }
+                    bj_copy(4i64, 2i64)
+                    k = 0i64
+                    while k < j { if bj_qmul(4i64, 4i64, 0i64, d) < 0i64 { return 0i64 - 2i64 }   k = k + 1i64 }
+                    if bj_qmul(5i64, 3i64, 4i64, d) < 0i64 { return 0i64 - 2i64 }
+                    bj_copy(6i64, 7i64)
+                    k = 0i64
+                    while k < (i + j) { if bj_qmul(6i64, 6i64, 0i64, d) < 0i64 { return 0i64 - 2i64 }   k = k + 1i64 }
+                    if bj_eq(5i64, 6i64) != 1i64 { return 0i64 - 3i64 }
+                    checks = checks + 1i64
+                    j = j + 1i64
+                }
+                i = i + 1i64
+            }
+            s = s + 1i64
+        }
+        r = r + 1i64
+    }
+    return checks
+}
+
+/* ---- THE GAMMA^2 CENSUS over unordered catalogue row pairs: which products land in
+ *      Z + Z*gamma (c2 == 0)?  Returns the vanishing count; the pair pattern via doors. ---- */
+var MP_GZ : [i64; 64]      /* per pair (packed r*16+s): 1 = c2 vanishes */
+var MP_GZN : i64
+fn mp_gz(k: i64) -> i64 @export { return MP_GZ[k as u64] }
+fn mp_gzn() -> i64 @export { return MP_GZN }
+fn mp_gamma2_pairs(d: i64, curve: i64) -> i64 @export {
+    mcv_hunt_reset()
+    let n : i64 = mcv_hunt(d, curve, 60i64)
+    if n < 0i64 { return 0i64 - 1i64 }
+    MP_GZN = 0i64
+    let mut vanish : i64 = 0i64
+    let mut r : i64 = 0i64
+    while r < n {
+        let mut s : i64 = r + 1i64
+        while s < n {
+            bj_set(1i64, mcv_row_u(r), mcv_row_v(r), mcv_row_w(r))
+            bj_set(2i64, mcv_row_u(s), mcv_row_v(s), mcv_row_w(s))
+            if bj_qmul(5i64, 1i64, 2i64, d) < 0i64 { return 0i64 - 2i64 }
+            let mut z : i64 = 0i64
+            if bc_iszero(bj_c(5i64, 2i64)) == 1i64 { z = 1i64   vanish = vanish + 1i64 }
+            if MP_GZN < 64i64 { MP_GZ[MP_GZN as u64] = (((r * 16i64) + s) * 2i64) + z   MP_GZN = MP_GZN + 1i64 }
+            s = s + 1i64
+        }
+        r = r + 1i64
+    }
+    return vanish
+}
+
+/* the same census at the HARVESTED tier: the six constructed points (events 0..5, post
+ * bg_replay + bg_harvest).  Returns the c2-vanishing count over the 15 unordered pairs;
+ * the c1-vanishing count via mp_bg1(). */
+var MP_BG1 : i64
+fn mp_bg1() -> i64 @export { return MP_BG1 }
+fn mp_big_gamma2(d: i64) -> i64 @export {
+    MP_BG1 = 0i64
+    let mut vanish : i64 = 0i64
+    let mut r : i64 = 0i64
+    while r < 6i64 {
+        let mut s : i64 = r + 1i64
+        while s < 6i64 {
+            bj_seth(1i64, bg_res_h(r, 0i64), bg_res_h(r, 1i64), bg_res_h(r, 2i64))
+            bj_seth(2i64, bg_res_h(s, 0i64), bg_res_h(s, 1i64), bg_res_h(s, 2i64))
+            if bj_qmul(5i64, 1i64, 2i64, d) < 0i64 { return 0i64 - 2i64 }
+            if bc_iszero(bj_c(5i64, 2i64)) == 1i64 { vanish = vanish + 1i64 }
+            if bc_iszero(bj_c(5i64, 1i64)) == 1i64 { MP_BG1 = MP_BG1 + 1i64 }
+            s = s + 1i64
+        }
+        r = r + 1i64
+    }
+    return vanish
+}
+
+/* ---- THE FIT: the exact signed-permutation map between rows (i64 coordinates).
+ *      For every ordered row pair (r, s), r != s, search sigma in S_3 x {+-1}^3 with
+ *      (u_s, v_s, w_s) == signs * sigma(u_r, v_r, w_r).  Matches stored packed. ---- */
+var MP_FT : [i64; 64]      /* packed: ((r*16 + s)*6 + perm)*8 + signmask */
+var MP_FTN : i64
+fn mp_ft(k: i64) -> i64 @export { return MP_FT[k as u64] }
+fn mp_ftn() -> i64 @export { return MP_FTN }
+var MP_PP : [i64; 18]      /* the 6 perms of (0,1,2) */
+var MP_SRC : [i64; 3]      /* global scratch (two-local-array codegen hazard, 2026-07-13) */
+fn mp_fit(d: i64, curve: i64) -> i64 @export {
+    MP_PP[0u64] = 0i64   MP_PP[1u64] = 1i64   MP_PP[2u64] = 2i64
+    MP_PP[3u64] = 0i64   MP_PP[4u64] = 2i64   MP_PP[5u64] = 1i64
+    MP_PP[6u64] = 1i64   MP_PP[7u64] = 0i64   MP_PP[8u64] = 2i64
+    MP_PP[9u64] = 1i64   MP_PP[10u64] = 2i64   MP_PP[11u64] = 0i64
+    MP_PP[12u64] = 2i64   MP_PP[13u64] = 0i64   MP_PP[14u64] = 1i64
+    MP_PP[15u64] = 2i64   MP_PP[16u64] = 1i64   MP_PP[17u64] = 0i64
+    mcv_hunt_reset()
+    let n : i64 = mcv_hunt(d, curve, 60i64)
+    if n < 0i64 { return 0i64 - 1i64 }
+    MP_FTN = 0i64
+    let mut r : i64 = 0i64
+    while r < n {
+        let mut s : i64 = 0i64
+        while s < n {
+            if s != r {
+                let mut p : i64 = 0i64
+                while p < 6i64 {
+                    let mut sm : i64 = 0i64
+                    while sm < 8i64 {
+                        MP_SRC[0u64] = mcv_row_u(r)
+                        MP_SRC[1u64] = mcv_row_v(r)
+                        MP_SRC[2u64] = mcv_row_w(r)
+                        let mut ok : i64 = 1i64
+                        let mut c : i64 = 0i64
+                        while c < 3i64 {
+                            let mut v : i64 = MP_SRC[MP_PP[((p * 3i64) + c) as u64] as u64]
+                            if (((sm as u64) >> (c as u64)) & 1u64) == 1u64 { v = 0i64 - v }
+                            let mut tgt : i64 = mcv_row_u(s)
+                            if c == 1i64 { tgt = mcv_row_v(s) }
+                            if c == 2i64 { tgt = mcv_row_w(s) }
+                            if v != tgt { ok = 0i64   c = 3i64 } else { c = c + 1i64 }
+                        }
+                        if ok == 1i64 {
+                            if MP_FTN < 64i64 {
+                                MP_FT[MP_FTN as u64] = ((((r * 16i64) + s) * 6i64) + p) * 8i64 + sm
+                                MP_FTN = MP_FTN + 1i64
+                            }
+                        }
+                        sm = sm + 1i64
+                    }
+                    p = p + 1i64
+                }
+            }
+            s = s + 1i64
+        }
+        r = r + 1i64
+    }
+    return MP_FTN
+}
+
+/* ---- THE FACTOR DOOR: trial division to 10^6; the cofactor NAMED, never silent ---- */
+var MP_FP : [i64; 24]
+var MP_FPN : i64
+var MP_FCOF : i64
+fn mp_fp(k: i64) -> i64 @export { return MP_FP[k as u64] }
+fn mp_fcof() -> i64 @export { return MP_FCOF }
+fn mp_factor(n0: i64) -> i64 @export {
+    MP_FPN = 0i64
+    let mut n : i64 = n0
+    if n < 0i64 { n = 0i64 - n }
+    MP_FCOF = 1i64
+    if n < 2i64 { return 0i64 }
+    while (n % 2i64) == 0i64 {
+        if MP_FPN < 24i64 { MP_FP[MP_FPN as u64] = 2i64   MP_FPN = MP_FPN + 1i64 }
+        n = n / 2i64
+    }
+    let mut p : i64 = 3i64
+    while p <= 999983i64 {
+        if (p * p) > n { p = 1000000i64 }
+        else {
+            while (n % p) == 0i64 {
+                if MP_FPN < 24i64 { MP_FP[MP_FPN as u64] = p   MP_FPN = MP_FPN + 1i64 }
+                n = n / p
+            }
+            p = p + 2i64
+        }
+    }
+    if n > 1i64 {
+        if n < 1000000000000i64 {
+            /* below 10^12 with no prime factor <= 10^6: n is PRIME (p^2 > n test above) */
+            if MP_FPN < 24i64 { MP_FP[MP_FPN as u64] = n   MP_FPN = MP_FPN + 1i64 }
+        } else { MP_FCOF = n }
+    }
+    return MP_FPN
+}
+
+/* ---- d = 225: THE OUTSTANDING PREDICTION.  Hunt at h, then DECIDE every judge-#2 refusal
+ *      through the big judge.  Returns verified-count*100 + refused*10 + big-judged. ---- */
+fn mp_d225(h: i64) -> i64 @export {
+    mcv_hunt_reset()
+    let a : i64 = mcv_hunt(225i64, 1i64, h)
+    if a < 0i64 { return 0i64 - 1i64 }
+    let b : i64 = mcv_hunt(225i64, 2i64, h)
+    if b < 0i64 { return 0i64 - 1i64 }
+    let refused : i64 = mcv_refused()
+    let mut bigok : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < mcv_refrows() {
+        if bj_verify_raw(mcv_refrow_d(i), mcv_refrow_c(i), mcv_refrow_u(i), mcv_refrow_v(i),
+                         mcv_refrow_w(i), mcv_refrow_e(i), mcv_refrow_f(i)) == 1i64 { bigok = bigok + 1i64 }
+        i = i + 1i64
+    }
+    return (((a + b) * 100i64) + (refused * 10i64)) + bigok
+}

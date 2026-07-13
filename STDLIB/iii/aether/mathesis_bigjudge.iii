@@ -1,0 +1,349 @@
+/* aether/mathesis_bigjudge.iii -- THE BIG JUDGE (campaign Chi, item Chi-1: the judge's third
+ * universe -- the exact-sign envelope lifted past e ~ 10^6 by UNIFICATION with the bigint core).
+ *
+ * Campaign Phi harvested 12 constructed identities whose radical coefficients (e ~ 3*10^12)
+ * exceed judge #2's exact-sign envelope (|e| <= 1,008,000 keeps e^3*m inside i64): they were
+ * counted as ENVELOPE REFUSALS, certified only by the bigint on-curve identity.  This organ is
+ * the judge that decides them: elements of Q(cbrt d) as bigint coefficient triples
+ * u + v*gamma + w*gamma^2 (gamma^3 = d), through the STANDING limb core of mathesis_bigcurve
+ * (one slab, two organs -- the bc_* doors were made public for exactly this composition):
+ *
+ *   bj_qmul     the quotient-ring product (the general instrument: cubes, gamma-action,
+ *               cross-orbit products, all in one door)
+ *   bj_cube     alpha^3 by two quotient products
+ *   bj_norm     N(alpha) = u^3 + d v^3 + d^2 w^3 - 3 d u v w, exact in bigint
+ *   bj_sign     EXACT SIGN: gamma bracketed by an integer cube root (bit-descent icbrt, the
+ *               bracket G^3 <= d*4^s < (G+1)^3 verified explicitly), the element evaluated as
+ *               an exact interval, the window escalated s = 64..1000 bits.  TERMINATION IS A
+ *               THEOREM: for integer coefficients (<= 12 limbs, the printed envelope) a nonzero
+ *               element has |alpha| >= |N(alpha)|/B^2 >= 2^-800, so a straddle past the
+ *               schedule is a SELF-DETECTED DEFECT (-8), never an abstention; only an
+ *               out-of-envelope input refuses (-9), by name.
+ *   bj_cmp      exact order of two elements (sign of the difference)
+ *   bj_verify_catrow   a standing catalogue row re-judged: the cube computed by bj_qmul must
+ *               equal (f, e) AND the machine-derived grids (bge_eval) must deliver the same
+ *               components -- ONE DERIVATION, TWO ARITHMETICS, THIRD JUDGE, ONE TRUTH.
+ *   bj_verify_harvest  a Phi-2 construction judged END-TO-END: the harvested point's cube
+ *               collapses (the gamma^1 coefficient EXACTLY ZERO in bigint) and equals the
+ *               harvested (e, f) -- the identity cbrt(f + e*gamma^2) = u + v*gamma + w*gamma^2
+ *               is now a JUDGED theorem, not a refusal.
+ *
+ * HANDLE DISCIPLINE (the shared slab): this organ owns 64..103 exactly.  Element slot k
+ * (k = 0..7) = handles 64+3k..66+3k; slot 7 is bj_cube's internal scratch.  Product/norm
+ * temps 88..92; sign window 93..103 (N pinned at 99).  The bigcurve organ's own regions
+ * (0..63 scratch, 104..163 harvest, 164..235 growth) are never written by this organ.
+ *
+ * Gate: corpus/2717_mathesis_bigjudge.  Stream: DOCS/MATHESIS-CHI-ROUND1.log (BJ rows).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_bigcurve (the limb core, the grids,
+ * the harvest) + mathesis_curve (derivation, catalogue, judge-#2-route verify) doors only.
+ * ZERO-CASCADE: standalone aether TU, exported doors only. */
+module mathesis_bigjudge
+
+extern @abi(c-msvc-x64) fn bc_zero(h: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_seti(h: i64, v: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_copy(d: i64, s: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_add(d: i64, a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_sub(d: i64, a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_mul(d: i64, a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_muli(d: i64, a: i64, v: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_cmpmag(a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_iszero(h: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_eq(a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_sgn(h: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_len(h: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_limb(h: i64, i: i64) -> u64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_neg(h: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_shl(h: i64, nb: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bge_eval(which: i64, hu: i64, hv: i64, hw: i64, dst: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_h(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_noncube(d: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+
+const BJ_SIGMAX : i64 = 12i64        /* sign-door coefficient envelope: 12 limbs (384 bits) */
+
+/* element slot k -> coefficient handle */
+fn bj_c(k: i64, c: i64) -> i64 @export { return 64i64 + (k * 3i64) + c }
+
+fn bj_set(k: i64, u: i64, v: i64, w: i64) -> i32 @export {
+    bc_seti(bj_c(k, 0i64), u)
+    bc_seti(bj_c(k, 1i64), v)
+    bc_seti(bj_c(k, 2i64), w)
+    return 0i32
+}
+
+/* load a slot from three arbitrary handles (the harvest bridge) */
+fn bj_seth(k: i64, hu: i64, hv: i64, hw: i64) -> i32 @export {
+    bc_copy(bj_c(k, 0i64), hu)
+    bc_copy(bj_c(k, 1i64), hv)
+    bc_copy(bj_c(k, 2i64), hw)
+    return 0i32
+}
+
+/* add 1 to coefficient c of slot k -- the gate's perturbation tooth */
+fn bj_bump(k: i64, c: i64) -> i64 @export {
+    bc_seti(88i64, 1i64)
+    return bc_add(bj_c(k, c), bj_c(k, c), 88i64)
+}
+
+fn bj_eq(a: i64, b: i64) -> i64 @export {
+    if bc_eq(bj_c(a, 0i64), bj_c(b, 0i64)) != 1i64 { return 0i64 }
+    if bc_eq(bj_c(a, 1i64), bj_c(b, 1i64)) != 1i64 { return 0i64 }
+    if bc_eq(bj_c(a, 2i64), bj_c(b, 2i64)) != 1i64 { return 0i64 }
+    return 1i64
+}
+
+fn bj_copy(dst: i64, src: i64) -> i32 @export {
+    bc_copy(bj_c(dst, 0i64), bj_c(src, 0i64))
+    bc_copy(bj_c(dst, 1i64), bj_c(src, 1i64))
+    bc_copy(bj_c(dst, 2i64), bj_c(src, 2i64))
+    return 0i32
+}
+
+/* dst = a * b in Z[gamma]/(gamma^3 - d).  dst may alias a or b (accumulated in temps first).
+ *   c0 = a0 b0 + d (a1 b2 + a2 b1)
+ *   c1 = a0 b1 + a1 b0 + d a2 b2
+ *   c2 = a0 b2 + a1 b1 + a2 b0
+ * 0 ok, -1 limb refusal. */
+fn bj_qmul(dst: i64, a: i64, b: i64, d: i64) -> i64 @export {
+    let a0 : i64 = bj_c(a, 0i64)
+    let a1 : i64 = bj_c(a, 1i64)
+    let a2 : i64 = bj_c(a, 2i64)
+    let b0 : i64 = bj_c(b, 0i64)
+    let b1 : i64 = bj_c(b, 1i64)
+    let b2 : i64 = bj_c(b, 2i64)
+    /* c0 -> 90 */
+    if bc_mul(88i64, a0, b0) < 0i64 { return 0i64 - 1i64 }
+    bc_copy(90i64, 88i64)
+    if bc_mul(88i64, a1, b2) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(89i64, a2, b1) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(88i64, 88i64, 89i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(89i64, 88i64, d) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(90i64, 90i64, 89i64) < 0i64 { return 0i64 - 1i64 }
+    /* c1 -> 91 */
+    if bc_mul(88i64, a0, b1) < 0i64 { return 0i64 - 1i64 }
+    bc_copy(91i64, 88i64)
+    if bc_mul(88i64, a1, b0) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(91i64, 91i64, 88i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(88i64, a2, b2) < 0i64 { return 0i64 - 1i64 }
+    if bc_muli(89i64, 88i64, d) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(91i64, 91i64, 89i64) < 0i64 { return 0i64 - 1i64 }
+    /* c2 -> 92 */
+    if bc_mul(88i64, a0, b2) < 0i64 { return 0i64 - 1i64 }
+    bc_copy(92i64, 88i64)
+    if bc_mul(88i64, a1, b1) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(92i64, 92i64, 88i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_mul(88i64, a2, b0) < 0i64 { return 0i64 - 1i64 }
+    if bc_add(92i64, 92i64, 88i64) < 0i64 { return 0i64 - 1i64 }
+    bc_copy(bj_c(dst, 0i64), 90i64)
+    bc_copy(bj_c(dst, 1i64), 91i64)
+    bc_copy(bj_c(dst, 2i64), 92i64)
+    return 0i64
+}
+
+/* dst = a^3 (slot 7 is the internal square; dst must not be slot 7) */
+fn bj_cube(dst: i64, a: i64, d: i64) -> i64 @export {
+    if bj_qmul(7i64, a, a, d) < 0i64 { return 0i64 - 1i64 }
+    return bj_qmul(dst, 7i64, a, d)
+}
+
+/* N(slot) -> handle 99; returns sign of N (or -9 limb refusal) */
+fn bj_norm(k: i64, d: i64) -> i64 @export {
+    let a0 : i64 = bj_c(k, 0i64)
+    let a1 : i64 = bj_c(k, 1i64)
+    let a2 : i64 = bj_c(k, 2i64)
+    if bc_mul(88i64, a0, a0) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(89i64, 88i64, a0) < 0i64 { return 0i64 - 9i64 }
+    bc_copy(90i64, 89i64)
+    if bc_mul(88i64, a1, a1) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(89i64, 88i64, a1) < 0i64 { return 0i64 - 9i64 }
+    if bc_muli(88i64, 89i64, d) < 0i64 { return 0i64 - 9i64 }
+    if bc_add(90i64, 90i64, 88i64) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(88i64, a2, a2) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(89i64, 88i64, a2) < 0i64 { return 0i64 - 9i64 }
+    if bc_muli(88i64, 89i64, d * d) < 0i64 { return 0i64 - 9i64 }
+    if bc_add(90i64, 90i64, 88i64) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(88i64, a0, a1) < 0i64 { return 0i64 - 9i64 }
+    if bc_mul(89i64, 88i64, a2) < 0i64 { return 0i64 - 9i64 }
+    if bc_muli(88i64, 89i64, 0i64 - (3i64 * d)) < 0i64 { return 0i64 - 9i64 }
+    if bc_add(90i64, 90i64, 88i64) < 0i64 { return 0i64 - 9i64 }
+    bc_copy(99i64, 90i64)
+    return bc_sgn(99i64)
+}
+
+/* bit length of |h| (0 for zero) */
+fn bj_bits(h: i64) -> i64 {
+    let n : i64 = bc_len(h)
+    if n == 0i64 { return 0i64 }
+    let mut top : u64 = bc_limb(h, n - 1i64)
+    let mut b : i64 = 0i64
+    while top > 0u64 { top = top >> 1u64   b = b + 1i64 }
+    return ((n - 1i64) * 32i64) + b
+}
+
+/* G (handle 93) = floor(cbrt(D)) for D at handle 98 (magnitude), by bit descent.
+ * Scratch: 94 (candidate), 95 (square), 100 (cube), 101 (the bit).  0 ok, -1 refusal. */
+fn bj_icbrt() -> i64 {
+    bc_zero(93i64)
+    let mut bit : i64 = (bj_bits(98i64) / 3i64) + 1i64
+    while bit >= 0i64 {
+        bc_seti(101i64, 1i64)
+        if bc_shl(101i64, bit) < 0i64 { return 0i64 - 1i64 }
+        if bc_add(94i64, 93i64, 101i64) < 0i64 { return 0i64 - 1i64 }
+        if bc_mul(95i64, 94i64, 94i64) < 0i64 { return 0i64 - 1i64 }
+        if bc_mul(100i64, 95i64, 94i64) < 0i64 { return 0i64 - 1i64 }
+        if bc_cmpmag(100i64, 98i64) <= 0i64 { bc_copy(93i64, 94i64) }
+        bit = bit - 1i64
+    }
+    return 0i64
+}
+
+var BJ_S : i64            /* the window scale that decided the last sign (the certificate) */
+fn bj_sign_s() -> i64 @export { return BJ_S }
+
+/* EXACT SIGN of slot k over Q(cbrt d): -1/0/1; -9 envelope refusal (coefficient > 12 limbs
+ * or d not cube-free-noncube); -8 self-detected defect (a straddle the termination theorem
+ * forbids, or N == 0 on a nonzero element). */
+fn bj_sign(k: i64, d: i64) -> i64 @export {
+    let a0 : i64 = bj_c(k, 0i64)
+    let a1 : i64 = bj_c(k, 1i64)
+    let a2 : i64 = bj_c(k, 2i64)
+    if bc_iszero(a0) == 1i64 { if bc_iszero(a1) == 1i64 { if bc_iszero(a2) == 1i64 { BJ_S = 0i64   return 0i64 } } }
+    if bc_iszero(a1) == 1i64 { if bc_iszero(a2) == 1i64 { BJ_S = 0i64   return bc_sgn(a0) } }
+    if mcv_noncube(d) != 1i64 { return 0i64 - 9i64 }
+    if bc_len(a0) > BJ_SIGMAX { return 0i64 - 9i64 }
+    if bc_len(a1) > BJ_SIGMAX { return 0i64 - 9i64 }
+    if bc_len(a2) > BJ_SIGMAX { return 0i64 - 9i64 }
+    /* N != 0 or the field theorem is violated (gamma irrational => Q(gamma) a field) */
+    let nsg : i64 = bj_norm(k, d)
+    if nsg == 0i64 { return 0i64 - 8i64 }
+    if nsg < (0i64 - 1i64) { return nsg }
+    let mut s : i64 = 64i64
+    while s <= 1000i64 {
+        /* D = d * 2^(3s) -> 98; G = icbrt -> 93 */
+        bc_seti(98i64, d)
+        if bc_shl(98i64, 3i64 * s) < 0i64 { return 0i64 - 9i64 }
+        if bj_icbrt() < 0i64 { return 0i64 - 9i64 }
+        /* the bracket TOOTH: G^3 <= D < (G+1)^3, verified, not assumed */
+        if bc_mul(95i64, 93i64, 93i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_mul(100i64, 95i64, 93i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_cmpmag(100i64, 98i64) > 0i64 { return 0i64 - 8i64 }
+        bc_seti(101i64, 1i64)
+        if bc_add(94i64, 93i64, 101i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_mul(95i64, 94i64, 94i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_mul(100i64, 95i64, 94i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_cmpmag(100i64, 98i64) <= 0i64 { return 0i64 - 8i64 }
+        /* squares: 95 = G^2 (recompute), 98 = (G+1)^2 (D no longer needed) */
+        if bc_mul(95i64, 93i64, 93i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_mul(98i64, 94i64, 94i64) < 0i64 { return 0i64 - 9i64 }
+        /* a1-term bounds: lo -> 101, hi -> 102 (a1 * x * 2^s, x in {G, G+1}) */
+        let s1 : i64 = bc_sgn(a1)
+        if s1 >= 0i64 {
+            if bc_mul(101i64, a1, 93i64) < 0i64 { return 0i64 - 9i64 }
+            if bc_mul(102i64, a1, 94i64) < 0i64 { return 0i64 - 9i64 }
+        } else {
+            if bc_mul(101i64, a1, 94i64) < 0i64 { return 0i64 - 9i64 }
+            if bc_mul(102i64, a1, 93i64) < 0i64 { return 0i64 - 9i64 }
+        }
+        if bc_shl(101i64, s) < 0i64 { return 0i64 - 9i64 }
+        if bc_shl(102i64, s) < 0i64 { return 0i64 - 9i64 }
+        /* a2-term bounds: lo -> 103, hi -> 100 (a2 * x^2, x^2 in {G^2, (G+1)^2}) */
+        let s2 : i64 = bc_sgn(a2)
+        if s2 >= 0i64 {
+            if bc_mul(103i64, a2, 95i64) < 0i64 { return 0i64 - 9i64 }
+            if bc_mul(100i64, a2, 98i64) < 0i64 { return 0i64 - 9i64 }
+        } else {
+            if bc_mul(103i64, a2, 98i64) < 0i64 { return 0i64 - 9i64 }
+            if bc_mul(100i64, a2, 95i64) < 0i64 { return 0i64 - 9i64 }
+        }
+        /* E bounds: base a0 * 4^s, then the term bounds */
+        bc_copy(96i64, a0)
+        if bc_shl(96i64, 2i64 * s) < 0i64 { return 0i64 - 9i64 }
+        bc_copy(97i64, 96i64)
+        if bc_add(96i64, 96i64, 101i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_add(96i64, 96i64, 103i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_add(97i64, 97i64, 102i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_add(97i64, 97i64, 100i64) < 0i64 { return 0i64 - 9i64 }
+        if bc_sgn(96i64) > 0i64 { BJ_S = s   return 1i64 }
+        if bc_sgn(97i64) < 0i64 { BJ_S = s   return 0i64 - 1i64 }
+        if s == 1000i64 { s = 1001i64 } else { s = s * 2i64   if s > 1000i64 { s = 1000i64 } }
+    }
+    /* the termination theorem forbids arriving here for in-envelope nonzero elements */
+    return 0i64 - 8i64
+}
+
+/* order: sign of (a - b); the difference built in slot 6 (public slots for callers: 0..5) */
+fn bj_cmp(a: i64, b: i64, d: i64) -> i64 @export {
+    let mut c : i64 = 0i64
+    while c < 3i64 {
+        if bc_sub(bj_c(6i64, c), bj_c(a, c), bj_c(b, c)) < 0i64 { return 0i64 - 9i64 }
+        c = c + 1i64
+    }
+    return bj_sign(6i64, d)
+}
+
+/* a RAW (d, curve, u, v, w, e, f) identity judged: cube by bj_qmul == (f, e) per curve AND
+ * the derived grids deliver the same components (two arithmetics, one truth).  Slots 0/1 used.
+ * 1 = judged; 0 = mismatch; negative = named refusal.  This is the door that decides the hits
+ * judge #2 REFUSED (the mcv_refrow_* rows -- campaign Chi's lift). */
+fn bj_verify_raw(d: i64, c: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+    bj_set(0i64, u, v, w)
+    if bj_cube(1i64, 0i64, d) < 0i64 { return 0i64 - 1i64 }
+    /* expected components */
+    bc_seti(88i64, f)
+    if bc_eq(bj_c(1i64, 0i64), 88i64) != 1i64 { return 0i64 }
+    bc_seti(88i64, e)
+    if c == 1i64 {
+        if bc_eq(bj_c(1i64, 1i64), 88i64) != 1i64 { return 0i64 }
+        if bc_iszero(bj_c(1i64, 2i64)) != 1i64 { return 0i64 }
+    } else {
+        if bc_eq(bj_c(1i64, 2i64), 88i64) != 1i64 { return 0i64 }
+        if bc_iszero(bj_c(1i64, 1i64)) != 1i64 { return 0i64 }
+    }
+    /* the second path: the machine-derived grids evaluated in bigint at the same point */
+    let mut vg : i64 = 2i64          /* vanishing grid: P2 for curve A */
+    let mut eg : i64 = 1i64          /* e-grid: P1 for curve A */
+    if c == 2i64 { vg = 1i64   eg = 2i64 }
+    if bge_eval(vg, bj_c(0i64, 0i64), bj_c(0i64, 1i64), bj_c(0i64, 2i64), 100i64) < 0i64 { return 0i64 - 1i64 }
+    if bc_iszero(100i64) != 1i64 { return 0i64 }
+    if bge_eval(eg, bj_c(0i64, 0i64), bj_c(0i64, 1i64), bj_c(0i64, 2i64), 100i64) < 0i64 { return 0i64 - 1i64 }
+    bc_seti(88i64, e)
+    if bc_eq(100i64, 88i64) != 1i64 { return 0i64 }
+    if bge_eval(0i64, bj_c(0i64, 0i64), bj_c(0i64, 1i64), bj_c(0i64, 2i64), 100i64) < 0i64 { return 0i64 - 1i64 }
+    bc_seti(88i64, f)
+    if bc_eq(100i64, 88i64) != 1i64 { return 0i64 }
+    return 1i64
+}
+
+/* a standing catalogue row re-judged through the raw door */
+fn bj_verify_catrow(i: i64) -> i64 @export {
+    if i >= mcv_found() { return 0i64 - 9i64 }
+    return bj_verify_raw(mcv_row_d(i), mcv_row_c(i), mcv_row_u(i), mcv_row_v(i), mcv_row_w(i), mcv_row_e(i), mcv_row_f(i))
+}
+
+/* a Phi-2 harvested construction judged end-to-end (the state must be post bg_replay +
+ * bg_harvest in this process; curve 2 = the d=3B configuration).  Slots 0/1 used.
+ * 1 = the identity is JUDGED: cube == (f, 0-or-e, e-or-0) with the collapse coefficient
+ * EXACTLY ZERO.  0 = mismatch; negative = named refusal. */
+fn bj_verify_harvest(i: i64, d: i64, curve: i64) -> i64 @export {
+    if mcv_derive(d) != 0i32 { return 0i64 - 9i64 }
+    bj_seth(0i64, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+    if bj_cube(1i64, 0i64, d) < 0i64 { return 0i64 - 1i64 }
+    if bc_eq(bj_c(1i64, 0i64), bg_res_h(i, 4i64)) != 1i64 { return 0i64 }
+    if curve == 1i64 {
+        if bc_eq(bj_c(1i64, 1i64), bg_res_h(i, 3i64)) != 1i64 { return 0i64 }
+        if bc_iszero(bj_c(1i64, 2i64)) != 1i64 { return 0i64 }
+    } else {
+        if bc_eq(bj_c(1i64, 2i64), bg_res_h(i, 3i64)) != 1i64 { return 0i64 }
+        if bc_iszero(bj_c(1i64, 1i64)) != 1i64 { return 0i64 }
+    }
+    return 1i64
+}

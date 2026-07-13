@@ -121,10 +121,13 @@ fn mcv_qmul(qap: u64, qbp: u64, qcp: u64, d: i64) -> i32 {
     return 0i32
 }
 
-/* derive P0/P1/P2 = components of (u + v g + w g^2)^3 for THIS d.  0 ok, -1 refused. */
+/* derive P0/P1/P2 = components of (u + v g + w g^2)^3 for THIS d.  0 ok, -1 refused.
+ * ENVELOPE (lifted in campaign Chi for the d = 225 prediction): d <= 4096 -- the pilot's own
+ * cube-free-walk cap.  Soundness: grid coefficients are bounded by 6 d^2 <= 1.01e8, and the
+ * hunt's eval terms by 6 d^2 * hmax^3 * 64 <= 5.2e16 at hmax <= 200 -- inside i64 with slack. */
 fn mcv_derive(d: i64) -> i32 @export {
     if d < 2i64 { return 0i32 - 1i32 }
-    if d > 49i64 { return 0i32 - 1i32 }
+    if d > 4096i64 { return 0i32 - 1i32 }
     /* A = (u, v, w): A0 = u, A1 = v, A2 = w */
     mcv_gclear((&MCV_QA) as u64)
     mcv_gclear(((&MCV_QA) as u64) + 512u64)
@@ -298,7 +301,23 @@ fn mcv_row_e(i: i64) -> i64 @export { return MCV_E[i as u64] }
 fn mcv_row_f(i: i64) -> i64 @export { return MCV_F[i as u64] }
 
 fn mcv_refused() -> i64 @export { return MCV_REF }
-fn mcv_hunt_reset() -> i32 @export { MCV_N = 0i64   MCV_DEG = 0i64   MCV_TRIV = 0i64   MCV_RAYS = 0i64   MCV_REF = 0i64   return 0i32 }
+
+/* the refused hits RECORDED (campaign Chi: the big judge decides what judge #2 refused --
+ * a refusal is still a surface hit with exact coordinates; cap 16, the COUNT never lies) */
+var MCV_RD : [i64; 16]   var MCV_RC : [i64; 16]
+var MCV_RU : [i64; 16]   var MCV_RV : [i64; 16]   var MCV_RW : [i64; 16]
+var MCV_RE : [i64; 16]   var MCV_RF : [i64; 16]
+var MCV_RN : i64
+fn mcv_refrows() -> i64 @export { return MCV_RN }
+fn mcv_refrow_d(i: i64) -> i64 @export { return MCV_RD[i as u64] }
+fn mcv_refrow_c(i: i64) -> i64 @export { return MCV_RC[i as u64] }
+fn mcv_refrow_u(i: i64) -> i64 @export { return MCV_RU[i as u64] }
+fn mcv_refrow_v(i: i64) -> i64 @export { return MCV_RV[i as u64] }
+fn mcv_refrow_w(i: i64) -> i64 @export { return MCV_RW[i as u64] }
+fn mcv_refrow_e(i: i64) -> i64 @export { return MCV_RE[i as u64] }
+fn mcv_refrow_f(i: i64) -> i64 @export { return MCV_RF[i as u64] }
+
+fn mcv_hunt_reset() -> i32 @export { MCV_N = 0i64   MCV_DEG = 0i64   MCV_TRIV = 0i64   MCV_RAYS = 0i64   MCV_REF = 0i64   MCV_RN = 0i64   return 0i32 }
 
 /* THE HUNT over one (d, curve) at height H: every surface hit judge-verified or the hunt aborts.
  * Returns finds this run, -1 envelope, -2 a judge disagreement (defect), -3 store overflow. */
@@ -353,7 +372,16 @@ fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 @export {
                             let f : i64 = mcv_eval(0i64, cu, cv, cw)
                             let jq : i64 = mcv_verify(d, curve, cu, cv, cw, e, f)
                             if jq == 0i64 { return 0i64 - 2i64 }       /* DISAGREEMENT: a defect */
-                            if jq < 0i64 { MCV_REF = MCV_REF + 1i64 }  /* envelope refusal: counted */
+                            if jq < 0i64 {
+                                MCV_REF = MCV_REF + 1i64               /* envelope refusal: counted */
+                                if MCV_RN < 16i64 {                    /* ... and RECORDED (Chi) */
+                                    MCV_RD[MCV_RN as u64] = d    MCV_RC[MCV_RN as u64] = curve
+                                    MCV_RU[MCV_RN as u64] = cu   MCV_RV[MCV_RN as u64] = cv
+                                    MCV_RW[MCV_RN as u64] = cw   MCV_RE[MCV_RN as u64] = e
+                                    MCV_RF[MCV_RN as u64] = f
+                                    MCV_RN = MCV_RN + 1i64
+                                }
+                            }
                             if jq == 1i64 {
                                 if MCV_N >= MCV_MAXR { return 0i64 - 3i64 }
                                 MCV_D[MCV_N as u64] = d   MCV_C[MCV_N as u64] = curve

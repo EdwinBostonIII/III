@@ -1,0 +1,146 @@
+/* 2719_mathesis_pattern.iii -- GATE for THE PATTERN INSTRUMENT (campaign Chi, item Chi-3:
+ * the open question attacked with composed organs; the involution's outstanding prediction
+ * EXECUTED).
+ *
+ * WHAT THE INSTRUMENT FOUND (observed 2026-07-13, pinned here):
+ *   - THE SCAN (19 cube-free d, height 60, both curves, 62 verified finds):
+ *     A = {2:3, 6:6, 7:6, 9:6, 12:6, 15:6},  B = {3:6, 4:3, 18:6, 36:6, 49:5, 225:3},
+ *     empty = {5, 10, 11, 13, 14, 17, 25};  d=36 carries ONE refusal, now RECORDED;
+ *   - d = 225 (the involution partner of the pilot's d = 15): THREE curve-B identities at
+ *     height 60 -- THE PREDICTION CONFIRMED, and with it H3, THE INVOLUTION CLASS LAW,
+ *     CONFIRMED over all SEVEN in-box pairs {x, x^2 mod cubes};
+ *   - H1 (collapse <=> nontrivial unit at h<=40): REFUTED, witness d=5 (units exist, no
+ *     collapse; and d=12 collapses with NO unit at h<=40) -- the unit group does NOT drive
+ *     the pattern (the second such refutation, after Phi's unit-action);
+ *   - H2 (A-collapse <=> first unit on the A-surface): REFUTED, witness d=2;
+ *   - H4 (multiplicativity): REFUTED, witness d=14 = 2*7 -- now a PINNED verdict row;
+ *   - THE ORBIT LAW through the big judge: (g^i a)(g^j b) == g^(i+j)(a b) -- 324/324 checks
+ *     over d=3B ordered pairs, 81/81 over d=2A: the mod-3 arithmetic of the cross-orbit
+ *     product law is EXACT;
+ *   - THE GAMMA^2 CENSUS: exactly 3 of 15 d=3B pair products land in Z + Z*gamma (pairs
+ *     (0,2), (1,3), (4,5)); AT THE HARVESTED 10^12 TIER the same census gives 3 c2-vanishing
+ *     AND 3 c1-vanishing pairs of 15 -- the collapse structure EXTENDS to the constructed
+ *     points;
+ *   - THE FIT: 0 of 384 signed-permutation maps relate any two d=3B rows -- the entanglement
+ *     is NOT a coordinate permutation (an honest kill);
+ *   - THE FACTOR DOOR: -249049 = 271 * 919 re-derived; THE NORM LAW: the six d=3B row norms
+ *     are (-271, 2757, 919, -2439, -813, 8271) = the two gamma-orbits carrying the two
+ *     primes 271 and 919, scaled by exactly d = 3 per gamma-step;
+ *   - THE COMPOSITION TOOTH: d=36's recorded refusal (the hit judge #2 refused since
+ *     Upsilon) is DECIDED by the big judge: bj_verify_raw == 1.
+ * EXIT 99. */
+module corpus_2719_mathesis_pattern
+
+extern @abi(c-msvc-x64) fn mp_nd() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_d(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_scan() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_a(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_b(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ra(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_rb(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_units(h: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ut(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_hypo() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_h(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_hw(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_orbit_law(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gamma2_pairs(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gz(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gzn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_big_gamma2(d: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_bg1() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fit(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_factor(n: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fp(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fcof() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_d225(h: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refused() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrows() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bj_verify_raw(d: i64, c: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bg_replay(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_evn() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_harvest(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn mn_row_norm(i: i64) -> i64 from "mathesis_norm.iii"
+
+fn chk_d(i: i64, d: i64, a: i64, b: i64) -> i64 {
+    if mp_d(i) != d { return 0i64 }
+    if mp_a(i) != a { return 0i64 }
+    if mp_b(i) != b { return 0i64 }
+    return 1i64
+}
+
+fn main() -> i32 {
+    /* [T] THE COMPOSITION TOOTH FIRST: d=36's refusal recorded AND decided by the big judge */
+    mcv_hunt_reset()
+    if mcv_hunt(36i64, 2i64, 60i64) != 6i64 { return 10i32 }
+    if mcv_refused() != 1i64 { return 11i32 }
+    if mcv_refrows() != 1i64 { return 12i32 }
+    if bj_verify_raw(mcv_refrow_d(0i64), mcv_refrow_c(0i64), mcv_refrow_u(0i64), mcv_refrow_v(0i64),
+                     mcv_refrow_w(0i64), mcv_refrow_e(0i64), mcv_refrow_f(0i64)) != 1i64 { return 13i32 }
+    /* [S] THE SCAN: the whole box, 62 verified finds; the load-bearing rows pinned */
+    if mp_scan() != 62i64 { return 20i32 }
+    if mp_nd() != 19i64 { return 21i32 }
+    if chk_d(0i64, 2i64, 3i64, 0i64) != 1i64 { return 22i32 }
+    if chk_d(1i64, 3i64, 0i64, 6i64) != 1i64 { return 23i32 }
+    if chk_d(2i64, 4i64, 0i64, 3i64) != 1i64 { return 24i32 }
+    if chk_d(6i64, 9i64, 6i64, 0i64) != 1i64 { return 25i32 }
+    if chk_d(11i64, 14i64, 0i64, 0i64) != 1i64 { return 26i32 }
+    if chk_d(12i64, 15i64, 6i64, 0i64) != 1i64 { return 27i32 }
+    if chk_d(14i64, 18i64, 0i64, 6i64) != 1i64 { return 28i32 }
+    if chk_d(17i64, 49i64, 0i64, 5i64) != 1i64 { return 29i32 }
+    if chk_d(18i64, 225i64, 0i64, 3i64) != 1i64 { return 30i32 }
+    if mp_rb(16i64) != 1i64 { return 31i32 }          /* d=36: the one refusal */
+    /* [U] the unit table at 40: 16 of 19 d carry a nontrivial unit; d=12 does NOT */
+    if mp_units(40i64) != 16i64 { return 40i32 }
+    if mp_ut(9i64) != 0i64 { return 41i32 }           /* d=12: collapses WITHOUT a unit */
+    if mp_ut(3i64) != 2i64 { return 42i32 }           /* d=5: units WITHOUT collapse */
+    /* [H] the hypothesis verdicts: H3 (involution class law) CONFIRMED; H1/H2/H4 refuted */
+    if mp_hypo() != 10i64 { return 50i32 }
+    if mp_hw(1i64) != 5i64 { return 51i32 }
+    if mp_hw(3i64) != (0i64 - 1i64) { return 52i32 }
+    if mp_hw(4i64) != 14i64 { return 53i32 }
+    /* [O] the orbit law through the big judge: total over both catalogues */
+    if mp_orbit_law(3i64, 2i64) != 324i64 { return 60i32 }
+    if mp_orbit_law(2i64, 1i64) != 81i64 { return 61i32 }
+    /* [G] the gamma^2 census: exactly pairs (0,2), (1,3), (4,5) vanish */
+    if mp_gamma2_pairs(3i64, 2i64) != 3i64 { return 70i32 }
+    if mp_gzn() != 15i64 { return 71i32 }
+    if mp_gz(1i64) != 5i64 { return 72i32 }           /* (0,2) vanishes */
+    if mp_gz(6i64) != 39i64 { return 73i32 }          /* (1,3) vanishes */
+    if mp_gz(14i64) != 139i64 { return 74i32 }        /* (4,5) vanishes */
+    /* [B] the harvested tier: the collapse extends to the constructed points */
+    mcv_hunt_reset()
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 80i32 }
+    if bg_replay(3i64, 2i64) != 9i64 { return 81i32 }
+    let mut i : i64 = 0i64
+    while i < bg_evn() { if bg_harvest(i) != 1i64 { return 82i32 }   i = i + 1i64 }
+    if mp_big_gamma2(3i64) != 3i64 { return 83i32 }
+    if mp_bg1() != 3i64 { return 84i32 }
+    /* [F] the fit: honestly refuted */
+    if mp_fit(3i64, 2i64) != 0i64 { return 90i32 }
+    /* [N] the factorizations: the fundamental product and the norm law's primes */
+    if mp_factor(0i64 - 249049i64) != 2i64 { return 100i32 }
+    if mp_fp(0i64) != 271i64 { return 101i32 }
+    if mp_fp(1i64) != 919i64 { return 102i32 }
+    if mp_fcof() != 1i64 { return 103i32 }
+    mcv_hunt_reset()
+    if mcv_hunt(3i64, 2i64, 60i64) != 6i64 { return 104i32 }
+    if mn_row_norm(0i64) != (0i64 - 271i64) { return 105i32 }
+    if mn_row_norm(1i64) != 2757i64 { return 106i32 }
+    if mn_row_norm(2i64) != 919i64 { return 107i32 }
+    if mn_row_norm(3i64) != (0i64 - 2439i64) { return 108i32 }
+    if mn_row_norm(4i64) != (0i64 - 813i64) { return 109i32 }
+    if mn_row_norm(5i64) != 8271i64 { return 110i32 }
+    /* [P] d = 225: THE PREDICTION -- three curve-B identities at height 60, none refused */
+    if mp_d225(60i64) != 300i64 { return 120i32 }
+    return 99i32
+}

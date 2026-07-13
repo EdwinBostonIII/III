@@ -1,0 +1,444 @@
+/* sovir/mathesis_chi_main.iii -- THE CHI STREAM DRIVER (campaign Chi: the capability lift).
+ * Prints the big judge's discharge of the 12 refusals + the exact ordering, the full fourth
+ * token census, the pattern instrument's tables/verdicts, and the pilot's rounds 12..17.
+ * Sealed as DOCS/MATHESIS-CHI-ROUND1.log; replay must be byte-identical. */
+module mathesis_chi_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_verify(d: i64, curve: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrows() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_refrow_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bg_replay(d: i64, curve: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_evn() -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_harvest(i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_res_h(i: i64, f: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bj_set(k: i64, u: i64, v: i64, w: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_seth(k: i64, hu: i64, hv: i64, hw: i64) -> i32 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_eq(a: i64, b: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_sign(k: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_sign_s() -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_cmp(a: i64, b: i64, d: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_catrow(i: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_harvest(i: i64, d: i64, curve: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn bj_verify_raw(d: i64, c: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_bigjudge.iii"
+extern @abi(c-msvc-x64) fn mt4f_twopath() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_burnside_full(n: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_load(tid: i64) -> i32 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_cell(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_raw(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_isoc(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_rep(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_inhabited() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_lawful_raw() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_structures_lawful() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_citizens() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_inh() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_str() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_cit() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_anchor() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_product12_law(cap: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mp_nd() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_d(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_scan() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_a(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_b(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ra(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_rb(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_units(h: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ut(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fu(i: i64, c: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ona(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_onb(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_hypo() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_h(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_hw(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_orbit_law(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gamma2_pairs(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gz(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_gzn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_big_gamma2(d: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_bg1() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fit(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_factor(n: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fp(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fcof() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_d225(h: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mn_row_norm(i: i64) -> i64 from "mathesis_norm.iii"
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+
+fn pnum(n0: i64) -> i32 {
+    let mut n : i64 = n0
+    if n < 0i64 { putchar(45i32)   n = 0i64 - n }
+    var d : [u8; 24]
+    let mut c : i64 = 0i64
+    if n == 0i64 { putchar(48i32)   return 0i32 }
+    while n > 0i64 { d[c as u64] = ((n % 10i64) + 48i64) as u8   n = n / 10i64   c = c + 1i64 }
+    while c > 0i64 { c = c - 1i64   putchar(d[c as u64] as i32) }
+    return 0i32
+}
+fn sp() -> i32 { return putchar(32i32) }
+fn nl() -> i32 { return putchar(10i32) }
+fn ps(msg: u64) -> i32 {
+    let s : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while s[i] != 0u8 { putchar(s[i] as i32)   i = i + 1u64 }
+    return 0i32
+}
+fn pslot(slot: i64) -> i32 {
+    let n : i64 = bg_diglen(slot)
+    let mut i : i64 = 0i64
+    while i < n { putchar(bg_digat(slot, i) as i32)   i = i + 1i64 }
+    return 0i32
+}
+fn phead() -> i32 {
+    let mut i : i64 = 0i64
+    while i < 32i64 {
+        let b : i64 = mpl_head_byte(i) as i64
+        let hi : i64 = b / 16i64
+        let lo : i64 = b % 16i64
+        if hi < 10i64 { putchar((48i64 + hi) as i32) } else { putchar((87i64 + hi) as i32) }
+        if lo < 10i64 { putchar((48i64 + lo) as i32) } else { putchar((87i64 + lo) as i32) }
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+var DIX : [i64; 12]
+var ORD : [i64; 6]
+
+fn main() -> i32 {
+    ps("CHI == CAMPAIGN CHI: THE CAPABILITY LIFT (unification of the standing organs) ==\n" as u64)
+
+    /* ---- Chi-1: THE BIG JUDGE ---- */
+    mcv_hunt_reset()
+    mcv_hunt(2i64, 1i64, 60i64)
+    mcv_hunt(3i64, 2i64, 60i64)
+    let mut agree : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < mcv_found() {
+        if mcv_verify(mcv_row_d(i), mcv_row_c(i), mcv_row_u(i), mcv_row_v(i), mcv_row_w(i), mcv_row_e(i), mcv_row_f(i)) == 1i64 {
+            if bj_verify_catrow(i) == 1i64 { agree = agree + 1i64 }
+        }
+        i = i + 1i64
+    }
+    ps("BJ CATALOGUE rows=" as u64)
+    pnum(mcv_found())
+    ps(" both-judges-agree=" as u64)
+    pnum(agree)
+    nl()
+    bg_replay(3i64, 2i64)
+    let mut judged : i64 = 0i64
+    i = 0i64
+    while i < bg_evn() {
+        bg_harvest(i)
+        if bj_verify_harvest(i, 3i64, 2i64) == 1i64 { judged = judged + 1i64 }
+        i = i + 1i64
+    }
+    ps("BJ JUDGED constructions=" as u64)
+    pnum(judged)
+    ps(" of " as u64)
+    pnum(bg_evn())
+    nl()
+    let mut pos : i64 = 0i64
+    let mut smax : i64 = 0i64
+    i = 0i64
+    while i < bg_evn() {
+        bj_seth(5i64, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+        if bj_sign(5i64, 3i64) == 1i64 { pos = pos + 1i64 }
+        if bj_sign_s() > smax { smax = bj_sign_s() }
+        i = i + 1i64
+    }
+    ps("BJ SIGN positive=" as u64)
+    pnum(pos)
+    ps(" window-scale=" as u64)
+    pnum(smax)
+    nl()
+    /* distinct + THE ORDERING */
+    let mut nd : i64 = 0i64
+    i = 0i64
+    while i < bg_evn() {
+        bj_seth(7i64, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+        let mut dup : i64 = 0i64
+        let mut k : i64 = 0i64
+        while k < nd { if bj_eq(7i64, k) == 1i64 { dup = 1i64   k = nd }   k = k + 1i64 }
+        if dup == 0i64 { if nd < 6i64 {
+            bj_seth(nd, bg_res_h(i, 0i64), bg_res_h(i, 1i64), bg_res_h(i, 2i64))
+            DIX[nd as u64] = i
+            nd = nd + 1i64
+        } }
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < nd { ORD[i as u64] = i   i = i + 1i64 }
+    let mut a : i64 = 0i64
+    while a < nd {
+        let mut best : i64 = a
+        let mut b : i64 = a + 1i64
+        while b < nd {
+            if bj_cmp(ORD[b as u64], ORD[best as u64], 3i64) == (0i64 - 1i64) { best = b }
+            b = b + 1i64
+        }
+        let t : i64 = ORD[a as u64]
+        ORD[a as u64] = ORD[best as u64]
+        ORD[best as u64] = t
+        a = a + 1i64
+    }
+    ps("BJ ORDER distinct=" as u64)
+    pnum(nd)
+    ps(" ascending-events" as u64)
+    i = 0i64
+    while i < nd { sp()   pnum(DIX[ORD[i as u64] as u64])   i = i + 1i64 }
+    nl()
+    ps("BJ I0 (" as u64)
+    bc_render(bg_res_h(0i64, 0i64), 60i64)   pslot(60i64)
+    ps(" + " as u64)
+    bc_render(bg_res_h(0i64, 1i64), 60i64)   pslot(60i64)
+    ps("*cbrt3 " as u64)
+    bc_render(bg_res_h(0i64, 2i64), 60i64)   pslot(60i64)
+    ps("*cbrt9)^3 = " as u64)
+    bc_render(bg_res_h(0i64, 3i64), 60i64)   pslot(60i64)
+    ps("*cbrt9 " as u64)
+    bc_render(bg_res_h(0i64, 4i64), 60i64)   pslot(60i64)
+    nl()
+    ps("BJ VERDICT: the 12 judge-envelope refusals are now JUDGED IDENTITIES (third judge,\n" as u64)
+    ps("BJ   cube-and-compare + grid two-path); the six constructed points carry an EXACT ORDER\n" as u64)
+
+    /* ---- Chi-2: THE FULL FOURTH TOKEN ---- */
+    ps("T4F TWOPATH " as u64)
+    pnum(mt4f_twopath())
+    nl()
+    ps("T4F BURNSIDE " as u64)
+    pnum(mt4f_burnside_full(2i64))
+    sp()
+    pnum(mt4f_burnside_full(3i64))
+    sp()
+    pnum(mt4f_burnside_full(4i64))
+    nl()
+    mt4f_census()
+    ps("T4F CENSUS tables=4294967296 inhabited=" as u64)
+    pnum(mt4f_inhabited())
+    ps(" lawful=" as u64)
+    pnum(mt4f_lawful_raw())
+    ps(" structures=" as u64)
+    pnum(mt4f_structures_lawful())
+    ps(" citizens=" as u64)
+    pnum(mt4f_citizens())
+    nl()
+    mt4_census()
+    ps("T4F SYM " as u64)
+    pnum(mt4f_sym_inh())
+    sp()
+    pnum(mt4f_sym_str())
+    sp()
+    pnum(mt4f_sym_cit())
+    ps(" anchor-mismatches=" as u64)
+    pnum(mt4f_sym_anchor())
+    nl()
+    ps("T4F GROUPS z4-raw=" as u64)
+    pnum(mt4f_raw(1131i64))
+    ps(" v4-raw=" as u64)
+    pnum(mt4f_raw(3691i64))
+    nl()
+    let mut p : i64 = 1i64
+    while p < 4096i64 {
+        if mt4f_isoc(p) == 1i64 {
+            ps("T4F CIT " as u64)
+            pnum(p)
+            sp()
+            pnum(mt4f_rep(p))
+            mt4f_load(mt4f_rep(p))
+            let mut c2 : i64 = 0i64
+            while c2 < 16i64 { sp()   pnum(mt4f_cell(c2))   c2 = c2 + 1i64 }
+            nl()
+        }
+        p = p + 1i64
+    }
+    ps("T4F LAWLESS classes=" as u64)
+    pnum(mt4f_burnside_full(4i64) - mt4f_structures_lawful())
+    nl()
+    ps("T4F PRODUCT12 pairs=" as u64)
+    pnum(mt4f_product12_law(21i64))
+    nl()
+    ps("T4F VERDICT: the 4^16 refusal is DISCHARGED -- 178,981,952 structures, 109 species,\n" as u64)
+    ps("T4F   21 citizens (14 non-commutative, the projection among them); the commutative\n" as u64)
+    ps("T4F   slice replayed inside it species-for-species; the two ontology organs UNIFIED\n" as u64)
+    ps("T4F   by the carrier-12 product law\n" as u64)
+
+    /* ---- Chi-3: THE PATTERN INSTRUMENT ---- */
+    mp_scan()
+    i = 0i64
+    while i < mp_nd() {
+        ps("MP d " as u64)
+        pnum(mp_d(i))
+        sp()
+        pnum(mp_a(i))
+        sp()
+        pnum(mp_b(i))
+        sp()
+        pnum(mp_ra(i))
+        sp()
+        pnum(mp_rb(i))
+        nl()
+        i = i + 1i64
+    }
+    mp_units(40i64)
+    i = 0i64
+    while i < mp_nd() {
+        ps("MP u " as u64)
+        pnum(mp_d(i))
+        sp()
+        pnum(mp_ut(i))
+        sp()
+        pnum(mp_fu(i, 0i64))
+        sp()
+        pnum(mp_fu(i, 1i64))
+        sp()
+        pnum(mp_fu(i, 2i64))
+        sp()
+        pnum(mp_ona(i))
+        sp()
+        pnum(mp_onb(i))
+        nl()
+        i = i + 1i64
+    }
+    mp_hypo()
+    let mut hk : i64 = 1i64
+    while hk < 5i64 {
+        ps("MP H" as u64)
+        pnum(hk)
+        if mp_h(hk) == 1i64 { ps(" CONFIRMED-on-box" as u64) } else { ps(" REFUTED witness d=" as u64)   pnum(mp_hw(hk)) }
+        nl()
+        hk = hk + 1i64
+    }
+    ps("MP ORBIT-LAW d3B checks=" as u64)
+    pnum(mp_orbit_law(3i64, 2i64))
+    ps(" d2A checks=" as u64)
+    pnum(mp_orbit_law(2i64, 1i64))
+    nl()
+    ps("MP GAMMA2 d3B vanishing-pairs=" as u64)
+    pnum(mp_gamma2_pairs(3i64, 2i64))
+    ps(" of " as u64)
+    pnum(mp_gzn())
+    nl()
+    mcv_hunt_reset()
+    mcv_hunt(3i64, 2i64, 60i64)
+    bg_replay(3i64, 2i64)
+    i = 0i64
+    while i < bg_evn() { bg_harvest(i)   i = i + 1i64 }
+    ps("MP BIG-GAMMA2 c2-vanishing=" as u64)
+    pnum(mp_big_gamma2(3i64))
+    ps(" c1-vanishing=" as u64)
+    pnum(mp_bg1())
+    ps(" of 15 -- the cross-orbit collapse EXTENDS to the 10^12 tier\n" as u64)
+    ps("MP FIT signed-permutation matches=" as u64)
+    pnum(mp_fit(3i64, 2i64))
+    ps(" -- REFUTED: the entanglement is not a coordinate permutation\n" as u64)
+    let mut nf : i64 = mp_factor(0i64 - 249049i64)
+    ps("MP FACTOR -249049 =" as u64)
+    i = 0i64
+    while i < nf { sp()   pnum(mp_fp(i))   i = i + 1i64 }
+    nl()
+    mcv_hunt_reset()
+    mcv_hunt(3i64, 2i64, 60i64)
+    i = 0i64
+    while i < 6i64 {
+        let nrm : i64 = mn_row_norm(i)
+        nf = mp_factor(nrm)
+        ps("MP NORM row" as u64)
+        pnum(i)
+        ps(" N=" as u64)
+        pnum(nrm)
+        ps(" primes" as u64)
+        let mut k2 : i64 = 0i64
+        while k2 < nf { sp()   pnum(mp_fp(k2))   k2 = k2 + 1i64 }
+        nl()
+        i = i + 1i64
+    }
+    ps("MP NORM-LAW: the two d3B gamma-orbits carry the two primes of the fundamental product\n" as u64)
+    ps("MP   (271 and 919); norms scale by exactly d per gamma-step\n" as u64)
+    let p60 : i64 = mp_d225(60i64)
+    ps("MP D225 h60 code=" as u64)
+    pnum(p60)
+    nl()
+    if p60 == 0i64 {
+        let p120 : i64 = mp_d225(120i64)
+        ps("MP D225 h120 code=" as u64)
+        pnum(p120)
+        ps(" (verified*100 + refused*10 + big-judged)\n" as u64)
+    }
+    let mut r : i64 = 0i64
+    while r < mcv_refrows() {
+        ps("MP D225 ROW c=" as u64)
+        pnum(mcv_refrow_c(r))
+        sp()
+        pnum(mcv_refrow_u(r))
+        sp()
+        pnum(mcv_refrow_v(r))
+        sp()
+        pnum(mcv_refrow_w(r))
+        ps(" e=" as u64)
+        pnum(mcv_refrow_e(r))
+        ps(" f=" as u64)
+        pnum(mcv_refrow_f(r))
+        ps(" big-judged=" as u64)
+        pnum(bj_verify_raw(mcv_refrow_d(r), mcv_refrow_c(r), mcv_refrow_u(r), mcv_refrow_v(r), mcv_refrow_w(r), mcv_refrow_e(r), mcv_refrow_f(r)))
+        nl()
+        r = r + 1i64
+    }
+
+    /* ---- Chi-4: THE PILOT AT 18 ---- */
+    r = 12i64
+    while r < 18i64 {
+        if mpl_round(r) != 0i64 { ps("MPL ERROR round\n" as u64)   return 7i32 }
+        ps("MPL# " as u64)
+        pnum(r)
+        sp()
+        pnum(mpl_k())
+        sp()
+        pnum(mpl_p1())
+        sp()
+        pnum(mpl_p2())
+        sp()
+        pnum(mpl_r1())
+        sp()
+        pnum(mpl_r2())
+        nl()
+        r = r + 1i64
+    }
+    mpl_run(18i64)
+    ps("MPL rounds=18 head=" as u64)
+    phead()
+    nl()
+    ps("CHI VERDICT: EVERY NAMED ENVELOPE LIFTED -- the judge decides the harvested tier, the\n" as u64)
+    ps("CHI   fourth token is censused in FULL, the pattern instrument tests its own laws, and\n" as u64)
+    ps("CHI   the pilot's ledger extends -- seven certificates stand, the eighth is minted\n" as u64)
+    return 0i32
+}

@@ -1,0 +1,125 @@
+/* 2718_mathesis_tetra_full.iii -- GATE for THE FULL FOURTH TOKEN (campaign Chi, item Chi-2:
+ * the 4^16 refusal DISCHARGED by total exhaustion).
+ *
+ * Campaign Upsilon priced the full fourth token at 4,294,967,296 tables and refused it by
+ * name; Phi took the commutative slice.  This gate pays the full price -- every table, every
+ * law, by exhaustion (the priced sweep runs ~17 minutes; the harness grants it a long
+ * timeout, printed, never hidden):
+ *
+ *   - the fast per-law checker equals the STANDING mt4_profile over the ENTIRE commutative
+ *     slice (1,048,576 tables through both checkers -- one semantics, two checkers);
+ *   - BURNSIDE, analytic (cell-orbit product formula): n=2 -> 10 and n=3 -> 3,330 (the
+ *     forge's own numbers) and n=4 -> 178,981,952 -- THE MACHINE'S OWN COUNT of all binary
+ *     operations on four tokens up to isomorphism;
+ *   - THE CENSUS (observed 2026-07-13, pinned): 109 inhabited species of the 4096-profile
+ *     lattice, 20,596,732 lawful tables, 860,978 lawful structures, 21 CITIZENS -- among
+ *     them 14 NON-commutative ones the commutative slice could not see (the right-projection
+ *     T(x,y) = y minted at profile 1957 with its exact seven-law set);
+ *   - the sym sub-census inside the full sweep == the sealed Phi-3 numbers (25 / 43,968 / 7)
+ *     AND species-for-species (RAWC[p] == mt4_raw(p), ISOCC[p] == mt4_isoc(p), all 4096 p);
+ *   - the group species: Z_4 raw 12 / V_4 raw 4, one structure each (24/|Aut|);
+ *   - the lawless-classes derivation: 178,981,952 - 860,978 = 178,120,974;
+ *   - THE CROSS-CARRIER PRODUCT LAW: ontogenesis citizens (n=3) x full-token citizens (n=4)
+ *     on carrier 12 -- profile12(A x B) == profile12(A) AND profile12(B), 24 x 21 = 504
+ *     ordered pairs, the two ontology organs UNIFIED by a verified law.
+ *
+ * TEETH FIRST: Z_4 -> 1131 and V_4 -> 3691 (the sealed citizen profiles); a corrupted Z_4
+ * table LOSES ASSOC.  EXIT 99. */
+module corpus_2718_mathesis_tetra_full
+
+extern @abi(c-msvc-x64) fn mt4_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_structures() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_citizens() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_load(tid: i64) -> i32 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_cell(k: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_profile() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_twopath() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_burnside_full(n: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_census() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_raw(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_isoc(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_rep(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_inhabited() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_lawful_raw() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_structures_lawful() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_citizens() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_inh() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_str() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_cit() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_sym_anchor() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_product12_law(cap: i64) -> i64 from "mathesis_tetra.iii"
+
+fn z4_tid() -> i64 {
+    let mut tid : i64 = 0i64
+    let mut pos : i64 = 15i64
+    while pos >= 0i64 {
+        let x : i64 = pos / 4i64
+        let y : i64 = pos % 4i64
+        tid = (tid * 4i64) + ((x + y) % 4i64)
+        pos = pos - 1i64
+    }
+    return tid
+}
+
+fn v4_tid() -> i64 {
+    let mut tid : i64 = 0i64
+    let mut pos : i64 = 15i64
+    while pos >= 0i64 {
+        let x : u64 = (pos / 4i64) as u64
+        let y : u64 = (pos % 4i64) as u64
+        tid = (tid * 4i64) + ((x ^ y) as i64)
+        pos = pos - 1i64
+    }
+    return tid
+}
+
+fn main() -> i32 {
+    /* [T] teeth first: the sealed citizen profiles, and the discrimination tooth */
+    mt4f_load(z4_tid())
+    if mt4f_profile() != 1131i64 { return 10i32 }
+    mt4f_load(v4_tid())
+    if mt4f_profile() != 3691i64 { return 11i32 }
+    /* corrupt one off-diagonal cell of Z_4 (cell (3,0), digit 4^12: 3 -> 0): ASSOC must die */
+    mt4f_load(z4_tid() - (3i64 * 16777216i64))
+    let pc2 : i64 = mt4f_profile()
+    if (pc2 & 1i64) != 0i64 { return 12i32 }
+    /* [P] the two-path over the whole commutative slice */
+    if mt4f_twopath() != 1048576i64 { return 20i32 }
+    /* [B] Burnside analytic, anchored then extended */
+    if mt4f_burnside_full(2i64) != 10i64 { return 21i32 }
+    if mt4f_burnside_full(3i64) != 3330i64 { return 22i32 }
+    let b4 : i64 = mt4f_burnside_full(4i64)
+    if b4 != 178981952i64 { return 23i32 }
+    /* [C] THE CENSUS: all 4,294,967,296 tables (the priced sweep, paid here) */
+    if mt4f_census() != 109i64 { return 30i32 }
+    if mt4f_lawful_raw() != 20596732i64 { return 31i32 }
+    if mt4f_structures_lawful() != 860978i64 { return 32i32 }
+    if mt4f_citizens() != 21i64 { return 33i32 }
+    /* [S] the sym sub-census == the sealed Phi-3 commutative ontology */
+    if mt4f_sym_inh() != 25i64 { return 40i32 }
+    if mt4f_sym_str() != 43968i64 { return 41i32 }
+    if mt4f_sym_cit() != 7i64 { return 42i32 }
+    /* [A] species-for-species against the standing organ's own census */
+    if mt4_census() != 25i64 { return 43i32 }
+    if mt4_structures() != 43968i64 { return 44i32 }
+    if mt4_citizens() != 7i64 { return 45i32 }
+    if mt4f_sym_anchor() != 0i64 { return 46i32 }
+    /* [G] the group species (24/|Aut|: Z_4 -> 12, V_4 -> 4; one structure each) */
+    if mt4f_raw(1131i64) != 12i64 { return 50i32 }
+    if mt4f_isoc(1131i64) != 1i64 { return 51i32 }
+    if mt4f_raw(3691i64) != 4i64 { return 52i32 }
+    if mt4f_isoc(3691i64) != 1i64 { return 53i32 }
+    /* [K] the right-projection citizen: profile 1957, rep = T(x,y) = y */
+    if mt4f_isoc(1957i64) != 1i64 { return 54i32 }
+    mt4f_load(mt4f_rep(1957i64))
+    let mut k : i64 = 0i64
+    while k < 16i64 {
+        if mt4f_cell(k) != (k % 4i64) { return 55i32 }
+        k = k + 1i64
+    }
+    /* [Q] the lawless classes, derived */
+    if (b4 - mt4f_structures_lawful()) != 178120974i64 { return 56i32 }
+    /* [L] THE CROSS-CARRIER PRODUCT LAW: 24 onto citizens x 21 full-token citizens */
+    if mt4f_product12_law(21i64) != 504i64 { return 60i32 }
+    return 99i32
+}

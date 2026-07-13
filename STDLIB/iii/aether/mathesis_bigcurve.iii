@@ -59,7 +59,7 @@ var BC_S : [i64; 256]         /* sign 1 / -1 (a zero value has len 0, sign 1) */
 var BC_N : [i64; 256]         /* limb count (trimmed) */
 var BC_MT : [u64; 200]        /* mul accumulator */
 
-fn bc_zero(h: i64) -> i32 { BC_S[h as u64] = 1i64   BC_N[h as u64] = 0i64   return 0i32 }
+fn bc_zero(h: i64) -> i32 @export { BC_S[h as u64] = 1i64   BC_N[h as u64] = 0i64   return 0i32 }
 fn bc_len(h: i64) -> i64 @export { return BC_N[h as u64] }
 fn bc_sgn(h: i64) -> i64 @export { if BC_N[h as u64] == 0i64 { return 0i64 }   return BC_S[h as u64] }
 
@@ -74,7 +74,7 @@ fn bc_trim(h: i64) -> i32 {
     return 0i32
 }
 
-fn bc_seti(h: i64, v: i64) -> i32 {
+fn bc_seti(h: i64, v: i64) -> i32 @export {
     let mut m : u64 = v as u64
     BC_S[h as u64] = 1i64
     if v < 0i64 { BC_S[h as u64] = 0i64 - 1i64   m = (0i64 - v) as u64 }
@@ -84,7 +84,7 @@ fn bc_seti(h: i64, v: i64) -> i32 {
     return bc_trim(h)
 }
 
-fn bc_copy(d: i64, s: i64) -> i32 {
+fn bc_copy(d: i64, s: i64) -> i32 @export {
     let n : i64 = BC_N[s as u64]
     let mut i : i64 = 0i64
     while i < n { BC_L[((d * BCW) + i) as u64] = BC_L[((s * BCW) + i) as u64]   i = i + 1i64 }
@@ -93,7 +93,7 @@ fn bc_copy(d: i64, s: i64) -> i32 {
     return 0i32
 }
 
-fn bc_cmpmag(a: i64, b: i64) -> i64 {
+fn bc_cmpmag(a: i64, b: i64) -> i64 @export {
     let na : i64 = BC_N[a as u64]
     let nb : i64 = BC_N[b as u64]
     if na > nb { return 1i64 }
@@ -177,11 +177,11 @@ fn bc_addsub(d: i64, a: i64, b: i64, flip: i64) -> i64 {
     BC_S[d as u64] = sb
     return bc_trim(d) as i64
 }
-fn bc_add(d: i64, a: i64, b: i64) -> i64 { return bc_addsub(d, a, b, 0i64) }
-fn bc_sub(d: i64, a: i64, b: i64) -> i64 { return bc_addsub(d, a, b, 1i64) }
+fn bc_add(d: i64, a: i64, b: i64) -> i64 @export { return bc_addsub(d, a, b, 0i64) }
+fn bc_sub(d: i64, a: i64, b: i64) -> i64 @export { return bc_addsub(d, a, b, 1i64) }
 
 /* d = a * b (signed, exact).  d must NOT alias a or b.  -1 = limb refusal. */
-fn bc_mul(d: i64, a: i64, b: i64) -> i64 {
+fn bc_mul(d: i64, a: i64, b: i64) -> i64 @export {
     let na : i64 = BC_N[a as u64]
     let nb : i64 = BC_N[b as u64]
     if na == 0i64 { return bc_zero(d) as i64 }
@@ -213,12 +213,12 @@ fn bc_mul(d: i64, a: i64, b: i64) -> i64 {
 }
 
 /* d = a * v (i64), via scratch handle 15.  d must not be 15 or a. */
-fn bc_muli(d: i64, a: i64, v: i64) -> i64 {
+fn bc_muli(d: i64, a: i64, v: i64) -> i64 @export {
     bc_seti(15i64, v)
     return bc_mul(d, a, 15i64)
 }
 
-fn bc_iszero(h: i64) -> i64 { if BC_N[h as u64] == 0i64 { return 1i64 }   return 0i64 }
+fn bc_iszero(h: i64) -> i64 @export { if BC_N[h as u64] == 0i64 { return 1i64 }   return 0i64 }
 
 fn bc_eq(a: i64, b: i64) -> i64 @export {
     if BC_N[a as u64] == 0i64 { return bc_iszero(b) }
@@ -227,6 +227,15 @@ fn bc_eq(a: i64, b: i64) -> i64 @export {
     if bc_cmpmag(a, b) != 0i64 { return 0i64 }
     return 1i64
 }
+
+/* negate in place (a public door for the composing organs -- the judge, the pattern engine) */
+fn bc_neg(h: i64) -> i32 @export {
+    if BC_N[h as u64] > 0i64 { BC_S[h as u64] = 0i64 - BC_S[h as u64] }
+    return 0i32
+}
+
+/* raw limb reader (bit-length computations in the composing organs) */
+fn bc_limb(h: i64, i: i64) -> u64 @export { return BC_L[((h * BCW) + i) as u64] }
 
 /* trailing zero BITS of a nonzero magnitude */
 fn bc_tzbits(h: i64) -> i64 {
@@ -246,7 +255,7 @@ fn bc_tzbits(h: i64) -> i64 {
 }
 
 /* h >>= nb bits, in place */
-fn bc_shr(h: i64, nb: i64) -> i32 {
+fn bc_shr(h: i64, nb: i64) -> i32 @export {
     let ls : i64 = nb / 32i64
     let bs : i64 = nb % 32i64
     let n : i64 = BC_N[h as u64]
@@ -264,7 +273,7 @@ fn bc_shr(h: i64, nb: i64) -> i32 {
 }
 
 /* h <<= nb bits, in place.  -1 refusal. */
-fn bc_shl(h: i64, nb: i64) -> i64 {
+fn bc_shl(h: i64, nb: i64) -> i64 @export {
     let ls : i64 = nb / 32i64
     let bs : i64 = nb % 32i64
     let n : i64 = BC_N[h as u64]
@@ -285,7 +294,7 @@ fn bc_shl(h: i64, nb: i64) -> i64 {
 }
 
 /* d = gcd(|a|, |b|), binary (handles 23/24 are scratch; d may be any other handle). */
-fn bc_gcdmag(d: i64, a: i64, b: i64) -> i32 {
+fn bc_gcdmag(d: i64, a: i64, b: i64) -> i32 @export {
     if BC_N[a as u64] == 0i64 { bc_copy(d, b)   BC_S[d as u64] = 1i64   return 0i32 }
     if BC_N[b as u64] == 0i64 { bc_copy(d, a)   BC_S[d as u64] = 1i64   return 0i32 }
     bc_copy(23i64, a)   BC_S[23u64] = 1i64
@@ -326,7 +335,7 @@ fn bc_gcdmag(d: i64, a: i64, b: i64) -> i32 {
 /* q = n / g EXACT (magnitudes; the division must be exact or -2 is returned: the residue is
  * checked limb-for-limb).  Jebelean LSB-first.  Scratch: 25 (n working copy), 26 (g working).
  * q must not be 25/26 and must not alias n or g. */
-fn bc_divexact(q: i64, n: i64, g: i64) -> i64 {
+fn bc_divexact(q: i64, n: i64, g: i64) -> i64 @export {
     if BC_N[n as u64] == 0i64 { bc_zero(q)   return 0i64 }
     if BC_N[g as u64] == 0i64 { return 0i64 - 2i64 }
     bc_copy(25i64, n)
@@ -389,7 +398,7 @@ fn bc_divexact(q: i64, n: i64, g: i64) -> i64 {
 
 /* decimal digits of |h| + sign into the digit pool slot (64 bytes: [0]=length, then chars). */
 var BG_DG : [u8; 4096]
-fn bc_render(h: i64, slot: i64) -> i32 {
+fn bc_render(h: i64, slot: i64) -> i32 @export {
     let base : i64 = slot * 64i64
     var tmpd : [u8; 64]
     let mut nd : i64 = 0i64
@@ -423,7 +432,7 @@ fn bg_digat(slot: i64, i: i64) -> i64 @export { return BG_DG[((slot * 64i64) + 1
 
 /* dst = grid<which>(hu, hv, hw) -- handles; powers in 0..11, acc 12, t 13/14.
  * dst must be outside 0..15.  0 ok, -1 limb refusal. */
-fn bge_eval(which: i64, hu: i64, hv: i64, hw: i64, dst: i64) -> i64 {
+fn bge_eval(which: i64, hu: i64, hv: i64, hw: i64, dst: i64) -> i64 @export {
     bc_seti(0i64, 1i64)   bc_copy(4i64, 0i64)   bc_copy(8i64, 0i64)
     bc_copy(1i64, hu)   bc_copy(5i64, hv)   bc_copy(9i64, hw)
     if bc_mul(2i64, 1i64, hu) < 0i64 { return 0i64 - 1i64 }
@@ -797,6 +806,10 @@ fn bg_recheck(i: i64) -> i64 @export {
     if bc_eq(43i64, rb + 4i64) != 1i64 { return 0i64 }
     return 1i64
 }
+
+/* the harvested-result HANDLE door: event i, field f in (0 u, 1 v, 2 w, 3 e, 4 f) -- the
+ * contract the big judge composes through (one slab, two organs). */
+fn bg_res_h(i: i64, f: i64) -> i64 @export { return 104i64 + (i * 5i64) + f }
 
 /* i64 doors onto a harvested result (valid only while it FITS i64; -1 sentinel otherwise --
  * the gate uses these for the small-point two-path only). */

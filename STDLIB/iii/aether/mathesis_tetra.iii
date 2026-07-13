@@ -15,10 +15,17 @@
  *     independently in-gate (sum over all 24 relabelings of the equivariant-fix counts);
  *   - the commutative-slice census at n <= 3 must equal the forge's own commutative rows.
  *
- * SCOPE, stated exactly: the commutative slice.  The non-commutative fourth token stays priced
- * and refused by name (4^16 tables) -- a frontier, not a claim.
+ * SCOPE: the commutative slice above (gate 2716, sealed) -- and, since campaign Chi, THE FULL
+ * FOURTH TOKEN (the mt4f_ tier below): all 4^16 = 4,294,967,296 tables censused by TOTAL
+ * exhaustion with a per-law early-exit checker TWO-PATHED against mt4_profile over the entire
+ * commutative slice, the lawful slice classified up to isomorphism by canonical minimum,
+ * BURNSIDE computed analytically (cell-orbit product formula, anchored at n=2/3 against the
+ * forge's 10 / 3,330), and the census cross-anchored species-for-species against the sealed
+ * commutative rows.  The old refusal-by-name is DISCHARGED.
  *
- * Gate: corpus/2716_mathesis_tetra.  Stream: DOCS/MATHESIS-PHI-ROUND1.log (MT4 rows).
+ * Gates: corpus/2716_mathesis_tetra (the commutative slice) + corpus/2718_mathesis_tetra_full
+ * (the full census).  Streams: DOCS/MATHESIS-PHI-ROUND1.log (MT4 rows) +
+ * DOCS/MATHESIS-CHI-ROUND1.log (T4F rows).
  * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_forge (tables) + mathesis_ontogenesis
  * (the standing checker, as the two-path partner) doors only.  ZERO-CASCADE: standalone TU. */
 module mathesis_tetra
@@ -29,6 +36,9 @@ extern @abi(c-msvc-x64) fn mff_op(x: i64, y: i64) -> i64 from "mathesis_forge.ii
 extern @abi(c-msvc-x64) fn mff_iso(p: i64) -> i64 from "mathesis_forge.iii"
 extern @abi(c-msvc-x64) fn mog_load_forge(idx: i64, n: i64) -> i32 from "mathesis_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn mog_profile() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_citizens(n: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_p(k: i64) -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_cit_r(k: i64) -> i64 from "mathesis_ontogenesis.iii"
 
 /* ---- the working table (carrier <= 16 for the product tier) ---- */
 var MT4_OP : [i64; 256]
@@ -553,4 +563,531 @@ fn mt4_forge_comm_classes(n: i64) -> i64 @export {
         p = p + 1i64
     }
     return acc
+}
+
+/* ==================== THE FULL FOURTH TOKEN (campaign Chi, mt4f_ tier) ====================
+ * All 4^16 tables.  The flat working table MT4F_T holds cell (x,y) at index x*4+y; a table id
+ * is its base-4 digit string over those 16 cells (LSB = cell 0).  The fast checker is a
+ * per-law early-exit re-statement of the SAME twelve laws -- proven equal to mt4_profile over
+ * the whole commutative slice by mt4f_twopath (one semantics, two checkers, in one organ). */
+
+var MT4F_T : [i64; 16]
+
+fn mt4f_load(tid: i64) -> i32 @export {
+    let mut t : i64 = tid
+    let mut k : i64 = 0i64
+    while k < 16i64 { MT4F_T[k as u64] = t % 4i64   t = t / 4i64   k = k + 1i64 }
+    return 0i32
+}
+fn mt4f_cell(k: i64) -> i64 @export { return MT4F_T[k as u64] }
+
+fn mt4f_idem() -> i64 {
+    if MT4F_T[0u64] != 0i64 { return 0i64 }
+    if MT4F_T[5u64] != 1i64 { return 0i64 }
+    if MT4F_T[10u64] != 2i64 { return 0i64 }
+    if MT4F_T[15u64] != 3i64 { return 0i64 }
+    return 1i64
+}
+
+fn mt4f_comm() -> i64 {
+    if MT4F_T[1u64] != MT4F_T[4u64] { return 0i64 }
+    if MT4F_T[2u64] != MT4F_T[8u64] { return 0i64 }
+    if MT4F_T[3u64] != MT4F_T[12u64] { return 0i64 }
+    if MT4F_T[6u64] != MT4F_T[9u64] { return 0i64 }
+    if MT4F_T[7u64] != MT4F_T[13u64] { return 0i64 }
+    if MT4F_T[11u64] != MT4F_T[14u64] { return 0i64 }
+    return 1i64
+}
+
+fn mt4f_lcan() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let b : i64 = x * 4i64
+        let mut m : u64 = 1u64 << (MT4F_T[b as u64] as u64)
+        m = m | (1u64 << (MT4F_T[(b + 1i64) as u64] as u64))
+        m = m | (1u64 << (MT4F_T[(b + 2i64) as u64] as u64))
+        m = m | (1u64 << (MT4F_T[(b + 3i64) as u64] as u64))
+        if m != 15u64 { return 0i64 }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_rcan() -> i64 {
+    let mut y : i64 = 0i64
+    while y < 4i64 {
+        let mut m : u64 = 1u64 << (MT4F_T[y as u64] as u64)
+        m = m | (1u64 << (MT4F_T[(y + 4i64) as u64] as u64))
+        m = m | (1u64 << (MT4F_T[(y + 8i64) as u64] as u64))
+        m = m | (1u64 << (MT4F_T[(y + 12i64) as u64] as u64))
+        if m != 15u64 { return 0i64 }
+        y = y + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_ident() -> i64 {
+    let mut e : i64 = 0i64
+    while e < 4i64 {
+        if MT4F_T[(e * 5i64) as u64] == e {
+            let mut ok : i64 = 1i64
+            let mut x : i64 = 0i64
+            while x < 4i64 {
+                if MT4F_T[((e * 4i64) + x) as u64] != x { ok = 0i64   x = 4i64 }
+                else { if MT4F_T[((x * 4i64) + e) as u64] != x { ok = 0i64   x = 4i64 } else { x = x + 1i64 } }
+            }
+            if ok == 1i64 { return 1i64 }
+        }
+        e = e + 1i64
+    }
+    return 0i64
+}
+
+fn mt4f_zero() -> i64 {
+    let mut e : i64 = 0i64
+    while e < 4i64 {
+        if MT4F_T[(e * 5i64) as u64] == e {
+            let mut ok : i64 = 1i64
+            let mut x : i64 = 0i64
+            while x < 4i64 {
+                if MT4F_T[((e * 4i64) + x) as u64] != e { ok = 0i64   x = 4i64 }
+                else { if MT4F_T[((x * 4i64) + e) as u64] != e { ok = 0i64   x = 4i64 } else { x = x + 1i64 } }
+            }
+            if ok == 1i64 { return 1i64 }
+        }
+        e = e + 1i64
+    }
+    return 0i64
+}
+
+fn mt4f_linvol() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let b : i64 = x * 4i64
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            if MT4F_T[(b + MT4F_T[(b + y) as u64]) as u64] != y { return 0i64 }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_rinvol() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            if MT4F_T[((MT4F_T[((x * 4i64) + y) as u64] * 4i64) + y) as u64] != x { return 0i64 }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_assoc() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            let xy : i64 = MT4F_T[((x * 4i64) + y) as u64]
+            let mut z : i64 = 0i64
+            while z < 4i64 {
+                if MT4F_T[((xy * 4i64) + z) as u64] != MT4F_T[((x * 4i64) + MT4F_T[((y * 4i64) + z) as u64]) as u64] { return 0i64 }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_lsd() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let b : i64 = x * 4i64
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            let xy : i64 = MT4F_T[(b + y) as u64]
+            let mut z : i64 = 0i64
+            while z < 4i64 {
+                if MT4F_T[(b + MT4F_T[((y * 4i64) + z) as u64]) as u64] != MT4F_T[((xy * 4i64) + MT4F_T[(b + z) as u64]) as u64] { return 0i64 }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_rsd() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            let xy : i64 = MT4F_T[((x * 4i64) + y) as u64]
+            let mut z : i64 = 0i64
+            while z < 4i64 {
+                if MT4F_T[((xy * 4i64) + z) as u64] != MT4F_T[((MT4F_T[((x * 4i64) + z) as u64] * 4i64) + MT4F_T[((y * 4i64) + z) as u64]) as u64] { return 0i64 }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_medial() -> i64 {
+    let mut x : i64 = 0i64
+    while x < 4i64 {
+        let mut y : i64 = 0i64
+        while y < 4i64 {
+            let xy : i64 = MT4F_T[((x * 4i64) + y) as u64]
+            let mut z : i64 = 0i64
+            while z < 4i64 {
+                let xz : i64 = MT4F_T[((x * 4i64) + z) as u64]
+                let mut w : i64 = 0i64
+                while w < 4i64 {
+                    if MT4F_T[((xy * 4i64) + MT4F_T[((z * 4i64) + w) as u64]) as u64] != MT4F_T[((xz * 4i64) + MT4F_T[((y * 4i64) + w) as u64]) as u64] { return 0i64 }
+                    w = w + 1i64
+                }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1i64
+}
+
+fn mt4f_profile() -> i64 @export {
+    let mut p : i64 = 0i64
+    if mt4f_assoc() == 1i64 { p = p | 1i64 }
+    if mt4f_comm() == 1i64 { p = p | 2i64 }
+    if mt4f_idem() == 1i64 { p = p | 4i64 }
+    if mt4f_ident() == 1i64 { p = p | 8i64 }
+    if mt4f_zero() == 1i64 { p = p | 16i64 }
+    if mt4f_lcan() == 1i64 { p = p | 32i64 }
+    if mt4f_rcan() == 1i64 { p = p | 64i64 }
+    if mt4f_lsd() == 1i64 { p = p | 128i64 }
+    if mt4f_rsd() == 1i64 { p = p | 256i64 }
+    if mt4f_linvol() == 1i64 { p = p | 512i64 }
+    if mt4f_medial() == 1i64 { p = p | 1024i64 }
+    if mt4f_rinvol() == 1i64 { p = p | 2048i64 }
+    return p
+}
+
+/* the inverse-permutation companion of MT4_PM (built once from the standing table) */
+var MT4F_PI : [i64; 96]
+var MT4F_PIN : i64
+fn mt4f_perms_init() -> i32 {
+    mt4_perms_init()
+    if MT4F_PIN == 24i64 { return 0i32 }
+    let mut s : i64 = 0i64
+    while s < 24i64 {
+        let mut x : i64 = 0i64
+        while x < 4i64 {
+            MT4F_PI[((s * 4i64) + mt4_pm(s, x)) as u64] = x
+            x = x + 1i64
+        }
+        s = s + 1i64
+    }
+    MT4F_PIN = 24i64
+    return 0i32
+}
+
+/* 1 iff the working table is the lexicographic minimum of its S_4 orbit (cells row-major) */
+fn mt4f_canonical() -> i64 @export {
+    mt4f_perms_init()
+    let mut s : i64 = 1i64
+    while s < 24i64 {
+        let sb : i64 = s * 4i64
+        let mut pos : i64 = 0i64
+        while pos < 16i64 {
+            let x : i64 = pos / 4i64
+            let y : i64 = pos % 4i64
+            let v : i64 = MT4_PM[(sb + MT4F_T[((MT4F_PI[(sb + x) as u64] * 4i64) + MT4F_PI[(sb + y) as u64]) as u64]) as u64]
+            if v < MT4F_T[pos as u64] { return 0i64 }
+            if v > MT4F_T[pos as u64] { pos = 16i64 } else { pos = pos + 1i64 }
+        }
+        s = s + 1i64
+    }
+    return 1i64
+}
+
+/* BURNSIDE analytic for the FULL n-universe (n <= 4): the cell-orbit product formula.
+ * Anchors: n=2 -> 10 and n=3 -> 3,330 must equal the forge; the identity term is n^(n*n). */
+var MT4F_BP : [i64; 4]
+var MT4F_BU : [i64; 16]
+fn mt4f_burnside_full(n: i64) -> i64 @export {
+    let mut total : i64 = 0i64
+    let mut nperm : i64 = 0i64
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            let mut c : i64 = 0i64
+            while c < n {
+                let mut d : i64 = 0i64
+                while d < n {
+                    let mut ok : i64 = 1i64
+                    if a == b { ok = 0i64 }
+                    if n > 2i64 { if a == c { ok = 0i64 }   if b == c { ok = 0i64 } }
+                    if n > 3i64 {
+                        if a == d { ok = 0i64 }
+                        if b == d { ok = 0i64 }
+                        if c == d { ok = 0i64 }
+                    }
+                    if ok == 1i64 {
+                        MT4F_BP[0u64] = a   MT4F_BP[1u64] = b   MT4F_BP[2u64] = c   MT4F_BP[3u64] = d
+                        nperm = nperm + 1i64
+                        let mut i : i64 = 0i64
+                        while i < (n * n) { MT4F_BU[i as u64] = 0i64   i = i + 1i64 }
+                        let mut fixcnt : i64 = 1i64
+                        i = 0i64
+                        while i < (n * n) {
+                            if MT4F_BU[i as u64] == 0i64 {
+                                let mut ln : i64 = 0i64
+                                let mut cur : i64 = i
+                                let mut guard : i64 = 0i64
+                                while guard < 20i64 {
+                                    MT4F_BU[cur as u64] = 1i64
+                                    ln = ln + 1i64
+                                    let cx : i64 = cur / n
+                                    let cy : i64 = cur % n
+                                    cur = (MT4F_BP[cx as u64] * n) + MT4F_BP[cy as u64]
+                                    if cur == i { guard = 20i64 }
+                                    guard = guard + 1i64
+                                }
+                                let mut fp : i64 = 0i64
+                                let mut t : i64 = 0i64
+                                while t < n {
+                                    let mut v : i64 = t
+                                    let mut k : i64 = 0i64
+                                    while k < ln { v = MT4F_BP[v as u64]   k = k + 1i64 }
+                                    if v == t { fp = fp + 1i64 }
+                                    t = t + 1i64
+                                }
+                                fixcnt = fixcnt * fp
+                            }
+                            i = i + 1i64
+                        }
+                        total = total + fixcnt
+                    }
+                    d = d + 1i64
+                    if n < 4i64 { if d > 0i64 { d = n } }
+                }
+                c = c + 1i64
+                if n < 3i64 { if c > 0i64 { c = n } }
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return total / nperm
+}
+
+/* sym tid -> full tid (the commutative slice's embedding, for the two-path) */
+var MT4F_SD : [i64; 10]
+var MT4F_SC : [i64; 16]
+fn mt4f_sym_to_full(sid: i64) -> i64 @export {
+    let mut t : i64 = sid
+    let mut i : i64 = 0i64
+    while i < 10i64 { MT4F_SD[i as u64] = t % 4i64   t = t / 4i64   i = i + 1i64 }
+    MT4F_SC[0u64] = MT4F_SD[0u64]    MT4F_SC[5u64] = MT4F_SD[1u64]
+    MT4F_SC[10u64] = MT4F_SD[2u64]   MT4F_SC[15u64] = MT4F_SD[3u64]
+    MT4F_SC[1u64] = MT4F_SD[4u64]    MT4F_SC[4u64] = MT4F_SD[4u64]
+    MT4F_SC[2u64] = MT4F_SD[5u64]    MT4F_SC[8u64] = MT4F_SD[5u64]
+    MT4F_SC[3u64] = MT4F_SD[6u64]    MT4F_SC[12u64] = MT4F_SD[6u64]
+    MT4F_SC[6u64] = MT4F_SD[7u64]    MT4F_SC[9u64] = MT4F_SD[7u64]
+    MT4F_SC[7u64] = MT4F_SD[8u64]    MT4F_SC[13u64] = MT4F_SD[8u64]
+    MT4F_SC[11u64] = MT4F_SD[9u64]   MT4F_SC[14u64] = MT4F_SD[9u64]
+    let mut f : i64 = 0i64
+    i = 15i64
+    while i >= 0i64 { f = (f * 4i64) + MT4F_SC[i as u64]   i = i - 1i64 }
+    return f
+}
+
+/* THE TWO-PATH: the fast checker equals the standing mt4_profile over the ENTIRE commutative
+ * slice (every sym tid).  Returns tables checked; negative = first disagreement's sym tid. */
+fn mt4f_twopath() -> i64 @export {
+    let mut sid : i64 = 0i64
+    while sid < 1048576i64 {
+        mt4f_load(mt4f_sym_to_full(sid))
+        let pf : i64 = mt4f_profile()
+        mt4_load_sym(sid)
+        if pf != mt4_profile() { return 0i64 - (sid + 1i64) }
+        sid = sid + 1i64
+    }
+    return 1048576i64
+}
+
+/* ---- THE CENSUS over all 4^16 tables (the priced sweep, paid) ---- */
+var MT4F_RAW : [i64; 4096]
+var MT4F_ISOC : [i64; 4096]
+var MT4F_REP : [i64; 4096]
+var MT4F_RAWC : [i64; 4096]
+var MT4F_ISOCC : [i64; 4096]
+var MT4F_INH : i64
+var MT4F_LAWRAW : i64
+var MT4F_STRL : i64
+var MT4F_CITN : i64
+var MT4F_SYMINH : i64
+var MT4F_SYMSTR : i64
+var MT4F_SYMCIT : i64
+fn mt4f_raw(p: i64) -> i64 @export { return MT4F_RAW[p as u64] }
+fn mt4f_isoc(p: i64) -> i64 @export { return MT4F_ISOC[p as u64] }
+fn mt4f_rep(p: i64) -> i64 @export { return MT4F_REP[p as u64] }
+fn mt4f_rawc(p: i64) -> i64 @export { return MT4F_RAWC[p as u64] }
+fn mt4f_isocc(p: i64) -> i64 @export { return MT4F_ISOCC[p as u64] }
+fn mt4f_inhabited() -> i64 @export { return MT4F_INH }
+fn mt4f_lawful_raw() -> i64 @export { return MT4F_LAWRAW }
+fn mt4f_structures_lawful() -> i64 @export { return MT4F_STRL }
+fn mt4f_citizens() -> i64 @export { return MT4F_CITN }
+fn mt4f_sym_inh() -> i64 @export { return MT4F_SYMINH }
+fn mt4f_sym_str() -> i64 @export { return MT4F_SYMSTR }
+fn mt4f_sym_cit() -> i64 @export { return MT4F_SYMCIT }
+
+fn mt4f_census() -> i64 @export {
+    mt4f_perms_init()
+    let mut i : i64 = 0i64
+    while i < 4096i64 {
+        MT4F_RAW[i as u64] = 0i64    MT4F_ISOC[i as u64] = 0i64   MT4F_REP[i as u64] = 0i64 - 1i64
+        MT4F_RAWC[i as u64] = 0i64   MT4F_ISOCC[i as u64] = 0i64
+        i = i + 1i64
+    }
+    mt4f_load(0i64)
+    MT4F_LAWRAW = 0i64
+    MT4F_STRL = 0i64
+    let cap : i64 = 4294967296i64
+    let mut tid : i64 = 0i64
+    while tid < cap {
+        let p : i64 = mt4f_profile()
+        MT4F_RAW[p as u64] = MT4F_RAW[p as u64] + 1i64
+        if p != 0i64 {
+            MT4F_LAWRAW = MT4F_LAWRAW + 1i64
+            let cn : i64 = mt4f_canonical()
+            if cn == 1i64 {
+                MT4F_ISOC[p as u64] = MT4F_ISOC[p as u64] + 1i64
+                MT4F_STRL = MT4F_STRL + 1i64
+                if MT4F_REP[p as u64] < 0i64 { MT4F_REP[p as u64] = tid }
+            }
+            if (p & 2i64) != 0i64 {
+                MT4F_RAWC[p as u64] = MT4F_RAWC[p as u64] + 1i64
+                if cn == 1i64 { MT4F_ISOCC[p as u64] = MT4F_ISOCC[p as u64] + 1i64 }
+            }
+        }
+        let mut k : i64 = 0i64
+        let mut carry : i64 = 1i64
+        while carry == 1i64 {
+            if k >= 16i64 { carry = 0i64 }
+            else {
+                MT4F_T[k as u64] = MT4F_T[k as u64] + 1i64
+                if MT4F_T[k as u64] == 4i64 { MT4F_T[k as u64] = 0i64   k = k + 1i64 } else { carry = 0i64 }
+            }
+        }
+        tid = tid + 1i64
+    }
+    MT4F_INH = 0i64
+    MT4F_CITN = 0i64
+    MT4F_SYMINH = 0i64
+    MT4F_SYMSTR = 0i64
+    MT4F_SYMCIT = 0i64
+    i = 0i64
+    while i < 4096i64 {
+        if MT4F_RAW[i as u64] > 0i64 { MT4F_INH = MT4F_INH + 1i64 }
+        if MT4F_ISOC[i as u64] == 1i64 { MT4F_CITN = MT4F_CITN + 1i64 }
+        if MT4F_RAWC[i as u64] > 0i64 { MT4F_SYMINH = MT4F_SYMINH + 1i64 }
+        MT4F_SYMSTR = MT4F_SYMSTR + MT4F_ISOCC[i as u64]
+        if MT4F_ISOCC[i as u64] == 1i64 { MT4F_SYMCIT = MT4F_SYMCIT + 1i64 }
+        i = i + 1i64
+    }
+    return MT4F_INH
+}
+
+/* the per-species anchor against the sealed commutative organ (run mt4_census first):
+ * RAWC[p] == mt4_raw(p) and ISOCC[p] == mt4_isoc(p) for ALL p.  Returns mismatches (0!). */
+fn mt4f_sym_anchor() -> i64 @export {
+    let mut bad : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 4096i64 {
+        if MT4F_RAWC[i as u64] != mt4_raw(i) { bad = bad + 1i64 }
+        if MT4F_ISOCC[i as u64] != mt4_isoc(i) { bad = bad + 1i64 }
+        i = i + 1i64
+    }
+    return bad
+}
+
+/* ---- THE CROSS-CARRIER PRODUCT LAW: onto/forge citizens (n = 3) x full-token citizens
+ *      (n = 4) on carrier 12 -- profile12(A x B) == profile(A) AND profile(B).  The 3-side
+ *      comes through the forge doors (mff_load by index); the 4-side is an mt4f tid. ---- */
+fn mt4f_product12(fidx3: i64, tid4: i64) -> i32 @export {
+    mff_load(fidx3, 3i64)
+    let mut i : i64 = 0i64
+    while i < 9i64 { MT4_TA[i as u64] = mff_op(i / 3i64, i % 3i64)   i = i + 1i64 }
+    mt4f_load(tid4)
+    i = 0i64
+    while i < 16i64 { MT4_TB[i as u64] = MT4F_T[i as u64]   i = i + 1i64 }
+    MT4_N = 12i64
+    let mut x1 : i64 = 0i64
+    while x1 < 3i64 {
+        let mut x2 : i64 = 0i64
+        while x2 < 4i64 {
+            let mut y1 : i64 = 0i64
+            while y1 < 3i64 {
+                let mut y2 : i64 = 0i64
+                while y2 < 4i64 {
+                    let a : i64 = MT4_TA[((x1 * 3i64) + y1) as u64]
+                    let b : i64 = MT4_TB[((x2 * 4i64) + y2) as u64]
+                    mt4_set((x1 * 4i64) + x2, (y1 * 4i64) + y2, (a * 4i64) + b)
+                    y2 = y2 + 1i64
+                }
+                y1 = y1 + 1i64
+            }
+            x2 = x2 + 1i64
+        }
+        x1 = x1 + 1i64
+    }
+    return 0i32
+}
+
+/* the law over onto citizens x the first `cap` full-token citizens (by ascending profile).
+ * Runs the ontogenesis citizen selection itself (mog_citizens(3)); the census must have run.
+ * Returns ordered pairs verified; negative = the pair where it broke (mt4f_pl_a/b). */
+var MT4F_PLA : i64   var MT4F_PLB : i64
+fn mt4f_pl_a() -> i64 @export { return MT4F_PLA }
+fn mt4f_pl_b() -> i64 @export { return MT4F_PLB }
+fn mt4f_product12_law(cap: i64) -> i64 @export {
+    let n3 : i64 = mog_citizens(3i64)
+    let mut verified : i64 = 0i64
+    let mut ia : i64 = 0i64
+    while ia < n3 {
+        let ra : i64 = mog_cit_r(ia)
+        /* the 3-side's TWELVE-law profile (mog_cit_p is the forge's 11-law species tag) */
+        mt4_load_forge(ra, 3i64)
+        let pa : i64 = mt4_profile()
+        let mut ib : i64 = 0i64
+        let mut p4 : i64 = 1i64
+        while p4 < 4096i64 {
+            if MT4F_ISOC[p4 as u64] == 1i64 {
+                if ib < cap {
+                    mt4f_product12(ra, MT4F_REP[p4 as u64])
+                    if mt4_profile() != (pa & p4) {
+                        MT4F_PLA = ia   MT4F_PLB = p4
+                        return 0i64 - 1i64
+                    }
+                    verified = verified + 1i64
+                }
+                ib = ib + 1i64
+            }
+            p4 = p4 + 1i64
+        }
+        ia = ia + 1i64
+    }
+    return verified
 }

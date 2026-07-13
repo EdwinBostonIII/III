@@ -5,7 +5,13 @@
 #
 #   iii-exact "<a1> <b1> <a2> <b2> ...">     decide sign(a1*sqrt(b1) + a2*sqrt(b2) + ...) EXACTLY
 #   iii-exact --cmp "<terms A>" "<terms B>"  decide whether (sum A) <, =, or > (sum B), EXACTLY
+#   iii-exact --denest <a> <b> <d>           denest sqrt(a + b*sqrt(d)) or certify the extension
+#   iii-exact --roots "<c0 c1 ... cd>" [lo hi]   isolate ALL real roots (+ multiplicity), every claim
+#                                            re-certified through the independent bigint Sturm chain
+#   iii-exact --alg-sign "<c0 .. cd>" <lo> <hi>   exact sign of the root isolated in (lo, hi]
+#   iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   order/EQUALITY of two algebraic numbers
 #   exit: 1 = NEGATIVE | 0 = EXACTLY ZERO | 2 = POSITIVE | 3 = usage/parse error
+#         (--roots/--alg add: 4 REFUSED | 5 ABSTAIN | 6 internal refuse -- see the CLI header)
 #
 # Floating point gets sign(sum a_i sqrt(b_i)) wrong near a tie, and every geometry predicate built on
 # it inherits the error.  This is the separation-bound engine (aether/sqrt_sum_sign over the bigint
@@ -55,10 +61,11 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/iii-exact-build.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT" 2>/dev/null || true' EXIT
 mkdir -p "$TMP_ROOT" "$OUT_DIR"
 
-# exact_cli composes aether/sqrt_sum_sign (+ its kfield sibling) and aether/exact_denest (--denest),
-# which are separate TUs, not archived.
+# exact_cli composes aether/sqrt_sum_sign (+ its kfield sibling), aether/exact_denest (--denest),
+# aether/sturm + aether/sturm_big (--roots: i64 propose / bigint certify), and aether/algnum
+# (--alg-sign/--alg-cmp) -- all separate TUs, not archived (their bigint/arena deps ARE archived).
 OBJS=()
-for tu in kfield sqrt_sum_sign exact_denest; do
+for tu in kfield sqrt_sum_sign exact_denest sturm sturm_big algnum; do
     o="$TMP_ROOT/${tu}.iii.o"
     log "iiis-2 ${tu}.iii -> ${tu}.iii.o"
     "$IIIS" "$III_ROOT/STDLIB/iii/aether/${tu}.iii" --compile-only --out "$o" || die 3 "iii compile failed: ${tu}.iii"

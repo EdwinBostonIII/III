@@ -2,24 +2,33 @@
  *
  *   iii-typecheck <term-file>                    INFER the term's type; print it, or refuse
  *   iii-typecheck --check <term-file> <type-file>  CHECK term : type (bidirectional)
+ *   iii-typecheck --qtt <term-file>              judge QTT USAGE: every binder within its declared
+ *                                                multiplicity (erased ^0 / linear ^1 / unrestricted ^w).
+ *                                                A layer over typing: ill-typed terms are refused first.
  *
  * The kernel (numera/typecheck: lambda-Pi + predicative universes U0:U1:..., Sigma, Bool, Id/J,
- * Nat/iter/natrec, Unit, Empty, Sum, W-types; conversion by the directed CCL oracle) is TRUSTED and
- * UNCHANGED: this CLI is only an S-expression front end that BUILDS terms through the kernel's own
- * constructors and prints results by decoding the kernel's own serializer.  The de Bruijn criterion
- * survives: a parse error is THIS tool's verdict; only the kernel says WELL-TYPED.
+ * Nat/iter/natrec, Unit, Empty, Sum, W-types, BV64, QTT; conversion by the directed CCL oracle) is
+ * TRUSTED and UNCHANGED: this CLI is only an S-expression front end that BUILDS terms through the
+ * kernel's own constructors and prints results by decoding the kernel's own serializer.  The de
+ * Bruijn criterion survives: a parse error is THIS tool's verdict; only the kernel says WELL-TYPED.
  *
  * GRAMMAR (S-expressions; binders are de Bruijn -- (var 0) is the innermost):
  *   (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p) (ann t T)
  *   bool true false (if s t e) (id T a b) (refl a) (j M base proof) (transp P proof base)
  *   nat zero (succ n) (iter z s n) (natrec P z s n) unit tt empty (absurd C e)
  *   (sum A B) (inl v) (inr v) (case C f g s) (w A B) (sup a f) (wrec P s w)
+ *   QTT binders: (lam0 A b) erased | (lam1 A b) linear | (lamw A b) unrestricted; same pi0/pi1/piw.
+ *   BV64 (the native 64-bit machine-int type; ops iota-reduce mod 2^64 on literals):
+ *   bv (bvlit N) (bvadd a b) (bvsub a b) (bvmul a b) (bvand a b) (bvor a b) (bvxor a b)
+ *   (bvshl a b) (bvlshr a b) (bvudiv a b) (bvaddovf a b):Bool (bvmulovf a b):Bool
  * inl/inr/sup are CHECKABLE, not inferable (bidirectional): infer refuses them bare; annotate
- * ((ann (inl true) (sum bool nat))) or use --check.  QTT quantities and the BV64/LEK/REACH
- * certification nodes are kernel-internal programmatic surfaces (own gates), not CLI grammar.
+ * ((ann (inl true) (sum bool nat))) or use --check.  bvudiv by literal 0 is STUCK by design: the
+ * kernel will not equate it with anything.  Printed types omit QTT quantities (the kernel carries
+ * them internally; they are part of the type's identity for conversion).  LEK/REACH certification
+ * nodes stay kernel-internal (they bind in-process cost/budget registries, not files).
  *
- * exit: 0 = WELL-TYPED / CHECKED | 4 = the kernel REFUSED (ill-typed / does not check / the
- *       supplied type is not a universe-classified type) | 3 = parse error (position printed)
+ * exit: 0 = WELL-TYPED / CHECKED / QTT-RESPECTED | 4 = the kernel REFUSED (ill-typed / does not
+ *       check / usage violates a declared multiplicity) | 3 = parse error (position printed)
  *       | 2 = file error | 1 = usage | 5 = internal (serializer overflow -- never a silent claim).
  *
  * Hexad: kind_cognition.  Ring: R0.  NIH: composes numera/typecheck (+ its ccl/combinator oracles
@@ -70,6 +79,24 @@ extern @abi(c-msvc-x64) fn tc_wrec(p: u32, s: u32, w: u32) -> u32 from "typechec
 extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+/* QTT: multiplicity-carrying binders + the usage judgment (a layer over infer). */
+extern @abi(c-msvc-x64) fn tc_pi_q(a: u32, b: u32, code: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam_q(a: u32, b: u32, code: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_qtt_ok(t: u32) -> u8 from "typecheck.iii"
+/* BV64: the native 64-bit machine-int model (iota-reduces mod 2^64 on literals). */
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
 
 const SRCCAP : u64 = 1048576u64
 const INVALID_H : u64 = 18446744073709551615u64
@@ -183,6 +210,25 @@ fn tk_wnum() -> u32 {
     }
     NOK = 1u64
     return v as u32
+}
+/* full-range u64 word (for bvlit): rejects non-digits and anything past 2^64-1. */
+fn tk_wnum64() -> u64 {
+    NOK = 0u64
+    if WLEN == 0u64 { return 0u64 }
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < WLEN {
+        let c : u8 = WORD[i]
+        if c < 48u8 { return 0u64 }
+        if c > 57u8 { return 0u64 }
+        let dg : u64 = (c as u64) - 48u64
+        if v > 1844674407370955161u64 { return 0u64 }
+        if v == 1844674407370955161u64 { if dg > 5u64 { return 0u64 } }
+        v = v * 10u64 + dg
+        i = i + 1u64
+    }
+    NOK = 1u64
+    return v
 }
 
 /* ---------- parser: S-expression -> kernel term (returns 0 + PERR on failure) ---------- */
@@ -332,6 +378,99 @@ fn tk_parse(depth: u64) -> u32 {
             let c : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
             node = tc_wrec(a, b, c)  got = 1u32
         } }
+        /* QTT binders: multiplicity 1=erased, 2=linear, 3=omega (kernel TC_MULT codes) */
+        if got == 0u32 { if tk_weq("lam0" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_lam_q(a, b, 1u32)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("lam1" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_lam_q(a, b, 2u32)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("lamw" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_lam_q(a, b, 3u32)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("pi0" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_pi_q(a, b, 1u32)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("pi1" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_pi_q(a, b, 2u32)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("piw" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_pi_q(a, b, 3u32)  got = 1u32
+        } }
+        /* BV64: literal + the binary operations (typing and iota live in the kernel) */
+        if got == 0u32 { if tk_weq("bvlit" as u64) == 1u32 {
+            tk_skip()  tk_word()
+            let v : u64 = tk_wnum64()
+            if NOK == 0u64 { return tk_err("bvlit needs a decimal u64 (0 .. 18446744073709551615)" as u64) }
+            node = tc_bvlit_u64(v)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvadd" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvadd(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvsub" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvsub(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvmul" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvmul(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvand" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvand(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvor" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvor(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvxor" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvxor(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvshl" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvshl(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvlshr" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvlshr(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvudiv" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvudiv(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvaddovf" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvaddovf(a, b)  got = 1u32
+        } }
+        if got == 0u32 { if tk_weq("bvmulovf" as u64) == 1u32 {
+            let a : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            let b : u32 = tk_parse(depth + 1u64)  if PERR == 1u64 { return 0u32 }
+            node = tc_bvmulovf(a, b)  got = 1u32
+        } }
         if got == 0u32 { return tk_err("unknown form (see usage for the grammar)" as u64) }
         tk_skip()
         if TKCUR >= TKLEN { return tk_err("missing )" as u64) }
@@ -349,7 +488,8 @@ fn tk_parse(depth: u64) -> u32 {
     if tk_weq("unit" as u64) == 1u32 { return tc_unit() }
     if tk_weq("tt" as u64) == 1u32 { return tc_tt() }
     if tk_weq("empty" as u64) == 1u32 { return tc_empty() }
-    return tk_err("unknown atom (know bool true false nat zero unit tt empty)" as u64)
+    if tk_weq("bv" as u64) == 1u32 { return tc_bv() }
+    return tk_err("unknown atom (know bool true false nat zero unit tt empty bv)" as u64)
 }
 
 /* ---------- printer: decode tc_serialize's pre-order encoding -> S-expression ---------- */
@@ -512,14 +652,20 @@ fn tk_report(path: u64) -> u64 {
 fn usage() -> u64 {
     ps("iii-typecheck -- the dependent-type kernel (lambda-Pi + universes), on your terms\n\n" as u64)
     ps("  iii-typecheck <term-file>                    infer the type, or refuse\n" as u64)
-    ps("  iii-typecheck --check <term-file> <type-file>  check term : type\n\n" as u64)
+    ps("  iii-typecheck --check <term-file> <type-file>  check term : type\n" as u64)
+    ps("  iii-typecheck --qtt <term-file>              judge QTT usage (a layer over typing)\n\n" as u64)
     ps("  grammar (de Bruijn indices; (var 0) is the innermost binder):\n" as u64)
     ps("    (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p)\n" as u64)
     ps("    (ann t T) bool true false (if s t e) (id T a b) (refl a) (j M base proof)\n" as u64)
     ps("    (transp P proof base) nat zero (succ n) (iter z s n) (natrec P z s n) unit tt\n" as u64)
-    ps("    empty (absurd C e) (sum A B) (inl v) (inr v) (case C f g s) (w A B) (sup a f) (wrec P s w)\n\n" as u64)
+    ps("    empty (absurd C e) (sum A B) (inl v) (inr v) (case C f g s) (w A B) (sup a f) (wrec P s w)\n" as u64)
+    ps("    QTT binders: (lam0 A b) erased / (lam1 A b) linear / (lamw A b) unrestricted; pi0/pi1/piw\n" as u64)
+    ps("    BV64: bv (bvlit N) (bvadd a b) (bvsub a b) (bvmul a b) (bvand a b) (bvor a b) (bvxor a b)\n" as u64)
+    ps("          (bvshl a b) (bvlshr a b) (bvudiv a b) (bvaddovf a b) (bvmulovf a b)\n\n" as u64)
     ps("  inl/inr/sup are checkable, not inferable: annotate them or use --check.\n" as u64)
-    ps("  exit: 0 well-typed/checked | 4 kernel REFUSED | 3 parse error | 2 file error | 1 usage.\n" as u64)
+    ps("  BV ops iota-reduce mod 2^64 on literals (bvudiv by 0 is STUCK -- unprovable, by design).\n" as u64)
+    ps("  printed types omit QTT quantities (the kernel carries them; they shape conversion).\n" as u64)
+    ps("  exit: 0 well-typed/checked/qtt-respected | 4 kernel REFUSED | 3 parse | 2 file | 1 usage.\n" as u64)
     return 1u64
 }
 
@@ -530,7 +676,27 @@ fn main(argc: i32, argv: u64) -> u64 {
 
     let a1 : *u8 = av[1u64] as *u8
     if a1[0u64] == 45u8 { if a1[1u64] == 45u8 {
-        if a1[2u64] != 99u8 { return usage() }              /* only --check */
+        if a1[2u64] == 113u8 {                              /* "--qtt" <term-file> */
+            if argc < 3i32 { return usage() }
+            let qt : u32 = tk_load_parse(av[2u64])
+            if PERR != 0u64 { return tk_report(av[2u64]) }
+            let qty : u32 = tc_infer(qt)
+            if qty == 0u32 {
+                ps("ILL-TYPED: QTT is a layer over typing -- the kernel refused to assign a type; fix that first\n" as u64)
+                return 4u64
+            }
+            if tc_qtt_ok(qt) != 1u8 {
+                ps("QTT REJECTED: a binder violates its declared multiplicity (kernel usage judgment)\n" as u64)
+                ps("  (erased ^0 must be unused at runtime -- type positions are free; linear ^1 exactly\n" as u64)
+                ps("   once per run; if/case branches are ALTERNATIVES: once in each branch is still once)\n" as u64)
+                return 4u64
+            }
+            ps("QTT USAGE: RESPECTED -- every binder within its declared multiplicity.  term : " as u64)
+            if pr_node(qty) == 0u32 { nl()  return 5u64 }
+            nl()
+            return 0u64
+        }
+        if a1[2u64] != 99u8 { return usage() }              /* else only --check */
         if argc < 4i32 { return usage() }
         let t : u32 = tk_load_parse(av[2u64])
         if PERR != 0u64 { return tk_report(av[2u64]) }

@@ -152,15 +152,43 @@ A verifier that can only say yes is not a verifier: every reject arm above is a 
 iii-exact "<a1> <b1> <a2> <b2> ..."      sign(a1*sqrt(b1) + a2*sqrt(b2) + ...), decided EXACTLY
 iii-exact --cmp "<terms A>" "<terms B>"  decide whether (sum A) <, =, or > (sum B), EXACTLY
 iii-exact --denest <a> <b> <d>           is a + b*sqrt(d) a PERFECT SQUARE in Q(sqrt(d))?
+iii-exact --roots "<c0 c1 ... cd>" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d into
+                                         disjoint rational intervals, each with its exact
+                                         MULTIPLICITY -- every printed claim bigint-recertified
+iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE root isolated in (lo, hi]
+iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER with DECIDABLE EQUALITY of two
+                                         real algebraic numbers (the zero problem, decided)
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_exact.sh` → `COMPILED/iii-exact`.
 Source: `STDLIB/iii/aether/exact_cli.iii` (composes `aether/sqrt_sum_sign` + `aether/kfield` +
-`aether/exact_denest` over the bigint arena). Sign modes print `-1 / 0 / +1`; exit `1` = NEGATIVE,
-`0` = EXACTLY ZERO, `2` = POSITIVE, `3` = usage/parse error. `--denest` exits `0` = perfect square
-(root printed), `4` = genuine extension, `5` = out-of-envelope abstain, `6` = internal refuse (the
-tool re-squares the root IN-PROCESS and will not print one it did not re-verify).
+`aether/exact_denest` + `aether/sturm` + `aether/sturm_big` + `aether/algnum` over the bigint
+arena). Sign modes print `-1 / 0 / +1`; exit `1` = NEGATIVE, `0` = EXACTLY ZERO, `2` = POSITIVE,
+`3` = usage/parse error. `--denest` exits `0` = perfect square (root printed), `4` = genuine
+extension, `5` = out-of-envelope abstain, `6` = internal refuse (the tool re-squares the root
+IN-PROCESS and will not print one it did not re-verify).
 No floating point anywhere in any decision.
+
+`--roots` is two-engine by construction: the i64 Sturm chain (`aether/sturm`) PROPOSES isolating
+intervals by dyadic bisection; the INDEPENDENT bigint chain (`aether/sturm_big` — limb-pool
+coefficients, structurally incapable of coefficient overflow) then re-certifies **every** printed
+claim in this process: the window's root count, each interval's exactly-one-root recount, and each
+root's multiplicity (`root_mult2`). A disagreement is a measured exit 6 — nothing unverified
+prints. Envelope (enforced; abstain outside): degree ≤ 7, |cᵢ| < 2²⁰, window endpoints |·| ≤ 2²⁰
+(default window = the Cauchy bound, which strictly contains all real roots), proposal depth 24.
+Exits: `0` certified | `3` parse | `5` ABSTAIN | `6` internal refuse.
+
+`--alg-sign` / `--alg-cmp` surface `aether/algnum`'s order structure (gate 2157): an algebraic
+number is (an integer polynomial, the interval (lo, hi] isolating exactly one of its real roots).
+EQUALITY is decided by polynomial gcd — never by refining to an epsilon. The sign is decided
+TWICE, by two different exact faculties (interval counting vs dyadic refinement), which must agree
+before anything prints; `--alg-cmp` re-verifies antisymmetry on fresh registers, and when both
+numbers are principal square roots the Σ√ separation-bound oracle must agree with the Sturm order
+(two mathematically independent faculties certifying one cut — the 2157 UNIFY law, now a CLI arm).
+Envelope: degree ≤ 3 (the gate-proven algnum class), |cᵢ| < 2²⁰, integer endpoints |·| ≤ 1024.
+Exits: `--alg-sign` sign-mode 1/0/2; `--alg-cmp` `1` A<B | `0` EQUAL | `2` A>B (= sign(A−B));
+both add `4` REFUSED (the interval does not isolate exactly one root) | `5` abstain | `6` a
+cross-check failed.
 
 Verified on fresh input:
 
@@ -176,6 +204,21 @@ Verified on fresh input:
 | `--denest 9 6 2` | exit 4 | THE norm trap: N = 9 = 3², yet 9+6√2 is NOT a square — the norm alone is never trusted |
 | `--denest 100 2000000 2` | exit 5 | outside the proven i64 envelope (`\|a\|<2³⁰, \|b\|<2²⁰, 0<d<2²⁰`) → ABSTAIN |
 | `"1x 2"` | exit 3 | trailing garbage in a number is an ERROR — measured fast, never a hang |
+| `--roots "47 -70 25" 1 2` | exit 0 | THE float smoking gun: 25x²−70x+47 is POSITIVE at both ends of (1,2] (p(1)=2, p(2)=7) so every endpoint check finds nothing — the tool certifies **2** roots, `(1, 3/2]` and `(3/2, 2]` (= (7±√2)/5), each recounted through the bigint chain |
+| `--roots "4 0 -3 1"` | exit 0 | (x−2)²(x+1): the root in `(0/2, 5]` has **multiplicity 2 — "TOUCHES the axis, no sign change (invisible to every sign-sampler)"**; the root in `(-5, 0/2]` (= −1) crosses; `with multiplicity: 3 of degree 3` |
+| `--roots "-10 31 -25 6"` | exit 0 | non-monic (2x−1)(3x−5)(x−2): three one-root intervals bracketing 1/2, 5/3, 2 inside the derived Cauchy window (−7, 7] |
+| `--roots "-1 1 0 0 1"` / `"1 1 0 0 1"` | exit 0 both | x⁴+x−1 → `2` real + `(2 non-real)`; x⁴+x+1 → `0` real — the degree-gap chain whose pseudo-remainder sign-correction is load-bearing (gate 2156's DEFECTIVE arm), certified through BOTH engines |
+| `--roots "-6 11 -6 1" 1 3` | exit 0 | the half-open convention measured on (x−1)(x−2)(x−3) over (1,3]: root 1 EXCLUDED, root 3 INCLUDED → count 2 |
+| `--roots "1 0 1"` | exit 0 | x²+1: `DISTINCT REAL ROOTS in (-2, 2]: 0 [bigint-certified] (all 2 roots non-real)` |
+| `--roots "0 0 0"` / `--roots "1 2x 3"` | exit 3 | the zero polynomial refused by name; trailing garbage an error |
+| `--roots "0 0 0 0 0 0 0 0 1"` / `--roots "1048576 1"` | exit 5 | degree 8 / a coefficient at 2²⁰: ABSTAIN — refused, not guessed |
+| `--alg-cmp "-2 0 1" 1 2 "0 -2 0 1" 1 2` | **`EQUAL`, exit 0** | **THE ZERO PROBLEM, DECIDED: √2 as a root of x²−2 EQUALS √2 as a root of x³−2x — two different polynomials, one number, decided by gcd; a refine-to-epsilon impostor loops forever** |
+| `--alg-cmp "-2 0 1" 1 2 "-3 0 0 1" 1 2` | `A < B`, exit 1 | √2 < ∛3 (≈1.4142 vs ≈1.4422, overlapping isolating intervals): coprime → distinct → dyadic refinement separates |
+| `--alg-cmp "-2 0 1" 1 2 "-3 0 1" 1 2` | `A < B`, exit 1 | √2 < √3 with BOTH inputs sqrt-shaped: the Σ√ separation-bound oracle cross-checked the Sturm order in-process before printing |
+| `--alg-cmp "-2 0 1" 1 2 "-99 70" 1 2` and reversed | exit 1 / exit 2 | √2 vs the tight rational 99/70 (70√2 = 98.9949…), both directions — antisymmetry measured |
+| `--alg-sign "-2 0 1" 1 2` / `"-2 0 1" -2 -1` / `"0 1" -1 1` | exit 2 / 1 / 0 | +√2 POSITIVE, −√2 NEGATIVE, the root of x EXACTLY ZERO — each verdict agreed by the counting AND refinement faculties |
+| `--alg-sign "2 -3 1" 0 3` | exit 4 | `REFUSED: (0, 3] holds 2 roots … an algebraic number needs exactly 1 (isolate first: --roots)` |
+| `--alg-sign "1 0 0 0 1" 0 2` | exit 5 | degree 4: outside the gate-proven algnum envelope — ABSTAIN |
 
 ---
 
@@ -184,17 +227,28 @@ Verified on fresh input:
 ```
 iii-typecheck <term-file>                      infer the term's type, or refuse
 iii-typecheck --check <term-file> <type-file>  check term : type (bidirectional)
+iii-typecheck --qtt <term-file>                judge QTT usage: every binder within its declared
+                                               multiplicity (erased ^0 / linear ^1 / unrestricted)
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_typecheck.sh` → `COMPILED/iii-typecheck`.
 Source: `STDLIB/iii/aether/typecheck_cli.iii` over the UNCHANGED kernel `numera/typecheck`
 (lambda-Pi + predicative universes U0:U1:…, Σ, Bool, Id/J, Nat/iter/natrec, Unit, Empty, Sum,
-W-types; conversion by the directed CCL oracle). The CLI is an untrusted S-expression front end
-over the kernel's own constructors and serializer — the de Bruijn criterion survives: a parse
-error is the TOOL's verdict (exit 3, position printed); only the kernel says WELL-TYPED.
-Grammar in `--help`; binders are de Bruijn (`(var 0)` innermost). Exit `0` = well-typed/checked,
-`4` = the kernel REFUSED, `3` = parse, `2` = file. QTT quantities and the BV64/LEK/REACH
-certification nodes remain kernel-internal programmatic surfaces with their own gates.
+W-types, **BV64** and **QTT**; conversion by the directed CCL oracle). The CLI is an untrusted
+S-expression front end over the kernel's own constructors and serializer — the de Bruijn criterion
+survives: a parse error is the TOOL's verdict (exit 3, position printed); only the kernel says
+WELL-TYPED. Grammar in `--help`; binders are de Bruijn (`(var 0)` innermost). Exit `0` =
+well-typed/checked/QTT-respected, `4` = the kernel REFUSED, `3` = parse, `2` = file.
+
+BV64 grammar: `bv` (the native 64-bit machine-int type, BV : U0), `(bvlit N)` (a decimal u64),
+and `bvadd bvsub bvmul bvand bvor bvxor bvshl bvlshr bvudiv : BV→BV→BV` plus the overflow
+predicates `bvaddovf bvmulovf : BV→BV→Bool` — all iota-reduce mod 2⁶⁴ on literals, so the kernel
+PROVES width-sensitive machine arithmetic by conversion, not by a unary Peano tower. QTT grammar:
+`(lam0 A b)` erased / `(lam1 A b)` linear / `(lamw A b)` unrestricted (same `pi0/pi1/piw`);
+`--qtt` requires well-typedness FIRST (QTT is a layer over infer), then runs the kernel's
+`tc_qtt_ok` usage judgment. Printed types omit the quantities (the kernel carries them — they are
+part of the type's identity for conversion). LEK/REACH certification nodes stay kernel-internal
+by design: they bind in-process cost/budget registries, not files (own gates).
 
 Verified on fresh input:
 
@@ -210,6 +264,21 @@ Verified on fresh input:
 | `--check (sort 0) : (sort 5)` | `CHECKED`, exit 0 — predicative cumulativity, measured |
 | `--check (sort 0) : true` | `REJECTED: the supplied 'type' is a term, but its type is not a universe`, exit 4 |
 | `(succ` / `(frob 1)` / `true junk` | parse errors at the exact byte offset, exit 3 — never the kernel's verdict |
+| `(bvadd (bvlit 3) (bvlit 4))` | `WELL-TYPED : bv` |
+| `--check (refl (bvlit 7)) : (id bv (bvadd (bvlit 3) (bvlit 4)) (bvlit 7))` | `CHECKED`, exit 0 — **the kernel PROVES 3+4=7 in 64-bit machine arithmetic** by iota conversion |
+| the same against `(bvlit 8)` | `REJECTED`, exit 4 — a FALSE machine identity does not check |
+| `--check (refl (bvlit 0)) : (id bv (bvadd (bvlit 18446744073709551615) (bvlit 1)) (bvlit 0))` | `CHECKED`, exit 0 — **mod-2⁶⁴ wraparound PROVEN: max+1 = 0** (unreachable for a unary Peano tower) |
+| `bvaddovf(max, 1) = true` / `= false` | `CHECKED` / `REJECTED` exit 4 — the carry-out is a Bool the kernel computes, both arms |
+| `bvmulovf(2³², 2³²) = true` | `CHECKED`, exit 0 — the full-product overflow flag |
+| `(id bv (bvshl (bvlit 5) (bvlit 3)) (bvmul (bvlit 5) (bvlit 8)))` with `(refl (bvlit 40))` | `CHECKED`, exit 0 — x≪k = x·2ᵏ, both sides reduce to 40 |
+| `(id bv (bvudiv (bvlit 5) (bvlit 0)) (bvlit 0))` | `REJECTED`, exit 4 — **division by zero is STUCK: the kernel will not equate 5/0 with anything, by design** |
+| `(bvlit 18446744073709551616)` | `parse error at byte 27`, exit 3 — one past 2⁶⁴−1 is the TOOL's verdict, never the kernel's |
+| `--qtt (lam1 bool (var 0))` | `QTT USAGE: RESPECTED … term : (pi bool bool)`, exit 0 — linear, used exactly once (the printed pi omits the quantity, as documented) |
+| `--qtt (lam1 bool (if (var 0) (var 0) (var 0)))` | `QTT REJECTED`, exit 4 — scrutinee + branch = 1+1 = ω violates linear |
+| `--qtt (lam1 bool (if true (var 0) (var 0)))` | **`RESPECTED`, exit 0 — the alternative-branch law: once in EACH if-branch is still exactly once (only one branch runs)** |
+| `--qtt (lam0 bool true)` / `(lam0 bool (var 0))` | `RESPECTED` exit 0 / `REJECTED` exit 4 — erased means UNUSED at runtime, both arms measured |
+| `--qtt (lam0 (sort 0) (lam1 (var 0) (var 0)))` | `RESPECTED … term : (pi (sort 0) (pi (var 0) (var 1)))`, exit 0 — dependent erasure: the erased type-argument appears ONLY in a type position |
+| `--qtt (lam1 bool (app (var 0) (var 0)))` | `ILL-TYPED: QTT is a layer over typing`, exit 4 — the ill-typed term is refused BEFORE usage is judged |
 
 ---
 
@@ -255,14 +324,19 @@ what survives into a replayable content-addressed library, and folds the useful 
 Named, not hidden. These are real capabilities with real KAT coverage that **do not yet have a standing CLI**,
 and therefore do not yet meet the bar this document sets:
 
-- **The exact-arithmetic engine beyond Σaᵢ√bᵢ sign and rank-1 denesting**: bounded-rank algebraic
-  numbers (`algnum`) and Sturm exact root isolation decide exactly — but still only from inside a linked
-  program. `iii-exact` (above) is the surface to extend.
-- **Kernel-internal judgment surfaces**: QTT quantity checking (`tc_qtt_ok`) and the BV64/LEK/REACH
-  certification nodes are programmatic-only (own corpus gates); `iii-typecheck` (above) is the surface
-  to extend if a file-facing form is ever warranted.
+- **Algebraic-number ARITHMETIC** (α+β, α·β via resultants): `--alg-cmp`/`--alg-sign` surface algnum's
+  ORDER structure (sign, total order, decidable equality); the FIELD structure is `algnum.iii`'s stated
+  future work (needs the bigint register tier). `iii-exact` remains the surface.
+- **Beyond-i64 coefficients for `--roots`**: `sturm_big` accepts raw limb-wise bigint coefficients to
+  degree 24 (`sturm2_in_begin/in_limb/in_set` — the resultant-ABI bridge, gate 2185); the CLI's parser
+  is i64. A bigint-coefficient front end is the named extension.
+- **LEK/REACH certification nodes**: kernel-internal BY DESIGN — they bind in-process cost/budget
+  registries, not files (own gates); a file-facing form would need a registry serialization story first.
 
-(ML-KEM, SLH-DSA, Ed25519, AES-SIV, rank-1 denesting, and the CIC core all left this list on
-2026-07-12 — each now a verb on a standing tool above, proven on both arms.)
+(ML-KEM, SLH-DSA, Ed25519, AES-SIV, rank-1 denesting, and the CIC core left this list on 2026-07-12;
+Sturm root isolation + multiplicity (`--roots`, bigint-recertified), the algnum order structure
+(`--alg-sign`/`--alg-cmp`, the zero problem decided), QTT usage judgment (`--qtt`), and the BV64
+machine-arithmetic prover left it the same day — each now a verb on a standing tool above, proven on
+both arms.)
 
 Each is a tool of the same shape as `iii-prove`: link the library, take real input, print a real verdict.

@@ -5,6 +5,20 @@
  *   iii-exact --denest <a> <b> <d>           is a + b*sqrt(d) a PERFECT SQUARE in Q(sqrt(d))?  If so print
  *                                            the principal root x + y*sqrt(d), re-verified by exact
  *                                            re-squaring IN THIS PROCESS; if not, certify the extension.
+ *   iii-exact --roots "<c0 c1 ... cd>" [lo hi]    isolate ALL real roots of c0 + c1*x + ... + cd*x^d into
+ *                                            disjoint rational intervals, each with its exact MULTIPLICITY
+ *                                            (even = TOUCHES the axis, structurally invisible to every
+ *                                            sign-sampler; odd = crosses).  The i64 Sturm chain PROPOSES;
+ *                                            the INDEPENDENT bigint Sturm chain re-certifies every printed
+ *                                            claim in this process, or the tool refuses.
+ *   iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE algebraic number "the unique root of
+ *                                            this polynomial in (lo, hi]" -- decided twice, by two
+ *                                            different exact faculties (counting vs refinement), which
+ *                                            must agree before anything prints.
+ *   iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER WITH DECIDABLE EQUALITY of two real
+ *                                            algebraic numbers.  Equality (the zero problem) is decided
+ *                                            by polynomial gcd, NEVER by refining to an epsilon -- two
+ *                                            different polynomials naming the same irrational are EQUAL.
  *
  * Each term is a signed integer coefficient a_i and a NON-NEGATIVE integer radicand b_i.  The sign modes print
  * one of  -1 / 0 / +1  and exit with that sign encoded (see below) -- the EXACT sign of the real number,
@@ -30,8 +44,24 @@
  * exit (--denest):   0 = PERFECT SQUARE (root printed, re-verified) | 4 = NOT a square (genuine extension)
  *                  | 5 = out-of-envelope ABSTAIN | 3 = usage/parse error | 6 = internal refuse (root failed
  *                    the in-process re-square -- the tool will not print a root it did not re-verify).
+ * exit (--roots):    0 = certified (count + intervals + multiplicities printed) | 3 = parse | 5 = ABSTAIN
+ *                    (envelope, or a cluster unresolved at the dyadic depth cap) | 6 = internal refuse
+ *                    (a proposed claim FAILED bigint re-certification -- nothing unverified prints).
+ * exit (--alg-sign): 1 = NEGATIVE | 0 = EXACTLY ZERO | 2 = POSITIVE (the sign-mode convention)
+ *                  | 4 = REFUSED ((lo,hi] does not isolate exactly one root) | 5 abstain | 3 parse
+ *                  | 6 = the two faculties disagreed -- no claim.
+ * exit (--alg-cmp):  1 = A < B | 0 = EQUAL (the SAME algebraic number) | 2 = A > B  (= sign(A-B))
+ *                  | 4 refused | 5 = ABSTAIN (not separated at the refinement cap) | 3 parse
+ *                  | 6 = a cross-check (antisymmetry / Sigma-sqrt oracle) failed -- no claim.
  *
- * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/sqrt_sum_sign (which composes numera/bigint + arena).
+ * ENVELOPES (enforced; the tool ABSTAINS outside them, never guesses): --roots degree <= 7, |c_i| < 2^20,
+ * window endpoints |.| <= 2^20 (default: the Cauchy bound), dyadic proposal depth 24 -- and every claim is
+ * re-certified through aether/sturm_big's overflow-free bigint chain regardless.  --alg-* degree <= 3 and
+ * integer interval endpoints |.| <= 1024 (the gate-2157-proven algnum class); |c_i| < 2^20.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/sqrt_sum_sign (which composes numera/bigint +
+ * arena) + aether/exact_denest + aether/sturm (i64 propose) + aether/sturm_big (bigint certify) +
+ * aether/algnum (order / equality / sign of algebraic numbers).  Nothing reimplemented.
  */
 module exact_cli
 
@@ -40,12 +70,38 @@ extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i
 extern @abi(c-msvc-x64) fn denest_r1(a: i64, b: i64, d: i64) -> i32 from "exact_denest.iii"
 extern @abi(c-msvc-x64) fn denest_x() -> i64 from "exact_denest.iii"
 extern @abi(c-msvc-x64) fn denest_y() -> i64 from "exact_denest.iii"
+/* --roots: the i64 Sturm tier (proposes) ... */
+extern @abi(c-msvc-x64) fn sturm_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn isolate_roots(lo: i64, hi: i64, maxdepth: i64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_count() -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_lo_den(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_num(i: u64) -> i64 from "sturm.iii"
+extern @abi(c-msvc-x64) fn iso_hi_den(i: u64) -> i64 from "sturm.iii"
+/* ... and the INDEPENDENT bigint Sturm tier (certifies every printed claim). */
+extern @abi(c-msvc-x64) fn sturm2_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+/* --alg-*: the algebraic-number order structure (sign / total order / decidable equality). */
+extern @abi(c-msvc-x64) fn an_set(r: i64, coeffs_ptr: u64, deg: i64, lo: i64, hi: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_valid(r: i64) -> i64 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_cmp(r: i64, s: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_sign(r: i64) -> i32 from "algnum.iii"
+extern @abi(c-msvc-x64) fn an_sign_vs_rat(r: i64, n: i64, dd: i64) -> i32 from "algnum.iii"
 
 const MAXTERMS : u64 = 4096u64
 
 var AV : [i64; 4096]      /* coefficients a_i */
 var BV : [i64; 4096]      /* radicands b_i (>= 0) */
 var DEC : [u8; 24]
+
+/* --roots / --alg state: polynomials (coeff of x^i at index i), proposed intervals, multiplicities. */
+var RC  : [i64; 16]       /* polynomial A coefficients (low -> high) */
+var RC2 : [i64; 16]       /* polynomial B coefficients (--alg-cmp)   */
+var ILN : [i64; 8]   var ILD : [i64; 8]   var IHN : [i64; 8]   var IHD : [i64; 8]   var IMU : [i64; 8]
+var RW2 : i64             /* bigint-certified window count */
+var RSUM : i64            /* sum of certified multiplicities */
+var ADG : [i64; 2]        /* --alg register degrees (for the fresh re-set) */
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -177,16 +233,359 @@ fn emit_denest(a: i64, b: i64, d: i64) -> u64 {
     return 0u64
 }
 
+/* ── --roots / --alg shared parsing ─────────────────────────────────────────────────────────── */
+
+/* parse a whitespace-separated list of up to 16 signed integers (<= 18 digits each) into dst.
+ * returns the count, or PARSEFAIL -- trailing garbage is an ERROR, never a hang. */
+fn parse_list(str: u64, dst: u64) -> u64 {
+    let p : *u8 = str as *u8
+    let d : *i64 = dst as *i64
+    let mut i : u64 = 0u64
+    let mut n : u64 = 0u64
+    while p[i] != 0u8 {
+        while p[i] == 32u8 { i = i + 1u64 }
+        while p[i] == 9u8 { i = i + 1u64 }
+        if p[i] == 0u8 { i = i }
+        else {
+            let mut neg : u32 = 0u32
+            if p[i] == 45u8 { neg = 1u32  i = i + 1u64 }
+            else { if p[i] == 43u8 { i = i + 1u64 } }
+            if p[i] < 48u8 { return PARSEFAIL }
+            if p[i] > 57u8 { return PARSEFAIL }
+            let mut v : i64 = 0i64
+            let mut nd : u64 = 0u64
+            while p[i] >= 48u8 { if p[i] <= 57u8 {
+                v = (v * 10i64) + ((p[i] as i64) - 48i64)
+                nd = nd + 1u64
+                if nd > 18u64 { return PARSEFAIL }
+                i = i + 1u64
+            } else { return PARSEFAIL } }
+            if neg == 1u32 { v = 0i64 - v }
+            if n >= 16u64 { return PARSEFAIL }
+            d[n] = v
+            n = n + 1u64
+        }
+    }
+    return n
+}
+
+/* degree = highest nonzero coefficient index (trailing zeros trimmed), or -1 if all zero. */
+fn poly_deg(dst: u64, n: u64) -> i64 {
+    let d : *i64 = dst as *i64
+    let mut k : i64 = (n as i64) - 1i64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if k < 0i64 { done = 1u8 } else { let c : i64 = d[k as u64]   if c != 0i64 { done = 1u8 } else { k = k - 1i64 } }
+    }
+    return k
+}
+
+fn poly_maxabs(dst: u64, deg: i64) -> i64 {
+    let d : *i64 = dst as *i64
+    let mut m : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let c : i64 = d[i as u64]
+        let mut a : i64 = c
+        if a < 0i64 { a = 0i64 - a }
+        if a > m { m = a }
+        i = i + 1i64
+    }
+    return m
+}
+
+/* print an exact rational n/d (den 1 prints as the integer). */
+fn pr_rat(n: i64, d: i64) -> u32 {
+    pi(n)
+    if d != 1i64 { putchar(47i32)  pi(d) }
+    return 1u32
+}
+
+/* ── --roots: certified real-root isolation ─────────────────────────────────────────────────── */
+
+/* ascending order of proposed intervals i,j by the low endpoint (exact cross-multiplied compare;
+ * coordinates pre-bounded < 2^31 so the products are exact in i64). */
+fn iv_less(i: u64, j: u64) -> u32 {
+    let an : i64 = ILN[i]   let ad : i64 = ILD[i]
+    let bn : i64 = ILN[j]   let bd : i64 = ILD[j]
+    let x : i64 = an * bd
+    let y : i64 = bn * ad
+    if x < y { return 1u32 }
+    return 0u32
+}
+fn iv_swap(i: u64, j: u64) -> u32 {
+    let t0 : i64 = ILN[i]   ILN[i] = ILN[j]   ILN[j] = t0
+    let t1 : i64 = ILD[i]   ILD[i] = ILD[j]   ILD[j] = t1
+    let t2 : i64 = IHN[i]   IHN[i] = IHN[j]   IHN[j] = t2
+    let t3 : i64 = IHD[i]   IHD[i] = IHD[j]   IHD[j] = t3
+    return 0u32
+}
+
+/* copy the i64 tier's proposals out of the shared engine arrays, bound every coordinate (so the
+ * exact compares below cannot overflow), sort ascending, verify pairwise disjointness.
+ * 9 = ok, anything else is the final exit code (message already printed). */
+fn rt_gather(n1: i64) -> u64 {
+    let mut i : i64 = 0i64
+    while i < n1 {
+        ILN[i as u64] = iso_lo_num(i as u64)   ILD[i as u64] = iso_lo_den(i as u64)
+        IHN[i as u64] = iso_hi_num(i as u64)   IHD[i as u64] = iso_hi_den(i as u64)
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < n1 {
+        let ln : i64 = ILN[i as u64]   let ld : i64 = ILD[i as u64]
+        let hn : i64 = IHN[i as u64]   let hd : i64 = IHD[i as u64]
+        let mut bad : u32 = 0u32
+        if ln >= 2147483648i64 { bad = 1u32 }
+        if ln <= (0i64 - 2147483648i64) { bad = 1u32 }
+        if hn >= 2147483648i64 { bad = 1u32 }
+        if hn <= (0i64 - 2147483648i64) { bad = 1u32 }
+        if ld <= 0i64 { bad = 1u32 }
+        if ld >= 2147483648i64 { bad = 1u32 }
+        if hd <= 0i64 { bad = 1u32 }
+        if hd >= 2147483648i64 { bad = 1u32 }
+        if bad == 1u32 { ps("ABSTAIN: an isolating interval left the certifiable coordinate envelope -- refused, not guessed\n" as u64)  return 5u64 }
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < n1 {
+        let mut best : i64 = i
+        let mut j : i64 = i + 1i64
+        while j < n1 {
+            if iv_less(j as u64, best as u64) == 1u32 { best = j }
+            j = j + 1i64
+        }
+        if best != i { iv_swap(i as u64, best as u64) }
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < (n1 - 1i64) {
+        let hn2 : i64 = IHN[i as u64]   let hd2 : i64 = IHD[i as u64]
+        let ln2 : i64 = ILN[(i + 1i64) as u64]   let ld2 : i64 = ILD[(i + 1i64) as u64]
+        let a : i64 = hn2 * ld2
+        let b : i64 = ln2 * hd2
+        if a > b { ps("INTERNAL REFUSE: proposed intervals overlap -- no claim\n" as u64)  return 6u64 }
+        i = i + 1i64
+    }
+    return 9u64
+}
+
+/* the bigint tier: certified window count + every proposed interval re-counted through the
+ * INDEPENDENT chain.  Sets RW2.  9 = ok, else the exit code. */
+fn rt_certify(coeffs: u64, deg: i64, n1: i64, lo: i64, hi: i64) -> u64 {
+    let bc : i64 = sturm2_build(coeffs, deg)
+    if bc < 0i64 { ps("ABSTAIN: the bigint chain refused this polynomial\n" as u64)  return 5u64 }
+    let w2 : i64 = root_count2(lo, 1i64, hi, 1i64)
+    RW2 = w2
+    if w2 < 0i64 { ps("INTERNAL REFUSE: negative certified count -- no claim\n" as u64)  return 6u64 }
+    if w2 > deg { ps("INTERNAL REFUSE: certified count exceeds the degree -- no claim\n" as u64)  return 6u64 }
+    let mut i : i64 = 0i64
+    while i < n1 {
+        let ln : i64 = ILN[i as u64]   let ld : i64 = ILD[i as u64]
+        let hn : i64 = IHN[i as u64]   let hd : i64 = IHD[i as u64]
+        let r : i64 = root_count2(ln, ld, hn, hd)
+        if r != 1i64 { ps("INTERNAL REFUSE: a proposed interval failed the bigint recount -- no claim\n" as u64)  return 6u64 }
+        i = i + 1i64
+    }
+    if n1 > w2 { ps("INTERNAL REFUSE: more certified-disjoint intervals than certified roots -- no claim\n" as u64)  return 6u64 }
+    if n1 < w2 {
+        ps("ABSTAIN: " as u64)  pi(w2)  ps(" real roots certified in the window but only " as u64)  pi(n1)
+        ps(" isolated at the dyadic depth cap (a cluster tighter than 2^-24) -- refused, not guessed\n" as u64)
+        return 5u64
+    }
+    return 9u64
+}
+
+/* per-root multiplicity through the bigint tier (root_mult2 is self-contained per call). */
+fn rt_mults(coeffs: u64, deg: i64, n1: i64) -> u64 {
+    RSUM = 0i64
+    let mut i : i64 = 0i64
+    while i < n1 {
+        let ln : i64 = ILN[i as u64]   let ld : i64 = ILD[i as u64]
+        let hn : i64 = IHN[i as u64]   let hd : i64 = IHD[i as u64]
+        let m : i64 = root_mult2(coeffs, deg, ln, ld, hn, hd)
+        if m < 1i64 { ps("INTERNAL REFUSE: multiplicity certification failed -- no claim\n" as u64)  return 6u64 }
+        IMU[i as u64] = m
+        RSUM = RSUM + m
+        i = i + 1i64
+    }
+    let s : i64 = RSUM
+    if s > deg { ps("INTERNAL REFUSE: multiplicities exceed the degree -- no claim\n" as u64)  return 6u64 }
+    return 9u64
+}
+
+fn rt_print(n1: i64, deg: i64, lo: i64, hi: i64, wset: u32) -> u64 {
+    ps("DISTINCT REAL ROOTS in (" as u64)  pi(lo)  ps(", " as u64)  pi(hi)  ps("]: " as u64)  pi(n1)
+    ps("   [every claim re-certified through the independent bigint Sturm chain]\n" as u64)
+    let mut i : i64 = 0i64
+    while i < n1 {
+        let ln : i64 = ILN[i as u64]   let ld : i64 = ILD[i as u64]
+        let hn : i64 = IHN[i as u64]   let hd : i64 = IHD[i as u64]
+        let m : i64 = IMU[i as u64]
+        ps("  root " as u64)  pi(i + 1i64)  ps(": in (" as u64)  pr_rat(ln, ld)  ps(", " as u64)  pr_rat(hn, hd)
+        ps("]   multiplicity " as u64)  pi(m)
+        if (m % 2i64) == 0i64 { ps("  -- TOUCHES the axis, no sign change (invisible to every sign-sampler)\n" as u64) }
+        else { ps("  -- crosses the axis\n" as u64) }
+        i = i + 1i64
+    }
+    let s : i64 = RSUM
+    ps("  with multiplicity: " as u64)  pi(s)  ps(" of degree " as u64)  pi(deg)
+    let rem : i64 = deg - s
+    if rem > 0i64 {
+        if wset == 0u32 { ps("  (" as u64)  pi(rem)  ps(" non-real)" as u64) }
+        else { ps("  (" as u64)  pi(rem)  ps(" non-real or outside the window)" as u64) }
+    }
+    nl()
+    return 0u64
+}
+
+/* --roots: the i64 Sturm chain PROPOSES isolating intervals; the bigint chain CERTIFIES every
+ * printed claim (window count, each interval's one-root recount, each multiplicity) in-process.
+ * wset = 0 -> derive the window from the Cauchy bound (covers ALL real roots, strictly). */
+fn emit_roots(coeffs: u64, nc: u64, wlo: i64, whi: i64, wset: u32) -> u64 {
+    let deg : i64 = poly_deg(coeffs, nc)
+    if deg < 0i64 { ps("iii-exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
+    if deg == 0i64 { ps("DISTINCT REAL ROOTS: 0   (nonzero constant)\n" as u64)  return 0u64 }
+    if deg > 7i64 { ps("ABSTAIN: degree > 7 is outside this surface's envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    let mx : i64 = poly_maxabs(coeffs, deg)
+    if mx >= 1048576i64 { ps("ABSTAIN: a |coefficient| >= 2^20 is outside the envelope\n" as u64)  return 5u64 }
+    let mut lo : i64 = wlo
+    let mut hi : i64 = whi
+    if wset == 0u32 {
+        let d : *i64 = coeffs as *i64
+        let mut lc : i64 = d[deg as u64]
+        if lc < 0i64 { lc = 0i64 - lc }
+        let b : i64 = 1i64 + ((mx + lc - 1i64) / lc)      /* Cauchy: every real root has |x| < b (strict) */
+        lo = 0i64 - b
+        hi = b
+    }
+    if lo >= hi { ps("iii-exact: --roots window needs lo < hi\n" as u64)  return 3u64 }
+    if lo < (0i64 - 1048576i64) { ps("ABSTAIN: window endpoint outside the envelope\n" as u64)  return 5u64 }
+    if hi > 1048576i64 { ps("ABSTAIN: window endpoint outside the envelope\n" as u64)  return 5u64 }
+    sturm_build(coeffs, deg)
+    isolate_roots(lo, hi, 24i64)
+    let n1 : i64 = iso_count()
+    if n1 > deg { ps("INTERNAL REFUSE: more proposed intervals than the degree -- no claim\n" as u64)  return 6u64 }
+    if n1 > 0i64 {
+        let g : u64 = rt_gather(n1)
+        if g != 9u64 { return g }
+    }
+    let c : u64 = rt_certify(coeffs, deg, n1, lo, hi)
+    if c != 9u64 { return c }
+    if n1 == 0i64 {
+        ps("DISTINCT REAL ROOTS in (" as u64)  pi(lo)  ps(", " as u64)  pi(hi)  ps("]: 0   [bigint-certified]" as u64)
+        if wset == 0u32 { ps("  (all " as u64)  pi(deg)  ps(" roots non-real)" as u64) }
+        nl()
+        return 0u64
+    }
+    let mm : u64 = rt_mults(coeffs, deg, n1)
+    if mm != 9u64 { return mm }
+    return rt_print(n1, deg, lo, hi, wset)
+}
+
+/* ── --alg-sign / --alg-cmp: the algebraic-number order structure, surfaced ─────────────────── */
+
+/* load + validate one algebraic number into register reg: the unique root of the polynomial
+ * (degree 1..3 after trim) in the integer interval (lo, hi].  9 = ok (ADG[reg] set). */
+fn alg_load(reg: i64, coeffs: u64, nc: u64, lo: i64, hi: i64) -> u64 {
+    let deg : i64 = poly_deg(coeffs, nc)
+    if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
+    if deg > 3i64 { ps("ABSTAIN: degree > 3 is outside the gate-proven algnum envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    let mx : i64 = poly_maxabs(coeffs, deg)
+    if mx >= 1048576i64 { ps("ABSTAIN: a |coefficient| >= 2^20 is outside the envelope\n" as u64)  return 5u64 }
+    if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
+    if lo < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
+    if hi > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
+    an_set(reg, coeffs, deg, lo, hi)
+    let v : i64 = an_valid(reg)
+    if v != 1i64 {
+        ps("REFUSED: (" as u64)  pi(lo)  ps(", " as u64)  pi(hi)  ps("] holds " as u64)  pi(v)
+        ps(" roots of the polynomial -- an algebraic number needs exactly 1 (isolate first: --roots)\n" as u64)
+        return 4u64
+    }
+    ADG[reg as u64] = deg
+    return 9u64
+}
+
+/* is this x^2 - b (monic, b > 0) on a nonnegative interval -- i.e. the principal sqrt(b)?
+ * Returns b, or 0. */
+fn sqrt_shape(coeffs: u64, deg: i64, lo: i64) -> i64 {
+    if deg != 2i64 { return 0i64 }
+    if lo < 0i64 { return 0i64 }
+    let d : *i64 = coeffs as *i64
+    let c2 : i64 = d[2u64]
+    let c1 : i64 = d[1u64]
+    let c0 : i64 = d[0u64]
+    if c2 != 1i64 { return 0i64 }
+    if c1 != 0i64 { return 0i64 }
+    if c0 >= 0i64 { return 0i64 }
+    return 0i64 - c0
+}
+
+/* --alg-sign: two different exact faculties decide the sign -- counting (an_sign_vs_rat against
+ * 0/1, no refinement) and refinement (an_sign) -- and must AGREE before anything prints. */
+fn emit_alg_sign(coeffs: u64, nc: u64, lo: i64, hi: i64) -> u64 {
+    let r : u64 = alg_load(0i64, coeffs, nc, lo, hi)
+    if r != 9u64 { return r }
+    let s1 : i32 = an_sign_vs_rat(0i64, 0i64, 1i64)
+    let s2 : i32 = an_sign(0i64)
+    if s1 != s2 { ps("INTERNAL REFUSE: the counting and refinement faculties disagree -- no claim\n" as u64)  return 6u64 }
+    return emit_sign(s2)
+}
+
+/* --alg-cmp: total order with decidable EQUALITY.  After the verdict: antisymmetry is re-verified
+ * on FRESH registers (both were refined), and when both numbers are principal square roots the
+ * Sigma-sqrt separation-bound oracle must agree (two independent faculties, one cut). */
+fn emit_alg_cmp(nca: u64, loa: i64, hia: i64, ncb: u64, lob: i64, hib: i64) -> u64 {
+    let ra : u64 = alg_load(0i64, (&RC) as u64, nca, loa, hia)
+    if ra != 9u64 { return ra }
+    let rb : u64 = alg_load(1i64, (&RC2) as u64, ncb, lob, hib)
+    if rb != 9u64 { return rb }
+    let c1 : i32 = an_cmp(0i64, 1i64)
+    if c1 == 2i32 { ps("ABSTAIN: not separated within the refinement cap -- refused, not guessed\n" as u64)  return 5u64 }
+    let dga : i64 = ADG[0u64]
+    let dgb : i64 = ADG[1u64]
+    an_set(0i64, (&RC) as u64, dga, loa, hia)
+    an_set(1i64, (&RC2) as u64, dgb, lob, hib)
+    let c2 : i32 = an_cmp(1i64, 0i64)
+    let mut anti : u32 = 0u32
+    if c1 == 0i32 { if c2 == 0i32 { anti = 1u32 } }
+    if c1 == 1i32 { if c2 == (0i32 - 1i32) { anti = 1u32 } }
+    if c1 == (0i32 - 1i32) { if c2 == 1i32 { anti = 1u32 } }
+    if anti == 0u32 { ps("INTERNAL REFUSE: antisymmetry re-verification failed -- no claim\n" as u64)  return 6u64 }
+    let ba : i64 = sqrt_shape((&RC) as u64, dga, loa)
+    let bb : i64 = sqrt_shape((&RC2) as u64, dgb, lob)
+    if ba > 0i64 { if bb > 0i64 {
+        AV[0u64] = 1i64             BV[0u64] = ba
+        AV[1u64] = 0i64 - 1i64      BV[1u64] = bb
+        let s3 : i32 = ui_sqrt_sum_sign(&AV as u64, &BV as u64, 2u64)
+        if s3 != c1 { ps("INTERNAL REFUSE: the Sigma-sqrt oracle disagrees with the Sturm order -- no claim\n" as u64)  return 6u64 }
+    } }
+    if c1 == 0i32 {
+        ps("EQUAL: the SAME algebraic number (decided by gcd -- two polynomials, one root; never epsilon)\n" as u64)
+        return 0u64
+    }
+    if c1 < 0i32 { ps("A < B  (exact total order on real algebraic numbers)\n" as u64)  return 1u64 }
+    ps("A > B  (exact total order on real algebraic numbers)\n" as u64)
+    return 2u64
+}
+
 fn main(argc: i32, argv: u64) -> u64 {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-exact -- EXACT sign of a sum of square roots (no floating point anywhere)\n\n" as u64)
         ps("  iii-exact \"<a1> <b1> <a2> <b2> ...\"      sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...\n" as u64)
         ps("  iii-exact --cmp \"<A terms>\" \"<B terms>\"   sign of (sum A) - (sum B)\n" as u64)
-        ps("  iii-exact --denest <a> <b> <d>            is a + b*sqrt(d) a perfect square in Q(sqrt(d))?\n\n" as u64)
+        ps("  iii-exact --denest <a> <b> <d>            is a + b*sqrt(d) a perfect square in Q(sqrt(d))?\n" as u64)
+        ps("  iii-exact --roots \"<c0 c1 ... cd>\" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d\n" as u64)
+        ps("                                            (+ exact multiplicity), bigint-certified\n" as u64)
+        ps("  iii-exact --alg-sign \"<c0 ... cd>\" <lo> <hi>  sign of THE root isolated in (lo, hi]\n" as u64)
+        ps("  iii-exact --alg-cmp \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   order / EQUALITY of two algebraic numbers\n\n" as u64)
         ps("  a_i signed integer coefficient, b_i non-negative integer radicand.\n" as u64)
-        ps("  exit (sign modes): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
+        ps("  exit (sign modes, --alg-sign): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
         ps("  exit (--denest):   0 square (root printed, re-verified) | 4 extension | 5 abstain | 3 parse.\n" as u64)
+        ps("  exit (--roots):    0 certified | 3 parse | 5 abstain | 6 refuse (failed re-certification).\n" as u64)
+        ps("  exit (--alg-cmp):  1 A<B | 0 EQUAL | 2 A>B | 4 refused | 5 abstain | 6 cross-check failed.\n" as u64)
         return 3u64
     }
 
@@ -215,7 +614,55 @@ fn main(argc: i32, argv: u64) -> u64 {
             let sgn : i32 = ui_sqrt_sum_sign(&AV as u64, &BV as u64, nAB)
             return emit_sign(sgn)
         }
-        ps("iii-exact: unknown option (know --cmp, --denest)\n" as u64)
+        if a0[2u64] == 114u8 {                          /* "--roots" "<coeffs>" [lo hi] */
+            if argc < 3i32 { ps("iii-exact: --roots needs a coefficient list \"c0 c1 ... cd\" (low -> high)\n" as u64)  return 3u64 }
+            let rn : u64 = parse_list(av[2u64], (&RC) as u64)
+            if rn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (up to 16 integers, <= 18 digits each)\n" as u64)  return 3u64 }
+            if rn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+            if argc == 3i32 { return emit_roots((&RC) as u64, rn, 0i64, 0i64, 0u32) }
+            if argc < 5i32 { ps("iii-exact: --roots window needs BOTH lo and hi\n" as u64)  return 3u64 }
+            let wl : i64 = parse_one(av[3u64])
+            if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+            let wh : i64 = parse_one(av[4u64])
+            if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+            return emit_roots((&RC) as u64, rn, wl, wh, 1u32)
+        }
+        if a0[2u64] == 97u8 {                           /* "--alg-sign" / "--alg-cmp" */
+            let mut algok : u32 = 1u32
+            if a0[3u64] != 108u8 { algok = 0u32 }
+            if algok == 1u32 { if a0[4u64] != 103u8 { algok = 0u32 } }
+            if algok == 1u32 { if a0[5u64] != 45u8 { algok = 0u32 } }
+            if algok == 1u32 { if a0[6u64] == 115u8 {   /* "--alg-sign" "<coeffs>" <lo> <hi> */
+                if argc < 5i32 { ps("iii-exact: --alg-sign needs \"<c0 ... cd>\" <lo> <hi>\n" as u64)  return 3u64 }
+                let sn : u64 = parse_list(av[2u64], (&RC) as u64)
+                if sn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list\n" as u64)  return 3u64 }
+                if sn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+                let sl : i64 = parse_one(av[3u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+                let sh : i64 = parse_one(av[4u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+                return emit_alg_sign((&RC) as u64, sn, sl, sh)
+            } }
+            if algok == 1u32 { if a0[6u64] == 99u8 {    /* "--alg-cmp" "<A>" <lo> <hi> "<B>" <lo> <hi> */
+                if argc < 8i32 { ps("iii-exact: --alg-cmp needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
+                let ca : u64 = parse_list(av[2u64], (&RC) as u64)
+                if ca == PARSEFAIL { ps("iii-exact: parse error in polynomial A\n" as u64)  return 3u64 }
+                if ca == 0u64 { ps("iii-exact: empty polynomial A\n" as u64)  return 3u64 }
+                let la : i64 = parse_one(av[3u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in A's lo\n" as u64)  return 3u64 }
+                let ha : i64 = parse_one(av[4u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in A's hi\n" as u64)  return 3u64 }
+                let cb : u64 = parse_list(av[5u64], (&RC2) as u64)
+                if cb == PARSEFAIL { ps("iii-exact: parse error in polynomial B\n" as u64)  return 3u64 }
+                if cb == 0u64 { ps("iii-exact: empty polynomial B\n" as u64)  return 3u64 }
+                let lb : i64 = parse_one(av[6u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in B's lo\n" as u64)  return 3u64 }
+                let hb : i64 = parse_one(av[7u64])
+                if P1_OK != 1u32 { ps("iii-exact: parse error in B's hi\n" as u64)  return 3u64 }
+                return emit_alg_cmp(ca, la, ha, cb, lb, hb)
+            } }
+        }
+        ps("iii-exact: unknown option (know --cmp, --denest, --roots, --alg-sign, --alg-cmp)\n" as u64)
         return 3u64
     } }
 

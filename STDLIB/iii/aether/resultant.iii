@@ -270,8 +270,11 @@ fn rs_powi(b: i64, e: i64) -> i64 {
  * OWN dropped arena (peak ~5 live handles; a bigint MATRIX would need n^2 > the global 64-slot table).
  * SOUNDNESS: |coeff_i| <= ||R||_1 <= prod_rows(row 1-norm of the t-polynomial Sylvester)  [permanent
  * bound]; we CERTIFY bound_bits + 2 <= 464 <= bits(P) BEFORE trusting centered reconstruction, and
- * re-check  sum_i q_i t^i == R(t)  mod every prime afterwards.  Refusals (-1): degrees beyond storage,
- * zero leading input coefficients, bound not certifiable, or a recovered coefficient beyond i64 out. */
+ * re-check  sum_i q_i t^i == R(t)  mod every prime afterwards.  Recovery geometry: D <= 49 (50 nodes,
+ * stride-51 matrices; operands degree <= 24 each) -- the bnd certification is PER RUN, so the 16-prime
+ * window refuses honestly whenever a coefficient bound exceeds 464 bits, at ANY D.  Refusals (-1):
+ * degrees beyond storage, zero leading input coefficients, bound not certifiable, or a recovered
+ * coefficient beyond i64 out. */
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
@@ -289,8 +292,8 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 
 /* raw bigint-output rows (V-I.2): filled when RSB_WANT == 1 (rs_*_big2) */
 var RSB_WANT : i64
-var RSB_SGN : [i64; 20]   var RSB_LEN : [i64; 20]   var RSB_FIT : [i64; 20]
-var RSB_LIMB : [u64; 1280]                              /* coefficient i limb j at i*64+j */
+var RSB_SGN : [i64; 50]   var RSB_LEN : [i64; 50]   var RSB_FIT : [i64; 50]
+var RSB_LIMB : [u64; 3200]                              /* coefficient i limb j at i*64+j */
 
 var RS_PRIMES : [i64; 16]
 var RS_PINIT : i64
@@ -333,48 +336,48 @@ fn rs_bits(v0: i64) -> i64 {
     return b
 }
 
-var RS_MM : [i64; 400]                                     /* modular working matrix, stride 20 */
-var RS_HM : [i64; 20]                                      /* h(x) = g(t-x) mod p */
-var RS_RMOD : [i64; 320]                                   /* R(t) mod p_l at index t*16+l (t<=19) */
+var RS_MM : [i64; 2601]                                    /* modular working matrix, stride 51 */
+var RS_HM : [i64; 50]                                      /* h(x) = g(t-x) mod p */
+var RS_RMOD : [i64; 800]                                   /* R(t) mod p_l at index t*16+l (t<=49) */
 var RS_VD : [i64; 16]                                      /* det(Vandermonde) mod p_l */
 var RS_CR : [i64; 16]                                      /* current coefficient residues */
-var RS_Q : [i64; 20]                                       /* recovered integer coefficients */
-var RS_ND : [i64; 20]                                      /* interpolation nodes (row r samples t = RS_ND[r]) */
+var RS_Q : [i64; 50]                                       /* recovered integer coefficients */
+var RS_ND : [i64; 50]                                      /* interpolation nodes (row r samples t = RS_ND[r]) */
 
 /* Gauss determinant mod p of the n x n matrix in RS_MM (destructive) */
 fn rs_det_mod(n: i64, p: i64) -> i64 {
     let mut det : i64 = 1i64
     let mut k : i64 = 0i64
     while k < n {
-        let pkk : i64 = RS_MM[((k * 20i64) + k) as u64]
+        let pkk : i64 = RS_MM[((k * 51i64) + k) as u64]
         if pkk == 0i64 {
             let mut found : i64 = 0i64 - 1i64
             let mut r : i64 = k + 1i64
             while r < n {
-                if found < 0i64 { let v : i64 = RS_MM[((r * 20i64) + k) as u64]   if v != 0i64 { found = r } }
+                if found < 0i64 { let v : i64 = RS_MM[((r * 51i64) + k) as u64]   if v != 0i64 { found = r } }
                 r = r + 1i64
             }
             if found < 0i64 { return 0i64 }
             let mut c : i64 = 0i64
             while c < n {
-                let t : i64 = RS_MM[((k * 20i64) + c) as u64]
-                RS_MM[((k * 20i64) + c) as u64] = RS_MM[((found * 20i64) + c) as u64]
-                RS_MM[((found * 20i64) + c) as u64] = t
+                let t : i64 = RS_MM[((k * 51i64) + c) as u64]
+                RS_MM[((k * 51i64) + c) as u64] = RS_MM[((found * 51i64) + c) as u64]
+                RS_MM[((found * 51i64) + c) as u64] = t
                 c = c + 1i64
             }
             det = rs_modp(0i64 - det, p)
         }
-        let pv : i64 = RS_MM[((k * 20i64) + k) as u64]
+        let pv : i64 = RS_MM[((k * 51i64) + k) as u64]
         det = (det * pv) % p
         let inv : i64 = rs_minv(pv, p)
         let mut i : i64 = k + 1i64
         while i < n {
-            let fct : i64 = (RS_MM[((i * 20i64) + k) as u64] * inv) % p
+            let fct : i64 = (RS_MM[((i * 51i64) + k) as u64] * inv) % p
             if fct != 0i64 {
                 let mut j : i64 = k
                 while j < n {
-                    let sub : i64 = (fct * RS_MM[((k * 20i64) + j) as u64]) % p
-                    RS_MM[((i * 20i64) + j) as u64] = rs_modp(RS_MM[((i * 20i64) + j) as u64] - sub, p)
+                    let sub : i64 = (fct * RS_MM[((k * 51i64) + j) as u64]) % p
+                    RS_MM[((i * 51i64) + j) as u64] = rs_modp(RS_MM[((i * 51i64) + j) as u64] - sub, p)
                     j = j + 1i64
                 }
             }
@@ -393,7 +396,7 @@ fn rs_shift_mod(gp: u64, degg: i64, t: i64, p: i64) -> i32 {
         let mut acc : i64 = 0i64
         let mut j : i64 = i
         while j <= degg {
-            let mut binom : i64 = 1i64                     /* C(j,i) exact: <= C(9,4)=126 */
+            let mut binom : i64 = 1i64                     /* C(j,i) exact: <= C(24,12) = 2704156 */
             let mut q : i64 = 0i64
             while q < i { binom = binom * (j - q)   q = q + 1i64 }
             q = 1i64
@@ -446,9 +449,9 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
     let out : *i64 = outp as *i64
     let D : i64 = degf * degg
     if D < 1i64 { return 0i64 - 1i64 }
-    if D > 18i64 { return 0i64 - 1i64 }
-    if degf > 9i64 { return 0i64 - 1i64 }
-    if degg > 9i64 { return 0i64 - 1i64 }
+    if D > 49i64 { return 0i64 - 1i64 }                    /* recovery geometry: 50 nodes, stride-51 matrix */
+    if degf > 24i64 { return 0i64 - 1i64 }
+    if degg > 24i64 { return 0i64 - 1i64 }
     let flead : i64 = f[degf as u64]
     let glead : i64 = g[degg as u64]
     if flead == 0i64 { return 0i64 - 1i64 }
@@ -504,17 +507,17 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
             if op == 1i64 { rs_shift_prod_mod(gp, degg, t, p) }
             let n : i64 = degf + degg
             let mut r : i64 = 0i64
-            while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 20i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
+            while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 51i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
             r = 0i64
             while r < degg {
                 let mut k : i64 = 0i64
-                while k <= degf { RS_MM[((r * 20i64) + (r + k)) as u64] = rs_modp(f[(degf - k) as u64], p)   k = k + 1i64 }
+                while k <= degf { RS_MM[((r * 51i64) + (r + k)) as u64] = rs_modp(f[(degf - k) as u64], p)   k = k + 1i64 }
                 r = r + 1i64
             }
             r = 0i64
             while r < degf {
                 let mut k : i64 = 0i64
-                while k <= degg { RS_MM[(((degg + r) * 20i64) + (r + k)) as u64] = RS_HM[(degg - k) as u64]   k = k + 1i64 }
+                while k <= degg { RS_MM[(((degg + r) * 51i64) + (r + k)) as u64] = RS_HM[(degg - k) as u64]   k = k + 1i64 }
                 r = r + 1i64
             }
             RS_RMOD[((t * 16i64) + l) as u64] = rs_det_mod(n, p)
@@ -569,7 +572,7 @@ fn rs_vd_all(D: i64) -> i64 {
         let mut r2 : i64 = 0i64
         while r2 < nv {
             let mut c2 : i64 = 0i64
-            while c2 < nv { RS_MM[((r2 * 20i64) + c2) as u64] = rs_powmod(RS_ND[r2 as u64], c2, p)   c2 = c2 + 1i64 }
+            while c2 < nv { RS_MM[((r2 * 51i64) + c2) as u64] = rs_powmod(RS_ND[r2 as u64], c2, p)   c2 = c2 + 1i64 }
             r2 = r2 + 1i64
         }
         let vd : i64 = rs_det_mod(nv, p)
@@ -649,7 +652,7 @@ fn rs_recover(D: i64) -> i64 {
                 while c2 < nv {
                     let mut v : i64 = rs_powmod(RS_ND[r2 as u64], c2, p)
                     if c2 == i { v = RS_RMOD[((r2 * 16i64) + l) as u64] }
-                    RS_MM[((r2 * 20i64) + c2) as u64] = v
+                    RS_MM[((r2 * 51i64) + c2) as u64] = v
                     c2 = c2 + 1i64
                 }
                 r2 = r2 + 1i64
@@ -793,17 +796,17 @@ fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) 
             let tv : i64 = RS_ND[r as u64]
             let n : i64 = fdu + gdu
             let mut r0 : i64 = 0i64
-            while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 20i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
+            while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 51i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
             r0 = 0i64
             while r0 < gdu {
                 let mut k : i64 = 0i64
-                while k <= fdu { RS_MM[((r0 * 20i64) + (r0 + k)) as u64] = rs_gr_evalmod(fp, fdu - k, fdt, tv, p)   k = k + 1i64 }
+                while k <= fdu { RS_MM[((r0 * 51i64) + (r0 + k)) as u64] = rs_gr_evalmod(fp, fdu - k, fdt, tv, p)   k = k + 1i64 }
                 r0 = r0 + 1i64
             }
             r0 = 0i64
             while r0 < fdu {
                 let mut k : i64 = 0i64
-                while k <= gdu { RS_MM[(((gdu + r0) * 20i64) + (r0 + k)) as u64] = rs_gr_evalmod(gp, gdu - k, gdt, tv, p)   k = k + 1i64 }
+                while k <= gdu { RS_MM[(((gdu + r0) * 51i64) + (r0 + k)) as u64] = rs_gr_evalmod(gp, gdu - k, gdt, tv, p)   k = k + 1i64 }
                 r0 = r0 + 1i64
             }
             RS_RMOD[((r * 16i64) + l) as u64] = rs_det_mod(n, p)
@@ -1021,17 +1024,17 @@ fn rs3_nodes(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64,
             let mut s : i64 = 0i64
             while s <= Dy {
                 let mut r0 : i64 = 0i64
-                while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 20i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
+                while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 51i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
                 r0 = 0i64
                 while r0 < gdz {
                     let mut kk : i64 = 0i64
-                    while kk <= fdz { RS_MM[((r0 * 20i64) + (r0 + kk)) as u64] = rs3_cvalmod(fp, fdz - kk, fdx, fdy, r, s, p)   kk = kk + 1i64 }
+                    while kk <= fdz { RS_MM[((r0 * 51i64) + (r0 + kk)) as u64] = rs3_cvalmod(fp, fdz - kk, fdx, fdy, r, s, p)   kk = kk + 1i64 }
                     r0 = r0 + 1i64
                 }
                 r0 = 0i64
                 while r0 < fdz {
                     let mut kk : i64 = 0i64
-                    while kk <= gdz { RS_MM[(((gdz + r0) * 20i64) + (r0 + kk)) as u64] = rs3_cvalmod(gp, gdz - kk, gdx, gdy, r, s, p)   kk = kk + 1i64 }
+                    while kk <= gdz { RS_MM[(((gdz + r0) * 51i64) + (r0 + kk)) as u64] = rs3_cvalmod(gp, gdz - kk, gdx, gdy, r, s, p)   kk = kk + 1i64 }
                     r0 = r0 + 1i64
                 }
                 RS3_RES[((((r * Dy1) + s) * 16i64) + l) as u64] = rs_det_mod(n, p)

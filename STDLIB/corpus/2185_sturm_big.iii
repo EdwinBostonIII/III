@@ -10,9 +10,13 @@
  *   (25/10, 26/10] and 3^(1/4)-2^(1/4) in (1/10, 2/10].  Two charter increments, one pipeline.
  * C -- MULTIPLICITY AT DEPTH: (x^4-10x^2+1)^2 -- the squared chain overflows i64 (v1 root_mult is
  *   garbage there, printed); root_mult2 certifies multiplicity 2 at sqrt2+sqrt3 in (31/10, 32/10].
- * D -- refusal: degree 25 refused (-1), never garbage.
+ * D -- refusal at the WIDENED envelope: degree 61 refused (-1), never garbage.
+ * E -- the old boundary now DELIVERS: x^25 - 2 counted (1 root in (1,2], 1 in (-2,2] -- odd degree,
+ *   ONE real root) -- degree 25 was the refusal arm before the pool went to stride 64 / degree <= 60.
+ * F -- the new boundary itself: x^60 - 2 counted (1 root in (1,2], 2 in (-2,2]).
  *
- * exit 99 = pass;  10 A twin failed to diverge;  11 A count/brackets;  12 B;  13 C;  14 D */
+ * exit 99 = pass;  10 A twin failed to diverge;  11 A count/brackets;  12 B;  13 C;  14 D;
+ * 15 E;  16 F */
 module corpus_2185_sturm_big
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -26,7 +30,7 @@ extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, ou
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var BP : [i64; 32]   var BF : [i64; 10]   var BG : [i64; 10]
+var BP : [i64; 64]   var BF : [i64; 10]   var BG : [i64; 10]
 
 fn main() -> u64 {
     /* ══ A: the degree-12 wall. */
@@ -66,10 +70,30 @@ fn main() -> u64 {
     putchar(67i32) putchar(58i32) sp() e_i64(mb) nl()                                                /* "C: 2" */
     if mb != 2i64 { return 13u64 }
 
-    /* ══ D: the envelope refuses. */
-    let rd : i64 = sturm2_build((&BP) as u64, 25i64)
+    /* ══ D: the WIDENED envelope refuses at its true boundary. */
+    let rd : i64 = sturm2_build((&BP) as u64, 61i64)
     putchar(68i32) putchar(58i32) sp() e_i64(rd) nl()                                                /* "D: -1" */
     if rd != (0i64 - 1i64) { return 14u64 }
+
+    /* ══ E: the OLD boundary (degree 25, the former refusal arm) now delivers. */
+    let mut z : i64 = 0i64
+    while z <= 60i64 { BP[z as u64] = 0i64   z = z + 1i64 }
+    BP[0u64] = 0i64 - 2i64   BP[25u64] = 1i64
+    if sturm2_build((&BP) as u64, 25i64) < 0i64 { return 15u64 }
+    let e1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    let e2 : i64 = root_count2(0i64 - 2i64, 1i64, 2i64, 1i64)
+    putchar(69i32) putchar(58i32) sp() e_i64(e1) sp() e_i64(e2) nl()                                 /* "E: 1 1" */
+    if e1 != 1i64 { return 15u64 }
+    if e2 != 1i64 { return 15u64 }                       /* odd degree: ONE real root */
+
+    /* ══ F: the new boundary itself -- degree 60. */
+    BP[25u64] = 0i64   BP[60u64] = 1i64
+    if sturm2_build((&BP) as u64, 60i64) < 0i64 { return 16u64 }
+    let f1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    let f2 : i64 = root_count2(0i64 - 2i64, 1i64, 2i64, 1i64)
+    putchar(70i32) putchar(58i32) sp() e_i64(f1) sp() e_i64(f2) nl()                                 /* "F: 1 2" */
+    if f1 != 1i64 { return 16u64 }
+    if f2 != 2i64 { return 16u64 }
 
     return 99u64
 }

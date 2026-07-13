@@ -13,26 +13,28 @@
  *                                            claim in this process, or the tool refuses.
  *   iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE algebraic number "the unique root of
  *                                            this polynomial in (lo, hi]" -- AT THE ENGINE'S FULL CLASS
- *                                            (degree <= 60, ~4930-digit coefficients), decided by two
- *                                            exact faculties (one-count vs dyadic refinement) which must
+ *                                            (degree <= 120, ~4930-digit coefficients), decided by two
+ *                                            exact faculties (one-count vs dyadic refinement, the DEEP
+ *                                            TIER descending to any depth memory affords) which must
  *                                            agree; the deg<=3 algnum register file rides as a third.
  *   iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER WITH DECIDABLE EQUALITY of two real
  *                                            algebraic numbers, AT THE SAME FULL CLASS.  Equality (the
  *                                            zero problem) is decided by the sturm_big PAIR-GCD door --
  *                                            a shared root in the window overlap -- NEVER by refining to
  *                                            an epsilon; order by shared-depth refinement, distinctness
- *                                            already proven, the 2^-44 cap a named abstention.
+ *                                            already proven, DESCENDING WITHOUT A DEPTH CAP through the
+ *                                            bigint-numerator deep tier (memory is the only boundary).
  *   iii-exact --alg-add "<A>" <lo> <hi> "<B>" <lo> <hi>   THE ARITHMETIC CLOSURE: construct the integer
  *   iii-exact --alg-mul "<A>" <lo> <hi> "<B>" <lo> <hi>   defining polynomial of alpha+beta / alpha*beta
  *                                            (certified-CRT resultant, coefficients beyond i64 delivered
  *                                            as limb rows) AND the exact isolating window that pins WHICH
  *                                            root -- roots are now closed under + and * on this surface.
- *                                            Degree <= 24 each, degA*degB <= 49, EITHER sign (a
+ *                                            Degree <= 48 each, degA*degB <= 96, EITHER sign (a
  *                                            sign-definite refinement phase separates operands from 0).
  *   iii-exact --alg-inv "<A>" <lo> <hi>      THE FIELD COMPLETION: 1/alpha's defining polynomial (the
  *                                            exact reversal) + certified window, either sign; with
  *                                            add/mul this closes +, *, and inverse (hence division).
- *   iii-exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 60,
+ *   iii-exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 120,
  *                                            coefficients to ~4930 digits (256 limbs -- the engine's
  *                                            true row capacity), counted and isolated through the
  *                                            bigint Sturm chain (gate 2185's tier).
@@ -74,13 +76,14 @@
  * ENVELOPES (enforced; the tool ABSTAINS outside them, never guesses): --roots degree <= 7, |c_i| < 2^20,
  * window endpoints |.| <= 2^20 (default: the Cauchy bound), dyadic proposal depth 24 -- and every claim is
  * re-certified through aether/sturm_big's overflow-free bigint chain regardless.  --alg-sign/--alg-cmp
- * degree <= 60 with decimal coefficients to ~4930 digits (the FULL bigint-chain class; sign = one-count
- * vs refinement agreement, equality = the sturm_big pair-gcd door, order-refinement cap 2^-44 named);
+ * degree <= 120 with decimal coefficients to ~4930 digits (the FULL bigint-chain class; sign = one-count
+ * vs refinement agreement, equality = the sturm_big pair-gcd door, order refinement DEPTH-UNCAPPED
+ * through the bigint-numerator deep tier -- memory is the only boundary);
  * the deg<=3 / |c|<2^20 algnum register file (gate 2157) rides along as an independent faculty inside
- * its own class.  --alg-add/--alg-mul/--alg-inv degree <= 24 each with degA*degB <= 49 (validation and
+ * its own class.  --alg-add/--alg-mul/--alg-inv degree <= 48 each with degA*degB <= 96 (validation and
  * refinement run entirely through the bigint chain -- sound at every depth, so the wider class is
  * certified per run), either sign, |c_i| < 2^20 there.  --alg-* integer interval endpoints |.| <= 1024.
- * --roots-big degree <= 60, coefficients <= 256 limbs (~4930 digits), window endpoints |.| <= 2^44 with
+ * --roots-big degree <= 120, coefficients <= 256 limbs (~4930 digits), window endpoints |.| <= 2^44 with
  * runtime coordinate guards.
  *
  * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/sqrt_sum_sign (which composes numera/bigint +
@@ -127,6 +130,10 @@ extern @abi(c-msvc-x64) fn sturm2_build_cur() -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_pair_stash() -> i32 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_pair_gcd() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
 /* the archive bigint engine: exact decimal in/out for coefficients beyond i64 */
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
@@ -153,26 +160,36 @@ var BV : [i64; 4096]      /* radicands b_i (>= 0) */
 var DEC : [u8; 24]
 
 /* --roots / --alg state: polynomials (coeff of x^i at index i), proposed intervals, multiplicities. */
-var RC  : [i64; 32]       /* polynomial A coefficients (low -> high) */
-var RC2 : [i64; 32]       /* polynomial B coefficients (--alg-cmp)   */
-var ILN : [i64; 64]   var ILD : [i64; 64]   var IHN : [i64; 64]   var IHD : [i64; 64]   var IMU : [i64; 64]
+var RC  : [i64; 64]       /* polynomial A coefficients (low -> high) */
+var RC2 : [i64; 64]       /* polynomial B coefficients (--alg-cmp)   */
+var ILN : [i64; 128]   var ILD : [i64; 128]   var IHN : [i64; 128]   var IHD : [i64; 128]   var IMU : [i64; 128]
 var RW2 : i64             /* bigint-certified window count */
 var RSUM : i64            /* sum of certified multiplicities */
 var ADG : [i64; 2]        /* --alg register degrees (for the fresh re-set) */
 
 /* --alg-add/--alg-mul + --roots-big state: a polynomial with LIMB-ROW coefficients (sign, limb count,
  * limbs low->high at row i*64+j), the dyadic alpha/beta refinement states, the certified gamma interval. */
-var GBS : [i64; 64]   var GBL : [i64; 64]   var GBW : [u64; 16384]     /* row i limb j at i*256+j */
-var GB2S : [i64; 64]   var GB2L : [i64; 64]   var GB2W : [u64; 16384] /* --alg-cmp polynomial A rows */
+var GBS : [i64; 128]   var GBL : [i64; 128]   var GBW : [u64; 32768]     /* row i limb j at i*256+j */
+var GB2S : [i64; 128]   var GB2L : [i64; 128]   var GB2W : [u64; 32768] /* --alg-cmp polynomial A rows */
 var GDEG : i64
 var AAL : [i64; 2]   var AAH : [i64; 2]   var AAK : i64        /* alpha/beta: (AAL/2^AAK, AAH/2^AAK] */
 var GLO : i64   var GLD : i64   var GHI : i64   var GHD : i64  /* gamma: (GLO/GLD, GHI/GHD] certified */
 var AZR : [u64; 2]                                             /* operand IS exactly zero (arithmetic test) */
 var DECB2 : [u8; 4990]                                         /* decimal digits scratch (bigint print) */
 var RB_POS : u64   var PB_SGN : i64   var PB_OK : u64   var PB_ERR : u64
-var WK2L : [i64; 192]   var WK2H : [i64; 192]   var WK2K : [i64; 192]
+var WK2L : [i64; 384]   var WK2H : [i64; 384]   var WK2K : [i64; 384]
 var RBCL : u64                                                 /* --roots-big cluster-at-cap flag */
-var IKD : [i64; 64]                                            /* per-interval attained dyadic depth */
+var IKD : [i64; 128]                                           /* per-interval attained dyadic depth */
+
+/* THE DEEP-REFINEMENT TIER (the former 2^-44 wall, dissolved): dyadic windows with BIGINT
+ * numerators as signed (sign, handle) pairs in their own migrating arena, counted through
+ * sturm_big's handle door (root_count2_h).  Slots: 0/1 = operand A's (lo, hi], 2/3 = B's.
+ * Termination is MATHEMATICAL (distinctness / nonzero-ness is proven before refinement starts);
+ * the per-input separation-bound guard (CQDMAX, a Mignotte-style over-bound) can only fire on a
+ * defect, and resource exhaustion is an honest named abstention -- physics, never a wrong sign. */
+var CQS : [i64; 4]   var CQH : [u64; 4]
+var CQAR : u64   var CQK : i64   var CQMIG : i64   var CQE : u32   var CQDMAX : i64
+var CQTS : i64   var CQTH : u64                                /* signed-add result channel */
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -306,7 +323,7 @@ fn emit_denest(a: i64, b: i64, d: i64) -> u64 {
 
 /* ── --roots / --alg shared parsing ─────────────────────────────────────────────────────────── */
 
-/* parse a whitespace-separated list of up to 32 signed integers (<= 18 digits each) into dst.
+/* parse a whitespace-separated list of up to 64 signed integers (<= 18 digits each) into dst.
  * returns the count, or PARSEFAIL -- trailing garbage is an ERROR, never a hang. */
 fn parse_list(str: u64, dst: u64) -> u64 {
     let p : *u8 = str as *u8
@@ -332,7 +349,7 @@ fn parse_list(str: u64, dst: u64) -> u64 {
                 i = i + 1u64
             } else { return PARSEFAIL } }
             if neg == 1u32 { v = 0i64 - v }
-            if n >= 32u64 { return PARSEFAIL }
+            if n >= 64u64 { return PARSEFAIL }
             d[n] = v
             n = n + 1u64
         }
@@ -691,15 +708,120 @@ fn gb_small(which: i64, deg: i64, dst: u64) -> u32 {
     return 1u32
 }
 
-/* ── the ORDER VERBS at the engine's full class (deg <= 60, ~4930-digit coefficients) ───────────
+/* ── THE DEEP-REFINEMENT TIER: signed bigint dyadic windows through the handle door ─────────────
+ * The former 2^-44 wall was the i64 window numerator.  Numerators are now (sign, bigint-handle)
+ * pairs in a migrating arena, halved through sturm_big's root_count2_h: refinement descends to
+ * any depth memory affords.  CQE marks resource exhaustion (an honest named abstention); the
+ * per-input separation-bound guard (CQDMAX, a Mignotte-style over-bound) can only fire on a
+ * defect, because distinctness / nonzero-ness is PROVEN before refinement ever begins. */
+
+fn c_guard(h: u64) -> u32 { if h == 0u64 { CQE = 1u32   return 0u32 }   return 1u32 }
+
+/* (CQTS, CQTH) := (s1,m1) + (s2,m2) in CQAR (inputs untouched; the st2_sadd law) */
+fn c_sadd(s1: i64, m1: u64, s2: i64, m2: u64) -> u32 {
+    if s1 == 0i64 { CQTS = s2   CQTH = bigint_copy(CQAR, m2)   return c_guard(CQTH) }
+    if s2 == 0i64 { CQTS = s1   CQTH = bigint_copy(CQAR, m1)   return c_guard(CQTH) }
+    if s1 == s2 { CQTS = s1   CQTH = bigint_add(CQAR, m1, m2)   return c_guard(CQTH) }
+    let c : i32 = bigint_cmp(m1, m2)
+    if c > 0i32 { CQTS = s1   CQTH = bigint_sub(CQAR, m1, m2)   return c_guard(CQTH) }
+    if c < 0i32 { CQTS = s2   CQTH = bigint_sub(CQAR, m2, m1)   return c_guard(CQTH) }
+    CQTS = 0i64   CQTH = bigint_from_u64(CQAR, 0u64)
+    return c_guard(CQTH)
+}
+
+/* sign of (s1,m1) - (s2,m2), exact */
+fn c_scmp(s1: i64, m1: u64, s2: i64, m2: u64) -> i32 {
+    if s1 > s2 { return 1i32 }
+    if s1 < s2 { return 0i32 - 1i32 }
+    if s1 == 0i64 { return 0i32 }
+    let c : i32 = bigint_cmp(m1, m2)
+    if s1 > 0i64 { return c }
+    return 0i32 - c
+}
+
+fn cq_free() -> u32 {
+    if CQAR != 0u64 { bigint_drop_arena(CQAR)   arena_drop(CQAR)   CQAR = 0u64 }
+    return 1u32
+}
+
+fn cq_open() -> u32 {
+    CQE = 0u32   CQMIG = 0i64
+    CQAR = arena_new(8388608u64)
+    if CQAR == 0u64 { CQE = 1u32   return 0u32 }
+    return 1u32
+}
+
+/* seed slots [base, base+1] from i64 dyadic numerators (entering the deep tier) */
+fn cq_seed2(base: i64, lo: i64, hi: i64) -> u32 {
+    let mut a : i64 = lo   let mut sa : i64 = 1i64
+    if a < 0i64 { a = 0i64 - a   sa = 0i64 - 1i64 }
+    if a == 0i64 { sa = 0i64 }
+    let mut b : i64 = hi   let mut sb : i64 = 1i64
+    if b < 0i64 { b = 0i64 - b   sb = 0i64 - 1i64 }
+    if b == 0i64 { sb = 0i64 }
+    CQH[base as u64] = bigint_from_u64(CQAR, a as u64)
+    CQH[(base + 1i64) as u64] = bigint_from_u64(CQAR, b as u64)
+    CQS[base as u64] = sa
+    CQS[(base + 1i64) as u64] = sb
+    if c_guard(CQH[base as u64]) == 0u32 { return 0u32 }
+    return c_guard(CQH[(base + 1i64) as u64])
+}
+
+/* migrate the first nslots handles into a FRESH arena (bump bytes reclaimed; the gas_big law) */
+fn cq_migrate(nslots: i64) -> u32 {
+    let na : u64 = arena_new(8388608u64)
+    if na == 0u64 { CQE = 1u32   return 0u32 }
+    let mut i : i64 = 0i64
+    let mut ok : u32 = 1u32
+    while i < nslots {
+        let nh : u64 = bigint_copy(na, CQH[i as u64])
+        if nh == 0u64 { ok = 0u32 }
+        CQH[i as u64] = nh
+        i = i + 1i64
+    }
+    bigint_drop_arena(CQAR)
+    arena_drop(CQAR)
+    CQAR = na
+    if ok == 0u32 { CQE = 1u32   return 0u32 }
+    return 1u32
+}
+
+/* halve the window in slots (base, base+1) at depth CQK through the handle door (chain built). */
+fn cq_halve(base: i64) -> u32 {
+    let ls : i64 = CQS[base as u64]
+    let lh : u64 = CQH[base as u64]
+    let hs : i64 = CQS[(base + 1i64) as u64]
+    let hh : u64 = CQH[(base + 1i64) as u64]
+    let l2 : u64 = bigint_mul_u64(CQAR, lh, 2u64)
+    if c_guard(l2) == 0u32 { return 0u32 }
+    if c_sadd(ls, lh, hs, hh) == 0u32 { bigint_drop(l2)   return 0u32 }
+    let ms : i64 = CQTS
+    let mh : u64 = CQTH
+    let c : i64 = root_count2_h(l2, ls, mh, ms, CQK + 1i64)
+    if c < 0i64 { CQE = 1u32   bigint_drop(l2)   bigint_drop(mh)   return 0u32 }
+    if c == 1i64 {
+        bigint_drop(lh)   bigint_drop(hh)
+        CQH[base as u64] = l2
+        CQS[(base + 1i64) as u64] = ms   CQH[(base + 1i64) as u64] = mh
+        return 1u32
+    }
+    let h2 : u64 = bigint_mul_u64(CQAR, hh, 2u64)
+    if c_guard(h2) == 0u32 { bigint_drop(l2)   bigint_drop(mh)   return 0u32 }
+    bigint_drop(lh)   bigint_drop(hh)   bigint_drop(l2)
+    CQS[base as u64] = ms   CQH[base as u64] = mh
+    CQH[(base + 1i64) as u64] = h2
+    return 1u32
+}
+
+/* ── the ORDER VERBS at the engine's full class (deg <= 120, ~4930-digit coefficients) ──────────
  * SIGN: two faculties -- counting (ONE exact root_count2 against the rational 0, no refinement:
  * the an_sign_vs_rat law lifted past i64) and dyadic refinement through the same overflow-free
  * chain -- must AGREE; the exact-zero case (c0 == 0 and 0 in the isolating window) is pure
  * arithmetic.  EQUALITY (the zero problem): the sturm_big PAIR-GCD door -- gcd(A,B) has a root in
  * the window overlap iff alpha = beta -- decided ONCE, exactly, never by epsilon.  ORDER: shared-
- * depth dyadic refinement, distinctness already PROVEN, cap 2^-44 a named abstention.  The deg<=3
- * algnum register file (gate 2157) and the Sigma-sqrt separation-bound oracle ride along as
- * independent faculties wherever the input fits their class. */
+ * depth dyadic refinement, distinctness already PROVEN, descending through the DEEP TIER to any
+ * depth memory affords (no numeric cap).  The deg<=3 algnum register file (gate 2157) and the
+ * Sigma-sqrt separation-bound oracle ride along as independent faculties in their classes. */
 
 fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
     let pn : u64 = rb_parse(str)
@@ -708,7 +830,7 @@ fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
     if pn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
     let deg : i64 = gb_deg(pn)
     if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
-    if deg > 60i64 { ps("ABSTAIN: degree > 60 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 120i64 { ps("ABSTAIN: degree > 120 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if hi > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
@@ -732,7 +854,10 @@ fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
             if cp == 1i64 { s1 = 1i32 } else { s1 = 0i32 - 1i32 }
         } }
     }
-    /* faculty 2: dyadic REFINEMENT through the same chain (one polynomial -- the chain stays built) */
+    /* faculty 2: dyadic REFINEMENT through the same chain (one polynomial -- the chain stays
+     * built).  i64 numerators to depth 40, then THE DEEP TIER: bigint numerators through the
+     * handle door, to any depth memory affords.  alpha != 0 is already proven, so termination is
+     * mathematical; the separation-bound guard over-bounds -log2|alpha| and fires only on a defect. */
     let mut s2 : i32 = 0i32
     if zero == 0u32 {
         let mut l : i64 = lo
@@ -742,10 +867,8 @@ fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
         while und == 1u32 {
             if l >= 0i64 { s2 = 1i32   und = 0u32 }
             else { if h <= 0i64 { s2 = 0i32 - 1i32   und = 0u32 }
-            else { if k >= 44i64 {
-                ps("ABSTAIN: not separated from 0 at the refinement cap (2^-44) -- refused, not guessed\n" as u64)
-                return 5u64
-            } else {
+            else { if k >= 40i64 { und = 2u32 }
+            else {
                 let d2 : i64 = pw2(k + 1i64)
                 let mid : i64 = l + h
                 let c : i64 = root_count2(2i64 * l, d2, mid, d2)
@@ -753,6 +876,44 @@ fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
                 else         { l = mid        h = 2i64 * h }
                 k = k + 1i64
             } } }
+        }
+        if und == 2u32 {
+            /* the root-magnitude lower bound |alpha| >= |c_v| / (|c_v| + H) over the trailing
+             * nonzero coefficient gives depth <= 64*(ml+2) + deg + 64; over-bound generously. */
+            let mut mlmax : i64 = 1i64
+            let mut mi : i64 = 0i64
+            while mi <= deg { if GBL[mi as u64] > mlmax { mlmax = GBL[mi as u64] }   mi = mi + 1i64 }
+            let dmaxs : i64 = (64i64 * (mlmax + 2i64)) + (64i64 * deg) + 1024i64
+            if cq_open() == 0u32 { ps("ABSTAIN: the deep-refinement arena is unavailable (memory) -- refused, not guessed\n" as u64)  return 5u64 }
+            if cq_seed2(0i64, l, h) == 0u32 { cq_free()  ps("ABSTAIN: the deep-refinement tier exhausted memory -- refused, not guessed\n" as u64)  return 5u64 }
+            CQK = k
+            let mut going : u32 = 1u32
+            while going == 1u32 {
+                if CQS[0u64] >= 0i64 { s2 = 1i32   going = 0u32 }
+                else { if CQS[1u64] <= 0i64 { s2 = 0i32 - 1i32   going = 0u32 }
+                else { if CQK > dmaxs {
+                    cq_free()
+                    ps("INTERNAL REFUSE: refinement passed the computed separation bound -- indicates a defect; no claim\n" as u64)
+                    return 6u64
+                } else {
+                    if cq_halve(0i64) == 0u32 {
+                        cq_free()
+                        ps("ABSTAIN: the deep-refinement tier exhausted memory -- refused, not guessed\n" as u64)
+                        return 5u64
+                    }
+                    CQK = CQK + 1i64
+                    CQMIG = CQMIG + 1i64
+                    if CQMIG >= 128i64 {
+                        CQMIG = 0i64
+                        if cq_migrate(2i64) == 0u32 {
+                            cq_free()
+                            ps("ABSTAIN: the deep-refinement tier exhausted memory -- refused, not guessed\n" as u64)
+                            return 5u64
+                        }
+                    }
+                } } }
+            }
+            cq_free()
         }
     }
     if s1 != s2 { ps("INTERNAL REFUSE: the counting and refinement faculties disagree -- no claim\n" as u64)  return 6u64 }
@@ -785,8 +946,12 @@ fn cmp_refine(which: i64, dg: i64, k: i64) -> u64 {
     return 9u64
 }
 
-/* the total-order core: 0 EQUAL | 1 A < B | 2 A > B | 5 refinement cap | 55 engine refuse.
- * A = the GB2 rows (degree dga, initial window (la, ha]); B = the GB rows (dgb, (lb, hb]). */
+/* the total-order core: 0 EQUAL | 1 A < B | 2 A > B | 55 engine/memory refuse | 66 defect guard.
+ * A = the GB2 rows (degree dga, initial window (la, ha]); B = the GB rows (dgb, (lb, hb]).
+ * Order refinement: i64 numerators to depth 40, then the DEEP TIER (bigint numerators via the
+ * handle door) to any depth memory affords -- distinctness is proven before refinement starts,
+ * so there is NO depth abstention; CQDMAX (a per-input Mignotte-style over-bound) only names a
+ * defect.  The caller frees the deep arena. */
 fn cmp_core(dga: i64, dgb: i64, la: i64, ha: i64, lb: i64, hb: i64) -> u64 {
     AAL[0u64] = la   AAH[0u64] = ha
     AAL[1u64] = lb   AAH[1u64] = hb
@@ -794,8 +959,16 @@ fn cmp_core(dga: i64, dgb: i64, la: i64, ha: i64, lb: i64, hb: i64) -> u64 {
     let mut eqdone : u32 = 0u32
     let mut res : u64 = 9u64
     while res == 9u64 {
-        if AAH[0u64] <= AAL[1u64] { res = 1u64 }
-        else { if AAH[1u64] <= AAL[0u64] { res = 2u64 }
+        let mut dis : i32 = 0i32
+        if CQAR == 0u64 {
+            if AAH[0u64] <= AAL[1u64] { dis = 1i32 }
+            else { if AAH[1u64] <= AAL[0u64] { dis = 2i32 } }
+        } else {
+            if c_scmp(CQS[1u64], CQH[1u64], CQS[2u64], CQH[2u64]) <= 0i32 { dis = 1i32 }
+            else { if c_scmp(CQS[3u64], CQH[3u64], CQS[0u64], CQH[0u64]) <= 0i32 { dis = 2i32 } }
+        }
+        if dis == 1i32 { res = 1u64 }
+        else { if dis == 2i32 { res = 2u64 }
         else {
             if eqdone == 0u32 {
                 /* THE ZERO PROBLEM, decided ONCE on the initial overlap: the pair-gcd door.
@@ -829,18 +1002,40 @@ fn cmp_core(dga: i64, dgb: i64, la: i64, ha: i64, lb: i64, hb: i64) -> u64 {
                         }
                     }
                 } } }
-            } else {
-                if AAK >= 44i64 { res = 5u64 }
+            } else { if AAK < 40i64 {
+                let r1 : u64 = cmp_refine(0i64, dga, AAK)
+                if r1 != 9u64 { res = 55u64 }
                 else {
-                    let r1 : u64 = cmp_refine(0i64, dga, AAK)
-                    if r1 != 9u64 { res = 55u64 }
+                    let r2 : u64 = cmp_refine(1i64, dgb, AAK)
+                    if r2 != 9u64 { res = 55u64 }
+                    else { AAK = AAK + 1i64 }
+                }
+            } else {
+                /* THE DEEP TIER */
+                if CQAR == 0u64 {
+                    if cq_open() == 0u32 { res = 55u64 }
+                    else { if cq_seed2(0i64, AAL[0u64], AAH[0u64]) == 0u32 { res = 55u64 }
+                    else { if cq_seed2(2i64, AAL[1u64], AAH[1u64]) == 0u32 { res = 55u64 }
+                    else { CQK = AAK } } }
+                }
+                if res == 9u64 {
+                    if CQK > CQDMAX { res = 66u64 }
                     else {
-                        let r2 : u64 = cmp_refine(1i64, dgb, AAK)
-                        if r2 != 9u64 { res = 55u64 }
-                        else { AAK = AAK + 1i64 }
+                        if gb2_build(dga) < 0i64 { res = 55u64 }
+                        else { if cq_halve(0i64) == 0u32 { res = 55u64 }
+                        else { if gb_build(dgb) < 0i64 { res = 55u64 }
+                        else { if cq_halve(2i64) == 0u32 { res = 55u64 }
+                        else {
+                            CQK = CQK + 1i64
+                            CQMIG = CQMIG + 1i64
+                            if CQMIG >= 128i64 {
+                                CQMIG = 0i64
+                                if cq_migrate(4i64) == 0u32 { res = 55u64 }
+                            }
+                        } } } }
                     }
                 }
-            }
+            } }
         } }
     }
     return res
@@ -854,7 +1049,7 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     if pa == 0u64 { ps("iii-exact: empty polynomial A\n" as u64)  return 3u64 }
     let dga : i64 = gb_deg(pa)
     if dga < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (A)\n" as u64)  return 3u64 }
-    if dga > 60i64 { ps("ABSTAIN: degree(A) > 60 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if dga > 120i64 { ps("ABSTAIN: degree(A) > 120 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     gb_stash2(dga)
     let pb : u64 = rb_parse(strb)
     if pb == PARSEFAIL { ps("iii-exact: parse error in polynomial B (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
@@ -862,7 +1057,7 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     if pb == 0u64 { ps("iii-exact: empty polynomial B\n" as u64)  return 3u64 }
     let dgb : i64 = gb_deg(pb)
     if dgb < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (B)\n" as u64)  return 3u64 }
-    if dgb > 60i64 { ps("ABSTAIN: degree(B) > 60 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if dgb > 120i64 { ps("ABSTAIN: degree(B) > 120 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if la >= ha { ps("iii-exact: --alg interval needs lo < hi (A)\n" as u64)  return 3u64 }
     if lb >= hb { ps("iii-exact: --alg interval needs lo < hi (B)\n" as u64)  return 3u64 }
     if la < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
@@ -887,14 +1082,20 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     /* the cross-check-faculty extractions, while the rows still hold A = GB2, B = GB */
     let smA : u32 = gb_small(2i64, dga, (&RC) as u64)
     let smB : u32 = gb_small(1i64, dgb, (&RC2) as u64)
+    /* the per-input separation over-bound (Mignotte-style): root separation of coprime integer
+     * polynomials exceeds 2^-(degB*log2||A|| + degA*log2||B|| + O(d log d)) -- over-bound it. */
+    let mut mla : i64 = 1i64
+    let mut mi : i64 = 0i64
+    while mi <= dga { if GB2L[mi as u64] > mla { mla = GB2L[mi as u64] }   mi = mi + 1i64 }
+    let mut mlb : i64 = 1i64
+    mi = 0i64
+    while mi <= dgb { if GBL[mi as u64] > mlb { mlb = GBL[mi as u64] }   mi = mi + 1i64 }
+    CQDMAX = (64i64 * ((dga * (mlb + 2i64)) + (dgb * (mla + 2i64)) + dga + dgb)) + 1024i64
     /* the decision */
     let v1 : u64 = cmp_core(dga, dgb, la, ha, lb, hb)
-    if v1 == 55u64 { ps("ABSTAIN: the bigint engine refused during the decision -- no claim\n" as u64)  return 5u64 }
-    if v1 == 5u64 {
-        ps("ABSTAIN: PROVEN DISTINCT (pair-gcd: no shared root in the overlap) but not separated\n" as u64)
-        ps("  at the refinement cap (2^-44) -- refused, not guessed\n" as u64)
-        return 5u64
-    }
+    cq_free()
+    if v1 == 55u64 { ps("ABSTAIN: the engine exhausted its resource envelope during the decision (memory) -- refused, not guessed\n" as u64)  return 5u64 }
+    if v1 == 66u64 { ps("INTERNAL REFUSE: refinement passed the computed separation bound -- indicates a defect; no claim\n" as u64)  return 6u64 }
     /* antisymmetry: the WHOLE decision re-run with the roles swapped (fresh parses, fresh states) */
     let pb2 : u64 = rb_parse(strb)
     if pb2 == PARSEFAIL { return 6u64 }
@@ -902,6 +1103,7 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     let pa2 : u64 = rb_parse(stra)
     if pa2 == PARSEFAIL { return 6u64 }
     let v2 : u64 = cmp_core(dgb, dga, lb, hb, la, ha)
+    cq_free()
     let mut anti : u32 = 0u32
     if v1 == 0u64 { if v2 == 0u64 { anti = 1u32 } }
     if v1 == 1u64 { if v2 == 2u64 { anti = 1u32 } }
@@ -1135,7 +1337,7 @@ fn aa_sqrtchk(op: i64, ba: i64, bb: i64) -> u64 {
 fn alg2_load(which: i64, coeffs: u64, nc: u64, lo: i64, hi: i64) -> u64 {
     let deg : i64 = poly_deg(coeffs, nc)
     if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
-    if deg > 24i64 { ps("ABSTAIN: degree > 24 is outside the arithmetic-verb envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 48i64 { ps("ABSTAIN: degree > 48 is outside the arithmetic-verb envelope -- refused, not guessed\n" as u64)  return 5u64 }
     let mx : i64 = poly_maxabs(coeffs, deg)
     if mx >= 1048576i64 { ps("ABSTAIN: a |coefficient| >= 2^20 is outside the envelope\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
@@ -1193,9 +1395,9 @@ fn emit_alg_arith(op: i64, nca: u64, loa: i64, hia: i64, ncb: u64, lob: i64, hib
     }
     if op != 2i64 {
         let dd0 : i64 = dga * dgb
-        if dd0 > 49i64 {
+        if dd0 > 96i64 {
             ps("ABSTAIN: degree(A) * degree(B) = " as u64)  pi(dd0)
-            ps(" exceeds 49 -- the recovery geometry's bound (the 16-prime bnd certification still\n" as u64)
+            ps(" exceeds 96 -- the recovery geometry's bound (the 64-prime bnd certification still\n" as u64)
             ps("  applies per run inside it); refused, not guessed\n" as u64)
             return 5u64
         }
@@ -1348,7 +1550,7 @@ fn rb_parse(str: u64) -> u64 {
         if PB_ERR == 1u64 { res = PARSEFAIL   going = 0u8 }
         else { if PB_OK == 0u64 { res = n   going = 0u8 }
         else {
-            if n >= 64u64 { res = PARSEFAIL   going = 0u8 }
+            if n >= 128u64 { res = PARSEFAIL   going = 0u8 }
             else {
                 if PB_SGN == 0i64 { GBS[n] = 0i64   GBL[n] = 0i64 }
                 else {
@@ -1400,7 +1602,7 @@ fn rb_bisect(lo: i64, hi: i64) -> i64 {
         let dk : i64 = pw2(k)
         let c : i64 = root_count2(l, dk, h, dk)
         if c == 1i64 {
-            if nrec >= 60i64 { return 0i64 - 1i64 }
+            if nrec >= 120i64 { return 0i64 - 1i64 }
             ILN[nrec as u64] = l   IHN[nrec as u64] = h   IKD[nrec as u64] = k
             nrec = nrec + 1i64
         } else { if c > 1i64 {
@@ -1411,7 +1613,7 @@ fn rb_bisect(lo: i64, hi: i64) -> i64 {
             if ha >= 2305843009213693952i64 { big = 1u32 }
             if k >= RBDEP { RBCL = 1u64 }
             else { if big == 1u32 { RBCL = 1u64 }
-            else { if top < 190i64 {
+            else { if top < 380i64 {
                 let l2 : i64 = 2i64 * l
                 let h2 : i64 = 2i64 * h
                 let mid : i64 = l + h
@@ -1482,7 +1684,7 @@ fn emit_roots_big(str: u64, lo: i64, hi: i64) -> u64 {
     let deg : i64 = gb_deg(pn)
     if deg < 0i64 { ps("iii-exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
     if deg == 0i64 { ps("DISTINCT REAL ROOTS: 0   (nonzero constant)\n" as u64)  return 0u64 }
-    if deg > 60i64 { ps("ABSTAIN: degree > 60 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 120i64 { ps("ABSTAIN: degree > 120 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --roots-big window needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 17592186044416i64) { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
     if hi > 17592186044416i64 { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
@@ -1584,14 +1786,14 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  iii-exact --roots \"<c0 c1 ... cd>\" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d\n" as u64)
         ps("                                            (+ exact multiplicity), bigint-certified\n" as u64)
         ps("  iii-exact --alg-sign \"<c0 ... cd>\" <lo> <hi>  sign of THE root isolated in (lo, hi]\n" as u64)
-        ps("                                            (deg <= 60, coefficients to ~4930 digits)\n" as u64)
+        ps("                                            (deg <= 120, coefficients to ~4930 digits)\n" as u64)
         ps("  iii-exact --alg-cmp \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   order / EQUALITY of two algebraic numbers\n" as u64)
         ps("                                            (same class; equality by the pair-gcd door)\n" as u64)
         ps("  iii-exact --alg-add | --alg-mul \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   the defining polynomial +\n" as u64)
         ps("                                            certified window of alpha+beta / alpha*beta (closure;\n" as u64)
-        ps("                                            deg <= 24 each, degA*degB <= 49, either sign)\n" as u64)
+        ps("                                            deg <= 48 each, degA*degB <= 96, either sign)\n" as u64)
         ps("  iii-exact --alg-inv \"<A>\" <lo> <hi>       the defining polynomial + certified window of 1/alpha\n" as u64)
-        ps("  iii-exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 60, coefficients\n" as u64)
+        ps("  iii-exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 120, coefficients\n" as u64)
         ps("                                            to ~4930 digits (256 limbs)\n\n" as u64)
         ps("  a_i signed integer coefficient, b_i non-negative integer radicand.\n" as u64)
         ps("  exit (sign modes, --alg-sign): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
@@ -1637,7 +1839,7 @@ fn main(argc: i32, argv: u64) -> u64 {
             }
             if argc < 3i32 { ps("iii-exact: --roots needs a coefficient list \"c0 c1 ... cd\" (low -> high)\n" as u64)  return 3u64 }
             let rn : u64 = parse_list(av[2u64], (&RC) as u64)
-            if rn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (up to 32 integers, <= 18 digits each)\n" as u64)  return 3u64 }
+            if rn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (up to 64 integers, <= 18 digits each)\n" as u64)  return 3u64 }
             if rn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
             if argc == 3i32 { return emit_roots((&RC) as u64, rn, 0i64, 0i64, 0u32) }
             if argc < 5i32 { ps("iii-exact: --roots window needs BOTH lo and hi\n" as u64)  return 3u64 }

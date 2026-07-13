@@ -10,13 +10,20 @@
  *   (25/10, 26/10] and 3^(1/4)-2^(1/4) in (1/10, 2/10].  Two charter increments, one pipeline.
  * C -- MULTIPLICITY AT DEPTH: (x^4-10x^2+1)^2 -- the squared chain overflows i64 (v1 root_mult is
  *   garbage there, printed); root_mult2 certifies multiplicity 2 at sqrt2+sqrt3 in (31/10, 32/10].
- * D -- refusal at the WIDENED envelope: degree 61 refused (-1), never garbage.
+ * D -- refusal at the WIDENED envelope: degree 121 refused (-1), never garbage.
  * E -- the old boundary now DELIVERS: x^25 - 2 counted (1 root in (1,2], 1 in (-2,2] -- odd degree,
- *   ONE real root) -- degree 25 was the refusal arm before the pool went to stride 64 / degree <= 60.
- * F -- the new boundary itself: x^60 - 2 counted (1 root in (1,2], 2 in (-2,2]).
+ *   ONE real root) -- degree 25 was the refusal arm before the pool went past stride 32.
+ * F -- a former boundary: x^60 - 2 counted (1 root in (1,2], 2 in (-2,2]).
+ * G -- the CURRENT boundary itself: x^120 - 2 counted through a degree-120 chain (1 in (1,2],
+ *   2 in (-2,2]).
+ * H -- THE HANDLE DOOR, SELF-VERIFYING: chain evaluation at dyadic rationals with BIGINT
+ *   numerators (root_count2_h).  (2^70/2^70, 2^71/2^70] counts like (1,2] (equivalence);
+ *   the negative mirror counts -sqrt2; then sqrt2 is refined 100 DEEP through the door and the
+ *   final window (L/2^100, (L+1)/2^100] is verified by EXACT SQUARING (L^2 < 2*4^100 <= (L+1)^2)
+ *   -- the gate carries NO transcribed 100-bit constant; the certificate is computed.
  *
  * exit 99 = pass;  10 A twin failed to diverge;  11 A count/brackets;  12 B;  13 C;  14 D;
- * 15 E;  16 F */
+ * 15 E;  16 F;  17 G;  18 H */
 module corpus_2185_sturm_big
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -25,12 +32,22 @@ extern @abi(c-msvc-x64) fn root_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64
 extern @abi(c-msvc-x64) fn sturm2_build(coeffs_ptr: u64, deg: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var BP : [i64; 64]   var BF : [i64; 10]   var BG : [i64; 10]
+var BP : [i64; 128]   var BF : [i64; 10]   var BG : [i64; 10]
 
 fn main() -> u64 {
     /* ══ A: the degree-12 wall. */
@@ -71,13 +88,13 @@ fn main() -> u64 {
     if mb != 2i64 { return 13u64 }
 
     /* ══ D: the WIDENED envelope refuses at its true boundary. */
-    let rd : i64 = sturm2_build((&BP) as u64, 61i64)
+    let rd : i64 = sturm2_build((&BP) as u64, 121i64)
     putchar(68i32) putchar(58i32) sp() e_i64(rd) nl()                                                /* "D: -1" */
     if rd != (0i64 - 1i64) { return 14u64 }
 
     /* ══ E: the OLD boundary (degree 25, the former refusal arm) now delivers. */
     let mut z : i64 = 0i64
-    while z <= 60i64 { BP[z as u64] = 0i64   z = z + 1i64 }
+    while z <= 120i64 { BP[z as u64] = 0i64   z = z + 1i64 }
     BP[0u64] = 0i64 - 2i64   BP[25u64] = 1i64
     if sturm2_build((&BP) as u64, 25i64) < 0i64 { return 15u64 }
     let e1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
@@ -86,7 +103,7 @@ fn main() -> u64 {
     if e1 != 1i64 { return 15u64 }
     if e2 != 1i64 { return 15u64 }                       /* odd degree: ONE real root */
 
-    /* ══ F: the new boundary itself -- degree 60. */
+    /* ══ F: a former boundary -- degree 60. */
     BP[25u64] = 0i64   BP[60u64] = 1i64
     if sturm2_build((&BP) as u64, 60i64) < 0i64 { return 16u64 }
     let f1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
@@ -94,6 +111,84 @@ fn main() -> u64 {
     putchar(70i32) putchar(58i32) sp() e_i64(f1) sp() e_i64(f2) nl()                                 /* "F: 1 2" */
     if f1 != 1i64 { return 16u64 }
     if f2 != 2i64 { return 16u64 }
+
+    /* ══ G: the current boundary itself -- degree 120. */
+    BP[60u64] = 0i64   BP[120u64] = 1i64
+    if sturm2_build((&BP) as u64, 120i64) < 0i64 { return 17u64 }
+    let ga : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    let gb : i64 = root_count2(0i64 - 2i64, 1i64, 2i64, 1i64)
+    putchar(71i32) putchar(58i32) sp() e_i64(ga) sp() e_i64(gb) nl()                                 /* "G: 1 2" */
+    if ga != 1i64 { return 17u64 }
+    if gb != 2i64 { return 17u64 }
+
+    /* ══ H: the handle door, self-verifying.  Chain of x^2 - 2. */
+    BP[120u64] = 0i64   BP[0u64] = 0i64 - 2i64   BP[2u64] = 1i64
+    if sturm2_build((&BP) as u64, 2i64) < 0i64 { return 18u64 }
+    let ar : u64 = arena_new(16777216u64)
+    if ar == 0u64 { return 18u64 }
+    /* H1: (2^70/2^70, 2^71/2^70] counts EXACTLY like (1,2]. */
+    let mut lh : u64 = bigint_from_u64(ar, 1u64)
+    let mut hh : u64 = bigint_from_u64(ar, 1u64)
+    let mut q : i64 = 0i64
+    while q < 70i64 { let t : u64 = bigint_mul_u64(ar, lh, 2u64)   bigint_drop(lh)   lh = t   q = q + 1i64 }
+    q = 0i64
+    while q < 71i64 { let t : u64 = bigint_mul_u64(ar, hh, 2u64)   bigint_drop(hh)   hh = t   q = q + 1i64 }
+    let h1 : i64 = root_count2_h(lh, 1i64, hh, 1i64, 70i64)
+    /* H2: the negative mirror (-2^71/2^70, -2^70/2^70] holds -sqrt2. */
+    let h2 : i64 = root_count2_h(hh, 0i64 - 1i64, lh, 0i64 - 1i64, 70i64)
+    bigint_drop(lh)   bigint_drop(hh)
+    /* H3: refine sqrt2 100 DEEP through the door; window numerators stay width 1. */
+    let mut wl : u64 = bigint_from_u64(ar, 1u64)
+    let mut wh : u64 = bigint_from_u64(ar, 2u64)
+    let mut k : i64 = 0i64
+    let mut hok : i64 = 1i64
+    while k < 100i64 {
+        let l2 : u64 = bigint_mul_u64(ar, wl, 2u64)
+        let mid : u64 = bigint_add(ar, wl, wh)
+        if l2 == 0u64 { hok = 0i64 }
+        if mid == 0u64 { hok = 0i64 }
+        if hok == 1i64 {
+            let c : i64 = root_count2_h(l2, 1i64, mid, 1i64, k + 1i64)
+            if c < 0i64 { hok = 0i64   bigint_drop(l2)   bigint_drop(mid) }
+            else { if c == 1i64 {
+                bigint_drop(wl)   bigint_drop(wh)
+                wl = l2   wh = mid
+            } else {
+                let h2x : u64 = bigint_mul_u64(ar, wh, 2u64)
+                bigint_drop(wl)   bigint_drop(wh)   bigint_drop(l2)
+                wl = mid   wh = h2x
+            } }
+        }
+        if hok == 0i64 { k = 100i64 } else { k = k + 1i64 }
+    }
+    let mut h3 : i64 = 0i64
+    let mut h4 : i64 = 0i64
+    let mut h5 : i64 = 0i64
+    if hok == 1i64 {
+        h3 = root_count2_h(wl, 1i64, wh, 1i64, 100i64)
+        /* the SQUARING CERTIFICATE: wl^2 < 2*4^100 <= wh^2, and wh == wl + 1 (width one). */
+        let one : u64 = bigint_from_u64(ar, 1u64)
+        let wl1 : u64 = bigint_add(ar, wl, one)
+        if bigint_cmp(wl1, wh) == 0i32 { h4 = 1i64 }
+        let sq_l : u64 = bigint_mul(ar, wl, wl)
+        let sq_h : u64 = bigint_mul(ar, wh, wh)
+        let mut two : u64 = bigint_from_u64(ar, 2u64)
+        q = 0i64
+        while q < 200i64 { let t : u64 = bigint_mul_u64(ar, two, 2u64)   bigint_drop(two)   two = t   q = q + 1i64 }
+        if bigint_cmp(sq_l, two) < 0i32 { if bigint_cmp(sq_h, two) >= 0i32 { h5 = 1i64 } }
+        bigint_drop(one)   bigint_drop(wl1)   bigint_drop(sq_l)   bigint_drop(sq_h)   bigint_drop(two)
+    }
+    bigint_drop(wl)   bigint_drop(wh)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    putchar(72i32) putchar(58i32) sp() e_i64(h1) sp() e_i64(h2) sp() e_i64(hok) sp() e_i64(h3) sp() e_i64(h4) sp() e_i64(h5) nl()
+    /* "H: 1 1 1 1 1 1" */
+    if h1 != 1i64 { return 18u64 }
+    if h2 != 1i64 { return 18u64 }
+    if hok != 1i64 { return 18u64 }
+    if h3 != 1i64 { return 18u64 }
+    if h4 != 1i64 { return 18u64 }
+    if h5 != 1i64 { return 18u64 }
 
     return 99u64
 }

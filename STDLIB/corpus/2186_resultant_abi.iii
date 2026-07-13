@@ -13,15 +13,22 @@
  * C -- the shared-envelope twin: on cbrt2 + sqrt3 the big2 ABI equals rs_sum_big coefficient-for-
  *   coefficient with every fit flag 1 (the extension is conservative).
  *
- * P2/Q -- the WIDENED recovery geometry: D = 49 (deg 7 x deg 7) delivers (t^7-6)^7 for
- *   2^(1/7) * 3^(1/7); the deg-49 output re-enters the (widened) chain and root_mult2_cur
- *   certifies multiplicity SEVEN at 6^(1/7) -- closure at the new boundary.
+ * P2/Q -- the widened recovery geometry, first rung: D = 49 (deg 7 x deg 7) delivers (t^7-6)^7
+ *   for 2^(1/7) * 3^(1/7); the deg-49 output re-enters the chain and root_mult2_cur certifies
+ *   multiplicity SEVEN at 6^(1/7) -- closure at that boundary.
  * G -- THE PAIR-GCD DOOR (sturm2_pair_stash / sturm2_pair_gcd): gcd through the same
  *   content-reduced chain -- both staging orders, coprime -> 0, an 81-bit-coefficient pair
  *   past the i64 wall, and the protocol refusal.
+ * W -- THE SELF-GENERATED PRIME WINDOW: the generator reproduces the historical 16-entry table
+ *   EXACTLY (sealed outputs byte-identical), delivers 64 strictly-descending primes in
+ *   (2^29, 2^30), each re-verified by this gate's OWN independent trial division.
+ * H -- PAST THE OLD 464-BIT CEILING: a 520-bit-bound sum (x^24 - 10^6) + (x^2 - 999983) the
+ *   16-prime window refused is DELIVERED (deg 48, c0 spanning 8 raw limbs) and its root
+ *   10^(1/4) + sqrt(999983) counted in (1001, 1002] through the chain.
+ * P3 -- the recovery boundary D = 96 (deg 48 x deg 2): (t^48 - 2^25)^2 for 2^(25/48).
  *
  * exit 99 = pass;  10 A refusal/degree;  11 A coefficients/limbs;  12 B;  13 C;  14 P;  15 M;
- * 17 P2/Q;  18 G */
+ * 17 P2/Q;  18 G;  19 W;  20 H;  21 P3 */
 module corpus_2186_resultant_abi
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -41,11 +48,13 @@ extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i6
 extern @abi(c-msvc-x64) fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_pair_stash() -> i32 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_pair_gcd() -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn rs_prime(i: i64) -> i64 from "resultant.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var AF : [i64; 10]   var AG : [i64; 10]   var AO : [i64; 64]   var AO2 : [i64; 64]
+var AF : [i64; 64]   var AG : [i64; 64]   var AO : [i64; 100]   var AO2 : [i64; 100]
+var PHIST : [i64; 16]
 
 /* the M-arm polynomial (x - 2^40)^2 (x - 1) as raw limb rows: c0 = -2^80 (two limbs), c1 = 2^80 + 2^41
  * (two limbs), c2 = -(2^41 + 1), c3 = 1.  Reloadable (build/mult consume the CUR rows). */
@@ -257,6 +266,83 @@ fn main() -> u64 {
     if g4a != 1i64 { return 18u64 }
     if g4b != 0i64 { return 18u64 }
     if g5d != (0i64 - 1i64) { return 18u64 }
+
+    /* ══ W: THE SELF-GENERATED PRIME WINDOW.  The engine's generator must reproduce the historical
+     * 16-entry hardcoded table EXACTLY (so every sealed CRT output is byte-identical), deliver 64
+     * primes total, strictly descending inside (2^29, 2^30), and EVERY one must pass this gate's
+     * OWN independent trial division -- two implementations, one truth. */
+    PHIST[0u64] = 1073741789i64    PHIST[1u64] = 1073741783i64
+    PHIST[2u64] = 1073741741i64    PHIST[3u64] = 1073741723i64
+    PHIST[4u64] = 1073741719i64    PHIST[5u64] = 1073741717i64
+    PHIST[6u64] = 1073741689i64    PHIST[7u64] = 1073741671i64
+    PHIST[8u64] = 1073741663i64    PHIST[9u64] = 1073741651i64
+    PHIST[10u64] = 1073741621i64   PHIST[11u64] = 1073741567i64
+    PHIST[12u64] = 1073741561i64   PHIST[13u64] = 1073741527i64
+    PHIST[14u64] = 1073741503i64   PHIST[15u64] = 1073741477i64
+    let mut wh16 : i64 = 1i64
+    i = 0i64
+    while i < 16i64 { if rs_prime(i) != PHIST[i as u64] { wh16 = 0i64 }   i = i + 1i64 }
+    let mut wall : i64 = 1i64
+    i = 0i64
+    while i < 64i64 {
+        let pv : i64 = rs_prime(i)
+        if pv <= 536870912i64 { wall = 0i64 }               /* > 2^29 */
+        if pv >= 1073741824i64 { wall = 0i64 }              /* < 2^30 */
+        if i > 0i64 { if pv >= rs_prime(i - 1i64) { wall = 0i64 } }
+        /* the gate's OWN trial division (independent of the engine's) */
+        if (pv % 2i64) == 0i64 { wall = 0i64 }
+        let mut dd : i64 = 3i64
+        while (dd * dd) <= pv {
+            if (pv % dd) == 0i64 { wall = 0i64   dd = pv }
+            else { dd = dd + 2i64 }
+        }
+        i = i + 1i64
+    }
+    let w65 : i64 = rs_prime(64i64)                          /* out of range: 0 */
+    putchar(87i32) putchar(58i32) sp() e_i64(wh16) sp() e_i64(wall) sp() e_i64(w65) nl()   /* "W: 1 1 0" */
+    if wh16 != 1i64 { return 19u64 }
+    if wall != 1i64 { return 19u64 }
+    if w65 != 0i64 { return 19u64 }
+
+    /* ══ H: PAST THE OLD 464-BIT CEILING.  A = x^24 - 10^6, B = x^2 - 999983: the certified bound
+     * is 2*bits(frow) + 24*bits(hrow) = 520 bits -- the 16-prime window REFUSED this class; the
+     * 64-prime window (1856) delivers.  gamma = 10^(1/4) + sqrt(999983) is the ONE root of the
+     * degree-48 R in (1001, 1002]; c0 = f(sqrt(999983))^2 ~ 10^144 spans 8 raw limbs. */
+    i = 0i64
+    while i <= 63i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    AF[0u64] = 0i64 - 1000000i64   AF[24u64] = 1i64
+    AG[0u64] = 0i64 - 999983i64    AG[2u64] = 1i64
+    let dh : i64 = rs_sum_big2((&AF) as u64, 24i64, (&AG) as u64, 2i64, (&AO) as u64)
+    if dh != 48i64 { putchar(72i32) putchar(33i32) sp() e_i64(dh) nl()   return 20u64 }
+    let hl0 : i64 = rs_big_len(0i64)
+    if sturm2_in_begin(48i64) != 0i32 { return 20u64 }
+    i = 0i64
+    while i <= 48i64 {
+        let lnh : i64 = rs_big_len(i)
+        let mut jh : i64 = 0i64
+        while jh < lnh { sturm2_in_limb(i, jh, rs_big_limb(i, jh))   jh = jh + 1i64 }
+        sturm2_in_set(i, rs_big_sgn(i), lnh)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 20u64 }
+    let hc : i64 = root_count2(1001i64, 1i64, 1002i64, 1i64)
+    putchar(72i32) putchar(58i32) sp() e_i64(dh) sp() e_i64(hl0) sp() e_i64(hc) nl()       /* "H: 48 8 1" */
+    if hl0 != 8i64 { return 20u64 }
+    if hc != 1i64 { return 20u64 }
+
+    /* ══ P3: the WIDENED recovery boundary D = 96 (deg 48 x deg 2): 2^(1/48) * sqrt2 = 2^(25/48),
+     * R = (t^48 - 2^25)^2 -- c0 = 2^50, c48 = -2^26, monic, every coefficient fitting. */
+    i = 0i64
+    while i <= 63i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    AF[0u64] = 0i64 - 2i64   AF[48u64] = 1i64
+    AG[0u64] = 0i64 - 2i64   AG[2u64] = 1i64
+    let d96 : i64 = rs_prod_big2((&AF) as u64, 48i64, (&AG) as u64, 2i64, (&AO) as u64)
+    putchar(80i32) putchar(51i32) putchar(58i32) sp() e_i64(d96) sp() e_i64(AO[0u64]) sp() e_i64(AO[48u64]) sp() e_i64(AO[96u64]) nl()
+    /* "P3: 96 1125899906842624 -67108864 1" */
+    if d96 != 96i64 { return 21u64 }
+    if AO[0u64] != 1125899906842624i64 { return 21u64 }
+    if AO[48u64] != (0i64 - 67108864i64) { return 21u64 }
+    if AO[96u64] != 1i64 { return 21u64 }
 
     return 99u64
 }

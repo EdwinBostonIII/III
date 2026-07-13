@@ -10,7 +10,7 @@
  *   (25/10, 26/10] and 3^(1/4)-2^(1/4) in (1/10, 2/10].  Two charter increments, one pipeline.
  * C -- MULTIPLICITY AT DEPTH: (x^4-10x^2+1)^2 -- the squared chain overflows i64 (v1 root_mult is
  *   garbage there, printed); root_mult2 certifies multiplicity 2 at sqrt2+sqrt3 in (31/10, 32/10].
- * D -- refusal at the WIDENED envelope: degree 121 refused (-1), never garbage.
+ * D -- refusal at the WIDENED envelope: degree 241 refused (-1), never garbage.
  * E -- the old boundary now DELIVERS: x^25 - 2 counted (1 root in (1,2], 1 in (-2,2] -- odd degree,
  *   ONE real root) -- degree 25 was the refusal arm before the pool went past stride 32.
  * F -- a former boundary: x^60 - 2 counted (1 root in (1,2], 2 in (-2,2]).
@@ -33,6 +33,11 @@ extern @abi(c-msvc-x64) fn sturm2_build(coeffs_ptr: u64, deg: i64) -> i64 from "
 extern @abi(c-msvc-x64) fn root_count2(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_mult2(coeffs_ptr: u64, deg: i64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn root_count2_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_count2_q(lnh: u64, lsgn: i64, ldh: u64, hnh: u64, hsgn: i64, hdh: u64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn root_mult2_cur_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_begin(deg: i64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_limb(i: i64, j: i64, v: u64) -> i32 from "sturm_big.iii"
+extern @abi(c-msvc-x64) fn sturm2_in_set(i: i64, sgn: i64, nlimbs: i64) -> i32 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn rs_sum_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 from "resultant.iii"
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
@@ -47,7 +52,7 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var BP : [i64; 128]   var BF : [i64; 10]   var BG : [i64; 10]
+var BP : [i64; 256]   var BF : [i64; 10]   var BG : [i64; 10]
 
 fn main() -> u64 {
     /* ══ A: the degree-12 wall. */
@@ -88,13 +93,13 @@ fn main() -> u64 {
     if mb != 2i64 { return 13u64 }
 
     /* ══ D: the WIDENED envelope refuses at its true boundary. */
-    let rd : i64 = sturm2_build((&BP) as u64, 121i64)
+    let rd : i64 = sturm2_build((&BP) as u64, 241i64)
     putchar(68i32) putchar(58i32) sp() e_i64(rd) nl()                                                /* "D: -1" */
     if rd != (0i64 - 1i64) { return 14u64 }
 
     /* ══ E: the OLD boundary (degree 25, the former refusal arm) now delivers. */
     let mut z : i64 = 0i64
-    while z <= 120i64 { BP[z as u64] = 0i64   z = z + 1i64 }
+    while z <= 240i64 { BP[z as u64] = 0i64   z = z + 1i64 }
     BP[0u64] = 0i64 - 2i64   BP[25u64] = 1i64
     if sturm2_build((&BP) as u64, 25i64) < 0i64 { return 15u64 }
     let e1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
@@ -120,6 +125,15 @@ fn main() -> u64 {
     putchar(71i32) putchar(58i32) sp() e_i64(ga) sp() e_i64(gb) nl()                                 /* "G: 1 2" */
     if ga != 1i64 { return 17u64 }
     if gb != 2i64 { return 17u64 }
+
+    /* ══ G2: the CURRENT boundary -- degree 240. */
+    BP[120u64] = 0i64   BP[240u64] = 1i64
+    if sturm2_build((&BP) as u64, 240i64) < 0i64 { return 17u64 }
+    let g2a : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    let g2b : i64 = root_count2(0i64 - 2i64, 1i64, 2i64, 1i64)
+    putchar(71i32) putchar(50i32) putchar(58i32) sp() e_i64(g2a) sp() e_i64(g2b) nl()                /* "G2: 1 2" */
+    if g2a != 1i64 { return 17u64 }
+    if g2b != 2i64 { return 17u64 }
 
     /* ══ H: the handle door, self-verifying.  Chain of x^2 - 2. */
     BP[120u64] = 0i64   BP[0u64] = 0i64 - 2i64   BP[2u64] = 1i64
@@ -189,6 +203,36 @@ fn main() -> u64 {
     if h3 != 1i64 { return 18u64 }
     if h4 != 1i64 { return 18u64 }
     if h5 != 1i64 { return 18u64 }
+
+    /* ══ I: the GENERAL-RATIONAL door + the DEEP MULTIPLICITY door.  x^2 - 2's chain queried at
+     * NON-DYADIC rationals (denominator 3): sqrt2 in (4/3, 3/2] but not in (2/3, 4/3]; then
+     * (x^2-2)^2 through root_mult2_cur_h: multiplicity 2 at the dyadic handle window (1, 3/2]. */
+    BP[240u64] = 0i64   BP[0u64] = 0i64 - 2i64   BP[2u64] = 1i64
+    if sturm2_build((&BP) as u64, 2i64) < 0i64 { return 19u64 }
+    let ar2 : u64 = arena_new(1048576u64)
+    if ar2 == 0u64 { return 19u64 }
+    let qn4 : u64 = bigint_from_u64(ar2, 4u64)
+    let qd3 : u64 = bigint_from_u64(ar2, 3u64)
+    let qn3 : u64 = bigint_from_u64(ar2, 3u64)
+    let qd2 : u64 = bigint_from_u64(ar2, 2u64)
+    let qn2 : u64 = bigint_from_u64(ar2, 2u64)
+    let i1 : i64 = root_count2_q(qn4, 1i64, qd3, qn3, 1i64, qd2)     /* (4/3, 3/2] -> 1 */
+    let i2 : i64 = root_count2_q(qn2, 1i64, qd3, qn4, 1i64, qd3)     /* (2/3, 4/3] -> 0 */
+    /* (x^2-2)^2 = 4 0 -4 0 1 through the deep multiplicity door at (2/2, 3/2] */
+    if sturm2_in_begin(4i64) != 0i32 { return 19u64 }
+    sturm2_in_limb(0i64, 0i64, 4u64)   sturm2_in_set(0i64, 1i64, 1i64)
+    sturm2_in_set(1i64, 0i64, 0i64)
+    sturm2_in_limb(2i64, 0i64, 4u64)   sturm2_in_set(2i64, 0i64 - 1i64, 1i64)
+    sturm2_in_set(3i64, 0i64, 0i64)
+    sturm2_in_limb(4i64, 0i64, 1u64)   sturm2_in_set(4i64, 1i64, 1i64)
+    let i3 : i64 = root_mult2_cur_h(qn2, 1i64, qn3, 1i64, 1i64)
+    bigint_drop(qn4)   bigint_drop(qd3)   bigint_drop(qn3)   bigint_drop(qd2)   bigint_drop(qn2)
+    bigint_drop_arena(ar2)
+    arena_drop(ar2)
+    putchar(73i32) putchar(58i32) sp() e_i64(i1) sp() e_i64(i2) sp() e_i64(i3) nl()                  /* "I: 1 0 2" */
+    if i1 != 1i64 { return 19u64 }
+    if i2 != 0i64 { return 19u64 }
+    if i3 != 2i64 { return 19u64 }
 
     return 99u64
 }

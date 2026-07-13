@@ -19,8 +19,8 @@
  * root_count2_h) evaluates the chain at DYADIC RATIONALS WITH BIGINT NUMERATORS (caller-owned
  * handles, any arena) -- the deep-refinement engine: order refinement descends to any depth the
  * machine's memory affords, every allocation guarded to a refusal.
- * Envelope: degree <= 120, chain <= 127 (truncation = ST2_BAD refusal, never a silent wrong
- * count), pool 262144 limbs; refusal (-1), never garbage. */
+ * Envelope: degree <= 240, chain <= 255 (truncation = ST2_BAD refusal, never a silent wrong
+ * count), pool 524288 limbs; refusal (-1), never garbage. */
 module sturm_big
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
@@ -44,15 +44,15 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
 
-const ST2_MAXD : i64 = 120i64
+const ST2_MAXD : i64 = 240i64
 
-/* the chain pool: poly k coefficient i at row r = k*128+i */
-var ST2_LIMB : [u64; 262144]   var ST2_TOP : i64
-var ST2_SGN : [i64; 16384]   var ST2_OFF : [i64; 16384]   var ST2_LEN : [i64; 16384]
-var ST2_PDEG : [i64; 128]   var ST2_N : i64   var ST2_BAD : i64   var ST2_PST : i64
+/* the chain pool: poly k coefficient i at row r = k*256+i */
+var ST2_LIMB : [u64; 524288]   var ST2_TOP : i64
+var ST2_SGN : [i64; 65536]   var ST2_OFF : [i64; 65536]   var ST2_LEN : [i64; 65536]
+var ST2_PDEG : [i64; 256]   var ST2_N : i64   var ST2_BAD : i64   var ST2_PST : i64
 
 /* CUR input rows: coefficient i limbs at CLB[i*256 + j] */
-var ST2_CS : [i64; 128]   var ST2_CL : [i64; 128]   var ST2_CLB : [u64; 32768]
+var ST2_CS : [i64; 256]   var ST2_CL : [i64; 256]   var ST2_CLB : [u64; 65536]
 var ST2_CD : i64
 
 /* prem working rows: PING-PONG REGIONS in a dedicated limb pool, so the live-handle count stays
@@ -60,8 +60,8 @@ var ST2_CD : i64
  * design point, but the GLOBAL bigint handle table has 64 slots: past ~60 coefficients that
  * silently exhausted the table and degraded operands to zero.  The pool design exists to respect
  * that wall; the working row now respects it too.)  Row (region*128 + i); per-region bump tops. */
-var ST2_WLB : [u64; 131072]
-var ST2_WSG : [i64; 256]   var ST2_WOF : [i64; 256]   var ST2_WLN : [i64; 256]
+var ST2_WLB : [u64; 524288]
+var ST2_WSG : [i64; 512]   var ST2_WOF : [i64; 512]   var ST2_WLN : [i64; 512]
 var ST2_WT : [i64; 2]
 
 /* signed-result channel of the helpers */
@@ -73,7 +73,7 @@ fn st2_sgn_i64(v: i64) -> i64 { if v > 0i64 { return 1i64 }   if v < 0i64 { retu
 fn st2_store(h: u64, sgn: i64, r: i64) -> i32 {
     let mut ln : i64 = bigint_len_limbs(h) as i64
     if bigint_is_zero(h) == 1u8 { ln = 0i64 }
-    if (ST2_TOP + ln) > 262144i64 { ST2_BAD = 1i64   return 0i32 - 1i32 }
+    if (ST2_TOP + ln) > 524288i64 { ST2_BAD = 1i64   return 0i32 - 1i32 }
     ST2_OFF[r as u64] = ST2_TOP
     ST2_LEN[r as u64] = ln
     let mut s : i64 = sgn
@@ -169,9 +169,9 @@ fn st2_cur_load(ar: u64, i: i64) -> u64 {
 fn st2_wstore(h: u64, sgn: i64, region: i64, i: i64) -> i32 {
     let mut ln : i64 = bigint_len_limbs(h) as i64
     if bigint_is_zero(h) == 1u8 { ln = 0i64 }
-    if (ST2_WT[region as u64] + ln) > 65536i64 { ST2_BAD = 1i64   return 0i32 - 1i32 }
-    let off : i64 = (region * 65536i64) + ST2_WT[region as u64]
-    let r : i64 = (region * 128i64) + i
+    if (ST2_WT[region as u64] + ln) > 262144i64 { ST2_BAD = 1i64   return 0i32 - 1i32 }
+    let off : i64 = (region * 262144i64) + ST2_WT[region as u64]
+    let r : i64 = (region * 256i64) + i
     ST2_WOF[r as u64] = off
     ST2_WLN[r as u64] = ln
     let mut s : i64 = sgn
@@ -184,7 +184,7 @@ fn st2_wstore(h: u64, sgn: i64, region: i64, i: i64) -> i32 {
 }
 /* working-row read: materialize scratch row (region, i); 0 = exhaustion (BAD set) */
 fn st2_wload(ar: u64, region: i64, i: i64) -> u64 {
-    let r : i64 = (region * 128i64) + i
+    let r : i64 = (region * 256i64) + i
     let ln : i64 = ST2_WLN[r as u64]
     if ln == 0i64 {
         let z : u64 = bigint_from_u64(ar, 0u64)
@@ -209,8 +209,8 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
     let ar : u64 = arena_new(33554432u64)
     let degA : i64 = ST2_PDEG[ka as u64]
     let degB : i64 = ST2_PDEG[kb as u64]
-    let lcBs : i64 = ST2_SGN[((kb * 128i64) + degB) as u64]
-    let lcBh : u64 = st2_load(ar, (kb * 128i64) + degB)
+    let lcBs : i64 = ST2_SGN[((kb * 256i64) + degB) as u64]
+    let lcBh : u64 = st2_load(ar, (kb * 256i64) + degB)
     if lcBh == 0u64 { ST2_BAD = 1i64 }
     let mut cur : i64 = 1i64                    /* meaningful only once fromka drops */
     let mut fromka : u32 = 1u32
@@ -228,10 +228,10 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
             let mut lcRs : i64 = 0i64
             let mut lcRh : u64 = 0u64
             if fromka == 1u32 {
-                lcRs = ST2_SGN[((ka * 128i64) + dR) as u64]
-                lcRh = st2_load(ar, (ka * 128i64) + dR)
+                lcRs = ST2_SGN[((ka * 256i64) + dR) as u64]
+                lcRh = st2_load(ar, (ka * 256i64) + dR)
             } else {
-                lcRs = ST2_WSG[((cur * 128i64) + dR) as u64]
+                lcRs = ST2_WSG[((cur * 256i64) + dR) as u64]
                 lcRh = st2_wload(ar, cur, dR)
             }
             if lcRh == 0u64 { ST2_BAD = 1i64 }
@@ -242,10 +242,10 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
                 let mut rs : i64 = 0i64
                 let mut rh : u64 = 0u64
                 if fromka == 1u32 {
-                    rs = ST2_SGN[((ka * 128i64) + i) as u64]
-                    rh = st2_load(ar, (ka * 128i64) + i)
+                    rs = ST2_SGN[((ka * 256i64) + i) as u64]
+                    rh = st2_load(ar, (ka * 256i64) + i)
                 } else {
-                    rs = ST2_WSG[((cur * 128i64) + i) as u64]
+                    rs = ST2_WSG[((cur * 256i64) + i) as u64]
                     rh = st2_wload(ar, cur, i)
                 }
                 let mut th : u64 = bigint_mul(ar, rh, lcBh)
@@ -255,8 +255,8 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
                 /* ... minus lcR * x^shift * B  at the overlapped positions */
                 if ST2_BAD == 0i64 { if i >= shift {
                     let j : i64 = i - shift
-                    let bs : i64 = ST2_SGN[((kb * 128i64) + j) as u64]
-                    let bh : u64 = st2_load(ar, (kb * 128i64) + j)
+                    let bs : i64 = ST2_SGN[((kb * 256i64) + j) as u64]
+                    let bh : u64 = st2_load(ar, (kb * 256i64) + j)
                     let t2 : u64 = bigint_mul(ar, lcRh, bh)
                     bigint_drop(bh)
                     if t2 == 0u64 { ST2_BAD = 1i64 }
@@ -282,7 +282,7 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
             let mut done : u8 = 0u8
             while done == 0u8 {
                 if nd < 0i64 { done = 1u8 } else {
-                    if ST2_WSG[((cur * 128i64) + nd) as u64] != 0i64 { done = 1u8 } else { nd = nd - 1i64 }
+                    if ST2_WSG[((cur * 256i64) + nd) as u64] != 0i64 { done = 1u8 } else { nd = nd - 1i64 }
                 }
             }
             dR = nd
@@ -298,8 +298,8 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
     }
     if dR < 0i64 {
         ST2_PDEG[(kb + 1i64) as u64] = 0i64
-        ST2_SGN[(((kb + 1i64) * 128i64)) as u64] = 0i64
-        ST2_LEN[(((kb + 1i64) * 128i64)) as u64] = 0i64
+        ST2_SGN[(((kb + 1i64) * 256i64)) as u64] = 0i64
+        ST2_LEN[(((kb + 1i64) * 256i64)) as u64] = 0i64
         bigint_drop_arena(ar)   arena_drop(ar)
         return 0i64 - 1i64
     }
@@ -323,9 +323,9 @@ fn st2_prem(ka: i64, kb: i64) -> i64 {
             bigint_drop(hh)
             hh = q
         }
-        let mut sg : i64 = ST2_WSG[((cur * 128i64) + i2) as u64] * mult
+        let mut sg : i64 = ST2_WSG[((cur * 256i64) + i2) as u64] * mult
         if bigint_is_zero(hh) == 1u8 { sg = 0i64 }
-        st2_store(hh, sg, ((kb + 1i64) * 128i64) + i2)
+        st2_store(hh, sg, ((kb + 1i64) * 256i64) + i2)
         bigint_drop(hh)
         i2 = i2 + 1i64
     }
@@ -361,7 +361,7 @@ fn sturm2_build_cur() -> i64 @export {
         bigint_drop(h)
         let mut sg : i64 = ST2_CS[(i + 1i64) as u64]
         if bigint_is_zero(d) == 1u8 { sg = 0i64 }
-        st2_store(d, sg, 128i64 + i)
+        st2_store(d, sg, 256i64 + i)
         bigint_drop(d)
         i = i + 1i64
     }
@@ -376,7 +376,7 @@ fn sturm2_build_cur() -> i64 @export {
         if dk <= 0i64 { done = 1u8 } else {
             st2_prem(k - 1i64, k)
             k = k + 1i64
-            if k >= 127i64 { ST2_BAD = 1i64   done = 1u8 }   /* truncation is a REFUSAL, never a wrong count */
+            if k >= 255i64 { ST2_BAD = 1i64   done = 1u8 }   /* truncation is a REFUSAL, never a wrong count */
         }
         if ST2_BAD != 0i64 { done = 1u8 }
     }
@@ -407,8 +407,8 @@ fn st2_eval_sign(k: i64, xn: i64, xd: i64) -> i32 {
     let deg : i64 = ST2_PDEG[k as u64]
     let mut axn : i64 = xn   let mut sxn : i64 = 1i64
     if axn < 0i64 { axn = 0i64 - axn   sxn = 0i64 - 1i64 }
-    let mut accs : i64 = ST2_SGN[((k * 128i64) + deg) as u64]
-    let mut acch : u64 = st2_load(ar, (k * 128i64) + deg)
+    let mut accs : i64 = ST2_SGN[((k * 256i64) + deg) as u64]
+    let mut acch : u64 = st2_load(ar, (k * 256i64) + deg)
     let mut pw : u64 = bigint_from_u64(ar, 1u64)
     let mut i : i64 = deg - 1i64
     while i >= 0i64 {
@@ -417,10 +417,10 @@ fn st2_eval_sign(k: i64, xn: i64, xd: i64) -> i32 {
         let a2 : u64 = bigint_mul_u64(ar, acch, axn as u64)
         bigint_drop(acch)   acch = a2   accs = accs * sxn
         if bigint_is_zero(acch) == 1u8 { accs = 0i64 }
-        let ch : u64 = st2_load(ar, (k * 128i64) + i)
+        let ch : u64 = st2_load(ar, (k * 256i64) + i)
         let ct : u64 = bigint_mul(ar, ch, pw)
         bigint_drop(ch)
-        st2_sadd(ar, accs, acch, ST2_SGN[((k * 128i64) + i) as u64], ct)
+        st2_sadd(ar, accs, acch, ST2_SGN[((k * 256i64) + i) as u64], ct)
         bigint_drop(ct)   bigint_drop(acch)
         accs = ST2_QS   acch = ST2_QH
         i = i - 1i64
@@ -439,7 +439,7 @@ fn sturm2_var(xn: i64, xd: i64) -> i64 @export {
     while k < ST2_N {
         let dk : i64 = ST2_PDEG[k as u64]
         let mut use0 : i64 = 1i64
-        if dk == 0i64 { let s0 : i64 = ST2_SGN[(k * 128i64) as u64]   if s0 == 0i64 { use0 = 0i64 } }
+        if dk == 0i64 { let s0 : i64 = ST2_SGN[(k * 256i64) as u64]   if s0 == 0i64 { use0 = 0i64 } }
         if use0 == 1i64 {
             let s : i32 = st2_eval_sign(k, xn, xd)
             if s != 0i32 {
@@ -494,7 +494,7 @@ fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
                         let dk : i64 = ST2_PDEG[kg as u64]
                         let mut nz : i64 = 0i64
                         let mut j : i64 = 0i64
-                        while j <= dk { if ST2_SGN[((kg * 128i64) + j) as u64] != 0i64 { nz = 1i64 }   j = j + 1i64 }
+                        while j <= dk { if ST2_SGN[((kg * 256i64) + j) as u64] != 0i64 { nz = 1i64 }   j = j + 1i64 }
                         if nz == 1i64 { found = kg }
                     }
                     kg = kg - 1i64
@@ -505,7 +505,7 @@ fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
                         sturm2_in_begin(dg)
                         let mut j : i64 = 0i64
                         while j <= dg {
-                            let r : i64 = (found * 128i64) + j
+                            let r : i64 = (found * 256i64) + j
                             let ln : i64 = ST2_LEN[r as u64]
                             let off : i64 = ST2_OFF[r as u64]
                             let mut q : i64 = 0i64
@@ -558,10 +558,10 @@ fn st2_swap01() -> i32 {
     let d0 : i64 = ST2_PDEG[0u64]
     ST2_PDEG[0u64] = ST2_PDEG[1u64]   ST2_PDEG[1u64] = d0
     let mut i : i64 = 0i64
-    while i < 128i64 {
-        let s : i64 = ST2_SGN[i as u64]   ST2_SGN[i as u64] = ST2_SGN[(128i64 + i) as u64]   ST2_SGN[(128i64 + i) as u64] = s
-        let o : i64 = ST2_OFF[i as u64]   ST2_OFF[i as u64] = ST2_OFF[(128i64 + i) as u64]   ST2_OFF[(128i64 + i) as u64] = o
-        let l : i64 = ST2_LEN[i as u64]   ST2_LEN[i as u64] = ST2_LEN[(128i64 + i) as u64]   ST2_LEN[(128i64 + i) as u64] = l
+    while i < 256i64 {
+        let s : i64 = ST2_SGN[i as u64]   ST2_SGN[i as u64] = ST2_SGN[(256i64 + i) as u64]   ST2_SGN[(256i64 + i) as u64] = s
+        let o : i64 = ST2_OFF[i as u64]   ST2_OFF[i as u64] = ST2_OFF[(256i64 + i) as u64]   ST2_OFF[(256i64 + i) as u64] = o
+        let l : i64 = ST2_LEN[i as u64]   ST2_LEN[i as u64] = ST2_LEN[(256i64 + i) as u64]   ST2_LEN[(256i64 + i) as u64] = l
         i = i + 1i64
     }
     return 0i32
@@ -577,7 +577,7 @@ fn sturm2_pair_gcd() -> i64 @export {
     let mut i : i64 = 0i64
     while i <= degb {
         let h : u64 = st2_cur_load(ar, i)
-        st2_store(h, ST2_CS[i as u64], 128i64 + i)
+        st2_store(h, ST2_CS[i as u64], 256i64 + i)
         bigint_drop(h)
         i = i + 1i64
     }
@@ -594,7 +594,7 @@ fn sturm2_pair_gcd() -> i64 @export {
         if dk <= 0i64 { done = 1u8 } else {
             st2_prem(k - 1i64, k)
             k = k + 1i64
-            if k >= 127i64 { ST2_BAD = 1i64   done = 1u8 }
+            if k >= 255i64 { ST2_BAD = 1i64   done = 1u8 }
         }
         if ST2_BAD != 0i64 { done = 1u8 }
     }
@@ -607,7 +607,7 @@ fn sturm2_pair_gcd() -> i64 @export {
             let dkg : i64 = ST2_PDEG[kg as u64]
             let mut nz : i64 = 0i64
             let mut j : i64 = 0i64
-            while j <= dkg { if ST2_SGN[((kg * 128i64) + j) as u64] != 0i64 { nz = 1i64 }   j = j + 1i64 }
+            while j <= dkg { if ST2_SGN[((kg * 256i64) + j) as u64] != 0i64 { nz = 1i64 }   j = j + 1i64 }
             if nz == 1i64 { found = kg }
         }
         kg = kg - 1i64
@@ -615,10 +615,10 @@ fn sturm2_pair_gcd() -> i64 @export {
     if found < 1i64 { return 0i64 - 1i64 }               /* poly 1 = B is nonzero: found >= 1 always */
     let dg : i64 = ST2_PDEG[found as u64]
     /* sign-normalize: positive leading coefficient (a gcd is defined up to sign) */
-    if ST2_SGN[((found * 128i64) + dg) as u64] < 0i64 {
+    if ST2_SGN[((found * 256i64) + dg) as u64] < 0i64 {
         let mut q : i64 = 0i64
         while q <= dg {
-            ST2_SGN[((found * 128i64) + q) as u64] = 0i64 - ST2_SGN[((found * 128i64) + q) as u64]
+            ST2_SGN[((found * 256i64) + q) as u64] = 0i64 - ST2_SGN[((found * 256i64) + q) as u64]
             q = q + 1i64
         }
     }
@@ -627,7 +627,7 @@ fn sturm2_pair_gcd() -> i64 @export {
     sturm2_in_begin(dg)
     let mut j2 : i64 = 0i64
     while j2 <= dg {
-        let r : i64 = (found * 128i64) + j2
+        let r : i64 = (found * 256i64) + j2
         let ln : i64 = ST2_LEN[r as u64]
         let off : i64 = ST2_OFF[r as u64]
         let mut q2 : i64 = 0i64
@@ -674,7 +674,7 @@ fn st2_eval_sign_h(kpoly: i64, xh: u64, xsgn0: i64, kd: i64) -> i32 {
     let mut rowmax : i64 = 0i64
     let mut ri : i64 = 0i64
     while ri <= deg {
-        let rl : i64 = ST2_LEN[((kpoly * 128i64) + ri) as u64]
+        let rl : i64 = ST2_LEN[((kpoly * 256i64) + ri) as u64]
         if rl > rowmax { rowmax = rl }
         ri = ri + 1i64
     }
@@ -685,8 +685,8 @@ fn st2_eval_sign_h(kpoly: i64, xh: u64, xsgn0: i64, kd: i64) -> i32 {
     if ar == 0u64 { return 0i32 - 2i32 }
     let mut xs : i64 = xsgn0
     if bigint_is_zero(xh) == 1u8 { xs = 0i64 }
-    let mut accs : i64 = ST2_SGN[((kpoly * 128i64) + deg) as u64]
-    let mut acch : u64 = st2_load(ar, (kpoly * 128i64) + deg)
+    let mut accs : i64 = ST2_SGN[((kpoly * 256i64) + deg) as u64]
+    let mut acch : u64 = st2_load(ar, (kpoly * 256i64) + deg)
     let mut pw : u64 = bigint_from_u64(ar, 1u64)
     let mut bad : u32 = 0u32
     if acch == 0u64 { bad = 1u32 }
@@ -702,12 +702,12 @@ fn st2_eval_sign_h(kpoly: i64, xh: u64, xsgn0: i64, kd: i64) -> i32 {
         if a2 == 0u64 { bad = 1u32   acch = 0u64 } else {
         acch = a2   accs = accs * xs
         if bigint_is_zero(acch) == 1u8 { accs = 0i64 }
-        let ch : u64 = st2_load(ar, (kpoly * 128i64) + i)
+        let ch : u64 = st2_load(ar, (kpoly * 256i64) + i)
         if ch == 0u64 { bad = 1u32 } else {
         let ct : u64 = bigint_mul(ar, ch, pw)
         bigint_drop(ch)
         if ct == 0u64 { bad = 1u32 } else {
-        st2_sadd(ar, accs, acch, ST2_SGN[((kpoly * 128i64) + i) as u64], ct)
+        st2_sadd(ar, accs, acch, ST2_SGN[((kpoly * 256i64) + i) as u64], ct)
         bigint_drop(ct)   bigint_drop(acch)
         accs = ST2_QS   acch = ST2_QH
         if acch == 0u64 { bad = 1u32 }
@@ -729,7 +729,7 @@ fn sturm2_var_h(xh: u64, xsgn: i64, kd: i64) -> i64 @export {
     while k < ST2_N {
         let dk : i64 = ST2_PDEG[k as u64]
         let mut use0 : i64 = 1i64
-        if dk == 0i64 { let s0 : i64 = ST2_SGN[(k * 128i64) as u64]   if s0 == 0i64 { use0 = 0i64 } }
+        if dk == 0i64 { let s0 : i64 = ST2_SGN[(k * 256i64) as u64]   if s0 == 0i64 { use0 = 0i64 } }
         if use0 == 1i64 {
             let s : i32 = st2_eval_sign_h(k, xh, xsgn, kd)
             if s == (0i32 - 2i32) { return 0i64 - 1i64 }
@@ -750,4 +750,140 @@ fn root_count2_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 @export
     let b : i64 = sturm2_var_h(hh, hsgn, kd)
     if b < 0i64 { return 0i64 - 1i64 }
     return a - b
+}
+
+/* ── the GENERAL-RATIONAL door: x = (xsgn*|X|) / |D| with BOTH numerator and denominator as
+ * caller-owned handles (D > 0).  Subsumes the dyadic door (D = 2^kd) -- needed wherever a window
+ * endpoint is not dyadic (the INVERSE windows 2^k/(h+1)).  Same guard discipline. */
+fn st2_eval_sign_q(kpoly: i64, xh: u64, xsgn0: i64, dh: u64) -> i32 {
+    let deg : i64 = ST2_PDEG[kpoly as u64]
+    let xlen : i64 = bigint_len_limbs(xh) as i64
+    let dlen : i64 = bigint_len_limbs(dh) as i64
+    let mut rowmax : i64 = 0i64
+    let mut ri : i64 = 0i64
+    while ri <= deg {
+        let rl : i64 = ST2_LEN[((kpoly * 256i64) + ri) as u64]
+        if rl > rowmax { rowmax = rl }
+        ri = ri + 1i64
+    }
+    let mut need : i64 = 1048576i64 + ((deg + 4i64) * (((xlen + dlen + rowmax + 4i64) * 8i64) * (deg + 4i64)))
+    if need < 1048576i64 { return 0i32 - 2i32 }
+    if need > 1073741824i64 { return 0i32 - 2i32 }
+    let ar : u64 = arena_new(need as u64)
+    if ar == 0u64 { return 0i32 - 2i32 }
+    let mut xs : i64 = xsgn0
+    if bigint_is_zero(xh) == 1u8 { xs = 0i64 }
+    let mut accs : i64 = ST2_SGN[((kpoly * 256i64) + deg) as u64]
+    let mut acch : u64 = st2_load(ar, (kpoly * 256i64) + deg)
+    let mut pw : u64 = bigint_from_u64(ar, 1u64)
+    let mut bad : u32 = 0u32
+    if acch == 0u64 { bad = 1u32 }
+    if pw == 0u64 { bad = 1u32 }
+    let mut i : i64 = deg - 1i64
+    while i >= 0i64 { if bad == 0u32 {
+        let p2 : u64 = bigint_mul(ar, pw, dh)
+        bigint_drop(pw)
+        if p2 == 0u64 { bad = 1u32   pw = 0u64 } else {
+        pw = p2
+        let a2 : u64 = bigint_mul(ar, acch, xh)
+        bigint_drop(acch)
+        if a2 == 0u64 { bad = 1u32   acch = 0u64 } else {
+        acch = a2   accs = accs * xs
+        if bigint_is_zero(acch) == 1u8 { accs = 0i64 }
+        let ch : u64 = st2_load(ar, (kpoly * 256i64) + i)
+        if ch == 0u64 { bad = 1u32 } else {
+        let ct : u64 = bigint_mul(ar, ch, pw)
+        bigint_drop(ch)
+        if ct == 0u64 { bad = 1u32 } else {
+        st2_sadd(ar, accs, acch, ST2_SGN[((kpoly * 256i64) + i) as u64], ct)
+        bigint_drop(ct)   bigint_drop(acch)
+        accs = ST2_QS   acch = ST2_QH
+        if acch == 0u64 { bad = 1u32 }
+        } } } }
+    }   i = i - 1i64 }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    if bad == 1u32 { return 0i32 - 2i32 }
+    if accs > 0i64 { return 1i32 }
+    if accs < 0i64 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+fn sturm2_var_q(xh: u64, xsgn: i64, dh: u64) -> i64 @export {
+    let mut prev : i32 = 0i32
+    let mut v : i64 = 0i64
+    let mut k : i64 = 0i64
+    while k < ST2_N {
+        let dk : i64 = ST2_PDEG[k as u64]
+        let mut use0 : i64 = 1i64
+        if dk == 0i64 { let s0 : i64 = ST2_SGN[(k * 256i64) as u64]   if s0 == 0i64 { use0 = 0i64 } }
+        if use0 == 1i64 {
+            let s : i32 = st2_eval_sign_q(k, xh, xsgn, dh)
+            if s == (0i32 - 2i32) { return 0i64 - 1i64 }
+            if s != 0i32 {
+                if prev != 0i32 { if s != prev { v = v + 1i64 } }
+                prev = s
+            }
+        }
+        k = k + 1i64
+    }
+    return v
+}
+
+/* roots in ((lsgn*|LN|)/|LD|, (hsgn*|HN|)/|HD|] -- general rational endpoints.  -1 = refusal. */
+fn root_count2_q(lnh: u64, lsgn: i64, ldh: u64, hnh: u64, hsgn: i64, hdh: u64) -> i64 @export {
+    let a : i64 = sturm2_var_q(lnh, lsgn, ldh)
+    if a < 0i64 { return 0i64 - 1i64 }
+    let b : i64 = sturm2_var_q(hnh, hsgn, hdh)
+    if b < 0i64 { return 0i64 - 1i64 }
+    return a - b
+}
+
+/* ── the DEEP MULTIPLICITY door: root_mult2_cur's reduce-to-gcd loop with the counting window at
+ * dyadic HANDLE endpoints -- multiplicity of the single root in ((lsgn|L|)/2^kd, (hsgn|H|)/2^kd].
+ * CONSUMES the CUR rows.  -1 no root / resource refusal, -2 ambiguous, else m >= 1. */
+fn root_mult2_cur_h(lh: u64, lsgn: i64, hh: u64, hsgn: i64, kd: i64) -> i64 @export {
+    let mut m : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if ST2_CD < 1i64 { going = 0u8 } else {
+            if sturm2_build_cur() < 0i64 { return 0i64 - 1i64 }
+            let c : i64 = root_count2_h(lh, lsgn, hh, hsgn, kd)
+            if c < 0i64 { return 0i64 - 1i64 }
+            if c > 1i64 { return 0i64 - 2i64 }
+            if c < 1i64 { going = 0u8 } else {
+                m = m + 1i64
+                let mut kg : i64 = ST2_N - 1i64
+                let mut found : i64 = 0i64 - 1i64
+                while kg >= 0i64 {
+                    if found < 0i64 {
+                        let dk : i64 = ST2_PDEG[kg as u64]
+                        let mut nz : i64 = 0i64
+                        let mut j : i64 = 0i64
+                        while j <= dk { if ST2_SGN[((kg * 256i64) + j) as u64] != 0i64 { nz = 1i64 }   j = j + 1i64 }
+                        if nz == 1i64 { found = kg }
+                    }
+                    kg = kg - 1i64
+                }
+                if found < 1i64 { going = 0u8 } else {
+                    let dg : i64 = ST2_PDEG[found as u64]
+                    if dg < 1i64 { going = 0u8 } else {
+                        sturm2_in_begin(dg)
+                        let mut j : i64 = 0i64
+                        while j <= dg {
+                            let r : i64 = (found * 256i64) + j
+                            let ln : i64 = ST2_LEN[r as u64]
+                            let off : i64 = ST2_OFF[r as u64]
+                            let mut q : i64 = 0i64
+                            while q < ln { sturm2_in_limb(j, q, ST2_LIMB[(off + q) as u64])   q = q + 1i64 }
+                            sturm2_in_set(j, ST2_SGN[r as u64], ln)
+                            j = j + 1i64
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if m == 0i64 { return 0i64 - 1i64 }
+    return m
 }

@@ -20,7 +20,7 @@
  *   content-reduced chain -- both staging orders, coprime -> 0, an 81-bit-coefficient pair
  *   past the i64 wall, and the protocol refusal.
  * W -- THE SELF-GENERATED PRIME WINDOW: the generator reproduces the historical 16-entry table
- *   EXACTLY (sealed outputs byte-identical), delivers 64 strictly-descending primes in
+ *   EXACTLY (sealed outputs byte-identical), delivers 128 strictly-descending primes in
  *   (2^29, 2^30), each re-verified by this gate's OWN independent trial division.
  * H -- PAST THE OLD 464-BIT CEILING: a 520-bit-bound sum (x^24 - 10^6) + (x^2 - 999983) the
  *   16-prime window refused is DELIVERED (deg 48, c0 spanning 8 raw limbs) and its root
@@ -53,7 +53,7 @@ extern @abi(c-msvc-x64) fn rs_prime(i: i64) -> i64 from "resultant.iii"
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var AF : [i64; 64]   var AG : [i64; 64]   var AO : [i64; 100]   var AO2 : [i64; 100]
+var AF : [i64; 100]   var AG : [i64; 100]   var AO : [i64; 200]   var AO2 : [i64; 200]
 var PHIST : [i64; 16]
 
 /* the M-arm polynomial (x - 2^40)^2 (x - 1) as raw limb rows: c0 = -2^80 (two limbs), c1 = 2^80 + 2^41
@@ -284,7 +284,7 @@ fn main() -> u64 {
     while i < 16i64 { if rs_prime(i) != PHIST[i as u64] { wh16 = 0i64 }   i = i + 1i64 }
     let mut wall : i64 = 1i64
     i = 0i64
-    while i < 64i64 {
+    while i < 128i64 {
         let pv : i64 = rs_prime(i)
         if pv <= 536870912i64 { wall = 0i64 }               /* > 2^29 */
         if pv >= 1073741824i64 { wall = 0i64 }              /* < 2^30 */
@@ -298,7 +298,7 @@ fn main() -> u64 {
         }
         i = i + 1i64
     }
-    let w65 : i64 = rs_prime(64i64)                          /* out of range: 0 */
+    let w65 : i64 = rs_prime(128i64)                         /* out of range: 0 */
     putchar(87i32) putchar(58i32) sp() e_i64(wh16) sp() e_i64(wall) sp() e_i64(w65) nl()   /* "W: 1 1 0" */
     if wh16 != 1i64 { return 19u64 }
     if wall != 1i64 { return 19u64 }
@@ -343,6 +343,39 @@ fn main() -> u64 {
     if AO[0u64] != 1125899906842624i64 { return 21u64 }
     if AO[48u64] != (0i64 - 67108864i64) { return 21u64 }
     if AO[96u64] != 1i64 { return 21u64 }
+
+    /* ══ P4: the WIDENED recovery boundary D = 192 through the LAGRANGE recovery (deg 64 x deg 3,
+     * gcd(64,3)=1 so all 192 root-of-unity pairs are distinct): 2^(1/64) * 2^(1/3) = 2^(67/192),
+     * R = t^192 - 2^67 EXACTLY -- c0 = -2^67 spans two raw limbs (0, 8), monic; and the deg-192
+     * output re-enters the (widened) chain: exactly ONE root in (1, 2]. */
+    i = 0i64
+    while i <= 99i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    AF[0u64] = 0i64 - 2i64   AF[64u64] = 1i64
+    AG[0u64] = 0i64 - 2i64   AG[3u64] = 1i64
+    let d192 : i64 = rs_prod_big2((&AF) as u64, 64i64, (&AG) as u64, 3i64, (&AO) as u64)
+    if d192 != 192i64 { putchar(80i32) putchar(52i32) putchar(33i32) sp() e_i64(d192) nl()   return 22u64 }
+    let p4l : i64 = rs_big_len(0i64)
+    let p4s : i64 = rs_big_sgn(0i64)
+    let p4a : i64 = rs_big_limb(0i64, 0i64) as i64
+    let p4b : i64 = rs_big_limb(0i64, 1i64) as i64
+    if sturm2_in_begin(192i64) != 0i32 { return 22u64 }
+    i = 0i64
+    while i <= 192i64 {
+        let lnq : i64 = rs_big_len(i)
+        let mut jq : i64 = 0i64
+        while jq < lnq { sturm2_in_limb(i, jq, rs_big_limb(i, jq))   jq = jq + 1i64 }
+        sturm2_in_set(i, rs_big_sgn(i), lnq)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 22u64 }
+    let p4c : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    putchar(80i32) putchar(52i32) putchar(58i32) sp() e_i64(d192) sp() e_i64(p4l) sp() e_i64(p4s) sp() e_i64(p4a) sp() e_i64(p4b) sp() e_i64(p4c) nl()
+    /* "P4: 192 2 -1 0 8 1" */
+    if p4l != 2i64 { return 22u64 }
+    if p4s != (0i64 - 1i64) { return 22u64 }
+    if p4a != 0i64 { return 22u64 }
+    if p4b != 8i64 { return 22u64 }
+    if p4c != 1i64 { return 22u64 }
 
     return 99u64
 }

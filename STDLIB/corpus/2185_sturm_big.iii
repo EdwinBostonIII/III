@@ -10,7 +10,7 @@
  *   (25/10, 26/10] and 3^(1/4)-2^(1/4) in (1/10, 2/10].  Two charter increments, one pipeline.
  * C -- MULTIPLICITY AT DEPTH: (x^4-10x^2+1)^2 -- the squared chain overflows i64 (v1 root_mult is
  *   garbage there, printed); root_mult2 certifies multiplicity 2 at sqrt2+sqrt3 in (31/10, 32/10].
- * D -- refusal at the WIDENED envelope: degree 241 refused (-1), never garbage.
+ * D -- refusal at the WIDENED envelope: degree 481 refused (-1), never garbage.
  * E -- the old boundary now DELIVERS: x^25 - 2 counted (1 root in (1,2], 1 in (-2,2] -- odd degree,
  *   ONE real root) -- degree 25 was the refusal arm before the pool went past stride 32.
  * F -- a former boundary: x^60 - 2 counted (1 root in (1,2], 2 in (-2,2]).
@@ -52,7 +52,7 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var BP : [i64; 256]   var BF : [i64; 10]   var BG : [i64; 10]
+var BP : [i64; 512]   var BF : [i64; 10]   var BG : [i64; 10]
 
 fn main() -> u64 {
     /* ══ A: the degree-12 wall. */
@@ -93,13 +93,13 @@ fn main() -> u64 {
     if mb != 2i64 { return 13u64 }
 
     /* ══ D: the WIDENED envelope refuses at its true boundary. */
-    let rd : i64 = sturm2_build((&BP) as u64, 241i64)
+    let rd : i64 = sturm2_build((&BP) as u64, 481i64)
     putchar(68i32) putchar(58i32) sp() e_i64(rd) nl()                                                /* "D: -1" */
     if rd != (0i64 - 1i64) { return 14u64 }
 
     /* ══ E: the OLD boundary (degree 25, the former refusal arm) now delivers. */
     let mut z : i64 = 0i64
-    while z <= 240i64 { BP[z as u64] = 0i64   z = z + 1i64 }
+    while z <= 480i64 { BP[z as u64] = 0i64   z = z + 1i64 }
     BP[0u64] = 0i64 - 2i64   BP[25u64] = 1i64
     if sturm2_build((&BP) as u64, 25i64) < 0i64 { return 15u64 }
     let e1 : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
@@ -126,7 +126,7 @@ fn main() -> u64 {
     if ga != 1i64 { return 17u64 }
     if gb != 2i64 { return 17u64 }
 
-    /* ══ G2: the CURRENT boundary -- degree 240. */
+    /* ══ G2: a former boundary -- degree 240. */
     BP[120u64] = 0i64   BP[240u64] = 1i64
     if sturm2_build((&BP) as u64, 240i64) < 0i64 { return 17u64 }
     let g2a : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
@@ -135,8 +135,17 @@ fn main() -> u64 {
     if g2a != 1i64 { return 17u64 }
     if g2b != 2i64 { return 17u64 }
 
+    /* ══ G3: the CURRENT boundary -- degree 480. */
+    BP[240u64] = 0i64   BP[480u64] = 1i64
+    if sturm2_build((&BP) as u64, 480i64) < 0i64 { return 17u64 }
+    let g3a : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    let g3b : i64 = root_count2(0i64 - 2i64, 1i64, 2i64, 1i64)
+    putchar(71i32) putchar(51i32) putchar(58i32) sp() e_i64(g3a) sp() e_i64(g3b) nl()                /* "G3: 1 2" */
+    if g3a != 1i64 { return 17u64 }
+    if g3b != 2i64 { return 17u64 }
+
     /* ══ H: the handle door, self-verifying.  Chain of x^2 - 2. */
-    BP[120u64] = 0i64   BP[0u64] = 0i64 - 2i64   BP[2u64] = 1i64
+    BP[480u64] = 0i64   BP[0u64] = 0i64 - 2i64   BP[2u64] = 1i64
     if sturm2_build((&BP) as u64, 2i64) < 0i64 { return 18u64 }
     let ar : u64 = arena_new(16777216u64)
     if ar == 0u64 { return 18u64 }

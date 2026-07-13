@@ -20,7 +20,7 @@
  *   content-reduced chain -- both staging orders, coprime -> 0, an 81-bit-coefficient pair
  *   past the i64 wall, and the protocol refusal.
  * W -- THE SELF-GENERATED PRIME WINDOW: the generator reproduces the historical 16-entry table
- *   EXACTLY (sealed outputs byte-identical), delivers 128 strictly-descending primes in
+ *   EXACTLY (sealed outputs byte-identical), delivers 256 strictly-descending primes in
  *   (2^29, 2^30), each re-verified by this gate's OWN independent trial division.
  * H -- PAST THE OLD 464-BIT CEILING: a 520-bit-bound sum (x^24 - 10^6) + (x^2 - 999983) the
  *   16-prime window refused is DELIVERED (deg 48, c0 spanning 8 raw limbs) and its root
@@ -49,11 +49,19 @@ extern @abi(c-msvc-x64) fn root_mult2_cur(an: i64, ad: i64, bn: i64, bd: i64) ->
 extern @abi(c-msvc-x64) fn sturm2_pair_stash() -> i32 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn sturm2_pair_gcd() -> i64 from "sturm_big.iii"
 extern @abi(c-msvc-x64) fn rs_prime(i: i64) -> i64 from "resultant.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
 
-var AF : [i64; 100]   var AG : [i64; 100]   var AO : [i64; 200]   var AO2 : [i64; 200]
+var AF : [i64; 100]   var AG : [i64; 100]   var AO : [i64; 400]   var AO2 : [i64; 400]
 var PHIST : [i64; 16]
 
 /* the M-arm polynomial (x - 2^40)^2 (x - 1) as raw limb rows: c0 = -2^80 (two limbs), c1 = 2^80 + 2^41
@@ -284,7 +292,7 @@ fn main() -> u64 {
     while i < 16i64 { if rs_prime(i) != PHIST[i as u64] { wh16 = 0i64 }   i = i + 1i64 }
     let mut wall : i64 = 1i64
     i = 0i64
-    while i < 128i64 {
+    while i < 256i64 {
         let pv : i64 = rs_prime(i)
         if pv <= 536870912i64 { wall = 0i64 }               /* > 2^29 */
         if pv >= 1073741824i64 { wall = 0i64 }              /* < 2^30 */
@@ -298,7 +306,7 @@ fn main() -> u64 {
         }
         i = i + 1i64
     }
-    let w65 : i64 = rs_prime(128i64)                         /* out of range: 0 */
+    let w65 : i64 = rs_prime(256i64)                         /* out of range: 0 */
     putchar(87i32) putchar(58i32) sp() e_i64(wh16) sp() e_i64(wall) sp() e_i64(w65) nl()   /* "W: 1 1 0" */
     if wh16 != 1i64 { return 19u64 }
     if wall != 1i64 { return 19u64 }
@@ -376,6 +384,80 @@ fn main() -> u64 {
     if p4a != 0i64 { return 22u64 }
     if p4b != 8i64 { return 22u64 }
     if p4c != 1i64 { return 22u64 }
+
+    /* ══ P5: the WIDENED recovery boundary D = 384 (deg 16 x deg 24 -- the SMALLEST-Sylvester
+     * factorization of 384, n = 40): 2^(1/16) * 2^(1/24) = 2^(5/48), whose mu_48 orbit carries
+     * multiplicity 8: R = (t^48 - 32)^8 -- c0 = 32^8 = 2^40, the t^336 coefficient
+     * C(8,7)*(-32) = -256, monic; and the deg-384 output re-enters the WIDENED chain:
+     * exactly ONE root in (1, 2]. */
+    i = 0i64
+    while i <= 99i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    AF[0u64] = 0i64 - 2i64   AF[16u64] = 1i64
+    AG[0u64] = 0i64 - 2i64   AG[24u64] = 1i64
+    let d384 : i64 = rs_prod_big2((&AF) as u64, 16i64, (&AG) as u64, 24i64, (&AO) as u64)
+    if d384 != 384i64 { putchar(80i32) putchar(53i32) putchar(33i32) sp() e_i64(d384) nl()   return 23u64 }
+    let p5c0 : i64 = AO[0u64]
+    let p5a : i64 = AO[336u64]
+    let p5b : i64 = AO[384u64]
+    if sturm2_in_begin(384i64) != 0i32 { return 23u64 }
+    i = 0i64
+    while i <= 384i64 {
+        let ln5 : i64 = rs_big_len(i)
+        let mut j5 : i64 = 0i64
+        while j5 < ln5 { sturm2_in_limb(i, j5, rs_big_limb(i, j5))   j5 = j5 + 1i64 }
+        sturm2_in_set(i, rs_big_sgn(i), ln5)
+        i = i + 1i64
+    }
+    if sturm2_build_cur() < 0i64 { return 23u64 }
+    let p5r : i64 = root_count2(1i64, 1i64, 2i64, 1i64)
+    putchar(80i32) putchar(53i32) putchar(58i32) sp() e_i64(d384) sp() e_i64(p5c0) sp() e_i64(p5a) sp() e_i64(p5b) sp() e_i64(p5r) nl()
+    /* "P5: 384 1099511627776 -256 1 1" */
+    if p5c0 != 1099511627776i64 { return 23u64 }
+    if p5a != (0i64 - 256i64) { return 23u64 }
+    if p5b != 1i64 { return 23u64 }
+    if p5r != 1i64 { return 23u64 }
+
+    /* ══ R: PAST BOTH OLD CEILINGS AT ONCE -- the 3712-bit window bound AND the 64-limb delivery
+     * row.  A = x^67 - a, B = x^2 - a with a = 2^60 - 1: bnd = 69 * bits(2^60) = 4209 bits (the
+     * 128-prime window REFUSED this class), and R(0) = a^2 * (-a)^67 = -a^69 ~ 2^4140 spans 65
+     * raw limbs (the old 64-limb rows REFUSED it).  The gate re-computes a^69 with its OWN bigint
+     * chain and pins every limb -- self-verifying, no transcribed constants. */
+    i = 0i64
+    while i <= 99i64 { AF[i as u64] = 0i64   AG[i as u64] = 0i64   i = i + 1i64 }
+    let av : i64 = 1152921504606846975i64
+    AF[0u64] = 0i64 - av   AF[67u64] = 1i64
+    AG[0u64] = 0i64 - av   AG[2u64] = 1i64
+    let d134 : i64 = rs_prod_big2((&AF) as u64, 67i64, (&AG) as u64, 2i64, (&AO) as u64)
+    if d134 != 134i64 { putchar(82i32) putchar(33i32) sp() e_i64(d134) nl()   return 24u64 }
+    let r0s : i64 = rs_big_sgn(0i64)
+    let r0l : i64 = rs_big_len(0i64)
+    let r0f : i64 = rs_big_fit(0i64)
+    let arv : u64 = arena_new(4194304u64)
+    if arv == 0u64 { return 24u64 }
+    let mut pw : u64 = bigint_from_u64(arv, av as u64)
+    i = 1i64
+    while i < 69i64 {
+        let nx : u64 = bigint_mul_u64(arv, pw, av as u64)
+        bigint_drop(pw)
+        pw = nx
+        i = i + 1i64
+    }
+    let wl : i64 = bigint_len_limbs(pw) as i64
+    let mut lm_ok : i64 = 1i64
+    i = 0i64
+    while i < wl { if rs_big_limb(0i64, i) != bigint_get_limb(pw, i as u64) { lm_ok = 0i64 }   i = i + 1i64 }
+    bigint_drop(pw)
+    bigint_drop_arena(arv)
+    arena_drop(arv)
+    let rt : i64 = rs_big_sgn(134i64)
+    putchar(82i32) putchar(58i32) sp() e_i64(d134) sp() e_i64(r0s) sp() e_i64(r0l) sp() e_i64(r0f) sp() e_i64(wl) sp() e_i64(lm_ok) sp() e_i64(rt) nl()
+    /* "R: 134 -1 65 0 65 1 1" */
+    if r0s != (0i64 - 1i64) { return 24u64 }
+    if r0l != wl { return 24u64 }
+    if r0l < 65i64 { return 24u64 }
+    if r0f != 0i64 { return 24u64 }
+    if lm_ok != 1i64 { return 24u64 }
+    if rt != 1i64 { return 24u64 }
 
     return 99u64
 }

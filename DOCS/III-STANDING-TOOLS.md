@@ -161,9 +161,13 @@ iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER with DECIDABLE
 iii-exact --alg-add "<A>" <lo> <hi> "<B>" <lo> <hi>   THE ARITHMETIC CLOSURE: construct gamma =
 iii-exact --alg-mul "<A>" <lo> <hi> "<B>" <lo> <hi>   alpha+beta / alpha*beta as (an integer defining
                                          polynomial, a certified isolating window) -- roots are
-                                         closed under + and * ON THIS SURFACE
+                                         closed under + and * ON THIS SURFACE (deg <= 7 each,
+                                         degA*degB <= 18, EITHER sign)
+iii-exact --alg-inv "<A>" <lo> <hi>      THE FIELD COMPLETION: 1/alpha (exact reversal + certified
+                                         window, either sign) -- with add/mul this closes
+                                         +, *, and inverse, hence division
 iii-exact --roots-big "<c0 .. cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 24,
-                                         coefficients of ANY size (<= 1300 digits each)
+                                         coefficients to ~4930 digits (256 limbs)
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_exact.sh` → `COMPILED/iii-exact`.
@@ -196,16 +200,22 @@ Exits: `--alg-sign` sign-mode 1/0/2; `--alg-cmp` `1` A<B | `0` EQUAL | `2` A>B (
 both add `4` REFUSED (the interval does not isolate exactly one root) | `5` abstain | `6` a
 cross-check failed.
 
-`--alg-add` / `--alg-mul` are the ARITHMETIC CLOSURE (`aether/resultant`, gates 2177/2179/2180/2186):
-the certified modular-CRT resultant engine CONSTRUCTS γ's integer defining polynomial (16 fixed
+`--alg-add` / `--alg-mul` / `--alg-inv` are the ARITHMETIC CLOSURE and FIELD COMPLETION
+(`aether/resultant`, gates 2177/2179/2180/2186): the certified modular-CRT resultant engine (or,
+for the inverse, the exact reversal `rs_inv`) CONSTRUCTS γ's integer defining polynomial (16 fixed
 30-bit primes, a certified permanent norm bound, a mod-every-prime consistency re-check, and the
 V-I.2 limb-row ABI so coefficients beyond i64 are DELIVERED, not refused); the CLI then pins WHICH
-root γ is by refining α and β through the overflow-free bigint chain until R has exactly ONE
-root (`root_count2`-certified) in γ's interval-arithmetic window.  When both inputs are principal
-square roots, the Σ√ separation-bound oracle must independently confirm γ's window before anything
-prints.  The product needs nonnegative isolating intervals (a named abstention gives the exact
-p(−x) workaround); a zero operand is detected exactly and answered `PRODUCT: exactly 0`.  The
-output pair (R + window) is itself a legal `--roots`/`--roots-big` input — closure, literally.
+root γ is by refining the operands through the overflow-free bigint chain until R has exactly ONE
+root (`root_count2`-certified) in γ's window.  Inputs take degree ≤ 7 each with degA·degB ≤ 18
+(the 16-prime window's certified bound) — validation AND refinement run entirely through the
+bigint chain, sound at every depth, so the wider class is certified per run rather than inherited.
+PRODUCT and INVERSE work at EITHER sign: a sign-definite refinement phase separates each operand
+from 0 first; then the product uses [min,max] of the four endpoint products with the lower bound
+widened one half-step, and the inverse uses the strict outer bracket of [2ᵏ/h, 2ᵏ/l) — the
+half-open mirroring that made 1/α the frontier item, dissolved by widening instead of case-work.
+Sqrt-shaped inputs get the Σ√ separation-bound oracle as an independent second faculty.  A zero
+operand is detected exactly (`PRODUCT: exactly 0`; the inverse of zero is REFUSED).  The output
+pair (R + window) is itself a legal `--roots`/`--roots-big` input — closure, literally.
 Exits: `0` certified | `3` parse | `4` refused | `5` abstain | `6` a cross-check failed.
 
 `--roots-big` carries isolation PAST the i64 chain wall (gate 2185: the i64 chain honestly
@@ -256,6 +266,16 @@ Verified on fresh input:
 | `--roots-big "-1208925819614629174706176 1208925819616828197961728 -2199023255553 1" 0 1099511627777` | exit 0 | **(x−2⁴⁰)²(x−1) with an 81-bit constant term: the double root at 2⁴⁰ certified `multiplicity 2 — TOUCHES`** through the raw limb door; root 1 crosses; Σ = 3 = degree |
 | `--roots-big "1125899906842623 -6755399441055744 10133099161583616" 0 1` | exit 5 | roots 1/3 ± 1/(3·2²⁵), gap ≈ 2⁻²⁶: `2 roots certified but only 0 isolated at the dyadic depth cap` — the count stays exact, the isolation refuses honestly |
 | `--roots-big "0 0 … 0 1"` (deg 25) / `"12x 1"` / `"0 0"` / window past 2⁴⁴ | exits 5/3/3/5 | envelope abstention, trailing garbage, the zero polynomial, window envelope — each named |
+| `--alg-inv "-2 0 1" 1 2` | exit 0 | 1/√2 → `-1 0 2` = 2x²−1, window (1/3, 1], Σ√-oracle-confirmed |
+| `--alg-inv "1 0 -10 0 1" 3 4` | exit 0 | **1/(√2+√3) with a DEGREE-4 input** (the widened envelope): R is `1 0 -10 0 1` — **self-reversed**, the 2180 palindrome fact on the CLI; window (1/5, 1/3] pins √3−√2 |
+| `--alg-inv "-2 0 0 1" 1 2` / `"-2 0 1" -2 -1` | exit 0 both | 1/∛2 → 2x³−1; **1/(−√2), the negative side** — window (−2, −1/2], the h = −1 outer-bracket case measured |
+| `--alg-inv "0 1" -1 1` | exit 4 | `REFUSED: the inverse of the zero algebraic number does not exist` |
+| `--alg-mul "-2 0 1" -2 -1 "-3 0 1" -2 -1` and mixed | exit 0 both | **the SIGNED product**: (−√2)(−√3) = +√6 in (1/2, 4]; (−√2)(√3) = −√6 in (−9/2, −1] — the former nonneg-only abstention replaced by real support |
+| `--alg-mul "-2 0 1" 1 2 "-2 0 0 1" -1 2` | exit 0 | a ZERO-STRADDLING valid interval for β: the sign-definite phase separates it, then √2·∛2 → `-32 0 0 0 0 0 1` = **t⁶−32 exactly** (γ⁶ = 32) |
+| `--alg-add "-2 0 0 0 0 0 0 1" 1 2 "-1 1" 0 2` | exit 0 | **a degree-7 input**: 2^(1/7)+1 → `-3 7 -21 35 -35 21 -7 1` = (t−1)⁷−2, the binomial row machine-constructed |
+| `--alg-mul "-2 0 0 0 0 0 1" 1 2 "-2 0 0 1" 1 2` | exit 0 | **the D = 18 boundary**: 2^(1/6)·2^(1/3) = √2 through a degree-18 resultant — R = (t⁶−8)³, window (1/2, 4] pins the one positive real root |
+| `--alg-mul` at deg 7 × deg 3 | exit 5 | `degree(A) * degree(B) = 21 exceeds 18 — the 16-prime window's certified bound; refused, not guessed` |
+| `--roots-big` with 2001-digit coefficients | exit 0 | N = 10²⁰⁰⁰+1, p = N·x − (3N+1) (primitive): the root 3 + 1/N isolated in (3, 4], multiplicity 1 — coefficients past the old 1300-digit cap, at the engine's true 256-limb row capacity |
 
 ---
 
@@ -375,21 +395,22 @@ what survives into a replayable content-addressed library, and folds the useful 
 Named, not hidden. These are real capabilities with real KAT coverage that **do not yet have a standing CLI**,
 and therefore do not yet meet the bar this document sets:
 
-- **`--alg-inv` (the field completion)**: `rs_inv` is gated (2180: x⁴−10x²+1 is self-reversed; 1/∛2 →
-  2x³−1) but 1/α's isolating window mirrors half-open orientation ((lo,hi] → [1/hi, 1/lo)) — the
-  surface needs the exact-endpoint rational case answered directly and the cross-denominator window
-  (2ᵏ/h, 2ᵏ/l]. With it, +, ·, ⁻¹ (hence ÷) all stand on the CLI.
-- **Wider envelopes, honestly held**: `--alg-*` inputs stop at degree 3 (the gate-2157-proven algnum
-  register class; degree ≤ 7 is mechanical but unproven); `--roots-big` stops at degree 24 / 64-limb
-  coefficients (`sturm_big`'s pool geometry). Each boundary is an abstention today, an extension when
-  a gate proves the wider class.
+- **The ORDER verbs beyond degree 3**: `--alg-cmp`/`--alg-sign` ride algnum's register file, whose
+  equality decision (gcd) and refinement run through the i64 chain — degree > 3 there needs a bigint
+  polynomial pair-gcd engine (the arithmetic verbs already escaped to the bigint chain, which is why
+  THEY stand at degree 7). That engine is the named extension.
+- **Geometry-bound caps**: `--roots-big` degree 24 (sturm_big's pool layout: 32-coefficient rows,
+  chain ≤ 30) and degA·degB ≤ 18 for the resultant verbs (the 16-prime window's certified bound —
+  more primes widen it). Each is an abstention today, an engine-geometry extension when re-gated.
 
 (ML-KEM, SLH-DSA, Ed25519, AES-SIV, rank-1 denesting, and the CIC core left this list on 2026-07-12;
-Sturm isolation + multiplicity, the algnum order structure, QTT, and BV64 left it the same day; and
-the last three named items — **algebraic-number ARITHMETIC** (`--alg-add`/`--alg-mul`: the certified
-resultant closure, the golden ratio composed across two invocations), **beyond-i64 coefficients**
-(`--roots-big`: Wilkinson-12 past the chain wall, an 81-bit-coefficient double root certified through
-the raw limb door), and **LEK/REACH** (`--lek`/`--reach`: sovereignty as types, on your own vectors) —
-left it before that day ended. Every verb proven on both arms, every claimed line observed output.)
+Sturm isolation + multiplicity, the algnum order structure, QTT, and BV64 left it the same day; the
+three then-named items — algebraic-number ARITHMETIC, beyond-i64 coefficients, LEK/REACH — left it
+before that day ended; and on 2026-07-13 **`--alg-inv` closed the FIELD** (+, ·, ⁻¹, hence ÷, all
+standing — the half-open mirroring dissolved by widened outer brackets rather than case-work), the
+**product went signed** (sign-definite refinement phase), the **arithmetic verbs went to degree 7 /
+D = 18** (validation and refinement moved wholly onto the bigint chain — certified per run), and
+**`--roots-big` reached the engine's true 256-limb row capacity** (~4930-digit coefficients).
+Every verb proven on both arms, every claimed line observed output.)
 
 Each is a tool of the same shape as `iii-prove`: link the library, take real input, print a real verdict.

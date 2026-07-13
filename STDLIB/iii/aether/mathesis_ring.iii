@@ -1,0 +1,372 @@
+/* aether/mathesis_ring.iii -- THE RING JUDGE (campaign Sigma: the frontier's own named retry route,
+ * "ring/kernel later" in mathesis_frontier's header -- this is the ring route, landed).
+ *
+ * Decides schema equality for the synth space's {ADD,SUB,MUL} fragment by EXACT MULTIVARIATE
+ * POLYNOMIAL NORMALIZATION over Z[x,c1,c2] -- no SAT, no bit-blast, no width:
+ *
+ *   SOUNDNESS   : ring equality composes with EVERY ring homomorphism Z[x,c1,c2] -> Z/2^w, so a
+ *                 ring-PROVEN pair holds at ALL widths simultaneously (strictly stronger than the
+ *                 width-64 rows the disposer emits).
+ *   COMPLETENESS (the GRID LEMMA, constructive): on this fragment the difference polynomial has
+ *                 per-variable degree <= 3 and coefficient magnitude < 2^12; its Newton
+ *                 finite-difference coefficients over the grid {0,1,2,3}^3 are integer
+ *                 combinations bounded far below 2^64, so vanishing mod 2^64 ON THE GRID forces
+ *                 them to vanish EXACTLY, i.e. forces the zero polynomial.  Contrapositive: a
+ *                 ring-UNEQUAL pure pair has a counterexample IN THE GRID -- the witness search
+ *                 cannot come home empty, and an empty-handed search is a SELF-DETECTED DEFECT
+ *                 (-2), never an abstention.
+ *
+ * Pairs bearing AND/OR/XOR are outside the ring fragment: the judge abstains on the proof side
+ * and still hunts witnesses (grid + a structured 13-value cube) through mxn_eval_f/mxn_eval_g --
+ * the INDEPENDENT native evaluator (mathesis_novel's door), so refutations never trust this
+ * organ's own parser.  Verdicts: 1 RING-PROVEN (all widths) / 0 REFUTED (witness recorded,
+ * re-checkable) / 3 UNDECIDED (stays frontiered, blocker named) / -2 internal defect.
+ *
+ * Gates: corpus/2705 (the judge: refuted-with-witness first, mul-assoc PROVEN, the w8 exhaustive
+ * retry AGREEING with the ring verdict -- two engines, one truth), corpus/2706 (THE DRAIN: the
+ * round-1 frontier rebuilt pair-for-pair and decided; counts pinned).
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_synth (the one body builder) +
+ * mathesis_novel (the one native evaluator) only.
+ */
+module aether_mathesis_ring
+
+extern @abi(c-msvc-x64) fn mxs_build_f1(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_f2(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_g(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_fbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_gbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_f(tier: u64, code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_g(code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+
+const MRG_CMAX : i64 = 1099511627776i64      /* 2^40 coefficient envelope (the lemma's headroom) */
+
+/* polynomial grids: coefficient of x^a c1^b c2^c at a*16+b*4+c (per-var degree <= 3).
+ * stack of 4 grids + two result grids, module scope. */
+var MRG_S : [i64; 256]
+var MRG_SP : i64
+var MRG_A : [i64; 64]
+var MRG_B : [i64; 64]
+var MRG_T : [i64; 64]
+var MRG_WX : u64   var MRG_W1 : u64   var MRG_W2 : u64   var MRG_HASW : i64
+
+fn mrg_grid_clear(base: i64) -> i32 {
+    let mut i : i64 = 0i64
+    while i < 64i64 { MRG_S[(base + i) as u64] = 0i64   i = i + 1i64 }
+    return 0i32
+}
+
+/* parse one RPN body (the mxs encoding: [0x10 idx] param, [0x01 + 8 LE] const, op byte, 0x60 end)
+ * into the grid stack; result left in stack slot 0.  0 ok / -1 non-ring op / -2 envelope. */
+fn mrg_parse(bp: u64, blen: u64) -> i32 {
+    let b : *u8 = bp as *u8
+    MRG_SP = 0i64
+    let mut p : u64 = 0u64
+    while p < blen {
+        let tag : u8 = b[p]
+        if tag == 0x60u8 { p = blen } else {
+        if tag == 0x10u8 {
+            if MRG_SP >= 4i64 { return 0i32 - 2i32 }
+            let base : i64 = MRG_SP * 64i64
+            mrg_grid_clear(base)
+            let idx : u8 = b[p + 1u64]
+            if idx == 0u8 { MRG_S[(base + 16i64) as u64] = 1i64 }        /* x^1 */
+            if idx == 1u8 { MRG_S[(base + 4i64) as u64] = 1i64 }         /* c1^1 */
+            if idx == 2u8 { MRG_S[(base + 1i64) as u64] = 1i64 }         /* c2^1 */
+            if idx > 2u8 { return 0i32 - 2i32 }
+            MRG_SP = MRG_SP + 1i64
+            p = p + 2u64
+        } else {
+        if tag == 0x01u8 {
+            if MRG_SP >= 4i64 { return 0i32 - 2i32 }
+            let base : i64 = MRG_SP * 64i64
+            mrg_grid_clear(base)
+            let mut v : u64 = 0u64
+            let mut i : u64 = 0u64
+            while i < 8u64 { v = v | ((b[p + 1u64 + i] as u64) << (8u64 * i))   i = i + 1u64 }
+            if v > 2147483647u64 { return 0i32 - 2i32 }    /* the space carries only const 0; guard */
+            MRG_S[base as u64] = v as i64
+            MRG_SP = MRG_SP + 1i64
+            p = p + 9u64
+        } else {
+            /* an operator: pops two, pushes one */
+            if MRG_SP < 2i64 { return 0i32 - 2i32 }
+            let rb : i64 = (MRG_SP - 1i64) * 64i64
+            let ra : i64 = (MRG_SP - 2i64) * 64i64
+            if tag == 0x20u8 {
+                let mut i2 : i64 = 0i64
+                while i2 < 64i64 { MRG_S[(ra + i2) as u64] = MRG_S[(ra + i2) as u64] + MRG_S[(rb + i2) as u64]   i2 = i2 + 1i64 }
+            } else { if tag == 0x21u8 {
+                let mut i3 : i64 = 0i64
+                while i3 < 64i64 { MRG_S[(ra + i3) as u64] = MRG_S[(ra + i3) as u64] - MRG_S[(rb + i3) as u64]   i3 = i3 + 1i64 }
+            } else { if tag == 0x22u8 {
+                /* convolve into MRG_T then copy back */
+                let mut i4 : i64 = 0i64
+                while i4 < 64i64 { MRG_T[i4 as u64] = 0i64   i4 = i4 + 1i64 }
+                let mut a1 : i64 = 0i64
+                while a1 < 64i64 {
+                    let ca : i64 = MRG_S[(ra + a1) as u64]
+                    if ca != 0i64 {
+                        let mut b1 : i64 = 0i64
+                        while b1 < 64i64 {
+                            let cb : i64 = MRG_S[(rb + b1) as u64]
+                            if cb != 0i64 {
+                                let ea : i64 = (a1 / 16i64) + (b1 / 16i64)
+                                let eb : i64 = ((a1 / 4i64) % 4i64) + ((b1 / 4i64) % 4i64)
+                                let ec : i64 = (a1 % 4i64) + (b1 % 4i64)
+                                if ea > 3i64 { return 0i32 - 2i32 }
+                                if eb > 3i64 { return 0i32 - 2i32 }
+                                if ec > 3i64 { return 0i32 - 2i32 }
+                                let dst : i64 = (ea * 16i64) + (eb * 4i64) + ec
+                                let nv : i64 = MRG_T[dst as u64] + (ca * cb)
+                                if nv > MRG_CMAX { return 0i32 - 2i32 }
+                                if nv < (0i64 - MRG_CMAX) { return 0i32 - 2i32 }
+                                MRG_T[dst as u64] = nv
+                            }
+                            b1 = b1 + 1i64
+                        }
+                    }
+                    a1 = a1 + 1i64
+                }
+                let mut i5 : i64 = 0i64
+                while i5 < 64i64 { MRG_S[(ra + i5) as u64] = MRG_T[i5 as u64]   i5 = i5 + 1i64 }
+            } else {
+                return 0i32 - 1i32                       /* AND/OR/XOR/shift: outside the ring */
+            } } }
+            MRG_SP = MRG_SP - 1i64
+            p = p + 1u64
+        } }
+        }
+    }
+    if MRG_SP != 1i64 { return 0i32 - 2i32 }
+    return 0i32
+}
+
+/* witness search via the INDEPENDENT evaluator: the {0..3}^3 grid first (the lemma's set), then
+ * the structured 13-cube.  1 = witness found (recorded), 0 = none. */
+var MRG_SV : [u64; 13]
+fn mrg_wset() -> i32 {
+    MRG_SV[0u64] = 0u64   MRG_SV[1u64] = 1u64   MRG_SV[2u64] = 2u64   MRG_SV[3u64] = 3u64
+    MRG_SV[4u64] = 5u64   MRG_SV[5u64] = 7u64   MRG_SV[6u64] = 255u64
+    MRG_SV[7u64] = 4294967296u64
+    MRG_SV[8u64] = 9223372036854775808u64
+    MRG_SV[9u64] = 18446744073709551615u64
+    MRG_SV[10u64] = 6148914691236517205u64
+    MRG_SV[11u64] = 12297829382473034410u64
+    MRG_SV[12u64] = 81985529216486895u64
+    return 0i32
+}
+fn mrg_witness(tier: u64, fcode: u64, gcode: u64, full: i64) -> i64 {
+    mrg_wset()
+    let mut n : i64 = 4i64
+    if full == 1i64 { n = 13i64 }
+    MRG_HASW = 0i64
+    let mut xi : i64 = 0i64
+    while xi < n {
+        let mut ai : i64 = 0i64
+        while ai < n {
+            let mut bi : i64 = 0i64
+            while bi < n {
+                let x : u64 = MRG_SV[xi as u64]
+                let a : u64 = MRG_SV[ai as u64]
+                let c : u64 = MRG_SV[bi as u64]
+                let fv : u64 = mxn_eval_f(tier, fcode, x, a, c)
+                let gv : u64 = mxn_eval_g(gcode, x, a, c)
+                if fv != gv {
+                    MRG_WX = x   MRG_W1 = a   MRG_W2 = c   MRG_HASW = 1i64
+                    return 1i64
+                }
+                bi = bi + 1i64
+            }
+            ai = ai + 1i64
+        }
+        xi = xi + 1i64
+    }
+    return 0i64
+}
+fn mrg_wx() -> u64 @export { return MRG_WX }
+fn mrg_w1() -> u64 @export { return MRG_W1 }
+fn mrg_w2() -> u64 @export { return MRG_W2 }
+
+/* THE LIBRARY-COMPOSITION PRE-PASS: rewrite [param k, param k, AND|OR] -> [param k] inside a
+ * body, CITING the round-1 MACHINE library rows (x & x == x  and  x | x == x -- tier-1 codes
+ * (1, 9, 0) and (1, 12, 0), both PROVEN by the disposer in round 1; the gate re-proves both
+ * citations through seq_equiv before trusting a single rewrite).  This is theorems-from-theorems
+ * (the Xi10 shape): the rewrite is sound BECAUSE the cited schema is a proven forall-theorem.
+ * Body copied to MRG_RB (the shared synth buffers are single-owner); returns the new length. */
+var MRG_RB : [u8; 64]
+var MRG_CITED : i64            /* bit 0 = AND-idempotence cited, bit 1 = OR-idempotence cited */
+fn mrg_rewrite_idem(bp: u64, blen: u64) -> u64 {
+    let b : *u8 = bp as *u8
+    let mut p : u64 = 0u64
+    let mut q : u64 = 0u64
+    while p < blen {
+        let tag : u8 = b[p]
+        let mut copied : u64 = 0u64
+        if tag == 0x10u8 { if (p + 4u64) < blen {
+            if b[p + 2u64] == 0x10u8 { if b[p + 3u64] == b[p + 1u64] {
+                let op : u8 = b[p + 4u64]
+                if op == 0x25u8 {
+                    MRG_RB[q] = 0x10u8   MRG_RB[q + 1u64] = b[p + 1u64]
+                    q = q + 2u64   p = p + 5u64   copied = 1u64
+                    MRG_CITED = MRG_CITED | 1i64
+                }
+                if op == 0x26u8 { if copied == 0u64 {
+                    MRG_RB[q] = 0x10u8   MRG_RB[q + 1u64] = b[p + 1u64]
+                    q = q + 2u64   p = p + 5u64   copied = 1u64
+                    MRG_CITED = MRG_CITED | 2i64
+                } }
+            } }
+        } }
+        if copied == 0u64 {
+            if tag == 0x01u8 {
+                let mut i : u64 = 0u64
+                while i < 9u64 { MRG_RB[q + i] = b[p + i]   i = i + 1u64 }
+                q = q + 9u64   p = p + 9u64
+            } else { if tag == 0x10u8 {
+                MRG_RB[q] = b[p]   MRG_RB[q + 1u64] = b[p + 1u64]
+                q = q + 2u64   p = p + 2u64
+            } else {
+                MRG_RB[q] = b[p]
+                q = q + 1u64   p = p + 1u64
+            } }
+        }
+    }
+    return q
+}
+fn mrg_cited() -> i64 @export { return MRG_CITED }
+
+/* THE DECISION.  1 RING-PROVEN (all widths) / 2 PROVEN by library-composition (idempotence
+ * rewrite + ring; citations in mrg_cited) / 0 REFUTED (witness recorded) / 3 UNDECIDED
+ * (stays frontiered) / -2 internal defect (a ring-unequal PURE pair with no grid witness:
+ * the lemma says impossible; if seen, the organ is broken). */
+fn mrg_decide(tier: u64, fcode: u64, gcode: u64) -> i64 @export {
+    let mut fl : u64 = 0u64
+    if tier == 1u64 { fl = mxs_build_f1(fcode) }
+    if tier == 2u64 { fl = mxs_build_f2(fcode) }
+    if fl == 0u64 { return 0i64 - 2i64 }
+    let pf : i32 = mrg_parse(mxs_fbuf(), fl)
+    if pf == (0i32 - 2i32) { return 0i64 - 2i64 }
+    let mut pure : i64 = 1i64
+    if pf == (0i32 - 1i32) { pure = 0i64 }
+    if pure == 1i64 {
+        let mut i : i64 = 0i64
+        while i < 64i64 { MRG_A[i as u64] = MRG_S[i as u64]   i = i + 1i64 }
+    }
+    let gl : u64 = mxs_build_g(gcode)
+    if gl == 0u64 { return 0i64 - 2i64 }
+    let pg : i32 = mrg_parse(mxs_gbuf(), gl)
+    if pg == (0i32 - 2i32) { return 0i64 - 2i64 }
+    if pg == (0i32 - 1i32) { pure = 0i64 }
+    if pure == 1i64 {
+        let mut j : i64 = 0i64
+        while j < 64i64 { MRG_B[j as u64] = MRG_S[j as u64]   j = j + 1i64 }
+        let mut eq : i64 = 1i64
+        j = 0i64
+        while j < 64i64 { if MRG_A[j as u64] != MRG_B[j as u64] { eq = 0i64 }   j = j + 1i64 }
+        if eq == 1i64 { return 1i64 }
+        /* ring-UNEQUAL: the grid lemma GUARANTEES a witness in {0..3}^3 */
+        if mrg_witness(tier, fcode, gcode, 0i64) == 1i64 { return 0i64 }
+        return 0i64 - 2i64
+    }
+    /* outside the ring fragment: the library-composition route first (idempotence rewrite +
+     * ring), then witnesses.  The rewrite preserves semantics (cited proven schemas), so a
+     * rewritten-pure verdict IS a verdict on the original pair. */
+    MRG_CITED = 0i64
+    let mut fl2 : u64 = 0u64
+    if tier == 1u64 { fl2 = mxs_build_f1(fcode) }
+    if tier == 2u64 { fl2 = mxs_build_f2(fcode) }
+    if fl2 > 0u64 {
+        let frl : u64 = mrg_rewrite_idem(mxs_fbuf(), fl2)
+        let prf : i32 = mrg_parse((&MRG_RB) as u64, frl)
+        if prf == 0i32 {
+            let mut i6 : i64 = 0i64
+            while i6 < 64i64 { MRG_A[i6 as u64] = MRG_S[i6 as u64]   i6 = i6 + 1i64 }
+            let gl2 : u64 = mxs_build_g(gcode)
+            if gl2 > 0u64 {
+                let grl : u64 = mrg_rewrite_idem(mxs_gbuf(), gl2)
+                let prg : i32 = mrg_parse((&MRG_RB) as u64, grl)
+                if prg == 0i32 {
+                    let mut eq2 : i64 = 1i64
+                    let mut j6 : i64 = 0i64
+                    while j6 < 64i64 { if MRG_A[j6 as u64] != MRG_S[j6 as u64] { eq2 = 0i64 }   j6 = j6 + 1i64 }
+                    if eq2 == 1i64 { if MRG_CITED != 0i64 { return 2i64 } }
+                    if eq2 == 1i64 { return 1i64 }
+                }
+            }
+        }
+    }
+    if mrg_witness(tier, fcode, gcode, 1i64) == 1i64 { return 0i64 }
+    return 3i64
+}
+
+/* THE DRAIN: rebuild the round-1 mul-mul frontier pair-for-pair (the same predicate and canonical
+ * order the synth sweep used; gcost mirrors mxs_gcost: atoms 0, forms 1) and decide every pair.
+ * Returns packed counts (proven<<40 | refuted<<20 | undecided); -1 on any internal defect. */
+extern @abi(c-msvc-x64) fn mxs_f_has_mul(tier: u64, code: u64) -> u32 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_g_has_mul(code: u64) -> u32 from "mathesis_synth.iii"
+
+var MRG_PN : i64   var MRG_RN : i64   var MRG_UN : i64   var MRG_QN : i64
+var MRG_PT : [u64; 512]   var MRG_PF : [u64; 512]   var MRG_PG : [u64; 512]     /* proven rows */
+var MRG_PR : [u64; 512]                                                          /* proof route */
+var MRG_UT : [u64; 128]   var MRG_UF : [u64; 128]   var MRG_UG : [u64; 128]     /* undecided rows */
+
+fn mrg_gcost(code: u64) -> u64 { if code <= 2u64 { return 0u64 }   return 1u64 }
+
+fn mrg_drain() -> i64 @export {
+    MRG_PN = 0i64   MRG_RN = 0i64   MRG_UN = 0i64   MRG_QN = 0i64
+    /* tier 1: f 0..17 x g 0..2 (cost 0 < 1); tier 2: f 0..323 x g 0..56 (cost < 2) */
+    let mut tier : u64 = 1u64
+    while tier <= 2u64 {
+        let mut fmax : u64 = 18u64
+        if tier == 2u64 { fmax = 324u64 }
+        let mut fc : u64 = 0u64
+        while fc < fmax {
+            let mut gc : u64 = 0u64
+            while gc < 57u64 {
+                let mut inpair : i64 = 0i64
+                if mrg_gcost(gc) < tier { inpair = 1i64 }
+                if tier == 1u64 { if gc >= 3u64 { inpair = 0i64 } }
+                if inpair == 1i64 {
+                    if mxs_f_has_mul(tier, fc) == 1u32 { if mxs_g_has_mul(gc) == 1u32 {
+                        MRG_QN = MRG_QN + 1i64
+                        let v : i64 = mrg_decide(tier, fc, gc)
+                        if v >= 1i64 { if v <= 2i64 {
+                            if MRG_PN < 512i64 {
+                                MRG_PT[MRG_PN as u64] = tier   MRG_PF[MRG_PN as u64] = fc   MRG_PG[MRG_PN as u64] = gc
+                                MRG_PR[MRG_PN as u64] = v as u64      /* route: 1 ring, 2 library+ring */
+                            }
+                            MRG_PN = MRG_PN + 1i64
+                        } }
+                        if v == 0i64 {
+                            MRG_RN = MRG_RN + 1i64
+                        }
+                        if v == 3i64 {
+                            if MRG_UN < 128i64 {
+                                MRG_UT[MRG_UN as u64] = tier   MRG_UF[MRG_UN as u64] = fc   MRG_UG[MRG_UN as u64] = gc
+                            }
+                            MRG_UN = MRG_UN + 1i64
+                        }
+                        if v < 0i64 { return 0i64 - 1i64 }
+                    } }
+                }
+                gc = gc + 1u64
+            }
+            fc = fc + 1u64
+        }
+        tier = tier + 1u64
+    }
+    if MRG_PN > 512i64 { return 0i64 - 1i64 }
+    if MRG_UN > 128i64 { return 0i64 - 1i64 }
+    return ((MRG_PN * 1099511627776i64) + (MRG_RN * 1048576i64)) + MRG_UN
+}
+fn mrg_queue_n() -> i64 @export { return MRG_QN }
+fn mrg_proven_n() -> i64 @export { return MRG_PN }
+fn mrg_refuted_n() -> i64 @export { return MRG_RN }
+fn mrg_undecided_n() -> i64 @export { return MRG_UN }
+fn mrg_proven_t(i: i64) -> u64 @export { return MRG_PT[i as u64] }
+fn mrg_proven_f(i: i64) -> u64 @export { return MRG_PF[i as u64] }
+fn mrg_proven_g(i: i64) -> u64 @export { return MRG_PG[i as u64] }
+fn mrg_und_t(i: i64) -> u64 @export { return MRG_UT[i as u64] }
+fn mrg_und_f(i: i64) -> u64 @export { return MRG_UF[i as u64] }
+fn mrg_und_g(i: i64) -> u64 @export { return MRG_UG[i as u64] }
+fn mrg_proven_r(i: i64) -> u64 @export { return MRG_PR[i as u64] }

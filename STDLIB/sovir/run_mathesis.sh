@@ -178,6 +178,31 @@ RADICAL_CERT="$(printf '%s' "2a84e3b73394d86ed00a1146af0bc3c7cb3cd20bd06b83f922c
 echo "[mathesis] RADICAL_CERT = $RADICAL_CERT"
 echo "[mathesis] GREEN: radical round-1 stream sealed (5023 chained theorems: 194 denestings incl. 143 NOVEL, 4828 nonexistence certificates, Ramanujan re-found; head pinned)"
 
+echo "[mathesis] == [10] CAMPAIGN SIGMA (the ring judge, the frontier drain, the surface hunter) =="
+for t in mathesis_ring mathesis_curve; do
+    o="$RUN/$t.o"
+    [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" \
+        >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 70; }
+    RADFACE+=("$o")
+done
+gate 2705_mathesis_ring_judge  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 71   # ring normalization: all-width proofs, grid witnesses, library composition
+gate 2706_mathesis_ring_drain  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 72   # THE 1386-PAIR FRONTIER DRAINED: 8 proven + 1378 refuted + 0 undecided
+gate 2707_mathesis_curve_hunt  "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 73   # the machine-derived surfaces hunted; the SIGMA catalogue verified + chained
+
+# the sealed Sigma streams: the committed records must match their pins
+RINGLOG="$III_ROOT/DOCS/MATHESIS-RING-DRAIN.log"
+grep -q "^MRG queue=1386 proven=8 refuted=1378 undecided=0$" "$RINGLOG" \
+    || { echo "[mathesis] RED: ring-drain summary drifted"; exit 74; }
+[[ "$(grep -c '^MRG# P ' "$RINGLOG")" -eq 8 ]] || { echo "[mathesis] RED: ring proven count != 8"; exit 75; }
+CURVELOG="$III_ROOT/DOCS/MATHESIS-CURVE-ROUND1.log"
+grep -q "^MXC found=21 degenerate=0 rays=7326700 chain=31 head=07fdc686ea0dabdfb97fd96711c0ba17c304a8669e5b98b89572e6399187a354$" "$CURVELOG" \
+    || { echo "[mathesis] RED: curve round-1 summary drifted"; exit 76; }
+[[ "$(grep -c '^MXC# ' "$CURVELOG")" -eq 21 ]] || { echo "[mathesis] RED: sigma catalogue count != 21"; exit 77; }
+grep -q "name=SIGMA-d3B-1$" "$CURVELOG" || { echo "[mathesis] RED: the first d=3 curve-B sigma identity missing"; exit 78; }
+SIGMA_CERT="$(printf '%s' "07fdc686ea0dabdfb97fd96711c0ba17c304a8669e5b98b89572e6399187a354|21|1386|8|1378|0" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] SIGMA_CERT = $SIGMA_CERT"
+echo "[mathesis] GREEN: campaign Sigma sealed (frontier 1386 -> 0 undecided; the SIGMA catalogue: 21 machine-found cube identities incl. six d=3 curve-B rows unknown to the author, d=5 certified EMPTY both curves to height 60)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

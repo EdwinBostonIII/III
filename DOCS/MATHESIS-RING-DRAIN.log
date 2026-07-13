@@ -1,0 +1,10 @@
+MRG-DRAIN declared: the round-1 mul-mul frontier (1386 pairs, blocker bit-blast-mul); routes: ring normalization over Z[x,c1,c2] (all widths) + library-composition (idempotence rewrite, citations re-proven) + grid witnesses
+MRG# P 2 131 35 1
+MRG# P 2 134 35 1
+MRG# P 2 180 9 2
+MRG# P 2 181 10 2
+MRG# P 2 181 11 2
+MRG# P 2 234 9 2
+MRG# P 2 235 10 2
+MRG# P 2 235 11 2
+MRG queue=1386 proven=8 refuted=1378 undecided=0

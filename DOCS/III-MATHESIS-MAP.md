@@ -827,6 +827,62 @@ LLM, anywhere in the loop (law 12 holds; the engine's process tree is unchanged)
 
 ---
 
+## 15. CAMPAIGN Σ — UNASSISTED DISCOVERY (the answer to "old theorems are worthless"; 2026-07-13)
+
+The Ρ critique, accepted in full: re-deriving a NAMED identity proves machinery, not discovery.
+Σ pivots to hunts whose answers the author did not know, with the hunting equations themselves
+machine-derived so nothing can be seeded. Two organs, three gates, two sealed streams; still zero
+archive edits.
+
+- **`aether/mathesis_ring.iii` — THE RING JUDGE + THE FRONTIER DRAIN** (gates 2705/2706; stream
+  `DOCS/MATHESIS-RING-DRAIN.log`). Exact multivariate normalization over ℤ[x,c1,c2] on the synth
+  RPN bodies. Soundness: ring homomorphism into EVERY ℤ/2^w — a ring-proven schema holds at ALL
+  widths at once (stronger than the disposer's width-64 rows). Completeness on the fragment, and
+  CONSTRUCTIVE: per-variable degree ≤ 3 with coefficients < 2¹² means the Newton finite
+  differences over {0,1,2,3}³ sit far below 2⁶⁴, so grid-vanishing mod 2⁶⁴ forces the zero
+  polynomial — a ring-unequal pure pair MUST have a witness IN THE GRID (an empty-handed search
+  is a self-detected defect, not an abstention). Mixed boolean-mul pairs go through THE
+  LIBRARY-COMPOSITION ROUTE: idempotence rewrite citing round-1's own PROVEN schemas (citations
+  re-proven fresh through seq_equiv before any rewrite is trusted — theorems-from-theorems).
+  **THE ROUND-1 FRONTIER — 1,386 pairs queued since the first sweep with blocker "bit-blast mul
+  equality" — IS DRAINED: 2 ring-proven (both mul-associativity forms, now ∀-width theorems) +
+  6 library-composed ((x&x)·x ≡ x·x and kin) + 1,378 refuted with concrete witnesses + 0
+  undecided.** Every proven pair re-proven independently by the standing width-8 EXHAUSTIVE
+  engine (all 2²⁴ triples — two engines, one truth). R7 honored by the exact route the frontier's
+  header had named ("ring/kernel later").
+- **`aether/mathesis_curve.iii` — THE SURFACE HUNTER + THE SIGMA CATALOGUE** (gate 2707; stream
+  `DOCS/MATHESIS-CURVE-ROUND1.log`, MX05 chain head `07fdc686…a354`). The machine DERIVES — by
+  exact quotient-ring cubing in ℤ[u,v,w][γ]/(γ³−d), no transcribed algebra — the surfaces on
+  which (u+v∛d+w∛d²)³ collapses to ℤ+ℤ∛d (curve A: P2 = 0) or ℤ+ℤ∛d² (curve B: P1 = 0), with the
+  completeness bridge machine-checked per d (non-cube ⟹ t³−d has no integer root ⟹ no rational
+  root ⟹ irreducible ⟹ {1,γ,γ²} independent ⟹ every identity lies ON the surface). It then
+  inventories ALL primitive canonical rays to height 60 for d ∈ {2,3,5,6,7} on both curves —
+  7,326,700 rays — and verifies every hit end-to-end through the pair-gcd judge. **THE INVENTORY
+  (pinned, every row machine-found): 21 identities in 7 complete ∛d-orbits — d=2 curve A carries
+  exactly the Ramanujan orbit (the machine's independent re-find, now properly attributed);
+  d=3 curve B carries SIX rows the author did not know — the seed SIGMA-d3B-1:
+  (2 + 3∛3 − 4∛9)³ = 438∛9 − 919 — the first σ-identities; d=6 and d=7 carry six curve-A rows
+  each (SIGMA-d6A-*, SIGMA-d7A-*, e.g. ∛(84∛6−148) = 2−2∛6+∛36); and d=5 is CERTIFIED EMPTY on
+  both curves to height 60 — a nonexistence theorem.** The γ-orbit closure law
+  (γ·ρ solves whenever ρ does) is machine-verified over the whole inventory: 21/21 orbits close
+  inside the box. The A/B selection pattern (d=2:A, d=3:B, d=6,7:A, d=5:neither) is a
+  machine-posed OPEN question, recorded with its certified evidence.
+- **THE FIELD COMPLETION** (`ma_inv`, gate 2700 arm I): inverse by row reversal + unit-widened
+  rational-to-dyadic windows; 2·(1/√2) ≡ √2 and 1/(√2+√3) ≡ √3−√2 decided by pair-gcd; 1/0
+  refused by name. The judge now carries +, ×, −, ⁻¹, and k-th roots.
+
+**The honesty framework for "new":** novelty against the world's literature is unfalsifiable
+from inside this room and is NOT claimed. What IS claimed, and machine-certified: (1) the
+surfaces were derived, not supplied; (2) the sweeps were exhaustive over printed boxes; (3) every
+find carries an end-to-end exact certificate; (4) the author's own prior ignorance of the d=3/6/7
+rows and of d=5's emptiness (recorded here as a fact about provenance, not a proof of global
+novelty); (5) the names are minted by the catalogue (SIGMA-d<d><A|B>-<k>), and the finds are the
+machine's to keep regardless of what any archive turns up. SIGMA_CERT binds the catalogue head +
+the drain partition; MATHESIS_CERT and RADICAL_CERT stand unchanged beside it.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
-`III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`.*
+`III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
+`DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`.*

@@ -1,0 +1,456 @@
+/* aether/mathesis_curve.iii -- THE SURFACE HUNTER (campaign Sigma: unassisted discovery).
+ *
+ * The question nobody hands the machine an answer to: for which integers (u,v,w) does
+ * (u + v*cbrt(d) + w*cbrt(d^2))^3 collapse into the LINE Z + Z*cbrt(d) (curve A) or
+ * Z + Z*cbrt(d^2) (curve B)?  The machine DERIVES the answer's shape itself:
+ *
+ *   DERIVATION (symbolic, in Z[u,v,w][g]/(g^3 - d)): cube (u + v g + w g^2) by exact quotient-
+ *   ring multiplication -> three component polynomials P0 + P1 g + P2 g^2.  The collapse
+ *   conditions ARE the machine-derived surfaces  P2(u,v,w) = 0  (curve A)  and  P1(u,v,w) = 0
+ *   (curve B) -- no human algebra enters; the organ never carries a transcribed surface.
+ *
+ *   COMPLETENESS BRIDGE (machine-checked per d): d is verified NON-CUBE (iroot re-cube), so the
+ *   monic cubic t^3 - d has no integer root, hence no rational root (monic => rational roots are
+ *   integers dividing d), hence -- degree 3 -- it is IRREDUCIBLE over Q and {1, g, g^2} is a
+ *   Q-basis: an identity OFF the surface would give g a rational quadratic, impossible.  So the
+ *   exhaustive surface sweep of a box IS a completeness theorem for that box.
+ *
+ *   THE HUNT: primitive canonical rays (gcd 1, first nonzero positive, >= 2 nonzero components)
+ *   with |u|,|v|,|w| <= H; surface hits re-oriented so the radical coefficient e > 0; every hit
+ *   VERIFIED END-TO-END through the real-algebraic judge (construct cbrt(e*cbrt(m)+f) by t->t^3
+ *   substitution, construct u + v*cbrt(d) + w*cbrt(d^2) by resultant composition, decide by
+ *   pair-gcd) -- a hit that fails the judge aborts the hunt as a defect.  Findings and the
+ *   box-completeness rows are chained through THE MX05 DOOR (own magic, own genesis, the cad
+ *   spine): provenance MACHINE, names minted from content -- these are the machine's OWN
+ *   theorems, discovered and certified without a candidate list.
+ *
+ * Gates: corpus/2707 (near-miss refuted FIRST -- the surface is load-bearing; the machine-checked
+ * completeness bridge; the hunt over d in {2,3,5,6,7} x both curves; every find judge-verified;
+ * the inventory pinned).  Driver: sovir/mathesis_curve_main.iii -> DOCS/MATHESIS-CURVE-ROUND1.log.
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes mathesis_alg (the judge) + cad (ids) only.
+ */
+module aether_mathesis_curve
+
+extern @abi(c-msvc-x64) fn ma_reset() -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_rat(p: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_leaf_root(k: i64, m: i64, s: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_sum(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_prod(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_neg(sa: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_kroot(sa: i64, k: i64, sd: i64) -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_equal(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_iroot(m: i64, k: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+
+const MCV_MAGIC : u64 = 0x4D583035u64      /* "MX05" -- the surface-domain descriptor tag */
+const MCV_BIAS  : i64 = 512i64
+const MCV_MAXR  : i64 = 64i64
+
+/* component polynomial grids over (u,v,w): coefficient of u^a v^b w^c at a*16+b*4+c */
+var MCV_P0 : [i64; 64]   var MCV_P1 : [i64; 64]   var MCV_P2 : [i64; 64]
+var MCV_QA : [i64; 192]  var MCV_QB : [i64; 192]  var MCV_QC : [i64; 192]   /* quotient triples */
+var MCV_T : [i64; 64]
+
+fn mcv_gclear(gp: u64) -> i32 {
+    let g : *i64 = gp as *i64
+    let mut i : i64 = 0i64
+    while i < 64i64 { g[i as u64] = 0i64   i = i + 1i64 }
+    return 0i32
+}
+/* MCV_T += ga * gb (exact convolution; homogeneous degree stays <= 3 per var, guarded) */
+fn mcv_gmuladd(gap: u64, gbp: u64) -> i32 {
+    let ga : *i64 = gap as *i64
+    let gb : *i64 = gbp as *i64
+    let mut a : i64 = 0i64
+    while a < 64i64 {
+        let ca : i64 = ga[a as u64]
+        if ca != 0i64 {
+            let mut b : i64 = 0i64
+            while b < 64i64 {
+                let cb : i64 = gb[b as u64]
+                if cb != 0i64 {
+                    let ea : i64 = (a / 16i64) + (b / 16i64)
+                    let eb : i64 = ((a / 4i64) % 4i64) + ((b / 4i64) % 4i64)
+                    let ec : i64 = (a % 4i64) + (b % 4i64)
+                    if ea > 3i64 { return 0i32 - 1i32 }
+                    if eb > 3i64 { return 0i32 - 1i32 }
+                    if ec > 3i64 { return 0i32 - 1i32 }
+                    MCV_T[((ea * 16i64) + (eb * 4i64) + ec) as u64] = MCV_T[((ea * 16i64) + (eb * 4i64) + ec) as u64] + (ca * cb)
+                }
+                b = b + 1i64
+            }
+        }
+        a = a + 1i64
+    }
+    return 0i32
+}
+/* quotient product C = A * B in Z[u,v,w][g]/(g^3 - d): the triples live at qp+0/64/128 */
+fn mcv_qmul(qap: u64, qbp: u64, qcp: u64, d: i64) -> i32 {
+    /* C0 = A0B0 + d(A1B2 + A2B1); C1 = A0B1 + A1B0 + d A2B2; C2 = A0B2 + A1B1 + A2B0 */
+    let a0 : u64 = qap   let a1 : u64 = qap + 512u64   let a2 : u64 = qap + 1024u64
+    let b0 : u64 = qbp   let b1 : u64 = qbp + 512u64   let b2 : u64 = qbp + 1024u64
+    let c : *i64 = qcp as *i64
+    /* C0 */
+    mcv_gclear((&MCV_T) as u64)
+    if mcv_gmuladd(a0, b0) != 0i32 { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i < 64i64 { c[i as u64] = MCV_T[i as u64]   i = i + 1i64 }
+    mcv_gclear((&MCV_T) as u64)
+    if mcv_gmuladd(a1, b2) != 0i32 { return 0i32 - 1i32 }
+    if mcv_gmuladd(a2, b1) != 0i32 { return 0i32 - 1i32 }
+    i = 0i64
+    while i < 64i64 { c[i as u64] = c[i as u64] + (d * MCV_T[i as u64])   i = i + 1i64 }
+    /* C1 */
+    mcv_gclear((&MCV_T) as u64)
+    if mcv_gmuladd(a0, b1) != 0i32 { return 0i32 - 1i32 }
+    if mcv_gmuladd(a1, b0) != 0i32 { return 0i32 - 1i32 }
+    i = 0i64
+    while i < 64i64 { c[(64i64 + i) as u64] = MCV_T[i as u64]   i = i + 1i64 }
+    mcv_gclear((&MCV_T) as u64)
+    if mcv_gmuladd(a2, b2) != 0i32 { return 0i32 - 1i32 }
+    i = 0i64
+    while i < 64i64 { c[(64i64 + i) as u64] = c[(64i64 + i) as u64] + (d * MCV_T[i as u64])   i = i + 1i64 }
+    /* C2 */
+    mcv_gclear((&MCV_T) as u64)
+    if mcv_gmuladd(a0, b2) != 0i32 { return 0i32 - 1i32 }
+    if mcv_gmuladd(a1, b1) != 0i32 { return 0i32 - 1i32 }
+    if mcv_gmuladd(a2, b0) != 0i32 { return 0i32 - 1i32 }
+    i = 0i64
+    while i < 64i64 { c[(128i64 + i) as u64] = MCV_T[i as u64]   i = i + 1i64 }
+    return 0i32
+}
+
+/* derive P0/P1/P2 = components of (u + v g + w g^2)^3 for THIS d.  0 ok, -1 refused. */
+fn mcv_derive(d: i64) -> i32 @export {
+    if d < 2i64 { return 0i32 - 1i32 }
+    if d > 49i64 { return 0i32 - 1i32 }
+    /* A = (u, v, w): A0 = u, A1 = v, A2 = w */
+    mcv_gclear((&MCV_QA) as u64)
+    mcv_gclear(((&MCV_QA) as u64) + 512u64)
+    mcv_gclear(((&MCV_QA) as u64) + 1024u64)
+    MCV_QA[16u64] = 1i64                        /* A0 = u */
+    MCV_QA[(64i64 + 4i64) as u64] = 1i64        /* A1 = v */
+    MCV_QA[(128i64 + 1i64) as u64] = 1i64       /* A2 = w */
+    if mcv_qmul((&MCV_QA) as u64, (&MCV_QA) as u64, (&MCV_QB) as u64, d) != 0i32 { return 0i32 - 1i32 }
+    if mcv_qmul((&MCV_QB) as u64, (&MCV_QA) as u64, (&MCV_QC) as u64, d) != 0i32 { return 0i32 - 1i32 }
+    let mut i : i64 = 0i64
+    while i < 64i64 {
+        MCV_P0[i as u64] = MCV_QC[i as u64]
+        MCV_P1[i as u64] = MCV_QC[(64i64 + i) as u64]
+        MCV_P2[i as u64] = MCV_QC[(128i64 + i) as u64]
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* exact evaluation of a component grid at integer (u,v,w) */
+fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 @export {
+    let mut acc : i64 = 0i64
+    let mut a : i64 = 0i64
+    while a < 64i64 {
+        let mut cf : i64 = 0i64
+        if which == 0i64 { cf = MCV_P0[a as u64] }
+        if which == 1i64 { cf = MCV_P1[a as u64] }
+        if which == 2i64 { cf = MCV_P2[a as u64] }
+        if cf != 0i64 {
+            let ea : i64 = a / 16i64
+            let eb : i64 = (a / 4i64) % 4i64
+            let ec : i64 = a % 4i64
+            let mut t : i64 = cf
+            let mut k : i64 = 0i64
+            while k < ea { t = t * u   k = k + 1i64 }
+            k = 0i64
+            while k < eb { t = t * v   k = k + 1i64 }
+            k = 0i64
+            while k < ec { t = t * w   k = k + 1i64 }
+            acc = acc + t
+        }
+        a = a + 1i64
+    }
+    return acc
+}
+
+/* the machine-checked completeness bridge: d is not a perfect cube (so t^3 - d has no integer
+ * root; monic => no rational root; degree 3 => irreducible; {1,g,g^2} independent). */
+fn mcv_noncube(d: i64) -> i64 @export {
+    let r : i64 = ma_iroot(d, 3i64)
+    if (r * r * r) == d { return 0i64 }
+    return 1i64
+}
+
+fn mcv_gcd(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0
+    let mut b : i64 = b0
+    if a < 0i64 { a = 0i64 - a }
+    if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* build gamma_R = u + v*cbrt(d) + w*cbrt(d^2) in the judge -> slot 7.  1 built, 0 refusal. */
+fn mcv_build_rhs(d: i64, u: i64, v: i64, w: i64) -> i64 @export {
+    ma_reset()
+    if ma_leaf_rat(u, 0i64) != 0i32 { return 0i64 }
+    let mut acc : i64 = 0i64
+    if v != 0i64 {
+        let mut av : i64 = v
+        if av < 0i64 { av = 0i64 - av }
+        if ma_leaf_rat(av, 1i64) != 0i32 { return 0i64 }
+        if ma_leaf_root(3i64, d, 2i64) != 0i32 { return 0i64 }
+        if ma_prod(1i64, 2i64, 3i64) != 0i32 { return 0i64 }
+        let mut t : i64 = 3i64
+        if v < 0i64 { if ma_neg(3i64, 4i64) != 0i32 { return 0i64 }   t = 4i64 }
+        if ma_sum(acc, t, 5i64) != 0i32 { return 0i64 }
+        acc = 5i64
+    }
+    if w != 0i64 {
+        let mut aw : i64 = w
+        if aw < 0i64 { aw = 0i64 - aw }
+        if ma_leaf_rat(aw, 1i64) != 0i32 { return 0i64 }
+        if ma_leaf_root(3i64, d * d, 2i64) != 0i32 { return 0i64 }
+        if ma_prod(1i64, 2i64, 3i64) != 0i32 { return 0i64 }
+        let mut t2 : i64 = 3i64
+        if w < 0i64 { if ma_neg(3i64, 4i64) != 0i32 { return 0i64 }   t2 = 4i64 }
+        if ma_sum(acc, t2, 6i64) != 0i32 { return 0i64 }
+        acc = 6i64
+    }
+    if acc != 7i64 {
+        if ma_leaf_rat(0i64, 1i64) != 0i32 { return 0i64 }
+        if ma_sum(acc, 1i64, 7i64) != 0i32 { return 0i64 }
+    }
+    return 1i64
+}
+
+/* build gamma_L = cbrt(e*cbrt(m) + f) (delta > 0 branch) -> slot 6.  e >= 1.  1 built, 0 refusal. */
+fn mcv_build_lhs(m: i64, e: i64, f: i64) -> i64 @export {
+    if ma_leaf_rat(e, 0i64) != 0i32 { return 0i64 }
+    if ma_leaf_root(3i64, m, 1i64) != 0i32 { return 0i64 }
+    if ma_prod(0i64, 1i64, 2i64) != 0i32 { return 0i64 }
+    if ma_leaf_rat(f, 3i64) != 0i32 { return 0i64 }
+    if ma_sum(2i64, 3i64, 4i64) != 0i32 { return 0i64 }
+    if ma_kroot(4i64, 3i64, 6i64) != 0i32 { return 0i64 }
+    return 1i64
+}
+/* build gamma_L for delta < 0: cbrt(-delta) = -gamma, with -delta = |f| - e*cbrt(m) > 0 -> slot 6. */
+fn mcv_build_lhs_neg(m: i64, e: i64, f: i64) -> i64 @export {
+    if ma_leaf_rat(e, 0i64) != 0i32 { return 0i64 }
+    if ma_leaf_root(3i64, m, 1i64) != 0i32 { return 0i64 }
+    if ma_prod(0i64, 1i64, 2i64) != 0i32 { return 0i64 }         /* e*cbrt(m) > 0 */
+    if ma_neg(2i64, 3i64) != 0i32 { return 0i64 }
+    if ma_leaf_rat(0i64 - f, 4i64) != 0i32 { return 0i64 }       /* |f| (f < 0 here) */
+    if ma_sum(4i64, 3i64, 5i64) != 0i32 { return 0i64 }          /* -delta */
+    if ma_kroot(5i64, 3i64, 6i64) != 0i32 { return 0i64 }
+    return 1i64
+}
+
+/* verify one hit end-to-end through the judge.  1 verified, 0 the judge disagrees, -1 refusal. */
+fn mcv_verify(d: i64, curve: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 @export {
+    let mut m : i64 = d
+    if curve == 2i64 { m = d * d }
+    /* delta = e*cbrt(m) + f, e >= 1: sign by exact cubes (monotone) */
+    let e3m : i64 = e * e * e * m
+    let nf3 : i64 = 0i64 - (f * f * f)
+    if mcv_build_rhs(d, u, v, w) != 1i64 { return 0i64 - 1i64 }
+    if e3m > nf3 {
+        if mcv_build_lhs(m, e, f) != 1i64 { return 0i64 - 1i64 }
+        return ma_equal(6i64, 7i64)
+    }
+    /* delta < 0: cbrt(-delta) must equal -gamma_R */
+    if mcv_build_lhs_neg(m, e, f) != 1i64 { return 0i64 - 1i64 }
+    /* relocate -gamma_R to slot 5 without clobbering slot 6 */
+    if ma_neg(7i64, 5i64) != 0i32 { return 0i64 - 1i64 }
+    return ma_equal(6i64, 5i64)
+}
+
+/* the find store */
+var MCV_D : [i64; 64]   var MCV_C : [i64; 64]
+var MCV_U : [i64; 64]   var MCV_V : [i64; 64]   var MCV_W : [i64; 64]
+var MCV_E : [i64; 64]   var MCV_F : [i64; 64]
+var MCV_N : i64
+var MCV_DEG : i64          /* degenerate hits (e == 0: the cube is rational -- trivial family) */
+var MCV_TRIV : i64         /* trivial rays skipped (< 2 nonzero components) */
+var MCV_RAYS : i64         /* primitive canonical rays swept */
+
+fn mcv_found() -> i64 @export { return MCV_N }
+fn mcv_degenerate() -> i64 @export { return MCV_DEG }
+fn mcv_trivial() -> i64 @export { return MCV_TRIV }
+fn mcv_rays() -> i64 @export { return MCV_RAYS }
+fn mcv_row_d(i: i64) -> i64 @export { return MCV_D[i as u64] }
+fn mcv_row_c(i: i64) -> i64 @export { return MCV_C[i as u64] }
+fn mcv_row_u(i: i64) -> i64 @export { return MCV_U[i as u64] }
+fn mcv_row_v(i: i64) -> i64 @export { return MCV_V[i as u64] }
+fn mcv_row_w(i: i64) -> i64 @export { return MCV_W[i as u64] }
+fn mcv_row_e(i: i64) -> i64 @export { return MCV_E[i as u64] }
+fn mcv_row_f(i: i64) -> i64 @export { return MCV_F[i as u64] }
+
+fn mcv_hunt_reset() -> i32 @export { MCV_N = 0i64   MCV_DEG = 0i64   MCV_TRIV = 0i64   MCV_RAYS = 0i64   return 0i32 }
+
+/* THE HUNT over one (d, curve) at height H: every surface hit judge-verified or the hunt aborts.
+ * Returns finds this run, -1 envelope, -2 a judge disagreement (defect), -3 store overflow. */
+fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 @export {
+    if hmax < 1i64 { return 0i64 - 1i64 }
+    if hmax > 200i64 { return 0i64 - 1i64 }
+    if curve < 1i64 { return 0i64 - 1i64 }
+    if curve > 2i64 { return 0i64 - 1i64 }
+    if mcv_noncube(d) != 1i64 { return 0i64 - 1i64 }
+    if mcv_derive(d) != 0i32 { return 0i64 - 1i64 }
+    let n0 : i64 = MCV_N
+    let mut u : i64 = 0i64 - hmax
+    while u <= hmax {
+        let mut v : i64 = 0i64 - hmax
+        while v <= hmax {
+            let mut w : i64 = 0i64 - hmax
+            while w <= hmax {
+                /* canonical primitive ray: gcd 1, first nonzero component positive */
+                let mut ok : i64 = 1i64
+                if u == 0i64 { if v == 0i64 { if w == 0i64 { ok = 0i64 } } }
+                if ok == 1i64 {
+                    let mut fnz : i64 = u
+                    if fnz == 0i64 { fnz = v }
+                    if fnz == 0i64 { fnz = w }
+                    if fnz < 0i64 { ok = 0i64 }
+                }
+                if ok == 1i64 {
+                    let g : i64 = mcv_gcd(mcv_gcd(u, v), w)
+                    if g != 1i64 { ok = 0i64 }
+                }
+                if ok == 1i64 {
+                    let mut nz : i64 = 0i64
+                    if u != 0i64 { nz = nz + 1i64 }
+                    if v != 0i64 { nz = nz + 1i64 }
+                    if w != 0i64 { nz = nz + 1i64 }
+                    if nz < 2i64 { MCV_TRIV = MCV_TRIV + 1i64   ok = 0i64 }
+                }
+                if ok == 1i64 {
+                    MCV_RAYS = MCV_RAYS + 1i64
+                    let mut surf : i64 = 0i64
+                    if curve == 1i64 { surf = mcv_eval(2i64, u, v, w) }
+                    if curve == 2i64 { surf = mcv_eval(1i64, u, v, w) }
+                    if surf == 0i64 {
+                        let mut e : i64 = 0i64
+                        if curve == 1i64 { e = mcv_eval(1i64, u, v, w) }
+                        if curve == 2i64 { e = mcv_eval(2i64, u, v, w) }
+                        let mut cu : i64 = u
+                        let mut cv : i64 = v
+                        let mut cw : i64 = w
+                        if e < 0i64 { cu = 0i64 - u   cv = 0i64 - v   cw = 0i64 - w   e = 0i64 - e }
+                        if e == 0i64 { MCV_DEG = MCV_DEG + 1i64 } else {
+                            let f : i64 = mcv_eval(0i64, cu, cv, cw)
+                            let jq : i64 = mcv_verify(d, curve, cu, cv, cw, e, f)
+                            if jq != 1i64 { return 0i64 - 2i64 }
+                            if MCV_N >= MCV_MAXR { return 0i64 - 3i64 }
+                            MCV_D[MCV_N as u64] = d   MCV_C[MCV_N as u64] = curve
+                            MCV_U[MCV_N as u64] = cu   MCV_V[MCV_N as u64] = cv   MCV_W[MCV_N as u64] = cw
+                            MCV_E[MCV_N as u64] = e   MCV_F[MCV_N as u64] = f
+                            MCV_N = MCV_N + 1i64
+                        }
+                    }
+                }
+                w = w + 1i64
+            }
+            v = v + 1i64
+        }
+        u = u + 1i64
+    }
+    return MCV_N - n0
+}
+
+/* ---- THE MX05 DOOR (the surface domain's descriptor grammar on the cad spine) ------------------ */
+
+var MCX_SER : [u8; 64]
+var MCX_HD : [u8; 32]
+var MCX_ID : [u8; 32]
+var MCX_D : [u64; 8]
+var MCX_CN : i64
+
+fn mcx_desc_valid(desc: u64) -> u32 @export {
+    if desc == 0u64 { return 0u32 }
+    let d : *u64 = desc as *u64
+    if d[0u64] != MCV_MAGIC { return 0u32 }
+    let cl : u64 = d[1u64]
+    if cl < 1u64 { return 0u32 }
+    if cl > 2u64 { return 0u32 }
+    let mut i : u64 = 2u64
+    while i <= 6u64 { if d[i] > 1024u64 { return 0u32 }   i = i + 1u64 }
+    if d[7u64] != 1u64 { return 0u32 }
+    return 1u32
+}
+fn mcx_serialize(desc: u64) -> u32 {
+    let d : *u64 = desc as *u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = d[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 { MCX_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8   w = w >> 8u64   b = b + 1u64 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn mcx_id_of(desc: u64, out32: u64) -> i32 @export {
+    if mcx_desc_valid(desc) != 1u32 { return 0i32 - 3i32 }
+    mcx_serialize(desc)
+    return cad_oneshot(0u32, (&MCX_SER) as *u8, 64u64, out32 as *u8)
+}
+fn mcx_genesis() -> i32 @export {
+    MCX_D[0u64] = MCV_MAGIC
+    MCX_D[1u64] = 0u64
+    let mut i : u64 = 2u64
+    while i <= 6u64 { MCX_D[i] = 0u64   i = i + 1u64 }
+    MCX_D[7u64] = 0xFFFFFFFFFFFFFFFFu64
+    mcx_serialize((&MCX_D) as u64)
+    MCX_CN = 0i64
+    return cad_oneshot(0u32, (&MCX_SER) as *u8, 64u64, (&MCX_HD) as *u8)
+}
+fn mcx_chain_add(desc: u64) -> i32 @export {
+    let rc : i32 = mcx_id_of(desc, (&MCX_ID) as u64)
+    if rc != 0i32 { return 0i32 - 3i32 }
+    cad_compose((&MCX_HD) as *u8, (&MCX_ID) as *u8, (&MCX_HD) as *u8)
+    MCX_CN = MCX_CN + 1i64
+    return 0i32
+}
+fn mcx_head_byte(i: i64) -> u64 @export { return MCX_HD[i as u64] as u64 }
+fn mcx_chain_len() -> i64 @export { return MCX_CN }
+
+/* chain the whole round: class-1 point rows (d, curve, u,v,w biased) in store order, then one
+ * class-2 completeness row per (d, curve) swept (d, curve, H, finds, degenerates).  -1 refusal. */
+fn mcx_chain_round(hmax: i64, dsp: u64, nds: i64) -> i64 @export {
+    if mcx_genesis() != 0i32 { return 0i64 - 1i64 }
+    let ds : *i64 = dsp as *i64
+    let mut i : i64 = 0i64
+    while i < MCV_N {
+        MCX_D[0u64] = MCV_MAGIC   MCX_D[1u64] = 1u64
+        MCX_D[2u64] = ((MCV_D[i as u64] * 4i64) + MCV_C[i as u64]) as u64
+        MCX_D[3u64] = (MCV_U[i as u64] + MCV_BIAS) as u64
+        MCX_D[4u64] = (MCV_V[i as u64] + MCV_BIAS) as u64
+        MCX_D[5u64] = (MCV_W[i as u64] + MCV_BIAS) as u64
+        MCX_D[6u64] = hmax as u64
+        MCX_D[7u64] = 1u64
+        if mcx_chain_add((&MCX_D) as u64) != 0i32 { return 0i64 - 1i64 }
+        i = i + 1i64
+    }
+    let mut k : i64 = 0i64
+    while k < nds {
+        let d : i64 = ds[k as u64]
+        let mut cv : i64 = 1i64
+        while cv <= 2i64 {
+            let mut cnt : i64 = 0i64
+            let mut j : i64 = 0i64
+            while j < MCV_N {
+                if MCV_D[j as u64] == d { if MCV_C[j as u64] == cv { cnt = cnt + 1i64 } }
+                j = j + 1i64
+            }
+            MCX_D[0u64] = MCV_MAGIC   MCX_D[1u64] = 2u64
+            MCX_D[2u64] = ((d * 4i64) + cv) as u64
+            MCX_D[3u64] = hmax as u64
+            MCX_D[4u64] = cnt as u64
+            MCX_D[5u64] = 0u64
+            MCX_D[6u64] = 0u64
+            MCX_D[7u64] = 1u64
+            if mcx_chain_add((&MCX_D) as u64) != 0i32 { return 0i64 - 1i64 }
+            cv = cv + 1i64
+        }
+        k = k + 1i64
+    }
+    return MCX_CN
+}

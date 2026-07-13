@@ -17,7 +17,7 @@
  *      problem answered structurally: c0 == 0 + the isolated window closes on 0);
  *      sqrt3 - sqrt2 POSITIVE; sqrt2 - sqrt3 NEGATIVE.
  *
- * exit 99 pass; 10 R-refute; 11 R-order; 12 E; 13 A; 14 B; 15 C. */
+ * exit 99 pass; 10 R-refute; 11 R-order; 12 E; 13 A; 14 B; 15 C; 16 I (the field completion). */
 module corpus_2700_mathesis_alg_judge
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -31,6 +31,7 @@ extern @abi(c-msvc-x64) fn ma_equal(a: i64, b: i64) -> i64 from "mathesis_alg.ii
 extern @abi(c-msvc-x64) fn ma_cmp(a: i64, b: i64) -> i64 from "mathesis_alg.iii"
 extern @abi(c-msvc-x64) fn ma_sign(s: i64) -> i64 from "mathesis_alg.iii"
 extern @abi(c-msvc-x64) fn ma_deg(s: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_inv(sa: i64, sd: i64) -> i32 from "mathesis_alg.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
@@ -41,6 +42,7 @@ var EA : i32   var EB : i32   var EC : i32
 var AQ1 : i64   var AQ2 : i64
 var BQ : i64   var BD : i64
 var CZ : i64   var CP : i64   var CN : i64
+var IQ1 : i64   var IQ2 : i64   var IZ : i64
 
 fn main() -> u64 {
     /* == R: the FALSE identity refuted first, then ordered both ways. */
@@ -108,6 +110,30 @@ fn main() -> u64 {
     if CZ != 0i64 { return 15u64 }
     if CP != 1i64 { return 15u64 }
     if CN != (0i64 - 1i64) { return 15u64 }
+
+    /* == I: THE FIELD COMPLETION -- inverse through row reversal.  2*(1/sqrt2) == sqrt2, and the
+     * classical rationalization 1/(sqrt2+sqrt3) == sqrt3 - sqrt2 decided by pair-gcd; the
+     * inverse of an exact zero is REFUSED by name. */
+    ma_reset()
+    if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 16u64 }     /* sqrt2 */
+    if ma_inv(0i64, 1i64) != 0i32 { return 16u64 }                 /* 1/sqrt2 */
+    if ma_leaf_rat(2i64, 2i64) != 0i32 { return 16u64 }
+    if ma_prod(2i64, 1i64, 3i64) != 0i32 { return 16u64 }          /* 2/sqrt2 */
+    IQ1 = ma_equal(3i64, 0i64)
+    ma_reset()
+    if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 16u64 }
+    if ma_leaf_root(2i64, 3i64, 1i64) != 0i32 { return 16u64 }
+    if ma_sum(0i64, 1i64, 2i64) != 0i32 { return 16u64 }           /* sqrt2 + sqrt3 */
+    if ma_inv(2i64, 3i64) != 0i32 { return 16u64 }                 /* its inverse */
+    if ma_neg(0i64, 4i64) != 0i32 { return 16u64 }
+    if ma_sum(1i64, 4i64, 5i64) != 0i32 { return 16u64 }           /* sqrt3 - sqrt2 */
+    IQ2 = ma_equal(3i64, 5i64)
+    if ma_leaf_rat(0i64, 6i64) != 0i32 { return 16u64 }
+    IZ = ma_inv(6i64, 7i64) as i64                                 /* 1/0: refused -5 (zero) */
+    putchar(73i32) putchar(58i32) sp() e_i64(IQ1) sp() e_i64(IQ2) sp() e_i64(IZ) nl()   /* "I: 1 1 -5" */
+    if IQ1 != 1i64 { return 16u64 }
+    if IQ2 != 1i64 { return 16u64 }
+    if IZ != (0i64 - 5i64) { return 16u64 }
 
     return 99u64
 }

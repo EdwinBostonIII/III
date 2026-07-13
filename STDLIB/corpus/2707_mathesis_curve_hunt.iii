@@ -1,0 +1,210 @@
+/* 2707_mathesis_curve_hunt.iii -- GATE for THE SURFACE HUNTER (campaign Sigma: unassisted
+ * discovery).  The machine derives its own collapse surfaces in Z[u,v,w][g]/(g^3-d), sweeps
+ * primitive canonical rays to height 60 for d in {2,3,5,6,7} on BOTH curves, and verifies every
+ * hit end-to-end through the real-algebraic judge.  Nothing here was supplied: the surfaces are
+ * derived, the inventory is swept, the pins below are OBSERVATIONS re-asserted.
+ *
+ * B -- the machine-checked completeness bridge: every d verified NON-CUBE (t^3-d has no integer
+ *      root => no rational root => irreducible => {1,g,g^2} independent => identities MUST lie on
+ *      the surface); 8 = 2^3 correctly rejected by the same check.
+ * N -- NEAR-MISS REFUTED FIRST: (1,1,1) is OFF the d=2 surface; the judge refutes the would-be
+ *      identity -- the surface is load-bearing, not decorative.
+ * H -- THE HUNT: 21 verified finds; per-(d,curve) inventory pinned -- d=2 carries EXACTLY the
+ *      Ramanujan orbit on curve A (3 rays); d=3 carries SIX curve-B rays (the sigma identities:
+ *      cube roots of e*cbrt9 + f collapsing -- machine-found, no candidate supplied); d=6 and
+ *      d=7 carry six curve-A rays each; d=5 is EMPTY ON BOTH CURVES to height 60 (a certified
+ *      nonexistence inventory).  Exemplars pinned by full coordinates.
+ * O -- THE ORBIT LAW (machine-observed, machine-verified): multiplication by g maps solutions to
+ *      solutions ((g*rho)^3 = d*rho^3 stays in the line); every find's g-image, gcd-reduced,
+ *      matches another find up to global sign or leaves the height box -- closure verified over
+ *      the WHOLE inventory.
+ * V -- REPLAY: two finds re-verified end-to-end outside the hunt (fresh judge, fresh pair-gcd).
+ * X -- THE MX05 DOOR: single-false rejections; the round chain (21 point rows + 10 completeness
+ *      rows = 31) replays byte-identically.
+ *
+ * exit 99 pass; 10 B; 11 N; 12 H-run; 13 H-counts; 14 H-rows; 15 O; 16 V; 17 X-door; 18 X-chain. */
+module corpus_2707_mathesis_curve_hunt
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mcv_noncube(d: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_derive(d: i64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_eval(which: i64, u: i64, v: i64, w: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_verify(d: i64, curve: i64, u: i64, v: i64, w: i64, e: i64, f: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_degenerate() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_desc_valid(desc: u64) -> u32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_id_of(desc: u64, out32: u64) -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_chain_round(hmax: i64, dsp: u64, nds: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_head_byte(i: i64) -> u64 from "mathesis_curve.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var DS : [i64; 5]
+var HB : [u8; 32]
+var DD : [u64; 8]
+var ID : [u8; 32]
+var BOK : i64   var NV : i64   var CNT : [i64; 10]   var COK : i64
+var ROK1 : i64   var ROK2 : i64   var ROK3 : i64   var ROK4 : i64
+var OMATCH : i64   var OOUT : i64
+var V1 : i64   var V2 : i64
+var XA : i32   var XB : i32   var XC : i32
+var L1 : i64   var L2 : i64   var HEQ : i64
+
+fn gcd3(a0: i64, b0: i64) -> i64 {
+    let mut a : i64 = a0
+    let mut b : i64 = b0
+    if a < 0i64 { a = 0i64 - a }
+    if b < 0i64 { b = 0i64 - b }
+    while b != 0i64 { let t : i64 = a % b   a = b   b = t }
+    return a
+}
+
+/* find a stored row equal to (d,c,u,v,w) up to GLOBAL sign.  1 found, 0 not. */
+fn row_present(d: i64, c: i64, u: i64, v: i64, w: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < mcv_found() {
+        if mcv_row_d(i) == d { if mcv_row_c(i) == c {
+            if mcv_row_u(i) == u { if mcv_row_v(i) == v { if mcv_row_w(i) == w { return 1i64 } } }
+            if mcv_row_u(i) == (0i64 - u) { if mcv_row_v(i) == (0i64 - v) { if mcv_row_w(i) == (0i64 - w) { return 1i64 } } }
+        } }
+        i = i + 1i64
+    }
+    return 0i64
+}
+
+fn main() -> u64 {
+    DS[0u64] = 2i64   DS[1u64] = 3i64   DS[2u64] = 5i64   DS[3u64] = 6i64   DS[4u64] = 7i64
+
+    /* == B: the completeness bridge, machine-checked per d; the cube 8 rejected. */
+    BOK = 1i64
+    let mut k : i64 = 0i64
+    while k < 5i64 { if mcv_noncube(DS[k as u64]) != 1i64 { BOK = 0i64 }   k = k + 1i64 }
+    if mcv_noncube(8i64) != 0i64 { BOK = 0i64 }
+    putchar(66i32) putchar(58i32) sp() e_i64(BOK) nl()                              /* "B: 1" */
+    if BOK != 1i64 { return 10u64 }
+
+    /* == N: the near-miss refuted first (the surface is load-bearing). */
+    if mcv_derive(2i64) != 0i32 { return 11u64 }
+    let s111 : i64 = mcv_eval(2i64, 1i64, 1i64, 1i64)
+    NV = mcv_verify(2i64, 1i64, 1i64, 1i64, 1i64, mcv_eval(1i64, 1i64, 1i64, 1i64), mcv_eval(0i64, 1i64, 1i64, 1i64))
+    putchar(78i32) putchar(58i32) sp() e_i64(s111) sp() e_i64(NV) nl()              /* "N: 12 0" */
+    if s111 == 0i64 { return 11u64 }
+    if NV != 0i64 { return 11u64 }
+
+    /* == H: the hunt, inventory pinned. */
+    mcv_hunt_reset()
+    k = 0i64
+    let mut slot : i64 = 0i64
+    while k < 5i64 {
+        let mut cv : i64 = 1i64
+        while cv <= 2i64 {
+            let r : i64 = mcv_hunt(DS[k as u64], cv, 60i64)
+            if r < 0i64 { return 12u64 }
+            CNT[slot as u64] = r
+            slot = slot + 1i64
+            cv = cv + 1i64
+        }
+        k = k + 1i64
+    }
+    putchar(72i32) putchar(58i32) sp() e_i64(mcv_found()) sp() e_i64(mcv_degenerate())
+    k = 0i64
+    while k < 10i64 { sp() e_i64(CNT[k as u64])   k = k + 1i64 }
+    nl()                                    /* "H: 21 0 3 0 0 6 0 0 6 0 6 0" */
+    if mcv_found() != 21i64 { return 13u64 }
+    if mcv_degenerate() != 0i64 { return 13u64 }
+    COK = 1i64
+    if CNT[0u64] != 3i64 { COK = 0i64 }
+    if CNT[1u64] != 0i64 { COK = 0i64 }
+    if CNT[2u64] != 0i64 { COK = 0i64 }
+    if CNT[3u64] != 6i64 { COK = 0i64 }
+    if CNT[4u64] != 0i64 { COK = 0i64 }
+    if CNT[5u64] != 0i64 { COK = 0i64 }
+    if CNT[6u64] != 6i64 { COK = 0i64 }
+    if CNT[7u64] != 0i64 { COK = 0i64 }
+    if CNT[8u64] != 6i64 { COK = 0i64 }
+    if CNT[9u64] != 0i64 { COK = 0i64 }
+    if COK != 1i64 { return 13u64 }
+    /* exemplars by full coordinates: Ramanujan's orbit seed; the first sigma identity (d=3,
+     * curve B); the d=6 and d=7 seeds -- all machine-found. */
+    ROK1 = row_present(2i64, 1i64, 1i64, 0i64 - 1i64, 1i64)
+    ROK2 = row_present(3i64, 2i64, 2i64, 3i64, 0i64 - 4i64)
+    ROK3 = row_present(6i64, 1i64, 2i64, 0i64 - 1i64, 1i64)
+    ROK4 = row_present(7i64, 1i64, 4i64, 1i64, 0i64 - 2i64)
+    putchar(88i32) putchar(58i32) sp() e_i64(ROK1) sp() e_i64(ROK2) sp() e_i64(ROK3) sp() e_i64(ROK4) nl()   /* "X: 1 1 1 1" */
+    if ROK1 != 1i64 { return 14u64 }
+    if ROK2 != 1i64 { return 14u64 }
+    if ROK3 != 1i64 { return 14u64 }
+    if ROK4 != 1i64 { return 14u64 }
+
+    /* == O: the orbit law verified over the whole inventory. */
+    OMATCH = 0i64   OOUT = 0i64
+    k = 0i64
+    while k < mcv_found() {
+        let d : i64 = mcv_row_d(k)
+        let mu : i64 = d * mcv_row_w(k)
+        let mv : i64 = mcv_row_u(k)
+        let mw : i64 = mcv_row_v(k)
+        let g : i64 = gcd3(gcd3(mu, mv), mw)
+        if g < 1i64 { return 15u64 }
+        let ru : i64 = mu / g
+        let rv : i64 = mv / g
+        let rw : i64 = mw / g
+        let mut inbox : i64 = 1i64
+        if ru > 60i64 { inbox = 0i64 }
+        if ru < (0i64 - 60i64) { inbox = 0i64 }
+        if rv > 60i64 { inbox = 0i64 }
+        if rv < (0i64 - 60i64) { inbox = 0i64 }
+        if rw > 60i64 { inbox = 0i64 }
+        if rw < (0i64 - 60i64) { inbox = 0i64 }
+        if inbox == 1i64 {
+            if row_present(d, mcv_row_c(k), ru, rv, rw) == 1i64 { OMATCH = OMATCH + 1i64 } else { return 15u64 }
+        } else { OOUT = OOUT + 1i64 }
+        k = k + 1i64
+    }
+    putchar(79i32) putchar(58i32) sp() e_i64(OMATCH) sp() e_i64(OOUT) nl()
+    if (OMATCH + OOUT) != 21i64 { return 15u64 }
+
+    /* == V: two finds replayed end-to-end outside the hunt. */
+    V1 = mcv_verify(2i64, 1i64, 1i64, 0i64 - 1i64, 1i64, 9i64, 0i64 - 9i64)
+    V2 = mcv_verify(3i64, 2i64, 2i64, 3i64, 0i64 - 4i64, 438i64, 0i64 - 919i64)
+    putchar(86i32) putchar(58i32) sp() e_i64(V1) sp() e_i64(V2) nl()                /* "V: 1 1" */
+    if V1 != 1i64 { return 16u64 }
+    if V2 != 1i64 { return 16u64 }
+
+    /* == X: the MX05 door + the replayed chain. */
+    DD[0u64] = 0x4D583034u64   DD[1u64] = 1u64
+    DD[2u64] = 9u64   DD[3u64] = 513u64   DD[4u64] = 511u64   DD[5u64] = 513u64   DD[6u64] = 60u64
+    DD[7u64] = 1u64
+    XA = mcx_id_of((&DD) as u64, (&ID) as u64)          /* wrong magic -> -3 */
+    DD[0u64] = 0x4D583035u64   DD[1u64] = 3u64
+    XB = mcx_id_of((&DD) as u64, (&ID) as u64)          /* class 3 -> -3 */
+    DD[1u64] = 1u64   DD[7u64] = 0u64
+    XC = mcx_id_of((&DD) as u64, (&ID) as u64)          /* provenance != MACHINE -> -3 */
+    putchar(88i32) putchar(50i32) putchar(58i32) sp() e_i64(XA as i64) sp() e_i64(XB as i64) sp() e_i64(XC as i64) nl()
+    if XA != (0i32 - 3i32) { return 17u64 }
+    if XB != (0i32 - 3i32) { return 17u64 }
+    if XC != (0i32 - 3i32) { return 17u64 }
+    L1 = mcx_chain_round(60i64, (&DS) as u64, 5i64)
+    k = 0i64
+    while k < 32i64 { HB[k as u64] = mcx_head_byte(k) as u8   k = k + 1i64 }
+    L2 = mcx_chain_round(60i64, (&DS) as u64, 5i64)
+    HEQ = 1i64
+    k = 0i64
+    while k < 32i64 { if (HB[k as u64] as u64) != mcx_head_byte(k) { HEQ = 0i64 }   k = k + 1i64 }
+    putchar(67i32) putchar(58i32) sp() e_i64(L1) sp() e_i64(L2) sp() e_i64(HEQ) nl()   /* "C: 31 31 1" */
+    if L1 != 31i64 { return 18u64 }
+    if L2 != 31i64 { return 18u64 }
+    if HEQ != 1i64 { return 18u64 }
+
+    return 99u64
+}

@@ -1,0 +1,47 @@
+/* sovir/mathesis_ring_main.iii -- THE RING-DRAIN STREAM DRIVER (campaign Sigma).
+ * Prints the full drain of the round-1 mul-mul frontier: every proven pair with its route
+ * (1 = ring, 2 = library-composition), the partition summary.  Sealed as
+ * DOCS/MATHESIS-RING-DRAIN.log; replay must be byte-identical. */
+module mathesis_ring_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mrg_drain() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_queue_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_refuted_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_undecided_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_t(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_f(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_g(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_r(i: i64) -> u64 from "mathesis_ring.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ps(msg: u64) -> i32 {
+    let p : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ch : u8 = p[i]
+        if ch == 0u8 { going = 0u8 } else { putchar(ch as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    ps("MRG-DRAIN declared: the round-1 mul-mul frontier (1386 pairs, blocker bit-blast-mul); routes: ring normalization over Z[x,c1,c2] (all widths) + library-composition (idempotence rewrite, citations re-proven) + grid witnesses\n" as u64)
+    let dr : i64 = mrg_drain()
+    if dr < 0i64 { return 1u64 }
+    let mut i : i64 = 0i64
+    while i < mrg_proven_n() {
+        ps("MRG# P " as u64) e_i64(mrg_proven_t(i) as i64) sp() e_i64(mrg_proven_f(i) as i64)
+        sp() e_i64(mrg_proven_g(i) as i64) sp() e_i64(mrg_proven_r(i) as i64) nl()
+        i = i + 1i64
+    }
+    ps("MRG queue=" as u64) e_i64(mrg_queue_n())
+    ps(" proven=" as u64) e_i64(mrg_proven_n())
+    ps(" refuted=" as u64) e_i64(mrg_refuted_n())
+    ps(" undecided=" as u64) e_i64(mrg_undecided_n())
+    nl()
+    return 0u64
+}

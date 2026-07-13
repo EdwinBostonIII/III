@@ -1,0 +1,107 @@
+/* sovir/mathesis_curve_main.iii -- THE SIGMA-CATALOGUE STREAM DRIVER (campaign Sigma).
+ * Prints the whole surface hunt: bounds, every verified find WITH ITS MINTED NAME
+ * (SIGMA-d<d><A|B>-<k>), the per-(d,curve) completeness rows, the MX05 chain head.
+ * Sealed as DOCS/MATHESIS-CURVE-ROUND1.log; replay must be byte-identical. */
+module mathesis_curve_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_degenerate() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_rays() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_d(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_c(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_u(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_v(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_w(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_e(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_chain_round(hmax: i64, dsp: u64, nds: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_head_byte(i: i64) -> u64 from "mathesis_curve.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ps(msg: u64) -> i32 {
+    let p : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ch : u8 = p[i]
+        if ch == 0u8 { going = 0u8 } else { putchar(ch as i32)   i = i + 1u64 }
+    }
+    return 0i32
+}
+fn hexnib(v: u64) -> i32 {
+    if v < 10u64 { putchar((48u64 + v) as i32) } else { putchar((87u64 + v) as i32) }
+    return 0i32
+}
+
+var DS : [i64; 5]
+var KDC : [i64; 32]        /* per-(d,curve) minted-name counters (index d*4 + curve) */
+
+fn main() -> u64 {
+    ps("MXC-ROUND1 declared: (u + v*cbrt(d) + w*cbrt(d^2))^3 collapsing to Z + Z*cbrt(d) (curve A = machine-derived surface P2 = 0) or Z + Z*cbrt(d^2) (curve B = P1 = 0); d in {2,3,5,6,7} verified non-cube; primitive canonical rays, height <= 60; every find judge-verified end-to-end; names minted SIGMA-d<d><A|B>-<k>\n" as u64)
+    DS[0u64] = 2i64   DS[1u64] = 3i64   DS[2u64] = 5i64   DS[3u64] = 6i64   DS[4u64] = 7i64
+    mcv_hunt_reset()
+    let mut k : i64 = 0i64
+    while k < 5i64 {
+        let mut cv : i64 = 1i64
+        while cv <= 2i64 {
+            let r : i64 = mcv_hunt(DS[k as u64], cv, 60i64)
+            if r < 0i64 { return 1u64 }
+            cv = cv + 1i64
+        }
+        k = k + 1i64
+    }
+    let mut i : i64 = 0i64
+    while i < 32i64 { KDC[i as u64] = 0i64   i = i + 1i64 }
+    i = 0i64
+    while i < mcv_found() {
+        let d : i64 = mcv_row_d(i)
+        let c : i64 = mcv_row_c(i)
+        let ki : i64 = (d * 4i64) + c
+        KDC[ki as u64] = KDC[ki as u64] + 1i64
+        ps("MXC# " as u64) e_i64(d) sp() e_i64(c) sp() e_i64(mcv_row_u(i)) sp() e_i64(mcv_row_v(i))
+        sp() e_i64(mcv_row_w(i)) sp() e_i64(mcv_row_e(i)) sp() e_i64(mcv_row_f(i))
+        ps(" name=SIGMA-d" as u64) e_i64(d)
+        if c == 1i64 { putchar(65i32) } else { putchar(66i32) }
+        putchar(45i32) e_i64(KDC[ki as u64])
+        nl()
+        i = i + 1i64
+    }
+    k = 0i64
+    while k < 5i64 {
+        let mut cv2 : i64 = 1i64
+        while cv2 <= 2i64 {
+            let mut cnt : i64 = 0i64
+            i = 0i64
+            while i < mcv_found() {
+                if mcv_row_d(i) == DS[k as u64] { if mcv_row_c(i) == cv2 { cnt = cnt + 1i64 } }
+                i = i + 1i64
+            }
+            ps("MXC= d=" as u64) e_i64(DS[k as u64])
+            ps(" curve=" as u64) e_i64(cv2)
+            ps(" H=60 finds=" as u64) e_i64(cnt)
+            nl()
+            cv2 = cv2 + 1i64
+        }
+        k = k + 1i64
+    }
+    let ch : i64 = mcx_chain_round(60i64, (&DS) as u64, 5i64)
+    if ch < 1i64 { return 2u64 }
+    ps("MXC found=" as u64) e_i64(mcv_found())
+    ps(" degenerate=" as u64) e_i64(mcv_degenerate())
+    ps(" rays=" as u64) e_i64(mcv_rays())
+    ps(" chain=" as u64) e_i64(ch)
+    ps(" head=" as u64)
+    i = 0i64
+    while i < 32i64 {
+        let b : u64 = mcx_head_byte(i)
+        hexnib(b >> 4u64)
+        hexnib(b & 15u64)
+        i = i + 1i64
+    }
+    nl()
+    return 0u64
+}

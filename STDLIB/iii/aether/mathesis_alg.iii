@@ -618,6 +618,61 @@ fn ma_cmp(a: i64, b: i64) -> i64 @export {
     return 0i64 - 1i64
 }
 
+/* gamma = 1/alpha_sa -> slot sd (alpha strictly POSITIVE; negatives compose via neg-inv-neg).
+ * Row REVERSAL: q(t) = t^deg * p(1/t) vanishes at 1/alpha (0-roots stripped first so the
+ * reversed leading coefficient is nonzero).  Window: alpha in (wn/2^k, wh/2^k] with wn >= 1
+ * (refined up to that) gives 1/alpha in [2^k/wh, 2^k/wn) -- carried as the unit-widened dyadic
+ * (floor(2^(k+q)/wh) - 1, floor(2^(k+q)/wn) + 1] at denominator 2^q (the ma_neg half-open
+ * lesson), then count == 1 refinement.  0 ok, negative = named refusal. */
+fn ma_inv(sa: i64, sd: i64) -> i32 @export {
+    if MA_ISO[sa as u64] != 1i64 { return 0i32 - 2i32 }
+    if ma_sign_definite(sa) != 1i64 { return 0i32 - 5i32 }
+    if ma_strip0(sa) != 0i32 { return 0i32 - 3i32 }
+    /* refine until the window's low end is a POSITIVE numerator (alpha > 0 guarantees reach) */
+    let mut r0 : i64 = 0i64
+    while r0 < MA_ROUNDS {
+        if MA_WN[sa as u64] >= 1i64 { r0 = MA_ROUNDS } else {
+            if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+        }
+        r0 = r0 + 1i64
+    }
+    if MA_WN[sa as u64] < 1i64 { return 0i32 - 1i32 }
+    let deg : i64 = MA_DEG[sa as u64]
+    if deg < 1i64 { return 0i32 - 1i32 }
+    /* reversed rows */
+    let mut i : i64 = 0i64
+    while i <= deg {
+        let rs : i64 = (sa * 65i64) + (deg - i)
+        let rd : i64 = (sd * 65i64) + i
+        MA_SGN[rd as u64] = MA_SGN[rs as u64]
+        MA_CLN[rd as u64] = MA_CLN[rs as u64]
+        let mut j : i64 = 0i64
+        while j < MA_CLN[rs as u64] { MA_LMB[((rd * 16i64) + j) as u64] = MA_LMB[((rs * 16i64) + j) as u64]   j = j + 1i64 }
+        i = i + 1i64
+    }
+    MA_DEG[sd as u64] = deg
+    MA_ISO[sd as u64] = 0i64
+    let mut r : i64 = 0i64
+    while r < MA_ROUNDS {
+        let k : i64 = MA_WK[sa as u64]
+        let wn : i64 = MA_WN[sa as u64]
+        let wh : i64 = MA_WH[sa as u64]
+        let q : i64 = k + 6i64
+        if (k + q) > MA_KMAX { return 0i32 - 1i32 }
+        let num : i64 = ma_ipow_capped(2i64, k + q)
+        if num < 1i64 { return 0i32 - 1i32 }
+        MA_WN[sd as u64] = (num / wh) - 1i64
+        MA_WH[sd as u64] = (num / wn) + 1i64
+        MA_WK[sd as u64] = q
+        let c : i64 = ma_count(sd)
+        if c == 1i64 { MA_ISO[sd as u64] = 1i64   return 0i32 }
+        if c < 0i64 { return 0i32 - 1i32 }
+        if ma_refine_step(sa) != 0i32 { return 0i32 - 1i32 }
+        r = r + 1i64
+    }
+    return 0i32 - 1i32
+}
+
 /* SIGN: -1 / 0 / +1, or -9 refused.  The exact-zero case is decided by pair-gcd against t. */
 fn ma_sign(s: i64) -> i64 @export {
     if MA_ISO[s as u64] != 1i64 { return 0i64 - 9i64 }

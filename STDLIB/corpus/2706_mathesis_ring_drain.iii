@@ -1,0 +1,110 @@
+/* 2706_mathesis_ring_drain.iii -- GATE for THE FRONTIER DRAIN (campaign Sigma): the 1,386-pair
+ * mul-mul frontier -- queued since round 1 with blocker "bit-blast mul equality" -- is decided
+ * PAIR-FOR-PAIR by the ring judge + the library-composition route + grid witnesses:
+ *
+ *   1386 = 2 RING-PROVEN (both mul-associativity forms, now theorems at EVERY width)
+ *        + 6 LIBRARY-COMPOSED (idempotence-rewrite + ring: (x&x)*x == x*x and kin)
+ *        + 1378 REFUTED with concrete witnesses
+ *        + 0 UNDECIDED -- the queue is EMPTY; R7 honored by the route its header named.
+ *
+ * D -- the drain runs; the partition is pinned EXACTLY (any drift is a red).
+ * P -- all 8 proven rows pinned by coordinates and route (2 ring / 6 library).
+ * W -- the WIDTH-8 EXHAUSTIVE dual on every proven pair: the standing mxf engine re-proves each
+ *      over ALL 2^24 triples of Z/2^8 -- two independent engines agree on all 8.
+ * S -- a REFUTED sample re-decided with its witness re-evaluated through mxn_eval (independent).
+ *
+ * exit 99 pass; 10 D-run; 11 D-counts; 12 P; 13 W; 14 S. */
+module corpus_2706_mathesis_ring_drain
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mrg_drain() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_queue_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_refuted_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_undecided_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_t(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_f(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_g(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_proven_r(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_decide(tier: u64, fcode: u64, gcode: u64) -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_wx() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_w1() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_w2() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_f(tier: u64, code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_g(code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_width(i: u64, w: u64) -> u32 from "mathesis_frontier.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+/* the expected proven set: (tier, f, g, route) x 8 */
+var XT : [u64; 8]   var XF : [u64; 8]   var XG : [u64; 8]   var XR : [u64; 8]
+var DOK : i64   var POK : i64   var WOK : i64   var SOK : i64
+
+fn xinit() -> i32 {
+    XT[0u64] = 2u64   XF[0u64] = 131u64   XG[0u64] = 35u64   XR[0u64] = 1u64
+    XT[1u64] = 2u64   XF[1u64] = 134u64   XG[1u64] = 35u64   XR[1u64] = 1u64
+    XT[2u64] = 2u64   XF[2u64] = 180u64   XG[2u64] = 9u64    XR[2u64] = 2u64
+    XT[3u64] = 2u64   XF[3u64] = 181u64   XG[3u64] = 10u64   XR[3u64] = 2u64
+    XT[4u64] = 2u64   XF[4u64] = 181u64   XG[4u64] = 11u64   XR[4u64] = 2u64
+    XT[5u64] = 2u64   XF[5u64] = 234u64   XG[5u64] = 9u64    XR[5u64] = 2u64
+    XT[6u64] = 2u64   XF[6u64] = 235u64   XG[6u64] = 10u64   XR[6u64] = 2u64
+    XT[7u64] = 2u64   XF[7u64] = 235u64   XG[7u64] = 11u64   XR[7u64] = 2u64
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* == D: the drain, partition pinned. */
+    let dr : i64 = mrg_drain()
+    if dr < 0i64 { return 10u64 }
+    putchar(68i32) putchar(58i32) sp() e_i64(mrg_queue_n()) sp() e_i64(mrg_proven_n()) sp() e_i64(mrg_refuted_n()) sp() e_i64(mrg_undecided_n()) nl()
+    if mrg_queue_n() != 1386i64 { return 11u64 }
+    if mrg_proven_n() != 8i64 { return 11u64 }
+    if mrg_refuted_n() != 1378i64 { return 11u64 }
+    if mrg_undecided_n() != 0i64 { return 11u64 }
+
+    /* == P: the 8 proven rows, coordinates + route. */
+    xinit()
+    POK = 1i64
+    let mut i : i64 = 0i64
+    while i < 8i64 {
+        if mrg_proven_t(i) != XT[i as u64] { POK = 0i64 }
+        if mrg_proven_f(i) != XF[i as u64] { POK = 0i64 }
+        if mrg_proven_g(i) != XG[i as u64] { POK = 0i64 }
+        if mrg_proven_r(i) != XR[i as u64] { POK = 0i64 }
+        i = i + 1i64
+    }
+    putchar(80i32) putchar(58i32) sp() e_i64(POK) nl()                     /* "P: 1" */
+    if POK != 1i64 { return 12u64 }
+
+    /* == W: the width-8 exhaustive dual on all 8 (two engines, one truth). */
+    mxf_reset()
+    WOK = 1i64
+    i = 0i64
+    while i < 8i64 {
+        if mxf_push(XT[i as u64], XF[i as u64], XG[i as u64], 1u64) != 1u32 { WOK = 0i64 }
+        i = i + 1i64
+    }
+    i = 0i64
+    while i < 8i64 {
+        if mxf_retry_width(i as u64, 8u64) != 1u32 { WOK = 0i64 }
+        i = i + 1i64
+    }
+    putchar(87i32) putchar(58i32) sp() e_i64(WOK) nl()                     /* "W: 1" */
+    if WOK != 1i64 { return 13u64 }
+
+    /* == S: a refuted sample with the witness re-evaluated independently. */
+    let sv : i64 = mrg_decide(2u64, 131u64, 33u64)
+    SOK = 0i64
+    if sv == 0i64 {
+        let fv : u64 = mxn_eval_f(2u64, 131u64, mrg_wx(), mrg_w1(), mrg_w2())
+        let gv : u64 = mxn_eval_g(33u64, mrg_wx(), mrg_w1(), mrg_w2())
+        if fv != gv { SOK = 1i64 }
+    }
+    putchar(83i32) putchar(58i32) sp() e_i64(SOK) nl()                     /* "S: 1" */
+    if SOK != 1i64 { return 14u64 }
+
+    return 99u64
+}

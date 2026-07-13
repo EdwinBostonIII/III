@@ -1,0 +1,93 @@
+/* 2705_mathesis_ring_judge.iii -- GATE for THE RING JUDGE (campaign Sigma): schema equality over
+ * the {ADD,SUB,MUL} fragment decided by exact multivariate normalization over Z[x,c1,c2] -- the
+ * frontier's own named retry route ("ring/kernel later"), landed as the ring route.
+ *
+ * R -- REFUTED-with-witness FIRST: (x*c1)*c2 =? x*(c1+c2) -> verdict 0; the witness lies in the
+ *      GRID {0..3}^3 (the constructive completeness lemma observed live) and is RE-CHECKED here
+ *      through mxn_eval_f/mxn_eval_g -- the INDEPENDENT evaluator, not this organ's parser.
+ * A -- mul-associativity (x*c1)*c2 == x*(c1*c2) RING-PROVEN (verdict 1) -- a theorem at EVERY
+ *      width at once -- and the EXISTING width-8 exhaustive engine (mxf_retry_width: all 2^24
+ *      triples) must AGREE: two engines, one truth.
+ * L -- THE LIBRARY-COMPOSITION ROUTE: (x&x)*x == x*x proven (verdict 2) BY CITING round-1's
+ *      idempotence schema; the citation itself is RE-PROVEN fresh through seq_equiv before the
+ *      arm accepts (theorems-from-theorems, nothing trusted un-re-checked).
+ * N -- HONEST ABSTAIN: (x^c1)^c2 vs x^(c1^c2) is TRUE but XOR is outside the ring fragment and
+ *      no witness exists -> verdict 3, never a guess (round 1 already proved it via seq_equiv;
+ *      the ring judge correctly declines jurisdiction).
+ *
+ * exit 99 pass; 10 R; 11 R-witness; 12 A; 13 A-w8; 14 L; 15 L-cite; 16 N. */
+module corpus_2705_mathesis_ring_judge
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mrg_decide(tier: u64, fcode: u64, gcode: u64) -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_wx() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_w1() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_w2() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_cited() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_f(tier: u64, code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxn_eval_g(code: u64, x: u64, c1: u64, c2: u64) -> u64 from "mathesis_novel.iii"
+extern @abi(c-msvc-x64) fn mxf_reset() -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_push(tier: u64, fcode: u64, gcode: u64, blocker: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxf_retry_width(i: u64, w: u64) -> u32 from "mathesis_frontier.iii"
+extern @abi(c-msvc-x64) fn mxs_build_f1(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_build_g(code: u64) -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_fbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn mxs_gbuf() -> u64 from "mathesis_synth.iii"
+extern @abi(c-msvc-x64) fn seq_equiv(ba: u64, oa: u64, la: u64, bx: u64, ox: u64, lx: u64, nparam: u32) -> u32 from "ser_kinduct_sym.iii"
+
+fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+var RV : i64   var WX : u64   var W1 : u64   var W2 : u64   var RWOK : i64
+var AV : i64   var AW8 : u32
+var LV : i64   var LC : i64   var CIT1 : u32   var CIT2 : u32
+var NV : i64
+
+fn main() -> u64 {
+    /* == R: refuted with a GRID witness, re-checked through the independent evaluator. */
+    RV = mrg_decide(2u64, 131u64, 33u64)                 /* (x*c1)*c2 vs x*(c1+c2) */
+    WX = mrg_wx()   W1 = mrg_w1()   W2 = mrg_w2()
+    RWOK = 0i64
+    let fv : u64 = mxn_eval_f(2u64, 131u64, WX, W1, W2)
+    let gv : u64 = mxn_eval_g(33u64, WX, W1, W2)
+    if fv != gv { RWOK = 1i64 }
+    let mut ingrid : i64 = 1i64
+    if WX > 3u64 { ingrid = 0i64 }
+    if W1 > 3u64 { ingrid = 0i64 }
+    if W2 > 3u64 { ingrid = 0i64 }
+    putchar(82i32) putchar(58i32) sp() e_i64(RV) sp() e_i64(RWOK) sp() e_i64(ingrid) nl()   /* "R: 0 1 1" */
+    if RV != 0i64 { return 10u64 }
+    if RWOK != 1i64 { return 11u64 }
+    if ingrid != 1i64 { return 11u64 }
+
+    /* == A: mul-assoc RING-PROVEN, and the width-8 EXHAUSTIVE engine agrees. */
+    AV = mrg_decide(2u64, 131u64, 35u64)
+    mxf_reset()
+    if mxf_push(2u64, 131u64, 35u64, 1u64) != 1u32 { return 13u64 }
+    AW8 = mxf_retry_width(0u64, 8u64)
+    putchar(65i32) putchar(58i32) sp() e_i64(AV) sp() e_i64(AW8 as i64) nl()               /* "A: 1 1" */
+    if AV != 1i64 { return 12u64 }
+    if AW8 != 1u32 { return 13u64 }
+
+    /* == L: the library-composition route, with the citation RE-PROVEN fresh. */
+    LV = mrg_decide(2u64, 180u64, 9u64)                  /* (x&x)*x vs x*x */
+    LC = mrg_cited()
+    let fl1 : u64 = mxs_build_f1(9u64)                   /* x & x */
+    let gl1 : u64 = mxs_build_g(0u64)                    /* x */
+    CIT1 = seq_equiv(mxs_fbuf(), 0u64, fl1, mxs_gbuf(), 0u64, gl1, 3u32)
+    let fl2 : u64 = mxs_build_f1(12u64)                  /* x | x */
+    let gl2 : u64 = mxs_build_g(0u64)
+    CIT2 = seq_equiv(mxs_fbuf(), 0u64, fl2, mxs_gbuf(), 0u64, gl2, 3u32)
+    putchar(76i32) putchar(58i32) sp() e_i64(LV) sp() e_i64(LC) sp() e_i64(CIT1 as i64) sp() e_i64(CIT2 as i64) nl()   /* "L: 2 1 1 1" */
+    if LV != 2i64 { return 14u64 }
+    if LC != 1i64 { return 14u64 }
+    if CIT1 != 1u32 { return 15u64 }
+    if CIT2 != 1u32 { return 15u64 }
+
+    /* == N: honest abstain outside the fragment (a TRUE xor pair -- no witness, no jurisdiction). */
+    NV = mrg_decide(2u64, 320u64, 56u64)                 /* (x^c1)^c2 vs x^(c1^c2) */
+    putchar(78i32) putchar(58i32) sp() e_i64(NV) nl()                                       /* "N: 3" */
+    if NV != 3i64 { return 16u64 }
+
+    return 99u64
+}

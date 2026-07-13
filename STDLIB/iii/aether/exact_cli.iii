@@ -13,7 +13,7 @@
  *                                            claim in this process, or the tool refuses.
  *   iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE algebraic number "the unique root of
  *                                            this polynomial in (lo, hi]" -- AT THE ENGINE'S FULL CLASS
- *                                            (degree <= 480, ~4930-digit coefficients), decided by two
+ *                                            (degree <= 960, ~4930-digit coefficients), decided by two
  *                                            exact faculties (one-count vs dyadic refinement, the DEEP
  *                                            TIER descending to any depth memory affords) which must
  *                                            agree; the deg<=3 algnum register file rides as a third.
@@ -29,12 +29,12 @@
  *                                            (certified-CRT resultant, coefficients beyond i64 delivered
  *                                            as limb rows) AND the exact isolating window that pins WHICH
  *                                            root -- roots are now closed under + and * on this surface.
- *                                            Degree <= 192 each, degA*degB <= 384, EITHER sign (a
+ *                                            Degree <= 384 each, degA*degB <= 768, EITHER sign (a
  *                                            sign-definite refinement phase separates operands from 0).
  *   iii-exact --alg-inv "<A>" <lo> <hi>      THE FIELD COMPLETION: 1/alpha's defining polynomial (the
  *                                            exact reversal) + certified window, either sign; with
  *                                            add/mul this closes +, *, and inverse (hence division).
- *   iii-exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 480,
+ *   iii-exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 960,
  *                                            coefficients to ~4930 digits (256 limbs -- the engine's
  *                                            true row capacity), counted and isolated through the
  *                                            bigint Sturm chain (gate 2185's tier).
@@ -76,14 +76,14 @@
  * ENVELOPES (enforced; the tool ABSTAINS outside them, never guesses): --roots degree <= 7, |c_i| < 2^20,
  * window endpoints |.| <= 2^20 (default: the Cauchy bound), dyadic proposal depth 24 -- and every claim is
  * re-certified through aether/sturm_big's overflow-free bigint chain regardless.  --alg-sign/--alg-cmp
- * degree <= 480 with decimal coefficients to ~4930 digits (the FULL bigint-chain class; sign = one-count
+ * degree <= 960 with decimal coefficients to ~4930 digits (the FULL bigint-chain class; sign = one-count
  * vs refinement agreement, equality = the sturm_big pair-gcd door, order refinement DEPTH-UNCAPPED
  * through the bigint-numerator deep tier -- memory is the only boundary);
  * the deg<=3 / |c|<2^20 algnum register file (gate 2157) rides along as an independent faculty inside
- * its own class.  --alg-add/--alg-mul/--alg-inv degree <= 192 each with degA*degB <= 384 (validation and
+ * its own class.  --alg-add/--alg-mul/--alg-inv degree <= 384 each with degA*degB <= 768 (validation and
  * refinement run entirely through the bigint chain -- sound at every depth, so the wider class is
  * certified per run), either sign, |c_i| < 2^60 there (the per-run bnd certificate is the honest gatekeeper).  --alg-* integer interval endpoints |.| <= 1024.
- * --roots-big degree <= 480, coefficients <= 256 limbs (~4930 digits), window endpoints |.| <= 2^44 with
+ * --roots-big degree <= 960, coefficients <= 256 limbs (~4930 digits), window endpoints |.| <= 2^44 with
  * runtime coordinate guards.
  *
  * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/sqrt_sum_sign (which composes numera/bigint +
@@ -163,26 +163,26 @@ var BV : [i64; 4096]      /* radicands b_i (>= 0) */
 var DEC : [u8; 24]
 
 /* --roots / --alg state: polynomials (coeff of x^i at index i), proposed intervals, multiplicities. */
-var RC  : [i64; 256]       /* polynomial A coefficients (low -> high) */
-var RC2 : [i64; 256]       /* polynomial B coefficients (--alg-cmp)   */
-var ILN : [i64; 512]   var ILD : [i64; 512]   var IHN : [i64; 512]   var IHD : [i64; 512]   var IMU : [i64; 512]
+var RC  : [i64; 512]       /* polynomial A coefficients (low -> high) */
+var RC2 : [i64; 512]       /* polynomial B coefficients (--alg-cmp)   */
+var ILN : [i64; 1024]   var ILD : [i64; 1024]   var IHN : [i64; 1024]   var IHD : [i64; 1024]   var IMU : [i64; 1024]
 var RW2 : i64             /* bigint-certified window count */
 var RSUM : i64            /* sum of certified multiplicities */
 var ADG : [i64; 2]        /* --alg register degrees (for the fresh re-set) */
 
 /* --alg-add/--alg-mul + --roots-big state: a polynomial with LIMB-ROW coefficients (sign, limb count,
  * limbs low->high at row i*64+j), the dyadic alpha/beta refinement states, the certified gamma interval. */
-var GBS : [i64; 512]   var GBL : [i64; 512]   var GBW : [u64; 131072]     /* row i limb j at i*256+j */
-var GB2S : [i64; 512]   var GB2L : [i64; 512]   var GB2W : [u64; 131072] /* --alg-cmp polynomial A rows */
+var GBS : [i64; 1024]   var GBL : [i64; 1024]   var GBW : [u64; 262144]     /* row i limb j at i*256+j */
+var GB2S : [i64; 1024]   var GB2L : [i64; 1024]   var GB2W : [u64; 262144] /* --alg-cmp polynomial A rows */
 var GDEG : i64
 var AAL : [i64; 2]   var AAH : [i64; 2]   var AAK : i64        /* alpha/beta: (AAL/2^AAK, AAH/2^AAK] */
 var GLO : i64   var GLD : i64   var GHI : i64   var GHD : i64  /* gamma: (GLO/GLD, GHI/GHD] certified */
 var AZR : [u64; 2]                                             /* operand IS exactly zero (arithmetic test) */
 var DECB2 : [u8; 4990]                                         /* decimal digits scratch (bigint print) */
 var RB_POS : u64   var PB_SGN : i64   var PB_OK : u64   var PB_ERR : u64
-var WK2L : [i64; 1536]   var WK2H : [i64; 1536]   var WK2K : [i64; 1536]
+var WK2L : [i64; 3072]   var WK2H : [i64; 3072]   var WK2K : [i64; 3072]
 var RBCL : u64                                                 /* --roots-big cluster-at-cap flag */
-var IKD : [i64; 512]                                           /* per-interval attained dyadic depth */
+var IKD : [i64; 1024]                                          /* per-interval attained dyadic depth */
 
 /* THE DEEP-REFINEMENT TIER (the former 2^-44 wall, dissolved): dyadic windows with BIGINT
  * numerators as signed (sign, handle) pairs in their own migrating arena, counted through
@@ -372,7 +372,7 @@ fn parse_list(str: u64, dst: u64) -> u64 {
                 i = i + 1u64
             } else { return PARSEFAIL } }
             if neg == 1u32 { v = 0i64 - v }
-            if n >= 256u64 { return PARSEFAIL }
+            if n >= 512u64 { return PARSEFAIL }
             d[n] = v
             n = n + 1u64
         }
@@ -1010,7 +1010,7 @@ fn rb_deepsplit(l0: i64, h0: i64, k0: i64, dmaxr: i64) -> u64 {
     return code
 }
 
-/* ── the ORDER VERBS at the engine's full class (deg <= 480, ~4930-digit coefficients) ──────────
+/* ── the ORDER VERBS at the engine's full class (deg <= 960, ~4930-digit coefficients) ──────────
  * SIGN: two faculties -- counting (ONE exact root_count2 against the rational 0, no refinement:
  * the an_sign_vs_rat law lifted past i64) and dyadic refinement through the same overflow-free
  * chain -- must AGREE; the exact-zero case (c0 == 0 and 0 in the isolating window) is pure
@@ -1027,7 +1027,7 @@ fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
     if pn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
     let deg : i64 = gb_deg(pn)
     if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
-    if deg > 480i64 { ps("ABSTAIN: degree > 480 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 960i64 { ps("ABSTAIN: degree > 960 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if hi > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
@@ -1246,7 +1246,7 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     if pa == 0u64 { ps("iii-exact: empty polynomial A\n" as u64)  return 3u64 }
     let dga : i64 = gb_deg(pa)
     if dga < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (A)\n" as u64)  return 3u64 }
-    if dga > 480i64 { ps("ABSTAIN: degree(A) > 480 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if dga > 960i64 { ps("ABSTAIN: degree(A) > 960 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     gb_stash2(dga)
     let pb : u64 = rb_parse(strb)
     if pb == PARSEFAIL { ps("iii-exact: parse error in polynomial B (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
@@ -1254,7 +1254,7 @@ fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u6
     if pb == 0u64 { ps("iii-exact: empty polynomial B\n" as u64)  return 3u64 }
     let dgb : i64 = gb_deg(pb)
     if dgb < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (B)\n" as u64)  return 3u64 }
-    if dgb > 480i64 { ps("ABSTAIN: degree(B) > 480 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if dgb > 960i64 { ps("ABSTAIN: degree(B) > 960 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if la >= ha { ps("iii-exact: --alg interval needs lo < hi (A)\n" as u64)  return 3u64 }
     if lb >= hb { ps("iii-exact: --alg interval needs lo < hi (B)\n" as u64)  return 3u64 }
     if la < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
@@ -1534,7 +1534,7 @@ fn aa_sqrtchk(op: i64, ba: i64, bb: i64) -> u64 {
 fn alg2_load(which: i64, coeffs: u64, nc: u64, lo: i64, hi: i64) -> u64 {
     let deg : i64 = poly_deg(coeffs, nc)
     if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
-    if deg > 192i64 { ps("ABSTAIN: degree > 192 is outside the arithmetic-verb envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 384i64 { ps("ABSTAIN: degree > 384 is outside the arithmetic-verb envelope -- refused, not guessed\n" as u64)  return 5u64 }
     let mx : i64 = poly_maxabs(coeffs, deg)
     if mx >= 1152921504606846976i64 { ps("ABSTAIN: a |coefficient| >= 2^60 is outside the envelope\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
@@ -1783,9 +1783,9 @@ fn emit_alg_arith(op: i64, nca: u64, loa: i64, hia: i64, ncb: u64, lob: i64, hib
     }
     if op != 2i64 {
         let dd0 : i64 = dga * dgb
-        if dd0 > 384i64 {
+        if dd0 > 768i64 {
             ps("ABSTAIN: degree(A) * degree(B) = " as u64)  pi(dd0)
-            ps(" exceeds 384 -- the recovery geometry's bound (the 256-prime bnd certification still\n" as u64)
+            ps(" exceeds 768 -- the recovery geometry's bound (the adaptive <= 512-prime bnd certification\n" as u64)
             ps("  applies per run inside it); refused, not guessed\n" as u64)
             return 5u64
         }
@@ -1974,7 +1974,7 @@ fn rb_parse(str: u64) -> u64 {
         if PB_ERR == 1u64 { res = PARSEFAIL   going = 0u8 }
         else { if PB_OK == 0u64 { res = n   going = 0u8 }
         else {
-            if n >= 512u64 { res = PARSEFAIL   going = 0u8 }
+            if n >= 1024u64 { res = PARSEFAIL   going = 0u8 }
             else {
                 if PB_SGN == 0i64 { GBS[n] = 0i64   GBL[n] = 0i64 }
                 else {
@@ -2028,7 +2028,7 @@ fn rb_bisect(lo: i64, hi: i64) -> i64 {
         let dk : i64 = pw2(k)
         let c : i64 = root_count2(l, dk, h, dk)
         if c == 1i64 {
-            if nrec >= 480i64 { return 0i64 - 1i64 }
+            if nrec >= 960i64 { return 0i64 - 1i64 }
             ILN[nrec as u64] = l   IHN[nrec as u64] = h   IKD[nrec as u64] = k
             nrec = nrec + 1i64
         } else { if c > 1i64 {
@@ -2047,7 +2047,7 @@ fn rb_bisect(lo: i64, hi: i64) -> i64 {
                 CLL[CLC as u64] = l   CLH[CLC as u64] = h   CLKD[CLC as u64] = k
                 CLC = CLC + 1i64
             }
-            else { if top < 1532i64 {
+            else { if top < 3068i64 {
                 let l2 : i64 = 2i64 * l
                 let h2 : i64 = 2i64 * h
                 let mid : i64 = l + h
@@ -2118,7 +2118,7 @@ fn emit_roots_big(str: u64, lo: i64, hi: i64) -> u64 {
     let deg : i64 = gb_deg(pn)
     if deg < 0i64 { ps("iii-exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
     if deg == 0i64 { ps("DISTINCT REAL ROOTS: 0   (nonzero constant)\n" as u64)  return 0u64 }
-    if deg > 480i64 { ps("ABSTAIN: degree > 480 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
+    if deg > 960i64 { ps("ABSTAIN: degree > 960 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     if lo >= hi { ps("iii-exact: --roots-big window needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 17592186044416i64) { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
     if hi > 17592186044416i64 { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
@@ -2374,14 +2374,14 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  iii-exact --roots \"<c0 c1 ... cd>\" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d\n" as u64)
         ps("                                            (+ exact multiplicity), bigint-certified\n" as u64)
         ps("  iii-exact --alg-sign \"<c0 ... cd>\" <lo> <hi>  sign of THE root isolated in (lo, hi]\n" as u64)
-        ps("                                            (deg <= 480, coefficients to ~4930 digits)\n" as u64)
+        ps("                                            (deg <= 960, coefficients to ~4930 digits)\n" as u64)
         ps("  iii-exact --alg-cmp \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   order / EQUALITY of two algebraic numbers\n" as u64)
         ps("                                            (same class; equality by the pair-gcd door)\n" as u64)
         ps("  iii-exact --alg-add | --alg-mul \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   the defining polynomial +\n" as u64)
         ps("                                            certified window of alpha+beta / alpha*beta (closure;\n" as u64)
-        ps("                                            deg <= 192 each, degA*degB <= 384, either sign)\n" as u64)
+        ps("                                            deg <= 384 each, degA*degB <= 768, either sign)\n" as u64)
         ps("  iii-exact --alg-inv \"<A>\" <lo> <hi>       the defining polynomial + certified window of 1/alpha\n" as u64)
-        ps("  iii-exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 480, coefficients\n" as u64)
+        ps("  iii-exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 960, coefficients\n" as u64)
         ps("                                            to ~4930 digits (256 limbs)\n\n" as u64)
         ps("  a_i signed integer coefficient, b_i non-negative integer radicand.\n" as u64)
         ps("  exit (sign modes, --alg-sign): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)

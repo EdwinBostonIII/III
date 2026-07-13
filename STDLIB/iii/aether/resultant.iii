@@ -265,17 +265,19 @@ fn rs_powi(b: i64, e: i64) -> i64 {
 
 /* ═════════ v2: THE MODULAR-CRT DETERMINANT ENGINE (the charter's "bigint determinant engine") ═════════
  * Same construction as rs_sum, unbounded intermediates: every Sylvester value R(t) is computed mod
- * 256 SELF-GENERATED 30-bit primes (rs_pinit: deterministic trial division, gate-pinned) -- i64
- * products never exceed 2^60 -- the coefficient residues are recovered per prime by LAGRANGE
- * interpolation (rs_recover), and the integers by Garner CRT into UNSIGNED bigints in a
- * per-coefficient dropped arena.
+ * the ADAPTIVELY-SIZED window of SELF-GENERATED 30-bit primes (rs_pinit + rs_setnuse: this run
+ * uses ceil((bnd+2)/29) primes, ceiling 512) -- i64 products never exceed 2^60 -- the coefficient
+ * residues are recovered per prime by LAGRANGE interpolation (rs_recover), and the integers by
+ * Garner CRT into UNSIGNED bigints in a per-coefficient dropped arena.
  * SOUNDNESS: |coeff_i| <= ||R||_1 <= prod_rows(row 1-norm of the t-polynomial Sylvester)  [permanent
- * bound]; we CERTIFY bound_bits + 2 <= 7424 <= bits(P) BEFORE trusting centered reconstruction, and
- * re-check  sum_i q_i t^i == R(t)  mod every prime afterwards.  Recovery geometry: D <= 384 (385
- * nodes, stride-385 matrices; operands degree <= 192 each) -- the bnd certification is PER RUN, so
- * the window refuses honestly whenever a coefficient bound exceeds 7424 bits, at ANY D.  Refusals
- * (-1): degrees beyond storage, zero leading input coefficients, bound not certifiable, or a
- * recovered coefficient beyond i64 out. */
+ * bound]; we CERTIFY bound_bits + 2 <= 29 * nuse < bits(P_used) BEFORE trusting centered
+ * reconstruction, and re-check  sum_i q_i t^i == R(t)  mod every USED prime afterwards --
+ * reconstruction below P_used/2 is unique, so outputs are byte-identical at ANY window at or above
+ * the bound (the 464-bit sealed class runs its ORIGINAL 16-prime window).  Recovery geometry:
+ * D <= 768 (769 nodes, stride-769 matrices; operands degree <= 384 each) -- the bnd certification
+ * is PER RUN, so the window refuses honestly whenever a coefficient bound exceeds 14848 bits, at
+ * ANY D.  Refusals (-1): degrees beyond storage, zero leading input coefficients, bound not
+ * certifiable, or a recovered coefficient beyond i64 out. */
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
@@ -293,19 +295,21 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 
 /* raw bigint-output rows (V-I.2): filled when RSB_WANT == 1 (rs_*_big2) */
 var RSB_WANT : i64
-var RSB_SGN : [i64; 386]   var RSB_LEN : [i64; 386]   var RSB_FIT : [i64; 386]
-var RSB_LIMB : [u64; 49408]                              /* coefficient i limb j at i*128+j -- 128-limb
-                                                          * rows (8192 bits) COVER the 7424-bit window:
+var RSB_SGN : [i64; 770]   var RSB_LEN : [i64; 770]   var RSB_FIT : [i64; 770]
+var RSB_LIMB : [u64; 197120]                             /* coefficient i limb j at i*256+j -- 256-limb
+                                                          * rows (16384 bits) COVER the 14848-bit window:
                                                           * everything the bound certifies is deliverable */
 
-/* THE SELF-GENERATING, SELF-CERTIFYING PRIME WINDOW: the 256 largest primes below 2^30, GENERATED
+/* THE SELF-GENERATING, SELF-CERTIFYING PRIME WINDOW: the 512 largest primes below 2^30, GENERATED
  * at first use by deterministic trial division (exact for n < 2^30: divisors <= 2^15) -- no table
  * to transcribe wrong, ever.  The first 16 generated primes ARE the historical hardcoded table
  * (gate-pinned in 2186), so every sealed output stays byte-identical: a value X with |X| < P16/2
- * reconstructs to the SAME centered integer under the larger P256.  Primes 17..256 lift the
- * certified ceiling 464 -> 7424 bits (256 primes, each > 2^29 -> bits(prod) > 256*29). */
-const RS_NP : i64 = 256i64
-var RS_PRIMES : [i64; 256]
+ * reconstructs to the SAME centered integer under any wider window.  Primes 17..512 lift the
+ * certified CEILING 464 -> 14848 bits (512 primes, each > 2^29 -> bits(prod) > 512*29) -- and the
+ * ADAPTIVE window (rs_setnuse) means capacity is not price: each run uses exactly the primes its
+ * own certified bound demands. */
+const RS_NP : i64 = 512i64
+var RS_PRIMES : [i64; 512]
 var RS_PINIT : i64
 fn rs_isp30(n: i64) -> i64 {
     if (n % 2i64) == 0i64 { return 0i64 }
@@ -334,6 +338,25 @@ fn rs_prime(i: i64) -> i64 @export {
     if i >= RS_NP { return 0i64 }
     return RS_PRIMES[i as u64]
 }
+
+/* THE ADAPTIVE PRIME WINDOW (the conquest of the time wall): every run uses EXACTLY the primes
+ * its own certified bound demands -- k = ceil((bnd+2)/29) -- and no more.  The 29-bit floor is
+ * the SAME theorem the fixed window rested on (every generated prime exceeds 2^29, so the product
+ * of k primes exceeds 2^(29k) >= 2^(bnd+2) > 2*|X|): soundness is unchanged, and centered
+ * reconstruction below P_k/2 is UNIQUE, so every output is byte-identical to the full-window
+ * computation -- the historical 464-bit class computes ceil(464/29) = 16: sealed rows literally
+ * re-run their original 16-prime window.  Cost becomes BOUND-PROPORTIONAL: the window's capacity
+ * (512 primes, 14848 bits) is a ceiling, not a price.  -1 = the bound exceeds the whole window. */
+var RS_NUSE : i64
+fn rs_nuse() -> i64 @export { return RS_NUSE }
+fn rs_setnuse(bnd: i64) -> i64 {
+    rs_pinit()
+    let mut k : i64 = (bnd + 2i64 + 28i64) / 29i64
+    if k < 1i64 { k = 1i64 }
+    if k > RS_NP { return 0i64 - 1i64 }
+    RS_NUSE = k
+    return k
+}
 fn rs_modp(v: i64, p: i64) -> i64 { let m : i64 = v % p   if m < 0i64 { return m + p }   return m }
 fn rs_minv(a0: i64, p: i64) -> i64 {                       /* extended Euclid; gcd(a0,p)=1 assumed */
     let mut t : i64 = 0i64    let mut nt : i64 = 1i64
@@ -360,47 +383,47 @@ fn rs_bits(v0: i64) -> i64 {
     return b
 }
 
-var RS_MM : [i64; 148225]                                 /* modular working matrix, stride 385 */
-var RS_HM : [i64; 386]                                     /* h(x) = g(t-x) mod p */
-var RS_RMOD : [i64; 98560]                                /* R(t) mod p_l at index t*256+l (t<=384) */
-var RS_CR : [i64; 256]                                    /* current coefficient residues */
-var RS_Q : [i64; 386]                                     /* recovered integer coefficients */
-var RS_ND : [i64; 386]                                    /* interpolation nodes (row r samples t = RS_ND[r]) */
+var RS_MM : [i64; 591361]                                 /* modular working matrix, stride 769 */
+var RS_HM : [i64; 770]                                     /* h(x) = g(t-x) mod p */
+var RS_RMOD : [i64; 393728]                               /* R(t) mod p_l at index t*512+l (t<=768) */
+var RS_CR : [i64; 512]                                    /* current coefficient residues */
+var RS_Q : [i64; 770]                                     /* recovered integer coefficients */
+var RS_ND : [i64; 770]                                    /* interpolation nodes (row r samples t = RS_ND[r]) */
 
 /* Gauss determinant mod p of the n x n matrix in RS_MM (destructive) */
 fn rs_det_mod(n: i64, p: i64) -> i64 {
     let mut det : i64 = 1i64
     let mut k : i64 = 0i64
     while k < n {
-        let pkk : i64 = RS_MM[((k * 385i64) + k) as u64]
+        let pkk : i64 = RS_MM[((k * 769i64) + k) as u64]
         if pkk == 0i64 {
             let mut found : i64 = 0i64 - 1i64
             let mut r : i64 = k + 1i64
             while r < n {
-                if found < 0i64 { let v : i64 = RS_MM[((r * 385i64) + k) as u64]   if v != 0i64 { found = r } }
+                if found < 0i64 { let v : i64 = RS_MM[((r * 769i64) + k) as u64]   if v != 0i64 { found = r } }
                 r = r + 1i64
             }
             if found < 0i64 { return 0i64 }
             let mut c : i64 = 0i64
             while c < n {
-                let t : i64 = RS_MM[((k * 385i64) + c) as u64]
-                RS_MM[((k * 385i64) + c) as u64] = RS_MM[((found * 385i64) + c) as u64]
-                RS_MM[((found * 385i64) + c) as u64] = t
+                let t : i64 = RS_MM[((k * 769i64) + c) as u64]
+                RS_MM[((k * 769i64) + c) as u64] = RS_MM[((found * 769i64) + c) as u64]
+                RS_MM[((found * 769i64) + c) as u64] = t
                 c = c + 1i64
             }
             det = rs_modp(0i64 - det, p)
         }
-        let pv : i64 = RS_MM[((k * 385i64) + k) as u64]
+        let pv : i64 = RS_MM[((k * 769i64) + k) as u64]
         det = (det * pv) % p
         let inv : i64 = rs_minv(pv, p)
         let mut i : i64 = k + 1i64
         while i < n {
-            let fct : i64 = (RS_MM[((i * 385i64) + k) as u64] * inv) % p
+            let fct : i64 = (RS_MM[((i * 769i64) + k) as u64] * inv) % p
             if fct != 0i64 {
                 let mut j : i64 = k
                 while j < n {
-                    let sub : i64 = (fct * RS_MM[((k * 385i64) + j) as u64]) % p
-                    RS_MM[((i * 385i64) + j) as u64] = rs_modp(RS_MM[((i * 385i64) + j) as u64] - sub, p)
+                    let sub : i64 = (fct * RS_MM[((k * 769i64) + j) as u64]) % p
+                    RS_MM[((i * 769i64) + j) as u64] = rs_modp(RS_MM[((i * 769i64) + j) as u64] - sub, p)
                     j = j + 1i64
                 }
             }
@@ -427,16 +450,16 @@ fn rs_binom(j: i64, i: i64) -> i64 {
 
 /* Pascal's triangle mod p to degree dg (additive recurrence -- exact residues at ANY degree,
  * no inverses): C(j,i) mod p at RS_PAS[j*193 + i].  Filled once per prime by rs_gamma_big. */
-var RS_PAS : [i64; 148225]
+var RS_PAS : [i64; 591361]
 fn rs_pascal(dg: i64, p: i64) -> i32 {
     let mut j : i64 = 0i64
     while j <= dg {
-        RS_PAS[(j * 385i64) as u64] = 1i64
-        RS_PAS[((j * 385i64) + j) as u64] = 1i64
+        RS_PAS[(j * 769i64) as u64] = 1i64
+        RS_PAS[((j * 769i64) + j) as u64] = 1i64
         let mut i : i64 = 1i64
         while i < j {
-            let s2 : i64 = RS_PAS[(((j - 1i64) * 385i64) + (i - 1i64)) as u64] + RS_PAS[(((j - 1i64) * 385i64) + i) as u64]
-            RS_PAS[((j * 385i64) + i) as u64] = rs_modp(s2, p)
+            let s2 : i64 = RS_PAS[(((j - 1i64) * 769i64) + (i - 1i64)) as u64] + RS_PAS[(((j - 1i64) * 769i64) + i) as u64]
+            RS_PAS[((j * 769i64) + i) as u64] = rs_modp(s2, p)
             i = i + 1i64
         }
         j = j + 1i64
@@ -444,20 +467,28 @@ fn rs_pascal(dg: i64, p: i64) -> i32 {
     return 0i32
 }
 
+/* powers of t mod p, built ONCE per (t, p): TP[k] = t^k -- the shift rows' inner power loops
+ * become table lookups (same values, the per-term O(j-i) walk gone). */
+var RS_TP : [i64; 776]
+fn rs_tp_fill(t: i64, dg: i64, p: i64) -> i32 {
+    let tm : i64 = rs_modp(t, p)
+    RS_TP[0u64] = 1i64
+    let mut k : i64 = 1i64
+    while k <= dg { RS_TP[k as u64] = (RS_TP[(k - 1i64) as u64] * tm) % p   k = k + 1i64 }
+    return 0i32
+}
+
 fn rs_shift_mod(gp: u64, degg: i64, t: i64, p: i64) -> i32 {
     let g : *i64 = gp as *i64
-    let tm : i64 = rs_modp(t, p)
+    rs_tp_fill(t, degg, p)
     let mut i : i64 = 0i64
     while i <= degg {
         let mut acc : i64 = 0i64
         let mut j : i64 = i
         while j <= degg {
-            let binom : i64 = RS_PAS[((j * 385i64) + i) as u64]
-            let mut pw : i64 = 1i64
-            let mut q : i64 = 0i64
-            while q < (j - i) { pw = (pw * tm) % p   q = q + 1i64 }
+            let binom : i64 = RS_PAS[((j * 769i64) + i) as u64]
             let gm : i64 = rs_modp(g[j as u64], p)
-            acc = (acc + ((gm * binom) % p) * pw) % p
+            acc = (acc + ((gm * binom) % p) * RS_TP[(j - i) as u64]) % p
             j = j + 1i64
         }
         if (i % 2i64) != 0i64 { acc = rs_modp(0i64 - acc, p) }
@@ -484,10 +515,11 @@ fn rs_bigmod(id: u64, p: i64) -> i64 {
 
 fn rs_shift_prod_mod(gp: u64, degg: i64, t: i64, p: i64) -> i32 {
     let g : *i64 = gp as *i64
+    rs_tp_fill(t, degg, p)
     let mut k : i64 = 0i64
     while k <= degg {
         let gm : i64 = rs_modp(g[(degg - k) as u64], p)
-        RS_HM[k as u64] = (gm * rs_powmod(t, degg - k, p)) % p
+        RS_HM[k as u64] = (gm * RS_TP[(degg - k) as u64]) % p
         k = k + 1i64
     }
     return 0i32
@@ -501,9 +533,9 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
     let out : *i64 = outp as *i64
     let D : i64 = degf * degg
     if D < 1i64 { return 0i64 - 1i64 }
-    if D > 384i64 { return 0i64 - 1i64 }                   /* recovery geometry: 385 nodes, stride-385 matrix */
-    if degf > 192i64 { return 0i64 - 1i64 }
-    if degg > 192i64 { return 0i64 - 1i64 }
+    if D > 768i64 { return 0i64 - 1i64 }                   /* recovery geometry: 769 nodes, stride-769 matrix */
+    if degf > 384i64 { return 0i64 - 1i64 }
+    if degg > 384i64 { return 0i64 - 1i64 }
     let flead : i64 = f[degf as u64]
     let glead : i64 = g[degg as u64]
     if flead == 0i64 { return 0i64 - 1i64 }
@@ -558,13 +590,14 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
         if op == 0i64 { bh = bh + degg + 1i64 }
         bnd = (degg * bf) + (degf * bh)
     }
-    if (bnd + 2i64) > 7424i64 { return 0i64 - 1i64 }
+    if rs_setnuse(bnd) < 0i64 { return 0i64 - 1i64 }       /* the ADAPTIVE window: this run pays for
+                                                            * ceil((bnd+2)/29) primes, ceiling 512 (14848 bits) */
 
     /* ── per-prime residues of R(t) for t = 0..D ── */
     let mut nd0 : i64 = 0i64
     while nd0 <= D { RS_ND[nd0 as u64] = nd0   nd0 = nd0 + 1i64 }
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         if op == 0i64 { rs_pascal(degg, p) }               /* C(j,i) mod p for the shift rows */
         let mut t : i64 = 0i64
@@ -573,20 +606,20 @@ fn rs_gamma_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64, op: i64) -> i
             if op == 1i64 { rs_shift_prod_mod(gp, degg, t, p) }
             let n : i64 = degf + degg
             let mut r : i64 = 0i64
-            while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 385i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
+            while r < n { let mut c : i64 = 0i64   while c < n { RS_MM[((r * 769i64) + c) as u64] = 0i64   c = c + 1i64 }   r = r + 1i64 }
             r = 0i64
             while r < degg {
                 let mut k : i64 = 0i64
-                while k <= degf { RS_MM[((r * 385i64) + (r + k)) as u64] = rs_modp(f[(degf - k) as u64], p)   k = k + 1i64 }
+                while k <= degf { RS_MM[((r * 769i64) + (r + k)) as u64] = rs_modp(f[(degf - k) as u64], p)   k = k + 1i64 }
                 r = r + 1i64
             }
             r = 0i64
             while r < degf {
                 let mut k : i64 = 0i64
-                while k <= degg { RS_MM[(((degg + r) * 385i64) + (r + k)) as u64] = RS_HM[(degg - k) as u64]   k = k + 1i64 }
+                while k <= degg { RS_MM[(((degg + r) * 769i64) + (r + k)) as u64] = RS_HM[(degg - k) as u64]   k = k + 1i64 }
                 r = r + 1i64
             }
-            RS_RMOD[((t * 256i64) + l) as u64] = rs_det_mod(n, p)
+            RS_RMOD[((t * 512i64) + l) as u64] = rs_det_mod(n, p)
             t = t + 1i64
         }
         l = l + 1i64
@@ -618,7 +651,7 @@ fn rs_rawmod(i: i64, p: i64) -> i64 {
     let mut j : i64 = RSB_LEN[i as u64]
     while j > 0i64 {
         j = j - 1i64
-        let lm : u64 = RSB_LIMB[((i as u64) * 128u64) + (j as u64)]
+        let lm : u64 = RSB_LIMB[((i as u64) * 256u64) + (j as u64)]
         r = ((r * pw64) + (lm % pu)) % pu
     }
     let mut v : i64 = r as i64
@@ -638,13 +671,13 @@ fn rs_rawmod(i: i64, p: i64) -> i64 {
  * copied -- the caller must treat that as beyond storage), RS_CT_FIT (magnitude fits i64),
  * RS_CT_LO (low limb), RS_CT_LIMB[0..RS_CT_LEN). */
 var RS_CT_SGN : i64   var RS_CT_LEN : i64   var RS_CT_FIT : i64   var RS_CT_LO : u64
-var RS_CT_LIMB : [u64; 128]
+var RS_CT_LIMB : [u64; 256]
 fn rs_crt_center(ar: u64) -> i32 {
     let cr0 : i64 = RS_CR[0u64]
     let mut X : u64 = bigint_from_u64(ar, cr0 as u64)
     let mut PB : u64 = bigint_from_u64(ar, RS_PRIMES[0u64] as u64)
     let mut l : i64 = 1i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         let mut pm : i64 = 1i64                            /* prod_{j<l} p_j mod p */
         let mut jj : i64 = 0i64
@@ -676,7 +709,7 @@ fn rs_crt_center(ar: u64) -> i32 {
     let mut sg2 : i64 = sgn
     if zln == 0u64 { sg2 = 0i64 }
     RS_CT_SGN = sg2   RS_CT_LEN = zln as i64   RS_CT_FIT = fits   RS_CT_LO = lo
-    if zln <= 128u64 {
+    if zln <= 256u64 {
         let mut j2 : u64 = 0u64
         while j2 < zln { RS_CT_LIMB[j2] = bigint_get_limb(mag, j2)   j2 = j2 + 1u64 }
     }
@@ -690,22 +723,24 @@ fn rs_crt_center(ar: u64) -> i32 {
  * recovery this replaces, at O(n^2) per prime instead of O(n^4); rs_consist still re-checks
  * every node mod every prime afterwards, so a recovery defect is a REFUSAL, never a wrong
  * coefficient.  The CRT runs in a PER-COEFFICIENT arena (the rs3_crt_rows law): the Garner
- * chain's transient allocations are dominated by the prime-product chain (~130 KB at 256 primes)
- * plus the value's own limbs (<= 116; a NEGATIVE value walks full-width, ~370-900 KB) -- a bump
- * arena SHARED across coefficients would grow with D+1 (D = 384: tens of MB, past any fixed size)
- * while the per-coefficient peak stays bounded (2 MiB arena, >= 2x the worst walk).
+ * chain's transient allocations are dominated by the prime-product chain (~520 KB at the full 512
+ * primes; bound-proportional below that under the adaptive window) plus the value's own limbs
+ * (<= 232; a NEGATIVE value walks full-width, ~1.5-2.5 MB at the ceiling) -- a bump arena SHARED
+ * across coefficients would grow with D+1 while the per-coefficient peak stays bounded (4 MiB
+ * arena, > 1.5x the worst full-window walk).
  * -1 refused (degenerate nodes / arena unavailable / output width without RSB_WANT / row
  * overflow). */
-var RS_LM2 : [i64; 392]                                    /* master polynomial (x - t_0)...(x - t_D) mod p:
-                                                            * degree D+1 -> index D+1 <= 385 (the [200] of the
+var RS_LM2 : [i64; 776]                                    /* master polynomial (x - t_0)...(x - t_D) mod p:
+                                                            * degree D+1 -> index D+1 <= 769 (the [200] of the
                                                             * D<=192 era would SILENTLY overflow at D > 198 --
-                                                            * caught by this rung's widening audit) */
-var RS_LQ2 : [i64; 392]                                    /* master / (x - t_r) */
-var RS_LCR : [i64; 98816]                                  /* recovered residues: coeff i, prime l at i*256+l */
+                                                            * caught by the rung-four widening audit; sized
+                                                            * with the envelope ever since) */
+var RS_LQ2 : [i64; 776]                                    /* master / (x - t_r) */
+var RS_LCR : [i64; 394240]                                 /* recovered residues: coeff i, prime l at i*512+l */
 fn rs_recover(D: i64) -> i64 {
     let nv : i64 = D + 1i64
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         /* master M(x) = prod_r (x - t_r) mod p, built incrementally in place */
         RS_LM2[0u64] = 1i64
@@ -726,7 +761,7 @@ fn rs_recover(D: i64) -> i64 {
         }
         /* zero this prime's residue column */
         let mut i0 : i64 = 0i64
-        while i0 <= D { RS_LCR[((i0 * 256i64) + l) as u64] = 0i64   i0 = i0 + 1i64 }
+        while i0 <= D { RS_LCR[((i0 * 512i64) + l) as u64] = 0i64   i0 = i0 + 1i64 }
         /* per node: Q_r = M/(x - t_r) by synthetic division; d_r = Q_r(t_r); accumulate w_r * Q_r */
         r = 0i64
         while r < nv {
@@ -742,11 +777,11 @@ fn rs_recover(D: i64) -> i64 {
             let mut j3 : i64 = D
             while j3 >= 0i64 { dr = rs_modp((dr * tm) + RS_LQ2[j3 as u64], p)   j3 = j3 - 1i64 }
             if dr == 0i64 { return 0i64 - 1i64 }
-            let w : i64 = (RS_RMOD[((r * 256i64) + l) as u64] * rs_minv(dr, p)) % p
+            let w : i64 = (RS_RMOD[((r * 512i64) + l) as u64] * rs_minv(dr, p)) % p
             let mut j4 : i64 = 0i64
             while j4 <= D {
-                let acc : i64 = rs_modp(RS_LCR[((j4 * 256i64) + l) as u64] + ((w * RS_LQ2[j4 as u64]) % p), p)
-                RS_LCR[((j4 * 256i64) + l) as u64] = acc
+                let acc : i64 = rs_modp(RS_LCR[((j4 * 512i64) + l) as u64] + ((w * RS_LQ2[j4 as u64]) % p), p)
+                RS_LCR[((j4 * 512i64) + l) as u64] = acc
                 j4 = j4 + 1i64
             }
             r = r + 1i64
@@ -756,8 +791,8 @@ fn rs_recover(D: i64) -> i64 {
     let mut i : i64 = 0i64
     while i <= D {
         let mut l2 : i64 = 0i64
-        while l2 < 256i64 { RS_CR[l2 as u64] = RS_LCR[((i * 256i64) + l2) as u64]   l2 = l2 + 1i64 }
-        let ar : u64 = arena_new(2097152u64)
+        while l2 < RS_NUSE { RS_CR[l2 as u64] = RS_LCR[((i * 512i64) + l2) as u64]   l2 = l2 + 1i64 }
+        let ar : u64 = arena_new(4194304u64)
         if ar == 0u64 { return 0i64 - 1i64 }
         rs_crt_center(ar)
         bigint_drop_arena(ar)
@@ -765,10 +800,10 @@ fn rs_recover(D: i64) -> i64 {
         let ctl : i64 = RS_CT_LEN
         let ctf : i64 = RS_CT_FIT
         if RSB_WANT == 1i64 {
-            if ctl > 128i64 { return 0i64 - 1i64 }
+            if ctl > 256i64 { return 0i64 - 1i64 }
             RSB_SGN[i as u64] = RS_CT_SGN   RSB_LEN[i as u64] = ctl   RSB_FIT[i as u64] = ctf
             let mut j2 : i64 = 0i64
-            while j2 < ctl { RSB_LIMB[((i as u64) * 128u64) + (j2 as u64)] = RS_CT_LIMB[j2 as u64]   j2 = j2 + 1i64 }
+            while j2 < ctl { RSB_LIMB[((i as u64) * 256u64) + (j2 as u64)] = RS_CT_LIMB[j2 as u64]   j2 = j2 + 1i64 }
         }
         if ctf == 0i64 {
             if RSB_WANT == 0i64 { return 0i64 - 1i64 }
@@ -783,22 +818,27 @@ fn rs_recover(D: i64) -> i64 {
     return 0i64
 }
 
-/* sum_i q_i * node^i == R(node) mod EVERY prime, at every node.  -1 on any mismatch. */
+/* sum_i q_i * node^i == R(node) mod EVERY USED prime, at every node.  -1 on any mismatch.
+ * The row residues are hoisted ONCE per prime (rs3_consist's law) and each node evaluates by
+ * HORNER -- O(D) per (node, prime) instead of the per-term linear powmod's O(D^2): the same
+ * values compared, the D^3 term gone. */
+var RS_CI : [i64; 770]
 fn rs_consist(D: i64) -> i64 {
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
+        let mut i : i64 = 0i64
+        while i <= D {
+            if RSB_WANT == 1i64 { RS_CI[i as u64] = rs_rawmod(i, p) } else { RS_CI[i as u64] = rs_modp(RS_Q[i as u64], p) }
+            i = i + 1i64
+        }
         let mut t : i64 = 0i64
         while t <= D {
+            let tm : i64 = rs_modp(RS_ND[t as u64], p)
             let mut acc : i64 = 0i64
-            let mut i : i64 = 0i64
-            while i <= D {
-                let mut ri : i64 = 0i64
-                if RSB_WANT == 1i64 { ri = rs_rawmod(i, p) } else { ri = rs_modp(RS_Q[i as u64], p) }
-                acc = (acc + (ri * rs_powmod(RS_ND[t as u64], i, p))) % p
-                i = i + 1i64
-            }
-            let rv : i64 = RS_RMOD[((t * 256i64) + l) as u64]
+            let mut j : i64 = D
+            while j >= 0i64 { acc = ((acc * tm) + RS_CI[j as u64]) % p   j = j - 1i64 }
+            let rv : i64 = RS_RMOD[((t * 512i64) + l) as u64]
             if acc != rv { return 0i64 - 1i64 }
             t = t + 1i64
         }
@@ -869,7 +909,8 @@ fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) 
     while i <= gdu { j = 0i64   while j <= gdt { let mut av : i64 = g[((i * 8i64) + j) as u64]   if av < 0i64 { av = 0i64 - av }   gnorm = rs_add(gnorm, av)   j = j + 1i64 }   i = i + 1i64 }
     if RS_OVF != 0i64 { return 0i64 - 1i64 }
     let bnd : i64 = (gdu * rs_bits(fnorm)) + (fdu * rs_bits(gnorm))
-    if (bnd + 2i64) > 7424i64 { return 0i64 - 1i64 }
+    if rs_setnuse(bnd) < 0i64 { return 0i64 - 1i64 }       /* the ADAPTIVE window: this run pays for
+                                                            * ceil((bnd+2)/29) primes, ceiling 512 (14848 bits) */
     /* node selection: D+1 integers where BOTH u-leads are nonzero over Z */
     let mut nd : i64 = 0i64
     let mut tc : i64 = 0i64
@@ -886,27 +927,27 @@ fn rs_elim(fp: u64, fdu: i64, fdt: i64, gp: u64, gdu: i64, gdt: i64, outp: u64) 
     }
     /* per-prime residues at the nodes */
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         let mut r : i64 = 0i64
         while r <= D {
             let tv : i64 = RS_ND[r as u64]
             let n : i64 = fdu + gdu
             let mut r0 : i64 = 0i64
-            while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 385i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
+            while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 769i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
             r0 = 0i64
             while r0 < gdu {
                 let mut k : i64 = 0i64
-                while k <= fdu { RS_MM[((r0 * 385i64) + (r0 + k)) as u64] = rs_gr_evalmod(fp, fdu - k, fdt, tv, p)   k = k + 1i64 }
+                while k <= fdu { RS_MM[((r0 * 769i64) + (r0 + k)) as u64] = rs_gr_evalmod(fp, fdu - k, fdt, tv, p)   k = k + 1i64 }
                 r0 = r0 + 1i64
             }
             r0 = 0i64
             while r0 < fdu {
                 let mut k : i64 = 0i64
-                while k <= gdu { RS_MM[(((gdu + r0) * 385i64) + (r0 + k)) as u64] = rs_gr_evalmod(gp, gdu - k, gdt, tv, p)   k = k + 1i64 }
+                while k <= gdu { RS_MM[(((gdu + r0) * 769i64) + (r0 + k)) as u64] = rs_gr_evalmod(gp, gdu - k, gdt, tv, p)   k = k + 1i64 }
                 r0 = r0 + 1i64
             }
-            RS_RMOD[((r * 256i64) + l) as u64] = rs_det_mod(n, p)
+            RS_RMOD[((r * 512i64) + l) as u64] = rs_det_mod(n, p)
             r = r + 1i64
         }
         l = l + 1i64
@@ -942,7 +983,7 @@ fn rs_prod_big(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export
 fn rs_big_sgn(i: i64) -> i64 @export { return RSB_SGN[i as u64] }
 fn rs_big_len(i: i64) -> i64 @export { return RSB_LEN[i as u64] }
 fn rs_big_fit(i: i64) -> i64 @export { return RSB_FIT[i as u64] }
-fn rs_big_limb(i: i64, j: i64) -> u64 @export { return RSB_LIMB[((i * 128i64) + j) as u64] }
+fn rs_big_limb(i: i64, j: i64) -> u64 @export { return RSB_LIMB[((i * 256i64) + j) as u64] }
 fn rs_sum_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @export {
     RSB_WANT = 1i64
     let d : i64 = rs_gamma_big(fp, degf, gp, degg, outp, 0i64)
@@ -986,11 +1027,11 @@ fn rs_prod_big2(fp: u64, degf: i64, gp: u64, degg: i64, outp: u64) -> i64 @expor
  * window, or (strict rs_elim3 only) a recovered coefficient beyond i64.  rs_elim3_big delivers
  * EVERY coefficient as raw sign/limb rows (<= 8 limbs -- guaranteed by rs3's OWN 464-bit ceiling, kept:
  * the same shape a b3_slice feeds into sturm_big's sturm2_in_* rows; the 8-limb row geometry is
- * WHY rs3 keeps 464 while the 1D pipeline certifies to 7424). ═════════ */
+ * WHY rs3 keeps 464 while the 1D pipeline certifies to 14848). ═════════ */
 
 var RS3_DX : i64   var RS3_DY : i64
-var RS3_RES : [i64; 278784]                                 /* node dets: ((r*(Dy+1)+s)*256 + l) */
-var RS3_CMOD : [i64; 278784]                                /* coeff residues: ((a*(Dy+1)+b)*256 + l) */
+var RS3_RES : [i64; 557568]                                 /* node dets: ((r*(Dy+1)+s)*512 + l) */
+var RS3_CMOD : [i64; 557568]                                /* coeff residues: ((a*(Dy+1)+b)*512 + l) */
 var RS3_XST : [i64; 1089]                                  /* stage-1 x-coeffs at (a*(Dy+1)+s) */
 var RS3_CRES : [i64; 1089]                                 /* per-prime recovered-coeff residues */
 var RS3_LM : [i64; 35]                                     /* Lagrange master polynomial */
@@ -1114,27 +1155,27 @@ fn rs3_nodes(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64,
     let n : i64 = fdz + gdz
     let Dy1 : i64 = Dy + 1i64
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         let mut r : i64 = 0i64
         while r <= Dx {
             let mut s : i64 = 0i64
             while s <= Dy {
                 let mut r0 : i64 = 0i64
-                while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 385i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
+                while r0 < n { let mut c0 : i64 = 0i64   while c0 < n { RS_MM[((r0 * 769i64) + c0) as u64] = 0i64   c0 = c0 + 1i64 }   r0 = r0 + 1i64 }
                 r0 = 0i64
                 while r0 < gdz {
                     let mut kk : i64 = 0i64
-                    while kk <= fdz { RS_MM[((r0 * 385i64) + (r0 + kk)) as u64] = rs3_cvalmod(fp, fdz - kk, fdx, fdy, r, s, p)   kk = kk + 1i64 }
+                    while kk <= fdz { RS_MM[((r0 * 769i64) + (r0 + kk)) as u64] = rs3_cvalmod(fp, fdz - kk, fdx, fdy, r, s, p)   kk = kk + 1i64 }
                     r0 = r0 + 1i64
                 }
                 r0 = 0i64
                 while r0 < fdz {
                     let mut kk : i64 = 0i64
-                    while kk <= gdz { RS_MM[(((gdz + r0) * 385i64) + (r0 + kk)) as u64] = rs3_cvalmod(gp, gdz - kk, gdx, gdy, r, s, p)   kk = kk + 1i64 }
+                    while kk <= gdz { RS_MM[(((gdz + r0) * 769i64) + (r0 + kk)) as u64] = rs3_cvalmod(gp, gdz - kk, gdx, gdy, r, s, p)   kk = kk + 1i64 }
                     r0 = r0 + 1i64
                 }
-                RS3_RES[((((r * Dy1) + s) * 256i64) + l) as u64] = rs_det_mod(n, p)
+                RS3_RES[((((r * Dy1) + s) * 512i64) + l) as u64] = rs_det_mod(n, p)
                 s = s + 1i64
             }
             r = r + 1i64
@@ -1148,12 +1189,12 @@ fn rs3_nodes(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64,
 fn rs3_interp(Dx: i64, Dy: i64) -> i32 {
     let Dy1 : i64 = Dy + 1i64
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         let mut s : i64 = 0i64
         while s <= Dy {
             let mut r : i64 = 0i64
-            while r <= Dx { RS3_LV[r as u64] = RS3_RES[((((r * Dy1) + s) * 256i64) + l) as u64]   r = r + 1i64 }
+            while r <= Dx { RS3_LV[r as u64] = RS3_RES[((((r * Dy1) + s) * 512i64) + l) as u64]   r = r + 1i64 }
             rs3_lagr(Dx, p)
             let mut a : i64 = 0i64
             while a <= Dx { RS3_XST[((a * Dy1) + s) as u64] = RS3_LC[a as u64]   a = a + 1i64 }
@@ -1165,7 +1206,7 @@ fn rs3_interp(Dx: i64, Dy: i64) -> i32 {
             while s2 <= Dy { RS3_LV[s2 as u64] = RS3_XST[((a2 * Dy1) + s2) as u64]   s2 = s2 + 1i64 }
             rs3_lagr(Dy, p)
             let mut b : i64 = 0i64
-            while b <= Dy { RS3_CMOD[((((a2 * Dy1) + b) * 256i64) + l) as u64] = RS3_LC[b as u64]   b = b + 1i64 }
+            while b <= Dy { RS3_CMOD[((((a2 * Dy1) + b) * 512i64) + l) as u64] = RS3_LC[b as u64]   b = b + 1i64 }
             a2 = a2 + 1i64
         }
         l = l + 1i64
@@ -1184,7 +1225,7 @@ fn rs3_crt_rows(ncoef: i64) -> i64 {
     let mut m : i64 = 0i64
     while m < ncoef {
         let mut l : i64 = 0i64
-        while l < 256i64 { RS_CR[l as u64] = RS3_CMOD[((m * 256i64) + l) as u64]   l = l + 1i64 }
+        while l < RS_NUSE { RS_CR[l as u64] = RS3_CMOD[((m * 512i64) + l) as u64]   l = l + 1i64 }
         let ar : u64 = arena_new(2097152u64)
         rs_crt_center(ar)
         bigint_drop_arena(ar)
@@ -1223,7 +1264,7 @@ fn rs3_consist(Dx: i64, Dy: i64) -> i64 {
     let Dy1 : i64 = Dy + 1i64
     let ncoef : i64 = (Dx + 1i64) * Dy1
     let mut l : i64 = 0i64
-    while l < 256i64 {
+    while l < RS_NUSE {
         let p : i64 = RS_PRIMES[l as u64]
         let mut m : i64 = 0i64
         while m < ncoef { RS3_CRES[m as u64] = rs3_rawmod(m, p)   m = m + 1i64 }
@@ -1242,7 +1283,7 @@ fn rs3_consist(Dx: i64, Dy: i64) -> i64 {
                     acc = ((acc * rm) + inner) % p
                     a = a - 1i64
                 }
-                let rv : i64 = RS3_RES[((((r * Dy1) + s) * 256i64) + l) as u64]
+                let rv : i64 = RS3_RES[((((r * Dy1) + s) * 512i64) + l) as u64]
                 if acc != rv { return 0i64 - 1i64 }
                 s = s + 1i64
             }
@@ -1281,6 +1322,7 @@ fn rs_gamma3(fp: u64, fdz: i64, fdx: i64, fdy: i64, gp: u64, gdz: i64, gdx: i64,
     if RS_OVF != 0i64 { return 0i64 - 1i64 }
     let bnd : i64 = (gdz * rs_bits(fnorm)) + (fdz * rs_bits(gnorm))
     if (bnd + 2i64) > 464i64 { return 0i64 - 1i64 }
+    if rs_setnuse(bnd) < 0i64 { return 0i64 - 1i64 }      /* <= 16 primes: the historical rs3 window */
     RS3_DX = Dx   RS3_DY = Dy
     let Dy1 : i64 = Dy + 1i64
     rs3_nodes(fp, fdz, fdx, fdy, gp, gdz, gdx, gdy, Dx, Dy)

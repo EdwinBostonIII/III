@@ -103,3 +103,60 @@ OM validate8 rot 0 0 neg 0 0
 # collapsed to 780, and those 780 are EXACTLY the shapes containing a hardware MULTIPLY (the
 # classically SAT-hard 64-bit multiplier) -- named, not claimed.  cost64(rot_k)=3 for the decided.
 OM omega64 refuted 2676 decided 2676 undecided 780 matches 0 mul 780
+
+== OMEGA-2  THE FULL SETTLEMENT (2727_mathesis_rot64_omega2 / 2728_mathesis_census10 / 2729_mathesis_pattern_omega2 / 2730_mathesis_pilot30) ==
+# the Omega residual (780 MUL shapes) closed to ZERO by ENCODING, not capacity: SHARING (an
+# x-independent subtree is the same function of (c1,c2) at every sample -- built ONCE per CEGIS
+# round; the x-free shapes' mismatch OR over distinct targets is then UNSAT by unit propagation
+# alone), THE SHIFT BOX (a constant whose every occurrence is a shift AMOUNT has live box {0..w}
+# by the saturation law: total exhaustion, natively), THE HYBRID BOX (the shift/multiply
+# coupling: pin the amount constant to each box value and every multiplier operand goes concrete
+# -- fold or cmul; the >= w tail is the constant-0 function, the saturated operand feeds an
+# absorbing op), and THE BUDGET (the only per-sample FULL-multiplier class runs permanent seeds
+# {0, 2^(w-1)} -- t(0) = 0 forces the zero-divisor structure, t(2^(w-1)) = 1 forces the
+# multiplier constant ODD -- plus one sliding slot: three multipliers, inside the UNCHANGED
+# bv_bits caps, so the sealed 2726 pins cannot move).  THE CERTIFICATE, unchanged discipline:
+# the omega2 per-shape verdict equals the TOTAL width-8 brute oracle over ALL 3,456 classes,
+# for rot AND neg -- 0 disagreements, 0 undecided.
+O2 validate8 rot 0 0 neg 0 0
+# THE RESULT (width 64): every class decided -- 3,456 REFUTED, 0 undecided, 0 matches.  NO 2-op
+# program over the full 8-op ALU grammar computes rot_1 at the machine word.  With the 63/63
+# definiens (cost <= 3) and the sealed width-8 exhaustion: cost64(rot_1) = 3 EXACTLY -- the
+# question queued since Xi9, settled TOTALLY at the machine word.
+O2 omega64 refuted 3456 decided 3456 undecided 0 matches 0
+# THE CENSUS AT TEN TOKENS (envelope 7 -> 10: permutation slots 8 -> 12, flood cells 64 -> 144,
+# digit render 64 -> 128 bytes; the lifted organ re-anchored to the sealed n <= 7 values first;
+# two INDEPENDENT routes -- the permutation flood and the cycle-type partition arithmetic --
+# agree to the digit at every n.  n = 10 counts the iso-classes of 10^100 binary operations --
+# a googol of tables -- without enumerating one):
+T8 8 0 0 155682086691137947272042502251643461917498835481022016
+T8 8 1 0 8048575431238519331999571800
+T8 9 0 0 541851439802559836957713164869818405872834954135521300809902639457510935
+T8 9 1 0 24051927835861852500932966021650993560
+T8 10 0 0 2755731922398589065255809763441934634394385899578014939091916518138245006100594169510342419300
+T8 10 1 0 2755731922430783367615449408031031255131879354330
+# GAMMA-ORBIT COMPLETION on the new both-curve ground (d curve finds constructed verified
+# beyond-height distinct; every constructed point ON the curve in exact bigint):
+O 20 1 9 18 18 3 12
+O 30 1 18 36 36 3 21
+O 50 2 7 14 14 2 9
+# THE NORM-PRIME LAW extends (isqrt-certified primality): d=20 A carries {2,3,19,5,17,269,2287};
+# d=30 A carries {2,19,251,5,17,3,107,163,2609,492319} -- ten distinct primes, the richest row
+# set; d=50 B carries {3,5,19,2,2287}.  2287 appears on BOTH curves of the involution pair
+# {20, 50}: the class law's prime signature.
+N2 20 1 7
+N2 30 1 10
+N2 50 2 5
+# THE INVOLUTION CLASS LAW over the WHOLE [2,50] box: all SEVEN in-box pairs {x, x^2 mod cubes}
+# ({2,4} {3,9} {5,25} {6,36} {7,49} {12,18} {20,50}) confirmed in the existence sense
+# (A(x) <=> B(y) and B(x) <=> A(y)), ZERO refuting witness.
+I2 invol 7 0
+# THE PILOT AT 30: round 24 (NEW-D) chose d=22 and found A:4 -- THE PILOT'S SIXTH AUTONOMOUS
+# DISCOVERY (the box sweep's independent find, now reached by the pilot's own schedule); round
+# 27 chose d=23, EMPTY (the prime 23 joins the nonexistence inventory); rounds 25/28 are NAMED
+# schedule refusals (kind 9 -- a refusal keeps its coordinates, still a chained row).
+R 24 0 22 60 4 0
+R 27 0 23 60 0 0
+# THE PREFIX LAW: head(24) == the sealed Psi ledger head byte for byte; head(30) pinned across
+# two full runs.
+H head30 = b78b28fbc9202b0894cf324cb6396b208860665c2900aaaf08d3ef6410c171e5

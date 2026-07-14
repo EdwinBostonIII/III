@@ -1,0 +1,52 @@
+/* 2727_mathesis_rot64_omega2.iii -- GATE for THE FULL SETTLEMENT (campaign Omega-2).
+ *
+ * Omega refuted 2,676 of the 3,456 width-64 rot shape-classes and NAMED its residual: the 780
+ * shapes containing a hardware MULTIPLY, poisoned by encoding size (bb_mul emits ~35k clauses
+ * regardless of operand constness).  Omega-2 closes the residual to ZERO with encoding
+ * mechanisms only -- the bv_bits caps are UNTOUCHED (the sealed 2726 pins depend on them):
+ *
+ *   SHARING         an x-independent subtree is the same function of (c1,c2) at every sample:
+ *                   built ONCE per CEGIS round (the x-free shapes' mismatch OR over distinct
+ *                   targets is then UNSAT by unit propagation alone).
+ *   THE SHIFT BOX   a constant whose every occurrence is a shift AMOUNT has live box {0..w}
+ *                   (>= w saturates identically): total exhaustion, natively.
+ *   THE HYBRID BOX  the shift/multiply coupling -- pin the amount constant to each box value
+ *                   and every multiplier operand goes concrete (fold/cmul); the >= w tail is
+ *                   the constant-0 function (the saturated operand feeds an absorbing op).
+ *   THE BUDGET      the only per-sample FULL multiplier class (outer mul, const co-operand,
+ *                   mixed inner) runs permanent seeds {0, 2^(w-1)} (t(0)=0 forces the
+ *                   zero-divisor structure; t(2^(w-1))=1 forces the multiplier constant ODD)
+ *                   plus one sliding slot: three multipliers, the proven-feasible envelope.
+ *
+ * THE CERTIFICATE (width-8 ground truth): the omega2 per-shape verdict EQUALS the total brute
+ * oracle over ALL 3,456 classes, for rot AND neg -- 0 disagreements, 0 undecided.
+ *
+ * THE RESULT (width 64): ALL 3,456 classes REFUTED -- 0 undecided, 0 matches.  No 2-op program
+ * over the full 8-op ALU grammar computes rot_1 at the machine word; with the 63/63 definiens
+ * (cost <= 3) and the sealed width-8 exhaustion: cost_64(rot_1) = 3 EXACTLY, settled TOTALLY.
+ * EXIT 99. */
+module corpus_2727_mathesis_rot64_omega2
+
+extern @abi(c-msvc-x64) fn mr64_validate8b(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_val2_und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_omega2(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o2dec() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o2und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o2match() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_undn() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    /* [A] THE CERTIFICATE: sound + complete at width 8 against the total oracle, rot AND neg */
+    if mr64_validate8b(1i64) != 0i64 { return 20i32 }        /* rot: no disagreement */
+    if mr64_val2_und() != 0i64 { return 21i32 }              /* rot: nothing undecided at width 8 */
+    if mr64_validate8b(0i64) != 0i64 { return 22i32 }        /* neg: no disagreement (the finder works) */
+    if mr64_val2_und() != 0i64 { return 23i32 }              /* neg: nothing undecided at width 8 */
+
+    /* [B] THE RESULT at width 64: the FULL settlement -- 3,456 refuted, 0 undecided, 0 matches */
+    if mr64_omega2(1i64) != 3456i64 { return 30i32 }         /* every class refuted */
+    if mr64_o2match() != 0i64 { return 31i32 }               /* NO 2-op rotation anywhere */
+    if mr64_o2dec() != 3456i64 { return 32i32 }
+    if mr64_o2und() != 0i64 { return 33i32 }                 /* the Omega residual is CLOSED */
+    if mr64_undn() != 0i64 { return 34i32 }                  /* the refusal store is empty */
+    return 99i32
+}

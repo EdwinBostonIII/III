@@ -447,10 +447,10 @@ fn mp2_gcd(a0: i64, b0: i64) -> i64 {
     while b > 0i64 { let t : i64 = a % b   a = b   b = t }
     return a
 }
-var MP2_PU : [i64; 48]
-var MP2_PV : [i64; 48]
-var MP2_PW : [i64; 48]
-var MP2_PORG : [i64; 48]    /* 0 = a hunt find, 1 = reachable only by construction */
+var MP2_PU : [i64; 96]      /* lifted 48->96: d=30 has 18 finds -> up to 54 orbit points */
+var MP2_PV : [i64; 96]
+var MP2_PW : [i64; 96]
+var MP2_PORG : [i64; 96]    /* 0 = a hunt find, 1 = reachable only by construction */
 var MP2_PN : i64
 var MP2_CU : [i64; 3]       /* canonical scratch (global: two-local-array codegen hazard) */
 fn mp2_canon(u0: i64, v0: i64, w0: i64) -> i32 {
@@ -478,7 +478,7 @@ fn mp2_find_pt() -> i64 {
 fn mp2_add_pt(org: i64) -> i64 {
     let ex : i64 = mp2_find_pt()
     if ex >= 0i64 { return ex }
-    if MP2_PN >= 48i64 { return 0i64 - 1i64 }
+    if MP2_PN >= 96i64 { return 0i64 - 1i64 }
     MP2_PU[MP2_PN as u64] = MP2_CU[0u64]
     MP2_PV[MP2_PN as u64] = MP2_CU[1u64]
     MP2_PW[MP2_PN as u64] = MP2_CU[2u64]
@@ -651,4 +651,52 @@ fn mp2_box(hi: i64) -> i64 @export {
         d = d + 1i64
     }
     return total
+}
+
+/* ---- Psi/Omega2: THE INVOLUTION CLASS LAW over the WHOLE [2,50] box.  For each in-box pair
+ *      {x, y = x^2 mod cubes} the involution swaps the curves: A(x)>0 <=> B(y)>0 and B(x)>0 <=>
+ *      A(y)>0 (existence form -- the involution preserves POINTS, not heights, so counts may
+ *      differ, e.g. d=49 carries 5/6 partners inside height 60).  Run mp2_box(50) first.
+ *      Returns the number of pairs the law CONFIRMS; MP2_IVW = a refuting witness x (or 0). ---- */
+var MP2_IVP : [i64; 16]     /* the involution pairs, packed x,y */
+var MP2_IVW : i64
+fn mp2_ivw() -> i64 @export { return MP2_IVW }
+fn mp2_ex(d: i64) -> i64 {   /* 1 iff either curve of d collapses (d cube-free & in box) */
+    if MP2_BA[d as u64] < 0i64 { return 0i64 - 1i64 }   /* not cube-free / out of box */
+    let mut e : i64 = 0i64
+    if MP2_BA[d as u64] > 0i64 { e = 1i64 }
+    return e
+}
+fn mp2_exb(d: i64) -> i64 {
+    if MP2_BB[d as u64] < 0i64 { return 0i64 - 1i64 }
+    let mut e : i64 = 0i64
+    if MP2_BB[d as u64] > 0i64 { e = 1i64 }
+    return e
+}
+fn mp2_invol_box() -> i64 @export {
+    /* the 7 in-box involution pairs {x, x^2 mod cubes} */
+    MP2_IVP[0u64] = 2i64    MP2_IVP[1u64] = 4i64
+    MP2_IVP[2u64] = 3i64    MP2_IVP[3u64] = 9i64
+    MP2_IVP[4u64] = 5i64    MP2_IVP[5u64] = 25i64
+    MP2_IVP[6u64] = 6i64    MP2_IVP[7u64] = 36i64
+    MP2_IVP[8u64] = 7i64    MP2_IVP[9u64] = 49i64
+    MP2_IVP[10u64] = 12i64  MP2_IVP[11u64] = 18i64
+    MP2_IVP[12u64] = 20i64  MP2_IVP[13u64] = 50i64
+    MP2_IVW = 0i64
+    let mut confirmed : i64 = 0i64
+    let mut i : i64 = 0i64
+    while i < 7i64 {
+        let x : i64 = MP2_IVP[(i * 2i64) as u64]
+        let y : i64 = MP2_IVP[((i * 2i64) + 1i64) as u64]
+        let ax : i64 = mp2_ex(x)      /* A(x)>0 ? */
+        let bx : i64 = mp2_exb(x)     /* B(x)>0 ? */
+        let ay : i64 = mp2_ex(y)
+        let by : i64 = mp2_exb(y)
+        let mut ok : i64 = 1i64
+        if ax != by { ok = 0i64 }     /* A(x) <=> B(y) */
+        if bx != ay { ok = 0i64 }     /* B(x) <=> A(y) */
+        if ok == 1i64 { confirmed = confirmed + 1i64 } else { if MP2_IVW == 0i64 { MP2_IVW = x } }
+        i = i + 1i64
+    }
+    return confirmed
 }

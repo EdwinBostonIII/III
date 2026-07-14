@@ -1,0 +1,76 @@
+/* 2729_mathesis_pattern_omega2.iii -- GATE for THE PATTERN INSTRUMENTS ON THE NEW GROUND
+ * (campaign Omega-2: the discoveries Psi's box-to-50 surfaced, instrumented).
+ *
+ * ORBIT COMPLETION on the both-curve d's (finds / constructed / verified / only-by-construction /
+ * distinct; every constructed point ON the curve in exact bigint, verified == constructed):
+ *   d=20 A: 9 / 18 / 18 / 3 / 12   -- FOUR gamma-orbits; three partners beyond height 60
+ *   d=30 A: 18 / 36 / 36 / 3 / 21  -- SEVEN gamma-orbits: the richest carrier in the box
+ *   d=50 B: 7 / 14 / 14 / 2 / 9    -- THREE gamma-orbits on the involution partner's curve
+ *
+ * THE NORM-PRIME LAW extends to the new ground (isqrt-certified primality):
+ *   d=20 A carries {2, 3, 19, 5, 17, 269, 2287}   (7 distinct primes)
+ *   d=30 A carries {2, 19, 251, 5, 17, 3, 107, 163, 2609, 492319}   (10)
+ *   d=50 B carries {3, 5, 19, 2, 2287}   (5) -- 2287 appears on BOTH curves of the
+ *   involution pair {20, 50}: the class law's prime signature.
+ *
+ * THE INVOLUTION CLASS LAW over the WHOLE [2,50] box: for every in-box pair {x, x^2 mod cubes}
+ * ({2,4} {3,9} {5,25} {6,36} {7,49} {12,18} {20,50}), A(x) <=> B(y) and B(x) <=> A(y) in the
+ * existence sense -- 7 of 7 pairs CONFIRMED, zero refuting witness.  EXIT 99. */
+module corpus_2729_mathesis_pattern_omega2
+
+extern @abi(c-msvc-x64) fn mp2_orbit(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbf() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbc() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbv() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbt() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_orbn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_normprime(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_npr(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_nprn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_box(hi: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_invol_box() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp2_ivw() -> i64 from "mathesis_pattern.iii"
+
+fn chk_orbit(d: i64, curve: i64, f: i64, t: i64, v: i64, c: i64, n: i64) -> i64 {
+    if mp2_orbit(d, curve) != n { return 0i64 }
+    if mp2_orbf() != f { return 0i64 }
+    if mp2_orbt() != t { return 0i64 }
+    if mp2_orbv() != v { return 0i64 }
+    if mp2_orbc() != c { return 0i64 }
+    if mp2_orbn() != n { return 0i64 }
+    return 1i64
+}
+fn has_prime(p: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < mp2_nprn() { if mp2_npr(i) == p { return 1i64 }   i = i + 1i64 }
+    return 0i64
+}
+
+fn main() -> i32 {
+    /* [A] orbit completion on the new both-curve ground */
+    if chk_orbit(20i64, 1i64, 9i64, 18i64, 18i64, 3i64, 12i64) != 1i64 { return 10i32 }
+    if chk_orbit(30i64, 1i64, 18i64, 36i64, 36i64, 3i64, 21i64) != 1i64 { return 11i32 }
+    if chk_orbit(50i64, 2i64, 7i64, 14i64, 14i64, 2i64, 9i64) != 1i64 { return 12i32 }
+    /* [B] the norm-prime law on d=20 A */
+    if mp2_normprime(20i64, 1i64) != 7i64 { return 20i32 }
+    if mp2_nprn() != 7i64 { return 21i32 }
+    if has_prime(2i64) != 1i64 { return 22i32 }
+    if has_prime(269i64) != 1i64 { return 23i32 }
+    if has_prime(2287i64) != 1i64 { return 24i32 }
+    /* [C] d=30 A: ten distinct primes (the richest row set) */
+    if mp2_normprime(30i64, 1i64) != 10i64 { return 30i32 }
+    if mp2_nprn() != 10i64 { return 31i32 }
+    if has_prime(251i64) != 1i64 { return 32i32 }
+    if has_prime(2609i64) != 1i64 { return 33i32 }
+    if has_prime(492319i64) != 1i64 { return 34i32 }
+    /* [D] d=50 B: 2287 re-surfaces on the involution partner -- the pair's prime signature */
+    if mp2_normprime(50i64, 2i64) != 5i64 { return 40i32 }
+    if mp2_nprn() != 5i64 { return 41i32 }
+    if has_prime(2287i64) != 1i64 { return 42i32 }
+    if has_prime(19i64) != 1i64 { return 43i32 }
+    /* [E] THE INVOLUTION CLASS LAW over the whole box: 7/7 confirmed, no witness */
+    if mp2_box(50i64) != 133i64 { return 50i32 }             /* the sealed Psi-2 total re-derived */
+    if mp2_invol_box() != 7i64 { return 51i32 }
+    if mp2_ivw() != 0i64 { return 52i32 }
+    return 99i32
+}

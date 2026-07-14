@@ -736,6 +736,491 @@ fn mr64_omega(k: i64) -> i64 @export {
     return refuted
 }
 
+/* ================= CAMPAIGN OMEGA-2: THE MUL CLOSURE =================
+ * The Omega residual (780 shapes, all containing a hardware MULTIPLY) failed on ENCODING SIZE:
+ * bb_mul emits its full ~35k-clause / ~12k-var structure regardless of operand constness, so a
+ * mismatch over a few samples with muls blew the stream/var caps (0xFF -> undecided).  This tier
+ * fixes the encoding, NOT the engine: a NEW tier (omega2) so the sealed 2726 pins stay green.
+ *
+ *   CONST FOLDING    an op whose operands are BOTH structurally constant is computed NATIVELY
+ *                    (mr64_op) and emitted as bb_const -- zero clauses.
+ *   THE CMUL COLLAPSE  mul by a CONCRETE constant m = the shift-add over m's bits: popcount(m)-1
+ *                    ripple adders instead of the full 64-row multiplier.  Samples are chosen
+ *                    small-popcount, so mul-by-sample costs ~1 adder.
+ *   SHARING          an x-independent subtree is the SAME function of (c1,c2) at every sample --
+ *                    built ONCE per round and reused (a per-sample rebuild re-emits its clauses:
+ *                    that duplication was the whole residual).  The shared INNER covers the
+ *                    const-const-mul shapes; the shared ROOT covers the x-free shapes, whose
+ *                    mismatch OR over distinct targets is then UNSAT by unit propagation alone.
+ *   THE SHIFT BOX    a constant whose every occurrence is a shift AMOUNT has live box {0..w}
+ *                    (>= w saturates identically -- the SVIR shift law): such shapes are decided
+ *                    by TOTAL box exhaustion, natively, <= 65x65 candidates at the machine word
+ *                    (bb_equal on battery survivors: concrete shifts encode as zero-clause bit
+ *                    remaps).  Subsumes the no-constant shapes (empty boxes = one candidate).
+ *   THE BUDGET       a per-sample FULL multiplier (outer mul, const co-operand, an inner mixing
+ *                    x and a constant) costs ~35k clauses / ~147k stream words: three fill the
+ *                    UNCHANGED bv_bits envelope (the sealed 2726 pins depend on those caps), so
+ *                    exactly those shapes run permanent seeds {0, 2^63} (t(0)=0 forces the
+ *                    zero-divisor structure; t(2^63)=1 forces the multiplier constant ODD) plus
+ *                    one sliding refinement slot (UNSAT over a sample SUBSET is still a sound
+ *                    refutation); every other shape gets the full 200-sample budget.
+ *   THE NATIVE SCAN  a candidate from the model is first attacked NATIVELY (mr64_eval over a
+ *                    low-popcount battery) -- most counterexamples are found without a SAT call,
+ *                    and the samples they add keep the next round's encoding small.
+ *
+ * The certificate discipline is unchanged: mr64_validate8b must equal the TOTAL width-8 oracle
+ * over all 3,456 shapes for rot AND neg (0 disagreements, 0 undecided) before width 64 is
+ * trusted. */
+var MR64_BC : i64                /* constness of the node just built by mr64_op2/leaf builders */
+var MR64_BV : u64                /* its concrete value when MR64_BC == 1 */
+
+/* mul by a CONCRETE constant: shift-add over the bits of m (masked to the width). */
+fn mr64_cmul(a: u32, m0: u64) -> u32 {
+    let m : u64 = m0 & mr64_mask(MR64_W)
+    if m == 0u64 { return bb_const(0u64) }
+    let mut acc : u32 = 0u32
+    let mut have : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < MR64_W {
+        if ((m >> (j as u64)) & 1u64) == 1u64 {
+            let t : u32 = bb_shl(a, j as u64)
+            if have == 0i64 { acc = t   have = 1i64 } else { acc = bb_add(acc, t) }
+        }
+        j = j + 1i64
+    }
+    return acc
+}
+
+/* op(a,b) with structural constness (ac/av, bc/bv describe the operands); the RESULT's
+ * constness/value is left in MR64_BC/MR64_BV.  Every path sets both. */
+fn mr64_op2(op: i64, a: u32, ac: i64, av: u64, b: u32, bc: i64, bv: u64) -> u32 {
+    if ac == 1i64 { if bc == 1i64 {
+        MR64_BC = 1i64
+        MR64_BV = mr64_op(op, av, bv, MR64_W)
+        return bb_const(MR64_BV)
+    } }
+    MR64_BC = 0i64
+    MR64_BV = 0u64
+    if op == 0i64 { return bb_add(a, b) }
+    if op == 1i64 { return bb_sub(a, b) }
+    if op == 2i64 {
+        if ac == 1i64 { return mr64_cmul(b, av) }
+        if bc == 1i64 { return mr64_cmul(a, bv) }
+        return bb_mul(a, b)
+    }
+    if op == 3i64 { return bb_and(a, b) }
+    if op == 4i64 { return bb_or(a, b) }
+    if op == 5i64 { return bb_xor(a, b) }
+    /* shifts: a concrete amount is a constant shift (>= width saturates to the const-0 node --
+     * the RESULT is constant even though a is variable); a variable amount is the barrel. */
+    if bc == 1i64 {
+        if bv >= (MR64_W as u64) { MR64_BC = 1i64   MR64_BV = 0u64   return bb_const(0u64) }
+        if op == 6i64 { return bb_shl(a, bv) }
+        return bb_shr(a, bv)
+    }
+    return mr64_bb_shift_v(op, a, b)
+}
+
+/* the omega2 SYNTH root at concrete sample xval: x -> const, c1/c2 -> bb_var(1)/(2) -- unless the
+ * constant is PINNED (the hybrid box): a pinned constant is a concrete leaf, so every operation
+ * on it folds or cmuls exactly like a sample. */
+var MR64_PIN1 : i64 = 0i64 - 1i64      /* pin c1 to this value when >= 0 (the hybrid box) */
+var MR64_PIN2 : i64 = 0i64 - 1i64
+fn mr64_s2leaf(sel: i64, xval: u64) -> u32 {
+    if sel == 0i64 {
+        MR64_BC = 1i64
+        MR64_BV = xval & mr64_mask(MR64_W)
+        return bb_const(MR64_BV)
+    }
+    if sel == 1i64 { if MR64_PIN1 >= 0i64 {
+        MR64_BC = 1i64
+        MR64_BV = (MR64_PIN1 as u64) & mr64_mask(MR64_W)
+        return bb_const(MR64_BV)
+    } }
+    if sel == 2i64 { if MR64_PIN2 >= 0i64 {
+        MR64_BC = 1i64
+        MR64_BV = (MR64_PIN2 as u64) & mr64_mask(MR64_W)
+        return bb_const(MR64_BV)
+    } }
+    MR64_BC = 0i64
+    MR64_BV = 0u64
+    return bb_var(sel as u32)
+}
+fn mr64_synth2_root(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, xval: u64) -> u32 {
+    let an : u32 = mr64_s2leaf(l0, xval)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr64_s2leaf(l1, xval)
+    let bc2 : i64 = MR64_BC
+    let bv2 : u64 = MR64_BV
+    let cn : u32 = mr64_s2leaf(l2, xval)
+    let cc : i64 = MR64_BC
+    let cv : u64 = MR64_BV
+    if nest == 0i64 {
+        let inner : u32 = mr64_op2(oa, an, ac, av, bn, bc2, bv2)
+        let ic : i64 = MR64_BC
+        let iv : u64 = MR64_BV
+        return mr64_op2(ob, inner, ic, iv, cn, cc, cv)
+    }
+    let inner : u32 = mr64_op2(oa, bn, bc2, bv2, cn, cc, cv)
+    let ic2 : i64 = MR64_BC
+    let iv2 : u64 = MR64_BV
+    return mr64_op2(ob, an, ac, av, inner, ic2, iv2)
+}
+
+/* the omega2 VERIFY root at concrete constants: x -> bb_var(0), c1/c2 -> const */
+fn mr64_v2leaf(sel: i64, c1: u64, c2: u64) -> u32 {
+    if sel == 0i64 {
+        MR64_BC = 0i64
+        MR64_BV = 0u64
+        return bb_var(0u32)
+    }
+    MR64_BC = 1i64
+    if sel == 1i64 { MR64_BV = c1 & mr64_mask(MR64_W) } else { MR64_BV = c2 & mr64_mask(MR64_W) }
+    return bb_const(MR64_BV)
+}
+fn mr64_verify2(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    bb_reset(MR64_W as u64)
+    let an : u32 = mr64_v2leaf(l0, c1, c2)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr64_v2leaf(l1, c1, c2)
+    let bc2 : i64 = MR64_BC
+    let bv2 : u64 = MR64_BV
+    let cn : u32 = mr64_v2leaf(l2, c1, c2)
+    let cc : i64 = MR64_BC
+    let cv : u64 = MR64_BV
+    let mut root : u32 = 0u32
+    if nest == 0i64 {
+        let inner : u32 = mr64_op2(oa, an, ac, av, bn, bc2, bv2)
+        let ic : i64 = MR64_BC
+        let iv : u64 = MR64_BV
+        root = mr64_op2(ob, inner, ic, iv, cn, cc, cv)
+    } else {
+        let inner : u32 = mr64_op2(oa, bn, bc2, bv2, cn, cc, cv)
+        let ic2 : i64 = MR64_BC
+        let iv2 : u64 = MR64_BV
+        root = mr64_op2(ob, an, ac, av, inner, ic2, iv2)
+    }
+    let tgt : u32 = mr64_target_node(k)
+    let v : u8 = bb_equal(root, tgt)
+    if v == 1u8 { return 1i64 }
+    if v == 0u8 { MR64_CEX = bb_witness(0u32)   return 0i64 }
+    return 0i64 - 1i64
+}
+
+/* ---- SHARING: build the x-independent INNER once per round (per bb_reset).  Both its leaves
+ * are constants, which in the SYNTH phase are bb_vars -- so the inner (e.g. c1*c2: a full
+ * width-64 multiplier) would otherwise be re-emitted per sample.  The shared node carries
+ * synth-constness 0 (it contains solver variables). ---- */
+var MR64_SHIN : u32
+var MR64_SHHAVE : i64
+fn mr64_synth2_shared(nest: i64, oa: i64, l0: i64, l1: i64, l2: i64) -> i32 {
+    MR64_SHHAVE = 0i64
+    let mut la : i64 = l0
+    let mut lb : i64 = l1
+    if nest == 1i64 { la = l1   lb = l2 }
+    if la == 0i64 { return 0i32 }
+    if lb == 0i64 { return 0i32 }
+    let an : u32 = mr64_s2leaf(la, 0u64)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr64_s2leaf(lb, 0u64)
+    MR64_SHIN = mr64_op2(oa, an, ac, av, bn, MR64_BC, MR64_BV)
+    MR64_SHHAVE = 1i64
+    return 0i32
+}
+/* the synth root using the round's shared inner when one exists */
+fn mr64_synth2_root2(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, xval: u64) -> u32 {
+    if MR64_SHHAVE == 0i64 { return mr64_synth2_root(nest, oa, ob, l0, l1, l2, xval) }
+    let mut third : i64 = l2
+    if nest == 1i64 { third = l0 }
+    let tn : u32 = mr64_s2leaf(third, xval)
+    let tc : i64 = MR64_BC
+    let tv : u64 = MR64_BV
+    if nest == 0i64 { return mr64_op2(ob, MR64_SHIN, 0i64, 0u64, tn, tc, tv) }
+    return mr64_op2(ob, tn, tc, tv, MR64_SHIN, 0i64, 0u64)
+}
+
+/* the NATIVE counterexample scan: attack a concrete candidate with a low-popcount battery
+ * (0..7, every 2^j, then heavier probes), ordered so the sample it contributes keeps the next
+ * synth encoding SMALL.  1 = found (MR64_CEX set), 0 = battery exhausted. */
+fn mr64_native_cex(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    let mut t : i64 = 0i64
+    while t < 8i64 {
+        if mr64_eval(nest, oa, ob, l0, l1, l2, t as u64, c1, c2, MR64_W) != mr64_target(k, t as u64, MR64_W) {
+            MR64_CEX = t as u64
+            return 1i64
+        }
+        t = t + 1i64
+    }
+    let mut j : i64 = 3i64
+    while j < MR64_W {
+        let x : u64 = 1u64 << (j as u64)
+        if mr64_eval(nest, oa, ob, l0, l1, l2, x, c1, c2, MR64_W) != mr64_target(k, x, MR64_W) {
+            MR64_CEX = x
+            return 1i64
+        }
+        j = j + 1i64
+    }
+    j = 1i64
+    while j < MR64_W {
+        let x2 : u64 = (1u64 << (j as u64)) + 1u64
+        if mr64_eval(nest, oa, ob, l0, l1, l2, x2, c1, c2, MR64_W) != mr64_target(k, x2, MR64_W) {
+            MR64_CEX = x2
+            return 1i64
+        }
+        j = j + 1i64
+    }
+    let m : u64 = mr64_mask(MR64_W)
+    if mr64_eval(nest, oa, ob, l0, l1, l2, m, c1, c2, MR64_W) != mr64_target(k, m, MR64_W) { MR64_CEX = m   return 1i64 }
+    let am : u64 = 0xAAAAAAAAAAAAAAAAu64 & m
+    if mr64_eval(nest, oa, ob, l0, l1, l2, am, c1, c2, MR64_W) != mr64_target(k, am, MR64_W) { MR64_CEX = am   return 1i64 }
+    let fm : u64 = 0x5555555555555555u64 & m
+    if mr64_eval(nest, oa, ob, l0, l1, l2, fm, c1, c2, MR64_W) != mr64_target(k, fm, MR64_W) { MR64_CEX = fm   return 1i64 }
+    return 0i64
+}
+
+/* the omega2 CEGIS: sharing + the per-sample-multiplier budget (psmul shapes: seeds {0,1,2^63},
+ * cap 5, sliding window; others: the full budget), native-scan-first refinement.
+ * 1 = REFUTED, 0 = MATCH, -1 = undecided. */
+fn mr64_cegis2(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, k: i64, psmul: i64) -> i64 {
+    let mut cap : i64 = 200i64
+    if psmul == 1i64 {
+        /* seeds {0, 2^(w-1)} are permanent (t(0) = 0 forces the zero-divisor structure;
+         * t(2^(w-1)) = 1 forces the multiplier constant ODD -- and the top-bit seed MUST be
+         * width-relative: a fixed 2^63 masks to 0 at width 8 and collapses the window); slot 2
+         * starts at 1 and is the sliding refinement slot.  cap 3 = three full multipliers, the
+         * proven-feasible envelope of the UNCHANGED bv_bits caps (the sealed 2726 pins depend on
+         * those caps: they must not move). */
+        MR64_SAMP[0u64] = 0u64   MR64_SAMP[1u64] = 1u64 << ((MR64_W - 1i64) as u64)   MR64_SAMP[2u64] = 1u64
+        MR64_NSAMP = 3i64
+        cap = 3i64
+    } else {
+        MR64_SAMP[0u64] = 1u64   MR64_SAMP[1u64] = 2u64   MR64_SAMP[2u64] = 3u64   MR64_SAMP[3u64] = 0u64
+        MR64_NSAMP = 4i64
+    }
+    let mut xfree : i64 = 1i64
+    if l0 == 0i64 { xfree = 0i64 }
+    if l1 == 0i64 { xfree = 0i64 }
+    if l2 == 0i64 { xfree = 0i64 }
+    let mut rounds : i64 = 0i64
+    while rounds < 96i64 {
+        bb_reset(MR64_W as u64)
+        mr64_synth2_shared(nest, oa, l0, l1, l2)
+        /* an x-free shape's ROOT is x-independent: build it once; the mismatch OR over two
+         * distinct targets then forces root == t_i for BOTH -- UNSAT by propagation alone */
+        let mut shroot : u32 = 0u32
+        let mut havesh : i64 = 0i64
+        if xfree == 1i64 { shroot = mr64_synth2_root2(nest, oa, ob, l0, l1, l2, 0u64)   havesh = 1i64 }
+        let mut mnode : u32 = 0u32
+        let mut havem : i64 = 0i64
+        let mut i : i64 = 0i64
+        while i < MR64_NSAMP {
+            let mut r : u32 = shroot
+            if havesh == 0i64 { r = mr64_synth2_root2(nest, oa, ob, l0, l1, l2, MR64_SAMP[i as u64]) }
+            let d : u32 = bb_xor(r, bb_const(mr64_target(k, MR64_SAMP[i as u64], MR64_W)))
+            if havem == 0i64 { mnode = d   havem = 1i64 } else { mnode = bb_or(mnode, d) }
+            i = i + 1i64
+        }
+        let sv : u8 = bb_solve_zero(mnode)
+        if sv == 0xFFu8 { return 0i64 - 1i64 }
+        if sv == 1u8 { return 1i64 }                        /* UNSAT: REFUTED */
+        let mut c1c : u64 = 0u64
+        let mut c2c : u64 = 0u64
+        if MR64_PIN1 >= 0i64 { c1c = MR64_PIN1 as u64 }
+        else { if MR64_C1DAT == 1i64 { c1c = bb_witness(1u32) } }
+        if MR64_PIN2 >= 0i64 { c2c = MR64_PIN2 as u64 }
+        else { if MR64_C2DAT == 1i64 { c2c = bb_witness(2u32) } }
+        /* native scan first; the full bb verify only when the battery is silent */
+        let mut cex : i64 = mr64_native_cex(nest, oa, ob, l0, l1, l2, c1c, c2c, k)
+        if cex == 0i64 {
+            let vc : i64 = mr64_verify2(nest, oa, ob, l0, l1, l2, c1c, c2c, k)
+            if vc == 1i64 { MR64_OW1 = c1c as i64   MR64_OW2 = c2c as i64   return 0i64 }   /* MATCH */
+            if vc < 0i64 { return 0i64 - 1i64 }
+            cex = 1i64
+        }
+        /* fold the counterexample in (dup impossible: the model satisfied every sample) */
+        if MR64_NSAMP < cap {
+            MR64_SAMP[MR64_NSAMP as u64] = MR64_CEX
+            MR64_NSAMP = MR64_NSAMP + 1i64
+        } else {
+            /* sliding window: overwrite the oldest refinement slot (the seeds stay) */
+            let mut base : i64 = 3i64
+            if psmul == 1i64 { base = 2i64 }
+            MR64_SAMP[(base + (rounds % (cap - base))) as u64] = MR64_CEX
+        }
+        rounds = rounds + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+/* THE SHIFT-BOX EXHAUSTION: when every constant occurrence sits in a shift-AMOUNT slot, the
+ * live box is {0..w} per constant (every amount >= w saturates to the SAME const-0 program --
+ * the SVIR shift law), so the WHOLE candidate space is <= (w+1)^2 representatives: decide by
+ * total exhaustion, natively (battery), with bb_equal on survivors (concrete shift amounts
+ * encode as pure bit remaps -- zero clauses).  Sound AND complete; subsumes the no-constant
+ * shapes (an absent constant's box is {0}).  1 = REFUTED, 0 = MATCH, -1 = poison. */
+fn mr64_shiftbox(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, k: i64) -> i64 {
+    let mut c1hi : i64 = 0i64
+    if MR64_C1DAT == 1i64 { c1hi = MR64_W }
+    let mut c2hi : i64 = 0i64
+    if MR64_C2DAT == 1i64 { c2hi = MR64_W }
+    let mut c1 : i64 = 0i64
+    while c1 <= c1hi {
+        let mut c2 : i64 = 0i64
+        while c2 <= c2hi {
+            let cex : i64 = mr64_native_cex(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, k)
+            if cex == 0i64 {
+                let vc : i64 = mr64_verify2(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, k)
+                if vc == 1i64 { MR64_OW1 = c1   MR64_OW2 = c2   return 0i64 }
+                if vc < 0i64 { return 0i64 - 1i64 }
+            }
+            c2 = c2 + 1i64
+        }
+        c1 = c1 + 1i64
+    }
+    return 1i64
+}
+
+/* decide ONE shape with the omega2 engine: shift-amount-only constants -> the box exhaustion;
+ * everything else -> CEGIS with the sharing + per-sample-multiplier budget. */
+fn mr64_omega2_decide(sid: i64, k: i64) -> i64 @export {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    mr64_const_roles(nest, oa, ob, l0, l1, l2)
+    /* every constant occurrence in a shift-amount slot?  (nest 0: l1 under oa, l2 under ob;
+     * nest 1: l2 under oa.  l0 is always a data slot; nest 1's l1 likewise; a shift whose
+     * amount is the INNER expression is the barrel case, not a constant slot.) */
+    let mut shonly : i64 = 1i64
+    if l0 != 0i64 { shonly = 0i64 }
+    if nest == 0i64 {
+        if l1 != 0i64 { if oa != 6i64 { if oa != 7i64 { shonly = 0i64 } } }
+        if l2 != 0i64 { if ob != 6i64 { if ob != 7i64 { shonly = 0i64 } } }
+    } else {
+        if l1 != 0i64 { shonly = 0i64 }
+        if l2 != 0i64 { if oa != 6i64 { if oa != 7i64 { shonly = 0i64 } } }
+    }
+    if shonly == 1i64 { return mr64_shiftbox(nest, oa, ob, l0, l1, l2, k) }
+    /* THE HYBRID BOX -- the shift/multiply coupling: one constant is a shift AMOUNT (live box
+     * {0..w}: >= w saturates) in a shape that ALSO multiplies, so the plain CEGIS meets a barrel
+     * shifter TIMES a full multiplier per sample.  Pinning the amount constant to each box value
+     * makes every multiplier operand concrete (fold / cmul) or x-free (shared): the sub-question
+     * per pin is a cheap one-constant CEGIS.  The >= w tail is the constant-0 function -- the
+     * saturated operand feeds an absorbing op (0*y = 0) or the saturation IS the outer op -- so
+     * the w representative covers the whole tail, data occurrences of the pinned constant
+     * included (they are annihilated).  Cases:
+     *   A' (nest 0)  E = (l0 * l1) >> c_a   (outer shift amount, mul inner)
+     *   B  (nest 0)  E = (l0 << c_a) * l2   (inner shift amount, outer mul, const co-operand)
+     *   B' (nest 1)  E = l0 * (l1 << c_a)   (mirrored; l0 = x is a cmul, no hybrid needed) */
+    let mut hyb : i64 = 0i64
+    if nest == 0i64 {
+        if oa == 2i64 { if l2 != 0i64 { if ob == 6i64 { hyb = l2 }   if ob == 7i64 { hyb = l2 } } }
+        if hyb == 0i64 { if ob == 2i64 { if l2 != 0i64 { if l1 != 0i64 {
+            if oa == 6i64 { hyb = l1 }
+            if oa == 7i64 { hyb = l1 }
+        } } } }
+    } else {
+        if ob == 2i64 { if l0 != 0i64 { if l2 != 0i64 {
+            if oa == 6i64 { hyb = l2 }
+            if oa == 7i64 { hyb = l2 }
+        } } }
+    }
+    if hyb != 0i64 {
+        let mut anyund : i64 = 0i64
+        let mut v : i64 = 0i64
+        while v <= MR64_W {
+            if hyb == 1i64 { MR64_PIN1 = v } else { MR64_PIN2 = v }
+            let rc : i64 = mr64_cegis2(nest, oa, ob, l0, l1, l2, k, 0i64)
+            MR64_PIN1 = 0i64 - 1i64
+            MR64_PIN2 = 0i64 - 1i64
+            if rc == 0i64 { return 0i64 }          /* MATCH (witness in MR64_OW1/OW2) */
+            if rc < 0i64 { anyund = 1i64 }
+            v = v + 1i64
+        }
+        if anyund == 1i64 { return 0i64 - 1i64 }
+        return 1i64
+    }
+    /* the budget class: an outer MUL whose co-operand is a constant and whose inner MIXES x and
+     * a constant emits one FULL multiplier per sample -- everything else's muls fold (all-x
+     * inner: a per-sample constant, so the outer mul is a cmul), cmul (concrete co-operand), or
+     * share (x-free inner: built once per round) */
+    let mut ia : i64 = l0
+    let mut ib : i64 = l1
+    if nest == 1i64 { ia = l1   ib = l2 }
+    let mut innerhasx : i64 = 0i64
+    if ia == 0i64 { innerhasx = 1i64 }
+    if ib == 0i64 { innerhasx = 1i64 }
+    let mut innerallx : i64 = 0i64
+    if ia == 0i64 { if ib == 0i64 { innerallx = 1i64 } }
+    let mut third : i64 = l2
+    if nest == 1i64 { third = l0 }
+    let mut psmul : i64 = 0i64
+    if ob == 2i64 { if third != 0i64 { if innerhasx == 1i64 { if innerallx == 0i64 { psmul = 1i64 } } } }
+    return mr64_cegis2(nest, oa, ob, l0, l1, l2, k, psmul)
+}
+var MR64_O2DEC : i64
+var MR64_O2UND : i64
+var MR64_O2MATCH : i64
+var MR64_UNDS : [i64; 256]       /* the undecided sids, recorded (a refusal keeps its coordinates) */
+var MR64_UNDN : i64
+fn mr64_o2dec() -> i64 @export { return MR64_O2DEC }
+fn mr64_o2und() -> i64 @export { return MR64_O2UND }
+fn mr64_o2match() -> i64 @export { return MR64_O2MATCH }
+fn mr64_undn() -> i64 @export { return MR64_UNDN }
+fn mr64_undat(i: i64) -> i64 @export {
+    if i < 0i64 { return 0i64 - 1i64 }
+    if i >= MR64_UNDN { return 0i64 - 1i64 }
+    return MR64_UNDS[i as u64]
+}
+fn mr64_o2rec(sid: i64) -> i32 {
+    if MR64_UNDN < 256i64 { MR64_UNDS[MR64_UNDN as u64] = sid   MR64_UNDN = MR64_UNDN + 1i64 }
+    MR64_O2UND = MR64_O2UND + 1i64
+    return 0i32
+}
+/* the FULL width-64 omega2 sweep */
+fn mr64_omega2(k: i64) -> i64 @export {
+    MR64_W = 64i64
+    MR64_O2DEC = 0i64
+    MR64_O2UND = 0i64
+    MR64_O2MATCH = 0i64
+    MR64_UNDN = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let v : i64 = mr64_omega2_decide(sid, k)
+        if v == 1i64 { MR64_O2DEC = MR64_O2DEC + 1i64   refuted = refuted + 1i64 }
+        else { if v == 0i64 { MR64_O2DEC = MR64_O2DEC + 1i64   MR64_O2MATCH = MR64_O2MATCH + 1i64 } else { mr64_o2rec(sid) } }
+        sid = sid + 1i64
+    }
+    return refuted
+}
+/* the omega2 width-8 validation against the total oracle (the certificate) */
+var MR64_V2UND : i64
+fn mr64_val2_und() -> i64 @export { return MR64_V2UND }
+fn mr64_validate8b(k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR64_V2UND = 0i64
+    let mut bad : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let ce : i64 = mr64_omega2_decide(sid, k)
+        let br : i64 = mr64_brute_shape(sid, k, 8i64)
+        if ce == 1i64 { if br != 0i64 { bad = bad + 1i64 } }
+        else { if ce == 0i64 { if br != 1i64 { bad = bad + 1i64 } }
+               else { MR64_V2UND = MR64_V2UND + 1i64 } }
+        sid = sid + 1i64
+    }
+    return bad
+}
+
 /* ---- the width-8 GROUND-TRUTH ORACLE: does ANY (c1,c2) make shape sid compute target k? ---- */
 fn mr64_brute_shape(sid: i64, k: i64, w: i64) -> i64 {
     let nest : i64 = sid / 1728i64

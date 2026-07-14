@@ -366,6 +366,25 @@ OMEGA_CERT="$(printf '%s' "0|0|0|0|2676|2676|780|0|780|3456" | sha256sum | cut -
 echo "[mathesis] OMEGA_CERT = $OMEGA_CERT"
 echo "[mathesis] GREEN: campaign Omega sealed (the bb_solve_zero EXISTS-synthesis door -- bv_bits' dual of bb_equal, purely additive -- + the CEGIS engine, PROVEN sound+complete at width 8 against the total brute oracle over ALL 3,456 classes for rot AND neg: 0 disagreements, 0 undecided; at the machine word 2,676 classes REFUTED (0 admit a 2-op rotation), the Psi residual 2,638 collapsed to 780, and those 780 are EXACTLY the hardware-multiply shapes -- the classically SAT-hard 64-bit multiplier -- named; cost64(rot_k)=3 for the 2,676 decided classes)"
 
+echo "[mathesis] == [17] CAMPAIGN OMEGA-2 (THE FULL SETTLEMENT: the MUL residual to ZERO; the census at ten tokens; the pattern instruments on the new ground; the pilot at 30) =="
+gate 2727_mathesis_rot64_omega2   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 146   # sharing + shift/hybrid boxes + the budget: sound+complete at width 8 (0/0 both targets); width-64 refutes ALL 3,456 -- cost64(rot_1)=3 EXACTLY, total
+gate 2728_mathesis_census10       "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 147   # Burnside n=8,9,10 in bigint, two routes agree; n=10 = the iso-count of 10^100 operations; sealed n<=7 anchors re-verified through the lifted envelope
+gate 2729_mathesis_pattern_omega2 "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 148   # d=20/30/50 gamma-orbits completed (bigint-verified); norm-prime law extends (2287 on both curves of {20,50}); THE INVOLUTION CLASS LAW 7/7 over the whole box
+gate_slow 2730_mathesis_pilot30   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 149   # rounds 24..29: d=22 found (A:4, the SIXTH autonomous discovery); d=23 empty; prefix law; head(30) pinned twice
+grep -q "^O2 validate8 rot 0 0 neg 0 0$" "$PSILOG" || { echo "[mathesis] RED: the omega2 validation row drifted"; exit 150; }
+grep -q "^O2 omega64 refuted 3456 decided 3456 undecided 0 matches 0$" "$PSILOG" || { echo "[mathesis] RED: the omega2 full-settlement row drifted"; exit 151; }
+grep -q "^T8 10 0 0 2755731922398589065255809763441934634394385899578014939091916518138245006100594169510342419300$" "$PSILOG" || { echo "[mathesis] RED: the n=10 census row drifted"; exit 152; }
+grep -q "^T8 10 1 0 2755731922430783367615449408031031255131879354330$" "$PSILOG" || { echo "[mathesis] RED: the n=10 commutative census row drifted"; exit 153; }
+grep -q "^O 30 1 18 36 36 3 21$" "$PSILOG" || { echo "[mathesis] RED: the d=30 orbit-completion row drifted"; exit 154; }
+grep -q "^I2 invol 7 0$" "$PSILOG" || { echo "[mathesis] RED: the involution class law row drifted"; exit 155; }
+grep -q "^R 24 0 22 60 4 0$" "$PSILOG" || { echo "[mathesis] RED: the pilot d=22 discovery row drifted"; exit 156; }
+grep -q "^H head30 = b78b28fbc9202b0894cf324cb6396b208860665c2900aaaf08d3ef6410c171e5$" "$PSILOG" || { echo "[mathesis] RED: the pilot head(30) drifted"; exit 157; }
+# [OMEGA-2] THE CERTIFICATE: sha256 over the campaign's pinned facts (the full settlement + the
+# ten-token census + the orbit/norm/involution instruments + the pilot head).
+OMEGA2_CERT="$(printf '%s' "0|0|0|0|3456|3456|0|0|155682086691137947272042502251643461917498835481022016|8048575431238519331999571800|541851439802559836957713164869818405872834954135521300809902639457510935|24051927835861852500932966021650993560|2755731922398589065255809763441934634394385899578014939091916518138245006100594169510342419300|2755731922430783367615449408031031255131879354330|9|18|3|12|18|36|3|21|7|14|2|9|7|10|5|7|0|133|b78b28fbc9202b0894cf324cb6396b208860665c2900aaaf08d3ef6410c171e5" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] OMEGA2_CERT = $OMEGA2_CERT"
+echo "[mathesis] GREEN: campaign Omega-2 sealed (THE FULL SETTLEMENT: the Omega MUL residual 780 -> 0 by ENCODING inside the unchanged bv_bits caps -- sharing of x-independent subtrees, the shift box, the hybrid box, the odd-forcing seed budget -- the engine re-proven sound+complete at width 8 against the total oracle for rot AND neg, and at the machine word ALL 3,456 two-op shape-classes REFUTED: cost64(rot_1) = 3 EXACTLY, the question queued since Xi9 settled TOTALLY; the census lifted to TEN tokens -- the exact iso-count of 10^100 binary operations, two independent routes agreeing to the digit, 94 digits pinned; the gamma-orbits of d=20/30/50 completed and bigint-verified with the norm-prime law carrying 2287 across the involution pair; THE INVOLUTION CLASS LAW confirmed 7/7 over the whole box; the pilot found d=22 (A:4, its SIXTH autonomous discovery) and head(30) extends the ledger)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

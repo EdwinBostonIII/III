@@ -78,8 +78,8 @@ fn mce_mul_in(h: i64, v: i64) -> i64 {
 }
 
 /* ================= ROUTE 1: THE FLOOD ================= */
-var CE_P : [i64; 8]            /* the working permutation of [0..n-1] */
-var CE_MARK : [i64; 64]        /* cell visitation for the flood (n^2 <= 49) */
+var CE_P : [i64; 12]           /* the working permutation of [0..n-1] (n <= 10) */
+var CE_MARK : [i64; 144]       /* cell visitation for the flood (n^2 <= 100) */
 
 /* fixed points of P^L over [0..n-1]: count k with P^L(k) == k */
 fn mce_fixL(n: i64, ell: i64) -> i64 {
@@ -172,8 +172,8 @@ fn mce_route1(n: i64, comm: i64) -> i64 {
 }
 
 /* ================= ROUTE 2: THE PARTITION ARITHMETIC ================= */
-var CE_M : [i64; 8]            /* multiplicity vector m[1..n] (m[0] unused) */
-var CE_CL : [i64; 8]           /* the flat cycle-length list for the current type */
+var CE_M : [i64; 12]           /* multiplicity vector m[1..n] (m[0] unused; n <= 10) */
+var CE_CL : [i64; 12]          /* the flat cycle-length list for the current type */
 
 /* fixP over the current type (CE_CL[0..c-1]) at exponent L: sum of lengths dividing L */
 fn mce_typeFix(c: i64, ell: i64) -> i64 {
@@ -318,7 +318,7 @@ fn mce_route2(n: i64, comm: i64) -> i64 {
  * returns 0 = routes agree (result in CE_R1 == CE_R2); -1 refusal; -2 DISAGREEMENT (defect). */
 fn mce_burnside(n: i64, comm: i64) -> i64 @export {
     if n < 1i64 { return 0i64 - 1i64 }
-    if n > 7i64 { return 0i64 - 1i64 }
+    if n > 10i64 { return 0i64 - 1i64 }
     bc_seti(CE_NF, mce_fact(n))
     if mce_route1(n, comm) < 0i64 { return 0i64 - 1i64 }
     if mce_route2(n, comm) < 0i64 { return 0i64 - 1i64 }

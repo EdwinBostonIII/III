@@ -1238,6 +1238,83 @@ with the deciding engine PROVEN correct against total ground truth. **Named fron
 reduction "x·c is GF(2)-linear ⟺ c is 0 or a power of two" — would close them); the same CEGIS door
 now generalises to any 2-op synthesis question over the ALU at the machine word.
 
+## 23. CAMPAIGN Ω-2 — THE FULL SETTLEMENT (gates 2727–2730, stage [17], OMEGA2_CERT)
+
+Ω left 780 MUL shapes undecided at the machine word and named the obstruction: `bb_mul` emits its
+full ~35k-clause / ~12k-var structure regardless of operand constness, so a CEGIS mismatch over a
+few samples with multipliers blew the `bv_bits` stream/var caps (0xFF → undecided). Ω-2 closes the
+residual **to ZERO by ENCODING, not capacity** — the caps are UNTOUCHED, because the sealed 2726
+pins (2,676/780) *depend* on where they bind; lifting them would drift a sealed gate. A new tier
+(`omega2`) in `mathesis_rot64`, so the sealed Ω tier stays byte-identical.
+
+- **THE MECHANISMS** (each earns a named class of the residual):
+  1. **CONST FOLDING + THE CMUL COLLAPSE** — an op with two structurally-constant operands is
+     computed natively (zero clauses); mul by a CONCRETE constant m is the shift-add over m's bits
+     (samples are chosen low-popcount, so mul-by-sample ≈ one ripple adder).
+  2. **SHARING** — an x-independent subtree is the SAME function of (c1,c2) at every sample: built
+     ONCE per CEGIS round and reused. The per-sample rebuild was the whole capacity story (each
+     rebuild re-emits the multiplier's clauses). The shared INNER kills the const·const-mul shapes;
+     the shared ROOT kills the x-free shapes — their mismatch OR over two distinct targets forces
+     `root == t₀ ∧ root == t₁`, UNSAT by unit propagation alone, multipliers never consulted.
+     Measured: the 80 x-free and 12 const·const-mul residual classes went extinct at once.
+  3. **THE SHIFT BOX** — a constant whose every occurrence is a shift AMOUNT has live box {0..w}
+     (≥ w saturates identically — the SVIR shift law): total exhaustion, natively, ≤ 65×65
+     candidates; `bb_equal` on battery survivors costs zero clauses (concrete shifts are bit
+     remaps). Subsumes the no-constant shapes (an absent constant's box is {0}).
+  4. **THE HYBRID BOX** — the shift/multiply coupling (`(x⟪c)·c'`, `(x·c)⟫c'`, both nestings):
+     pin the amount constant to each box value and every multiplier operand goes concrete (fold /
+     cmul); the ≥ w tail is PROVABLY the constant-0 function (the saturated operand feeds an
+     absorbing op — 0·y=0 — or the saturation IS the outer op), so the w representative covers the
+     whole tail, data occurrences of the pinned constant included (annihilated). The last 20
+     residual classes (16 `shift·mul`, 4 `mul⟫shift`) die here.
+  5. **THE BUDGET** — the one class whose synth genuinely needs a FULL multiplier per sample
+     (outer mul, const co-operand, an inner MIXING x and a constant) runs permanent seeds
+     `{0, 2^(w−1)}` — `t(0)=0` forces the zero-divisor structure, `t(2^(w−1))=1` forces the
+     multiplier constant ODD — plus one sliding refinement slot: three multipliers, the
+     proven-feasible envelope of the unchanged caps. (The top-bit seed must be WIDTH-RELATIVE: a
+     fixed 2⁶³ masks to 0 at width 8 and collapses the window — caught by the certificate, R 0 4.)
+- **THE CERTIFICATE** (unchanged discipline): `mr64_validate8b` — the omega2 per-shape verdict
+  equals the TOTAL width-8 brute oracle over all 3,456 classes, **rot AND neg: 0 disagreements,
+  0 undecided**. Every mechanism above (sharing, boxes, pins, tail representative) is exercised
+  against ground truth at width 8 before width 64 is trusted.
+- **THE RESULT** (width 64, ~52 s — FASTER than Ω's partial sweep): **ALL 3,456 shape-classes
+  REFUTED — 0 undecided, 0 matches** (`O2 omega64 refuted 3456 decided 3456 undecided 0 matches 0`).
+  NO 2-op program over the full 8-op ALU grammar computes rot₁ at the machine word. With the Ψ
+  63/63 definiens (≤3) and the sealed width-8 exhaustion: **cost₆₄(rot₁) = 3 EXACTLY — the question
+  queued since Ξ9, settled TOTALLY at the machine word.** The undecided-sid store (`mr64_undat`, a
+  refusal keeps its coordinates) is pinned EMPTY.
+- **THE CENSUS AT TEN TOKENS** (`mathesis_census` envelope 7 → 10: permutation slots 8 → 12, flood
+  cells 64 → 144; `bc_render` digit scratch 64 → 128 bytes; gate 2728): Burnside over Sₙ in exact
+  bigint, the two independent routes (permutation flood / cycle-type partition arithmetic) agreeing
+  to the digit at n = 8, 9, 10 — **n = 10 full = 2755731922398589065255809763441934634394385899578
+  014939091916518138245006100594169510342419300 (94 digits): the exact iso-count of 10¹⁰⁰ binary
+  operations — a googol of tables — without enumerating one** (comm = 275573192243078336761544940
+  8031031255131879354330, 49 digits). The LIFTED organ is re-anchored to the sealed Ψ values first
+  (n=5 exact i64 both flavors, n=7 full digit-for-digit); n=11 refuses BY NAME.
+- **THE PATTERN INSTRUMENTS ON THE NEW GROUND** (gate 2729): the γ-orbits of Ψ's both-curve
+  discoveries COMPLETED and bigint-verified — d=20 A: 9 finds → 12 points (4 orbits, 3 partners
+  beyond height 60), d=30 A: 18 → 21 (SEVEN orbits, the richest carrier), d=50 B: 7 → 9 (3 orbits);
+  the norm-prime law extends (d=20 carries {2,3,19,5,17,269,2287}, d=30 ten distinct primes incl.
+  492319, d=50 {3,5,19,2,2287}) — **2287 appears on BOTH curves of the involution pair {20,50}: the
+  class law's prime signature**; and **THE INVOLUTION CLASS LAW is CONFIRMED over the WHOLE [2,50]
+  box — all seven pairs {x, x² mod cubes}, zero refuting witness** (`mp2_invol_box`, on top of the
+  box's sealed 133 finds re-derived in-gate).
+- **THE PILOT AT 30** (gate 2730, gate_slow): rounds 24–29 purely from the schedule — **round 24
+  chose d=22 and found A:4: THE SIXTH AUTONOMOUS DISCOVERY** (the box sweep's independent find,
+  reached by the pilot's own NEW-D schedule); round 27 d=23 EMPTY (the prime 23 joins the
+  nonexistence inventory); rounds 25/28 are NAMED schedule refusals (kind 9 — a refusal keeps its
+  coordinates, still a chained row). THE PREFIX LAW held (head(24) == the sealed Ψ head byte for
+  byte) and **head(30) = b78b28fb… pinned across two full runs**.
+
+**What Ω-2 establishes**: the machine-word 2-op synthesis question over the FULL ALU grammar is now
+TOTALLY decided for the canonical rotation — no residual, no caveat, the deciding engine re-proven
+sound + complete against total ground truth — and the encoding discipline that did it (sharing,
+saturation boxes, hybrid pinning, odd-forcing seeds) is a reusable vocabulary for making SAT-hard
+structure tractable WITHOUT touching solver capacity. The census now speaks to ten tokens by pure
+arithmetic. **Named frontier out of Ω-2**: rot_k for k ≠ 1 at width 64 (the engine is k-generic;
+63 sweeps ≈ an hour of gate_slow — priced, not run); the census at n = 11+ (the partition route
+scales; only bc_render's digit pool prices it); the pilot past 30.
+
 ---
 
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`

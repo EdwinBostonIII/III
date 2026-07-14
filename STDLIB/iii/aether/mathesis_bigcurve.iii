@@ -399,8 +399,13 @@ fn bc_divexact(q: i64, n: i64, g: i64) -> i64 @export {
 /* decimal digits of |h| + sign into the digit pool slot (64 bytes: [0]=length, then chars). */
 var BG_DG : [u8; 4096]
 fn bc_render(h: i64, slot: i64) -> i32 @export {
-    let base : i64 = slot * 64i64
-    var tmpd : [u8; 64]
+    let base : i64 = slot * 64i64        /* the digit pool has 64-byte slots; a render > 63 digits
+                                          * spills into the NEXT slot's bytes -- fine for a single
+                                          * render into a low slot (the census's n>=9 counts), the
+                                          * caller must not co-render into slot+1. */
+    var tmpd : [u8; 128]                 /* was 64 -- lifted so n<=10 census counts (<= 93 digits)
+                                          * render without a stack overflow; byte-identical for the
+                                          * <= 63-digit sealed callers. */
     let mut nd : i64 = 0i64
     bc_copy(27i64, h)
     if BC_N[27u64] == 0i64 { tmpd[0u64] = 48u8   nd = 1i64 }

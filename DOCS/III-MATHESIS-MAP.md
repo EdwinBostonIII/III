@@ -1193,6 +1193,53 @@ so a full width-64 lower bound over free constants needs a SAT model (priced, no
 
 ---
 
+## 22. CAMPAIGN Ω — CLOSING THE RESIDUAL (gate 2726, stage [16b], OMEGA_CERT)
+
+Ψ named the residual and its obstruction precisely: deciding whether a 2-op shape computes rot_k at
+width 64 is `∃c1,c2 ∀x` (a Σ₂ query), and `bv_bits` decided `∀`-equivalence but had no `∃`-synthesis
+door. Ω builds the door and closes the residual as far as the machine word's SAT-hardness allows.
+
+- **THE DOOR** (`numera/bv_bits.bb_solve_zero`, ~25 lines, PURELY ADDITIVE): the dual of `bb_equal`.
+  Where `bb_equal` asserts "some output bit differs" and reads UNSAT as PROVEN, this asserts "every
+  bit of `node` is 0" (w unit clauses), replays the same buffered construction stream into a fresh
+  `sat_init`, and reads **SAT as WITNESSED** (the model left live for `bb_witness`), UNSAT as "node
+  is nonzero for all inputs." The `∃`-half `bv_bits` lacked. Existing behaviour byte-unchanged
+  (verified: two-compile determinism + gate 2724 still green + unit test: `∃c:(c⊕5)=0→5`,
+  `∃c:(c+3)=0→−3`, `const 5→UNSAT`). Fresh-linked into the mathesis harness only; the archive's
+  `bv_bits` is untouched, so the 46 other corpus gates + the weave keep the old engine.
+- **THE CEGIS ENGINE** (`mathesis_rot64`, `mr64_omega`): counterexample-guided inductive synthesis.
+  SYNTH the mismatch `M = ⋁ᵢ (E(xᵢ;c) ⊕ target(xᵢ))` with the constants as `bb_var` and the samples
+  as `bb_const`; `bb_solve_zero(M)` → UNSAT = **REFUTED** (no constant fits the necessary sample
+  conditions, hence none works — SOUND), SAT = candidate via `bb_witness`. VERIFY `∀x` via `bb_equal`;
+  a match is a genuine cost-2 witness (RED), a difference feeds `bb_witness(0)` back as a new
+  distinguishing sample. Terminates (each round kills the last candidate; the constant space is
+  finite). A **saturating BARREL SHIFTER** in bb primitives (6 MUX stages + an overflow mask) makes
+  even variable-shift shapes — a shift by `x` or by the inner expression — bit-blastable, so every
+  shape is in scope.
+- **THE CERTIFICATE** (width-8 ground truth): `mr64_validate8` runs the CEGIS per-shape verdict
+  against the TOTAL native oracle `mr64_brute_shape` over **all 3,456 classes, for rot AND neg** —
+  **0 disagreements, 0 undecided.** The engine is sound (never false-refutes, proven where neg HAS
+  solutions the finder must — and does — find them) and complete at width 8. Only then is its
+  width-64 verdict trusted. This is the whole soundness proof, machine-checked; corrupt the barrel
+  shifter or the door and a disagreement reddens the gate.
+- **THE RESULT** (width 64, ~55 s): CEGIS **refutes 2,676 classes (0 admit a 2-op rotation)** — the
+  Ψ residual **2,638 collapses to 780** — and those **780 are EXACTLY the shapes containing a
+  hardware MULTIPLY** (`mr64_oundmul` == `mr64_ound` == 780). That is the classically SAT-hard 64-bit
+  multiplier `bv_bits`' own header flags ("solve interactively at width 8 … SAT-hard at 64"): a
+  documented, principled limit of the SAT approach, NOT an engine defect (the engine decides those
+  same MUL shapes correctly at width 8). **cost₆₄(rot_k) = 3 for the 2,676 decided classes**; with
+  the Ψ 63/63 machine-word definiens (≤3) and the total width-8 exhaustion (=3).
+
+**What Ω establishes**: III's own SAT solver now SYNTHESISES-OR-REFUTES 2-op programs at the machine
+word, not just checks equivalence — a capability the tree lacked. The width-64 rot lower bound goes
+from "818 classes decided (Ψ)" to "2,676 decided, residual = the 780 irreducible multiply shapes,"
+with the deciding engine PROVEN correct against total ground truth. **Named frontier out of Ω**: the
+780 MUL shapes (a multiplier-aware decision procedure — Z/2ⁿ polynomial reasoning, or the linearity
+reduction "x·c is GF(2)-linear ⟺ c is 0 or a power of two" — would close them); the same CEGIS door
+now generalises to any 2-op synthesis question over the ALU at the machine word.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,

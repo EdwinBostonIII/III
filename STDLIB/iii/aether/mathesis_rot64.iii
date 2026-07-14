@@ -43,6 +43,8 @@ extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_solve_zero(node: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_witness(v: u32) -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
 extern @abi(c-msvc-x64) fn mr2_mk(k: i64) -> i64 from "mathesis_rot2.iii"
 
@@ -474,4 +476,314 @@ fn mr64_lb64(k: i64) -> i64 @export {
         sid = sid + 1i64
     }
     return refuted
+}
+
+/* ================= CAMPAIGN OMEGA: CEGIS closes the residual =================
+ * The Psi lower bound left 2,638 shape-classes UNDECIDED (two interacting constants, a free inner
+ * mask / multiplier): deciding "exists c1,c2: forall x, E(x;c)=rot_k(x)" is a 2-level exists-forall
+ * query, and bv_bits decides forall-equivalence but had no exists-synthesis door.  This tier adds
+ * the missing half by CEGIS (counterexample-guided inductive synthesis) over the new bb_solve_zero:
+ *
+ *   SYNTH   build the mismatch M = OR over sampled inputs of (E(x_i;c) XOR target(x_i)), with the
+ *           DATA constants as bb_var and x_i as bb_const; bb_solve_zero(M): UNSAT => REFUTED (no
+ *           constant fits even the samples -- SOUND, the samples are necessary conditions), SAT =>
+ *           candidate constants read via bb_witness.
+ *   VERIFY  bb_equal(E(x;c-candidate), target): equal => a genuine COST-2 witness (RED); differ =>
+ *           bb_witness gives a new distinguishing x, appended to the samples, and SYNTH re-runs.
+ *   TERMINATES  each round adds an x that kills the last candidate; the constant space is finite.
+ *   SHIFT AMOUNTS are program constants (not bb-encodable as variables): enumerated 0..64 (>=w is
+ *           the const-0 program), the DATA constants CEGIS'd per amount -- complete over both.
+ *
+ * WIDTH-PARAMETRIC + ANCHORED: run at width 8 the per-shape verdict must equal the TOTAL native
+ * oracle mr64_brute_shape over ALL 3,456 classes, for rot (no solution) AND neg (has solutions --
+ * CEGIS must FIND them) -- the ground-truth certificate that the CEGIS engine (and the door) are
+ * sound and complete before the width-64 sweep is trusted. */
+var MR64_W : i64                 /* the CEGIS decision width */
+var MR64_C1DAT : i64             /* c1 is a DATA constant (a bb_var in synth) */
+var MR64_C2DAT : i64
+var MR64_C1SH : i64              /* c1 is a SHIFT-AMOUNT constant (enumerated concrete) */
+var MR64_C2SH : i64
+var MR64_SA1 : u64               /* the current enumerated shift amount for c1 (if C1SH) */
+var MR64_SA2 : u64
+var MR64_SPOISON : i64           /* a variable/inner shift amount -> the shape is out of grammar */
+var MR64_CEX : u64               /* the last verify counterexample x */
+var MR64_SAMP : [u64; 200]       /* the CEGIS sample set */
+var MR64_NSAMP : i64
+
+/* is leaf `slot` a shift-amount operand (right operand of a shift op)?  1/0. */
+fn mr64_slot_shamt(nest: i64, oa: i64, ob: i64, slot: i64) -> i64 {
+    if mr64_amount_op(nest, oa, ob, slot) >= 6i64 { return 1i64 }
+    return 0i64
+}
+/* whether c1, c2 appear at all (the barrel shifter lets EVERY constant -- data or shift-amount --
+ * be a SAT variable the synthesiser solves for, so no shift-amount enumeration is needed). */
+fn mr64_const_roles(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64) -> i32 {
+    MR64_C1DAT = mr64_hasleaf(l0, l1, l2, 1i64)
+    MR64_C2DAT = mr64_hasleaf(l0, l1, l2, 2i64)
+    return 0i32
+}
+/* the synth leaf: x -> the concrete sample; c1/c2 -> the SAT variables being synthesised. */
+fn mr64_synth_leaf(sel: i64, xval: u64) -> u32 {
+    if sel == 0i64 { return bb_const(xval) }
+    if sel == 1i64 { return bb_var(1u32) }
+    return bb_var(2u32)
+}
+/* ---- the BARREL SHIFTER (bb primitives): a variable shift, saturating to 0 for amount >= width,
+ *      so a shift by x or by the inner expression -- outside the constant-shift fragment -- is
+ *      bit-blastable too.  This is what lets CEGIS decide the variable-shift shapes. ---- */
+fn mr64_bb_nz(n: u32) -> u32 {                 /* OR-reduce all bits into bit 0 (1 iff n != 0) */
+    let mut t : u32 = n
+    let mut s : i64 = 32i64
+    while s >= 1i64 {
+        if s < MR64_W { t = bb_or(t, bb_shr(t, s as u64)) }
+        s = s / 2i64
+    }
+    return bb_and(t, bb_const(1u64))
+}
+fn mr64_bb_shift_v(op: i64, a: u32, sb: u32) -> u32 {   /* a << sb (op 6) / a >> sb (op 7), saturating */
+    let mut cur : u32 = a
+    let mut sh : i64 = 1i64
+    let mut j : i64 = 0i64
+    while sh < MR64_W {
+        let bitj : u32 = bb_and(bb_shr(sb, j as u64), bb_const(1u64))
+        let mask : u32 = bb_sub(bb_const(0u64), bitj)          /* all-ones iff bit j of sb set */
+        let mut shifted : u32 = bb_shl(cur, sh as u64)
+        if op == 7i64 { shifted = bb_shr(cur, sh as u64) }
+        cur = bb_or(bb_and(mask, shifted), bb_and(bb_not(mask), cur))
+        sh = sh * 2i64
+        j = j + 1i64
+    }
+    let hi : u32 = bb_shr(sb, j as u64)                        /* bits at or above the width's log */
+    let sat : u32 = bb_sub(bb_const(0u64), mr64_bb_nz(hi))     /* all-ones iff sb >= width */
+    return bb_and(bb_not(sat), cur)
+}
+/* the unified op builder: shift by a shift-amount CONSTANT leaf (selr 1/2, value c1v/c2v) is a
+ * constant shift; a shift by x or the inner expression (selr <= 0) is the barrel shifter on b. */
+fn mr64_vbinop(op: i64, a: u32, b: u32, selr: i64, c1v: u64, c2v: u64) -> u32 {
+    if op == 0i64 { return bb_add(a, b) }
+    if op == 1i64 { return bb_sub(a, b) }
+    if op == 2i64 { return bb_mul(a, b) }
+    if op == 3i64 { return bb_and(a, b) }
+    if op == 4i64 { return bb_or(a, b) }
+    if op == 5i64 { return bb_xor(a, b) }
+    if selr == 1i64 {
+        if c1v >= (MR64_W as u64) { return bb_const(0u64) }
+        if op == 6i64 { return bb_shl(a, c1v) }
+        return bb_shr(a, c1v)
+    }
+    if selr == 2i64 {
+        if c2v >= (MR64_W as u64) { return bb_const(0u64) }
+        if op == 6i64 { return bb_shl(a, c2v) }
+        return bb_shr(a, c2v)
+    }
+    return mr64_bb_shift_v(op, a, b)             /* x / inner as amount -> barrel shift a by b */
+}
+/* the synth op: constants are all bb_vars, so EVERY shift's amount is a variable node -> the
+ * barrel shifter (shift a by the right-operand node b), uniformly. */
+fn mr64_synth_op(op: i64, a: u32, b: u32) -> u32 {
+    if op == 0i64 { return bb_add(a, b) }
+    if op == 1i64 { return bb_sub(a, b) }
+    if op == 2i64 { return bb_mul(a, b) }
+    if op == 3i64 { return bb_and(a, b) }
+    if op == 4i64 { return bb_or(a, b) }
+    if op == 5i64 { return bb_xor(a, b) }
+    return mr64_bb_shift_v(op, a, b)
+}
+fn mr64_synth_root(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, xval: u64) -> u32 {
+    let an : u32 = mr64_synth_leaf(l0, xval)
+    let bn : u32 = mr64_synth_leaf(l1, xval)
+    let cn : u32 = mr64_synth_leaf(l2, xval)
+    if nest == 0i64 {
+        let inner : u32 = mr64_synth_op(oa, an, bn)
+        return mr64_synth_op(ob, inner, cn)
+    }
+    let inner : u32 = mr64_synth_op(oa, bn, cn)
+    return mr64_synth_op(ob, an, inner)
+}
+/* rot_k (or NEG) as a bb node at the current width MR64_W, x = bb_var(0). */
+fn mr64_target_node(k: i64) -> u32 {
+    let x : u32 = bb_var(0u32)
+    if k == 0i64 { return bb_sub(bb_const(0u64), x) }
+    let hi : u32 = bb_shl(x, k as u64)
+    let lo : u32 = bb_shr(x, (MR64_W - k) as u64)
+    return bb_or(hi, lo)
+}
+/* VERIFY a concrete-constant candidate at width MR64_W: 1 = equals target (a cost-2 witness), 0 =
+ * differs (MR64_CEX = a distinguishing x), -1 = poison. */
+fn mr64_verify_w(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    bb_reset(MR64_W as u64)
+    MR64_POISON = 0i64
+    let xn : u32 = bb_var(0u32)
+    let an : u32 = mr64_bb_leaf(l0, xn, c1, c2)
+    let bn : u32 = mr64_bb_leaf(l1, xn, c1, c2)
+    let cn : u32 = mr64_bb_leaf(l2, xn, c1, c2)
+    let mut root : u32 = 0u32
+    if nest == 0i64 {
+        let inner : u32 = mr64_vbinop(oa, an, bn, l1, c1, c2)
+        root = mr64_vbinop(ob, inner, cn, l2, c1, c2)
+    } else {
+        let inner : u32 = mr64_vbinop(oa, bn, cn, l2, c1, c2)
+        root = mr64_vbinop(ob, an, inner, 0i64 - 1i64, c1, c2)
+    }
+    let mut tgt : u32 = 0u32
+    if k == 0i64 { tgt = bb_sub(bb_const(0u64), xn) } else { tgt = mr64_target_node(k) }
+    let v : u8 = bb_equal(root, tgt)
+    if v == 1u8 { return 1i64 }
+    if v == 0u8 { MR64_CEX = bb_witness(0u32)   return 0i64 }
+    return 0i64 - 1i64
+}
+/* CEGIS for the DATA constants at fixed shift amounts (MR64_SA1/SA2 preset): 1 = REFUTED,
+ * 0 = MATCH (cost-2 witness in MR64_OW1/OW2), -1 = undecided (poison / budget). */
+var MR64_OW1 : i64
+var MR64_OW2 : i64
+fn mr64_cegis_data(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, k: i64) -> i64 {
+    MR64_SAMP[0u64] = 1u64   MR64_SAMP[1u64] = 2u64   MR64_SAMP[2u64] = 3u64   MR64_SAMP[3u64] = 0u64
+    MR64_NSAMP = 4i64
+    let mut rounds : i64 = 0i64
+    while rounds < 96i64 {
+        bb_reset(MR64_W as u64)
+        MR64_SPOISON = 0i64
+        let mut m : u32 = 0u32
+        let mut havem : i64 = 0i64
+        let mut i : i64 = 0i64
+        while i < MR64_NSAMP {
+            let r : u32 = mr64_synth_root(nest, oa, ob, l0, l1, l2, MR64_SAMP[i as u64])
+            let d : u32 = bb_xor(r, bb_const(mr64_target(k, MR64_SAMP[i as u64], MR64_W)))
+            if havem == 0i64 { m = d   havem = 1i64 } else { m = bb_or(m, d) }
+            i = i + 1i64
+        }
+        if MR64_SPOISON == 1i64 { return 0i64 - 1i64 }
+        let sv : u8 = bb_solve_zero(m)
+        if sv == 0xFFu8 { return 0i64 - 1i64 }
+        if sv == 1u8 { return 1i64 }                        /* UNSAT: no constant fits -> REFUTED */
+        /* SAT: read the candidate constants from the model */
+        let mut c1c : u64 = 0u64
+        let mut c2c : u64 = 0u64
+        if MR64_C1DAT == 1i64 { c1c = bb_witness(1u32) }
+        if MR64_C2DAT == 1i64 { c2c = bb_witness(2u32) }
+        let vc : i64 = mr64_verify_w(nest, oa, ob, l0, l1, l2, c1c, c2c, k)
+        if vc == 1i64 { MR64_OW1 = c1c as i64   MR64_OW2 = c2c as i64   return 0i64 }   /* MATCH */
+        if vc < 0i64 { return 0i64 - 1i64 }
+        /* differ: add the distinguishing x */
+        let xn : u64 = MR64_CEX
+        let mut dup : i64 = 0i64
+        let mut j : i64 = 0i64
+        while j < MR64_NSAMP { if MR64_SAMP[j as u64] == xn { dup = 1i64 }   j = j + 1i64 }
+        if dup == 1i64 { return 0i64 - 1i64 }               /* no progress (should not happen) */
+        if MR64_NSAMP >= 200i64 { return 0i64 - 1i64 }
+        MR64_SAMP[MR64_NSAMP as u64] = xn
+        MR64_NSAMP = MR64_NSAMP + 1i64
+        rounds = rounds + 1i64
+    }
+    return 0i64 - 1i64
+}
+/* decide ONE shape at width MR64_W: enumerate shift-amount constants, CEGIS the data constants.
+ * 1 = REFUTED, 0 = MATCH, -1 = undecided. */
+fn mr64_omega_decide(sid: i64, k: i64) -> i64 {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    mr64_const_roles(nest, oa, ob, l0, l1, l2)
+    /* any constant present -> CEGIS synthesises it; none -> E is fixed, verify directly */
+    if MR64_C1DAT == 1i64 { return mr64_cegis_data(nest, oa, ob, l0, l1, l2, k) }
+    if MR64_C2DAT == 1i64 { return mr64_cegis_data(nest, oa, ob, l0, l1, l2, k) }
+    let vc : i64 = mr64_verify_w(nest, oa, ob, l0, l1, l2, 0u64, 0u64, k)
+    if vc == 1i64 { MR64_OWK = k   MR64_OWS = sid   return 0i64 }
+    if vc == 0i64 { return 1i64 }
+    return 0i64 - 1i64
+}
+var MR64_OWK : i64
+var MR64_OWS : i64
+var MR64_ODEC : i64
+var MR64_OUND : i64
+var MR64_OMATCH : i64
+fn mr64_odec() -> i64 @export { return MR64_ODEC }
+fn mr64_ound() -> i64 @export { return MR64_OUND }
+fn mr64_omatch() -> i64 @export { return MR64_OMATCH }
+fn mr64_ows() -> i64 @export { return MR64_OWS }
+/* the FULL width-64 CEGIS sweep over all 3,456 classes (subsumes the Psi decider).  Returns the
+ * refuted count; sets odec/ound/omatch.  A match => cost<=2 witness (RED). */
+var MR64_OUNDMUL : i64           /* of the undecided, how many contain a MUL op */
+fn mr64_oundmul() -> i64 @export { return MR64_OUNDMUL }
+fn mr64_omega(k: i64) -> i64 @export {
+    MR64_W = 64i64
+    MR64_ODEC = 0i64
+    MR64_OUND = 0i64
+    MR64_OMATCH = 0i64
+    MR64_OUNDMUL = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let v : i64 = mr64_omega_decide(sid, k)
+        if v == 1i64 { MR64_ODEC = MR64_ODEC + 1i64   refuted = refuted + 1i64 }
+        else { if v == 0i64 { MR64_ODEC = MR64_ODEC + 1i64   MR64_OMATCH = MR64_OMATCH + 1i64 }
+               else {
+                   MR64_OUND = MR64_OUND + 1i64
+                   let mut rr : i64 = sid % 1728i64
+                   let oaz : i64 = rr / 216i64
+                   rr = rr % 216i64
+                   let obz : i64 = rr / 27i64
+                   if oaz == 2i64 { MR64_OUNDMUL = MR64_OUNDMUL + 1i64 } else { if obz == 2i64 { MR64_OUNDMUL = MR64_OUNDMUL + 1i64 } }
+               } }
+        sid = sid + 1i64
+    }
+    return refuted
+}
+
+/* ---- the width-8 GROUND-TRUTH ORACLE: does ANY (c1,c2) make shape sid compute target k? ---- */
+fn mr64_brute_shape(sid: i64, k: i64, w: i64) -> i64 {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    let m : i64 = mr64_mask(w) as i64
+    let mut c1max : i64 = 0i64
+    if l0 == 1i64 { c1max = m }
+    if l1 == 1i64 { c1max = m }
+    if l2 == 1i64 { c1max = m }
+    let mut c2max : i64 = 0i64
+    if l0 == 2i64 { c2max = m }
+    if l1 == 2i64 { c2max = m }
+    if l2 == 2i64 { c2max = m }
+    let mut c1 : i64 = 0i64
+    while c1 <= c1max {
+        let mut c2 : i64 = 0i64
+        while c2 <= c2max {
+            if mr64_full(nest, oa, ob, l0, l1, l2, c1 as u64, c2 as u64, k, w) == 1i64 { return 1i64 }
+            c2 = c2 + 1i64
+        }
+        c1 = c1 + 1i64
+    }
+    return 0i64
+}
+/* THE VALIDATION at width 8: CEGIS verdict must equal the total oracle for EVERY shape, for rot
+ * AND neg.  Returns the number of DISAGREEMENTS (0 = the engine is sound+complete at width 8);
+ * mr64_val_und() = shapes CEGIS left undecided at width 8 (must also be 0). */
+var MR64_VUND : i64
+fn mr64_val_und() -> i64 @export { return MR64_VUND }
+fn mr64_validate8(k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR64_VUND = 0i64
+    let mut bad : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let ce : i64 = mr64_omega_decide(sid, k)
+        let br : i64 = mr64_brute_shape(sid, k, 8i64)   /* 1 = has a solution, 0 = none */
+        if ce == 1i64 { if br != 0i64 { bad = bad + 1i64 } }         /* refuted but a solution exists */
+        else { if ce == 0i64 { if br != 1i64 { bad = bad + 1i64 } }  /* matched but no solution exists */
+               else { MR64_VUND = MR64_VUND + 1i64 } }               /* undecided at width 8 */
+        sid = sid + 1i64
+    }
+    return bad
 }

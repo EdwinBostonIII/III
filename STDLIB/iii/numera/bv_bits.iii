@@ -489,6 +489,58 @@ fn bb_witness(v: u32) -> u64 @export {
     return val
 }
 
+/* THE EXISTENTIAL DOOR (the dual of bb_equal): 0 iff SOME input assignment drives every bit of
+ * `node` to 0 (SAT -- the satisfying assignment is LEFT LIVE for bb_witness), 1 iff no assignment
+ * can (UNSAT -- node is nonzero for all inputs), 0xFF on any capacity/input error.  Where bb_equal
+ * asserts "some output bit differs" and reads UNSAT as PROVEN, this asserts "every bit of node is
+ * zero" (w unit clauses) and reads SAT as WITNESSED.  It is the exists-half CEGIS needs: point it
+ * at a mismatch node over sampled inputs (constants as bb_var, samples as bb_const) and a SAT
+ * verdict yields candidate constants via bb_witness; UNSAT is a REFUTATION (no constant fits the
+ * samples).  Snapshots/restores the var+stream cursors, so the DAG survives for further calls --
+ * identical discipline to bb_equal, purely additive (no existing door's behaviour changes). */
+fn bb_solve_zero(node: u32) -> u8 @export {
+    if BB_ERR == 1u8 { return 0xFFu8 }
+    if node == BB_SENT { return 0xFFu8 }
+    if node >= BB_NN { return 0xFFu8 }
+    let save_nv : u32 = BB_NV
+    let save_sp : u64 = BB_SP
+    let save_ncl : u64 = BB_NCL
+    /* assert every bit of node is 0: a unit clause (~bit_i) per bit */
+    let mut i : u64 = 0u64
+    while i < BB_W {
+        bb_cl1(bb_neg(bb_bit(node, i)))
+        i = i + 1u64
+    }
+    let mut verdict : u8 = 0xFFu8
+    if BB_ERR == 0u8 {
+        let irc : i32 = sat_init(BB_NV)
+        if irc == 0i32 {
+            let mut sp : u64 = 0u64
+            let mut bad : u8 = 0u8
+            while sp < BB_SP {
+                let nl : u32 = BB_STREAM[sp]
+                let mut q : u64 = 0u64
+                while q < (nl as u64) {
+                    BB_CL[q] = BB_STREAM[sp + 1u64 + q]
+                    q = q + 1u64
+                }
+                let rc : i32 = sat_add_clause((&BB_CL as u64) as *u32, nl)
+                if rc != 0i32 { bad = 1u8 }
+                sp = sp + (nl as u64) + 1u64
+            }
+            if bad == 0u8 {
+                let sv : i32 = sat_solve()
+                if sv == BB_SAT_SAT { verdict = 0u8 }      /* SAT: node forced to 0, model live */
+                if sv == BB_SAT_UNSAT { verdict = 1u8 }    /* UNSAT: node is nonzero for all inputs */
+            }
+        }
+    }
+    BB_NV = save_nv
+    BB_SP = save_sp
+    BB_NCL = save_ncl
+    return verdict
+}
+
 /* ============================================================================================================
  * THE EVALUATOR -- the circuit EXECUTES (the half that makes the substrate ONE, not two).
  *

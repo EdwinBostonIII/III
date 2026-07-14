@@ -93,3 +93,13 @@ R 23 2 5 43 57 39
 H head18 = 18a0495c7556cc3011d64d4aa32b96f1a188773c18acbc7df24524a9539e67a6
 H head24 = f6d76f9979683613e5025568cde8270e1fd695e60207b50d8e84192397f553f7
 # the prefix law: head(18) == the sealed Chi ledger head byte for byte; head(24) pinned across two runs.
+
+== OMEGA  CLOSING THE RESIDUAL (2726_mathesis_rot64_omega) ==
+# the bb_solve_zero exists-synthesis door + CEGIS.  THE CERTIFICATE (width 8): the CEGIS per-shape
+# verdict equals the total brute oracle over ALL 3,456 classes, rot AND neg -- 0 disagreements,
+# 0 undecided (the engine is sound + complete before its width-64 verdict is trusted).
+OM validate8 rot 0 0 neg 0 0
+# THE RESULT (width 64): 2,676 classes refuted (0 admit a 2-op rotation), the Psi residual 2,638
+# collapsed to 780, and those 780 are EXACTLY the shapes containing a hardware MULTIPLY (the
+# classically SAT-hard 64-bit multiplier) -- named, not claimed.  cost64(rot_k)=3 for the decided.
+OM omega64 refuted 2676 decided 2676 undecided 780 matches 0 mul 780

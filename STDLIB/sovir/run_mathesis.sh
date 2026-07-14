@@ -330,6 +330,12 @@ echo "[mathesis] CHI_CERT = $CHI_CERT"
 echo "[mathesis] GREEN: campaign Chi sealed (the judge's third universe decides the harvested tier and ORDERS the six constructed points; the 4^16 refusal DISCHARGED: 178,981,952 structures, 109 species, 21 citizens, the two ontology organs unified by the carrier-12 product law; the involution class law CONFIRMED over all seven pairs with d=225 delivering the predicted three curve-B identities; units REFUTED as the pattern's driver; the pilot found d=19 (A:4) and head(18) extends the ledger)"
 
 echo "[mathesis] == [16] CAMPAIGN PSI (the universal reach: gamma-orbit completion, the box to 50, THE CENSUS BEYOND ENUMERATION, the width-64 rot settlement, the pilot at 24) =="
+# Omega's fresh bv_bits (the +bb_solve_zero exists-synthesis door): compiled here and linked BEFORE
+# the archive so mathesis_rot64's CEGIS references resolve and the fresh bb_* win; the archive's
+# bv_bits is untouched, so every OTHER harness's gates keep the old (additively-compatible) engine.
+BVO="$RUN/bv_bits.o"
+timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/numera/bv_bits.iii" --compile-only --out "$BVO" >/dev/null 2>"$RUN/bv_bits.err" || { echo "[mathesis] RED: bv_bits compile"; exit 129; }
+RADFACE+=("$BVO")
 for t in mathesis_census mathesis_rot64; do
     o="$RUN/$t.o"
     [[ -f "$o" ]] || timeout 180 "$IIIS" "$III_ROOT/STDLIB/iii/aether/$t.iii" --compile-only --out "$o" >/dev/null 2>"$RUN/$t.err" || { echo "[mathesis] RED: $t compile"; exit 130; }
@@ -351,6 +357,14 @@ grep -q "^D 20 9 2$" "$PSILOG" || { echo "[mathesis] RED: the d=20 both-curve ro
 PSI_CERT="$(printf '%s' "2483527537094825|254429900|30468670170912|91267244789189735259|63|818|2638|311056|4|8|2|42|133|f6d76f9979683613e5025568cde8270e1fd695e60207b50d8e84192397f553f7" | sha256sum | cut -d' ' -f1)"
 echo "[mathesis] PSI_CERT = $PSI_CERT"
 echo "[mathesis] GREEN: campaign Psi sealed (THE CENSUS BEYOND ENUMERATION -- the exact iso-count of all binary operations on n=5,6,7 tokens in bigint, two routes agreeing, n=7 counting 7^49 ~ 2.56e41 operations without enumeration; cost64(rot_k)<=3 PROVEN at the machine word for all 63 rotations by III's own SAT solver, cost8=3 total, 818 shape-classes refuted at width 64; d=19's gamma-orbit COMPLETED with two partners constructed beyond hunt height; the box to 50 found d=20/d=50 on both curves and d=30 carrying 18; the norm-prime law generalized with isqrt-certified primality; the pilot found d=20 and extends the ledger to head(24))"
+
+echo "[mathesis] == [16b] CAMPAIGN OMEGA (closing the Psi residual: the exists-synthesis door + CEGIS) =="
+gate_slow 2726_mathesis_rot64_omega "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 143   # bb_solve_zero + CEGIS: sound+complete at width 8 (0/0 both targets); width-64 closes 2,676, residual = the 780 MUL shapes
+grep -q "^OM validate8 rot 0 0 neg 0 0$" "$PSILOG" || { echo "[mathesis] RED: the omega validation row drifted"; exit 144; }
+grep -q "^OM omega64 refuted 2676 decided 2676 undecided 780 matches 0 mul 780$" "$PSILOG" || { echo "[mathesis] RED: the omega width-64 row drifted"; exit 145; }
+OMEGA_CERT="$(printf '%s' "0|0|0|0|2676|2676|780|0|780|3456" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] OMEGA_CERT = $OMEGA_CERT"
+echo "[mathesis] GREEN: campaign Omega sealed (the bb_solve_zero EXISTS-synthesis door -- bv_bits' dual of bb_equal, purely additive -- + the CEGIS engine, PROVEN sound+complete at width 8 against the total brute oracle over ALL 3,456 classes for rot AND neg: 0 disagreements, 0 undecided; at the machine word 2,676 classes REFUTED (0 admit a 2-op rotation), the Psi residual 2,638 collapsed to 780, and those 780 are EXACTLY the hardware-multiply shapes -- the classically SAT-hard 64-bit multiplier -- named; cost64(rot_k)=3 for the 2,676 decided classes)"
 
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then

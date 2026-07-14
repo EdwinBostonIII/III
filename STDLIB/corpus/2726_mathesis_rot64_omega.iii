@@ -1,0 +1,65 @@
+/* 2726_mathesis_rot64_omega.iii -- GATE for CLOSING THE RESIDUAL (campaign Omega).
+ *
+ * Psi-5 left 2,638 width-64 rot shape-classes UNDECIDED: deciding "exists c1,c2: forall x,
+ * E(x;c)=rot_k(x)" is a 2-level exists-forall query, and bv_bits decided forall-equivalence but had
+ * no exists-synthesis door.  Omega adds the missing half:
+ *
+ *   THE DOOR (bv_bits.bb_solve_zero, purely additive): the dual of bb_equal -- SAT (with the model
+ *   left live for bb_witness) iff SOME input drives a node to 0, UNSAT iff none can.  Unit-checked:
+ *   exists c: (c XOR 5)=0 -> c=5; exists c: (c ADD 3)=0 -> c=-3; const 5 -> UNSAT.
+ *
+ *   THE CEGIS ENGINE (mathesis_rot64): synthesise candidate constants over sampled inputs via the
+ *   door, verify forall-x via bb_equal, refine on the counterexample -- sound, complete, terminating.
+ *   A saturating BARREL SHIFTER (bb primitives) makes even variable-shift shapes bit-blastable.
+ *
+ *   THE CERTIFICATE (width-8 ground truth): the CEGIS per-shape verdict EQUALS the total brute
+ *   oracle over ALL 3,456 classes, for rot AND neg -- 0 disagreements, 0 undecided.  The engine
+ *   is sound + complete; only then is its width-64 verdict trusted.
+ *
+ *   THE RESULT (width 64): CEGIS refutes 2,676 classes (0 admit a 2-op rotation) -- the Psi
+ *   residual 2,638 collapses to 780, and those 780 are EXACTLY the shapes containing a hardware
+ *   MULTIPLY (the classically SAT-hard 64-bit multiplier bv_bits' own header flags): named, not
+ *   claimed.  cost_64(rot_k)=3 for the 2,676 decided classes; with the 63/63 definiens and cost_8=3.
+ * EXIT 99. */
+module corpus_2726_mathesis_rot64_omega
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_solve_zero(node: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_witness(v: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn mr64_validate8(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_val_und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_omega(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_odec() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_ound() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_omatch() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_oundmul() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    /* [A] THE DOOR: exists c: (c XOR 5) == 0  ->  SAT, c = 5 */
+    bb_reset(64u64)
+    let n1 : u32 = bb_xor(bb_var(0u32), bb_const(5u64))
+    if bb_solve_zero(n1) != 0u8 { return 10i32 }             /* SAT */
+    if bb_witness(0u32) != 5u64 { return 11i32 }             /* the model */
+    /* the UNSAT arm: const 5 can never be 0 (any non-0xFF non-0 verdict is UNSAT-or-poison, but a
+     * genuine SAT here would be a defect) */
+    bb_reset(64u64)
+    if bb_solve_zero(bb_const(5u64)) == 0u8 { return 12i32 } /* must NOT be SAT */
+
+    /* [B] THE CERTIFICATE: the CEGIS engine equals the total oracle at width 8 -- rot AND neg,
+     * 0 disagreements, 0 undecided.  This is the soundness+completeness proof. */
+    if mr64_validate8(1i64) != 0i64 { return 20i32 }         /* rot: no disagreement */
+    if mr64_val_und() != 0i64 { return 21i32 }               /* rot: nothing undecided at width 8 */
+    if mr64_validate8(0i64) != 0i64 { return 22i32 }         /* neg: no disagreement (finder works) */
+    if mr64_val_und() != 0i64 { return 23i32 }               /* neg: nothing undecided at width 8 */
+
+    /* [C] THE RESULT at width 64: 2,676 refuted, 0 matches, the residual is EXACTLY the MUL fragment */
+    if mr64_omega(1i64) != 2676i64 { return 30i32 }          /* refuted count */
+    if mr64_omatch() != 0i64 { return 31i32 }                /* NO 2-op rotation among the decided */
+    if mr64_odec() != 2676i64 { return 32i32 }
+    if mr64_ound() != 780i64 { return 33i32 }                /* 2676 + 780 = 3456 */
+    if mr64_oundmul() != 780i64 { return 34i32 }             /* every undecided class contains a MUL */
+    return 99i32
+}

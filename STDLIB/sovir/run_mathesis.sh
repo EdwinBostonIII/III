@@ -385,6 +385,26 @@ OMEGA2_CERT="$(printf '%s' "0|0|0|0|3456|3456|0|0|155682086691137947272042502251
 echo "[mathesis] OMEGA2_CERT = $OMEGA2_CERT"
 echo "[mathesis] GREEN: campaign Omega-2 sealed (THE FULL SETTLEMENT: the Omega MUL residual 780 -> 0 by ENCODING inside the unchanged bv_bits caps -- sharing of x-independent subtrees, the shift box, the hybrid box, the odd-forcing seed budget -- the engine re-proven sound+complete at width 8 against the total oracle for rot AND neg, and at the machine word ALL 3,456 two-op shape-classes REFUTED: cost64(rot_1) = 3 EXACTLY, the question queued since Xi9 settled TOTALLY; the census lifted to TEN tokens -- the exact iso-count of 10^100 binary operations, two independent routes agreeing to the digit, 94 digits pinned; the gamma-orbits of d=20/30/50 completed and bigint-verified with the norm-prime law carrying 2287 across the involution pair; THE INVOLUTION CLASS LAW confirmed 7/7 over the whole box; the pilot found d=22 (A:4, its SIXTH autonomous discovery) and head(30) extends the ledger)"
 
+echo "[mathesis] == [18] CAMPAIGN OMEGA-3 (THE UNIVERSAL ROTATION THEOREM: cost64(rot_k)=3 for EVERY k; the census at eleven tokens; the pilot at 36) =="
+echo "[mathesis] [18] gates 2731-2733 pay the 62-rotation universal sweep in full (~45 min total, ~15 min each) ..."
+gate_slow 2731_mathesis_rot64_universal1 "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 158   # the EXTENDED certificate (all 8 width-8 targets, 27,648 verdicts, 0/0) + k=2..22: 72,576 refuted, 0 und, 0 matches
+gate_slow 2732_mathesis_rot64_universal2 "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 159   # k=23..43 (incl. the half-word swap k=32): 72,576 refuted, 0 und, 0 matches
+gate_slow 2733_mathesis_rot64_universal3 "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 160   # k=44..63: 69,120 refuted -- THE UNIVERSAL THEOREM: cost64(rot_k)=3 for every k in 1..63
+gate_slow 2734_mathesis_census11         "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 161   # Burnside n=11 bigint, two routes agree (119/62 digits); n=10 anchor == sealed; n=12 refuses
+gate_slow 2735_mathesis_pilot36          "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 162   # rounds 30..35: d=26 found (A:3, the SEVENTH autonomous discovery); d=25 EMPTY (involution confirmed); head(36) pinned twice
+grep -q "^U3 validate8 all-eight-targets 0 0$" "$PSILOG" || { echo "[mathesis] RED: the extended certificate row drifted"; exit 163; }
+grep -q "^U3 sweep k2..k22 refuted 72576 undecided 0 matches 0$" "$PSILOG" || { echo "[mathesis] RED: the universal sweep row 1 drifted"; exit 164; }
+grep -q "^U3 sweep k23..k43 refuted 72576 undecided 0 matches 0$" "$PSILOG" || { echo "[mathesis] RED: the universal sweep row 2 drifted"; exit 165; }
+grep -q "^U3 sweep k44..k63 refuted 69120 undecided 0 matches 0$" "$PSILOG" || { echo "[mathesis] RED: the universal sweep row 3 drifted"; exit 166; }
+grep -q "^T9 11 0 0 25548134043714192564627592359898060492413365614765979623395725725208082687322534509496712372506123634918408242423944102$" "$PSILOG" || { echo "[mathesis] RED: the n=11 census row drifted"; exit 167; }
+grep -q "^R 33 0 26 60 3 0$" "$PSILOG" || { echo "[mathesis] RED: the pilot d=26 discovery row drifted"; exit 168; }
+grep -q "^H head36 = aa4e38be8c6cc3532ae121a3a1470dbc440d654290f29abbad51dc7419db9641$" "$PSILOG" || { echo "[mathesis] RED: the pilot head(36) drifted"; exit 169; }
+# [OMEGA-3] THE CERTIFICATE: sha256 over the campaign's pinned facts (the extended certificate +
+# the three sweep partitions + the eleven-token census + the pilot rows and head).
+OMEGA3_CERT="$(printf '%s' "0|0|72576|0|0|72576|0|0|69120|0|0|25548134043714192564627592359898060492413365614765979623395725725208082687322534509496712372506123634918408242423944102|13513302615133133128014689228630596983478739041461798638894834|25|0|26|3|aa4e38be8c6cc3532ae121a3a1470dbc440d654290f29abbad51dc7419db9641" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] OMEGA3_CERT = $OMEGA3_CERT"
+echo "[mathesis] GREEN: campaign Omega-3 sealed (THE UNIVERSAL ROTATION THEOREM: the extended width-8 certificate -- the engine equals the total oracle for EVERY width-8 target, all eight, 27,648 verdicts 0/0 -- and the 62-rotation width-64 sweep: 214,272 decisions, EVERY class refuted, 0 undecided, 0 matches; with the sealed k=1 settlement and the 63/63 definiens, cost64(rot_k) = 3 EXACTLY for every k in 1..63 -- the rotation family's 2-op question CLOSED at the machine word, universally; the census reaches ELEVEN tokens -- the exact iso-count of 11^121 ~ 10^126 binary operations, 119 digits, two independent routes agreeing, the n=10 anchor byte-identical, n=12 refused by name; the pilot found d=26 (A:3, its SEVENTH autonomous discovery), confirmed the involution law's d=25 emptiness from its own schedule, and head(36) extends the ledger)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

@@ -1,0 +1,20 @@
+/* 2732_mathesis_rot64_universal2.iii -- GATE for THE UNIVERSAL ROTATION THEOREM, part 2 of 3
+ * (campaign Omega-3): the sweep k = 23..43 -- 21 rotations x 3,456 classes = 72,576 decisions,
+ * every class REFUTED, 0 undecided, 0 matches.  The range includes k = 32, the half-word swap
+ * (the rotation with the most algebraic structure: rot_32 is an involution and a ring
+ * automorphism candidate -- still no 2-op spelling).  The engine's certificate is gate 2731's
+ * extended width-8 validation.  EXIT 99. */
+module corpus_2732_mathesis_rot64_universal2
+
+extern @abi(c-msvc-x64) fn mr64_omega3(klo: i64, khi: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3ref() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3match() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr64_omega3(23i64, 43i64) != 72576i64 { return 30i32 }
+    if mr64_o3ref() != 72576i64 { return 31i32 }
+    if mr64_o3und() != 0i64 { return 32i32 }
+    if mr64_o3match() != 0i64 { return 33i32 }
+    return 99i32
+}

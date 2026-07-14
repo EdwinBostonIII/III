@@ -1315,6 +1315,54 @@ arithmetic. **Named frontier out of Ω-2**: rot_k for k ≠ 1 at width 64 (the e
 63 sweeps ≈ an hour of gate_slow — priced, not run); the census at n = 11+ (the partition route
 scales; only bc_render's digit pool prices it); the pilot past 30.
 
+## 24. CAMPAIGN Ω-3 — THE UNIVERSAL ROTATION THEOREM (gates 2731–2735, stage [18], OMEGA3_CERT)
+
+Ω-2 settled cost₆₄(rot₁) = 3 totally; the engine is k-generic. Ω-3 pays the priced frontier in
+full: the theorem lifted from the canonical rotation to the WHOLE family.
+
+- **THE EXTENDED CERTIFICATE** (gate 2731 [A]): the omega2 per-shape verdict equals the TOTAL
+  width-8 brute oracle for **EVERY width-8 target — neg AND all seven rotations k = 1..7** —
+  8 × 3,456 = **27,648 verdicts, 0 disagreements, 0 undecided**. Every mechanism (sharing, the
+  shift box, the hybrid box, the odd-forcing budget) is certified against ground truth over the
+  whole target family, not two representatives.
+- **THE UNIVERSAL SWEEP** (the range door `mr64_omega3(klo,khi)` — accumulating counters that
+  never average an undecided away; three gate-sized partitions, ~15 min each): 62 rotations ×
+  3,456 shape-classes = **214,272 width-64 decisions — EVERY class refuted, 0 undecided,
+  0 matches** (k=2..22: 72,576; k=23..43 incl. the half-word swap k=32: 72,576; k=44..63:
+  69,120). NO 2-op program over the full 8-op ALU grammar computes ANY rotation at the machine
+  word. With the sealed Ω-2 k=1 settlement and the Ψ 63/63 definiens (≤3):
+
+      **cost₆₄(rot_k) = 3 EXACTLY, FOR EVERY k ∈ 1..63 — THE UNIVERSAL ROTATION THEOREM.**
+
+  The question Ξ9 opened as "2 ≤ cost(rot_k) ≤ 3" (THEOREM-0005, one-op refutation) is CLOSED at
+  the machine word, universally: a rotation costs exactly three ALU operations, and the machine
+  proved both bounds itself — the upper by bit-blasting its own three spellings, the lower by
+  synthesising-or-refuting every two-op candidate shape against its own SAT solver, the engine
+  certified sound + complete against total ground truth at every width-8 target first.
+- **THE CENSUS AT ELEVEN TOKENS** (gate 2734; the guard was the ONLY price — the standing arrays
+  already held n=11: CE_M/CE_CL indices 0..11, 121 ≤ 144 flood cells, 119 digits < 128 render
+  scratch): Burnside over S₁₁ in exact bigint, the two independent routes agreeing to the digit —
+  **n=11 full = 2554813404371419256462759235989806049241336561476597962339572572520808268732253
+  4509496712372506123634918408242423944102 (119 digits): the exact iso-count of 11¹²¹ ≈ 10¹²⁶
+  binary operations** (comm: 62 digits); the n=10 anchor re-verified byte-identical against the
+  sealed Ω-2 digits; n=12 refuses BY NAME (arrays 16, render 192, a 479M-permutation flood — the
+  next envelope turn, priced).
+- **THE PILOT AT 36** (gate 2735, gate_slow): rounds 30–35 — **round 30 chose d=25, the
+  involution partner of the empty d=5, and CONFIRMED the class law's emptiness prediction from
+  its own schedule**; **round 33 chose d=26 and found A:3 — THE SEVENTH AUTONOMOUS DISCOVERY**
+  (2·13, the box sweep's independent find reached by the pilot's own NEW-D schedule); rounds
+  31/34 named schedule refusals. THE PREFIX LAW held (head(30) == the sealed Ω-2 head) and
+  **head(36) = aa4e38be… pinned across two full runs**.
+
+**What Ω-3 establishes**: the first UNIVERSAL exact-cost theorem of the mathesis arc — not one
+rotation, not a sample, but the entire family, with the deciding engine's soundness proof
+extended to every target the ground-truth oracle can express. The pilot has now confirmed the
+involution class law from its own schedule (d=25) — the machine's conjecture engine and its
+autonomous experimenter closing a loop no human steered. **Named frontier out of Ω-3**: the
+census at n=12 (the 479M-perm flood ≈ 40+ min/flavor — a priced gate_slower tier, or the
+partition route alone with a stated single-route scope); 3-op cost questions (the CEGIS door
+generalises: cost(rot_k ∘ rot_j)? cost of byte-swap?); the pilot past 36.
+
 ---
 
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`

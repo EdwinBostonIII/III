@@ -1202,6 +1202,31 @@ fn mr64_omega2(k: i64) -> i64 @export {
     }
     return refuted
 }
+/* ---- Omega-3: THE UNIVERSAL RANGE DOOR -- the full-settlement sweep for EVERY k in
+ * [klo..khi], accumulated.  Returns the refuted total; undecided/match totals are separate
+ * counters, never averaged away.  62 sweeps at ~1 min each lift cost64(rot_k) = 3 from the
+ * settled k = 1 to the WHOLE rotation family. ---- */
+var MR64_O3REF : i64
+var MR64_O3UND : i64
+var MR64_O3MATCH : i64
+fn mr64_o3ref() -> i64 @export { return MR64_O3REF }
+fn mr64_o3und() -> i64 @export { return MR64_O3UND }
+fn mr64_o3match() -> i64 @export { return MR64_O3MATCH }
+fn mr64_omega3(klo: i64, khi: i64) -> i64 @export {
+    MR64_O3REF = 0i64
+    MR64_O3UND = 0i64
+    MR64_O3MATCH = 0i64
+    let mut k : i64 = klo
+    while k <= khi {
+        let rf : i64 = mr64_omega2(k)
+        MR64_O3REF = MR64_O3REF + rf
+        MR64_O3UND = MR64_O3UND + MR64_O2UND
+        MR64_O3MATCH = MR64_O3MATCH + MR64_O2MATCH
+        k = k + 1i64
+    }
+    return MR64_O3REF
+}
+
 /* the omega2 width-8 validation against the total oracle (the certificate) */
 var MR64_V2UND : i64
 fn mr64_val2_und() -> i64 @export { return MR64_V2UND }

@@ -182,7 +182,11 @@ fn main() -> i32 {
     if chk(10i64, 0i64) != 1i64 { return 40i32 }
     set_n10comm()
     if chk(10i64, 1i64) != 1i64 { return 41i32 }
-    /* [E] the envelope refusal is NAMED, never garbage */
-    if mce_burnside(11i64, 0i64) != (0i64 - 1i64) { return 50i32 }
+    /* [E] the envelope-refusal MECHANISM is NAMED, never garbage -- checked at a FAR boundary
+     * (the boundary-arm law, paid for by campaign Omega-3: a gate that pins the CURRENT
+     * envelope boundary reddens on every future lift -- the guard moved 10 -> 11 and this arm's
+     * original n=11 form fired; the exact boundary is the owning campaign's PROBE measurement,
+     * the newest census gate documents it) */
+    if mce_burnside(99i64, 0i64) != (0i64 - 1i64) { return 50i32 }
     return 99i32
 }

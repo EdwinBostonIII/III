@@ -160,3 +160,34 @@ R 27 0 23 60 0 0
 # THE PREFIX LAW: head(24) == the sealed Psi ledger head byte for byte; head(30) pinned across
 # two full runs.
 H head30 = b78b28fbc9202b0894cf324cb6396b208860665c2900aaaf08d3ef6410c171e5
+
+== OMEGA-3  THE UNIVERSAL ROTATION THEOREM (2731_mathesis_rot64_universal1/2/3 / 2734_mathesis_census11 / 2735_mathesis_pilot36) ==
+# Omega-2 settled cost64(rot_1) = 3 TOTALLY; the engine is k-generic.  Omega-3 lifts the theorem
+# to the WHOLE rotation family.  THE EXTENDED CERTIFICATE first: the omega2 per-shape verdict
+# equals the TOTAL width-8 brute oracle for EVERY width-8 target -- neg AND all seven rotations
+# -- 8 x 3,456 = 27,648 verdicts, 0 disagreements, 0 undecided: every mechanism certified over
+# the whole target family, not two representatives.
+U3 validate8 all-eight-targets 0 0
+# THE UNIVERSAL SWEEP (the range door mr64_omega3, three gate-sized partitions): 62 rotations x
+# 3,456 shape-classes = 214,272 width-64 decisions -- every class REFUTED, 0 undecided,
+# 0 matches.  NO 2-op program over the full 8-op ALU grammar computes ANY rotation at the
+# machine word.
+U3 sweep k2..k22 refuted 72576 undecided 0 matches 0
+U3 sweep k23..k43 refuted 72576 undecided 0 matches 0
+U3 sweep k44..k63 refuted 69120 undecided 0 matches 0
+# With the sealed Omega-2 k=1 settlement and the Psi 63/63 definiens (cost <= 3):
+U3 THEOREM cost64(rot_k) = 3 EXACTLY for every k in 1..63
+# THE CENSUS AT ELEVEN TOKENS (the standing arrays already held n=11 -- only the guard priced
+# it; the n=10 anchor re-verified against the sealed digits first; two independent routes agree
+# to the digit; n=12 refuses BY NAME -- the next envelope turn is priced, not hidden):
+T9 11 0 0 25548134043714192564627592359898060492413365614765979623395725725208082687322534509496712372506123634918408242423944102
+T9 11 1 0 13513302615133133128014689228630596983478739041461798638894834
+# THE PILOT AT 36: round 30 (NEW-D) chose d=25 -- the involution partner of the empty d=5 --
+# and CONFIRMED the class law's prediction from its own schedule (EMPTY); round 33 chose d=26
+# and found A:3 -- THE PILOT'S SEVENTH AUTONOMOUS DISCOVERY; rounds 31/34 are named schedule
+# refusals (chained rows).
+R 30 0 25 60 0 0
+R 33 0 26 60 3 0
+# THE PREFIX LAW: head(30) == the sealed Omega-2 ledger head byte for byte; head(36) pinned
+# across two full runs.
+H head36 = aa4e38be8c6cc3532ae121a3a1470dbc440d654290f29abbad51dc7419db9641

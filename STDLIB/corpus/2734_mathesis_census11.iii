@@ -1,0 +1,126 @@
+/* 2734_mathesis_census11.iii -- GATE for THE CENSUS AT ELEVEN TOKENS (campaign Omega-3).
+ *
+ * The standing arrays already held n = 11 exactly (CE_M/CE_CL indices 0..11, flood cells
+ * 121 <= 144, 119 digits < 128 render scratch) -- only the guard priced it; lifted 10 -> 11.
+ * Burnside over S_11 in exact bigint, the two INDEPENDENT routes (permutation flood over all
+ * 11! = 39,916,800 permutations / cycle-type partition arithmetic) agreeing to the digit.
+ * Observed 2026-07-14, pinned here:
+ *
+ *   n=11 all   2.554...e118 (119 digits) -- the exact iso-count of 11^121 ~ 10^126 binary
+ *              operations on eleven tokens, counted without enumerating one
+ *   n=11 comm  1.351...e61  (62 digits)
+ *
+ * The gate re-anchors to the SEALED Omega-2 n = 10 digits first (the guard edit changed no
+ * sealed output), then requires route agreement AND the digit strings at n = 11; n = 12
+ * refuses BY NAME (the next envelope turn: arrays 16, render 192, a 479M-permutation flood --
+ * PRICED, not hidden).  EXIT 99. */
+module corpus_2734_mathesis_census11
+
+extern @abi(c-msvc-x64) fn mce_burnside(n: i64, comm: i64) -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn mce_rh() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_diglen(slot: i64) -> i64 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bg_digat(slot: i64, i: i64) -> i64 from "mathesis_bigcurve.iii"
+
+var EXP : [i64; 128]
+var LEN : i64
+
+fn chk(n: i64, comm: i64) -> i64 {
+    if mce_burnside(n, comm) != 0i64 { return 0i64 }
+    bc_render(mce_rh(), 41i64)
+    if bg_diglen(41i64) != LEN { return 0i64 }
+    let mut i : i64 = 0i64
+    while i < LEN {
+        if bg_digat(41i64, i) != (48i64 + EXP[i as u64]) { return 0i64 }
+        i = i + 1i64
+    }
+    return 1i64
+}
+
+fn set_n10full() -> i32 {
+    /* the SEALED Omega-2 anchor: 2755731922398589065255809763441934634394385899578014939091916518138245006100594169510342419300 (94 digits) */
+    EXP[0u64] = 2i64    EXP[1u64] = 7i64    EXP[2u64] = 5i64    EXP[3u64] = 5i64    EXP[4u64] = 7i64
+    EXP[5u64] = 3i64    EXP[6u64] = 1i64    EXP[7u64] = 9i64    EXP[8u64] = 2i64    EXP[9u64] = 2i64
+    EXP[10u64] = 3i64   EXP[11u64] = 9i64   EXP[12u64] = 8i64   EXP[13u64] = 5i64   EXP[14u64] = 8i64
+    EXP[15u64] = 9i64   EXP[16u64] = 0i64   EXP[17u64] = 6i64   EXP[18u64] = 5i64   EXP[19u64] = 2i64
+    EXP[20u64] = 5i64   EXP[21u64] = 5i64   EXP[22u64] = 8i64   EXP[23u64] = 0i64   EXP[24u64] = 9i64
+    EXP[25u64] = 7i64   EXP[26u64] = 6i64   EXP[27u64] = 3i64   EXP[28u64] = 4i64   EXP[29u64] = 4i64
+    EXP[30u64] = 1i64   EXP[31u64] = 9i64   EXP[32u64] = 3i64   EXP[33u64] = 4i64   EXP[34u64] = 6i64
+    EXP[35u64] = 3i64   EXP[36u64] = 4i64   EXP[37u64] = 3i64   EXP[38u64] = 9i64   EXP[39u64] = 4i64
+    EXP[40u64] = 3i64   EXP[41u64] = 8i64   EXP[42u64] = 5i64   EXP[43u64] = 8i64   EXP[44u64] = 9i64
+    EXP[45u64] = 9i64   EXP[46u64] = 5i64   EXP[47u64] = 7i64   EXP[48u64] = 8i64   EXP[49u64] = 0i64
+    EXP[50u64] = 1i64   EXP[51u64] = 4i64   EXP[52u64] = 9i64   EXP[53u64] = 3i64   EXP[54u64] = 9i64
+    EXP[55u64] = 0i64   EXP[56u64] = 9i64   EXP[57u64] = 1i64   EXP[58u64] = 9i64   EXP[59u64] = 1i64
+    EXP[60u64] = 6i64   EXP[61u64] = 5i64   EXP[62u64] = 1i64   EXP[63u64] = 8i64   EXP[64u64] = 1i64
+    EXP[65u64] = 3i64   EXP[66u64] = 8i64   EXP[67u64] = 2i64   EXP[68u64] = 4i64   EXP[69u64] = 5i64
+    EXP[70u64] = 0i64   EXP[71u64] = 0i64   EXP[72u64] = 6i64   EXP[73u64] = 1i64   EXP[74u64] = 0i64
+    EXP[75u64] = 0i64   EXP[76u64] = 5i64   EXP[77u64] = 9i64   EXP[78u64] = 4i64   EXP[79u64] = 1i64
+    EXP[80u64] = 6i64   EXP[81u64] = 9i64   EXP[82u64] = 5i64   EXP[83u64] = 1i64   EXP[84u64] = 0i64
+    EXP[85u64] = 3i64   EXP[86u64] = 4i64   EXP[87u64] = 2i64   EXP[88u64] = 4i64   EXP[89u64] = 1i64
+    EXP[90u64] = 9i64   EXP[91u64] = 3i64   EXP[92u64] = 0i64   EXP[93u64] = 0i64
+    LEN = 94i64
+    return 0i32
+}
+fn set_n11full() -> i32 {
+    /* 25548134043714192564627592359898060492413365614765979623395725725208082687322534509496712372506123634918408242423944102 (119 digits) */
+    EXP[0u64] = 2i64    EXP[1u64] = 5i64    EXP[2u64] = 5i64    EXP[3u64] = 4i64    EXP[4u64] = 8i64
+    EXP[5u64] = 1i64    EXP[6u64] = 3i64    EXP[7u64] = 4i64    EXP[8u64] = 0i64    EXP[9u64] = 4i64
+    EXP[10u64] = 3i64   EXP[11u64] = 7i64   EXP[12u64] = 1i64   EXP[13u64] = 4i64   EXP[14u64] = 1i64
+    EXP[15u64] = 9i64   EXP[16u64] = 2i64   EXP[17u64] = 5i64   EXP[18u64] = 6i64   EXP[19u64] = 4i64
+    EXP[20u64] = 6i64   EXP[21u64] = 2i64   EXP[22u64] = 7i64   EXP[23u64] = 5i64   EXP[24u64] = 9i64
+    EXP[25u64] = 2i64   EXP[26u64] = 3i64   EXP[27u64] = 5i64   EXP[28u64] = 9i64   EXP[29u64] = 8i64
+    EXP[30u64] = 9i64   EXP[31u64] = 8i64   EXP[32u64] = 0i64   EXP[33u64] = 6i64   EXP[34u64] = 0i64
+    EXP[35u64] = 4i64   EXP[36u64] = 9i64   EXP[37u64] = 2i64   EXP[38u64] = 4i64   EXP[39u64] = 1i64
+    EXP[40u64] = 3i64   EXP[41u64] = 3i64   EXP[42u64] = 6i64   EXP[43u64] = 5i64   EXP[44u64] = 6i64
+    EXP[45u64] = 1i64   EXP[46u64] = 4i64   EXP[47u64] = 7i64   EXP[48u64] = 6i64   EXP[49u64] = 5i64
+    EXP[50u64] = 9i64   EXP[51u64] = 7i64   EXP[52u64] = 9i64   EXP[53u64] = 6i64   EXP[54u64] = 2i64
+    EXP[55u64] = 3i64   EXP[56u64] = 3i64   EXP[57u64] = 9i64   EXP[58u64] = 5i64   EXP[59u64] = 7i64
+    EXP[60u64] = 2i64   EXP[61u64] = 5i64   EXP[62u64] = 7i64   EXP[63u64] = 2i64   EXP[64u64] = 5i64
+    EXP[65u64] = 2i64   EXP[66u64] = 0i64   EXP[67u64] = 8i64   EXP[68u64] = 0i64   EXP[69u64] = 8i64
+    EXP[70u64] = 2i64   EXP[71u64] = 6i64   EXP[72u64] = 8i64   EXP[73u64] = 7i64   EXP[74u64] = 3i64
+    EXP[75u64] = 2i64   EXP[76u64] = 2i64   EXP[77u64] = 5i64   EXP[78u64] = 3i64   EXP[79u64] = 4i64
+    EXP[80u64] = 5i64   EXP[81u64] = 0i64   EXP[82u64] = 9i64   EXP[83u64] = 4i64   EXP[84u64] = 9i64
+    EXP[85u64] = 6i64   EXP[86u64] = 7i64   EXP[87u64] = 1i64   EXP[88u64] = 2i64   EXP[89u64] = 3i64
+    EXP[90u64] = 7i64   EXP[91u64] = 2i64   EXP[92u64] = 5i64   EXP[93u64] = 0i64   EXP[94u64] = 6i64
+    EXP[95u64] = 1i64   EXP[96u64] = 2i64   EXP[97u64] = 3i64   EXP[98u64] = 6i64   EXP[99u64] = 3i64
+    EXP[100u64] = 4i64  EXP[101u64] = 9i64  EXP[102u64] = 1i64  EXP[103u64] = 8i64  EXP[104u64] = 4i64
+    EXP[105u64] = 0i64  EXP[106u64] = 8i64  EXP[107u64] = 2i64  EXP[108u64] = 4i64  EXP[109u64] = 2i64
+    EXP[110u64] = 4i64  EXP[111u64] = 2i64  EXP[112u64] = 3i64  EXP[113u64] = 9i64  EXP[114u64] = 4i64
+    EXP[115u64] = 4i64  EXP[116u64] = 1i64  EXP[117u64] = 0i64  EXP[118u64] = 2i64
+    LEN = 119i64
+    return 0i32
+}
+fn set_n11comm() -> i32 {
+    /* 13513302615133133128014689228630596983478739041461798638894834 (62 digits) */
+    EXP[0u64] = 1i64    EXP[1u64] = 3i64    EXP[2u64] = 5i64    EXP[3u64] = 1i64    EXP[4u64] = 3i64
+    EXP[5u64] = 3i64    EXP[6u64] = 0i64    EXP[7u64] = 2i64    EXP[8u64] = 6i64    EXP[9u64] = 1i64
+    EXP[10u64] = 5i64   EXP[11u64] = 1i64   EXP[12u64] = 3i64   EXP[13u64] = 3i64   EXP[14u64] = 1i64
+    EXP[15u64] = 3i64   EXP[16u64] = 3i64   EXP[17u64] = 1i64   EXP[18u64] = 2i64   EXP[19u64] = 8i64
+    EXP[20u64] = 0i64   EXP[21u64] = 1i64   EXP[22u64] = 4i64   EXP[23u64] = 6i64   EXP[24u64] = 8i64
+    EXP[25u64] = 9i64   EXP[26u64] = 2i64   EXP[27u64] = 2i64   EXP[28u64] = 8i64   EXP[29u64] = 6i64
+    EXP[30u64] = 3i64   EXP[31u64] = 0i64   EXP[32u64] = 5i64   EXP[33u64] = 9i64   EXP[34u64] = 6i64
+    EXP[35u64] = 9i64   EXP[36u64] = 8i64   EXP[37u64] = 3i64   EXP[38u64] = 4i64   EXP[39u64] = 7i64
+    EXP[40u64] = 8i64   EXP[41u64] = 7i64   EXP[42u64] = 3i64   EXP[43u64] = 9i64   EXP[44u64] = 0i64
+    EXP[45u64] = 4i64   EXP[46u64] = 1i64   EXP[47u64] = 4i64   EXP[48u64] = 6i64   EXP[49u64] = 1i64
+    EXP[50u64] = 7i64   EXP[51u64] = 9i64   EXP[52u64] = 8i64   EXP[53u64] = 6i64   EXP[54u64] = 3i64
+    EXP[55u64] = 8i64   EXP[56u64] = 8i64   EXP[57u64] = 9i64   EXP[58u64] = 4i64   EXP[59u64] = 8i64
+    EXP[60u64] = 3i64   EXP[61u64] = 4i64
+    LEN = 62i64
+    return 0i32
+}
+
+fn main() -> i32 {
+    /* [A] THE ANCHOR: the guard-lifted organ still equals the SEALED Omega-2 n=10 digits */
+    set_n10full()
+    if chk(10i64, 0i64) != 1i64 { return 10i32 }
+    /* [B] n = 11: both routes agree, digits pinned -- eleven tokens, one exact number */
+    set_n11full()
+    if chk(11i64, 0i64) != 1i64 { return 20i32 }
+    set_n11comm()
+    if chk(11i64, 1i64) != 1i64 { return 21i32 }
+    /* [C] the envelope-refusal MECHANISM is NAMED, never garbage -- checked at a FAR boundary
+     * (the boundary-arm law: n=12's exact refusal is the probe's measurement, recorded in the
+     * sealed log narrative; pinning it HERE would redden this gate on the n=12 lift) */
+    if mce_burnside(99i64, 0i64) != (0i64 - 1i64) { return 30i32 }
+    return 99i32
+}

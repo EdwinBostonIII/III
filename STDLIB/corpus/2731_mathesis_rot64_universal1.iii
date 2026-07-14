@@ -1,0 +1,40 @@
+/* 2731_mathesis_rot64_universal1.iii -- GATE for THE UNIVERSAL ROTATION THEOREM, part 1 of 3
+ * (campaign Omega-3).
+ *
+ * Omega-2 settled cost_64(rot_1) = 3 TOTALLY.  The engine is k-generic; this campaign lifts the
+ * theorem to the WHOLE rotation family k = 1..63.
+ *
+ * [A] THE EXTENDED CERTIFICATE: the omega2 per-shape verdict equals the TOTAL width-8 brute
+ *     oracle for EVERY width-8 target -- neg AND all seven rotations k = 1..7 -- over all 3,456
+ *     shape-classes each: 8 x 3,456 = 27,648 verdicts, 0 disagreements, 0 undecided.  Every
+ *     mechanism (sharing, the shift box, the hybrid box, the odd-forcing budget) is certified
+ *     against ground truth over the whole target family, not two representatives.
+ *
+ * [B] THE SWEEP, k = 2..22 (21 rotations x 3,456 classes = 72,576 decisions): every class
+ *     REFUTED, 0 undecided, 0 matches -- no 2-op program over the full 8-op ALU grammar computes
+ *     rot_k at the machine word for any k in this range.  Parts 2/3 (gates 2732/2733) cover
+ *     k = 23..43 and k = 44..63.  EXIT 99. */
+module corpus_2731_mathesis_rot64_universal1
+
+extern @abi(c-msvc-x64) fn mr64_validate8b(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_val2_und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_omega3(klo: i64, khi: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3ref() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3match() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    /* [A] the extended certificate: every width-8 target vs the total oracle */
+    let mut k : i64 = 0i64
+    while k <= 7i64 {
+        if mr64_validate8b(k) != 0i64 { return 20i32 }       /* no disagreement at any target */
+        if mr64_val2_und() != 0i64 { return 21i32 }          /* nothing undecided at any target */
+        k = k + 1i64
+    }
+    /* [B] the universal sweep, first partition: k = 2..22 */
+    if mr64_omega3(2i64, 22i64) != 72576i64 { return 30i32 } /* 21 x 3,456 all refuted */
+    if mr64_o3ref() != 72576i64 { return 31i32 }
+    if mr64_o3und() != 0i64 { return 32i32 }
+    if mr64_o3match() != 0i64 { return 33i32 }               /* no 2-op rotation anywhere */
+    return 99i32
+}

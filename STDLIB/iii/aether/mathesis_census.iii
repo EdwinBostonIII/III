@@ -318,7 +318,10 @@ fn mce_route2(n: i64, comm: i64) -> i64 {
  * returns 0 = routes agree (result in CE_R1 == CE_R2); -1 refusal; -2 DISAGREEMENT (defect). */
 fn mce_burnside(n: i64, comm: i64) -> i64 @export {
     if n < 1i64 { return 0i64 - 1i64 }
-    if n > 10i64 { return 0i64 - 1i64 }
+    if n > 11i64 { return 0i64 - 1i64 }    /* n = 11 fits the standing arrays exactly (CE_M/CE_CL
+                                            * indices 0..11, CE_MARK 121 <= 144, 119 digits < 128
+                                            * render scratch); n = 12 needs the next envelope turn
+                                            * (arrays 16, render 192, flood ~479M perms: PRICED) */
     bc_seti(CE_NF, mce_fact(n))
     if mce_route1(n, comm) < 0i64 { return 0i64 - 1i64 }
     if mce_route2(n, comm) < 0i64 { return 0i64 - 1i64 }

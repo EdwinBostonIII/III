@@ -1,0 +1,23 @@
+/* 2733_mathesis_rot64_universal3.iii -- GATE for THE UNIVERSAL ROTATION THEOREM, part 3 of 3
+ * (campaign Omega-3): the sweep k = 44..63 -- 20 rotations x 3,456 classes = 69,120 decisions,
+ * every class REFUTED, 0 undecided, 0 matches.  With parts 1/2 and the sealed Omega-2 k = 1
+ * settlement: NO 2-op program over the full 8-op ALU grammar computes ANY rotation at the
+ * machine word.  With the Psi 63/63 definiens (cost <= 3):
+ *
+ *     cost_64(rot_k) = 3 EXACTLY, FOR EVERY k in 1..63 -- THE UNIVERSAL ROTATION THEOREM.
+ *
+ * EXIT 99. */
+module corpus_2733_mathesis_rot64_universal3
+
+extern @abi(c-msvc-x64) fn mr64_omega3(klo: i64, khi: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3ref() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3und() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_o3match() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr64_omega3(44i64, 63i64) != 69120i64 { return 30i32 }
+    if mr64_o3ref() != 69120i64 { return 31i32 }
+    if mr64_o3und() != 0i64 { return 32i32 }
+    if mr64_o3match() != 0i64 { return 33i32 }
+    return 99i32
+}

@@ -1,0 +1,97 @@
+/* 2735_mathesis_pilot36.iii -- GATE for THE PILOT'S SIXTH EXTENSION (campaign Omega-3:
+ * budget 36 -- the autonomous ledger extends deterministically, forever).
+ *
+ * Rounds 30..35, every experiment a pure function of the round number (observed 2026-07-14):
+ *   r30 NEW-D  d=25 at 60  -> A:0 B:0  -- the pilot reaches the involution partner of the empty
+ *              d=5 and CONFIRMS the class law's prediction from its own schedule: 25 is EMPTY
+ *   r31 kind 9 (1, 10)     -> the HEIGHT schedule stays exhausted: a NAMED refusal, chained
+ *   r32 LOCAL  (10, 23)    -> 24 / 24
+ *   r33 NEW-D  d=26 at 60  -> A:3 B:0  -- THE PILOT'S SEVENTH AUTONOMOUS DISCOVERY: d=26 = 2*13
+ *              carries THREE curve-A identities (the box sweep's independent find, now reached
+ *              by the pilot's own schedule)
+ *   r34 kind 9 (1, 11)     -> the same named refusal at q=11
+ *   r35 LOCAL  (10, 29)    -> 30 / 30
+ *
+ * THE PREFIX LAW: head(30) recomputed in-gate equals the SEALED Omega-2 ledger head byte for
+ * byte; head(36) is pinned as the new frontier head and is IDENTICAL across two full runs.
+ * EXIT 99. */
+module corpus_2735_mathesis_pilot36
+
+extern @abi(c-msvc-x64) fn mpl_round(r: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_k() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_p2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r1() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_r2() -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_run(k: i64) -> i64 from "mathesis_pilot.iii"
+extern @abi(c-msvc-x64) fn mpl_head_byte(i: i64) -> u64 from "mathesis_pilot.iii"
+
+var H30 : [u64; 32]
+var H36 : [u64; 32]
+var SNAP : [u64; 32]
+
+fn fill_heads() -> i32 {
+    /* the SEALED Omega-2 head(30): b78b28fbc9202b0894cf324cb6396b208860665c2900aaaf08d3ef6410c171e5 */
+    H30[0u64] = 183u64  H30[1u64] = 139u64  H30[2u64] = 40u64   H30[3u64] = 251u64
+    H30[4u64] = 201u64  H30[5u64] = 32u64   H30[6u64] = 43u64   H30[7u64] = 8u64
+    H30[8u64] = 148u64  H30[9u64] = 207u64  H30[10u64] = 50u64  H30[11u64] = 76u64
+    H30[12u64] = 182u64 H30[13u64] = 57u64  H30[14u64] = 107u64 H30[15u64] = 32u64
+    H30[16u64] = 136u64 H30[17u64] = 96u64  H30[18u64] = 102u64 H30[19u64] = 92u64
+    H30[20u64] = 41u64  H30[21u64] = 0u64   H30[22u64] = 170u64 H30[23u64] = 175u64
+    H30[24u64] = 8u64   H30[25u64] = 211u64 H30[26u64] = 239u64 H30[27u64] = 100u64
+    H30[28u64] = 16u64  H30[29u64] = 193u64 H30[30u64] = 113u64 H30[31u64] = 229u64
+    /* the observed head(36): aa4e38be8c6cc3532ae121a3a1470dbc440d654290f29abbad51dc7419db9641 */
+    H36[0u64] = 170u64  H36[1u64] = 78u64   H36[2u64] = 56u64   H36[3u64] = 190u64
+    H36[4u64] = 140u64  H36[5u64] = 108u64  H36[6u64] = 195u64  H36[7u64] = 83u64
+    H36[8u64] = 42u64   H36[9u64] = 225u64  H36[10u64] = 33u64  H36[11u64] = 163u64
+    H36[12u64] = 161u64 H36[13u64] = 71u64  H36[14u64] = 13u64  H36[15u64] = 188u64
+    H36[16u64] = 68u64  H36[17u64] = 13u64  H36[18u64] = 101u64 H36[19u64] = 66u64
+    H36[20u64] = 144u64 H36[21u64] = 242u64 H36[22u64] = 154u64 H36[23u64] = 187u64
+    H36[24u64] = 173u64 H36[25u64] = 81u64  H36[26u64] = 220u64 H36[27u64] = 116u64
+    H36[28u64] = 25u64  H36[29u64] = 219u64 H36[30u64] = 150u64 H36[31u64] = 65u64
+    return 0i32
+}
+
+fn chk_round(r: i64, k: i64, p1: i64, p2: i64, r1: i64, r2: i64) -> i64 {
+    if mpl_round(r) != 0i64 { return 0i64 }
+    if mpl_k() != k { return 0i64 }
+    if mpl_p1() != p1 { return 0i64 }
+    if mpl_p2() != p2 { return 0i64 }
+    if mpl_r1() != r1 { return 0i64 }
+    if mpl_r2() != r2 { return 0i64 }
+    return 1i64
+}
+
+fn main() -> i32 {
+    fill_heads()
+    /* [A] the six new rounds, outcome for outcome */
+    if chk_round(30i64, 0i64, 25i64, 60i64, 0i64, 0i64) != 1i64 { return 10i32 }
+    if chk_round(31i64, 9i64, 1i64, 10i64, 0i64, 0i64) != 1i64 { return 11i32 }
+    if chk_round(32i64, 2i64, 10i64, 23i64, 24i64, 24i64) != 1i64 { return 12i32 }
+    if chk_round(33i64, 0i64, 26i64, 60i64, 3i64, 0i64) != 1i64 { return 13i32 }
+    if chk_round(34i64, 9i64, 1i64, 11i64, 0i64, 0i64) != 1i64 { return 14i32 }
+    if chk_round(35i64, 2i64, 10i64, 29i64, 30i64, 30i64) != 1i64 { return 15i32 }
+    /* [B] THE PREFIX LAW: head(30) == the sealed Omega-2 ledger head */
+    if mpl_run(30i64) != 30i64 { return 20i32 }
+    let mut i : i64 = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != H30[i as u64] { return 21i32 }
+        i = i + 1i64
+    }
+    /* [C] head(36): the new frontier head, pinned */
+    if mpl_run(36i64) != 36i64 { return 30i32 }
+    i = 0i64
+    while i < 32i64 {
+        SNAP[i as u64] = mpl_head_byte(i)
+        if mpl_head_byte(i) != H36[i as u64] { return 31i32 }
+        i = i + 1i64
+    }
+    /* [D] determinism EXECUTED: a second full run, the same head */
+    if mpl_run(36i64) != 36i64 { return 40i32 }
+    i = 0i64
+    while i < 32i64 {
+        if mpl_head_byte(i) != SNAP[i as u64] { return 41i32 }
+        i = i + 1i64
+    }
+    return 99i32
+}

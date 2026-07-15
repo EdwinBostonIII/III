@@ -191,3 +191,47 @@ R 33 0 26 60 3 0
 # THE PREFIX LAW: head(30) == the sealed Omega-2 ledger head byte for byte; head(36) pinned
 # across two full runs.
 H head36 = aa4e38be8c6cc3532ae121a3a1470dbc440d654290f29abbad51dc7419db9641
+== OMEGA-4  THE THIRD OPERATION (2736_mathesis_op3_census / 2737_mathesis_op3_cert_rot / 2738_mathesis_op3_cert_neg / 2739_mathesis_pilot42 / 2740_mathesis_op3_sweep) ==
+# Omega-3 closed the 2-op question for the whole rotation family; its named frontier was the
+# THIRD operation.  The grammar turns the rung: five tree shapes x 8^3 op-triples x 3^4
+# leaf-quads = 207,360 3-op shape-classes over the full ALU.  THE WIDTH-8 CENSUS first (total
+# constant exhaustion, the Phi-1 method lifted a rung): rot_1 has EXACTLY 60 spelling classes
+# carrying EXACTLY 60 constant assignments -- ONE each: every width-8 3-op rotation spelling
+# is RIGID, its constants forced.  neg (match-dense) carries 23,340 classes by the
+# classes-only door -- THE DOOR-PER-DENSITY LAW: exact assignment-counting on a dense target
+# enumerates millions of verifications; census classes with first-match early exit.
+O4 census rot1 60 60
+O4 census neg 23340
+# THE CERTIFICATE, BOTH HALVES: the 3-op decide engine (generalized x-free-node sharing, the
+# shift box, the width-scaled mul budget) against the first-match TOTAL width-8 oracle over
+# ALL 207,360 classes.  rot_1 (refute-dense): 0 disagreements, 0 undecided.  neg (the finder
+# must FIND 23,340 times): 0 disagreements, 0 undecided -- a FOUR-RUNG measured ladder
+# 816->80->18->0 (the width-scaled mul budget; THE NO-SLIDE WINDOW -- below the machine word
+# the sample window holds the whole single-constant candidate space, killed candidates are
+# permanent, termination is a pigeonhole theorem; THE DISTINGUISHED-CANDIDATE PRE-PASS --
+# {0,1,w-1,w,top-bit,mask} native-battery-then-FULL-verify; THE PREIMAGE SAMPLES -- the
+# refuting witness as a function x(c) of the candidate, because the covering set sits exactly
+# on the sealed bb capacity wall).
+O4 validate8 rot 0 0
+O4 validate8 neg 0 0
+# THE MACHINE-WORD SWEEP (the 16-way fleet over the mr3_omega range door): all 207,360
+# classes SWEPT at width 64 -- 199,226 DECIDED: 56 carry a rot_1 spelling (the definiens
+# (x<<c1)|(x>>c2), sid 118919, MATCHES by the named one-class arm) and 199,170 are REFUTED;
+# 8,130 classes REFUSE at the SEALED bb capacity pins, every refusal keeping its coordinates
+# AND its reason -- the sampled envelope is UNIFORMLY mechanism-1, solver-capacity (0xFF at
+# 3-56 samples, 20/20 sampled across 13 regions incl. the heavy tail): the Omega-2
+# 780-MUL-residual analogue at the third rung, SEALED-PIN/CAP law holding (closure route
+# algebraic -- box/pin -- never a capacity lift).  FOUR classes are wall-clock UNREACHED
+# (120620/120624/120628/120630, one leaf-quad family of tree 2: >1 h solo each with NO
+# engine verdict; 3-h probes left running at seal time) -- the residual drain's first
+# entries.  THE HEAVY-TAIL LAW: per-class cost is violently non-uniform (~90 ms average,
+# four classes >3600 s); a range timeout is a NAMED SPLIT, not a verdict.
+O4 sweep w64 rot1 decided 199226 matched 56 capacity-refused 8130 unreached 4
+# THE PILOT AT 42: round 36 (NEW-D) chose d=28 (4x7) and found A:3 -- THE EIGHTH AUTONOMOUS
+# DISCOVERY; round 39 chose d=29 and confirmed the prime EMPTY (the nonexistence inventory
+# grows); rounds 37/40 are named schedule refusals (chained rows).
+R 36 0 28 60 3 0
+R 39 0 29 60 0 0
+# THE PREFIX LAW: head(36) == the sealed Omega-3 head byte for byte; head(42) pinned across
+# two full runs.
+H head42 = d24760d33dde16feaad8ac23c6e02f2b6340625fd8c04ade080047c9cfe286fb

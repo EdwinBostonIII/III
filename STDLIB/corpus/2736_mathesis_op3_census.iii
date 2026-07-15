@@ -1,0 +1,37 @@
+/* 2736_mathesis_op3_census.iii -- GATE for THE THIRD OPERATION'S SPELLING CENSUS (campaign
+ * Omega-4, width 8, TOTAL exhaustion).
+ *
+ * The 3-op shape grammar over the full 8-op ALU with leaves {x, c1, c2}: five tree shapes x
+ * 8^3 op triples x 3^4 leaf quads = 207,360 shape-classes.  The Phi-1 method (total constant
+ * exhaustion, native, early-exit) lifted from two operations to three.  Observed 2026-07-14:
+ *
+ *   rot_1:  EXACTLY 60 classes carry a spelling, with EXACTLY 60 constant assignments -- ONE
+ *           assignment per class: at width 8 every 3-op rotation spelling is RIGID (its
+ *           constants are forced).  The definiens class (x << c1) | (x >> c2), tree T2, is
+ *           among them (sid 118919, the named arm below).
+ *   neg:    23,340 classes carry a spelling (the classes-only door: neg is match-DENSE -- the
+ *           2-op spellings times every identity tail -- so the exact assignment count is the
+ *           priced-and-refused form; the DOOR-PER-DENSITY law from the first census run).
+ *
+ * The gate re-runs BOTH censuses in full (~16 min) and pins the counts.  EXIT 99. */
+module corpus_2736_mathesis_op3_census
+
+extern @abi(c-msvc-x64) fn mr3_brute(sid: i64, k: i64, w: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_brute_any(sid: i64, k: i64, w: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_census(k: i64, w: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_census_cls(k: i64, w: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_ccls() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_casg() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    /* [A] the named arm: the definiens class (x << c1) | (x >> c2) has a width-8 spelling */
+    if mr3_brute_any(118919i64, 1i64, 8i64) != 1i64 { return 10i32 }
+    /* [B] rot_1: the EXACT census -- 60 classes, 60 assignments (every spelling rigid) */
+    if mr3_census(1i64, 8i64) != 60i64 { return 20i32 }
+    if mr3_ccls() != 60i64 { return 21i32 }
+    if mr3_casg() != 60i64 { return 22i32 }
+    /* [C] neg: 23,340 classes (the existence tooth at scale -- 11.3% of the grammar) */
+    if mr3_census_cls(0i64, 8i64) != 23340i64 { return 30i32 }
+    if mr3_ccls() != 23340i64 { return 31i32 }
+    return 99i32
+}

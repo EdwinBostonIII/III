@@ -405,6 +405,28 @@ OMEGA3_CERT="$(printf '%s' "0|0|72576|0|0|72576|0|0|69120|0|0|255481340437141925
 echo "[mathesis] OMEGA3_CERT = $OMEGA3_CERT"
 echo "[mathesis] GREEN: campaign Omega-3 sealed (THE UNIVERSAL ROTATION THEOREM: the extended width-8 certificate -- the engine equals the total oracle for EVERY width-8 target, all eight, 27,648 verdicts 0/0 -- and the 62-rotation width-64 sweep: 214,272 decisions, EVERY class refuted, 0 undecided, 0 matches; with the sealed k=1 settlement and the 63/63 definiens, cost64(rot_k) = 3 EXACTLY for every k in 1..63 -- the rotation family's 2-op question CLOSED at the machine word, universally; the census reaches ELEVEN tokens -- the exact iso-count of 11^121 ~ 10^126 binary operations, 119 digits, two independent routes agreeing, the n=10 anchor byte-identical, n=12 refused by name; the pilot found d=26 (A:3, its SEVENTH autonomous discovery), confirmed the involution law's d=25 emptiness from its own schedule, and head(36) extends the ledger)"
 
+echo "[mathesis] == [19] CAMPAIGN OMEGA-4 (THE THIRD OPERATION: the 3-op grammar censused at width 8, certified on BOTH densities, and SWEPT at the machine word with the refusal envelope NAMED; the pilot at 42) =="
+echo "[mathesis] [19] gates 2736-2740: the w8 censuses (~30 min), the certificate halves (~20 + ~18 min), the pilot (~7 min), and the strided w64 certificate (~1 min; the FULL 207,360-class machine-word sweep is the fleet-measured campaign artifact, PSI-pinned) ..."
+gate_slow 2736_mathesis_op3_census   "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 170   # rot_1: 60 classes x 60 assignments (RIGID); neg: 23,340 classes (door-per-density)
+gate_slow 2737_mathesis_op3_cert_rot "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 171   # decide == total w8 oracle, target rot_1 (refute-dense): 0/0
+gate_slow 2738_mathesis_op3_cert_neg "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 172   # decide == total w8 oracle, target neg (match-dense): 0/0 -- the 816->80->18->0 ladder
+gate_slow 2739_mathesis_pilot42      "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 173   # r36 d=28 A:3 (EIGHTH discovery); r39 d=29 EMPTY; head(42) pinned twice
+gate_slow 2740_mathesis_op3_sweep    "${RADFACE[@]}" "${EXACTFACE[@]}" || exit 174   # definiens MATCHES at w64 + the stride-97 certificate subset (2051/0/87) + far-boundary arms
+grep -q "^O4 census rot1 60 60$" "$PSILOG" || { echo "[mathesis] RED: the 3-op rot census row drifted"; exit 175; }
+grep -q "^O4 census neg 23340$" "$PSILOG" || { echo "[mathesis] RED: the 3-op neg census row drifted"; exit 176; }
+grep -q "^O4 validate8 rot 0 0$" "$PSILOG" || { echo "[mathesis] RED: the 3-op rot certificate row drifted"; exit 177; }
+grep -q "^O4 validate8 neg 0 0$" "$PSILOG" || { echo "[mathesis] RED: the 3-op neg certificate row drifted"; exit 178; }
+grep -q "^O4 sweep w64 rot1 decided 199226 matched 56 capacity-refused 8130 unreached 4$" "$PSILOG" || { echo "[mathesis] RED: the machine-word sweep row drifted"; exit 179; }
+grep -q "^R 36 0 28 60 3 0$" "$PSILOG" || { echo "[mathesis] RED: the pilot d=28 discovery row drifted"; exit 180; }
+grep -q "^H head42 = d24760d33dde16feaad8ac23c6e02f2b6340625fd8c04ade080047c9cfe286fb$" "$PSILOG" || { echo "[mathesis] RED: the pilot head(42) drifted"; exit 181; }
+
+# [OMEGA-4] THE CERTIFICATE: sha256 over the campaign's pinned facts (both censuses + both
+# certificate halves + the machine-word sweep with its named envelope + the pilot discovery
+# and head).
+OMEGA4_CERT="$(printf '%s' "60|60|23340|0|0|0|0|199226|56|8130|4|28|3|d24760d33dde16feaad8ac23c6e02f2b6340625fd8c04ade080047c9cfe286fb" | sha256sum | cut -d' ' -f1)"
+echo "[mathesis] OMEGA4_CERT = $OMEGA4_CERT"
+echo "[mathesis] GREEN: campaign Omega-4 sealed (THE THIRD OPERATION: the 3-op grammar -- 207,360 shape-classes, five trees x 512 op-triples x 81 leaf-quads -- censused TOTALLY at width 8: rot_1 has EXACTLY 60 spelling classes with EXACTLY 60 constant assignments, every width-8 3-op rotation spelling RIGID, neg carries 23,340 classes by the density-matched door; the engine (generalized sharing + shift box + width-scaled mul budget + no-slide window + distinguished-candidate pre-pass + preimage samples) re-proven sound+complete at width 8 against the total oracle for BOTH a refute-dense and a match-dense target -- the neg half a FOUR-RUNG measured ladder 816->80->18->0; THE MACHINE-WORD SWEEP with the envelope NAMED: 199,226 of 207,360 classes DECIDED at width 64 -- 56 carry a rot_1 spelling incl. the definiens (x<<c1)|(x>>c2), 199,170 refuted -- 8,130 REFUSE at the SEALED bb capacity pins (mechanism-1 uniform on 20/20 samples, coordinates and reasons kept) and FOUR are wall-clock unreached, the residual drain named: the Omega-2-residual analogue at the third rung, closure algebraic, never a cap lift; the pilot found d=28 (A:3, its EIGHTH autonomous discovery), named d=29 EMPTY, and head(42) extends the ledger, pinned across two full runs)"
+
 # --synth: REPLAY the whole 18,522-pair sweep and demand byte-identity with the sealed log
 if [[ "${1:-}" == "--synth" ]]; then
     SWEEP="$III_ROOT/STDLIB/build/mathesis/synth_sweep$BIN_SUFFIX"

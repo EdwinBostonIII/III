@@ -1,0 +1,28 @@
+/* 2738_mathesis_op3_cert_neg.iii -- GATE for THE THIRD OPERATION'S CERTIFICATE, neg half
+ * (campaign Omega-4).
+ *
+ * The same total validation as 2737 with the target the engine must FIND rather than refute:
+ * neg has 23,340 matched classes at width 8, so this half proves the finder finds (23,340
+ * matches confirmed against the oracle, 0 disagreements) and the deciding never abstains
+ * (0 undecided).  The 0-undecided was paid for by a three-mechanism ladder (816 -> 80 -> 18
+ * -> 0), each rung measured before it was built: (1) THE NO-SLIDE WINDOW -- below the machine
+ * word the sample window holds the whole single-constant candidate space, so a killed
+ * candidate's sample is permanent and termination is a pigeonhole theorem; (2) THE
+ * DISTINGUISHED-CANDIDATE PRE-PASS -- after a CEGIS abstention, the degenerate constants
+ * {0, 1, w-1, w, top-bit, mask} are tried with a native battery then a FULL symbolic verify
+ * (c=0 zeroes a shifted operand, c=1 rides x>>x==0 -- width-independent witnesses); (3) THE
+ * PREIMAGE SAMPLES -- for shift shapes whose amount is a single op over {x, const}, the
+ * refuting witness rides the formula AS A FUNCTION OF THE CANDIDATE (x(c) = a0 (-) c for the
+ * invertible amount ops; MUL amounts: the even side dies at x = 2^(w-1), the odd side on a
+ * width-budgeted Newton-inverse branch), because the constant-sample covering set (~32) sits
+ * exactly on the sealed bb capacity wall (measured: 0xFF at 33-36 samples).  EXIT 99. */
+module corpus_2738_mathesis_op3_cert_neg
+
+extern @abi(c-msvc-x64) fn mr3_validate8(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr3_validate8(0i64) != 0i64 { return 20i32 }
+    if mr3_vund() != 0i64 { return 21i32 }
+    return 99i32
+}

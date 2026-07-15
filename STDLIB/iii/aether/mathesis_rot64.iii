@@ -507,7 +507,11 @@ var MR64_SA1 : u64               /* the current enumerated shift amount for c1 (
 var MR64_SA2 : u64
 var MR64_SPOISON : i64           /* a variable/inner shift amount -> the shape is out of grammar */
 var MR64_CEX : u64               /* the last verify counterexample x */
-var MR64_SAMP : [u64; 200]       /* the CEGIS sample set */
+var MR64_SAMP : [u64; 384]       /* the CEGIS sample set (384 holds the full w8 single-constant
+                                  * candidate space + seeds WITHOUT sliding -- the omega-4 neg
+                                  * certificate's termination guarantee; every writer stays
+                                  * bounded by its own cap, so the sealed 2-op paths are
+                                  * byte-identical in behaviour) */
 var MR64_NSAMP : i64
 
 /* is leaf `slot` a shift-amount operand (right operand of a shift op)?  1/0. */
@@ -1296,4 +1300,866 @@ fn mr64_validate8(k: i64) -> i64 @export {
         sid = sid + 1i64
     }
     return bad
+}
+
+/* ================= CAMPAIGN OMEGA-4: THE THIRD OPERATION =================
+ * The 3-op shape grammar over the full 8-op ALU with leaves {x, c1, c2}: FIVE tree shapes
+ *     T0 ((a.b).c).d   T1 (a.(b.c)).d   T2 (a.b).(c.d)   T3 a.((b.c).d)   T4 a.(b.(c.d))
+ * x 8^3 op triples x 3^4 leaf quads = 207,360 shape-classes (sid = ((t*8+oa)*8+ob)*8+oc over
+ * the leaf base-3 digits l0..l3, decoded low-to-high as l3 first).
+ *
+ * The native tier: the width-parametric evaluator, the TOTAL width-8 oracle (every occurring
+ * constant swept over the whole byte, every x, early exit), and THE SPELLING CENSUS -- the
+ * exact count of (class, constant-assignment) pairs computing a target at width 8, the Phi-1
+ * total-exhaustion method lifted from two operations to three.  Priced by measurement:
+ * ~2.4 ms/class average -> ~8.3 min per target for the full census (a gate_slow).  The SAT
+ * lift to width 64 (the omega2 mechanisms generalised to five trees) is the tier after this
+ * one; the native census is its ground truth at width 8. */
+fn mr3_leafq(sid: i64, i: i64) -> i64 {   /* leaf l_i of sid (i = 0..3; l3 is the lowest digit) */
+    let mut r : i64 = sid
+    let mut v : i64 = 0i64
+    let mut j : i64 = 3i64
+    while j >= i {
+        v = r % 3i64
+        r = r / 3i64
+        j = j - 1i64
+    }
+    return v
+}
+/* eval shape sid at (x, c1, c2) over width w */
+fn mr3_eval(sid: i64, x: u64, c1: u64, c2: u64, w: i64) -> u64 {
+    let mut r : i64 = sid
+    let l3 : i64 = r % 3i64   r = r / 3i64
+    let l2 : i64 = r % 3i64   r = r / 3i64
+    let l1 : i64 = r % 3i64   r = r / 3i64
+    let l0 : i64 = r % 3i64   r = r / 3i64
+    let oc : i64 = r % 8i64   r = r / 8i64
+    let ob : i64 = r % 8i64   r = r / 8i64
+    let oa : i64 = r % 8i64   r = r / 8i64
+    let t : i64 = r
+    let a : u64 = mr64_leaf(l0, x, c1, c2)
+    let b : u64 = mr64_leaf(l1, x, c1, c2)
+    let c : u64 = mr64_leaf(l2, x, c1, c2)
+    let d : u64 = mr64_leaf(l3, x, c1, c2)
+    if t == 0i64 { return mr64_op(oc, mr64_op(ob, mr64_op(oa, a, b, w), c, w), d, w) }
+    if t == 1i64 { return mr64_op(oc, mr64_op(ob, a, mr64_op(oa, b, c, w), w), d, w) }
+    if t == 2i64 { return mr64_op(oc, mr64_op(oa, a, b, w), mr64_op(ob, c, d, w), w) }
+    if t == 3i64 { return mr64_op(oc, a, mr64_op(ob, mr64_op(oa, b, c, w), d, w), w) }
+    return mr64_op(oc, a, mr64_op(ob, b, mr64_op(oa, c, d, w), w), w)
+}
+/* which constants occur in sid's leaves (sets MR64_C1DAT/C2DAT like mr64_const_roles) */
+fn mr3_const_roles(sid: i64) -> i32 {
+    MR64_C1DAT = 0i64
+    MR64_C2DAT = 0i64
+    let mut r : i64 = sid
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        let l : i64 = r % 3i64
+        if l == 1i64 { MR64_C1DAT = 1i64 }
+        if l == 2i64 { MR64_C2DAT = 1i64 }
+        r = r / 3i64
+        i = i + 1i64
+    }
+    return 0i32
+}
+/* the TOTAL width-w oracle: 1 iff SOME constant assignment makes sid compute target k
+ * (k = 0 neg, 1..w-1 rot_k); MR3_ASG accumulates the number of MATCHING assignments. */
+var MR3_ASG : i64
+fn mr3_brute(sid: i64, k: i64, w: i64) -> i64 @export {
+    mr3_const_roles(sid)
+    let m : i64 = mr64_mask(w) as i64
+    let mut c1max : i64 = 0i64
+    if MR64_C1DAT == 1i64 { c1max = m }
+    let mut c2max : i64 = 0i64
+    if MR64_C2DAT == 1i64 { c2max = m }
+    let mut hit3 : i64 = 0i64
+    let mut c1 : i64 = 0i64
+    while c1 <= c1max {
+        let mut c2 : i64 = 0i64
+        while c2 <= c2max {
+            let mut ok : i64 = 1i64
+            let mut x : i64 = 0i64
+            while x <= m {
+                if mr3_eval(sid, x as u64, c1 as u64, c2 as u64, w) != mr64_target(k, x as u64, w) { ok = 0i64   x = m }
+                x = x + 1i64
+            }
+            if ok == 1i64 { hit3 = 1i64   MR3_ASG = MR3_ASG + 1i64 }
+            c2 = c2 + 1i64
+        }
+        c1 = c1 + 1i64
+    }
+    return hit3
+}
+/* the FIRST-MATCH oracle: 1 iff SOME assignment works -- early exit on the first match, so a
+ * match-DENSE target (neg: every 2-op spelling times every identity tail) costs no more than a
+ * refutation.  The exact-counting door above is for match-RARE targets (rot: 60 total; the
+ * exact count for a dense target would enumerate millions of full verifications -- the first
+ * probe TIMED OUT there, exit 124: the lesson is a DOOR PER DENSITY CLASS). */
+fn mr3_brute_any(sid: i64, k: i64, w: i64) -> i64 @export {
+    mr3_const_roles(sid)
+    let m : i64 = mr64_mask(w) as i64
+    let mut c1max : i64 = 0i64
+    if MR64_C1DAT == 1i64 { c1max = m }
+    let mut c2max : i64 = 0i64
+    if MR64_C2DAT == 1i64 { c2max = m }
+    let mut c1 : i64 = 0i64
+    while c1 <= c1max {
+        let mut c2 : i64 = 0i64
+        while c2 <= c2max {
+            let mut ok : i64 = 1i64
+            let mut x : i64 = 0i64
+            while x <= m {
+                if mr3_eval(sid, x as u64, c1 as u64, c2 as u64, w) != mr64_target(k, x as u64, w) { ok = 0i64   x = m }
+                x = x + 1i64
+            }
+            if ok == 1i64 { return 1i64 }
+            c2 = c2 + 1i64
+        }
+        c1 = c1 + 1i64
+    }
+    return 0i64
+}
+/* THE SPELLING CENSUS at width w: sweep ALL 207,360 classes against target k.
+ * mr3_census: classes AND the exact assignment total (match-rare targets);
+ * mr3_census_cls: classes only, first-match early exit (any target). */
+var MR3_CCLS : i64
+var MR3_CASG : i64
+fn mr3_ccls() -> i64 @export { return MR3_CCLS }
+fn mr3_casg() -> i64 @export { return MR3_CASG }
+fn mr3_census(k: i64, w: i64) -> i64 @export {
+    MR3_CCLS = 0i64
+    MR3_CASG = 0i64
+    MR3_ASG = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        if mr3_brute(sid, k, w) == 1i64 { MR3_CCLS = MR3_CCLS + 1i64 }
+        sid = sid + 1i64
+    }
+    MR3_CASG = MR3_ASG
+    return MR3_CCLS
+}
+fn mr3_census_cls(k: i64, w: i64) -> i64 @export {
+    MR3_CCLS = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        if mr3_brute_any(sid, k, w) == 1i64 { MR3_CCLS = MR3_CCLS + 1i64 }
+        sid = sid + 1i64
+    }
+    return MR3_CCLS
+}
+
+/* ---- the omega-4 SAT tier: the width-64 lift of the 3-op grammar.  Every omega2 mechanism
+ * generalised to the five trees: SHARING (every x-free named node -- n1, n2, or the whole
+ * root -- is built ONCE per round), the CMUL/fold discipline (mr64_op2 carries it), the PIN
+ * doors (mr64_s2leaf carries them), THE BUDGET (exact full-multiplier accounting: a mul node
+ * whose BOTH operands contain a constant; x-free ones weigh ONE per round, x-dependent ones
+ * one PER SAMPLE), and the SHIFT BOX (every constant in a shift-amount slot -> total native
+ * exhaustion over the {0..w} boxes).  The hybrid box joins after the first width-64 residual
+ * is MEASURED -- the omega2 discipline. ---- */
+var MR3_SH1 : u32
+var MR3_SH1H : i64
+var MR3_SH2 : u32
+var MR3_SH2H : i64
+var MR3_SHR : u32
+var MR3_SHRH : i64
+var MR3_LS : [i64; 4]          /* decoded leaves of the current sid (global scratch) */
+fn mr3_dec(sid: i64) -> i64 {  /* decode sid into MR3_LS + return packed t*512+oa*64+ob*8+oc */
+    let mut r : i64 = sid
+    MR3_LS[3u64] = r % 3i64   r = r / 3i64
+    MR3_LS[2u64] = r % 3i64   r = r / 3i64
+    MR3_LS[1u64] = r % 3i64   r = r / 3i64
+    MR3_LS[0u64] = r % 3i64   r = r / 3i64
+    return r
+}
+/* leaf-span content flags for node ni of tree t over the decoded leaves:
+ * bit0 = contains x, bit1 = contains a constant.  ni: 1 = n1, 2 = n2, 0 = root. */
+fn mr3_span(t: i64, ni: i64) -> i64 {
+    let mut lo : i64 = 0i64
+    let mut hi : i64 = 3i64
+    if ni == 1i64 {
+        lo = 0i64   hi = 1i64
+        if t == 1i64 { lo = 1i64   hi = 2i64 }
+        if t == 3i64 { lo = 1i64   hi = 2i64 }
+        if t == 4i64 { lo = 2i64   hi = 3i64 }
+    }
+    if ni == 2i64 {
+        lo = 0i64   hi = 2i64
+        if t == 2i64 { lo = 2i64   hi = 3i64 }
+        if t == 3i64 { lo = 1i64   hi = 3i64 }
+        if t == 4i64 { lo = 1i64   hi = 3i64 }
+    }
+    let mut f : i64 = 0i64
+    let mut i : i64 = lo
+    while i <= hi {
+        if MR3_LS[i as u64] == 0i64 { f = f | 1i64 }
+        if MR3_LS[i as u64] != 0i64 { f = f | 2i64 }
+        i = i + 1i64
+    }
+    return f
+}
+/* build the SYNTH tree for sid at sample xval, honouring the round's shared nodes.  Every op
+ * goes through mr64_op2 (fold / cmul / concrete shift / barrel); leaves through mr64_s2leaf
+ * (sample- and pin-aware). */
+fn mr3_synth_root(sid: i64, xval: u64) -> u32 {
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let l0 : i64 = MR3_LS[0u64]
+    let l1 : i64 = MR3_LS[1u64]
+    let l2 : i64 = MR3_LS[2u64]
+    let l3 : i64 = MR3_LS[3u64]
+    let an : u32 = mr64_s2leaf(l0, xval)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr64_s2leaf(l1, xval)
+    let bc : i64 = MR64_BC
+    let bv : u64 = MR64_BV
+    let cn : u32 = mr64_s2leaf(l2, xval)
+    let cc : i64 = MR64_BC
+    let cv : u64 = MR64_BV
+    let dn : u32 = mr64_s2leaf(l3, xval)
+    let dc : i64 = MR64_BC
+    let dv : u64 = MR64_BV
+    let mut n1 : u32 = 0u32
+    let mut n1c : i64 = 0i64
+    let mut n1v : u64 = 0u64
+    if MR3_SH1H == 1i64 { n1 = MR3_SH1 }
+    else {
+        if t == 0i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+        if t == 1i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+        if t == 2i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+        if t == 3i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+        if t == 4i64 { n1 = mr64_op2(oa, cn, cc, cv, dn, dc, dv) }
+        n1c = MR64_BC
+        n1v = MR64_BV
+    }
+    let mut n2 : u32 = 0u32
+    let mut n2c : i64 = 0i64
+    let mut n2v : u64 = 0u64
+    if MR3_SH2H == 1i64 { n2 = MR3_SH2 }
+    else {
+        if t == 0i64 { n2 = mr64_op2(ob, n1, n1c, n1v, cn, cc, cv) }
+        if t == 1i64 { n2 = mr64_op2(ob, an, ac, av, n1, n1c, n1v) }
+        if t == 2i64 { n2 = mr64_op2(ob, cn, cc, cv, dn, dc, dv) }
+        if t == 3i64 { n2 = mr64_op2(ob, n1, n1c, n1v, dn, dc, dv) }
+        if t == 4i64 { n2 = mr64_op2(ob, bn, bc, bv, n1, n1c, n1v) }
+        n2c = MR64_BC
+        n2v = MR64_BV
+    }
+    if t == 0i64 { return mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 1i64 { return mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 2i64 { return mr64_op2(oc, n1, n1c, n1v, n2, n2c, n2v) }
+    return mr64_op2(oc, an, ac, av, n2, n2c, n2v)
+}
+/* the round's shared prefix: build every x-free named node ONCE.  An x-free root serves every
+ * sample whole; an x-free n2 implies its nested n1 is shared first (same span logic). */
+fn mr3_synth_shared(sid: i64) -> i32 {
+    MR3_SH1H = 0i64
+    MR3_SH2H = 0i64
+    MR3_SHRH = 0i64
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let fr : i64 = mr3_span(t, 0i64)
+    if (fr & 1i64) == 0i64 {
+        MR3_SHR = mr3_synth_root(sid, 0u64)
+        MR3_SHRH = 1i64
+        return 0i32
+    }
+    let f1 : i64 = mr3_span(t, 1i64)
+    if (f1 & 1i64) == 0i64 {
+        let mut la : i64 = MR3_LS[0u64]
+        let mut lb : i64 = MR3_LS[1u64]
+        if t == 1i64 { la = MR3_LS[1u64]   lb = MR3_LS[2u64] }
+        if t == 3i64 { la = MR3_LS[1u64]   lb = MR3_LS[2u64] }
+        if t == 4i64 { la = MR3_LS[2u64]   lb = MR3_LS[3u64] }
+        let an : u32 = mr64_s2leaf(la, 0u64)
+        let ac : i64 = MR64_BC
+        let av : u64 = MR64_BV
+        let bn : u32 = mr64_s2leaf(lb, 0u64)
+        MR3_SH1 = mr64_op2(oa, an, ac, av, bn, MR64_BC, MR64_BV)
+        MR3_SH1H = 1i64
+    }
+    let f2 : i64 = mr3_span(t, 2i64)
+    if (f2 & 1i64) == 0i64 {
+        if t == 0i64 {
+            let c0 : u32 = mr64_s2leaf(MR3_LS[2u64], 0u64)
+            MR3_SH2 = mr64_op2(ob, MR3_SH1, 0i64, 0u64, c0, MR64_BC, MR64_BV)
+        }
+        if t == 1i64 {
+            let a1 : u32 = mr64_s2leaf(MR3_LS[0u64], 0u64)
+            let a1c : i64 = MR64_BC
+            let a1v : u64 = MR64_BV
+            MR3_SH2 = mr64_op2(ob, a1, a1c, a1v, MR3_SH1, 0i64, 0u64)
+        }
+        if t == 2i64 {
+            let c2n : u32 = mr64_s2leaf(MR3_LS[2u64], 0u64)
+            let c2c : i64 = MR64_BC
+            let c2v : u64 = MR64_BV
+            let d2n : u32 = mr64_s2leaf(MR3_LS[3u64], 0u64)
+            MR3_SH2 = mr64_op2(ob, c2n, c2c, c2v, d2n, MR64_BC, MR64_BV)
+        }
+        if t == 3i64 {
+            let d3n : u32 = mr64_s2leaf(MR3_LS[3u64], 0u64)
+            MR3_SH2 = mr64_op2(ob, MR3_SH1, 0i64, 0u64, d3n, MR64_BC, MR64_BV)
+        }
+        if t == 4i64 {
+            let b4n : u32 = mr64_s2leaf(MR3_LS[1u64], 0u64)
+            let b4c : i64 = MR64_BC
+            let b4v : u64 = MR64_BV
+            MR3_SH2 = mr64_op2(ob, b4n, b4c, b4v, MR3_SH1, 0i64, 0u64)
+        }
+        MR3_SH2H = 1i64
+    }
+    return 0i32
+}
+/* VERIFY a concrete candidate at width MR64_W: leaves via mr64_v2leaf (x = the solver var),
+ * nodes via mr64_op2, bb_equal against the target node.  1 match / 0 differ (MR64_CEX set) /
+ * -1 poison. */
+fn mr3_verify(sid: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    bb_reset(MR64_W as u64)
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let an : u32 = mr64_v2leaf(MR3_LS[0u64], c1, c2)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr64_v2leaf(MR3_LS[1u64], c1, c2)
+    let bc : i64 = MR64_BC
+    let bv : u64 = MR64_BV
+    let cn : u32 = mr64_v2leaf(MR3_LS[2u64], c1, c2)
+    let cc : i64 = MR64_BC
+    let cv : u64 = MR64_BV
+    let dn : u32 = mr64_v2leaf(MR3_LS[3u64], c1, c2)
+    let dc : i64 = MR64_BC
+    let dv : u64 = MR64_BV
+    let mut n1 : u32 = 0u32
+    if t == 0i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+    if t == 1i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+    if t == 2i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+    if t == 3i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+    if t == 4i64 { n1 = mr64_op2(oa, cn, cc, cv, dn, dc, dv) }
+    let n1c : i64 = MR64_BC
+    let n1v : u64 = MR64_BV
+    let mut n2 : u32 = 0u32
+    if t == 0i64 { n2 = mr64_op2(ob, n1, n1c, n1v, cn, cc, cv) }
+    if t == 1i64 { n2 = mr64_op2(ob, an, ac, av, n1, n1c, n1v) }
+    if t == 2i64 { n2 = mr64_op2(ob, cn, cc, cv, dn, dc, dv) }
+    if t == 3i64 { n2 = mr64_op2(ob, n1, n1c, n1v, dn, dc, dv) }
+    if t == 4i64 { n2 = mr64_op2(ob, bn, bc, bv, n1, n1c, n1v) }
+    let n2c : i64 = MR64_BC
+    let n2v : u64 = MR64_BV
+    let mut root : u32 = 0u32
+    if t == 0i64 { root = mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 1i64 { root = mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 2i64 { root = mr64_op2(oc, n1, n1c, n1v, n2, n2c, n2v) }
+    if t == 3i64 { root = mr64_op2(oc, an, ac, av, n2, n2c, n2v) }
+    if t == 4i64 { root = mr64_op2(oc, an, ac, av, n2, n2c, n2v) }
+    let tgt : u32 = mr64_target_node(k)
+    let v : u8 = bb_equal(root, tgt)
+    if v == 1u8 { return 1i64 }
+    if v == 0u8 { MR64_CEX = bb_witness(0u32)   return 0i64 }
+    return 0i64 - 1i64
+}
+/* the NATIVE counterexample battery (the mr64 sequence over the 3-op evaluator) */
+fn mr3_native_cex(sid: i64, c1: u64, c2: u64, k: i64) -> i64 {
+    let mut t : i64 = 0i64
+    while t < 8i64 {
+        if mr3_eval(sid, t as u64, c1, c2, MR64_W) != mr64_target(k, t as u64, MR64_W) { MR64_CEX = t as u64   return 1i64 }
+        t = t + 1i64
+    }
+    let mut j : i64 = 3i64
+    while j < MR64_W {
+        let x : u64 = 1u64 << (j as u64)
+        if mr3_eval(sid, x, c1, c2, MR64_W) != mr64_target(k, x, MR64_W) { MR64_CEX = x   return 1i64 }
+        j = j + 1i64
+    }
+    j = 1i64
+    while j < MR64_W {
+        let x2 : u64 = (1u64 << (j as u64)) + 1u64
+        if mr3_eval(sid, x2, c1, c2, MR64_W) != mr64_target(k, x2, MR64_W) { MR64_CEX = x2   return 1i64 }
+        j = j + 1i64
+    }
+    let m : u64 = mr64_mask(MR64_W)
+    if mr3_eval(sid, m, c1, c2, MR64_W) != mr64_target(k, m, MR64_W) { MR64_CEX = m   return 1i64 }
+    let am : u64 = 0xAAAAAAAAAAAAAAAAu64 & m
+    if mr3_eval(sid, am, c1, c2, MR64_W) != mr64_target(k, am, MR64_W) { MR64_CEX = am   return 1i64 }
+    let fm : u64 = 0x5555555555555555u64 & m
+    if mr3_eval(sid, fm, c1, c2, MR64_W) != mr64_target(k, fm, MR64_W) { MR64_CEX = fm   return 1i64 }
+    return 0i64
+}
+/* THE BUDGET: exact full-multiplier accounting for sid's synth encoding.  Returns the
+ * per-SAMPLE full-mul count; the round-constant (shared) count lands in MR3_SMUL. */
+var MR3_SMUL : i64
+fn mr3_psmul(sid: i64) -> i64 {
+    MR3_SMUL = 0i64
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let mut p : i64 = 0i64
+    /* per node: op == MUL and BOTH operand spans contain a constant -> a full multiplier;
+     * weigh 1 (shared) if the NODE span is x-free, else 1 per sample.  Leaf operand spans:
+     * a leaf contains-c iff it IS a constant; contains-x iff it is x. */
+    let l0 : i64 = MR3_LS[0u64]
+    let l1 : i64 = MR3_LS[1u64]
+    let l2 : i64 = MR3_LS[2u64]
+    let l3 : i64 = MR3_LS[3u64]
+    /* n1 */
+    if oa == 2i64 {
+        let mut lc : i64 = 0i64
+        let mut rc : i64 = 0i64
+        if t == 0i64 { if l0 != 0i64 { lc = 1i64 }   if l1 != 0i64 { rc = 1i64 } }
+        if t == 1i64 { if l1 != 0i64 { lc = 1i64 }   if l2 != 0i64 { rc = 1i64 } }
+        if t == 2i64 { if l0 != 0i64 { lc = 1i64 }   if l1 != 0i64 { rc = 1i64 } }
+        if t == 3i64 { if l1 != 0i64 { lc = 1i64 }   if l2 != 0i64 { rc = 1i64 } }
+        if t == 4i64 { if l2 != 0i64 { lc = 1i64 }   if l3 != 0i64 { rc = 1i64 } }
+        if lc == 1i64 { if rc == 1i64 {
+            if (mr3_span(t, 1i64) & 1i64) == 0i64 { MR3_SMUL = MR3_SMUL + 1i64 } else { p = p + 1i64 }
+        } }
+    }
+    /* n2: operands per tree -- (n1,l2) (l0,n1) (l2,l3) (n1,l3) (l1,n1) */
+    if ob == 2i64 {
+        let f1 : i64 = mr3_span(t, 1i64)
+        let mut lc2 : i64 = 0i64
+        let mut rc2 : i64 = 0i64
+        if t == 0i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if l2 != 0i64 { rc2 = 1i64 } }
+        if t == 1i64 { if l0 != 0i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
+        if t == 2i64 { if l2 != 0i64 { lc2 = 1i64 }   if l3 != 0i64 { rc2 = 1i64 } }
+        if t == 3i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if l3 != 0i64 { rc2 = 1i64 } }
+        if t == 4i64 { if l1 != 0i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
+        if lc2 == 1i64 { if rc2 == 1i64 {
+            if (mr3_span(t, 2i64) & 1i64) == 0i64 { MR3_SMUL = MR3_SMUL + 1i64 } else { p = p + 1i64 }
+        } }
+    }
+    /* root: operands per tree -- (n2,l3) (n2,l3) (n1,n2) (l0,n2) (l0,n2) */
+    if oc == 2i64 {
+        let f1r : i64 = mr3_span(t, 1i64)
+        let f2r : i64 = mr3_span(t, 2i64)
+        let mut lc3 : i64 = 0i64
+        let mut rc3 : i64 = 0i64
+        if t == 0i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if l3 != 0i64 { rc3 = 1i64 } }
+        if t == 1i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if l3 != 0i64 { rc3 = 1i64 } }
+        if t == 2i64 { if (f1r & 2i64) != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
+        if t == 3i64 { if l0 != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
+        if t == 4i64 { if l0 != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
+        if lc3 == 1i64 { if rc3 == 1i64 {
+            /* the root is x-dependent whenever we are here (an x-free root is fully shared) */
+            p = p + 1i64
+        } }
+    }
+    return p
+}
+/* THE SHIFT BOX at three ops: every constant occurrence sits in a shift-AMOUNT slot (the
+ * right-operand LEAF of a shift node); the live boxes are {0..w} each.  Total native
+ * exhaustion; bb_equal only on battery survivors. */
+fn mr3_shonly(sid: i64) -> i64 {
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    /* amount-slot leaf index per node (-1 = the right operand is an expression) */
+    let mut a1 : i64 = 1i64
+    if t == 1i64 { a1 = 2i64 }
+    if t == 3i64 { a1 = 2i64 }
+    if t == 4i64 { a1 = 3i64 }
+    let mut a2 : i64 = 2i64
+    if t == 1i64 { a2 = 0i64 - 1i64 }
+    if t == 2i64 { a2 = 3i64 }
+    if t == 3i64 { a2 = 3i64 }
+    if t == 4i64 { a2 = 0i64 - 1i64 }
+    let mut a3 : i64 = 3i64
+    if t == 2i64 { a3 = 0i64 - 1i64 }
+    if t == 3i64 { a3 = 0i64 - 1i64 }
+    if t == 4i64 { a3 = 0i64 - 1i64 }
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        if MR3_LS[i as u64] != 0i64 {
+            let mut ok : i64 = 0i64
+            if i == a1 { if oa == 6i64 { ok = 1i64 }   if oa == 7i64 { ok = 1i64 } }
+            if i == a2 { if ob == 6i64 { ok = 1i64 }   if ob == 7i64 { ok = 1i64 } }
+            if i == a3 { if oc == 6i64 { ok = 1i64 }   if oc == 7i64 { ok = 1i64 } }
+            if ok == 0i64 { return 0i64 }
+        }
+        i = i + 1i64
+    }
+    return 1i64
+}
+fn mr3_shiftbox(sid: i64, k: i64) -> i64 {
+    mr3_const_roles(sid)
+    let mut c1hi : i64 = 0i64
+    if MR64_C1DAT == 1i64 { c1hi = MR64_W }
+    let mut c2hi : i64 = 0i64
+    if MR64_C2DAT == 1i64 { c2hi = MR64_W }
+    let mut c1 : i64 = 0i64
+    while c1 <= c1hi {
+        let mut c2 : i64 = 0i64
+        while c2 <= c2hi {
+            let cex : i64 = mr3_native_cex(sid, c1 as u64, c2 as u64, k)
+            if cex == 0i64 {
+                let vc : i64 = mr3_verify(sid, c1 as u64, c2 as u64, k)
+                if vc == 1i64 { MR64_OW1 = c1   MR64_OW2 = c2   return 0i64 }
+                if vc < 0i64 { return 0i64 - 1i64 }
+            }
+            c2 = c2 + 1i64
+        }
+        c1 = c1 + 1i64
+    }
+    return 1i64
+}
+/* ---- THE PREIMAGE SAMPLES (Skolemized refutation witnesses; the omega-4 neg-certificate
+ * closer, final half).  The 18 residual classes are shift shapes whose AMOUNT is a single
+ * op over {x, const} -- e.g. (x << (x+c)) - x vs neg.  Refuting them with CONSTANT samples
+ * needs a ~32-sample covering set (each x kills only the ~8 candidates mapping it to a
+ * small amount), which sits exactly on the sealed bb capacity wall (measured: 0xFF at
+ * 33-36 samples).  The fix is to put the killer INTO the formula as a function of the
+ * candidate: for invertible amount ops the preimage x(c) with amount == a0 is a one-op
+ * circuit (ADD: a0-c | SUB: a0+c / c-a0 | XOR: a0^c), and the branch
+ * E(x(c); c) != target(x(c)) joins the mismatch-OR.  Any x(c) is a legitimate forall-
+ * instance, so a TRUE match survives every branch (finder-completeness preserved) and
+ * UNSAT still soundly refutes.  a0 in {0,1,3,4} covers both shift directions.  MUL amounts
+ * have no preimage circuit: the even candidates die by the constant branch x = 2^(w-1)
+ * (amount == 0 there, any width), and the odd side rides a Newton-inverse branch priced
+ * IN clauses like a full multiplier -- so it runs below the machine word only, under the
+ * same printed width-budget law as the mul cap. ---- */
+var MR3_PIOP : i64               /* the amount op (0 ADD | 1 SUB | 2 MUL | 5 XOR) */
+var MR3_PICSEL : i64             /* which constant lives in the amount (1 | 2) */
+var MR3_PIXFIRST : i64           /* 1 iff x is the LEFT operand of the amount op */
+fn mr3_pi_scan(sid: i64) -> i64 {
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let mut amop : i64 = 0i64 - 1i64
+    let mut la : i64 = 0i64
+    let mut lb : i64 = 0i64
+    /* the expression-amount shift positions: t1/t4 ob-shift (amount = n1), t2 oc-shift
+     * (amount = n2); every other shift amount is a leaf (the shift box's domain). */
+    if t == 1i64 { if ob == 6i64 { amop = oa   la = MR3_LS[1u64]   lb = MR3_LS[2u64] }
+                   if ob == 7i64 { amop = oa   la = MR3_LS[1u64]   lb = MR3_LS[2u64] } }
+    if t == 4i64 { if ob == 6i64 { amop = oa   la = MR3_LS[2u64]   lb = MR3_LS[3u64] }
+                   if ob == 7i64 { amop = oa   la = MR3_LS[2u64]   lb = MR3_LS[3u64] } }
+    if t == 2i64 { if oc == 6i64 { amop = ob   la = MR3_LS[2u64]   lb = MR3_LS[3u64] }
+                   if oc == 7i64 { amop = ob   la = MR3_LS[2u64]   lb = MR3_LS[3u64] } }
+    if amop < 0i64 { return 0i64 }
+    if amop != 0i64 { if amop != 1i64 { if amop != 2i64 { if amop != 5i64 { return 0i64 } } } }
+    /* exactly one x and one constant in the amount */
+    if la == 0i64 {
+        if lb == 0i64 { return 0i64 }
+        MR3_PIXFIRST = 1i64
+        MR3_PICSEL = lb
+    } else {
+        if lb != 0i64 { return 0i64 }
+        MR3_PIXFIRST = 0i64
+        MR3_PICSEL = la
+    }
+    MR3_PIOP = amop
+    return 1i64
+}
+/* build the preimage node x(c) with amount forced to a0 (invertible ops only) */
+fn mr3_pi_xnode(a0: u64) -> u32 {
+    let cvar : u32 = bb_var(MR3_PICSEL as u32)
+    let an : u32 = bb_const(a0)
+    if MR3_PIOP == 0i64 { return bb_sub(an, cvar) }                       /* x + c == a0  |  c + x == a0 */
+    if MR3_PIOP == 1i64 {
+        if MR3_PIXFIRST == 1i64 { return bb_add(an, cvar) }               /* x - c == a0 */
+        return bb_sub(cvar, an)                                           /* c - x == a0 */
+    }
+    return bb_xor(an, cvar)                                               /* x ^ c == a0 (either order) */
+}
+/* E at a SYMBOLIC x-node (constant leaves stay solver vars / pins; no sharing shortcuts) */
+fn mr3_pi_leaf(sel: i64, xn: u32) -> u32 {
+    if sel == 0i64 {
+        MR64_BC = 0i64
+        MR64_BV = 0u64
+        return xn
+    }
+    return mr64_s2leaf(sel, 0u64)
+}
+fn mr3_synth_rootx(sid: i64, xn: u32) -> u32 {
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let an : u32 = mr3_pi_leaf(MR3_LS[0u64], xn)
+    let ac : i64 = MR64_BC
+    let av : u64 = MR64_BV
+    let bn : u32 = mr3_pi_leaf(MR3_LS[1u64], xn)
+    let bc : i64 = MR64_BC
+    let bv : u64 = MR64_BV
+    let cn : u32 = mr3_pi_leaf(MR3_LS[2u64], xn)
+    let cc : i64 = MR64_BC
+    let cv : u64 = MR64_BV
+    let dn : u32 = mr3_pi_leaf(MR3_LS[3u64], xn)
+    let dc : i64 = MR64_BC
+    let dv : u64 = MR64_BV
+    let mut n1 : u32 = 0u32
+    if t == 0i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+    if t == 1i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+    if t == 2i64 { n1 = mr64_op2(oa, an, ac, av, bn, bc, bv) }
+    if t == 3i64 { n1 = mr64_op2(oa, bn, bc, bv, cn, cc, cv) }
+    if t == 4i64 { n1 = mr64_op2(oa, cn, cc, cv, dn, dc, dv) }
+    let n1c : i64 = MR64_BC
+    let n1v : u64 = MR64_BV
+    let mut n2 : u32 = 0u32
+    if t == 0i64 { n2 = mr64_op2(ob, n1, n1c, n1v, cn, cc, cv) }
+    if t == 1i64 { n2 = mr64_op2(ob, an, ac, av, n1, n1c, n1v) }
+    if t == 2i64 { n2 = mr64_op2(ob, cn, cc, cv, dn, dc, dv) }
+    if t == 3i64 { n2 = mr64_op2(ob, n1, n1c, n1v, dn, dc, dv) }
+    if t == 4i64 { n2 = mr64_op2(ob, bn, bc, bv, n1, n1c, n1v) }
+    let n2c : i64 = MR64_BC
+    let n2v : u64 = MR64_BV
+    let mut root : u32 = 0u32
+    if t == 0i64 { root = mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 1i64 { root = mr64_op2(oc, n2, n2c, n2v, dn, dc, dv) }
+    if t == 2i64 { root = mr64_op2(oc, n1, n1c, n1v, n2, n2c, n2v) }
+    if t == 3i64 { root = mr64_op2(oc, an, ac, av, n2, n2c, n2v) }
+    if t == 4i64 { root = mr64_op2(oc, an, ac, av, n2, n2c, n2v) }
+    return root
+}
+/* the target at a SYMBOLIC x-node: neg = 0 - x; rot_k = (x << k) | (x >> w-k) */
+fn mr3_tgt_nodex(k: i64, xn: u32) -> u32 {
+    if k == 0i64 { return mr64_op2(1i64, bb_const(0u64), 1i64, 0u64, xn, 0i64, 0u64) }
+    let ln : u32 = mr64_op2(6i64, xn, 0i64, 0u64, bb_const(k as u64), 1i64, k as u64)
+    let lc : i64 = MR64_BC
+    let lv : u64 = MR64_BV
+    let rn : u32 = mr64_op2(7i64, xn, 0i64, 0u64, bb_const((MR64_W - k) as u64), 1i64, (MR64_W - k) as u64)
+    return mr64_op2(4i64, ln, lc, lv, rn, MR64_BC, MR64_BV)
+}
+/* one preimage branch: E(x(c);c) != target(x(c)), OR'd into the mismatch node */
+fn mr3_pi_branch(sid: i64, k: i64, xn: u32, mnode: u32) -> u32 {
+    let en : u32 = mr3_synth_rootx(sid, xn)
+    let tn : u32 = mr3_tgt_nodex(k, xn)
+    return bb_or(mnode, bb_xor(en, tn))
+}
+var MR3_WHY : i64                /* the last cegis refusal's reason (1 cap | 2 verify | 3 rounds) */
+var MR3_WHYN : i64               /* ... and its sample count -- a refusal keeps its coordinates */
+/* the omega-4 CEGIS over one 3-op shape.  1 REFUTED / 0 MATCH / -1 undecided.
+ * A refusal keeps its coordinates AND its reason: MR3_WHY = 1 solver-capacity (bb 0xFF) |
+ * 2 verify-poison | 3 round-exhaustion, MR3_WHYN = the sample count at refusal. */
+fn mr3_cegis(sid: i64, k: i64, p: i64) -> i64 {
+    let mut cap : i64 = 200i64
+    let mut base : i64 = 3i64
+    if p > 0i64 {
+        /* THE WIDTH-SCALED MUL BUDGET (paid for by the first w8 certificate run -- 352/816
+         * undecided): a full multiplier costs ~17w^2/2 clauses, so the capacity envelope is
+         * width-dependent: 3 multipliers at the machine word, dozens at width 8.  The w64
+         * arithmetic is BYTE-IDENTICAL to the priced behaviour (mb = 3, cap <= 3). */
+        let mut mb : i64 = 3i64
+        if MR64_W < 64i64 { mb = 48i64 }
+        cap = (mb - MR3_SMUL) / p
+        if cap < 1i64 { cap = 1i64 }
+        if cap > 48i64 { cap = 48i64 }                /* wide sub-word windows: a w8 multiplier
+                                                       * is ~544 clauses -- monotone growth beats
+                                                       * sliding for the match-dense targets */
+        if MR64_W == 64i64 { if cap > 3i64 { cap = 3i64 } }
+        MR64_SAMP[0u64] = 0u64
+        MR64_SAMP[1u64] = 1u64 << ((MR64_W - 1i64) as u64)
+        MR64_SAMP[2u64] = 1u64
+        MR64_NSAMP = cap
+        if MR64_NSAMP > 3i64 { MR64_NSAMP = 3i64 }    /* three seeds; refinement grows to cap */
+        base = cap - 1i64
+        if base < 1i64 { base = 1i64 }
+        if base > 2i64 { base = 2i64 }                /* the two strongest seeds stay permanent */
+    } else {
+        /* THE NO-SLIDE WINDOW below the machine word (the neg-certificate closer, paid for by
+         * the 80-class residual): at w <= 8 a single live constant has <= 2^w candidates; with
+         * the window >= 2^w + seeds, every killed candidate's sample is PERMANENT, the solver
+         * can never re-propose it, and the loop MUST terminate -- a verified match (a never-
+         * killed candidate arrives) or UNSAT (all excluded) within 2^w + eps rounds.  Sliding
+         * was the livelock: killed candidates resurfaced when their sample slid out.  At w64
+         * cap stays 200 -- byte-identical to the priced sweep behaviour. */
+        if MR64_W < 64i64 { cap = 320i64 }
+        MR64_SAMP[0u64] = 1u64   MR64_SAMP[1u64] = 2u64   MR64_SAMP[2u64] = 3u64   MR64_SAMP[3u64] = 0u64
+        MR64_NSAMP = 4i64
+    }
+    mr3_const_roles(sid)
+    /* the round budget scales with width too: sub-word rounds are ~ms each, and the neg-dense
+     * classes need the window to outlast candidate cycling (the 816 -> 80 -> 0 ladder) */
+    let mut rmax : i64 = 96i64
+    if MR64_W < 64i64 { rmax = 512i64 }
+    let mut rounds : i64 = 0i64
+    while rounds < rmax {
+        bb_reset(MR64_W as u64)
+        mr3_synth_shared(sid)
+        let mut mnode : u32 = 0u32
+        let mut havem : i64 = 0i64
+        let mut i : i64 = 0i64
+        while i < MR64_NSAMP {
+            let mut rt : u32 = MR3_SHR
+            if MR3_SHRH == 0i64 { rt = mr3_synth_root(sid, MR64_SAMP[i as u64]) }
+            let d : u32 = bb_xor(rt, bb_const(mr64_target(k, MR64_SAMP[i as u64], MR64_W)))
+            if havem == 0i64 { mnode = d   havem = 1i64 } else { mnode = bb_or(mnode, d) }
+            i = i + 1i64
+        }
+        /* the preimage branches (see the block above): for expression-amount shift shapes,
+         * the killer rides the formula as a function of the candidate */
+        if mr3_pi_scan(sid) == 1i64 {
+            if MR3_PIOP == 2i64 {
+                /* MUL amount: even candidates die at x = 2^(w-1) (amount == 0 there); the odd
+                 * side needs c^-1 (Newton, ~5 multipliers) -- priced below the machine word
+                 * only, the same printed width-budget law as the mul cap */
+                mnode = mr3_pi_branch(sid, k, bb_const(1u64 << ((MR64_W - 1i64) as u64)), mnode)
+                if MR64_W <= 8i64 {
+                    let cvar : u32 = bb_var(MR3_PICSEL as u32)
+                    let two : u32 = bb_const(2u64)
+                    let z1 : u32 = bb_mul(cvar, bb_sub(two, bb_mul(cvar, cvar)))
+                    let z2 : u32 = bb_mul(z1, bb_sub(two, bb_mul(cvar, z1)))
+                    mnode = mr3_pi_branch(sid, k, bb_mul(z2, bb_const(3u64)), mnode)
+                }
+            } else {
+                mnode = mr3_pi_branch(sid, k, mr3_pi_xnode(0u64), mnode)
+                mnode = mr3_pi_branch(sid, k, mr3_pi_xnode(1u64), mnode)
+                mnode = mr3_pi_branch(sid, k, mr3_pi_xnode(3u64), mnode)
+                mnode = mr3_pi_branch(sid, k, mr3_pi_xnode(4u64), mnode)
+            }
+        }
+        let sv : u8 = bb_solve_zero(mnode)
+        if sv == 0xFFu8 { MR3_WHY = 1i64   MR3_WHYN = MR64_NSAMP   return 0i64 - 1i64 }
+        if sv == 1u8 { return 1i64 }
+        let mut c1c : u64 = 0u64
+        let mut c2c : u64 = 0u64
+        if MR64_PIN1 >= 0i64 { c1c = MR64_PIN1 as u64 }
+        else { if MR64_C1DAT == 1i64 { c1c = bb_witness(1u32) } }
+        if MR64_PIN2 >= 0i64 { c2c = MR64_PIN2 as u64 }
+        else { if MR64_C2DAT == 1i64 { c2c = bb_witness(2u32) } }
+        let mut cex : i64 = mr3_native_cex(sid, c1c, c2c, k)
+        if cex == 0i64 {
+            let vc : i64 = mr3_verify(sid, c1c, c2c, k)
+            if vc == 1i64 { MR64_OW1 = c1c as i64   MR64_OW2 = c2c as i64   return 0i64 }
+            if vc < 0i64 { MR3_WHY = 2i64   MR3_WHYN = MR64_NSAMP   return 0i64 - 1i64 }
+            cex = 1i64
+        }
+        if MR64_NSAMP < cap { MR64_SAMP[MR64_NSAMP as u64] = MR64_CEX   MR64_NSAMP = MR64_NSAMP + 1i64 }
+        else {
+            if cap > base { MR64_SAMP[(base + (rounds % (cap - base))) as u64] = MR64_CEX }
+            else { MR64_SAMP[(cap - 1i64) as u64] = MR64_CEX }
+        }
+        rounds = rounds + 1i64
+    }
+    MR3_WHY = 3i64
+    MR3_WHYN = MR64_NSAMP
+    return 0i64 - 1i64
+}
+/* THE DISTINGUISHED-CANDIDATE PRE-PASS (the omega-4 neg-certificate closer, second half):
+ * after a CEGIS abstention, try the degenerate constant values whose witnesses are WIDTH-
+ * INDEPENDENT constructions -- c=0 zeroes a shifted operand ((0 << a) - x = neg x at any
+ * width); c=1 rides x >> x == 0 (every x >= its own bit-length); w-1/w/top-bit/mask drive
+ * saturation.  Native counterexample battery first (cheap reject), then the FULL symbolic
+ * verify, so a survivor is a PROVEN match over all 2^w x, never a sampled one.  A verify
+ * refusal just skips the candidate; exhaustion returns the honest -1.  Same six values at
+ * width 8 and width 64 -- the mechanism the certificate certifies IS the mechanism the
+ * machine-word sweep runs. */
+fn mr3_pdv(i: i64) -> u64 {
+    if i == 0i64 { return 0u64 }
+    if i == 1i64 { return 1u64 }
+    if i == 2i64 { return (MR64_W - 1i64) as u64 }
+    if i == 3i64 { return MR64_W as u64 }
+    if i == 4i64 { return 1u64 << ((MR64_W - 1i64) as u64) }
+    return mr64_mask(MR64_W)
+}
+fn mr3_prepass(sid: i64, k: i64) -> i64 {
+    mr3_const_roles(sid)
+    let mut n1 : i64 = 1i64
+    if MR64_C1DAT == 1i64 { n1 = 6i64 }
+    let mut n2 : i64 = 1i64
+    if MR64_C2DAT == 1i64 { n2 = 6i64 }
+    let mut i : i64 = 0i64
+    while i < n1 {
+        let mut j : i64 = 0i64
+        while j < n2 {
+            let c1 : u64 = mr3_pdv(i)
+            let c2 : u64 = mr3_pdv(j)
+            if mr3_native_cex(sid, c1, c2, k) == 0i64 {
+                let vc : i64 = mr3_verify(sid, c1, c2, k)
+                if vc == 1i64 { MR64_OW1 = c1 as i64   MR64_OW2 = c2 as i64   return 0i64 }
+            }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    return 0i64 - 1i64
+}
+/* decide ONE 3-op shape at the current width */
+fn mr3_decide(sid: i64, k: i64) -> i64 @export {
+    mr3_const_roles(sid)
+    if mr3_shonly(sid) == 1i64 { return mr3_shiftbox(sid, k) }
+    let p : i64 = mr3_psmul(sid)
+    let r : i64 = mr3_cegis(sid, k, p)
+    if r >= 0i64 { return r }
+    return mr3_prepass(sid, k)
+}
+/* diagnostics: the width-8 single-class door + the refusal reason (probe surface only) */
+fn mr3_decide8(sid: i64, k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR3_WHY = 0i64
+    MR3_WHYN = 0i64
+    return mr3_decide(sid, k)
+}
+fn mr3_why() -> i64 @export { return MR3_WHY }
+fn mr3_whyn() -> i64 @export { return MR3_WHYN }
+/* the width-8 VALIDATION: the decide verdict against the first-match total oracle over ALL
+ * 207,360 classes.  Returns disagreements; MR3_VUND counts undecided. */
+var MR3_VUND : i64
+fn mr3_vund() -> i64 @export { return MR3_VUND }
+fn mr3_validate8(k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR3_VUND = 0i64
+    MR3_UNDN = 0i64
+    let mut bad : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        let ce : i64 = mr3_decide(sid, k)
+        let br : i64 = mr3_brute_any(sid, k, 8i64)
+        if ce == 1i64 { if br != 0i64 { bad = bad + 1i64 } }
+        else { if ce == 0i64 { if br != 1i64 { bad = bad + 1i64 } }
+               else { MR3_VUND = MR3_VUND + 1i64
+                      if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 } } }
+        sid = sid + 1i64
+    }
+    return bad
+}
+/* the width-64 sweep against target k: counts refuted / matched / undecided; undecided sids
+ * recorded (a refusal keeps its coordinates; store cap 4096). */
+var MR3_ODEC : i64
+var MR3_OUND : i64
+var MR3_OMATCH : i64
+var MR3_UNDS : [i64; 4096]
+var MR3_UNDN : i64
+fn mr3_odec() -> i64 @export { return MR3_ODEC }
+fn mr3_ound() -> i64 @export { return MR3_OUND }
+fn mr3_omatch() -> i64 @export { return MR3_OMATCH }
+fn mr3_undn() -> i64 @export { return MR3_UNDN }
+fn mr3_undat(i: i64) -> i64 @export {
+    if i < 0i64 { return 0i64 - 1i64 }
+    if i >= MR3_UNDN { return 0i64 - 1i64 }
+    return MR3_UNDS[i as u64]
+}
+fn mr3_omega(k: i64, lo: i64, hi: i64) -> i64 @export {
+    MR64_W = 64i64
+    MR3_ODEC = 0i64
+    MR3_OUND = 0i64
+    MR3_OMATCH = 0i64
+    MR3_UNDN = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = lo
+    while sid < hi {
+        let v : i64 = mr3_decide(sid, k)
+        if v == 1i64 { MR3_ODEC = MR3_ODEC + 1i64   refuted = refuted + 1i64 }
+        else { if v == 0i64 { MR3_ODEC = MR3_ODEC + 1i64   MR3_OMATCH = MR3_OMATCH + 1i64 }
+               else { MR3_OUND = MR3_OUND + 1i64
+                      if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 } } }
+        sid = sid + 1i64
+    }
+    return refuted
 }

@@ -1363,6 +1363,78 @@ census at n=12 (the 479M-perm flood ≈ 40+ min/flavor — a priced gate_slower 
 partition route alone with a stated single-route scope); 3-op cost questions (the CEGIS door
 generalises: cost(rot_k ∘ rot_j)? cost of byte-swap?); the pilot past 36.
 
+## 25. CAMPAIGN Ω-4 — THE THIRD OPERATION (gates 2736–2740, stage [19], OMEGA4_CERT)
+
+The grammar turns its third rung: FIVE tree shapes × 8³ op-triples × 3⁴ leaf-quads =
+**207,360 3-op shape-classes** over the full ALU (`mr3_` tier in `aether/mathesis_rot64`:
+native evaluator + total width-8 oracle + census doors + the full SAT lift, with the Ω-2
+mechanisms generalised — sharing of the x-free NAMED nodes, the shift box, the width-scaled
+mul budget).
+
+- **THE WIDTH-8 SPELLING CENSUS** (gate 2736, ~30 min, total exhaustion): **rot₁ = EXACTLY 60
+  classes carrying EXACTLY 60 constant assignments — ONE assignment per class: every width-8
+  3-op rotation spelling is RIGID** (its constants are forced); the definiens class
+  (x≪c1)|(x≫c2) (sid 118919) among them. **neg = 23,340 classes** (11.3% of the grammar) by
+  the classes-only door — **THE DOOR-PER-DENSITY LAW** (paid: the first census run timed out):
+  exact assignment-counting on a match-DENSE target enumerates millions of full verifications;
+  census the classes with first-match early exit, count assignments only where matches are rare.
+- **THE CERTIFICATE, BOTH HALVES** (gates 2737/2738): the 3-op decide engine against the
+  first-match total width-8 oracle over ALL 207,360 classes — target rot₁ (refute-dense):
+  **0 disagreements, 0 undecided**; target neg (match-dense — the finder must FIND 23,340
+  times): **0 disagreements, 0 undecided — a FOUR-RUNG measured ladder 816 → 80 → 18 → 0**,
+  every rung diagnosed before its mechanism was built. **THE WIDTH-SCALED MUL BUDGET LAW**
+  (352/816 undecided at cap 1): ~17w²/2 clauses per multiplier — the capacity envelope scales
+  with width. **THE NO-SLIDE WINDOW** (80 → 18): below the machine word the sample window
+  holds the whole single-constant candidate space (384-slot array, cap 320 at w<64), so a
+  killed candidate's sample is PERMANENT and termination is a pigeonhole theorem — sliding
+  was a livelock. **THE DISTINGUISHED-CANDIDATE PRE-PASS**: after a CEGIS abstention,
+  {0, 1, w−1, w, 2^(w−1), mask} are tried native-battery-then-FULL-symbolic-verify — the
+  witnesses are width-independent constructions (c=0 zeroes a shifted operand; c=1 rides
+  x≫x ≡ 0). **THE PREIMAGE SAMPLES** (the last 18, all must-refute expression-amount shifts):
+  the refutation witness rides the formula AS A FUNCTION OF THE CANDIDATE — x(c) = a₀ ⊖ c for
+  invertible amount ops; MUL amounts: even candidates die at x = 2^(w−1), odd ones on a
+  width-budgeted Newton-inverse branch — because the constant-sample covering set (~32) sits
+  EXACTLY on the sealed bb capacity wall (0xFF at 33–36 samples; the refusal-reason
+  instrumentation mr3_why/whyn is a standing probe surface). Soundness is unconditional:
+  any x(c) is a legitimate ∀-instance, so a true match survives every branch and UNSAT still
+  refutes.
+- **THE MACHINE-WORD SWEEP WITH THE ENVELOPE NAMED** (gate 2740 + the fleet artifact): all
+  207,360 classes SWEPT at width 64 by a 16-way partition fleet (~5.5 h single-threaded, ~1 h
+  wall) — **199,226 DECIDED: 56 classes carry a rot₁ spelling (the definiens among them,
+  proven by the gate's NAMED ONE-CLASS ARM), 199,170 REFUTED; 8,130 classes REFUSE at the
+  SEALED bb capacity pins** — every sampled refusal (20/20 across 13 regions, including the
+  heavy tail) is **mechanism-1: solver-capacity 0xFF at 3–56 samples**, coordinates and
+  reasons kept (mr3_why/whyn); **and FOUR classes are wall-clock UNREACHED** (sids
+  120620/120624/120628/120630 — one leaf-quad family in tree 2, each >1 h solo with NO
+  engine verdict, and the 3-h solo probes ALSO capped verdict-less: unreached at three
+  independent budgets) — the residual drain's first named entries. The SEALED-PIN/CAP law holds: this is the Ω-2 780-MUL-residual analogue at the
+  third rung — the residual's closure route is ALGEBRAIC (box/pin decomposition), never a
+  capacity lift. In-gate (2740, ~1 min): the definiens arm + **THE STRIDE-97 CERTIFICATE
+  SUBSET** (2138 classes crossing all five trees: 2051 decided / 0 matched / 87 refused,
+  reproduced exactly across two runs — the engine is deterministic, so drift here is engine
+  drift; none of the four unreached sids is a stride multiple) + the far-boundary arms (the
+  empty range at the grammar edge decides nothing; the refusal store's guards refuse
+  out-of-range reads by name). **THE HEAVY-TAIL LAW (measured)**: per-class cost is violently
+  non-uniform — ~90 ms average against four classes exceeding 3,600 s — so a timeout on a
+  RANGE is a NAMED SPLIT, not a verdict: fleet → sub-chunks → micros → slices → singles, each
+  rung isolating the cost until the atom is reached. And the exit-buffer corollary: a
+  timeout-killed probe loses its buffered output — partition sweeps write per-chunk logs.
+- **THE PILOT AT 42** (gate 2739): rounds 36–41 — **round 36 chose d=28 (4·7) and found A:3 —
+  THE EIGHTH AUTONOMOUS DISCOVERY**; round 39 chose d=29 (EMPTY — the prime joins the
+  nonexistence inventory); rounds 37/40 named schedule refusals. THE PREFIX LAW held
+  (head(36) == the sealed Ω-3 head); **head(42) = d24760d3… pinned across two full runs**.
+
+**What Ω-4 establishes**: the cost-3 tier is a MEASURED SPACE — the machine knows every
+width-8 3-op rotation spelling (60, rigid), knows the machine word's decided census exactly
+(56 spelling classes, 199,170 refutations), and names its own refusal envelope (8,130
+capacity-refused + 4 unreached, one mechanism, sealed pins) with coordinates a future
+campaign can drain. The deciding engine is certified against ground truth on BOTH densities
+before any width-64 verdict is trusted. TRAP (paid): MR64_W defaults to 0 — never call a
+width-CONSUMING door before a width-SETTING one; the named-arm discipline is a one-class
+mr3_omega range. **Named frontier out of Ω-4**: the 8,134-class residual drain (box/pin —
+the Ω-2-full-settlement pattern at rung 3 — with the four unreached classes first); the 4-op
+grammar (~10⁷ classes, priced); census n=12; the pilot past 42.
+
 ---
 
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`

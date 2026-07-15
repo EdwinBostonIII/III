@@ -1,0 +1,20 @@
+/* 2737_mathesis_op3_cert_rot.iii -- GATE for THE THIRD OPERATION'S CERTIFICATE, rot half
+ * (campaign Omega-4).
+ *
+ * The 3-op decision engine (the shift box, the width-scaled budgeted CEGIS, the generalised
+ * sharing of x-free named nodes) against the first-match TOTAL width-8 oracle over ALL
+ * 207,360 shape-classes, target rot_1: 0 disagreements, 0 undecided.  The width-scaled mul
+ * budget is itself a paid law (the first certificate run left 352 classes undecided at cap 1:
+ * a full multiplier costs ~17w^2/2 clauses, so the capacity envelope must scale with width --
+ * the width-64 arithmetic stays byte-identical to the priced behaviour).  Only after this gate
+ * is the engine's width-64 verdict trusted.  EXIT 99. */
+module corpus_2737_mathesis_op3_cert_rot
+
+extern @abi(c-msvc-x64) fn mr3_validate8(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr3_validate8(1i64) != 0i64 { return 20i32 }      /* no disagreement anywhere */
+    if mr3_vund() != 0i64 { return 21i32 }               /* nothing undecided at width 8 */
+    return 99i32
+}

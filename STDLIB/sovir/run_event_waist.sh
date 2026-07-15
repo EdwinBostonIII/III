@@ -67,8 +67,9 @@ done
 say "[event-waist] cg_svir harness fresh"
 
 say "[event-waist] == [4] THE DIFFERENTIAL: route S (state-primary) == route V (event-primary) =="
+IND_DIR="$III_ROOT/STDLIB/independence"
 SQN=0; SQPASS=0; SQEXCL=0
-for src in "$SQ_DIR"/sq*.iii; do
+for src in "$SQ_DIR"/sq*.iii "$IND_DIR/indep_ops.iii" "$IND_DIR/indep_isqrt.iii"; do
     [[ -f "$src" ]] || continue
     SQN=$((SQN+1)); base="$(basename "$src" .iii)"
     SW="$W/w_$base"; mkdir -p "$SW"
@@ -84,6 +85,10 @@ for src in "$SQ_DIR"/sq*.iii; do
     RCV=$?
     if [[ $RCV -eq 190 || $RCV -eq 192 ]]; then
         say "EXCLUDED-BY-CAPACITY $base (route-V refused $RCV; log cap is the named envelope)"
+        SQEXCL=$((SQEXCL+1)); continue
+    fi
+    if [[ $RCS -eq 198 && $RCV -eq 198 ]]; then
+        say "EXCLUDED-VACUOUS $base (both routes refuse the unresolved import -- agreement proves nothing)"
         SQEXCL=$((SQEXCL+1)); continue
     fi
     if [[ "$RCS" == "$RCV" ]] && cmp -s "$SW/out_s.txt" "$SW/out_v.txt"; then
@@ -116,7 +121,58 @@ else
     say "RED teeth stage: no route_v for sq06_loops"; FAIL=1
 fi
 
+say "[event-waist] == [6] THE STANDING TOOL: iii-events (route V on arbitrary user programs) =="
+TOOL="$W/iii-events$BIN_SUFFIX"
+if bash "$BOOT/build_iii_events.sh" --out "$TOOL" >"$W/_tool_build.log" 2>&1 && [[ -x "$TOOL" ]]; then
+    # a FRESH program authored by this gate run -- the expectation comes from the NATIVE route,
+    # never from a constant: two meaning-bearers, one gate-authored input.
+    cat > "$W/gate_probe.iii" << 'IIIEOF'
+module gate_probe
+fn tri(n: u64) -> u64 {
+    let mut s : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i <= n { s = s + i  i = i + 1u64 }
+    return s
+}
+fn main() -> i32 {
+    if tri(12u64) != 78u64 { return 1i32 }
+    if tri(0u64) != 0u64 { return 2i32 }
+    return ((tri(11u64) % 100u64) as i32)
+}
+IIIEOF
+    "$IIIS" "$W/gate_probe.iii" --compile-only --out "$W/gate_probe.o" >/dev/null 2>&1 \
+        && gcc "$W/gate_probe.o" -o "$W/gate_probe$BIN_SUFFIX" >/dev/null 2>&1
+    "$W/gate_probe$BIN_SUFFIX" >/dev/null 2>&1
+    RCN=$?
+    "$TOOL" --quiet "$W/gate_probe.iii" >/dev/null 2>&1
+    RCT=$?
+    if [[ "$RCN" == "$RCT" ]]; then say "TOOL parity gate-authored probe: native=$RCN tool=$RCT"; else say "RED tool parity: native=$RCN tool=$RCT"; FAIL=1; fi
+    TPN=0; TPOK=0
+    for tsrc in sq01_arith sq05_recur sq15_crt; do
+        TPN=$((TPN+1))
+        NEXE="$W/w_$tsrc/route_s$BIN_SUFFIX"
+        [[ -x "$NEXE" ]] || { say "RED tool parity $tsrc: no route_s"; FAIL=1; continue; }
+        timeout 120 "$NEXE" > "$W/_tp_s.txt" 2>&1
+        RS=$?
+        timeout 120 "$TOOL" --quiet "$SQ_DIR/$tsrc.iii" > "$W/_tp_v.txt" 2>&1
+        RV=$?
+        if [[ "$RS" == "$RV" ]] && cmp -s "$W/_tp_s.txt" "$W/_tp_v.txt"; then
+            say "TOOL parity $tsrc rc=$RS (output bytes equal)"; TPOK=$((TPOK+1))
+        else
+            say "RED tool parity $tsrc: S=$RS V=$RV cmp=$(cmp -s "$W/_tp_s.txt" "$W/_tp_v.txt" && echo same || echo DIFF)"; FAIL=1
+        fi
+    done
+    timeout 120 "$TOOL" --tamper "$W/gate_probe.iii" >/dev/null 2>&1
+    rc=$?
+    if [[ $rc -eq 193 ]]; then say "TOOL tamper tooth 193"; else say "RED tool tamper: rc=$rc"; FAIL=1; fi
+    timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv1.txt" 2>&1
+    timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv2.txt" 2>&1
+    if cmp -s "$W/_tv1.txt" "$W/_tv2.txt"; then say "TOOL determinism: verdict lines byte-identical"; else say "RED tool determinism"; FAIL=1; fi
+else
+    say "RED tool build failed (see _tool_build.log)"; FAIL=1
+fi
+
 if [[ $KATN -eq 0 || $SQN -eq 0 ]]; then echo "[event-waist] FATAL: an arm ran EMPTY"; exit 2; fi
 if [[ $FAIL -ne 0 ]]; then echo "[event-waist] RED"; exit 1; fi
-echo "[event-waist] GREEN: 3 organ-law gates (99) + differential $SQPASS/$SQN route-S==route-V (rc+stdout) + real-module teeth"
+echo "[event-waist] GREEN: 3 organ-law gates (99) + differential $SQPASS/$SQN route-S==route-V (rc+stdout) + real-module teeth + iii-events tool arms"
 exit 0

@@ -1,8 +1,11 @@
 # III — THE EVENT-PRIMARY WAIST: the inversion made the ground of execution
 ### route V: SVIR executed as an append-only retirement log; state, output, and result = a validating fold over history
 > **Date:** 2026-07-14 · **Status: BUILT + GATE GREEN same session** (`run_event_waist.sh` exit 0:
-> 3 organ-law gates at 99 · **differential 17/17 route-S ≡ route-V (rc + stdout bytes) over the real
-> square-probe SVIR modules** · tamper tooth 193 on real module bytes · two full runs byte-identical).
+> 3 organ-law gates at 99 · **differential 19/19 route-S ≡ route-V (rc + stdout bytes) over the real
+> square-probe SVIR modules + the extern-free independence probes** · tamper tooth 193 on real module
+> bytes · two full runs byte-identical · **THE STANDING TOOL `iii-events`** (route V on arbitrary user
+> programs, `COMPILER/BOOT/build_iii_events.sh` → `COMPILED/iii-events`; see III-STANDING-TOOLS.md) with
+> gate-authored-probe parity, source-level rc+output parity, tamper 193, and verdict determinism arms).
 > **Files:** `STDLIB/sovir/svir_event.iii` (the organ) · `STDLIB/sovir/svir_event_main.iii` (driver) ·
 > `STDLIB/corpus/2750/2751/2752` (laws · replay independence · recurrence) ·
 > `STDLIB/sovir/run_event_waist.sh` (family owner; SKIP-registered in `run_corpus.sh`).

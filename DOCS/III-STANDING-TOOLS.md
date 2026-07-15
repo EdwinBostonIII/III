@@ -596,3 +596,36 @@ byte-identical across the widening.  Every verb proven on both arms, every claim
 output; owner family PASS=71 FAIL=0 at every rung.)
 
 Each is a tool of the same shape as `iii-prove`: link the library, take real input, print a real verdict.
+
+---
+
+## `iii-events` — execute any .iii program as an append-only event history (route V)
+
+```
+iii-events <file.iii>              run; output prints AT FOLD TIME (read out of the retirement log,
+                                   not the live machine), then: IIIEVENTS rc= evn= wit= term= lasso=
+iii-events --quiet <file.iii>      pure program behavior (exit = the program's own rc)
+iii-events --tamper <file.iii>     corrupt one recorded event, fold: MUST exit 193
+```
+
+Build: `bash COMPILER/BOOT/build_iii_events.sh` → `COMPILED/iii-events`.
+Source: `COMPILER/BOOT/events_main.iii` + `STDLIB/sovir/svir_event.iii` (the organ, gate family
+`STDLIB/sovir/run_event_waist.sh`).
+
+This is THE EVENT-PRIMARY WAIST (`DOCS/III-EVENT-WAIST.md`) made independently useful: the compiler's
+own front end + its own SVIR backend in-process (the `iii-prove` closure), then execution whose ONLY
+product is a retirement log — the program's output and exit code are **read back out of the log by a
+validating fold** that re-derives every event and refuses any corruption. Every run is witnessed
+(order-sensitive fold root), deterministic (two runs byte-identical), prefix-re-derivable, and its
+recurrences are readable (`lasso=`). Refusals are named, never silent: 190 log-cap, 192 cap+lasso,
+193 fold/witness refuses, 198 unresolved import (the deterministic CRT tier malloc/free/putchar/
+VirtualAlloc/VirtualFree/Sleep IS supported), 199 OOB indirect.
+
+**Measured this session (all observed command output, none curated):** a fresh 36-line rotation+gcd
+program → `IIIEVENTS rc=99 evn=6207 wit=a48aea815e8d951d term=1 lasso=0`, exit 99; `--tamper` on the
+same → exit 193; `--quiet` on `square_probes/sq01_arith.iii` → exit 61 == the native binary's 61;
+`sq15_crt.iii` (CRT shim tier) → its output byte produced at fold time, rc=96 == native. The owner
+gate additionally proves, every run: a **gate-authored** probe whose expectation comes from the
+native route (never a constant), three square sources with output-byte equality, the tamper tooth,
+and verdict-line determinism — plus the standing 19/19 route-S ≡ route-V differential (17 square
+probes + the extern-free independence probes, rc AND stdout bytes).

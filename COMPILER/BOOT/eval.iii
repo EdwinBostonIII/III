@@ -100,6 +100,13 @@ extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "ast
 extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_loop_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_range_lo(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_range_hi(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
@@ -166,6 +173,8 @@ const EVK_STRUCT_DECL: u32 = 75u32
 const EVK_STMT_LOOP: u32 = 76u32
 const EVK_STMT_BREAK: u32 = 77u32
 const EVK_STMT_CONTINUE: u32 = 78u32
+const EVK_STMT_FOR: u32 = 24u32          /* for <var> in <iter> { body }  -- desugared to a while */
+const EVK_EXPR_RANGE: u32 = 71u32        /* lo..hi (exclusive; the for iterable) */
 const EVK_EXPR_PARALLEL: u32 = 61u32    /* bracket-init [a, b, c] parses as EXPR_PARALLEL */
 
 /* binary / unary op enums (ast.iii canon) */
@@ -1630,6 +1639,62 @@ fn ev_exec_stmt(node: u32) -> u32 {
         let en: u32 = iii_ast_if_else(EV_AST, node)
         if en == 0u32 { return EVS_OK }
         return ev_exec_block_or_stmt(en)
+    }
+    if k == EVK_STMT_FOR {
+        /* for <var> in <iter> { body } -- native (cg_r3) semantics, mirrored: a RANGE lo..hi runs
+         * var from lo while var < hi (SIGNED, exclusive); a bare iterable runs var from 0 while
+         * var < count.  The loop var lives in a fresh scope + world slot (so the body reads it and
+         * &var is real); increment is +1 each turn; break/return/error stop, continue increments. */
+        let fiter: u32 = iii_ast_for_iter(EV_AST, node)
+        let fbody: u32 = iii_ast_for_body(EV_AST, node)
+        let fwhere: u32 = iii_ast_for_where(EV_AST, node)
+        let voff: u32 = iii_ast_for_var_off(EV_AST, node)
+        let vlen: u32 = iii_ast_for_var_len(EV_AST, node)
+        let ik: u32 = iii_ast_node_kind(EV_AST, fiter)
+        ev_scope_push()
+        let slot: u64 = ev_dalloc(8u64)
+        if slot == 0u64 { ev_scope_pop() ; return EVE_OOM }
+        ev_local_add(voff, vlen, slot, ev_mk_int(0u64, 0u64))
+        let mut limit: u64 = 0u64
+        let mut st: u32 = EVS_OK
+        let mut go: u32 = 1u32
+        if ik == EVK_EXPR_RANGE {
+            let rlo: u32 = ev_eval_expr(iii_ast_range_lo(EV_AST, fiter))
+            if rlo != EVS_OK { go = 0u32 ; st = rlo }
+            if go == 1u32 {
+                ev_pop()                                 /* ev_eval_expr PUSHES; pop into EV_POPV */
+                iii_lex_write_u64_c(slot, 0u64, EV_POPV)
+                let rhi: u32 = ev_eval_expr(iii_ast_range_hi(EV_AST, fiter))
+                if rhi != EVS_OK { go = 0u32 ; st = rhi } else { ev_pop() ; limit = EV_POPV }
+            }
+        } else {
+            iii_lex_write_u64_c(slot, 0u64, 0u64)
+            let rc: u32 = ev_eval_expr(fiter)
+            if rc != EVS_OK { go = 0u32 ; st = rc } else { ev_pop() ; limit = EV_POPV }
+        }
+        while go == 1u32 {
+            let iv: u64 = iii_lex_read_u64_c(slot, 0u64)
+            if (iv as i64) < (limit as i64) {
+                let mut do_body: u32 = 1u32
+                if fwhere != 0u32 {
+                    let rw: u32 = ev_eval_expr(fwhere)
+                    if rw != EVS_OK { go = 0u32 ; st = rw ; do_body = 0u32 }
+                    if go == 1u32 { ev_pop() ; if EV_POPV == 0u64 { do_body = 0u32 } }
+                }
+                if go == 1u32 { if do_body == 1u32 {
+                    let bs: u32 = ev_exec_block_or_stmt(fbody)
+                    if bs == EVS_BRK { go = 0u32 }
+                    if bs == EVS_RET { go = 0u32 ; st = EVS_RET }
+                    if bs > 3u32 { go = 0u32 ; st = bs }
+                } }
+                if go == 1u32 {
+                    let iv2: u64 = iii_lex_read_u64_c(slot, 0u64)
+                    iii_lex_write_u64_c(slot, 0u64, iv2 + 1u64)
+                }
+            } else { go = 0u32 }
+        }
+        ev_scope_pop()
+        return st
     }
     if k == EVK_STMT_WHILE {
         let cond: u32 = iii_ast_while_cond(EV_AST, node)

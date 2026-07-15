@@ -606,3 +606,32 @@ kernel judge, the zkVM attest, and the spore carry the proof.*
 > exist four commits ago: the event-primary waist → its standing tool → its corpus differential →
 > the bootstrap theater — a NEW bearer's first sweep of an OLD corpus found a defect every existing
 > gate had structural reason to miss.
+
+> **LEDGER ROW 18 — `for` LANDS IN BOTH BEARERS (2026-07-15; a FREQUENCY-ZERO FRONTIER CLASS
+> closed as a FEATURE, the same discipline as a defect row).** THE GAP: native (cg_r3) has
+> compiled `for v in lo..hi { }` from the beginning; eval.iii and cg_svir.iii both REFUSED the
+> construct (EVK/K_STMT_FOR unhandled → named abstention), so every for-loop program sat outside
+> the differential theater — the widest construct-level hole in the two bearers' language
+> coverage. THE LIFT: eval walks it (desugared-to-while semantics: RANGE lo..hi SIGNED-exclusive,
+> bare iterable 0..count, `where` honored, break/continue correct — eval.iii:1640-1701); cg_svir
+> emits it (BLOCK/LOOP with the INCREMENT AT THE LOOP HEAD, loop var pre-seeded lo−1, so `break`
+> targets the BLOCK and `continue` targets the LOOP head → increment → guard — cg_svir.iii
+> sv_s_for, dispatch :1439, arena-extent taught the body :1507). Both are a clean SUPERSET of
+> native, which refuses break/continue inside for (native rc=14); a `where` clause in SVIR refuses
+> loudly (SVU_STMT_KIND). TRAP paid: ev_eval_expr leaves its result ON THE VALUE STACK — ev_pop()
+> moves it to EV_POPV; reading EV_POPV unpopped yields stale zero (the while-handler's pattern is
+> the law). THE HONEST ARITHMETIC: ZERO extern-free STDLIB KATs use `for` in code (grep-audited;
+> the single textual hit is a comment in 1851, already PASS), so the Θ ratchet HOLDS at **602**
+> rather than rises — the construct's whole corpus incidence is stage1's `13_for_loop`, which
+> joins the EVENT gate's theater: **covered 104 → 105/151, three-way 105/105, ratchet 104 → 105**;
+> the FOR-LOOP emission-refusal class is EXTINCT (any future for-loop KAT lands covered), with 7
+> emission refusals remaining in other construct classes (frontier 46 = emit 7 + cap 29 + other 10).
+> Four-way agreement on the probe family (nested, var-bound, ranges): native ≡ eval ≡ route-S ≡
+> route-V. THE CHAIN (sanctioned reseal): iiis-1 resealed (1640fbbe…), iiis-2 ≡ iiis-3
+> BYTE-IDENTICAL FIXPOINT (e9ccda35…), stage1 60/60, DDC GREEN, A2 goldens 13/13 HELD (for absent
+> from the square theater — no golden reseal, exactly as predicted), meaning gate GREEN (probes
+> 21/21, corpus 602/1892 pass, 0 divergence, ratchet=602), event gates GREEN. MEASUREMENT
+> DISCIPLINE PAID: the meaning gate redded TWICE at 600<602 — PASS→ETIME flips on two heavy KATs
+> (1761_sha_optform, 1846_grail_combined_partial_solver) under five concurrent SAT probes + a
+> machine sleep; the quiet re-run restored both (ETIME census 67 == sealed baseline). A ratchet
+> red under load is an ARTIFACT CANDIDATE first: re-run quiet before adjudicating semantics.

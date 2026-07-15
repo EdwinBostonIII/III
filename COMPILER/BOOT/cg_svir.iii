@@ -77,6 +77,13 @@ extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "ast
 extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_loop_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_range_lo(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_range_hi(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
@@ -128,6 +135,8 @@ const K_EXPR_BINARY: u32 = 49u32
 const K_EXPR_UNARY: u32 = 50u32
 const K_EXPR_PAREN: u32 = 53u32
 const K_STMT_IF: u32 = 69u32
+const K_STMT_FOR: u32 = 24u32            /* for <var> in <iter> { body } -- emitted as a BLOCK/LOOP */
+const K_EXPR_RANGE: u32 = 71u32          /* lo..hi (exclusive) */
 const K_STMT_WHILE: u32 = 70u32
 const K_EXPR_CAST: u32 = 72u32
 const K_EXPR_SIZEOF: u32 = 73u32
@@ -1377,9 +1386,57 @@ fn sv_s_loop(node: u32) {
     ctl_pop()  ctl_pop()
 }
 
+/* for <var> in <iter> { body } -- native (cg_r3) semantics: RANGE lo..hi runs var from lo while
+ * var < hi (SIGNED, exclusive); a bare iterable runs var from 0 while var < count.  Emitted as
+ * BLOCK/LOOP with the INCREMENT AT THE LOOP HEAD and the loop var pre-seeded to lo-1, so both `break`
+ * (targets the BLOCK) and `continue` (targets the LOOP head -> increment -> guard) are correct -- a
+ * clean superset of native, which refuses break/continue in for.  A `where` clause is refused (loud;
+ * niche, absent from the theater). */
+fn sv_s_for(node: u32) {
+    let fiter: u32 = iii_ast_for_iter(SV_AST, node)
+    let fbody: u32 = iii_ast_for_body(SV_AST, node)
+    let fwhere: u32 = iii_ast_for_where(SV_AST, node)
+    if fwhere != 0u32 { sv_refuse(SVU_STMT_KIND, node)  return }
+    let voff: u32 = iii_ast_for_var_off(SV_AST, node)
+    let vlen: u32 = iii_ast_for_var_len(SV_AST, node)
+    let ik: u32 = iii_ast_node_kind(SV_AST, fiter)
+    let lim_slot: u32 = ladd(0u32, 0u32, T_UNTYPED)          /* anonymous limit (len 0 -> no name match) */
+    if ik == K_EXPR_RANGE {
+        sv_expr(iii_ast_range_hi(SV_AST, fiter))             /* limit = hi */
+        if SV_UNSUP != 0u32 { return }
+        eu8(0x11u32, lim_slot)
+        let vslot: u32 = ladd(voff, vlen, T_UNTYPED)
+        sv_expr(iii_ast_range_lo(SV_AST, fiter))             /* var = lo - 1 (increment-at-head seeds to lo) */
+        if SV_UNSUP != 0u32 { return }
+        econst(1u64)  eb(0x21u32)                            /* SUB */
+        eu8(0x11u32, vslot)
+        sv_for_loop(vslot, lim_slot, fbody)
+    } else {
+        sv_expr(fiter)                                       /* limit = count */
+        if SV_UNSUP != 0u32 { return }
+        eu8(0x11u32, lim_slot)
+        let vslot: u32 = ladd(voff, vlen, T_UNTYPED)
+        econst(0u64)  econst(1u64)  eb(0x21u32)              /* var = 0 - 1 (wraps; +1 at head -> 0) */
+        eu8(0x11u32, vslot)
+        sv_for_loop(vslot, lim_slot, fbody)
+    }
+}
+fn sv_for_loop(vslot: u32, lim_slot: u32, fbody: u32) {
+    eb(0x40u32)  ctl_push(0u32)                              /* BLOCK (break target) */
+    eb(0x41u32)  ctl_push(1u32)                              /* LOOP (continue target) */
+    eu8(0x10u32, vslot)  econst(1u64)  eb(0x20u32)  eu8(0x11u32, vslot)   /* var = var + 1 (at head) */
+    eu8(0x10u32, vslot)  eu8(0x10u32, lim_slot)  eb(0x32u32)              /* var < limit (SIGNED) */
+    econst(0u64)  eb(0x30u32)  eu8(0x51u32, 1u32)           /* if (var<limit)==0 -> BR_IF out of BLOCK */
+    sv_block(fbody)
+    if SV_UNSUP != 0u32 { ctl_pop()  ctl_pop()  return }
+    eu8(0x50u32, 0u32)  eb(0x44u32)  eb(0x44u32)            /* BR to LOOP head ; END ; END */
+    ctl_pop()  ctl_pop()
+}
+
 fn sv_stmt(node: u32) {
     if SV_UNSUP != 0u32 { return }
     let k: u32 = iii_ast_node_kind(SV_AST, node)
+    if k == K_STMT_FOR { sv_s_for(node)  return }
     if k == K_STMT_LET { sv_s_let(node)  return }
     if k == K_STMT_RETURN {
         let rv: u32 = iii_ast_return_value(SV_AST, node)
@@ -1447,6 +1504,7 @@ fn sv_arena_extent(node: u32) -> u64 {
     }
     if k == K_STMT_WHILE { return sv_arena_extent(iii_ast_while_body(SV_AST, node)) }
     if k == K_STMT_LOOP { return sv_arena_extent(iii_ast_loop_body(SV_AST, node)) }
+    if k == K_STMT_FOR { return sv_arena_extent(iii_ast_for_body(SV_AST, node)) }
     if k == K_STMT_LET {
         let tn: u32 = iii_ast_let_type(SV_AST, node)
         if tn == 0u32 { return 0u64 }

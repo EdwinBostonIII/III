@@ -126,6 +126,15 @@ The native route is the oracle; route V is the challenger; a disagreement is a S
 > 13/13 HELD, meaning ratchet held). The stage1 theater is now PART of this gate's standing corpus:
 > **covered 104/151, three-way 104/104, ratchet 83 → 104**, `20_sizeof rc=4` a permanent row. A new
 > bearer's first sweep of an old corpus found what every existing gate had structural reason to miss.
+>
+> **THE FOR-LOOP LIFT (2026-07-15):** `for` lands in BOTH parse-only bearers (ledger row 18) —
+> `13_for_loop`, the one for-KAT in any theater, moves from the emission-refusal frontier to the
+> covered set: **covered 104 → 105/151, three-way 105/105, ratchet 104 → 105**; the FOR-LOOP
+> emission-refusal class is now EXTINCT (any future for-loop KAT lands covered), with 7 emission
+> refusals remaining in other construct classes (frontier 46 = emit 7 + cap 29 + other 10). Route V
+> executes for-loops as BLOCK/LOOP events with the increment a retired instruction at the loop
+> head — break/continue correct where native refuses to compile them: the first construct where
+> the event-primary executor's language coverage is a strict SUPERSET of the native route's.
 
 **THE HONEST ENVELOPE (a first-class property, not a defect):** event-primary execution is
 **O(trace-length) in memory** — the log holds one row per retired instruction, by design. That is the

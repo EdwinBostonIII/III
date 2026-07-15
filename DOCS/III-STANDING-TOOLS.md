@@ -749,15 +749,23 @@ of the tool's verdict against an independent computation of the admission rule o
 
 ---
 
-### The ontology trilogy, runnable
+### The ontology quartet, runnable
 
-The three non-numeric ontologies the deep evaluation identified as load-bearing in III now each have a
-standing tool that takes real input and does the real thing, no operator in the loop:
+The deep evaluation began from a question: *numbers are one lens on the world — do the other ontologies
+(information, process, semiotic, correlative) exist in III with the same modularity and harmony, runnably?*
+All four the questioner named now have a standing tool that takes real input and does the real thing, no
+operator in the loop:
 
-| ontology | standing tool | what it runs |
-|---|---|---|
-| **process** (event/history) | `iii-events` | execute any program as an append-only retirement log; state/output/result = a validating fold; `--cert` sha256 receipt; `--diff` execution-divergence locator |
-| **semiotic** (sign/meaning) | `iii-intent` | resolve a human intent to one interpretation by bitwise mask intersection, or reject it |
-| **correlative** (qualitative phase) | `iii-hexad` | the asymmetric ternary safety algebra: admitted vs bricking-by-construction, compose |
+| ontology (as named in the question) | building block | standing tool | what it runs |
+|---|---|---|---|
+| **information / algorithmic** ("it from bit") | the bit + the rule | `iii-prove` | decide two functions equal (or not) over *all* 2⁶⁴ inputs — bit-blast UNSAT, the courtroom every claim discharges through |
+| **process** (event / history) | the event | `iii-events` | execute any program as an append-only retirement log; state/output/result = a validating fold; `--cert` sha256 receipt; `--diff` execution-divergence locator |
+| **semiotic** (sign / meaning) | the sign | `iii-intent` | resolve a human intent to one interpretation by bitwise mask intersection, or ruthlessly reject it |
+| **correlative** (qualitative phase) | the trit / phase | `iii-hexad` | the asymmetric ternary safety algebra: admitted vs bricking-by-construction, compose (NEG dominates) |
 
-Numbers were never the only medium III speaks; these make the other three executable.
+Numbers were never the only medium III speaks. `iii-prove` was the information ontology all along (the
+evaluation's finding: bit-blast SAT is the judiciary the whole system reasons through); this session made
+the other three executable to the same standard — leaf-built, gated on external truth, and held evergreen
+together by `run_standing_tools.sh`. Four ontologies, four runnable tools, one archive, one trust floor.
+That is the concrete form of the answer: III does not merely *have* these ontologies as library code — it
+*runs* them, and the whole quartet is one checked, non-AI-reliant, evergreen surface.

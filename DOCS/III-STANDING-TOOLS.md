@@ -599,6 +599,21 @@ Each is a tool of the same shape as `iii-prove`: link the library, take real inp
 
 ---
 
+## The evergreen guarantee — `run_standing_tools.sh`
+
+A tool that rots is worse than no tool. `STDLIB/scripts/run_standing_tools.sh` **rebuilds every one of
+the eight committed tool binaries from source** (each via its leaf `build_iii_*.sh` — pinned `iiis-2` +
+the committed archive, bootstrap untouched) and exercises each on **one canonical known-answer input**,
+so any change that silently breaks a tool reddens here. Known answers come from external truth, never
+from the tool itself: the FIPS-180 `sha256("abc")` vector; closed-form surd signs (`√2 > 0`,
+`2√2+3√2−5√2 = 0`); the faculty's own rules (144-manifold, `--reach` admissibility); prove/refute over
+all 2⁶⁴; `eval ≡ route-V ≡ native` on a shared probe. It also pins a **cross-tool consistency** check:
+`iii-hexad` and `iii-typecheck --reach` share the `hexad_reach` faculty, so they must agree on hexad
+admissibility (id 728 admitted, id 0 bricking) — the safety algebra is one object seen through two
+surfaces. GREEN = the whole runnable capability surface is, in fact, runnable.
+
+---
+
 ## `iii-events` — execute any .iii program as an append-only event history (route V)
 
 ```

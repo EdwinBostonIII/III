@@ -657,3 +657,42 @@ compares *results*, `iii-prove` compares *functions over all inputs*, `--diff` c
 whole computation*. Use `--diff` to verify an edit preserved not just the answer but the exact
 computation. The owner gate pins self-identical (exit 0), a located divergence (exit 1), and
 determinism every run.
+
+---
+
+## `iii-intent` — resolve a human intent to ONE interpretation, or reject it
+
+```
+iii-intent "<sentence>"
+```
+
+Build: `bash COMPILER/BOOT/build_iii_intent.sh` → `COMPILED/iii-intent`.
+Source: `STDLIB/iii/intent/intent_cli.iii` (over `intent/disambiguate` + `intent_lex` + `lex_ontology`
++ `numera/sat_arith` popcount).
+
+The "Oracle of Rejection" (`III-EVENT-SUBSTRATE`-adjacent, the semiotic faculty) made runnable. It
+collapses the overloaded domain masks of a sentence's recognised operator lexemes by **bitwise
+intersection** and inspects the survivor's population count — exactly one interpretation, none, or many.
+Pure bitwise constraint satisfaction over a fixed 16-lexeme ontology; **zero ML, no guessing,
+deterministic, a few hundred cycles**. The compiler's job is not to guess what the human meant — it is
+to reject the human until they mean exactly one thing.
+
+| exit | verdict | meaning |
+|---|---|---|
+| 0 | **RESOLVED** | one interpretation survives — it is **named** on stdout |
+| 1 | **CONTRADICTION** | the lexemes share no bit — they cannot co-refer (*halt, do not guess*) |
+| 2 | **AMBIGUOUS** | more than one interpretation survives — under-specified (*say more*) |
+| 3 | **EMPTY** | no recognised operator lexeme |
+| 4 | **OVERFLOW** | sentence exceeded the 64-token arena |
+
+Exit codes are **equal to the faculty's own verdict constants** (`disambiguate.iii`), so the CLI and the
+library never disagree — a property the owner gate enforced during authoring (an early draft transposed
+CONTRADICTION/AMBIGUOUS; the faculty's own worked example `encrypt the network port` == CONTRADICTION
+caught it on the first run).
+
+**Measured (observed output, verdicts derived from the ontology masks — not from the tool):**
+`lock the database` → RESOLVED FREEZE (`lock`=FREEZE|ENCRYPT|DENY ∩ `database`=FREEZE); `encrypt the
+network port` → CONTRADICTION (ENCRYPT ∩ DENY ∩ DENY = ∅); `generate a key` → CONTRADICTION
+(DET|STOCH ∩ ENCRYPT = ∅); `lock` → AMBIGUOUS (three bits survive); `the cat sat on the mat` → EMPTY.
+Gate `STDLIB/scripts/run_intent_cli.sh` pins all five verdict classes on known-verdict sentences plus
+determinism.

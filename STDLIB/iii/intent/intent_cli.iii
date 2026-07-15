@@ -1,0 +1,115 @@
+/* STDLIB/iii/intent/intent_cli.iii -- iii-intent: THE ORACLE OF REJECTION AS A STANDING TOOL.
+ *
+ *     iii-intent "<sentence>"     resolve a human intent to ONE interpretation, or REJECT with the reason
+ *
+ * This makes III's intent disambiguator (intent/disambiguate::dis_resolve, over intent_lex +
+ * lex_ontology + the sat_arith popcount) INDEPENDENTLY USEFUL: hand it a sentence, and it collapses the
+ * overloaded domain masks of the recognised operator lexemes by bitwise intersection and inspects the
+ * survivor's population count -- exactly one interpretation (RESOLVED), none (CONTRADICTION -- the words
+ * cannot co-refer), more than one (AMBIGUOUS -- under-specified), or no operators at all (EMPTY).  Pure
+ * bitwise constraint satisfaction over a fixed 16-lexeme ontology; zero ML, no guessing, a few hundred
+ * cycles, deterministic.  The compiler's job is not to figure out what the human meant -- it is to
+ * ruthlessly reject the human until they mean EXACTLY one thing.
+ *
+ * The verdict rides the exit code -- EQUAL to the faculty's own verdict constants (disambiguate.iii),
+ * so the CLI and the library never disagree -- and composes into any pipeline:
+ *   0 RESOLVED     (the surviving interpretation is NAMED on stdout)
+ *   1 CONTRADICTION (0 survive -- the words cannot co-refer)
+ *   2 AMBIGUOUS    (>1 interpretation survives -- the human under-specified)
+ *   3 EMPTY        (no recognised operator lexeme)
+ *   4 OVERFLOW     (sentence exceeded the 64-token arena)
+ *   5 usage
+ *
+ * A LEAF tool build (build_iii_intent.sh): pinned in-tree iiis-2 + the committed archive; the bootstrap
+ * chain is never touched.  NIH: composes the standing intent faculty + msvcrt putchar only.
+ */
+module intent_cli
+
+extern @abi(c-msvc-x64) fn lo_init() -> i32 from "lex_ontology.iii"
+extern @abi(c-msvc-x64) fn dis_resolve(text: u64, len: u64) -> u32 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_resolved_mask() -> u64 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_recognized(text: u64, len: u64) -> u32 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+/* verdict codes -- READ from intent/disambiguate.iii, not assumed (RESOLVED=0, CONTRADICTION=1,
+ * AMBIGUOUS=2; an earlier draft transposed the middle two -- caught by the header's own worked
+ * example "encrypt the network port" == CONTRADICTION during the tool's first run). */
+const DIS_RESOLVED      : u32 = 0u32
+const DIS_CONTRADICTION : u32 = 1u32
+const DIS_AMBIGUOUS     : u32 = 2u32
+const DIS_EMPTY         : u32 = 3u32
+const DIS_OVERFLOW      : u32 = 4u32
+
+/* the six domain bits (lex_ontology), named for the RESOLVED verdict's stdout */
+const DOM_VBD_FREEZE     : u64 = 1u64
+const DOM_CRYPTO_ENCRYPT : u64 = 2u64
+const DOM_NET_DENY       : u64 = 4u64
+const DOM_DETERMINISTIC  : u64 = 8u64
+const DOM_STOCHASTIC     : u64 = 16u64
+const DOM_TTL_BOUND      : u64 = 32u64
+
+fn ps(s: u64) {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+}
+fn slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+var PD_D : [u8; 24]
+fn pd(v: u64) {
+    if v == 0u64 { putchar(48i32)  return }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { PD_D[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(PD_D[k] as i32) }
+}
+
+fn name_domain(m: u64) {
+    if m == DOM_VBD_FREEZE     { ps("FREEZE (freeze a virtual-block-device state root)" as u64)  return }
+    if m == DOM_CRYPTO_ENCRYPT { ps("ENCRYPT (apply an encryption scheme)" as u64)  return }
+    if m == DOM_NET_DENY       { ps("DENY (deny network access to a port)" as u64)  return }
+    if m == DOM_DETERMINISTIC  { ps("DETERMINISTIC (a content-addressed reproducible computation)" as u64)  return }
+    if m == DOM_STOCHASTIC     { ps("STOCHASTIC (an oracle-dependent / random value)" as u64)  return }
+    if m == DOM_TTL_BOUND      { ps("TTL-BOUND (a temporal self-destruct bound)" as u64)  return }
+    ps("<unknown domain bit 0x" as u64)  pd(m)  ps(">" as u64)
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 {
+        ps("iii-intent -- resolve a human intent to ONE interpretation, or REJECT with the reason\n\n" as u64)
+        ps("  iii-intent \"<sentence>\"\n\n" as u64)
+        ps("vocabulary (16 lexemes): lock freeze database disk encrypt key deny network port\n" as u64)
+        ps("                         hash deterministic generate random nondeterministic expire ttl\n\n" as u64)
+        ps("exit: 0 RESOLVED (interpretation named) | 1 CONTRADICTION | 2 AMBIGUOUS | 3 EMPTY | 4 OVERFLOW\n" as u64)
+        return 5u64
+    }
+    lo_init()
+    let text : u64 = av[1u64]
+    let len  : u64 = slen(text)
+    let rec  : u32 = dis_recognized(text, len)
+    let v    : u32 = dis_resolve(text, len)
+    if v == DIS_RESOLVED {
+        ps("RESOLVED: " as u64)  name_domain(dis_resolved_mask())
+        ps("  (" as u64)  pd(rec as u64)  ps(" operator lexeme(s) agreed)\n" as u64)
+        return 0u64
+    }
+    if v == DIS_CONTRADICTION {
+        ps("CONTRADICTION: the recognised operator lexemes cannot co-refer (their interpretations share no bit) -- HALT, do not guess.\n" as u64)
+        return 1u64
+    }
+    if v == DIS_AMBIGUOUS {
+        ps("AMBIGUOUS: " as u64)  pd(rec as u64)  ps(" operator lexeme(s) recognised, but >1 interpretation survives -- under-specified; say more.\n" as u64)
+        return 2u64
+    }
+    if v == DIS_EMPTY {
+        ps("EMPTY: no recognised operator lexeme (all tokens are user identifiers).\n" as u64)
+        return 3u64
+    }
+    ps("OVERFLOW: sentence exceeded the 64-token arena.\n" as u64)
+    return 4u64
+}

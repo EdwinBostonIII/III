@@ -696,3 +696,53 @@ network port` → CONTRADICTION (ENCRYPT ∩ DENY ∩ DENY = ∅); `generate a k
 (DET|STOCH ∩ ENCRYPT = ∅); `lock` → AMBIGUOUS (three bits survive); `the cat sat on the mat` → EMPTY.
 Gate `STDLIB/scripts/run_intent_cli.sh` pins all five verdict classes on known-verdict sentences plus
 determinism.
+
+---
+
+## `iii-hexad` — is a hexad admitted, or bricking-by-construction?
+
+```
+iii-hexad <P1> <P2> <P3> <P4> <P5> <P6>   each pillar NEG|ZERO|POS (or N/Z/P, -1/0/1)
+iii-hexad --count                          admitted hexads of the 729 (the 144-manifold)
+iii-hexad --compose <6 trits> <6 trits>    AND on P1..4, OR on P5..6
+```
+
+Build: `bash COMPILER/BOOT/build_iii_hexad.sh` → `COMPILED/iii-hexad`.
+Source: `STDLIB/iii/omnia/hexad_cli.iii` (over `omnia/hexad_reach` + `hexad_algebra`).
+
+III's safety ground (`III-HEXAD.md`) made runnable: the **asymmetric ternary algebra** — six pillars,
+each a trit NEG|ZERO|POS, where a NEG in any of the four **structural** pillars (P1 Inverse-Derivability,
+P2 Causality-Depth, P3 Consent-Recency, P4 Replication-Tier) makes the hexad **structurally
+unrepresentable** — bricking-*by-construction*, not merely forbidden — while the two informational
+pillars (P5 Adversariality, P6 Coherence) may be NEG in an admitted hexad. Exactly **144** of the 729
+hexads are admitted. This is the correlative ontology — qualities with *directional dominance*, not
+magnitudes — as a runnable check.
+
+| exit | verdict | meaning |
+|---|---|---|
+| 0 | **ADMITTED** | representable in the 144-manifold (no NEG in a structural pillar) |
+| 1 | **BRICKING** | a structural pillar is NEG (**named**), or one of the six PFS bricking hexads |
+| 2 | usage / parse error |
+
+**Measured:** `--count` → 144; `P P P P P P` → ADMITTED; `N P P P P P` → BRICKING (P1
+Inverse-Derivability is NEG); `Z Z Z Z N P` → ADMITTED (P5 NEG is informational); `--compose P P P P P P
+N P P P P P` → `(NEG POS POS POS POS POS)` BRICKING — composing a fully-derivable hexad with an
+irreversible one yields irreversible: **NEG dominates AND on the structural pillars** ("damage
+compounds"). Gate `STDLIB/scripts/run_hexad_cli.sh` pins the manifold size, the structural/informational
+asymmetry, the compose dominance, input-form equivalence, determinism, and an **adversarial cross-check**
+of the tool's verdict against an independent computation of the admission rule over a spanning sample.
+
+---
+
+### The ontology trilogy, runnable
+
+The three non-numeric ontologies the deep evaluation identified as load-bearing in III now each have a
+standing tool that takes real input and does the real thing, no operator in the loop:
+
+| ontology | standing tool | what it runs |
+|---|---|---|
+| **process** (event/history) | `iii-events` | execute any program as an append-only retirement log; state/output/result = a validating fold; `--cert` sha256 receipt; `--diff` execution-divergence locator |
+| **semiotic** (sign/meaning) | `iii-intent` | resolve a human intent to one interpretation by bitwise mask intersection, or reject it |
+| **correlative** (qualitative phase) | `iii-hexad` | the asymmetric ternary safety algebra: admitted vs bricking-by-construction, compose |
+
+Numbers were never the only medium III speaks; these make the other three executable.

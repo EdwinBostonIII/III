@@ -1,0 +1,159 @@
+/* STDLIB/iii/omnia/hexad_cli.iii -- iii-hexad: THE ASYMMETRIC TERNARY SAFETY GROUND, made runnable.
+ *
+ *     iii-hexad <P1> <P2> <P3> <P4> <P5> <P6>   is this hexad ADMITTED, or bricking-by-construction?
+ *     iii-hexad --count                          how many of the 729 hexads are admitted (the manifold)
+ *     iii-hexad --compose <6 trits> <6 trits>    compose two hexads (AND on P1..4, OR on P5..6)
+ *
+ * Each pillar is a TRIT -- NEG | ZERO | POS (also accepted: N/Z/P, -1/0/1) -- and the six pillars are
+ * NOT interchangeable (III-HEXAD.md §2.1):
+ *   P1 Inverse-Derivability  P2 Causality-Depth  P3 Consent-Recency  P4 Replication-Tier
+ *   P5 Adversariality-Class  P6 Coherence-Impact
+ * The FIRST FOUR are STRUCTURAL: any NEG in P1..P4 makes the hexad structurally UNREPRESENTABLE
+ * (unreachable in the 144-byte manifold) -- bricking-by-construction, not merely forbidden.  The last
+ * two are informational.  Exactly 2^4 * 3^2 = 144 of the 3^6 = 729 hexads are admitted.  This is the
+ * correlative ontology (qualities with directional dominance, not magnitudes) made a runnable check.
+ *
+ * The verdict rides the exit code:
+ *   0 ADMITTED    (representable; no NEG in a structural pillar)
+ *   1 BRICKING    (a structural pillar is NEG -- the offending pillar is NAMED)
+ *   2 usage / parse error
+ *
+ * A LEAF tool build (build_iii_hexad.sh): pinned iiis-2 + the committed archive; bootstrap untouched.
+ * NIH: composes omnia/hexad_reach + hexad_algebra (the standing safety algebra) + msvcrt putchar.
+ */
+module hexad_cli
+
+extern @abi(c-msvc-x64) fn iii_hexad_pack6(pillars_addr: u64) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable_count() -> u64 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var PILL_A : [i32; 6]
+var PILL_B : [i32; 6]
+var PILL_O : [i32; 6]
+var PD_D : [u8; 24]
+
+fn ps(s: u64) { let p : *u8 = s as *u8  let mut i : u64 = 0u64  while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 } }
+fn pd(v: u64) { if v == 0u64 { putchar(48i32)  return }  let mut n : u64 = v  let mut k : u64 = 0u64  while n > 0u64 { PD_D[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }  while k > 0u64 { k = k - 1u64  putchar(PD_D[k] as i32) } }
+
+/* parse one arg into a trit -1/0/1; returns 2 (out of {-1,0,1}) on parse failure. */
+fn parse_trit(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let c0 : u32 = p[0u64] as u32
+    /* single-letter N/Z/P (and lowercase) */
+    if p[1u64] == 0u8 {
+        if c0 == 78u32 { return -1i32 }   if c0 == 110u32 { return -1i32 }   /* N n */
+        if c0 == 90u32 { return 0i32 }    if c0 == 122u32 { return 0i32 }     /* Z z */
+        if c0 == 80u32 { return 1i32 }    if c0 == 112u32 { return 1i32 }     /* P p */
+        if c0 == 48u32 { return 0i32 }                                        /* 0 */
+    }
+    /* -1 / 0 / 1 / +1 */
+    if c0 == 45u32 { if p[1u64] == 49u8 { return -1i32 } }                    /* -1 */
+    if c0 == 43u32 { if p[1u64] == 49u8 { return 1i32 } }                     /* +1 */
+    if c0 == 49u32 { if p[1u64] == 0u8 { return 1i32 } }                      /* 1 */
+    if c0 == 48u32 { if p[1u64] == 0u8 { return 0i32 } }                      /* 0 */
+    /* words NEG/ZERO/POS by first letter (already covered by single-letter) */
+    if c0 == 78u32 { return -1i32 }   if c0 == 110u32 { return -1i32 }
+    if c0 == 90u32 { return 0i32 }    if c0 == 122u32 { return 0i32 }
+    if c0 == 80u32 { return 1i32 }    if c0 == 112u32 { return 1i32 }
+    return 2i32
+}
+
+fn trit_name(t: i32) { if t == -1i32 { ps("NEG" as u64) }  else { if t == 0i32 { ps("ZERO" as u64) } else { ps("POS" as u64) } } }
+
+fn pillar_name(i: u64) {
+    if i == 0u64 { ps("P1 Inverse-Derivability" as u64)  return }
+    if i == 1u64 { ps("P2 Causality-Depth" as u64)  return }
+    if i == 2u64 { ps("P3 Consent-Recency" as u64)  return }
+    if i == 3u64 { ps("P4 Replication-Tier" as u64)  return }
+    if i == 4u64 { ps("P5 Adversariality-Class" as u64)  return }
+    ps("P6 Coherence-Impact" as u64)
+}
+
+/* parse 6 trits from av[start..start+6) into `dst`; returns 0 ok, 2 on failure. */
+fn parse6(av: *u64, start: u64, dst: u64) -> u32 {
+    let d : *i32 = dst as *i32
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        let t : i32 = parse_trit(av[start + i])
+        if t == 2i32 { return 2u32 }
+        d[i] = t
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8  let pb : *u8 = b as *u8  let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }  i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+
+fn print_hexad(dst: u64) {
+    let d : *i32 = dst as *i32
+    putchar(40i32)   /* ( */
+    let mut i : u64 = 0u64
+    while i < 6u64 { if i > 0u64 { putchar(32i32) }  trit_name(d[i])  i = i + 1u64 }
+    putchar(41i32)   /* ) */
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 {
+        ps("iii-hexad -- the asymmetric ternary safety ground: is a hexad admitted, or bricking?\n\n" as u64)
+        ps("  iii-hexad <P1> <P2> <P3> <P4> <P5> <P6>   each pillar NEG|ZERO|POS (or N/Z/P, -1/0/1)\n" as u64)
+        ps("  iii-hexad --count                          admitted hexads of the 729 (the 144-manifold)\n" as u64)
+        ps("  iii-hexad --compose <6 trits> <6 trits>    AND on P1..4, OR on P5..6\n\n" as u64)
+        ps("pillars: P1 Inverse-Derivability  P2 Causality-Depth  P3 Consent-Recency\n" as u64)
+        ps("         P4 Replication-Tier  P5 Adversariality-Class  P6 Coherence-Impact\n" as u64)
+        ps("a NEG in ANY of P1..P4 (structural) makes the hexad bricking-by-construction.\n\n" as u64)
+        ps("exit: 0 ADMITTED | 1 BRICKING (pillar named) | 2 usage\n" as u64)
+        return 2u64
+    }
+
+    if streq(av[1u64], "--count" as u64) == 1u32 {
+        ps("admitted hexads = " as u64)  pd(iii_hexad_reachable_count())
+        ps(" of 729  (2^4 * 3^2 = 144: P1..P4 in {ZERO,POS}, P5..P6 free)\n" as u64)
+        return 0u64
+    }
+
+    if streq(av[1u64], "--compose" as u64) == 1u32 {
+        if argc < 14i32 { ps("iii-hexad --compose needs 12 trits (two hexads)\n" as u64)  return 2u64 }
+        if parse6(av, 2u64, &PILL_A as u64) != 0u32 { ps("iii-hexad: bad trit in hexad A\n" as u64)  return 2u64 }
+        if parse6(av, 8u64, &PILL_B as u64) != 0u32 { ps("iii-hexad: bad trit in hexad B\n" as u64)  return 2u64 }
+        let ha : u16 = iii_hexad_pack6(&PILL_A as u64)
+        let hb : u16 = iii_hexad_pack6(&PILL_B as u64)
+        let hc : u16 = iii_hexad_compose6(ha, hb)
+        iii_hexad_unpack6(hc, &PILL_O as u64)
+        ps("A " as u64)  print_hexad(&PILL_A as u64)  putchar(10i32)
+        ps("B " as u64)  print_hexad(&PILL_B as u64)  putchar(10i32)
+        ps("A o B = " as u64)  print_hexad(&PILL_O as u64)
+        if iii_hexad_reachable(hc) == 1u8 { ps("  [ADMITTED]\n" as u64)  return 0u64 }
+        ps("  [BRICKING]\n" as u64)  return 1u64
+    }
+
+    if argc < 7i32 { ps("iii-hexad: need 6 pillars (got fewer); see iii-hexad with no args\n" as u64)  return 2u64 }
+    if parse6(av, 1u64, &PILL_A as u64) != 0u32 { ps("iii-hexad: a pillar was not NEG|ZERO|POS\n" as u64)  return 2u64 }
+    let h : u16 = iii_hexad_pack6(&PILL_A as u64)
+    ps("hexad " as u64)  print_hexad(&PILL_A as u64)  ps("  packed=0x" as u64)  pd(h as u64)  putchar(10i32)
+    if iii_hexad_reachable(h) == 1u8 {
+        ps("ADMITTED: representable in the 144-manifold (no NEG in a structural pillar).\n" as u64)
+        return 0u64
+    }
+    /* bricking -- name the first structural pillar (P1..P4) that is NEG */
+    let d : *i32 = &PILL_A as u64 as *i32
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        if d[i] == -1i32 {
+            ps("BRICKING-BY-CONSTRUCTION: " as u64)  pillar_name(i)  ps(" is NEG -- structurally unrepresentable.\n" as u64)
+            return 1u64
+        }
+        i = i + 1u64
+    }
+    /* no structural NEG but still unreachable = one of the six explicitly-cleared PFS bricking hexads */
+    ps("BRICKING: a PFS bricking hexad (explicitly cleared from the manifold).\n" as u64)
+    return 1u64
+}

@@ -7,6 +7,12 @@
  *     iii-events --quiet <file.iii>      no verdict line: pure program behavior (exit = program rc)
  *     iii-events --tamper <file.iii>     flip one bit of one recorded event after the run, then fold:
  *                                        MUST exit 193 (the log refuses corruption -- the standing tooth)
+ *     iii-events --cert <file.iii>       print a CRYPTOGRAPHIC EXECUTION CERTIFICATE: the sha256 over the
+ *                                        whole retirement log (via omnia::exec_cert -- real streaming
+ *                                        sha256, not the FNV witness).  A portable, reproducible receipt
+ *                                        of exactly what happened: same program => same certificate
+ *                                        (determinism), any different run => different certificate.  The
+ *                                        log is history made a carryable object -- "it from bit" cashed.
  *
  * This makes route V (STDLIB/sovir/svir_event.iii) INDEPENDENTLY USEFUL on ARBITRARY user programs:
  * the whole pipeline runs IN THIS PROCESS -- read source, lex, parse, emit SVIR (the compiler's own
@@ -49,6 +55,12 @@ extern @abi(c-msvc-x64) fn sve_terminated() -> u32 from "svir_event.iii"
 extern @abi(c-msvc-x64) fn sve_lasso_len() -> u64 from "svir_event.iii"
 extern @abi(c-msvc-x64) fn sve_ev_get(i: u64, which: u32) -> u64 from "svir_event.iii"
 extern @abi(c-msvc-x64) fn sve_ev_poke(i: u64, which: u32, v: u64) -> i32 from "svir_event.iii"
+/* the CRYPTOGRAPHIC certificate: compose omnia::exec_cert (streaming sha256, O(1)/event) -- the log
+ * folded into a reproducible, tamper-evident 32-byte receipt.  No crypto authored here; the real
+ * sha256 organ is reused (NIH-strict, connect-don't-island). */
+extern @abi(c-msvc-x64) fn xc_begin() -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_event_u32(v: u32) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_seal(out32: u64) -> i32 from "exec_cert.iii"
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 
 const CAP : u64 = 1048576u64
@@ -58,6 +70,7 @@ const RD_FAIL : u64 = 18446744073709551615u64
 var SRC : [u8; 1048576]
 var CON : [u8; 262145]
 var DIG : [u8; 24]
+var CERT : [u8; 32]
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -111,6 +124,34 @@ fn read_file(path: u64, buf: u64) -> u64 {
     return total
 }
 
+/* fold the whole retirement log into a sha256 execution certificate (exec_cert), print it as 64 hex. */
+fn emit_cert(cnt: u64) {
+    xc_begin()
+    let mut i : u64 = 0u64
+    while i < cnt {
+        let mut w : u32 = 0u32
+        while w < 4u32 {
+            let f : u64 = sve_ev_get(i, w)
+            xc_event_u32((f & 0xFFFFFFFFu64) as u32)
+            xc_event_u32(((f >> 32u64) & 0xFFFFFFFFu64) as u32)
+            w = w + 1u32
+        }
+        i = i + 1u64
+    }
+    xc_seal(&CERT as u64)
+    ps("IIIEVENTS-CERT sha256=" as u64)
+    let mut b : u64 = 0u64
+    while b < 32u64 {
+        let byte : u32 = CERT[b] as u32
+        let hi : u32 = (byte >> 4u32) & 15u32
+        let lo : u32 = byte & 15u32
+        if hi < 10u32 { putchar((48u32 + hi) as i32) } else { putchar((87u32 + hi) as i32) }
+        if lo < 10u32 { putchar((48u32 + lo) as i32) } else { putchar((87u32 + lo) as i32) }
+        b = b + 1u64
+    }
+    ps(" events=" as u64)  pd(cnt)  putchar(10i32)
+}
+
 fn verdict_line(rc: u64) {
     ps("IIIEVENTS rc=" as u64)  pd(rc)
     ps(" evn=" as u64)  pd(sve_count())
@@ -124,12 +165,14 @@ fn main(argc: i32, argv: u64) -> u64 {
     let av : *u64 = argv as *u64
     let mut quiet : u32 = 0u32
     let mut tamper : u32 = 0u32
+    let mut cert : u32 = 0u32
     let mut path : u64 = 0u64
     let mut ai : u64 = 1u64
     while ai < (argc as u64) {
         if streq(av[ai], "--quiet" as u64) == 1u32 { quiet = 1u32 }
         else { if streq(av[ai], "--tamper" as u64) == 1u32 { tamper = 1u32 }
-        else { path = av[ai] } }
+        else { if streq(av[ai], "--cert" as u64) == 1u32 { cert = 1u32 }
+        else { path = av[ai] } } }
         ai = ai + 1u64
     }
     if path == 0u64 {
@@ -137,7 +180,8 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  iii-events <file.iii>            run; output prints AT FOLD TIME from the retirement log,\n" as u64)
         ps("                                   then: IIIEVENTS rc= evn= wit= term= lasso=\n" as u64)
         ps("  iii-events --quiet <file.iii>    no verdict line (exit = the program's own rc)\n" as u64)
-        ps("  iii-events --tamper <file.iii>   corrupt one recorded event, fold: MUST exit 193\n\n" as u64)
+        ps("  iii-events --tamper <file.iii>   corrupt one recorded event, fold: MUST exit 193\n" as u64)
+        ps("  iii-events --cert <file.iii>     print a sha256 execution certificate (a portable receipt)\n\n" as u64)
         ps("refusals: 190 log-cap | 192 cap+lasso | 193 fold/witness refuses | 198 import | 199 oob-indirect\n" as u64)
         ps("tool:     3 usage | 4 file | 5 parse | 6 SVIR refused\n" as u64)
         return 3u64
@@ -190,6 +234,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         return 193u64
     }
     let rc : u64 = sve_result() & 255u64
+    if cert == 1u32 { emit_cert(sve_count()) }
     if quiet == 0u32 { verdict_line(rc) }
     if sve_oob() > 0u32 { return 199u64 }
     if sve_unres() > 0u32 { return 198u64 }

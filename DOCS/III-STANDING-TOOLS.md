@@ -606,6 +606,7 @@ iii-events <file.iii>              run; output prints AT FOLD TIME (read out of 
                                    not the live machine), then: IIIEVENTS rc= evn= wit= term= lasso=
 iii-events --quiet <file.iii>      pure program behavior (exit = the program's own rc)
 iii-events --tamper <file.iii>     corrupt one recorded event, fold: MUST exit 193
+iii-events --cert <file.iii>       print a sha256 EXECUTION CERTIFICATE over the whole retirement log
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_events.sh` → `COMPILED/iii-events`.
@@ -629,3 +630,12 @@ gate additionally proves, every run: a **gate-authored** probe whose expectation
 native route (never a constant), three square sources with output-byte equality, the tamper tooth,
 and verdict-line determinism — plus the standing 19/19 route-S ≡ route-V differential (17 square
 probes + the extern-free independence probes, rc AND stdout bytes).
+
+**The execution certificate (`--cert`).** Folds the whole retirement log through `omnia::exec_cert`
+(real streaming **sha256**, O(1) per event — not the FNV witness; no crypto authored here, the FIPS
+sha256 organ is reused) into a 32-byte receipt: `IIIEVENTS-CERT sha256=<64hex> events=<n>`. **A
+portable, reproducible receipt of exactly what happened** — the same program yields a byte-identical
+certificate (determinism, now cryptographic), any different run yields a different one (measured:
+`eval_probe` → `201ab8d6…` twice; a distinct program → `8227a336…`). This is "history as the ground"
+cashed as a carryable object: an execution receipt anyone can recompute and check, the runtime sibling
+of the build-time seal chain. The owner gate pins both properties (determinism + sensitivity) every run.

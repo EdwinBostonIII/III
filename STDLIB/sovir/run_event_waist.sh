@@ -168,6 +168,17 @@ IIIEOF
     timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv1.txt" 2>&1
     timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv2.txt" 2>&1
     if cmp -s "$W/_tv1.txt" "$W/_tv2.txt"; then say "TOOL determinism: verdict lines byte-identical"; else say "RED tool determinism"; FAIL=1; fi
+    # THE CRYPTOGRAPHIC EXECUTION CERTIFICATE (composes omnia::exec_cert -- real sha256): reproducible
+    # (same program => same receipt) AND sensitive (a different program => a different receipt).
+    C1="$(timeout 120 "$TOOL" --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    C1B="$(timeout 120 "$TOOL" --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    cat > "$W/cert_variant.iii" << 'IIIEOF'
+module cert_variant
+fn main() -> i32 { let mut s : u64 = 0u64  let mut i : u64 = 1u64  while i <= 12u64 { s = s + (i + 1u64)  i = i + 1u64 }  return (s % 100u64) as i32 }
+IIIEOF
+    C2="$(timeout 120 "$TOOL" --cert --quiet "$W/cert_variant.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    if [[ -n "$C1" && "$C1" == "$C1B" ]]; then say "CERT determinism: $C1"; else say "RED cert determinism: $C1 vs $C1B"; FAIL=1; fi
+    if [[ -n "$C2" && "$C1" != "$C2" ]]; then say "CERT sensitivity: distinct programs -> distinct receipts"; else say "RED cert sensitivity: $C1 == $C2"; FAIL=1; fi
 else
     say "RED tool build failed (see _tool_build.log)"; FAIL=1
 fi

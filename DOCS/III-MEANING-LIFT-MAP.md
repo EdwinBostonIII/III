@@ -581,3 +581,28 @@ redesign — confirms Θ0's oracle-shape was right.
 what it means: lift the meaning of .iii out of its one implementation into a definitional evaluator
 the system itself runs, differentially, against its whole proven corpus, forever — then let the
 kernel judge, the zkVM attest, and the spore carry the proof.*
+
+---
+
+> **LEDGER ROW 17 — sizeof SILENT-ZERO IN TWO BEARERS (2026-07-14; found by ROUTE V's bootstrap-theater
+> differential, fixed + chain-sealed same session).** THE FIND: `20_sizeof` (stage1_corpus) split
+> four-way — native=4, eval=0, route-S=0, route-V=0. Localization: the PARSER always writes
+> `sizeof.resolved = 0` (parse.iii's primary arm zeroes NODE_U+8; "parser-resolved" was aspirational);
+> cg_r3 alone carries the fallback law (`r3_type_ref_byte_size`: scalar names u8/i8/bool→1, u16/i16→2,
+> u32/i32→4, u64/i64→8, len>4 excluded, else 8); eval.iii:1245 and cg_svir.iii:1128 TRUSTED the
+> never-filled field and silently produced 0 — the silent-wrongness class, invisible to every theater
+> until route V met the bootstrap corpus (sizeof appears in NO square probe, NO independence probe, NO
+> extern-free STDLIB KAT). ADJUDICATION: *native-incumbent* — the fallback law IS the language fact;
+> both bearers now mirror it EXACTLY via per-TU helpers (`ev_sizeof_value`, `sv_sizeof_value`) that
+> deliberately do NOT use their richer alias/array type machinery (richer-than-the-oracle is how a
+> bearer CREATES divergence; sizeof-of-alias/array/pointer = 8 is the pinned fact, adjudicable later
+> ACROSS ALL THREE together). THE CHAIN (sanctioned reseal): iiis-1 rebuilt + re-sealed (a6e468ae…),
+> iiis-2 rebuilt (56b21679…) with stage1 parity 60/60, iiis-3 **BYTE-IDENTICAL FIXPOINT** (56b21679…,
+> fixpoint seals updated from 4cc76c7d…), run_ddc GREEN, svir-backend gate GREEN with **A2 goldens
+> 13/13 HELD** (sizeof absent from the typed theater — no reseal), tools re-minted, meaning gate
+> re-run against the fixed eval, event gates GREEN. THE STANDING PIN: run_event_corpus.sh's theater
+> now includes stage1_corpus — `20_sizeof rc=4` is a covered row, ratchet **83 → 104** (three-way
+> native≡eval≡route-V = 104/104, eval-vs-routeV = 0). The instrument chain that caught this did not
+> exist four commits ago: the event-primary waist → its standing tool → its corpus differential →
+> the bootstrap theater — a NEW bearer's first sweep of an OLD corpus found a defect every existing
+> gate had structural reason to miss.

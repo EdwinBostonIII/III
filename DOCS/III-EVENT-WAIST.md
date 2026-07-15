@@ -111,11 +111,21 @@ The native route is the oracle; route V is the challenger; a disagreement is a S
 > (`event_corpus_ratchet.txt`): covered may only rise, splits must stay 0. Idempotent green on re-run.
 >
 > **THE THIRD ORACLE (same day):** `iii_eval` (the Θ definitional bearer) joins the gate —
-> **three-way agreement native ≡ eval ≡ route-V on ALL 83 covered KATs** (eval abstained on none),
+> **three-way agreement native ≡ eval ≡ route-V on ALL covered KATs** (eval abstained on none),
 > and the dedicated cross-check **eval-vs-routeV disagreements = 0** is a RED condition, not a report.
 > This is the common-mode-blindness kill made standing: eval and route V are BOTH independent of
 > sema/cg_r3/x86 (they share only lex+parse), so their agreement cannot be inherited from the
 > compiled route — three bearers, two independence classes, one verdict.
+>
+> **THE FIRST CATCH + THE BOOTSTRAP THEATER (same day):** route V's first sweep of `stage1_corpus`
+> (the seed chain's own theater) split `20_sizeof` four ways — native=4, eval/route-S/route-V all
+> silently 0 — exposing that BOTH parse-only bearers trusted a `sizeof.resolved` field the parser
+> never fills. Divergence-ledger **row 17** (III-MEANING-LIFT-MAP.md): native-incumbent; both bearers
+> now mirror cg_r3's scalar byte-size law exactly; the full sanctioned chain resealed (iiis-1
+> a6e468ae…, iiis-2/iiis-3 byte-identical fixpoint 56b21679…, stage1 60/60, DDC green, A2 goldens
+> 13/13 HELD, meaning ratchet held). The stage1 theater is now PART of this gate's standing corpus:
+> **covered 104/151, three-way 104/104, ratchet 83 → 104**, `20_sizeof rc=4` a permanent row. A new
+> bearer's first sweep of an old corpus found what every existing gate had structural reason to miss.
 
 **THE HONEST ENVELOPE (a first-class property, not a defect):** event-primary execution is
 **O(trace-length) in memory** — the log holds one row per retired instruction, by design. That is the

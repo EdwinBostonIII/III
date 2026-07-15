@@ -1,4 +1,4 @@
 # STDLIB/sovir/event_corpus_ratchet.txt -- route V corpus-scale coverage, UP-ONLY.
 # Enforced by run_event_corpus.sh: covered may only rise; splits must be 0.
-covered_floor=83
-# frontier at last green: emit-refused=0 capacity=29 other=10 total=122
+covered_floor=104
+# frontier at last green: emit-refused=8 capacity=29 other=10 total=151

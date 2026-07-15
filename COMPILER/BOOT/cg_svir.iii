@@ -95,6 +95,7 @@ extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from
 extern @abi(c-msvc-x64) fn iii_ast_expr_hex_u64(ast: u64, node: u32) -> u64 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_bool_value(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_sizeof_resolved(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_sizeof_target_type(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
 extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
@@ -569,6 +570,31 @@ fn sv_type_find_rhs(off: u32, len: u32) -> u32 {
     if d == 0u32 { return 0u32 }
     if iii_ast_node_kind(SV_AST, d) == K_STRUCT_DECL { sv_refuse(SVU_STRUCT, K_STRUCT_DECL)  return 0u32 }
     return iii_ast_type_decl_rhs_type(SV_AST, d)
+}
+
+/* DIVERGENCE-LEDGER row (2026-07-14, found by route V's stage1 differential: 20_sizeof native=4,
+ * route-S/route-V/eval all 0): the parser ALWAYS zeroes sizeof.resolved; cg_r3 falls back to its
+ * scalar-name byte-size law; this backend emitted CONST 0 -- silent wrongness.  MIRROR THE NATIVE
+ * LAW EXACTLY (scalar names only, len>4 excluded, else 8 -- NOT sv_type_ref_tag, whose alias
+ * resolution is richer than the oracle and would create fresh splits on alias-typed sizeof). */
+fn sv_sizeof_value(node: u32) -> u64 {
+    let rv: u64 = iii_ast_sizeof_resolved(SV_AST, node)
+    if rv != 0u64 { return rv }
+    let tt: u32 = iii_ast_sizeof_target_type(SV_AST, node)
+    if tt == 0u32 { return 8u64 }
+    if iii_ast_node_kind(SV_AST, tt) != K_TYPE_REF { return 8u64 }
+    let toff: u32 = iii_ast_type_ref_name_off(SV_AST, tt)
+    let tlen: u32 = iii_ast_type_ref_name_len(SV_AST, tt)
+    if tlen == 0u32 { return 8u64 }
+    if tlen > 4u32 { return 8u64 }
+    if sv_name_is(toff, tlen, "u8" as u64, 2u64) == 1u32 { return 1u64 }
+    if sv_name_is(toff, tlen, "i8" as u64, 2u64) == 1u32 { return 1u64 }
+    if sv_name_is(toff, tlen, "bool" as u64, 4u64) == 1u32 { return 1u64 }
+    if sv_name_is(toff, tlen, "u16" as u64, 3u64) == 1u32 { return 2u64 }
+    if sv_name_is(toff, tlen, "i16" as u64, 3u64) == 1u32 { return 2u64 }
+    if sv_name_is(toff, tlen, "u32" as u64, 3u64) == 1u32 { return 4u64 }
+    if sv_name_is(toff, tlen, "i32" as u64, 3u64) == 1u32 { return 4u64 }
+    return 8u64
 }
 
 fn sv_type_ref_tag(off: u32, len: u32, depth: u32) -> u32 {
@@ -1125,7 +1151,7 @@ fn sv_expr(node: u32) -> u64 {
     if k == K_EXPR_INT { return sv_e_lit(node, T_UNTYPED) }
     if k == K_EXPR_HEX { return sv_e_lit(node, T_UNTYPED) }
     if k == K_EXPR_BOOL { econst(iii_ast_bool_value(SV_AST, node) as u64)  return T_BOOL }
-    if k == K_EXPR_SIZEOF { econst(iii_ast_sizeof_resolved(SV_AST, node))  return mk_int(8u64, 0u64) }
+    if k == K_EXPR_SIZEOF { econst(sv_sizeof_value(node))  return mk_int(8u64, 0u64) }
     if k == K_EXPR_BINARY { return sv_e_binop(node) }
     if k == K_EXPR_UNARY { return sv_e_unary(node) }
     if k == K_EXPR_CALL { return sv_e_call(node) }

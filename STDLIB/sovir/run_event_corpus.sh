@@ -42,7 +42,10 @@ say "[event-corpus] iii-events = $TOOL"
 AGREE=0; SPLIT=0; FR_EMIT=0; FR_CAP=0; FR_OTHER=0; TOTAL=0
 THREEWAY=0; XMODE=0   # THREEWAY: native==eval==routeV; XMODE: eval-vs-routeV disagreements (must stay 0)
 : > "$W/_agree.list"; : > "$W/_split.list"; : > "$W/_frontier.list"
-for f in "$CORPUS"/[0-9]*.iii; do
+# THE THEATER: the meaning-lift corpus (STDLIB/corpus extern-free) + the BOOTSTRAP theater
+# (stage1_corpus extern-free -- the programs that gate the seed chain; 20_sizeof lives here, the
+# KAT whose four-way split exposed the sizeof silent-zero divergence this gate now pins healed).
+for f in "$CORPUS"/[0-9]*.iii "$III_ROOT"/COMPILER/BOOT/stage1_corpus/[0-9]*.iii; do
     grep -q "extern" "$f" 2>/dev/null && continue        # single-file, import-free = the tool's domain
     TOTAL=$((TOTAL+1)); base="$(basename "$f" .iii)"
     # NATIVE oracle

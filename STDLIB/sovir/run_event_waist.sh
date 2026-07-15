@@ -179,6 +179,20 @@ IIIEOF
     C2="$(timeout 120 "$TOOL" --cert --quiet "$W/cert_variant.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
     if [[ -n "$C1" && "$C1" == "$C1B" ]]; then say "CERT determinism: $C1"; else say "RED cert determinism: $C1 vs $C1B"; FAIL=1; fi
     if [[ -n "$C2" && "$C1" != "$C2" ]]; then say "CERT sensitivity: distinct programs -> distinct receipts"; else say "RED cert sensitivity: $C1 == $C2"; FAIL=1; fi
+    # THE EXECUTION-DIVERGENCE LOCATOR (--diff): trace-identical self == exit 0; a trace-divergent
+    # variant == exit 1 with a locus; determinism (same pair, identical output).  Stronger than
+    # result-equality: it compares the whole retirement stream, event for event.
+    cat > "$W/diff_variant.iii" << 'IIIEOF'
+module diff_variant
+fn tri(n: u64) -> u64 { let mut s : u64 = 0u64  let mut i : u64 = 1u64  while i <= n { s = s + i  i = i + 1u64 }  return s }
+fn main() -> i32 { if tri(12u64) != 78u64 { return 1i32 }  if tri(0u64) != 0u64 { return 2i32 }  return ((tri(13u64) % 100u64) as i32) }
+IIIEOF
+    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self.txt" 2>&1; DSELF=$?
+    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/diff_variant.iii" > "$W/_diff_var.txt" 2>&1; DVAR=$?
+    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self2.txt" 2>&1
+    if [[ $DSELF -eq 0 ]] && grep -q "identical" "$W/_diff_self.txt"; then say "DIFF self-identical (exit 0): $(cat "$W/_diff_self.txt")"; else say "RED diff self: exit=$DSELF"; FAIL=1; fi
+    if [[ $DVAR -eq 1 ]] && grep -q "diverge at event" "$W/_diff_var.txt"; then say "DIFF locates a real divergence (exit 1): $(cat "$W/_diff_var.txt")"; else say "RED diff variant: exit=$DVAR"; FAIL=1; fi
+    if cmp -s "$W/_diff_self.txt" "$W/_diff_self2.txt"; then say "DIFF determinism: identical output on re-run"; else say "RED diff determinism"; FAIL=1; fi
 else
     say "RED tool build failed (see _tool_build.log)"; FAIL=1
 fi

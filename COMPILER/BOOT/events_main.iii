@@ -66,11 +66,18 @@ extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 const CAP : u64 = 1048576u64
 const MAXSVIR : u64 = 262145u64
 const RD_FAIL : u64 = 18446744073709551615u64
+const DIFFCAP : u64 = 1048576u64        /* --diff: driver-side snapshot of run A's log (1M events) */
 
 var SRC : [u8; 1048576]
 var CON : [u8; 262145]
 var DIG : [u8; 24]
 var CERT : [u8; 32]
+/* run A's retirement log, copied out of the organ before run B overwrites it (the log is global). */
+var DA_META : [u64; 1048576]
+var DA_A    : [u64; 1048576]
+var DA_B    : [u64; 1048576]
+var DA_R    : [u64; 1048576]
+var DIFF_FAILCODE : u64 = 0u64
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -152,6 +159,97 @@ fn emit_cert(cnt: u64) {
     ps(" events=" as u64)  pd(cnt)  putchar(10i32)
 }
 
+/* compile one .iii source into the SVIR container `con`; returns ml+1 (>=1) on success, 0 on failure
+ * with DIFF_FAILCODE set to the tool exit code (4 read | 5 parse | 6 emit).  The front-end is global
+ * and re-entrant per emit (cg_svir_emit_mem resets), so this may be called sequentially -- exactly the
+ * prove_main A-then-B discipline; the caller must snapshot any prior run's log before re-calling. */
+fn compile_to_con(path: u64, con: u64) -> u64 {
+    let n : u64 = read_file(path, &SRC as u64)
+    if n == RD_FAIL { DIFF_FAILCODE = 4u64  return 0u64 }
+    if n == 0u64 { DIFF_FAILCODE = 4u64  return 0u64 }
+    let lx : u64 = iii_lex_create(&SRC as u64, n, path)
+    if lx == 0u64 { DIFF_FAILCODE = 5u64  return 0u64 }
+    let ast : u64 = iii_ast_create(&SRC as u64, n, path)
+    if ast == 0u64 { DIFF_FAILCODE = 5u64  return 0u64 }
+    let p : u64 = iii_parse_create(lx, ast)
+    if p == 0u64 { DIFF_FAILCODE = 5u64  return 0u64 }
+    if iii_parse_module(p) == 0u32 { DIFF_FAILCODE = 5u64  return 0u64 }
+    if iii_cg_svir_emit_mem(ast) != 0u32 { DIFF_FAILCODE = 6u64  return 0u64 }
+    let ml : u64 = iii_cg_svir_mlen()
+    if ml + 1u64 > MAXSVIR { DIFF_FAILCODE = 6u64  return 0u64 }
+    let d : *u8 = con as *u8
+    let s : *u8 = (iii_cg_svir_mo()) as *u8
+    d[0u64] = (iii_cg_svir_nfunc() & 255u32) as u8
+    let mut i : u64 = 0u64
+    while i < ml { d[1u64 + i] = s[i]  i = i + 1u64 }
+    return ml + 1u64
+}
+
+/* THE EXECUTION-DIVERGENCE LOCATOR (unique to the event-primary form): run A and B event-primarily and
+ * report the FIRST retirement at which their computations differ.  A state-primary executor can only
+ * compare final results; the log lets us localize the exact instruction where two runs first diverge --
+ * the runtime dual of iii-prove (which proves two FUNCTIONS equal over ALL inputs; this shows WHERE two
+ * PROGRAMS diverge on their actual run).  The refactor-verification tool: a behavior-preserving edit
+ * must trace identically.  Exit: 0 identical execution | 1 diverged (locus printed) | 2 one is a strict
+ * prefix of the other (a ran longer / shorter) | 4/5/6 a compile failed | 7 a run refused. */
+fn print_op(op: u32) {
+    ps("op=0x" as u64)
+    let hi : u32 = (op >> 4u32) & 15u32
+    let lo : u32 = op & 15u32
+    if hi < 10u32 { putchar((48u32 + hi) as i32) } else { putchar((87u32 + hi) as i32) }
+    if lo < 10u32 { putchar((48u32 + lo) as i32) } else { putchar((87u32 + lo) as i32) }
+}
+fn run_diff(patha: u64, pathb: u64) -> u64 {
+    /* --- run A, snapshot its log (capped) --- */
+    sve_reset()
+    let mla : u64 = compile_to_con(patha, &CON as u64)
+    if mla == 0u64 { ps("iii-events --diff: compile failed for " as u64)  ps(patha)  putchar(10i32)  return DIFF_FAILCODE }
+    if sve_load(&CON as u64, mla) != 0i32 { ps("iii-events --diff: container refused for " as u64)  ps(patha)  putchar(10i32)  return 6u64 }
+    let ra : i32 = sve_run()
+    if ra != 0i32 { ps("iii-events --diff: run A refused (" as u64)  pd(ra as u64)  ps(")\n" as u64)  return 7u64 }
+    let cnta0 : u64 = sve_count()
+    let mut cnta : u64 = cnta0
+    if cnta > DIFFCAP { cnta = DIFFCAP }
+    let mut i : u64 = 0u64
+    while i < cnta {
+        DA_META[i] = sve_ev_get(i, 0u32)
+        DA_A[i]    = sve_ev_get(i, 1u32)
+        DA_B[i]    = sve_ev_get(i, 2u32)
+        DA_R[i]    = sve_ev_get(i, 3u32)
+        i = i + 1u64
+    }
+    /* --- run B (overwrites the organ's log), compare against the snapshot --- */
+    sve_reset()
+    let mlb : u64 = compile_to_con(pathb, &CON as u64)
+    if mlb == 0u64 { ps("iii-events --diff: compile failed for " as u64)  ps(pathb)  putchar(10i32)  return DIFF_FAILCODE }
+    if sve_load(&CON as u64, mlb) != 0i32 { ps("iii-events --diff: container refused for " as u64)  ps(pathb)  putchar(10i32)  return 6u64 }
+    let rb : i32 = sve_run()
+    if rb != 0i32 { ps("iii-events --diff: run B refused (" as u64)  pd(rb as u64)  ps(")\n" as u64)  return 7u64 }
+    let cntb0 : u64 = sve_count()
+    let mut cntb : u64 = cntb0
+    if cntb > DIFFCAP { cntb = DIFFCAP }
+    let mut lim : u64 = cnta
+    if cntb < lim { lim = cntb }
+    let mut j : u64 = 0u64
+    while j < lim {
+        let mb : u64 = sve_ev_get(j, 0u32)
+        let ab : u64 = sve_ev_get(j, 1u32)
+        let bb : u64 = sve_ev_get(j, 2u32)
+        let rbv : u64 = sve_ev_get(j, 3u32)
+        if DA_META[j] != mb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" ("as u64)  print_op((DA_META[j] & 255u64) as u32)  ps("_A vs " as u64)  print_op((mb & 255u64) as u32)  ps("_B) field=meta A=" as u64)  phex16(DA_META[j])  ps(" B=" as u64)  phex16(mb)  putchar(10i32)  return 1u64 }
+        if DA_A[j] != ab { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=a A=" as u64)  phex16(DA_A[j])  ps(" B=" as u64)  phex16(ab)  putchar(10i32)  return 1u64 }
+        if DA_B[j] != bb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=b A=" as u64)  phex16(DA_B[j])  ps(" B=" as u64)  phex16(bb)  putchar(10i32)  return 1u64 }
+        if DA_R[j] != rbv { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=r A=" as u64)  phex16(DA_R[j])  ps(" B=" as u64)  phex16(rbv)  putchar(10i32)  return 1u64 }
+        j = j + 1u64
+    }
+    if cnta0 != cntb0 {
+        ps("IIIEVENTS-DIFF prefix-identical for " as u64)  pd(lim)  ps(" events, but lengths differ: A=" as u64)  pd(cnta0)  ps(" B=" as u64)  pd(cntb0)  putchar(10i32)
+        return 2u64
+    }
+    ps("IIIEVENTS-DIFF identical: both executions retired " as u64)  pd(cnta0)  ps(" events, event-for-event\n" as u64)
+    return 0u64
+}
+
 fn verdict_line(rc: u64) {
     ps("IIIEVENTS rc=" as u64)  pd(rc)
     ps(" evn=" as u64)  pd(sve_count())
@@ -166,14 +264,24 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut quiet : u32 = 0u32
     let mut tamper : u32 = 0u32
     let mut cert : u32 = 0u32
+    let mut diff : u32 = 0u32
     let mut path : u64 = 0u64
+    let mut path2 : u64 = 0u64
     let mut ai : u64 = 1u64
     while ai < (argc as u64) {
         if streq(av[ai], "--quiet" as u64) == 1u32 { quiet = 1u32 }
         else { if streq(av[ai], "--tamper" as u64) == 1u32 { tamper = 1u32 }
         else { if streq(av[ai], "--cert" as u64) == 1u32 { cert = 1u32 }
-        else { path = av[ai] } } }
+        else { if streq(av[ai], "--diff" as u64) == 1u32 { diff = 1u32 }
+        else { if path == 0u64 { path = av[ai] } else { path2 = av[ai] } } } } }
         ai = ai + 1u64
+    }
+
+    /* --diff <a.iii> <b.iii>: the execution-divergence locator (two source files) */
+    if diff == 1u32 {
+        if path == 0u64 { ps("iii-events --diff needs two files\n" as u64)  return 3u64 }
+        if path2 == 0u64 { ps("iii-events --diff needs a SECOND file\n" as u64)  return 3u64 }
+        return run_diff(path, path2)
     }
     if path == 0u64 {
         ps("iii-events -- execute a .iii program event-primarily (route V: state = fold over history)\n\n" as u64)
@@ -181,37 +289,23 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("                                   then: IIIEVENTS rc= evn= wit= term= lasso=\n" as u64)
         ps("  iii-events --quiet <file.iii>    no verdict line (exit = the program's own rc)\n" as u64)
         ps("  iii-events --tamper <file.iii>   corrupt one recorded event, fold: MUST exit 193\n" as u64)
-        ps("  iii-events --cert <file.iii>     print a sha256 execution certificate (a portable receipt)\n\n" as u64)
+        ps("  iii-events --cert <file.iii>     print a sha256 execution certificate (a portable receipt)\n" as u64)
+        ps("  iii-events --diff <a.iii> <b.iii> locate the FIRST retirement where two runs diverge\n\n" as u64)
         ps("refusals: 190 log-cap | 192 cap+lasso | 193 fold/witness refuses | 198 import | 199 oob-indirect\n" as u64)
         ps("tool:     3 usage | 4 file | 5 parse | 6 SVIR refused\n" as u64)
         return 3u64
     }
 
-    let n : u64 = read_file(path, &SRC as u64)
-    if n == RD_FAIL { ps("iii-events: cannot read: " as u64)  ps(path)  putchar(10i32)  return 4u64 }
-    if n == 0u64 { ps("iii-events: empty file: " as u64)  ps(path)  putchar(10i32)  return 4u64 }
-    let lx : u64 = iii_lex_create(&SRC as u64, n, path)
-    if lx == 0u64 { ps("iii-events: lex error\n" as u64)  return 5u64 }
-    let ast : u64 = iii_ast_create(&SRC as u64, n, path)
-    if ast == 0u64 { ps("iii-events: ast error\n" as u64)  return 5u64 }
-    let p : u64 = iii_parse_create(lx, ast)
-    if p == 0u64 { ps("iii-events: parse-create error\n" as u64)  return 5u64 }
-    if iii_parse_module(p) == 0u32 { ps("iii-events: parse error in: " as u64)  ps(path)  putchar(10i32)  return 5u64 }
-    if iii_cg_svir_emit_mem(ast) != 0u32 {
+    sve_reset()
+    let ml1 : u64 = compile_to_con(path, &CON as u64)
+    if ml1 == 0u64 {
+        if DIFF_FAILCODE == 4u64 { ps("iii-events: cannot read: " as u64)  ps(path)  putchar(10i32)  return 4u64 }
+        if DIFF_FAILCODE == 5u64 { ps("iii-events: parse error in: " as u64)  ps(path)  putchar(10i32)  return 5u64 }
         ps("iii-events: SVIR emission refused (unsupported construct class " as u64)
         pd(iii_cg_svir_unsup() as u64)  ps(")\n" as u64)
         return 6u64
     }
-    let ml : u64 = iii_cg_svir_mlen()
-    if ml + 1u64 > MAXSVIR { ps("iii-events: module too large\n" as u64)  return 6u64 }
-    let d : *u8 = &CON as u64 as *u8
-    let s : *u8 = (iii_cg_svir_mo()) as *u8
-    d[0u64] = (iii_cg_svir_nfunc() & 255u32) as u8
-    let mut i : u64 = 0u64
-    while i < ml { d[1u64 + i] = s[i]  i = i + 1u64 }
-
-    sve_reset()
-    if sve_load(&CON as u64, ml + 1u64) != 0i32 { ps("iii-events: container refused\n" as u64)  return 6u64 }
+    if sve_load(&CON as u64, ml1) != 0i32 { ps("iii-events: container refused\n" as u64)  return 6u64 }
     let rr : i32 = sve_run()
     if rr != 0i32 {
         if quiet == 0u32 { verdict_line(0u64) }

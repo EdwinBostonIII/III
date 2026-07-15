@@ -139,6 +139,21 @@ This makes route V a **fourth independent corpus-scale meaning-bearer** — nati
 svir_interp (route S) ≡ **svir_event (route V)** — the differential the meaning-lift built for eval,
 now extended to the event-primary executor, on the same theater, as a standing gate.
 
+## 5b. THE CAPABILITY UNIQUE TO THE INVERSION (`iii-events --diff`)
+
+State-primary execution can compare two runs only by their final result. The event-primary log is a
+first-class object, so two executions can be compared **event for event** and their first divergence
+**localized**: `iii-events --diff a.iii b.iii` runs both, walks the retirement streams in lockstep, and
+prints the exact retirement where they part (`diverge at event <n> (op=0x..) field=<meta|a|b|r>
+A=<hex> B=<hex>`) or certifies them trace-identical. It is the runtime dual of `iii-prove`: prove shows
+two *functions* equal over *all inputs*; `--diff` shows *where* two *programs* diverge on *their actual
+run*. The three standing checks form a strict lattice — `--quiet` rc (results) ⊂ `iii-prove` (functions
+over all inputs) ⊂ `--diff` (this run's whole computation): a result-preserving edit that changes the
+instruction stream diverges under `--diff` and correctly so. This capability does not exist for route S
+and has no analogue in a state-primary substrate; it is the inversion paying a dividend a value-flow
+executor structurally cannot. Gate-pinned (run_event_waist.sh stage 6): self-identical exit 0, a located
+divergence exit 1, determinism.
+
 ## 6. WHY THIS MATTERS (the ontology, one paragraph)
 
 The process-ontology claim — *state is a summary of events, not a substance* — is now load-bearing at

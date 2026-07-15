@@ -607,6 +607,7 @@ iii-events <file.iii>              run; output prints AT FOLD TIME (read out of 
 iii-events --quiet <file.iii>      pure program behavior (exit = the program's own rc)
 iii-events --tamper <file.iii>     corrupt one recorded event, fold: MUST exit 193
 iii-events --cert <file.iii>       print a sha256 EXECUTION CERTIFICATE over the whole retirement log
+iii-events --diff <a.iii> <b.iii>  locate the FIRST retirement where two runs' computations diverge
 ```
 
 Build: `bash COMPILER/BOOT/build_iii_events.sh` → `COMPILED/iii-events`.
@@ -639,3 +640,20 @@ certificate (determinism, now cryptographic), any different run yields a differe
 `eval_probe` → `201ab8d6…` twice; a distinct program → `8227a336…`). This is "history as the ground"
 cashed as a carryable object: an execution receipt anyone can recompute and check, the runtime sibling
 of the build-time seal chain. The owner gate pins both properties (determinism + sensitivity) every run.
+
+**The execution-divergence locator (`--diff`).** Runs A and B event-primarily and reports the **first
+retirement at which their computations differ** — decoded: `IIIEVENTS-DIFF diverge at event <n>
+(op=0x..) field=<meta|a|b|r> A=<hex> B=<hex>`, or `identical: both executions retired <n> events,
+event-for-event`, or `prefix-identical … lengths differ`. Exit 0 identical / 1 diverged (locus
+printed) / 2 one a strict prefix of the other. **This is a capability unique to the event-primary
+form**: a state-primary executor can only compare final results; the log lets you localize the exact
+instruction where two runs first part. It is the runtime dual of `iii-prove` — where prove shows two
+*functions* are equal over *all inputs*, `--diff` shows *where* two *programs* diverge on *their actual
+run*. **Note the precise semantics: `--diff` checks EXECUTION-TRACE equality, which is strictly
+stronger than result-equality.** A result-preserving edit that changes the instruction stream (e.g.
+materializing an intermediate into a `let` slot) *does* diverge — correctly (measured: `x*10` inline
+vs via a `let` binding diverges at the LOCAL_SET). So the three tools form a lattice: `--quiet` rc
+compares *results*, `iii-prove` compares *functions over all inputs*, `--diff` compares *this run's
+whole computation*. Use `--diff` to verify an edit preserved not just the answer but the exact
+computation. The owner gate pins self-identical (exit 0), a located divergence (exit 1), and
+determinism every run.

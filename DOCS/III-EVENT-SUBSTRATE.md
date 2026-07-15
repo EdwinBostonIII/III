@@ -120,7 +120,11 @@ Witness = multiply-add poly rolling hash over the 5-tuple per event (pure `*`,`+
 
 ## 9. STATUS UPDATE (2026-07-14): the inversion reached the waist
 
-§7.1 closed earlier (1900/1901 registered + green in the main corpus). The inversion this organ
+§7.1 closed earlier (1900/1901 registered + green in the main corpus). **§7.2 also closed** — the
+preferred consumer was built as `corpus/1902_event_substrate_parity.iii` (registered =99, re-verified
+green this session): the substrate folds plays of the REAL `omnia/parity_game` Zielonka solver, with
+determinacy's honest boundary executable (in-region play ⇒ fold verdict == game value; out-of-region ⇒
+control-blindness demonstrated). `1903_event_rewind` extends the organ; both are archive members. The inversion this organ
 proved at organ scale is now the ground of EXECUTION itself: `STDLIB/sovir/svir_event.iii` (route V)
 executes real SVIR modules as an append-only retirement log — state/output/result = a validating
 fold over history, prefix-re-derivable, tamper-evident, with the recurrence instrument (this organ's

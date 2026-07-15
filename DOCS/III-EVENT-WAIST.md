@@ -98,6 +98,30 @@ every field of every event — determinism/tamper grade by declared scope (conte
   (max observed 1,763); capacity exhaustion is the named 190/192 refusal, and the gate prints
   EXCLUDED-BY-CAPACITY loudly if a future probe outgrows it (anti-vacuity floor 15/17 holds).
 
+## 5a. ROUTE V AT CORPUS SCALE (the meaning-bearer, not just the 19 probes)
+
+`STDLIB/sovir/run_event_corpus.sh` promotes route V from the square theater to the **same corpus the
+Θ meaning-lift uses** — every extern-free (single-file, import-free) KAT, executed event-primarily by
+the standing tool `iii-events`, its exit code pinned == the **native compiled route's** exit code.
+The native route is the oracle; route V is the challenger; a disagreement is a SPLIT (red).
+
+> **GREEN (2026-07-14):** **83 / 122** extern-free KATs — **route V exit == native exit, 0 splits**;
+> frontier 39 named by class (10 negative-compile KATs, out of theater; 29 exceed the 4M-event log
+> capacity; 0 SVIR-emission refusals). Up-only ratchet pinned `covered_floor=83`
+> (`event_corpus_ratchet.txt`): covered may only rise, splits must stay 0. Idempotent green on re-run.
+
+**THE HONEST ENVELOPE (a first-class property, not a defect):** event-primary execution is
+**O(trace-length) in memory** — the log holds one row per retired instruction, by design. That is the
+real, irreducible cost of making history the ground: route S (state-primary) runs any terminating
+program in O(1) state; route V materializes the whole history. The 29 capacity-bounded KATs are heavy
+solver/crypto traces whose retirement count exceeds 4,194,304; the 4M cap is the **named** envelope
+(190/192 refusal), lifted only against the SizeOfImage wall (the seventh-rung storage law), never
+silently. This is the paradigm being honest about its own price, exactly as the parity wall is.
+
+This makes route V a **fourth independent corpus-scale meaning-bearer** — native ≡ eval (Θ) ≡
+svir_interp (route S) ≡ **svir_event (route V)** — the differential the meaning-lift built for eval,
+now extended to the event-primary executor, on the same theater, as a standing gate.
+
 ## 6. WHY THIS MATTERS (the ontology, one paragraph)
 
 The process-ontology claim — *state is a summary of events, not a substance* — is now load-bearing at

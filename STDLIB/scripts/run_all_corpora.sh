@@ -46,7 +46,9 @@ RUNNERS=(
     "$S/run_autogenesis_corpus.sh"
     "$S/run_nous_corpus.sh"
     "$S/run_stoma_kats.sh"
+    "$III_ROOT/STDLIB/sovir/run_event_waist.sh"
     "$III_ROOT/COMPILER/BOOT/stage1_corpus/run_corpus.sh"
+    "$III_ROOT/STDLIB/sovir/run_mathesis.sh"
 )
 
 # COMPLETENESS TEETH: every family runner run_corpus.sh's dispatch cites must appear above,

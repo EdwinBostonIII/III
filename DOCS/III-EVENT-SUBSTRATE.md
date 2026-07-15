@@ -117,3 +117,13 @@ Witness = multiply-add poly rolling hash over the 5-tuple per event (pure `*`,`+
 | Stays a dead island (the very thing being cleaned up) | §7.2 is the gating next step; organ already computes a *named* thing (parity acceptance), not a demo |
 | Reseal never run ⇒ drift between file and sealed archive | §7.1 staged explicitly; tree left green (seal untouched) rather than half-sealed |
 | Toy-trap on the XII wire | ADR-1/2 forbid the fabricated loop; finite-certificate + honest-negative only |
+
+## 9. STATUS UPDATE (2026-07-14): the inversion reached the waist
+
+§7.1 closed earlier (1900/1901 registered + green in the main corpus). The inversion this organ
+proved at organ scale is now the ground of EXECUTION itself: `STDLIB/sovir/svir_event.iii` (route V)
+executes real SVIR modules as an append-only retirement log — state/output/result = a validating
+fold over history, prefix-re-derivable, tamper-evident, with the recurrence instrument (this organ's
+lasso discipline) reading loops off real execution logs. Differential-pinned 17/17 against
+`svir_interp` (rc + stdout bytes) on the production square theater. See `III-EVENT-WAIST.md`
+(gates 2750/2751/2752, family `run_event_waist.sh`).

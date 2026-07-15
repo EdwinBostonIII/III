@@ -1,0 +1,130 @@
+/* corpus/2751_event_waist_replay.iii -- THE EVENT-PRIMARY WAIST, gate 2: replay independence.
+ *
+ * A richer hand-built v1 module -- memory stores/loads, a two-function CALL, a 300-iteration loop --
+ * produces ~1,8xx retirement events.  The arms prove the log is THE ground:
+ *   (1) run rc 0, terminated, event count in the expected window                 -> exit 10..12
+ *   (2) the validating fold re-derives result 88 and the witness                 -> exit 13..15
+ *   (3) REPLAY IS A PURE FOLD: calling it twice gives the same rc and witness    -> exit 16/17
+ *   (4) THE TWO-PATH PREFIX ARM: every producer snapshot (vsp, top at tick 1024k)
+ *       must equal the state re-derived from the log prefix alone               -> exit 20..23
+ *   (5) a LOCAL_GET result tamper (the locals fold) refuses 193; restore heals   -> exit 24/25
+ *   (6) an LD8 result tamper (the memory fold) refuses 193; restore heals        -> exit 26/27
+ * Family: run_event_waist.sh.  Exit 99 = replay independence holds. */
+module corpus_2751_event_waist_replay
+
+extern @abi(c-msvc-x64) fn sve_reset() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_load(mp: u64, ml: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_run() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_result() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_count() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_get(i: u64, which: u32) -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_poke(i: u64, which: u32, v: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_state_at(t: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_sa_vsp() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_sa_top() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_terminated() -> u32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_snap_n() -> u32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_snap_tick(i: u32) -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_snap_vsp(i: u32) -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_snap_top(i: u32) -> u64 from "svir_event.iii"
+
+var MB : [u8; 128]
+var MN : u64 = 0u64
+
+fn put8(v: u64) {
+    let mut k : u64 = 0u64
+    while k < 8u64 { MB[MN] = ((v >> (k*8u64)) & 255u64) as u8  MN = MN + 1u64  k = k + 1u64 }
+}
+fn putb(v: u32) { MB[MN] = (v & 255u32) as u8  MN = MN + 1u64 }
+fn pconst(v: u64) { putb(0x01u32)  put8(v) }
+
+/* fn0 (blen 73): ST8 mem[100]=7; x = CALL fn1(5); DROP x; i=300; LOOP { i=i-1 } BR_IF; RETURN 88
+ * fn1 (blen 24): return local0*2 + LD8 mem[100]   (= 5*2 + 7 = 17) */
+fn build_mod() {
+    MN = 0u64
+    putb(2u32)                     /* nfunc = 2 (v1) */
+    putb(0u32) putb(0u32)  putb(73u32) putb(0u32)    /* fn0 header, blen 73 */
+    pconst(100u64)  pconst(7u64)  putb(0x83u32)      /* mem[100] = 7 (ST8) */
+    pconst(5u64)
+    putb(0x70u32) putb(1u32) putb(1u32)              /* CALL fn1, 1 arg */
+    putb(0x72u32)                                    /* DROP the 17 */
+    pconst(300u64)  putb(0x11u32) putb(2u32)         /* local2 = 300 */
+    putb(0x41u32)                                    /* LOOP */
+    putb(0x10u32) putb(2u32)                         /* LOCAL_GET 2 */
+    pconst(1u64)  putb(0x21u32)                      /* - 1 */
+    putb(0x11u32) putb(2u32)                         /* LOCAL_SET 2 */
+    putb(0x10u32) putb(2u32)                         /* LOCAL_GET 2 */
+    putb(0x51u32) putb(0u32)                         /* BR_IF 0 (back to LOOP while nonzero) */
+    putb(0x44u32)                                    /* END */
+    pconst(88u64)  putb(0x60u32)                     /* RETURN 88 */
+    putb(0u32) putb(0u32)  putb(24u32) putb(0u32)    /* fn1 header, blen 24 */
+    putb(0x10u32) putb(0u32)                         /* LOCAL_GET 0 */
+    pconst(2u64)  putb(0x22u32)                      /* * 2 */
+    pconst(100u64)  putb(0x82u32)                    /* LD8 mem[100] */
+    putb(0x20u32)                                    /* + */
+    putb(0x60u32)                                    /* RETURN */
+}
+
+fn main() -> i32 {
+    build_mod()
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 10i32 }
+    if sve_run() != 0i32 { return 11i32 }
+    let n : u64 = sve_count()
+    if n < 1500u64 { return 12i32 }
+    if n > 2500u64 { return 12i32 }
+    if sve_terminated() != 1u32 { return 12i32 }
+
+    if sve_replay() != 0i32 { return 13i32 }
+    if sve_result() != 88u64 { return 14i32 }
+    if sve_wit() != sve_replay_wit() { return 15i32 }
+    let rw1 : u64 = sve_replay_wit()
+
+    /* (3) fold purity: a second replay is identical */
+    if sve_replay() != 0i32 { return 16i32 }
+    if sve_replay_wit() != rw1 { return 17i32 }
+
+    /* (4) the two-path prefix arm: producer snapshots vs log-derived prefix states */
+    let sn : u32 = sve_snap_n()
+    if sn < 1u32 { return 20i32 }
+    let mut i : u32 = 0u32
+    while i < sn {
+        if sve_state_at(sve_snap_tick(i)) != 0i32 { return 21i32 }
+        if sve_sa_vsp() != sve_snap_vsp(i) { return 22i32 }
+        if sve_sa_top() != sve_snap_top(i) { return 23i32 }
+        i = i + 1u32
+    }
+
+    /* (5) locals-fold tooth: find a LOCAL_GET event (op 0x10) and tamper its result */
+    let mut gi : u64 = 0u64
+    let mut found : u64 = 18446744073709551615u64
+    while gi < n {
+        if (sve_ev_get(gi, 0u32) & 255u64) == 16u64 { found = gi  gi = n }
+        gi = gi + 1u64
+    }
+    if found == 18446744073709551615u64 { return 24i32 }
+    let r0 : u64 = sve_ev_get(found, 3u32)
+    sve_ev_poke(found, 3u32, r0 + 1u64)
+    if sve_replay() != 193i32 { return 24i32 }
+    sve_ev_poke(found, 3u32, r0)
+    if sve_replay() != 0i32 { return 25i32 }
+
+    /* (6) memory-fold tooth: find the LD8 event (op 0x82) and tamper its result */
+    gi = 0u64
+    found = 18446744073709551615u64
+    while gi < n {
+        if (sve_ev_get(gi, 0u32) & 255u64) == 130u64 { found = gi  gi = n }
+        gi = gi + 1u64
+    }
+    if found == 18446744073709551615u64 { return 26i32 }
+    let r1 : u64 = sve_ev_get(found, 3u32)
+    sve_ev_poke(found, 3u32, r1 ^ 2u64)
+    if sve_replay() != 193i32 { return 26i32 }
+    sve_ev_poke(found, 3u32, r1)
+    if sve_replay() != 0i32 { return 27i32 }
+
+    return 99i32
+}

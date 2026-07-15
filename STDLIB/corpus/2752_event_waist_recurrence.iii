@@ -1,0 +1,99 @@
+/* corpus/2752_event_waist_recurrence.iii -- THE EVENT-PRIMARY WAIST, gate 3: the recurrence instrument.
+ *
+ * The event_substrate lasso discipline (KAT 1901) carried to real execution logs: recurrence is READ
+ * OFF THE LOG, and its absence over a terminated run is the termination witness.  Three modules:
+ *   (A) terminating   -> finite log closed by RETURN@depth0: sve_terminated()=1, run rc 0  -> exit 10..12
+ *   (B) pure loop     -> LOOP; BR 0: identical retirement rows forever.  Under a lowered log
+ *       limit the run REFUSES 192 (capacity + LASSO FOUND) with cycle length 1            -> exit 13..15
+ *   (C) counting loop -> i=i+1 forever: rows carry the counter, NO identical window exists.
+ *       Same limit: REFUSES 190 (capacity, honestly NO lasso claim)                        -> exit 16..18
+ * The B/C pair is the positive-AND-negative proof that the lasso scan reads structure, not hope:
+ * state-recurrence found exactly when the observable rows recur.  (A lasso REPORT is an observed
+ * recurrence of retirement rows -- never a non-termination theorem; the header of svir_event.iii
+ * states the scope.)  Family: run_event_waist.sh.  Exit 99 = the instrument reads truly. */
+module corpus_2752_event_waist_recurrence
+
+extern @abi(c-msvc-x64) fn sve_reset() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_load(mp: u64, ml: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_run() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_result() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_set_limit(n: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_lasso_start() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_lasso_len() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_terminated() -> u32 from "svir_event.iii"
+
+var MB : [u8; 96]
+var MN : u64 = 0u64
+
+fn put8(v: u64) {
+    let mut k : u64 = 0u64
+    while k < 8u64 { MB[MN] = ((v >> (k*8u64)) & 255u64) as u8  MN = MN + 1u64  k = k + 1u64 }
+}
+fn putb(v: u32) { MB[MN] = (v & 255u32) as u8  MN = MN + 1u64 }
+fn pconst(v: u64) { putb(0x01u32)  put8(v) }
+
+fn build_terminating() {          /* CONST 7, RETURN */
+    MN = 0u64
+    putb(1u32)
+    putb(0u32) putb(0u32)  putb(10u32) putb(0u32)
+    pconst(7u64)  putb(0x60u32)
+}
+
+fn build_pure_loop() {            /* LOOP; BR 0; END; (unreachable RETURN) */
+    MN = 0u64
+    putb(1u32)
+    putb(0u32) putb(0u32)  putb(5u32) putb(0u32)
+    putb(0x41u32)                 /* LOOP */
+    putb(0x50u32) putb(0u32)      /* BR 0 -> back to the loop head, forever */
+    putb(0x44u32)                 /* END (never reached) */
+    putb(0x60u32)                 /* RETURN (never reached) */
+}
+
+fn build_counting_loop() {        /* local0=0; LOOP { local0=local0+1; BR_IF 1 } -- rows differ forever */
+    MN = 0u64
+    putb(1u32)
+    putb(0u32) putb(0u32)  putb(40u32) putb(0u32)
+    pconst(0u64)  putb(0x11u32) putb(0u32)           /* local0 = 0            (11 bytes) */
+    putb(0x41u32)                                    /* LOOP                  (1) */
+    putb(0x10u32) putb(0u32)                         /* LOCAL_GET 0           (2) */
+    pconst(1u64)                                     /* CONST 1               (9) */
+    putb(0x20u32)                                    /* ADD                   (1) */
+    putb(0x11u32) putb(0u32)                         /* LOCAL_SET 0           (2) */
+    pconst(1u64)                                     /* CONST 1 (always true) (9) */
+    putb(0x51u32) putb(0u32)                         /* BR_IF 0               (2) */
+    putb(0x44u32)                                    /* END                   (1) */
+    putb(0x60u32)                                    /* RETURN                (1) */
+    putb(0x72u32)                                    /* pad                   (1) */
+}
+
+fn main() -> i32 {
+    /* (A) termination witness: the finite log, closed by RETURN at depth 0 */
+    build_terminating()
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 10i32 }
+    if sve_run() != 0i32 { return 11i32 }
+    if sve_terminated() != 1u32 { return 12i32 }
+    if sve_replay() != 0i32 { return 12i32 }
+    if sve_result() != 7u64 { return 12i32 }
+
+    /* (B) the pure loop: capacity + a period-1 lasso in the rows -> 192 */
+    build_pure_loop()
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 13i32 }
+    sve_set_limit(4096u64)
+    if sve_run() != 192i32 { return 14i32 }
+    if sve_lasso_len() != 1u64 { return 15i32 }
+    sve_set_limit(4194304u64)
+
+    /* (C) the counting loop: capacity, and HONESTLY no lasso (the counter rides in the rows) -> 190 */
+    build_counting_loop()
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 16i32 }
+    sve_set_limit(4096u64)
+    if sve_run() != 190i32 { return 17i32 }
+    if sve_lasso_len() != 0u64 { return 18i32 }
+    sve_set_limit(4194304u64)
+
+    return 99i32
+}

@@ -1941,6 +1941,10 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : THE ALGEBRAIC CREATOR TIER + CAMPAIGN SIGMA..PSI (real-algebraic judge + radical synthesizer + MX04 chain + exact spectral organ + ring judge/frontier drain + surface hunter + gamma-orbit completion + the box to 50 + THE CENSUS BEYOND ENUMERATION (Burnside n=5,6,7 in bigint) + the width-64 rot settlement/FULL SETTLEMENT + the census at ten tokens + the autonomous pilot) -- owned by run_mathesis.sh stages [9]..[18] (links resultant + sturm_big + mathesis_alg + mathesis_radical + charpoly + mathesis_ring + mathesis_curve + mathesis_forge/pilot/ontogenesis/rot2/bigcurve/norm/tetra + mathesis_bigjudge/pattern/census/rot64 + the exact-face TUs)")
             SKIP=$((SKIP+1)); continue
             ;;
+        2750_event_waist_laws|2751_event_waist_replay|2752_event_waist_recurrence)
+            RESULTS+=("SKIP  $base : THE EVENT-PRIMARY WAIST (route V: an SVIR executor whose ground is the append-only retirement log -- state/output/result = a validating fold over history) -- owned by STDLIB/sovir/run_event_waist.sh (links svir_event.o; + the route-S==route-V differential over COMPILER/BOOT/square_probes)")
+            SKIP=$((SKIP+1)); continue
+            ;;
         2126_involution|2127_membrane|2128_involution_closed|2129_epoch|2130_disposers|2131_reactor|2132_eidolon|2133_ripple_eidolon|2134_planner)
             RESULTS+=("SKIP  $base : RIPPLE MERGE -- owned by run_ripple_kats.sh (involution + membrane + epoch + disposer + crystal/ripple_field/logic6)")
             SKIP=$((SKIP+1)); continue

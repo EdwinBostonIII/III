@@ -1,0 +1,678 @@
+/* svir_event.iii -- THE EVENT-PRIMARY WAIST (route V): an SVIR v1/v2 executor in which the EVENT IS THE
+ * GROUND.  Where svir_interp (route S) is the state-primary reference (registers/stack/memory stepped in
+ * place, output printed as it happens), THIS executor's only product is an APPEND-ONLY RETIREMENT LOG --
+ * one event per executed instruction, carrying the consumed operands and the produced result -- and the
+ * program's OUTPUT and RESULT are not taken from the live machine at all: they are READ OUT OF THE LOG by
+ * a deterministic validating FOLD (sve_replay).  State is a fold over history; the machine that produced
+ * the history is scaffolding.  omnia/event_substrate proved this inversion at organ scale (KATs 1900/1901:
+ * state = fold over a perceived log, the infinitary lasso fold); this TU carries the same discipline to
+ * the waist itself: the execution semantics of SVIR, the ISA every route shares.
+ *
+ * THE TWO ENGINES (non-tautology by construction):
+ *   PRODUCER  sve_run     -- walks the module (semantics mirrored from svir_interp OP FOR OP, parity
+ *                            first: silent-pop-0, shift masks, sentinels 198/199, argv staging, arena
+ *                            save/restore), appending one event per retirement.  IT NEVER PRINTS and its
+ *                            live state is discarded.
+ *   GROUND    sve_replay  -- folds (data image, log) ALONE: no program text, no control-flow logic.  It
+ *                            maintains its OWN stack/locals/memory folds, re-derives every event's result
+ *                            from the op semantics and CHECKS it against the recorded result, re-checks
+ *                            every recorded operand against its own fold, prints the output (PRINT/putchar
+ *                            events) at fold time, and recomputes the witness root.  Any single tampered
+ *                            field diverges the fold (rc 193) or the witness -- teeth, not vibes.
+ *
+ * WITNESS: an order-sensitive multiply-add fold (FNV64 prime) over every event field; root exposed for
+ * both engines.  Scope: determinism/tamper-detection grade (the pure *,+ discipline of evt_witness), NOT
+ * cryptographic -- content-address-grade sealing is omnia/involution's job and is not re-authored here.
+ *
+ * SENTINELS (8-bit-safe, disjoint from the square set's real rcs and the reference's 198/199):
+ *   190 = event-log capacity exceeded (named refusal -- never silent truncation)
+ *   192 = capacity/budget hit AND a state-signature recurrence was found in the log (lasso REPORT:
+ *         (fn,pc,depth,vsp,top) recurred -- an observed-recurrence report, NOT a non-termination theorem)
+ *   193 = replay divergence (the fold refutes the log: tamper, or a producer bug)
+ *   198 = unresolved / non-deterministic-tier import reached (mirrors the reference's meaning; the
+ *         deterministic CRT tier malloc/free/putchar/VirtualAlloc/VirtualFree/Sleep IS supported)
+ *   199 = out-of-range CALL_INDIRECT fired (mirrors the reference exactly)
+ *
+ * NIH: libc putchar only.  No island: gated by corpus 2750/2751/2752 (family run_event_waist.sh) and the
+ * route-S==route-V differential over the COMPILER/BOOT/square_probes theater (the real production SVIR
+ * modules of the meaning campaign).  Standalone TU -- NOT an archive member (zero-cascade; the mathesis
+ * engine discipline). */
+module svir_event
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+/* ---- the module under execution (set by sve_load) ---- */
+var SVE_MP : u64 = 0u64          /* module bytes base */
+var SVE_ML : u64 = 0u64          /* module byte length */
+var EFN_OFF  : [u64; 4096]
+var EFN_BLEN : [u64; 4096]
+var ENFUNC : u32 = 0u32
+var EV2G   : u32 = 0u32
+var EDOFF  : u64 = 0u64          /* data section offset in module bytes */
+var EDLEN  : u64 = 0u64          /* data section length */
+
+/* ---- THE LOG (the ground): parallel columns, one row per retirement ----
+ * meta packing: op(8) | kind(8)<<8 | depth(12)<<16 | fn(16)<<28 | pc(16)<<44 | w(4)<<60 */
+const EVC_CAP : u64 = 4194304u64
+var EV_META : [u64; 4194304]
+var EV_A    : [u64; 4194304]
+var EV_B    : [u64; 4194304]
+var EV_R    : [u64; 4194304]
+var EV_N    : u64 = 0u64
+var EV_LIMIT : u64 = 4194304u64  /* test door may lower this (never raise) */
+var EWIT    : u64 = 0u64         /* producer witness fold */
+const WF : u64 = 1099511628211u64   /* FNV64 prime (odd) */
+
+/* event kinds */
+const K_EXEC : u64 = 0u64        /* value op: pops checked vs a,b; r re-derived */
+const K_CTRL : u64 = 1u64        /* control op: pops checked vs a (IF/BR_IF); no push */
+const K_CALL : u64 = 2u64        /* call: a=fnidx, b=argcount; replay opens a frame */
+const K_RET  : u64 = 3u64        /* return: a=value; replay closes frame, pushes a */
+const K_SHIM : u64 = 4u64        /* deterministic CRT tier: op=shim id, a=arg0, b=arg1, r=result */
+
+/* shim ids (op field of a K_SHIM event) */
+const SH_MALLOC : u32 = 1u32
+const SH_FREE   : u32 = 2u32
+const SH_PUTC   : u32 = 3u32
+const SH_VALLOC : u32 = 4u32
+const SH_VFREE  : u32 = 5u32
+const SH_SLEEP  : u32 = 6u32
+const SH_NOOP0  : u32 = 7u32     /* fputc/fputs/fflush/signal/getenv/fprintf tier: result 0, no effect */
+
+/* ---- the producer's live machine (scaffolding; discarded after the run) ---- */
+var EMEM : [u8; 134217728]       /* 128 MiB flat linear memory (the reference's world size) */
+var EVS  : [u64; 16384]
+var EVSP : u32 = 0u32
+var ELOC : [u64; 131072]         /* frame `depth` owns ELOC[depth*256 .. +256] */
+var ECK  : [u32; 16384]
+var ECP  : [u64; 16384]
+var ECE  : [u64; 16384]
+var EAB  : [u64; 512]
+var EARENA_TOP : u64 = 8388608u64
+var ESHIM_HEAP : u64 = 67108864u64
+var E_OOB   : u32 = 0u32
+var E_UNRES : u32 = 0u32
+var E_FULL  : u32 = 0u32         /* log capacity exceeded flag */
+var EMEM_HI : u64 = 0u64         /* upper bound of touched memory (for replay re-init) */
+var ECUR_PC : u64 = 0u64         /* pc of the instruction being retired (for the event meta) */
+var ECUR_FN : u32 = 0u32
+var ECUR_DEP : u32 = 0u32
+
+/* ---- during-run prefix snapshots (the two-path prefix arm) ---- */
+var SNAP_TICK : [u64; 64]
+var SNAP_VSP  : [u64; 64]
+var SNAP_TOP  : [u64; 64]
+var SNAP_N    : u32 = 0u32
+var SNAP_PEND : u32 = 0u32       /* capture is LAZY: the state after event T is read just before */
+var SNAP_PT   : u64 = 0u64       /* event T+1 retires (all inter-event stack motion settled) */
+const SNAP_EVERY : u64 = 1024u64
+
+/* ---- the replay engine's own folds (independent of the producer's machine) ---- */
+var RVS  : [u64; 16384]
+var RVSP : u32 = 0u32
+var RLOC : [u64; 131072]
+var RFR_DEPTH : u32 = 0u32       /* replay frame depth */
+var RFR_AT    : [u64; 512]      /* saved arena tops per frame */
+var RAB  : [u64; 512]
+var RARENA_TOP : u64 = 0u64
+var RSHIM_HEAP : u64 = 0u64
+var RWIT : u64 = 0u64
+var RRES : u64 = 0u64            /* the fold-derived program result */
+var RRES_SET : u32 = 0u32
+var R_DIVERGE_AT : u64 = 0u64    /* first diverging event index (for diagnosis) */
+var R_DIVERGE_WHY : u32 = 0u32   /* 1 pop-a 2 pop-b 3 result 4 frame 5 local 6 stackflow 7 kind */
+var R_QUIET : u32 = 0u32         /* 1 = fold without printing (state_at prefix probes) */
+
+/* ---- lasso report (recurrence of (fn,pc,depth,vsp,top) signatures in the log) ---- */
+var LASSO_START : u64 = 0u64
+var LASSO_LEN   : u64 = 0u64
+
+fn sve_count() -> u64 @export { return EV_N }
+fn sve_wit() -> u64 @export { return EWIT }
+fn sve_replay_wit() -> u64 @export { return RWIT }
+fn sve_result() -> u64 @export { return RRES }
+fn sve_oob() -> u32 @export { return E_OOB }
+fn sve_unres() -> u32 @export { return E_UNRES }
+fn sve_lasso_start() -> u64 @export { return LASSO_START }
+fn sve_lasso_len() -> u64 @export { return LASSO_LEN }
+fn sve_diverge_at() -> u64 @export { return R_DIVERGE_AT }
+fn sve_diverge_why() -> u32 @export { return R_DIVERGE_WHY }
+
+/* test door: lower the effective log capacity (never raise past the real cap) */
+fn sve_set_limit(n: u64) -> i32 @export {
+    if n > EVC_CAP { EV_LIMIT = EVC_CAP  return -1i32 }
+    if n < 2u64 { EV_LIMIT = 2u64  return -1i32 }
+    EV_LIMIT = n
+    return 0i32
+}
+
+/* test door: read/poke one event field (0=meta 1=a 2=b 3=r) -- the tamper tooth's hands */
+fn sve_ev_get(i: u64, which: u32) -> u64 @export {
+    if i >= EV_N { return 0u64 }
+    if which == 0u32 { return EV_META[i] }
+    if which == 1u32 { return EV_A[i] }
+    if which == 2u32 { return EV_B[i] }
+    return EV_R[i]
+}
+fn sve_ev_poke(i: u64, which: u32, v: u64) -> i32 @export {
+    if i >= EV_N { return -1i32 }
+    if which == 0u32 { EV_META[i] = v  return 0i32 }
+    if which == 1u32 { EV_A[i] = v  return 0i32 }
+    if which == 2u32 { EV_B[i] = v  return 0i32 }
+    EV_R[i] = v
+    return 0i32
+}
+
+/* ---- module byte access ---- */
+fn eb(i: u64) -> u32 { let p : *u8 = (SVE_MP + i) as *u8  return p[0u64] as u32 }
+fn erd8(i: u64) -> u64 { let mut v:u64=0u64  let mut k:u64=0u64  while k<8u64 { v = v | ((eb(i+k)) as u64 << (k*8u64))  k=k+1u64 }  return v }
+fn eu16(i: u64) -> u64 { return (eb(i) as u64) | ((eb(i+1u64) as u64) << 8u64) }
+
+/* ---- producer memory (mirrors the reference mb/msb/mld/mst semantics) ---- */
+fn emb(a: u64) -> u32 { if a < 134217728u64 { return EMEM[a] as u32 }  return 0u32 }
+fn emsb(a: u64, v: u32) { if a < 134217728u64 { EMEM[a] = (v & 255u32) as u8  if a >= EMEM_HI { EMEM_HI = a + 1u64 } } }
+fn emld(a: u64, w: u32, sgn: u32) -> u64 {
+    let mut v : u64 = 0u64  let mut k : u64 = 0u64
+    while k < (w as u64) { v = v | ((emb(a+k)) as u64 << (k*8u64))  k=k+1u64 }
+    if sgn == 1u32 { if w == 2u32 { if v >= 32768u64 { v = v | 18446744073709551360u64 } }
+                     if w == 4u32 { if v >= 2147483648u64 { v = v | 18446744069414584320u64 } } }
+    return v
+}
+fn emst(a: u64, w: u32, v: u64) {
+    let mut k : u64 = 0u64  while k < (w as u64) { emsb(a+k, ((v >> (k*8u64)) & 255u64) as u32)  k=k+1u64 }
+}
+
+fn evpush(v: u64) { if EVSP < 16384u32 { EVS[EVSP as u64] = v  EVSP = EVSP + 1u32 } }
+fn evpop() -> u64 { if EVSP > 0u32 { EVSP = EVSP - 1u32  return EVS[EVSP as u64] }  return 0u64 }
+
+/* ---- THE APPEND (the only act that matters): one retirement -> one event ---- */
+fn ev_meta_pack(op: u32, kind: u64, w: u32) -> u64 {
+    let mut m : u64 = (op as u64) & 255u64
+    m = m | ((kind & 255u64) << 8u64)
+    m = m | (((ECUR_DEP as u64) & 4095u64) << 16u64)
+    m = m | (((ECUR_FN as u64) & 65535u64) << 28u64)
+    m = m | ((ECUR_PC & 65535u64) << 44u64)
+    m = m | (((w as u64) & 15u64) << 60u64)
+    return m
+}
+fn snap_capture() {
+    if SNAP_N < 64u32 {
+        SNAP_TICK[SNAP_N as u64] = SNAP_PT
+        SNAP_VSP[SNAP_N as u64] = EVSP as u64
+        if EVSP > 0u32 { SNAP_TOP[SNAP_N as u64] = EVS[(EVSP - 1u32) as u64] } else { SNAP_TOP[SNAP_N as u64] = 0u64 }
+        SNAP_N = SNAP_N + 1u32
+    }
+    SNAP_PEND = 0u32
+}
+fn ev_append(op: u32, kind: u64, w: u32, a: u64, b: u64, r: u64) -> u32 {
+    if SNAP_PEND == 1u32 { snap_capture() }
+    if EV_N >= EV_LIMIT { E_FULL = 1u32  return 0u32 }
+    let m : u64 = ev_meta_pack(op, kind, w)
+    EV_META[EV_N] = m  EV_A[EV_N] = a  EV_B[EV_N] = b  EV_R[EV_N] = r
+    EWIT = ((EWIT * WF) + m)
+    EWIT = ((EWIT * WF) + a)
+    EWIT = ((EWIT * WF) + b)
+    EWIT = ((EWIT * WF) + r)
+    EV_N = EV_N + 1u64
+    if (EV_N % SNAP_EVERY) == 0u64 { SNAP_PEND = 1u32  SNAP_PT = EV_N }
+    return 1u32
+}
+fn sve_snap_n() -> u32 @export { return SNAP_N }
+fn sve_snap_tick(i: u32) -> u64 @export { if i < SNAP_N { return SNAP_TICK[i as u64] }  return 0u64 }
+fn sve_snap_vsp(i: u32) -> u64 @export { if i < SNAP_N { return SNAP_VSP[i as u64] }  return 0u64 }
+fn sve_snap_top(i: u32) -> u64 @export { if i < SNAP_N { return SNAP_TOP[i as u64] }  return 0u64 }
+
+/* ---- container load (v1: [nfunc u8] ; v2: 0x00 [nfunc u16 LE]; per fn 4B header [.,.,blen u16]) ---- */
+fn sve_load(mp: u64, ml: u64) -> i32 @export {
+    SVE_MP = mp  SVE_ML = ml
+    ENFUNC = eb(0u64)
+    let mut p : u64 = 1u64  let mut fi : u32 = 0u32
+    EV2G = 0u32
+    if ENFUNC == 0u32 { ENFUNC = (eu16(1u64)) as u32  p = 3u64  EV2G = 1u32 }
+    if ENFUNC == 0u32 { return -1i32 }
+    if (ENFUNC as u64) > 4096u64 { return -1i32 }
+    while fi < ENFUNC {
+        if p + 4u64 > ml { return -1i32 }
+        let bl : u64 = eu16(p + 2u64)
+        EFN_OFF[fi as u64] = p + 4u64  EFN_BLEN[fi as u64] = bl
+        p = p + 4u64 + bl
+        fi = fi + 1u32
+    }
+    EDOFF = 0u64  EDLEN = 0u64
+    if p < ml {
+        let mut dl : u64 = eu16(p)
+        let mut db : u64 = p + 2u64
+        if EV2G == 1u32 { dl = dl | (eu16(p + 2u64) << 16u64)  db = p + 4u64 }
+        EDOFF = db  EDLEN = dl
+    }
+    return 0i32
+}
+
+/* ---- shared world init: zero touched memory, stage data image + argv (the reference's exact map) ---- */
+fn world_init() {
+    let mut z : u64 = 0u64
+    let hi : u64 = EMEM_HI
+    while z < hi { EMEM[z] = 0u8  z = z + 1u64 }          /* erase exactly the touched span */
+    let mut z2 : u64 = 134213424u64                        /* argv region: always re-staged fresh */
+    while z2 < 134213760u64 { EMEM[z2] = 0u8  z2 = z2 + 1u64 }
+    EMEM_HI = 0u64
+    let mut k : u64 = 0u64  while k < EDLEN { EMEM[k] = eb(EDOFF + k) as u8  k = k + 1u64 }
+    if EDLEN > EMEM_HI { EMEM_HI = EDLEN }
+    /* argv world: table at 134213424, strings at 134213680, argv0 = "iiis-0", argc = 1 (exact reference map) */
+    EMEM[134213680u64]=105u8 EMEM[134213681u64]=105u8 EMEM[134213682u64]=105u8 EMEM[134213683u64]=115u8
+    EMEM[134213684u64]=45u8  EMEM[134213685u64]=48u8  EMEM[134213686u64]=0u8
+    let mut k8 : u64 = 0u64  while k8 < 8u64 { EMEM[134213424u64+k8] = ((134213680u64 >> (8u64*k8)) & 255u64) as u8  k8=k8+1u64 }
+    EMEM_HI = 134213760u64
+}
+
+/* ---- import-name matching (module bytes vs literal) ---- */
+fn enm_is(no: u64, nl: u32, s: u64, sl: u32) -> u32 {
+    if nl != sl { return 0u32 }
+    let p : *u8 = s as *u8
+    let mut j : u32 = 0u32
+    while j < nl { if eb(no + (j as u64)) != (p[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+
+/* deterministic CRT tier: id for a whitelisted name, 0 = not in the tier */
+fn shim_id(boff: u64) -> u32 {
+    let nl : u32 = eb(boff + 1u64)
+    let no : u64 = boff + 2u64
+    if enm_is(no, nl, "malloc" as u64, 6u32)==1u32 { return SH_MALLOC }
+    if enm_is(no, nl, "free" as u64, 4u32)==1u32 { return SH_FREE }
+    if enm_is(no, nl, "putchar" as u64, 7u32)==1u32 { return SH_PUTC }
+    if enm_is(no, nl, "VirtualAlloc" as u64, 12u32)==1u32 { return SH_VALLOC }
+    if enm_is(no, nl, "VirtualFree" as u64, 11u32)==1u32 { return SH_VFREE }
+    if enm_is(no, nl, "Sleep" as u64, 5u32)==1u32 { return SH_SLEEP }
+    if enm_is(no, nl, "fputc" as u64, 5u32)==1u32 { return SH_NOOP0 }
+    if enm_is(no, nl, "fputs" as u64, 5u32)==1u32 { return SH_NOOP0 }
+    if enm_is(no, nl, "fflush" as u64, 6u32)==1u32 { return SH_NOOP0 }
+    if enm_is(no, nl, "signal" as u64, 6u32)==1u32 { return SH_NOOP0 }
+    if enm_is(no, nl, "getenv" as u64, 6u32)==1u32 { return SH_NOOP0 }
+    if enm_is(no, nl, "fprintf" as u64, 7u32)==1u32 { return SH_NOOP0 }
+    return 0u32
+}
+
+/* execute the deterministic shim: result computed from the FOLD state, appended as K_SHIM. NO printing. */
+fn shim_exec(sid: u32, lb: u64) -> u64 {
+    let a0 : u64 = ELOC[lb]  let a1 : u64 = ELOC[lb + 1u64]
+    let mut r : u64 = 0u64
+    if sid == SH_MALLOC { r = ESHIM_HEAP  ESHIM_HEAP = ESHIM_HEAP + ((a0 + 7u64) & 18446744073709551608u64) }
+    if sid == SH_VALLOC { r = ESHIM_HEAP  ESHIM_HEAP = ESHIM_HEAP + ((a1 + 7u64) & 18446744073709551608u64) }
+    if sid == SH_VFREE  { r = 1u64 }
+    if sid == SH_PUTC   { r = a0 & 255u64 }
+    ev_append(sid, K_SHIM, 0u32, a0, a1, r)
+    return r
+}
+
+/* ---- opcode-aware operand widths (needed to skip operands when scanning for END/ELSE) ---- */
+fn eop_w(op: u32) -> u64 {
+    if op==0x01u32 { return 8u64 }
+    if op==0x10u32 { return 1u64 }
+    if op==0x11u32 { return 1u64 }
+    if op==0x50u32 { return 1u64 }
+    if op==0x51u32 { return 1u64 }
+    if op==0x70u32 { return 2u64 }
+    if op==0x73u32 { return 1u64 }
+    if op==0x74u32 { return 3u64 }
+    if op==0x8Bu32 { return 2u64 }
+    return 0u64
+}
+fn ematch_end(boff: u64, blen: u64, q: u64) -> u64 {
+    let mut p : u64 = q + 1u64  let mut depth : i64 = 1i64  let mut res : u64 = blen  let mut done : u32 = 0u32
+    while p < blen { if done == 0u32 {
+        let op : u32 = eb(boff + p)  let w : u64 = eop_w(op)
+        if op==0x40u32 { depth=depth+1i64 }  if op==0x41u32 { depth=depth+1i64 }  if op==0x42u32 { depth=depth+1i64 }
+        if op==0x44u32 { depth=depth-1i64  if depth==0i64 { res=p  done=1u32 } }
+        p = p + 1u64 + w
+    } else { p = blen } }
+    return res
+}
+fn ematch_else(boff: u64, blen: u64, q: u64) -> u64 {
+    let mut p : u64 = q + 1u64  let mut depth : i64 = 1i64  let mut res : u64 = blen  let mut done : u32 = 0u32
+    while p < blen { if done == 0u32 {
+        let op : u32 = eb(boff + p)  let w : u64 = eop_w(op)
+        if op==0x40u32 { depth=depth+1i64 }  if op==0x41u32 { depth=depth+1i64 }  if op==0x42u32 { depth=depth+1i64 }
+        if op==0x44u32 { depth=depth-1i64  if depth==0i64 { done=1u32 } }
+        if op==0x43u32 { if depth==1i64 { res=p  done=1u32 } }
+        if done==0u32 { p = p + 1u64 + w }
+    } else { p = blen } }
+    return res
+}
+
+/* ---- THE PRODUCER: reference semantics op for op; every retirement appends ---- */
+fn eexec_fn(fnidx: u32, depth: u32) -> u64 {
+    let saved_at : u64 = EARENA_TOP
+    let r : u64 = eexec_fn_body(fnidx, depth)
+    EARENA_TOP = saved_at
+    return r
+}
+
+fn eexec_fn_body(fnidx: u32, depth: u32) -> u64 {
+    let boff : u64 = EFN_OFF[fnidx as u64]
+    let blen : u64 = EFN_BLEN[fnidx as u64]
+    let lb   : u64 = (depth as u64) * 256u64
+    if blen > 0u64 { if eb(boff) == 0x8Au32 {
+        let sid : u32 = shim_id(boff)
+        ECUR_FN = fnidx  ECUR_DEP = depth  ECUR_PC = 0u64
+        if sid != 0u32 { return shim_exec(sid, lb) }
+        E_UNRES = E_UNRES + 1u32
+        return 0u64
+    } }
+    let cb   : u64 = (depth as u64) * 64u64
+    let mut csp : u32 = 0u32
+    let mut p   : u64 = 0u64
+    while p < blen {
+        if E_FULL == 1u32 { return 0u64 }
+        ECUR_FN = fnidx  ECUR_DEP = depth  ECUR_PC = p
+        let op : u32 = eb(boff + p)
+        let mut adv : u32 = 1u32
+        if op == 0x60u32 { let rv:u64 = evpop()  ev_append(op, K_RET, 0u32, rv, 0u64, rv)  return rv }   /* RETURN */
+        if op == 0x01u32 { let im:u64 = erd8(boff + p + 1u64)  ev_append(op, K_EXEC, 0u32, im, 0u64, im)  evpush(im)  p = p + 9u64  adv = 0u32 }   /* CONST */
+        if op == 0x10u32 { let sl:u32=eb(boff+p+1u64)  let v:u64 = ELOC[lb + (sl as u64)]  ev_append(op, K_EXEC, 0u32, 0u64, sl as u64, v)  evpush(v)  p = p + 2u64  adv=0u32 }   /* LOCAL_GET */
+        if op == 0x11u32 { let sl:u32=eb(boff+p+1u64)  let v:u64 = evpop()  ELOC[lb + (sl as u64)] = v  ev_append(op, K_EXEC, 0u32, v, sl as u64, 0u64)  p = p + 2u64  adv=0u32 } /* LOCAL_SET */
+        if op == 0x40u32 { ECK[(cb+(csp as u64))]=0u32  ECP[(cb+(csp as u64))]=p  ECE[(cb+(csp as u64))]=ematch_end(boff,blen,p)  csp=csp+1u32  ev_append(op, K_CTRL, 0u32, 0u64, 0u64, 0u64) }   /* BLOCK */
+        if op == 0x41u32 { ECK[(cb+(csp as u64))]=1u32  ECP[(cb+(csp as u64))]=p  ECE[(cb+(csp as u64))]=ematch_end(boff,blen,p)  csp=csp+1u32  ev_append(op, K_CTRL, 0u32, 0u64, 0u64, 0u64) }   /* LOOP */
+        if op == 0x44u32 { if csp>0u32 {csp=csp-1u32}  ev_append(op, K_CTRL, 0u32, 0u64, 0u64, 0u64) }   /* END */
+        if op == 0x71u32 { let c:u64=evpop()  ev_append(op, K_EXEC, 0u32, c, 0u64, c & 255u64) }         /* PRINT_CHAR: fold prints, not us */
+        if op == 0x72u32 { let d:u64=evpop()  ev_append(op, K_EXEC, 0u32, d, 0u64, 0u64) }               /* DROP */
+        if op == 0x42u32 { adv=0u32  let c:u64=evpop()  let me:u64=ematch_end(boff,blen,p)  ECK[(cb+(csp as u64))]=2u32  ECP[(cb+(csp as u64))]=p  ECE[(cb+(csp as u64))]=me  csp=csp+1u32   /* IF */
+            ev_append(op, K_CTRL, 0u32, c, 0u64, 0u64)
+            if c != 0u64 { p = p + 1u64 } else { let el:u64=ematch_else(boff,blen,p)  if el < blen { p = el + 1u64 } else { if csp>0u32 {csp=csp-1u32}  p = me + 1u64 } } }
+        if op == 0x43u32 { adv=0u32  let topx:u32=csp-1u32  p = ECE[(cb+(topx as u64))] + 1u64  if csp>0u32 {csp=csp-1u32}  ev_append(op, K_CTRL, 0u32, 0u64, 0u64, 0u64) }   /* ELSE */
+        if op == 0x50u32 { adv=0u32  let d:u32=eb(boff+p+1u64)  let tgt:u32=(csp-1u32)-d               /* BR d */
+            ev_append(op, K_CTRL, 0u32, 0u64, d as u64, 0u64)
+            if ECK[(cb+(tgt as u64))]==1u32 { csp=tgt+1u32  p=ECP[(cb+(tgt as u64))]+1u64 } else { csp=tgt  p=ECE[(cb+(tgt as u64))]+1u64 } }
+        if op == 0x51u32 { adv=0u32  let c:u64=evpop()  let d:u32=eb(boff+p+1u64)                       /* BR_IF d */
+            ev_append(op, K_CTRL, 0u32, c, d as u64, 0u64)
+            if c != 0u64 { let tgt:u32=(csp-1u32)-d  if ECK[(cb+(tgt as u64))]==1u32 { csp=tgt+1u32  p=ECP[(cb+(tgt as u64))]+1u64 } else { csp=tgt  p=ECE[(cb+(tgt as u64))]+1u64 } } else { p=p+2u64 } }
+        if op == 0x70u32 { adv=0u32  let fi:u32=eb(boff+p+1u64)  let ac:u32=eb(boff+p+2u64)  p=p+3u64   /* CALL fi ac */
+            ev_append(op, K_CALL, 0u32, fi as u64, ac as u64, 0u64)
+            let nb : u64 = ((depth+1u32) as u64) * 256u64
+            let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  ELOC[nb + (j as u64)] = evpop() }
+            evpush(eexec_fn(fi, depth + 1u32)) }
+        if op == 0x74u32 { adv=0u32  let fi:u32=(eu16(boff+p+1u64)) as u32  let ac:u32=eb(boff+p+3u64)  p=p+4u64   /* CALL2 */
+            ev_append(op, K_CALL, 0u32, fi as u64, ac as u64, 0u64)
+            let nb : u64 = ((depth+1u32) as u64) * 256u64
+            let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  ELOC[nb + (j as u64)] = evpop() }
+            evpush(eexec_fn(fi, depth + 1u32)) }
+        if op == 0x73u32 { adv=0u32  let ac:u32=eb(boff+p+1u64)  p=p+2u64                                /* CALL_INDIRECT ac */
+            let fi:u32 = evpop() as u32
+            if fi < ENFUNC {
+                ev_append(op, K_CALL, 0u32, fi as u64, ac as u64, 1u64)
+                let nb : u64 = ((depth+1u32) as u64) * 256u64
+                let mut j : u32 = ac  while j > 0u32 { j = j - 1u32  ELOC[nb + (j as u64)] = evpop() }
+                evpush(eexec_fn(fi, depth + 1u32))
+            } else {
+                E_OOB = E_OOB + 1u32
+                ev_append(op, K_EXEC, 0u32, fi as u64, ac as u64, 0u64)   /* OOB: pops index+args, pushes 0 */
+                let mut j2 : u32 = ac  while j2 > 0u32 { j2 = j2 - 1u32  evpop() }
+                evpush(0u64)
+            } }
+        if op == 0x8Bu32 { adv=0u32  let ext:u64=eu16(boff+p+1u64)  p=p+3u64                             /* ARENA [u16 ext] */
+            EAB[depth as u64] = EARENA_TOP
+            ev_append(op, K_CTRL, 0u32, ext, 0u64, EARENA_TOP)
+            let mut z:u64=0u64  while z < ext { emsb(EARENA_TOP + z, 0u32)  z=z+1u64 }
+            EARENA_TOP = EARENA_TOP + ext }
+        if op == 0x8Cu32 { let ab:u64 = EAB[depth as u64]  ev_append(op, K_EXEC, 0u32, 0u64, 0u64, ab)  evpush(ab) }   /* ABASE */
+        if op >= 0x80u32 { if op <= 0x89u32 {
+            if op==0x80u32 { let a:u64=evpop()  let v:u64=emld(a,1u32,0u32)  ev_append(op, K_EXEC, 1u32, a, 0u64, v)  evpush(v) }
+            if op==0x82u32 { let a:u64=evpop()  let v:u64=emld(a,8u32,0u32)  ev_append(op, K_EXEC, 8u32, a, 0u64, v)  evpush(v) }
+            if op==0x84u32 { let a:u64=evpop()  let v:u64=emld(a,2u32,0u32)  ev_append(op, K_EXEC, 2u32, a, 0u64, v)  evpush(v) }
+            if op==0x85u32 { let a:u64=evpop()  let v:u64=emld(a,2u32,1u32)  ev_append(op, K_EXEC, 10u32, a, 0u64, v)  evpush(v) }
+            if op==0x86u32 { let a:u64=evpop()  let v:u64=emld(a,4u32,0u32)  ev_append(op, K_EXEC, 4u32, a, 0u64, v)  evpush(v) }
+            if op==0x87u32 { let a:u64=evpop()  let v:u64=emld(a,4u32,1u32)  ev_append(op, K_EXEC, 12u32, a, 0u64, v)  evpush(v) }
+            if op==0x81u32 { let v:u64=evpop()  let a:u64=evpop()  emst(a,1u32,v)  ev_append(op, K_EXEC, 1u32, a, v, 0u64) }
+            if op==0x83u32 { let v:u64=evpop()  let a:u64=evpop()  emst(a,8u32,v)  ev_append(op, K_EXEC, 8u32, a, v, 0u64) }
+            if op==0x88u32 { let v:u64=evpop()  let a:u64=evpop()  emst(a,2u32,v)  ev_append(op, K_EXEC, 2u32, a, v, 0u64) }
+            if op==0x89u32 { let v:u64=evpop()  let a:u64=evpop()  emst(a,4u32,v)  ev_append(op, K_EXEC, 4u32, a, v, 0u64) }
+        } }
+        if op >= 0x20u32 { if op <= 0x35u32 {
+            let b:u64=evpop()  let a:u64=evpop()
+            let r : u64 = ebinop(op, a, b)
+            ev_append(op, K_EXEC, 0u32, a, b, r)
+            evpush(r)
+        } }
+        if adv == 1u32 { p = p + 1u64 + eop_w(op) }
+    }
+    return 0u64
+}
+
+/* the ONE binop semantics table -- shared by producer and replay (the fold re-derives through THIS,
+ * checking the recorded result; a tampered result cannot survive because this fn recomputes it) */
+fn ebinop(op: u32, a: u64, b: u64) -> u64 {
+    let mut r : u64 = 0u64
+    if op==0x20u32 { r = a + b }  if op==0x21u32 { r = a - b }  if op==0x22u32 { r = a * b }
+    if op==0x23u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) / bi) as u64 } }
+    if op==0x24u32 { let bi:i64=b as i64  if bi != 0i64 { r = ((a as i64) % bi) as u64 } }
+    if op==0x2Au32 { if b != 0u64 { r = a / b } }  if op==0x2Bu32 { if b != 0u64 { r = a % b } }
+    if op==0x25u32 { r = a & b }  if op==0x26u32 { r = a | b }  if op==0x27u32 { r = a ^ b }
+    if op==0x28u32 { r = a << (b & 63u64) }  if op==0x29u32 { r = a >> (b & 63u64) }
+    if op==0x30u32 { if a == b { r = 1u64 } }  if op==0x31u32 { if a != b { r = 1u64 } }
+    if op==0x32u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai <  bi { r = 1u64 } }
+    if op==0x33u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai >= bi { r = 1u64 } }
+    if op==0x34u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai <= bi { r = 1u64 } }
+    if op==0x35u32 { let ai:i64=a as i64  let bi:i64=b as i64  if ai >  bi { r = 1u64 } }
+    return r
+}
+
+/* ---- reset + run ---- */
+fn sve_reset() -> i32 @export {
+    EV_N = 0u64  EWIT = 0u64  E_OOB = 0u32  E_UNRES = 0u32  E_FULL = 0u32
+    EVSP = 0u32  SNAP_N = 0u32  SNAP_PEND = 0u32
+    EARENA_TOP = 8388608u64  ESHIM_HEAP = 67108864u64
+    LASSO_START = 0u64  LASSO_LEN = 0u64
+    RRES = 0u64  RRES_SET = 0u32  RWIT = 0u64
+    let mut s : u64 = 0u64  while s < 131072u64 { ELOC[s] = 0u64  s = s + 1u64 }
+    return 0i32
+}
+
+/* run func 0 with the staged world; returns 0 ok / the named refusal sentinel.
+ * The PROGRAM result is NOT returned here -- it is read from the log by sve_replay (the ground). */
+fn sve_run() -> i32 @export {
+    world_init()
+    ELOC[0u64] = 1u64             /* staged argc = 1 (the reference's no-args world) */
+    ELOC[1u64] = 134213424u64     /* staged argv table */
+    ECUR_FN = 0u32  ECUR_DEP = 0u32  ECUR_PC = 0u64
+    eexec_fn(0u32, 0u32)
+    if SNAP_PEND == 1u32 { snap_capture() }
+    if E_FULL == 1u32 {
+        lasso_scan()
+        if LASSO_LEN > 0u64 { return 192i32 }
+        return 190i32
+    }
+    return 0i32
+}
+
+/* recurrence report over the log: first (fn,pc,depth,vsp-agnostic) signature whose (meta,a,b,r) row
+ * recurs with an IDENTICAL row between the two occurrences' distance -- scan the tail window for a
+ * repeated (meta, stack-top-effect) pair.  Report only; never a theorem. */
+fn lasso_scan() {
+    LASSO_START = 0u64  LASSO_LEN = 0u64
+    if EV_N < 64u64 { return }
+    let tail : u64 = EV_N - 1u64
+    let m0 : u64 = EV_META[tail]  let a0 : u64 = EV_A[tail]  let b0 : u64 = EV_B[tail]  let r0 : u64 = EV_R[tail]
+    let mut i : u64 = 1u64
+    while i <= 65536u64 {
+        if i <= tail {
+            let j : u64 = tail - i
+            if EV_META[j] == m0 { if EV_A[j] == a0 { if EV_B[j] == b0 { if EV_R[j] == r0 {
+                /* candidate period i: verify the whole window [j+1 .. tail] equals [j+1-i .. tail-i] */
+                let mut k : u64 = 0u64  let mut ok : u32 = 1u32
+                while k < i {
+                    if (j + 1u64 + k) >= i {
+                        let x : u64 = j + 1u64 + k
+                        let y : u64 = x - i
+                        if EV_META[x] != EV_META[y] { ok = 0u32  k = i } else {
+                        if EV_A[x] != EV_A[y] { ok = 0u32  k = i } else {
+                        if EV_B[x] != EV_B[y] { ok = 0u32  k = i } else {
+                        if EV_R[x] != EV_R[y] { ok = 0u32  k = i } } } }
+                    } else { ok = 0u32  k = i }
+                    if k < i { k = k + 1u64 }
+                }
+                if ok == 1u32 { LASSO_START = j + 1u64 - i  LASSO_LEN = i  return }
+            } } } }
+        }
+        i = i + 1u64
+    }
+}
+
+/* ---- THE GROUND: the validating fold over (data image, log) -- no program text, no control logic ----
+ * Re-derives every event: pops checked against recorded operands, results recomputed through the SAME
+ * semantics doors, memory/locals/shim-heap folds maintained independently, output printed HERE (this is
+ * where the program's output actually happens), witness recomputed, final result = the K_RET that closes
+ * frame 0.  Returns 0 ok / 193 divergence (R_DIVERGE_AT/WHY pin the row). */
+fn rvpush(v: u64) { if RVSP < 16384u32 { RVS[RVSP as u64] = v  RVSP = RVSP + 1u32 } }
+fn rvpop() -> u64 { if RVSP > 0u32 { RVSP = RVSP - 1u32  return RVS[RVSP as u64] }  return 0u64 }
+
+fn rdiverge(i: u64, why: u32) -> i32 { R_DIVERGE_AT = i  R_DIVERGE_WHY = why  return 193i32 }
+
+fn sve_replay_upto(nlim: u64) -> i32 {
+    /* replay's world: re-zero the producer's touched span, re-stage data+argv -- the producer's live
+     * state is ERASED and re-derived from (module data, log) alone.  Its stack/locals/frames are its own. */
+    world_init()
+    RVSP = 0u32  RFR_DEPTH = 0u32  RWIT = 0u64  RRES = 0u64  RRES_SET = 0u32
+    RARENA_TOP = 8388608u64  RSHIM_HEAP = 67108864u64
+    R_DIVERGE_AT = 0u64  R_DIVERGE_WHY = 0u32
+    let mut s : u64 = 0u64  while s < 131072u64 { RLOC[s] = 0u64  s = s + 1u64 }
+    RLOC[0u64] = 1u64  RLOC[1u64] = 134213424u64
+    let mut i : u64 = 0u64
+    while i < nlim {
+        let m : u64 = EV_META[i]  let a : u64 = EV_A[i]  let b : u64 = EV_B[i]  let r : u64 = EV_R[i]
+        RWIT = ((RWIT * WF) + m)
+        RWIT = ((RWIT * WF) + a)
+        RWIT = ((RWIT * WF) + b)
+        RWIT = ((RWIT * WF) + r)
+        let op : u32 = (m & 255u64) as u32
+        let kind : u64 = (m >> 8u64) & 255u64
+        let dep : u64 = (m >> 16u64) & 4095u64
+        let lb : u64 = dep * 256u64
+        if kind == K_EXEC {
+            if op == 0x01u32 { if r != a { return rdiverge(i, 3u32) }  rvpush(r) }
+            if op == 0x10u32 { let v:u64 = RLOC[lb + b]  if v != r { return rdiverge(i, 5u32) }  rvpush(v) }
+            if op == 0x11u32 { let v:u64 = rvpop()  if v != a { return rdiverge(i, 1u32) }  RLOC[lb + b] = v }
+            if op == 0x71u32 { let c:u64 = rvpop()  if c != a { return rdiverge(i, 1u32) }  if R_QUIET == 0u32 { putchar((c & 255u64) as i32) } }
+            if op == 0x72u32 { let d:u64 = rvpop()  if d != a { return rdiverge(i, 1u32) } }
+            if op == 0x8Cu32 { let ab:u64 = RAB[dep]  if ab != r { return rdiverge(i, 3u32) }  rvpush(ab) }
+            if op == 0x73u32 { let fi:u64 = rvpop()  if fi != a { return rdiverge(i, 1u32) }   /* OOB indirect: index+args popped, 0 pushed */
+                let mut j : u64 = 0u64  while j < b { rvpop()  j = j + 1u64 }
+                rvpush(0u64) }
+            if op >= 0x80u32 { if op <= 0x89u32 {
+                if op==0x80u32 { ld_chk(i, a, 1u32, 0u32, r) }
+                if op==0x82u32 { ld_chk(i, a, 8u32, 0u32, r) }
+                if op==0x84u32 { ld_chk(i, a, 2u32, 0u32, r) }
+                if op==0x85u32 { ld_chk(i, a, 2u32, 1u32, r) }
+                if op==0x86u32 { ld_chk(i, a, 4u32, 0u32, r) }
+                if op==0x87u32 { ld_chk(i, a, 4u32, 1u32, r) }
+                if R_LDBAD == 1u32 { R_LDBAD = 0u32  return rdiverge(i, 3u32) }
+                if op==0x81u32 { st_do(i, a, b, 1u32) }
+                if op==0x83u32 { st_do(i, a, b, 8u32) }
+                if op==0x88u32 { st_do(i, a, b, 2u32) }
+                if op==0x89u32 { st_do(i, a, b, 4u32) }
+                if R_STBAD == 1u32 { R_STBAD = 0u32  return rdiverge(i, 1u32) }
+            } }
+            if op >= 0x20u32 { if op <= 0x35u32 {
+                let vb:u64 = rvpop()  let va:u64 = rvpop()
+                if va != a { return rdiverge(i, 1u32) }
+                if vb != b { return rdiverge(i, 2u32) }
+                let rr : u64 = ebinop(op, va, vb)
+                if rr != r { return rdiverge(i, 3u32) }
+                rvpush(rr)
+            } }
+        }
+        if kind == K_CTRL {
+            if op == 0x42u32 { let c:u64 = rvpop()  if c != a { return rdiverge(i, 1u32) } }
+            if op == 0x51u32 { let c:u64 = rvpop()  if c != a { return rdiverge(i, 1u32) } }
+            if op == 0x8Bu32 {
+                if r != RARENA_TOP { return rdiverge(i, 3u32) }
+                RAB[dep] = RARENA_TOP
+                let mut z:u64=0u64  while z < a { if (RARENA_TOP + z) < 134217728u64 { EMEM[RARENA_TOP + z] = 0u8 }  z=z+1u64 }
+                RARENA_TOP = RARENA_TOP + a }
+        }
+        if kind == K_CALL {
+            if RFR_DEPTH >= 511u32 { return rdiverge(i, 4u32) }
+            RFR_AT[RFR_DEPTH as u64] = RARENA_TOP
+            RFR_DEPTH = RFR_DEPTH + 1u32
+            let nb : u64 = (dep + 1u64) * 256u64
+            let mut j : u64 = b  while j > 0u64 { j = j - 1u64  RLOC[nb + j] = rvpop() }
+        }
+        if kind == K_RET {
+            let rv : u64 = rvpop()                     /* the callee's result leaves the stack... */
+            if rv != a { return rdiverge(i, 1u32) }
+            if r != a { return rdiverge(i, 3u32) }
+            if RFR_DEPTH > 0u32 {
+                RFR_DEPTH = RFR_DEPTH - 1u32
+                RARENA_TOP = RFR_AT[RFR_DEPTH as u64]
+                rvpush(a)                              /* ...and re-enters as the caller's value */
+            } else {
+                RRES = a  RRES_SET = 1u32
+            }
+        }
+        if kind == K_SHIM {
+            let lb2 : u64 = dep * 256u64
+            let a0 : u64 = RLOC[lb2]
+            if a0 != a { return rdiverge(i, 5u32) }
+            let mut rr : u64 = 0u64
+            if op == SH_MALLOC { rr = RSHIM_HEAP  RSHIM_HEAP = RSHIM_HEAP + ((a + 7u64) & 18446744073709551608u64) }
+            if op == SH_VALLOC { rr = RSHIM_HEAP  RSHIM_HEAP = RSHIM_HEAP + ((b + 7u64) & 18446744073709551608u64) }
+            if op == SH_VFREE { rr = 1u64 }
+            if op == SH_PUTC { rr = a & 255u64  if R_QUIET == 0u32 { putchar((a & 255u64) as i32) } }
+            if rr != r { return rdiverge(i, 3u32) }
+            /* a shim IS call+result+return fused: close the frame the K_CALL opened, deliver the result */
+            if RFR_DEPTH > 0u32 { RFR_DEPTH = RFR_DEPTH - 1u32  RARENA_TOP = RFR_AT[RFR_DEPTH as u64] }
+            rvpush(rr)
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+var R_LDBAD : u32 = 0u32
+var R_STBAD : u32 = 0u32
+fn ld_chk(i: u64, addr_rec: u64, w: u32, sgn: u32, r: u64) {
+    let va : u64 = rvpop()
+    if va != addr_rec { R_LDBAD = 1u32  return }
+    let v : u64 = emld(va, w, sgn)
+    if v != r { R_LDBAD = 1u32  return }
+    rvpush(v)
+}
+fn st_do(i: u64, addr_rec: u64, val_rec: u64, w: u32) {
+    let v : u64 = rvpop()
+    if v != val_rec { R_STBAD = 1u32  return }
+    let a : u64 = rvpop()
+    if a != addr_rec { R_STBAD = 1u32  return }
+    emst(a, w, v)
+}
+
+fn sve_replay() -> i32 @export {
+    R_QUIET = 0u32
+    return sve_replay_upto(EV_N)
+}
+
+/* prefix fold: state after the first t events, derived from the log alone (quiet: no output re-print).
+ * Exposes (vsp, top) for the two-path prefix arm against the producer's snapshots. */
+var SA_VSP : u64 = 0u64
+var SA_TOP : u64 = 0u64
+fn sve_state_at(t: u64) -> i32 @export {
+    let mut n : u64 = t
+    if n > EV_N { n = EV_N }
+    R_QUIET = 1u32
+    let rc : i32 = sve_replay_upto(n)
+    R_QUIET = 0u32
+    if rc != 0i32 { return rc }
+    SA_VSP = RVSP as u64
+    if RVSP > 0u32 { SA_TOP = RVS[(RVSP - 1u32) as u64] } else { SA_TOP = 0u64 }
+    return 0i32
+}
+fn sve_sa_vsp() -> u64 @export { return SA_VSP }
+fn sve_sa_top() -> u64 @export { return SA_TOP }
+fn sve_rres_set() -> u32 @export { return RRES_SET }
+fn sve_terminated() -> u32 @export {
+    if EV_N == 0u64 { return 0u32 }
+    if E_FULL == 1u32 { return 0u32 }
+    let m : u64 = EV_META[EV_N - 1u64]
+    let kind : u64 = (m >> 8u64) & 255u64
+    let dep : u64 = (m >> 16u64) & 4095u64
+    if kind == K_RET { if dep == 0u64 { return 1u32 } }
+    return 0u32
+}

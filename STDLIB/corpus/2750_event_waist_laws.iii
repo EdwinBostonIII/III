@@ -1,0 +1,130 @@
+/* corpus/2750_event_waist_laws.iii -- THE EVENT-PRIMARY WAIST, gate 1: the fold laws.
+ *
+ * A hand-built 35-byte SVIR v1 module (CONST 33, CONST 9, ADD, PRINT_CHAR, CONST 55, RETURN) is run
+ * through svir_event (route V): the producer appends 6 retirement events and DISCARDS its machine; the
+ * validating fold (sve_replay) re-derives output '*' and result 55 FROM THE LOG ALONE.  Arms, refusals
+ * and teeth FIRST:
+ *   (1) a malformed module (nfunc=0) is REFUSED by sve_load             -> exit 10 if not
+ *   (2) the capacity door: limit 4 -> run REFUSES 190 (named, no lasso) -> exit 11/12
+ *   (3) the good module: run rc 0, 6 events, terminated-by-RETURN       -> exit 13/14/15
+ *   (4) fold: replay rc 0, result 55, witness roots EQUAL               -> exit 16/17/18
+ *   (5) TAMPER TEETH, every field class: meta/a/b/r each poked -> replay MUST refuse 193; restored ->
+ *       replay MUST return to 0 and the SAME witness                    -> exit 20..27
+ *   (6) prefix folds: state_at(2) = [33,9] top 9; state_at(3) = [42] top 42 (the ADD retired)
+ *                                                                        -> exit 30..33
+ *   (7) determinism: a full second load+run gives the IDENTICAL witness -> exit 34
+ * Family: run_event_waist.sh (links svir_event.o explicitly).  Exit 99 = all laws hold. */
+module corpus_2750_event_waist_laws
+
+extern @abi(c-msvc-x64) fn sve_reset() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_load(mp: u64, ml: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_run() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_result() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_count() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_set_limit(n: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_get(i: u64, which: u32) -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_poke(i: u64, which: u32, v: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_state_at(t: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_sa_vsp() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_sa_top() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_terminated() -> u32 from "svir_event.iii"
+
+var MB : [u8; 64]
+var MN : u64 = 0u64
+
+fn put8(v: u64) {
+    let mut k : u64 = 0u64
+    while k < 8u64 { MB[MN] = ((v >> (k*8u64)) & 255u64) as u8  MN = MN + 1u64  k = k + 1u64 }
+}
+fn putb(v: u32) { MB[MN] = (v & 255u32) as u8  MN = MN + 1u64 }
+fn pconst(v: u64) { putb(0x01u32)  put8(v) }
+
+/* the good module: fn0 = CONST 33, CONST 9, ADD, PRINT_CHAR, CONST 55, RETURN  (blen 30) */
+fn build_good() {
+    MN = 0u64
+    putb(1u32)                    /* nfunc = 1 (v1) */
+    putb(0u32)  putb(0u32)        /* fn header pad */
+    putb(30u32) putb(0u32)        /* blen = 30 LE */
+    pconst(33u64)
+    pconst(9u64)
+    putb(0x20u32)                 /* ADD */
+    putb(0x71u32)                 /* PRINT_CHAR -> '*' at fold time */
+    pconst(55u64)
+    putb(0x60u32)                 /* RETURN */
+}
+
+fn build_bad() {
+    MN = 0u64
+    putb(0u32)  putb(0u32)  putb(0u32)   /* v2 marker with nfunc=0 -> refused */
+}
+
+fn main() -> i32 {
+    /* (1) refusal first: the malformed module must be refused */
+    build_bad()
+    sve_reset()
+    if sve_load(&MB as u64, MN) == 0i32 { return 10i32 }
+
+    /* (2) the capacity door: named refusal 190, never silent truncation */
+    build_good()
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 11i32 }
+    sve_set_limit(4u64)
+    if sve_run() != 190i32 { return 12i32 }
+    sve_set_limit(4194304u64)
+
+    /* (3) the good module runs: 6 retirements, closed by RETURN at depth 0 */
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 11i32 }
+    if sve_run() != 0i32 { return 13i32 }
+    if sve_count() != 6u64 { return 14i32 }
+    if sve_terminated() != 1u32 { return 15i32 }
+
+    /* (4) THE GROUND: result + output read out of the log by the validating fold */
+    if sve_replay() != 0i32 { return 16i32 }
+    if sve_result() != 55u64 { return 17i32 }
+    if sve_wit() != sve_replay_wit() { return 18i32 }
+    let wit1 : u64 = sve_wit()
+
+    /* (5) tamper teeth -- every field class refuses, restoration heals */
+    let m0 : u64 = sve_ev_get(2u64, 0u32)      /* the ADD event */
+    sve_ev_poke(2u64, 0u32, m0 ^ 2u64)         /* flip a kind bit in meta */
+    if sve_replay() == 0i32 { return 20i32 }
+    sve_ev_poke(2u64, 0u32, m0)
+    if sve_replay() != 0i32 { return 21i32 }
+    let a0 : u64 = sve_ev_get(2u64, 1u32)
+    sve_ev_poke(2u64, 1u32, a0 + 1u64)
+    if sve_replay() != 193i32 { return 22i32 }
+    sve_ev_poke(2u64, 1u32, a0)
+    if sve_replay() != 0i32 { return 23i32 }
+    let b0 : u64 = sve_ev_get(2u64, 2u32)
+    sve_ev_poke(2u64, 2u32, b0 ^ 4u64)
+    if sve_replay() != 193i32 { return 24i32 }
+    sve_ev_poke(2u64, 2u32, b0)
+    if sve_replay() != 0i32 { return 25i32 }
+    let r0 : u64 = sve_ev_get(2u64, 3u32)
+    sve_ev_poke(2u64, 3u32, r0 ^ 8u64)
+    if sve_replay() != 193i32 { return 26i32 }
+    sve_ev_poke(2u64, 3u32, r0)
+    if sve_replay() != 0i32 { return 27i32 }
+    if sve_wit() != sve_replay_wit() { return 28i32 }
+
+    /* (6) prefix folds: the state after t events, derived from the log alone */
+    if sve_state_at(2u64) != 0i32 { return 30i32 }
+    if sve_sa_vsp() != 2u64 { return 31i32 }
+    if sve_sa_top() != 9u64 { return 31i32 }
+    if sve_state_at(3u64) != 0i32 { return 32i32 }
+    if sve_sa_vsp() != 1u64 { return 33i32 }
+    if sve_sa_top() != 42u64 { return 33i32 }
+
+    /* (7) determinism: a fresh full run folds to the identical witness root */
+    sve_reset()
+    if sve_load(&MB as u64, MN) != 0i32 { return 11i32 }
+    if sve_run() != 0i32 { return 13i32 }
+    if sve_replay() != 0i32 { return 16i32 }
+    if sve_wit() != wit1 { return 34i32 }
+
+    return 99i32
+}

@@ -1,0 +1,78 @@
+/* svir_event_main.iii -- route V's driver: link with a generated gen_svir TU (the module bytes) and
+ * svir_event.iii (the event-primary executor).  The driver runs the PRODUCER (which prints nothing and
+ * returns nothing of the program's), then reads the program's output and result OUT OF THE LOG via the
+ * validating fold.  Exit code = the fold's result, with the reference's sentinel order mirrored
+ * (OOB-indirect 199, unresolved import 198) and the event machine's own named refusals (190/192/193).
+ *
+ * Flags (consumed by the driver; the module always sees the staged argc=1 world, exactly like route S
+ * run with no arguments):
+ *   --tamper   after the run, flip one bit of one recorded event field, then fold: MUST exit 193
+ *              (the tooth on real module bytes, not just hand-built KAT modules)
+ *   --stats    after the fold, print one line: "EVN=<count> WIT=<root-hex> RC=<result>"  (determinism
+ *              arm: two runs of the same module must print identical bytes) */
+module svir_event_main
+
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "gen_svir.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn sve_reset() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_load(mp: u64, ml: u64) -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_run() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay() -> i32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_result() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_count() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_replay_wit() -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_oob() -> u32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_unres() -> u32 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_get(i: u64, which: u32) -> u64 from "svir_event.iii"
+extern @abi(c-msvc-x64) fn sve_ev_poke(i: u64, which: u32, v: u64) -> i32 from "svir_event.iii"
+
+var PD : [u8; 24]
+fn pdec(v0: u64) { if v0==0u64 { putchar(48i32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { PD[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  putchar(PD[n as u64] as i32) } }
+fn phex(v: u64) { let mut k : i64 = 60i64  while k >= 0i64 { let d : u64 = (v >> (k as u64)) & 15u64  if d < 10u64 { putchar((48u64+d) as i32) } else { putchar((87u64+d) as i32) }  k = k - 4i64 } }
+
+fn arg_is(p: u64, s: u64, sl: u64) -> u32 {
+    let a : *u8 = p as *u8
+    let b : *u8 = s as *u8
+    let mut j : u64 = 0u64
+    while j < sl { if (a[j] as u32) != (b[j] as u32) { return 0u32 }  j = j + 1u64 }
+    if (a[sl] as u32) != 0u32 { return 0u32 }
+    return 1u32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let mut do_tamper : u32 = 0u32
+    let mut do_stats  : u32 = 0u32
+    let pp : *u64 = argv as *u64
+    let mut ai : u64 = 1u64
+    while ai < (argc as u64) {
+        if arg_is(pp[ai], "--tamper" as u64, 8u64) == 1u32 { do_tamper = 1u32 }
+        if arg_is(pp[ai], "--stats" as u64, 7u64) == 1u32 { do_stats = 1u32 }
+        ai = ai + 1u64
+    }
+    sve_reset()
+    if sve_load(svir_ptr(), svir_len()) != 0i32 { return 197u64 }
+    let rr : i32 = sve_run()
+    if rr != 0i32 { return rr as u64 }
+    if do_tamper == 1u32 {
+        let n : u64 = sve_count()
+        if n < 2u64 { return 196u64 }
+        let mid : u64 = n / 2u64
+        let old : u64 = sve_ev_get(mid, 3u32)
+        sve_ev_poke(mid, 3u32, old ^ 1u64)
+    }
+    let rp : i32 = sve_replay()
+    if rp != 0i32 { return rp as u64 }
+    if sve_wit() != sve_replay_wit() { return 193u64 }
+    if do_stats == 1u32 {
+        putchar(10i32)
+        putchar(69i32) putchar(86i32) putchar(78i32) putchar(61i32)  pdec(sve_count())
+        putchar(32i32) putchar(87i32) putchar(73i32) putchar(84i32) putchar(61i32)  phex(sve_wit())
+        putchar(32i32) putchar(82i32) putchar(67i32) putchar(61i32)  pdec(sve_result() & 255u64)
+        putchar(10i32)
+    }
+    if sve_oob() > 0u32 { return 199u64 }
+    if sve_unres() > 0u32 { return 198u64 }
+    return sve_result()
+}

@@ -109,6 +109,13 @@ The native route is the oracle; route V is the challenger; a disagreement is a S
 > frontier 39 named by class (10 negative-compile KATs, out of theater; 29 exceed the 4M-event log
 > capacity; 0 SVIR-emission refusals). Up-only ratchet pinned `covered_floor=83`
 > (`event_corpus_ratchet.txt`): covered may only rise, splits must stay 0. Idempotent green on re-run.
+>
+> **THE THIRD ORACLE (same day):** `iii_eval` (the Θ definitional bearer) joins the gate —
+> **three-way agreement native ≡ eval ≡ route-V on ALL 83 covered KATs** (eval abstained on none),
+> and the dedicated cross-check **eval-vs-routeV disagreements = 0** is a RED condition, not a report.
+> This is the common-mode-blindness kill made standing: eval and route V are BOTH independent of
+> sema/cg_r3/x86 (they share only lex+parse), so their agreement cannot be inherited from the
+> compiled route — three bearers, two independence classes, one verdict.
 
 **THE HONEST ENVELOPE (a first-class property, not a defect):** event-primary execution is
 **O(trace-length) in memory** — the log holds one row per retired instruction, by design. That is the

@@ -28,6 +28,8 @@ esac
 IIIS="${IIIS:-$III_ROOT/COMPILED/iiis-2${BIN_SUFFIX}}"
 LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
 TOOL="$III_ROOT/COMPILED/iii-events${BIN_SUFFIX}"
+EVAL_BIN="$III_ROOT/COMPILED/iii_eval${BIN_SUFFIX}"   # the Theta meaning-bearer -- a THIRD oracle,
+                                                       # independent of cg_r3/x86 exactly as route V is
 [[ -x "$IIIS" && -f "$LIB" ]] || { echo "[event-corpus] FATAL: missing toolchain"; exit 2; }
 say() { printf '%s\n' "$*"; }
 
@@ -38,6 +40,7 @@ fi
 say "[event-corpus] iii-events = $TOOL"
 
 AGREE=0; SPLIT=0; FR_EMIT=0; FR_CAP=0; FR_OTHER=0; TOTAL=0
+THREEWAY=0; XMODE=0   # THREEWAY: native==eval==routeV; XMODE: eval-vs-routeV disagreements (must stay 0)
 : > "$W/_agree.list"; : > "$W/_split.list"; : > "$W/_frontier.list"
 for f in "$CORPUS"/[0-9]*.iii; do
     grep -q "extern" "$f" 2>/dev/null && continue        # single-file, import-free = the tool's domain
@@ -54,6 +57,15 @@ for f in "$CORPUS"/[0-9]*.iii; do
     timeout 60 "$TOOL" --quiet "$f" >/dev/null 2>&1; RV=$?
     if [[ "$RN" == "$RV" ]]; then
         AGREE=$((AGREE+1)); echo "$base rc=$RN" >> "$W/_agree.list"
+        # THIRD ORACLE: eval.iii (the Theta bearer).  213/214 = eval-abstain (out of its fragment) -- not
+        # a disagreement.  A real eval verdict that differs from route V is an XMODE break: two bearers
+        # BOTH independent of cg_r3/x86 must never split (that would be the common-mode blindness Theta names).
+        if [[ -x "$EVAL_BIN" ]]; then
+            timeout 60 "$EVAL_BIN" "$f" >/dev/null 2>&1; RE=$?
+            if [[ "$RE" == 213 || "$RE" == 214 ]]; then :   # eval abstains -- fine, native==routeV stands
+            elif [[ "$RE" == "$RV" ]]; then THREEWAY=$((THREEWAY+1))
+            else XMODE=$((XMODE+1)); say "XMODE-SPLIT $base: eval=$RE route-V=$RV (two cg_r3-independent bearers disagree)"; fi
+        fi
     elif [[ "$RV" == 6 ]]; then
         FR_EMIT=$((FR_EMIT+1)); echo "$base svir-emit-refused" >> "$W/_frontier.list"
     elif [[ "$RV" == 190 || "$RV" == 192 ]]; then
@@ -66,6 +78,7 @@ done
 
 FRONTIER=$((FR_EMIT+FR_CAP+FR_OTHER))
 say "[event-corpus] covered(agree)=$AGREE  splits=$SPLIT  frontier=$FRONTIER (emit=$FR_EMIT cap=$FR_CAP other=$FR_OTHER)  total=$TOTAL"
+say "[event-corpus] three-way (native==eval==routeV)=$THREEWAY  eval-vs-routeV disagreements=$XMODE (the common-mode-blindness kill: must be 0)"
 
 # up-only ratchet: covered may only rise; splits must be zero.
 FLOOR=0
@@ -73,6 +86,7 @@ FLOOR=0
 FLOOR="${FLOOR:-0}"
 FAIL=0
 if [[ $SPLIT -ne 0 ]]; then say "[event-corpus] RED: $SPLIT split(s) -- route V disagrees with the native oracle"; FAIL=1; fi
+if [[ $XMODE -ne 0 ]]; then say "[event-corpus] RED: $XMODE eval-vs-routeV disagreement(s) -- two cg_r3-independent bearers split"; FAIL=1; fi
 if [[ $AGREE -lt $FLOOR ]]; then say "[event-corpus] RED: covered $AGREE < pinned floor $FLOOR (a KAT stopped being executable -- regression)"; FAIL=1; fi
 if [[ $AGREE -lt 50 ]]; then say "[event-corpus] RED: anti-vacuity floor 50 not met (covered=$AGREE)"; FAIL=1; fi
 

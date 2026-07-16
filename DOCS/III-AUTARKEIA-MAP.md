@@ -217,6 +217,20 @@ green testament; each forgery class reddens at judge, emit, or witness — never
 *Falsifier:* any forged green surviving to a signed testament.
 
 ### Α3 — THE COVENANT: evergreen as an equation; trust compounds across hosts
+> **STATUS: EXECUTED (single-host).** `STDLIB/scripts/run_covenant.sh` proves the covenant end to
+> end (ALL GREEN, ~194s): it builds iii-testament/iii-witness/iii-judge/iii-crypto from source,
+> emits gen0 + an INDEPENDENT gen0b + a chained gen1 over the live tree (3,674 files), extracts
+> `core(T)` = the host- & generation-invariant `show` subset (TREE root ∥ SEED n ∥ BEARER kats ∥
+> MATHESIS RECORD heads ∥ CERT values; generation/parent/pk/TOOLS/EXEC/SPORE excluded) folded to a
+> single root by **iii-judge**, and proves the covenant equation `core(gen0)==core(gen0b)` and the
+> evergreen equation `core(gen1)==core(gen0)` (core held while generation/parent advanced). The
+> **monotone law** is enforced by `iii-judge pin` (gen may not go backward) and a live **ML-DSA
+> (FIPS 204) 3-of-3 quorum** co-signs the core via iii-crypto (a tampered core is co-signed by
+> NONE). SCOPE: the covenant EQUATION + enforcement + FED quorum are proven on one host; `core(T)`
+> is host-invariant BY CONSTRUCTION (omits per-ISA TOOLS digests), so the remaining Α3 tail is the
+> physical second Γ host (germination) that makes `core(testament_H)==core(testament_win64)`
+> concrete rather than by-construction.
+
 Every green run emits testament(n) chained to testament(n−1); the monotone law is enforced by
 iii-judge `pin`. Define `core(T)` = TREE root ∥ SEED digests ∥ MATHESIS heads ∥ BEARER receipts
 (host-invariant by construction); TOOLS digests are per-ISA and recorded per host. Cross-host:

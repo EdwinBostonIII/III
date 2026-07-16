@@ -1,0 +1,414 @@
+/* STDLIB/iii/aether/author_cli.iii -- iii-author: THE AUTHOR (AUTARKEIA Alpha-4).
+ *
+ * Machine growth made lawful.  Alpha-2 gave III the sovereign VERDICT (iii-judge); Alpha-3 gave it
+ * the evergreen COVENANT.  Alpha-4 lets the machine EXTEND its own sealed surface -- but only under
+ * THE NAMED-DEFICIT LAW, and the law is adjudicated by III itself, never by bash:
+ *
+ *   THE NAMED-DEFICIT LAW.  No agenda item exists unless it cites a deficit ALREADY NAMED in the
+ *   testament (a refusal-class counter, a named-unreached spelling, a coverage pin, an emission-
+ *   refusal class).  A seal is admitted only if it STRICTLY DECREASES its named counter OR extends
+ *   a census with TWO AGREEING ROUTES.  Novelty is adjudicated (verdict novelty=NONE => reject).
+ *   Per-cyc admission cap.  Provenance recorded per seal: MACHINE / HUMAN / AI.
+ *
+ *   iii-author admit <ledger> <cyc> <deficit> <before> <after> <routes> <novelty> <prov> <cap>
+ *       Adjudicate ONE seal against the law and, iff lawful, append its row to the cyc ledger.
+ *       Rejections are NAMED, each with its own exit code (nothing silently passes):
+ *         3 UNNAMED       -- deficit is not in the named-deficit registry
+ *         4 NOVELTY-NONE  -- the novelty verdict is NONE (stamp-collecting refused)
+ *         5 BAD-PROV      -- provenance is not MACHINE|HUMAN|AI
+ *         6 NO-PROGRESS   -- neither a strict decrease NOR two agreeing routes
+ *         7 RATCHET       -- continuity/monotone break (before != last after, or the counter rose)
+ *         8 CAP           -- the per-cyc admission cap is already spent
+ *       exit 0 = admitted (row appended).
+ *
+ *   iii-author verify <ledger> <deficit> <mincycles>
+ *       THE EXIT GATE: assert the ledger holds >= mincycles consecutive cycles for <deficit>, each
+ *       provenance=MACHINE, each strictly shrinking the counter with unbroken continuity.  0/1.
+ *
+ *   iii-author fold <ledger>                         MERKLE FOLD (seal the growth)
+ *       h_k = SHA256(h_{k-1} || row_k), h_0 = 0^32 -- the whole autonomous history as one root.
+ *
+ * A LEAF tool (the build_iii_judge mold): pinned iiis-2 + committed archive; cad_* resolve from
+ * libiii_native.a.  Hexad: kind_essence.  Ring: R0.  NIH: composes numera/cad only.
+ */
+module author_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, read: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const GENERIC_READ  : u32 = 2147483648u32
+const GENERIC_WRITE : u32 = 1073741824u32
+const OPEN_EXISTING : u32 = 3u32
+const CREATE_ALWAYS : u32 = 2u32
+const INVALID_H     : u64 = 18446744073709551615u64
+const BUFCAP        : u64 = 1048576u64
+
+var MSG  : [u8; 1048576]
+var LOUT : [u8; 1048576]
+var ROOT : [u8; 32]
+var HEX  : [u8; 72]
+var DEC  : [u8; 32]
+var NIO  : [u32; 2]
+var PROBE: [u8; 1]
+var FS   : [u64; 16]
+var FE   : [u64; 16]
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn sp() -> u32 { putchar(32i32)  return 1u32 }
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DEC[k] as i32) }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn atou(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if p[i] < 48u8 { return INVALID_H }
+        if p[i] > 57u8 { return INVALID_H }
+        v = (v * 10u64) + ((p[i] as u64) - 48u64)
+        i = i + 1u64
+    }
+    return v
+}
+fn hexof(dp: u64) -> u32 {
+    let d : *u8 = dp as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let b  : u32 = d[i] as u32
+        let hi : u32 = b >> 4u32
+        let lo : u32 = b & 15u32
+        if hi < 10u32 { HEX[i * 2u64] = (48u32 + hi) as u8 } else { HEX[i * 2u64] = (87u32 + hi) as u8 }
+        if lo < 10u32 { HEX[(i * 2u64) + 1u64] = (48u32 + lo) as u8 } else { HEX[(i * 2u64) + 1u64] = (87u32 + lo) as u8 }
+        i = i + 1u64
+    }
+    HEX[64u64] = 0u8
+    return 1u32
+}
+fn rdfile(path: u64, buf: u64, cap: u64) -> u64 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0u32, 0u64)
+    if h == INVALID_H { return INVALID_H }
+    let mut total : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if total == cap {
+            let okp : i32 = ReadFile(h, (&PROBE) as u64, 1u32, (&NIO) as u64, 0u64)
+            if okp == 0i32 { CloseHandle(h)  return INVALID_H }
+            if NIO[0u64] != 0u32 { CloseHandle(h)  return INVALID_H }
+            going = 0u8
+        } else {
+            let mut want : u64 = 65536u64
+            if total + want > cap { want = cap - total }
+            let ok : i32 = ReadFile(h, buf + total, want as u32, (&NIO) as u64, 0u64)
+            if ok == 0i32 { CloseHandle(h)  return INVALID_H }
+            let n : u32 = NIO[0u64]
+            if n == 0u32 { going = 0u8 } else { total = total + (n as u64) }
+        }
+    }
+    CloseHandle(h)
+    return total
+}
+fn wrfile(path: u64, buf: u64, n: u64) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_WRITE, 0u32, 0u64, CREATE_ALWAYS, 0u32, 0u64)
+    if h == INVALID_H { return 1u32 }
+    let mut done : u64 = 0u64
+    while done < n {
+        let mut want : u64 = 65536u64
+        if done + want > n { want = n - done }
+        let ok : i32 = WriteFile(h, buf + done, want as u32, (&NIO) as u64, 0u64)
+        if ok == 0i32 { CloseHandle(h)  return 1u32 }
+        let w : u32 = NIO[0u64]
+        if w == 0u32 { CloseHandle(h)  return 1u32 }
+        done = done + (w as u64)
+    }
+    CloseHandle(h)
+    return 0u32
+}
+fn region_eq(a: u64, b: u64, str: u64) -> u32 {
+    let s : *u8 = str as *u8
+    let mut i : u64 = a
+    let mut j : u64 = 0u64
+    while i < b {
+        if s[j] == 0u8 { return 0u32 }
+        if MSG[i] != s[j] { return 0u32 }
+        i = i + 1u64
+        j = j + 1u64
+    }
+    if s[j] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn region_num(a: u64, b: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = a
+    while i < b {
+        if MSG[i] < 48u8 { return v }
+        if MSG[i] > 57u8 { return v }
+        v = (v * 10u64) + ((MSG[i] as u64) - 48u64)
+        i = i + 1u64
+    }
+    return v
+}
+
+/* split a line region [a,e) into space-delimited fields FS[k]/FE[k]; returns field count. */
+fn split_line(a: u64, e: u64) -> u64 {
+    let mut nf : u64 = 0u64
+    let mut i  : u64 = a
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let mut sk : u32 = 1u32
+        while sk == 1u32 { if i >= e { sk = 0u32 } else { if MSG[i] == 32u8 { i = i + 1u64 } else { sk = 0u32 } } }
+        if i >= e { go = 0u32 } else {
+            let st : u64 = i
+            let mut tk : u32 = 1u32
+            while tk == 1u32 { if i >= e { tk = 0u32 } else { if MSG[i] == 32u8 { tk = 0u32 } else { i = i + 1u64 } } }
+            if nf < 16u64 { FS[nf] = st  FE[nf] = i  nf = nf + 1u64 }
+        }
+    }
+    return nf
+}
+
+/* the NAMED-DEFICIT REGISTRY -- the finite complement of the sealed surface, named in the testament. */
+fn is_named(d: u64) -> u32 {
+    if streq(d, "unreached" as u64) == 1u32 { return 1u32 }
+    if streq(d, "frontier"  as u64) == 1u32 { return 1u32 }
+    if streq(d, "capacity"  as u64) == 1u32 { return 1u32 }
+    if streq(d, "refusal7"  as u64) == 1u32 { return 1u32 }
+    if streq(d, "refusal29" as u64) == 1u32 { return 1u32 }
+    if streq(d, "refusal10" as u64) == 1u32 { return 1u32 }
+    return 0u32
+}
+fn prov_ok(p: u64) -> u32 {
+    if streq(p, "MACHINE" as u64) == 1u32 { return 1u32 }
+    if streq(p, "HUMAN"   as u64) == 1u32 { return 1u32 }
+    if streq(p, "AI"      as u64) == 1u32 { return 1u32 }
+    return 0u32
+}
+
+/* scan globals filled by verb_admit's ledger walk */
+var HAVE_PREV  : u32
+var PREV_AFTER : u64
+var CYC_COUNT  : u64
+
+/* walk the ledger: last `after` for <deficit>, and count of rows tagged <cyc>. */
+fn scan_ledger(n: u64, deficit: u64, cyc: u64) -> u32 {
+    HAVE_PREV = 0u32   PREV_AFTER = 0u64   CYC_COUNT = 0u64
+    let mut p : u64 = 0u64
+    while p < n {
+        let a : u64 = p
+        let mut e  : u64 = p
+        let mut sc : u32 = 1u32
+        while sc == 1u32 { if e >= n { sc = 0u32 } else { if MSG[e] == 10u8 { sc = 0u32 } else { e = e + 1u64 } } }
+        if e > a {
+            let nf : u64 = split_line(a, e)
+            /* row: CYCLE <cyc> <deficit> <before> <after> <routes> <novelty> <prov> */
+            if nf >= 8u64 {
+                if region_eq(FS[0u64], FE[0u64], "CYCLE" as u64) == 1u32 {
+                    if region_eq(FS[2u64], FE[2u64], deficit) == 1u32 {
+                        HAVE_PREV = 1u32
+                        PREV_AFTER = region_num(FS[4u64], FE[4u64])
+                    }
+                    if region_num(FS[1u64], FE[1u64]) == cyc { CYC_COUNT = CYC_COUNT + 1u64 }
+                }
+            }
+        }
+        if e < n { p = e + 1u64 } else { p = e }
+    }
+    return 1u32
+}
+
+/* ---- admit: THE NAMED-DEFICIT LAW adjudicator ------------------------------------------------ */
+fn verb_admit(ledger: u64, cyc: u64, deficit: u64, before: u64, after: u64, routes: u64, novelty: u64, prov: u64, cap: u64) -> u64 {
+    if is_named(deficit) == 0u32 { ps("AUTHOR reject UNNAMED deficit=" as u64)  ps(deficit)  nl()  return 3u64 }
+    if streq(novelty, "NONE" as u64) == 1u32 { ps("AUTHOR reject NOVELTY-NONE deficit=" as u64)  ps(deficit)  nl()  return 4u64 }
+    if prov_ok(prov) == 0u32 { ps("AUTHOR reject BAD-PROV prov=" as u64)  ps(prov)  nl()  return 5u64 }
+
+    let mut strict : u32 = 0u32
+    if after < before { strict = 1u32 }
+    let mut tworoute : u32 = 0u32
+    if routes >= 2u64 { tworoute = 1u32 }
+    if strict == 0u32 { if tworoute == 0u32 { ps("AUTHOR reject NO-PROGRESS before=" as u64)  pd(before)  ps(" after=" as u64)  pd(after)  ps(" routes=" as u64)  pd(routes)  nl()  return 6u64 } }
+
+    let mut n : u64 = rdfile(ledger, (&MSG) as u64, BUFCAP)
+    if n == INVALID_H { n = 0u64 }
+    scan_ledger(n, deficit, cyc)
+    if HAVE_PREV == 1u32 {
+        if before != PREV_AFTER { ps("AUTHOR reject RATCHET continuity before=" as u64)  pd(before)  ps(" last_after=" as u64)  pd(PREV_AFTER)  nl()  return 7u64 }
+        if after > PREV_AFTER { ps("AUTHOR reject RATCHET rise after=" as u64)  pd(after)  ps(" last_after=" as u64)  pd(PREV_AFTER)  nl()  return 7u64 }
+    }
+    if CYC_COUNT >= cap { ps("AUTHOR reject CAP cyc=" as u64)  pd(cyc)  ps(" cap=" as u64)  pd(cap)  nl()  return 8u64 }
+
+    /* append: copy existing bytes, then the new row */
+    let mut lo : u64 = 0u64
+    let mut c  : u64 = 0u64
+    while c < n { LOUT[lo] = MSG[c]  lo = lo + 1u64  c = c + 1u64 }
+    if lo > 0u64 { if LOUT[lo - 1u64] != 10u8 { LOUT[lo] = 10u8  lo = lo + 1u64 } }
+    lo = emit_str(lo, "CYCLE " as u64)
+    lo = emit_num(lo, cyc)   LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_str(lo, deficit) LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_num(lo, before)  LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_num(lo, after)   LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_num(lo, routes)  LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_str(lo, novelty) LOUT[lo] = 32u8  lo = lo + 1u64
+    lo = emit_str(lo, prov)    LOUT[lo] = 10u8  lo = lo + 1u64
+    if wrfile(ledger, (&LOUT) as u64, lo) != 0u32 { ps("iii-author: cannot write ledger\n" as u64)  return 9u64 }
+
+    ps("AUTHOR admit cyc=" as u64)  pd(cyc)  ps(" deficit=" as u64)  ps(deficit)
+    ps(" " as u64)  pd(before)  ps("->" as u64)  pd(after)
+    ps(" routes=" as u64)  pd(routes)  ps(" novelty=" as u64)  ps(novelty)
+    ps(" prov=" as u64)  ps(prov)  ps(" verdict=PASS\n" as u64)
+    return 0u64
+}
+fn emit_num(lo0: u64, v: u64) -> u64 {
+    let mut lo : u64 = lo0
+    if v == 0u64 { LOUT[lo] = 48u8  return lo + 1u64 }
+    let mut vv : u64 = v
+    let mut dk : u64 = 0u64
+    while vv > 0u64 { DEC[dk] = ((vv % 10u64) + 48u64) as u8  vv = vv / 10u64  dk = dk + 1u64 }
+    while dk > 0u64 { dk = dk - 1u64  LOUT[lo] = DEC[dk]  lo = lo + 1u64 }
+    return lo
+}
+fn emit_str(lo0: u64, s: u64) -> u64 {
+    let mut lo : u64 = lo0
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { LOUT[lo] = p[i]  lo = lo + 1u64  i = i + 1u64 }
+    return lo
+}
+
+/* ---- verify: THE EXIT GATE ------------------------------------------------------------------- */
+fn verb_verify(ledger: u64, deficit: u64, mincycles: u64) -> u64 {
+    let n : u64 = rdfile(ledger, (&MSG) as u64, BUFCAP)
+    if n == INVALID_H { ps("iii-author: cannot read ledger\n" as u64)  return 2u64 }
+    let mut cycles   : u64 = 0u64
+    let mut have_last: u32 = 0u32
+    let mut last_aft : u64 = 0u64
+    let mut ok       : u32 = 1u32
+    let mut p : u64 = 0u64
+    while p < n {
+        let a : u64 = p
+        let mut e  : u64 = p
+        let mut sc : u32 = 1u32
+        while sc == 1u32 { if e >= n { sc = 0u32 } else { if MSG[e] == 10u8 { sc = 0u32 } else { e = e + 1u64 } } }
+        if e > a {
+            let nf : u64 = split_line(a, e)
+            if nf >= 8u64 {
+                if region_eq(FS[0u64], FE[0u64], "CYCLE" as u64) == 1u32 {
+                    if region_eq(FS[2u64], FE[2u64], deficit) == 1u32 {
+                        let bef : u64 = region_num(FS[3u64], FE[3u64])
+                        let aft : u64 = region_num(FS[4u64], FE[4u64])
+                        if region_eq(FS[7u64], FE[7u64], "MACHINE" as u64) == 0u32 { ok = 0u32 }
+                        if have_last == 1u32 {
+                            if bef != last_aft { ok = 0u32 }
+                            if aft >= last_aft { ok = 0u32 }
+                        } else {
+                            if aft >= bef { ok = 0u32 }
+                        }
+                        have_last = 1u32   last_aft = aft
+                        cycles = cycles + 1u64
+                    }
+                }
+            }
+        }
+        if e < n { p = e + 1u64 } else { p = e }
+    }
+    ps("AUTHOR verify deficit=" as u64)  ps(deficit)  ps(" cycles=" as u64)  pd(cycles)  ps(" need>=" as u64)  pd(mincycles)
+    if cycles < mincycles { ok = 0u32 }
+    if ok == 1u32 { ps(" verdict=PASS\n" as u64)  return 0u64 }
+    ps(" verdict=FAIL\n" as u64)
+    return 1u64
+}
+
+/* ---- fold: seal the autonomous history -------------------------------------------------------- */
+fn verb_fold(ledger: u64) -> u64 {
+    let n : u64 = rdfile(ledger, (&MSG) as u64, BUFCAP)
+    if n == INVALID_H { ps("iii-author: cannot read ledger\n" as u64)  return 2u64 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { ROOT[i] = 0u8  i = i + 1u64 }
+    let mut rows : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < n {
+        let a : u64 = p
+        let mut e  : u64 = p
+        let mut sc : u32 = 1u32
+        while sc == 1u32 { if e >= n { sc = 0u32 } else { if MSG[e] == 10u8 { sc = 0u32 } else { e = e + 1u64 } } }
+        let len : u64 = e - a
+        if len > 0u64 {
+            if cad_begin(0u32) != 0i32 { return 3u64 }
+            if cad_payload((&ROOT) as u64, 32u64) != 0i32 { return 3u64 }
+            if cad_payload(((&MSG) as u64) + a, len) != 0i32 { return 3u64 }
+            if cad_final((&ROOT) as u64) != 0i32 { return 3u64 }
+            rows = rows + 1u64
+        }
+        if e < n { p = e + 1u64 } else { p = e }
+    }
+    hexof((&ROOT) as u64)
+    ps("AUTHOR fold rows=" as u64)  pd(rows)  ps(" root=" as u64)  ps((&HEX) as u64)  nl()
+    return 0u64
+}
+
+fn usage() -> u64 {
+    ps("iii-author -- THE AUTHOR, machine growth under THE NAMED-DEFICIT LAW (Alpha-4)\n" as u64)
+    ps("  iii-author admit  <ledger> <cyc> <deficit> <before> <after> <routes> <novelty> <prov> <cap>\n" as u64)
+    ps("  iii-author verify <ledger> <deficit> <mincycles>\n" as u64)
+    ps("  iii-author fold   <ledger>\n" as u64)
+    return 2u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return usage() }
+    let av : *u64 = argv as *u64
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "admit" as u64) == 1u32 {
+        if argc < 11i32 { return usage() }
+        let a_cyc  : u64 = atou(av[3u64])
+        let a_bef  : u64 = atou(av[5u64])
+        let a_aft  : u64 = atou(av[6u64])
+        let a_rts  : u64 = atou(av[7u64])
+        let a_cap  : u64 = atou(av[10u64])
+        if a_cyc  == INVALID_H { ps("iii-author: bad cyc\n"  as u64)  return 2u64 }
+        if a_bef  == INVALID_H { ps("iii-author: bad before\n" as u64)  return 2u64 }
+        if a_aft  == INVALID_H { ps("iii-author: bad after\n"  as u64)  return 2u64 }
+        if a_rts  == INVALID_H { ps("iii-author: bad routes\n" as u64)  return 2u64 }
+        if a_cap  == INVALID_H { ps("iii-author: bad cap\n"    as u64)  return 2u64 }
+        return verb_admit(av[2u64], a_cyc, av[4u64], a_bef, a_aft, a_rts, av[8u64], av[9u64], a_cap)
+    }
+    if streq(cmd, "verify" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        let mc : u64 = atou(av[4u64])
+        if mc == INVALID_H { ps("iii-author: bad mincycles\n" as u64)  return 2u64 }
+        return verb_verify(av[2u64], av[3u64], mc)
+    }
+    if streq(cmd, "fold" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        return verb_fold(av[2u64])
+    }
+    return usage()
+}

@@ -277,6 +277,26 @@ each cycle strictly shrinking at least one named counter.
 *Falsifier:* a cycle needing a hand edit (counter resets — honest accounting); a seal admitted
 without a named deficit; ratchet/cap breach.
 
+> **STATUS: EXECUTED.** THE NAMED-DEFICIT LAW is made sovereign — III adjudicates it, not bash.
+> `iii-author` (`STDLIB/iii/aether/author_cli.iii`, built by `COMPILER/BOOT/build_iii_author.sh`,
+> the `iii-judge` leaf mold) has three verbs: `admit` (the law adjudicator — every breach gets its
+> own NAMED exit code: 3 UNNAMED / 4 NOVELTY-NONE / 5 BAD-PROV / 6 NO-PROGRESS / 7 RATCHET /
+> 8 CAP), `verify` (the exit gate: ≥N consecutive MACHINE cycles, strict + continuous), and `fold`
+> (Merkle-seal the autonomous history). The gate `STDLIB/scripts/run_author.sh` drives III's own
+> **PILOT** (`aether/mathesis_pilot`, campaign Upsilon — "nobody steers": the round budget is the
+> only input and it *selects nothing*, built here from source: pilot + curve + alg + resultant +
+> sturm_big) for **3 consecutive autonomous cycles** (budgets 6→12→18). Each cycle: reaches more of
+> the canonical cube-free NEW-D targets via **two agreeing routes** (curve 1 ∥ curve 2), strictly
+> shrinks the named counter `unreached` **8→6→4→2**, emits a **green testament chained** to the prior
+> generation, and is admitted `provenance=MACHINE` under the law. `iii-author verify … 3` seals the
+> exit gate; the autonomous history folds to a single root. "Nobody steers" is OBSERVED (budget 6 →
+> identical head twice). Every adversarial breach (unnamed deficit, novelty=NONE, bad provenance,
+> no-progress, ratchet-rise, continuity-break, cap-exhaustion) is NAMED-REJECTED. ALL GREEN. The
+> `x+0=x` non-item is refused by construction (it cites no named deficit). SCOPE: the cycles run
+> from a single harness invocation; the honest residue is that a standing daemon re-arming the gate
+> on a timer is operational packaging, not new capability — the LAW, the engine, the strict ratchet,
+> and the MACHINE-provenance seal chain are all live.
+
 ---
 
 ## 5. What "no other system" cashes out to (the pentagon, unchanged and checkable)

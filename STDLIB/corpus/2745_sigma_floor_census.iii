@@ -1,0 +1,377 @@
+/* 2745_sigma_floor_census.iii -- THE TRINOMIAL COST DICHOTOMY, censused blind at BOTH widths.
+ * (run_mathesis.sh stage [21], CAMPAIGN SIGMA-FLOOR: SHA-512's Sigma_0/Sigma_1 op-count floor.)
+ *
+ * Grammar G_ror = { ROTR-by-constant (1 op), XOR (1 op) } -- the ISA pricing (x86 ROR = 1).
+ * Universe: rotation-trinomials  f_T(x) = ROTR_a(x) ^ ROTR_b(x) ^ ROTR_c(x),  T = {a,b,c} <= Z/w.
+ * SHA-512's Sigma1 is T = {14,18,41}; Sigma0 is T = {28,34,39}.
+ *
+ * CLAIMED DICHOTOMY (hand-derived, to be adjudicated by the census below, both widths):
+ *     cost(T) = 4  iff  0 in T  or  T is sum-closed (some t_i + t_j == t_k mod w),  else  cost(T) = 5.
+ * Corollary: Sigma0/Sigma1 constants are 0-free, sum-free -> FLOOR = 5 in G_ror.
+ *
+ * METHOD (two-path, no tautology): the census enumerates EVERY straight-line program of <= 4 ops
+ * over G_ror -- all op orders, all operand choices (any prior value), all rotation constants
+ * INCLUDING the identity, all XOR pairs INCLUDING self -- with no shape pruning whatsoever.
+ * The ONTOLOGY is the collapse that makes this exact: a {ROT,XOR}-program is GF(2)[X]/(X^w-1)-
+ * linear, so a program IS its exponent-set mask (one u64), rot = mask-rotate, xor = mask-xor.
+ * The 2^64 value sweep that "verify f == Sigma1 on all inputs" would need becomes ONE mask
+ * equality.  The hand formula (path A) is then checked against the blind reach-set (path B)
+ * over the FULL C(w,3) universe: mismatches must be ZERO at w=8 AND w=64.
+ *
+ * Extra teeth: [pre] a <=3-op census must find NO trinomial at all (floor > 3 everywhere);
+ * [bridge] value-space check Sigma1(e_0) = e_50^e_46^e_23 ties mask-space to real ROTR semantics;
+ * [alien] the 4-op program for a sum-closed triple {5,9,14} is verified against its 5-op
+ * definition on the full basis (complete, by linearity) + 1000 splitmix values;
+ * [slice] the bitsliced ontology: 64 lanes transposed, Sigma1 = 2 XORs/lane (rotation = renaming
+ * = 0 ops), two-path vs 64 scalar evaluations on random AND basis lanes (basis = complete).
+ *
+ * Exit 99 = GREEN.  Every failure names its arm (8-bit codes; counts travel via stdout). */
+module sigma_floor_census
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var DEC     : [u8; 32]
+var REACHED : [u64; 65536]      /* open-address set of weight-3 masks reached (0 = empty slot) */
+var RCOUNT  : u64
+var V       : [u64; 8]          /* SLP value stack: V[0] = x = rotr_0 -> mask bit 0 */
+var LA      : [u64; 64]         /* bitslice: lanes */
+var TA      : [u64; 64]         /* bitslice: transposed lanes */
+var TB      : [u64; 64]         /* bitslice: sliced sigma output */
+var OL      : [u64; 64]         /* bitslice: output lanes (transposed back) */
+var SC      : [u64; 64]         /* bitslice: scalar reference */
+var SMX     : u64               /* splitmix state */
+
+/* ---------------- print helpers (house idiom) ---------------- */
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn pi(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)  return pi(0i64 - v) }
+    if v == 0i64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v as u64
+    let mut k : u64 = 0u64
+    while n > 0u64 { DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DEC[k] as i32) }
+    return 1u32
+}
+
+/* ---------------- reach-set (open addressing, 64K slots) ---------------- */
+fn hclear() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 65536u64 { REACHED[i] = 0u64  i = i + 1u64 }
+    RCOUNT = 0u64
+    return 1u32
+}
+fn hins(m: u64) -> u32 {
+    let mut h : u64 = (m * 0x9E3779B97F4A7C15u64) >> 48u64
+    while REACHED[h] != 0u64 {
+        if REACHED[h] == m { return 0u32 }
+        h = (h + 1u64) & 65535u64
+    }
+    REACHED[h] = m
+    RCOUNT = RCOUNT + 1u64
+    return 1u32
+}
+fn hhas(m: u64) -> u32 {
+    let mut h : u64 = (m * 0x9E3779B97F4A7C15u64) >> 48u64
+    while REACHED[h] != 0u64 {
+        if REACHED[h] == m { return 1u32 }
+        h = (h + 1u64) & 65535u64
+    }
+    return 0u32
+}
+
+/* record m if it has Hamming weight exactly 3 */
+fn record3(m: u64) -> u32 {
+    if m == 0u64 { return 0u32 }
+    let a : u64 = m & (m - 1u64)
+    if a == 0u64 { return 0u32 }
+    let b : u64 = a & (a - 1u64)
+    if b == 0u64 { return 0u32 }
+    let c : u64 = b & (b - 1u64)
+    if c != 0u64 { return 0u32 }
+    return hins(m)
+}
+
+/* exponent-mask rotation: value poly S -> S + c (mod w) == LEFT-rotate of the w-bit mask by c */
+fn mrot(m: u64, c: u64, w: u64, wmask: u64) -> u64 {
+    if c == 0u64 { return m }
+    return ((m << c) | (m >> (w - c))) & wmask
+}
+
+/* ---------------- the blind SLP census ----------------
+ * depth = ops already applied; V[0..depth] live; enumerate op depth+1.
+ * At the last level (depth == maxops-1) record only, no recursion. */
+fn census_rec(depth: u64, maxops: u64, w: u64, wmask: u64) -> u32 {
+    let n : u64 = depth + 1u64          /* values available */
+    let leaf : u64 = maxops - 1u64
+    /* ROT(V[j], c) for every prior value, every constant incl. identity */
+    let mut j : u64 = 0u64
+    while j < n {
+        let vj : u64 = V[j]
+        let mut c : u64 = 0u64
+        while c < w {
+            let mut nv : u64 = vj
+            if c != 0u64 { nv = ((vj << c) | (vj >> (w - c))) & wmask }
+            record3(nv)
+            if depth != leaf {
+                V[n] = nv
+                census_rec(depth + 1u64, maxops, w, wmask)
+            }
+            c = c + 1u64
+        }
+        j = j + 1u64
+    }
+    /* XOR(V[j], V[k]) for every pair incl. self */
+    j = 0u64
+    while j < n {
+        let mut k : u64 = j
+        while k < n {
+            let nv : u64 = V[j] ^ V[k]
+            record3(nv)
+            if depth != leaf {
+                V[n] = nv
+                census_rec(depth + 1u64, maxops, w, wmask)
+            }
+            k = k + 1u64
+        }
+        j = j + 1u64
+    }
+    return 1u32
+}
+fn census(maxops: u64, w: u64) -> u32 {
+    hclear()
+    let mut wmask : u64 = 0xFFFFFFFFFFFFFFFFu64
+    if w < 64u64 { wmask = (1u64 << w) - 1u64 }
+    V[0] = 1u64                          /* x itself: the rotr_0 term */
+    record3(1u64)
+    census_rec(0u64, maxops, w, wmask)
+    return 1u32
+}
+
+/* ---------------- path A: the hand formula ---------------- */
+fn pred4(a: u64, b: u64, c: u64, w: u64) -> u32 {
+    if a == 0u64 { return 1u32 }                 /* a<b<c so only a can be 0 */
+    if ((a + b) % w) == c { return 1u32 }
+    if ((a + c) % w) == b { return 1u32 }
+    if ((b + c) % w) == a { return 1u32 }
+    return 0u32
+}
+
+/* classify the FULL C(w,3) universe: formula vs reach-set.  returns mismatch count. */
+var N4P : u64
+var N4R : u64
+var N5  : u64
+fn classify(w: u64) -> u64 {
+    N4P = 0u64
+    N4R = 0u64
+    N5  = 0u64
+    let mut mm : u64 = 0u64
+    let mut a : u64 = 0u64
+    while a < w {
+        let mut b : u64 = a + 1u64
+        while b < w {
+            let mut c : u64 = b + 1u64
+            while c < w {
+                let t : u64 = (1u64 << a) | (1u64 << b) | (1u64 << c)
+                let p : u32 = pred4(a, b, c, w)
+                let g : u32 = hhas(t)
+                if p == 1u32 { N4P = N4P + 1u64 }
+                if g == 1u32 { N4R = N4R + 1u64 }
+                if p != g {
+                    mm = mm + 1u64
+                    ps("    MISMATCH T={" as u64)  pi(a as i64)  ps("," as u64)  pi(b as i64)
+                    ps("," as u64)  pi(c as i64)  ps("} pred=" as u64)  pi(p as i64)
+                    ps(" reached=" as u64)  pi(g as i64)  nl()
+                }
+                if p == 0u32 { N5 = N5 + 1u64 }
+                c = c + 1u64
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return mm
+}
+
+/* ---------------- value-space semantics (the bridge + alien + slice arms) ---------------- */
+fn rotr64(x: u64, k: u64) -> u64 {
+    if k == 0u64 { return x }
+    return (x >> k) | (x << (64u64 - k))
+}
+fn sig1(x: u64) -> u64 { return rotr64(x, 14u64) ^ rotr64(x, 18u64) ^ rotr64(x, 41u64) }
+fn sig0(x: u64) -> u64 { return rotr64(x, 28u64) ^ rotr64(x, 34u64) ^ rotr64(x, 39u64) }
+
+/* the 4-op program for the sum-closed triple {5,9,14}  (5+9=14):
+ *   v1 = rotr5(x); v2 = x^v1; v3 = rotr9(v2); out = v3^v1   -- 2 ROT + 2 XOR */
+fn alien4(x: u64) -> u64 {
+    let v1 : u64 = rotr64(x, 5u64)
+    let v2 : u64 = x ^ v1
+    let v3 : u64 = rotr64(v2, 9u64)
+    return v3 ^ v1
+}
+fn ref5(x: u64) -> u64 { return rotr64(x, 5u64) ^ rotr64(x, 9u64) ^ rotr64(x, 14u64) }
+
+fn smx() -> u64 {
+    SMX = SMX + 0x9E3779B97F4A7C15u64
+    let mut z : u64 = SMX
+    z = (z ^ (z >> 30u64)) * 0xBF58476D1CE4E5B9u64
+    z = (z ^ (z >> 27u64)) * 0x94D049BB133111EBu64
+    return z ^ (z >> 31u64)
+}
+
+/* naive 64x64 bit transpose SRC->DST: DST[i] bit j == SRC[j] bit i  (correct by construction;
+ * the fast Hacker's-Delight transpose is known art and irrelevant to the theorem) */
+fn transpose_la_ta() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let mut acc : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 64u64 {
+            acc = acc | (((LA[j] >> i) & 1u64) << j)
+            j = j + 1u64
+        }
+        TA[i] = acc
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn transpose_tb_ol() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let mut acc : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 64u64 {
+            acc = acc | (((TB[j] >> i) & 1u64) << j)
+            j = j + 1u64
+        }
+        OL[i] = acc
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* bitsliced Sigma1 over the transposed state: out bit-plane i = plane (i+14) ^ (i+18) ^ (i+41).
+ * bit i of ROTR_k(x) = bit (i+k mod 64) of x.  The rotations are INDEX RENAMINGS: the only
+ * data operations are the two XORs per plane -> 128 XORs / 64 lanes = 2 ops per lane. */
+fn slice_sig1() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        TB[i] = TA[(i + 14u64) & 63u64] ^ TA[(i + 18u64) & 63u64] ^ TA[(i + 41u64) & 63u64]
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* run the sliced two-path on whatever is in LA[]; returns 0 ok, else arm */
+fn slice_twopath(arm: i32) -> i32 {
+    let mut j : u64 = 0u64
+    while j < 64u64 { SC[j] = sig1(LA[j])  j = j + 1u64 }
+    transpose_la_ta()
+    /* transpose self-check: TA[i] bit j == LA[j] bit i, full 4096 */
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let mut jj : u64 = 0u64
+        while jj < 64u64 {
+            if ((TA[i] >> jj) & 1u64) != ((LA[jj] >> i) & 1u64) { return arm }
+            jj = jj + 1u64
+        }
+        i = i + 1u64
+    }
+    slice_sig1()
+    transpose_tb_ol()
+    j = 0u64
+    while j < 64u64 {
+        if OL[j] != SC[j] { return arm + 1i32 }
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* ---------------- one width, fully pinned ---------------- */
+fn run_width(w: u64, exp4: u64, exp5: u64, sh1: u64, sh0: u64, base: i32) -> i32 {
+    /* [pre] <=3 ops: NO trinomial anywhere (floor > 3 for the whole family) */
+    census(3u64, w)
+    ps("[w" as u64)  pi(w as i64)  ps("] <=3-op census: weight-3 reached = " as u64)  pi(RCOUNT as i64)
+    ps("  (must be 0)" as u64)  nl()
+    if RCOUNT != 0u64 { return base }
+    /* [census] <=4 ops, blind */
+    census(4u64, w)
+    let reached : u64 = RCOUNT
+    /* [classify] formula vs reach-set over ALL C(w,3) trinomials */
+    let mm : u64 = classify(w)
+    ps("[w" as u64)  pi(w as i64)  ps("] <=4-op census: reached4=" as u64)  pi(reached as i64)
+    ps(" pred4=" as u64)  pi(N4P as i64)  ps(" reached-in-universe=" as u64)  pi(N4R as i64)
+    ps(" pred5=" as u64)  pi(N5 as i64)  ps(" mismatch=" as u64)  pi(mm as i64)  nl()
+    if mm != 0u64 { return base + 1i32 }
+    if N4P != exp4 { return base + 2i32 }
+    if N5 != exp5 { return base + 3i32 }
+    if reached != exp4 { return base + 4i32 }    /* every reached weight-3 mask is in the universe */
+    /* [sigma] the two SHA-512 constant sets (or their w8 shadows) must sit in the 5-class */
+    if hhas(sh1) != 0u32 { return base + 5i32 }
+    if hhas(sh0) != 0u32 { return base + 6i32 }
+    ps("[w" as u64)  pi(w as i64)  ps("] Sigma1-set + Sigma0-set: UNREACHED at <=4 ops -> FLOOR = 5 in G_ror" as u64)  nl()
+    return 0i32
+}
+
+fn main() -> i32 {
+    ps("== SIGMA DICHOTOMY PROBE == grammar G_ror = {ROTR-const, XOR}, blind SLP census, depth <= 4" as u64)  nl()
+    ps("   claim: cost(T)=4 iff 0 in T or T sum-closed (mod w); else 5.  Sigma0/Sigma1 -> 5." as u64)  nl()
+
+    /* ---- w=8: Sigma shadows {14,18,41} mod 8 = {6,2,1}, {28,34,39} mod 8 = {4,2,7} ---- */
+    let s1w8 : u64 = (1u64 << 1u64) | (1u64 << 2u64) | (1u64 << 6u64)
+    let s0w8 : u64 = (1u64 << 2u64) | (1u64 << 4u64) | (1u64 << 7u64)
+    let r8 : i32 = run_width(8u64, 36u64, 20u64, s1w8, s0w8, 10i32)
+    if r8 != 0i32 { return r8 }
+
+    /* ---- w=64: the real thing ---- */
+    let s1 : u64 = (1u64 << 14u64) | (1u64 << 18u64) | (1u64 << 41u64)
+    let s0 : u64 = (1u64 << 28u64) | (1u64 << 34u64) | (1u64 << 39u64)
+    let r64 : i32 = run_width(64u64, 3844u64, 37820u64, s1, s0, 20i32)
+    if r64 != 0i32 { return r64 }
+
+    /* ---- [bridge] mask-space -> value-space: Sigma1(e_0) must be e_50 ^ e_46 ^ e_23 ---- */
+    let y : u64 = sig1(1u64)
+    let ey : u64 = (1u64 << 50u64) | (1u64 << 46u64) | (1u64 << 23u64)
+    if y != ey { return 30i32 }
+    ps("[bridge] Sigma1(e_0) == e_50^e_46^e_23: mask calculus == real ROTR semantics" as u64)  nl()
+
+    /* ---- [alien] the 4-op program for sum-closed {5,9,14}: complete basis check + 1000 rands ---- */
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let e : u64 = 1u64 << i
+        if alien4(e) != ref5(e) { return 31i32 }
+        i = i + 1u64
+    }
+    SMX = 20260716u64
+    i = 0u64
+    while i < 1000u64 {
+        let x : u64 = smx()
+        if alien4(x) != ref5(x) { return 32i32 }
+        i = i + 1u64
+    }
+    ps("[alien] rotr5^rotr9^rotr14 (5+9=14, sum-closed) computed in 4 ops == 5-op definition:" as u64)  nl()
+    ps("        64-basis (complete by linearity) + 1000 splitmix values EQUAL" as u64)  nl()
+
+    /* ---- [slice] the bitsliced ontology: rotation = renaming = 0 ops; 2 XORs/lane ---- */
+    SMX = 424242u64
+    let mut j : u64 = 0u64
+    while j < 64u64 { LA[j] = smx()  j = j + 1u64 }
+    let sr : i32 = slice_twopath(40i32)
+    if sr != 0i32 { return sr }
+    j = 0u64
+    while j < 64u64 { LA[j] = 1u64 << j  j = j + 1u64 }
+    let sb : i32 = slice_twopath(42i32)
+    if sb != 0i32 { return sb }
+    ps("[slice] bitsliced Sigma1, 64 lanes: two-path EQUAL on random + full basis lanes" as u64)  nl()
+    ps("        cost: 128 XOR / 64 lanes = 2 ops/lane (rotations are index renamings, 0 ops)" as u64)  nl()
+    ps("        vs scalar 5 ops/lane; floor 2 exact: each output bit is a 3-input parity" as u64)  nl()
+    ps("        bridge (naive transpose) = 2 x 4096 gather steps per 64-lane block, amortized" as u64)  nl()
+
+    ps("== GREEN: dichotomy sealed at w8 AND w64; Sigma0/Sigma1 floor=5 in G_ror; floor=2 sliced ==" as u64)  nl()
+    return 99i32
+}

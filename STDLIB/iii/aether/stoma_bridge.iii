@@ -1,0 +1,96 @@
+/* STDLIB/iii/aether/stoma_bridge.iii -- STOMA <-> GLASS bridge: makes the sovereign Stoma shell drivable as a
+ * WINDOWED component (the studio centerpiece), not just a VT/console app.
+ *
+ * The studio window has no OS console -- it has a pixel framebuffer and WM_CHAR/WM_KEYDOWN key rings.  This organ
+ * adapts those to the REAL Stoma shell core with ZERO reimplementation of shell logic:
+ *   - a headless LINE EDITOR (append/backspace) accumulating the current input line,
+ *   - on Enter, it echoes the prompt+line then calls the real shell_feed_line (parse + dispatch + journal),
+ *   - it appends the shell's verb TRANSCRIPT (vb_out) into a SCROLLBACK buffer the window renders with exact fonts.
+ * Plain mode is forced (the window is a Collapse-Law plain surface) and externals are pipe-captured (no pty in a
+ * window), so every organ still obeys the Membrane + Collapse laws.  The shell stays the single source of truth;
+ * this is purely an I/O skin -- so the terminal Stoma and the windowed Stoma are byte-identical.
+ *
+ * Ring R-1.  K 0.95.  Composes stoma_shell (+ its family) -- NIH. */
+module stoma_bridge
+
+extern @abi(c-msvc-x64) fn shell_feed_line(line: u64, llen: u64) -> u32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_set_plain(v: u32) -> i32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn shell_set_con(v: u32) -> i32 from "stoma_shell.iii"
+extern @abi(c-msvc-x64) fn vb_out_ptr() -> u64 from "stoma_verb.iii"
+extern @abi(c-msvc-x64) fn vb_out_len() -> u64 from "stoma_verb.iii"
+
+const BR_LCAP : u64 = 1024u64
+const BR_SCAP : u64 = 262144u64
+const BR_SKEEP : u64 = 131072u64          /* bytes retained when the scrollback compacts */
+
+var BR_LINE   : [u8; 1024]
+var BR_LLEN   : u64
+var BR_SCROLL : [u8; 262144]
+var BR_SLEN   : u64
+
+fn br_reset() -> i32 @export {
+    BR_LLEN = 0u64   BR_SLEN = 0u64
+    shell_set_plain(1u32)                 /* the window is a plain surface: no VT escapes on the wire */
+    shell_set_con(0u32)                   /* no OS console in a window -> externals are pipe-captured */
+    return 0i32
+}
+
+fn br_line_ptr() -> u64 @export { return (&BR_LINE) as u64 }
+fn br_line_len() -> u64 @export { return BR_LLEN }
+fn br_scroll_ptr() -> u64 @export { return (&BR_SCROLL) as u64 }
+fn br_scroll_len() -> u64 @export { return BR_SLEN }
+fn br_scroll_byte(i: u64) -> u8 @export { if i < BR_SLEN { return BR_SCROLL[i] }   return 0u8 }
+
+/* append n bytes at src into the scrollback, compacting (drop oldest) if it would overflow. */
+fn br_scroll_push(src: u64, n: u64) -> i32 {
+    if BR_SLEN + n > BR_SCAP {
+        /* keep the last BR_SKEEP bytes */
+        let mut base : u64 = 0u64
+        if BR_SLEN > BR_SKEEP { base = BR_SLEN - BR_SKEEP }
+        let mut i : u64 = base
+        let mut w : u64 = 0u64
+        while i < BR_SLEN { BR_SCROLL[w] = BR_SCROLL[i]   w = w + 1u64   i = i + 1u64 }
+        BR_SLEN = w
+    }
+    let sp : *u8 = src as *u8
+    let mut k : u64 = 0u64
+    while k < n {
+        if BR_SLEN < BR_SCAP { BR_SCROLL[BR_SLEN] = sp[k]   BR_SLEN = BR_SLEN + 1u64 }
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+fn br_backspace() -> i32 { if BR_LLEN > 0u64 { BR_LLEN = BR_LLEN - 1u64 }   return 0i32 }
+fn br_append(ch: u8) -> i32 { if BR_LLEN < (BR_LCAP - 1u64) { BR_LINE[BR_LLEN] = ch   BR_LLEN = BR_LLEN + 1u64 }   return 0i32 }
+
+/* commit the current line: echo "> <line>\n" to scrollback, run the real shell, append its transcript, clear line.
+ * Returns the shell control signal (0 continue, 2 exit requested). */
+fn br_commit() -> u32 @export {
+    br_scroll_push("> " as u64, 2u64)
+    br_scroll_push((&BR_LINE) as u64, BR_LLEN)
+    br_scroll_push("\n" as u64, 1u64)
+    let sig : u32 = shell_feed_line((&BR_LINE) as u64, BR_LLEN)
+    br_scroll_push(vb_out_ptr(), vb_out_len())
+    BR_LLEN = 0u64
+    return sig
+}
+
+/* feed one keystroke (a Unicode/ASCII code point).  Enter commits; Backspace deletes; printable ASCII appends. */
+fn br_key(ch: u32) -> u32 @export {
+    if ch == 13u32 { return br_commit() }
+    if ch == 10u32 { return br_commit() }
+    if ch == 8u32  { br_backspace()   return 0u32 }
+    if ch == 127u32 { br_backspace()   return 0u32 }
+    if ch >= 32u32 { if ch < 127u32 { br_append(ch as u8) } }
+    return 0u32
+}
+
+/* feed a whole byte string (paste / test driver): returns the last control signal seen. */
+fn br_feed(p: u64, n: u64) -> u32 @export {
+    let sp : *u8 = p as *u8
+    let mut sig : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < n { sig = br_key(sp[i] as u32)   i = i + 1u64 }
+    return sig
+}

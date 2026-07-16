@@ -1,0 +1,168 @@
+/* STDLIB/iii/aether/iform.iii -- III-FORM: the sovereign, fully-NIH exact image container (.ixr = III eXact Raster).
+ *
+ * WHY IT SUPERSEDES .bmp (provably, not rhetorically -- every claim is a gate arm in 2199_iform):
+ *   1. LOSSLESS 32-BIT: stores the framebuffer's full 0xAARRGGBB word verbatim.  The in-tree 24-bit BMP writer
+ *      (aether_lens_frame.frame_write_bmp) DISCARDS the alpha byte and 4-byte-pads every row -- a lossy re-encode.
+ *      .ixr round-trips a framebuffer BIT-FOR-BIT, alpha included.  (arm RT)
+ *   2. SELF-VERIFYING: the header embeds an FNV-1a signature of the exact pixel payload (the SAME hash the render
+ *      determinism gate uses).  iform_verify recomputes it and detects a SINGLE flipped byte.  A BMP carries no
+ *      integrity field -- a corrupt BMP is indistinguishable from a good one.  (arms SV, TAMPER)
+ *   3. GENERATOR-BOUND: a reserved 64-bit slot binds the raster to the signature of the exact math that produced it
+ *      (a scene/frame sig), so a pixel file can PROVE which exact computation it came from.  BMP cannot.  (arm BIND)
+ *   4. DETERMINISTIC & SELF-DESCRIBING: a fixed 40-byte header (magic/version/w/h/flags/bpp/sig/bind) -- no palette
+ *      ambiguity, no top-down/bottom-up flag traps, no endian surprises.  Read w,h back exactly.  (arm HDR)
+ *
+ * Only the OS file ABI (kernel32 CreateFile/Read/Write) is touched -- no image library, no msvcrt, no foreign format.
+ * The BMP path stays only as an EXPLICIT, lossy, legacy EXPORT (iform_note_bmp_is_legacy documents the demotion).
+ *
+ * Ring R0.  NIH.  Container layout (little-endian):
+ *   [ 0] u8x4  magic  'I','X','R','1'
+ *   [ 4] u32   version = 1
+ *   [ 8] u32   width
+ *   [12] u32   height
+ *   [16] u32   flags   (bit0 = has-alpha)
+ *   [20] u32   bpp     = 32
+ *   [24] u64   sig     FNV-1a over the w*h u32 payload words
+ *   [32] u64   bind    generator signature (0 = unbound)
+ *   [40] u32 * (w*h)   pixel payload, 0xAARRGGBB per word
+ */
+module aether_iform
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, red: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+const IXR_HDR   : u64 = 40u64
+const FNV_OFF   : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME : u64 = 0x100000001b3u64
+const IXR_MAXW  : u64 = 262144u64           /* max words the internal file buffer can hold (payload) */
+
+/* scratch file buffer: 40-byte header + up to IXR_MAXW payload words (4 bytes each). */
+var IXR_BUF   : [u8; 1048616]               /* 40 + 262144*4 */
+var IXR_CNT   : [u32; 1]                     /* bytes-written / bytes-read out slot */
+var IXR_LW    : u32                          /* last width read */
+var IXR_LH    : u32                          /* last height read */
+var IXR_LSIG  : u64                          /* last payload sig read from header */
+var IXR_LBIND : u64                          /* last bind sig read from header */
+
+/* ---- little-endian byte access on a raw base address ---- */
+fn ixr_pb(base: u64, off: u64, v: u32) -> i32 { let p : *u8 = (base + off) as *u8   p[0u64] = (v & 255u32) as u8   return 0i32 }
+fn ixr_gb(base: u64, off: u64) -> u32 { let p : *u8 = (base + off) as *u8   return p[0u64] as u32 }
+
+fn ixr_p32(base: u64, off: u64, v: u32) -> i32 {
+    ixr_pb(base, off, v)   ixr_pb(base, off + 1u64, v >> 8u32)
+    ixr_pb(base, off + 2u64, v >> 16u32)   ixr_pb(base, off + 3u64, v >> 24u32)
+    return 0i32
+}
+fn ixr_g32(base: u64, off: u64) -> u32 {
+    return ixr_gb(base, off) | (ixr_gb(base, off + 1u64) << 8u32) | (ixr_gb(base, off + 2u64) << 16u32) | (ixr_gb(base, off + 3u64) << 24u32)
+}
+fn ixr_p64(base: u64, off: u64, v: u64) -> i32 {
+    ixr_p32(base, off, (v & 0xFFFFFFFFu64) as u32)
+    ixr_p32(base, off + 4u64, (v >> 32u64) as u32)
+    return 0i32
+}
+fn ixr_g64(base: u64, off: u64) -> u64 {
+    return (ixr_g32(base, off) as u64) | ((ixr_g32(base, off + 4u64) as u64) << 32u64)
+}
+
+/* FNV-1a over n u32 words at `base` (each word hashed as its u64 value -- identical rule to frame_sig). */
+fn iform_sig_words(base: u64, n: u64) -> u64 @export {
+    let mut hsh : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < n {
+        let w : u64 = ixr_g32(base, i * 4u64) as u64
+        hsh = hsh ^ w
+        hsh = hsh * FNV_PRIME
+        i = i + 1u64
+    }
+    return hsh
+}
+
+/* write `fb` (w*h u32 words, 0xAARRGGBB) to `path` as an .ixr container binding it to generator sig `bind`.
+ * Returns 0 on success, 15 on open fail, 12 if too large for the buffer. */
+fn iform_write_bound(fb: u64, w: u32, h: u32, bind: u64, path: u64) -> i32 @export {
+    let n : u64 = (w as u64) * (h as u64)
+    if n > IXR_MAXW { return 12i32 }
+    let hb : u64 = (&IXR_BUF) as u64
+    /* header */
+    ixr_pb(hb, 0u64, 73u32)   ixr_pb(hb, 1u64, 88u32)   ixr_pb(hb, 2u64, 82u32)   ixr_pb(hb, 3u64, 49u32)   /* 'I','X','R','1' */
+    ixr_p32(hb, 4u64, 1u32)                       /* version */
+    ixr_p32(hb, 8u64, w)   ixr_p32(hb, 12u64, h)
+    ixr_p32(hb, 16u64, 1u32)                      /* flags: has-alpha */
+    ixr_p32(hb, 20u64, 32u32)                     /* bpp */
+    /* copy payload words verbatim into the buffer after the header */
+    let mut i : u64 = 0u64
+    while i < n {
+        let px : u32 = ixr_g32(fb, i * 4u64)
+        ixr_p32(hb, IXR_HDR + i * 4u64, px)
+        i = i + 1u64
+    }
+    let sig : u64 = iform_sig_words(hb + IXR_HDR, n)
+    ixr_p64(hb, 24u64, sig)
+    ixr_p64(hb, 32u64, bind)
+    let total : u32 = (IXR_HDR + n * 4u64) as u32
+    /* GENERIC_WRITE=0x40000000, CREATE_ALWAYS=2, FILE_ATTRIBUTE_NORMAL=0x80 */
+    let hf : u64 = CreateFileA(path, 1073741824u32, 0u32, 0u64, 2u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 15i32 }
+    WriteFile(hf, hb, total, (&IXR_CNT) as u64, 0u64)
+    CloseHandle(hf)
+    return 0i32
+}
+fn iform_write(fb: u64, w: u32, h: u32, path: u64) -> i32 @export { return iform_write_bound(fb, w, h, 0u64, path) }
+
+/* read `path` into the internal buffer, copy the payload into fb_out (up to maxwords), and populate the
+ * IXR_L* accessors.  Returns (w<<32)|h on success, or a negative code: -1 bad magic, -2 bad version, -3 too big. */
+fn iform_read(path: u64, fb_out: u64, maxwords: u64) -> i64 @export {
+    let hb : u64 = (&IXR_BUF) as u64
+    /* GENERIC_READ=0x80000000, OPEN_EXISTING=3 */
+    let hf : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 0i64 - 1i64 }
+    ReadFile(hf, hb, 1048616u32, (&IXR_CNT) as u64, 0u64)
+    CloseHandle(hf)
+    if ixr_gb(hb, 0u64) != 73u32 { return 0i64 - 1i64 }
+    if ixr_gb(hb, 1u64) != 88u32 { return 0i64 - 1i64 }
+    if ixr_gb(hb, 2u64) != 82u32 { return 0i64 - 1i64 }
+    if ixr_gb(hb, 3u64) != 49u32 { return 0i64 - 1i64 }
+    if ixr_g32(hb, 4u64) != 1u32 { return 0i64 - 2i64 }
+    let w : u32 = ixr_g32(hb, 8u64)   let h : u32 = ixr_g32(hb, 12u64)
+    IXR_LW = w   IXR_LH = h
+    IXR_LSIG = ixr_g64(hb, 24u64)   IXR_LBIND = ixr_g64(hb, 32u64)
+    let n : u64 = (w as u64) * (h as u64)
+    if n > maxwords { return 0i64 - 3i64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        let px : u32 = ixr_g32(hb, IXR_HDR + i * 4u64)
+        ixr_p32(fb_out, i * 4u64, px)
+        i = i + 1u64
+    }
+    return ((w as i64) << 32i64) | (h as i64)
+}
+
+/* re-read `path` and verify the embedded signature against a fresh hash of the payload.
+ * Returns 0 = intact, 1 = bad magic/version, 2 = SIGNATURE MISMATCH (tamper/corruption). */
+fn iform_verify(path: u64) -> i32 @export {
+    let hb : u64 = (&IXR_BUF) as u64
+    let hf : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 1i32 }
+    ReadFile(hf, hb, 1048616u32, (&IXR_CNT) as u64, 0u64)
+    CloseHandle(hf)
+    if ixr_gb(hb, 0u64) != 73u32 { return 1i32 }
+    if ixr_g32(hb, 4u64) != 1u32 { return 1i32 }
+    let w : u32 = ixr_g32(hb, 8u64)   let h : u32 = ixr_g32(hb, 12u64)
+    let n : u64 = (w as u64) * (h as u64)
+    let stored : u64 = ixr_g64(hb, 24u64)
+    let fresh : u64 = iform_sig_words(hb + IXR_HDR, n)
+    if stored != fresh { return 2i32 }
+    return 0i32
+}
+
+fn iform_last_w() -> u32 @export { return IXR_LW }
+fn iform_last_h() -> u32 @export { return IXR_LH }
+fn iform_last_sig() -> u64 @export { return IXR_LSIG }
+fn iform_last_bind() -> u64 @export { return IXR_LBIND }
+
+/* the demotion, stated in code: BMP remains reachable only as a lossy legacy export target (24-bit, no alpha,
+ * no integrity, no binding).  Returns 1 -- a compile-time reminder that .ixr is the sovereign master format. */
+fn iform_note_bmp_is_legacy() -> i32 @export { return 1i32 }

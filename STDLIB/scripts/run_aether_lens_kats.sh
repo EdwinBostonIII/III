@@ -30,10 +30,10 @@ echo "PASS  world_graph      : compiles (nodes+edges extracted LIVE by gen_world
 echo "PASS  aether_world     : compiles (the resizable 3D sovereign-geometry explorer: photons + shapes + CSG + wireframe)"
 "$I2" "$A/cyclotomic_se3.iii"    --compile-only --out "$OUT/cyclotomic_se3.o"   2>"$OUT/cse3.log" || { echo "FAIL cyclotomic_se3 compile"; cat "$OUT/cse3.log"; exit 1; }
 # III STUDIO: the sovereign exact-mathematics IDE (shell + six live workspaces on the GLASS substrate)
-for sm in wb_kernel studio_theme studio_trig ws_home ws_forge ws_bench ws_lens ws_zoom ws_console iii_studio studio_sample; do
+for sm in wb_kernel studio_theme studio_trig ws_home ws_forge ws_bench ws_lens ws_zoom ws_stoma iii_studio studio_sample; do
     "$I2" "$A/$sm.iii" --compile-only --out "$OUT/$sm.o" 2>"$OUT/$sm.log" || { echo "FAIL $sm compile"; cat "$OUT/$sm.log"; exit 1; }
 done
-echo "PASS  iii_studio       : compiles (shell + HOME/FORGE/BENCH/LENS/ZOOM/CONSOLE -- all six live workspaces)"
+echo "PASS  iii_studio       : compiles (shell + HOME/FORGE/BENCH/LENS/RENDER/STOMA -- all six live workspaces)"
 
 # run <corpus-name> <want-exit> <workdir> <link objs...>
 run() {
@@ -50,6 +50,13 @@ run() {
 run 2155_aether_lens          99 "$OUT" "$OUT/aether_lens.o" "$OUT/aether_lens_frame.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"                          # EXACT RAY-CAST core: hit/miss/tangent + z-fight-killer depth near-tie + derived 8-bit Lambert; first-light shaded sphere
 run 2158_aether_lens_render   99 "$ART" "$OUT/aether_lens_frame.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # THE INTERFACE: determinism + exact CSG membership + occlusion + bigint==i64 shade + cyclotomic_se3 zero-drift ORBIT; writes aether_lens.bmp
 run 2169_studio_kernel        99 "$OUT" "$OUT/wb_kernel.o" "$OUT/studio_trig.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"        # III STUDIO's pure organs: collide/order/relay exact signs (hand-derived quadratics + marquee near-tie + surd-identity zero) + trig-table symmetries
+
+# unified renderer core: 1D spectrum + 2D radial field + 3D ray-cast, all exact, all pinned; + sovereign .ixr seal round-trip
+for rc in render_core render_time ui_field iform exact_denest; do
+    "$I2" "$A/$rc.iii" --compile-only --out "$OUT/$rc.o" 2>"$OUT/$rc.log" || { echo "FAIL $rc compile"; cat "$OUT/$rc.log"; exit 1; }
+done
+run 2201_render_core          99 "$OUT" "$OUT/render_core.o" "$OUT/ui_field.o" "$OUT/iform.o" "$OUT/aether_lens_frame.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/exact_denest.o" "$OUT/kfield.o" "$LIB"  # THE UNIFIED RENDERER: exact 1D/2D/3D determinism (pinned FNV sigs) + lossless .ixr seal round-trip
+run 2202_render_time          99 "$OUT" "$OUT/render_time.o" "$OUT/render_core.o" "$OUT/ui_field.o" "$OUT/iform.o" "$OUT/aether_lens_frame.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/exact_denest.o" "$OUT/kfield.o" "$LIB"  # TIME AXIS: pinned 16-frame time-testament per mode + reproducibility + replay + mode discrimination
 
 echo "=== AETHER-LENS gate: PASS=$pass FAIL=$fail ==="
 [[ "$fail" == 0 ]] && exit 0 || exit 1

@@ -1,0 +1,87 @@
+/* 2467_stoma_bridge.iii -- GATE for stoma_bridge.iii: the REAL Stoma shell runs, driven only by keystrokes, and its
+ * transcript accumulates in a scrollback a window can render -- proving Stoma is a live windowed component now.
+ *
+ * ARMS:
+ *   ECHO   feed the keystrokes "help\n"; the scrollback must contain the real help banner "STOMA verbs"
+ *          (i.e. the genuine shell_feed_line -> vb_do_help path ran, not a stub).
+ *   PROMPT the scrollback must contain the echoed prompt "> help" (the window's input line was recorded).
+ *   LINE   typing "xyz" (no Enter) leaves br_line_len()==3; a Backspace makes it 2 (headless line editor works).
+ *   COMMIT pressing Enter clears the input line (br_line_len()==0) and the scrollback grows (dispatch happened).
+ *   EXIT   feeding "exit\n" returns the shell control signal 2 (exit requested) through the bridge.
+ *
+ *   exit 99 = all correct.  10 ECHO  20 PROMPT  30 LINE  40 COMMIT  50 EXIT */
+module corpus_2467_stoma_bridge
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn br_reset() -> i32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_key(ch: u32) -> u32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_feed(p: u64, n: u64) -> u32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_commit() -> u32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_line_len() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_scroll_ptr() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_scroll_len() -> u64 from "stoma_bridge.iii"
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn lab(a: i32, b: i32, c: i32) -> i32 { putchar(a) putchar(b) putchar(c) putchar(58i32) sp()   return 0i32 }
+
+/* does the scrollback contain the pat[0..plen) byte pattern? */
+fn scroll_has(pat: u64, plen: u64) -> u32 {
+    let base : u64 = br_scroll_ptr()
+    let slen : u64 = br_scroll_len()
+    if plen == 0u64 { return 1u32 }
+    if plen > slen { return 0u32 }
+    let sb : *u8 = base as *u8
+    let pb : *u8 = pat as *u8
+    let last : u64 = slen - plen
+    let mut i : u64 = 0u64
+    while i <= last {
+        let mut j : u64 = 0u64
+        let mut ok : u32 = 1u32
+        while j < plen { if sb[i + j] != pb[j] { ok = 0u32   j = plen } else { j = j + 1u64 } }
+        if ok == 1u32 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let mut FEC : u64 = 0u64   let mut FPR : u64 = 0u64   let mut FLN : u64 = 0u64
+    let mut FCM : u64 = 0u64   let mut FEX : u64 = 0u64
+
+    /* ── ECHO + PROMPT: run "help" via keystrokes */
+    br_reset()
+    br_feed("help\n" as u64, 5u64)
+    let after_help : u64 = br_scroll_len()
+    if scroll_has("STOMA verbs" as u64, 11u64) != 1u32 { FEC = FEC + 1u64 }
+    if scroll_has("> help" as u64, 6u64) != 1u32 { FPR = FPR + 1u64 }
+    lab(69i32,67i32,72i32) e_u64(after_help) nl()
+
+    /* ── LINE: type "xyz" (no Enter), edit with Backspace */
+    br_key(120u32)   br_key(121u32)   br_key(122u32)        /* x y z */
+    if br_line_len() != 3u64 { FLN = FLN + 1u64 }
+    br_key(8u32)                                            /* backspace */
+    if br_line_len() != 2u64 { FLN = FLN + 1u64 }
+    lab(76i32,78i32,58i32) e_u64(br_line_len()) nl()
+
+    /* ── COMMIT: Enter clears the line and grows the scrollback */
+    let before : u64 = br_scroll_len()
+    br_key(13u32)
+    if br_line_len() != 0u64 { FCM = FCM + 1u64 }
+    if br_scroll_len() <= before { FCM = FCM + 1u64 }
+    lab(67i32,77i32,58i32) e_u64(br_scroll_len()) nl()
+
+    /* ── EXIT: the exit verb returns control signal 2 through the bridge */
+    let sig : u32 = br_feed("exit\n" as u64, 5u64)
+    if sig != 2u32 { FEX = FEX + 1u64 }
+    lab(69i32,88i32,58i32) e_u64(sig as u64) nl()
+
+    if FEC != 0u64 { return 10u64 }
+    if FPR != 0u64 { return 20u64 }
+    if FLN != 0u64 { return 30u64 }
+    if FCM != 0u64 { return 40u64 }
+    if FEX != 0u64 { return 50u64 }
+    return 99u64
+}

@@ -1,0 +1,228 @@
+/* STDLIB/iii/aether/iscene.iii -- III-SCENE: the resolution-INDEPENDENT sovereign image master (.isc = III Scene).
+ *
+ * The deepest form of the NIH-format supremacy: a .isc file is not pixels at all -- it is the EXACT math that GENERATES
+ * the image (a list of exact quadric solids + exact colours + camera focal + light), rendered on the aether_lens exact
+ * ray-cast core.  From this ONE tiny file (O(objects) i64s -- a few hundred bytes, resolution-free) the exact same scene
+ * renders deterministically at ANY resolution.  A .bmp/.ixr raster is then merely a LOSSY PROJECTION of a .isc at one
+ * chosen resolution; the .isc is the master it was projected from.
+ *
+ * WHY IT SUPERSEDES a raster (each a gate arm in 2200_iscene):
+ *   RES  RESOLUTION-INDEPENDENCE: the SAME sub-1KB file renders valid, distinct, deterministic frames at 96x72,
+ *        128x96, 192x144 -- a BMP is frozen at one resolution and cannot be losslessly rescaled.
+ *   RT   LOSSLESS GENERATOR ROUND-TRIP: write .isc, wipe the scene, read it back, re-render -> BIT-IDENTICAL frame sig.
+ *   BIND the rendered raster is written to .ixr bound to the .isc scene signature, so a pixel file PROVES which exact
+ *        generator produced it (iform_last_bind == iscene_scene_sig).  No raster format can do this.
+ *   DET  every render is a pure function of integers -> pinned, bit-reproducible frame signature.
+ *
+ * Composes aether_lens (exact ray-quadric) + iform (.ixr sink).  kernel32-only file I/O.  Ring R0.  NIH. */
+module aether_iscene
+
+extern @abi(c-msvc-x64) fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_a() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_b() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_disc() -> i64 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_t_cmp_fx(ai: i64, bi: i64, di: i64, aj: i64, bj: i64, dj: i64) -> i32 from "aether_lens.iii"
+extern @abi(c-msvc-x64) fn lens_shade255_fast(lx: i64, ly: i64, lz: i64) -> u32 from "aether_lens.iii"
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, red: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+const ISC_MAXOBJ : u64 = 16u64
+const ISC_MAXFB  : u64 = 65536u64          /* up to 256x256 */
+const FNV_OFF    : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME  : u64 = 0x100000001b3u64
+
+var ISC_N     : i64
+var ISC_CX    : [i64; 16]   var ISC_CY : [i64; 16]   var ISC_CZ : [i64; 16]   var ISC_R2 : [i64; 16]
+var ISC_R     : [i64; 16]   var ISC_G  : [i64; 16]   var ISC_B  : [i64; 16]
+var ISC_FOCAL : i64
+var ISC_LX    : i64   var ISC_LY : i64   var ISC_LZ : i64
+var SFB       : [u32; 65536]
+var ISC_FILE  : [u8; 2048]                 /* .isc container scratch (header + up to 16 objects) */
+var ISC_CNT   : [u32; 1]
+
+/* ---- LE byte access ---- */
+fn isc_pb(base: u64, off: u64, v: u32) -> i32 { let p : *u8 = (base + off) as *u8   p[0u64] = (v & 255u32) as u8   return 0i32 }
+fn isc_gb(base: u64, off: u64) -> u32 { let p : *u8 = (base + off) as *u8   return p[0u64] as u32 }
+fn isc_p64(base: u64, off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { isc_pb(base, off + i, (v >> (i * 8u64)) as u32)   i = i + 1u64 }
+    return 0i32
+}
+fn isc_g64(base: u64, off: u64) -> u64 {
+    let mut v : u64 = 0u64   let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((isc_gb(base, off + i) as u64) << (i * 8u64))   i = i + 1u64 }
+    return v
+}
+
+fn iscene_reset() -> i32 @export {
+    ISC_N = 0i64   ISC_FOCAL = 280i64
+    ISC_LX = 0i64 - 5i64   ISC_LY = 7i64   ISC_LZ = 0i64 - 4i64
+    return 0i32
+}
+fn iscene_set_light(lx: i64, ly: i64, lz: i64) -> i32 @export { ISC_LX = lx   ISC_LY = ly   ISC_LZ = lz   return 0i32 }
+fn iscene_set_focal(f: i64) -> i32 @export { ISC_FOCAL = f   return 0i32 }
+fn iscene_count() -> i64 @export { return ISC_N }
+
+fn iscene_add(cx: i64, cy: i64, cz: i64, r2: i64, r: i64, g: i64, b: i64) -> i32 @export {
+    if ISC_N >= (ISC_MAXOBJ as i64) { return 0i32 - 1i32 }
+    let k : u64 = ISC_N as u64
+    ISC_CX[k] = cx   ISC_CY[k] = cy   ISC_CZ[k] = cz   ISC_R2[k] = r2
+    ISC_R[k] = r     ISC_G[k] = g     ISC_B[k] = b
+    ISC_N = ISC_N + 1i64
+    return 0i32
+}
+
+fn isc_pack(r: u32, g: u32, b: u32) -> u32 { return ((r & 0xFFu32) << 16u32) | ((g & 0xFFu32) << 8u32) | (b & 0xFFu32) }
+fn isc_clamp(v: u32) -> u32 { if v > 255u32 { return 255u32 }   return v }
+fn isc_bg(y: u64, h: u64) -> u32 {
+    let t : u64 = (y * 64u64) / h
+    return isc_pack((6u64 + t/4u64) as u32, (10u64 + t/2u64) as u32, (26u64 + t) as u32)
+}
+fn isc_setup(k: u64) -> i32 {
+    let px : i64 = ISC_CX[k]   let py : i64 = ISC_CY[k]   let pz : i64 = ISC_CZ[k]   let r2 : i64 = ISC_R2[k]
+    return lens_setup(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64 - 2i64*px, 0i64 - 2i64*py, 0i64 - 2i64*pz, px*px + py*py + pz*pz - r2)
+}
+fn isc_shade_albedo(k: u64, inten: u32) -> u32 {
+    let r : u32 = (((ISC_R[k] as u32) * inten) / 255u32) + 10u32
+    let g : u32 = (((ISC_G[k] as u32) * inten) / 255u32) + 12u32
+    let b : u32 = (((ISC_B[k] as u32) * inten) / 255u32) + 16u32
+    return isc_pack(isc_clamp(r), isc_clamp(g), isc_clamp(b))
+}
+
+/* render the scene into SFB at arbitrary w x h (exact occlusion + derived Lambert).  Deterministic. */
+fn iscene_render(w: u64, h: u64) -> i32 @export {
+    if w * h > ISC_MAXFB { return 0i32 - 1i32 }
+    let hw : i64 = (w / 2u64) as i64
+    let hh : i64 = (h / 2u64) as i64
+    let mut y : u64 = 0u64
+    while y < h {
+        let sy : i64 = hh - (y as i64)
+        let mut x : u64 = 0u64
+        while x < w {
+            let sx : i64 = (x as i64) - hw
+            lens_set_ray(0i64, 0i64, 0i64, sx, sy, ISC_FOCAL)
+            let mut best : i64 = 0i64 - 1i64
+            let mut ba : i64 = 0i64   let mut bb : i64 = 0i64   let mut bd : i64 = 0i64
+            let mut k : u64 = 0u64
+            while k < (ISC_N as u64) {
+                let hs : i32 = isc_setup(k)
+                if hs >= 0i32 {
+                    let ca : i64 = lens_a()   let cb : i64 = lens_b()   let cd : i64 = lens_disc()
+                    if best < 0i64 { best = k as i64   ba = ca   bb = cb   bd = cd }
+                    else {
+                        let cmp : i32 = lens_t_cmp_fx(ca, cb, cd, ba, bb, bd)
+                        if cmp < 0i32 { best = k as i64   ba = ca   bb = cb   bd = cd }
+                    }
+                }
+                k = k + 1u64
+            }
+            let mut px : u32 = isc_bg(y, h)
+            if best >= 0i64 {
+                isc_setup(best as u64)
+                let inten : u32 = lens_shade255_fast(ISC_LX, ISC_LY, ISC_LZ)
+                px = isc_shade_albedo(best as u64, inten)
+            }
+            SFB[y * w + x] = px
+            x = x + 1u64
+        }
+        y = y + 1u64
+    }
+    return 0i32
+}
+
+fn iscene_px(x: u64, y: u64, w: u64) -> u32 @export { return SFB[y * w + x] }
+fn iscene_fb_addr() -> u64 @export { return (&SFB) as u64 }
+
+/* FNV-1a of the w*h rendered frame -- the determinism signature (identical rule to frame_sig). */
+fn iscene_sig(w: u64, h: u64) -> u64 @export {
+    let mut hsh : u64 = FNV_OFF
+    let n : u64 = w * h
+    let mut i : u64 = 0u64
+    while i < n { hsh = hsh ^ (SFB[i] as u64)   hsh = hsh * FNV_PRIME   i = i + 1u64 }
+    return hsh
+}
+
+/* FNV-1a of the SCENE PARAMETERS themselves -- the exact GENERATOR signature (resolution-free identity of the image). */
+fn iscene_scene_sig() -> u64 @export {
+    let mut hsh : u64 = FNV_OFF
+    hsh = (hsh ^ (ISC_N as u64)) * FNV_PRIME
+    hsh = (hsh ^ (ISC_FOCAL as u64)) * FNV_PRIME
+    hsh = (hsh ^ (ISC_LX as u64)) * FNV_PRIME
+    hsh = (hsh ^ (ISC_LY as u64)) * FNV_PRIME
+    hsh = (hsh ^ (ISC_LZ as u64)) * FNV_PRIME
+    let mut k : u64 = 0u64
+    while k < (ISC_N as u64) {
+        hsh = (hsh ^ (ISC_CX[k] as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_CY[k] as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_CZ[k] as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_R2[k] as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_R[k]  as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_G[k]  as u64)) * FNV_PRIME
+        hsh = (hsh ^ (ISC_B[k]  as u64)) * FNV_PRIME
+        k = k + 1u64
+    }
+    return hsh
+}
+
+/* .isc container (all fields 8-byte, no overlap): [0..4) 'I','S','C','1'  [4..8) pad  [8..16) version=1  [16..24) N
+ *                 [24..32) focal  [32..40) LX  [40..48) LY  [48..56) LZ  then per object 7 i64 (cx,cy,cz,r2,r,g,b).
+ *                 Resolution-FREE. */
+fn iscene_write(path: u64) -> i32 @export {
+    let hb : u64 = (&ISC_FILE) as u64
+    isc_pb(hb, 0u64, 73u32)   isc_pb(hb, 1u64, 83u32)   isc_pb(hb, 2u64, 67u32)   isc_pb(hb, 3u64, 49u32)   /* 'I','S','C','1' */
+    isc_pb(hb, 4u64, 0u32)   isc_pb(hb, 5u64, 0u32)   isc_pb(hb, 6u64, 0u32)   isc_pb(hb, 7u64, 0u32)        /* pad */
+    isc_p64(hb, 8u64, 1u64)                                    /* version */
+    isc_p64(hb, 16u64, ISC_N as u64)
+    isc_p64(hb, 24u64, ISC_FOCAL as u64)
+    isc_p64(hb, 32u64, ISC_LX as u64)   isc_p64(hb, 40u64, ISC_LY as u64)   isc_p64(hb, 48u64, ISC_LZ as u64)
+    let mut off : u64 = 56u64   let mut k : u64 = 0u64
+    while k < (ISC_N as u64) {
+        isc_p64(hb, off,          ISC_CX[k] as u64)
+        isc_p64(hb, off + 8u64,   ISC_CY[k] as u64)
+        isc_p64(hb, off + 16u64,  ISC_CZ[k] as u64)
+        isc_p64(hb, off + 24u64,  ISC_R2[k] as u64)
+        isc_p64(hb, off + 32u64,  ISC_R[k]  as u64)
+        isc_p64(hb, off + 40u64,  ISC_G[k]  as u64)
+        isc_p64(hb, off + 48u64,  ISC_B[k]  as u64)
+        off = off + 56u64   k = k + 1u64
+    }
+    let hf : u64 = CreateFileA(path, 1073741824u32, 0u32, 0u64, 2u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 15i32 }
+    WriteFile(hf, hb, off as u32, (&ISC_CNT) as u64, 0u64)
+    CloseHandle(hf)
+    return 0i32
+}
+fn iscene_file_bytes() -> u64 @export { return 56u64 + (ISC_N as u64) * 56u64 }
+
+/* read a .isc back into the live scene.  Returns object count, or negative on bad magic/version. */
+fn iscene_read(path: u64) -> i64 @export {
+    let hb : u64 = (&ISC_FILE) as u64
+    let hf : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if hf == 18446744073709551615u64 { return 0i64 - 1i64 }
+    ReadFile(hf, hb, 2048u32, (&ISC_CNT) as u64, 0u64)
+    CloseHandle(hf)
+    if isc_gb(hb, 0u64) != 73u32 { return 0i64 - 1i64 }
+    if isc_gb(hb, 1u64) != 83u32 { return 0i64 - 1i64 }
+    if isc_gb(hb, 2u64) != 67u32 { return 0i64 - 1i64 }
+    if isc_gb(hb, 3u64) != 49u32 { return 0i64 - 1i64 }
+    if isc_g64(hb, 8u64) != 1u64 { return 0i64 - 2i64 }
+    ISC_N = isc_g64(hb, 16u64) as i64
+    ISC_FOCAL = isc_g64(hb, 24u64) as i64
+    ISC_LX = isc_g64(hb, 32u64) as i64   ISC_LY = isc_g64(hb, 40u64) as i64   ISC_LZ = isc_g64(hb, 48u64) as i64
+    let mut off : u64 = 56u64   let mut k : u64 = 0u64
+    while k < (ISC_N as u64) {
+        ISC_CX[k] = isc_g64(hb, off)          as i64
+        ISC_CY[k] = isc_g64(hb, off + 8u64)   as i64
+        ISC_CZ[k] = isc_g64(hb, off + 16u64)  as i64
+        ISC_R2[k] = isc_g64(hb, off + 24u64)  as i64
+        ISC_R[k]  = isc_g64(hb, off + 32u64)  as i64
+        ISC_G[k]  = isc_g64(hb, off + 40u64)  as i64
+        ISC_B[k]  = isc_g64(hb, off + 48u64)  as i64
+        off = off + 56u64   k = k + 1u64
+    }
+    return ISC_N
+}

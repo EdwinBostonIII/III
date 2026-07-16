@@ -1,0 +1,55 @@
+/* STDLIB/iii/aether/render_time.iii -- TIME as a first-class, provable axis of the unified renderer.
+ * A frame at integer time t is a closed-form value of III's math (render_core); an ANIMATION is therefore a
+ * deterministic SEQUENCE of frames.  This module captures that sequence and folds each frame's FNV signature into
+ * a single chained "time testament" hash: identical (mode, size, frame-count) always yields the identical testament,
+ * so an entire animation -- not just one frame -- is a reproducible mathematical object.  No float, no wall clock;
+ * time is an exact integer index into a proven family of frames.  The per-frame signatures are retained so a verifier
+ * can replay any single instant.  Headless + kernel32-only, so it is gated by a real corpus KAT. */
+module render_time
+
+extern @abi(c-msvc-x64) fn rc_render_1d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_2d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_3d(fb: u64, w: u64, hh: u64, ang: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn iform_sig_words(base: u64, n: u64) -> u64 from "iform.iii"
+
+const RTW : u64 = 256u64
+const RTH : u64 = 256u64
+const RT_MAXF : u64 = 64u64
+
+var RT_FB   : [u32; 65536]
+var RT_SIGS : [u64; 64]                   /* per-frame signatures (replay any instant) */
+var RT_N    : u64                         /* frames captured in the last testament */
+var RT_TEST : u64                         /* the chained time-testament hash */
+
+fn rt_fb() -> u64 { return (&RT_FB) as u64 }
+
+/* render one frame of `mode` at time t into RT_FB (mode: 0=1D,1=2D,2=3D). */
+fn rt_frame(mode: i64, t: u64) -> i32 {
+    if mode == 0i64 { rc_render_1d_t(rt_fb(), RTW, RTH, t) }
+    if mode == 1i64 { rc_render_2d_t(rt_fb(), RTW, RTH, t) }
+    if mode == 2i64 { rc_render_3d(rt_fb(), RTW, RTH, t % 36u64) }
+    return 0i32
+}
+
+/* capture frames t = 0..frames-1 of `mode`, chaining each frame's signature into RT_TEST (FNV-1a over the sig stream).
+ * Returns the testament hash.  Deterministic in (mode, frames). */
+fn rt_capture(mode: i64, frames: u64) -> u64 @export {
+    let mut f : u64 = frames
+    if f > RT_MAXF { f = RT_MAXF }
+    let mut h : u64 = 14695981039346656037u64            /* FNV offset basis */
+    let mut i : u64 = 0u64
+    while i < f {
+        rt_frame(mode, i)
+        let s : u64 = iform_sig_words(rt_fb(), RTW * RTH)
+        RT_SIGS[i] = s
+        h = (h ^ s) * 1099511628211u64                   /* FNV prime fold */
+        i = i + 1u64
+    }
+    RT_N = f
+    RT_TEST = h
+    return h
+}
+
+fn rt_testament() -> u64 @export { return RT_TEST }
+fn rt_count() -> u64 @export { return RT_N }
+fn rt_frame_sig(i: u64) -> u64 @export { if i >= RT_N { return 0u64 }   return RT_SIGS[i] }

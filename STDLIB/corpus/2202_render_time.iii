@@ -1,0 +1,49 @@
+/* STDLIB/corpus/2202_render_time.iii -- GATE for TIME as a provable renderer axis (render_time.iii).
+ * Teeth: a captured animation (16 frames per mode) must fold to its PINNED time-testament hash; capturing the SAME
+ * animation twice must yield the IDENTICAL testament (reproducibility); every retained per-frame signature must be
+ * non-zero and independently replayable; and two different modes must yield DIFFERENT testaments (the axis actually
+ * discriminates content).  Headless, kernel32-only.  Exit 99 = all arms pass; distinct codes localise the failure. */
+module main
+
+extern @abi(c-msvc-x64) fn rt_capture(mode: i64, frames: u64) -> u64 from "render_time.iii"
+extern @abi(c-msvc-x64) fn rt_testament() -> u64 from "render_time.iii"
+extern @abi(c-msvc-x64) fn rt_count() -> u64 from "render_time.iii"
+extern @abi(c-msvc-x64) fn rt_frame_sig(i: u64) -> u64 from "render_time.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+const FRAMES : u64 = 16u64
+
+/* PINNED time-testament hashes (FNV chain over the 16 per-frame signatures). */
+const PIN_T1D : u64 = 12034586841858160693u64
+const PIN_T2D : u64 = 14514711519919874637u64
+const PIN_T3D : u64 = 17105709687095900159u64
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn main() -> u64 {
+    let t1 : u64 = rt_capture(0i64, FRAMES)
+    /* replay arm: every retained per-frame signature must be non-zero and captured count must equal FRAMES */
+    if rt_count() != FRAMES { return 61u64 }
+    let mut i : u64 = 0u64
+    while i < FRAMES { if rt_frame_sig(i) == 0u64 { return 62u64 }   i = i + 1u64 }
+    let t2 : u64 = rt_capture(1i64, FRAMES)
+    let t3 : u64 = rt_capture(2i64, FRAMES)
+    e_u64(t1) nl() e_u64(t2) nl() e_u64(t3) nl()
+
+    /* reproducibility: re-capture 1D and expect the identical testament */
+    let t1b : u64 = rt_capture(0i64, FRAMES)
+    if t1b != t1 { return 63u64 }
+
+    /* discrimination: the three modes must not collide */
+    if t1 == t2 { return 64u64 }
+    if t2 == t3 { return 65u64 }
+    if t1 == t3 { return 66u64 }
+
+    /* pinned teeth */
+    if t1 != PIN_T1D { return 71u64 }
+    if t2 != PIN_T2D { return 72u64 }
+    if t3 != PIN_T3D { return 73u64 }
+
+    return 99u64
+}

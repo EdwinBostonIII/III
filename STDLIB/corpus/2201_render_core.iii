@@ -1,0 +1,73 @@
+/* STDLIB/corpus/2201_render_core.iii -- GATE for the unified renderer core (render_core.iii + iform seal).
+ * Teeth: the three exact render modes must produce their PINNED determinism signatures (any drift in the colour
+ * math, the wavelength identity, or the ray-cast organ reddens the gate), AND a sealed .ixr must round-trip the
+ * framebuffer losslessly (read-back FNV == in-memory FNV).  Headless, kernel32-only -- a real corpus KAT the
+ * window workspace could never be.  Exit 99 = all arms pass; distinct codes localise the failing arm. */
+module main
+
+extern @abi(c-msvc-x64) fn rc_render_1d(fb: u64, w: u64, hh: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_2d(fb: u64, w: u64, hh: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_3d(fb: u64, w: u64, hh: u64, ang: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn iform_sig_words(base: u64, n: u64) -> u64 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_write(fb: u64, w: u32, h: u32, path: u64) -> i32 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_read(path: u64, fb_out: u64, maxwords: u64) -> i64 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_verify(path: u64) -> i32 from "iform.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+const RW : u64 = 256u64
+const RH : u64 = 256u64
+var FB  : [u32; 65536]
+var FB2 : [u32; 65536]
+
+/* PINNED determinism signatures (FNV-1a over the 65536 payload words) -- teeth of the gate. */
+const PIN_1D : u64 = 15386703606466121509u64
+const PIN_2D : u64 = 3465217304396480773u64
+const PIN_3D : u64 = 2894031707862850890u64
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn fb_addr() -> u64 { return (&FB) as u64 }
+fn fb2_addr() -> u64 { return (&FB2) as u64 }
+
+fn main() -> u64 {
+    /* --- discovery print: the three signatures (read on first run to set the pins) --- */
+    rc_render_1d(fb_addr(), RW, RH)
+    let s1 : u64 = iform_sig_words(fb_addr(), RW * RH)
+    rc_render_2d(fb_addr(), RW, RH)
+    let s2 : u64 = iform_sig_words(fb_addr(), RW * RH)
+    rc_render_3d(fb_addr(), RW, RH, 0u64)
+    let s3 : u64 = iform_sig_words(fb_addr(), RW * RH)
+    e_u64(s1) nl() e_u64(s2) nl() e_u64(s3) nl()
+
+    /* --- arm 1: 1D spectrum determinism --- */
+    if s1 != PIN_1D { return 61u64 }
+    /* --- arm 2: 2D radial field determinism --- */
+    if s2 != PIN_2D { return 62u64 }
+    /* --- arm 3: 3D ray-cast determinism (turntable step 0) --- */
+    if s3 != PIN_3D { return 63u64 }
+
+    /* --- arm 4: re-render 1D and confirm it re-derives the SAME signature (idempotent determinism) --- */
+    rc_render_1d(fb_addr(), RW, RH)
+    if iform_sig_words(fb_addr(), RW * RH) != PIN_1D { return 64u64 }
+
+    /* --- arm 5: seal the 2D field to .ixr and losslessly round-trip it (no BMP-style loss) --- */
+    rc_render_2d(fb_addr(), RW, RH)
+    let want : u64 = iform_sig_words(fb_addr(), RW * RH)
+    if iform_write(fb_addr(), RW as u32, RH as u32, "/tmp/rc_gate.ixr" as u64) != 0i32 { return 65u64 }
+    if iform_verify("/tmp/rc_gate.ixr" as u64) != 0i32 { return 66u64 }
+    let n : i64 = iform_read("/tmp/rc_gate.ixr" as u64, fb2_addr(), RW * RH)
+    if n != (((RW as i64) << 32i64) | (RH as i64)) { return 67u64 }
+    if iform_sig_words(fb2_addr(), RW * RH) != want { return 68u64 }
+
+    /* --- arm 6: exact byte-for-byte round-trip (every pixel identical, not just the signature) --- */
+    let a : *u32 = fb_addr() as *u32
+    let b : *u32 = fb2_addr() as *u32
+    let mut i : u64 = 0u64
+    while i < (RW * RH) {
+        if (a[i] & 0x00FFFFFFu32) != (b[i] & 0x00FFFFFFu32) { return 69u64 }
+        i = i + 1u64
+    }
+
+    return 99u64
+}

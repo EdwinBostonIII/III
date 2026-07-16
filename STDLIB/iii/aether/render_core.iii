@@ -1,0 +1,75 @@
+/* STDLIB/iii/aether/render_core.iii -- the pure, headless, window-free heart of III's unified renderer.
+ * Every pixel here is a PROVEN closed-form value of III's own mathematics -- no float, no foreign lib, no window.
+ * It writes into a caller-provided 32-bit ARGB framebuffer so it can be gated by a headless corpus KAT (which a
+ * window workspace never can) AND reused by ws_render for the live studio surface: one core, two consumers, one law.
+ *   rc_render_1d : the exact visible spectrum -- column x is wavelength 380 + 320*x/w nm via the proven eye-RGB map.
+ *   rc_render_2d : a radial spectral field -- pixel colour is the wavelength of its exact squared radius (rings).
+ *   rc_render_3d : the gated exact ray-cast scene (aether_lens frame_render_spin) copied into the framebuffer.
+ * The determinism of each is provable: identical inputs -> byte-identical framebuffer -> identical FNV signature. */
+module render_core
+
+extern @abi(c-msvc-x64) fn ui_wavelength_rgb(lam: i64) -> u32 from "ui_field.iii"
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_fb_addr() -> u64 from "aether_lens_frame.iii"
+
+/* [1D] exact visible spectrum: column x -> wavelength 380 + 320*x/w nm -> proven eye-RGB (alpha stripped to 0). */
+fn rc_render_1d(fb: u64, w: u64, hh: u64) -> i32 @export { return rc_render_1d_t(fb, w, hh, 0u64) }
+
+/* [1D+t] the spectrum scrolled by an exact integer phase t (continuous time as an algebraic index, zero drift). */
+fn rc_render_1d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 @export {
+    let p : *u32 = fb as *u32
+    let mut x : u64 = 0u64
+    while x < w {
+        let xt : u64 = (x + t) % w
+        let lam : i64 = 380i64 + ((320i64 * (xt as i64)) / (w as i64))
+        let col : u32 = ui_wavelength_rgb(lam) & 0x00FFFFFFu32
+        let mut y : u64 = 0u64
+        while y < hh { p[(y * w) + x] = col   y = y + 1u64 }
+        x = x + 1u64
+    }
+    return 0i32
+}
+
+/* [2D] radial spectral field: pixel colour = wavelength of its exact squared radius from centre. */
+fn rc_render_2d(fb: u64, w: u64, hh: u64) -> i32 @export { return rc_render_2d_t(fb, w, hh, 0u64) }
+
+/* [2D+t] radial field with an exact phase t: the spectral rings expand outward over time, deterministically. */
+fn rc_render_2d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 @export {
+    let p : *u32 = fb as *u32
+    let cx : i64 = (w / 2u64) as i64
+    let cy : i64 = (hh / 2u64) as i64
+    let maxd2 : i64 = (cx * cx) + (cy * cy)
+    let ph : i64 = (t as i64) % maxd2
+    let mut y : u64 = 0u64
+    while y < hh {
+        let dy : i64 = (y as i64) - cy
+        let mut x : u64 = 0u64
+        while x < w {
+            let dx : i64 = (x as i64) - cx
+            let d2 : i64 = ((dx * dx) + (dy * dy) + ph) % maxd2
+            let lam : i64 = 380i64 + ((320i64 * d2) / maxd2)
+            p[(y * w) + x] = ui_wavelength_rgb(lam) & 0x00FFFFFFu32
+            x = x + 1u64
+        }
+        y = y + 1u64
+    }
+    return 0i32
+}
+
+/* [3D] the gated exact ray-cast scene copied into the framebuffer (organ renders w x 192; rows below are floor). */
+fn rc_render_3d(fb: u64, w: u64, hh: u64, ang: u64) -> i32 @export {
+    frame_render_spin(w, 192u64, ang)
+    let p : *u32 = fb as *u32
+    let src : *u32 = frame_fb_addr() as *u32
+    let mut y : u64 = 0u64
+    while y < hh {
+        let mut x : u64 = 0u64
+        while x < w {
+            if y < 192u64 { p[(y * w) + x] = src[(y * w) + x] & 0x00FFFFFFu32 }
+            else { p[(y * w) + x] = 0x00101014u32 }
+            x = x + 1u64
+        }
+        y = y + 1u64
+    }
+    return 0i32
+}

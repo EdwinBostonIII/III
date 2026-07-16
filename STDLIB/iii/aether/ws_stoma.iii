@@ -1,0 +1,117 @@
+/* STDLIB/iii/aether/ws_stoma.iii -- III STUDIO workspace: STOMA, the sovereign shell as the studio centerpiece.
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
+ *
+ * This replaces the toy CONSOLE with the REAL Stoma shell (cd/pwd/ls/env/tree/gate/seal/help + external spawn),
+ * wired to the window through stoma_bridge: WM_CHAR keystrokes drive the real line editor + shell_feed_line, and the
+ * shell's verb transcript accumulates in a scrollback this workspace renders with III's own exact fonts.  The
+ * terminal Stoma and the windowed Stoma run byte-identical logic (Collapse Law) -- the studio just paints it. */
+module ws_stoma
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_cream() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+
+extern @abi(c-msvc-x64) fn br_reset() -> i32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_key(ch: u32) -> u32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_feed(p: u64, n: u64) -> u32 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_line_ptr() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_line_len() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_scroll_ptr() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn br_scroll_len() -> u64 from "stoma_bridge.iii"
+
+const WSM_LCAP : u64 = 300u64
+var WSM_OFF : [u64; 300]
+var WSM_LEN : [u32; 300]
+var WSM_N   : u64                       /* total lines laid out (ring index) */
+var WSM_DONE : u32 = 0u32
+
+/* lay out the scrollback into (wrapped) lines: break on '\n' or when a line reaches `cols` chars.  Ring-buffered
+ * into WSM_OFF/WSM_LEN so only the most recent WSM_LCAP lines are retained; WSM_N counts all lines seen. */
+fn wsm_layout(cols: u64) -> i32 {
+    let base : u64 = br_scroll_ptr()
+    let slen : u64 = br_scroll_len()
+    let sb : *u8 = base as *u8
+    WSM_N = 0u64
+    let mut i : u64 = 0u64
+    let mut ls : u64 = 0u64
+    let mut ll : u64 = 0u64
+    while i < slen {
+        let c : u8 = sb[i]
+        if c == 10u8 {
+            let slot : u64 = WSM_N % WSM_LCAP
+            WSM_OFF[slot] = ls   WSM_LEN[slot] = ll as u32   WSM_N = WSM_N + 1u64
+            ls = i + 1u64   ll = 0u64
+        } else {
+            ll = ll + 1u64
+            if ll >= cols {
+                let slot : u64 = WSM_N % WSM_LCAP
+                WSM_OFF[slot] = ls   WSM_LEN[slot] = ll as u32   WSM_N = WSM_N + 1u64
+                ls = i + 1u64   ll = 0u64
+            }
+        }
+        i = i + 1u64
+    }
+    if ll > 0u64 { let slot : u64 = WSM_N % WSM_LCAP   WSM_OFF[slot] = ls   WSM_LEN[slot] = ll as u32   WSM_N = WSM_N + 1u64 }
+    return 0i32
+}
+
+fn ws_stoma_init() -> i32 @export {
+    if WSM_DONE == 1u32 { return 0i32 }
+    br_reset()
+    br_feed("help\n" as u64, 5u64)      /* welcome = the REAL verb list */
+    WSM_DONE = 1u32
+    return 0i32
+}
+
+fn ws_stoma_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 { br_key(c)   c = ui_getchar() }
+    return 0i32
+}
+
+fn ws_stoma_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "STOMA" as u64, 5u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 130u32, cy + 8u32, "the sovereign shell -- real verbs, real spawn, journaled" as u64, 55u32, th_dim())
+
+    let py : u32 = cy + 40u32
+    let ph : u32 = chh - 96u32
+    th_panel_c(buf, w, h, cx + 4u32, py, cw - 12u32, ph, th_inset())
+
+    let mut cols : u64 = ((cw - 40u32) / 8u32) as u64
+    if cols > 200u64 { cols = 200u64 }
+    wsm_layout(cols)
+
+    let rows : u64 = ((ph - 20u32) / 18u32) as u64
+    let mut show : u64 = WSM_N
+    if show > rows { show = rows }
+    let mut r : u64 = 0u64
+    while r < show {
+        let idx : u64 = ((WSM_N - show + r) % WSM_LCAP)
+        let off : u64 = WSM_OFF[idx]
+        let ln : u32 = WSM_LEN[idx]
+        let sb : *u8 = (br_scroll_ptr() + off) as *u8
+        let mut col : u32 = th_ink()
+        if ln > 0u32 { if sb[0u64] == 62u8 { col = th_maroon() } }   /* prompt lines start with '>' */
+        ui_text_n(buf, w, h, cx + 18u32, py + 12u32 + (r as u32) * 18u32, br_scroll_ptr() + off, ln, col)
+        r = r + 1u64
+    }
+
+    /* input line */
+    let iy : u32 = py + ph + 10u32
+    th_panel_c(buf, w, h, cx + 4u32, iy, cw - 12u32, 36u32, th_cream())
+    ui_text_n(buf, w, h, cx + 16u32, iy + 10u32, ">" as u64, 1u32, th_maroon())
+    let lp : u64 = br_line_ptr()
+    let llen : u32 = br_line_len() as u32
+    ui_text_n(buf, w, h, cx + 32u32, iy + 10u32, lp, llen, th_ink())
+    ui_fill_rect(buf, w, h, cx + 32u32 + llen * 8u32, iy + 8u32, 8u32, 18u32, th_maroon())
+    return 0i32
+}

@@ -1,0 +1,142 @@
+/* STDLIB/iii/aether/ws_render.iii -- III STUDIO workspace: RENDER.  The one unified exact-mathematics renderer,
+ * [APP-SURFACE-MODULE] -- window/app execution surface: compiled by its family gate so it cannot rot;
+ * its unreached exports are app-class BY NATURE (headless corpus cannot pump a window) and are excluded
+ * from the v3 dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).
+ *
+ * ONE surface, three dimensions, all in true color, all from III's own proven math -- no float, no foreign lib:
+ *   [1D]  the visible spectrum: each column x is the EXACT wavelength lambda = 380 + 320*x/W nm, coloured by the
+ *         proven wavelength->eye-RGB identity (ui_wavelength_rgb).  A 1D mathematical object rendered in colour.
+ *   [2D]  a radial spectral field: every pixel's colour is the wavelength of its exact squared-radius from centre --
+ *         concentric spectral rings that are a closed-form integer map, identical every frame (determinism).
+ *   [3D]  the gated exact ray-cast scene (aether_lens frame_render_spin): three exact-shaded, exactly-occluded
+ *         spheres on the turntable, orbited with the arrow keys -- the same organ the LENS gate proves.
+ * Any frame can be sealed to a sovereign .ixr (III eXact Raster: lossless 32-bit ARGB + FNV integrity sig, no BMP
+ * demotion) with 'c'.  Mode cycles with Tab or 'm'.  The determinism signature is shown live for every mode. */
+module ws_render
+
+extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "ui_raster.iii"
+extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
+extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_outline2(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, color: u32) -> i32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_maroon() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_good() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_dim() -> u32 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn ui_getchar() -> u32 from "ui_win.iii"
+
+extern @abi(c-msvc-x64) fn ui_wavelength_rgb(lam: i64) -> u32 from "ui_field.iii"
+
+extern @abi(c-msvc-x64) fn rc_render_1d(fb: u64, w: u64, hh: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_2d(fb: u64, w: u64, hh: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_1d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_2d_t(fb: u64, w: u64, hh: u64, t: u64) -> i32 from "render_core.iii"
+extern @abi(c-msvc-x64) fn rc_render_3d(fb: u64, w: u64, hh: u64, ang: u64) -> i32 from "render_core.iii"
+
+extern @abi(c-msvc-x64) fn rt_capture(mode: i64, frames: u64) -> u64 from "render_time.iii"
+
+extern @abi(c-msvc-x64) fn frame_render_spin(w: u64, h: u64, ai: u64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_set_focal(f: i64) -> i32 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_get_focal() -> i64 from "aether_lens_frame.iii"
+extern @abi(c-msvc-x64) fn frame_fb_addr() -> u64 from "aether_lens_frame.iii"
+
+extern @abi(c-msvc-x64) fn iform_write(fb: u64, w: u32, h: u32, path: u64) -> i32 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_sig_words(base: u64, n: u64) -> u64 from "iform.iii"
+
+const RW : u64 = 256u64
+const RH : u64 = 256u64
+var RFB : [u32; 65536]                   /* the unified 256x256 sovereign framebuffer */
+var WSR_MODE : i64 = 0i64                 /* 0=1D spectrum, 1=2D radial field, 2=3D ray-cast */
+var WSR_ANG  : i64 = 0i64                 /* 3D turntable step 0..35 */
+var WSR_T    : i64 = 0i64                 /* the exact integer TIME index (1D/2D animation phase) */
+var WSR_SIG  : i64 = 0i64                 /* current frame determinism signature (low 63 bits) */
+var WSR_CAP  : i64 = 0i64                 /* number of frames sealed to .ixr this session */
+var WSR_TEST : i64 = 0i64                 /* last captured 16-frame time-testament (low 63 bits) */
+var WSR_RDY  : u8 = 0u8
+
+fn wsr_fb() -> u64 { return (&RFB) as u64 }
+
+fn wsr_rebuild() -> i32 {
+    if WSR_MODE == 0i64 { rc_render_1d_t(wsr_fb(), RW, RH, (WSR_T * 4i64) as u64) }
+    if WSR_MODE == 1i64 { rc_render_2d_t(wsr_fb(), RW, RH, (WSR_T * 256i64) as u64) }
+    if WSR_MODE == 2i64 { rc_render_3d(wsr_fb(), RW, RH, WSR_ANG as u64) }
+    WSR_SIG = (iform_sig_words(wsr_fb(), RW * RH) & 0x7FFFFFFFFFFFFFFFu64) as i64
+    WSR_RDY = 1u8
+    return 0i32
+}
+
+fn ws_render_init() -> i32 @export {
+    if WSR_RDY == 1u8 { return 0i32 }
+    wsr_rebuild()
+    return 0i32
+}
+
+fn ws_render_input(k: u32, mx: u32, my: u32, md: u32) -> i32 @export {
+    let mut c : u32 = ui_getchar()
+    while c != 0u32 {
+        if c == 109u32 { WSR_MODE = WSR_MODE + 1i64   if WSR_MODE > 2i64 { WSR_MODE = 0i64 }   wsr_rebuild() }   /* 'm' */
+        if c == 9u32   { WSR_MODE = WSR_MODE + 1i64   if WSR_MODE > 2i64 { WSR_MODE = 0i64 }   wsr_rebuild() }   /* Tab */
+        if c == 99u32  { iform_write(wsr_fb(), RW as u32, RH as u32, "studio_capture.ixr" as u64)   WSR_CAP = WSR_CAP + 1i64 }  /* 'c' seal .ixr */
+        if c == 46u32  { WSR_T = WSR_T + 1i64   wsr_rebuild() }                                          /* '.' time + */
+        if c == 44u32  { WSR_T = WSR_T - 1i64   if WSR_T < 0i64 { WSR_T = 0i64 }   wsr_rebuild() }        /* ',' time - */
+        if c == 116u32 { WSR_TEST = (rt_capture(WSR_MODE, 16u64) & 0x7FFFFFFFFFFFFFFFu64) as i64 }        /* 't' seal 16-frame time testament */
+        c = ui_getchar()
+    }
+    if k == 37u32 { if WSR_MODE == 2i64 { WSR_ANG = WSR_ANG - 1i64   if WSR_ANG < 0i64 { WSR_ANG = 35i64 }   wsr_rebuild() } }
+    if k == 39u32 { if WSR_MODE == 2i64 { WSR_ANG = WSR_ANG + 1i64   if WSR_ANG > 35i64 { WSR_ANG = 0i64 }   wsr_rebuild() } }
+    if k == 82u32 { WSR_ANG = 0i64   frame_set_focal(300i64)   wsr_rebuild() }
+    return 0i32
+}
+
+fn wsr_mode_name(m: i64) -> u64 {
+    if m == 0i64 { return "1D  visible spectrum (exact wavelength -> eye-RGB)" as u64 }
+    if m == 1i64 { return "2D  radial spectral field (closed-form squared-radius rings)" as u64 }
+    return "3D  gated exact ray-cast (arrows orbit the turntable)" as u64
+}
+fn wsr_mode_nlen(m: i64) -> u32 {
+    if m == 0i64 { return 48u32 }   if m == 1i64 { return 58u32 }   return 52u32
+}
+
+fn ws_render_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 @export {
+    th_vbold(buf, w, h, (cx + 8u32) as i64, cy as i64, "RENDER" as u64, 6u32, 24i64, th_maroon())
+    ui_text_n(buf, w, h, cx + 150u32, cy + 8u32, "Tab/m dim   arrows orbit(3D)   ,/. time   c seal.ixr   t testament   R reset" as u64, 74u32, th_dim())
+    ui_text_n(buf, w, h, cx + 20u32, cy + 34u32, wsr_mode_name(WSR_MODE), wsr_mode_nlen(WSR_MODE), th_ink())
+
+    /* fit the 256x256 sovereign framebuffer into the panel at the largest integer scale */
+    let mut sc : u32 = 2u32
+    let avail_w : u32 = cw - 24u32
+    let avail_h : u32 = chh - 130u32
+    while sc > 1u32 { if (256u32 * sc) <= avail_w { if (256u32 * sc) <= avail_h { sc = sc } else { sc = sc - 1u32 } } else { sc = sc - 1u32 } }
+    let vw : u32 = 256u32 * sc
+    let vh : u32 = 256u32 * sc
+    let px : u32 = cx + (cw - vw) / 2u32
+    let py : u32 = cy + 56u32
+    th_outline2(buf, w, h, px - 3u32, py - 3u32, vw + 6u32, vh + 6u32, th_ink())
+    let sp : *u32 = wsr_fb() as *u32
+    let dp : *u32 = buf as *u32
+    let mut yy : u32 = 0u32
+    while yy < vh {
+        let sy : u64 = ((yy / sc) as u64) * RW
+        let drow : u64 = (((py + yy) * w) + px) as u64
+        let mut xx : u32 = 0u32
+        while xx < vw {
+            dp[drow + (xx as u64)] = sp[sy + ((xx / sc) as u64)] | 0xFF000000u32
+            xx = xx + 1u32
+        }
+        yy = yy + 1u32
+    }
+
+    let ry : u32 = py + vh + 12u32
+    th_panel_c(buf, w, h, cx + 4u32, ry, cw - 12u32, 34u32, th_inset())
+    let mut sx : u32 = ui_text_n(buf, w, h, cx + 20u32, ry + 9u32, "sig " as u64, 4u32, th_ink())
+    sx = th_num(buf, w, h, sx, ry + 9u32, WSR_SIG, th_good())
+    sx = ui_text_n(buf, w, h, sx + 12u32, ry + 9u32, "  time " as u64, 6u32, th_ink())
+    sx = th_num(buf, w, h, sx, ry + 9u32, WSR_T, th_maroon())
+    sx = ui_text_n(buf, w, h, sx + 12u32, ry + 9u32, "  .ixr " as u64, 6u32, th_ink())
+    sx = th_num(buf, w, h, sx, ry + 9u32, WSR_CAP, th_maroon())
+    sx = ui_text_n(buf, w, h, sx + 12u32, ry + 9u32, "  testament " as u64, 11u32, th_ink())
+    th_num(buf, w, h, sx, ry + 9u32, WSR_TEST, th_good())
+    return 0i32
+}

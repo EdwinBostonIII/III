@@ -1,0 +1,131 @@
+/* 2200_iscene.iii -- GATE for iscene.iii: the resolution-independent .isc scene master PROVABLY supersedes a raster.
+ *
+ * ARMS:
+ *   DET   determinism: render 128x96 twice -> identical, pinned frame signature.
+ *   RES   resolution-independence: the SAME scene renders valid, deterministic, DISTINCT frames at 96x72, 128x96,
+ *         192x144 -- one tiny file, arbitrarily many exact rasters (a BMP is frozen at one resolution).
+ *   RT    lossless generator round-trip: write .isc, WIPE the scene, read .isc, re-render 128x96 -> identical sig.
+ *   BIND  the rendered raster is written to .ixr bound to the scene signature; reading the .ixr recovers that exact
+ *         binding AND the pixels bit-for-bit -- a pixel file that proves its exact generator.
+ *   SIZE  the .isc master is O(objects), resolution-free (< 1KB) and equals the exact predicted byte count.
+ *
+ *   exit 99 = all correct.  10 DET  20 RES  30 RT  40 BIND  50 SIZE */
+module corpus_2200_iscene
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn iscene_reset() -> i32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_add(cx: i64, cy: i64, cz: i64, r2: i64, r: i64, g: i64, b: i64) -> i32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_render(w: u64, h: u64) -> i32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_sig(w: u64, h: u64) -> u64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_scene_sig() -> u64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_count() -> i64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_fb_addr() -> u64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_write(path: u64) -> i32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_read(path: u64) -> i64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_file_bytes() -> u64 from "iscene.iii"
+
+extern @abi(c-msvc-x64) fn iform_write_bound(fb: u64, w: u32, h: u32, bind: u64, path: u64) -> i32 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_read(path: u64, fb_out: u64, maxwords: u64) -> i64 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_last_bind() -> u64 from "iform.iii"
+
+var FBRD  : [u32; 27648]
+var PISC  : [u8; 20]
+var PIXR  : [u8; 20]
+
+fn e_u64(v: u64) -> i32 { if v >= 10u64 { e_u64(v / 10u64) }   putchar(((v % 10u64) + 48u64) as i32)   return 0i32 }
+fn sp() -> i32 { putchar(32i32)   return 0i32 }
+fn nl() -> i32 { putchar(10i32)   return 0i32 }
+fn lab(a: i32, b: i32, c: i32) -> i32 { putchar(a) putchar(b) putchar(c) putchar(58i32) sp()   return 0i32 }
+
+fn build_scene() -> i32 {
+    iscene_reset()
+    iscene_add(0i64 - 30i64, 20i64,        340i64, 7225i64, 235i64, 150i64, 70i64)
+    iscene_add(55i64,        0i64 - 4i64,  250i64, 3600i64, 80i64,  175i64, 225i64)
+    iscene_add(0i64 - 82i64, 0i64 - 60i64, 205i64, 2025i64, 120i64, 220i64, 110i64)
+    return 0i32
+}
+
+fn set_paths() -> i32 {
+    /* "iscene_kat.isc\0" */
+    PISC[0u64]=105u8 PISC[1u64]=115u8 PISC[2u64]=99u8 PISC[3u64]=101u8 PISC[4u64]=110u8 PISC[5u64]=101u8
+    PISC[6u64]=95u8 PISC[7u64]=107u8 PISC[8u64]=97u8 PISC[9u64]=116u8
+    PISC[10u64]=46u8 PISC[11u64]=105u8 PISC[12u64]=115u8 PISC[13u64]=99u8 PISC[14u64]=0u8
+    /* "iscene_kat.ixr\0" */
+    PIXR[0u64]=105u8 PIXR[1u64]=115u8 PIXR[2u64]=99u8 PIXR[3u64]=101u8 PIXR[4u64]=110u8 PIXR[5u64]=101u8
+    PIXR[6u64]=95u8 PIXR[7u64]=107u8 PIXR[8u64]=97u8 PIXR[9u64]=116u8
+    PIXR[10u64]=46u8 PIXR[11u64]=105u8 PIXR[12u64]=120u8 PIXR[13u64]=114u8 PIXR[14u64]=0u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    set_paths()
+    let mut FDT : u64 = 0u64   let mut FRS : u64 = 0u64   let mut FRT : u64 = 0u64
+    let mut FBD : u64 = 0u64   let mut FSZ : u64 = 0u64
+
+    /* ── DET */
+    build_scene()
+    iscene_render(128u64, 96u64)   let d1 : u64 = iscene_sig(128u64, 96u64)
+    iscene_render(128u64, 96u64)   let d2 : u64 = iscene_sig(128u64, 96u64)
+    if d1 != d2 { FDT = FDT + 1u64 }
+    if d1 == 0u64 { FDT = FDT + 1u64 }
+    if d1 != 2171929741710745466u64 { FDT = FDT + 1u64 }   /* PIN */
+    lab(68i32,69i32,84i32) e_u64(d1) nl()
+
+    /* ── RES: same scene, three resolutions, each deterministic + distinct */
+    iscene_render(96u64, 72u64)     let r_a1 : u64 = iscene_sig(96u64, 72u64)
+    iscene_render(96u64, 72u64)     let r_a2 : u64 = iscene_sig(96u64, 72u64)
+    iscene_render(192u64, 144u64)   let r_c1 : u64 = iscene_sig(192u64, 144u64)
+    iscene_render(192u64, 144u64)   let r_c2 : u64 = iscene_sig(192u64, 144u64)
+    if r_a1 != r_a2 { FRS = FRS + 1u64 }
+    if r_c1 != r_c2 { FRS = FRS + 1u64 }
+    if r_a1 == 0u64 { FRS = FRS + 1u64 }
+    if r_c1 == 0u64 { FRS = FRS + 1u64 }
+    if r_a1 == d1 { FRS = FRS + 1u64 }        /* different resolution -> different image */
+    if r_c1 == d1 { FRS = FRS + 1u64 }
+    if r_a1 == r_c1 { FRS = FRS + 1u64 }
+    lab(82i32,69i32,83i32) e_u64(r_a1) sp() e_u64(r_c1) nl()
+
+    /* ── SIZE: master is resolution-free and exactly O(objects) */
+    let fb : u64 = iscene_file_bytes()
+    if fb != (56u64 + 3u64 * 56u64) { FSZ = FSZ + 1u64 }   /* 56 + 3*56 = 224 bytes for 3 spheres */
+    if fb >= 1024u64 { FSZ = FSZ + 1u64 }
+    lab(83i32,90i32,58i32) e_u64(fb) nl()
+
+    /* ── RT: write master, WIPE scene, read master, re-render -> identical to DET */
+    let scene_sig_before : u64 = iscene_scene_sig()
+    if iscene_write((&PISC) as u64) != 0i32 { FRT = FRT + 1u64 }
+    iscene_reset()                                          /* wipe: 0 objects now */
+    if iscene_count() != 0i64 { FRT = FRT + 1u64 }
+    let rc : i64 = iscene_read((&PISC) as u64)
+    if rc != 3i64 { FRT = FRT + 1u64 }
+    if iscene_scene_sig() != scene_sig_before { FRT = FRT + 1u64 }
+    iscene_render(128u64, 96u64)   let rt : u64 = iscene_sig(128u64, 96u64)
+    if rt != d1 { FRT = FRT + 1u64 }
+    lab(82i32,84i32,58i32) e_u64(rt) nl()
+
+    /* ── BIND: project the master to .ixr bound to its scene signature; recover binding + pixels */
+    let ss : u64 = iscene_scene_sig()
+    iscene_render(128u64, 96u64)
+    if iform_write_bound(iscene_fb_addr(), 128u32, 96u32, ss, (&PIXR) as u64) != 0i32 { FBD = FBD + 1u64 }
+    let rr : i64 = iform_read((&PIXR) as u64, (&FBRD) as u64, 27648u64)
+    if rr < 0i64 { FBD = FBD + 1u64 }
+    if iform_last_bind() != ss { FBD = FBD + 1u64 }
+    /* pixels bit-for-bit vs the live framebuffer */
+    let fba : u64 = iscene_fb_addr()
+    let mut diff : u64 = 0u64   let mut i : u64 = 0u64
+    while i < 12288u64 {
+        let p : *u32 = (fba + i * 4u64) as *u32
+        if p[0u64] != FBRD[i] { diff = diff + 1u64 }
+        i = i + 1u64
+    }
+    if diff != 0u64 { FBD = FBD + 1u64 }
+    lab(66i32,68i32,58i32) e_u64(iform_last_bind()) sp() e_u64(diff) nl()
+
+    if FDT != 0u64 { return 10u64 }
+    if FRS != 0u64 { return 20u64 }
+    if FRT != 0u64 { return 30u64 }
+    if FBD != 0u64 { return 40u64 }
+    if FSZ != 0u64 { return 50u64 }
+    return 99u64
+}

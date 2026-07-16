@@ -10,7 +10,7 @@ OUT="$III/STDLIB/build/stoma_kats"
 mkdir -p "$OUT"
 pass=0; fail=0
 
-ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_tree stoma_fg stoma_shell"
+ORGANS="stoma_con stoma_proc stoma_pty stoma_journal stoma_line stoma_verb stoma_gate stoma_traps stoma_queue stoma_build stoma_ripple stoma_tree stoma_fg stoma_shell stoma_bridge"
 for m in $ORGANS; do
     "$I2" "$A/$m.iii" --compile-only --out "$OUT/$m.o" 2>"$OUT/$m.c.log" \
         || { echo "FAIL $m : organ compile"; tail -3 "$OUT/$m.c.log"; exit 1; }
@@ -46,6 +46,8 @@ run 2465_stoma_matrix 99 "$OUT/stoma_proc.o" "$OUT/stoma_pty.o"
     && gcc "$OUT/con_probe.o" -lkernel32 -o "$OUT/con_probe.exe" 2>>"$OUT/cp.log" \
     || { echo "FAIL con_probe : build"; tail -3 "$OUT/cp.log"; fail=$((fail+1)); }
 run 2466_stoma_fg     99 "$OUT/stoma_fg.o" "$OUT/stoma_pty.o" "$OUT/stoma_con.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o"
+# stoma_bridge: the shell driven as a WINDOWED component (keystroke line editor + transcript scrollback for the studio)
+run 2467_stoma_bridge 99 "$OUT/stoma_bridge.o" "$OUT/stoma_shell.o" "$OUT/stoma_verb.o" "$OUT/stoma_proc.o" "$OUT/stoma_journal.o" "$OUT/stoma_gate.o" "$OUT/stoma_tree.o" "$OUT/stoma_con.o" "$OUT/stoma_fg.o" "$OUT/stoma_pty.o"
 
 # ---- stoma.exe walking-skeleton: build (gcc dev-link here; sovbuild parity is the M5/M7 gate) + plain-mode smoke ----
 "$I2" "$A/stoma.iii" --compile-only --out "$OUT/stoma.o" 2>"$OUT/stoma.c.log" \

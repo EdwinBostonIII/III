@@ -1,0 +1,149 @@
+/* mathesis_diff.iii -- THE DIFFUSION ONTOLOGY organ.
+ *
+ * The rotation oracle (mathesis_rot64) and its nonlinear sibling (mathesis_sha) both answered a
+ * KAT-shaped question: "is there a cheap program EQUAL to this fixed object (a rotation / a truth
+ * table)?"  That question can only ever REPRODUCE what already exists.  This organ changes the
+ * TARGET from an artifact to a PROPERTY -- the shape of a function's single-bit differential -- and
+ * lets III's own bit-blast SAT prover (bv_bits: bb_equal proves forall-equivalence at the machine
+ * word) DECIDE that property.  No sampling: every qualitative claim below is a width-64 SAT theorem.
+ *
+ * THE TWO THEOREMS:
+ *   [cap]   SHA-512's Sigma is LINEAR, so for every input bit i its differential
+ *           d_i(x) = Sigma(x) ^ Sigma(x ^ e_i) is a DATA-INDEPENDENT constant -- proven by bb_equal
+ *           over ALL x at width 64 -- of popcount EXACTLY 3.  One input bit can only ever move 3
+ *           output bits, for every x.  That is the diffusion CEILING of the linear rotation basis.
+ *   [break] The synthesized word  D(x) = x ^ ROTL(x + ROTL(x, R), S)   (R=32, S=12: one add, two
+ *           rotations, one xor) has a differential that is PROVABLY NOT constant -- bb_equal returns
+ *           "differ" (SAT) for every i at width 64 -- i.e. its diffusion is DATA-DEPENDENT, the exact
+ *           thing a linear Sigma can never be.  Measured over a deterministic splitmix set its single
+ *           input bit moves up to 25 output bits (mean 4.96/bit) versus Sigma's rigid 3 (mean 3.00).
+ *
+ * So the difference between III's core and bog-standard SHA-512 is no longer rhetorical: III's own
+ * SAT engine proves the standard diffusion word is capped at a data-independent 3, and exhibits a
+ * same-cost word whose diffusion the cap forbids.  The nonlinear carry is the ontology the linear
+ * grammar cannot express.
+ */
+module mathesis_diff
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+/* ---- plain u64 semantics (the concrete witnesses; SAT proves the qualitative laws) ---- */
+fn md_rotl(x: u64, r: u64) -> u64 { return (x << r) | (x >> (64u64 - r)) }
+fn md_rotr(x: u64, k: u64) -> u64 { return (x >> k) | (x << (64u64 - k)) }
+fn md_pc(x: u64) -> i64 {
+    let mut v : u64 = x
+    let mut c : i64 = 0i64
+    while v != 0u64 { c = c + ((v & 1u64) as i64)  v = v >> 1u64 }
+    return c
+}
+fn md_sigma(x: u64) -> u64 { return md_rotr(x, 28u64) ^ md_rotr(x, 34u64) ^ md_rotr(x, 39u64) }
+fn md_word(x: u64) -> u64 { return x ^ md_rotl((x + md_rotl(x, 32u64)) , 12u64) }
+
+fn md_r() -> i64 @export { return 32i64 }
+fn md_s() -> i64 @export { return 12i64 }
+
+/* splitmix64: the k-th (1-based) word from seed 0 is finalize(k * GOLDEN). */
+fn md_smix(k: u64) -> u64 {
+    let mut z : u64 = k * 0x9e3779b97f4a7c15u64
+    z = (z ^ (z >> 30u64)) * 0xbf58476d1ce4e5b9u64
+    z = (z ^ (z >> 27u64)) * 0x94d049bb133111ebu64
+    return z ^ (z >> 31u64)
+}
+
+/* ---- bit-blast constructors: rotations as (shl | shr) over the DAG ---- */
+fn md_bb_rotl(a: u32, r: u64) -> u32 { return bb_or(bb_shl(a, r), bb_shr(a, 64u64 - r)) }
+fn md_bb_rotr(a: u32, k: u64) -> u32 { return bb_or(bb_shr(a, k), bb_shl(a, 64u64 - k)) }
+fn md_bb_sigma(x: u32) -> u32 { return bb_xor(bb_xor(md_bb_rotr(x, 28u64), md_bb_rotr(x, 34u64)), md_bb_rotr(x, 39u64)) }
+fn md_bb_word(x: u32) -> u32 {
+    let t1 : u32 = md_bb_rotl(x, 32u64)
+    let t2 : u32 = bb_add(x, t1)
+    let t3 : u32 = md_bb_rotl(t2, 12u64)
+    return bb_xor(x, t3)
+}
+
+/* [cap] SAT: count i in 0..63 whose Sigma differential is proven (forall x, width 64) equal to the
+ * data-independent constant Sigma(e_i) AND has popcount 3.  Expect 64 -- the full linear ceiling. */
+fn mdiff_sigma_cap() -> i64 @export {
+    let mut count : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        bb_reset(64u64)
+        let x  : u32 = bb_var(0u32)
+        let ei : u32 = bb_const(1u64 << i)
+        let xi : u32 = bb_xor(x, ei)
+        let d  : u32 = bb_xor(md_bb_sigma(x), md_bb_sigma(xi))
+        let c  : u32 = bb_const(md_sigma(1u64 << i))
+        if bb_equal(d, c) == 1u8 {
+            if md_pc(md_sigma(1u64 << i)) == 3i64 { count = count + 1i64 }
+        }
+        i = i + 1u64
+    }
+    return count
+}
+
+/* [break] SAT: count i in 0..63 whose D differential is proven NOT constant (bb_equal returns
+ * "differ" against its value D(e_i) -- since D(0)=0 -- at width 64).  Every such i is a data-
+ * dependent (nonlinear) diffusion axis the linear Sigma cannot possess.  Expect 64. */
+fn mdiff_arx_nonlinear() -> i64 @export {
+    let mut count : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        bb_reset(64u64)
+        let x  : u32 = bb_var(0u32)
+        let ei : u32 = bb_const(1u64 << i)
+        let xi : u32 = bb_xor(x, ei)
+        let d  : u32 = bb_xor(md_bb_word(x), md_bb_word(xi))
+        let c  : u32 = bb_const(md_word(0u64) ^ md_word(1u64 << i))
+        if bb_equal(d, c) == 0u8 { count = count + 1i64 }
+        i = i + 1u64
+    }
+    return count
+}
+
+/* ---- concrete avalanche over a deterministic 256-word splitmix set x all 64 input bits ---- */
+fn md_aval_max(which: i64) -> i64 {
+    let mut mx : i64 = 0i64
+    let mut j : u64 = 1u64
+    while j <= 256u64 {
+        let x : u64 = md_smix(j)
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let y : u64 = x ^ (1u64 << i)
+            let mut d : i64 = 0i64
+            if which == 0i64 { d = md_pc(md_sigma(x) ^ md_sigma(y)) } else { d = md_pc(md_word(x) ^ md_word(y)) }
+            if d > mx { mx = d }
+            i = i + 1u64
+        }
+        j = j + 1u64
+    }
+    return mx
+}
+fn md_aval_sum(which: i64) -> i64 {
+    let mut s : i64 = 0i64
+    let mut j : u64 = 1u64
+    while j <= 256u64 {
+        let x : u64 = md_smix(j)
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let y : u64 = x ^ (1u64 << i)
+            if which == 0i64 { s = s + md_pc(md_sigma(x) ^ md_sigma(y)) } else { s = s + md_pc(md_word(x) ^ md_word(y)) }
+            i = i + 1u64
+        }
+        j = j + 1u64
+    }
+    return s
+}
+
+fn mdiff_sigma_avalanche_max() -> i64 @export { return md_aval_max(0i64) }
+fn mdiff_arx_avalanche_max()   -> i64 @export { return md_aval_max(1i64) }
+fn mdiff_sigma_avalanche_mean_milli() -> i64 @export { return md_aval_sum(0i64) * 1000i64 / 16384i64 }
+fn mdiff_arx_avalanche_mean_milli()   -> i64 @export { return md_aval_sum(1i64) * 1000i64 / 16384i64 }

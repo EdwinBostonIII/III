@@ -1,0 +1,76 @@
+/* 2747_sha512_diffusion_break.iii -- GATE for CAMPAIGN DIFFUSION (run_mathesis.sh stage [23]).
+ *
+ * The answer to "is III's round core meaningfully different from bog-standard SHA-512?" turned into a
+ * PROOF.  This gate computes nothing itself: it externs the diffusion organ (mathesis_diff), which
+ * drives III's own bit-blast SAT prover (bv_bits.bb_equal) at the machine word, and pins its verdicts.
+ *
+ *   [cap]   mdiff_sigma_cap() == 64 : for ALL 64 input bits, SHA-512's Sigma differential is a
+ *           data-INDEPENDENT constant of popcount 3, PROVEN over all 2^64 inputs by bb_equal.  The
+ *           linear rotation basis cannot move more than 3 output bits per input bit -- ever.
+ *   [break] mdiff_arx_nonlinear() == 64 : for ALL 64 input bits, the synthesized word D's differential
+ *           is PROVEN not constant (data-DEPENDENT) at width 64 -- diffusion the linear cap forbids.
+ *   [measure] over a deterministic splitmix set: Sigma avalanche = rigid 3 (mean 3.000); D avalanche
+ *           reaches 25 (mean 4.960).  Same role, one add + two rotations + one xor, strictly more mixing.
+ *
+ * EXIT 99 = GREEN; arms 10..40 pinpoint any drift.  This is the meaningful difference, machine-proven.
+ */
+module corpus_2747_sha512_diffusion_break
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn mdiff_sigma_cap() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn mdiff_arx_nonlinear() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn mdiff_sigma_avalanche_max() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn mdiff_arx_avalanche_max() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn mdiff_sigma_avalanche_mean_milli() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn mdiff_arx_avalanche_mean_milli() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn md_r() -> i64 from "mathesis_diff.iii"
+extern @abi(c-msvc-x64) fn md_s() -> i64 from "mathesis_diff.iii"
+
+var DEC : [u8; 32]
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn pi(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)  return pi(0i64 - v) }
+    if v == 0i64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v as u64
+    let mut k : u64 = 0u64
+    while n > 0u64 { DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DEC[k] as i32) }
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+
+fn main() -> i32 {
+    ps("== SHA-512 DIFFUSION BREAK == the meaningful difference, proven by III's own SAT engine" as u64)  nl()
+
+    /* [cap] the linear ceiling, SAT-proven forall x at width 64 */
+    let cap : i64 = mdiff_sigma_cap()
+    ps("[cap] SHA-512 Sigma: differential is a data-INDEPENDENT popcount-3 constant for all 64 input bits (bb_equal, forall 2^64) -- proven axes = " as u64)  pi(cap)  ps("/64" as u64)  nl()
+    if cap != 64i64 { return 10i32 }
+
+    /* [break] the nonlinear breakout, SAT-proven forall x at width 64 */
+    let brk : i64 = mdiff_arx_nonlinear()
+    ps("[break] synthesized word D(x)=x^ROTL(x+ROTL(x,R),S): differential PROVEN data-DEPENDENT (not constant) for all 64 input bits -- nonlinear axes = " as u64)  pi(brk)  ps("/64  (R=" as u64)  pi(md_r())  ps(" S=" as u64)  pi(md_s())  ps(")" as u64)  nl()
+    if brk != 64i64 { return 20i32 }
+
+    /* [measure] concrete avalanche over the deterministic splitmix set */
+    let sm : i64 = mdiff_sigma_avalanche_max()
+    let smean : i64 = mdiff_sigma_avalanche_mean_milli()
+    let dm : i64 = mdiff_arx_avalanche_max()
+    let dmean : i64 = mdiff_arx_avalanche_mean_milli()
+    ps("[measure] avalanche/input-bit -- Sigma max=" as u64)  pi(sm)  ps(" mean=" as u64)  pi(smean)  ps("/1000 (rigid) ;  D max=" as u64)  pi(dm)  ps(" mean=" as u64)  pi(dmean)  ps("/1000" as u64)  nl()
+    if sm != 3i64 { return 30i32 }
+    if smean != 3000i64 { return 31i32 }
+    if dm != 25i64 { return 32i32 }
+    if dmean != 4960i64 { return 33i32 }
+
+    /* the qualitative gap: D moves strictly more than Sigma's linear cap of 3 */
+    if dm <= sm { return 40i32 }
+
+    ps("== GREEN: SHA-512's diffusion is a proven data-independent cap of 3; III mints a same-cost word that breaks it (max 25, data-dependent) ==" as u64)  nl()
+    return 99i32
+}

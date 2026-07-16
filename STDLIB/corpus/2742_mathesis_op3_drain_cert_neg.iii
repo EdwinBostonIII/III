@@ -1,0 +1,18 @@
+/* 2742_mathesis_op3_drain_cert_neg.iii -- GATE for THE DRAIN DOOR'S CERTIFICATE, neg half
+ * (campaign Omega-5).
+ *
+ * The same total validation as 2741 with the match-DENSE target: the finder must FIND
+ * 23,340 times THROUGH the composite door -- the bit-0 slice law must never fire on a
+ * matchable class (its oracle soundness is total), the box must FIND (a pinned box value
+ * with a witness is a MATCH -- box completeness), and the sealed engine keeps its halves.
+ * 0 disagreements, 0 undecided.  EXIT 99. */
+module corpus_2742_mathesis_op3_drain_cert_neg
+
+extern @abi(c-msvc-x64) fn mr3_validate8v2(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr3_validate8v2(0i64) != 0i64 { return 20i32 }
+    if mr3_vund() != 0i64 { return 21i32 }
+    return 99i32
+}

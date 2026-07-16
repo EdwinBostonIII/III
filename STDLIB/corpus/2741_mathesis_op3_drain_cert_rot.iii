@@ -1,0 +1,21 @@
+/* 2741_mathesis_op3_drain_cert_rot.iii -- GATE for THE DRAIN DOOR'S CERTIFICATE, rot half
+ * (campaign Omega-5).
+ *
+ * The composite door mr3_decide2 (the bit-0 slice law + shift-only -> the sealed shiftbox
+ * route + the hybrid box FIRST on amount-only classes + the sealed CEGIS on the rest)
+ * against the first-match TOTAL width-8 oracle over ALL 207,360 shape-classes, target
+ * rot_1: 0 disagreements, 0 undecided.  Structural dispatch is the omega-2 shape -- the
+ * box is NOT refusal-gated, so the unbounded plain-CEGIS grind (the four >3h monsters are
+ * amount-only classes) is never entered; a width-64 box refusal is the honest -1.  Only
+ * after this gate (and its neg twin 2742) is the drain door's width-64 verdict trusted.
+ * EXIT 99. */
+module corpus_2741_mathesis_op3_drain_cert_rot
+
+extern @abi(c-msvc-x64) fn mr3_validate8v2(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr3_validate8v2(1i64) != 0i64 { return 20i32 }
+    if mr3_vund() != 0i64 { return 21i32 }
+    return 99i32
+}

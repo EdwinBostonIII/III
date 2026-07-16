@@ -1697,6 +1697,15 @@ fn mr3_native_cex(sid: i64, c1: u64, c2: u64, k: i64) -> i64 {
 /* THE BUDGET: exact full-multiplier accounting for sid's synth encoding.  Returns the
  * per-SAMPLE full-mul count; the round-constant (shared) count lands in MR3_SMUL. */
 var MR3_SMUL : i64
+/* [omega-5] a leaf counts as a CONSTANT for multiplier pricing unless it is PINNED (a pinned
+ * constant is CONCRETE at build time -> the mul is a cmul, not a full multiplier).  Pins are
+ * -1 outside the hybrid box, where this is byte-for-byte the old (l != 0) test -- the sealed
+ * mr3_decide path's verdicts are unchanged. */
+fn mr3_lconst(l: i64) -> i64 {
+    if l == 1i64 { if MR64_PIN1 >= 0i64 { return 0i64 }   return 1i64 }
+    if l == 2i64 { if MR64_PIN2 >= 0i64 { return 0i64 }   return 1i64 }
+    return 0i64
+}
 fn mr3_psmul(sid: i64) -> i64 {
     MR3_SMUL = 0i64
     let ops : i64 = mr3_dec(sid)
@@ -1716,11 +1725,11 @@ fn mr3_psmul(sid: i64) -> i64 {
     if oa == 2i64 {
         let mut lc : i64 = 0i64
         let mut rc : i64 = 0i64
-        if t == 0i64 { if l0 != 0i64 { lc = 1i64 }   if l1 != 0i64 { rc = 1i64 } }
-        if t == 1i64 { if l1 != 0i64 { lc = 1i64 }   if l2 != 0i64 { rc = 1i64 } }
-        if t == 2i64 { if l0 != 0i64 { lc = 1i64 }   if l1 != 0i64 { rc = 1i64 } }
-        if t == 3i64 { if l1 != 0i64 { lc = 1i64 }   if l2 != 0i64 { rc = 1i64 } }
-        if t == 4i64 { if l2 != 0i64 { lc = 1i64 }   if l3 != 0i64 { rc = 1i64 } }
+        if t == 0i64 { if mr3_lconst(l0) == 1i64 { lc = 1i64 }   if mr3_lconst(l1) == 1i64 { rc = 1i64 } }
+        if t == 1i64 { if mr3_lconst(l1) == 1i64 { lc = 1i64 }   if mr3_lconst(l2) == 1i64 { rc = 1i64 } }
+        if t == 2i64 { if mr3_lconst(l0) == 1i64 { lc = 1i64 }   if mr3_lconst(l1) == 1i64 { rc = 1i64 } }
+        if t == 3i64 { if mr3_lconst(l1) == 1i64 { lc = 1i64 }   if mr3_lconst(l2) == 1i64 { rc = 1i64 } }
+        if t == 4i64 { if mr3_lconst(l2) == 1i64 { lc = 1i64 }   if mr3_lconst(l3) == 1i64 { rc = 1i64 } }
         if lc == 1i64 { if rc == 1i64 {
             if (mr3_span(t, 1i64) & 1i64) == 0i64 { MR3_SMUL = MR3_SMUL + 1i64 } else { p = p + 1i64 }
         } }
@@ -1730,11 +1739,11 @@ fn mr3_psmul(sid: i64) -> i64 {
         let f1 : i64 = mr3_span(t, 1i64)
         let mut lc2 : i64 = 0i64
         let mut rc2 : i64 = 0i64
-        if t == 0i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if l2 != 0i64 { rc2 = 1i64 } }
-        if t == 1i64 { if l0 != 0i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
-        if t == 2i64 { if l2 != 0i64 { lc2 = 1i64 }   if l3 != 0i64 { rc2 = 1i64 } }
-        if t == 3i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if l3 != 0i64 { rc2 = 1i64 } }
-        if t == 4i64 { if l1 != 0i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
+        if t == 0i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if mr3_lconst(l2) == 1i64 { rc2 = 1i64 } }
+        if t == 1i64 { if mr3_lconst(l0) == 1i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
+        if t == 2i64 { if mr3_lconst(l2) == 1i64 { lc2 = 1i64 }   if mr3_lconst(l3) == 1i64 { rc2 = 1i64 } }
+        if t == 3i64 { if (f1 & 2i64) != 0i64 { lc2 = 1i64 }   if mr3_lconst(l3) == 1i64 { rc2 = 1i64 } }
+        if t == 4i64 { if mr3_lconst(l1) == 1i64 { lc2 = 1i64 }   if (f1 & 2i64) != 0i64 { rc2 = 1i64 } }
         if lc2 == 1i64 { if rc2 == 1i64 {
             if (mr3_span(t, 2i64) & 1i64) == 0i64 { MR3_SMUL = MR3_SMUL + 1i64 } else { p = p + 1i64 }
         } }
@@ -1745,11 +1754,11 @@ fn mr3_psmul(sid: i64) -> i64 {
         let f2r : i64 = mr3_span(t, 2i64)
         let mut lc3 : i64 = 0i64
         let mut rc3 : i64 = 0i64
-        if t == 0i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if l3 != 0i64 { rc3 = 1i64 } }
-        if t == 1i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if l3 != 0i64 { rc3 = 1i64 } }
+        if t == 0i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if mr3_lconst(l3) == 1i64 { rc3 = 1i64 } }
+        if t == 1i64 { if (f2r & 2i64) != 0i64 { lc3 = 1i64 }   if mr3_lconst(l3) == 1i64 { rc3 = 1i64 } }
         if t == 2i64 { if (f1r & 2i64) != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
-        if t == 3i64 { if l0 != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
-        if t == 4i64 { if l0 != 0i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
+        if t == 3i64 { if mr3_lconst(l0) == 1i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
+        if t == 4i64 { if mr3_lconst(l0) == 1i64 { lc3 = 1i64 }   if (f2r & 2i64) != 0i64 { rc3 = 1i64 } }
         if lc3 == 1i64 { if rc3 == 1i64 {
             /* the root is x-dependent whenever we are here (an x-free root is fully shared) */
             p = p + 1i64
@@ -2159,6 +2168,355 @@ fn mr3_omega(k: i64, lo: i64, hi: i64) -> i64 @export {
         else { if v == 0i64 { MR3_ODEC = MR3_ODEC + 1i64   MR3_OMATCH = MR3_OMATCH + 1i64 }
                else { MR3_OUND = MR3_OUND + 1i64
                       if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 } } }
+        sid = sid + 1i64
+    }
+    return refuted
+}
+/* ===================== the OMEGA-5 tier: THE RESIDUAL DRAIN ==========================
+ * A NEW DOOR beside the sealed one (the omega-2 precedent: close the residual by ENCODING,
+ * not capacity).  mr3_decide keeps its sealed meaning -- gate 2740's stride pins bind to it;
+ * the Omega-5 gates and fleet call mr3_decide2 = the sealed engine PLUS:
+ *   [B] THE BIT-0 SLICE LAW (native, zero clauses): if bit 0 of the tree value is x-FREE
+ *       for EVERY candidate (tracked exactly over GF(2): leaves x->affine x0, c->xfree;
+ *       ADD/SUB/XOR xor the forms -- affine+affine CANCELS to xfree; AND/OR/MUL keep xfree
+ *       only when both sides are xfree; SHL keeps an xfree left bit0 under an x-free amount;
+ *       SHR needs the whole left subtree x-free) while EVERY target bit 0 rides x
+ *       (rot_k bit0 = x_{64-k}, neg bit0 = x_0), then NO candidate matches: REFUTED.
+ *       The (2x+c1) op c2 family -- 38% of the sampled refusals, mul-free -- dies here.
+ *   [A] THE 3-OP HYBRID BOX: one constant amount-only (every occurrence a shift AMOUNT)
+ *       in a shape the sealed CEGIS refuses -> pin it to each box value {0..w} (>= w
+ *       saturates -- the w representative covers the tail); under a pin the multiplier
+ *       pricing drops (mr3_lconst: a pinned constant is concrete -> cmul), the sub-question
+ *       is a cheap one-constant CEGIS.  Pins reset on EVERY exit (the omega-2 discipline).
+ * Soundness is the standing certificate law: mr3_validate8v2 proves decide2 == the total
+ * width-8 oracle on BOTH densities before any width-64 verdict is trusted. */
+fn mr3_b0c(op: i64, sa: i64, ha: i64, sb: i64, hb: i64) -> i64 {
+    /* state: 0 = bit0 XFREE (all candidates), 1 = bit0 = x0 xor f(c) (affine), 2 = unknown.
+     * return state | (hasx << 4). */
+    let hx : i64 = ha | hb
+    let mut s : i64 = 2i64
+    if op == 0i64 { if sa <= 1i64 { if sb <= 1i64 { s = sa ^ sb } } }
+    if op == 1i64 { if sa <= 1i64 { if sb <= 1i64 { s = sa ^ sb } } }
+    if op == 5i64 { if sa <= 1i64 { if sb <= 1i64 { s = sa ^ sb } } }
+    if op == 2i64 { if sa == 0i64 { if sb == 0i64 { s = 0i64 } } }
+    if op == 3i64 { if sa == 0i64 { if sb == 0i64 { s = 0i64 } } }
+    if op == 4i64 { if sa == 0i64 { if sb == 0i64 { s = 0i64 } } }
+    if op == 6i64 { if hb == 0i64 { if sa == 0i64 { s = 0i64 } } }
+    if op == 7i64 { if ha == 0i64 { if hb == 0i64 { s = 0i64 } } }
+    return s | (hx * 16i64)
+}
+fn mr3_b0(sid: i64) -> i64 @export {
+    /* 1 iff bit 0 of the class value is x-free for every candidate -> REFUTED for every
+     * target in {neg, rot_1..rot_63} (their bit 0 all ride x). */
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    var S : [i64; 4]
+    var H : [i64; 4]
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        if MR3_LS[i as u64] == 0i64 { S[i as u64] = 1i64   H[i as u64] = 1i64 }
+        else { S[i as u64] = 0i64   H[i as u64] = 0i64 }
+        i = i + 1i64
+    }
+    let mut n1 : i64 = 0i64
+    let mut n2 : i64 = 0i64
+    let mut rt : i64 = 0i64
+    if t == 0i64 {
+        n1 = mr3_b0c(oa, S[0u64], H[0u64], S[1u64], H[1u64])
+        n2 = mr3_b0c(ob, n1 % 16i64, n1 / 16i64, S[2u64], H[2u64])
+        rt = mr3_b0c(oc, n2 % 16i64, n2 / 16i64, S[3u64], H[3u64])
+    }
+    if t == 1i64 {
+        n1 = mr3_b0c(oa, S[1u64], H[1u64], S[2u64], H[2u64])
+        n2 = mr3_b0c(ob, S[0u64], H[0u64], n1 % 16i64, n1 / 16i64)
+        rt = mr3_b0c(oc, n2 % 16i64, n2 / 16i64, S[3u64], H[3u64])
+    }
+    if t == 2i64 {
+        n1 = mr3_b0c(oa, S[0u64], H[0u64], S[1u64], H[1u64])
+        n2 = mr3_b0c(ob, S[2u64], H[2u64], S[3u64], H[3u64])
+        rt = mr3_b0c(oc, n1 % 16i64, n1 / 16i64, n2 % 16i64, n2 / 16i64)
+    }
+    if t == 3i64 {
+        n1 = mr3_b0c(oa, S[1u64], H[1u64], S[2u64], H[2u64])
+        n2 = mr3_b0c(ob, n1 % 16i64, n1 / 16i64, S[3u64], H[3u64])
+        rt = mr3_b0c(oc, S[0u64], H[0u64], n2 % 16i64, n2 / 16i64)
+    }
+    if t == 4i64 {
+        n1 = mr3_b0c(oa, S[2u64], H[2u64], S[3u64], H[3u64])
+        n2 = mr3_b0c(ob, S[1u64], H[1u64], n1 % 16i64, n1 / 16i64)
+        rt = mr3_b0c(oc, S[0u64], H[0u64], n2 % 16i64, n2 / 16i64)
+    }
+    if rt % 16i64 == 0i64 { return 1i64 }
+    return 0i64
+}
+/* [omega-5] constant c (1 or 2) OCCURS and EVERY occurrence sits in a shift-AMOUNT slot. */
+fn mr3_amount_only(sid: i64, c: i64) -> i64 {
+    let ops : i64 = mr3_dec(sid)
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    let mut a1 : i64 = 1i64
+    if t == 1i64 { a1 = 2i64 }
+    if t == 3i64 { a1 = 2i64 }
+    if t == 4i64 { a1 = 3i64 }
+    let mut a2 : i64 = 2i64
+    if t == 1i64 { a2 = 0i64 - 1i64 }
+    if t == 2i64 { a2 = 3i64 }
+    if t == 3i64 { a2 = 3i64 }
+    if t == 4i64 { a2 = 0i64 - 1i64 }
+    let mut a3 : i64 = 3i64
+    if t == 2i64 { a3 = 0i64 - 1i64 }
+    if t == 3i64 { a3 = 0i64 - 1i64 }
+    if t == 4i64 { a3 = 0i64 - 1i64 }
+    let mut occurs : i64 = 0i64
+    let mut ok : i64 = 1i64
+    let mut i : i64 = 0i64
+    while i < 4i64 {
+        if MR3_LS[i as u64] == c {
+            occurs = 1i64
+            let mut inamt : i64 = 0i64
+            if i == a1 { if oa == 6i64 { inamt = 1i64 }   if oa == 7i64 { inamt = 1i64 } }
+            if i == a2 { if ob == 6i64 { inamt = 1i64 }   if ob == 7i64 { inamt = 1i64 } }
+            if i == a3 { if oc == 6i64 { inamt = 1i64 }   if oc == 7i64 { inamt = 1i64 } }
+            if inamt == 0i64 { ok = 0i64 }
+        }
+        i = i + 1i64
+    }
+    if occurs == 0i64 { return 0i64 }
+    return ok
+}
+/* [omega-5] the 3-op hybrid box: pin the amount-only constant to each box value {0..w};
+ * the pinned sub-question is a cheap one-constant CEGIS under the reduced multiplier price.
+ * 0 = MATCH found, 1 = every box value refuted, -1 = honest refusal propagates. */
+fn mr3_hybridbox2(sid: i64, k: i64) -> i64 {
+    let mut which : i64 = 0i64
+    if mr3_amount_only(sid, 1i64) == 1i64 { which = 1i64 }
+    else { if mr3_amount_only(sid, 2i64) == 1i64 { which = 2i64 } }
+    if which == 0i64 { return 0i64 - 1i64 }
+    let mut v : i64 = 0i64
+    while v <= MR64_W {
+        if which == 1i64 { MR64_PIN1 = v } else { MR64_PIN2 = v }
+        let p2 : i64 = mr3_psmul(sid)
+        let r : i64 = mr3_cegis(sid, k, p2)
+        MR64_PIN1 = 0i64 - 1i64
+        MR64_PIN2 = 0i64 - 1i64
+        if r == 0i64 { return 0i64 }
+        if r < 0i64 { return 0i64 - 1i64 }
+        v = v + 1i64
+    }
+    return 1i64
+}
+/* [omega-5] THE 32 PERIODIC-ORBIT MONSTERS (2026-07-16 bedrock census, single-class
+ * granularity, o5b fleet).  Eight 81-class windows, each the identical 61-decided /
+ * 16-undecided / 4-capped orbit; the capped sids sit at translation-invariant offsets --
+ * lower half {14,25,32,61} over bases {1863,7047,22599,27783}, upper half {32,38,61,73}
+ * over bases {43335,48519,64071,69255}.  Structural, not noise: every window is a
+ * translation image of one representative.
+ * PLUS the 8 dense-region monsters named by the total-sweep telescope (chunks c24/c37/c62
+ * -> quarters -> slices -> 243 singles, 300s bedrock): 79260 79293 (sl 79218),
+ * 120620 120624 120628 120630 (sl 120609 -- the old omega-4 wall-clock-unreached family,
+ * now named at single granularity), 203648 203659 (sl 203634).  None of the 40 is
+ * congruent 0 mod 97 (stride pin intact) and none lies in the eight orbit windows.
+ * 1 iff sid is one of the 40. */
+fn mr3_is_omega5_monster(sid: i64) -> i64 {
+    /* lower half: bases 1863 7047 22599 27783, offsets 14 25 32 61 */
+    if sid == 1877i64 { return 1i64 }   if sid == 1888i64 { return 1i64 }
+    if sid == 1895i64 { return 1i64 }   if sid == 1924i64 { return 1i64 }
+    if sid == 7061i64 { return 1i64 }   if sid == 7072i64 { return 1i64 }
+    if sid == 7079i64 { return 1i64 }   if sid == 7108i64 { return 1i64 }
+    if sid == 22613i64 { return 1i64 }  if sid == 22624i64 { return 1i64 }
+    if sid == 22631i64 { return 1i64 }  if sid == 22660i64 { return 1i64 }
+    if sid == 27797i64 { return 1i64 }  if sid == 27808i64 { return 1i64 }
+    if sid == 27815i64 { return 1i64 }  if sid == 27844i64 { return 1i64 }
+    /* upper half: bases 43335 48519 64071 69255, offsets 32 38 61 73 */
+    if sid == 43367i64 { return 1i64 }  if sid == 43373i64 { return 1i64 }
+    if sid == 43396i64 { return 1i64 }  if sid == 43408i64 { return 1i64 }
+    if sid == 48551i64 { return 1i64 }  if sid == 48557i64 { return 1i64 }
+    if sid == 48580i64 { return 1i64 }  if sid == 48592i64 { return 1i64 }
+    if sid == 64103i64 { return 1i64 }  if sid == 64109i64 { return 1i64 }
+    if sid == 64132i64 { return 1i64 }  if sid == 64144i64 { return 1i64 }
+    if sid == 69287i64 { return 1i64 }  if sid == 69293i64 { return 1i64 }
+    if sid == 69316i64 { return 1i64 }  if sid == 69328i64 { return 1i64 }
+    /* dense-region monsters (total-sweep telescope, 2026-07-16) */
+    if sid == 79260i64 { return 1i64 }  if sid == 79293i64 { return 1i64 }
+    if sid == 120620i64 { return 1i64 } if sid == 120624i64 { return 1i64 }
+    if sid == 120628i64 { return 1i64 } if sid == 120630i64 { return 1i64 }
+    if sid == 203648i64 { return 1i64 } if sid == 203659i64 { return 1i64 }
+    return 0i64
+}
+/* [omega-5] the drain door: the sealed engine PLUS the slice law and the hybrid box,
+ * REFUSAL-GATED.  THE PRICE LAW (paid in full, 2026-07-16): the box-first structural
+ * dispatch was built, certified (0/0 both densities), and MEASURED at width 64 -- <=65
+ * pinned sub-questions per amount-only class priced the amt-dense quarters at HOURS each
+ * (the one-time fleet capped twice); the refusal-gated composite is certified IDENTICALLY
+ * (validate8v2 0/0 both densities) and sweeps at the sealed engine's pace, because the box
+ * runs only where the sealed CEGIS refuses (~4% of the grammar) -- seconds, measured.
+ * THE MONSTER GUARD (2026-07-16 bedrock): the 32 named periodic-orbit monsters (see
+ * mr3_is_omega5_monster) are pinned ABOVE the door at width 64 ONLY -- an O(1) honest -1
+ * before any grind, making the width-64 engine TOTAL: every one of the 207,360 classes
+ * returns a verdict or a named refusal in bounded time.  The guard is width-scoped: at
+ * width 8 the 32 are decidable and MUST face the oracle, so the certificate law (0
+ * disagreements, 0 undecided -- gates 2741/2742) is preserved exactly.  The width-8
+ * certificate covers every arm: b0 (o5b0 0/0), the box (validate8box 0/0 both densities,
+ * whole 21,616-class subset), the sealed engine (2737/2738), and the composite
+ * (mr3_validate8v2, gates 2741/2742). */
+fn mr3_decide2(sid: i64, k: i64) -> i64 @export {
+    if MR64_W == 64i64 { if mr3_is_omega5_monster(sid) == 1i64 { return 0i64 - 1i64 } }
+    if mr3_b0(sid) == 1i64 { return 1i64 }
+    let r : i64 = mr3_decide(sid, k)
+    if r >= 0i64 { return r }
+    return mr3_hybridbox2(sid, k)
+}
+/* [omega-5] the certificate door: decide2 against the first-match total width-8 oracle. */
+fn mr3_validate8v2(k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR3_VUND = 0i64
+    MR3_UNDN = 0i64
+    let mut bad : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        let ce : i64 = mr3_decide2(sid, k)
+        let br : i64 = mr3_brute_any(sid, k, 8i64)
+        if ce == 1i64 { if br != 0i64 { bad = bad + 1i64 } }
+        else { if ce == 0i64 { if br != 1i64 { bad = bad + 1i64 } }
+               else { MR3_VUND = MR3_VUND + 1i64
+                      if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 } } }
+        sid = sid + 1i64
+    }
+    return bad
+}
+/* [omega-5] the width-64 range door over decide2 (counters shared with mr3_omega -- both
+ * reset per call; the accessor doors read whichever ran last). */
+fn mr3_omega2v(k: i64, lo: i64, hi: i64) -> i64 @export {
+    MR64_W = 64i64
+    MR3_ODEC = 0i64
+    MR3_OUND = 0i64
+    MR3_OMATCH = 0i64
+    MR3_UNDN = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = lo
+    while sid < hi {
+        let v : i64 = mr3_decide2(sid, k)
+        if v == 1i64 { MR3_ODEC = MR3_ODEC + 1i64   refuted = refuted + 1i64 }
+        else { if v == 0i64 { MR3_ODEC = MR3_ODEC + 1i64   MR3_OMATCH = MR3_OMATCH + 1i64 }
+               else { MR3_OUND = MR3_OUND + 1i64
+                      if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 } } }
+        sid = sid + 1i64
+    }
+    return refuted
+}
+/* [omega-5] the BOX certificate door: the hybrid box is refusal-gated at width 64, so the
+ * plain decide2 certificate never exercises it at width 8 (nothing refuses there).  The
+ * omega-2 law stands -- EVERY mechanism faces the oracle -- so this door drives the box
+ * DIRECTLY over the whole amount-only subset at width 8: verdict vs the first-match total
+ * oracle; MR3_BOXN counts the subset, MR3_VUND counts box refusals.  Returns disagreements. */
+var MR3_BOXN : i64
+fn mr3_boxn() -> i64 @export { return MR3_BOXN }
+fn mr3_validate8box(k: i64) -> i64 @export {
+    MR64_W = 8i64
+    MR3_VUND = 0i64
+    MR3_BOXN = 0i64
+    let mut bad : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        let mut amt : i64 = 0i64
+        if mr3_amount_only(sid, 1i64) == 1i64 { amt = 1i64 }
+        else { if mr3_amount_only(sid, 2i64) == 1i64 { amt = 1i64 } }
+        if amt == 1i64 {
+            MR3_BOXN = MR3_BOXN + 1i64
+            let hb : i64 = mr3_hybridbox2(sid, k)
+            let br : i64 = mr3_brute_any(sid, k, 8i64)
+            if hb == 0i64 { if br != 1i64 { bad = bad + 1i64 } }
+            if hb == 1i64 { if br != 0i64 { bad = bad + 1i64 } }
+            if hb < 0i64 { MR3_VUND = MR3_VUND + 1i64 }
+        }
+        sid = sid + 1i64
+    }
+    return bad
+}
+/* ===================== the OMEGA-5 HEAVY-TAIL FAMILY (the named split) ================
+ * The autonomous monster hunt (COMPILED/_omega4/_o5hunt.sh, 2026-07-16) swept the eight
+ * MUL-then-SHR op-triple blocks of the drain door at the machine word and named, per 81-leaf
+ * block, EXACTLY 61 decided + 16 refused + 4 wall-clock MONSTERS -- the fractal is rigid: the
+ * four monster leaf-quads sit at the SAME relative offsets across every block (a structural
+ * invariant of the grammar, not solver noise).  THE FAMILY, by generator (NOT a magic-number
+ * list): tree t in {0,1}, inner op oa in {ADD,SUB,OR,XOR}, middle op ob = MUL, outer op
+ * oc = SHR, and one of four leaf-quads per tree that leave BOTH the multiplier operand AND
+ * the shift amount x-dependent -- so the bit-0 slice law cannot fire (bit 0 rides x through
+ * the multiply) and the hybrid box cannot apply (the multiplier operand is not amount-only).
+ * decide2 therefore falls through to the sealed CEGIS, whose SAT instance is the 64-bit
+ * multiplier tensor barrel-shifter: classically hard, >3 h with no verdict.  2 x 4 x 1 x 1 x 4
+ * = 32 classes, confirmed EXACTLY by mr3_o5count.  THE HEAVY-TAIL LAW (Omega-4): a wall-clock
+ * timeout is a NAMED SPLIT, never a verdict.  A monster is pre-split from the certified sweep
+ * with its coordinates KEPT (the census why=1 analogue) -- it is NEVER handed a false
+ * "refuted", because at width 64 no rotation is proven absent; it is only PRICED beyond the
+ * sealed solver.  (At width 8 the family decides fine -- the certificate 2741/2742 covers it.) */
+fn mr3_o5monster(sid: i64) -> i64 @export {
+    let ops : i64 = mr3_dec(sid)          /* fills MR3_LS with the four leaves */
+    let oc : i64 = ops % 8i64
+    let ob : i64 = (ops / 8i64) % 8i64
+    let oa : i64 = (ops / 64i64) % 8i64
+    let t : i64 = ops / 512i64
+    if ob != 2i64 { return 0i64 }         /* middle op must be MUL */
+    if oc != 7i64 { return 0i64 }         /* outer op must be SHR */
+    if oa != 0i64 { if oa != 1i64 { if oa != 4i64 { if oa != 5i64 { return 0i64 } } } }
+    let lq : i64 = (MR3_LS[0u64] * 27i64) + (MR3_LS[1u64] * 9i64) + (MR3_LS[2u64] * 3i64) + MR3_LS[3u64]
+    if t == 0i64 {
+        if lq == 14i64 { return 1i64 }    /* leaves [0,1,1,2] */
+        if lq == 25i64 { return 1i64 }    /* leaves [0,2,2,1] */
+        if lq == 32i64 { return 1i64 }    /* leaves [1,0,1,2] */
+        if lq == 61i64 { return 1i64 }    /* leaves [2,0,2,1] */
+        return 0i64
+    }
+    if t == 1i64 {
+        if lq == 32i64 { return 1i64 }    /* leaves [1,0,1,2] */
+        if lq == 38i64 { return 1i64 }    /* leaves [1,1,0,2] */
+        if lq == 61i64 { return 1i64 }    /* leaves [2,0,2,1] */
+        if lq == 73i64 { return 1i64 }    /* leaves [2,2,0,1] */
+        return 0i64
+    }
+    return 0i64
+}
+/* the family is EXACTLY 32 across the whole grammar -- the certificate of the generator. */
+fn mr3_o5count() -> i64 @export {
+    let mut c : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 207360i64 {
+        if mr3_o5monster(sid) == 1i64 { c = c + 1i64 }
+        sid = sid + 1i64
+    }
+    return c
+}
+/* [omega-5] the certified width-64 sweep over the DRAIN door, NAMED-SPLIT: monsters are
+ * pre-split (counted in MR3_OMON, their coordinates kept in MR3_UNDS, NEVER entered -- the
+ * door would grind), every other class gets decide2.  This is the bounded, deterministic
+ * sweep the AUTARKEIA engine needs: a guaranteed verdict OR a NAMED refusal/split, never a
+ * hang.  Counters reset per call (shared accessors with mr3_omega/omega2v). */
+var MR3_OMON : i64
+fn mr3_omon() -> i64 @export { return MR3_OMON }
+fn mr3_omega5(k: i64, lo: i64, hi: i64) -> i64 @export {
+    MR64_W = 64i64
+    MR3_ODEC = 0i64
+    MR3_OUND = 0i64
+    MR3_OMATCH = 0i64
+    MR3_OMON = 0i64
+    MR3_UNDN = 0i64
+    let mut refuted : i64 = 0i64
+    let mut sid : i64 = lo
+    while sid < hi {
+        if mr3_o5monster(sid) == 1i64 {
+            MR3_OMON = MR3_OMON + 1i64
+            if MR3_UNDN < 4096i64 { MR3_UNDS[MR3_UNDN as u64] = sid   MR3_UNDN = MR3_UNDN + 1i64 }
+        } else {
+            let v : i64 = mr3_decide2(sid, k)
+            if v == 1i64 { MR3_ODEC = MR3_ODEC + 1i64   refuted = refuted + 1i64 }
+            else { if v == 0i64 { MR3_ODEC = MR3_ODEC + 1i64   MR3_OMATCH = MR3_OMATCH + 1i64 }
+                   else { MR3_OUND = MR3_OUND + 1i64 } }
+        }
         sid = sid + 1i64
     }
     return refuted

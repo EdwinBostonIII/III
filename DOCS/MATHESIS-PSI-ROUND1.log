@@ -235,3 +235,40 @@ R 39 0 29 60 0 0
 # THE PREFIX LAW: head(36) == the sealed Omega-3 head byte for byte; head(42) pinned across
 # two full runs.
 H head42 = d24760d33dde16feaad8ac23c6e02f2b6340625fd8c04ade080047c9cfe286fb
+#
+# ============================== CAMPAIGN OMEGA-5 ==============================
+# THE RESIDUAL DRAIN: the Omega-4 refusal envelope attacked by ENCODING, never a cap lift.
+# THE BIT-0 SLICE LAW (exact GF(2) bit-0 form tracking -- a class whose bit 0 rides no x for
+# EVERY candidate can match NO target whose bit 0 rides x: REFUTED with zero clauses) and THE
+# 3-OP HYBRID BOX (each amount-only constant pinned to each box value, each pin a cheap
+# one-constant CEGIS under the honest multiplier price).  The composite door mr3_decide2
+# re-certified sound+complete at width 8 against the TOTAL oracle on BOTH densities; the box
+# ALSO faced the oracle DIRECTLY over its whole jurisdiction: EXACTLY 21,616 amount-only
+# classes, 0/0 both densities, the jurisdiction size itself pinned.
+O5 drain cert rot 0 0
+O5 drain cert neg 0 0
+O5 box cert jurisdiction 21616 0 0
+# THE BEDROCK CENSUS (single-class granularity, 648 isolates): the Omega-4 residual poison
+# telescoped chunks -> quarters -> sixteenths -> slices -> thirds -> SINGLES to eight
+# IDENTICAL 81-class orbits, each EXACTLY 61 decided / 16 engine-refused / 4 capped, the
+# capped sids at TRANSLATION-INVARIANT offsets: lower half {14,25,32,61} over bases
+# {1863,7047,22599,27783}, upper half {32,38,61,73} over bases {43335,48519,64071,69255}.
+# Structural, not noise: every window is a translation image of one representative.
+O5 orbit monsters 32 windows 8 row 61 0 20
+# THE TOTAL SWEEP (the mr3_omega2v drain door, 64 chunks x 3240): three dense chunks
+# (c24/c37/c62) telescoped to 243 more SINGLES naming 8 dense-region monsters -- 79260 79293
+# (slice 79218), 120620 120624 120628 120630 (slice 120609: the Omega-4 wall-clock-unreached
+# family, NOW NAMED at single granularity), 203648 203659 (slice 203634).  THE GUARD
+# (mr3_is_omega5_monster, width 64 ONLY -- at width 8 all 40 are decidable and face the
+# oracle): each of the 40 refuses in O(1); every poison window lands in 10-25 s, every dense
+# slice in 2-36 s, the formerly-capped chunks whole in 147-173 s (were 1800-s caps).
+O5 monsters total 40 orbit 32 dense 8
+# THE SWEEP MADE TOTAL, ZERO CAPS: all 207,360 classes at width 64 through the drain door --
+# 201,244 DECIDED (56 carry a rot_1 spelling incl. the definiens, 201,188 refuted), 6,116
+# REFUSED BY NAME (engine refusals at the sealed capacity pins + the 40 guarded monsters),
+# 0 capped, 0 dropped: 201,244 + 6,116 = 207,360 EXACTLY.  The drain measured live: the
+# 2138-class stride-97 subset decides 2051 -> 2071 and refuses 87 -> 67 between the sealed
+# door (gate 2740) and the drain door (gate 2744); no monster is a stride multiple -- the
+# guard is INVISIBLE off the 40.
+O5 sweep w64 total 207360 decided 201244 matched 56 refused 6116 capped 0
+O5 stride97 2138 2071 0 67

@@ -2,7 +2,7 @@
 # STDLIB/scripts/run_standing_tools.sh -- THE EVERGREEN GUARANTEE for III's runnable capability surface.
 #
 # "A capability that can only be exercised by hand-writing a driver for each input is a demo with good
-# manners" (III-STANDING-TOOLS.md).  III ships EIGHT committed tool binaries.  This gate rebuilds EVERY
+# manners" (III-STANDING-TOOLS.md).  III ships TEN committed tool binaries.  This gate rebuilds EVERY
 # one from source via its leaf script (pinned iiis-2 + committed archive; bootstrap untouched) and
 # exercises it on ONE canonical known-answer input -- so a change that silently breaks any tool reddens
 # here, and the whole surface stays runnable.  Known answers are derived from external truth (FIPS
@@ -98,6 +98,31 @@ if build build_iii_hexad.sh iii-hexad; then
     if [[ "$CNT" == "144" ]]; then say "PASS --count = 144"; else say "RED --count = $CNT"; FAIL=1; fi
     expect_exit "N P P P P P (structural NEG) BRICKING" 1 "$C/iii-hexad$BIN_SUFFIX" N P P P P P
     expect_exit "P P P P P P (all POS) ADMITTED"        0 "$C/iii-hexad$BIN_SUFFIX" P P P P P P
+fi
+
+say "[standing] == iii-testament: the AUTARKEIA spine emitter =="
+if build build_iii_testament.sh iii-testament; then
+    # keygen is DETERMINISTIC in the seed FILE: same 96-byte seed -> byte-identical SLH-DSA-SHA2-256s
+    # keypair, always.  That determinism (external truth: FIPS-205 deterministic keygen) is the KAT.
+    printf '%-96.96s' 'AUTARKEIA-TESTAMENT-STANDING-SMOKE-SEED' > "$W/tst_seed.bin"   # pad-to-96/truncate-at-96: EXACTLY 96 B by construction
+    "$C/iii-testament$BIN_SUFFIX" keygen "$W/tst_seed.bin" "$W/tst_pk1.bin" "$W/tst_sk1.bin" >/dev/null 2>&1
+    "$C/iii-testament$BIN_SUFFIX" keygen "$W/tst_seed.bin" "$W/tst_pk2.bin" "$W/tst_sk2.bin" >/dev/null 2>&1
+    if cmp -s "$W/tst_pk1.bin" "$W/tst_pk2.bin" && cmp -s "$W/tst_sk1.bin" "$W/tst_sk2.bin" \
+       && [[ "$(wc -c < "$W/tst_pk1.bin")" -eq 64 && "$(wc -c < "$W/tst_sk1.bin")" -eq 128 ]]; then
+        say "PASS keygen deterministic (same seed -> identical pk64+sk128)"
+    else say "RED  keygen determinism/sizes"; FAIL=1; fi
+fi
+
+say "[standing] == iii-witness: the stranger's testament verifier =="
+if build build_iii_witness.sh iii-witness; then
+    # a malformed file must be REFUSED as format (exit 10) -- the witness trusts nothing it is handed.
+    printf 'not a testament at all -- too short and no IIITSTMT magic' > "$W/garbage.bin"
+    expect_exit "malformed input REFUSED as format" 10 "$C/iii-witness$BIN_SUFFIX" verify "$W/garbage.bin"
+    # and if the committed canonical testament exists, Tier-1 verify it (signature + internal chain).
+    if [[ -f "$III_ROOT/STDLIB/testament/testament.dat" && -f "$III_ROOT/STDLIB/testament/testament.pk" ]]; then
+        expect_exit "committed testament.dat Tier-1 VALID" 0 "$C/iii-witness$BIN_SUFFIX" verify \
+            "$III_ROOT/STDLIB/testament/testament.dat" "$III_ROOT/STDLIB/testament/testament.pk"
+    fi
 fi
 
 # CROSS-TOOL CONSISTENCY: iii-hexad and iii-typecheck --reach share the hexad_reach faculty -- they must

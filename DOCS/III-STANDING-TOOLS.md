@@ -602,12 +602,14 @@ Each is a tool of the same shape as `iii-prove`: link the library, take real inp
 ## The evergreen guarantee — `run_standing_tools.sh`
 
 A tool that rots is worse than no tool. `STDLIB/scripts/run_standing_tools.sh` **rebuilds every one of
-the eight committed tool binaries from source** (each via its leaf `build_iii_*.sh` — pinned `iiis-2` +
+the ten committed tool binaries from source** (each via its leaf `build_iii_*.sh` — pinned `iiis-2` +
 the committed archive, bootstrap untouched) and exercises each on **one canonical known-answer input**,
 so any change that silently breaks a tool reddens here. Known answers come from external truth, never
 from the tool itself: the FIPS-180 `sha256("abc")` vector; closed-form surd signs (`√2 > 0`,
 `2√2+3√2−5√2 = 0`); the faculty's own rules (144-manifold, `--reach` admissibility); prove/refute over
-all 2⁶⁴; `eval ≡ route-V ≡ native` on a shared probe. It also pins a **cross-tool consistency** check:
+all 2⁶⁴; `eval ≡ route-V ≡ native` on a shared probe; FIPS-205 deterministic keygen (same 96-byte seed
+→ byte-identical SLH-DSA-SHA2-256s keypair); a malformed testament REFUSED as format (exit 10) and the
+committed canonical testament Tier-1 VALID. It also pins a **cross-tool consistency** check:
 `iii-hexad` and `iii-typecheck --reach` share the `hexad_reach` faculty, so they must agree on hexad
 admissibility (id 728 admitted, id 0 bricking) — the safety algebra is one object seen through two
 surfaces. GREEN = the whole runnable capability surface is, in fact, runnable.
@@ -769,3 +771,48 @@ the other three executable to the same standard — leaf-built, gated on externa
 together by `run_standing_tools.sh`. Four ontologies, four runnable tools, one archive, one trust floor.
 That is the concrete form of the answer: III does not merely *have* these ontologies as library code — it
 *runs* them, and the whole quartet is one checked, non-AI-reliant, evergreen surface.
+
+---
+
+## `iii-testament` + `iii-witness` — the AUTARKEIA pair: trust that travels without the author
+
+(`DOCS/III-AUTARKEIA-MAP.md` Α0/Α1 — executed 2026-07-16.) Everything above proves capabilities to
+*this repository's operator*, through hours of gates on a prepared host. The testament pair makes the
+proven state **portable**: one signed, hash-chained, minutes-checkable object a stranger can verify on
+a bare machine — no toolchain, no re-derivation marathon, no author's word taken for anything.
+
+    iii-testament keygen <seed96> <pk-out> <sk-out>        # SLH-DSA-SHA2-256s; DETERMINISTIC in the seed FILE
+    iii-testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts|none]
+    iii-testament show   <testament.dat>                   # the sealed pins, bash-consumable
+    iii-witness  verify  <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]
+
+`emit` fuses the tree's sealed truth into `testament.dat` (~33 KB, signature-dominated): the manifest
+digest + a Merkle-style root over the **raw bytes** of every committed file (3,649 at generation 0, no
+line-ending normalization — CRLF sources are content), the `COMPILER/BOOT` seed digests, the corpus KAT
+count, the 12 committed mathesis records with digests + pinned heads + row/chain counts, **the FORGE
+chain re-walked row by row from the committed record** (descriptor → sha256 → `cad_compose`, reproducing
+the sealed head `c28e85ac…` and its 69-row chain), the RADICAL certificate re-derived **in code**
+(`sha256(head|rows|chain)` = `6acc138e…` — a pin that lived as a bash string in `run_mathesis.sh`, now
+re-derivable from a signed spine: THE PIN MIGRATION, bash demoted from author to consumer), the three
+spore scripts, the standing-tool binaries, and optional execution receipts — then signs `sha256(body)`
+with SLH-DSA-SHA2-256s (pk 64 B, sig 29,792 B — FIPS 205 category 5, the small-signature "s" set;
+verification is hash-walks, deliberately the stranger-cheap direction). No wall clock, no randomness,
+and FIPS-205 deterministic signing: **two emissions over an unchanged tree reproduce the ENTIRE file
+byte-for-byte — signature included** (measured; the gate first "caught" this as a failed wrong-parent
+decoy, then pinned it as the stronger determinism arm).
+
+`iii-witness verify` is the stranger's side, two honest tiers. **Tier-1** (minutes, zero toolchain):
+format + signature + key pin + generation link + the monotone law. **FULL** (pointed at the repo):
+every digest, every pinned head, the FORGE re-walk, the RADICAL certificate, and the tree root
+re-derived from the committed bytes. Every tamper class has its own exit — 0 green / 2 file / 10 format
+/ 11 signature or key-pin / 12 generation link / 13 semantic re-derivation / 14 tree root / 15 monotone
+breach. Measured (gate `STDLIB/scripts/run_testament.sh`, ALL GREEN): one flipped body byte → 11; a
+wrong key → 11; one dropped manifest line → 14; **one appended newline in one of 3,649 files → 14**.
+
+The generation chain is evergreen as an *equation*: each testament carries its parent's digest, its
+generation index, key continuity, and per-tag counters (`TREE/SEED/BEARER/MATHESIS/SPORE/TOOLS/EXEC`)
+that may **never decrease**. The canonical generation-0 lives at `STDLIB/testament/testament.dat` +
+`testament.pk` (committed; the signing seed/sk are **never** committed — custody is not mathematics,
+and the claim is tamper-evidence + continuity, not identity PKI). The witness's trust-root ladder is
+the map's §Α1: today the native verifier + the repo's own git history as replication ledger; the
+anchor-verified `witness.svir` form over the 374-line SVIR waist is the named next rung.

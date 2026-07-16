@@ -1,0 +1,151 @@
+/* 2744_mathesis_op3_sweep2.iii -- GATE for THE BOUNDED MACHINE-WORD SWEEP (campaign
+ * Omega-5: the drain door TOTAL at width 64, with THE 40 MONSTERS -- 32 periodic-orbit
+ * + 8 dense-region -- named, guarded, and refused in O(1)).
+ *
+ * THE BEDROCK CENSUS (2026-07-16, single-class granularity, 648 isolates): the residual
+ * poison of the Omega-4 sweep telescoped -- chunks -> quarters -> sixteenths -> slices ->
+ * thirds -> SINGLES -- to eight 81-class windows, each the IDENTICAL 61-decided /
+ * 16-undecided / 4-capped orbit, the capped sids at translation-invariant offsets: lower
+ * half {14,25,32,61} over bases {1863,7047,22599,27783}, upper half {32,38,61,73} over
+ * bases {43335,48519,64071,69255}.  Structural, not noise.  PLUS the total-sweep telescope
+ * (chunks c24/c37/c62 -> quarters -> slices -> 243 SINGLES): 8 dense-region monsters --
+ * 79260 79293 (slice 79218), 120620 120624 120628 120630 (slice 120609: the old Omega-4
+ * wall-clock-unreached family, now named at single granularity), 203648 203659 (slice
+ * 203634).  The 40 are pinned ABOVE the
+ * drain door at width 64 ONLY (mr3_is_omega5_monster): an O(1) honest -1 before any
+ * grind -- the width-64 engine is TOTAL (verdict or named refusal, bounded time), and the
+ * width-8 certificate law (gates 2741/2742/2743: 0/0) is untouched because at width 8 the
+ * 40 are decidable and face the oracle.  Wall-clock proof (v10, measured 2026-07-16): every
+ * poison window lands in 10-25 s and every dense slice in 2-36 s (was rc=124 at 600 s); the
+ * FULL 207,360-class sweep completes with ZERO caps -- dec 201,244 + und 6,116 = 207,360.
+ *
+ * In-gate: [A] THE MONSTER ARM -- each of the 40 named sids as a one-class width-64 range:
+ * decided 0, undecided 1 (the honest refusal), and the whole arm completes inside the gate
+ * budget BECAUSE the guard is O(1) -- before the guard this arm alone was >40 x 300 s.
+ * [B] THE ORBIT ARM -- all eight 81-class poison windows: EXACTLY 61 decided, 0 matched,
+ * 20 undecided EACH (16 engine refusals + 4 guarded monsters); eight identical rows ARE
+ * the translation invariance, re-proven inside the gate.  [B2] THE DENSE-SLICE ARM -- the
+ * three formerly-poison 81-class slices land bounded: 79218 -> 67/0/14, 120609 -> 77/0/4,
+ * 203634 -> 67/0/14 (each row sums to 81; the und counts CONTAIN the guarded monsters).
+ * [C] THE STRIDE-97 CERTIFICATE
+ * SUBSET under the drain door -- 2138 classes: 2071 decided, 0 matched, 67 refused, pinned
+ * EXACTLY (reproduced across two runs 2026-07-16; none of the 40 monsters is a stride
+ * multiple -- so this arm also proves the guard is INVISIBLE off the 40).  [D] THE FAR-BOUNDARY ARMS (boundary-arm law): the empty range at the
+ * grammar edge decides nothing; the refusal-coordinate store refuses out-of-range reads by
+ * name.  EXIT 99. */
+module corpus_2744_mathesis_op3_sweep2
+
+extern @abi(c-msvc-x64) fn mr3_omega2v(k: i64, lo: i64, hi: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_odec() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_ound() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_omatch() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_undn() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_undat(i: i64) -> i64 from "mathesis_rot64.iii"
+
+fn monster_at(i: i64) -> i64 {
+    /* lower half: bases {1863,7047,22599,27783} x offsets {14,25,32,61} */
+    if i == 0i64 { return 1877i64 }    if i == 1i64 { return 1888i64 }
+    if i == 2i64 { return 1895i64 }    if i == 3i64 { return 1924i64 }
+    if i == 4i64 { return 7061i64 }    if i == 5i64 { return 7072i64 }
+    if i == 6i64 { return 7079i64 }    if i == 7i64 { return 7108i64 }
+    if i == 8i64 { return 22613i64 }   if i == 9i64 { return 22624i64 }
+    if i == 10i64 { return 22631i64 }  if i == 11i64 { return 22660i64 }
+    if i == 12i64 { return 27797i64 }  if i == 13i64 { return 27808i64 }
+    if i == 14i64 { return 27815i64 }  if i == 15i64 { return 27844i64 }
+    /* upper half: bases {43335,48519,64071,69255} x offsets {32,38,61,73} */
+    if i == 16i64 { return 43367i64 }  if i == 17i64 { return 43373i64 }
+    if i == 18i64 { return 43396i64 }  if i == 19i64 { return 43408i64 }
+    if i == 20i64 { return 48551i64 }  if i == 21i64 { return 48557i64 }
+    if i == 22i64 { return 48580i64 }  if i == 23i64 { return 48592i64 }
+    if i == 24i64 { return 64103i64 }  if i == 25i64 { return 64109i64 }
+    if i == 26i64 { return 64132i64 }  if i == 27i64 { return 64144i64 }
+    if i == 28i64 { return 69287i64 }  if i == 29i64 { return 69293i64 }
+    if i == 30i64 { return 69316i64 }  if i == 31i64 { return 69328i64 }
+    /* dense-region monsters (total-sweep telescope, 243 singles) */
+    if i == 32i64 { return 79260i64 }  if i == 33i64 { return 79293i64 }
+    if i == 34i64 { return 120620i64 } if i == 35i64 { return 120624i64 }
+    if i == 36i64 { return 120628i64 } if i == 37i64 { return 120630i64 }
+    if i == 38i64 { return 203648i64 } if i == 39i64 { return 203659i64 }
+    return 0i64 - 1i64
+}
+
+/* the three formerly-poison dense slices: base, expected decided, expected undecided */
+fn dslice_base(i: i64) -> i64 {
+    if i == 0i64 { return 79218i64 }
+    if i == 1i64 { return 120609i64 }
+    return 203634i64
+}
+fn dslice_dec(i: i64) -> i64 {
+    if i == 1i64 { return 77i64 }
+    return 67i64
+}
+fn dslice_und(i: i64) -> i64 {
+    if i == 1i64 { return 4i64 }
+    return 14i64
+}
+
+fn window_at(i: i64) -> i64 {
+    if i == 0i64 { return 1863i64 }    if i == 1i64 { return 7047i64 }
+    if i == 2i64 { return 22599i64 }   if i == 3i64 { return 27783i64 }
+    if i == 4i64 { return 43335i64 }   if i == 5i64 { return 48519i64 }
+    if i == 6i64 { return 64071i64 }   if i == 7i64 { return 69255i64 }
+    return 0i64 - 1i64
+}
+
+fn main() -> i32 {
+    /* [A] THE MONSTER ARM: each named sid refuses in O(1) at the machine word */
+    let mut i : i64 = 0i64
+    while i < 40i64 {
+        let sid : i64 = monster_at(i)
+        mr3_omega2v(1i64, sid, sid + 1i64)
+        if mr3_odec() != 0i64 { return 10i32 }
+        if mr3_ound() != 1i64 { return 11i32 }
+        if mr3_undn() != 1i64 { return 12i32 }
+        if mr3_undat(0i64) != sid { return 13i32 }
+        i = i + 1i64
+    }
+    /* [B] THE ORBIT ARM: eight identical 61/0/20 windows = the translation invariance */
+    i = 0i64
+    while i < 8i64 {
+        let base : i64 = window_at(i)
+        mr3_omega2v(1i64, base, base + 81i64)
+        if mr3_odec() != 61i64 { return 20i32 }
+        if mr3_omatch() != 0i64 { return 21i32 }
+        if mr3_ound() != 20i64 { return 22i32 }
+        i = i + 1i64
+    }
+    /* [B2] THE DENSE-SLICE ARM: the three formerly-poison slices land bounded, rows pinned */
+    i = 0i64
+    while i < 3i64 {
+        let dbase : i64 = dslice_base(i)
+        mr3_omega2v(1i64, dbase, dbase + 81i64)
+        if mr3_odec() != dslice_dec(i) { return 25i32 }
+        if mr3_omatch() != 0i64 { return 26i32 }
+        if mr3_ound() != dslice_und(i) { return 27i32 }
+        i = i + 1i64
+    }
+    /* [C] THE STRIDE-97 CERTIFICATE SUBSET: counts pinned exactly (deterministic engine;
+     * no monster on the stride -- the guard is invisible here) */
+    let mut sid : i64 = 0i64
+    let mut dec : i64 = 0i64
+    let mut mat : i64 = 0i64
+    let mut und : i64 = 0i64
+    while sid < 207360i64 {
+        mr3_omega2v(1i64, sid, sid + 1i64)
+        dec = dec + mr3_odec()
+        mat = mat + mr3_omatch()
+        und = und + mr3_ound()
+        sid = sid + 97i64
+    }
+    if dec != 2071i64 { return 30i32 }
+    if mat != 0i64 { return 31i32 }
+    if und != 67i64 { return 32i32 }
+    /* [D] the far-boundary arms: the empty edge range decides nothing; the refusal store
+     * refuses out-of-range reads BY NAME */
+    mr3_omega2v(1i64, 207360i64, 207360i64)
+    if mr3_odec() != 0i64 { return 40i32 }
+    if mr3_ound() != 0i64 { return 41i32 }
+    if mr3_undat(0i64) != 0i64 - 1i64 { return 42i32 }
+    if mr3_undat(0i64 - 1i64) != 0i64 - 1i64 { return 43i32 }
+    return 99i32
+}

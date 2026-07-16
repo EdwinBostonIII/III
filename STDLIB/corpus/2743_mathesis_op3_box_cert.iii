@@ -1,0 +1,25 @@
+/* 2743_mathesis_op3_box_cert.iii -- GATE for THE HYBRID BOX'S OWN CERTIFICATE (campaign
+ * Omega-5).
+ *
+ * The box is structurally dispatched inside decide2, so the composite certificate only
+ * exercises it where the composite routes to it; the omega-2 law -- EVERY mechanism faces
+ * the oracle -- gets the box its own door: mr3_validate8box drives mr3_hybridbox2 DIRECTLY
+ * over the WHOLE amount-only subset (EXACTLY 21,616 classes: one constant whose every
+ * occurrence is a shift amount) at width 8, BOTH densities.  0 disagreements, 0 box
+ * refusals, and the subset size itself is pinned (a drift in mr3_amount_only is a drift
+ * in the box's jurisdiction).  EXIT 99. */
+module corpus_2743_mathesis_op3_box_cert
+
+extern @abi(c-msvc-x64) fn mr3_validate8box(k: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_boxn() -> i64 from "mathesis_rot64.iii"
+
+fn main() -> i32 {
+    if mr3_validate8box(1i64) != 0i64 { return 10i32 }
+    if mr3_vund() != 0i64 { return 11i32 }
+    if mr3_boxn() != 21616i64 { return 12i32 }
+    if mr3_validate8box(0i64) != 0i64 { return 20i32 }
+    if mr3_vund() != 0i64 { return 21i32 }
+    if mr3_boxn() != 21616i64 { return 22i32 }
+    return 99i32
+}

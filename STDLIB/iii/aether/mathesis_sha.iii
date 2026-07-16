@@ -1,0 +1,155 @@
+/* mathesis_sha.iii -- THE NONLINEAR SIBLING OF THE ROTATION ORACLE.
+ *
+ * mr64_brute / mr3_brute census the ROTATION grammar {ROTR-const, XOR, ADD, ...} against rot_k.
+ * This organ adds what that grammar cannot see: the EXACT 2-input-gate complexity of an arbitrary
+ * Boolean function of three inputs, by an exhaustive straight-line-DAG census -- the same shape of
+ * total-oracle proof mr64_brute is, moved to the nonlinear basis.  Together they cover the whole
+ * SHA-512 round core: the rotation engine owns Sigma/sigma (linear diffusion), this organ owns
+ * Ch/Maj (the nonlinear choosers), and both are certified by gate 2746 through their real exports.
+ *
+ * A wire is its 8-row truth table (one byte; the three inputs are the standard columns
+ * E=0xF0, F=0xCC, G=0xAA).  s_census enumerates EVERY distinct-truth-table DAG over ALL sixteen
+ * binary Boolean ops; the only pruning is the sound one (a minimal circuit never recomputes a
+ * truth table it already holds), so first-appearance depth == EXACT circuit complexity for every
+ * function of complexity <= the budget.  msha_complexity(tt) returns that exact minimum.
+ *
+ * Exports (the callable oracle; gate 2746 is a thin certifier over these):
+ *   msha_complexity(tt)  exact min 2-input-gate count for 8-bit truth table tt (255 = > budget)
+ *   msha_rename_ok()     1 iff the four SHA-512 rotation mixers' bit-rename identity holds over the
+ *                        complete 64-vector basis (rotations are index maps -> 0 gates; total for a
+ *                        linear map) AND 4096 splitmix words
+ *   msha_xor(sel)        measured XOR-gate count / word of mixer sel (0=Sigma0 1=Sigma1 2=sigma0 3=sigma1)
+ *   msha_xor3_tt/ch_tt/maj_tt   the three core target truth tables (so the gate pins them)
+ */
+module mathesis_sha
+
+var SW     : [i64; 32]
+var SFIRST : [i64; 256]
+var SSMX   : u64
+
+/* ---------------- the exact 2-input-gate DAG census (the nonlinear oracle) ---------------- */
+fn s_bop(o: i64, a: i64, b: i64) -> i64 {
+    let na : i64 = (a ^ 255i64) & 255i64
+    let nb : i64 = (b ^ 255i64) & 255i64
+    let mut r : i64 = 0i64
+    if (o & 1i64) != 0i64 { r = r | (na & nb) }
+    if (o & 2i64) != 0i64 { r = r | (na & b)  }
+    if (o & 4i64) != 0i64 { r = r | (a & nb)  }
+    if (o & 8i64) != 0i64 { r = r | (a & b)   }
+    return r & 255i64
+}
+fn s_inW(n: i64, tt: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < n { if SW[i as u64] == tt { return 1i64 }  i = i + 1i64 }
+    return 0i64
+}
+fn s_census(n: i64, g: i64, maxg: i64) -> i64 {
+    let mut i : i64 = 0i64
+    while i < n {
+        let mut j : i64 = i
+        while j < n {
+            let a : i64 = SW[i as u64]
+            let b : i64 = SW[j as u64]
+            let mut o : i64 = 0i64
+            while o < 16i64 {
+                let c : i64 = s_bop(o, a, b)
+                if s_inW(n, c) == 0i64 {
+                    if (g + 1i64) < SFIRST[c as u64] { SFIRST[c as u64] = g + 1i64 }
+                    if (g + 1i64) < maxg {
+                        SW[n as u64] = c
+                        s_census(n + 1i64, g + 1i64, maxg)
+                    }
+                }
+                o = o + 1i64
+            }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    return 1i64
+}
+fn msha_build() -> i64 {
+    let mut t : i64 = 0i64
+    while t < 256i64 { SFIRST[t as u64] = 255i64  t = t + 1i64 }
+    SW[0u64] = 240i64  SW[1u64] = 204i64  SW[2u64] = 170i64
+    SFIRST[240u64] = 0i64  SFIRST[204u64] = 0i64  SFIRST[170u64] = 0i64
+    s_census(3i64, 0i64, 4i64)      /* budget 4: covers Maj (=4) exactly, hence all core primitives */
+    return 1i64
+}
+fn msha_complexity(tt: i64) -> i64 @export {
+    msha_build()
+    return SFIRST[(tt & 255i64) as u64]
+}
+fn msha_xor3_tt() -> i64 @export { return 150i64 }   /* E^F^G  -- one Sigma output bit */
+fn msha_ch_tt()   -> i64 @export { return 202i64 }   /* (E&F)^(~E&G) */
+fn msha_maj_tt()  -> i64 @export { return 232i64 }   /* (E&F)^(E&G)^(F&G) */
+
+/* ---------------- the bit-rename ontology: rotations cost 0 (linear diffusion) ---------------- */
+fn s_rotr(x: u64, k: u64) -> u64 {
+    if k == 0u64 { return x }
+    return (x >> k) | (x << (64u64 - k))
+}
+fn s_sig0(x: u64)  -> u64 { return s_rotr(x, 28u64) ^ s_rotr(x, 34u64) ^ s_rotr(x, 39u64) }
+fn s_sig1(x: u64)  -> u64 { return s_rotr(x, 14u64) ^ s_rotr(x, 18u64) ^ s_rotr(x, 41u64) }
+fn s_ssig0(x: u64) -> u64 { return s_rotr(x, 1u64)  ^ s_rotr(x, 8u64)  ^ (x >> 7u64) }
+fn s_ssig1(x: u64) -> u64 { return s_rotr(x, 19u64) ^ s_rotr(x, 61u64) ^ (x >> 6u64) }
+fn s_bits3(x: u64, ra: u64, rb: u64, rc: u64, mode: i64) -> u64 {
+    let mut out : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let ba : u64 = (x >> ((i + ra) & 63u64)) & 1u64
+        let bb : u64 = (x >> ((i + rb) & 63u64)) & 1u64
+        let mut bc : u64 = 0u64
+        if mode == 0i64 { bc = (x >> ((i + rc) & 63u64)) & 1u64 }
+        else { let idx : u64 = i + rc  if idx < 64u64 { bc = (x >> idx) & 1u64 } }
+        out = out | ((ba ^ bb ^ bc) << i)
+        i = i + 1u64
+    }
+    return out
+}
+fn s_smx() -> u64 {
+    SSMX = SSMX + 0x9E3779B97F4A7C15u64
+    let mut z : u64 = SSMX
+    z = (z ^ (z >> 30u64)) * 0xBF58476D1CE4E5B9u64
+    z = (z ^ (z >> 27u64)) * 0x94D049BB133111EBu64
+    z = z ^ (z >> 31u64)
+    return z
+}
+fn msha_rename_ok() -> i64 @export {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let x : u64 = 1u64 << i
+        if s_bits3(x, 14u64, 18u64, 41u64, 0i64) != s_sig1(x)  { return 0i64 }
+        if s_bits3(x, 28u64, 34u64, 39u64, 0i64) != s_sig0(x)  { return 0i64 }
+        if s_bits3(x, 1u64,  8u64,  7u64,  1i64) != s_ssig0(x) { return 0i64 }
+        if s_bits3(x, 19u64, 61u64, 6u64,  1i64) != s_ssig1(x) { return 0i64 }
+        i = i + 1u64
+    }
+    SSMX = 20260716u64
+    i = 0u64
+    while i < 4096u64 {
+        let x : u64 = s_smx()
+        if s_bits3(x, 14u64, 18u64, 41u64, 0i64) != s_sig1(x)  { return 0i64 }
+        if s_bits3(x, 28u64, 34u64, 39u64, 0i64) != s_sig0(x)  { return 0i64 }
+        if s_bits3(x, 1u64,  8u64,  7u64,  1i64) != s_ssig0(x) { return 0i64 }
+        if s_bits3(x, 19u64, 61u64, 6u64,  1i64) != s_ssig1(x) { return 0i64 }
+        i = i + 1u64
+    }
+    return 1i64
+}
+fn msha_xor(sel: i64) -> i64 @export {
+    let mut mode : i64 = 0i64
+    let mut sc : u64 = 0u64
+    if sel == 2i64 { mode = 1i64  sc = 7u64 }
+    if sel == 3i64 { mode = 1i64  sc = 6u64 }
+    let mut total : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let mut terms : i64 = 2i64
+        if mode == 0i64 { terms = terms + 1i64 }
+        else { if (i + sc) < 64u64 { terms = terms + 1i64 } }
+        total = total + (terms - 1i64)
+        i = i + 1u64
+    }
+    return total
+}

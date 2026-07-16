@@ -1,0 +1,139 @@
+/* covobs_tail.iii -- III EMITS III.  The evergreen tail-generator for the Autarkeia A3-tail NIH observer.
+ *
+ * Reads the LIVE covenant core rows (arg1) and the cad-computed covenant root CA (arg2, 64 lowercase hex),
+ * and prints to stdout the data-dependent tail of indep_covenant_obs: the DATA fill (chunked so no single
+ * function body exceeds the iiisv 32768-byte cap), EXP (= CA) and main().  Concatenated after
+ * indep_covenant_obs_head.iii it forms a complete organ that recomputes iii-judge's Merkle fold with a
+ * from-scratch III SHA-256 and returns 99 iff the independent root equals CA -- proven on the mainline
+ * backend AND under svir_interp.  No foreign tool computes anything: III reads the core, III emits the
+ * observer, III compiles it, III executes it, III's hasher reproduces III's fold.  core_H by OBSERVATION. */
+module covobs_tail
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, read: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+const GENERIC_READ  : u32 = 2147483648u32
+const OPEN_EXISTING : u32 = 3u32
+const INVALID_H     : u64 = 18446744073709551615u64
+const CORECAP       : u64 = 65536u64
+
+var CORE : [u8; 65536]
+var NIO  : [u32; 2]
+var PROBE : [u8; 1]
+var DEC  : [u8; 32]
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn pl(s: u64) -> u32 { ps(s)  nl()  return 1u32 }
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(DEC[k] as i32) }
+    return 1u32
+}
+fn hexv(c: u64) -> u64 {
+    if c >= 48u64 { if c <= 57u64 { return c - 48u64 } }
+    if c >= 97u64 { if c <= 102u64 { return c - 87u64 } }
+    if c >= 65u64 { if c <= 70u64 { return c - 55u64 } }
+    return 0u64
+}
+fn rdfile(path: u64, buf: u64, cap: u64) -> u64 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0u32, 0u64)
+    if h == INVALID_H { return INVALID_H }
+    let mut total : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if total == cap {
+            let okp : i32 = ReadFile(h, (&PROBE) as u64, 1u32, (&NIO) as u64, 0u64)
+            if okp == 0i32 { CloseHandle(h)  return INVALID_H }
+            if NIO[0u64] != 0u32 { CloseHandle(h)  return INVALID_H }
+            going = 0u8
+        } else {
+            let mut want : u64 = 65536u64
+            if total + want > cap { want = cap - total }
+            let ok : i32 = ReadFile(h, buf + total, want as u32, (&NIO) as u64, 0u64)
+            if ok == 0i32 { CloseHandle(h)  return INVALID_H }
+            let n : u32 = NIO[0u64]
+            if n == 0u32 { going = 0u8 } else { total = total + (n as u64) }
+        }
+    }
+    CloseHandle(h)
+    return total
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { ps("usage: covobs_tail <core_file> <CA-64hex>\n" as u64)  return 2u64 }
+    let av : *u64 = argv as *u64
+    let n : u64 = rdfile(av[1u64], (&CORE) as u64, CORECAP)
+    if n == INVALID_H { ps("covobs_tail: cannot read core\n" as u64)  return 2u64 }
+
+    /* ---- DATA fill, chunked at 180 stores/function (< iiisv 32768-byte body cap) ---- */
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if (i % 180u64) == 0u64 {
+            if i > 0u64 { pl("    return 0u64" as u64)  pl("}" as u64) }
+            ps("fn data_init_" as u64)  pd(c)  pl("() -> u64 {" as u64)
+            c = c + 1u64
+        }
+        ps("    DATA[" as u64)  pd(i)  ps("u64] = " as u64)  pd(CORE[i])  pl("u64" as u64)
+        i = i + 1u64
+    }
+    if n > 0u64 { pl("    return 0u64" as u64)  pl("}" as u64) }
+    else { pl("fn data_init_0() -> u64 { return 0u64 }" as u64)  c = 1u64 }
+    let nchunks : u64 = c
+
+    /* ---- EXP = CA (parse 64 hex chars -> 32 bytes) ---- */
+    let ca : *u8 = av[2u64] as *u8
+    nl()
+    pl("fn exp_init() -> u64 {" as u64)
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        let hi : u64 = hexv(ca[j * 2u64] as u64)
+        let lo : u64 = hexv(ca[(j * 2u64) + 1u64] as u64)
+        let b  : u64 = (hi * 16u64) + lo
+        ps("    EXP[" as u64)  pd(j)  ps("u64] = " as u64)  pd(b)  pl("u64" as u64)
+        j = j + 1u64
+    }
+    pl("    return 0u64" as u64)
+    pl("}" as u64)
+
+    /* ---- main() : the iii-judge Merkle fold, checked against CA ---- */
+    nl()
+    pl("fn main() -> u64 {" as u64)
+    pl("    k_init()" as u64)
+    let mut d : u64 = 0u64
+    while d < nchunks { ps("    data_init_" as u64)  pd(d)  pl("()" as u64)  d = d + 1u64 }
+    pl("    exp_init()" as u64)
+    pl("    let mut z : u64 = 0u64" as u64)
+    pl("    while z < 32u64 { ROOT[z] = 0u64  z = z + 1u64 }" as u64)
+    ps("    let n : u64 = " as u64)  pd(n)  pl("u64" as u64)
+    pl("    let mut p : u64 = 0u64" as u64)
+    pl("    while p < n {" as u64)
+    pl("        let a : u64 = p" as u64)
+    pl("        let mut e : u64 = p" as u64)
+    pl("        let mut sc : u64 = 1u64" as u64)
+    pl("        while sc == 1u64 { if e >= n { sc = 0u64 } else { if DATA[e] == 10u64 { sc = 0u64 } else { e = e + 1u64 } } }" as u64)
+    pl("        let len : u64 = e - a" as u64)
+    pl("        if len > 0u64 {" as u64)
+    pl("            load_root_row(a, len)" as u64)
+    pl("            sha256(32u64 + len)" as u64)
+    pl("            store_root()" as u64)
+    pl("        }" as u64)
+    pl("        if e < n { p = e + 1u64 } else { p = e }" as u64)
+    pl("    }" as u64)
+    pl("    let mut k : u64 = 0u64" as u64)
+    pl("    while k < 32u64 { if ROOT[k] != EXP[k] { return 1u64 }  k = k + 1u64 }" as u64)
+    pl("    return 99u64" as u64)
+    pl("}" as u64)
+    return 0u64
+}

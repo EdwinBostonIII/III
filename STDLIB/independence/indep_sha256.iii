@@ -1,0 +1,258 @@
+/* indep_sha256.iii -- a SECOND, from-scratch III SHA-256 (FIPS 180-4), sharing ZERO code with the cad
+ * suite.  Pure III, zero externs: lowered by the mainline compiler AND by the independent iiisv (.iii ->
+ * SVIR) front-end, then executed BOTH natively AND under svir_interp reference semantics -- an executor
+ * that shares no code with the native backend.  Two independences at once: a second HASHER (algorithm-
+ * independent of cad) confirmed on a second SUBSTRATE (interp-independent of native codegen).  Self-
+ * checks the three FIPS test vectors (empty, "abc", the 56-byte two-block vector) and returns 99 iff
+ * every 32-byte digest is bit-exact.  32-bit words carried in u64 with explicit & 0xffffffff masking. */
+module indep_sha256
+
+var MSG : [u8; 256]
+var W   : [u64; 64]
+var H   : [u64; 8]
+var K   : [u64; 64]
+var EXP : [u64; 8]
+
+fn rotr(x: u64, n: u64) -> u64 {
+    return (((x >> n) | (x << (32u64 - n)))) & 0xffffffffu64
+}
+
+fn k_init() -> u64 {
+    K[0u64] = 0x428a2f98u64
+    K[1u64] = 0x71374491u64
+    K[2u64] = 0xb5c0fbcfu64
+    K[3u64] = 0xe9b5dba5u64
+    K[4u64] = 0x3956c25bu64
+    K[5u64] = 0x59f111f1u64
+    K[6u64] = 0x923f82a4u64
+    K[7u64] = 0xab1c5ed5u64
+    K[8u64] = 0xd807aa98u64
+    K[9u64] = 0x12835b01u64
+    K[10u64] = 0x243185beu64
+    K[11u64] = 0x550c7dc3u64
+    K[12u64] = 0x72be5d74u64
+    K[13u64] = 0x80deb1feu64
+    K[14u64] = 0x9bdc06a7u64
+    K[15u64] = 0xc19bf174u64
+    K[16u64] = 0xe49b69c1u64
+    K[17u64] = 0xefbe4786u64
+    K[18u64] = 0x0fc19dc6u64
+    K[19u64] = 0x240ca1ccu64
+    K[20u64] = 0x2de92c6fu64
+    K[21u64] = 0x4a7484aau64
+    K[22u64] = 0x5cb0a9dcu64
+    K[23u64] = 0x76f988dau64
+    K[24u64] = 0x983e5152u64
+    K[25u64] = 0xa831c66du64
+    K[26u64] = 0xb00327c8u64
+    K[27u64] = 0xbf597fc7u64
+    K[28u64] = 0xc6e00bf3u64
+    K[29u64] = 0xd5a79147u64
+    K[30u64] = 0x06ca6351u64
+    K[31u64] = 0x14292967u64
+    K[32u64] = 0x27b70a85u64
+    K[33u64] = 0x2e1b2138u64
+    K[34u64] = 0x4d2c6dfcu64
+    K[35u64] = 0x53380d13u64
+    K[36u64] = 0x650a7354u64
+    K[37u64] = 0x766a0abbu64
+    K[38u64] = 0x81c2c92eu64
+    K[39u64] = 0x92722c85u64
+    K[40u64] = 0xa2bfe8a1u64
+    K[41u64] = 0xa81a664bu64
+    K[42u64] = 0xc24b8b70u64
+    K[43u64] = 0xc76c51a3u64
+    K[44u64] = 0xd192e819u64
+    K[45u64] = 0xd6990624u64
+    K[46u64] = 0xf40e3585u64
+    K[47u64] = 0x106aa070u64
+    K[48u64] = 0x19a4c116u64
+    K[49u64] = 0x1e376c08u64
+    K[50u64] = 0x2748774cu64
+    K[51u64] = 0x34b0bcb5u64
+    K[52u64] = 0x391c0cb3u64
+    K[53u64] = 0x4ed8aa4au64
+    K[54u64] = 0x5b9cca4fu64
+    K[55u64] = 0x682e6ff3u64
+    K[56u64] = 0x748f82eeu64
+    K[57u64] = 0x78a5636fu64
+    K[58u64] = 0x84c87814u64
+    K[59u64] = 0x8cc70208u64
+    K[60u64] = 0x90befffau64
+    K[61u64] = 0xa4506cebu64
+    K[62u64] = 0xbef9a3f7u64
+    K[63u64] = 0xc67178f2u64
+    return 0u64
+}
+
+fn hexp(v: u64) -> u64 { return v & 0xffffffffu64 }
+
+fn sha256(msg_len: u64) -> u64 {
+    MSG[msg_len] = 0x80u64
+    let mut p : u64 = msg_len + 1u64
+    while (p % 64u64) != 56u64 { MSG[p] = 0u64  p = p + 1u64 }
+    let bits : u64 = msg_len * 8u64
+    MSG[p] = 0u64  MSG[p + 1u64] = 0u64  MSG[p + 2u64] = 0u64  MSG[p + 3u64] = 0u64
+    MSG[p + 4u64] = (bits >> 24u64) & 0xffu64
+    MSG[p + 5u64] = (bits >> 16u64) & 0xffu64
+    MSG[p + 6u64] = (bits >> 8u64) & 0xffu64
+    MSG[p + 7u64] = bits & 0xffu64
+    let total : u64 = p + 8u64
+    H[0u64] = 0x6a09e667u64  H[1u64] = 0xbb67ae85u64  H[2u64] = 0x3c6ef372u64  H[3u64] = 0xa54ff53au64
+    H[4u64] = 0x510e527fu64  H[5u64] = 0x9b05688cu64  H[6u64] = 0x1f83d9abu64  H[7u64] = 0x5be0cd19u64
+    let mut off : u64 = 0u64
+    while off < total {
+        let mut t : u64 = 0u64
+        while t < 16u64 {
+            let b : u64 = off + (t * 4u64)
+            let b0 : u64 = MSG[b]
+            let b1 : u64 = MSG[b + 1u64]
+            let b2 : u64 = MSG[b + 2u64]
+            let b3 : u64 = MSG[b + 3u64]
+            W[t] = ((b0 << 24u64) | (b1 << 16u64) | (b2 << 8u64) | b3) & 0xffffffffu64
+            t = t + 1u64
+        }
+        while t < 64u64 {
+            let w15 : u64 = W[t - 15u64]
+            let w2  : u64 = W[t - 2u64]
+            let s0 : u64 = (rotr(w15, 7u64) ^ rotr(w15, 18u64) ^ (w15 >> 3u64)) & 0xffffffffu64
+            let s1 : u64 = (rotr(w2, 17u64) ^ rotr(w2, 19u64) ^ (w2 >> 10u64)) & 0xffffffffu64
+            W[t] = (W[t - 16u64] + s0 + W[t - 7u64] + s1) & 0xffffffffu64
+            t = t + 1u64
+        }
+        let mut a : u64 = H[0u64]
+        let mut bb : u64 = H[1u64]
+        let mut c : u64 = H[2u64]
+        let mut d : u64 = H[3u64]
+        let mut e : u64 = H[4u64]
+        let mut f : u64 = H[5u64]
+        let mut g : u64 = H[6u64]
+        let mut hh : u64 = H[7u64]
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let S1 : u64 = (rotr(e, 6u64) ^ rotr(e, 11u64) ^ rotr(e, 25u64)) & 0xffffffffu64
+            let ch : u64 = ((e & f) ^ ((e ^ 0xffffffffu64) & g)) & 0xffffffffu64
+            let t1 : u64 = (hh + S1 + ch + K[i] + W[i]) & 0xffffffffu64
+            let S0 : u64 = (rotr(a, 2u64) ^ rotr(a, 13u64) ^ rotr(a, 22u64)) & 0xffffffffu64
+            let maj : u64 = ((a & bb) ^ (a & c) ^ (bb & c)) & 0xffffffffu64
+            let t2 : u64 = (S0 + maj) & 0xffffffffu64
+            hh = g
+            g = f
+            f = e
+            e = (d + t1) & 0xffffffffu64
+            d = c
+            c = bb
+            bb = a
+            a = (t1 + t2) & 0xffffffffu64
+            i = i + 1u64
+        }
+        H[0u64] = (H[0u64] + a) & 0xffffffffu64
+        H[1u64] = (H[1u64] + bb) & 0xffffffffu64
+        H[2u64] = (H[2u64] + c) & 0xffffffffu64
+        H[3u64] = (H[3u64] + d) & 0xffffffffu64
+        H[4u64] = (H[4u64] + e) & 0xffffffffu64
+        H[5u64] = (H[5u64] + f) & 0xffffffffu64
+        H[6u64] = (H[6u64] + g) & 0xffffffffu64
+        H[7u64] = (H[7u64] + hh) & 0xffffffffu64
+        off = off + 64u64
+    }
+    return 0u64
+}
+
+fn eq8() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { if H[i] != EXP[i] { return 0u64 }  i = i + 1u64 }
+    return 1u64
+}
+
+fn main() -> u64 {
+    k_init()
+    MSG[0u64] = 97u64  MSG[1u64] = 98u64  MSG[2u64] = 99u64
+    EXP[0u64] = 0xba7816bfu64
+    EXP[1u64] = 0x8f01cfeau64
+    EXP[2u64] = 0x414140deu64
+    EXP[3u64] = 0x5dae2223u64
+    EXP[4u64] = 0xb00361a3u64
+    EXP[5u64] = 0x96177a9cu64
+    EXP[6u64] = 0xb410ff61u64
+    EXP[7u64] = 0xf20015adu64
+    sha256(3u64)
+    if eq8() != 1u64 { return 2u64 }
+    EXP[0u64] = 0xe3b0c442u64
+    EXP[1u64] = 0x98fc1c14u64
+    EXP[2u64] = 0x9afbf4c8u64
+    EXP[3u64] = 0x996fb924u64
+    EXP[4u64] = 0x27ae41e4u64
+    EXP[5u64] = 0x649b934cu64
+    EXP[6u64] = 0xa495991bu64
+    EXP[7u64] = 0x7852b855u64
+    sha256(0u64)
+    if eq8() != 1u64 { return 1u64 }
+    MSG[0u64] = 97u64
+    MSG[1u64] = 98u64
+    MSG[2u64] = 99u64
+    MSG[3u64] = 100u64
+    MSG[4u64] = 98u64
+    MSG[5u64] = 99u64
+    MSG[6u64] = 100u64
+    MSG[7u64] = 101u64
+    MSG[8u64] = 99u64
+    MSG[9u64] = 100u64
+    MSG[10u64] = 101u64
+    MSG[11u64] = 102u64
+    MSG[12u64] = 100u64
+    MSG[13u64] = 101u64
+    MSG[14u64] = 102u64
+    MSG[15u64] = 103u64
+    MSG[16u64] = 101u64
+    MSG[17u64] = 102u64
+    MSG[18u64] = 103u64
+    MSG[19u64] = 104u64
+    MSG[20u64] = 102u64
+    MSG[21u64] = 103u64
+    MSG[22u64] = 104u64
+    MSG[23u64] = 105u64
+    MSG[24u64] = 103u64
+    MSG[25u64] = 104u64
+    MSG[26u64] = 105u64
+    MSG[27u64] = 106u64
+    MSG[28u64] = 104u64
+    MSG[29u64] = 105u64
+    MSG[30u64] = 106u64
+    MSG[31u64] = 107u64
+    MSG[32u64] = 105u64
+    MSG[33u64] = 106u64
+    MSG[34u64] = 107u64
+    MSG[35u64] = 108u64
+    MSG[36u64] = 106u64
+    MSG[37u64] = 107u64
+    MSG[38u64] = 108u64
+    MSG[39u64] = 109u64
+    MSG[40u64] = 107u64
+    MSG[41u64] = 108u64
+    MSG[42u64] = 109u64
+    MSG[43u64] = 110u64
+    MSG[44u64] = 108u64
+    MSG[45u64] = 109u64
+    MSG[46u64] = 110u64
+    MSG[47u64] = 111u64
+    MSG[48u64] = 109u64
+    MSG[49u64] = 110u64
+    MSG[50u64] = 111u64
+    MSG[51u64] = 112u64
+    MSG[52u64] = 110u64
+    MSG[53u64] = 111u64
+    MSG[54u64] = 112u64
+    MSG[55u64] = 113u64
+    EXP[0u64] = 0x248d6a61u64
+    EXP[1u64] = 0xd20638b8u64
+    EXP[2u64] = 0xe5c02693u64
+    EXP[3u64] = 0x0c3e6039u64
+    EXP[4u64] = 0xa33ce459u64
+    EXP[5u64] = 0x64ff2167u64
+    EXP[6u64] = 0xf6ecedd4u64
+    EXP[7u64] = 0x19db06c1u64
+    sha256(56u64)
+    if eq8() != 1u64 { return 3u64 }
+    return 99u64
+}

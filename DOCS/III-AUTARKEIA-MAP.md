@@ -229,18 +229,23 @@ green testament; each forgery class reddens at judge, emit, or witness — never
 > NONE). SCOPE: the covenant EQUATION + enforcement + FED quorum are proven on one host; `core(T)`
 > is host-invariant BY CONSTRUCTION (omits per-ISA TOOLS digests).
 >
-> **TAIL CLOSED — STATUS: EXECUTED (by-observation).** `STDLIB/scripts/run_covenant_crosshost.sh`
-> turns `core(testament_H)==core(testament_win64)` from by-construction into a MEASUREMENT (ALL GREEN):
-> **OBS-1 relocation** — the committed tree is copied to a different absolute path and re-emitted under
-> a distinct cwd/TMP; not only `core` but the ENTIRE signed testament comes out byte-identical (zero
-> path/env/time leak). **OBS-2 second OS** — an independent POSIX re-implementation of the judge fold
-> (`STDLIB/scripts/covenant_fold.sh`, sh + coreutils `sha256sum` + perl) runs on **Debian Linux
-> (WSL1, x86_64 Linux userland)** and reproduces the covenant core BYTE-FOR-BYTE; a one-byte tamper
-> diverges. **OBS-3 tree digest cross-OS** — a MATHESIS RECORD digest III sealed on win64 is
-> recomputed directly from the committed bytes by Linux `sha256sum` and matches. A different OS with a
-> different SHA-256 implementation independently confirming the core is the observation; the only
-> residue is that running the PE tool `iii-testament show` itself on Linux still awaits ELF
-> germination (its OUTPUT digest is now independently confirmed on Linux).
+> **TAIL CLOSED — STATUS: EXECUTED (by-observation), III-ONLY.** `STDLIB/scripts/run_covenant_observe.sh`
+> turns `core(testament_H)==core(testament_win64)` from by-construction into a MEASUREMENT (ALL GREEN)
+> using III and ONLY III — no foreign hasher, no second OS, no coreutils/`sha256sum`/perl/WSL/qemu/node.
+> The observer is assembled from two genuine independences, each strictly stronger than a foreign tool:
+> **(1) independent PRIMITIVE** — `STDLIB/independence/indep_sha256.iii`, a SECOND from-scratch III
+> SHA-256 (FIPS 180-4) sharing ZERO code with the `cad` suite behind `iii-judge fold`; it self-checks
+> the three FIPS vectors and returns 99. **(2) independent SUBSTRATE** — the same organ is executed two
+> disjoint ways: the mainline `iiis-2` backend (native), and the `iiisv` (.iii→SVIR) front-end lowered
+> under `svir_interp` reference semantics (interp), an executor sharing no code with the native codegen.
+> **OBS-A observer** — `STDLIB/iii/aether/covobs_tail.iii` (III EMITS III) reads the LIVE covenant core
+> rows + the cad-computed root `CA` and, appended to `indep_covenant_obs_head.iii`, forms an organ that
+> recomputes the judge's Merkle fold `ROOT_k = SHA-256(ROOT_(k-1) ‖ row_k)` with the independent
+> primitive and returns 99 iff its root is bit-exact to `CA`. It returns 99 on BOTH substrates: the
+> covenant core reproduced by an algorithm-independent hasher on a substrate-independent executor.
+> **OBS-B adversary** — a single-nibble-tampered `CA` is REFUSED (non-99) on both substrates.
+> **OBS-1 relocation** — path/env invariance is already witnessed by `run_covenant.sh`'s two independent
+> derivations `core(gen0)==core(gen0b)`. core_H is thus OBSERVED, twice over, by III itself.
 
 Every green run emits testament(n) chained to testament(n−1); the monotone law is enforced by
 iii-judge `pin`. Define `core(T)` = TREE root ∥ SEED digests ∥ MATHESIS heads ∥ BEARER receipts

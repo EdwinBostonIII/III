@@ -125,7 +125,38 @@ if build build_iii_witness.sh iii-witness; then
     fi
 fi
 
-# CROSS-TOOL CONSISTENCY: iii-hexad and iii-typecheck --reach share the hexad_reach faculty -- they must
+say "[standing] == iii-judge: THE JUDGE -- sovereign verdicts (AUTARKEIA Alpha-2) =="
+# The verdict repatriated into III.  Until now every PASS in this tree was declared by bash; here
+# the JUDGE is put on trial by an ADVERSARIAL launcher and must resist every forgery.  Each known
+# answer is external truth (an OS exit code, a FIPS digest, the ratchet's own law) -- never the
+# tool's stdout, which a complicit launcher could fake.
+if build build_iii_judge.sh iii-judge; then
+    JU="$C/iii-judge$BIN_SUFFIX"
+    JW="$(cygpath -w "$JU" 2>/dev/null || printf '%s' "$JU")"
+    # RC-SOVEREIGNTY: the judge reads the child's TRUE exit code from the OS (GetExitCodeProcess).
+    expect_exit "run: child exits 2, want 2   PASS"                 0 "$JU" run 2  "$JW"
+    expect_exit "run: child exits 2, want 99  FAIL"                 1 "$JU" run 99 "$JW"
+    # FULL-WIDTH (kills the 8-bit trap): 300 & 0xFF == 44; the judge must report 300, not 44.
+    expect_exit "run: child exits 300, want 300 PASS (full-width)"  0 "$JU" run 300 "cmd /c exit 300"
+    expect_exit "run: child exits 300, want 44  FAIL (no 8-bit mask)" 1 "$JU" run 44 "cmd /c exit 300"
+    # FORGED-PASS RESISTANCE: a launcher PRINTS a green, but the verdict is the OS rc, not stdout.
+    expect_exit "run: child prints 'verdict=PASS' yet exits 1 -> FAIL" 1 "$JU" run 0 "cmd /c echo verdict=PASS& exit 1"
+    # ARTIFACT-SOVEREIGNTY: the receipt binds bytes, not a filename a launcher could swap.
+    printf 'abc' > "$W/ju_art.txt"
+    expect_exit "hash: bound digest matches            PASS"        0 "$JU" hash "$W/ju_art.txt" ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    printf 'abd' > "$W/ju_art.txt"   # same NAME, one byte changed
+    expect_exit "hash: swapped content (same name)      FAIL"       1 "$JU" hash "$W/ju_art.txt" ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    # MONOTONE RATCHET: a regression cannot be pinned as progress.
+    rm -f "$W/ju_led.txt"
+    expect_exit "pin: floor 10 up                        PASS"      0 "$JU" pin "$W/ju_led.txt" floor 10 up
+    expect_exit "pin: floor 20 up                        PASS"      0 "$JU" pin "$W/ju_led.txt" floor 20 up
+    expect_exit "pin: floor 5 up (regression)            BREAK"     1 "$JU" pin "$W/ju_led.txt" floor 5 up
+    # MERKLE FOLD: dropping/altering one receipt row must change the root (coverage-sovereignty).
+    printf 'row-a\nrow-b\nrow-c\n' > "$W/ju_r1.txt"; printf 'row-a\nrow-X\nrow-c\n' > "$W/ju_r2.txt"
+    R1="$("$JU" fold "$W/ju_r1.txt" 2>/dev/null | grep -o 'root=[0-9a-f]*')"
+    R2="$("$JU" fold "$W/ju_r2.txt" 2>/dev/null | grep -o 'root=[0-9a-f]*')"
+    if [[ -n "$R1" && "$R1" != "$R2" ]]; then say "PASS fold: altering one row changes the Merkle root"; else say "RED  fold: R1=$R1 R2=$R2"; FAIL=1; fi
+fi
 # agree on hexad admissibility.  hexad 40 (packed) admitted <=> --reach 40 PROVEN.  A genuine two-tool
 # check that the safety algebra is ONE object seen through two surfaces.
 say "[standing] == cross-tool: iii-hexad reachability == iii-typecheck --reach =="
@@ -144,5 +175,5 @@ if [[ -x "$C/iii-hexad$BIN_SUFFIX" && -x "$C/iii-typecheck$BIN_SUFFIX" ]]; then
 fi
 
 if [[ $FAIL -ne 0 ]]; then echo "[standing] RED -- a tool broke"; exit 1; fi
-echo "[standing] GREEN: all 8 tools build from source and pass their known-answer smoke checks + cross-tool consistency"
+echo "[standing] GREEN: all 11 tools build from source and pass their known-answer smoke checks + cross-tool consistency (incl. iii-judge under an adversarial launcher)"
 exit 0

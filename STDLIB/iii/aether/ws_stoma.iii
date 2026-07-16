@@ -13,6 +13,7 @@ extern @abi(c-msvc-x64) fn ui_fill_rect(buf: u64, w: u32, h: u32, x: u32, y: u32
 extern @abi(c-msvc-x64) fn ui_text_n(buf: u64, w: u32, h: u32, x: u32, y: u32, str: u64, len: u32, color: u32) -> u32 from "ui_font.iii"
 extern @abi(c-msvc-x64) fn th_panel_c(buf: u64, w: u32, h: u32, x: u32, y: u32, rw: u32, rh: u32, fill: u32) -> i32 from "studio_theme.iii"
 extern @abi(c-msvc-x64) fn th_vbold(buf: u64, w: u32, h: u32, x: i64, y: i64, str: u64, len: u32, size: i64, color: u32) -> i64 from "studio_theme.iii"
+extern @abi(c-msvc-x64) fn th_num(buf: u64, w: u32, h: u32, x: u32, y: u32, v: i64, color: u32) -> u32 from "studio_theme.iii"
 extern @abi(c-msvc-x64) fn th_inset() -> u32 from "studio_theme.iii"
 extern @abi(c-msvc-x64) fn th_cream() -> u32 from "studio_theme.iii"
 extern @abi(c-msvc-x64) fn th_ink() -> u32 from "studio_theme.iii"
@@ -27,12 +28,15 @@ extern @abi(c-msvc-x64) fn br_line_ptr() -> u64 from "stoma_bridge.iii"
 extern @abi(c-msvc-x64) fn br_line_len() -> u64 from "stoma_bridge.iii"
 extern @abi(c-msvc-x64) fn br_scroll_ptr() -> u64 from "stoma_bridge.iii"
 extern @abi(c-msvc-x64) fn br_scroll_len() -> u64 from "stoma_bridge.iii"
+extern @abi(c-msvc-x64) fn journal_seq() -> u64 from "stoma_journal.iii"
+extern @abi(c-msvc-x64) fn GetCurrentDirectoryA(n: u32, buf: u64) -> u32 from "kernel32"
 
 const WSM_LCAP : u64 = 300u64
 var WSM_OFF : [u64; 300]
 var WSM_LEN : [u32; 300]
 var WSM_N   : u64                       /* total lines laid out (ring index) */
 var WSM_DONE : u32 = 0u32
+var WSM_CWD : [u8; 520]                  /* live OS working directory (the cd verb moves it) */
 
 /* lay out the scrollback into (wrapped) lines: break on '\n' or when a line reaches `cols` chars.  Ring-buffered
  * into WSM_OFF/WSM_LEN so only the most recent WSM_LCAP lines are retained; WSM_N counts all lines seen. */
@@ -84,9 +88,11 @@ fn ws_stoma_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32
 
     let py : u32 = cy + 40u32
     let ph : u32 = chh - 96u32
-    th_panel_c(buf, w, h, cx + 4u32, py, cw - 12u32, ph, th_inset())
+    let sbw : u32 = 236u32                         /* right context/verb sidebar */
+    let scw : u32 = cw - 20u32 - sbw               /* scrollback width */
+    th_panel_c(buf, w, h, cx + 4u32, py, scw, ph, th_inset())
 
-    let mut cols : u64 = ((cw - 40u32) / 8u32) as u64
+    let mut cols : u64 = ((scw - 24u32) / 8u32) as u64
     if cols > 200u64 { cols = 200u64 }
     wsm_layout(cols)
 
@@ -105,7 +111,30 @@ fn ws_stoma_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32
         r = r + 1u64
     }
 
-    /* input line */
+    /* --- live CONTEXT + VERB sidebar (makes the shell discoverable, Blender-style) --- */
+    let sbx : u32 = cx + cw - sbw - 4u32
+    th_panel_c(buf, w, h, sbx, py, sbw, ph, th_cream())
+    th_vbold(buf, w, h, (sbx + 12u32) as i64, (py + 6u32) as i64, "CONTEXT" as u64, 7u32, 16i64, th_maroon())
+    /* live working directory (the cd verb moves the real OS cwd) */
+    let clen : u32 = GetCurrentDirectoryA(519u32, (&WSM_CWD) as u64)
+    ui_text_n(buf, w, h, sbx + 12u32, py + 36u32, "cwd" as u64, 3u32, th_dim())
+    let mut dshow : u32 = clen
+    if dshow > 26u32 { dshow = 26u32 }
+    ui_text_n(buf, w, h, sbx + 12u32, py + 52u32, ((&WSM_CWD) as u64 + (clen - dshow) as u64), dshow, th_ink())
+    let mut jx : u32 = ui_text_n(buf, w, h, sbx + 12u32, py + 74u32, "journaled cmds " as u64, 15u32, th_dim())
+    th_num(buf, w, h, jx, py + 74u32, journal_seq() as i64, th_maroon())
+
+    th_vbold(buf, w, h, (sbx + 12u32) as i64, (py + 100u32) as i64, "VERBS" as u64, 5u32, 16i64, th_maroon())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 128u32, "cd <dir>    change directory" as u64, 28u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 146u32, "pwd / ls    where / list" as u64, 24u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 164u32, "env         environment" as u64, 23u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 182u32, "tree        the repo cone" as u64, 25u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 200u32, "gate <n>    run corpus KAT" as u64, 26u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 218u32, "seal        seal the tree" as u64, 25u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 236u32, "cmd <exe>   spawn external" as u64, 26u32, th_ink())
+    ui_text_n(buf, w, h, sbx + 12u32, py + 254u32, "help / exit" as u64, 11u32, th_ink())
+
+    /* input line (under the scrollback, full width) */
     let iy : u32 = py + ph + 10u32
     th_panel_c(buf, w, h, cx + 4u32, iy, cw - 12u32, 36u32, th_cream())
     ui_text_n(buf, w, h, cx + 16u32, iy + 10u32, ">" as u64, 1u32, th_maroon())

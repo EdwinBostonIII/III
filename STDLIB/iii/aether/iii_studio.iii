@@ -8,8 +8,8 @@
  *   FORGE   -- edit a real .iii file and COMPILE it with the real iiis-2 (real stderr, real exit code)
  *   BENCH   -- the exact-physics workbench (integer + Sqrt-sum verdicts, live)
  *   LENS    -- the gated exact ray-cast renderer, orbited live
- *   ZOOM    -- infinite exact-integer zoom that resolves into the REAL e-graph, then the SAT netlist
- *   CONSOLE -- the sovereign CLI: exact signs, inductive provers, live corpus gates
+ *   RENDER  -- the ONE unified exact renderer: 1D spectrum / 2D field / 3D ray-cast, in colour, over TIME, sealed to .ixr
+ *   STOMA   -- the sovereign shell as centerpiece: real verbs, real spawn, journaled (the terminal Stoma, windowed)
  * The shell owns routing only: workspaces own their state; the theme owns the look; the substrate owns the OS.
  * Everything on screen is drawn by III's own rasterizer and fonts.  F1..F6 or click the rail; ESC quits. */
 module iii_studio
@@ -124,11 +124,12 @@ fn rail_icon(buf: u64, i: i64, x: u32, y: u32, main: u32, hi: u32) -> i32 {
         ui_fill_circle_aa(buf, STU_W, STU_H, xi + 10i64, yi + 10i64, 8i64, main, 2i64)
         ui_fill_circle_aa(buf, STU_W, STU_H, xi + 7i64, yi + 7i64, 3i64, hi, 2i64)
     }
-    if i == 4i64 {   /* ZOOM: nested frames -- depth */
-        ui_rect(buf, STU_W, STU_H, x, y + 1u32, 20u32, 17u32, main)
-        ui_rect(buf, STU_W, STU_H, x + 5u32, y + 5u32, 10u32, 9u32, hi)
+    if i == 4i64 {   /* RENDER: a spectrum sweep -- three colour bars across the dimensions */
+        ui_fill_rect(buf, STU_W, STU_H, x, y + 2u32, 6u32, 16u32, main)
+        ui_fill_rect(buf, STU_W, STU_H, x + 7u32, y + 2u32, 6u32, 16u32, hi)
+        ui_fill_rect(buf, STU_W, STU_H, x + 14u32, y + 2u32, 6u32, 16u32, main)
     }
-    if i == 5i64 {   /* CONSOLE: the prompt */
+    if i == 5i64 {   /* STOMA: the prompt -- the sovereign shell */
         ui_line(buf, STU_W, STU_H, (x + 2u32) as i32, (y + 3u32) as i32, (x + 9u32) as i32, (y + 9u32) as i32, main)
         ui_line(buf, STU_W, STU_H, (x + 9u32) as i32, (y + 9u32) as i32, (x + 2u32) as i32, (y + 15u32) as i32, main)
         ui_fill_rect(buf, STU_W, STU_H, x + 12u32, y + 14u32, 9u32, 3u32, hi)

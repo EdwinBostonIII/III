@@ -227,9 +227,20 @@ green testament; each forgery class reddens at judge, emit, or witness — never
 > **monotone law** is enforced by `iii-judge pin` (gen may not go backward) and a live **ML-DSA
 > (FIPS 204) 3-of-3 quorum** co-signs the core via iii-crypto (a tampered core is co-signed by
 > NONE). SCOPE: the covenant EQUATION + enforcement + FED quorum are proven on one host; `core(T)`
-> is host-invariant BY CONSTRUCTION (omits per-ISA TOOLS digests), so the remaining Α3 tail is the
-> physical second Γ host (germination) that makes `core(testament_H)==core(testament_win64)`
-> concrete rather than by-construction.
+> is host-invariant BY CONSTRUCTION (omits per-ISA TOOLS digests).
+>
+> **TAIL CLOSED — STATUS: EXECUTED (by-observation).** `STDLIB/scripts/run_covenant_crosshost.sh`
+> turns `core(testament_H)==core(testament_win64)` from by-construction into a MEASUREMENT (ALL GREEN):
+> **OBS-1 relocation** — the committed tree is copied to a different absolute path and re-emitted under
+> a distinct cwd/TMP; not only `core` but the ENTIRE signed testament comes out byte-identical (zero
+> path/env/time leak). **OBS-2 second OS** — an independent POSIX re-implementation of the judge fold
+> (`STDLIB/scripts/covenant_fold.sh`, sh + coreutils `sha256sum` + perl) runs on **Debian Linux
+> (WSL1, x86_64 Linux userland)** and reproduces the covenant core BYTE-FOR-BYTE; a one-byte tamper
+> diverges. **OBS-3 tree digest cross-OS** — a MATHESIS RECORD digest III sealed on win64 is
+> recomputed directly from the committed bytes by Linux `sha256sum` and matches. A different OS with a
+> different SHA-256 implementation independently confirming the core is the observation; the only
+> residue is that running the PE tool `iii-testament show` itself on Linux still awaits ELF
+> germination (its OUTPUT digest is now independently confirmed on Linux).
 
 Every green run emits testament(n) chained to testament(n−1); the monotone law is enforced by
 iii-judge `pin`. Define `core(T)` = TREE root ∥ SEED digests ∥ MATHESIS heads ∥ BEARER receipts

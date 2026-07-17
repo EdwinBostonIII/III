@@ -404,14 +404,10 @@ MODULES=(
     "numera/ec384"
     "numera/ecdsa_p384"
     "numera/rsa"
-    "numera/zk_field"
-    "numera/zk_snark"
-    "numera/zk_stark"
-    "numera/zk_air"
-    # numera/zk_rev -- ZERO-KNOWLEDGE PROVABLE REVERSIBILITY: composes reversible (undo engine) + zk_air
-    # (STARK) so a node proves a reversible-operation trace is faithfully invertible without revealing states.
-    "numera/zk_rev"
-    "numera/zk_prune"
+    # zk_field/zk_snark/zk_stark/zk_air/zk_rev/zk_prune RETIRED 2026-07-17 (Z supersession,
+    # commit 51c9bd70): the entire zk-STARK/SNARK/FRI subsystem retired in full -- III verifies
+    # exactly (proofcarry Z2 scrolls), or not at all.  Rows removed when Phi-3 surfaced the
+    # stale roster (build_stdlib counted 10 missing modules every run since the retirement).
     "verba/base64"
     "numera/hkdf"
     "numera/crc32"
@@ -422,7 +418,7 @@ MODULES=(
     "numera/murmur3"
     "numera/ntt"
     "numera/ntt_fri_organ"
-    "numera/zk_stark_seal"
+    # numera/zk_stark_seal RETIRED 2026-07-17 (Z supersession, 51c9bd70)
     "numera/ntt_bigint"
     "verba/csv"
     "verba/ini"
@@ -1459,13 +1455,8 @@ MODULES=(
     # bitmask equals the reverse-dispatch one -- a short-circuiting/order-dependent checker diverges.
     # Composes numera/typecheck (no island); compiler-unreferenced -> LIBNATIVE; last.
     "numera/proof_parallel"
-    # --- PHASE III Campaign II #3: a SUCCINCT PROOF OF PROOF-CHECKING.  numera/proof_stark encodes a
-    # kernel-checkable arithmetic trace as an AIR and drives numera/zk_air's STARK+FRI to a polylog-
-    # verifiable content-addressed certificate: a peer verifies a tiny seal instead of re-running the
-    # kernel.  Sound -- the AIR constraints have teeth (a violated cell fails air_constraints_hold) and
-    # the proof is unforgeable (zk_air_stark_selftest); the certified product equals the kernel's tc_eval.
-    # Composes zk_air + typecheck + ntt_fri_organ (no island); compiler-unreferenced -> LIBNATIVE; last.
-    "numera/proof_stark"
+    # numera/proof_stark RETIRED 2026-07-17 (Z supersession, 51c9bd70): the succinct
+    # proof-of-proof-checking is carried EXACTLY by the Z2 proof-carrying scroll (proofcarry).
     # --- PHASE III Campaign II #4: the kernel lowered to certified silicon.  numera/aeu_kernel lowers the
     # kernel's BV equality predicate (which tc_conv decides) to a universal-NAND netlist, proven equal to
     # the native-gate spec EXHAUSTIVELY (hdl_equiv2 over all 2^4 inputs) AND equal to the kernel's own
@@ -1702,12 +1693,8 @@ MODULES=(
     # bus).  Colour IS the content-address (palette over isub_cav); composes canvas + palette + isub (no island,
     # NO hand-built web).  Compiler-unreferenced -> LIBNATIVE; last.  Proven corpus 1987.
     "eidos/web"
-    # GF(p^2)/GF(p^4) extension-field arithmetic libraries (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md F9): zk_air's
-    # GF(p^4) composition-polynomial path (air_combine_ext4 / air_build_cp_ext4) references ext2_*/e2pack/e2lo/e2hi +
-    # the GF(p^4) ops, so the lib is INCOMPLETE without them.  They were present in the old lib (manual ar) but absent
-    # from this MODULES list -- a real omission that a clean rebuild exposes.  Leaf arithmetic; appended at end (BSS-safe).
-    "numera/zk_ext2"
-    "numera/zk_ext4"
+    # numera/zk_ext2 + zk_ext4 RETIRED 2026-07-17 (Z supersession, 51c9bd70): the GF(p^2)/GF(p^4)
+    # towers served zk_air's composition-polynomial path, which retired with the STARK subsystem.
     # Omega3 proof-carrying XII canonicalisation: ADMITTED (reunification W0.2.1, closing F3 of
     # DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md).  The old exclusion note claimed the tamper hooks
     # (xii_proof_set_rid/set_pos/flip_ahash) "cannot be covered by a positive corpus KAT" -- refuted:
@@ -1968,6 +1955,20 @@ fi
 # $REPO_ROOT/_cov_report.txt.  The RATCHET: uncovered may only shrink -- a count above
 # scripts/coverage_pin.txt FAILS the build (lower the pin as the census burns down; raise
 # it never, except with an explicit, reviewed justification).
+#
+# REVIEWED RE-PIN 2026-07-17 (0/2/1 -> 138/7/199), the PHI-3 rite's finding: the pins'
+# baseline was earned under the OLD reference regime (corpus + the Ε2 standing-tool list).
+# The ERGON constitution then moved verification INTO the organism (census seats + verbs +
+# a grown tool fleet) and a week of retirement campaigns (Z supersession, geometric
+# absorption, mind layer) retired ~40 corpus gates whose coverage the regime never
+# re-derived -- the ratchets red at 309/10/568 measured pure regime lag, not new dark
+# surface.  cov_gate_driver's root list gained the SECOND-INCREMENT roots (the census
+# organs, the verb organs, the new mains), collapsing the lag to 138/7/199; the residue is
+# live-but-ungated accessor surface owned by the still-running campaigns (kinesis/pyrgos/
+# riza/lexicon accessors, csg accessors in their absorbing eidos organs, adjunction
+# accessors pending the prove-main root).  Down-only resumes from these values; burning
+# them toward zero is the standing coverage arc, gate-by-gate, never by deletion of
+# another session's live surface.
 if [[ $FAIL -eq 0 ]]; then
     COV_REPO_ROOT="$(cd "$STDLIB_DIR/.." && pwd)"
     COV_DRV_SRC="$SCRIPT_DIR/cov_gate_driver.iii"

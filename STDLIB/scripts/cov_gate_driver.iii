@@ -17,7 +17,16 @@
  * the pins (0 / 2 / 1) are UNCHANGED -- what repoints is only the reference source, in
  * the direction the organ itself declares safe: file segments can mark surface
  * covered/rooted, NEVER add surface.  Wave 2 (DOCS/III-ENTELECHEIA-MAP.md SS Ε2): the
- * agon generated-program stream joins these roots; the static corpus demotes to seed. */
+ * agon generated-program stream joins these roots; the static corpus demotes to seed.
+ *
+ * SECOND INCREMENT (2026-07-17, the ERGON constitution): verification moved INTO the
+ * organism -- the census seats (katabasis ergon/kardia/soma/doxa/introspection) re-derive
+ * the fleet's laws EVERY invocation, the substrate verbs execute their organs
+ * (cassandra/topos/crucible/entangle/lagrangian/admix/autophasis/glossa/synapse/
+ * autognosis), and the tool fleet grew mains (ergon/kardia/soma/doxa/eidolos/proofcarry
+ * + the exact-geometry line/plane/space/motion/manifold/worldline).  Their use sites are
+ * execution evidence exactly as corpus call sites are; the stale root list was reporting
+ * the whole recent arc as uncovered (309/10/568 vs pins 0/2/1) purely by regime lag. */
 module cov_real_driver
 
 extern @abi(c-msvc-x64) fn cov_audit(cap: u64, modules_root: u64, corpus_root: u64) -> u64 from "corpus_coverage.iii"
@@ -37,7 +46,7 @@ extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
 
 var MODS : [u8; 32]
-var CORP : [u8; 1024]
+var CORP : [u8; 4096]
 var REPT : [u8; 32]
 var GREP : [u8; 32]
 var RREP : [u8; 32]
@@ -61,7 +70,7 @@ fn appseg(dst_addr: u64, at: u64, src_addr: u64) -> u64 {
     while go == 1u8 {
         let c : u8 = s[i]
         if c == 0u8 { go = 0u8 } else {
-            if w >= 1023u64 { go = 0u8 } else { d[w] = c   w = w + 1u64   i = i + 1u64 }
+            if w >= 4095u64 { go = 0u8 } else { d[w] = c   w = w + 1u64   i = i + 1u64 }
         }
     }
     d[w] = 0u8
@@ -106,6 +115,41 @@ fn main() -> u64 {
     /* symmetria -- the conservation worlds (reversible-closed algebras, exact-table
      * saturation proofs, measured grading); consumed by the iii-substrate symmetry verb. */
     at = appseg(ca, at, ("STDLIB/iii/aether/symmetria.iii" as u64))
+    /* --- SECOND INCREMENT roots (2026-07-17): the ERGON constitution ------------- */
+    /* the census organs: their arms EXECUTE every iii-ergon invocation */
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/ergon.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/kardia.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/soma.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/doxa.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/introspection.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/autognosis.iii" as u64))
+    /* organs consumed by substrate verbs (project/evolve/couple/presses/wire) */
+    at = appseg(ca, at, ("STDLIB/iii/oneiros/cassandra.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/glossa/topos.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/crucible.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/entangle.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/lagrangian.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/admix.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/autophasis.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/glossa.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/aether/synapse.iii" as u64))
+    /* the tool mains the fleet grew (built by COMPILER/BOOT/build_iii_*.sh) */
+    at = appseg(ca, at, ("COMPILER/BOOT/ergon_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/kardia_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/soma_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/doxa_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/eidolos_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/proofcarry_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/line_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/plane_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/space_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/motion_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/manifold_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/worldline_main.iii" as u64))
+    /* the event-primary tool entry (iii-events) + the eidolos organ (arms 70-83
+     * execute every unravel, NO gate by design) */
+    at = appseg(ca, at, ("STDLIB/sovir/svir_event.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/omnia/eidolos.iii" as u64))
     setl((&REPT as u64), ("./_cov_report.txt" as u64), 17u64)
     setl((&GREP as u64), ("./_cov_gate_report.txt" as u64), 22u64)
     setl((&RREP as u64), ("./_cov_reach_report.txt" as u64), 23u64)

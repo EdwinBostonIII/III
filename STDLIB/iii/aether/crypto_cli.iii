@@ -355,14 +355,17 @@ fn main(argc: i32, argv: u64) -> u64 {
         if sn != sig_bytes(lv) {
             ps("INVALID: signature is " as u64)  pd(sn)  ps(" B, ML-DSA-" as u64)  pd(lv)
             ps(" signatures are " as u64)  pd(sig_bytes(lv))  ps(" B\n" as u64)
+            ps("[crypto = invalid]\n" as u64)
             return 4u64
         }
         if iii_mldsa_verify(lv, (&PK) as u64, (&MSG) as u64, mn, (&SIG) as u64, sn) != 0i32 {
             ps("INVALID: signature does NOT verify against this key and this file\n" as u64)
+            ps("[crypto = invalid]\n" as u64)
             return 4u64
         }
         ps("VALID: ML-DSA-" as u64)  pd(lv)  ps(" signature verifies (" as u64)  pd(mn)
         ps(" bytes signed)\n" as u64)
+        ps("[crypto = valid]\n" as u64)
         return 0u64
     }
 

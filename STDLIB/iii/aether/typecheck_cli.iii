@@ -796,6 +796,7 @@ fn main(argc: i32, argv: u64) -> u64 {
             ps("REACHABLE: hexad " as u64)  pd(hv)
             ps("'s Reach proof type-checks -- REACH(h) iota-reduces to true via the kernel's\n" as u64)
             ps("  own reachability oracle (verified by reduction, never a baked value).\n" as u64)
+            ps("[typecheck = admitted]\n" as u64)
             return 0u64
         }
         if a1[2u64] != 99u8 { return usage() }              /* else only --check */
@@ -838,5 +839,6 @@ fn main(argc: i32, argv: u64) -> u64 {
     ps("WELL-TYPED : " as u64)
     if pr_node(ty) == 0u32 { nl()  return 5u64 }
     nl()
+    ps("[typecheck = checked]\n" as u64)
     return 0u64
 }

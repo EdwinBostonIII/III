@@ -270,9 +270,10 @@ fn parse_terms(str: u64, base: u64) -> u64 {
 }
 
 fn emit_sign(sgn: i32) -> u64 {
-    if sgn < 0i32 { ps("-1  (NEGATIVE)" as u64)  nl()  return 1u64 }
-    if sgn == 0i32 { ps("0  (EXACTLY ZERO)" as u64)  nl()  return 0u64 }
+    if sgn < 0i32 { ps("-1  (NEGATIVE)" as u64)  nl()  ps("[exact = negative]\n" as u64)  return 1u64 }
+    if sgn == 0i32 { ps("0  (EXACTLY ZERO)" as u64)  nl()  ps("[exact = zero]\n" as u64)  return 0u64 }
     ps("+1  (POSITIVE)" as u64)  nl()
+    ps("[exact = positive]\n" as u64)
     return 2u64
 }
 

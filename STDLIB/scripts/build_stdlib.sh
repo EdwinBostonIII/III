@@ -355,8 +355,6 @@ MODULES=(
     "aether/handle"
     "aether/fs"
     "aether/glossa"
-    "aether/sqrt_sum_sign"
-    "aether/aether_lens"
     "aether/iform"
     "tempora/instant"
     "tempora/duration"

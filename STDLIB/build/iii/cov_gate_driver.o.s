@@ -76,10 +76,12 @@ L_str_34:
 L_str_35:
     .ascii "STDLIB/iii/aether/reversibility.iii\0"
 L_str_36:
-    .ascii "./_cov_report.txt\0"
+    .ascii "STDLIB/iii/aether/symmetria.iii\0"
 L_str_37:
-    .ascii "./_cov_gate_report.txt\0"
+    .ascii "./_cov_report.txt\0"
 L_str_38:
+    .ascii "./_cov_gate_report.txt\0"
+L_str_39:
     .ascii "./_cov_reach_report.txt\0"
     .section .bss
 L_MODS:
@@ -797,9 +799,26 @@ main:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    leaq L_str_36(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movabsq $0x11, %rax
     pushq %rax
-    leaq L_str_36(%rip), %rax
+    leaq L_str_37(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -817,7 +836,7 @@ main:
     popq %rax
     movabsq $0x16, %rax
     pushq %rax
-    leaq L_str_37(%rip), %rax
+    leaq L_str_38(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -835,7 +854,7 @@ main:
     popq %rax
     movabsq $0x17, %rax
     pushq %rax
-    leaq L_str_38(%rip), %rax
+    leaq L_str_39(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax

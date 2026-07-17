@@ -3,7 +3,7 @@
 # rebuild road after ANY parliament chamber adopts: NOMOS rewrite law or GLOSSA
 # vocabulary).  stdlib -> iiis-2 double-build determinism -> iiis-3 fixpoint ->
 # reseal goldens.  The verification surfaces (run_corpus.sh with the standing
-# arms + run_standing_tools.sh + run_meaning.sh) are launched SEPARATELY after
+# arms + iii-ergon census [ex run_standing_tools.sh, retired] + run_meaning.sh) are launched SEPARATELY after
 # this core holds: they are hours-long judges, and this script's contract is
 # the byte-seal itself.
 #
@@ -61,5 +61,5 @@ else
     log "FIXPOINT BROKEN -- stop"
     exit 6
 fi
-log "COVENANT CORE GREEN (mhash $M1) -- now run the judges: run_corpus.sh, run_standing_tools.sh, run_meaning.sh"
+log "COVENANT CORE GREEN (mhash $M1) -- now run the judges: run_corpus.sh, iii-ergon census (the standing fleet, ex run_standing_tools -- retired 2026-07-17), run_meaning.sh"
 exit 0

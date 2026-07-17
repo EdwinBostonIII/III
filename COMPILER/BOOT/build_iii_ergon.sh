@@ -63,6 +63,7 @@ SRCS=(
     "$III_ROOT/STDLIB/iii/intent/intent_lex.iii"
     "$III_ROOT/STDLIB/iii/numera/sat_arith.iii"
     "$III_ROOT/STDLIB/iii/intent/disambiguate.iii"
+    "$III_ROOT/STDLIB/iii/aether/stoma_proc.iii"
     "$III_ROOT/COMPILER/BOOT/cg_glossa_rules.iii"
     "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii"
     "$III_ROOT/STDLIB/iii/numera/idfold.iii"

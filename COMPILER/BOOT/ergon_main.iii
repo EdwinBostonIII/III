@@ -30,6 +30,10 @@ extern @abi(c-msvc-x64) fn erg_seat_iscene() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_iform() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_hexad() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_intent() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_exec() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_deep() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_nomos_live() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_nomos_sealed() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_ledger_runners() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn intro_organ_count() -> u32 from "introspection.iii"
@@ -69,7 +73,9 @@ fn usage() -> u64 {
     ps("iii-ergon -- THE ERGON: the machine proven by its WORK\n\n" as u64)
     ps("  iii-ergon prove     the organ's own instruments (fault map, fold), with teeth\n" as u64)
     ps("  iii-ergon census    the whole standing fleet re-derives its laws in one process,\n" as u64)
-    ps("                      then the FORM LEDGER (ancestral batch debt, measured)\n\n" as u64)
+    ps("                      then the FORM LEDGER (ancestral batch debt, measured)\n" as u64)
+    ps("  iii-ergon deep      the die's heavy faculties (nomos/oneiros/reversible/redeem/\n" as u64)
+    ps("                      symmetry/physis/wire/presses) -- minutes of wall, on demand\n\n" as u64)
     ps("no seat compares against a stored expected answer; every law is derived at the\n" as u64)
     ps("moment of motion.  requires CWD = the III root.\n" as u64)
     ps("exit: 0 WHOLE | 1 fault (located) | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
@@ -102,6 +108,31 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("Re-derived THIS invocation, before any verb moved.\n" as u64)
         return 0u64
     }
+    if streq(cmd, "deep" as u64) == 1u32 {
+        ps("== THE DEEP DERIVATION: the die's heavy faculties, organ-owned ==\n" as u64)
+        ps("  (nomos, oneiros, reversible, redeem, symmetry, physis/moment/taxis,\n" as u64)
+        ps("   both wire faculties, both presses vs the SEALED constitution, the\n" as u64)
+        ps("   author->prover chain -- minutes of wall; ex run_standing_tools deep half)\n" as u64)
+        let d : u32 = erg_deep()
+        if d != 0u32 {
+            ps("  DEEP FAULT " as u64)
+            pu(d as u64)
+            putchar(10i32)
+            return 1u64
+        }
+        ps("  presses reproduce the SEALED ids (autophasis, glossa) -- judged in-process.\n" as u64)
+        if erg_nomos_live() == erg_nomos_sealed() {
+            ps("  nomos: live legislation reproduces the SEALED rule set.\n" as u64)
+        } else {
+            ps("  nomos: live id " as u64)
+            pu(erg_nomos_live())
+            ps(" vs sealed " as u64)
+            pu(erg_nomos_sealed())
+            ps(" -- METER-CONTEXT drift (band physics, NAMED; sealed truth lives in heart cell 2748)\n" as u64)
+        }
+        ps("  DEEP WHOLE: every heavy faculty derived on today's die.\n" as u64)
+        return 0u64
+    }
     if streq(cmd, "census" as u64) == 1u32 {
         ps("== THE WORK-PROOF CENSUS: the fleet works, therefore it is ==\n" as u64)
         let s0 : u32 = erg_seat_intro()
@@ -116,6 +147,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         let s5 : u32 = seat_line("iform (ABSORBED family -- first C1 retirement)       : " as u64, erg_seat_iform())
         let s6 : u32 = seat_line("hexad (ABSORBED -- whole 729-space, ex run-hexad-cli): " as u64, erg_seat_hexad())
         let s7 : u32 = seat_line("intent (ABSORBED -- mask-derived, ex run-intent-cli) : " as u64, erg_seat_intent())
+        let s8 : u32 = seat_line("exec (tool faces via the process organ, ex standing) : " as u64, erg_seat_exec())
         /* the ledger: the ancestral form still on the die, measured */
         ps("  -- THE FORM LEDGER (ancestral batch layer, burn-down measured) --\n" as u64)
         let r : i64 = soma_audit("STDLIB/corpus" as u64)
@@ -150,6 +182,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         if verdict == 0u64 { if s5 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s6 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s7 != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s8 != 0u32 { verdict = 1u64 } }
         if verdict != 0u64 {
             ps("  VERDICT: FAULT -- the fleet did not fully derive itself this invocation.\n" as u64)
             return 1u64

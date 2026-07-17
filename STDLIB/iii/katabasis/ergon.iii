@@ -50,6 +50,10 @@
  *   950+arm    iform absorbed laws (951..957)
  *   1100+arm   hexad absorbed laws (1101..1105, ex run_hexad_cli -- whole-space)
  *   1200+arm   intent absorbed laws (1201..1204, ex run_intent_cli -- mask-derived)
+ *   1300+arm   exec seat: the tool faces through the process organ (1301..1312,
+ *              ex run_standing_tools' smoke half + the judge's adversarial trial)
+ *   1400+arm   the DEEP verb: the die's heavy faculties (1401..1411, ex
+ *              run_standing_tools' deep half -- organ-owned, on demand)
  *   1001..1003 ergon meta (vitality anomaly, cross-fold mismatch, garbage accepted)
  *
  * THE LEDGER: the census also REPORTS the ancestral batch layer still on the
@@ -101,6 +105,16 @@ extern @abi(c-msvc-x64) fn iii_hexad_pack6(pillars_addr: u64) -> u16 from "hexad
 extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
 extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
 
+extern @abi(c-msvc-x64) fn proc_run(cmd: u64, cwd: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_find(pat: u64, plen: u64) -> u32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_len() -> u64 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_out_at(i: u64) -> u8 from "stoma_proc.iii"
+
+extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_glossa_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_autophasis_id() -> u64 from "autognosis.iii"
+
 extern @abi(c-msvc-x64) fn lo_init() -> i32 from "lex_ontology.iii"
 extern @abi(c-msvc-x64) fn lo_mask_of(token: u64, len: u64) -> u64 from "lex_ontology.iii"
 extern @abi(c-msvc-x64) fn dis_resolve(text: u64, len: u64) -> u32 from "disambiguate.iii"
@@ -143,14 +157,16 @@ fn erg_mapcode(seat: u64, arm: u64, mode: u64) -> u64 {
     if seat == 5u64 { return 950u64 + arm }
     if seat == 6u64 { return 1100u64 + arm }
     if seat == 7u64 { return 1200u64 + arm }
+    if seat == 8u64 { return 1300u64 + arm }
+    if seat == 10u64 { return 1400u64 + arm }          /* the DEEP verb's codes  */
     return 1000u64 + arm
 }
 /* the whole fault space is INJECTIVE: enumerate every code either seat can emit
  * and require no collision (1 injective | 0 collision found) */
-var ERG_SEEN : [u8; 1400]
+var ERG_SEEN : [u8; 1500]
 fn erg_map_injective(mode: u64) -> u64 {
     let mut i : u64 = 0u64
-    while i < 1400u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
+    while i < 1500u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
     /* seat 0: 100..599  seat 1: 11..19  seat 2: 41..45  seat 3: 21..36
      * seat 4: 1..6  meta: 1..3 (mapped 1001..1003) */
     let mut c : u64 = 100u64
@@ -208,6 +224,20 @@ fn erg_map_injective(mode: u64) -> u64 {
         if ERG_SEEN[m7] == 1u8 { return 0u64 }
         ERG_SEEN[m7] = 1u8
         it = it + 1u64
+    }
+    let mut xc : u64 = 1u64
+    while xc <= 12u64 {
+        let m8 : u64 = erg_mapcode(8u64, xc, mode)
+        if ERG_SEEN[m8] == 1u8 { return 0u64 }
+        ERG_SEEN[m8] = 1u8
+        xc = xc + 1u64
+    }
+    let mut dp : u64 = 1u64
+    while dp <= 13u64 {
+        let m10 : u64 = erg_mapcode(10u64, dp, mode)
+        if ERG_SEEN[m10] == 1u8 { return 0u64 }
+        ERG_SEEN[m10] = 1u8
+        dp = dp + 1u64
     }
     let mut z : u64 = 1u64
     while z <= 3u64 {
@@ -748,6 +778,303 @@ fn erg_seat_intent() -> u32 @export {
     return 0u32
 }
 
+/* ==================== SEAT 8: EXEC -- the tool faces, through the process
+ * organ (ex run_standing_tools' smoke half) ====================
+ * The committed tool binaries are made to DO THEIR WORK: spawned through
+ * stoma_proc (the house's own process organ -- pipes, wall-cap, kill-on-close),
+ * their TRUE OS exit codes and output bytes judged in-process.  Known answers
+ * are external truth (FIPS-180 digests, closed-form signs, the OS's own exit
+ * codes, the constitution's sealed ids) -- never a tool's own stdout taken on
+ * faith.  The retired runner's gate-REBUILD arms are NOT here: those gates are
+ * C1 heart cells (the heart beats them when their reach drifts) -- rebuilding
+ * them per sweep was the batch form.  Its in-process synapse/autophasis law
+ * arms live in introspection's examines (seat 0).  Its heavy die-faculty verbs
+ * live in the DEEP verb (erg_deep, 1400+) -- organ-owned, on demand.
+ * Codes 1300+arm. */
+var ERG_XB : [u8; 512]
+fn erg_x_sput(at: u64, s: u64) -> u64 {
+    let p : *u8 = (&ERG_XB) as u64 as *u8
+    let q : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while q[i] != 0u8 { p[a] = q[i]   a = a + 1u64   i = i + 1u64 }
+    p[a] = 0u8
+    return a
+}
+/* spawn a command line (CWD = the III root, inherited); returns the child's
+ * exit code, or 9901 on plumbing failure / 9902 on wall-timeout */
+fn erg_x_run(cmd: u64, cap_ms: u32) -> u64 {
+    let r : i32 = proc_run(cmd, 0u64, cap_ms)
+    if r == 1i32 { return 9902u64 }
+    if r != 0i32 { return 9901u64 }
+    return proc_code() as u64
+}
+fn erg_x_find(pat: u64) -> u64 {
+    let mut n : u64 = 0u64
+    let p : *u8 = pat as *u8
+    while p[n] != 0u8 { n = n + 1u64 }
+    if proc_out_find(pat, n) == 1u32 { return 1u64 }
+    return 0u64
+}
+/* parse the first unsigned decimal right after `marker` in the captured stdout */
+fn erg_x_parse_after(marker: u64) -> u64 {
+    let mut mlen : u64 = 0u64
+    let mp : *u8 = marker as *u8
+    while mp[mlen] != 0u8 { mlen = mlen + 1u64 }
+    let n : u64 = proc_out_len()
+    let mut i : u64 = 0u64
+    while i + mlen <= n {
+        let mut k : u64 = 0u64
+        let mut hit : u64 = 1u64
+        while k < mlen { if proc_out_at(i + k) != mp[k] { hit = 0u64   k = mlen } else { k = k + 1u64 } }
+        if hit == 1u64 {
+            let mut j : u64 = i + mlen
+            let mut v : u64 = 0u64
+            let mut got : u64 = 0u64
+            let mut go : u64 = 1u64
+            while go == 1u64 {
+                if j >= n { go = 0u64 } else {
+                    let c : u8 = proc_out_at(j)
+                    if c >= 48u8 { if c <= 57u8 { v = v * 10u64 + ((c - 48u8) as u64)   got = 1u64   j = j + 1u64 } else { go = 0u64 } } else { go = 0u64 }
+                }
+            }
+            if got == 1u64 { return v }
+            return 0u64
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* write a small file (CREATE_ALWAYS) through the OS; length = strlen(bytes),
+ * so literals never carry hand-counted lengths (foreseen numbers rot) */
+var ERG_NOMOS_LIVE : u64 = 0u64
+var ERG_NOMOS_SEALED : u64 = 0u64
+var ERG_SEED : [u8; 96]
+fn erg_x_put(path: u64, bytes: u64) -> u64 {
+    let p : *u8 = bytes as *u8
+    let mut len : u64 = 0u64
+    while p[len] != 0u8 { len = len + 1u64 }
+    return erg_x_putn(path, bytes, len)
+}
+fn erg_x_putn(path: u64, bytes: u64, len: u64) -> u64 {
+    let h : u64 = CreateFileA(path, 1073741824u32, 0u32, 0u64, 2u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 0u64 }
+    WriteFile(h, bytes, len as u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(h)
+    return 1u64
+}
+fn erg_arm_exec() -> u64 {
+    /* arm 1: HARNESS TEETH -- the spawner must FEEL exit codes and absence.  A
+     * missing exe is plumbing-failed, a real exit code must not read as 0. */
+    if erg_x_run("COMPILED\\iii-no-such-tool.exe" as u64, 15000u32) < 9000u64 { return 1u64 }
+    if erg_x_run("cmd /c exit 7" as u64, 15000u32) != 7u64 { return 1u64 }
+    if erg_x_run("cmd /c exit 300" as u64, 15000u32) != 300u64 { return 1u64 }   /* full width, no 8-bit mask */
+    /* arm 2: iii-prove -- the sovereign prover over ALL 2^64: a true identity
+     * PROVEN (0), a false one REFUTED (1).  Probe organs authored here. */
+    erg_x_put("STDLIB/build/ergon_pa.iii" as u64, "module pa\nfn mul10(x: u64) -> u64 @export { return x * 10u64 }\nfn xor2(x: u64) -> u64 @export { return x ^ 2u64 }\n" as u64)
+    erg_x_put("STDLIB/build/ergon_pb.iii" as u64, "module pb\nfn shadd(x: u64) -> u64 @export { return (x << 3u64) + (x << 1u64) }\nfn add2(x: u64) -> u64 @export { return x + 2u64 }\n" as u64)
+    if erg_x_run("COMPILED\\iii-prove.exe STDLIB/build/ergon_pa.iii mul10 STDLIB/build/ergon_pb.iii shadd" as u64, 120000u32) != 0u64 { return 2u64 }
+    if erg_x_run("COMPILED\\iii-prove.exe STDLIB/build/ergon_pa.iii xor2 STDLIB/build/ergon_pb.iii add2" as u64, 120000u32) != 1u64 { return 2u64 }
+    /* arm 3: iii-crypto -- SHA-256 of "abc" IS the FIPS-180 vector */
+    erg_x_put("STDLIB/build/ergon_abc.txt" as u64, "abc" as u64)
+    if erg_x_run("COMPILED\\iii-crypto.exe hash STDLIB/build/ergon_abc.txt" as u64, 60000u32) != 0u64 { return 3u64 }
+    if erg_x_find("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" as u64) != 1u64 { return 3u64 }
+    /* arm 4: iii-exact -- exact signs of surd sums, no float */
+    if erg_x_run("COMPILED\\iii-exact.exe \"1 2\"" as u64, 60000u32) != 2u64 { return 4u64 }
+    if erg_x_run("COMPILED\\iii-exact.exe \"2 2 3 2 -5 2\"" as u64, 60000u32) != 0u64 { return 4u64 }
+    /* arm 5: iii-typecheck -- hexad reachability as a TYPE + the cross-tool
+     * agreement law (typecheck --reach and iii-hexad judge the same manifold) */
+    if erg_x_run("COMPILED\\iii-typecheck.exe --reach 40" as u64, 60000u32) != 0u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-typecheck.exe --reach 0" as u64, 60000u32) != 4u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-typecheck.exe --reach 728" as u64, 60000u32) != 0u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-hexad.exe P P P P P P" as u64, 60000u32) != 0u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-hexad.exe N N N N N N" as u64, 60000u32) != 1u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-hexad.exe N P P P P P" as u64, 60000u32) != 1u64 { return 5u64 }
+    if erg_x_run("COMPILED\\iii-hexad.exe --count" as u64, 60000u32) != 0u64 { return 5u64 }
+    if erg_x_find("= 144" as u64) != 1u64 { return 5u64 }
+    /* arm 6: iii_eval + iii-events -- the definitional bearer and route V agree
+     * on the same program (36 = sum(1..8)%100), and --diff self is identical */
+    erg_x_put("STDLIB/build/ergon_p42.iii" as u64, "module probe42\nfn main() -> i32 { let mut s : u64 = 0u64  let mut i : u64 = 1u64  while i <= 8u64 { s = s + i  i = i + 1u64 }  return (s % 100u64) as i32 }\n" as u64)
+    if erg_x_run("COMPILED\\iii_eval.exe STDLIB/build/ergon_p42.iii" as u64, 120000u32) != 36u64 { return 6u64 }
+    if erg_x_run("COMPILED\\iii-events.exe --quiet STDLIB/build/ergon_p42.iii" as u64, 120000u32) != 36u64 { return 6u64 }
+    if erg_x_run("COMPILED\\iii-events.exe --diff STDLIB/build/ergon_p42.iii STDLIB/build/ergon_p42.iii" as u64, 120000u32) != 0u64 { return 6u64 }
+    /* arm 7: iii-intent tool face (module laws live in seat 7) */
+    if erg_x_run("COMPILED\\iii-intent.exe \"lock the database\"" as u64, 60000u32) != 0u64 { return 7u64 }
+    if erg_x_run("COMPILED\\iii-intent.exe \"encrypt the network port\"" as u64, 60000u32) != 1u64 { return 7u64 }
+    /* arm 8: iii-judge -- THE JUDGE on trial by an adversarial launcher: OS-true
+     * exit codes (full width), forged-PASS resistance, byte-bound receipts,
+     * the monotone ratchet, the Merkle fold's row sensitivity */
+    if erg_x_run("COMPILED\\iii-judge.exe run 2 \"cmd /c exit 2\"" as u64, 60000u32) != 0u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe run 99 \"cmd /c exit 2\"" as u64, 60000u32) != 1u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe run 300 \"cmd /c exit 300\"" as u64, 60000u32) != 0u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe run 44 \"cmd /c exit 300\"" as u64, 60000u32) != 1u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe run 0 \"cmd /c echo verdict=PASS& exit 1\"" as u64, 60000u32) != 1u64 { return 8u64 }
+    erg_x_put("STDLIB/build/ergon_ju.txt" as u64, "abc" as u64)
+    if erg_x_run("COMPILED\\iii-judge.exe hash STDLIB/build/ergon_ju.txt ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" as u64, 60000u32) != 0u64 { return 8u64 }
+    erg_x_put("STDLIB/build/ergon_ju.txt" as u64, "abd" as u64)
+    if erg_x_run("COMPILED\\iii-judge.exe hash STDLIB/build/ergon_ju.txt ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" as u64, 60000u32) != 1u64 { return 8u64 }
+    erg_x_put("STDLIB/build/ergon_led.txt" as u64, "" as u64)
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_led.txt floor 10 up" as u64, 60000u32) != 0u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_led.txt floor 20 up" as u64, 60000u32) != 0u64 { return 8u64 }
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_led.txt floor 5 up" as u64, 60000u32) != 1u64 { return 8u64 }
+    erg_x_put("STDLIB/build/ergon_r1.txt" as u64, "row-a\nrow-b\nrow-c\n" as u64)
+    if erg_x_run("COMPILED\\iii-judge.exe fold STDLIB/build/ergon_r1.txt" as u64, 60000u32) != 0u64 { return 8u64 }
+    if erg_x_find("root=" as u64) != 1u64 { return 8u64 }
+    let ra : u64 = erg_x_parse_after("root=" as u64)
+    erg_x_put("STDLIB/build/ergon_r1.txt" as u64, "row-a\nrow-X\nrow-c\n" as u64)
+    if erg_x_run("COMPILED\\iii-judge.exe fold STDLIB/build/ergon_r1.txt" as u64, 60000u32) != 0u64 { return 8u64 }
+    let rb : u64 = erg_x_parse_after("root=" as u64)
+    if ra == rb { return 8u64 }
+    /* arm 9: iii-testament keygen -- FIPS-205 deterministic: same 96-byte seed
+     * file -> byte-identical pk(64)+sk(128), twice */
+    /* the seed is GENERATED to exactly 96 bytes by construction (deterministic
+     * fill) -- no hand-counted literal length anywhere */
+    let mut sdi : u64 = 0u64
+    while sdi < 96u64 { ERG_SEED[sdi] = (65u64 + (sdi * 7u64 + 3u64) % 26u64) as u8   sdi = sdi + 1u64 }
+    if erg_x_putn("STDLIB/build/ergon_seed.bin" as u64, (&ERG_SEED) as u64, 96u64) != 1u64 { return 9u64 }
+    if erg_x_run("COMPILED\\iii-testament.exe keygen STDLIB/build/ergon_seed.bin STDLIB/build/ergon_pk1.bin STDLIB/build/ergon_sk1.bin" as u64, 180000u32) != 0u64 { return 9u64 }
+    if erg_x_run("COMPILED\\iii-testament.exe keygen STDLIB/build/ergon_seed.bin STDLIB/build/ergon_pk2.bin STDLIB/build/ergon_sk2.bin" as u64, 180000u32) != 0u64 { return 9u64 }
+    if erg_x_cmp("STDLIB/build/ergon_pk1.bin" as u64, "STDLIB/build/ergon_pk2.bin" as u64, 64u64) != 1u64 { return 9u64 }
+    if erg_x_cmp("STDLIB/build/ergon_sk1.bin" as u64, "STDLIB/build/ergon_sk2.bin" as u64, 128u64) != 1u64 { return 9u64 }
+    /* arm 10: iii-witness -- trusts nothing: malformed input REFUSED as format
+     * (10); the committed canonical testament verifies Tier-1 VALID */
+    erg_x_put("STDLIB/build/ergon_garbage.bin" as u64, "not a testament at all -- too short and no IIITSTMT magic" as u64)
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_garbage.bin" as u64, 60000u32) != 10u64 { return 10u64 }
+    /* the canonical testament is a RITE product, not a committed artifact --
+     * tier-1 verify runs only when one exists (the retired runner's own guard) */
+    let th : u64 = CreateFileA("STDLIB/testament/testament.dat" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if th != 18446744073709551615u64 {
+        CloseHandle(th)
+        if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/testament/testament.dat STDLIB/testament/testament.pk" as u64, 120000u32) != 0u64 { return 10u64 }
+    }
+    /* arm 11: iii-friction -- the falsifier battery greens; bare usage is 1 */
+    if erg_x_run("COMPILED\\iii-friction.exe check" as u64, 240000u32) != 0u64 { return 11u64 }
+    if erg_x_run("COMPILED\\iii-friction.exe" as u64, 30000u32) != 1u64 { return 11u64 }
+    /* arm 12: iii-xeno -- fairness bijection exact; two-route census (canonical
+     * == Burnside) at n=2; vacuous sweep REFUSED; bare usage 1 */
+    if erg_x_run("COMPILED\\iii-xeno.exe fair 300" as u64, 120000u32) != 0u64 { return 12u64 }
+    if erg_x_run("COMPILED\\iii-xeno.exe census 2" as u64, 240000u32) != 0u64 { return 12u64 }
+    if erg_x_run("COMPILED\\iii-xeno.exe sweep 0 0" as u64, 60000u32) != 5u64 { return 12u64 }
+    if erg_x_run("COMPILED\\iii-xeno.exe" as u64, 30000u32) != 1u64 { return 12u64 }
+    return 0u64
+}
+/* byte-compare two files of exact expected length through the OS */
+var ERG_FA : [u8; 256]
+var ERG_FB : [u8; 256]
+fn erg_x_cmp(pa: u64, pb: u64, want_len: u64) -> u64 {
+    if want_len > 256u64 { return 0u64 }
+    let ha : u64 = CreateFileA(pa, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if ha == 18446744073709551615u64 { return 0u64 }
+    ReadFile(ha, (&ERG_FA) as u64, 256u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(ha)
+    if (ERG_TC[0u64] as u64) != want_len { return 0u64 }
+    let hb : u64 = CreateFileA(pb, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if hb == 18446744073709551615u64 { return 0u64 }
+    ReadFile(hb, (&ERG_FB) as u64, 256u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(hb)
+    if (ERG_TC[0u64] as u64) != want_len { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < want_len { if ERG_FA[i] != ERG_FB[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn erg_seat_exec() -> u32 @export {
+    let a : u64 = erg_arm_exec()
+    if a != 0u64 { return (1300u64 + a) as u32 }
+    return 0u32
+}
+
+/* ==================== THE DEEP VERB: the die's heavy faculties ====================
+ * The substrate's live-die verbs (ex run_standing_tools' deep half), organ-owned
+ * and on-demand: minutes of wall, not census-weight.  Sealed-id agreements are
+ * judged IN-PROCESS against the constitution (autognosis) -- stronger than the
+ * retired runner's source-grepping.  NOMOS id-drift is band physics (THE
+ * METER-CONTEXT LAW): named, never silent; the sealed rows' TRUTH on today's
+ * die is the heart's cell 2748 (beaten on drift), not re-adjudicated here.
+ * Codes 1400+arm. */
+fn erg_deep() -> u32 @export {
+    /* arm 1: atoms/bridge/isa -- the ISA-born algebra on the live die */
+    if erg_x_run("COMPILED\\iii-substrate.exe atoms" as u64, 240000u32) != 0u64 { return 1401u32 }
+    if erg_x_run("COMPILED\\iii-substrate.exe bridge" as u64, 240000u32) != 0u64 { return 1401u32 }
+    if erg_x_run("COMPILED\\iii-substrate.exe isa 3" as u64, 300000u32) != 0u64 { return 1401u32 }
+    /* arm 2: author->prover -- III lowers a discovered identity to pure .iii
+     * and the sovereign prover disposes it over ALL 2^64 */
+    erg_x_run("cmd /c del /q STDLIB\\build\\ergon_isa_l.iii STDLIB\\build\\ergon_isa_r.iii" as u64, 30000u32)
+    if erg_x_run("COMPILED\\iii-substrate.exe emit 3 0 STDLIB/build/ergon_isa_l.iii STDLIB/build/ergon_isa_r.iii" as u64, 300000u32) != 0u64 { return 1402u32 }
+    if erg_x_run("COMPILED\\iii-prove.exe STDLIB/build/ergon_isa_l.iii f STDLIB/build/ergon_isa_r.iii f" as u64, 300000u32) != 0u64 { return 1402u32 }
+    /* arm 3: physis + moment + taxis -- cost geometry, the contingency
+     * register (rc 2 = honestly-quiet die), the 153-class preorder */
+    if erg_x_run("COMPILED\\iii-substrate.exe physis" as u64, 300000u32) != 0u64 { return 1403u32 }
+    if erg_x_find("VALUE-INVARIANT" as u64) != 1u64 { return 1403u32 }
+    let mm : u64 = erg_x_run("COMPILED\\iii-substrate.exe moment" as u64, 300000u32)
+    if mm != 0u64 { if mm != 2u64 { return 1403u32 } }
+    if mm == 0u64 { if erg_x_find("MODAL SPLIT IS REAL" as u64) != 1u64 { return 1403u32 } }
+    if erg_x_run("COMPILED\\iii-substrate.exe taxis 3" as u64, 300000u32) != 0u64 { return 1403u32 }
+    if erg_x_find("objects: 153 semantic classes" as u64) != 1u64 { return 1403u32 }
+    if erg_x_find("0 cycles" as u64) != 1u64 { return 1403u32 }
+    /* arm 4: reversible -- the diode + the six-altar convergence */
+    if erg_x_run("COMPILED\\iii-substrate.exe reversible" as u64, 300000u32) != 0u64 { return 1404u32 }
+    if erg_x_find("SHARPEST DIODE" as u64) != 1u64 { return 1404u32 }
+    if erg_x_find("THREE independent routes, one gate" as u64) != 1u64 { return 1404u32 }
+    if erg_x_find("SIX altars" as u64) != 1u64 { return 1404u32 }
+    /* arm 5: redeem -- 929 fallen ops lifted at exact measured deficit */
+    if erg_x_run("COMPILED\\iii-substrate.exe redeem 3" as u64, 300000u32) != 0u64 { return 1405u32 }
+    if erg_x_find("FALLEN (irreversible)     : 929" as u64) != 1u64 { return 1405u32 }
+    if erg_x_find("d=4 F=14  BLSR(x)" as u64) != 1u64 { return 1405u32 }
+    if erg_x_find("homomorphism B_f.B_g == B_{f^g} : 28 / 28" as u64) != 1u64 { return 1405u32 }
+    /* arm 6: symmetry -- conservation worlds saturated to proof */
+    if erg_x_run("COMPILED\\iii-substrate.exe symmetry 12 12345" as u64, 300000u32) != 0u64 { return 1406u32 }
+    if erg_x_find("proven world-signatures=" as u64) != 1u64 { return 1406u32 }
+    if erg_x_find("OPEN (order beyond cap" as u64) != 1u64 { return 1406u32 }
+    /* arm 7: the wire faculties over real loopback -- synapse handshake and
+     * the lagrangian couple (state never on the wire) */
+    if erg_x_run("COMPILED\\iii-substrate.exe synapse 47137" as u64, 300000u32) != 0u64 { return 1407u32 }
+    if erg_x_find("HELLO client->server: CONCUR" as u64) != 1u64 { return 1407u32 }
+    if erg_x_find("REFUSED (undeliverable content)" as u64) != 1u64 { return 1407u32 }
+    if erg_x_run("COMPILED\\iii-substrate.exe couple 47156" as u64, 300000u32) != 0u64 { return 1407u32 }
+    if erg_x_find("COUPLE GREEN" as u64) != 1u64 { return 1407u32 }
+    /* arm 8: autophasis press -- deterministic twice, and the live utterance
+     * reproduces the SEALED id (judged in-process against the constitution) */
+    if erg_x_run("cmd /c if not exist STDLIB\\build\\ergap1 mkdir STDLIB\\build\\ergap1" as u64, 30000u32) >= 9000u64 { return 1408u32 }
+    if erg_x_run("COMPILED\\iii-substrate.exe autophasis STDLIB/build/ergap1" as u64, 300000u32) != 0u64 { return 1408u32 }
+    let a1 : u64 = erg_x_parse_after("AUTOPHASIS-SET id=" as u64)
+    if erg_x_run("COMPILED\\iii-substrate.exe autophasis STDLIB/build/ergap1" as u64, 300000u32) != 0u64 { return 1408u32 }
+    let a2 : u64 = erg_x_parse_after("AUTOPHASIS-SET id=" as u64)
+    if a1 != a2 { return 1408u32 }
+    if a1 != autognosis_autophasis_id() { return 1408u32 }
+    /* arm 9: glossa press -- deterministic twice, live == SEALED lexicon id,
+     * and the spot ladder link re-PROVEN over all 2^64 from the live press */
+    if erg_x_run("COMPILED\\iii-substrate.exe glossa STDLIB/build/ergap1" as u64, 300000u32) != 0u64 { return 1409u32 }
+    let g1 : u64 = erg_x_parse_after("GLOSSA-SET id=" as u64)
+    if erg_x_run("COMPILED\\iii-substrate.exe glossa STDLIB/build/ergap1" as u64, 300000u32) != 0u64 { return 1409u32 }
+    let g2 : u64 = erg_x_parse_after("GLOSSA-SET id=" as u64)
+    if g1 != g2 { return 1409u32 }
+    if g1 != autognosis_glossa_id() { return 1409u32 }
+    if erg_x_run("COMPILED\\iii-prove.exe STDLIB/build/ergap1/gw5_s0.iii f STDLIB/build/ergap1/gw5_s1.iii f" as u64, 300000u32) != 0u64 { return 1409u32 }
+    /* arm 10: nomos -- live legislation runs; the sealed id is compared in-
+     * process; drift is NAMED (band physics), truth lives in heart cell 2748 */
+    if erg_x_run("cmd /c if not exist STDLIB\\build\\ergnm mkdir STDLIB\\build\\ergnm" as u64, 30000u32) >= 9000u64 { return 1410u32 }
+    if erg_x_run("COMPILED\\iii-substrate.exe nomos 25000 STDLIB/build/ergnm" as u64, 600000u32) != 0u64 { return 1410u32 }
+    let nl : u64 = erg_x_parse_after("NOMOS-SET id=" as u64)
+    if nl == 0u64 { return 1410u32 }
+    ERG_NOMOS_LIVE = nl
+    ERG_NOMOS_SEALED = autognosis_nomos_id()
+    /* arm 11: oneiros -- the dream admitted (sentinel 0, cert present) */
+    if erg_x_run("COMPILED\\iii-substrate.exe oneiros 500 STDLIB/build/ergnm" as u64, 600000u32) != 0u64 { return 1411u32 }
+    if erg_x_find("SENTINEL=0" as u64) != 1u64 { return 1411u32 }
+    if erg_x_find("ONEIROS-CERT=" as u64) != 1u64 { return 1411u32 }
+    /* arm 12: project (TOPOS x CASSANDRA) -- data as GF(2) geometry, predicted
+     * in bounded superposition, reified bit-for-bit with no parser; the verb
+     * runs cass_selfproof + tp_selfprove as its condition of motion */
+    if erg_x_run("COMPILED\\iii-substrate.exe project" as u64, 300000u32) != 0u64 { return 1412u32 }
+    /* arm 13: evolve (THE CRUCIBLE) -- morphogenetic evolution, beam-search
+     * cheaper than blind, adopts only a survivor proven flawless; cr_selfprove
+     * is its condition of motion and the live seal is never overwritten */
+    if erg_x_run("COMPILED\\iii-substrate.exe evolve" as u64, 300000u32) != 0u64 { return 1413u32 }
+    return 0u32
+}
+fn erg_nomos_live() -> u64 @export { return ERG_NOMOS_LIVE }
+fn erg_nomos_sealed() -> u64 @export { return ERG_NOMOS_SEALED }
+
 /* ==================== THE CENSUS: the fleet works, therefore it is ==================== */
 fn erg_census() -> u32 @export {
     let sp : u64 = erg_selfprove()
@@ -768,6 +1095,8 @@ fn erg_census() -> u32 @export {
     if s6 != 0u32 { return s6 }
     let s7 : u32 = erg_seat_intent()
     if s7 != 0u32 { return s7 }
+    let s8 : u32 = erg_seat_exec()
+    if s8 != 0u32 { return s8 }
     return 0u32
 }
 

@@ -320,7 +320,7 @@ printf '%s GLOSSA: %s\n' "$TAG" "$GLOSSA_NOTE"
 if [[ "$NOMOS_NOTE" == ADOPTED* || "$GLOSSA_NOTE" == ADOPTED* ]]; then
     printf '%s a chamber ADOPTED -- the covenant ceremony is MANDATORY:\n' "$TAG"
     printf '%s   bash COMPILER/BOOT/covenant_ceremony.sh   (stdlib -> iiis-2 determinism -> iiis-3 fixpoint -> goldens)\n' "$TAG"
-    printf '%s   then the judges: run_corpus.sh + run_standing_tools.sh + run_meaning.sh\n' "$TAG"
+    printf '%s   then the judges: run_corpus.sh + iii-ergon census (ex run_standing_tools.sh, retired 2026-07-17) + run_meaning.sh\n' "$TAG"
 fi
 FINAL_RC=0
 [[ ${NOMOS_RC:-0} -ne 0 ]] && FINAL_RC=${NOMOS_RC}

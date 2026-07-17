@@ -1,0 +1,680 @@
+/* STDLIB/iii/eidos/kinesis.iii -- THE KINETIC SCROLL: motion as a pure event
+ * fold.  No objects, no frames, no dt -- the simulation IS the append-only
+ * sequence of exact impact events, and state at any moment is DERIVED by
+ * folding worldlines forward to the next event.
+ *
+ * WHAT exact_motion COULD NOT DO: find one exact TOI and stop -- its state is
+ * integer-only, so the FIRST irrational impact ends the world (positions at
+ * t* = (-B - sqrt Delta)/(2A) leave Z^3).  Here the state lives in the
+ * CONSTRUCTIBLE TOWER (aether/pyrgos): each irrational event lazily adjoins
+ * its one radical sqrt(Delta_k) to the spine and the fold CONTINUES -- the
+ * next discriminant is a tower element, its root is a NESTED radical, and the
+ * chain runs on, exactly, at any depth the pools can hold.
+ *
+ * THE EVENT LAW (per fold step):
+ *   1  SCAN every pair: viability (A > 0, Delta >= 0) and the future gate
+ *      (t* > t_now, or t* = t_now while APPROACHING -- dx.dv < 0 -- which
+ *      admits genuinely simultaneous disjoint contacts and auto-excludes the
+ *      pair that just responded).  Candidate radicals adjoin under a mark and
+ *      ROLL BACK -- only the chosen event's radical joins the spine.
+ *   2  ORDER candidates by the EXACT tower sign of t_a - t_b; an exact tie is
+ *      DETECTED (counted) and broken by index -- simultaneity is decidable
+ *      here and nowhere in floating point.
+ *   3  ADVANCE every worldline to the event time symbolically: P += V dt.
+ *   4  RESPOND (equal masses): s = (dV.m)/(m.m), V_i -= s m, V_j += s m --
+ *      RATIONAL in the tower (adjoins nothing; only TIME mints radicals).
+ *      A graze (Delta = 0) has dV.m = 0 exactly: the response is the
+ *      identity -- tangency exchanges nothing, and the machine proves it.
+ *   5  CONSERVE: total momentum and total energy are compared EXACTLY (tower
+ *      sign of difference must be 0) across the response; a violation is a
+ *      counted law-break, never a silent drift.
+ *   6  KEEP: the surviving state (spine, time, worldlines) is slid down the
+ *      pools by the two-phase copy; everything scanned-and-rejected is gone.
+ *
+ * ZERO DRIFT AT ANY DEPTH: the k-th event is as exact as the first -- there
+ * is no accumulation because there is no approximation.  The LOSCHMIDT ECHO
+ * is an arm, not an aspiration: negate velocities, fold on, negate again --
+ * the state returns to the EXACT integer initial conditions through however
+ * many irrational events the forward fold minted.
+ *
+ * Truth is a CONDITION OF MOTION: kn_selfprove (arms 190..196) -- the
+ * hand-checkable rational 3-collision chain, the irrational chain that mints
+ * a NESTED radical, the echo, exact simultaneity, the graze identity, an
+ * enumerated conservation family, and determinism.  NO gate.
+ * NIH: composes aether/pyrgos (the tower IS the state substrate).
+ * Hexad: kind_event.  Ring R0. */
+module eidos_kinesis
+
+extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_h() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_mark() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_release(m: u64) -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_release_pools(m: u64) -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_spine(lvl: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_spine_set(lvl: u64, e: u64) -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sqrt(e: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_new(hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_i64(v: i64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_rat(r: u64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_copy(e: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sub(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_div(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_neg(a: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sign(a: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+
+const KN_NCAP : u64 = 6u64
+const KN_EVCAP : u64 = 16u64
+const KN_BRD : i64 = 10000i64            /* bracket denominator                 */
+const KN_SENT : u64 = 18446744073709551615u64
+
+/* worldline state (pyrgos element indices) */
+var KN_PX : [u64; 6]   var KN_PY : [u64; 6]   var KN_PZ : [u64; 6]
+var KN_VX : [u64; 6]   var KN_VY : [u64; 6]   var KN_VZ : [u64; 6]
+var KN_R : [i64; 6]
+var KN_N : u64 = 0u64
+var KN_T : u64 = 0u64                    /* current time (element)              */
+var KN_BASE : u64 = 0u64                 /* the keep watermark                  */
+
+/* the integer genesis (for the echo) */
+var KN_P0X : [i64; 6]   var KN_P0Y : [i64; 6]   var KN_P0Z : [i64; 6]
+var KN_V0X : [i64; 6]   var KN_V0Y : [i64; 6]   var KN_V0Z : [i64; 6]
+
+/* the scroll: one record per event */
+var KN_EI : [u64; 16]   var KN_EJ : [u64; 16]
+var KN_EKIND : [u64; 16]                 /* 1 hit, 2 graze                      */
+var KN_EHH : [u64; 16]                   /* tower height after the event        */
+var KN_BLO : [i64; 16]  var KN_BHI : [i64; 16]  /* exact bracket num over KN_BRD */
+var KN_ESTRICT : [u64; 16]               /* 1 = strictly after the previous event */
+var KN_EVN : u64 = 0u64
+
+/* counted law state (never silent) */
+var KN_TIE : u64 = 0u64                  /* exact simultaneity detections       */
+var KN_LAWVIOL : u64 = 0u64              /* conservation violations             */
+var KN_ORDVIOL : u64 = 0u64              /* causal order violations             */
+var KN_ERRK : u64 = 0u64                 /* 1 cap, 2 coincident bodies          */
+var KN_GDOT : i64 = 0i64                 /* sign of dV.m at the last response   */
+
+/* quad cells for the current pair */
+var KN_QA : u64 = 0u64   var KN_QB : u64 = 0u64
+var KN_QC : u64 = 0u64   var KN_QD : u64 = 0u64
+
+/* scan cells */
+var KN_BI : u64 = 0u64   var KN_BJ : u64 = 0u64
+var KN_BKIND : u64 = 0u64
+var KN_FOUND : u32 = 0u32
+
+/* keep scratch */
+var KN_KT : [u64; 64]
+
+/* determinism snapshot (arm 196) */
+var KN_D1LO : [i64; 16]   var KN_D1HI : [i64; 16]
+var KN_D1N : u64 = 0u64   var KN_D1H : u64 = 0u64
+
+fn kn_n() -> u64 @export { return KN_N }
+fn kn_evn() -> u64 @export { return KN_EVN }
+fn kn_ei(k: u64) -> u64 @export { if k < KN_EVN { return KN_EI[k] }   return KN_SENT }
+fn kn_ej(k: u64) -> u64 @export { if k < KN_EVN { return KN_EJ[k] }   return KN_SENT }
+fn kn_ekind(k: u64) -> u64 @export { if k < KN_EVN { return KN_EKIND[k] }   return 0u64 }
+fn kn_eh(k: u64) -> u64 @export { if k < KN_EVN { return KN_EHH[k] }   return 0u64 }
+fn kn_blo(k: u64) -> i64 @export { if k < KN_EVN { return KN_BLO[k] }   return 0i64 }
+fn kn_bhi(k: u64) -> i64 @export { if k < KN_EVN { return KN_BHI[k] }   return 0i64 }
+fn kn_brd() -> i64 @export { return KN_BRD }
+fn kn_estrict(k: u64) -> u64 @export { if k < KN_EVN { return KN_ESTRICT[k] }   return 0u64 }
+fn kn_tie() -> u64 @export { return KN_TIE }
+fn kn_lawviol() -> u64 @export { return KN_LAWVIOL }
+fn kn_ordviol() -> u64 @export { return KN_ORDVIOL }
+fn kn_errk() -> u64 @export { return KN_ERRK }
+fn kn_gdot() -> i64 @export { return KN_GDOT }
+
+fn kn_elfrac(n: i64, d: i64) -> u64 {
+    return py_el_from_rat(py_rat_frac(n, d), 0u64)
+}
+
+fn kn_reset() -> i32 @export {
+    py_reset()
+    KN_N = 0u64   KN_EVN = 0u64
+    KN_TIE = 0u64   KN_LAWVIOL = 0u64   KN_ORDVIOL = 0u64   KN_ERRK = 0u64
+    KN_GDOT = 0i64   KN_FOUND = 0u32
+    KN_BASE = py_mark()
+    KN_T = py_el_from_i64(0i64, 0u64)
+    return 0i32
+}
+fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 @export {
+    if KN_N >= KN_NCAP { KN_ERRK = 1u64   return KN_SENT }
+    if r < 0i64 { KN_ERRK = 1u64   return KN_SENT }
+    let b : u64 = KN_N
+    KN_PX[b] = py_el_from_i64(px, 0u64)
+    KN_PY[b] = py_el_from_i64(py0, 0u64)
+    KN_PZ[b] = py_el_from_i64(pz, 0u64)
+    KN_VX[b] = py_el_from_i64(vx, 0u64)
+    KN_VY[b] = py_el_from_i64(vy, 0u64)
+    KN_VZ[b] = py_el_from_i64(vz, 0u64)
+    KN_R[b] = r
+    KN_P0X[b] = px   KN_P0Y[b] = py0   KN_P0Z[b] = pz
+    KN_V0X[b] = vx   KN_V0Y[b] = vy   KN_V0Z[b] = vz
+    KN_N = KN_N + 1u64
+    return b
+}
+
+fn kn_sq3(x: u64, y: u64, z: u64) -> u64 {
+    let e1 : u64 = py_mul(x, x)
+    let e2 : u64 = py_mul(y, y)
+    let e3 : u64 = py_mul(z, z)
+    return py_add(py_add(e1, e2), e3)
+}
+fn kn_dot3(ax: u64, ay: u64, az: u64, bx: u64, by: u64, bz: u64) -> u64 {
+    let e1 : u64 = py_mul(ax, bx)
+    let e2 : u64 = py_mul(ay, by)
+    let e3 : u64 = py_mul(az, bz)
+    return py_add(py_add(e1, e2), e3)
+}
+
+/* build A, B, C, Delta for pair (i, j) from the CURRENT state (roots are in
+ * relative time tau = t - t_now) */
+fn kn_quad(i: u64, j: u64) -> i32 {
+    let dxx : u64 = py_sub(KN_PX[i], KN_PX[j])
+    let dxy : u64 = py_sub(KN_PY[i], KN_PY[j])
+    let dxz : u64 = py_sub(KN_PZ[i], KN_PZ[j])
+    let dvx : u64 = py_sub(KN_VX[i], KN_VX[j])
+    let dvy : u64 = py_sub(KN_VY[i], KN_VY[j])
+    let dvz : u64 = py_sub(KN_VZ[i], KN_VZ[j])
+    KN_QA = kn_sq3(dvx, dvy, dvz)
+    let two : u64 = py_el_from_i64(2i64, 0u64)
+    KN_QB = py_mul(two, kn_dot3(dxx, dxy, dxz, dvx, dvy, dvz))
+    let ri : i64 = KN_R[i]
+    let rj : i64 = KN_R[j]
+    let rr : i64 = ri + rj
+    let rre : u64 = py_el_from_i64(rr * rr, 0u64)
+    KN_QC = py_sub(kn_sq3(dxx, dxy, dxz), rre)
+    let four : u64 = py_el_from_i64(4i64, 0u64)
+    KN_QD = py_sub(py_mul(KN_QB, KN_QB), py_mul(four, py_mul(KN_QA, KN_QC)))
+    return 0i32
+}
+/* entry-root ABSOLUTE time from the current quad cells (adjoins if Delta > 0;
+ * call under a mark unless the event is being committed) */
+fn kn_toi_abs() -> u64 {
+    let sd : i64 = py_sign(KN_QD)
+    let mut rt : u64 = 0u64
+    if sd > 0i64 {
+        rt = py_sqrt(KN_QD)
+    } else {
+        rt = py_el_new(0u64)
+    }
+    let two : u64 = py_el_from_i64(2i64, 0u64)
+    let num : u64 = py_sub(py_neg(KN_QB), rt)
+    let den : u64 = py_mul(two, KN_QA)
+    let trel : u64 = py_div(num, den)
+    return py_add(KN_T, trel)
+}
+/* is pair (i, j) a viable next event?  1 yes (strictly future, or a
+ * simultaneous approaching contact), 0 no.  Pure (mark/release). */
+fn kn_viable(i: u64, j: u64) -> u32 {
+    let m : u64 = py_mark()
+    kn_quad(i, j)
+    let sa : i64 = py_sign(KN_QA)
+    if sa <= 0i64 { py_release(m)   return 0u32 }
+    let sd : i64 = py_sign(KN_QD)
+    if sd < 0i64 { py_release(m)   return 0u32 }
+    let t : u64 = kn_toi_abs()
+    let c : i64 = py_cmp(t, KN_T)
+    if c > 0i64 { py_release(m)   return 1u32 }
+    if c == 0i64 {
+        /* contact NOW: admit only if genuinely approaching */
+        let dxx : u64 = py_sub(KN_PX[i], KN_PX[j])
+        let dxy : u64 = py_sub(KN_PY[i], KN_PY[j])
+        let dxz : u64 = py_sub(KN_PZ[i], KN_PZ[j])
+        let dvx : u64 = py_sub(KN_VX[i], KN_VX[j])
+        let dvy : u64 = py_sub(KN_VY[i], KN_VY[j])
+        let dvz : u64 = py_sub(KN_VZ[i], KN_VZ[j])
+        let dot : u64 = kn_dot3(dvx, dvy, dvz, dxx, dxy, dxz)
+        let sdot : i64 = py_sign(dot)
+        py_release(m)
+        if sdot < 0i64 { return 1u32 }
+        return 0u32
+    }
+    py_release(m)
+    return 0u32
+}
+/* exact order of the entry times of two pairs: sign(t_ij - t_kl).  Pure. */
+fn kn_toi_cmp(i: u64, j: u64, k: u64, l: u64) -> i64 {
+    let m : u64 = py_mark()
+    kn_quad(i, j)
+    let t1 : u64 = kn_toi_abs()
+    kn_quad(k, l)
+    let t2 : u64 = kn_toi_abs()
+    let c : i64 = py_cmp(t1, t2)
+    py_release(m)
+    return c
+}
+/* scan every pair; leaves the chosen pair in KN_BI/BJ (KN_FOUND = 1) */
+fn kn_scan() -> i32 {
+    KN_FOUND = 0u32
+    let mut i : u64 = 0u64
+    while i < KN_N {
+        let mut j : u64 = i + 1u64
+        while j < KN_N {
+            if kn_viable(i, j) == 1u32 {
+                if KN_FOUND == 0u32 {
+                    KN_BI = i   KN_BJ = j   KN_FOUND = 1u32
+                } else {
+                    let c : i64 = kn_toi_cmp(i, j, KN_BI, KN_BJ)
+                    if c < 0i64 { KN_BI = i   KN_BJ = j }
+                    if c == 0i64 { KN_TIE = KN_TIE + 1u64 }
+                }
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* equal-mass elastic response on pair (i, j) at contact.  Adjoins nothing. */
+fn kn_respond(i: u64, j: u64) -> i32 {
+    let mx : u64 = py_sub(KN_PX[i], KN_PX[j])
+    let my : u64 = py_sub(KN_PY[i], KN_PY[j])
+    let mz : u64 = py_sub(KN_PZ[i], KN_PZ[j])
+    let mm : u64 = kn_sq3(mx, my, mz)
+    if py_sign(mm) == 0i64 { KN_ERRK = 2u64   return -1i32 }
+    let dvx : u64 = py_sub(KN_VX[i], KN_VX[j])
+    let dvy : u64 = py_sub(KN_VY[i], KN_VY[j])
+    let dvz : u64 = py_sub(KN_VZ[i], KN_VZ[j])
+    let dot : u64 = kn_dot3(dvx, dvy, dvz, mx, my, mz)
+    KN_GDOT = py_sign(dot)
+    let s : u64 = py_div(dot, mm)
+    let sx : u64 = py_mul(s, mx)
+    let sy : u64 = py_mul(s, my)
+    let sz : u64 = py_mul(s, mz)
+    KN_VX[i] = py_sub(KN_VX[i], sx)
+    KN_VY[i] = py_sub(KN_VY[i], sy)
+    KN_VZ[i] = py_sub(KN_VZ[i], sz)
+    KN_VX[j] = py_add(KN_VX[j], sx)
+    KN_VY[j] = py_add(KN_VY[j], sy)
+    KN_VZ[j] = py_add(KN_VZ[j], sz)
+    return 0i32
+}
+/* total momentum component and total energy (equal masses) */
+fn kn_ptot(axis: u64) -> u64 {
+    let mut e : u64 = py_el_new(0u64)
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        if axis == 0u64 { e = py_add(e, KN_VX[b]) }
+        if axis == 1u64 { e = py_add(e, KN_VY[b]) }
+        if axis == 2u64 { e = py_add(e, KN_VZ[b]) }
+        b = b + 1u64
+    }
+    return e
+}
+fn kn_etot() -> u64 {
+    let mut e : u64 = py_el_new(0u64)
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        e = py_add(e, kn_sq3(KN_VX[b], KN_VY[b], KN_VZ[b]))
+        b = b + 1u64
+    }
+    return e
+}
+/* the two-phase keep: slide spine + time + worldlines down to the base */
+fn kn_keep() -> i32 {
+    let mut c : u64 = 0u64
+    let H : u64 = py_h()
+    let mut l : u64 = 0u64
+    while l < H { KN_KT[c] = py_el_copy(py_spine(l))   c = c + 1u64   l = l + 1u64 }
+    KN_KT[c] = py_el_copy(KN_T)   c = c + 1u64
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        KN_KT[c] = py_el_copy(KN_PX[b])   c = c + 1u64
+        KN_KT[c] = py_el_copy(KN_PY[b])   c = c + 1u64
+        KN_KT[c] = py_el_copy(KN_PZ[b])   c = c + 1u64
+        KN_KT[c] = py_el_copy(KN_VX[b])   c = c + 1u64
+        KN_KT[c] = py_el_copy(KN_VY[b])   c = c + 1u64
+        KN_KT[c] = py_el_copy(KN_VZ[b])   c = c + 1u64
+        b = b + 1u64
+    }
+    py_release_pools(KN_BASE)
+    let mut c2 : u64 = 0u64
+    l = 0u64
+    while l < H {
+        let ns : u64 = py_el_copy(KN_KT[c2])
+        py_spine_set(l, ns)
+        c2 = c2 + 1u64
+        l = l + 1u64
+    }
+    KN_T = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+    b = 0u64
+    while b < KN_N {
+        KN_PX[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        KN_PY[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        KN_PZ[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        KN_VX[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        KN_VY[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        KN_VZ[b] = py_el_copy(KN_KT[c2])   c2 = c2 + 1u64
+        b = b + 1u64
+    }
+    return 0i32
+}
+/* exact decimal bracket of the current time: KN_BLO/KN_BHI over KN_BRD */
+var KN_TLO : i64 = 0i64   var KN_THI : i64 = 0i64
+fn kn_bracket(t: u64) -> i32 {
+    let m : u64 = py_mark()
+    let mut hi : i64 = 1i64
+    let mut guard : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let he : u64 = py_el_from_i64(hi, 0u64)
+        let c : i64 = py_cmp(t, he)
+        if c < 0i64 { going = 0u8 } else { hi = hi * 2i64 }
+        guard = guard + 1u64
+        if guard > 40u64 { going = 0u8 }
+    }
+    let mut lo : i64 = 0i64
+    let mut hi2 : i64 = hi * KN_BRD
+    while (hi2 - lo) > 1i64 {
+        let mid : i64 = (lo + hi2) / 2i64
+        let me : u64 = py_el_from_rat(py_rat_frac(mid, KN_BRD), 0u64)
+        let c : i64 = py_cmp(t, me)
+        if c >= 0i64 { lo = mid } else { hi2 = mid }
+    }
+    py_release(m)
+    KN_TLO = lo   KN_THI = hi2
+    return 0i32
+}
+/* one fold step: 0 no event, 1 hit, 2 graze */
+fn kn_step() -> u64 @export {
+    if KN_EVN >= KN_EVCAP { return 0u64 }
+    kn_scan()
+    if KN_FOUND == 0u32 { return 0u64 }
+    let bi : u64 = KN_BI
+    let bj : u64 = KN_BJ
+    /* commit: recompute the chosen pair cleanly (permanent adjoin if surd) */
+    kn_quad(bi, bj)
+    let sd : i64 = py_sign(KN_QD)
+    let tevt : u64 = kn_toi_abs()
+    let cord : i64 = py_cmp(tevt, KN_T)
+    if cord < 0i64 { KN_ORDVIOL = KN_ORDVIOL + 1u64 }
+    let mut strict : u64 = 0u64
+    if cord > 0i64 { strict = 1u64 }
+    /* advance every worldline */
+    let dt : u64 = py_sub(tevt, KN_T)
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        KN_PX[b] = py_add(KN_PX[b], py_mul(KN_VX[b], dt))
+        KN_PY[b] = py_add(KN_PY[b], py_mul(KN_VY[b], dt))
+        KN_PZ[b] = py_add(KN_PZ[b], py_mul(KN_VZ[b], dt))
+        b = b + 1u64
+    }
+    KN_T = tevt
+    /* conservation across the response, exactly (post-values scoped) */
+    let px0 : u64 = kn_ptot(0u64)
+    let py0 : u64 = kn_ptot(1u64)
+    let pz0 : u64 = kn_ptot(2u64)
+    let en0 : u64 = kn_etot()
+    kn_respond(bi, bj)
+    let mc : u64 = py_mark()
+    let px1 : u64 = kn_ptot(0u64)
+    let py1 : u64 = kn_ptot(1u64)
+    let pz1 : u64 = kn_ptot(2u64)
+    let en1 : u64 = kn_etot()
+    if py_cmp(px0, px1) != 0i64 { KN_LAWVIOL = KN_LAWVIOL + 1u64 }
+    if py_cmp(py0, py1) != 0i64 { KN_LAWVIOL = KN_LAWVIOL + 1u64 }
+    if py_cmp(pz0, pz1) != 0i64 { KN_LAWVIOL = KN_LAWVIOL + 1u64 }
+    if py_cmp(en0, en1) != 0i64 { KN_LAWVIOL = KN_LAWVIOL + 1u64 }
+    py_release(mc)
+    /* record the event */
+    let mut kind : u64 = 1u64
+    if sd == 0i64 { kind = 2u64 }
+    kn_bracket(KN_T)
+    let k : u64 = KN_EVN
+    KN_EI[k] = bi   KN_EJ[k] = bj   KN_EKIND[k] = kind
+    KN_EHH[k] = py_h()
+    KN_BLO[k] = KN_TLO   KN_BHI[k] = KN_THI
+    KN_ESTRICT[k] = strict
+    KN_EVN = KN_EVN + 1u64
+    /* keep: slide the survivors down */
+    kn_keep()
+    return kind
+}
+fn kn_run(mx: u64) -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if n >= mx { going = 0u8 } else {
+            let k : u64 = kn_step()
+            if k == 0u64 { going = 0u8 } else { n = n + 1u64 }
+        }
+    }
+    return n
+}
+/* advance every worldline to the rational time tn (no event processing) */
+fn kn_advance_to(tn: i64) -> i32 @export {
+    let te : u64 = py_el_from_i64(tn, 0u64)
+    let dt : u64 = py_sub(te, KN_T)
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        KN_PX[b] = py_add(KN_PX[b], py_mul(KN_VX[b], dt))
+        KN_PY[b] = py_add(KN_PY[b], py_mul(KN_VY[b], dt))
+        KN_PZ[b] = py_add(KN_PZ[b], py_mul(KN_VZ[b], dt))
+        b = b + 1u64
+    }
+    KN_T = te
+    kn_keep()
+    return 0i32
+}
+fn kn_flip() -> i32 @export {
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        KN_VX[b] = py_neg(KN_VX[b])
+        KN_VY[b] = py_neg(KN_VY[b])
+        KN_VZ[b] = py_neg(KN_VZ[b])
+        b = b + 1u64
+    }
+    kn_keep()
+    return 0i32
+}
+/* THE LOSCHMIDT ECHO: at rational time techo (past the last event), reverse,
+ * fold the SAME physics forward, reverse again at 2*techo -- the state must
+ * equal the integer genesis EXACTLY.  Returns 0 on exact recovery. */
+fn kn_echo(techo: i64) -> u64 @export {
+    kn_advance_to(techo)
+    kn_flip()
+    kn_run(KN_EVCAP)
+    kn_advance_to(2i64 * techo)
+    kn_flip()
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        let p0x : i64 = KN_P0X[b]
+        let p0y : i64 = KN_P0Y[b]
+        let p0z : i64 = KN_P0Z[b]
+        let v0x : i64 = KN_V0X[b]
+        let v0y : i64 = KN_V0Y[b]
+        let v0z : i64 = KN_V0Z[b]
+        if py_cmp(KN_PX[b], py_el_from_i64(p0x, 0u64)) != 0i64 { return 1u64 }
+        if py_cmp(KN_PY[b], py_el_from_i64(p0y, 0u64)) != 0i64 { return 2u64 }
+        if py_cmp(KN_PZ[b], py_el_from_i64(p0z, 0u64)) != 0i64 { return 3u64 }
+        if py_cmp(KN_VX[b], py_el_from_i64(v0x, 0u64)) != 0i64 { return 4u64 }
+        if py_cmp(KN_VY[b], py_el_from_i64(v0y, 0u64)) != 0i64 { return 5u64 }
+        if py_cmp(KN_VZ[b], py_el_from_i64(v0z, 0u64)) != 0i64 { return 6u64 }
+        b = b + 1u64
+    }
+    return 0u64
+}
+
+/* ==================== THE SELF-PROOF (arms 190..196) ==================== */
+fn kn_arm190() -> u64 {
+    /* the hand-checkable rational chain: A(0)v+2, B(10)v0, C(30)v-2, r=1 ->
+     * three exchanges at t = 4, 13/2, 9; final velocities (-2, 0, +2). */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64)
+    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64)
+    let n : u64 = kn_run(10u64)
+    if n != 3u64 { return 190u64 }
+    if KN_EVN != 3u64 { return 190u64 }
+    let b0 : i64 = KN_BLO[0u64]
+    let b1 : i64 = KN_BLO[1u64]
+    let b2 : i64 = KN_BLO[2u64]
+    if b0 != 40000i64 { return 190u64 }                   /* t1 = 4       */
+    if b1 != 65000i64 { return 190u64 }                   /* t2 = 13/2    */
+    if b2 != 90000i64 { return 190u64 }                   /* t3 = 9       */
+    if py_cmp(KN_T, py_el_from_i64(9i64, 0u64)) != 0i64 { return 190u64 }
+    if py_cmp(KN_VX[0u64], py_el_from_i64(0i64 - 2i64, 0u64)) != 0i64 { return 190u64 }
+    if py_cmp(KN_VX[1u64], py_el_new(0u64)) != 0i64 { return 190u64 }
+    if py_cmp(KN_VX[2u64], py_el_from_i64(2i64, 0u64)) != 0i64 { return 190u64 }
+    if py_h() != 0u64 { return 190u64 }                   /* all rational */
+    if KN_LAWVIOL != 0u64 { return 190u64 }
+    if KN_ORDVIOL != 0u64 { return 190u64 }
+    if KN_ERRK != 0u64 { return 190u64 }
+    if py_err() != 0u64 { return 190u64 }
+    return 0u64
+}
+fn kn_arm191() -> u64 {
+    /* the irrational chain: event 1 mints sqrt(4800) (t1 = (10-sqrt3)/20,
+     * bracket 0.4133..0.4134) and sends A down-left at (-5, -5 sqrt3); a
+     * stationary third body C(-1,-11) r=2 sits on that surd worldline, so
+     * event 2's discriminant carries a sqrt3 coefficient and its root is a
+     * NESTED radical -- the tower height reaches >= 2.  C is exactly checked
+     * to touch nothing before event 1 (A-C: B=+20, C=113 -> no positive root;
+     * B-C: Delta < 0 -> never). */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    let n : u64 = kn_run(4u64)
+    if n < 2u64 { return 191u64 }
+    let lo0 : i64 = KN_BLO[0u64]
+    let hi0 : i64 = KN_BHI[0u64]
+    if lo0 != 4133i64 { return 191u64 }                   /* (10-sqrt3)/20 */
+    if hi0 != 4134i64 { return 191u64 }
+    if py_h() < 2u64 { return 191u64 }                    /* NESTED minted */
+    if KN_LAWVIOL != 0u64 { return 191u64 }
+    if KN_ORDVIOL != 0u64 { return 191u64 }
+    if KN_ERRK != 0u64 { return 191u64 }
+    if py_err() != 0u64 { return 191u64 }
+    return 0u64
+}
+fn kn_arm192() -> u64 {
+    /* THE ECHO through an irrational event: fold, reverse at t=2, fold back,
+     * reverse -- the exact integer genesis returns. */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    let n : u64 = kn_run(4u64)
+    if n != 1u64 { return 192u64 }
+    if py_h() != 1u64 { return 192u64 }
+    let e : u64 = kn_echo(2i64)
+    if e != 0u64 { return 192u64 }
+    if py_h() < 2u64 { return 192u64 }                    /* the echo minted its own radical */
+    if KN_LAWVIOL != 0u64 { return 192u64 }
+    if py_err() != 0u64 { return 192u64 }
+    return 0u64
+}
+fn kn_arm193() -> u64 {
+    /* exact simultaneity: two far-apart head-on pairs share ONE exact TOI;
+     * both fire at t = 9/4 and the tie is DETECTED, not fudged. */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,    4i64,0i64,0i64, 1i64)
+    kn_add(20i64,0i64,0i64,   0i64-4i64,0i64,0i64, 1i64)
+    kn_add(0i64,100i64,0i64,  4i64,0i64,0i64, 1i64)
+    kn_add(20i64,100i64,0i64, 0i64-4i64,0i64,0i64, 1i64)
+    let n : u64 = kn_run(4u64)
+    if n != 2u64 { return 193u64 }
+    if KN_TIE < 1u64 { return 193u64 }
+    let l0 : i64 = KN_BLO[0u64]
+    let l1 : i64 = KN_BLO[1u64]
+    if l0 != 22500i64 { return 193u64 }                   /* 9/4 exactly  */
+    if l0 != l1 { return 193u64 }
+    if py_cmp(KN_T, kn_elfrac(9i64, 4i64)) != 0i64 { return 193u64 }
+    if KN_LAWVIOL != 0u64 { return 193u64 }
+    if py_err() != 0u64 { return 193u64 }
+    return 0u64
+}
+fn kn_arm194() -> u64 {
+    /* the graze identity: Delta = 0 -> tangent contact, dV.m = 0 exactly,
+     * the response exchanges NOTHING, and no radical is minted. */
+    kn_reset()
+    kn_add(0i64,0i64,0i64, 2i64,0i64,0i64, 1i64)
+    kn_add(4i64,2i64,0i64, 0i64,0i64,0i64, 1i64)
+    let n : u64 = kn_run(4u64)
+    if n != 1u64 { return 194u64 }
+    if KN_EKIND[0u64] != 2u64 { return 194u64 }
+    if KN_GDOT != 0i64 { return 194u64 }
+    if py_cmp(KN_VX[0u64], py_el_from_i64(2i64, 0u64)) != 0i64 { return 194u64 }
+    if py_cmp(KN_VX[1u64], py_el_new(0u64)) != 0i64 { return 194u64 }
+    if py_h() != 0u64 { return 194u64 }
+    if KN_LAWVIOL != 0u64 { return 194u64 }
+    if py_err() != 0u64 { return 194u64 }
+    return 0u64
+}
+fn kn_arm195() -> u64 {
+    /* the conservation family, ENUMERATED: every closing 1D pair over
+     * v1 in 1..3, v2 in -3..-1 folds with momentum and energy exact. */
+    let mut v1 : i64 = 1i64
+    while v1 <= 3i64 {
+        let mut v2 : i64 = 0i64 - 3i64
+        while v2 <= (0i64 - 1i64) {
+            kn_reset()
+            kn_add(0i64,0i64,0i64,  v1,0i64,0i64, 1i64)
+            kn_add(10i64,0i64,0i64, v2,0i64,0i64, 1i64)
+            let n : u64 = kn_run(2u64)
+            if n != 1u64 { return 195u64 }
+            if KN_LAWVIOL != 0u64 { return 195u64 }
+            if KN_ERRK != 0u64 { return 195u64 }
+            if py_err() != 0u64 { return 195u64 }
+            v2 = v2 + 1i64
+        }
+        v1 = v1 + 1i64
+    }
+    return 0u64
+}
+fn kn_arm196() -> u64 {
+    /* determinism: the same gas folds to the same scroll, twice. */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    let n1 : u64 = kn_run(4u64)
+    KN_D1N = KN_EVN   KN_D1H = py_h()
+    let mut k : u64 = 0u64
+    while k < KN_EVN { KN_D1LO[k] = KN_BLO[k]   KN_D1HI[k] = KN_BHI[k]   k = k + 1u64 }
+    kn_reset()
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    let n2 : u64 = kn_run(4u64)
+    if n1 != n2 { return 196u64 }
+    if KN_EVN != KN_D1N { return 196u64 }
+    if py_h() != KN_D1H { return 196u64 }
+    k = 0u64
+    while k < KN_EVN {
+        let a : i64 = KN_D1LO[k]
+        let b : i64 = KN_BLO[k]
+        if a != b { return 196u64 }
+        let c : i64 = KN_D1HI[k]
+        let d : i64 = KN_BHI[k]
+        if c != d { return 196u64 }
+        k = k + 1u64
+    }
+    if py_err() != 0u64 { return 196u64 }
+    return 0u64
+}
+fn kn_selfprove() -> u64 @export {
+    let a0 : u64 = kn_arm190()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = kn_arm191()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = kn_arm192()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = kn_arm193()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = kn_arm194()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = kn_arm195()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = kn_arm196()
+    if a6 != 0u64 { return a6 }
+    return 0u64
+}

@@ -1,11 +1,19 @@
-/* COMPILER/BOOT/motion_main.iii -- iii-motion: GAMMA-MOTION, THE EXACT TIME-OF-
- * IMPACT, standing.  Choreo re-founded: the irrational surd impact, exact.
+/* COMPILER/BOOT/motion_main.iii -- iii-motion: GAMMA-MOTION standing, and THE
+ * KINETIC SCROLL speaking.  The exact time-of-impact (exact_motion), the
+ * constructible tower (pyrgos), the event fold that chains THROUGH irrational
+ * impacts (kinesis), and the EIDOLOS voice that states the fold as causal
+ * claims and lets the language DERIVE what physics implied.
  *
- *   iii-motion prove       the self-proof (arms 170..176)
- *   iii-motion impact      the irrational TOI choreo refuses, bracketed exactly
- *   iii-motion tunnel      the no-tunneling proof (a fast crossing between samples)
+ *   iii-motion prove       the full self-proof (arms 170..179 + 180..187 + 190..196)
+ *   iii-motion toi     <14 ints>   one pair: HIT/GRAZE/MISS + the exact TOI
+ *   iii-motion respond <14 ints>   one pair: exact elastic response
+ *   iii-motion scroll      the irrational chain folded PAST its surds (nested tower)
+ *   iii-motion echo        the Loschmidt echo: exact return to the integer genesis
+ *   iii-motion speak       the scroll as EIDOLOS claims; the mirror law DERIVES
+ *                          the echo causality the fold never stated
  *
- * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
+ * Every verb self-proves all three organs first (exit 9).
+ * exit: 0 ok | 1 miss | 3 usage | 9 SELF-REFUSED */
 module motion_main
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -26,6 +34,42 @@ extern @abi(c-msvc-x64) fn xm_graze_time(i: u64, j: u64) -> i32 from "exact_moti
 extern @abi(c-msvc-x64) fn xm_graze_num() -> i64 from "exact_motion.iii"
 extern @abi(c-msvc-x64) fn xm_graze_den() -> i64 from "exact_motion.iii"
 extern @abi(c-msvc-x64) fn xm_isqrt_floor(v: i64) -> i64 from "exact_motion.iii"
+
+extern @abi(c-msvc-x64) fn py_selfprove() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_h() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_ltop() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rtop() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_etop() -> u64 from "pyrgos.iii"
+
+extern @abi(c-msvc-x64) fn kn_selfprove() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_reset() -> i32 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_run(mx: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_echo(techo: i64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_evn() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_ei(k: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_ej(k: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_ekind(k: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_eh(k: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_blo(k: u64) -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_bhi(k: u64) -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_brd() -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_estrict(k: u64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_tie() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_lawviol() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_ordviol() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_errk() -> u64 from "kinesis.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claims() -> u64 from "eidolos.iii"
 
 fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
 fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
@@ -57,9 +101,8 @@ fn load_pair(argc: i32, argv: u64, base: u64) -> u32 {
 /* bracket the entry TOI to 1/scale by binary search over p in [0, hi*scale]:
  * prints the exact rational lower bound floor(t* * scale)/scale as p/scale. */
 fn print_toi_bracket(scale: i64) -> u32 {
-    /* find the largest p with p/scale <= t* (t* known finite >= 0 here) */
     let mut plo : i64 = 0i64
-    let mut phi : i64 = scale                          /* assume t* < 1 window start; widen if needed */
+    let mut phi : i64 = scale
     while xm_toi_vs_rat(0u64, 1u64, phi, scale) == 1i32 { plo = phi   phi = phi * 2i64   if phi > 1000000000i64 { return 0u32 } }
     while plo + 1i64 < phi {
         let mid : i64 = (plo + phi) / 2i64
@@ -68,14 +111,99 @@ fn print_toi_bracket(scale: i64) -> u32 {
     ps("  t* in [ " as u64)   pi(plo)   ps("/" as u64)   pi(scale)   ps(" , " as u64)   pi(phi)   ps("/" as u64)   pi(scale)   ps(" ]\n" as u64)
     return 1u32
 }
+
+/* ==================== the two canonical gases ==================== */
+/* the surd chain: e1 mints sqrt(4800); the stationary C on A's post-impact
+ * surd worldline makes e2's root a NESTED radical (tower height >= 2). */
+fn gas_surd() -> u64 {
+    kn_reset()
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    return kn_run(4u64)
+}
+/* the rational 3-collision chain (t = 4, 13/2, 9): the echo's forward leg */
+fn gas_chain() -> u64 {
+    kn_reset()
+    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64)
+    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64)
+    return kn_run(10u64)
+}
+fn print_events(base: u64, n: u64, name: u64) -> u32 {
+    let mut k : u64 = base
+    while k < base + n {
+        ps("  " as u64)   ps(name)   ps(" " as u64)   pu(k - base + 1u64)
+        ps("  pair(" as u64)   pu(kn_ei(k))   ps("," as u64)   pu(kn_ej(k))   ps(")" as u64)
+        if kn_ekind(k) == 2u64 { ps("  GRAZE" as u64) } else { ps("  hit  " as u64) }
+        ps("  t in [" as u64)   pi(kn_blo(k))   ps("/10000, " as u64)   pi(kn_bhi(k))   ps("/10000]" as u64)
+        ps("  H=" as u64)   pu(kn_eh(k))
+        putchar(10i32)
+        k = k + 1u64
+    }
+    return 1u32
+}
+
+/* ==================== the EIDOLOS voice ==================== */
+var MM_SCR : [u8; 6144]
+var MM_SN : u64 = 0u64
+var MM_TA : [u8; 96]
+var MM_TAN : u64 = 0u64
+var MM_TB : [u8; 96]
+var MM_TBN : u64 = 0u64
+var MM_SEL : u64 = 0u64                  /* 0 -> scroll, 1 -> TA, 2 -> TB       */
+fn wb(c: u8) -> i32 {
+    if MM_SEL == 0u64 { if MM_SN < 6144u64 { MM_SCR[MM_SN] = c   MM_SN = MM_SN + 1u64 } }
+    if MM_SEL == 1u64 { if MM_TAN < 96u64 { MM_TA[MM_TAN] = c   MM_TAN = MM_TAN + 1u64 } }
+    if MM_SEL == 2u64 { if MM_TBN < 96u64 { MM_TB[MM_TBN] = c   MM_TBN = MM_TBN + 1u64 } }
+    return 0i32
+}
+fn wstr(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { wb(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn wu(v: u64) -> i32 {
+    if v >= 10u64 { wu(v / 10u64) }
+    wb((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+/* thing text: <name> <seq> pair <i> <j> at <lo>:10000 */
+fn wthing(name: u64, seq: u64, i: u64, j: u64, lo: i64) -> i32 {
+    wstr(name)   wb(32u8)   wu(seq)
+    wstr(" pair " as u64)   wu(i)   wb(32u8)   wu(j)
+    wstr(" at " as u64)   wu(lo as u64)   wb(58u8)   wu(10000u64)
+    return 0i32
+}
+fn wthing_ev(name: u64, base: u64, k: u64) -> i32 {
+    return wthing(name, k - base + 1u64, kn_ei(k), kn_ej(k), kn_blo(k))
+}
+fn wclaim_open() -> i32 { wb(91u8)   return 0i32 }
+fn wclaim_verb(c: u8) -> i32 { wb(32u8)   wb(c)   wb(32u8)   return 0i32 }
+fn wclaim_close() -> i32 { wb(93u8)   wb(32u8)   return 0i32 }
+fn print_out() -> u32 {
+    eol_write()
+    let n : u64 = eol_out_len()
+    let mut i : u64 = 0u64
+    while i < n {
+        putchar(eol_out_byte(i) as i32)
+        i = i + 1u64
+    }
+    putchar(10i32)
+    return 1u32
+}
+
 fn usage() -> u64 {
-    ps("iii-motion -- GAMMA-MOTION, the exact time-of-impact.  Moving spheres as\n" as u64)
-    ps("integer worldlines P(t)=X+Vt; exact surd impact, ordered, no tunneling, no epsilon.\n\n" as u64)
-    ps("  iii-motion prove\n" as u64)
+    ps("iii-motion -- GAMMA-MOTION + THE KINETIC SCROLL: exact impacts, the\n" as u64)
+    ps("constructible tower, the event fold past irrational impacts, the EIDOLOS voice.\n\n" as u64)
+    ps("  iii-motion prove       full self-proof (arms 170..179, 180..187, 190..196)\n" as u64)
     ps("  iii-motion toi     <ax ay az avx avy avz ar>  <bx by bz bvx bvy bvz br>\n" as u64)
-    ps("                     HIT/GRAZE/MISS, the exact TOI (rational or surd), bracketed\n" as u64)
-    ps("  iii-motion respond <14 ints>   the exact post-collision velocities (elastic, equal mass)\n\n" as u64)
-    ps("exit: 0 impact/ok | 1 miss | 3 usage | 9 SELF-REFUSED\n" as u64)
+    ps("  iii-motion respond <14 ints>   exact elastic response (equal mass)\n" as u64)
+    ps("  iii-motion scroll      fold the surd chain PAST its radicals (nested tower)\n" as u64)
+    ps("  iii-motion echo        the Loschmidt echo: exact return to the genesis\n" as u64)
+    ps("  iii-motion speak       the fold as EIDOLOS; the mirror law derives the echo\n\n" as u64)
+    ps("exit: 0 ok | 1 miss | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
 fn main(argc: i32, argv: u64) -> u64 {
@@ -83,20 +211,33 @@ fn main(argc: i32, argv: u64) -> u64 {
     if argc < 2i32 { return usage() }
     let sp : u64 = xm_selfprove()
     if sp != 0u64 {
-        ps("MOTION REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        ps("MOTION REFUSES ITSELF: exact_motion arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let sp2 : u64 = py_selfprove()
+    if sp2 != 0u64 {
+        ps("MOTION REFUSES ITSELF: pyrgos arm " as u64)   pu(sp2)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let sp3 : u64 = kn_selfprove()
+    if sp3 != 0u64 {
+        ps("MOTION REFUSES ITSELF: kinesis arm " as u64)   pu(sp3)   ps(" failed\n" as u64)
         return 9u64
     }
     let cmd : u64 = av[1u64]
     if streq(cmd, "prove" as u64) == 1u32 {
-        ps("THE EXACT TIME-OF-IMPACT PROVEN (arms 170..178):\n" as u64)
-        ps("  HIT/GRAZE/MISS is the sign of the discriminant; the impact is the SURD\n" as u64)
-        ps("  t* = (-B - sqrt(Delta))/(2A) -- computed for ANY Delta, where choreo\n" as u64)
-        ps("  refuses the instant Delta is not a perfect square.  Impacts are ordered\n" as u64)
-        ps("  against any rational time and against each other EXACTLY by III's\n" as u64)
-        ps("  sum-of-surds sign oracle (no epsilon).  No tunneling at any speed.  A gas\n" as u64)
-        ps("  of moving bodies sorts into the exact collision sequence (motion meets\n" as u64)
-        ps("  the worldline: ordering impacts by TOI IS the causal < of Gamma-4).  Exact\n" as u64)
-        ps("  graze time and exact elastic response (momentum-conserving) complete it.\n" as u64)
+        ps("THE KINETIC SCROLL PROVEN (arms 170..179 + 180..187 + 190..196):\n" as u64)
+        ps("  exact_motion   the exact surd TOI, ordered, no tunneling (170..179)\n" as u64)
+        ps("  pyrgos         the constructible tower: nested radicals EXACT at any\n" as u64)
+        ps("                 depth -- sqrt2+sqrt3-sqrt(5+2sqrt6) DECIDED zero; 125\n" as u64)
+        ps("                 flat cases cross-agree with the separation-bound oracle;\n" as u64)
+        ps("                 total sign, total inverse, watermark pools (180..187)\n" as u64)
+        ps("  kinesis        the event fold PAST irrational impacts: the rational\n" as u64)
+        ps("                 3-chain lands t = 4, 13/2, 9; the surd chain mints a\n" as u64)
+        ps("                 NESTED radical; the Loschmidt echo returns the exact\n" as u64)
+        ps("                 integer genesis; simultaneity DETECTED; the graze\n" as u64)
+        ps("                 exchanges nothing; conservation exact at every event;\n" as u64)
+        ps("                 the fold is deterministic (190..196)\n" as u64)
         return 0u64
     }
     if streq(cmd, "toi" as u64) == 1u32 {
@@ -132,6 +273,141 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  body A' = ( " as u64)  pi(xm_rv(0u64))  ps(" , " as u64)  pi(xm_rv(1u64))  ps(" , " as u64)  pi(xm_rv(2u64))  ps(" ) / " as u64)  pi(dd)  putchar(10i32)
         ps("  body B' = ( " as u64)  pi(xm_rv(3u64))  ps(" , " as u64)  pi(xm_rv(4u64))  ps(" , " as u64)  pi(xm_rv(5u64))  ps(" ) / " as u64)  pi(dd)  putchar(10i32)
         ps("  (momentum conserved: A'+B' == A+B, exactly)\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "scroll" as u64) == 1u32 {
+        ps("THE KINETIC SCROLL: the fold does not stop at the first surd.\n\n" as u64)
+        ps("  A(0,0) -> +x at 10;  B(10,1) -> -x at 10;  C(-1,-11) at rest, r=2.\n" as u64)
+        ps("  event 1 mints sqrt(4800): t1 = (10 - sqrt3)/20, IRRATIONAL; the state\n" as u64)
+        ps("  moves into Q(sqrt(Delta1)); event 2's discriminant lives in that field\n" as u64)
+        ps("  and its root is a NESTED radical no flat oracle accepts.  The fold\n" as u64)
+        ps("  continues exactly:\n\n" as u64)
+        let n : u64 = gas_surd()
+        print_events(0u64, n, "event" as u64)
+        putchar(10i32)
+        ps("  events folded          = " as u64)   pu(n)   putchar(10i32)
+        ps("  tower height (spine)   = " as u64)   pu(py_h())   ps("   (nested radicals minted)\n" as u64)
+        ps("  conservation breaks    = " as u64)   pu(kn_lawviol())   ps("   (momentum + energy, EXACT, per event)\n" as u64)
+        ps("  causal order breaks    = " as u64)   pu(kn_ordviol())   putchar(10i32)
+        ps("  exact ties detected    = " as u64)   pu(kn_tie())   putchar(10i32)
+        ps("  pools: limbs " as u64)   pu(py_ltop())   ps(" / rats " as u64)   pu(py_rtop())
+        ps(" / elems " as u64)   pu(py_etop())   ps("   refusals = " as u64)   pu(py_err())   putchar(10i32)
+        if kn_lawviol() != 0u64 { return 1u64 }
+        if py_err() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "echo" as u64) == 1u32 {
+        ps("THE LOSCHMIDT ECHO: time reversal is EXACT, not approximate.\n\n" as u64)
+        ps("  the rational 3-chain folds forward (t = 4, 13/2, 9); at t = 10 every\n" as u64)
+        ps("  velocity is negated; the fold runs FORWARD again; at t = 20 velocities\n" as u64)
+        ps("  are negated once more.  A float engine returns near the start.  III\n" as u64)
+        ps("  returns THE start -- every coordinate exactly the integer genesis.\n\n" as u64)
+        let n1 : u64 = gas_chain()
+        print_events(0u64, n1, "impact" as u64)
+        let e : u64 = kn_echo(10i64)
+        let n2 : u64 = kn_evn() - n1
+        print_events(n1, n2, "echo  " as u64)
+        putchar(10i32)
+        if e == 0u64 {
+            ps("  EXACT RECOVERY: every position and velocity equals the genesis.  0 drift.\n" as u64)
+        } else {
+            ps("  ECHO BROKE at check " as u64)   pu(e)   putchar(10i32)
+            return 1u64
+        }
+        ps("  conservation breaks = " as u64)   pu(kn_lawviol())   ps("   refusals = " as u64)   pu(py_err())   putchar(10i32)
+        if kn_lawviol() != 0u64 { return 1u64 }
+        if py_err() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "speak" as u64) == 1u32 {
+        /* movement I: the surd chain speaks its causal order with exact brackets */
+        ps("MOVEMENT I -- the surd chain speaks (each time is the exact bracket):\n\n" as u64)
+        let n : u64 = gas_surd()
+        eol_reset()
+        MM_SEL = 0u64   MM_SN = 0u64
+        let mut k : u64 = 0u64
+        while k + 1u64 < n {
+            if kn_estrict(k + 1u64) == 1u64 {
+                wclaim_open()
+                wthing_ev("impact" as u64, 0u64, k)
+                wclaim_verb(60u8)
+                wthing_ev("impact" as u64, 0u64, k + 1u64)
+                wclaim_close()
+            }
+            k = k + 1u64
+        }
+        let r1 : i64 = eol_read((&MM_SCR) as u64, MM_SN)
+        let law1 : u64 = eol_lawcheck()
+        ps("  " as u64)   print_out()
+        ps("\n  claims stated = " as u64)   pi(r1)
+        ps("   coherent = " as u64)   if law1 == 0u64 { ps("YES" as u64) } else { ps("NO" as u64) }
+        ps("   scroll address = " as u64)   pu(eol_addr())   putchar(10i32)
+        ps("  tower height reached = " as u64)   pu(py_h())   putchar(10i32)
+        /* movement II: the echo -- state the forward chain and the mirror pairs
+         * ONLY; the echo's own causal order is stated by NO ONE */
+        ps("\nMOVEMENT II -- the echo: forward chain + mirror pairs stated; the\n" as u64)
+        ps("echo's causality stated by NO claim:\n\n" as u64)
+        let n1 : u64 = gas_chain()
+        let e : u64 = kn_echo(10i64)
+        let n2 : u64 = kn_evn() - n1
+        eol_reset()
+        MM_SEL = 0u64   MM_SN = 0u64
+        k = 0u64
+        while k + 1u64 < n1 {
+            wclaim_open()
+            wthing_ev("impact" as u64, 0u64, k)
+            wclaim_verb(60u8)
+            wthing_ev("impact" as u64, 0u64, k + 1u64)
+            wclaim_close()
+            k = k + 1u64
+        }
+        k = 0u64
+        while k < n1 {
+            if k < n2 {
+                wclaim_open()
+                wthing_ev("impact" as u64, 0u64, k)
+                wclaim_verb(126u8)
+                wthing_ev("echo" as u64, n1, n1 + (n1 - 1u64 - k))
+                wclaim_close()
+            }
+            k = k + 1u64
+        }
+        let r2 : i64 = eol_read((&MM_SCR) as u64, MM_SN)
+        let law2 : u64 = eol_lawcheck()
+        ps("  " as u64)   print_out()
+        ps("\n  echo exact recovery = " as u64)   if e == 0u64 { ps("YES" as u64) } else { ps("NO" as u64) }
+        ps("   claims stated = " as u64)   pi(r2)
+        ps("   coherent = " as u64)   if law2 == 0u64 { ps("YES" as u64) } else { ps("NO" as u64) }
+        putchar(10i32)
+        /* movement III: ask the language what physics implied.  The mirror law
+         * (~ reverses <) must DERIVE the echo causality. */
+        ps("\nMOVEMENT III -- the derivation (asked, never stated):\n\n" as u64)
+        MM_SEL = 1u64   MM_TAN = 0u64
+        wthing_ev("echo" as u64, n1, n1)                       /* echo 1 (earliest) */
+        MM_SEL = 2u64   MM_TBN = 0u64
+        wthing_ev("echo" as u64, n1, n1 + 1u64)                /* echo 2            */
+        let q1 : u64 = eol_entails((&MM_TA) as u64, MM_TAN, 0u64, (&MM_TB) as u64, MM_TBN)
+        ps("  [echo 1 < echo 2] ? " as u64)
+        if q1 == 1u64 { ps("DERIVED" as u64) } else { if q1 == 0u64 { ps("not entailed" as u64) } else { ps("refused" as u64) } }
+        putchar(10i32)
+        MM_SEL = 2u64   MM_TBN = 0u64
+        wthing_ev("echo" as u64, n1, n1 + 2u64)                /* echo 3 (latest)   */
+        let q2 : u64 = eol_entails((&MM_TA) as u64, MM_TAN, 0u64, (&MM_TB) as u64, MM_TBN)
+        ps("  [echo 1 < echo 3] ? " as u64)
+        if q2 == 1u64 { ps("DERIVED (transitively)" as u64) } else { if q2 == 0u64 { ps("not entailed" as u64) } else { ps("refused" as u64) } }
+        putchar(10i32)
+        let q3 : u64 = eol_entails((&MM_TB) as u64, MM_TBN, 0u64, (&MM_TA) as u64, MM_TAN)
+        ps("  [echo 3 < echo 1] ? " as u64)
+        if q3 == 1u64 { ps("claimed (WRONG)" as u64) } else { if q3 == 0u64 { ps("NOT entailed (the negative control holds)" as u64) } else { ps("refused" as u64) } }
+        putchar(10i32)
+        putchar(10i32)
+        ps("  the fold stated the FORWARD order and the mirror pairs.  EIDOLOS's own\n" as u64)
+        ps("  law (a mirror REVERSES under) derived the echo's causality -- language\n" as u64)
+        ps("  and physics agree about time reversal, and neither copied the other.\n" as u64)
+        if q1 != 1u64 { return 1u64 }
+        if q2 != 1u64 { return 1u64 }
+        if q3 == 1u64 { return 1u64 }
+        if e != 0u64 { return 1u64 }
         return 0u64
     }
     return usage()

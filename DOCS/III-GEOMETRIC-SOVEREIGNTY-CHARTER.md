@@ -178,8 +178,43 @@ target named; the tool prints III's raw table.
   independence capstones are migrated (they no longer claim a probabilistic
   capability — III retired it for a better one).  arms 160..168.
 
-REMAINING (genuinely optional future work, no ZK left to retire): Γ's deeper
-dynamics (re-found choreo's exact time-of-impact on the worldline).  The
-retired files' MANIFEST lines reconcile at the autarkeia ceremony (the signed
-testament is regenerated there; deleting listed files is the established
-campaign pattern, not a break — proven across 100+ deletions this campaign).
+- **Γ-MOTION — THE EXACT TIME-OF-IMPACT** (commit 1e10d839).  choreo re-founded
+  on the organism and retired: `eidos/exact_motion.iii` + `iii-motion`.  A
+  moving sphere is a worldline P(t)=X+Vt; HIT/GRAZE/MISS is the sign of the
+  discriminant; the impact is the SURD t* = (-B - sqrt Δ)/(2A) computed for ANY
+  Δ (choreo refused every non-perfect-square); impacts are ordered against any
+  rational and against each other by the exact surd oracle; exact graze time;
+  exact elastic response; no tunneling at any speed.  arms 170..179.
+
+- **Γ-KINESIS — THE CONSTRUCTIBLE TOWER + THE KINETIC SCROLL + THE VOICE**.
+  The gap `algnum.iii` itself named ("algebraic arithmetic needs a bigint
+  tier; i64 envelope d·depth ≲ 60") is CLOSED, generally: `aether/pyrgos.iii`
+  is the ordered field of ruler-and-compass reals — big-rational base on the
+  bigint substrate, lazily NESTED quadratic extensions (a spine of radicands
+  that are themselves tower elements — the numbers every flat oracle refuses),
+  a TOTAL sign by norm descent (no isolation intervals, no separation bound,
+  no abstention), total inverse (degenerate norms take the value-is-2a
+  branch), exact sqrt with rational perfect-square fast path.  Proven by arms
+  180..187, including sqrt2+sqrt3-sqrt(5+2·sqrt6) DECIDED exactly zero and a
+  125-case enumerated cross-agreement with `ui_sqrt_sum_sign` (two independent
+  exact paths, no target named).  On that field, `eidos/kinesis.iii` folds an
+  N-body gas as PURE EVENTS — no frames, no dt, no objects: each irrational
+  impact adjoins its one radical and the fold CONTINUES past it (what
+  exact_motion could not do); candidates roll back under pool watermarks, the
+  chosen radical joins the spine; simultaneity is DETECTED by exact tie (and
+  admitted by the approaching-contact law); the graze provably exchanges
+  nothing; momentum and energy are compared EXACTLY at every event; the
+  LOSCHMIDT ECHO returns the exact integer genesis through however many
+  radicals the forward fold minted.  arms 190..196.  `iii-motion
+  scroll|echo|speak`: the fold speaks EIDOLOS — each impact a claim thing with
+  its exact bracket as the measure, the forward chain and the mirror pairs
+  stated, and the language's own law (~ reverses <) DERIVES the echo's
+  causality (the fold never stated it; the negative control does not entail).
+  The spoken scroll is canonical bytes with a content address: a peer refolds
+  the same gas and derives the same address — verification without trust,
+  the proofcarry law extended to physics.  All four verbs byte-deterministic.
+
+The retired files' MANIFEST lines reconcile at the autarkeia ceremony (the
+signed testament is regenerated there; deleting listed files is the
+established campaign pattern, not a break — proven across 100+ deletions this
+campaign).

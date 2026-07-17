@@ -9,10 +9,17 @@ case "$(uname -s 2>/dev/null||echo x)" in MINGW*|MSYS*|CYGWIN*) X=".exe";; *) X=
 IIIS="$OUT/iiis-2$X"; [[ -x "$IIIS" ]]||die "no compiler" 2; CC="${CC:-gcc}"; A="$ROOT/STDLIB/build/iii/libiii_native.a"; [[ -f "$A" ]]||die "no archive" 2
 SRCS=(
   "$ROOT/STDLIB/iii/eidos/exact_motion.iii"
+  "$ROOT/STDLIB/iii/aether/pyrgos.iii"
+  "$ROOT/STDLIB/iii/eidos/kinesis.iii"
+  "$ROOT/STDLIB/iii/omnia/eidolos.iii"
+  "$ROOT/STDLIB/iii/numera/idfold.iii"
+  "$ROOT/STDLIB/iii/omnia/isub.iii"
+  "$ROOT/STDLIB/iii/omnia/exec_cert.iii"
   "$ROOT/STDLIB/iii/aether/sqrt_sum_sign.iii"
   "$ROOT/STDLIB/iii/aether/kfield.iii"
   "$ROOT/STDLIB/iii/memoria/arena.iii"
   "$ROOT/STDLIB/iii/numera/bigint.iii"
+  "$ROOT/STDLIB/iii/numera/bigint_div.iii"
   "$ROOT/STDLIB/iii/numera/bv_ring.iii"
   "$ROOT/STDLIB/iii/numera/cpufeat.iii"
   "$ROOT/STDLIB/iii/numera/typecheck.iii"

@@ -1,0 +1,1044 @@
+/* STDLIB/iii/aether/pyrgos.iii -- THE CONSTRUCTIBLE TOWER: the ordered field of
+ * ruler-and-compass reals, computable, total, EXACT, at ANY depth and ANY size.
+ *
+ * THE GAP THIS CLOSES (named by algnum.iii itself): "NOT algebraic arithmetic --
+ * needs a bigint tier, stated future work; i64 envelope d*depth <= 60".  Every
+ * exact-sign oracle before this one takes FLAT radicals with i64 radicands
+ * (sqrt_sum_sign: sum a_i sqrt(b_i), b_i i64; kfield: Q(sqrtA,sqrtB,sqrtC),
+ * rank <= 3, ABSTAINS out of envelope).  But the numbers motion MAKES are
+ * NESTED: after one irrational impact at t1 in Q(sqrt D1), the next
+ * discriminant is  x + y sqrt(D1)  and its root is  sqrt(x + y sqrt(D1)) -- a
+ * radical no flat oracle accepts.  The tower accepts it, and the one after it,
+ * and the one after that, forever.
+ *
+ * THE FIELD.  F0 = Q (big rationals, sign-magnitude bigint, gcd-reduced).
+ * F_{k+1} = F_k(sqrt d_k) with d_k an ELEMENT of F_k, d_k > 0 (the SPINE).
+ * An element of F_h is a coefficient vector of 2^h rationals indexed by the
+ * subset mask of the spine radicals -- lo half = without the top radical (a),
+ * hi half = with it (b): e = a + b*sqrt(d).  Everything is exact integers.
+ *
+ * THE TOTAL SIGN (norm descent -- no isolation interval, no Sturm, no
+ * separation bound, no abstention):
+ *     sign(a + b sqrt d),  d > 0:
+ *       b = 0 -> sign(a);   a = 0 -> sign(b);   sign a = sign b -> that sign;
+ *       else  sign(a) * sign(a^2 - b^2 d)      [one level down]
+ * The recursion terminates at rational signs.  It is correct even when the
+ * tower is DEGENERATE (sqrt d already in F_k): soundness needs only d > 0 and
+ * the ordered-field axioms, never uniqueness of representation.
+ *
+ * ARITHMETIC:  +,- coefficientwise;  (a+b r)(c+e r) = (ac + be d) + (ae + bc) r;
+ * inverse by conjugation  1/(a+b r) = (a - b r)/(a^2 - b^2 d), with the
+ * DEGENERATE branch: if the norm a^2 - b^2 d = 0 then sqrt d = a/b in F_k, so
+ * the value IS 2a -- invert that one level down.  Division never refuses.
+ * sqrt: rationals get an exact perfect-square test (bigint_isqrt); everything
+ * else adjoins a spine level lazily.  ONE radical per event, forever.
+ *
+ * WHY THIS IS THE GENERAL ENHANCEMENT AND NOT A MOTION HACK: the constructible
+ * closure IS the field of compass-and-straightedge geometry.  Sphere collision
+ * chains live here (the elastic response is RATIONAL in its inputs -- only the
+ * impact TIME adjoins sqrt(Delta)), but so does every iterated quadratic
+ * construction III will ever meet: circumcentres of circumcentres, bisector
+ * cascades, Apollonius chains.  Depth unbounded, coefficient size unbounded.
+ *
+ * MEMORY LAW (the pools): limbs, rationals and elements live in module bump
+ * pools with WATERMARK discipline -- py_mark packs (limb,rat,elem,H) tops into
+ * one u64, py_release restores them (including the tower height, so candidate
+ * radicals scanned-but-not-chosen roll back).  Persistent survivors cross a
+ * release by the TWO-PHASE COPY: py_el_copy up (fresh contiguous ascending
+ * layout), release, py_el_copy down -- the slide is memmove-down safe because
+ * every read offset is >= its write offset in program order.  bigint handles
+ * are TRANSIENT ONLY: each rational op opens its own arena, streams limbs in
+ * through set_limb (no address-of anywhere -- the FFI address law is never
+ * touched), drops every handle and the arena before returning; the 64-slot
+ * handle table never sees more than ~8 live.
+ *
+ * REFUSALS are sticky and named (PY_ERR): 1 limb pool, 2 rational pool,
+ * 3 element pool, 4 tower height, 5 divide-by-zero, 6 bigint alloc,
+ * 7 nonpositive radicand.  Arms assert PY_ERR == 0.
+ *
+ * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..187) -- including
+ * the nested-radical exact zero  sqrt2 + sqrt3 - sqrt(5 + 2 sqrt6) = 0  that
+ * no float and no flat i64 oracle can decide, and a 125-case ENUMERATED
+ * cross-oracle agreement with ui_sqrt_sum_sign (two mathematically independent
+ * exact paths, no target named).  NO gate.
+ * NIH: composes memoria/arena, numera/bigint(+div), aether/sqrt_sum_sign
+ * (bigint_isqrt + the flat oracle as the independent witness).
+ * Hexad: kind_form.  Ring R-1. */
+module aether_pyrgos
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_isqrt(ar: u64, N: u64) -> u64 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+/* ==================== the pools ==================== */
+const PY_LCAP : u64 = 49152u64           /* limb pool (u64 limbs)               */
+const PY_RCAP : u64 = 10240u64           /* rational slots                      */
+const PY_ECAP : u64 = 8192u64            /* element registers                   */
+const PY_HMAX : u64 = 8u64               /* max tower height                    */
+const PY_SENT : u64 = 18446744073709551615u64
+
+var PY_LIMB : [u64; 49152]
+var PY_LTOP : u64 = 0u64
+
+var PY_RSG : [i64; 10240]                /* sign -1/0/+1                        */
+var PY_RNO : [u64; 10240]                /* numerator limb offset               */
+var PY_RNL : [u64; 10240]                /* numerator limb count (0 = zero)     */
+var PY_RDO : [u64; 10240]                /* denominator limb offset             */
+var PY_RDL : [u64; 10240]                /* denominator limb count (>= 1)       */
+var PY_RTOP : u64 = 0u64
+
+var PY_EH : [u64; 8192]                  /* element height                      */
+var PY_EC : [u64; 8192]                  /* element base rational slot          */
+var PY_ETOP : u64 = 0u64
+
+var PY_SPINE : [u64; 8]                  /* radicand element index per level    */
+var PY_H : u64 = 0u64                    /* current tower height                */
+
+var PY_ERR : u64 = 0u64                  /* sticky named refusal (0 = healthy)  */
+var PY_ONE : u64 = 0u64                  /* offset of the shared limb 1         */
+
+/* store cells (multi-out through module cells, the house pattern) */
+var PY_SOFF : u64 = 0u64
+var PY_SLEN : u64 = 0u64
+
+/* flat-oracle scratch for the cross-check arm (module scope: the FFI law) */
+var PY_XA : [i64; 4]
+var PY_XB : [i64; 4]
+
+fn py_err() -> u64 @export { return PY_ERR }
+fn py_h() -> u64 @export { return PY_H }
+fn py_ltop() -> u64 @export { return PY_LTOP }
+fn py_rtop() -> u64 @export { return PY_RTOP }
+fn py_etop() -> u64 @export { return PY_ETOP }
+fn py_spine(lvl: u64) -> u64 @export { if lvl < PY_H { return PY_SPINE[lvl] }   return PY_SENT }
+fn py_spine_set(lvl: u64, e: u64) -> i32 @export { if lvl < PY_H { PY_SPINE[lvl] = e   return 0i32 }   return -1i32 }
+
+fn py_reset() -> i32 @export {
+    PY_LTOP = 0u64   PY_RTOP = 0u64   PY_ETOP = 0u64
+    PY_H = 0u64   PY_ERR = 0u64
+    PY_LIMB[0u64] = 1u64   PY_ONE = 0u64   PY_LTOP = 1u64
+    return 0i32
+}
+
+/* ==================== pool primitives ==================== */
+fn py_lalloc(n: u64) -> u64 {
+    let need : u64 = PY_LTOP + n
+    if need > PY_LCAP { PY_ERR = 1u64   return 0u64 }
+    let off : u64 = PY_LTOP
+    PY_LTOP = need
+    return off
+}
+fn py_ralloc() -> u64 {
+    if PY_RTOP >= PY_RCAP { PY_ERR = 2u64   return 0u64 }
+    let r : u64 = PY_RTOP
+    PY_RTOP = PY_RTOP + 1u64
+    PY_RSG[r] = 0i64   PY_RNO[r] = PY_ONE   PY_RNL[r] = 0u64
+    PY_RDO[r] = PY_ONE   PY_RDL[r] = 1u64
+    return r
+}
+fn py_ralloc_n(n: u64) -> u64 {
+    if PY_RTOP + n > PY_RCAP { PY_ERR = 2u64   return 0u64 }
+    let base : u64 = PY_RTOP
+    let mut k : u64 = 0u64
+    while k < n {
+        let r : u64 = base + k
+        PY_RSG[r] = 0i64   PY_RNO[r] = PY_ONE   PY_RNL[r] = 0u64
+        PY_RDO[r] = PY_ONE   PY_RDL[r] = 1u64
+        k = k + 1u64
+    }
+    PY_RTOP = base + n
+    return base
+}
+fn py_emk(hgt: u64, base: u64) -> u64 {
+    if PY_ETOP >= PY_ECAP { PY_ERR = 3u64   return 0u64 }
+    let e : u64 = PY_ETOP
+    PY_ETOP = PY_ETOP + 1u64
+    PY_EH[e] = hgt   PY_EC[e] = base
+    return e
+}
+fn py_rentry_copy(dst: u64, src: u64) -> i32 {
+    PY_RSG[dst] = PY_RSG[src]
+    PY_RNO[dst] = PY_RNO[src]   PY_RNL[dst] = PY_RNL[src]
+    PY_RDO[dst] = PY_RDO[src]   PY_RDL[dst] = PY_RDL[src]
+    return 0i32
+}
+
+/* mark = (LTOP << 31) | (RTOP << 17) | (ETOP << 4) | H   (16/14/13/4 bits) */
+fn py_mark() -> u64 @export {
+    return (PY_LTOP << 31u64) | (PY_RTOP << 17u64) | (PY_ETOP << 4u64) | PY_H
+}
+fn py_release(m: u64) -> i32 @export {
+    PY_H = m & 15u64
+    PY_ETOP = (m >> 4u64) & 8191u64
+    PY_RTOP = (m >> 17u64) & 16383u64
+    PY_LTOP = m >> 31u64
+    return 0i32
+}
+/* pools-only release: restores the bump tops but KEEPS the tower height --
+ * the keep/slide pass of a consumer (kinesis) re-copies the spine radicands
+ * down and re-points them with py_spine_set, so H must survive the release. */
+fn py_release_pools(m: u64) -> i32 @export {
+    PY_ETOP = (m >> 4u64) & 8191u64
+    PY_RTOP = (m >> 17u64) & 16383u64
+    PY_LTOP = m >> 31u64
+    return 0i32
+}
+
+/* ==================== transient bigint bridge ==================== */
+fn py_bload(ar: u64, off: u64, len: u64) -> u64 {
+    let id : u64 = bigint_new(ar, len + 1u64)
+    if id == 0u64 { PY_ERR = 6u64   return 0u64 }
+    let mut i : u64 = 0u64
+    while i < len { bigint_set_limb(id, i, PY_LIMB[off + i])   i = i + 1u64 }
+    bigint_set_len(id, len)
+    bigint_normalize(id)
+    return id
+}
+fn py_bstore(h: u64) -> i32 {
+    bigint_normalize(h)
+    let len : u64 = bigint_len_limbs(h)
+    if len == 0u64 { PY_SOFF = PY_ONE   PY_SLEN = 0u64   return 0i32 }
+    let off : u64 = py_lalloc(len)
+    if PY_ERR != 0u64 { PY_SOFF = PY_ONE   PY_SLEN = 0u64   return -1i32 }
+    let mut i : u64 = 0u64
+    while i < len { PY_LIMB[off + i] = bigint_get_limb(h, i)   i = i + 1u64 }
+    PY_SOFF = off   PY_SLEN = len
+    return 0i32
+}
+fn py_arsz(l1: u64, l2: u64) -> u64 {
+    let t : u64 = l1 + l2 + 8u64
+    let mut sz : u64 = 262144u64 + (t * t * 640u64)
+    if sz > 33554432u64 { sz = 33554432u64 }
+    return sz
+}
+
+/* trailing zero bits of a nonzero bigint handle */
+fn py_btz(h: u64) -> u64 {
+    let len : u64 = bigint_len_limbs(h)
+    let mut i : u64 = 0u64
+    while i < len {
+        let l : u64 = bigint_get_limb(h, i)
+        if l != 0u64 {
+            let mut b : u64 = 0u64
+            let mut t : u64 = l
+            while (t & 1u64) == 0u64 { t = t >> 1u64   b = b + 1u64 }
+            return (i * 64u64) + b
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* binary gcd of two positive handles; returns a FRESH handle in ar */
+fn py_bgcd(ar: u64, a0: u64, b0: u64) -> u64 {
+    let mut A : u64 = bigint_copy(ar, a0)
+    let mut B : u64 = bigint_copy(ar, b0)
+    if A == 0u64 { PY_ERR = 6u64   return 0u64 }
+    if B == 0u64 { PY_ERR = 6u64   return 0u64 }
+    bigint_normalize(A)   bigint_normalize(B)
+    if bigint_is_zero(A) == 1u8 { bigint_drop(A)   return B }
+    if bigint_is_zero(B) == 1u8 { bigint_drop(B)   return A }
+    let ta : u64 = py_btz(A)
+    let tb : u64 = py_btz(B)
+    let mut k : u64 = ta
+    if tb < k { k = tb }
+    let nA : u64 = bigint_shr_bits(ar, A, ta)
+    bigint_drop(A)   A = nA
+    let nB : u64 = bigint_shr_bits(ar, B, tb)
+    bigint_drop(B)   B = nB
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if bigint_is_zero(B) == 1u8 {
+            going = 0u8
+        } else {
+            let c : i32 = bigint_cmp(A, B)
+            if c > 0i32 { let t : u64 = A   A = B   B = t }
+            let d : u64 = bigint_sub(ar, B, A)
+            bigint_drop(B)   B = d
+            bigint_normalize(B)
+            if bigint_is_zero(B) == 0u8 {
+                let tz : u64 = py_btz(B)
+                if tz > 0u64 {
+                    let sB : u64 = bigint_shr_bits(ar, B, tz)
+                    bigint_drop(B)   B = sB
+                }
+            }
+        }
+    }
+    bigint_drop(B)
+    if k > 0u64 {
+        let res : u64 = bigint_shl_bits(ar, A, k)
+        bigint_drop(A)
+        return res
+    }
+    return A
+}
+
+/* reduce handles N (numerator magnitude) and D (denominator magnitude > 0) by
+ * their gcd, store both into the limb pool, build a rational slot with sign sg.
+ * Drops N and D.  Returns the slot. */
+fn py_rmake(ar: u64, sg: i64, N: u64, D: u64) -> u64 {
+    bigint_normalize(N)   bigint_normalize(D)
+    if bigint_is_zero(D) == 1u8 { PY_ERR = 5u64   bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
+    if sg == 0i64 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
+    if bigint_is_zero(N) == 1u8 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
+    let g : u64 = py_bgcd(ar, N, D)
+    if PY_ERR != 0u64 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
+    let mut NN : u64 = N
+    let mut DD : u64 = D
+    let glen : u64 = bigint_len_limbs(g)
+    let glo : u64 = bigint_get_limb(g, 0u64)
+    let mut gone : u8 = 0u8
+    if glen == 1u64 { if glo == 1u64 { gone = 1u8 } }
+    if gone == 0u8 {
+        let q1 : u64 = bigint_div_qr(ar, N, g)
+        let r1 : u64 = bigint_remainder_take()
+        bigint_drop(r1)   bigint_drop(N)
+        NN = q1
+        let q2 : u64 = bigint_div_qr(ar, D, g)
+        let r2 : u64 = bigint_remainder_take()
+        bigint_drop(r2)   bigint_drop(D)
+        DD = q2
+        if NN == 0u64 { PY_ERR = 6u64 }
+        if DD == 0u64 { PY_ERR = 6u64 }
+    }
+    bigint_drop(g)
+    if PY_ERR != 0u64 { return py_ralloc() }
+    py_bstore(NN)
+    let no : u64 = PY_SOFF
+    let nl : u64 = PY_SLEN
+    py_bstore(DD)
+    let dof : u64 = PY_SOFF
+    let dl : u64 = PY_SLEN
+    bigint_drop(NN)   bigint_drop(DD)
+    let r : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return r }
+    PY_RSG[r] = sg
+    PY_RNO[r] = no   PY_RNL[r] = nl
+    PY_RDO[r] = dof   PY_RDL[r] = dl
+    return r
+}
+
+/* ==================== rational constructors ==================== */
+fn py_ugcd64(x: u64, y: u64) -> u64 {
+    let mut a : u64 = x
+    let mut b : u64 = y
+    while b != 0u64 { let t : u64 = a % b   a = b   b = t }
+    return a
+}
+fn py_rat_frac(n: i64, d: i64) -> u64 @export {
+    if d == 0i64 { PY_ERR = 5u64   return py_ralloc() }
+    let mut sg : i64 = 1i64
+    let mut nn : i64 = n
+    let mut dd : i64 = d
+    if nn < 0i64 { sg = 0i64 - sg   nn = 0i64 - nn }
+    if dd < 0i64 { sg = 0i64 - sg   dd = 0i64 - dd }
+    if nn == 0i64 { return py_ralloc() }
+    let un : u64 = nn as u64
+    let ud : u64 = dd as u64
+    let g : u64 = py_ugcd64(un, ud)
+    let rn : u64 = un / g
+    let rd : u64 = ud / g
+    let r : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return r }
+    let no : u64 = py_lalloc(1u64)
+    if PY_ERR != 0u64 { return r }
+    PY_LIMB[no] = rn
+    let mut dof : u64 = PY_ONE
+    if rd != 1u64 {
+        dof = py_lalloc(1u64)
+        if PY_ERR != 0u64 { return r }
+        PY_LIMB[dof] = rd
+    }
+    PY_RSG[r] = sg
+    PY_RNO[r] = no   PY_RNL[r] = 1u64
+    PY_RDO[r] = dof   PY_RDL[r] = 1u64
+    return r
+}
+fn py_rat_i64(v: i64) -> u64 @export { return py_rat_frac(v, 1i64) }
+fn py_pow10(k: u64) -> u64 @export {
+    let ar : u64 = arena_new(1048576u64)
+    let mut h : u64 = bigint_from_u64(ar, 1u64)
+    let mut i : u64 = 0u64
+    while i < k {
+        let nh : u64 = bigint_mul_u64(ar, h, 10u64)
+        bigint_drop(h)   h = nh
+        if h == 0u64 { PY_ERR = 6u64   i = k }
+        i = i + 1u64
+    }
+    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    py_bstore(h)
+    let no : u64 = PY_SOFF
+    let nl : u64 = PY_SLEN
+    bigint_drop(h)
+    bigint_drop_arena(ar)   arena_drop(ar)
+    let r : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return r }
+    PY_RSG[r] = 1i64
+    PY_RNO[r] = no   PY_RNL[r] = nl
+    PY_RDO[r] = PY_ONE   PY_RDL[r] = 1u64
+    return r
+}
+
+/* ==================== rational arithmetic ==================== */
+fn py_rat_sign(r: u64) -> i64 @export { let s : i64 = PY_RSG[r]   return s }
+fn py_rat_neg(r: u64) -> u64 {
+    let e : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return e }
+    py_rentry_copy(e, r)
+    let s : i64 = PY_RSG[r]
+    PY_RSG[e] = 0i64 - s
+    return e
+}
+fn py_rat_share(r: u64) -> u64 {
+    let e : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return e }
+    py_rentry_copy(e, r)
+    return e
+}
+fn py_rat_add(a: u64, b: u64) -> u64 {
+    if PY_ERR != 0u64 { return py_ralloc() }
+    let sa : i64 = PY_RSG[a]
+    let sb : i64 = PY_RSG[b]
+    if sa == 0i64 { return py_rat_share(b) }
+    if sb == 0i64 { return py_rat_share(a) }
+    let nal : u64 = PY_RNL[a]
+    let dal : u64 = PY_RDL[a]
+    let nbl : u64 = PY_RNL[b]
+    let dbl : u64 = PY_RDL[b]
+    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let na : u64 = py_bload(ar, PY_RNO[a], nal)
+    let da : u64 = py_bload(ar, PY_RDO[a], dal)
+    let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
+    let db : u64 = py_bload(ar, PY_RDO[b], dbl)
+    let X : u64 = bigint_mul(ar, na, db)
+    let Y : u64 = bigint_mul(ar, nb, da)
+    let D : u64 = bigint_mul(ar, da, db)
+    bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
+    if X == 0u64 { PY_ERR = 6u64 }
+    if Y == 0u64 { PY_ERR = 6u64 }
+    if D == 0u64 { PY_ERR = 6u64 }
+    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    let mut sg : i64 = 0i64
+    let mut N : u64 = 0u64
+    if sa == sb {
+        N = bigint_add(ar, X, Y)
+        sg = sa
+        bigint_drop(X)   bigint_drop(Y)
+    } else {
+        let c : i32 = bigint_cmp(X, Y)
+        if c > 0i32 {
+            N = bigint_sub(ar, X, Y)
+            sg = sa
+        }
+        if c < 0i32 {
+            N = bigint_sub(ar, Y, X)
+            sg = sb
+        }
+        bigint_drop(X)   bigint_drop(Y)
+        if c == 0i32 {
+            bigint_drop(D)
+            bigint_drop_arena(ar)   arena_drop(ar)
+            return py_ralloc()                       /* exact cancel -> zero */
+        }
+    }
+    if N == 0u64 { PY_ERR = 6u64   bigint_drop(D)   bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    let res : u64 = py_rmake(ar, sg, N, D)
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return res
+}
+fn py_rat_mul(a: u64, b: u64) -> u64 {
+    if PY_ERR != 0u64 { return py_ralloc() }
+    let sa : i64 = PY_RSG[a]
+    let sb : i64 = PY_RSG[b]
+    if sa == 0i64 { return py_ralloc() }
+    if sb == 0i64 { return py_ralloc() }
+    let nal : u64 = PY_RNL[a]
+    let dal : u64 = PY_RDL[a]
+    let nbl : u64 = PY_RNL[b]
+    let dbl : u64 = PY_RDL[b]
+    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let na : u64 = py_bload(ar, PY_RNO[a], nal)
+    let da : u64 = py_bload(ar, PY_RDO[a], dal)
+    let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
+    let db : u64 = py_bload(ar, PY_RDO[b], dbl)
+    let N : u64 = bigint_mul(ar, na, nb)
+    let D : u64 = bigint_mul(ar, da, db)
+    bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
+    if N == 0u64 { PY_ERR = 6u64 }
+    if D == 0u64 { PY_ERR = 6u64 }
+    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    let res : u64 = py_rmake(ar, sa * sb, N, D)
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return res
+}
+fn py_rat_inv(r: u64) -> u64 @export {
+    let s : i64 = PY_RSG[r]
+    if s == 0i64 { PY_ERR = 5u64   return py_ralloc() }
+    let e : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return e }
+    PY_RSG[e] = s
+    PY_RNO[e] = PY_RDO[r]   PY_RNL[e] = PY_RDL[r]
+    PY_RDO[e] = PY_RNO[r]   PY_RDL[e] = PY_RNL[r]
+    return e
+}
+fn py_rat_cmp(a: u64, b: u64) -> i64 @export {
+    let sa : i64 = PY_RSG[a]
+    let sb : i64 = PY_RSG[b]
+    if sa > sb { return 1i64 }
+    if sa < sb { return 0i64 - 1i64 }
+    if sa == 0i64 { return 0i64 }
+    let nal : u64 = PY_RNL[a]
+    let dal : u64 = PY_RDL[a]
+    let nbl : u64 = PY_RNL[b]
+    let dbl : u64 = PY_RDL[b]
+    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let na : u64 = py_bload(ar, PY_RNO[a], nal)
+    let da : u64 = py_bload(ar, PY_RDO[a], dal)
+    let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
+    let db : u64 = py_bload(ar, PY_RDO[b], dbl)
+    let X : u64 = bigint_mul(ar, na, db)
+    let Y : u64 = bigint_mul(ar, nb, da)
+    let c : i32 = bigint_cmp(X, Y)
+    bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
+    bigint_drop(X)   bigint_drop(Y)
+    bigint_drop_arena(ar)   arena_drop(ar)
+    let mut cc : i64 = 0i64
+    if c > 0i32 { cc = 1i64 }
+    if c < 0i32 { cc = 0i64 - 1i64 }
+    if sa < 0i64 { cc = 0i64 - cc }
+    return cc
+}
+
+/* ==================== elements ==================== */
+fn py_el_h(e: u64) -> u64 @export { return PY_EH[e] }
+fn py_el_new(hgt: u64) -> u64 @export {
+    let n : u64 = 1u64 << hgt
+    let base : u64 = py_ralloc_n(n)
+    return py_emk(hgt, base)
+}
+fn py_lo(e: u64) -> u64 {
+    let h : u64 = PY_EH[e]
+    return py_emk(h - 1u64, PY_EC[e])
+}
+fn py_hiv(e: u64) -> u64 {
+    let h : u64 = PY_EH[e]
+    return py_emk(h - 1u64, PY_EC[e] + (1u64 << (h - 1u64)))
+}
+fn py_el_from_rat(r: u64, hgt: u64) -> u64 @export {
+    let e : u64 = py_el_new(hgt)
+    if PY_ERR != 0u64 { return e }
+    py_rentry_copy(PY_EC[e], r)
+    return e
+}
+fn py_el_from_i64(v: i64, hgt: u64) -> u64 @export {
+    let r : u64 = py_rat_frac(v, 1i64)
+    return py_el_from_rat(r, hgt)
+}
+fn py_el_lift(e: u64, hgt: u64) -> u64 @export {
+    let h : u64 = PY_EH[e]
+    if h == hgt { return e }
+    if h > hgt { PY_ERR = 4u64   return e }
+    let e2 : u64 = py_el_new(hgt)
+    if PY_ERR != 0u64 { return e2 }
+    let n : u64 = 1u64 << h
+    let mut k : u64 = 0u64
+    while k < n {
+        py_rentry_copy(PY_EC[e2] + k, PY_EC[e] + k)
+        k = k + 1u64
+    }
+    return e2
+}
+/* deep copy: fresh contiguous ascending layout (the keep/slide primitive) */
+fn py_el_copy(e: u64) -> u64 @export {
+    let h : u64 = PY_EH[e]
+    let n : u64 = 1u64 << h
+    let e2 : u64 = py_el_new(h)
+    if PY_ERR != 0u64 { return e2 }
+    let mut k : u64 = 0u64
+    while k < n {
+        let src : u64 = PY_EC[e] + k
+        let dst : u64 = PY_EC[e2] + k
+        let nl : u64 = PY_RNL[src]
+        let dl : u64 = PY_RDL[src]
+        let sg : i64 = PY_RSG[src]
+        let mut no : u64 = PY_ONE
+        if nl > 0u64 {
+            no = py_lalloc(nl)
+            if PY_ERR != 0u64 { return e2 }
+            let so : u64 = PY_RNO[src]
+            let mut i : u64 = 0u64
+            while i < nl { PY_LIMB[no + i] = PY_LIMB[so + i]   i = i + 1u64 }
+        }
+        let mut dof : u64 = PY_ONE
+        let mut isone : u8 = 0u8
+        if dl == 1u64 { if PY_LIMB[PY_RDO[src]] == 1u64 { isone = 1u8 } }
+        if isone == 0u8 {
+            dof = py_lalloc(dl)
+            if PY_ERR != 0u64 { return e2 }
+            let so2 : u64 = PY_RDO[src]
+            let mut j : u64 = 0u64
+            while j < dl { PY_LIMB[dof + j] = PY_LIMB[so2 + j]   j = j + 1u64 }
+        }
+        PY_RSG[dst] = sg
+        PY_RNO[dst] = no   PY_RNL[dst] = nl
+        PY_RDO[dst] = dof   PY_RDL[dst] = dl
+        k = k + 1u64
+    }
+    return e2
+}
+/* strict same-height add / sub / neg */
+fn py_el_neg(e: u64) -> u64 {
+    let h : u64 = PY_EH[e]
+    let n : u64 = 1u64 << h
+    let e2 : u64 = py_el_new(h)
+    if PY_ERR != 0u64 { return e2 }
+    let mut k : u64 = 0u64
+    while k < n {
+        let src : u64 = PY_EC[e] + k
+        let dst : u64 = PY_EC[e2] + k
+        py_rentry_copy(dst, src)
+        let s : i64 = PY_RSG[src]
+        PY_RSG[dst] = 0i64 - s
+        k = k + 1u64
+    }
+    return e2
+}
+fn py_el_add0(a: u64, b: u64) -> u64 {
+    let h : u64 = PY_EH[a]
+    let n : u64 = 1u64 << h
+    let e : u64 = py_el_new(h)
+    if PY_ERR != 0u64 { return e }
+    let mut k : u64 = 0u64
+    while k < n {
+        let r : u64 = py_rat_add(PY_EC[a] + k, PY_EC[b] + k)
+        py_rentry_copy(PY_EC[e] + k, r)
+        k = k + 1u64
+    }
+    return e
+}
+fn py_el_mul0(a: u64, b: u64) -> u64 {
+    let h : u64 = PY_EH[a]
+    if h == 0u64 {
+        let e : u64 = py_el_new(0u64)
+        if PY_ERR != 0u64 { return e }
+        let r : u64 = py_rat_mul(PY_EC[a], PY_EC[b])
+        py_rentry_copy(PY_EC[e], r)
+        return e
+    }
+    let hm : u64 = h - 1u64
+    let a1 : u64 = py_lo(a)
+    let b1 : u64 = py_hiv(a)
+    let a2 : u64 = py_lo(b)
+    let b2 : u64 = py_hiv(b)
+    let D : u64 = PY_SPINE[hm]
+    let t1 : u64 = py_el_mul0(a1, a2)
+    let t2 : u64 = py_el_mul0(b1, b2)
+    let t3 : u64 = py_el_mul0(t2, D)
+    let loP : u64 = py_el_add0(t1, t3)
+    let t4 : u64 = py_el_mul0(a1, b2)
+    let t5 : u64 = py_el_mul0(b1, a2)
+    let hiP : u64 = py_el_add0(t4, t5)
+    let e : u64 = py_el_new(h)
+    if PY_ERR != 0u64 { return e }
+    let half : u64 = 1u64 << hm
+    let mut k : u64 = 0u64
+    while k < half {
+        py_rentry_copy(PY_EC[e] + k, PY_EC[loP] + k)
+        py_rentry_copy(PY_EC[e] + half + k, PY_EC[hiP] + k)
+        k = k + 1u64
+    }
+    return e
+}
+fn py_el_sub0(a: u64, b: u64) -> u64 {
+    let nb : u64 = py_el_neg(b)
+    return py_el_add0(a, nb)
+}
+/* the total sign: norm descent.  Pure -- all temporaries are released. */
+fn py_el_sign(e: u64) -> i64 @export {
+    if PY_ERR != 0u64 { return 0i64 }
+    let h : u64 = PY_EH[e]
+    if h == 0u64 { let s : i64 = PY_RSG[PY_EC[e]]   return s }
+    let m : u64 = py_mark()
+    let la : u64 = py_lo(e)
+    let hb : u64 = py_hiv(e)
+    let sa : i64 = py_el_sign(la)
+    let sb : i64 = py_el_sign(hb)
+    if sb == 0i64 { py_release(m)   return sa }
+    if sa == 0i64 { py_release(m)   return sb }
+    if sa == sb { py_release(m)   return sa }
+    let hm : u64 = h - 1u64
+    let a2 : u64 = py_el_mul0(la, la)
+    let b2 : u64 = py_el_mul0(hb, hb)
+    let b2d : u64 = py_el_mul0(b2, PY_SPINE[hm])
+    let nrm : u64 = py_el_sub0(a2, b2d)
+    let s2 : i64 = py_el_sign(nrm)
+    py_release(m)
+    return sa * s2
+}
+/* inverse with the degenerate-norm branch (division never refuses) */
+fn py_el_inv(e: u64) -> u64 @export {
+    if PY_ERR != 0u64 { return py_el_new(PY_EH[e]) }
+    let h : u64 = PY_EH[e]
+    if h == 0u64 {
+        let e2 : u64 = py_el_new(0u64)
+        if PY_ERR != 0u64 { return e2 }
+        let r : u64 = py_rat_inv(PY_EC[e])
+        py_rentry_copy(PY_EC[e2], r)
+        return e2
+    }
+    let hm : u64 = h - 1u64
+    let la : u64 = py_lo(e)
+    let hb : u64 = py_hiv(e)
+    let a2 : u64 = py_el_mul0(la, la)
+    let b2 : u64 = py_el_mul0(hb, hb)
+    let b2d : u64 = py_el_mul0(b2, PY_SPINE[hm])
+    let nrm : u64 = py_el_sub0(a2, b2d)
+    let sn : i64 = py_el_sign(nrm)
+    if sn != 0i64 {
+        let ni : u64 = py_el_inv(nrm)
+        let rlo : u64 = py_el_mul0(la, ni)
+        let nhb : u64 = py_el_neg(hb)
+        let rhi : u64 = py_el_mul0(nhb, ni)
+        let e2 : u64 = py_el_new(h)
+        if PY_ERR != 0u64 { return e2 }
+        let half : u64 = 1u64 << hm
+        let mut k : u64 = 0u64
+        while k < half {
+            py_rentry_copy(PY_EC[e2] + k, PY_EC[rlo] + k)
+            py_rentry_copy(PY_EC[e2] + half + k, PY_EC[rhi] + k)
+            k = k + 1u64
+        }
+        return e2
+    }
+    /* degenerate: sqrt(d) = a/b in the subfield, so the value IS 2a */
+    let two : u64 = py_el_from_i64(2i64, hm)
+    let a2x : u64 = py_el_mul0(la, two)
+    let iv : u64 = py_el_inv(a2x)
+    return py_el_lift(iv, h)
+}
+/* public height-promoting field operations */
+fn py_maxh(a: u64, b: u64) -> u64 {
+    let ha : u64 = PY_EH[a]
+    let hb : u64 = PY_EH[b]
+    if ha > hb { return ha }
+    return hb
+}
+fn py_add(a: u64, b: u64) -> u64 @export {
+    let H : u64 = py_maxh(a, b)
+    let aa : u64 = py_el_lift(a, H)
+    let bb : u64 = py_el_lift(b, H)
+    return py_el_add0(aa, bb)
+}
+fn py_sub(a: u64, b: u64) -> u64 @export {
+    let H : u64 = py_maxh(a, b)
+    let aa : u64 = py_el_lift(a, H)
+    let bb : u64 = py_el_lift(b, H)
+    return py_el_sub0(aa, bb)
+}
+fn py_mul(a: u64, b: u64) -> u64 @export {
+    let H : u64 = py_maxh(a, b)
+    let aa : u64 = py_el_lift(a, H)
+    let bb : u64 = py_el_lift(b, H)
+    return py_el_mul0(aa, bb)
+}
+fn py_div(a: u64, b: u64) -> u64 @export {
+    let H : u64 = py_maxh(a, b)
+    let aa : u64 = py_el_lift(a, H)
+    let bb : u64 = py_el_lift(b, H)
+    let bi : u64 = py_el_inv(bb)
+    return py_el_mul0(aa, bi)
+}
+fn py_neg(a: u64) -> u64 @export { return py_el_neg(a) }
+fn py_sign(a: u64) -> i64 @export { return py_el_sign(a) }
+fn py_cmp(a: u64, b: u64) -> i64 @export {
+    let m : u64 = py_mark()
+    let d : u64 = py_sub(a, b)
+    let s : i64 = py_el_sign(d)
+    py_release(m)
+    return s
+}
+/* is the element rational in value-representation (all nonbase coeffs zero)? */
+fn py_el_is_rat(e: u64) -> u32 {
+    let h : u64 = PY_EH[e]
+    let n : u64 = 1u64 << h
+    let mut k : u64 = 1u64
+    while k < n {
+        let s : i64 = PY_RSG[PY_EC[e] + k]
+        if s != 0i64 { return 0u32 }
+        k = k + 1u64
+    }
+    return 1u32
+}
+
+/* ==================== adjoin and sqrt ==================== */
+fn py_adjoin(d: u64) -> u64 @export {
+    if PY_H >= PY_HMAX { PY_ERR = 4u64   return PY_SENT }
+    let dd : u64 = py_el_lift(d, PY_H)
+    if PY_ERR != 0u64 { return PY_SENT }
+    let s : i64 = py_el_sign(dd)
+    if s <= 0i64 { PY_ERR = 7u64   return PY_SENT }
+    PY_SPINE[PY_H] = dd
+    PY_H = PY_H + 1u64
+    return PY_H - 1u64
+}
+/* basis element sqrt(spine[lvl]) at height lvl+1 */
+fn py_el_root(lvl: u64) -> u64 @export {
+    let e : u64 = py_el_new(lvl + 1u64)
+    if PY_ERR != 0u64 { return e }
+    let r : u64 = py_rat_i64(1i64)
+    py_rentry_copy(PY_EC[e] + (1u64 << lvl), r)
+    return e
+}
+/* exact square root: rational perfect squares stay rational (no adjoin);
+ * everything else adjoins one spine level and returns the basis radical. */
+fn py_sqrt(e: u64) -> u64 @export {
+    let s : i64 = py_el_sign(e)
+    if s < 0i64 { PY_ERR = 7u64   return py_el_new(0u64) }
+    if s == 0i64 { return py_el_new(0u64) }
+    if py_el_is_rat(e) == 1u32 {
+        let r : u64 = PY_EC[e]
+        let nl : u64 = PY_RNL[r]
+        let dl : u64 = PY_RDL[r]
+        let ar : u64 = arena_new(py_arsz(nl, dl))
+        let N : u64 = py_bload(ar, PY_RNO[r], nl)
+        let D : u64 = py_bload(ar, PY_RDO[r], dl)
+        let ND : u64 = bigint_mul(ar, N, D)
+        let sq : u64 = bigint_isqrt(ar, ND)
+        let ck : u64 = bigint_mul(ar, sq, sq)
+        let eqz : i32 = bigint_cmp(ck, ND)
+        if eqz == 0i32 {
+            /* sqrt(n/d) = sqrt(n d)/d exactly */
+            py_bstore(sq)
+            let no : u64 = PY_SOFF
+            let nl2 : u64 = PY_SLEN
+            bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(sq)   bigint_drop(ck)
+            bigint_drop_arena(ar)   arena_drop(ar)
+            let rr : u64 = py_ralloc()
+            if PY_ERR != 0u64 { return py_el_from_rat(rr, 0u64) }
+            PY_RSG[rr] = 1i64
+            PY_RNO[rr] = no   PY_RNL[rr] = nl2
+            PY_RDO[rr] = PY_RDO[r]   PY_RDL[rr] = dl
+            /* reduce sqrt(nd)/d exactly: gcd pass through py_rmake */
+            let ar2 : u64 = arena_new(py_arsz(nl2, dl))
+            let N2 : u64 = py_bload(ar2, PY_RNO[rr], nl2)
+            let D2 : u64 = py_bload(ar2, PY_RDO[rr], dl)
+            let res : u64 = py_rmake(ar2, 1i64, N2, D2)
+            bigint_drop_arena(ar2)   arena_drop(ar2)
+            return py_el_from_rat(res, 0u64)
+        }
+        bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(sq)   bigint_drop(ck)
+        bigint_drop_arena(ar)   arena_drop(ar)
+    }
+    let lvl : u64 = py_adjoin(e)
+    if PY_ERR != 0u64 { return py_el_new(0u64) }
+    return py_el_root(lvl)
+}
+
+/* ==================== THE SELF-PROOF (arms 180..187) ==================== */
+fn py_arm180() -> u64 {
+    py_reset()
+    let r13 : u64 = py_rat_frac(1i64, 3i64)
+    let r23 : u64 = py_rat_frac(2i64, 3i64)
+    let s : u64 = py_rat_add(r13, r23)
+    let one : u64 = py_rat_i64(1i64)
+    if py_rat_cmp(s, one) != 0i64 { return 180u64 }
+    let p30 : u64 = py_pow10(30u64)
+    let ip : u64 = py_rat_inv(p30)
+    let pr : u64 = py_rat_mul(p30, ip)
+    if py_rat_cmp(pr, one) != 0i64 { return 180u64 }
+    let x : u64 = py_rat_frac(0i64 - 7i64, 21i64)
+    let y : u64 = py_rat_frac(0i64 - 1i64, 3i64)
+    if py_rat_cmp(x, y) != 0i64 { return 180u64 }
+    if py_rat_sign(y) != (0i64 - 1i64) { return 180u64 }
+    let a : u64 = py_rat_frac(123456789i64, 1000003i64)
+    let b : u64 = py_pow10(15u64)
+    let s2 : u64 = py_rat_add(a, b)
+    let nb : u64 = py_rat_neg(b)
+    let d : u64 = py_rat_add(s2, nb)
+    if py_rat_cmp(d, a) != 0i64 { return 180u64 }
+    if PY_ERR != 0u64 { return 180u64 }
+    return 0u64
+}
+/* builds Q(sqrt2, sqrt3); returns 0 ok.  Leaves root2 at h1 in PY_T2, root3 at
+ * h2 in PY_T3 (module cells -- arms reuse the tower). */
+var PY_T2 : u64 = 0u64
+var PY_T3 : u64 = 0u64
+fn py_mk23() -> u64 {
+    py_reset()
+    let two : u64 = py_el_from_i64(2i64, 0u64)
+    PY_T2 = py_sqrt(two)                                  /* adjoin level 0 */
+    if PY_H != 1u64 { return 1u64 }
+    let three : u64 = py_el_from_i64(3i64, 1u64)
+    PY_T3 = py_sqrt(three)                                /* adjoin level 1 */
+    if PY_H != 2u64 { return 1u64 }
+    if PY_ERR != 0u64 { return 1u64 }
+    return 0u64
+}
+fn py_arm181() -> u64 {
+    if py_mk23() != 0u64 { return 181u64 }
+    let p : u64 = py_mul(PY_T2, PY_T3)                    /* sqrt2*sqrt3 at h2 */
+    let q : u64 = py_mul(p, p)
+    let six : u64 = py_el_from_i64(6i64, 2u64)
+    let df : u64 = py_sub(q, six)
+    if py_el_sign(df) != 0i64 { return 181u64 }
+    if PY_ERR != 0u64 { return 181u64 }
+    return 0u64
+}
+fn py_arm182() -> u64 {
+    if py_mk23() != 0u64 { return 182u64 }
+    let p : u64 = py_mul(PY_T2, PY_T3)
+    let twop : u64 = py_mul(py_el_from_i64(2i64, 2u64), p)
+    let d : u64 = py_add(py_el_from_i64(5i64, 2u64), twop)    /* 5 + 2 sqrt6 */
+    if py_el_sign(d) != 1i64 { return 182u64 }
+    let rt : u64 = py_sqrt(d)                                 /* h3: nested   */
+    if PY_H != 3u64 { return 182u64 }
+    let sum : u64 = py_add(PY_T2, PY_T3)
+    let E : u64 = py_sub(sum, rt)
+    if py_el_sign(E) != 0i64 { return 182u64 }                /* THE NESTED ZERO */
+    let eps : u64 = py_el_from_rat(py_rat_inv(py_pow10(25u64)), 3u64)
+    let Ep : u64 = py_add(E, eps)
+    if py_el_sign(Ep) != 1i64 { return 182u64 }
+    let Em : u64 = py_sub(E, eps)
+    if py_el_sign(Em) != (0i64 - 1i64) { return 182u64 }
+    if PY_ERR != 0u64 { return 182u64 }
+    return 0u64
+}
+fn py_arm183() -> u64 {
+    if py_mk23() != 0u64 { return 183u64 }
+    let lo : i64 = 0i64 - 2i64
+    let hi : i64 = 2i64
+    let mut a : i64 = lo
+    while a <= hi {
+        let mut b : i64 = lo
+        while b <= hi {
+            let mut c : i64 = lo
+            while c <= hi {
+                let m : u64 = py_mark()
+                let e1 : u64 = py_el_from_i64(a, 2u64)
+                let e2 : u64 = py_mul(py_el_from_i64(b, 2u64), PY_T2)
+                let e3 : u64 = py_mul(py_el_from_i64(c, 2u64), PY_T3)
+                let E : u64 = py_add(py_add(e1, e2), e3)
+                let s2 : i64 = py_el_sign(E)
+                py_release(m)
+                PY_XA[0u64] = a   PY_XB[0u64] = 1i64
+                PY_XA[1u64] = b   PY_XB[1u64] = 2i64
+                PY_XA[2u64] = c   PY_XB[2u64] = 3i64
+                let s1 : i32 = ui_sqrt_sum_sign((&PY_XA) as u64, (&PY_XB) as u64, 3u64)
+                let s1w : i64 = s1 as i64
+                if s1w != s2 { return 183u64 }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    if PY_ERR != 0u64 { return 183u64 }
+    return 0u64
+}
+fn py_arm184() -> u64 {
+    /* degenerate adjoin: sqrt4 forced onto the spine; 2 + sqrt4 has norm 0 */
+    py_reset()
+    let four : u64 = py_el_from_i64(4i64, 0u64)
+    let lvl : u64 = py_adjoin(four)
+    if lvl != 0u64 { return 184u64 }
+    let x : u64 = py_add(py_el_from_i64(2i64, 1u64), py_el_root(0u64))
+    let ix : u64 = py_el_inv(x)
+    let pr : u64 = py_mul(x, ix)
+    let one1 : u64 = py_el_from_i64(1i64, 1u64)
+    if py_el_sign(py_sub(pr, one1)) != 0i64 { return 184u64 }
+    /* regular inverse in the nested tower */
+    if py_mk23() != 0u64 { return 184u64 }
+    let y : u64 = py_add(py_el_from_i64(1i64, 2u64), py_add(PY_T2, PY_T3))
+    let iy : u64 = py_el_inv(y)
+    let pr2 : u64 = py_mul(y, iy)
+    let one2 : u64 = py_el_from_i64(1i64, 2u64)
+    if py_el_sign(py_sub(pr2, one2)) != 0i64 { return 184u64 }
+    if PY_ERR != 0u64 { return 184u64 }
+    return 0u64
+}
+fn py_arm185() -> u64 {
+    if py_mk23() != 0u64 { return 185u64 }
+    let one : u64 = py_el_from_i64(1i64, 2u64)
+    let x : u64 = py_sub(PY_T2, one)                      /* sqrt2 - 1 > 0    */
+    if py_el_sign(x) != 1i64 { return 185u64 }
+    let y : u64 = py_sub(PY_T3, PY_T2)                    /* sqrt3 - sqrt2 > 0 */
+    if py_el_sign(y) != 1i64 { return 185u64 }
+    let z : u64 = py_sub(x, y)                            /* 2sqrt2 - sqrt3 - 1 > 0 */
+    if py_el_sign(z) != 1i64 { return 185u64 }
+    let s1 : i64 = py_cmp(PY_T2, PY_T3)
+    let s2 : i64 = py_cmp(PY_T3, PY_T2)
+    if s1 != (0i64 - s2) { return 185u64 }
+    if s1 != (0i64 - 1i64) { return 185u64 }
+    if PY_ERR != 0u64 { return 185u64 }
+    return 0u64
+}
+fn py_arm186() -> u64 {
+    if py_mk23() != 0u64 { return 186u64 }
+    let x : u64 = py_add(py_el_from_rat(py_rat_frac(1i64, 3i64), 2u64), PY_T2)
+    let m0 : u64 = py_mark()
+    let jm : u64 = py_mul(x, x)
+    if py_el_sign(jm) != 1i64 { return 186u64 }
+    py_release(m0)
+    let m1 : u64 = py_mark()
+    if m1 != m0 { return 186u64 }
+    /* the keep/slide contract: copy up, release, copy down; value survives */
+    let mk : u64 = py_mark()
+    let y : u64 = py_add(x, py_el_from_i64(1i64, 2u64))
+    let c1 : u64 = py_el_copy(y)
+    py_release(mk)
+    let c2 : u64 = py_el_copy(c1)
+    let y2 : u64 = py_add(x, py_el_from_i64(1i64, 2u64))
+    if py_el_sign(py_sub(c2, y2)) != 0i64 { return 186u64 }
+    if PY_ERR != 0u64 { return 186u64 }
+    return 0u64
+}
+fn py_arm187() -> u64 {
+    if py_mk23() != 0u64 { return 187u64 }
+    let z : u64 = py_sub(py_mul(PY_T2, PY_T2), py_el_from_i64(2i64, 2u64))
+    if py_el_sign(z) != 0i64 { return 187u64 }
+    let tiny : u64 = py_el_from_rat(py_rat_inv(py_pow10(40u64)), 2u64)
+    if py_el_sign(py_add(z, tiny)) != 1i64 { return 187u64 }
+    if PY_ERR != 0u64 { return 187u64 }
+    return 0u64
+}
+fn py_selfprove() -> u64 @export {
+    let a0 : u64 = py_arm180()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = py_arm181()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = py_arm182()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = py_arm183()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = py_arm184()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = py_arm185()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = py_arm186()
+    if a6 != 0u64 { return a6 }
+    let a7 : u64 = py_arm187()
+    if a7 != 0u64 { return a7 }
+    return 0u64
+}

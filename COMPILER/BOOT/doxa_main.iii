@@ -47,6 +47,11 @@ extern @abi(c-msvc-x64) fn dx_rank_build() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_rank_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_write_order(dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_unlearn(seq: u64, dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_mint_due() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_mint(dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxm_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxm_par_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxm_fact_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_dream(k: u64, seed: u64, dir: u64, sabotage: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_dream_found(i_back: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_state_fold() -> u64 from "doxa.iii"
@@ -200,6 +205,30 @@ fn print_books() -> u32 {
     }
     return 1u32
 }
+/* after settlements: a provably-confused class (>=2 green AND >=2 red) splits
+ * itself by the next record fact -- the organism refines its own representation
+ * and grows CAUTIOUS (children re-earn width from 1) exactly where it was wrong */
+fn auto_mint(doxadir: u64) -> u32 {
+    let due : u64 = dx_mint_due()
+    if due == 0u64 { return 0u32 }
+    let mm : u64 = dx_mint(doxadir)
+    ps("  THE MINT: " as u64)  pu(mm)
+    ps(" confused class(es) split by the next record fact -- children re-earn width from 1\n" as u64)
+    return 1u32
+}
+fn print_mints() -> u32 {
+    let n : u64 = dxm_n()
+    if n == 0u64 { return 0u32 }
+    ps("  minted refinements (the representation the mind grew for itself): " as u64)  pu(n)  putchar(10i32)
+    let mut i : u64 = 0u64
+    while i < n { if i < 8u64 {
+        ps("    parent ctx " as u64)  phex(dxm_par_at(i))
+        ps(" -> split by record fact " as u64)  pu(dxm_fact_at(i))
+        ps(" (hundreds digit of the claim's own prefix)\n" as u64)
+        i = i + 1u64
+    } else { i = n } }
+    return 1u32
+}
 fn print_calib() -> u32 {
     let gg : u64 = dx_calib(0u64, 0u64)
     let gr : u64 = dx_calib(0u64, 1u64)
@@ -344,8 +373,10 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("SOLVENCY law (width earned, floor 1), the SPECULATION bound (65th color refused), the\n" as u64)
         ps("DREAM law (zero residue proven; sabotage detected), the RIGHT TO BE FORGOTTEN (tombstone\n" as u64)
         ps("fold-subtraction, bit-identical; dangling settlements refused), the QUESTION economy\n" as u64)
-        ps("(exhaustive optimality; empty set = certified undecidable), the log's teeth -- every arm\n" as u64)
-        ps("re-derived THIS invocation, before any verb may move.  No gate, no KAT: this IS the law.\n" as u64)
+        ps("(exhaustive optimality; empty set = certified undecidable), THE MINT (a provably-confused\n" as u64)
+        ps("class splits itself by the next record fact; keys frozen at door time; one level; shadow\n" as u64)
+        ps("agrees), the log's teeth -- every arm re-derived THIS invocation, before any verb may\n" as u64)
+        ps("move.  No gate, no KAT: this IS the law.\n" as u64)
         return 0u64
     }
     dx_reset()
@@ -362,6 +393,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("== THE TWO BOOKS (modal asserts; statistical prefers; never blurred) ==\n" as u64)
         print_counts()
         print_books()
+        print_mints()
         print_calib()
         print_certs()
         let fnd : u64 = dx_dream_found(0u64)
@@ -387,6 +419,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("== THE RECONCILIATION: stakes settle against DERIVED evidence only (the foreign law) ==\n" as u64)
         let settled : u64 = dx_reconcile(doxadir)
         ps("  settled " as u64)  pu(settled)  ps(" stakes\n" as u64)
+        auto_mint(doxadir)
         print_calib()
         print_books()
         print_counts()
@@ -465,6 +498,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         dx_ingest_heart(heartdir)
         let settled : u64 = dx_reconcile(doxadir)
         ps("  settled " as u64)  pu(settled)  ps(" stakes against the heart's DERIVED evidence\n" as u64)
+        auto_mint(doxadir)
         print_calib()
         print_books()
         print_counts()

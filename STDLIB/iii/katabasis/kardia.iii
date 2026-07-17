@@ -1,0 +1,796 @@
+/* STDLIB/iii/katabasis/kardia.iii -- THE HEART: validation dissolved from batch
+ * runs into being.
+ *
+ * The batch model re-executes the whole foreseen checklist to answer "am I
+ * green?" -- O(everything) per question, external bash, and one unregistered
+ * gate at the front door stalls the entire organism (measured: four corpus
+ * launches died on '2199_iform' before its registration landed).  This organ
+ * is the ENTELECHEIA carrier for the law surface itself: every verification
+ * claim becomes a CELL with
+ *
+ *     (name, class, expected-exit, REACH-PIN, last-verdict, mode)
+ *
+ * where the reach-pin is the mhash fold of everything the verdict depends on
+ * (the pinned compiler, the stdlib archive, the harness, the claim source, and
+ * -- for organ-linked gates -- the transitive extern closure).  A cell is DUE
+ * exactly when its live pin no longer matches its recorded pin; everything
+ * else KEEPS ITS STANDING.  "Run the corpus" stops being a sentence: the
+ * heart answers from the ledger and re-derives only what changed.
+ *
+ * THE BIRTH LAW (inherited immunity, honestly labelled): at birth every
+ * registered cell is ADOPTED -- expected verdict inherited from the sealed
+ * lineage (the corpus EXPECTED table + the standing seal), pinned against the
+ * live tree, and NEVER counted as proven-green.  Only a DERIVED record (this
+ * organ re-ran the claim and saw the exit itself) counts toward green.  Beats
+ * convert due cells; audits drip-convert adopted cells regardless of pins; the
+ * organism's claim strengthens monotonically and the two populations are
+ * reported apart, always.
+ *
+ * THE LEDGER (event-primary): an append-only line log; state = last-wins fold
+ * over history (the event-waist discipline).  Malformed lines are COUNTED and
+ * refused, never skipped silently.  Records carry a deterministic sequence
+ * number, never a wall clock.
+ *
+ * Classes:  1 = C1, a single-TU corpus claim the heart re-derives itself
+ *               (compile vs the pinned iiis-2, link vs the committed archive,
+ *               run, compare exit);
+ *           2 = C2, an organ-linked gate SKIP-registered in the harness with a
+ *               named standing-arm owner: the heart pins its transitive extern
+ *               closure and names it DUE-OWNED when invalidated (the owner arm
+ *               re-derives; the heart schedules).
+ *
+ * NIH: composes sanctus/mhash (Crown SHA-256) + msvcrt.  Two-path: the gate
+ * (2767) exercises the pure core adversarially; the standing arm exercises
+ * birth/status/audit/teeth against the real registry.  Hexad: kind_essence.
+ * Ring R0. */
+module katabasis_kardia
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(payload: u64, payload_len: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out_32: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fputs(s: u64, stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _mkdir(path: u64) -> i32 from "msvcrt"
+
+const KD_MAX   : u64 = 4096u64
+const KD_NLEN  : u64 = 48u64
+const KD_SENT  : u64 = 18446744073709551615u64
+
+/* ---- the cell table ---- */
+var KD_NAMES : [u8; 196608]              /* KD_MAX x KD_NLEN, NUL-padded         */
+var KD_NL    : [u64; 4096]
+var KD_CLS   : [u8; 4096]
+var KD_EXP   : [u64; 4096]
+var KD_PIN   : [u64; 4096]               /* live reach-pin (kd_pin_all)          */
+var KD_LPIN  : [u64; 4096]               /* last recorded pin (ledger fold)      */
+var KD_LEXIT : [u64; 4096]
+var KD_LMODE : [u8; 4096]                /* 0 none | 1 ADOPTED | 2 DERIVED       */
+var KD_LSEQ  : [u64; 4096]
+var KD_N     : u64 = 0u64
+var KD_MALF  : u64 = 0u64                /* malformed ledger lines, counted      */
+var KD_SEQ   : u64 = 0u64                /* highest sequence seen/written        */
+var KD_UNRES : u64 = 0u64                /* unresolved closure imports, counted  */
+var KD_TPIN  : u64 = 0u64                /* the tool pin: iiis-2 + archive + harness */
+
+fn kd_reset() -> i32 @export {
+    KD_N = 0u64
+    KD_MALF = 0u64
+    KD_SEQ = 0u64
+    KD_UNRES = 0u64
+    KD_TPIN = 0u64
+    return 0i32
+}
+fn kd_name_at(i: u64) -> u64 { return ((&KD_NAMES) as u64) + (i * KD_NLEN) }
+fn kd_find(name: u64, len: u64) -> u64 {
+    let np : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    while i < KD_N {
+        if KD_NL[i] == len {
+            let cp : *u8 = kd_name_at(i) as *u8
+            let mut j : u64 = 0u64
+            let mut same : u64 = 1u64
+            while j < len { if cp[j] != np[j] { same = 0u64   j = len } else { j = j + 1u64 } }
+            if same == 1u64 { return i }
+        }
+        i = i + 1u64
+    }
+    return KD_SENT
+}
+/* register (or update) a cell.  Class 2 (owned) takes priority over class 1 on
+ * a name collision -- a SKIP-registered gate is never treated as runnable. */
+fn kd_reg(name: u64, len: u64, cls: u8, exp: u64) -> i64 @export {
+    if len == 0u64 { return -1i64 }
+    if len >= KD_NLEN { return -1i64 }
+    let ex : u64 = kd_find(name, len)
+    if ex != KD_SENT {
+        if cls == 2u8 { KD_CLS[ex] = 2u8 }
+        KD_EXP[ex] = exp
+        return ex as i64
+    }
+    if KD_N >= KD_MAX { return -2i64 }
+    let dst : *u8 = kd_name_at(KD_N) as *u8
+    let sp : *u8 = name as *u8
+    let mut j : u64 = 0u64
+    while j < len { dst[j] = sp[j]   j = j + 1u64 }
+    while j < KD_NLEN { dst[j] = 0u8   j = j + 1u64 }
+    KD_NL[KD_N] = len
+    KD_CLS[KD_N] = cls
+    KD_EXP[KD_N] = exp
+    KD_PIN[KD_N] = 0u64
+    KD_LPIN[KD_N] = 0u64
+    KD_LEXIT[KD_N] = 0u64
+    KD_LMODE[KD_N] = 0u8
+    KD_LSEQ[KD_N] = 0u64
+    KD_N = KD_N + 1u64
+    return KD_N as i64 - 1i64
+}
+fn kd_count() -> u64 @export { return KD_N }
+fn kd_cell_class(i: u64) -> u8 @export { if i < KD_N { return KD_CLS[i] }  return 0u8 }
+fn kd_cell_mode(i: u64) -> u8 @export { if i < KD_N { return KD_LMODE[i] }  return 0u8 }
+fn kd_cell_exp(i: u64) -> u64 @export { if i < KD_N { return KD_EXP[i] }  return 0u64 }
+fn kd_cell_lexit(i: u64) -> u64 @export { if i < KD_N { return KD_LEXIT[i] }  return 0u64 }
+fn kd_cell_name_byte(i: u64, j: u64) -> u8 @export { if i < KD_N { if j < KD_NL[i] { let cp : *u8 = kd_name_at(i) as *u8   return cp[j] } }  return 0u8 }
+fn kd_cell_name_len(i: u64) -> u64 @export { if i < KD_N { return KD_NL[i] }  return 0u64 }
+fn kd_set_live_pin(i: u64, pin: u64) -> i32 @export { if i < KD_N { KD_PIN[i] = pin }  return 0i32 }
+fn kd_live_pin(i: u64) -> u64 @export { if i < KD_N { return KD_PIN[i] }  return 0u64 }
+fn kd_malformed() -> u64 @export { return KD_MALF }
+fn kd_unresolved() -> u64 @export { return KD_UNRES }
+fn kd_tool_pin() -> u64 @export { return KD_TPIN }
+
+/* ---- the ledger fold (pure): last-wins by sequence ---- */
+fn kd_fold_rec(name: u64, len: u64, pin: u64, exitc: u64, mode: u8, seq: u64) -> u64 @export {
+    if mode != 1u8 { if mode != 2u8 { KD_MALF = KD_MALF + 1u64   return 0u64 } }
+    let i : u64 = kd_find(name, len)
+    if i == KD_SENT { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if seq > KD_SEQ { KD_SEQ = seq }
+    if KD_LMODE[i] != 0u8 { if seq < KD_LSEQ[i] { return 1u64 } }
+    /* THE MONOTONE LAW: an ADOPTED record never overwrites a DERIVED one --
+     * inherited immunity cannot displace earned proof. */
+    if mode == 1u8 { if KD_LMODE[i] == 2u8 { return 1u64 } }
+    KD_LPIN[i] = pin
+    KD_LEXIT[i] = exitc
+    KD_LMODE[i] = mode
+    KD_LSEQ[i] = seq
+    return 1u64
+}
+/* a cell is DUE iff it has no record, or its live pin drifted from its record */
+fn kd_cell_due(i: u64) -> u64 @export {
+    if i >= KD_N { return 0u64 }
+    if KD_LMODE[i] == 0u8 { return 1u64 }
+    if KD_LPIN[i] != KD_PIN[i] { return 1u64 }
+    return 0u64
+}
+fn kd_adopted_n() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KD_N { if KD_LMODE[i] == 1u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+fn kd_derived_green_n() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KD_N { if KD_LMODE[i] == 2u8 { if KD_LEXIT[i] == KD_EXP[i] { n = n + 1u64 } }   i = i + 1u64 }
+    return n
+}
+fn kd_derived_red_n() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KD_N { if KD_LMODE[i] == 2u8 { if KD_LEXIT[i] != KD_EXP[i] { n = n + 1u64 } }   i = i + 1u64 }
+    return n
+}
+fn kd_due_n() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KD_N { if kd_cell_due(i) == 1u64 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+/* VITALITY: the fold of (name, pin, exit) over every DERIVED-GREEN cell;
+ * REFUSED (0) while any derived cell is red -- the organism will not name
+ * itself healthy over a known wound.  Adopted cells contribute nothing:
+ * inherited immunity is standing, not health. */
+var KD_H32 : [u8; 32]
+var KD_VACC : [u64; 4]
+fn kd_vitality() -> u64 @export {
+    if kd_derived_red_n() != 0u64 { return 0u64 }
+    mhash_begin()
+    let mut i : u64 = 0u64
+    let mut folded : u64 = 0u64
+    while i < KD_N {
+        if KD_LMODE[i] == 2u8 {
+            folded = folded + 1u64
+            mhash_payload(kd_name_at(i), KD_NL[i])
+            KD_VACC[0u64] = KD_LPIN[i]
+            KD_VACC[1u64] = KD_LEXIT[i]
+            KD_VACC[2u64] = KD_LSEQ[i]
+            KD_VACC[3u64] = i
+            mhash_payload((&KD_VACC) as u64, 32u64)
+        }
+        i = i + 1u64
+    }
+    if folded == 0u64 { return 1u64 }               /* nothing earned yet -- intact but unproven */
+    mhash_final((&KD_H32) as u64)
+    let hp : *u64 = (&KD_H32) as *u64
+    let v : u64 = hp[0u64]
+    if v == 0u64 { return 1u64 }
+    return v
+}
+
+/* ==================== the I/O faces ==================== */
+
+/* digest a file into a u64 pin (first 8 bytes of Crown SHA-256); SENT if unreadable */
+var KD_CHUNK : [u8; 65536]
+fn kd_digest_file(path: u64) -> u64 @export {
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return KD_SENT }
+    mhash_begin()
+    let mut n : u64 = fread((&KD_CHUNK) as u64, 1u64, 65536u64, h)
+    while n > 0u64 {
+        mhash_payload((&KD_CHUNK) as u64, n)
+        n = fread((&KD_CHUNK) as u64, 1u64, 65536u64, h)
+    }
+    fclose(h)
+    mhash_final((&KD_H32) as u64)
+    let hp : *u64 = (&KD_H32) as *u64
+    return hp[0u64]
+}
+/* the DIGEST MEMO: a file's content-digest is a pure function of its path within
+ * one tree-state, so each distinct path is SHA-streamed at most once per pin
+ * pass.  This is what makes the closure walk affordable -- bv_bits/sat/isa are
+ * reached by hundreds of gates and were being re-hashed every time.  Keyed by a
+ * cheap path hash, open-addressed, generation-stamped (kd_pin_all bumps GEN). */
+var KD_DCK  : [u64; 8192]                /* path-hash keys                       */
+var KD_DCV  : [u64; 8192]                /* cached content-digest                */
+var KD_DCG  : [u64; 8192]               /* generation stamp                      */
+var KD_DGEN : u64 = 0u64
+var KD_DHITS : u64 = 0u64
+var KD_DMISS : u64 = 0u64
+fn kd_path_hash(path: u64) -> u64 {
+    let p : *u8 = path as *u8
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { h = (h ^ (p[i] as u64)) * 1099511628211u64   i = i + 1u64 }
+    return h
+}
+fn kd_digest_memo(path: u64) -> u64 {
+    let key : u64 = kd_path_hash(path)
+    let mut h : u64 = (key ^ (key >> 33u64)) % 8192u64
+    let mut probe : u64 = 0u64
+    while probe < 8192u64 {
+        let s : u64 = (h + probe) % 8192u64
+        if KD_DCG[s] != KD_DGEN { KD_DCG[s] = KD_DGEN   KD_DCK[s] = key   KD_DCV[s] = kd_digest_file(path)   KD_DMISS = KD_DMISS + 1u64   return KD_DCV[s] }
+        if KD_DCK[s] == key { KD_DHITS = KD_DHITS + 1u64   return KD_DCV[s] }
+        probe = probe + 1u64
+    }
+    return kd_digest_file(path)
+}
+fn kd_memo_hits() -> u64 @export { return KD_DHITS }
+fn kd_memo_misses() -> u64 @export { return KD_DMISS }
+/* fold two u64s through the hash (order-sensitive) */
+var KD_PAIR : [u64; 2]
+fn kd_fold2(a: u64, b: u64) -> u64 @export {
+    KD_PAIR[0u64] = a
+    KD_PAIR[1u64] = b
+    mhash_begin()
+    mhash_payload((&KD_PAIR) as u64, 16u64)
+    mhash_final((&KD_H32) as u64)
+    let hp : *u64 = (&KD_H32) as *u64
+    return hp[0u64]
+}
+
+/* ---- small string kit (paths are ROOT-RELATIVE; no spaces, no quoting) ---- */
+var KD_PATH : [u8; 512]
+var KD_CMD  : [u8; 1024]
+fn kd_sput(dst: *u8, at: u64, s: u64) -> u64 {
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while sp[i] != 0u8 { dst[a] = sp[i]   a = a + 1u64   i = i + 1u64 }
+    dst[a] = 0u8
+    return a
+}
+fn kd_sputn(dst: *u8, at: u64, s: u64, n: u64) -> u64 {
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while i < n { dst[a] = sp[i]   a = a + 1u64   i = i + 1u64 }
+    dst[a] = 0u8
+    return a
+}
+fn kd_sputu(dst: *u8, at: u64, v: u64) -> u64 {
+    if v >= 10u64 {
+        let a : u64 = kd_sputu(dst, at, v / 10u64)
+        dst[a] = (48u64 + (v % 10u64)) as u8
+        dst[a + 1u64] = 0u8
+        return a + 1u64
+    }
+    dst[at] = (48u64 + v) as u8
+    dst[at + 1u64] = 0u8
+    return at + 1u64
+}
+fn kd_sputhex(dst: *u8, at: u64, v: u64) -> u64 {
+    let mut a : u64 = at
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { dst[a] = (48u64 + nib) as u8 } else { dst[a] = (87u64 + nib) as u8 }
+        a = a + 1u64
+    }
+    dst[a] = 0u8
+    return a
+}
+/* flip / to \ in place (cmd.exe program paths) */
+fn kd_backslash(dst: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while dst[i] != 0u8 { if dst[i] == 47u8 { dst[i] = 92u8 }   i = i + 1u64 }
+    return 0i32
+}
+
+/* ---- the tool pin: the pinned compiler + the committed archive + the harness ---- */
+fn kd_pin_tools() -> u64 @export {
+    let a : u64 = kd_digest_memo("COMPILED/iiis-2.exe" as u64)
+    let b : u64 = kd_digest_memo("STDLIB/build/iii/libiii_native.a" as u64)
+    let c : u64 = kd_digest_memo("STDLIB/scripts/run_corpus.sh" as u64)
+    KD_TPIN = kd_fold2(kd_fold2(a, b), c)
+    return KD_TPIN
+}
+
+/* ---- whole-file loader (parsing only; digests stream) ---- */
+var KD_FBUF : [u8; 1048576]
+var KD_FLEN : u64 = 0u64
+fn kd_load_file(path: u64) -> u64 {
+    KD_FLEN = 0u64
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return 0u64 }
+    let mut n : u64 = fread(((&KD_FBUF) as u64) + KD_FLEN, 1u64, 65536u64, h)
+    while n > 0u64 {
+        KD_FLEN = KD_FLEN + n
+        if KD_FLEN + 65536u64 >= 1048576u64 { n = 0u64 } else {
+            n = fread(((&KD_FBUF) as u64) + KD_FLEN, 1u64, 65536u64, h)
+        }
+    }
+    fclose(h)
+    return KD_FLEN
+}
+
+/* ---- the C2 closure pin: transitive `from "X.iii"` walk over the source tree.
+ * Resolution tries the house directories; an unresolved import is COUNTED
+ * (KD_UNRES) and folded as SENT so resolution changes flip the pin. ---- */
+var KD_Q     : [u8; 3072]                /* 64 pending names x 48                */
+var KD_QL    : [u64; 64]
+var KD_QN    : u64 = 0u64
+var KD_QDONE : u64 = 0u64
+fn kd_q_has(name: u64, len: u64) -> u64 {
+    let np : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    while i < KD_QN {
+        if KD_QL[i] == len {
+            let cp : *u8 = (((&KD_Q) as u64) + (i * 48u64)) as *u8
+            let mut j : u64 = 0u64
+            let mut same : u64 = 1u64
+            while j < len { if cp[j] != np[j] { same = 0u64   j = len } else { j = j + 1u64 } }
+            if same == 1u64 { return 1u64 }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn kd_q_push(name: u64, len: u64) -> i32 {
+    if len == 0u64 { return 0i32 }
+    if len >= 48u64 { return 0i32 }
+    if KD_QN >= 64u64 { return 0i32 }
+    if kd_q_has(name, len) == 1u64 { return 0i32 }
+    let dst : *u8 = (((&KD_Q) as u64) + (KD_QN * 48u64)) as *u8
+    let sp : *u8 = name as *u8
+    let mut j : u64 = 0u64
+    while j < len { dst[j] = sp[j]   j = j + 1u64 }
+    KD_QL[KD_QN] = len
+    KD_QN = KD_QN + 1u64
+    return 0i32
+}
+/* scan the loaded buffer for `from "NAME"` targets and queue each NAME */
+fn kd_scan_imports() -> i32 {
+    let bp : *u8 = (&KD_FBUF) as *u8
+    let mut i : u64 = 0u64
+    while i + 7u64 < KD_FLEN {
+        if bp[i] == 102u8 { if bp[i+1u64] == 114u8 { if bp[i+2u64] == 111u8 { if bp[i+3u64] == 109u8 {
+            if bp[i+4u64] == 32u8 { if bp[i+5u64] == 34u8 {
+                let start : u64 = i + 6u64
+                let mut e : u64 = start
+                while e < KD_FLEN { if bp[e] == 34u8 { i = e   e = KD_FLEN } else { e = e + 1u64   if e > start + 47u64 { i = e   e = KD_FLEN } } }
+                let nl : u64 = i - start
+                if i > start { if nl < 48u64 { kd_q_push(((&KD_FBUF) as u64) + start, nl) } }
+            } }
+        } } } }
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* resolve NAME against the house directories; returns the digest or SENT */
+fn kd_resolve_digest(name: u64, len: u64) -> u64 {
+    let dp : *u8 = (&KD_PATH) as *u8
+    let mut d : u64 = 0u64
+    while d < 10u64 {
+        let mut at : u64 = 0u64
+        if d == 0u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/aether/" as u64) }
+        if d == 1u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/katabasis/" as u64) }
+        if d == 2u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/numera/" as u64) }
+        if d == 3u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/sanctus/" as u64) }
+        if d == 4u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/sovereign/" as u64) }
+        if d == 5u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/omnia/" as u64) }
+        if d == 6u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/eidos/" as u64) }
+        if d == 7u64 { at = kd_sput(dp, 0u64, "STDLIB/iii/nous/" as u64) }
+        if d == 8u64 { at = kd_sput(dp, 0u64, "COMPILER/BOOT/" as u64) }
+        if d == 9u64 { at = kd_sput(dp, 0u64, "STDLIB/sovir/" as u64) }
+        at = kd_sputn(dp, at, name, len)
+        let g : u64 = kd_digest_memo((&KD_PATH) as u64)
+        if g != KD_SENT { return g }
+        d = d + 1u64
+    }
+    return KD_SENT
+}
+/* the reach-pin for a C2 gate at STDLIB/corpus/<name>.iii.
+ *
+ * THE REACH LAW (why one import level suffices, stated so it can be checked):
+ * the tool pin already folds the compiler + the committed archive + the harness.
+ * EVERY archived organ's bytes live in that archive digest, so a change to any
+ * archived dependency -- at any transitive depth -- flips the tool pin and wakes
+ * every cell.  What the archive digest CANNOT see is a LEAF-linked organ (one
+ * built fresh by the gate, not an archive member).  A gate names those in its
+ * own `from "X.iii"` line, so folding the gate's DIRECT imports closes exactly
+ * that gap.  Deeper leaf->leaf chains are the honest boundary (counted below as
+ * unresolved when a name does not resolve; a leaf importing a leaf is rare and
+ * documented, never silently claimed covered). */
+fn kd_pin_closure(i: u64) -> u64 {
+    let dp : *u8 = (&KD_PATH) as *u8
+    let mut at : u64 = kd_sput(dp, 0u64, "STDLIB/corpus/" as u64)
+    at = kd_sputn(dp, at, kd_name_at(i), KD_NL[i])
+    at = kd_sput(dp, at, ".iii" as u64)
+    let mut pin : u64 = kd_fold2(KD_TPIN, kd_digest_memo((&KD_PATH) as u64))
+    KD_QN = 0u64
+    KD_QDONE = 0u64
+    if kd_load_file((&KD_PATH) as u64) > 0u64 { kd_scan_imports() }
+    while KD_QDONE < KD_QN {
+        let qname : u64 = ((&KD_Q) as u64) + (KD_QDONE * 48u64)
+        let qlen : u64 = KD_QL[KD_QDONE]
+        KD_QDONE = KD_QDONE + 1u64
+        let g : u64 = kd_resolve_digest(qname, qlen)
+        if g == KD_SENT {
+            /* msvcrt / non-file imports are named seats, not files: fold their
+             * NAME so a rename flips the pin, and count true unresolves only
+             * for .iii-suffixed targets */
+            let qp : *u8 = qname as *u8
+            if qlen > 4u64 { if qp[qlen - 4u64] == 46u8 { KD_UNRES = KD_UNRES + 1u64 } }
+            mhash_begin()
+            mhash_payload(qname, qlen)
+            mhash_final((&KD_H32) as u64)
+            let hp : *u64 = (&KD_H32) as *u64
+            pin = kd_fold2(pin, hp[0u64])
+        } else {
+            pin = kd_fold2(pin, g)
+        }
+    }
+    return pin
+}
+/* compute live pins for every cell (C1: tools+file; C2: tools+closure) */
+fn kd_pin_all() -> i32 @export {
+    KD_DGEN = KD_DGEN + 1u64            /* fresh memo generation each pass */
+    KD_DHITS = 0u64
+    KD_DMISS = 0u64
+    kd_pin_tools()
+    KD_UNRES = 0u64
+    let dp : *u8 = (&KD_PATH) as *u8
+    let mut i : u64 = 0u64
+    while i < KD_N {
+        if KD_CLS[i] == 2u8 { KD_PIN[i] = kd_pin_closure(i) } else {
+            let mut at : u64 = kd_sput(dp, 0u64, "STDLIB/corpus/" as u64)
+            at = kd_sputn(dp, at, kd_name_at(i), KD_NL[i])
+            at = kd_sput(dp, at, ".iii" as u64)
+            KD_PIN[i] = kd_fold2(KD_TPIN, kd_digest_memo((&KD_PATH) as u64))
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- the registry ingestion: the corpus harness IS the claim registry ----
+ * C1 cells from `    [name]=NN` EXPECTED entries; C2 cells from the SKIP case
+ * labels `NNNN_x|NNNN_y)`.  Counted; nothing silent. */
+fn kd_is_namech(c: u8) -> u64 {
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 65u8 { if c <= 90u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    return 0u64
+}
+fn kd_ingest_registry() -> i64 @export {
+    if kd_load_file("STDLIB/scripts/run_corpus.sh" as u64) == 0u64 { return -1i64 }
+    let bp : *u8 = (&KD_FBUF) as *u8
+    let mut c1 : u64 = 0u64
+    let mut c2 : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KD_FLEN {
+        /* line start */
+        let ls : u64 = i
+        let mut le : u64 = i
+        while le < KD_FLEN { if bp[le] == 10u8 { i = le   le = KD_FLEN } else { le = le + 1u64   if le >= KD_FLEN { i = le } } }
+        /* [name]=digits  (EXPECTED entry) */
+        let mut p : u64 = ls
+        while p < i { if bp[p] == 32u8 { p = p + 1u64 } else { if bp[p] == 9u8 { p = p + 1u64 } else { le = p   p = i } } }
+        p = le
+        if p < i { if bp[p] == 91u8 {
+            let ns : u64 = p + 1u64
+            let mut ne : u64 = ns
+            while ne < i { if kd_is_namech(bp[ne]) == 1u64 { ne = ne + 1u64 } else { le = ne   ne = i } }
+            ne = le
+            if ne > ns { if ne + 1u64 < i { if bp[ne] == 93u8 { if bp[ne + 1u64] == 61u8 {
+                let mut v : u64 = 0u64
+                let mut vp : u64 = ne + 2u64
+                let mut nfound : u64 = 0u64
+                while vp < i { if bp[vp] >= 48u8 { if bp[vp] <= 57u8 { v = (v * 10u64) + ((bp[vp] - 48u8) as u64)   nfound = 1u64   vp = vp + 1u64 } else { le = vp   vp = i } } else { le = vp   vp = i } }
+                if nfound == 1u64 { if bp[ns] >= 48u8 { if bp[ns] <= 57u8 {
+                    if kd_reg(((&KD_FBUF) as u64) + ns, ne - ns, 1u8, v) >= 0i64 { c1 = c1 + 1u64 }
+                } } }
+            } } } }
+        } }
+        /* case labels: tokens ending with `)` on the line, `|`-separated, each
+         * starting with a digit and containing `_` (the SKIP families) */
+        if p < i { if bp[i - 1u64] == 41u8 { if bp[p] >= 48u8 { if bp[p] <= 57u8 {
+            let mut ts : u64 = p
+            let mut q : u64 = p
+            while q < i {
+                let brk : u64 = q
+                if bp[q] == 124u8 { le = 1u64 } else { if bp[q] == 41u8 { le = 1u64 } else { le = 0u64 } }
+                if le == 1u64 {
+                    let tl : u64 = brk - ts
+                    if tl > 4u64 { if tl < KD_NLEN { if bp[ts] >= 48u8 { if bp[ts] <= 57u8 {
+                        let mut hasu : u64 = 0u64
+                        let mut ok : u64 = 1u64
+                        let mut t : u64 = ts
+                        while t < brk { if kd_is_namech(bp[t]) == 0u64 { ok = 0u64   t = brk } else { if bp[t] == 95u8 { hasu = 1u64 }   t = t + 1u64 } }
+                        if ok == 1u64 { if hasu == 1u64 {
+                            if kd_reg(((&KD_FBUF) as u64) + ts, tl, 2u8, 99u64) >= 0i64 { c2 = c2 + 1u64 }
+                        } }
+                    } } } }
+                    ts = q + 1u64
+                }
+                q = q + 1u64
+            }
+        } } } }
+        i = i + 1u64
+    }
+    return (c1 + (c2 << 32u64)) as i64
+}
+
+/* ---- the append-only ledger ----
+ * line: K1|name|pin16hex|exit|mode(A|D)|seq  */
+var KD_LBUF : [u8; 256]
+fn kd_ledger_append(dir: u64, i: u64, mode: u8) -> i32 @export {
+    let dp : *u8 = (&KD_PATH) as *u8
+    let mut at : u64 = kd_sput(dp, 0u64, dir)
+    at = kd_sput(dp, at, "/kardia.log" as u64)
+    let h : u64 = fopen((&KD_PATH) as u64, "ab" as u64)
+    if h == 0u64 { return -1i32 }
+    let lp : *u8 = (&KD_LBUF) as *u8
+    let mut a : u64 = kd_sput(lp, 0u64, "K1|" as u64)
+    a = kd_sputn(lp, a, kd_name_at(i), KD_NL[i])
+    a = kd_sput(lp, a, "|" as u64)
+    a = kd_sputhex(lp, a, KD_PIN[i])
+    a = kd_sput(lp, a, "|" as u64)
+    a = kd_sputu(lp, a, KD_LEXIT[i])
+    a = kd_sput(lp, a, "|" as u64)
+    if mode == 2u8 { a = kd_sput(lp, a, "D" as u64) } else { a = kd_sput(lp, a, "A" as u64) }
+    a = kd_sput(lp, a, "|" as u64)
+    KD_SEQ = KD_SEQ + 1u64
+    a = kd_sputu(lp, a, KD_SEQ)
+    a = kd_sput(lp, a, "\n" as u64)
+    fputs((&KD_LBUF) as u64, h)
+    fclose(h)
+    /* fold what we wrote (the ledger and the table never disagree) */
+    kd_fold_rec(kd_name_at(i), KD_NL[i], KD_PIN[i], KD_LEXIT[i], mode, KD_SEQ)
+    return 0i32
+}
+/* parse + fold one ledger line (exported so the gate can feed it garbage) */
+fn kd_fold_line(addr: u64, len: u64) -> u64 @export {
+    let lp : *u8 = addr as *u8
+    if len < 8u64 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[0u64] != 75u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[1u64] != 49u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[2u64] != 124u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    let ns : u64 = 3u64
+    let mut ne : u64 = ns
+    while ne < len { if lp[ne] == 124u8 { let k : u64 = ne   ne = len   KD_QDONE = k } else { ne = ne + 1u64 } }
+    ne = KD_QDONE
+    if ne <= ns { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if ne >= len { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    /* pin: exactly 16 hex */
+    let ps : u64 = ne + 1u64
+    if ps + 16u64 >= len { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    let mut pin : u64 = 0u64
+    let mut k : u64 = 0u64
+    let mut bad : u64 = 0u64
+    while k < 16u64 {
+        let c : u8 = lp[ps + k]
+        let mut nib : u64 = 255u64
+        if c >= 48u8 { if c <= 57u8 { nib = (c - 48u8) as u64 } }
+        if c >= 97u8 { if c <= 102u8 { nib = ((c - 97u8) as u64) + 10u64 } }
+        if nib == 255u64 { bad = 1u64   k = 16u64 } else { pin = (pin << 4u64) | nib   k = k + 1u64 }
+    }
+    if bad == 1u64 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[ps + 16u64] != 124u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    /* exit digits */
+    let mut vp : u64 = ps + 17u64
+    let mut v : u64 = 0u64
+    let mut nfound : u64 = 0u64
+    while vp < len { let c2 : u8 = lp[vp]   if c2 >= 48u8 { if c2 <= 57u8 { v = (v * 10u64) + ((c2 - 48u8) as u64)   nfound = 1u64   vp = vp + 1u64 } else { KD_QDONE = vp   vp = len } } else { KD_QDONE = vp   vp = len } }
+    vp = KD_QDONE
+    if nfound == 0u64 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if vp >= len { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[vp] != 124u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    let mp : u64 = vp + 1u64
+    if mp + 1u64 >= len { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    let mut mode : u8 = 0u8
+    if lp[mp] == 65u8 { mode = 1u8 }
+    if lp[mp] == 68u8 { mode = 2u8 }
+    if mode == 0u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    if lp[mp + 1u64] != 124u8 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    let mut sp2 : u64 = mp + 2u64
+    let mut seq : u64 = 0u64
+    nfound = 0u64
+    while sp2 < len { let c3 : u8 = lp[sp2]   if c3 >= 48u8 { if c3 <= 57u8 { seq = (seq * 10u64) + ((c3 - 48u8) as u64)   nfound = 1u64   sp2 = sp2 + 1u64 } else { sp2 = len } } else { sp2 = len } }
+    if nfound == 0u64 { KD_MALF = KD_MALF + 1u64   return 0u64 }
+    return kd_fold_rec(addr + ns, ne - ns, pin, v, mode, seq)
+}
+/* load + fold the whole ledger (missing ledger = empty heart, 0 lines) */
+fn kd_ledger_load(dir: u64) -> i64 @export {
+    let dp : *u8 = (&KD_PATH) as *u8
+    let mut at : u64 = kd_sput(dp, 0u64, dir)
+    at = kd_sput(dp, at, "/kardia.log" as u64)
+    if kd_load_file((&KD_PATH) as u64) == 0u64 { return 0i64 }
+    let bp : *u8 = (&KD_FBUF) as *u8
+    let mut n : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < KD_FLEN {
+        let ls : u64 = i
+        let mut le : u64 = i
+        while le < KD_FLEN { if bp[le] == 10u8 { i = le   le = KD_FLEN } else { le = le + 1u64   if le >= KD_FLEN { i = le } } }
+        let mut ll : u64 = i - ls
+        if ll > 0u64 { if bp[ls + ll - 1u64] == 13u8 { ll = ll - 1u64 } }
+        if ll > 0u64 {
+            kd_fold_line(((&KD_FBUF) as u64) + ls, ll)
+            n = n + 1i64
+        }
+        i = i + 1u64
+    }
+    return n
+}
+
+/* ---- the beat: re-derive one C1 cell (compile, link vs the archive, run) ----
+ * returns the observed exit (or 900+phase on a build failure).  Root-relative;
+ * requires CWD = the III root. */
+fn kd_derive_c1(i: u64) -> u64 @export {
+    _mkdir("STDLIB/build/kardia" as u64)
+    let cp : *u8 = (&KD_CMD) as *u8
+    let mut a : u64 = kd_sput(cp, 0u64, "timeout 90 COMPILED/iiis-2.exe STDLIB/corpus/" as u64)
+    a = kd_sputn(cp, a, kd_name_at(i), KD_NL[i])
+    a = kd_sput(cp, a, ".iii --compile-only --out STDLIB/build/kardia/cell.o > STDLIB/build/kardia/cell.log 2>&1" as u64)
+    let rc1 : i32 = system((&KD_CMD) as u64)
+    if rc1 != 0i32 { return 901u64 }
+    a = kd_sput(cp, 0u64, "gcc STDLIB/build/kardia/cell.o STDLIB/build/iii/libiii_native.a -lws2_32 -lkernel32 -o STDLIB/build/kardia/cell.exe >> STDLIB/build/kardia/cell.log 2>&1" as u64)
+    let rc2 : i32 = system((&KD_CMD) as u64)
+    if rc2 != 0i32 { return 902u64 }
+    a = kd_sput(cp, 0u64, "timeout 60 STDLIB/build/kardia/cell.exe > STDLIB/build/kardia/cell_run.log 2>&1" as u64)
+    let rc3 : i32 = system((&KD_CMD) as u64)
+    if rc3 < 0i32 { return 903u64 }
+    return rc3 as u64
+}
+/* does the cell name contain "_neg" -- a negative-compile gate whose contract is
+ * "iiis REJECTS it", owned by the negative-test jurisdiction, not self-derivable
+ * by the plain compile-link-run recipe */
+fn kd_name_is_neg(i: u64) -> u64 @export {
+    if i >= KD_N { return 0u64 }
+    let cp : *u8 = kd_name_at(i) as *u8
+    let n : u64 = KD_NL[i]
+    let mut j : u64 = 0u64
+    while j + 4u64 <= n {
+        if cp[j] == 95u8 { if cp[j+1u64] == 110u8 { if cp[j+2u64] == 101u8 { if cp[j+3u64] == 103u8 { return 1u64 } } } }
+        j = j + 1u64
+    }
+    return 0u64
+}
+/* THE VERDICT CLASSES (the honest envelope -- no false reds):
+ *   0 SELF-GREEN   compiled, linked, ran, exit == expected  (DERIVED, recorded)
+ *   1 SELF-RED     compiled + linked but exit != expected, OR a non-neg gate
+ *                  failed to COMPILE (a real source regression)  (DERIVED, recorded)
+ *   2 UNDERIVABLE  compiled but the PLAIN link failed -- needs an owner recipe
+ *                  (side-effect objects); ADOPTED standing kept, counted, NOT red
+ *   3 OWNER-JURIS  a negative-compile gate (its contract is rejection, owned by
+ *                  the negative-test scripts); ADOPTED standing kept, counted
+ * Records a DERIVED ledger line ONLY for classes 0/1 -- the heart writes down
+ * only what it truly re-derived; jurisdiction it does not own it never claims. */
+fn kd_beat_cell(i: u64, dir: u64) -> u64 @export {
+    if i >= KD_N { return 3u64 }
+    if KD_CLS[i] != 1u8 { return 3u64 }
+    if kd_name_is_neg(i) == 1u64 { return 3u64 }
+    let got : u64 = kd_derive_c1(i)
+    if got == 902u64 { return 2u64 }              /* plain link failed -> owner recipe */
+    KD_LEXIT[i] = got
+    kd_ledger_append(dir, i, 2u8)
+    if got == KD_EXP[i] { return 0u64 }
+    return 1u64
+}
+
+/* adopt cell i: inherit the registry's expected verdict (BIRTH ONLY -- the
+ * record is written mode=ADOPTED and never counts as proven-green) */
+fn kd_adopt_cell(i: u64, dir: u64) -> i32 @export {
+    if i >= KD_N { return -1i32 }
+    KD_LEXIT[i] = KD_EXP[i]
+    return kd_ledger_append(dir, i, 1u8)
+}
+fn kd_make_dir(path: u64) -> i32 @export { return _mkdir(path) }
+
+/* ==================== THE SELF-PROOF ====================
+ * The heart carries its own falsifiers and runs them at EVERY invocation,
+ * before touching any real state -- verification as a condition of motion,
+ * not a gate file a batch executes.  Each arm asserts a LAW against a
+ * synthetic case whose outcome is fixed by the law's statement, including a
+ * negative control (a case built to be refused MUST be refused).  A failed
+ * arm returns its code and the heart REFUSES to beat -- the autognosis
+ * pattern: an organ that cannot prove itself does not get to answer.
+ * Runs on the reset table and resets after; 0 = proven. */
+fn kd_selfprove() -> u64 @export {
+    kd_reset()
+    /* arm 11: registration -- dedupe + owned-class priority */
+    let a : i64 = kd_reg("cell_a" as u64, 6u64, 1u8, 99u64)
+    let b : i64 = kd_reg("cell_b" as u64, 6u64, 2u8, 99u64)
+    let a2 : i64 = kd_reg("cell_a" as u64, 6u64, 2u8, 99u64)
+    if a != 0i64 { kd_reset()   return 11u64 }
+    if b != 1i64 { kd_reset()   return 11u64 }
+    if a2 != 0i64 { kd_reset()   return 11u64 }
+    if kd_count() != 2u64 { kd_reset()   return 11u64 }
+    if kd_cell_class(0u64) != 2u8 { kd_reset()   return 11u64 }
+    /* arm 12: the fold is last-wins BY SEQUENCE -- an older record never displaces */
+    if kd_fold_rec("cell_a" as u64, 6u64, 111u64, 99u64, 2u8, 5u64) != 1u64 { kd_reset()   return 12u64 }
+    kd_fold_rec("cell_a" as u64, 6u64, 222u64, 7u64, 2u8, 3u64)
+    if KD_LPIN[0u64] != 111u64 { kd_reset()   return 12u64 }
+    if KD_LEXIT[0u64] != 99u64 { kd_reset()   return 12u64 }
+    /* arm 13: THE MONOTONE LAW -- inherited immunity (ADOPTED) never displaces
+     * earned proof (DERIVED), even with a higher sequence */
+    kd_fold_rec("cell_a" as u64, 6u64, 333u64, 99u64, 1u8, 9u64)
+    if KD_LMODE[0u64] != 2u8 { kd_reset()   return 13u64 }
+    if KD_LPIN[0u64] != 111u64 { kd_reset()   return 13u64 }
+    /* arm 14: due-logic -- pin drift wakes the cell; a match lets it rest;
+     * a cell with no record is always due */
+    kd_set_live_pin(0u64, 111u64)
+    if kd_cell_due(0u64) != 0u64 { kd_reset()   return 14u64 }
+    kd_set_live_pin(0u64, 999u64)
+    if kd_cell_due(0u64) != 1u64 { kd_reset()   return 14u64 }
+    if kd_cell_due(1u64) != 1u64 { kd_reset()   return 14u64 }
+    /* arm 15: teeth -- a malformed ledger line is REFUSED and COUNTED (negative
+     * control: garbage must fail; a mode outside A|D must fail) */
+    let mbefore : u64 = kd_malformed()
+    if kd_fold_line("garbage line" as u64, 12u64) != 0u64 { kd_reset()   return 15u64 }
+    if kd_malformed() != mbefore + 1u64 { kd_reset()   return 15u64 }
+    if kd_fold_rec("cell_a" as u64, 6u64, 1u64, 1u64, 7u8, 99u64) != 0u64 { kd_reset()   return 15u64 }
+    if kd_malformed() != mbefore + 2u64 { kd_reset()   return 15u64 }
+    /* arm 16: a WELL-formed line for a known cell folds (the teeth bite garbage,
+     * not food): craft K1|cell_b|<16 hex>|99|D|8 */
+    let lp : *u8 = (&KD_LBUF) as *u8
+    let mut at : u64 = kd_sput(lp, 0u64, "K1|cell_b|" as u64)
+    at = kd_sputhex(lp, at, 4660u64)
+    at = kd_sput(lp, at, "|99|D|8" as u64)
+    if kd_fold_line((&KD_LBUF) as u64, at) != 1u64 { kd_reset()   return 16u64 }
+    if KD_LMODE[1u64] != 2u8 { kd_reset()   return 16u64 }
+    /* arm 17: VITALITY refuses over a wound -- with every derived cell green it
+     * is nonzero; one derived red collapses it to 0 */
+    kd_fold_rec("cell_a" as u64, 6u64, 111u64, 99u64, 2u8, 10u64)
+    if kd_vitality() == 0u64 { kd_reset()   return 17u64 }
+    kd_fold_rec("cell_b" as u64, 6u64, 4660u64, 7u64, 2u8, 11u64)
+    if kd_derived_red_n() != 1u64 { kd_reset()   return 17u64 }
+    if kd_vitality() != 0u64 { kd_reset()   return 17u64 }
+    kd_reset()
+    return 0u64
+}

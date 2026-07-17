@@ -1,0 +1,236 @@
+/* COMPILER/BOOT/kardia_main.iii -- iii-kardia: THE HEART's tool face.
+ *
+ *   iii-kardia prove                 run the self-proof alone (the falsifier surface)
+ *   iii-kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt
+ *   iii-kardia status [--ledger D]   the standing question: is the being green?
+ *   iii-kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells
+ *   iii-kardia audit N [--ledger D]  re-derive up to N ADOPTED cells regardless of
+ *                                    pins -- the drip that retires inherited trust
+ *
+ * EVERY verb self-proves first and REFUSES to run on a failed arm (exit 9) --
+ * verification as a condition of motion, never a gate file.  Requires CWD =
+ * the III root (all paths root-relative).  Default ledger: STDLIB/kardia.
+ *
+ * exit: 0 coherent | 1 a derived cell is red | 2 env | 3 usage | 9 SELF-REFUSED */
+module kardia_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn kd_selfprove() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_reset() -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_ingest_registry() -> i64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_ledger_load(dir: u64) -> i64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_pin_all() -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_pin_tools() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_count() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_class(i: u64) -> u8 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_mode(i: u64) -> u8 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_exp(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_lexit(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_due(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_byte(i: u64, j: u64) -> u8 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_len(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_adopted_n() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_derived_green_n() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_derived_red_n() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_due_n() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_malformed() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_unresolved() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_tool_pin() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_vitality() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_adopt_cell(i: u64, dir: u64) -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_beat_cell(i: u64, dir: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_make_dir(path: u64) -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_digest_file(path: u64) -> u64 from "kardia.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+    }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if p[i] >= 48u8 { if p[i] <= 57u8 { v = (v * 10u64) + ((p[i] - 48u8) as u64) } }   i = i + 1u64 }
+    return v
+}
+fn pname(i: u64) -> u32 {
+    let n : u64 = kd_cell_name_len(i)
+    let mut j : u64 = 0u64
+    while j < n { putchar(kd_cell_name_byte(i, j) as i32)   j = j + 1u64 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-kardia -- THE HEART: validation dissolved from batch runs into being\n\n" as u64)
+    ps("  iii-kardia prove                 the self-proof alone (every law arm, every falsifier)\n" as u64)
+    ps("  iii-kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt the lineage\n" as u64)
+    ps("  iii-kardia status [--ledger D]   is the being green?  answered from the ledger, O(changed)\n" as u64)
+    ps("  iii-kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells (pin-invalidated only)\n" as u64)
+    ps("  iii-kardia audit N [--ledger D]  re-derive up to N ADOPTED cells -- retire inherited trust\n\n" as u64)
+    ps("every verb SELF-PROVES first and refuses to run on a failed arm (exit 9).\n" as u64)
+    ps("cells: ADOPTED = inherited from the sealed lineage, NEVER counted green; DERIVED = re-run here.\n" as u64)
+    ps("exit: 0 coherent | 1 derived-red | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+/* common load: registry + ledger + pins.  Returns packed c1|c2, or SENT on env fail. */
+fn heart_load(dir: u64) -> u64 {
+    let r : i64 = kd_ingest_registry()
+    if r < 0i64 { return 18446744073709551615u64 }
+    kd_ledger_load(dir)
+    kd_pin_all()
+    return r as u64
+}
+fn env_guard() -> u64 {
+    if kd_digest_file("COMPILED/iiis-2.exe" as u64) == 18446744073709551615u64 { return 1u64 }
+    if kd_digest_file("STDLIB/build/iii/libiii_native.a" as u64) == 18446744073709551615u64 { return 1u64 }
+    return 0u64
+}
+fn print_counts() -> u32 {
+    ps("  cells registered          : " as u64)  pu(kd_count())  putchar(10i32)
+    ps("  ADOPTED (inherited, never counted green): " as u64)  pu(kd_adopted_n())  putchar(10i32)
+    ps("  DERIVED green             : " as u64)  pu(kd_derived_green_n())  putchar(10i32)
+    ps("  DERIVED red               : " as u64)  pu(kd_derived_red_n())  putchar(10i32)
+    ps("  DUE (no record / pin drift): " as u64)  pu(kd_due_n())  putchar(10i32)
+    ps("  unresolved closure imports : " as u64)  pu(kd_unresolved())  putchar(10i32)
+    ps("  malformed ledger lines     : " as u64)  pu(kd_malformed())  putchar(10i32)
+    ps("  tool pin (iiis-2 + archive + harness): " as u64)  phex(kd_tool_pin())  putchar(10i32)
+    let v : u64 = kd_vitality()
+    if v == 0u64 { ps("  VITALITY REFUSED (a derived cell is red -- the heart will not call this healthy)\n" as u64) } else {
+        ps("  VITALITY = " as u64)  phex(v)  ps("  (fold over every DERIVED-green cell)\n" as u64)
+    }
+    return 1u32
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    /* THE CONDITION OF MOTION: prove the laws before touching any state */
+    let sp : u64 = kd_selfprove()
+    if sp != 0u64 {
+        ps("THE HEART REFUSES ITSELF: self-proof arm " as u64)  pu(sp)  ps(" failed -- no verb will run over broken law\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    /* optional [--ledger D] anywhere after the verb; optional leading count */
+    let mut dir : u64 = "STDLIB/build/kardia" as u64
+    let mut cap : u64 = 8u64
+    let mut ai : u64 = 2u64
+    while (ai as i64) < (argc as i64) {
+        if streq(av[ai], "--ledger" as u64) == 1u32 {
+            if (ai as i64) + 1i64 < (argc as i64) { dir = av[ai + 1u64]   ai = ai + 2u64 } else { return usage() }
+        } else { cap = parse_u64(av[ai])   ai = ai + 1u64 }
+    }
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("HEART PROVEN: registration, last-wins fold, THE MONOTONE LAW (adopted never displaces derived),\n" as u64)
+        ps("due-on-drift, malformed teeth (garbage refused + counted), well-formed fold, vitality refusal --\n" as u64)
+        ps("every arm re-derived THIS invocation, before any verb may move.\n" as u64)
+        return 0u64
+    }
+    if env_guard() == 1u64 {
+        ps("iii-kardia: env -- run from the III root (COMPILED/iiis-2.exe + the archive must resolve)\n" as u64)
+        return 2u64
+    }
+    if streq(cmd, "birth" as u64) == 1u32 {
+        kd_make_dir(dir)
+        let packed : u64 = heart_load(dir)
+        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable (STDLIB/scripts/run_corpus.sh)\n" as u64)  return 2u64 }
+        ps("== THE BIRTH: the claim registry becomes cells; the sealed lineage becomes inherited standing ==\n" as u64)
+        ps("  registry: " as u64)  pu(packed & 4294967295u64)  ps(" runnable claims (C1) + " as u64)  pu(packed >> 32u64)  ps(" owned organ gates (C2)\n" as u64)
+        let mut adopted : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < kd_count() {
+            if kd_cell_mode(i) == 0u8 { if kd_adopt_cell(i, dir) == 0i32 { adopted = adopted + 1u64 } }
+            i = i + 1u64
+        }
+        ps("  ADOPTED this birth        : " as u64)  pu(adopted)  ps("  (expected verdicts inherited, pinned against the LIVE tree)\n" as u64)
+        print_counts()
+        ps("  the heart is born beating: nothing here is proven yet -- beats and audits EARN it, cell by cell.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "status" as u64) == 1u32 {
+        let packed : u64 = heart_load(dir)
+        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        ps("== THE STANDING QUESTION: is the being green?  (answered from the ledger; only DUE cells owe work) ==\n" as u64)
+        print_counts()
+        if kd_derived_red_n() > 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "beat" as u64) == 1u32 {
+        let packed : u64 = heart_load(dir)
+        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        ps("== THE BEAT: re-derive what drifted; everything else keeps its standing ==\n" as u64)
+        let mut done : u64 = 0u64
+        let mut green : u64 = 0u64
+        let mut red : u64 = 0u64
+        let mut undv : u64 = 0u64
+        let mut owned_due : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < kd_count() {
+            if kd_cell_due(i) == 1u64 {
+                if kd_cell_class(i) == 1u8 {
+                    if done < cap {
+                        ps("  beat " as u64)  pname(i)
+                        let g : u64 = kd_beat_cell(i, dir)
+                        if g == 0u64 { ps(" -> exit " as u64)  pu(kd_cell_lexit(i))  ps("  DERIVED GREEN\n" as u64)   green = green + 1u64 } else {
+                            if g == 1u64 { ps(" -> exit " as u64)  pu(kd_cell_lexit(i))  ps("  DERIVED RED (expected " as u64)  pu(kd_cell_exp(i))  ps(")\n" as u64)   red = red + 1u64 } else {
+                                if g == 2u64 { ps("  UNDERIVABLE-BY-SELF (plain link needs an owner recipe -- standing kept)\n" as u64)   undv = undv + 1u64 } else {
+                                    ps("  OWNER-JURISDICTION (negative-compile gate -- standing kept)\n" as u64)
+                                }
+                            }
+                        }
+                        done = done + 1u64
+                    }
+                } else {
+                    owned_due = owned_due + 1u64
+                    if owned_due <= 6u64 { ps("  DUE-OWNED " as u64)  pname(i)  ps("  (organ gate -- its standing arm owner re-derives)\n" as u64) }
+                }
+            }
+            i = i + 1u64
+        }
+        ps("  beat this run: " as u64)  pu(done)  ps(" attempted -> " as u64)  pu(green)  ps(" green, " as u64)  pu(red)  ps(" red, " as u64)  pu(undv)  ps(" owner-recipe; due-owned organ gates: " as u64)  pu(owned_due)  putchar(10i32)
+        print_counts()
+        if red > 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "audit" as u64) == 1u32 {
+        let packed : u64 = heart_load(dir)
+        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        ps("== THE AUDIT DRIP: re-derive ADOPTED cells regardless of pins -- inherited trust retires into proof ==\n" as u64)
+        let mut done : u64 = 0u64
+        let mut green : u64 = 0u64
+        let mut red : u64 = 0u64
+        let mut undv : u64 = 0u64
+        let mut owner : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < kd_count() {
+            if green + red + undv + owner < cap { if kd_cell_mode(i) == 1u8 { if kd_cell_class(i) == 1u8 {
+                let g : u64 = kd_beat_cell(i, dir)
+                if g == 0u64 { ps("  audit " as u64)  pname(i)  ps(" -> exit " as u64)  pu(kd_cell_lexit(i))  ps("  DERIVED GREEN (adoption retired)\n" as u64)   green = green + 1u64 } else {
+                    if g == 1u64 { ps("  audit " as u64)  pname(i)  ps(" -> exit " as u64)  pu(kd_cell_lexit(i))  ps("  DERIVED RED (expected " as u64)  pu(kd_cell_exp(i))  ps(")\n" as u64)   red = red + 1u64 } else {
+                        if g == 2u64 { undv = undv + 1u64 } else { owner = owner + 1u64 }
+                    }
+                }
+                done = done + 1u64
+            } } }
+            i = i + 1u64
+        }
+        ps("  audit this run: " as u64)  pu(done)  ps(" attempted -> " as u64)  pu(green)  ps(" green, " as u64)  pu(red)  ps(" red, " as u64)  pu(undv)  ps(" owner-recipe, " as u64)  pu(owner)  ps(" negative-jurisdiction\n" as u64)
+        print_counts()
+        if red > 0u64 { return 1u64 }
+        return 0u64
+    }
+    return usage()
+}

@@ -240,6 +240,48 @@ target named; the tool prints III's raw table.
   genuinely open rung (the real-closed-field tier), stated, never smuggled.
   All six verbs byte-deterministic; 27 arms in ~0.4 s.
 
+- **RIZA — THE ROOT-STOCK: THE OPEN RUNG CLIMBED** (same campaign, third
+  wave).  `aether/riza.iii` is the real-closed-field tier, standing on the
+  SAME pyrgos rationals (one rational engine, no island).  R1: exact
+  polynomials over big rationals — primitive PRS division/gcd, Sturm chains,
+  THE STURM-TARSKI QUERY (sign of E at an isolated root, no refinement, no
+  epsilon), and resultants by fixed-shape Sylvester determinants evaluated
+  at rational nodes and Lagrange-interpolated (immune to leading-coefficient
+  degree drop; the mint re-derives x⁴−10x²+1 from Res_t(t²−2,(x−t)²−3) and
+  cross-checks its root bracket against pyrgos norm descent — arms 210..212).
+  R2: THE FIELD Q(α) — elements are vectors mod the defining polynomial;
+  inverse by PRIMITIVE BEZOUT (the (r,t) pair is content-stripped together,
+  the invariant t·e ≡ r (mod P) survives simultaneous scaling — without this
+  law the plain chain explodes exponentially and the machine MEASURED it:
+  its own op-counters attributed a twenty-second organ to allocation churn
+  inside the gcd of unscaled remainders); sign by Tarski; a zero divisor
+  fires the D5 SPLIT and the field self-refines (arm 215).  ∛2 is HELD and
+  signed exactly — the first number no quadratic tower can hold (arm 214).
+  R3: polynomials whose coefficients are field elements, signed remainder
+  sequences OVER THE EXTENSION, and THE JOIN: γ = η + c·α by resultant,
+  γ isolated by refining both brackets (pinned Sturm chains — built once,
+  queried per halving), α RECOVERED inside Q(γ) as the degree-1 gcd of P(t)
+  and Ŝ(γ−ct,t), verified by P(α)=0, old state lifted by Horner.  On known
+  ground the join re-mints x⁴−10x²+1 from Q(√2)+√3 and hands back √2 and √3
+  as exact Q(γ)-vectors (arm 216).  THE PROOF OF THE RUNG: the irreducible
+  quartic TOI τ⁴+2τ³−18τ²−24τ+100 (Galois-blocked from every tower) is
+  installed as a FIELD, the contact gate |A−B|²=4 closes algebraically via
+  P(α)=0, the elastic response conserves momentum and energy EXACTLY in
+  Q(α), the NEXT event's separation quadratic lives over Q(α), and the JOIN
+  moves the world into the degree-8 Q(γ) where contact gate 2 closes and
+  conservation holds EXACTLY again (arm 217) — the fold CONTINUES past the
+  non-constructible root.  The engine-room laws this rung forced, each
+  MEASURED by III's own counted telemetry (py_opc/py_maxl/rf_*): the
+  primitive Bezout pair; ONE persistent scratch arena reset per rational op
+  (the per-op arena cost ~2 MB of allocate-and-zero per op); THE RAW-LANE
+  GCD (the subtraction cascade runs on two module limb lanes with ZERO
+  allocations — the old handle-per-subtract loop was ~500 µs/op of pure
+  churn).  Together: the full tier self-proof 22.4 s → 1.9 s, the
+  tri-organ membrane (pyrgos 180..188 + kinesis 190..199 + riza 210..217)
+  2.2 s, byte-deterministic.  The mark repacked (LTOP<<35|RTOP<<18|ETOP<<4|H,
+  29/17/14/4 bits) so the rational pool could grow to 100 000 slots —
+  consumers hold marks opaquely, so the repack is invisible to every organ.
+
 The retired files' MANIFEST lines reconcile at the autarkeia ceremony (the
 signed testament is regenerated there; deleting listed files is the
 established campaign pattern, not a break — proven across 100+ deletions this

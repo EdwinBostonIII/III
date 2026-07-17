@@ -1,0 +1,1711 @@
+/* STDLIB/iii/aether/riza.iii -- RIZA (the ROOT-STOCK): the real-closed-field
+ * tier, stage R1 -- the EXACT POLYNOMIAL ENGINE over big rationals.
+ *
+ * THE RUNG THIS CLIMBS (named by the kinesis charter): chaining PAST a
+ * non-constructible root.  A quartic time-of-impact generally needs cube
+ * roots (the resolvent cubic); no quadratic tower can HOLD it.  The
+ * real-closed-field tier holds ANY real algebraic number as (defining
+ * polynomial, isolating interval) and computes with it exactly.  This file
+ * is the substrate: polynomials with big-rational coefficients (COMPOSING
+ * pyrgos's exact rational slots -- one rational engine, no island), with
+ *   - exact division and gcd by PRIMITIVE remainder sequences (contents
+ *     stripped through py_rat_gcdpos, so PRS coefficient explosion never
+ *     happens and every scale factor is POSITIVE -- sign sequences survive);
+ *   - Sturm chains and root counting in rational intervals;
+ *   - the STURM-TARSKI QUERY: the signed remainder sequence of (P, P'*E)
+ *     evaluated at the ends of an interval isolating ONE root of P returns
+ *     sign(E(alpha)) directly -- +1/0/-1, no refinement loop, no epsilon;
+ *   - RESULTANTS by fixed-shape Sylvester determinants evaluated at rational
+ *     points and Lagrange-interpolated (the fixed shape makes the evaluation
+ *     immune to leading-coefficient degree drop), with an exact rational
+ *     Gauss determinant underneath.
+ *
+ * Stage R2 (same file, below) builds the FIELD Q(alpha) on this engine:
+ * elements as coefficient vectors mod the defining polynomial, inverse by
+ * Bezout with D5 dynamic splitting, sign by the Tarski query.
+ *
+ * Truth is a CONDITION OF MOTION: rz_selfprove (arms 210..).  The resultant
+ * MINTS the minimal polynomial of sqrt2+sqrt3 (x^4-10x^2+1) and its root
+ * brackets are cross-checked against pyrgos norm descent -- independent
+ * engines, one truth.  NO gate.
+ * NIH: composes aether/pyrgos (rationals + marks).  Hexad: kind_form.
+ * Ring R-1. */
+module aether_riza
+
+extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_mark() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_release(m: u64) -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_i64(v: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_neg(r: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_inv(r: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_sign(r: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_gcdpos(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sqrt(e: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_i64(v: i64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_rat(r: u64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sign(a: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+
+const RZ_CCAP : u64 = 65536u64           /* coefficient slots (rational idx)    */
+const RZ_PCAP : u64 = 8192u64            /* poly registers                      */
+const RZ_SENT : u64 = 18446744073709551615u64
+
+var RZ_PC : [u64; 65536]                 /* coefficient slot -> pyrgos rational */
+var RZ_CTOP : u64 = 0u64
+var RE_TOP : u64 = 0u64                  /* element-poly registers (R3, below)  */
+var RZ_PB : [u64; 8192]                  /* poly base coeff slot                */
+var RZ_PD : [i64; 8192]                  /* poly degree (-1 = zero)             */
+var RZ_PTOP : u64 = 0u64
+var RZ_ERR : u64 = 0u64                  /* 1 coeff pool, 2 poly pool, 3 shape  */
+
+/* the mark stack: (pyrgos mark, CTOP, PTOP) triples */
+var RZ_MS : [u64; 96]
+var RZ_SP : u64 = 0u64
+
+/* divmod side-channel: the quotient handle */
+var RZ_QH : u64 = 0u64
+/* isolation side-channel */
+var RZ_BLO : i64 = 0i64   var RZ_BHI : i64 = 0i64
+/* the signed-remainder chain */
+var RZ_CH : [u64; 56]
+var RZ_CN : u64 = 0u64
+/* the determinant matrix (up to 22 x 22 rational slots) */
+var RZ_MAT : [u64; 484]
+
+fn rz_err() -> u64 @export { return RZ_ERR }
+/* full reset: riza owns its pools AND (re)initializes the pyrgos rational
+ * substrate it composes -- a standalone riza consumer must never depend on
+ * some earlier organ having called py_reset (the PY_ONE home limb law). */
+fn rz_reset() -> i32 @export {
+    py_reset()
+    RZ_CTOP = 0u64   RZ_PTOP = 0u64   RZ_SP = 0u64   RZ_ERR = 0u64
+    RE_TOP = 0u64
+    return 0i32
+}
+fn rz_mark() -> i32 @export {
+    if RZ_SP + 4u64 > 96u64 { RZ_ERR = 3u64   return -1i32 }
+    RZ_MS[RZ_SP] = py_mark()
+    RZ_MS[RZ_SP + 1u64] = RZ_CTOP
+    RZ_MS[RZ_SP + 2u64] = RZ_PTOP
+    RZ_MS[RZ_SP + 3u64] = RE_TOP
+    RZ_SP = RZ_SP + 4u64
+    return 0i32
+}
+fn rz_release() -> i32 @export {
+    if RZ_SP < 4u64 { RZ_ERR = 3u64   return -1i32 }
+    RZ_SP = RZ_SP - 4u64
+    py_release(RZ_MS[RZ_SP])
+    RZ_CTOP = RZ_MS[RZ_SP + 1u64]
+    RZ_PTOP = RZ_MS[RZ_SP + 2u64]
+    RE_TOP = RZ_MS[RZ_SP + 3u64]
+    return 0i32
+}
+
+/* ==================== poly primitives ==================== */
+fn rz_calloc(n: u64) -> u64 {
+    if RZ_CTOP + n > RZ_CCAP { RZ_ERR = 1u64   return 0u64 }
+    let base : u64 = RZ_CTOP
+    RZ_CTOP = RZ_CTOP + n
+    let mut k : u64 = 0u64
+    while k < n { RZ_PC[base + k] = py_rat_i64(0i64)   k = k + 1u64 }
+    return base
+}
+fn rz_pmk(base: u64, deg: i64) -> u64 {
+    if RZ_PTOP >= RZ_PCAP { RZ_ERR = 2u64   return 0u64 }
+    let p : u64 = RZ_PTOP
+    RZ_PTOP = RZ_PTOP + 1u64
+    RZ_PB[p] = base   RZ_PD[p] = deg
+    return p
+}
+fn rz_new(deg: i64) -> u64 @export {
+    let mut n : i64 = deg + 1i64
+    if n < 1i64 { n = 1i64 }
+    let base : u64 = rz_calloc(n as u64)
+    return rz_pmk(base, deg)
+}
+fn rz_deg(p: u64) -> i64 @export { let d : i64 = RZ_PD[p]   return d }
+fn rz_c(p: u64, k: i64) -> u64 @export {
+    let d : i64 = RZ_PD[p]
+    if k < 0i64 { return py_rat_i64(0i64) }
+    if k > d { return py_rat_i64(0i64) }
+    return RZ_PC[RZ_PB[p] + (k as u64)]
+}
+fn rz_setc(p: u64, k: i64, r: u64) -> i32 @export {
+    RZ_PC[RZ_PB[p] + (k as u64)] = r
+    return 0i32
+}
+/* recompute the effective degree in place */
+fn rz_norm(p: u64) -> u64 {
+    let mut d : i64 = RZ_PD[p]
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if d < 0i64 { going = 0u8 } else {
+            let c : u64 = RZ_PC[RZ_PB[p] + (d as u64)]
+            if py_rat_sign(c) != 0i64 { going = 0u8 } else { d = d - 1i64 }
+        }
+    }
+    RZ_PD[p] = d
+    return p
+}
+/* build from i64 coefficients (c0..cdeg) passed via the module input cells */
+var RZ_IN : [i64; 48]
+fn rz_in(k: u64, v: i64) -> i32 @export { RZ_IN[k] = v   return 0i32 }
+fn rz_from_in(deg: i64) -> u64 @export {
+    let p : u64 = rz_new(deg)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= deg {
+        rz_setc(p, k, py_rat_i64(RZ_IN[k as u64]))
+        k = k + 1i64
+    }
+    return rz_norm(p)
+}
+fn rz_copy(a: u64) -> u64 {
+    let d : i64 = RZ_PD[a]
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d { rz_setc(p, k, rz_c(a, k))   k = k + 1i64 }
+    return p
+}
+fn rz_add(a: u64, b: u64) -> u64 @export {
+    let da : i64 = RZ_PD[a]
+    let db : i64 = RZ_PD[b]
+    let mut d : i64 = da
+    if db > d { d = db }
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d {
+        rz_setc(p, k, py_rat_add(rz_c(a, k), rz_c(b, k)))
+        k = k + 1i64
+    }
+    return rz_norm(p)
+}
+fn rz_neg(a: u64) -> u64 @export {
+    let d : i64 = RZ_PD[a]
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d { rz_setc(p, k, py_rat_neg(rz_c(a, k)))   k = k + 1i64 }
+    return p
+}
+fn rz_sub(a: u64, b: u64) -> u64 @export { return rz_add(a, rz_neg(b)) }
+fn rz_scale(a: u64, r: u64) -> u64 @export {
+    let d : i64 = RZ_PD[a]
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d { rz_setc(p, k, py_rat_mul(rz_c(a, k), r))   k = k + 1i64 }
+    return rz_norm(p)
+}
+fn rz_mul(a: u64, b: u64) -> u64 @export {
+    let da : i64 = RZ_PD[a]
+    let db : i64 = RZ_PD[b]
+    if da < 0i64 { return rz_new(0i64 - 1i64) }
+    if db < 0i64 { return rz_new(0i64 - 1i64) }
+    let d : i64 = da + db
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut i : i64 = 0i64
+    while i <= da {
+        let ci : u64 = rz_c(a, i)
+        if py_rat_sign(ci) != 0i64 {
+            let mut j : i64 = 0i64
+            while j <= db {
+                let t : u64 = py_rat_mul(ci, rz_c(b, j))
+                let k : i64 = i + j
+                rz_setc(p, k, py_rat_add(rz_c(p, k), t))
+                j = j + 1i64
+            }
+        }
+        i = i + 1i64
+    }
+    return rz_norm(p)
+}
+/* remainder of a by b (b != 0); the quotient lands in RZ_QH */
+fn rz_divmod(a: u64, b: u64) -> u64 @export {
+    rz_norm(b)
+    let db : i64 = RZ_PD[b]
+    if db < 0i64 { RZ_ERR = 3u64   RZ_QH = rz_new(0i64 - 1i64)   return rz_copy(a) }
+    let il : u64 = py_rat_inv(rz_c(b, db))
+    let mut r : u64 = rz_copy(a)
+    rz_norm(r)
+    let q : u64 = rz_new(RZ_PD[a])
+    if RZ_ERR != 0u64 { RZ_QH = q   return r }
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let dr : i64 = RZ_PD[r]
+        if dr < db { going = 0u8 } else {
+            let f : u64 = py_rat_mul(rz_c(r, dr), il)
+            let sh : i64 = dr - db
+            rz_setc(q, sh, py_rat_add(rz_c(q, sh), f))
+            let nf : u64 = py_rat_neg(f)
+            let mut k : i64 = 0i64
+            while k <= db {
+                let t : i64 = sh + k
+                rz_setc(r, t, py_rat_add(rz_c(r, t), py_rat_mul(nf, rz_c(b, k))))
+                k = k + 1i64
+            }
+            rz_setc(r, dr, py_rat_i64(0i64))
+            RZ_PD[r] = dr - 1i64
+            rz_norm(r)
+        }
+    }
+    RZ_QH = rz_norm(q)
+    return r
+}
+fn rz_quot() -> u64 @export { return RZ_QH }
+/* rational content (positive; zero only for the zero poly) */
+fn rz_content(a: u64) -> u64 {
+    rz_norm(a)
+    let d : i64 = RZ_PD[a]
+    let mut g : u64 = py_rat_i64(0i64)
+    if d < 0i64 { return g }
+    let mut k : i64 = 0i64
+    while k <= d {
+        let c : u64 = rz_c(a, k)
+        if py_rat_sign(c) != 0i64 { g = py_rat_gcdpos(g, c) }
+        k = k + 1i64
+    }
+    return g
+}
+/* primitive part: strip the (POSITIVE) rational content -- sign-safe */
+fn rz_pp(a: u64) -> u64 @export {
+    rz_norm(a)
+    let d : i64 = RZ_PD[a]
+    if d < 0i64 { return a }
+    let mut g : u64 = py_rat_i64(0i64)
+    let mut k : i64 = 0i64
+    while k <= d {
+        let c : u64 = rz_c(a, k)
+        if py_rat_sign(c) != 0i64 { g = py_rat_gcdpos(g, c) }
+        k = k + 1i64
+    }
+    if py_rat_sign(g) == 0i64 { return a }
+    return rz_scale(a, py_rat_inv(g))
+}
+fn rz_deriv(a: u64) -> u64 @export {
+    let d : i64 = RZ_PD[a]
+    if d < 1i64 { return rz_new(0i64 - 1i64) }
+    let p : u64 = rz_new(d - 1i64)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 1i64
+    while k <= d {
+        rz_setc(p, k - 1i64, py_rat_mul(rz_c(a, k), py_rat_i64(k)))
+        k = k + 1i64
+    }
+    return rz_norm(p)
+}
+/* gcd by the primitive PRS, positive leading coefficient */
+fn rz_gcd(a: u64, b: u64) -> u64 @export {
+    let mut A : u64 = rz_pp(rz_copy(a))
+    let mut B : u64 = rz_pp(rz_copy(b))
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        rz_norm(B)
+        if RZ_PD[B] < 0i64 { going = 0u8 } else {
+            let R : u64 = rz_divmod(A, B)
+            A = B
+            B = rz_pp(R)
+        }
+    }
+    let dA : i64 = RZ_PD[A]
+    if dA >= 0i64 {
+        if py_rat_sign(rz_c(A, dA)) < 0i64 { A = rz_neg(A) }
+    }
+    return A
+}
+/* exact rational evaluation sign at n/d */
+fn rz_eval_rat(p: u64, n: i64, d: i64) -> u64 {
+    let dp : i64 = RZ_PD[p]
+    if dp < 0i64 { return py_rat_i64(0i64) }
+    let t : u64 = py_rat_frac(n, d)
+    let mut v : u64 = rz_c(p, dp)
+    let mut k : i64 = dp - 1i64
+    while k >= 0i64 {
+        v = py_rat_add(py_rat_mul(v, t), rz_c(p, k))
+        k = k - 1i64
+    }
+    return v
+}
+fn rz_eval_sign(p: u64, n: i64, d: i64) -> i64 @export {
+    return py_rat_sign(rz_eval_rat(p, n, d))
+}
+
+/* ==================== signed remainder sequences ==================== */
+/* chain := srs(A, B): S0 = A, S1 = B, S_{k+1} = -rem(S_{k-1}, S_k), each
+ * primitive-part-normalized (positive content only -- signs preserved). */
+fn rz_srs(A: u64, B: u64) -> i32 {
+    RZ_CH[0u64] = rz_pp(rz_copy(A))
+    RZ_CH[1u64] = rz_pp(rz_copy(B))
+    RZ_CN = 2u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let last : u64 = RZ_CH[RZ_CN - 1u64]
+        rz_norm(last)
+        if RZ_PD[last] < 0i64 { RZ_CN = RZ_CN - 1u64   going = 0u8 } else {
+        if RZ_PD[last] == 0i64 { going = 0u8 } else {
+        if RZ_CN >= 56u64 { going = 0u8 } else {
+            let R : u64 = rz_divmod(RZ_CH[RZ_CN - 2u64], last)
+            rz_norm(R)
+            if RZ_PD[R] < 0i64 { going = 0u8 } else {
+                RZ_CH[RZ_CN] = rz_pp(rz_neg(R))
+                RZ_CN = RZ_CN + 1u64
+            }
+        } } }
+    }
+    return 0i32
+}
+fn rz_var_at(n: i64, d: i64) -> i64 {
+    let mut ch : i64 = 0i64
+    let mut prev : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < RZ_CN {
+        let s : i64 = rz_eval_sign(RZ_CH[p], n, d)
+        if s != 0i64 {
+            if prev != 0i64 { if s != prev { ch = ch + 1i64 } }
+            prev = s
+        }
+        p = p + 1u64
+    }
+    return ch
+}
+/* distinct real roots of P in (a, b] = (an/ad, bn/bd] */
+fn rz_count(P: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    rz_mark()
+    rz_srs(P, rz_deriv(P))
+    let va : i64 = rz_var_at(an, ad)
+    let vb : i64 = rz_var_at(bn, bd)
+    rz_release()
+    return va - vb
+}
+/* THE STURM-TARSKI QUERY: over an interval (a, b) containing exactly ONE
+ * root alpha of P (and with P(a), P(b) != 0), the srs(P, P'*E) variation
+ * difference IS sign(E(alpha)). */
+fn rz_tarski(P: u64, E: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    rz_mark()
+    rz_srs(P, rz_mul(rz_deriv(P), E))
+    let va : i64 = rz_var_at(an, ad)
+    let vb : i64 = rz_var_at(bn, bd)
+    rz_release()
+    return va - vb
+}
+/* bracket the FIRST root of P in (lo, hi] to 1/10000 (RZ_BLO/RZ_BHI) */
+fn rz_isolate(P: u64, lo: i64, hi: i64) -> i32 @export {
+    let mut a : i64 = lo * 10000i64
+    let mut b : i64 = hi * 10000i64
+    while (b - a) > 1i64 {
+        let mid : i64 = (a + b) / 2i64
+        let c : i64 = rz_count(P, lo, 1i64, mid, 10000i64)
+        if c == 0i64 { a = mid } else { b = mid }
+    }
+    RZ_BLO = a   RZ_BHI = b
+    return 0i32
+}
+fn rz_blo() -> i64 @export { return RZ_BLO }
+fn rz_bhi() -> i64 @export { return RZ_BHI }
+
+/* ==================== the exact determinant ==================== */
+/* rational Gauss with first-nonzero pivoting on RZ_MAT (n x n) */
+fn rz_det(n: u64) -> u64 @export {
+    let mut det : u64 = py_rat_i64(1i64)
+    let mut sgn : i64 = 1i64
+    let mut col : u64 = 0u64
+    while col < n {
+        /* find pivot row */
+        let mut pr : u64 = RZ_SENT
+        let mut r : u64 = col
+        while r < n {
+            if pr == RZ_SENT {
+                if py_rat_sign(RZ_MAT[(r * n) + col]) != 0i64 { pr = r }
+            }
+            r = r + 1u64
+        }
+        if pr == RZ_SENT { return py_rat_i64(0i64) }
+        if pr != col {
+            let mut k : u64 = 0u64
+            while k < n {
+                let t : u64 = RZ_MAT[(col * n) + k]
+                RZ_MAT[(col * n) + k] = RZ_MAT[(pr * n) + k]
+                RZ_MAT[(pr * n) + k] = t
+                k = k + 1u64
+            }
+            sgn = 0i64 - sgn
+        }
+        let piv : u64 = RZ_MAT[(col * n) + col]
+        det = py_rat_mul(det, piv)
+        let ip : u64 = py_rat_inv(piv)
+        let mut rr : u64 = col + 1u64
+        while rr < n {
+            let f : u64 = py_rat_mul(RZ_MAT[(rr * n) + col], ip)
+            if py_rat_sign(f) != 0i64 {
+                let nf : u64 = py_rat_neg(f)
+                let mut k2 : u64 = col
+                while k2 < n {
+                    RZ_MAT[(rr * n) + k2] = py_rat_add(RZ_MAT[(rr * n) + k2], py_rat_mul(nf, RZ_MAT[(col * n) + k2]))
+                    k2 = k2 + 1u64
+                }
+            }
+            rr = rr + 1u64
+        }
+        col = col + 1u64
+    }
+    if sgn < 0i64 { det = py_rat_neg(det) }
+    return det
+}
+
+/* ==================== the bivariate resultant ==================== */
+/* A and B are t-polynomials whose coefficients are x-POLYNOMIALS (handles in
+ * the caller-filled cells RZ_AC[0..ta], RZ_BC[0..tb]).  R(x) = Res_t(A, B)
+ * by the FIXED-SHAPE Sylvester determinant: entries are the coefficient
+ * x-polys; evaluating every entry at x = x0 and taking the exact rational
+ * determinant of the (ta+tb)^2 matrix gives R(x0) even where true t-degrees
+ * drop; npts values interpolate R exactly (Lagrange over rationals). */
+var RZ_AC : [u64; 12]   var RZ_AT : i64 = 0i64
+var RZ_BC : [u64; 12]   var RZ_BT : i64 = 0i64
+fn rz_res_seta(k: u64, p: u64) -> i32 @export { RZ_AC[k] = p   return 0i32 }
+fn rz_res_setb(k: u64, p: u64) -> i32 @export { RZ_BC[k] = p   return 0i32 }
+fn rz_res_deg(ta: i64, tb: i64) -> i32 @export { RZ_AT = ta   RZ_BT = tb   return 0i32 }
+/* evaluate the Sylvester determinant at x = x0 (integer) */
+fn rz_res_at(x0: i64) -> u64 {
+    let ta : i64 = RZ_AT
+    let tb : i64 = RZ_BT
+    let n : u64 = (ta + tb) as u64
+    /* zero the matrix */
+    let mut z : u64 = 0u64
+    while z < n * n { RZ_MAT[z] = py_rat_i64(0i64)   z = z + 1u64 }
+    /* tb rows of A's coefficients (t-degree ta .. 0 left to right) */
+    let mut row : u64 = 0u64
+    while row < (tb as u64) {
+        let mut k : i64 = 0i64
+        while k <= ta {
+            let v : u64 = rz_eval_rat(RZ_AC[(ta - k) as u64], x0, 1i64)
+            RZ_MAT[(row * n) + row + (k as u64)] = v
+            k = k + 1i64
+        }
+        row = row + 1u64
+    }
+    /* ta rows of B's coefficients */
+    let mut row2 : u64 = 0u64
+    while row2 < (ta as u64) {
+        let mut k2 : i64 = 0i64
+        while k2 <= tb {
+            let v2 : u64 = rz_eval_rat(RZ_BC[(tb - k2) as u64], x0, 1i64)
+            RZ_MAT[(((tb as u64) + row2) * n) + row2 + (k2 as u64)] = v2
+            k2 = k2 + 1i64
+        }
+        row2 = row2 + 1u64
+    }
+    return rz_det(n)
+}
+/* Lagrange-interpolate R(x) from npts values at x = off, off+1, ... */
+fn rz_res_run(dbound: i64) -> u64 @export {
+    let npts : i64 = dbound + 1i64
+    let off : i64 = 0i64 - (dbound / 2i64)
+    /* master M(x) = prod (x - x_j) built incrementally; values in RZ_YS */
+    let mut M : u64 = rz_new(0i64)
+    rz_setc(M, 0i64, py_rat_i64(1i64))
+    let mut j : i64 = 0i64
+    while j < npts {
+        let xj : i64 = off + j
+        let lin : u64 = rz_new(1i64)
+        rz_setc(lin, 0i64, py_rat_i64(0i64 - xj))
+        rz_setc(lin, 1i64, py_rat_i64(1i64))
+        M = rz_mul(M, lin)
+        j = j + 1i64
+    }
+    let mut acc : u64 = rz_new(0i64 - 1i64)
+    j = 0i64
+    while j < npts {
+        let xj : i64 = off + j
+        let yj : u64 = rz_res_at(xj)
+        if py_rat_sign(yj) != 0i64 {
+            let lin : u64 = rz_new(1i64)
+            rz_setc(lin, 0i64, py_rat_i64(0i64 - xj))
+            rz_setc(lin, 1i64, py_rat_i64(1i64))
+            let Qj : u64 = rz_divmod(M, lin)
+            let Q : u64 = RZ_QH
+            /* weight = Q(x_j) */
+            let w : u64 = rz_eval_rat(Q, xj, 1i64)
+            let s : u64 = py_rat_mul(yj, py_rat_inv(w))
+            acc = rz_add(acc, rz_scale(Q, s))
+        }
+        j = j + 1i64
+    }
+    return rz_norm(acc)
+}
+
+/* ==================== R2: THE FIELD Q(alpha) ====================
+ * ONE current field: a MONIC defining polynomial RF_P and an isolating
+ * interval (RF_LON/RF_BD, RF_HIN/RF_BD] holding exactly one real root
+ * alpha.  An element IS a poly handle of degree < RF_D -- its VALUE is the
+ * evaluation at alpha, so representatives of any degree are lawful and
+ * rf_red normalizes.  Sign is the Sturm-Tarski query (no refinement loop).
+ * Inverse is Bezout; a zero divisor fires the D5 SPLIT: the defining
+ * polynomial factors, the factor holding alpha (root count on the interval)
+ * becomes the NEW defining polynomial, and the inverse recurses -- division
+ * never refuses, and the field SELF-REFINES toward the minimal polynomial
+ * exactly when the algebra demands it.  Old representatives stay valid:
+ * value-at-alpha is untouched by refinement. */
+var RF_P : u64 = 0u64                    /* monic defining poly handle          */
+var RF_D : i64 = 0i64                    /* its degree                          */
+var RF_LON : i64 = 0i64                  /* interval lo numerator               */
+var RF_HIN : i64 = 0i64                  /* interval hi numerator               */
+var RF_BD : i64 = 1i64                   /* shared interval denominator         */
+var RF_SPLITS : u64 = 0u64               /* D5 refinements fired (telemetry)    */
+
+/* counted field-op telemetry (never silent) */
+var RF_INVC : u64 = 0u64   var RF_MULC : u64 = 0u64
+var RF_SIGNC : u64 = 0u64  var RF_REDC : u64 = 0u64
+fn rf_invc() -> u64 @export { return RF_INVC }
+fn rf_mulc() -> u64 @export { return RF_MULC }
+fn rf_signc() -> u64 @export { return RF_SIGNC }
+fn rf_redc() -> u64 @export { return RF_REDC }
+fn rf_ctr_reset() -> i32 @export { RF_INVC = 0u64   RF_MULC = 0u64   RF_SIGNC = 0u64   RF_REDC = 0u64   return 0i32 }
+
+fn rf_d() -> i64 @export { return RF_D }
+fn rf_splits() -> u64 @export { return RF_SPLITS }
+fn rf_lon() -> i64 @export { return RF_LON }
+fn rf_hin() -> i64 @export { return RF_HIN }
+fn rf_bd() -> i64 @export { return RF_BD }
+/* make p monic (positive lead, lead 1) */
+fn rf_monic(p: u64) -> u64 {
+    rz_norm(p)
+    let d : i64 = RZ_PD[p]
+    if d < 0i64 { return p }
+    let l : u64 = rz_c(p, d)
+    return rz_scale(p, py_rat_inv(l))
+}
+/* install the field: P's unique root in (lon/bd, hin/bd] */
+fn rf_set_frac(P: u64, lon: i64, hin: i64, bd: i64) -> i32 @export {
+    let M : u64 = rf_monic(rz_copy(P))
+    let c : i64 = rz_count(M, lon, bd, hin, bd)
+    if c != 1i64 { RZ_ERR = 4u64   return -1i32 }
+    if rz_eval_sign(M, lon, bd) == 0i64 { RZ_ERR = 4u64   return -1i32 }
+    if rz_eval_sign(M, hin, bd) == 0i64 { RZ_ERR = 4u64   return -1i32 }
+    RF_P = M
+    RF_D = RZ_PD[M]
+    RF_LON = lon   RF_HIN = hin   RF_BD = bd
+    RF_SPLITS = 0u64
+    return 0i32
+}
+/* rf_set_iv: was rf_set -- renamed 2026-07-17: the ancestral refract.iii organ
+ * @exports rf_set (5-arg raster form); ONE exported name = ONE owner (the
+ * cartographer's dup-export law reddened build_stdlib on the collision). */
+fn rf_set_iv(P: u64, lo: i64, hi: i64) -> i32 @export {
+    return rf_set_frac(P, lo, hi, 1i64)
+}
+/* halve the isolating interval (exact dyadic bisection) */
+fn rf_refine() -> i32 @export {
+    if RF_BD > 2305843009213693952i64 { RZ_ERR = 4u64   return -1i32 }
+    let mn : i64 = RF_LON + RF_HIN
+    let bd2 : i64 = 2i64 * RF_BD
+    let c : i64 = rz_count(RF_P, RF_LON, RF_BD, mn, bd2)
+    if c == 1i64 { RF_HIN = mn   RF_LON = 2i64 * RF_LON } else { RF_LON = mn   RF_HIN = 2i64 * RF_HIN }
+    RF_BD = bd2
+    return 0i32
+}
+fn rf_red(p: u64) -> u64 @export {
+    RF_REDC = RF_REDC + 1u64
+    rz_norm(p)
+    if RZ_PD[p] < RF_D { return p }
+    return rz_divmod(p, RF_P)
+}
+fn rf_mul(a: u64, b: u64) -> u64 @export { RF_MULC = RF_MULC + 1u64   return rf_red(rz_mul(a, b)) }
+fn rf_add(a: u64, b: u64) -> u64 @export { return rz_add(a, b) }
+fn rf_sub(a: u64, b: u64) -> u64 @export { return rz_sub(a, b) }
+fn rf_alpha() -> u64 @export {
+    let p : u64 = rz_new(1i64)
+    rz_setc(p, 1i64, py_rat_i64(1i64))
+    return p
+}
+fn rf_from_rat(r: u64) -> u64 @export {
+    let p : u64 = rz_new(0i64)
+    rz_setc(p, 0i64, r)
+    return rz_norm(p)
+}
+/* sign of the element's value at alpha: rational fast path, else Tarski */
+fn rf_sign(e: u64) -> i64 @export {
+    RF_SIGNC = RF_SIGNC + 1u64
+    let r : u64 = rf_red(e)
+    let d : i64 = RZ_PD[r]
+    if d < 0i64 { return 0i64 }
+    if d == 0i64 { return py_rat_sign(rz_c(r, 0i64)) }
+    return rz_tarski(RF_P, r, RF_LON, RF_BD, RF_HIN, RF_BD)
+}
+/* the D5 split: g is a nonconstant proper factor of RF_P discovered by a
+ * failed inverse.  Keep whichever factor holds alpha (count on the isolating
+ * interval); degree strictly drops. */
+fn rf_split(g: u64) -> i32 {
+    let gm : u64 = rf_monic(rz_copy(g))
+    let rem : u64 = rz_divmod(RF_P, gm)
+    let h : u64 = rf_monic(RZ_QH)
+    rz_norm(rem)
+    if RZ_PD[rem] >= 0i64 { RZ_ERR = 4u64   return -1i32 }
+    let cg : i64 = rz_count(gm, RF_LON, RF_BD, RF_HIN, RF_BD)
+    if cg == 1i64 { RF_P = gm } else { RF_P = h }
+    RF_D = RZ_PD[RF_P]
+    RF_SPLITS = RF_SPLITS + 1u64
+    return 0i32
+}
+/* Bezout inverse; a zero divisor fires the split and recursion finishes.
+ * Division never refuses on a nonzero value. */
+fn rf_inv(e: u64) -> u64 @export {
+    RF_INVC = RF_INVC + 1u64
+    let er : u64 = rf_red(rz_copy(e))
+    rz_norm(er)
+    if RZ_PD[er] < 0i64 { RZ_ERR = 5u64   return rz_new(0i64 - 1i64) }
+    /* primitive Bezout: any (r, t) pair may be scaled by a nonzero rational
+     * without disturbing the invariant t*e == r (mod P), so every remainder
+     * is content-stripped WITH its cofactor.  Intermediates stay
+     * subresultant-sized instead of exploding exponentially -- the same law
+     * rz_srs lives by, carried to the Bezout pair.  (The degree-8 join made
+     * the plain chain a twenty-second organ; this is the cure, not a cap.)
+     * The recursion and the final normalization use the UNSCALED er, so the
+     * returned inverse is of the true value. */
+    let mut r0 : u64 = rz_copy(RF_P)
+    let g0 : u64 = rz_content(r0)
+    if py_rat_sign(g0) != 0i64 { r0 = rz_scale(r0, py_rat_inv(g0)) }
+    let mut r1 : u64 = er
+    let mut t0 : u64 = rz_new(0i64 - 1i64)
+    let mut t1 : u64 = rz_new(0i64)
+    rz_setc(t1, 0i64, py_rat_i64(1i64))
+    let g1 : u64 = rz_content(r1)
+    if py_rat_sign(g1) != 0i64 {
+        let ig1 : u64 = py_rat_inv(g1)
+        r1 = rz_scale(r1, ig1)
+        t1 = rz_scale(t1, ig1)
+    }
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        rz_norm(r1)
+        if RZ_PD[r1] < 0i64 { going = 0u8 } else {
+            let rem : u64 = rz_divmod(r0, r1)
+            let q : u64 = RZ_QH
+            let mut nt : u64 = rz_sub(t0, rz_mul(q, t1))
+            let mut rr : u64 = rem
+            rz_norm(rr)
+            if RZ_PD[rr] >= 0i64 {
+                let g : u64 = rz_content(rr)
+                if py_rat_sign(g) != 0i64 {
+                    let ig : u64 = py_rat_inv(g)
+                    rr = rz_scale(rr, ig)
+                    nt = rz_scale(nt, ig)
+                }
+            }
+            r0 = r1   r1 = rr
+            t0 = t1   t1 = nt
+        }
+    }
+    rz_norm(r0)
+    let dg : i64 = RZ_PD[r0]
+    if dg > 0i64 {
+        /* zero divisor: r0 = gcd(P, e) is a proper factor -> split, retry */
+        if rf_split(r0) != 0i32 { return rz_new(0i64 - 1i64) }
+        return rf_inv(rf_red(er))
+    }
+    let c : u64 = rz_c(r0, 0i64)
+    return rf_red(rz_scale(t0, py_rat_inv(c)))
+}
+fn rf_div(a: u64, b: u64) -> u64 @export { return rf_mul(a, rf_inv(b)) }
+/* exact vector equality of two elements (canonical reduced difference) */
+fn rf_eqz(e: u64) -> u32 @export {
+    let r : u64 = rf_red(rz_copy(e))
+    rz_norm(r)
+    if RZ_PD[r] < 0i64 { return 1u32 }
+    return 0u32
+}
+
+/* ==================== R3: polynomials over Q(alpha) + THE JOIN ==========
+ * A poly over the field: coefficients are ELEMENTS (rz-poly handles).  This
+ * is what an event's separation polynomial looks like once the state lives
+ * in Q(alpha).  Signed remainder sequences run verbatim -- the divisions use
+ * rf_inv, the sign evaluations use the Tarski query -- so root counting and
+ * isolation work OVER THE EXTENSION.  THE JOIN then swallows the new root:
+ * gamma = eta + c*alpha, defining polynomial by the fixed-shape resultant
+ * Res_t(P(t), S-hat(x - c t, t)), gamma isolated by refining both brackets,
+ * alpha recovered INSIDE Q(gamma) as the degree-1 gcd of P(t) and
+ * S-hat(gamma - c t, t), verified by P(alpha) = 0, eta = gamma - c*alpha.
+ * Old state vectors lift by Horner.  The world continues in Q(gamma). */
+var RE_C : [u64; 1536]                   /* element-poly coefficient handles    */
+var RE_B : [u64; 128]   var RE_D : [i64; 128]
+var RE_QH : u64 = 0u64
+var RE_CH : [u64; 12]
+var RE_CN : u64 = 0u64
+
+fn re_new(deg: i64) -> u64 @export {
+    let mut n : i64 = deg + 1i64
+    if n < 1i64 { n = 1i64 }
+    if RE_TOP >= 128u64 { RZ_ERR = 2u64   return 0u64 }
+    let p : u64 = RE_TOP
+    RE_TOP = RE_TOP + 1u64
+    RE_B[p] = 0u64
+    /* coefficient block: reuse the tail of RE_C by a simple bump on total use */
+    let mut base : u64 = 0u64
+    if p > 0u64 { base = RE_B[p - 1u64] + 12u64 }
+    if base + 12u64 > 1536u64 { RZ_ERR = 2u64   return 0u64 }
+    RE_B[p] = base
+    RE_D[p] = deg
+    let mut k : i64 = 0i64
+    while k < 12i64 { RE_C[base + (k as u64)] = rz_new(0i64 - 1i64)   k = k + 1i64 }
+    return p
+}
+fn re_deg(p: u64) -> i64 @export { let d : i64 = RE_D[p]   return d }
+fn re_c(p: u64, k: i64) -> u64 @export {
+    if k < 0i64 { return rz_new(0i64 - 1i64) }
+    if k > RE_D[p] { return rz_new(0i64 - 1i64) }
+    return RE_C[RE_B[p] + (k as u64)]
+}
+fn re_setc(p: u64, k: i64, e: u64) -> i32 @export {
+    RE_C[RE_B[p] + (k as u64)] = e
+    return 0i32
+}
+fn re_norm(p: u64) -> u64 {
+    let mut d : i64 = RE_D[p]
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if d < 0i64 { going = 0u8 } else {
+            if rf_eqz(RE_C[RE_B[p] + (d as u64)]) == 0u32 { going = 0u8 } else { d = d - 1i64 }
+        }
+    }
+    RE_D[p] = d
+    return p
+}
+fn re_copy(a: u64) -> u64 {
+    let d : i64 = RE_D[a]
+    let p : u64 = re_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d { re_setc(p, k, rz_copy(re_c(a, k)))   k = k + 1i64 }
+    return p
+}
+fn re_sub(a: u64, b: u64) -> u64 {
+    let da : i64 = RE_D[a]
+    let db : i64 = RE_D[b]
+    let mut d : i64 = da
+    if db > d { d = db }
+    let p : u64 = re_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d {
+        let ca : u64 = re_c(a, k)
+        let cb : u64 = re_c(b, k)
+        re_setc(p, k, rf_sub(ca, cb))
+        k = k + 1i64
+    }
+    return re_norm(p)
+}
+fn re_add(a: u64, b: u64) -> u64 {
+    let da : i64 = RE_D[a]
+    let db : i64 = RE_D[b]
+    let mut d : i64 = da
+    if db > d { d = db }
+    let p : u64 = re_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d {
+        re_setc(p, k, rf_add(re_c(a, k), re_c(b, k)))
+        k = k + 1i64
+    }
+    return re_norm(p)
+}
+fn re_mul(a: u64, b: u64) -> u64 {
+    let da : i64 = RE_D[a]
+    let db : i64 = RE_D[b]
+    if da < 0i64 { return re_new(0i64 - 1i64) }
+    if db < 0i64 { return re_new(0i64 - 1i64) }
+    let d : i64 = da + db
+    let p : u64 = re_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut i : i64 = 0i64
+    while i <= da {
+        let ci : u64 = re_c(a, i)
+        if rf_eqz(ci) == 0u32 {
+            let mut j : i64 = 0i64
+            while j <= db {
+                let k : i64 = i + j
+                re_setc(p, k, rf_add(re_c(p, k), rf_mul(ci, re_c(b, j))))
+                j = j + 1i64
+            }
+        }
+        i = i + 1i64
+    }
+    return re_norm(p)
+}
+fn re_divmod(a: u64, b: u64) -> u64 {
+    re_norm(b)
+    let db : i64 = RE_D[b]
+    if db < 0i64 { RZ_ERR = 3u64   RE_QH = re_new(0i64 - 1i64)   return re_copy(a) }
+    let il : u64 = rf_inv(re_c(b, db))
+    let mut r : u64 = re_copy(a)
+    re_norm(r)
+    let q : u64 = re_new(RE_D[a])
+    if RZ_ERR != 0u64 { RE_QH = q   return r }
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let dr : i64 = RE_D[r]
+        if dr < db { going = 0u8 } else {
+            let f : u64 = rf_mul(re_c(r, dr), il)
+            let sh : i64 = dr - db
+            re_setc(q, sh, rf_add(re_c(q, sh), f))
+            let mut k : i64 = 0i64
+            while k <= db {
+                let t : i64 = sh + k
+                re_setc(r, t, rf_sub(re_c(r, t), rf_mul(f, re_c(b, k))))
+                k = k + 1i64
+            }
+            re_setc(r, dr, rz_new(0i64 - 1i64))
+            RE_D[r] = dr - 1i64
+            re_norm(r)
+        }
+    }
+    RE_QH = re_norm(q)
+    return r
+}
+fn re_deriv(a: u64) -> u64 {
+    let d : i64 = RE_D[a]
+    if d < 1i64 { return re_new(0i64 - 1i64) }
+    let p : u64 = re_new(d - 1i64)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 1i64
+    while k <= d {
+        re_setc(p, k - 1i64, rf_mul(re_c(a, k), rf_from_rat(py_rat_i64(k))))
+        k = k + 1i64
+    }
+    return re_norm(p)
+}
+fn re_srs(A: u64, B: u64) -> i32 {
+    RE_CH[0u64] = re_copy(A)
+    RE_CH[1u64] = re_copy(B)
+    RE_CN = 2u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let last : u64 = RE_CH[RE_CN - 1u64]
+        re_norm(last)
+        if RE_D[last] < 0i64 { RE_CN = RE_CN - 1u64   going = 0u8 } else {
+        if RE_D[last] == 0i64 { going = 0u8 } else {
+        if RE_CN >= 12u64 { going = 0u8 } else {
+            let R : u64 = re_divmod(RE_CH[RE_CN - 2u64], last)
+            re_norm(R)
+            if RE_D[R] < 0i64 { going = 0u8 } else {
+                /* negate coefficientwise */
+                let d : i64 = RE_D[R]
+                let N : u64 = re_new(d)
+                let mut k : i64 = 0i64
+                while k <= d { re_setc(N, k, rf_sub(rz_new(0i64 - 1i64), re_c(R, k)))   k = k + 1i64 }
+                RE_CH[RE_CN] = re_norm(N)
+                RE_CN = RE_CN + 1u64
+            }
+        } } }
+    }
+    return 0i32
+}
+/* sign of an element-poly at the rational n/d: Horner over the field */
+fn re_eval_sign(p: u64, n: i64, d: i64) -> i64 {
+    let dp : i64 = RE_D[p]
+    if dp < 0i64 { return 0i64 }
+    let t : u64 = rf_from_rat(py_rat_frac(n, d))
+    let mut v : u64 = rz_copy(re_c(p, dp))
+    let mut k : i64 = dp - 1i64
+    while k >= 0i64 {
+        v = rf_add(rf_mul(v, t), re_c(p, k))
+        k = k - 1i64
+    }
+    return rf_sign(v)
+}
+fn re_var_at(n: i64, d: i64) -> i64 {
+    let mut ch : i64 = 0i64
+    let mut prev : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < RE_CN {
+        let s : i64 = re_eval_sign(RE_CH[p], n, d)
+        if s != 0i64 {
+            if prev != 0i64 { if s != prev { ch = ch + 1i64 } }
+            prev = s
+        }
+        p = p + 1u64
+    }
+    return ch
+}
+fn re_count(S: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    rz_mark()
+    re_srs(S, re_deriv(S))
+    let va : i64 = re_var_at(an, ad)
+    let vb : i64 = re_var_at(bn, bd)
+    rz_release()
+    return va - vb
+}
+
+/* ==================== the join ==================== */
+var RJ_ALPHA : u64 = 0u64                /* old alpha, as a Q(gamma) element    */
+var RJ_ETA : u64 = 0u64                  /* the new root, as a Q(gamma) element */
+var RJ_GLN : i64 = 0i64   var RJ_GHN : i64 = 0i64   var RJ_GD : i64 = 1i64
+var RJ_ACC : [u64; 12]
+var RJ_ELON : i64 = 0i64   var RJ_EHIN : i64 = 0i64   var RJ_EBD : i64 = 1i64
+var RJ_S : u64 = 0u64
+
+/* pinned Sturm chains: a refinement loop queries the SAME chain at moving
+ * endpoints, so rebuilding the signed remainder sequence per query is an
+ * O(rounds x chain-build) waste -- the chain depends only on the polynomial
+ * (and, for the field chain, on RF_P, which refinement never touches).
+ * Pin once, evaluate per round; a D5 split re-pins (RJ_EPIN guard). */
+var RS_CH : [u64; 56]                    /* pinned rational chain (the mint R) */
+var RS_CN : u64 = 0u64
+var RJ_ECH : [u64; 12]                   /* pinned field chain srs(S, S')       */
+var RJ_ECN : u64 = 0u64
+var RJ_EPIN : u64 = 0u64                 /* RF_SPLITS at pin time + 1           */
+
+fn rs_pin(P: u64) -> i32 {
+    rz_srs(P, rz_deriv(P))
+    let mut k : u64 = 0u64
+    while k < RZ_CN { RS_CH[k] = RZ_CH[k]   k = k + 1u64 }
+    RS_CN = RZ_CN
+    return 0i32
+}
+fn rs_var_at(n: i64, d: i64) -> i64 {
+    let mut ch : i64 = 0i64
+    let mut prev : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < RS_CN {
+        let s : i64 = rz_eval_sign(RS_CH[p], n, d)
+        if s != 0i64 {
+            if prev != 0i64 { if s != prev { ch = ch + 1i64 } }
+            prev = s
+        }
+        p = p + 1u64
+    }
+    return ch
+}
+fn rj_epin() -> i32 {
+    re_srs(RJ_S, re_deriv(RJ_S))
+    let mut k : u64 = 0u64
+    while k < RE_CN { RJ_ECH[k] = RE_CH[k]   k = k + 1u64 }
+    RJ_ECN = RE_CN
+    RJ_EPIN = RF_SPLITS + 1u64
+    return 0i32
+}
+fn rj_evar_at(n: i64, d: i64) -> i64 {
+    let mut ch : i64 = 0i64
+    let mut prev : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < RJ_ECN {
+        let s : i64 = re_eval_sign(RJ_ECH[p], n, d)
+        if s != 0i64 {
+            if prev != 0i64 { if s != prev { ch = ch + 1i64 } }
+            prev = s
+        }
+        p = p + 1u64
+    }
+    return ch
+}
+fn rj_bin(i: i64, k: i64) -> i64 {
+    let mut r : i64 = 1i64
+    let mut t : i64 = 0i64
+    while t < k {
+        r = (r * (i - t)) / (t + 1i64)
+        t = t + 1i64
+    }
+    return r
+}
+fn rj_powneg(c: i64, e: i64) -> i64 {
+    let mut r : i64 = 1i64
+    let mut t : i64 = 0i64
+    while t < e { r = r * (0i64 - c)   t = t + 1i64 }
+    return r
+}
+/* build the resultant inputs: A(t) = old P; B(t) = S-hat(x - c t, t) */
+fn rj_bivar(S: u64, c: i64) -> i64 {
+    let n : i64 = RF_D
+    let m : i64 = RE_D[S]
+    let mut k0 : i64 = 0i64
+    while k0 <= n {
+        let cp : u64 = rz_new(0i64)
+        rz_setc(cp, 0i64, rz_c(RF_P, k0))
+        rz_res_seta(k0 as u64, cp)
+        k0 = k0 + 1i64
+    }
+    let tmax : i64 = (n - 1i64) + m
+    let mut z : i64 = 0i64
+    while z <= tmax { RJ_ACC[z as u64] = rz_new(m)   z = z + 1i64 }
+    let mut i : i64 = 0i64
+    while i <= m {
+        let cf : u64 = re_c(S, i)                    /* element = rational t-poly */
+        let dj : i64 = RZ_PD[cf]
+        let mut k : i64 = 0i64
+        while k <= i {
+            let fr : u64 = py_rat_i64(rj_bin(i, k) * rj_powneg(c, i - k))
+            let mut j : i64 = 0i64
+            while j <= dj {
+                let cj : u64 = rz_c(cf, j)
+                if py_rat_sign(cj) != 0i64 {
+                    let tp : i64 = j + (i - k)
+                    let ac : u64 = RJ_ACC[tp as u64]
+                    rz_setc(ac, k, py_rat_add(rz_c(ac, k), py_rat_mul(cj, fr)))
+                }
+                j = j + 1i64
+            }
+            k = k + 1i64
+        }
+        i = i + 1i64
+    }
+    let mut tb : i64 = 0i64
+    z = 0i64
+    while z <= tmax {
+        rz_norm(RJ_ACC[z as u64])
+        if RZ_PD[RJ_ACC[z as u64]] >= 0i64 { tb = z }
+        rz_res_setb(z as u64, RJ_ACC[z as u64])
+        z = z + 1i64
+    }
+    rz_res_deg(n, tb)
+    return tb
+}
+/* halve the eta bracket (over the OLD field, S saved in RJ_S).  The chain is
+ * pinned: only the two variation walks run per halving. */
+fn rj_eta_refine() -> i32 {
+    if RJ_EBD > 2305843009213693952i64 { RZ_ERR = 4u64   return -1i32 }
+    if RJ_EPIN != RF_SPLITS + 1u64 { rj_epin() }
+    let mn : i64 = RJ_ELON + RJ_EHIN
+    let bd2 : i64 = 2i64 * RJ_EBD
+    rz_mark()
+    let va : i64 = rj_evar_at(RJ_ELON, RJ_EBD)
+    let vm : i64 = rj_evar_at(mn, bd2)
+    rz_release()
+    let cnt : i64 = va - vm
+    if cnt == 1i64 { RJ_EHIN = mn   RJ_ELON = 2i64 * RJ_ELON } else { RJ_ELON = mn   RJ_EHIN = 2i64 * RJ_EHIN }
+    RJ_EBD = bd2
+    return 0i32
+}
+/* THE JOIN.  S: element-poly over the current field with exactly one root in
+ * (elon/ebd, ehin/ebd].  On success the CURRENT FIELD BECOMES Q(gamma) and
+ * RJ_ALPHA / RJ_ETA hold the old root and the new one as its elements. */
+fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
+    if RZ_ERR != 0u64 { return -1i32 }               /* refuse a poisoned engine */
+    RJ_S = S
+    RJ_ELON = elon   RJ_EHIN = ehin   RJ_EBD = ebd
+    /* save the old field */
+    let OP : u64 = RF_P
+    let od : i64 = RF_D
+    let olon : i64 = RF_LON
+    let ohin : i64 = RF_HIN
+    let obd : i64 = RF_BD
+    let mut c : i64 = 1i64
+    while c <= 6i64 {
+        /* restore the old field for this attempt.  A shape refusal (>= 4)
+         * left by a FAILED prior attempt is spent -- entry ERR was 0, so
+         * clearing it can never mask a pre-join or pool refusal (1/2/3). */
+        RF_P = OP   RF_D = od   RF_LON = olon   RF_HIN = ohin   RF_BD = obd
+        if RZ_ERR >= 4u64 { RZ_ERR = 0u64 }
+        let m : i64 = RE_D[S]
+        rj_bivar(S, c)
+        let R : u64 = rz_pp(rz_res_run(od * m))
+        rs_pin(R)
+        RJ_EPIN = 0u64                               /* eta chain: pin lazily */
+        /* bracket gamma = eta + c*alpha; refine both until it isolates.
+         * gd = EBD*BD quadruples per refinement round: past 2^58 the bracket
+         * numerators can no longer be formed in i64, so the attempt exhausts
+         * LOUDLY instead of overflowing silently. */
+        let mut tries : u64 = 0u64
+        let mut ok : u8 = 0u8
+        while tries < 50u64 {
+            if RJ_EBD > (288230376151711744i64 / RF_BD) { tries = 50u64 } else {
+                let gd : i64 = RJ_EBD * RF_BD
+                let gln : i64 = (RJ_ELON * RF_BD) + (c * RF_LON * RJ_EBD)
+                let ghn : i64 = (RJ_EHIN * RF_BD) + (c * RF_HIN * RJ_EBD)
+                let mut good : u8 = 1u8
+                if rz_eval_sign(R, gln, gd) == 0i64 { good = 0u8 }
+                if rz_eval_sign(R, ghn, gd) == 0i64 { good = 0u8 }
+                if good == 1u8 {
+                    rz_mark()
+                    let cnt : i64 = rs_var_at(gln, gd) - rs_var_at(ghn, gd)
+                    rz_release()
+                    if cnt == 1i64 {
+                        RJ_GLN = gln   RJ_GHN = ghn   RJ_GD = gd
+                        ok = 1u8
+                        tries = 50u64
+                    }
+                }
+                if ok == 0u8 {
+                    rf_refine()
+                    rj_eta_refine()
+                    tries = tries + 1u64
+                }
+            }
+        }
+        if ok == 1u8 {
+            /* switch to Q(gamma) */
+            if rf_set_frac(R, RJ_GLN, RJ_GHN, RJ_GD) == 0i32 {
+                /* recover alpha inside Q(gamma):
+                 * gcd( P(t), S-hat(gamma - c t, t) ) has degree 1 */
+                let gam : u64 = rf_alpha()
+                let mm : i64 = m
+                let tmax : i64 = (od - 1i64) + mm
+                let TT : u64 = re_new(tmax)
+                let mut i : i64 = 0i64
+                while i <= mm {
+                    let cf : u64 = re_c(S, i)
+                    let dj : i64 = RZ_PD[cf]
+                    let mut k : i64 = 0i64
+                    while k <= i {
+                        /* gamma^k */
+                        let mut gk : u64 = rf_from_rat(py_rat_i64(1i64))
+                        let mut e : i64 = 0i64
+                        while e < k { gk = rf_mul(gk, gam)   e = e + 1i64 }
+                        let fr : u64 = py_rat_i64(rj_bin(i, k) * rj_powneg(c, i - k))
+                        let mut j : i64 = 0i64
+                        while j <= dj {
+                            let cj : u64 = rz_c(cf, j)
+                            if py_rat_sign(cj) != 0i64 {
+                                let tp : i64 = j + (i - k)
+                                let contrib : u64 = rf_mul(gk, rf_from_rat(py_rat_mul(cj, fr)))
+                                re_setc(TT, tp, rf_add(re_c(TT, tp), contrib))
+                            }
+                            j = j + 1i64
+                        }
+                        k = k + 1i64
+                    }
+                    i = i + 1i64
+                }
+                re_norm(TT)
+                let PP : u64 = re_new(od)
+                let mut k2 : i64 = 0i64
+                while k2 <= od {
+                    re_setc(PP, k2, rf_from_rat(rz_c(OP, k2)))
+                    k2 = k2 + 1i64
+                }
+                /* plain Euclid over Q(gamma) */
+                let mut A : u64 = re_norm(PP)
+                let mut B : u64 = re_norm(TT)
+                let mut going : u8 = 1u8
+                while going == 1u8 {
+                    re_norm(B)
+                    if RE_D[B] < 0i64 { going = 0u8 } else {
+                        let RR : u64 = re_divmod(A, B)
+                        A = B
+                        B = RR
+                    }
+                }
+                re_norm(A)
+                if RE_D[A] == 1i64 {
+                    let alel : u64 = rf_div(rf_sub(rz_new(0i64 - 1i64), re_c(A, 0i64)), re_c(A, 1i64))
+                    /* verify P(alpha) = 0 in Q(gamma) */
+                    let mut acc : u64 = rf_from_rat(rz_c(OP, od))
+                    let mut k3 : i64 = od - 1i64
+                    while k3 >= 0i64 {
+                        acc = rf_add(rf_mul(acc, alel), rf_from_rat(rz_c(OP, k3)))
+                        k3 = k3 - 1i64
+                    }
+                    if rf_eqz(acc) == 1u32 {
+                        RJ_ALPHA = alel
+                        RJ_ETA = rf_sub(gam, rf_mul(rf_from_rat(py_rat_i64(c)), alel))
+                        return 0i32
+                    }
+                }
+            }
+        }
+        c = c + 1i64
+    }
+    RZ_ERR = 6u64
+    return -1i32
+}
+fn rj_alpha() -> u64 @export { return RJ_ALPHA }
+fn rj_eta() -> u64 @export { return RJ_ETA }
+/* lift an OLD-field vector (rational poly in old alpha) into Q(gamma) */
+fn rj_lift(v: u64) -> u64 @export {
+    rz_norm(v)
+    let d : i64 = RZ_PD[v]
+    if d < 0i64 { return rz_new(0i64 - 1i64) }
+    let mut acc : u64 = rf_from_rat(rz_c(v, d))
+    let mut k : i64 = d - 1i64
+    while k >= 0i64 {
+        acc = rf_add(rf_mul(acc, RJ_ALPHA), rf_from_rat(rz_c(v, k)))
+        k = k - 1i64
+    }
+    return acc
+}
+
+/* ==================== THE SELF-PROOF (arms 210..215) ==================== */
+fn rz_arm210() -> u64 {
+    /* divmod round trip: (x^2-2)(x^2-3) / (x^2-2) -> quotient x^2-3, rem 0 */
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p2 : u64 = rz_from_in(2i64)
+    rz_in(0u64, 0i64 - 3i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p3 : u64 = rz_from_in(2i64)
+    let pr : u64 = rz_mul(p2, p3)
+    if RZ_PD[pr] != 4i64 { return 210u64 }
+    let rem : u64 = rz_divmod(pr, p2)
+    if RZ_PD[rem] >= 0i64 { return 210u64 }
+    let q : u64 = rz_quot()
+    if RZ_PD[q] != 2i64 { return 210u64 }
+    if py_rat_cmp(rz_c(q, 0i64), py_rat_i64(0i64 - 3i64)) != 0i64 { return 210u64 }
+    if py_rat_cmp(rz_c(q, 2i64), py_rat_i64(1i64)) != 0i64 { return 210u64 }
+    /* gcd((x^2-1)(x^2-2), (x^2-1)(x^2-3)) = x^2-1 */
+    rz_in(0u64, 0i64 - 1i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p1 : u64 = rz_from_in(2i64)
+    let g : u64 = rz_gcd(rz_mul(p1, p2), rz_mul(p1, p3))
+    if RZ_PD[g] != 2i64 { return 210u64 }
+    if py_rat_cmp(rz_c(g, 0i64), py_rat_i64(0i64 - 1i64)) != 0i64 { return 210u64 }
+    if py_rat_cmp(rz_c(g, 2i64), py_rat_i64(1i64)) != 0i64 { return 210u64 }
+    /* derivative of x^4-20x^2+96 is 4x^3-40x */
+    rz_in(0u64, 96i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64 - 20i64)   rz_in(3u64, 0i64)   rz_in(4u64, 1i64)
+    let q4 : u64 = rz_from_in(4i64)
+    let dq : u64 = rz_deriv(q4)
+    if RZ_PD[dq] != 3i64 { return 210u64 }
+    if py_rat_cmp(rz_c(dq, 1i64), py_rat_i64(0i64 - 40i64)) != 0i64 { return 210u64 }
+    if py_rat_cmp(rz_c(dq, 3i64), py_rat_i64(4i64)) != 0i64 { return 210u64 }
+    if RZ_ERR != 0u64 { return 210u64 }
+    if py_err() != 0u64 { return 210u64 }
+    return 0u64
+}
+fn rz_arm211() -> u64 {
+    /* x^4 - 20x^2 + 96: roots 2sqrt2 and 2sqrt3 (and negatives).  Counts and
+     * the first-root bracket -- the THIRD independent engine to land 28284. */
+    rz_in(0u64, 96i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64 - 20i64)   rz_in(3u64, 0i64)   rz_in(4u64, 1i64)
+    let P : u64 = rz_from_in(4i64)
+    if rz_count(P, 0i64, 1i64, 2i64, 1i64) != 0i64 { return 211u64 }
+    if rz_count(P, 0i64, 1i64, 3i64, 1i64) != 1i64 { return 211u64 }
+    if rz_count(P, 0i64, 1i64, 4i64, 1i64) != 2i64 { return 211u64 }
+    rz_isolate(P, 0i64, 4i64)
+    let lo : i64 = RZ_BLO
+    if lo != 28284i64 { return 211u64 }
+    /* the Tarski query on the isolated root: sign(x^2 - 8) at alpha = 2sqrt2
+     * must be 0; sign(x^2 - 9) must be -1; sign(x - 2) must be +1 */
+    rz_in(0u64, 0i64 - 8i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let e8 : u64 = rz_from_in(2i64)
+    if rz_tarski(P, e8, 2i64, 1i64, 3i64, 1i64) != 0i64 { return 211u64 }
+    rz_in(0u64, 0i64 - 9i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let e9 : u64 = rz_from_in(2i64)
+    if rz_tarski(P, e9, 2i64, 1i64, 3i64, 1i64) != (0i64 - 1i64) { return 211u64 }
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 1i64)
+    let e2 : u64 = rz_from_in(1i64)
+    if rz_tarski(P, e2, 2i64, 1i64, 3i64, 1i64) != 1i64 { return 211u64 }
+    if RZ_ERR != 0u64 { return 211u64 }
+    if py_err() != 0u64 { return 211u64 }
+    return 0u64
+}
+fn rz_arm212() -> u64 {
+    /* THE RESULTANT MINT: Res_t(t^2 - 2, (x-t)^2 - 3) must equal
+     * x^4 - 10x^2 + 1 -- the minimal polynomial of sqrt2 + sqrt3, COMPUTED,
+     * then isolated and cross-checked against pyrgos norm descent. */
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    /* A(t) = t^2 - 2: x-poly coefficients (constants) */
+    let a0 : u64 = rz_from_in(0i64)                       /* -2 */
+    rz_in(0u64, 0i64)
+    let a1 : u64 = rz_from_in(0i64)                       /* 0 */
+    rz_in(0u64, 1i64)
+    let a2 : u64 = rz_from_in(0i64)                       /* 1 */
+    rz_res_seta(0u64, a0)   rz_res_seta(1u64, a1)   rz_res_seta(2u64, a2)
+    /* B(t) = t^2 - 2x t + (x^2 - 3): coefficients as x-polys */
+    rz_in(0u64, 0i64 - 3i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let b0 : u64 = rz_from_in(2i64)                       /* x^2 - 3 */
+    rz_in(0u64, 0i64)   rz_in(1u64, 0i64 - 2i64)
+    let b1 : u64 = rz_from_in(1i64)                       /* -2x */
+    rz_in(0u64, 1i64)
+    let b2 : u64 = rz_from_in(0i64)                       /* 1 */
+    rz_res_setb(0u64, b0)   rz_res_setb(1u64, b1)   rz_res_setb(2u64, b2)
+    rz_res_deg(2i64, 2i64)
+    let R : u64 = rz_res_run(8i64)
+    if RZ_PD[R] != 4i64 { return 212u64 }
+    if py_rat_cmp(rz_c(R, 0i64), py_rat_i64(1i64)) != 0i64 { return 212u64 }
+    if py_rat_cmp(rz_c(R, 1i64), py_rat_i64(0i64)) != 0i64 { return 212u64 }
+    if py_rat_cmp(rz_c(R, 2i64), py_rat_i64(0i64 - 10i64)) != 0i64 { return 212u64 }
+    if py_rat_cmp(rz_c(R, 3i64), py_rat_i64(0i64)) != 0i64 { return 212u64 }
+    if py_rat_cmp(rz_c(R, 4i64), py_rat_i64(1i64)) != 0i64 { return 212u64 }
+    /* isolate both positive roots: sqrt3 - sqrt2 = 0.3178..., sqrt2 + sqrt3
+     * = 3.1462... -- and cross-check the big one against PYRGOS */
+    rz_isolate(R, 0i64, 1i64)
+    let lo1 : i64 = RZ_BLO
+    if lo1 != 3178i64 { return 212u64 }
+    rz_isolate(R, 3i64, 4i64)
+    let lo2 : i64 = RZ_BLO
+    if lo2 != 31462i64 { return 212u64 }
+    /* pyrgos: sqrt2 + sqrt3 vs the same bracket -- independent engine */
+    let s23 : u64 = py_add(py_sqrt(py_el_from_i64(2i64, 0u64)), py_sqrt(py_el_from_i64(3i64, 0u64)))
+    if py_cmp(s23, py_el_from_rat(py_rat_frac(31462i64, 10000i64), 0u64)) != 1i64 { return 212u64 }
+    if py_cmp(s23, py_el_from_rat(py_rat_frac(31463i64, 10000i64), 0u64)) != (0i64 - 1i64) { return 212u64 }
+    if RZ_ERR != 0u64 { return 212u64 }
+    if py_err() != 0u64 { return 212u64 }
+    return 0u64
+}
+fn rz_arm213() -> u64 {
+    /* THE FIELD Q(sqrt2+sqrt3) as pure algebra: alpha = the (3,4)-root of the
+     * MINTED minimal polynomial x^4-10x^2+1.  Inverse exact, the defining
+     * identity alpha^4 = 10 alpha^2 - 1 exact, and a 27-case ENUMERATED
+     * cross-oracle: Tarski signs vs pyrgos norm descent on the same values. */
+    rz_in(0u64, 1i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64 - 10i64)   rz_in(3u64, 0i64)   rz_in(4u64, 1i64)
+    let P : u64 = rz_from_in(4i64)
+    if rf_set_iv(P, 3i64, 4i64) != 0i32 { return 213u64 }
+    let al : u64 = rf_alpha()
+    let one : u64 = rf_from_rat(py_rat_i64(1i64))
+    if rf_eqz(rf_sub(rf_mul(al, rf_inv(al)), one)) != 1u32 { return 213u64 }
+    let a2 : u64 = rf_mul(al, al)
+    let a4 : u64 = rf_mul(a2, a2)
+    rz_in(0u64, 0i64 - 1i64)   rz_in(1u64, 0i64)   rz_in(2u64, 10i64)
+    let expct : u64 = rz_from_in(2i64)
+    if rf_eqz(rf_sub(a4, expct)) != 1u32 { return 213u64 }
+    /* rational cuts around the value 3.14626... */
+    let c1 : u64 = rz_new(1i64)
+    rz_setc(c1, 0i64, py_rat_frac(0i64 - 355i64, 113i64))
+    rz_setc(c1, 1i64, py_rat_i64(1i64))
+    if rf_sign(c1) != 1i64 { return 213u64 }
+    let c2 : u64 = rz_new(1i64)
+    rz_setc(c2, 0i64, py_rat_frac(0i64 - 63i64, 20i64))
+    rz_setc(c2, 1i64, py_rat_i64(1i64))
+    if rf_sign(c2) != (0i64 - 1i64) { return 213u64 }
+    /* the cross-oracle: pyrgos builds the SAME number as nested surds */
+    let alp : u64 = py_add(py_sqrt(py_el_from_i64(2i64, 0u64)), py_sqrt(py_el_from_i64(3i64, 0u64)))
+    let mut a : i64 = 0i64 - 1i64
+    while a <= 1i64 {
+        let mut b : i64 = 0i64 - 1i64
+        while b <= 1i64 {
+            let mut c : i64 = 0i64 - 1i64
+            while c <= 1i64 {
+                rz_in(0u64, a)   rz_in(1u64, b)   rz_in(2u64, c)
+                let erz : u64 = rz_from_in(2i64)
+                let s1 : i64 = rf_sign(erz)
+                /* pyrgos path: a + b*alp + c*alp^2 */
+                let t1 : u64 = py_el_from_i64(a, 0u64)
+                let t2 : u64 = py_mul(py_el_from_i64(b, 0u64), alp)
+                let t3 : u64 = py_mul(py_el_from_i64(c, 0u64), py_mul(alp, alp))
+                let epy : u64 = py_add(py_add(t1, t2), t3)
+                let s2 : i64 = py_sign(epy)
+                if s1 != s2 { return 213u64 }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    if RZ_ERR != 0u64 { return 213u64 }
+    if py_err() != 0u64 { return 213u64 }
+    return 0u64
+}
+fn rz_arm214() -> u64 {
+    /* THE CUBE ROOT: Q(cbrt2) via x^3 - 2 -- the first number III holds
+     * that NO quadratic tower can.  alpha^3 = 2 exactly; 1/alpha = alpha^2/2
+     * exactly; rational cuts land on both sides of 1.259921... */
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64)   rz_in(3u64, 1i64)
+    let P : u64 = rz_from_in(3i64)
+    if rf_set_iv(P, 1i64, 2i64) != 0i32 { return 214u64 }
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64)   rz_in(3u64, 1i64)
+    let cube : u64 = rz_from_in(3i64)
+    if rf_eqz(cube) != 1u32 { return 214u64 }                 /* alpha^3 - 2 == 0 */
+    let c1 : u64 = rz_new(1i64)
+    rz_setc(c1, 0i64, py_rat_frac(0i64 - 5i64, 4i64))
+    rz_setc(c1, 1i64, py_rat_i64(1i64))
+    if rf_sign(c1) != 1i64 { return 214u64 }                  /* cbrt2 > 5/4      */
+    let c2 : u64 = rz_new(1i64)
+    rz_setc(c2, 0i64, py_rat_frac(0i64 - 63i64, 50i64))
+    rz_setc(c2, 1i64, py_rat_i64(1i64))
+    if rf_sign(c2) != (0i64 - 1i64) { return 214u64 }         /* cbrt2 < 63/50    */
+    let al : u64 = rf_alpha()
+    let iv : u64 = rf_inv(al)
+    let expct : u64 = rz_new(2i64)
+    rz_setc(expct, 2i64, py_rat_frac(1i64, 2i64))
+    if rf_eqz(rf_sub(iv, expct)) != 1u32 { return 214u64 }    /* 1/a = a^2/2      */
+    let onep : u64 = rf_add(rf_from_rat(py_rat_i64(1i64)), al)
+    let one : u64 = rf_from_rat(py_rat_i64(1i64))
+    if rf_eqz(rf_sub(rf_mul(onep, rf_inv(onep)), one)) != 1u32 { return 214u64 }
+    let mut k : u64 = 0u64
+    while k < 8u64 { rf_refine()   k = k + 1u64 }
+    if rf_sign(c1) != 1i64 { return 214u64 }                  /* stable under refinement */
+    if RZ_ERR != 0u64 { return 214u64 }
+    if py_err() != 0u64 { return 214u64 }
+    return 0u64
+}
+fn rz_arm215() -> u64 {
+    /* THE D5 SELF-SPLITTING FIELD: install the REDUCIBLE x^4 - 5x^2 + 6 with
+     * the interval (13/10, 3/2] isolating sqrt2.  Inverting the ZERO DIVISOR
+     * x^2 - 3 fires the split: the field discovers x^2 - 2 by itself, the
+     * degree drops, the inverse completes (-1), and every value survives. */
+    rz_in(0u64, 6i64)   rz_in(1u64, 0i64)   rz_in(2u64, 0i64 - 5i64)   rz_in(3u64, 0i64)   rz_in(4u64, 1i64)
+    let P : u64 = rz_from_in(4i64)
+    if rf_set_frac(P, 13i64, 15i64, 10i64) != 0i32 { return 215u64 }
+    if rf_d() != 4i64 { return 215u64 }
+    let c1 : u64 = rz_new(1i64)
+    rz_setc(c1, 0i64, py_rat_frac(0i64 - 7i64, 5i64))
+    rz_setc(c1, 1i64, py_rat_i64(1i64))
+    if rf_sign(c1) != 1i64 { return 215u64 }                  /* sqrt2 > 7/5     */
+    rz_in(0u64, 0i64 - 3i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let zd : u64 = rz_from_in(2i64)
+    let iv : u64 = rf_inv(zd)                                 /* value -1: SPLIT */
+    if rf_d() != 2i64 { return 215u64 }
+    if rf_splits() != 1u64 { return 215u64 }
+    if rf_eqz(rf_sub(iv, rf_from_rat(py_rat_i64(0i64 - 1i64)))) != 1u32 { return 215u64 }
+    if rf_sign(c1) != 1i64 { return 215u64 }                  /* value preserved */
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let sq : u64 = rz_from_in(2i64)
+    if rf_eqz(sq) != 1u32 { return 215u64 }                   /* alpha^2 = 2 now */
+    if RZ_ERR != 0u64 { return 215u64 }
+    if py_err() != 0u64 { return 215u64 }
+    return 0u64
+}
+fn rz_arm216() -> u64 @export {
+    /* THE JOIN, on known ground: field Q(sqrt2), adjoin the root of x^2-3.
+     * gamma = sqrt3 + sqrt2; the resultant must re-mint x^4-10x^2+1; alpha
+     * must be RECOVERED inside Q(gamma) with alpha^2 = 2 exactly, and
+     * eta = gamma - alpha with eta^2 = 3 exactly. */
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let P : u64 = rz_from_in(2i64)
+    if rf_set_iv(P, 1i64, 2i64) != 0i32 { return 216u64 }
+    let S : u64 = re_new(2i64)
+    re_setc(S, 0i64, rf_from_rat(py_rat_i64(0i64 - 3i64)))
+    re_setc(S, 2i64, rf_from_rat(py_rat_i64(1i64)))
+    re_norm(S)
+    if re_count(S, 1i64, 1i64, 2i64, 1i64) != 1i64 { return 216u64 }
+    if rj_join(S, 1i64, 2i64, 1i64) != 0i32 { return 216u64 }
+    if rf_d() != 4i64 { return 216u64 }
+    if py_rat_cmp(rz_c(RF_P, 2i64), py_rat_i64(0i64 - 10i64)) != 0i64 { return 216u64 }
+    if py_rat_cmp(rz_c(RF_P, 0i64), py_rat_i64(1i64)) != 0i64 { return 216u64 }
+    let al : u64 = rj_alpha()
+    let et : u64 = rj_eta()
+    if rf_eqz(rf_sub(rf_mul(al, al), rf_from_rat(py_rat_i64(2i64)))) != 1u32 { return 216u64 }
+    if rf_eqz(rf_sub(rf_mul(et, et), rf_from_rat(py_rat_i64(3i64)))) != 1u32 { return 216u64 }
+    if rf_sign(al) != 1i64 { return 216u64 }
+    if rf_sign(et) != 1i64 { return 216u64 }
+    if RZ_ERR != 0u64 { return 216u64 }
+    if py_err() != 0u64 { return 216u64 }
+    return 0u64
+}
+/* arm 217 state cells (the chain, split to respect the local ceiling) */
+var RA_BX : u64 = 0u64   var RA_BY : u64 = 0u64
+var RA_AVX : u64 = 0u64   var RA_AVY : u64 = 0u64
+var RA_BVX : u64 = 0u64   var RA_BVY : u64 = 0u64
+var RA_S2 : u64 = 0u64
+fn rz_arm217a() -> u64 @export {
+    /* EVENT 1: the IRREDUCIBLE quartic tau^4+2tau^3-18tau^2-24tau+100 (no
+     * rational root, no integer quadratic split -- verified by hand and held
+     * here only through its polynomial).  Genesis: A(0,0) v(1,0) accel (2,0);
+     * B(10,2) v(0,-1); r=1 each, masses equal.  At the (2, 5/2]-root alpha:
+     * the contact identity |A-B|^2 = 4 must close ALGEBRAICALLY via P(alpha)=0,
+     * and the elastic exchange must conserve momentum and energy EXACTLY. */
+    rz_in(0u64, 100i64)   rz_in(1u64, 0i64 - 24i64)   rz_in(2u64, 0i64 - 18i64)
+    rz_in(3u64, 2i64)   rz_in(4u64, 1i64)
+    let P : u64 = rz_from_in(4i64)
+    if rf_set_frac(P, 4i64, 5i64, 2i64) != 0i32 { return 217u64 }
+    /* the state at alpha, as vectors in alpha */
+    rz_in(0u64, 0i64)   rz_in(1u64, 1i64)   rz_in(2u64, 1i64)
+    let Ax : u64 = rz_from_in(2i64)                       /* alpha + alpha^2 */
+    let Ay : u64 = rz_new(0i64 - 1i64)
+    let Bx : u64 = rf_from_rat(py_rat_i64(10i64))
+    rz_in(0u64, 2i64)   rz_in(1u64, 0i64 - 1i64)
+    let By : u64 = rz_from_in(1i64)                       /* 2 - alpha       */
+    rz_in(0u64, 1i64)   rz_in(1u64, 2i64)
+    let Avx : u64 = rz_from_in(1i64)                      /* 1 + 2 alpha     */
+    let Avy : u64 = rz_new(0i64 - 1i64)
+    let Bvx : u64 = rz_new(0i64 - 1i64)
+    let Bvy : u64 = rf_from_rat(py_rat_i64(0i64 - 1i64))
+    let mx : u64 = rf_sub(Ax, Bx)
+    let my : u64 = rf_sub(Ay, By)
+    let mm : u64 = rf_add(rf_mul(mx, mx), rf_mul(my, my))
+    let four : u64 = rf_from_rat(py_rat_i64(4i64))
+    if rf_eqz(rf_sub(mm, four)) != 1u32 { return 217u64 }     /* CONTACT GATE 1 */
+    let dvx : u64 = rf_sub(Avx, Bvx)
+    let dvy : u64 = rf_sub(Avy, Bvy)
+    let dot : u64 = rf_add(rf_mul(dvx, mx), rf_mul(dvy, my))
+    let s : u64 = rf_div(dot, mm)
+    let Avx2 : u64 = rf_sub(Avx, rf_mul(s, mx))
+    let Avy2 : u64 = rf_sub(Avy, rf_mul(s, my))
+    let Bvx2 : u64 = rf_add(Bvx, rf_mul(s, mx))
+    let Bvy2 : u64 = rf_add(Bvy, rf_mul(s, my))
+    /* conservation at event 1, exactly */
+    if rf_eqz(rf_sub(rf_add(Avx, Bvx), rf_add(Avx2, Bvx2))) != 1u32 { return 217u64 }
+    if rf_eqz(rf_sub(rf_add(Avy, Bvy), rf_add(Avy2, Bvy2))) != 1u32 { return 217u64 }
+    let en0 : u64 = rf_add(rf_add(rf_mul(Avx, Avx), rf_mul(Avy, Avy)), rf_add(rf_mul(Bvx, Bvx), rf_mul(Bvy, Bvy)))
+    let en1 : u64 = rf_add(rf_add(rf_mul(Avx2, Avx2), rf_mul(Avy2, Avy2)), rf_add(rf_mul(Bvx2, Bvx2), rf_mul(Bvy2, Bvy2)))
+    if rf_eqz(rf_sub(en0, en1)) != 1u32 { return 217u64 }
+    /* EVENT 2: B (now linear) meets the resting C(15,-2), r_C = 2 (contact 3).
+     * Its time is a root of a QUADRATIC OVER Q(alpha) -- the world past the
+     * quartic.  Build S2(x) = |dx + dv x|^2 - 9. */
+    let dxx : u64 = rf_sub(Bx, rf_from_rat(py_rat_i64(15i64)))
+    let dxy : u64 = rf_sub(By, rf_from_rat(py_rat_i64(0i64 - 2i64)))
+    let Aq : u64 = rf_add(rf_mul(Bvx2, Bvx2), rf_mul(Bvy2, Bvy2))
+    let two : u64 = rf_from_rat(py_rat_i64(2i64))
+    let Bq : u64 = rf_mul(two, rf_add(rf_mul(dxx, Bvx2), rf_mul(dxy, Bvy2)))
+    let Cq : u64 = rf_sub(rf_add(rf_mul(dxx, dxx), rf_mul(dxy, dxy)), rf_from_rat(py_rat_i64(9i64)))
+    let S2 : u64 = re_new(2i64)
+    re_setc(S2, 0i64, Cq)
+    re_setc(S2, 1i64, Bq)
+    re_setc(S2, 2i64, Aq)
+    re_norm(S2)
+    if re_count(S2, 0i64, 1i64, 1i64, 1i64) != 1i64 { return 217u64 }  /* the event EXISTS */
+    RA_BX = Bx   RA_BY = By
+    RA_AVX = Avx2   RA_AVY = Avy2
+    RA_BVX = Bvx2   RA_BVY = Bvy2
+    RA_S2 = S2
+    return 0u64
+}
+fn rz_arm217b() -> u64 @export {
+    /* THE JOIN AND THE SECOND EVENT: the world moves into Q(gamma) and the
+     * fold CONTINUES -- contact gate 2 closes algebraically, the response
+     * conserves momentum and energy EXACTLY in the joined field. */
+    if rj_join(RA_S2, 0i64, 1i64, 1i64) != 0i32 { return 217u64 }
+    return rz_arm217b_fold()
+}
+/* the post-join fold alone (the join must already have succeeded) */
+fn rz_arm217b_fold() -> u64 @export {
+    if rf_d() < 4i64 { return 217u64 }
+    let eta : u64 = rj_eta()
+    if rf_sign(eta) != 1i64 { return 217u64 }
+    let Bx : u64 = rj_lift(RA_BX)
+    let By : u64 = rj_lift(RA_BY)
+    let Avx : u64 = rj_lift(RA_AVX)
+    let Avy : u64 = rj_lift(RA_AVY)
+    let Bvx : u64 = rj_lift(RA_BVX)
+    let Bvy : u64 = rj_lift(RA_BVY)
+    /* advance B by eta (C rests) */
+    let Bx3 : u64 = rf_add(Bx, rf_mul(Bvx, eta))
+    let By3 : u64 = rf_add(By, rf_mul(Bvy, eta))
+    let m3x : u64 = rf_sub(Bx3, rf_from_rat(py_rat_i64(15i64)))
+    let m3y : u64 = rf_sub(By3, rf_from_rat(py_rat_i64(0i64 - 2i64)))
+    let mm3 : u64 = rf_add(rf_mul(m3x, m3x), rf_mul(m3y, m3y))
+    if rf_eqz(rf_sub(mm3, rf_from_rat(py_rat_i64(9i64)))) != 1u32 { return 217u64 }  /* CONTACT GATE 2 */
+    let dot3 : u64 = rf_add(rf_mul(Bvx, m3x), rf_mul(Bvy, m3y))
+    let s3 : u64 = rf_div(dot3, mm3)
+    let Bvx4 : u64 = rf_sub(Bvx, rf_mul(s3, m3x))
+    let Bvy4 : u64 = rf_sub(Bvy, rf_mul(s3, m3y))
+    let Cvx4 : u64 = rf_mul(s3, m3x)
+    let Cvy4 : u64 = rf_mul(s3, m3y)
+    /* conservation at event 2 in Q(gamma), exactly (A untouched, C from rest) */
+    if rf_eqz(rf_sub(Bvx, rf_add(Bvx4, Cvx4))) != 1u32 { return 217u64 }
+    if rf_eqz(rf_sub(Bvy, rf_add(Bvy4, Cvy4))) != 1u32 { return 217u64 }
+    let e0 : u64 = rf_add(rf_add(rf_mul(Avx, Avx), rf_mul(Avy, Avy)), rf_add(rf_mul(Bvx, Bvx), rf_mul(Bvy, Bvy)))
+    let e1a : u64 = rf_add(rf_mul(Bvx4, Bvx4), rf_mul(Bvy4, Bvy4))
+    let e1b : u64 = rf_add(rf_mul(Cvx4, Cvx4), rf_mul(Cvy4, Cvy4))
+    let e1 : u64 = rf_add(rf_add(rf_mul(Avx, Avx), rf_mul(Avy, Avy)), rf_add(e1a, e1b))
+    if rf_eqz(rf_sub(e0, e1)) != 1u32 { return 217u64 }
+    if RZ_ERR != 0u64 { return 217u64 }
+    if py_err() != 0u64 { return 217u64 }
+    return 0u64
+}
+fn ra_s2() -> u64 @export { return RA_S2 }
+fn rz_arm217() -> u64 @export {
+    let a : u64 = rz_arm217a()
+    if a != 0u64 { return a }
+    return rz_arm217b()
+}
+fn rz_arm217_a_only() -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a : u64 = rz_arm217a()
+    rz_release()
+    return a
+}
+fn rz_arm216_only() -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a : u64 = rz_arm216()
+    rz_release()
+    return a
+}
+/* cost-attribution faces (probe-only): stop the 217 chain after each stage */
+fn rz_arm217_res_only() -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a : u64 = rz_arm217a()
+    if a != 0u64 { rz_release()   return a }
+    rj_bivar(RA_S2, 1i64)
+    let R : u64 = rz_pp(rz_res_run(4i64 * 2i64))
+    let d : i64 = RZ_PD[R]
+    rz_release()
+    if d != 8i64 { return 99u64 }
+    return 0u64
+}
+fn rz_arm217_join_only() -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a : u64 = rz_arm217a()
+    if a != 0u64 { rz_release()   return a }
+    let j : i32 = rj_join(RA_S2, 0i64, 1i64, 1i64)
+    rz_release()
+    if j != 0i32 { return 98u64 }
+    return 0u64
+}
+/* bisection face: run arms 210..upto (1..8 => 210..217) with the standard
+ * scoping; returns 0 or the first failing arm */
+fn rz_arms_upto(upto: u64) -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a0 : u64 = rz_arm210()
+    rz_release()
+    if a0 != 0u64 { return a0 }
+    if upto < 2u64 { return 0u64 }
+    rz_mark()
+    let a1 : u64 = rz_arm211()
+    rz_release()
+    if a1 != 0u64 { return a1 }
+    if upto < 3u64 { return 0u64 }
+    rz_mark()
+    let a2 : u64 = rz_arm212()
+    rz_release()
+    if a2 != 0u64 { return a2 }
+    if upto < 4u64 { return 0u64 }
+    rz_mark()
+    let a3 : u64 = rz_arm213()
+    rz_release()
+    if a3 != 0u64 { return a3 }
+    if upto < 5u64 { return 0u64 }
+    rz_mark()
+    let a4 : u64 = rz_arm214()
+    rz_release()
+    if a4 != 0u64 { return a4 }
+    if upto < 6u64 { return 0u64 }
+    rz_mark()
+    let a5 : u64 = rz_arm215()
+    rz_release()
+    if a5 != 0u64 { return a5 }
+    if upto < 7u64 { return 0u64 }
+    rz_mark()
+    let a6 : u64 = rz_arm216()
+    rz_release()
+    if a6 != 0u64 { return a6 }
+    if upto < 8u64 { return 0u64 }
+    rz_mark()
+    let a7 : u64 = rz_arm217()
+    rz_release()
+    if a7 != 0u64 { return a7 }
+    return 0u64
+}
+fn rz_selfprove() -> u64 @export {
+    rz_reset()
+    rz_mark()
+    let a0 : u64 = rz_arm210()
+    rz_release()
+    if a0 != 0u64 { return a0 }
+    rz_mark()
+    let a1 : u64 = rz_arm211()
+    rz_release()
+    if a1 != 0u64 { return a1 }
+    rz_mark()
+    let a2 : u64 = rz_arm212()
+    rz_release()
+    if a2 != 0u64 { return a2 }
+    rz_mark()
+    let a3 : u64 = rz_arm213()
+    rz_release()
+    if a3 != 0u64 { return a3 }
+    rz_mark()
+    let a4 : u64 = rz_arm214()
+    rz_release()
+    if a4 != 0u64 { return a4 }
+    rz_mark()
+    let a5 : u64 = rz_arm215()
+    rz_release()
+    if a5 != 0u64 { return a5 }
+    rz_mark()
+    let a6 : u64 = rz_arm216()
+    rz_release()
+    if a6 != 0u64 { return a6 }
+    rz_mark()
+    let a7 : u64 = rz_arm217()
+    rz_release()
+    if a7 != 0u64 { return a7 }
+    return 0u64
+}

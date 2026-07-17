@@ -67,7 +67,7 @@
 module aether_pyrgos
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(arena: u64) -> i32 from "arena.iii"
 extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
@@ -92,24 +92,24 @@ extern @abi(c-msvc-x64) fn bigint_isqrt(ar: u64, N: u64) -> u64 from "sqrt_sum_s
 extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
 
 /* ==================== the pools ==================== */
-const PY_LCAP : u64 = 49152u64           /* limb pool (u64 limbs)               */
-const PY_RCAP : u64 = 10240u64           /* rational slots                      */
-const PY_ECAP : u64 = 8192u64            /* element registers                   */
+const PY_LCAP : u64 = 262144u64          /* limb pool (u64 limbs)               */
+const PY_RCAP : u64 = 100000u64          /* rational slots                      */
+const PY_ECAP : u64 = 12288u64           /* element registers                   */
 const PY_HMAX : u64 = 8u64               /* max tower height                    */
 const PY_SENT : u64 = 18446744073709551615u64
 
-var PY_LIMB : [u64; 49152]
+var PY_LIMB : [u64; 262144]
 var PY_LTOP : u64 = 0u64
 
-var PY_RSG : [i64; 10240]                /* sign -1/0/+1                        */
-var PY_RNO : [u64; 10240]                /* numerator limb offset               */
-var PY_RNL : [u64; 10240]                /* numerator limb count (0 = zero)     */
-var PY_RDO : [u64; 10240]                /* denominator limb offset             */
-var PY_RDL : [u64; 10240]                /* denominator limb count (>= 1)       */
+var PY_RSG : [i64; 100000]               /* sign -1/0/+1                        */
+var PY_RNO : [u64; 100000]               /* numerator limb offset               */
+var PY_RNL : [u64; 100000]               /* numerator limb count (0 = zero)     */
+var PY_RDO : [u64; 100000]               /* denominator limb offset             */
+var PY_RDL : [u64; 100000]               /* denominator limb count (>= 1)       */
 var PY_RTOP : u64 = 0u64
 
-var PY_EH : [u64; 8192]                  /* element height                      */
-var PY_EC : [u64; 8192]                  /* element base rational slot          */
+var PY_EH : [u64; 12288]                 /* element height                      */
+var PY_EC : [u64; 12288]                 /* element base rational slot          */
 var PY_ETOP : u64 = 0u64
 
 var PY_SPINE : [u64; 8]                  /* radicand element index per level    */
@@ -117,6 +117,31 @@ var PY_H : u64 = 0u64                    /* current tower height                
 
 var PY_ERR : u64 = 0u64                  /* sticky named refusal (0 = healthy)  */
 var PY_ONE : u64 = 0u64                  /* offset of the shared limb 1         */
+
+/* counted telemetry (never silent): arena-op count + peak magnitude width */
+var PY_OPC : u64 = 0u64                  /* arena-spinning rational ops fired    */
+var PY_MAXL : u64 = 0u64                 /* peak stored magnitude limb count     */
+
+/* THE SCRATCH: one persistent arena serves every transient bigint op.  The
+ * old per-op arena_new/arena_drop pair cost ~2MB of allocation and zeroing
+ * PER RATIONAL OP (the join measured 655us/op on 50us of math); the scratch
+ * is created once, reset per op, and a too-big op refuses LOUDLY (PY_ERR=6)
+ * exactly where the old per-op sizing formula capped out. */
+const PY_SARCAP : u64 = 33554432u64      /* one op's worst case (the old ceiling)*/
+var PY_SAR : u64 = 0u64                  /* the scratch arena id (0 = not yet)  */
+fn py_sar() -> u64 {
+    if PY_SAR == 0u64 {
+        PY_SAR = arena_new(PY_SARCAP)
+        if PY_SAR == 0u64 { PY_ERR = 6u64 }
+    }
+    return PY_SAR
+}
+fn py_sar_done(ar: u64) -> i32 {
+    if ar == 0u64 { return -1i32 }
+    bigint_drop_arena(ar)
+    arena_reset(ar)
+    return 0i32
+}
 
 /* store cells (multi-out through module cells, the house pattern) */
 var PY_SOFF : u64 = 0u64
@@ -127,6 +152,9 @@ var PY_XA : [i64; 4]
 var PY_XB : [i64; 4]
 
 fn py_err() -> u64 @export { return PY_ERR }
+fn py_opc() -> u64 @export { return PY_OPC }
+fn py_maxl() -> u64 @export { return PY_MAXL }
+fn py_opc_reset() -> i32 @export { PY_OPC = 0u64   PY_MAXL = 0u64   return 0i32 }
 fn py_h() -> u64 @export { return PY_H }
 fn py_ltop() -> u64 @export { return PY_LTOP }
 fn py_rtop() -> u64 @export { return PY_RTOP }
@@ -138,6 +166,7 @@ fn py_reset() -> i32 @export {
     PY_LTOP = 0u64   PY_RTOP = 0u64   PY_ETOP = 0u64
     PY_H = 0u64   PY_ERR = 0u64
     PY_LIMB[0u64] = 1u64   PY_ONE = 0u64   PY_LTOP = 1u64
+    if PY_SAR != 0u64 { bigint_drop_arena(PY_SAR)   arena_reset(PY_SAR) }
     return 0i32
 }
 
@@ -184,24 +213,24 @@ fn py_rentry_copy(dst: u64, src: u64) -> i32 {
     return 0i32
 }
 
-/* mark = (LTOP << 31) | (RTOP << 17) | (ETOP << 4) | H   (16/14/13/4 bits) */
+/* mark = (LTOP << 35) | (RTOP << 18) | (ETOP << 4) | H   (29/17/14/4 bits) */
 fn py_mark() -> u64 @export {
-    return (PY_LTOP << 31u64) | (PY_RTOP << 17u64) | (PY_ETOP << 4u64) | PY_H
+    return (PY_LTOP << 35u64) | (PY_RTOP << 18u64) | (PY_ETOP << 4u64) | PY_H
 }
 fn py_release(m: u64) -> i32 @export {
     PY_H = m & 15u64
-    PY_ETOP = (m >> 4u64) & 8191u64
-    PY_RTOP = (m >> 17u64) & 16383u64
-    PY_LTOP = m >> 31u64
+    PY_ETOP = (m >> 4u64) & 16383u64
+    PY_RTOP = (m >> 18u64) & 131071u64
+    PY_LTOP = m >> 35u64
     return 0i32
 }
 /* pools-only release: restores the bump tops but KEEPS the tower height --
  * the keep/slide pass of a consumer (kinesis) re-copies the spine radicands
  * down and re-points them with py_spine_set, so H must survive the release. */
 fn py_release_pools(m: u64) -> i32 @export {
-    PY_ETOP = (m >> 4u64) & 8191u64
-    PY_RTOP = (m >> 17u64) & 16383u64
-    PY_LTOP = m >> 31u64
+    PY_ETOP = (m >> 4u64) & 16383u64
+    PY_RTOP = (m >> 18u64) & 131071u64
+    PY_LTOP = m >> 35u64
     return 0i32
 }
 
@@ -223,16 +252,10 @@ fn py_bstore(h: u64) -> i32 {
     if PY_ERR != 0u64 { PY_SOFF = PY_ONE   PY_SLEN = 0u64   return -1i32 }
     let mut i : u64 = 0u64
     while i < len { PY_LIMB[off + i] = bigint_get_limb(h, i)   i = i + 1u64 }
+    if len > PY_MAXL { PY_MAXL = len }
     PY_SOFF = off   PY_SLEN = len
     return 0i32
 }
-fn py_arsz(l1: u64, l2: u64) -> u64 {
-    let t : u64 = l1 + l2 + 8u64
-    let mut sz : u64 = 262144u64 + (t * t * 640u64)
-    if sz > 33554432u64 { sz = 33554432u64 }
-    return sz
-}
-
 /* trailing zero bits of a nonzero bigint handle */
 fn py_btz(h: u64) -> u64 {
     let len : u64 = bigint_len_limbs(h)
@@ -250,8 +273,149 @@ fn py_btz(h: u64) -> u64 {
     return 0u64
 }
 
+/* ==================== the raw-lane gcd ====================
+ * The gcd is the heartbeat of every rational reduction, and the old
+ * handle-per-subtract loop paid ~thousands of arena allocations per call --
+ * measured at ~500us/op, it WAS the cost of the real-closed tier.  The raw
+ * path runs the whole subtraction cascade on two module limb lanes with
+ * ZERO allocations; one handle is built only for the final answer.  Lanes
+ * hold <= 512 limbs (32768 bits); wider operands take the handle path. */
+var PY_GBUF : [u64; 1088]                /* lane A at 0, lane B at 544          */
+fn pg_norm(base: u64, len: u64) -> u64 {
+    let mut l : u64 = len
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if l == 0u64 { going = 0u8 } else {
+            if PY_GBUF[(base + l) - 1u64] != 0u64 { going = 0u8 } else { l = l - 1u64 }
+        }
+    }
+    return l
+}
+fn pg_cmp(ba: u64, la: u64, bb: u64, lb: u64) -> i64 {
+    if la > lb { return 1i64 }
+    if la < lb { return 0i64 - 1i64 }
+    let mut i : u64 = la
+    while i > 0u64 {
+        let x : u64 = PY_GBUF[(ba + i) - 1u64]
+        let y : u64 = PY_GBUF[(bb + i) - 1u64]
+        if x > y { return 1i64 }
+        if x < y { return 0i64 - 1i64 }
+        i = i - 1u64
+    }
+    return 0i64
+}
+/* lane(ba) -= lane(bb); requires lane(ba) >= lane(bb); returns new length */
+fn pg_sub(ba: u64, la: u64, bb: u64, lb: u64) -> u64 {
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < la {
+        let mut bv : u64 = 0u64
+        if i < lb { bv = PY_GBUF[bb + i] }
+        let av : u64 = PY_GBUF[ba + i]
+        let d1 : u64 = av - bv
+        let mut nbw : u64 = 0u64
+        if av < bv { nbw = 1u64 }
+        let d2 : u64 = d1 - borrow
+        if d1 < borrow { nbw = 1u64 }
+        PY_GBUF[ba + i] = d2
+        borrow = nbw
+        i = i + 1u64
+    }
+    return pg_norm(ba, la)
+}
+fn pg_tz(base: u64, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        let l : u64 = PY_GBUF[base + i]
+        if l != 0u64 {
+            let mut b : u64 = 0u64
+            let mut t : u64 = l
+            while (t & 1u64) == 0u64 { t = t >> 1u64   b = b + 1u64 }
+            return (i * 64u64) + b
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* in-place right shift; returns new length */
+fn pg_shr(base: u64, len: u64, bits: u64) -> u64 {
+    if bits == 0u64 { return len }
+    let w : u64 = bits / 64u64
+    let b : u64 = bits % 64u64
+    if w >= len { return 0u64 }
+    let nl : u64 = len - w
+    let mut i : u64 = 0u64
+    if b == 0u64 {
+        while i < nl { PY_GBUF[base + i] = PY_GBUF[(base + i) + w]   i = i + 1u64 }
+    } else {
+        while i < nl {
+            let lo : u64 = PY_GBUF[(base + i) + w] >> b
+            let mut hi : u64 = 0u64
+            if ((i + w) + 1u64) < len { hi = PY_GBUF[((base + i) + w) + 1u64] << (64u64 - b) }
+            PY_GBUF[base + i] = lo | hi
+            i = i + 1u64
+        }
+    }
+    return pg_norm(base, nl)
+}
 /* binary gcd of two positive handles; returns a FRESH handle in ar */
 fn py_bgcd(ar: u64, a0: u64, b0: u64) -> u64 {
+    bigint_normalize(a0)   bigint_normalize(b0)
+    if bigint_is_zero(a0) == 1u8 { return bigint_copy(ar, b0) }
+    if bigint_is_zero(b0) == 1u8 { return bigint_copy(ar, a0) }
+    let la : u64 = bigint_len_limbs(a0)
+    let lb : u64 = bigint_len_limbs(b0)
+    if la == 1u64 { if lb == 1u64 {
+        let g : u64 = py_ugcd64(bigint_get_limb(a0, 0u64), bigint_get_limb(b0, 0u64))
+        return bigint_from_u64(ar, g)
+    } }
+    if la > 512u64 { return py_bgcd_slow(ar, a0, b0) }
+    if lb > 512u64 { return py_bgcd_slow(ar, a0, b0) }
+    let mut i : u64 = 0u64
+    while i < la { PY_GBUF[i] = bigint_get_limb(a0, i)   i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < lb { PY_GBUF[544u64 + j] = bigint_get_limb(b0, j)   j = j + 1u64 }
+    let mut ba : u64 = 0u64      let mut na : u64 = pg_norm(0u64, la)
+    let mut bb : u64 = 544u64    let mut nb : u64 = pg_norm(544u64, lb)
+    let ta : u64 = pg_tz(ba, na)
+    let tb : u64 = pg_tz(bb, nb)
+    let mut k : u64 = ta
+    if tb < k { k = tb }
+    na = pg_shr(ba, na, ta)
+    nb = pg_shr(bb, nb, tb)
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if nb == 0u64 { going = 0u8 } else {
+            let c : i64 = pg_cmp(ba, na, bb, nb)
+            if c == 0i64 { going = 0u8 } else {
+                if c < 0i64 {
+                    let tbase : u64 = ba   let tlen : u64 = na
+                    ba = bb   na = nb
+                    bb = tbase   nb = tlen
+                }
+                na = pg_sub(ba, na, bb, nb)
+                if na > 0u64 {
+                    let tz : u64 = pg_tz(ba, na)
+                    if tz > 0u64 { na = pg_shr(ba, na, tz) }
+                }
+            }
+        }
+    }
+    let h : u64 = bigint_new(ar, na + 1u64)
+    if h == 0u64 { PY_ERR = 6u64   return 0u64 }
+    let mut z : u64 = 0u64
+    while z < na { bigint_set_limb(h, z, PY_GBUF[ba + z])   z = z + 1u64 }
+    bigint_set_len(h, na)
+    bigint_normalize(h)
+    if k > 0u64 {
+        let hs : u64 = bigint_shl_bits(ar, h, k)
+        bigint_drop(h)
+        return hs
+    }
+    return h
+}
+/* the handle-path gcd (operands wider than the lanes take this) */
+fn py_bgcd_slow(ar: u64, a0: u64, b0: u64) -> u64 {
     let mut A : u64 = bigint_copy(ar, a0)
     let mut B : u64 = bigint_copy(ar, b0)
     if A == 0u64 { PY_ERR = 6u64   return 0u64 }
@@ -378,7 +542,7 @@ fn py_rat_frac(n: i64, d: i64) -> u64 @export {
 }
 fn py_rat_i64(v: i64) -> u64 @export { return py_rat_frac(v, 1i64) }
 fn py_pow10(k: u64) -> u64 @export {
-    let ar : u64 = arena_new(1048576u64)
+    let ar : u64 = py_sar()
     let mut h : u64 = bigint_from_u64(ar, 1u64)
     let mut i : u64 = 0u64
     while i < k {
@@ -387,12 +551,12 @@ fn py_pow10(k: u64) -> u64 @export {
         if h == 0u64 { PY_ERR = 6u64   i = k }
         i = i + 1u64
     }
-    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    if PY_ERR != 0u64 { py_sar_done(ar)   return py_ralloc() }
     py_bstore(h)
     let no : u64 = PY_SOFF
     let nl : u64 = PY_SLEN
     bigint_drop(h)
-    bigint_drop_arena(ar)   arena_drop(ar)
+    py_sar_done(ar)
     let r : u64 = py_ralloc()
     if PY_ERR != 0u64 { return r }
     PY_RSG[r] = 1i64
@@ -403,7 +567,7 @@ fn py_pow10(k: u64) -> u64 @export {
 
 /* ==================== rational arithmetic ==================== */
 fn py_rat_sign(r: u64) -> i64 @export { let s : i64 = PY_RSG[r]   return s }
-fn py_rat_neg(r: u64) -> u64 {
+fn py_rat_neg(r: u64) -> u64 @export {
     let e : u64 = py_ralloc()
     if PY_ERR != 0u64 { return e }
     py_rentry_copy(e, r)
@@ -417,17 +581,18 @@ fn py_rat_share(r: u64) -> u64 {
     py_rentry_copy(e, r)
     return e
 }
-fn py_rat_add(a: u64, b: u64) -> u64 {
+fn py_rat_add(a: u64, b: u64) -> u64 @export {
     if PY_ERR != 0u64 { return py_ralloc() }
     let sa : i64 = PY_RSG[a]
     let sb : i64 = PY_RSG[b]
     if sa == 0i64 { return py_rat_share(b) }
     if sb == 0i64 { return py_rat_share(a) }
+    PY_OPC = PY_OPC + 1u64
     let nal : u64 = PY_RNL[a]
     let dal : u64 = PY_RDL[a]
     let nbl : u64 = PY_RNL[b]
     let dbl : u64 = PY_RDL[b]
-    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let ar : u64 = py_sar()
     let na : u64 = py_bload(ar, PY_RNO[a], nal)
     let da : u64 = py_bload(ar, PY_RDO[a], dal)
     let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
@@ -439,7 +604,7 @@ fn py_rat_add(a: u64, b: u64) -> u64 {
     if X == 0u64 { PY_ERR = 6u64 }
     if Y == 0u64 { PY_ERR = 6u64 }
     if D == 0u64 { PY_ERR = 6u64 }
-    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    if PY_ERR != 0u64 { py_sar_done(ar)   return py_ralloc() }
     let mut sg : i64 = 0i64
     let mut N : u64 = 0u64
     if sa == sb {
@@ -459,26 +624,27 @@ fn py_rat_add(a: u64, b: u64) -> u64 {
         bigint_drop(X)   bigint_drop(Y)
         if c == 0i32 {
             bigint_drop(D)
-            bigint_drop_arena(ar)   arena_drop(ar)
+            py_sar_done(ar)
             return py_ralloc()                       /* exact cancel -> zero */
         }
     }
-    if N == 0u64 { PY_ERR = 6u64   bigint_drop(D)   bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    if N == 0u64 { PY_ERR = 6u64   bigint_drop(D)   py_sar_done(ar)   return py_ralloc() }
     let res : u64 = py_rmake(ar, sg, N, D)
-    bigint_drop_arena(ar)   arena_drop(ar)
+    py_sar_done(ar)
     return res
 }
-fn py_rat_mul(a: u64, b: u64) -> u64 {
+fn py_rat_mul(a: u64, b: u64) -> u64 @export {
     if PY_ERR != 0u64 { return py_ralloc() }
     let sa : i64 = PY_RSG[a]
     let sb : i64 = PY_RSG[b]
     if sa == 0i64 { return py_ralloc() }
     if sb == 0i64 { return py_ralloc() }
+    PY_OPC = PY_OPC + 1u64
     let nal : u64 = PY_RNL[a]
     let dal : u64 = PY_RDL[a]
     let nbl : u64 = PY_RNL[b]
     let dbl : u64 = PY_RDL[b]
-    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let ar : u64 = py_sar()
     let na : u64 = py_bload(ar, PY_RNO[a], nal)
     let da : u64 = py_bload(ar, PY_RDO[a], dal)
     let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
@@ -488,9 +654,45 @@ fn py_rat_mul(a: u64, b: u64) -> u64 {
     bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
     if N == 0u64 { PY_ERR = 6u64 }
     if D == 0u64 { PY_ERR = 6u64 }
-    if PY_ERR != 0u64 { bigint_drop_arena(ar)   arena_drop(ar)   return py_ralloc() }
+    if PY_ERR != 0u64 { py_sar_done(ar)   return py_ralloc() }
     let res : u64 = py_rmake(ar, sa * sb, N, D)
-    bigint_drop_arena(ar)   arena_drop(ar)
+    py_sar_done(ar)
+    return res
+}
+/* positive rational gcd: gcd(|a|, |b|) = gcd(na*db, nb*da) / (da*db), reduced.
+ * The content/primitive-part engine of the polynomial tier composes this. */
+fn py_rat_gcdpos(a: u64, b: u64) -> u64 @export {
+    PY_OPC = PY_OPC + 1u64
+    let sa : i64 = PY_RSG[a]
+    let sb : i64 = PY_RSG[b]
+    if sa == 0i64 {
+        let e : u64 = py_rat_share(b)
+        if sb != 0i64 { PY_RSG[e] = 1i64 }
+        return e
+    }
+    if sb == 0i64 {
+        let e : u64 = py_rat_share(a)
+        PY_RSG[e] = 1i64
+        return e
+    }
+    let nal : u64 = PY_RNL[a]
+    let dal : u64 = PY_RDL[a]
+    let nbl : u64 = PY_RNL[b]
+    let dbl : u64 = PY_RDL[b]
+    let ar : u64 = py_sar()
+    let na : u64 = py_bload(ar, PY_RNO[a], nal)
+    let da : u64 = py_bload(ar, PY_RDO[a], dal)
+    let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
+    let db : u64 = py_bload(ar, PY_RDO[b], dbl)
+    let X : u64 = bigint_mul(ar, na, db)
+    let Y : u64 = bigint_mul(ar, nb, da)
+    let D : u64 = bigint_mul(ar, da, db)
+    let G : u64 = py_bgcd(ar, X, Y)
+    bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
+    bigint_drop(X)   bigint_drop(Y)
+    if PY_ERR != 0u64 { bigint_drop(D)   bigint_drop(G)   py_sar_done(ar)   return py_ralloc() }
+    let res : u64 = py_rmake(ar, 1i64, G, D)
+    py_sar_done(ar)
     return res
 }
 fn py_rat_inv(r: u64) -> u64 @export {
@@ -509,11 +711,12 @@ fn py_rat_cmp(a: u64, b: u64) -> i64 @export {
     if sa > sb { return 1i64 }
     if sa < sb { return 0i64 - 1i64 }
     if sa == 0i64 { return 0i64 }
+    PY_OPC = PY_OPC + 1u64
     let nal : u64 = PY_RNL[a]
     let dal : u64 = PY_RDL[a]
     let nbl : u64 = PY_RNL[b]
     let dbl : u64 = PY_RDL[b]
-    let ar : u64 = arena_new(py_arsz(nal + dal, nbl + dbl))
+    let ar : u64 = py_sar()
     let na : u64 = py_bload(ar, PY_RNO[a], nal)
     let da : u64 = py_bload(ar, PY_RDO[a], dal)
     let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
@@ -523,7 +726,7 @@ fn py_rat_cmp(a: u64, b: u64) -> i64 @export {
     let c : i32 = bigint_cmp(X, Y)
     bigint_drop(na)   bigint_drop(da)   bigint_drop(nb)   bigint_drop(db)
     bigint_drop(X)   bigint_drop(Y)
-    bigint_drop_arena(ar)   arena_drop(ar)
+    py_sar_done(ar)
     let mut cc : i64 = 0i64
     if c > 0i32 { cc = 1i64 }
     if c < 0i32 { cc = 0i64 - 1i64 }
@@ -858,7 +1061,7 @@ fn py_el_sqrt_try(e: u64) -> u64 {
         if sg < 0i64 { return PY_SENT }
         let nl : u64 = PY_RNL[r]
         let dl : u64 = PY_RDL[r]
-        let ar : u64 = arena_new(py_arsz(nl, dl))
+        let ar : u64 = py_sar()
         let N : u64 = py_bload(ar, PY_RNO[r], nl)
         let D : u64 = py_bload(ar, PY_RDO[r], dl)
         let ND : u64 = bigint_mul(ar, N, D)
@@ -867,14 +1070,14 @@ fn py_el_sqrt_try(e: u64) -> u64 {
         let eqz : i32 = bigint_cmp(ck, ND)
         if eqz != 0i32 {
             bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(sq)   bigint_drop(ck)
-            bigint_drop_arena(ar)   arena_drop(ar)
+            py_sar_done(ar)
             return PY_SENT
         }
         /* sqrt(n/d) = sqrt(n d)/d exactly; reduce through py_rmake */
         let D2 : u64 = bigint_copy(ar, D)
         bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(ck)
         let res : u64 = py_rmake(ar, 1i64, sq, D2)
-        bigint_drop_arena(ar)   arena_drop(ar)
+        py_sar_done(ar)
         return py_el_from_rat(res, 0u64)
     }
     let hm : u64 = h - 1u64

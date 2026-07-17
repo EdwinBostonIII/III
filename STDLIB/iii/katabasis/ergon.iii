@@ -162,14 +162,15 @@ fn erg_mapcode(seat: u64, arm: u64, mode: u64) -> u64 {
     if seat == 10u64 { return 1400u64 + arm }          /* the DEEP verb's codes  */
     if seat == 11u64 { return 1500u64 + arm }          /* the AUTARKEIA verb     */
     if seat == 12u64 { return 1600u64 + arm }          /* the ZK-AUDIT verb      */
+    if seat == 13u64 { return 1700u64 + arm }          /* the AUTHOR verb        */
     return 1000u64 + arm
 }
 /* the whole fault space is INJECTIVE: enumerate every code either seat can emit
  * and require no collision (1 injective | 0 collision found) */
-var ERG_SEEN : [u8; 1700]
+var ERG_SEEN : [u8; 1800]
 fn erg_map_injective(mode: u64) -> u64 {
     let mut i : u64 = 0u64
-    while i < 1700u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
+    while i < 1800u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
     /* seat 0: 100..599  seat 1: 11..19  seat 2: 41..45  seat 3: 21..36
      * seat 4: 1..6  meta: 1..3 (mapped 1001..1003) */
     let mut c : u64 = 100u64
@@ -255,6 +256,13 @@ fn erg_map_injective(mode: u64) -> u64 {
         if ERG_SEEN[m12] == 1u8 { return 0u64 }
         ERG_SEEN[m12] = 1u8
         zk = zk + 1u64
+    }
+    let mut au : u64 = 1u64
+    while au <= 4u64 {
+        let m13 : u64 = erg_mapcode(13u64, au, mode)
+        if ERG_SEEN[m13] == 1u8 { return 0u64 }
+        ERG_SEEN[m13] = 1u8
+        au = au + 1u64
     }
     let mut z : u64 = 1u64
     while z <= 3u64 {
@@ -1572,6 +1580,97 @@ fn erg_zk_downscale_nbatch() -> u64 {
         i = i + 1u64
     }
     return 0u64
+}
+/* ==================== THE AUTHOR VERB (ex run_author) ====================
+ * AUTARKEIA Alpha-4: THE NAMED-DEFICIT LAW -- machine growth adjudicated by III
+ * itself (iii-author), never bash.  A seal is admitted only if it cites a NAMED
+ * deficit AND strictly shrinks its counter under a continuous monotone ratchet,
+ * with MACHINE provenance and >=2 agreeing routes; per-cycle cap.  The verb
+ * drives iii-author (admit/verify/fold) through the process organ and judges the
+ * OS-true exit codes -- every law breach its own DISTINCT refusal, external
+ * truth (the law's own code space, not a stored answer).  Plus NOBODY STEERS:
+ * the pilot head is a pure function of the round budget (two runs, one head).
+ * Codes 1700+arm. */
+var ERG_PH1 : [u8; 80]
+var ERG_PH2 : [u8; 80]
+/* capture the hex after `marker` in captured stdout into dst; returns len */
+fn erg_capture_hex(marker: u64, dst: u64) -> u64 {
+    let mp : *u8 = marker as *u8
+    let mut ml : u64 = 0u64
+    while mp[ml] != 0u8 { ml = ml + 1u64 }
+    let n : u64 = proc_out_len()
+    let dp : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i + ml <= n {
+        let mut k : u64 = 0u64
+        let mut hit : u64 = 1u64
+        while k < ml { if proc_out_at(i + k) != mp[k] { hit = 0u64   k = ml } else { k = k + 1u64 } }
+        if hit == 1u64 {
+            let mut j : u64 = i + ml
+            let mut w : u64 = 0u64
+            let mut go : u64 = 1u64
+            while go == 1u64 {
+                if j >= n { go = 0u64 } else {
+                    let c : u8 = proc_out_at(j)
+                    if erg_ishex(c) == 1u64 { if w < 79u64 { dp[w] = c   w = w + 1u64 }   j = j + 1u64 } else { go = 0u64 }
+                }
+            }
+            return w
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn erg_author() -> u32 @export {
+    erg_x_run("cmd /c if not exist STDLIB\\build\\ergon_auth mkdir STDLIB\\build\\ergon_auth" as u64, 30000u32)
+    erg_x_run("cmd /c del /q STDLIB\\build\\ergon_auth\\a.ledger STDLIB\\build\\ergon_auth\\cap.ledger" as u64, 30000u32)
+    /* arm 1: THE LAWFUL CHAIN -- 3 autonomous MACHINE cycles, each strictly
+     * shrinking `unreached` under the continuous ratchet (8->6->4->2), 2 routes */
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 1 unreached 8 6 2 NEW MACHINE 1" as u64, 30000u32) != 0u64 { return 1701u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 2 unreached 6 4 2 NEW MACHINE 1" as u64, 30000u32) != 0u64 { return 1701u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 3 unreached 4 2 2 NEW MACHINE 1" as u64, 30000u32) != 0u64 { return 1701u32 }
+    /* arm 2: the EXIT GATE -- verify >=3 consecutive MACHINE cycles; fold roots */
+    if erg_x_run("COMPILED\\iii-author.exe verify STDLIB/build/ergon_auth/a.ledger unreached 3" as u64, 30000u32) != 0u64 { return 1702u32 }
+    if erg_x_run("COMPILED\\iii-author.exe fold STDLIB/build/ergon_auth/a.ledger" as u64, 30000u32) != 0u64 { return 1702u32 }
+    if erg_x_find("root=" as u64) != 1u64 { return 1702u32 }
+    /* arm 3: THE ADVERSARIAL TEETH -- every breach its DISTINCT named refusal.
+     * On the verified ledger (last after=2, so before=2 is continuity-valid):
+     * UNNAMED=3, NOVELTY-NONE=4, BAD-PROVENANCE=5, NO-PROGRESS=6, RATCHET-RISE=7,
+     * RATCHET-CONTINUITY=7 */
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 x_plus_zero 2 1 2 NEW MACHINE 1" as u64, 30000u32) != 3u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 unreached 2 1 2 NONE MACHINE 1" as u64, 30000u32) != 4u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 unreached 2 1 2 NEW ROBOT 1" as u64, 30000u32) != 5u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 unreached 2 2 1 NEW MACHINE 1" as u64, 30000u32) != 6u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 unreached 2 5 2 NEW MACHINE 1" as u64, 30000u32) != 7u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/a.ledger 4 unreached 99 1 2 NEW MACHINE 1" as u64, 30000u32) != 7u64 { return 1703u32 }
+    /* the CAP -- a second admit in one fresh cycle (cap=1) is CAP-rejected (8) */
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/cap.ledger 1 frontier 10 8 2 NEW MACHINE 1" as u64, 30000u32) != 0u64 { return 1703u32 }
+    if erg_x_run("COMPILED\\iii-author.exe admit STDLIB/build/ergon_auth/cap.ledger 1 frontier 8 6 2 NEW MACHINE 1" as u64, 30000u32) != 8u64 { return 1703u32 }
+    /* arm 4: NOBODY STEERS -- the pilot head is a pure function of the budget.
+     * Drive the autonomous engine twice at budget 6; the heads must be identical
+     * and nonzero (the policy selects nothing; the round number alone decides). */
+    if erg_author_pilot_ready() == 0u64 { return 1704u32 }
+    if erg_x_run("cmd /c \"set PILOT_ROUNDS=6&& STDLIB\\build\\author\\pilot.exe\"" as u64, 120000u32) >= 9000u64 { return 1704u32 }
+    let l1 : u64 = erg_capture_hex("head=" as u64, (&ERG_PH1) as u64)
+    if l1 == 0u64 { return 1704u32 }
+    if erg_x_run("cmd /c \"set PILOT_ROUNDS=6&& STDLIB\\build\\author\\pilot.exe\"" as u64, 120000u32) >= 9000u64 { return 1704u32 }
+    let l2 : u64 = erg_capture_hex("head=" as u64, (&ERG_PH2) as u64)
+    if erg_buf_eq((&ERG_PH1) as u64, l1, (&ERG_PH2) as u64, l2) != 1u64 { return 1704u32 }
+    return 0u32
+}
+/* the pilot is the autonomous engine; if its binary is absent (clean checkout)
+ * build it from source through the sovereign compiler + linker, spawned -- the
+ * engine is infrastructure the law adjudicates, built not tested */
+fn erg_author_pilot_ready() -> u64 {
+    let h : u64 = CreateFileA("STDLIB/build/author/pilot.exe" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h != 18446744073709551615u64 { CloseHandle(h)   return 1u64 }
+    /* build via the committed helper (spawned bash builds the engine) */
+    erg_x_put("STDLIB/build/ergon_auth/build_pilot.sh" as u64, "set -e\nR=\"$(git rev-parse --show-toplevel)\"\nB=\"$R/STDLIB/build/iii\"; L=\"$B/libiii_native.a\"; I=\"$R/COMPILED/iiis-2.exe\"; W=\"$R/STDLIB/build/author\"; mkdir -p \"$W\"\nSE=\"\"\nfor n in omnia_resolution_init omnia_resolution_meta_dispatch omnia_proof_ripple_resolution omnia_resolver omnia_resolver_memo omnia_resolver_replay omnia_codegen_patterns omnia_transform_patterns omnia_xii_curated_payloads omnia_hw_offload aether_pattern_set_federation sanctus_calculus_v1 sanctus_resolver_replay sanctus_seal_resolver verba_nl_lex; do [ -f \"$B/$n.iii.o\" ] && SE=\"$SE $B/$n.iii.o\"; done\nO=\"\"\nfor s in sovir/mathesis_pilot_main iii/aether/mathesis_pilot iii/aether/mathesis_curve iii/aether/mathesis_alg iii/aether/resultant iii/aether/sturm_big; do b=$(basename $s); \"$I\" \"$R/STDLIB/$s.iii\" --compile-only --out \"$W/$b.o\"; O=\"$O $W/$b.o\"; done\ngcc $O -Wl,--whole-archive $SE -Wl,--no-whole-archive \"$L\" -lws2_32 -lkernel32 -o \"$W/pilot.exe\"\n" as u64)
+    if erg_x_run("cmd /c bash STDLIB/build/ergon_auth/build_pilot.sh" as u64, 300000u32) != 0u64 { return 0u64 }
+    let h2 : u64 = CreateFileA("STDLIB/build/author/pilot.exe" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h2 == 18446744073709551615u64 { return 0u64 }
+    CloseHandle(h2)
+    return 1u64
 }
 /* the k-th FED seed path suffix (1/2/3) */
 fn erg_k_str(k: u64) -> u64 {

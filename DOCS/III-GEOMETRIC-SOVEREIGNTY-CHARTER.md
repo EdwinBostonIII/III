@@ -164,10 +164,22 @@ target named; the tool prints III's raw table.
   transcript.  **RETIRED** `sovir/zk_eidos_fold.iii` + `sovir/zk_eidos_ripple.iii`
   (probabilistic fold-attestation, now done exactly) + the run_zk gate entries.
 
-REMAINING (future rungs): Z3 (federation attestation on doxa's OFFER wire),
-Z4 (migrate the independence proofs off `zk_stark` so the FRI/STARK core can
-retire — it still has live consumers, so it is kept for now, honestly), Γ's
-deeper dynamics (re-found choreo's exact TOI on the worldline).  The retired
-files' MANIFEST lines reconcile at the autarkeia ceremony (the signed testament
-is regenerated there; deleting listed files is the established campaign
-pattern, not a break).
+- **Z3/Z4 — THE ENTIRE ZK SUBSYSTEM RETIRED** (commit 51c9bd70).  No later
+  rung: the probabilistic zk-STARK/SNARK/FRI stack is GONE from III — 98 files
+  (57 organs `numera/zk_*` + `sovir/zk_*` + `proof_stark`; 33 corpus KATs; 2
+  independence falsifiers; 6 gates: `run_zk`, `run_ext4_committed`, and the
+  whole Phase-Omega pipeline `run_grand_unification` + `run_here_to_there` +
+  `run_federate_quorum` + `run_trust_certificate`).  Zero dangling references
+  remain.  proofcarry absorbed every capability EXACTLY: **ship + verify-
+  without-re-exec** (was Omega.f — the artifact is the readable cone, a peer
+  refolds it) and **federation** (was Omega.g's ML-DSA BFT quorum — now an
+  exact content-address quorum where III DISCOVERED the fault-tolerance
+  floor((n-1)/3) from the vote count, no target named, no probability).  The
+  independence capstones are migrated (they no longer claim a probabilistic
+  capability — III retired it for a better one).  arms 160..168.
+
+REMAINING (genuinely optional future work, no ZK left to retire): Γ's deeper
+dynamics (re-found choreo's exact time-of-impact on the worldline).  The
+retired files' MANIFEST lines reconcile at the autarkeia ceremony (the signed
+testament is regenerated there; deleting listed files is the established
+campaign pattern, not a break — proven across 100+ deletions this campaign).

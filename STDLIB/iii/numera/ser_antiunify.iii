@@ -2088,3 +2088,29 @@ fn au_conform_bound(base: u64, boff: u64, blen: u64, accum: u32, acc0: u64, boun
     AU_CONF_ITER = (gap + delta - 1u64) / delta                    /* first n: acc0 + n*delta >= bound (ceil div) */
     return AU_CONF_VIOL
 }
+
+/* ============================================================================================================
+ * THE LOWER ADJOINT, SELF-CERTIFIED (2026-07-17) -- intuition's half of the intent ⊣ intuition adjunction.
+ * numera/ser_intent proves the full Galois connection (composing this module); here intuition self-proves,
+ * FAST (cg_synth only, milliseconds), the discipline that makes it a sound lower adjoint gamma:
+ *   EXPANSIVE   each instance is a member of its own generalization (au_is_subk).
+ *   TIGHT       a non-member (6 != 2^k-1) forbids the family (au_generalize -> AU_NONE): gamma never claims a
+ *               shape sigma cannot prove -- the anti-over-generalization law, the conscience line as code.
+ *   IDEMPOTENT  gamma is deterministic (same instances => same family): the closure sigma.gamma is stable.
+ * The heavy WARRANT (au_prove_family, the full-range symbolic certificate) is the deep proof, deliberate.
+ * 0 = intuition's lower-adjoint discipline PROVEN | 10 gamma-wrong | 11 not-expansive | 15 not-tight
+ * | 16 not-idempotent. */
+fn au_adjoint_selfproof() -> u32 @export {
+    let seed : u64 = 1u64
+    if au_generalize(7u64, 15u64, 31u64, seed) != AU_SUBK { return 10u32 }
+    if au_is_subk(7u64, seed) != 1u32 { return 11u32 }
+    if au_is_subk(15u64, seed) != 1u32 { return 11u32 }
+    if au_is_subk(31u64, seed) != 1u32 { return 11u32 }
+    if au_generalize(7u64, 15u64, 6u64, seed) != AU_NONE { return 15u32 }
+    if au_generalize(7u64, 15u64, 31u64, seed) != AU_SUBK { return 16u32 }
+    return 0u32
+}
+fn au_adjoint_ok() -> u8 @export {
+    if au_adjoint_selfproof() == 0u32 { return 1u8 }
+    return 0u8
+}

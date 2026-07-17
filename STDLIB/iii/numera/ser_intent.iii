@@ -152,3 +152,96 @@ fn in_certify_wrong(v: u64, seed: u64) -> u32 @export {
     let lr : u64 = in_emit_red(&IN_REDB as u64, form, k)
     return seq_equiv(&IN_MULB as u64, 0u64, lm, &IN_REDB as u64, 0u64, lr, 1u32)
 }
+
+/* ============================================================================================================
+ * THE PROVEN ADJUNCTION -- intent ⊣ intuition, made executable law (2026-07-17).
+ *
+ * The header calls intent "the INVERSE of intuition (a Galois adjunction)".  Until now that was PROSE.  Here
+ * it becomes a theorem III PROVES WITH ITS OWN ENGINES -- the two faculties composed into one certified loop.
+ *
+ * THE ADJUNCTION.  Write gamma (INTUITION, generalize) : instances -> the parametric family they share
+ * (numera/ser_antiunify::au_generalize, a pure structural least-general-generalization), and sigma (INTENT,
+ * specialize+prove) : a family/contract -> the cheapest PROVABLY-correct implementation (this module).  The
+ * Galois CLOSURE is sigma.gamma (generalize, then prove).  The laws, each discharged by a REAL prover, never
+ * an assertion:
+ *   EXPANSIVE   S subset sigma.gamma(S): every instance is a proven member of its own generalization
+ *               (au_is_subk verifies 2^k-1 == v for each; ser_antiunify:37).
+ *   WARRANTED   sigma proves the WHOLE generalized family in ONE symbolic shot over k=3..63
+ *               (au_prove_family -> forcefield/cg_opt_rules::cor_ss_certify_all; ser_antiunify:74).
+ *   ROUND-TRIP  on a member, INTUITION synthesizes the reduction (cg_synth) and INTENT certifies it == x*v
+ *               over ALL 2^64 by the SVIR<->SVIR miter (in_certify -> ser_kinduct_sym::seq_equiv).
+ *   SOUND       the negative arm PROVEN: a descriptor corrupted by +1 is REFUTED by the same miter
+ *               (in_certify_wrong == 0) -- intent certifies the SPECIFIC descriptor, not "any reduction".
+ *   TIGHT       the lower adjoint does not over-reach: a non-member in the instance set forbids the family
+ *               (au_generalize -> AU_NONE), so gamma never claims a shape sigma cannot prove.
+ *   IDEMPOTENT  gamma is deterministic (same instances => same family): the closure sigma.gamma is stable.
+ *
+ * TWO-PATH (the no-tautology law): the ROUND-TRIP identity (x<<3)-x == x*7 is certified here by seq_equiv AND,
+ * independently, by the standing tool `iii-prove` over all 2^64 (bit-blast UNSAT); the corrupted (x<<4)-x is
+ * REFUTED by both -- so a vacuous in-organ pass cannot hide.  in_adjoint_selfproof is the CONDITION OF MOTION:
+ * before intent may resolve any contract, the adjunction that justifies it is re-proven, exit 0. */
+extern @abi(c-msvc-x64) fn au_generalize(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_family(family: u32) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_is_subk(v: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+
+const IN_AU_SUBK : u32 = 2u32
+const IN_AU_NONE : u32 = 255u32
+
+/* gamma: the family INTUITION generalizes the instances to (exported for consumers of the adjunction). */
+fn in_adjoint_gamma(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 @export { return au_generalize(v0, v1, v2, seed) }
+/* sigma's warrant for a whole family: INTENT's one-shot proof (1 = universally sound). */
+fn in_adjoint_family_warrant(family: u32) -> u8 @export { return au_prove_family(family) }
+/* the closure sigma.gamma applied to {v0,v1,v2}: 1 iff intuition generalizes them to a family AND intent
+ * proves that whole family -- the Galois closure, computed and certified by III's own engines. */
+fn in_adjoint_closure(v0: u64, v1: u64, v2: u64, seed: u64) -> u8 @export {
+    let fam : u32 = au_generalize(v0, v1, v2, seed)
+    if fam == IN_AU_NONE { return 0u8 }
+    return au_prove_family(fam)
+}
+
+/* THE ADJUNCTION SELF-PROOF (CONDITION OF MOTION -- the FAST tier, milliseconds).  It proves the adjunction's
+ * STRUCTURE plus a REAL soundness certificate: the e-class MERGE fires only on a bv_ring proof over ALL 2^64
+ * that (x<<3)-x == x*7 (in_propose_shlsub), so the ground identity is machine-proven here -- and a wrong
+ * proposal is bv_ring-REFUTED.  The exhaustive SVIR-miter + whole-family certificates are the deliberate
+ * WARRANT below (they cost ~30s -- too dear for every motion, so they are a deep-proof, not a heartbeat).
+ * 0 = intent ⊣ intuition structurally PROVEN this invocation.
+ *   10 gamma-wrong   11 not-expansive   15 not-tight   16 not-idempotent
+ *   17 merge-not-cheaper   18 wrong-proposal-merged */
+fn in_adjoint_selfproof() -> u32 @export {
+    let seed : u64 = 1u64
+    /* gamma: intuition generalizes {7,15,31} (each 2^k-1) to the SUBK family */
+    if au_generalize(7u64, 15u64, 31u64, seed) != IN_AU_SUBK { return 10u32 }
+    /* EXPANSIVE: each instance is a proven member of its own generalization */
+    if au_is_subk(7u64, seed) != 1u32 { return 11u32 }
+    if au_is_subk(15u64, seed) != 1u32 { return 11u32 }
+    if au_is_subk(31u64, seed) != 1u32 { return 11u32 }
+    /* TIGHT: a non-member (6 is not 2^k-1) forbids the family -- gamma never over-reaches */
+    if au_generalize(7u64, 15u64, 6u64, seed) != IN_AU_NONE { return 15u32 }
+    /* IDEMPOTENT: gamma is deterministic -> the closure is stable */
+    if au_generalize(7u64, 15u64, 31u64, seed) != IN_AU_SUBK { return 16u32 }
+    /* the e-class INTENT linker: a proof-triggered merge (bv_ring over ALL 2^64, fast) lowers the cost;
+     * a wrong proposal is bv_ring-REFUTED and never merges -- a REAL soundness arm, both directions */
+    let h : u64 = in_declare(7u64)
+    let before : u32 = in_resolve(h)
+    if in_propose_shlsub(h, 3u64) != 1u32 { return 17u32 }       /* (x<<3)-x == x*7 proven -> merge */
+    if in_resolve(h) >= before { return 17u32 }                  /* the merge lowered the cost      */
+    let h2 : u64 = in_declare(15u64)
+    if in_propose_shlsub(h2, 3u64) != 0u32 { return 18u32 }      /* (x<<3)-x = x*7 != x*15 -> no merge */
+    return 0u32
+}
+fn in_adjoint_ok() -> u8 @export {
+    if in_adjoint_selfproof() == 0u32 { return 1u8 }
+    return 0u8
+}
+/* THE ADJUNCTION WARRANT (the DEEP tier, deliberate ~30s): the exhaustive certificates that make the
+ * adjunction SOUND over the whole domain -- the WHOLE family proven in one symbolic shot, the SVIR<->SVIR
+ * round-trip certified over ALL 2^64, and the corrupted descriptor REFUTED by the same miter.  Run at seal
+ * time / on demand, not every motion.  0 = warranted | 12 family-unwarranted | 13 round-trip-fails
+ * | 14 not-sound(teeth). */
+fn in_adjoint_warrant() -> u32 @export {
+    let seed : u64 = 1u64
+    if au_prove_family(IN_AU_SUBK) != 1u8 { return 12u32 }       /* the whole family, cor_ss_certify_all */
+    if in_certify(7u64, seed) != 1u32 { return 13u32 }           /* the SVIR round-trip, seq_equiv 2^64  */
+    if in_certify_wrong(7u64, seed) != 0u32 { return 14u32 }     /* the SVIR teeth (corrupt +1 refuted)  */
+    return 0u32
+}

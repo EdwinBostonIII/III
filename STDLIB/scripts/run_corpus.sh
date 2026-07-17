@@ -1787,7 +1787,8 @@ declare -A EXPECTED=(
     # ENTELECHEIA retirement removed from the run-line harvest; they are plain falsifiable-arm
     # conformance gates linking straight from the archive, so this table judges them directly.
     [2199_iform]=99                     # .ixr sovereign image container PROVABLY supersedes .bmp: alpha-lossless round-trip, self-verify, 1-byte tamper=2, self-describing header, generator binding, deterministic payload sig, superiority witness (alpha∉{0,255} preserved) + read-side sig cache coherence + the organ's own legacy verdict
-    [2200_iscene]=99                    # .isc resolution-independent scene master PROVABLY supersedes a raster: pinned deterministic frame sig; SAME scene → valid DISTINCT exact rasters at 96x72/128x96/192x144 (one tiny file, any resolution)
+    # (2200_iscene is NOT here: iscene renders THROUGH the aether_lens family -- leaf organs not in
+    #  the archive -- so it is owned by run_aether_lens_kats.sh which links the lens deps explicitly.)
     [2753_closure_claim]=99             # Ε3 per-claim closure-pin table: set/find/count/byte/is_set/verify/update/reset; foreign buffer + unknown claim REJECT; set on existing id UPDATES (no append)
     [2754_pulse]=99                     # Ε0 birth-rite: gate-verdict fold + composed silicon/behavior/image checks; all-pass=KGV_OK, each single failure yields its DISTINCT verdict; unreadable image errors + attests seal rejection; byte accessors guard range
     [2755_babel_wire_content]=99        # Ε1 content-address-as-integrity: message id IS the mhash of its payload; flipped byte → different address → undeliverable; restore re-greens; short-frame + null buffers rejected
@@ -1945,7 +1946,7 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom / csg kernel / photon route / mechanism / collision / delaunay / sturm / algebraic-numbers / mathesis-telescope 2680+2681 (Xi12; also exercised by the mathesis engine harness) -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + exact_denest + traj_kinematics + cyclotomic_se3 + collide + delaunay + sturm + algnum + bigint)")
             SKIP=$((SKIP+1)); continue
             ;;
-        2155_aether_lens|2158_aether_lens_render)
+        2155_aether_lens|2158_aether_lens_render|2200_iscene)
             RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- owned by run_aether_lens_kats.sh (links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
             SKIP=$((SKIP+1)); continue
             ;;

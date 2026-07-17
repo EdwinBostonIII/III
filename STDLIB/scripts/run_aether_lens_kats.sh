@@ -19,6 +19,7 @@ pass=0; fail=0
 "$I2" "$A/sqrt_sum_sign.iii"     --compile-only --out "$OUT/sqrt_sum_sign.o"     2>"$OUT/ss.log"  || { echo "FAIL sqrt_sum_sign compile";     cat "$OUT/ss.log";  exit 1; }
 "$I2" "$A/kfield.iii"  --compile-only --out "$OUT/kfield.o"  2>"$OUT/kfw.log" || { echo "FAIL kfield compile"; cat "$OUT/kfw.log"; exit 1; }
 "$I2" "$A/aether_lens.iii"       --compile-only --out "$OUT/aether_lens.o"       2>"$OUT/al.log"  || { echo "FAIL aether_lens compile";       cat "$OUT/al.log";  exit 1; }
+"$I2" "$A/iscene.iii"            --compile-only --out "$OUT/iscene.o"            2>"$OUT/isc.log" || { echo "FAIL iscene compile";            cat "$OUT/isc.log"; exit 1; }
 "$I2" "$A/aether_lens_frame.iii" --compile-only --out "$OUT/aether_lens_frame.o" 2>"$OUT/alf.log" || { echo "FAIL aether_lens_frame compile"; cat "$OUT/alf.log"; exit 1; }
 "$I2" "$A/aether_lens_view.iii"  --compile-only --out "$OUT/aether_lens_view.o"  2>"$OUT/alv.log" || { echo "FAIL aether_lens_view compile";  cat "$OUT/alv.log"; exit 1; }
 echo "PASS  aether_lens_view : compiles (the live interactive terminal viewer)"
@@ -50,6 +51,7 @@ run() {
 run 2155_aether_lens          99 "$OUT" "$OUT/aether_lens.o" "$OUT/aether_lens_frame.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"                          # EXACT RAY-CAST core: hit/miss/tangent + z-fight-killer depth near-tie + derived 8-bit Lambert; first-light shaded sphere
 run 2158_aether_lens_render   99 "$ART" "$OUT/aether_lens_frame.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"  # THE INTERFACE: determinism + exact CSG membership + occlusion + bigint==i64 shade + cyclotomic_se3 zero-drift ORBIT; writes aether_lens.bmp
 run 2169_studio_kernel        99 "$OUT" "$OUT/wb_kernel.o" "$OUT/studio_trig.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"        # III STUDIO's pure organs: collide/order/relay exact signs (hand-derived quadratics + marquee near-tie + surd-identity zero) + trig-table symmetries
+run 2200_iscene               99 "$OUT" "$OUT/iscene.o" "$OUT/aether_lens.o" "$OUT/cyclotomic_se3.o" "$OUT/sqrt_sum_sign.o" "$OUT/kfield.o" "$LIB"        # .isc resolution-independent scene master: pinned deterministic frame sig; SAME scene -> DISTINCT exact rasters at 96x72/128x96/192x144 (renders THROUGH the exact lens, hence owned here, not archive)
 
 # unified renderer core: 1D spectrum + 2D radial field + 3D ray-cast, all exact, all pinned; + sovereign .ixr seal round-trip
 for rc in render_core render_time ui_field iform exact_denest; do

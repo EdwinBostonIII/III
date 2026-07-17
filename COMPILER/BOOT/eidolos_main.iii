@@ -45,6 +45,22 @@ extern @abi(c-msvc-x64) fn eol_axiom_text() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_axiom() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_witness() -> u64 from "eidolos.iii"
 
+extern @abi(c-msvc-x64) fn lx_selfprove() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_bind() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_addr() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_count() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_word_len(i: u64) -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_word_byte(i: u64, k: u64) -> u8 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_check(addr: u64, len: u64) -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_unknown_len() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn lx_unknown_byte(k: u64) -> u8 from "lexicon.iii"
+
+extern @abi(c-msvc-x64) fn lw_selfprove() -> u64 from "logos_wire.iii"
+extern @abi(c-msvc-x64) fn lw_send(text: u64, len: u64) -> u64 from "logos_wire.iii"
+extern @abi(c-msvc-x64) fn lw_recv() -> u64 from "logos_wire.iii"
+extern @abi(c-msvc-x64) fn lw_frame_len() -> u64 from "logos_wire.iii"
+extern @abi(c-msvc-x64) fn lw_frame_manifold() -> u64 from "logos_wire.iii"
+
 const EM_SENT : u64 = 18446744073709551615u64
 
 var EM_IN : [u8; 16384]
@@ -103,8 +119,12 @@ fn usage() -> u64 {
     ps("  iii-eidolos read    \"[a < b] ...\"      one canonical scroll + its address\n" as u64)
     ps("  iii-eidolos unravel \"[a < b] ...\"      + everything the scroll knows\n" as u64)
     ps("  iii-eidolos ask     \"scroll\" -- \"thing\" is|under|mirrors \"thing\"\n" as u64)
-    ps("  iii-eidolos axiom                      the Logos Axiom -- the handshake address\n\n" as u64)
-    ps("exit: 0 ok/entailed | 1 not entailed | 3 usage | 4 scroll refused | 9 SELF-REFUSED\n" as u64)
+    ps("  iii-eidolos axiom                      the Logos Axiom -- the grammar handshake\n" as u64)
+    ps("  iii-eidolos words                      the universal lexicon -- the vocabulary handshake\n" as u64)
+    ps("  iii-eidolos check   \"[a < b] ...\"      production discipline: every word pooled?\n" as u64)
+    ps("  iii-eidolos wire    \"[a < b] ...\"      ride the aether: project to geometry, reify,\n" as u64)
+    ps("                                         verify the address end to end\n\n" as u64)
+    ps("exit: 0 ok/entailed | 1 not entailed/unpooled | 3 usage | 4 refused | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
 fn teach() -> u64 {
@@ -188,14 +208,80 @@ fn unravel_print() -> u64 {
 fn main(argc: i32, argv: u64) -> u64 {
     let av : *u64 = argv as *u64
     if argc < 2i32 { return usage() }
-    /* THE CONDITION OF MOTION: the language proves its own laws first */
+    /* THE CONDITION OF MOTION: language, lexicon, and wire prove their laws
+     * first -- the whole stack, every invocation */
     let sp : u64 = eol_selfprove()
     if sp != 0u64 {
         ps("THE LANGUAGE REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
         return 9u64
     }
+    let lxp : u64 = lx_selfprove()
+    if lxp != 0u64 {
+        ps("THE LEXICON REFUSES ITSELF: self-proof arm " as u64)   pu(lxp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let lwp : u64 = lw_selfprove()
+    if lwp != 0u64 {
+        ps("THE WIRE REFUSES ITSELF: self-proof arm " as u64)   pu(lwp)   ps(" failed\n" as u64)
+        return 9u64
+    }
     let cmd : u64 = av[1u64]
     if streq(cmd, "teach" as u64) == 1u32 { return teach() }
+    if streq(cmd, "words" as u64) == 1u32 {
+        let la : u64 = lx_bind()
+        if la == 0u64 { ps("THE LEXICON REFUSES: the definitional scroll did not bind\n" as u64)   return 9u64 }
+        ps("THE UNIVERSAL LEXICON -- one pool of words, defined in the language itself:\n\n" as u64)
+        eol_write()
+        ps("definitions : " as u64)   pscroll()   putchar(10i32)
+        ps("vocabulary handshake : " as u64)   phex(la)   putchar(10i32)
+        ps("pooled words (" as u64)   pu(lx_count())   ps("):\n " as u64)
+        let mut i : u64 = 0u64
+        while i < lx_count() {
+            putchar(32i32)
+            let n : u64 = lx_word_len(i)
+            let mut k : u64 = 0u64
+            while k < n { putchar(lx_word_byte(i, k) as i32)   k = k + 1u64 }
+            i = i + 1u64
+        }
+        putchar(10i32)
+        ps("\ntwo systems sharing this address share the WORDS; sharing the axiom's\n" as u64)
+        ps("address they share the GRAMMAR -- together, one tongue.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "check" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&EM_IN) as u64, 16383u64)
+        let u : u64 = lx_check((&EM_IN) as u64, n)
+        if u == EM_SENT { ps("check refused: the lexicon did not bind\n" as u64)   return 4u64 }
+        if u == 0u64 {
+            ps("WITHIN THE LEXICON: every word of the scroll is pooled and defined\n" as u64)
+            return 0u64
+        }
+        ps("OUTSIDE THE LEXICON: " as u64)   pu(u)
+        ps(" unknown word(s); first = \"" as u64)
+        let mut k : u64 = 0u64
+        while k < lx_unknown_len() { putchar(lx_unknown_byte(k) as i32)   k = k + 1u64 }
+        ps("\"\n(mint it into verba/lexicon.iii's definitional scroll -- a word is\n" as u64)
+        ps("admitted exactly by being DEFINED)\n" as u64)
+        return 1u64
+    }
+    if streq(cmd, "wire" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&EM_IN) as u64, 16383u64)
+        let sa : u64 = lw_send((&EM_IN) as u64, n)
+        if sa == 0u64 {
+            ps("wire refused: incoherent, over the 512-byte frame, or rank owed\n" as u64)
+            return 4u64
+        }
+        ps("sent     : address " as u64)   phex(sa)
+        ps("  frame " as u64)   pu(lw_frame_len())
+        ps(" bytes  manifold " as u64)   phex(lw_frame_manifold())   putchar(10i32)
+        let ra : u64 = lw_recv()
+        if ra == 0u64 { ps("DELIVERY REFUSED: the reified address does not match the seal\n" as u64)   return 4u64 }
+        ps("received : address " as u64)   phex(ra)
+        ps("  VERIFIED -- the geometry carried the scroll bit-exactly\n" as u64)
+        return 0u64
+    }
     if streq(cmd, "axiom" as u64) == 1u32 {
         ps("THE LOGOS AXIOM -- III's soul-sentence, the linguistic and logical barometer:\n\n" as u64)
         ps("  " as u64)   ps(eol_axiom_text())   ps("\n\n" as u64)

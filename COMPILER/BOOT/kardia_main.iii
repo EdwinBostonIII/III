@@ -104,6 +104,7 @@ fn print_counts() -> u32 {
     ps("  ADOPTED (inherited, never counted green): " as u64)  pu(kd_adopted_n())  putchar(10i32)
     ps("  DERIVED green             : " as u64)  pu(kd_derived_green_n())  putchar(10i32)
     ps("  DERIVED red               : " as u64)  pu(kd_derived_red_n())  putchar(10i32)
+    ps("[kardia " as u64)  pu(kd_derived_green_n())  ps(":" as u64)  pu(kd_count())  ps(" = derived]\n" as u64)
     ps("  DUE (no record / pin drift): " as u64)  pu(kd_due_n())  putchar(10i32)
     ps("  unresolved closure imports : " as u64)  pu(kd_unresolved())  putchar(10i32)
     ps("  malformed ledger lines     : " as u64)  pu(kd_malformed())  putchar(10i32)

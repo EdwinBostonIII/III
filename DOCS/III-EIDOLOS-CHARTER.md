@@ -115,6 +115,93 @@ named counter (`eol_rsyn`, `eol_rcap`, `eol_rlaw`, `eol_rq`, `eol_rwit`) —
 never silent.  Measures are exact records, not calculators: the language
 carries `124:1766`, the organs compute.
 
+## The Universal Lexicon (verba ⊗ eidolos, holographically bound)
+
+`STDLIB/iii/verba/lexicon.iii`.  One pool of words, and the definitions are
+themselves EIDOLOS: a single definitional scroll states, in the language, what
+every pooled word IS — so the pool is *derived* from the definitions (a word
+is in the lexicon iff the definitions speak it), and pool and meaning can
+never drift: they are one text with one address, the **vocabulary handshake**
+(`lx_addr`), beside the axiom's grammar handshake.  34 words pooled at birth,
+covering every standing speaker's vocabulary, with the true dualities stated
+(`[deterministic ~ stochastic]`, `[admitted ~ bricking]`, `[proven ~
+refuted]`, `[adopted ~ derived]`).
+
+The discipline sits at the boundary, never in the core: eidolos itself stays
+free (minting stays open — the liberation law), while `lx_check` audits a
+production scroll word-by-word and names the first alien word with its mint
+path: *a word is admitted exactly by being defined*.  Integer topology
+throughout: words intern once to 64-bit idfold names; membership is a fold
+compare; zero allocation.  Arms 90..95 are its condition of motion.
+
+## The Wire (EIDOLOS embedded in the aether)
+
+`STDLIB/iii/aether/logos_wire.iii`.  A claim does not travel as a parsed
+format: the canonical scroll bytes are PROJECTED through `glossa/topos`
+(manifold + GF(2) color basis — the gate-proven lossless holographic
+factoring) and REIFIED at the far edge; the receiver re-reads and must derive
+the sender's sealed address.  The (1,1,1) law rides shotgun: one flipped bit
+changes the address and the delivery REFUSES.  Zero-API interoperability —
+any listener feeds the reified bytes to its local unraveler and inherits the
+claims.  Envelope: 512 canonical bytes per frame (the 64-word manifold);
+over-cap and rank-owed payloads refused into named counters; an incoherent
+scroll never enters the aether.  Arms 100..104 are its condition of motion.
+
+## The adoption roster (the substitution sweep, one part at a time)
+
+Speaking now (bare-bracket lines, prose and exits unchanged, gates green —
+the evergreen `run_standing_tools` verifies all eight tools with the lines in
+place): **iii-intent**, **iii-hexad**, **iii-kardia** (`[kardia 180:1765 =
+derived]` live from the real ledger), **iii-prove** (`[prove 1:1 = proven]` /
+`[prove 0:1 = refuted]` / `[prove = undecided]`).
+
+Next, same pattern (one line per verdict, zero link weight): iii-exact,
+iii-typecheck, iii-crypto, iii-eval, iii-events; then doxa and kardia's event
+ledgers when their owning session lands them.
+
+## The master plan, adjudicated (what the tree's own laws permit)
+
+- **Integer topology** — already the implementation: things intern once to
+  64-bit folds; claims are integer triples; the closure runs on integers;
+  strings exist only at the boundary.
+- **"Rewrite isub to carry payloads"** — refused: Ring −1's no-label law is
+  the bus's essence and its operand shape is load-bearing under committed
+  gates.  The lawful form ships: `eol_witness` (shape on the bus) +
+  `logos_wire` (named payloads as topos geometry).
+- **Parser/sema injection (`[` as native AST)** — the destination is right;
+  this session it is doubly barred by the tree itself: the sealed
+  readability-boundary adjudication (vocabulary is the provable frontier;
+  grammar-shape carries no value leg for the parliament) and the covenant
+  ceremony, which refuses while another session holds the compiler/archive
+  hot.  The road: (1) the compiler *speaks* EIDOLOS verdicts at the next
+  covenant window; (2) EIDOLOS words enter the tongue through GLOSSA chamber
+  II as they earn value legs; (3) compile-time entailment (`[state <
+  guarded-storage]` refusing contradictory code) is the value-leg case to
+  bring before the parliament — refusal of provable contradiction IS a truth
+  leg, which is what the boundary law demands.
+- **Scorched-earth debloat** — refused as-written by yesterday's own SOMA
+  audit (the "debloat them" kill-list held 0 true orphans; text-scan
+  kill-lists nearly deleted a load-bearing family).  The lawful form is the
+  ERGON absorption-retirement protocol: `lex_ontology` + `disambiguate`
+  retire when the lexicon path replicates their exact contract and their
+  gates are rewired and phantom-0 is instrument-verified; local verdict
+  writers retire organ-by-organ as adoption lands.  Supersession by the same
+  yardstick, never deletion by assertion.
+
+## Superiority, measured (the replaced vocab vs the language)
+
+- Four organs' bespoke verdict formats now carry ONE grammar (five rules)
+  with zero added link weight per speaker.
+- Cross-organ entailment exists where none was possible: harvested live
+  lines from two tools plus a taxonomy claim answered `[intent 1:6 <
+  guarded storage] : KNOWN` — a fact no single organ stated or could state.
+- Merge is order-free and byte-canonical (no reconciliation code anywhere).
+- Transport is self-verifying (address equality; corruption cannot hide) and
+  parser-free on the wire.
+- The whole stack — language, lexicon, wire — re-proves itself at every
+  invocation (arms 70..83, 90..95, 100..104); no gate, no KAT, no stored
+  answers.
+
 ## Honest scope
 
 Mechanism novelty: none claimed — canonical forms, congruence closure,

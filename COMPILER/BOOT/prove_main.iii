@@ -249,6 +249,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("PROVEN: " as u64)  ps(av[2u64])  ps(" == " as u64)  ps(av[4u64])
         ps("  for EVERY input (all 2^64 assignments of " as u64)  pd(npa as u64)
         ps(" parameter(s); bit-blast UNSAT, not sampled).\n" as u64)
+        ps("[prove 1:1 = proven]\n" as u64)
         return 0u64
     }
 
@@ -269,11 +270,13 @@ fn main(argc: i32, argv: u64) -> u64 {
                 }
             }
         } }
+        ps("[prove 0:1 = refuted]\n" as u64)
         return 1u64
     }
 
     /* UNDECIDED -- say exactly why, never guess. */
     ps("UNDECIDED: cannot decide " as u64)  ps(av[2u64])  ps(" vs " as u64)  ps(av[4u64])  putchar(10i32)
+    ps("[prove = undecided]\n" as u64)
     bb_reset(64u64)
     let ta : u32 = sd_denote(&CONA as u64, boa, bla, npa)
     if ta == SD_TOP {

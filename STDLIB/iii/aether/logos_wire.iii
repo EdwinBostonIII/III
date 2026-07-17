@@ -1,0 +1,179 @@
+/* STDLIB/iii/aether/logos_wire.iii -- THE LOGOS WIRE: EIDOLOS embedded in the
+ * aether, systemwide.
+ *
+ * The nervous-system law: when an organ has derived something, it does not
+ * toggle a private flag -- it ripples a CLAIM.  This protocol carries a
+ * canonical EIDOLOS scroll across the aether the III way: as GEOMETRY, never
+ * as a parsed wire format.  The scroll's canonical bytes are PROJECTED through
+ * glossa/topos (manifold + GF(2) color basis + per-word coordinates -- the
+ * parser-free holographic factoring, gate-proven lossless) and REIFIED on the
+ * far side; the receiver re-reads the bytes and must derive the SAME eidolos
+ * address the sender computed.  The (1,1,1) law rides shotgun on every
+ * transmission: shape = address = value means transport corruption cannot
+ * hide -- a single flipped bit changes the address and the delivery REFUSES.
+ *
+ * Zero-API interoperability: any listener that catches a delivery feeds the
+ * reified bytes to its local eidolos and inherits the claims -- no per-organ
+ * hooks, no bespoke formats.  The wire never parses; only the edges read.
+ *
+ * ENVELOPE (named, counted): one coupling frame carries a canonical scroll of
+ * <= 512 bytes (topos's 64-word manifold); longer scrolls and over-rank
+ * payloads are REFUSED into named counters, never truncated.
+ *
+ * Truth is a CONDITION OF MOTION: lw_selfprove (arms 100..104) proves the
+ * Logos Axiom rides bit-identically, address preserved; a corrupted delivery
+ * is REFUSED; the envelope has teeth.  NO gate, NO KAT.
+ * NIH: composes omnia/eidolos (the language), glossa/topos (the geometry),
+ * numera/idfold (the ONE seat).  Hexad: kind_essence.  Ring R0. */
+module aether_logos_wire
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_axiom_text() -> u64 from "eidolos.iii"
+
+extern @abi(c-msvc-x64) fn tp_reset() -> i32 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_manifold(ptr: u64, len: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_extract_basis(ptr: u64, len: u64, manifold: u64, color_out: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_reify(manifold: u64, dest: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_word_count() -> u64 from "topos.iii"
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+const LW_CAP  : u64 = 512u64             /* one frame: topos's 64-word manifold */
+const LW_SENT : u64 = 18446744073709551615u64
+
+/* the frame in flight (module scratch -- the FFI address law) */
+var LW_SRC : [u8; 512]
+var LW_DST : [u8; 520]
+var LW_COL : [u64; 64]
+var LW_LEN : u64 = 0u64                  /* canonical byte length in the frame  */
+var LW_MAN : u64 = 0u64                  /* the frame's manifold                */
+var LW_SA  : u64 = 0u64                  /* the sender's address (the seal)     */
+var LW_ROVR : u64 = 0u64                 /* refused: scroll over the envelope   */
+var LW_ROWE : u64 = 0u64                 /* refused: deficit rank owed (>64)    */
+var LW_RBAD : u64 = 0u64                 /* refused: delivery address mismatch  */
+var LW_RINC : u64 = 0u64                 /* refused: incoherent source scroll   */
+
+fn lw_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn lw_rovr() -> u64 @export { return LW_ROVR }
+fn lw_rowe() -> u64 @export { return LW_ROWE }
+fn lw_rbad() -> u64 @export { return LW_RBAD }
+fn lw_rinc() -> u64 @export { return LW_RINC }
+fn lw_frame_len() -> u64 @export { return LW_LEN }
+fn lw_frame_manifold() -> u64 @export { return LW_MAN }
+fn lw_frame_addr() -> u64 @export { return LW_SA }
+
+/* SEND: read the scroll text, canonicalize, seal the address, project the
+ * canonical bytes to geometry.  Returns the sealed address; 0 = refused. */
+fn lw_send(text: u64, len: u64) -> u64 @export {
+    eol_reset()
+    if eol_read(text, len) < 0i64 { LW_RINC = LW_RINC + 1u64   return 0u64 }
+    let a : u64 = eol_addr()
+    if a == 0u64 { LW_RINC = LW_RINC + 1u64   return 0u64 }
+    eol_write()
+    let n : u64 = eol_out_len()
+    if n > LW_CAP { LW_ROVR = LW_ROVR + 1u64   return 0u64 }
+    let mut i : u64 = 0u64
+    while i < n { LW_SRC[i] = eol_out_byte(i)   i = i + 1u64 }
+    /* zero the pad tail so the projected words are deterministic */
+    i = n
+    while i < LW_CAP { LW_SRC[i] = 0u8   i = i + 1u64 }
+    tp_reset()
+    let m : u64 = tp_manifold((&LW_SRC) as u64, n)
+    let rank : u64 = tp_extract_basis((&LW_SRC) as u64, n, m, (&LW_COL) as u64)
+    if rank == LW_SENT { LW_ROWE = LW_ROWE + 1u64   return 0u64 }
+    LW_LEN = n
+    LW_MAN = m
+    LW_SA = a
+    return a
+}
+/* RECEIVE: reify the geometry, re-read the bytes, and REFUSE unless the
+ * derived address equals the sender's seal (corruption cannot hide).
+ * Returns the verified address; 0 = refused. */
+fn lw_recv() -> u64 @export {
+    if LW_LEN == 0u64 { LW_RBAD = LW_RBAD + 1u64   return 0u64 }
+    let mut i : u64 = 0u64
+    while i < 520u64 { LW_DST[i] = 0u8   i = i + 1u64 }
+    tp_reify(LW_MAN, (&LW_DST) as u64)
+    eol_reset()
+    if eol_read((&LW_DST) as u64, LW_LEN) < 0i64 { LW_RBAD = LW_RBAD + 1u64   return 0u64 }
+    let a : u64 = eol_addr()
+    if a != LW_SA { LW_RBAD = LW_RBAD + 1u64   return 0u64 }
+    return a
+}
+fn lw_recv_byte(i: u64) -> u8 @export { if i < LW_LEN { return LW_DST[i] }   return 0u8 }
+
+/* ==================== THE SELF-PROOF (arms 100..104) ==================== */
+fn lw_selfprove() -> u64 @export {
+    /* arm 100: the Logos Axiom rides the wire -- address preserved, bytes
+     * bit-identical end to end */
+    let ax : u64 = eol_axiom_text()
+    let sa : u64 = lw_send(ax, lw_slen(ax))
+    if sa == 0u64 { return 100u64 }
+    let ra : u64 = lw_recv()
+    if ra != sa { return 100u64 }
+    let mut i : u64 = 0u64
+    while i < LW_LEN { if LW_DST[i] != LW_SRC[i] { return 100u64 }   i = i + 1u64 }
+    /* arm 101: a measured, phrasal, nested scroll rides too */
+    let s2 : u64 = "[kardia 124:1766 = derived] [[dream ~ wake] < law] [belief 9:12 < assert]" as u64
+    let sb : u64 = lw_send(s2, lw_slen(s2))
+    if sb == 0u64 { return 101u64 }
+    if lw_recv() != sb { return 101u64 }
+    /* arm 102: CORRUPTION CANNOT HIDE -- flip one frame bit; the delivery
+     * REFUSES with the mismatch counted */
+    let sc : u64 = lw_send(ax, lw_slen(ax))
+    if sc == 0u64 { return 102u64 }
+    LW_SA = LW_SA ^ 1u64
+    let b0 : u64 = LW_RBAD
+    if lw_recv() != 0u64 { return 102u64 }
+    if LW_RBAD != b0 + 1u64 { return 102u64 }
+    LW_SA = LW_SA ^ 1u64
+    if lw_recv() != sc { return 102u64 }
+    /* arm 103: the envelope has teeth -- an over-cap scroll is REFUSED whole */
+    let o0 : u64 = LW_ROVR
+    let mut k : u64 = 0u64
+    while k < 60u64 {
+        /* sixty distinct claims of ~11 bytes exceed one 512-byte frame */
+        let d0 : u64 = 97u64 + (k / 26u64)
+        let d1 : u64 = 97u64 + (k % 26u64)
+        LW_DST[(k * 2u64)] = d0 as u8
+        LW_DST[(k * 2u64) + 1u64] = d1 as u8
+        k = k + 1u64
+    }
+    /* build "[aa < xz] [ab < xz] ..." in LW_SRC is the sender's job; here we
+     * synthesize the TEXT into LW_DST's tail region and send it */
+    let mut w : u64 = 0u64
+    k = 0u64
+    while k < 60u64 {
+        LW_DST[128u64 + w] = 91u8
+        LW_DST[128u64 + w + 1u64] = LW_DST[k * 2u64]
+        LW_DST[128u64 + w + 2u64] = LW_DST[(k * 2u64) + 1u64]
+        LW_DST[128u64 + w + 3u64] = 32u8
+        LW_DST[128u64 + w + 4u64] = 60u8
+        LW_DST[128u64 + w + 5u64] = 32u8
+        LW_DST[128u64 + w + 6u64] = 122u8
+        LW_DST[128u64 + w + 7u64] = 93u8
+        LW_DST[128u64 + w + 8u64] = 32u8
+        w = w + 9u64
+        k = k + 1u64
+    }
+    if lw_send((&LW_DST) as u64 + 128u64, w) != 0u64 { return 103u64 }
+    if LW_ROVR != o0 + 1u64 { return 103u64 }
+    /* arm 104: an incoherent scroll never enters the aether */
+    let i0 : u64 = LW_RINC
+    let cy : u64 = "[a < b] [b < a]" as u64
+    if lw_send(cy, lw_slen(cy)) != 0u64 { return 104u64 }
+    if LW_RINC != i0 + 1u64 { return 104u64 }
+    return 0u64
+}

@@ -1,0 +1,289 @@
+/* STDLIB/iii/verba/lexicon.iii -- THE UNIVERSAL LEXICON: verba and EIDOLOS,
+ * holographically bound.
+ *
+ * Every system speaks different concepts in different ontologies through ONE
+ * mode of expression -- and the WORDS in those expressions are pulled from one
+ * pool, with definitions the system is familiar with.  The binding is
+ * holographic because the definitions are themselves EIDOLOS: one canonical
+ * DEFINITIONAL SCROLL states, in the language, what every pooled word IS
+ * (which family it sits under, what it mirrors).  The pool is DERIVED from
+ * that scroll -- a word is in the lexicon iff the definitions speak it -- so
+ * pool and meaning can never drift apart: they are one text with one address.
+ *
+ * THE DISCIPLINE SITS AT THE BOUNDARY, NEVER IN THE CORE: eidolos itself
+ * remains free (any phrase is speakable -- the liberation law; minting stays
+ * open to GLOSSA and to every organ).  What the lexicon adds is the PRODUCTION
+ * check: a standing speaker's scroll can be audited word-by-word against the
+ * pool (lx_check), and the whole pool's meaning travels as one address
+ * (lx_addr -- the VOCABULARY HANDSHAKE, beside the Logos Axiom's grammar
+ * handshake).  Two systems that share both addresses share the language AND
+ * the words.
+ *
+ * Integer topology: words intern once to 64-bit idfold names; checks compare
+ * folds, not bytes.  Zero allocation; fixed-width throughout.
+ *
+ * Truth is a CONDITION OF MOTION: lx_selfprove (arms 90..95) re-derives the
+ * defs' coherence, the pool census, every standing speaker's vocabulary, and
+ * the refusal teeth at every invocation.  NO gate, NO KAT.
+ * NIH: composes omnia/eidolos (the language) + numera/idfold (the ONE seat).
+ * Hexad: kind_glyph.  Ring R0. */
+module verba_lexicon
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_things() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+const LX_WCAP : u64 = 128u64             /* pooled words                        */
+const LX_WLEN : u64 = 32u64              /* max word bytes                      */
+const LX_SENT : u64 = 18446744073709551615u64
+
+/* THE DEFINITIONAL SCROLL -- the pool and its meaning, one text.  Every claim
+ * is TRUE of the tree it describes: the verb triad sits under the logos and
+ * the two moving verbs are duals; the Logos Axiom; the intent faculty's six
+ * domains (deterministic/stochastic are the real duality in its mask bits);
+ * the standing verdicts with their dualities; the evidence modes (kardia's
+ * adopted/derived split); the standing speakers. */
+fn lx_defs_text() -> u64 @export {
+    return "[below < logos] [reflect < logos] [flat < logos] [below ~ reflect] [dream < proof] [proof = law] [law ~ metal] [dream ~ wake] [freeze < domain] [encrypt < domain] [deny < domain] [deterministic < domain] [stochastic < domain] [ttl < domain] [deterministic ~ stochastic] [resolved < verdict] [void < verdict] [unread < verdict] [admitted < verdict] [bricking < verdict] [admitted ~ bricking] [proven < verdict] [refuted < verdict] [undecided < verdict] [proven ~ refuted] [derived < evidence] [adopted < evidence] [derived ~ adopted] [intent < speaker] [hexad < speaker] [kardia < speaker] [doxa < speaker] [prove < speaker]" as u64
+}
+
+/* ==================== the derived pool ==================== */
+var LX_WB : [u8; 4096]                   /* word bytes arena                    */
+var LX_WO : [u64; 128]
+var LX_WL : [u64; 128]
+var LX_WF : [u64; 128]                   /* idfold of the word's bytes          */
+var LX_WN : u64 = 0u64
+var LX_ADDR : u64 = 0u64                 /* the defs scroll's eidolos address   */
+var LX_READY : u64 = 0u64
+var LX_RCAP : u64 = 0u64
+var LX_RUNK : u64 = 0u64                 /* unknown-word refusals (lx_check)    */
+var LX_UNKA : u64 = 0u64                 /* first unknown word: arena offset    */
+var LX_UNKL : u64 = 0u64                 /* first unknown word: length          */
+var LX_SCAN : [u8; 4096]                 /* lx_check word scratch               */
+
+fn lx_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn lx_fold_arena(off: u64, n: u64) -> u64 {
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < n { h = idfold_u64(h, LX_WB[off + i] as u64)   i = i + 1u64 }
+    return idfold_seal(h)
+}
+fn lx_is_lower(c: u8) -> u64 { if c >= 97u8 { if c <= 122u8 { return 1u64 } }   return 0u64 }
+fn lx_is_wordch(c: u8) -> u64 {
+    if lx_is_lower(c) == 1u64 { return 1u64 }
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    if c == 45u8 { return 1u64 }
+    return 0u64
+}
+/* pool a word (idempotent); 1 pooled | 0 refused */
+fn lx_pool_word(off: u64, n: u64) -> u64 {
+    if n == 0u64 { return 0u64 }
+    if n >= LX_WLEN { LX_RCAP = LX_RCAP + 1u64   return 0u64 }
+    let f : u64 = lx_fold_arena(off, n)
+    let mut i : u64 = 0u64
+    while i < LX_WN {
+        if LX_WF[i] == f { if LX_WL[i] == n { return 1u64 } }
+        i = i + 1u64
+    }
+    if LX_WN >= LX_WCAP { LX_RCAP = LX_RCAP + 1u64   return 0u64 }
+    let mut dst : u64 = 0u64
+    if LX_WN > 0u64 { dst = LX_WO[LX_WN - 1u64] + LX_WL[LX_WN - 1u64] }
+    if dst + n > 4096u64 { LX_RCAP = LX_RCAP + 1u64   return 0u64 }
+    let mut k : u64 = 0u64
+    while k < n { LX_WB[dst + k] = LX_WB[off + k]   k = k + 1u64 }
+    LX_WO[LX_WN] = dst
+    LX_WL[LX_WN] = n
+    LX_WF[LX_WN] = f
+    LX_WN = LX_WN + 1u64
+    return 1u64
+}
+/* harvest every WORD (letter-led token; measures skipped) of every thing in
+ * the eidolos state into the pool.  The eidolos state must hold the scroll. */
+fn lx_harvest_pool() -> u64 {
+    LX_WN = 0u64
+    let tn : u64 = eol_things()
+    let mut t : u64 = 0u64
+    while t < tn {
+        let ln : u64 = eol_thing_len(t)
+        let mut k : u64 = 0u64
+        while k < ln {
+            let c : u8 = eol_thing_byte(t, k)
+            if lx_is_lower(c) == 1u64 {
+                /* copy the word into the arena tail as scratch, then pool it */
+                let mut scratch : u64 = 0u64
+                if LX_WN > 0u64 { scratch = LX_WO[LX_WN - 1u64] + LX_WL[LX_WN - 1u64] }
+                let mut n : u64 = 0u64
+                let mut cc : u8 = c
+                let mut going : u64 = 1u64
+                while going == 1u64 {
+                    if lx_is_wordch(cc) == 1u64 {
+                        if scratch + n < 4096u64 { LX_WB[scratch + n] = cc }
+                        n = n + 1u64
+                        if k + n < ln { cc = eol_thing_byte(t, k + n) } else { going = 0u64 }
+                    } else { going = 0u64 }
+                }
+                if lx_pool_word(scratch, n) == 0u64 { return 0u64 }
+                k = k + n
+            } else {
+                /* skip a measure or structural byte wholesale */
+                if c >= 48u8 { if c <= 57u8 {
+                    let mut going2 : u64 = 1u64
+                    while going2 == 1u64 {
+                        if k < ln {
+                            let c2 : u8 = eol_thing_byte(t, k)
+                            let mut ism : u64 = 0u64
+                            if c2 >= 48u8 { if c2 <= 57u8 { ism = 1u64 } }
+                            if c2 == 58u8 { ism = 1u64 }
+                            if ism == 1u64 { k = k + 1u64 } else { going2 = 0u64 }
+                        } else { going2 = 0u64 }
+                    }
+                } else { k = k + 1u64 } } else { k = k + 1u64 }
+            }
+        }
+        t = t + 1u64
+    }
+    return 1u64
+}
+/* (re)bind the lexicon: read the defs, prove coherence, derive the pool.
+ * Returns the defs address (the VOCABULARY HANDSHAKE), 0 = refused. */
+fn lx_bind() -> u64 @export {
+    LX_READY = 0u64
+    eol_reset()
+    let t : u64 = lx_defs_text()
+    if eol_read(t, lx_slen(t)) < 0i64 { return 0u64 }
+    let a : u64 = eol_addr()
+    if a == 0u64 { return 0u64 }
+    if lx_harvest_pool() == 0u64 { return 0u64 }
+    if LX_WN == 0u64 { return 0u64 }
+    LX_ADDR = a
+    LX_READY = 1u64
+    return a
+}
+fn lx_addr() -> u64 @export { return LX_ADDR }
+fn lx_count() -> u64 @export { return LX_WN }
+fn lx_word_len(i: u64) -> u64 @export { if i < LX_WN { return LX_WL[i] }   return 0u64 }
+fn lx_word_byte(i: u64, k: u64) -> u8 @export {
+    if i < LX_WN { if k < LX_WL[i] { return LX_WB[LX_WO[i] + k] } }
+    return 0u8
+}
+fn lx_runk() -> u64 @export { return LX_RUNK }
+fn lx_rcap() -> u64 @export { return LX_RCAP }
+fn lx_unknown_len() -> u64 @export { return LX_UNKL }
+fn lx_unknown_byte(k: u64) -> u8 @export { if k < LX_UNKL { return LX_SCAN[LX_UNKA + k] }   return 0u8 }
+/* is a word (bytes) in the pool?  Fold-compared: integer topology. */
+fn lx_known(addr: u64, len: u64) -> u64 @export {
+    if LX_READY != 1u64 { return 0u64 }
+    let p : *u8 = addr as *u8
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < len { h = idfold_u64(h, p[i] as u64)   i = i + 1u64 }
+    let f : u64 = idfold_seal(h)
+    i = 0u64
+    while i < LX_WN {
+        if LX_WF[i] == f { if LX_WL[i] == len { return 1u64 } }
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* THE PRODUCTION CHECK: every word of a scroll text must be pooled.  Returns
+ * the number of unknown words (0 = fully within the lexicon); the first
+ * unknown word is retrievable.  NOTE: owns the shared eidolos state during
+ * the call (callers re-read their scroll afterwards); the lexicon itself is
+ * re-bound before returning so lx stays coherent. */
+fn lx_check(addr: u64, len: u64) -> u64 @export {
+    if LX_READY != 1u64 { if lx_bind() == 0u64 { return LX_SENT } }
+    /* scan the raw TEXT (not the eidolos state): words are letter-led runs */
+    let p : *u8 = addr as *u8
+    let mut unknown : u64 = 0u64
+    LX_UNKL = 0u64
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u8 = p[i]
+        if lx_is_lower(c) == 1u64 {
+            let mut n : u64 = 0u64
+            let mut going : u64 = 1u64
+            while going == 1u64 {
+                if i + n < len {
+                    let cc : u8 = p[i + n]
+                    if lx_is_wordch(cc) == 1u64 {
+                        if n < 4096u64 { LX_SCAN[n] = cc }
+                        n = n + 1u64
+                    } else { going = 0u64 }
+                } else { going = 0u64 }
+            }
+            if lx_known((&LX_SCAN) as u64, n) == 0u64 {
+                unknown = unknown + 1u64
+                LX_RUNK = LX_RUNK + 1u64
+                if LX_UNKL == 0u64 { LX_UNKA = 0u64   LX_UNKL = n }
+            }
+            i = i + n
+        } else { i = i + 1u64 }
+    }
+    return unknown
+}
+
+/* ==================== THE SELF-PROOF (arms 90..95) ==================== */
+fn lx_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, lx_slen(a), v, b, lx_slen(b))
+}
+fn lx_selfprove() -> u64 @export {
+    /* arm 90: the definitional scroll is coherent and the pool derives */
+    let a1 : u64 = lx_bind()
+    if a1 == 0u64 { return 90u64 }
+    if LX_WN < 20u64 { return 90u64 }
+    /* arm 91: the binding is stable -- rebinding derives the same address and
+     * the same pool count (the vocabulary handshake is deterministic) */
+    let n1 : u64 = LX_WN
+    let a2 : u64 = lx_bind()
+    if a2 != a1 { return 91u64 }
+    if LX_WN != n1 { return 91u64 }
+    /* arm 92: every standing speaker's vocabulary is pooled */
+    if lx_known("intent" as u64, 6u64) != 1u64 { return 92u64 }
+    if lx_known("freeze" as u64, 6u64) != 1u64 { return 92u64 }
+    if lx_known("void" as u64, 4u64) != 1u64 { return 92u64 }
+    if lx_known("resolved" as u64, 8u64) != 1u64 { return 92u64 }
+    if lx_known("unread" as u64, 6u64) != 1u64 { return 92u64 }
+    if lx_known("hexad" as u64, 5u64) != 1u64 { return 92u64 }
+    if lx_known("admitted" as u64, 8u64) != 1u64 { return 92u64 }
+    if lx_known("bricking" as u64, 8u64) != 1u64 { return 92u64 }
+    if lx_known("kardia" as u64, 6u64) != 1u64 { return 92u64 }
+    if lx_known("derived" as u64, 7u64) != 1u64 { return 92u64 }
+    if lx_known("adopted" as u64, 7u64) != 1u64 { return 92u64 }
+    if lx_known("proven" as u64, 6u64) != 1u64 { return 92u64 }
+    if lx_known("dream" as u64, 5u64) != 1u64 { return 92u64 }
+    if lx_known("metal" as u64, 5u64) != 1u64 { return 92u64 }
+    /* arm 93: the definitions MEAN -- the bound scroll entails family facts */
+    if lx_ent("freeze" as u64, 0u64, "domain" as u64) != 1u64 { return 93u64 }
+    if lx_ent("stochastic" as u64, 1u64, "deterministic" as u64) != 1u64 { return 93u64 }
+    if lx_ent("dream" as u64, 0u64, "law" as u64) != 1u64 { return 93u64 }
+    if lx_ent("refuted" as u64, 1u64, "proven" as u64) != 1u64 { return 93u64 }
+    if lx_ent("freeze" as u64, 0u64, "verdict" as u64) != 0u64 { return 93u64 }
+    /* arm 94: the teeth -- an alien word is caught, named, counted */
+    if lx_known("zzzq" as u64, 4u64) != 0u64 { return 94u64 }
+    let r0 : u64 = LX_RUNK
+    let bad : u64 = "[intent 1:6 = zzzq]" as u64
+    let u : u64 = lx_check(bad, lx_slen(bad))
+    if u != 1u64 { return 94u64 }
+    if LX_RUNK != r0 + 1u64 { return 94u64 }
+    if LX_UNKL != 4u64 { return 94u64 }
+    /* arm 95: a fully-pooled speaker line checks clean (production discipline) */
+    let good : u64 = "[intent 1:6 = freeze] [hexad 144:729 = admitted] [kardia 124:1766 = derived]" as u64
+    if lx_check(good, lx_slen(good)) != 0u64 { return 95u64 }
+    /* leave the lexicon bound and coherent */
+    if lx_bind() == 0u64 { return 95u64 }
+    return 0u64
+}

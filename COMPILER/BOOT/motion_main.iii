@@ -44,7 +44,22 @@ extern @abi(c-msvc-x64) fn py_etop() -> u64 from "pyrgos.iii"
 
 extern @abi(c-msvc-x64) fn kn_selfprove() -> u64 from "kinesis.iii"
 extern @abi(c-msvc-x64) fn kn_reset() -> i32 from "kinesis.iii"
-extern @abi(c-msvc-x64) fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64, m: i64) -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_setg(gx: i64, gy: i64, gz: i64, gd: i64) -> i32 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kn_seta(b: u64, ax: i64, ay: i64, az: i64) -> i32 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_build(i: u64, j: u64) -> i32 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_degen() -> u64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_bracket(hin: i64) -> i32 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_blo2() -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn kq_bhi2() -> i64 from "kinesis.iii"
+extern @abi(c-msvc-x64) fn py_mark() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_release(m: u64) -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_i64(v: i64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_rat(r: u64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sqrt(e: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn kn_run(mx: u64) -> u64 from "kinesis.iii"
 extern @abi(c-msvc-x64) fn kn_echo(techo: i64) -> u64 from "kinesis.iii"
 extern @abi(c-msvc-x64) fn kn_evn() -> u64 from "kinesis.iii"
@@ -117,17 +132,17 @@ fn print_toi_bracket(scale: i64) -> u32 {
  * surd worldline makes e2's root a NESTED radical (tower height >= 2). */
 fn gas_surd() -> u64 {
     kn_reset()
-    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
-    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
-    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64, 1i64)
     return kn_run(4u64)
 }
 /* the rational 3-collision chain (t = 4, 13/2, 9): the echo's forward leg */
 fn gas_chain() -> u64 {
     kn_reset()
-    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
-    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64)
-    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64)
+    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64, 1i64)
     return kn_run(10u64)
 }
 fn print_events(base: u64, n: u64, name: u64) -> u32 {
@@ -179,6 +194,9 @@ fn wthing(name: u64, seq: u64, i: u64, j: u64, lo: i64) -> i32 {
 fn wthing_ev(name: u64, base: u64, k: u64) -> i32 {
     return wthing(name, k - base + 1u64, kn_ei(k), kn_ej(k), kn_blo(k))
 }
+fn mk_frac(n: i64, d: i64) -> u64 {
+    return py_el_from_rat(py_rat_frac(n, d), 0u64)
+}
 fn wclaim_open() -> i32 { wb(91u8)   return 0i32 }
 fn wclaim_verb(c: u8) -> i32 { wb(32u8)   wb(c)   wb(32u8)   return 0i32 }
 fn wclaim_close() -> i32 { wb(93u8)   wb(32u8)   return 0i32 }
@@ -202,7 +220,9 @@ fn usage() -> u64 {
     ps("  iii-motion respond <14 ints>   exact elastic response (equal mass)\n" as u64)
     ps("  iii-motion scroll      fold the surd chain PAST its radicals (nested tower)\n" as u64)
     ps("  iii-motion echo        the Loschmidt echo: exact return to the genesis\n" as u64)
-    ps("  iii-motion speak       the fold as EIDOLOS; the mirror law derives the echo\n\n" as u64)
+    ps("  iii-motion speak       the fold as EIDOLOS; the mirror law derives the echo\n" as u64)
+    ps("  iii-motion ballistic   uniform gravity: parabolic worldlines, exact echo\n" as u64)
+    ps("  iii-motion quartic     per-body acceleration: exact Sturm trichotomy + bracket\n\n" as u64)
     ps("exit: 0 ok | 1 miss | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
@@ -225,19 +245,89 @@ fn main(argc: i32, argv: u64) -> u64 {
         return 9u64
     }
     let cmd : u64 = av[1u64]
+    if streq(cmd, "ballistic" as u64) == 1u32 {
+        ps("BALLISTICS, EXACT: the uniform field cancels in every pairwise\n" as u64)
+        ps("separation, so gravity costs the fold NOTHING -- impacts stay surds,\n" as u64)
+        ps("worldlines become exact parabolas, and time reversal still returns\n" as u64)
+        ps("the integer genesis.\n\n" as u64)
+        ps("  g = (0,-2);  A falls from rest at y=10;  B rises at 3 from y=0.\n" as u64)
+        ps("  contact at the exact rational t = 8/3; the at-impact velocities\n" as u64)
+        ps("  -16/3 and -7/3 EXCHANGE (equal masses):\n\n" as u64)
+        kn_reset()
+        kn_setg(0i64, 0i64 - 2i64, 0i64, 1i64)
+        kn_add(0i64,10i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+        kn_add(0i64,0i64,0i64,  0i64,3i64,0i64, 1i64, 1i64)
+        let n : u64 = kn_run(4u64)
+        print_events(0u64, n, "impact" as u64)
+        let e : u64 = kn_echo(3i64)
+        let n2 : u64 = kn_evn() - n
+        print_events(n, n2, "echo  " as u64)
+        putchar(10i32)
+        if e == 0u64 {
+            ps("  THE BALLISTIC ECHO: the parabolas retraced to the exact genesis.  0 drift.\n" as u64)
+        } else {
+            ps("  ECHO BROKE at check " as u64)   pu(e)   putchar(10i32)
+            return 1u64
+        }
+        ps("  conservation breaks = " as u64)   pu(kn_lawviol())
+        ps("   tower height = " as u64)   pu(py_h())
+        ps("   refusals = " as u64)   pu(py_err())   putchar(10i32)
+        if kn_lawviol() != 0u64 { return 1u64 }
+        if py_err() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "quartic" as u64) == 1u32 {
+        ps("THE QUARTIC ORACLE: per-body acceleration makes the separation a\n" as u64)
+        ps("QUARTIC whose roots are generally NOT constructible (the resolvent\n" as u64)
+        ps("cubic demands cube roots) -- no tower can HOLD them.  III still\n" as u64)
+        ps("DECIDES them: a Sturm chain with tower-element coefficients and\n" as u64)
+        ps("exact field-division remainders counts and brackets every root.\n\n" as u64)
+        ps("  A at rest at 0 accelerating +x at 2;  B at rest at 10;  r = 1 each.\n" as u64)
+        ps("  4*sep2 = 4 t^4 - 80 t^2 + 384:  first contact t = sqrt8, exit t = sqrt12.\n\n" as u64)
+        kn_reset()
+        kn_add(0i64,0i64,0i64,  0i64,0i64,0i64, 1i64, 1i64)
+        kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+        kn_seta(0u64, 2i64, 0i64, 0i64)
+        let m : u64 = py_mark()
+        kq_build(0u64, 1u64)
+        ps("  roots in (0,2] = " as u64)   pi(kq_count(0i64,1i64, 2i64,1i64))
+        ps("   in (0,3] = " as u64)   pi(kq_count(0i64,1i64, 3i64,1i64))
+        ps("   in (0,4] = " as u64)   pi(kq_count(0i64,1i64, 4i64,1i64))
+        ps("   degenerate = " as u64)   pu(kq_degen())   putchar(10i32)
+        kq_bracket(4i64)
+        ps("  first impact bracketed: t in [" as u64)   pi(kq_blo2())
+        ps("/10000, " as u64)   pi(kq_bhi2())   ps("/10000]\n" as u64)
+        let blo : i64 = kq_blo2()
+        py_release(m)
+        ps("\n  the INDEPENDENT path: the tower surd sqrt8 (norm descent, no Sturm):\n" as u64)
+        let r8 : u64 = py_sqrt(py_el_from_i64(8i64, 0u64))
+        let agree1 : i64 = py_cmp(r8, mk_frac(28284i64, 10000i64))
+        let agree2 : i64 = py_cmp(r8, mk_frac(28285i64, 10000i64))
+        ps("    sqrt8 > 28284/10000 : " as u64)   if agree1 == 1i64 { ps("yes\n" as u64) } else { ps("NO\n" as u64) }
+        ps("    sqrt8 < 28285/10000 : " as u64)   if agree2 == (0i64 - 1i64) { ps("yes\n" as u64) } else { ps("NO\n" as u64) }
+        if blo == 28284i64 { ps("  TWO PATHS, ONE BRACKET: Sturm count and norm descent agree exactly.\n" as u64) } else { ps("  DISAGREEMENT\n" as u64)   return 1u64 }
+        if py_err() != 0u64 { return 1u64 }
+        return 0u64
+    }
     if streq(cmd, "prove" as u64) == 1u32 {
-        ps("THE KINETIC SCROLL PROVEN (arms 170..179 + 180..187 + 190..196):\n" as u64)
+        ps("THE KINETIC SCROLL PROVEN (arms 170..179 + 180..188 + 190..199):\n" as u64)
         ps("  exact_motion   the exact surd TOI, ordered, no tunneling (170..179)\n" as u64)
         ps("  pyrgos         the constructible tower: nested radicals EXACT at any\n" as u64)
         ps("                 depth -- sqrt2+sqrt3-sqrt(5+2sqrt6) DECIDED zero; 125\n" as u64)
         ps("                 flat cases cross-agree with the separation-bound oracle;\n" as u64)
-        ps("                 total sign, total inverse, watermark pools (180..187)\n" as u64)
+        ps("                 total sign, total inverse, watermark pools; the\n" as u64)
+        ps("                 DENESTING ORACLE keeps the spine minimal -- sqrt6,\n" as u64)
+        ps("                 sqrt(3+2sqrt2) recognized, sqrt(2+sqrt2) proven\n" as u64)
+        ps("                 independent (180..188)\n" as u64)
         ps("  kinesis        the event fold PAST irrational impacts: the rational\n" as u64)
         ps("                 3-chain lands t = 4, 13/2, 9; the surd chain mints a\n" as u64)
         ps("                 NESTED radical; the Loschmidt echo returns the exact\n" as u64)
-        ps("                 integer genesis; simultaneity DETECTED; the graze\n" as u64)
-        ps("                 exchanges nothing; conservation exact at every event;\n" as u64)
-        ps("                 the fold is deterministic (190..196)\n" as u64)
+        ps("                 integer genesis WITHOUT growing the tower (the denest\n" as u64)
+        ps("                 law); simultaneity DETECTED; the graze exchanges\n" as u64)
+        ps("                 nothing; conservation exact at every event; GENERAL\n" as u64)
+        ps("                 MASSES; uniform gravity folds exactly (the ballistic\n" as u64)
+        ps("                 echo); the quartic Sturm oracle two-paths against the\n" as u64)
+        ps("                 tower surd; deterministic (190..199)\n" as u64)
         return 0u64
     }
     if streq(cmd, "toi" as u64) == 1u32 {

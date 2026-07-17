@@ -212,7 +212,33 @@ target named; the tool prints III's raw table.
   causality (the fold never stated it; the negative control does not entail).
   The spoken scroll is canonical bytes with a content address: a peer refolds
   the same gas and derives the same address — verification without trust,
-  the proofcarry law extended to physics.  All four verbs byte-deterministic.
+  the proofcarry law extended to physics.
+
+- **Γ-KINESIS-Ω — THE STATED LIMITS ANNIHILATED** (same campaign, second
+  wave).  (1) *The 4^H pool wall*: killed at its root by THE DENESTING
+  ORACLE — the complete square-root-in-tower decision (norm must be a square
+  one level down, then p² = (a±s)/2; every success verified by squaring).
+  `py_sqrt` now DECIDES before adjoining: √6 in Q(√2,√3), √(3+2√2) = 1+√2
+  recognized without growing the spine; √(2+√2) PROVEN independent and only
+  then adjoined (arm 188).  The Loschmidt echo no longer grows the tower at
+  all — the replay's radical is proven dependent and H stays exactly 1 (arm
+  192): the tower is MINIMAL, every adjoin carries its failed-denest
+  certificate.  (2) *Equal masses*: general — impulse 2·mj/(mi+mj) along the
+  normal, still rational-in-tower; 1-vs-3 hand-check and an enumerated mass
+  family with exact conservation (arm 197).  (3) *No gravity*: a UNIFORM
+  field cancels in every pairwise separation, so ballistics folds EXACTLY —
+  parabolic worldlines, surd impacts, and THE BALLISTIC ECHO returning the
+  integer genesis (arm 198; `iii-motion ballistic`, echo bracket 10/3 =
+  2·3 − 8/3, the visible parabola mirror).  Per-body accelerations make the
+  separation a QUARTIC whose roots are generally NOT constructible (the
+  resolvent cubic demands cube roots — Galois, not engineering): III DECIDES
+  them anyway — THE QUARTIC ORACLE, a Sturm chain with tower-element
+  coefficients and exact field-division remainders, counts roots in any
+  rational interval and brackets the first impact; two-pathed against the
+  independent norm-descent surd √8 to the same 1/10000 (arm 199;
+  `iii-motion quartic`).  Chaining PAST a non-constructible root is the one
+  genuinely open rung (the real-closed-field tier), stated, never smuggled.
+  All six verbs byte-deterministic; 27 arms in ~0.4 s.
 
 The retired files' MANIFEST lines reconcile at the autarkeia ceremony (the
 signed testament is regenerated there; deleting listed files is the

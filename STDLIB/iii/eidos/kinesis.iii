@@ -76,9 +76,19 @@ const KN_SENT : u64 = 18446744073709551615u64
 var KN_PX : [u64; 6]   var KN_PY : [u64; 6]   var KN_PZ : [u64; 6]
 var KN_VX : [u64; 6]   var KN_VY : [u64; 6]   var KN_VZ : [u64; 6]
 var KN_R : [i64; 6]
+var KN_M : [i64; 6]                      /* masses (positive integers)          */
 var KN_N : u64 = 0u64
 var KN_T : u64 = 0u64                    /* current time (element)              */
 var KN_BASE : u64 = 0u64                 /* the keep watermark                  */
+
+/* the uniform field (the FOLD's gravity: cancels in every pairwise separation,
+ * so impacts stay quadratic and the chain stays constructible) */
+var KN_GX : i64 = 0i64   var KN_GY : i64 = 0i64   var KN_GZ : i64 = 0i64
+var KN_GD : i64 = 1i64
+
+/* per-body constant accelerations (the quartic ORACLE face only -- the fold
+ * does not chain past a non-constructible root, it DECIDES and BRACKETS it) */
+var KN_AX : [i64; 6]   var KN_AY : [i64; 6]   var KN_AZ : [i64; 6]
 
 /* the integer genesis (for the echo) */
 var KN_P0X : [i64; 6]   var KN_P0Y : [i64; 6]   var KN_P0Z : [i64; 6]
@@ -140,13 +150,28 @@ fn kn_reset() -> i32 @export {
     KN_N = 0u64   KN_EVN = 0u64
     KN_TIE = 0u64   KN_LAWVIOL = 0u64   KN_ORDVIOL = 0u64   KN_ERRK = 0u64
     KN_GDOT = 0i64   KN_FOUND = 0u32
+    KN_GX = 0i64   KN_GY = 0i64   KN_GZ = 0i64   KN_GD = 1i64
+    let mut b : u64 = 0u64
+    while b < KN_NCAP { KN_AX[b] = 0i64   KN_AY[b] = 0i64   KN_AZ[b] = 0i64   b = b + 1u64 }
     KN_BASE = py_mark()
     KN_T = py_el_from_i64(0i64, 0u64)
     return 0i32
 }
-fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 @export {
+/* the uniform field, as an exact rational vector (gx, gy, gz)/gd */
+fn kn_setg(gx: i64, gy: i64, gz: i64, gd: i64) -> i32 @export {
+    if gd <= 0i64 { KN_ERRK = 1u64   return -1i32 }
+    KN_GX = gx   KN_GY = gy   KN_GZ = gz   KN_GD = gd
+    return 0i32
+}
+fn kn_seta(b: u64, ax: i64, ay: i64, az: i64) -> i32 @export {
+    if b >= KN_N { KN_ERRK = 1u64   return -1i32 }
+    KN_AX[b] = ax   KN_AY[b] = ay   KN_AZ[b] = az
+    return 0i32
+}
+fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64, m: i64) -> u64 @export {
     if KN_N >= KN_NCAP { KN_ERRK = 1u64   return KN_SENT }
     if r < 0i64 { KN_ERRK = 1u64   return KN_SENT }
+    if m <= 0i64 { KN_ERRK = 1u64   return KN_SENT }
     let b : u64 = KN_N
     KN_PX[b] = py_el_from_i64(px, 0u64)
     KN_PY[b] = py_el_from_i64(py0, 0u64)
@@ -155,6 +180,7 @@ fn kn_add(px: i64, py0: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 
     KN_VY[b] = py_el_from_i64(vy, 0u64)
     KN_VZ[b] = py_el_from_i64(vz, 0u64)
     KN_R[b] = r
+    KN_M[b] = m
     KN_P0X[b] = px   KN_P0Y[b] = py0   KN_P0Z[b] = pz
     KN_V0X[b] = vx   KN_V0Y[b] = vy   KN_V0Z[b] = vz
     KN_N = KN_N + 1u64
@@ -273,7 +299,10 @@ fn kn_scan() -> i32 {
     }
     return 0i32
 }
-/* equal-mass elastic response on pair (i, j) at contact.  Adjoins nothing. */
+/* elastic response on pair (i, j) at contact, GENERAL MASSES: the impulse
+ * along the contact normal m is  J = 2 mi mj/(mi+mj) * (dV.m)/(m.m), applied
+ * as  V_i -= (2 mj/(mi+mj)) * ((dV.m)/(m.m)) m  and the mirror on j.
+ * Still RATIONAL in the tower -- masses adjoin nothing. */
 fn kn_respond(i: u64, j: u64) -> i32 {
     let mx : u64 = py_sub(KN_PX[i], KN_PX[j])
     let my : u64 = py_sub(KN_PY[i], KN_PY[j])
@@ -286,25 +315,30 @@ fn kn_respond(i: u64, j: u64) -> i32 {
     let dot : u64 = kn_dot3(dvx, dvy, dvz, mx, my, mz)
     KN_GDOT = py_sign(dot)
     let s : u64 = py_div(dot, mm)
-    let sx : u64 = py_mul(s, mx)
-    let sy : u64 = py_mul(s, my)
-    let sz : u64 = py_mul(s, mz)
-    KN_VX[i] = py_sub(KN_VX[i], sx)
-    KN_VY[i] = py_sub(KN_VY[i], sy)
-    KN_VZ[i] = py_sub(KN_VZ[i], sz)
-    KN_VX[j] = py_add(KN_VX[j], sx)
-    KN_VY[j] = py_add(KN_VY[j], sy)
-    KN_VZ[j] = py_add(KN_VZ[j], sz)
+    let mi : i64 = KN_M[i]
+    let mj : i64 = KN_M[j]
+    let fi : u64 = py_el_from_rat(py_rat_frac(2i64 * mj, mi + mj), 0u64)
+    let fj : u64 = py_el_from_rat(py_rat_frac(2i64 * mi, mi + mj), 0u64)
+    let si : u64 = py_mul(fi, s)
+    let sj : u64 = py_mul(fj, s)
+    KN_VX[i] = py_sub(KN_VX[i], py_mul(si, mx))
+    KN_VY[i] = py_sub(KN_VY[i], py_mul(si, my))
+    KN_VZ[i] = py_sub(KN_VZ[i], py_mul(si, mz))
+    KN_VX[j] = py_add(KN_VX[j], py_mul(sj, mx))
+    KN_VY[j] = py_add(KN_VY[j], py_mul(sj, my))
+    KN_VZ[j] = py_add(KN_VZ[j], py_mul(sj, mz))
     return 0i32
 }
-/* total momentum component and total energy (equal masses) */
+/* total momentum component and total kinetic energy, MASS-WEIGHTED */
 fn kn_ptot(axis: u64) -> u64 {
     let mut e : u64 = py_el_new(0u64)
     let mut b : u64 = 0u64
     while b < KN_N {
-        if axis == 0u64 { e = py_add(e, KN_VX[b]) }
-        if axis == 1u64 { e = py_add(e, KN_VY[b]) }
-        if axis == 2u64 { e = py_add(e, KN_VZ[b]) }
+        let mb : i64 = KN_M[b]
+        let me : u64 = py_el_from_i64(mb, 0u64)
+        if axis == 0u64 { e = py_add(e, py_mul(me, KN_VX[b])) }
+        if axis == 1u64 { e = py_add(e, py_mul(me, KN_VY[b])) }
+        if axis == 2u64 { e = py_add(e, py_mul(me, KN_VZ[b])) }
         b = b + 1u64
     }
     return e
@@ -313,10 +347,35 @@ fn kn_etot() -> u64 {
     let mut e : u64 = py_el_new(0u64)
     let mut b : u64 = 0u64
     while b < KN_N {
-        e = py_add(e, kn_sq3(KN_VX[b], KN_VY[b], KN_VZ[b]))
+        let mb : i64 = KN_M[b]
+        let me : u64 = py_el_from_i64(mb, 0u64)
+        e = py_add(e, py_mul(me, kn_sq3(KN_VX[b], KN_VY[b], KN_VZ[b])))
         b = b + 1u64
     }
     return e
+}
+/* advance every worldline by the exact interval dt under the uniform field:
+ * P += V dt + (g/2) dt^2 ; V += g dt.  ONE seat for both the event commit
+ * and the free advance -- the parabolas are exact tower elements. */
+fn kn_adv(dt: u64) -> i32 {
+    let ghx : u64 = py_el_from_rat(py_rat_frac(KN_GX, 2i64 * KN_GD), 0u64)
+    let ghy : u64 = py_el_from_rat(py_rat_frac(KN_GY, 2i64 * KN_GD), 0u64)
+    let ghz : u64 = py_el_from_rat(py_rat_frac(KN_GZ, 2i64 * KN_GD), 0u64)
+    let gx : u64 = py_el_from_rat(py_rat_frac(KN_GX, KN_GD), 0u64)
+    let gy : u64 = py_el_from_rat(py_rat_frac(KN_GY, KN_GD), 0u64)
+    let gz : u64 = py_el_from_rat(py_rat_frac(KN_GZ, KN_GD), 0u64)
+    let dt2 : u64 = py_mul(dt, dt)
+    let mut b : u64 = 0u64
+    while b < KN_N {
+        KN_PX[b] = py_add(KN_PX[b], py_add(py_mul(KN_VX[b], dt), py_mul(ghx, dt2)))
+        KN_PY[b] = py_add(KN_PY[b], py_add(py_mul(KN_VY[b], dt), py_mul(ghy, dt2)))
+        KN_PZ[b] = py_add(KN_PZ[b], py_add(py_mul(KN_VZ[b], dt), py_mul(ghz, dt2)))
+        KN_VX[b] = py_add(KN_VX[b], py_mul(gx, dt))
+        KN_VY[b] = py_add(KN_VY[b], py_mul(gy, dt))
+        KN_VZ[b] = py_add(KN_VZ[b], py_mul(gz, dt))
+        b = b + 1u64
+    }
+    return 0i32
 }
 /* the two-phase keep: slide spine + time + worldlines down to the base */
 fn kn_keep() -> i32 {
@@ -398,15 +457,9 @@ fn kn_step() -> u64 @export {
     if cord < 0i64 { KN_ORDVIOL = KN_ORDVIOL + 1u64 }
     let mut strict : u64 = 0u64
     if cord > 0i64 { strict = 1u64 }
-    /* advance every worldline */
+    /* advance every worldline (parabolic under the uniform field) */
     let dt : u64 = py_sub(tevt, KN_T)
-    let mut b : u64 = 0u64
-    while b < KN_N {
-        KN_PX[b] = py_add(KN_PX[b], py_mul(KN_VX[b], dt))
-        KN_PY[b] = py_add(KN_PY[b], py_mul(KN_VY[b], dt))
-        KN_PZ[b] = py_add(KN_PZ[b], py_mul(KN_VZ[b], dt))
-        b = b + 1u64
-    }
+    kn_adv(dt)
     KN_T = tevt
     /* conservation across the response, exactly (post-values scoped) */
     let px0 : u64 = kn_ptot(0u64)
@@ -453,13 +506,7 @@ fn kn_run(mx: u64) -> u64 @export {
 fn kn_advance_to(tn: i64) -> i32 @export {
     let te : u64 = py_el_from_i64(tn, 0u64)
     let dt : u64 = py_sub(te, KN_T)
-    let mut b : u64 = 0u64
-    while b < KN_N {
-        KN_PX[b] = py_add(KN_PX[b], py_mul(KN_VX[b], dt))
-        KN_PY[b] = py_add(KN_PY[b], py_mul(KN_VY[b], dt))
-        KN_PZ[b] = py_add(KN_PZ[b], py_mul(KN_VZ[b], dt))
-        b = b + 1u64
-    }
+    kn_adv(dt)
     KN_T = te
     kn_keep()
     return 0i32
@@ -503,14 +550,178 @@ fn kn_echo(techo: i64) -> u64 @export {
     return 0u64
 }
 
-/* ==================== THE SELF-PROOF (arms 190..196) ==================== */
+/* ==================== THE QUARTIC ORACLE (tower-Sturm) ====================
+ * Per-body constant accelerations make the pairwise separation QUARTIC in
+ * tau -- its roots are generally NOT constructible (the resolvent cubic
+ * demands cube roots), so the 2-tower cannot HOLD them.  It can still DECIDE
+ * them: the Sturm chain of the quartic, with coefficients that are TOWER
+ * ELEMENTS and remainders computed by EXACT field division, counts the real
+ * roots in any rational interval and brackets the first impact to any width.
+ * Trichotomy and ordering without epsilon.  Chaining PAST such a root needs
+ * the real-closed-field tier -- the genuinely open rung, stated, never
+ * smuggled.  4*sep2(tau) = c0 + c1 t + c2 t^2 + c3 t^3 + c4 t^4 with
+ *   c0 = 4(|dX|^2 - rr^2)   c1 = 8 dX.dV   c2 = 4|dV|^2 + 4 dX.dA
+ *   c3 = 4 dV.dA            c4 = |dA|^2                (dA = accel diff)   */
+var KQ_C : [u64; 30]                     /* chain: up to 6 polys x 5 coeffs     */
+var KQ_D : [i64; 6]                      /* effective degree per poly           */
+var KQ_N : u64 = 0u64
+var KQ_DEGEN : u64 = 0u64                /* gcd(P, P') nonconstant              */
+var KQ_BLO2 : i64 = 0i64   var KQ_BHI2 : i64 = 0i64
+var KQ_W : [u64; 5]                      /* remainder scratch                   */
+
+fn kq_degof(base: u64) -> i64 {
+    let mut d : i64 = 0i64 - 1i64
+    let mut k : u64 = 0u64
+    while k < 5u64 {
+        if py_sign(KQ_C[base + k]) != 0i64 { d = k as i64 }
+        k = k + 1u64
+    }
+    return d
+}
+/* exact polynomial remainder of chain[pb] (deg dr0) by chain[db] (deg dv),
+ * into KQ_W; returns the remainder's effective degree */
+fn kq_rem(pb: u64, dr0: i64, db: u64, dv: i64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 5u64 { KQ_W[k] = KQ_C[pb + k]   k = k + 1u64 }
+    let mut dr : i64 = dr0
+    while dr >= dv {
+        let lead : u64 = KQ_W[dr as u64]
+        if py_sign(lead) == 0i64 {
+            dr = dr - 1i64
+        } else {
+            let f : u64 = py_div(lead, KQ_C[db + (dv as u64)])
+            let sh : u64 = (dr - dv) as u64
+            let mut t : i64 = 0i64
+            while t < dv {
+                let wi : u64 = sh + (t as u64)
+                KQ_W[wi] = py_sub(KQ_W[wi], py_mul(f, KQ_C[db + (t as u64)]))
+                t = t + 1i64
+            }
+            KQ_W[dr as u64] = py_el_new(0u64)
+            dr = dr - 1i64
+        }
+    }
+    let mut d : i64 = 0i64 - 1i64
+    k = 0u64
+    while k < 5u64 {
+        if py_sign(KQ_W[k]) != 0i64 { d = k as i64 }
+        k = k + 1u64
+    }
+    return d
+}
+fn kq_build(i: u64, j: u64) -> i32 @export {
+    let dxx : u64 = py_sub(KN_PX[i], KN_PX[j])
+    let dxy : u64 = py_sub(KN_PY[i], KN_PY[j])
+    let dxz : u64 = py_sub(KN_PZ[i], KN_PZ[j])
+    let dvx : u64 = py_sub(KN_VX[i], KN_VX[j])
+    let dvy : u64 = py_sub(KN_VY[i], KN_VY[j])
+    let dvz : u64 = py_sub(KN_VZ[i], KN_VZ[j])
+    let daxi : i64 = KN_AX[i] - KN_AX[j]
+    let dayi : i64 = KN_AY[i] - KN_AY[j]
+    let dazi : i64 = KN_AZ[i] - KN_AZ[j]
+    let dax : u64 = py_el_from_i64(daxi, 0u64)
+    let day : u64 = py_el_from_i64(dayi, 0u64)
+    let daz : u64 = py_el_from_i64(dazi, 0u64)
+    let ri : i64 = KN_R[i]
+    let rj : i64 = KN_R[j]
+    let rr : i64 = ri + rj
+    let rre : u64 = py_el_from_i64(rr * rr, 0u64)
+    let four : u64 = py_el_from_i64(4i64, 0u64)
+    let eight : u64 = py_el_from_i64(8i64, 0u64)
+    KQ_C[0u64] = py_mul(four, py_sub(kn_sq3(dxx, dxy, dxz), rre))
+    KQ_C[1u64] = py_mul(eight, kn_dot3(dxx, dxy, dxz, dvx, dvy, dvz))
+    KQ_C[2u64] = py_add(py_mul(four, kn_sq3(dvx, dvy, dvz)), py_mul(four, kn_dot3(dxx, dxy, dxz, dax, day, daz)))
+    KQ_C[3u64] = py_mul(four, kn_dot3(dvx, dvy, dvz, dax, day, daz))
+    KQ_C[4u64] = kn_sq3(dax, day, daz)
+    KQ_D[0u64] = kq_degof(0u64)
+    KQ_C[5u64] = KQ_C[1u64]
+    KQ_C[6u64] = py_mul(py_el_from_i64(2i64, 0u64), KQ_C[2u64])
+    KQ_C[7u64] = py_mul(py_el_from_i64(3i64, 0u64), KQ_C[3u64])
+    KQ_C[8u64] = py_mul(four, KQ_C[4u64])
+    KQ_C[9u64] = py_el_new(0u64)
+    KQ_D[1u64] = kq_degof(5u64)
+    KQ_N = 2u64
+    KQ_DEGEN = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let lastd : i64 = KQ_D[KQ_N - 1u64]
+        if lastd <= 0i64 { going = 0u8 } else {
+        if KQ_N >= 6u64 { going = 0u8 } else {
+            let prevd : i64 = KQ_D[KQ_N - 2u64]
+            let rd : i64 = kq_rem((KQ_N - 2u64) * 5u64, prevd, (KQ_N - 1u64) * 5u64, lastd)
+            if rd < 0i64 {
+                KQ_DEGEN = 1u64
+                going = 0u8
+            } else {
+                let base : u64 = KQ_N * 5u64
+                let mut k : u64 = 0u64
+                while k < 5u64 { KQ_C[base + k] = py_neg(KQ_W[k])   k = k + 1u64 }
+                KQ_D[KQ_N] = rd
+                KQ_N = KQ_N + 1u64
+            }
+        } }
+    }
+    return 0i32
+}
+fn kq_eval_sign(base: u64, d: i64, pn: i64, pd: i64) -> i64 {
+    let tp : u64 = py_el_from_rat(py_rat_frac(pn, pd), 0u64)
+    let mut v : u64 = KQ_C[base + (d as u64)]
+    let mut k : i64 = d - 1i64
+    while k >= 0i64 {
+        v = py_add(py_mul(v, tp), KQ_C[base + (k as u64)])
+        k = k - 1i64
+    }
+    return py_sign(v)
+}
+fn kq_var(pn: i64, pd: i64) -> i64 {
+    let mut ch : i64 = 0i64
+    let mut prev : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < KQ_N {
+        let d : i64 = KQ_D[p]
+        if d >= 0i64 {
+            let s : i64 = kq_eval_sign(p * 5u64, d, pn, pd)
+            if s != 0i64 {
+                if prev != 0i64 { if s != prev { ch = ch + 1i64 } }
+                prev = s
+            }
+        }
+        p = p + 1u64
+    }
+    return ch
+}
+/* distinct real roots of 4*sep2 in (a, b] -- the exact Sturm count */
+fn kq_count(an: i64, ad: i64, bn: i64, bd: i64) -> i64 @export {
+    let m : u64 = py_mark()
+    let va : i64 = kq_var(an, ad)
+    let vb : i64 = kq_var(bn, bd)
+    py_release(m)
+    return va - vb
+}
+fn kq_degen() -> u64 @export { return KQ_DEGEN }
+fn kq_blo2() -> i64 @export { return KQ_BLO2 }
+fn kq_bhi2() -> i64 @export { return KQ_BHI2 }
+/* bracket the FIRST root in (0, hin] to width 1/10000 by count bisection */
+fn kq_bracket(hin: i64) -> i32 @export {
+    let mut lo : i64 = 0i64
+    let mut hi : i64 = hin * 10000i64
+    while (hi - lo) > 1i64 {
+        let mid : i64 = (lo + hi) / 2i64
+        let c : i64 = kq_count(0i64, 1i64, mid, 10000i64)
+        if c == 0i64 { lo = mid } else { hi = mid }
+    }
+    KQ_BLO2 = lo   KQ_BHI2 = hi
+    return 0i32
+}
+
+/* ==================== THE SELF-PROOF (arms 190..199) ==================== */
 fn kn_arm190() -> u64 {
     /* the hand-checkable rational chain: A(0)v+2, B(10)v0, C(30)v-2, r=1 ->
      * three exchanges at t = 4, 13/2, 9; final velocities (-2, 0, +2). */
     kn_reset()
-    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
-    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64)
-    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64)
+    kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+    kn_add(30i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64, 1i64)
     let n : u64 = kn_run(10u64)
     if n != 3u64 { return 190u64 }
     if KN_EVN != 3u64 { return 190u64 }
@@ -540,9 +751,9 @@ fn kn_arm191() -> u64 {
      * to touch nothing before event 1 (A-C: B=+20, C=113 -> no positive root;
      * B-C: Delta < 0 -> never). */
     kn_reset()
-    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
-    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
-    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64, 1i64)
     let n : u64 = kn_run(4u64)
     if n < 2u64 { return 191u64 }
     let lo0 : i64 = KN_BLO[0u64]
@@ -560,14 +771,17 @@ fn kn_arm192() -> u64 {
     /* THE ECHO through an irrational event: fold, reverse at t=2, fold back,
      * reverse -- the exact integer genesis returns. */
     kn_reset()
-    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
-    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64, 1i64)
     let n : u64 = kn_run(4u64)
     if n != 1u64 { return 192u64 }
     if py_h() != 1u64 { return 192u64 }
     let e : u64 = kn_echo(2i64)
     if e != 0u64 { return 192u64 }
-    if py_h() < 2u64 { return 192u64 }                    /* the echo minted its own radical */
+    /* THE DENEST LAW, live: the replay's radical lies in Q(sqrt Delta1) (its
+     * quadratic factors over the field), the oracle PROVES it, and the tower
+     * does not grow -- H stays exactly 1 through the whole echo. */
+    if py_h() != 1u64 { return 192u64 }
     if KN_LAWVIOL != 0u64 { return 192u64 }
     if py_err() != 0u64 { return 192u64 }
     return 0u64
@@ -576,10 +790,10 @@ fn kn_arm193() -> u64 {
     /* exact simultaneity: two far-apart head-on pairs share ONE exact TOI;
      * both fire at t = 9/4 and the tie is DETECTED, not fudged. */
     kn_reset()
-    kn_add(0i64,0i64,0i64,    4i64,0i64,0i64, 1i64)
-    kn_add(20i64,0i64,0i64,   0i64-4i64,0i64,0i64, 1i64)
-    kn_add(0i64,100i64,0i64,  4i64,0i64,0i64, 1i64)
-    kn_add(20i64,100i64,0i64, 0i64-4i64,0i64,0i64, 1i64)
+    kn_add(0i64,0i64,0i64,    4i64,0i64,0i64, 1i64, 1i64)
+    kn_add(20i64,0i64,0i64,   0i64-4i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64,100i64,0i64,  4i64,0i64,0i64, 1i64, 1i64)
+    kn_add(20i64,100i64,0i64, 0i64-4i64,0i64,0i64, 1i64, 1i64)
     let n : u64 = kn_run(4u64)
     if n != 2u64 { return 193u64 }
     if KN_TIE < 1u64 { return 193u64 }
@@ -596,8 +810,8 @@ fn kn_arm194() -> u64 {
     /* the graze identity: Delta = 0 -> tangent contact, dV.m = 0 exactly,
      * the response exchanges NOTHING, and no radical is minted. */
     kn_reset()
-    kn_add(0i64,0i64,0i64, 2i64,0i64,0i64, 1i64)
-    kn_add(4i64,2i64,0i64, 0i64,0i64,0i64, 1i64)
+    kn_add(0i64,0i64,0i64, 2i64,0i64,0i64, 1i64, 1i64)
+    kn_add(4i64,2i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
     let n : u64 = kn_run(4u64)
     if n != 1u64 { return 194u64 }
     if KN_EKIND[0u64] != 2u64 { return 194u64 }
@@ -617,8 +831,8 @@ fn kn_arm195() -> u64 {
         let mut v2 : i64 = 0i64 - 3i64
         while v2 <= (0i64 - 1i64) {
             kn_reset()
-            kn_add(0i64,0i64,0i64,  v1,0i64,0i64, 1i64)
-            kn_add(10i64,0i64,0i64, v2,0i64,0i64, 1i64)
+            kn_add(0i64,0i64,0i64,  v1,0i64,0i64, 1i64, 1i64)
+            kn_add(10i64,0i64,0i64, v2,0i64,0i64, 1i64, 1i64)
             let n : u64 = kn_run(2u64)
             if n != 1u64 { return 195u64 }
             if KN_LAWVIOL != 0u64 { return 195u64 }
@@ -633,17 +847,17 @@ fn kn_arm195() -> u64 {
 fn kn_arm196() -> u64 {
     /* determinism: the same gas folds to the same scroll, twice. */
     kn_reset()
-    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
-    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
-    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64, 1i64)
     let n1 : u64 = kn_run(4u64)
     KN_D1N = KN_EVN   KN_D1H = py_h()
     let mut k : u64 = 0u64
     while k < KN_EVN { KN_D1LO[k] = KN_BLO[k]   KN_D1HI[k] = KN_BHI[k]   k = k + 1u64 }
     kn_reset()
-    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64)
-    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64)
-    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64)
+    kn_add(0i64,0i64,0i64,   10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,1i64,0i64,  0i64-10i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64-1i64,0i64-11i64,0i64,  0i64,0i64,0i64, 2i64, 1i64)
     let n2 : u64 = kn_run(4u64)
     if n1 != n2 { return 196u64 }
     if KN_EVN != KN_D1N { return 196u64 }
@@ -661,6 +875,82 @@ fn kn_arm196() -> u64 {
     if py_err() != 0u64 { return 196u64 }
     return 0u64
 }
+fn kn_arm197() -> u64 {
+    /* GENERAL MASSES: 1-vs-3 head-on hand-check -- V1' = ((m1-m2)v1)/(m1+m2)
+     * = -2, V2' = 2 m1 v1/(m1+m2) = 2 -- then an enumerated mass family with
+     * momentum and energy exact (the counters are the assertion). */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,  4i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64, 3i64)
+    let n : u64 = kn_run(2u64)
+    if n != 1u64 { return 197u64 }
+    if py_cmp(KN_VX[0u64], py_el_from_i64(0i64 - 2i64, 0u64)) != 0i64 { return 197u64 }
+    if py_cmp(KN_VX[1u64], py_el_from_i64(2i64, 0u64)) != 0i64 { return 197u64 }
+    if KN_LAWVIOL != 0u64 { return 197u64 }
+    let mut m2 : i64 = 1i64
+    while m2 <= 3i64 {
+        kn_reset()
+        kn_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64, 1i64)
+        kn_add(10i64,0i64,0i64, 0i64-2i64,0i64,0i64, 1i64, m2)
+        let nn : u64 = kn_run(2u64)
+        if nn != 1u64 { return 197u64 }
+        if KN_LAWVIOL != 0u64 { return 197u64 }
+        if KN_ERRK != 0u64 { return 197u64 }
+        if py_err() != 0u64 { return 197u64 }
+        m2 = m2 + 1i64
+    }
+    return 0u64
+}
+fn kn_arm198() -> u64 {
+    /* THE BALLISTIC ECHO: uniform gravity g = (0,-2,0).  A falls from rest at
+     * y=10, B rises at 3 from y=0; gravity CANCELS in their separation, so the
+     * impact is the exact rational tau = 8/3 (bracket 26666), the at-impact
+     * velocities are -16/3 and -7/3, the equal-mass exchange swaps them, and
+     * the echo retraces the PARABOLAS to the exact integer genesis. */
+    kn_reset()
+    kn_setg(0i64, 0i64 - 2i64, 0i64, 1i64)
+    kn_add(0i64,10i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+    kn_add(0i64,0i64,0i64,  0i64,3i64,0i64, 1i64, 1i64)
+    let n : u64 = kn_run(4u64)
+    if n != 1u64 { return 198u64 }
+    let b0 : i64 = KN_BLO[0u64]
+    if b0 != 26666i64 { return 198u64 }
+    if py_cmp(KN_VY[0u64], py_el_from_rat(py_rat_frac(0i64 - 7i64, 3i64), 0u64)) != 0i64 { return 198u64 }
+    if py_cmp(KN_VY[1u64], py_el_from_rat(py_rat_frac(0i64 - 16i64, 3i64), 0u64)) != 0i64 { return 198u64 }
+    if py_h() != 0u64 { return 198u64 }
+    let e : u64 = kn_echo(3i64)
+    if e != 0u64 { return 198u64 }
+    if KN_LAWVIOL != 0u64 { return 198u64 }
+    if KN_ERRK != 0u64 { return 198u64 }
+    if py_err() != 0u64 { return 198u64 }
+    return 0u64
+}
+fn kn_arm199() -> u64 {
+    /* THE QUARTIC ORACLE, two-path: A accelerates at (2,0,0) toward B at rest
+     * 10 apart (r+r = 2): 4*sep2 = 4 tau^4 - 80 tau^2 + 384, roots tau^2 = 8
+     * and 12.  Sturm counts (0,2]=0, (0,3]=1, (0,4]=2; the first-impact
+     * bracket must agree with the INDEPENDENT tower surd sqrt8 = 2 sqrt2
+     * (norm-descent path) to the same 1/10000. */
+    kn_reset()
+    kn_add(0i64,0i64,0i64,  0i64,0i64,0i64, 1i64, 1i64)
+    kn_add(10i64,0i64,0i64, 0i64,0i64,0i64, 1i64, 1i64)
+    kn_seta(0u64, 2i64, 0i64, 0i64)
+    let m : u64 = py_mark()
+    kq_build(0u64, 1u64)
+    if KQ_DEGEN != 0u64 { py_release(m)   return 199u64 }
+    if kq_count(0i64, 1i64, 2i64, 1i64) != 0i64 { py_release(m)   return 199u64 }
+    if kq_count(0i64, 1i64, 3i64, 1i64) != 1i64 { py_release(m)   return 199u64 }
+    if kq_count(0i64, 1i64, 4i64, 1i64) != 2i64 { py_release(m)   return 199u64 }
+    kq_bracket(4i64)
+    let blo : i64 = KQ_BLO2
+    py_release(m)
+    if blo != 28284i64 { return 199u64 }
+    let r8 : u64 = py_sqrt(py_el_from_i64(8i64, 0u64))
+    if py_cmp(r8, kn_elfrac(28284i64, 10000i64)) != 1i64 { return 199u64 }
+    if py_cmp(r8, kn_elfrac(28285i64, 10000i64)) != (0i64 - 1i64) { return 199u64 }
+    if py_err() != 0u64 { return 199u64 }
+    return 0u64
+}
 fn kn_selfprove() -> u64 @export {
     let a0 : u64 = kn_arm190()
     if a0 != 0u64 { return a0 }
@@ -676,5 +966,11 @@ fn kn_selfprove() -> u64 @export {
     if a5 != 0u64 { return a5 }
     let a6 : u64 = kn_arm196()
     if a6 != 0u64 { return a6 }
+    let a7 : u64 = kn_arm197()
+    if a7 != 0u64 { return a7 }
+    let a8 : u64 = kn_arm198()
+    if a8 != 0u64 { return a8 }
+    let a9 : u64 = kn_arm199()
+    if a9 != 0u64 { return a9 }
     return 0u64
 }

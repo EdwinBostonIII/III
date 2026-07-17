@@ -811,14 +811,51 @@ fn py_el_root(lvl: u64) -> u64 @export {
     py_rentry_copy(PY_EC[e] + (1u64 << lvl), r)
     return e
 }
-/* exact square root: rational perfect squares stay rational (no adjoin);
- * everything else adjoins one spine level and returns the basis radical. */
-fn py_sqrt(e: u64) -> u64 @export {
-    let s : i64 = py_el_sign(e)
-    if s < 0i64 { PY_ERR = 7u64   return py_el_new(0u64) }
-    if s == 0i64 { return py_el_new(0u64) }
-    if py_el_is_rat(e) == 1u32 {
+/* is the element identically zero (every coefficient sign 0)? */
+fn py_el_is_zero(e: u64) -> u32 {
+    let h : u64 = PY_EH[e]
+    let n : u64 = 1u64 << h
+    let mut k : u64 = 0u64
+    while k < n {
+        let s : i64 = PY_RSG[PY_EC[e] + k]
+        if s != 0i64 { return 0u32 }
+        k = k + 1u64
+    }
+    return 1u32
+}
+/* assemble p (lo half) and q (hi half), both at height h-1, into one element
+ * at height h:  x = p + q * sqrt(spine[h-1]) */
+fn py_el_pair(p: u64, q: u64, h: u64) -> u64 {
+    let e : u64 = py_el_new(h)
+    if PY_ERR != 0u64 { return e }
+    let half : u64 = 1u64 << (h - 1u64)
+    let mut k : u64 = 0u64
+    while k < half {
+        py_rentry_copy(PY_EC[e] + k, PY_EC[p] + k)
+        py_rentry_copy(PY_EC[e] + half + k, PY_EC[q] + k)
+        k = k + 1u64
+    }
+    return e
+}
+/* THE DENESTING ORACLE: decide whether e (sign >= 0) is a SQUARE in its own
+ * field F_h, and if so return the principal root -- else PY_SENT (never an
+ * error).  Complete for quadratic towers:
+ *   h = 0        exact bigint perfect-square test on n*d;
+ *   b = 0        x = sqrt(a) in F_{h-1}, or x = q sqrt(d) with q^2 = a/d
+ *                (2pq = 0 forces p = 0 or q = 0 -- both branches tried);
+ *   b != 0       norm(e) = a^2 - b^2 d must be a square s^2 one level down
+ *                (necessity: norm of a square is the square of a norm), then
+ *                p^2 = (a+s)/2 or (a-s)/2 and q = b/(2p).
+ * Every success is VERIFIED by squaring before it is returned, so an
+ * algebraic slip can only turn into a refused denest, never a wrong root. */
+fn py_el_sqrt_try(e: u64) -> u64 {
+    if PY_ERR != 0u64 { return PY_SENT }
+    let h : u64 = PY_EH[e]
+    if h == 0u64 {
         let r : u64 = PY_EC[e]
+        let sg : i64 = PY_RSG[r]
+        if sg == 0i64 { return py_el_new(0u64) }
+        if sg < 0i64 { return PY_SENT }
         let nl : u64 = PY_RNL[r]
         let dl : u64 = PY_RDL[r]
         let ar : u64 = arena_new(py_arsz(nl, dl))
@@ -828,30 +865,88 @@ fn py_sqrt(e: u64) -> u64 @export {
         let sq : u64 = bigint_isqrt(ar, ND)
         let ck : u64 = bigint_mul(ar, sq, sq)
         let eqz : i32 = bigint_cmp(ck, ND)
-        if eqz == 0i32 {
-            /* sqrt(n/d) = sqrt(n d)/d exactly */
-            py_bstore(sq)
-            let no : u64 = PY_SOFF
-            let nl2 : u64 = PY_SLEN
+        if eqz != 0i32 {
             bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(sq)   bigint_drop(ck)
             bigint_drop_arena(ar)   arena_drop(ar)
-            let rr : u64 = py_ralloc()
-            if PY_ERR != 0u64 { return py_el_from_rat(rr, 0u64) }
-            PY_RSG[rr] = 1i64
-            PY_RNO[rr] = no   PY_RNL[rr] = nl2
-            PY_RDO[rr] = PY_RDO[r]   PY_RDL[rr] = dl
-            /* reduce sqrt(nd)/d exactly: gcd pass through py_rmake */
-            let ar2 : u64 = arena_new(py_arsz(nl2, dl))
-            let N2 : u64 = py_bload(ar2, PY_RNO[rr], nl2)
-            let D2 : u64 = py_bload(ar2, PY_RDO[rr], dl)
-            let res : u64 = py_rmake(ar2, 1i64, N2, D2)
-            bigint_drop_arena(ar2)   arena_drop(ar2)
-            return py_el_from_rat(res, 0u64)
+            return PY_SENT
         }
-        bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(sq)   bigint_drop(ck)
+        /* sqrt(n/d) = sqrt(n d)/d exactly; reduce through py_rmake */
+        let D2 : u64 = bigint_copy(ar, D)
+        bigint_drop(N)   bigint_drop(D)   bigint_drop(ND)   bigint_drop(ck)
+        let res : u64 = py_rmake(ar, 1i64, sq, D2)
         bigint_drop_arena(ar)   arena_drop(ar)
+        return py_el_from_rat(res, 0u64)
     }
-    let lvl : u64 = py_adjoin(e)
+    let hm : u64 = h - 1u64
+    let la : u64 = py_lo(e)
+    let hb : u64 = py_hiv(e)
+    let D : u64 = PY_SPINE[hm]
+    if py_el_is_zero(hb) == 1u32 {
+        /* b = 0: sqrt lives one level down, plain or times sqrt(d) */
+        let r1 : u64 = py_el_sqrt_try(la)
+        if r1 != PY_SENT { return py_el_lift(r1, h) }
+        let q2 : u64 = py_el_mul0(la, py_el_inv(D))
+        let q : u64 = py_el_sqrt_try(q2)
+        if q != PY_SENT {
+            let zero : u64 = py_el_new(hm)
+            let x : u64 = py_el_pair(zero, q, h)
+            let m : u64 = py_mark()
+            let ok : i64 = py_el_sign(py_el_sub0(py_el_mul0(x, x), e))
+            py_release(m)
+            if ok == 0i64 { return x }
+        }
+        return PY_SENT
+    }
+    /* b != 0 */
+    let a2 : u64 = py_el_mul0(la, la)
+    let b2 : u64 = py_el_mul0(hb, hb)
+    let b2d : u64 = py_el_mul0(b2, D)
+    let nrm : u64 = py_el_sub0(a2, b2d)
+    if py_el_sign(nrm) < 0i64 { return PY_SENT }
+    let s : u64 = py_el_sqrt_try(nrm)
+    if s == PY_SENT { return PY_SENT }
+    let two : u64 = py_el_from_i64(2i64, hm)
+    let itwo : u64 = py_el_inv(two)
+    let mut br : u64 = 0u64
+    while br < 2u64 {
+        let mut num : u64 = 0u64
+        if br == 0u64 { num = py_el_add0(la, s) } else { num = py_el_sub0(la, s) }
+        let p2 : u64 = py_el_mul0(num, itwo)
+        if py_el_sign(p2) > 0i64 {
+            let p : u64 = py_el_sqrt_try(p2)
+            if p != PY_SENT {
+                let twop : u64 = py_el_mul0(two, p)
+                let q : u64 = py_el_mul0(hb, py_el_inv(twop))
+                let mut x : u64 = py_el_pair(p, q, h)
+                let m : u64 = py_mark()
+                let ok : i64 = py_el_sign(py_el_sub0(py_el_mul0(x, x), e))
+                py_release(m)
+                if ok == 0i64 {
+                    if py_el_sign(x) < 0i64 { x = py_el_neg(x) }
+                    return x
+                }
+            }
+        }
+        br = br + 1u64
+    }
+    return PY_SENT
+}
+/* exact square root: first DECIDE whether the root already lives in the
+ * current tower (the denesting oracle above) -- the echo's re-minted radicals,
+ * cross-products like sqrt6 in Q(sqrt2,sqrt3), and classical denestings like
+ * sqrt(3+2 sqrt2) = 1+sqrt2 all resolve WITHOUT growing the spine.  Only a
+ * radical PROVEN independent (the try fails) adjoins a level.  The tower
+ * stays minimal, and every adjoin carries its failed-denest certificate. */
+fn py_sqrt(e: u64) -> u64 @export {
+    let s : i64 = py_el_sign(e)
+    if s < 0i64 { PY_ERR = 7u64   return py_el_new(0u64) }
+    if s == 0i64 { return py_el_new(0u64) }
+    let ee : u64 = py_el_lift(e, PY_H)
+    let m : u64 = py_mark()
+    let t : u64 = py_el_sqrt_try(ee)
+    if t != PY_SENT { return t }
+    py_release(m)
+    let lvl : u64 = py_adjoin(ee)
     if PY_ERR != 0u64 { return py_el_new(0u64) }
     return py_el_root(lvl)
 }
@@ -912,7 +1007,12 @@ fn py_arm182() -> u64 {
     let twop : u64 = py_mul(py_el_from_i64(2i64, 2u64), p)
     let d : u64 = py_add(py_el_from_i64(5i64, 2u64), twop)    /* 5 + 2 sqrt6 */
     if py_el_sign(d) != 1i64 { return 182u64 }
-    let rt : u64 = py_sqrt(d)                                 /* h3: nested   */
+    /* FORCE the nested representation (py_adjoin, not py_sqrt -- py_sqrt now
+     * DENESTS this radical; the norm-descent sign engine must still decide
+     * the zero across the redundant level) */
+    let lvl : u64 = py_adjoin(d)
+    if lvl != 2u64 { return 182u64 }
+    let rt : u64 = py_el_root(lvl)
     if PY_H != 3u64 { return 182u64 }
     let sum : u64 = py_add(PY_T2, PY_T3)
     let E : u64 = py_sub(sum, rt)
@@ -1023,6 +1123,32 @@ fn py_arm187() -> u64 {
     if PY_ERR != 0u64 { return 187u64 }
     return 0u64
 }
+fn py_arm188() -> u64 {
+    /* THE DENESTING ORACLE: radicals already in the tower are RECOGNIZED and
+     * the spine does not grow; only proven-independent radicands adjoin. */
+    if py_mk23() != 0u64 { return 188u64 }
+    let t2l : u64 = py_el_lift(PY_T2, 2u64)
+    /* cross-product: sqrt6 = sqrt2 * sqrt3, no adjoin */
+    let six : u64 = py_el_from_i64(6i64, 2u64)
+    let r6 : u64 = py_sqrt(six)
+    if PY_H != 2u64 { return 188u64 }
+    if py_el_sign(py_sub(py_mul(r6, r6), six)) != 0i64 { return 188u64 }
+    let prod : u64 = py_mul(t2l, PY_T3)
+    if py_cmp(r6, prod) != 0i64 { return 188u64 }
+    /* classical: sqrt(3 + 2 sqrt2) = 1 + sqrt2, no adjoin */
+    let d : u64 = py_add(py_el_from_i64(3i64, 2u64), py_mul(py_el_from_i64(2i64, 2u64), t2l))
+    let rd : u64 = py_sqrt(d)
+    if PY_H != 2u64 { return 188u64 }
+    let expct : u64 = py_add(py_el_from_i64(1i64, 2u64), t2l)
+    if py_cmp(rd, expct) != 0i64 { return 188u64 }
+    /* negative control: sqrt(2 + sqrt2) is PROVEN independent -> adjoins */
+    let nd : u64 = py_add(py_el_from_i64(2i64, 2u64), t2l)
+    let rn : u64 = py_sqrt(nd)
+    if PY_H != 3u64 { return 188u64 }
+    if py_el_sign(py_sub(py_mul(rn, rn), py_el_lift(nd, 3u64))) != 0i64 { return 188u64 }
+    if PY_ERR != 0u64 { return 188u64 }
+    return 0u64
+}
 fn py_selfprove() -> u64 @export {
     let a0 : u64 = py_arm180()
     if a0 != 0u64 { return a0 }
@@ -1040,5 +1166,7 @@ fn py_selfprove() -> u64 @export {
     if a6 != 0u64 { return a6 }
     let a7 : u64 = py_arm187()
     if a7 != 0u64 { return a7 }
+    let a8 : u64 = py_arm188()
+    if a8 != 0u64 { return a8 }
     return 0u64
 }

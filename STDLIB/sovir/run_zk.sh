@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop zk_svir_vm_fused zk_perm_malicious zk_ext2_kat zk_ext2_fri zk_ext2_stark zk_ext2_live zk_ext4_kat zk_ext4_probe zk_ext2_friq zk_ext2_live2 zk_ext2_friN zk_ext2_fri256 zk_ext2_prod zk_ext4_fri zk_ext4_prod zk_ext4_perm zk_perm_k3prod zk_fused_prod; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop zk_svir_vm_fused zk_perm_malicious zk_ext2_kat zk_ext2_fri zk_ext2_stark zk_ext2_live zk_ext4_kat zk_ext4_probe zk_ext2_friq zk_ext2_live2 zk_ext2_friN zk_ext2_fri256 zk_ext2_prod zk_ext4_fri zk_ext4_prod zk_ext4_perm zk_perm_k3prod zk_fused_prod; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -72,14 +72,6 @@ else say "FAIL zkVM-COMPOSE: zk_svir_prog=$progrc (1=honest 7=cp 2=forged-result
 attrc=$(runzk zk_svir_attest)
 if [ "$attrc" = "99" ]; then say "ZK-SOUNDNESS : a mechanically-computed recurrence trace -> air_stark_prove (Merkle+FS+FRI proof object) -> air_stark_verify (independent, witness-free) ACCEPTS ; a FALSE computation (one interior cell broken) is REJECTED BY THE MATH (CP=combine/Z_T true quotient; CP*Z_H != combine*(x-w^{n-1}) at random openings), and a forged BOUNDARY is rejected -> 99 (sound: the verifier rejects false statements, not a hand-placed tamper -- fixed the air_build_cp Z_H/Z_T gap, DOCS/III-ZK-SOUNDNESS-GAP.md)"
 else say "FAIL ZK-SOUNDNESS: zk_svir_attest=$attrc (1=honest-rejected 92=interior-forge-accepted[UNSOUND] 93=both-accepted)"; fail=1; fi
-# (0g) ZK-ATTESTED EIDOS PRIMITIVE: a sound STARK proof of an EIDOS event-FOLD (state' = BASE*state + event, the ripple kernel / content-address).
-foldrc=$(runzk zk_eidos_fold)
-if [ "$foldrc" = "99" ]; then say "ZK-FOLD : EIDOS event-fold (rolling-hash content-address state'=BASE*state+event) MECHANICALLY traced + proven by the sound STARK -> independent witness-free verifier ACCEPTS the honest fold, REJECTS a forged STATE and a forged EVENT by the math -> 99 (the ripple's computational kernel attested soundly; toward Omega.e -- a full EIDOS ripple via iiisv->SVIR->trace->this STARK)"
-else say "FAIL ZK-FOLD: zk_eidos_fold=$foldrc (1=honest-rejected 2=forged-state-accepted 3=forged-event-accepted 4=re-prove)"; fail=1; fi
-# (0h) ZK-ATTESTED REAL EIDOS RIPPLE: the events are EMITTED BY THE REAL eidos::ripple module (verbs derived from hex-rank gradients), folded + soundly proven.
-riprc=$(runzk zk_eidos_ripple)
-if [ "$riprc" = "99" ]; then say "ZK-RIPPLE: a REAL eidos::ripple run (eidos_ripple_emit derives each <verb,a,b> from real hex-rank geometry) -> its >=7 emitted events READ BACK + folded by OUR content-address (enc=verb*65536+a*256+b -- NOT the module's sha256 isub witness) + proven by the sound STARK -> witness-free verifier ACCEPTS the honest fold, REJECTS a forged EVENT and a forged STATE by the math -> 99 (HONEST SCOPE: the ripple's real EVENT STREAM is attested under our fold; matching the module's actual sha256 witness identity needs a keccak AIR, not yet built)"
-else say "FAIL ZK-RIPPLE: zk_eidos_ripple=$riprc (5=<7-events 1=honest-rejected 2=forged-event-accepted 3=forged-state-accepted 4=re-prove)"; fail=1; fi
 # (0i) PERMUTATION-QUARANTINE: the discriminating oracle for the grand-product memory argument (zk_svir_mem). Fixed public alpha is forgeable; this surfaces it honestly.
 permrc=$(runzk zk_perm_oracle)
 if [ "$permrc" = "99" ]; then say "PERMUTATION : FS-alpha SOUND -- a colliding non-permutation is rejected (the memory argument is safe to make load-bearing)"

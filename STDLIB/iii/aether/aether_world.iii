@@ -8,13 +8,13 @@
  *   [1] PHOTONIC LATTICE + exact O_h geodesic  -- the crystal lattice nodes and the exact shortest photon route
  *       (photon_route::plr_bulk), drawn as the routed path of king-moves.  PHOTONS. LATTICE. LINES.
  *   [2] EXACT SHAPES + CSG  -- a sphere, an ellipsoid, and the EXACT sphere-minus-cylinder solid whose surface shell is
- *       decided point-by-point by csg_kernel::csg_inside (integer-exact membership).  ANY SHAPE.
+ *       decided point-by-point by exact_space::csg_inside (integer-exact membership).  ANY SHAPE.
  *   [3] WIREFRAME  -- a cube and an octahedron as edges + vertices.  LINES. CORNERS.
  * Coordinate axes always.  On-screen GDI labels say what you are looking at.
  *
  * Camera: DRAG to rotate, WHEEL to zoom, keys 1/2/3 to switch, R reset, Q/Esc quit.  The window is resizable/maximizable
  * (WS_OVERLAPPEDWINDOW + WM_SIZE) and the image fills the whole client.  Geometry is computed by III's exact organs; the
- * viewport projection is fixed-point integer for speed.  Ring R0.  Composes photon_route + csg_kernel. */
+ * viewport projection is fixed-point integer for speed.  Ring R0.  Composes photon_route + exact_space. */
 module aether_world
 
 extern @abi(c-msvc-x64) fn GetModuleHandleA(name: u64) -> u64 from "kernel32"
@@ -37,7 +37,7 @@ extern @abi(c-msvc-x64) fn SetBkMode(dc: u64, m: i32) -> i32 from "gdi32"
 
 extern @abi(c-msvc-x64) fn plr_bulk(dx: i64, dy: i64, dz: i64) -> i32 from "photon_route.iii"
 extern @abi(c-msvc-x64) fn plr_route_class(i: u64) -> i64 from "photon_route.iii"
-extern @abi(c-msvc-x64) fn csg_inside(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x: i64, y: i64, z: i64) -> i32 from "csg_kernel.iii"
+extern @abi(c-msvc-x64) fn csg_inside(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x: i64, y: i64, z: i64) -> i32 from "exact_space.iii"
 extern @abi(c-msvc-x64) fn wbk_collide_sign(dd: i64, sm: i64) -> i32 from "wb_kernel.iii"
 extern @abi(c-msvc-x64) fn wbk_order_sign(ba: i64, da: i64, bb: i64, db: i64) -> i32 from "wb_kernel.iii"
 extern @abi(c-msvc-x64) fn wbk_relay_sign(d_sr1: i64, d_r1t: i64, d_sr2: i64, d_r2t: i64) -> i32 from "wb_kernel.iii"
@@ -221,7 +221,7 @@ fn build_ellipsoid(cx: i64, cy: i64, cz: i64, rx: i64, ry: i64, rz: i64, col: u3
     return 0i32
 }
 
-/* [2] exact sphere-minus-cylinder SOLID via csg_kernel: keep the boundary shell (inside solid, a neighbour outside) */
+/* [2] exact sphere-minus-cylinder SOLID via exact_space: keep the boundary shell (inside solid, a neighbour outside) */
 fn build_csg(cx: i64) -> i32 {
     let r2 : i64 = 3600i64                                   /* sphere radius 60 (local units, scaled to world) */
     let cr2 : i64 = 900i64                                   /* cylinder radius 30, axis parallel to y at (18,*,0) */
@@ -963,7 +963,7 @@ fn main() -> u64 {
         SetTextColor(dc, 0x0080E0FFu32)
         if MODE == 0u8 { wb_readout(dc) }
         if MODE == 1u8 { w_text(dc, 14i32, 30i32, "[1] PHOTONIC LATTICE  +  exact O_h geodesic photon route (photon_route)   green=source  red=target" as u64) }
-        if MODE == 2u8 { w_text(dc, 14i32, 30i32, "[2] EXACT SHAPES  +  sphere-minus-cylinder CSG shell decided by csg_kernel (integer-exact membership)" as u64) }
+        if MODE == 2u8 { w_text(dc, 14i32, 30i32, "[2] EXACT SHAPES  +  sphere-minus-cylinder CSG shell decided by exact_space (integer-exact membership)" as u64) }
         if MODE == 3u8 { w_text(dc, 14i32, 30i32, "[3] WIREFRAME  -  cube + octahedron : edges (lines) and vertices (corners)" as u64) }
         if MODE == 4u8 {
             w_text(dc, 14i32, 30i32, "[4] SYSTEM MAP - III analysing ITSELF: 783 modules by DERIVED topological layer (bottom=foundation, top=app), size = transitive impact" as u64)

@@ -41,8 +41,8 @@ if i == 26u64 { return "constraint" as u64 }
 if i == 27u64 { return "context_awareness" as u64 }
 if i == 28u64 { return "cost_overrun_handler" as u64 }
 if i == 29u64 { return "crystal3" as u64 }
-if i == 30u64 { return "csg_kernel" as u64 }
-if i == 31u64 { return "csg_tree" as u64 }
+if i == 30u64 { return "exact_space" as u64 }
+if i == 31u64 { return "exact_space_tree" as u64 }
 if i == 32u64 { return "cspace" as u64 }
 if i == 33u64 { return "cyclotomic_se3" as u64 }
 if i == 34u64 { return "exact_plane" as u64 }

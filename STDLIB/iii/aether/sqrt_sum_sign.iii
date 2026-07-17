@@ -20,7 +20,7 @@
  *   Tier 2.5  adaptive precision           bigint interval doubled to the instance's true need p~log(1/|E|);
  *   Tier 4    separation bound (oracle)    ui_sqrt_sum_sign, arbitrary n, exponential, certifies exact zeros.
  * LIVE CONSUMERS: eidos/ripple_eidolon (exact real-order verb of the eidolon ripple, gate 2133) and the aether
- * faces (csg_kernel, exact_plane, algnum, aether_lens, aether_world, q23_sign->cyclotomic_se3/collide, verb_geom),
+ * faces (exact_space, exact_plane, algnum, aether_lens, aether_world, q23_sign->cyclotomic_se3/collide, verb_geom),
  * all through this one kernel -- gates run_sqrtsum_kats.sh / run_ripple_kats.sh / run_aether_lens_kats.sh. */
 module sqrt_sum_sign
 

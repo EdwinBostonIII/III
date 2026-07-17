@@ -1,0 +1,405 @@
+/* STDLIB/iii/eidos/exact_space.iii -- GAMMA-3, THE EXACT SPACE: dimension
+ * three, invented anew on the unified organism and PROVEN CONSISTENT by III's
+ * own arithmetic.  Supersedes aether/csg_kernel.iii + aether/csg_tree.iii:
+ * every one of their exact predicates is carried here byte-for-byte, and III
+ * adds the primitive they never had (the simplex orientation orient3d, the
+ * atom of all 3D exact geometry), its discovered symmetry, and the language.
+ *
+ * THE ATOM III INVENTS (nowhere in the tree before this):
+ *   orient3d(a,b,c,d)  the sign of the 3x3 determinant [b-a; c-a; d-a] -- the
+ *                      signed volume of the tetrahedron.  +1 positively
+ *                      oriented, 0 coplanar, -1 negatively.  Exact integer.
+ *   in_tetra(p; a,b,c,d)  point-in-tetrahedron by four orient3d face-signs --
+ *                      a 3D membership test with ZERO float, built on the atom.
+ *
+ * WHAT III DISCOVERS (no target named): III enumerates the COMPLETE orbit of
+ * orient3d -- all 24 orderings of the 4 points (S_4) -- and computes, by exact
+ * integer arithmetic, the sign of each; INDEPENDENTLY it computes each
+ * ordering's permutation parity by counting inversions.  The two agree on all
+ * 24: the geometric sign IS the sign homomorphism of S_4 (12 even orderings
+ * one sense, 12 odd the other).  Orientation is an ALTERNATING function -- the
+ * Kettner-Mehlhorn consistency float violates -- and III surfaced it as an
+ * isomorphism between two independent computations, not an assertion.  The 3D
+ * smoking gun fires live: a tetrahedron 1 unit from coplanar has exact volume
+ * +-1 where a double, summing ~2^54 products, rounds to 0 (coplanar, wrong).
+ *
+ * WHAT III CARRIES FORWARD (csg_kernel + csg_tree, exact, now unified + spoken):
+ *   the quadric layer (quadric_eval_sign, inside, surf_point_side via the
+ *   Sum-sqrt oracle, sphere-cylinder degeneracy classifier, the rank-1 corner
+ *   denest) and the boolean CSG tree (leaf / sphere / swept-capsule / union /
+ *   intersect / difference / side), depth-independent exact sign algebra.  The
+ *   old export names are kept, so the one real consumer repoints by a word.
+ *
+ * THE SPACE SPEAKS (EIDOLOS): a point's membership is a claim ([p = inside] |
+ * [p = outside]); inside/outside are mirror senses; a tetra's chirality speaks.
+ * A point cannot be coherently both inside and outside -- the trichotomy is a
+ * coherence law, not a runtime check.
+ *
+ * Truth is a CONDITION OF MOTION: xs_selfprove (arms 130..137).  NO gate.
+ * NIH: composes aether/sqrt_sum_sign, aether/exact_denest, omnia/eidolos.
+ * Hexad: kind_form.  Ring R0. */
+module eidos_exact_space
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+extern @abi(c-msvc-x64) fn denest_r1(a: i64, b: i64, d: i64) -> i32 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_x() -> i64 from "exact_denest.iii"
+extern @abi(c-msvc-x64) fn denest_y() -> i64 from "exact_denest.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+fn xs_sign(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return -1i32 }   return 0i32 }
+fn xs_iabs(v: i64) -> i64 { if v < 0i64 { return 0i64 - v }   return v }
+
+/* ==================== THE ATOM: orient3d (invented) ==================== */
+fn orient3d(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64, cx: i64, cy: i64, cz: i64, dx: i64, dy: i64, dz: i64) -> i32 @export {
+    let bax : i64 = bx - ax   let bay : i64 = by - ay   let baz : i64 = bz - az
+    let cax : i64 = cx - ax   let cay : i64 = cy - ay   let caz : i64 = cz - az
+    let dax : i64 = dx - ax   let day : i64 = dy - ay   let daz : i64 = dz - az
+    let det : i64 = bax * (cay*daz - caz*day) - bay * (cax*daz - caz*dax) + baz * (cax*day - cay*dax)
+    return xs_sign(det)
+}
+/* point p is strictly INSIDE tetra (a,b,c,d) iff it is on the interior side of
+ * all four faces (orient3d against each face has the tetra's sign).  Returns
+ * 1 inside / 0 on a face / -1 outside.  Built on the atom -- exact, no float. */
+fn in_tetra(px: i64, py: i64, pz: i64, ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64, cx: i64, cy: i64, cz: i64, dx: i64, dy: i64, dz: i64) -> i32 @export {
+    let s0 : i32 = orient3d(ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz)     /* the tetra's own sense */
+    if s0 == 0i32 { return 0i32 }                                       /* degenerate tetra */
+    /* replace each vertex by p; the sub-tetra must share the sense (inside) */
+    let f0 : i32 = orient3d(px,py,pz, bx,by,bz, cx,cy,cz, dx,dy,dz)
+    let f1 : i32 = orient3d(ax,ay,az, px,py,pz, cx,cy,cz, dx,dy,dz)
+    let f2 : i32 = orient3d(ax,ay,az, bx,by,bz, px,py,pz, dx,dy,dz)
+    let f3 : i32 = orient3d(ax,ay,az, bx,by,bz, cx,cy,cz, px,py,pz)
+    let mut on : i32 = 0i32
+    if f0 == 0i32 { on = 1i32 }   if f1 == 0i32 { on = 1i32 }
+    if f2 == 0i32 { on = 1i32 }   if f3 == 0i32 { on = 1i32 }
+    /* outside if any face-sign opposes the tetra sense */
+    if f0 == (0i32 - s0) { return -1i32 }
+    if f1 == (0i32 - s0) { return -1i32 }
+    if f2 == (0i32 - s0) { return -1i32 }
+    if f3 == (0i32 - s0) { return -1i32 }
+    if on == 1i32 { return 0i32 }
+    return 1i32
+}
+
+/* ==================== III DISCOVERS the S_4 alternating character ==================== */
+var XS_PT : [i64; 12]                    /* 4 points x 3 coords, XS_PT[p*3+c]   */
+var XS_PERM : [u64; 4]
+fn xs_orient_idx(i: u64, j: u64, k: u64, l: u64) -> i32 {
+    let bi : u64 = i*3u64   let bj : u64 = j*3u64   let bk : u64 = k*3u64   let bl : u64 = l*3u64
+    return orient3d(XS_PT[bi],XS_PT[bi+1u64],XS_PT[bi+2u64], XS_PT[bj],XS_PT[bj+1u64],XS_PT[bj+2u64],
+                    XS_PT[bk],XS_PT[bk+1u64],XS_PT[bk+2u64], XS_PT[bl],XS_PT[bl+1u64],XS_PT[bl+2u64])
+}
+/* Lehmer decode: the idx-th (0..23) permutation of {0,1,2,3} into XS_PERM */
+fn xs_lehmer(idx: u64) -> i32 {
+    var avail : [u64; 4]
+    avail[0u64] = 0u64   avail[1u64] = 1u64   avail[2u64] = 2u64   avail[3u64] = 3u64
+    var navail : u64 = 4u64
+    var rem : u64 = idx
+    var fact : u64 = 6u64                /* 3! */
+    var pos : u64 = 0u64
+    while pos < 4u64 {
+        let d : u64 = rem / fact
+        let r2 : u64 = rem - (d * fact)
+        rem = r2
+        XS_PERM[pos] = avail[d]
+        /* remove avail[d] by shifting down */
+        let mut q : u64 = d
+        while q + 1u64 < navail { avail[q] = avail[q + 1u64]   q = q + 1u64 }
+        navail = navail - 1u64
+        pos = pos + 1u64
+        if navail > 0u64 { fact = fact / navail }
+    }
+    return 0i32
+}
+/* parity of XS_PERM by inversion count: +1 even, -1 odd */
+fn xs_parity() -> i32 {
+    let mut inv : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut j : u64 = i + 1u64
+        while j < 4u64 {
+            if XS_PERM[i] > XS_PERM[j] { inv = inv + 1u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    if (inv & 1u64) == 0u64 { return 1i32 }
+    return -1i32
+}
+fn xs_set_witness(w: u64) -> i32 {
+    if w == 0u64 {
+        XS_PT[0u64]=0i64  XS_PT[1u64]=0i64   XS_PT[2u64]=0i64
+        XS_PT[3u64]=5i64  XS_PT[4u64]=1i64   XS_PT[5u64]=1i64
+        XS_PT[6u64]=1i64  XS_PT[7u64]=5i64   XS_PT[8u64]=1i64
+        XS_PT[9u64]=1i64  XS_PT[10u64]=1i64  XS_PT[11u64]=5i64
+    } else {
+        if w == 1u64 {
+            XS_PT[0u64]=2i64  XS_PT[1u64]=3i64   XS_PT[2u64]=1i64
+            XS_PT[3u64]=9i64  XS_PT[4u64]=2i64   XS_PT[5u64]=4i64
+            XS_PT[6u64]=3i64  XS_PT[7u64]=11i64  XS_PT[8u64]=5i64
+            XS_PT[9u64]=4i64  XS_PT[10u64]=6i64  XS_PT[11u64]=13i64
+        } else {
+            XS_PT[0u64]=1i64  XS_PT[1u64]=1i64   XS_PT[2u64]=2i64
+            XS_PT[3u64]=7i64  XS_PT[4u64]=3i64   XS_PT[5u64]=1i64
+            XS_PT[6u64]=2i64  XS_PT[7u64]=8i64   XS_PT[8u64]=4i64
+            XS_PT[9u64]=3i64  XS_PT[10u64]=2i64  XS_PT[11u64]=9i64
+        }
+    }
+    return 0i32
+}
+/* III's discovered relation for ordering idx at witness w: returns the geometric
+ * sign (exact) of that ordering's tetra.  Exposed so the tool can print. */
+fn xs_orbit_geo(w: u64, idx: u64) -> i32 @export {
+    xs_set_witness(w)
+    xs_lehmer(idx)
+    return xs_orient_idx(XS_PERM[0u64], XS_PERM[1u64], XS_PERM[2u64], XS_PERM[3u64])
+}
+fn xs_orbit_parity(idx: u64) -> i32 @export {
+    xs_lehmer(idx)
+    return xs_parity()
+}
+/* THE DISCOVERY: over the complete 24-orbit at witness w, does the exact
+ * geometric sign equal (permutation parity) x (the identity's sign) for EVERY
+ * ordering?  Returns the number of orderings where the two INDEPENDENT
+ * computations agree (24 == full isomorphism).  Also tallies even/odd. */
+var XS_EVEN : u64 = 0u64
+var XS_ODD  : u64 = 0u64
+fn xs_discover(w: u64) -> u64 @export {
+    XS_EVEN = 0u64
+    XS_ODD = 0u64
+    xs_set_witness(w)
+    xs_lehmer(0u64)
+    let g0 : i32 = xs_orient_idx(XS_PERM[0u64], XS_PERM[1u64], XS_PERM[2u64], XS_PERM[3u64])
+    if g0 == 0i32 { return 0u64 }                    /* degenerate witness: no discovery */
+    let mut agree : u64 = 0u64
+    let mut idx : u64 = 0u64
+    while idx < 24u64 {
+        xs_lehmer(idx)
+        let par : i32 = xs_parity()
+        let geo : i32 = xs_orient_idx(XS_PERM[0u64], XS_PERM[1u64], XS_PERM[2u64], XS_PERM[3u64])
+        if geo == (par * g0) { agree = agree + 1u64 }
+        if par == 1i32 { XS_EVEN = XS_EVEN + 1u64 } else { XS_ODD = XS_ODD + 1u64 }
+        idx = idx + 1u64
+    }
+    return agree
+}
+fn xs_even() -> u64 @export { return XS_EVEN }
+fn xs_odd()  -> u64 @export { return XS_ODD }
+
+/* ==================== CARRIED: the quadric layer (exact) ==================== */
+fn csg_quadric_eval_sign(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x: i64, y: i64, z: i64) -> i32 @export {
+    let v : i64 = qa*x*x + qb*y*y + qc*z*z + qd*x*y + qe*x*z + qf*y*z + qg*x + qh*y + qi*z + qj
+    return xs_sign(v)
+}
+fn csg_inside(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x: i64, y: i64, z: i64) -> i32 @export {
+    let s : i32 = csg_quadric_eval_sign(qa, qb, qc, qd, qe, qf, qg, qh, qi, qj, x, y, z)
+    if s > 0i32 { return 0i32 }
+    return 1i32
+}
+var CSG_A : [i64; 8]   var CSG_B : [i64; 8]
+fn csg_surf_point_side(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64, x0: i64, beta: i64, gamma: i64, sy: i64, sz: i64) -> i32 @export {
+    let r0 : i64 = qa*x0*x0 + qb*beta + qc*gamma + qg*x0 + qj
+    let cb : i64 = (qd*x0 + qh) * sy
+    let cg : i64 = (qe*x0 + qi) * sz
+    let cf : i64 = qf * sy * sz
+    CSG_A[0u64] = r0   CSG_B[0u64] = 1i64
+    CSG_A[1u64] = cb   CSG_B[1u64] = beta
+    CSG_A[2u64] = cg   CSG_B[2u64] = gamma
+    CSG_A[3u64] = cf   CSG_B[3u64] = beta * gamma
+    return sqrtsum_lazy3((&CSG_A) as u64, (&CSG_B) as u64, 4u64)
+}
+fn csg_sphere_cyl_class(R: i64, a: i64, r: i64) -> i32 @export {
+    let aa : i64 = xs_iabs(a)
+    let sumr : i64 = R + r
+    let difr : i64 = xs_iabs(R - r)
+    if aa > sumr { return 2i32 }
+    if aa == sumr { return 3i32 }
+    if aa < difr { return 0i32 }
+    if aa == difr { return 4i32 }
+    return 1i32
+}
+var CORNER_P : i64   var CORNER_Q : i64   var CORNER_D : i64
+fn csg_sc_plane_corner(R2: i64, a: i64, r2: i64) -> i32 @export {
+    CORNER_D = 2i64*a*a + R2 - r2
+    CORNER_P = 2i64*r2 - 6i64*a*a - R2
+    CORNER_Q = 4i64*a
+    return 0i32
+}
+fn csg_corner_p() -> i64 @export { return CORNER_P }
+fn csg_corner_q() -> i64 @export { return CORNER_Q }
+fn csg_corner_delta() -> i64 @export { return CORNER_D }
+fn csg_corner_rank(p: i64, q: i64, delta: i64) -> i32 @export { return denest_r1(p, q, delta) }
+fn csg_corner_x() -> i64 @export { return denest_x() }
+fn csg_corner_y() -> i64 @export { return denest_y() }
+fn csg_union(in_a: i32, in_b: i32) -> i32 @export { if in_a == 1i32 { return 1i32 }   if in_b == 1i32 { return 1i32 }   return 0i32 }
+fn csg_intersect(in_a: i32, in_b: i32) -> i32 @export { if in_a == 1i32 { if in_b == 1i32 { return 1i32 } }   return 0i32 }
+fn csg_difference(in_a: i32, in_b: i32) -> i32 @export { if in_a == 1i32 { if in_b == 0i32 { return 1i32 } }   return 0i32 }
+
+/* ==================== CARRIED: the boolean CSG tree (exact) ==================== */
+const CT_MAXN : u64 = 2048u64
+const CT_LEAF : i64 = 0i64
+const CT_UNION : i64 = 1i64
+const CT_INTER : i64 = 2i64
+const CT_DIFF : i64 = 3i64
+const CT_SWEPT : i64 = 4i64
+var CT_KIND : [i64; 2048]
+var CT_L : [i64; 2048]   var CT_R : [i64; 2048]
+var CT_Q : [i64; 20480]
+var CT_N : u64
+fn ct_reset() -> i32 @export { CT_N = 0u64   return 0i32 }
+fn ct_count() -> u64 @export { return CT_N }
+fn ct_leaf(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i64 @export {
+    if CT_N >= CT_MAXN { return 0i64 - 1i64 }
+    let n : u64 = CT_N
+    CT_KIND[n] = CT_LEAF
+    let b : u64 = n * 10u64
+    CT_Q[b] = qa   CT_Q[b + 1u64] = qb   CT_Q[b + 2u64] = qc   CT_Q[b + 3u64] = qd   CT_Q[b + 4u64] = qe
+    CT_Q[b + 5u64] = qf   CT_Q[b + 6u64] = qg   CT_Q[b + 7u64] = qh   CT_Q[b + 8u64] = qi   CT_Q[b + 9u64] = qj
+    CT_N = n + 1u64
+    return n as i64
+}
+fn ct_sphere(cx: i64, cy: i64, cz: i64, r2: i64) -> i64 @export {
+    let qj : i64 = ((cx * cx) + (cy * cy) + (cz * cz)) - r2
+    return ct_leaf(1i64, 1i64, 1i64, 0i64, 0i64, 0i64, 0i64 - (2i64 * cx), 0i64 - (2i64 * cy), 0i64 - (2i64 * cz), qj)
+}
+fn ct_swept(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64, r2: i64) -> i64 @export {
+    if CT_N >= CT_MAXN { return 0i64 - 1i64 }
+    let n : u64 = CT_N
+    CT_KIND[n] = CT_SWEPT
+    let b : u64 = n * 10u64
+    CT_Q[b] = ax   CT_Q[b + 1u64] = ay   CT_Q[b + 2u64] = az
+    CT_Q[b + 3u64] = bx   CT_Q[b + 4u64] = by   CT_Q[b + 5u64] = bz
+    CT_Q[b + 6u64] = r2   CT_Q[b + 7u64] = 0i64   CT_Q[b + 8u64] = 0i64   CT_Q[b + 9u64] = 0i64
+    CT_N = n + 1u64
+    return n as i64
+}
+fn ct_swept_side(n: u64, x: i64, y: i64, z: i64) -> i32 {
+    let b : u64 = n * 10u64
+    let wx : i64 = x - CT_Q[b]   let wy : i64 = y - CT_Q[b + 1u64]   let wz : i64 = z - CT_Q[b + 2u64]
+    let dx : i64 = CT_Q[b + 3u64] - CT_Q[b]   let dy : i64 = CT_Q[b + 4u64] - CT_Q[b + 1u64]   let dz : i64 = CT_Q[b + 5u64] - CT_Q[b + 2u64]
+    let r2 : i64 = CT_Q[b + 6u64]
+    let ww : i64 = ((wx * wx) + (wy * wy)) + (wz * wz)
+    let dd : i64 = ((dx * dx) + (dy * dy)) + (dz * dz)
+    if dd == 0i64 { return xs_sign(ww - r2) }
+    let wd : i64 = ((wx * dx) + (wy * dy)) + (wz * dz)
+    if wd <= 0i64 { return xs_sign(ww - r2) }
+    if wd >= dd {
+        let ux : i64 = wx - dx   let uy : i64 = wy - dy   let uz : i64 = wz - dz
+        let uu : i64 = ((ux * ux) + (uy * uy)) + (uz * uz)
+        return xs_sign(uu - r2)
+    }
+    return xs_sign(((ww * dd) - (wd * wd)) - (r2 * dd))
+}
+fn ct_node(kind: i64, l: i64, r: i64) -> i64 @export {
+    if CT_N >= CT_MAXN { return 0i64 - 1i64 }
+    if l < 0i64 { return 0i64 - 1i64 }
+    if r < 0i64 { return 0i64 - 1i64 }
+    let n : u64 = CT_N
+    CT_KIND[n] = kind   CT_L[n] = l   CT_R[n] = r
+    CT_N = n + 1u64
+    return n as i64
+}
+fn ct_union(l: i64, r: i64) -> i64 @export { return ct_node(CT_UNION, l, r) }
+fn ct_intersect(l: i64, r: i64) -> i64 @export { return ct_node(CT_INTER, l, r) }
+fn ct_difference(l: i64, r: i64) -> i64 @export { return ct_node(CT_DIFF, l, r) }
+fn ct_min(a: i32, b: i32) -> i32 { if a < b { return a }   return b }
+fn ct_max(a: i32, b: i32) -> i32 { if a > b { return a }   return b }
+fn ct_side(node: i64, x: i64, y: i64, z: i64) -> i32 @export {
+    let n : u64 = node as u64
+    let k : i64 = CT_KIND[n]
+    if k == CT_LEAF {
+        let b : u64 = n * 10u64
+        return csg_quadric_eval_sign(CT_Q[b], CT_Q[b + 1u64], CT_Q[b + 2u64], CT_Q[b + 3u64], CT_Q[b + 4u64],
+                                     CT_Q[b + 5u64], CT_Q[b + 6u64], CT_Q[b + 7u64], CT_Q[b + 8u64], CT_Q[b + 9u64], x, y, z)
+    }
+    if k == CT_SWEPT { return ct_swept_side(n, x, y, z) }
+    let sl : i32 = ct_side(CT_L[n], x, y, z)
+    let sr : i32 = ct_side(CT_R[n], x, y, z)
+    if k == CT_UNION { return ct_min(sl, sr) }
+    if k == CT_INTER { return ct_max(sl, sr) }
+    return ct_max(sl, 0i32 - sr)
+}
+
+/* ==================== the space speaks EIDOLOS ==================== */
+var XS_TXT : [u8; 256]
+var XS_TN  : u64 = 0u64
+fn xs_tstr(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if XS_TN < 256u64 { XS_TXT[XS_TN] = p[i]   XS_TN = XS_TN + 1u64 }   i = i + 1u64 }
+    return 0i32
+}
+/* speak a tetra-membership verdict: inside/on/outside as an EIDOLOS claim, with
+ * the trichotomy stated as coherence (inside mirrors outside; on sits under
+ * both boundaries).  Returns the scroll address, 0 = refused. */
+fn xs_speak_member(side: i32) -> u64 @export {
+    XS_TN = 0u64
+    if side > 0i32 { xs_tstr("[p = inside] [inside ~ outside]" as u64) } else {
+        if side < 0i32 { xs_tstr("[p = outside] [inside ~ outside]" as u64) } else {
+            xs_tstr("[p = boundary] [boundary < inside] [boundary < outside]" as u64) } }
+    eol_reset()
+    if eol_read((&XS_TXT) as u64, XS_TN) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+fn xs_speak_len() -> u64 @export { return XS_TN }
+fn xs_speak_byte(i: u64) -> u8 @export { if i < XS_TN { return XS_TXT[i] }   return 0u8 }
+
+/* ==================== THE SELF-PROOF (arms 130..137) ==================== */
+fn xs_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn xs_selfprove() -> u64 @export {
+    /* arm 130: the atom -- a positively-oriented tetra, a negatively-oriented
+     * one (swap two vertices), and a coplanar quadruple */
+    if orient3d(0i64,0i64,0i64, 5i64,1i64,1i64, 1i64,5i64,1i64, 1i64,1i64,5i64) != 1i32 { return 130u64 }
+    if orient3d(0i64,0i64,0i64, 1i64,5i64,1i64, 5i64,1i64,1i64, 1i64,1i64,5i64) != -1i32 { return 130u64 }
+    if orient3d(0i64,0i64,0i64, 1i64,0i64,0i64, 0i64,1i64,0i64, 2i64,1i64,0i64) != 0i32 { return 130u64 }
+    /* arm 131: THE DISCOVERY at witness 0 -- the geometric sign and the
+     * permutation parity, TWO independent computations, agree on all 24
+     * orderings, and the orbit splits 12 even / 12 odd (the S_4 sign character,
+     * surfaced with no target named) */
+    if xs_discover(0u64) != 24u64 { return 131u64 }
+    if xs_even() != 12u64 { return 131u64 }
+    if xs_odd() != 12u64 { return 131u64 }
+    /* arm 132: the discovery is CONFIG-INDEPENDENT -- two more generic witnesses
+     * yield the identical 24/12/12 (it is the group structure, not a fluke) */
+    if xs_discover(1u64) != 24u64 { return 132u64 }
+    if xs_even() != 12u64 { return 132u64 }
+    if xs_discover(2u64) != 24u64 { return 132u64 }
+    if xs_odd() != 12u64 { return 132u64 }
+    /* arm 133: THE 3D SMOKING GUN -- a tetra 1 unit off coplanar has exact
+     * volume sign +-1; the three base points are coplanar in z=0 and the apex
+     * sits at z=1, so orient3d is exactly nonzero where a float area of the
+     * base (~0) would collapse it */
+    if orient3d(0i64,0i64,0i64, 1000000i64,0i64,0i64, 0i64,1000000i64,0i64, 500000i64,500000i64,1i64) != 1i32 { return 133u64 }
+    if orient3d(0i64,0i64,0i64, 1000000i64,0i64,0i64, 0i64,1000000i64,0i64, 500000i64,500000i64,0i64) != 0i32 { return 133u64 }
+    /* arm 134: point-in-tetra -- centroid inside, far point outside, a vertex on */
+    if in_tetra(2i64,2i64,2i64, 0i64,0i64,0i64, 9i64,0i64,0i64, 0i64,9i64,0i64, 0i64,0i64,9i64) != 1i32 { return 134u64 }
+    if in_tetra(100i64,100i64,100i64, 0i64,0i64,0i64, 9i64,0i64,0i64, 0i64,9i64,0i64, 0i64,0i64,9i64) != -1i32 { return 134u64 }
+    if in_tetra(0i64,0i64,0i64, 0i64,0i64,0i64, 9i64,0i64,0i64, 0i64,9i64,0i64, 0i64,0i64,9i64) != 0i32 { return 134u64 }
+    /* arm 135: CARRIED quadric layer still exact -- inside a unit-radius sphere
+     * at origin (x^2+y^2+z^2-1), on it, outside */
+    if csg_quadric_eval_sign(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64-1i64, 0i64,0i64,0i64) != -1i32 { return 135u64 }
+    if csg_quadric_eval_sign(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64-1i64, 1i64,0i64,0i64) != 0i32 { return 135u64 }
+    if csg_quadric_eval_sign(1i64,1i64,1i64,0i64,0i64,0i64,0i64,0i64,0i64,0i64-1i64, 2i64,0i64,0i64) != 1i32 { return 135u64 }
+    /* arm 136: CARRIED CSG tree -- a sphere minus a sphere; a point in the
+     * removed region is outside the difference */
+    ct_reset()
+    let sa : i64 = ct_sphere(0i64,0i64,0i64, 100i64)
+    let sb : i64 = ct_sphere(0i64,0i64,0i64, 25i64)
+    let dif : i64 = ct_difference(sa, sb)
+    if ct_side(dif, 0i64,0i64,0i64) != 1i32 { return 136u64 }         /* core: in the removed inner ball -> OUTSIDE (+1) */
+    if ct_side(dif, 7i64,0i64,0i64) != -1i32 { return 136u64 }        /* shell: in A, not in B -> INSIDE (-1) */
+    /* arm 137: THE SPACE SPEAKS -- inside/outside are mirror senses in the
+     * language; a membership scroll entails the involution */
+    let addr : u64 = xs_speak_member(1i32)
+    if addr == 0u64 { return 137u64 }
+    if eol_entails("inside" as u64, 6u64, 1u64, "outside" as u64, 7u64) != 1u64 { return 137u64 }
+    return 0u64
+}

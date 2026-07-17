@@ -7,14 +7,14 @@
  * spurious miss.  The pixel is a rounding artifact, not the geometry.
  *
  * INSIGHT (first principles).  A ray p(t)=o+t*d meeting a quadric Q(p)=0 is EXACTLY a quadratic  a*t^2 + b*t + g = 0
- * with a,b,g INTEGERS (integer camera + integer quadric coeffs, the csg_kernel qa..qj form).  Then:
+ * with a,b,g INTEGERS (integer camera + integer quadric coeffs, the exact_space qa..qj form).  Then:
  *   - HIT / MISS / TANGENT is sign(Delta), Delta = b^2 - 4ag : plain INTEGER arithmetic -- exact, trivially.
  *   - the near hit is t- = (-b - sqrt Delta)/(2a).  For a POSITIVE-DEFINITE quadric (a = d^T A d > 0: spheres,
  *     ellipsoids) the minus-root is unconditionally the nearer, and t- lives in the rank-1 field Q(sqrt Delta).
  *   - DEPTH ORDER across two surfaces i,j -- the operation float z-fights on -- reduces EXACTLY to a sign of a sum of
  *     square roots:  (t_i - t_j)*4 a_i a_j = (2 a_i b_j - 2 a_j b_i) sqrt 1  +  (-2 a_j) sqrt(Delta_i)  +  (2 a_i) sqrt(Delta_j)
  *     an n=3 surd sign.  With a_i,a_j>0 the 4 a_i a_j factor is positive, so sign(t_i - t_j) IS that surd sign -- decided
- *     by sqrtsum_lazy3, the SAME engine behind csg_kernel / q23_sign / photon_route.  It NEVER collapses a near-tie.
+ *     by sqrtsum_lazy3, the SAME engine behind exact_space / q23_sign / photon_route.  It NEVER collapses a near-tie.
  *   - SHADING is DERIVED, not stored (the "Schrodinger colour"): the exact surface normal is N = grad Q(p) = 2A p + b,
  *     an element of Q(sqrt Delta)^3.  A Lambert intensity k in 0..255 is the largest k with cos^2 theta >= (k/255)^2,
  *     i.e.  255^2 (N.L)^2 >= k^2 |N|^2 |L|^2 -- and after clearing (2a)^2 that is  C0 sqrt 1 + C1 sqrt Delta >= 0, an
@@ -24,11 +24,11 @@
  * hit -> n<=3 surd sign for depth/CSG -> n=2 surd sign for shading.  No mesh, no texture, no float, no epsilon.
  *
  * WHAT IT GIVES BACK (honest -- a consumed-by relationship, not manufactured plumbing).  aether_lens is a VISUAL PROVER:
- * it CONSUMES csg_kernel (it renders the exact solid whose membership csg_kernel decides) and cyclotomic_se3 (the camera
+ * it CONSUMES exact_space (it renders the exact solid whose membership exact_space decides) and cyclotomic_se3 (the camera
  * and objects are placed / orbited by the zero-drift SE(3) rotation, so an orbit returns bit-for-bit -- a rendered proof
- * of the zero-drift theorem).  The scene is fed as csg_kernel qa..qj quadrics: ONE representation, no adapter.
+ * of the zero-drift theorem).  The scene is fed as exact_space qa..qj quadrics: ONE representation, no adapter.
  *
- * EXACTNESS SCOPE (honest, sibling-consistent with csg_kernel's "integer-exact within the i64 envelope"):
+ * EXACTNESS SCOPE (honest, sibling-consistent with exact_space's "integer-exact within the i64 envelope"):
  *   - MODE A (this file): CLOSED-FORM ray-quadric roots -> UNCONDITIONAL exactness (hit/miss/tangent/order/shade all
  *     decided with zero float error).  Scoped to POSITIVE-DEFINITE quadrics (a>0); a<=0 (cylinder ray-parallel-to-axis,
  *     plane, hyperboloid: linear or two-positive-root cases) is the NEXT increment, not faked here.
@@ -39,7 +39,7 @@
  *     fit i64 (the surd engine then signs them exactly, escalating to its own bigint tier past 2^20).  The render-scale
  *     widening is the EXISTING ui_sqrt_sum_sign_big (bigint-coefficient surd sign) -- named, not a stub.
  *
- * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00.  Depends only on sqrt_sum_sign (+ the csg_kernel quadric form). */
+ * Hexad: kind_form (exact geometry).  Ring: R-1.  K: 1.00.  Depends only on sqrt_sum_sign (+ the exact_space quadric form). */
 module aether_lens
 
 extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
@@ -60,7 +60,7 @@ extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii
 /* the integer ray  p(t) = o + t*d  (set once, then cast many quadrics against it) */
 var LENS_OX : i64   var LENS_OY : i64   var LENS_OZ : i64
 var LENS_DX : i64   var LENS_DY : i64   var LENS_DZ : i64
-/* the current quadric's csg_kernel coeffs qa..qj (kept for the exact gradient / shading) */
+/* the current quadric's exact_space coeffs qa..qj (kept for the exact gradient / shading) */
 var LENS_Q : [i64; 10]
 /* the current ray-quadric quadratic  a t^2 + b t + g = 0 ,  Delta = b^2 - 4 a g */
 var LENS_A : i64   var LENS_B : i64   var LENS_G : i64   var LENS_D : i64
@@ -97,7 +97,7 @@ fn lens_set_ray(ox: i64, oy: i64, oz: i64, dx: i64, dy: i64, dz: i64) -> i32 @ex
     return 0i32
 }
 
-/* ── (1) HIT / MISS / TANGENT -- integer-exact.  Casts the current ray at a csg_kernel quadric qa..qj; writes the
+/* ── (1) HIT / MISS / TANGENT -- integer-exact.  Casts the current ray at a exact_space quadric qa..qj; writes the
  * quadratic (a,b,g,Delta) into module state and returns sign(Delta):  +1 two real hits | 0 EXACT tangent | -1 miss.
  * a = d^T A d is the leading coeff; for the positive-definite scope of MODE A the caller ensures a > 0. */
 fn lens_setup(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 @export {
@@ -194,7 +194,7 @@ fn lens_shade255(lx: i64, ly: i64, lz: i64) -> u32 @export {
 /* ── (6) EXACT CSG MEMBERSHIP of the current near hit in ANOTHER quadric B (qa..qj of B), same ray.  This is what makes
  * solids INTERACT: it decides sign(Q_B(p)) at p = the CURRENT quadric's near hit -- an IRRATIONAL point in Q(sqrt Delta_A)
  * -- so a CSG A\B / A∩B can carve one exact solid against another with zero float error (the direct generalisation of
- * csg_kernel::csg_surf_point_side to an arbitrary ray hit).  Returns +1 outside B / 0 exactly on B / -1 inside B.
+ * exact_space::csg_surf_point_side to an arbitrary ray hit).  Returns +1 outside B / 0 exactly on B / -1 inside B.
  *   Q_B(p)*4 a_A^2 = C0 sqrt1 + C1 sqrt(Delta_A),  C0 = a_B(b_A^2+Delta_A) - 2 a_A b_A b_B + 4 a_A^2 g_B,  C1 = 2 a_B b_A - 2 a_A b_B
  * (identity check: B==A gives C0=C1=0 -> 0, the hit is on A).  a_A>0 so the *4a_A^2 is sign-preserving. */
 fn lens_membership_sign(qa: i64, qb: i64, qc: i64, qd: i64, qe: i64, qf: i64, qg: i64, qh: i64, qi: i64, qj: i64) -> i32 @export {

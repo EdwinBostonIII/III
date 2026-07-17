@@ -106,6 +106,8 @@ const DXK_CERT  : u64 = 3u64
 const DXK_DREAM : u64 = 4u64
 const DXK_MINT  : u64 = 5u64
 const DXK_TOMB  : u64 = 6u64
+const DXK_ADJU  : u64 = 7u64             /* the chamber's verdict (confirm merges + bills; refute bills) */
+const DXK_FCONJ : u64 = 9u64             /* a peer's conjecture, quarantined, author-carried */
 /* certificate kinds (the FRONTIER discipline: every refusal named, never silent) */
 const DXC_OVERWIDTH : u64 = 1u64
 const DXC_UNDECIDE  : u64 = 2u64
@@ -114,6 +116,7 @@ const DXC_JURIS     : u64 = 4u64
 const DXC_CONJ      : u64 = 5u64
 const DXC_SOLVENCY  : u64 = 6u64
 const DXC_DANGLING  : u64 = 7u64
+const DXC_REFUTED   : u64 = 8u64         /* a conjecture the chamber refuted (author billed if foreign) */
 
 /* ==================== the event log (the waist) ==================== */
 var DXE_KIND : [u64; 16384]
@@ -175,6 +178,41 @@ var DXM_SEQ  : [u64; 128]
 var DXM_NN   : [u64; 2]
 var DX_MFULL : u64 = 0u64
 
+/* THE MERGE TABLE (the chamber's confirmations): src key -> dst key, applied
+ * at ctx-key time for the FUTURE only (the frozen-key law again).  Stars are
+ * lawful (many sources, one canonical dst); CHAINS are not -- a pair whose
+ * merge would need a double hop is TABLED, counted, never billed. */
+const DX_JROW : u64 = 64u64
+var DXJ_SRC : [u64; 128]
+var DXJ_DST : [u64; 128]
+var DXJ_SEQ : [u64; 128]
+var DXJ_NN  : [u64; 2]
+var DX_JFULL : u64 = 0u64
+var DX_TABLED : u64 = 0u64
+
+/* THE FOREIGN TABLE (federation, doxa side): a peer's conjecture enters
+ * QUARANTINED -- it may stand for adjudication, it can never touch tallies,
+ * and it carries its AUTHOR (constitution root; 0 = incoherent peer, REFUSED
+ * at the door: the citizen law applies to peers too).  The synapse kind-3
+ * wire is the named transport hook; this door works over any carrier. */
+const DX_WROW : u64 = 64u64
+var DXW_FA  : [u64; 128]
+var DXW_FB  : [u64; 128]
+var DXW_AU  : [u64; 128]
+var DXW_SEQ : [u64; 128]
+var DXW_NN  : [u64; 2]
+var DX_WFULL : u64 = 0u64
+var DX_XREF  : u64 = 0u64                /* incoherent-peer refusals, counted   */
+
+/* THE AUTHOR LEDGER: every adjudicated foreign conjecture bills or credits
+ * its author -- accountability with a constitution-rooted name attached. */
+const DX_UROW : u64 = 64u64
+var DXU_ROOT : [u64; 128]
+var DXU_CONF : [u64; 128]
+var DXU_REF  : [u64; 128]
+var DXU_NN   : [u64; 2]
+var DX_UFULL : u64 = 0u64
+
 /* live-law refusal counters (observability; certificated refusals also event) */
 var DX_JREF : u64 = 0u64
 var DX_FREF : u64 = 0u64
@@ -230,6 +268,17 @@ fn dx_reset() -> i32 @export {
     DXM_NN[0u64] = 0u64
     DXM_NN[1u64] = 0u64
     DX_MFULL = 0u64
+    DXJ_NN[0u64] = 0u64
+    DXJ_NN[1u64] = 0u64
+    DX_JFULL = 0u64
+    DX_TABLED = 0u64
+    DXW_NN[0u64] = 0u64
+    DXW_NN[1u64] = 0u64
+    DX_WFULL = 0u64
+    DX_XREF = 0u64
+    DXU_NN[0u64] = 0u64
+    DXU_NN[1u64] = 0u64
+    DX_UFULL = 0u64
     DX_JREF = 0u64
     DX_FREF = 0u64
     DX_SREF = 0u64
@@ -402,16 +451,23 @@ fn dx_ctx_key(cell: u64) -> u64 @export {
     /* THE MINT: if this parent class was split, refine by the registry's next
      * record fact (the hundreds digit of the claim's own numeric prefix).
      * Live-table read only -- keys inside events stay frozen at door time. */
+    let mut kk : u64 = base
     let mut m : u64 = 0u64
     while m < DXM_NN[0u64] {
         if DXM_PAR[m] == base {
             let mut hund : u64 = 0u64
             if anyd == 1u64 { hund = (v / 100u64) % 10u64 }
-            return base | ((hund + 1u64) << 13u64)
-        }
+            kk = base | ((hund + 1u64) << 13u64)
+            m = DXM_NN[0u64]
+        } else { m = m + 1u64 }
+    }
+    /* the chamber's confirmed merges map the FUTURE key onto its canonical dst */
+    m = 0u64
+    while m < DXJ_NN[0u64] {
+        if DXJ_SRC[m] == kk { return DXJ_DST[m] }
         m = m + 1u64
     }
-    return base
+    return kk
 }
 
 /* ==================== the books' rows ==================== */
@@ -551,6 +607,33 @@ fn dx_fold(s: u64) -> u64 {
         h = idfold_u64(h, DXM_FACT[mbase + i])
         i = i + 1u64
     }
+    let jbase : u64 = s * DX_JROW
+    i = 0u64
+    while i < DXJ_NN[s] {
+        h = idfold_u64(h, DXJ_SRC[jbase + i])
+        h = idfold_u64(h, DXJ_DST[jbase + i])
+        i = i + 1u64
+    }
+    let wbase : u64 = s * DX_WROW
+    i = 0u64
+    while i < DXW_NN[s] {
+        h = idfold_u64(h, DXW_FA[wbase + i])
+        h = idfold_u64(h, DXW_FB[wbase + i])
+        h = idfold_u64(h, DXW_AU[wbase + i])
+        i = i + 1u64
+    }
+    let ubase : u64 = s * DX_UROW
+    i = 0u64
+    while i < DXU_NN[s] {
+        let uc : u64 = DXU_CONF[ubase + i]
+        let ur : u64 = DXU_REF[ubase + i]
+        if uc + ur != 0u64 {
+            h = idfold_u64(h, DXU_ROOT[ubase + i])
+            h = idfold_u64(h, uc)
+            h = idfold_u64(h, ur)
+        }
+        i = i + 1u64
+    }
     let v : u64 = idfold_seal(h)
     if v == 0u64 { return 1u64 }
     return v
@@ -621,6 +704,57 @@ fn dx_apply(s: u64, kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 
         DXM_NN[s] = DXM_NN[s] + 1u64
         return 1u64
     }
+    if kind == DXK_ADJU {
+        /* a=src, b=dst, c=verdict (1 confirm | 0 refute), d=author (0 local).
+         * Topology/voters are DOOR law; the fold accepts what the door said,
+         * refusing only structural impossibilities (dup src, capacity). */
+        if c == 1u64 {
+            let jb : u64 = s * DX_JROW
+            let mut i : u64 = 0u64
+            while i < DXJ_NN[s] { if DXJ_SRC[jb + i] == a { DX_SEMV = DX_SEMV + 1u64   return 0u64 }   i = i + 1u64 }
+            if DXJ_NN[s] >= DX_JROW { DX_JFULL = DX_JFULL + 1u64   return 0u64 }
+            let jr : u64 = jb + DXJ_NN[s]
+            DXJ_SRC[jr] = a
+            DXJ_DST[jr] = b
+            DXJ_SEQ[jr] = seq
+            DXJ_NN[s] = DXJ_NN[s] + 1u64
+        }
+        if d != 0u64 {
+            let ub : u64 = s * DX_UROW
+            let mut u : u64 = DX_SENT
+            let mut k : u64 = 0u64
+            while k < DXU_NN[s] { if DXU_ROOT[ub + k] == d { u = ub + k   k = DXU_NN[s] } else { k = k + 1u64 } }
+            if u == DX_SENT {
+                if DXU_NN[s] >= DX_UROW { DX_UFULL = DX_UFULL + 1u64   return 1u64 }
+                u = ub + DXU_NN[s]
+                DXU_ROOT[u] = d
+                DXU_CONF[u] = 0u64
+                DXU_REF[u] = 0u64
+                DXU_NN[s] = DXU_NN[s] + 1u64
+            }
+            if c == 1u64 { DXU_CONF[u] = DXU_CONF[u] + 1u64 } else { DXU_REF[u] = DXU_REF[u] + 1u64 }
+        }
+        return 1u64
+    }
+    if kind == DXK_FCONJ {
+        /* a=fa, b=fb, c=0, d=author.  The citizen law applies to peers: an
+         * incoherent author (0) is refused in the fold too. */
+        if d == 0u64 { DX_SEMV = DX_SEMV + 1u64   return 0u64 }
+        let wb : u64 = s * DX_WROW
+        let mut i : u64 = 0u64
+        while i < DXW_NN[s] {
+            if DXW_FA[wb + i] == a { if DXW_FB[wb + i] == b { if DXW_AU[wb + i] == d { DX_SEMV = DX_SEMV + 1u64   return 0u64 } } }
+            i = i + 1u64
+        }
+        if DXW_NN[s] >= DX_WROW { DX_WFULL = DX_WFULL + 1u64   return 0u64 }
+        let wr : u64 = wb + DXW_NN[s]
+        DXW_FA[wr] = a
+        DXW_FB[wr] = b
+        DXW_AU[wr] = d
+        DXW_SEQ[wr] = seq
+        DXW_NN[s] = DXW_NN[s] + 1u64
+        return 1u64
+    }
     if kind == DXK_DREAM { return 1u64 }
     DX_SEMV = DX_SEMV + 1u64
     return 0u64
@@ -676,6 +810,49 @@ fn dx_reverse_live(kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 {
             j = j + 1u64
         }
         DXM_NN[0u64] = DXM_NN[0u64] - 1u64
+        return 1u64
+    }
+    if kind == DXK_ADJU {
+        if c == 1u64 {
+            let mut r : u64 = DX_SENT
+            let mut i : u64 = 0u64
+            while i < DXJ_NN[0u64] { if DXJ_SEQ[i] == seq { r = i   i = DXJ_NN[0u64] } else { i = i + 1u64 } }
+            if r != DX_SENT {
+                let mut j : u64 = r
+                while j + 1u64 < DXJ_NN[0u64] {
+                    DXJ_SRC[j] = DXJ_SRC[j + 1u64]
+                    DXJ_DST[j] = DXJ_DST[j + 1u64]
+                    DXJ_SEQ[j] = DXJ_SEQ[j + 1u64]
+                    j = j + 1u64
+                }
+                DXJ_NN[0u64] = DXJ_NN[0u64] - 1u64
+            }
+        }
+        if d != 0u64 {
+            let mut k : u64 = 0u64
+            while k < DXU_NN[0u64] {
+                if DXU_ROOT[k] == d {
+                    if c == 1u64 { DXU_CONF[k] = DXU_CONF[k] - 1u64 } else { DXU_REF[k] = DXU_REF[k] - 1u64 }
+                    k = DXU_NN[0u64]
+                } else { k = k + 1u64 }
+            }
+        }
+        return 1u64
+    }
+    if kind == DXK_FCONJ {
+        let mut r : u64 = DX_SENT
+        let mut i : u64 = 0u64
+        while i < DXW_NN[0u64] { if DXW_SEQ[i] == seq { r = i   i = DXW_NN[0u64] } else { i = i + 1u64 } }
+        if r == DX_SENT { return 0u64 }
+        let mut j : u64 = r
+        while j + 1u64 < DXW_NN[0u64] {
+            DXW_FA[j] = DXW_FA[j + 1u64]
+            DXW_FB[j] = DXW_FB[j + 1u64]
+            DXW_AU[j] = DXW_AU[j + 1u64]
+            DXW_SEQ[j] = DXW_SEQ[j + 1u64]
+            j = j + 1u64
+        }
+        DXW_NN[0u64] = DXW_NN[0u64] - 1u64
         return 1u64
     }
     if kind == DXK_DREAM { return 1u64 }
@@ -879,6 +1056,157 @@ fn dx_mint(dir: u64) -> u64 @export {
 fn dxm_n() -> u64 @export { return DXM_NN[0u64] }
 fn dxm_par_at(i: u64) -> u64 @export { if i < DXM_NN[0u64] { return DXM_PAR[i] }   return 0u64 }
 fn dxm_fact_at(i: u64) -> u64 @export { if i < DXM_NN[0u64] { return DXM_FACT[i] }   return 0u64 }
+
+/* ==================== THE CHAMBER (merge adjudication) + FEDERATION ====================
+ * A conjecture (local dream cert, or a peer's quarantined claim) faces the
+ * chamber: ENUMERATED voters, each a global pre-stated predicate --
+ *   V-TRUTH    exact tally proportionality, RE-DERIVED live (never from the cert)
+ *   V-EVIDENCE both sides' totals >= 8 (double the mint floor)
+ *   V-PERSIST  >= 4 live settlements arrived AFTER the conjecture stood
+ * Unanimous -> CONFIRMED: a MERGE row (canonical dst = the LOWER key) and the
+ * author CREDITED.  Any voter refuses -> REFUTED: certificated and the author
+ * BILLED.  A merge that would CHAIN (src already a dst, or vice versa) is
+ * TABLED -- counted, never billed: topology is not the author's fault. */
+fn dxj_n() -> u64 @export { return DXJ_NN[0u64] }
+fn dxj_src_at(i: u64) -> u64 @export { if i < DXJ_NN[0u64] { return DXJ_SRC[i] }   return 0u64 }
+fn dxj_dst_at(i: u64) -> u64 @export { if i < DXJ_NN[0u64] { return DXJ_DST[i] }   return 0u64 }
+fn dxw_n() -> u64 @export { return DXW_NN[0u64] }
+fn dxw_fa_at(i: u64) -> u64 @export { if i < DXW_NN[0u64] { return DXW_FA[i] }   return 0u64 }
+fn dxw_fb_at(i: u64) -> u64 @export { if i < DXW_NN[0u64] { return DXW_FB[i] }   return 0u64 }
+fn dxw_au_at(i: u64) -> u64 @export { if i < DXW_NN[0u64] { return DXW_AU[i] }   return 0u64 }
+fn dxu_n() -> u64 @export { return DXU_NN[0u64] }
+fn dxu_root_at(i: u64) -> u64 @export { if i < DXU_NN[0u64] { return DXU_ROOT[i] }   return 0u64 }
+fn dxu_conf_at(i: u64) -> u64 @export { if i < DXU_NN[0u64] { return DXU_CONF[i] }   return 0u64 }
+fn dxu_ref_at(i: u64) -> u64 @export { if i < DXU_NN[0u64] { return DXU_REF[i] }   return 0u64 }
+fn dx_tabled() -> u64 @export { return DX_TABLED }
+fn dx_xref() -> u64 @export { return DX_XREF }
+/* the federation door: a peer's conjecture, quarantined + author-carried.
+ * seq > 0 | -1 incoherent author (the citizen law, refused + counted) | -4. */
+fn dx_foreign_conj(author: u64, fa: u64, fb: u64, dir: u64) -> i64 @export {
+    if author == 0u64 { DX_XREF = DX_XREF + 1u64   return -1i64 }
+    let seq : u64 = dxe_append(DXK_FCONJ, fa, fb, 0u64, author, dir)
+    if seq == 0u64 { return -4i64 }
+    let ap : u64 = dx_apply(0u64, DXK_FCONJ, fa, fb, 0u64, author, seq)
+    if ap != 1u64 { return -4i64 }
+    return seq as i64
+}
+/* the newest standing emission for a pair (either order).  Returns 1 found |
+ * 0 none; the author (0 = local dream cert; full u64 root for a peer) and the
+ * emission seq land in DX_STAND_AU / DX_STAND_SQ (module seats -- a packed
+ * return would truncate the root). */
+var DX_STAND_AU : u64 = 0u64
+var DX_STAND_SQ : u64 = 0u64
+fn dx_conj_standing(lo: u64, hi: u64) -> u64 {
+    let mut found : u64 = 0u64
+    DX_STAND_AU = 0u64
+    DX_STAND_SQ = 0u64
+    let mut i : u64 = 0u64
+    while i < DXW_NN[0u64] {
+        let mut hit : u64 = 0u64
+        if DXW_FA[i] == lo { if DXW_FB[i] == hi { hit = 1u64 } }
+        if DXW_FA[i] == hi { if DXW_FB[i] == lo { hit = 1u64 } }
+        if hit == 1u64 { if DXW_SEQ[i] >= DX_STAND_SQ { DX_STAND_AU = DXW_AU[i]   DX_STAND_SQ = DXW_SEQ[i]   found = 1u64 } }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < DXG_NN[0u64] {
+        if DXG_KIND[i] == DXC_CONJ {
+            let mut hit : u64 = 0u64
+            if DXG_A[i] == lo { if DXG_B[i] == hi { hit = 1u64 } }
+            if DXG_A[i] == hi { if DXG_B[i] == lo { hit = 1u64 } }
+            if hit == 1u64 { if DXG_SEQ[i] >= DX_STAND_SQ { DX_STAND_AU = 0u64   DX_STAND_SQ = DXG_SEQ[i]   found = 1u64 } }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+/* THE CHAMBER: 1 confirmed | 0 refuted | -1 no standing conjecture |
+ * -2 tabled (topology; never billed) | -3 already adjudicated. */
+fn dx_adjudicate(fa: u64, fb: u64, dir: u64) -> i64 @export {
+    if fa == fb { return -1i64 }
+    let mut lo : u64 = fa
+    let mut hi : u64 = fb
+    if lo > hi { lo = fb   hi = fa }
+    let stand : u64 = dx_conj_standing(lo, hi)
+    if stand == 0u64 { return -1i64 }
+    let author : u64 = DX_STAND_AU
+    let sseq : u64 = DX_STAND_SQ
+    /* already: a merge row for the pair, or a refuted cert */
+    let mut i : u64 = 0u64
+    while i < DXJ_NN[0u64] { if DXJ_SRC[i] == hi { if DXJ_DST[i] == lo { return -3i64 } }   i = i + 1u64 }
+    i = 0u64
+    while i < DXG_NN[0u64] {
+        if DXG_KIND[i] == DXC_REFUTED { if DXG_A[i] == lo { if DXG_B[i] == hi { return -3i64 } } }
+        i = i + 1u64
+    }
+    /* topology: chains are tabled -- counted, never billed */
+    i = 0u64
+    while i < DXJ_NN[0u64] {
+        if DXJ_DST[i] == hi { DX_TABLED = DX_TABLED + 1u64   return -2i64 }
+        if DXJ_SRC[i] == hi { DX_TABLED = DX_TABLED + 1u64   return -2i64 }
+        if DXJ_SRC[i] == lo { DX_TABLED = DX_TABLED + 1u64   return -2i64 }
+        i = i + 1u64
+    }
+    /* the voters */
+    let ra : u64 = dxc_row(0u64, lo, 0u64)
+    let rb : u64 = dxc_row(0u64, hi, 0u64)
+    let mut pass : u64 = 1u64
+    if ra == DX_SENT { pass = 0u64 }
+    if rb == DX_SENT { pass = 0u64 }
+    if pass == 1u64 {
+        let ta : u64 = DXC_GRN[ra] + DXC_RED[ra]
+        let tb : u64 = DXC_GRN[rb] + DXC_RED[rb]
+        /* V-EVIDENCE */
+        if ta < 8u64 { pass = 0u64 }
+        if tb < 8u64 { pass = 0u64 }
+        /* V-TRUTH: exact cross-multiplication, re-derived live */
+        if (DXC_RED[ra] * tb) != (DXC_RED[rb] * ta) { pass = 0u64 }
+        /* V-PERSIST: >= 4 live settlements after the conjecture stood */
+        let mut after : u64 = 0u64
+        let mut e : u64 = 0u64
+        while e < DXE_N {
+            if DXE_KIND[e] == DXK_OBSV { if DXE_TOMB[e] == 0u8 { if e + 1u64 > sseq { after = after + 1u64 } } }
+            e = e + 1u64
+        }
+        if after < 4u64 { pass = 0u64 }
+    }
+    if pass == 0u64 {
+        dx_cert_emit(DXC_REFUTED, lo, hi, dir)
+        let seq0 : u64 = dxe_append(DXK_ADJU, hi, lo, 0u64, author, dir)
+        if seq0 != 0u64 { dx_apply(0u64, DXK_ADJU, hi, lo, 0u64, author, seq0) }
+        return 0i64
+    }
+    let seq1 : u64 = dxe_append(DXK_ADJU, hi, lo, 1u64, author, dir)
+    if seq1 == 0u64 { return -1i64 }
+    dx_apply(0u64, DXK_ADJU, hi, lo, 1u64, author, seq1)
+    return 1i64
+}
+/* convene on every standing, un-adjudicated conjecture (certs + foreign).
+ * Returns confirmed | refuted<<16 | tabled<<32. */
+fn dx_adju_sweep(dir: u64) -> u64 @export {
+    let mut conf : u64 = 0u64
+    let mut refu : u64 = 0u64
+    let mut tabl : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXG_NN[0u64] {
+        if DXG_KIND[i] == DXC_CONJ {
+            let r : i64 = dx_adjudicate(DXG_A[i], DXG_B[i], dir)
+            if r == 1i64 { conf = conf + 1u64 }
+            if r == 0i64 { refu = refu + 1u64 }
+            if r == -2i64 { tabl = tabl + 1u64 }
+        }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < DXW_NN[0u64] {
+        let r2 : i64 = dx_adjudicate(DXW_FA[i], DXW_FB[i], dir)
+        if r2 == 1i64 { conf = conf + 1u64 }
+        if r2 == 0i64 { refu = refu + 1u64 }
+        if r2 == -2i64 { tabl = tabl + 1u64 }
+        i = i + 1u64
+    }
+    return conf | (refu << 16u64) | (tabl << 32u64)
+}
 
 /* ==================== THE AGENDA (v3, the aim) ====================
  * The mind's exact statement of where the next beat buys the most: the
@@ -1158,6 +1486,8 @@ fn dx_fold_logline(addr: u64, len: u64) -> u64 @export {
     if kind == DXK_CERT { known = 1u64 }
     if kind == DXK_DREAM { known = 1u64 }
     if kind == DXK_MINT { known = 1u64 }
+    if kind == DXK_ADJU { known = 1u64 }
+    if kind == DXK_FCONJ { known = 1u64 }
     if kind == DXK_TOMB { known = 1u64 }
     if known == 0u64 { DX_MALF = DX_MALF + 1u64   return 0u64 }
     /* seq must be exactly the next dense sequence -- a gap or replay is refused */
@@ -1649,17 +1979,9 @@ fn dx_selfprove() -> u64 @export {
     let h65 : u64 = dx_hold(81985529216486895u64, 0u64)
     if h65 != 0u64 { dx_reset()   return 26u64 }
     if DX_WREF != wref0 + 1u64 { dx_reset()   return 26u64 }
-    /* arm 27: THE DREAM LAW -- excursion leaves the books bit-identical; the
-     * SABOTAGED rewind is DETECTED, refused, and retains nothing */
-    let d1 : u64 = dx_dream(64u64, 12345u64, 0u64, 0u64)
-    if d1 != 0u64 { dx_reset()   return 27u64 }
-    let f_mid : u64 = dx_fold(0u64)
-    let e_mid : u64 = DXE_N
-    let d2 : u64 = dx_dream(64u64, 54321u64, 0u64, 1u64)
-    if d2 != 1u64 { dx_reset()   return 27u64 }
-    let f_mid2 : u64 = dx_fold(0u64)
-    if f_mid2 != f_mid { dx_reset()   return 27u64 }
-    if DXE_N != e_mid { dx_reset()   return 27u64 }
+    /* arm 27: THE DREAM LAW (own frame) */
+    let a27 : u64 = dx_arm_dream()
+    if a27 != 0u64 { dx_reset()   return a27 }
     /* arm 28: THE RIGHT TO BE FORGOTTEN -- first the clean fold-identity pair
      * (unlearn the settlement: fold returns to the post-stake state; unlearn
      * the stake: fold returns to the pre-stake state; each proven in-door vs
@@ -1686,8 +2008,41 @@ fn dx_selfprove() -> u64 @export {
     if s6 <= 0i64 { dx_reset()   return 28u64 }
     let u1 : u64 = dx_unlearn(p6 as u64, 0u64)
     if u1 != 14u64 { dx_reset()   return 28u64 }
-    /* arm 29: THE QUESTION ECONOMY -- exhaustive optimality; the empty set is
-     * UNDECIDABLE, certificated */
+    /* arms 29+30: THE QUESTION ECONOMY + the log's teeth (own frame) */
+    let a29 : u64 = dx_arm_qlog()
+    if a29 != 0u64 { dx_reset()   return a29 }
+    /* arm 31: THE MINT (own frame -- the 64-slot ceiling law) */
+    let a31 : u64 = dx_arm_mint()
+    if a31 != 0u64 { dx_reset()   return a31 }
+    /* arm 32: THE PHASE (abelian law -- interior tombstones) */
+    let a32 : u64 = dx_arm_phase()
+    if a32 != 0u64 { dx_reset()   return a32 }
+    /* arm 33: THE CHAMBER (voters, merge, tabled topology) */
+    let a33 : u64 = dx_arm_chamber()
+    if a33 != 0u64 { dx_reset()   return a33 }
+    /* arm 34: FEDERATION (citizen law for peers; author billing both ways) */
+    let a34 : u64 = dx_arm_foreign()
+    if a34 != 0u64 { dx_reset()   return a34 }
+    dx_reset()
+    return 0u64
+}
+/* arm 27, hoisted: THE DREAM LAW -- excursion leaves the books bit-identical;
+ * the SABOTAGED rewind is DETECTED, refused, and retains nothing.  0 | 27. */
+fn dx_arm_dream() -> u64 {
+    let d1 : u64 = dx_dream(64u64, 12345u64, 0u64, 0u64)
+    if d1 != 0u64 { return 27u64 }
+    let f_mid : u64 = dx_fold(0u64)
+    let e_mid : u64 = DXE_N
+    let d2 : u64 = dx_dream(64u64, 54321u64, 0u64, 1u64)
+    if d2 != 1u64 { return 27u64 }
+    let f_mid2 : u64 = dx_fold(0u64)
+    if f_mid2 != f_mid { return 27u64 }
+    if DXE_N != e_mid { return 27u64 }
+    return 0u64
+}
+/* arms 29+30, hoisted: exhaustive minimax optimality + UNDECIDABLE cert +
+ * the log's teeth (garbage refused, dense-seq law).  0 | 29 | 30. */
+fn dx_arm_qlog() -> u64 {
     DXQ_SET[0u64] = 15u64
     DXQ_SET[1u64] = 63u64
     DXQ_SET[2u64] = 255u64
@@ -1695,31 +2050,200 @@ fn dx_selfprove() -> u64 @export {
     let live12 : u64 = 4095u64
     let pick : u64 = dx_best_question(live12, (&DXQ_SET) as u64, 4u64, 0u64)
     let mut bw : u64 = DX_SENT
-    kk = 0u64
+    let mut kk : u64 = 0u64
     while kk < 4u64 { let w : u64 = dx_q_worst(live12, DXQ_SET[kk])   if w < bw { bw = w }   kk = kk + 1u64 }
     let pw : u64 = dx_q_worst(live12, DXQ_SET[pick])
-    if pw != bw { dx_reset()   return 29u64 }
-    if pick != 1u64 { dx_reset()   return 29u64 }
+    if pw != bw { return 29u64 }
+    if pick != 1u64 { return 29u64 }
     let g0 : u64 = dxg_n()
     let und : u64 = dx_best_question(live12, (&DXQ_SET) as u64, 0u64, 0u64)
-    if und != DX_SENT { dx_reset()   return 29u64 }
-    if dxg_n() != g0 + 1u64 { dx_reset()   return 29u64 }
-    /* arm 30: the log's teeth -- garbage refused + counted; a well-formed line
-     * with a broken sequence refused (the dense-seq law) */
+    if und != DX_SENT { return 29u64 }
+    if dxg_n() != g0 + 1u64 { return 29u64 }
     let m0 : u64 = DX_MALF
     let z1 : u64 = dx_fold_logline("garbage line" as u64, 12u64)
-    if z1 != 0u64 { dx_reset()   return 30u64 }
-    if DX_MALF != m0 + 1u64 { dx_reset()   return 30u64 }
+    if z1 != 0u64 { return 30u64 }
+    if DX_MALF != m0 + 1u64 { return 30u64 }
     let z2 : u64 = dx_fold_logline("X1|4|1|1|0|0|999" as u64, 15u64)
-    if z2 != 0u64 { dx_reset()   return 30u64 }
-    if DX_MALF != m0 + 2u64 { dx_reset()   return 30u64 }
-    /* arm 31: THE MINT (own frame -- the 64-slot ceiling law) */
-    let a31 : u64 = dx_arm_mint()
-    if a31 != 0u64 { dx_reset()   return a31 }
-    /* arm 32: THE PHASE (abelian law -- interior tombstones) */
-    let a32 : u64 = dx_arm_phase()
-    if a32 != 0u64 { dx_reset()   return a32 }
-    dx_reset()
+    if z2 != 0u64 { return 30u64 }
+    if DX_MALF != m0 + 2u64 { return 30u64 }
+    return 0u64
+}
+/* register + adopt + stake + settle one synthetic cell "F805_cf_D" (family
+ * digit F, cell digit 1+idx); returns the cell's ctx key, SENT on refusal */
+fn dx_arm_cell(fam: u64, idx: u64, exitc: u64) -> u64 {
+    let lp : *u8 = (&DX_LBUF) as *u8
+    lp[0u64] = (48u64 + fam) as u8
+    lp[1u64] = 56u8
+    lp[2u64] = 48u8
+    lp[3u64] = 53u8
+    lp[4u64] = 95u8
+    lp[5u64] = 99u8
+    lp[6u64] = 102u8
+    lp[7u64] = 95u8
+    lp[8u64] = (49u64 + idx) as u8
+    lp[9u64] = 0u8
+    let r : i64 = dx_k_reg((&DX_LBUF) as u64, 9u64, 1u8, 99u64)
+    if r < 0i64 { return DX_SENT }
+    let cell : u64 = r as u64
+    dx_k_adopt_mark(cell)
+    let p : i64 = dx_open_pred(cell, 0u64)
+    if p <= 0i64 { return DX_SENT }
+    let o : i64 = dx_settle(cell, 2u64, exitc, 0u64)
+    if o <= 0i64 { return DX_SENT }
+    return dx_ctx_key(cell)
+}
+/* arm 33: the chamber.  Families A(kilo1) B(kilo2) all-green, C(kilo3) mixed;
+ * a false pair (A,C) REFUTED by V-TRUTH; a true pair (A,B) CONFIRMED and
+ * MERGED onto the lower key (future ctx keys unify; shadow agrees); the
+ * refuted and confirmed pairs both refuse re-convening; a pair whose merge
+ * would CHAIN is TABLED with the fold untouched and nobody billed. */
+fn dx_arm_chamber() -> u64 {
+    let mut ka : u64 = 0u64
+    let mut kb : u64 = 0u64
+    let mut kc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { ka = dx_arm_cell(1u64, i, 99u64)   if ka == DX_SENT { return 33u64 }   i = i + 1u64 }
+    i = 0u64
+    while i < 6u64 { kb = dx_arm_cell(2u64, i, 99u64)   if kb == DX_SENT { return 33u64 }   i = i + 1u64 }
+    i = 0u64
+    while i < 6u64 {
+        let mut ex : u64 = 99u64
+        if i >= 4u64 { ex = 7u64 }
+        kc = dx_arm_cell(3u64, i, ex)
+        if kc == DX_SENT { return 33u64 }
+        i = i + 1u64
+    }
+    /* the false pair stands, gains evidence, and is REFUTED (author = local) */
+    dx_cert_emit(DXC_CONJ, ka, kc, 0u64)
+    i = 6u64
+    while i < 8u64 {
+        let t1 : u64 = dx_arm_cell(1u64, i, 99u64)
+        if t1 == DX_SENT { return 33u64 }
+        let t2 : u64 = dx_arm_cell(3u64, i, 99u64)
+        if t2 == DX_SENT { return 33u64 }
+        i = i + 1u64
+    }
+    let rj : i64 = dx_adjudicate(ka, kc, 0u64)
+    if rj != 0i64 { return 33u64 }
+    let rj2 : i64 = dx_adjudicate(ka, kc, 0u64)
+    if rj2 != -3i64 { return 33u64 }
+    /* the true pair: stands, persists, CONFIRMED, MERGED */
+    dx_cert_emit(DXC_CONJ, ka, kb, 0u64)
+    i = 6u64
+    while i < 8u64 {
+        let t3 : u64 = dx_arm_cell(2u64, i, 99u64)
+        if t3 == DX_SENT { return 33u64 }
+        let t4 : u64 = dx_arm_cell(4u64, i - 6u64, 99u64)
+        if t4 == DX_SENT { return 33u64 }
+        i = i + 1u64
+    }
+    let cj : i64 = dx_adjudicate(ka, kb, 0u64)
+    if cj != 1i64 { return 33u64 }
+    if dxj_n() != 1u64 { return 33u64 }
+    /* future keys unify onto the canonical dst */
+    let kA2 : u64 = dx_arm_key_of(1u64)
+    let kB2 : u64 = dx_arm_key_of(2u64)
+    if kA2 != kB2 { return 33u64 }
+    let mut dst : u64 = ka
+    if kb < ka { dst = kb }
+    if kA2 != dst { return 33u64 }
+    let sh : u64 = dx_refold_shadow(0u64)
+    let lv : u64 = dx_fold(0u64)
+    if sh != lv { return 33u64 }
+    let cj2 : i64 = dx_adjudicate(ka, kb, 0u64)
+    if cj2 != -3i64 { return 33u64 }
+    /* the chain is TABLED: pair (dst, key0-raw) would make the existing dst a
+     * source -- counted, fold untouched, nobody billed */
+    dx_cert_emit(DXC_CONJ, dst, 4097u64, 0u64)
+    let ft : u64 = dx_fold(0u64)
+    let t0 : u64 = DX_TABLED
+    let tj : i64 = dx_adjudicate(dst, 4097u64, 0u64)
+    if tj != -2i64 { return 33u64 }
+    if DX_TABLED != t0 + 1u64 { return 33u64 }
+    if dx_fold(0u64) != ft { return 33u64 }
+    return 0u64
+}
+/* the ctx key of family F's first cell (name lookup, no side effects) */
+fn dx_arm_key_of(fam: u64) -> u64 {
+    let lp : *u8 = (&DX_LBUF) as *u8
+    lp[0u64] = (48u64 + fam) as u8
+    lp[1u64] = 56u8
+    lp[2u64] = 48u8
+    lp[3u64] = 53u8
+    lp[4u64] = 95u8
+    lp[5u64] = 99u8
+    lp[6u64] = 102u8
+    lp[7u64] = 95u8
+    lp[8u64] = 49u8
+    lp[9u64] = 0u8
+    let c : u64 = dxn_find((&DX_LBUF) as u64, 9u64)
+    if c == DX_SENT { return DX_SENT }
+    return dx_ctx_key(c)
+}
+/* arm 34: federation.  An incoherent peer (root 0) is REFUSED at the door; a
+ * peer's false conjecture is REFUTED and the author BILLED (ref+1); a peer's
+ * true conjecture is CONFIRMED and the author CREDITED (conf+1); the foreign
+ * row itself never touches a tally (conservation holds throughout); the
+ * shadow refold agrees. */
+fn dx_arm_foreign() -> u64 {
+    let x0 : u64 = DX_XREF
+    let z : i64 = dx_foreign_conj(0u64, 1u64, 2u64, 0u64)
+    if z != -1i64 { return 34u64 }
+    if DX_XREF != x0 + 1u64 { return 34u64 }
+    /* family E (kilo4): 2 greens rode in during arm 33; top up 4 green 2 red */
+    let mut ke : u64 = 0u64
+    let mut kf : u64 = 0u64
+    let mut i : u64 = 2u64
+    while i < 8u64 {
+        let mut ex : u64 = 99u64
+        if i >= 6u64 { ex = 7u64 }
+        ke = dx_arm_cell(4u64, i, ex)
+        if ke == DX_SENT { return 34u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 8u64 { kf = dx_arm_cell(5u64, i, 99u64)   if kf == DX_SENT { return 34u64 }   i = i + 1u64 }
+    let fj : i64 = dx_foreign_conj(12345u64, ke, kf, 0u64)
+    if fj <= 0i64 { return 34u64 }
+    if dxw_n() != 1u64 { return 34u64 }
+    /* persistence rides on family G's first settlements */
+    let mut kg : u64 = 0u64
+    i = 0u64
+    while i < 4u64 { kg = dx_arm_cell(6u64, i, 99u64)   if kg == DX_SENT { return 34u64 }   i = i + 1u64 }
+    let av : i64 = dx_adjudicate(ke, kf, 0u64)
+    if av != 0i64 { return 34u64 }
+    /* the author is billed by name */
+    let mut ur : u64 = DX_SENT
+    i = 0u64
+    while i < dxu_n() { if dxu_root_at(i) == 12345u64 { ur = i   i = dxu_n() } else { i = i + 1u64 } }
+    if ur == DX_SENT { return 34u64 }
+    if dxu_ref_at(ur) != 1u64 { return 34u64 }
+    if dxu_conf_at(ur) != 0u64 { return 34u64 }
+    /* the true pair G~H from author 777: confirmed, credited */
+    i = 4u64
+    while i < 8u64 { kg = dx_arm_cell(6u64, i, 99u64)   if kg == DX_SENT { return 34u64 }   i = i + 1u64 }
+    let mut kh : u64 = 0u64
+    i = 0u64
+    while i < 6u64 { kh = dx_arm_cell(7u64, i, 99u64)   if kh == DX_SENT { return 34u64 }   i = i + 1u64 }
+    let fj2 : i64 = dx_foreign_conj(777u64, kg, kh, 0u64)
+    if fj2 <= 0i64 { return 34u64 }
+    i = 6u64
+    while i < 8u64 { kh = dx_arm_cell(7u64, i, 99u64)   if kh == DX_SENT { return 34u64 }   i = i + 1u64 }
+    let t5 : u64 = dx_arm_cell(6u64, 8u64, 99u64)
+    if t5 == DX_SENT { return 34u64 }
+    let t6 : u64 = dx_arm_cell(7u64, 8u64, 99u64)
+    if t6 == DX_SENT { return 34u64 }
+    let av2 : i64 = dx_adjudicate(kg, kh, 0u64)
+    if av2 != 1i64 { return 34u64 }
+    let mut u7 : u64 = DX_SENT
+    i = 0u64
+    while i < dxu_n() { if dxu_root_at(i) == 777u64 { u7 = i   i = dxu_n() } else { i = i + 1u64 } }
+    if u7 == DX_SENT { return 34u64 }
+    if dxu_conf_at(u7) != 1u64 { return 34u64 }
+    if dxu_ref_at(u7) != 0u64 { return 34u64 }
+    if dx_conserve() != 0u64 { return 34u64 }
+    let sh : u64 = dx_refold_shadow(0u64)
+    if sh != dx_fold(0u64) { return 34u64 }
     return 0u64
 }
 /* arm 32, hoisted: THE PHASE LAW -- every settlement moves the context's

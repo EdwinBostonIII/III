@@ -47,6 +47,19 @@ extern @abi(c-msvc-x64) fn dx_rank_build() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_rank_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_write_order(dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_unlearn(seq: u64, dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_foreign_conj(author: u64, fa: u64, fb: u64, dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_adjudicate(fa: u64, fb: u64, dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_adju_sweep(dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxj_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxj_src_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxj_dst_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxw_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxu_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxu_root_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxu_conf_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxu_ref_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_tabled() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_xref() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_agenda_build() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_agenda_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_agenda_evd(i: u64) -> u64 from "doxa.iii"
@@ -158,6 +171,8 @@ fn usage() -> u64 {
     ps("  iii-doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
     ps("  iii-doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
     ps("  iii-doxa aim       [dirs]          the agenda: least-known contexts first (writes aim.txt)\n" as u64)
+    ps("  iii-doxa foreign ROOT FA FB [dirs] a peer's conjecture (decimal): quarantined, author-carried;\n" as u64)
+    ps("                                     the chamber adjudicates; refuted -> the AUTHOR is billed\n" as u64)
     ps("  iii-doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
     ps("                                     bit-identity proven; dangling settlements refused\n" as u64)
     ps("  iii-doxa loop N    [dirs]          predict -> summon the heart -> reconcile\n\n" as u64)
@@ -183,6 +198,7 @@ fn print_certs() -> u32 {
             if k == 5u64 { ps("CONJECTURE ctx " as u64)  phex(dxg_a_at(i))  ps(" ~ ctx " as u64)  phex(dxg_b_at(i))  ps("  [not adjudicated]" as u64) }
             if k == 6u64 { ps("SOLVENCY hold (ctx " as u64)  phex(dxg_a_at(i))  ps(", cell " as u64)  pu(dxg_b_at(i))  ps(")" as u64) }
             if k == 7u64 { ps("DANGLING settlement (stake seq " as u64)  pu(dxg_a_at(i))  ps(" blocked by obsv seq " as u64)  pu(dxg_b_at(i))  ps(")" as u64) }
+            if k == 8u64 { ps("REFUTED conjecture ctx " as u64)  phex(dxg_a_at(i))  ps(" ~ ctx " as u64)  phex(dxg_b_at(i))  ps("  (the chamber said no; author billed if foreign)" as u64) }
             putchar(10i32)
             shown = shown + 1u64
         }
@@ -222,6 +238,48 @@ fn auto_mint(doxadir: u64) -> u32 {
     let mm : u64 = dx_mint(doxadir)
     ps("  THE MINT: " as u64)  pu(mm)
     ps(" confused class(es) split by the next record fact -- children re-earn width from 1\n" as u64)
+    return 1u32
+}
+/* convene the chamber on everything standing; print what it decided */
+fn auto_chamber(doxadir: u64) -> u32 {
+    let packed : u64 = dx_adju_sweep(doxadir)
+    let conf : u64 = packed & 65535u64
+    let refu : u64 = (packed >> 16u64) & 65535u64
+    let tabl : u64 = (packed >> 32u64) & 65535u64
+    if conf + refu + tabl == 0u64 { return 0u32 }
+    ps("  THE CHAMBER: " as u64)  pu(conf)
+    ps(" confirmed (classes merged, authors credited), " as u64)  pu(refu)
+    ps(" refuted (authors billed), " as u64)  pu(tabl)
+    ps(" tabled (topology -- never billed)\n" as u64)
+    return 1u32
+}
+fn print_federation() -> u32 {
+    let jn : u64 = dxj_n()
+    if jn > 0u64 {
+        ps("  merged classes (the chamber's confirmations): " as u64)  pu(jn)  putchar(10i32)
+        let mut i : u64 = 0u64
+        while i < jn { if i < 6u64 {
+            ps("    ctx " as u64)  phex(dxj_src_at(i))
+            ps(" -> ctx " as u64)  phex(dxj_dst_at(i))
+            putchar(10i32)
+            i = i + 1u64
+        } else { i = jn } }
+    }
+    let un : u64 = dxu_n()
+    if un > 0u64 {
+        ps("  the author ledger (federated accountability, constitution-rooted):\n" as u64)
+        let mut u : u64 = 0u64
+        while u < un { if u < 6u64 {
+            ps("    author " as u64)  phex(dxu_root_at(u))
+            ps("  confirmed " as u64)  pu(dxu_conf_at(u))
+            ps("  refuted " as u64)  pu(dxu_ref_at(u))
+            putchar(10i32)
+            u = u + 1u64
+        } else { u = un } }
+    }
+    if dxw_n() > 0u64 { ps("  quarantined foreign conjectures standing: " as u64)  pu(dxw_n())  putchar(10i32) }
+    if dx_tabled() > 0u64 { ps("  tabled (topology): " as u64)  pu(dx_tabled())  putchar(10i32) }
+    if dx_xref() > 0u64 { ps("  incoherent-peer refusals: " as u64)  pu(dx_xref())  putchar(10i32) }
     return 1u32
 }
 fn print_mints() -> u32 {
@@ -376,6 +434,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut heartdir : u64 = "STDLIB/build/kardia" as u64
     let mut n1 : u64 = 8u64
     let mut n2 : u64 = 0u64
+    let mut n3 : u64 = 0u64
     let mut nseen : u64 = 0u64
     let mut ai : u64 = 2u64
     while (ai as i64) < (argc as i64) {
@@ -384,7 +443,9 @@ fn main(argc: i32, argv: u64) -> u64 {
         } else { if streq(av[ai], "--heart" as u64) == 1u32 {
             if (ai as i64) + 1i64 < (argc as i64) { heartdir = av[ai + 1u64]   ai = ai + 2u64 } else { return usage() }
         } else {
-            if nseen == 0u64 { n1 = parse_u64(av[ai])   nseen = 1u64 } else { n2 = parse_u64(av[ai])   nseen = 2u64 }
+            if nseen == 0u64 { n1 = parse_u64(av[ai])   nseen = 1u64 } else {
+                if nseen == 1u64 { n2 = parse_u64(av[ai])   nseen = 2u64 } else { n3 = parse_u64(av[ai])   nseen = 3u64 }
+            }
             ai = ai + 1u64
         } }
     }
@@ -411,11 +472,27 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("move or remove that file to begin fresh beliefs for this registry.\n" as u64)
         return 2u64
     }
+    if streq(cmd, "foreign" as u64) == 1u32 {
+        if nseen < 3u64 { return usage() }
+        ps("== A PEER SPEAKS: the conjecture enters QUARANTINED, author-carried (the citizen law applies to peers) ==\n" as u64)
+        let fr : i64 = dx_foreign_conj(n1, n2, n3, doxadir)
+        if fr == -1i64 {
+            ps("  REFUSED: an incoherent peer (author root 0) cannot conjecture here -- counted\n" as u64)
+            return 4u64
+        }
+        if fr <= 0i64 { ps("  refused (capacity)\n" as u64)   return 4u64 }
+        ps("  quarantined (seq " as u64)  pu(fr as u64)
+        ps("): it may stand for the chamber; it can never touch a tally, never settle a stake\n" as u64)
+        auto_chamber(doxadir)
+        print_federation()
+        return 0u64
+    }
     if streq(cmd, "status" as u64) == 1u32 {
         ps("== THE TWO BOOKS (modal asserts; statistical prefers; never blurred) ==\n" as u64)
         print_counts()
         print_books()
         print_mints()
+        print_federation()
         print_calib()
         print_certs()
         let fnd : u64 = dx_dream_found(0u64)
@@ -442,6 +519,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         let settled : u64 = dx_reconcile(doxadir)
         ps("  settled " as u64)  pu(settled)  ps(" stakes\n" as u64)
         auto_mint(doxadir)
+        auto_chamber(doxadir)
         print_calib()
         print_books()
         print_counts()
@@ -527,8 +605,10 @@ fn main(argc: i32, argv: u64) -> u64 {
         let settled : u64 = dx_reconcile(doxadir)
         ps("  settled " as u64)  pu(settled)  ps(" stakes against the heart's DERIVED evidence\n" as u64)
         auto_mint(doxadir)
+        auto_chamber(doxadir)
         print_calib()
         print_books()
+        print_federation()
         print_agenda(doxadir)
         print_counts()
         if dx_conserve() != 0u64 { return 1u64 }

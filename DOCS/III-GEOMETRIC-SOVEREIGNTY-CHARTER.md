@@ -120,3 +120,54 @@ absorption-retirement of the superseded surface):
 Γ4 → Z4 → Γ5.  Each rung is a session with its own self-proving organ, its
 own measured-superiority table, and its own absorption step.  No rung ships
 as a demo; every rung retires what it supersedes.
+
+## 5. STATE — THE CAMPAIGN EXECUTED (2026-07-17)
+
+The discovery discipline the whole campaign runs on (set by the user, after
+rejecting a scripted single-comparison "proof"): **III does not confirm a
+hand-picked target — it enumerates the COMPLETE orbit and SURFACES the
+structure.**  Every rung's core is III's own engine computing, live, with no
+target named; the tool prints III's raw table.
+
+- **Γ1 — the exact line** (`eidos/exact_line.iii`, `iii-line`).  Points are
+  eidolon identities; order is the exact sign oracle (the olympiad concavity
+  pair ordered strictly where float conflates); the line speaks its covering
+  chain in EIDOLOS; two-path cross-proof against `eid_plan` (repurposed as the
+  verifier, not deleted).  No 2D/3D organ obsolete yet → nothing retired.
+- **Γ2 — the exact plane** (`eidos/exact_plane.iii`, `iii-plane`).  III's RING
+  ENGINE (`bv_ring`), told only to enumerate the orientation predicate's full
+  orbit and compare, DISCOVERED the alternating character of S_3 over all 2^64;
+  the Kettner-Mehlhorn/Cassini smoking gun fires exact.  **RETIRED**
+  `aether/delaunay.iii` + its KAT by absorption.
+- **Γ3 — the exact space** (`eidos/exact_space.iii`, `iii-space`).  III invented
+  `orient3d` (the tree had no simplex-orientation atom) and DISCOVERED the S_4
+  character (24 orderings; geometric sign == inversion-parity, two independent
+  computations, 12/12).  Carries every csg predicate forward exact + adds the
+  atom + the language.  **RETIRED** `csg_kernel.iii` + `csg_tree.iii` + 3 KATs.
+- **Γ4 — the exact worldline** (`eidos/exact_worldline.iii`, `iii-worldline`).
+  `orient4d` + the S_5 discovery (120 orderings, 60/60, config-independent).
+  TIME IS THE LANGUAGE: causality is `<`, time-reversal is `~` (Loschmidt echo,
+  R^2=id), a closed timelike curve is an INCOHERENT scroll.  Purely inventive —
+  nothing retired (choreo = dynamics, algebraic_time = the clock: different
+  capabilities, kept; the SOMA law, not dodging).
+- **Γ5 — the unification** (`eidos/exact_manifold.iii`, `iii-manifold`).
+  Composes the four rung organs (calls them, never reimplements) and CENSUSES
+  the ladder: the split is (D+1)!/2 : (D+1)!/2 at every dimension — 1/1, 3/3,
+  12/12, 60/60.  THE UNIVERSAL LAW: exact orientation is the sign homomorphism
+  S_{D+1} → {±1}; geometry's robustness IS group representation theory, the
+  same in every dimension, resting on the one plane base-case the ring engine
+  proved over all 2^64.
+- **Z2 — the proof-carrying scroll** (`eidos/proofcarry.iii`, `iii-proofcarry`).
+  A claim + its cone + the EIDOLOS seal; verify = refold (integrity) + entail
+  (validity), EXACT.  III enumerated the tamper space and discovered SLIP = 0
+  (0 soundness error) vs the STARK's 2^-lambda; transparent vs opaque
+  transcript.  **RETIRED** `sovir/zk_eidos_fold.iii` + `sovir/zk_eidos_ripple.iii`
+  (probabilistic fold-attestation, now done exactly) + the run_zk gate entries.
+
+REMAINING (future rungs): Z3 (federation attestation on doxa's OFFER wire),
+Z4 (migrate the independence proofs off `zk_stark` so the FRI/STARK core can
+retire — it still has live consumers, so it is kept for now, honestly), Γ's
+deeper dynamics (re-found choreo's exact TOI on the worldline).  The retired
+files' MANIFEST lines reconcile at the autarkeia ceremony (the signed testament
+is regenerated there; deleting listed files is the established campaign
+pattern, not a break).

@@ -28,7 +28,7 @@ FILTER="${CONSCIENCE_FILTER:-.}"
 # ---- gates that are discovered but must not run inside this sweep: name|reason ----
 EXCLUDES=(
     "run_conscience.sh|self (this meta-gate)"
-    "run_completion.sh|the capstone PARENT: it invokes this gate; running it here would recurse"
+    "run_completion.sh|the RETIRED capstone parent (2026-07-17, ERGON constitution): entry kept so a resurrected copy never recurses"
     "run_residue_hunt.sh|exploratory hunter (unbounded search), not a pass/fail gate; its findings land as run_residue_gate"
 )
 excluded_reason() { local b="$1"; local e; for e in "${EXCLUDES[@]}"; do [ "${e%%|*}" = "$b" ] && { echo "${e#*|}"; return 0; }; done; return 1; }

@@ -120,7 +120,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("     batch runners on the die (STDLIB/scripts run_*.sh) : " as u64)
         pu(erg_ledger_runners())
         putchar(10i32)
-        ps("     registry claims (the stored-expectation table)     : " as u64)
+        ps("     registry claims (C1 expectations + C2 adopted)     : " as u64)
         pu(soma_registry())
         putchar(10i32)
         ps("     gate files in the corpus territory                 : " as u64)

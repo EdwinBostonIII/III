@@ -25,8 +25,8 @@
 #   literal -> fopen(mode="") -> NULL -> silent EMIT_FAIL 16 with a byte-correct .o (fieldisarr now gates
 #   the deref arm, store+read); (4) ferror (main.c's iii_mhash_file read-back check) was unregistered +
 #   unshimmed -> registered in crt_tail, shimmed in svir_interp.  Falsifiers: _s4_probe8..11.c, all 99 on
-#   gcc + interp + verifier + sovereign-x86-native.  This arc now holds run_completion.sh's seed_sovereign
-#   member green.
+#   gcc + interp + verifier + sovereign-x86-native.  This arc held the capstone's seed_sovereign
+#   member green (ex run_completion, retired 2026-07-17 under the ERGON constitution).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; W="$ROOT/STDLIB/build/sovlink"

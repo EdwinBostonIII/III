@@ -88,9 +88,10 @@ smoke_rm1.iii          smoke_rm2.iii
 _hp.iii                                  (hot-path probe)
 ```
 
-Run via `bash run_all_corpora.sh` after the 2026-05-08 reorg
-(see `STDLIB/scripts/run_corpus.sh` and `COMPILER/BOOT/stage1_corpus/run_corpus.sh`
-for the existing two; `run_all_corpora.sh` is the unified driver).
+Run via `bash COMPILER/BOOT/stage1_corpus/run_corpus.sh` (the stage-1 driver) and
+`bash STDLIB/scripts/run_corpus.sh` (the canonical stdlib driver).  The one-sweep
+`run_all_corpora.sh` was retired 2026-07-17 (ERGON constitution): the heart beats
+cells on drift and `iii-ergon census` derives the standing fleet's laws live.
 
 ## §5. Stage-1 corpus (`COMPILER/BOOT/stage1_corpus/`)
 

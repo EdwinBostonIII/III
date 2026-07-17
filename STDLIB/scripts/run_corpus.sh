@@ -191,7 +191,7 @@ declare -A EXPECTED=(
     [2073_invsynth_conservation]=99
     [2074_consv_memory_seal]=99
     # 2080-2082 (III-GLASS UI raster/exact/font) are an APPLICATION on III, not core runtime -- they link the UI
-    # .o's directly (not via the coverage-gated libiii_native.a) and are gated by run_ui_kats.sh, delegated below.
+    # .o's directly (not via the coverage-gated libiii_native.a); heart-adopted 2026-07-17 (ex run_ui_kats), delegated below.
     # 2083/2084 stay: their deps (ser_egraph/ser_absint) ARE core library modules, so they link via the archive.
     [2083_egraph_walk]=99
     [2084_disjoint]=99
@@ -201,7 +201,7 @@ declare -A EXPECTED=(
     [2094_constraint_solver]=99    # the REAL layout solver: smt.iii's exact-rational simplex solves + detects conflict (smt is stable core, not WIP)
     [2096_proven_display]=99       # NeWS done right: smt.iii proves a display field's framebuffer writes in-bounds; catches a buggy field with a witness
     # 2088-2093 (Topological Windowing) deliberately NOT here: they link the archive DIRECTLY (the au_*/sp_*
-    # closure), so the core gate stays decoupled from ser_* signature churn.  Gated by run_topo_kats.sh, delegated
+    # closure), so the core gate stays decoupled from ser_* signature churn.  Heart-adopted 2026-07-17 (ex run_topo_kats), delegated
     # below -- the same discipline as the UI app KATs.  (ser_antiunify/ser_petri are LIB and stable since
     # 2026-06-27; the old "volatile WIP" justification was stale doc-drift, struck by the reunification W2.)
     # (1982_dome_accessor_coverage removed -- dome PoC deleted)
@@ -1802,9 +1802,11 @@ FAIL=0
 _S8_MANIFEST="$(dirname "${BASH_SOURCE[0]}")/corpus_families.txt"
 if [[ -f "$_S8_MANIFEST" ]]; then
     for _s8 in $(grep -o "run_[a-z_]*\.sh" "${BASH_SOURCE[0]}" | sort -u); do
-        [[ "$_s8" == "run_corpus.sh" || "$_s8" == "run_all_corpora.sh" ]] && continue
+        [[ "$_s8" == "run_corpus.sh" ]] && continue
         grep -q "^$_s8 " "$_S8_MANIFEST" || { echo "[run_corpus] S8 MANIFEST MISS: $_s8 cited by dispatch but absent from corpus_families.txt"; exit 4; }
-        [[ -f "$(dirname "${BASH_SOURCE[0]}")/$_s8" ]] || { echo "[run_corpus] S8 RUNNER ABSENT: $_s8"; exit 4; }
+        # a runner may be seated in scripts/ OR sovir/ (the harvest loop below has the same
+        # two-seat resolution; the 2026-07-17 retirement removed the scripts/ ownership shims)
+        [[ -f "$(dirname "${BASH_SOURCE[0]}")/$_s8" || -f "$(dirname "${BASH_SOURCE[0]}")/../sovir/$_s8" ]] || { echo "[run_corpus] S8 RUNNER ABSENT: $_s8"; exit 4; }
     done
 else
     echo "[run_corpus] S8 MANIFEST MISSING: corpus_families.txt"; exit 4
@@ -1928,26 +1930,26 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
 
     # III-GLASS UI (2080-2082): an APPLICATION on III, not core runtime.  Its modules (ui_raster/ui_exact/ui_font)
     # are deliberately NOT in the coverage-gated libiii_native.a, so they cannot link via the generic archive link
-    # here.  Gated instead by run_ui_kats.sh (links the UI .o's directly).  Delegate, do not phantom-FAIL.
+    # here.  Heart-adopted 2026-07-17 (ex run_ui_kats; links the UI .o's directly).  Delegate, do not phantom-FAIL.
     case "$base" in
         2080_ui_raster|2081_ui_exact|2082_ui_font|2095_exact_coverage|2097_exact_aa|2098_exact_aa_poly|2099_exact_bezier|2100_biquad_coverage|2101_hausdorff_dim|2102_cover2d|2453_glass_surface)
-            RESULTS+=("SKIP  $base : III-GLASS UI -- owned by run_ui_kats.sh (app, not core lib)")
+            RESULTS+=("SKIP  $base : III-GLASS UI -- heart-adopted 2026-07-17 (ex run_ui_kats, retired; app not core lib; protocol: links ui .o's directly)")
             SKIP=$((SKIP+1)); continue
             ;;
         2103_bsign_big)
-            RESULTS+=("SKIP  $base : bigint 2D coverage -- owned by run_bigcov_kats.sh (links ui_exact_big + bigint)")
+            RESULTS+=("SKIP  $base : bigint 2D coverage -- heart-adopted 2026-07-17 (ex run_bigcov_kats, retired; protocol: links ui_exact_big + bigint)")
             SKIP=$((SKIP+1)); continue
             ;;
         2104_field_kolmogorov|2105_field_color|2106_field_time|2107_field_inverse|2108_field_slice|2109_field_quantum|2110_field_acoustic|2111_field_reversible|2112_field_localweb|2113_field_selfpop|2114_field_cf|2115_field_wave|2116_field_hash|2117_field_superpos|2118_field_binding)
-            RESULTS+=("SKIP  $base : UNIFIED FIELD -- owned by run_field_kats.sh (links ui_field/egraph)")
+            RESULTS+=("SKIP  $base : UNIFIED FIELD -- heart-adopted 2026-07-17 (ex run_field_kats, retired; protocol: links ui_field/egraph)")
             SKIP=$((SKIP+1)); continue
             ;;
         2120_bigint_isqrt|2121_sqrt_sum_sign|2122_lazy_real|2123_lazy3|2124_transcendental|2125_verb_geom|2137_adaptive_sign|2138_symmetry_quotient|2139_padic_barrier|2140_adaptive_big|2141_cyclotomic_rotation|2142_se3_screw|2143_traj_arclen|2144_lattice_pathfind|2145_denest|2146_compactor|2147_lattice_oracle|2148_theorem_fuzzer|2149_universal_block|2150_csg_kernel|2151_photon_route|2152_mechanism|2153_collision|2154_delaunay|2156_sturm|2157_algnum|2159_kf_weld|2680_mathesis_denest|2681_mathesis_envelope)
-            RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom / csg kernel / photon route / mechanism / collision / delaunay / sturm / algebraic-numbers / mathesis-telescope 2680+2681 (Xi12; also exercised by the mathesis engine harness) -- owned by run_sqrtsum_kats.sh (links sqrt_sum_sign + exact_denest + traj_kinematics + cyclotomic_se3 + collide + delaunay + sturm + algnum + bigint)")
+            RESULTS+=("SKIP  $base : sqrt-sum sign / lazy real / verb-geom / csg kernel / photon route / mechanism / collision / delaunay / sturm / algebraic-numbers / mathesis-telescope 2680+2681 (Xi12; also exercised by the mathesis engine harness) -- heart-adopted 2026-07-17 (ex run_sqrtsum_kats, retired; protocol: links sqrt_sum_sign + exact_denest + traj_kinematics + cyclotomic_se3 + collide + delaunay + sturm + algnum + bigint)")
             SKIP=$((SKIP+1)); continue
             ;;
         2155_aether_lens|2158_aether_lens_render)
-            RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- owned by run_aether_lens_kats.sh (links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
+            RESULTS+=("SKIP  $base : AETHER-LENS exact ray-cast -- heart-adopted 2026-07-17 (ex run_aether_lens_kats, retired; protocol: links aether_lens + aether_lens_frame + cyclotomic_se3 + sqrt_sum_sign + kfield)")
             SKIP=$((SKIP+1)); continue
             ;;
         2700_mathesis_alg_judge|2701_mathesis_denest_general|2702_mathesis_cube_ramanujan|2703_mathesis_mx04_chain|2704_ripple_spectral|2705_mathesis_ring_judge|2706_mathesis_ring_drain|2707_mathesis_curve_hunt|2708_mathesis_group_tau|2709_mathesis_forge|2710_mathesis_pilot|2711_mathesis_ontogenesis|2712_mathesis_rot2|2713_mathesis_bigcurve|2714_mathesis_norm|2715_mathesis_pilot12|2716_mathesis_tetra|2717_mathesis_bigjudge|2718_mathesis_tetra_full|2719_mathesis_pattern|2720_mathesis_pilot18|2721_mathesis_orbits|2722_mathesis_box50|2723_mathesis_census|2724_mathesis_rot64|2725_mathesis_pilot24|2726_mathesis_rot64_omega|2727_mathesis_rot64_omega2|2728_mathesis_census10|2729_mathesis_pattern_omega2|2730_mathesis_pilot30|2731_mathesis_rot64_universal1|2732_mathesis_rot64_universal2|2733_mathesis_rot64_universal3|2734_mathesis_census11|2735_mathesis_pilot36|2736_mathesis_op3_census|2737_mathesis_op3_cert_rot|2738_mathesis_op3_cert_neg|2739_mathesis_pilot42|2740_mathesis_op3_sweep|2741_mathesis_op3_drain_cert_rot|2742_mathesis_op3_drain_cert_neg|2743_mathesis_op3_box_cert|2744_mathesis_op3_sweep2|2745_sigma_floor_census|2746_sha512_core_optimum|2747_sha512_diffusion_break)
@@ -1987,11 +1989,11 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             SKIP=$((SKIP+1)); continue
             ;;
         2126_involution|2127_membrane|2128_involution_closed|2129_epoch|2130_disposers|2131_reactor|2132_eidolon|2133_ripple_eidolon|2134_planner)
-            RESULTS+=("SKIP  $base : RIPPLE MERGE -- owned by run_ripple_kats.sh (involution + membrane + epoch + disposer + crystal/ripple_field/logic6)")
+            RESULTS+=("SKIP  $base : RIPPLE MERGE -- heart-adopted 2026-07-17 (ex run_ripple_kats, retired; protocol: involution + membrane + epoch + disposer + crystal/ripple_field/logic6)")
             SKIP=$((SKIP+1)); continue
             ;;
         2088_frp_kinematics|2089_constraint_layout|2090_topological_field|2091_association_invariant|2092_raster_crush|2093_pixel_crush)
-            RESULTS+=("SKIP  $base : Topological Windowing -- owned by run_topo_kats.sh (links the archive directly; ser_* decoupling)")
+            RESULTS+=("SKIP  $base : Topological Windowing -- heart-adopted 2026-07-17 (ex run_topo_kats, retired; protocol: links the archive directly; ser_* decoupling)")
             SKIP=$((SKIP+1)); continue
             ;;
     esac
@@ -2038,6 +2040,31 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
     case "$base" in
         2491_mldsa44_c2sp_kat|2492_mldsa65_c2sp_kat|2493_mldsa87_c2sp_kat)
             RESULTS+=("SKIP  $base : official FIPS-204 C2SP KAT (10k iters) -- owned by mldsa_c2sp_kat_gate.sh (bootstrap stage 11)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        # ── THE ADOPTED FAMILIES (2026-07-17, ERGON constitution): the five family runners were
+        # retired; their formerly-runner-only gates are ADOPTED here as heart-tracked cells (C2).
+        # Each arm preserves the retired runner's LINK PROTOCOL so future ERGON-seat absorption
+        # (laws re-derived live, batch form dies) has the full recipe.  Nothing was deleted on
+        # assumption: gate files remain the falsifiable claim bodies until their laws are absorbed.
+        2167_billiard_reversal|2168_csg_tree|2170_swept_leaf|2171_lattice_march|2172_constraint|2173_cspace|2174_gas_demon|2175_arc_sweep|2176_gas_big|2177_resultant|2178_refract|2179_resultant_big|2180_resultant_closure|2181_arc_tangency|2182_march_v2|2183_gas_compact|2184_photon_stack|2185_sturm_big|2186_resultant_abi|2187_green_moments|2188_gas_deep|2189_shadow|2190_photon3|2191_graze_legal|2192_dynamic_toi|2193_elim|2194_crystal|2195_gas_100k|2196_moments_big|2197_edge_graze|2198_shadow_family|2433_gas_reversal|2473_elim3|2474_brep_edge|2479_inertia3|2480_inverse_design|2481_exact3_fuzz|2482_loschmidt_echo|2483_crystal3|2485_choreography|2486_fourbar)
+            RESULTS+=("SKIP  $base : exact-geometry/dynamics family -- heart-adopted 2026-07-17 (ex run_sqrtsum_kats, retired; protocol: link aether_lens+aether_lens_frame+algnum+arc_sweep+billiard+brep3+choreo+collide+constraint+crystal3+csg_kernel+csg_tree+cspace+cyclotomic_se3+delaunay+exact_denest+exact_surd_value+fourbar+gas+gas_big+green_moments+inertia3+kfield+lattice_march+photon3+photon_route+q23_sign+refract+resultant+sqrt_sum_sign+sturm+sturm_big+traj_kinematics+ui_exact_big+verb_geom objs + archive)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2455_stoma_con|2456_stoma_proc|2457_stoma_pty|2458_stoma_line|2459_stoma_shell|2460_stoma_gate|2461_stoma_queue|2462_stoma_build|2463_stoma_ripple|2464_stoma_tree|2465_stoma_matrix|2466_stoma_fg|2467_stoma_bridge)
+            RESULTS+=("SKIP  $base : STOMA console/proc/pty arc -- heart-adopted 2026-07-17 (ex run_stoma_kats, retired; protocol: link con_probe+stoma+stoma_bridge+stoma_build+stoma_con+stoma_fg+stoma_gate+stoma_journal+stoma_line+stoma_proc+stoma_pty+stoma_queue+stoma_ripple+stoma_shell+stoma_traps+stoma_tree+stoma_verb objs)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2160_bigint_supersedes_i64|2161_exact_sign_escalation|2162_curve_coverage_sym|2163_curve_coverage_trange|2165_dome_full|2166_cover_bigcoeff)
+            RESULTS+=("SKIP  $base : bigint 2D coverage family -- heart-adopted 2026-07-17 (ex run_bigcov_kats, retired; protocol: link kfield+sqrt_sum_sign+ui_exact+ui_exact_big+ui_exact_bigcov+ui_exact_sym+ui_raster objs)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2169_studio_kernel|2201_render_core|2202_render_time)
+            RESULTS+=("SKIP  $base : lens/studio render family -- heart-adopted 2026-07-17 (ex run_aether_lens_kats, retired; protocol: link aether_lens+aether_lens_frame+aether_lens_view+aether_lens_win+aether_world+cyclotomic_se3+exact_denest+iform+kfield+render_core+render_time+sqrt_sum_sign+studio_trig+ui_field+wb_kernel+world_graph objs)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2476_morphic_writeback|2477_destiny_closed_form)
+            RESULTS+=("SKIP  $base : UI morphic/destiny family -- heart-adopted 2026-07-17 (ex run_ui_kats, retired; protocol: link studio_sample+studio_theme+ui_destiny+ui_exact+ui_exact_cubic+ui_font+ui_font_data+ui_morphic+ui_present+ui_raster+ui_vfont+ui_vfont_data objs)")
             SKIP=$((SKIP+1)); continue
             ;;
     esac

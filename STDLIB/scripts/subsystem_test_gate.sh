@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # subsystem_test_gate.sh — V1->V2 transition gate (forward-reference #28).
 #
-# Exits 0 iff: every .iii corpus passes (run_all_corpora.sh) AND every
-# subsystem test exe (<DIR>/build/iii_*_test.exe) exits 0. With --build it
-# first runs the deterministic stdlib build and requires FAIL = 0.
+# Exits 0 iff: the canonical corpus passes (run_corpus.sh), the standing fleet
+# re-derives its laws (iii-ergon census -- the ERGON work-proof, 2026-07-17;
+# the retired one-sweep run_all_corpora is superseded), AND every subsystem
+# test exe (<DIR>/build/iii_*_test.exe) exits 0. With --build it first runs
+# the deterministic stdlib build and requires FAIL = 0.
 #
 # Non-zero exit lists the failing gate(s). The pass/fail is TRUE function:
 # every exe is actually executed and its exit code checked; nothing is
@@ -44,23 +46,34 @@ if [ "$DO_BUILD" -eq 1 ]; then
     fi
 fi
 
-# 1. .iii corpora (stdlib correctness + bench correctness + stage1) via the canonical driver.
-#    PATH FIXED (2026-07-04): the one-sweep moved to STDLIB/scripts/ (its header records the move);
-#    this gate still invoked it at repo root -- exit 127 (not-found) was then mislabeled "127
-#    failed tests" and the gate had NEVER actually judged the corpora from here.
-echo "[gate] run_all_corpora.sh ..."
+# 1. .iii corpus via the canonical driver (2026-07-17, ERGON constitution: the one-sweep
+#    run_all_corpora was retired with the batch family runners; run_corpus.sh is the one
+#    canonical driver -- its dispatch heart-adopts the retired families).
+echo "[gate] run_corpus.sh ..."
 if [ "$QUIET" -eq 1 ]; then
-    bash "$ROOT/STDLIB/scripts/run_all_corpora.sh" --quiet >/dev/null 2>&1
+    bash "$ROOT/STDLIB/scripts/run_corpus.sh" >/dev/null 2>&1
 else
-    bash "$ROOT/STDLIB/scripts/run_all_corpora.sh" --quiet
+    bash "$ROOT/STDLIB/scripts/run_corpus.sh"
 fi
 corpora_rc=$?
 if [ "$corpora_rc" -eq 126 ] || [ "$corpora_rc" -eq 127 ]; then
-    echo "[gate] FAIL: .iii corpora driver did not run (spawn rc=$corpora_rc) -- a harness fault, not a test count"
+    echo "[gate] FAIL: .iii corpus driver did not run (spawn rc=$corpora_rc) -- a harness fault, not a test count"
     FAILED="$FAILED iii-corpora-spawn($corpora_rc)"
 elif [ "$corpora_rc" -ne 0 ]; then
-    echo "[gate] FAIL: .iii corpora red (driver rc=$corpora_rc)"
+    echo "[gate] FAIL: .iii corpus red (driver rc=$corpora_rc)"
     FAILED="$FAILED iii-corpora($corpora_rc)"
+fi
+
+# 1b. THE WORK-PROOF (2026-07-17): the standing fleet re-derives its laws in one process --
+#     introspection roster + kardia + soma + doxa + absorbed families (iii-ergon census; no
+#     stored expectation consulted).  Soft dependency like 3b: skipped on a checkout without
+#     the built tool, so the SHA-gated levels above still judge.
+if [ -x "$ROOT/COMPILED/iii-ergon.exe" ]; then
+    echo "[gate] iii-ergon census (standing-fleet work-proof) ..."
+    if ! "$ROOT/COMPILED/iii-ergon.exe" census >/dev/null 2>&1; then
+        echo "[gate] FAIL: ERGON census -- a standing organ did not derive its law"
+        FAILED="$FAILED ergon-census"
+    fi
 fi
 
 # 2. Subsystem test exes: actually run each and check exit code.

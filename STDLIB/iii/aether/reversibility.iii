@@ -35,6 +35,8 @@ extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_tcount(m: i64) -> u64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
@@ -586,6 +588,333 @@ fn rv_table8(ser_addr: u64, len: u64, yv: u64, out_addr: u64) -> u64 @export {
     }
     return 1u64
 }
+/* ==================== THE FRONTIER (2026-07-17) ====================
+ * The bb walker's honest boundary -- the count/deposit atoms (POPCNT/LZCNT/
+ * TZCNT/PDEP/PEXT) it SKIPS as not bit-blastable -- is exactly where no
+ * existing theory reaches: not GF(2) linear algebra, not the triangular
+ * (T-function) invertibility theory, not its bit-mirrored dual, not the
+ * hash-finalizer catalog.  This arm hunts CUBE PERMUTATIONS UNDER TRUE DIE
+ * SEMANTICS: terms evaluated by the real instructions (ia_apply), domain =
+ * the 2^13 cube, and an operation qualifies only if it is a SELF-MAP of the
+ * cube (measured, not assumed) that is INJECTIVE by exhaustion -- a genuine
+ * permutation, no truncation ring, no catalog.
+ *
+ * THE PRE-STATED GLOBAL CRITERIA (declared before any run; no target named):
+ *   ENUMERATE  isa_ontogenesis's fair index<->term bijection, sizes 1..max,
+ *              second operand y swept over the kernel's declared RV_YVALS
+ *              prefix -- the same sweep discipline as every other arm.
+ *   DECIDE     self-map + injectivity over ALL 2^13 inputs on the die.
+ *   EXPLAIN    each permutation is then attacked by every theory III can
+ *              name, each test EXHAUSTIVE on the stored value table:
+ *                affine       f(x) == f(0) XOR (+)_{j in x} (f(e_j) XOR f(0))
+ *                triangular   flipping input bit j never moves an output bit
+ *                             below j (the T-function class, invertibility
+ *                             charted by Klimov-Shamir)
+ *                anti-tri     the bit-mirrored dual (the SHR world)
+ *                factorable   f == b(a(x)) for explained permutations a, b
+ *                             of THIS run's own registry (depth 2, both
+ *                             orders -- the composite/finalizer shapes)
+ *   FRONTIER   what survives every explanation is a CERTIFIED-UNEXPLAINED
+ *              conservation operation of this die.  For each, III hunts a
+ *              CLOSED-FORM inverse in the same fair space (first find in
+ *              fair order = the canonical inverse; none in budget = OWED,
+ *              docketed, never faked).
+ * All counters are printed; caps are named; refusals are counted.  ==== */
+var RF_SER  : [u8; 64]
+var RF_SLN  : u64 = 0u64
+var RF_CUR  : u64 = 0u64
+var RF_VX   : u64 = 0u64
+var RF_VY   : u64 = 0u64
+/* RF_WMASK == 0 : the INTERVAL cube {0..2^W-1} under TRUE 64-bit arithmetic (an op whose
+ * result escapes the interval fails the self-map filter -- so only interval-preserving ops
+ * qualify).  RF_WMASK == 2^W-1 : the TORUS Z/2^W -- every intermediate is reduced mod 2^W
+ * after the real instruction executes, so MUL-odd and the wrap-around bijections live here.
+ * This second world is exactly the ring bv_bits models -- EXCEPT bv_bits cannot bit-blast
+ * POPCNT/TZCNT/LZCNT/PDEP/PEXT, so a torus term USING those atoms is territory no bit-blast
+ * catalog can reach.  The die still executes the real instruction; only the reduction differs. */
+var RF_WMASK : u64 = 0u64
+fn rf_walk() -> u64 {
+    if RF_CUR >= RF_SLN { return 0u64 }
+    let b : u8 = RF_SER[RF_CUR]
+    RF_CUR = RF_CUR + 1u64
+    if b == 0u8 { return RF_VX }
+    if b == 1u8 { return RF_VY }
+    let atom : i64 = (b as i64) - 2i64
+    let a : u64 = rf_walk()
+    if ia_atom_arity(atom) == 1i64 {
+        let r1 : u64 = ia_apply1(atom, a)
+        if RF_WMASK != 0u64 { return r1 & RF_WMASK }
+        return r1
+    }
+    let c : u64 = rf_walk()
+    let r2 : u64 = ia_apply2(atom, a, c)
+    if RF_WMASK != 0u64 { return r2 & RF_WMASK }
+    return r2
+}
+fn rf_eval(x: u64, y: u64) -> u64 {
+    RF_CUR = 0u64
+    RF_VX = x
+    RF_VY = y
+    return rf_walk()
+}
+const RF_N    : u64 = 8192u64
+const RF_PMAX : u64 = 256u64             /* permutation pool cap (counted if hit)   */
+const RF_FMAX : u64 = 16u64              /* frontier register cap (counted if hit)  */
+var RF_MK   : [u64; 8192]                /* generation-stamped injectivity marks    */
+var RF_MG   : u64 = 0u64
+var RF_TMPT : [u32; 8192]
+var RF_PT   : [u32; 2097152]             /* RF_PMAX x 8192 exact value tables       */
+var RF_PH   : [u64; 256]
+var RF_PSER : [u8; 8192]                 /* RF_PMAX x 32 sers                       */
+var RF_PLEN : [u64; 256]
+var RF_PY   : [u64; 256]
+var RF_PCLS : [u8; 256]                  /* 0 unclassified | 1 affine | 2 triangular | 3 anti | 4 factorable | 9 FRONTIER */
+var RF_PN   : u64 = 0u64
+var RF_POVF : u64 = 0u64
+var RF_DUP  : u64 = 0u64
+var RF_EXAM : u64 = 0u64
+var RF_XLESS : u64 = 0u64
+var RF_SELF : u64 = 0u64                 /* self-maps that failed injectivity       */
+var RF_AFF : u64 = 0u64
+var RF_TRI : u64 = 0u64
+var RF_ANT : u64 = 0u64
+var RF_FAC : u64 = 0u64
+var RF_FN  : u64 = 0u64
+var RF_FIX : [u64; 16]                   /* frontier -> pool index                  */
+var RF_ISER : [u8; 512]                  /* per-frontier inverse ser (16 x 32)      */
+var RF_ILEN : [u64; 16]
+var RF_IY   : [u64; 16]
+var RF_IHAS : [u8; 16]
+var RF_OWED : u64 = 0u64
+var RF_DEP  : [u64; 13]
+fn rf_hash_tmp() -> u64 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u64 = 0u64
+    while i < RF_N {
+        h = (h ^ (RF_TMPT[i] as u64)) * 1099511628211u64
+        i = i + 1u64
+    }
+    return h
+}
+fn rf_ptab(p: u64) -> u64 { return ((&RF_PT) as u64) + (p * RF_N * 4u64) }
+fn rf_pget(p: u64, x: u64) -> u64 {
+    let t : *u32 = rf_ptab(p) as *u32
+    return t[x] as u64
+}
+/* decide one (term, y): self-map + injectivity by exhaustion; on success the
+ * table is in RF_TMPT and the permutation is pooled (deduped, fair-first). */
+fn rf_try(yv: u64) -> i32 {
+    RF_EXAM = RF_EXAM + 1u64
+    RF_MG = RF_MG + 1u64
+    let mut x : u64 = 0u64
+    let mut ok : u64 = 1u64
+    while ok == 1u64 {
+        if x < RF_N {
+            let v : u64 = rf_eval(x, yv)
+            if v >= RF_N { ok = 0u64 } else {
+                if RF_MK[v] == RF_MG { ok = 0u64   RF_SELF = RF_SELF + 1u64 } else {
+                    RF_MK[v] = RF_MG
+                    RF_TMPT[x] = v as u32
+                    x = x + 1u64
+                }
+            }
+        } else { ok = 2u64 }
+    }
+    if ok != 2u64 { return 0i32 }
+    /* a genuine permutation of the cube -- dedupe into the pool */
+    let h : u64 = rf_hash_tmp()
+    let mut p : u64 = 0u64
+    while p < RF_PN {
+        if RF_PH[p] == h {
+            let mut same : u64 = 1u64
+            let mut i : u64 = 0u64
+            while i < RF_N { if rf_pget(p, i) != (RF_TMPT[i] as u64) { same = 0u64   i = RF_N } else { i = i + 1u64 } }
+            if same == 1u64 { RF_DUP = RF_DUP + 1u64   return 0i32 }
+        }
+        p = p + 1u64
+    }
+    if RF_PN >= RF_PMAX { RF_POVF = RF_POVF + 1u64   return 0i32 }
+    let dst : *u32 = rf_ptab(RF_PN) as *u32
+    let mut i : u64 = 0u64
+    while i < RF_N { dst[i] = RF_TMPT[i]   i = i + 1u64 }
+    RF_PH[RF_PN] = h
+    let sd : *u8 = (((&RF_PSER) as u64) + (RF_PN * 32u64)) as *u8
+    i = 0u64
+    while i < RF_SLN { sd[i] = RF_SER[i]   i = i + 1u64 }
+    RF_PLEN[RF_PN] = RF_SLN
+    RF_PY[RF_PN] = yv
+    RF_PCLS[RF_PN] = 0u8
+    RF_PN = RF_PN + 1u64
+    return 0i32
+}
+/* the explanation battery, each test exhaustive on the stored table */
+fn rf_classify_one(p: u64) -> i32 {
+    /* affine over GF(2) on the cube */
+    let f0 : u64 = rf_pget(p, 0u64)
+    let mut cols : u64 = 0u64            /* packed 13 columns x 13 bits -> use RF_DEP as scratch */
+    let mut j : u64 = 0u64
+    while j < 13u64 { RF_DEP[j] = rf_pget(p, 1u64 << j) ^ f0   j = j + 1u64 }
+    let mut aff : u64 = 1u64
+    let mut x : u64 = 0u64
+    while x < RF_N {
+        if aff == 1u64 {
+            let mut acc : u64 = f0
+            j = 0u64
+            while j < 13u64 { if ((x >> j) & 1u64) == 1u64 { acc = acc ^ RF_DEP[j] }   j = j + 1u64 }
+            if acc != rf_pget(p, x) { aff = 0u64 }
+        }
+        x = x + 1u64
+    }
+    if aff == 1u64 { RF_PCLS[p] = 1u8   RF_AFF = RF_AFF + 1u64   return 0i32 }
+    /* dependency masks: DEP[j] = OR over x of f(x) ^ f(x ^ 2^j) */
+    j = 0u64
+    while j < 13u64 {
+        let mut d : u64 = 0u64
+        x = 0u64
+        while x < RF_N { d = d | (rf_pget(p, x) ^ rf_pget(p, x ^ (1u64 << j)))   x = x + 1u64 }
+        RF_DEP[j] = d
+        j = j + 1u64
+    }
+    let mut tri : u64 = 1u64
+    let mut ant : u64 = 1u64
+    j = 0u64
+    while j < 13u64 {
+        if (RF_DEP[j] & ((1u64 << j) - 1u64)) != 0u64 { tri = 0u64 }
+        let hi : u64 = 8191u64 ^ ((1u64 << (j + 1u64)) - 1u64)
+        if (RF_DEP[j] & hi) != 0u64 { ant = 0u64 }
+        j = j + 1u64
+    }
+    if tri == 1u64 { RF_PCLS[p] = 2u8   RF_TRI = RF_TRI + 1u64   return 0i32 }
+    if ant == 1u64 { RF_PCLS[p] = 3u8   RF_ANT = RF_ANT + 1u64   return 0i32 }
+    return 0i32
+}
+/* factorization over the run's own explained registry: f == b(a(x)), both orders */
+fn rf_factor_one(p: u64) -> u64 {
+    let mut a : u64 = 0u64
+    while a < RF_PN {
+        if RF_PCLS[a] >= 1u8 { if RF_PCLS[a] <= 3u8 {
+            let mut b : u64 = 0u64
+            while b < RF_PN {
+                if RF_PCLS[b] >= 1u8 { if RF_PCLS[b] <= 3u8 {
+                    let mut same : u64 = 1u64
+                    let mut x : u64 = 0u64
+                    while x < RF_N { if rf_pget(p, x) != rf_pget(b, rf_pget(a, x)) { same = 0u64   x = RF_N } else { x = x + 1u64 } }
+                    if same == 1u64 { return 1u64 }
+                } }
+                b = b + 1u64
+            }
+        } }
+        a = a + 1u64
+    }
+    return 0u64
+}
+/* the closed-form inverse hunt for frontier citizen fi (pool index p):
+ * first g in fair order with g(f(x)) == x for ALL 2^13 -- else OWED. */
+fn rf_inverse_hunt(fi: u64, p: u64, prefix: u64) -> i32 {
+    let mut t : u64 = 0u64
+    let mut found : u64 = 0u64
+    while t < prefix {
+        if found == 0u64 {
+            RF_SLN = ia_term_ser(t, (&RF_SER) as u64)
+            if RF_SLN > 0u64 { if RF_SLN <= 31u64 {
+                let mut yi : u64 = 0u64
+                while yi < RV_NY {
+                    if found == 0u64 {
+                        let yv : u64 = RV_YVALS[yi]
+                        if rf_eval(rf_pget(p, 0u64), yv) == 0u64 { if rf_eval(rf_pget(p, 1u64), yv) == 1u64 {
+                            let mut x : u64 = 2u64
+                            let mut ok : u64 = 1u64
+                            while ok == 1u64 {
+                                if x < RF_N {
+                                    if rf_eval(rf_pget(p, x), yv) != x { ok = 0u64 } else { x = x + 1u64 }
+                                } else { ok = 2u64 }
+                            }
+                            if ok == 2u64 {
+                                found = 1u64
+                                let dst : *u8 = (((&RF_ISER) as u64) + (fi * 32u64)) as *u8
+                                let mut i : u64 = 0u64
+                                while i < RF_SLN { dst[i] = RF_SER[i]   i = i + 1u64 }
+                                RF_ILEN[fi] = RF_SLN
+                                RF_IY[fi] = yv
+                                RF_IHAS[fi] = 1u8
+                            }
+                        } }
+                    }
+                    yi = yi + 1u64
+                }
+            } }
+        }
+        t = t + 1u64
+    }
+    if found == 0u64 { RF_IHAS[fi] = 0u8   RF_OWED = RF_OWED + 1u64 }
+    return 0i32
+}
+fn rf_run(maxsize: i64) -> i64 @export { RF_WMASK = 0u64        return rf_core(maxsize) }
+fn rf_run_torus(maxsize: i64) -> i64 @export { RF_WMASK = RF_N - 1u64   return rf_core(maxsize) }
+fn rf_core(maxsize: i64) -> i64 {
+    ia_init()
+    RF_PN = 0u64    RF_POVF = 0u64  RF_DUP = 0u64   RF_EXAM = 0u64
+    RF_XLESS = 0u64 RF_SELF = 0u64  RF_AFF = 0u64   RF_TRI = 0u64
+    RF_ANT = 0u64   RF_FAC = 0u64   RF_FN = 0u64    RF_OWED = 0u64
+    let mut i : u64 = 0u64
+    while i < RF_N { RF_MK[i] = 0u64   i = i + 1u64 }
+    RF_MG = 0u64
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= maxsize { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    let mut t : u64 = 0u64
+    while t < prefix {
+        RF_SLN = ia_term_ser(t, (&RF_SER) as u64)
+        if RF_SLN > 0u64 { if RF_SLN <= 31u64 {
+            let mut hasx : u64 = 0u64
+            i = 0u64
+            while i < RF_SLN { if RF_SER[i] == 0u8 { hasx = 1u64 }   i = i + 1u64 }
+            if hasx == 0u64 { RF_XLESS = RF_XLESS + 1u64 } else {
+                let mut yi : u64 = 0u64
+                while yi < RV_NY {
+                    rf_try(RV_YVALS[yi])
+                    yi = yi + 1u64
+                }
+            }
+        } }
+        t = t + 1u64
+    }
+    let mut p : u64 = 0u64
+    while p < RF_PN { rf_classify_one(p)   p = p + 1u64 }
+    p = 0u64
+    while p < RF_PN {
+        if RF_PCLS[p] == 0u8 {
+            if rf_factor_one(p) == 1u64 { RF_PCLS[p] = 4u8   RF_FAC = RF_FAC + 1u64 } else {
+                RF_PCLS[p] = 9u8
+                if RF_FN < RF_FMAX { RF_FIX[RF_FN] = p   RF_FN = RF_FN + 1u64 }
+            }
+        }
+        p = p + 1u64
+    }
+    let mut fi : u64 = 0u64
+    while fi < RF_FN { rf_inverse_hunt(fi, RF_FIX[fi], prefix)   fi = fi + 1u64 }
+    return RF_FN as i64
+}
+fn rf_examined() -> u64 @export { return RF_EXAM }
+fn rf_xless() -> u64 @export { return RF_XLESS }
+fn rf_selfmap_collisions() -> u64 @export { return RF_SELF }
+fn rf_pool_n() -> u64 @export { return RF_PN }
+fn rf_pool_dupes() -> u64 @export { return RF_DUP }
+fn rf_pool_ovf() -> u64 @export { return RF_POVF }
+fn rf_affine_n() -> u64 @export { return RF_AFF }
+fn rf_tri_n() -> u64 @export { return RF_TRI }
+fn rf_anti_n() -> u64 @export { return RF_ANT }
+fn rf_fact_n() -> u64 @export { return RF_FAC }
+fn rf_frontier_n() -> u64 @export { return RF_FN }
+fn rf_owed() -> u64 @export { return RF_OWED }
+fn rf_f_len(i: u64) -> u64 @export { if i < RF_FN { return RF_PLEN[RF_FIX[i]] }  return 0u64 }
+fn rf_f_byte(i: u64, j: u64) -> u8 @export { if i < RF_FN { if j < 32u64 { return RF_PSER[(RF_FIX[i] * 32u64) + j] } }  return 0u8 }
+fn rf_f_y(i: u64) -> u64 @export { if i < RF_FN { return RF_PY[RF_FIX[i]] }  return 0u64 }
+fn rf_f_has_inv(i: u64) -> u8 @export { if i < RF_FN { return RF_IHAS[i] }  return 0u8 }
+fn rf_f_inv_len(i: u64) -> u64 @export { if i < RF_FN { return RF_ILEN[i] }  return 0u64 }
+fn rf_f_inv_byte(i: u64, j: u64) -> u8 @export { if i < RF_FN { if j < 32u64 { return RF_ISER[(i * 32u64) + j] } }  return 0u8 }
+fn rf_f_inv_y(i: u64) -> u64 @export { if i < RF_FN { return RF_IY[i] }  return 0u64 }
+
 var RV_B13 : [u8; 8192]
 fn rv_bij13(ser_addr: u64, len: u64, yv: u64) -> u64 @export {
     if len == 0u64 { return 0u64 }

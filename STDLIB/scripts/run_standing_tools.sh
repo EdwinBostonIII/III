@@ -318,6 +318,91 @@ if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
     else say "RED  conservation: iiis-2 absent"; FAIL=1; fi
 else say "RED  reversible: iii-substrate absent"; FAIL=1; fi
 
+say "[standing] == AUTOPHASIS: the self-utterance (press determinism + sealed-id pin + byte pin + gate 2763 + tamper teeth) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+    APW="$(mktemp -d "${TMPDIR:-/tmp}/autophasis-standing.XXXXXX")"
+    mkdir -p "$APW/1" "$APW/2"
+    "$C/iii-substrate$BIN_SUFFIX" autophasis "$APW/1" >"$APW/p1.log" 2>&1
+    aprc=$?
+    if [[ $aprc -eq 0 ]]; then
+        "$C/iii-substrate$BIN_SUFFIX" autophasis "$APW/2" >"$APW/p2.log" 2>&1
+        A1="$(grep -o 'AUTOPHASIS-SET id=[0-9]*' "$APW/p1.log" | head -1 | grep -o '[0-9]*$')"
+        A2="$(grep -o 'AUTOPHASIS-SET id=[0-9]*' "$APW/p2.log" | head -1 | grep -o '[0-9]*$')"
+        AS="$(grep -o 'autophasis_set_id() -> u64 @export { return [0-9]*' "$III_ROOT/STDLIB/iii/aether/autophasis.iii" | grep -o '[0-9]*$')"
+        if [[ -n "$A1" && "$A1" == "$A2" ]]; then
+            say "PASS autophasis: press deterministic (two runs, one id $A1)"
+        else say "RED  autophasis: press self-disagreement (run1=$A1 run2=$A2)"; FAIL=1; fi
+        if [[ -n "$AS" && "$AS" == "$A1" ]]; then
+            say "PASS autophasis: live press reproduces the SEALED utterance (id $AS)"
+        else say "RED  autophasis: sealed-organ drift (sealed=${AS:-none} live=${A1:-none})"; FAIL=1; fi
+        if cmp -s "$APW/1/autophasis.iii" "$III_ROOT/STDLIB/iii/aether/autophasis.iii"; then
+            say "PASS autophasis: sealed organ byte-identical to the live utterance"
+        else say "RED  autophasis: sealed organ bytes differ from the live utterance"; FAIL=1; fi
+        apok=1
+        for apd in xeno_ontogenesis substrate_ontogenesis; do
+            "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/$apd.iii" --compile-only --out "$APW/$apd.o" >>"$APW/build.log" 2>&1 || apok=0
+        done
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/autophasis.iii" --compile-only --out "$APW/autophasis.o" >>"$APW/build.log" 2>&1 || apok=0
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2763_autophasis.iii" --compile-only --out "$APW/2763.o" >>"$APW/build.log" 2>&1 || apok=0
+        if [[ $apok -eq 1 ]]; then
+            gcc "$APW/2763.o" "$APW/autophasis.o" "$APW/xeno_ontogenesis.o" "$APW/substrate_ontogenesis.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$APW/2763.exe" >>"$APW/build.log" 2>&1 || apok=0
+        fi
+        if [[ $apok -eq 1 && -x "$APW/2763.exe" ]]; then
+            "$APW/2763.exe" >/dev/null 2>&1; ap2rc=$?
+            if [[ $ap2rc -eq 99 ]]; then
+                say "PASS autophasis: gate 2763 re-derived the utterance from the universe (carrier+index+census+table+quasigroup+divisions+witness+teeth+guards, exit 99)"
+            else say "RED  autophasis: gate 2763 exit $ap2rc"; FAIL=1; fi
+            # TEETH: a tampered utterance must be REFUSED by the same gate
+            sed 's/if i == 0i64 { return 1i64 }/if i == 0i64 { return 2i64 }/' "$III_ROOT/STDLIB/iii/aether/autophasis.iii" > "$APW/tampered.iii"
+            if cmp -s "$APW/tampered.iii" "$III_ROOT/STDLIB/iii/aether/autophasis.iii"; then
+            say "RED  autophasis: tamper arm inert (sed matched nothing)"; FAIL=1
+            else
+                "$C/iiis-2$BIN_SUFFIX" "$APW/tampered.iii" --compile-only --out "$APW/tampered.o" >>"$APW/build.log" 2>&1 \
+                    && gcc "$APW/2763.o" "$APW/tampered.o" "$APW/xeno_ontogenesis.o" "$APW/substrate_ontogenesis.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$APW/2763_t.exe" >>"$APW/build.log" 2>&1
+                if [[ -x "$APW/2763_t.exe" ]]; then
+                    "$APW/2763_t.exe" >/dev/null 2>&1; aptrc=$?
+                    if [[ $aptrc -ne 0 && $aptrc -ne 99 ]]; then
+                        say "PASS autophasis: tampered utterance REFUSED (rc=$aptrc) -- the gate has teeth"
+                    else say "RED  autophasis: tampered utterance NOT refused (rc=$aptrc)"; FAIL=1; fi
+                else say "RED  autophasis: tamper arm failed to build"; FAIL=1; fi
+            fi
+        else say "RED  autophasis: gate 2763 failed to build (see $APW/build.log)"; FAIL=1; fi
+    else say "RED  autophasis: press red (rc=$aprc, see $APW/p1.log)"; FAIL=1; fi
+    rm -rf "$APW"
+else say "RED  autophasis: iii-substrate or iiis-2 absent"; FAIL=1; fi
+
+say "[standing] == SYNAPSE: the constitution-pinned wire (autognosis root + gate 2764 in-process + the real-socket handshake) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+    SNW="$(mktemp -d "${TMPDIR:-/tmp}/synapse-standing.XXXXXX")"
+    snok=1
+    for snd in autophasis synapse; do
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/$snd.iii" --compile-only --out "$SNW/$snd.o" >>"$SNW/build.log" 2>&1 || snok=0
+    done
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/katabasis/autognosis.iii" --compile-only --out "$SNW/autognosis.o" >>"$SNW/build.log" 2>&1 || snok=0
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/cg_glossa_rules.iii" --compile-only --out "$SNW/cggr.o" >>"$SNW/build.log" 2>&1 || snok=0
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" --compile-only --out "$SNW/cgpr.o" >>"$SNW/build.log" 2>&1 || snok=0
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2764_synapse.iii" --compile-only --out "$SNW/2764.o" >>"$SNW/build.log" 2>&1 || snok=0
+    if [[ $snok -eq 1 ]]; then
+        gcc "$SNW/2764.o" "$SNW/synapse.o" "$SNW/autognosis.o" "$SNW/autophasis.o" "$SNW/cggr.o" "$SNW/cgpr.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$SNW/2764.exe" >>"$SNW/build.log" 2>&1 || snok=0
+    fi
+    if [[ $snok -eq 1 && -x "$SNW/2764.exe" ]]; then
+        "$SNW/2764.exe" >/dev/null 2>&1; sn2rc=$?
+        if [[ $sn2rc -eq 99 ]]; then
+            say "PASS synapse: gate 2764 in-process -- self-fold, hello CONCUR, 4 foreign refusals BY NAME, content/crc/seal/short/facet refusals, 7 words x 26 pts wire==third-engine, omega pairs wire==organ, nonce binding, 4 serve refusals (exit 99)"
+        else say "RED  synapse: gate 2764 exit $sn2rc"; FAIL=1; fi
+    else say "RED  synapse: gate 2764 failed to build (see $SNW/build.log)"; FAIL=1; fi
+    # THE REAL-SOCKET ARM: two endpoints, loopback TCP, mutual constitution handshake
+    SNO="$("$C/iii-substrate$BIN_SUFFIX" synapse 47137 2>&1)"; snrc=$?
+    if [[ $snrc -eq 0 ]] \
+        && echo "$SNO" | grep -q "HELLO client->server: CONCUR" \
+        && echo "$SNO" | grep -q "HELLO server->client: CONCUR" \
+        && echo "$SNO" | grep -q "cross-derived" \
+        && echo "$SNO" | grep -q "REFUSED (undeliverable content)"; then
+        say "PASS synapse: real loopback handshake -- two endpoints proved the same being, obligations served in the minted tongue, truth cross-derived, wire corruption refused"
+    else say "RED  synapse: real-socket handshake drifted (rc=$snrc)"; FAIL=1; fi
+    rm -rf "$SNW"
+else say "RED  synapse: iii-substrate or iiis-2 absent"; FAIL=1; fi
+
 say "[standing] == SYMMETRIA: the conservation worlds (closed reversible algebras, saturated to PROOF, friction-graded) =="
 if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
     SYO="$("$C/iii-substrate$BIN_SUFFIX" symmetry 12 12345 2>&1)"; syrc=$?

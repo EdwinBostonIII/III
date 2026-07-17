@@ -1,0 +1,336 @@
+/* STDLIB/iii/aether/synapse.iii -- THE SYNAPSE: III's own wire protocol, in
+ * which the HANDSHAKE IS THE CONSTITUTION.
+ *
+ * THE PROTOCOL (NIH -- the grammar, the pinning law, and the refusal order are
+ * invented here; the envelope is III's own babel_wire with its proven
+ * content-address-as-integrity law; the transport, composed at the tool layer,
+ * is aether/net -- rings stay separate: THIS organ is R0-pure and never touches
+ * a socket, so every rule below is provable in-process):
+ *
+ *   frame  = babel_wire envelope, seal_id = SYNAPSE_SEAL ("III-SYN1"),
+ *            ctx_digest = mhash CONTENT ADDRESS of the payload (EVERY frame --
+ *            a corrupted frame is not "damaged", it is a DIFFERENT, unasked
+ *            message, hence undeliverable), facet = frame kind.
+ *
+ *   HELLO   (facet 1, 24-byte payload: nomos_id, glossa_id, autophasis_id)
+ *            intent_id = the sender's CONSTITUTION ROOT (katabasis/autognosis).
+ *            THE PINNING LAW: the receiver compares every id against ITS OWN
+ *            sealed seats and the claimed root against BOTH its own root and
+ *            the fold of the payload ids.  Any mismatch is a NAMED refusal --
+ *            two IIIs speak only after proving they are THE SAME BEING under
+ *            the same sealed law.  An incoherent self-model cannot even build
+ *            a HELLO (autognosis_root() = 0 refuses the press of the frame).
+ *
+ *   ASK     (facet 2, 28-byte payload: kind u32, a u64, b u64, c u64)
+ *            intent_id = caller nonce, echoed by the verdict (replay binding).
+ *            A PROOF OBLIGATION: the peer is asked to EXECUTE a fact against
+ *            its own sealed organs, not to relay bytes.
+ *              kind 1  GLOSSA: a = lexicon index; the serve path SPEAKS THE
+ *                      MACHINE'S OWN MINTED WORDS BARE (andn64/blsi64/blsmsk64/
+ *                      blsr64/lzcnt64/popcnt64/tzcnt64) -- vocabulary the
+ *                      parliament adopted is what travels the wire.
+ *              kind 2  AUTOPHASIS: (a,b) in the pressed carrier; result =
+ *                      omega_op(a,b), ok = all four division laws re-checked
+ *                      live at (a,b).
+ *   VERDICT (facet 3, 41-byte payload: kind, a, b, c, result u64, ok u8)
+ *            intent_id = the ask's nonce.  The asker RE-VERIFIES content and
+ *            nonce before reading -- delivery is proof of integrity, never of
+ *            truth: truth stays with the asker's own cross-derivation.
+ *
+ * THE REFUSAL ORDER (lexicographic gravity, every code named): a frame you
+ * cannot parse is refused before its constitution is weighed; a foreign
+ * constitution before any obligation is executed.
+ *
+ * RIPPLE: this is the enhancement seat the arc owed -- one III can now push a
+ * re-derivation obligation to another instance OF ITSELF (loopback today,
+ * federation's sealed channel tomorrow) and cross-check the verdict against
+ * its own engines: self-reference over a wire, refusing all strangers.
+ * NIH: composes babel_wire + katabasis/autognosis + the sealed organs it
+ * serves.  Hexad: kind_passage.  Ring: R0.  Gate: 2764 (stored-answer-free). */
+module aether_synapse
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_intent_id(in_buf: u64) -> u64 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_ctx_digest_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_content(in_buf: u64, in_len: u32, expected_id_ptr: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_content_id(in_buf: u64, out_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_glossa_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_autophasis_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+
+extern @abi(c-msvc-x64) fn omega_n() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_ld(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_rd(x: i64, y: i64) -> i64 from "autophasis.iii"
+
+/* "III-SYN1" little-endian: I I I - S Y N 1 */
+const SYNAPSE_SEAL : u64 = 0x314E59532D494949u64
+
+const SYNAPSE_F_HELLO   : u8 = 1u8
+const SYNAPSE_F_ASK     : u8 = 2u8
+const SYNAPSE_F_VERDICT : u8 = 3u8
+
+const SYNAPSE_K_GLOSSA     : u32 = 1u32
+const SYNAPSE_K_AUTOPHASIS : u32 = 2u32
+
+const SYNAPSE_OK          : i32 =  0i32
+const SYNAPSE_E_NULL      : i32 = -1i32   /* null buffer                        */
+const SYNAPSE_E_SHORT     : i32 = -2i32   /* frame shorter than it claims       */
+const SYNAPSE_E_CRC       : i32 = -3i32   /* header integrity broken            */
+const SYNAPSE_E_SEAL      : i32 = -4i32   /* not a synapse frame                */
+const SYNAPSE_E_CONTENT   : i32 = -5i32   /* payload is a DIFFERENT message     */
+const SYNAPSE_E_KIND      : i32 = -6i32   /* wrong facet for this verifier      */
+const SYNAPSE_E_SHAPE     : i32 = -7i32   /* payload length wrong for the facet */
+const SYNAPSE_E_F_NOMOS   : i32 = -8i32   /* FOREIGN: rewrite constitution      */
+const SYNAPSE_E_F_GLOSSA  : i32 = -9i32   /* FOREIGN: vocabulary                */
+const SYNAPSE_E_F_AUTOPH  : i32 = -10i32  /* FOREIGN: pressed discovery         */
+const SYNAPSE_E_ROOT      : i32 = -11i32  /* claimed root lies about the ids    */
+const SYNAPSE_E_NONCE     : i32 = -12i32  /* verdict does not answer this ask   */
+const SYNAPSE_E_SELF      : i32 = -13i32  /* own self-model incoherent          */
+
+var SY_PAY  : [u8; 64]
+var SY_DIG  : [u8; 32]
+
+fn sy_pay_w64(off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        SY_PAY[off + i] = ((v >> (i * 8u64)) & 255u64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn sy_r64(in_buf: u64, off: u32) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let b : u32 = babel_wire_unpack_payload_byte(in_buf, off + i)
+        v = v | (((b & 255u32) as u64) << ((i as u64) * 8u64))
+        i = i + 1u32
+    }
+    return v
+}
+
+/* the fold the HELLO's root must equal over its OWN payload ids (a consistent
+ * lie about the root is still a lie: the receiver re-folds) */
+fn sy_fold3(a: u64, b: u64, c: u64) -> u64 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        let mut v : u64 = 0u64
+        if k == 0u64 { v = a }
+        if k == 1u64 { v = b }
+        if k == 2u64 { v = c }
+        let mut i : u64 = 0u64
+        while i < 8u64 {
+            h = (h ^ ((v >> (i * 8u64)) & 255u64)) * 1099511628211u64
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+    if h == 0u64 { h = 1u64 }
+    return h
+}
+
+/* stamp the content address of the payload into the header, then finalize.
+ * Returns the wire length (0 = refuse). */
+fn sy_seal_frame(buf: u64) -> u32 {
+    if babel_wire_content_id(buf, (&SY_DIG) as u64) != 0i32 { return 0u32 }
+    babel_wire_set_ctx_digest(buf, (&SY_DIG) as u64)
+    return babel_wire_finalize(buf)
+}
+
+/* THE UNIVERSAL FRAME GATE: structural length, header integrity, protocol
+ * seal, content address -- in that refusal order.  Every verifier runs it. */
+fn synapse_frame_gate(in_buf: u64, in_len: u32) -> i32 @export {
+    if in_buf == 0u64 { return SYNAPSE_E_NULL }
+    if babel_wire_verify_len(in_buf, in_len) != 1u8 { return SYNAPSE_E_SHORT }
+    if babel_wire_verify_crc(in_buf, in_len) != 1u8 { return SYNAPSE_E_CRC }
+    if babel_wire_verify_seal(in_buf, SYNAPSE_SEAL) != 1u8 { return SYNAPSE_E_SEAL }
+    /* the header's claimed content address, re-derived from the payload */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let b : u32 = babel_wire_unpack_ctx_digest_byte(in_buf, i)
+        if b > 255u32 { return SYNAPSE_E_SHORT }
+        SY_DIG[i as u64] = (b & 255u32) as u8
+        i = i + 1u32
+    }
+    if babel_wire_verify_content(in_buf, in_len, (&SY_DIG) as u64) != 1u8 { return SYNAPSE_E_CONTENT }
+    return SYNAPSE_OK
+}
+
+/* ---- HELLO: the constitution handshake ---- */
+
+/* Build the HELLO into buf (caller allocates >= 96 bytes).  Returns wire len,
+ * 0 = REFUSED (an incoherent self-model cannot say hello). */
+fn synapse_hello_build(buf: u64) -> u32 @export {
+    if buf == 0u64 { return 0u32 }
+    let root : u64 = autognosis_root()
+    if root == 0u64 { return 0u32 }
+    babel_wire_init(buf)
+    babel_wire_set_seal_id(buf, SYNAPSE_SEAL)
+    babel_wire_set_facet(buf, SYNAPSE_F_HELLO)
+    babel_wire_set_intent_id(buf, root)
+    sy_pay_w64(0u64, autognosis_nomos_id())
+    sy_pay_w64(8u64, autognosis_glossa_id())
+    sy_pay_w64(16u64, autognosis_autophasis_id())
+    babel_wire_set_payload(buf, (&SY_PAY) as u64, 24u32)
+    return sy_seal_frame(buf)
+}
+
+/* Verify a received HELLO against THIS machine's own sealed constitution.
+ * 0 = CONCUR (the peer is the same being); negative = the named refusal. */
+fn synapse_hello_verify(in_buf: u64, in_len: u32) -> i32 @export {
+    let g : i32 = synapse_frame_gate(in_buf, in_len)
+    if g != SYNAPSE_OK { return g }
+    if babel_wire_unpack_facet(in_buf) != SYNAPSE_F_HELLO { return SYNAPSE_E_KIND }
+    if babel_wire_unpack_payload_len(in_buf) != 24u32 { return SYNAPSE_E_SHAPE }
+    let my_root : u64 = autognosis_root()
+    if my_root == 0u64 { return SYNAPSE_E_SELF }
+    let p_nomos : u64 = sy_r64(in_buf, 0u32)
+    let p_glossa : u64 = sy_r64(in_buf, 8u32)
+    let p_autoph : u64 = sy_r64(in_buf, 16u32)
+    if p_nomos != autognosis_nomos_id() { return SYNAPSE_E_F_NOMOS }
+    if p_glossa != autognosis_glossa_id() { return SYNAPSE_E_F_GLOSSA }
+    if p_autoph != autognosis_autophasis_id() { return SYNAPSE_E_F_AUTOPH }
+    let claimed : u64 = babel_wire_unpack_intent_id(in_buf)
+    if claimed != my_root { return SYNAPSE_E_ROOT }
+    if claimed != sy_fold3(p_nomos, p_glossa, p_autoph) { return SYNAPSE_E_ROOT }
+    return SYNAPSE_OK
+}
+
+/* ---- ASK: a proof obligation ---- */
+
+/* args_ptr -> three u64 operands (a, b, c).  Returns wire len (0 refuse). */
+fn synapse_ask_build(buf: u64, kind: u32, args_ptr: u64, nonce: u64) -> u32 @export {
+    if buf == 0u64 { return 0u32 }
+    if args_ptr == 0u64 { return 0u32 }
+    if kind != SYNAPSE_K_GLOSSA { if kind != SYNAPSE_K_AUTOPHASIS { return 0u32 } }
+    let ap : *u64 = args_ptr as *u64
+    babel_wire_init(buf)
+    babel_wire_set_seal_id(buf, SYNAPSE_SEAL)
+    babel_wire_set_facet(buf, SYNAPSE_F_ASK)
+    babel_wire_set_intent_id(buf, nonce)
+    SY_PAY[0u64] = (kind & 255u32) as u8
+    SY_PAY[1u64] = ((kind >> 8u32) & 255u32) as u8
+    SY_PAY[2u64] = ((kind >> 16u32) & 255u32) as u8
+    SY_PAY[3u64] = ((kind >> 24u32) & 255u32) as u8
+    sy_pay_w64(4u64, ap[0u64])
+    sy_pay_w64(12u64, ap[1u64])
+    sy_pay_w64(20u64, ap[2u64])
+    babel_wire_set_payload(buf, (&SY_PAY) as u64, 28u32)
+    return sy_seal_frame(buf)
+}
+
+fn sy_ask_kind(in_buf: u64) -> u32 {
+    let b0 : u32 = babel_wire_unpack_payload_byte(in_buf, 0u32) & 255u32
+    let b1 : u32 = babel_wire_unpack_payload_byte(in_buf, 1u32) & 255u32
+    let b2 : u32 = babel_wire_unpack_payload_byte(in_buf, 2u32) & 255u32
+    let b3 : u32 = babel_wire_unpack_payload_byte(in_buf, 3u32) & 255u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* ---- SERVE: execute the obligation against the sealed organs ---- */
+
+/* Verify the ASK, execute it, and press the VERDICT into out_buf (caller
+ * allocates >= 128 bytes).  Returns the verdict wire length; 0 = the ask was
+ * REFUSED (gate, facet, shape, kind bounds, or carrier bounds).  The GLOSSA
+ * road speaks the minted words BARE -- the adopted vocabulary itself. */
+fn synapse_serve(in_buf: u64, in_len: u32, out_buf: u64) -> u32 @export {
+    if out_buf == 0u64 { return 0u32 }
+    if synapse_frame_gate(in_buf, in_len) != SYNAPSE_OK { return 0u32 }
+    if babel_wire_unpack_facet(in_buf) != SYNAPSE_F_ASK { return 0u32 }
+    if babel_wire_unpack_payload_len(in_buf) != 28u32 { return 0u32 }
+    let kind : u32 = sy_ask_kind(in_buf)
+    let a : u64 = sy_r64(in_buf, 4u32)
+    let b : u64 = sy_r64(in_buf, 12u32)
+    let c : u64 = sy_r64(in_buf, 20u32)
+    let nonce : u64 = babel_wire_unpack_intent_id(in_buf)
+    let mut result : u64 = 0u64
+    let mut ok : u8 = 0u8
+    if kind == SYNAPSE_K_GLOSSA {
+        if a >= (cgglossa_nwords() as u64) { return 0u32 }
+        /* the lexicon's canonical name order, spoken bare */
+        if a == 0u64 { result = andn64(b, c) }
+        if a == 1u64 { result = blsi64(b) }
+        if a == 2u64 { result = blsmsk64(b) }
+        if a == 3u64 { result = blsr64(b) }
+        if a == 4u64 { result = lzcnt64(b) }
+        if a == 5u64 { result = popcnt64(b) }
+        if a == 6u64 { result = tzcnt64(b) }
+        ok = 1u8
+    }
+    if kind == SYNAPSE_K_AUTOPHASIS {
+        let n : i64 = omega_n()
+        let ai : i64 = a as i64
+        let bi : i64 = b as i64
+        if ai < 0i64 { return 0u32 }
+        if bi < 0i64 { return 0u32 }
+        if ai >= n { return 0u32 }
+        if bi >= n { return 0u32 }
+        result = omega_op(ai, bi) as u64
+        ok = 1u8
+        if omega_op(ai, omega_ld(ai, bi)) != bi { ok = 0u8 }
+        if omega_ld(ai, omega_op(ai, bi)) != bi { ok = 0u8 }
+        if omega_op(omega_rd(ai, bi), bi) != ai { ok = 0u8 }
+        if omega_rd(omega_op(ai, bi), bi) != ai { ok = 0u8 }
+    }
+    if kind != SYNAPSE_K_GLOSSA { if kind != SYNAPSE_K_AUTOPHASIS { return 0u32 } }
+    babel_wire_init(out_buf)
+    babel_wire_set_seal_id(out_buf, SYNAPSE_SEAL)
+    babel_wire_set_facet(out_buf, SYNAPSE_F_VERDICT)
+    babel_wire_set_intent_id(out_buf, nonce)
+    SY_PAY[0u64] = (kind & 255u32) as u8
+    SY_PAY[1u64] = ((kind >> 8u32) & 255u32) as u8
+    SY_PAY[2u64] = ((kind >> 16u32) & 255u32) as u8
+    SY_PAY[3u64] = ((kind >> 24u32) & 255u32) as u8
+    sy_pay_w64(4u64, a)
+    sy_pay_w64(12u64, b)
+    sy_pay_w64(20u64, c)
+    sy_pay_w64(28u64, result)
+    SY_PAY[36u64] = ok
+    babel_wire_set_payload(out_buf, (&SY_PAY) as u64, 37u32)
+    return sy_seal_frame(out_buf)
+}
+
+/* ---- VERDICT: the asker's side ---- */
+
+/* Verify a received VERDICT answers (nonce, kind).  0 = verified; then and
+ * only then the accessors below may read it. */
+fn synapse_verdict_verify(in_buf: u64, in_len: u32, nonce: u64, kind: u32) -> i32 @export {
+    let g : i32 = synapse_frame_gate(in_buf, in_len)
+    if g != SYNAPSE_OK { return g }
+    if babel_wire_unpack_facet(in_buf) != SYNAPSE_F_VERDICT { return SYNAPSE_E_KIND }
+    if babel_wire_unpack_payload_len(in_buf) != 37u32 { return SYNAPSE_E_SHAPE }
+    if babel_wire_unpack_intent_id(in_buf) != nonce { return SYNAPSE_E_NONCE }
+    if sy_ask_kind(in_buf) != kind { return SYNAPSE_E_KIND }
+    return SYNAPSE_OK
+}
+fn synapse_verdict_result(in_buf: u64) -> u64 @export { return sy_r64(in_buf, 28u32) }
+fn synapse_verdict_ok(in_buf: u64) -> u8 @export {
+    return (babel_wire_unpack_payload_byte(in_buf, 36u32) & 255u32) as u8
+}
+fn synapse_verdict_arg(in_buf: u64, i: u32) -> u64 @export {
+    if i > 2u32 { return 0u64 }
+    return sy_r64(in_buf, 4u32 + (i * 8u32))
+}
+
+/* protocol facts for gates and tools */
+fn synapse_seal_const() -> u64 @export { return SYNAPSE_SEAL }
+fn synapse_header_bytes() -> u32 @export { return babel_wire_header_bytes() }

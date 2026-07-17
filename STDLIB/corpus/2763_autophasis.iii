@@ -1,0 +1,212 @@
+/* STDLIB/corpus/2763_autophasis.iii -- Ξ-Ω THE AUTOPHASIS GATE: the machine's
+ * self-utterance re-derived from scratch, every run, stored-answer-free.
+ *
+ * The sealed organ aether/autophasis.iii is a DISCOVERY the machine made in the
+ * fair magma universe and pressed into its own language (op + synthesized
+ * divisions + witness + census).  This gate holds NO answers: it re-hunts the
+ * universe with an INDEPENDENT associativity engine, re-derives the carrier,
+ * fair index, and full census, checks the pressed table cell-by-cell against
+ * the universe, re-proves quasigroup + all four division laws FROM THE PRESSED
+ * FNS, re-derives the lex-first witness, checks the totality guards, and
+ * refutes a corrupted table (teeth).  If the sealed utterance and the universe
+ * ever disagree, this gate reds -- there is no stored expectation to go stale.
+ *
+ * ARMS: ID 10 | RE-HUNT 11 | CENSUS 12 | TABLE 13 | QUASIGROUP 14
+ *     | DIVISIONS 15 | WITNESS 16 | TEETH 17 | GUARDS 18 | exit 99 green. */
+module corpus_d2763
+
+extern @abi(c-msvc-x64) fn omega_n() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_idx() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_ld(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_rd(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wa() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wb() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wc() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_tables() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_qg() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_assoc() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_nonassoc() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn autophasis_set_id() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn xo_load(n: i64, idx: u64) -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_get(x: i64, y: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_quasigroup() -> u8 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+
+/* the INDEPENDENT associativity engine (the gate's own, over the universe) */
+fn g_assoc(n: i64) -> u8 {
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            let mut c : i64 = 0i64
+            while c < n {
+                let ab : i64 = xo_get(a, b)
+                let bc : i64 = xo_get(b, c)
+                if xo_get(ab, c) != xo_get(a, bc) { return 0u8 }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return 1u8
+}
+
+/* row/column permutation check over an in-RAM table (used for TEETH too) */
+var G_T : [i64; 16]
+var G_SEEN : [u8; 8]
+fn g_table_qg(n: i64) -> u8 {
+    let mut r : i64 = 0i64
+    while r < n {
+        let mut j : u64 = 0u64
+        while j < 8u64 { G_SEEN[j] = 0u8   j = j + 1u64 }
+        let mut c : i64 = 0i64
+        while c < n {
+            let v : i64 = G_T[((r * n) + c) as u64]
+            if v < 0i64 { return 0u8 }
+            if v >= n { return 0u8 }
+            if G_SEEN[v as u64] == 1u8 { return 0u8 }
+            G_SEEN[v as u64] = 1u8
+            c = c + 1i64
+        }
+        r = r + 1i64
+    }
+    let mut cc : i64 = 0i64
+    while cc < n {
+        let mut j2 : u64 = 0u64
+        while j2 < 8u64 { G_SEEN[j2] = 0u8   j2 = j2 + 1u64 }
+        let mut rr : i64 = 0i64
+        while rr < n {
+            let v2 : i64 = G_T[((rr * n) + cc) as u64]
+            if G_SEEN[v2 as u64] == 1u8 { return 0u8 }
+            G_SEEN[v2 as u64] = 1u8
+            rr = rr + 1i64
+        }
+        cc = cc + 1i64
+    }
+    return 1u8
+}
+
+fn main() -> i32 {
+    /* [ID] the utterance is sealed with a nonzero id */
+    if autophasis_set_id() == 0u64 { ps("RED ID\n" as u64)   return 10i32 }
+    let n : i64 = omega_n()
+    if n < 1i64 { ps("RED ID: carrier\n" as u64)   return 10i32 }
+    if n > 4i64 { ps("RED ID: carrier\n" as u64)   return 10i32 }
+    /* [RE-HUNT] independent sweep: smaller carriers must be EMPTY of
+     * non-associative quasigroups; at the pressed carrier the FIRST one in
+     * fair order must sit at the pressed index, and the census must agree */
+    let mut m : i64 = 1i64
+    while m <= n {
+        let cells : i64 = m * m
+        let mut total : u64 = 1u64
+        let mut e : i64 = 0i64
+        while e < cells { total = total * (m as u64)   e = e + 1i64 }
+        let mut nq : u64 = 0u64
+        let mut na : u64 = 0u64
+        let mut nn : u64 = 0u64
+        let mut hit : u8 = 0u8
+        let mut hidx : u64 = 0u64
+        let mut idx : u64 = 0u64
+        while idx < total {
+            xo_load(m, idx)
+            if xo_quasigroup() == 1u8 {
+                nq = nq + 1u64
+                if g_assoc(m) == 1u8 { na = na + 1u64 } else {
+                    nn = nn + 1u64
+                    if hit == 0u8 { hidx = idx   hit = 1u8 }
+                }
+            }
+            idx = idx + 1u64
+        }
+        if m < n {
+            if nn != 0u64 { ps("RED RE-HUNT: smaller carrier populated\n" as u64)   return 11i32 }
+        }
+        if m == n {
+            if hit == 0u8 { ps("RED RE-HUNT: pressed carrier empty\n" as u64)   return 11i32 }
+            if hidx != omega_idx() { ps("RED RE-HUNT: first index differs\n" as u64)   return 11i32 }
+            if total != omega_census_tables() { ps("RED CENSUS: tables\n" as u64)   return 12i32 }
+            if nq != omega_census_qg() { ps("RED CENSUS: quasigroups\n" as u64)   return 12i32 }
+            if na != omega_census_assoc() { ps("RED CENSUS: associative\n" as u64)   return 12i32 }
+            if nn != omega_census_nonassoc() { ps("RED CENSUS: non-associative\n" as u64)   return 12i32 }
+        }
+        m = m + 1i64
+    }
+    /* [TABLE] the pressed op equals the universe cell-by-cell */
+    xo_load(n, omega_idx())
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = 0i64
+        while y < n {
+            if omega_op(x, y) != xo_get(x, y) { ps("RED TABLE\n" as u64)   return 13i32 }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    /* [QUASIGROUP] rows+columns of the PRESSED fn are permutations */
+    x = 0i64
+    while x < n {
+        let mut y2 : i64 = 0i64
+        while y2 < n { G_T[((x * n) + y2) as u64] = omega_op(x, y2)   y2 = y2 + 1i64 }
+        x = x + 1i64
+    }
+    if g_table_qg(n) != 1u8 { ps("RED QUASIGROUP\n" as u64)   return 14i32 }
+    /* [DIVISIONS] all four division laws from the pressed fns, every pair */
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            if omega_op(a, omega_ld(a, b)) != b { ps("RED DIV: op(a,ld(a,b))\n" as u64)   return 15i32 }
+            if omega_ld(a, omega_op(a, b)) != b { ps("RED DIV: ld(a,op(a,b))\n" as u64)   return 15i32 }
+            if omega_op(omega_rd(a, b), b) != a { ps("RED DIV: op(rd(a,b),b)\n" as u64)   return 15i32 }
+            if omega_rd(omega_op(a, b), b) != a { ps("RED DIV: rd(op(a,b),b)\n" as u64)   return 15i32 }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    /* [WITNESS] the lex-first associativity violation, re-derived */
+    let mut wa : i64 = 0i64 - 1i64
+    let mut wb : i64 = 0i64 - 1i64
+    let mut wc : i64 = 0i64 - 1i64
+    a = 0i64
+    while a < n {
+        let mut b3 : i64 = 0i64
+        while b3 < n {
+            let mut c3 : i64 = 0i64
+            while c3 < n {
+                if wa < 0i64 {
+                    if omega_op(omega_op(a, b3), c3) != omega_op(a, omega_op(b3, c3)) {
+                        wa = a   wb = b3   wc = c3
+                    }
+                }
+                c3 = c3 + 1i64
+            }
+            b3 = b3 + 1i64
+        }
+        a = a + 1i64
+    }
+    if wa < 0i64 { ps("RED WITNESS: none exists\n" as u64)   return 16i32 }
+    if wa != omega_wa() { ps("RED WITNESS: a\n" as u64)   return 16i32 }
+    if wb != omega_wb() { ps("RED WITNESS: b\n" as u64)   return 16i32 }
+    if wc != omega_wc() { ps("RED WITNESS: c\n" as u64)   return 16i32 }
+    /* [TEETH] a corrupted table must be REFUSED by the quasigroup law */
+    let v0 : i64 = G_T[0u64]
+    G_T[0u64] = (v0 + 1i64) % n
+    if g_table_qg(n) == 1u8 { ps("RED TEETH: corruption not refused\n" as u64)   return 17i32 }
+    G_T[0u64] = v0
+    /* [GUARDS] the pressed fns are total (out-of-carrier args refused) */
+    if omega_op(0i64 - 1i64, 0i64) != (0i64 - 1i64) { ps("RED GUARDS\n" as u64)   return 18i32 }
+    if omega_op(0i64, n) != (0i64 - 1i64) { ps("RED GUARDS\n" as u64)   return 18i32 }
+    if omega_ld(n, 0i64) != (0i64 - 1i64) { ps("RED GUARDS\n" as u64)   return 18i32 }
+    if omega_rd(0i64, 0i64 - 1i64) != (0i64 - 1i64) { ps("RED GUARDS\n" as u64)   return 18i32 }
+    ps("AUTOPHASIS GREEN: utterance re-derived from the universe -- carrier, index, census, table, quasigroup, divisions, witness, teeth, guards\n" as u64)
+    return 99i32
+}

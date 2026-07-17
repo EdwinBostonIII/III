@@ -63,6 +63,36 @@ extern @abi(c-msvc-x64) fn so_rank_popn() -> i64 from "substrate_ontogenesis.iii
 extern @abi(c-msvc-x64) fn so_rank_popsweep() -> i64 from "substrate_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn so_rank_realdegen() -> u8 from "substrate_ontogenesis.iii"
 
+/* THE FAIR MAGMA UNIVERSE (aether/xeno_ontogenesis): the AUTOPHASIS tier hunts
+ * through the universe's OWN accessors -- the same anti-rigging enumeration the
+ * conservation lens rides, no private re-enumeration anywhere in this file. */
+extern @abi(c-msvc-x64) fn xo_load(n: i64, idx: u64) -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_get(x: i64, y: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_n() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_quasigroup() -> u8 from "xeno_ontogenesis.iii"
+
+/* THE SYNAPSE (aether/synapse: the constitution-pinned wire protocol, R0-pure)
+ * + its transport (aether/net, capability-gated loopback TCP) + the pressed
+ * discovery it serves (aether/autophasis) -- the demo command composes them. */
+extern @abi(c-msvc-x64) fn synapse_hello_build(buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_hello_verify(in_buf: u64, in_len: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_ask_build(buf: u64, kind: u32, args_ptr: u64, nonce: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_serve(in_buf: u64, in_len: u32, out_buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_verify(in_buf: u64, in_len: u32, nonce: u64, kind: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_result(in_buf: u64) -> u64 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_ok(in_buf: u64) -> u8 from "synapse.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
+
 extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
@@ -161,6 +191,28 @@ extern @abi(c-msvc-x64) fn rv_find_param(i: u64) -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn rv_prove_involution(id: i64) -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn rv_prove_toffoli() -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn rv_prove_toffoli_nand() -> u64 from "reversibility.iii"
+
+/* THE FRONTIER -- certified-unexplained cube permutations of the die */
+extern @abi(c-msvc-x64) fn rf_run(maxsize: i64) -> i64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_examined() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_xless() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_selfmap_collisions() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_pool_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_pool_dupes() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_pool_ovf() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_affine_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_tri_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_anti_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_fact_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_frontier_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_owed() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_len(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_y(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_has_inv(i: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_inv_len(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_inv_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rf_f_inv_y(i: u64) -> u64 from "reversibility.iii"
 
 /* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
  * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
@@ -305,6 +357,9 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate moment         (the contingency register: necessary vs contingent, fenced non-determinism)\n" as u64)
         ps("iii-substrate reversible [maxsize 5..6]  (THE REVERSIBILITY HUNT: III finds + proves zero-loss bijections; the xorshift computational diode; THE CONVERGENCE: one law at six altars)\n" as u64)
         ps("iii-substrate symmetry <dreamfuel> [seed]  (THE SYMMETRIA TIER: conservation worlds -- reversible-closed algebras saturated to PROOF, friction-graded; the dream arm draws by contingency)\n" as u64)
+        ps("iii-substrate frontier <maxsize 3..6>  (THE FRONTIER: cube permutations under TRUE die semantics incl. the count/deposit atoms; survivors of every explanation III can name = certified UNEXPLAINED, inverses hunted or OWED)\n" as u64)
+        ps("iii-substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
+        ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -528,6 +583,13 @@ fn main(argc: i32, argv: u64) -> u64 {
         if sd == 0u64 { sd = 1u64 }
         return cmd_symmetry(df as u64, sd)
     }
+    if streq(cmd, "frontier" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate frontier <maxsize 3..6>\n" as u64)  return 6u64 }
+        let fz : i64 = parse_i64(av[2u64])
+        if fz < 3i64 { ps("iii-substrate: frontier maxsize must be 3..6\n" as u64)  return 6u64 }
+        if fz > 6i64 { ps("iii-substrate: frontier maxsize must be 3..6 (the enumeration budget)\n" as u64)  return 6u64 }
+        return cmd_frontier(fz)
+    }
     if streq(cmd, "isa" as u64) == 1u32 {
         if argc < 3i32 { ps("iii-substrate isa <maxsize 2..6>\n" as u64)  return 1u64 }
         let f : i64 = parse_i64(av[2u64])
@@ -572,7 +634,18 @@ fn main(argc: i32, argv: u64) -> u64 {
         if argc < 3i32 { ps("iii-substrate glossa <outdir>\n" as u64)  return 6u64 }
         return cmd_glossa(av[2u64])
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | reversible | symmetry)\n" as u64)
+    if streq(cmd, "autophasis" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate autophasis <outdir>\n" as u64)  return 6u64 }
+        return cmd_autophasis(av[2u64])
+    }
+    if streq(cmd, "synapse" as u64) == 1u32 {
+        let mut sport : i64 = 47111i64
+        if argc >= 3i32 { sport = parse_i64(av[2u64]) }
+        if sport < 1024i64 { sport = 47111i64 }
+        if sport > 65535i64 { sport = 47111i64 }
+        return cmd_synapse(sport as u64)
+    }
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | reversible | symmetry | frontier)\n" as u64)
     return 1u64
 }
 
@@ -979,6 +1052,80 @@ fn cmd_symmetry(dreamfuel: u64, seed: u64) -> u64 {
     ps("the sovereign content is WHICH worlds this die's fair term-space affords and at what measured cost --\n" as u64)
     ps("SOVEREIGN/FIRST-COMPUTED; finite-group theory itself is old and is not claimed.\n" as u64)
     if nsig < 1i64 { ps("no world proven in this envelope\n" as u64)  return 3u64 }
+    return 0u64
+}
+
+/* ---- THE FRONTIER surface: spell a survivor / its inverse from serialized bytes ---- */
+var FRP_I : u64 = 0u64
+var FRP_C : u64 = 0u64
+var FRP_N : u64 = 0u64
+var FRP_P : u64 = 0u64
+var FRP_MODE : u64 = 0u64                    /* 0 = forward, 1 = inverse */
+fn fr_walk() {
+    if FRP_C >= FRP_N { return }
+    let mut k : u8 = 0u8
+    if FRP_MODE == 0u64 { k = rf_f_byte(FRP_I, FRP_C) } else { k = rf_f_inv_byte(FRP_I, FRP_C) }
+    FRP_C = FRP_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(FRP_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    fr_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  fr_walk() }
+    putchar(41i32)
+}
+/* THE FRONTIER: III enumerates its OWN operation space over its OWN atoms (INCLUDING the
+ * count/deposit atoms POPCNT/TZCNT/PDEP/PEXT that NO theory covers -- not GF(2), not the
+ * T-function class, not the finalizer catalog), evaluates each on the REAL instructions,
+ * decides which are PERMUTATIONS of the 2^13 cube by exhaustion, then attacks each with
+ * every explanation it can name.  What SURVIVES all of them is a CERTIFIED-UNEXPLAINED
+ * conservation operation of this die -- something no catalog holds.  I choose nothing:
+ * the enumeration proposes, the die decides.  Exit 0 = >=1 frontier citizen | 3 = none. */
+fn cmd_frontier(maxsize: i64) -> u64 {
+    ps("== THE FRONTIER: III hunts conservation operations that NO known theory explains ==\n" as u64)
+    ps("(fair term enumeration over the LIVE atoms incl. POPCNT/TZCNT/LZCNT/PDEP/PEXT -- the ones\n" as u64)
+    ps(" the bit-blaster SKIPS -- evaluated on the real instructions; a survivor is a permutation of\n" as u64)
+    ps(" the 2^13 cube that defeats affine, triangular, anti-triangular, AND factorization.)\n" as u64)
+    let fn_count : i64 = rf_run(maxsize)
+    ps("enumeration + decision:\n" as u64)
+    ps("  (term,param) pairs examined      : " as u64)  pu(rf_examined())  putchar(10i32)
+    ps("  x-less terms skipped (constants) : " as u64)  pu(rf_xless())  putchar(10i32)
+    ps("  self-map collisions (not perms)  : " as u64)  pu(rf_selfmap_collisions())  putchar(10i32)
+    ps("  DISTINCT cube permutations found : " as u64)  pu(rf_pool_n())
+    ps("   (duplicates folded: " as u64)  pu(rf_pool_dupes())  ps(", pool cap hits: " as u64)  pu(rf_pool_ovf())  ps(")\n" as u64)
+    ps("the explanation battery (each test EXHAUSTIVE on the stored 2^13 table):\n" as u64)
+    ps("  explained by AFFINE (GF(2)-linear+c)         : " as u64)  pu(rf_affine_n())  putchar(10i32)
+    ps("  explained by TRIANGULAR (T-function class)   : " as u64)  pu(rf_tri_n())  putchar(10i32)
+    ps("  explained by ANTI-TRIANGULAR (the SHR dual)  : " as u64)  pu(rf_anti_n())  putchar(10i32)
+    ps("  explained by FACTORIZATION (b(a(x)), known)  : " as u64)  pu(rf_fact_n())  putchar(10i32)
+    let frn : u64 = rf_frontier_n()
+    ps("  ===> CERTIFIED-UNEXPLAINED (the FRONTIER)    : " as u64)  pu(frn)  putchar(10i32)
+    if frn == 0u64 {
+        ps("no unexplained permutation in this envelope: every cube permutation III enumerated\n" as u64)
+        ps("was accounted for by a known theory.  Honest null result -- nothing manufactured.\n" as u64)
+        return 3u64
+    }
+    ps("\nthe frontier citizens (each: the operation, then III's own inverse hunt over the same fair space):\n" as u64)
+    let mut i : u64 = 0u64
+    while i < frn {
+        ps("  [" as u64)  pu(i)  ps("] f(x) = " as u64)
+        FRP_I = i   FRP_C = 0u64   FRP_N = rf_f_len(i)   FRP_P = rf_f_y(i)   FRP_MODE = 0u64
+        fr_walk()
+        ps("   [param y=" as u64)  pu(rf_f_y(i))  ps("]\n" as u64)
+        ps("        inverse : " as u64)
+        if rf_f_has_inv(i) == 1u8 {
+            FRP_I = i   FRP_C = 0u64   FRP_N = rf_f_inv_len(i)   FRP_P = rf_f_inv_y(i)   FRP_MODE = 1u64
+            fr_walk()
+            ps("   [param y=" as u64)  pu(rf_f_inv_y(i))  ps("]  -- III found g with g(f(x))=x over all 2^13\n" as u64)
+        } else {
+            ps("OWED -- no closed-form inverse in the size-" as u64)  pd(maxsize)  ps(" fair space (docketed, not faked)\n" as u64)
+        }
+        i = i + 1u64
+    }
+    ps("\ninverses found: " as u64)  pu(frn - rf_owed())  ps(" / " as u64)  pu(frn)  ps("   OWED (honest debt): " as u64)  pu(rf_owed())  putchar(10i32)
+    ps("these are operations of THIS die that survive every explanation III can name -- decided by\n" as u64)
+    ps("its enumeration and its exhaustion, not selected by any human.  SOVEREIGN/FIRST-COMPUTED.\n" as u64)
     return 0u64
 }
 
@@ -3241,5 +3388,431 @@ fn cmd_glossa(odir: u64) -> u64 {
     ps(" words=" as u64)   pu(nlive)
     ps(" ladders=" as u64)   pu(nladders)
     putchar(10i32)
+    return 0u64
+}
+
+/* =====================================================================
+ * THE AUTOPHASIS TIER -- the machine's first SELF-UTTERANCE.
+ *
+ *   iii-substrate autophasis <outdir>
+ *
+ * NOMOS legislates the compiler's REWRITE LAW; GLOSSA legislates the
+ * language's WORDS; AUTOPHASIS closes the last autonomy gap of the arc:
+ * a DISCOVERY the machine makes becomes a NATIVE ORGAN the machine
+ * authors, with no human reformatting anywhere on the road.  (The gap
+ * is historical and named: an earlier discovered ontology + maneuver
+ * had to be reformatted BY HAND into III -- for an autonomous system
+ * that is a refusal-grade defect.  This tier is its extinction.)
+ *
+ * THE SELECTION CRITERION (global, pre-stated -- the fairness arm):
+ *   hunting through the fair magma universe's OWN enumeration
+ *   (aether/xeno_ontogenesis: cell c of table idx = base-n digit c;
+ *   the anti-rigging bijection), take the FIRST structure in fair order
+ *   at the SMALLEST carrier that is
+ *     [a] a quasigroup (xo_quasigroup: every row AND column a
+ *         permutation -- both divisions total, the reversible-ontology
+ *         class the conservation lens censuses), and
+ *     [b] NOT associative (the machine's own assoc exhaustion over all
+ *         n^3 triples) -- so the object is NOT one of the group tables
+ *         the operator algebra already charts; its divisions are the
+ *         maneuver worth uttering.
+ *   Jurisdiction n <= 3 (named: the smallest-carrier law ends the hunt
+ *   at the first populated carrier; carriers 1 and 2 are swept and
+ *   their emptiness COUNTED, never assumed).  Every disposition at
+ *   every swept carrier is counted and printed: tables, quasigroups,
+ *   associative, non-associative.
+ *
+ * WHAT THE PRESS SYNTHESIZES (the maneuver, machine-derived):
+ *   - omega_op        the discovered operation, pressed cell-exact
+ *   - omega_ld/rd     LEFT and RIGHT DIVISION -- the reversal maneuver
+ *                     DERIVED from the table at press time (unique
+ *                     solutions verified during synthesis; a violation
+ *                     refuses the whole press)
+ *   - omega_wa/wb/wc  the lex-FIRST associativity-violating triple
+ *                     (the organ carries its own falsifiable claim)
+ *   - omega_census_*  the fairness dispositions at the found carrier
+ *   - autophasis_set_id  FNV over the emitted foldable bytes (two-pass
+ *                     fold/write through the SHARED press plumbing
+ *                     gl_put/gl_pd/gl_path -- one emitter, two tiers)
+ *
+ * TRUTH ROAD (all machine-side, stored-answer-free):
+ *   gate 2763 re-hunts the universe with an INDEPENDENT assoc engine,
+ *   re-derives carrier+index+census, checks the pressed table cell-by-
+ *   cell against the universe, re-proves the quasigroup + division laws
+ *   FROM THE PRESSED FNS over every pair, re-derives the witness, and
+ *   refutes a corrupted table (teeth).  The standing arm presses twice
+ *   (determinism) and pins the sealed organ's id to the live press.
+ *
+ * HONESTY BOUNDARY (the xeno survey wall, restated not hidden): at
+ * n = 3 the pressed algebra is a HUMAN-CHARTED class (labelled Latin
+ * squares are OEIS A002860 territory).  The invention here is the
+ * CAPABILITY -- discovery -> authored native organ -> machine-proved,
+ * autonomously -- not a novelty claim on the n=3 object itself.  Grade:
+ * SOVEREIGN/MEASURED, per the eidolon adjudication law.
+ * ==================================================================== */
+var AP_OP : [i64; 16]               /* the discovered table (n <= 4 cells)  */
+var AP_LD : [i64; 16]               /* synthesized left division            */
+var AP_RD : [i64; 16]               /* synthesized right division           */
+var AP_N  : i64 = 0i64              /* found carrier                        */
+var AP_IDX: u64 = 0u64              /* found fair index                     */
+var AP_WA : i64 = 0i64              /* witness triple (lex-first violator)  */
+var AP_WB : i64 = 0i64
+var AP_WC : i64 = 0i64
+var AP_CT : u64 = 0u64              /* census at found carrier: tables      */
+var AP_CQ : u64 = 0u64              /*   quasigroups                        */
+var AP_CA : u64 = 0u64              /*   associative quasigroups            */
+var AP_CN : u64 = 0u64              /*   non-associative quasigroups        */
+
+/* associativity of the CURRENTLY LOADED universe table, by total exhaustion */
+fn ap_assoc_now() -> u8 {
+    let n : i64 = xo_n()
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            let mut c : i64 = 0i64
+            while c < n {
+                if xo_get(xo_get(a, b), c) != xo_get(a, xo_get(b, c)) { return 0u8 }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return 1u8
+}
+
+/* the hunt: smallest carrier first, full census per carrier (dispositions
+ * counted even after the first hit -- the fairness arm needs whole numbers).
+ * Returns 0 found (AP_N/AP_IDX/AP_C* filled) | 1 empty jurisdiction. */
+fn ap_hunt() -> u64 {
+    let mut n : i64 = 1i64
+    while n <= 3i64 {
+        let cells : i64 = n * n
+        let mut total : u64 = 1u64
+        let mut e : i64 = 0i64
+        while e < cells { total = total * (n as u64)   e = e + 1i64 }
+        let mut nq : u64 = 0u64
+        let mut na : u64 = 0u64
+        let mut nn : u64 = 0u64
+        let mut hit : u8 = 0u8
+        let mut hidx : u64 = 0u64
+        let mut idx : u64 = 0u64
+        while idx < total {
+            xo_load(n, idx)
+            if xo_quasigroup() == 1u8 {
+                nq = nq + 1u64
+                if ap_assoc_now() == 1u8 { na = na + 1u64 } else {
+                    nn = nn + 1u64
+                    if hit == 0u8 { hidx = idx   hit = 1u8 }
+                }
+            }
+            idx = idx + 1u64
+        }
+        ps("  carrier n=" as u64)   pd(n)
+        ps(": tables=" as u64)      pu(total)
+        ps(" quasigroups=" as u64)  pu(nq)
+        ps(" associative=" as u64)  pu(na)
+        ps(" NON-associative=" as u64)   pu(nn)
+        putchar(10i32)
+        if hit == 1u8 {
+            AP_N = n   AP_IDX = hidx
+            AP_CT = total   AP_CQ = nq   AP_CA = na   AP_CN = nn
+            return 0u64
+        }
+        n = n + 1i64
+    }
+    return 1u64
+}
+
+/* copy the selected table + synthesize the divisions (uniqueness VERIFIED --
+ * a non-unique solution refuses the press) + find the lex-first witness.
+ * Returns 0 ok | 1 division synthesis violated | 2 no witness (not non-assoc). */
+fn ap_synthesize() -> u64 {
+    let n : i64 = AP_N
+    xo_load(n, AP_IDX)
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = 0i64
+        while y < n {
+            AP_OP[((x * n) + y) as u64] = xo_get(x, y)
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    /* ld[a][b]: the unique z with op(a,z) = b ; rd[a][b]: unique z, op(z,b) = a */
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            let mut zl : i64 = 0i64 - 1i64
+            let mut zr : i64 = 0i64 - 1i64
+            let mut nl : i64 = 0i64
+            let mut nr : i64 = 0i64
+            let mut z : i64 = 0i64
+            while z < n {
+                if AP_OP[((a * n) + z) as u64] == b { zl = z   nl = nl + 1i64 }
+                if AP_OP[((z * n) + b) as u64] == a { zr = z   nr = nr + 1i64 }
+                z = z + 1i64
+            }
+            if nl != 1i64 { return 1u64 }
+            if nr != 1i64 { return 1u64 }
+            AP_LD[((a * n) + b) as u64] = zl
+            AP_RD[((a * n) + b) as u64] = zr
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    /* lex-first violating triple over the PRESSED table (not the universe --
+     * the utterance must witness itself) */
+    a = 0i64
+    while a < n {
+        let mut b2 : i64 = 0i64
+        while b2 < n {
+            let mut c2 : i64 = 0i64
+            while c2 < n {
+                let l : i64 = AP_OP[((AP_OP[((a * n) + b2) as u64] * n) + c2) as u64]
+                let r : i64 = AP_OP[((a * n) + AP_OP[((b2 * n) + c2) as u64]) as u64]
+                if l != r {
+                    AP_WA = a   AP_WB = b2   AP_WC = c2
+                    return 0u64
+                }
+                c2 = c2 + 1i64
+            }
+            b2 = b2 + 1i64
+        }
+        a = a + 1i64
+    }
+    return 2u64
+}
+
+/* press one 16-cell-max table as a total fn body (guards + row lookups) */
+fn ap_emit_table_fn(name: u64, tbl: u64) -> i32 {
+    let n : i64 = AP_N
+    let t : *i64 = tbl as *i64
+    gl_put("fn " as u64)
+    gl_put(name)
+    gl_put("(x: i64, y: i64) -> i64 @export {\n" as u64)
+    gl_put("    if x < 0i64 { return 0i64 - 1i64 }\n" as u64)
+    gl_put("    if y < 0i64 { return 0i64 - 1i64 }\n" as u64)
+    gl_put("    if x >= " as u64)   gl_pd(n as u64)   gl_put("i64 { return 0i64 - 1i64 }\n" as u64)
+    gl_put("    if y >= " as u64)   gl_pd(n as u64)   gl_put("i64 { return 0i64 - 1i64 }\n" as u64)
+    gl_put("    let i : i64 = (x * " as u64)   gl_pd(n as u64)   gl_put("i64) + y\n" as u64)
+    let cells : i64 = n * n
+    let mut c : i64 = 0i64
+    while c < cells {
+        gl_put("    if i == " as u64)   gl_pd(c as u64)
+        gl_put("i64 { return " as u64)  gl_pd(t[c as u64] as u64)
+        gl_put("i64 }\n" as u64)
+        c = c + 1i64
+    }
+    gl_put("    return 0i64 - 1i64\n}\n" as u64)
+    return 0i32
+}
+
+fn ap_emit_u64_fn(name: u64, v: u64) -> i32 {
+    gl_put("fn " as u64)   gl_put(name)
+    gl_put("() -> u64 @export { return " as u64)
+    gl_pd(v)
+    gl_put("u64 }\n" as u64)
+    return 0i32
+}
+fn ap_emit_i64_fn(name: u64, v: i64) -> i32 {
+    gl_put("fn " as u64)   gl_put(name)
+    gl_put("() -> i64 @export { return " as u64)
+    gl_pd(v as u64)
+    gl_put("i64 }\n" as u64)
+    return 0i32
+}
+
+/* the organ's foldable portion -- ONE emitter, fold pass and write pass see
+ * the same bytes (the glossa discipline; set id = the artifact) */
+fn ap_emit_foldable() -> i32 {
+    gl_put("/* STDLIB/iii/aether/autophasis.iii -- THE SELF-UTTERANCE (GENERATED by\n" as u64)
+    gl_put(" * `iii-substrate autophasis`; edit NOTHING by hand -- regeneration is the only\n" as u64)
+    gl_put(" * lawful amendment road, and the standing arm pins the sealed id to the live\n" as u64)
+    gl_put(" * press).  The organ IS a discovery the machine made in the fair magma universe\n" as u64)
+    gl_put(" * (aether/xeno_ontogenesis) and pressed into its own language: the FIRST\n" as u64)
+    gl_put(" * non-associative quasigroup in fair order at the smallest populated carrier.\n" as u64)
+    gl_put(" * omega_ld/omega_rd are the reversal maneuver SYNTHESIZED from the table by\n" as u64)
+    gl_put(" * the press (unique-solution verified); omega_wa/wb/wc is the lex-first\n" as u64)
+    gl_put(" * associativity violation (the organ owns its falsifiable claim); omega_census_*\n" as u64)
+    gl_put(" * are the fairness dispositions.  Gate 2763 re-derives EVERYTHING each run.\n" as u64)
+    gl_put(" * Grade: SOVEREIGN/MEASURED (n=3 Latin squares are human-charted; the\n" as u64)
+    gl_put(" * capability -- discovery -> native organ, no human reformat -- is the point).\n" as u64)
+    gl_put(" * Hexad: kind_essence.  Ring: R0.  NIH: pure integer forms, zero deps. */\n" as u64)
+    gl_put("module autophasis\n\n" as u64)
+    ap_emit_i64_fn("omega_n" as u64, AP_N)
+    ap_emit_u64_fn("omega_idx" as u64, AP_IDX)
+    ap_emit_table_fn("omega_op" as u64, (&AP_OP) as u64)
+    ap_emit_table_fn("omega_ld" as u64, (&AP_LD) as u64)
+    ap_emit_table_fn("omega_rd" as u64, (&AP_RD) as u64)
+    ap_emit_i64_fn("omega_wa" as u64, AP_WA)
+    ap_emit_i64_fn("omega_wb" as u64, AP_WB)
+    ap_emit_i64_fn("omega_wc" as u64, AP_WC)
+    ap_emit_u64_fn("omega_census_tables" as u64, AP_CT)
+    ap_emit_u64_fn("omega_census_qg" as u64, AP_CQ)
+    ap_emit_u64_fn("omega_census_assoc" as u64, AP_CA)
+    ap_emit_u64_fn("omega_census_nonassoc" as u64, AP_CN)
+    return 0i32
+}
+
+fn cmd_autophasis(odir: u64) -> u64 {
+    ps("== THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ ==\n" as u64)
+    ps("criterion (pre-stated): first NON-associative quasigroup, fair order, smallest carrier (n <= 3)\n" as u64)
+    if ap_hunt() != 0u64 {
+        ps("AUTOPHASIS: jurisdiction empty (no non-associative quasigroup at n <= 3) -- named refusal\n" as u64)
+        return 5u64
+    }
+    let syn : u64 = ap_synthesize()
+    if syn == 1u64 {
+        ps("AUTOPHASIS: division synthesis violated uniqueness -- press REFUSED (quasigroup law broken)\n" as u64)
+        return 7u64
+    }
+    if syn == 2u64 {
+        ps("AUTOPHASIS: no associativity witness in the selected table -- press REFUSED (selection broken)\n" as u64)
+        return 7u64
+    }
+    /* fold pass: the set id IS the artifact bytes */
+    GL_MODE = 1u64
+    GL_FNV = 14695981039346656037u64
+    ap_emit_foldable()
+    let sid : u64 = GL_FNV
+    GL_MODE = 0u64
+    /* write pass: foldable + the id tail (id OUTSIDE the fold -- no circularity) */
+    GL_H = fopen(gl_path(odir, "autophasis.iii" as u64), ("wb" as u64))
+    if GL_H == 0u64 { ps("AUTOPHASIS: cannot open autophasis.iii\n" as u64)   return 2u64 }
+    ap_emit_foldable()
+    gl_put("fn autophasis_set_id() -> u64 @export { return " as u64)
+    gl_pd(sid)
+    gl_put("u64 }\n" as u64)
+    fclose(GL_H)
+    ps("UTTERED: carrier=" as u64)   pd(AP_N)
+    ps(" fair-index=" as u64)        pu(AP_IDX)
+    ps(" witness=(" as u64)          pd(AP_WA)
+    ps("," as u64)                   pd(AP_WB)
+    ps("," as u64)                   pd(AP_WC)
+    ps(")\n" as u64)
+    ps("AUTOPHASIS-SET id=" as u64)  pu(sid)
+    ps(" carrier=" as u64)           pd(AP_N)
+    ps(" index=" as u64)             pu(AP_IDX)
+    putchar(10i32)
+    return 0u64
+}
+
+/* =====================================================================
+ * THE SYNAPSE DEMO -- the constitution-pinned wire over REAL sockets.
+ *
+ *   iii-substrate synapse [port]
+ *
+ * The protocol organ (aether/synapse) is R0-pure; THIS command is its
+ * transport composition: capability-minted loopback TCP (aether/net,
+ * ring R-1), one process playing both endpoints in strict ping-pong.
+ * What travels the wire are REAL frames through the OS:
+ *   [1] HELLO both ways -- each side verifies the other IS the same
+ *       being (same sealed NOMOS + GLOSSA + AUTOPHASIS, same root).
+ *   [2] ASK kind 1 (GLOSSA): the server answers by SPEAKING the minted
+ *       word; the client CROSS-DERIVES by speaking the same word
+ *       locally -- truth never rests on delivery.
+ *   [3] ASK kind 2 (AUTOPHASIS): the pressed discovery's op + division
+ *       laws served and cross-checked against the local organ.
+ *   [4] a payload byte flipped AFTER sealing -- the server's frame gate
+ *       must refuse it (a different, unasked message).
+ * Exit 0 all green | 2 net setup | 3 handshake | 4 obligation | 5 teeth.
+ * ==================================================================== */
+var SN_ADDR : [u8; 16]
+var SN_A    : [u8; 160]     /* client-side frame  */
+var SN_B    : [u8; 160]     /* server-side frame  */
+var SN_ARGS : [u64; 3]
+
+/* recv one whole frame (68-byte header first, then the claimed payload).
+ * Ping-pong discipline means no coalescing; still loop for partial reads.
+ * Returns total frame length, 0 on error/overflow. */
+fn sn_recv_frame(h: u64, buf: u64) -> u32 {
+    let mut got : u64 = 0u64
+    while got < 68u64 {
+        let r : i32 = net_tcp_recv(h, buf + got, 160u64 - got)
+        if r <= 0i32 { return 0u32 }
+        got = got + (r as u64)
+    }
+    let plen : u32 = babel_wire_unpack_payload_len(buf)
+    let need : u64 = 68u64 + (plen as u64)
+    if need > 160u64 { return 0u32 }
+    while got < need {
+        let r2 : i32 = net_tcp_recv(h, buf + got, 160u64 - got)
+        if r2 <= 0i32 { return 0u32 }
+        got = got + (r2 as u64)
+    }
+    return need as u32
+}
+
+fn cmd_synapse(port: u64) -> u64 {
+    ps("== THE SYNAPSE: constitution-pinned wire over real loopback sockets ==\n" as u64)
+    /* capability mint: DIAL|LISTEN, no expiry */
+    let root_cap : u64 = cap_env_init()
+    let net_cap : u64 = cap_attenuate(root_cap, 96u64, 0u64)
+    if net_cap == 0u64 { ps("SYNAPSE: capability mint failed\n" as u64)   return 2u64 }
+    net_pack_sockaddr_ipv4((&SN_ADDR) as u64, 2130706433u32, (port & 65535u64) as u32)
+    let lh : u64 = net_tcp_listen_ipv4(net_cap, (&SN_ADDR) as u64, 16u32)
+    if lh == 0u64 { ps("SYNAPSE: listen failed (port busy?)\n" as u64)   return 2u64 }
+    let ch : u64 = net_tcp_connect_ipv4(net_cap, (&SN_ADDR) as u64, 16u32)
+    if ch == 0u64 { ps("SYNAPSE: connect failed\n" as u64)   net_close(lh)   return 2u64 }
+    let sh : u64 = net_tcp_accept(lh, net_cap)
+    if sh == 0u64 { ps("SYNAPSE: accept failed\n" as u64)   net_close(ch)   net_close(lh)   return 2u64 }
+    /* [1] HELLO client -> server */
+    let hl : u32 = synapse_hello_build((&SN_A) as u64)
+    if hl == 0u32 { ps("SYNAPSE: hello build REFUSED (self-model incoherent?)\n" as u64)   return 3u64 }
+    if net_tcp_send(ch, (&SN_A) as u64, hl as u64) != (hl as i32) { ps("SYNAPSE: send failed\n" as u64)   return 2u64 }
+    let rl : u32 = sn_recv_frame(sh, (&SN_B) as u64)
+    if rl == 0u32 { ps("SYNAPSE: recv failed\n" as u64)   return 2u64 }
+    let hv : i32 = synapse_hello_verify((&SN_B) as u64, rl)
+    if hv != 0i32 { ps("SYNAPSE: server refused the hello (code " as u64)   pd(hv as i64)   ps(")\n" as u64)   return 3u64 }
+    ps("HELLO client->server: CONCUR (same being, same sealed constitution)\n" as u64)
+    /* [1b] HELLO server -> client (mutual) */
+    let hl2 : u32 = synapse_hello_build((&SN_B) as u64)
+    if net_tcp_send(sh, (&SN_B) as u64, hl2 as u64) != (hl2 as i32) { ps("SYNAPSE: send failed\n" as u64)   return 2u64 }
+    let rl2 : u32 = sn_recv_frame(ch, (&SN_A) as u64)
+    if rl2 == 0u32 { ps("SYNAPSE: recv failed\n" as u64)   return 2u64 }
+    if synapse_hello_verify((&SN_A) as u64, rl2) != 0i32 { ps("SYNAPSE: client refused the hello\n" as u64)   return 3u64 }
+    ps("HELLO server->client: CONCUR (the handshake is mutual)\n" as u64)
+    /* [2] ASK kind 1: popcnt64 over the wire, cross-derived locally */
+    let xval : u64 = 16045690984833335023u64
+    SN_ARGS[0u64] = 5u64   SN_ARGS[1u64] = xval   SN_ARGS[2u64] = 0u64
+    let al : u32 = synapse_ask_build((&SN_A) as u64, 1u32, (&SN_ARGS) as u64, 424242u64)
+    if net_tcp_send(ch, (&SN_A) as u64, al as u64) != (al as i32) { return 2u64 }
+    let arl : u32 = sn_recv_frame(sh, (&SN_B) as u64)
+    let vl : u32 = synapse_serve((&SN_B) as u64, arl, (&SN_B) as u64)
+    if vl == 0u32 { ps("SYNAPSE: serve refused a lawful ask\n" as u64)   return 4u64 }
+    if net_tcp_send(sh, (&SN_B) as u64, vl as u64) != (vl as i32) { return 2u64 }
+    let vrl : u32 = sn_recv_frame(ch, (&SN_A) as u64)
+    if synapse_verdict_verify((&SN_A) as u64, vrl, 424242u64, 1u32) != 0i32 { ps("SYNAPSE: verdict refused\n" as u64)   return 4u64 }
+    let wire_pc : u64 = synapse_verdict_result((&SN_A) as u64)
+    let local_pc : u64 = popcnt64(xval)
+    if wire_pc != local_pc { ps("SYNAPSE: wire and local WORD disagree\n" as u64)   return 4u64 }
+    ps("ASK/VERDICT glossa: popcnt64 over the wire = " as u64)   pu(wire_pc)
+    ps(" == spoken locally (cross-derived)\n" as u64)
+    /* [3] ASK kind 2: the pressed discovery through the wire */
+    SN_ARGS[0u64] = 1u64   SN_ARGS[1u64] = 2u64   SN_ARGS[2u64] = 0u64
+    let al2 : u32 = synapse_ask_build((&SN_A) as u64, 2u32, (&SN_ARGS) as u64, 515151u64)
+    if net_tcp_send(ch, (&SN_A) as u64, al2 as u64) != (al2 as i32) { return 2u64 }
+    let arl2 : u32 = sn_recv_frame(sh, (&SN_B) as u64)
+    let vl2 : u32 = synapse_serve((&SN_B) as u64, arl2, (&SN_B) as u64)
+    if vl2 == 0u32 { ps("SYNAPSE: omega serve refused\n" as u64)   return 4u64 }
+    if net_tcp_send(sh, (&SN_B) as u64, vl2 as u64) != (vl2 as i32) { return 2u64 }
+    let vrl2 : u32 = sn_recv_frame(ch, (&SN_A) as u64)
+    if synapse_verdict_verify((&SN_A) as u64, vrl2, 515151u64, 2u32) != 0i32 { return 4u64 }
+    if synapse_verdict_ok((&SN_A) as u64) != 1u8 { ps("SYNAPSE: omega division laws failed remotely\n" as u64)   return 4u64 }
+    if synapse_verdict_result((&SN_A) as u64) != (omega_op(1i64, 2i64) as u64) { ps("SYNAPSE: omega wire/local disagree\n" as u64)   return 4u64 }
+    ps("ASK/VERDICT autophasis: omega_op(1,2) served + division laws held + cross-derived\n" as u64)
+    /* [4] TEETH: a flipped payload byte is a DIFFERENT message -- refused */
+    SN_ARGS[0u64] = 5u64   SN_ARGS[1u64] = 999u64   SN_ARGS[2u64] = 0u64
+    let al3 : u32 = synapse_ask_build((&SN_A) as u64, 1u32, (&SN_ARGS) as u64, 616161u64)
+    SN_A[69u64] = SN_A[69u64] ^ 255u8
+    if net_tcp_send(ch, (&SN_A) as u64, al3 as u64) != (al3 as i32) { return 2u64 }
+    let arl3 : u32 = sn_recv_frame(sh, (&SN_B) as u64)
+    if synapse_serve((&SN_B) as u64, arl3, (&SN_B) as u64) != 0u32 { ps("SYNAPSE: corrupted frame was SERVED\n" as u64)   return 5u64 }
+    ps("TEETH: corrupted ask arrived over the wire and was REFUSED (undeliverable content)\n" as u64)
+    net_close(ch)   net_close(sh)   net_close(lh)
+    ps("SYNAPSE GREEN: two endpoints proved the same being, obligations served in the minted tongue, truth cross-derived, corruption refused -- over real OS loopback\n" as u64)
     return 0u64
 }

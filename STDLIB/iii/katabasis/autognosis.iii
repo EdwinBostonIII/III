@@ -1,0 +1,68 @@
+/* STDLIB/iii/katabasis/autognosis.iii -- THE SELF-KNOWLEDGE: III knows, at the
+ * base level, WHAT LAW IT RUNS UNDER -- and refuses to name itself when its own
+ * seats disagree.
+ *
+ * The katabasis descent so far judges admissions (isa_admit), rewrite-law
+ * consent (nomos_consent chamber I), and vocabulary consent (chamber II).
+ * This organ is the floor those verdicts stand on: the machine's CONSTITUTION
+ * as a linkable fact.  Three sealed identities exist in the tree today, each
+ * machine-minted and parliament- or gate-guarded:
+ *
+ *   NOMOS      cgphys_set_id()      the compiler's rewrite constitution
+ *   GLOSSA     cgglossa_set_id()    the language's vocabulary (lexicon seat)
+ *              glossa_set_id()      ... and the tongue seat of the SAME law
+ *   AUTOPHASIS autophasis_set_id()  the machine's first pressed discovery
+ *
+ * autognosis_root() folds them into ONE u64 -- THE CONSTITUTION ROOT, the name
+ * of this III's total sealed law-state.  THE COHERENCE LAW: GLOSSA is one law
+ * with two seats (lexicon + tongue); if the seats disagree the machine's
+ * self-model is BROKEN, and the root is REFUSED (0) rather than computed over
+ * a lie.  Every consumer inherits the refusal: an incoherent III cannot build
+ * a synapse HELLO, cannot pin an attestation, cannot claim to be anything.
+ *
+ * Nothing here is stored: every id is read from its sealed seat at link time,
+ * so the root is exactly as live as the law itself.  NIH: pure composition of
+ * sealed seats.  Hexad: kind_essence.  Ring: R0. */
+module katabasis_autognosis
+
+extern @abi(c-msvc-x64) fn cgphys_set_id() -> u64 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_set_id() -> u64 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn glossa_set_id() -> u64 from "glossa.iii"
+extern @abi(c-msvc-x64) fn autophasis_set_id() -> u64 from "autophasis.iii"
+
+fn autognosis_nomos_id() -> u64 @export { return cgphys_set_id() }
+fn autognosis_glossa_id() -> u64 @export { return cgglossa_set_id() }
+fn autognosis_autophasis_id() -> u64 @export { return autophasis_set_id() }
+
+/* the GLOSSA coherence law: lexicon seat == tongue seat, or the self-model
+ * is broken (1 coherent | 0 broken) */
+fn autognosis_coherent() -> u32 @export {
+    if cgglossa_set_id() != glossa_set_id() { return 0u32 }
+    if cgglossa_set_id() == 0u64 { return 0u32 }
+    if cgphys_set_id() == 0u64 { return 0u32 }
+    if autophasis_set_id() == 0u64 { return 0u32 }
+    return 1u32
+}
+
+/* THE CONSTITUTION ROOT: FNV-1a fold of the sealed ids in constitutional
+ * order (NOMOS, GLOSSA, AUTOPHASIS -- law before language before speech).
+ * REFUSED (0) when the self-model is incoherent. */
+fn autognosis_root() -> u64 @export {
+    if autognosis_coherent() != 1u32 { return 0u64 }
+    let mut h : u64 = 14695981039346656037u64
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        let mut v : u64 = 0u64
+        if k == 0u64 { v = cgphys_set_id() }
+        if k == 1u64 { v = cgglossa_set_id() }
+        if k == 2u64 { v = autophasis_set_id() }
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            h = (h ^ ((v >> (b * 8u64)) & 255u64)) * 1099511628211u64
+            b = b + 1u64
+        }
+        k = k + 1u64
+    }
+    if h == 0u64 { h = 1u64 }
+    return h
+}

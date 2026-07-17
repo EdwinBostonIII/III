@@ -1,0 +1,304 @@
+/* STDLIB/corpus/2764_synapse.iii -- Ξ-ΣΥΝ THE SYNAPSE GATE: the constitution-
+ * pinned wire protocol, every law re-derived in-process, stored-answer-free.
+ *
+ * No sockets here (the protocol organ is R0-pure; transport is the tool's
+ * composition) -- which is exactly what makes every rule PROVABLE: this gate
+ * builds real frames, walks the whole refusal order with named codes, serves
+ * real proof obligations, and cross-checks every wire answer against its OWN
+ * independent engines (bit-loop evaluators for the GLOSSA words; the direct
+ * organ road for AUTOPHASIS).  Foreign constitutions are hand-forged and must
+ * be refused BY NAME.  Nothing is stored: the constitution ids come from the
+ * sealed seats at link time, the fold is re-derived here, the battery is
+ * generated, the evaluators are independent code.
+ *
+ * ARMS: SELF 10 | HELLO 11 | FOREIGN 12 | CONTENT 13 | CRC 14 | SEAL 15
+ *     | SHORT 16 | GLOSSA-WIRE 17 | AUTOPHASIS-WIRE 18 | NONCE 19
+ *     | REFUSALS 20 | FACET 21 | exit 99 green. */
+module corpus_d2764
+
+extern @abi(c-msvc-x64) fn synapse_hello_build(buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_hello_verify(in_buf: u64, in_len: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_ask_build(buf: u64, kind: u32, args_ptr: u64, nonce: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_serve(in_buf: u64, in_len: u32, out_buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_verify(in_buf: u64, in_len: u32, nonce: u64, kind: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_result(in_buf: u64) -> u64 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_ok(in_buf: u64) -> u8 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_frame_gate(in_buf: u64, in_len: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_seal_const() -> u64 from "synapse.iii"
+
+extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_glossa_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_autophasis_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_coherent() -> u32 from "autognosis.iii"
+
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+
+extern @abi(c-msvc-x64) fn omega_n() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_content_id(in_buf: u64, out_ptr: u64) -> i32 from "babel_wire.iii"
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+
+/* ---- the INDEPENDENT third engines (bit loops, deliberately naive) ---- */
+fn g_pc(v: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut s : u64 = 0u64
+    while s < 64u64 { c = c + ((v >> s) & 1u64)   s = s + 1u64 }
+    return c
+}
+fn g_lz(v: u64) -> u64 {
+    let mut s : i64 = 63i64
+    let mut c : u64 = 0u64
+    while s >= 0i64 {
+        if ((v >> (s as u64)) & 1u64) == 1u64 { return c }
+        c = c + 1u64
+        s = s - 1i64
+    }
+    return 64u64
+}
+fn g_tz(v: u64) -> u64 {
+    let mut s : u64 = 0u64
+    while s < 64u64 {
+        if ((v >> s) & 1u64) == 1u64 { return s }
+        s = s + 1u64
+    }
+    return 64u64
+}
+fn g_low(v: u64) -> u64 {
+    let mut s : u64 = 0u64
+    while s < 64u64 {
+        if ((v >> s) & 1u64) == 1u64 { return 1u64 << s }
+        s = s + 1u64
+    }
+    return 0u64
+}
+fn g_blsmsk(v: u64) -> u64 {
+    if v == 0u64 { return 18446744073709551615u64 }
+    let t : u64 = g_tz(v)
+    if t == 63u64 { return 18446744073709551615u64 }
+    return (1u64 << (t + 1u64)) - 1u64
+}
+fn g_blsr(v: u64) -> u64 {
+    if v == 0u64 { return 0u64 }
+    return v - g_low(v)
+}
+fn g_andn(a: u64, b: u64) -> u64 {
+    let mut r : u64 = 0u64
+    let mut s : u64 = 0u64
+    while s < 64u64 {
+        if ((a >> s) & 1u64) == 0u64 { if ((b >> s) & 1u64) == 1u64 { r = r | (1u64 << s) } }
+        s = s + 1u64
+    }
+    return r
+}
+fn g_word(w: u64, b: u64, c: u64) -> u64 {
+    if w == 0u64 { return g_andn(b, c) }
+    if w == 1u64 { return g_low(b) }
+    if w == 2u64 { return g_blsmsk(b) }
+    if w == 3u64 { return g_blsr(b) }
+    if w == 4u64 { return g_lz(b) }
+    if w == 5u64 { return g_pc(b) }
+    if w == 6u64 { return g_tz(b) }
+    return 0u64
+}
+
+fn bat(k: u64) -> u64 {
+    if k == 0u64 { return 0u64 }
+    if k == 1u64 { return 1u64 }
+    if k == 2u64 { return 2u64 }
+    if k == 3u64 { return 18446744073709551615u64 }
+    if k == 4u64 { return 9223372036854775808u64 }
+    if k == 5u64 { return 12297829382473034410u64 }
+    if k == 6u64 { return 6148914691236517205u64 }
+    if k == 7u64 { return 4294967295u64 }
+    if k == 8u64 { return 18446744069414584320u64 }
+    if k == 9u64 { return 81985529216486895u64 }
+    if k == 10u64 { return 16045690984833335023u64 }
+    if k == 11u64 { return 9223372036854775809u64 }
+    if k == 12u64 { return 9223372036854775807u64 }
+    return 0u64
+}
+
+var HB  : [u8; 160]        /* hello / forged frames  */
+var AB  : [u8; 160]        /* ask frames             */
+var VB  : [u8; 160]        /* verdict frames         */
+var PAY : [u8; 64]
+var DIG : [u8; 32]
+var ARGS : [u64; 3]
+
+fn pay_w64(off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        PAY[off + i] = ((v >> (i * 8u64)) & 255u64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* forge a HELLO with arbitrary ids + claimed root (the foreign-constitution
+ * press: structurally VALID, constitutionally alien) */
+fn forge_hello(n_id: u64, g_id: u64, a_id: u64, root: u64) -> u32 {
+    babel_wire_init((&HB) as u64)
+    babel_wire_set_seal_id((&HB) as u64, synapse_seal_const())
+    babel_wire_set_facet((&HB) as u64, 1u8)
+    babel_wire_set_intent_id((&HB) as u64, root)
+    pay_w64(0u64, n_id)
+    pay_w64(8u64, g_id)
+    pay_w64(16u64, a_id)
+    babel_wire_set_payload((&HB) as u64, (&PAY) as u64, 24u32)
+    babel_wire_content_id((&HB) as u64, (&DIG) as u64)
+    babel_wire_set_ctx_digest((&HB) as u64, (&DIG) as u64)
+    return babel_wire_finalize((&HB) as u64)
+}
+
+fn fold3(a: u64, b: u64, c: u64) -> u64 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        let mut v : u64 = 0u64
+        if k == 0u64 { v = a }
+        if k == 1u64 { v = b }
+        if k == 2u64 { v = c }
+        let mut i : u64 = 0u64
+        while i < 8u64 {
+            h = (h ^ ((v >> (i * 8u64)) & 255u64)) * 1099511628211u64
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+    if h == 0u64 { h = 1u64 }
+    return h
+}
+
+fn main() -> i32 {
+    /* [SELF] the self-model is coherent and the root is the independent fold */
+    if autognosis_coherent() != 1u32 { ps("RED SELF: incoherent\n" as u64)   return 10i32 }
+    let root : u64 = autognosis_root()
+    if root == 0u64 { ps("RED SELF: no root\n" as u64)   return 10i32 }
+    let ni : u64 = autognosis_nomos_id()
+    let gi : u64 = autognosis_glossa_id()
+    let ai : u64 = autognosis_autophasis_id()
+    if root != fold3(ni, gi, ai) { ps("RED SELF: root != independent fold\n" as u64)   return 10i32 }
+    /* [HELLO] build -> verify CONCUR */
+    let hlen : u32 = synapse_hello_build((&HB) as u64)
+    if hlen == 0u32 { ps("RED HELLO: build refused\n" as u64)   return 11i32 }
+    if synapse_hello_verify((&HB) as u64, hlen) != 0i32 { ps("RED HELLO: self-concur failed\n" as u64)   return 11i32 }
+    /* [FOREIGN] each perturbed id refused BY NAME; a lying root refused */
+    let f1 : u32 = forge_hello(ni + 1u64, gi, ai, fold3(ni + 1u64, gi, ai))
+    if synapse_hello_verify((&HB) as u64, f1) != (0i32 - 8i32) { ps("RED FOREIGN: nomos\n" as u64)   return 12i32 }
+    let f2 : u32 = forge_hello(ni, gi + 1u64, ai, fold3(ni, gi + 1u64, ai))
+    if synapse_hello_verify((&HB) as u64, f2) != (0i32 - 9i32) { ps("RED FOREIGN: glossa\n" as u64)   return 12i32 }
+    let f3 : u32 = forge_hello(ni, gi, ai + 1u64, fold3(ni, gi, ai + 1u64))
+    if synapse_hello_verify((&HB) as u64, f3) != (0i32 - 10i32) { ps("RED FOREIGN: autophasis\n" as u64)   return 12i32 }
+    let f4 : u32 = forge_hello(ni, gi, ai, root + 1u64)
+    if synapse_hello_verify((&HB) as u64, f4) != (0i32 - 11i32) { ps("RED FOREIGN: root lie\n" as u64)   return 12i32 }
+    /* [CONTENT] rebuild the honest hello; flip a payload byte AFTER sealing:
+     * the frame becomes a DIFFERENT message -- undeliverable, code -5 */
+    let h2 : u32 = synapse_hello_build((&HB) as u64)
+    if h2 == 0u32 { ps("RED CONTENT: rebuild\n" as u64)   return 13i32 }
+    HB[70u64] = HB[70u64] ^ 255u8
+    if synapse_frame_gate((&HB) as u64, h2) != (0i32 - 5i32) { ps("RED CONTENT: not refused\n" as u64)   return 13i32 }
+    HB[70u64] = HB[70u64] ^ 255u8
+    if synapse_frame_gate((&HB) as u64, h2) != 0i32 { ps("RED CONTENT: restore failed\n" as u64)   return 13i32 }
+    /* [CRC] flip a header byte inside the CRC domain */
+    HB[5u64] = HB[5u64] ^ 255u8
+    if synapse_frame_gate((&HB) as u64, h2) != (0i32 - 3i32) { ps("RED CRC: not refused\n" as u64)   return 14i32 }
+    HB[5u64] = HB[5u64] ^ 255u8
+    /* [SEAL] an alien protocol seal is refused before anything else is read */
+    babel_wire_init((&AB) as u64)
+    babel_wire_set_seal_id((&AB) as u64, 1234567u64)
+    babel_wire_set_facet((&AB) as u64, 1u8)
+    babel_wire_set_payload((&AB) as u64, (&PAY) as u64, 4u32)
+    babel_wire_content_id((&AB) as u64, (&DIG) as u64)
+    babel_wire_set_ctx_digest((&AB) as u64, (&DIG) as u64)
+    let alen : u32 = babel_wire_finalize((&AB) as u64)
+    if synapse_frame_gate((&AB) as u64, alen) != (0i32 - 4i32) { ps("RED SEAL\n" as u64)   return 15i32 }
+    /* [SHORT] a truncated frame is structurally refused */
+    if synapse_frame_gate((&HB) as u64, 40u32) != (0i32 - 2i32) { ps("RED SHORT\n" as u64)   return 16i32 }
+    /* [FACET] a verdict-verifier fed a hello is a kind refusal */
+    if synapse_verdict_verify((&HB) as u64, h2, root, 1u32) != (0i32 - 6i32) { ps("RED FACET\n" as u64)   return 21i32 }
+    /* [GLOSSA-WIRE] every word, battery + LCG mixed points: ask -> serve ->
+     * verdict, wire result == the gate's own bit-loop engine */
+    let nw : u64 = cgglossa_nwords() as u64
+    if nw != 7u64 { ps("RED GLOSSA-WIRE: lexicon width\n" as u64)   return 17i32 }
+    let mut w : u64 = 0u64
+    let mut nonce : u64 = 88172645463325252u64
+    while w < nw {
+        let mut k : u64 = 0u64
+        while k < 26u64 {
+            let mut b : u64 = 0u64
+            let mut c : u64 = 0u64
+            if k < 13u64 { b = bat(k)   c = bat(12u64 - k) } else {
+                nonce = (nonce ^ (nonce >> 30u64)) * 13787848793156543929u64
+                nonce = (nonce ^ (nonce >> 27u64)) * 10723151780598845931u64
+                b = nonce ^ (nonce >> 31u64)
+                nonce = nonce + 1442695040888963407u64
+                c = nonce
+            }
+            ARGS[0u64] = w   ARGS[1u64] = b   ARGS[2u64] = c
+            let al : u32 = synapse_ask_build((&AB) as u64, 1u32, (&ARGS) as u64, nonce)
+            if al == 0u32 { ps("RED GLOSSA-WIRE: ask build\n" as u64)   return 17i32 }
+            let vl : u32 = synapse_serve((&AB) as u64, al, (&VB) as u64)
+            if vl == 0u32 { ps("RED GLOSSA-WIRE: serve refused\n" as u64)   return 17i32 }
+            if synapse_verdict_verify((&VB) as u64, vl, nonce, 1u32) != 0i32 { ps("RED GLOSSA-WIRE: verdict verify\n" as u64)   return 17i32 }
+            if synapse_verdict_ok((&VB) as u64) != 1u8 { ps("RED GLOSSA-WIRE: not ok\n" as u64)   return 17i32 }
+            if synapse_verdict_result((&VB) as u64) != g_word(w, b, c) { ps("RED GLOSSA-WIRE: engines disagree\n" as u64)   return 17i32 }
+            k = k + 1u64
+        }
+        w = w + 1u64
+    }
+    /* [AUTOPHASIS-WIRE] every pair in the pressed carrier through the wire */
+    let n : i64 = omega_n()
+    let mut a2 : i64 = 0i64
+    while a2 < n {
+        let mut b2 : i64 = 0i64
+        while b2 < n {
+            ARGS[0u64] = a2 as u64   ARGS[1u64] = b2 as u64   ARGS[2u64] = 0u64
+            let al2 : u32 = synapse_ask_build((&AB) as u64, 2u32, (&ARGS) as u64, 777u64)
+            if al2 == 0u32 { ps("RED AUTOPHASIS-WIRE: ask build\n" as u64)   return 18i32 }
+            let vl2 : u32 = synapse_serve((&AB) as u64, al2, (&VB) as u64)
+            if vl2 == 0u32 { ps("RED AUTOPHASIS-WIRE: serve refused\n" as u64)   return 18i32 }
+            if synapse_verdict_verify((&VB) as u64, vl2, 777u64, 2u32) != 0i32 { ps("RED AUTOPHASIS-WIRE: verdict\n" as u64)   return 18i32 }
+            if synapse_verdict_ok((&VB) as u64) != 1u8 { ps("RED AUTOPHASIS-WIRE: division laws\n" as u64)   return 18i32 }
+            if synapse_verdict_result((&VB) as u64) != (omega_op(a2, b2) as u64) { ps("RED AUTOPHASIS-WIRE: result\n" as u64)   return 18i32 }
+            b2 = b2 + 1i64
+        }
+        a2 = a2 + 1i64
+    }
+    /* [NONCE] the last verdict does not answer a different nonce */
+    let vlast : u32 = 68u32 + 37u32
+    if synapse_verdict_verify((&VB) as u64, vlast, 778u64, 2u32) != (0i32 - 12i32) { ps("RED NONCE\n" as u64)   return 19i32 }
+    /* [REFUSALS] unknown kind refused at build; OOB word + OOB carrier refused
+     * at serve; corrupted ask refused at serve */
+    ARGS[0u64] = 0u64   ARGS[1u64] = 0u64   ARGS[2u64] = 0u64
+    if synapse_ask_build((&AB) as u64, 3u32, (&ARGS) as u64, 1u64) != 0u32 { ps("RED REFUSALS: kind 3 built\n" as u64)   return 20i32 }
+    ARGS[0u64] = nw
+    let alx : u32 = synapse_ask_build((&AB) as u64, 1u32, (&ARGS) as u64, 1u64)
+    if alx == 0u32 { ps("RED REFUSALS: bounds ask build\n" as u64)   return 20i32 }
+    if synapse_serve((&AB) as u64, alx, (&VB) as u64) != 0u32 { ps("RED REFUSALS: OOB word served\n" as u64)   return 20i32 }
+    ARGS[0u64] = n as u64   ARGS[1u64] = 0u64
+    let aly : u32 = synapse_ask_build((&AB) as u64, 2u32, (&ARGS) as u64, 1u64)
+    if synapse_serve((&AB) as u64, aly, (&VB) as u64) != 0u32 { ps("RED REFUSALS: OOB carrier served\n" as u64)   return 20i32 }
+    ARGS[0u64] = 5u64   ARGS[1u64] = 12345u64
+    let alz : u32 = synapse_ask_build((&AB) as u64, 1u32, (&ARGS) as u64, 1u64)
+    AB[69u64] = AB[69u64] ^ 255u8
+    if synapse_serve((&AB) as u64, alz, (&VB) as u64) != 0u32 { ps("RED REFUSALS: corrupted ask served\n" as u64)   return 20i32 }
+    ps("SYNAPSE GREEN: constitution-pinned wire -- self-fold, hello concur, 4 foreign refusals BY NAME, content/crc/seal/short/facet refusals, 7 words x 26 points wire==third-engine, omega pairs wire==organ, nonce binding, 4 serve refusals\n" as u64)
+    return 99i32
+}

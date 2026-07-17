@@ -1,4 +1,0 @@
-/* 1042 — zkf_fexp_selftest: BLS12-381 final exponentiation. Closes a gating gap (selftest existed, ungated). */
-module corpus_1042
-extern @abi(c-msvc-x64) fn zkf_fexp_selftest() -> u64 from "zk_field.iii"
-fn main() -> u64 { return zkf_fexp_selftest() }

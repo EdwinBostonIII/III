@@ -1,4 +1,0 @@
-/* 1035 — zkf_fp_selftest: BLS12-381 base field Fp arithmetic. Closes a gating gap (selftest existed, ungated). */
-module corpus_1035
-extern @abi(c-msvc-x64) fn zkf_fp_selftest() -> u64 from "zk_field.iii"
-fn main() -> u64 { return zkf_fp_selftest() }

@@ -1,4 +1,0 @@
-/* 1036 — zkf_fp2_selftest: BLS12-381 quadratic-extension Fp2. Closes a gating gap (selftest existed, ungated). */
-module corpus_1036
-extern @abi(c-msvc-x64) fn zkf_fp2_selftest() -> u64 from "zk_field.iii"
-fn main() -> u64 { return zkf_fp2_selftest() }

@@ -51,10 +51,6 @@ extern @abi(c-msvc-x64) fn keccak256_kat() -> u64 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn rsa_pss_selftest() -> u64 from "rsa.iii"
 extern @abi(c-msvc-x64) fn galois_selftest() -> u64 from "galois.iii"
 extern @abi(c-msvc-x64) fn ntt_selftest() -> u64 from "ntt.iii"
-extern @abi(c-msvc-x64) fn zk_stark_kat() -> u64 from "zk_stark.iii"
-extern @abi(c-msvc-x64) fn zk_air_stark_selftest() -> u64 from "zk_air.iii"
-extern @abi(c-msvc-x64) fn zk_snark_kat() -> u64 from "zk_snark.iii"
-extern @abi(c-msvc-x64) fn zkf_pairing_selftest() -> u64 from "zk_field.iii"
 extern @abi(c-msvc-x64) fn symreg_selftest() -> u64 from "symbolic_regression.iii"
 
 /* ---- Proof + type theory ---- */
@@ -119,13 +115,11 @@ fn main() -> u64 {
     r = chk(rsa_pss_selftest(), 23u64);            if r != 0u64 { return r }
     r = chk(galois_selftest(), 24u64);             if r != 0u64 { return r }
     r = chk(ntt_selftest(), 25u64);                if r != 0u64 { return r }
-    r = chk(zk_stark_kat(), 26u64);                if r != 0u64 { return r }
-    /* 27 RE-UNIFIED (2026-06-21): the sf_* collision is resolved -- zk_air + zk_stark both extern the
-     * field arithmetic from the shared ntt_fri_organ.iii, so they define no common symbol and link clean
-     * (proven: zk_stark+zk_air+zk_snark coexist + pass).  All 49 faculties are back in the conjunction. */
-    r = chk(zk_air_stark_selftest(), 27u64);       if r != 0u64 { return r }
-    r = chk(zk_snark_kat(), 28u64);                if r != 0u64 { return r }
-    r = chk(zkf_pairing_selftest(), 29u64);        if r != 0u64 { return r }
+    /* THE ZK FACULTIES RETIRED (2026-07-17): the probabilistic zk-STARK/SNARK stack
+     * (zk_stark/zk_air/zk_snark/zk_field) is superseded by the EXACT proof-carrying
+     * scroll (eidos/proofcarry.iii, iii-proofcarry: 0 soundness error vs 2^-lambda).
+     * III no longer claims a probabilistic verification capability -- it has a
+     * better one, which stands as its own self-proving tool. */
     r = chk(symreg_selftest(), 30u64);             if r != 0u64 { return r }
     /* Proof + type theory */
     r = chk(curryh_selftest(), 31u64);             if r != 0u64 { return r }

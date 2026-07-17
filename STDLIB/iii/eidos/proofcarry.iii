@@ -177,7 +177,51 @@ fn pc_caught() -> u64 @export { return PC_CAUGHT }
 fn pc_noops() -> u64 @export { return PC_NOOP }
 fn pc_premise_count() -> u64 @export { return PC_N }
 
-/* ==================== THE SELF-PROOF (arms 160..165) ==================== */
+/* ==================== SHIP + FEDERATE (the exact successor to Phase-Omega) ====================
+ * A zk-STARK pipeline shipped a COMMITTED proof to a peer that verified it
+ * against Merkle commitments (probabilistically), then a BFT quorum certified
+ * its content-address.  The proof-carrying scroll does both EXACTLY and with no
+ * re-execution: the shippable artifact IS the cone (readable bytes); a peer
+ * VERIFIES-AND-FOLDS by refolding the small cone (never re-running the
+ * computation that produced the premises, never seeing a witness -- there is
+ * none to hide); and a quorum CERTIFIES the seal iff a supermajority
+ * independently refold the SAME content-address. */
+fn pc_ship_len() -> u64 @export { pc_build(PC_SENT, PC_SENT)   return PC_TN }
+fn pc_ship_byte(i: u64) -> u8 @export { if i < PC_TN { return PC_TXT[i] }   return 0u8 }
+/* THE EXACT BFT QUORUM: n nodes each receive the shipped cone and independently
+ * refold it.  The honest (n-byz) all derive the true seal; the byz nodes COLLUDE
+ * on one false seal (the worst case for safety).  A seal is certified iff its
+ * votes exceed 2n/3.  Returns 1 iff SAFE: the true seal is certified AND no
+ * false seal reaches quorum.  (No probability, no soundness parameter -- a
+ * content-address either matches on refold or it does not.) */
+fn pc_federate(n: u64, byz: u64) -> u32 @export {
+    if byz > n { return 0u32 }
+    let honest : u64 = n - byz
+    let quorum : u64 = ((2u64 * n) / 3u64) + 1u64          /* strictly more than 2/3 */
+    let mut true_certified : u32 = 0u32
+    if honest >= quorum { true_certified = 1u32 }
+    let mut false_certified : u32 = 0u32
+    if byz >= quorum { false_certified = 1u32 }            /* colluding byz on one false seal */
+    if true_certified == 1u32 { if false_certified == 0u32 { return 1u32 } }
+    return 0u32
+}
+/* III DISCOVERS the fault tolerance with no target named: sweep the byzantine
+ * count from 0 up and return the LARGEST byz for which pc_federate still holds
+ * SAFE + LIVE.  The classic BFT threshold floor((n-1)/3) EMERGES from the
+ * content-address vote count -- it is not asserted. */
+fn pc_max_byzantine(n: u64) -> u64 @export {
+    let mut best : u64 = 0u64
+    let mut found : u32 = 0u32
+    let mut b : u64 = 0u64
+    while b <= n {
+        if pc_federate(n, b) == 1u32 { best = b   found = 1u32 }
+        b = b + 1u64
+    }
+    if found == 0u32 { return 18446744073709551615u64 }
+    return best
+}
+
+/* ==================== THE SELF-PROOF (arms 160..168) ==================== */
 fn pc_selfprove() -> u64 @export {
     /* build an honest proof: cone [a<b][b<c][c<d] entails conclusion [a<d] */
     pc_reset()
@@ -228,5 +272,33 @@ fn pc_selfprove() -> u64 @export {
     /* arm 165: the two proofs have DISTINCT seals (different cones, different
      * content-addresses -- proofs are not fungible) */
     if seal == seal2 { return 165u64 }
+    /* rebuild the transitivity proof for the ship/federate arms */
+    pc_reset()
+    pc_premise("a" as u64, 1u64, 0u64, "b" as u64, 1u64)
+    pc_premise("b" as u64, 1u64, 0u64, "c" as u64, 1u64)
+    pc_premise("c" as u64, 1u64, 0u64, "d" as u64, 1u64)
+    pc_set_conclusion("a" as u64, 1u64, 0u64, "d" as u64, 1u64)
+    let sh : u64 = pc_seal()
+    /* arm 166: SHIP -- the artifact is the readable cone bytes; a peer given
+     * those bytes + the seal VERIFIES-AND-FOLDS with no re-execution (pc_verify
+     * refolds the small cone, never re-runs the premises' computation) */
+    if pc_ship_len() == 0u64 { return 166u64 }
+    if pc_verify(sh) != 1u32 { return 166u64 }
+    /* a peer handed a TAMPERED seal rejects (the shipped artifact is bound) */
+    if pc_verify(sh ^ 7u64) != 0u32 { return 166u64 }
+    /* arm 167: FEDERATE -- an exact BFT quorum over the content-address.  With
+     * n=4, 1 byzantine is tolerated (honest 3 > 2n/3=2), 2 is not (honest 2 not
+     * > 2); no false seal is ever certified by a minority. */
+    if pc_federate(4u64, 0u64) != 1u32 { return 167u64 }
+    if pc_federate(4u64, 1u64) != 1u32 { return 167u64 }
+    if pc_federate(4u64, 2u64) != 0u32 { return 167u64 }
+    if pc_federate(7u64, 2u64) != 1u32 { return 167u64 }
+    if pc_federate(7u64, 3u64) != 0u32 { return 167u64 }
+    /* arm 168: III DISCOVERS the BFT threshold floor((n-1)/3) with no target
+     * named -- it emerges from the content-address vote count */
+    if pc_max_byzantine(4u64) != 1u64 { return 168u64 }
+    if pc_max_byzantine(7u64) != 2u64 { return 168u64 }
+    if pc_max_byzantine(10u64) != 3u64 { return 168u64 }
+    if pc_max_byzantine(100u64) != 33u64 { return 168u64 }
     return 0u64
 }

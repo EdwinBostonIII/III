@@ -1,5 +1,0 @@
-/* Standalone proof of faculty #27 (general AIR-STARK), isolated from zk_stark to
- * avoid the duplicate-sf_* co-link collision the capstone surfaced. */
-module indep_zkair
-extern @abi(c-msvc-x64) fn zk_air_stark_selftest() -> u64 from "zk_air.iii"
-fn main() -> u64 { return zk_air_stark_selftest() }

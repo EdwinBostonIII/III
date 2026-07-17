@@ -1,9 +1,0 @@
-/* 1007_air_proof_seal.iii -- falsifier for the GENERAL STARK's real-proof content-address
- * seal (APOTHEOSIS C.3 item 5).  The multi-column AIR proof gets the SAME §S.6 identity
- * surface as the demo: deterministic re-seal, and tampering a trace-column root OR a boundary
- * opening changes the identity.  99 = pass. */
-module corpus_1007
-
-extern @abi(c-msvc-x64) fn air_proof_seal_kat() -> u64 from "zk_air.iii"
-
-fn main() -> u64 { return air_proof_seal_kat() }

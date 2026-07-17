@@ -1,5 +1,0 @@
-/* 377 — witness-chain pruning + rollup: preservation rules, chain consistency,
- * sidecar build (deterministic body), rollup-witness verify (accept/reject). */
-module corpus_377
-extern @abi(c-msvc-x64) fn zk_prune_kat_x() -> u64 from "zk_prune.iii"
-fn main() -> u64 { return zk_prune_kat_x() }

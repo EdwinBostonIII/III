@@ -75,7 +75,7 @@ for f in "$ROOT/STDLIB/sovir"/*.iii "$ROOT/STDLIB/sovtc"/*.iii; do
     # PROBE VEHICLES by tree convention: leading-underscore (_vprobe, _svir_ci_oob) OR a _probe suffix
     # (eidos_ripple_probe -> a cg_r3 driver returning a DIAGNOSTIC 0; zk_ext4_probe -> 200).  A probe
     # emits a diagnostic code, not the 99 gate convention, and is owned by its subsystem gate
-    # (run_eidos_svir.sh, run_zk.sh); scoring it against 99 is a category error.
+    # (run_eidos_svir.sh); scoring it against 99 is a category error.
     case "$name" in _*) continue;; esac
     case "$name" in *_probe) continue;; esac
     # *_w files are WAIST-SUBSET sources (the iiisv dialect: suffix-less literals, svir_putc builtin)

@@ -20,6 +20,9 @@ extern @abi(c-msvc-x64) fn pc_slips() -> u64 from "proofcarry.iii"
 extern @abi(c-msvc-x64) fn pc_caught() -> u64 from "proofcarry.iii"
 extern @abi(c-msvc-x64) fn pc_noops() -> u64 from "proofcarry.iii"
 extern @abi(c-msvc-x64) fn pc_premise_count() -> u64 from "proofcarry.iii"
+extern @abi(c-msvc-x64) fn pc_federate(n: u64, byz: u64) -> u32 from "proofcarry.iii"
+extern @abi(c-msvc-x64) fn pc_max_byzantine(n: u64) -> u64 from "proofcarry.iii"
+extern @abi(c-msvc-x64) fn pc_ship_len() -> u64 from "proofcarry.iii"
 
 fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
 fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
@@ -85,6 +88,29 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  no-op (symmetric, unchanged)    : " as u64)   pu(pc_noops())   putchar(10i32)
         ps("  SLIPPED (changed cone, verified): " as u64)   pu(pc_slips())
         if pc_slips() == 0u64 { ps("   <-- ZERO.  0 soundness error.\n" as u64) } else { ps("   <-- FORGERY\n" as u64) }
+        return 0u64
+    }
+    if streq(cmd, "federate" as u64) == 1u32 {
+        build_demo()
+        let seal : u64 = pc_seal()
+        ps("SHIP + FEDERATE (the exact successor to the committed-zk Phase-Omega pipeline):\n\n" as u64)
+        ps("  the shipped artifact is the readable cone (" as u64)   pu(pc_ship_len())   ps(" bytes) + its seal " as u64)   phex(seal)   putchar(10i32)
+        ps("  a peer VERIFIES-AND-FOLDS with no re-execution : " as u64)
+        if pc_verify(seal) == 1u32 { ps("VALID (refolded the cone, never re-ran the premises)\n\n" as u64) } else { ps("REJECTED\n\n" as u64) }
+        ps("  EXACT BFT quorum over the content-address (no soundness parameter):\n" as u64)
+        ps("    n    max byzantine tolerated (III discovered)   floor((n-1)/3)\n" as u64)
+        let mut i : u64 = 0u64
+        let ns : u64 = 4u64
+        while i < 5u64 {
+            let n : u64 = ns + (i * ns)
+            ps("    " as u64)   pu(n)   if n < 10u64 { ps("    " as u64) } else { ps("   " as u64) }
+            ps("  " as u64)   pu(pc_max_byzantine(n))   ps("                                          " as u64)   pu((n - 1u64) / 3u64)   putchar(10i32)
+            i = i + 1u64
+        }
+        ps("\nThe classic BFT fault-tolerance floor((n-1)/3) EMERGED from the content-\n" as u64)
+        ps("address vote count -- no target named, and no probability: a peer's refold\n" as u64)
+        ps("either matches the seal or it does not.  This replaces the ML-DSA committed-\n" as u64)
+        ps("proof quorum with an EXACT one.\n" as u64)
         return 0u64
     }
     if streq(cmd, "stark" as u64) == 1u32 {

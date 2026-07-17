@@ -294,6 +294,19 @@ extern @abi(c-msvc-x64) fn tp_mask(i: u64) -> u64 from "topos.iii"
 extern @abi(c-msvc-x64) fn tp_skeleton(manifold: u64, i: u64) -> u64 from "topos.iii"
 extern @abi(c-msvc-x64) fn tp_owed() -> u64 from "topos.iii"
 
+/* CRUCIBLE (katabasis) -- morphogenetic evolution with a cryptographic floor:
+ * mutate the physics under stress, beam-search worthy mutations, adopt only a
+ * survivor proven flawless.  Evolution that costs LESS than blind mutation. */
+extern @abi(c-msvc-x64) fn cr_selfprove() -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_beam(stress: u64, ngen: u64, k: u64) -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_blind(stress: u64, ngen: u64) -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_beam_expensive() -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_blind_expensive() -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_beam_dist() -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_blind_dist() -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_survives(mtn: u64) -> u64 from "crucible.iii"
+extern @abi(c-msvc-x64) fn cr_gen_stats(stress: u64, ngen: u64) -> u64 from "crucible.iii"
+
 /* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
  * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
  * ripple palindrome (R^2 = id on the real ripple field); ser_pipeline (intent (x) intuition,
@@ -443,6 +456,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
         ps("iii-substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
         ps("iii-substrate project  (TOPOS x CASSANDRA: data transmission as GF(2) geometry -- project a payload to a manifold + colors, predict it in bounded superposition before it arrives, reify bit-for-bit with NO parser)\n" as u64)
+        ps("iii-substrate evolve  (THE CRUCIBLE: morphogenetic evolution with a cryptographic floor -- mutate the physics under stress, BEAM-SEARCH worthy mutations, adopt only a survivor proven flawless; evolution that costs LESS than blind)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -745,7 +759,10 @@ fn main(argc: i32, argv: u64) -> u64 {
     if streq(cmd, "project" as u64) == 1u32 {
         return cmd_project()
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | reversible | symmetry | frontier | redeem)\n" as u64)
+    if streq(cmd, "evolve" as u64) == 1u32 {
+        return cmd_evolve()
+    }
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | evolve | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
 }
 
@@ -4244,6 +4261,41 @@ fn cmd_project() -> u64 {
     if bad != 0u64 { ps("PROJECT: REIFICATION LOSSY -- " as u64)  pu(bad)  ps(" bytes differ; entropy lost to the void\n" as u64)   return 5u64 }
     ps("REIFIED: " as u64)  pu(len)  ps(" bytes rebuilt from geometry, BIT-FOR-BIT identical -- no parser, zero entropy lost\n" as u64)
     ps("PROJECT GREEN: the payload crossed as geometry, was predicted in superposition, and reified losslessly. Serialization is dead.\n" as u64)
+    return 0u64
+}
+
+/* =====================================================================
+ * THE EVOLVE VERB -- morphogenetic evolution with a cryptographic floor.
+ *
+ *   iii-substrate evolve
+ *
+ * Under a stress signal, III mutates its own physics, BEAM-SEARCHES the worthy
+ * mutations (a cheap proxy ranks a generation; only the top-k pay the expensive
+ * law verdict), and adopts a survivor only if it is proven flawless (bijective +
+ * near-ideal + the organism whole).  The gate: beam-search must cost LESS than
+ * blind mutation -- evolution that is more efficient, not less.  The live seal is
+ * never overwritten; the crucible proposes candidate physics, governance decides.
+ * exit 0 evolved | 5 self-proof refused | 6 no viable mutation this generation.
+ * ==================================================================== */
+fn cmd_evolve() -> u64 {
+    ps("== THE CRUCIBLE: morphogenetic evolution with a cryptographic floor ==\n" as u64)
+    if cr_selfprove() != 0u64 { ps("EVOLVE: crucible self-proof REFUSED -- the evolution mechanism is unsound; no mutation\n" as u64)   return 5u64 }
+    ps("self-proof: NULL survives (floor), even-multiplier + zero-shift DIE (teeth), beam < blind (efficiency), deterministic\n" as u64)
+    /* the stress signal: real die-time jitter names this generation (replayable via the print) */
+    let stress : u64 = (bench_now() ^ autognosis_root()) | 1u64
+    let st : u64 = cr_gen_stats(stress, 128u64)
+    ps("STRESS " as u64)  phex64(stress)  ps(": generation of 128 mutations -> " as u64)  pu(st >> 16u64)  ps(" valid, " as u64)  pu(st & 65535u64)  ps(" survive the brutal laws\n" as u64)
+    let bs : u64 = cr_beam(stress, 128u64, 4u64)
+    let be : u64 = cr_beam_expensive()
+    if bs == 18446744073709551615u64 { ps("EVOLVE: no viable mutation this generation (honestly reported -- the physics held)\n" as u64)   return 6u64 }
+    let bl : u64 = cr_blind(stress, 128u64)
+    let ble : u64 = cr_blind_expensive()
+    ps("  BEAM-SEARCH: found a flawless survivor in " as u64)  pu(be)  ps(" expensive verdicts (survivor fitness dist " as u64)  pu(cr_beam_dist())  ps(" from ideal)\n" as u64)
+    ps("  BLIND (refused baseline): the global-best survivor cost " as u64)  pu(ble)  ps(" expensive verdicts (best dist " as u64)  pu(cr_blind_dist())  ps(")\n" as u64)
+    if be >= ble { ps("  EVOLVE: beam was NOT cheaper -- the efficiency law failed\n" as u64)   return 5u64 }
+    ps("  EFFICIENCY: beam-search spent " as u64)  pu(be)  ps(" verdicts where blind spent " as u64)  pu(ble)  ps(" -- evolution costs LESS, and the survivor is GUARANTEED flawless\n" as u64)
+    if cr_survives(bs) != 1u64 { ps("  EVOLVE: the survivor failed re-verification -- broken\n" as u64)   return 5u64 }
+    ps("EVOLVE GREEN: III found a mutation of its own physics that survives every law, at a FRACTION of blind cost. Darwinian evolution with a cryptographic floor -- proposed, not seized.\n" as u64)
     return 0u64
 }
 

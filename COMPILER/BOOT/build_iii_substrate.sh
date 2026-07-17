@@ -66,6 +66,8 @@ SRCS=(
     "$III_ROOT/STDLIB/iii/aether/lagrangian.iii"
     "$III_ROOT/STDLIB/iii/oneiros/cassandra.iii"
     "$III_ROOT/STDLIB/iii/glossa/topos.iii"
+    "$III_ROOT/STDLIB/iii/katabasis/kardia.iii"
+    "$III_ROOT/STDLIB/iii/katabasis/crucible.iii"
     "$III_ROOT/STDLIB/iii/aether/symmetria.iii"
     "$III_ROOT/STDLIB/iii/aether/substrate_cli.iii"
 )

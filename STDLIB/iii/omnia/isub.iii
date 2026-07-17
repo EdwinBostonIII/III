@@ -65,6 +65,8 @@ var IS_ROOT  : [u8; 32]
 /* scratch (module scope -- W4: no fn-local var arrays). */
 var IS_FP    : [u8; 16]                   /* one block's 9-byte geometric footprint */
 var IS_TMP   : [u8; 32]                   /* a freshly-sealed CAV before it is copied into IS_CAV */
+var IS_VIS   : [u32; 512]                 /* the order-query's visited set (bounded by the block cap) */
+var IS_FRT   : [u32; 512]                 /* the order-query's DFS frontier */
 
 fn isub_reset() -> i32 @export {
     IS_COUNT = 0u32
@@ -164,4 +166,118 @@ fn isub_witness_into(out32: *u8) -> i32 @export {
     let mut k : u64 = 0u64
     while k < 32u64 { out32[k] = IS_ROOT[k]  k = k + 1u64 }
     return 0i32
+}
+
+/* ==================== THE ORDER ORACLE (the belief kinship, 2026-07-17) ====================
+ * V_BELOW records "a sits under b" -- the shape of every logic, and exactly the
+ * shape of a belief's PREFERENCE (world a preferred under world b).  V_REFLECT
+ * records "a mirrors to b" -- the involution, and exactly the shape of a mind's
+ * reversible DREAM (a proportional-context mirror pair).  Until now the bus could
+ * only WRITE and WITNESS these; a mind that emitted its belief-order could not
+ * ASK the bus about it.  These verbs let the logos bus REASON over the order it
+ * has witnessed -- so the belief organ (katabasis/doxa) emits its preference as
+ * V_BELOW and its dream as V_REFLECT, and the bus FULFILS the belief-queries:
+ *   isub_below   -- is world a preferred-under world b?  (transitive closure of
+ *                   the strict V_BELOW relation, reflexive: a <= a)
+ *   isub_reflect -- what does a mirror to?  (its V_REFLECT involution partner)
+ *   isub_agree   -- do two minds hold the same belief-order?  (their witness
+ *                   ROOTs are equal -- recognise-and-merge as one comparison)
+ * Sovereign: pure integer reasoning over the bus's own uniform blocks; no import,
+ * no crypto, Ring -1 intact.  The bedrock does not learn about beliefs -- it
+ * learns to reason about ORDER, which belief is a case of.  The dependency still
+ * flows mind -> metal; the metal simply became a queryable order, not a scroll.
+ * ==================================================================== */
+
+/* is `a` below `b` in the reflexive-transitive closure of the witnessed V_BELOW
+ * order?  1 yes | 0 no.  A bounded DFS over the <= 512 emitted blocks (no
+ * allocation, no recursion): the acyclic witness makes it terminate. */
+fn isub_below(a: u32, b: u32) -> u32 @export {
+    if a == b { return 1u32 }
+    let mut nvis : u64 = 0u64
+    let mut sp : u64 = 0u64
+    IS_FRT[sp] = a   sp = sp + 1u64
+    IS_VIS[nvis] = a   nvis = nvis + 1u64
+    while sp > 0u64 {
+        sp = sp - 1u64
+        let cur : u32 = IS_FRT[sp]
+        let mut i : u64 = 0u64
+        while i < (IS_COUNT as u64) {
+            if IS_VERB[i] == V_BELOW { if IS_A[i] == cur {
+                let nb : u32 = IS_B[i]
+                if nb == b { return 1u32 }
+                let mut seen : u64 = 0u64
+                let mut j : u64 = 0u64
+                while j < nvis { if IS_VIS[j] == nb { seen = 1u64   j = nvis } else { j = j + 1u64 } }
+                if seen == 0u64 { if nvis < 512u64 { if sp < 512u64 {
+                    IS_VIS[nvis] = nb   nvis = nvis + 1u64
+                    IS_FRT[sp] = nb     sp = sp + 1u64
+                } } }
+            } }
+            i = i + 1u64
+        }
+    }
+    return 0u32
+}
+/* the V_REFLECT involution partner of `a` (a mirrors to b, or b mirrors to a),
+ * or ISUB_NULL if the bus witnessed no reflection touching a. */
+fn isub_reflect(a: u32) -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < (IS_COUNT as u64) {
+        if IS_VERB[i] == V_REFLECT {
+            if IS_A[i] == a { return IS_B[i] }
+            if IS_B[i] == a { return IS_A[i] }
+        }
+        i = i + 1u64
+    }
+    return ISUB_NULL
+}
+/* do two witnessed belief-orders agree?  1 iff their 32-byte ROOTs are equal --
+ * recognise-and-merge: two minds concur exactly when their orders hash the same. */
+fn isub_agree(root_a: *u8, root_b: *u8) -> u32 @export {
+    let mut k : u64 = 0u64
+    while k < 32u64 { if root_a[k] != root_b[k] { return 0u32 }   k = k + 1u64 }
+    return 1u32
+}
+
+/* the order oracle's self-proof (condition of motion for the new verbs): the
+ * closure is transitive + reflexive + acyclic; the reflection is symmetric; two
+ * identical orders agree and two distinct orders do not; the name-gate still
+ * holds.  0 = proven | the failed arm. */
+var IS_RA : [u8; 32]
+var IS_RB : [u8; 32]
+fn isub_order_selfproof() -> u32 @export {
+    isub_reset()
+    /* 1 under 2 under 3 under 4 (a total order) */
+    isub_emit(V_BELOW, 1u32, 2u32)
+    isub_emit(V_BELOW, 2u32, 3u32)
+    isub_emit(V_BELOW, 3u32, 4u32)
+    if isub_below(1u32, 4u32) != 1u32 { return 10u32 }        /* transitive       */
+    if isub_below(2u32, 3u32) != 1u32 { return 10u32 }        /* direct           */
+    if isub_below(1u32, 1u32) != 1u32 { return 11u32 }        /* reflexive        */
+    if isub_below(4u32, 1u32) != 0u32 { return 12u32 }        /* acyclic (no back)*/
+    if isub_below(1u32, 5u32) != 0u32 { return 13u32 }        /* 5 not in order   */
+    isub_witness_into((&IS_RA) as u64 as *u8)
+    /* the reflection involution */
+    isub_reset()
+    isub_emit(V_REFLECT, 7u32, 9u32)
+    if isub_reflect(7u32) != 9u32 { return 14u32 }            /* a mirrors to b   */
+    if isub_reflect(9u32) != 7u32 { return 14u32 }            /* symmetric        */
+    if isub_reflect(3u32) != ISUB_NULL { return 14u32 }       /* no mirror        */
+    /* recognise-and-merge: the same order agrees with itself, a different one not */
+    isub_reset()
+    isub_emit(V_BELOW, 1u32, 2u32)
+    isub_emit(V_BELOW, 2u32, 3u32)
+    isub_emit(V_BELOW, 3u32, 4u32)
+    isub_witness_into((&IS_RB) as u64 as *u8)
+    if isub_agree((&IS_RA) as u64 as *u8, (&IS_RB) as u64 as *u8) != 1u32 { return 15u32 }
+    isub_reset()
+    isub_emit(V_BELOW, 4u32, 3u32)                            /* the reversed order */
+    isub_witness_into((&IS_RB) as u64 as *u8)
+    if isub_agree((&IS_RA) as u64 as *u8, (&IS_RB) as u64 as *u8) != 0u32 { return 15u32 }
+    /* the name-gate still holds under the new surface */
+    isub_reset()
+    if isub_emit(2u32, 1u32, 1u32) != 0u64 { return 16u32 }
+    if isub_count() != 0u32 { return 16u32 }
+    isub_reset()
+    return 0u32
 }

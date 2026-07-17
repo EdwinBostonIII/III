@@ -23,7 +23,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; IND="$ROOT/STDLIB/independence"
 BOOT="$ROOT/STDLIB/build/_sovboot"; W="$ROOT/STDLIB/build/sovir"; mkdir -p "$W"
 WSL="/c/Windows/System32/wsl.exe"; WSLDIST="${WSLDIST:-Debian}"
-WSLW="/mnt/c${W#/c}"
+# Windows->WSL path, robust to pwd flavor: MSYS bash yields /c/..., but bash
+# spawned via `cmd /c bash` (the ERGON process organ) yields C:/... -- the bare
+# `${x#/c}` strip then produced /mnt/cC:/... and every WSL route died ENOENT.
+to_wsl(){ case "$1" in /c/*) echo "/mnt/c${1#/c}";; [A-Za-z]:*) echo "/mnt/$(printf %.1s "$1" | tr 'A-Z' 'a-z')${1#*:}";; *) echo "$1";; esac; }
+WSLW="$(to_wsl "$W")"
 fail=0; say(){ echo "[hostmx] $*"; }
 
 # ---- (b) THE Γ2 LAW: zero anchor growth ------------------------------------
@@ -53,7 +57,7 @@ arm64_bootstrap(){
   local HC="$ROOT/COMPILED/_hostcache"; mkdir -p "$HC"
   [ -s "$HC/qemu-user72.deb" ] || curl.exe -sLo "$HC/qemu-user72.deb" "https://deb.debian.org/debian/pool/main/q/qemu/qemu-user_7.2+dfsg-7+deb12u18+b3_amd64.deb"
   [ -s "$HC/capstone4.deb" ]   || curl.exe -sLo "$HC/capstone4.deb"   "https://deb.debian.org/debian/pool/main/c/capstone/libcapstone4_4.0.2-5_amd64.deb"
-  local HCW="/mnt/c${HC#/c}"
+  local HCW="$(to_wsl "$HC")"
   MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e sh -c "mkdir -p /opt/q72 && dpkg -x '$HCW/qemu-user72.deb' /opt/q72 && dpkg -x '$HCW/capstone4.deb' /opt/q72 && apt-get install -y libgnutls30t64 libnuma1 liburing2 libglib2.0-0t64 >/dev/null 2>&1"
 }
 arm64_ok=1; riscv_ok=1

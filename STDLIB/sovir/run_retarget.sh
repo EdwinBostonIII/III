@@ -16,7 +16,10 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"
 BOOT="$ROOT/STDLIB/build/_sovboot"; W="$ROOT/STDLIB/build/sovir"; SP="$ROOT/STDLIB/build/spore/S0"
-WSL="/c/Windows/System32/wsl.exe"; WSLDIST="${WSLDIST:-Debian}"; WSLW="/mnt/c${W#/c}"
+WSL="/c/Windows/System32/wsl.exe"; WSLDIST="${WSLDIST:-Debian}"
+# Windows->WSL path, robust to pwd flavor (cmd-spawned bash yields C:/... -- see run_host_matrix.sh)
+to_wsl(){ case "$1" in /c/*) echo "/mnt/c${1#/c}";; [A-Za-z]:*) echo "/mnt/$(printf %.1s "$1" | tr 'A-Z' 'a-z')${1#*:}";; *) echo "$1";; esac; }
+WSLW="$(to_wsl "$W")"
 fail=0; say(){ echo "[retgt] $*"; }
 PROGS="sum loop call fact bignum cioob toolchain ops bignum2 isqrt"
 want_rc(){ case "$1" in cioob) echo 199;; *) echo 99;; esac; }

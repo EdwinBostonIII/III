@@ -118,6 +118,7 @@ extern @abi(c-msvc-x64) fn proc_out_len() -> u64 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_out_at(i: u64) -> u8 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_ms() -> u64 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fflush(f: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
@@ -1960,10 +1961,19 @@ fn erg_evg_scan(dircmd: u64, dir: u64) -> u64 {
     }
     return 0u64
 }
-fn erg_evergreen() -> u32 @export {
+/* sel: 0 FULL (the only form that makes the evergreen claim) | 1 programs-only
+ * | 2 all Γ gates | 3/4/5 one Γ gate (host/retarget/germinate) -- subsets are
+ * ITERATION AIDS (a red composition must be probed in minutes, not by paying
+ * the 45-min atomic run per hypothesis); the caller prints PARTIAL for them. */
+fn erg_evergreen(sel: u64) -> u32 @export {
     ERG_EVG_RAN = 0u64
     ERG_EVG_PASS = 0u64
+    ERG_EVG_RETRIES = 0u64
+    ERG_EVG_FNL = 0u64
+    ERG_EVG_FLAW = 0u64
+    ERG_EVG_FRC = 0u64
     erg_x_run("cmd /c if not exist STDLIB\\build\\ergon_evg mkdir STDLIB\\build\\ergon_evg" as u64, 30000u32)
+    if sel >= 2u64 { return erg_evg_gamma(sel) }
     /* arm 1: NO STUBS -- 0 work-markers in the load-bearing sources */
     if erg_evg_nostubs("cmd /c dir /b STDLIB\\sovir\\*.iii > STDLIB\\build\\ergon_evg\\ns.txt" as u64, "STDLIB/sovir" as u64) != 0u64 { return 1801u32 }
     if erg_evg_nostubs("cmd /c dir /b STDLIB\\sovtc\\*.iii > STDLIB\\build\\ergon_evg\\ns.txt" as u64, "STDLIB/sovtc" as u64) != 0u64 { return 1801u32 }
@@ -1972,16 +1982,37 @@ fn erg_evergreen() -> u32 @export {
     if erg_evg_scan("cmd /c dir /b STDLIB\\sovir\\*.iii > STDLIB\\build\\ergon_evg\\list.txt" as u64, "STDLIB/sovir" as u64) != 0u64 { return 1802u32 }
     if erg_evg_scan("cmd /c dir /b STDLIB\\sovtc\\*.iii > STDLIB\\build\\ergon_evg\\list.txt" as u64, "STDLIB/sovtc" as u64) != 0u64 { return 1802u32 }
     if ERG_EVG_RAN < 40u64 { return 1802u32 }            /* the program census must be non-trivial */
+    if sel == 1u64 { return 0u32 }                       /* programs-only subset ends here */
+    return erg_evg_gamma(0u64)
+}
+fn erg_evg_gamma(sel: u64) -> u32 {
     /* arm 3: the Γ living-invariant gates (host matrix, retarget fixpoint, spore).
      * 25-min caps: the spore + retarget legs tar, translate, and execute under
      * qemu/WSL -- 10 min measured too tight on cold caches right after the
      * 65-program sweep (all three gates proven green standalone).  A red NAMES
-     * its gate (law 6) -- an anonymous red is not a located fault. */
-    let g1 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_host_matrix.sh" as u64, 1500000u32)
+     * its gate (law 6) -- an anonymous red is not a located fault -- and each
+     * gate's FULL transcript is preserved (_gamma_*.log, the same forensic
+     * contract the conscience rite keeps): a Γ gate reads the WHOLE tree (git
+     * anchor diffs, the committed compiler, sovir sources), so a red must be
+     * attributable to a clause, not reconstructed from a lost capture. */
+    if sel == 0u64 { } else { if sel == 2u64 { } else { if sel == 3u64 { } else {
+        if sel == 4u64 { return erg_evg_g2() }
+        return erg_evg_g3()
+    } } }
+    let g1 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_host_matrix.sh > STDLIB\\build\\ergon_evg\\_gamma_host_matrix.log 2>&1" as u64, 1500000u32)
     if g1 != 0u64 { erg_evg_name_fail("run_host_matrix" as u64, 15u64, 6u64, g1)   return 1803u32 }
-    let g2 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_retarget.sh" as u64, 1500000u32)
+    if sel == 3u64 { return 0u32 }
+    let r2 : u32 = erg_evg_g2()
+    if r2 != 0u32 { return r2 }
+    return erg_evg_g3()
+}
+fn erg_evg_g2() -> u32 {
+    let g2 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_retarget.sh > STDLIB\\build\\ergon_evg\\_gamma_retarget.log 2>&1" as u64, 1500000u32)
     if g2 != 0u64 { erg_evg_name_fail("run_retarget" as u64, 12u64, 6u64, g2)   return 1803u32 }
-    let g3 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_germinate.sh" as u64, 1500000u32)
+    return 0u32
+}
+fn erg_evg_g3() -> u32 {
+    let g3 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_germinate.sh > STDLIB\\build\\ergon_evg\\_gamma_germinate.log 2>&1" as u64, 1500000u32)
     if g3 != 0u64 { erg_evg_name_fail("run_germinate" as u64, 13u64, 6u64, g3)   return 1803u32 }
     return 0u32
 }
@@ -2153,6 +2184,7 @@ fn erg_con_excluded(nm: u64, nlen: u64) -> u64 {
     if r == 3u64 { erg_ps(" -- exploratory hunter (unbounded), not a pass/fail gate; findings land as run_residue_gate" as u64) }
     if r == 4u64 { erg_ps(" -- driven INSIDE iii-ergon evergreen (the Gamma living invariant): one run per rite, not two" as u64) }
     putchar(10i32)
+    fflush(0u64)
     return 1u64
 }
 /* spawn ERG_CON_CMD, judge the OS-true code, append the row, narrate live */
@@ -2169,6 +2201,7 @@ fn erg_con_spawn(nm: u64, nlen: u64) -> u64 {
         erg_ps("  (" as u64)
         erg_pu(proc_ms() / 1000u64)
         erg_ps("s)\n" as u64)
+        fflush(0u64)                                     /* the rite narrates LIVE, even piped */
         return 0u64
     }
     ERG_CON_FAIL = ERG_CON_FAIL + 1u64
@@ -2181,6 +2214,7 @@ fn erg_con_spawn(nm: u64, nlen: u64) -> u64 {
     erg_ps("  (log: COMPILED/_conscience_" as u64)
     erg_psn(nm, nlen)
     erg_ps(".log)\n" as u64)
+    fflush(0u64)
     return 1u64
 }
 /* build: cmd /c bash <dirfs>/<stem>.sh > COMPILED\_conscience_<stem>.log 2>&1 */

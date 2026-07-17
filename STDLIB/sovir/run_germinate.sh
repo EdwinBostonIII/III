@@ -201,7 +201,9 @@ else say "FAIL WIN-PREFIX rc=$wrc"; fail=1; fi
 
 # ---- GERMINATE: virgin LINUX prefix (delivery copy is the only /mnt/c touch) --------
 # wsl.exe writes at offset 0 of a shared redirected handle (clobbers earlier bash output) -> own capture file
-SPW="/mnt/c${SPD#/c}"
+# Windows->WSL path, robust to pwd flavor (cmd-spawned bash yields C:/... -- see run_host_matrix.sh)
+to_wsl(){ case "$1" in /c/*) echo "/mnt/c${1#/c}";; [A-Za-z]:*) echo "/mnt/$(printf %.1s "$1" | tr 'A-Z' 'a-z')${1#*:}";; *) echo "$1";; esac; }
+SPW="$(to_wsl "$SPD")"
 MSYS_NO_PATHCONV=1 "$WSL" -d "$WSLDIST" -u root -e bash -c "rm -rf /tmp/iii_germ_l && mkdir -p /tmp/iii_germ_l && cp '$SPW/S0.tar' /tmp/iii_germ_l/ && cd /tmp/iii_germ_l && tar -xf S0.tar && exec bash ./germinate.sh --germinate-lin /tmp/iii_germ_l" > "$SPD/_linleg.log" 2>&1; lrc=$?
 cat "$SPD/_linleg.log"
 if [ $lrc -eq 0 ]; then say "LIN-PREFIX  : GREEN (integrity + sysv-native exec + a64-qemu exec vs oracle)"

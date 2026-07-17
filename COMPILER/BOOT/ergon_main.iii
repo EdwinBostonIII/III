@@ -38,7 +38,7 @@ extern @abi(c-msvc-x64) fn erg_zk_scanned() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_zk_claimers() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_zk_violations() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_author() -> u32 from "ergon.iii"
-extern @abi(c-msvc-x64) fn erg_evergreen() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evergreen(sel: u64) -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_evg_ran() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_evg_pass() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_observe() -> u32 from "ergon.iii"
@@ -165,7 +165,17 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("  (no work-markers in the load-bearing sources; every `fn main` program builds through\n" as u64)
         ps("   sovas/sovld with witness=0 -- gcc NEVER assembles -- and runs to its real exit code;\n" as u64)
         ps("   then the Γ living invariant: host matrix, retarget fixpoint, spore germination)\n" as u64)
-        let e : u32 = erg_evergreen()
+        let mut esel : u64 = 0u64
+        if argc >= 3i32 {
+            let tok : u64 = av[2u64]
+            if streq(tok, "programs" as u64) == 1u32 { esel = 1u64 }
+            if streq(tok, "gamma" as u64) == 1u32 { esel = 2u64 }
+            if streq(tok, "gamma-host" as u64) == 1u32 { esel = 3u64 }
+            if streq(tok, "gamma-retarget" as u64) == 1u32 { esel = 4u64 }
+            if streq(tok, "gamma-germinate" as u64) == 1u32 { esel = 5u64 }
+        }
+        if esel != 0u64 { ps("  SUBSET (iteration aid): the evergreen CLAIM is only the bare full run\n" as u64) }
+        let e : u32 = erg_evergreen(esel)
         ps("  programs: ran " as u64)  pu(erg_evg_ran())  ps(", sovereign+green " as u64)  pu(erg_evg_pass())
         ps(", settle-retries " as u64)  pu(erg_evg_retries())  putchar(10i32)
         if e != 0u32 {
@@ -187,6 +197,10 @@ fn main(argc: i32, argv: u64) -> u64 {
                 putchar(10i32)
             }
             return 1u64
+        }
+        if esel != 0u64 {
+            ps("  EVERGREEN: PARTIAL -- the subset is green; the claim requires the bare full run.\n" as u64)
+            return 0u64
         }
         ps("  EVERGREEN: every standalone program self-builds sovereignly (witness=0) + runs; no\n" as u64)
         ps("  stubs; the Γ living invariant (host matrix, retarget fixpoint, spore germination) holds.\n" as u64)

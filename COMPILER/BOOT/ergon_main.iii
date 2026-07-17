@@ -38,6 +38,22 @@ extern @abi(c-msvc-x64) fn erg_zk_scanned() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_zk_claimers() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_zk_violations() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_author() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evergreen() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_ran() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_pass() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_observe() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_retries() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_fail_name_len() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_fail_name_at(i: u64) -> u8 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_fail_law() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_evg_fail_rc() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_conscience(filter: u64) -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_total() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_ran_n() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_fail_n() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_excl_n() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_receipt_len() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_con_receipt_at(i: u64) -> u8 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_live() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_sealed() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
@@ -85,7 +101,13 @@ fn usage() -> u64 {
     ps("  iii-ergon autarkeia the sealed spine + the covenant (testament emit/re-derive,\n" as u64)
     ps("                      tamper battery, generation chain, covenant equation + quorum)\n" as u64)
     ps("  iii-ergon zkaudit   every zk soundness claim matches its query/field knobs (+ teeth)\n" as u64)
-    ps("  iii-ergon author    THE NAMED-DEFICIT LAW (admit/verify/fold + 8 adversarial teeth; nobody steers)\n\n" as u64)
+    ps("  iii-ergon author    THE NAMED-DEFICIT LAW (admit/verify/fold + 8 adversarial teeth; nobody steers)\n" as u64)
+    ps("  iii-ergon evergreen every program self-builds sovereignly (witness=0) + runs; no stubs; Γ invariant\n" as u64)
+    ps("  iii-ergon observe   core_H by OBSERVATION (independent SHA-256, native AND interp substrates)\n" as u64)
+    ps("  iii-ergon conscience [filter]  PHI-3, THE EXIT GATE: every discovered gate (run_*.sh +\n" as u64)
+    ps("                      *_gate.sh + build-spines + the sibling verbs) runs to its OS-true\n" as u64)
+    ps("                      exit code; logs at COMPILED/_conscience_*.log; rows folded to ONE\n" as u64)
+    ps("                      receipt.  HOURS of wall; the PHI-3 claim is only the unfiltered rite.\n\n" as u64)
     ps("no seat compares against a stored expected answer; every law is derived at the\n" as u64)
     ps("moment of motion.  requires CWD = the III root.\n" as u64)
     ps("exit: 0 WHOLE | 1 fault (located) | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
@@ -116,6 +138,58 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("exactly one seat+arm; the checker itself has teeth -- a sabotaged map is caught),\n" as u64)
         ps("and the cross-fold instrument is deterministic and input-sensitive.\n" as u64)
         ps("Re-derived THIS invocation, before any verb moved.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "observe" as u64) == 1u32 {
+        ps("== THE OBSERVE VERB: core_H by OBSERVATION, algorithm- and substrate-independent ==\n" as u64)
+        ps("  (an independent SHA-256 sharing zero code with cad, run on native gcc AND the\n" as u64)
+        ps("   iiisv->SVIR->svir_interp reference path, recomputes iii-judge's fold and reproduces\n" as u64)
+        ps("   the covenant core bit-exact -- twice over; a tampered core refused on both)\n" as u64)
+        let o : u32 = erg_observe()
+        if o != 0u32 {
+            ps("  OBSERVE FAULT " as u64)
+            pu(o as u64)
+            if o == 1902u32 { ps(" -- indep_sha256 did not reproduce the FIPS vectors on both substrates" as u64) }
+            if o == 1904u32 { ps(" -- the observer did not reproduce CA bit-exact on both substrates" as u64) }
+            if o == 1905u32 { ps(" -- a tampered CA was ACCEPTED (the adversary teeth did not bite)" as u64) }
+            putchar(10i32)
+            return 1u64
+        }
+        ps("  core_H OBSERVED: an algorithm-independent hasher reproduced the covenant core on a\n" as u64)
+        ps("  substrate-independent executor, native AND interp; a single-nibble tamper refused on\n" as u64)
+        ps("  both.  core_H is no longer trusted by construction alone -- III observed it, twice.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "evergreen" as u64) == 1u32 {
+        ps("== THE EVERGREEN VERB: every standalone program self-builds SOVEREIGNLY ==\n" as u64)
+        ps("  (no work-markers in the load-bearing sources; every `fn main` program builds through\n" as u64)
+        ps("   sovas/sovld with witness=0 -- gcc NEVER assembles -- and runs to its real exit code;\n" as u64)
+        ps("   then the Γ living invariant: host matrix, retarget fixpoint, spore germination)\n" as u64)
+        let e : u32 = erg_evergreen()
+        ps("  programs: ran " as u64)  pu(erg_evg_ran())  ps(", sovereign+green " as u64)  pu(erg_evg_pass())
+        ps(", settle-retries " as u64)  pu(erg_evg_retries())  putchar(10i32)
+        if e != 0u32 {
+            ps("  EVERGREEN FAULT " as u64)
+            pu(e as u64)
+            if e == 1801u32 { ps(" -- an incomplete-work marker in a load-bearing source (the floor is zero)" as u64) }
+            if e == 1802u32 { ps(" -- a program failed to self-build sovereignly (witness>0 or non-99/crash)" as u64) }
+            if e == 1803u32 { ps(" -- a Γ living-invariant gate is red (host matrix / retarget / germinate)" as u64) }
+            putchar(10i32)
+            if erg_evg_fail_name_len() > 0u64 {
+                ps("  the NAMED fault: " as u64)
+                let mut fi : u64 = 0u64
+                while fi < erg_evg_fail_name_len() { putchar(erg_evg_fail_name_at(fi) as i32)   fi = fi + 1u64 }
+                ps("  law " as u64)
+                pu(erg_evg_fail_law())
+                ps(" (1 no-LINKED 2 witness 3 PE-absent 4 driver-crash 5 kat-rc 6 gamma-gate)  rc=" as u64)
+                pu(erg_evg_fail_rc())
+                ps(" (9902=wall-timeout)" as u64)
+                putchar(10i32)
+            }
+            return 1u64
+        }
+        ps("  EVERGREEN: every standalone program self-builds sovereignly (witness=0) + runs; no\n" as u64)
+        ps("  stubs; the Γ living invariant (host matrix, retarget fixpoint, spore germination) holds.\n" as u64)
         return 0u64
     }
     if streq(cmd, "author" as u64) == 1u32 {
@@ -200,6 +274,50 @@ fn main(argc: i32, argv: u64) -> u64 {
             ps(" -- METER-CONTEXT drift (band physics, NAMED; sealed truth lives in heart cell 2748)\n" as u64)
         }
         ps("  DEEP WHOLE: every heavy faculty derived on today's die.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "conscience" as u64) == 1u32 {
+        ps("== THE CONSCIENCE: PHI-3, the exit gate -- no decorative claims ==\n" as u64)
+        ps("  (the gate set DISCOVERED from the living tree: run_*.sh + *_gate.sh across the four\n" as u64)
+        ps("   gate dirs + the two build-spines + the ERGON's own sibling verbs; each spawned\n" as u64)
+        ps("   SEQUENTIALLY to its OS-true exit code under a 2h cap; logs at COMPILED/_conscience_*.log;\n" as u64)
+        ps("   the rows folded by iii-judge into ONE receipt root)\n" as u64)
+        let mut filt : u64 = 0u64
+        if argc >= 3i32 { filt = av[2u64] }
+        if filt != 0u64 { ps("  FILTER (substring): a subset run -- the PHI-3 claim is ONLY the unfiltered rite\n" as u64) }
+        let c : u32 = erg_conscience(filt)
+        ps("  ------------------------------------------------------------\n" as u64)
+        ps("  gates: enumerated " as u64)
+        pu(erg_con_total())
+        ps(", ran " as u64)
+        pu(erg_con_ran_n())
+        ps(", red " as u64)
+        pu(erg_con_fail_n())
+        ps(", excluded " as u64)
+        pu(erg_con_excl_n())
+        putchar(10i32)
+        if erg_con_receipt_len() == 64u64 {
+            ps("  receipt (iii-judge fold of the rite rows): " as u64)
+            let mut ri : u64 = 0u64
+            while ri < 64u64 { putchar(erg_con_receipt_at(ri) as i32)   ri = ri + 1u64 }
+            putchar(10i32)
+        }
+        if c != 0u32 {
+            ps("  CONSCIENCE FAULT " as u64)
+            pu(c as u64)
+            if c == 2001u32 { ps(" -- env: a discovery listing could not run" as u64) }
+            if c == 2002u32 { ps(" -- ENUMERATION VIOLATION: a discovery class is empty (a sweep that cannot fail proves nothing)" as u64) }
+            if c == 2003u32 { ps(" -- a banner's gate is red; the claim above it is DECORATIVE until fixed" as u64) }
+            if c == 2004u32 { ps(" -- the receipt fold failed" as u64) }
+            putchar(10i32)
+            if c == 2001u32 { return 2u64 }
+            return 1u64
+        }
+        if filt != 0u64 {
+            ps("  CONSCIENCE: PARTIAL -- the filtered subset is green; the PHI-3 claim requires the unfiltered rite.\n" as u64)
+            return 0u64
+        }
+        ps("  CONSCIENCE: PASS -- every enumerated gate is runnable and green.  No decorative claims.\n" as u64)
         return 0u64
     }
     if streq(cmd, "census" as u64) == 1u32 {

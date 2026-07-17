@@ -58,8 +58,10 @@ if [[ ! -x "$EVAL_BIN" ]]; then
 fi
 
 # cache key: sealed identities, never timestamps
-IIIS_ID="$(cut -d' ' -f1 "$III_ROOT/COMPILED/iiis-2.exe.mhash" 2>/dev/null || sha256sum "$IIIS" | cut -d' ' -f1)"
-LIB_ID="$(cut -d' ' -f1 "$BUILD_DIR/libiii_native.a.mhash" 2>/dev/null || sha256sum "$LIB_ARCHIVE" | cut -d' ' -f1)"
+# seal authorship: III hashes III (mhash_lib; GNU is the veto-witness, never the author)
+. "$SCRIPT_DIR/mhash_lib.sh"
+IIIS_ID="$(cut -d' ' -f1 "$III_ROOT/COMPILED/iiis-2.exe.mhash" 2>/dev/null || mhash_file "$IIIS")"
+LIB_ID="$(cut -d' ' -f1 "$BUILD_DIR/libiii_native.a.mhash" 2>/dev/null || mhash_file "$LIB_ARCHIVE")"
 NKEY="${IIIS_ID:0:16}_${LIB_ID:0:16}"
 # eval-route cache: the eval binary IS the subject under test — its verdicts
 # (raw out + rc, incl. timeouts) are deterministic per (binary, KAT).  The
@@ -113,7 +115,7 @@ run_pair() {
     obj="$RUN_DIR/${base}.o"
     exe="$RUN_DIR/${base}${BIN_SUFFIX}"
     CLASS="" ; RCN="" ; RCE="" ; EVOUT="" ; OUTNOTE=""
-    kat_id="$(sha256sum "$src" | cut -c1-16)"
+    kat_id="$(mhash_file "$src" | cut -c1-16)"
     ck="$CACHE_DIR/${base}.${NKEY}.${kat_id}"
     # ALL same-invocation read-back files live in /tmp: OneDrive serves STALE
     # reads on rapidly-rewritten files (measured 1/40 on .ev_out — the
@@ -162,7 +164,7 @@ run_pair() {
     fi
     EVRAW="/tmp/meaning_ev_$$.out"
     local ekey_now
-    ekey_now="$(sha256sum "$EVAL_BIN" | cut -c1-16)"
+    ekey_now="$(mhash_file "$EVAL_BIN" | cut -c1-16)"
     ek="$CACHE_DIR/${base}.E${ekey_now}.${kat_id}"
     if [[ -f "$ek.etime" ]]; then CLASS="EVAL_TIMEOUT"; return; fi
     if [[ -f "$ek.rce" ]]; then

@@ -94,7 +94,7 @@ Weakest → strongest leverage:
 1. **Tune parameters** (more KATs, NQ knobs, ratchet pins — Φ4/Φ6 hygiene). *The low-leverage move a
    reviewer would reach for.* Valuable, already programmed, changes nothing structural.
 2. **Capability-consumer unification** (one Studio/field surface; genuine-output breadth). Consumer-side;
-   the reunification (W0–W8) + run_evergreen already police this equilibrium.
+   the reunification (W0–W8) + `iii-ergon evergreen` already police this equilibrium.
 3. **{BELOW,REFLECT} → one primitive.** Real surplus, small scope (the architecture doc's step 6).
 4. **Information flow: weld the capstone** — run_completion.sh 8/8. This is the *completion invariant*
    going green: the strongest move **inside** the current goal. Blocked on exactly one arc: **Φ1**.

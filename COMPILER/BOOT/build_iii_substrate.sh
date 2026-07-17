@@ -62,6 +62,8 @@ SRCS=(
     "$III_ROOT/STDLIB/iii/katabasis/autognosis.iii"
     "$III_ROOT/STDLIB/iii/aether/synapse.iii"
     "$III_ROOT/STDLIB/iii/aether/admix.iii"
+    "$III_ROOT/STDLIB/iii/aether/entangle.iii"
+    "$III_ROOT/STDLIB/iii/katabasis/introspection.iii"
     "$III_ROOT/STDLIB/iii/aether/reversibility.iii"
     "$III_ROOT/STDLIB/iii/aether/lagrangian.iii"
     "$III_ROOT/STDLIB/iii/oneiros/cassandra.iii"

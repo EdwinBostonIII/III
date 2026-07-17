@@ -93,6 +93,13 @@ extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
 
+/* THE INTROSPECTION FACULTY (katabasis/introspection: III examines itself,
+ * systemwide -- the seat that dissolved the per-organ probe files). */
+extern @abi(c-msvc-x64) fn intro_organ_count() -> u32 from "introspection.iii"
+extern @abi(c-msvc-x64) fn intro_organ_ident(i: u32) -> u64 from "introspection.iii"
+extern @abi(c-msvc-x64) fn intro_examine(i: u32) -> u32 from "introspection.iii"
+extern @abi(c-msvc-x64) fn intro_vitality() -> u64 from "introspection.iii"
+
 extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
@@ -457,6 +464,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
         ps("iii-substrate project  (TOPOS x CASSANDRA: data transmission as GF(2) geometry -- project a payload to a manifold + colors, predict it in bounded superposition before it arrives, reify bit-for-bit with NO parser)\n" as u64)
         ps("iii-substrate evolve  (THE CRUCIBLE: morphogenetic evolution with a cryptographic floor -- mutate the physics under stress, BEAM-SEARCH worthy mutations, adopt only a survivor proven flawless; evolution that costs LESS than blind)\n" as u64)
+        ps("iii-substrate introspect  (SYSTEMWIDE INTROSPECTION: III examines itself through one inherited faculty -- per-organ verdicts + the vitality root)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -761,6 +769,9 @@ fn main(argc: i32, argv: u64) -> u64 {
     }
     if streq(cmd, "evolve" as u64) == 1u32 {
         return cmd_evolve()
+    }
+    if streq(cmd, "introspect" as u64) == 1u32 {
+        return cmd_introspect()
     }
     ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | evolve | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
@@ -4299,3 +4310,50 @@ fn cmd_evolve() -> u64 {
     return 0u64
 }
 
+/* =====================================================================
+ * THE INTROSPECT VERB -- III examines itself, systemwide, on command.
+ *
+ *   iii-substrate introspect
+ *
+ * The tool face of katabasis/introspection: walk every registered organ,
+ * re-derive each one's truth through the inherited faculty, print the
+ * per-organ verdict + identity, and report the VITALITY ROOT (nonzero
+ * iff the organism examined itself and found itself whole).  This is the
+ * systemwide self-examination that replaced the per-organ probe files.
+ * Exit 0 whole | 1 a located organ fault.
+ * ==================================================================== */
+fn adx_organ_name(i: u32) -> u64 {
+    if i == 0u32 { return "autognosis (constitution)" as u64 }
+    if i == 1u32 { return "autophasis (pressed discovery)" as u64 }
+    if i == 2u32 { return "synapse    (constitution-pinned wire)" as u64 }
+    if i == 3u32 { return "admix      (self-deriving diffuser)" as u64 }
+    if i == 4u32 { return "entangle   (Lagrangian reversible coupling)" as u64 }
+    return "?" as u64
+}
+
+fn cmd_introspect() -> u64 {
+    ps("== INTROSPECTION: III examines itself through one inherited faculty ==\n" as u64)
+    let n : u32 = intro_organ_count()
+    let mut sick : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let v : u32 = intro_examine(i)
+        ps("  [" as u64)   pu(i as u64)   ps("] " as u64)   ps(adx_organ_name(i))
+        if v == 0u32 {
+            ps("  WHOLE   id=" as u64)   pu(intro_organ_ident(i))
+        } else {
+            ps("  FAULT " as u64)   pu(v as u64)
+            sick = sick + 1u32
+        }
+        putchar(10i32)
+        i = i + 1u32
+    }
+    let vit : u64 = intro_vitality()
+    if sick == 0u32 {
+        ps("VITALITY ROOT = " as u64)   pu(vit)
+        ps("  (nonzero: III is whole -- every organ re-derived from scratch, two-path)\n" as u64)
+        return 0u64
+    }
+    ps("VITALITY REFUSED (root 0): " as u64)   pu(sick as u64)   ps(" organ(s) not whole\n" as u64)
+    return 1u64
+}

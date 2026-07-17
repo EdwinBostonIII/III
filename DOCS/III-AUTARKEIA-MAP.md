@@ -64,7 +64,7 @@ nowhere else (§5).
 |---|---|---|
 | Portable proof object | **ABSENT** (`**/EXCHANGE/**` = 0 hits) | glob **[measured]** |
 | Judge surface | **≥163** .sh gates (68 + 61 + 34 across scripts/BOOT/sovir) | globs **[measured]** |
-| Verdict primitives | bash: `grep -q` pins, `cut -d'\|'`, `$rc == $want`, `FAIL=1` counters | run_evergreen.sh:37–60, run_standing_tools.sh:27–35, run_mathesis.sh:51–66 **[measured]** |
+| Verdict primitives | bash: `grep -q` pins, `cut -d'\|'`, `$rc == $want`, `FAIL=1` counters | run_evergreen.sh:37–60, run_standing_tools.sh:27–35, run_mathesis.sh:51–66 **[measured]** (evergreen + standing_tools since ABSORBED: `iii-ergon evergreen`/`census`, runners retired 2026-07-17) |
 | Certificate minting | `sha256sum \| cut` in bash; pins hardcoded in-script | run_mathesis.sh:164–176, 203–208, 227–232 **[measured]** |
 | Mathesis gate linker | **gcc** (fast-lane corpus convention) | run_mathesis.sh:57 **[measured]** |
 | Named TCB in prior maps | loader, CPU, node, frozen gcc — **bash unnamed** | Λ-map §1 **[measured: read]** |
@@ -229,7 +229,7 @@ green testament; each forgery class reddens at judge, emit, or witness — never
 > NONE). SCOPE: the covenant EQUATION + enforcement + FED quorum are proven on one host; `core(T)`
 > is host-invariant BY CONSTRUCTION (omits per-ISA TOOLS digests).
 >
-> **TAIL CLOSED — STATUS: EXECUTED (by-observation), III-ONLY.** `STDLIB/scripts/run_covenant_observe.sh`
+> **TAIL CLOSED — STATUS: EXECUTED (by-observation), III-ONLY.** `iii-ergon observe` (ex `run_covenant_observe.sh`, retired 2026-07-17)
 > turns `core(testament_H)==core(testament_win64)` from by-construction into a MEASUREMENT (ALL GREEN)
 > using III and ONLY III — no foreign hasher, no second OS, no coreutils/`sha256sum`/perl/WSL/qemu/node.
 > The observer is assembled from two genuine independences, each strictly stronger than a foreign tool:

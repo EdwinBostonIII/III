@@ -346,7 +346,7 @@ sovereign frontier (`ccsv/sovas/sovparse`) is sibling-owned now — steps 1–2 
   `run_seed_sovereign.sh` (absent). *Falsifier:* flip one emitted opcode → `svir_verify` reddens.
 - **[ ] Step 2 — The sovereign emit fold (F5; active frontier C1→C2→C3).** C1 landed (`sovtc` in
   `libiii_native.a`). C2/C3: `emit.iii` calls `sovas/sovcoff/sovld` **in-process** → `iiis-2` emits native PE
-  with **zero gcc/ld**. *Falsifier:* a gcc dependency reappears → `run_evergreen` reddens.
+  with **zero gcc/ld**. *Falsifier:* a gcc dependency reappears → `iii-ergon evergreen` reddens.
 - **[ ] Step 3 — Author-diversity DDC (Φ2): `crosslang=YES`.** `ccsv ≡ iiisv` on the seed lineage. *Exit
   gate:* `run_ddc.sh` + a `seed` axis, rc=0.
 - **[≈ mostly] Step 4 — Coverage ratchet to zero (Φ4).** Measured green this pass: `build_stdlib` →
@@ -368,11 +368,12 @@ sovereign frontier (`ccsv/sovas/sovparse`) is sibling-owned now — steps 1–2 
   recurs in ≥3 engines `[gated 2140 (R²=id) / 2141]`. Make it one shared faculty — a substrate dedup, the
   clearest structural "greater than the sum." *Cost:* touches sealed sources → seal cascade; schedule after
   the sovereign frontier settles.
-- **[≈ partial] Step 7 — Conscience + evergreen + TCB (Φ3 + Φ7).** **`DOCS/III-TCB.md` written** this pass
+- **[CLOSED 2026-07-17] Step 7 — Conscience + evergreen + TCB (Φ3 + Φ7).** **`DOCS/III-TCB.md` written**
   (the irreducible TCB = CPU/microcode · OS loader · kernel32 · msvcrt, named + measured; §3 records the one
-  open sovereignty gap). `run_conscience.sh` / `run_evergreen.sh` remain — and `run_evergreen` (self-build
-  sovereignly) is **blocked** by the emitter regression (Step 5): programs needing cross-module data exports
-  can't sovereign-build until that lands.
+  open sovereignty gap). Both meta-gates ABSORBED into the ERGON: `iii-ergon evergreen` (self-build
+  sovereignly, witness=0, full sweep green in-organ — the Step-5 emitter regression that once blocked it was
+  resolved) and `iii-ergon conscience` (PHI-3: discovery widened to *_gate.sh + the sibling verbs, per-gate
+  logs, iii-judge receipt fold). The .sh runners are retired.
 - **[◐ unblocked ] Step 8 — Weld the capstone `run_completion.sh` (§9).** The keystone blocker is GONE:
   the Step-5 emitter regression was fixed 2026-07-07 in its focused, protocol-gated session (root cause =
   export resolution through the .text-only label table; fix = `EXP_SEC` + `exp_ok` lockstep predicate;
@@ -394,20 +395,22 @@ run_completion.sh   ⇐  ALL of:
   run_grand_unification.sh     EXISTS   — the unified pipeline (Ω.a/d+b+F2+e+f+g+Ω7)
   run_seed_sovereign.sh        ABSENT   — Step 1: trust floor closed (ccsv builds iiis-0, byte-DDC)
   run_ddc.sh [+ seed axis]     EXISTS   — Step 3: DDC closed incl. author-diversity lineage
-  run_conscience.sh            EXISTS   — Step 7 (built 2026-07-07): auto-discovers every run_*.sh (50
-                                          lines: 9 spine + 41 discovered, excludes carry printed reasons);
-                                          full-sweep run pending a quiet tree
+  iii-ergon conscience         ABSORBED — Step 7 (verb 2026-07-17, ex run_conscience.sh): discovery WIDENED
+                                          (run_*.sh + *_gate.sh + 2 build-spines + the sibling verbs),
+                                          per-gate OS-true rc + logs, iii-judge receipt fold, printed
+                                          exclusion reasons, enumeration-violation teeth
   build_stdlib --check-corpus  EXISTS*  — Step 4: coverage ratchet all-zero  (*full gate, not run_corpus)
-  run_zk_audit.sh              EXISTS✔  — Φ6 (built 2026-07-07): 49 gadgets, 9 claimers audited, 0
-                                          violations; teeth proven (NBATCH 4→2 → rc=1)
-  run_evergreen.sh             EXISTS   — Step 7 (built 2026-07-07): sovbuild every `fn main` under
-                                          sovir+sovtc, witness=0 enforced, strict no-stubs scan (0 markers);
-                                          full run pending (unblocked by the Step-5 emitter fix)
+  iii-ergon zkaudit            ABSORBED — Φ6 (verb 2026-07-17, ex run_zk_audit.sh): claims matched to knobs
+                                          organ-natively, falsifier teeth live
+  iii-ergon evergreen          ABSORBED — Step 7 (verb 2026-07-17, ex run_evergreen.sh): sovbuild every
+                                          `fn main` under sovir+sovtc, witness=0 enforced, no-stubs scan,
+                                          Γ living-invariant gates driven in-verb; full sweep green
 ```
 
 One of eight is absent (down from four — 2026-07-07 built `run_zk_audit` [green+teeth], `run_conscience`
-and `run_evergreen` [authored, full sweeps scheduled]; only `run_seed_sovereign.sh` — the Step-1 ccsv
-campaign's exit gate — remains). The **I2 structural gate** (no cycle / no dup-export) is *not* a
+and `run_evergreen` [authored]; all three since ABSORBED into `iii-ergon` verbs, 2026-07-17; only
+`run_seed_sovereign.sh` — the Step-1 ccsv campaign's exit gate — remains). The **I2 structural gate**
+(no cycle / no dup-export) is *not* a
 missing row — it is already folded into `build_stdlib` (the cartographer gate, §2.2), green this pass; only
 I1 needed a dedicated gate because nothing checked floor-import closure before. **That table is the
 orchestration gap in one screen.** The capstone is not a dashboard — it is a proof obligation, green iff the

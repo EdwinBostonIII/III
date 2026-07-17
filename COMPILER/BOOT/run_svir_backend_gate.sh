@@ -21,6 +21,8 @@ set -u
 IFS=$'\n\t'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 III_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# seal authorship: III hashes III (mhash_lib; GNU is the veto-witness, never the author)
+. "$SCRIPT_DIR/mhash_lib.sh"
 SQ_DIR="$SCRIPT_DIR/square_probes"
 IND_DIR="$III_ROOT/STDLIB/independence"
 SOVIR="$III_ROOT/STDLIB/sovir"
@@ -118,7 +120,7 @@ for entry in "${A2_LIST[@]}"; do
     "/tmp/svg_cg_$$$BIN_SUFFIX" "$src" > "$W/${name}_cg.iii" 2>/dev/null
     rm -f "/tmp/svg_cg_$$$BIN_SUFFIX"
     [[ -s "$W/${name}_cg.iii" ]] || { say "GOLDEN-RED $name: emitted nothing"; FAIL=1; continue; }
-    h="$(sha256sum "$W/${name}_cg.iii" | cut -d' ' -f1)"
+    h="$(mhash_file "$W/${name}_cg.iii")"
     printf '%s %s\n' "$name" "$h" >> "$W/goldens_measured.txt"
     pin="${GOLD_PIN[$name]:-}"
     if [[ -z "$pin" ]]; then

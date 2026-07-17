@@ -14,6 +14,8 @@ BIN_SUFFIX=".exe"
 IIIS="$III_ROOT/COMPILED/iiis-2$BIN_SUFFIX"
 BUILD_DIR="$III_ROOT/STDLIB/build/iii"
 LIB_ARCHIVE="$BUILD_DIR/libiii_native.a"
+# seal authorship: III hashes III (mhash_lib; GNU is the veto-witness, never the author)
+. "$SCRIPT_DIR/mhash_lib.sh"
 IIIS_ID="$(cut -d' ' -f1 "$III_ROOT/COMPILED/iiis-2.exe.mhash")"
 LIB_ID="$(cut -d' ' -f1 "$BUILD_DIR/libiii_native.a.mhash")"
 NKEY="${IIIS_ID:0:16}_${LIB_ID:0:16}"
@@ -41,7 +43,7 @@ worker() {
         case "$base" in *_neg_*|*_neg) continue ;; esac
         idx=$((idx + 1))
         [[ $((idx % nw)) -ne $wid ]] && continue
-        kat_id="$(sha256sum "$src" | cut -c1-16)"
+        kat_id="$(mhash_file "$src" | cut -c1-16)"
         ck="$CACHE_DIR/${base}.${NKEY}.${kat_id}"
         [[ -f "$ck.rc" ]] && continue
         obj="$RUN_DIR/w${wid}_${base}.o"

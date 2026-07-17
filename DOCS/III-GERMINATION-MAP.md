@@ -6,7 +6,7 @@
 > spore, 151 members, regrows 30 win64 + 30 Linux binaries across 3 ISAs, reproducible) ·
 > **Γ3 EXECUTED across all three ISAs** (`run_retarget.sh`: 3 translators as anchor-verified waist
 > objects, 30/30 byte-match, self-translation fixpoint, TWO cross-ISA Linux germs) · **Γ2b + Γ5
-> CLOSED** (wasm leg in retarget; the three Γ legs run inside `run_evergreen.sh`).  Ledger:
+> CLOSED** (wasm leg in retarget; the three Γ legs run inside `iii-ergon evergreen`, ex `run_evergreen.sh` retired 2026-07-17).  Ledger:
 > `III-GAMMA-RETARGET-SPORE.md`.  Still open: **Γ0 S4 parse frontier** (deep, independent) and Γ1
 > body-onto-waist at full corpus scale (needs the cg_r3 SVIR backend).
 >
@@ -61,7 +61,7 @@ port."
 | Capability body | **811 modules**, of which **37 touch OS symbols** | ⇒ **95.4% pure** (37/811; was 32 — tree grew) |
 | Corpus | **1,831 KATs**; **69 use aether**, **~8** WriteFile-class, **17 metal**; the 348 "msvcrt" hits are **malloc/free only** | heap is already *inside* the waist (size-tracked heap, 4 MiB linear memory) ⇒ **~96% of the proven capability surface is waist-expressible** |
 | Host set today | **{win64-native, wasm-under-node}** — greps find **no ELF, no SysV, no AArch64 anywhere** | "all contexts" is currently two contexts, one of them via node |
-| Spine | `run_seed_sovereign.sh` EXISTS (S4 red), `run_completion.sh` + `run_evergreen.sh` exist | Λ0 in flight; frontier = parse.c corruption when main.c is the entry TU [recorded, ledger] |
+| Spine | `run_seed_sovereign.sh` EXISTS (S4 red), `run_completion.sh` + `run_evergreen.sh` exist [at map time; evergreen since ABSORBED → `iii-ergon evergreen`, 2026-07-17] | Λ0 in flight; frontier = parse.c corruption when main.c is the entry TU [recorded, ledger] |
 
 **The load-bearing coupling.** Unchanged from the Λ map at the first order: the body reaches the waist at
 one point (the R0 fold). Γ adds the second-order observation: **the waist reaches the world at exactly one
@@ -167,13 +167,13 @@ production form.**
 *Exit gate:* `run_germinate.sh` rc=0 on a clean prefix, per host in the matrix. *Falsifier:* perturb any
 spore byte → germination reddens.
 
-**Γ5 — THE LIVING INVARIANT (evergreen as a property, not a slogan).** `run_evergreen.sh` extended to:
+**Γ5 — THE LIVING INVARIANT (evergreen as a property, not a slogan).** `iii-ergon evergreen` (ex `run_evergreen.sh`, retired 2026-07-17) extended to:
 germinate + N-route corpus differential + fixpoint + GU legs on a REAL organ result (absorbs Λ4:
 canonicalise where a term exists, zk-attest folds/kernels — selective by design, stated), continuously.
 Optimizer/e-graph evolution is admitted **only** under the N-route oracle + the byte-match law. "Evergreen"
 then means: *the system re-derives itself, verified, anywhere, forever* — and every result it ships is a
 proof-carrying artifact any germinated node can check without re-execution.
-*Exit gate:* extended `run_evergreen.sh` green = the completion invariant's successor. *Falsifier:* any
+*Exit gate:* extended `iii-ergon evergreen` green = the completion invariant's successor. *Falsifier:* any
 placeholder, host regression, route divergence, or fixpoint break reddens.
 
 **Scheduling fact (measured, load-bearing):** Γ0 and Γ2a are **independent** — the host-closure rung needs

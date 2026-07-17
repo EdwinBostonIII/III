@@ -96,17 +96,24 @@ else
 fi
 
 # --- C: ALGEBRA IN CODEGEN ----------------------------------------------------
+# 2026-07-17: the certified-rewrite law became SINGLE-SOURCE -- commit 98de97e4
+# deleted cg_r3's five proven-dead peephole wrappers (seg_mul_plan is the sole
+# emit path, complete by linearity over Z/2^64) and the admit/shift laws live in
+# cg_opt_rules.iii with their bv_ring proofs.  The clause counts citations across
+# BOTH decision-path files; the pin is unchanged (removing any certified citation
+# still reddens).
 BVRING_MIN="$(pin BVRING_MIN)"
 CGR3="$BOOT/cg_r3.iii"
-if [[ -f "$CGR3" ]]; then
-    BV="$(grep -c "bv_ring" "$CGR3")"
+CGOPT="$BOOT/cg_opt_rules.iii"
+if [[ -f "$CGR3" && -f "$CGOPT" ]]; then
+    BV=$(( $(grep -c "bv_ring" "$CGR3") + $(grep -c "bv_ring" "$CGOPT") ))
     if [[ "$BV" -lt "$BVRING_MIN" ]]; then
-        red "C: cg_r3.iii bv_ring-proven sites = $BV < pin $BVRING_MIN (certified-rewrite machinery regressed)"
+        red "C: cg_r3.iii+cg_opt_rules.iii bv_ring-proven sites = $BV < pin $BVRING_MIN (certified-rewrite machinery regressed)"
     else
-        log "C: cg_r3.iii bv_ring-proven sites = $BV >= $BVRING_MIN (mul-plan + shl+add certification live)"
+        log "C: cg_r3.iii+cg_opt_rules.iii bv_ring-proven sites = $BV >= $BVRING_MIN (mul-plan + shl+add certification live)"
     fi
 else
-    red "C: cg_r3.iii missing"
+    red "C: cg_r3.iii or cg_opt_rules.iii missing"
 fi
 for f in "$BOOT/build_iiis1.sh" "$BOOT/build_iiis2.sh" "$BOOT/build_iiis3.sh"; do
     grep -q "libiii_native\.a" "$f" \

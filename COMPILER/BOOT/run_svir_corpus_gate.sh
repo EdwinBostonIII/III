@@ -57,10 +57,12 @@ S_TIMEOUT="${S_TIMEOUT:-120}"
 [[ -f "$LIB_ARCHIVE" ]] || { echo "[sq-corpus] FATAL: no stdlib archive"; exit 2; }
 
 # cache keys: sealed identities, never timestamps (run_meaning.sh's law)
-IIIS_ID="$(cut -d' ' -f1 "$III_ROOT/COMPILED/iiis-2.exe.mhash" 2>/dev/null || sha256sum "$IIIS" | cut -d' ' -f1)"
-LIB_ID="$(cut -d' ' -f1 "$BUILD_DIR/libiii_native.a.mhash" 2>/dev/null || sha256sum "$LIB_ARCHIVE" | cut -d' ' -f1)"
+# seal authorship: III hashes III (mhash_lib; GNU is the veto-witness, never the author)
+. "$SCRIPT_DIR/mhash_lib.sh"
+IIIS_ID="$(cut -d' ' -f1 "$III_ROOT/COMPILED/iiis-2.exe.mhash" 2>/dev/null || mhash_file "$IIIS")"
+LIB_ID="$(cut -d' ' -f1 "$BUILD_DIR/libiii_native.a.mhash" 2>/dev/null || mhash_file "$LIB_ARCHIVE")"
 NKEY="${IIIS_ID:0:16}_${LIB_ID:0:16}"
-SKEY="$(sha256sum "$SOVIR/svir_interp.iii" | cut -c1-8)"    # S verdicts re-measure when interp or compiler change
+SKEY="$(mhash_file "$SOVIR/svir_interp.iii" | cut -c1-8)"    # S verdicts re-measure when interp or compiler change
 
 # force-linked side-effect set — MIRRORS run_meaning.sh / run_corpus.sh
 SIDE_EFFECT_NAMES=(
@@ -98,7 +100,7 @@ run_native() {  # $1 src -> RCN + CLASS_N ∈ {OK, NATIVE_CFAIL, NATIVE_LFAIL, N
     obj="$RUN_DIR/${base}.o"
     exe="$RUN_DIR/${base}${BIN_SUFFIX}"
     CLASS_N="OK"; RCN=""
-    kat_id="$(sha256sum "$src" | cut -c1-16)"
+    kat_id="$(mhash_file "$src" | cut -c1-16)"
     ck="$CACHE_DIR/${base}.${NKEY}.${kat_id}"
     if [[ -f "$ck.lfail" ]]; then CLASS_N="NATIVE_LFAIL"; return; fi
     if [[ -f "$ck.ntime" ]]; then CLASS_N="NATIVE_TIMEOUT"; return; fi
@@ -134,7 +136,7 @@ run_svir() {  # $1 src -> RCS + CLASS_S ∈ {OK, S_UNSUP, S_TIMEOUT, S_DEFECT} +
     local src="$1" base kat_id sk W rc _la
     base="$(basename "$src" .iii)"
     CLASS_S="OK"; RCS=""; SNOTE=""
-    kat_id="$(sha256sum "$src" | cut -c1-16)"
+    kat_id="$(mhash_file "$src" | cut -c1-16)"
     sk="$CACHE_DIR/${base}.S${NKEY:0:16}.${SKEY}.${kat_id}"
     if [[ -f "$sk.class" ]]; then
         CLASS_S="$(cat "$sk.class")"; RCS="$(cat "$sk.rcs" 2>/dev/null)"; SNOTE="$(cat "$sk.note" 2>/dev/null)"

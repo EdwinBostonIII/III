@@ -54,6 +54,12 @@
  *              ex run_standing_tools' smoke half + the judge's adversarial trial)
  *   1400+arm   the DEEP verb: the die's heavy faculties (1401..1411, ex
  *              run_standing_tools' deep half -- organ-owned, on demand)
+ *   1500+arm   the AUTARKEIA verb: sealed spine + covenant (ex run_testament/covenant)
+ *   1600+arm   the ZK-AUDIT verb: soundness claims vs knobs (ex run_zk_audit)
+ *   1700+arm   the AUTHOR verb: THE NAMED-DEFICIT LAW (ex run_author)
+ *   1800+arm   the EVERGREEN verb: sovereign self-build census (ex run_evergreen)
+ *   1900+arm   the OBSERVE verb: core_H by observation (ex run_covenant_observe)
+ *   2000+arm   the CONSCIENCE verb: PHI-3, the exit gate (ex run_conscience)
  *   1001..1003 ergon meta (vitality anomaly, cross-fold mismatch, garbage accepted)
  *
  * THE LEDGER: the census also REPORTS the ancestral batch layer still on the
@@ -110,6 +116,9 @@ extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_out_find(pat: u64, plen: u64) -> u32 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_out_len() -> u64 from "stoma_proc.iii"
 extern @abi(c-msvc-x64) fn proc_out_at(i: u64) -> u8 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_ms() -> u64 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> i32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
 extern @abi(c-msvc-x64) fn autognosis_glossa_id() -> u64 from "autognosis.iii"
@@ -163,14 +172,17 @@ fn erg_mapcode(seat: u64, arm: u64, mode: u64) -> u64 {
     if seat == 11u64 { return 1500u64 + arm }          /* the AUTARKEIA verb     */
     if seat == 12u64 { return 1600u64 + arm }          /* the ZK-AUDIT verb      */
     if seat == 13u64 { return 1700u64 + arm }          /* the AUTHOR verb        */
+    if seat == 14u64 { return 1800u64 + arm }          /* the EVERGREEN verb     */
+    if seat == 15u64 { return 1900u64 + arm }          /* the OBSERVE verb       */
+    if seat == 16u64 { return 2000u64 + arm }          /* the CONSCIENCE verb    */
     return 1000u64 + arm
 }
 /* the whole fault space is INJECTIVE: enumerate every code either seat can emit
  * and require no collision (1 injective | 0 collision found) */
-var ERG_SEEN : [u8; 1800]
+var ERG_SEEN : [u8; 2100]
 fn erg_map_injective(mode: u64) -> u64 {
     let mut i : u64 = 0u64
-    while i < 1800u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
+    while i < 2100u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
     /* seat 0: 100..599  seat 1: 11..19  seat 2: 41..45  seat 3: 21..36
      * seat 4: 1..6  meta: 1..3 (mapped 1001..1003) */
     let mut c : u64 = 100u64
@@ -263,6 +275,27 @@ fn erg_map_injective(mode: u64) -> u64 {
         if ERG_SEEN[m13] == 1u8 { return 0u64 }
         ERG_SEEN[m13] = 1u8
         au = au + 1u64
+    }
+    let mut ev : u64 = 1u64
+    while ev <= 3u64 {
+        let m14 : u64 = erg_mapcode(14u64, ev, mode)
+        if ERG_SEEN[m14] == 1u8 { return 0u64 }
+        ERG_SEEN[m14] = 1u8
+        ev = ev + 1u64
+    }
+    let mut ob : u64 = 1u64
+    while ob <= 5u64 {
+        let m15 : u64 = erg_mapcode(15u64, ob, mode)
+        if ERG_SEEN[m15] == 1u8 { return 0u64 }
+        ERG_SEEN[m15] = 1u8
+        ob = ob + 1u64
+    }
+    let mut cn : u64 = 1u64
+    while cn <= 4u64 {
+        let m16 : u64 = erg_mapcode(16u64, cn, mode)
+        if ERG_SEEN[m16] == 1u8 { return 0u64 }
+        ERG_SEEN[m16] = 1u8
+        cn = cn + 1u64
     }
     let mut z : u64 = 1u64
     while z <= 3u64 {
@@ -1581,6 +1614,699 @@ fn erg_zk_downscale_nbatch() -> u64 {
     }
     return 0u64
 }
+/* ==================== THE OBSERVE VERB (ex run_covenant_observe) ============
+ * AUTARKEIA Alpha-3 tail: core_H by OBSERVATION, III-only.  The covenant verb
+ * proves core(T) host-invariant BY CONSTRUCTION; this verb turns that into by
+ * OBSERVATION using an ALGORITHM-INDEPENDENT hasher (indep_sha256 -- a second,
+ * from-scratch SHA-256 sharing zero code with cad) run on a SUBSTRATE-INDEPENDENT
+ * executor (native gcc AND the iiisv->SVIR->svir_interp reference path, disjoint
+ * code).  The observer (covobs_tail: III emits III) recomputes iii-judge's Merkle
+ * fold with the independent primitive and returns 99 iff its root is bit-exact to
+ * CA -- on BOTH substrates.  A single-nibble-tampered CA must be REFUSED on both.
+ * Everything spawned through the process organ; no foreign hasher, no second OS.
+ * Codes 1900+arm. */
+var ERG_OBS_CA : [u8; 80]
+var ERG_OBS_CALEN : u64 = 0u64
+/* build+run a zero-import organ NATIVELY (iiis-2 -> gcc -> run); returns rc, or
+ * 25x on a build-step failure */
+fn erg_obs_native(src: u64, tag: u64) -> u64 {
+    let mut a : u64 = erg_x_sput(0u64, "cmd /c COMPILED\\iiis-2.exe " as u64)
+    a = erg_x_sput(a, src)
+    a = erg_x_sput(a, " --compile-only --out STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_n.o" as u64)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 255u64 }
+    a = erg_x_sput(0u64, "cmd /c gcc STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_n.o -o STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_n.exe -lkernel32" as u64)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 254u64 }
+    a = erg_x_sput(0u64, "STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_n.exe" as u64)
+    return erg_x_run((&ERG_XB) as u64, 120000u32)
+}
+/* build+run the SAME organ under the INTERP substrate (iiisv lowers .iii->SVIR,
+ * iiis-2 compiles the generated .iii, gcc links it with svir_interp, run) */
+fn erg_obs_interp(src: u64, tag: u64) -> u64 {
+    let mut a : u64 = erg_x_sput(0u64, "cmd /c STDLIB\\build\\ergon_obs\\iiisv.exe " as u64)
+    a = erg_x_sput(a, src)
+    a = erg_x_sput(a, " > STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_gen.iii" as u64)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 253u64 }
+    a = erg_x_sput(0u64, "cmd /c COMPILED\\iiis-2.exe STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_gen.iii --compile-only --out STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_gen.o" as u64)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 252u64 }
+    a = erg_x_sput(0u64, "cmd /c gcc STDLIB/build/ergon_obs/svir_interp.o STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_gen.o -o STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_i.exe" as u64)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 251u64 }
+    a = erg_x_sput(0u64, "STDLIB/build/ergon_obs/" as u64)
+    a = erg_x_sput(a, tag)
+    a = erg_x_sput(a, "_i.exe" as u64)
+    return erg_x_run((&ERG_XB) as u64, 120000u32)
+}
+fn erg_observe() -> u32 @export {
+    erg_x_run("cmd /c if not exist STDLIB\\build\\ergon_obs mkdir STDLIB\\build\\ergon_obs" as u64, 30000u32)
+    /* arm 1: build the leaves from source -- covobs_tail (III emits III), iiisv
+     * (the independent front-end), svir_interp (the reference executor) */
+    if erg_x_run("cmd /c COMPILED\\iiis-2.exe STDLIB/iii/aether/covobs_tail.iii --compile-only --out STDLIB/build/ergon_obs/covobs_tail.o" as u64, 120000u32) != 0u64 { return 1901u32 }
+    if erg_x_run("cmd /c gcc STDLIB/build/ergon_obs/covobs_tail.o -o STDLIB/build/ergon_obs/covobs_tail.exe -lkernel32" as u64, 120000u32) != 0u64 { return 1901u32 }
+    if erg_x_run("cmd /c COMPILED\\iiis-2.exe STDLIB/sovir/iiisv.iii --compile-only --out STDLIB/build/ergon_obs/iiisv.o" as u64, 120000u32) != 0u64 { return 1901u32 }
+    if erg_x_run("cmd /c gcc STDLIB/build/ergon_obs/iiisv.o -o STDLIB/build/ergon_obs/iiisv.exe" as u64, 120000u32) != 0u64 { return 1901u32 }
+    if erg_x_run("cmd /c COMPILED\\iiis-2.exe STDLIB/sovir/svir_interp.iii --compile-only --out STDLIB/build/ergon_obs/svir_interp.o" as u64, 120000u32) != 0u64 { return 1901u32 }
+    /* arm 2: the PRIMITIVE -- indep_sha256 (cad-independent) is a correct SHA-256
+     * (FIPS vectors) on BOTH substrates (99 native AND 99 interp) */
+    if erg_obs_native("STDLIB/independence/indep_sha256.iii" as u64, "kat" as u64) != 99u64 { return 1902u32 }
+    if erg_obs_interp("STDLIB/independence/indep_sha256.iii" as u64, "kat" as u64) != 99u64 { return 1902u32 }
+    /* arm 3: emit a live testament; derive the host-invariant core rows + CA
+     * (iii-judge's cad Merkle fold), exactly as the covenant does */
+    if erg_x_run("cmd /c git ls-files -- COMPILER/BOOT/*.iii COMPILER/BOOT/*.c COMPILER/BOOT/*.h COMPILER/BOOT/*.sh STDLIB/iii/**/*.iii STDLIB/sovir/*.iii STDLIB/sovir/*.sh STDLIB/corpus/*.iii STDLIB/scripts/*.sh DOCS/*.md DOCS/*.log DOCS/*.txt > STDLIB\\build\\ergon_obs\\MANIFEST.txt" as u64, 120000u32) != 0u64 { return 1903u32 }
+    let mut sdi : u64 = 0u64
+    while sdi < 96u64 { ERG_SEED[sdi] = (67u64 + (sdi * 5u64 + 7u64) % 26u64) as u8   sdi = sdi + 1u64 }
+    if erg_x_putn("STDLIB/build/ergon_obs/seed.bin" as u64, (&ERG_SEED) as u64, 96u64) != 1u64 { return 1903u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe keygen STDLIB/build/ergon_obs/seed.bin STDLIB/build/ergon_obs/pk.bin STDLIB/build/ergon_obs/sk.bin" as u64, 180000u32) != 0u64 { return 1903u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_obs/MANIFEST.txt STDLIB/build/ergon_obs/sk.bin STDLIB/build/ergon_obs/pk.bin STDLIB/build/ergon_obs/gen0.dat none none" as u64, 300000u32) != 0u64 { return 1903u32 }
+    if erg_show_core("STDLIB/build/ergon_obs/gen0.dat" as u64, "STDLIB/build/ergon_obs/core_A.txt" as u64) < 5u64 { return 1903u32 }
+    ERG_OBS_CALEN = erg_fold_root("STDLIB/build/ergon_obs/core_A.txt" as u64, (&ERG_OBS_CA) as u64)
+    if ERG_OBS_CALEN != 64u64 { return 1903u32 }
+    /* arm 4: the OBSERVER -- covobs_tail (III emits III) appended to the head
+     * forms an organ that recomputes CA with the INDEPENDENT primitive; 99 iff
+     * bit-exact to CA, on BOTH substrates */
+    erg_x_run("cmd /c copy /y STDLIB\\independence\\indep_covenant_obs_head.iii STDLIB\\build\\ergon_obs\\obs.iii >nul" as u64, 30000u32)
+    let mut a : u64 = erg_x_sput(0u64, "cmd /c STDLIB\\build\\ergon_obs\\covobs_tail.exe STDLIB/build/ergon_obs/core_A.txt " as u64)
+    a = erg_x_sput(a, (&ERG_OBS_CA) as u64)
+    a = erg_x_sput(a, " >> STDLIB/build/ergon_obs/obs.iii" as u64)
+    if erg_x_run((&ERG_XB) as u64, 60000u32) != 0u64 { return 1904u32 }
+    if erg_obs_native("STDLIB/build/ergon_obs/obs.iii" as u64, "obs" as u64) != 99u64 { return 1904u32 }
+    if erg_obs_interp("STDLIB/build/ergon_obs/obs.iii" as u64, "obs" as u64) != 99u64 { return 1904u32 }
+    /* arm 5: the ADVERSARY -- a single-nibble-tampered CA must be REFUSED on
+     * BOTH substrates (non-99).  Flip the last hex nibble of CA. */
+    let cp : *u8 = (&ERG_OBS_CA) as u64 as *u8
+    let lastc : u8 = cp[ERG_OBS_CALEN - 1u64]
+    let mut nx : u8 = lastc + 1u8
+    if lastc == 102u8 { nx = 48u8 }                     /* 'f' -> '0' */
+    if lastc == 57u8 { nx = 97u8 }                      /* '9' -> 'a' */
+    cp[ERG_OBS_CALEN - 1u64] = nx
+    erg_x_run("cmd /c copy /y STDLIB\\independence\\indep_covenant_obs_head.iii STDLIB\\build\\ergon_obs\\obsbad.iii >nul" as u64, 30000u32)
+    a = erg_x_sput(0u64, "cmd /c STDLIB\\build\\ergon_obs\\covobs_tail.exe STDLIB/build/ergon_obs/core_A.txt " as u64)
+    a = erg_x_sput(a, (&ERG_OBS_CA) as u64)
+    a = erg_x_sput(a, " >> STDLIB/build/ergon_obs/obsbad.iii" as u64)
+    if erg_x_run((&ERG_XB) as u64, 60000u32) != 0u64 { return 1905u32 }
+    if erg_obs_native("STDLIB/build/ergon_obs/obsbad.iii" as u64, "obsbad" as u64) == 99u64 { return 1905u32 }
+    if erg_obs_interp("STDLIB/build/ergon_obs/obsbad.iii" as u64, "obsbad" as u64) == 99u64 { return 1905u32 }
+    return 0u32
+}
+
+/* ==================== THE EVERGREEN VERB (ex run_evergreen) ====================
+ * THE EVERGREEN GUARANTEE (Φ7): every standalone program self-builds through the
+ * SOVEREIGN toolchain (sovas assembles, sovld links -- gcc NEVER assembles) and
+ * runs to its real exit code, and the load-bearing sources carry ZERO incomplete-
+ * work markers.  The verb: (1) scans sovir/sovtc/BOOT for work-markers in-organ
+ * (0 is the floor); (2) enumerates every `fn main` program, drives sovbuild
+ * through the process organ, demands LINKED + witness=0 (a gcc-as re-entry is a
+ * FAIL -- the arch doc's own falsifier), then runs it and judges its exit per
+ * mode (kat=99 or an override; driver=deliberate non-crash; buildonly=link
+ * only); (3) drives the Γ living-invariant gates (host matrix, retarget fixpoint,
+ * spore germination).  Everything spawned + judged; no bash reads the verdict.
+ * Codes 1800+arm; a program fault is 1800 + (its index is logged separately). */
+var ERG_EVG_LIST : [u8; 131072]
+var ERG_EVG_SRC : [u8; 262144]            /* one program source (separate from ERG_ZKF) */
+var ERG_EVG_SRCLEN : u64 = 0u64
+var ERG_EVG_RAN : u64 = 0u64
+var ERG_EVG_PASS : u64 = 0u64
+fn erg_evg_ran() -> u64 @export { return ERG_EVG_RAN }
+fn erg_evg_pass() -> u64 @export { return ERG_EVG_PASS }
+/* count a marker substring in ERG_EVG_SRC[0..len) */
+fn erg_evg_count(pat: u64) -> u64 {
+    let f : *u8 = (&ERG_EVG_SRC) as u64 as *u8
+    let p : *u8 = pat as *u8
+    let mut pl : u64 = 0u64
+    while p[pl] != 0u8 { pl = pl + 1u64 }
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i + pl <= ERG_EVG_SRCLEN {
+        let mut j : u64 = 0u64
+        let mut hit : u64 = 1u64
+        while j < pl { if f[i + j] != p[j] { hit = 0u64   j = pl } else { j = j + 1u64 } }
+        if hit == 1u64 { c = c + 1u64   i = i + pl } else { i = i + 1u64 }
+    }
+    return c
+}
+fn erg_evg_has(pat: u64) -> u64 { if erg_evg_count(pat) > 0u64 { return 1u64 }   return 0u64 }
+fn erg_evg_read(path: u64) -> u64 {
+    let h : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 0u64 }
+    if ReadFile(h, (&ERG_EVG_SRC) as u64, 262144u32, (&ERG_TC) as u64, 0u64) == 0i32 { CloseHandle(h)   return 0u64 }
+    CloseHandle(h)
+    ERG_EVG_SRCLEN = ERG_TC[0u64] as u64
+    return ERG_EVG_SRCLEN
+}
+fn erg_evg_markers() -> u64 {
+    return erg_evg_count("TODO" as u64) + erg_evg_count("FIXME" as u64) + erg_evg_count("XXX" as u64) + erg_evg_count("HACK" as u64) + erg_evg_count("NOT IMPLEMENTED" as u64) + erg_evg_count("not yet implemented" as u64)
+}
+/* name ends with suffix? */
+fn erg_evg_ends(nm: u64, nlen: u64, suf: u64) -> u64 {
+    let p : *u8 = nm as *u8
+    let s : *u8 = suf as *u8
+    let mut sl : u64 = 0u64
+    while s[sl] != 0u8 { sl = sl + 1u64 }
+    if sl > nlen { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < sl { if p[nlen - sl + i] != s[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn erg_evg_starts(nm: u64, nlen: u64, pre: u64) -> u64 {
+    let p : *u8 = nm as *u8
+    let s : *u8 = pre as *u8
+    let mut i : u64 = 0u64
+    while s[i] != 0u8 { if i >= nlen { return 0u64 }   if p[i] != s[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+/* build the "dir/name.iii" path into ERG_XB2, and "STDLIB/build/ergon_evg/name.exe" into ERG_XB */
+fn erg_evg_paths(dir: u64, nm: u64, nlen: u64) -> i32 {
+    let sp : *u8 = nm as *u8
+    let a : *u8 = (&ERG_XB2) as u64 as *u8
+    let mut w : u64 = 0u64
+    let dp : *u8 = dir as *u8
+    let mut i : u64 = 0u64
+    while dp[i] != 0u8 { a[w] = dp[i]   w = w + 1u64   i = i + 1u64 }
+    a[w] = 47u8   w = w + 1u64
+    i = 0u64
+    while i < nlen { a[w] = sp[i]   w = w + 1u64   i = i + 1u64 }
+    a[w] = 46u8   a[w+1u64] = 105u8   a[w+2u64] = 105u8   a[w+3u64] = 105u8   a[w+4u64] = 0u8
+    let b : *u8 = (&ERG_XB) as u64 as *u8
+    let mut v : u64 = 0u64
+    let pre : *u8 = "STDLIB/build/ergon_evg/" as u64 as *u8
+    let mut k : u64 = 0u64
+    while pre[k] != 0u8 { b[v] = pre[k]   v = v + 1u64   k = k + 1u64 }
+    i = 0u64
+    while i < nlen { b[v] = sp[i]   v = v + 1u64   i = i + 1u64 }
+    b[v] = 46u8   b[v+1u64] = 101u8   b[v+2u64] = 120u8   b[v+3u64] = 101u8   b[v+4u64] = 0u8
+    return 0i32
+}
+/* the FAILURE is NAMED: which program, which law, what rc -- an anonymous red
+ * is not a located fault (the organ's own constitution).  law: 1 LINKED line
+ * missing | 2 witness>0 | 3 the PE absent | 4 driver crash-class rc | 5 kat rc */
+var ERG_EVG_FN : [u8; 128]
+var ERG_EVG_FNL : u64 = 0u64
+var ERG_EVG_FLAW : u64 = 0u64
+var ERG_EVG_FRC : u64 = 0u64
+var ERG_EVG_RETRIES : u64 = 0u64
+fn erg_evg_fail_name_len() -> u64 @export { return ERG_EVG_FNL }
+fn erg_evg_fail_name_at(i: u64) -> u8 @export {
+    let p : *u8 = (&ERG_EVG_FN) as u64 as *u8
+    return p[i]
+}
+fn erg_evg_fail_law() -> u64 @export { return ERG_EVG_FLAW }
+fn erg_evg_fail_rc() -> u64 @export { return ERG_EVG_FRC }
+fn erg_evg_retries() -> u64 @export { return ERG_EVG_RETRIES }
+fn erg_evg_name_fail(nm: u64, nlen: u64, law: u64, rc: u64) -> u64 {
+    let d : *u8 = (&ERG_EVG_FN) as u64 as *u8
+    let p : *u8 = nm as *u8
+    let mut i : u64 = 0u64
+    let mut w : u64 = 0u64
+    while i < nlen { if w < 127u64 { d[w] = p[i]   w = w + 1u64 }   i = i + 1u64 }
+    d[w] = 0u8
+    ERG_EVG_FNL = w
+    ERG_EVG_FLAW = law
+    ERG_EVG_FRC = rc
+    return 1u64
+}
+/* build + run one program; 0 pass | 1 fail | 2 skip (excluded/no-main).
+ * A fail is retried ONCE after a settle (a freshly-linked PE can lose a race
+ * with the host's file scanner on this die -- OneDrive/AV hold new binaries
+ * briefly); the retry is COUNTED and reported, so a flaky sweep is visible,
+ * and a genuinely broken program still fails both attempts. */
+fn erg_evg_program(dir: u64, nm: u64, nlen: u64) -> u64 {
+    if erg_evg_paths(dir, nm, nlen) != 0i32 { return 2u64 }
+    if erg_evg_read((&ERG_XB2) as u64) == 0u64 { return 2u64 }
+    if erg_evg_has("fn main" as u64) == 0u64 { return 2u64 }
+    /* exclusions (mirror the runner exactly) */
+    if erg_evg_streq(nm, nlen, "crt0" as u64) == 1u64 { return 2u64 }
+    if erg_evg_starts(nm, nlen, "_" as u64) == 1u64 { return 2u64 }
+    if erg_evg_ends(nm, nlen, "_probe" as u64) == 1u64 { return 2u64 }
+    if erg_evg_ends(nm, nlen, "_w" as u64) == 1u64 { return 2u64 }
+    /* payload-consumer libraries (unresolved externs standalone) */
+    if erg_evg_has("fn svir_ptr" as u64) == 1u64 { return 2u64 }
+    if erg_evg_has("fn svir_len" as u64) == 1u64 { return 2u64 }
+    if erg_evg_has("fn verify_body" as u64) == 1u64 { return 2u64 }
+    if erg_evg_has("svir_prog.iii" as u64) == 1u64 { return 2u64 }
+    if erg_evg_has("gen_svir.iii" as u64) == 1u64 { return 2u64 }
+    /* mode */
+    let mut mode : u64 = 0u64                            /* 0 kat | 1 driver | 2 buildonly */
+    if erg_evg_has("fn main(argc" as u64) == 1u64 { mode = 1u64 }
+    if erg_evg_has("CreateWindow" as u64) == 1u64 { mode = 2u64 }
+    if erg_evg_has("GetMessageA" as u64) == 1u64 { mode = 2u64 }
+    if erg_evg_has("PeekMessageA" as u64) == 1u64 { mode = 2u64 }
+    if erg_evg_has("RegisterClass" as u64) == 1u64 { mode = 2u64 }
+    /* mathesis campaign STAGE DRIVERS (mathesis_*_main) are owned by run_mathesis,
+     * which PRICES their slow sweeps (the CHI-2 stage exhausts 2^32 tables, ~17
+     * min).  The evergreen claim over them is the SOVEREIGN BUILD (witness=0);
+     * their priced RUN belongs to their owner -- so they are buildonly here, the
+     * same category the runner grants GUI drivers.  This preserves the Φ7 build
+     * guarantee without the category error of a 120s standalone-kat cap. */
+    if erg_evg_starts(nm, nlen, "mathesis_" as u64) == 1u64 { if erg_evg_ends(nm, nlen, "_main" as u64) == 1u64 { mode = 2u64 } }
+    ERG_EVG_RAN = ERG_EVG_RAN + 1u64
+    let r1 : u64 = erg_evg_attempt(dir, nm, nlen, mode)
+    if r1 != 1u64 { return r1 }
+    ERG_EVG_RETRIES = ERG_EVG_RETRIES + 1u64
+    Sleep(500u32)
+    return erg_evg_attempt(dir, nm, nlen, mode)
+}
+fn erg_evg_attempt(dir: u64, nm: u64, nlen: u64, mode: u64) -> u64 {
+    /* SOVEREIGN BUILD: spawn sovbuild (captures stdout); demand LINKED + witness=0 */
+    let sp : *u8 = (&ERG_XB) as u64 as *u8               /* remember the exe path */
+    /* construct: cmd /c bash STDLIB/sovtc/sovbuild.sh <src> <exe> */
+    let cp : *u8 = (&ERG_CORE) as u64 as *u8             /* reuse ERG_CORE as cmd buffer */
+    let mut w : u64 = 0u64
+    let pfx : *u8 = "cmd /c bash STDLIB/sovtc/sovbuild.sh " as u64 as *u8
+    let mut k : u64 = 0u64
+    while pfx[k] != 0u8 { cp[w] = pfx[k]   w = w + 1u64   k = k + 1u64 }
+    let s2 : *u8 = (&ERG_XB2) as u64 as *u8
+    k = 0u64
+    while s2[k] != 0u8 { cp[w] = s2[k]   w = w + 1u64   k = k + 1u64 }
+    cp[w] = 32u8   w = w + 1u64
+    k = 0u64
+    while sp[k] != 0u8 { cp[w] = sp[k]   w = w + 1u64   k = k + 1u64 }
+    cp[w] = 0u8
+    erg_x_run((&ERG_CORE) as u64, 180000u32)             /* sovbuild exits with the program's rc; ignore it */
+    if erg_x_find("LINKED (sovld" as u64) != 1u64 { return erg_evg_name_fail(nm, nlen, 1u64, 0u64) }
+    let wit : u64 = erg_x_parse_after("witness=" as u64)
+    if wit != 0u64 { return erg_evg_name_fail(nm, nlen, 2u64, wit) }
+    /* the PE must exist */
+    let hx : u64 = CreateFileA((&ERG_XB) as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if hx == 18446744073709551615u64 { return erg_evg_name_fail(nm, nlen, 3u64, 0u64) }
+    CloseHandle(hx)
+    if mode == 2u64 { return 0u64 }                      /* buildonly: sovereign link is the claim */
+    /* run the PE, judge its exit */
+    let rc : u64 = erg_x_run((&ERG_XB) as u64, 120000u32)
+    if mode == 1u64 {
+        /* driver: must exit DELIBERATELY, never crash/hang/no-load */
+        if rc == 9902u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 124u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 127u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 132u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 134u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 136u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 139u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        if rc == 143u64 { return erg_evg_name_fail(nm, nlen, 4u64, rc) }
+        return 0u64
+    }
+    /* kat: exit 99, unless it is a sov_drive* emitter (override 0) */
+    if erg_evg_starts(nm, nlen, "sov_drive" as u64) == 1u64 { if rc == 0u64 { return 0u64 }   return erg_evg_name_fail(nm, nlen, 5u64, rc) }
+    if rc == 99u64 { return 0u64 }
+    return erg_evg_name_fail(nm, nlen, 5u64, rc)
+}
+fn erg_evg_streq(nm: u64, nlen: u64, lit: u64) -> u64 {
+    let p : *u8 = nm as *u8
+    let q : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while q[i] != 0u8 { if i >= nlen { return 0u64 }   if p[i] != q[i] { return 0u64 }   i = i + 1u64 }
+    if i != nlen { return 0u64 }
+    return 1u64
+}
+/* enumerate dir's *.iii, build+run each program; returns 1 on the FIRST fail */
+fn erg_evg_scan(dircmd: u64, dir: u64) -> u64 {
+    if erg_x_run(dircmd, 60000u32) != 0u64 { return 1u64 }
+    let h : u64 = CreateFileA("STDLIB/build/ergon_evg/list.txt" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 1u64 }
+    ReadFile(h, (&ERG_EVG_LIST) as u64, 131072u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(h)
+    let ln : u64 = ERG_TC[0u64] as u64
+    let lp : *u8 = (&ERG_EVG_LIST) as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < ln {
+        let ls : u64 = i
+        let mut le : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 { if le >= ln { go = 0u64 } else { if lp[le] == 10u8 { go = 0u64 } else { if lp[le] == 13u8 { go = 0u64 } else { le = le + 1u64 } } } }
+        if le > ls + 4u64 {
+            let blen : u64 = (le - ls) - 4u64            /* strip ".iii" */
+            let r : u64 = erg_evg_program(dir, ((&ERG_EVG_LIST) as u64) + ls, blen)
+            if r == 0u64 { ERG_EVG_PASS = ERG_EVG_PASS + 1u64 }
+            if r == 1u64 { return 1u64 }                 /* a real fail */
+        }
+        i = le
+        let mut eol : u64 = 1u64
+        while eol == 1u64 { if i >= ln { eol = 0u64 } else { if lp[i] == 10u8 { i = i + 1u64 } else { if lp[i] == 13u8 { i = i + 1u64 } else { eol = 0u64 } } } }
+    }
+    return 0u64
+}
+fn erg_evergreen() -> u32 @export {
+    ERG_EVG_RAN = 0u64
+    ERG_EVG_PASS = 0u64
+    erg_x_run("cmd /c if not exist STDLIB\\build\\ergon_evg mkdir STDLIB\\build\\ergon_evg" as u64, 30000u32)
+    /* arm 1: NO STUBS -- 0 work-markers in the load-bearing sources */
+    if erg_evg_nostubs("cmd /c dir /b STDLIB\\sovir\\*.iii > STDLIB\\build\\ergon_evg\\ns.txt" as u64, "STDLIB/sovir" as u64) != 0u64 { return 1801u32 }
+    if erg_evg_nostubs("cmd /c dir /b STDLIB\\sovtc\\*.iii > STDLIB\\build\\ergon_evg\\ns.txt" as u64, "STDLIB/sovtc" as u64) != 0u64 { return 1801u32 }
+    if erg_evg_nostubs("cmd /c dir /b COMPILER\\BOOT\\*.iii > STDLIB\\build\\ergon_evg\\ns.txt" as u64, "COMPILER/BOOT" as u64) != 0u64 { return 1801u32 }
+    /* arm 2: every standalone program self-builds sovereignly (witness=0) + runs */
+    if erg_evg_scan("cmd /c dir /b STDLIB\\sovir\\*.iii > STDLIB\\build\\ergon_evg\\list.txt" as u64, "STDLIB/sovir" as u64) != 0u64 { return 1802u32 }
+    if erg_evg_scan("cmd /c dir /b STDLIB\\sovtc\\*.iii > STDLIB\\build\\ergon_evg\\list.txt" as u64, "STDLIB/sovtc" as u64) != 0u64 { return 1802u32 }
+    if ERG_EVG_RAN < 40u64 { return 1802u32 }            /* the program census must be non-trivial */
+    /* arm 3: the Γ living-invariant gates (host matrix, retarget fixpoint, spore).
+     * 25-min caps: the spore + retarget legs tar, translate, and execute under
+     * qemu/WSL -- 10 min measured too tight on cold caches right after the
+     * 65-program sweep (all three gates proven green standalone).  A red NAMES
+     * its gate (law 6) -- an anonymous red is not a located fault. */
+    let g1 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_host_matrix.sh" as u64, 1500000u32)
+    if g1 != 0u64 { erg_evg_name_fail("run_host_matrix" as u64, 15u64, 6u64, g1)   return 1803u32 }
+    let g2 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_retarget.sh" as u64, 1500000u32)
+    if g2 != 0u64 { erg_evg_name_fail("run_retarget" as u64, 12u64, 6u64, g2)   return 1803u32 }
+    let g3 : u64 = erg_x_run("cmd /c bash STDLIB/sovir/run_germinate.sh" as u64, 1500000u32)
+    if g3 != 0u64 { erg_evg_name_fail("run_germinate" as u64, 13u64, 6u64, g3)   return 1803u32 }
+    return 0u32
+}
+/* scan a dir's *.iii for work-markers; 0 clean | 1 a marker found (or env) */
+fn erg_evg_nostubs(dircmd: u64, dir: u64) -> u64 {
+    if erg_x_run(dircmd, 60000u32) != 0u64 { return 1u64 }
+    let h : u64 = CreateFileA("STDLIB/build/ergon_evg/ns.txt" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 1u64 }
+    ReadFile(h, (&ERG_EVG_LIST) as u64, 131072u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(h)
+    let ln : u64 = ERG_TC[0u64] as u64
+    let lp : *u8 = (&ERG_EVG_LIST) as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < ln {
+        let ls : u64 = i
+        let mut le : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 { if le >= ln { go = 0u64 } else { if lp[le] == 10u8 { go = 0u64 } else { if lp[le] == 13u8 { go = 0u64 } else { le = le + 1u64 } } } }
+        if le > ls + 4u64 {
+            let blen : u64 = (le - ls) - 4u64
+            erg_evg_paths(dir, ((&ERG_EVG_LIST) as u64) + ls, blen)
+            if erg_evg_read((&ERG_XB2) as u64) > 0u64 {
+                if erg_evg_markers() > 0u64 { return 1u64 }
+            }
+        }
+        i = le
+        let mut eol : u64 = 1u64
+        while eol == 1u64 { if i >= ln { eol = 0u64 } else { if lp[i] == 10u8 { i = i + 1u64 } else { if lp[i] == 13u8 { i = i + 1u64 } else { eol = 0u64 } } } }
+    }
+    return 0u64
+}
+
+/* ==================== THE CONSCIENCE VERB (ex run_conscience) ====================
+ * PHI-3, THE EXIT GATE: every CLOSED/PROVEN/GATED banner in the tree must carry
+ * a RUNNABLE realization -- a claim whose gate is missing, rotten, or red is
+ * DECORATIVE, and this rite finds it.  COMPLETENESS BY CONSTRUCTION: the gate
+ * set is DISCOVERED from the living tree at the moment of motion -- run_*.sh
+ * AND *_gate.sh across the four gate dirs (the retired runner hand-listed its
+ * gate spine; discovery dissolves the hand-list, so a new *_gate.sh
+ * auto-enrolls and can never rot unexecuted) -- plus the two named
+ * build-spines, plus THE ORGAN'S OWN SIBLING VERBS (census/observe/zkaudit/
+ * author/autarkeia/evergreen/deep): the ERGON's banners are claims like any
+ * other.  Every gate is spawned SEQUENTIALLY through the process organ
+ * (parallel corpus runs starve commits on this box), judged by its OS-TRUE
+ * exit code, its output preserved at COMPILED/_conscience_<name>.log (the
+ * ancestor's forensic contract), under a 2h wall-cap (a gate that cannot
+ * finish is not a gate; a TIMEOUT IS a failure).  A file matching BOTH
+ * patterns enrolls ONCE (the runner class owns run_*).  Exclusions are NAMED
+ * with PRINTED reasons.  The per-gate rows are folded by iii-judge into ONE
+ * receipt root -- the rite leaves a verifiable artifact.  An optional
+ * substring filter runs a subset (iteration aid; the PHI-3 claim is ONLY the
+ * unfiltered rite).  Unfiltered, an empty discovery class is an ENUMERATION
+ * VIOLATION: a sweep that cannot fail proves nothing.
+ * Codes 2000+arm: 1 env (a discovery listing could not run), 2 enumeration
+ * violation (an empty class), 3 at least one gate red (each named live),
+ * 4 the receipt fold failed. */
+var ERG_CON_LIST : [u8; 65536]
+var ERG_CON_ROWS : [u8; 32768]
+var ERG_CON_RLEN : u64 = 0u64
+var ERG_CON_RCPT : [u8; 96]
+var ERG_CON_RCPTL : u64 = 0u64
+var ERG_CON_CMD : [u8; 1024]
+var ERG_CON_FILT : u64 = 0u64
+var ERG_CON_TOTAL : u64 = 0u64
+var ERG_CON_RAN : u64 = 0u64
+var ERG_CON_FAIL : u64 = 0u64
+var ERG_CON_EXCL : u64 = 0u64
+var ERG_CON_NGATE : u64 = 0u64
+var ERG_CON_NRUN : u64 = 0u64
+/* the organ prints the rite LIVE (an hours-long rite must narrate itself) */
+fn erg_ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn erg_psn(s: u64, n: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn erg_pu(v: u64) -> u32 { if v >= 10u64 { erg_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn erg_con_len(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+/* bounded writers into the command buffer */
+fn erg_con_cp(at: u64, s: u64) -> u64 {
+    let d : *u8 = (&ERG_CON_CMD) as u64 as *u8
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while p[i] != 0u8 { if a < 1023u64 { d[a] = p[i]   a = a + 1u64 }   i = i + 1u64 }
+    d[a] = 0u8
+    return a
+}
+fn erg_con_cpn(at: u64, s: u64, n: u64) -> u64 {
+    let d : *u8 = (&ERG_CON_CMD) as u64 as *u8
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while i < n { if a < 1023u64 { d[a] = p[i]   a = a + 1u64 }   i = i + 1u64 }
+    d[a] = 0u8
+    return a
+}
+/* bounded appenders into the rows artifact */
+fn erg_con_rown(s: u64, n: u64) -> u32 {
+    let d : *u8 = (&ERG_CON_ROWS) as u64 as *u8
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n { if ERG_CON_RLEN < 32760u64 { d[ERG_CON_RLEN] = p[i]   ERG_CON_RLEN = ERG_CON_RLEN + 1u64 }   i = i + 1u64 }
+    return 1u32
+}
+fn erg_con_rowz(s: u64) -> u32 { return erg_con_rown(s, erg_con_len(s)) }
+fn erg_con_rowu(v: u64) -> u32 {
+    if v >= 10u64 { erg_con_rowu(v / 10u64) }
+    let d : *u8 = (&ERG_CON_ROWS) as u64 as *u8
+    if ERG_CON_RLEN < 32760u64 { d[ERG_CON_RLEN] = (48u64 + (v % 10u64)) as u8   ERG_CON_RLEN = ERG_CON_RLEN + 1u64 }
+    return 1u32
+}
+/* substring test (the filter law: a subset is an iteration aid, never the claim) */
+fn erg_con_sub(hay: u64, hlen: u64, nee: u64) -> u64 {
+    let h : *u8 = hay as *u8
+    let q : *u8 = nee as *u8
+    let mut nl : u64 = 0u64
+    while q[nl] != 0u8 { nl = nl + 1u64 }
+    if nl == 0u64 { return 1u64 }
+    if nl > hlen { return 0u64 }
+    let mut i : u64 = 0u64
+    while i + nl <= hlen {
+        let mut j : u64 = 0u64
+        let mut hit : u64 = 1u64
+        while j < nl { if h[i + j] != q[j] { hit = 0u64   j = nl } else { j = j + 1u64 } }
+        if hit == 1u64 { return 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn erg_con_match(nm: u64, nlen: u64) -> u64 {
+    if ERG_CON_FILT == 0u64 { return 1u64 }
+    return erg_con_sub(nm, nlen, ERG_CON_FILT)
+}
+fn erg_con_iseq(nm: u64, nlen: u64, lit: u64) -> u64 {
+    let p : *u8 = nm as *u8
+    let q : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while q[i] != 0u8 { if i >= nlen { return 0u64 }   if p[i] != q[i] { return 0u64 }   i = i + 1u64 }
+    if i != nlen { return 0u64 }
+    return 1u64
+}
+/* the exclusion table -- every row PRINTS its reason (auditable, never silent) */
+fn erg_con_excluded(nm: u64, nlen: u64) -> u64 {
+    let mut r : u64 = 0u64
+    if erg_con_iseq(nm, nlen, "run_conscience" as u64) == 1u64 { r = 1u64 }
+    if erg_con_iseq(nm, nlen, "run_completion" as u64) == 1u64 { r = 2u64 }
+    if erg_con_iseq(nm, nlen, "run_residue_hunt" as u64) == 1u64 { r = 3u64 }
+    if erg_con_iseq(nm, nlen, "run_host_matrix" as u64) == 1u64 { r = 4u64 }
+    if erg_con_iseq(nm, nlen, "run_retarget" as u64) == 1u64 { r = 4u64 }
+    if erg_con_iseq(nm, nlen, "run_germinate" as u64) == 1u64 { r = 4u64 }
+    if r == 0u64 { return 0u64 }
+    ERG_CON_EXCL = ERG_CON_EXCL + 1u64
+    erg_ps("  EXCLUDED " as u64)
+    erg_psn(nm, nlen)
+    if r == 1u64 { erg_ps(" -- the retired ancestor of THIS verb: a resurrected copy never runs inside the rite" as u64) }
+    if r == 2u64 { erg_ps(" -- the retired capstone parent: kept so a resurrected copy never recurses" as u64) }
+    if r == 3u64 { erg_ps(" -- exploratory hunter (unbounded), not a pass/fail gate; findings land as run_residue_gate" as u64) }
+    if r == 4u64 { erg_ps(" -- driven INSIDE iii-ergon evergreen (the Gamma living invariant): one run per rite, not two" as u64) }
+    putchar(10i32)
+    return 1u64
+}
+/* spawn ERG_CON_CMD, judge the OS-true code, append the row, narrate live */
+fn erg_con_spawn(nm: u64, nlen: u64) -> u64 {
+    ERG_CON_RAN = ERG_CON_RAN + 1u64
+    let rc : u64 = erg_x_run((&ERG_CON_CMD) as u64, 7200000u32)
+    erg_con_rown(nm, nlen)
+    erg_con_rowz(" rc=" as u64)
+    erg_con_rowu(rc)
+    erg_con_rowz("\n" as u64)
+    if rc == 0u64 {
+        erg_ps("  PASS " as u64)
+        erg_psn(nm, nlen)
+        erg_ps("  (" as u64)
+        erg_pu(proc_ms() / 1000u64)
+        erg_ps("s)\n" as u64)
+        return 0u64
+    }
+    ERG_CON_FAIL = ERG_CON_FAIL + 1u64
+    erg_ps("  FAIL " as u64)
+    erg_psn(nm, nlen)
+    if rc == 9902u64 { erg_ps("  TIMEOUT(2h)" as u64) } else {
+        erg_ps("  rc=" as u64)
+        erg_pu(rc)
+    }
+    erg_ps("  (log: COMPILED/_conscience_" as u64)
+    erg_psn(nm, nlen)
+    erg_ps(".log)\n" as u64)
+    return 1u64
+}
+/* build: cmd /c bash <dirfs>/<stem>.sh > COMPILED\_conscience_<stem>.log 2>&1 */
+fn erg_con_build_sh(dirfs: u64, nm: u64, nlen: u64) -> u64 {
+    let mut a : u64 = erg_con_cp(0u64, "cmd /c bash " as u64)
+    a = erg_con_cp(a, dirfs)
+    a = erg_con_cp(a, "/" as u64)
+    a = erg_con_cpn(a, nm, nlen)
+    a = erg_con_cp(a, ".sh > COMPILED\\_conscience_" as u64)
+    a = erg_con_cpn(a, nm, nlen)
+    a = erg_con_cp(a, ".log 2>&1" as u64)
+    return a
+}
+/* build: cmd /c <body> > COMPILED\_conscience_<stem>.log 2>&1 */
+fn erg_con_build_cmd(body: u64, nm: u64) -> u64 {
+    let mut a : u64 = erg_con_cp(0u64, "cmd /c " as u64)
+    a = erg_con_cp(a, body)
+    a = erg_con_cp(a, " > COMPILED\\_conscience_" as u64)
+    a = erg_con_cp(a, nm)
+    a = erg_con_cp(a, ".log 2>&1" as u64)
+    return a
+}
+/* a named fixed line (build-spine / sibling verb) under the filter */
+fn erg_con_fixed(body: u64, nm: u64) -> u64 {
+    ERG_CON_TOTAL = ERG_CON_TOTAL + 1u64
+    if erg_con_match(nm, erg_con_len(nm)) == 0u64 { return 0u64 }
+    erg_con_build_cmd(body, nm)
+    return erg_con_spawn(nm, erg_con_len(nm))
+}
+/* enumerate one dir with one pattern; klass 0 = run_*.sh | 1 = *_gate.sh
+ * (klass 1 skips run_-prefixed names: the runner class owns them -- the
+ * both-pattern files enroll exactly once).  0 ok | 1 env. */
+fn erg_con_scan(dirfs: u64, dircmd: u64, klass: u64) -> u64 {
+    let lrc : u64 = erg_x_run(dircmd, 60000u32)
+    if lrc >= 9000u64 { return 1u64 }
+    if lrc != 0u64 { return 0u64 }                       /* no matches in this dir */
+    let h : u64 = CreateFileA("STDLIB/build/ergon_con.txt" as u64, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 1u64 }
+    if ReadFile(h, (&ERG_CON_LIST) as u64, 65536u32, (&ERG_TC) as u64, 0u64) == 0i32 { CloseHandle(h)   return 1u64 }
+    CloseHandle(h)
+    let ln : u64 = ERG_TC[0u64] as u64
+    let lp : *u8 = (&ERG_CON_LIST) as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < ln {
+        let ls : u64 = i
+        let mut le : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 { if le >= ln { go = 0u64 } else { if lp[le] == 10u8 { go = 0u64 } else { if lp[le] == 13u8 { go = 0u64 } else { le = le + 1u64 } } } }
+        if le > ls + 3u64 {
+            let stem : u64 = ((&ERG_CON_LIST) as u64) + ls
+            let slen : u64 = (le - ls) - 3u64            /* strip ".sh" */
+            let mut own : u64 = 1u64
+            if klass == 1u64 { if erg_evg_starts(stem, slen, "run_" as u64) == 1u64 { own = 0u64 } }
+            if own == 1u64 {
+                if erg_con_excluded(stem, slen) == 0u64 {
+                    ERG_CON_TOTAL = ERG_CON_TOTAL + 1u64
+                    if klass == 0u64 { ERG_CON_NRUN = ERG_CON_NRUN + 1u64 } else { ERG_CON_NGATE = ERG_CON_NGATE + 1u64 }
+                    if erg_con_match(stem, slen) == 1u64 {
+                        erg_con_build_sh(dirfs, stem, slen)
+                        erg_con_spawn(stem, slen)
+                    }
+                }
+            }
+        }
+        i = le
+        let mut eol : u64 = 1u64
+        while eol == 1u64 { if i >= ln { eol = 0u64 } else { if lp[i] == 10u8 { i = i + 1u64 } else { if lp[i] == 13u8 { i = i + 1u64 } else { eol = 0u64 } } } }
+    }
+    return 0u64
+}
+fn erg_conscience(filter: u64) -> u32 @export {
+    ERG_CON_FILT = filter
+    ERG_CON_RLEN = 0u64
+    ERG_CON_RCPTL = 0u64
+    ERG_CON_TOTAL = 0u64
+    ERG_CON_RAN = 0u64
+    ERG_CON_FAIL = 0u64
+    ERG_CON_EXCL = 0u64
+    ERG_CON_NGATE = 0u64
+    ERG_CON_NRUN = 0u64
+    /* the two build-spines FIRST: later gates read their artifacts */
+    erg_con_fixed("bash STDLIB/scripts/build_stdlib.sh" as u64, "build_stdlib" as u64)
+    erg_con_fixed("bash COMPILER/BOOT/build_iiis2.sh --check-corpus" as u64, "build_iiis2_check_corpus" as u64)
+    /* the discovered gate spine: *_gate.sh across the four dirs */
+    if erg_con_scan("STDLIB/scripts" as u64, "cmd /c dir /b STDLIB\\scripts\\*_gate.sh > STDLIB\\build\\ergon_con.txt" as u64, 1u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("STDLIB/sovtc" as u64, "cmd /c dir /b STDLIB\\sovtc\\*_gate.sh > STDLIB\\build\\ergon_con.txt" as u64, 1u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("STDLIB/sovir" as u64, "cmd /c dir /b STDLIB\\sovir\\*_gate.sh > STDLIB\\build\\ergon_con.txt" as u64, 1u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("COMPILER/BOOT" as u64, "cmd /c dir /b COMPILER\\BOOT\\*_gate.sh > STDLIB\\build\\ergon_con.txt" as u64, 1u64) == 1u64 { return 2001u32 }
+    /* the discovered runners: run_*.sh across the four dirs */
+    if erg_con_scan("STDLIB/scripts" as u64, "cmd /c dir /b STDLIB\\scripts\\run_*.sh > STDLIB\\build\\ergon_con.txt" as u64, 0u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("STDLIB/sovtc" as u64, "cmd /c dir /b STDLIB\\sovtc\\run_*.sh > STDLIB\\build\\ergon_con.txt" as u64, 0u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("STDLIB/sovir" as u64, "cmd /c dir /b STDLIB\\sovir\\run_*.sh > STDLIB\\build\\ergon_con.txt" as u64, 0u64) == 1u64 { return 2001u32 }
+    if erg_con_scan("COMPILER/BOOT" as u64, "cmd /c dir /b COMPILER\\BOOT\\run_*.sh > STDLIB\\build\\ergon_con.txt" as u64, 0u64) == 1u64 { return 2001u32 }
+    /* the ERGON's own sibling verbs: the organ's banners are claims too
+     * (never conscience itself -- the rite does not recurse) */
+    erg_con_fixed("COMPILED\\iii-ergon.exe census" as u64, "ergon_census" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe observe" as u64, "ergon_observe" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe zkaudit" as u64, "ergon_zkaudit" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe author" as u64, "ergon_author" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe autarkeia" as u64, "ergon_autarkeia" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe evergreen" as u64, "ergon_evergreen" as u64)
+    erg_con_fixed("COMPILED\\iii-ergon.exe deep" as u64, "ergon_deep" as u64)
+    /* enumeration teeth: unfiltered, an empty discovery class is a VIOLATION */
+    if ERG_CON_FILT == 0u64 {
+        if ERG_CON_NGATE == 0u64 { return 2002u32 }
+        if ERG_CON_NRUN == 0u64 { return 2002u32 }
+    }
+    /* the receipt: fold the rows through iii-judge -- the rite leaves an artifact */
+    if ERG_CON_RAN > 0u64 {
+        if erg_x_putn("COMPILED/_conscience_rows.txt" as u64, (&ERG_CON_ROWS) as u64, ERG_CON_RLEN) != 1u64 { return 2004u32 }
+        ERG_CON_RCPTL = erg_fold_root("COMPILED/_conscience_rows.txt" as u64, (&ERG_CON_RCPT) as u64)
+        if ERG_CON_RCPTL != 64u64 { return 2004u32 }
+    }
+    if ERG_CON_FAIL > 0u64 { return 2003u32 }
+    return 0u32
+}
+fn erg_con_total() -> u64 @export { return ERG_CON_TOTAL }
+fn erg_con_ran_n() -> u64 @export { return ERG_CON_RAN }
+fn erg_con_fail_n() -> u64 @export { return ERG_CON_FAIL }
+fn erg_con_excl_n() -> u64 @export { return ERG_CON_EXCL }
+fn erg_con_receipt_len() -> u64 @export { return ERG_CON_RCPTL }
+fn erg_con_receipt_at(i: u64) -> u8 @export {
+    let p : *u8 = (&ERG_CON_RCPT) as u64 as *u8
+    return p[i]
+}
+
 /* ==================== THE AUTHOR VERB (ex run_author) ====================
  * AUTARKEIA Alpha-4: THE NAMED-DEFICIT LAW -- machine growth adjudicated by III
  * itself (iii-author), never bash.  A seal is admitted only if it cites a NAMED

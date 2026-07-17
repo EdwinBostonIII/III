@@ -103,6 +103,6 @@ bash STDLIB/scripts/emit_symbol_consistency_gate.sh        # -> currently FAIL (
 ```
 
 **The completion form of R7:** when `emit_symbol_consistency_gate.sh` is green, a full `run_corpus` links and
-runs via the sovereign path, and every standalone program self-builds sovereignly (`run_evergreen.sh`), then
+runs via the sovereign path, and every standalone program self-builds sovereignly (`iii-ergon evergreen`, ex `run_evergreen.sh` retired 2026-07-17), then
 this document's §3 residual closes and the TCB is exactly R0 — silicon, loader, kernel32, msvcrt — nothing
 above it trusted by assertion.

@@ -127,8 +127,9 @@ gated green without touching it. It is the next rock; it needs the full crash-pa
 protocol), not a host-closure move.
 
 Γ2b (wasm) and Γ5 (evergreen extension) were CLOSED this session (wasm leg in run_retarget; the three Γ
-legs run inside run_evergreen). Γ1 body-onto-waist at full corpus scale remains open (needs the cg_r3
-SVIR backend beside its x86 emitter — a large piece, not a translator-class one).
+legs run inside `iii-ergon evergreen` — ex run_evergreen.sh, retired 2026-07-17). Γ1 body-onto-waist at
+full corpus scale remains open (needs the cg_r3 SVIR backend beside its x86 emitter — a large piece, not
+a translator-class one).
 
 ## 5. Frontier arithmetic (the thesis, now measured twice)
 "One more host ≈ one ~430-line encoder OR ~13 KB of carried SVIR" — MEASURED on two independent new ISAs

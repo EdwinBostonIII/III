@@ -108,8 +108,10 @@ falsifier, or is struck. No DECORATIVE claims survive.
 rungs (statement→hypotheses→discharge→realization→falsifier→verdict) and **check, don't attest** — run the
 gate, point discharge to file:line. Downgrade any rung that cannot be filled; strike or build the gap.
 **Exit gate:** `DOCS/III-F6-LEDGER-AUDIT.md` lists every claim with its verdict and the command that proves
-it; a `run_conscience.sh` meta-gate runs the full set and any DECORATIVE claim is removed from the banners.
-**Falsifier:** a banner with no gate line in `run_conscience.sh` fails the meta-gate.
+it; the `iii-ergon conscience` meta-verb (ex `run_conscience.sh`, retired 2026-07-17) DISCOVERS and runs
+the full set and any DECORATIVE claim is removed from the banners.
+**Falsifier:** a banner whose gate is missing from the discovered set (run_*.sh + *_gate.sh + the
+build-spines + the sibling verbs) fails the meta-verb.
 
 ### Φ4 — DRIVE THE COVERAGE RATCHET TO ZERO (R4)
 **Goal:** uncovered=0, dark=0, under-proven=0 → the *full* `build_stdlib` gate (not just `run_corpus`)
@@ -143,13 +145,13 @@ verifier (the path `zk_fused_committed` already proves).
 ### Φ7 — THE EVERGREEN GUARANTEE (R7 + the meta-invariant)
 **Goal:** every program/tool is *independently and completely functional* — no demos, no placeholders, no
 "works only inside its script." The irreducible TCB is named and minimised.
-**Method:** (a) a `run_evergreen.sh` meta-gate that, for every standalone sovir/ program, builds it from
+**Method:** (a) the `iii-ergon evergreen` meta-verb (ex `run_evergreen.sh`, retired 2026-07-17) that, for every standalone sovir/ program, builds it from
 source via the *sovereign* path and runs it to its real exit code — no gcc/ld in the trusted build of the
 trusted programs; (b) a placeholder-scanner that fails on any `TODO`/`stub`/`unimplemented`/`placeholder` in
 load-bearing modules; (c) `DOCS/III-TCB.md` enumerating the exact irreducible trust floor (CPU/microcode +
 OS loader) with the measured sovereign surface (kernel32-only) and the argument that nothing above it is
 trusted-by-assertion.
-**Exit gate:** `run_evergreen.sh` rc=0 (every program self-builds sovereignly + runs) AND the placeholder
+**Exit gate:** `iii-ergon evergreen` rc=0 (every program self-builds sovereignly + runs) AND the placeholder
 scanner is clean. **Falsifier:** introduce a placeholder or a gcc-dependency in a trusted program → reddens.
 
 ---
@@ -164,10 +166,10 @@ run_completion.sh  ⇐  ALL of:
   run_grand_unification.sh        (Ω.a/d+b+F2+e+f+g+Ω7)         = the unified pipeline
   run_seed_sovereign.sh           (Φ1: ccsv builds iiis-0,DDC)  = the trust floor closed
   run_ddc.sh  [+ seed axis]       (Φ2)                          = DDC closed incl. lineage
-  run_conscience.sh               (Φ3: every banner runnable)   = no DECORATIVE claims
+  iii-ergon conscience            (Φ3: every banner runnable)   = no DECORATIVE claims [ex run_conscience.sh, retired 2026-07-17]
   build_stdlib --check-corpus     (Φ4: ratchet all-zero)        = full coverage
-  run_zk_audit.sh                 (Φ6: bit-counts match knobs)  = production everywhere
-  run_evergreen.sh                (Φ7: self-build + no stubs)   = evergreen, independent
+  iii-ergon zkaudit               (Φ6: bit-counts match knobs)  = production everywhere [ex run_zk_audit.sh, retired 2026-07-17]
+  iii-ergon evergreen             (Φ7: self-build + no stubs)   = evergreen, independent [ex run_evergreen.sh, retired 2026-07-17]
 ```
 
 with `run_grand_unification.sh` optionally upgraded by Φ5 to the one-object binding. Every line is a real

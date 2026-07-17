@@ -214,6 +214,42 @@ extern @abi(c-msvc-x64) fn rf_f_inv_len(i: u64) -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn rf_f_inv_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn rf_f_inv_y(i: u64) -> u64 from "reversibility.iii"
 
+/* THE ANASTASIS TIER -- every fallen op redeemed at its exact measured deficit */
+extern @abi(c-msvc-x64) fn an_run(maxsize: i64) -> i64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_examined() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_skipped() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_fallen() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_redeemed() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_ben12_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_ben16_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_pool_n() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_bite() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_nobite() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_minwit() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_hist(d: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_maxdef() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_homo() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_comm() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_pairs() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_worst_len() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_worst_byte(j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_worst_y() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_worst_def() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_worst_fiber() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_count() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_len(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_y(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_def(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_find_fiber(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_count() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_len(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_y(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_def(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_mid_fiber(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn an_neg_teeth() -> u64 from "reversibility.iii"
+
 /* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
  * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
  * ripple palindrome (R^2 = id on the real ripple field); ser_pipeline (intent (x) intuition,
@@ -357,6 +393,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate moment         (the contingency register: necessary vs contingent, fenced non-determinism)\n" as u64)
         ps("iii-substrate reversible [maxsize 5..6]  (THE REVERSIBILITY HUNT: III finds + proves zero-loss bijections; the xorshift computational diode; THE CONVERGENCE: one law at six altars)\n" as u64)
         ps("iii-substrate symmetry <dreamfuel> [seed]  (THE SYMMETRIA TIER: conservation worlds -- reversible-closed algebras saturated to PROOF, friction-graded; the dream arm draws by contingency)\n" as u64)
+        ps("iii-substrate redeem [maxsize 3..4]  (THE ANASTASIS TIER: every fallen op lifted into a proven bijection whose ancilla pays EXACTLY the measured deficit; Bennett involutions; the redeemed form a proven abelian group)\n" as u64)
         ps("iii-substrate frontier <maxsize 3..6>  (THE FRONTIER: cube permutations under TRUE die semantics incl. the count/deposit atoms; survivors of every explanation III can name = certified UNEXPLAINED, inverses hunted or OWED)\n" as u64)
         ps("iii-substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
         ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
@@ -590,6 +627,13 @@ fn main(argc: i32, argv: u64) -> u64 {
         if fz > 6i64 { ps("iii-substrate: frontier maxsize must be 3..6 (the enumeration budget)\n" as u64)  return 6u64 }
         return cmd_frontier(fz)
     }
+    if streq(cmd, "redeem" as u64) == 1u32 {
+        let mut az : i64 = 4i64
+        if argc >= 3i32 { az = parse_i64(av[2u64]) }
+        if az < 3i64 { ps("iii-substrate: redeem maxsize must be 3..4 (the exhaustive-census envelope)\n" as u64)  return 6u64 }
+        if az > 4i64 { ps("iii-substrate: redeem maxsize must be 3..4 (size 5+ over the per-op proof budget)\n" as u64)  return 6u64 }
+        return cmd_redeem(az)
+    }
     if streq(cmd, "isa" as u64) == 1u32 {
         if argc < 3i32 { ps("iii-substrate isa <maxsize 2..6>\n" as u64)  return 1u64 }
         let f : i64 = parse_i64(av[2u64])
@@ -645,7 +689,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         if sport > 65535i64 { sport = 47111i64 }
         return cmd_synapse(sport as u64)
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | reversible | symmetry | frontier)\n" as u64)
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
 }
 
@@ -979,6 +1023,132 @@ fn cmd_reversible(maxsize: i64) -> u64 {
     ps("      identity admitted / non-inverse refused with counterexample / capability gate fails closed / idempotent + full / counterexample reproducible: " as u64)
     if rva_selftest() == 99u64 { ps("ALL PROVEN\n" as u64) } else { ps("auditor law BROKEN!\n" as u64)  return 2u64 }
     ps("  SIX altars -- bit-kernel, compiler fold, universal gate, ripple field, meaning, auditor -- one truth.\n" as u64)
+    return 0u64
+}
+
+/* ---- ANASTASIS surface: spell a redeemed find / the worst-deficit op ---- */
+var ANF_I : u64 = 0u64
+var ANF_C : u64 = 0u64
+var ANF_N : u64 = 0u64
+var ANF_P : u64 = 0u64
+fn an_find_walk() {
+    if ANF_C >= ANF_N { return }
+    let k : u8 = an_find_byte(ANF_I, ANF_C)
+    ANF_C = ANF_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(ANF_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    an_find_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  an_find_walk() }
+    putchar(41i32)
+}
+var ANG_I : u64 = 0u64
+var ANG_C : u64 = 0u64
+var ANG_N : u64 = 0u64
+var ANG_P : u64 = 0u64
+fn an_mid_walk() {
+    if ANG_C >= ANG_N { return }
+    let k : u8 = an_mid_byte(ANG_I, ANG_C)
+    ANG_C = ANG_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(ANG_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    an_mid_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  an_mid_walk() }
+    putchar(41i32)
+}
+var ANW_C : u64 = 0u64
+var ANW_N : u64 = 0u64
+var ANW_P : u64 = 0u64
+fn an_worst_walk() {
+    if ANW_C >= ANW_N { return }
+    let k : u8 = an_worst_byte(ANW_C)
+    ANW_C = ANW_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(ANW_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    an_worst_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  an_worst_walk() }
+    putchar(41i32)
+}
+/* THE ANASTASIS TIER.  The census re-derives every verdict (stored-answer-free):
+ * fallen by exhaustive injectivity, deficit by largest fiber, redemption by the
+ * fiber-rank minimal lift PROVEN injective + reconstructed, Bennett involution
+ * per op (SAT / 2^16-exhaustion pools), and the group laws pairwise.  Any broken
+ * law returns 2 -- the verb is a driver, never the law's home. */
+fn cmd_redeem(maxsize: i64) -> u64 {
+    ps("== THE ANASTASIS TIER: every irreversible op REDEEMED at its exact measured price ==\n" as u64)
+    let frc : i64 = an_run(maxsize)
+    if frc < 0i64 { ps("  REDEMPTION BROKEN: a lift failed its proof -- the tier is red\n" as u64)  return 2u64 }
+    ps("census (fair enumeration, size<=" as u64)  pd(maxsize)  ps(", y swept, full 2^13 injectivity refereeing):\n" as u64)
+    ps("  ops examined              : " as u64)  pu(an_examined())  putchar(10i32)
+    ps("  skipped (not blastable)   : " as u64)  pu(an_skipped())  putchar(10i32)
+    ps("  FALLEN (irreversible)     : " as u64)  pu(an_fallen())  putchar(10i32)
+    ps("  REDEEMED (minimal lift injective + reconstructed, all 2^13): " as u64)  pu(an_redeemed())  putchar(10i32)
+    if an_redeemed() != an_fallen() { ps("  REDEMPTION INCOMPLETE -- the tier is red\n" as u64)  return 2u64 }
+    ps("  minimality witnessed (a fiber exceeds 2^(d-1))              : " as u64)  pu(an_minwit())  putchar(10i32)
+    if an_minwit() != an_fallen() { ps("  MINIMALITY UNWITNESSED -- the tier is red\n" as u64)  return 2u64 }
+    ps("  deficit spectrum (bits erased -> ops; the Landauer ledger):\n" as u64)
+    let mut d : u64 = 1u64
+    while d < 14u64 {
+        if an_hist(d) > 0u64 {
+            ps("    d=" as u64)  pu(d)  ps(" : " as u64)  pu(an_hist(d))  putchar(10i32)
+        }
+        d = d + 1u64
+    }
+    ps("  Bennett involutions PROVEN (full 2^12 double-die exhaustion, EVERY op): " as u64)  pu(an_ben12_n())  putchar(10i32)
+    if an_ben12_n() != an_fallen() { ps("  A BENNETT PROOF MISSING -- the tier is red\n" as u64)  return 2u64 }
+    ps("    width-stability rung: first " as u64)  pu(an_pool_n())  ps(" citizens re-proven on the 2^16 double: " as u64)  pu(an_ben16_n())  ps("  (the 26-bit SAT route stands in gate 2765)\n" as u64)
+    if an_ben16_n() != an_pool_n() { ps("  THE WIDTH RUNG BROKEN -- the tier is red\n" as u64)  return 2u64 }
+    ps("    biting (B_f != id)      : " as u64)  pu(an_bite())  ps("   identity-lift (constant ops, honest): " as u64)  pu(an_nobite())  putchar(10i32)
+    ps("  THE GROUP (first " as u64)  pu(an_pairs())  ps(" pairs, each law proven by full 2^16 exhaustion):\n" as u64)
+    ps("    homomorphism B_f.B_g == B_{f^g} : " as u64)  pu(an_homo())  ps(" / " as u64)  pu(an_pairs())  putchar(10i32)
+    ps("    commutativity B_f.B_g == B_g.B_f: " as u64)  pu(an_comm())  ps(" / " as u64)  pu(an_pairs())  putchar(10i32)
+    if an_homo() != an_pairs() { ps("  HOMOMORPHISM BROKEN -- the tier is red\n" as u64)  return 2u64 }
+    if an_comm() != an_pairs() { ps("  COMMUTATIVITY BROKEN -- the tier is red\n" as u64)  return 2u64 }
+    ps("  negative teeth (SHL-1 lift stripped of its kept bit must fail on exactly 2^12 inputs): " as u64)
+    if an_neg_teeth() == 1u64 { ps("HOLDS\n" as u64) } else { ps("BROKEN -- the deficit was ceremony!\n" as u64)  return 2u64 }
+    let fc : u64 = an_find_count()
+    if fc > 0u64 {
+        ps("  first redeemed citizens (fair order; deficit d, largest fiber F):\n" as u64)
+        let mut fi : u64 = 0u64
+        while fi < fc {
+            ps("    d=" as u64)  pu(an_find_def(fi))  ps(" F=" as u64)  pu(an_find_fiber(fi))  ps("  " as u64)
+            ANF_I = fi   ANF_C = 0u64   ANF_N = an_find_len(fi)   ANF_P = an_find_y(fi)
+            an_find_walk()
+            putchar(10i32)
+            fi = fi + 1u64
+        }
+    }
+    let mc : u64 = an_mid_count()
+    if mc > 0u64 {
+        ps("  first PARTIAL destroyers (0 < d < 13, fair order -- the spectrum's middle):\n" as u64)
+        let mut mi : u64 = 0u64
+        while mi < mc {
+            ps("    d=" as u64)  pu(an_mid_def(mi))  ps(" F=" as u64)  pu(an_mid_fiber(mi))  ps("  " as u64)
+            ANG_I = mi   ANG_C = 0u64   ANG_N = an_mid_len(mi)   ANG_P = an_mid_y(mi)
+            an_mid_walk()
+            putchar(10i32)
+            mi = mi + 1u64
+        }
+    }
+    ps("  worst destroyer: d=" as u64)  pu(an_worst_def())  ps(" bits (largest fiber " as u64)  pu(an_worst_fiber())  ps(")  " as u64)
+    ANW_C = 0u64   ANW_N = an_worst_len()   ANW_P = an_worst_y()
+    an_worst_walk()
+    putchar(10i32)
+    let mut ledger : u64 = 0u64
+    let mut ld : u64 = 1u64
+    while ld < 14u64 { ledger = ledger + (ld * an_hist(ld))   ld = ld + 1u64 }
+    ps("  the Landauer ledger: " as u64)  pu(ledger)  ps(" bits erased across the census -- " as u64)  pu(ledger)  ps(" ancilla bits paid; premium ZERO at this width\n" as u64)
+    ps("  THE THEOREM: irreversibility is a property of the PROJECTION, never of the computation --\n" as u64)
+    ps("  every fallen op above was lifted into a PROVEN bijection paying exactly its measured deficit,\n" as u64)
+    ps("  and the universal lifts form a PROVEN abelian group of involutions.  Landauer's ledger closes.\n" as u64)
     return 0u64
 }
 

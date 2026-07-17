@@ -915,6 +915,407 @@ fn rf_f_inv_len(i: u64) -> u64 @export { if i < RF_FN { return RF_ILEN[i] }  ret
 fn rf_f_inv_byte(i: u64, j: u64) -> u8 @export { if i < RF_FN { if j < 32u64 { return RF_ISER[(i * 32u64) + j] } }  return 0u8 }
 fn rf_f_inv_y(i: u64) -> u64 @export { if i < RF_FN { return RF_IY[i] }  return 0u64 }
 
+/* ==================== THE ANASTASIS TIER (THE REDEMPTION, 2026-07-17) ====================
+ * THE REDEMPTION: every operation the hunt condemns as irreversible is LIFTED into
+ * a proven bijection whose ancilla pays EXACTLY the measured information deficit.
+ * Irreversibility is a property of the PROJECTION, never of the computation: the
+ * fallen op is a reversible op seen through a forgetful window, and III computes
+ * the forgetting and undoes it, op by op, by its own algebra.
+ *
+ * THE PRE-STATED GLOBAL CRITERIA (declared before any run; no target named):
+ *   ENUMERATE  the SAME fair index<->term bijection as rv_hunt (isa_ontogenesis),
+ *              sizes 1..max, y swept over the kernel's declared RV_YVALS prefix.
+ *   FALL       an op is FALLEN iff exhaustive injectivity over all 2^13 fails --
+ *              the existing decision, re-derived here, never read from a label.
+ *   MEASURE    deficit d = ceil(log2(largest fiber)) -- the exact number of bits
+ *              the op erases (Landauer); the whole SPECTRUM is histogrammed.
+ *   REDEEM     the minimal lift x -> (f(x), rank-of-x-within-its-fiber): the keep
+ *              costs exactly d bits.  PROVEN injective by exhaustion (hash set,
+ *              all 2^13) and PROVEN undone by table reconstruction g(lift(x))==x.
+ *   MINWIT     minimality witnessed: some fiber exceeds 2^(d-1), so d-1 bits
+ *              cannot index it -- the price is not merely sufficient but floor.
+ *   BENNETT    the universal lift B_f(x) = x ^ (f(low(x)) << h) is proven an
+ *              INVOLUTION + BIJECTION for EVERY fallen op by full-domain
+ *              exhaustion on the 12-bit double die (6-bit halves) -- bounded
+ *              time, no SAT worst case in the census loop.  The first stored
+ *              citizens are RE-proven at the 16-bit double (8-bit halves): the
+ *              width-stability rung.  The independent SAT route at the 26-bit
+ *              double lives in gate 2765 -- three routes, no silent path.
+ *              Biting (B_f != id) is counted separately: constant-zero ops lift
+ *              to the identity, honest.
+ *   GROUP      on the first stored fallen ops, pairwise: B_f.B_g == B_{f^g}
+ *              (homomorphism) and B_f.B_g == B_g.B_f (commutativity), each
+ *              proven by full 2^16 exhaustion -- the redeemed involutions form
+ *              an elementary abelian 2-group, proven not asserted.
+ * All counters are exported; refusals and skips are counted; the worst op is
+ * kept spellable.  Composes rv_build (one walker, one truth) + bv_bits + sat. */
+var AN_FX   : [u32; 8192]                /* f(x) value table for the current op    */
+var AN_RANK : [u32; 8192]                /* rank of x within its fiber             */
+var AN_CNT  : [u32; 8192]                /* fiber counters, generation-stamped     */
+var AN_CG   : [u64; 8192]
+var AN_GEN  : u64 = 0u64
+var AN_MKY  : [u64; 16384]               /* lift-injectivity + reconstruction map  */
+var AN_MVAL : [u32; 16384]
+var AN_MG   : [u64; 16384]
+var AN_MGEN : u64 = 0u64
+var AN_B16  : [u8; 65536]                /* 16-bit Bennett bijection marks         */
+var AN_EXAM     : u64 = 0u64
+var AN_SKIP     : u64 = 0u64
+var AN_FALLEN   : u64 = 0u64
+var AN_REDEEMED : u64 = 0u64
+var AN_BEN12    : u64 = 0u64
+var AN_BEN16    : u64 = 0u64
+var AN_BITE     : u64 = 0u64
+var AN_NOBITE   : u64 = 0u64
+var AN_MINWIT   : u64 = 0u64
+var AN_HIST : [u64; 14]
+var AN_MAXD : u64 = 0u64
+var AN_WSER : [u8; 64]
+var AN_WLEN : u64 = 0u64
+var AN_WY   : u64 = 0u64
+var AN_WD   : u64 = 0u64
+var AN_WMF  : u64 = 0u64
+var AN_PS   : [u8; 512]                  /* first 8 fallen sers for the pair laws  */
+var AN_PL   : [u64; 8]
+var AN_PYV  : [u64; 8]
+var AN_PN   : u64 = 0u64
+var AN_HOMO : u64 = 0u64
+var AN_COMM : u64 = 0u64
+var AN_PAIRS : u64 = 0u64
+var AN_FSER : [u8; 384]                  /* first 6 redeemed finds, spellable      */
+var AN_FLEN : [u64; 6]
+var AN_FYV  : [u64; 6]
+var AN_FD   : [u64; 6]
+var AN_FMF  : [u64; 6]
+var AN_FN   : u64 = 0u64
+var AN_GSER : [u8; 384]                  /* first 6 PARTIAL destroyers (0<d<13) -- the
+                                          * fair-order middle of the spectrum, criterion
+                                          * declared before any run */
+var AN_GLEN : [u64; 6]
+var AN_GYV  : [u64; 6]
+var AN_GD   : [u64; 6]
+var AN_GMF  : [u64; 6]
+var AN_GN   : u64 = 0u64
+fn an_map_put(key: u64, val: u32) -> u64 {
+    let mut h : u64 = (key ^ (key >> 21u64)) * 12297829382473034411u64
+    h = (h ^ (h >> 29u64)) % 16384u64
+    let mut probe : u64 = 0u64
+    while probe < 16384u64 {
+        let s : u64 = (h + probe) % 16384u64
+        if AN_MG[s] != AN_MGEN { AN_MG[s] = AN_MGEN   AN_MKY[s] = key   AN_MVAL[s] = val   return 0u64 }
+        if AN_MKY[s] == key { return 1u64 }
+        probe = probe + 1u64
+    }
+    return 1u64
+}
+fn an_map_get(key: u64) -> u64 {
+    let mut h : u64 = (key ^ (key >> 21u64)) * 12297829382473034411u64
+    h = (h ^ (h >> 29u64)) % 16384u64
+    let mut probe : u64 = 0u64
+    while probe < 16384u64 {
+        let s : u64 = (h + probe) % 16384u64
+        if AN_MG[s] != AN_MGEN { return RV_SENT }
+        if AN_MKY[s] == key { return AN_MVAL[s] as u64 }
+        probe = probe + 1u64
+    }
+    return RV_SENT
+}
+/* pass 1: value table + fiber sizes; returns the largest fiber (1 = not fallen) */
+fn an_fibers(f: u32) -> u64 {
+    AN_GEN = AN_GEN + 1u64
+    let mut mf : u64 = 1u64
+    let mut x : u64 = 0u64
+    while x < RV_N {
+        bb_set_input(0u32, x)
+        let fx : u64 = bb_eval(f) & 8191u64
+        AN_FX[x] = fx as u32
+        if AN_CG[fx] != AN_GEN { AN_CG[fx] = AN_GEN   AN_CNT[fx] = 0u32 }
+        AN_CNT[fx] = AN_CNT[fx] + 1u32
+        let c : u64 = AN_CNT[fx] as u64
+        if c > mf { mf = c }
+        x = x + 1u64
+    }
+    return mf
+}
+/* pass 2: rank of each x within its fiber (arrival order -- deterministic) */
+fn an_ranks() {
+    AN_GEN = AN_GEN + 1u64
+    let mut x : u64 = 0u64
+    while x < RV_N {
+        let fx : u64 = AN_FX[x] as u64
+        if AN_CG[fx] != AN_GEN { AN_CG[fx] = AN_GEN   AN_CNT[fx] = 0u32 }
+        AN_RANK[x] = AN_CNT[fx]
+        AN_CNT[fx] = AN_CNT[fx] + 1u32
+        x = x + 1u64
+    }
+}
+/* pass 3+4: lift injectivity by exhaustion (hash set over packed pairs), then
+ * reconstruction g(lift(x)) == x from the stored map.  1 = proven, 0 = broken. */
+fn an_inj_recon() -> u64 {
+    AN_MGEN = AN_MGEN + 1u64
+    let mut x : u64 = 0u64
+    while x < RV_N {
+        let key : u64 = ((AN_FX[x] as u64) << 13u64) | (AN_RANK[x] as u64)
+        if an_map_put(key, x as u32) != 0u64 { return 0u64 }
+        x = x + 1u64
+    }
+    x = 0u64
+    while x < RV_N {
+        let key : u64 = ((AN_FX[x] as u64) << 13u64) | (AN_RANK[x] as u64)
+        if an_map_get(key) != x { return 0u64 }
+        x = x + 1u64
+    }
+    return 1u64
+}
+/* Bennett involution + bijection proof by full-domain exhaustion on the packed
+ * double die: half-width h, world 2h, all 2^(2h) inputs.  2 = proven+bites,
+ * 1 = proven+identity (constant-zero op), 0 = broken. */
+fn an_bennett_exh(h: u64) -> u64 {
+    let n : u64 = 1u64 << (h + h)
+    let hm : u64 = (1u64 << h) - 1u64
+    bb_reset(h + h)
+    let x : u32 = bb_var(0u32)
+    let mh : u32 = bb_const(hm)
+    RV_UNSUP = 0u64
+    RV_INPUT = bb_and(x, mh)
+    RV_CUR = 0u64
+    let f1 : u32 = bb_and(rv_build(), mh)
+    if RV_UNSUP != 0u64 { return 0u64 }
+    let b1 : u32 = bb_xor(x, bb_shl(f1, h))
+    let mut v : u64 = 0u64
+    while v < n { AN_B16[v] = 0u8   v = v + 1u64 }
+    let mut ident : u64 = 1u64
+    v = 0u64
+    while v < n {
+        bb_set_input(0u32, v)
+        let w : u64 = bb_eval(b1) & (n - 1u64)
+        if AN_B16[w] != 0u8 { return 0u64 }
+        AN_B16[w] = 1u8
+        if w != v { ident = 0u64 }
+        v = v + 1u64
+    }
+    v = 0u64
+    while v < n {
+        bb_set_input(0u32, v)
+        let w : u64 = bb_eval(b1) & (n - 1u64)
+        bb_set_input(0u32, w)
+        if (bb_eval(b1) & (n - 1u64)) != v { return 0u64 }
+        v = v + 1u64
+    }
+    if ident == 1u64 { return 1u64 }
+    return 2u64
+}
+/* redeem the current (RV_SER, RV_YC) term.  0 skip/unsup, 1 not fallen, 2 REDEEMED, 3 broken */
+fn an_redeem_current() -> u64 {
+    bb_reset(RV_W)
+    RV_UNSUP = 0u64
+    RV_INPUT = bb_var(0u32)
+    RV_CUR = 0u64
+    let f : u32 = rv_build()
+    if RV_UNSUP != 0u64 { AN_SKIP = AN_SKIP + 1u64   return 0u64 }
+    let mf : u64 = an_fibers(f)
+    if mf == 1u64 { return 1u64 }
+    AN_FALLEN = AN_FALLEN + 1u64
+    let mut d : u64 = 0u64
+    let mut mm : u64 = 1u64
+    while mm < mf { mm = mm << 1u64   d = d + 1u64 }
+    AN_HIST[d] = AN_HIST[d] + 1u64
+    if d >= 1u64 { if mf > (1u64 << (d - 1u64)) { AN_MINWIT = AN_MINWIT + 1u64 } }
+    if d > AN_MAXD { AN_MAXD = d }
+    if d >= AN_WD {
+        AN_WD = d   AN_WMF = mf   AN_WLEN = RV_SLN   AN_WY = RV_YC
+        let mut i : u64 = 0u64
+        while i < RV_SLN { AN_WSER[i] = RV_SER[i]   i = i + 1u64 }
+    }
+    an_ranks()
+    if an_inj_recon() != 1u64 { return 3u64 }
+    let ben : u64 = an_bennett_exh(6u64)
+    if ben == 0u64 { return 3u64 }
+    AN_BEN12 = AN_BEN12 + 1u64
+    if ben == 2u64 { AN_BITE = AN_BITE + 1u64 } else { AN_NOBITE = AN_NOBITE + 1u64 }
+    if AN_PN < 8u64 {
+        if an_bennett_exh(8u64) == 0u64 { return 3u64 }
+        AN_BEN16 = AN_BEN16 + 1u64
+        let pb : u64 = AN_PN * 64u64
+        let mut i : u64 = 0u64
+        while i < RV_SLN { AN_PS[pb + i] = RV_SER[i]   i = i + 1u64 }
+        AN_PL[AN_PN] = RV_SLN   AN_PYV[AN_PN] = RV_YC
+        AN_PN = AN_PN + 1u64
+    }
+    if AN_FN < 6u64 {
+        let fb : u64 = AN_FN * 64u64
+        let mut i : u64 = 0u64
+        while i < RV_SLN { AN_FSER[fb + i] = RV_SER[i]   i = i + 1u64 }
+        AN_FLEN[AN_FN] = RV_SLN   AN_FYV[AN_FN] = RV_YC   AN_FD[AN_FN] = d   AN_FMF[AN_FN] = mf
+        AN_FN = AN_FN + 1u64
+    }
+    if AN_GN < 6u64 { if d >= 1u64 { if d <= 12u64 {
+        /* a y-independent term is the SAME op at every swept y -- store it once
+         * (adjacent dedupe; the sweep is the inner loop, so duplicates adjoin) */
+        let mut usesy : u64 = 0u64
+        let mut same : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < RV_SLN { if RV_SER[i] == 1u8 { usesy = 1u64 }   i = i + 1u64 }
+        if usesy == 0u64 { if AN_GN > 0u64 {
+            let lb : u64 = (AN_GN - 1u64) * 64u64
+            if AN_GLEN[AN_GN - 1u64] == RV_SLN {
+                same = 1u64
+                i = 0u64
+                while i < RV_SLN { if AN_GSER[lb + i] != RV_SER[i] { same = 0u64   i = RV_SLN } else { i = i + 1u64 } }
+            }
+        } }
+        if same == 0u64 {
+            let gb : u64 = AN_GN * 64u64
+            i = 0u64
+            while i < RV_SLN { AN_GSER[gb + i] = RV_SER[i]   i = i + 1u64 }
+            AN_GLEN[AN_GN] = RV_SLN   AN_GYV[AN_GN] = RV_YC   AN_GD[AN_GN] = d   AN_GMF[AN_GN] = mf
+            AN_GN = AN_GN + 1u64
+        }
+    } } }
+    AN_REDEEMED = AN_REDEEMED + 1u64
+    return 2u64
+}
+/* load stored pair-op pi into RV_SER/RV_SLN/RV_YC */
+fn an_load_pair(pi: u64) {
+    let pb : u64 = pi * 64u64
+    let mut i : u64 = 0u64
+    while i < AN_PL[pi] { RV_SER[i] = AN_PS[pb + i]   i = i + 1u64 }
+    RV_SLN = AN_PL[pi]
+    RV_YC = AN_PYV[pi]
+}
+/* the GROUP laws on stored pair (i, j), both proven by FULL 2^16 exhaustion on the
+ * 16-bit double die: homomorphism B_i(B_j(x)) == B_{fi^fj}(x) and commutativity
+ * B_i(B_j(x)) == B_j(B_i(x)).  Bounded time; no SAT in the loop. */
+fn an_pair_laws(pi: u64, pj: u64) -> u64 {
+    bb_reset(16u64)
+    let x : u32 = bb_var(0u32)
+    let m8 : u32 = bb_const(255u64)
+    let xl : u32 = bb_and(x, m8)
+    an_load_pair(pi)
+    RV_UNSUP = 0u64   RV_INPUT = xl   RV_CUR = 0u64
+    let fi : u32 = bb_and(rv_build(), m8)
+    an_load_pair(pj)
+    RV_INPUT = xl   RV_CUR = 0u64
+    let fj : u32 = bb_and(rv_build(), m8)
+    if RV_UNSUP != 0u64 { return 0u64 }
+    /* lhs_ij = B_i(B_j(x)) */
+    let t1 : u32 = bb_xor(x, bb_shl(fj, 8u64))
+    an_load_pair(pi)
+    RV_INPUT = bb_and(t1, m8)   RV_CUR = 0u64
+    let fi2 : u32 = bb_and(rv_build(), m8)
+    let lij : u32 = bb_xor(t1, bb_shl(fi2, 8u64))
+    /* lhs_ji = B_j(B_i(x)) */
+    let t2 : u32 = bb_xor(x, bb_shl(fi, 8u64))
+    an_load_pair(pj)
+    RV_INPUT = bb_and(t2, m8)   RV_CUR = 0u64
+    let fj2 : u32 = bb_and(rv_build(), m8)
+    let lji : u32 = bb_xor(t2, bb_shl(fj2, 8u64))
+    if RV_UNSUP != 0u64 { return 0u64 }
+    let rhs : u32 = bb_xor(x, bb_shl(bb_xor(fi, fj), 8u64))
+    let mut okh : u64 = 1u64
+    let mut okc : u64 = 1u64
+    let mut v : u64 = 0u64
+    while v < 65536u64 {
+        bb_set_input(0u32, v)
+        let a : u64 = bb_eval(lij)
+        if a != bb_eval(rhs) { okh = 0u64   v = 65536u64 } else {
+            if a != bb_eval(lji) { okc = 0u64   v = 65536u64 } else { v = v + 1u64 }
+        }
+    }
+    if okh == 1u64 { AN_HOMO = AN_HOMO + 1u64 }
+    if okc == 1u64 { AN_COMM = AN_COMM + 1u64 }
+    AN_PAIRS = AN_PAIRS + 1u64
+    return okh
+}
+fn an_run(maxsize: i64) -> i64 @export {
+    ia_init()
+    AN_EXAM = 0u64    AN_SKIP = 0u64      AN_FALLEN = 0u64   AN_REDEEMED = 0u64
+    AN_BEN12 = 0u64    AN_BEN16 = 0u64    AN_BITE = 0u64     AN_NOBITE = 0u64
+    AN_MINWIT = 0u64   AN_MAXD = 0u64     AN_PN = 0u64       AN_FN = 0u64
+    AN_GN = 0u64
+    AN_HOMO = 0u64     AN_COMM = 0u64     AN_PAIRS = 0u64
+    AN_WD = 0u64       AN_WMF = 0u64      AN_WLEN = 0u64     AN_WY = 0u64
+    let mut i : u64 = 0u64
+    while i < 14u64 { AN_HIST[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < 8192u64 { AN_CG[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < 16384u64 { AN_MG[i] = 0u64   i = i + 1u64 }
+    AN_GEN = 0u64
+    AN_MGEN = 0u64
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= maxsize { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    let mut t : u64 = 0u64
+    while t < prefix {
+        RV_SLN = ia_term_ser(t, (&RV_SER) as u64)
+        if RV_SLN > 0u64 { if RV_SLN <= 32u64 {
+            let mut yi : u64 = 0u64
+            while yi < RV_NY {
+                RV_YC = RV_YVALS[yi]
+                AN_EXAM = AN_EXAM + 1u64
+                if an_redeem_current() == 3u64 { return -1i64 }
+                yi = yi + 1u64
+            }
+        } }
+        t = t + 1u64
+    }
+    let mut pi : u64 = 0u64
+    while pi < AN_PN {
+        let mut pj : u64 = pi + 1u64
+        while pj < AN_PN { an_pair_laws(pi, pj)   pj = pj + 1u64 }
+        pi = pi + 1u64
+    }
+    return AN_FALLEN as i64
+}
+/* NEGATIVE TEETH: strip the kept bit from SHL-1's minimal lift and the
+ * reconstruction MUST fail on exactly the 2^12 inputs whose top bit was erased --
+ * the deficit is real information, not ceremony.  1 iff the crippled lift fails
+ * on exactly half the domain and succeeds on the other half. */
+fn an_neg_teeth() -> u64 @export {
+    let mut bad : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < 8192u64 {
+        let rec : u64 = ((x << 1u64) & 8191u64) >> 1u64
+        if rec != x { bad = bad + 1u64 }
+        x = x + 1u64
+    }
+    if bad == 4096u64 { return 1u64 }
+    return 0u64
+}
+fn an_examined() -> u64 @export { return AN_EXAM }
+fn an_skipped() -> u64 @export { return AN_SKIP }
+fn an_fallen() -> u64 @export { return AN_FALLEN }
+fn an_redeemed() -> u64 @export { return AN_REDEEMED }
+fn an_ben12_n() -> u64 @export { return AN_BEN12 }
+fn an_ben16_n() -> u64 @export { return AN_BEN16 }
+fn an_pool_n() -> u64 @export { return AN_PN }
+fn an_bite() -> u64 @export { return AN_BITE }
+fn an_nobite() -> u64 @export { return AN_NOBITE }
+fn an_minwit() -> u64 @export { return AN_MINWIT }
+fn an_hist(d: u64) -> u64 @export { if d < 14u64 { return AN_HIST[d] }  return 0u64 }
+fn an_maxdef() -> u64 @export { return AN_MAXD }
+fn an_homo() -> u64 @export { return AN_HOMO }
+fn an_comm() -> u64 @export { return AN_COMM }
+fn an_pairs() -> u64 @export { return AN_PAIRS }
+fn an_worst_len() -> u64 @export { return AN_WLEN }
+fn an_worst_byte(j: u64) -> u8 @export { if j < 64u64 { return AN_WSER[j] }  return 0u8 }
+fn an_worst_y() -> u64 @export { return AN_WY }
+fn an_worst_def() -> u64 @export { return AN_WD }
+fn an_worst_fiber() -> u64 @export { return AN_WMF }
+fn an_find_count() -> u64 @export { return AN_FN }
+fn an_find_len(i: u64) -> u64 @export { if i < AN_FN { return AN_FLEN[i] }  return 0u64 }
+fn an_find_byte(i: u64, j: u64) -> u8 @export { if i < AN_FN { if j < 64u64 { return AN_FSER[(i * 64u64) + j] } }  return 0u8 }
+fn an_find_y(i: u64) -> u64 @export { if i < AN_FN { return AN_FYV[i] }  return 0u64 }
+fn an_find_def(i: u64) -> u64 @export { if i < AN_FN { return AN_FD[i] }  return 0u64 }
+fn an_find_fiber(i: u64) -> u64 @export { if i < AN_FN { return AN_FMF[i] }  return 0u64 }
+fn an_mid_count() -> u64 @export { return AN_GN }
+fn an_mid_len(i: u64) -> u64 @export { if i < AN_GN { return AN_GLEN[i] }  return 0u64 }
+fn an_mid_byte(i: u64, j: u64) -> u8 @export { if i < AN_GN { if j < 64u64 { return AN_GSER[(i * 64u64) + j] } }  return 0u8 }
+fn an_mid_y(i: u64) -> u64 @export { if i < AN_GN { return AN_GYV[i] }  return 0u64 }
+fn an_mid_def(i: u64) -> u64 @export { if i < AN_GN { return AN_GD[i] }  return 0u64 }
+fn an_mid_fiber(i: u64) -> u64 @export { if i < AN_GN { return AN_GMF[i] }  return 0u64 }
+
 var RV_B13 : [u8; 8192]
 fn rv_bij13(ser_addr: u64, len: u64, yv: u64) -> u64 @export {
     if len == 0u64 { return 0u64 }

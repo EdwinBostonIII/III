@@ -417,6 +417,44 @@ if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
     else say "RED  symmetry: SYMMETRIA refused (rc=$syrc -- degenerate pool or no proven world)"; FAIL=1; fi
 else say "RED  symmetry: iii-substrate absent"; FAIL=1; fi
 
+say "[standing] == ANASTASIS: the redemption (every fallen op lifted into a proven bijection at its exact measured deficit) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+    ANO="$("$C/iii-substrate$BIN_SUFFIX" redeem 3 2>&1)"; anrc=$?
+    if [[ $anrc -eq 0 ]]; then
+        # rc 0 already asserts FALLEN==REDEEMED==BENNETT==MINWIT and the group laws (the verb
+        # exits 2 on any broken law).  The markers pin the deterministic census and two
+        # hand-checkable external truths: BLSR's largest fiber at W=13 is exactly 14
+        # ({0} plus the 13 powers of two all collapse to 0), so its measured deficit is
+        # exactly 4 bits; and the stripped SHL-1 lift must fail on exactly half the domain.
+        if echo "$ANO" | grep -q "FALLEN (irreversible)     : 929" \
+           && echo "$ANO" | grep -q "REDEEMED (minimal lift injective + reconstructed, all 2^13): 929" \
+           && echo "$ANO" | grep -q "d=4 F=14  BLSR(x)" \
+           && echo "$ANO" | grep -q "homomorphism B_f.B_g == B_{f^g} : 28 / 28" \
+           && echo "$ANO" | grep -q "stripped of its kept bit must fail on exactly 2^12 inputs): HOLDS"; then
+            say "PASS anastasis: 929 fallen ops REDEEMED at exact measured deficit (full Landauer spectrum), Bennett involution proven per op, group laws 28/28, negative teeth hold"
+        else say "RED  anastasis: verb exited 0 but the census drifted (marker lines missing)"; FAIL=1; fi
+    else say "RED  anastasis: REDEMPTION refused (rc=$anrc)"; FAIL=1; fi
+    # THE GATE: 2765 built + run live -- the machinery shapes at the 26-bit double (SAT route),
+    # the 2^16 second path, the SHL/MUL minimal repairs, and the organ's own census + teeth.
+    ANW="$(mktemp -d "${TMPDIR:-/tmp}/anastasis-standing.XXXXXX")"
+    anok=1
+    for ansrc in aether/reversibility aether/isa_ontogenesis numera/cpufeat numera/bv_bits numera/sat; do
+        anb="${ansrc##*/}"
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/$ansrc.iii" --compile-only --out "$ANW/$anb.o" >>"$ANW/build.log" 2>&1 || anok=0
+    done
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2765_anastasis.iii" --compile-only --out "$ANW/2765.o" >>"$ANW/build.log" 2>&1 || anok=0
+    if [[ $anok -eq 1 ]]; then
+        gcc "$ANW/2765.o" "$ANW/reversibility.o" "$ANW/isa_ontogenesis.o" "$ANW/cpufeat.o" "$ANW/bv_bits.o" "$ANW/sat.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$ANW/2765.exe" >>"$ANW/build.log" 2>&1 || anok=0
+    fi
+    if [[ $anok -eq 1 && -x "$ANW/2765.exe" ]]; then
+        "$ANW/2765.exe" >/dev/null 2>&1; an2rc=$?
+        if [[ $an2rc -eq 99 ]]; then
+            say "PASS anastasis: gate 2765 -- Bennett involution + homomorphism SAT-proven on the 26-bit double, 2^16 second path, SHL/MUL minimal repairs, live organ census (all redeemed, group laws, teeth), exit 99"
+        else say "RED  anastasis: gate 2765 exit $an2rc"; FAIL=1; fi
+    else say "RED  anastasis: gate 2765 failed to build (see $ANW/build.log)"; FAIL=1; fi
+    rm -rf "$ANW"
+else say "RED  anastasis: iii-substrate or iiis-2 absent"; FAIL=1; fi
+
 say "[standing] == ONEIROS: the dream that must wake (believe each owed law -> collapse to witnesses -> docket the prover) =="
 if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iii-prove$BIN_SUFFIX" ]]; then
     ZW="$(mktemp -d "${TMPDIR:-/tmp}/oneiros-standing.XXXXXX")"

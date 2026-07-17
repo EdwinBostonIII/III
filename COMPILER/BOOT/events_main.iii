@@ -236,17 +236,19 @@ fn run_diff(patha: u64, pathb: u64) -> u64 {
         let ab : u64 = sve_ev_get(j, 1u32)
         let bb : u64 = sve_ev_get(j, 2u32)
         let rbv : u64 = sve_ev_get(j, 3u32)
-        if DA_META[j] != mb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" ("as u64)  print_op((DA_META[j] & 255u64) as u32)  ps("_A vs " as u64)  print_op((mb & 255u64) as u32)  ps("_B) field=meta A=" as u64)  phex16(DA_META[j])  ps(" B=" as u64)  phex16(mb)  putchar(10i32)  return 1u64 }
-        if DA_A[j] != ab { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=a A=" as u64)  phex16(DA_A[j])  ps(" B=" as u64)  phex16(ab)  putchar(10i32)  return 1u64 }
-        if DA_B[j] != bb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=b A=" as u64)  phex16(DA_B[j])  ps(" B=" as u64)  phex16(bb)  putchar(10i32)  return 1u64 }
-        if DA_R[j] != rbv { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=r A=" as u64)  phex16(DA_R[j])  ps(" B=" as u64)  phex16(rbv)  putchar(10i32)  return 1u64 }
+        if DA_META[j] != mb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" ("as u64)  print_op((DA_META[j] & 255u64) as u32)  ps("_A vs " as u64)  print_op((mb & 255u64) as u32)  ps("_B) field=meta A=" as u64)  phex16(DA_META[j])  ps(" B=" as u64)  phex16(mb)  putchar(10i32)  ps("[events = divergent]\n" as u64)  return 1u64 }
+        if DA_A[j] != ab { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=a A=" as u64)  phex16(DA_A[j])  ps(" B=" as u64)  phex16(ab)  putchar(10i32)  ps("[events = divergent]\n" as u64)  return 1u64 }
+        if DA_B[j] != bb { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=b A=" as u64)  phex16(DA_B[j])  ps(" B=" as u64)  phex16(bb)  putchar(10i32)  ps("[events = divergent]\n" as u64)  return 1u64 }
+        if DA_R[j] != rbv { ps("IIIEVENTS-DIFF diverge at event " as u64)  pd(j)  ps(" (" as u64)  print_op((mb & 255u64) as u32)  ps(") field=r A=" as u64)  phex16(DA_R[j])  ps(" B=" as u64)  phex16(rbv)  putchar(10i32)  ps("[events = divergent]\n" as u64)  return 1u64 }
         j = j + 1u64
     }
     if cnta0 != cntb0 {
         ps("IIIEVENTS-DIFF prefix-identical for " as u64)  pd(lim)  ps(" events, but lengths differ: A=" as u64)  pd(cnta0)  ps(" B=" as u64)  pd(cntb0)  putchar(10i32)
+        ps("[events = divergent]\n" as u64)
         return 2u64
     }
     ps("IIIEVENTS-DIFF identical: both executions retired " as u64)  pd(cnta0)  ps(" events, event-for-event\n" as u64)
+    ps("[events " as u64)  pd(cnta0)  ps(":" as u64)  pd(cnta0)  ps(" = identical]\n" as u64)
     return 0u64
 }
 

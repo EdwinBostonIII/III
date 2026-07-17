@@ -561,6 +561,43 @@ fn soma_cluster_singletons() -> u64 @export {
  * is anchored by construction; a C2 with unresolved imports is the island) */
 fn soma_islands() -> u64 @export { return kd_unresolved() }
 
+/* ==================== THE FORM LEDGER (metamorphosis debt) ====================
+ * The claim-space has TWO forms on the die: the LIVING form (organ arms derived
+ * as a condition of motion -- introspection's law) and the ANCESTRAL form (the
+ * batch layer: runner scripts, the stored-expectation registry, gate files run
+ * from outside).  The ledger COUNTS the ancestral form so its burn-down is a
+ * measured fact the census reports every invocation -- molt-pressure that can
+ * never be hand-waved.  Counting is organ-native (fs_dir), no bash reads the
+ * self.  A runner is a name of the form `run_*.sh`; builders are not debt. */
+fn sm_is_runner_name(addr: u64, len: u64) -> u64 {
+    if len < 7u64 { return 0u64 }                       /* "run_.sh" is the floor */
+    let p : *u8 = addr as *u8
+    if p[0u64] != 114u8 { return 0u64 }                 /* r */
+    if p[1u64] != 117u8 { return 0u64 }                 /* u */
+    if p[2u64] != 110u8 { return 0u64 }                 /* n */
+    if p[3u64] != 95u8  { return 0u64 }                 /* _ */
+    if p[len - 3u64] != 46u8  { return 0u64 }           /* . */
+    if p[len - 2u64] != 115u8 { return 0u64 }           /* s */
+    if p[len - 1u64] != 104u8 { return 0u64 }           /* h */
+    return 1u64
+}
+/* count the batch runners in a directory; SENT on open failure */
+fn soma_survey_runners(dirpath: u64) -> u64 @export {
+    let root : u64 = cap_env_init()
+    let rcap : u64 = cap_attenuate(root, SM_FS_READ, 0u64)
+    if rcap == 0u64 { return SM_SENT }
+    let h : u64 = fs_dir_open(rcap, dirpath)
+    if h == 0u64 { return SM_SENT }
+    let mut n : u64 = 0u64
+    while fs_dir_read(h) == 1u8 {
+        if fs_dir_is_dir() == 0u8 {
+            if sm_is_runner_name(fs_dir_name(), fs_dir_name_len()) == 1u64 { n = n + 1u64 }
+        }
+    }
+    fs_dir_close(h)
+    return n
+}
+
 /* ---- the live driver: ingest the map, pin it, survey the territory, diff ---- */
 fn soma_audit(dirpath: u64) -> i64 @export {
     kd_reset()
@@ -582,6 +619,7 @@ fn soma_audit(dirpath: u64) -> i64 @export {
 var SM_A : [u8; 8]
 var SM_B : [u8; 8]
 var SM_MAPC : [u8; 8]
+var SM_C : [u8; 16]
 fn sm_setname(dst: u64, a: u8, b: u8, c: u8) -> u64 {
     let p : *u8 = dst as *u8
     p[0u64] = a   p[1u64] = b   p[2u64] = c   p[3u64] = 0u8
@@ -619,7 +657,37 @@ fn soma_selfprove() -> u64 @export {
     /* arm 44: THE OWNERSHIP LAW (own frame -- the 64-slot ceiling) */
     let a44 : u64 = sm_arm_ownership()
     if a44 != 0u64 { sm_reset()   return a44 }
+    /* arm 45: THE LEDGER MATCHER law -- a batch runner is `run_*.sh` and
+     * nothing else.  Positive, three negatives (wrong prefix, wrong suffix,
+     * suffix-buried), and the floor. */
+    let a45 : u64 = sm_arm_ledger_matcher()
+    if a45 != 0u64 { sm_reset()   return a45 }
     sm_reset()
+    return 0u64
+}
+fn sm_put16(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8, i: u8, j: u8) -> u64 {
+    let p : *u8 = (&SM_C) as u64 as *u8
+    p[0u64]=a p[1u64]=b p[2u64]=c p[3u64]=d p[4u64]=e p[5u64]=f p[6u64]=g p[7u64]=h p[8u64]=i p[9u64]=j
+    let mut n : u64 = 10u64
+    while n > 0u64 { if p[n - 1u64] == 0u8 { n = n - 1u64 } else { return n } }
+    return 0u64
+}
+fn sm_arm_ledger_matcher() -> u64 {
+    /* "run_x.sh" -> runner */
+    let l1 : u64 = sm_put16(114u8,117u8,110u8,95u8,120u8,46u8,115u8,104u8,0u8,0u8)
+    if sm_is_runner_name((&SM_C) as u64, l1) != 1u64 { return 45u64 }
+    /* "bld_x.sh" -> not (wrong prefix) */
+    let l2 : u64 = sm_put16(98u8,108u8,100u8,95u8,120u8,46u8,115u8,104u8,0u8,0u8)
+    if sm_is_runner_name((&SM_C) as u64, l2) != 0u64 { return 45u64 }
+    /* "run_x.txt" -> not (wrong suffix) */
+    let l3 : u64 = sm_put16(114u8,117u8,110u8,95u8,120u8,46u8,116u8,120u8,116u8,0u8)
+    if sm_is_runner_name((&SM_C) as u64, l3) != 0u64 { return 45u64 }
+    /* "run_x.shx" -> not (suffix buried, not terminal) */
+    let l4 : u64 = sm_put16(114u8,117u8,110u8,95u8,120u8,46u8,115u8,104u8,120u8,0u8)
+    if sm_is_runner_name((&SM_C) as u64, l4) != 0u64 { return 45u64 }
+    /* "r.sh" -> not (below the floor) */
+    let l5 : u64 = sm_put16(114u8,46u8,115u8,104u8,0u8,0u8,0u8,0u8,0u8,0u8)
+    if sm_is_runner_name((&SM_C) as u64, l5) != 0u64 { return 45u64 }
     return 0u64
 }
 /* arm 44, hoisted: a runner names a dark gate BY NAME -> owned; BY NUMBER (the

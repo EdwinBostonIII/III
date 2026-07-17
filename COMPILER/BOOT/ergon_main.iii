@@ -1,0 +1,153 @@
+/* COMPILER/BOOT/ergon_main.iii -- iii-ergon: THE ERGON's tool face.
+ *
+ *   iii-ergon prove     the organ's own instruments (fault-map injectivity with
+ *                       teeth, fold determinism/sensitivity)
+ *   iii-ergon census    THE WORK-PROOF: the whole standing fleet re-derives its
+ *                       laws in ONE process -- introspection's 5-organ roster,
+ *                       kardia, soma, doxa, and the absorbed iscene family --
+ *                       then the FORM LEDGER (the ancestral batch layer still on
+ *                       the die, measured organ-natively)
+ *
+ * THE CONSTITUTION: verification is a property of work, not a separate act on
+ * foreseen cases.  No seat here compares against a stored expected answer; every
+ * seat DERIVES its law at the moment of motion, with teeth (a perturbed input
+ * must be refused, a load-bearing setter must move the output).  Requires CWD =
+ * the III root (the ledger reads the die).
+ *
+ * exit: 0 WHOLE | 1 fault (verdict printed, seat+arm located) | 2 env |
+ *       3 usage | 9 SELF-REFUSED */
+module ergon_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn erg_selfprove() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_census() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_intro() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_kardia() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_soma() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_doxa() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_iscene() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_ledger_runners() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn intro_organ_count() -> u32 from "introspection.iii"
+
+extern @abi(c-msvc-x64) fn soma_audit(dirpath: u64) -> i64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_matched() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_phantom() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_dark() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_registry() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_territory() -> u64 from "soma.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+    }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-ergon -- THE ERGON: the machine proven by its WORK\n\n" as u64)
+    ps("  iii-ergon prove     the organ's own instruments (fault map, fold), with teeth\n" as u64)
+    ps("  iii-ergon census    the whole standing fleet re-derives its laws in one process,\n" as u64)
+    ps("                      then the FORM LEDGER (ancestral batch debt, measured)\n\n" as u64)
+    ps("no seat compares against a stored expected answer; every law is derived at the\n" as u64)
+    ps("moment of motion.  requires CWD = the III root.\n" as u64)
+    ps("exit: 0 WHOLE | 1 fault (located) | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn seat_line(name: u64, code: u32) -> u32 {
+    ps("  " as u64)
+    ps(name)
+    if code == 0u32 { ps("derived\n" as u64)   return 0u32 }
+    ps("FAULT " as u64)
+    pu(code as u64)
+    putchar(10i32)
+    return 1u32
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let sp : u64 = erg_selfprove()
+    if sp != 0u64 {
+        ps("THE ERGON REFUSES ITSELF: instrument arm " as u64)
+        pu(sp)
+        ps(" failed -- no verb runs over a broken instrument\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("ERGON PROVEN: the fault map is INJECTIVE (a nonzero census verdict locates\n" as u64)
+        ps("exactly one seat+arm; the checker itself has teeth -- a sabotaged map is caught),\n" as u64)
+        ps("and the cross-fold instrument is deterministic and input-sensitive.\n" as u64)
+        ps("Re-derived THIS invocation, before any verb moved.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "census" as u64) == 1u32 {
+        ps("== THE WORK-PROOF CENSUS: the fleet works, therefore it is ==\n" as u64)
+        let s0 : u32 = erg_seat_intro()
+        ps("  introspection roster (" as u64)
+        pu(intro_organ_count() as u64)
+        ps(" organs, independent re-derivation + cross-fold): " as u64)
+        if s0 == 0u32 { ps("derived, vitality " as u64)   phex(erg_vitality())   putchar(10i32) } else { ps("FAULT " as u64)   pu(s0 as u64)   putchar(10i32) }
+        let s1 : u32 = seat_line("kardia (heart arms + garbage teeth)                  : " as u64, erg_seat_kardia())
+        let s2 : u32 = seat_line("soma (body arms: address/partition/ownership/ledger) : " as u64, erg_seat_soma())
+        let s3 : u32 = seat_line("doxa (belief arms, 16, each with negative control)   : " as u64, erg_seat_doxa())
+        let s4 : u32 = seat_line("iscene (ABSORBED family -- laws live, pin removed)   : " as u64, erg_seat_iscene())
+        /* the ledger: the ancestral form still on the die, measured */
+        ps("  -- THE FORM LEDGER (ancestral batch layer, burn-down measured) --\n" as u64)
+        let r : i64 = soma_audit("STDLIB/corpus" as u64)
+        if r < 0i64 {
+            ps("  ledger unreadable (run from the III root)\n" as u64)
+            return 2u64
+        }
+        ps("     batch runners on the die (STDLIB/scripts run_*.sh) : " as u64)
+        pu(erg_ledger_runners())
+        putchar(10i32)
+        ps("     registry claims (the stored-expectation table)     : " as u64)
+        pu(soma_registry())
+        putchar(10i32)
+        ps("     gate files in the corpus territory                 : " as u64)
+        pu(soma_territory())
+        ps("  (matched " as u64)
+        pu(soma_matched())
+        ps(", phantom " as u64)
+        pu(soma_phantom())
+        ps(", dark " as u64)
+        pu(soma_dark())
+        ps(")\n" as u64)
+        ps("     absorbed into living seats so far                  : 1 family (iscene)\n" as u64)
+        ps("     LAW: debt burns down only by ABSORPTION (a family's laws re-homed as a\n" as u64)
+        ps("     seat, then its ancestral form retired) -- never by deletion on assumption.\n" as u64)
+        let mut verdict : u64 = 0u64
+        if s0 != 0u32 { verdict = s0 as u64 }
+        if verdict == 0u64 { if s1 != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s2 != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s3 != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s4 != 0u32 { verdict = 1u64 } }
+        if verdict != 0u64 {
+            ps("  VERDICT: FAULT -- the fleet did not fully derive itself this invocation.\n" as u64)
+            return 1u64
+        }
+        ps("  VERDICT: WHOLE -- every law above was derived THIS invocation.  No stored\n" as u64)
+        ps("  expectation was consulted anywhere in this census.\n" as u64)
+        return 0u64
+    }
+    return usage()
+}

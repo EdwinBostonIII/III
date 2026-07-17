@@ -1,0 +1,138 @@
+/* COMPILER/BOOT/motion_main.iii -- iii-motion: GAMMA-MOTION, THE EXACT TIME-OF-
+ * IMPACT, standing.  Choreo re-founded: the irrational surd impact, exact.
+ *
+ *   iii-motion prove       the self-proof (arms 170..176)
+ *   iii-motion impact      the irrational TOI choreo refuses, bracketed exactly
+ *   iii-motion tunnel      the no-tunneling proof (a fast crossing between samples)
+ *
+ * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
+module motion_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn xm_selfprove() -> u64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_reset() -> i32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_add(px: i64, py: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_hit(i: u64, j: u64) -> i32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_disc(i: u64, j: u64) -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_getA() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_getB() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_getC() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_toi_vs_rat(i: u64, j: u64, p: i64, q: i64) -> i32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_toi_in_window(i: u64, j: u64, tn: i64, td: i64) -> u32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_respond(i: u64, j: u64) -> i32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_rv(k: u64) -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_rd() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_graze_time(i: u64, j: u64) -> i32 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_graze_num() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_graze_den() -> i64 from "exact_motion.iii"
+extern @abi(c-msvc-x64) fn xm_isqrt_floor(v: i64) -> i64 from "exact_motion.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn pi(v: i64) -> u32 { if v < 0i64 { putchar(45i32)   pu((0i64 - v) as u64) } else { pu(v as u64) }   return 1u32 }
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8   let pb : *u8 = b as *u8   let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn parse_i64(s: u64) -> i64 {
+    let p : *u8 = s as *u8   let mut i : u64 = 0u64   let mut neg : i64 = 1i64
+    if p[0u64] == 45u8 { neg = 0i64 - 1i64   i = 1u64 }
+    let mut v : i64 = 0i64
+    while p[i] >= 48u8 { if p[i] <= 57u8 { v = (v * 10i64) + ((p[i] - 48u8) as i64)   i = i + 1u64 } else { i = i + 1u64 } }
+    return v * neg
+}
+/* load two bodies from argv[base..base+14): ax ay az avx avy avz ar  bx ... br */
+fn load_pair(argc: i32, argv: u64, base: u64) -> u32 {
+    let av : *u64 = argv as *u64
+    if (base as i64) + 14i64 > (argc as i64) { return 0u32 }
+    xm_reset()
+    xm_add(parse_i64(av[base]), parse_i64(av[base+1u64]), parse_i64(av[base+2u64]),
+           parse_i64(av[base+3u64]), parse_i64(av[base+4u64]), parse_i64(av[base+5u64]), parse_i64(av[base+6u64]))
+    xm_add(parse_i64(av[base+7u64]), parse_i64(av[base+8u64]), parse_i64(av[base+9u64]),
+           parse_i64(av[base+10u64]), parse_i64(av[base+11u64]), parse_i64(av[base+12u64]), parse_i64(av[base+13u64]))
+    return 1u32
+}
+/* bracket the entry TOI to 1/scale by binary search over p in [0, hi*scale]:
+ * prints the exact rational lower bound floor(t* * scale)/scale as p/scale. */
+fn print_toi_bracket(scale: i64) -> u32 {
+    /* find the largest p with p/scale <= t* (t* known finite >= 0 here) */
+    let mut plo : i64 = 0i64
+    let mut phi : i64 = scale                          /* assume t* < 1 window start; widen if needed */
+    while xm_toi_vs_rat(0u64, 1u64, phi, scale) == 1i32 { plo = phi   phi = phi * 2i64   if phi > 1000000000i64 { return 0u32 } }
+    while plo + 1i64 < phi {
+        let mid : i64 = (plo + phi) / 2i64
+        if xm_toi_vs_rat(0u64, 1u64, mid, scale) == 1i32 { plo = mid } else { phi = mid }
+    }
+    ps("  t* in [ " as u64)   pi(plo)   ps("/" as u64)   pi(scale)   ps(" , " as u64)   pi(phi)   ps("/" as u64)   pi(scale)   ps(" ]\n" as u64)
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-motion -- GAMMA-MOTION, the exact time-of-impact.  Moving spheres as\n" as u64)
+    ps("integer worldlines P(t)=X+Vt; exact surd impact, ordered, no tunneling, no epsilon.\n\n" as u64)
+    ps("  iii-motion prove\n" as u64)
+    ps("  iii-motion toi     <ax ay az avx avy avz ar>  <bx by bz bvx bvy bvz br>\n" as u64)
+    ps("                     HIT/GRAZE/MISS, the exact TOI (rational or surd), bracketed\n" as u64)
+    ps("  iii-motion respond <14 ints>   the exact post-collision velocities (elastic, equal mass)\n\n" as u64)
+    ps("exit: 0 impact/ok | 1 miss | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let sp : u64 = xm_selfprove()
+    if sp != 0u64 {
+        ps("MOTION REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE EXACT TIME-OF-IMPACT PROVEN (arms 170..178):\n" as u64)
+        ps("  HIT/GRAZE/MISS is the sign of the discriminant; the impact is the SURD\n" as u64)
+        ps("  t* = (-B - sqrt(Delta))/(2A) -- computed for ANY Delta, where choreo\n" as u64)
+        ps("  refuses the instant Delta is not a perfect square.  Impacts are ordered\n" as u64)
+        ps("  against any rational time and against each other EXACTLY by III's\n" as u64)
+        ps("  sum-of-surds sign oracle (no epsilon).  No tunneling at any speed.  A gas\n" as u64)
+        ps("  of moving bodies sorts into the exact collision sequence (motion meets\n" as u64)
+        ps("  the worldline: ordering impacts by TOI IS the causal < of Gamma-4).  Exact\n" as u64)
+        ps("  graze time and exact elastic response (momentum-conserving) complete it.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "toi" as u64) == 1u32 {
+        if load_pair(argc, argv, 2u64) != 1u32 { return usage() }
+        let h : i32 = xm_hit(0u64, 1u64)
+        if h == -2i32 { ps("DEGENERATE: no relative motion (A = 0) -- the worldlines are parallel.\n" as u64)   return 1u64 }
+        let d : i64 = xm_disc(0u64, 1u64)
+        ps("A = " as u64)  pi(xm_getA())  ps("   B = " as u64)  pi(xm_getB())  ps("   C = " as u64)  pi(xm_getC())
+        ps("   discriminant Delta = " as u64)  pi(d)  putchar(10i32)
+        if h == -1i32 { ps("MISS: Delta < 0 -- the worldlines never touch.\n" as u64)   return 1u64 }
+        if h == 0i32 {
+            xm_graze_time(0u64, 1u64)
+            ps("GRAZE: Delta = 0 -- tangent contact at the exact rational t* = " as u64)
+            pi(xm_graze_num())  ps("/" as u64)  pi(xm_graze_den())  putchar(10i32)
+            return 0u64
+        }
+        let sq : i64 = xm_isqrt_floor(d)
+        if sq * sq == d {
+            ps("HIT (rational): t* = (" as u64)  pi(0i64 - xm_getB())  ps(" - " as u64)  pi(sq)
+            ps(") / " as u64)  pi(2i64 * xm_getA())  ps("   -- an exact rational impact\n" as u64)
+        } else {
+            ps("HIT (surd): t* = (" as u64)  pi(0i64 - xm_getB())  ps(" - sqrt(" as u64)  pi(d)
+            ps(")) / " as u64)  pi(2i64 * xm_getA())  ps("   -- an exact IRRATIONAL impact (choreo refuses this)\n" as u64)
+        }
+        print_toi_bracket(1000i64)
+        return 0u64
+    }
+    if streq(cmd, "respond" as u64) == 1u32 {
+        if load_pair(argc, argv, 2u64) != 1u32 { return usage() }
+        if xm_respond(0u64, 1u64) != 1i32 { ps("COINCIDENT: no contact normal (bodies share a centre).\n" as u64)   return 1u64 }
+        let dd : i64 = xm_rd()
+        ps("exact elastic response (equal masses), post-collision velocities over " as u64)  pi(dd)  ps(":\n" as u64)
+        ps("  body A' = ( " as u64)  pi(xm_rv(0u64))  ps(" , " as u64)  pi(xm_rv(1u64))  ps(" , " as u64)  pi(xm_rv(2u64))  ps(" ) / " as u64)  pi(dd)  putchar(10i32)
+        ps("  body B' = ( " as u64)  pi(xm_rv(3u64))  ps(" , " as u64)  pi(xm_rv(4u64))  ps(" , " as u64)  pi(xm_rv(5u64))  ps(" ) / " as u64)  pi(dd)  putchar(10i32)
+        ps("  (momentum conserved: A'+B' == A+B, exactly)\n" as u64)
+        return 0u64
+    }
+    return usage()
+}

@@ -1,0 +1,341 @@
+/* STDLIB/iii/eidos/exact_motion.iii -- GAMMA-MOTION, THE EXACT TIME-OF-IMPACT:
+ * Choreo re-founded on the organism.  Let there be motion.
+ *
+ * A moving sphere is a WORLDLINE  P(t) = X + V t  (X, V, radius integers).  The
+ * squared separation of two bodies is the quadratic  sep2(t) = A t^2 + B t + C,
+ *   A = |dV|^2   (a sum of squares -- always >= 0),
+ *   B = 2 dX.dV,
+ *   C = |dX|^2 - (Ri+Rj)^2,
+ * and a COLLISION is a real root of sep2 -- the algebraic intersection of two
+ * worldlines.  The time of impact is the EXACT SURD
+ *       t* = ( -B - sqrt(Delta) ) / (2A),   Delta = B^2 - 4AC,
+ * a canonical element of Q(sqrt Delta).  THIS is the moment choreo REFUSED: its
+ * ch_toi returns 0 the instant Delta is not a perfect square ("a nested-radical
+ * TOI is out of the rational fast path").  Here there is no fast path and no
+ * refusal -- the irrational impact is a first-class value, and its ORDER against
+ * any rational time or any other impact is decided EXACTLY by III's own
+ * sum-of-surds sign oracle (aether/sqrt_sum_sign), never by an epsilon.
+ *
+ * NO TUNNELING, AT ANY SPEED.  A discrete time-stepper samples sep2 at t=0,1,2,...
+ * and MISSES a collision that opens and closes between two samples (the body
+ * passes through the wall).  The exact root is found regardless of the step:
+ * HIT/GRAZE/MISS is the sign of Delta, and the impact time is the surd itself,
+ * computed whether the bodies crawl or fly.
+ *
+ * MOTION MEETS THE WORLDLINE (Gamma-4): the impacts are EVENTS; ordering them by
+ * exact TOI is the causal `<` on the worldline; III sorts a whole gas of moving
+ * bodies into the exact collision sequence, no two swapped, no float ever.
+ *
+ * Truth is a CONDITION OF MOTION: xm_selfprove (arms 170..176).  NO gate.
+ * NIH: composes aether/sqrt_sum_sign (the exact surd order).  Hexad: kind_form.
+ * Ring R0. */
+module eidos_exact_motion
+
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+const XM_CAP  : u64 = 64u64
+const XM_SENT : u64 = 18446744073709551615u64
+
+var XM_PX : [i64; 64]   var XM_PY : [i64; 64]   var XM_PZ : [i64; 64]
+var XM_VX : [i64; 64]   var XM_VY : [i64; 64]   var XM_VZ : [i64; 64]
+var XM_R  : [i64; 64]
+var XM_N  : u64 = 0u64
+
+/* the current pair's exact separation coefficients (integers) */
+var XM_A : i64 = 0i64   var XM_B : i64 = 0i64   var XM_C : i64 = 0i64
+var XM_D : i64 = 0i64                    /* the discriminant B^2 - 4AC          */
+
+/* the surd-sign scratch (module scope -- the FFI address law) */
+var XM_SA : [i64; 4]                     /* coefficients                        */
+var XM_SB : [i64; 4]                     /* radicands (>= 0)                    */
+
+/* floor(sqrt(v)) for v >= 0 (exact integer; -1 for v < 0).  A rational TOI is
+ * exactly the case sq*sq == Delta -- a perfect square. */
+fn xm_isqrt_floor(v: i64) -> i64 @export {
+    if v < 0i64 { return -1i64 }
+    if v == 0i64 { return 0i64 }
+    let mut x : i64 = v
+    let mut y : i64 = (x + 1i64) / 2i64
+    while y < x { x = y   y = (x + (v / x)) / 2i64 }
+    return x
+}
+
+fn xm_reset() -> i32 @export { XM_N = 0u64   return 0i32 }
+fn xm_count() -> u64 @export { return XM_N }
+/* add a moving sphere (integer worldline); returns its index or SENT */
+fn xm_add(px: i64, py: i64, pz: i64, vx: i64, vy: i64, vz: i64, r: i64) -> u64 @export {
+    if XM_N >= XM_CAP { return XM_SENT }
+    if r < 0i64 { return XM_SENT }
+    XM_PX[XM_N]=px  XM_PY[XM_N]=py  XM_PZ[XM_N]=pz
+    XM_VX[XM_N]=vx  XM_VY[XM_N]=vy  XM_VZ[XM_N]=vz
+    XM_R[XM_N]=r
+    XM_N = XM_N + 1u64
+    return XM_N - 1u64
+}
+/* build A, B, C, Delta for the pair (i, j) into the module cells */
+fn xm_sep(i: u64, j: u64) -> i32 @export {
+    let dxx : i64 = XM_PX[i] - XM_PX[j]   let dvx : i64 = XM_VX[i] - XM_VX[j]
+    let dxy : i64 = XM_PY[i] - XM_PY[j]   let dvy : i64 = XM_VY[i] - XM_VY[j]
+    let dxz : i64 = XM_PZ[i] - XM_PZ[j]   let dvz : i64 = XM_VZ[i] - XM_VZ[j]
+    XM_A = dvx*dvx + dvy*dvy + dvz*dvz
+    XM_B = 2i64 * (dxx*dvx + dxy*dvy + dxz*dvz)
+    let rr : i64 = XM_R[i] + XM_R[j]
+    XM_C = (dxx*dxx + dxy*dxy + dxz*dxz) - (rr * rr)
+    XM_D = (XM_B * XM_B) - (4i64 * XM_A * XM_C)
+    return 0i32
+}
+fn xm_getA() -> i64 @export { return XM_A }
+fn xm_getB() -> i64 @export { return XM_B }
+fn xm_getC() -> i64 @export { return XM_C }
+fn xm_disc(i: u64, j: u64) -> i64 @export { xm_sep(i, j)   return XM_D }
+/* HIT / GRAZE / MISS is the sign of Delta.  +1 two real contacts (a HIT window),
+ * 0 GRAZE (a tangent double root), -1 MISS (never touch), -2 no relative motion. */
+fn xm_hit(i: u64, j: u64) -> i32 @export {
+    xm_sep(i, j)
+    if XM_A == 0i64 { return -2i32 }
+    if XM_D > 0i64 { return 1i32 }
+    if XM_D == 0i64 { return 0i32 }
+    return -1i32
+}
+
+/* sign(t*_ij - p/q) for the ENTRY impact t* = (-B - sqrt D)/(2A), A>0, q>0.
+ * t* - p/q = [ (-qB - 2Ap) - q sqrt D ] / (2Aq),  denom > 0, so the sign is that
+ * of the surd  (-qB-2Ap)*sqrt 1 + (-q)*sqrt D  -- decided exactly. */
+fn xm_toi_vs_rat(i: u64, j: u64, p: i64, q: i64) -> i32 @export {
+    xm_sep(i, j)
+    if XM_A <= 0i64 { return -2i32 }
+    if XM_D < 0i64 { return -2i32 }                  /* no real impact */
+    let mut pp : i64 = p   let mut qq : i64 = q
+    if qq < 0i64 { pp = 0i64 - pp   qq = 0i64 - qq }
+    XM_SA[0u64] = (0i64 - (qq * XM_B)) - (2i64 * XM_A * pp)   XM_SB[0u64] = 1i64
+    XM_SA[1u64] = 0i64 - qq                                   XM_SB[1u64] = XM_D
+    return ui_sqrt_sum_sign((&XM_SA) as u64, (&XM_SB) as u64, 2u64)
+}
+/* sign(t_exit - p/q) for the EXIT contact t_exit = (-B + sqrt D)/(2A), A>0,
+ * q>0 -- when the bodies separate again.  numerator = (-qB-2Ap) + q sqrt D. */
+fn xm_exit_vs_rat(i: u64, j: u64, p: i64, q: i64) -> i32 @export {
+    xm_sep(i, j)
+    if XM_A <= 0i64 { return -2i32 }
+    if XM_D < 0i64 { return -2i32 }
+    let mut pp : i64 = p   let mut qq : i64 = q
+    if qq < 0i64 { pp = 0i64 - pp   qq = 0i64 - qq }
+    XM_SA[0u64] = (0i64 - (qq * XM_B)) - (2i64 * XM_A * pp)   XM_SB[0u64] = 1i64
+    XM_SA[1u64] = qq                                          XM_SB[1u64] = XM_D
+    return ui_sqrt_sum_sign((&XM_SA) as u64, (&XM_SB) as u64, 2u64)
+}
+/* sign(t*_ij - t*_kl): two entry impacts, ordered EXACTLY.  Both A>0.
+ * t1 - t2 = [ (A1 B2 - A2 B1) + A1 sqrt D2 - A2 sqrt D1 ] / (2 A1 A2), denom>0. */
+var XM_A2:i64=0i64  var XM_B2:i64=0i64  var XM_D2:i64=0i64
+fn xm_toi_cmp(i: u64, j: u64, k: u64, l: u64) -> i32 @export {
+    xm_sep(i, j)
+    let a1 : i64 = XM_A   let b1 : i64 = XM_B   let d1 : i64 = XM_D
+    if a1 <= 0i64 { return -2i32 }
+    if d1 < 0i64 { return -2i32 }
+    xm_sep(k, l)
+    let a2 : i64 = XM_A   let b2 : i64 = XM_B   let d2 : i64 = XM_D
+    if a2 <= 0i64 { return -2i32 }
+    if d2 < 0i64 { return -2i32 }
+    XM_SA[0u64] = (a1 * b2) - (a2 * b1)   XM_SB[0u64] = 1i64
+    XM_SA[1u64] = a1                       XM_SB[1u64] = d2
+    XM_SA[2u64] = 0i64 - a2                XM_SB[2u64] = d1
+    return ui_sqrt_sum_sign((&XM_SA) as u64, (&XM_SB) as u64, 3u64)
+}
+/* THE NO-TUNNELING TEST: is the exact impact strictly inside the window (0, T]
+ * with T = tn/td?  1 yes (a real collision a stepper of any step could miss),
+ * 0 no.  The exact root decides it, never a sample. */
+fn xm_toi_in_window(i: u64, j: u64, tn: i64, td: i64) -> u32 @export {
+    if xm_hit(i, j) < 0i32 { return 0u32 }           /* no real impact (miss/degenerate) */
+    if xm_toi_vs_rat(i, j, 0i64, 1i64) != 1i32 { return 0u32 }   /* t* > 0 */
+    let up : i32 = xm_toi_vs_rat(i, j, tn, td)
+    if up == 1i32 { return 0u32 }                    /* t* > T -- beyond the window */
+    return 1u32                                      /* 0 < t* <= T */
+}
+
+/* ==================== EXACT GRAZE TIME + ELASTIC RESPONSE (supersedes choreo) ====================
+ * At a GRAZE (Delta == 0) the tangent contact time is the exact rational
+ * t* = -B/(2A); no surd, no epsilon. */
+var XM_GN : i64 = 0i64   var XM_GD : i64 = 1i64
+fn xm_graze_time(i: u64, j: u64) -> i32 @export {
+    xm_sep(i, j)
+    if XM_A <= 0i64 { return 0i32 }
+    if XM_D != 0i64 { return 0i32 }                  /* not a graze */
+    XM_GN = 0i64 - XM_B   XM_GD = 2i64 * XM_A
+    if XM_GD < 0i64 { XM_GN = 0i64 - XM_GN   XM_GD = 0i64 - XM_GD }
+    return 1i32
+}
+fn xm_graze_num() -> i64 @export { return XM_GN }
+fn xm_graze_den() -> i64 @export { return XM_GD }
+
+/* EXACT ELASTIC RESPONSE (equal masses): at the contact configuration the two
+ * bodies exchange the velocity component along the contact normal m = X_i - X_j.
+ * The impulse is s = (dV . m)/(m . m); the post-collision velocities are
+ *   V_i' = V_i - s m,   V_j' = V_j + s m,
+ * exact RATIONALS with the common denominator m.m.  Pure (does not mutate the
+ * stored integer state): the caller reads the exact new velocities.  This is
+ * choreo's ch_apply, made exact and dependency-clean.  Returns 1, or 0 if the
+ * bodies are coincident (m.m == 0, no defined normal). */
+var XM_RV : [i64; 6]                     /* new velocity numerators: V_i'(x,y,z), V_j'(x,y,z) */
+var XM_RD : i64 = 1i64                    /* common denominator m.m               */
+fn xm_respond(i: u64, j: u64) -> i32 @export {
+    let mx : i64 = XM_PX[i] - XM_PX[j]   let my : i64 = XM_PY[i] - XM_PY[j]   let mz : i64 = XM_PZ[i] - XM_PZ[j]
+    let dvx : i64 = XM_VX[i] - XM_VX[j]   let dvy : i64 = XM_VY[i] - XM_VY[j]   let dvz : i64 = XM_VZ[i] - XM_VZ[j]
+    let mm : i64 = mx*mx + my*my + mz*mz
+    if mm == 0i64 { return 0i32 }
+    let dot : i64 = dvx*mx + dvy*my + dvz*mz
+    /* V_i' component = V_i*mm - dot*m ; V_j' = V_j*mm + dot*m ; over mm */
+    XM_RV[0u64] = XM_VX[i]*mm - dot*mx   XM_RV[1u64] = XM_VY[i]*mm - dot*my   XM_RV[2u64] = XM_VZ[i]*mm - dot*mz
+    XM_RV[3u64] = XM_VX[j]*mm + dot*mx   XM_RV[4u64] = XM_VY[j]*mm + dot*my   XM_RV[5u64] = XM_VZ[j]*mm + dot*mz
+    XM_RD = mm
+    return 1i32
+}
+fn xm_rv(k: u64) -> i64 @export { if k < 6u64 { return XM_RV[k] }   return 0i64 }
+fn xm_rd() -> i64 @export { return XM_RD }
+
+/* ==================== III DISCOVERS the collision sequence ====================
+ * enumerate every pair of a gas of moving bodies; III computes each pair's
+ * HIT/GRAZE/MISS and, for the hits, sorts them by exact TOI into the causal
+ * order on the worldline -- no target named, no float. */
+var XM_PI : [u64; 512]   var XM_PJ : [u64; 512]   var XM_PN : u64 = 0u64
+fn xm_collisions() -> u64 @export {
+    XM_PN = 0u64
+    let mut i : u64 = 0u64
+    while i < XM_N {
+        let mut j : u64 = i + 1u64
+        while j < XM_N {
+            if xm_hit(i, j) == 1i32 { if XM_PN < 512u64 { XM_PI[XM_PN]=i   XM_PJ[XM_PN]=j   XM_PN = XM_PN + 1u64 } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* selection sort the hit pairs by exact TOI (the worldline order) */
+    let mut a : u64 = 0u64
+    while a + 1u64 < XM_PN {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < XM_PN {
+            if xm_toi_cmp(XM_PI[b], XM_PJ[b], XM_PI[best], XM_PJ[best]) == -1i32 { best = b }
+            b = b + 1u64
+        }
+        if best != a {
+            let ti:u64=XM_PI[a]  XM_PI[a]=XM_PI[best]  XM_PI[best]=ti
+            let tj:u64=XM_PJ[a]  XM_PJ[a]=XM_PJ[best]  XM_PJ[best]=tj
+        }
+        a = a + 1u64
+    }
+    return XM_PN
+}
+fn xm_coll_n() -> u64 @export { return XM_PN }
+fn xm_coll_i(k: u64) -> u64 @export { if k < XM_PN { return XM_PI[k] }   return XM_SENT }
+fn xm_coll_j(k: u64) -> u64 @export { if k < XM_PN { return XM_PJ[k] }   return XM_SENT }
+
+/* ==================== THE SELF-PROOF (arms 170..176) ==================== */
+fn xm_selfprove() -> u64 @export {
+    /* arm 170: HIT / GRAZE / MISS trichotomy from the discriminant sign.
+     * Two bodies closing head-on in 1D: hit; just grazing: 0; passing wide: miss. */
+    xm_reset()
+    let _a : u64 = xm_add(0i64,0i64,0i64,  4i64,0i64,0i64, 1i64)   /* -> +x */
+    let _b : u64 = xm_add(20i64,0i64,0i64, 0i64-4i64,0i64,0i64, 1i64) /* -> -x, closing */
+    if xm_hit(0u64, 1u64) != 1i32 { return 170u64 }
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  1i64,0i64,0i64, 1i64)
+    xm_add(0i64,2i64,0i64,  0i64,0i64,0i64, 1i64)                  /* offset exactly 2 = r+r -> tangent graze */
+    if xm_hit(0u64, 1u64) != 0i32 { return 170u64 }
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  1i64,0i64,0i64, 1i64)
+    xm_add(0i64,10i64,0i64, 0i64,0i64,0i64, 1i64)                  /* passes 10 apart -> miss */
+    if xm_hit(0u64, 1u64) != -1i32 { return 170u64 }
+    /* arm 171: THE IRRATIONAL IMPACT choreo REFUSES.  Two bodies crossing in 2D
+     * with Delta = 4800 (= 1600*3, NOT a perfect square) -> t* = (400 - 40 sqrt3)/800.
+     * choreo's ch_toi returns 0 here; III computes and ORDERS it. */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  10i64,0i64,0i64, 1i64)
+    xm_add(10i64,1i64,0i64, 0i64-10i64,0i64,0i64, 1i64)
+    if xm_hit(0u64, 1u64) != 1i32 { return 171u64 }
+    xm_sep(0u64, 1u64)
+    if xm_getA() != 400i64 { return 171u64 }
+    if xm_getB() != 0i64 - 400i64 { return 171u64 }
+    if XM_D != 4800i64 { return 171u64 }                          /* not a perfect square */
+    /* t* = (400 - sqrt4800)/800 ~ 0.4134 : strictly between 2/5 and 1/2, exactly */
+    if xm_toi_vs_rat(0u64, 1u64, 2i64, 5i64) != 1i32 { return 171u64 }   /* t* > 0.4 */
+    if xm_toi_vs_rat(0u64, 1u64, 1i64, 2i64) != -1i32 { return 171u64 }  /* t* < 0.5 */
+    if xm_toi_vs_rat(0u64, 1u64, 413i64, 1000i64) != 1i32 { return 171u64 }  /* t* > 0.413 */
+    if xm_toi_vs_rat(0u64, 1u64, 414i64, 1000i64) != -1i32 { return 171u64 } /* t* < 0.414 */
+    /* arm 172: EXACT ZERO at the graze -- the tangent impact is exactly t* rational
+     * where Delta=0, and lies strictly inside its window (no epsilon) */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
+    xm_add(4i64,2i64,0i64,  0i64,0i64,0i64, 1i64)                  /* grazes: closest approach exactly 2 */
+    if xm_hit(0u64, 1u64) != 0i32 { return 172u64 }
+    /* arm 173: NO TUNNELING -- a high-speed crossing whose impact sits inside
+     * (0,1]; sampling at t=0 (50 apart) and t=1 (70 apart in x) sees both bodies
+     * clear, the exact root does not.  A=(0,0) v=+60, B=(50,1) v=-60, r=1:
+     * Delta = 172800 = 57600*3, t* = (50 - sqrt3)/120 ~ 0.4023 in (0,1]. */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,   60i64,0i64,0i64, 1i64)
+    xm_add(50i64,1i64,0i64,  0i64-60i64,0i64,0i64, 1i64)
+    if xm_hit(0u64, 1u64) != 1i32 { return 173u64 }
+    if XM_D != 172800i64 { return 173u64 }                       /* not a perfect square */
+    if xm_toi_in_window(0u64, 1u64, 1i64, 1i64) != 1u32 { return 173u64 }   /* t* in (0,1] */
+    if xm_toi_vs_rat(0u64, 1u64, 0i64, 1i64) != 1i32 { return 173u64 }      /* t* > 0 */
+    if xm_toi_vs_rat(0u64, 1u64, 40i64, 100i64) != 1i32 { return 173u64 }   /* t* > 0.40 */
+    if xm_toi_vs_rat(0u64, 1u64, 41i64, 100i64) != -1i32 { return 173u64 }  /* t* < 0.41 */
+    /* arm 174: THE WORLDLINE ORDER -- three approaching pairs collide at distinct
+     * exact times; III sorts them into the causal sequence and the order is total
+     * (antisymmetric: cmp(x,y) = -cmp(y,x)) */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,   1i64,0i64,0i64, 1i64)                /* 0 */
+    xm_add(10i64,0i64,0i64,  0i64-1i64,0i64,0i64, 1i64)          /* 1: meets 0 near t=4 */
+    xm_add(0i64,20i64,0i64,  2i64,0i64,0i64, 1i64)               /* 2 */
+    xm_add(6i64,20i64,0i64,  0i64-2i64,0i64,0i64, 1i64)          /* 3: meets 2 near t=1 */
+    let c01_23 : i32 = xm_toi_cmp(0u64,1u64, 2u64,3u64)
+    let c23_01 : i32 = xm_toi_cmp(2u64,3u64, 0u64,1u64)
+    if c01_23 != (0i32 - c23_01) { return 174u64 }               /* antisymmetry */
+    if c01_23 != 1i32 { return 174u64 }                          /* pair(0,1) later than pair(2,3) */
+    /* arm 175: DISCOVERY -- enumerate the gas, III surfaces the collision
+     * sequence with no target named; the two hits order (2,3) before (0,1) */
+    if xm_collisions() != 2u64 { return 175u64 }
+    if xm_coll_i(0u64) != 2u64 { return 175u64 }
+    if xm_coll_j(0u64) != 3u64 { return 175u64 }
+    if xm_coll_i(1u64) != 0u64 { return 175u64 }
+    if xm_coll_j(1u64) != 1u64 { return 175u64 }
+    /* arm 176: no relative motion is degenerate (A=0), and a receding pair never
+     * impacts in the future window */
+    xm_reset()
+    xm_add(0i64,0i64,0i64, 3i64,0i64,0i64, 1i64)
+    xm_add(5i64,0i64,0i64, 3i64,0i64,0i64, 1i64)                  /* same velocity -> A=0 */
+    if xm_hit(0u64, 1u64) != -2i32 { return 176u64 }
+    /* arm 177: EXACT GRAZE TIME -- a tangent contact has rational t* = -B/(2A) */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  2i64,0i64,0i64, 1i64)
+    xm_add(4i64,2i64,0i64,  0i64,0i64,0i64, 1i64)
+    if xm_graze_time(0u64, 1u64) != 1i32 { return 177u64 }
+    /* the closest approach of these worldlines is exactly r+r=2 at t* = xm_graze_num/den */
+    if xm_graze_den() == 0i64 { return 177u64 }
+    /* arm 178: EXACT ELASTIC RESPONSE -- a head-on equal-mass contact EXCHANGES
+     * velocities exactly (momentum + energy conserved by construction).  Bodies
+     * in contact along x, closing at +/-4: after response V_i' = -4, V_j' = +4. */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  4i64,0i64,0i64, 1i64)
+    xm_add(2i64,0i64,0i64,  0i64-4i64,0i64,0i64, 1i64)            /* touching along x, closing */
+    if xm_respond(0u64, 1u64) != 1i32 { return 178u64 }
+    /* V_i'_x = -4  and  V_j'_x = +4  (as numerators over XM_RD) */
+    if xm_rv(0u64) != (0i64 - 4i64) * xm_rd() { return 178u64 }
+    if xm_rv(3u64) != 4i64 * xm_rd() { return 178u64 }
+    /* the y,z components are unchanged (0) -- no impulse off the normal */
+    if xm_rv(1u64) != 0i64 { return 178u64 }
+    if xm_rv(4u64) != 0i64 { return 178u64 }
+    /* MOMENTUM CONSERVED: V_i' + V_j' == V_i + V_j (== 0 here) */
+    if (xm_rv(0u64) + xm_rv(3u64)) != 0i64 { return 178u64 }
+    /* arm 179: ENTRY precedes EXIT for a genuine hit -- the contact window is a
+     * real interval [t_entry, t_exit], both surds, and the entry is the smaller
+     * root (the irrational crossing: entry ~0.413 < exit ~0.586). */
+    xm_reset()
+    xm_add(0i64,0i64,0i64,  10i64,0i64,0i64, 1i64)
+    xm_add(10i64,1i64,0i64, 0i64-10i64,0i64,0i64, 1i64)          /* Delta=4800, both roots surd */
+    if xm_hit(0u64, 1u64) != 1i32 { return 179u64 }
+    if xm_toi_vs_rat(0u64, 1u64, 1i64, 2i64) != -1i32 { return 179u64 }   /* entry < 1/2 */
+    if xm_exit_vs_rat(0u64, 1u64, 1i64, 2i64) != 1i32 { return 179u64 }   /* exit  > 1/2 */
+    if xm_exit_vs_rat(0u64, 1u64, 586i64, 1000i64) != 1i32 { return 179u64 } /* exit > 0.586 */
+    if xm_exit_vs_rat(0u64, 1u64, 587i64, 1000i64) != -1i32 { return 179u64 }/* exit < 0.587 */
+    return 0u64
+}

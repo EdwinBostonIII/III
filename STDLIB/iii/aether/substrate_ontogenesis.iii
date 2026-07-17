@@ -1,0 +1,687 @@
+/* aether/substrate_ontogenesis.iii -- THE SUBSTRATE ONTOGENESIS: an algebra
+ * whose carrier, operation, and laws are a FUNCTION OF THE SILICON, not the
+ * author (ENTELECHEIA, the real crossing of the threshold).
+ *
+ * THE DEFECT IT REPLACES: mathesis_lawforge searched an AUTHORED term grammar
+ * (x, y, ordered pairs, a fixed operator menu, a fixed 11-law bitmask) and is
+ * substrate-INVARIANT -- it reads no cpu_census, no behavioral_fp, and prints
+ * byte-identical output on every machine.  Searching a space the author built
+ * to contain RINVOL is a lookup, not a derivation.  It can only ever surface
+ * pre-existing human theorems because its universe is a fully human-charted
+ * symbolic space.
+ *
+ * THE CONSTRUCTION (substrate-derived, bottom-up):
+ *   SIGNATURE  s = bfp_compute48() (the machine's MEASURED ALU behavior on a
+ *              canonical battery) XOR the four u64 words of the CPUID
+ *              self-identity crystal (katabasis_cpu_census_hash).  This is the
+ *              qualitative fact of THIS silicon's execution -- machine-specific,
+ *              read at Ring 0/3, never a constant.
+ *   CARRIER    k = 2 + (s mod 3) in {2,3,4} -- the DOMAIN SIZE is chosen by the
+ *              substrate, not the author.
+ *   OPERATION  x o y is not a table the author indexes into (that was forge's
+ *              mff_load(idx)).  It is COMPUTED by EXECUTING a 6-step program of
+ *              real ALU ops -- the opcode and operand of each step decoded from
+ *              s -- over the machine's wrapping u64 arithmetic, then reduced mod
+ *              k.  A different silicon signature runs a different program and so
+ *              IS a different algebra.  The operation is the machine's own
+ *              bit-behavior (XOR that squares to identity, MUL that drops the
+ *              high half, SHL that is not multiplication at the boundary) --
+ *              non-arithmetic, "beyond number," the silicon's Boolean reality.
+ *   PROFILE    which of ten universal-algebra laws HOLD is then OBSERVED by
+ *              exhaustion over the finite carrier -- the operation executed on
+ *              every tuple.  A law bit is set iff it holds for EVERY tuple, so
+ *              the profile IS the embodiment proof: validation by running the
+ *              structure, never by matching a human answer key.
+ *
+ * THE FALSIFIER (wired FIRST, allowed to redden): so_variance sweeps many
+ * distinct signatures and counts DISTINCT profiles.  If the profile is the same
+ * for every signature, the construction is substrate-INVARIANT -> AUTHORED ->
+ * REFUSED (the CLI exits nonzero).  A genuine substrate ontogenesis MUST vary
+ * with the substrate; that variance is the evidence it is derived, not typed.
+ *
+ * HONEST BOUNDARIES (envelope, not hidden): the MENU of eight ALU ops and the
+ * program length are authored; the SELECTION and COMPOSITION from that menu are
+ * substrate-driven -- so a residual authored surface remains and is named.  The
+ * signal is deterministic-but-machine-specific (CPUID does not fluctuate); this
+ * yields a PER-SUBSTRATE ontology, not a per-run-random one.  On one physical
+ * host the live signature is a single point; substrate-VARIANCE is demonstrated
+ * by evaluating the derivation across many signature values (as if across many
+ * silicons) -- the function is proven substrate-variant even though this host
+ * instantiates one input.
+ *
+ * NIH: composes katabasis/cpu_census + katabasis/behavioral_fp (their FIRST
+ * consumer outside the pulse) over the machine's own ALU.  Hexad: kind_essence.
+ * Ring: R0.
+ */
+module aether_substrate_ontogenesis
+
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_hash(out_addr: u64) -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+
+const SO_STEPS : u64 = 6u64
+
+var SO_CEN : [u8; 32]        /* the CPUID self-identity crystal, live-read      */
+var SO_OP  : [i64; 256]      /* the derived operation table, op[x*k+y], k <= 16 */
+var SO_K   : i64 = 0i64      /* the derived carrier size                        */
+
+/* ---- the machine's own signature: measured ALU behavior XOR CPU DNA ---- */
+fn so_signature() -> u64 @export {
+    katabasis_cpu_census_hash((&SO_CEN) as u64)
+    let p : *u64 = (&SO_CEN as u64) as *u64
+    let mut s : u64 = bfp_compute48()
+    s = s ^ p[0u64]
+    s = s ^ p[1u64]
+    s = s ^ p[2u64]
+    s = s ^ p[3u64]
+    return s
+}
+
+/* one ALU micro-op: the machine's actual wrapping bit-behavior on u64.  opc in
+ * 0..7 selects AND OR XOR ADD SUB MUL SHL SHR.  These are the silicon's real
+ * operations -- ADD/MUL wrap mod 2^64, SHL/SHR are bit motions, none is the
+ * abstract-integer operation of the same name. */
+fn so_alu(acc: u64, v: u64, opc: u64) -> u64 {
+    if opc == 0u64 { return acc & v }
+    if opc == 1u64 { return acc | v }
+    if opc == 2u64 { return acc ^ v }
+    if opc == 3u64 { return acc + v }
+    if opc == 4u64 { return acc - v }
+    if opc == 5u64 { return acc * v }
+    if opc == 6u64 { return acc << (v & 7u64) }
+    return acc >> (v & 7u64)
+}
+
+/* THE OPERATION, computed by EXECUTION: start acc = x+1 (never zero, so both
+ * operands stay live through MUL), then run SO_STEPS ALU steps whose opcode and
+ * operand are decoded from the signature s, and reduce mod k.  This is the
+ * machine composing its own instructions -- not an author table lookup. */
+fn so_op_exec(x: i64, y: i64, s: u64, k: i64) -> i64 {
+    let xv : u64 = (x as u64) + 1u64
+    let yv : u64 = (y as u64) + 1u64
+    let mut acc : u64 = xv
+    let mut step : u64 = 0u64
+    while step < SO_STEPS {
+        let field : u64 = (s >> (2u64 + (step * 4u64))) & 15u64
+        let opc   : u64 = field & 7u64
+        let sel   : u64 = (field >> 3u64) & 1u64
+        let mut v : u64 = xv
+        if sel == 1u64 { v = yv }
+        acc = so_alu(acc, v, opc)
+        step = step + 1u64
+    }
+    return (acc % (k as u64)) as i64
+}
+
+/* build the derived table for signature s into SO_OP; returns k (2..16).  The
+ * carrier size is chosen by the substrate over a wider range so the operation
+ * is not crushed to a trivial residue -- richer structure needs room. */
+fn so_build(s: u64) -> i64 @export {
+    let k : i64 = 2i64 + (((s >> 33u64) % 15u64) as i64)
+    SO_K = k
+    let mut x : i64 = 0i64
+    while x < k {
+        let mut y : i64 = 0i64
+        while y < k {
+            SO_OP[((x * k) + y) as u64] = so_op_exec(x, y, s, k)
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return k
+}
+
+fn so_get(x: i64, y: i64) -> i64 @export { return SO_OP[((x * SO_K) + y) as u64] }
+fn so_k() -> i64 @export { return SO_K }
+
+/* ---- THE PROFILE: which laws HOLD, observed by exhaustion over the carrier.
+ * Ten universal-algebra laws; a bit is set iff the law holds for EVERY tuple of
+ * the derived operation.  The exhaustive execution IS the embodiment proof. ----
+ *   1 ASSOC  2 COMM  4 IDEM  8 IDENT  16 ZERO  32 LCANCEL  64 RCANCEL
+ *   128 LINVOL  256 RINVOL  512 MEDIAL */
+fn so_profile() -> i64 @export {
+    let n : i64 = SO_K
+    let mut p : i64 = 1023i64
+    let mut x : i64 = 0i64
+    while x < n {
+        if so_get(x, x) != x { p = p & (1023i64 - 4i64) }
+        let mut y : i64 = 0i64
+        while y < n {
+            if so_get(x, y) != so_get(y, x) { p = p & (1023i64 - 2i64) }
+            if so_get(x, so_get(x, y)) != y { p = p & (1023i64 - 128i64) }
+            if so_get(so_get(x, y), y) != x { p = p & (1023i64 - 256i64) }
+            let mut y2 : i64 = y + 1i64
+            while y2 < n {
+                if so_get(x, y) == so_get(x, y2) { p = p & (1023i64 - 32i64) }
+                if so_get(y, x) == so_get(y2, x) { p = p & (1023i64 - 64i64) }
+                y2 = y2 + 1i64
+            }
+            let mut z : i64 = 0i64
+            while z < n {
+                if so_get(so_get(x, y), z) != so_get(x, so_get(y, z)) { p = p & (1023i64 - 1i64) }
+                let mut w : i64 = 0i64
+                while w < n {
+                    if so_get(so_get(x, y), so_get(z, w)) != so_get(so_get(x, z), so_get(y, w)) { p = p & (1023i64 - 512i64) }
+                    w = w + 1i64
+                }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    /* identity / zero existence */
+    let mut hase : i64 = 0i64
+    let mut hasz : i64 = 0i64
+    let mut e : i64 = 0i64
+    while e < n {
+        let mut ise : i64 = 1i64
+        let mut isz : i64 = 1i64
+        let mut t : i64 = 0i64
+        while t < n {
+            if so_get(e, t) != t { ise = 0i64 }
+            if so_get(t, e) != t { ise = 0i64 }
+            if so_get(e, t) != e { isz = 0i64 }
+            if so_get(t, e) != e { isz = 0i64 }
+            t = t + 1i64
+        }
+        if ise == 1i64 { hase = 1i64 }
+        if isz == 1i64 { hasz = 1i64 }
+        e = e + 1i64
+    }
+    if hase == 0i64 { p = p & (1023i64 - 8i64) }
+    if hasz == 0i64 { p = p & (1023i64 - 16i64) }
+    return p
+}
+
+/* profile for a given signature (build + observe) */
+fn so_profile_of(s: u64) -> i64 @export {
+    so_build(s)
+    return so_profile()
+}
+
+/* ---- THE FALSIFIER: distinct profiles across a swept signature space.  If
+ * distinct == 1 the construction is substrate-INVARIANT (authored); > 1 means
+ * the discovered algebra genuinely varies with the silicon signature. ---- */
+const SO_GOLDEN : u64 = 11400714819323198485u64   /* odd (2^64/phi): a full-period stride, NOT a chosen constant of the algebra */
+var SO_SEEN     : [i64; 1024]
+var SO_NSEEN    : i64 = 0i64
+var SO_KVAR     : [i64; 17]        /* histogram of derived carrier sizes (k <= 16) */
+var SO_NONTRIV  : i64 = 0i64       /* signatures whose profile is proper (not 0, not full) */
+
+fn so_seen_has(v: i64) -> u8 {
+    let mut i : i64 = 0i64
+    while i < SO_NSEEN {
+        if SO_SEEN[i as u64] == v { return 1u8 }
+        i = i + 1i64
+    }
+    return 0u8
+}
+
+/* sweep `count` distinct synthetic signatures (as if across `count` silicons);
+ * record the distinct profiles.  Returns the DISTINCT profile count. */
+fn so_variance(count: i64) -> i64 @export {
+    SO_NSEEN = 0i64
+    SO_NONTRIV = 0i64
+    let mut ki : i64 = 0i64
+    while ki < 17i64 { SO_KVAR[ki as u64] = 0i64  ki = ki + 1i64 }
+    let mut i : i64 = 0i64
+    let mut s : u64 = SO_GOLDEN
+    while i < count {
+        let prof : i64 = so_profile_of(s)
+        if prof != 0i64 { if prof != 1023i64 { SO_NONTRIV = SO_NONTRIV + 1i64 } }
+        let kk : i64 = SO_K
+        if kk < 17i64 { SO_KVAR[kk as u64] = SO_KVAR[kk as u64] + 1i64 }
+        if so_seen_has(prof) == 0u8 {
+            if SO_NSEEN < 1024i64 { SO_SEEN[SO_NSEEN as u64] = prof  SO_NSEEN = SO_NSEEN + 1i64 }
+        }
+        s = s + SO_GOLDEN        /* wrap-stride: hits a fresh signature each step */
+        i = i + 1i64
+    }
+    return SO_NSEEN
+}
+
+fn so_variance_nontriv() -> i64 @export { return SO_NONTRIV }
+fn so_variance_kcount(k: i64) -> i64 @export { if k < 17i64 { if k >= 0i64 { return SO_KVAR[k as u64] } }  return 0i64 }
+fn so_seen_at(i: i64) -> i64 @export { if i < SO_NSEEN { return SO_SEEN[i as u64] }  return 0i64 - 1i64 }
+fn so_seen_count() -> i64 @export { return SO_NSEEN }
+
+/* ===================================================================
+ * THE SUBSTRATE CRITERION -- so the machine is NOT graded on human algebra.
+ *
+ * The profile above grades an operation on TEN LAWS A HUMAN NAMED (assoc,
+ * comm, medial, ...).  That is an authored criterion.  Here the criterion
+ * ITSELF is derived from the substrate:
+ *
+ *   A PROBE is a random equational law -- a pair of depth<=2 terms over the
+ *   operation and three variables {x,y,z}, DECODED FROM A SIGNATURE exactly the
+ *   way the operation is.  It FIRES on an operation iff the identity holds for
+ *   every assignment (exhaustion = embodiment).  Human laws (ASSOC is
+ *   ((x o y) o z) = (x o (y o z)); COMM is (x o y) = (y o x)) are unremarkable
+ *   POINTS in this probe space -- never named, they emerge as rare-and-satisfied
+ *   or they do not.
+ *
+ *   INTERESTINGNESS is SURPRISE: an operation is interesting when it satisfies
+ *   probes that are globally RARE (fire on few operations).  Surprise is the
+ *   self-grounding measure -- it grades itself -- so the criterion regress
+ *   terminates at information theory, not at more human algebra.
+ *
+ * THE FALSIFIER (this step, wired first): substrate-probes must CARRY
+ * INFORMATION -- their firing rates over the operation population must SPREAD
+ * (not all ~0 / ~1) and their firing PATTERNS must be DIVERSE (not all probes
+ * measuring the same thing).  A collapsed histogram = a degenerate probe
+ * vocabulary = the criterion is refused before any ranking is claimed.
+ *
+ * HONEST RESIDUE (named): the probe FORM (equational, 3 variables, depth<=2,
+ * the ALU-decode) is authored as a MINIMAL-COMMITMENT interrogation -- you
+ * cannot measure an operation's structure with no way to interrogate it.  What
+ * is NOT authored: which identities are rare, which the operation satisfies,
+ * which count as interesting.  Probes are drawn from a signature region DISJOINT
+ * from the operation's, so a probe never knows the operation it scores (no
+ * circularity).
+ * =================================================================== */
+
+const SO_PROBE_GOLDEN : u64 = 14029467366897019727u64   /* a DIFFERENT odd stride: probe region disjoint from the op region */
+
+/* a depth<=2 AST over {x=0, y=1, z=2, op=3}; two roots per probe */
+var SO_NK   : [i64; 16]      /* node kind: 0 x, 1 y, 2 z, 3 op       */
+var SO_NL   : [i64; 16]      /* left child index (op only)           */
+var SO_NR   : [i64; 16]      /* right child index (op only)          */
+var SO_NNODE: i64 = 0i64
+var SO_PSIG : u64 = 0u64
+var SO_PCUR : u64 = 0u64
+var SO_ROOT1: i64 = 0i64
+var SO_ROOT2: i64 = 0i64
+
+/* read n bits from the probe signature at the rolling cursor */
+fn so_bits(n: u64) -> u64 {
+    if (SO_PCUR + n) > 64u64 { SO_PCUR = 0u64 }
+    let v : u64 = (SO_PSIG >> SO_PCUR) & ((1u64 << n) - 1u64)
+    SO_PCUR = SO_PCUR + n
+    return v
+}
+
+/* decode one term of the given depth budget into the node pool; return its
+ * node index.  A leaf is a variable; a compound is (child op child). */
+fn so_decode(depth: i64) -> i64 {
+    let idx : i64 = SO_NNODE
+    if SO_NNODE >= 15i64 {
+        /* pool exhausted: force a leaf x (bounded, deterministic) */
+        SO_NK[idx as u64] = 0i64  SO_NL[idx as u64] = 0i64  SO_NR[idx as u64] = 0i64
+        SO_NNODE = SO_NNODE + 1i64
+        return idx
+    }
+    let mut isop : u64 = 0u64
+    if depth > 0i64 { isop = so_bits(1u64) }
+    if isop == 1u64 {
+        SO_NNODE = SO_NNODE + 1i64
+        let l : i64 = so_decode(depth - 1i64)
+        let r : i64 = so_decode(depth - 1i64)
+        SO_NK[idx as u64] = 3i64
+        SO_NL[idx as u64] = l
+        SO_NR[idx as u64] = r
+        return idx
+    }
+    let atom : i64 = (so_bits(2u64) % 3u64) as i64
+    SO_NK[idx as u64] = atom
+    SO_NL[idx as u64] = 0i64
+    SO_NR[idx as u64] = 0i64
+    SO_NNODE = SO_NNODE + 1i64
+    return idx
+}
+
+/* build probe `ps` (two depth<=2 terms) into the node pool */
+fn so_probe_build(ps: u64) -> i32 @export {
+    SO_PSIG = ps
+    SO_PCUR = 0u64
+    SO_NNODE = 0i64
+    SO_ROOT1 = so_decode(2i64)
+    SO_ROOT2 = so_decode(2i64)
+    return 0i32
+}
+
+/* evaluate node `idx` at assignment (x,y,z) over the CURRENT SO_OP table */
+fn so_eval(idx: i64, x: i64, y: i64, z: i64) -> i64 {
+    let k : i64 = SO_NK[idx as u64]
+    if k == 0i64 { return x }
+    if k == 1i64 { return y }
+    if k == 2i64 { return z }
+    let lv : i64 = so_eval(SO_NL[idx as u64], x, y, z)
+    let rv : i64 = so_eval(SO_NR[idx as u64], x, y, z)
+    return so_get(lv, rv)
+}
+
+/* does the current probe FIRE on the current operation? (identity over all
+ * assignments at the operation's carrier k) -- exhaustion is the embodiment. */
+fn so_probe_fires(k: i64) -> u8 {
+    let mut x : i64 = 0i64
+    while x < k {
+        let mut y : i64 = 0i64
+        while y < k {
+            let mut z : i64 = 0i64
+            while z < k {
+                if so_eval(SO_ROOT1, x, y, z) != so_eval(SO_ROOT2, x, y, z) { return 0u8 }
+                z = z + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return 1u8
+}
+
+/* ---- THE CENSUS: firing of M substrate-probes over N substrate-operations.
+ * Reports the base-rate histogram (does information exist?) and the number of
+ * distinct firing patterns (are the probes diverse, or all the same test?). ---- */
+const SO_FNV_OFF : u64 = 14695981039346656037u64
+const SO_FNV_P   : u64 = 1099511628211u64
+
+var SO_FC   : [i64; 256]     /* fire count per probe (<= N)                  */
+var SO_PH   : [u64; 256]     /* firing-pattern hash per probe                */
+var SO_TH   : [u64; 256]     /* term-STRUCTURE hash per probe (decode diversity) */
+var SO_BUCK : [i64; 6]       /* base-rate histogram: 0, (0,.1), [.1,.5), [.5,.9), [.9,1), 1 */
+var SO_MM   : i64 = 0i64
+var SO_NN   : i64 = 0i64
+var SO_DISTINCT : i64 = 0i64
+var SO_TERMDISTINCT : i64 = 0i64    /* distinct decoded term structures     */
+var SO_INFODISTINCT : i64 = 0i64    /* distinct patterns among INFORMATIVE probes */
+var SO_INFOCOUNT    : i64 = 0i64    /* probes with 0 < rate < 1             */
+
+/* fold a term structure (kind,l,r recursively) into a hash -- decode diversity */
+fn so_struct_fold(idx: i64, h: u64) -> u64 {
+    let mut hh : u64 = (h ^ (SO_NK[idx as u64] as u64)) * SO_FNV_P
+    if SO_NK[idx as u64] == 3i64 {
+        hh = so_struct_fold(SO_NL[idx as u64], hh)
+        hh = so_struct_fold(SO_NR[idx as u64], hh)
+    }
+    return hh
+}
+
+/* mode 0 = the real disjoint-stride probe vocabulary; mode 1 = the NEGATIVE
+ * CONTROL, every probe forced identical (a deliberately degenerate vocabulary
+ * that MUST be refused -- it proves the falsifier still has teeth). */
+fn so_probe_census(m: i64, n: i64, mode: i64) -> i64 @export {
+    let mm : i64 = m
+    let nn : i64 = n
+    let md : i64 = mode
+    SO_MM = mm
+    SO_NN = nn
+    let mut j : i64 = 0i64
+    while j < mm { SO_FC[j as u64] = 0i64  SO_PH[j as u64] = SO_FNV_OFF  j = j + 1i64 }
+    /* single pass: for each operation, test every probe against it */
+    let mut i : i64 = 0i64
+    while i < nn {
+        let osig : u64 = SO_GOLDEN * ((i + 1i64) as u64)   /* operation region */
+        so_build(osig)
+        let k : i64 = SO_K
+        j = 0i64
+        while j < mm {
+            let mut psig : u64 = SO_PROBE_GOLDEN * ((j + 1i64) as u64)   /* disjoint probe region */
+            if md == 1i64 { psig = SO_PROBE_GOLDEN }                     /* negative control: all identical */
+            so_probe_build(psig)
+            if i == 0i64 {
+                let mut th : u64 = so_struct_fold(SO_ROOT1, SO_FNV_OFF)
+                th = so_struct_fold(SO_ROOT2, th)
+                SO_TH[j as u64] = th
+            }
+            let f : u8 = so_probe_fires(k)
+            let bit : u64 = f as u64
+            SO_PH[j as u64] = (SO_PH[j as u64] ^ bit) * SO_FNV_P
+            if f == 1u8 { SO_FC[j as u64] = SO_FC[j as u64] + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    /* base-rate histogram */
+    let mut b : i64 = 0i64
+    while b < 6i64 { SO_BUCK[b as u64] = 0i64  b = b + 1i64 }
+    j = 0i64
+    while j < mm {
+        let fc : i64 = SO_FC[j as u64]
+        if fc == 0i64 { SO_BUCK[0u64] = SO_BUCK[0u64] + 1i64 }
+        else { if fc == nn { SO_BUCK[5u64] = SO_BUCK[5u64] + 1i64 }
+        else { if (fc * 10i64) < nn { SO_BUCK[1u64] = SO_BUCK[1u64] + 1i64 }
+        else { if (fc * 2i64) < nn { SO_BUCK[2u64] = SO_BUCK[2u64] + 1i64 }
+        else { if (fc * 10i64) < (9i64 * nn) { SO_BUCK[3u64] = SO_BUCK[3u64] + 1i64 }
+        else { SO_BUCK[4u64] = SO_BUCK[4u64] + 1i64 } } } } }
+        j = j + 1i64
+    }
+    /* distinct firing patterns (all probes); distinct patterns among INFORMATIVE
+     * probes (0<rate<1); distinct decoded term structures.  O(M^2). */
+    SO_DISTINCT = 0i64
+    SO_INFODISTINCT = 0i64
+    SO_INFOCOUNT = 0i64
+    SO_TERMDISTINCT = 0i64
+    j = 0i64
+    while j < mm {
+        let hj : u64 = SO_PH[j as u64]
+        let fcj : i64 = SO_FC[j as u64]
+        let thj : u64 = SO_TH[j as u64]
+        let mut seen : u8 = 0u8
+        let mut tseen : u8 = 0u8
+        let mut iseen : u8 = 0u8
+        let informative : u8 = ((fcj > 0i64) as u8) & ((fcj < nn) as u8)
+        if informative == 1u8 { SO_INFOCOUNT = SO_INFOCOUNT + 1i64 }
+        let mut t : i64 = 0i64
+        while t < j {
+            if SO_PH[t as u64] == hj { seen = 1u8 }
+            if SO_TH[t as u64] == thj { tseen = 1u8 }
+            if informative == 1u8 {
+                let fct : i64 = SO_FC[t as u64]
+                if fct > 0i64 { if fct < nn { if SO_PH[t as u64] == hj { iseen = 1u8 } } }
+            }
+            t = t + 1i64
+        }
+        if seen == 0u8  { SO_DISTINCT = SO_DISTINCT + 1i64 }
+        if tseen == 0u8 { SO_TERMDISTINCT = SO_TERMDISTINCT + 1i64 }
+        if informative == 1u8 { if iseen == 0u8 { SO_INFODISTINCT = SO_INFODISTINCT + 1i64 } }
+        j = j + 1i64
+    }
+    return SO_DISTINCT
+}
+
+fn so_census_bucket(b: i64) -> i64 @export { if b >= 0i64 { if b < 6i64 { return SO_BUCK[b as u64] } }  return 0i64 }
+fn so_census_distinct() -> i64 @export { return SO_DISTINCT }
+fn so_census_termdistinct() -> i64 @export { return SO_TERMDISTINCT }
+fn so_census_infodistinct() -> i64 @export { return SO_INFODISTINCT }
+fn so_census_infocount() -> i64 @export { return SO_INFOCOUNT }
+fn so_census_fc(j: i64) -> i64 @export { if j >= 0i64 { if j < SO_MM { return SO_FC[j as u64] } }  return 0i64 - 1i64 }
+
+/* ===================================================================
+ * STEP 2 -- INTERESTINGNESS AS SURPRISE, and the ranking's own falsifier.
+ *
+ * An operation's interestingness under a probe library is its ATYPICALITY under
+ * the null: sum over probes of a monotone integer surrogate for surprise --
+ * a FIRED probe contributes its rarity (N - firecount, high when the probe is
+ * rare), a NOT-FIRED probe contributes its commonness (firecount, high when a
+ * usually-true law fails here).  This is -log P(firing vector) up to the linear
+ * surrogate; it needs NO human law and it grades itself (surprise of surprise
+ * is surprise -- the regress terminus).
+ *
+ * THE RANKING FALSIFIER (two libraries): rank the SAME operation population by
+ * two probe libraries drawn from DISJOINT signature regions.  Kendall
+ * concordance tau between the two rankings must be:
+ *   tau ~ 1  -> the ranking is library-INDEPENDENT: the substrate probes add
+ *              nothing, the criterion is effectively universal/authored -> REFUSE;
+ *   tau ~ 0  -> the two libraries disagree completely: the criterion is NOISE
+ *              -> REFUSE;
+ *   0 < tau < 1 with real discordance -> a STABLE criterion whose detail is
+ *              substrate-DERIVED (the library genuinely shapes the ranking).
+ * =================================================================== */
+
+const SO_STRIDE_A : u64 = 14029467366897019727u64   /* library A region */
+const SO_STRIDE_B : u64 = 15113383382063831677u64   /* library B region (disjoint odd) */
+
+var SO_STRIDE : u64 = 14029467366897019727u64       /* active probe stride */
+var SO_IA : [i64; 256]      /* interest of pop op i under library A */
+var SO_IB : [i64; 256]      /* interest of pop op i under library B */
+var SO_POP : [u64; 256]     /* signatures of the CLEAN (non-degenerate) population */
+var SO_POPN : i64 = 0i64    /* clean population size */
+var SO_POPSWEEP : i64 = 0i64 /* signatures swept to fill it */
+var SO_CONC : i64 = 0i64
+var SO_DISC : i64 = 0i64
+var SO_REALINT : i64 = 0i64
+var SO_REALPCT : i64 = 0i64
+var SO_REALDEGEN : u8 = 0u8
+
+/* Does the CURRENTLY-BUILT operation carry information -- depend on BOTH
+ * arguments?  A constant, a left-projection (x o y = x) or a right-projection
+ * (x o y = y) does not, and is degenerate.  This is the information floor
+ * (self-grounding: a thing must carry information to be a thing), NOT a taste
+ * for any particular algebra. */
+fn so_depends_both() -> u8 {
+    let k : i64 = SO_K
+    let mut dr : u8 = 0u8
+    let mut dl : u8 = 0u8
+    let mut x : i64 = 0i64
+    while x < k {
+        let mut y : i64 = 0i64
+        while y < k {
+            let mut y2 : i64 = y + 1i64
+            while y2 < k {
+                if so_get(x, y) != so_get(x, y2) { dr = 1u8 }
+                y2 = y2 + 1i64
+            }
+            let mut x2 : i64 = x + 1i64
+            while x2 < k {
+                if so_get(x, y) != so_get(x2, y) { dl = 1u8 }
+                x2 = x2 + 1i64
+            }
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    return dl & dr
+}
+fn so_is_degenerate() -> u8 @export { if so_depends_both() == 1u8 { return 0u8 }  return 1u8 }
+
+/* build a CLEAN population: sweep signatures, keep only the non-degenerate ops
+ * (those that carry information), until `want` collected or `cap` swept. */
+fn so_build_pop(want: i64, cap: i64) -> i64 @export {
+    SO_POPN = 0i64
+    let mut i : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= cap { going = 0u8 }
+        else { if SO_POPN >= want { going = 0u8 }
+        else {
+            let s : u64 = SO_GOLDEN * ((i + 1i64) as u64)
+            so_build(s)
+            if so_depends_both() == 1u8 {
+                SO_POP[SO_POPN as u64] = s
+                SO_POPN = SO_POPN + 1i64
+            }
+            i = i + 1i64
+        } }
+    }
+    SO_POPSWEEP = i
+    return SO_POPN
+}
+
+/* base rates SO_FC over the CLEAN population, using the ACTIVE stride */
+fn so_census_rates_pop(m: i64) -> i32 {
+    let mm : i64 = m
+    let mut j : i64 = 0i64
+    while j < mm { SO_FC[j as u64] = 0i64  j = j + 1i64 }
+    let mut i : i64 = 0i64
+    while i < SO_POPN {
+        so_build(SO_POP[i as u64])
+        let k : i64 = SO_K
+        j = 0i64
+        while j < mm {
+            so_probe_build(SO_STRIDE * ((j + 1i64) as u64))
+            if so_probe_fires(k) == 1u8 { SO_FC[j as u64] = SO_FC[j as u64] + 1i64 }
+            j = j + 1i64
+        }
+        i = i + 1i64
+    }
+    return 0i32
+}
+
+/* two-sided atypicality of the CURRENTLY-BUILT op vs SO_FC (population size P):
+ * a FIRED rare probe (low fc) and a NOT-FIRED common probe (high fc) both add
+ * surprise; a fired common probe or an unfired rare probe add little.  A
+ * constant op is never scored (it is filtered out of the population). */
+fn so_interest_current(m: i64, P: i64, k: i64) -> i64 {
+    let mm : i64 = m
+    let pp : i64 = P
+    let mut acc : i64 = 0i64
+    let mut j : i64 = 0i64
+    while j < mm {
+        so_probe_build(SO_STRIDE * ((j + 1i64) as u64))
+        let fc : i64 = SO_FC[j as u64]
+        if so_probe_fires(k) == 1u8 { acc = acc + (pp - fc) }
+        else { acc = acc + fc }
+        j = j + 1i64
+    }
+    return acc
+}
+
+/* rank the CLEAN population by two libraries; measure concordance; score the
+ * REAL machine op (only if it is itself non-degenerate). `want` = population. */
+fn so_rank_variance(m: i64, want: i64) -> i64 @export {
+    let mm : i64 = m
+    so_build_pop(want, want * 40i64)
+    let P : i64 = SO_POPN
+    SO_CONC = 0i64
+    SO_DISC = 0i64
+    if P < 4i64 { return 0i64 }
+    /* library A: rates then interest per clean op */
+    SO_STRIDE = SO_STRIDE_A
+    so_census_rates_pop(mm)
+    let mut i : i64 = 0i64
+    while i < P {
+        so_build(SO_POP[i as u64])
+        SO_IA[i as u64] = so_interest_current(mm, P, SO_K)
+        i = i + 1i64
+    }
+    /* the REAL machine operation: scored only if it carries information */
+    let rsig : u64 = so_signature()
+    so_build(rsig)
+    if so_depends_both() == 0u8 {
+        SO_REALDEGEN = 1u8
+        SO_REALINT = 0i64
+        SO_REALPCT = 0i64 - 1i64
+    } else {
+        SO_REALDEGEN = 0u8
+        SO_REALINT = so_interest_current(mm, P, SO_K)
+        let mut below : i64 = 0i64
+        i = 0i64
+        while i < P { if SO_IA[i as u64] < SO_REALINT { below = below + 1i64 }  i = i + 1i64 }
+        SO_REALPCT = (below * 100i64) / P
+    }
+    /* library B: rates then interest per clean op */
+    SO_STRIDE = SO_STRIDE_B
+    so_census_rates_pop(mm)
+    i = 0i64
+    while i < P {
+        so_build(SO_POP[i as u64])
+        SO_IB[i as u64] = so_interest_current(mm, P, SO_K)
+        i = i + 1i64
+    }
+    /* Kendall concordance between the two rankings over the CLEAN population */
+    let mut a : i64 = 0i64
+    while a < P {
+        let mut b : i64 = a + 1i64
+        while b < P {
+            let da : i64 = SO_IA[a as u64] - SO_IA[b as u64]
+            let db : i64 = SO_IB[a as u64] - SO_IB[b as u64]
+            if da != 0i64 { if db != 0i64 {
+                let sa : u8 = (da > 0i64) as u8
+                let sb : u8 = (db > 0i64) as u8
+                if sa == sb { SO_CONC = SO_CONC + 1i64 } else { SO_DISC = SO_DISC + 1i64 }
+            } }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    SO_STRIDE = SO_STRIDE_A
+    return SO_CONC
+}
+fn so_rank_popn() -> i64 @export { return SO_POPN }
+fn so_rank_popsweep() -> i64 @export { return SO_POPSWEEP }
+fn so_rank_realdegen() -> u8 @export { return SO_REALDEGEN }
+
+fn so_rank_conc() -> i64 @export { return SO_CONC }
+fn so_rank_disc() -> i64 @export { return SO_DISC }
+fn so_rank_realint() -> i64 @export { return SO_REALINT }
+fn so_rank_realpct() -> i64 @export { return SO_REALPCT }

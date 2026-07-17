@@ -50,6 +50,11 @@ extern @abi(c-msvc-x64) fn mp_gzn() -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_big_gamma2(d: i64) -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_bg1() -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_fit(d: i64, curve: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ftn() -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ft(k: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_fu(i: i64, c: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_ona(i: i64) -> i64 from "mathesis_pattern.iii"
+extern @abi(c-msvc-x64) fn mp_onb(i: i64) -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_factor(n: i64) -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_fp(k: i64) -> i64 from "mathesis_pattern.iii"
 extern @abi(c-msvc-x64) fn mp_fcof() -> i64 from "mathesis_pattern.iii"
@@ -86,6 +91,10 @@ fn main() -> i32 {
     if mcv_refrows() != 1i64 { return 12i32 }
     if bj_verify_raw(mcv_refrow_d(0i64), mcv_refrow_c(0i64), mcv_refrow_u(0i64), mcv_refrow_v(0i64),
                      mcv_refrow_w(0i64), mcv_refrow_e(0i64), mcv_refrow_f(0i64)) != 1i64 { return 13i32 }
+    /* the REJECT half: corrupt the expected f-component by 1 and the SAME judge REFUSES
+     * the row (== 0) -- proof bj_verify_raw discriminates, not always-accepts (2nd outcome). */
+    if bj_verify_raw(mcv_refrow_d(0i64), mcv_refrow_c(0i64), mcv_refrow_u(0i64), mcv_refrow_v(0i64),
+                     mcv_refrow_w(0i64), mcv_refrow_e(0i64), mcv_refrow_f(0i64) + 1i64) == 1i64 { return 14i32 }
     /* [S] THE SCAN: the whole box, 62 verified finds; the load-bearing rows pinned */
     if mp_scan() != 62i64 { return 20i32 }
     if mp_nd() != 19i64 { return 21i32 }
@@ -103,11 +112,35 @@ fn main() -> i32 {
     if mp_units(40i64) != 16i64 { return 40i32 }
     if mp_ut(9i64) != 0i64 { return 41i32 }           /* d=12: collapses WITHOUT a unit */
     if mp_ut(3i64) != 2i64 { return 42i32 }           /* d=5: units WITHOUT collapse */
+    /* [U2] THE UNIT READ-HEADS: d=5 (idx 3) carries units, so its stored first unit
+     * (u,v,w) is a REAL nonzero triple (never the BSS zero), and its surface flags
+     * are booleans -- the read-heads report the unit the finder actually stored. */
+    let u5 : i64 = mp_fu(3i64, 0i64)
+    let v5 : i64 = mp_fu(3i64, 1i64)
+    let w5 : i64 = mp_fu(3i64, 2i64)
+    if ((u5 * u5) + (v5 * v5)) + (w5 * w5) == 0i64 { return 43i32 }   /* a real unit */
+    if mp_ona(3i64) < 0i64 { return 44i32 }
+    if mp_ona(3i64) > 1i64 { return 44i32 }           /* surface flag is a boolean */
+    if mp_onb(3i64) < 0i64 { return 45i32 }
+    if mp_onb(3i64) > 1i64 { return 45i32 }
+    /* d=12 (idx 9) has NO unit: its stored triple is the zero triple (the negative arm) */
+    let z9a : i64 = mp_fu(9i64, 0i64) * mp_fu(9i64, 0i64)
+    let z9b : i64 = mp_fu(9i64, 1i64) * mp_fu(9i64, 1i64)
+    let z9c : i64 = mp_fu(9i64, 2i64) * mp_fu(9i64, 2i64)
+    if ((z9a + z9b) + z9c) != 0i64 { return 46i32 }
     /* [H] the hypothesis verdicts: H3 (involution class law) CONFIRMED; H1/H2/H4 refuted */
     if mp_hypo() != 10i64 { return 50i32 }
     if mp_hw(1i64) != 5i64 { return 51i32 }
     if mp_hw(3i64) != (0i64 - 1i64) { return 52i32 }
     if mp_hw(4i64) != 14i64 { return 53i32 }
+    /* the hypothesis VERDICT read-heads (mp_h): the witness (mp_hw) and the verdict
+     * (mp_h) must agree -- H3 CONFIRMED (verdict 1, no witness -1); H1/H4 REFUTED
+     * (verdict 0, witness present).  Reading mp_h beside mp_hw closes the accessor. */
+    if mp_h(3i64) != 1i64 { return 54i32 }            /* confirmed <=> no witness */
+    if mp_h(1i64) != 0i64 { return 55i32 }            /* refuted   <=> witness 5   */
+    if mp_h(4i64) != 0i64 { return 56i32 }            /* refuted   <=> witness 14  */
+    /* the per-row ra read-head from the scan: row 0's ra is a real (bounded) value */
+    if mp_ra(0i64) < 0i64 { return 57i32 }
     /* [O] the orbit law through the big judge: total over both catalogues */
     if mp_orbit_law(3i64, 2i64) != 324i64 { return 60i32 }
     if mp_orbit_law(2i64, 1i64) != 81i64 { return 61i32 }
@@ -127,6 +160,29 @@ fn main() -> i32 {
     if mp_bg1() != 3i64 { return 84i32 }
     /* [F] the fit: honestly refuted */
     if mp_fit(3i64, 2i64) != 0i64 { return 90i32 }
+    /* [F2] THE FIT READ-HEADS, census-consistent: a refuted fit stores ZERO match
+     * rows (mp_ftn == 0 -- the same "no result => no claim" law the witness slots
+     * carry); and sweeping the catalogue, EVERY fit's returned row-count equals the
+     * organ's stored mp_ftn and each stored row decodes to a valid packed match. */
+    if mp_ftn() != 0i64 { return 91i32 }              /* refuted (3,2) stored nothing */
+    let mut fits : i64 = 0i64
+    let mut fd : i64 = 2i64
+    while fd <= 50i64 {
+        let mut fcv : i64 = 1i64
+        while fcv <= 2i64 {
+            let fr : i64 = mp_fit(fd, fcv)
+            if fr > 0i64 {
+                if mp_ftn() != fr { return 92i32 }    /* returned count == stored count */
+                if mp_ft(0i64) < 0i64 { return 93i32 } /* the first row decodes */
+                fits = fits + fr
+            }
+            fcv = fcv + 1i64
+        }
+        fd = fd + 1i64
+    }
+    /* the census is a stable fact of the catalogue (re-seat the refuted case last) */
+    if mp_fit(3i64, 2i64) != 0i64 { return 94i32 }
+    if mp_ftn() != 0i64 { return 95i32 }
     /* [N] the factorizations: the fundamental product and the norm law's primes */
     if mp_factor(0i64 - 249049i64) != 2i64 { return 100i32 }
     if mp_fp(0i64) != 271i64 { return 101i32 }

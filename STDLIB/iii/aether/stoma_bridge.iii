@@ -1,5 +1,8 @@
 /* STDLIB/iii/aether/stoma_bridge.iii -- STOMA <-> GLASS bridge: makes the sovereign Stoma shell drivable as a
  * WINDOWED component (the studio centerpiece), not just a VT/console app.
+ * [APP-SURFACE-MODULE] -- window/app execution surface (line-editor taps, scroll bytes) pumped by the studio
+ * window BY NATURE, never by a headless corpus KAT; excluded from the v3 dark census (sanctus/corpus_coverage,
+ * reunification W0.2).  The LIB teeth (v1) stay full.
  *
  * The studio window has no OS console -- it has a pixel framebuffer and WM_CHAR/WM_KEYDOWN key rings.  This organ
  * adapts those to the REAL Stoma shell core with ZERO reimplementation of shell logic:
@@ -39,7 +42,11 @@ fn br_line_ptr() -> u64 @export { return (&BR_LINE) as u64 }
 fn br_line_len() -> u64 @export { return BR_LLEN }
 fn br_scroll_ptr() -> u64 @export { return (&BR_SCROLL) as u64 }
 fn br_scroll_len() -> u64 @export { return BR_SLEN }
-fn br_scroll_byte(i: u64) -> u8 @export { if i < BR_SLEN { return BR_SCROLL[i] }   return 0u8 }
+/* (br_scroll_byte removed 2026-07-16 -- ONTOLOGICAL NECROSIS: the sole scrollback
+ * consumer, ws_stoma's renderer, reads the buffer through br_scroll_ptr()+offset (a
+ * bounds-checked pointer walk), never this per-byte getter.  A read-head with zero
+ * callers is infinite-friction dead weight; deleted rather than excused.  The bounded
+ * pointer API (br_scroll_ptr / br_scroll_len) is the live surface.) */
 
 /* append n bytes at src into the scrollback, compacting (drop oldest) if it would overflow. */
 fn br_scroll_push(src: u64, n: u64) -> i32 {

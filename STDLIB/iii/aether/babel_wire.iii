@@ -31,6 +31,10 @@
 module aether_babel_wire
 
 extern @abi(c-msvc-x64) fn crc32_oneshot(data: *u8, len: u64) -> u32 from "crc32.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 from "timing_safe.iii"
 
 const BABEL_WIRE_HEADER_BYTES : u32 = 68u32
 /* 2^32: a wire length (header+payload) at or above this overflows the u32 length field (scan-6). */
@@ -41,6 +45,9 @@ const BABEL_WIRE_E_NULL         : i32 = -1i32
 const BABEL_WIRE_E_BAD_CRC      : i32 = -2i32
 const BABEL_WIRE_E_BAD_SEAL     : i32 = -3i32
 const BABEL_WIRE_E_BAD_LEN      : i32 = -4i32
+const BABEL_WIRE_E_BAD_CONTENT  : i32 = -5i32
+
+var BW_CONTENT_SCRATCH : [u8; 32]
 
 /* ---------------- internal helpers ---------------- */
 
@@ -299,4 +306,41 @@ fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 @export {
 
 fn babel_wire_header_bytes() -> u32 @export {
     return BABEL_WIRE_HEADER_BYTES
+}
+
+/* ---------------- ENTELECHEIA Ε1: CONTENT-ADDRESS-AS-INTEGRITY ---------------- */
+
+/* The message id IS the mhash of its payload -- a DERIVED identity, never a
+ * stored header field that could lie.  A corrupted payload hashes to a DIFFERENT
+ * address, so it is undeliverable (a different message), not merely CRC-flagged.
+ * The checksum layer of a borrowed stack does not exist here because it cannot
+ * be needed.  Writes the 32-byte content address of the frame's payload to
+ * out_ptr. */
+fn babel_wire_content_id(in_buf: u64, out_ptr: u64) -> i32 @export {
+    if in_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    if out_ptr == 0u64 { return BABEL_WIRE_E_NULL }
+    let plen : u32 = _bw_read_u32_le(in_buf, 57u64)
+    mhash_begin()
+    mhash_payload(in_buf + 68u64, plen as u64)
+    mhash_final(out_ptr)
+    return BABEL_WIRE_OK
+}
+
+/* Gate a received frame by its content address: recompute the payload mhash and
+ * compare it (constant-time) against the expected message id.  The frame must
+ * first be structurally long enough to hold its claimed payload (the W2616
+ * out-of-bounds guard).  Returns 1 iff the payload's address matches the id
+ * (deliverable); 0 on mismatch or short frame (undeliverable). */
+fn babel_wire_verify_content(in_buf: u64, in_len: u32, expected_id_ptr: u64) -> u8 @export {
+    if in_buf == 0u64 { return 0u8 }
+    if expected_id_ptr == 0u64 { return 0u8 }
+    if in_len < BABEL_WIRE_HEADER_BYTES { return 0u8 }
+    let plen : u32 = _bw_read_u32_le(in_buf, 57u64)
+    let need : u64 = (BABEL_WIRE_HEADER_BYTES as u64) + (plen as u64)
+    if (in_len as u64) < need { return 0u8 }
+    mhash_begin()
+    mhash_payload(in_buf + 68u64, plen as u64)
+    mhash_final(&BW_CONTENT_SCRATCH as u64)
+    if timing_safe_eq((&BW_CONTENT_SCRATCH as u64) as *u8, expected_id_ptr as *u8, 32u64) == 1u32 { return 1u8 }
+    return 0u8
 }

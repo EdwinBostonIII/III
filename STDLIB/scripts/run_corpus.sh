@@ -1783,6 +1783,14 @@ declare -A EXPECTED=(
     [2620_mathesis_ground]=99           # Ξ2 THE GROUNDING: THEOREM-0008 instances executed as zk-AIR-constrained traces (both association orders, 5 witness triples, field-exact); attestation root = SHA-256 over the 40 trace cells (input-sensitive + deterministic); FORGERY ARMS — flipped accumulator + swapped opcode selector both FAIL constraints (a forgery cannot attest); bitwise gadget layer = named frontier
     [2660_mathesis_federate]=99         # Ξ6 FEDERATION BY PROOF: bundle {descriptor‖id‖route} over the REAL sealed channel (x25519+ChaCha20-Poly1305) with ML-DSA-44 2f+1 quorum; receiver RE-DERIVES the id + RE-PROVES the statement — a FALSE theorem with a valid envelope is REJECTED by the receiver's own disposer; forged byte ⇒ id mismatch; flipped ciphertext ⇒ tag fail; f=1 tolerated, f=2 rejected (~30s)
     [2684_mathesis_chain_v2]=99         # Ξ7 THE CHAIN-V2 SEAL: the whole library (7 opening + 11 creator-tier entries 0008..0018) replays genesis→d18e5038(prefix checkpoint)→HEAD_v2 197631db…24da0; entry-kind-agnostic (MX01/MX03/MX04 ids + canonical-statement hashes, one chain); tamper (flipped 0008 byte) + truncation (one entry short) arms break it; determinism
+    # Fleet-retirement re-owning (2026-07-17): these five were owned only by runners the
+    # ENTELECHEIA retirement removed from the run-line harvest; they are plain falsifiable-arm
+    # conformance gates linking straight from the archive, so this table judges them directly.
+    [2199_iform]=99                     # .ixr sovereign image container PROVABLY supersedes .bmp: alpha-lossless round-trip, self-verify, 1-byte tamper=2, self-describing header, generator binding, deterministic payload sig, superiority witness (alpha∉{0,255} preserved) + read-side sig cache coherence + the organ's own legacy verdict
+    [2200_iscene]=99                    # .isc resolution-independent scene master PROVABLY supersedes a raster: pinned deterministic frame sig; SAME scene → valid DISTINCT exact rasters at 96x72/128x96/192x144 (one tiny file, any resolution)
+    [2753_closure_claim]=99             # Ε3 per-claim closure-pin table: set/find/count/byte/is_set/verify/update/reset; foreign buffer + unknown claim REJECT; set on existing id UPDATES (no append)
+    [2754_pulse]=99                     # Ε0 birth-rite: gate-verdict fold + composed silicon/behavior/image checks; all-pass=KGV_OK, each single failure yields its DISTINCT verdict; unreadable image errors + attests seal rejection; byte accessors guard range
+    [2755_babel_wire_content]=99        # Ε1 content-address-as-integrity: message id IS the mhash of its payload; flipped byte → different address → undeliverable; restore re-greens; short-frame + null buffers rejected
 )
 
 PASS=0
@@ -1815,6 +1823,10 @@ while IFS='|' read -r _fo_runner _; do
     _fo_runner="$(echo "$_fo_runner" | tr -d ' \t')"
     case "$_fo_runner" in ''|\#*) continue;; esac
     _fo_rf="$(dirname "${BASH_SOURCE[0]}")/$_fo_runner"
+    # sovir-seated runners (the manifest documents them: run_event_waist.sh,
+    # run_mathesis.sh live in STDLIB/sovir) -- harvest their run-lines too,
+    # so documented ownership and the derived map cannot diverge again
+    [[ -f "$_fo_rf" ]] || _fo_rf="$(dirname "${BASH_SOURCE[0]}")/../sovir/$_fo_runner"
     [[ -f "$_fo_rf" ]] || continue
     while IFS= read -r _fo_kat; do
         [[ -n "$_fo_kat" ]] && FAMILY_OWNER["$_fo_kat"]="$_fo_runner"
@@ -1939,6 +1951,14 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             ;;
         2700_mathesis_alg_judge|2701_mathesis_denest_general|2702_mathesis_cube_ramanujan|2703_mathesis_mx04_chain|2704_ripple_spectral|2705_mathesis_ring_judge|2706_mathesis_ring_drain|2707_mathesis_curve_hunt|2708_mathesis_group_tau|2709_mathesis_forge|2710_mathesis_pilot|2711_mathesis_ontogenesis|2712_mathesis_rot2|2713_mathesis_bigcurve|2714_mathesis_norm|2715_mathesis_pilot12|2716_mathesis_tetra|2717_mathesis_bigjudge|2718_mathesis_tetra_full|2719_mathesis_pattern|2720_mathesis_pilot18|2721_mathesis_orbits|2722_mathesis_box50|2723_mathesis_census|2724_mathesis_rot64|2725_mathesis_pilot24|2726_mathesis_rot64_omega|2727_mathesis_rot64_omega2|2728_mathesis_census10|2729_mathesis_pattern_omega2|2730_mathesis_pilot30|2731_mathesis_rot64_universal1|2732_mathesis_rot64_universal2|2733_mathesis_rot64_universal3|2734_mathesis_census11|2735_mathesis_pilot36|2736_mathesis_op3_census|2737_mathesis_op3_cert_rot|2738_mathesis_op3_cert_neg|2739_mathesis_pilot42|2740_mathesis_op3_sweep|2741_mathesis_op3_drain_cert_rot|2742_mathesis_op3_drain_cert_neg|2743_mathesis_op3_box_cert|2744_mathesis_op3_sweep2|2745_sigma_floor_census|2746_sha512_core_optimum|2747_sha512_diffusion_break)
             RESULTS+=("SKIP  $base : THE ALGEBRAIC CREATOR TIER + CAMPAIGN SIGMA..PSI..OMEGA5 + SIGMA-FLOOR + SIGMA-CORE (real-algebraic judge + radical synthesizer + MX04 chain + exact spectral organ + ring judge/frontier drain + surface hunter + gamma-orbit completion + the box to 50 + THE CENSUS BEYOND ENUMERATION (Burnside n=5,6,7 in bigint) + the width-64 rot settlement/FULL SETTLEMENT + the census at ten tokens + the autonomous pilot + the SHA-512 Sigma_0/Sigma_1 op-count floor + the whole SHA-512 round core cost-optimum through III's own oracles + the machine-proven diffusion break: SHA-512's linear Sigma is a data-independent avalanche cap of 3, III mints a same-cost data-dependent word reaching 25) -- owned by run_mathesis.sh stages [9]..[23] (self-contained gates + links resultant + sturm_big + mathesis_alg + mathesis_radical + charpoly + mathesis_ring + mathesis_curve + mathesis_forge/pilot/ontogenesis/rot2/bigcurve/norm/tetra + mathesis_bigjudge/pattern/census/rot64/sha/diff + the exact-face TUs)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2762_conservation)
+            RESULTS+=("SKIP  $base : THE CONSERVATION TIER (III decides information conservation autonomously on both sides -- reversible WORDS of its die [aether/reversibility: GF(2) autonomous inversion + computational diodes] + the NONLINEAR inverse it could not GF(2)-invert [MUL-odd via III's own Newton iteration, round-tripped] + reversible ONTOLOGIES of the fair magma universe [aether/xeno_ontogenesis conservation lens: quasigroup/Latin-square census by exhaustion]) -- owned by the standing arm (links reversibility.o + xeno_ontogenesis.o + substrate_ontogenesis.o + isa_ontogenesis.o + bv_bits.o; stored-answer-free: census re-computed, inverse re-synthesized, round-tripped, negative arm)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+        2748_nomos_rules|2749_nomothesis_gap|2756_taxis_quotient|2757_oneiros_collapse|2758_nomos_consent|2759_glossa_words)
+            RESULTS+=("SKIP  $base : THE NOMOS LEGISLATURE + THE TAXIS ONTOLOGY + THE ONEIROS TIER (machine-legislated compiler law: the sealed-rules ledger gate + THE OWED-LAW ENUMERATOR -- gap census, critical pairs, count-atom candidates + the die's semantic quotient = the objects of the friction order + the dream crucible: owed laws BELIEVED then collapsed to two-path witnesses by algebra-generated points, unoriented joinability docket, seraphic womb, replayable jitter seed) -- owned by the standing NOMOS/TAXIS/ONEIROS arm (scripts/run_standing_tools, see III-STANDING-TOOLS.md: builds + runs the gates against the SEALED cg_phys_rules module + the live taxis ordering + the live dream every invocation; links cg_phys_rules.o + isa_ontogenesis.o + oneiros.o + isa_friction_judge.o + friction.o)")
             SKIP=$((SKIP+1)); continue
             ;;
         2750_event_waist_laws|2751_event_waist_replay|2752_event_waist_recurrence)

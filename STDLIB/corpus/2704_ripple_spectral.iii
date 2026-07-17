@@ -26,6 +26,7 @@ module corpus_2704_ripple_spectral
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn ca_reset(n: i64) -> i32 from "charpoly.iii"
+extern @abi(c-msvc-x64) fn ca_n() -> i64 from "charpoly.iii"
 extern @abi(c-msvc-x64) fn ca_set(i: i64, j: i64, v: i64) -> i32 from "charpoly.iii"
 extern @abi(c-msvc-x64) fn ca_charpoly() -> i32 from "charpoly.iii"
 extern @abi(c-msvc-x64) fn ca_load_chain(build: i64) -> i32 from "charpoly.iii"
@@ -203,7 +204,8 @@ fn load_dir(n: i64, extra: i64) -> i32 {
 
 fn main() -> u64 {
     /* == E: envelope refusals named first. */
-    EA = ca_reset(65i64)
+    /* (ca_n externed below with the other charpoly doors) */
+EA = ca_reset(65i64)
     ca_reset(2i64)
     EB = ca_set(0i64, 0i64, 2097152i64)
     putchar(69i32) putchar(58i32) sp() e_i64(EA as i64) sp() e_i64(EB as i64) nl()   /* "E: -1 -1" */
@@ -217,6 +219,11 @@ fn main() -> u64 {
     ca_set(1i64, 2i64, 1i64)   ca_set(2i64, 1i64, 1i64)
     ca_set(2i64, 3i64, 1i64)   ca_set(3i64, 2i64, 1i64)
     if ca_charpoly() != 0i32 { return 12u64 }
+    /* the dimension register: live after the accepted reset, and IMMUNE to a refused
+     * one (a refusal that clobbered state would poison every later read). */
+    if ca_n() != 4i64 { return 60u64 }
+    if ca_reset(65i64) != (0i32 - 1i32) { return 61u64 }
+    if ca_n() != 4i64 { return 62u64 }
     /* the deliberately-WRONG recurrence value is REFUTED (discrimination, not vacuous match) */
     FREF = coeff_is(2i64, 3i64)                          /* true c2 = -3: +3 must MISMATCH */
     FMATCH = 1i64

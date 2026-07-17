@@ -34,12 +34,18 @@ extern @abi(c-msvc-x64) fn mr64_o2dec() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_o2und() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_o2match() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_undn() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_undat(i: i64) -> i64 from "mathesis_rot64.iii"
 
 fn main() -> i32 {
     /* [A] THE CERTIFICATE: sound + complete at width 8 against the total oracle, rot AND neg */
     if mr64_validate8b(1i64) != 0i64 { return 20i32 }        /* rot: no disagreement */
     if mr64_val2_und() != 0i64 { return 21i32 }              /* rot: nothing undecided at width 8 */
     if mr64_validate8b(0i64) != 0i64 { return 22i32 }        /* neg: no disagreement (the finder works) */
+    /* the POSITIVE soundness certificate (the == arm): the width-8 CEGIS engine agrees
+     * with the total brute oracle on EXACTLY zero classes -- stated as a positive fact.
+     * mr64_validate8b is an agreement-METER (0 = sound), not an accept/reject gate; its
+     * discriminating second outcome is soundness asserted (==0), not just guarded (!=0). */
+    if mr64_validate8b(1i64) == 0i64 { } else { return 24i32 }
     if mr64_val2_und() != 0i64 { return 23i32 }              /* neg: nothing undecided at width 8 */
 
     /* [B] THE RESULT at width 64: the FULL settlement -- 3,456 refuted, 0 undecided, 0 matches */
@@ -48,5 +54,12 @@ fn main() -> i32 {
     if mr64_o2dec() != 3456i64 { return 32i32 }
     if mr64_o2und() != 0i64 { return 33i32 }                 /* the Omega residual is CLOSED */
     if mr64_undn() != 0i64 { return 34i32 }                  /* the refusal store is empty */
+    /* [C] AN EMPTY STORE ANSWERS THE SENTINEL, NEVER A STALE COORDINATE.  Every read of
+     * the refusal store is OOB here (undn == 0), so each must return -1 -- the bound
+     * that makes "a refusal keeps its coordinates" distinguishable from BSS zeros
+     * (the unarmed-witness defect class, caught live twice on 2026-07-16). */
+    if mr64_undat(0i64) != (0i64 - 1i64) { return 40i32 }
+    if mr64_undat(0i64 - 1i64) != (0i64 - 1i64) { return 41i32 }
+    if mr64_undat(4096i64) != (0i64 - 1i64) { return 42i32 }
     return 99i32
 }

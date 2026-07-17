@@ -21,6 +21,10 @@ module corpus_2705_mathesis_ring_judge
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn mrg_decide(tier: u64, fcode: u64, gcode: u64) -> i64 from "mathesis_ring.iii"
 extern @abi(c-msvc-x64) fn mrg_wx() -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_undecided_n() -> i64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_und_t(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_und_f(i: i64) -> u64 from "mathesis_ring.iii"
+extern @abi(c-msvc-x64) fn mrg_und_g(i: i64) -> u64 from "mathesis_ring.iii"
 extern @abi(c-msvc-x64) fn mrg_w1() -> u64 from "mathesis_ring.iii"
 extern @abi(c-msvc-x64) fn mrg_w2() -> u64 from "mathesis_ring.iii"
 extern @abi(c-msvc-x64) fn mrg_cited() -> i64 from "mathesis_ring.iii"
@@ -68,6 +72,17 @@ fn main() -> u64 {
     putchar(65i32) putchar(58i32) sp() e_i64(AV) sp() e_i64(AW8 as i64) nl()               /* "A: 1 1" */
     if AV != 1i64 { return 12u64 }
     if AW8 != 1u32 { return 13u64 }
+
+    /* == B: the undecided store's BOUNDS speak (the unfalsifiable-accessor cure):
+     * out-of-range reads answer the 2^64-1 sentinel, never adjacent memory; and iff
+     * the store is inhabited, index 0 answers a REAL coordinate (not the sentinel). */
+    let un : i64 = mrg_undecided_n()
+    if mrg_und_t(un) != 18446744073709551615u64 { return 30u64 }
+    if mrg_und_f(0i64 - 1i64) != 18446744073709551615u64 { return 31u64 }
+    if mrg_und_g(un + 7i64) != 18446744073709551615u64 { return 32u64 }
+    if un > 0i64 {
+        if mrg_und_t(0i64) == 18446744073709551615u64 { return 33u64 }
+    }
 
     /* == L: the library-composition route, with the citation RE-PROVEN fresh. */
     LV = mrg_decide(2u64, 180u64, 9u64)                  /* (x&x)*x vs x*x */

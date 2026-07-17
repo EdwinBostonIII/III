@@ -14,3 +14,5 @@ run_ripple_kats.sh       | RIPPLE MERGE: 2126-2134, 2145 (links eidos ripple coh
 run_topo_kats.sh         | Topological Windowing: 2088-2093 (links the archive directly)
 run_bench_corpus.sh      | perf benchmarks 237/242/243/244 (correctness hard-gated, timing advisory)
 run_stoma_kats.sh        | STOMA console/proc/pty arc: 2455-2466 (sibling in-flight; runner + KATs land with their arc)
+run_event_waist.sh       | THE EVENT-PRIMARY WAIST route V: svir_event retirement-log executor + route-S==route-V differential (owned by STDLIB/sovir/run_event_waist.sh)
+run_mathesis.sh          | THE MATHESIS ENGINE: 25-gate creator-tier chain (2600-2748 era mathesis stages; owned by STDLIB/sovir/run_mathesis.sh)

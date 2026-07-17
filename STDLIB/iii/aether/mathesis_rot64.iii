@@ -702,8 +702,19 @@ fn mr64_omega_decide(sid: i64, k: i64) -> i64 {
     if vc == 0i64 { return 1i64 }
     return 0i64 - 1i64
 }
-var MR64_OWK : i64
-var MR64_OWS : i64
+/* THE WITNESS SLOT (mr64_omega_decide's only recorded output).  CONTRACT: it holds a
+ * claim ONLY about the sweep that just ran -- (owk, ows) name a CONSTANT-FREE shape
+ * that sweep verified as computing its target (the CEGIS-data path synthesises its own
+ * constants and does not record here).  -1 = NO CLAIM.  Every sweep that can set the
+ * slot MUST arm it first via mr64_ow_arm(); the sentinel is what makes "no match" and
+ * "match at shape 0" distinguishable -- BSS-zero is a VALID sid, so an unarmed slot
+ * reports shape 0 as the witness of a sweep that found nothing (measured 2026-07-16:
+ * validate8(0) recorded sid 1755 = x-(x+x) = -x, and the following rot sweep -- 0
+ * matches -- still reported 1755, a NEG shape offered as a rot witness).  Gate: 2724
+ * (no match => no witness) + 2726 (the witness must witness). */
+var MR64_OWK : i64 = 0i64 - 1i64
+var MR64_OWS : i64 = 0i64 - 1i64
+fn mr64_ow_arm() -> i32 { MR64_OWK = 0i64 - 1i64   MR64_OWS = 0i64 - 1i64   return 0i32 }
 var MR64_ODEC : i64
 var MR64_OUND : i64
 var MR64_OMATCH : i64
@@ -711,12 +722,14 @@ fn mr64_odec() -> i64 @export { return MR64_ODEC }
 fn mr64_ound() -> i64 @export { return MR64_OUND }
 fn mr64_omatch() -> i64 @export { return MR64_OMATCH }
 fn mr64_ows() -> i64 @export { return MR64_OWS }
+fn mr64_owk() -> i64 @export { return MR64_OWK }
 /* the FULL width-64 CEGIS sweep over all 3,456 classes (subsumes the Psi decider).  Returns the
  * refuted count; sets odec/ound/omatch.  A match => cost<=2 witness (RED). */
 var MR64_OUNDMUL : i64           /* of the undecided, how many contain a MUL op */
 fn mr64_oundmul() -> i64 @export { return MR64_OUNDMUL }
 fn mr64_omega(k: i64) -> i64 @export {
     MR64_W = 64i64
+    mr64_ow_arm()                /* the slot claims nothing until THIS sweep records */
     MR64_ODEC = 0i64
     MR64_OUND = 0i64
     MR64_OMATCH = 0i64
@@ -1288,6 +1301,7 @@ var MR64_VUND : i64
 fn mr64_val_und() -> i64 @export { return MR64_VUND }
 fn mr64_validate8(k: i64) -> i64 @export {
     MR64_W = 8i64
+    mr64_ow_arm()                /* same contract: this sweep's claim, or none */
     MR64_VUND = 0i64
     let mut bad : i64 = 0i64
     let mut sid : i64 = 0i64

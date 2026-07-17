@@ -354,6 +354,9 @@ MODULES=(
     "aether/capability"
     "aether/handle"
     "aether/fs"
+    "aether/glossa"
+    "aether/iform"
+    "aether/iscene"
     "tempora/instant"
     "tempora/duration"
     "tempora/deadline"
@@ -1713,6 +1716,23 @@ MODULES=(
     # instruments, not unsuitable exports.  The sovir standalone gate (run_xii_proof.sh) still stands.
     "omnia/xii_proof"
     "omnia/xii_proof_check"
+    # --- ENTELECHEIA Ε0 (appended at end to preserve pre-existing BSS layout) ---
+    # katabasis/pulse -- THE PULSE: birth-rite attestation (streaming self-image mhash +
+    # CPUID self-identity crystal + behavioral fingerprint, folded through gate_verdict).
+    # First consumer of cpu_census / behavioral_fp / gate_verdict.  Backs iii-pulse.
+    "katabasis/pulse"
+    # --- ENTELECHEIA Ε2/Ε3 organs are LEAF-TOOL-LINKED, not archive members (2026-07-16):
+    # sanctus/closure_graph (Ε3; backs iii-closure), katabasis/agon (Ε2; backs iii-agon),
+    # aether/substrate_ontogenesis (the machine's own silicon-derived algebra; backs
+    # iii-substrate) compile per-tool via COMPILER/BOOT/build_iii_*.sh.  Archive
+    # membership without corpus coverage reddens the down-only coverage/dark-surface
+    # ratchets (measured: uncovered 0->56, dark 1->94); pins are never raised.  They
+    # enter this list in Wave 1/Ε2, when corpus_coverage's reference source repoints
+    # from the static corpus to the agon stream (DOCS/III-ENTELECHEIA-MAP.md §Ε2).
+    # FIRST REPOINT INCREMENT EXECUTED 2026-07-16: the reference roots now include the
+    # standing-tool ENTRY TUs (scripts/cov_gate_driver.iii, THE EXECUTED-SURFACE LAW;
+    # organ support: corpus_coverage multi-root FILE segments + let-binding-aware
+    # outcome capture).  The agon generated-program stream is the SECOND increment.
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

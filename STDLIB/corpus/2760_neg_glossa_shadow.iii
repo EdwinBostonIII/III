@@ -1,0 +1,10 @@
+/* STDLIB/corpus/2760_neg_glossa_shadow.iii -- NEGATIVE gate: THE SHADOW LAW.
+ * A sealed word is language; declaring a fn of the same name anywhere outside
+ * the tongue (aether/glossa.iii) must be REFUSED by sema (SEMA_E_GLOSSA_SHADOW).
+ * This file must FAIL to compile.  If it ever compiles, the vocabulary has lost
+ * its uniqueness law and the corpus reds here. */
+module corpus_d2760_neg
+
+fn popcnt64(x: u64) -> u64 { return 0u64 }
+
+fn main() -> i32 { return popcnt64(1u64) as i32 }

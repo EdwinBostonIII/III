@@ -32,6 +32,9 @@
 module corpus_2713_mathesis_bigcurve
 
 extern @abi(c-msvc-x64) fn mcv_hunt_reset() -> i32 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn bc_seti(h: i64, v: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_neg(h: i64) -> i32 from "mathesis_bigcurve.iii"
+extern @abi(c-msvc-x64) fn bc_sgn(h: i64) -> i64 from "mathesis_bigcurve.iii"
 extern @abi(c-msvc-x64) fn mcv_hunt(d: i64, curve: i64, hmax: i64) -> i64 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcv_found() -> i64 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcg_closure(d: i64, curve: i64, seedmode: i64) -> i64 from "mathesis_curve.iii"
@@ -165,6 +168,15 @@ fn main() -> u64 {
     if bgb_refused() != 3i64 { return 82u64 }
     if bgb_added(0i64) != 6i64 { return 83u64 }
     if bgb_added(1i64) != 9i64 { return 84u64 }
+
+    /* the bigint NEGATE read-head: +5 has sign +1; negating flips it to -1; negating
+     * again restores +1 -- bc_neg is an involution on sign, exercised on a scratch slot. */
+    bc_seti(90i64, 5i64)
+    if bc_sgn(90i64) != 1i64 { return 90u64 }
+    bc_neg(90i64)
+    if bc_sgn(90i64) != (0i64 - 1i64) { return 91u64 }
+    bc_neg(90i64)
+    if bc_sgn(90i64) != 1i64 { return 92u64 }
 
     return 99u64
 }

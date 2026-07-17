@@ -1,0 +1,10 @@
+/* STDLIB/corpus/2761_neg_glossa_arity.iii -- NEGATIVE gate: THE ARITY LAW.
+ * A word carries its arity in the sealed lexicon; speaking popcnt64 (arity 1)
+ * with two arguments must be REFUSED by sema (SEMA_E_GLOSSA_ARITY).
+ * This file must FAIL to compile. */
+module corpus_d2761_neg
+
+fn main() -> i32 {
+    let v : u64 = popcnt64(1u64, 2u64)
+    return v as i32
+}

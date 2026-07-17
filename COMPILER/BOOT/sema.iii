@@ -26,6 +26,14 @@ module sema
 extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
 extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
 extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+/* THE GLOSSA LEXICON (machine-minted, parliament-sealed vocabulary -- the sema
+ * binding half of "one name, two seats"; see COMPILER/BOOT/cg_glossa_rules.iii) */
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_arity(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_len(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_byte(i: u32, j: u32) -> u32 from "cg_glossa_rules.iii"
 
 extern @abi(c-msvc-x64) fn iii_hexad_check_init() -> u32 from "hexad_check.c"
 extern @abi(c-msvc-x64) fn iii_hexad_packed_admitted(packed: u32) -> u8 from "hexad_check.c"
@@ -200,6 +208,8 @@ const SEMA_E_EXTERN_ABI      : i32 = 9i32
 const SEMA_E_SEAL_COLLISION  : i32 = 10i32
 const SEMA_E_ERROR_NODE      : i32 = 11i32
 const SEMA_E_PFS_BRICK       : i32 = 12i32
+const SEMA_E_GLOSSA_SHADOW   : i32 = 13i32
+const SEMA_E_GLOSSA_ARITY    : i32 = 14i32
 const SEMA_E_OOM             : i32 = 99i32
 
 const SEMA_RING_R3   : u32 = 0x01u32
@@ -354,7 +364,7 @@ var SEMA_NEXT_BINDER    : u32 = 1u32
 
 /* Error-name strings (codes 0..12 + 99 mapped to slot 13, plus "UNKNOWN" 14). */
 var SEMA_ENAME_BUF  : [u8; 384]
-var SEMA_ENAME_OFF  : [u32; 16]
+var SEMA_ENAME_OFF  : [u32; 18]
 var SEMA_ENAME_LEN  : [u32; 16]
 var SEMA_ENAME_INIT : u8 = 0u8
 
@@ -589,6 +599,10 @@ fn s_init_ename_table() -> u32 {
     s_ename_write(13u32, 79u32, 79u32, 77u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32)
     /* 14 -> "UNKNOWN"            fallback                            */
     s_ename_write(14u32, 85u32, 78u32, 75u32, 78u32, 79u32, 87u32, 78u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32)
+    /* 15 -> "TYPE-GLOSSA-001"    sealed word redeclared (the shadow law) */
+    s_ename_write(15u32, 84u32, 89u32, 80u32, 69u32, 45u32, 71u32, 76u32, 79u32, 83u32, 83u32, 65u32, 45u32, 48u32, 48u32, 49u32, 0u32)
+    /* 16 -> "TYPE-GLOSSA-002"    word spoken with the wrong arity        */
+    s_ename_write(16u32, 84u32, 89u32, 80u32, 69u32, 45u32, 71u32, 76u32, 79u32, 83u32, 83u32, 65u32, 45u32, 48u32, 48u32, 50u32, 0u32)
     return 0u32
 }
 
@@ -673,7 +687,18 @@ fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
 }
 
 fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
-    if SEMA_DECL_COUNT >= SEMA_DECL_CAP { return 0u32 }
+    /* THE LOUD WALL (NOMOS reseal): decl-table overflow used to drop the decl SILENTLY, so the
+     * 1025th decl surfaced only as a baffling TYPE-IDENT-001 at some later call site (cg_r3 hit
+     * this at 1021+7 decls).  Refuse LOUDLY at the drop.  The cap itself stays 1024: the frozen
+     * iiis-1 binary carries it, so lifting it here alone would be false comfort -- the named
+     * rung is an iiis-1 reseal lifting both. */
+    if SEMA_DECL_COUNT >= SEMA_DECL_CAP { s_emit_error(SEMA_E_OOM, node, 0u32)   return 0u32 }
+    /* THE SHADOW LAW: a sealed word may be declared ONLY by the tongue (module
+     * glossa, the generated organ).  Everywhere else the decl is refused
+     * LOUDLY -- programs already speak the word bare. */
+    if s_glossa_find_arena(name_off, name_len) != 0u32 {
+        if s_module_is_glossa() == 0u32 { s_emit_error(SEMA_E_GLOSSA_SHADOW, node, 0u32)   return 0u32 }
+    }
     let slot : u32 = SEMA_DECL_COUNT
     SEMA_DECLS_NAME_OFF[slot] = name_off
     SEMA_DECLS_NAME_LEN[slot] = name_len
@@ -849,6 +874,8 @@ fn s_error_name_addr(code: i32) -> u64 {
     if code == SEMA_E_ERROR_NODE          { slot = 11u32 }
     if code == SEMA_E_PFS_BRICK           { slot = 12u32 }
     if code == SEMA_E_OOM                 { slot = 13u32 }
+    if code == SEMA_E_GLOSSA_SHADOW       { slot = 15u32 }
+    if code == SEMA_E_GLOSSA_ARITY        { slot = 16u32 }
     return (&SEMA_ENAME_BUF as u64) + (SEMA_ENAME_OFF[slot] as u64)
 }
 
@@ -1643,14 +1670,94 @@ fn s_walk_stmt_metal(node: u32) -> u32 {
     return 0u32
 }
 
+/* ─── THE GLOSSA BINDING: sealed words are language ─────────────────────
+ * The lexicon (cg_glossa_rules.iii -- machine-minted by `iii-substrate glossa`,
+ * sealed only through the parliament's chamber II) binds bare names in CALLEE
+ * position tree-wide: no extern, no import -- vocabulary IS language in III's
+ * call form.  Precedence is structural: locals shadow words lexically (they
+ * shadow everything), decls and builtins resolve first; a DECL of a word's
+ * name anywhere outside the tongue is refused loudly (the shadow law, at
+ * s_decl_table_add).  The word's one lawful seat is aether/glossa.iii. */
+var SEMA_GLOSSA_CALLEE : u32 = 0u32
+fn s_glossa_find_src(off: u32, len: u32) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let n : u32 = cgglossa_nwords()
+    let mut i : u32 = 0u32
+    while i < n {
+        if cgglossa_name_len(i) == len {
+            let mut j : u32 = 0u32
+            let mut eq : u32 = 1u32
+            while j < len {
+                if cgglossa_name_byte(i, j) != s_load_u8(src_buf + ((off + j) as u64)) { eq = 0u32 ; j = len }
+                j = j + 1u32
+            }
+            if eq == 1u32 { return i + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+fn s_glossa_find_arena(off: u32, len: u32) -> u32 {
+    let n : u32 = cgglossa_nwords()
+    let mut i : u32 = 0u32
+    while i < n {
+        if cgglossa_name_len(i) == len {
+            let mut j : u32 = 0u32
+            let mut eq : u32 = 1u32
+            while j < len {
+                if cgglossa_name_byte(i, j) != s_load_u8(s_arena_addr(off + j)) { eq = 0u32 ; j = len }
+                j = j + 1u32
+            }
+            if eq == 1u32 { return i + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+/* the tongue itself (module glossa -- the generated organ) is the ONE module
+ * lawfully seating word decls */
+fn s_module_is_glossa() -> u32 {
+    let root : u32 = iii_ast_root_module(SEMA_AST)
+    if root == 0u32 { return 0u32 }
+    let off : u32 = iii_ast_module_name_offset(SEMA_AST, root)
+    let len : u32 = iii_ast_module_name_length(SEMA_AST, root)
+    if len != 6u32 { return 0u32 }
+    let src : u64 = iii_ast_source_buf(SEMA_AST)
+    if s_load_u8(src + (off as u64)) != 103u32 { return 0u32 }
+    if s_load_u8(src + ((off + 1u32) as u64)) != 108u32 { return 0u32 }
+    if s_load_u8(src + ((off + 2u32) as u64)) != 111u32 { return 0u32 }
+    if s_load_u8(src + ((off + 3u32) as u64)) != 115u32 { return 0u32 }
+    if s_load_u8(src + ((off + 4u32) as u64)) != 115u32 { return 0u32 }
+    if s_load_u8(src + ((off + 5u32) as u64)) != 97u32 { return 0u32 }
+    return 1u32
+}
+
 fn s_walk_expr_call(node: u32) -> u32 {
     let callee : u32 = iii_ast_call_callee(SEMA_AST, node)
+    let ckk : u32 = iii_ast_node_kind(SEMA_AST, callee)
+    if ckk == SEMA_K_EXPR_IDENT { SEMA_GLOSSA_CALLEE = 1u32 }
     s_walk_node(callee)
+    SEMA_GLOSSA_CALLEE = 0u32
     let n : u32 = iii_ast_call_arg_count(SEMA_AST, node)
     let mut i : u32 = 0u32
     while i < n {
         s_walk_node(iii_ast_call_arg_at(SEMA_AST, node, i))
         i = i + 1u32
+    }
+    /* the arity law: a word carries its arity in the sealed lexicon; a bare
+     * callee that binds to no local and no decl but IS a word must be spoken
+     * with exactly its arity */
+    if ckk == SEMA_K_EXPR_IDENT {
+        let goff : u32 = iii_ast_ident_name_offset(SEMA_AST, callee)
+        let glen : u32 = iii_ast_ident_name_length(SEMA_AST, callee)
+        if s_local_lookup_src(goff, glen) == 0u32 {
+            if s_decl_find_src(goff, glen) == 0u32 {
+                let gw : u32 = s_glossa_find_src(goff, glen)
+                if gw != 0u32 {
+                    if n != cgglossa_arity(gw - 1u32) { s_emit_error(SEMA_E_GLOSSA_ARITY, node, 0u32) }
+                }
+            }
+        }
     }
     if callee != 0u32 {
         let ck : u32 = iii_ast_node_kind(SEMA_AST, callee)
@@ -1685,15 +1792,9 @@ fn s_walk_expr_parallel(node: u32) -> u32 {
     return 0u32
 }
 
-fn s_walk_expr_ident(node: u32) -> u32 {
-    let off : u32 = iii_ast_ident_name_offset(SEMA_AST, node)
-    let len : u32 = iii_ast_ident_name_length(SEMA_AST, node)
-    if len == 0u32 { return 0u32 }
-    let bid : u32 = s_local_lookup_src(off, len)
-    if bid != 0u32 {
-        iii_ast_set_binder_id_u32(SEMA_AST, node, bid)
-        return 0u32
-    }
+/* the decl-table scan by SOURCE slice, shared by ident binding and the glossa
+ * arity law (one scan, two consumers -- kept in lockstep by construction) */
+fn s_decl_find_src(off: u32, len: u32) -> u32 {
     let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
     let mut i : u32 = 0u32
     while i < SEMA_DECL_COUNT {
@@ -1708,14 +1809,31 @@ fn s_walk_expr_ident(node: u32) -> u32 {
                 if a != b { eq = 0u32 ; j = len }
                 j = j + 1u32
             }
-            if eq == 1u32 {
-                iii_ast_set_binder_id_u32(SEMA_AST, node, SEMA_DECLS_NODE[i])
-                return 0u32
-            }
+            if eq == 1u32 { return SEMA_DECLS_NODE[i] }
         }
         i = i + 1u32
     }
+    return 0u32
+}
+
+fn s_walk_expr_ident(node: u32) -> u32 {
+    let off : u32 = iii_ast_ident_name_offset(SEMA_AST, node)
+    let len : u32 = iii_ast_ident_name_length(SEMA_AST, node)
+    if len == 0u32 { return 0u32 }
+    let bid : u32 = s_local_lookup_src(off, len)
+    if bid != 0u32 {
+        iii_ast_set_binder_id_u32(SEMA_AST, node, bid)
+        return 0u32
+    }
+    let dn : u32 = s_decl_find_src(off, len)
+    if dn != 0u32 {
+        iii_ast_set_binder_id_u32(SEMA_AST, node, dn)
+        return 0u32
+    }
     if s_is_builtin_ident_src(off, len) == 1u32 { return 0u32 }
+    /* a sealed word binds BARE in callee position (the glossa law); anywhere
+     * else it is not a value and the standard unresolved error stands */
+    if SEMA_GLOSSA_CALLEE == 1u32 { if s_glossa_find_src(off, len) != 0u32 { return 0u32 } }
     s_emit_error(SEMA_E_IDENT_UNRESOLVED, node, 0u32)
     return 0u32
 }

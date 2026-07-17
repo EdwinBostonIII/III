@@ -136,6 +136,20 @@ var CV_GIDX  : [u32; 16384]        /* sorted under-proven gate indices */
 var CV_NGUND : u64 = 0u64
 var CV_NGATE : u64 = 0u64
 
+/* --- v2b: BINDING-AWARE outcome capture (2026-07-16).  The creator-tier corpus idiom
+ * binds a gate's verdict before comparing it -- `let v : i64 = mr3_validate8(...)` then
+ * `if v == 1i64 { ... }` -- which pure adjacency cannot see: 13 verifiers with REAL
+ * two-path corpus arms (2737 cert_rot / 2738 cert_neg ...) read as under-proven.  The
+ * cure is measurement honesty, not a pin move: pass 3 remembers, per scanned file, which
+ * local a gate call was `let`-bound to, and credits that export when the local is later
+ * compared against a literal.  Overflow of the per-file table can only HIDE outcomes,
+ * which leaves under-proven HIGH and the gate RED -- the fail-loud direction -- so it
+ * needs no side channel; it is counted here for the curious. --- */
+var CV_BKEY  : [u64; 512]          /* FNV of the bound local's name (per-file, reset)  */
+var CV_BEXP  : [u32; 512]          /* the gate export index the local carries          */
+var CV_BN    : u64 = 0u64
+var CV_BTRUNC : u64 = 0u64
+
 /* --- CRITERION v3: transitive corpus REACHABILITY (the numera-audit lesson, 2026-06-12).
  * v1 counts a reference from ANYWHERE -- so an export consumed only by a module-internal
  * helper that no corpus test ever runs reads as covered while being completely untested
@@ -505,6 +519,20 @@ fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
         }
     }
     if depth != 0u64 { return }                        /* unbalanced within bound */
+    let folded : u8 = cv_cmp_fold(idx, p, len)
+    if folded == 0u8 {
+        /* the call's verdict was NOT adjacently compared: if this line BINDS it
+         * (`let [mut] name [: T] = gate(...)`), remember name -> export so a later
+         * same-file `name ==/!= LIT` credits this gate (v2b binding awareness). */
+        cv_bind_capture(idx, pos - tok_len)
+    }
+}
+
+/* the shared comparison fold: at `pos` expect (same line, space/tab only) `==` or `!=`
+ * then a literal/const token; fold FNV(op || token) into export idx's outcome set.
+ * Returns 1 iff a comparison was present (folded or already known), 0 if none. */
+fn cv_cmp_fold(idx: u64, pos: u64, len: u64) -> u8 {
+    let mut p : u64 = pos
     let mut wg2 : u8 = 1u8
     while wg2 == 1u8 {                                 /* space/tab only: same line */
         if p >= len { wg2 = 0u8 } else {
@@ -514,13 +542,13 @@ fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
             }
         }
     }
-    if (p + 1u64) >= len { return }
+    if (p + 1u64) >= len { return 0u8 }
     let o1 : u8 = CV_FBUF[p]
     let o2 : u8 = CV_FBUF[p + 1u64]
     let mut op : u8 = 0u8
     if o1 == 0x3Du8 { if o2 == 0x3Du8 { op = 0x3Du8 } }    /* == */
     if o1 == 0x21u8 { if o2 == 0x3Du8 { op = 0x21u8 } }    /* != */
-    if op == 0u8 { return }
+    if op == 0u8 { return 0u8 }
     p = p + 2u64
     let mut wg3 : u8 = 1u8
     while wg3 == 1u8 {
@@ -557,16 +585,159 @@ fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
             } else { tg = 0u8 }
         }
     }
-    if tn == 0u64 { return }                           /* no outcome token */
+    if tn == 0u64 { return 0u8 }                       /* no outcome token */
     let base : u64 = idx * 4u64
     let nc : u64 = (CV_ONC[idx] as u64) & 0xFFu64
     let mut s : u64 = 0u64
     while s < nc {
-        if CV_OKEY[base + s] == h { return }           /* same outcome again: no new proof */
+        if CV_OKEY[base + s] == h { return 1u8 }       /* same outcome again: no new proof */
         s = s + 1u64
     }
     CV_OKEY[base + nc] = h
     CV_ONC[idx] = ((nc + 1u64) & 0xFFu64) as u8
+    return 1u8
+}
+
+/* v2b: at `let [mut] NAME [: T] = <gate>(` record NAME -> gate export (per-file).
+ * Backward-bounded to the line start, then a forward micro-parse that must land the
+ * '=' RHS exactly at the gate token; anything else (compound ops, comparisons, field
+ * stores, multi-line bindings) is refused -- a missed binding only leaves the gate
+ * under-proven, which is the fail-loud direction. */
+fn cv_bind_capture(eidx: u64, tok_start: u64) {
+    let mut ls : u64 = tok_start
+    let mut back : u64 = 0u64
+    let mut bg : u8 = 1u8
+    while bg == 1u8 {
+        if ls == 0u64 { bg = 0u8 } else {
+            if CV_FBUF[ls - 1u64] == 0x0Au8 { bg = 0u8 } else {
+                if back >= 480u64 { return }           /* line too long: refuse */
+                ls = ls - 1u64
+                back = back + 1u64
+            }
+        }
+    }
+    let mut p : u64 = ls
+    let mut wg : u8 = 1u8
+    while wg == 1u8 {                                  /* leading ws */
+        if p >= tok_start { wg = 0u8 } else {
+            let c : u8 = CV_FBUF[p]
+            if c == 0x20u8 { p = p + 1u64 } else {
+                if c == 0x09u8 { p = p + 1u64 } else { wg = 0u8 }
+            }
+        }
+    }
+    if p >= tok_start { return }
+    /* OPTIONAL `let [mut] ` prefix.  v2c (2026-07-16): a bare `NAME = gate(...)`
+     * assignment binds too -- the corpus idiom for a verdict is `var X : i64` then
+     * `X = verify(...)` then `if X == A`, NOT a `let`.  The let-only capture missed
+     * every such verifier (mrd_verify_judge, bj_verify_raw, tw_verify, the mr*_validate8
+     * meters).  Over-credit is bounded: a lone false binding yields ONE outcome, and a
+     * gate needs TWO DISTINCT to clear -- so a spurious bind can never green a gate by
+     * itself; a missed bind only leaves it under-proven (the fail-loud direction). */
+    if (p + 4u64) <= tok_start {
+        if CV_FBUF[p] == 0x6Cu8 { if CV_FBUF[p + 1u64] == 0x65u8 { if CV_FBUF[p + 2u64] == 0x74u8 {
+            let cl : u8 = CV_FBUF[p + 3u64]
+            if cl == 0x20u8 {
+                p = p + 4u64
+            } else { if cl == 0x09u8 { p = p + 4u64 } }
+            let mut wg1 : u8 = 1u8
+            while wg1 == 1u8 {
+                if p >= tok_start { wg1 = 0u8 } else {
+                    let c1 : u8 = CV_FBUF[p]
+                    if c1 == 0x20u8 { p = p + 1u64 } else { if c1 == 0x09u8 { p = p + 1u64 } else { wg1 = 0u8 } }
+                }
+            }
+            if (p + 4u64) <= tok_start {               /* optional 'mut ' */
+                if CV_FBUF[p] == 0x6Du8 { if CV_FBUF[p + 1u64] == 0x75u8 { if CV_FBUF[p + 2u64] == 0x74u8 {
+                    let cm : u8 = CV_FBUF[p + 3u64]
+                    if cm == 0x20u8 { p = p + 4u64 } else { if cm == 0x09u8 { p = p + 4u64 } }
+                } } }
+            }
+            let mut wg2 : u8 = 1u8
+            while wg2 == 1u8 {
+                if p >= tok_start { wg2 = 0u8 } else {
+                    let c2 : u8 = CV_FBUF[p]
+                    if c2 == 0x20u8 { p = p + 1u64 } else { if c2 == 0x09u8 { p = p + 1u64 } else { wg2 = 0u8 } }
+                }
+            }
+        } } }
+    }
+    if p >= tok_start { return }
+    if cv_is_ident_start(CV_FBUF[p]) == 0u8 { return }
+    let ns : u64 = p                                   /* the bound name */
+    let mut ng : u8 = 1u8
+    while ng == 1u8 {
+        if p >= tok_start { ng = 0u8 } else {
+            if cv_is_ident_char(CV_FBUF[p]) == 1u8 { p = p + 1u64 } else { ng = 0u8 }
+        }
+    }
+    let nl : u64 = p - ns
+    if nl == 0u64 { return }
+    if nl > 63u64 { return }
+    let mut wg3 : u8 = 1u8
+    while wg3 == 1u8 {
+        if p >= tok_start { wg3 = 0u8 } else {
+            let c3 : u8 = CV_FBUF[p]
+            if c3 == 0x20u8 { p = p + 1u64 } else {
+                if c3 == 0x09u8 { p = p + 1u64 } else { wg3 = 0u8 }
+            }
+        }
+    }
+    if p >= tok_start { return }
+    if CV_FBUF[p] == 0x3Au8 {                          /* ': T' -- skip to '=' */
+        let mut sg : u8 = 1u8
+        while sg == 1u8 {
+            if p >= tok_start { sg = 0u8 } else {
+                let cs : u8 = CV_FBUF[p]
+                if cs == 0x3Du8 { sg = 0u8 } else {
+                    if cs == 0x0Au8 { return } else { p = p + 1u64 }
+                }
+            }
+        }
+    }
+    if p >= tok_start { return }
+    if CV_FBUF[p] != 0x3Du8 { return }                 /* '=' */
+    if (p + 1u64) < tok_start { if CV_FBUF[p + 1u64] == 0x3Du8 { return } }  /* '==' */
+    p = p + 1u64
+    let mut wg4 : u8 = 1u8
+    while wg4 == 1u8 {
+        if p >= tok_start { wg4 = 0u8 } else {
+            let c4 : u8 = CV_FBUF[p]
+            if c4 == 0x20u8 { p = p + 1u64 } else {
+                if c4 == 0x09u8 { p = p + 1u64 } else { wg4 = 0u8 }
+            }
+        }
+    }
+    if p != tok_start { return }                       /* RHS must BE the gate call */
+    let h : u64 = cv_fnv((&CV_FBUF as u64) + ns, nl)
+    let mut i : u64 = 0u64
+    while i < CV_BN {
+        if CV_BKEY[i] == h { CV_BEXP[i] = (eidx & 0xFFFFFFFFu64) as u32   return }
+        i = i + 1u64
+    }
+    if CV_BN >= 512u64 { CV_BTRUNC = CV_BTRUNC + 1u64   return }
+    CV_BKEY[CV_BN] = h
+    CV_BEXP[CV_BN] = (eidx & 0xFFFFFFFFu64) as u32
+    CV_BN = CV_BN + 1u64
+}
+
+/* v2b: a bare ident bound earlier in THIS file to a gate export: an adjacent
+ * ==/!= literal credits that export's outcome set. */
+fn cv_bound_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
+    if CV_BN == 0u64 { return }
+    let h : u64 = cv_fnv(tok_addr, tok_len)
+    let mut i : u64 = 0u64
+    while i < CV_BN {
+        if CV_BKEY[i] == h {
+            let ei : u64 = (CV_BEXP[i] as u64) & 0xFFFFFFFFu64
+            if CV_ONC[ei] < 2u8 {
+                let f : u8 = cv_cmp_fold(ei, pos, len)
+                if f == 0u8 { return }
+            }
+            return
+        }
+        i = i + 1u64
+    }
 }
 
 /* === CRITERION v3 primitives: node interning, edge dedup, the reference handler === */
@@ -890,7 +1061,10 @@ fn cv_scan_buf(len: u64, phase: u32) {
                     prev_fn = 0u8
                 } else {
                     if phase == 2u32 { cv_mark(ta, tl) }
-                    if phase == 3u32 { cv_outcome_try(ta, tl, j4, len) }
+                    if phase == 3u32 {
+                        cv_outcome_try(ta, tl, j4, len)
+                        cv_bound_try(ta, tl, j4, len)   /* v2b: let-bound gate verdicts */
+                    }
                     if phase == 4u32 { cv_reach_ref_try(ta, tl, i, j4, len) }
                 }
             } }
@@ -926,6 +1100,7 @@ fn cv_scan_file(cap_id: u64, phase: u32) {
         CV_FILE_APP = cv_contains((&CV_FBUF as u64), got, ("APP-SURFACE-MODULE" as u64), 18u64)
     }
     if phase == 2u32 { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
+    if phase == 3u32 { CV_BN = 0u64 }   /* v2b: bindings are file-scoped */
     if phase == 4u32 {
         /* v3: a fresh file ordinal scopes internal-node keys; enclosing state resets */
         CV_CUR_FILE = CV_CUR_FILE + 1u64
@@ -995,7 +1170,20 @@ fn cv_walk_root_segment(cap_id: u64, roots_addr: u64, s: u64, e: u64, phase: u32
             let mut k : u64 = 0u64
             while k < len { dst[k] = src[k]   k = k + 1u64 }
             dst[len] = 0u8
-            cv_walk(cap, (&CV_ROOTSEG as u64), phase)
+            /* EXECUTED-SURFACE segments (Ε2 repoint, 2026-07-16): a segment that names
+             * a .iii FILE scans that one file -- the driver lists the standing-tool
+             * entry TUs as reference/outcome/reach roots beside the corpus dirs.
+             * Exports still derive ONLY from the modules root: a file segment can mark
+             * surface covered/rooted, never add surface (the down-only-safe direction,
+             * same law as the multi-root dirs above). */
+            if cv_is_iii_file((&CV_ROOTSEG as u64), len) == 1u8 {
+                if cv_is_excluded_file((&CV_ROOTSEG as u64), len) == 0u8 {
+                    cv_strcpy((&CV_CHILDBUF as u64), (&CV_ROOTSEG as u64))
+                    cv_scan_file(cap, phase)
+                }
+            } else {
+                cv_walk(cap, (&CV_ROOTSEG as u64), phase)
+            }
         }
     }
 }
@@ -1033,6 +1221,8 @@ fn cov_reset() @export {
     CV_NUNCOV = 0u64
     CV_SP = 0u64
     CV_OVERFLOW = 0u8
+    CV_BN = 0u64
+    CV_BTRUNC = 0u64
     /* v3 graph state */
     let mut t : u64 = 0u64
     while t < 65536u64 { CV_INKEY[t] = 0u64   CV_INREACH[t] = 0u8   t = t + 1u64 }

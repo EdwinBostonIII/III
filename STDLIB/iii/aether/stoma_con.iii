@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/stoma_con.iii -- STOMA organ: our OWN console (M1 of DOCS/III-STOMA-PLAN.md).
+ * [APP-SURFACE-MODULE] -- console app surface: raw-input/console-face verbs are pumped by a live console
+ * BY NATURE, never by a headless corpus KAT; excluded from the v3 dark census (sanctus/corpus_coverage,
+ * reunification W0.2).  The LIB teeth (v1) stay full.
  *
  * The console face of the sovereign CLI: detect whether stdout is a real console (plain-mode
  * detector -- the Collapse Law's sensor), enable VT processing, emit VT sequences from PURE

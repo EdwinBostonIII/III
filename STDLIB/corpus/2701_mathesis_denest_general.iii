@@ -96,5 +96,21 @@ fn main() -> u64 {
     if XR != 3i64 { return 15u64 }
     if XJ != 0i64 { return 15u64 }
 
+    /* == A: THE ACCEPT HALF -- every judge above REFUTED (verify == 0); here a TRUE
+     * denest is VERIFIED.  sqrt(3+2sqrt2) = 1+sqrt2 = sqrt1+sqrt2: disc = 9-8 = 1 (a
+     * perfect square), so the denest SUCCEEDS and its (m,n) read-heads carry the real
+     * roots -- m+n = a = 3, m*n = (b^2*c)/4 = 2 -- and the judge VERIFIES the identity
+     * (!= 1 guard: a second, distinct outcome for the verifier, proving it discriminates
+     * truth from falsehood, not just always-rejects). */
+    if mrd_denest(3i64, 2i64, 2i64) != 1i64 { return 20u64 }
+    let dm : i64 = mrd_m()
+    let dn : i64 = mrd_n()
+    if (dm + dn) != 3i64 { return 21u64 }
+    if (dm * dn) != 2i64 { return 22u64 }
+    if mrd_verify_judge(3i64, 2i64, 2i64, dm, dn) != 1i64 { return 23u64 }   /* ACCEPT */
+    /* and the judge still REJECTS a corrupted (m,n) for the SAME radical -- so the
+     * accept above is discrimination, not an always-accept stub */
+    if mrd_verify_judge(3i64, 2i64, 2i64, dm + 1i64, dn) == 1i64 { return 24u64 }
+
     return 99u64
 }

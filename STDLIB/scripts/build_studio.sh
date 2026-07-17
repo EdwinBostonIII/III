@@ -10,7 +10,7 @@ LIB="$III/STDLIB/build/iii/libiii_native.a"
 O="${STUDIO_OUT:-/tmp/studio}"
 mkdir -p "$O" "$III/build"
 
-MODS_A="ui_raster ui_font_data ui_font ui_vfont_data ui_vfont ui_exact ui_win ui_egraph studio_theme studio_trig wb_kernel sqrt_sum_sign exact_denest aether_lens aether_lens_frame cyclotomic_se3 kfield world_graph ui_field iform render_core render_time stoma_con stoma_proc stoma_pty stoma_journal stoma_verb stoma_gate stoma_tree stoma_fg stoma_shell stoma_bridge ws_home ws_forge ws_bench ws_lens ws_render ws_stoma iii_studio studio_sample"
+MODS_A="ui_raster ui_font_data ui_font ui_vfont_data ui_vfont ui_exact ui_win ui_egraph studio_theme studio_trig wb_kernel sqrt_sum_sign exact_denest aether_lens aether_lens_frame cyclotomic_se3 kfield world_graph ui_field iform render_core render_time stoma_con stoma_proc stoma_pty stoma_journal stoma_verb stoma_gate stoma_tree stoma_fg stoma_shell stoma_bridge ws_home ws_forge ws_bench ws_lens ws_render ws_stoma ws_console ws_zoom iii_studio studio_sample"
 MODS_N="ser_egraph ser_kinduct_sym"
 
 for m in $MODS_A; do
@@ -23,6 +23,7 @@ echo "compile: all modules OK"
 
 gcc "$O/iii_studio.o" "$O/studio_theme.o" "$O/studio_trig.o" \
     "$O/ws_home.o" "$O/ws_forge.o" "$O/ws_bench.o" "$O/ws_lens.o" "$O/ws_render.o" "$O/ws_stoma.o" \
+    "$O/ws_console.o" "$O/ws_zoom.o" \
     "$O/render_core.o" "$O/render_time.o" "$O/ui_field.o" "$O/iform.o" \
     "$O/stoma_bridge.o" "$O/stoma_shell.o" "$O/stoma_verb.o" "$O/stoma_proc.o" "$O/stoma_journal.o" \
     "$O/stoma_gate.o" "$O/stoma_tree.o" "$O/stoma_con.o" "$O/stoma_fg.o" "$O/stoma_pty.o" \

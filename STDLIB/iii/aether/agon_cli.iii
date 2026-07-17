@@ -1,0 +1,178 @@
+/* STDLIB/iii/aether/agon_cli.iii -- iii-agon: THE AGON, made observable (ENTELECHEIA Ε2).
+ *
+ *   iii-agon root   <src_root.iii> <binary>                     -- FORGE: derive the two
+ *                                                                  bearer pins (source
+ *                                                                  closure root + binary
+ *                                                                  image hash) and print
+ *                                                                  them; exit 0.
+ *   iii-agon verify <src-64hex> <src_root.iii> <img-64hex> <bin>-- run BOTH bearers against
+ *                                                                  their pins; the verdict
+ *                                                                  is the divergence class.
+ *
+ * The two-path proof (the agon, made observable) -- run from the repo root:
+ *   root  over {src_root organ, its compiled binary}  -> pins  (Rs, Ri)
+ *   verify Rs,Ri with both untouched                  -> exit 0  LIVE
+ *   touch a source in the derived closure, verify     -> exit 2  SOURCE_DRIFT (a divergence)
+ *   flip a byte in the binary, verify                 -> exit 3  IMAGE_DRIFT  (a divergence)
+ *   move both                                         -> exit 4  BOTH
+ * Each run leaves two witnessed events on the substrate (agon_witness), so the
+ * departure is dispersed, not merely returned.
+ *
+ * EXIT: 0 LIVE | 1 usage | 2 SOURCE_DRIFT | 3 IMAGE_DRIFT | 4 BOTH.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes katabasis/agon.
+ */
+module agon_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn agon_run(src_root_path: u64, src_expect: u64, bin_path: u64, img_expect: u64) -> u32 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_ca_byte(i: u32) -> u32 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_img_byte(i: u32) -> u32 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_source_ok() -> u8 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_image_ok() -> u8 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_witness() -> u64 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_verdict() -> u32 from "agon.iii"
+extern @abi(c-msvc-x64) fn agon_event_count() -> u32 from "agon.iii"
+
+var CLI_SRCPIN : [u8; 32]
+var CLI_IMGPIN : [u8; 32]
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+
+fn ph_nib(v: u32) -> i32 {
+    if v < 10u32 { return putchar((48u32 + v) as i32) }
+    return putchar((87u32 + v) as i32)
+}
+fn ph_byte(b: u32) -> i32 {
+    ph_nib((b >> 4u32) & 0xFu32)
+    ph_nib(b & 0xFu32)
+    return 0i32
+}
+fn print_ca() -> i32 {
+    let mut i : u32 = 0u32
+    while i < 32u32 { ph_byte(agon_ca_byte(i))  i = i + 1u32 }
+    return 0i32
+}
+fn print_img() -> i32 {
+    let mut i : u32 = 0u32
+    while i < 32u32 { ph_byte(agon_img_byte(i))  i = i + 1u32 }
+    return 0i32
+}
+fn print_u64_hex(v: u64) -> i32 {
+    let mut sh : i32 = 56i32
+    while sh >= 0i32 {
+        ph_byte(((v >> (sh as u64)) & 0xFFu64) as u32)
+        sh = sh - 8i32
+    }
+    return 0i32
+}
+
+fn hexval(c: u8) -> i32 {
+    if c >= 48u8 { if c <= 57u8  { return (c - 48u8) as i32 } }
+    if c >= 97u8 { if c <= 102u8 { return (c - 87u8) as i32 } }
+    if c >= 65u8 { if c <= 70u8  { return (c - 55u8) as i32 } }
+    return -1i32
+}
+fn parse_hex32(src: u64, out: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let hi : i32 = hexval(s[i * 2u64])
+        let lo : i32 = hexval(s[(i * 2u64) + 1u64])
+        if hi < 0i32 { return -1i32 }
+        if lo < 0i32 { return -1i32 }
+        o[i] = ((hi * 16i32) + lo) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn pu_dec(v: u64) -> i32 {
+    if v >= 10u64 { pu_dec(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+
+fn usage() -> u64 {
+    ps("iii-agon root   <src_root.iii> <binary>                      (FORGE: print both pins)\n" as u64)
+    ps("iii-agon verify <src-64hex> <src_root.iii> <img-64hex> <bin> (LIVE=0 SRC=2 IMG=3 BOTH=4)\n" as u64)
+    return 1u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { return usage() }
+    let av  : *u64 = argv as *u64
+    let cmd : u64  = av[1u64]
+
+    if streq(cmd, "root" as u64) == 1u32 {
+        if argc < 4i32 { return usage() }
+        agon_run(av[2u64], 0u64, av[3u64], 0u64)
+        if agon_source_ok() == 0u8 {
+            ps("iii-agon: source bearer could not derive (unreadable source / unresolved import)\n" as u64)
+            return 2u64
+        }
+        if agon_image_ok() == 0u8 {
+            ps("iii-agon: image bearer could not attest (unreadable binary)\n" as u64)
+            return 3u64
+        }
+        ps("src=" as u64)  print_ca()   putchar(10i32)
+        ps("img=" as u64)  print_img()  putchar(10i32)
+        return 0u64
+    }
+
+    if streq(cmd, "verify" as u64) == 1u32 {
+        if argc < 6i32 { return usage() }
+        if parse_hex32(av[2u64], (&CLI_SRCPIN) as u64) != 0i32 {
+            ps("iii-agon: source pin must be 64 hex chars\n" as u64)
+            return 1u64
+        }
+        if parse_hex32(av[4u64], (&CLI_IMGPIN) as u64) != 0i32 {
+            ps("iii-agon: image pin must be 64 hex chars\n" as u64)
+            return 1u64
+        }
+        let v : u32 = agon_run(av[3u64], (&CLI_SRCPIN) as u64, av[5u64], (&CLI_IMGPIN) as u64)
+        /* self-consistency: the returned verdict must equal the organ's stored
+         * verdict -- a disagreement is an internal defect, refused loudly. */
+        if agon_verdict() != v {
+            ps("iii-agon: INTERNAL: stored verdict diverges from returned verdict\n" as u64)
+            return 6u64
+        }
+        ps("src="     as u64)  print_ca()   putchar(10i32)
+        ps("img="     as u64)  print_img()  putchar(10i32)
+        ps("witness=" as u64)  print_u64_hex(agon_witness())
+        ps(" events=" as u64)  pu_dec(agon_event_count() as u64)  putchar(10i32)
+        if v == 0u32 {
+            ps("agon LIVE (both bearers agree the organism is itself)\n" as u64)
+            return 0u64
+        }
+        if v == 2u32 {
+            ps("agon SOURCE_DRIFT (sources moved under an unchanged binary -- divergence)\n" as u64)
+            return 2u64
+        }
+        if v == 3u32 {
+            ps("agon IMAGE_DRIFT (binary moved under unchanged sources -- divergence)\n" as u64)
+            return 3u64
+        }
+        ps("agon BOTH (whole-organism departure)\n" as u64)
+        return 4u64
+    }
+
+    return usage()
+}

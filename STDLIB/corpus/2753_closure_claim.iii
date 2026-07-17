@@ -1,0 +1,64 @@
+/* closure Ε3 per-claim closure-pin table: set/find/count/byte/is_set/verify/update/reset.
+ * Proves: a claim's sealed pin reads back; verifies against its own buffer; a foreign
+ * buffer or unknown claim REJECTS (negative); set on an existing id UPDATES (no append). */
+module corpus_d2753
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn closure_claim_set(claim_id: u64, root_ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_find(claim_id: u64) -> i64 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_count() -> u64 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_byte(claim_id: u64, i: u32) -> u32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_is_set(claim_id: u64) -> u8 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_verify_against(claim_id: u64, addr: u64) -> u8 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_reset() -> i32 from "closure.iii"
+
+fn main() -> u64 {
+    closure_claim_reset()
+    if closure_claim_count() != 0u64 { return 1u64 }
+
+    let a : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        a[i] = ((i * 5u64) + 1u64) as u8
+        i = i + 1u64
+    }
+    let cid_a : u64 = 0xAA01u64
+    if closure_claim_set(cid_a, a as u64) < 0i32 { return 2u64 }
+    if closure_claim_is_set(cid_a) != 1u8 { return 3u64 }
+    if closure_claim_count() != 1u64 { return 4u64 }
+    if closure_claim_find(cid_a) != 0i64 { return 5u64 }
+
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        let exp : u8 = (((j as u64) * 5u64) + 1u64) as u8
+        if closure_claim_byte(cid_a, j) != (exp as u32) { return 6u64 }
+        j = j + 1u32
+    }
+    if closure_claim_verify_against(cid_a, a as u64) != 1u8 { return 7u64 }
+
+    let b : *u8 = malloc(32u64)
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        b[k] = 0xF0u8
+        k = k + 1u64
+    }
+    let cid_b : u64 = 0xBB02u64
+    if closure_claim_set(cid_b, b as u64) < 0i32 { return 8u64 }
+    if closure_claim_count() != 2u64 { return 9u64 }
+
+    if closure_claim_verify_against(cid_a, b as u64) != 0u8 { return 10u64 }  /* foreign buffer rejects */
+    if closure_claim_verify_against(cid_b, b as u64) != 1u8 { return 11u64 }
+
+    if closure_claim_find(0xDEADu64) != -1i64 { return 12u64 }               /* unknown claim */
+    if closure_claim_is_set(0xDEADu64) != 0u8 { return 13u64 }
+    if closure_claim_verify_against(0xDEADu64, a as u64) != 0u8 { return 14u64 }
+
+    if closure_claim_set(cid_a, b as u64) < 0i32 { return 15u64 }            /* UPDATE existing id */
+    if closure_claim_count() != 2u64 { return 16u64 }                        /* not appended */
+    if closure_claim_verify_against(cid_a, b as u64) != 1u8 { return 17u64 }
+
+    free(a)
+    free(b)
+    return 99u64
+}

@@ -1,0 +1,55 @@
+/* STDLIB/corpus/2758_nomos_consent.iii -- THE PARLIAMENT CAN SAY NO.
+ *
+ * katabasis/nomos_consent.iii is the law by which III AUTONOMOUSLY consents to
+ * amend its own constitution (the sealed rewrite legislature).  A consent that
+ * could never refuse is rigging (THE UNIVERSALITY LAW).  This gate proves the
+ * parliament CONCURS only on unanimous yes, and REFUSES -- naming the dissenting
+ * voter -- on EACH single no.  It is the anti-rigging demonstration: the amendment
+ * road has real teeth at the consent step, not just at truth.
+ *
+ * BOTH CHAMBERS: the parliament organ now rules on the rewrite law (chamber I,
+ * katabasis_nomos_consent, 4 voters) AND the language's vocabulary (chamber II,
+ * katabasis_glossa_consent, 5 voters -- adds COLLISION + WORD-CONTINUITY).  This
+ * gate proves each chamber concurs only on unanimous yes and names each single
+ * dissent in lexicographic gravity order.
+ *
+ * Exit: 99 green | 10 concur-wrong | 20..24 a chamber-I dissent path wrong
+ *     | 30 continuity | 31 quorum | 40 chamber-II concur | 41..45 a chamber-II
+ *     dissent path wrong. */
+module corpus_2758_nomos_consent
+
+extern @abi(c-msvc-x64) fn katabasis_nomos_consent(a: u32, b: u32, c: u32, d: u32) -> u32 from "nomos_consent.iii"
+extern @abi(c-msvc-x64) fn katabasis_nomos_continuous(removed: u64, explained: u64) -> u32 from "nomos_consent.iii"
+extern @abi(c-msvc-x64) fn katabasis_nomos_quorum_unanimous() -> u32 from "nomos_consent.iii"
+extern @abi(c-msvc-x64) fn katabasis_glossa_consent(a: u32, b: u32, c: u32, d: u32, e: u32) -> u32 from "nomos_consent.iii"
+
+fn main() -> i32 {
+    /* unanimous yes -> the amendment is adopted */
+    if katabasis_nomos_consent(1u32, 1u32, 1u32, 1u32) != 0u32 { return 10i32 }
+    /* each single NO tables the proposal, named by the dissenting voter, in
+     * lexicographic gravity order (a law you cannot reproduce is refused before
+     * its truth is even weighed) */
+    if katabasis_nomos_consent(0u32, 1u32, 1u32, 1u32) != 1u32 { return 20i32 }   /* self-disagreement */
+    if katabasis_nomos_consent(1u32, 0u32, 1u32, 1u32) != 2u32 { return 21i32 }   /* untrue */
+    if katabasis_nomos_consent(1u32, 1u32, 0u32, 1u32) != 3u32 { return 22i32 }   /* toothless */
+    if katabasis_nomos_consent(1u32, 1u32, 1u32, 0u32) != 4u32 { return 23i32 }   /* discontinuous */
+    /* gravity order: a self-disagreeing AND untrue AND toothless proposal names
+     * SELF-DISAGREEMENT first (the earliest, gravest dissent) */
+    if katabasis_nomos_consent(0u32, 0u32, 0u32, 0u32) != 1u32 { return 24i32 }
+    /* the continuity sub-law: every removal must be explained (degenerate/superseded) */
+    if katabasis_nomos_continuous(3u64, 3u64) != 1u32 { return 30i32 }   /* all explained */
+    if katabasis_nomos_continuous(3u64, 2u64) != 0u32 { return 30i32 }   /* one erosion -> refuse */
+    if katabasis_nomos_continuous(0u64, 0u64) != 1u32 { return 30i32 }   /* nothing removed -> ok */
+    /* the quorum is unanimous by constitutional weight (a rule binds every organ) */
+    if katabasis_nomos_quorum_unanimous() != 1u32 { return 31i32 }
+    /* CHAMBER II -- the GLOSSA vocabulary consent (5 voters, two extra: collision
+     * + word-continuity).  Unanimous yes adopts; each single no tables it, named
+     * in gravity order (a lexicon you cannot reproduce is refused before truth). */
+    if katabasis_glossa_consent(1u32, 1u32, 1u32, 1u32, 1u32) != 0u32 { return 40i32 }
+    if katabasis_glossa_consent(0u32, 1u32, 1u32, 1u32, 1u32) != 1u32 { return 41i32 }   /* self-disagreement */
+    if katabasis_glossa_consent(1u32, 0u32, 1u32, 1u32, 1u32) != 2u32 { return 42i32 }   /* untrue */
+    if katabasis_glossa_consent(1u32, 1u32, 0u32, 1u32, 1u32) != 3u32 { return 43i32 }   /* toothless */
+    if katabasis_glossa_consent(1u32, 1u32, 1u32, 0u32, 1u32) != 4u32 { return 44i32 }   /* colliding */
+    if katabasis_glossa_consent(1u32, 1u32, 1u32, 1u32, 0u32) != 5u32 { return 45i32 }   /* discontinuous */
+    return 99i32
+}

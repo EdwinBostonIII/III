@@ -1,0 +1,71 @@
+/* STDLIB/iii/aether/testament_cli.iii -- iii-testament: THE TESTAMENT EMITTER (AUTARKEIA Alpha-0).
+ *
+ *   iii-testament keygen <seed96> <pk-out> <sk-out>
+ *       SLH-DSA-SHA2-256s keypair, deterministic in the 96-byte seed FILE (no hidden RNG).
+ *   iii-testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts-list|none]
+ *       Fuse the tree's sealed truth into a signed, chained testament.dat.  <root> is the tree
+ *       root directory; <manifest> lists the committed files (one repo-relative path per line).
+ *       With a <parent> testament, the new one chains to it and the MONOTONE LAW is enforced.
+ *   iii-testament show   <testament.dat>
+ *       Print the sealed pins (generation, tree root, record heads, certificate values) --
+ *       bash-consumable, the pin-migration source.
+ *
+ * A LEAF tool (the build_iii_crypto mold): the pinned in-tree compiler + the committed archive;
+ * the testament organ (aether/testament.iii) links as a standalone object.  exit 0 = success.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/testament (-> numera/cad + numera/slhdsa).
+ */
+module testament_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ts_keygen(seedp: u64, pkp: u64, skp: u64) -> u64 from "testament.iii"
+extern @abi(c-msvc-x64) fn ts_emit(root: u64, manp: u64, skp: u64, pkp: u64, outp: u64, parentp: u64, rcpts: u64) -> u64 from "testament.iii"
+extern @abi(c-msvc-x64) fn ts_show(datp: u64) -> u64 from "testament.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-testament -- the AUTARKEIA testament emitter (DOCS/III-AUTARKEIA-MAP.md)\n" as u64)
+    ps("  iii-testament keygen <seed96> <pk-out> <sk-out>\n" as u64)
+    ps("  iii-testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts|none]\n" as u64)
+    ps("  iii-testament show   <testament.dat>\n" as u64)
+    return 1u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return usage() }
+    let av : *u64 = argv as *u64
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "keygen" as u64) == 1u32 {
+        if argc < 5i32 { return usage() }
+        return ts_keygen(av[2u64], av[3u64], av[4u64])
+    }
+    if streq(cmd, "emit" as u64) == 1u32 {
+        if argc < 7i32 { return usage() }
+        let mut parentp : u64 = 0u64
+        if argc >= 8i32 { if streq(av[7u64], "none" as u64) == 0u32 { parentp = av[7u64] } }
+        let mut rcpts : u64 = 0u64
+        if argc >= 9i32 { if streq(av[8u64], "none" as u64) == 0u32 { rcpts = av[8u64] } }
+        return ts_emit(av[2u64], av[3u64], av[4u64], av[5u64], av[6u64], parentp, rcpts)
+    }
+    if streq(cmd, "show" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        return ts_show(av[2u64])
+    }
+    return usage()
+}

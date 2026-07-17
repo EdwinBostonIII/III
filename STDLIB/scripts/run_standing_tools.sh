@@ -157,8 +157,218 @@ if build build_iii_judge.sh iii-judge; then
     R2="$("$JU" fold "$W/ju_r2.txt" 2>/dev/null | grep -o 'root=[0-9a-f]*')"
     if [[ -n "$R1" && "$R1" != "$R2" ]]; then say "PASS fold: altering one row changes the Merkle root"; else say "RED  fold: R1=$R1 R2=$R2"; FAIL=1; fi
 fi
+say "[standing] == iii-friction: THE FRICTION LOGOS (measured cycles as the law of least action) =="
+if build build_iii_friction.sh iii-friction; then
+    # external truth: the ledger's own falsifier battery -- null race INDISTINGUISHABLE,
+    # 64x gross race DEARER with margin >> band, verdict determinism, starvation REFUSED
+    # and counted.  Verdicts (not raw floors) are the stable observable.
+    expect_exit "friction check: falsifier battery"      0 "$C/iii-friction$BIN_SUFFIX" check
+    expect_exit "friction usage"                         1 "$C/iii-friction$BIN_SUFFIX"
+fi
+
+say "[standing] == iii-xeno: THE OPEN SPACE (fair universe + two-route census) =="
+if build build_iii_xeno.sh iii-xeno; then
+    # external truth: (a) the fairness bijection roundtrips exactly (structural law);
+    # (b) the iso-class census by TWO INDEPENDENT ROUTES (explicit canonicalization vs
+    #     Burnside counting) agrees -- 10 at n=2, 3330 at n=3, the same figures the
+    #     PSI campaign sealed by a third route (mt4f flood exhaustion, T5 rows).
+    expect_exit "xeno fair 300: bijection EXACT"            0 "$C/iii-xeno$BIN_SUFFIX" fair 300
+    expect_exit "xeno census 2: canonical == Burnside (10)" 0 "$C/iii-xeno$BIN_SUFFIX" census 2
+    expect_exit "xeno census 3: canonical == Burnside (3330)" 0 "$C/iii-xeno$BIN_SUFFIX" census 3
+    expect_exit "xeno sweep 0 (vacuous): REFUSED"           5 "$C/iii-xeno$BIN_SUFFIX" sweep 0 0
+    expect_exit "xeno usage"                                1 "$C/iii-xeno$BIN_SUFFIX"
+fi
+
+say "[standing] == iii-substrate: THE ISA-BORN ALGEBRA (atoms from CPUID, executed on the die) =="
+# The capability is validated by what it CAN DO, not by a rigged known-answer: the atoms are the
+# chip's own live CPUID report; the BRIDGE is a TWO-ENGINE agreement (the live instruction vs an
+# independent pure-.iii definiens -- a mis-encoded executor reddens); the ISA loop's ADMIT verdict
+# requires the control to redden AND the capability-mask variance falsifier to fire.  The STRONGEST
+# arm ties discovery to an INDEPENDENT prover: III lowers a discovered chip identity to pure .iii and
+# iii-prove disposes it over ALL 2^64 (bit-blast UNSAT) -- external truth (the identity is provable),
+# never the tool's own stdout.
+if build build_iii_substrate.sh iii-substrate; then
+    expect_exit "atoms: live CPUID capability report"      0 "$C/iii-substrate$BIN_SUFFIX" atoms
+    expect_exit "bridge: instruction == definiens"         0 "$C/iii-substrate$BIN_SUFFIX" bridge
+    expect_exit "isa 3: discover -> separate -> ADMIT"     0 "$C/iii-substrate$BIN_SUFFIX" isa 3
+    if [[ -x "$C/iii-prove$BIN_SUFFIX" ]]; then
+        rm -f "$W/isa_l.iii" "$W/isa_r.iii"
+        "$C/iii-substrate$BIN_SUFFIX" emit 3 0 "$W/isa_l.iii" "$W/isa_r.iii" >/dev/null 2>&1
+        if [[ -f "$W/isa_l.iii" && -f "$W/isa_r.iii" ]]; then
+            expect_exit "author->prover: III-emitted identity PROVEN over 2^64" 0 "$C/iii-prove$BIN_SUFFIX" "$W/isa_l.iii" f "$W/isa_r.iii" f
+        else say "RED  iii-substrate emit produced no files"; FAIL=1; fi
+    fi
+fi
+
 # agree on hexad admissibility.  hexad 40 (packed) admitted <=> --reach 40 PROVEN.  A genuine two-tool
 # check that the safety algebra is ONE object seen through two surfaces.
+say "[standing] == NOMOS: machine-legislated compiler law (sealed truth vs the live meter) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -f "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" ]]; then
+    NW="$(mktemp -d "${TMPDIR:-/tmp}/nomos-standing.XXXXXX")"
+    if "$C/iii-substrate$BIN_SUFFIX" nomos 25000 "$NW" > "$NW/nomos.log" 2>&1; then
+        SID_LIVE="$(grep -o "NOMOS-SET id=[0-9]*" "$NW/nomos.log" | head -1 | cut -d= -f2)"
+        SID_SEALED="$(grep "cgphys_set_id" "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" | grep -o "return [0-9]*" | grep -o "[0-9]*")"
+        if [[ -n "$SID_LIVE" && "$SID_LIVE" == "$SID_SEALED" ]]; then
+            say "PASS nomos: live regeneration reproduces the SEALED rule set (id $SID_LIVE)"
+        else
+            # THE METER-CONTEXT LAW (2026-07-17, measured): friction floor RATIOS are a
+            # fact about die x binary -- growing the tool binary re-classifies
+            # margin-adjacent laws DETERMINISTICALLY (probe binary held LAW 11867 at a
+            # 1.56x margin while this binary declassifies it; three consecutive sweeps
+            # byte-identical either way).  Sealed rows are PROVEN over 2^64; truth
+            # outlives the meter.  Drift is therefore RED only when a sealed law's
+            # TRUTH breaks on today's die (judge refusal); a declassification
+            # (inert / under-margin) is band physics: NAMED, counted, never silent.
+            grep -o "LAW [0-9]*" "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" | awk '{print $2}' | sort -un > "$NW/sealed.laws"
+            grep "NOMOS-ROW" "$NW/nomos.log" | grep -o "LAW [0-9]*" | awk '{print $2}' | sort -un > "$NW/live.laws"
+            NOMOS_TRUTH_BROKE=0; NOMOS_DRIFT=0
+            while read -r L; do
+                [[ -z "$L" ]] && continue
+                JOUT="$("$C/iii-substrate$BIN_SUFFIX" judge "$L" 2>&1)"
+                if echo "$JOUT" | grep -q "^HELD"; then
+                    NOMOS_DRIFT=$((NOMOS_DRIFT+1))
+                    say "  drift: sealed LAW $L held-but-declassified by today's meter ($(echo "$JOUT" | grep -o "VERDICT=[0-9-]* FLOORS=[0-9/]*")) -- proven row stands"
+                else
+                    NOMOS_TRUTH_BROKE=1
+                    say "  TRUTH BROKE: sealed LAW $L refused by the judge on today's die: $JOUT"
+                fi
+            done < <(comm -23 "$NW/sealed.laws" "$NW/live.laws")
+            NEWLAWS="$(comm -13 "$NW/sealed.laws" "$NW/live.laws" | tr '\n' ' ')"
+            [[ -n "${NEWLAWS// /}" ]] && say "  growth: live stream seats candidate law(s) beyond the seal: $NEWLAWS(reseal-ceremony feedstock, named)"
+            if [[ "$NOMOS_TRUTH_BROKE" == "1" ]]; then
+                say "RED  nomos: a SEALED law's truth broke on today's die (prover-vs-die contradiction class)"; FAIL=1
+            else
+                say "PASS nomos: sealed truth intact on today's die; meter drift $NOMOS_DRIFT row(s) declassified (band physics, counted -- THE METER-CONTEXT LAW; sealed id $SID_SEALED, live id $SID_LIVE)"
+            fi
+        fi
+        if [[ -x "$C/iii-prove$BIN_SUFFIX" && -f "$NW/nomos_r0d.iii" ]]; then
+            expect_exit "nomos row 0 re-PROVEN over all 2^64" 0 "$C/iii-prove$BIN_SUFFIX" "$NW/nomos_r0d.iii" f "$NW/nomos_r0c.iii" f
+        fi
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2748_nomos_rules.iii" --compile-only --out "$NW/2748.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" --compile-only --out "$NW/cgpr.o" >/dev/null 2>&1
+        if gcc "$NW/2748.o" "$NW/cgpr.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$NW/2748$BIN_SUFFIX" >/dev/null 2>&1; then
+            expect_exit "gate 2748: sealed rows vs independent evaluator + doors" 99 "$NW/2748$BIN_SUFFIX"
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2749_nomothesis_gap.iii" --compile-only --out "$NW/2749.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/isa_ontogenesis.iii" --compile-only --out "$NW/isao.o" >/dev/null 2>&1
+        if gcc "$NW/2749.o" "$NW/isao.o" "$NW/cgpr.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$NW/2749$BIN_SUFFIX" >/dev/null 2>&1; then
+            expect_exit "gate 2749: the owed-law enumerator (gap census + critical pairs, pinned)" 99 "$NW/2749$BIN_SUFFIX"
+        else say "RED  gate 2749 link failed"; FAIL=1; fi
+        else say "RED  gate 2748 link failed"; FAIL=1; fi
+    else say "RED  nomos generation failed"; FAIL=1; fi
+    rm -rf "$NW"
+fi
+
+say "[standing] == PHYSIS + TAXIS + MOMENT: the die's cost geometry, the preorder it forces, the contingency that escapes it =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
+    PHO="$("$C/iii-substrate$BIN_SUFFIX" physis 2>&1)"; phrc=$?
+    if [[ $phrc -eq 0 ]] && echo "$PHO" | grep -q "VALUE-INVARIANT"; then
+        say "PASS physis: cost measured a value-invariant (atoms constant-time, DIV=bit-length fn) -- the taxis-is-order-theory boundary, measured"
+    else say "RED  physis: cost-geometry probe drifted (rc=$phrc)"; FAIL=1; fi
+    # THE CONTINGENCY REGISTER: the fenced non-determinism (jitter above the floor). RC 0 =
+    # modal split measured, RC 2 = honestly-quiet die (no jitter to witness) -- both are the
+    # faculty behaving correctly; only a crash / floor-drift (RC 3) reds.  Non-determinism
+    # is not pinnable in a corpus gate, so it lives here as a measured standing faculty.
+    MMO="$("$C/iii-substrate$BIN_SUFFIX" moment 2>&1)"; mmrc=$?
+    if [[ $mmrc -eq 0 ]] && echo "$MMO" | grep -q "MODAL SPLIT IS REAL"; then
+        say "PASS moment: the necessary/contingent split MEASURED (floor stable, moment+event non-deterministic) -- fenced from every seal"
+    elif [[ $mmrc -eq 2 ]]; then
+        say "PASS moment: die impossibly quiet this run (no jitter to witness) -- honestly reported, faculty intact"
+    else say "RED  moment: contingency register drifted (rc=$mmrc)"; FAIL=1; fi
+    TXO="$("$C/iii-substrate$BIN_SUFFIX" taxis 3 2>&1)"; txrc=$?
+    if [[ $txrc -eq 0 ]]; then
+        if echo "$TXO" | grep -q "objects: 153 semantic classes" && echo "$TXO" | grep -q "0 cycles"; then
+            say "PASS taxis: the die's 153-class canonicalization PREORDER admitted (acyclic + prediction-sound; order theory, sovereign content)"
+        else say "RED  taxis: preorder admitted but structural invariant drifted (objects/acyclicity)"; FAIL=1; fi
+    else say "RED  taxis: preorder REFUSED (rc=$txrc -- stability/cycle/prediction)"; FAIL=1; fi
+else say "RED  physis/taxis: iii-substrate absent"; FAIL=1; fi
+
+say "[standing] == REVERSIBILITY: III finds + proves zero-information-loss computing (the xorshift diode) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
+    RVO="$("$C/iii-substrate$BIN_SUFFIX" reversible 2>&1)"; rvrc=$?
+    if [[ $rvrc -eq 0 ]]; then
+        # the discovery arm (the xorshift diode, inverse constructed + proven) AND the
+        # unification arm (cg_r3's NOMOS-collapse re-proven by the same kernel, both sides).
+        if echo "$RVO" | grep -q "SHARPEST DIODE" && echo "$RVO" | grep -q "XOR(x,MUL(x,2))" \
+           && echo "$RVO" | grep -q "NOT(NOT(x)) -> x : PROVEN" && echo "$RVO" | grep -q "correctly REFUSED" \
+           && echo "$RVO" | grep -q "THREE independent routes, one gate" && echo "$RVO" | grep -q "SIX altars"; then
+            say "PASS reversible: xorshift diode DISCOVERED + inverse PROVEN; NOMOS-collapse re-proven; THE CONVERGENCE green (Toffoli exhaustion+SAT+signature, ripple palindrome R^2=id over 15876 edges, intent(x)intuition round-trip + oracle refusal, rva auditor law -- six altars, one truth)"
+        else say "RED  reversible: verb exited 0 but discovery/unification/convergence invariant drifted"; FAIL=1; fi
+    else say "RED  reversible: hunt REFUSED (rc=$rvrc -- no diode found, or a reversibility altar broke)"; FAIL=1; fi
+    # THE CONSERVATION TIER (gate 2762, standing-owned): III's NONLINEAR inverse
+    # (Newton MUL-odd, closing the GF(2) hunter's gap) + the reversible-ONTOLOGY
+    # census (xeno quasigroup/Latin-square) -- both sides re-computed stored-answer-free.
+    if [[ -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+        CVW="$(mktemp -d "${TMPDIR:-/tmp}/conserve-standing.XXXXXX")"
+        cvok=1
+        for cvd in reversibility xeno_ontogenesis substrate_ontogenesis isa_ontogenesis; do
+            "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/$cvd.iii" --compile-only --out "$CVW/$cvd.o" >>"$CVW/build.log" 2>&1 || cvok=0
+        done
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/numera/bv_bits.iii" --compile-only --out "$CVW/bv_bits.o" >>"$CVW/build.log" 2>&1 || cvok=0
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2762_conservation.iii" --compile-only --out "$CVW/2762.o" >>"$CVW/build.log" 2>&1 || cvok=0
+        if [[ $cvok -eq 1 ]]; then
+            gcc "$CVW/2762.o" "$CVW/reversibility.o" "$CVW/xeno_ontogenesis.o" "$CVW/substrate_ontogenesis.o" "$CVW/isa_ontogenesis.o" "$CVW/bv_bits.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$CVW/2762.exe" >>"$CVW/build.log" 2>&1 || cvok=0
+        fi
+        if [[ $cvok -eq 1 && -x "$CVW/2762.exe" ]]; then
+            "$CVW/2762.exe" >/dev/null 2>&1; cv2rc=$?
+            if [[ $cv2rc -eq 99 ]]; then
+                say "PASS conservation: reversible ONTOLOGIES censused (1,2,12 Latin squares) + MUL-odd NONLINEAR inverse synthesized (Newton) + round-tripped + wrong inverse REFUSED (gate 2762 exit 99)"
+            else say "RED  conservation: gate 2762 exit $cv2rc (census / nonlinear-inverse / deficit / negative arm drifted)"; FAIL=1; fi
+        else say "RED  conservation: gate 2762 failed to build (see $CVW/build.log)"; FAIL=1; fi
+        rm -rf "$CVW"
+    else say "RED  conservation: iiis-2 absent"; FAIL=1; fi
+else say "RED  reversible: iii-substrate absent"; FAIL=1; fi
+
+say "[standing] == SYMMETRIA: the conservation worlds (closed reversible algebras, saturated to PROOF, friction-graded) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" ]]; then
+    SYO="$("$C/iii-substrate$BIN_SUFFIX" symmetry 12 12345 2>&1)"; syrc=$?
+    if [[ $syrc -eq 0 ]]; then
+        # rc 0 already asserts >= 1 PROVEN world (the verb exits 3 otherwise); the markers assert
+        # the register's shape: exact-saturation signatures, the counted OPEN frontier (never
+        # claimed), and the dream arm under its pinned replay seed.
+        if echo "$SYO" | grep -q "proven world-signatures=" && echo "$SYO" | grep -q "largest proven order=" \
+           && echo "$SYO" | grep -q "OPEN (order beyond cap" && echo "$SYO" | grep -q "first-reached="; then
+            say "PASS symmetry: conservation worlds PROVEN by exact-table saturation (order x involution-core x abelian), OPEN frontier counted, floors MEASURED, dream arm replayable"
+        else say "RED  symmetry: verb exited 0 but the world register drifted (marker lines missing)"; FAIL=1; fi
+    else say "RED  symmetry: SYMMETRIA refused (rc=$syrc -- degenerate pool or no proven world)"; FAIL=1; fi
+else say "RED  symmetry: iii-substrate absent"; FAIL=1; fi
+
+say "[standing] == ONEIROS: the dream that must wake (believe each owed law -> collapse to witnesses -> docket the prover) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iii-prove$BIN_SUFFIX" ]]; then
+    ZW="$(mktemp -d "${TMPDIR:-/tmp}/oneiros-standing.XXXXXX")"
+    if "$C/iii-substrate$BIN_SUFFIX" oneiros 500 "$ZW" > "$ZW/oneiros.log" 2>&1; then
+        if grep -q "SENTINEL=0" "$ZW/oneiros.log" && grep -q "ONEIROS-CERT=" "$ZW/oneiros.log"; then
+            say "PASS oneiros: dream admitted (controls fired, sentinel 0, every annihilation carries a two-path witness + recorded seed)"
+        else say "RED  oneiros: sentinel fired or cert missing (two-path split / sealed-row kill)"; FAIL=1; fi
+        [[ -f "$ZW/oneiros_heat.ppm" ]] && say "PASS oneiros: heat strip rendered (the comprehension artifact)" || { say "RED  oneiros: heat strip missing"; FAIL=1; }
+        # THE PREDICTION ARM: when the docket's top entry is a JOINABLE (derivable
+        # from the sealed rows, unoriented), the prediction "iii-prove PROVES it"
+        # faces the sovereign prover LIVE -- the arm proves one prophecy per run.
+        if grep -q "#0 JOINABLE" "$ZW/oneiros.log" && [[ -f "$ZW/oneiros_d0a.iii" ]]; then
+            expect_exit "oneiros docket #0 (JOINABLE prophecy) PROVEN over all 2^64" 0 "$C/iii-prove$BIN_SUFFIX" "$ZW/oneiros_d0a.iii" f "$ZW/oneiros_d0b.iii" f
+        else say "PASS oneiros: no joinable at the docket top this run (honestly reported -- nothing prophesied, nothing owed)"; fi
+        # THE CROSS-INSTRUMENT ARM: the organ's INDEPENDENT census must agree with
+        # gate 2749's owed-law count on this die (two implementations, one truth).
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2749_nomothesis_gap.iii" --compile-only --out "$ZW/2749.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/isa_ontogenesis.iii" --compile-only --out "$ZW/isao.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/cg_phys_rules.iii" --compile-only --out "$ZW/cgpr.o" >/dev/null 2>&1
+        if gcc "$ZW/2749.o" "$ZW/isao.o" "$ZW/cgpr.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$ZW/2749$BIN_SUFFIX" >/dev/null 2>&1; then
+            "$ZW/2749$BIN_SUFFIX" > "$ZW/2749.log" 2>&1
+            OW_GATE="$(grep "THE OWED-LAW COUNT" "$ZW/2749.log" | head -1 | grep -o "[0-9]\+" | head -1)"
+            OW_OZ="$(grep -o "OWED [0-9]\+" "$ZW/oneiros.log" | head -1 | grep -o "[0-9]\+")"
+            if [[ -n "$OW_GATE" && "$OW_GATE" == "$OW_OZ" ]]; then say "PASS oneiros: independent census == gate 2749 (owed $OW_OZ on this die -- two implementations, one truth)"; else say "RED  oneiros: census split (gate $OW_GATE vs organ $OW_OZ)"; FAIL=1; fi
+        else say "RED  oneiros: 2749 cross-instrument link failed"; FAIL=1; fi
+        # THE COLLAPSE GATE, fresh-built every run
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2757_oneiros_collapse.iii" --compile-only --out "$ZW/2757.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/oneiros.iii" --compile-only --out "$ZW/oneiros.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/aether/isa_friction_judge.iii" --compile-only --out "$ZW/fj.o" >/dev/null 2>&1
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/omnia/friction.iii" --compile-only --out "$ZW/fric.o" >/dev/null 2>&1
+        if gcc "$ZW/2757.o" "$ZW/oneiros.o" "$ZW/isao.o" "$ZW/cgpr.o" "$ZW/fj.o" "$ZW/fric.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$ZW/2757$BIN_SUFFIX" >/dev/null 2>&1; then
+            expect_exit "gate 2757: the oneiros collapse gate (replay law + third-evaluator witnesses + docket + pins)" 99 "$ZW/2757$BIN_SUFFIX"
+        else say "RED  gate 2757 link failed"; FAIL=1; fi
+    else say "RED  oneiros: dream refused (sentinel / control-silent / envelope)"; FAIL=1; fi
+    rm -rf "$ZW"
+else say "RED  oneiros: iii-substrate or iii-prove absent"; FAIL=1; fi
+
 say "[standing] == cross-tool: iii-hexad reachability == iii-typecheck --reach =="
 if [[ -x "$C/iii-hexad$BIN_SUFFIX" && -x "$C/iii-typecheck$BIN_SUFFIX" ]]; then
     # hexad id 40 = 0b...; unpack: 40 base-3 = trits.  Rather than reconstruct, use --reach as the oracle
@@ -174,6 +384,75 @@ if [[ -x "$C/iii-hexad$BIN_SUFFIX" && -x "$C/iii-typecheck$BIN_SUFFIX" ]]; then
     if [[ $ok -eq 1 ]]; then say "PASS iii-hexad and iii-typecheck --reach agree (id 728 admitted, id 0 bricking)"; else say "RED cross-tool: reach728=$R728 hex728=$H728 reach0=$R0 hex0=$H0"; FAIL=1; fi
 fi
 
+# GLOSSA standing arm -- append to STDLIB/scripts/run_standing_tools.sh after the
+# PHYSIS/TAXIS/MOMENT section (mirror its conventions: $C tool dir, $BIN_SUFFIX,
+# say(), FAIL=1 on red).  The arm re-derives the lexicon LIVE each invocation:
+# press reproducibility, sealed-id agreement, one spot ladder proof re-run, the
+# 2759 gate against the SEALED table, and both negative laws' teeth.
+
+say "[standing] == GLOSSA: the tongue (press reproducibility + sealed-id + spot ladder proof + gate 2759 + the negative laws) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iii-prove$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+    GNW="$(mktemp -d "${TMPDIR:-/tmp}/glossa-standing.XXXXXX")"
+    "$C/iii-substrate$BIN_SUFFIX" glossa "$GNW" >"$GNW/p1.log" 2>&1
+    grc=$?
+    if [[ $grc -eq 0 ]]; then
+        G1="$(grep -o 'GLOSSA-SET id=[0-9]*' "$GNW/p1.log" | head -1 | grep -o '[0-9]*$')"
+        mkdir -p "$GNW/2"
+        "$C/iii-substrate$BIN_SUFFIX" glossa "$GNW/2" >"$GNW/p2.log" 2>&1
+        G2="$(grep -o 'GLOSSA-SET id=[0-9]*' "$GNW/2/../p2.log" 2>/dev/null | head -1 | grep -o '[0-9]*$')"
+        [[ -z "$G2" ]] && G2="$(grep -o 'GLOSSA-SET id=[0-9]*' "$GNW/p2.log" | head -1 | grep -o '[0-9]*$')"
+        GS="$(grep -o 'cgglossa_set_id() -> u64 @export { return [0-9]*' "$III_ROOT/COMPILER/BOOT/cg_glossa_rules.iii" | grep -o '[0-9]*$')"
+        if [[ -n "$G1" && "$G1" == "$G2" ]]; then
+            say "PASS glossa: press deterministic (two runs, one id $G1)"
+        else
+            say "RED  glossa: press self-disagreement (run1=$G1 run2=$G2)"; FAIL=1
+        fi
+        if [[ -n "$GS" && "$GS" == "$G1" ]]; then
+            say "PASS glossa: live press reproduces the SEALED lexicon (id $GS)"
+        else
+            say "RED  glossa: lexicon drift (sealed=$GS live=$G1) -- convene nomos_seal.sh chamber II"; FAIL=1
+        fi
+        # spot ladder proof: the popcount sub->add link, re-proven from the live press
+        "$C/iii-prove$BIN_SUFFIX" "$GNW/gw5_s0.iii" f "$GNW/gw5_s1.iii" f >"$GNW/spot.log" 2>&1
+        src_rc=$?
+        if [[ $src_rc -eq 0 ]]; then
+            say "PASS glossa: spot ladder link (popcnt64 s0==s1) re-PROVEN over all 2^64"
+        else
+            say "RED  glossa: spot ladder link failed (rc=$src_rc)"; FAIL=1
+        fi
+        # gate 2759 against the SEALED table + the archive tongue
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2759_glossa_words.iii" --compile-only --out "$GNW/2759.o" >"$GNW/g2759.log" 2>&1 \
+            && "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/cg_glossa_rules.iii" --compile-only --out "$GNW/cggl.o" >>"$GNW/g2759.log" 2>&1 \
+            && gcc "$GNW/2759.o" "$GNW/cggl.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$GNW/2759.exe" >>"$GNW/g2759.log" 2>&1
+        if [[ -x "$GNW/2759.exe" ]]; then
+            "$GNW/2759.exe" >"$GNW/g2759run.log" 2>&1
+            g59=$?
+            if [[ $g59 -eq 99 ]]; then
+                say "PASS gate 2759: bare words compiled + third-engine agreement (the vocabulary IS language, exit 99)"
+            else
+                say "RED  gate 2759: exit $g59 (see run log)"; FAIL=1
+            fi
+        else
+            say "RED  gate 2759: failed to build (see $GNW/g2759.log)"; FAIL=1
+        fi
+        # the negative laws have teeth: shadow + arity probes MUST refuse
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2760_neg_glossa_shadow.iii" --compile-only --out "$GNW/neg1.o" >"$GNW/neg1.log" 2>&1
+        n1=$?
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2761_neg_glossa_arity.iii" --compile-only --out "$GNW/neg2.o" >"$GNW/neg2.log" 2>&1
+        n2=$?
+        if [[ $n1 -ne 0 && $n2 -ne 0 ]]; then
+            say "PASS glossa negative laws: shadow decl REFUSED (rc=$n1) + wrong arity REFUSED (rc=$n2)"
+        else
+            say "RED  glossa negative laws: shadow rc=$n1 arity rc=$n2 (both must be nonzero)"; FAIL=1
+        fi
+    else
+        say "RED  glossa: press red (rc=$grc, see $GNW/p1.log)"; FAIL=1
+    fi
+    rm -rf "$GNW"
+else
+    say "RED  glossa: iii-substrate / iii-prove / iiis-2 absent"; FAIL=1
+fi
+
 if [[ $FAIL -ne 0 ]]; then echo "[standing] RED -- a tool broke"; exit 1; fi
-echo "[standing] GREEN: all 11 tools build from source and pass their known-answer smoke checks + cross-tool consistency (incl. iii-judge under an adversarial launcher)"
+echo "[standing] GREEN: every registered tool builds from source and passes its known-answer smoke checks + cross-tool consistency (incl. iii-judge under an adversarial launcher)"
 exit 0

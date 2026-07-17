@@ -363,10 +363,13 @@ fn mrg_queue_n() -> i64 @export { return MRG_QN }
 fn mrg_proven_n() -> i64 @export { return MRG_PN }
 fn mrg_refuted_n() -> i64 @export { return MRG_RN }
 fn mrg_undecided_n() -> i64 @export { return MRG_UN }
-fn mrg_proven_t(i: i64) -> u64 @export { return MRG_PT[i as u64] }
-fn mrg_proven_f(i: i64) -> u64 @export { return MRG_PF[i as u64] }
-fn mrg_proven_g(i: i64) -> u64 @export { return MRG_PG[i as u64] }
-fn mrg_und_t(i: i64) -> u64 @export { return MRG_UT[i as u64] }
-fn mrg_und_f(i: i64) -> u64 @export { return MRG_UF[i as u64] }
-fn mrg_und_g(i: i64) -> u64 @export { return MRG_UG[i as u64] }
-fn mrg_proven_r(i: i64) -> u64 @export { return MRG_PR[i as u64] }
+/* store accessors: OUT-OF-BOUNDS ANSWERS THE SENTINEL (2^64-1), never adjacent memory.
+ * An unbounded read of a coordinate store is an unfalsifiable accessor -- garbage and
+ * truth are indistinguishable to the caller (fixed 2026-07-16; gate 2705 pins it). */
+fn mrg_proven_t(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_PN { return 18446744073709551615u64 }  return MRG_PT[i as u64] }
+fn mrg_proven_f(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_PN { return 18446744073709551615u64 }  return MRG_PF[i as u64] }
+fn mrg_proven_g(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_PN { return 18446744073709551615u64 }  return MRG_PG[i as u64] }
+fn mrg_und_t(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_UN { return 18446744073709551615u64 }  return MRG_UT[i as u64] }
+fn mrg_und_f(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_UN { return 18446744073709551615u64 }  return MRG_UF[i as u64] }
+fn mrg_und_g(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_UN { return 18446744073709551615u64 }  return MRG_UG[i as u64] }
+fn mrg_proven_r(i: i64) -> u64 @export { if i < 0i64 { return 18446744073709551615u64 }  if i >= MRG_PN { return 18446744073709551615u64 }  return MRG_PR[i as u64] }

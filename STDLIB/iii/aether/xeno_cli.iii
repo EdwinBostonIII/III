@@ -1,0 +1,772 @@
+/* STDLIB/iii/aether/xeno_cli.iii -- iii-xeno: THE OPEN SPACE, driven.
+ *
+ *   iii-xeno fair <N>              THE FAIRNESS ARM: roundtrip the first N steps of
+ *                                  the universal enumeration + spot-encode every
+ *                                  carrier; exit 3 on any break.  This is the
+ *                                  anti-rigging theorem, machine-checked live.
+ *   iii-xeno census <n>            the exact iso-class census of carrier n by TWO
+ *                                  INDEPENDENT ROUTES: explicit canonical dedup
+ *                                  (organ) vs Burnside fixed-point counting (CLI,
+ *                                  separate code).  Exit 7 iff they disagree.
+ *   iii-xeno anchor <lawfuel>      the machine's own algebra (the silicon point,
+ *                                  via substrate_ontogenesis), its exact seat in
+ *                                  the universal enumeration (n<=5 exact; else
+ *                                  class-only, named), and its open-law theory.
+ *   iii-xeno sweep <fuel> <lawfuel>  the dovetail: visit structures fairly, canon-
+ *                                  dedup, decide the first lawfuel open laws on
+ *                                  every NEW class by total exhaustion, search
+ *                                  anchor homomorphisms, print the law demography
+ *                                  + drain + XENO_CERT (deterministic fold).
+ *   iii-xeno check <fuel>          the whole arm battery (fair, census x2, judge
+ *                                  two-path, canon<->profile consistency, replay
+ *                                  determinism, vacuity refusal).
+ *
+ * Exit: 0 OK | 1 usage | 2 env | 3 FAIRNESS BROKEN | 5 VACUOUS (refused)
+ *     | 6 INTERNAL DISAGREEMENT (two-path) | 7 CENSUS MISMATCH | 8 NONDETERMINISM.
+ * NIH: composes xeno_ontogenesis + substrate_ontogenesis (the anchor) +
+ * mathesis_ontogenesis/mathesis_forge (the independent profile lens).
+ * Hexad: kind_essence.  Ring: R0. */
+module xeno_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xo_decode(step: u64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_encode(n: i64, idx: u64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_fair(count: u64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_load(n: i64, idx: u64) -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_get(x: i64, y: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_n() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_index_of_loaded() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_canon_fold() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_law_holds(p: u64, g: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_anchor() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_anchor_theory(lawfuel: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_hom_count() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_hom_witness(i: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_hom_refusals() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_sweep(s0: u64, fuel: u64, lawfuel: i64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_census(n: i64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_reset() -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_visited() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_canon_new() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_pern(n: i64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_laws_decided() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_laws_held() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_hold_count(p: u64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_first_holder(p: u64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_anchor_holds(p: u64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_hom_hits() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_seen_sat() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_cert() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_anchor_k() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_term_ser(t_idx: u64, out_addr: u64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_law_i() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_law_j() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_law_pair_set(p: u64) -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_dec_n() -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_dec_i() -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_anchor_seat() -> u64 from "xeno_ontogenesis.iii"
+
+extern @abi(c-msvc-x64) fn so_signature() -> u64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_get(x: i64, y: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_is_degenerate() -> u8 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_probe_census(m: i64, n: i64, mode: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_distinct() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_fc(j: i64) -> i64 from "substrate_ontogenesis.iii"
+
+extern @abi(c-msvc-x64) fn mog_load_forge(idx: i64, n: i64) -> i32 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_profile() -> i64 from "mathesis_ontogenesis.iii"
+
+/* the ISA face: the algebra of the instructions THIS die actually carries */
+extern @abi(c-msvc-x64) fn xi_menu() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_caps() -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_nops() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_nterms() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_term_op(i: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_term_l(i: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_term_r(i: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_sweep() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_sweep_base8() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_nclass() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_trunc() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_rep(t: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_term_depth(i: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_nheld() -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_wit_x() -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_wit_y() -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_is_bmi2_law(t: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_same(a: i64, b: i64) -> i64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_cert() -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_die_fact(i: u64) -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_feature_word() -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_eval(t: i64, x: u64, y: u64) -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_pdep(a: u64, b: u64) -> u64 from "xeno_isa.iii"
+extern @abi(c-msvc-x64) fn xi_pext(a: u64, b: u64) -> u64 from "xeno_isa.iii"
+
+/* ---- print helpers (the house pattern) ---- */
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn pd(v: i64) -> i32 {
+    if v < 0i64 { putchar(45i32)  return pd(0i64 - v) }
+    if v >= 10i64 { pd(v / 10i64) }
+    putchar((48i64 + (v % 10i64)) as i32)
+    return 0i32
+}
+fn pu(v: u64) -> i32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+fn phx(v: u64) -> i32 {
+    let mut sh : i64 = 60i64
+    while sh >= 0i64 {
+        let nib : u64 = (v >> (sh as u64)) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+        sh = sh - 4i64
+    }
+    return 0i32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        if pa[i] == 0u8 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        let c : u8 = p[i]
+        if c >= 0x30u8 { if c <= 0x39u8 { v = (v * 10u64) + ((c - 0x30u8) as u64) } }
+        i = i + 1u64
+    }
+    return v
+}
+
+/* ---- term printing: preorder byte serialization -> infix string ---- */
+var TS : [u8; 64]
+var TSN : u64 = 0u64
+var TSC : u64 = 0u64
+
+fn pterm_walk() {
+    if TSC >= TSN { return }
+    let k : u8 = TS[TSC]
+    TSC = TSC + 1u64
+    if k == 0u8 { putchar(120i32)  return }   /* x */
+    if k == 1u8 { putchar(121i32)  return }   /* y */
+    if k == 2u8 { putchar(122i32)  return }   /* z */
+    putchar(40i32)                            /* ( */
+    pterm_walk()
+    putchar(111i32)                           /* o */
+    pterm_walk()
+    putchar(41i32)                            /* ) */
+}
+
+fn pterm(t_idx: u64) {
+    TSN = xo_term_ser(t_idx, (&TS as u64))
+    TSC = 0u64
+    pterm_walk()
+}
+
+fn plaw(p: u64) {
+    xo_law_pair_set(p)
+    pterm(xo_law_i())
+    ps(" = " as u64)
+    pterm(xo_law_j())
+}
+
+/* ---- ARM A second route: Burnside fixed-point counting (CLI-local code,
+ * independent of the organ's canonicalizer).  Iso-classes of binary ops on n
+ * tokens = (1/n!) * sum over permutations of n^(value-consistent cell orbits).
+ * Exact in u64 for n <= 4; n=5 exceeds u64 in intermediate sums -> refused. ---- */
+var BP  : [i64; 8]
+var BPI : [i64; 8]
+
+fn burn_perm(n: i64, rank: u64) {
+    var pool : [i64; 8]
+    let mut i : i64 = 0i64
+    while i < n { pool[i as u64] = i   i = i + 1i64 }
+    let mut f : u64 = 1u64
+    let mut k : i64 = 2i64
+    while k <= n { f = f * (k as u64)   k = k + 1i64 }
+    let mut r : u64 = rank
+    let mut left : i64 = n
+    let mut w : i64 = 0i64
+    while left > 0i64 {
+        f = f / (left as u64)
+        let pick : u64 = r / f
+        r = r % f
+        BP[w as u64] = pool[pick]
+        let mut m : u64 = pick
+        while (m + 1u64) < (left as u64) { pool[m] = pool[m + 1u64]   m = m + 1u64 }
+        left = left - 1i64
+        w = w + 1i64
+    }
+    i = 0i64
+    while i < n { BPI[BP[i as u64] as u64] = i   i = i + 1i64 }
+}
+
+/* apply sigma^L to v */
+fn burn_pow(v: i64, l: u64) -> i64 {
+    let mut r : i64 = v
+    let mut i : u64 = 0u64
+    while i < l { r = BP[r as u64]   i = i + 1u64 }
+    return r
+}
+
+fn burn_count(n: i64) -> u64 {
+    if n > 4i64 { return 0u64 }               /* u64 envelope: refused, printed */
+    let cells : i64 = n * n
+    let mut nf : u64 = 1u64
+    let mut k : i64 = 2i64
+    while k <= n { nf = nf * (k as u64)   k = k + 1i64 }
+    let mut total : u64 = 0u64
+    let mut rank : u64 = 0u64
+    while rank < nf {
+        burn_perm(n, rank)
+        /* orbits of c=(x,y) under c -> (sigma x, sigma y); per orbit of length L,
+         * admissible values v with sigma^L(v) = v */
+        var seen : [u8; 16]
+        let mut c : i64 = 0i64
+        while c < cells { seen[c as u64] = 0u8   c = c + 1i64 }
+        let mut fixed : u64 = 1u64
+        c = 0i64
+        while c < cells {
+            if seen[c as u64] == 0u8 {
+                /* walk the orbit */
+                let mut l : u64 = 0u64
+                let mut cur : i64 = c
+                let mut go : u8 = 1u8
+                while go == 1u8 {
+                    seen[cur as u64] = 1u8
+                    l = l + 1u64
+                    let x : i64 = cur / n
+                    let y : i64 = cur % n
+                    cur = (BP[x as u64] * n) + BP[y as u64]
+                    if cur == c { go = 0u8 }
+                }
+                let mut ch : u64 = 0u64
+                let mut v : i64 = 0i64
+                while v < n {
+                    if burn_pow(v, l) == v { ch = ch + 1u64 }
+                    v = v + 1i64
+                }
+                fixed = fixed * ch
+            }
+            c = c + 1i64
+        }
+        total = total + fixed
+        rank = rank + 1u64
+    }
+    return total / nf
+}
+
+/* ---- ARM B second route: evaluate a law over the loaded table by walking the
+ * SERIALIZED term bytes (independent evaluation code; decode is shared and its
+ * structure is pinned by the fairness arm -- envelope named in the print). ---- */
+var EB : [u8; 64]
+var EBN : u64 = 0u64
+var EBC : u64 = 0u64
+var EVX : i64 = 0i64
+var EVY : i64 = 0i64
+var EVZ : i64 = 0i64
+
+fn eval_ser() -> i64 {
+    let k : u8 = EB[EBC]
+    EBC = EBC + 1u64
+    if k == 0u8 { return EVX }
+    if k == 1u8 { return EVY }
+    if k == 2u8 { return EVZ }
+    let a : i64 = eval_ser()
+    let b : i64 = eval_ser()
+    return xo_get(a, b)
+}
+
+fn law_holds_cli(p: u64) -> i64 {
+    xo_law_pair_set(p)
+    let li : u64 = xo_law_i()
+    let lj : u64 = xo_law_j()
+    let n : i64 = xo_n()
+    var lb : [u8; 64]
+    var rb : [u8; 64]
+    let ln : u64 = xo_term_ser(li, (&lb as u64))
+    let rn : u64 = xo_term_ser(lj, (&rb as u64))
+    let mut vx : i64 = 0i64
+    while vx < n {
+        let mut vy : i64 = 0i64
+        while vy < n {
+            let mut vz : i64 = 0i64
+            while vz < n {
+                EVX = vx  EVY = vy  EVZ = vz
+                let mut i : u64 = 0u64
+                while i < ln { EB[i] = lb[i]   i = i + 1u64 }
+                EBN = ln  EBC = 0u64
+                let a : i64 = eval_ser()
+                i = 0u64
+                while i < rn { EB[i] = rb[i]   i = i + 1u64 }
+                EBN = rn  EBC = 0u64
+                let b : i64 = eval_ser()
+                if a != b { return 0i64 }
+                vz = vz + 1i64
+            }
+            vy = vy + 1i64
+        }
+        vx = vx + 1i64
+    }
+    return 1i64
+}
+
+/* ---- the commands ---- */
+
+fn cmd_fair(count: u64) -> u64 {
+    let r : i64 = xo_fair(count)
+    ps("FAIRNESS: roundtrip step<->(carrier, table) over " as u64)  pu(count)
+    ps(" steps + per-carrier spot encodes: " as u64)
+    if r == 0i64 {
+        ps("EXACT (bijective; nothing in jurisdiction is unreachable)\n" as u64)
+        ps("jurisdiction: every finite magma with carrier n <= 6 (n=6 on its u64 index prefix -- named envelope)\n" as u64)
+        return 0u64
+    }
+    ps("BROKEN class=" as u64)  pd(r)  putchar(10i32)
+    return 3u64
+}
+
+fn cmd_census(n: i64) -> u64 {
+    let mine : u64 = xo_census(n)
+    ps("census n=" as u64)  pd(n)
+    ps(": explicit-canonical route = " as u64)  pu(mine)
+    if n <= 4i64 {
+        let burn : u64 = burn_count(n)
+        ps(", Burnside route (independent) = " as u64)  pu(burn)
+        if mine != burn { ps("  MISMATCH\n" as u64)  return 7u64 }
+        ps("  AGREE\n" as u64)
+        return 0u64
+    }
+    ps(", Burnside route: REFUSED (u64 envelope at n>4, named)\n" as u64)
+    return 0u64
+}
+
+fn cmd_anchor(lawfuel: i64) -> u64 {
+    let s : u64 = so_signature()
+    let k : i64 = xo_anchor()
+    ps("SILICON SIGNATURE = 0x" as u64)  phx(s)  putchar(10i32)
+    ps("anchor carrier k = " as u64)  pd(k)  putchar(10i32)
+    /* the substrate point's own verdict on itself: is this die's algebra degenerate
+     * (a constant/one-operand op, carrying no relational structure)?  A real fact
+     * about the anchor -- this host's trivial signature makes the answer yes. */
+    ps("anchor degenerate = " as u64)  pd(so_is_degenerate() as i64)
+    ps("   (1 = constant/one-operand op; the substrate point carries no relation)\n" as u64)
+    /* a bounded characterization of the anchor point: how many distinct probe-response
+     * classes this die's substrate algebra induces over a small probe battery (the twin
+     * substrate organ's census read-heads, consumed here where they characterize the
+     * very anchor xeno's whole universe is pinned to). */
+    so_probe_census(3i64, 3i64, 0i64)         /* small: the census cost is superlinear */
+    ps("substrate census: distinct probe classes = " as u64)  pd(so_census_distinct())
+    ps(", fc[0] = " as u64)  pd(so_census_fc(0i64))  putchar(10i32)
+    /* the anchor-carrier accessor agrees with the built k, and the load/index
+     * round-trip is exact (xo_load then xo_index_of_loaded is the identity) -- the
+     * enumeration read-heads the fairness law rests on. */
+    if xo_anchor_k() != k { ps("INTERNAL: anchor-k accessor disagrees with the build\n" as u64)  return 6u64 }
+    if k >= 1i64 { if k <= 5i64 {
+        xo_load(k, 0u64)
+        if xo_index_of_loaded() != 0u64 { ps("INTERNAL: load/index round-trip broke at idx 0\n" as u64)  return 6u64 }
+        xo_load(k, 7u64)
+        if xo_index_of_loaded() != 7u64 { ps("INTERNAL: load/index round-trip broke at idx 7\n" as u64)  return 6u64 }
+        ps("enumeration read-heads: anchor k=" as u64)  pd(xo_anchor_k())
+        ps(", load/index round-trip exact\n" as u64)
+    } }
+    let seat : u64 = xo_anchor_seat()
+    if seat != 18446744073709551615u64 {
+        ps("anchor seat: THIS machine's algebra is step " as u64)  pu(seat)
+        ps(" of the universal enumeration\n" as u64)
+    } else {
+        ps("anchor seat: beyond the u64 index envelope at k=" as u64)  pd(k)
+        ps(" (named refusal; the class is still judged below)\n" as u64)
+    }
+    let th : i64 = xo_anchor_theory(lawfuel)
+    ps("anchor open-law theory: " as u64)  pd(th)
+    ps(" of the first " as u64)  pd(lawfuel)
+    ps(" laws HOLD (total exhaustion over k^3 assignments each)\n" as u64)
+    ps("first held laws:\n" as u64)
+    let mut p : u64 = 0u64
+    let mut shown : i64 = 0i64
+    while p < (lawfuel as u64) {
+        if shown < 12i64 {
+            if xo_anchor_holds(p) == 1u64 {
+                ps("  LAW " as u64)  pu(p)  ps(":  " as u64)  plaw(p)  putchar(10i32)
+                shown = shown + 1i64
+            }
+        }
+        p = p + 1u64
+    }
+    return 0u64
+}
+
+fn cmd_sweep(fuel: u64, lawfuel: u64) -> u64 {
+    if fuel == 0u64 {
+        ps("VACUOUS: zero fuel mints nothing; refused (exit 5)\n" as u64)
+        return 5u64
+    }
+    xo_reset()
+    let k : i64 = xo_anchor()
+    let ath : i64 = xo_anchor_theory(lawfuel as i64)
+    let neu : u64 = xo_sweep(0u64, fuel, lawfuel as i64)
+    ps("== XENO SWEEP (fair dovetail; no privileged interior) ==\n" as u64)
+    ps("fuel steps        = " as u64)  pu(fuel)  putchar(10i32)
+    ps("visited           = " as u64)  pu(xo_visited())  putchar(10i32)
+    ps("canonical NEW     = " as u64)  pu(xo_canon_new())
+    ps("   (by carrier:" as u64)
+    let mut n : i64 = 1i64
+    while n <= 6i64 {
+        ps(" n" as u64)  pd(n)  ps("=" as u64)  pu(xo_pern(n))
+        n = n + 1i64
+    }
+    ps(")\n" as u64)
+    ps("laws decided      = " as u64)  pu(xo_laws_decided())
+    ps("  held = " as u64)  pu(xo_laws_held())  putchar(10i32)
+    ps("anchor k          = " as u64)  pd(k)
+    ps("  anchor theory = " as u64)  pd(ath)
+    ps("  hom-captured classes = " as u64)  pu(xo_hom_hits())
+    ps("  hom refusals(budget) = " as u64)  pu(xo_hom_refusals())  putchar(10i32)
+    ps("seen-set sat      = " as u64)  pu(xo_seen_sat())  putchar(10i32)
+    ps("-- law demography (first 24 inhabited laws) --\n" as u64)
+    let mut p : u64 = 0u64
+    let mut shown : i64 = 0i64
+    while p < lawfuel {
+        if shown < 24i64 {
+            let hc : u64 = xo_hold_count(p)
+            if hc > 0u64 {
+                ps("  LAW " as u64)  pu(p)
+                ps("  holders=" as u64)  pu(hc)
+                ps("  first@step " as u64)  pu(xo_first_holder(p))
+                if xo_anchor_holds(p) == 1u64 { ps("  [SHARED WITH THE SILICON]" as u64) }
+                ps("   " as u64)  plaw(p)
+                putchar(10i32)
+                shown = shown + 1i64
+            }
+        }
+        p = p + 1u64
+    }
+    ps("XENO_CERT = 0x" as u64)  phx(xo_cert())  putchar(10i32)
+    return 0u64
+}
+
+fn cmd_check(fuel: u64) -> u64 {
+    /* ARM 1: fairness */
+    let fr : u64 = cmd_fair(1000u64)
+    if fr != 0u64 { return fr }
+    /* ARM 2: census two-path at n=2 and n=3 */
+    let c2 : u64 = cmd_census(2i64)
+    if c2 != 0u64 { return c2 }
+    let c3 : u64 = cmd_census(3i64)
+    if c3 != 0u64 { return c3 }
+    /* ARM 3: judge two-path -- organ vs CLI-side evaluator over a stride
+     * (shared term DECODE, independent EVAL + exhaustion; envelope named) */
+    let mut s : u64 = 7u64
+    let mut checked : u64 = 0u64
+    while s < 4000u64 {
+        if xo_decode(s) != 0i64 { s = 4000u64 } else {
+            CKN = xo_dec_n()
+            CKI = xo_dec_i()
+            let mut p : u64 = 0u64
+            while p < 12u64 {
+                /* reload before each judge: the organ's own judging reuses the slot */
+                xo_load_from_decode()
+                let a : i64 = xo_law_holds(p, 0i64)
+                xo_load_from_decode()
+                let b : i64 = law_holds_cli(p)
+                if a != b {
+                    ps("JUDGE TWO-PATH DISAGREES at step " as u64)  pu(s)
+                    ps(" law " as u64)  pu(p)  putchar(10i32)
+                    return 6u64
+                }
+                checked = checked + 1u64
+                p = p + 1u64
+            }
+            s = s + 613u64
+        }
+    }
+    ps("JUDGE TWO-PATH: " as u64)  pu(checked)
+    ps(" (structure, law) verdicts agree (independent eval; shared decode -- named)\n" as u64)
+    /* ARM 4: canon <-> profile consistency at n=3 (mog: the independent lens).
+     * A relabeled table must keep BOTH the canonical fold and the mog profile;
+     * distinct profiles must have distinct canonical folds. */
+    let mut j : u64 = 0u64
+    let mut lastp : i64 = 0i64 - 1i64
+    let mut lastc : u64 = 0u64
+    let mut rounds : u64 = 0u64
+    while j < 64u64 {
+        let idx : u64 = (j * 6151u64) % 19683u64
+        xo_load(3i64, idx)
+        let c1 : u64 = xo_canon_fold()
+        /* relabel by the 3-cycle (0 1 2): t'(x,y) = s(t(is x, is y)) */
+        var tt : [i64; 16]
+        let mut x : i64 = 0i64
+        while x < 3i64 {
+            let mut y : i64 = 0i64
+            while y < 3i64 {
+                let sx : i64 = (x + 2i64) % 3i64      /* inverse of +1 mod 3 */
+                let sy : i64 = (y + 2i64) % 3i64
+                tt[((x * 3i64) + y) as u64] = (xo_get(sx, sy) + 1i64) % 3i64
+                y = y + 1i64
+            }
+            x = x + 1i64
+        }
+        /* index of the relabeled table */
+        let mut idx2 : u64 = 0u64
+        let mut c : i64 = 8i64
+        while c >= 0i64 {
+            idx2 = (idx2 * 3u64) + (tt[c as u64] as u64)
+            c = c - 1i64
+        }
+        xo_load(3i64, idx2)
+        let c2f : u64 = xo_canon_fold()
+        if c1 != c2f {
+            ps("CANON BROKEN: relabeled table changed canonical fold at idx " as u64)  pu(idx)  putchar(10i32)
+            return 6u64
+        }
+        mog_load_forge(idx as i64, 3i64)
+        let p1 : i64 = mog_profile()
+        mog_load_forge(idx2 as i64, 3i64)
+        let p2 : i64 = mog_profile()
+        if p1 != p2 {
+            ps("PROFILE LENS DISAGREES with relabeling at idx " as u64)  pu(idx)  putchar(10i32)
+            return 6u64
+        }
+        /* contrapositive tooth: distinct profile => distinct canonical fold */
+        if lastp >= 0i64 {
+            if p1 != lastp {
+                if c1 == lastc {
+                    ps("CANON UNSOUND: distinct profiles share a canonical fold\n" as u64)
+                    return 6u64
+                }
+            }
+        }
+        lastp = p1
+        lastc = c1
+        rounds = rounds + 1u64
+        j = j + 1u64
+    }
+    ps("CANON <-> PROFILE LENS: " as u64)  pu(rounds)
+    ps(" relabel rounds consistent (mog: independent iso-invariant)\n" as u64)
+    /* ARM 4b: hom-witness verification -- the organ's capture claim re-checked
+     * by INDEPENDENT CLI code: read the witness map and confirm it really is a
+     * homomorphism into the live anchor.  A hom search that returns count > 0
+     * with a broken witness reddens here. */
+    let ak : i64 = xo_anchor()
+    let mut ws : u64 = 11u64
+    let mut wdone : u8 = 0u8
+    while ws < 600u64 {
+        if wdone == 1u8 { ws = 600u64 } else {
+            if xo_decode(ws) != 0i64 { ws = 600u64 } else {
+                xo_load(xo_dec_n(), xo_dec_i())
+                let hc : i64 = xo_hom_count()
+                if hc > 0i64 {
+                    let n2 : i64 = xo_n()
+                    let mut x2 : i64 = 0i64
+                    while x2 < n2 {
+                        let mut y2 : i64 = 0i64
+                        while y2 < n2 {
+                            let lhs : i64 = xo_hom_witness(xo_get(x2, y2))
+                            let rhs : i64 = so_get(xo_hom_witness(x2), xo_hom_witness(y2))
+                            if lhs != rhs {
+                                ps("HOM WITNESS BROKEN at step " as u64)  pu(ws)  putchar(10i32)
+                                return 6u64
+                            }
+                            y2 = y2 + 1i64
+                        }
+                        x2 = x2 + 1i64
+                    }
+                    ps("HOM WITNESS: organ capture at step " as u64)  pu(ws)
+                    ps(" re-verified cell-by-cell against the anchor (k=" as u64)  pd(ak)
+                    ps(")\n" as u64)
+                    wdone = 1u8
+                }
+                ws = ws + 7u64
+            }
+        }
+    }
+    if wdone == 0u8 { ps("HOM WITNESS: no capture in the sample window (named; arm skipped)\n" as u64) }
+    /* ARM 5: replay determinism */
+    xo_reset()
+    xo_anchor()
+    xo_sweep(0u64, fuel, 24i64)
+    let cert1 : u64 = xo_cert()
+    xo_reset()
+    xo_anchor()
+    xo_sweep(0u64, fuel, 24i64)
+    let cert2 : u64 = xo_cert()
+    if cert1 != cert2 {
+        ps("NONDETERMINISM: replay cert differs\n" as u64)
+        return 8u64
+    }
+    ps("REPLAY: two sweeps at fuel " as u64)  pu(fuel)
+    ps(" fold to the same XENO_CERT = 0x" as u64)  phx(cert1)  putchar(10i32)
+    /* ARM 6: vacuity refusal */
+    xo_reset()
+    let z : u64 = xo_sweep(0u64, 0u64, 0i64)
+    if z != 0u64 { ps("VACUITY ARM BROKEN: zero fuel minted\n" as u64)  return 6u64 }
+    if xo_cert() != 0u64 { ps("VACUITY ARM BROKEN: zero-work cert nonzero\n" as u64)  return 6u64 }
+    ps("VACUITY: zero fuel mints nothing and certifies nothing (refusal intact)\n" as u64)
+    ps("ALL ARMS GREEN\n" as u64)
+    return 0u64
+}
+
+/* reload the structure xo_decode most recently selected (helper for ARM 3) */
+var CKN : i64 = 0i64
+var CKI : u64 = 0u64
+fn xo_load_from_decode() -> i32 {
+    return xo_load(CKN, CKI)
+}
+
+/* ---- the ISA face: print a term of the MEASURED menu ---- */
+fn pop_name(o: i64) {
+    if o == 0i64 { ps("and" as u64)  return }
+    if o == 1i64 { ps("or" as u64)   return }
+    if o == 2i64 { ps("xor" as u64)  return }
+    if o == 3i64 { ps("add" as u64)  return }
+    if o == 4i64 { ps("sub" as u64)  return }
+    if o == 5i64 { ps("mul" as u64)  return }
+    if o == 6i64 { ps("shl" as u64)  return }
+    if o == 7i64 { ps("shr" as u64)  return }
+    if o == 8i64 { ps("PDEP" as u64) return }
+    ps("PEXT" as u64)
+}
+fn pvar(v: i64) { if v == 0i64 { putchar(120i32) } else { putchar(121i32) } }
+fn piterm(t: i64) {
+    let o : i64 = xi_term_op(t)
+    if o < 0i64 { pvar(xi_term_l(t))  return }
+    let d : i64 = xi_term_depth(t)
+    pop_name(o)
+    putchar(40i32)
+    if d == 1i64 {
+        pvar(xi_term_l(t))  putchar(44i32)  pvar(xi_term_r(t))
+    } else {
+        if d == 2i64 { piterm(xi_term_l(t))  putchar(44i32)  pvar(xi_term_r(t)) }
+        else         { pvar(xi_term_l(t))    putchar(44i32)  piterm(xi_term_r(t)) }
+    }
+    putchar(41i32)
+}
+
+fn cmd_isa() -> u64 {
+    let nops : i64 = xi_menu()
+    ps("== THE ALGEBRA OF THIS DIE'S OWN INSTRUCTIONS ==\n" as u64)
+    ps("die (CPUID facts): vendor=" as u64)  phx(xi_die_fact(0u64))
+    ps("/" as u64)  phx(xi_die_fact(1u64))
+    ps("/" as u64)  phx(xi_die_fact(2u64))
+    ps("  fms=" as u64)  phx(xi_die_fact(3u64))
+    ps("  featword=" as u64)  phx(xi_die_fact(7u64))  putchar(10i32)
+    /* the live CPUID feature summary -- the same word the atom menu is gated on;
+     * printed so the die's capability signature is on the record beside the caps. */
+    ps("cpufeat summary  = 0x" as u64)  phx(xi_feature_word())  putchar(10i32)
+    ps("measured caps    = 0x" as u64)  phx(xi_caps())
+    ps("   menu ops = " as u64)  pd(nops)
+    if (xi_caps() & 1u64) == 1u64 {
+        ps("  (BMI2 PRESENT: PDEP/PEXT are in the signature)\n" as u64)
+    } else {
+        ps("  (no BMI2: PDEP/PEXT ABSENT -- this die has a different theory)\n" as u64)
+    }
+    /* the electrons answer, live -- not a model of the instruction */
+    ps("live issue: PDEP(0x12345678,0xF0F0F0F0) = 0x" as u64)  phx(xi_pdep(305419896u64, 4042322160u64))
+    ps("  PEXT(0xAA,0xAA) = 0x" as u64)  phx(xi_pext(170u64, 170u64))  putchar(10i32)
+    let nt : i64 = xi_nterms()
+    let held : i64 = xi_sweep()
+    ps("terms (depth<=2, canonical order) = " as u64)  pd(nt)
+    if xi_trunc() > 0i64 { ps("  [ceiling refused " as u64)  pd(xi_trunc())  ps(" more -- named envelope]" as u64) }
+    putchar(10i32)
+    ps("distinct behaviours (classes) = " as u64)  pd(xi_nclass())
+    ps("   IDENTITIES HELD by TOTAL exhaustion of all 65,536 (x,y) = " as u64)  pd(held)  putchar(10i32)
+    ps("ISA_CERT = 0x" as u64)  phx(xi_cert())  putchar(10i32)
+    /* the identities that exist ONLY because this die carries BMI2 */
+    ps("-- identities naming THIS DIE'S BMI2 instructions (they do not exist on a die without) --\n" as u64)
+    let mut k : i64 = 0i64
+    let mut shown : i64 = 0i64
+    let mut nb : i64 = 0i64
+    while k < nt {
+        if xi_rep(k) >= 0i64 {
+            if xi_is_bmi2_law(k) == 1i64 {
+                nb = nb + 1i64
+                if shown < 32i64 {
+                    ps("  " as u64)  piterm(k)
+                    ps("  =  " as u64)  piterm(xi_rep(k))
+                    putchar(10i32)
+                    shown = shown + 1i64
+                }
+            }
+        }
+        k = k + 1i64
+    }
+    ps("   (BMI2-dependent identities held: " as u64)  pd(nb)  ps(")\n" as u64)
+    /* self-audit: the held-count accessor agrees with the sweep, and the EXACT
+     * resolver (the anti-collision comparator) can tell two different terms apart
+     * and keeps the disagreement point -- the read-heads the census stands on. */
+    if xi_nheld() != held { ps("INTERNAL: held-count accessor disagrees with the sweep\n" as u64)  return 6u64 }
+    if xi_same(0i64, 1i64) == 1i64 { ps("INTERNAL: the resolver thinks x == y\n" as u64)  return 6u64 }
+    ps("exact resolver: x != y, first witnessed at (x=0x" as u64)  phx(xi_wit_x())
+    ps(", y=0x" as u64)  phx(xi_wit_y())  ps(")\n" as u64)
+    /* THE SUBSTRATE FALSIFIER: force the base-8 ALU and re-census.  The theory MUST
+     * shrink -- if a die's measured menu does not change its theory, the theory was
+     * authored, not measured, and this tool refuses. */
+    let h8 : i64 = xi_sweep_base8()
+    ps("-- substrate falsifier --\n" as u64)
+    ps("   theory on the MEASURED menu (" as u64)  pd(nops)  ps(" ops) = " as u64)  pd(held)  ps(" identities\n" as u64)
+    ps("   theory on a forced base-8 ALU     = " as u64)  pd(h8)  ps(" identities\n" as u64)
+    if nops == 8i64 {
+        ps("   this die has no BMI2: the two menus coincide; substrate-variance NOT demonstrable here (named)\n" as u64)
+        return 0u64
+    }
+    if held == h8 {
+        ps("   REFUSED: the measured menu did not change the theory => authored, not measured\n" as u64)
+        return 2u64
+    }
+    ps("   DISTINCT: this die's instruction set yields a strictly different theory (+" as u64)
+    pd(held - h8)
+    ps(" identities that do not exist without its BMI2 silicon)\n" as u64)
+    ps("NOVELTY: NOT CLAIMED and NOT ADJUDICATED -- these are measured identities of this\n" as u64)
+    ps("  die's instruction algebra; whether any is new to humanity is an eidolon question\n" as u64)
+    ps("  that has NOT been run.  'No human named it' is not evidence and is not asserted.\n" as u64)
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 {
+        ps("iii-xeno fair <N> | census <n> | anchor <lawfuel> | sweep <fuel> <lawfuel> | check <fuel> | isa\n" as u64)
+        return 1u64
+    }
+    let av  : *u64 = argv as *u64
+    let cmd : u64  = av[1u64]
+    if streq(cmd, "fair" as u64) == 1u32 {
+        if argc < 3i32 { return 1u64 }
+        return cmd_fair(parse_u64(av[2u64]))
+    }
+    if streq(cmd, "census" as u64) == 1u32 {
+        if argc < 3i32 { return 1u64 }
+        return cmd_census(parse_u64(av[2u64]) as i64)
+    }
+    if streq(cmd, "anchor" as u64) == 1u32 {
+        if argc < 3i32 { return 1u64 }
+        return cmd_anchor(parse_u64(av[2u64]) as i64)
+    }
+    if streq(cmd, "sweep" as u64) == 1u32 {
+        if argc < 4i32 { return 1u64 }
+        return cmd_sweep(parse_u64(av[2u64]), parse_u64(av[3u64]))
+    }
+    if streq(cmd, "check" as u64) == 1u32 {
+        if argc < 3i32 { return 1u64 }
+        return cmd_check(parse_u64(av[2u64]))
+    }
+    if streq(cmd, "isa" as u64) == 1u32 { return cmd_isa() }
+    ps("iii-xeno: unknown command\n" as u64)
+    return 1u64
+}

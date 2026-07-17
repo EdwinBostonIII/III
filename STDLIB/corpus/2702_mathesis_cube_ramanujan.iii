@@ -58,6 +58,10 @@ fn main() -> u64 {
     SCN = mrc_count()   STD = mrc_tested()   SBX = mrc_box()
     putchar(83i32) putchar(58i32) sp() e_i64(SEQ) sp() e_i64(SCN) sp() e_i64(STD) sp() e_i64(SBX) nl()
     if SEQ < 1i64 { return 12u64 }
+    /* the equality-count read-head: the equalities the sweep found are a bounded subset
+     * of the candidates it tested -- 0 <= mrc_equal_count() <= mrc_tested(). */
+    if mrc_equal_count() < 0i64 { return 13u64 }
+    if mrc_equal_count() > STD { return 13u64 }
     if SCN < SEQ { return 12u64 }
     if STD != SCN { return 12u64 }              /* every judged survivor recorded, none dropped */
     RAM = 0i64

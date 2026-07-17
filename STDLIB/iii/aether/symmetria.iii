@@ -1,0 +1,431 @@
+/* aether/symmetria.iii -- THE CONSERVATION WORLDS: the closed reversible
+ * algebras of THIS die, saturated to proof and graded by measured friction.
+ *
+ * WHAT THIS ORGAN IS.  The reversibility kernel finds single operations that
+ * conserve information (bijections).  This organ is the next rung of being:
+ * it registers the WORLDS those operations generate -- sets of operations
+ * CLOSED under composition, where no sequence of steps can ever lose a bit.
+ * Mathematically each world is a finite GROUP: the saturation itself is the
+ * proof (a finite set of bijections closed under composition contains the
+ * identity and, because every element has finite order, every inverse --
+ * g^-1 = g^(ord-1) is inside).  Nothing is assumed: closure is reached by
+ * exhaustive composition over EXACT 256-byte value tables, never by hash.
+ *
+ * THE PRE-STATED GLOBAL CRITERIA (the fairness law -- declared BEFORE any
+ * run, so no space is authored around a target):
+ *   POOL      the generator pool is the FIRST SY_PMAX distinct non-identity
+ *             bijections met walking isa_ontogenesis's fair term enumeration
+ *             (sizes 1..3, index order) with the second operand y swept over
+ *             the fixed declared list SY_YV -- the same sweep discipline as
+ *             the reversibility hunt.  No operation is hand-picked.
+ *   TRUTH     a pool candidate must be bijective at W=8 (exhaustive over all
+ *             256 inputs on TRUE mod-2^8 semantics, via the reversibility
+ *             kernel's own walker rv_table8) AND width-stable (bijective
+ *             again at W=13 by exhaustion, rv_bij13) -- width artifacts are
+ *             dropped and counted.
+ *   WORLDS    systematic arm: EVERY unordered generator pair {i,j} is
+ *             saturated (complete coverage -- nothing favored).  A world
+ *             whose order exceeds SY_GMAX is reported OPEN, never claimed.
+ *   DREAM     oneiric arm: generator TRIPLES {i,j,k} are drawn by a seeded
+ *             splitmix64 stream (the seed is the die's own contingency,
+ *             fr_moment, unless the caller pins one for replay) from the SAME
+ *             pool.  Nondeterminism lives ONLY in generation; the prover
+ *             (saturation) is the same sovereign engine.  A dream world is
+ *             marked by provenance, never by a different standard of proof.
+ *   GRADE     each generator's shape floor is MEASURED through the friction
+ *             judge (a self-race: the invariance leg is trivially true, the
+ *             ledger still measures the route on this die); a world's grade
+ *             is the sum of its generators' floors.  Per the PHYSIS theorem
+ *             the atoms' cost is value-invariant, so a shape floor is valid
+ *             for every parameter binding.  A refused meter is recorded as
+ *             UNMEASURED (sentinel), never invented.
+ *
+ * WHAT IS CLAIMED.  Orders, involution cores, abelian-ness: PROVEN (exact
+ * saturation).  Floors: MEASURED (die x binary x load facts -- METER-CONTEXT
+ * LAW).  The catalog of finite groups is old mathematics; the sovereign
+ * content is WHICH worlds this die's fair term-space affords and at WHAT
+ * measured cost -- SOVEREIGN/FIRST-COMPUTED, never claimed NOVEL upstream of
+ * adjudication.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes reversibility (the lent
+ * walker), isa_ontogenesis (fair enumeration), isa_friction_judge (the
+ * measured ledger).  Consumed by the iii-substrate symmetry verb. */
+module aether_symmetria
+
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_tcount(m: i64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn rv_table8(ser_addr: u64, len: u64, yv: u64, out_addr: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_bij13(ser_addr: u64, len: u64, yv: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn fj_race_sers(pa: u64, la: u64, pb: u64, lb: u64, reps: u64, trials: i64) -> i64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_lhs_floor() -> u64 from "isa_friction_judge.iii"
+
+const SY_SENT : u64 = 18446744073709551615u64
+const SY_PMAX : u64 = 24u64        /* generator pool cap (the fair-order prefix)         */
+const SY_GMAX : u64 = 2048u64      /* world order cap -- beyond it the closure is OPEN   */
+const SY_SMAX : u64 = 64u64        /* distinct world signatures kept                     */
+const SY_NY   : u64 = 12u64
+
+/* the declared second-operand sweep (shift amounts / small constants) */
+var SY_YV : [u64; 12] = [1u64, 2u64, 3u64, 4u64, 5u64, 6u64, 7u64, 8u64, 9u64, 11u64, 13u64, 15u64]
+
+/* ---- the generator pool ---- */
+var SY_PT   : [u8; 6144]           /* SY_PMAX x 256 exact value tables      */
+var SY_PSER : [u8; 768]            /* SY_PMAX x 32 serialized terms         */
+var SY_PLEN : [u64; 24]
+var SY_PY   : [u64; 24]
+var SY_PFLR : [u64; 24]            /* measured shape floor; SY_SENT = meter refused */
+var SY_PN    : u64 = 0u64
+var SY_SCAN  : u64 = 0u64          /* (term, param) candidates examined      */
+var SY_B8    : u64 = 0u64          /* bijections at 2^8 seen (pre-dedupe)    */
+var SY_WDROP : u64 = 0u64          /* bijective at 8 but NOT at 13 (width artifacts, dropped) */
+var SY_SBUF : [u8; 64]
+var SY_MK   : [u8; 256]
+
+/* ---- the world under saturation (exact tables, append-only) ---- */
+var SY_GT   : [u8; 524288]         /* SY_GMAX x 256                          */
+var SY_GH   : [u64; 2048]          /* per-element FNV fingerprint (accelerator ONLY -- equality is always the exact 256-byte compare) */
+var SY_GN   : u64 = 0u64
+var SY_TMP  : [u8; 256]
+var SY_TMP2 : [u8; 256]
+var SY_GIX  : [u64; 3]             /* generator element indices inside SY_GT */
+var SY_GCN  : u64 = 0u64
+
+/* ---- runs + the signature register ---- */
+var SY_RUNS  : u64 = 0u64
+var SY_OPEN  : u64 = 0u64
+var SY_LARGE : u64 = 0u64
+var SY_SIG_ORD : [u64; 64]
+var SY_SIG_INV : [u64; 64]
+var SY_SIG_AB  : [u8; 64]
+var SY_SIG_GI  : [u64; 64]
+var SY_SIG_GJ  : [u64; 64]
+var SY_SIG_GK  : [u64; 64]
+var SY_SIG_PROV : [u8; 64]         /* 0 = systematic first, 1 = the dream reached it first */
+var SY_SIG_FLR : [u64; 64]         /* min summed generator floor over runs hitting this signature */
+var SY_SIG_N   : u64 = 0u64
+var SY_DREAMNEW : u64 = 0u64
+
+fn sy_hash(addr: u64) -> u64 {
+    let p : *u8 = addr as *u8
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u64 = 0u64
+    while i < 256u64 {
+        h = (h ^ (p[i] as u64)) * 1099511628211u64
+        i = i + 1u64
+    }
+    return h
+}
+fn sy_teq(a: u64, b: u64) -> u64 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 256u64 {
+        if pa[i] != pb[i] { return 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+fn sy_gaddr(i: u64) -> u64 { return ((&SY_GT) as u64) + (i * 256u64) }
+fn sy_paddr(i: u64) -> u64 { return ((&SY_PT) as u64) + (i * 256u64) }
+
+/* find the element equal to the table at addr; SY_SENT if absent.  The hash is
+ * only a fast reject -- membership is decided by the exact byte compare. */
+fn sy_find(addr: u64) -> u64 {
+    let h : u64 = sy_hash(addr)
+    let mut i : u64 = 0u64
+    while i < SY_GN {
+        if SY_GH[i] == h { if sy_teq(addr, sy_gaddr(i)) == 1u64 { return i } }
+        i = i + 1u64
+    }
+    return SY_SENT
+}
+/* append the table at addr as a new element; SY_SENT iff the world overflows the cap */
+fn sy_gadd(addr: u64) -> u64 {
+    if SY_GN >= SY_GMAX { return SY_SENT }
+    let src : *u8 = addr as *u8
+    let dst : *u8 = sy_gaddr(SY_GN) as *u8
+    let mut i : u64 = 0u64
+    while i < 256u64 { dst[i] = src[i]   i = i + 1u64 }
+    SY_GH[SY_GN] = sy_hash(addr)
+    SY_GN = SY_GN + 1u64
+    return SY_GN - 1u64
+}
+/* SY_TMP = element bi AFTER element ai (right-multiplication by bi) */
+fn sy_compose(ai: u64, bi: u64) -> i32 {
+    let ta : *u8 = sy_gaddr(ai) as *u8
+    let tb : *u8 = sy_gaddr(bi) as *u8
+    let mut x : u64 = 0u64
+    while x < 256u64 { SY_TMP[x] = tb[(ta[x] as u64)]   x = x + 1u64 }
+    return 0i32
+}
+
+/* ---- SATURATION: the world generated by pool members gi, gj (and gk unless
+ * SY_SENT).  Seeds the identity, inserts the generators, then composes every
+ * element with every generator until NOTHING NEW appears.  The fixpoint IS the
+ * proof of closure; the returned order is exact.  0 = OPEN (cap exceeded --
+ * no claim made). ---- */
+fn sy_saturate(gi: u64, gj: u64, gk: u64) -> u64 {
+    SY_GN = 0u64
+    let idp : *u8 = ((&SY_GT) as u64) as *u8
+    let mut x : u64 = 0u64
+    while x < 256u64 { idp[x] = x as u8   x = x + 1u64 }
+    SY_GH[0u64] = sy_hash((&SY_GT) as u64)
+    SY_GN = 1u64
+    SY_GCN = 0u64
+    let mut s : u64 = 0u64
+    while s < 3u64 {
+        let mut pick : u64 = SY_SENT
+        if s == 0u64 { pick = gi }
+        if s == 1u64 { pick = gj }
+        if s == 2u64 { pick = gk }
+        if pick != SY_SENT {
+            let src : *u8 = sy_paddr(pick) as *u8
+            let mut c : u64 = 0u64
+            while c < 256u64 { SY_TMP2[c] = src[c]   c = c + 1u64 }
+            let mut at : u64 = sy_find((&SY_TMP2) as u64)
+            if at == SY_SENT { at = sy_gadd((&SY_TMP2) as u64) }
+            if at == SY_SENT { return 0u64 }
+            SY_GIX[SY_GCN] = at
+            SY_GCN = SY_GCN + 1u64
+        }
+        s = s + 1u64
+    }
+    let mut p : u64 = 0u64
+    while p < SY_GN {
+        let mut c : u64 = 0u64
+        while c < SY_GCN {
+            sy_compose(p, SY_GIX[c])
+            if sy_find((&SY_TMP) as u64) == SY_SENT {
+                if sy_gadd((&SY_TMP) as u64) == SY_SENT { return 0u64 }
+            }
+            c = c + 1u64
+        }
+        p = p + 1u64
+    }
+    return SY_GN
+}
+/* the involution core: elements with e o e == identity (PROVEN per element) */
+fn sy_invols() -> u64 {
+    let mut n : u64 = 0u64
+    let mut e : u64 = 0u64
+    while e < SY_GN {
+        sy_compose(e, e)
+        if sy_teq((&SY_TMP) as u64, (&SY_GT) as u64) == 1u64 { n = n + 1u64 }
+        e = e + 1u64
+    }
+    return n
+}
+/* abelian iff every generator pair commutes (generators commute => the whole
+ * generated group is abelian -- the standard argument, applied to exact tables) */
+fn sy_abelian() -> u64 {
+    let mut a : u64 = 0u64
+    while a < SY_GCN {
+        let mut b : u64 = a + 1u64
+        while b < SY_GCN {
+            sy_compose(SY_GIX[a], SY_GIX[b])
+            let mut x : u64 = 0u64
+            while x < 256u64 { SY_TMP2[x] = SY_TMP[x]   x = x + 1u64 }
+            sy_compose(SY_GIX[b], SY_GIX[a])
+            if sy_teq((&SY_TMP) as u64, (&SY_TMP2) as u64) != 1u64 { return 0u64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return 1u64
+}
+/* SENT-propagating grade: the sum of the generators' measured floors */
+fn sy_world_floor(gi: u64, gj: u64, gk: u64) -> u64 {
+    let mut f : u64 = 0u64
+    if SY_PFLR[gi] == SY_SENT { return SY_SENT }
+    f = f + SY_PFLR[gi]
+    if SY_PFLR[gj] == SY_SENT { return SY_SENT }
+    f = f + SY_PFLR[gj]
+    if gk != SY_SENT {
+        if SY_PFLR[gk] == SY_SENT { return SY_SENT }
+        f = f + SY_PFLR[gk]
+    }
+    return f
+}
+/* register a proven world's signature (order x involution-core x abelian).
+ * A repeat keeps the MIN floor; a first reach by the dream is counted. */
+fn sy_sig_note(ord: u64, inv: u64, ab: u64, gi: u64, gj: u64, gk: u64, prov: u64, flr: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < SY_SIG_N {
+        if SY_SIG_ORD[i] == ord { if SY_SIG_INV[i] == inv { if (SY_SIG_AB[i] as u64) == ab {
+            if flr < SY_SIG_FLR[i] { SY_SIG_FLR[i] = flr }
+            return 0u64
+        } } }
+        i = i + 1u64
+    }
+    if SY_SIG_N >= SY_SMAX { return 0u64 }
+    SY_SIG_ORD[SY_SIG_N] = ord
+    SY_SIG_INV[SY_SIG_N] = inv
+    SY_SIG_AB[SY_SIG_N] = ab as u8
+    SY_SIG_GI[SY_SIG_N] = gi
+    SY_SIG_GJ[SY_SIG_N] = gj
+    SY_SIG_GK[SY_SIG_N] = gk
+    SY_SIG_PROV[SY_SIG_N] = prov as u8
+    SY_SIG_FLR[SY_SIG_N] = flr
+    SY_SIG_N = SY_SIG_N + 1u64
+    if prov == 1u64 { SY_DREAMNEW = SY_DREAMNEW + 1u64 }
+    return 1u64
+}
+/* one saturation run, recorded honestly (OPEN counted, proven noted) */
+fn sy_world_run(gi: u64, gj: u64, gk: u64, prov: u64) -> i32 {
+    let ord : u64 = sy_saturate(gi, gj, gk)
+    SY_RUNS = SY_RUNS + 1u64
+    if ord == 0u64 { SY_OPEN = SY_OPEN + 1u64   return 0i32 }
+    if ord > SY_LARGE { SY_LARGE = ord }
+    let inv : u64 = sy_invols()
+    let ab : u64 = sy_abelian()
+    let flr : u64 = sy_world_floor(gi, gj, gk)
+    sy_sig_note(ord, inv, ab, gi, gj, gk, prov, flr)
+    return 0i32
+}
+
+/* ---- the pool scan: the fair-order prefix of width-stable bijections ---- */
+fn sy_pool_try(len: u64, yv: u64) -> i32 {
+    SY_SCAN = SY_SCAN + 1u64
+    if rv_table8((&SY_SBUF) as u64, len, yv, (&SY_TMP) as u64) != 1u64 { return 0i32 }
+    let mut x : u64 = 0u64
+    while x < 256u64 { SY_MK[x] = 0u8   x = x + 1u64 }
+    x = 0u64
+    while x < 256u64 {
+        let v : u64 = SY_TMP[x] as u64
+        if SY_MK[v] != 0u8 { return 0i32 }
+        SY_MK[v] = 1u8
+        x = x + 1u64
+    }
+    SY_B8 = SY_B8 + 1u64
+    /* the identity generates nothing -- excluded by the declared criteria */
+    let mut idf : u64 = 1u64
+    x = 0u64
+    while x < 256u64 { if SY_TMP[x] != (x as u8) { idf = 0u64 }   x = x + 1u64 }
+    if idf == 1u64 { return 0i32 }
+    /* dedupe: the pool keeps one representative per PERMUTATION (first in fair order) */
+    let mut i : u64 = 0u64
+    while i < SY_PN {
+        if sy_teq((&SY_TMP) as u64, sy_paddr(i)) == 1u64 { return 0i32 }
+        i = i + 1u64
+    }
+    /* width-stability: bijective again at W=13, by exhaustion */
+    if rv_bij13((&SY_SBUF) as u64, len, yv) != 1u64 { SY_WDROP = SY_WDROP + 1u64   return 0i32 }
+    let dst : *u8 = sy_paddr(SY_PN) as *u8
+    x = 0u64
+    while x < 256u64 { dst[x] = SY_TMP[x]   x = x + 1u64 }
+    let sd : *u8 = (((&SY_PSER) as u64) + (SY_PN * 32u64)) as *u8
+    x = 0u64
+    while x < len { sd[x] = SY_SBUF[x]   x = x + 1u64 }
+    SY_PLEN[SY_PN] = len
+    SY_PY[SY_PN] = yv
+    SY_PFLR[SY_PN] = SY_SENT
+    SY_PN = SY_PN + 1u64
+    return 0i32
+}
+fn sy_pool_scan(scan_cap: u64) -> i32 {
+    ia_init()
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= 3i64 { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    let mut t : u64 = 0u64
+    while t < prefix {
+        if SY_PN < SY_PMAX { if SY_SCAN < scan_cap {
+            let len : u64 = ia_term_ser(t, (&SY_SBUF) as u64)
+            if len > 0u64 { if len <= 31u64 {
+                let mut yi : u64 = 0u64
+                while yi < SY_NY {
+                    if SY_PN < SY_PMAX { if SY_SCAN < scan_cap { sy_pool_try(len, SY_YV[yi]) } }
+                    yi = yi + 1u64
+                }
+            } }
+        } }
+        t = t + 1u64
+    }
+    return 0i32
+}
+/* ---- the measured grade: each generator's shape floor through the friction
+ * judge (self-race -- the invariance leg is trivially true; the ledger still
+ * measures the route).  A refusal is recorded as SENT, never invented. ---- */
+fn sy_grade_pool() -> i32 {
+    let mut i : u64 = 0u64
+    while i < SY_PN {
+        let pa : u64 = ((&SY_PSER) as u64) + (i * 32u64)
+        let v : i64 = fj_race_sers(pa, SY_PLEN[i], pa, SY_PLEN[i], 2u64, 5i64)
+        if v >= 1i64 { if v <= 3i64 { SY_PFLR[i] = fj_lhs_floor() } }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn sy_systematic() -> i32 {
+    let mut i : u64 = 0u64
+    while i < SY_PN {
+        let mut j : u64 = i + 1u64
+        while j < SY_PN {
+            sy_world_run(i, j, SY_SENT, 0u64)
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+var SY_MIXS : u64 = 0u64
+fn sy_mix() -> u64 {
+    SY_MIXS = SY_MIXS + 11400714819323198485u64
+    let mut z : u64 = SY_MIXS
+    z = (z ^ (z >> 30u64)) * 13787848793156543929u64
+    z = (z ^ (z >> 27u64)) * 10723151780598845931u64
+    return z ^ (z >> 31u64)
+}
+fn sy_dream(fuel: u64, seed: u64) -> i32 {
+    if SY_PN < 3u64 { return 0i32 }
+    SY_MIXS = seed
+    let mut n : u64 = 0u64
+    while n < fuel {
+        let i : u64 = sy_mix() % SY_PN
+        let j : u64 = sy_mix() % SY_PN
+        let k : u64 = sy_mix() % SY_PN
+        if i != j { if j != k { if i != k {
+            sy_world_run(i, j, k, 1u64)
+        } } }
+        n = n + 1u64
+    }
+    return 0i32
+}
+
+/* ---- THE RUN: pool -> grade -> systematic pairs (complete) -> dream triples
+ * (contingent).  Returns the count of PROVEN world signatures. ---- */
+fn sy_run(scan_cap: u64, dreamfuel: u64, seed: u64) -> i64 @export {
+    SY_PN = 0u64    SY_SCAN = 0u64   SY_B8 = 0u64    SY_WDROP = 0u64
+    SY_RUNS = 0u64  SY_OPEN = 0u64   SY_LARGE = 0u64
+    SY_SIG_N = 0u64 SY_DREAMNEW = 0u64
+    sy_pool_scan(scan_cap)
+    if SY_PN < 2u64 { return 0i64 }
+    sy_grade_pool()
+    sy_systematic()
+    sy_dream(dreamfuel, seed)
+    return SY_SIG_N as i64
+}
+
+/* ---- the readers (the verb's whole surface) ---- */
+fn sy_pool_n() -> u64 @export { return SY_PN }
+fn sy_scanned() -> u64 @export { return SY_SCAN }
+fn sy_bij8() -> u64 @export { return SY_B8 }
+fn sy_width_dropped() -> u64 @export { return SY_WDROP }
+fn sy_runs() -> u64 @export { return SY_RUNS }
+fn sy_open() -> u64 @export { return SY_OPEN }
+fn sy_largest() -> u64 @export { return SY_LARGE }
+fn sy_sig_n() -> u64 @export { return SY_SIG_N }
+fn sy_sig_order(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_ORD[i] }  return 0u64 }
+fn sy_sig_invol(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_INV[i] }  return 0u64 }
+fn sy_sig_abelian(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_AB[i] as u64 }  return 0u64 }
+fn sy_sig_gi(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_GI[i] }  return 0u64 }
+fn sy_sig_gj(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_GJ[i] }  return 0u64 }
+fn sy_sig_gk(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_GK[i] }  return SY_SENT }
+fn sy_sig_prov(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_PROV[i] as u64 }  return 0u64 }
+fn sy_sig_floor(i: u64) -> u64 @export { if i < SY_SIG_N { return SY_SIG_FLR[i] }  return SY_SENT }
+fn sy_dream_new() -> u64 @export { return SY_DREAMNEW }
+fn sy_pool_len(i: u64) -> u64 @export { if i < SY_PN { return SY_PLEN[i] }  return 0u64 }
+fn sy_pool_byte(i: u64, j: u64) -> u8 @export { if i < SY_PN { if j < 32u64 { return SY_PSER[(i * 32u64) + j] } }  return 0u8 }
+fn sy_pool_y(i: u64) -> u64 @export { if i < SY_PN { return SY_PY[i] }  return 0u64 }
+fn sy_pool_floor(i: u64) -> u64 @export { if i < SY_PN { return SY_PFLR[i] }  return SY_SENT }

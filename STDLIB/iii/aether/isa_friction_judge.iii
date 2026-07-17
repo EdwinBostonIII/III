@@ -1,0 +1,239 @@
+/* aether/isa_friction_judge.iii -- INCREMENT 2 OF THE FRICTION LOGOS:
+ * THE PHYSICAL SHORTCUT JUDGE.  A discovered identity's utility stops being a
+ * node count and becomes a MEASURED direction of rewrite on the live die.
+ *
+ * WHAT THIS ORGAN DOES: for an enumerated law p of the ISA ontogenesis (terms
+ * over {x, y} and the LIVE CPUID-gated atoms, executing as the real
+ * instructions), it
+ *   (1) RE-PROVES the law's invariance over the organ's whole published
+ *       battery THROUGH ITS OWN WALKER -- this file carries an independent
+ *       term evaluator over the EXPORTED atom doors (ia_apply1/ia_apply2), so
+ *       the invariance gate does not trust the discoverer's judge;
+ *   (2) only then RACES lhs vs rhs through omnia/friction (alternating laps,
+ *       min-floor, honesty band, refusal class);
+ *   (3) returns THE DIRECTION OF REWRITE: which side is the canonical route
+ *       on THIS silicon, or INDISTINGUISHABLE (true but physically inert), or
+ *       REFUSED (starved / unproven -- friction is NEVER consulted on a claim
+ *       that failed the truth leg: the lexicographic law, in code).
+ *
+ * THE ARCHITECTURAL SHIFT (charter: III-ENTELECHEIA-MAP SS Ε5, Increment 2):
+ * a survivor law with verdict 1/2 is a PHYSICAL SHORTCUT -- the dearer side is
+ * flagged for demotion and the cheaper side is the rewrite target; a survivor
+ * with verdict 3 is true-but-inert weight (kept as mathematics, never as an
+ * optimization).  Verdicts are facts ABOUT A DIE and any seal must name it.
+ *
+ * SENTINEL DISCIPLINE (the unarmed-witness class, found 4x on 2026-07-16):
+ * every witness/direction register here initializes to -1/NO-CLAIM and is
+ * re-armed at each judgment's entry; refusals are counted by class.
+ *
+ * NIH: composes omnia/friction (the ledger) + aether/isa_ontogenesis (the
+ * atoms, battery, law enumeration -- all via its EXPORTED doors only).
+ * Hexad: kind_motion.  Ring: R0. */
+module aether_isa_friction_judge
+
+extern @abi(c-msvc-x64) fn fr_reset(iters: u64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_begin() -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_end(side: i64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_verdict() -> i64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_floor(side: i64) -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_margin() -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_band() -> u64 from "friction.iii"
+
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_battery() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_battery_size() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_battery_v(i: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_set(p: u64) -> i32 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_i() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_j() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+
+const FJ_SENT : u64 = 18446744073709551615u64
+
+/* ---- the independent walker: preorder ser bytes -> value, atoms via the
+ * EXPORTED doors (the real instructions).  0 = x, 1 = y, k >= 2 = atom k-2. ---- */
+var FJ_SER : [u8; 64]
+var FJ_SLN : u64 = 0u64
+var FJ_CUR : u64 = 0u64
+var FJ_VX  : u64 = 0u64
+var FJ_VY  : u64 = 0u64
+var FJ_BAD : i64 = 0i64          /* walker saw a malformed byte stream */
+
+fn fj_walk() -> u64 {
+    if FJ_CUR >= FJ_SLN { FJ_BAD = 1i64   return 0u64 }
+    let b : u8 = FJ_SER[FJ_CUR]
+    FJ_CUR = FJ_CUR + 1u64
+    if b == 0u8 { return FJ_VX }
+    if b == 1u8 { return FJ_VY }
+    let atom : i64 = (b as i64) - 2i64
+    let a : u64 = fj_walk()
+    if ia_atom_arity(atom) == 1i64 { return ia_apply1(atom, a) }
+    let b2 : u64 = fj_walk()
+    return ia_apply2(atom, a, b2)
+}
+
+fn fj_eval_ser(x: u64, y: u64) -> u64 {
+    FJ_CUR = 0u64
+    FJ_VX = x
+    FJ_VY = y
+    return fj_walk()
+}
+
+/* ---- the law under judgment: both sides serialized once ---- */
+var FJ_SA : [u8; 64]
+var FJ_AL : u64 = 0u64
+var FJ_SB : [u8; 64]
+var FJ_BL : u64 = 0u64
+
+fn fj_load_side(sel: i64) -> i32 {
+    let mut i : u64 = 0u64
+    if sel == 0i64 {
+        while i < FJ_AL { FJ_SER[i] = FJ_SA[i]   i = i + 1u64 }
+        FJ_SLN = FJ_AL
+    } else {
+        while i < FJ_BL { FJ_SER[i] = FJ_SB[i]   i = i + 1u64 }
+        FJ_SLN = FJ_BL
+    }
+    return 0i32
+}
+
+/* ---- THE INVARIANCE GATE: the whole published battery, both sides, through
+ * THIS walker.  First disagreement keeps its witness and refuses the race. ---- */
+var FJ_WX : u64 = FJ_SENT        /* invariance-refusal witness (SENT = no claim) */
+var FJ_WY : u64 = FJ_SENT
+var FJ_REF_UNPROVEN : u64 = 0u64 /* races refused: the law failed the truth leg  */
+var FJ_REF_MALFORMED : u64 = 0u64
+
+fn fj_invariant() -> i64 {
+    let n : u64 = ia_battery_size()
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut j : u64 = 0u64
+        while j < n {
+            let x : u64 = ia_battery_v(i)
+            let y : u64 = ia_battery_v(j)
+            fj_load_side(0i64)
+            let a : u64 = fj_eval_ser(x, y)
+            fj_load_side(1i64)
+            let b : u64 = fj_eval_ser(x, y)
+            if FJ_BAD == 1i64 { FJ_REF_MALFORMED = FJ_REF_MALFORMED + 1u64   return 0i64 - 2i64 }
+            if a != b { FJ_WX = x   FJ_WY = y   return 0i64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1i64
+}
+
+/* one measured lap of one side: `reps` full battery^2 sweeps, folded to a sink */
+var FJ_SINK : u64 = 0u64
+
+fn fj_lap(sel: i64, reps: u64) -> i32 {
+    let n : u64 = ia_battery_size()
+    fj_load_side(sel)
+    let mut r : u64 = 0u64
+    while r < reps {
+        let mut i : u64 = 0u64
+        while i < n {
+            let mut j : u64 = 0u64
+            while j < n {
+                FJ_SINK = FJ_SINK ^ fj_eval_ser(ia_battery_v(i), ia_battery_v(j))
+                j = j + 1u64
+            }
+            i = i + 1u64
+        }
+        r = r + 1u64
+    }
+    return 0i32
+}
+
+/* ---- THE JUDGMENT ----
+ * returns  1 LHS cheaper (rhs rewrites to lhs)  |  2 RHS cheaper (lhs -> rhs)
+ *          3 INDISTINGUISHABLE (true, physically inert)
+ *          0 REFUSED-STARVED (ledger)  |  -1 REFUSED-UNPROVEN (truth leg failed)
+ *          -2 REFUSED-MALFORMED (decode)
+ * Direction and floors persist in accessors; every register re-armed here. */
+var FJ_DIR : i64 = 0i64 - 1i64   /* last judgment's direction (-1 = no claim) */
+var FJ_LP  : u64 = 0u64          /* last law index judged */
+
+/* THE RACE CORE, term-addressed (the taxis tier's door): race ANY two term
+ * spellings of the live universe -- truth leg (battery invariance) FIRST and
+ * non-negotiable (two terms that are not the same function on the die REFUSE
+ * as unproven: the order is only ever built over proven-equal spellings),
+ * then the friction leg.  fj_judge is the law-addressed spelling of this. */
+fn fj_race_core(reps: u64, trials: i64) -> i64 {
+    ia_init()
+    ia_battery()
+    FJ_DIR = 0i64 - 1i64
+    FJ_WX = FJ_SENT
+    FJ_WY = FJ_SENT
+    FJ_BAD = 0i64
+    if FJ_AL == 0u64 { FJ_REF_MALFORMED = FJ_REF_MALFORMED + 1u64   return 0i64 - 2i64 }
+    if FJ_BL == 0u64 { FJ_REF_MALFORMED = FJ_REF_MALFORMED + 1u64   return 0i64 - 2i64 }
+    /* THE TRUTH LEG, first and non-negotiable */
+    let inv : i64 = fj_invariant()
+    if inv == (0i64 - 2i64) { return 0i64 - 2i64 }
+    if inv != 1i64 { FJ_REF_UNPROVEN = FJ_REF_UNPROVEN + 1u64   return 0i64 - 1i64 }
+    /* THE FRICTION LEG: alternating laps so drift hits both routes */
+    fr_reset(reps)
+    let mut t : i64 = 0i64
+    while t < trials {
+        fr_lap_begin()
+        fj_lap(0i64, reps)
+        fr_lap_end(0i64)
+        fr_lap_begin()
+        fj_lap(1i64, reps)
+        fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    let v : i64 = fr_verdict()
+    if v == 1i64 { FJ_DIR = 0i64 }        /* canonical route = side 0 (lhs) */
+    if v == 2i64 { FJ_DIR = 1i64 }        /* canonical route = side 1 (rhs) */
+    return v
+}
+fn fj_race_terms(ti: u64, tj: u64, reps: u64, trials: i64) -> i64 @export {
+    ia_init()
+    FJ_AL = ia_term_ser(ti, (&FJ_SA) as u64)
+    FJ_BL = ia_term_ser(tj, (&FJ_SB) as u64)
+    return fj_race_core(reps, trials)
+}
+/* THE SER DOOR (the oneiros tier's meter): race any two SERIALIZED spellings
+ * from caller buffers -- same truth leg, same friction leg, same refusal
+ * classes.  A term's SELF-race (pa == pb) passes the truth leg trivially and
+ * yields its honest measured floor: the single-term meter, through the one
+ * race core, without ever consulting friction on an unproven claim. */
+fn fj_race_sers(pa: u64, la: u64, pb: u64, lb: u64, reps: u64, trials: i64) -> i64 @export {
+    let a : *u8 = pa as *u8
+    let b : *u8 = pb as *u8
+    let mut ca : u64 = la
+    if ca > 60u64 { ca = 0u64 }
+    let mut cb : u64 = lb
+    if cb > 60u64 { cb = 0u64 }
+    let mut i : u64 = 0u64
+    while i < ca { FJ_SA[i] = a[i]   i = i + 1u64 }
+    i = 0u64
+    while i < cb { FJ_SB[i] = b[i]   i = i + 1u64 }
+    FJ_AL = ca
+    FJ_BL = cb
+    return fj_race_core(reps, trials)
+}
+fn fj_judge(p: u64, reps: u64, trials: i64) -> i64 @export {
+    ia_init()
+    FJ_LP = p
+    if ia_law_set(p) != 0i32 { FJ_REF_MALFORMED = FJ_REF_MALFORMED + 1u64   return 0i64 - 2i64 }
+    return fj_race_terms(ia_law_i(), ia_law_j(), reps, trials)
+}
+
+/* ---- accessors (sentinel-armed; a judge that judged nothing claims nothing) ---- */
+fn fj_dir() -> i64 @export { return FJ_DIR }
+fn fj_last_law() -> u64 @export { return FJ_LP }
+fn fj_wit_x() -> u64 @export { return FJ_WX }
+fn fj_wit_y() -> u64 @export { return FJ_WY }
+fn fj_refused_unproven() -> u64 @export { return FJ_REF_UNPROVEN }
+fn fj_refused_malformed() -> u64 @export { return FJ_REF_MALFORMED }
+fn fj_lhs_floor() -> u64 @export { return fr_floor(0i64) }
+fn fj_rhs_floor() -> u64 @export { return fr_floor(1i64) }
+fn fj_sink() -> u64 @export { return FJ_SINK }

@@ -266,8 +266,16 @@ fn mog_product(ia: i64, na: i64, ib: i64, nb: i64) -> i32 @export {
 /* THE PRODUCT LAW over every ordered pair of citizens of carriers (na, nb): tests
  * profile12(A x B) == profile12(A) & profile12(B).  Returns pairs verified, or -(k+1) at the
  * first refutation (witness pair retrievable via the counters). */
-var MOG_PA : i64   var MOG_PB : i64
+/* the product law's REFUTATION witness: the citizen pair it blames.  CONTRACT: -1 = NO
+ * CLAIM.  Table index 0 is a REAL citizen, so a BSS-zero slot reads as "table 0 broke the
+ * law" -- a counterexample that was never found and does not exist.  Armed at every entry
+ * to mog_product_law so the slot only ever speaks for the run that just finished.
+ * (Same defect class as mathesis_rot64's unarmed omega witness, found the same day; gate
+ * 2711 pins it and REDDENED at exit 14 before this line existed.) */
+var MOG_PA : i64 = 0i64 - 1i64   var MOG_PB : i64 = 0i64 - 1i64
 fn mog_product_law(na: i64, nb: i64) -> i64 @export {
+    MOG_PA = 0i64 - 1i64        /* the slot blames no one until THIS run refutes */
+    MOG_PB = 0i64 - 1i64
     let ca : i64 = mog_citizens(na)
     if ca < 1i64 { return 0i64 - 1000000i64 }
     let mut AR : i64 = 0i64

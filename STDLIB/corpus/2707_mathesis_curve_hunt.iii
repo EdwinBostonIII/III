@@ -44,6 +44,9 @@ extern @abi(c-msvc-x64) fn mcv_row_f(i: i64) -> i64 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcx_desc_valid(desc: u64) -> u32 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcx_id_of(desc: u64, out32: u64) -> i32 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcx_chain_round(hmax: i64, dsp: u64, nds: i64) -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcx_chain_len() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_rays() -> i64 from "mathesis_curve.iii"
+extern @abi(c-msvc-x64) fn mcv_trivial() -> i64 from "mathesis_curve.iii"
 extern @abi(c-msvc-x64) fn mcx_head_byte(i: i64) -> u64 from "mathesis_curve.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
@@ -205,6 +208,30 @@ fn main() -> u64 {
     if L1 != 31i64 { return 18u64 }
     if L2 != 31i64 { return 18u64 }
     if HEQ != 1i64 { return 18u64 }
+
+    /* [X] THE CHAIN READ-HEAD: the organ's stored chain length must equal the length
+     * chain_round returned -- stored-vs-returned self-consistency, the class that
+     * caught the rot64 stale witness.  A drift here is an internal defect, refused. */
+    if mcx_chain_len() != L2 { return 19u64 }
+
+    /* [R] THE RAY CENSUS READ-HEADS: a fresh hunt sweeps primitive canonical rays
+     * (mcv_rays) and skips trivial <2-nonzero-component ones (mcv_trivial); the
+     * primitive sweep is NONEMPTY and both counts are DETERMINISTIC across a re-hunt
+     * -- the read-heads report the sweep the finder actually performed, not stale BSS. */
+    mcv_hunt_reset()
+    if mcv_hunt(2i64, 1i64, 60i64) < 0i64 { return 20u64 }
+    let rr1 : i64 = mcv_rays()
+    let tt1 : i64 = mcv_trivial()
+    if rr1 <= 0i64 { return 21u64 }             /* the sweep swept SOME primitive ray */
+    if tt1 < 0i64 { return 21u64 }
+    mcv_hunt_reset()
+    mcv_hunt(2i64, 1i64, 60i64)
+    if mcv_rays() != rr1 { return 22u64 }       /* deterministic: same sweep, same census */
+    if mcv_trivial() != tt1 { return 22u64 }
+    /* the reset really zeroes the read-heads (no state leaks across hunts) */
+    mcv_hunt_reset()
+    if mcv_rays() != 0i64 { return 23u64 }
+    if mcv_trivial() != 0i64 { return 23u64 }
 
     return 99u64
 }

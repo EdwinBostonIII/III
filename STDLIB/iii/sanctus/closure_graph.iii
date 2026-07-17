@@ -1,0 +1,643 @@
+/* STDLIB/iii/sanctus/closure_graph.iii -- ENTELECHEIA Ε3: THE CLOSURE-PIN LAW,
+ * the derivation half.
+ *
+ * closure.iii STORES a claim's sealed 32-byte pin and compares it (constant
+ * time) against a freshly-derived root.  This organ DERIVES that root -- from
+ * the LIVE bytes of exactly the sources that support the claim, so that
+ * touching any one of them reddens the claim's pin.  A pin is trustworthy only
+ * because it is a function of the current source bytes, never a hand-authored
+ * constant (hand-authored closures are how pins lie).
+ *
+ * The convention is the testament tree's, matched byte-for-byte so a closure
+ * root composes with the sealed tree rather than islanding a second scheme:
+ *   leaf(file)  = mhash(the file's live bytes)          -- streaming, unbounded
+ *   root(files) = mhash(leaf_0 ‖ leaf_1 ‖ ... ‖ leaf_{n-1})   -- ordered fold
+ * (testament: hashfile() -> TS_CAT -> tree root).  The fold is NON-NESTED --
+ * every leaf hash completes into the leaf buffer before the root hash begins --
+ * because the mhash context is a single global; nesting would clobber it.
+ *
+ * The ORDER of the file set is the caller's canonical order (the dependency
+ * graph pass sorts by path bytes, as the testament manifest is sorted).  This
+ * organ hashes in the order given; determinism is the caller's contract, the
+ * same contract the testament tree walk keeps.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.  NIH: composes sanctus/mhash;
+ * consumed by closure.closure_claim_* (the pin table) and iii-closure.
+ */
+module sanctus_closure_graph
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+const CG_E_OPEN    : i64 = -1i64
+const CG_E_TOOMANY : i64 = -3i64
+
+const CG_MAX_FILES : u64 = 256u64
+const CG_CHUNK     : u64 = 65536u64
+
+var CG_BUF    : [u8; 65536]     /* streaming read buffer */
+var CG_LEAVES : [u8; 8192]      /* 256 leaves * 32 bytes -- the ordered leaf CAT */
+
+/* Stream the LIVE bytes of the file at path_ptr into a 32-byte mhash leaf at
+ * out_ptr.  Streaming (not a single slurp) means the source bytes are never
+ * held in a form the checker can substitute, and files of any size hash.
+ * Returns bytes read (>= 0; 0 = a legitimately empty source) or CG_E_OPEN
+ * when the file cannot be opened (missing source -> the claim cannot derive). */
+fn closure_graph_file_leaf(path_ptr: u64, out_ptr: u64) -> i64 @export {
+    let f : u64 = fopen(path_ptr, "rb" as u64)
+    if f == 0u64 { return CG_E_OPEN }
+    mhash_begin()
+    let mut total : u64 = 0u64
+    let mut n : u64 = fread((&CG_BUF) as u64, 1u64, CG_CHUNK, f)
+    while n > 0u64 {
+        mhash_payload((&CG_BUF) as u64, n)
+        total = total + n
+        n = fread((&CG_BUF) as u64, 1u64, CG_CHUNK, f)
+    }
+    fclose(f)
+    mhash_final(out_ptr)
+    return total as i64
+}
+
+/* Derive the closure root over `count` source paths (paths_arr is an array of
+ * `count` C-string pointers, argv-shaped, in canonical order) into out_ptr
+ * (32 bytes).  Streams each file's live bytes to an ordered leaf, then folds
+ * the leaf CAT into the root.  Reddens if ANY file's bytes change.
+ * Returns count (>= 0) on success, or negative: CG_E_OPEN (-1) a path was
+ * unreadable, CG_E_TOOMANY (-3) count exceeded CG_MAX_FILES. */
+fn closure_graph_root(paths_arr: u64, count: u64, out_ptr: u64) -> i64 @export {
+    if count > CG_MAX_FILES { return CG_E_TOOMANY }
+    let arr : *u64 = paths_arr as *u64
+    let mut k : u64 = 0u64
+    while k < count {
+        let path_k  : u64 = arr[k]
+        let leaf_ptr: u64 = (&CG_LEAVES as u64) + (k * 32u64)
+        let rd : i64 = closure_graph_file_leaf(path_k, leaf_ptr)
+        if rd < 0i64 { return rd }
+        k = k + 1u64
+    }
+    /* the ordered leaves are all final in CG_LEAVES; fold them into the root */
+    mhash_begin()
+    mhash_payload((&CG_LEAVES) as u64, count * 32u64)
+    mhash_final(out_ptr)
+    return count as i64
+}
+
+/* Byte i (0..31) of the last leaf buffer slot j (for reporting/inspection). */
+fn closure_graph_leaf_byte(j: u64, i: u32) -> u32 @export {
+    if i >= 32u32     { return 0x100u32 }
+    if j >= CG_MAX_FILES { return 0x100u32 }
+    return CG_LEAVES[(j * 32u64) + (i as u64)] as u32
+}
+
+/* ===================================================================
+ * THE DERIVATION (pins are never hand-authored).
+ *
+ * closure_graph_derive walks the import graph from a claim's root organ:
+ * every `extern ... fn SYM(...) ... from "target.iii"` edge, transitively,
+ * with a byte-stream automaton that respects nested block comments, //
+ * line comments, and string literals with backslash escapes (so prose
+ * never mints an edge and code strings never hide one).  Targets that do
+ * not end in ".iii" (msvcrt, kernel32, bench_helpers, cpuid_helper, ...)
+ * are the native runtime layer -- sealed by the archive and the
+ * testament, not by a per-claim source closure -- and are skipped.
+ *
+ * RESOLUTION (measured against the live tree, 2026-07-16):
+ *   1. the importing file's own directory first (the convention that
+ *      covers every same-name case in the tree today), then
+ *   2. the 12 STDLIB/iii subdirectories in sorted order; when the same
+ *      basename exists in several (field/ripple/weave/resolver_replay),
+ *      the candidate that DEFINES the imported symbol wins -- resolution
+ *      by exported symbol, which is the linker's own semantics, so the
+ *      derived closure tracks real linkage, never a directory guess.
+ *   An import no candidate defines is a NAMED refusal (CG_E_UNRESOLVED),
+ *   never a silently smaller closure.
+ *
+ * The derived set is sorted by path bytes (the testament manifest
+ * convention) before the leaf/root fold, so the pin is a canonical
+ * function of (set, bytes) alone -- independent of traversal order.
+ *
+ * JURISDICTION: dependency paths resolve as "STDLIB/iii/<dir>/<name>"
+ * relative to the working directory; run from the repo root (the same
+ * CWD contract every standing-tool gate keeps).
+ * =================================================================== */
+
+const CG_E_UNRESOLVED : i64 = -4i64
+const CG_E_ENVELOPE   : i64 = -5i64
+
+const CG_MAX_PATH : u64 = 192u64
+const CG_NDIRS    : u64 = 12u64
+
+/* scanner states */
+const CGS_NORMAL : u32 = 0u32
+const CGS_BLOCK  : u32 = 1u32
+const CGS_LINE   : u32 = 2u32
+const CGS_STR    : u32 = 3u32
+
+var CG_POOL    : [u8; 49152]     /* 256 paths * 192 bytes, NUL-terminated  */
+var CG_NPATHS  : u64 = 0u64
+var CG_ORDER   : [u64; 256]      /* canonical (path-byte-sorted) order     */
+var CG_SCANBUF : [u8; 65536]     /* scan streaming buffer (NOT CG_BUF)     */
+var CG_CAND    : [u8; 65664]     /* candidate scan: 128 carry + 64K chunk  */
+var CG_TMP     : [u8; 256]       /* path assembly scratch                  */
+var CG_DIRSCR  : [u8; 256]       /* importer-directory scratch             */
+
+/* scanner state (module-level: the automaton survives chunk boundaries) */
+var CG_ST      : u32 = 0u32      /* CGS_*                                  */
+var CG_DEPTH   : u32 = 0u32      /* nested block-comment depth             */
+var CG_PSLASH  : u8  = 0u8       /* pending '/' seen in NORMAL             */
+var CG_PSTAR   : u8  = 0u8       /* pending '*' seen in BLOCK              */
+var CG_PBSLASH : u8  = 0u8       /* pending '/' seen in BLOCK              */
+var CG_ESC     : u8  = 0u8       /* pending backslash in STR               */
+var CG_EXFLAG  : u8  = 0u8       /* inside an extern declaration           */
+var CG_SYMCAP  : u8  = 0u8       /* next identifier is the extern symbol   */
+var CG_FROMFLG : u8  = 0u8       /* next string is the from-target         */
+var CG_TOK     : [u8; 128]
+var CG_TOKLEN  : u64 = 0u64
+var CG_SYM     : [u8; 128]
+var CG_TGT     : [u8; 192]
+var CG_TGTLEN  : u64 = 0u64
+var CG_TGTLONG : u8  = 0u8
+var CG_ERR     : i64 = 0i64
+var CG_IMPORTER: u64 = 0u64      /* pool ptr of the file being scanned     */
+
+/* the 12 STDLIB/iii subdirectories, sorted (the canonical search order) */
+fn cg_dir(i: u64) -> u64 {
+    if i == 0u64  { return "aether" as u64 }
+    if i == 1u64  { return "eidos" as u64 }
+    if i == 2u64  { return "forcefield" as u64 }
+    if i == 3u64  { return "intent" as u64 }
+    if i == 4u64  { return "katabasis" as u64 }
+    if i == 5u64  { return "memoria" as u64 }
+    if i == 6u64  { return "nous" as u64 }
+    if i == 7u64  { return "numera" as u64 }
+    if i == 8u64  { return "omnia" as u64 }
+    if i == 9u64  { return "sanctus" as u64 }
+    if i == 10u64 { return "tempora" as u64 }
+    return "verba" as u64
+}
+
+fn cg_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+fn cg_seq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+/* byte-lexicographic path compare: -1 / 0 / +1 */
+fn cg_pathcmp(a: u64, b: u64) -> i32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let ca : u8 = pa[i]
+        let cb : u8 = pb[i]
+        if ca < cb { return 0i32 - 1i32 }
+        if ca > cb { return 1i32 }
+        if ca == 0u8 { going = 0u8 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn cg_pool_ptr(i: u64) -> u64 {
+    return (&CG_POOL as u64) + (i * CG_MAX_PATH)
+}
+fn cg_pool_find(path: u64) -> i64 {
+    let mut i : u64 = 0u64
+    while i < CG_NPATHS {
+        if cg_seq(path, cg_pool_ptr(i)) == 1u32 { return i as i64 }
+        i = i + 1u64
+    }
+    return -1i64
+}
+/* push a NUL-terminated path (dedup inside); returns index or negative */
+fn cg_pool_push(path: u64) -> i64 {
+    let found : i64 = cg_pool_find(path)
+    if found >= 0i64 { return found }
+    if CG_NPATHS >= CG_MAX_FILES { return CG_E_TOOMANY }
+    if cg_slen(path) >= CG_MAX_PATH { return CG_E_ENVELOPE }
+    let dst : *u8 = cg_pool_ptr(CG_NPATHS) as *u8
+    let src : *u8 = path as *u8
+    let mut i : u64 = 0u64
+    while src[i] != 0u8 { dst[i] = src[i]  i = i + 1u64 }
+    dst[i] = 0u8
+    let idx : u64 = CG_NPATHS
+    CG_NPATHS = CG_NPATHS + 1u64
+    return idx as i64
+}
+
+/* does the file exist (fopen probe)? */
+fn cg_exists(path: u64) -> u8 {
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { return 0u8 }
+    fclose(f)
+    return 1u8
+}
+
+/* does the file at `path` DEFINE fn `sym`?  Streams the file hunting the
+ * byte pattern "fn <sym>(" with a 128-byte carry across chunk boundaries. */
+fn cg_defines(path: u64, sym: u64) -> u8 {
+    let symlen : u64 = cg_slen(sym)
+    if symlen == 0u64 { return 0u8 }
+    let patlen : u64 = symlen + 4u64          /* "fn " + sym + "("        */
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { return 0u8 }
+    let base  : u64 = (&CG_CAND) as u64
+    let carry : u64 = 128u64
+    let sp : *u8 = sym as *u8
+    let cb : *u8 = base as *u8
+    /* zero the carry region once */
+    let mut z : u64 = 0u64
+    while z < carry { cb[z] = 0u8  z = z + 1u64 }
+    let mut hit : u8 = 0u8
+    let mut n : u64 = fread(base + carry, 1u64, 65536u64, f)
+    while n > 0u64 {
+        if hit == 0u8 {
+            let avail : u64 = carry + n
+            let mut i : u64 = 0u64
+            while (i + patlen) <= avail {
+                if cb[i] == 102u8 {                    /* f */
+                    if cb[i + 1u64] == 110u8 {         /* n */
+                        if cb[i + 2u64] == 32u8 {      /* space */
+                            let mut k : u64 = 0u64
+                            let mut ok : u8 = 1u8
+                            while k < symlen {
+                                if cb[i + 3u64 + k] != sp[k] { ok = 0u8  k = symlen }
+                                else { k = k + 1u64 }
+                            }
+                            if ok == 1u8 {
+                                if cb[i + 3u64 + symlen] == 40u8 { hit = 1u8 }  /* ( */
+                            }
+                        }
+                    }
+                }
+                i = i + 1u64
+            }
+            /* slide the last (carry) bytes of this window to the front */
+            let mut c : u64 = 0u64
+            while c < carry {
+                cb[c] = cb[avail - carry + c]
+                c = c + 1u64
+            }
+        }
+        n = fread(base + carry, 1u64, 65536u64, f)
+    }
+    fclose(f)
+    return hit
+}
+
+/* assemble "<dirprefix>/<name>" into CG_TMP; dirprefix has NO trailing '/' */
+fn cg_join(dirp: u64, name: u64) -> u64 {
+    let d : *u8 = dirp as *u8
+    let s : *u8 = name as *u8
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while d[i] != 0u8 { CG_TMP[k] = d[i]  k = k + 1u64  i = i + 1u64 }
+    CG_TMP[k] = 47u8
+    k = k + 1u64
+    i = 0u64
+    while s[i] != 0u8 { CG_TMP[k] = s[i]  k = k + 1u64  i = i + 1u64 }
+    CG_TMP[k] = 0u8
+    return (&CG_TMP) as u64
+}
+/* "STDLIB/iii/<dirname>/<name>" into CG_TMP */
+fn cg_join_std(dirname: u64, name: u64) -> u64 {
+    let pre : *u8 = ("STDLIB/iii/" as u64) as *u8
+    let d : *u8 = dirname as *u8
+    let s : *u8 = name as *u8
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while pre[i] != 0u8 { CG_TMP[k] = pre[i]  k = k + 1u64  i = i + 1u64 }
+    i = 0u64
+    while d[i] != 0u8 { CG_TMP[k] = d[i]  k = k + 1u64  i = i + 1u64 }
+    CG_TMP[k] = 47u8
+    k = k + 1u64
+    i = 0u64
+    while s[i] != 0u8 { CG_TMP[k] = s[i]  k = k + 1u64  i = i + 1u64 }
+    CG_TMP[k] = 0u8
+    return (&CG_TMP) as u64
+}
+/* copy the directory part of `path` (up to the last '/') into CG_DIRSCR,
+ * WITHOUT the trailing slash; returns 0 when path has no directory part. */
+fn cg_dir_of(path: u64) -> u64 {
+    let p : *u8 = path as *u8
+    let mut last : u64 = 0u64
+    let mut has : u8 = 0u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if p[i] == 47u8 { last = i  has = 1u8 }
+        i = i + 1u64
+    }
+    if has == 0u8 { return 0u64 }
+    let mut k : u64 = 0u64
+    while k < last { CG_DIRSCR[k] = p[k]  k = k + 1u64 }
+    CG_DIRSCR[k] = 0u8
+    return (&CG_DIRSCR) as u64
+}
+
+/* does `s` end with ".iii"? */
+fn cg_is_iii(s: u64) -> u8 {
+    let n : u64 = cg_slen(s)
+    if n < 4u64 { return 0u8 }
+    let p : *u8 = s as *u8
+    if p[n - 4u64] != 46u8  { return 0u8 }
+    if p[n - 3u64] != 105u8 { return 0u8 }
+    if p[n - 2u64] != 105u8 { return 0u8 }
+    if p[n - 1u64] != 105u8 { return 0u8 }
+    return 1u8
+}
+
+/* Resolve import `name` (a bare "x.iii") from `importer`; push the resolved
+ * path.  Same-dir first, then the 12 sorted dirs; collisions decided by the
+ * imported symbol in CG_SYM.  Sets CG_ERR on failure. */
+fn cg_resolve(importer: u64, name: u64) -> u32 {
+    /* 1. the importer's own directory */
+    let dirp : u64 = cg_dir_of(importer)
+    if dirp != 0u64 {
+        let cand : u64 = cg_join(dirp, name)
+        if cg_exists(cand) == 1u8 {
+            let rc : i64 = cg_pool_push(cand)
+            if rc < 0i64 { CG_ERR = rc }
+            return 1u32
+        }
+    }
+    /* 2. the canonical subdirectories: existence census first */
+    let mut nfound : u64 = 0u64
+    let mut only : u64 = 0xFFFFFFFFu64
+    let mut d : u64 = 0u64
+    while d < CG_NDIRS {
+        let cand2 : u64 = cg_join_std(cg_dir(d), name)
+        if cg_exists(cand2) == 1u8 {
+            nfound = nfound + 1u64
+            if only == 0xFFFFFFFFu64 { only = d }
+        }
+        d = d + 1u64
+    }
+    if nfound == 0u64 { CG_ERR = CG_E_UNRESOLVED  return 0u32 }
+    if nfound == 1u64 {
+        let rc2 : i64 = cg_pool_push(cg_join_std(cg_dir(only), name))
+        if rc2 < 0i64 { CG_ERR = rc2 }
+        return 1u32
+    }
+    /* 3. collision: the candidate that DEFINES the imported symbol wins */
+    let mut hits : u64 = 0u64
+    d = 0u64
+    while d < CG_NDIRS {
+        let cand3 : u64 = cg_join_std(cg_dir(d), name)
+        if cg_exists(cand3) == 1u8 {
+            if cg_defines(cand3, (&CG_SYM) as u64) == 1u8 {
+                let rc3 : i64 = cg_pool_push(cand3)
+                if rc3 < 0i64 { CG_ERR = rc3 }
+                hits = hits + 1u64
+            }
+        }
+        d = d + 1u64
+    }
+    if hits == 0u64 { CG_ERR = CG_E_UNRESOLVED }
+    return 1u32
+}
+
+/* a completed identifier token: classify it for the extern automaton */
+fn cg_token_done() -> u32 {
+    if CG_TOKLEN == 0u64 { return 0u32 }
+    if CG_TOKLEN >= 127u64 { CG_TOKLEN = 0u64  return 0u32 }
+    CG_TOK[CG_TOKLEN] = 0u8
+    let t : u64 = (&CG_TOK) as u64
+    if CG_SYMCAP == 1u8 {
+        /* this identifier is the extern's symbol name */
+        let mut i : u64 = 0u64
+        while i <= CG_TOKLEN { CG_SYM[i] = CG_TOK[i]  i = i + 1u64 }
+        CG_SYMCAP = 0u8
+        CG_TOKLEN = 0u64
+        return 1u32
+    }
+    if cg_seq(t, "extern" as u64) == 1u32 { CG_EXFLAG = 1u8 }
+    if CG_EXFLAG == 1u8 {
+        if cg_seq(t, "fn" as u64)   == 1u32 { CG_SYMCAP = 1u8 }
+        if cg_seq(t, "from" as u64) == 1u32 { CG_FROMFLG = 1u8 }
+    }
+    CG_TOKLEN = 0u64
+    return 1u32
+}
+
+/* a completed string literal while FROMFLG: the from-target */
+fn cg_string_done() -> u32 {
+    if CG_FROMFLG == 0u8 { CG_TGTLEN = 0u64  CG_TGTLONG = 0u8  return 0u32 }
+    CG_FROMFLG = 0u8
+    CG_EXFLAG = 0u8
+    if CG_TGTLONG == 1u8 { CG_TGTLEN = 0u64  CG_TGTLONG = 0u8  return 0u32 }
+    CG_TGT[CG_TGTLEN] = 0u8
+    let tgt : u64 = (&CG_TGT) as u64
+    CG_TGTLEN = 0u64
+    if cg_is_iii(tgt) == 0u8 { return 0u32 }   /* msvcrt / native helpers */
+    cg_resolve(CG_IMPORTER, tgt)
+    return 1u32
+}
+
+fn cg_is_identb(b: u8) -> u8 {
+    if b >= 97u8 { if b <= 122u8 { return 1u8 } }   /* a-z */
+    if b >= 65u8 { if b <= 90u8  { return 1u8 } }   /* A-Z */
+    if b >= 48u8 { if b <= 57u8  { return 1u8 } }   /* 0-9 */
+    if b == 95u8 { return 1u8 }                     /* _   */
+    return 0u8
+}
+
+/* the byte-stream automaton (survives chunk boundaries in module state) */
+fn cg_scan_byte(b: u8) -> u32 {
+    if CG_ST == CGS_BLOCK {
+        /* nested block comments: depth-counted, matching the lexer */
+        if CG_PSTAR == 1u8 {
+            CG_PSTAR = 0u8
+            if b == 47u8 {
+                CG_DEPTH = CG_DEPTH - 1u32
+                if CG_DEPTH == 0u32 { CG_ST = CGS_NORMAL }
+                return 1u32
+            }
+        }
+        if CG_PBSLASH == 1u8 {
+            CG_PBSLASH = 0u8
+            if b == 42u8 { CG_DEPTH = CG_DEPTH + 1u32  return 1u32 }
+        }
+        if b == 42u8 { CG_PSTAR = 1u8 }
+        if b == 47u8 { CG_PBSLASH = 1u8 }
+        return 1u32
+    }
+    if CG_ST == CGS_LINE {
+        if b == 10u8 { CG_ST = CGS_NORMAL }
+        return 1u32
+    }
+    if CG_ST == CGS_STR {
+        if CG_ESC == 1u8 { CG_ESC = 0u8  return 1u32 }
+        if b == 92u8 { CG_ESC = 1u8  return 1u32 }
+        if b == 34u8 { CG_ST = CGS_NORMAL  cg_string_done()  return 1u32 }
+        if CG_FROMFLG == 1u8 {
+            if CG_TGTLEN < 191u64 { CG_TGT[CG_TGTLEN] = b  CG_TGTLEN = CG_TGTLEN + 1u64 }
+            else { CG_TGTLONG = 1u8 }
+        }
+        return 1u32
+    }
+    /* NORMAL */
+    if CG_PSLASH == 1u8 {
+        CG_PSLASH = 0u8
+        if b == 42u8 { cg_token_done()  CG_ST = CGS_BLOCK  CG_DEPTH = 1u32  CG_PSTAR = 0u8  CG_PBSLASH = 0u8  return 1u32 }
+        if b == 47u8 { cg_token_done()  CG_ST = CGS_LINE  return 1u32 }
+        /* a lone '/': ordinary punctuation; fall through to process b */
+        cg_token_done()
+    }
+    if b == 47u8 { CG_PSLASH = 1u8  return 1u32 }
+    if b == 34u8 { cg_token_done()  CG_ST = CGS_STR  CG_ESC = 0u8  CG_TGTLEN = 0u64  CG_TGTLONG = 0u8  return 1u32 }
+    if cg_is_identb(b) == 1u8 {
+        if CG_TOKLEN < 127u64 { CG_TOK[CG_TOKLEN] = b  CG_TOKLEN = CG_TOKLEN + 1u64 }
+        else { CG_TOKLEN = 127u64 }
+        return 1u32
+    }
+    cg_token_done()
+    return 1u32
+}
+
+/* scan one file: stream chunks through the automaton, resolving edges */
+fn cg_scan_file(pool_idx: u64) -> i64 {
+    let path : u64 = cg_pool_ptr(pool_idx)
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { return CG_E_OPEN }
+    /* reset per-file automaton state */
+    CG_ST = CGS_NORMAL
+    CG_DEPTH = 0u32
+    CG_PSLASH = 0u8
+    CG_PSTAR = 0u8
+    CG_PBSLASH = 0u8
+    CG_ESC = 0u8
+    CG_EXFLAG = 0u8
+    CG_SYMCAP = 0u8
+    CG_FROMFLG = 0u8
+    CG_TOKLEN = 0u64
+    CG_TGTLEN = 0u64
+    CG_TGTLONG = 0u8
+    CG_IMPORTER = path
+    let mut n : u64 = fread((&CG_SCANBUF) as u64, 1u64, 65536u64, f)
+    while n > 0u64 {
+        let mut i : u64 = 0u64
+        while i < n {
+            cg_scan_byte(CG_SCANBUF[i])
+            if CG_ERR < 0i64 { fclose(f)  return CG_ERR }
+            i = i + 1u64
+        }
+        n = fread((&CG_SCANBUF) as u64, 1u64, 65536u64, f)
+    }
+    cg_token_done()
+    fclose(f)
+    return 0i64
+}
+
+/* normalize the root argument into CG_TMP: backslashes -> '/', and when
+ * the path contains "STDLIB/iii/" start there (canonical repo-relative). */
+fn cg_normalize_root(src: u64) -> u64 {
+    let p : *u8 = src as *u8
+    let n : u64 = cg_slen(src)
+    if n >= 255u64 { return 0u64 }
+    /* copy with separator normalization */
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut c : u8 = p[i]
+        if c == 92u8 { c = 47u8 }
+        CG_TMP[i] = c
+        i = i + 1u64
+    }
+    CG_TMP[n] = 0u8
+    /* find the LAST "STDLIB/iii/" occurrence (drive prefixes fall away) */
+    let pat : *u8 = ("STDLIB/iii/" as u64) as *u8
+    let mut start : u64 = 0u64
+    if n >= 11u64 {
+        let mut j : u64 = 0u64
+        while (j + 11u64) <= n {
+            let mut k : u64 = 0u64
+            let mut ok : u8 = 1u8
+            while k < 11u64 {
+                if CG_TMP[j + k] != pat[k] { ok = 0u8  k = 11u64 }
+                else { k = k + 1u64 }
+            }
+            if ok == 1u8 { start = j }
+            j = j + 1u64
+        }
+    }
+    return ((&CG_TMP) as u64) + start
+}
+
+/* --------------------------------------------------------------------
+ * closure_graph_derive: from a root organ, derive the FULL import
+ * closure, canonicalize, and fold the root pin over live bytes.
+ * Returns the file count (>= 1), or negative:
+ *   CG_E_OPEN (-1) unreadable file | CG_E_TOOMANY (-3) > 256 files |
+ *   CG_E_UNRESOLVED (-4) an import no candidate defines |
+ *   CG_E_ENVELOPE (-5) path too long.
+ * ------------------------------------------------------------------ */
+fn closure_graph_derive(root_path: u64, out_ptr: u64) -> i64 @export {
+    CG_NPATHS = 0u64
+    CG_ERR = 0i64
+    let norm : u64 = cg_normalize_root(root_path)
+    if norm == 0u64 { return CG_E_ENVELOPE }
+    let rc : i64 = cg_pool_push(norm)
+    if rc < 0i64 { return rc }
+    /* BFS: the pool IS the worklist */
+    let mut w : u64 = 0u64
+    while w < CG_NPATHS {
+        let src : i64 = cg_scan_file(w)
+        if src < 0i64 { return src }
+        if CG_ERR < 0i64 { return CG_ERR }
+        w = w + 1u64
+    }
+    /* canonical order: selection sort by path bytes */
+    let n : u64 = CG_NPATHS
+    let mut i : u64 = 0u64
+    while i < n { CG_ORDER[i] = i  i = i + 1u64 }
+    i = 0u64
+    while i < n {
+        let mut best : u64 = i
+        let mut j : u64 = i + 1u64
+        while j < n {
+            if cg_pathcmp(cg_pool_ptr(CG_ORDER[j]), cg_pool_ptr(CG_ORDER[best])) < 0i32 { best = j }
+            j = j + 1u64
+        }
+        if best != i {
+            let t : u64 = CG_ORDER[i]
+            CG_ORDER[i] = CG_ORDER[best]
+            CG_ORDER[best] = t
+        }
+        i = i + 1u64
+    }
+    /* leaf-hash each file's live bytes in canonical order, fold the root */
+    i = 0u64
+    while i < n {
+        let leaf : u64 = (&CG_LEAVES as u64) + (i * 32u64)
+        let rd : i64 = closure_graph_file_leaf(cg_pool_ptr(CG_ORDER[i]), leaf)
+        if rd < 0i64 { return rd }
+        i = i + 1u64
+    }
+    mhash_begin()
+    mhash_payload((&CG_LEAVES) as u64, n * 32u64)
+    mhash_final(out_ptr)
+    return n as i64
+}
+
+/* the i-th path of the last derivation, in CANONICAL (sorted) order */
+fn closure_graph_path_at(i: u64) -> u64 @export {
+    if i >= CG_NPATHS { return 0u64 }
+    return cg_pool_ptr(CG_ORDER[i])
+}
+fn closure_graph_count() -> u64 @export { return CG_NPATHS }

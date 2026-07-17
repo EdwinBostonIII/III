@@ -73,3 +73,10 @@ STDLIB/build/VERIFIED.tsv
 STDLIB/build/worldgraph.*.nodes
 STDLIB/build/worldgraph.*.edges
 /*.curve
+
+# Mathesis/testament SECRETS -- key material NEVER committed (memory law: seed/sk never committed)
+STDLIB/build/**/secret.txt
+STDLIB/build/**/seed*.bin
+STDLIB/build/mathesis/*.bin
+**/*.sk
+**/*.seed

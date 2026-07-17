@@ -1059,10 +1059,15 @@ fn mt4f_product12(fidx3: i64, tid4: i64) -> i32 @export {
 /* the law over onto citizens x the first `cap` full-token citizens (by ascending profile).
  * Runs the ontogenesis citizen selection itself (mog_citizens(3)); the census must have run.
  * Returns ordered pairs verified; negative = the pair where it broke (mt4f_pl_a/b). */
-var MT4F_PLA : i64   var MT4F_PLB : i64
+/* the blame pair: -1 = NO CLAIM.  Citizen index 0 and profile 0 are REAL coordinates,
+ * so a BSS-zero slot would blame a pair the law never broke on (the unarmed-witness
+ * defect class: 4th instance found 2026-07-16; gate 2718 pins the sentinel). */
+var MT4F_PLA : i64 = 0i64 - 1i64   var MT4F_PLB : i64 = 0i64 - 1i64
 fn mt4f_pl_a() -> i64 @export { return MT4F_PLA }
 fn mt4f_pl_b() -> i64 @export { return MT4F_PLB }
 fn mt4f_product12_law(cap: i64) -> i64 @export {
+    MT4F_PLA = 0i64 - 1i64      /* this run blames no one until it refutes */
+    MT4F_PLB = 0i64 - 1i64
     let n3 : i64 = mog_citizens(3i64)
     let mut verified : i64 = 0i64
     let mut ia : i64 = 0i64

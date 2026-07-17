@@ -130,6 +130,10 @@ fn main() -> u64 {
     if L1 < 1i64 { return 15u64 }
     if L1 != L2 { return 15u64 }
     if drep != 1i64 { return 15u64 }
+    /* the chain-length read-head: the organ's stored length equals the length the last
+     * chain_round returned -- stored-vs-returned self-consistency (the class that caught
+     * the rot64 stale-witness bug); a drift is an internal defect, refused. */
+    if mxr_chain_len() != L2 { return 16u64 }
 
     return 99u64
 }

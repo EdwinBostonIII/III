@@ -19,6 +19,10 @@ fn main() -> i32 {
     if mr3_vund() != 0i64 { return 11i32 }
     if mr3_boxn() != 21616i64 { return 12i32 }
     if mr3_validate8box(0i64) != 0i64 { return 20i32 }
+    /* the POSITIVE soundness certificate (the == arm, the discriminating second outcome):
+     * the box door agrees with the total oracle on EXACTLY zero classes.  An agreement-
+     * METER (0 = sound), so soundness is asserted (==0), not only guarded (!=0). */
+    if mr3_validate8box(1i64) == 0i64 { } else { return 24i32 }
     if mr3_vund() != 0i64 { return 21i32 }
     if mr3_boxn() != 21616i64 { return 22i32 }
     return 99i32

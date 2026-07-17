@@ -112,3 +112,92 @@ fn closure_with_resolver_byte(i: u32) -> u32 @export {
 fn closure_with_resolver_is_computed() -> u8 @export {
     return CLOSURE_RWR_COMPUTED
 }
+
+/* ENTELECHEIA Ε3 -- THE CLOSURE-PIN LAW (the spine).
+ *
+ * Phase E generalized from ONE build-root to a per-claim TABLE: for every
+ * sealed claim, the mhash tree of EXACTLY the sources that support it (derived
+ * from sovbuild's dependency graph by sanctus/closure_graph -- never
+ * hand-authored, since hand-authored closures are how pins lie).
+ *
+ * A claim is LIVE while its closure pin matches the tree.  closure_claim_set
+ * registers a claim's sealed 32-byte pin; closure_claim_verify_against compares
+ * that pin (constant-time) against a freshly-derived root supplied by the caller
+ * (promote/demote/author).  Touching a file inside a claim's closure reddens
+ * exactly that claim's pin and nothing else (specificity, two-path).
+ */
+const CLOSURE_CLAIM_CAP  : u64 = 64u64
+const CLOSURE_E_FULL     : i32 = -2i32
+const CLOSURE_E_NOTFOUND : i32 = -3i32
+
+var CLAIM_IDS   : [u64; 64]
+var CLAIM_ROOTS : [u8; 2048]
+var CLAIM_COUNT : u64 = 0u64
+
+/* Index of a registered claim, or -1 if this claim_id has no pin yet. */
+fn closure_claim_find(claim_id: u64) -> i64 @export {
+    let mut i : u64 = 0u64
+    while i < CLAIM_COUNT {
+        if CLAIM_IDS[i] == claim_id { return i as i64 }
+        i = i + 1u64
+    }
+    return -1i64
+}
+
+/* How many claim pins are registered. */
+fn closure_claim_count() -> u64 @export { return CLAIM_COUNT }
+
+/* Register (or update) the sealed 32-byte closure pin for claim_id.  Returns
+ * the claim's table index on success, or a negative error (BADID/FULL). */
+fn closure_claim_set(claim_id: u64, root_ptr: u64) -> i32 @export {
+    if root_ptr == 0u64 { return CLOSURE_E_BADID }
+    let src : *u8 = root_ptr as *u8
+    let found : i64 = closure_claim_find(claim_id)
+    let mut idx : u64 = 0u64
+    if found >= 0i64 {
+        idx = found as u64
+    } else {
+        if CLAIM_COUNT >= CLOSURE_CLAIM_CAP { return CLOSURE_E_FULL }
+        idx = CLAIM_COUNT
+        CLAIM_IDS[idx] = claim_id
+        CLAIM_COUNT = CLAIM_COUNT + 1u64
+    }
+    let base : u64 = idx * 32u64
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        CLAIM_ROOTS[base + j] = src[j]
+        j = j + 1u64
+    }
+    return idx as i32
+}
+
+/* Whether claim_id has a registered pin. */
+fn closure_claim_is_set(claim_id: u64) -> u8 @export {
+    if closure_claim_find(claim_id) >= 0i64 { return 1u8 }
+    return 0u8
+}
+
+/* Byte i (0..31) of claim_id's sealed pin, or 0x100 if out of range / unset. */
+fn closure_claim_byte(claim_id: u64, i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    let found : i64 = closure_claim_find(claim_id)
+    if found < 0i64 { return 0x100u32 }
+    let base : u64 = (found as u64) * 32u64
+    return CLAIM_ROOTS[base + (i as u64)] as u32
+}
+
+/* Verify a freshly-derived 32-byte root (at addr) against claim_id's sealed
+ * pin, constant-time.  Returns 1 on match (claim LIVE), 0 on mismatch/unset
+ * (claim DEMOTED).  This is the trigger promote/demote consume. */
+fn closure_claim_verify_against(claim_id: u64, addr: u64) -> u8 @export {
+    if addr == 0u64 { return 0u8 }
+    let found : i64 = closure_claim_find(claim_id)
+    if found < 0i64 { return 0u8 }
+    let base : u64 = (found as u64) * 32u64
+    let stored : u64 = (&CLAIM_ROOTS as u64) + base
+    if timing_safe_eq(addr as *u8, stored as *u8, 32u64) == 1u32 { return 1u8 }
+    return 0u8
+}
+
+/* Reset the claim table (test / re-seal support). */
+fn closure_claim_reset() -> i32 @export { CLAIM_COUNT = 0u64  return CLOSURE_OK }

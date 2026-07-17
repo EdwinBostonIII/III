@@ -1,0 +1,938 @@
+/* aether/isa_ontogenesis.iii -- THE ISA ONTOGENESIS: the algebra whose atoms
+ * are READ FROM THE CHIP and whose semantics is EXECUTED ON THE ELECTRONS.
+ *
+ * THE DEFECT THIS ENDS (the third RINVOL, named 2026-07-16): every prior
+ * generative space had TYPED atoms -- an 8-op ALU menu, a binary operation on
+ * a handful of tokens.  A fair search of a small human-charted space proves
+ * only that the space is not rigged; it cannot contain mathematics humans have
+ * not already finished.  The atoms must come from the substrate:
+ *
+ *   ATOMS      the operation set is the LIVE CPUID capability report
+ *              (numera/cpufeat -- ring-3 CPUID, no privilege, no fluctuation):
+ *              the x86-64 baseline {NOT NEG AND OR XOR ADD SUB MUL SHL SHR} is
+ *              cited to the base ISA; ANDN/BLSI/BLSMSK/BLSR/TZCNT enter iff
+ *              CPUID.7.0:EBX[3] (BMI1); PDEP/PEXT iff BMI2; POPCNT iff
+ *              CPUID.1:ECX[23]; LZCNT iff CPUID.0x80000001:ECX[5].  A machine
+ *              without BMI2 HAS A DIFFERENT ALGEBRA -- substrate-dependence by
+ *              construction, not by hash-seeded selection.
+ *   SEMANTICS  gated atoms execute as THE REAL INSTRUCTIONS via metal blocks
+ *              (pdep %rdx,%rcx,%r8 on the actual silicon); baseline atoms are
+ *              the compiler's own emission of the same ALU.  Nothing is
+ *              modeled.  The definiens (pure-.iii bounded loops/expressions)
+ *              exists ONLY as the second engine of the BRIDGE arm and as the
+ *              lowering target for the prover tier -- never as the semantics.
+ *   TERMS/LAWS terms over {x,y} and the LIVE atoms, ranked fairly by
+ *              (node count, structural rank) with a machine-checked bijection
+ *              index <-> tree (ia_fair, the anti-rigging arm carried over);
+ *              laws are triangular pairs, enumerated, never listed.
+ *   JUDGMENT   a law is REFUTED by a concrete witness (x,y) on the live
+ *              silicon, or SURVIVES the ENTIRE published battery -- a survivor
+ *              is a CONJECTURE with its exact survival envelope counted, never
+ *              a proven theorem (the prover tier disposes survivors over all
+ *              2^64 separately, via the bridged definiens).
+ *   HONESTY    survivors are CLASSED by atom composition: baseline-only means
+ *              THE HUMAN-CHARTED REGION (Boolean/arithmetic identities, named
+ *              as such, held out of every novelty count); a survivor touching
+ *              PDEP/PEXT/BMI1/POPCNT/LZCNT lives on the axis where no human
+ *              equational catalog exists -- a fact about the literature and
+ *              the atoms' 2013-era silicon birth, stated as the CLASS, never
+ *              as a per-law novelty certificate.
+ *   FALSIFIER  the capability-mask variance arm: the SAME construction under a
+ *              masked capability report (cpufeat_force_mask) must yield a
+ *              DIFFERENT term universe and census -- equal output would mean
+ *              the algebra ignores the chip => AUTHORED => REFUSED.
+ *
+ * THE BATTERY (published, deterministic, machine-independent): 24 structured
+ * constants + 64 walking bits + 40 splitmix64(k) values (seed constants
+ * 0x9E3779B97F4A7C15 / 0xBF58476D1CE4E5B9 / 0x94D049BB133111EB, k = 0..39) =
+ * 128 values per variable; a law is judged over the full 128x128 cross.
+ * Refutation needs no fairness (a witness is a witness); survival claims carry
+ * this battery's exact definition as their envelope.
+ *
+ * ENVELOPE (named): terms to 9 nodes; law fuel <= 8192; survivor record cap
+ * 512 (overflow counted, never silent).  NIH: composes numera/cpufeat (the
+ * capability oracle -- consumer #1 of the new BMI1/POPCNT/LZCNT accessors).
+ * Hexad: kind_essence.  Ring: R0 (unprivileged instructions; CPUID at CPL3).
+ */
+module aether_isa_ontogenesis
+
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi1() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_popcnt() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_lzcnt() -> u8 from "cpufeat.iii"
+
+/* ---- the atom table: id, arity, gate class ----
+ * ids: 0 NOT 1 NEG 2 BLSI 3 BLSMSK 4 BLSR 5 POPCNT 6 LZCNT 7 TZCNT (unary)
+ *      8 AND 9 OR 10 XOR 11 ADD 12 SUB 13 MUL 14 SHL 15 SHR 16 ANDN
+ *      17 PDEP 18 PEXT (binary)
+ * gate: 0 base ISA | 1 BMI1 | 2 BMI2 | 3 POPCNT | 4 LZCNT/ABM */
+const IA_NATOMS : i64 = 19i64
+const IA_NVARS  : i64 = 2i64
+const IA_MMAX   : i64 = 9i64
+const IA_FUELMAX: u64 = 8192u64
+const IA_BATN   : u64 = 128u64
+const IA_SURVCAP: u64 = 512u64
+const IA_ONES   : u64 = 18446744073709551615u64
+const IA_FNV_B  : u64 = 14695981039346656037u64
+const IA_FNV_P  : u64 = 1099511628211u64
+
+var IA_ARITY : [i64; 19]
+var IA_GATE  : [i64; 19]
+var IA_LIVE  : [u8; 19]
+var IA_LIVEU : [i64; 8]        /* live unary atom ids, enumeration order  */
+var IA_LIVEB : [i64; 11]       /* live binary atom ids, enumeration order */
+var IA_NU    : i64 = 0i64
+var IA_NB    : i64 = 0i64
+var IA_INITED: u8  = 0u8
+
+fn ia_gate_of(id: i64) -> i64 {
+    if id == 2i64 { return 1i64 }      /* BLSI   */
+    if id == 3i64 { return 1i64 }      /* BLSMSK */
+    if id == 4i64 { return 1i64 }      /* BLSR   */
+    if id == 5i64 { return 3i64 }      /* POPCNT */
+    if id == 6i64 { return 4i64 }      /* LZCNT  */
+    if id == 7i64 { return 1i64 }      /* TZCNT  */
+    if id == 16i64 { return 1i64 }     /* ANDN   */
+    if id == 17i64 { return 2i64 }     /* PDEP   */
+    if id == 18i64 { return 2i64 }     /* PEXT   */
+    return 0i64
+}
+
+/* the LIVE atom set: read the chip's own report and admit exactly what it
+ * grants.  Re-callable (the variance falsifier re-derives under a forced
+ * capability mask).  Returns the live atom count. */
+fn ia_init() -> i64 @export {
+    let b1 : u8 = cpufeat_has_bmi1()
+    let b2 : u8 = cpufeat_has_bmi2()
+    let pc : u8 = cpufeat_has_popcnt()
+    let lz : u8 = cpufeat_has_lzcnt()
+    let mut id : i64 = 0i64
+    while id < IA_NATOMS {
+        if id < 8i64 { IA_ARITY[id as u64] = 1i64 } else { IA_ARITY[id as u64] = 2i64 }
+        let g : i64 = ia_gate_of(id)
+        IA_GATE[id as u64] = g
+        let mut lv : u8 = 0u8
+        if g == 0i64 { lv = 1u8 }
+        if g == 1i64 { lv = b1 }
+        if g == 2i64 { lv = b2 }
+        if g == 3i64 { lv = pc }
+        if g == 4i64 { lv = lz }
+        IA_LIVE[id as u64] = lv
+        id = id + 1i64
+    }
+    IA_NU = 0i64
+    IA_NB = 0i64
+    id = 0i64
+    while id < IA_NATOMS {
+        if IA_LIVE[id as u64] == 1u8 {
+            if IA_ARITY[id as u64] == 1i64 { IA_LIVEU[IA_NU as u64] = id   IA_NU = IA_NU + 1i64 }
+            else { IA_LIVEB[IA_NB as u64] = id   IA_NB = IA_NB + 1i64 }
+        }
+        id = id + 1i64
+    }
+    ia_termcounts()
+    IA_INITED = 1u8
+    return IA_NU + IA_NB
+}
+
+fn ia_atom_live(id: i64) -> u64 @export { if id < IA_NATOMS { return IA_LIVE[id as u64] as u64 }  return 0u64 }
+fn ia_atom_arity(id: i64) -> i64 @export { if id < IA_NATOMS { return IA_ARITY[id as u64] }  return 0i64 }
+fn ia_atom_gate(id: i64) -> i64 @export { if id < IA_NATOMS { return IA_GATE[id as u64] }  return 0i64 }
+fn ia_live_unary() -> i64 @export { return IA_NU }
+fn ia_live_binary() -> i64 @export { return IA_NB }
+
+/* ---- the executors: the REAL instructions on the REAL registers ----
+ * Operands pass through module cells (L_<VAR>(%rip) addressing -- the verified
+ * probe pattern); each gated atom is ONE live instruction between two moves. */
+var IA_X : u64 = 0u64
+var IA_Y : u64 = 0u64
+var IA_R : u64 = 0u64
+
+fn ia_m_blsi() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    blsi %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_blsmsk() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    blsmsk %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_blsr() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    blsr %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_popcnt() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    popcnt %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_lzcnt() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    lzcnt %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_tzcnt() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    tzcnt %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_andn() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_IA_Y(%rip), %rax
+    movq (%rax), %rdx
+    andn %rdx, %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_pdep() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_IA_Y(%rip), %rax
+    movq (%rax), %rdx
+    pdep %rdx, %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+fn ia_m_pext() -> i32 {
+    metal {
+    leaq L_IA_X(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_IA_Y(%rip), %rax
+    movq (%rax), %rdx
+    pext %rdx, %rcx, %r8
+    leaq L_IA_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return 0i32
+}
+
+/* apply a unary atom to a: baseline through the compiler's own ALU emission,
+ * gated through the live instruction. */
+fn ia_apply1(atom: i64, a: u64) -> u64 @export {
+    if atom == 0i64 { return IA_ONES ^ a }         /* NOT */
+    if atom == 1i64 { return 0u64 - a }            /* NEG */
+    IA_X = a
+    if atom == 2i64 { ia_m_blsi() }
+    if atom == 3i64 { ia_m_blsmsk() }
+    if atom == 4i64 { ia_m_blsr() }
+    if atom == 5i64 { ia_m_popcnt() }
+    if atom == 6i64 { ia_m_lzcnt() }
+    if atom == 7i64 { ia_m_tzcnt() }
+    return IA_R
+}
+
+/* apply a binary atom.  Operand order is the INSTRUCTION's: with a in %rcx
+ * and b in %rdx, ANDN yields (~a)&b, PDEP deposits VALUE a into MASK b, PEXT
+ * extracts VALUE a under MASK b -- whatever the silicon says, the bridge arm
+ * pins it against the definiens, so a mis-transcribed order REDDENS. */
+fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 @export {
+    if atom == 8i64  { return a & b }
+    if atom == 9i64  { return a | b }
+    if atom == 10i64 { return a ^ b }
+    if atom == 11i64 { return a + b }
+    if atom == 12i64 { return a - b }
+    if atom == 13i64 { return a * b }
+    if atom == 14i64 { return a << (b & 63u64) }   /* the chip's own count-mask rule */
+    if atom == 15i64 { return a >> (b & 63u64) }
+    IA_X = a
+    IA_Y = b
+    if atom == 16i64 { ia_m_andn() }
+    if atom == 17i64 { ia_m_pdep() }
+    if atom == 18i64 { ia_m_pext() }
+    return IA_R
+}
+
+/* ---- the definiens: the pure-.iii second engine (bridge + prover lowering).
+ * NEVER the semantics -- the semantics is the instruction above. ---- */
+fn ia_def1(atom: i64, a: u64) -> u64 @export {
+    if atom == 0i64 { return IA_ONES ^ a }
+    if atom == 1i64 { return 0u64 - a }
+    if atom == 2i64 { return a & (0u64 - a) }              /* BLSI   */
+    if atom == 3i64 { return a ^ (a - 1u64) }              /* BLSMSK */
+    if atom == 4i64 { return a & (a - 1u64) }              /* BLSR   */
+    if atom == 5i64 {                                      /* POPCNT */
+        let mut c : u64 = 0u64
+        let mut v : u64 = a
+        let mut i : u64 = 0u64
+        while i < 64u64 { c = c + (v & 1u64)   v = v >> 1u64   i = i + 1u64 }
+        return c
+    }
+    if atom == 6i64 {                                      /* LZCNT: 64 on zero */
+        let mut c : u64 = 0u64
+        let mut sh : i64 = 63i64
+        while sh >= 0i64 {
+            if ((a >> (sh as u64)) & 1u64) == 1u64 { return c }
+            c = c + 1u64
+            sh = sh - 1i64
+        }
+        return 64u64
+    }
+    /* TZCNT: 64 on zero */
+    let mut c2 : u64 = 0u64
+    let mut sh2 : u64 = 0u64
+    while sh2 < 64u64 {
+        if ((a >> sh2) & 1u64) == 1u64 { return c2 }
+        c2 = c2 + 1u64
+        sh2 = sh2 + 1u64
+    }
+    return 64u64
+}
+
+fn ia_def2(atom: i64, a: u64, b: u64) -> u64 @export {
+    if atom == 8i64  { return a & b }
+    if atom == 9i64  { return a | b }
+    if atom == 10i64 { return a ^ b }
+    if atom == 11i64 { return a + b }
+    if atom == 12i64 { return a - b }
+    if atom == 13i64 { return a * b }
+    if atom == 14i64 { return a << (b & 63u64) }
+    if atom == 15i64 { return a >> (b & 63u64) }
+    if atom == 16i64 { return (IA_ONES ^ a) & b }          /* ANDN */
+    if atom == 17i64 {                                     /* PDEP: deposit a into mask b */
+        let mut r : u64 = 0u64
+        let mut mm : u64 = b
+        let mut src : u64 = a
+        while mm != 0u64 {
+            let low : u64 = mm & (0u64 - mm)
+            if (src & 1u64) == 1u64 { r = r | low }
+            src = src >> 1u64
+            mm = mm & (mm - 1u64)
+        }
+        return r
+    }
+    /* PEXT: extract a under mask b */
+    let mut r2 : u64 = 0u64
+    let mut mm2 : u64 = b
+    let mut bit : u64 = 1u64
+    while mm2 != 0u64 {
+        let low2 : u64 = mm2 & (0u64 - mm2)
+        if (a & low2) != 0u64 { r2 = r2 | bit }
+        bit = bit << 1u64
+        mm2 = mm2 & (mm2 - 1u64)
+    }
+    return r2
+}
+
+/* ---- THE BRIDGE: instruction == definiens over the whole battery, per gated
+ * live atom.  Two independent engines bearing one claim; a mis-encoded metal
+ * block or a wrong operand order REDDENS here, loudly. ---- */
+var IA_BRC : u64 = 0u64        /* agreement checks performed  */
+var IA_BRA : i64 = 0i64        /* first-disagreement atom id  */
+var IA_BRX : u64 = 0u64
+var IA_BRY : u64 = 0u64
+var IA_BRG : u64 = 0u64        /* got (instruction)           */
+var IA_BRW : u64 = 0u64        /* want (definiens)            */
+
+fn ia_bridge() -> i64 @export {
+    ia_battery()
+    IA_BRC = 0u64
+    let mut id : i64 = 0i64
+    while id < IA_NATOMS {
+        if IA_LIVE[id as u64] == 1u8 {
+            if IA_GATE[id as u64] != 0i64 {
+                if IA_ARITY[id as u64] == 1i64 {
+                    let mut i : u64 = 0u64
+                    while i < IA_BATN {
+                        let a : u64 = IA_V[i]
+                        let got : u64 = ia_apply1(id, a)
+                        let want : u64 = ia_def1(id, a)
+                        if got != want {
+                            IA_BRA = id   IA_BRX = a   IA_BRY = 0u64   IA_BRG = got   IA_BRW = want
+                            return 1i64
+                        }
+                        IA_BRC = IA_BRC + 1u64
+                        i = i + 1u64
+                    }
+                } else {
+                    let mut i2 : u64 = 0u64
+                    while i2 < IA_BATN {
+                        let mut j : u64 = 0u64
+                        while j < IA_BATN {
+                            let a2 : u64 = IA_V[i2]
+                            let b2 : u64 = IA_V[j]
+                            let got2 : u64 = ia_apply2(id, a2, b2)
+                            let want2 : u64 = ia_def2(id, a2, b2)
+                            if got2 != want2 {
+                                IA_BRA = id   IA_BRX = a2   IA_BRY = b2   IA_BRG = got2   IA_BRW = want2
+                                return 1i64
+                            }
+                            IA_BRC = IA_BRC + 1u64
+                            j = j + 1u64
+                        }
+                        i2 = i2 + 1u64
+                    }
+                }
+            }
+        }
+        id = id + 1i64
+    }
+    return 0i64
+}
+fn ia_bridge_checks() -> u64 @export { return IA_BRC }
+fn ia_bridge_atom() -> i64 @export { return IA_BRA }
+fn ia_bridge_x() -> u64 @export { return IA_BRX }
+fn ia_bridge_y() -> u64 @export { return IA_BRY }
+fn ia_bridge_got() -> u64 @export { return IA_BRG }
+fn ia_bridge_want() -> u64 @export { return IA_BRW }
+
+/* ---- the published battery ---- */
+var IA_V : [u64; 128]
+var IA_BATB : u8 = 0u8
+
+fn ia_smix(k: u64) -> u64 {
+    let mut z : u64 = (k + 1u64) * 0x9E3779B97F4A7C15u64
+    z = (z ^ (z >> 30u64)) * 0xBF58476D1CE4E5B9u64
+    z = (z ^ (z >> 27u64)) * 0x94D049BB133111EBu64
+    return z ^ (z >> 31u64)
+}
+
+fn ia_battery() -> i64 @export {
+    if IA_BATB == 1u8 { return 0i64 }
+    IA_V[0u64] = 0u64                       IA_V[1u64] = 1u64
+    IA_V[2u64] = 2u64                       IA_V[3u64] = 3u64
+    IA_V[4u64] = 5u64                       IA_V[5u64] = 7u64
+    IA_V[6u64] = 0xFFu64                    IA_V[7u64] = 0x100u64
+    IA_V[8u64] = IA_ONES                    IA_V[9u64] = IA_ONES - 1u64
+    IA_V[10u64] = 0xAAAAAAAAAAAAAAAAu64     IA_V[11u64] = 0x5555555555555555u64
+    IA_V[12u64] = 0x0F0F0F0F0F0F0F0Fu64     IA_V[13u64] = 0xF0F0F0F0F0F0F0F0u64
+    IA_V[14u64] = 0x00FF00FF00FF00FFu64     IA_V[15u64] = 0xFFFF0000FFFF0000u64
+    IA_V[16u64] = 0x80000000u64             IA_V[17u64] = 0x100000000u64
+    IA_V[18u64] = 0x8000000000000000u64     IA_V[19u64] = 0x7FFFFFFFFFFFFFFFu64
+    IA_V[20u64] = 0x8000000000000001u64     IA_V[21u64] = 0x123456789ABCDEF0u64
+    IA_V[22u64] = 0xDEADBEEFDEADBEEFu64     IA_V[23u64] = 0x0123456789ABCDEFu64
+    let mut k : u64 = 0u64
+    while k < 64u64 { IA_V[24u64 + k] = 1u64 << k   k = k + 1u64 }
+    let mut s : u64 = 0u64
+    while s < 40u64 { IA_V[88u64 + s] = ia_smix(s)   s = s + 1u64 }
+    IA_BATB = 1u8
+    return 0i64
+}
+fn ia_battery_size() -> u64 @export { return IA_BATN }
+fn ia_battery_v(i: u64) -> u64 @export { if i < IA_BATN { return IA_V[i] }  return 0u64 }
+
+/* ---- the fair term space over the LIVE atoms ----
+ * T(1) = |vars|; T(m) = NU*T(m-1) + NB * sum_{a} T(a)*T(m-1-a).  Saturating
+ * u64; the counts are a FUNCTION OF THE CHIP (NU/NB from CPUID) -- the term
+ * universe itself differs between machines with different silicon. */
+var IA_TC : [u64; 10]
+var IA_TTOT : u64 = 0u64
+
+fn ia_sat_mul(a: u64, b: u64) -> u64 {
+    if a == 0u64 { return 0u64 }
+    if b > (IA_ONES / a) { return IA_ONES }
+    return a * b
+}
+fn ia_sat_add(a: u64, b: u64) -> u64 {
+    if (IA_ONES - a) < b { return IA_ONES }
+    return a + b
+}
+
+fn ia_termcounts() -> i32 {
+    IA_TC[0u64] = 0u64
+    IA_TC[1u64] = IA_NVARS as u64
+    let mut m : i64 = 2i64
+    while m <= IA_MMAX {
+        let mut s : u64 = ia_sat_mul(IA_NU as u64, IA_TC[(m - 1i64) as u64])
+        let mut a : i64 = 1i64
+        while a <= (m - 2i64) {
+            let blk : u64 = ia_sat_mul(ia_sat_mul(IA_NB as u64, IA_TC[a as u64]), IA_TC[(m - 1i64 - a) as u64])
+            s = ia_sat_add(s, blk)
+            a = a + 1i64
+        }
+        IA_TC[m as u64] = s
+        m = m + 1i64
+    }
+    IA_TTOT = 0u64
+    m = 1i64
+    while m <= IA_MMAX { IA_TTOT = ia_sat_add(IA_TTOT, IA_TC[m as u64])   m = m + 1i64 }
+    return 0i32
+}
+fn ia_tcount(m: i64) -> u64 @export { if m >= 0i64 { if m <= IA_MMAX { return IA_TC[m as u64] } }  return 0u64 }
+fn ia_terms_total() -> u64 @export { return IA_TTOT }
+
+/* ---- the term pool ---- */
+var IA_PK : [i64; 64]      /* 0 x, 1 y, 2+id = atom applied */
+var IA_PL : [i64; 64]
+var IA_PR : [i64; 64]
+var IA_PP : i64 = 0i64
+
+fn ia_alloc() -> i64 { let id : i64 = IA_PP   IA_PP = IA_PP + 1i64   return id }
+
+fn ia_term_build(m: i64, rank: u64) -> i64 {
+    if m == 1i64 {
+        let leaf : i64 = ia_alloc()
+        IA_PK[leaf as u64] = rank as i64
+        IA_PL[leaf as u64] = 0i64 - 1i64
+        IA_PR[leaf as u64] = 0i64 - 1i64
+        return leaf
+    }
+    let tm1 : u64 = IA_TC[(m - 1i64) as u64]
+    let ub : u64 = ia_sat_mul(IA_NU as u64, tm1)
+    if rank < ub {
+        let u : u64 = rank / tm1
+        let cr : u64 = rank % tm1
+        let node : i64 = ia_alloc()
+        IA_PK[node as u64] = 2i64 + IA_LIVEU[u]
+        IA_PR[node as u64] = 0i64 - 1i64
+        let ch : i64 = ia_term_build(m - 1i64, cr)
+        IA_PL[node as u64] = ch
+        return node
+    }
+    let mut r : u64 = rank - ub
+    let mut a : i64 = 1i64
+    while a <= (m - 2i64) {
+        let per : u64 = ia_sat_mul(IA_TC[a as u64], IA_TC[(m - 1i64 - a) as u64])
+        let blk : u64 = ia_sat_mul(IA_NB as u64, per)
+        if r < blk {
+            let b : u64 = r / per
+            let rem : u64 = r % per
+            let lr : u64 = rem / IA_TC[(m - 1i64 - a) as u64]
+            let rr : u64 = rem % IA_TC[(m - 1i64 - a) as u64]
+            let node2 : i64 = ia_alloc()
+            IA_PK[node2 as u64] = 2i64 + IA_LIVEB[b]
+            let l : i64 = ia_term_build(a, lr)
+            let rgt : i64 = ia_term_build(m - 1i64 - a, rr)
+            IA_PL[node2 as u64] = l
+            IA_PR[node2 as u64] = rgt
+            return node2
+        }
+        r = r - blk
+        a = a + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+fn ia_term_decode(t_idx: u64) -> i64 {
+    let mut r : u64 = t_idx
+    let mut m : i64 = 1i64
+    while m <= IA_MMAX {
+        if r < IA_TC[m as u64] { return ia_term_build(m, r) }
+        r = r - IA_TC[m as u64]
+        m = m + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+fn ia_term_size(id: i64) -> i64 {
+    if IA_PK[id as u64] < 2i64 { return 1i64 }
+    if IA_PR[id as u64] < 0i64 { return 1i64 + ia_term_size(IA_PL[id as u64]) }
+    return 1i64 + ia_term_size(IA_PL[id as u64]) + ia_term_size(IA_PR[id as u64])
+}
+
+/* structural rank of a built tree (the inverse of ia_term_build) */
+fn ia_liveu_slot(atom: i64) -> u64 {
+    let mut i : i64 = 0i64
+    while i < IA_NU { if IA_LIVEU[i as u64] == atom { return i as u64 }  i = i + 1i64 }
+    return 0u64
+}
+fn ia_liveb_slot(atom: i64) -> u64 {
+    let mut i : i64 = 0i64
+    while i < IA_NB { if IA_LIVEB[i as u64] == atom { return i as u64 }  i = i + 1i64 }
+    return 0u64
+}
+
+fn ia_term_rank(id: i64, m: i64) -> u64 {
+    if m == 1i64 { return IA_PK[id as u64] as u64 }
+    let tm1 : u64 = IA_TC[(m - 1i64) as u64]
+    if IA_PR[id as u64] < 0i64 {
+        let u : u64 = ia_liveu_slot(IA_PK[id as u64] - 2i64)
+        return (u * tm1) + ia_term_rank(IA_PL[id as u64], m - 1i64)
+    }
+    let mut base : u64 = ia_sat_mul(IA_NU as u64, tm1)
+    let asz : i64 = ia_term_size(IA_PL[id as u64])
+    let mut ap : i64 = 1i64
+    while ap < asz {
+        base = ia_sat_add(base, ia_sat_mul(ia_sat_mul(IA_NB as u64, IA_TC[ap as u64]), IA_TC[(m - 1i64 - ap) as u64]))
+        ap = ap + 1i64
+    }
+    let per : u64 = ia_sat_mul(IA_TC[asz as u64], IA_TC[(m - 1i64 - asz) as u64])
+    let b : u64 = ia_liveb_slot(IA_PK[id as u64] - 2i64)
+    let lrank : u64 = ia_term_rank(IA_PL[id as u64], asz)
+    let rrank : u64 = ia_term_rank(IA_PR[id as u64], m - 1i64 - asz)
+    return base + (b * per) + (lrank * IA_TC[(m - 1i64 - asz) as u64]) + rrank
+}
+
+fn ia_term_encode(id: i64) -> u64 {
+    let m : i64 = ia_term_size(id)
+    let mut g : u64 = 0u64
+    let mut mm : i64 = 1i64
+    while mm < m { g = ia_sat_add(g, IA_TC[mm as u64])   mm = mm + 1i64 }
+    return g + ia_term_rank(id, m)
+}
+
+/* THE FAIRNESS ARM: index -> tree -> index roundtrips exactly over the first
+ * `count` terms of THIS chip's universe.  0 exact | 1 decode hole | 2 broken. */
+fn ia_fair(count: u64) -> i64 @export {
+    let mut i : u64 = 0u64
+    while i < count {
+        IA_PP = 0i64
+        let root : i64 = ia_term_decode(i)
+        if root < 0i64 { return 1i64 }
+        if ia_term_encode(root) != i { return 2i64 }
+        i = i + 1u64
+    }
+    return 0i64
+}
+
+/* ---- laws: triangular pairs of term indices ---- */
+var IA_LI : u64 = 0u64
+var IA_LJ : u64 = 0u64
+
+fn ia_law_set(p: u64) -> i32 @export {
+    let mut j : u64 = 1u64
+    let mut r : u64 = p
+    let mut guard : u64 = 0u64
+    while guard < 100000000u64 {
+        if r < j { IA_LI = r   IA_LJ = j   return 0i32 }
+        r = r - j
+        j = j + 1u64
+        guard = guard + 1u64
+    }
+    return 0i32 - 1i32
+}
+fn ia_law_i() -> u64 @export { return IA_LI }
+fn ia_law_j() -> u64 @export { return IA_LJ }
+
+/* evaluate a pool term on the LIVE silicon under (vx, vy) */
+fn ia_eval(id: i64, vx: u64, vy: u64) -> u64 {
+    let k : i64 = IA_PK[id as u64]
+    if k == 0i64 { return vx }
+    if k == 1i64 { return vy }
+    let a : u64 = ia_eval(IA_PL[id as u64], vx, vy)
+    if IA_PR[id as u64] < 0i64 { return ia_apply1(k - 2i64, a) }
+    let b : u64 = ia_eval(IA_PR[id as u64], vx, vy)
+    return ia_apply2(k - 2i64, a, b)
+}
+
+/* gate-class fold of a pool term: bit0 BMI1, bit1 BMI2, bit2 POPCNT, bit3 LZCNT */
+fn ia_term_class(id: i64) -> i64 {
+    let k : i64 = IA_PK[id as u64]
+    if k < 2i64 { return 0i64 }
+    let g : i64 = IA_GATE[(k - 2i64) as u64]
+    let mut c : i64 = 0i64
+    if g == 1i64 { c = 1i64 }
+    if g == 2i64 { c = 2i64 }
+    if g == 3i64 { c = 4i64 }
+    if g == 4i64 { c = 8i64 }
+    c = c | ia_term_class(IA_PL[id as u64])
+    if IA_PR[id as u64] >= 0i64 { c = c | ia_term_class(IA_PR[id as u64]) }
+    return c
+}
+
+/* ---- THE SWEEP: adjudicate laws on the live silicon, SIZE-ORDERED ----
+ * A law is an ordered pair of terms (ti < tj) tested for equality over the
+ * published battery on the real silicon: REFUTED with a concrete witness, or
+ * SURVIVED the whole battery.  Nothing else exists.
+ *
+ * Enumeration is by the SIZE of the larger side (fair term order groups terms
+ * by node count ascending): tj runs over all terms up to `sizecap` nodes, ti
+ * over every earlier term.  This reaches the chip identities -- BLSI(x) =
+ * AND(x,NEG(x)) at size 3, ANDN(x,y) = AND(NOT(x),y) at size 4, the PDEP/PEXT
+ * shortcuts at size 5 -- which triangular index-pairing buries at astronomical
+ * indices.  The larger-side size cap is the MEASURED envelope (named, counted);
+ * IA_LAWCAP bounds the examined-pair count and a cap-hit is reported, never a
+ * silent truncation. */
+const IA_LAWCAP : u64 = 12000000u64
+const IA_DFCAP  : u64 = 4096u64        /* distinct-function record cap (named)     */
+const IA_SIGN   : u64 = 24u64          /* function signature = SIGN^2 sample points */
+const IA_SIGHN  : u64 = 16384u64       /* signature hash-set slots (power of two)   */
+
+var IA_REFUTED  : u64 = 0u64
+var IA_SURV_TOT : u64 = 0u64
+var IA_SURV_GAT : u64 = 0u64       /* survivors touching a gated atom          */
+var IA_DF_N     : u64 = 0u64       /* DISTINCT gated functions (novel count)   */
+var IA_DF_RED   : u64 = 0u64       /* gated survivors that RE-EXPRESS a known function */
+var IA_DFSAT    : u64 = 0u64       /* distinct functions beyond the record cap */
+var IA_DTI      : [u64; 4096]      /* distinct fn: a representative smaller side */
+var IA_DTJ      : [u64; 4096]      /* distinct fn: a representative larger side  */
+var IA_DSIG     : [u64; 4096]      /* distinct fn: value signature              */
+var IA_DCLS     : [i64; 4096]      /* distinct fn: gate-class fold              */
+var IA_DSAVED   : [i64; 4096]      /* distinct fn: op-nodes saved (size tj-ti)  */
+var IA_DWFP     : [u64; 4096]      /* distinct fn: width-tower footprint (info) */
+var IA_SIGH     : [u64; 16384]     /* open-addressed signature set             */
+var IA_DECFAIL  : u64 = 0u64
+var IA_CERT     : u64 = 0u64
+var IA_EXAM     : u64 = 0u64
+var IA_CAPHIT   : u8  = 0u8
+var IA_FR_SET   : u8  = 0u8        /* first refuted law + its witness          */
+var IA_FR_TI    : u64 = 0u64
+var IA_FR_TJ    : u64 = 0u64
+var IA_FR_X     : u64 = 0u64
+var IA_FR_Y     : u64 = 0u64
+var IA_FR_L     : u64 = 0u64
+var IA_FR_R     : u64 = 0u64
+
+/* cumulative term count up to and including size `sc` (the tj upper bound) */
+fn ia_cum_end(sc: i64) -> u64 {
+    let mut e : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= sc { e = ia_sat_add(e, IA_TC[m as u64])   m = m + 1i64 }
+    return e
+}
+
+/* battery adjudication of the decoded pair (ri, rj) with early exit; sets the
+ * refutation witness on the first disagreement.  1 refuted / 0 survived. */
+var IA_WX : u64 = 0u64
+var IA_WY : u64 = 0u64
+var IA_WL : u64 = 0u64
+var IA_WR : u64 = 0u64
+fn ia_battery_judge(ri: i64, rj: i64) -> i64 {
+    let mut i : u64 = 0u64
+    while i < IA_BATN {
+        let mut j : u64 = 0u64
+        while j < IA_BATN {
+            let va : u64 = ia_eval(ri, IA_V[i], IA_V[j])
+            let vb : u64 = ia_eval(rj, IA_V[i], IA_V[j])
+            if va != vb {
+                IA_WX = IA_V[i]   IA_WY = IA_V[j]   IA_WL = va   IA_WR = vb
+                return 1i64
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i64
+}
+
+/* THE FUNCTION SIGNATURE: fold the common value tj(x,y) over the SIGN^2 sample.
+ * Two shortcuts computing the SAME function agree on every point => identical
+ * signature; a DISTINCT signature is a witnessed distinct function (the sample
+ * values differed).  A hash collision can only MERGE (undercount novelty) --
+ * never invent it -- so novelty is conservative and sound. */
+fn ia_func_sig(rj: i64) -> u64 {
+    let mut h : u64 = IA_FNV_B
+    let mut i : u64 = 0u64
+    while i < IA_SIGN {
+        let mut j : u64 = 0u64
+        while j < IA_SIGN {
+            let v : u64 = ia_eval(rj, IA_V[i], IA_V[j])
+            h = (h ^ v) * IA_FNV_P
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    if h == 0u64 { h = 1u64 }
+    return h
+}
+
+/* signature set: 1 = already present, 0 = freshly inserted */
+fn ia_sig_seen(sig: u64) -> i64 {
+    let mut s : u64 = sig & (IA_SIGHN - 1u64)
+    let mut probes : u64 = 0u64
+    while probes < IA_SIGHN {
+        if IA_SIGH[s] == sig { return 1i64 }
+        if IA_SIGH[s] == 0u64 { IA_SIGH[s] = sig   return 0i64 }
+        s = (s + 1u64) & (IA_SIGHN - 1u64)
+        probes = probes + 1u64
+    }
+    return 1i64
+}
+
+fn ia_sweep(sizecap: i64) -> i64 @export {
+    if IA_INITED == 0u8 { ia_init() }
+    ia_battery()
+    let mut sc : i64 = sizecap
+    if sc < 2i64 { sc = 2i64 }
+    if sc > IA_MMAX { sc = IA_MMAX }
+    IA_REFUTED = 0u64
+    IA_SURV_TOT = 0u64
+    IA_SURV_GAT = 0u64
+    IA_DF_N = 0u64
+    IA_DF_RED = 0u64
+    IA_DFSAT = 0u64
+    IA_DECFAIL = 0u64
+    IA_CERT = 0u64
+    IA_EXAM = 0u64
+    IA_CAPHIT = 0u8
+    IA_FR_SET = 0u8
+    let mut z : u64 = 0u64
+    while z < IA_SIGHN { IA_SIGH[z] = 0u64   z = z + 1u64 }
+    let tend : u64 = ia_cum_end(sc)
+    let mut tj : u64 = 2u64
+    while tj < tend {
+        if IA_EXAM >= IA_LAWCAP { IA_CAPHIT = 1u8   tj = tend } else {
+            IA_PP = 0i64
+            let rj : i64 = ia_term_decode(tj)
+            if rj < 0i64 { IA_DECFAIL = IA_DECFAIL + 1u64 } else {
+                let njp : i64 = IA_PP
+                let mut ti : u64 = 0u64
+                while ti < tj {
+                    if IA_EXAM >= IA_LAWCAP { IA_CAPHIT = 1u8   ti = tj } else {
+                        IA_PP = njp
+                        let ri : i64 = ia_term_decode(ti)
+                        if ri < 0i64 { IA_DECFAIL = IA_DECFAIL + 1u64 } else {
+                            let refuted : i64 = ia_battery_judge(ri, rj)
+                            IA_EXAM = IA_EXAM + 1u64
+                            if refuted == 1i64 {
+                                IA_REFUTED = IA_REFUTED + 1u64
+                                if IA_FR_SET == 0u8 {
+                                    IA_FR_SET = 1u8
+                                    IA_FR_TI = ti   IA_FR_TJ = tj
+                                    IA_FR_X = IA_WX   IA_FR_Y = IA_WY   IA_FR_L = IA_WL   IA_FR_R = IA_WR
+                                }
+                                IA_CERT = ((IA_CERT ^ (tj + 1u64)) * IA_FNV_P) ^ (ti + 1u64)
+                            } else {
+                                IA_SURV_TOT = IA_SURV_TOT + 1u64
+                                let cls : i64 = ia_term_class(ri) | ia_term_class(rj)
+                                if cls != 0i64 {
+                                    IA_SURV_GAT = IA_SURV_GAT + 1u64
+                                    let sig : u64 = ia_func_sig(rj)
+                                    if ia_sig_seen(sig) == 0i64 {
+                                        if IA_DF_N < IA_DFCAP {
+                                            let d : u64 = IA_DF_N
+                                            IA_DTI[d] = ti   IA_DTJ[d] = tj   IA_DSIG[d] = sig
+                                            IA_DCLS[d] = cls
+                                            IA_DSAVED[d] = ia_term_size(rj) - ia_term_size(ri)
+                                            IA_DWFP[d] = ia_width_fp(ri, rj)
+                                            IA_DF_N = IA_DF_N + 1u64
+                                        } else { IA_DFSAT = IA_DFSAT + 1u64 }
+                                    } else { IA_DF_RED = IA_DF_RED + 1u64 }
+                                }
+                                IA_CERT = ((IA_CERT ^ (tj + 1u64)) * IA_FNV_P) ^ 0x53u64
+                            }
+                            IA_CERT = IA_CERT * IA_FNV_P
+                        }
+                        ti = ti + 1u64
+                    }
+                }
+            }
+            tj = tj + 1u64
+        }
+    }
+    return IA_EXAM as i64
+}
+
+fn ia_refuted() -> u64 @export { return IA_REFUTED }
+fn ia_survivors() -> u64 @export { return IA_SURV_TOT }
+fn ia_survivors_gated() -> u64 @export { return IA_SURV_GAT }
+fn ia_distinct_functions() -> u64 @export { return IA_DF_N }
+fn ia_redundant() -> u64 @export { return IA_DF_RED }
+fn ia_dfsat() -> u64 @export { return IA_DFSAT }
+fn ia_df_ti(k: u64) -> u64 @export { if k < IA_DF_N { return IA_DTI[k] }  return 0u64 }
+fn ia_df_tj(k: u64) -> u64 @export { if k < IA_DF_N { return IA_DTJ[k] }  return 0u64 }
+fn ia_df_sig(k: u64) -> u64 @export { if k < IA_DF_N { return IA_DSIG[k] }  return 0u64 }
+fn ia_df_class(k: u64) -> i64 @export { if k < IA_DF_N { return IA_DCLS[k] }  return 0i64 }
+fn ia_df_saved(k: u64) -> i64 @export { if k < IA_DF_N { return IA_DSAVED[k] }  return 0i64 }
+fn ia_df_widthfp(k: u64) -> u64 @export { if k < IA_DF_N { return IA_DWFP[k] }  return 0u64 }
+fn ia_decode_failures() -> u64 @export { return IA_DECFAIL }
+fn ia_examined() -> u64 @export { return IA_EXAM }
+fn ia_caphit() -> u64 @export { return IA_CAPHIT as u64 }
+fn ia_cert() -> u64 @export { return IA_CERT }
+
+/* the CONTROL: the first refuted law, its witness, and the concrete wrong
+ * answer -- using a refuted identity as a rewrite yields a wrong value HERE. */
+fn ia_ctrl_ti() -> u64 @export { return IA_FR_TI }
+fn ia_ctrl_tj() -> u64 @export { return IA_FR_TJ }
+fn ia_ctrl_set() -> u64 @export { return IA_FR_SET as u64 }
+fn ia_ctrl_x() -> u64 @export { return IA_FR_X }
+fn ia_ctrl_y() -> u64 @export { return IA_FR_Y }
+fn ia_ctrl_lhs() -> u64 @export { return IA_FR_L }
+fn ia_ctrl_rhs() -> u64 @export { return IA_FR_R }
+
+/* preorder serialization of a term index (0 x, 1 y, 2+id atom marker) */
+var IA_SER : [u8; 64]
+var IA_SERN : u64 = 0u64
+
+fn ia_ser_walk(id: i64) {
+    if IA_SERN >= 63u64 { return }
+    let k : i64 = IA_PK[id as u64]
+    IA_SER[IA_SERN] = (k as u64 & 0xFFu64) as u8
+    IA_SERN = IA_SERN + 1u64
+    if k >= 2i64 {
+        ia_ser_walk(IA_PL[id as u64])
+        if IA_PR[id as u64] >= 0i64 { ia_ser_walk(IA_PR[id as u64]) }
+    }
+}
+
+fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 @export {
+    IA_PP = 0i64
+    let root : i64 = ia_term_decode(t_idx)
+    if root < 0i64 { return 0u64 }
+    IA_SERN = 0u64
+    ia_ser_walk(root)
+    let d : *u8 = out_addr as *u8
+    let mut i : u64 = 0u64
+    while i < IA_SERN { d[i] = IA_SER[i]   i = i + 1u64 }
+    return IA_SERN
+}
+
+/* ============================================================================
+ * THE WIDTH-TOWER FOOTPRINT (informative descriptor of a distinct function).
+ *
+ * The novelty separator is the FUNCTION signature (ia_func_sig): two shortcuts
+ * are the same discovery iff they compute the same function on the silicon.
+ * This footprint is a SECONDARY, informative descriptor: across the word-width
+ * tower (Z/2^w with the chip's own ops, w = 1..6, checked EXHAUSTIVELY over
+ * {0..2^w-1}^2), at which widths does the identity hold?  A width-64-only PDEP
+ * identity that fails at width 3 is genuinely width-specific; one that holds at
+ * every width is width-robust.  It is reported per distinct function, never used
+ * to fabricate novelty (true identities saturate the tower -- which is exactly
+ * why the FUNCTION signature, not the truth-footprint, decides distinctness).
+ * ============================================================================ */
+fn mx_holds_width(ri: i64, rj: i64, w: u64) -> i64 {
+    let mw : u64 = (1u64 << w) - 1u64
+    let lim : u64 = 1u64 << w
+    let mut a : u64 = 0u64
+    while a < lim {
+        let mut b : u64 = 0u64
+        while b < lim {
+            let va : u64 = ia_eval(ri, a, b) & mw
+            let vb : u64 = ia_eval(rj, a, b) & mw
+            if va != vb { return 0i64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return 1i64
+}
+
+/* the 6-bit width-tower footprint of the decoded identity (ri, rj) */
+fn ia_width_fp(ri: i64, rj: i64) -> u64 {
+    let mut fp : u64 = 0u64
+    let mut w : u64 = 1u64
+    while w <= 6u64 {
+        if mx_holds_width(ri, rj, w) == 1i64 { fp = fp | (1u64 << (w - 1u64)) }
+        w = w + 1u64
+    }
+    return fp
+}
+fn ia_model_count() -> u64 @export { return 6u64 }

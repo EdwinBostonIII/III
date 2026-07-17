@@ -1,0 +1,615 @@
+/* aether/reversibility.iii -- THE REVERSIBILITY HUNT: III autonomously discovers the
+ * INFORMATION-CONSERVING fragment of its own operation space.
+ *
+ * The unifying fact under rva (the verifier), billiard (reversible physics), the NOMOS
+ * involutions, intent's Oracle of Rejection, and the friction cost: an operation either
+ * PRESERVES information (a bijection -- reversible, self-recoverable, Landauer heat floor
+ * ZERO) or DESTROYS it (a measurable deficit = bits erased, the thermodynamic cost).
+ * rva PROVES a caller-supplied (f, g) pair; this organ is the missing layer -- it SEES
+ * the opportunity, it does not need to be handed f or g.
+ *
+ * THE HUNT (autonomous, non-guided, GENUINE):
+ *   (1) ENUMERATE: walk isa_ontogenesis's fair term enumeration over THIS die's live
+ *       atoms (the index<->term bijection; I pick no operation).  Each term is a unary
+ *       operation f(x) = term(x, 0).
+ *   (2) BUILD in bv_bits with true mod-2^W closure -- the atoms via their base-op
+ *       definiens (NOT/NEG/AND/OR/XOR/ADD/SUB/MUL/SHL/SHR/ANDN and the BMI singletons
+ *       BLSI=x&-x, BLSMSK=x^(x-1), BLSR=x&(x-1)).  The count/deposit atoms (POPCNT/
+ *       LZCNT/TZCNT/PDEP/PEXT) are individually IRREVERSIBLE many->few maps and are not
+ *       bit-blastable -- terms using them are SKIPPED by name (honest, never a fake pass).
+ *   (3) DECIDE by EXHAUSTIVE INJECTIVITY over the FULL 2^W domain: with true mod-2^W
+ *       semantics, domain = codomain, so injective <=> BIJECTION.  2x is correctly 2-to-1
+ *       (loses the top bit) and REFUSED; x^2 is correctly non-injective and REFUSED.  This
+ *       is genuine reversibility, decided by exhaustion, not retrieved from a catalog.
+ *   (4) INVOLUTION: bb_equal(f(f(x)), x) -- PROVEN over all 2^W that the operation undoes
+ *       ITSELF (the do-and-undo-at-net-zero primitive; NOMOS's NOT/NEG are the first two).
+ *   (5) DEFICIT: for an irreversible f, the largest fiber -> bits erased (Landauer, MEASURED).
+ *
+ * A reversible found here is width-parametric for the algebraic families and promotable to
+ * rva's full-2^64 SMT proof + admission -- discovery FEEDS the verifier, never duplicates
+ * it.  Novelty is ADJUDICATED downstream (SOVEREIGN/FIRST-COMPUTED; NOVEL reserved for what
+ * survives).  Hexad: kind_essence.  Ring: R0.  NIH: composes isa_ontogenesis + numera/bv_bits. */
+module aether_reversibility
+
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_tcount(m: i64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+const RV_W    : u64 = 13u64                /* full domain 2^13 = 8192 -- injective <=> bijection */
+const RV_N    : u64 = 8192u64
+const RV_HN   : u64 = 16384u64
+const RV_SENT : u64 = 18446744073709551615u64
+
+/* ---- build the term (ser in RV_SER) as a bb node over the given input node.  Sets
+ * RV_UNSUP=1 if a count/deposit atom or a variable shift (not bit-blastable) is hit. ---- */
+var RV_SER   : [u8; 64]
+var RV_SLN   : u64 = 0u64
+var RV_CUR   : u64 = 0u64
+var RV_UNSUP : u64 = 0u64
+var RV_INPUT : u32 = 0u32
+var RV_YC    : u64 = 0u64
+fn rv_shift_amt(n: u32) -> u64 {
+    /* a bit-blastable shift needs a CONSTANT amount: same value regardless of x.
+     * (for size<=3 terms the amount subterm is a leaf/single atom, so a 2-point
+     * check settles constness; a variable shift is not bit-blastable -> UNSUP.) */
+    bb_set_input(0u32, 0u64)
+    let v0 : u64 = bb_eval(n)
+    bb_set_input(0u32, 1u64)
+    let v1 : u64 = bb_eval(n)
+    if v0 == v1 { return v0 & 63u64 }
+    RV_UNSUP = 1u64
+    return 0u64
+}
+fn rv_build() -> u32 {
+    if RV_CUR >= RV_SLN { RV_UNSUP = 1u64   return bb_const(0u64) }
+    let b : u8 = RV_SER[RV_CUR]
+    RV_CUR = RV_CUR + 1u64
+    if b == 0u8 { return RV_INPUT }
+    if b == 1u8 { return bb_const(RV_YC) }
+    let atom : i64 = (b as i64) - 2i64
+    if ia_atom_arity(atom) == 1i64 {
+        let a : u32 = rv_build()
+        if atom == 0i64 { return bb_not(a) }
+        if atom == 1i64 { return bb_sub(bb_const(0u64), a) }
+        if atom == 2i64 { return bb_and(a, bb_sub(bb_const(0u64), a)) }              /* BLSI  */
+        if atom == 3i64 { return bb_xor(a, bb_sub(a, bb_const(1u64))) }              /* BLSMSK */
+        if atom == 4i64 { return bb_and(a, bb_sub(a, bb_const(1u64))) }              /* BLSR  */
+        RV_UNSUP = 1u64                                                              /* POPCNT/LZCNT/TZCNT */
+        return bb_const(0u64)
+    }
+    let a : u32 = rv_build()
+    let c : u32 = rv_build()
+    if atom == 8i64  { return bb_and(a, c) }
+    if atom == 9i64  { return bb_or(a, c) }
+    if atom == 10i64 { return bb_xor(a, c) }
+    if atom == 11i64 { return bb_add(a, c) }
+    if atom == 12i64 { return bb_sub(a, c) }
+    if atom == 13i64 { return bb_mul(a, c) }
+    if atom == 14i64 { return bb_shl(a, rv_shift_amt(c)) }
+    if atom == 15i64 { return bb_shr(a, rv_shift_amt(c)) }
+    if atom == 16i64 { return bb_and(bb_not(a), c) }                                 /* ANDN */
+    RV_UNSUP = 1u64                                                                  /* PDEP/PEXT */
+    return bb_const(0u64)
+}
+
+/* injectivity hash-set (generation-stamped, open addressing) */
+var RV_HV  : [u64; 16384]
+var RV_HG  : [u64; 16384]
+var RV_HC  : [u64; 16384]
+var RV_GEN : u64 = 0u64
+fn rv_hins(v: u64) -> u64 {
+    let mut h : u64 = (v ^ (v >> 33u64)) * 12297829382473034411u64
+    h = (h ^ (h >> 29u64)) % RV_HN
+    let mut probe : u64 = 0u64
+    while probe < RV_HN {
+        let s : u64 = (h + probe) % RV_HN
+        if RV_HG[s] != RV_GEN { RV_HG[s] = RV_GEN   RV_HV[s] = v   RV_HC[s] = 1u64   return 0u64 }
+        if RV_HV[s] == v { RV_HC[s] = RV_HC[s] + 1u64   return RV_HC[s] }
+        probe = probe + 1u64
+    }
+    return RV_SENT
+}
+
+var RV_REV_N   : u64 = 0u64
+var RV_INV_N   : u64 = 0u64
+var RV_MAXDEF  : u64 = 0u64
+var RV_EXAM    : u64 = 0u64
+var RV_SKIP    : u64 = 0u64
+var RV_NONTRIV : u64 = 0u64                /* reversibles that USE a nonlinear/BMI atom */
+var RV_REVSER  : [u8; 4096]
+var RV_REVLEN  : [u64; 64]
+var RV_REVINV  : [u8; 64]
+var RV_REVNL   : [u8; 64]
+var RV_REVY    : [u64; 64]
+var RV_REVSTORE : u64 = 0u64
+/* the second-operand parameter sweep: the shift amounts / operand constants that turn
+ * XOR(x,SHL(x,y)) into the xorshift x^(x<<y), MUL(x,y) into x*y, etc.  III sweeps the
+ * parameter space fairly; it does not hand-pick a value. */
+var RV_YVALS : [u64; 24] = [0u64, 1u64, 2u64, 3u64, 4u64, 5u64, 6u64, 7u64, 8u64, 9u64, 11u64, 13u64, 1u64, 3u64, 5u64, 7u64, 9u64, 15u64, 255u64, 12u64, 10u64, 6u64, 2u64, 4u64]
+const RV_NY : u64 = 12u64
+
+/* does the current ser use a nonlinear (MUL) or BMI (BLSI/BLSMSK/BLSR) atom? */
+fn rv_uses_nonlinear() -> u64 {
+    let mut i : u64 = 0u64
+    while i < RV_SLN {
+        let b : u8 = RV_SER[i]
+        if b >= 2u8 { let id : i64 = (b as i64) - 2i64
+            if id == 13i64 { return 1u64 }
+            if id == 2i64 { return 1u64 }   if id == 3i64 { return 1u64 }   if id == 4i64 { return 1u64 } }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* ==== THE AUTONOMOUS INVERSION: III recovers a reversible LINEAR op's inverse ITSELF.
+ * It is handed only the forward bb node f (no inverse, no label); it probes f's GF(2)
+ * matrix on the electrons (f(e_j) ^ f(0) = column j), inverts it by Gaussian elimination
+ * over GF(2), builds the inverse operation, and PROVES bb_equal(g(f(x)), x) over all 2^W.
+ * The forward/inverse matrix DENSITY (1s per row = GF(2) op-count) is the friction
+ * asymmetry: a bijection cheap forward but dear to undo is a COMPUTATIONAL DIODE -- the
+ * reversibility(bijection) x taxis(friction) object, sovereign to this die. ==== */
+var RV_MCOL : [u64; 64]
+var RV_MROW : [u64; 64]
+var RV_MINV : [u64; 64]
+var RV_WRK  : [u64; 64]
+var RV_MC   : u64 = 0u64
+var RV_FWDD : u64 = 0u64
+var RV_INVD : u64 = 0u64
+var RV_MAXASYM : u64 = 0u64                 /* max inverse/forward density ratio (x100) seen */
+var RV_DIODE_SER : [u8; 64]                 /* the ser of the sharpest computational diode */
+var RV_DIODE_LEN : u64 = 0u64
+var RV_DIODE_Y   : u64 = 0u64
+var RV_DIODE_FWD : u64 = 0u64
+var RV_DIODE_INV : u64 = 0u64
+var RV_LINREV    : u64 = 0u64               /* linear reversibles whose inverse III PROVED */
+var RV_DIODE_COUNT : u64 = 0u64             /* reversibles whose inverse is strictly DENSER (diodes) */
+fn rv_bit(v: u64, i: u64) -> u64 { return (v >> i) & 1u64 }
+/* probe f (a built bb node) for GF(2)-affine structure; 1 iff affine (verified on a battery) */
+fn rv_probe(f: u32) -> u64 {
+    bb_set_input(0u32, 0u64)
+    RV_MC = bb_eval(f)
+    let mut j : u64 = 0u64
+    while j < RV_W { bb_set_input(0u32, 1u64 << j)   RV_MCOL[j] = bb_eval(f) ^ RV_MC   j = j + 1u64 }
+    let mut i : u64 = 0u64
+    while i < RV_W {
+        let mut r : u64 = 0u64
+        j = 0u64
+        while j < RV_W { if rv_bit(RV_MCOL[j], i) == 1u64 { r = r | (1u64 << j) }   j = j + 1u64 }
+        RV_MROW[i] = r
+        i = i + 1u64
+    }
+    let mut s : u64 = 1u64
+    let mut ok : u64 = 1u64
+    let mut t : u64 = 0u64
+    while t < 48u64 {
+        s = (s * 6364136223846793005u64) + 1442695040888963407u64
+        let v : u64 = s & (RV_N - 1u64)
+        let mut mv : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < RV_W { if rv_bit(v, k) == 1u64 { mv = mv ^ RV_MCOL[k] }   k = k + 1u64 }
+        bb_set_input(0u32, v)
+        if (mv ^ RV_MC) != bb_eval(f) { ok = 0u64 }
+        t = t + 1u64
+    }
+    return ok
+}
+/* invert RV_MROW into RV_MINV over GF(2); 1 iff full rank */
+fn rv_gauss() -> u64 {
+    let mut i : u64 = 0u64
+    while i < RV_W { RV_MINV[i] = 1u64 << i   RV_WRK[i] = RV_MROW[i]   i = i + 1u64 }
+    let mut col : u64 = 0u64
+    while col < RV_W {
+        let mut pr : u64 = col
+        let mut found : u64 = 0u64
+        let mut scan : u64 = col
+        while scan < RV_W { if found == 0u64 { if rv_bit(RV_WRK[scan], col) == 1u64 { pr = scan   found = 1u64 } }   scan = scan + 1u64 }
+        if found == 0u64 { return 0u64 }
+        let tw : u64 = RV_WRK[col]   RV_WRK[col] = RV_WRK[pr]   RV_WRK[pr] = tw
+        let ti : u64 = RV_MINV[col]   RV_MINV[col] = RV_MINV[pr]   RV_MINV[pr] = ti
+        let mut r : u64 = 0u64
+        while r < RV_W { if r != col { if rv_bit(RV_WRK[r], col) == 1u64 { RV_WRK[r] = RV_WRK[r] ^ RV_WRK[col]   RV_MINV[r] = RV_MINV[r] ^ RV_MINV[col] } }   r = r + 1u64 }
+        col = col + 1u64
+    }
+    return 1u64
+}
+/* build g(y) = Minv.(y ^ c) as a bb node; g_i = parity(Minv[i] & (y^c)) at bit i */
+fn rv_build_inv(yc: u32) -> u32 {
+    let mut g : u32 = bb_const(0u64)
+    let mut i : u64 = 0u64
+    while i < RV_W {
+        let mut acc : u32 = bb_const(0u64)
+        let mut j : u64 = 0u64
+        while j < RV_W { if rv_bit(RV_MINV[i], j) == 1u64 { acc = bb_xor(acc, bb_and(bb_shr(yc, j), bb_const(1u64))) }   j = j + 1u64 }
+        g = bb_xor(g, bb_shl(acc, i))
+        i = i + 1u64
+    }
+    return g
+}
+fn rv_density(is_inv: u64) -> u64 {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < RV_W {
+        let mut row : u64 = RV_MROW[i]
+        if is_inv == 1u64 { row = RV_MINV[i] }
+        let mut j : u64 = 0u64
+        while j < RV_W { if rv_bit(row, j) == 1u64 { n = n + 1u64 }   j = j + 1u64 }
+        i = i + 1u64
+    }
+    return n
+}
+/* for the current reversible op (built as node f), if it is LINEAR, construct+PROVE the
+ * inverse and record the friction asymmetry; track the sharpest computational diode. */
+fn rv_characterize(f: u32) -> i32 {
+    if rv_probe(f) == 0u64 { return 0i32 }
+    if rv_gauss() == 0u64 { return 0i32 }
+    let yc : u32 = bb_xor(f, bb_const(RV_MC))
+    let g : u32 = rv_build_inv(yc)
+    if bb_equal(g, bb_var(0u32)) != 1u8 { return 0i32 }
+    RV_LINREV = RV_LINREV + 1u64
+    RV_FWDD = rv_density(0u64)
+    RV_INVD = rv_density(1u64)
+    /* a COMPUTATIONAL DIODE is a PARAMETRIZED reversible (uses y) whose inverse is
+     * strictly DENSER than the forward -- cheap to compute, dear to undo.  Identity
+     * and y-independent ops are not diodes. */
+    let mut usesy : u64 = 0u64
+    let mut si : u64 = 0u64
+    while si < RV_SLN { if RV_SER[si] == 1u8 { usesy = 1u64 }   si = si + 1u64 }
+    if usesy == 0u64 { return 0i32 }
+    if RV_INVD <= RV_FWDD { return 0i32 }
+    RV_DIODE_COUNT = RV_DIODE_COUNT + 1u64
+    let asym : u64 = (RV_INVD * 100u64) / (RV_FWDD + 1u64)
+    if asym > RV_MAXASYM {
+        RV_MAXASYM = asym
+        RV_DIODE_LEN = RV_SLN
+        RV_DIODE_Y = RV_YC
+        RV_DIODE_FWD = RV_FWDD
+        RV_DIODE_INV = RV_INVD
+        let mut i : u64 = 0u64
+        while i < RV_SLN { RV_DIODE_SER[i] = RV_SER[i]   i = i + 1u64 }
+    }
+    return 0i32
+}
+/* decide the current term.  2 = involution, 1 = reversible, 0 = irreversible, 9 = skipped */
+fn rv_decide() -> u64 {
+    bb_reset(RV_W)
+    RV_UNSUP = 0u64
+    RV_INPUT = bb_var(0u32)
+    RV_CUR = 0u64
+    let f : u32 = rv_build()
+    if RV_UNSUP != 0u64 { RV_SKIP = RV_SKIP + 1u64   return 9u64 }
+    RV_GEN = RV_GEN + 1u64
+    let mut injective : u64 = 1u64
+    let mut maxfiber : u64 = 1u64
+    let mut x : u64 = 0u64
+    while x < RV_N {
+        bb_set_input(0u32, x)
+        let fx : u64 = bb_eval(f)
+        let mult : u64 = rv_hins(fx)
+        if mult != 0u64 { injective = 0u64   if mult > maxfiber { maxfiber = mult } }
+        x = x + 1u64
+    }
+    if injective == 0u64 {
+        let mut def : u64 = 0u64
+        let mut mm : u64 = 1u64
+        while mm < maxfiber { mm = mm << 1u64   def = def + 1u64 }
+        if def > RV_MAXDEF { RV_MAXDEF = def }
+        return 0u64
+    }
+    /* bijection over 2^W.  INVOLUTION: build f(f(x)) by substitution and PROVE == x. */
+    RV_REV_N = RV_REV_N + 1u64
+    RV_INPUT = f
+    RV_CUR = 0u64
+    let ff : u32 = rv_build()
+    let mut invol : u64 = 0u64
+    if RV_UNSUP == 0u64 { if bb_equal(ff, bb_var(0u32)) == 1u8 { invol = 1u64   RV_INV_N = RV_INV_N + 1u64 } }
+    let nl : u64 = rv_uses_nonlinear()
+    if nl == 1u64 { RV_NONTRIV = RV_NONTRIV + 1u64 }
+    /* AUTONOMOUS INVERSION: if this reversible is LINEAR, recover its inverse by
+     * Gaussian elimination over the probed GF(2) matrix, PROVE it, and record the
+     * friction asymmetry (the sharpest becomes the computational diode). */
+    rv_characterize(f)
+    /* store only PARAMETRIZED non-trivial finds: the term must USE the parameter y
+     * (contain leaf 1) with a nonzero value, so the reversible is x^(x<<k), x*c, etc.
+     * -- the non-obvious finds, not the y-independent involutions NOT(NOT(x)). */
+    let mut natoms : u64 = 0u64
+    let mut usesy : u64 = 0u64
+    let mut ai : u64 = 0u64
+    while ai < RV_SLN { if RV_SER[ai] >= 2u8 { natoms = natoms + 1u64 }   if RV_SER[ai] == 1u8 { usesy = 1u64 }   ai = ai + 1u64 }
+    if RV_REVSTORE < 40u64 { if natoms >= 1u64 { if usesy == 1u64 { if RV_YC != 0u64 { if nl == 1u64 {
+        let base : u64 = RV_REVSTORE * 64u64
+        let mut i : u64 = 0u64
+        while i < RV_SLN { RV_REVSER[base + i] = RV_SER[i]   i = i + 1u64 }
+        RV_REVLEN[RV_REVSTORE] = RV_SLN
+        if invol == 1u64 { RV_REVINV[RV_REVSTORE] = 1u8 } else { RV_REVINV[RV_REVSTORE] = 0u8 }
+        if nl == 1u64 { RV_REVNL[RV_REVSTORE] = 1u8 } else { RV_REVNL[RV_REVSTORE] = 0u8 }
+        RV_REVY[RV_REVSTORE] = RV_YC
+        RV_REVSTORE = RV_REVSTORE + 1u64
+    } } } } }
+    if invol == 1u64 { return 2u64 }
+    return 1u64
+}
+fn rv_hunt(maxsize: i64) -> i32 @export {
+    ia_init()
+    RV_REV_N = 0u64   RV_INV_N = 0u64   RV_MAXDEF = 0u64   RV_EXAM = 0u64
+    RV_SKIP = 0u64    RV_NONTRIV = 0u64  RV_REVSTORE = 0u64  RV_GEN = 0u64
+    RV_MAXASYM = 0u64  RV_LINREV = 0u64  RV_DIODE_COUNT = 0u64  RV_DIODE_LEN = 0u64  RV_DIODE_FWD = 0u64  RV_DIODE_INV = 0u64
+    let mut i : u64 = 0u64
+    while i < RV_HN { RV_HG[i] = 0u64   i = i + 1u64 }
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= maxsize { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    let mut t : u64 = 0u64
+    while t < prefix {
+        RV_SLN = ia_term_ser(t, (&RV_SER) as u64)
+        if RV_SLN > 0u64 { if RV_SLN <= 32u64 {
+            /* sweep the second-operand parameter (shift amount / operand constant) */
+            let mut yi : u64 = 0u64
+            while yi < RV_NY {
+                RV_YC = RV_YVALS[yi]
+                rv_decide()
+                RV_EXAM = RV_EXAM + 1u64
+                yi = yi + 1u64
+            }
+        } }
+        t = t + 1u64
+    }
+    return 0i32
+}
+/* count occurrences of the x leaf (byte 0) in the current serialization -- the RECONVERGENCE
+ * of the term (how many distinct positions x fans out to). */
+fn rv_xfanout() -> u64 {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < RV_SLN { if RV_SER[i] == 0u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+/* ==== THE COMPUTATIONAL-DIODE HUNT ====
+ * Reversibility of a LINEAR map is decided by matrix RANK (W+1 probes + Gaussian
+ * elimination) -- NO 2^W brute force -- so this reaches the larger RECONVERGENT terms
+ * (x fanned out to >=2 leaves) where diodes actually live, which rv_hunt's exhaustive
+ * injectivity cannot afford.  III derives the structural law itself: a single-x linear
+ * reversible is always an identity-matrix translation (sparse inverse, zero friction);
+ * a COMPUTATIONAL DIODE -- a bijection cheap forward, dear to undo -- NEEDS x to fan out
+ * through >=2 distinct linear paths.  So it searches exactly that sublattice.  The xorshift
+ * x^(x>>k), core of every PRNG, is the first non-obvious inhabitant it finds and PROVES. */
+fn rv_diode_hunt(maxsize: i64) -> i32 @export {
+    ia_init()
+    RV_MAXASYM = 0u64  RV_LINREV = 0u64  RV_DIODE_COUNT = 0u64  RV_DIODE_LEN = 0u64  RV_DIODE_FWD = 0u64  RV_DIODE_INV = 0u64
+    RV_EXAM = 0u64
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= maxsize { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    let mut t : u64 = 0u64
+    while t < prefix {
+        RV_SLN = ia_term_ser(t, (&RV_SER) as u64)
+        if RV_SLN > 0u64 { if RV_SLN <= 32u64 { if rv_xfanout() >= 2u64 {
+            let mut yi : u64 = 0u64
+            while yi < RV_NY {
+                RV_YC = RV_YVALS[yi]
+                bb_reset(RV_W)
+                RV_UNSUP = 0u64
+                RV_INPUT = bb_var(0u32)
+                RV_CUR = 0u64
+                let f : u32 = rv_build()
+                if RV_UNSUP == 0u64 { rv_characterize(f) }
+                RV_EXAM = RV_EXAM + 1u64
+                yi = yi + 1u64
+            }
+        } } }
+        t = t + 1u64
+    }
+    return 0i32
+}
+/* apply unary atom `id` to bb node a (the involution-candidate base ops only) */
+fn rv_apply1(id: i64, a: u32) -> u32 {
+    if id == 0i64 { return bb_not(a) }                       /* NOT  */
+    if id == 1i64 { return bb_sub(bb_const(0u64), a) }       /* NEG  */
+    if id == 2i64 { return bb_and(a, bb_sub(bb_const(0u64), a)) }   /* BLSI   */
+    if id == 3i64 { return bb_xor(a, bb_sub(a, bb_const(1u64))) }   /* BLSMSK */
+    if id == 4i64 { return bb_and(a, bb_sub(a, bb_const(1u64))) }   /* BLSR   */
+    return a
+}
+/* PROVE atom(atom(x)) == x over all 2^W.  This is EXACTLY the property cg_r3's
+ * r3_nomos_collapse relies on to fold NOT(NOT(e))->e and NEG(NEG(e))->e: the discovery
+ * kernel here and the compiler's reversible-core rewrite are ONE law, cross-proven.  Returns
+ * 1 iff `id` is an involution (self-inverse) -- 1 for NOT/NEG, 0 for BLSI/BLSMSK/BLSR. */
+fn rv_prove_involution(id: i64) -> u64 @export {
+    bb_reset(RV_W)
+    let x : u32 = bb_var(0u32)
+    let inner : u32 = rv_apply1(id, x)
+    let outer : u32 = rv_apply1(id, inner)
+    if bb_equal(outer, x) == 1u8 { return 1u64 }
+    return 0u64
+}
+fn rv_find_param(i: u64) -> u64 @export { if i < RV_REVSTORE { return RV_REVY[i] }  return 0u64 }
+fn rv_examined() -> u64 @export { return RV_EXAM }
+fn rv_reversible() -> u64 @export { return RV_REV_N }
+fn rv_involutions() -> u64 @export { return RV_INV_N }
+fn rv_max_deficit() -> u64 @export { return RV_MAXDEF }
+fn rv_skipped() -> u64 @export { return RV_SKIP }
+fn rv_nonlinear_reversibles() -> u64 @export { return RV_NONTRIV }
+fn rv_find_count() -> u64 @export { return RV_REVSTORE }
+fn rv_find_len(i: u64) -> u64 @export { if i < RV_REVSTORE { return RV_REVLEN[i] }  return 0u64 }
+fn rv_find_byte(i: u64, j: u64) -> u8 @export { if i < RV_REVSTORE { if j < 64u64 { return RV_REVSER[(i * 64u64) + j] } }  return 0u8 }
+fn rv_find_involution(i: u64) -> u8 @export { if i < RV_REVSTORE { return RV_REVINV[i] }  return 0u8 }
+fn rv_find_nonlinear(i: u64) -> u8 @export { if i < RV_REVSTORE { return RV_REVNL[i] }  return 0u8 }
+fn rv_linear_inverted() -> u64 @export { return RV_LINREV }
+fn rv_diode_count() -> u64 @export { return RV_DIODE_COUNT }
+fn rv_max_asymmetry() -> u64 @export { return RV_MAXASYM }
+fn rv_diode_len() -> u64 @export { return RV_DIODE_LEN }
+fn rv_diode_byte(j: u64) -> u8 @export { if j < 64u64 { return RV_DIODE_SER[j] }  return 0u8 }
+fn rv_diode_param() -> u64 @export { return RV_DIODE_Y }
+fn rv_diode_fwd() -> u64 @export { return RV_DIODE_FWD }
+fn rv_diode_inv() -> u64 @export { return RV_DIODE_INV }
+
+/* ===== THE NONLINEAR INVERSION (2026-07-17): closing rv_characterize's gap ====
+ * rv_characterize inverts LINEAR reversibles by probing the GF(2) matrix and
+ * Gaussian-eliminating -- but a MUL-odd bijection is NONLINEAR over GF(2)
+ * (rv_probe returns 0), so the hunt FINDS x*c reversible yet leaves it
+ * un-inverted.  This is the one nonlinear subclass with a closed inverse:
+ * multiplication by an ODD constant is a unit in Z/2^64, and its inverse is
+ * computed by III itself via Newton iteration  y <- y*(2 - c*y)  (quadratic
+ * convergence: y0=c is exact to 3 bits, 5 doublings reach 64).  The inverse is
+ * VERIFIED in-organ by round-trip over a battery + walking bits + LCG, and is
+ * offered to the ceremony for the numera/bv_ring polynomial-identity proof over
+ * all 2^64 (the bit-blast miter times out on double 64x64 MUL -- MEASURED, so
+ * the ring judge is the right engine, not iii-prove).  An EVEN c has no inverse
+ * (returns 0): its Landauer deficit is exactly tz(c) bits, the erased low zeros. */
+fn rv_mul_inverse(c: u64) -> u64 @export {
+    if (c & 1u64) == 0u64 { return 0u64 }
+    let mut y : u64 = c
+    let mut i : u64 = 0u64
+    while i < 5u64 {
+        y = y * (2u64 - (c * y))
+        i = i + 1u64
+    }
+    return y
+}
+/* the Landauer deficit in bits of MUL-c: 0 for odd c (reversible), tz(c) for
+ * even c (the low zero bits the multiply erases). */
+fn rv_mul_deficit(c: u64) -> u64 @export {
+    if (c & 1u64) == 1u64 { return 0u64 }
+    if c == 0u64 { return 64u64 }
+    let mut v : u64 = c
+    let mut t : u64 = 0u64
+    while (v & 1u64) == 0u64 { v = v >> 1u64   t = t + 1u64 }
+    return t
+}
+/* in-organ round-trip verification of the synthesized mul inverse: cinv*(c*x)==x
+ * over the 13-value battery + all 64 walking bits + 128 LCG points.  Returns 1
+ * iff the inverse undoes the multiply everywhere sampled (a structural bijection
+ * cannot fail; a 0 is a synthesis bug, loud).  0 immediately for even c. */
+var RV_MB : [u64; 13] = [0u64, 1u64, 2u64, 18446744073709551615u64, 9223372036854775808u64, 12297829382473034410u64, 6148914691236517205u64, 4294967295u64, 18446744069414584320u64, 81985529216486895u64, 16045690984833335023u64, 9223372036854775809u64, 9223372036854775807u64]
+fn rv_mul_roundtrip(c: u64) -> u8 @export {
+    if (c & 1u64) == 0u64 { return 0u8 }
+    let ci : u64 = rv_mul_inverse(c)
+    let mut k : u64 = 0u64
+    while k < 13u64 {
+        let v : u64 = RV_MB[k]
+        if ((v * c) * ci) != v { return 0u8 }
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 64u64 {
+        let w : u64 = 1u64 << k
+        if ((w * c) * ci) != w { return 0u8 }
+        k = k + 1u64
+    }
+    let mut x : u64 = 88172645463325252u64
+    k = 0u64
+    while k < 128u64 {
+        x = (x ^ (x >> 30u64)) * 13787848793156543929u64
+        x = (x ^ (x >> 27u64)) * 10723151780598845931u64
+        x = x ^ (x >> 31u64)
+        if ((x * c) * ci) != x { return 0u8 }
+        k = k + 1u64
+    }
+    return 1u8
+}
+
+/* ==== THE UNIVERSAL REVERSIBLE GATE, THIRD ROUTE (2026-07-17) ====
+ * The Toffoli/CCNOT (a,b,c) -> (a,b,c^(a&b)) packed into one word: bit2=a,
+ * bit1=b, bit0=c, so t(x) = x ^ ((x>>1)&(x>>2)&1).  primweb proves it
+ * self-inverse by SAT (pw_toffoli_self_inverse, gate 1758); weave_graph
+ * re-proves it by the melted signature (ws_toffoli_selfinverse, gate 1797);
+ * THIS kernel proves it by EXHAUSTION over all 2^13 -- the third independent
+ * route.  The substrate verb asserts all three agree in ONE binary: the
+ * universal reversible primitive is one law wherever it is spoken. */
+fn rv_toffoli_node(inp: u32) -> u32 {
+    let ab : u32 = bb_and(bb_shr(inp, 1u64), bb_shr(inp, 2u64))
+    return bb_xor(inp, bb_and(ab, bb_const(1u64)))
+}
+fn rv_prove_toffoli() -> u64 @export {
+    bb_reset(RV_W)
+    let x : u32 = bb_var(0u32)
+    let t : u32 = rv_toffoli_node(x)
+    let tt : u32 = rv_toffoli_node(t)
+    if bb_equal(tt, x) != 1u8 { return 0u64 }        /* involution: t(t(x)) == x, all 2^13 */
+    if bb_equal(t, x) == 1u8 { return 0u64 }         /* biting: t is NOT the identity */
+    return 1u64
+}
+/* universality: with the c wire forced to 1, the Toffoli's c-output IS NAND(a,b):
+ * bit0(t(x|1)) == 1 ^ (bit1(x) & bit2(x)), proven over all 2^13. */
+fn rv_prove_toffoli_nand() -> u64 @export {
+    bb_reset(RV_W)
+    let x : u32 = bb_var(0u32)
+    let u : u32 = bb_or(x, bb_const(1u64))
+    let lhs : u32 = bb_and(rv_toffoli_node(u), bb_const(1u64))
+    let ab : u32 = bb_and(bb_and(bb_shr(x, 1u64), bb_shr(x, 2u64)), bb_const(1u64))
+    let rhs : u32 = bb_xor(ab, bb_const(1u64))
+    if bb_equal(lhs, rhs) == 1u8 { return 1u64 }
+    return 0u64
+}
+
+/* ==== THE WALKER LENT (2026-07-17): symmetria borrows this kernel's builder.
+ * rv_table8 builds a serialized term (y bound to yv) at TRUE mod-2^8 semantics
+ * and fills the caller's 256-byte value table; rv_bij13 re-decides the same
+ * operation's bijectivity at W=13 by exhaustion (width-stability, the kernel's
+ * own standard).  The group organ never re-implements term semantics: one
+ * walker, one truth. ==== */
+fn rv_table8(ser_addr: u64, len: u64, yv: u64, out_addr: u64) -> u64 @export {
+    if len == 0u64 { return 0u64 }
+    if len > 32u64 { return 0u64 }
+    let sp : *u8 = ser_addr as *u8
+    let mut i : u64 = 0u64
+    while i < len { RV_SER[i] = sp[i]   i = i + 1u64 }
+    RV_SLN = len
+    RV_YC = yv
+    bb_reset(8u64)
+    RV_UNSUP = 0u64
+    RV_INPUT = bb_var(0u32)
+    RV_CUR = 0u64
+    let f : u32 = rv_build()
+    if RV_UNSUP != 0u64 { return 0u64 }
+    let op : *u8 = out_addr as *u8
+    let mut x : u64 = 0u64
+    while x < 256u64 {
+        bb_set_input(0u32, x)
+        op[x] = (bb_eval(f) & 255u64) as u8
+        x = x + 1u64
+    }
+    return 1u64
+}
+var RV_B13 : [u8; 8192]
+fn rv_bij13(ser_addr: u64, len: u64, yv: u64) -> u64 @export {
+    if len == 0u64 { return 0u64 }
+    if len > 32u64 { return 0u64 }
+    let sp : *u8 = ser_addr as *u8
+    let mut i : u64 = 0u64
+    while i < len { RV_SER[i] = sp[i]   i = i + 1u64 }
+    RV_SLN = len
+    RV_YC = yv
+    bb_reset(RV_W)
+    RV_UNSUP = 0u64
+    RV_INPUT = bb_var(0u32)
+    RV_CUR = 0u64
+    let f : u32 = rv_build()
+    if RV_UNSUP != 0u64 { return 0u64 }
+    i = 0u64
+    while i < RV_N { RV_B13[i] = 0u8   i = i + 1u64 }
+    let mut x : u64 = 0u64
+    while x < RV_N {
+        bb_set_input(0u32, x)
+        let v : u64 = bb_eval(f) & (RV_N - 1u64)
+        if RV_B13[v] != 0u8 { return 0u64 }
+        RV_B13[v] = 1u8
+        x = x + 1u64
+    }
+    return 1u64
+}

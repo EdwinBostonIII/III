@@ -22,6 +22,10 @@ module corpus_2700_mathesis_alg_judge
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn ma_reset() -> i32 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_win_n(s: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_win_h(s: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_win_k(s: i64) -> i64 from "mathesis_alg.iii"
+extern @abi(c-msvc-x64) fn ma_ipow_capped(a: i64, k: i64) -> i64 from "mathesis_alg.iii"
 extern @abi(c-msvc-x64) fn ma_leaf_rat(p: i64, s: i64) -> i32 from "mathesis_alg.iii"
 extern @abi(c-msvc-x64) fn ma_leaf_root(k: i64, m: i64, s: i64) -> i32 from "mathesis_alg.iii"
 extern @abi(c-msvc-x64) fn ma_sum(sa: i64, sb: i64, sd: i64) -> i32 from "mathesis_alg.iii"
@@ -72,6 +76,18 @@ fn main() -> u64 {
     /* == A: sqrt2 three ways EQUAL. */
     ma_reset()
     if ma_leaf_root(2i64, 2i64, 0i64) != 0i32 { return 13u64 }     /* sqrt2 as t^2-2 */
+    /* == W: THE WINDOW IS SEMANTIC, not bookkeeping -- slot 0's isolation window
+     * [n/2^k, (n+h)/2^k] must really bracket sqrt2, checked in pure integer
+     * arithmetic: n^2 <= 2*4^k AND (n+h)^2 >= 2*4^k, with a nonzero width. */
+    let wn : i64 = ma_win_n(0i64)
+    let wh : i64 = ma_win_h(0i64)
+    let wk : i64 = ma_win_k(0i64)
+    if wk < 0i64 { return 30u64 }
+    if wh < 1i64 { return 31u64 }
+    let p4k : i64 = ma_ipow_capped(4i64, wk)
+    if p4k < 1i64 { return 32u64 }                     /* window unexpectedly deep */
+    if (wn * wn) > (2i64 * p4k) { return 33u64 }       /* left edge past sqrt2 */
+    if ((wn + wh) * (wn + wh)) < (2i64 * p4k) { return 34u64 }   /* right edge short */
     if ma_leaf_root(6i64, 8i64, 1i64) != 0i32 { return 13u64 }     /* 8^(1/6) = sqrt2, deg 6 */
     AQ1 = ma_equal(0i64, 1i64)
     if ma_leaf_rat(2i64, 2i64) != 0i32 { return 13u64 }

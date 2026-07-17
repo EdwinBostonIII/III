@@ -1,0 +1,140 @@
+/* STDLIB/iii/katabasis/pulse.iii -- ENTELECHEIA Ε0: THE PULSE (birth-rite attestation).
+ *
+ * The birth-rite every III binary performs at exec: no anonymous execution.
+ * A process, at birth, (1) mhashes its own image (streaming, so the checker
+ * cannot lie about the bytes), (2) fingerprints the silicon it woke up on via
+ * the CPUID self-identity crystal (katabasis/cpu_census) and the behavioral
+ * fingerprint (katabasis/behavioral_fp), (3) admits itself through the gate
+ * verdict pipeline (katabasis/gate_verdict), whose distinct verdicts become the
+ * process exit code -- exit-distinct per failure class.  This is core capture
+ * made ambient: the machine observing its own bytes and its own silicon at
+ * every exec.
+ *
+ * CONSUMER ASSIGNMENT (Ε0 revives Katabasis): this organ is the FIRST caller of
+ * cpu_census, behavioral_fp and gate_verdict -- three of the twenty-two organs
+ * that had zero consumers.  seal / quine_seal / caps / admit gain their first
+ * consumers at Ε6 (the crystal cage).
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.  NIH: composes mhash,
+ * cpu_census, behavioral_fp, gate_verdict.
+ */
+module katabasis_pulse
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_hash(out_addr: u64) -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_decide(checks: u32) -> u32 from "gate_verdict.iii"
+extern @abi(c-msvc-x64) fn katabasis_verdict_is_ok(verdict: u32) -> u8 from "gate_verdict.iii"
+extern @abi(c-msvc-x64) fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 from "timing_safe.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+const PULSE_OK      : i32 =  0i32
+const PULSE_E_OPEN  : i32 = -1i32
+const PULSE_E_EMPTY : i32 = -2i32
+
+const PULSE_CHUNK : u64 = 65536u64
+
+/* the four birth checks, as the gate_verdict bit layout (bit0 seal, bit1 cap,
+ * bit2 hexad, bit3 sid, bit4 perform; 1 = the check passed). */
+const PULSE_BIT_SEAL    : u32 =  1u32
+const PULSE_BIT_CAP     : u32 =  2u32
+const PULSE_BIT_HEXAD   : u32 =  4u32
+const PULSE_BIT_SID     : u32 =  8u32
+const PULSE_BIT_PERFORM : u32 = 16u32
+
+var PULSE_BUF      : [u8; 65536]
+var PULSE_IMG_MH   : [u8; 32]
+var PULSE_SIL_MH   : [u8; 32]
+var PULSE_LAST_LEN : u64 = 0u64
+
+/* Streaming mhash of the file at path_ptr into the 32-byte buffer at out_ptr.
+ * Streaming (not a single slurp) means the image bytes are never held in a form
+ * the checker can substitute; returns bytes read (>0) or a negative error. */
+fn pulse_image_hash(path_ptr: u64, out_ptr: u64) -> i64 @export {
+    let f : u64 = fopen(path_ptr, "rb" as u64)
+    if f == 0u64 { return PULSE_E_OPEN as i64 }
+    mhash_begin()
+    let mut total : u64 = 0u64
+    let mut n : u64 = fread((&PULSE_BUF) as u64, 1u64, PULSE_CHUNK, f)
+    while n > 0u64 {
+        mhash_payload((&PULSE_BUF) as u64, n)
+        total = total + n
+        n = fread((&PULSE_BUF) as u64, 1u64, PULSE_CHUNK, f)
+    }
+    fclose(f)
+    if total == 0u64 { return PULSE_E_EMPTY as i64 }
+    mhash_final(out_ptr)
+    PULSE_LAST_LEN = total
+    return total as i64
+}
+
+/* Bytes streamed by the last pulse_image_hash. */
+fn pulse_last_len() -> u64 @export { return PULSE_LAST_LEN }
+
+/* The CPUID self-identity crystal into the 32-byte buffer at out_ptr. */
+fn pulse_silicon_hash(out_ptr: u64) -> i32 @export {
+    return katabasis_cpu_census_hash(out_ptr)
+}
+
+/* The 48-bit behavioral fingerprint of this silicon. */
+fn pulse_behavior() -> u64 @export { return bfp_compute48() }
+
+/* The birth verdict: the four birth checks folded into the gate pipeline.  The
+ * perform bit is set only once the first four hold; the verdict is then the
+ * gate's total function of the birth checks -- KGV_OK (0) only when all pass,
+ * else a distinct rejection code (seal/cap/hexad/irreversible/fail-closed). */
+fn pulse_verdict(image_ok: u8, identity_ok: u8, silicon_ok: u8, behavior_ok: u8) -> u32 @export {
+    let mut c : u32 = 0u32
+    if image_ok    == 1u8 { c = c | PULSE_BIT_SEAL }
+    if identity_ok == 1u8 { c = c | PULSE_BIT_CAP }
+    if silicon_ok  == 1u8 { c = c | PULSE_BIT_HEXAD }
+    if behavior_ok == 1u8 { c = c | PULSE_BIT_SID }
+    if c == (PULSE_BIT_SEAL | PULSE_BIT_CAP | PULSE_BIT_HEXAD | PULSE_BIT_SID) {
+        c = c | PULSE_BIT_PERFORM
+    }
+    return katabasis_gate_decide(c)
+}
+
+/* The full birth-rite over the binary image at path_ptr, checked against an
+ * expected 32-byte image pin at expect_ptr (identity).  Returns the gate
+ * verdict: 0 = OK (green), distinct nonzero per failure class.  When expect_ptr
+ * is 0 the FORGE path applies -- image presence alone is the identity (a
+ * freshly-authored artifact has no committed pin yet). */
+fn pulse_attest(path_ptr: u64, expect_ptr: u64) -> u32 @export {
+    let rd : i64 = pulse_image_hash(path_ptr, (&PULSE_IMG_MH) as u64)
+    let mut image_ok : u8 = 0u8
+    if rd > 0i64 { image_ok = 1u8 }
+
+    let mut identity_ok : u8 = 0u8
+    if expect_ptr == 0u64 {
+        identity_ok = image_ok
+    } else {
+        if image_ok == 1u8 {
+            if timing_safe_eq((&PULSE_IMG_MH as u64) as *u8, expect_ptr as *u8, 32u64) == 1u32 { identity_ok = 1u8 }
+        }
+    }
+
+    let sr : i32 = pulse_silicon_hash((&PULSE_SIL_MH) as u64)
+    let mut silicon_ok : u8 = 0u8
+    if sr == 0i32 { silicon_ok = 1u8 }
+
+    let bf : u64 = pulse_behavior()
+    let mut behavior_ok : u8 = 0u8
+    if bf != 0u64 { behavior_ok = 1u8 }
+
+    return pulse_verdict(image_ok, identity_ok, silicon_ok, behavior_ok)
+}
+
+/* Byte i (0..31) of the last computed image / silicon crystal (for reporting). */
+fn pulse_img_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    return PULSE_IMG_MH[i as u64] as u32
+}
+fn pulse_sil_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    return PULSE_SIL_MH[i as u64] as u32
+}

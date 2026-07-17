@@ -1,0 +1,218 @@
+/* STDLIB/iii/aether/closure_cli.iii -- iii-closure: THE CLOSURE-PIN VERIFIER
+ * (ENTELECHEIA Ε3).
+ *
+ *   iii-closure derive <root.iii>                   -- walk the import graph from the
+ *                                                      root organ; print the DERIVED
+ *                                                      closure (sorted set + root pin)
+ *   iii-closure pin    <root.iii>                   -- print only the derived root pin
+ *   iii-closure check  <sealed-64hex> <root.iii>    -- re-derive from live sources +
+ *                                                      live import graph; pin LIVE?
+ *   iii-closure root   <src1> <src2> ...            -- explicit-set closure root
+ *                                                      (for claims over non-organ files)
+ *   iii-closure verify <sealed-64hex> <src1> ...    -- explicit-set check
+ *
+ * derive/pin/check NEVER take a file list: the closure is DERIVED from the
+ * live `extern ... from "x.iii"` graph (hand-authored closures are how pins
+ * lie).  Collisions resolve by exported symbol -- the linker's own law.
+ * Run from the repo root (dependency paths resolve as STDLIB/iii/<dir>/<name>).
+ *
+ * The two-path proof (the Ε3 spine, made observable):
+ *   pin over a root organ                          -> a sealed 32-byte pin R
+ *   check R, sources untouched                     -> exit 0  (LIVE)
+ *   touch ANY file in the derived closure, check R -> exit 2  (DEMOTED, distinct)
+ * Touching a source outside the closure never reddens R (specificity).
+ *
+ * EXIT (witness-style, distinct per class):
+ *   0 LIVE / derived | 1 usage | 2 DEMOTED (a closure source changed) |
+ *   3 a source in the closure was unreadable | 4 an import resolved to no
+ *   defining candidate | 5 envelope (path too long / > 256 files).
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes sanctus/closure_graph + sanctus/closure.
+ */
+module closure_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn closure_graph_root(paths_arr: u64, count: u64, out_ptr: u64) -> i64 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn closure_graph_derive(root_path: u64, out_ptr: u64) -> i64 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn closure_graph_path_at(i: u64) -> u64 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn closure_graph_count() -> u64 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn closure_graph_leaf_byte(j: u64, i: u32) -> u32 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn closure_claim_set(claim_id: u64, root_ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_claim_verify_against(claim_id: u64, addr: u64) -> u8 from "closure.iii"
+
+var CLI_ROOT   : [u8; 32]
+var CLI_SEALED : [u8; 32]
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+
+fn ph_nib(v: u32) -> i32 {
+    if v < 10u32 { return putchar((48u32 + v) as i32) }
+    return putchar((87u32 + v) as i32)
+}
+fn ph_byte(b: u32) -> i32 {
+    ph_nib((b >> 4u32) & 0xFu32)
+    ph_nib(b & 0xFu32)
+    return 0i32
+}
+fn print_root() -> i32 {
+    let p : *u8 = (&CLI_ROOT as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { ph_byte(p[i] as u32)  i = i + 1u64 }
+    return 0i32
+}
+fn pu_dec(v: u64) -> i32 {
+    if v >= 10u64 { pu_dec(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+
+fn hexval(c: u8) -> i32 {
+    if c >= 48u8 { if c <= 57u8  { return (c - 48u8) as i32 } }
+    if c >= 97u8 { if c <= 102u8 { return (c - 87u8) as i32 } }
+    if c >= 65u8 { if c <= 70u8  { return (c - 55u8) as i32 } }
+    return -1i32
+}
+/* parse 64 hex chars at src into 32 bytes at out; -1 on any bad char. */
+fn parse_hex32(src: u64, out: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let hi : i32 = hexval(s[i * 2u64])
+        let lo : i32 = hexval(s[(i * 2u64) + 1u64])
+        if hi < 0i32 { return -1i32 }
+        if lo < 0i32 { return -1i32 }
+        o[i] = ((hi * 16i32) + lo) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn usage() -> u64 {
+    ps("iii-closure derive <root.iii>                 (walk imports; print set + pin)\n" as u64)
+    ps("iii-closure pin    <root.iii>                 (print derived pin only)\n" as u64)
+    ps("iii-closure check  <sealed-64hex> <root.iii>  (re-derive; LIVE=0 DEMOTED=2)\n" as u64)
+    ps("iii-closure root   <src1> <src2> ...          (explicit-set pin)\n" as u64)
+    ps("iii-closure verify <sealed-64hex> <src1> ...  (explicit-set check)\n" as u64)
+    return 1u64
+}
+
+/* map a negative organ code to the tool's distinct exit class */
+fn errexit(rc: i64) -> u64 {
+    if rc == -4i64 { ps("iii-closure: an import resolved to NO defining candidate\n" as u64)  return 4u64 }
+    if rc == -3i64 { ps("iii-closure: closure exceeds 256 files (envelope)\n" as u64)         return 5u64 }
+    if rc == -5i64 { ps("iii-closure: path exceeds the envelope\n" as u64)                    return 5u64 }
+    ps("iii-closure: unreadable source in closure\n" as u64)
+    return 3u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 3i32 { return usage() }
+    let av  : *u64 = argv as *u64
+    let cmd : u64  = av[1u64]
+
+    if streq(cmd, "derive" as u64) == 1u32 {
+        let n : i64 = closure_graph_derive(av[2u64], (&CLI_ROOT) as u64)
+        if n < 0i64 { return errexit(n) }
+        /* self-consistency: the organ's stored count must equal the returned
+         * count -- a disagreement is an internal defect, refused loudly. */
+        if closure_graph_count() != (n as u64) {
+            ps("iii-closure: INTERNAL: stored count diverges from returned count\n" as u64)
+            return 6u64
+        }
+        ps("closure files=" as u64)
+        let d : u64 = n as u64
+        pu_dec(d)
+        putchar(10i32)
+        /* each file with its leaf digest (canonical order) -- the derived manifest */
+        let mut i : u64 = 0u64
+        while i < d {
+            ps("  " as u64)
+            let mut b : u32 = 0u32
+            while b < 32u32 { ph_byte(closure_graph_leaf_byte(i, b))  b = b + 1u32 }
+            ps("  " as u64)  ps(closure_graph_path_at(i))  putchar(10i32)
+            i = i + 1u64
+        }
+        ps("pin=" as u64)  print_root()  putchar(10i32)
+        return 0u64
+    }
+
+    if streq(cmd, "pin" as u64) == 1u32 {
+        let n2 : i64 = closure_graph_derive(av[2u64], (&CLI_ROOT) as u64)
+        if n2 < 0i64 { return errexit(n2) }
+        print_root()
+        putchar(10i32)
+        return 0u64
+    }
+
+    if streq(cmd, "check" as u64) == 1u32 {
+        if argc < 4i32 { return usage() }
+        if parse_hex32(av[2u64], (&CLI_SEALED) as u64) != 0i32 {
+            ps("iii-closure: sealed pin must be 64 hex chars\n" as u64)
+            return 1u64
+        }
+        let n3 : i64 = closure_graph_derive(av[3u64], (&CLI_ROOT) as u64)
+        if n3 < 0i64 { return errexit(n3) }
+        closure_claim_set(1u64, (&CLI_SEALED) as u64)
+        let live2 : u8 = closure_claim_verify_against(1u64, (&CLI_ROOT) as u64)
+        ps("derived=" as u64)  print_root()  putchar(10i32)
+        if live2 == 1u8 {
+            ps("closure LIVE (pin matches the live import graph + live sources)\n" as u64)
+            return 0u64
+        }
+        ps("closure DEMOTED (the derived closure diverged from the sealed pin)\n" as u64)
+        return 2u64
+    }
+
+    if streq(cmd, "root" as u64) == 1u32 {
+        /* paths are argv[2 .. argc): array base = argv + 2*8 */
+        let paths : u64 = argv + 16u64
+        let cnt   : u64 = (argc - 2i32) as u64
+        let rc : i64 = closure_graph_root(paths, cnt, (&CLI_ROOT) as u64)
+        if rc < 0i64 { ps("iii-closure: unreadable source in closure\n" as u64)  return 3u64 }
+        print_root()
+        putchar(10i32)
+        return 0u64
+    }
+
+    if streq(cmd, "verify" as u64) == 1u32 {
+        if argc < 4i32 { return usage() }
+        if parse_hex32(av[2u64], (&CLI_SEALED) as u64) != 0i32 {
+            ps("iii-closure: sealed pin must be 64 hex chars\n" as u64)
+            return 1u64
+        }
+        /* paths are argv[3 .. argc): array base = argv + 3*8 */
+        let paths : u64 = argv + 24u64
+        let cnt   : u64 = (argc - 3i32) as u64
+        let rc : i64 = closure_graph_root(paths, cnt, (&CLI_ROOT) as u64)
+        if rc < 0i64 { ps("iii-closure: unreadable source in closure\n" as u64)  return 3u64 }
+        /* register the sealed pin as claim 1, then verify the fresh root against it */
+        closure_claim_set(1u64, (&CLI_SEALED) as u64)
+        let live : u8 = closure_claim_verify_against(1u64, (&CLI_ROOT) as u64)
+        ps("derived=" as u64)  print_root()  putchar(10i32)
+        if live == 1u8 {
+            ps("closure LIVE (pin matches the live sources)\n" as u64)
+            return 0u64
+        }
+        ps("closure DEMOTED (a source in the closure changed)\n" as u64)
+        return 2u64
+    }
+
+    return usage()
+}

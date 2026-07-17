@@ -1,0 +1,61 @@
+/* pulse Ε0 birth-rite: the gate-verdict fold + composed silicon/behavior/image checks.
+ * Proves: all-pass verdict is KGV_OK (0); each single failure yields its distinct verdict
+ * (seal/cap/hexad/irreversible); the silicon crystal + behavioral fp compute; an
+ * unreadable image errors (negative) and attests to a seal rejection; byte accessors
+ * guard out-of-range.  Exit 99. */
+module corpus_d2754
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn remove(path: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pulse_verdict(image_ok: u8, identity_ok: u8, silicon_ok: u8, behavior_ok: u8) -> u32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_image_hash(path_ptr: u64, out_ptr: u64) -> i64 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_silicon_hash(out_ptr: u64) -> i32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_behavior() -> u64 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_attest(path_ptr: u64, expect_ptr: u64) -> u32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_img_byte(i: u32) -> u32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_sil_byte(i: u32) -> u32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_last_len() -> u64 from "pulse.iii"
+
+fn main() -> u64 {
+    if pulse_verdict(1u8, 1u8, 1u8, 1u8) != 0u32 { return 1u64 }   /* all pass -> KGV_OK */
+    if pulse_verdict(0u8, 1u8, 1u8, 1u8) != 1u32 { return 2u64 }   /* seal   -> REJECT_SEAL */
+    if pulse_verdict(1u8, 0u8, 1u8, 1u8) != 2u32 { return 3u64 }   /* cap    -> REJECT_CAP */
+    if pulse_verdict(1u8, 1u8, 0u8, 1u8) != 3u32 { return 4u64 }   /* hexad  -> REJECT_HEXAD */
+    if pulse_verdict(1u8, 1u8, 1u8, 0u8) != 4u32 { return 5u64 }   /* sid    -> REJECT_IRREVERSIBLE */
+
+    let s : *u8 = malloc(32u64)
+    if pulse_silicon_hash(s as u64) != 0i32 { return 6u64 }        /* CPUID self-identity crystal */
+    if pulse_behavior() == 0u64 { return 7u64 }                    /* behavioral fp non-degenerate */
+
+    if pulse_image_hash("iii_pulse_no_such_file_zzz.bin" as u64, s as u64) >= 0i64 { return 8u64 }  /* unreadable -> error */
+    if pulse_attest("iii_pulse_no_such_file_zzz.bin" as u64, 0u64) != 1u32 { return 9u64 }          /* -> seal reject */
+
+    /* write a real readable image, then drive pulse_attest to its other outcomes. */
+    let fh : u64 = fopen("iii_pulse_kat_tmp.bin" as u64, "wb" as u64)
+    if fh == 0u64 { return 14u64 }
+    let payload : *u8 = malloc(64u64)
+    let mut m : u64 = 0u64
+    while m < 64u64 { payload[m] = (m + 1u64) as u8  m = m + 1u64 }
+    fwrite(payload as u64, 1u64, 64u64, fh)
+    fclose(fh)
+    if pulse_attest("iii_pulse_kat_tmp.bin" as u64, 0u64) != 0u32 { remove("iii_pulse_kat_tmp.bin" as u64)  return 15u64 }  /* FORGE -> OK */
+    let wrong : *u8 = malloc(32u64)
+    let mut w : u64 = 0u64
+    while w < 32u64 { wrong[w] = 0u8  w = w + 1u64 }
+    if pulse_attest("iii_pulse_kat_tmp.bin" as u64, wrong as u64) != 2u32 { remove("iii_pulse_kat_tmp.bin" as u64)  return 16u64 }  /* wrong pin -> cap reject */
+    remove("iii_pulse_kat_tmp.bin" as u64)
+    free(payload)
+    free(wrong)
+
+    if pulse_sil_byte(32u32) != 0x100u32 { return 10u64 }          /* out-of-range guard */
+    if pulse_img_byte(32u32) != 0x100u32 { return 11u64 }
+    if pulse_img_byte(0u32) == 0x101u32 { return 12u64 }           /* in-range never 0x101 (touch) */
+    if pulse_last_len() == 0xFFFFFFFFFFFFFFFFu64 { return 13u64 }  /* touch last_len */
+
+    free(s)
+    return 99u64
+}

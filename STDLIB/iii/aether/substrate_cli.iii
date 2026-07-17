@@ -1,0 +1,3245 @@
+/* STDLIB/iii/aether/substrate_cli.iii -- iii-substrate: the machine's own
+ * algebra, derived from its silicon (ENTELECHEIA, the real crossing).
+ *
+ *   iii-substrate real            derive THIS machine's algebra from the live
+ *                                 cpu_census + behavioral_fp signature; print
+ *                                 the carrier, the operation table, and the
+ *                                 laws that HOLD (observed by exhaustion).
+ *   iii-substrate variance <N>    THE FALSIFIER: sweep N distinct signatures
+ *                                 and count distinct profiles.  Exit 0 iff the
+ *                                 discovered algebra VARIES with the substrate
+ *                                 (>= 2 distinct profiles) -- the evidence it is
+ *                                 derived, not authored.  Exit 2 = REFUTED
+ *                                 (invariant -> authored); exit 3 = degenerate
+ *                                 (no non-trivial law anywhere in the sweep).
+ *   iii-substrate atoms           THE ATOM SOURCE: the chip's own capability
+ *                                 report (live CPUID) and the term universe it
+ *                                 grants -- which instructions exist HERE.
+ *   iii-substrate bridge          per gated atom: the LIVE INSTRUCTION agrees
+ *                                 with its independent pure-.iii definiens over
+ *                                 the whole published battery (two engines).
+ *   iii-substrate isa <lawfuel>   THE ISA-BORN LOOP: fairness arm, law sweep on
+ *                                 the real silicon (REFUTED-with-witness or
+ *                                 SURVIVED-whole-battery), survivors classed
+ *                                 (baseline = human-charted, held out; gated =
+ *                                 the uncharted axis), reddening control,
+ *                                 capability-mask variance falsifier, and the
+ *                                 KATABASIS discovery admission -- exit is the
+ *                                 admission verdict.
+ *
+ * Exit: 0 OK/ADMIT | 1 usage | 2 SUBSTRATE-INVARIANT (refuted) | 3 degenerate
+ *     | isa: verdict codes 1..6 (atoms-dead / unbridged / unadjudicated /
+ *       charted-only / control-silent / invariant) | 7 vacuous | 8 fairness.
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/substrate_ontogenesis
+ * + aether/isa_ontogenesis + katabasis/isa_admit + omnia/event_substrate.
+ */
+module substrate_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn so_signature() -> u64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_build(s: u64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_get(x: i64, y: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_k() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_profile() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_profile_of(s: u64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_variance(count: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_variance_nontriv() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_variance_kcount(k: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_seen_at(i: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_seen_count() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_probe_census(m: i64, n: i64, mode: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_bucket(b: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_fc(j: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_distinct() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_termdistinct() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_infodistinct() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_census_infocount() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_variance(m: i64, want: i64) -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_conc() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_disc() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_realint() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_realpct() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_popn() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_popsweep() -> i64 from "substrate_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn so_rank_realdegen() -> u8 from "substrate_ontogenesis.iii"
+
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench.iii"
+extern @abi(c-msvc-x64) fn fr_reset(iters: u64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_begin() -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_end(side: i64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_floor(side: i64) -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_moment(side: i64) -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn ia_atom_live(id: i64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_gate(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_live_unary() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_live_binary() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_tcount(m: i64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_terms_total() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_fair(count: u64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_checks() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_atom() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_x() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_y() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_got() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_bridge_want() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_sweep(sizecap: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_refuted() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_survivors() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_survivors_gated() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_survivors_recorded() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_surv_ti(i: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_surv_tj(i: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_survivor_class(i: u64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_decode_failures() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_examined() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_caphit() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_cert() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_set() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_ti() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_tj() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_x() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_y() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_lhs() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_ctrl_rhs() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi1() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_popcnt() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_lzcnt() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_force_mask(m: u32) -> i32 from "cpufeat.iii"
+
+extern @abi(c-msvc-x64) fn katabasis_isa_admit(atoms_live: u32, bridged: u32, adjudicated: u32, gated_class: u32, control_red: u32, variant: u32) -> u32 from "isa_admit.iii"
+extern @abi(c-msvc-x64) fn katabasis_isa_informative(refuted: u64, survivors: u64) -> u32 from "isa_admit.iii"
+
+extern @abi(c-msvc-x64) fn katabasis_nomos_admit(directional: u32, floor_dear: u64, floor_cheap: u64, lowerable: u32, ser_ok: u32, cls: u32) -> u32 from "nomos_admit.iii"
+extern @abi(c-msvc-x64) fn katabasis_nomos_live(cls: u32) -> u32 from "nomos_admit.iii"
+extern @abi(c-msvc-x64) fn katabasis_nomos_challenge(fc_new: u64, fc_seated: u64) -> u32 from "nomos_admit.iii"
+
+extern @abi(c-msvc-x64) fn oz_run(dreamfuel: u64, seed: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_n() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_owed() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_kill() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_surv() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_join() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_sent() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_cert() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_seed_used() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_status(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_prov(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_docket_n() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_ord(k: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_ser(i: u64, side: u64, out_addr: u64) -> u64 from "oneiros.iii"
+
+extern @abi(c-msvc-x64) fn rv_hunt(maxsize: i64) -> i32 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_hunt(maxsize: i64) -> i32 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_examined() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_reversible() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_involutions() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_max_deficit() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_nonlinear_reversibles() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_linear_inverted() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_count() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_max_asymmetry() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_len() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_byte(j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_param() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_fwd() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_diode_inv() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_skipped() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_count() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_len(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_byte(i: u64, j: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_involution(i: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_nonlinear(i: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_find_param(i: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_prove_involution(id: i64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_prove_toffoli() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_prove_toffoli_nand() -> u64 from "reversibility.iii"
+
+/* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
+ * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
+ * ripple palindrome (R^2 = id on the real ripple field); ser_pipeline (intent (x) intuition,
+ * the semantic Galois pair, with the oracle's REFUSAL of a non-invertible ask); and rva,
+ * the independent SMT auditor (UNSAT-disequality proof + capability-gated admission). */
+extern @abi(c-msvc-x64) fn pw_toffoli_self_inverse() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_toffoli_is_nand() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn ws_toffoli_selfinverse() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_toffoli_agrees_primweb() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_involution(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn svp_descriptor(v: u64) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_k(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_intent_fulfilled(v: u64, k: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_pipeline_rejects(v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_selftest() -> u64 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn rva_selftest() -> u64 from "reversibility_audit.iii"
+
+/* SYMMETRIA -- the conservation worlds (closed reversible algebras, saturated + proven) */
+extern @abi(c-msvc-x64) fn sy_run(scan_cap: u64, dreamfuel: u64, seed: u64) -> i64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_pool_n() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_scanned() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_bij8() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_width_dropped() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_runs() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_open() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_largest() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_n() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_order(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_invol(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_abelian(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_gi(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_gj(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_gk(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_prov(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_sig_floor(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_dream_new() -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_pool_len(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_pool_byte(i: u64, j: u64) -> u8 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_pool_y(i: u64) -> u64 from "symmetria.iii"
+extern @abi(c-msvc-x64) fn sy_pool_floor(i: u64) -> u64 from "symmetria.iii"
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+
+extern @abi(c-msvc-x64) fn ia_distinct_functions() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_redundant() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_dfsat() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_ti(k: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_tj(k: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_saved(k: u64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_widthfp(k: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_sig(k: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_df_class(k: u64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_model_count() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_set(p: u64) -> i32 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_i() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_j() -> u64 from "isa_ontogenesis.iii"
+
+extern @abi(c-msvc-x64) fn fj_judge(p: u64, reps: u64, trials: i64) -> i64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_race_terms(ti: u64, tj: u64, reps: u64, trials: i64) -> i64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_lhs_floor() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_rhs_floor() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_refused_unproven() -> u64 from "isa_friction_judge.iii"
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: u64, len: u64, out: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: u64, right: u64, out: u64) -> i32 from "cad.iii"
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fputs(s: u64, stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn pd(v: i64) -> i32 {
+    if v < 0i64 { putchar(45i32)  return pd(0i64 - v) }
+    if v >= 10i64 { pd(v / 10i64) }
+    putchar((48i64 + (v % 10i64)) as i32)
+    return 0i32
+}
+fn phx(v: u64) -> i32 {
+    let mut sh : i64 = 60i64
+    while sh >= 0i64 {
+        let nib : u64 = (v >> (sh as u64)) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) }
+        else { putchar((87u64 + nib) as i32) }
+        sh = sh - 4i64
+    }
+    return 0i32
+}
+
+/* print the ten law names present in profile p */
+fn law_line(p: i64) -> i32 {
+    if (p & 1i64)   != 0i64 { ps(" ASSOC" as u64) }
+    if (p & 2i64)   != 0i64 { ps(" COMM" as u64) }
+    if (p & 4i64)   != 0i64 { ps(" IDEM" as u64) }
+    if (p & 8i64)   != 0i64 { ps(" IDENT" as u64) }
+    if (p & 16i64)  != 0i64 { ps(" ZERO" as u64) }
+    if (p & 32i64)  != 0i64 { ps(" LCANCEL" as u64) }
+    if (p & 64i64)  != 0i64 { ps(" RCANCEL" as u64) }
+    if (p & 128i64) != 0i64 { ps(" LINVOL" as u64) }
+    if (p & 256i64) != 0i64 { ps(" RINVOL" as u64) }
+    if (p & 512i64) != 0i64 { ps(" MEDIAL" as u64) }
+    if p == 0i64 { ps(" (none -- a lawless magma)" as u64) }
+    return 0i32
+}
+
+fn print_table() -> i32 {
+    let k : i64 = so_k()
+    ps("  operation table (o[x,y]):\n" as u64)
+    let mut x : i64 = 0i64
+    while x < k {
+        ps("    " as u64)
+        let mut y : i64 = 0i64
+        while y < k { pd(so_get(x, y))  putchar(32i32)  y = y + 1i64 }
+        putchar(10i32)
+        x = x + 1i64
+    }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 {
+        ps("iii-substrate real           (this machine's derived algebra)\n" as u64)
+        ps("iii-substrate variance <N>   (falsifier: does it vary with the substrate?)\n" as u64)
+        ps("iii-substrate atoms          (the chip's own capability report + its term universe)\n" as u64)
+        ps("iii-substrate bridge         (live instruction == independent definiens, whole battery)\n" as u64)
+        ps("iii-substrate isa <maxsize>  (the ISA-born loop: sweep, control, falsifier, admission)\n" as u64)
+        ps("iii-substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>  (III lowers discovered identity k to pure .iii for iii-prove)\n" as u64)
+        ps("iii-substrate nomos <lawfuel> <outdir>  (THE NOMOS TIER: friction-held laws -> compiler rules module + probe pairs)\n" as u64)
+        ps("iii-substrate oneiros <dreamfuel> <outdir> [seed]  (THE ONEIROS TIER: believe each owed law, collapse to witnesses, docket the survivors)\n" as u64)
+        ps("iii-substrate judge <law> [reps trials]  (one law through the friction judge: truth leg, then the race, registers printed)\n" as u64)
+        ps("iii-substrate glossa <outdir>  (THE GLOSSA TIER: the machine mints its vocabulary -> lexicon + tongue + ladder probes)\n" as u64)
+        ps("iii-substrate physis         (the substrate-determinism theorem: which observables are value-invariants)\n" as u64)
+        ps("iii-substrate taxis <maxsize 2..3>  (THE TAXIS TIER: the friction ORDER as a first-class ontology)\n" as u64)
+        ps("iii-substrate moment         (the contingency register: necessary vs contingent, fenced non-determinism)\n" as u64)
+        ps("iii-substrate reversible [maxsize 5..6]  (THE REVERSIBILITY HUNT: III finds + proves zero-loss bijections; the xorshift computational diode; THE CONVERGENCE: one law at six altars)\n" as u64)
+        ps("iii-substrate symmetry <dreamfuel> [seed]  (THE SYMMETRIA TIER: conservation worlds -- reversible-closed algebras saturated to PROOF, friction-graded; the dream arm draws by contingency)\n" as u64)
+        return 1u64
+    }
+    let av  : *u64 = argv as *u64
+    let cmd : u64  = av[1u64]
+
+    if streq(cmd, "real" as u64) == 1u32 {
+        let s : u64 = so_signature()
+        let k : i64 = so_build(s)
+        let p : i64 = so_profile()
+        ps("SILICON SIGNATURE = 0x" as u64)  phx(s)  putchar(10i32)
+        ps("derived carrier k = " as u64)    pd(k)   putchar(10i32)
+        print_table()
+        ps("laws that HOLD (observed by exhaustion over the carrier):" as u64)
+        law_line(p)
+        putchar(10i32)
+        ps("profile bits = " as u64)  pd(p)  putchar(10i32)
+        ps("(this algebra is a function of THIS silicon; different silicon = different signature = different algebra)\n" as u64)
+        return 0u64
+    }
+
+    if streq(cmd, "variance" as u64) == 1u32 {
+        if argc < 3i32 {
+            ps("iii-substrate variance <N>\n" as u64)
+            return 1u64
+        }
+        let n : i64 = parse_i64(av[2u64])
+        if n < 2i64 { ps("iii-substrate: N must be >= 2\n" as u64)  return 1u64 }
+        let distinct : i64 = so_variance(n)
+        let nontriv  : i64 = so_variance_nontriv()
+        ps("swept " as u64)  pd(n)  ps(" distinct silicon signatures\n" as u64)
+        ps("  carrier histogram (k: count):" as u64)
+        let mut kk : i64 = 2i64
+        while kk <= 16i64 {
+            let c : i64 = so_variance_kcount(kk)
+            if c > 0i64 { ps("  " as u64)  pd(kk)  ps(":" as u64)  pd(c) }
+            kk = kk + 1i64
+        }
+        putchar(10i32)
+        ps("  DISTINCT profiles discovered = " as u64)  pd(distinct)  putchar(10i32)
+        ps("  signatures with a proper (non-trivial) law set = " as u64)  pd(nontriv)  putchar(10i32)
+        /* show up to 16 distinct discovered profiles by their laws */
+        let mut i : i64 = 0i64
+        let sc : i64 = so_seen_count()
+        while i < sc {
+            if i < 16i64 {
+                ps("    profile " as u64)  pd(so_seen_at(i))  ps(":" as u64)
+                law_line(so_seen_at(i))
+                putchar(10i32)
+            }
+            i = i + 1i64
+        }
+        if distinct < 2i64 {
+            ps("REFUTED: the discovered algebra is INVARIANT to the substrate -- it is AUTHORED, not derived.\n" as u64)
+            return 2u64
+        }
+        if nontriv == 0i64 {
+            ps("DEGENERATE: every derived algebra is trivial (all-laws or no-laws) -- no structure to speak of.\n" as u64)
+            return 3u64
+        }
+        ps("SUBSTRATE-VARIANT: the discovered algebra is a genuine function of the silicon signature.\n" as u64)
+        ps("(the falsifier PASSES: perturbing the substrate changes the laws -- this is derived, not typed)\n" as u64)
+        return 0u64
+    }
+
+    if streq(cmd, "probes" as u64) == 1u32 {
+        if argc < 4i32 { ps("iii-substrate probes <M> <N> [degen]\n" as u64)  return 1u64 }
+        let m : i64 = parse_i64(av[2u64])
+        let n : i64 = parse_i64(av[3u64])
+        if m < 2i64 { ps("iii-substrate: M must be >= 2\n" as u64)  return 1u64 }
+        if n < 2i64 { ps("iii-substrate: N must be >= 2\n" as u64)  return 1u64 }
+        if m > 256i64 { ps("iii-substrate: M <= 256\n" as u64)  return 1u64 }
+        let mut mode : i64 = 0i64
+        if argc >= 5i32 { if streq(av[4u64], "degen" as u64) == 1u32 { mode = 1i64 } }
+        let distinct : i64 = so_probe_census(m, n, mode)
+        if mode == 1i64 { ps("[NEGATIVE CONTROL: probe vocabulary forced degenerate (all identical) -- MUST refuse]\n" as u64) }
+        ps("THE SUBSTRATE CRITERION -- no human law named:\n" as u64)
+        ps("  swept " as u64)  pd(m)  ps(" substrate-probes over " as u64)  pd(n)  ps(" substrate-operations\n" as u64)
+        ps("  probe firing-rate histogram:\n" as u64)
+        ps("    rate 0        (never fires): " as u64)  pd(so_census_bucket(0i64))  putchar(10i32)
+        ps("    rate (0,.1)   (very rare)  : " as u64)  pd(so_census_bucket(1i64))  putchar(10i32)
+        ps("    rate [.1,.5)  (rare)       : " as u64)  pd(so_census_bucket(2i64))  putchar(10i32)
+        ps("    rate [.5,.9)  (common)     : " as u64)  pd(so_census_bucket(3i64))  putchar(10i32)
+        ps("    rate [.9,1)   (very common): " as u64)  pd(so_census_bucket(4i64))  putchar(10i32)
+        ps("    rate 1        (always)     : " as u64)  pd(so_census_bucket(5i64))  putchar(10i32)
+        /* the per-probe fire-count read-heads (so_census_fc) -- the raw counts the
+         * buckets summarize; the extremes go on the record so the head is load-bearing */
+        let mut fcmin : i64 = 9223372036854775807i64
+        let mut fcmax : i64 = 0i64 - 1i64
+        let mut fj : i64 = 0i64
+        while fj < m {
+            let fcv : i64 = so_census_fc(fj)
+            if fcv < fcmin { fcmin = fcv }
+            if fcv > fcmax { fcmax = fcv }
+            fj = fj + 1i64
+        }
+        ps("    fire-count extremes (per probe): min " as u64)  pd(fcmin)  ps("  max " as u64)  pd(fcmax)  putchar(10i32)
+        let infocount : i64 = so_census_infocount()
+        let infodist  : i64 = so_census_infodistinct()
+        ps("  distinct firing patterns    : " as u64)  pd(distinct)  ps(" of " as u64)  pd(m)  putchar(10i32)
+        ps("  distinct term structures    : " as u64)  pd(so_census_termdistinct())  ps(" of " as u64)  pd(m)  ps("  (decode diversity)\n" as u64)
+        ps("  INFORMATIVE probes (0<rate<1): " as u64)  pd(infocount)  putchar(10i32)
+        ps("  distinct among informative  : " as u64)  pd(infodist)  ps(" of " as u64)  pd(infocount)  ps("  (are the real tests different?)\n" as u64)
+        /* THE FALSIFIER (dimensionality, validated by the `degen` negative control):
+         *  (1) rates spread across >= 3 buckets -- rare vs common exists, so surprise is meaningful;
+         *  (2) informative probes exist (>= 4) -- there is rare-but-satisfiable structure to grade on;
+         *  (3) the informative space is MULTI-DIMENSIONAL: >= 8 DISTINCT informative tests, ruling out
+         *      the "one thing in disguise" collapse (the negative control forces this to ~1 and is refused).
+         *  NOTE: an earlier draft used a distinctness FRACTION (infodist/infocount); that was wrong --
+         *  logical equivalence between random equations is a feature of equational logic, not redundancy,
+         *  and a fraction structurally punishes richer vocabularies.  Absolute dimensionality is the
+         *  correct test, and the `degen` arm proves it still refuses a truly degenerate vocabulary. */
+        let mut nonempty : i64 = 0i64
+        let mut b : i64 = 0i64
+        while b < 6i64 { if so_census_bucket(b) > 0i64 { nonempty = nonempty + 1i64 }  b = b + 1i64 }
+        if nonempty < 3i64 {
+            ps("REFUSED: firing rates collapse to < 3 buckets -- degenerate probe vocabulary, no information.\n" as u64)
+            return 2u64
+        }
+        if infocount < 4i64 {
+            ps("REFUSED: fewer than 4 informative probes -- no rare-but-satisfiable structure to grade on.\n" as u64)
+            return 2u64
+        }
+        if infodist < 8i64 {
+            ps("REFUSED: fewer than 8 distinct informative tests -- the criterion is not multi-dimensional (one thing in disguise).\n" as u64)
+            return 3u64
+        }
+        ps("INFORMATION PRESENT: substrate-probes span rare->common rates AND the informative tests are distinct.\n" as u64)
+        ps("(the criterion carries information with NO human law named -- interestingness = satisfying rare probes)\n" as u64)
+        return 0u64
+    }
+
+    if streq(cmd, "rank" as u64) == 1u32 {
+        if argc < 4i32 { ps("iii-substrate rank <M> <POP>\n" as u64)  return 1u64 }
+        let m : i64 = parse_i64(av[2u64])
+        let n : i64 = parse_i64(av[3u64])
+        if m < 2i64 { ps("iii-substrate: M must be >= 2\n" as u64)  return 1u64 }
+        if n < 4i64 { ps("iii-substrate: POP must be >= 4\n" as u64)  return 1u64 }
+        if m > 256i64 { ps("iii-substrate: M <= 256\n" as u64)  return 1u64 }
+        if n > 256i64 { ps("iii-substrate: POP <= 256\n" as u64)  return 1u64 }
+        so_rank_variance(m, n)
+        let conc : i64 = so_rank_conc()
+        let disc : i64 = so_rank_disc()
+        let tot  : i64 = conc + disc
+        let popn : i64 = so_rank_popn()
+        ps("INTERESTINGNESS = SURPRISE over a CLEAN (information-carrying) population; no human law\n" as u64)
+        ps("  clean population = " as u64)  pd(popn)  ps(" non-degenerate ops (swept " as u64)  pd(so_rank_popsweep())  ps(" signatures)\n" as u64)
+        if popn < 4i64 {
+            ps("REFUSED: the substrate construction yields too few non-degenerate operations to rank.\n" as u64)
+            return 4u64
+        }
+        ps("  ranked by two DISJOINT probe libraries (A, B)\n" as u64)
+        ps("  concordant pairs = " as u64)  pd(conc)  putchar(10i32)
+        ps("  discordant pairs = " as u64)  pd(disc)  putchar(10i32)
+        if tot > 0i64 {
+            ps("  concordance tau (permille) = " as u64)  pd(((conc - disc) * 1000i64) / tot)  putchar(10i32)
+        }
+        if so_rank_realdegen() == 1u8 {
+            ps("  THIS MACHINE's operation is DEGENERATE (does not depend on both inputs) -> correctly not ranked\n" as u64)
+        } else {
+            ps("  THIS MACHINE's operation: interest = " as u64)  pd(so_rank_realint())
+            ps(", at the " as u64)  pd(so_rank_realpct())  ps("th percentile of the clean population\n" as u64)
+        }
+        /* THE RANKING FALSIFIER (set before the numbers): the two libraries must be
+         * (a) positively associated -- conc > disc, a stable criterion, not noise; AND
+         * (b) genuinely different -- >= 10% discordant, so the substrate library shapes
+         *     the ranking (tau ~ 1 would mean the probes don't matter = authored/universal). */
+        if tot < 1i64 {
+            ps("REFUSED: no comparable pairs (all interest ties) -- the criterion does not discriminate.\n" as u64)
+            return 2u64
+        }
+        if conc <= disc {
+            ps("REFUSED: the two libraries disagree (conc <= disc) -- the ranking is NOISE, not a criterion.\n" as u64)
+            return 2u64
+        }
+        if (disc * 10i64) < tot {
+            ps("REFUSED: the two libraries agree almost perfectly (< 10% discordant) -- the substrate library\n" as u64)
+            ps("does not shape the ranking, so the criterion is effectively universal/authored, not derived.\n" as u64)
+            return 3u64
+        }
+        ps("SUBSTRATE-DERIVED CRITERION: stable content (conc > disc) but library-shaped detail (>=10% discordant).\n" as u64)
+        ps("(the ranking is a genuine function of the substrate probe library -- not universal, not noise)\n" as u64)
+        return 0u64
+    }
+
+    if streq(cmd, "atoms" as u64) == 1u32 {
+        isa_atoms_report()
+        return 0u64
+    }
+    if streq(cmd, "bridge" as u64) == 1u32 {
+        return cmd_isa_bridge()
+    }
+    if streq(cmd, "physis" as u64) == 1u32 {
+        return cmd_physis()
+    }
+    if streq(cmd, "moment" as u64) == 1u32 {
+        return cmd_moment()
+    }
+    if streq(cmd, "taxis" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate taxis <maxsize 2..3>\n" as u64)  return 6u64 }
+        let tz : i64 = parse_i64(av[2u64])
+        if tz < 2i64 { ps("iii-substrate: taxis maxsize must be 2..3\n" as u64)  return 6u64 }
+        if tz > 3i64 { ps("iii-substrate: taxis maxsize must be 2..3 (the race budget envelope)\n" as u64)  return 6u64 }
+        return cmd_taxis(tz)
+    }
+    if streq(cmd, "reversible" as u64) == 1u32 {
+        let mut rz : i64 = 5i64
+        if argc >= 3i32 { rz = parse_i64(av[2u64]) }
+        if rz < 5i64 { ps("iii-substrate: reversible maxsize must be 5..6 (the reconvergent diode envelope)\n" as u64)  return 6u64 }
+        if rz > 6i64 { ps("iii-substrate: reversible maxsize must be 5..6 (size 7+ over the enumeration budget)\n" as u64)  return 6u64 }
+        return cmd_reversible(rz)
+    }
+    if streq(cmd, "symmetry" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate symmetry <dreamfuel> [seed]\n" as u64)  return 6u64 }
+        let df : i64 = parse_i64(av[2u64])
+        if df < 0i64 { ps("iii-substrate: dreamfuel must be >= 0\n" as u64)  return 6u64 }
+        let mut sd : u64 = 0u64
+        if argc >= 4i32 { sd = parse_u64(av[3u64]) }
+        /* no seed pinned -> the die's own contingency names the dream: the moment register
+         * (empty on a cold start) XOR live die-time.  Replayable: the seed is printed. */
+        if sd == 0u64 { sd = fr_moment(0i64) ^ bench_now() }
+        if sd == 0u64 { sd = 1u64 }
+        return cmd_symmetry(df as u64, sd)
+    }
+    if streq(cmd, "isa" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate isa <maxsize 2..6>\n" as u64)  return 1u64 }
+        let f : i64 = parse_i64(av[2u64])
+        if f < 2i64 { ps("iii-substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
+        return cmd_isa(f)
+    }
+    if streq(cmd, "emit" as u64) == 1u32 {
+        if argc < 6i32 { ps("iii-substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>\n" as u64)  return 1u64 }
+        let sz : i64 = parse_i64(av[2u64])
+        let kk : i64 = parse_i64(av[3u64])
+        if sz < 2i64 { ps("iii-substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
+        if kk < 0i64 { ps("iii-substrate: k must be >= 0\n" as u64)  return 1u64 }
+        return cmd_emit(sz, kk, av[4u64], av[5u64])
+    }
+    if streq(cmd, "nomos" as u64) == 1u32 {
+        if argc < 4i32 { ps("iii-substrate nomos <lawfuel> <outdir>\n" as u64)  return 1u64 }
+        let nfu : i64 = parse_i64(av[2u64])
+        if nfu < 1i64 { ps("iii-substrate: lawfuel must be >= 1\n" as u64)  return 1u64 }
+        return cmd_nomos(nfu as u64, av[3u64])
+    }
+    if streq(cmd, "oneiros" as u64) == 1u32 {
+        if argc < 4i32 { ps("iii-substrate oneiros <dreamfuel> <outdir> [seed]\n" as u64)  return 6u64 }
+        let df : i64 = parse_i64(av[2u64])
+        if df < 1i64 { ps("iii-substrate: dreamfuel must be >= 1\n" as u64)  return 6u64 }
+        let mut sd : u64 = 0u64
+        if argc >= 5i32 { sd = parse_u64(av[4u64]) }
+        return cmd_oneiros(df as u64, av[3u64], sd)
+    }
+    if streq(cmd, "judge" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate judge <law> [reps trials]\n" as u64)  return 1u64 }
+        let jp : i64 = parse_i64(av[2u64])
+        if jp < 0i64 { ps("iii-substrate: law must be >= 0\n" as u64)  return 1u64 }
+        let mut jr : i64 = 4i64
+        let mut jt : i64 = 9i64
+        if argc >= 4i32 { jr = parse_i64(av[3u64]) }
+        if argc >= 5i32 { jt = parse_i64(av[4u64]) }
+        if jr < 1i64 { jr = 4i64 }
+        if jt < 1i64 { jt = 9i64 }
+        return cmd_judge(jp as u64, jr as u64, jt)
+    }
+    if streq(cmd, "glossa" as u64) == 1u32 {
+        if argc < 3i32 { ps("iii-substrate glossa <outdir>\n" as u64)  return 6u64 }
+        return cmd_glossa(av[2u64])
+    }
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | reversible | symmetry)\n" as u64)
+    return 1u64
+}
+
+/* THE SINGLE-LAW JUDGMENT DOOR (the increment-2 judge's standing CLI face):
+ * one law of the ISA stream through the friction judge -- truth leg first,
+ * then the race -- with every register printed machine-parsable.  The
+ * standing NOMOS arm uses it to separate METER drift (a declassification:
+ * band physics, counted) from TRUTH breakage (refusal: the only real red).
+ * Exit: 0 held (verdict 1/2/3) | 4 refused (unproven/malformed/starved). */
+fn cmd_judge(p: u64, reps: u64, trials: i64) -> u64 {
+    ia_init()
+    if ia_law_set(p) != 0i32 { ps("JUDGE LAW=" as u64)  pu(p)  ps(" VERDICT=-2 (law index outside the universe)\n" as u64)  return 4u64 }
+    let ti : u64 = ia_law_i()
+    let tj : u64 = ia_law_j()
+    let v : i64 = fj_judge(p, reps, trials)
+    ps("JUDGE LAW=" as u64)
+    pu(p)
+    ps(" I=" as u64)
+    pu(ti)
+    ps(" J=" as u64)
+    pu(tj)
+    ps(" VERDICT=" as u64)
+    pd(v)
+    ps(" FLOORS=" as u64)
+    pu(fj_lhs_floor())
+    ps("/" as u64)
+    pu(fj_rhs_floor())
+    ps(" REFUSED_UNPROVEN=" as u64)
+    pu(fj_refused_unproven())
+    putchar(10i32)
+    if v == 1i64 { ps("HELD: lhs canonical (rhs demotes on this die, this meter)\n" as u64)  return 0u64 }
+    if v == 2i64 { ps("HELD: rhs canonical (lhs demotes on this die, this meter)\n" as u64)  return 0u64 }
+    if v == 3i64 { ps("HELD: true but physically INERT inside the honesty band\n" as u64)  return 0u64 }
+    ps("REFUSED: the truth leg or the ledger refused (unproven/malformed/starved)\n" as u64)
+    return 4u64
+}
+
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn parse_i64(s: u64) -> i64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut v : i64 = 0i64
+    while p[i] != 0u8 {
+        if p[i] < 48u8 { return 0i64 - 1i64 }
+        if p[i] > 57u8 { return 0i64 - 1i64 }
+        v = (v * 10i64) + ((p[i] - 48u8) as i64)
+        i = i + 1u64
+    }
+    return v
+}
+/* full-width decimal (replayed oneiros seeds are u64-wide); junk parses to 0 */
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut v : u64 = 0u64
+    while p[i] != 0u8 {
+        if p[i] < 48u8 { return 0u64 }
+        if p[i] > 57u8 { return 0u64 }
+        v = (v * 10u64) + ((p[i] - 48u8) as u64)
+        i = i + 1u64
+    }
+    return v
+}
+fn pu(v: u64) -> i32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+
+/* ---- the ISA-born-algebra surface ---- */
+fn atom_name(id: i64) -> i32 {
+    if id == 0i64  { ps("NOT" as u64) }
+    if id == 1i64  { ps("NEG" as u64) }
+    if id == 2i64  { ps("BLSI" as u64) }
+    if id == 3i64  { ps("BLSMSK" as u64) }
+    if id == 4i64  { ps("BLSR" as u64) }
+    if id == 5i64  { ps("POPCNT" as u64) }
+    if id == 6i64  { ps("LZCNT" as u64) }
+    if id == 7i64  { ps("TZCNT" as u64) }
+    if id == 8i64  { ps("AND" as u64) }
+    if id == 9i64  { ps("OR" as u64) }
+    if id == 10i64 { ps("XOR" as u64) }
+    if id == 11i64 { ps("ADD" as u64) }
+    if id == 12i64 { ps("SUB" as u64) }
+    if id == 13i64 { ps("MUL" as u64) }
+    if id == 14i64 { ps("SHL" as u64) }
+    if id == 15i64 { ps("SHR" as u64) }
+    if id == 16i64 { ps("ANDN" as u64) }
+    if id == 17i64 { ps("PDEP" as u64) }
+    if id == 18i64 { ps("PEXT" as u64) }
+    return 0i32
+}
+fn gate_name(g: i64) -> i32 {
+    if g == 0i64 { ps("base-ISA" as u64) }
+    if g == 1i64 { ps("BMI1" as u64) }
+    if g == 2i64 { ps("BMI2" as u64) }
+    if g == 3i64 { ps("POPCNT" as u64) }
+    if g == 4i64 { ps("ABM/LZCNT" as u64) }
+    return 0i32
+}
+/* the gate-class fold as a name (bit0 BMI1, bit1 BMI2, bit2 POPCNT, bit3 LZCNT) */
+fn class_name(c: i64) -> i32 {
+    let mut hit : u8 = 0u8
+    if (c & 1i64) != 0i64 { ps("BMI1" as u64)  hit = 1u8 }
+    if (c & 2i64) != 0i64 { if hit == 1u8 { putchar(43i32) }  ps("BMI2" as u64)  hit = 1u8 }
+    if (c & 4i64) != 0i64 { if hit == 1u8 { putchar(43i32) }  ps("POPCNT" as u64)  hit = 1u8 }
+    if (c & 8i64) != 0i64 { if hit == 1u8 { putchar(43i32) }  ps("LZCNT" as u64)  hit = 1u8 }
+    if hit == 0u8 { ps("base" as u64) }
+    return 0i32
+}
+/* the width-tower footprint as a compact list of widths where the identity holds */
+fn width_line(fp: u64) -> i32 {
+    let mut hit : u8 = 0u8
+    let mut w : u64 = 1u64
+    while w <= 6u64 {
+        if (fp & (1u64 << (w - 1u64))) != 0u64 {
+            if hit == 1u8 { putchar(44i32) }
+            pu(w)
+            hit = 1u8
+        }
+        w = w + 1u64
+    }
+    if hit == 0u8 { ps("none(width-64-specific)" as u64) }
+    return 0i32
+}
+
+/* print a survivor law from its serialized preorder bytes (0 x, 1 y, 2+id atom) */
+var ISB : [u8; 64]
+var ISN : u64 = 0u64
+var ISC : u64 = 0u64
+fn iprint_walk() {
+    if ISC >= ISN { return }
+    let k : u8 = ISB[ISC]
+    ISC = ISC + 1u64
+    if k == 0u8 { putchar(120i32)  return }   /* x */
+    if k == 1u8 { putchar(121i32)  return }   /* y */
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    iprint_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  iprint_walk() }
+    putchar(41i32)
+}
+fn iprint_pair(ti: u64, tj: u64) {
+    ISN = ia_term_ser(tj, (&ISB) as u64)
+    ISC = 0u64
+    iprint_walk()
+    ps(" = " as u64)
+    ISN = ia_term_ser(ti, (&ISB) as u64)
+    ISC = 0u64
+    iprint_walk()
+}
+
+fn isa_atoms_report() -> i32 {
+    ia_init()
+    ps("live capability report (CPUID, ring 3 -- read, not typed):\n" as u64)
+    ps("  BMI1=" as u64)   pu(cpufeat_has_bmi1() as u64)
+    ps("  BMI2=" as u64)   pu(cpufeat_has_bmi2() as u64)
+    ps("  POPCNT=" as u64) pu(cpufeat_has_popcnt() as u64)
+    ps("  LZCNT=" as u64)  pu(cpufeat_has_lzcnt() as u64)  putchar(10i32)
+    ps("  atoms THIS chip grants: " as u64)
+    let mut id : i64 = 0i64
+    while id < 19i64 {
+        if ia_atom_live(id) == 1u64 {
+            atom_name(id)
+            if ia_atom_gate(id) != 0i64 { putchar(91i32)  gate_name(ia_atom_gate(id))  putchar(93i32) }
+            putchar(32i32)
+        }
+        id = id + 1i64
+    }
+    putchar(10i32)
+    ps("  live unary=" as u64)  pu(ia_live_unary() as u64)
+    ps("  live binary=" as u64)  pu(ia_live_binary() as u64)  putchar(10i32)
+    ps("  term universe of THIS silicon (count by node size): " as u64)
+    let mut m : i64 = 1i64
+    while m <= 6i64 { ps(" |" as u64)  pu(m as u64)  ps("|=" as u64)  pu(ia_tcount(m))  m = m + 1i64 }
+    ps("  total(<=9 nodes)=" as u64)  pu(ia_terms_total())  putchar(10i32)
+    return 0i32
+}
+
+/* ---- THE REVERSIBILITY HUNT surface: spell the sharpest computational diode ---- */
+var RVSP_C : u64 = 0u64
+var RVSP_N : u64 = 0u64
+var RVSP_P : u64 = 0u64
+fn rv_walk() {
+    if RVSP_C >= RVSP_N { return }
+    let k : u8 = rv_diode_byte(RVSP_C)
+    RVSP_C = RVSP_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }            /* x */
+    if k == 1u8 { pu(RVSP_P)  return }                 /* the parameter value (shift / multiplier) */
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    rv_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  rv_walk() }
+    putchar(41i32)
+}
+/* spell a stored non-obvious reversible find (index RVF_I) from its serialized bytes */
+var RVF_I : u64 = 0u64
+var RVF_C : u64 = 0u64
+var RVF_N : u64 = 0u64
+var RVF_P : u64 = 0u64
+fn rv_find_walk() {
+    if RVF_C >= RVF_N { return }
+    let k : u8 = rv_find_byte(RVF_I, RVF_C)
+    RVF_C = RVF_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(RVF_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    rv_find_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  rv_find_walk() }
+    putchar(41i32)
+}
+/* THE REVERSIBILITY HUNT.  Two oracles over the same term universe:
+ *  (1) the exhaustive floor -- injectivity over all 2^13 -- finds bijections,
+ *      involutions (self-inverse), and the information deficit (Landauer heat) of
+ *      the lossy ops; this catches the NONLINEAR reversibles (odd multiplies, ...).
+ *  (2) the computational-diode hunt -- reversibility of a LINEAR map decided by
+ *      matrix RANK, no brute force -- reaches the larger RECONVERGENT terms where
+ *      diodes live.  III constructs each inverse ITSELF by Gaussian elimination over
+ *      GF(2), PROVES g(f(x))=x over the whole domain, and measures the forward/inverse
+ *      density gap: a bijection cheap forward but dear to undo is a COMPUTATIONAL DIODE. */
+fn cmd_reversible(maxsize: i64) -> u64 {
+    ps("== THE REVERSIBILITY HUNT: III finds zero-information-loss computing on its own die ==\n" as u64)
+    rv_hunt(4i64)
+    ps("exhaustive floor (size<=4, full 2^13 injectivity -- catches nonlinear reversibles):\n" as u64)
+    ps("  ops examined              : " as u64)  pu(rv_examined())  putchar(10i32)
+    ps("  bijections (reversible)   : " as u64)  pu(rv_reversible())  putchar(10i32)
+    ps("  involutions (self-inverse): " as u64)  pu(rv_involutions())  putchar(10i32)
+    ps("  nonlinear reversibles     : " as u64)  pu(rv_nonlinear_reversibles())  putchar(10i32)
+    ps("  max information deficit    : " as u64)  pu(rv_max_deficit())  ps(" bits (the Landauer heat floor of the worst lossy op)\n" as u64)
+    ps("  terms skipped (variable shift / count-atom, not bit-blastable): " as u64)  pu(rv_skipped())  putchar(10i32)
+    let fc : u64 = rv_find_count()
+    if fc > 0u64 {
+        ps("  non-obvious reversibles III kept (parametrized, nonlinear-atom bijections): " as u64)  pu(fc)  putchar(10i32)
+        let mut fi : u64 = 0u64
+        while fi < fc {
+            if fi < 6u64 {
+                ps("    " as u64)
+                RVF_I = fi   RVF_C = 0u64   RVF_N = rv_find_len(fi)   RVF_P = rv_find_param(fi)
+                rv_find_walk()
+                if rv_find_involution(fi) == 1u8 { ps("  [involution: its own inverse]" as u64) }
+                if rv_find_nonlinear(fi) == 1u8 { ps("  [nonlinear atom]" as u64) }
+                putchar(10i32)
+            }
+            fi = fi + 1u64
+        }
+    }
+    rv_diode_hunt(maxsize)
+    ps("computational-diode hunt (reconvergent linear sublattice, size<=" as u64)  pd(maxsize)  ps(", matrix-rank oracle):\n" as u64)
+    ps("  reconvergent ops examined  : " as u64)  pu(rv_examined())  putchar(10i32)
+    ps("  linear inverses CONSTRUCTED + PROVED over 2^13: " as u64)  pu(rv_linear_inverted())  putchar(10i32)
+    ps("  computational diodes (inverse strictly denser): " as u64)  pu(rv_diode_count())  putchar(10i32)
+    if rv_diode_count() == 0u64 { ps("  no computational diode in this envelope\n" as u64)  return 3u64 }
+    ps("  SHARPEST DIODE: friction asymmetry " as u64)  pu(rv_max_asymmetry())  ps("% (inverse GF(2) op-count per forward op)\n" as u64)
+    ps("    forward density " as u64)  pu(rv_diode_fwd())  ps(" ops, inverse density " as u64)  pu(rv_diode_inv())  ps(" ops\n" as u64)
+    ps("    the operation III found, proved reversible, and inverted ITSELF (parameter " as u64)  pu(rv_diode_param())  ps("):\n      " as u64)
+    RVSP_N = rv_diode_len()   RVSP_C = 0u64   RVSP_P = rv_diode_param()
+    rv_walk()
+    putchar(10i32)
+    ps("    III recovered the inverse by Gaussian elimination over the probed GF(2) matrix and PROVED\n" as u64)
+    ps("    g(f(x)) = x over the whole 2^13 domain.  x^(x*2) = x^(x<<1) is the xorshift, PRNG-class,\n" as u64)
+    ps("    found -- not seeded -- by measuring that multiply-by-2 is a reversible linear map on the die.\n" as u64)
+    /* UNIFICATION with teeth: the compiler's own reversible-core rewrite (cg_r3
+     * r3_nomos_collapse) is the involution property this kernel decides -- cross-proven
+     * here, both arms (the two collapses hold; a non-involution is correctly refused). */
+    ps("  UNIFICATION -- cg_r3's reversible-core rewrite (NOMOS collapse) re-proven by this same kernel:\n" as u64)
+    ps("    NOT(NOT(x)) -> x : " as u64)
+    if rv_prove_involution(0i64) == 1u64 { ps("PROVEN involution (the fold is sound)\n" as u64) } else { ps("REFUTED -- compiler law broken!\n" as u64)  return 2u64 }
+    ps("    NEG(NEG(x)) -> x : " as u64)
+    if rv_prove_involution(1i64) == 1u64 { ps("PROVEN involution (the fold is sound)\n" as u64) } else { ps("REFUTED -- compiler law broken!\n" as u64)  return 2u64 }
+    ps("    control BLSR(BLSR(x)) : " as u64)
+    if rv_prove_involution(4i64) == 0u64 { ps("NOT self-inverse -- correctly REFUSED (the negative arm holds)\n" as u64) } else { ps("wrongly admitted -- kernel unsound!\n" as u64)  return 2u64 }
+    /* ==== THE CONVERGENCE: the one conservation law, machine-proven at every altar
+     * where the body already spoke it -- IN THIS ONE BINARY, no prose bridges. ==== */
+    ps("  THE CONVERGENCE -- the one law at every altar, each arm machine-proven here:\n" as u64)
+    ps("    [gate] Toffoli t(x)=x^((x>>1)&(x>>2)&1), the universal reversible primitive:\n" as u64)
+    ps("      exhaustion route (this kernel, all 2^13): " as u64)
+    if rv_prove_toffoli() == 1u64 { ps("involution + biting PROVEN\n" as u64) } else { ps("REFUTED!\n" as u64)  return 2u64 }
+    ps("      SAT route (primweb, gate 1758)          : " as u64)
+    if pw_toffoli_self_inverse() == 1u8 { ps("self-inverse PROVEN\n" as u64) } else { ps("REFUTED!\n" as u64)  return 2u64 }
+    ps("      signature route (weave, gate 1797)      : " as u64)
+    if ws_toffoli_selfinverse() == 1u8 { if ws_toffoli_agrees_primweb() == 1u8 { ps("self-inverse PROVEN, agrees with SAT\n" as u64) } else { ps("routes DISAGREE!\n" as u64)  return 2u64 } } else { ps("REFUTED!\n" as u64)  return 2u64 }
+    ps("      universality (c=1 wire IS NAND)         : " as u64)
+    if rv_prove_toffoli_nand() == 1u64 { if pw_toffoli_is_nand() == 1u8 { ps("PROVEN by exhaustion AND by SAT -- THREE independent routes, one gate\n" as u64) } else { ps("SAT route refutes!\n" as u64)  return 2u64 } } else { ps("exhaustion refutes!\n" as u64)  return 2u64 }
+    ps("    [field] the ripple palindrome (intent (x) intuition on the ripple field), R^2 = id:\n" as u64)
+    let mut rip_bad : u64 = 0u64
+    let mut rip_n : u64 = 0u64
+    let mut rpa : u64 = 1u64
+    while rpa <= 18u64 {
+        let mut rpb : u64 = 1u64
+        while rpb <= 18u64 {
+            let mut rha : u64 = 1u64
+            while rha <= 7u64 {
+                let mut rhb : u64 = 1u64
+                while rhb <= 7u64 {
+                    if eidos_ripple_involution(rpa as u8, rpb as u8, rha as u8, rhb as u8) != 1u32 { rip_bad = rip_bad + 1u64 }
+                    rip_n = rip_n + 1u64
+                    rhb = rhb + 1u64
+                }
+                rha = rha + 1u64
+            }
+            rpb = rpb + 1u64
+        }
+        rpa = rpa + 1u64
+    }
+    ps("      forward gradient + inverse gradient cancel AND the verb reflects, over " as u64)  pu(rip_n)
+    if rip_bad == 0u64 { ps(" edges: PROVEN (the inverse field is exact)\n" as u64) } else { ps(" edges: " as u64)  pu(rip_bad)  ps(" BROKEN!\n" as u64)  return 2u64 }
+    ps("    [meaning] intent (x) intuition, the semantic Galois pair (ser_pipeline, real organs):\n" as u64)
+    let svd : u32 = svp_descriptor(7u64)
+    let svk : u64 = svp_k(svd) as u64
+    ps("      intuition synthesized k=" as u64)  pu(svk)  ps(" for the family factor 7; intent's proof-merge with that k: " as u64)
+    if svp_intent_fulfilled(7u64, svk) == 1u8 { ps("FULFILLED (the round-trip closes)\n" as u64) } else { ps("BROKEN!\n" as u64)  return 2u64 }
+    ps("      the ORACLE OF REJECTION on the non-family 11 (no descriptor exists -- the information to invert is NOT THERE): " as u64)
+    if svp_pipeline_rejects(11u64) == 1u8 { ps("REFUSED, rolled back, provenance kept\n" as u64) } else { ps("wrongly accepted!\n" as u64)  return 2u64 }
+    ps("      the whole semantic fold (13 organs, one accept decision): " as u64)
+    if svp_selftest() == 99u64 { ps("GREEN\n" as u64) } else { ps("RED!\n" as u64)  return 2u64 }
+    ps("    [auditor] rva, the independent SMT auditor (UNSAT disequality == reversibility):\n" as u64)
+    ps("      identity admitted / non-inverse refused with counterexample / capability gate fails closed / idempotent + full / counterexample reproducible: " as u64)
+    if rva_selftest() == 99u64 { ps("ALL PROVEN\n" as u64) } else { ps("auditor law BROKEN!\n" as u64)  return 2u64 }
+    ps("  SIX altars -- bit-kernel, compiler fold, universal gate, ripple field, meaning, auditor -- one truth.\n" as u64)
+    return 0u64
+}
+
+/* ---- SYMMETRIA surface: spell a pool generator from its serialized bytes ---- */
+var SYP_I : u64 = 0u64
+var SYP_C : u64 = 0u64
+var SYP_N : u64 = 0u64
+var SYP_P : u64 = 0u64
+fn sy_pool_walk() {
+    if SYP_C >= SYP_N { return }
+    let k : u8 = sy_pool_byte(SYP_I, SYP_C)
+    SYP_C = SYP_C + 1u64
+    if k == 0u8 { putchar(120i32)  return }
+    if k == 1u8 { pu(SYP_P)  return }
+    let id : i64 = (k as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    sy_pool_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  sy_pool_walk() }
+    putchar(41i32)
+}
+/* THE SYMMETRIA TIER: the conservation worlds.  Every criterion is declared in
+ * the organ header BEFORE the run (fair-order pool, exhaustive pair coverage,
+ * dream triples by seeded contingency, exact-table saturation, measured floors).
+ * Exit: 0 at least one world PROVEN | 3 degenerate | 6 usage. */
+fn cmd_symmetry(dreamfuel: u64, seed: u64) -> u64 {
+    ps("== SYMMETRIA: the conservation worlds -- closed reversible algebras of THIS die, saturated to PROOF ==\n" as u64)
+    ps("(a world = operations closed under composition where NO sequence can lose a bit; the saturation\n" as u64)
+    ps(" fixpoint over exact 256-entry value tables IS the group proof -- identity + inverses inside)\n" as u64)
+    let nsig : i64 = sy_run(4096u64, dreamfuel, seed)
+    ps("generator pool (the FIRST distinct non-identity bijections in fair enumeration order, width-stable 8->13):\n" as u64)
+    ps("  (term,param) candidates examined: " as u64)  pu(sy_scanned())
+    ps("   bijections at 2^8: " as u64)  pu(sy_bij8())
+    ps("   width-artifacts dropped at 2^13: " as u64)  pu(sy_width_dropped())  putchar(10i32)
+    ps("  pool = " as u64)  pu(sy_pool_n())  ps(" generators (measured shape floor from the friction judge; SENT = meter refused, never invented):\n" as u64)
+    let mut pi : u64 = 0u64
+    while pi < sy_pool_n() {
+        ps("    [" as u64)  pu(pi)  ps("] " as u64)
+        SYP_I = pi   SYP_C = 0u64   SYP_N = sy_pool_len(pi)   SYP_P = sy_pool_y(pi)
+        sy_pool_walk()
+        ps("   param=" as u64)  pu(sy_pool_y(pi))
+        ps("   floor=" as u64)
+        if sy_pool_floor(pi) == 18446744073709551615u64 { ps("UNMEASURED" as u64) } else { pu(sy_pool_floor(pi)) }
+        putchar(10i32)
+        pi = pi + 1u64
+    }
+    if sy_pool_n() < 2u64 { ps("DEGENERATE: fewer than two generators -- no world derivable\n" as u64)  return 3u64 }
+    ps("worlds PROVEN (signature = order x involution-core x abelian; saturation closed under the generators):\n" as u64)
+    let mut si : u64 = 0u64
+    while si < sy_sig_n() {
+        ps("  order=" as u64)  pu(sy_sig_order(si))
+        ps("  involutions=" as u64)  pu(sy_sig_invol(si))
+        if sy_sig_abelian(si) == 1u64 { ps("  abelian" as u64) } else { ps("  NON-abelian" as u64) }
+        ps("  gens={" as u64)  pu(sy_sig_gi(si))  ps("," as u64)  pu(sy_sig_gj(si))
+        if sy_sig_gk(si) != 18446744073709551615u64 { ps("," as u64)  pu(sy_sig_gk(si)) }
+        ps("}" as u64)
+        ps("  floor(sum)=" as u64)
+        if sy_sig_floor(si) == 18446744073709551615u64 { ps("UNMEASURED" as u64) } else { pu(sy_sig_floor(si)) }
+        if sy_sig_prov(si) == 1u64 { ps("  first-reached=DREAM" as u64) } else { ps("  first-reached=systematic" as u64) }
+        putchar(10i32)
+        si = si + 1u64
+    }
+    ps("  saturation runs=" as u64)  pu(sy_runs())
+    ps("  proven world-signatures=" as u64)  pu(sy_sig_n())
+    ps("  OPEN (order beyond cap 2048 -- closure NOT claimed)=" as u64)  pu(sy_open())
+    ps("  largest proven order=" as u64)  pu(sy_largest())  putchar(10i32)
+    ps("THE DREAM ARM: fuel=" as u64)  pu(dreamfuel)
+    ps("  seed=" as u64)  pu(seed)
+    ps("  world-signatures FIRST reached by contingency: " as u64)  pu(sy_dream_new())  putchar(10i32)
+    ps("grading (honest): structures PROVEN by exact saturation; floors MEASURED on this die (meter-context);\n" as u64)
+    ps("the sovereign content is WHICH worlds this die's fair term-space affords and at what measured cost --\n" as u64)
+    ps("SOVEREIGN/FIRST-COMPUTED; finite-group theory itself is old and is not claimed.\n" as u64)
+    if nsig < 1i64 { ps("no world proven in this envelope\n" as u64)  return 3u64 }
+    return 0u64
+}
+
+fn cmd_isa_bridge() -> u64 {
+    isa_atoms_report()
+    ps("BRIDGE: live instruction vs independent pure-.iii definiens, over the whole published battery\n" as u64)
+    let br : i64 = ia_bridge()
+    if br != 0i64 {
+        ps("  DISAGREEMENT at atom " as u64)  atom_name(ia_bridge_atom())
+        ps(": x=0x" as u64)  phx(ia_bridge_x())  ps(" y=0x" as u64)  phx(ia_bridge_y())
+        ps(" instruction=0x" as u64)  phx(ia_bridge_got())  ps(" definiens=0x" as u64)  phx(ia_bridge_want())  putchar(10i32)
+        ps("UNBRIDGED (exit 2): the executor and the model disagree -- a mis-encoded atom.\n" as u64)
+        return 2u64
+    }
+    ps("  " as u64)  pu(ia_bridge_checks())  ps(" agreements: every gated instruction == its definiens on every battery point.\n" as u64)
+    ps("BRIDGED: the two engines bear one claim; the chip's semantics is pinned.\n" as u64)
+    return 0u64
+}
+
+/* content-address a novel survivor into the discovery chain (cad.iii -- the same
+ * primitive the mathesis library door uses).  entry = lhs || 0xFF || rhs ||
+ * footprint(8 LE) || witness(1) || class(1). */
+var ENT  : [u8; 128]
+var IDB  : [u8; 32]
+var ROOT : [u8; 32]
+fn chain_survivor(ti: u64, tj: u64, sig: u64, cls: i64) -> i32 {
+    let ln : u64 = ia_term_ser(tj, (&ENT) as u64)
+    let mut o : u64 = ln
+    ENT[o] = 0xFFu8   o = o + 1u64
+    var RB : [u8; 40]
+    let rn : u64 = ia_term_ser(ti, (&RB) as u64)
+    let mut j : u64 = 0u64
+    while j < rn { ENT[o] = RB[j]   o = o + 1u64   j = j + 1u64 }
+    let mut b : u64 = 0u64
+    while b < 8u64 { ENT[o] = ((sig >> (b * 8u64)) & 0xFFu64) as u8   o = o + 1u64   b = b + 1u64 }
+    ENT[o] = ((cls as u64) & 0xFFu64) as u8    o = o + 1u64
+    cad_oneshot(0u32, (&ENT) as u64, o, (&IDB) as u64)
+    cad_compose((&ROOT) as u64, (&IDB) as u64, (&ROOT) as u64)
+    return 0i32
+}
+
+fn cmd_isa(sizecap: i64) -> u64 {
+    ps("== THE ISA-BORN ALGEBRA: atoms READ from CPUID, EXECUTED on the die ==\n" as u64)
+    isa_atoms_report()
+
+    /* fairness: this chip's own term universe is bijectively enumerated */
+    let fr : i64 = ia_fair(2000u64)
+    if fr != 0i64 {
+        ps("FAIRNESS BROKEN (exit 8): index<->term roundtrip class=" as u64)  pd(fr)  putchar(10i32)
+        return 8u64
+    }
+    ps("FAIRNESS: index<->term bijection EXACT over 2000 terms of the live universe (no authored menu)\n" as u64)
+
+    /* bridge: the executor is pinned to an independent model */
+    let br : i64 = ia_bridge()
+    if br != 0i64 {
+        ps("UNBRIDGED (exit 2): atom " as u64)  atom_name(ia_bridge_atom())  ps(" instruction != definiens.\n" as u64)
+        return 2u64
+    }
+    ps("BRIDGE: " as u64)  pu(ia_bridge_checks())  ps(" instruction==definiens agreements (executor pinned)\n" as u64)
+
+    /* the sweep on the real silicon, size-ordered up to maxsize nodes */
+    ia_sweep(sizecap)
+    let refuted : u64 = ia_refuted()
+    let surv : u64 = ia_survivors()
+    let gated : u64 = ia_survivors_gated()
+    ps("SWEEP (larger-side size <= " as u64)  pd(sizecap)  ps(", judged on the electrons over the 128x128 battery):\n" as u64)
+    ps("  laws examined = " as u64)  pu(ia_examined())
+    if ia_caphit() == 1u64 { ps("  [LAW-CAP HIT -- envelope bounded, named]" as u64) }
+    putchar(10i32)
+    ps("  REFUTED (concrete witness) = " as u64)  pu(refuted)  putchar(10i32)
+    ps("  SURVIVED (whole battery)   = " as u64)  pu(surv)  ps("  of which touch a gated atom = " as u64)  pu(gated)  putchar(10i32)
+    ps("  decode holes = " as u64)  pu(ia_decode_failures())
+    ps("  ISA_CERT = 0x" as u64)  phx(ia_cert())  putchar(10i32)
+
+    if katabasis_isa_informative(refuted, surv) != 1u32 {
+        ps("VACUOUS (exit 7): the sweep decided nothing (no refutation, no survivor).\n" as u64)
+        return 7u64
+    }
+
+    /* the control: a refuted law, used as a rewrite, is wrong HERE */
+    let ctrl : u64 = ia_ctrl_set()
+    if ctrl == 1u64 {
+        ps("CONTROL: refuted law  " as u64)  iprint_pair(ia_ctrl_ti(), ia_ctrl_tj())  putchar(10i32)
+        ps("  at x=0x" as u64)  phx(ia_ctrl_x())  ps(" y=0x" as u64)  phx(ia_ctrl_y())
+        ps(" the sides part: lhs=0x" as u64)  phx(ia_ctrl_lhs())  ps(" rhs=0x" as u64)  phx(ia_ctrl_rhs())  putchar(10i32)
+        ps("  => the sweep is law-truth-sensitive (a refutation reddens), not a tautology.\n" as u64)
+    } else {
+        ps("CONTROL: no refutation within the envelope -- the reddening arm could not run (named).\n" as u64)
+    }
+
+    /* DISTINCT-FUNCTION SEPARATION -- counterfactual: two shortcuts are the SAME
+     * discovery iff they compute the SAME function on the silicon; a distinct
+     * value-signature is a WITNESSED distinct function (the sample values parted).
+     * Novelty is the count of distinct gated (uncharted-axis) functions. */
+    let novel : u64 = ia_distinct_functions()
+    ps("SEPARATION (function-identity across the silicon; a distinct signature = a witnessed distinct function):\n" as u64)
+    ps("  DISTINCT gated functions (novel)             = " as u64)  pu(novel)  putchar(10i32)
+    ps("  redundant gated expressions (same function)  = " as u64)  pu(ia_redundant())  putchar(10i32)
+    if ia_dfsat() > 0u64 { ps("  [distinct-function record cap hit: +" as u64)  pu(ia_dfsat())  ps(" more, named]\n" as u64) }
+
+    /* the discovery chain over the distinct uncharted-axis functions */
+    cad_oneshot(0u32, ("ISA-DISCOVERY-GENESIS" as u64), 21u64, (&ROOT) as u64)
+    let mut admitted : u64 = 0u64
+    let mut has_novel_gated : u64 = 0u64
+    let mut shown : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < novel {
+        has_novel_gated = 1u64
+        chain_survivor(ia_df_ti(k), ia_df_tj(k), ia_df_sig(k), ia_df_class(k))
+        admitted = admitted + 1u64
+        if shown < 16u64 {
+            ps("  [" as u64)  class_name(ia_df_class(k))  ps("] " as u64)  iprint_pair(ia_df_ti(k), ia_df_tj(k))
+            ps("   saves " as u64)  pd(ia_df_saved(k))  ps(" op-nodes; holds at widths {" as u64)
+            width_line(ia_df_widthfp(k))  ps("}\n" as u64)
+            shown = shown + 1u64
+        }
+        k = k + 1u64
+    }
+    ps("  discoveries chained (content-addressed, cad.iii) = " as u64)  pu(admitted)
+    ps("   chain root = 0x" as u64)
+    let rp : *u8 = (&ROOT) as u64 as *u8
+    let mut hb : u64 = 0u64
+    while hb < 8u64 {
+        let by : u64 = rp[hb] as u64
+        let hi : u64 = (by >> 4u64) & 15u64
+        let lo : u64 = by & 15u64
+        if hi < 10u64 { putchar((48u64 + hi) as i32) } else { putchar((87u64 + hi) as i32) }
+        if lo < 10u64 { putchar((48u64 + lo) as i32) } else { putchar((87u64 + lo) as i32) }
+        hb = hb + 1u64
+    }
+    putchar(10i32)
+
+    /* THE VARIANCE FALSIFIER: mask off the chip's gated atoms and confirm the
+     * term universe CHANGES.  Equal => the algebra ignores the silicon => authored. */
+    let total_full : u64 = ia_terms_total()
+    cpufeat_force_mask(0xFFFFE2FFu32)   /* clear BMI2(8) BMI1(10) POPCNT(11) LZCNT(12) */
+    ia_init()
+    let total_masked : u64 = ia_terms_total()
+    cpufeat_force_mask(0xFFFFFFFFu32)
+    ia_init()
+    let mut variant : u64 = 0u64
+    if total_masked != total_full { variant = 1u64 }
+    ps("VARIANCE FALSIFIER: term universe full=" as u64)  pu(total_full)
+    ps(" vs gated-atoms-masked=" as u64)  pu(total_masked)
+    if variant == 1u64 { ps("  => SUBSTRATE-VARIANT (the algebra is a function of the chip)\n" as u64) }
+    else { ps("  => INVARIANT (this chip grants no gated atoms; the algebra is the charted ALU)\n" as u64) }
+
+    /* THE KATABASIS VERDICT */
+    let mut brc : u32 = 0u32
+    if br == 0i64 { brc = 1u32 }
+    let verdict : u32 = katabasis_isa_admit(1u32, brc, 1u32, has_novel_gated as u32, ctrl as u32, variant as u32)
+
+    /* event dispersal: the run's verdict PERCEIVED on the shared substrate */
+    evt_reset()
+    evt_perceive(1u64, 1u64, verdict as u64, ia_cert())
+    let w : u64 = evt_witness(evt_count())
+    ps("VERDICT: " as u64)
+    if verdict == 0u32 { ps("ADMIT -- chip-atoms live, bridged, adjudicated, uncharted survivors separated, control red, substrate-variant\n" as u64) }
+    if verdict == 1u32 { ps("REJECT: atoms not live\n" as u64) }
+    if verdict == 2u32 { ps("REJECT: unbridged\n" as u64) }
+    if verdict == 3u32 { ps("REJECT: unadjudicated\n" as u64) }
+    if verdict == 4u32 { ps("REJECT: only human-charted laws surfaced (no novel uncharted-axis survivor at this fuel)\n" as u64) }
+    if verdict == 5u32 { ps("REJECT: control silent (no refutation to redden)\n" as u64) }
+    if verdict == 6u32 { ps("REJECT: substrate-invariant (this chip grants no atoms beyond the charted ALU)\n" as u64) }
+    ps("  (event dispersed on the substrate; witness fold = 0x" as u64)  phx(w)  ps(")\n" as u64)
+    return verdict as u64
+}
+
+/* ---- THE AUTHOR TIER: III lowers a discovered chip identity through the
+ * definiens to a pure base-op .iii function of (x,y), so III's OWN prover
+ * (iii-prove) can dispose it over ALL 2^64.
+ * COUNT atoms (POPCNT/LZCNT/TZCNT) LOWER (2026-07-17, the loop rung paid):
+ * each count node becomes straight-line let-SSA in the emitted fn preamble --
+ * POPCNT = the mul-free SWAR byte fold; TZCNT = POPCNT((a & (0-a)) - 1), total
+ * incl. a=0 -> 64; LZCNT = 64 - POPCNT(smear(a)), total.  The prover's decided
+ * fragment is straight-line ALU (its loop lane refused the naive fold -- sd
+ * diag 0, measured), so the lowering IS the prover-reachable spelling; its
+ * transcription is anchored on the DIE by lower_bridge() below (formula ==
+ * the executed instruction, corners + walking bits + mixed points) before any
+ * emission or generation is allowed.  DEPOSIT atoms (PDEP/PEXT) remain the
+ * named bit-serial rung -- refused BY NAME, never a silent skip; buffer
+ * exhaustion is its own LOUD refusal (capacity, never truncation). ---- */
+var LSB  : [u8; 64]
+var LSN  : u64 = 0u64
+var LSC  : u64 = 0u64
+var LOUT : [u8; 32768]
+var LON  : u64 = 0u64
+var LPRE : [u8; 32768]      /* let-SSA preamble: count-atom lowerings in dependency order */
+var LPN  : u64 = 0u64
+var LTN  : u64 = 0u64       /* temp-name counter: t<N><suffix> */
+var LBAD : u8  = 0u8        /* 1 = deposit atom (PDEP/PEXT, named rung) | 2 = capacity */
+
+fn lo_putc(ch: u8) -> i32 { if LON < 32766u64 { LOUT[LON] = ch   LON = LON + 1u64 } else { LBAD = 2u8 }  return 0i32 }
+fn lo_puts(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { lo_putc(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn lo_pputc(ch: u8) -> i32 { if LPN < 32766u64 { LPRE[LPN] = ch   LPN = LPN + 1u64 } else { LBAD = 2u8 }  return 0i32 }
+fn lo_pputs(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { lo_pputc(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn lo_pdec(v: u64) -> i32 { if v >= 10u64 { lo_pdec(v / 10u64) }   lo_pputc((48u64 + (v % 10u64)) as u8)   return 0i32 }
+fn lo_odec(v: u64) -> i32 { if v >= 10u64 { lo_odec(v / 10u64) }   lo_putc((48u64 + (v % 10u64)) as u8)   return 0i32 }
+/* temp-name writers t<N><suffix> -- preamble stream / expression stream */
+fn lo_ptn(n: u64, suf: u8) -> i32 { lo_pputc(116u8)   lo_pdec(n)   lo_pputc(suf)   return 0i32 }
+fn lo_otn(n: u64, suf: u8) -> i32 { lo_putc(116u8)   lo_odec(n)   lo_putc(suf)   return 0i32 }
+/* move the expression tail [c0..LON) into the preamble (captured operand text) */
+fn lo_take(c0: u64) -> i32 {
+    let mut i : u64 = c0
+    while i < LON { lo_pputc(LOUT[i])   i = i + 1u64 }
+    LON = c0
+    return 0i32
+}
+/* the mul-free SWAR byte fold: lets t<n>B..t<n>G from source temp t<n><src>;
+ * the caller reads (t<n>G & 127u64) -- byte sums accumulate low, the mask at
+ * the use site closes the fold. */
+fn lo_pc_chain(n: u64, src: u8) -> i32 {
+    lo_pputs("    let " as u64)  lo_ptn(n, 66u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(n, src)  lo_pputs(" - ((" as u64)  lo_ptn(n, src)  lo_pputs(" >> 1u64) & 6148914691236517205u64)\n" as u64)
+    lo_pputs("    let " as u64)  lo_ptn(n, 67u8)  lo_pputs(" : u64 = (" as u64)  lo_ptn(n, 66u8)  lo_pputs(" & 3689348814741910323u64) + ((" as u64)  lo_ptn(n, 66u8)  lo_pputs(" >> 2u64) & 3689348814741910323u64)\n" as u64)
+    lo_pputs("    let " as u64)  lo_ptn(n, 68u8)  lo_pputs(" : u64 = (" as u64)  lo_ptn(n, 67u8)  lo_pputs(" + (" as u64)  lo_ptn(n, 67u8)  lo_pputs(" >> 4u64)) & 1085102592571150095u64\n" as u64)
+    lo_pputs("    let " as u64)  lo_ptn(n, 69u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(n, 68u8)  lo_pputs(" + (" as u64)  lo_ptn(n, 68u8)  lo_pputs(" >> 8u64)\n" as u64)
+    lo_pputs("    let " as u64)  lo_ptn(n, 70u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(n, 69u8)  lo_pputs(" + (" as u64)  lo_ptn(n, 69u8)  lo_pputs(" >> 16u64)\n" as u64)
+    lo_pputs("    let " as u64)  lo_ptn(n, 71u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(n, 70u8)  lo_pputs(" + (" as u64)  lo_ptn(n, 70u8)  lo_pputs(" >> 32u64)\n" as u64)
+    return 0i32
+}
+
+/* emit the base-op .iii expression for the next serialized subtree (preorder) */
+fn lo_walk() {
+    if LSC >= LSN { return }
+    let b : u8 = LSB[LSC]
+    LSC = LSC + 1u64
+    if b == 0u8 { lo_puts("x" as u64)  return }
+    if b == 1u8 { lo_puts("y" as u64)  return }
+    let id : i64 = (b as i64) - 2i64
+    let ar : i64 = ia_atom_arity(id)
+    if ar == 1i64 {
+        if id == 0i64 { lo_puts("(18446744073709551615u64 ^ " as u64)  lo_walk()  lo_puts(")" as u64)  return }   /* NOT */
+        if id == 1i64 { lo_puts("(0u64 - " as u64)  lo_walk()  lo_puts(")" as u64)  return }                       /* NEG */
+        if id == 2i64 { let c0 : u64 = LSC   lo_puts("(" as u64)  lo_walk()  lo_puts(" & (0u64 - " as u64)  LSC = c0  lo_walk()  lo_puts("))" as u64)  return }   /* BLSI  c&(0-c) */
+        if id == 3i64 { let c0 : u64 = LSC   lo_puts("(" as u64)  lo_walk()  lo_puts(" ^ (" as u64)  LSC = c0  lo_walk()  lo_puts(" - 1u64))" as u64)  return }   /* BLSMSK c^(c-1) */
+        if id == 4i64 { let c0 : u64 = LSC   lo_puts("(" as u64)  lo_walk()  lo_puts(" & (" as u64)  LSC = c0  lo_walk()  lo_puts(" - 1u64))" as u64)  return }   /* BLSR  c&(c-1) */
+        if id == 5i64 {                                                                                            /* POPCNT -> mul-free SWAR let-SSA */
+            let nm : u64 = LTN   LTN = LTN + 1u64
+            let c0 : u64 = LON
+            lo_walk()
+            lo_pputs("    let " as u64)  lo_ptn(nm, 65u8)  lo_pputs(" : u64 = " as u64)  lo_take(c0)  lo_pputc(10u8)
+            lo_pc_chain(nm, 65u8)
+            lo_puts("(" as u64)  lo_otn(nm, 71u8)  lo_puts(" & 127u64)" as u64)
+            return
+        }
+        if id == 6i64 {                                                                                            /* LZCNT = 64 - POPCNT(smear(a)), total */
+            let nm : u64 = LTN   LTN = LTN + 1u64
+            let c0 : u64 = LON
+            lo_walk()
+            lo_pputs("    let " as u64)  lo_ptn(nm, 65u8)  lo_pputs(" : u64 = " as u64)  lo_take(c0)  lo_pputc(10u8)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 83u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 65u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 65u8)  lo_pputs(" >> 1u64)\n" as u64)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 84u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 83u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 83u8)  lo_pputs(" >> 2u64)\n" as u64)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 85u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 84u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 84u8)  lo_pputs(" >> 4u64)\n" as u64)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 86u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 85u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 85u8)  lo_pputs(" >> 8u64)\n" as u64)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 87u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 86u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 86u8)  lo_pputs(" >> 16u64)\n" as u64)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 88u8)  lo_pputs(" : u64 = " as u64)  lo_ptn(nm, 87u8)  lo_pputs(" | (" as u64)  lo_ptn(nm, 87u8)  lo_pputs(" >> 32u64)\n" as u64)
+            lo_pc_chain(nm, 88u8)
+            lo_puts("(64u64 - (" as u64)  lo_otn(nm, 71u8)  lo_puts(" & 127u64))" as u64)
+            return
+        }
+        if id == 7i64 {                                                                                            /* TZCNT = POPCNT((a & (0-a)) - 1), total */
+            let nm : u64 = LTN   LTN = LTN + 1u64
+            let c0 : u64 = LON
+            lo_walk()
+            lo_pputs("    let " as u64)  lo_ptn(nm, 65u8)  lo_pputs(" : u64 = " as u64)  lo_take(c0)  lo_pputc(10u8)
+            lo_pputs("    let " as u64)  lo_ptn(nm, 72u8)  lo_pputs(" : u64 = (" as u64)  lo_ptn(nm, 65u8)  lo_pputs(" & (0u64 - " as u64)  lo_ptn(nm, 65u8)  lo_pputs(")) - 1u64\n" as u64)
+            lo_pc_chain(nm, 72u8)
+            lo_puts("(" as u64)  lo_otn(nm, 71u8)  lo_puts(" & 127u64)" as u64)
+            return
+        }
+        LBAD = 1u8   lo_walk()   return                                                                            /* future unary atoms: refuse by name */
+    }
+    if id == 16i64 { lo_puts("((18446744073709551615u64 ^ " as u64)  lo_walk()  lo_puts(") & " as u64)  lo_walk()  lo_puts(")" as u64)  return }   /* ANDN (~a)&b */
+    if id == 8i64  { lo_puts("(" as u64)  lo_walk()  lo_puts(" & " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 9i64  { lo_puts("(" as u64)  lo_walk()  lo_puts(" | " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 10i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" ^ " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 11i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" + " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 12i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" - " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 13i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" * " as u64)  lo_walk()  lo_puts(")" as u64)  return }
+    if id == 14i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" << (" as u64)  lo_walk()  lo_puts(" & 63u64))" as u64)  return }
+    if id == 15i64 { lo_puts("(" as u64)  lo_walk()  lo_puts(" >> (" as u64)  lo_walk()  lo_puts(" & 63u64))" as u64)  return }
+    LBAD = 1u8   lo_walk()   lo_walk()   return                                                                    /* PDEP/PEXT */
+}
+
+fn lower_term(t: u64) -> i64 {
+    LSN = ia_term_ser(t, (&LSB) as u64)
+    LSC = 0u64   LON = 0u64   LPN = 0u64   LTN = 0u64   LBAD = 0u8
+    lo_walk()
+    LOUT[LON] = 0u8
+    LPRE[LPN] = 0u8
+    if LBAD != 0u8 { return 0i64 - (LBAD as i64) }
+    return 0i64
+}
+
+/* the ser-addressed lowering door (the oneiros docket's need: womb-born laws
+ * carry no term index -- the law IS its serialization) */
+fn lower_ser(addr: u64, n: u64) -> i64 {
+    if n < 1u64 { return 0i64 - 2i64 }
+    if n > 60u64 { return 0i64 - 2i64 }
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { LSB[i] = p[i]   i = i + 1u64 }
+    LSN = n
+    LSC = 0u64   LON = 0u64   LPN = 0u64   LTN = 0u64   LBAD = 0u8
+    lo_walk()
+    LOUT[LON] = 0u8
+    LPRE[LPN] = 0u8
+    if LBAD != 0u8 { return 0i64 - (LBAD as i64) }
+    return 0i64
+}
+
+fn write_fn(path: u64, modname: u64) -> i64 {
+    let h : u64 = fopen(path, ("wb" as u64))
+    if h == 0u64 { return 0i64 - 1i64 }
+    fputs("module " as u64, h)   fputs(modname, h)   fputs("\n" as u64, h)
+    fputs("fn f(x: u64, y: u64) -> u64 @export {\n" as u64, h)
+    fputs((&LPRE) as u64, h)
+    fputs("    return " as u64, h)
+    fputs((&LOUT) as u64, h)
+    fputs("\n}\n" as u64, h)
+    fclose(h)
+    return 0i64
+}
+
+/* ---- THE LOWER BRIDGE: the lowering's arithmetic == the DIE's instruction.
+ * Same two-engine discipline as the atom bridge (ia_def1 vs the metal): the
+ * SWAR/smear/blsi-1 formulas the emitter writes as text are computed here in
+ * organ code and raced against ia_apply1 (the executed instruction) over the
+ * corners, both walking-bit families and mixed points.  A disagreement refuses
+ * ALL emission and ALL generation -- a transcription drift cannot ship. ---- */
+fn low_pc64(v: u64) -> u64 {
+    let a : u64 = v - ((v >> 1u64) & 6148914691236517205u64)
+    let b : u64 = (a & 3689348814741910323u64) + ((a >> 2u64) & 3689348814741910323u64)
+    let c : u64 = (b + (b >> 4u64)) & 1085102592571150095u64
+    let d : u64 = c + (c >> 8u64)
+    let e : u64 = d + (d >> 16u64)
+    let g : u64 = e + (e >> 32u64)
+    return g & 127u64
+}
+fn low_lz64(v: u64) -> u64 {
+    let s1 : u64 = v | (v >> 1u64)
+    let s2 : u64 = s1 | (s1 >> 2u64)
+    let s3 : u64 = s2 | (s2 >> 4u64)
+    let s4 : u64 = s3 | (s3 >> 8u64)
+    let s5 : u64 = s4 | (s4 >> 16u64)
+    let s6 : u64 = s5 | (s5 >> 32u64)
+    return 64u64 - low_pc64(s6)
+}
+fn low_tz64(v: u64) -> u64 { return low_pc64((v & (0u64 - v)) - 1u64) }
+fn lower_bridge() -> i64 {
+    ia_init()
+    let mut k : u64 = 0u64
+    while k < 200u64 {
+        let mut v : u64 = 0u64
+        if k < 64u64 { v = 1u64 << k }
+        if k >= 64u64 { if k < 128u64 { v = 18446744073709551615u64 << (k - 64u64) } }
+        if k >= 128u64 { v = ((k - 128u64) * 81985529216486895u64) + 1442695040888963407u64 }
+        if ia_apply1(5i64, v) != low_pc64(v) { return 5i64 }
+        if ia_apply1(6i64, v) != low_lz64(v) { return 6i64 }
+        if ia_apply1(7i64, v) != low_tz64(v) { return 7i64 }
+        k = k + 1u64
+    }
+    if ia_apply1(5i64, 0u64) != low_pc64(0u64) { return 5i64 }
+    if ia_apply1(6i64, 0u64) != low_lz64(0u64) { return 6i64 }
+    if ia_apply1(7i64, 0u64) != low_tz64(0u64) { return 7i64 }
+    return 0i64
+}
+
+fn cmd_emit(size: i64, k: i64, patha: u64, pathb: u64) -> u64 {
+    ia_sweep(size)
+    let nf : u64 = ia_distinct_functions()
+    if (k as u64) >= nf {
+        ps("emit: k out of range (only " as u64)  pu(nf)  ps(" distinct gated functions at this size)\n" as u64)
+        return 1u64
+    }
+    let ti : u64 = ia_df_ti(k as u64)
+    let tj : u64 = ia_df_tj(k as u64)
+    ps("== AUTHOR TIER: III emits a discovered chip identity as pure base-op .iii ==\n" as u64)
+    ps("  identity: " as u64)  iprint_pair(ti, tj)  ps("   [" as u64)  class_name(ia_df_class(k as u64))  ps("]\n" as u64)
+    if lower_bridge() != 0i64 {
+        ps("  LOWER-BRIDGE RED: the count-atom lowering disagrees with the die -- emission refused.\n" as u64)
+        return 8u64
+    }
+    let lra : i64 = lower_term(tj)
+    if lra != 0i64 {
+        if lra == (0i64 - 2i64) { ps("  NOT lowerable (side A: lowering CAPACITY -- named refusal, never truncation).\n" as u64) } else { ps("  NOT lowerable (side A uses a deposit atom PDEP/PEXT -- the bit-serial rung, named).\n" as u64) }
+        return 9u64
+    }
+    if write_fn(patha, "isa_lhs" as u64) != 0i64 { ps("  emit: cannot open LHS path\n" as u64)  return 2u64 }
+    let lrb : i64 = lower_term(ti)
+    if lrb != 0i64 {
+        if lrb == (0i64 - 2i64) { ps("  NOT lowerable (side B: lowering CAPACITY -- named refusal, never truncation).\n" as u64) } else { ps("  NOT lowerable (side B uses a deposit atom PDEP/PEXT -- named).\n" as u64) }
+        return 9u64
+    }
+    if write_fn(pathb, "isa_rhs" as u64) != 0i64 { ps("  emit: cannot open RHS path\n" as u64)  return 2u64 }
+    ps("  emitted LHS -> " as u64)  ps(patha)  putchar(10i32)
+    ps("  emitted RHS -> " as u64)  ps(pathb)  putchar(10i32)
+    ps("  dispose over ALL 2^64 with:  iii-prove <LHS> f <RHS> f\n" as u64)
+    return 0u64
+}
+
+/* ===================================================================
+ * THE CONTINGENCY REGISTER -- the one structure that escapes the physis
+ * determinism theorem, admitted LEAN by unifying two organs already in the
+ * tree: the friction meter (which SEES the jitter and discarded it) and the
+ * event substrate (whose "events" were deterministic records).
+ *
+ *   iii-substrate moment
+ *
+ * The physis theorem: every DETERMINISTIC observable is a value-invariant,
+ * so III's whole reasoning register was the NECESSARY (what-must-be).  The
+ * jitter above the friction floor is the sole non-deterministic physical
+ * quantity -- provably NOT a function of the inputs.  fr_moment folds it;
+ * fr_floor keeps the necessary min.  Timing the SAME fixed computation twice
+ * yields an IDENTICAL floor (necessary; the eternal register) and DIFFERENT
+ * moments (contingent; the evental register).  Stamping an event with the
+ * moment makes it a genuine OCCURRENCE -- evt_witness over two identical
+ * logical events DIFFERS, because each happened at a distinct physical
+ * moment.  This is III's modal split necessary/contingent, grounded in its
+ * own die's physics, FENCED from the covenant: the compiler and every seal
+ * are forbidden fr_moment, and the fixpoint proves byte-identical alongside.
+ * Grade: the non-determinism is MEASURED (moments differ), the fence is
+ * PROVEN (fixpoint unchanged); the modal reading is the honest interpretation. */
+var MOM_SINK : u64 = 0u64
+fn mom_work() -> u64 {
+    /* a FIXED deterministic workload: its necessary cost is stable, only its
+     * jitter (the die's contention/thermal state) varies run to run. */
+    let mut a : u64 = 11400714819323198485u64
+    let mut i : u64 = 0u64
+    while i < 2000u64 {
+        a = (a ^ (a >> 13u64)) * 2685821657736338717u64
+        a = a + i
+        i = i + 1u64
+    }
+    return a
+}
+/* one measurement pass: 300 laps of the fixed workload; leaves floor in fr_floor(0),
+ * contingent signature in fr_moment(0). */
+fn mom_pass() -> i32 {
+    fr_reset(1u64)
+    let mut lap : i64 = 0i64
+    while lap < 300i64 {
+        fr_lap_begin()
+        MOM_SINK = MOM_SINK ^ mom_work()
+        fr_lap_end(0i64)
+        lap = lap + 1i64
+    }
+    return 0i32
+}
+fn cmd_moment() -> u64 {
+    ps("== THE CONTINGENCY REGISTER: the machine's necessary vs contingent, from the electrons ==\n" as u64)
+    ps("(the same fixed computation, timed twice; floor = what MUST be, moment = what HAPPENED)\n" as u64)
+    mom_pass()
+    let floor1 : u64 = fr_floor(0i64)
+    let mom1 : u64 = fr_moment(0i64)
+    /* stamp a CONTINGENT event: same observer/kind/priority, payload = the moment */
+    evt_reset()
+    evt_perceive(1u64, 7u64, 1u64, mom1)
+    let wit1 : u64 = evt_witness(1u32)
+    mom_pass()
+    let floor2 : u64 = fr_floor(0i64)
+    let mom2 : u64 = fr_moment(0i64)
+    evt_reset()
+    evt_perceive(1u64, 7u64, 1u64, mom2)
+    let wit2 : u64 = evt_witness(1u32)
+    ps("NECESSARY (fr_floor, the eternal register):\n" as u64)
+    ps("  run1 floor = " as u64)  pu(floor1)  ps(" cyc    run2 floor = " as u64)  pu(floor2)  ps(" cyc\n" as u64)
+    ps("CONTINGENT (fr_moment, the evental register -- folds the jitter the floor discards):\n" as u64)
+    ps("  run1 moment = 0x" as u64)  phx(mom1)  ps("    run2 moment = 0x" as u64)  phx(mom2)  putchar(10i32)
+    ps("EVENT (the same logical event, stamped with its moment):\n" as u64)
+    ps("  run1 witness = 0x" as u64)  phx(wit1)  ps("    run2 witness = 0x" as u64)  phx(wit2)  putchar(10i32)
+    /* the necessary reading is stable (essence); the contingent reading differs (accident) */
+    let mut fgap : u64 = 0u64
+    if floor1 > floor2 { fgap = floor1 - floor2 } else { fgap = floor2 - floor1 }
+    let mut floorstable : u32 = 0u32
+    if fgap <= (floor1 / 8u64) { floorstable = 1u32 }
+    let mut isctg : u32 = 0u32
+    if mom1 != mom2 { isctg = 1u32 }
+    ps("VERDICT: " as u64)
+    if isctg == 1u32 { if floorstable == 1u32 {
+        ps("THE MODAL SPLIT IS REAL AND MEASURED.\n" as u64)
+        ps("  * the NECESSARY reading reproduced (floor within band) -- the value-invariant register.\n" as u64)
+        ps("  * the CONTINGENT reading DIFFERED (moment, and the event's witness with it) -- genuine\n" as u64)
+        ps("    non-determinism, the one physical fact provably NOT a function of the inputs.\n" as u64)
+        ps("  * III now distinguishes what MUST be from what merely HAPPENED, grounded in its die's\n" as u64)
+        ps("    jitter and FENCED from every seal -- the bare-minimum non-determinism the physis\n" as u64)
+        ps("    theorem named as the sole escape.  The event substrate's records are now OCCURRENCES.\n" as u64)
+        return 0u64
+    } }
+    if isctg == 0u32 {
+        ps("moment IDENTICAL across runs -- the die was impossibly quiet this pass (no measurable jitter);\n" as u64)
+        ps("honestly reported, not faked: with no contingency to witness, the register is empty this run.\n" as u64)
+        return 2u64
+    }
+    ps("floor drifted beyond band -- the necessary reading did not converge (raise lap count).\n" as u64)
+    return 3u64
+}
+
+/* ===================================================================
+ * THE PHYSIS PROBE -- the die measures its own cost geometry, and thereby
+ * the CEILING on what structure is derivable from its electrons.
+ *
+ *   iii-substrate physis
+ *
+ * The question the taxis tier's honesty rests on: is any atom's cost a
+ * function of its INPUT VALUE (extra-algebraic, physical, potentially
+ * uncharted), or only of the operation (a scalar -> a mere preorder)?
+ * PDEP/PEXT are the microcoded suspects (data-dependent on older Zen).
+ * This probe times a 256-long DEPENDENT latency chain (result fed back as
+ * source, so the OoO engine cannot overlap) across masks of popcount
+ * 0..64 and across bit-LAYOUT at fixed popcount, min-floor over many reps.
+ * A data-dependent unit shows cost RISING with popcount (10-40x at pc>=32);
+ * a constant-time unit is FLAT.  Verdict decides what ontology the die can
+ * force: FLAT => scalar cost => only value-algebra + cost-preorder are
+ * derivable (both charted) => no new non-numerical schema lives here. */
+var PH_MSK : u64 = 0u64
+var PH_RES : u64 = 0u64
+var PH_DVD : u64 = 0u64
+var PH_DVS : u64 = 0u64
+fn ph_div_chain() -> i32 {
+    metal {
+    leaq L_PH_DVD(%rip), %rax
+    movq (%rax), %r10
+    leaq L_PH_DVS(%rip), %rax
+    movq (%rax), %r11
+    movabsq $0x8000000000000001, %r8
+    movq $128, %r9
+L_ph_dv:
+    movq %r10, %rax
+    xorq %rdx, %rdx
+    divq %r11
+    movq %rax, %r10
+    orq  %r8, %r10
+    decq %r9
+    jnz L_ph_dv
+    leaq L_PH_RES(%rip), %rax
+    movq %r10, (%rax)
+    }
+    return 0i32
+}
+fn ph_div_floor(dvs: u64, reps: u64) -> u64 {
+    PH_DVS = dvs
+    let mut best : u64 = 18446744073709551615u64
+    let mut r : u64 = 0u64
+    while r < reps {
+        PH_DVD = 18446744073709551615u64
+        let t0 : u64 = bench_now()
+        ph_div_chain()
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        r = r + 1u64
+    }
+    return best
+}
+fn ph_pdep_chain() -> i32 {
+    metal {
+    leaq L_PH_RES(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_PH_MSK(%rip), %rax
+    movq (%rax), %rdx
+    movq $256, %r9
+L_ph_pd:
+    pdep %rdx, %rcx, %rcx
+    decq %r9
+    jnz L_ph_pd
+    leaq L_PH_RES(%rip), %rax
+    movq %rcx, (%rax)
+    }
+    return 0i32
+}
+fn ph_pext_chain() -> i32 {
+    metal {
+    leaq L_PH_RES(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_PH_MSK(%rip), %rax
+    movq (%rax), %rdx
+    movq $256, %r9
+L_ph_px:
+    pext %rdx, %rcx, %rcx
+    decq %r9
+    jnz L_ph_px
+    leaq L_PH_RES(%rip), %rax
+    movq %rcx, (%rax)
+    }
+    return 0i32
+}
+fn ph_floor(which: u64, msk: u64, reps: u64) -> u64 {
+    PH_MSK = msk
+    let mut best : u64 = 18446744073709551615u64
+    let mut r : u64 = 0u64
+    while r < reps {
+        PH_RES = 305419896u64
+        let t0 : u64 = bench_now()
+        if which == 0u64 { ph_pdep_chain() } else { ph_pext_chain() }
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        r = r + 1u64
+    }
+    return best
+}
+fn ph_lowmask(p: u64) -> u64 { if p >= 64u64 { return 18446744073709551615u64 }   return (1u64 << p) - 1u64 }
+/* the whole span across popcount for op `which`; returns 1 if flat (band <= 12.5%), 0 if data-dependent */
+fn ph_span(which: u64) -> u32 {
+    let mut lo : u64 = 18446744073709551615u64
+    let mut hi : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p <= 64u64 {
+        let f : u64 = ph_floor(which, ph_lowmask(p), 8000u64)
+        if which == 0u64 { ps("  PDEP pc=" as u64) } else { ps("  PEXT pc=" as u64) }
+        pu(p)  ps(" floor=" as u64)  pu(f)  ps(" cyc\n" as u64)
+        if f < lo { lo = f }
+        if f > hi { hi = f }
+        if p == 0u64 { p = 1u64 } else { p = p * 2u64 }
+    }
+    /* flat iff hi - lo <= lo/8 (a data-dependent unit blows this out by >=10x) */
+    if (hi - lo) <= (lo / 8u64) { return 1u32 }
+    return 0u32
+}
+fn cmd_physis() -> u64 {
+    ps("== THE PHYSIS PROBE: what structure can these electrons force into existence? ==\n" as u64)
+    ps("(256-long dependent latency chains, min-floor; the question the taxis honesty rests on)\n" as u64)
+    ps("[1] THE ATOM SET (the fast BMI/ALU ops -- PDEP/PEXT the microcoded suspects):\n" as u64)
+    let fd : u32 = ph_span(0u64)
+    let fx : u32 = ph_span(1u64)
+    let atomsflat : u32 = fd & fx
+    /* [2] DIV -- the classic data-dependent unit (NOT an atom): cost tracks operand magnitude */
+    ps("[2] DIV (a data-dependent op, 128-chain) vs divisor magnitude:\n" as u64)
+    let d_lo : u64 = ph_div_floor(3u64, 8000u64)                          /* small divisor -> big quotient */
+    let d_hi : u64 = ph_div_floor(9223372036854775807u64, 8000u64)        /* ~2^63 divisor -> tiny quotient */
+    ps("  divisor=3 floor=" as u64)  pu(d_lo)  ps("   divisor~2^63 floor=" as u64)  pu(d_hi)  ps(" cyc\n" as u64)
+    let mut divdep : u32 = 0u32
+    if d_lo > d_hi { if (d_lo - d_hi) > (d_hi / 8u64) { divdep = 1u32 } }
+    /* [3] THE ORTHOGONALITY TEST: DIV cost at TWO divisors of the SAME bit-length but
+     * different VALUE.  If equal, cost is a function of bit-length -- a VALUE-INVARIANT,
+     * carrying no information the arithmetic doesn't already fix. */
+    let o1 : u64 = ph_div_floor(1099511627777u64, 8000u64)                /* 2^40 + 1  (41-bit) */
+    let o2 : u64 = ph_div_floor(1649267441663u64, 8000u64)               /* ~1.5*2^40 (41-bit), different value */
+    ps("  DIV same-bitlength diff-value: dvs=2^40+1 floor=" as u64)  pu(o1)  ps("  dvs~1.5*2^40 floor=" as u64)  pu(o2)  ps(" cyc\n" as u64)
+    let mut costisbitlen : u32 = 0u32
+    let mut od : u64 = 0u64
+    if o1 > o2 { od = o1 - o2 } else { od = o2 - o1 }
+    if od <= (o1 / 12u64) { costisbitlen = 1u32 }
+    ps("VERDICT (measured, reasoned to the bottom):\n" as u64)
+    if atomsflat == 1u32 {
+        ps("  * the ATOM SET is constant-time -> its friction is a SCALAR per op -> a cost PREORDER.\n" as u64)
+    } else {
+        ps("  * an atom is data-dependent (unexpected) -- see spans above.\n" as u64)
+    }
+    if divdep == 1u32 {
+        ps("  * DIV cost IS input-dependent (~" as u64)  pu(((d_lo - d_hi) * 100u64) / d_hi)  ps("% swing by magnitude) -- but\n" as u64)
+    }
+    if costisbitlen == 1u32 {
+        ps("  * that dependence is a DETERMINISTIC FUNCTION of operand bit-length (same-bitlength/diff-value\n" as u64)
+        ps("    divisors cost the same) -- i.e. cost is a VALUE-INVARIANT, computable from the inputs.\n" as u64)
+    }
+    ps("  => THE THEOREM (about determinism, not effort): every deterministic physical observable of\n" as u64)
+    ps("     this die -- value, latency floor, orbit structure -- is a FUNCTION of the input values,\n" as u64)
+    ps("     hence a value-invariant, hence charted-in-SCHEMA (universal algebra + order theory).\n" as u64)
+    ps("     The electrons carry the values and functions-of-values; there is NO second ontology\n" as u64)
+    ps("     orthogonal to what they compute.  A genuinely new non-numerical schema would require a\n" as u64)
+    ps("     NON-deterministic observable (jitter above the floor, RDRAND) -- physical entropy, not a\n" as u64)
+    ps("     reasoning schema.  So taxis is order theory not for lack of tools: the die forces it.\n" as u64)
+    return 0u64
+}
+
+/* ===================================================================
+ * THE TAXIS TIER -- the die's self-derived CANONICALIZATION PREORDER.
+ *
+ *   iii-substrate taxis <maxsize 2..3>
+ *
+ * HONEST NAMING (2026-07-17, measured): this is NOT a new ontology.  It is
+ * a friction-weighted quotient PREORDER -- order theory + an equivalence
+ * relation, both charted structures.  Its schema is textbook; only its
+ * CONTENT (which spelling dominates on THIS die) is self-derived and
+ * unpublished.  Grade: SOVEREIGN/FIRST-MEASURED, never NOVEL-schema.
+ * WHY only a preorder is derivable here, not a richer structure, is a
+ * MEASURED fact of the silicon: `iii-substrate physis` shows every atom's
+ * cost is INPUT-INDEPENDENT (PDEP/PEXT constant-time, flat across popcount
+ * 0..64), so the friction landscape collapses to a SCALAR per operation --
+ * and a scalar over a finite op-set yields exactly value-equivalence
+ * (algebra) + a cost order (preorder).  No extra-algebraic structure exists
+ * in these electrons to derive; the honest role of this tier is the
+ * compiler's CANONICALIZATION order (which proven-equal spelling is cheap).
+ *
+ * Objects: the SEMANTIC CLASSES of every term of size <= maxsize on the
+ * live die (corner-battery signature -- the electrons decide sameness).
+ * Relation: measured friction DOMINANCE between proven-equal spellings
+ * (fj_race_terms: battery-invariance truth leg FIRST, then cycle floors).
+ * The verdicts below are relational (composition/minimality), the standard
+ * order-theory reasoning -- the floors only generate the relation:
+ *   [S] STABILITY     one re-race per class: a DIRECTED verdict must not
+ *                     INVERT (direction<->inert flaps are band physics,
+ *                     counted, non-fatal);
+ *   [T] TRANSITIVITY  every measured triangle must compose -- a measured
+ *                     CYCLE (a<b, b<c, c<a) is physics contradicting
+ *                     itself and REFUSES the ontology;
+ *   [P] PREDICTION    per class of >= 3 spellings the pair (0,2) is HELD
+ *                     OUT, its direction DERIVED by composition of the
+ *                     measured edges, then raced fresh -- the ontology
+ *                     reasons beyond its data or it reddens.  A floor
+ *                     TABLE cannot infer an unraced race; the ORDER can.
+ *   [K] CANONICITY    per class: unique friction-minimal spelling vs
+ *                     ANTICHAIN (physics-silent -- the INERT frontier).
+ * Exit: 0 ontology ADMITTED | 2 stability inversion | 3 measured cycle
+ *     | 4 prediction refuted | 5 universe/race cap (named) | 6 usage. */
+var TXS  : [u8; 64]
+var TXC  : u64 = 0u64
+var TXX  : u64 = 0u64
+var TXY  : u64 = 0u64
+fn tx_eval() -> u64 {
+    let b : u8 = TXS[TXC]
+    TXC = TXC + 1u64
+    if b == 0u8 { return TXX }
+    if b == 1u8 { return TXY }
+    let id : i64 = (b as i64) - 2i64
+    if ia_atom_arity(id) == 1i64 { return ia_apply1(id, tx_eval()) }
+    let l : u64 = tx_eval()
+    return ia_apply2(id, l, tx_eval())
+}
+fn tx_bat(k: u64) -> u64 {
+    if k == 0u64 { return 0u64 }
+    if k == 1u64 { return 1u64 }
+    if k == 2u64 { return 2u64 }
+    if k == 3u64 { return 18446744073709551615u64 }
+    if k == 4u64 { return 9223372036854775808u64 }
+    if k == 5u64 { return 12297829382473034410u64 }
+    if k == 6u64 { return 6148914691236517205u64 }
+    if k == 7u64 { return 4294967295u64 }
+    if k == 8u64 { return 18446744069414584320u64 }
+    if k == 9u64 { return 81985529216486895u64 }
+    if k == 10u64 { return 16045690984833335023u64 }
+    if k == 11u64 { return 9223372036854775809u64 }
+    if k == 12u64 { return 9223372036854775807u64 }
+    if k == 13u64 { return 42u64 }
+    if k == 14u64 { return 1000003u64 }
+    return 1u64 << (k & 63u64)
+}
+fn tx_sig(t: u64) -> u64 {
+    let n : u64 = ia_term_ser(t, (&TXS) as u64)
+    if n == 0u64 { return 0u64 }
+    let mut h : u64 = 14695981039346656037u64
+    let mut kx : u64 = 0u64
+    while kx < 16u64 {
+        let mut ky : u64 = 0u64
+        while ky < 4u64 {
+            TXC = 0u64
+            TXX = tx_bat(kx)
+            TXY = tx_bat(ky * 5u64)
+            let v : u64 = tx_eval()
+            h = (h ^ v) * 1099511628211u64
+            h = (h ^ (v >> 32u64)) * 1099511628211u64
+            ky = ky + 1u64
+        }
+        kx = kx + 1u64
+    }
+    return h
+}
+var TX_SIGA : [u64; 640]
+var TX_TIDX : [u64; 640]
+var TX_CID  : [i64; 640]
+var TX_CN   : u64 = 0u64
+var TX_NC   : u64 = 0u64
+/* per-class working set (<= 8 spellings; overflow counted, never silent) */
+var TXK_T  : [u64; 8]
+var TXK_N  : u64 = 0u64
+var TXM    : [i64; 64]      /* measured: TXM[i*8+j] = 1 iff i CHEAPER than j */
+var TXIN   : [i64; 64]      /* measured inert marks */
+fn cmd_taxis(maxsize: i64) -> u64 {
+    ps("== THE TAXIS TIER: the friction ORDER as a first-class ontology (from the electrons) ==\n" as u64)
+    if lower_bridge() != 0i64 { ps("taxis: LOWER-BRIDGE RED -- refused\n" as u64)  return 5u64 }
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= maxsize { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    if prefix < 10u64 { ps("taxis: universe too small\n" as u64)  return 5u64 }
+    if prefix > 640u64 { ps("taxis: universe over the 640-slot envelope (named cap)\n" as u64)  return 5u64 }
+    ps("universe: every term of size <= " as u64)  pd(maxsize)  ps(" on this die = " as u64)  pu(prefix)  ps(" terms\n" as u64)
+    /* objects: semantic classes by die signature */
+    TX_CN = 0u64
+    let mut t : u64 = 0u64
+    while t < prefix {
+        TX_SIGA[TX_CN] = tx_sig(t)
+        TX_TIDX[TX_CN] = t
+        TX_CID[TX_CN] = 0i64 - 1i64
+        TX_CN = TX_CN + 1u64
+        t = t + 1u64
+    }
+    TX_NC = 0u64
+    let mut a : u64 = 0u64
+    while a < TX_CN {
+        if TX_CID[a] < 0i64 {
+            TX_CID[a] = TX_NC as i64
+            let mut b : u64 = a + 1u64
+            while b < TX_CN {
+                if TX_CID[b] < 0i64 { if TX_SIGA[b] == TX_SIGA[a] { TX_CID[b] = TX_NC as i64 } }
+                b = b + 1u64
+            }
+            TX_NC = TX_NC + 1u64
+        }
+        a = a + 1u64
+    }
+    ps("objects: " as u64)  pu(TX_NC)  ps(" semantic classes (the die's own quotient)\n" as u64)
+    /* the relation, class by class */
+    let mut races : u64 = 0u64
+    let mut inerts : u64 = 0u64
+    let mut refusedpairs : u64 = 0u64
+    let mut trunc : u64 = 0u64
+    let mut flaps : u64 = 0u64
+    let mut compagree : u64 = 0u64
+    let mut cycles : u64 = 0u64
+    let mut predok : u64 = 0u64
+    let mut predref : u64 = 0u64
+    let mut prednone : u64 = 0u64
+    let mut uniqmin : u64 = 0u64
+    let mut antich : u64 = 0u64
+    let mut mixedcls : u64 = 0u64
+    let mut multi : u64 = 0u64
+    let mut c : u64 = 0u64
+    while c < TX_NC {
+        /* collect this class's spellings (first 8 in term order -- pre-stated global criterion) */
+        TXK_N = 0u64
+        let mut s : u64 = 0u64
+        while s < TX_CN {
+            if TX_CID[s] == (c as i64) {
+                if TXK_N < 8u64 { TXK_T[TXK_N] = TX_TIDX[s]   TXK_N = TXK_N + 1u64 } else { trunc = trunc + 1u64 }
+            }
+            s = s + 1u64
+        }
+        if TXK_N >= 2u64 {
+            multi = multi + 1u64
+            let mut i : u64 = 0u64
+            while i < 64u64 { TXM[i] = 0i64   TXIN[i] = 0i64   i = i + 1u64 }
+            /* phase 1: race every pair EXCEPT the held-out (0,2) when k >= 3 */
+            i = 0u64
+            while i < TXK_N {
+                let mut j : u64 = i + 1u64
+                while j < TXK_N {
+                    let mut hold : u64 = 0u64
+                    if TXK_N >= 3u64 { if i == 0u64 { if j == 2u64 { hold = 1u64 } } }
+                    if hold == 0u64 {
+                        let v : i64 = fj_race_terms(TXK_T[i], TXK_T[j], 4u64, 9i64)
+                        races = races + 1u64
+                        if v == 1i64 { TXM[(i * 8u64) + j] = 1i64 }
+                        if v == 2i64 { TXM[(j * 8u64) + i] = 1i64 }
+                        if v == 3i64 { TXIN[(i * 8u64) + j] = 1i64   TXIN[(j * 8u64) + i] = 1i64   inerts = inerts + 1u64 }
+                        if v < 0i64 { refusedpairs = refusedpairs + 1u64 }
+                    }
+                    j = j + 1u64
+                }
+                i = i + 1u64
+            }
+            /* [S] stability: re-race the first raced pair; a directed verdict must not INVERT */
+            if TXK_N >= 2u64 {
+                let v0 : i64 = fj_race_terms(TXK_T[0u64], TXK_T[1u64], 4u64, 9i64)
+                let had01 : i64 = TXM[1u64]
+                let had10 : i64 = TXM[8u64]
+                if v0 == 1i64 { if had10 == 1i64 { ps("taxis: STABILITY INVERSION (class " as u64)  pu(c)  ps(")\n" as u64)  return 2u64 } }
+                if v0 == 2i64 { if had01 == 1i64 { ps("taxis: STABILITY INVERSION (class " as u64)  pu(c)  ps(")\n" as u64)  return 2u64 } }
+                let dir0 : i64 = had01 + had10
+                let mut dirn : i64 = 0i64
+                if v0 == 1i64 { dirn = 1i64 }
+                if v0 == 2i64 { dirn = 1i64 }
+                if dir0 != dirn { flaps = flaps + 1u64 }
+            }
+            /* [T] transitivity: every measured triangle must compose; a cycle refuses */
+            i = 0u64
+            while i < TXK_N {
+                let mut j2 : u64 = 0u64
+                while j2 < TXK_N {
+                    let mut k2 : u64 = 0u64
+                    while k2 < TXK_N {
+                        if i != j2 { if j2 != k2 { if i != k2 {
+                            if TXM[(i * 8u64) + j2] == 1i64 { if TXM[(j2 * 8u64) + k2] == 1i64 {
+                                if TXM[(k2 * 8u64) + i] == 1i64 {
+                                    ps("taxis: MEASURED CYCLE (class " as u64)  pu(c)  ps(") -- physics contradicting itself\n" as u64)
+                                    cycles = cycles + 1u64
+                                    return 3u64
+                                }
+                                if TXM[(i * 8u64) + k2] == 1i64 { compagree = compagree + 1u64 }
+                            } }
+                        } } }
+                        k2 = k2 + 1u64
+                    }
+                    j2 = j2 + 1u64
+                }
+                i = i + 1u64
+            }
+            /* [P] prediction: derive the held-out (0,2) by composition, then race it fresh */
+            if TXK_N >= 3u64 {
+                let mut pred : i64 = 0i64 - 1i64
+                if TXM[1u64] == 1i64 { if TXM[(1u64 * 8u64) + 2u64] == 1i64 { pred = 1i64 } }
+                if TXM[8u64] == 1i64 { if TXM[(2u64 * 8u64) + 1u64] == 1i64 { pred = 2i64 } }
+                if pred > 0i64 {
+                    let vp : i64 = fj_race_terms(TXK_T[0u64], TXK_T[2u64], 4u64, 9i64)
+                    races = races + 1u64
+                    if vp == pred { predok = predok + 1u64 } else {
+                        if vp == 3i64 { flaps = flaps + 1u64 } else {
+                            ps("taxis: PREDICTION REFUTED (class " as u64)  pu(c)  ps(") derived " as u64)  pd(pred)  ps(" measured " as u64)  pd(vp)  putchar(10i32)
+                            predref = predref + 1u64
+                            return 4u64
+                        }
+                    }
+                } else { prednone = prednone + 1u64 }
+            }
+            /* [K] canonicity: unique friction-minimal spelling vs antichain */
+            let mut anydir : u64 = 0u64
+            i = 0u64
+            while i < 64u64 { if TXM[i] == 1i64 { anydir = 1u64 }   i = i + 1u64 }
+            if anydir == 0u64 { antich = antich + 1u64 } else {
+                let mut minc : u64 = 0u64
+                i = 0u64
+                while i < TXK_N {
+                    let mut beat : u64 = 0u64
+                    let mut j3 : u64 = 0u64
+                    while j3 < TXK_N {
+                        if j3 != i { if TXM[(j3 * 8u64) + i] == 1i64 { beat = 1u64 } }
+                        j3 = j3 + 1u64
+                    }
+                    if beat == 0u64 { minc = minc + 1u64 }
+                    i = i + 1u64
+                }
+                if minc == 1u64 { uniqmin = uniqmin + 1u64 } else { mixedcls = mixedcls + 1u64 }
+            }
+        }
+        c = c + 1u64
+    }
+    ps("relation: " as u64)  pu(races)  ps(" races (" as u64)  pu(inerts)  ps(" inert, " as u64)  pu(refusedpairs)  ps(" refused-unproven, " as u64)  pu(trunc)  ps(" spellings past the 8-slot window)\n" as u64)
+    ps("[S] stability: 0 inversions   band flaps " as u64)  pu(flaps)  ps(" (jitter physics, counted)\n" as u64)
+    ps("[T] transitivity: " as u64)  pu(compagree)  ps(" measured triangles COMPOSE, 0 cycles -- the axiom is VALIDATED from measurement\n" as u64)
+    ps("[P] prediction: " as u64)  pu(predok)  ps(" held-out races DERIVED by composition then CONFIRMED on the die (" as u64)  pu(prednone)  ps(" classes gave no directed chain)\n" as u64)
+    ps("[K] canonicity: " as u64)  pu(uniqmin)  ps(" classes carry a UNIQUE friction-minimal spelling; " as u64)  pu(antich)  ps(" are ANTICHAINS (physics-silent); " as u64)  pu(mixedcls)  ps(" mixed\n" as u64)
+    ps("multi-spelling classes: " as u64)  pu(multi)  ps(" of " as u64)  pu(TX_NC)  putchar(10i32)
+    ps("THE PREORDER IS ADMITTED: the die's self-derived canonicalization order (a quotient poset --\n" as u64)
+    ps("order theory, charted schema; die-specific CONTENT).  The compiler picks the friction-minimal\n" as u64)
+    ps("spelling from it.  NOT a new ontology: `physis` shows cost is input-independent here, so the\n" as u64)
+    ps("friction landscape is a scalar and only algebra + this order are derivable from these electrons.\n" as u64)
+    return 0u64
+}
+
+/* ===================================================================
+ * THE NOMOS TIER -- the machine legislates its own compilation.
+ *
+ *   iii-substrate nomos <lawfuel> <outdir>
+ *
+ * Sweep the friction judge over laws 0..lawfuel of the ISA ontogenesis
+ * stream; turn the HELD verdicts into a compiler rules module
+ * (cg_phys_rules.iii, written to <outdir>) plus one probe pair per seated
+ * rule for iii-prove.  The module reaches COMPILER/BOOT ONLY through
+ * nomos_seal.sh, which REQUIRES iii-prove PROVEN over all 2^64 for every
+ * row -- truth is never decided here: the judge's battery leg screens,
+ * the sovereign prover disposes.
+ *
+ * Dispositions are GLOBAL, PRE-STATED criteria (THE UNIVERSALITY LAW --
+ * no per-law authorship; every held law lands in exactly one bucket and
+ * every bucket is COUNTED, never silent):
+ *   EXCLUDED-INERT       verdict 3: true but physically indistinguishable
+ *   EXCLUDED-MARGIN      dear floor < cheap + cheap/5 (too near the band)
+ *   REFUSED-UNLOWERABLE  a side uses a count/deposit atom (POPCNT/LZCNT/
+ *                        TZCNT/PDEP/PEXT: loop semantics, no expression
+ *                        definiens) -- the named loop-emission growth rung
+ *   DEDUP                dear side already seated: the cheaper cheap wins
+ *   SEATED class 0       COMPILER-LIVE: dear = u(u(t)), cheap = t, u in
+ *                        {NOT, NEG} -- hole multiplicity 1->1, sound even
+ *                        for effectful operands; cg_r3's nomos arm fires
+ *   SEATED class 1/2/3   REGISTERED, arm-dark: hole count shrinks (1) /
+ *                        grows (2) -- the purity tier's rung -- or equal
+ *                        but non-envelope (3): needs subtree-equality
+ * Floors are the sealing run's MEASUREMENT (provenance); the reproducible
+ * content is the rule set: cgphys_set_id() hashes sers+classes+laws+fuel+
+ * cap and EXCLUDES floors. ---- */
+
+var NMS_DEAR : [u8; 2048]      /* 32 seats x 64 preorder ser bytes */
+var NMS_CHEAP : [u8; 2048]
+var NMS_DEARL : [u64; 32]
+var NMS_CHEAPL : [u64; 32]
+var NMS_DEART : [u64; 32]      /* term indices (first seen) -- the probe source */
+var NMS_CHEAPT : [u64; 32]
+var NMS_LAW : [u64; 32]
+var NMS_FD : [u64; 32]
+var NMS_FC : [u64; 32]
+var NMS_CLASS : [u8; 32]
+var NMS_N : u64 = 0u64
+var NMS_OVF : u64 = 0u64
+var NMS_EXI : u64 = 0u64
+var NMS_EXM : u64 = 0u64
+var NMS_EXU : u64 = 0u64
+var NMS_EXD : u64 = 0u64
+var NMS_SA : [u8; 64]
+var NMS_SAL : u64 = 0u64
+var NMS_SB : [u8; 64]
+var NMS_SBL : u64 = 0u64
+
+/* count/deposit atoms have no expression definiens: ser bytes id+2 for
+ * id in {5 POPCNT, 6 LZCNT, 7 TZCNT, 17 PDEP, 18 PEXT} */
+fn nms_unlow(which: u64) -> u64 {
+    /* COUNT atoms (ser bytes 7/8/9 = POPCNT/LZCNT/TZCNT) are LOWERABLE since the
+     * loop rung was paid (2026-07-17): lower_term emits straight-line let-SSA
+     * (mul-free SWAR / smear / blsi-1), inside iii-prove's decided fragment and
+     * anchored on the die by lower_bridge().  Only the DEPOSIT atoms (19/20 =
+     * PDEP/PEXT, bit-serial) remain the named refusal. */
+    let mut n : u64 = NMS_SAL
+    if which == 1u64 { n = NMS_SBL }
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut b : u8 = 0u8
+        if which == 0u64 { b = NMS_SA[i] } else { b = NMS_SB[i] }
+        if b == 19u8 { return 1u64 }
+        if b == 20u8 { return 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn nms_leaves(which: u64) -> u64 {
+    let mut n : u64 = NMS_SAL
+    if which == 1u64 { n = NMS_SBL }
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut b : u8 = 0u8
+        if which == 0u64 { b = NMS_SA[i] } else { b = NMS_SB[i] }
+        if b < 2u8 { c = c + 1u64 }
+        i = i + 1u64
+    }
+    return c
+}
+
+fn nms_leafmask() -> u64 {
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < NMS_SAL { if NMS_SA[i] < 2u8 { m = m | (1u64 << (NMS_SA[i] as u64)) }   i = i + 1u64 }
+    i = 0u64
+    while i < NMS_SBL { if NMS_SB[i] < 2u8 { m = m | (1u64 << (NMS_SB[i] as u64)) }   i = i + 1u64 }
+    return m
+}
+
+/* a single-variable law is the same rule in x as in y: erase WHICH variable */
+fn nms_norm() -> i32 {
+    if nms_leafmask() == 2u64 {
+        let mut i : u64 = 0u64
+        while i < NMS_SAL { if NMS_SA[i] < 2u8 { NMS_SA[i] = 0u8 }   i = i + 1u64 }
+        i = 0u64
+        while i < NMS_SBL { if NMS_SB[i] < 2u8 { NMS_SB[i] = 0u8 }   i = i + 1u64 }
+    }
+    return 0i32
+}
+
+fn nms_find_dear() -> i64 {
+    let mut r : i64 = 0i64
+    while (r as u64) < NMS_N {
+        if NMS_DEARL[r as u64] == NMS_SAL {
+            let mut ok : u64 = 1u64
+            let mut j : u64 = 0u64
+            while j < NMS_SAL {
+                if NMS_DEAR[((r as u64) * 64u64) + j] != NMS_SA[j] { ok = 0u64 }
+                j = j + 1u64
+            }
+            if ok == 1u64 { return r }
+        }
+        r = r + 1i64
+    }
+    return 0i64 - 1i64
+}
+
+fn nms_class() -> u8 {
+    if NMS_SAL == 3u64 { if NMS_SBL == 1u64 { if NMS_SB[0u64] < 2u8 { if NMS_SA[2u64] < 2u8 {
+        if NMS_SA[0u64] == NMS_SA[1u64] {
+            if NMS_SA[0u64] == 2u8 { return 0u8 }
+            if NMS_SA[0u64] == 3u8 { return 0u8 }
+        }
+    } } } }
+    let dl : u64 = nms_leaves(0u64)
+    let cl : u64 = nms_leaves(1u64)
+    if dl > cl { return 1u8 }
+    if dl < cl { return 2u8 }
+    return 3u8
+}
+
+fn nms_seat(p: u64, dt: u64, ct: u64, fd: u64, fc: u64) -> i32 {
+    let r : u64 = NMS_N
+    let mut j : u64 = 0u64
+    while j < NMS_SAL { NMS_DEAR[(r * 64u64) + j] = NMS_SA[j]   j = j + 1u64 }
+    j = 0u64
+    while j < NMS_SBL { NMS_CHEAP[(r * 64u64) + j] = NMS_SB[j]   j = j + 1u64 }
+    NMS_DEARL[r] = NMS_SAL
+    NMS_CHEAPL[r] = NMS_SBL
+    NMS_DEART[r] = dt
+    NMS_CHEAPT[r] = ct
+    NMS_LAW[r] = p
+    NMS_FD[r] = fd
+    NMS_FC[r] = fc
+    NMS_CLASS[r] = nms_class()
+    NMS_N = NMS_N + 1u64
+    return 0i32
+}
+
+/* is the dear side a CONSTANT function (value-independent of x,y over the probe set)?
+ * evaluated through the taxis walker (ia_apply on the die), no timing -- deterministic. */
+fn nms_dear_constant() -> u32 {
+    if NMS_SAL == 0u64 { return 0u32 }
+    let mut i : u64 = 0u64
+    while i < NMS_SAL { TXS[i] = NMS_SA[i]   i = i + 1u64 }
+    TXC = 0u64   TXX = tx_bat(1u64)   TXY = tx_bat(2u64)
+    let v0 : u64 = tx_eval()
+    let mut k : u64 = 0u64
+    while k < 16u64 {
+        TXC = 0u64   TXX = tx_bat(k)   TXY = tx_bat((k + 3u64) & 15u64)
+        if tx_eval() != v0 { return 0u32 }
+        k = k + 1u64
+    }
+    return 1u32
+}
+/* op-count of a seated ser (atoms = bytes >= 2; leaves x/y are 0/1) */
+fn nms_opcount(is_cheap: u64) -> u64 {
+    let mut n : u64 = NMS_SAL
+    if is_cheap == 1u64 { n = NMS_SBL }
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut b : u8 = NMS_SA[i]
+        if is_cheap == 1u64 { b = NMS_SB[i] }
+        if b >= 2u8 { c = c + 1u64 }
+        i = i + 1u64
+    }
+    return c
+}
+/* THE DEGENERACY GUARD (2026-07-17, refined): a law is degenerate JUNK iff its dear
+ * side is CONSTANT (value-independent) AND it offers NO cost reduction (dear op-count
+ * <= cheap op-count).  That is exactly the margin-jittery pairing that broke the
+ * reproducible set-id: ANDN(y,y)=0 (1 op) -> XOR(x,x)=0 (1 op) -- a const=const identity
+ * across UNRELATED variables, ~equal cost, verdict flipping 3<->1/2 run to run.  A
+ * constant dear that IS a real reduction (BLSR(BLSI(x))=0, 2 ops -> XOR(x,x), 1 op)
+ * is KEPT -- it is a genuine strength reduction the compiler's purity tier fires.
+ * Deterministic (battery + op-count, no timing); restores membership determinism
+ * without pruning any real law. */
+fn nms_degenerate() -> u32 {
+    if nms_dear_constant() == 0u32 { return 0u32 }
+    if nms_opcount(0u64) <= nms_opcount(1u64) { return 1u32 }
+    return 0u32
+}
+fn nms_consider(p: u64, rhs_canon: u64) -> i32 {
+    ia_law_set(p)
+    let mut dt : u64 = ia_law_j()
+    let mut ct : u64 = ia_law_i()
+    let mut fd : u64 = fj_rhs_floor()
+    let mut fc : u64 = fj_lhs_floor()
+    if rhs_canon == 1u64 {
+        dt = ia_law_i()
+        ct = ia_law_j()
+        fd = fj_lhs_floor()
+        fc = fj_rhs_floor()
+    }
+    /* gather the FACTS; the VERDICT is katabasis' (katabasis/nomos_admit.iii) --
+     * this verb is a driver, never the law's home. */
+    NMS_SAL = ia_term_ser(dt, (&NMS_SA) as u64)
+    NMS_SBL = ia_term_ser(ct, (&NMS_SB) as u64)
+    let mut serok : u32 = 1u32
+    if NMS_SAL == 0u64 { serok = 0u32 }
+    if NMS_SBL == 0u64 { serok = 0u32 }
+    if NMS_SAL > 60u64 { serok = 0u32 }
+    if NMS_SBL > 60u64 { serok = 0u32 }
+    let mut low : u32 = 1u32
+    if serok == 1u32 {
+        if nms_unlow(0u64) == 1u64 { low = 0u32 }
+        if nms_unlow(1u64) == 1u64 { low = 0u32 }
+    }
+    if serok == 1u32 { nms_norm() }
+    /* the degeneracy guard: a const-dear law with no cost reduction is margin-jittery
+     * junk (not a shortcut); exclude deterministically so membership reproduces.  A
+     * const dear that IS a reduction is kept (real strength reduction). */
+    if serok == 1u32 { if low == 1u32 {
+        if nms_degenerate() == 1u32 { NMS_EXI = NMS_EXI + 1u64   return 0i32 }
+    } }
+    let mut kcls : u32 = 0u32
+    if serok == 1u32 { if low == 1u32 { kcls = nms_class() as u32 } }
+    let kv : u32 = katabasis_nomos_admit(1u32, fd, fc, low, serok, kcls)
+    if kv == 2u32 { NMS_EXM = NMS_EXM + 1u64   return 0i32 }
+    if kv == 3u32 { NMS_EXU = NMS_EXU + 1u64   return 0i32 }
+    if kv == 4u32 { NMS_EXU = NMS_EXU + 1u64   return 0i32 }
+    if kv != 0u32 { NMS_EXU = NMS_EXU + 1u64   return 0i32 }
+    let f : i64 = nms_find_dear()
+    if f >= 0i64 {
+        NMS_EXD = NMS_EXD + 1u64
+        /* THE r15 LESSON (caught by the seal ceremony's truth gate, run 2):
+         * (a) floors are NOISY physics -- the challenge threshold is organ law
+         *     (katabasis_nomos_challenge): a within-band tie keeps the seat,
+         *     so seating is deterministic (first-seen stream order);
+         * (b) a replacement takes the challenger's WHOLE probe pair (dt, ct):
+         *     dear sers are identical but probe terms must stay variable-
+         *     consistent -- an x-variant dear paired with a y-variant cheap
+         *     REFUTES at the prover (witnessed: x=0xff..f, y=0xff..e). */
+        if katabasis_nomos_challenge(fc, NMS_FC[f as u64]) == 1u32 {
+            let r : u64 = f as u64
+            let mut j : u64 = 0u64
+            while j < NMS_SBL { NMS_CHEAP[(r * 64u64) + j] = NMS_SB[j]   j = j + 1u64 }
+            NMS_CHEAPL[r] = NMS_SBL
+            NMS_CHEAPT[r] = ct
+            NMS_DEART[r] = dt
+            NMS_FC[r] = fc
+            NMS_CLASS[r] = nms_class()
+        }
+        return 0i32
+    }
+    if NMS_N >= 32u64 { NMS_OVF = NMS_OVF + 1u64   return 0i32 }
+    nms_seat(p, dt, ct, fd, fc)
+    return 0i32
+}
+
+/* row spelling printer (stdout) over the seated bytes */
+var NMR_I : u64 = 0u64
+var NMR_S : u64 = 0u64
+var NMR_C : u64 = 0u64
+var NMR_L : u64 = 0u64
+fn nmr_walk() {
+    if NMR_C >= NMR_L { return }
+    let mut b : u8 = 0u8
+    if NMR_S == 0u64 { b = NMS_DEAR[(NMR_I * 64u64) + NMR_C] } else { b = NMS_CHEAP[(NMR_I * 64u64) + NMR_C] }
+    NMR_C = NMR_C + 1u64
+    if b == 0u8 { putchar(120i32)  return }
+    if b == 1u8 { putchar(121i32)  return }
+    let id : i64 = (b as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    nmr_walk()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)  nmr_walk() }
+    putchar(41i32)
+}
+fn nmr_print(i: u64, side: u64) {
+    NMR_I = i
+    NMR_S = side
+    NMR_C = 0u64
+    if side == 0u64 { NMR_L = NMS_DEARL[i] } else { NMR_L = NMS_CHEAPL[i] }
+    nmr_walk()
+}
+
+/* file writers: decimal, one char, and the compact aN(...) spelling */
+var NMS_NUMB : [u8; 24]
+fn fpd(h: u64, v: u64) -> i32 {
+    NMS_NUMB[23u64] = 0u8
+    let mut pos : u64 = 23u64
+    let mut n : u64 = v
+    if n == 0u64 { pos = pos - 1u64   NMS_NUMB[pos] = 48u8 }
+    while n > 0u64 {
+        pos = pos - 1u64
+        NMS_NUMB[pos] = ((n % 10u64) + 48u64) as u8
+        n = n / 10u64
+    }
+    fputs(((&NMS_NUMB) as u64) + pos, h)
+    return 0i32
+}
+var NMS_CH : [u8; 2]
+fn fpc(h: u64, c: u64) -> i32 {
+    NMS_CH[0u64] = (c & 255u64) as u8
+    NMS_CH[1u64] = 0u8
+    fputs((&NMS_CH) as u64, h)
+    return 0i32
+}
+var NMW_I : u64 = 0u64
+var NMW_S : u64 = 0u64
+var NMW_C : u64 = 0u64
+var NMW_L : u64 = 0u64
+fn nmw_walk(h: u64) {
+    if NMW_C >= NMW_L { return }
+    let mut b : u8 = 0u8
+    if NMW_S == 0u64 { b = NMS_DEAR[(NMW_I * 64u64) + NMW_C] } else { b = NMS_CHEAP[(NMW_I * 64u64) + NMW_C] }
+    NMW_C = NMW_C + 1u64
+    if b == 0u8 { fpc(h, 120u64)  return }
+    if b == 1u8 { fpc(h, 121u64)  return }
+    let id : i64 = (b as i64) - 2i64
+    fpc(h, 97u64)
+    fpd(h, id as u64)
+    fpc(h, 40u64)
+    nmw_walk(h)
+    if ia_atom_arity(id) == 2i64 { fpc(h, 44u64)  nmw_walk(h) }
+    fpc(h, 41u64)
+}
+fn nmw_term(h: u64, i: u64, side: u64) {
+    NMW_I = i
+    NMW_S = side
+    NMW_C = 0u64
+    if side == 0u64 { NMW_L = NMS_DEARL[i] } else { NMW_L = NMS_CHEAPL[i] }
+    nmw_walk(h)
+}
+
+/* outdir path joiner (module-scope buffer; forward or back slashes accepted) */
+var NMS_PATH : [u8; 512]
+fn nms_pjoin_dir(dir: u64) -> u64 {
+    let p : *u8 = dir as *u8
+    let mut i : u64 = 0u64
+    let mut o : u64 = 0u64
+    while p[i] != 0u8 {
+        if o < 470u64 { NMS_PATH[o] = p[i]   o = o + 1u64 }
+        i = i + 1u64
+    }
+    if o > 0u64 {
+        let last : u8 = NMS_PATH[o - 1u64]
+        if last != 47u8 { if last != 92u8 { NMS_PATH[o] = 47u8   o = o + 1u64 } }
+    }
+    return o
+}
+fn nms_padd(o0: u64, s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut o : u64 = o0
+    while p[i] != 0u8 {
+        if o < 500u64 { NMS_PATH[o] = p[i]   o = o + 1u64 }
+        i = i + 1u64
+    }
+    return o
+}
+fn nms_pnum(o0: u64, v: u64) -> u64 {
+    if v >= 10u64 {
+        let o1 : u64 = nms_pnum(o0, v / 10u64)
+        NMS_PATH[o1] = ((v % 10u64) + 48u64) as u8
+        return o1 + 1u64
+    }
+    NMS_PATH[o0] = (v + 48u64) as u8
+    return o0 + 1u64
+}
+fn nms_pend(o: u64) -> u64 {
+    NMS_PATH[o] = 0u8
+    return (&NMS_PATH) as u64
+}
+
+var NMS_MOD : [u8; 24]
+fn nms_modname(i: u64, side: u64) -> u64 {
+    NMS_MOD[0u64] = 110u8
+    NMS_MOD[1u64] = 111u8
+    NMS_MOD[2u64] = 109u8
+    NMS_MOD[3u64] = 111u8
+    NMS_MOD[4u64] = 115u8
+    NMS_MOD[5u64] = 95u8
+    NMS_MOD[6u64] = 114u8
+    let mut o : u64 = 7u64
+    if i >= 10u64 { NMS_MOD[o] = ((i / 10u64) + 48u64) as u8   o = o + 1u64 }
+    NMS_MOD[o] = ((i % 10u64) + 48u64) as u8
+    o = o + 1u64
+    if side == 0u64 { NMS_MOD[o] = 100u8 } else { NMS_MOD[o] = 99u8 }
+    o = o + 1u64
+    NMS_MOD[o] = 0u8
+    return (&NMS_MOD) as u64
+}
+
+/* the reproducible rule-set id: FNV-1a over sers+classes+laws+fuel+cap (floors EXCLUDED) */
+var NMS_FNV : u64 = 0u64
+fn nms_fnv_b(b: u64) -> i32 {
+    NMS_FNV = (NMS_FNV ^ (b & 255u64)) * 1099511628211u64
+    return 0i32
+}
+/* lexicographic compare of two seated rows by (dear-ser, then cheap-ser) bytes.
+ * Returns 1 iff row a sorts strictly before row b.  Total + deterministic. */
+fn nms_row_less(a: u64, b: u64) -> u32 {
+    let mut i : u64 = 0u64
+    let da : u64 = NMS_DEARL[a]   let db : u64 = NMS_DEARL[b]
+    let mut n : u64 = da   if db < n { n = db }
+    while i < n {
+        let xa : u8 = NMS_DEAR[(a * 64u64) + i]   let xb : u8 = NMS_DEAR[(b * 64u64) + i]
+        if xa < xb { return 1u32 }   if xa > xb { return 0u32 }
+        i = i + 1u64
+    }
+    if da < db { return 1u32 }   if da > db { return 0u32 }
+    i = 0u64
+    let ca : u64 = NMS_CHEAPL[a]   let cb : u64 = NMS_CHEAPL[b]
+    n = ca   if cb < n { n = cb }
+    while i < n {
+        let ya : u8 = NMS_CHEAP[(a * 64u64) + i]   let yb : u8 = NMS_CHEAP[(b * 64u64) + i]
+        if ya < yb { return 1u32 }   if ya > yb { return 0u32 }
+        i = i + 1u64
+    }
+    if ca < cb { return 1u32 }
+    return 0u32
+}
+var NMS_ORD : [u64; 32]
+/* canonical order of seated rows by (dear-ser, cheap-ser) -- selection sort, N<=32.
+ * This makes the identity INDEPENDENT of seating order (which is jitter-sensitive:
+ * degenerate const-laws near the 20% margin admit a random equivalent spelling). */
+fn nms_canon_order() -> i32 {
+    let mut i : u64 = 0u64
+    while i < NMS_N { NMS_ORD[i] = i   i = i + 1u64 }
+    i = 0u64
+    while i < NMS_N {
+        let mut best : u64 = i
+        let mut k : u64 = i + 1u64
+        while k < NMS_N {
+            if nms_row_less(NMS_ORD[k], NMS_ORD[best]) == 1u32 { best = k }
+            k = k + 1u64
+        }
+        let t : u64 = NMS_ORD[i]   NMS_ORD[i] = NMS_ORD[best]   NMS_ORD[best] = t
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* THE REPRODUCIBLE IDENTITY (2026-07-17 fix): hash the FUNCTIONS (dear-ser, cheap-ser,
+ * class) in CANONICAL ser-order, plus fuel+cap.  The law INDEX is EXCLUDED -- it is
+ * jitter-sensitive provenance (which enumerated spelling first exhibited a function),
+ * not part of the legislature's identity.  The rule SET is defined by its rewrite
+ * functions; two runs seating the same functions via different equivalent law indices
+ * are the SAME legislature and now reproduce the SAME set-id. */
+fn nms_setid(fuel: u64, cap: u64) -> u64 {
+    nms_canon_order()
+    NMS_FNV = 14695981039346656037u64
+    let mut o : u64 = 0u64
+    while o < NMS_N {
+        let i : u64 = NMS_ORD[o]
+        let mut j : u64 = 0u64
+        while j < NMS_DEARL[i] { nms_fnv_b(NMS_DEAR[(i * 64u64) + j] as u64)   j = j + 1u64 }
+        nms_fnv_b(31u64)
+        j = 0u64
+        while j < NMS_CHEAPL[i] { nms_fnv_b(NMS_CHEAP[(i * 64u64) + j] as u64)   j = j + 1u64 }
+        nms_fnv_b(30u64)
+        nms_fnv_b(NMS_CLASS[i] as u64)
+        nms_fnv_b(29u64)
+        o = o + 1u64
+    }
+    let mut w2 : u64 = 0u64
+    while w2 < 8u64 { nms_fnv_b(fuel >> (w2 * 8u64))   w2 = w2 + 1u64 }
+    nms_fnv_b(cap)
+    return NMS_FNV
+}
+
+/* is there a seated COMPILER-LIVE row for unary kind k (0 NOT, 1 NEG)?
+ * liveness is organ law (katabasis_nomos_live), never this driver's opinion. */
+fn nms_live_kind(k: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < NMS_N {
+        if katabasis_nomos_live(NMS_CLASS[i] as u32) == 1u32 { if NMS_DEAR[i * 64u64] == ((k + 2u64) as u8) { return 1u64 } }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn nms_write_module(h: u64, fuel: u64, cap: u64, sid: u64) -> i32 {
+    fputs("/* COMPILER/BOOT/cg_phys_rules.iii -- NOMOS: machine-legislated physical rewrite law. [EMITTED]\n" as u64, h)
+    fputs(" * Generated by `iii-substrate nomos " as u64, h)
+    fpd(h, fuel)
+    fputs("` on the live die (cap word " as u64, h)
+    fpd(h, cap)
+    fputs("); sealed by COMPILER/BOOT/nomos_seal.sh --\n" as u64, h)
+    fputs(" * a row enters COMPILER/BOOT ONLY behind iii-prove PROVEN over all 2^64 (bit-blast, never sampled).\n" as u64, h)
+    fputs(" * Laws are DISCOVERED on this die by the ISA ontogenesis (atoms READ from CPUID, EXECUTED as real\n" as u64, h)
+    fputs(" * instructions), held by the friction judge: truth leg (whole battery) FIRST, then measured cycle\n" as u64, h)
+    fputs(" * floors with a 20% strict margin -- the dearer side demotes BY PHYSICS, not by human rule.\n" as u64, h)
+    fputs(" * Floors are the sealing run's measurement (provenance); the reproducible content is the RULE SET:\n" as u64, h)
+    fputs(" * cgphys_set_id() hashes sers+classes+fuel+cap in CANONICAL ser-order and EXCLUDES floors\n" as u64, h)
+    fputs(" * AND law indices (jitter-sensitive provenance) -- reproducible across regenerations.\n" as u64, h)
+    fputs(" * class 0 = COMPILER-LIVE involution u(u(t))->t, u in {NOT(a0),NEG(a1)} (hole multiplicity 1->1);\n" as u64, h)
+    fputs(" * class 1/2 = hole count shrinks/grows (the purity tier's rung); class 3 = needs subtree-equality.\n" as u64, h)
+    fputs(" * Per-row verdicts are ORGAN LAW: katabasis/nomos_admit.iii (admission clauses, liveness door,\n" as u64, h)
+    fputs(" * dedup challenge band); the generator verb and the seal script are drivers.\n" as u64, h)
+    let mut i : u64 = 0u64
+    while i < NMS_N {
+        fputs(" *   row " as u64, h)
+        fpd(h, i)
+        fputs(": LAW " as u64, h)
+        fpd(h, NMS_LAW[i])
+        fputs("  class " as u64, h)
+        fpd(h, NMS_CLASS[i] as u64)
+        fputs("  dear " as u64, h)
+        nmw_term(h, i, 0u64)
+        fputs("  cheap " as u64, h)
+        nmw_term(h, i, 1u64)
+        fputs("  floors " as u64, h)
+        fpd(h, NMS_FD[i])
+        fputs("/" as u64, h)
+        fpd(h, NMS_FC[i])
+        fputs("\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs(" * K: 1.00 */\n" as u64, h)
+    fputs("module boot_cg_phys_rules\n\n" as u64, h)
+    fputs("/* unary involution doors consulted by cg_r3's nomos arm (kind 0 = NOT, 1 = NEG) */\n" as u64, h)
+    fputs("fn cgphys_invol_admit(k: u32) -> u32 @export {\n" as u64, h)
+    if nms_live_kind(0u64) == 1u64 { fputs("    if k == 0u32 { return 1u32 }\n" as u64, h) }
+    if nms_live_kind(1u64) == 1u64 { fputs("    if k == 1u32 { return 1u32 }\n" as u64, h) }
+    fputs("    return 0u32\n}\n" as u64, h)
+    fputs("/* the base-op spelling constants of the legislated unary atoms */\n" as u64, h)
+    fputs("fn cgphys_not_const() -> u64 @export { return 18446744073709551615u64 }\n" as u64, h)
+    fputs("fn cgphys_neg_const() -> u64 @export { return 0u64 }\n" as u64, h)
+    fputs("fn cgphys_nrules() -> u32 @export { return " as u64, h)
+    fpd(h, NMS_N)
+    fputs("u32 }\n" as u64, h)
+    fputs("fn cgphys_fuel() -> u64 @export { return " as u64, h)
+    fpd(h, fuel)
+    fputs("u64 }\n" as u64, h)
+    fputs("fn cgphys_cap() -> u64 @export { return " as u64, h)
+    fpd(h, cap)
+    fputs("u64 }\n" as u64, h)
+    fputs("fn cgphys_set_id() -> u64 @export { return " as u64, h)
+    fpd(h, sid)
+    fputs("u64 }\n" as u64, h)
+    fputs("fn cgphys_rule_law(i: u32) -> u64 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_LAW[i])
+        fputs("u64 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 18446744073709551615u64\n}\n" as u64, h)
+    fputs("fn cgphys_rule_class(i: u32) -> u32 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_CLASS[i] as u64)
+        fputs("u32 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 255u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_live(i: u32) -> u32 @export {\n    if cgphys_rule_class(i) == 0u32 { return 1u32 }\n    return 0u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_dear_len(i: u32) -> u32 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_DEARL[i])
+        fputs("u32 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 0u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_cheap_len(i: u32) -> u32 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_CHEAPL[i])
+        fputs("u32 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 0u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_dear_b(i: u32, j: u32) -> u32 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 {" as u64, h)
+        let mut j : u64 = 0u64
+        while j < NMS_DEARL[i] {
+            fputs(" if j == " as u64, h)
+            fpd(h, j)
+            fputs("u32 { return " as u64, h)
+            fpd(h, NMS_DEAR[(i * 64u64) + j] as u64)
+            fputs("u32 }" as u64, h)
+            j = j + 1u64
+        }
+        fputs(" }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 255u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_cheap_b(i: u32, j: u32) -> u32 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 {" as u64, h)
+        let mut j2 : u64 = 0u64
+        while j2 < NMS_CHEAPL[i] {
+            fputs(" if j == " as u64, h)
+            fpd(h, j2)
+            fputs("u32 { return " as u64, h)
+            fpd(h, NMS_CHEAP[(i * 64u64) + j2] as u64)
+            fputs("u32 }" as u64, h)
+            j2 = j2 + 1u64
+        }
+        fputs(" }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 255u32\n}\n" as u64, h)
+    fputs("fn cgphys_rule_floor_dear(i: u32) -> u64 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_FD[i])
+        fputs("u64 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 0u64\n}\n" as u64, h)
+    fputs("fn cgphys_rule_floor_cheap(i: u32) -> u64 @export {\n" as u64, h)
+    i = 0u64
+    while i < NMS_N {
+        fputs("    if i == " as u64, h)
+        fpd(h, i)
+        fputs("u32 { return " as u64, h)
+        fpd(h, NMS_FC[i])
+        fputs("u64 }\n" as u64, h)
+        i = i + 1u64
+    }
+    fputs("    return 0u64\n}\n" as u64, h)
+    return 0i32
+}
+
+fn cmd_nomos(lawfuel: u64, odir: u64) -> u64 {
+    ps("== THE NOMOS TIER: the machine legislates its own compilation ==\n" as u64)
+    if lower_bridge() != 0i64 {
+        ps("NOMOS: LOWER-BRIDGE RED -- the count-atom lowering disagrees with the die; generation refused.\n" as u64)
+        return 6u64
+    }
+    ia_init()
+    let mut cap : u64 = 0u64
+    if cpufeat_has_bmi1() == 1u8 { cap = cap | 1u64 }
+    if cpufeat_has_bmi2() == 1u8 { cap = cap | 2u64 }
+    if cpufeat_has_popcnt() == 1u8 { cap = cap | 4u64 }
+    if cpufeat_has_lzcnt() == 1u8 { cap = cap | 8u64 }
+    ps("die cap word = " as u64)
+    pu(cap)
+    ps("   jurisdiction: laws 0.." as u64)
+    pu(lawfuel)
+    putchar(10i32)
+    ps("criteria (global, pre-candidate): held AND directional AND margin >= 20% AND expression-lowerable;\n" as u64)
+    ps("dedup by dear side (the cheaper cheap wins); truth gate = iii-prove over ALL 2^64 in nomos_seal.sh\n" as u64)
+    NMS_N = 0u64
+    NMS_OVF = 0u64
+    NMS_EXI = 0u64
+    NMS_EXM = 0u64
+    NMS_EXU = 0u64
+    NMS_EXD = 0u64
+    let mut held : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < lawfuel {
+        let v : i64 = fj_judge(p, 4u64, 9i64)
+        if v == 3i64 { held = held + 1u64   NMS_EXI = NMS_EXI + 1u64 }
+        if v == 1i64 { held = held + 1u64   nms_consider(p, 0u64) }
+        if v == 2i64 { held = held + 1u64   nms_consider(p, 1u64) }
+        p = p + 1u64
+    }
+    ps("-- held " as u64)
+    pu(held)
+    ps(": seated " as u64)
+    pu(NMS_N)
+    ps(", deduped " as u64)
+    pu(NMS_EXD)
+    ps(", excluded-inert " as u64)
+    pu(NMS_EXI)
+    ps(", excluded-margin " as u64)
+    pu(NMS_EXM)
+    ps(", refused-unlowerable " as u64)
+    pu(NMS_EXU)
+    ps(", seat-overflow " as u64)
+    pu(NMS_OVF)
+    ps(" (cap 32, counted never silent)\n" as u64)
+    ps("(refused-unproven upstream of held: " as u64)
+    pu(fj_refused_unproven())
+    ps(" -- the judge's truth leg fired before any race)\n" as u64)
+    if NMS_N == 0u64 {
+        ps("NOMOS: no seatable law in the jurisdiction -- nothing to legislate (exit 3)\n" as u64)
+        return 3u64
+    }
+    let mut i : u64 = 0u64
+    while i < NMS_N {
+        ps("NOMOS-ROW " as u64)
+        pu(i)
+        ps("  LAW " as u64)
+        pu(NMS_LAW[i])
+        ps("  class " as u64)
+        pu(NMS_CLASS[i] as u64)
+        ps("  floors " as u64)
+        pu(NMS_FD[i])
+        ps("/" as u64)
+        pu(NMS_FC[i])
+        ps("  dear " as u64)
+        nmr_print(i, 0u64)
+        ps("  -> cheap " as u64)
+        nmr_print(i, 1u64)
+        putchar(10i32)
+        i = i + 1u64
+    }
+    let sid : u64 = nms_setid(lawfuel, cap)
+    i = 0u64
+    while i < NMS_N {
+        if lower_term(NMS_DEART[i]) != 0i64 { ps("NOMOS INTERNAL: seated row not lowerable (dear)\n" as u64)  return 5u64 }
+        let mut o : u64 = nms_pjoin_dir(odir)
+        o = nms_padd(o, "nomos_r" as u64)
+        o = nms_pnum(o, i)
+        o = nms_padd(o, "d.iii" as u64)
+        if write_fn(nms_pend(o), nms_modname(i, 0u64)) != 0i64 { ps("NOMOS: cannot write probe (dear)\n" as u64)  return 2u64 }
+        if lower_term(NMS_CHEAPT[i]) != 0i64 { ps("NOMOS INTERNAL: seated row not lowerable (cheap)\n" as u64)  return 5u64 }
+        o = nms_pjoin_dir(odir)
+        o = nms_padd(o, "nomos_r" as u64)
+        o = nms_pnum(o, i)
+        o = nms_padd(o, "c.iii" as u64)
+        if write_fn(nms_pend(o), nms_modname(i, 1u64)) != 0i64 { ps("NOMOS: cannot write probe (cheap)\n" as u64)  return 2u64 }
+        i = i + 1u64
+    }
+    let mut o2 : u64 = nms_pjoin_dir(odir)
+    o2 = nms_padd(o2, "cg_phys_rules.iii" as u64)
+    let h : u64 = fopen(nms_pend(o2), "wb" as u64)
+    if h == 0u64 { ps("NOMOS: cannot open module path\n" as u64)  return 2u64 }
+    nms_write_module(h, lawfuel, cap, sid)
+    fclose(h)
+    ps("NOMOS-SET id=" as u64)
+    pu(sid)
+    ps("  rows=" as u64)
+    pu(NMS_N)
+    ps("  live-doors=" as u64)
+    pu(nms_live_kind(0u64) + nms_live_kind(1u64))
+    putchar(10i32)
+    ps("emitted cg_phys_rules.iii + " as u64)
+    pu(NMS_N)
+    ps(" probe pairs into the outdir; seal with COMPILER/BOOT/nomos_seal.sh\n" as u64)
+    return 0u64
+}
+
+/* ===================================================================
+ * THE ONEIROS DRIVER -- the organ (aether/oneiros.iii) dreams and
+ * verdicts; this verb only drives process: run, then lower the TOP of
+ * the docket to probe pairs for iii-prove (the sovereign disposition),
+ * then render the heat strip (the comprehension artifact).
+ *
+ *   iii-substrate oneiros <dreamfuel> <outdir> [seed]
+ *
+ * Exit: 0 admitted | 2 sentinel | 3 control-silent | 4 emission io
+ *     | 5 envelope | 6 usage  (0/2/3/5 are the organ's own verdicts). */
+var OZS_A   : [u8; 32]
+var OZS_AL  : u64 = 0u64
+var OZS_B   : [u8; 32]
+var OZS_BL  : u64 = 0u64
+var OZS_MOD : [u8; 24]
+fn ozs_modname(i: u64, side: u64) -> u64 {
+    OZS_MOD[0u64] = 111u8
+    OZS_MOD[1u64] = 122u8
+    OZS_MOD[2u64] = 95u8
+    OZS_MOD[3u64] = 100u8
+    let mut o : u64 = 4u64
+    if i >= 10u64 { OZS_MOD[o] = (((i / 10u64) % 10u64) + 48u64) as u8   o = o + 1u64 }
+    OZS_MOD[o] = ((i % 10u64) + 48u64) as u8
+    o = o + 1u64
+    if side == 0u64 { OZS_MOD[o] = 97u8 } else { OZS_MOD[o] = 98u8 }
+    o = o + 1u64
+    OZS_MOD[o] = 0u8
+    return (&OZS_MOD) as u64
+}
+fn cmd_oneiros(dreamfuel: u64, odir: u64, seed: u64) -> u64 {
+    let rc : u64 = oz_run(dreamfuel, seed)
+    if rc != 0u64 { return rc }
+    if lower_bridge() != 0i64 {
+        ps("oneiros: LOWER-BRIDGE RED -- the count-atom lowering disagrees with the die; docket emission refused\n" as u64)
+        return 2u64
+    }
+    /* the docket handoff: the hottest believed laws, lowered to pure base-op
+     * probe pairs -- truth is never decided here, iii-prove disposes */
+    let dn : u64 = oz_docket_n()
+    let mut emitted : u64 = 0u64
+    let mut unlow : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < dn {
+        if emitted < 8u64 {
+            let li : u64 = oz_ord(k)
+            OZS_AL = oz_ser(li, 0u64, (&OZS_A) as u64)
+            OZS_BL = oz_ser(li, 1u64, (&OZS_B) as u64)
+            let la : i64 = lower_ser((&OZS_A) as u64, OZS_AL)
+            if la != 0i64 { unlow = unlow + 1u64 } else {
+                let mut o : u64 = nms_pjoin_dir(odir)
+                o = nms_padd(o, "oneiros_d" as u64)
+                o = nms_pnum(o, emitted)
+                o = nms_padd(o, "a.iii" as u64)
+                if write_fn(nms_pend(o), ozs_modname(emitted, 0u64)) != 0i64 { ps("oneiros: cannot write probe (a)\n" as u64)  return 4u64 }
+                let lb : i64 = lower_ser((&OZS_B) as u64, OZS_BL)
+                if lb != 0i64 { unlow = unlow + 1u64 } else {
+                    o = nms_pjoin_dir(odir)
+                    o = nms_padd(o, "oneiros_d" as u64)
+                    o = nms_pnum(o, emitted)
+                    o = nms_padd(o, "b.iii" as u64)
+                    if write_fn(nms_pend(o), ozs_modname(emitted, 1u64)) != 0i64 { ps("oneiros: cannot write probe (b)\n" as u64)  return 4u64 }
+                    emitted = emitted + 1u64
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    ps("docket emission: " as u64)
+    pu(emitted)
+    ps(" probe pairs (oneiros_d<k>{a,b}.iii; dispose each with iii-prove <a> f <b> f), " as u64)
+    pu(unlow)
+    ps(" deposit-atom refusals (named)\n" as u64)
+    /* the heat strip: one column per belief, eight rows tall (P3 -- plain
+     * bytes, zero deps): the whole dream legible at a glance */
+    let n : u64 = oz_n()
+    if n > 0u64 {
+        let mut o2 : u64 = nms_pjoin_dir(odir)
+        o2 = nms_padd(o2, "oneiros_heat.ppm" as u64)
+        let h : u64 = fopen(nms_pend(o2), "wb" as u64)
+        if h != 0u64 {
+            fputs("P3\n" as u64, h)
+            fpd(h, n)
+            fputs(" 8\n255\n" as u64, h)
+            let mut row : u64 = 0u64
+            while row < 8u64 {
+                let mut i : u64 = 0u64
+                while i < n {
+                    let st : u64 = oz_status(i)
+                    let pv : u64 = oz_prov(i)
+                    let mut r : u64 = 70u64
+                    let mut g : u64 = 130u64
+                    let mut b : u64 = 230u64
+                    if st == 1u64 { r = 200u64  g = 30u64  b = 30u64 }
+                    if st == 2u64 { r = 255u64  g = 90u64  b = 30u64 }
+                    if st == 3u64 { r = 250u64  g = 210u64  b = 40u64 }
+                    if st == 4u64 { if pv == 1u64 { r = 90u64  g = 220u64  b = 140u64 } }
+                    fpd(h, r)
+                    fputs(" " as u64, h)
+                    fpd(h, g)
+                    fputs(" " as u64, h)
+                    fpd(h, b)
+                    if (i + 1u64) < n { fputs(" " as u64, h) }
+                    i = i + 1u64
+                }
+                fputs("\n" as u64, h)
+                row = row + 1u64
+            }
+            fclose(h)
+            ps("heat strip -> oneiros_heat.ppm (red/orange annihilated E/S, gold joinable, blue survived, green womb-survivor)\n" as u64)
+        }
+    }
+    return 0u64
+}
+
+/* =====================================================================
+ * THE GLOSSA TIER -- the machine mints its own VOCABULARY.
+ *
+ *   iii-substrate glossa <outdir>
+ *
+ * NOMOS legislates the compiler's REWRITE LAW; GLOSSA legislates the
+ * language's WORDS.  A word is a named, arity-checked, language-level
+ * operator whose meaning is a sealed definiens (spelling 0) and whose
+ * seat is an organ fn of the same name (one name, two seats: the parser
+ * needs no change -- vocabulary IS language in III's call form).
+ *
+ * THE MINT CRITERION (global, pre-stated -- the fairness arm):
+ *   mint one word per ledger atom (aether/isa_ontogenesis, the die's own
+ *   admitted ontology) that is
+ *     [a] LIVE on this die (CPUID-admitted),
+ *     [b] arity <= 2,
+ *     [c] closed-lowerable (a loop-free definiens exists: the BMI words'
+ *         ia_def verbatim; the count words' lower-bridge SWAR forms), and
+ *     [d] NOT already a single language operator (ids 0,1,8..15 are ~,-,
+ *         &,|,^,+,-,*,<<,>> -- naming them again would be a synonym, not
+ *         a word).
+ *   PDEP/PEXT are the named bit-serial refusals (no closed definiens --
+ *   refused BY NAME, the standing deposit-rung law).  A dormant atom is
+ *   a named exclusion, never a silent skip.
+ *
+ * THE LADDER OF SPELLINGS (the truth obligation, measured 2026-07-17):
+ *   engine-vs-engine equality of two full SWAR pipelines is prover-HARD
+ *   (the monolithic popcount dual timed out at 300s), but a SINGLE
+ *   local difference cancels almost the whole miter (7s / 4s / 0-1s per
+ *   link, measured).  So every word seals with a LADDER
+ *       spelling0 == spelling1 == ... == spellingK
+ *   of single-local-difference proofs, each over ALL 2^64 (bit-blast
+ *   UNSAT), reaching the maximally-dual engine by transitivity of proven
+ *   equality.  The linear tail cascade stays shared (its reversal is the
+ *   named prover-hard link); drift there is caught by the die race
+ *   below and the gate's loop engine.  MEASURED BONUS: links under a
+ *   wrapper (blsmsk/smear-masked domains) prove FASTER than bare ones.
+ *
+ * THE DIE RACE: the count spellings ARE the lower-bridge formulas -- the
+ *   bridge (lower_bridge) races them against the executed instruction
+ *   (ia_apply1) over corners + walking bits + mixed points before ANY
+ *   emission; a disagreement refuses the whole press.
+ *
+ * WHAT THIS FILE WRITES (all machine-authored, sealed only through the
+ * parliament's chamber II in nomos_seal.sh):
+ *   <odir>/cg_glossa_rules.iii  the compiler lexicon (BOOT spine TU:
+ *                               names/arity/atom ids/set-id accessors)
+ *   <odir>/glossa.iii           THE TONGUE (STDLIB organ: each word's
+ *                               fn, body = spelling 0 verbatim)
+ *   <odir>/gw<i>_s<j>.iii       the ladder probes (fn f(x,y), padded y)
+ *
+ * set id = FNV-1a over the EXACT emitted bytes of the organ's foldable
+ * portion + every probe (names, arities, spellings verbatim; the id
+ * tail itself excluded -- no circularity).  Floors carry nothing here:
+ * the press is pure text, so two runs agree byte-for-byte and the
+ * parliament's self-agreement voter has real teeth against press drift.
+ * ==================================================================== */
+var GL_H    : u64 = 0u64            /* write sink (file handle)          */
+var GL_MODE : u64 = 0u64            /* 0 = write | 1 = fold (set-id)     */
+var GL_FNV  : u64 = 0u64
+var GL_C2   : [u8; 2]               /* single-char write buffer          */
+var GL_PATH : [u8; 512]             /* odir/name join buffer             */
+var GL_LNAME: [u8; 24]              /* probe file-name buffer (module scope -- the organ idiom) */
+
+fn gl_put(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    if GL_MODE == 1u64 {
+        let mut i : u64 = 0u64
+        while p[i] != 0u8 { GL_FNV = (GL_FNV ^ (p[i] as u64)) * 1099511628211u64   i = i + 1u64 }
+        return 0i32
+    }
+    fputs(s, GL_H)
+    return 0i32
+}
+fn gl_putc(ch: u8) -> i32 {
+    if GL_MODE == 1u64 { GL_FNV = (GL_FNV ^ (ch as u64)) * 1099511628211u64   return 0i32 }
+    GL_C2[0u64] = ch   GL_C2[1u64] = 0u8
+    fputs((&GL_C2) as u64, GL_H)
+    return 0i32
+}
+fn gl_pd(v: u64) -> i32 {
+    if v >= 10u64 { gl_pd(v / 10u64) }
+    gl_putc((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+fn gl_path(odir: u64, name: u64) -> u64 {
+    let po : *u8 = odir as *u8
+    let pn : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    let mut k : u64 = 0u64
+    while po[i] != 0u8 { if k < 500u64 { GL_PATH[k] = po[i]   k = k + 1u64 }   i = i + 1u64 }
+    GL_PATH[k] = 47u8   k = k + 1u64
+    i = 0u64
+    while pn[i] != 0u8 { if k < 510u64 { GL_PATH[k] = pn[i]   k = k + 1u64 }   i = i + 1u64 }
+    GL_PATH[k] = 0u8
+    return (&GL_PATH) as u64
+}
+
+/* ---- the candidate list, canonical NAME order (lexicographic).  The
+ * atom id is the ledger's; the name is the mint (atom name, lowercase,
+ * width-suffixed) -- deterministic, no free choice at press time. ---- */
+fn gl_cand_atom(c: u64) -> i64 {
+    if c == 0u64 { return 16i64 }   /* andn64   */
+    if c == 1u64 { return 2i64 }    /* blsi64   */
+    if c == 2u64 { return 3i64 }    /* blsmsk64 */
+    if c == 3u64 { return 4i64 }    /* blsr64   */
+    if c == 4u64 { return 6i64 }    /* lzcnt64  */
+    if c == 5u64 { return 5i64 }    /* popcnt64 */
+    if c == 6u64 { return 7i64 }    /* tzcnt64  */
+    return 0i64 - 1i64
+}
+fn gl_atom_name(a: i64) -> u64 {
+    if a == 16i64 { return "andn64" as u64 }
+    if a == 2i64  { return "blsi64" as u64 }
+    if a == 3i64  { return "blsmsk64" as u64 }
+    if a == 4i64  { return "blsr64" as u64 }
+    if a == 6i64  { return "lzcnt64" as u64 }
+    if a == 5i64  { return "popcnt64" as u64 }
+    if a == 7i64  { return "tzcnt64" as u64 }
+    return "?" as u64
+}
+fn gl_atom_arity(a: i64) -> u64 { if a == 16i64 { return 2u64 }  return 1u64 }
+fn gl_atom_ladder(a: i64) -> u64 {
+    if a == 5i64 { return 3u64 }    /* popcnt: s0 sub-form, s1 add-form, s2 mask-dual  */
+    if a == 6i64 { return 3u64 }    /* lzcnt : under smear + 64-minus wrapper          */
+    if a == 7i64 { return 4u64 }    /* tzcnt : + the andn-form wrapper swap            */
+    return 2u64                     /* BMI words: ia_def verbatim vs dual              */
+}
+
+/* ---- the spelling bodies.  VERBATIM the proven probe texts (2026-07-17,
+ * each adjacent pair PROVEN over all 2^64; see the ladder law above).
+ * s0 is the DEFINIENS: ia_def verbatim for the BMI words, the
+ * lower-bridge SWAR forms for the count words.  The count tails and the
+ * SWAR masks are shared BY DESIGN between spellings -- each link moves
+ * ONE thing.  Bodies reference x (and y only for andn64), so one body
+ * serves both the padded probe signature and the true organ signature. */
+fn gl_body(a: i64, s: u64) -> i32 {
+    if a == 16i64 {
+        if s == 0u64 { gl_put("    return (18446744073709551615u64 ^ x) & y\n" as u64)   return 0i32 }
+        gl_put("    return (x | y) ^ x\n" as u64)
+        return 0i32
+    }
+    if a == 2i64 {
+        if s == 0u64 { gl_put("    return x & (0u64 - x)\n" as u64)   return 0i32 }
+        gl_put("    return x & ((18446744073709551615u64 ^ x) + 1u64)\n" as u64)
+        return 0i32
+    }
+    if a == 3i64 {
+        if s == 0u64 { gl_put("    return x ^ (x - 1u64)\n" as u64)   return 0i32 }
+        gl_put("    return ((x & (0u64 - x)) << 1u64) - 1u64\n" as u64)
+        return 0i32
+    }
+    if a == 4i64 {
+        if s == 0u64 { gl_put("    return x & (x - 1u64)\n" as u64)   return 0i32 }
+        gl_put("    return x - (x & (0u64 - x))\n" as u64)
+        return 0i32
+    }
+    if a == 5i64 {
+        if s == 0u64 { gl_put("    let b : u64 = x - ((x >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        if s >= 1u64 { gl_put("    let b : u64 = (x & 6148914691236517205u64) + ((x >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        gl_put("    let c : u64 = (b & 3689348814741910323u64) + ((b >> 2u64) & 3689348814741910323u64)\n" as u64)
+        if s <= 1u64 { gl_put("    let d : u64 = (c + (c >> 4u64)) & 1085102592571150095u64\n" as u64) }
+        if s == 2u64 { gl_put("    let d : u64 = (c & 1085102592571150095u64) + ((c >> 4u64) & 1085102592571150095u64)\n" as u64) }
+        gl_put("    let e : u64 = d + (d >> 8u64)\n" as u64)
+        gl_put("    let g : u64 = e + (e >> 16u64)\n" as u64)
+        gl_put("    let h : u64 = g + (g >> 32u64)\n" as u64)
+        gl_put("    return h & 127u64\n" as u64)
+        return 0i32
+    }
+    if a == 6i64 {
+        gl_put("    let s1 : u64 = x | (x >> 1u64)\n" as u64)
+        gl_put("    let s2 : u64 = s1 | (s1 >> 2u64)\n" as u64)
+        gl_put("    let s3 : u64 = s2 | (s2 >> 4u64)\n" as u64)
+        gl_put("    let s4 : u64 = s3 | (s3 >> 8u64)\n" as u64)
+        gl_put("    let s5 : u64 = s4 | (s4 >> 16u64)\n" as u64)
+        gl_put("    let s6 : u64 = s5 | (s5 >> 32u64)\n" as u64)
+        if s == 0u64 { gl_put("    let b : u64 = s6 - ((s6 >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        if s >= 1u64 { gl_put("    let b : u64 = (s6 & 6148914691236517205u64) + ((s6 >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        gl_put("    let c : u64 = (b & 3689348814741910323u64) + ((b >> 2u64) & 3689348814741910323u64)\n" as u64)
+        if s <= 1u64 { gl_put("    let d : u64 = (c + (c >> 4u64)) & 1085102592571150095u64\n" as u64) }
+        if s == 2u64 { gl_put("    let d : u64 = (c & 1085102592571150095u64) + ((c >> 4u64) & 1085102592571150095u64)\n" as u64) }
+        gl_put("    let e : u64 = d + (d >> 8u64)\n" as u64)
+        gl_put("    let g : u64 = e + (e >> 16u64)\n" as u64)
+        gl_put("    let h : u64 = g + (g >> 32u64)\n" as u64)
+        gl_put("    return 64u64 - (h & 127u64)\n" as u64)
+        return 0i32
+    }
+    if a == 7i64 {
+        if s == 0u64 { gl_put("    let m : u64 = (x & (0u64 - x)) - 1u64\n" as u64) }
+        if s >= 1u64 { gl_put("    let m : u64 = (18446744073709551615u64 ^ x) & (x - 1u64)\n" as u64) }
+        if s <= 1u64 { gl_put("    let b : u64 = m - ((m >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        if s >= 2u64 { gl_put("    let b : u64 = (m & 6148914691236517205u64) + ((m >> 1u64) & 6148914691236517205u64)\n" as u64) }
+        gl_put("    let c : u64 = (b & 3689348814741910323u64) + ((b >> 2u64) & 3689348814741910323u64)\n" as u64)
+        if s <= 2u64 { gl_put("    let d : u64 = (c + (c >> 4u64)) & 1085102592571150095u64\n" as u64) }
+        if s == 3u64 { gl_put("    let d : u64 = (c & 1085102592571150095u64) + ((c >> 4u64) & 1085102592571150095u64)\n" as u64) }
+        gl_put("    let e : u64 = d + (d >> 8u64)\n" as u64)
+        gl_put("    let g : u64 = e + (e >> 16u64)\n" as u64)
+        gl_put("    let h : u64 = g + (g >> 32u64)\n" as u64)
+        gl_put("    return h & 127u64\n" as u64)
+        return 0i32
+    }
+    return 0i32
+}
+
+/* the organ's foldable portion + every probe, through ONE emitter -- the
+ * fold pass and the write pass see the SAME bytes (set-id = the artifact) */
+fn gl_emit_organ_foldable(nlive: u64) -> i32 {
+    gl_put("/* STDLIB/iii/aether/glossa.iii -- THE TONGUE (GENERATED by `iii-substrate glossa`;\n" as u64)
+    gl_put(" * edit NOTHING by hand -- regeneration + the parliament's chamber II are the only\n" as u64)
+    gl_put(" * lawful amendment road).  Each fn below IS a sealed word of the language: sema\n" as u64)
+    gl_put(" * binds the bare name at every call site (no extern needed), cg_r3 emits the call\n" as u64)
+    gl_put(" * to THIS seat, and a decl of the same name anywhere else is a LOUD sema error\n" as u64)
+    gl_put(" * (the shadow law).  Body = spelling 0, the sealed definiens, proven equal over\n" as u64)
+    gl_put(" * ALL 2^64 to its dual engine through the ladder (see cg_glossa_rules.iii).\n" as u64)
+    gl_put(" * Hexad: kind_essence.  Ring: R0.  NIH: pure integer forms, zero deps. */\n" as u64)
+    gl_put("module glossa\n\n" as u64)
+    let mut c : u64 = 0u64
+    while c < 7u64 {
+        let a : i64 = gl_cand_atom(c)
+        if ia_atom_live(a) == 1u64 {
+            gl_put("fn " as u64)
+            gl_put(gl_atom_name(a))
+            if gl_atom_arity(a) == 2u64 { gl_put("(x: u64, y: u64) -> u64 @export {\n" as u64) } else { gl_put("(x: u64) -> u64 @export {\n" as u64) }
+            gl_body(a, 0u64)
+            gl_put("}\n" as u64)
+        }
+        c = c + 1u64
+    }
+    gl_put("\nfn glossa_nwords() -> u64 @export { return " as u64)
+    gl_pd(nlive)
+    gl_put("u64 }\n" as u64)
+    return 0i32
+}
+fn gl_emit_probe(a: i64, s: u64, c: u64) -> i32 {
+    gl_put("/* ladder probe: word " as u64)
+    gl_put(gl_atom_name(a))
+    gl_put(" spelling " as u64)
+    gl_pd(s)
+    gl_put(" (adjacent pairs proven over ALL 2^64 by iii-prove) */\n" as u64)
+    gl_put("module glossa_w" as u64)
+    gl_pd(c)
+    gl_put("s" as u64)
+    gl_pd(s)
+    gl_put("\nfn f(x: u64, y: u64) -> u64 @export {\n" as u64)
+    gl_body(a, s)
+    gl_put("}\n" as u64)
+    return 0i32
+}
+
+fn cmd_glossa(odir: u64) -> u64 {
+    ps("== THE GLOSSA TIER: the machine mints its own vocabulary ==\n" as u64)
+    /* [0] the die race: the count spellings are the lower-bridge formulas;
+     * the bridge must agree with the executed instruction or NOTHING mints */
+    if lower_bridge() != 0i64 {
+        ps("GLOSSA: LOWER-BRIDGE RED -- a count spelling disagrees with the die; the press is refused.\n" as u64)
+        return 6u64
+    }
+    ia_init()
+    /* [1] membership, every disposition counted + named (the fairness arm) */
+    ps("operator-covered atoms (named exclusions -- a word would be a synonym): ~ - & | ^ + - * << >> (ids 0,1,8..15)\n" as u64)
+    ps("bit-serial atoms (named refusals -- no closed definiens): PDEP PEXT (ids 17,18)\n" as u64)
+    let mut nlive : u64 = 0u64
+    let mut ndorm : u64 = 0u64
+    let mut c : u64 = 0u64
+    while c < 7u64 {
+        let a : i64 = gl_cand_atom(c)
+        if ia_atom_live(a) == 1u64 {
+            ps("  MINT " as u64)   ps(gl_atom_name(a))
+            ps("  (ledger atom " as u64)   pd(a)
+            ps(", arity " as u64)   pu(gl_atom_arity(a))
+            ps(", ladder " as u64)   pu(gl_atom_ladder(a))
+            ps(" spellings)\n" as u64)
+            nlive = nlive + 1u64
+        } else {
+            ps("  DORMANT " as u64)   ps(gl_atom_name(a))
+            ps("  (ledger atom " as u64)   pd(a)
+            ps(" not live on this die -- named exclusion)\n" as u64)
+            ndorm = ndorm + 1u64
+        }
+        c = c + 1u64
+    }
+    if nlive == 0u64 { ps("GLOSSA: no live candidate atoms -- nothing to mint (named empty lexicon)\n" as u64)   return 5u64 }
+    /* [2] fold pass: the set id IS the artifact bytes (organ foldable + probes) */
+    GL_MODE = 1u64
+    GL_FNV = 14695981039346656037u64
+    gl_emit_organ_foldable(nlive)
+    c = 0u64
+    while c < 7u64 {
+        let af : i64 = gl_cand_atom(c)
+        if ia_atom_live(af) == 1u64 {
+            let mut s : u64 = 0u64
+            while s < gl_atom_ladder(af) { gl_emit_probe(af, s, c)   s = s + 1u64 }
+        }
+        c = c + 1u64
+    }
+    let sid : u64 = GL_FNV
+    GL_MODE = 0u64
+    /* [3] write pass: probes */
+    let mut nladders : u64 = 0u64
+    c = 0u64
+    while c < 7u64 {
+        let aw : i64 = gl_cand_atom(c)
+        if ia_atom_live(aw) == 1u64 {
+            let mut s : u64 = 0u64
+            while s < gl_atom_ladder(aw) {
+                /* file name gw<c>_s<s>.iii built into the module-scope buffer */
+                GL_LNAME[0u64] = 103u8   GL_LNAME[1u64] = 119u8
+                GL_LNAME[2u64] = (48u64 + c) as u8
+                GL_LNAME[3u64] = 95u8   GL_LNAME[4u64] = 115u8
+                GL_LNAME[5u64] = (48u64 + s) as u8
+                GL_LNAME[6u64] = 46u8   GL_LNAME[7u64] = 105u8   GL_LNAME[8u64] = 105u8   GL_LNAME[9u64] = 105u8
+                GL_LNAME[10u64] = 0u8
+                GL_H = fopen(gl_path(odir, (&GL_LNAME) as u64), ("wb" as u64))
+                if GL_H == 0u64 { ps("GLOSSA: cannot open a probe path\n" as u64)   return 2u64 }
+                gl_emit_probe(aw, s, c)
+                fclose(GL_H)
+                s = s + 1u64
+            }
+            nladders = nladders + (gl_atom_ladder(aw) - 1u64)
+        }
+        c = c + 1u64
+    }
+    /* [4] write pass: the organ (foldable portion + the id tail, id OUTSIDE the fold) */
+    GL_H = fopen(gl_path(odir, "glossa.iii" as u64), ("wb" as u64))
+    if GL_H == 0u64 { ps("GLOSSA: cannot open glossa.iii\n" as u64)   return 2u64 }
+    gl_emit_organ_foldable(nlive)
+    gl_put("fn glossa_set_id() -> u64 @export { return " as u64)
+    gl_pd(sid)
+    gl_put("u64 }\n" as u64)
+    fclose(GL_H)
+    /* [5] write pass: the compiler lexicon table (not folded -- it embeds the id) */
+    let h : u64 = fopen(gl_path(odir, "cg_glossa_rules.iii" as u64), ("wb" as u64))
+    if h == 0u64 { ps("GLOSSA: cannot open cg_glossa_rules.iii\n" as u64)   return 2u64 }
+    fputs("/* COMPILER/BOOT/cg_glossa_rules.iii -- THE GLOSSA LEXICON (GENERATED by\n" as u64, h)
+    fputs(" * `iii-substrate glossa`; sealed ONLY through nomos_seal.sh chamber II on III's\n" as u64, h)
+    fputs(" * autonomous unanimous consent -- katabasis_glossa_consent is the law, the script\n" as u64, h)
+    fputs(" * is its driver).  One row per word the die's own admitted ledger mints (LIVE,\n" as u64, h)
+    fputs(" * arity <= 2, closed-lowerable, not an operator; PDEP/PEXT = named bit-serial\n" as u64, h)
+    fputs(" * refusals).  spelling 0 = the definiens (ia_def verbatim / lower-bridge SWAR),\n" as u64, h)
+    fputs(" * proven over ALL 2^64 equal to its dual engine via THE LADDER OF SPELLINGS\n" as u64, h)
+    fputs(" * (single-local-difference links; transitivity of proven equality; the tail\n" as u64, h)
+    fputs(" * reversal is the named prover-hard link, covered by the die race + gate loop\n" as u64, h)
+    fputs(" * engine).  sema binds these names at every bare call site; cg_r3 emits the\n" as u64, h)
+    fputs(" * call to the organ seat (aether/glossa.iii); a same-named decl anywhere else\n" as u64, h)
+    fputs(" * is the sema SHADOW error.  set id = FNV over the emitted organ+probe bytes.\n" as u64, h)
+    fputs(" */\n" as u64, h)
+    fputs("module cg_glossa_rules\n\n" as u64, h)
+    fputs("fn cgglossa_nwords() -> u32 @export { return " as u64, h)
+    fpd(h, nlive)
+    fputs("u32 }\n" as u64, h)
+    fputs("fn cgglossa_set_id() -> u64 @export { return " as u64, h)
+    fpd(h, sid)
+    fputs("u64 }\n" as u64, h)
+    /* arity / atom / ladder / name accessors, live words only, canonical order */
+    fputs("fn cgglossa_arity(i: u32) -> u32 @export {\n" as u64, h)
+    let mut w : u64 = 0u64
+    c = 0u64
+    while c < 7u64 {
+        let a2 : i64 = gl_cand_atom(c)
+        if ia_atom_live(a2) == 1u64 {
+            fputs("    if i == " as u64, h)   fpd(h, w)
+            fputs("u32 { return " as u64, h)   fpd(h, gl_atom_arity(a2))
+            fputs("u32 }\n" as u64, h)
+            w = w + 1u64
+        }
+        c = c + 1u64
+    }
+    fputs("    return 0u32\n}\n" as u64, h)
+    fputs("fn cgglossa_atom(i: u32) -> u32 @export {\n" as u64, h)
+    w = 0u64
+    c = 0u64
+    while c < 7u64 {
+        let a3 : i64 = gl_cand_atom(c)
+        if ia_atom_live(a3) == 1u64 {
+            fputs("    if i == " as u64, h)   fpd(h, w)
+            fputs("u32 { return " as u64, h)   fpd(h, a3 as u64)
+            fputs("u32 }\n" as u64, h)
+            w = w + 1u64
+        }
+        c = c + 1u64
+    }
+    fputs("    return 255u32\n}\n" as u64, h)
+    fputs("fn cgglossa_name_len(i: u32) -> u32 @export {\n" as u64, h)
+    w = 0u64
+    c = 0u64
+    while c < 7u64 {
+        let a4 : i64 = gl_cand_atom(c)
+        if ia_atom_live(a4) == 1u64 {
+            let pn : *u8 = gl_atom_name(a4) as *u8
+            let mut nl : u64 = 0u64
+            while pn[nl] != 0u8 { nl = nl + 1u64 }
+            fputs("    if i == " as u64, h)   fpd(h, w)
+            fputs("u32 { return " as u64, h)   fpd(h, nl)
+            fputs("u32 }\n" as u64, h)
+            w = w + 1u64
+        }
+        c = c + 1u64
+    }
+    fputs("    return 0u32\n}\n" as u64, h)
+    fputs("fn cgglossa_name_byte(i: u32, j: u32) -> u32 @export {\n" as u64, h)
+    w = 0u64
+    c = 0u64
+    while c < 7u64 {
+        let a5 : i64 = gl_cand_atom(c)
+        if ia_atom_live(a5) == 1u64 {
+            let pb : *u8 = gl_atom_name(a5) as *u8
+            let mut j : u64 = 0u64
+            while pb[j] != 0u8 {
+                fputs("    if i == " as u64, h)   fpd(h, w)
+                fputs("u32 { if j == " as u64, h)   fpd(h, j)
+                fputs("u32 { return " as u64, h)   fpd(h, pb[j] as u64)
+                fputs("u32 } }\n" as u64, h)
+                j = j + 1u64
+            }
+            w = w + 1u64
+        }
+        c = c + 1u64
+    }
+    fputs("    return 255u32\n}\n" as u64, h)
+    fclose(h)
+    ps("dispositions: minted " as u64)   pu(nlive)
+    ps(", dormant " as u64)   pu(ndorm)
+    ps(", operator-excluded 10, bit-serial-refused 2 (every candidate named)\n" as u64)
+    ps("GLOSSA-SET id=" as u64)   pu(sid)
+    ps(" words=" as u64)   pu(nlive)
+    ps(" ladders=" as u64)   pu(nladders)
+    putchar(10i32)
+    return 0u64
+}

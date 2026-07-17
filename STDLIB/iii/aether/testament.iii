@@ -1,0 +1,1374 @@
+/* STDLIB/iii/aether/testament.iii -- THE TESTAMENT ORGAN (AUTARKEIA Alpha-0/Alpha-1).
+ *
+ * DOCS/III-AUTARKEIA-MAP.md rev.2: one signed, hash-chained, minutes-checkable object -- the
+ * TESTAMENT -- fusing the tree's sealed truth: source-tree binding, seed digests, corpus counts,
+ * the mathesis records with their pinned heads, the RADICAL certificate re-derived, the forge
+ * chain RE-WALKED row by row, the standing-tool binaries, and execution receipts; bound to one
+ * SLH-DSA-SHA2-256s keypair and chained generation to generation.
+ *
+ * THE FORMAT (v1, frozen -- all integers u64 LE, all digests SHA-256 raw 32 B):
+ *
+ *   off 0   magic "IIITSTMT" (8 B)
+ *   off 8   version u64 = 1
+ *   off 16  parent testament digest 32 B   (sha256 of the parent FILE; 32 zero bytes at genesis)
+ *   off 48  generation index u64           (0 at genesis; parent.gen + 1 after)
+ *   off 56  key param id u64 = 2           (SLH-DSA-SHA2-256s: pk 64 B, sk 128 B, sig 29792 B)
+ *   off 64  public key 64 B
+ *   off 128 section count u64 (= 7 in v1)
+ *   then per section:  tag 8 B ASCII | payload_len u64 | payload
+ *     "TREE    "  u64 manifest-path-len | path | manifest sha256 32 | u64 file count | root 32
+ *                 root = sha256( concat of sha256(file bytes) in manifest line order )
+ *     "SEED    "  u64 n | n x 32 digests   (the manifest entries: COMPILER/BOOT C sources, in order)
+ *     "BEARER  "  u64 corpus KAT count     (manifest entries under STDLIB/corpus/)
+ *     "MATHESIS"  u64 nrec | nrec x { u64 plen | path | dig 32 | u64 has_head | head 32 |
+ *                 u64 rowcount | u64 chainlen } | u64 ncert | ncert x { u64 nlen | name | value 32 }
+ *     "SPORE   "  u64 n | n x { u64 plen | path | dig 32 }   (the germination scripts)
+ *     "TOOLS   "  u64 n | n x { u64 plen | path | dig 32 }   (committed standing-tool binaries)
+ *     "EXEC    "  u64 n | n x { u64 plen | path | dig 32 }   (execution receipts, from a list file)
+ *   after the last section:  u64 sig_len | SLH-DSA-SHA2-256s signature
+ *   signed message = sha256( bytes [0 .. offset of sig_len) ) -- 32 bytes, signed directly.
+ *
+ * DETERMINISM: no wall clock, no randomness; the unsigned body is a pure function of the tree.
+ * RAW BYTES: file hashing never normalizes line endings (CRLF sources exist and are content).
+ * PIN MIGRATION: the pinned heads/counters live HERE (parsed from the committed records), not in
+ * bash; the RADICAL certificate preimage rule (head-hex | MXR# rowcount | chain length) is code.
+ * THE FORGE RE-WALK: descriptor [magic 0x4D583037, class 1, n, profile, raw, iso, rep, prov 1]
+ * serialized 64 B LE; id = sha256; H_i = cad_compose(H_{i-1}, id_i) from the reserved genesis
+ * descriptor [magic, 0, 0,0,0,0,0, ~0] -- the same rule mathesis_forge seals with, re-derived
+ * from the committed record alone.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: composes numera/cad + numera/slhdsa ONLY.
+ * Standalone aether TU (NOT an archive member) -- consumed by testament_cli / witness_cli.
+ */
+module testament
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, red: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+
+const GENERIC_READ  : u32 = 2147483648u32
+const GENERIC_WRITE : u32 = 1073741824u32
+const OPEN_EXISTING : u32 = 3u32
+const CREATE_ALWAYS : u32 = 2u32
+const INVALID_H : u64 = 18446744073709551615u64
+const MAXF   : u64 = 16777216u64        /* per-file read cap (largest committed source ~450 KB) */
+const MAXMAN : u64 = 1048576u64
+const MAXE   : u64 = 8192u64            /* manifest entry cap (3,649 measured 2026-07-16) */
+const TS_VER : u64 = 1u64
+const TS_PARAM : u64 = 2u64             /* SLH-DSA-SHA2-256s */
+const SIGB : u64 = 29792u64
+const PKB  : u64 = 64u64
+const SKB  : u64 = 128u64
+const SEEDB: u64 = 96u64
+const FMAGIC : u64 = 0x4D583037u64      /* the forge/MX07 descriptor tag */
+const NREC : u64 = 12u64
+const NTOOL: u64 = 8u64
+const NSPORE : u64 = 3u64
+const OUTCAP : u64 = 131072u64
+
+var TS_MSG : [u8; 16777216]
+var TS_MAN : [u8; 1048576]
+var TS_OFF : [u64; 8192]
+var TS_PL  : [u64; 8192]
+var TS_CAT : [u8; 262144]
+var TS_OUT : [u8; 131072]
+var TS_PATH: [u8; 4096]
+var TS_DIG : [u8; 32]
+var TS_MDG : [u8; 32]          /* manifest digest */
+var TS_TRT : [u8; 32]          /* tree root */
+var TS_PAR : [u8; 32]          /* parent digest */
+var TS_BDG : [u8; 32]          /* body digest (signed message) */
+var TS_ID  : [u8; 32]
+var TS_FHD : [u8; 32]          /* forge re-walk running head */
+var TS_SER : [u8; 64]
+var TS_DESC: [u64; 8]
+var TS_PK  : [u8; 64]
+var TS_SK  : [u8; 128]
+var TS_SEED: [u8; 96]
+var TS_SIG : [u8; 32768]
+var TS_SLQ : [u64; 1]
+var TS_DEC : [u8; 24]
+var TS_NIO : [u32; 2]
+var TS_PRB : [u8; 4]
+var TS_CERT: [u8; 192]
+var TSR_DG : [u8; 384]         /* 12 record digests */
+var TSR_HD : [u8; 384]         /* 12 record heads (zero when none) */
+var TSR_HH : [u64; 12]         /* has_head flags */
+var TSR_RW : [u64; 12]         /* row counts */
+var TSR_CH : [u64; 12]         /* chain lengths */
+var TSR_FND: [u64; 12]         /* found-in-walk flags */
+var TSS_DG : [u8; 96]          /* 3 spore-script digests */
+var TSS_FND: [u64; 3]
+var TST_DG : [u8; 256]         /* 8 tool digests */
+var TSSEED : [u8; 2048]        /* up to 64 seed digests */
+var TS_RCT : [u8; 32]          /* RADICAL cert value */
+var TS_NE  : [u64; 1]          /* manifest entry count */
+var TS_NSEED : [u64; 1]
+var TS_NKAT  : [u64; 1]
+var TS_LASTN : [u64; 1]        /* last hashfile byte count */
+var TS_FORGE : [u64; 1]        /* forge re-walk verdict: 1 ok */
+var TS_ROOTP : [u64; 1]        /* root path (C string) for the current walk */
+var TSP_CNT : [u64; 8]         /* parsed section counters (verify/monotone) */
+var TSP_OFF : [u64; 8]         /* parsed section payload offsets */
+var TSP_LEN : [u64; 8]         /* parsed section payload lengths */
+var TS_PPK : [u8; 64]          /* parent pk */
+var TSP_PCNT : [u64; 8]        /* parent section counters */
+
+/* ------------------------------------------------ print helpers ------------------------------ */
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn nl() -> u32 { putchar(10i32)  return 1u32 }
+fn pd(v: u64) -> u32 {
+    if v == 0u64 { putchar(48i32)  return 1u32 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { TS_DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    while k > 0u64 { k = k - 1u64  putchar(TS_DEC[k] as i32) }
+    return 1u32
+}
+fn phexn(dp: u64, n: u64) -> u32 {
+    let d : *u8 = dp as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        let b : u32 = d[i] as u32
+        let hi : u32 = b >> 4u32
+        let lo : u32 = b & 15u32
+        if hi < 10u32 { putchar((48u32 + hi) as i32) } else { putchar((87u32 + hi) as i32) }
+        if lo < 10u32 { putchar((48u32 + lo) as i32) } else { putchar((87u32 + lo) as i32) }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+fn dcmp32(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if pa[i] != pb[i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* ------------------------------------------------ file I/O ----------------------------------- */
+fn rdfile(path: u64, buf: u64, cap: u64) -> u64 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0u32, 0u64)
+    if h == INVALID_H { return INVALID_H }
+    let mut total : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if total == cap {
+            let okp : i32 = ReadFile(h, (&TS_PRB) as u64, 1u32, (&TS_NIO) as u64, 0u64)
+            if okp == 0i32 { CloseHandle(h)  return INVALID_H }
+            if TS_NIO[0u64] != 0u32 { CloseHandle(h)  return INVALID_H }
+            going = 0u8
+        } else {
+            let mut want : u64 = 65536u64
+            if total + want > cap { want = cap - total }
+            let ok : i32 = ReadFile(h, buf + total, want as u32, (&TS_NIO) as u64, 0u64)
+            if ok == 0i32 { CloseHandle(h)  return INVALID_H }
+            let n : u32 = TS_NIO[0u64]
+            if n == 0u32 { going = 0u8 } else { total = total + (n as u64) }
+        }
+    }
+    CloseHandle(h)
+    return total
+}
+fn wrfile(path: u64, buf: u64, n: u64) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_WRITE, 0u32, 0u64, CREATE_ALWAYS, 0u32, 0u64)
+    if h == INVALID_H { return 1u32 }
+    let mut done : u64 = 0u64
+    while done < n {
+        let mut want : u64 = 65536u64
+        if done + want > n { want = n - done }
+        let ok : i32 = WriteFile(h, buf + done, want as u32, (&TS_NIO) as u64, 0u64)
+        if ok == 0i32 { CloseHandle(h)  return 1u32 }
+        let w : u32 = TS_NIO[0u64]
+        if w == 0u32 { CloseHandle(h)  return 1u32 }
+        done = done + (w as u64)
+    }
+    CloseHandle(h)
+    return 0u32
+}
+
+/* join root + '/' + rel(len) into TS_PATH (NUL-terminated) */
+fn pathjoin(rel_off: u64, rel_len: u64) -> u32 {
+    let rp : *u8 = TS_ROOTP[0u64] as *u8
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while rp[i] != 0u8 { TS_PATH[k] = rp[i]  k = k + 1u64  i = i + 1u64 }
+    TS_PATH[k] = 47u8
+    k = k + 1u64
+    i = 0u64
+    while i < rel_len {
+        TS_PATH[k] = TS_MAN[rel_off + i]
+        k = k + 1u64
+        i = i + 1u64
+    }
+    TS_PATH[k] = 0u8
+    return 1u32
+}
+/* join root + '/' + C-string rel into TS_PATH */
+fn pathjoin_s(rel: u64) -> u32 {
+    let rp : *u8 = TS_ROOTP[0u64] as *u8
+    let sp : *u8 = rel as *u8
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while rp[i] != 0u8 { TS_PATH[k] = rp[i]  k = k + 1u64  i = i + 1u64 }
+    TS_PATH[k] = 47u8
+    k = k + 1u64
+    i = 0u64
+    while sp[i] != 0u8 { TS_PATH[k] = sp[i]  k = k + 1u64  i = i + 1u64 }
+    TS_PATH[k] = 0u8
+    return 1u32
+}
+/* hash the file at TS_PATH into TS_DIG; byte count into TS_LASTN.  0 ok / -1 unreadable */
+fn hashfile() -> i32 {
+    let n : u64 = rdfile((&TS_PATH) as u64, (&TS_MSG) as u64, MAXF)
+    if n == INVALID_H { return 0i32 - 1i32 }
+    TS_LASTN[0u64] = n
+    if cad_oneshot(0u32, (&TS_MSG) as *u8, n, (&TS_DIG) as *u8) != 0i32 { return 0i32 - 1i32 }
+    return 0i32
+}
+
+/* ------------------------------------------------ config tables ------------------------------ */
+/* the 12 committed mathesis records (paths relative to the tree root) */
+fn rec_path(i: u64) -> u64 {
+    if i == 0u64  { return "DOCS/MATHESIS-SYNTH-ROUND1.log" as u64 }
+    if i == 1u64  { return "DOCS/MATHESIS-RATCHET.txt" as u64 }
+    if i == 2u64  { return "DOCS/MATHESIS-RADICAL-ROUND1.log" as u64 }
+    if i == 3u64  { return "DOCS/MATHESIS-RING-DRAIN.log" as u64 }
+    if i == 4u64  { return "DOCS/MATHESIS-CURVE-ROUND1.log" as u64 }
+    if i == 5u64  { return "DOCS/MATHESIS-TAU-ROUND1.log" as u64 }
+    if i == 6u64  { return "DOCS/MATHESIS-FORGE-ROUND1.log" as u64 }
+    if i == 7u64  { return "DOCS/MATHESIS-PILOT-LEDGER.log" as u64 }
+    if i == 8u64  { return "DOCS/MATHESIS-ONTO-ROUND1.log" as u64 }
+    if i == 9u64  { return "DOCS/MATHESIS-PHI-ROUND1.log" as u64 }
+    if i == 10u64 { return "DOCS/MATHESIS-CHI-ROUND1.log" as u64 }
+    return "DOCS/MATHESIS-PSI-ROUND1.log" as u64
+}
+/* the row prefix counted per record (0 = none counted) */
+fn rec_prefix(i: u64) -> u64 {
+    if i == 0u64  { return "MXS# " as u64 }
+    if i == 2u64  { return "MXR# " as u64 }
+    if i == 3u64  { return "MRG# " as u64 }
+    if i == 4u64  { return "MXC# " as u64 }
+    if i == 6u64  { return "MFF# " as u64 }
+    return 0u64
+}
+/* records whose summary carries "head=" + "chain=" */
+fn rec_headed(i: u64) -> u32 {
+    if i == 2u64 { return 1u32 }
+    if i == 4u64 { return 1u32 }
+    if i == 6u64 { return 1u32 }
+    return 0u32
+}
+fn tool_path(i: u64) -> u64 {
+    if i == 0u64 { return "COMPILED/iii-prove.exe" as u64 }
+    if i == 1u64 { return "COMPILED/iii-crypto.exe" as u64 }
+    if i == 2u64 { return "COMPILED/iii-exact.exe" as u64 }
+    if i == 3u64 { return "COMPILED/iii-typecheck.exe" as u64 }
+    if i == 4u64 { return "COMPILED/iii_eval.exe" as u64 }
+    if i == 5u64 { return "COMPILED/iii-events.exe" as u64 }
+    if i == 6u64 { return "COMPILED/iii-intent.exe" as u64 }
+    return "COMPILED/iii-hexad.exe" as u64
+}
+fn spore_path(i: u64) -> u64 {
+    if i == 0u64 { return "STDLIB/sovir/run_germinate.sh" as u64 }
+    if i == 1u64 { return "STDLIB/sovir/run_retarget.sh" as u64 }
+    return "STDLIB/sovir/run_host_matrix.sh" as u64
+}
+fn sect_tag(i: u64) -> u64 {
+    if i == 0u64 { return "TREE    " as u64 }
+    if i == 1u64 { return "SEED    " as u64 }
+    if i == 2u64 { return "BEARER  " as u64 }
+    if i == 3u64 { return "MATHESIS" as u64 }
+    if i == 4u64 { return "SPORE   " as u64 }
+    if i == 5u64 { return "TOOLS   " as u64 }
+    return "EXEC    " as u64
+}
+
+/* does manifest entry (off,len) equal the C string s? */
+fn entry_eq(off: u64, len: u64, s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        if p[i] == 0u8 { return 0u32 }
+        if p[i] != TS_MAN[off + i] { return 0u32 }
+        i = i + 1u64
+    }
+    if p[len] != 0u8 { return 0u32 }
+    return 1u32
+}
+/* does the entry start with prefix s? */
+fn entry_pfx(off: u64, len: u64, s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if i >= len { return 0u32 }
+        if p[i] != TS_MAN[off + i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+/* does the entry end with suffix s? */
+fn entry_sfx(off: u64, len: u64, s: u64) -> u32 {
+    let n : u64 = slen(s)
+    if n > len { return 0u32 }
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if p[i] != TS_MAN[off + len - n + i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* ------------------------------------------------ record parsing (over TS_MSG[0..n)) --------- */
+/* first occurrence of C-string sub in TS_MSG[0..n); -1 if absent (returned as u64 ~0) */
+fn msg_find(sub: u64, n: u64) -> u64 {
+    let p : *u8 = sub as *u8
+    let m : u64 = slen(sub)
+    if m == 0u64 { return INVALID_H }
+    if m > n { return INVALID_H }
+    let mut i : u64 = 0u64
+    while i + m <= n {
+        let mut j : u64 = 0u64
+        let mut hit : u32 = 1u32
+        while j < m {
+            if TS_MSG[i + j] != p[j] { hit = 0u32  j = m } else { j = j + 1u64 }
+        }
+        if hit == 1u32 { return i }
+        i = i + 1u64
+    }
+    return INVALID_H
+}
+fn msg_dec_at(off: u64, n: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = off
+    while i < n {
+        let c : u8 = TS_MSG[i]
+        if c < 48u8 { return v }
+        if c > 57u8 { return v }
+        v = (v * 10u64) + ((c as u64) - 48u64)
+        i = i + 1u64
+    }
+    return v
+}
+fn hexnib(c: u8) -> u64 {
+    if c >= 48u8 { if c <= 57u8 { return (c as u64) - 48u64 } }
+    if c >= 97u8 { if c <= 102u8 { return (c as u64) - 87u64 } }
+    if c >= 65u8 { if c <= 70u8 { return (c as u64) - 55u64 } }
+    return 255u64
+}
+/* parse 64 hex chars at off into out32.  1 ok / 0 malformed */
+fn msg_hex32_at(off: u64, n: u64, out32: u64) -> u32 {
+    if off + 64u64 > n { return 0u32 }
+    let o : *u8 = out32 as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let hi : u64 = hexnib(TS_MSG[off + (i * 2u64)])
+        let lo : u64 = hexnib(TS_MSG[off + (i * 2u64) + 1u64])
+        if hi == 255u64 { return 0u32 }
+        if lo == 255u64 { return 0u32 }
+        o[i] = ((hi << 4u64) | lo) as u8
+        i = i + 1u64
+    }
+    return 1u32
+}
+/* count lines beginning with C-string pfx in TS_MSG[0..n) */
+fn msg_count_pfx(pfx: u64, n: u64) -> u64 {
+    let p : *u8 = pfx as *u8
+    let m : u64 = slen(pfx)
+    let mut cnt : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut atbol : u32 = 1u32
+    while i < n {
+        if atbol == 1u32 {
+            if i + m <= n {
+                let mut j : u64 = 0u64
+                let mut hit : u32 = 1u32
+                while j < m {
+                    if TS_MSG[i + j] != p[j] { hit = 0u32  j = m } else { j = j + 1u64 }
+                }
+                if hit == 1u32 { cnt = cnt + 1u64 }
+            }
+        }
+        if TS_MSG[i] == 10u8 { atbol = 1u32 } else { atbol = 0u32 }
+        i = i + 1u64
+    }
+    return cnt
+}
+
+/* ------------------------------------------------ the forge re-walk -------------------------- */
+fn ser_desc() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut w : u64 = TS_DESC[i]
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            TS_SER[(i * 8u64) + b] = (w & 0xFFu64) as u8
+            w = w >> 8u64
+            b = b + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+/* re-walk the MFF chain from the record loaded in TS_MSG[0..n).
+ * rows "MFF# a b c d e ..." -> descriptor [FMAGIC,1,a,b,c,d,e,1]; genesis [FMAGIC,0,..,~0].
+ * verdict: 1 = head recomputed AND equals the record's own head= AND rowcount==chain=. */
+fn forge_rewalk(n: u64) -> u64 {
+    TS_DESC[0u64] = FMAGIC
+    TS_DESC[1u64] = 0u64
+    let mut z : u64 = 2u64
+    while z <= 6u64 { TS_DESC[z] = 0u64   z = z + 1u64 }
+    TS_DESC[7u64] = 0xFFFFFFFFFFFFFFFFu64
+    ser_desc()
+    if cad_oneshot(0u32, (&TS_SER) as *u8, 64u64, (&TS_FHD) as *u8) != 0i32 { return 0u64 }
+    let mut cnt : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut atbol : u32 = 1u32
+    while i < n {
+        if atbol == 1u32 {
+            if i + 5u64 <= n {
+                if TS_MSG[i] == 77u8 {                     /* M */
+                    if TS_MSG[i + 1u64] == 70u8 {          /* F */
+                        if TS_MSG[i + 2u64] == 70u8 {      /* F */
+                            if TS_MSG[i + 3u64] == 35u8 {  /* # */
+                                if TS_MSG[i + 4u64] == 32u8 {
+                                    let mut pos : u64 = i + 5u64
+                                    let mut f : u64 = 0u64
+                                    while f < 5u64 {
+                                        while pos < n {
+                                            if TS_MSG[pos] == 32u8 { pos = pos + 1u64 } else { break }
+                                        }
+                                        TS_DESC[2u64 + f] = msg_dec_at(pos, n)
+                                        while pos < n {
+                                            let c : u8 = TS_MSG[pos]
+                                            if c >= 48u8 { if c <= 57u8 { pos = pos + 1u64  continue } }
+                                            break
+                                        }
+                                        f = f + 1u64
+                                    }
+                                    TS_DESC[0u64] = FMAGIC
+                                    TS_DESC[1u64] = 1u64
+                                    TS_DESC[7u64] = 1u64
+                                    ser_desc()
+                                    if cad_oneshot(0u32, (&TS_SER) as *u8, 64u64, (&TS_ID) as *u8) != 0i32 { return 0u64 }
+                                    cad_compose((&TS_FHD) as *u8, (&TS_ID) as *u8, (&TS_FHD) as *u8)
+                                    cnt = cnt + 1u64
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if TS_MSG[i] == 10u8 { atbol = 1u32 } else { atbol = 0u32 }
+        i = i + 1u64
+    }
+    /* compare against the record's own pins */
+    let hoff : u64 = msg_find("head=" as u64, n)
+    if hoff == INVALID_H { return 0u64 }
+    if msg_hex32_at(hoff + 5u64, n, (&TS_ID) as u64) != 1u32 { return 0u64 }
+    if dcmp32((&TS_FHD) as u64, (&TS_ID) as u64) != 1u32 { return 0u64 }
+    let coff : u64 = msg_find("chain=" as u64, n)
+    if coff == INVALID_H { return 0u64 }
+    if msg_dec_at(coff + 6u64, n) != cnt { return 0u64 }
+    return 1u64
+}
+
+/* ------------------------------------------------ the tree walk ------------------------------ */
+/* load + index the manifest file at C-string path manp; 0 ok */
+fn manifest_load(manp: u64) -> i32 {
+    let n : u64 = rdfile(manp, (&TS_MAN) as u64, MAXMAN)
+    if n == INVALID_H { return 0i32 - 1i32 }
+    if cad_oneshot(0u32, (&TS_MAN) as *u8, n, (&TS_MDG) as *u8) != 0i32 { return 0i32 - 1i32 }
+    let mut ne : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut lo : u64 = 0u64
+    while i <= n {
+        let mut eol : u32 = 0u32
+        if i == n { eol = 1u32 } else { if TS_MAN[i] == 10u8 { eol = 1u32 } }
+        if eol == 1u32 {
+            let mut ll : u64 = i - lo
+            if ll > 0u64 {
+                if TS_MAN[lo + ll - 1u64] == 13u8 { ll = ll - 1u64 }
+            }
+            if ll > 0u64 {
+                if ne >= MAXE { return 0i32 - 2i32 }
+                if ll >= 2048u64 { return 0i32 - 2i32 }
+                TS_OFF[ne] = lo
+                TS_PL[ne] = ll
+                ne = ne + 1u64
+            }
+            lo = i + 1u64
+        }
+        i = i + 1u64
+    }
+    TS_NE[0u64] = ne
+    return 0i32
+}
+
+/* walk every manifest entry: hash it, build TS_CAT, capture section rows.  0 ok / -1 red
+ * (prints the offending path).  Root must be in TS_ROOTP. */
+fn tree_walk() -> i32 {
+    let ne : u64 = TS_NE[0u64]
+    TS_NSEED[0u64] = 0u64
+    TS_NKAT[0u64] = 0u64
+    TS_FORGE[0u64] = 0u64
+    let mut r : u64 = 0u64
+    while r < NREC {
+        TSR_FND[r] = 0u64
+        TSR_HH[r] = 0u64
+        TSR_RW[r] = 0u64
+        TSR_CH[r] = 0u64
+        let mut z : u64 = 0u64
+        while z < 32u64 { TSR_HD[(r * 32u64) + z] = 0u8   z = z + 1u64 }
+        r = r + 1u64
+    }
+    TSS_FND[0u64] = 0u64  TSS_FND[1u64] = 0u64  TSS_FND[2u64] = 0u64
+    let mut i : u64 = 0u64
+    while i < ne {
+        pathjoin(TS_OFF[i], TS_PL[i])
+        if hashfile() != 0i32 {
+            ps("testament: unreadable manifest entry: " as u64)
+            ps((&TS_PATH) as u64)
+            nl()
+            return 0i32 - 1i32
+        }
+        let mut z : u64 = 0u64
+        while z < 32u64 { TS_CAT[(i * 32u64) + z] = TS_DIG[z]   z = z + 1u64 }
+        let n : u64 = TS_LASTN[0u64]
+        /* SEED: the COMPILER/BOOT C sources in manifest order */
+        if entry_pfx(TS_OFF[i], TS_PL[i], "COMPILER/BOOT/" as u64) == 1u32 {
+            if entry_sfx(TS_OFF[i], TS_PL[i], ".c" as u64) == 1u32 {
+                let s : u64 = TS_NSEED[0u64]
+                if s < 64u64 {
+                    z = 0u64
+                    while z < 32u64 { TSSEED[(s * 32u64) + z] = TS_DIG[z]   z = z + 1u64 }
+                    TS_NSEED[0u64] = s + 1u64
+                }
+            }
+        }
+        /* BEARER: corpus KAT count */
+        if entry_pfx(TS_OFF[i], TS_PL[i], "STDLIB/corpus/" as u64) == 1u32 {
+            TS_NKAT[0u64] = TS_NKAT[0u64] + 1u64
+        }
+        /* SPORE scripts */
+        let mut sp : u64 = 0u64
+        while sp < NSPORE {
+            if entry_eq(TS_OFF[i], TS_PL[i], spore_path(sp)) == 1u32 {
+                z = 0u64
+                while z < 32u64 { TSS_DG[(sp * 32u64) + z] = TS_DIG[z]   z = z + 1u64 }
+                TSS_FND[sp] = 1u64
+            }
+            sp = sp + 1u64
+        }
+        /* MATHESIS records: capture digest + parse pins while the bytes are loaded */
+        r = 0u64
+        while r < NREC {
+            if entry_eq(TS_OFF[i], TS_PL[i], rec_path(r)) == 1u32 {
+                TSR_FND[r] = 1u64
+                z = 0u64
+                while z < 32u64 { TSR_DG[(r * 32u64) + z] = TS_DIG[z]   z = z + 1u64 }
+                let pfx : u64 = rec_prefix(r)
+                if pfx != 0u64 { TSR_RW[r] = msg_count_pfx(pfx, n) }
+                if rec_headed(r) == 1u32 {
+                    let hoff : u64 = msg_find("head=" as u64, n)
+                    if hoff == INVALID_H { return 0i32 - 1i32 }
+                    if msg_hex32_at(hoff + 5u64, n, ((&TSR_HD) as u64) + (r * 32u64)) != 1u32 { return 0i32 - 1i32 }
+                    TSR_HH[r] = 1u64
+                    let coff : u64 = msg_find("chain=" as u64, n)
+                    if coff == INVALID_H { return 0i32 - 1i32 }
+                    TSR_CH[r] = msg_dec_at(coff + 6u64, n)
+                }
+                if r == 6u64 { TS_FORGE[0u64] = forge_rewalk(n) }
+            }
+            r = r + 1u64
+        }
+        i = i + 1u64
+    }
+    /* every configured row must have been found */
+    r = 0u64
+    while r < NREC {
+        if TSR_FND[r] != 1u64 {
+            ps("testament: record missing kfrom manifest: " as u64)
+            ps(rec_path(r))
+            nl()
+            return 0i32 - 1i32
+        }
+        r = r + 1u64
+    }
+    let mut sp2 : u64 = 0u64
+    while sp2 < NSPORE {
+        if TSS_FND[sp2] != 1u64 {
+            ps("testament: spore script missing: " as u64)
+            ps(spore_path(sp2))
+            nl()
+            return 0i32 - 1i32
+        }
+        sp2 = sp2 + 1u64
+    }
+    if TS_FORGE[0u64] != 1u64 {
+        ps("testament: FORGE chain re-walk FAILED (record vs re-derived head)\n" as u64)
+        return 0i32 - 1i32
+    }
+    if cad_oneshot(0u32, (&TS_CAT) as *u8, ne * 32u64, (&TS_TRT) as *u8) != 0i32 { return 0i32 - 1i32 }
+    /* the standing tools */
+    let mut t : u64 = 0u64
+    while t < NTOOL {
+        pathjoin_s(tool_path(t))
+        if hashfile() != 0i32 {
+            ps("testament: tool binary unreadable: " as u64)
+            ps((&TS_PATH) as u64)
+            nl()
+            return 0i32 - 1i32
+        }
+        let mut z2 : u64 = 0u64
+        while z2 < 32u64 { TST_DG[(t * 32u64) + z2] = TS_DIG[z2]   z2 = z2 + 1u64 }
+        t = t + 1u64
+    }
+    /* the RADICAL certificate: sha256( head-hex | MXR# rowcount | chain length ) */
+    let mut cp : u64 = 0u64
+    let mut h : u64 = 0u64
+    while h < 32u64 {
+        let b : u8 = TSR_HD[(2u64 * 32u64) + h]
+        let hi : u64 = (b as u64) >> 4u64
+        let lo : u64 = (b as u64) & 15u64
+        if hi < 10u64 { TS_CERT[cp] = (48u64 + hi) as u8 } else { TS_CERT[cp] = (87u64 + hi) as u8 }
+        cp = cp + 1u64
+        if lo < 10u64 { TS_CERT[cp] = (48u64 + lo) as u8 } else { TS_CERT[cp] = (87u64 + lo) as u8 }
+        cp = cp + 1u64
+        h = h + 1u64
+    }
+    TS_CERT[cp] = 124u8
+    cp = cp + 1u64
+    cp = cert_dec(cp, TSR_RW[2u64])
+    TS_CERT[cp] = 124u8
+    cp = cp + 1u64
+    cp = cert_dec(cp, TSR_CH[2u64])
+    if cad_oneshot(0u32, (&TS_CERT) as *u8, cp, (&TS_RCT) as *u8) != 0i32 { return 0i32 - 1i32 }
+    return 0i32
+}
+fn cert_dec(pos: u64, v: u64) -> u64 {
+    if v == 0u64 { TS_CERT[pos] = 48u8  return pos + 1u64 }
+    let mut n : u64 = v
+    let mut k : u64 = 0u64
+    while n > 0u64 { TS_DEC[k] = ((n % 10u64) + 48u64) as u8  n = n / 10u64  k = k + 1u64 }
+    let mut p : u64 = pos
+    while k > 0u64 { k = k - 1u64  TS_CERT[p] = TS_DEC[k]  p = p + 1u64 }
+    return p
+}
+
+/* ------------------------------------------------ image writers ------------------------------ */
+var TS_WP : [u64; 1]
+fn w8v(b: u8) -> u32 { TS_OUT[TS_WP[0u64]] = b  TS_WP[0u64] = TS_WP[0u64] + 1u64  return 1u32 }
+fn wu64(v: u64) -> u32 {
+    let mut w : u64 = v
+    let mut b : u64 = 0u64
+    while b < 8u64 { w8v((w & 0xFFu64) as u8)  w = w >> 8u64  b = b + 1u64 }
+    return 1u32
+}
+fn wbytes(src: u64, n: u64) -> u32 {
+    let p : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { w8v(p[i])  i = i + 1u64 }
+    return 1u32
+}
+fn wstr(s: u64) -> u32 {
+    let n : u64 = slen(s)
+    wu64(n)
+    wbytes(s, n)
+    return 1u32
+}
+fn wtag(s: u64) -> u32 { wbytes(s, 8u64)  return 1u32 }
+
+/* ------------------------------------------------ EMIT --------------------------------------- */
+/* receipts list file (one path per line, relative to root); 0 = none */
+var TS_RCN : [u64; 1]
+var TS_RCOFF : [u64; 256]
+var TS_RCLEN : [u64; 256]
+var TS_RCB : [u8; 65536]
+var TS_RCD : [u8; 8192]        /* 256 x 32 receipt digests */
+fn receipts_load(listp: u64) -> i32 {
+    TS_RCN[0u64] = 0u64
+    if listp == 0u64 { return 0i32 }
+    let n : u64 = rdfile(listp, (&TS_RCB) as u64, 65536u64)
+    if n == INVALID_H { return 0i32 - 1i32 }
+    let mut i : u64 = 0u64
+    let mut lo : u64 = 0u64
+    while i <= n {
+        let mut eol : u32 = 0u32
+        if i == n { eol = 1u32 } else { if TS_RCB[i] == 10u8 { eol = 1u32 } }
+        if eol == 1u32 {
+            let mut ll : u64 = i - lo
+            if ll > 0u64 { if TS_RCB[lo + ll - 1u64] == 13u8 { ll = ll - 1u64 } }
+            if ll > 0u64 {
+                let k : u64 = TS_RCN[0u64]
+                if k >= 256u64 { return 0i32 - 1i32 }
+                TS_RCOFF[k] = lo
+                TS_RCLEN[k] = ll
+                TS_RCN[0u64] = k + 1u64
+            }
+            lo = i + 1u64
+        }
+        i = i + 1u64
+    }
+    /* hash each receipt (path joined under root) */
+    let mut k2 : u64 = 0u64
+    while k2 < TS_RCN[0u64] {
+        let rp : *u8 = TS_ROOTP[0u64] as *u8
+        let mut kk : u64 = 0u64
+        let mut ii : u64 = 0u64
+        while rp[ii] != 0u8 { TS_PATH[kk] = rp[ii]  kk = kk + 1u64  ii = ii + 1u64 }
+        TS_PATH[kk] = 47u8
+        kk = kk + 1u64
+        ii = 0u64
+        while ii < TS_RCLEN[k2] { TS_PATH[kk] = TS_RCB[TS_RCOFF[k2] + ii]  kk = kk + 1u64  ii = ii + 1u64 }
+        TS_PATH[kk] = 0u8
+        if hashfile() != 0i32 {
+            ps("testament: receipt unreadable: " as u64)
+            ps((&TS_PATH) as u64)
+            nl()
+            return 0i32 - 1i32
+        }
+        let mut z : u64 = 0u64
+        while z < 32u64 { TS_RCD[(k2 * 32u64) + z] = TS_DIG[z]   z = z + 1u64 }
+        k2 = k2 + 1u64
+    }
+    return 0i32
+}
+
+/* parse a parent testament loaded in TS_MSG[0..n): digest -> TS_PAR, pk -> TS_PPK,
+ * gen returned, per-tag counters -> TSP_PCNT.  INVALID_H on malformed. */
+fn parent_scan(n: u64) -> u64 {
+    if n < 136u64 { return INVALID_H }
+    if cad_oneshot(0u32, (&TS_MSG) as *u8, n, (&TS_PAR) as *u8) != 0i32 { return INVALID_H }
+    let mut z : u64 = 0u64
+    while z < 64u64 { TS_PPK[z] = TS_MSG[64u64 + z]   z = z + 1u64 }
+    let mut gen : u64 = 0u64
+    let mut b : u64 = 0u64
+    while b < 8u64 { gen = gen | ((TS_MSG[48u64 + b] as u64) << (b * 8u64))  b = b + 1u64 }
+    let mut nsect : u64 = 0u64
+    b = 0u64
+    while b < 8u64 { nsect = nsect | ((TS_MSG[128u64 + b] as u64) << (b * 8u64))  b = b + 1u64 }
+    let mut pos : u64 = 136u64
+    let mut s : u64 = 0u64
+    while s < 8u64 { TSP_PCNT[s] = 0u64   s = s + 1u64 }
+    s = 0u64
+    while s < nsect {
+        if pos + 16u64 > n { return INVALID_H }
+        let mut plen : u64 = 0u64
+        b = 0u64
+        while b < 8u64 { plen = plen | ((TS_MSG[pos + 8u64 + b] as u64) << (b * 8u64))  b = b + 1u64 }
+        /* first u64 of every v1 payload is its leading counter (TREE: manifest-path len -- use
+         * the file count at a fixed offset instead below; here store the LEADING u64) */
+        let mut t : u64 = 0u64
+        while t < 7u64 {
+            let tg : *u8 = sect_tag(t) as *u8
+            let mut j : u64 = 0u64
+            let mut hit : u32 = 1u32
+            while j < 8u64 {
+                if TS_MSG[pos + j] != tg[j] { hit = 0u32  j = 8u64 } else { j = j + 1u64 }
+            }
+            if hit == 1u32 {
+                if pos + 16u64 + 8u64 <= n {
+                    let mut lead : u64 = 0u64
+                    b = 0u64
+                    while b < 8u64 { lead = lead | ((TS_MSG[pos + 16u64 + b] as u64) << (b * 8u64))  b = b + 1u64 }
+                    if t == 0u64 {
+                        /* TREE counter = file count: at payload off 8+plen0+32 */
+                        let fo : u64 = pos + 16u64 + 8u64 + lead + 32u64
+                        if fo + 8u64 <= n {
+                            let mut fc : u64 = 0u64
+                            b = 0u64
+                            while b < 8u64 { fc = fc | ((TS_MSG[fo + b] as u64) << (b * 8u64))  b = b + 1u64 }
+                            TSP_PCNT[0u64] = fc
+                        }
+                    } else {
+                        TSP_PCNT[t] = lead
+                    }
+                }
+            }
+            t = t + 1u64
+        }
+        pos = pos + 16u64 + plen
+        s = s + 1u64
+    }
+    return gen
+}
+
+/* emit: root manifest sk pk out [parent] [receipts-list].  0 green. */
+fn ts_emit(root: u64, manp: u64, skp: u64, pkp: u64, outp: u64, parentp: u64, rcpts: u64) -> u64 @export {
+    TS_ROOTP[0u64] = root
+    let kn : u64 = rdfile(skp, (&TS_SK) as u64, SKB)
+    if kn != SKB { ps("testament: sk must be 128 B\n" as u64)  return 2u64 }
+    let pn : u64 = rdfile(pkp, (&TS_PK) as u64, PKB)
+    if pn != PKB { ps("testament: pk must be 64 B\n" as u64)  return 2u64 }
+    /* parent (0 = genesis) */
+    let mut gen : u64 = 0u64
+    let mut z : u64 = 0u64
+    while z < 32u64 { TS_PAR[z] = 0u8   z = z + 1u64 }
+    let mut s : u64 = 0u64
+    while s < 8u64 { TSP_PCNT[s] = 0u64   s = s + 1u64 }
+    if parentp != 0u64 {
+        let pn2 : u64 = rdfile(parentp, (&TS_MSG) as u64, MAXF)
+        if pn2 == INVALID_H { ps("testament: cannot read parent\n" as u64)  return 2u64 }
+        let pg : u64 = parent_scan(pn2)
+        if pg == INVALID_H { ps("testament: malformed parent\n" as u64)  return 2u64 }
+        gen = pg + 1u64
+        if dcmp32((&TS_PPK) as u64, (&TS_PK) as u64) != 1u32 {
+            ps("testament: key continuity BROKEN (parent pk != pk)\n" as u64)
+            return 15u64
+        }
+    }
+    if receipts_load(rcpts) != 0i32 { return 2u64 }
+    if manifest_load(manp) != 0i32 { ps("testament: manifest unreadable/oversized\n" as u64)  return 2u64 }
+    if tree_walk() != 0i32 { return 1u64 }
+    /* monotone law vs parent */
+    if parentp != 0u64 {
+        let mut bad : u32 = 0u32
+        if TS_NE[0u64] < TSP_PCNT[0u64] { bad = 1u32 }
+        if TS_NSEED[0u64] < TSP_PCNT[1u64] { bad = 1u32 }
+        if TS_NKAT[0u64] < TSP_PCNT[2u64] { bad = 1u32 }
+        if NREC < TSP_PCNT[3u64] { bad = 1u32 }
+        if NSPORE < TSP_PCNT[4u64] { bad = 1u32 }
+        if NTOOL < TSP_PCNT[5u64] { bad = 1u32 }
+        if TS_RCN[0u64] < TSP_PCNT[6u64] { bad = 1u32 }
+        if bad == 1u32 {
+            ps("testament: MONOTONE LAW breach (a counter decreased vs parent)\n" as u64)
+            return 15u64
+        }
+    }
+    /* assemble the body */
+    TS_WP[0u64] = 0u64
+    wbytes("IIITSTMT" as u64, 8u64)
+    wu64(TS_VER)
+    wbytes((&TS_PAR) as u64, 32u64)
+    wu64(gen)
+    wu64(TS_PARAM)
+    wbytes((&TS_PK) as u64, 64u64)
+    wu64(7u64)
+    /* TREE */
+    wtag(sect_tag(0u64))
+    let mrel : u64 = "STDLIB/testament/MANIFEST.txt" as u64
+    wu64(8u64 + slen(mrel) + 32u64 + 8u64 + 32u64)
+    wstr(mrel)
+    wbytes((&TS_MDG) as u64, 32u64)
+    wu64(TS_NE[0u64])
+    wbytes((&TS_TRT) as u64, 32u64)
+    /* SEED */
+    wtag(sect_tag(1u64))
+    wu64(8u64 + (TS_NSEED[0u64] * 32u64))
+    wu64(TS_NSEED[0u64])
+    wbytes((&TSSEED) as u64, TS_NSEED[0u64] * 32u64)
+    /* BEARER */
+    wtag(sect_tag(2u64))
+    wu64(8u64)
+    wu64(TS_NKAT[0u64])
+    /* MATHESIS */
+    wtag(sect_tag(3u64))
+    let mut mlen : u64 = 8u64
+    let mut r : u64 = 0u64
+    while r < NREC { mlen = mlen + 8u64 + slen(rec_path(r)) + 32u64 + 8u64 + 32u64 + 8u64 + 8u64   r = r + 1u64 }
+    mlen = mlen + 8u64 + 8u64 + slen("RADICAL" as u64) + 32u64
+    wu64(mlen)
+    wu64(NREC)
+    r = 0u64
+    while r < NREC {
+        wstr(rec_path(r))
+        wbytes(((&TSR_DG) as u64) + (r * 32u64), 32u64)
+        wu64(TSR_HH[r])
+        wbytes(((&TSR_HD) as u64) + (r * 32u64), 32u64)
+        wu64(TSR_RW[r])
+        wu64(TSR_CH[r])
+        r = r + 1u64
+    }
+    wu64(1u64)
+    wstr("RADICAL" as u64)
+    wbytes((&TS_RCT) as u64, 32u64)
+    /* SPORE */
+    wtag(sect_tag(4u64))
+    let mut splen : u64 = 8u64
+    let mut sp : u64 = 0u64
+    while sp < NSPORE { splen = splen + 8u64 + slen(spore_path(sp)) + 32u64   sp = sp + 1u64 }
+    wu64(splen)
+    wu64(NSPORE)
+    sp = 0u64
+    while sp < NSPORE {
+        wstr(spore_path(sp))
+        wbytes(((&TSS_DG) as u64) + (sp * 32u64), 32u64)
+        sp = sp + 1u64
+    }
+    /* TOOLS */
+    wtag(sect_tag(5u64))
+    let mut tlen : u64 = 8u64
+    let mut t : u64 = 0u64
+    while t < NTOOL { tlen = tlen + 8u64 + slen(tool_path(t)) + 32u64   t = t + 1u64 }
+    wu64(tlen)
+    wu64(NTOOL)
+    t = 0u64
+    while t < NTOOL {
+        wstr(tool_path(t))
+        wbytes(((&TST_DG) as u64) + (t * 32u64), 32u64)
+        t = t + 1u64
+    }
+    /* EXEC */
+    wtag(sect_tag(6u64))
+    let mut elen : u64 = 8u64
+    let mut k : u64 = 0u64
+    while k < TS_RCN[0u64] { elen = elen + 8u64 + TS_RCLEN[k] + 32u64   k = k + 1u64 }
+    wu64(elen)
+    wu64(TS_RCN[0u64])
+    k = 0u64
+    while k < TS_RCN[0u64] {
+        wu64(TS_RCLEN[k])
+        wbytes(((&TS_RCB) as u64) + TS_RCOFF[k], TS_RCLEN[k])
+        wbytes(((&TS_RCD) as u64) + (k * 32u64), 32u64)
+        k = k + 1u64
+    }
+    if TS_WP[0u64] + 8u64 + SIGB > OUTCAP { ps("testament: image overflow\n" as u64)  return 1u64 }
+    /* sign sha256(body) */
+    if cad_oneshot(0u32, (&TS_OUT) as *u8, TS_WP[0u64], (&TS_BDG) as *u8) != 0i32 { return 1u64 }
+    if iii_slhdsa_sha2_sign(2u64, (&TS_SK) as u64, (&TS_BDG) as u64, 32u64, (&TS_SIG) as u64, (&TS_SLQ) as u64) != 0i32 {
+        ps("testament: signing refused\n" as u64)
+        return 3u64
+    }
+    if TS_SLQ[0u64] != SIGB { ps("testament: unexpected signature size\n" as u64)  return 3u64 }
+    wu64(SIGB)
+    wbytes((&TS_SIG) as u64, SIGB)
+    if wrfile(outp, (&TS_OUT) as u64, TS_WP[0u64]) != 0u32 {
+        ps("testament: cannot write output\n" as u64)
+        return 2u64
+    }
+    ps("testament: generation " as u64)
+    pd(gen)
+    ps(" emitted (" as u64)
+    pd(TS_WP[0u64])
+    ps(" B, " as u64)
+    pd(TS_NE[0u64])
+    ps(" files, root " as u64)
+    phexn((&TS_TRT) as u64, 8u64)
+    ps("...)\n" as u64)
+    return 0u64
+}
+
+/* keygen: seed(96) -> pk(64) + sk(128), deterministic */
+fn ts_keygen(seedp: u64, pkp: u64, skp: u64) -> u64 @export {
+    let sn : u64 = rdfile(seedp, (&TS_SEED) as u64, SEEDB)
+    if sn != SEEDB { ps("testament: seed must be EXACTLY 96 B\n" as u64)  return 2u64 }
+    if iii_slhdsa_sha2_keygen(2u64, (&TS_SEED) as u64, (&TS_PK) as u64, (&TS_SK) as u64) != 0i32 {
+        ps("testament: keygen refused\n" as u64)
+        return 3u64
+    }
+    if wrfile(pkp, (&TS_PK) as u64, PKB) != 0u32 { return 2u64 }
+    if wrfile(skp, (&TS_SK) as u64, SKB) != 0u32 { return 2u64 }
+    ps("testament: SLH-DSA-SHA2-256s keypair written (pk 64 B, sk 128 B)\n" as u64)
+    return 0u64
+}
+
+/* ------------------------------------------------ parse + verify ----------------------------- */
+/* parse the testament image in TS_OUT[0..n); fills TSP_* tables.  0 ok / 10 format */
+var TS_GEN : [u64; 1]
+var TS_SIGOFF : [u64; 1]
+var TS_SIGLEN : [u64; 1]
+fn ru64(off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut b : u64 = 0u64
+    while b < 8u64 { v = v | ((TS_OUT[off + b] as u64) << (b * 8u64))  b = b + 1u64 }
+    return v
+}
+fn t_parse(n: u64) -> u64 {
+    if n < 136u64 { return 10u64 }
+    let mg : *u8 = "IIITSTMT" as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { if TS_OUT[i] != mg[i] { return 10u64 }  i = i + 1u64 }
+    if ru64(8u64) != TS_VER { return 10u64 }
+    if ru64(56u64) != TS_PARAM { return 10u64 }
+    TS_GEN[0u64] = ru64(48u64)
+    let nsect : u64 = ru64(128u64)
+    if nsect < 7u64 { return 10u64 }
+    if nsect > 32u64 { return 10u64 }
+    let mut s : u64 = 0u64
+    while s < 8u64 { TSP_CNT[s] = 0u64  TSP_OFF[s] = 0u64  TSP_LEN[s] = 0u64   s = s + 1u64 }
+    let mut pos : u64 = 136u64
+    s = 0u64
+    while s < nsect {
+        if pos + 16u64 > n { return 10u64 }
+        let plen : u64 = ru64(pos + 8u64)
+        if pos + 16u64 + plen > n { return 10u64 }
+        let mut t : u64 = 0u64
+        while t < 7u64 {
+            let tg : *u8 = sect_tag(t) as *u8
+            let mut j : u64 = 0u64
+            let mut hit : u32 = 1u32
+            while j < 8u64 {
+                if TS_OUT[pos + j] != tg[j] { hit = 0u32  j = 8u64 } else { j = j + 1u64 }
+            }
+            if hit == 1u32 {
+                TSP_OFF[t] = pos + 16u64
+                TSP_LEN[t] = plen
+                if t == 0u64 {
+                    let mp : u64 = ru64(pos + 16u64)
+                    TSP_CNT[0u64] = ru64(pos + 16u64 + 8u64 + mp + 32u64)
+                } else {
+                    TSP_CNT[t] = ru64(pos + 16u64)
+                }
+            }
+            t = t + 1u64
+        }
+        pos = pos + 16u64 + plen
+        s = s + 1u64
+    }
+    let mut t2 : u64 = 0u64
+    while t2 < 7u64 {
+        if TSP_OFF[t2] == 0u64 { return 10u64 }
+        t2 = t2 + 1u64
+    }
+    if pos + 8u64 > n { return 10u64 }
+    TS_SIGOFF[0u64] = pos
+    TS_SIGLEN[0u64] = ru64(pos)
+    if TS_SIGLEN[0u64] != SIGB { return 10u64 }
+    if pos + 8u64 + SIGB != n { return 10u64 }
+    return 0u64
+}
+
+/* the witness door.  Every argument beyond dat may be 0.
+ * exits: 0 green | 2 file | 10 format | 11 signature/key-pin | 12 generation link |
+ *        13 semantic re-derivation | 14 tree root | 15 monotone law */
+fn tw_verify(datp: u64, pkpin: u64, parentp: u64, root: u64, manp: u64) -> u64 @export {
+    let n : u64 = rdfile(datp, (&TS_OUT) as u64, OUTCAP)
+    if n == INVALID_H { ps("witness: cannot read testament\n" as u64)  return 2u64 }
+    let fr : u64 = t_parse(n)
+    if fr != 0u64 { ps("witness: FORMAT invalid\n" as u64)  return fr }
+    /* signature over sha256(body) with the EMBEDDED pk */
+    if cad_oneshot(0u32, (&TS_OUT) as *u8, TS_SIGOFF[0u64], (&TS_BDG) as *u8) != 0i32 { return 10u64 }
+    if iii_slhdsa_sha2_verify(2u64, ((&TS_OUT) as u64) + 64u64, (&TS_BDG) as u64, 32u64,
+                              ((&TS_OUT) as u64) + TS_SIGOFF[0u64] + 8u64, SIGB) != 0i32 {
+        ps("witness: SIGNATURE invalid\n" as u64)
+        return 11u64
+    }
+    if pkpin != 0u64 {
+        let pn : u64 = rdfile(pkpin, (&TS_PK) as u64, PKB)
+        if pn != PKB { ps("witness: cannot read pk pin\n" as u64)  return 2u64 }
+        let mut z : u64 = 0u64
+        while z < 64u64 {
+            if TS_PK[z] != TS_OUT[64u64 + z] {
+                ps("witness: KEY PIN mismatch (embedded pk is not the pinned pk)\n" as u64)
+                return 11u64
+            }
+            z = z + 1u64
+        }
+    }
+    if parentp != 0u64 {
+        let pn2 : u64 = rdfile(parentp, (&TS_MSG) as u64, MAXF)
+        if pn2 == INVALID_H { ps("witness: cannot read parent\n" as u64)  return 2u64 }
+        let pg : u64 = parent_scan(pn2)
+        if pg == INVALID_H { ps("witness: malformed parent\n" as u64)  return 12u64 }
+        let mut z2 : u64 = 0u64
+        while z2 < 32u64 {
+            if TS_PAR[z2] != TS_OUT[16u64 + z2] {
+                ps("witness: GENERATION LINK broken (parent digest mismatch)\n" as u64)
+                return 12u64
+            }
+            z2 = z2 + 1u64
+        }
+        if pg + 1u64 != TS_GEN[0u64] {
+            ps("witness: GENERATION index broken\n" as u64)
+            return 12u64
+        }
+        z2 = 0u64
+        while z2 < 64u64 {
+            if TS_PPK[z2] != TS_OUT[64u64 + z2] {
+                ps("witness: KEY CONTINUITY broken\n" as u64)
+                return 12u64
+            }
+            z2 = z2 + 1u64
+        }
+        let mut s : u64 = 0u64
+        while s < 7u64 {
+            if TSP_CNT[s] < TSP_PCNT[s] {
+                ps("witness: MONOTONE LAW breach vs parent\n" as u64)
+                return 15u64
+            }
+            s = s + 1u64
+        }
+    }
+    if root != 0u64 {
+        TS_ROOTP[0u64] = root
+        if manifest_load(manp) != 0i32 { ps("witness: manifest unreadable\n" as u64)  return 2u64 }
+        /* manifest digest + count + root must match the sealed TREE section */
+        let toff : u64 = TSP_OFF[0u64]
+        let mp : u64 = ru64(toff)
+        if tree_walk() != 0i32 { return 13u64 }
+        let mut z3 : u64 = 0u64
+        while z3 < 32u64 {
+            if TS_MDG[z3] != TS_OUT[toff + 8u64 + mp + z3] {
+                ps("witness: TREE manifest digest mismatch\n" as u64)
+                return 14u64
+            }
+            z3 = z3 + 1u64
+        }
+        if TS_NE[0u64] != ru64(toff + 8u64 + mp + 32u64) {
+            ps("witness: TREE file count mismatch\n" as u64)
+            return 14u64
+        }
+        z3 = 0u64
+        while z3 < 32u64 {
+            if TS_TRT[z3] != TS_OUT[toff + 8u64 + mp + 32u64 + 8u64 + z3] {
+                ps("witness: TREE ROOT mismatch (the tree is not the sealed tree)\n" as u64)
+                return 14u64
+            }
+            z3 = z3 + 1u64
+        }
+        /* SEED digests */
+        let soff : u64 = TSP_OFF[1u64]
+        if TS_NSEED[0u64] != ru64(soff) { ps("witness: SEED count mismatch\n" as u64)  return 13u64 }
+        let mut q : u64 = 0u64
+        while q < TS_NSEED[0u64] * 32u64 {
+            if TSSEED[q] != TS_OUT[soff + 8u64 + q] { ps("witness: SEED digest mismatch\n" as u64)  return 13u64 }
+            q = q + 1u64
+        }
+        /* BEARER */
+        if TS_NKAT[0u64] != ru64(TSP_OFF[2u64]) { ps("witness: BEARER count mismatch\n" as u64)  return 13u64 }
+        /* MATHESIS: recomputed digests/pins/cert vs the sealed rows */
+        let moff : u64 = TSP_OFF[3u64]
+        if ru64(moff) != NREC { ps("witness: MATHESIS record count mismatch\n" as u64)  return 13u64 }
+        let mut pos : u64 = moff + 8u64
+        let mut r : u64 = 0u64
+        while r < NREC {
+            let plen : u64 = ru64(pos)
+            pos = pos + 8u64 + plen
+            let mut z4 : u64 = 0u64
+            while z4 < 32u64 {
+                if TSR_DG[(r * 32u64) + z4] != TS_OUT[pos + z4] {
+                    ps("witness: MATHESIS record digest mismatch: " as u64)
+                    ps(rec_path(r))
+                    nl()
+                    return 13u64
+                }
+                z4 = z4 + 1u64
+            }
+            pos = pos + 32u64
+            if TSR_HH[r] != ru64(pos) { ps("witness: MATHESIS head flag mismatch\n" as u64)  return 13u64 }
+            pos = pos + 8u64
+            z4 = 0u64
+            while z4 < 32u64 {
+                if TSR_HD[(r * 32u64) + z4] != TS_OUT[pos + z4] {
+                    ps("witness: MATHESIS pinned head mismatch: " as u64)
+                    ps(rec_path(r))
+                    nl()
+                    return 13u64
+                }
+                z4 = z4 + 1u64
+            }
+            pos = pos + 32u64
+            if TSR_RW[r] != ru64(pos) { ps("witness: MATHESIS rowcount mismatch\n" as u64)  return 13u64 }
+            pos = pos + 8u64
+            if TSR_CH[r] != ru64(pos) { ps("witness: MATHESIS chain length mismatch\n" as u64)  return 13u64 }
+            pos = pos + 8u64
+            r = r + 1u64
+        }
+        if ru64(pos) != 1u64 { ps("witness: MATHESIS cert count mismatch\n" as u64)  return 13u64 }
+        pos = pos + 8u64
+        let nlen : u64 = ru64(pos)
+        pos = pos + 8u64 + nlen
+        let mut z5 : u64 = 0u64
+        while z5 < 32u64 {
+            if TS_RCT[z5] != TS_OUT[pos + z5] {
+                ps("witness: RADICAL certificate re-derivation mismatch\n" as u64)
+                return 13u64
+            }
+            z5 = z5 + 1u64
+        }
+        /* SPORE + TOOLS digests */
+        let spoff : u64 = TSP_OFF[4u64]
+        if ru64(spoff) != NSPORE { ps("witness: SPORE count mismatch\n" as u64)  return 13u64 }
+        let mut pos2 : u64 = spoff + 8u64
+        let mut sp : u64 = 0u64
+        while sp < NSPORE {
+            let pl2 : u64 = ru64(pos2)
+            pos2 = pos2 + 8u64 + pl2
+            let mut z6 : u64 = 0u64
+            while z6 < 32u64 {
+                if TSS_DG[(sp * 32u64) + z6] != TS_OUT[pos2 + z6] {
+                    ps("witness: SPORE digest mismatch\n" as u64)
+                    return 13u64
+                }
+                z6 = z6 + 1u64
+            }
+            pos2 = pos2 + 32u64
+            sp = sp + 1u64
+        }
+        let tooff : u64 = TSP_OFF[5u64]
+        if ru64(tooff) != NTOOL { ps("witness: TOOLS count mismatch\n" as u64)  return 13u64 }
+        pos2 = tooff + 8u64
+        let mut t3 : u64 = 0u64
+        while t3 < NTOOL {
+            let pl3 : u64 = ru64(pos2)
+            pos2 = pos2 + 8u64 + pl3
+            let mut z7 : u64 = 0u64
+            while z7 < 32u64 {
+                if TST_DG[(t3 * 32u64) + z7] != TS_OUT[pos2 + z7] {
+                    ps("witness: TOOL digest mismatch: " as u64)
+                    ps(tool_path(t3))
+                    nl()
+                    return 13u64
+                }
+                z7 = z7 + 1u64
+            }
+            pos2 = pos2 + 32u64
+            t3 = t3 + 1u64
+        }
+        /* EXEC receipts: every sealed receipt re-hashed from the tree */
+        let eoff : u64 = TSP_OFF[6u64]
+        let nrc : u64 = ru64(eoff)
+        pos2 = eoff + 8u64
+        let mut k : u64 = 0u64
+        while k < nrc {
+            let pl4 : u64 = ru64(pos2)
+            pos2 = pos2 + 8u64
+            let rp : *u8 = TS_ROOTP[0u64] as *u8
+            let mut kk : u64 = 0u64
+            let mut ii : u64 = 0u64
+            while rp[ii] != 0u8 { TS_PATH[kk] = rp[ii]  kk = kk + 1u64  ii = ii + 1u64 }
+            TS_PATH[kk] = 47u8
+            kk = kk + 1u64
+            ii = 0u64
+            while ii < pl4 { TS_PATH[kk] = TS_OUT[pos2 + ii]  kk = kk + 1u64  ii = ii + 1u64 }
+            TS_PATH[kk] = 0u8
+            pos2 = pos2 + pl4
+            if hashfile() != 0i32 { ps("witness: EXEC receipt unreadable\n" as u64)  return 13u64 }
+            let mut z8 : u64 = 0u64
+            while z8 < 32u64 {
+                if TS_DIG[z8] != TS_OUT[pos2 + z8] {
+                    ps("witness: EXEC receipt digest mismatch\n" as u64)
+                    return 13u64
+                }
+                z8 = z8 + 1u64
+            }
+            pos2 = pos2 + 32u64
+            k = k + 1u64
+        }
+    }
+    ps("witness: GREEN generation " as u64)
+    pd(TS_GEN[0u64])
+    if root != 0u64 { ps(" (full re-derivation against the tree)" as u64) }
+    else { ps(" (static: format+signature" as u64)
+           if parentp != 0u64 { ps("+generation" as u64) }
+           if pkpin != 0u64 { ps("+key-pin" as u64) }
+           ps(")" as u64) }
+    nl()
+    return 0u64
+}
+
+/* show: print the sealed pins (bash-consumable).  0 ok */
+fn ts_show(datp: u64) -> u64 @export {
+    let n : u64 = rdfile(datp, (&TS_OUT) as u64, OUTCAP)
+    if n == INVALID_H { ps("testament: cannot read\n" as u64)  return 2u64 }
+    let fr : u64 = t_parse(n)
+    if fr != 0u64 { ps("testament: FORMAT invalid\n" as u64)  return fr }
+    ps("generation " as u64)
+    pd(TS_GEN[0u64])
+    ps(" parent " as u64)
+    phexn(((&TS_OUT) as u64) + 16u64, 32u64)
+    nl()
+    ps("pk " as u64)
+    phexn(((&TS_OUT) as u64) + 64u64, 64u64)
+    nl()
+    let toff : u64 = TSP_OFF[0u64]
+    let mp : u64 = ru64(toff)
+    ps("TREE files=" as u64)
+    pd(ru64(toff + 8u64 + mp + 32u64))
+    ps(" root=" as u64)
+    phexn(((&TS_OUT) as u64) + toff + 8u64 + mp + 32u64 + 8u64, 32u64)
+    nl()
+    ps("SEED n=" as u64)
+    pd(ru64(TSP_OFF[1u64]))
+    nl()
+    ps("BEARER kats=" as u64)
+    pd(ru64(TSP_OFF[2u64]))
+    nl()
+    let moff : u64 = TSP_OFF[3u64]
+    let nrec : u64 = ru64(moff)
+    let mut pos : u64 = moff + 8u64
+    let mut r : u64 = 0u64
+    while r < nrec {
+        let plen : u64 = ru64(pos)
+        ps("RECORD " as u64)
+        let mut i : u64 = 0u64
+        while i < plen { putchar(TS_OUT[pos + 8u64 + i] as i32)  i = i + 1u64 }
+        pos = pos + 8u64 + plen
+        ps(" dig=" as u64)
+        phexn(((&TS_OUT) as u64) + pos, 32u64)
+        pos = pos + 32u64
+        let hh : u64 = ru64(pos)
+        pos = pos + 8u64
+        if hh == 1u64 {
+            ps(" head=" as u64)
+            phexn(((&TS_OUT) as u64) + pos, 32u64)
+        }
+        pos = pos + 32u64
+        ps(" rows=" as u64)
+        pd(ru64(pos))
+        pos = pos + 8u64
+        ps(" chain=" as u64)
+        pd(ru64(pos))
+        pos = pos + 8u64
+        nl()
+        r = r + 1u64
+    }
+    let ncert : u64 = ru64(pos)
+    pos = pos + 8u64
+    r = 0u64
+    while r < ncert {
+        let nlen : u64 = ru64(pos)
+        ps("CERT " as u64)
+        let mut i2 : u64 = 0u64
+        while i2 < nlen { putchar(TS_OUT[pos + 8u64 + i2] as i32)  i2 = i2 + 1u64 }
+        pos = pos + 8u64 + nlen
+        ps(" value=" as u64)
+        phexn(((&TS_OUT) as u64) + pos, 32u64)
+        pos = pos + 32u64
+        nl()
+        r = r + 1u64
+    }
+    ps("SPORE n=" as u64)
+    pd(ru64(TSP_OFF[4u64]))
+    ps(" TOOLS n=" as u64)
+    pd(ru64(TSP_OFF[5u64]))
+    ps(" EXEC n=" as u64)
+    pd(ru64(TSP_OFF[6u64]))
+    nl()
+    return 0u64
+}

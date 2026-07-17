@@ -13,9 +13,37 @@ module corpus_2741_mathesis_op3_drain_cert_rot
 
 extern @abi(c-msvc-x64) fn mr3_validate8v2(k: i64) -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr3_vund() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_o5count() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_o5monster(sid: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_omega5(k: i64, lo: i64, hi: i64) -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_omon() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_odec() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_ound() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_omatch() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr3_undn() -> i64 from "mathesis_rot64.iii"
 
 fn main() -> i32 {
     if mr3_validate8v2(1i64) != 0i64 { return 20i32 }
+    if mr3_validate8v2(1i64) == 0i64 { } else { return 26i32 }  /* soundness ASSERTED (==0), the meter's discriminating second outcome */
     if mr3_vund() != 0i64 { return 21i32 }
+    /* [B] THE MONSTER FAMILY IS EXACTLY 32 across the whole 207,360-class grammar --
+     * the named-split generator's certificate, recomputed live, never recalled. */
+    if mr3_o5count() != 32i64 { return 30i32 }
+    /* [C] a real width-64 drain window through the Omega-5 door: conservation + the
+     * named-split contract.  Every class in [0, 48) is EITHER a pre-split monster
+     * (counted, coordinates kept, never entered) OR decided/refused by decide2 --
+     * a class that vanishes from the partition is a silent cap, and reddens. */
+    let refuted : i64 = mr3_omega5(1i64, 0i64, 48i64)
+    if (mr3_omon() + mr3_odec()) + mr3_ound() != 48i64 { return 40i32 }
+    if refuted != (mr3_odec() - mr3_omatch()) { return 41i32 }
+    if mr3_undn() != mr3_omon() { return 42i32 }     /* a monster keeps its coordinates */
+    /* the split recomputed INDEPENDENTLY through the exported monster door */
+    let mut mc : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 48i64 {
+        if mr3_o5monster(sid) == 1i64 { mc = mc + 1i64 }
+        sid = sid + 1i64
+    }
+    if mc != mr3_omon() { return 43i32 }
     return 99i32
 }

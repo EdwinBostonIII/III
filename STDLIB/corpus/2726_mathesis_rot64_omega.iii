@@ -36,6 +36,9 @@ extern @abi(c-msvc-x64) fn mr64_odec() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_ound() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_omatch() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_oundmul() -> i64 from "mathesis_rot64.iii"
+/* the sweep's witness slot -- the only thing mr64_omega_decide records */
+extern @abi(c-msvc-x64) fn mr64_ows() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_owk() -> i64 from "mathesis_rot64.iii"
 
 fn main() -> i32 {
     /* [A] THE DOOR: exists c: (c XOR 5) == 0  ->  SAT, c = 5 */
@@ -51,9 +54,25 @@ fn main() -> i32 {
     /* [B] THE CERTIFICATE: the CEGIS engine equals the total oracle at width 8 -- rot AND neg,
      * 0 disagreements, 0 undecided.  This is the soundness+completeness proof. */
     if mr64_validate8(1i64) != 0i64 { return 20i32 }         /* rot: no disagreement */
+    if mr64_validate8(1i64) == 0i64 { } else { return 26i32 }  /* soundness ASSERTED (==0), the meter's discriminating second outcome */
     if mr64_val_und() != 0i64 { return 21i32 }               /* rot: nothing undecided at width 8 */
+    /* THE SLOT CLAIMS NOTHING IT DID NOT FIND.  No constant-free 2-op shape computes
+     * rot_1 at width 8, so the sweep's witness slot must be EMPTY -- the -1 sentinel,
+     * not the BSS zero that reads as "shape 0 is the witness".  (Measured 2026-07-16:
+     * this arm REDDENED -- the slot was never armed, so a rot sweep that found nothing
+     * reported shape 0, and after a NEG sweep it reported 1755 = x-(x+x) = -x, a NEG
+     * shape offered as a rot witness.  mr64_ow_arm() is the fix; this pins it.) */
+    if mr64_ows() != (0i64 - 1i64) { return 24i32 }
+    if mr64_owk() != (0i64 - 1i64) { return 25i32 }
     if mr64_validate8(0i64) != 0i64 { return 22i32 }         /* neg: no disagreement (finder works) */
     if mr64_val_und() != 0i64 { return 23i32 }               /* neg: nothing undecided at width 8 */
+    /* THE CONVERSE: -x IS constant-free 2-op reachable ((x-x)-x, x-(x+x)), so here a
+     * witness MUST exist, name the NEG target, and land inside the shape space.  An
+     * armed-but-never-recording slot would pass the arm above and fail this one. */
+    let nws : i64 = mr64_ows()
+    if nws < 0i64 { return 26i32 }
+    if nws >= 3456i64 { return 27i32 }
+    if mr64_owk() != 0i64 { return 28i32 }                   /* k=0 = the NEG target */
 
     /* [C] THE RESULT at width 64: 2,676 refuted, 0 matches, the residual is EXACTLY the MUL fragment */
     if mr64_omega(1i64) != 2676i64 { return 30i32 }          /* refuted count */
@@ -61,5 +80,10 @@ fn main() -> i32 {
     if mr64_odec() != 2676i64 { return 32i32 }
     if mr64_ound() != 780i64 { return 33i32 }                /* 2676 + 780 = 3456 */
     if mr64_oundmul() != 780i64 { return 34i32 }             /* every undecided class contains a MUL */
+    /* [D] AND THE WIDTH-64 SWEEP KEEPS THE SAME CONTRACT: 0 matches => 0 claims.  This
+     * is the arm that caught the stale witness surviving ACROSS sweeps (the width-8 NEG
+     * run's sid outliving the width-64 rot run that found nothing). */
+    if mr64_ows() != (0i64 - 1i64) { return 35i32 }
+    if mr64_owk() != (0i64 - 1i64) { return 36i32 }
     return 99i32
 }

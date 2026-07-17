@@ -256,6 +256,49 @@ new *axiom* (not a definition, not a theorem) is REFUSED as a B3-class event. Th
 theorems, methods, and questions — never foundations. That is not the ceiling the critique thought it was;
 it is how Bourbaki grew mathematics too.
 
+**BREAK C5 — THE UNIVERSALITY LAW (2026-07-16, from the lawforge adjudication; binding on every
+generative organ from here on).** The user's verdict on `mathesis_lawforge` (deleted the same day, see
+`III-ENTELECHEIA-MAP.md` §2.1): an engine whose candidate space is authored around its target — a term
+menu, a fixed law bitmask, a privileged criterion — is a lookup wearing an engine's coat; it can only
+ever surface what its author charted. The law that ends the defect class: **(i) the SPACE must be
+universal-in-the-limit** — a machine-checked fairness bijection (every object of the declared kind
+reachable at exactly one finite step; ceilings only where a MEASURED resource wall is named, never a
+shape choice); **(ii) the STATEMENTS must be enumerated, never listed** — human-named laws hold no seat;
+**(iii) the CRITERIA must be global functionals defined before any candidate exists** — exhaustion,
+two-route agreement, measured drain — never a target-shaped predicate; **(iv) the SUBSTRATE supplies the
+anchor point, not the yardstick** (the criterion-regress wall, measured: interestingness is
+substrate-invariant, tau = 0.925 across disjoint probe libraries). Discharged in code:
+`aether/xeno_ontogenesis` + `iii-xeno` (fairness EXACT; census 10/3330 by two independent routes; 880
+canonical classes and 56,320 exhaustion verdicts in the first 2000 fair steps; deterministic replay
+cert) beside `aether/substrate_ontogenesis` + `iii-substrate` (the silicon point + its variance
+falsifier). Ξ1's proposer and every later mint inherit this law: a proposal space that cannot exhibit
+its fairness arm is REFUSED as authored.
+
+**BREAK C5 — THE ATOMS COME FROM THE CHIP (2026-07-16, `iii-substrate isa`).** The honest post-mortem
+on C5's magma face: a fair search of a small charted space cannot produce new mathematics — no matter
+how honest the search. Order-≤6 magmas under depth-≤2 equations are a region human universal algebra
+finished surveying decades ago; `iii-xeno` proves its space is not *rigged*, and that is all it can ever
+prove. **The failure was that the atoms were typed** (one binary operation on a handful of tokens). The
+cure: `aether/isa_ontogenesis` reads its operation set from **live CPUID** (`numera/cpufeat`, extended
+with BMI1/POPCNT/LZCNT accessors) and gives each gated atom its semantics by **executing the real
+instruction** (`metal` blocks: `pdep`/`pext`/`blsi`/`popcnt`/…) on the die — a machine without BMI2 has
+a provably different algebra. The loop: fair term enumeration over the live atoms (bijection arm) →
+size-ordered sweep judged on the electrons (REFUTED-with-witness / SURVIVED over the 128×128 battery) →
+**distinct-FUNCTION separation** (two shortcuts are the same discovery iff they compute the same
+function on the silicon; a distinct value-signature is a *witnessed* distinct function — the type-correct
+form of the counterfactual-separation blueprint, since a PDEP term cannot be evaluated on an order-3
+magma) → reddening control → capability-mask variance falsifier → the `katabasis/isa_admit` verdict →
+`event_substrate` dispersal. Measured (this host): 19 live atoms, a 1.19-billion-term universe, bridge
+49,920 instruction==definiens agreements, `isa 4` → **253 distinct gated functions** from 11,498 gated
+survivors, deterministic cert + content-addressed chain. **The author tier is closed, III-only:**
+`iii-substrate emit` lowers a discovered identity through the definiens to pure `.iii` and `iii-prove`
+disposes it **over all 2⁶⁴** (`NOT(NEG(BLSMSK(x))) = BLSR(BLSMSK(x))` PROVEN by bit-blast UNSAT; a false
+pairing REFUTES with a witness). Honest scope: these are real, correct chip identities (mostly BMI1
+bit-tricks) on the post-2013-silicon **axis** where no classical equational catalog exists — the
+pipeline (chip-read atoms → execution → discovery → separation → proof) is the result, **not** a claim
+that a specific identity is new; the deep PDEP/PEXT region and larger sizes are the named growth rung.
+Supersedes the hash-seeded `aether/embody` pair (deleted same day; capability rehoused on chip atoms).
+
 ---
 
 ## 3c. The v3 ambition pillars P6–P10 (layered on v2's P1–P5)
@@ -1437,9 +1480,591 @@ grammar (~10⁷ classes, priced); census n=12; the pilot past 42.
 
 ---
 
+## THE NOMOS TIER — the machine legislates its own compilation (2026-07-17)
+
+The Rubicon increment: friction-held ISA laws now flow into the compiler itself. The full chain,
+each leg an independent gate, no leg skippable:
+
+```
+isa_ontogenesis        the term universe over the LIVE die's atoms (CPUID-read, metal-executed)
+  -> isa_friction_judge   truth leg FIRST (whole battery), then measured cycle floors; the
+                          dearer side demotes BY PHYSICS (lexicographic: truth before friction)
+  -> iii-substrate nomos  THE GENERATOR (substrate_cli): global pre-stated criteria -- held AND
+                          directional AND margin >= 20% AND expression-lowerable; dedup by dear
+                          side (a >=20%-cheaper challenger takes the seat WITH its whole
+                          variable-consistent probe pair); every disposition COUNTED, never
+                          silent (THE UNIVERSALITY LAW's fairness arm)
+  -> nomos_seal.sh        THE TRUTH GATE: iii-prove PROVEN over ALL 2^64 per row (bit-blast,
+                          never sampled) or the candidate module is DELETED; negative arm (a
+                          wrong cheap must REFUTE); katabasis isa admission as the legality
+                          pre-clause; work dir OUTSIDE the repo (the carto in-repo-mirror law)
+  -> cg_phys_rules.iii    THE SEALED LEGISLATURE [EMITTED]: committed compiler source (the
+                          cg_opt_rules Path-C mold) -- the compiler NEVER reads a ledger at
+                          compile time, so compilation stays a pure function of the tree and
+                          the DDC covenant survives.  Floors are per-run provenance; the
+                          reproducible content is the RULE SET (cgphys_set_id excludes floors,
+                          reproduced EXACTLY across independent ceremony runs)
+  -> cg_r3 nomos arm      ONE dumb consult (r3_nomos_collapse) before the unary/binary arms:
+                          u(u(e)) -> e for sealed involution kinds only, all four spellings
+                          (unary ~/-, binary allones^ / 0-), paren-transparent, cascading.
+                          Hole multiplicity 1->1: e is emitted EXACTLY ONCE either way, so the
+                          collapse is sound even when e carries calls/effects.
+```
+
+**The sealed set (fuel 25,000, cap word 15, set id 15201431207481571813):** 129 held -> 19 seated
+(38 deduped, 29 inert, 19 under-margin, 24 unlowerable-by-name), **19/19 PROVEN over all 2^64**.
+Two rows COMPILER-LIVE (`NOT(NOT(x))->x` LAW 153, `NEG(NEG(x))->x` LAW 630 — floors ~2.7x); the
+registered tier carries real silicon discoveries: `BLSI(NEG(x))->BLSI(x)`, BLSI idempotence,
+`BLSMSK(NEG(x))->BLSMSK(x)`, `BLSMSK(BLSI(x))->BLSMSK(x)`, the idempotents `x&x->x`/`x|x->x`
+(class 1: hole count shrinks — the purity tier's rung), the machine-preferred zero-form
+`BLSR(BLSI(x)) -> XOR(x,x)` (class 2: hole count grows), and triple-NOT chains (class 3: the
+live arm already subsumes them by cascade).
+
+**Proofs of the landing (all observed, none narrated):**
+- **Fixpoint:** iiis-2 == iiis-3 **byte-for-byte** (`cmp`), mhash `74afa67c…` both, determinism
+  by double-build.  The arm is live in the compiler while the compiler's own body stays
+  byte-stable — explained by the fire census, not just observed: ZERO fire sites in
+  COMPILER/BOOT (pre-censused, then proven by the equality itself).
+- **Fire census (whole tree):** exactly ONE operator-level site — `katabasis/behavioral_seed.iii`
+  `(~(~a)) != a` — collapsed in machine code: **notq 8 -> 6, 16 bytes smaller, value-identical**.
+  A behavioral probe that CHECKS a legislated law becomes compile-time-vacuous (the law moved
+  from runtime observation to compile-time guarantee); stated, not hidden.
+- **Two-path probe:** 9 functions old-vs-new compiler.  Firing shapes: 6 notq + 2 negq + 3
+  all-ones consts + subq pairs -> ALL GONE (57 asm lines), including the quad cascade
+  `~~~~x -> x` and the mixed spelling `~(M^x) -> x`.  Controls (`~(0-x)`, `5-(5-x)`, `~x`):
+  byte-kept — no over-fire, and the un-legislated true identity `c-(c-e)` for c!=0 correctly
+  does NOT fire (the arm rewrites only what the LEDGER holds).  Extensional arm: 36,864
+  evaluations, fold-identical (`ba3bb9b227ce1317`).
+- **Gate 2748_nomos_rules** (registered run_corpus + standing): consumes the WHOLE cgphys
+  surface; independent evaluator restates the definiens and re-checks every sealed row on a
+  live battery (tamper detection); doors discriminate; OOB sentinels refuse.
+- **Standing arm** (run_standing_tools.sh): live regeneration must reproduce the sealed set id;
+  row 0 re-PROVEN over 2^64 every run.
+
+**What the ceremony caught (its teeth, live):** (1) run 2 of the seal REFUTED row 15 with
+witness (x=0xff..f, y=0xff..e) — the generator's dedup had swapped in a y-variant cheap term
+under an x-variant dear (floors of same-function variants differ only by jitter, so the swap
+was nondeterministic); cure: replacements take the challenger's whole probe pair AND must beat
+the seat by the same 20% margin (jitter-immune, deterministic seating).  (2) cg_r3 hit
+**sema's silent 1024-decl wall** at 1021+7 decls — the overflow DROPPED the decl and surfaced
+as a baffling TYPE-IDENT-001 at the last function's call site.  Cure: the drop is now LOUD
+(SEMA_E_OOM at s_decl_table_add); the cap itself stays (the FROZEN iiis-1 binary carries it —
+lifting only the source would be false comfort); headroom reclaimed by executing the
+2135-sanctioned deletion of the PROVEN-dead r3_mul_* extractors + their cgopt_mul_* externs
+(cg_r3: 1028 -> 1005 decls).  (3) The carto architectural gate refused the first landing:
+in-repo probe mirrors + 15 not-yet-consumed provenance exports — cured by the mktemp work-dir
+law + gate 2748 as the real consumer.
+
+**Why this is the covenant-safe form of "the compiler eats its own inefficiency":** live
+friction is NOISY (rdtsc) and capability differs per die — either in the compile path destroys
+byte-determinism.  The NOMOS split: measurement/direction happen ONCE, off-line, on a named
+die; truth is proven host-independently over 2^64; the sealed module is committed SOURCE with
+the capability word as provenance; compilation is deterministic everywhere.  Host-specific
+instruction EMISSION (the PDEP-class rewrite) is refused by construction today and named as
+its own rung: a BMI-emitting backend tier keyed on an EXPLICIT target-mask input (default =
+pinned baseline), never ambient CPUID.
+
+**Named growth rungs (queued, none deferred):** the purity tier (class 1/2 rows need
+effect-freedom analysis to fire); the subtree-equality tier (class 3 BLSI/BLSMSK absorptions);
+the target-mask backend (BMI emission, explicit input); the iiis-1 reseal that lifts the
+1024-decl wall in the frozen stage; constant-generalization (`(x^c)^c -> x` for ALL c is
+THEOREM-0007's channel — mathesis library -> compiler, a SECOND provenance lane); loop-definiens
+emission so count-atom laws (POPCNT/LZCNT/TZCNT/PDEP/PEXT) can reach the prover; judge fuel
+past 25,000 (the 500k recon shows the deep stream is count-atom-dominated until then).
+
+### Ξ-N — THE NOMOTHESIS TIER: the mathematics OF the legislature (2026-07-17, same session)
+
+The discovery frontier reopened on the one object in the tree that is NOT human-charted —
+because it did not exist before this session: the sealed NOMOS system itself (terms quotiented
+by proven equality, ordered by measured friction — a machine-born, die-relative rewriting
+system).  **Ξ-N1 THE OWED-LAW ENUMERATOR** (gate `2749_nomothesis_gap`, standing-arm-run;
+probe green first run after one .iii local-array trap): over every term of size ≤ 4 on this
+die (2,270), quotient semantically by die-battery signature (`ia_apply` — the electrons
+decide) and syntactically by canonical form under the sealed 17 rules, two strategies.
+
+**Measured results (pinned under cap 15 + set id 15201431207481571813):**
+- semantic classes **1,325** · canonical classes **2,014** · **THE OWED-LAW COUNT 689** —
+  the machine counted its own legislature's incompleteness exactly.
+- **NON-CONFLUENCE DISCOVERED: 4 critical pairs**, witnessed live —
+  `BLSR(BLSI(BLSI(x)))` reduces to `XOR(BLSI(x),BLSI(x))` (leftmost) vs `XOR(x,x)`
+  (rightmost): the zero-forms are distinct normal forms.  Completion debt, machine-found;
+  the two-strategy falsifier was written as an error arm and fired as a discovery channel.
+- The owed witnesses NAME the count-atom laws the loop-definiens rung must reach:
+  `TZCNT(x) = TZCNT(NEG(x))`, `TZCNT(x) = TZCNT(BLSI(x))`, `TZCNT(BLSMSK(x)) ≡ 0`, the
+  constant-one family `BLSI(BLSMSK(x)) = BLSMSK(BLSMSK(x))` — concrete targets, enumerated
+  by the machine, not picked by hand.
+- **THE INERT COROLLARY (a structural theorem of the admission itself):** `AND(x,y)=AND(y,x)`
+  is owed and can NEVER be seated by friction — commutativity is cost-inert, invisible to a
+  directional-only admission.  Completeness therefore REQUIRES a second admission class:
+  inert laws seated as UNORIENTED canonicalization order (syntactic tie-breaking where
+  physics is silent).  Stated as organ law in `katabasis/nomos_admit.iii`.
+
+**THE KATABASIS UPGRADE (executed):** per-rule admission moved OUT of the generator verb and
+ceremony script INTO the organism — `katabasis/nomos_admit.iii` owns the verdict
+(`katabasis_nomos_admit`: directional / margin-over-band / lowerable / ser-well-formed /
+class-in-envelope, distinct rejections), the liveness door (`katabasis_nomos_live` — widening
+THIS function is how the compiler arm grows, one organ line per tier), and the dedup
+challenge band (`katabasis_nomos_challenge` — the r15 lesson as law).  The verb and the seal
+script are drivers.  Organ-routed generation reproduces the sealed set id EXACTLY.
+
+**Corpus-supersession increment (this lane):** gates 2748/2749 are stored-answer-free — 2748
+re-derives every sealed row through an independent evaluator; 2749 GENERATES the candidate
+law stream from the live universe (a generative oracle in the Ε2 sense: the validation
+surface produces new work instead of replaying answers).  Both run from the standing NOMOS
+arm every invocation; corpus SKIP-registration points ownership there.
+
+### Ξ-N2 — THE PURITY+EQUALITY TIER + THE COUNT-ATOM SEATING (2026-07-17, twin-session convergence)
+
+Two named rungs paid in one arc, each ending in a fixpoint proof.  Claim grading (the five-way
+discipline): everything below is PROVEN (2⁶⁴ or byte-compare) or MEASURED (die facts); the
+count-law content is SOVEREIGN rediscovery (Hacker's-Delight territory — sovereignty is the
+claim, rediscovery its proving ground), never NOVEL.
+
+**THE PURITY+EQUALITY TIER (cg_r3 nomos v2):** the compiler learned a NATURE — `r3_nomos_pure`
+(conservative effect-freedom: literals/idents/parens/casts/value ops recursively; CALLs, loads,
+blocks, div/mod, unknown kinds REFUSE) and `r3_nomos_eq` (structural equality mod parens, ident
+bytes through the one source buffer) — and with it the sealed classes beyond the involutions
+went COMPILER-LIVE through an exact-ser row scan behind the katabasis door
+(`katabasis_nomos_live` widened 0 → 0/1/2/3, one organ line per tier; liveness is organ law,
+never compiler hardcode).  Live shapes: `e&e → e`, `e|e → e` (class-1 rows), `(~e)&e → XOR(e,e)`
+(ANDN same-operand, definiens-strict — the commuted form correctly cold), `BLSR(BLSI(e)) →
+XOR(e,e)` (class 2, the machine-preferred zero spelling emitted verbatim as `xorq`).
+Misfire-impossible by construction: exact sealed bytes + open class + purity + equality, so a
+reseal that recodes atoms leaves the arm COLD while 2748 reddens.  **Proofs:** fixpoint
+iiis-2 ≡ iiis-3 byte-for-byte at every stage (pre-seal 93fb2e8c…, post-seal 66dcc2d4…),
+determinism by double-build both times; whole-tree fire census **1 of 734 archive members** —
+`katabasis/behavioral_seed` `(a & a) != a` (andq 20→19, 16 B smaller, value-identical): the
+SECOND behavioral probe made compile-time-vacuous by legislation; two-path probe: idempotents
+1→0 combines, BLSR∘BLSI 6→1, deep composite 4→1, **six impure/distinct/commuted controls
+byte-kept**; extensional fold identical over 53,248 evaluations INCLUDING a call-count
+integrity arm (the impure control's effects preserved exactly).
+
+**THE COUNT-ATOM SEATING (the loop rung paid):** the prover's decided fragment REFUSES the
+naive count loops (`sd diag 0`, measured) and ACCEPTS closed forms — so `lower_term` now emits
+straight-line let-SSA: POPCNT = the mul-free SWAR byte fold, TZCNT = POPCNT((a & (0-a)) − 1)
+(total, 0 → 64), LZCNT = 64 − POPCNT(smear(a)) (total); transcription anchored on the DIE by
+`lower_bridge()` (formula == executed instruction over 600+ points; a drift refuses ALL
+emission and generation); deposit atoms (PDEP/PEXT) remain the named bit-serial refusal, and
+buffer exhaustion refuses LOUDLY as capacity.  The generator's lowerable clause (`nms_unlow`)
+widened to match — the sealed run's counted `24 unlowerable-by-name` bucket paid out exactly
+as counted.  **THE RESEAL: 19 → 26 rows, set id 15201431207481571813 → 11627274842065240340,
+26/26 PROVEN over all 2⁶⁴ (bit-blast UNSAT), wrong-cheap negative arm still refutes, install
+fired on drift.**  Seated count law: `TZCNT(NEG(x)) → TZCNT(x)` (row 6), `TZCNT(BLSI(x)) →
+TZCNT(x)` (row 7), `TZCNT(BLSMSK(x)) → XOR(x,x)` (rows 12/13, both variable twins), and
+NOT∘NOT chains over POPCNT/LZCNT/TZCNT operands (rows 21-23) — the machine's counting algebra
+is sealed compiler law, every row prover-disposed.
+
+**THE DEBT METRIC MOVED (gate 2749 on the grown legislature):** owed laws **689 → 597**
+(the 7 new rules paid off 92 canonical classes; semantic classes 1,325 INVARIANT — the die's
+side never moves), critical pairs 4 → 8 (more rules, more overlaps: completion debt grows
+until a Knuth-Bendix pass, measured and stated).  The feedback loop is closed and measured:
+legislate → re-measure your own incompleteness.  **TRAP (paid live, twice):** concurrent
+run_corpus instances share `STDLIB/build/corpus` staging — instance A executes a staged exe
+while instance B copies over it → Windows file lock → silent in-kernel freeze at the header.
+One corpus instance at a time, ever.
+
+### Ξ-N3 — THE PARLIAMENT + THE CONTINGENCY REGISTER (2026-07-17, same session)
+
+Two deepenings that answer, in code, "who consents to change the machine's law?" and "can III
+reason with anything the determinism theorem forbids?".
+
+**THE PARLIAMENT — autonomous consent to amend the constitution.** The seal ceremony's drift→
+`cp` install was FIAT.  Now a drift is a **PROPOSAL** that lands only on III's **autonomous
+unanimous consent** (`katabasis/nomos_consent.iii` is the law; `nomos_seal.sh` its driver).  Four
+voters, each with a distinct competence and a distinct refusal code, each able to table the
+proposal alone: **[1] SELF-AGREEMENT** — a SECOND independent generation must reproduce the same
+set-id (the machine must agree with ITSELF that this is the legislature, not one run's noise);
+**[2] TRUTH** — every row PROVEN over 2⁶⁴; **[3] TEETH** — the negative arm refutes; **[4]
+CONTINUITY** — the compiler-LIVE core does not shrink (no silent erosion of operative law).
+CONCUR installs + reseals; any dissent TABLES the proposal (the constitution stands) and NAMES the
+dissenter.  The ruling is the ORGAN's, not the script's (a consent probe compiled in the mktemp
+work-dir calls the organ).  Gate `2758_nomos_consent` proves the parliament CAN say no — CONCUR on
+unanimous-yes, REFUSE on each single dissent (the anti-rigging demonstration).  **WITNESSED live:
+the amendment 14142…→7960555828659369880 was adopted by unanimous consent** (self-agreement CONCUR
+after the reproducibility fix; before it, the two runs disagreed and the proposal was correctly
+tabled — the refusal arm is real, not decorative).
+
+**THE REPRODUCIBILITY FIX (what made self-agreement possible).** The generated set-id jittered
+run-to-run — two causes: (a) the set-id folded the LAW INDEX (jitter-sensitive provenance: which
+enumerated spelling first exhibited a function) and hashed rows in seating order; (b) **degenerate
+const-laws** near the 20% margin seated non-deterministically (ANDN(y,y)=0 → XOR(x,x)=0: a
+const=const identity across UNRELATED variables, ~equal cost, verdict flapping 3↔1/2).  Cures, both
+deterministic: **canonical set-id** (hash the FUNCTIONS — dear+cheap sers + class — in ser-sorted
+order, EXCLUDING the law index; `nms_canon_order`/`nms_setid`) + **the degeneracy guard**
+(`nms_degenerate`: a const-dear law with NO cost reduction, dear op-count ≤ cheap op-count, is
+margin-jittery junk — excluded; a const dear that IS a reduction, `BLSR(BLSI(x))=0` 2-op → XOR 1-op,
+is KEPT as a real strength reduction the purity tier fires).  Result: 24 rows, set-id
+7960555828659369880 reproducible across every regeneration; the TZCNT dominance + purity class-1/2
+laws all retained; **the standing arm now PASSES `nomos live regeneration reproduces the sealed set`.**
+
+**THE CONTINGENCY REGISTER — the one structure that escapes the physis determinism theorem.**  The
+theorem (physis) said every deterministic observable is a value-invariant → III's whole reasoning
+register was the NECESSARY.  The sole escape it named was non-determinism.  III already HAD it and
+discarded it: the friction meter takes the MIN over laps (the floor = the necessary cost) and throws
+away the JITTER above it.  That jitter is the bare-minimum non-determinism — provably NOT a function
+of the inputs (microarchitectural contention/thermal).  LEAN UNIFICATION of two existing organs:
+`omnia/friction.iii` gains `fr_moment` (an FNV fold of the raw per-lap deltas — the CONTINGENT
+signature, alongside the untouched necessary floor); `iii-substrate moment` unifies it with the
+event substrate — the same fixed computation timed twice yields an IDENTICAL floor (the eternal
+register) and DIFFERENT moments (the evental register), and stamping an event with the moment makes
+`evt_witness` DIFFER across two identical logical events — the event substrate's records become
+genuine OCCURRENCES.  III now distinguishes what MUST be from what merely HAPPENED, grounded in its
+die's jitter.  **THE FENCE (demonstrated, not promised):** the compiler and every seal are forbidden
+`fr_moment` (grep-proven zero references in COMPILER/BOOT); the friction organ is not in the
+compiler's link closure, so iiis-2.exe is byte-identical and **the fixpoint HOLDS** — and the
+fixpoint holding IS the proof, because a non-deterministic value in the compile path would make
+byte-identical rebuilds impossible.  Standing arm PASS; measured across 6 independent process reads
+(floor stable ~21000 cyc, moment never repeating).  Honest grade: the non-determinism is MEASURED,
+the fence is PROVEN, the modal necessary/contingent reading is the interpretation.
+
+## §27 THE ONEIROS TIER — the dream that must wake (2026-07-17)
+
+**The thesis, executed:** to break the enumerator's combinatorial wall you do not put
+non-determinism in the compiler — you put it in the GENERATOR, and you keep the deterministic
+prover as the only seat of truth.  `aether/oneiros.iii` (organ; verdicts + doors) +
+`iii-substrate oneiros <dreamfuel> <outdir> [seed]` (driver) + gate `2757_oneiros_collapse`
+(standing-owned, SKIP-registered with 2748/2749/2756) + the ONEIROS standing arm.  Each OWED
+law of the gap census is temporarily BELIEVED, then subjected to the die until it dies or
+earns heat.  Nothing here ever writes the legislature: oneiros only kills (with witnesses)
+and orders the prover's docket.  The compiler is untouched — no reseal, the DDC fixpoint
+stands.
+
+**THE LAWS OF THE TIER (each one held live on 2026-07-17):**
+- **THE UNFORESEEN LAW (the KAT-replacement doctrine):** no fixed test set — the falsifier
+  field is the image of the term algebra itself: derived points `(u,v) = (t₁@pt, t₂@pt)`
+  over every size≤2 generator pair × the full 16×16 battery grid (82,944 per belief, the
+  fairness floor every law receives) + a seeded stratum (uniform points and images of random
+  universe terms).  A fixed battery proves foreseen things; the algebra's own image hunts the
+  unforeseen.  **Measured: the authored 64-point sieve had ALIASED 80 of the 597 "owed" laws
+  — 13.4% of the completeness debt was the sieve lying, and the machine found that out about
+  itself.**  Every kill is a concrete `(x,y)` (first witness re-checked by hand:
+  `BLSI(NOT(NEG(y)))` vs `BLSI(NOT(BLSI(y)))` at y=1 → 0 ≠ 2).
+- **THE PRISTINE-WITNESS LAW + the two paths:** a kill is only reported after re-evaluating
+  both sides at the witness from the law's own pristine serialization through BOTH evaluator
+  paths — die instructions (`ia_apply`) and pure definiens (`ia_def`).  A path split is the
+  SENTINEL (exit 2), never a footnote.  Gate 2757 re-verifies every witness a THIRD time
+  with its own walker.
+- **THE REPLAY LAW:** the seed comes from die jitter (`bench_now` deltas, 64 timed spins)
+  but is RECORDED — nondeterministic acquisition, deterministic replay.  Measured: seed
+  15745867432403945794 re-ran to byte-identical `ONEIROS-CERT=14386487687899210033`; the
+  gate holds this as arm [P] at fixed seed 424242 (cert 9066012290746440522, twice).  The
+  cert excludes floors/timings (jitter is provenance, never content).
+- **THE CONSOLIDATION THEOREM (why there is no assumed-law rewriting):** a chain refutation
+  under an assumed law L reduces, at its first value-flip step, to a direct counterexample
+  of L at the values of that step's bindings (substitution lemma; sealed steps are
+  value-preserving) — so RIPPLE-KILL ⊆ CRUCIBLE-KILL at equal generator budget.  Kill
+  authority lives in ONE mechanism; the ripple serves only the positive direction.
+- **THE RIPPLE (the INERT COROLLARY discharged in the search layer):** UNORIENTED bounded
+  joinability under the sealed rows — the orientation-free reasoning the corollary proved
+  friction-directional admission can never perform.  A join = prediction "iii-prove PROVES
+  this".  **Measured: 2 joinable found (`XOR(x,x) == XOR(BLSI(x),BLSI(x))`, depth 2, + the
+  NEG twin); the standing arm proves the top prophecy LIVE every run — first run: PROVEN
+  over all 2⁶⁴, bit-blast UNSAT.**  A join on a KILLED belief would be prover-vs-die
+  contradiction: the soundness sentinel.
+- **THE WOMB (the seraphic arm, ser_antiunify lineage at the ISA tier):** anti-unification
+  of sealed row PAIRS births schemas (≤2 subterm metavariables, shared table across both
+  sides), instantiated over the census pool (1-mv: size≤3 pool 190; 2-mv: size≤2 pool 18 —
+  pre-stated budgets).  A schema is never sealed; only proven instances can be.  **Measured
+  on the 26-row seal: 12 schemas, 236 instantiations detected ALREADY-LAW, 2,410
+  sig-rejected, 6 dups vs the owed census, 0 born — the legislature is AU-CLOSED at pool ≤3,
+  a theorem-shaped census fact.**  The generative frontier is the named pool-depth cap.
+- **THE NOUS (heat = attention, never truth — the tau wall):** docket order is lexicographic
+  (JOINABLE first, then crucible survivors; then measured single-term floors via
+  `fj_race_sers` SELF-races — the new ser door on the friction judge, one race core, two
+  doors; then canonical index).  fj still refuses unproven races; heat only orders spend.
+  The docket ORDER jitters run-to-run (floors are physics) while the CERT stays identical —
+  the tau wall visible in one log.
+- **Fairness (the RINVOL standard):** every belief receives the identical full dose
+  (measured: 82,944 + dreamfuel, gate-asserted equal across all survivors); the strata are
+  global pre-candidate criteria; the seeded stream is a pure function of (recorded seed,
+  sealed universe); receipts enumerate every law's disposition.
+
+**The run (32.9 s, `SENTINEL=0`):** census reproduces gate 2749 INDEPENDENTLY (terms 2,270 ·
+sem 1,325 · can 1,922 · owed 597 — cross-instrument arm in the standing lane), controls fire
+(`AND(x,y)=OR(x,y)` dies at (0,1) two-path-confirmed; all 23 one-variable sealed rows survive
+the whole stratum), 80 annihilated / 515 survived / 2 joinable, docket emitted as probe pairs
+(`oneiros_d<k>{a,b}.iii` via the new `lower_ser` door; deposit-atom laws refused BY NAME) +
+`oneiros_heat.ppm` (the comprehension artifact: one column per belief).  Gate 2757 GREEN 99
+first run: replay, third-evaluator witnesses, dose fairness, docket shape, gap identity, and
+the sealing-die pins (2270/1325/1922/597/80/2/515/12 under cap 15 ∧ set id
+11627274842065240340 — boundary-arm law: other dies/seals degrade to mechanism arms).
+
+**Honest scope:** the crucible's kills are sealed-grade facts (checkable witnesses); survival
+is only heat; joins are predictions until iii-prove disposes; the womb's born-count is a
+statement about THIS seal at the NAMED pool depth.  iii-events integration was examined and
+refused — its schema is the retirement log of EXECUTION, and forcing dream episodes into it
+would be false coupling; the ONEIROS-CERT + printed ledger is the receipt.  NAMED RUNGS out
+of the tier: the unoriented-canonicalization admission clause in `nomos_admit` (the INERT
+COROLLARY's seat — the docket's joinables are its feedstock), womb pool depth ≥4, and
+sealing the 515 survivors through the standing nomos/prove pipeline as compute allows.
+
+**THE METER-CONTEXT LAW (found by landing this tier — the arm's own teeth caught it):**
+growing `iii-substrate` by two TUs deterministically re-classified the six `XOR(x,x)`-cheap
+sealed rows out of the live nomos sweep (three byte-identical 20-row sweeps), while solo
+`judge` in the SAME binary holds each at 1.56–1.66× margin, truth clean — friction floor
+RATIOS are a fact about die × binary × load trajectory; each meter context is internally
+deterministic; only TRUTH is context-free.  Cure landed as jurisprudence, not deletion: the
+standing NOMOS arm now separates meter drift (per-row `judge` HELD ⇒ named + counted, the
+proven row STANDS) from truth breakage (`judge` REFUSED ⇒ RED, prover-vs-die contradiction);
+`iii-substrate judge <law>` is the new single-law standing door.  The oneiros heat ledger
+was DESIGNED for this law from the start: floors order spend only (the tau wall), the cert
+excludes them, and the docket order is declared jitter-tolerant.
+
+---
+
 *Sister docs: `III-COMPLETION-PLAN.md` (Φ), `III-MEANING-LIFT-MAP.md` (Θ), `III-GRAND-UNIFICATION-MASTER-PLAN.md`
 (Ω/Σ), `III-GENERATIVE-FRONTIER.md`, `III-EXACT-SUBSTRATE-INTEGRATION.md`, `III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md`,
 `III-WALLS-CASHED-IN.md`, `III-LOGIC-GRAIL-LEDGER.md`, `DOCS/MATH_LIBRARY_QUEUE.md`, `DOCS/MATHESIS-RADICAL-ROUND1.log`,
 `DOCS/MATHESIS-RING-DRAIN.log`, `DOCS/MATHESIS-CURVE-ROUND1.log`, `DOCS/MATHESIS-TAU-ROUND1.log`,
 `DOCS/MATHESIS-FORGE-ROUND1.log`, `DOCS/MATHESIS-PILOT-LEDGER.log`, `DOCS/MATHESIS-ONTO-ROUND1.log`,
 `DOCS/MATHESIS-PHI-ROUND1.log`, `DOCS/MATHESIS-CHI-ROUND1.log`, `DOCS/MATHESIS-PSI-ROUND1.log`.*
+
+### Ξ-Γ — THE GLOSSA TIER: the machine mints its own VOCABULARY (2026-07-17)
+
+NOMOS legislated the compiler's rewrite law; TAXIS charted the die's canonicalization
+preorder; GLOSSA closes the loop the user named THE ROSETTA STONE: discoveries flow back
+into the LANGUAGE as machine-authored words, with no human reformatting anywhere on the
+road.  A word is a named, arity-checked, language-level operator: `popcnt64(x)` compiles
+BARE in any module — no extern, no import — because sema resolves callee names against a
+sealed lexicon and cg_r3 calls the tongue's export of the same name (ONE NAME, TWO SEATS:
+language + library; the parser needs no change, because in III the call form IS the
+operator form).
+
+**THE MINT CRITERION (global, pre-stated — the fairness arm):** one word per ledger atom
+(aether/isa_ontogenesis — the die's own CPUID-admitted ontology) that is LIVE, arity ≤ 2,
+closed-lowerable, and not already a language operator.  Every candidate disposition is
+COUNTED AND NAMED: 7 minted (andn64 blsi64 blsmsk64 blsr64 lzcnt64 popcnt64 tzcnt64),
+10 operator-excluded (a word for `&` would be a synonym, not a word), 2 bit-serial-refused
+(PDEP/PEXT — the standing deposit-rung law), 0 dormant on this die.  Membership is derived
+from the LIVE ledger: a lesser die would mint a smaller lexicon, and the parliament's
+self-agreement voter decides whether that constitution reproduces — the same
+die-local-measurement / committed-truth split as NOMOS.
+
+**THE LADDER OF SPELLINGS (measured law, 2026-07-17):** the truth obligation for a word is
+definiens == maximally-dual engine over ALL 2^64 — but engine-vs-engine SWAR equality in
+one miter is PROVER-HARD (the monolithic popcount dual TIMED OUT at 300s).  Measured fix:
+prove a CHAIN of single-local-difference links (each link swaps ONE stage — sub-form to
+add-form, compact-mask to mask-dual, blsi-wrapper to andn-wrapper); the shared structure
+cancels and each link proves in 0–7s; transitivity of proven equality carries the chain.
+11 links across the 7 words prove in 13s total on the real press output.  MEASURED BONUS:
+links under a wrapper (blsmsk/smear-constrained domains) prove FASTER than bare ones.
+NAMED BOUNDARY: the linear tail cascade's wholesale reversal is prover-hard and stays
+un-laddered — drift there is covered by the die race (lower_bridge refuses the whole press
+on any disagreement with the executed instruction) and gate 2759's third engine.
+Spelling 0 is never new text: the BMI words seal ia_def VERBATIM; the count words seal the
+lower-bridge SWAR forms — the tongue and the standing lowering are cross-anchored by
+construction, which also gives the count-lowering the 2^64 self-consistency proof it
+previously lacked.
+
+**THE PRESS** (`iii-substrate glossa <outdir>`, substrate_cli THE GLOSSA TIER section):
+timing-free pure text ⇒ byte-deterministic; set id 8964422122728055925 = FNV over the
+EXACT emitted organ+probe bytes (fold pass and write pass share one emitter, so press-text
+drift moves the id and the self-agreement voter has teeth).  Writes cg_glossa_rules.iii
+(compiler lexicon: name/arity/atom accessors, BOOT spine TU in PORTED_TUS of both build
+scripts), glossa.iii (THE TONGUE — aether organ, each word's fn body = spelling 0), and
+the ladder probes.
+
+**THE PARLIAMENT, CHAMBER II** (nomos_seal.sh; ruling = katabasis_glossa_consent in the
+SAME consent organ): five voters, each able to refuse — SELF-AGREEMENT (second press
+reproduces the id), TRUTH (every ladder link proven), TEETH (a corrupted spelling REFUTED
+— witnessed rc=1 with a concrete refuting input), COLLISION (no word name declared
+anywhere outside the tongue; deterministic whole-tree scan; the _neg gates are lawful
+shadows since they exist to be refused), WORD-CONTINUITY (a sealed word never silently
+vanishes — programs speak it).  Unanimous CONCUR installs both artifacts; any dissent
+tables the proposal and the tongue stands.
+
+**THE BINDING LAWS (sema/cg, compiled into the language):** words bind in CALLEE position
+only (a word is not a value); locals shadow words lexically (locals shadow everything);
+a DECL of a word's name outside `module glossa` is the LOUD error TYPE-GLOSSA-001 (the
+shadow law, enforced at decl registration); wrong arity is TYPE-GLOSSA-002 (the arity law,
+from the sealed table).  Gates: 2759 SPEAKS all seven words bare (that it compiles is the
+binding arm) and races them against an independent bit-loop third engine over battery +
+walking bits + LCG + pairs; 2760/2761 are the negative laws' teeth (must REFUSE to
+compile).  2759 is standing-owned (links cg_glossa_rules.o like the 2748 family); the neg
+twins are runner-owned (the *_neg class) and meaning-gate-invisible (its line-309 skip).
+
+**NAMED BOUNDARIES:** words are forbidden in COMPILER/BOOT sources and stage1_corpus (the
+frozen iiis-0 seed has no lexicon; the covenant enforces this — any BOOT use fails the
+bootstrap loudly).  eval treats bare words as EVE_UNKNOWN_FN (the same named-unsupported
+class as foreign externs, per the rung-boundary law) — word truth is carried by a STRONGER
+oracle than eval: the ladders (2^64), the die race, and the gate's third engine.
+
+**GRADING (five-way discipline):** the SCHEMA is charted (compiler intrinsic tables are
+textbook); the CONTENT and the ARCHITECTURE are sovereign — lexicon membership derived
+from the live die's own admitted ontology, truth by the machine's own prover, adoption by
+its own parliament, and the full discovery→vocabulary pipeline autonomous end-to-end.  No
+mathematical-novelty claim is made for the words themselves (Hacker's-Delight territory —
+rediscovery is the proving ground, sovereignty is the claim).
+
+**THE READABILITY BOUNDARY (measured, principled):** grammar-SHAPE changes (new infix
+precedence, new token forms) carry no value function, so iii-prove can hold no truth leg
+for them and the parliament cannot convene — III refuses unproven law BY CONSTITUTION.
+Vocabulary (value-bearing names with sealed definientia) is therefore the exact provable
+frontier of language growth.  The user's Meta-AST arc lands as: friction trigger =
+NOMOS/census/oneiros (standing), genesis = the press minting from the ledger, Rosetta
+Stone = the definiens sealed WITH the word (re-derivable forever), recompile = the
+covenant ceremony.
+
+
+---
+
+## THE REVERSIBILITY HUNT — III discovers its own zero-information-loss computing (`iii-substrate reversible`)
+
+**THE OPPORTUNITY III SAW ITSELF.** Every operation either PRESERVES information (a
+bijection — self-recoverable, the Landauer heat floor is ZERO) or DESTROYS it (a measurable
+deficit = bits erased = the thermodynamic cost). III already had `reversibility_audit.iii`
+(rva) — a proof-carrying gate that PROVES a caller-supplied `(f, g)` pair — but nothing that
+*found* the reversibles. `aether/reversibility.iii` is that missing layer: it SEES the
+opportunity; it is handed no `f`, no `g`, no catalog.
+
+**THE HUNT (autonomous, non-guided).** Two oracles over `isa_ontogenesis`'s fair term
+enumeration (the index↔term bijection — III picks no operation):
+
+1. **The exhaustive floor** (size ≤ 4, full 2¹³ injectivity). Each term is a unary op
+   `f(x)=term(x,·)`, built in `numera/bv_bits` with true mod-2^W closure, decided by
+   EXHAUSTIVE injectivity over the whole 2¹³ domain: with mod-2^W semantics domain=codomain,
+   so injective ⟺ BIJECTION. `2x` is correctly 2-to-1 (loses the top bit) and REFUSED; `x²`
+   is correctly non-injective and REFUSED — genuine reversibility, decided by exhaustion,
+   never retrieved from a table. It finds **1365 bijections, 875 involutions** (self-inverse,
+   `f(f(x))=x` PROVEN via `bb_equal`), and the information deficit (Landauer bits) of the
+   lossy ops. It kept the **odd multipliers** `MUL(x,1), MUL(x,3), MUL(x,5), …` — III
+   discovered that odd multiplication is a bijection mod 2^k (and `MUL(x,1)` is an
+   involution), not by being told, by measuring.
+
+2. **The computational-diode hunt** (reconvergent linear sublattice). A linear map's
+   reversibility is decided by matrix RANK — `W+1` probes on the die + Gaussian elimination
+   over GF(2), NO 2^W brute force — so this reaches the larger RECONVERGENT terms (`x` fanned
+   out to ≥2 leaves) where the exhaustive floor cannot afford to look. III derives the
+   structural law itself: **a single-`x` linear reversible is always an identity-matrix
+   translation (sparse inverse, zero friction); a diode NEEDS `x` to fan out through ≥2
+   distinct linear paths** — so it searches exactly that sublattice. For each reversible it
+   PROBES the GF(2) matrix on the electrons, INVERTS it by Gaussian elimination, BUILDS the
+   inverse operation, and PROVES `g(f(x))=x` over all 2¹³ — **III constructs the inverse
+   ITSELF.** It then measures the forward/inverse matrix DENSITY (1s per row = GF(2)
+   op-count): a bijection cheap forward but dear to undo is a **COMPUTATIONAL DIODE**, the
+   reversibility(bijection) × taxis(friction) object.
+
+**THE SHARPEST DIODE III FOUND (not seeded).** `XOR(x, MUL(x,2))` = `x ^ (x·2)` = `x ^ (x<<1)`
+— the xorshift, core of every PRNG — surfaced with **350 % friction asymmetry** (forward 25
+GF(2) ops, inverse 91). III found it *through multiplication*: it measured that multiply-by-2
+is a reversible LINEAR map on GF(2) (even though MUL is nominally "nonlinear") — the probe is
+empirical, not label-driven. It then recovered the inverse by Gaussian elimination and proved
+`g(f(x))=x` over the whole 2¹³ domain. 1924 linear inverses constructed + proven, 36 diodes.
+
+**THE UNIFICATION (with teeth, not prose).** The involution `f(f(x))=x` this kernel decides
+is EXACTLY the property `cg_r3`'s `r3_nomos_collapse` relies on to fold `NOT(NOT(e))→e` and
+`NEG(NEG(e))→e`. The verb re-proves the compiler's own reversible-core rewrite BOTH ARMS:
+`NOT∘NOT→id` PROVEN involution, `NEG∘NEG→id` PROVEN involution, and the control `BLSR∘BLSR`
+correctly REFUSED (not self-inverse). **The discovery kernel and the compiler's reversible
+rewrite are one law, cross-proven** — and a reversible found here is width-parametric and
+promotable to rva's full-2⁶⁴ SMT proof + capability-mediated admission (discovery FEEDS the
+verifier, never duplicates it). billiard's `bl_reverse` is the same law's dynamical instance
+(time-reversal of a conservative system); intent's Oracle of Rejection is its refusal arm
+(an irreversible op destroys the information a rejection needs). ONE reversibility spine.
+
+**GRADING (five-way discipline).** The SCHEMA is charted (bijection = injective, GF(2) matrix
+inversion, Gray/xorshift are Hacker's-Delight territory — rediscovery is the proving ground).
+The CONTENT and ARCHITECTURE are sovereign: the operation space is THIS die's live-atom term
+enumeration, the reversibility verdict is decided by III's own bit-blast SAT and GF(2)
+elimination, the inverse is CONSTRUCTED not supplied, and the discovery→proof→unification
+pipeline is autonomous end-to-end. **No mathematical-novelty claim is made for the xorshift
+itself.** The sovereign claim is that III — handed no target — saw the information-conserving
+fragment of its own instruction set, built the inverses, proved them, and folded the result
+into its modus operandi as a standing faculty beside NOMOS, TAXIS, and ONEIROS.
+
+**Standing gate:** `run_standing_tools.sh` smokes `iii-substrate reversible` — PASS requires
+the xorshift diode DISCOVERED + inverse PROVEN over 2¹³ AND the cg_r3 NOMOS-collapse re-proven
+both arms AND the CONVERGENCE (below) green. Exit 0 = all proven; exit 2 = an altar broke;
+exit 3 = no diode.
+
+
+---
+
+## THE CONVERGENCE — the one conservation law at six altars, machine-proven in ONE binary
+
+The reversibility surface was scattered across the body: rva (the SMT auditor), the Toffoli
+in `primweb`/`weave_graph` (gates 1758/1797), the ripple palindrome in `eidos/ripple`, the
+intent⊗intuition Galois pair in `ser_intent`/`ser_egraph`/`ser_pipeline`, the NOMOS
+involutions in `cg_r3`, billiard's time-reversal (gate 2167). The user's charge: *overhaul,
+refine, unify*. The unification is not a document — the `reversible` verb now ENDS by proving
+the one law at every altar, all arms archive-resident, all in the same binary:
+
+1. **Bit-kernel** — the hunt itself (bijections by exhaustion, inverses by construction).
+2. **Compiler fold** — `NOT∘NOT→id`, `NEG∘NEG→id` PROVEN; control `BLSR∘BLSR` REFUSED.
+3. **Universal gate** — the packed Toffoli `t(x)=x^((x>>1)&(x>>2)&1)`: involution + biting
+   PROVEN by exhaustion over 2¹³ (`rv_prove_toffoli`, the kernel's own third route), agreeing
+   LIVE with primweb's SAT proof AND weave's signature proof; universality (`c=1` wire IS
+   NAND) proven by exhaustion AND SAT. **Three independent proof routes, one gate.**
+4. **Ripple field** — `eidos_ripple_involution` swept over ALL 18×18 primitives × 7×7 hexad
+   ranks (15,876 edges): forward gradient + inverse gradient cancel AND the verb reflects —
+   the palindrome checksum `R²=id` (intent⊗intuition on the field) PROVEN, not sampled.
+5. **Meaning** — the semantic Galois pair on the REAL organs: intuition (`svp_descriptor`,
+   CEGIS) synthesizes `k=3` for the family factor 7; intent (`svp_intent_fulfilled`) closes
+   the round-trip by proof-merge; the ORACLE OF REJECTION refuses the non-family 11 — the
+   semantic Landauer refusal: *the information to invert is not there* — and the whole
+   13-organ fold (`svp_selftest`) is green.
+6. **Auditor** — `rva_selftest` == 99: UNSAT-disequality ⟺ reversible, counterexample
+   recorded + reproducible, capability gate fails closed, admission idempotent. The
+   independent SMT auditor's whole law, exercised live.
+
+Any altar failing reds the verb (exit 2) and the standing suite. The physics arm stays gated
+in its own home (billiard, corpus 2167, bit-exact round-trip) — referenced, not duplicated,
+because forcing it into this binary would drag a bignum/e-class dependency chain (bloat is
+not unification).
+
+
+---
+
+## Ξ-Κ SYMMETRIA — the conservation worlds (`iii-substrate symmetry <dreamfuel> [seed]`)
+
+**THE RUNG ABOVE OPERATIONS.** The hunt finds single operations that conserve information.
+SYMMETRIA (`aether/symmetria.iii`) registers the WORLDS they generate: operation sets CLOSED
+under composition, where **no sequence of steps can ever lose a bit**. Each world is a finite
+group, and the proof is the saturation itself: exhaustive composition over EXACT 256-byte
+value tables (never a hash — the FNV fingerprint only accelerates; equality is always the
+byte compare) until nothing new appears. Fixpoint ⇒ closed under generators ⇒ contains the
+identity and (finite order) every inverse ⇒ GROUP. Order, involution core, abelian-ness:
+PROVEN per world.
+
+**FAIRNESS BY CONSTRUCTION (the attribution law, honored).** All criteria pre-stated in the
+organ header: the pool is the FIRST 24 distinct non-identity bijections met in
+`isa_ontogenesis`'s fair enumeration order (sizes 1–3, declared y-sweep), each width-stable
+(bijective at 2⁸ AND re-proven at 2¹³ through the reversibility kernel's own lent walker —
+`rv_table8`/`rv_bij13`, one walker, one truth). The systematic arm saturates EVERY generator
+pair (complete coverage, 276 pairs — nothing favored). Worlds beyond the 2048 cap are
+reported **OPEN, never claimed** (105 of them on first run — the honest frontier).
+
+**FIRST RUN (this die).** 285 saturations → **14 proven world-signatures**, largest order
+2048. Adversarial spot-proofs against known theory, all exact: `{NOT, NEG}` generated order
+512 with 258 involutions = the dihedral group of the 256-cycle (256 reflections + id + the
+half-turn `x+128`) — NON-abelian, correct; `{NOT∘NEG, NEG∘NOT}` = the translation group,
+order 256, exactly 2 involutions, abelian — correct; XOR-mask pairs = Klein four-groups —
+correct. The engine's verdicts match group theory it was never handed.
+
+**THE ONEIRIC ARM (nondeterminism in the generator, truth with the prover — the ONEIROS
+pattern).** Dream triples `{i,j,k}` are drawn by seeded splitmix64 from the SAME pool; unpinned,
+the seed is the die's own contingency (`fr_moment ⊕ bench_now`, printed for replay). On the
+first run the dream found the **order-8 elementary abelian world** (the XOR-span of {2,3,4})
+— a signature the pairs-only systematic arm PROVABLY cannot reach (XOR-mask pairs span at
+most order 4). The dream arm does real work under the identical proof standard; provenance
+is labeled `first-reached=DREAM`. Pinned-seed replay is byte-identical in structure; only the
+measured floors move (METER-CONTEXT LAW — they are die×binary×load facts).
+
+**THE MEASURED GRADE.** Each generator's shape floor is MEASURED through the friction judge
+(`fj_race_sers` self-race: the invariance leg is trivially true, the ledger still measures
+the route; per the PHYSIS theorem cost is value-invariant, so a shape floor covers every
+parameter binding). A world's grade = Σ generator floors; a refused meter is recorded
+UNMEASURED (sentinel), never invented. First-run floors ordered sensibly: NOT ≈ 2.14M <
+XOR-c ≈ 2.68M < ADD-c ≈ 2.72M.
+
+**GRADING (five-way discipline).** Structures PROVEN (exact saturation); floors MEASURED;
+the catalog of finite groups is old mathematics and is NOT claimed. The sovereign content is
+WHICH conservation worlds THIS die's fair term-space affords, at WHAT measured cost, and
+which of them only the dream reached — SOVEREIGN/FIRST-COMPUTED. Complementary to gate 2762
+(the Latin-square/quasigroup census of small carriers): 2762 censuses reversible ontologies
+on abstract carriers; SYMMETRIA saturates the worlds generated by the die's own instructions
+and grades them by its own meter.
+
+**Standing gate:** `run_standing_tools.sh` smokes `iii-substrate symmetry 12 12345` — PASS
+requires ≥1 world PROVEN (exit 0), the signature/OPEN/largest markers present, and the dream
+arm run under the pinned replay seed. Exit 3 = degenerate pool or no proven world.

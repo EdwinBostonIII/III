@@ -1,0 +1,71 @@
+/* STDLIB/iii/katabasis/nomos_admit.iii -- THE NOMOS ADMISSION: the per-rule verdict organ.
+ *
+ * The law deciding what may become COMPILER LAW lives HERE, in katabasis -- the
+ * organism's admission tissue -- not in a CLI verb's if-chain and not in a ceremony
+ * script's bash.  The verb (substrate_cli `nomos`) and the script (nomos_seal.sh)
+ * are DRIVERS: they gather facts and enforce process; the verdict is this organ's.
+ *
+ * TWO-PHASE ADMISSION (the lexicographic shield, law-shaped):
+ *   phase 1 (here, generation time)  ECONOMY + LEGALITY -- the judge's direction is
+ *       given; margin must clear the jitter band by the strict factor; both sides
+ *       must be expression-lowerable (count/deposit atoms are the named loop rung);
+ *       the serialization must be well-formed; the shape class must lie inside the
+ *       sealed envelope.  Distinct rejection codes -- a refusal names itself.
+ *   phase 2 (the sovereign prover)   TRUTH -- iii-prove PROVEN over ALL 2^64 per
+ *       row, enforced by nomos_seal.sh; ONE unproven row deletes the candidate
+ *       module.  A rule is law only behind BOTH phases.
+ *
+ * Verdict: 0 SEAT | 1 NOT-DIRECTIONAL (inert or unraced -- physics gave no arrow)
+ *        | 2 MARGIN-UNDER-BAND (dear < cheap + cheap/5: jitter could flip it)
+ *        | 3 UNLOWERABLE (a side uses a count/deposit atom; loop-definiens rung)
+ *        | 4 MALFORMED-SER (empty or over the 60-byte envelope)
+ *        | 5 CLASS-OUTSIDE-ENVELOPE (shape class beyond the sealed classes 0..3).
+ *
+ * THE INERT COROLLARY (measured by the owed-law enumerator, 2026-07-17): clause 1
+ * means friction-directional admission alone can NEVER complete the legislature --
+ * cost-inert laws (commutativity: AND(x,y)=AND(y,x)) are invisible to it, and the
+ * gap census counts them among the 689 owed at size <= 4.  Completeness needs a
+ * SECOND admission class: inert laws seated as UNORIENTED canonicalization order
+ * (syntactic tie-breaking where physics is silent) -- the named next clause, added
+ * here when that tier lands, never smuggled into a driver.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: pure integer clauses, zero deps. */
+module nomos_admit
+
+fn katabasis_nomos_admit(directional: u32, floor_dear: u64, floor_cheap: u64, lowerable: u32, ser_ok: u32, cls: u32) -> u32 @export {
+    if directional != 1u32 { return 1u32 }
+    if floor_dear < floor_cheap + (floor_cheap / 5u64) { return 2u32 }
+    if lowerable != 1u32 { return 3u32 }
+    if ser_ok != 1u32 { return 4u32 }
+    if cls > 3u32 { return 5u32 }
+    return 0u32
+}
+
+/* the compiler-live door: which seated class the cg_r3 arm may fire today.
+ * class 0 = multiplicity-1 involution (hole emitted exactly once both sides --
+ * sound under effects).
+ * THE PURITY+EQUALITY TIER (2026-07-17, this widening): classes 1/2 and the
+ * class-3 same-operand zero-forms fire behind cg_r3's purity oracle
+ * (r3_nomos_pure: literals/idents/parens/casts/value-ops recursively; CALLs,
+ * loads, blocks, div/mod, unknown kinds REFUSE) + structural equality
+ * (r3_nomos_eq, ident bytes through the one source buffer) + an EXACT sealed-ser
+ * row scan -- the operand's proven NATURE admits the multiplicity change, the
+ * sealed row + this door admit the law.  Class-3 u-chain rows carry no new arm:
+ * the involution cascade already subsumes them, and their residual content is
+ * operand order -- commutativity -- which the ledger does not hold (THE INERT
+ * COROLLARY above).  One organ line per tier, never a compiler-side special case. */
+fn katabasis_nomos_live(cls: u32) -> u32 @export {
+    if cls == 0u32 { return 1u32 }
+    if cls == 1u32 { return 1u32 }
+    if cls == 2u32 { return 1u32 }
+    if cls == 3u32 { return 1u32 }
+    return 0u32
+}
+
+/* the dedup challenge law: a challenger cheap unseats the incumbent only when
+ * BEYOND the same strict band (jitter-immune, deterministic first-seen order --
+ * the r15 lesson sealed as organ law). */
+fn katabasis_nomos_challenge(fc_new: u64, fc_seated: u64) -> u32 @export {
+    if fc_new + (fc_new / 5u64) <= fc_seated { return 1u32 }
+    return 0u32
+}

@@ -24,6 +24,8 @@ extern @abi(c-msvc-x64) fn iform_last_w() -> u32 from "iform.iii"
 extern @abi(c-msvc-x64) fn iform_last_h() -> u32 from "iform.iii"
 extern @abi(c-msvc-x64) fn iform_last_bind() -> u64 from "iform.iii"
 extern @abi(c-msvc-x64) fn iform_sig_words(base: u64, n: u64) -> u64 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_last_sig() -> u64 from "iform.iii"
+extern @abi(c-msvc-x64) fn iform_note_bmp_is_legacy() -> i32 from "iform.iii"
 
 /* raw file access for the on-disk TAMPER arm */
 extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
@@ -86,6 +88,11 @@ fn main() -> u64 {
     if wrc != 0i32 { FRT = FRT + 1u64 }
     let rr : i64 = iform_read((&PATH) as u64, (&FB2) as u64, N)
     if rr < 0i64 { FRT = FRT + 1u64 }
+    /* the read-side header cache: the signature field the reader stored must be the
+     * exact payload signature we computed and wrote (cache coherence, not decoration) */
+    if iform_last_sig() != d1 { FRT = FRT + 1u64 }
+    /* the organ's own recorded verdict on the legacy raster format */
+    if iform_note_bmp_is_legacy() != 1i32 { FSU = FSU + 1u64 }
     let mut diff : u64 = 0u64   let mut mid_alpha : u64 = 0u64
     let mut i : u64 = 0u64
     while i < N {

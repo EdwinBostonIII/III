@@ -57,6 +57,12 @@ extern @abi(c-msvc-x64) fn ws_render_init() -> i32 from "ws_render.iii"
 extern @abi(c-msvc-x64) fn ws_render_input(k: u32, mx: u32, my: u32, md: u32) -> i32 from "ws_render.iii"
 extern @abi(c-msvc-x64) fn ws_render_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 from "ws_render.iii"
 extern @abi(c-msvc-x64) fn ws_stoma_init() -> i32 from "ws_stoma.iii"
+extern @abi(c-msvc-x64) fn ws_console_init() -> i32 from "ws_console.iii"
+extern @abi(c-msvc-x64) fn ws_console_input(k: u32, mx: u32, my: u32, md: u32) -> i32 from "ws_console.iii"
+extern @abi(c-msvc-x64) fn ws_console_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 from "ws_console.iii"
+extern @abi(c-msvc-x64) fn ws_zoom_init() -> i32 from "ws_zoom.iii"
+extern @abi(c-msvc-x64) fn ws_zoom_input(k: u32, mx: u32, my: u32, md: u32) -> i32 from "ws_zoom.iii"
+extern @abi(c-msvc-x64) fn ws_zoom_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 from "ws_zoom.iii"
 extern @abi(c-msvc-x64) fn ws_stoma_input(k: u32, mx: u32, my: u32, md: u32) -> i32 from "ws_stoma.iii"
 extern @abi(c-msvc-x64) fn ws_stoma_render(buf: u64, w: u32, h: u32, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 from "ws_stoma.iii"
 
@@ -88,6 +94,8 @@ fn ws_dispatch_input(k: u32, mx: u32, my: u32, md: u32) -> i32 {
     if STU_MODE == 3i64 { ws_lens_input(k, mx, my, md) }
     if STU_MODE == 4i64 { ws_render_input(k, mx, my, md) }
     if STU_MODE == 5i64 { ws_stoma_input(k, mx, my, md) }
+    if STU_MODE == 6i64 { ws_console_input(k, mx, my, md) }
+    if STU_MODE == 7i64 { ws_zoom_input(k, mx, my, md) }
     return 0i32
 }
 fn ws_dispatch_render(buf: u64, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 {
@@ -97,6 +105,8 @@ fn ws_dispatch_render(buf: u64, cx: u32, cy: u32, cw: u32, chh: u32) -> i32 {
     if STU_MODE == 3i64 { ws_lens_render(buf, STU_W, STU_H, cx, cy, cw, chh) }
     if STU_MODE == 4i64 { ws_render_render(buf, STU_W, STU_H, cx, cy, cw, chh) }
     if STU_MODE == 5i64 { ws_stoma_render(buf, STU_W, STU_H, cx, cy, cw, chh) }
+    if STU_MODE == 6i64 { ws_console_render(buf, STU_W, STU_H, cx, cy, cw, chh) }
+    if STU_MODE == 7i64 { ws_zoom_render(buf, STU_W, STU_H, cx, cy, cw, chh) }
     return 0i32
 }
 
@@ -170,7 +180,7 @@ fn draw_chrome(buf: u64) -> i32 {
     /* status bar: the key legend + a breathing pulse (computed, quiet -- the surface is alive) */
     ui_fill_rect(buf, STU_W, STU_H, 0u32, STU_H - 30u32, STU_W, 30u32, th_maroon_d())
     ui_fill_rect(buf, STU_W, STU_H, 0u32, STU_H - 32u32, STU_W, 2u32, th_ink())
-    ui_text_n(buf, STU_W, STU_H, 162u32, STU_H - 23u32, "F1 home   F2 forge   F3 bench   F4 lens   F5 render   F6 stoma   ESC quit" as u64, 73u32, th_wash())
+    ui_text_n(buf, STU_W, STU_H, 162u32, STU_H - 23u32, "F1 home  F2 forge  F3 bench  F4 lens  F5 render  F6 stoma  F7 console  F8 zoom  ESC quit" as u64, 88u32, th_wash())
     let ph : i64 = STU_FRAME % 72i64
     let mut pr : i64 = ph / 12i64
     if ph >= 36i64 { pr = (72i64 - ph) / 12i64 }
@@ -181,6 +191,7 @@ fn draw_chrome(buf: u64) -> i32 {
 fn main() -> u64 {
     ui_win_open((&STU_TITLE) as u64, STU_W, STU_H)
     ws_home_init()   ws_forge_init()   ws_bench_init()   ws_lens_init()   ws_render_init()   ws_stoma_init()
+    ws_console_init()   ws_zoom_init()
     let mut guard : u64 = 0u64
     while ui_win_pump() == 0u32 {
         let mx : u32 = ui_mx()   let my : u32 = ui_my()   let md : u32 = ui_mdown()
@@ -190,6 +201,10 @@ fn main() -> u64 {
             if k == 112u32 { STU_MODE = 0i64 }   if k == 113u32 { STU_MODE = 1i64 }
             if k == 114u32 { STU_MODE = 2i64 }   if k == 115u32 { STU_MODE = 3i64 }
             if k == 116u32 { STU_MODE = 4i64 }   if k == 117u32 { STU_MODE = 5i64 }
+            /* F7/F8: the two key-reachable workspaces (built as studio workspaces,
+             * wired 2026-07-16; the hand-tuned six-card rail is left untouched --
+             * key access is the wiring, the legend below is the affordance). */
+            if k == 118u32 { STU_MODE = 6i64 }   if k == 119u32 { STU_MODE = 7i64 }
             ws_dispatch_input(k, mx, my, md)
             k = ui_getkey()
         }

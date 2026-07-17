@@ -27,6 +27,104 @@ extern @abi(c-msvc-x64) fn mr64_dec() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_und() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr64_match() -> i64 from "mathesis_rot64.iii"
 extern @abi(c-msvc-x64) fn mr2_sweep(target: i64) -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_wn() -> i64 from "mathesis_rot2.iii"
+extern @abi(c-msvc-x64) fn mr2_w(i: i64, j: i64) -> i64 from "mathesis_rot2.iii"
+/* the census's OWN witness surface -- the coordinates it recorded for the first match */
+extern @abi(c-msvc-x64) fn mr64_wk() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_wsid() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_wc1() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_wc2() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_cand() -> i64 from "mathesis_rot64.iii"
+extern @abi(c-msvc-x64) fn mr64_mk(k: i64) -> i64 from "mathesis_rot64.iii"
+
+/* ===== THE WITNESS ORACLE: this gate's OWN evaluator, written from the shape spec,
+ * never calling the organ's.  A shape is (nest, oa, ob, l0, l1, l2) over leaves
+ * {0=x, 1=c1, 2=c2} and ops {0 ADD, 1 SUB, 2 MUL, 3 AND, 4 OR, 5 XOR, 6 SHL, 7 SHR};
+ * nest 0 = (a oa b) ob c, nest 1 = a ob (b oa c).  Shape ids are radix-decoded
+ * 3456 = 2*8*8*3*3*3.  Independence is the point: if the organ's evaluator and this
+ * one disagree about the witness it recorded, THIS GATE REDDENS. ===== */
+fn tk_mask(w: i64) -> u64 {
+    if w >= 64i64 { return 18446744073709551615u64 }
+    return (1u64 << (w as u64)) - 1u64
+}
+fn tk_op(op: i64, a0: u64, b0: u64, w: i64) -> u64 {
+    let m : u64 = tk_mask(w)
+    let a : u64 = a0 & m
+    let b : u64 = b0 & m
+    if op == 0i64 { return (a + b) & m }
+    if op == 1i64 { return (a - b) & m }
+    if op == 2i64 { return (a * b) & m }
+    if op == 3i64 { return a & b }
+    if op == 4i64 { return a | b }
+    if op == 5i64 { return a ^ b }
+    if op == 6i64 { if b >= (w as u64) { return 0u64 }   return (a << b) & m }
+    if op == 7i64 { if b >= (w as u64) { return 0u64 }   return a >> b }
+    return 0u64
+}
+fn tk_leaf(sel: i64, x: u64, c1: u64, c2: u64) -> u64 {
+    if sel == 0i64 { return x }
+    if sel == 1i64 { return c1 }
+    return c2
+}
+fn tk_eval(nest: i64, oa: i64, ob: i64, l0: i64, l1: i64, l2: i64, x: u64, c1: u64, c2: u64, w: i64) -> u64 {
+    let a : u64 = tk_leaf(l0, x, c1, c2)
+    let b : u64 = tk_leaf(l1, x, c1, c2)
+    let c : u64 = tk_leaf(l2, x, c1, c2)
+    if nest == 0i64 { return tk_op(ob, tk_op(oa, a, b, w), c, w) }
+    return tk_op(ob, a, tk_op(oa, b, c, w), w)
+}
+/* the target, computed here from its DEFINITION: k=0 is -x mod 2^w, k>0 is rot_k */
+fn tk_target(k: i64, x: u64, w: i64) -> u64 {
+    let m : u64 = tk_mask(w)
+    if k == 0i64 { return (0u64 - x) & m }
+    let xv : u64 = x & m
+    return ((xv << (k as u64)) | (xv >> ((w - k) as u64))) & m
+}
+/* does the witness the organ recorded ACTUALLY compute the target at EVERY input?
+ * 1 = it witnesses; 0 = the organ handed out a lie. */
+fn tk_witness_holds(sid: i64, c1: i64, c2: i64, k: i64, w: i64) -> i64 {
+    let nest : i64 = sid / 1728i64
+    let mut r : i64 = sid % 1728i64
+    let oa : i64 = r / 216i64
+    r = r % 216i64
+    let ob : i64 = r / 27i64
+    r = r % 27i64
+    let l0 : i64 = r / 9i64
+    let l1 : i64 = (r / 3i64) % 3i64
+    let l2 : i64 = r % 3i64
+    let hi : u64 = 1u64 << (w as u64)
+    let mut x : u64 = 0u64
+    while x < hi {
+        if tk_eval(nest, oa, ob, l0, l1, l2, x, c1 as u64, c2 as u64, w) != tk_target(k, x, w) { return 0i64 }
+        x = x + 1u64
+    }
+    return 1i64
+}
+/* the candidate census, computed here from the enumeration's own arithmetic:
+ * every sid contributes (c1max+1)*(c2max+1) probes, c_imax = mask iff some leaf
+ * selects c_i, else 0.  The organ's mr64_cand() must equal this EXACTLY. */
+fn tk_cand_census(w: i64) -> i64 {
+    let m : i64 = tk_mask(w) as i64
+    let mut tot : i64 = 0i64
+    let mut sid : i64 = 0i64
+    while sid < 3456i64 {
+        let mut r : i64 = sid % 27i64
+        let l0 : i64 = r / 9i64
+        let l1 : i64 = (r / 3i64) % 3i64
+        let l2 : i64 = r % 3i64
+        let mut c1max : i64 = 0i64
+        if l0 == 1i64 { c1max = m }
+        if l1 == 1i64 { c1max = m }
+        if l2 == 1i64 { c1max = m }
+        let mut c2max : i64 = 0i64
+        if l0 == 2i64 { c2max = m }
+        if l1 == 2i64 { c2max = m }
+        if l2 == 2i64 { c2max = m }
+        tot = tot + ((c1max + 1i64) * (c2max + 1i64))
+        sid = sid + 1i64
+    }
+    return tot
+}
 
 fn main() -> i32 {
     /* [A] THE UPPER BOUND: cost64(rot_k) <= 3 for all 63 rotations */
@@ -48,5 +146,63 @@ fn main() -> i32 {
     if mr64_match() != 0i64 { return 51i32 }                    /* NO 2-op rotation among decided */
     if mr64_dec() != 818i64 { return 52i32 }
     if mr64_und() != 2638i64 { return 53i32 }                   /* named residual: 818 + 2638 = 3456 */
+
+    /* [F] NO MATCH => NO WITNESS.  The rot sweep found nothing; the organ must therefore
+     * CLAIM nothing -- its witness slot stays at the -1 sentinel.  (Run first: brute
+     * resets the witness at entry, so this pins the empty-census contract before [G]
+     * fills it.)  An organ that leaves a stale witness behind a zero count is caught. */
+    if mr64_brute(0i64, 8i64) != 0i64 { return 60i32 }
+    if mr64_wk() != (0i64 - 1i64) { return 61i32 }
+    /* the per-k census must agree with the total it returned: 0 matches, 0 anywhere */
+    let mut k : i64 = 0i64
+    while k < 64i64 {
+        if mr64_mk(k) != 0i64 { return 62i32 }
+        k = k + 1i64
+    }
+    /* [G] THE WITNESS MUST WITNESS.  311,056 is a COUNT, and a count exhibits nothing.
+     * The organ recorded the first match's coordinates; decode them and re-verify with
+     * THIS GATE'S OWN evaluator over ALL 2^8 inputs.  The census now carries an
+     * exemplar that was checked by code the organ never ran. */
+    if mr64_brute(1i64, 8i64) != 311056i64 { return 70i32 }
+    if mr64_wk() != 0i64 { return 71i32 }                       /* the NEG target */
+    let wsid : i64 = mr64_wsid()
+    if wsid < 0i64 { return 72i32 }
+    if wsid >= 3456i64 { return 73i32 }                         /* inside the shape space */
+    if tk_witness_holds(wsid, mr64_wc1(), mr64_wc2(), 0i64, 8i64) != 1i64 { return 74i32 }
+    /* [H] CONSERVATION: the per-k census must sum to the returned total, and for the NEG
+     * target every match is k=0 by construction -- a leak into any rot slot is a bug. */
+    if mr64_mk(0i64) != 311056i64 { return 80i32 }
+    let mut k2 : i64 = 1i64
+    while k2 < 64i64 {
+        if mr64_mk(k2) != 0i64 { return 81i32 }
+        k2 = k2 + 1i64
+    }
+    /* [I] THE ENVELOPE IS ARITHMETIC, NOT A CLAIM: the candidate count the sweep reports
+     * must equal the enumeration's own arithmetic, recomputed here.  This is what makes
+     * "311,056 of N" an honest fraction instead of a bare number. */
+    if mr64_cand() != tk_cand_census(8i64) { return 90i32 }
+    if mr64_cand() <= 311056i64 { return 91i32 }                /* matches are a SUBSET of probes */
+    /* [J] THE WITNESS ORACLE ITSELF MUST BE ABLE TO FAIL (no-tautology arm): the same
+     * witness, re-verified against the WRONG target (rot_1 instead of NEG), must NOT
+     * hold.  An oracle that says yes to everything proves nothing above. */
+    if tk_witness_holds(wsid, mr64_wc1(), mr64_wc2(), 1i64, 8i64) != 0i64 { return 95i32 }
+    /* [K] THE SECOND EVALUATOR'S GRID ALSO WITNESSES.  mr2 counted the same 311,056 by
+     * independent code; its witness GRID (rows (k, sid, c1, c2), rows capped at 64 --
+     * counts never capped) must carry rows that actually witness.  Rows 0 and 63 are
+     * re-verified through THIS GATE'S OWN evaluator -- three independent codebases
+     * agreeing on the same exemplars -- and the rot sweep (0 matches) must leave the
+     * grid EMPTY (the no-match => no-claim contract, same class as [F]). */
+    if mr2_sweep(0i64) != 0i64 { return 100i32 }
+    if mr2_wn() != 0i64 { return 101i32 }              /* no match => no witness rows */
+    if mr2_sweep(1i64) != 311056i64 { return 102i32 }
+    if mr2_wn() != 64i64 { return 103i32 }             /* the row cap is hit, honestly */
+    if mr2_w(0i64, 0i64) != 0i64 { return 104i32 }     /* NEG rows carry k = 0 */
+    let r0s : i64 = mr2_w(0i64, 1i64)
+    if r0s < 0i64 { return 105i32 }
+    if r0s >= 3456i64 { return 106i32 }
+    if tk_witness_holds(r0s, mr2_w(0i64, 2i64), mr2_w(0i64, 3i64), 0i64, 8i64) != 1i64 { return 107i32 }
+    if mr2_w(63i64, 0i64) != 0i64 { return 108i32 }
+    let r63s : i64 = mr2_w(63i64, 1i64)
+    if tk_witness_holds(r63s, mr2_w(63i64, 2i64), mr2_w(63i64, 3i64), 0i64, 8i64) != 1i64 { return 109i32 }
     return 99i32
 }

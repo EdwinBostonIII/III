@@ -45,5 +45,11 @@ fn main() -> u64 {
     if t2 != PIN_T2D { return 72u64 }
     if t3 != PIN_T3D { return 73u64 }
 
+    /* the render-testament read-head: the capture produced a nonzero testament digest
+     * (a content-address over the frame signatures), deterministic across reads. */
+    let rtst : u64 = rt_testament()
+    if rtst == 0u64 { return 80u64 }
+    if rt_testament() != rtst { return 81u64 }
+
     return 99u64
 }

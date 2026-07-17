@@ -1,0 +1,184 @@
+/* omnia/friction.iii -- THE FRICTION LEDGER: the measured half of THE FRICTION LOGOS.
+ *
+ * THE LOGOS (installed 2026-07-16; charter: DOCS/III-ENTELECHEIA-MAP.md SS Ε5):
+ *   a claim is TRUE iff its observable is INVARIANT across independent bearers;
+ *   among true routes to the same observable, THE LAW OF LEAST ACTION selects --
+ *   the route with the least MEASURED substrate friction is canonical.  No
+ *   node-count, no Big-O, no author cost model may stand where a measurement can
+ *   be taken; a model may only PREDICT, and a prediction that contradicts the
+ *   measurement is the defect.  Human encodings (integers, variables, arrays)
+ *   hold no protected status: they are routes, and they survive exactly as long
+ *   as they are not measured dearer.  The order is LEXICOGRAPHIC -- friction is
+ *   consulted only among routes already proven invariant -- because a ledger
+ *   without the invariance leg converges on `return 0` (zero cycles, zero truth).
+ *
+ * WHAT THIS ORGAN IS: the verdict algebra over omnia/bench's serialized cycle
+ * stamps.  bench gives the TIME; friction gives the LAW: floors, margins, an
+ * honesty band, and a refusal class.  The consumer runs its own route loops and
+ * BRACKETS them (no function pointers, no codegen adventure):
+ *
+ *     fr_reset(iters)                      -- calibrate bracket overhead
+ *     trial loop, ALTERNATING sides:       -- drift hits both routes equally
+ *         fr_lap_begin()  ...route A x iters...  fr_lap_end(0)
+ *         fr_lap_begin()  ...route B x iters...  fr_lap_end(1)
+ *     fr_verdict() -> 1 A-CHEAPER | 2 B-CHEAPER | 3 INDISTINGUISHABLE | 0 REFUSED
+ *
+ * MEASUREMENT HONESTY (why this is a ledger and not a random-number generator):
+ *   - the estimator is the MIN over laps: cycle noise (interrupts, SMT, scaling)
+ *     is strictly additive, so the floor is the physics and the mean is the
+ *     weather.  Means are never used.
+ *   - every lap is serialized by bench_now()'s lfence;rdtsc;lfence bracket, and
+ *     the empty-bracket overhead is calibrated per reset (min of 16) and
+ *     subtracted, clamped at zero.
+ *   - THE BAND: two floors are DISTINGUISHABLE only when their gap exceeds
+ *     max(floor)/16 + 64 cycles (6.25% + a fixed guard).  Inside the band the
+ *     verdict is INDISTINGUISHABLE -- a named honest outcome, never a coin flip.
+ *   - THE REFUSAL: fewer than FR_MIN_LAPS laps on either side refuses the
+ *     verdict outright (0) and counts the refusal.  A starved measurement is
+ *     not a measurement.
+ *   - determinism firewall (bench's own law): raw stamps NEVER enter any
+ *     mhash/witness/determinism-sealed path.  What may be sealed is the VERDICT
+ *     together with its margins -- and any seal must name the die (cpu_census),
+ *     because a friction fact is a fact ABOUT a die, never about mathematics.
+ *
+ * NIH: composes omnia/bench (the one timestamp door) only.  First consumers:
+ * aether/friction_cli (iii-friction: falsifier battery + the first sealed
+ * races).  Increment 2 (named): aether/isa_ontogenesis's shortcut judge repoints
+ * its op-nodes-saved metric to fr_verdict -- so a discovered chip identity's
+ * utility is MEASURED as a physical speedup on the die, not counted as tree size.
+ * Hexad: kind_motion.  Ring: R0. */
+module omnia_friction
+
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench.iii"
+extern @abi(c-msvc-x64) fn bench_warmup() -> i32 from "bench.iii"
+
+const FR_SENT     : u64 = 18446744073709551615u64
+const FR_MIN_LAPS : i64 = 3i64
+const FR_GUARD    : u64 = 64u64          /* cycles: the fixed half of the band  */
+
+var FR_ITERS : u64 = 0u64                /* consumer's per-lap iteration count (report only) */
+var FR_OVH   : u64 = 0u64                /* calibrated empty-bracket overhead   */
+var FR_T0    : u64 = 0u64
+var FR_MIN   : [u64; 2]
+var FR_LAPS  : [i64; 2]
+var FR_REF   : u64 = 0u64                /* refusals issued (why: starved laps) */
+var FR_OPEN  : i64 = 0i64                /* 1 iff a lap bracket is open         */
+
+/* THE CONTINGENT READING (2026-07-17): the meter already SEES the jitter above the
+ * floor (each raw `d`) and discards it -- min is the NECESSARY cost (re-derivable,
+ * a value-invariant; the determinism theorem in `iii-substrate physis`).  FR_MOMENT
+ * FNV-folds the raw deltas INSTEAD of minimizing them: it is the CONTINGENT signature
+ * of an actual run -- the one physical quantity that is NOT a function of the inputs
+ * (microarchitectural contention/thermal/scheduling), so two runs of the identical
+ * computation yield DIFFERENT moments.  This is the bare-minimum non-determinism the
+ * physis theorem named as the only escape from "everything is a value-invariant".
+ * IT IS FENCED BY THE SAME LAW AS THE FLOOR, ONLY STRONGER: a friction fact never
+ * enters a seal, and a NON-DETERMINISTIC fact ABSOLUTELY never does -- the compiler,
+ * the nomos/testament seals, and every proof are forbidden to consult fr_moment
+ * (grep-provable: zero references in COMPILER/BOOT + the seal scripts).  fr_floor is
+ * byte-for-byte unchanged, so the sealed friction VERDICT (which reads the floor) is
+ * untouched.  The fixpoint hash MOVES (a symbol joined the linked archive) but the
+ * fixpoint PROPERTY must still hold -- iiis-2 == iiis-3 byte-for-byte -- and THAT is
+ * the fence proof: a non-deterministic value reaching the compile path would fold
+ * differently on each build and make byte-identical rebuilds IMPOSSIBLE.  The fixpoint
+ * surviving alongside a live non-deterministic faculty is the quarantine, demonstrated. */
+const FR_MOMENT_SEED : u64 = 14695981039346656037u64
+const FR_MOMENT_PRIME : u64 = 1099511628211u64
+var FR_MOMENT : [u64; 2]
+
+/* arm the ledger: warm the pipelines, calibrate the empty bracket, zero floors */
+fn fr_reset(iters: u64) -> i32 @export {
+    bench_warmup()
+    FR_ITERS = iters
+    FR_OVH = FR_SENT
+    let mut c : i64 = 0i64
+    while c < 16i64 {
+        let a : u64 = bench_now()
+        let b : u64 = bench_now()
+        let d : u64 = b - a
+        if d < FR_OVH { FR_OVH = d }
+        c = c + 1i64
+    }
+    FR_MIN[0u64] = FR_SENT
+    FR_MIN[1u64] = FR_SENT
+    FR_LAPS[0u64] = 0i64
+    FR_LAPS[1u64] = 0i64
+    FR_MOMENT[0u64] = FR_MOMENT_SEED
+    FR_MOMENT[1u64] = FR_MOMENT_SEED
+    FR_OPEN = 0i64
+    return 0i32
+}
+
+fn fr_lap_begin() -> i32 @export {
+    FR_OPEN = 1i64
+    FR_T0 = bench_now()
+    return 0i32
+}
+
+/* close the bracket into side 0 or 1; unmatched/foreign closes are refused */
+fn fr_lap_end(side: i64) -> i32 @export {
+    let t1 : u64 = bench_now()
+    if FR_OPEN != 1i64 { return 0i32 - 1i32 }
+    FR_OPEN = 0i64
+    if side < 0i64 { return 0i32 - 1i32 }
+    if side > 1i64 { return 0i32 - 1i32 }
+    let mut d : u64 = t1 - FR_T0
+    if d > FR_OVH { d = d - FR_OVH } else { d = 0u64 }
+    if d < FR_MIN[side as u64] { FR_MIN[side as u64] = d }
+    /* the contingent fold -- the jitter the min discards.  ORDER-INDEPENDENT of the
+     * min update above; fr_floor's value is untouched (the necessary reading is byte-
+     * identical to before this line existed). */
+    FR_MOMENT[side as u64] = (FR_MOMENT[side as u64] ^ d) * FR_MOMENT_PRIME
+    FR_LAPS[side as u64] = FR_LAPS[side as u64] + 1i64
+    return 0i32
+}
+
+fn fr_floor(side: i64) -> u64 @export {
+    if side < 0i64 { return FR_SENT }
+    if side > 1i64 { return FR_SENT }
+    return FR_MIN[side as u64]
+}
+/* THE CONTINGENT ACCESSOR: the run's non-deterministic moment signature (folds the
+ * jitter, not the floor).  Two runs of the identical computation DIFFER here -- this
+ * is the machine's evental register (what HAPPENED), distinct from fr_floor's eternal
+ * register (what MUST be).  NEVER seal this; NEVER let the compiler read it. */
+fn fr_moment(side: i64) -> u64 @export {
+    if side < 0i64 { return FR_SENT }
+    if side > 1i64 { return FR_SENT }
+    return FR_MOMENT[side as u64]
+}
+fn fr_laps(side: i64) -> i64 @export {
+    if side < 0i64 { return 0i64 - 1i64 }
+    if side > 1i64 { return 0i64 - 1i64 }
+    return FR_LAPS[side as u64]
+}
+fn fr_overhead() -> u64 @export { return FR_OVH }
+fn fr_refusals() -> u64 @export { return FR_REF }
+
+/* the honesty band around the dearer floor: max/16 + 64 cycles */
+fn fr_band() -> u64 @export {
+    let mut m : u64 = FR_MIN[0u64]
+    if FR_MIN[1u64] > m { m = FR_MIN[1u64] }
+    if m == FR_SENT { return FR_SENT }
+    return (m >> 4u64) + FR_GUARD
+}
+
+/* the absolute floor gap (SENT when either side is unmeasured) */
+fn fr_margin() -> u64 @export {
+    if FR_MIN[0u64] == FR_SENT { return FR_SENT }
+    if FR_MIN[1u64] == FR_SENT { return FR_SENT }
+    if FR_MIN[0u64] > FR_MIN[1u64] { return FR_MIN[0u64] - FR_MIN[1u64] }
+    return FR_MIN[1u64] - FR_MIN[0u64]
+}
+
+/* THE VERDICT: 1 side-0 cheaper | 2 side-1 cheaper | 3 indistinguishable |
+ * 0 REFUSED (starved).  Refusal is loud and counted, never a default answer. */
+fn fr_verdict() -> i64 @export {
+    if FR_LAPS[0u64] < FR_MIN_LAPS { FR_REF = FR_REF + 1u64   return 0i64 }
+    if FR_LAPS[1u64] < FR_MIN_LAPS { FR_REF = FR_REF + 1u64   return 0i64 }
+    let g : u64 = fr_margin()
+    if g == FR_SENT { FR_REF = FR_REF + 1u64   return 0i64 }
+    if g <= fr_band() { return 3i64 }
+    if FR_MIN[0u64] < FR_MIN[1u64] { return 1i64 }
+    return 2i64
+}

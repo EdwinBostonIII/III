@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/iscene.iii -- III-SCENE: the resolution-INDEPENDENT sovereign image master (.isc = III Scene).
+ * [APP-SURFACE-MODULE] -- image/scene app surface: its unreached exports (camera/light setters, pixel taps)
+ * are driven by interactive scene tooling BY NATURE, never by a headless corpus KAT; excluded from the v3
+ * dark census (mechanism: sanctus/corpus_coverage, reunification W0.2).  The LIB teeth (v1) stay full.
  *
  * The deepest form of the NIH-format supremacy: a .isc file is not pixels at all -- it is the EXACT math that GENERATES
  * the image (a list of exact quadric solids + exact colours + camera focal + light), rendered on the aether_lens exact

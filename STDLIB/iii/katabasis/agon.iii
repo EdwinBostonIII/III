@@ -1,0 +1,147 @@
+/* STDLIB/iii/katabasis/agon.iii -- ENTELECHEIA Ε2: THE AGON (divergence as being-at-work).
+ *
+ * The scriptless carrier for the supersession table's first row --
+ *   regression detection  ->  closure-pin breakage + AGON DIVERGENCE.
+ * A regression is not "a foreseen check re-run to exit 0"; it is TWO INDEPENDENT
+ * bearers of the single claim "the organism is itself" DISAGREEING.  The claim
+ * is borne two ways that share no common front:
+ *
+ *   bearer SOURCE  -- sanctus/closure_graph derives the closure root over the
+ *                     LIVE bytes of exactly the sources that support the claim
+ *                     (walks the real import graph; hand-authored closures lie).
+ *   bearer IMAGE   -- katabasis/pulse performs the birth-rite over the compiled
+ *                     binary's own bytes + the silicon it woke on (core capture).
+ *
+ * These are common-mode independent: SOURCE reads .iii text off disk and folds an
+ * mhash tree; IMAGE reads the linked artifact's bytes and admits itself through
+ * the gate pipeline.  A defect that fools one cannot silently fool the other.
+ *
+ * DISPERSAL (Aether/Katabasis): each bearer's verdict is PERCEIVED as an event on
+ * omnia/event_substrate's append-only log -- so a departure is a LOUD, witnessed
+ * event on the shared substrate (evt_witness folds it tamper-evidently), never a
+ * silent return a later test might catch.  The agon is the first katabasis
+ * consumer of event_substrate.
+ *
+ * VERDICT (exit-distinct per class):
+ *   0 LIVE          both bearers agree the organism is itself
+ *   2 SOURCE_DRIFT  source bearer red, image green  -- a DIVERGENCE (sources moved
+ *                                                      under a stale/foreign binary)
+ *   3 IMAGE_DRIFT   image bearer red, source green   -- a DIVERGENCE (binary moved
+ *                                                      under unchanged sources)
+ *   4 BOTH          whole-organism departure (both bearers red)
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.  NIH: composes closure_graph,
+ * pulse, event_substrate, timing_safe.
+ */
+module katabasis_agon
+
+extern @abi(c-msvc-x64) fn closure_graph_derive(root_path: u64, out_ptr: u64) -> i64 from "closure_graph.iii"
+extern @abi(c-msvc-x64) fn pulse_image_hash(path_ptr: u64, out_ptr: u64) -> i64 from "pulse.iii"
+extern @abi(c-msvc-x64) fn pulse_attest(path_ptr: u64, expect_ptr: u64) -> u32 from "pulse.iii"
+extern @abi(c-msvc-x64) fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 from "timing_safe.iii"
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+
+const AGON_LIVE         : u32 = 0u32
+const AGON_SOURCE_DRIFT : u32 = 2u32
+const AGON_IMAGE_DRIFT  : u32 = 3u32
+const AGON_BOTH         : u32 = 4u32
+
+/* event observers (the two bearers) and the perception kind */
+const AGON_OBS_SOURCE : u64 = 1u64
+const AGON_OBS_IMAGE  : u64 = 2u64
+const AGON_KIND_OBS   : u64 = 1u64   /* event_substrate: 1 = OBSERVE */
+const AGON_PRIO_RED   : u64 = 1u64   /* a red bearer perceives at priority 1 */
+const AGON_PRIO_OK    : u64 = 0u64
+
+var AG_CA      : [u8; 32]   /* derived source closure root  */
+var AG_IMG     : [u8; 32]   /* derived binary image hash    */
+var AG_SRC_OK  : u8  = 0u8
+var AG_IMG_OK  : u8  = 0u8
+var AG_VERDICT : u32 = 0u32
+var AG_WITNESS : u64 = 0u64
+
+/* little-endian first 8 bytes of a 32-byte crystal, as an event payload */
+fn ag_le8(ptr: u64) -> u64 {
+    let p : *u8 = ptr as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        v = v | ((p[i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+/* Bearer SOURCE: derive the closure root over the claim's root source (walking
+ * the live import graph) and compare it (constant time) against its sealed pin.
+ * 1 = live; 0 = the sources moved, or a source was unreadable.  expect_ptr == 0
+ * is the FORGE path -- no pin yet, so a successful derivation is identity. */
+fn agon_bearer_source(src_root_path: u64, expect_ptr: u64) -> u8 @export {
+    let n : i64 = closure_graph_derive(src_root_path, (&AG_CA) as u64)
+    if n < 0i64 { return 0u8 }
+    if expect_ptr == 0u64 { return 1u8 }
+    if timing_safe_eq((&AG_CA as u64) as *u8, expect_ptr as *u8, 32u64) == 1u32 { return 1u8 }
+    return 0u8
+}
+
+/* Bearer IMAGE: record the binary's image hash (for the event payload), then run
+ * the full birth-rite against its image pin.  1 = live (gate verdict OK); 0 = the
+ * binary moved, or was unreadable.  expect_ptr == 0 is the FORGE path. */
+fn agon_bearer_image(bin_path: u64, expect_ptr: u64) -> u8 @export {
+    pulse_image_hash(bin_path, (&AG_IMG) as u64)
+    let v : u32 = pulse_attest(bin_path, expect_ptr)
+    if v == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* THE AGON: run both bearers over one claim, perceive each verdict as an event on
+ * the append-only substrate, witness the log, and fold the divergence.  Returns
+ * the verdict class (0 LIVE / 2 SOURCE_DRIFT / 3 IMAGE_DRIFT / 4 BOTH). */
+fn agon_run(src_root_path: u64, src_expect: u64, bin_path: u64, img_expect: u64) -> u32 @export {
+    evt_reset()
+    let s : u8 = agon_bearer_source(src_root_path, src_expect)
+    let i : u8 = agon_bearer_image(bin_path, img_expect)
+    AG_SRC_OK = s
+    AG_IMG_OK = i
+
+    if s == 1u8 {
+        evt_perceive(AGON_OBS_SOURCE, AGON_KIND_OBS, AGON_PRIO_OK,  ag_le8((&AG_CA) as u64))
+    } else {
+        evt_perceive(AGON_OBS_SOURCE, AGON_KIND_OBS, AGON_PRIO_RED, ag_le8((&AG_CA) as u64))
+    }
+    if i == 1u8 {
+        evt_perceive(AGON_OBS_IMAGE, AGON_KIND_OBS, AGON_PRIO_OK,  ag_le8((&AG_IMG) as u64))
+    } else {
+        evt_perceive(AGON_OBS_IMAGE, AGON_KIND_OBS, AGON_PRIO_RED, ag_le8((&AG_IMG) as u64))
+    }
+    AG_WITNESS = evt_witness(evt_count())
+
+    let mut v : u32 = AGON_LIVE
+    if s == 1u8 {
+        if i == 1u8 { v = AGON_LIVE } else { v = AGON_IMAGE_DRIFT }
+    } else {
+        if i == 1u8 { v = AGON_SOURCE_DRIFT } else { v = AGON_BOTH }
+    }
+    AG_VERDICT = v
+    return v
+}
+
+fn agon_verdict() -> u32 @export { return AG_VERDICT }
+fn agon_source_ok() -> u8 @export { return AG_SRC_OK }
+fn agon_image_ok() -> u8 @export { return AG_IMG_OK }
+/* the tamper-evident fold over the two perceived verdicts (the dispersed record) */
+fn agon_witness() -> u64 @export { return AG_WITNESS }
+fn agon_event_count() -> u32 @export { return evt_count() }
+
+/* byte i (0..31) of the last source closure root / binary image hash */
+fn agon_ca_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    return AG_CA[i as u64] as u32
+}
+fn agon_img_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    return AG_IMG[i as u64] as u32
+}

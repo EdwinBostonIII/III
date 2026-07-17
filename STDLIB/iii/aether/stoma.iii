@@ -1,4 +1,7 @@
 /* STDLIB/iii/aether/stoma.iii -- STOMA: the sovereign CLI entry point (M4 of III-STOMA-PLAN.md).
+ * [APP-SURFACE-MODULE] -- console/shell app surface: raw-console taps are exercised by the interactive
+ * shell BY NATURE, never by a headless corpus KAT; excluded from the v3 dark census (sanctus/
+ * corpus_coverage, reunification W0.2).  The LIB teeth (v1) stay full.
  *
  * The thin driver: detect console vs redirected (Collapse Law sensor), open a per-session
  * journal, and run one of two loops -- INTERACTIVE (raw console keys -> line editor -> shell,

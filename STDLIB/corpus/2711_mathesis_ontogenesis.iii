@@ -35,6 +35,9 @@ extern @abi(c-msvc-x64) fn mog_citizens(n: i64) -> i64 from "mathesis_ontogenesi
 extern @abi(c-msvc-x64) fn mog_cit_p(k: i64) -> i64 from "mathesis_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn mog_cit_r(k: i64) -> i64 from "mathesis_ontogenesis.iii"
 extern @abi(c-msvc-x64) fn mog_product_law(na: i64, nb: i64) -> i64 from "mathesis_ontogenesis.iii"
+/* the product law's REFUTATION witness -- the pair it blames when the law fails */
+extern @abi(c-msvc-x64) fn mog_pl_wa() -> i64 from "mathesis_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn mog_pl_wb() -> i64 from "mathesis_ontogenesis.iii"
 
 fn e_i64(v: i64) -> i32 { if v < 0i64 { putchar(45i32)   return e_i64(0i64 - v) }   if v >= 10i64 { e_i64(v / 10i64) }   putchar(((v % 10i64) + 48i64) as i32)   return 0i32 }
 fn sp() -> i32 { putchar(32i32)   return 0i32 }   fn nl() -> i32 { putchar(10i32)   return 0i32 }
@@ -104,6 +107,14 @@ fn main() -> u64 {
     if P22 != 100i64 { return 13u64 }
     if P23 != 240i64 { return 13u64 }
     if P32 != 240i64 { return 13u64 }
+    /* THE LAW HELD => THE ORGAN BLAMES NO ONE.  mog_product_law records (wa, wb) only
+     * on refutation; all 580 pairs above verified, so the blame slot must be EMPTY.
+     * Table index 0 is a REAL citizen, so a BSS-zero slot reads as "table 0 broke the
+     * law" -- a counterexample the organ never found and that does not exist.  The
+     * sentinel is what makes "no refutation" distinguishable from "refuted at 0".
+     * (Same class as mathesis_rot64's unarmed witness slot, found the same day.) */
+    if mog_pl_wa() != (0i64 - 1i64) { return 14u64 }
+    if mog_pl_wb() != (0i64 - 1i64) { return 14u64 }
 
     return 99u64
 }

@@ -1,0 +1,89 @@
+/* STDLIB/iii/katabasis/nomos_consent.iii -- THE PARLIAMENT: III's autonomous
+ * consent to amend its own constitution.
+ *
+ * The legislature (COMPILER/BOOT/cg_phys_rules.iii) is III's constitution -- the
+ * rewrite laws its compiler is bound by.  An amendment must NOT land by fiat (a
+ * script's `cp`): it lands only when III's independent faculties AUTONOMOUSLY
+ * CONCUR.  This organ is the CONSENT LAW.  The seal ceremony is its driver: it
+ * gathers each faculty's verdict as a fact and calls this organ for the ruling.
+ *
+ * THE FOUR VOTERS (each a distinct competence, each able to REFUSE by itself --
+ * consent is UNANIMOUS, because a constitutional amendment binds every organ):
+ *
+ *   [1] SELF-AGREEMENT (reproducibility) -- the machine must agree with ITSELF:
+ *       two INDEPENDENT regenerations (fresh processes, fresh jitter) must arrive
+ *       at the SAME rule set (identical set-id).  A proposal that is an artifact
+ *       of one run's noise is not a stable fact of the die and is REFUSED.  This
+ *       is the load-bearing autonomy vote: no human, no fiat -- the amendment is
+ *       adopted only if the machine, run twice, concurs on what the law IS.
+ *       (WITNESSED refusal, 2026-07-17: before the degeneracy guard, degenerate
+ *       const-laws seated jitterily and the two runs disagreed -- correctly tabled.)
+ *   [2] TRUTH -- every row PROVEN over all 2^64 by iii-prove (bit-blast UNSAT).
+ *   [3] TEETH -- the prover REFUSED a wrong-cheap side (it is not a rubber stamp).
+ *   [4] CONTINUITY -- no non-degenerate sealed law VANISHES unexplained: a row may
+ *       leave the constitution only if it became degenerate or was superseded by a
+ *       proven-cheaper equivalent, never by silent drift.  Erosion is refused.
+ *
+ * A consent that could never refuse is rigging (THE UNIVERSALITY LAW / attribution
+ * audit).  The corpus gate 2757 proves this law CONCURS on unanimous-yes and
+ * REFUSES on each single dissent -- the parliament can say no.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: pure integer clauses, zero deps. */
+module nomos_consent
+
+/* the ruling.  Inputs are the four faculties' verdicts (1 = that faculty concurs):
+ *   self_agree     : setid(run1) == setid(run2)          [reproducibility]
+ *   all_proven     : rows_proven == rows_total           [truth]
+ *   neg_refuted    : the wrong-cheap negative arm refused [teeth]
+ *   continuous     : removed_unexplained == 0            [continuity]
+ * Verdict: 0 CONCUR (amend) | 1 SELF-DISAGREEMENT | 2 UNTRUE | 3 TOOTHLESS
+ *        | 4 DISCONTINUOUS.  Order = the lexicographic gravity of the dissent:
+ * a law you cannot even reproduce is refused before its truth is weighed. */
+fn katabasis_nomos_consent(self_agree: u32, all_proven: u32, neg_refuted: u32, continuous: u32) -> u32 @export {
+    if self_agree != 1u32 { return 1u32 }
+    if all_proven != 1u32 { return 2u32 }
+    if neg_refuted != 1u32 { return 3u32 }
+    if continuous != 1u32 { return 4u32 }
+    return 0u32
+}
+
+/* the continuity sub-law: a sealed row that is ABSENT from the candidate is a
+ * lawful removal iff it is degenerate (const-dear, no directional work) OR
+ * superseded (its function reappears via a proven-cheaper spelling).  Any other
+ * absence is EROSION.  removed = sealed rows not in candidate; explained = those
+ * that are degenerate-or-superseded.  Returns 1 iff every removal is explained. */
+fn katabasis_nomos_continuous(removed: u64, explained: u64) -> u32 @export {
+    if removed == explained { return 1u32 }
+    return 0u32
+}
+
+/* the quorum is UNANIMOUS by constitutional weight: this names WHY (a rule binds
+ * every organ, so every organ must consent).  A future supermajority tier, if
+ * ever wanted, is added HERE as organ law -- never smuggled into the driver. */
+fn katabasis_nomos_quorum_unanimous() -> u32 @export { return 1u32 }
+
+/* CHAMBER II -- GLOSSA: consent to amend the language's VOCABULARY.
+ * A word binds every module that speaks (sema resolves it tree-wide), so the
+ * quorum is unanimous, same constitutional weight as a rewrite law.  Inputs
+ * (1 = that faculty concurs):
+ *   self_agree   : glossa-set-id(run1) == glossa-set-id(run2)  [the press is
+ *                  timing-free, so a disagreement is PRESS DRIFT -- refused]
+ *   all_proven   : every ladder link PROVEN over all 2^64      [truth]
+ *   neg_refuted  : a corrupted spelling was REFUTED            [teeth]
+ *   no_collision : no word name is declared anywhere outside the tongue
+ *                  (deterministic whole-tree scan)              [uniqueness]
+ *   continuous   : every sealed word survives into the candidate lexicon
+ *                  (a word, once spoken, may not silently vanish -- programs
+ *                  speak it)                                    [continuity]
+ * Verdict: 0 CONCUR | 1 SELF-DISAGREEMENT | 2 UNTRUE | 3 TOOTHLESS
+ *        | 4 COLLIDING | 5 DISCONTINUOUS.  Lexicographic gravity: a lexicon
+ * you cannot reproduce is refused before its truth is weighed; an untrue
+ * word before its uniqueness; a colliding word before its continuity. */
+fn katabasis_glossa_consent(self_agree: u32, all_proven: u32, neg_refuted: u32, no_collision: u32, continuous: u32) -> u32 @export {
+    if self_agree != 1u32 { return 1u32 }
+    if all_proven != 1u32 { return 2u32 }
+    if neg_refuted != 1u32 { return 3u32 }
+    if no_collision != 1u32 { return 4u32 }
+    if continuous != 1u32 { return 5u32 }
+    return 0u32
+}

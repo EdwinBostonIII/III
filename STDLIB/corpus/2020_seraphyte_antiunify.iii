@@ -18,6 +18,7 @@ module corpus_2020_seraphyte_antiunify
 extern @abi(c-msvc-x64) fn au_generalize(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_prove_family(family: u32) -> u8 from "ser_antiunify.iii"
 extern @abi(c-msvc-x64) fn au_is_subk(v: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_recurrence_mul(op: u32, arg: u64, r: u64) -> u8 from "ser_antiunify.iii"
 
 const AU_NONE   : u32 = 255u32
 const AU_SUBK   : u32 = 2u32
@@ -34,6 +35,12 @@ fn main() -> u64 {
     /* ARM 3: {9,17,33} anti-unify to the 2^k+1 (shladd) family; proven in one shot. */
     let fam2 : u32 = au_generalize(9u64, 17u64, 33u64, AU_SEED)
     if fam2 != AU_SHLADD { return 3u64 }
+    /* THE GUILLOTINE, exercised directly with BOTH verdicts: the geometric recurrence
+     * prover T(s) = s*r over all 2^64.  MUL-by-3 with r=3 is PROVEN (==1); the same step
+     * with r=5 is REFUTED (==0) -- the prover's two distinct outcomes, accept and reject,
+     * the discrimination the family-level arms above never exercise on it directly. */
+    if au_prove_recurrence_mul(1u32, 3u64, 3u64) != 1u8 { return 40u64 }
+    if au_prove_recurrence_mul(1u32, 3u64, 5u64) != 0u8 { return 41u64 }
     if au_prove_family(fam2) != 1u8 { return 4u64 }
 
     /* ARM 4: a MIXED set does NOT over-generalize -- 9 is shladd, breaking the shift-sub family. */

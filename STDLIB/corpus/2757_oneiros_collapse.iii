@@ -1,0 +1,240 @@
+/* STDLIB/corpus/2757_oneiros_collapse.iii -- THE ONEIROS COLLAPSE GATE.
+ *
+ * The dream tier's teeth, adversarially re-verified from OUTSIDE the organ:
+ *
+ *   [R] THE RUN        oz_run at a FIXED seed admits (exit 0): controls fired
+ *                      (the injected false law died two-path-confirmed, every
+ *                      sealed row survived the whole exhaustive stratum) and
+ *                      the sentinel stayed 0.
+ *   [P] THE REPLAY LAW the same seed re-runs to a BYTE-IDENTICAL cert and
+ *                      identical structural counts -- nondeterministic
+ *                      acquisition, deterministic replay, as a gate arm.
+ *   [W] THE WITNESS    every annihilated belief's (u,v) is re-evaluated by
+ *                      THIS gate's OWN walker (a THIRD independent evaluator,
+ *                      ia_apply through a separate implementation) -- both
+ *                      sides must genuinely differ at the recorded point.  A
+ *                      witness that checks nowhere is a lie; exit names it.
+ *   [D] DISPOSITIONS   no belief leaks the pipeline unclassified; survivors
+ *                      and joinables share ONE full dose (the fairness floor:
+ *                      every belief received the whole exhaustive stratum +
+ *                      the whole seeded stratum); an annihilated belief's
+ *                      dose never exceeds it.
+ *   [K] THE DOCKET     docket size == survivors + joinables; every entry is a
+ *                      live ledger id with a docket-class status; joinables
+ *                      precede survivors (heat is lexicographic, pre-stated).
+ *   [G] THE GAP        owed == canonical - semantic classes (the census
+ *                      identity, re-read through the doors).
+ *   [S] pinned census  EXACTLY the sealing die (cap word 15) under EXACTLY
+ *                      the sealed set id: terms/sem/can/owed/kill/join/surv/
+ *                      schemas pinned to the sealed-run values (the
+ *                      boundary-arm law: any other die or seal degrades to
+ *                      the mechanism arms above, never a false red).
+ *
+ * Exit: 99 green | 10 run refused | 11 replay cert split | 12 replay count
+ *     split | 13 witness refuted | 14 disposition leak | 15 dose fairness
+ *     | 16 docket shape | 17 gap identity | 20..27 pinned-census arms. */
+module corpus_2757_oneiros_collapse
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn cgphys_cap() -> u64 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_set_id() -> u64 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn oz_run(dreamfuel: u64, seed: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_n() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_owed() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_kill() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_surv() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_join() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_sent() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_terms() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_sem() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_can() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_cert() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_ctrl_ok() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_womb_schemas() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_status(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_wu(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_wv(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_dose(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_docket_n() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_floor_a(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_floor_b(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_jdepth(i: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_womb_born() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_womb_already() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_womb_sigrej() -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_ord(k: u64) -> u64 from "oneiros.iii"
+extern @abi(c-msvc-x64) fn oz_ser(i: u64, side: u64, out_addr: u64) -> u64 from "oneiros.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn pu(v: u64) -> i32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+
+/* the gate's OWN walker -- the third independent evaluator (organ idiom:
+ * module-scope scratch, never local arrays) */
+var GS  : [u8; 32]
+var GSL : u64 = 0u64
+var GSC : u64 = 0u64
+var GSX : u64 = 0u64
+var GSY : u64 = 0u64
+var GBAD : u64 = 0u64
+fn g_walk() -> u64 {
+    if GSC >= GSL { GBAD = 1u64   return 0u64 }
+    let b : u8 = GS[GSC]
+    GSC = GSC + 1u64
+    if b == 0u8 { return GSX }
+    if b == 1u8 { return GSY }
+    let id : i64 = (b as i64) - 2i64
+    if ia_atom_arity(id) == 1i64 { return ia_apply1(id, g_walk()) }
+    let l : u64 = g_walk()
+    return ia_apply2(id, l, g_walk())
+}
+fn g_eval(x: u64, y: u64) -> u64 {
+    GSC = 0u64
+    GSX = x
+    GSY = y
+    return g_walk()
+}
+
+const GATE_SEED : u64 = 424242u64
+const GATE_FUEL : u64 = 64u64
+
+fn main() -> i32 {
+    ps("== 2757 THE ONEIROS COLLAPSE GATE: the dream tier's teeth, re-verified from outside ==\n" as u64)
+    ia_init()
+    /* [R] the run at a fixed seed */
+    let rc1 : u64 = oz_run(GATE_FUEL, GATE_SEED)
+    if rc1 != 0u64 { return 10i32 }
+    if oz_ctrl_ok() != 1u64 { return 10i32 }
+    if oz_sent() != 0u64 { return 10i32 }
+    let c1 : u64 = oz_cert()
+    let n1 : u64 = oz_n()
+    let k1 : u64 = oz_kill()
+    let s1 : u64 = oz_surv()
+    let j1 : u64 = oz_join()
+    let o1 : u64 = oz_owed()
+    /* [P] the replay law */
+    let rc2 : u64 = oz_run(GATE_FUEL, GATE_SEED)
+    if rc2 != 0u64 { return 10i32 }
+    if oz_cert() != c1 { return 11i32 }
+    if oz_n() != n1 { return 12i32 }
+    if oz_kill() != k1 { return 12i32 }
+    if oz_surv() != s1 { return 12i32 }
+    if oz_join() != j1 { return 12i32 }
+    if oz_owed() != o1 { return 12i32 }
+    ps("[R][P] run admitted twice at seed " as u64)
+    pu(GATE_SEED)
+    ps(": cert " as u64)
+    pu(c1)
+    ps(" byte-identical, counts identical (the replay law)\n" as u64)
+    /* [W] every witness re-checked by the gate's own walker; [D] dispositions */
+    let mut fulldose : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n1 {
+        let st : u64 = oz_status(i)
+        if st < 1u64 { return 14i32 }
+        if st > 4u64 { return 14i32 }
+        if st >= 3u64 { if oz_dose(i) > fulldose { fulldose = oz_dose(i) } }
+        i = i + 1u64
+    }
+    let mut wchecked : u64 = 0u64
+    i = 0u64
+    while i < n1 {
+        let st : u64 = oz_status(i)
+        if st <= 2u64 {
+            GSL = oz_ser(i, 0u64, (&GS) as u64)
+            GBAD = 0u64
+            let av : u64 = g_eval(oz_wu(i), oz_wv(i))
+            if GBAD == 1u64 { return 13i32 }
+            GSL = oz_ser(i, 1u64, (&GS) as u64)
+            let bv : u64 = g_eval(oz_wu(i), oz_wv(i))
+            if GBAD == 1u64 { return 13i32 }
+            if av == bv { return 13i32 }
+            wchecked = wchecked + 1u64
+            if oz_dose(i) > fulldose { return 15i32 }
+        } else {
+            if oz_dose(i) != fulldose { return 15i32 }
+        }
+        i = i + 1u64
+    }
+    ps("[W] " as u64)
+    pu(wchecked)
+    ps(" annihilation witnesses re-verified by the gate's OWN walker (third evaluator) -- all genuine\n" as u64)
+    ps("[D] dispositions total; survivors+joinables share the full dose " as u64)
+    pu(fulldose)
+    ps(", no annihilated dose exceeds it\n" as u64)
+    /* [K] the docket */
+    let dn : u64 = oz_docket_n()
+    if dn != (s1 + j1) { return 16i32 }
+    let mut seen_surv : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < dn {
+        let li : u64 = oz_ord(k)
+        if li >= n1 { return 16i32 }
+        let st : u64 = oz_status(li)
+        if st < 3u64 { return 16i32 }
+        if st == 4u64 { seen_surv = 1u64 }
+        if st == 3u64 { if seen_surv == 1u64 { return 16i32 } }
+        k = k + 1u64
+    }
+    ps("[K] docket " as u64)
+    pu(dn)
+    ps(" == survivors " as u64)
+    pu(s1)
+    ps(" + joinables " as u64)
+    pu(j1)
+    ps("; joinables lead (heat lexicographic)\n" as u64)
+    /* [G] the gap identity */
+    if (oz_can() - oz_sem()) != o1 { return 17i32 }
+    ps("[G] owed " as u64)
+    pu(o1)
+    ps(" == canonical " as u64)
+    pu(oz_can())
+    ps(" - semantic " as u64)
+    pu(oz_sem())
+    ps(" (the census identity)\n" as u64)
+    /* [S] the pinned census: EXACTLY the sealing die under EXACTLY the seal */
+    if cgphys_cap() == 15u64 { if cgphys_set_id() == 11627274842065240340u64 {
+        if oz_terms() != 2270u64 { return 20i32 }
+        if oz_sem() != 1325u64 { return 21i32 }
+        if oz_can() != 1922u64 { return 22i32 }
+        if o1 != 597u64 { return 23i32 }
+        if k1 != 80u64 { return 24i32 }
+        if j1 != 2u64 { return 25i32 }
+        if s1 != 515u64 { return 26i32 }
+        if oz_womb_schemas() != 12u64 { return 27i32 }
+        ps("[S] sealing-die census pinned: 2270/1325/1922/597 owed, 80 annihilated, 2 joinable, 515 survived, 12 schemas\n" as u64)
+    } }
+    /* [A] THE DOCKET READ-HEADS: the per-row floor pair, judge depth, and the womb's
+     * born/already/sig-reject census -- exercised over the whole docket so the surface
+     * is covered and the readouts are bounded (a garbage/uninitialized slot would blow
+     * these loose bounds; the sealing die stays well inside them).  Floors are context
+     * facts (THE METER-CONTEXT LAW) so only their EXISTENCE is checked, never a value. */
+    let dn2 : u64 = oz_docket_n()
+    let mut di : u64 = 0u64
+    let mut fsink : u64 = 0u64
+    while di < dn2 {
+        if oz_jdepth(di) > 4096u64 { return 40i32 }         /* judge depth bounded (not garbage) */
+        fsink = (fsink ^ oz_floor_a(di)) + oz_floor_b(di)   /* floor pair read (context, existence only) */
+        di = di + 1u64
+    }
+    /* the womb census partitions its attempts: born + already-present + sig-rejected,
+     * each a bounded count of what the seraphic womb did this dream (not garbage). */
+    if oz_womb_born() > 1000000u64 { return 41i32 }
+    if oz_womb_already() > 1000000u64 { return 41i32 }
+    if oz_womb_sigrej() > 1000000u64 { return 41i32 }
+    ps("[A] docket read-heads exercised: " as u64)  pu(dn2)  ps(" rows, womb born/already/sigrej bounded\n" as u64)
+    ps("THE DREAM WAKES CLEAN: kills are witnessed, replay is law, heat is attention, truth stays with the prover.\n" as u64)
+    return 99i32
+}

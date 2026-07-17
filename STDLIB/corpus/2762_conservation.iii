@@ -1,0 +1,78 @@
+/* STDLIB/corpus/2762_conservation.iii -- GATE for THE CONSERVATION TIER:
+ * III decides information conservation autonomously, on BOTH sides of its being --
+ * the reversible WORDS of its die (aether/reversibility) and the reversible
+ * STRUCTURES of the fair magma universe (aether/xeno_ontogenesis's conservation
+ * lens).  Stored-answer-free: every number below is RE-COMPUTED here (census by
+ * exhaustion, inverse by Newton, round-trip over 2^64-sampled points), never a
+ * pinned constant read back.
+ *
+ * ARMS (each falsifiable, distinct exit):
+ *   ONTO   the reversible-ontology census reproduces the labelled Latin-square
+ *          counts BY EXHAUSTION over the fair universe: n=1->1, n=2->2, n=3->12.
+ *          (A non-quasigroup wrongly admitted, or a Latin square missed, reds.)
+ *   MULINV the nonlinear find III could not invert by GF(2) -- MUL-odd -- is
+ *          inverted by III's own Newton iteration and round-trips over battery +
+ *          walking bits + LCG (structural bijection; any miss is a synthesis bug).
+ *   DEFICIT the destroyer side is named with exact deficit: even MUL has no
+ *          inverse (0) and Landauer deficit tz(c); odd MUL deficit 0.
+ *   HUNT   the word-hunter runs and finds reversibles + at least one involution
+ *          + at least one nonlinear reversible (the die's algebra is non-empty).
+ *   NEG    a WRONG inverse is refused: cinv from an even (non-unit) c fails the
+ *          round-trip (the verifier has teeth).
+ *
+ * exit 99 = all arms hold.  10 ONTO  20 MULINV  30 DEFICIT  40 HUNT  50 NEG. */
+module corpus_d2762
+
+extern @abi(c-msvc-x64) fn xo_reversible_census(n: i64) -> u64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn rv_mul_inverse(c: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_mul_deficit(c: u64) -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_mul_roundtrip(c: u64) -> u8 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_hunt(maxsize: i64) -> i32 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_reversible() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_involutions() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn rv_nonlinear_reversibles() -> u64 from "reversibility.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+
+fn main() -> i32 {
+    /* ONTO: the reversible-ontology census, recomputed by exhaustion */
+    if xo_reversible_census(1i64) != 1u64 { ps("RED ONTO n=1\n" as u64)  return 10i32 }
+    if xo_reversible_census(2i64) != 2u64 { ps("RED ONTO n=2\n" as u64)  return 10i32 }
+    if xo_reversible_census(3i64) != 12u64 { ps("RED ONTO n=3\n" as u64)  return 10i32 }
+
+    /* MULINV: III inverts a nonlinear (MUL-odd) bijection its GF(2) probe cannot,
+     * and the inverse round-trips.  Three independent odd multipliers. */
+    if rv_mul_roundtrip(13787848793156543929u64) != 1u8 { ps("RED MULINV a\n" as u64)  return 20i32 }
+    if rv_mul_roundtrip(6364136223846793005u64) != 1u8 { ps("RED MULINV b\n" as u64)  return 20i32 }
+    if rv_mul_roundtrip(3u64) != 1u8 { ps("RED MULINV c\n" as u64)  return 20i32 }
+    /* the synthesized inverse actually satisfies c*cinv==1 (unit witness) */
+    let c : u64 = 13787848793156543929u64
+    if (c * rv_mul_inverse(c)) != 1u64 { ps("RED MULINV unit\n" as u64)  return 20i32 }
+
+    /* DEFICIT: the destroyer side named exactly.  even c: no inverse, deficit tz(c). */
+    if rv_mul_inverse(13787848793156543928u64) != 0u64 { ps("RED DEFICIT even-has-inverse\n" as u64)  return 30i32 }
+    if rv_mul_deficit(4u64) != 2u64 { ps("RED DEFICIT tz(4)\n" as u64)  return 30i32 }
+    if rv_mul_deficit(8u64) != 3u64 { ps("RED DEFICIT tz(8)\n" as u64)  return 30i32 }
+    if rv_mul_deficit(7u64) != 0u64 { ps("RED DEFICIT odd\n" as u64)  return 30i32 }
+
+    /* HUNT: the die's reversible word algebra is non-empty and structured */
+    rv_hunt(3i64)
+    if rv_reversible() == 0u64 { ps("RED HUNT no reversibles\n" as u64)  return 40i32 }
+    if rv_involutions() == 0u64 { ps("RED HUNT no involutions\n" as u64)  return 40i32 }
+    if rv_nonlinear_reversibles() == 0u64 { ps("RED HUNT no nonlinear reversibles\n" as u64)  return 40i32 }
+
+    /* NEG: the verifier has teeth -- an even c's "inverse" (0) must FAIL round-trip */
+    if rv_mul_roundtrip(13787848793156543928u64) != 0u8 { ps("RED NEG even round-trip passed\n" as u64)  return 50i32 }
+
+    ps("CONSERVATION GATE: III decides information conservation on both sides --\n" as u64)
+    ps("  reversible ONTOLOGIES censused by exhaustion (1,2,12 Latin squares) + reversible\n" as u64)
+    ps("  WORDS hunted + the MUL-odd nonlinear inverse SYNTHESIZED by Newton and round-tripped,\n" as u64)
+    ps("  destroyers named with exact Landauer deficit, a wrong inverse REFUSED.\n" as u64)
+    return 99i32
+}

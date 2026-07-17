@@ -212,19 +212,30 @@ extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from
 extern @abi(c-msvc-x64) fn iii_tc_expr_is_signed(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
 extern @abi(c-msvc-x64) fn iii_tc_expr_utag(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
 extern @abi(c-msvc-x64) fn iii_tc_utag_unify(a: u32, b: u32) -> u32 from "cg_typeclass.iii"
-/* Path C: the strength-reduction EMISSION law, factored into a single source the STDLIB certifier kernel-proves. */
-extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_shladd_admit(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_shladd_k(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_subk_admit(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2sh_admit(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2sh_j(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2sh_m(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2ss_admit(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2ss_j(v: u64) -> u32 from "cg_opt_rules.iii"
-extern @abi(c-msvc-x64) fn cgopt_mul_2ss_m(v: u64) -> u32 from "cg_opt_rules.iii"
+/* Path C: the strength-reduction EMISSION law, factored into a single source the STDLIB certifier
+ * kernel-proves.  The mul-family externs (cgopt_mul_*) left with their sole consumers, the PROVEN-dead
+ * r3_mul_* peephole extractors (seg_mul_plan is the sole mul path; corpus 2135 measured 0 declines) --
+ * deleted on this clean reseal as the 2135-era note sanctioned.  cg_opt_rules.iii keeps exporting the
+ * whole family: the certifier's proof binding (forcefield/cg_opt_cert.iii) consumes it there. */
+
+/* NOMOS: the machine-legislated rewrite door (COMPILER/BOOT/cg_phys_rules.iii [EMITTED],
+ * sealed behind iii-prove over all 2^64 by nomos_seal.sh -- see r3_nomos_* below).
+ * The purity+equality tier consults the sealed ROWS (exact ser bytes) behind the katabasis
+ * class door -- WHICH classes may fire is organ law (katabasis_nomos_live), never compiler
+ * hardcode; WHICH rows exist is the emitted module's, never hand-typed law data. */
+extern @abi(c-msvc-x64) fn cgphys_invol_admit(k: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_nrules() -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_class(i: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_dear_len(i: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_cheap_len(i: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_dear_b(i: u32, j: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_cheap_b(i: u32, j: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn katabasis_nomos_live(cls: u32) -> u32 from "nomos_admit.iii"
+/* THE GLOSSA LEXICON (machine-minted vocabulary): the cg half of "one name,
+ * two seats" -- an unbound bare callee found here calls the tongue's export */
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_len(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_byte(i: u32, j: u32) -> u32 from "cg_glossa_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_div_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_div_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mod_admit(v: u64) -> u32 from "cg_opt_rules.iii"
@@ -756,6 +767,26 @@ fn r3_emit_hex(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if 
 fn r3_is_sym_char(b: u32) -> u32 { if b >= 65u32 { if b <= 90u32 { return 1u32 } }; if b >= 97u32 { if b <= 122u32 { return 1u32 } }; if b >= 48u32 { if b <= 57u32 { return 1u32 } }; if b == 95u32 { return 1u32 }; return 0u32 }
 
 fn r3_name_eq_lit(off: u32, len: u32, lit_addr: u64, lit_len: u64) -> u32 { if (len as u64) != lit_len { return 0u32 }; let src: u64 = iii_ast_source_buf(R3_G_AST); if iii_emit_memcmp_c(src + (off as u64), lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
+/* THE GLOSSA SEAT: 1+index if the source slice names a sealed word, else 0.
+ * Lexicon bytes are staged into module scratch so the compare runs through
+ * the same memcmp the other name paths use. */
+var R3_GLOSSA_NB : [u8; 32]
+fn r3_glossa_find(off: u32, len: u32) -> u32 {
+    if len == 0u32 { return 0u32 }
+    if len > 31u32 { return 0u32 }
+    let src: u64 = iii_ast_source_buf(R3_G_AST)
+    let n: u32 = cgglossa_nwords()
+    let mut i: u32 = 0u32
+    while i < n {
+        if cgglossa_name_len(i) == len {
+            let mut j: u32 = 0u32
+            while j < len { R3_GLOSSA_NB[j] = cgglossa_name_byte(i, j) as u8   j = j + 1u32 }
+            if iii_emit_memcmp_c(src + (off as u64), (&R3_GLOSSA_NB) as u64, len as u64) == 0i32 { return i + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
 
 fn r3_emit_sym_run(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R3_G_AST); let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src, (off+i) as u64); if r3_is_sym_char(b) == 1u32 { r3_emit_ch(b) } else { r3_emit_ch(95u32) }; i = i + 1u32 }; return R3_OK }
 
@@ -880,71 +911,12 @@ fn r3_pop_rcx() -> u32 { r3_emit_arr(&R3_STR_POPRCX as u64, R3_STR_POPRCX_LEN); 
 fn r3_pop_rdx() -> u32 { r3_emit_arr(&R3_STR_POPRDX as u64, R3_STR_POPRDX_LEN); if R3_G_STACK_DEPTH > 0u32 { R3_G_STACK_DEPTH = R3_G_STACK_DEPTH - 1u32 }; return R3_OK }
 
 fn r3_emit_movabs_rax(v: u64) -> u32 { r3_emit_arr(&R3_STR_MOVABSQ_OPEN as u64, R3_STR_MOVABSQ_OPEN_LEN); r3_emit_hex(v); r3_emit_arr(&R3_STR_COMMA_RAX_NL as u64, R3_STR_COMMA_RAX_NL_LEN); return R3_OK }
-/* STRENGTH REDUCTION test: if op is MUL (3) and rhs is a constant integer literal equal to 2^k
- * (k in 1..63), return k; else 0.  Kernel-justified (sov_isa: mul(x,2^k) == shl(x,k)); x*2^k == x<<k
- * mod 2^64 for signed + unsigned, so the shift is byte-identical in RESULT to the imul. */
-fn r3_mul_pow2_k(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    /* TABLE-DRIVEN (Path C): the admit + shift decision is the single-source law in cg_opt_rules.iii that the
-     * STDLIB certifier kernel-proves sound.  Identical result to the former inline (v>=2 && pow2 -> log2(v)),
-     * so cg_r3.c's inline twin stays byte-equivalent (build_iiis2 --check-corpus). */
-    if cgopt_mul_admit(v) != 1u32 { return 0u32 }
-    return cgopt_mul_shift_k(v)
-}
-/* SHIFT-AND-ADD STRENGTH REDUCTION test (dual of cg_r3.c's mul_shladd_k -- IDENTICAL logic so the emitted
- * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is MUL(3) and rhs is a constant
- * integer literal equal to 2^k+1 (k in 1..63), return k; else 0.  Table-driven (Path C): the admit + shift
- * decision is the single-source law in cg_opt_rules.iii (cgopt_mul_shladd_*).  Sound: x*(2^k+1) ==
- * (x<<k)+x mod 2^64 (proven over bv_ring: (2^k+1)x = 2^k x + x).  Replaces a full imul with one shl + one
- * add for the non-pow2 (2^k+1) factors cg_r3 would otherwise imul. */
-fn r3_mul_shladd_k(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    if cgopt_mul_shladd_admit(v) != 1u32 { return 0u32 }
-    return cgopt_mul_shladd_k(v)
-}
-/* [EMITTED] SHIFT-AND-SUBQ STRENGTH REDUCTION test (dual of cg_r3.c's mul_subk_k -- IDENTICAL logic):
- * if op is MUL(3) and rhs == 2^k-1 (k in 3..63), return k via the single-source law cgopt_mul_subk_*. */
-fn r3_mul_subk_k(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    if cgopt_mul_subk_admit(v) != 1u32 { return 0u32 }
-    return cgopt_mul_subk_k(v)
-}
-/* [EMITTED] TWO-SHIFT STRENGTH REDUCTION extractors (dual of cg_r3.c's mul_2sh_j/_m -- IDENTICAL logic):
- * if op is MUL(3) and rhs == 2^j+2^m (j>m>=1), r3_mul_2sh_j returns j (>0 = admitted), r3_mul_2sh_m returns m. */
-fn r3_mul_2sh_j(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    if cgopt_mul_2sh_admit(v) != 1u32 { return 0u32 }
-    return cgopt_mul_2sh_j(v)
-}
-fn r3_mul_2sh_m(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    return cgopt_mul_2sh_m(v)
-}
-/* [EMITTED] 2-SHIFT-SUBTRACT extractors (dual of cg_r3.c's mul_2ss_j/_m -- IDENTICAL logic):
- * if op is MUL(3) and rhs == 2^j-2^m (contiguous run >=3), r3_mul_2ss_j returns j (>0 = admitted), _m returns m. */
-fn r3_mul_2ss_j(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    if cgopt_mul_2ss_admit(v) != 1u32 { return 0u32 }
-    return cgopt_mul_2ss_j(v)
-}
-fn r3_mul_2ss_m(op: u32, rhs: u32) -> u32 {
-    if op != 3u32 { return 0u32 }
-    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
-    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    return cgopt_mul_2ss_m(v)
-}
+/* (r3_mul_* strength-reduction extractors DELETED on this clean reseal, exactly as the 2135-era
+ * note sanctioned: corpus 2135 proves seg_mul_plan covers every reducible family with 0 declines,
+ * so these arms never ran.  Their cgopt_mul_* externs left with them.  The single-source law and
+ * its kernel-proof binding live on in cg_opt_rules.iii / forcefield/cg_opt_cert.iii.  Freed decl
+ * slots also matter: cg_r3 sits near sema's 1024-decl table, a wall the NOMOS splice first hit --
+ * the frozen iiis-1 carries that cap forever, so headroom is real capacity.) */
 /* [EMITTED] DIVIDE-BY-POW2 STRENGTH REDUCTION test (dual of cg_r3.c's div_pow2_k -- IDENTICAL logic): if op is
  * DIV(4) and rhs == 2^k (k in 1..63), return k via the single-source law cgopt_div_*.  Caller GATES on UNSIGNED
  * (signed x/2^k != x>>k).  Replaces an idiv/divq (tens of cycles) with one shr -- cg_r3 had NO division
@@ -2507,6 +2479,254 @@ fn r3_get_param_count(node: u32, kind: u32) -> u32 { if kind == R3_K_CYCLE_DECL 
 fn r3_get_param_at(node: u32, kind: u32, i: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_param_at(R3_G_AST, node, i) }; return iii_ast_fn_param_at(R3_G_AST, node, i) }
 fn r3_get_body(node: u32, kind: u32) -> u32 { if kind == R3_K_CYCLE_DECL { return iii_ast_cycle_forward_block(R3_G_AST, node) }; return iii_ast_fn_body(R3_G_AST, node) }
 
+/* ===== NOMOS -- the machine-legislated rewrite law (COMPILER/BOOT/cg_phys_rules.iii [EMITTED]) =====
+ * The consulted module is generated by `iii-substrate nomos` from the friction judge's held laws and
+ * lands ONLY behind nomos_seal.sh's truth gate: iii-prove PROVEN over all 2^64 per rule (bit-blast,
+ * never sampled).  cg_r3 consults value-level doors (the cg_opt_rules mold): WHICH atoms are
+ * legislated lives in the emitted module, never here -- no law indices, no hand-picked rules.
+ *
+ * v1 envelope: the multiplicity-1 involution family u(u(e)) -> e for u in {NOT, NEG}.  The operand
+ * hole e is emitted EXACTLY ONCE on both sides, so the collapse is sound even when e carries calls
+ * or loads; only the two pure atom applications are dropped.  Both spellings of each atom are
+ * recognized (paren-transparent): NOT(e) as unary `~e` or `allones ^ e` either operand order;
+ * NEG(e) as unary `-e` or `0 - e`.  Value equality holds mod 2^w for every width, so narrow-utag
+ * operands renorm identically through the surviving path (the parent keys its renorms statically
+ * on node utags, which the collapse does not change). */
+/* the operand of u(n0) if n0 syntactically spells unary atom u (kind 0 = NOT, 1 = NEG), else 0.
+ * The spelling constants here are RECOGNIZER facts -- the atoms' fixed base-op spellings
+ * (NOT(e) = allones ^ e, either operand order; NEG(e) = 0 - e, not commutative), the same
+ * definiens ia_def1 pins -- not law data; WHICH atoms are legislated is exclusively the
+ * emitted module's door (cgphys_invol_admit).  Paren-transparent on entry; returned operands
+ * need no stripping (they feed either this recognizer again or r3_emit_expr's PAREN arm). */
+fn r3_nomos_atom_arg(kind: u32, n0: u32) -> u32 {
+    let mut n: u32 = n0
+    let mut depth: u32 = 0u32
+    while depth < 255u32 {
+        if n == 0u32 { return 0u32 }
+        if iii_ast_node_kind(R3_G_AST, n) != R3_K_EXPR_PAREN { depth = 255u32 } else { n = iii_ast_paren_inner(R3_G_AST, n)   depth = depth + 1u32 }
+    }
+    if n == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(R3_G_AST, n)
+    if k == R3_K_EXPR_UNARY {
+        let mut want: u32 = 3u32
+        if kind == 1u32 { want = 1u32 }
+        if iii_ast_unary_op(R3_G_AST, n) == want { return iii_ast_unary_operand(R3_G_AST, n) }
+        return 0u32
+    }
+    if k == R3_K_EXPR_BINARY {
+        let mut bop: u32 = 8u32
+        let mut cst: u64 = 18446744073709551615u64
+        if kind == 1u32 { bop = 2u32   cst = 0u64 }
+        if iii_ast_binary_op(R3_G_AST, n) != bop { return 0u32 }
+        let l: u32 = iii_ast_binary_lhs(R3_G_AST, n)
+        if r3_lit_u64_compute(l) == 1u32 { if R3_LIT_VALUE == cst { return iii_ast_binary_rhs(R3_G_AST, n) } }
+        if kind == 0u32 {
+            if r3_lit_u64_compute(iii_ast_binary_rhs(R3_G_AST, n)) == 1u32 { if R3_LIT_VALUE == cst { return l } }
+        }
+        return 0u32
+    }
+    return 0u32
+}
+/* the surviving operand if node is a sealed involution u(u(e)), else 0 */
+fn r3_nomos_collapse(node: u32) -> u32 {
+    let mut kd: u32 = 0u32
+    while kd < 2u32 {
+        if cgphys_invol_admit(kd) == 1u32 {
+            let t: u32 = r3_nomos_atom_arg(kd, node)
+            if t != 0u32 { let e: u32 = r3_nomos_atom_arg(kd, t)  if e != 0u32 { return e } }
+        }
+        kd = kd + 1u32
+    }
+    return 0u32
+}
+
+/* ===== NOMOS v2: THE PURITY+EQUALITY TIER (sealed classes 1/2 + the class-3 same-operand rows).
+ * The involution arm above is hole-multiplicity 1->1 and therefore effect-blind.  Every further
+ * sealed row CHANGES evaluation multiplicity (e&e -> e drops an evaluation; the zero-forms
+ * re-spell it), so the arm first proves the operand's NATURE: a PURE expression -- literals,
+ * idents, parens, casts, value unary NOT/NEG, value binary ops, recursively -- evaluates with
+ * no effect and no instability, so dropping or re-spelling a duplicate evaluation is sound.
+ * Purity is conservative: CALL, BLOCK, INDEX/FIELD (loads), MATCH, RAW_ASM, SIZEOF, ADDR/DEREF,
+ * div/mod and every unknown kind REFUSE -- under-firing is always sound, over-firing never is.
+ * Equality is structural mod parens, ident bytes compared through the ONE source buffer
+ * (r3_local_lookup's own discipline), literal kinds never cross (INT never equals HEX).
+ * WHICH shapes may fire stays machine law twice over: the shape must exist as a SEALED ROW
+ * (exact ser bytes, the +2 atom coding gate 2748 pins to live arithmetic) in a class the
+ * katabasis door admits (katabasis_nomos_live -- one organ line per tier).  A reseal that
+ * drops or recodes a row leaves this arm COLD (the exact-byte scan finds nothing) while 2748
+ * reddens -- misfire-impossible by construction.  Operand order is definiens-strict: the
+ * ledger holds no commutativity (its own INERT corollary), so neither does the arm. */
+fn r3_nomos_pure(n0: u32) -> u32 {
+    if n0 == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(R3_G_AST, n0)
+    if k == R3_K_EXPR_INT { return 1u32 }
+    if k == R3_K_EXPR_HEX { return 1u32 }
+    if k == R3_K_EXPR_BOOL { return 1u32 }
+    if k == R3_K_EXPR_TRIT { return 1u32 }
+    if k == R3_K_EXPR_UNIT { return 1u32 }
+    if k == R3_K_EXPR_IDENT { return 1u32 }
+    if k == R3_K_EXPR_PAREN { return r3_nomos_pure(iii_ast_paren_inner(R3_G_AST, n0)) }
+    if k == R3_K_EXPR_CAST { return r3_nomos_pure(iii_ast_cast_value(R3_G_AST, n0)) }
+    if k == R3_K_EXPR_UNARY {
+        let uo: u32 = iii_ast_unary_op(R3_G_AST, n0)
+        if uo == 1u32 { return r3_nomos_pure(iii_ast_unary_operand(R3_G_AST, n0)) }
+        if uo == 3u32 { return r3_nomos_pure(iii_ast_unary_operand(R3_G_AST, n0)) }
+        return 0u32
+    }
+    if k == R3_K_EXPR_BINARY {
+        let bo: u32 = iii_ast_binary_op(R3_G_AST, n0)
+        if bo < 1u32 { return 0u32 }
+        if bo == 4u32 { return 0u32 }
+        if bo == 5u32 { return 0u32 }
+        if bo > 18u32 { return 0u32 }
+        if r3_nomos_pure(iii_ast_binary_lhs(R3_G_AST, n0)) == 0u32 { return 0u32 }
+        return r3_nomos_pure(iii_ast_binary_rhs(R3_G_AST, n0))
+    }
+    return 0u32
+}
+/* structural equality mod parens; 0 on anything not provably identical */
+fn r3_nomos_eq(a0: u32, b0: u32) -> u32 {
+    let mut a: u32 = a0
+    let mut d: u32 = 0u32
+    while d < 255u32 {
+        if a == 0u32 { return 0u32 }
+        if iii_ast_node_kind(R3_G_AST, a) != R3_K_EXPR_PAREN { d = 255u32 } else { a = iii_ast_paren_inner(R3_G_AST, a)   d = d + 1u32 }
+    }
+    let mut b: u32 = b0
+    d = 0u32
+    while d < 255u32 {
+        if b == 0u32 { return 0u32 }
+        if iii_ast_node_kind(R3_G_AST, b) != R3_K_EXPR_PAREN { d = 255u32 } else { b = iii_ast_paren_inner(R3_G_AST, b)   d = d + 1u32 }
+    }
+    if a == 0u32 { return 0u32 }
+    if b == 0u32 { return 0u32 }
+    let ka: u32 = iii_ast_node_kind(R3_G_AST, a)
+    if ka != iii_ast_node_kind(R3_G_AST, b) { return 0u32 }
+    if ka == R3_K_EXPR_INT {
+        if iii_ast_expr_int_u64(R3_G_AST, a) != iii_ast_expr_int_u64(R3_G_AST, b) { return 0u32 }
+        if r3_expr_utag(a) != r3_expr_utag(b) { return 0u32 }
+        return 1u32
+    }
+    if ka == R3_K_EXPR_HEX {
+        if iii_ast_hex_value_lo(R3_G_AST, a) != iii_ast_hex_value_lo(R3_G_AST, b) { return 0u32 }
+        if iii_ast_hex_value_hi(R3_G_AST, a) != iii_ast_hex_value_hi(R3_G_AST, b) { return 0u32 }
+        return 1u32
+    }
+    if ka == R3_K_EXPR_BOOL { if iii_ast_bool_value(R3_G_AST, a) == iii_ast_bool_value(R3_G_AST, b) { return 1u32 }   return 0u32 }
+    if ka == R3_K_EXPR_TRIT { if iii_ast_expr_trit_value(R3_G_AST, a) == iii_ast_expr_trit_value(R3_G_AST, b) { return 1u32 }   return 0u32 }
+    if ka == R3_K_EXPR_UNIT { return 1u32 }
+    if ka == R3_K_EXPR_IDENT {
+        let al: u32 = iii_ast_ident_name_length(R3_G_AST, a)
+        if al != iii_ast_ident_name_length(R3_G_AST, b) { return 0u32 }
+        let src: u64 = iii_ast_source_buf(R3_G_AST)
+        if iii_emit_memcmp_c(src + (iii_ast_ident_name_offset(R3_G_AST, a) as u64), src + (iii_ast_ident_name_offset(R3_G_AST, b) as u64), al as u64) == 0i32 { return 1u32 }
+        return 0u32
+    }
+    if ka == R3_K_EXPR_CAST {
+        if r3_expr_utag(a) != r3_expr_utag(b) { return 0u32 }
+        return r3_nomos_eq(iii_ast_cast_value(R3_G_AST, a), iii_ast_cast_value(R3_G_AST, b))
+    }
+    if ka == R3_K_EXPR_UNARY {
+        if iii_ast_unary_op(R3_G_AST, a) != iii_ast_unary_op(R3_G_AST, b) { return 0u32 }
+        return r3_nomos_eq(iii_ast_unary_operand(R3_G_AST, a), iii_ast_unary_operand(R3_G_AST, b))
+    }
+    if ka == R3_K_EXPR_BINARY {
+        if iii_ast_binary_op(R3_G_AST, a) != iii_ast_binary_op(R3_G_AST, b) { return 0u32 }
+        if r3_nomos_eq(iii_ast_binary_lhs(R3_G_AST, a), iii_ast_binary_lhs(R3_G_AST, b)) == 0u32 { return 0u32 }
+        return r3_nomos_eq(iii_ast_binary_rhs(R3_G_AST, a), iii_ast_binary_rhs(R3_G_AST, b))
+    }
+    return 0u32
+}
+var R3_NOMOS_E: u32 = 0u32
+/* TRUE iff a sealed row with EXACTLY these dear/cheap ser bytes exists in a katabasis-open
+ * class.  Out-of-range slots are compared against 255 -- the emitted accessors' own sentinel,
+ * so the compare is total over len-1 and len-3 sides alike. */
+fn r3_nomos_row(dl: u32, d0: u32, d1: u32, d2: u32, cl: u32, c0: u32, c1v: u32, c2v: u32) -> u32 {
+    let n: u32 = cgphys_nrules()
+    let mut i: u32 = 0u32
+    while i < n {
+        if katabasis_nomos_live(cgphys_rule_class(i)) == 1u32 {
+            if cgphys_rule_dear_len(i) == dl { if cgphys_rule_cheap_len(i) == cl {
+                if cgphys_rule_dear_b(i, 0u32) == d0 { if cgphys_rule_dear_b(i, 1u32) == d1 { if cgphys_rule_dear_b(i, 2u32) == d2 {
+                    if cgphys_rule_cheap_b(i, 0u32) == c0 { if cgphys_rule_cheap_b(i, 1u32) == c1v { if cgphys_rule_cheap_b(i, 2u32) == c2v {
+                        return 1u32
+                    } } }
+                } } }
+            } }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+/* rhs of BLSR's definiens: node spells (t - 1)?  returns t else 0 */
+fn r3_nomos_sub1_arg(n0: u32) -> u32 {
+    let mut n: u32 = n0
+    let mut d: u32 = 0u32
+    while d < 255u32 {
+        if n == 0u32 { return 0u32 }
+        if iii_ast_node_kind(R3_G_AST, n) != R3_K_EXPR_PAREN { d = 255u32 } else { n = iii_ast_paren_inner(R3_G_AST, n)   d = d + 1u32 }
+    }
+    if n == 0u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, n) != R3_K_EXPR_BINARY { return 0u32 }
+    if iii_ast_binary_op(R3_G_AST, n) != 2u32 { return 0u32 }
+    let r: u32 = iii_ast_binary_rhs(R3_G_AST, n)
+    if r == 0u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, r) != R3_K_EXPR_INT { return 0u32 }
+    if iii_ast_expr_int_u64(R3_G_AST, r) != 1u64 { return 0u32 }
+    return iii_ast_binary_lhs(R3_G_AST, n)
+}
+/* BLSI's definiens: node spells (e & NEG(e)) with pure e?  returns e else 0 */
+fn r3_nomos_blsi_arg(n0: u32) -> u32 {
+    let mut n: u32 = n0
+    let mut d: u32 = 0u32
+    while d < 255u32 {
+        if n == 0u32 { return 0u32 }
+        if iii_ast_node_kind(R3_G_AST, n) != R3_K_EXPR_PAREN { d = 255u32 } else { n = iii_ast_paren_inner(R3_G_AST, n)   d = d + 1u32 }
+    }
+    if n == 0u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, n) != R3_K_EXPR_BINARY { return 0u32 }
+    if iii_ast_binary_op(R3_G_AST, n) != 6u32 { return 0u32 }
+    let el: u32 = iii_ast_binary_lhs(R3_G_AST, n)
+    let t: u32 = r3_nomos_atom_arg(1u32, iii_ast_binary_rhs(R3_G_AST, n))
+    if t == 0u32 { return 0u32 }
+    if r3_nomos_eq(el, t) == 0u32 { return 0u32 }
+    if r3_nomos_pure(el) == 0u32 { return 0u32 }
+    return el
+}
+/* the tier's matcher: 1 = idempotent collapse (emit R3_NOMOS_E once), 2 = legislated
+ * zero-form (emit XOR(R3_NOMOS_E, R3_NOMOS_E) via the standard combine), 0 = cold. */
+fn r3_nomos_purity_tier(node: u32) -> u32 {
+    let op: u32 = iii_ast_binary_op(R3_G_AST, node)
+    if op != 6u32 { if op != 7u32 { return 0u32 } }
+    let lhs: u32 = iii_ast_binary_lhs(R3_G_AST, node)
+    let rhs: u32 = iii_ast_binary_rhs(R3_G_AST, node)
+    /* class 1: e & e -> e  |  e | e -> e   (sealed rows [AND x x] -> [x], [OR x x] -> [x]) */
+    if r3_nomos_eq(lhs, rhs) == 1u32 { if r3_nomos_pure(lhs) == 1u32 {
+        let mut ab: u32 = 10u32
+        if op == 7u32 { ab = 11u32 }
+        if r3_nomos_row(3u32, ab, 0u32, 0u32, 1u32, 0u32, 255u32, 255u32) == 1u32 { R3_NOMOS_E = lhs   return 1u32 }
+    } }
+    if op != 6u32 { return 0u32 }
+    /* class 3 same-operand: ANDN(e,e) spelled NOT(e) & e -> XOR(e,e) (x/y-twin rows).
+     * Definiens-strict: ANDN(a,b) = (~a) & b, so the NOT must be the LEFT operand. */
+    let t: u32 = r3_nomos_atom_arg(0u32, lhs)
+    if t != 0u32 { if r3_nomos_eq(t, rhs) == 1u32 { if r3_nomos_pure(rhs) == 1u32 {
+        if r3_nomos_row(3u32, 18u32, 0u32, 0u32, 3u32, 12u32, 0u32, 0u32) == 1u32 { R3_NOMOS_E = rhs   return 2u32 }
+        if r3_nomos_row(3u32, 18u32, 1u32, 1u32, 3u32, 12u32, 0u32, 0u32) == 1u32 { R3_NOMOS_E = rhs   return 2u32 }
+    } } }
+    /* class 2: BLSR(BLSI(e)) spelled (e & (0-e)) & ((e & (0-e)) - 1) -> XOR(e,e) (x/y-twin rows).
+     * Both BLSI spellings must be the SAME tree; the 1 literal is width-generic. */
+    let m: u32 = r3_nomos_sub1_arg(rhs)
+    if m != 0u32 { if r3_nomos_eq(lhs, m) == 1u32 {
+        let ei: u32 = r3_nomos_blsi_arg(lhs)
+        if ei != 0u32 {
+            if r3_nomos_row(3u32, 6u32, 4u32, 0u32, 3u32, 12u32, 0u32, 0u32) == 1u32 { R3_NOMOS_E = ei   return 2u32 }
+            if r3_nomos_row(3u32, 6u32, 4u32, 1u32, 3u32, 12u32, 0u32, 0u32) == 1u32 { R3_NOMOS_E = ei   return 2u32 }
+        }
+    } }
+    return 0u32
+}
+
 fn r3_emit_expr(node: u32) -> u32 {
     if node == 0u32 { return R3_OK }
     let k: u32 = iii_ast_node_kind(R3_G_AST, node)
@@ -2530,6 +2750,28 @@ fn r3_emit_expr(node: u32) -> u32 {
             return R3_OK
         }
         return r3_emit_global_ident(node, off, len)
+    }
+    /* NOMOS: collapse sealed involutions u(u(e)) -> e (machine-legislated; doors in cg_phys_rules.iii).
+     * The recursion re-enters this splice, so deeper chains cascade (u(u(u(u(e)))) -> e).
+     * NOMOS v2 purity+equality tier follows: idempotents collapse to their operand; legislated
+     * zero-forms re-emit as the ledger's cheap spelling XOR(e,e) through the STANDARD binary
+     * combine primitives (same pops, same XORQ, same bit renorm -- parents see the same
+     * contract as the general path).  R3_NOMOS_E is copied to a local BEFORE any re-entrant
+     * emission: the matcher global is clobbered by deeper splices. */
+    if k == R3_K_EXPR_UNARY { let nme: u32 = r3_nomos_collapse(node)  if nme != 0u32 { return r3_emit_expr(nme) } }
+    if k == R3_K_EXPR_BINARY {
+        let nme2: u32 = r3_nomos_collapse(node)
+        if nme2 != 0u32 { return r3_emit_expr(nme2) }
+        let npt: u32 = r3_nomos_purity_tier(node)
+        if npt == 1u32 { let ne1: u32 = R3_NOMOS_E   return r3_emit_expr(ne1) }
+        if npt == 2u32 {
+            let ne2: u32 = R3_NOMOS_E
+            let net: u32 = r3_expr_utag(ne2)
+            r3_emit_expr(ne2); r3_emit_expr(ne2); r3_pop_rcx(); r3_pop_rax()
+            r3_emit_arr(&R3_STR_XORQ as u64, R3_STR_XORQ_LEN)
+            r3_bit_renorm(net, net, iii_tc_utag_unify(net, net))
+            r3_push_rax(); return R3_OK
+        }
     }
     if k == R3_K_EXPR_UNARY {
         let op: u32 = iii_ast_unary_op(R3_G_AST, node)
@@ -2645,7 +2887,8 @@ fn r3_emit_expr(node: u32) -> u32 {
          * PROVEN-unreachable fallback -- corpus 2135 (a) emulates seg_mul_plan's encode->emit and verifies it
          * computes x*v for all families incl 2^64-1 (SOUND), and (b) measures 0 declines over pow2 / 2^k+/-1 /
          * 2^j+/-2^m (FULL COVERAGE), so the r3_mul_* arms never fire.  Deletion is byte-neutral + proven-safe;
-         * kept here as the independent reference cg_r3.c also embodies (deletion lands on the next clean reseal). */
+         * the NOMOS reseal EXECUTED that sanctioned deletion (helpers + their cgopt_mul_* externs) -- decl
+         * headroom under sema's 1024-decl table is real capacity now that the frozen iiis-1 pins the cap. */
         if op == 3u32 {
             if iii_ast_node_kind(R3_G_AST, rhs) == R3_K_EXPR_INT {
                 let mv: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
@@ -2692,9 +2935,10 @@ fn r3_emit_expr(node: u32) -> u32 {
          * linearity over Z/2^64), and a coverage sweep measured 0 declines over pow2 / 2^k+/-1 / 2^j+/-2^m -- so
          * seg_mul_plan returns a proven plan FIRST for every form these arms could fire on, and the arms never ran.
          * Output is byte-neutral (the e-graph byte-matches the families they encoded), verified by the stage1
-         * byte-check (iiis-0==iiis-2) + run_corpus.  The extractor helpers (r3_mul_*) remain defined; cg_r3.c (the
-         * frozen seed twin, unrebuildable under the gcc-15.2 blocker) keeps its mirror peephole -- iiis-0==iiis-2
-         * holds because the emitted bytes agree, not because the source mirrors. ===================================*/
+         * byte-check (iiis-0==iiis-2) + run_corpus.  The extractor helpers (r3_mul_*) are DELETED (the NOMOS
+         * reseal executed the sanctioned deletion); cg_r3.c (the frozen seed twin, unrebuildable under the
+         * gcc-15.2 blocker) keeps its mirror peephole -- byte agreement holds because the emitted bytes agree,
+         * not because the source mirrors. ==================================================================*/
         let shk: u32 = r3_shift_const_k(op, rhs)
         if shk != 0u32 {
             /* CONSTANT-SHIFT FOLD (the live self-optimizer; dual-implemented byte-identically in cg_r3.c):
@@ -2892,6 +3136,9 @@ fn r3_emit_expr(node: u32) -> u32 {
                 if pe_hit == 0u32 {
                 let bid: u32 = iii_ast_node_binder_id(R3_G_AST, callee)
                 if bid != 0u32 { let bk: u32 = iii_ast_node_kind(R3_G_AST, bid); if bk == R3_K_EXTERN_DECL { is_extern = 1u32; callee_rt = iii_ast_extern_return_type(R3_G_AST, bid) }; if bk == R3_K_FN_DECL { callee_rt = iii_ast_fn_return_type(R3_G_AST, bid); if r3_decl_is_exported(bid, bk) == 1u32 { is_extern = 1u32 } } }
+                /* a sealed word: unbound bare callee found in the lexicon calls
+                 * the tongue's export of the SAME name; rt 0 = u64, no extension */
+                if bid == 0u32 { if r3_glossa_find(cof, cln) != 0u32 { is_extern = 1u32; callee_rt = 0u32 } }
                 }
             }
         }

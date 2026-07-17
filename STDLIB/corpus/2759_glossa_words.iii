@@ -1,0 +1,223 @@
+/* STDLIB/corpus/2759_glossa_words.iii -- GATE for THE GLOSSA TIER: the machine's
+ * sealed vocabulary is LANGUAGE, and every word tells the truth.
+ *
+ * THIS FILE SPEAKS THE WORDS BARE -- no extern declarations for popcnt64/lzcnt64/
+ * tzcnt64/blsi64/blsmsk64/blsr64/andn64 anywhere below.  That it COMPILES is the
+ * language-binding arm: sema resolved the names from the sealed lexicon
+ * (cg_glossa_rules.iii), cg emitted calls to the tongue's seats (aether/glossa.iii),
+ * and the archive linked them.  A vocabulary regression cannot pass this file.
+ *
+ * ARMS (each falsifiable, distinct exit):
+ *   ID     table<->organ identity: cgglossa_set_id() == glossa_set_id() and the
+ *          word counts agree -- the compiler's lexicon and the tongue are ONE seal.
+ *   ROWS   every table row is well-formed: arity in {1,2}, atom id in the ledger's
+ *          range, name length in [4,16], name bytes lowercase-alnum.
+ *   PIN    the sealed lexicon pins the names this gate speaks (an unconscious
+ *          rename reds HERE, consciously, before it silently breaks speakers).
+ *   ENGINE the third engine: an independent bit-loop evaluator (neither spelling's
+ *          SWAR nor the die instruction) must agree with every word over the
+ *          13-value battery, all 64 walking bits, and 128 LCG mixed points
+ *          (andn64 additionally over battery x battery pairs).
+ *
+ * exit 99 = all arms hold.  10 ID  11 ROWS  12 PIN  20..26 ENGINE per word. */
+module corpus_d2759
+
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_set_id() -> u64 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_arity(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_atom(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_len(i: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn cgglossa_name_byte(i: u32, j: u32) -> u32 from "cg_glossa_rules.iii"
+extern @abi(c-msvc-x64) fn glossa_nwords() -> u64 from "glossa.iii"
+extern @abi(c-msvc-x64) fn glossa_set_id() -> u64 from "glossa.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+
+/* ---- the third engine: bit-loop evaluators, deliberately naive ---- */
+fn g_pc(v: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < 64u64 { c = c + (x & 1u64)   x = x >> 1u64   i = i + 1u64 }
+    return c
+}
+fn g_lz(v: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut sh : i64 = 63i64
+    while sh >= 0i64 {
+        if ((v >> (sh as u64)) & 1u64) == 1u64 { return c }
+        c = c + 1u64
+        sh = sh - 1i64
+    }
+    return 64u64
+}
+fn g_tz(v: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut sh : u64 = 0u64
+    while sh < 64u64 {
+        if ((v >> sh) & 1u64) == 1u64 { return c }
+        c = c + 1u64
+        sh = sh + 1u64
+    }
+    return 64u64
+}
+/* lowest set bit via the loop (not via x&-x -- that is spelling 0's algebra) */
+fn g_low(v: u64) -> u64 {
+    let mut sh : u64 = 0u64
+    while sh < 64u64 {
+        if ((v >> sh) & 1u64) == 1u64 { return 1u64 << sh }
+        sh = sh + 1u64
+    }
+    return 0u64
+}
+fn g_blsi(v: u64) -> u64 { return g_low(v) }
+fn g_blsmsk(v: u64) -> u64 {
+    /* bits 0..tz inclusive; all-ones on v==0 (the chip's rule) */
+    if v == 0u64 { return 18446744073709551615u64 }
+    let t : u64 = g_tz(v)
+    if t == 63u64 { return 18446744073709551615u64 }
+    return (1u64 << (t + 1u64)) - 1u64
+}
+fn g_blsr(v: u64) -> u64 {
+    let mut r : u64 = 0u64
+    let mut sh : u64 = 0u64
+    let mut dropped : u64 = 0u64
+    while sh < 64u64 {
+        if ((v >> sh) & 1u64) == 1u64 {
+            if dropped == 1u64 { r = r | (1u64 << sh) }
+            dropped = 1u64
+        }
+        sh = sh + 1u64
+    }
+    return r
+}
+fn g_andn(a: u64, b: u64) -> u64 {
+    let mut r : u64 = 0u64
+    let mut sh : u64 = 0u64
+    while sh < 64u64 {
+        if ((a >> sh) & 1u64) == 0u64 { if ((b >> sh) & 1u64) == 1u64 { r = r | (1u64 << sh) } }
+        sh = sh + 1u64
+    }
+    return r
+}
+
+fn bat(k: u64) -> u64 {
+    if k == 0u64 { return 0u64 }
+    if k == 1u64 { return 1u64 }
+    if k == 2u64 { return 2u64 }
+    if k == 3u64 { return 18446744073709551615u64 }
+    if k == 4u64 { return 9223372036854775808u64 }
+    if k == 5u64 { return 12297829382473034410u64 }
+    if k == 6u64 { return 6148914691236517205u64 }
+    if k == 7u64 { return 4294967295u64 }
+    if k == 8u64 { return 18446744069414584320u64 }
+    if k == 9u64 { return 81985529216486895u64 }
+    if k == 10u64 { return 16045690984833335023u64 }
+    if k == 11u64 { return 9223372036854775809u64 }
+    if k == 12u64 { return 9223372036854775807u64 }
+    return 0u64
+}
+
+/* one probe value against all seven words; returns 0 ok | 20..26 the red word */
+fn probe(v: u64) -> u64 {
+    if popcnt64(v) != g_pc(v) { return 20u64 }
+    if lzcnt64(v) != g_lz(v) { return 21u64 }
+    if tzcnt64(v) != g_tz(v) { return 22u64 }
+    if blsi64(v) != g_blsi(v) { return 23u64 }
+    if blsmsk64(v) != g_blsmsk(v) { return 24u64 }
+    if blsr64(v) != g_blsr(v) { return 25u64 }
+    return 0u64
+}
+
+fn main() -> i32 {
+    /* ID: one seal, two seats */
+    if cgglossa_set_id() != glossa_set_id() { ps("RED ID: table != tongue\n" as u64)   return 10i32 }
+    if (cgglossa_nwords() as u64) != glossa_nwords() { ps("RED ID: word counts differ\n" as u64)   return 10i32 }
+    /* ROWS: well-formedness of every row */
+    let n : u32 = cgglossa_nwords()
+    let mut i : u32 = 0u32
+    while i < n {
+        let ar : u32 = cgglossa_arity(i)
+        if ar < 1u32 { return 11i32 }
+        if ar > 2u32 { return 11i32 }
+        if cgglossa_atom(i) > 18u32 { return 11i32 }
+        let nl : u32 = cgglossa_name_len(i)
+        if nl < 4u32 { return 11i32 }
+        if nl > 16u32 { return 11i32 }
+        let mut j : u32 = 0u32
+        while j < nl {
+            let b : u32 = cgglossa_name_byte(i, j)
+            let mut ok : u32 = 0u32
+            if b >= 97u32 { if b <= 122u32 { ok = 1u32 } }
+            if b >= 48u32 { if b <= 57u32 { ok = 1u32 } }
+            if ok == 0u32 { return 11i32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    /* PIN: the sealed lexicon contains exactly the words this gate speaks.
+     * Recompute one name from the table (index of arity-2 word must spell andn64). */
+    let mut a2 : u32 = 4294967295u32
+    i = 0u32
+    while i < n { if cgglossa_arity(i) == 2u32 { a2 = i }   i = i + 1u32 }
+    if a2 == 4294967295u32 { return 12i32 }
+    if cgglossa_name_len(a2) != 6u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 0u32) != 97u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 1u32) != 110u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 2u32) != 100u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 3u32) != 110u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 4u32) != 54u32 { return 12i32 }
+    if cgglossa_name_byte(a2, 5u32) != 52u32 { return 12i32 }
+    /* ENGINE: battery + walking bits + LCG mixed, every unary word */
+    let mut k : u64 = 0u64
+    while k < 13u64 {
+        let r : u64 = probe(bat(k))
+        if r != 0u64 { return r as i32 }
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 64u64 {
+        let r2 : u64 = probe(1u64 << k)
+        if r2 != 0u64 { return r2 as i32 }
+        let r3 : u64 = probe(18446744073709551615u64 ^ (1u64 << k))
+        if r3 != 0u64 { return r3 as i32 }
+        k = k + 1u64
+    }
+    let mut x : u64 = 88172645463325252u64
+    k = 0u64
+    while k < 128u64 {
+        x = (x ^ (x >> 30u64)) * 13787848793156543929u64
+        x = (x ^ (x >> 27u64)) * 10723151780598845931u64
+        x = x ^ (x >> 31u64)
+        let r4 : u64 = probe(x)
+        if r4 != 0u64 { return r4 as i32 }
+        k = k + 1u64
+    }
+    /* andn64: battery x battery + LCG pairs */
+    let mut ia : u64 = 0u64
+    while ia < 13u64 {
+        let mut ib : u64 = 0u64
+        while ib < 13u64 {
+            if andn64(bat(ia), bat(ib)) != g_andn(bat(ia), bat(ib)) { return 26i32 }
+            ib = ib + 1u64
+        }
+        ia = ia + 1u64
+    }
+    let mut y : u64 = 1442695040888963407u64
+    k = 0u64
+    while k < 128u64 {
+        x = (x ^ (x >> 30u64)) * 13787848793156543929u64
+        y = (y * 6364136223846793005u64) + 1442695040888963407u64
+        if andn64(x, y) != g_andn(x, y) { return 26i32 }
+        k = k + 1u64
+    }
+    ps("GLOSSA GATE: the vocabulary is language (bare words compiled) and every word tells the truth\n" as u64)
+    ps("  (table==tongue seal, rows well-formed, lexicon pinned, third-engine agreement on all points)\n" as u64)
+    return 99i32
+}

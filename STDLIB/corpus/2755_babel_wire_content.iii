@@ -1,0 +1,62 @@
+/* babel_wire Ε1 content-address-as-integrity: the message id IS the mhash of its
+ * payload.  Proves: a finalized frame's content_id verifies against itself (1);
+ * a single flipped payload byte hashes to a DIFFERENT address and is rejected
+ * (0 -- undeliverable); restoring the byte re-greens (1); a frame too short to
+ * hold its claimed payload is rejected (out-of-bounds guard); null buffers,
+ * null id, and null out-ptr are all rejected.  Exit 99. */
+module corpus_d2755
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_content_id(in_buf: u64, out_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_content(in_buf: u64, in_len: u32, expected_id_ptr: u64) -> u8 from "babel_wire.iii"
+
+fn main() -> u64 {
+    let plen : u32 = 48u32
+    let total : u32 = 68u32 + plen
+    let b : *u8 = malloc(total as u64)
+
+    let payload : *u8 = malloc(plen as u64)
+    let mut m : u64 = 0u64
+    while m < (plen as u64) { payload[m] = ((m * 7u64) + 3u64) as u8  m = m + 1u64 }
+
+    if babel_wire_init(b as u64) != 0i32 { return 1u64 }
+    babel_wire_set_seal_id(b as u64, 0xABCDu64)
+    if babel_wire_set_payload(b as u64, payload as u64, plen) != 0i32 { return 2u64 }
+    babel_wire_finalize(b as u64)
+
+    let id : *u8 = malloc(32u64)
+    if babel_wire_content_id(b as u64, id as u64) != 0i32 { return 3u64 }
+
+    /* the payload's address matches its id -> deliverable */
+    if babel_wire_verify_content(b as u64, total, id as u64) != 1u8 { return 4u64 }
+
+    /* flip one payload byte -> different address -> undeliverable */
+    let orig : u8 = b[68u64]
+    b[68u64] = orig ^ 0xFFu8
+    if babel_wire_verify_content(b as u64, total, id as u64) != 0u8 { return 5u64 }
+
+    /* restore -> re-greens */
+    b[68u64] = orig
+    if babel_wire_verify_content(b as u64, total, id as u64) != 1u8 { return 6u64 }
+
+    /* frame shorter than the header is rejected */
+    if babel_wire_verify_content(b as u64, 67u32, id as u64) != 0u8 { return 7u64 }
+    /* frame too short to hold its claimed payload is rejected */
+    if babel_wire_verify_content(b as u64, total - 1u32, id as u64) != 0u8 { return 8u64 }
+
+    /* null guards */
+    if babel_wire_content_id(0u64, id as u64) == 0i32 { return 9u64 }
+    if babel_wire_content_id(b as u64, 0u64) == 0i32 { return 10u64 }
+    if babel_wire_verify_content(0u64, total, id as u64) != 0u8 { return 11u64 }
+    if babel_wire_verify_content(b as u64, total, 0u64) != 0u8 { return 12u64 }
+
+    free(b)
+    free(payload)
+    free(id)
+    return 99u64
+}

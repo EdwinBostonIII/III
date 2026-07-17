@@ -1,0 +1,66 @@
+/* STDLIB/iii/katabasis/isa_admit.iii
+ *
+ * KATABASIS -- THE DISCOVERY ADMISSION (the descent gate for machine-found
+ * laws of the chip's own algebra).  aether/isa_ontogenesis discovers; the
+ * ARCHIVE decides what counts as a discovery.  This module is that decision
+ * as a pure total function in the gate_verdict mold: no I/O, no metal, no
+ * externs -- the clause outcomes are computed by the real substrate elsewhere
+ * (the live CPUID atom set, the instruction==definiens bridge, the battery
+ * adjudication, the reddening control, the capability-mask variance arm);
+ * this module is the ORDER and the VERDICT.  Every rejection is class-distinct
+ * and as auditable as an admission.
+ *
+ * THE CLAUSES (canonical order -- first failure names the verdict):
+ *   ATOMS_LIVE   every atom in the law is reported by THIS chip's CPUID --
+ *                an algebra citing instructions the silicon does not grant is
+ *                fiction.
+ *   BRIDGED      per gated atom, the live instruction agreed with the
+ *                independent definiens over the whole published battery --
+ *                two engines, one claim; a mis-encoded executor cannot admit.
+ *   ADJUDICATED  the law is REFUTED with a concrete witness or SURVIVED the
+ *                entire battery -- no third state, no sampling hand-wave.
+ *   UNCHARTED    the law touches at least one gated atom (BMI1/BMI2/POPCNT/
+ *                LZCNT).  Baseline-only identities are THE HUMAN-CHARTED
+ *                REGION: catalogued, never admitted as discoveries -- the
+ *                clause that ends the unnamed-law wordplay (RINVOL x3).
+ *   CONTROL_RED  a refuted law, used the same way, exhibited a concrete wrong
+ *                answer -- the loop is law-truth-sensitive, not a tautology.
+ *   VARIANT      the same construction under a masked capability report gave a
+ *                DIFFERENT universe -- the algebra is a function of the chip;
+ *                substrate-invariance would mean AUTHORED and is refused.
+ *
+ * Ring R0.  K 1.00 (pure).  NIH: the verdict vocabulary of gate_verdict.iii
+ * extended to the discovery domain; consumed by iii-substrate (aether). */
+module katabasis_isa_admit
+
+const KIA_ADMIT                 : u32 = 0u32
+const KIA_REJECT_ATOMS_DEAD     : u32 = 1u32
+const KIA_REJECT_UNBRIDGED      : u32 = 2u32
+const KIA_REJECT_UNADJUDICATED  : u32 = 3u32
+const KIA_REJECT_CHARTED        : u32 = 4u32
+const KIA_REJECT_CONTROL_SILENT : u32 = 5u32
+const KIA_REJECT_INVARIANT      : u32 = 6u32
+
+/* The discovery admission: 1/0 clause outcomes in canonical order; gated_class
+ * is the law's gate-class fold (0 = baseline-only).  Returns the verdict. */
+fn katabasis_isa_admit(atoms_live: u32, bridged: u32, adjudicated: u32, gated_class: u32, control_red: u32, variant: u32) -> u32 @export {
+    if atoms_live != 1u32 { return KIA_REJECT_ATOMS_DEAD }
+    if bridged != 1u32 { return KIA_REJECT_UNBRIDGED }
+    if adjudicated != 1u32 { return KIA_REJECT_UNADJUDICATED }
+    if gated_class == 0u32 { return KIA_REJECT_CHARTED }
+    if control_red != 1u32 { return KIA_REJECT_CONTROL_SILENT }
+    if variant != 1u32 { return KIA_REJECT_INVARIANT }
+    return KIA_ADMIT
+}
+
+/* The window-information rule of the survivor census, as pure math: a sweep
+ * whose survivors are zero AND whose refutations are zero decided nothing
+ * (vacuous); a sweep with decisions but zero survivors is a live NEGATIVE
+ * result (informative); survivors + refutations > 0 is informative.
+ * 1 informative / 0 vacuous. */
+fn katabasis_isa_informative(refuted: u64, survivors: u64) -> u32 @export {
+    if refuted == 0u64 {
+        if survivors == 0u64 { return 0u32 }
+    }
+    return 1u32
+}

@@ -1,0 +1,466 @@
+/* STDLIB/iii/aether/friction_cli.iii -- iii-friction: THE FRICTION LOGOS, driven.
+ *
+ *   iii-friction check         THE FALSIFIER BATTERY (wired before any claim):
+ *                              [N] null: a route raced against ITSELF must be
+ *                                  INDISTINGUISHABLE -- a ledger that finds a
+ *                                  winner between f and f is measuring weather;
+ *                              [G] gross: a 64x-dependent-work route must be
+ *                                  DEARER than 1x, and the margin must dwarf the
+ *                                  band (the ledger can see elephants);
+ *                              [D] determinism-of-verdict: the SAME race re-run
+ *                                  yields the SAME verdict (floors may wobble
+ *                                  inside the band; the LAW may not);
+ *                              [S] starvation: laps below the minimum REFUSE
+ *                                  (0) and the refusal is COUNTED.
+ *   iii-friction rot           the first sealed race: the three PROVEN-invariant
+ *                              spellings of rot_1 at width 64 (OR / ADD / XOR of
+ *                              the two shifts -- bit-identical by the sealed 2724
+ *                              theorem) raced on THIS die.  Lexicographic order
+ *                              embodied: invariance was proven BEFORE friction is
+ *                              consulted; the verdict is a fact about the die.
+ *   iii-friction pdep          THE ALIEN-ATOM RACE: scatter the low 8 bits of x
+ *                              into even positions -- the PDEP route (one BMI2
+ *                              instruction) vs the human shift-and-mask route.
+ *                              INVARIANCE FIRST: both routes proven equal by
+ *                              total exhaustion over all 256 inputs; only then
+ *                              is friction measured.  cpufeat gates the verb on
+ *                              dies without BMI2 (named refusal, exit 4).
+ *
+ * Exit: 0 OK | 1 usage | 2 FALSIFIER FIRED (the ledger is broken -- fix it,
+ *       never ship a verdict from it) | 4 jurisdiction (no BMI2 on this die).
+ * The Logos' order: truth (invariance) FIRST, friction SECOND, always.
+ * NIH: composes omnia/friction + omnia/bench + numera/cpufeat.
+ * Hexad: kind_motion.  Ring: R0. */
+module friction_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fr_reset(iters: u64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_begin() -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_lap_end(side: i64) -> i32 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_floor(side: i64) -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_verdict() -> i64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_margin() -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_band() -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_refusals() -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn fr_overhead() -> u64 from "friction.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_fact(idx: u64) -> u64 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn fr_laps(side: i64) -> i64 from "friction.iii"
+
+/* INCREMENT 2: the physical shortcut judge over the ISA ontogenesis stream */
+extern @abi(c-msvc-x64) fn fj_judge(p: u64, reps: u64, trials: i64) -> i64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_dir() -> i64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_wit_x() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_wit_y() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_refused_unproven() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_refused_malformed() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_lhs_floor() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_rhs_floor() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_last_law() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn fj_sink() -> u64 from "isa_friction_judge.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_set(p: u64) -> i32 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_i() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_law_j() -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_model_count() -> u64 from "isa_ontogenesis.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)  i = i + 1u64 }
+    return 1u32
+}
+fn pd(v: i64) -> i32 {
+    if v < 0i64 { putchar(45i32)  return pd(0i64 - v) }
+    if v >= 10i64 { pd(v / 10i64) }
+    putchar((48i64 + (v % 10i64)) as i32)
+    return 0i32
+}
+fn pu(v: u64) -> i32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+fn phx(v: u64) -> i32 {
+    let mut sh : i64 = 60i64
+    while sh >= 0i64 {
+        let nib : u64 = (v >> (sh as u64)) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+        sh = sh - 4i64
+    }
+    return 0i32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if pa[i] != pb[i] { return 0u32 }
+        if pa[i] == 0u8 { return 1u32 }
+        i = i + 1u64
+    }
+    return 0u32
+}
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        let c : u8 = p[i]
+        if c >= 0x30u8 { if c <= 0x39u8 { v = (v * 10u64) + ((c - 0x30u8) as u64) } }
+        i = i + 1u64
+    }
+    return v
+}
+
+/* ---- the routes under measurement (each folds into a sink so nothing dead-codes) ---- */
+
+/* rot_1 three ways -- PROVEN bit-identical at width 64 (gate 2724 [A]); here we ask
+ * the DIE which spelling it prefers.  iters-long dependent chains: each output feeds
+ * the next input, so the chain measures latency, not throughput soup. */
+fn route_rot_or(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters { x = (x << 1u64) | (x >> 63u64)   i = i + 1u64 }
+    return x
+}
+fn route_rot_add(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters { x = (x << 1u64) + (x >> 63u64)   i = i + 1u64 }
+    return x
+}
+fn route_rot_xor(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters { x = (x << 1u64) ^ (x >> 63u64)   i = i + 1u64 }
+    return x
+}
+/* the gross-work control: 64 dependent adds per step vs 1 */
+fn route_lean(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters { x = x + 1u64   i = i + 1u64 }
+    return x
+}
+fn route_dear(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters {
+        let mut j : u64 = 0u64
+        while j < 64u64 { x = x + 1u64   j = j + 1u64 }
+        i = i + 1u64
+    }
+    return x
+}
+
+/* the alien atom: scatter x's low 8 bits into even positions 0,2,4,..,14.
+ * PDEP route: one instruction against the mask 0x5555. */
+var FRC_A : u64 = 0u64
+var FRC_B : u64 = 0u64
+var FRC_R : u64 = 0u64
+fn pdep_metal() -> u64 {
+    metal {
+    leaq L_FRC_A(%rip), %rax
+    movq (%rax), %rcx
+    leaq L_FRC_B(%rip), %rax
+    movq (%rax), %rdx
+    pdep %rdx, %rcx, %r8
+    leaq L_FRC_R(%rip), %rax
+    movq %r8, (%rax)
+    }
+    return FRC_R
+}
+fn route_scatter_pdep(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters {
+        FRC_A = x
+        FRC_B = 0x5555u64
+        let s : u64 = pdep_metal()
+        x = (s ^ (s >> 8u64)) & 255u64       /* fold back to 8 bits, dependent */
+        i = i + 1u64
+    }
+    return x
+}
+/* the human route: eight explicit shift-and-mask deposits */
+fn scatter_human(v: u64) -> u64 {
+    let mut s : u64 = 0u64
+    s = s | ((v & 1u64))
+    s = s | ((v & 2u64) << 1u64)
+    s = s | ((v & 4u64) << 2u64)
+    s = s | ((v & 8u64) << 3u64)
+    s = s | ((v & 16u64) << 4u64)
+    s = s | ((v & 32u64) << 5u64)
+    s = s | ((v & 64u64) << 6u64)
+    s = s | ((v & 128u64) << 7u64)
+    return s
+}
+fn route_scatter_human(x0: u64, iters: u64) -> u64 {
+    let mut x : u64 = x0
+    let mut i : u64 = 0u64
+    while i < iters {
+        let s : u64 = scatter_human(x)
+        x = (s ^ (s >> 8u64)) & 255u64
+        i = i + 1u64
+    }
+    return x
+}
+/* one-shot pdep scatter (for the invariance sweep, no folding) */
+fn scatter_pdep_once(v: u64) -> u64 {
+    FRC_A = v
+    FRC_B = 0x5555u64
+    return pdep_metal()
+}
+
+var SINK : u64 = 0u64        /* results land here so no route dead-codes */
+
+/* race two rot spellings (sel: 0 or/add, 1 or/xor, 2 add/xor), alternating laps */
+fn race_rot(sa: i64, sb: i64, iters: u64, trials: i64) -> i64 {
+    fr_reset(iters)
+    let mut t : i64 = 0i64
+    while t < trials {
+        fr_lap_begin()
+        if sa == 0i64 { SINK = SINK ^ route_rot_or(3u64, iters) }
+        if sa == 1i64 { SINK = SINK ^ route_rot_add(3u64, iters) }
+        if sa == 2i64 { SINK = SINK ^ route_rot_xor(3u64, iters) }
+        fr_lap_end(0i64)
+        fr_lap_begin()
+        if sb == 0i64 { SINK = SINK ^ route_rot_or(3u64, iters) }
+        if sb == 1i64 { SINK = SINK ^ route_rot_add(3u64, iters) }
+        if sb == 2i64 { SINK = SINK ^ route_rot_xor(3u64, iters) }
+        fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    return fr_verdict()
+}
+
+fn pr_verdict(v: i64) {
+    if v == 1i64 { ps("A-CHEAPER" as u64)  return }
+    if v == 2i64 { ps("B-CHEAPER" as u64)  return }
+    if v == 3i64 { ps("INDISTINGUISHABLE" as u64)  return }
+    ps("REFUSED" as u64)
+}
+
+fn pr_race_line(name: u64, v: i64) {
+    ps("  " as u64)  ps(name)
+    ps(": floors " as u64)  pu(fr_floor(0i64))
+    ps(" / " as u64)  pu(fr_floor(1i64))
+    ps(" cycles, margin " as u64)  pu(fr_margin())
+    ps(", band " as u64)  pu(fr_band())
+    ps("  ->  " as u64)  pr_verdict(v)
+    putchar(10i32)
+}
+
+fn cmd_check() -> u64 {
+    ps("== THE FALSIFIER BATTERY (the ledger must survive itself) ==\n" as u64)
+    /* [N] null: the same route on both sides */
+    fr_reset(4096u64)
+    let mut t : i64 = 0i64
+    while t < 9i64 {
+        fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 4096u64)  fr_lap_end(0i64)
+        fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 4096u64)  fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    let vn : i64 = fr_verdict()
+    pr_race_line("null  lean vs lean " as u64, vn)
+    if vn != 3i64 { ps("FALSIFIER FIRED: the null race found a winner (weather, not physics)\n" as u64)  return 2u64 }
+    /* [G] gross: 64x dependent work vs 1x */
+    fr_reset(4096u64)
+    t = 0i64
+    while t < 9i64 {
+        fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 4096u64)  fr_lap_end(0i64)
+        fr_lap_begin()  SINK = SINK ^ route_dear(1u64, 4096u64)  fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    let vg : i64 = fr_verdict()
+    pr_race_line("gross lean vs 64x  " as u64, vg)
+    if vg != 1i64 { ps("FALSIFIER FIRED: the ledger cannot see a 64x elephant\n" as u64)  return 2u64 }
+    if fr_margin() < (fr_band() * 8u64) { ps("FALSIFIER FIRED: elephant margin does not dwarf the band\n" as u64)  return 2u64 }
+    /* [D] determinism of the VERDICT under re-run */
+    fr_reset(4096u64)
+    t = 0i64
+    while t < 9i64 {
+        fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 4096u64)  fr_lap_end(0i64)
+        fr_lap_begin()  SINK = SINK ^ route_dear(1u64, 4096u64)  fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    let vg2 : i64 = fr_verdict()
+    if vg2 != vg { ps("FALSIFIER FIRED: the same race re-run changed its verdict\n" as u64)  return 2u64 }
+    ps("  determinism: the gross race re-run returns the same verdict\n" as u64)
+    /* [S] starvation refuses, loudly and counted */
+    let r0 : u64 = fr_refusals()
+    fr_reset(64u64)
+    fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 64u64)  fr_lap_end(0i64)
+    fr_lap_begin()  SINK = SINK ^ route_lean(1u64, 64u64)  fr_lap_end(1i64)
+    let vs : i64 = fr_verdict()
+    if vs != 0i64 { ps("FALSIFIER FIRED: a starved measurement produced a verdict\n" as u64)  return 2u64 }
+    if fr_refusals() != (r0 + 1u64) { ps("FALSIFIER FIRED: the refusal was not counted\n" as u64)  return 2u64 }
+    if fr_laps(0i64) != 1i64 { ps("FALSIFIER FIRED: the lap counter lies\n" as u64)  return 2u64 }
+    ps("  starvation: 1 lap/side REFUSED and counted (refusals=" as u64)  pu(fr_refusals())
+    ps(", bracket overhead=" as u64)  pu(fr_overhead())
+    ps(" cycles)\n" as u64)
+    ps("ALL FALSIFIERS SURVIVED (sink=0x" as u64)  phx(SINK)  ps(")\n" as u64)
+    return 0u64
+}
+
+fn cmd_rot() -> u64 {
+    ps("== THE FIRST SEALED RACE: rot_1's three PROVEN-invariant spellings ==\n" as u64)
+    ps("die " as u64)  phx(katabasis_cpu_census_fact(3u64))
+    ps("  (invariance: gate 2724 [A] -- bit-identical over all 2^64; friction is consulted SECOND)\n" as u64)
+    let v1 : i64 = race_rot(0i64, 1i64, 8192u64, 9i64)
+    pr_race_line("OR  vs ADD" as u64, v1)
+    let v2 : i64 = race_rot(0i64, 2i64, 8192u64, 9i64)
+    pr_race_line("OR  vs XOR" as u64, v2)
+    let v3 : i64 = race_rot(1i64, 2i64, 8192u64, 9i64)
+    pr_race_line("ADD vs XOR" as u64, v3)
+    if v1 == 0i64 { return 2u64 }
+    if v2 == 0i64 { return 2u64 }
+    if v3 == 0i64 { return 2u64 }
+    ps("(a verdict of INDISTINGUISHABLE is a real fact about this die's ALU, honestly banded)\n" as u64)
+    return 0u64
+}
+
+fn cmd_pdep() -> u64 {
+    if cpufeat_has_bmi2() != 1u8 {
+        ps("jurisdiction: this die carries no BMI2 -- the alien atom does not exist here (named refusal)\n" as u64)
+        return 4u64
+    }
+    ps("== THE ALIEN-ATOM RACE: PDEP scatter vs the human shift-and-mask ==\n" as u64)
+    /* INVARIANCE FIRST (the lexicographic law): total exhaustion over the domain */
+    let mut v : u64 = 0u64
+    while v < 256u64 {
+        if scatter_pdep_once(v) != scatter_human(v) {
+            ps("INVARIANCE BROKEN at input " as u64)  pu(v)
+            ps(" -- friction is NOT consulted (truth first)\n" as u64)
+            return 2u64
+        }
+        v = v + 1u64
+    }
+    ps("invariance: PDEP route == human route on ALL 256 inputs (proven before racing)\n" as u64)
+    fr_reset(4096u64)
+    let mut t : i64 = 0i64
+    while t < 9i64 {
+        fr_lap_begin()  SINK = SINK ^ route_scatter_pdep(170u64, 4096u64)   fr_lap_end(0i64)
+        fr_lap_begin()  SINK = SINK ^ route_scatter_human(170u64, 4096u64)  fr_lap_end(1i64)
+        t = t + 1i64
+    }
+    let vd : i64 = fr_verdict()
+    pr_race_line("PDEP vs human" as u64, vd)
+    if vd == 0i64 { return 2u64 }
+    if vd == 1i64 {
+        ps("THE LOGOS SPEAKS: the die's own instruction is the cheaper route for its own\n" as u64)
+        ps("  bit-geometry; the human spelling survives only as a route, not as a law.\n" as u64)
+    }
+    if vd == 2i64 {
+        ps("measured: the human spelling is cheaper ON THIS DIE -- the Logos keeps it.\n" as u64)
+        ps("  (least action selects routes; it owes no loyalty to novelty either.)\n" as u64)
+    }
+    return 0u64
+}
+
+/* ---- INCREMENT 2 driver: print one judged law ---- */
+var JT : [u8; 64]
+var JTN : u64 = 0u64
+var JTC : u64 = 0u64
+fn jterm_walk() {
+    if JTC >= JTN { return }
+    let b : u8 = JT[JTC]
+    JTC = JTC + 1u64
+    if b == 0u8 { putchar(120i32)  return }
+    if b == 1u8 { putchar(121i32)  return }
+    let atom : i64 = (b as i64) - 2i64
+    putchar(97i32)  pd(atom)  putchar(40i32)      /* a<k>( */
+    jterm_walk()
+    if ia_atom_arity(atom) == 2i64 { putchar(44i32)  jterm_walk() }
+    putchar(41i32)
+}
+fn jterm(t: u64) {
+    JTN = ia_term_ser(t, (&JT) as u64)
+    JTC = 0u64
+    jterm_walk()
+}
+
+fn cmd_judge(lawfuel: u64) -> u64 {
+    ps("== INCREMENT 2: THE PHYSICAL SHORTCUT JUDGE ==\n" as u64)
+    ps("die " as u64)  phx(katabasis_cpu_census_fact(3u64))
+    ps("  laws 0.." as u64)  pu(lawfuel)
+    ps("  (truth leg: the WHOLE battery through an independent walker; friction second)\n" as u64)
+    ps("isa models = " as u64)  pu(ia_model_count())
+    ps("  (the ontogenesis proposer's model tier count -- the space these laws are judged over)\n" as u64)
+    let mut held : u64 = 0u64
+    let mut cheaper_l : u64 = 0u64
+    let mut cheaper_r : u64 = 0u64
+    let mut inert : u64 = 0u64
+    let mut starved : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < lawfuel {
+        let v : i64 = fj_judge(p, 4u64, 9i64)
+        if v >= 0i64 {
+            if v != 0i64 {
+                held = held + 1u64
+                ia_law_set(p)
+                ps("  LAW " as u64)  pu(p)  ps(":  " as u64)
+                jterm(ia_law_i())
+                ps("  =  " as u64)
+                jterm(ia_law_j())
+                ps("   floors " as u64)  pu(fj_lhs_floor())
+                ps("/" as u64)  pu(fj_rhs_floor())
+                if v == 1i64 { cheaper_l = cheaper_l + 1u64   ps("  -> LHS CANONICAL (rhs demotes)" as u64) }
+                if v == 2i64 { cheaper_r = cheaper_r + 1u64   ps("  -> RHS CANONICAL (lhs demotes)" as u64) }
+                if v == 3i64 { inert = inert + 1u64   ps("  -> true, physically INERT" as u64) }
+                putchar(10i32)
+                /* the judge's stored rewrite direction must match the verdict it
+                 * returned: 1->side 0 (lhs), 2->side 1 (rhs), 3/other->no claim (-1). */
+                let want_dir : i64 = 0i64 - 1i64
+                if v == 1i64 { if fj_dir() != 0i64 { return 6u64 } }
+                if v == 2i64 { if fj_dir() != 1i64 { return 6u64 } }
+                if v == 3i64 { if fj_dir() != want_dir { return 6u64 } }
+            } else { starved = starved + 1u64 }
+        }
+        p = p + 1u64
+    }
+    ps("-- judged " as u64)  pu(lawfuel)
+    ps(": held " as u64)  pu(held)
+    ps(" (lhs-canonical " as u64)  pu(cheaper_l)
+    ps(", rhs-canonical " as u64)  pu(cheaper_r)
+    ps(", inert " as u64)  pu(inert)
+    ps("), refused-unproven " as u64)  pu(fj_refused_unproven())
+    ps(", starved " as u64)  pu(starved)
+    ps(", malformed " as u64)  pu(fj_refused_malformed())  putchar(10i32)
+    /* the lexicographic tooth: refuted laws MUST have been refused the race --
+     * if every law raced, the truth leg never fired and the judge is a bench */
+    if fj_refused_unproven() == 0u64 {
+        if held == lawfuel {
+            ps("SUSPICIOUS: every law held -- the truth leg never fired in this window\n" as u64)
+        }
+    }
+    ps("(a refusal carries its witness: last unproven law died at x=0x" as u64)
+    phx(fj_wit_x())
+    ps(" y=0x" as u64)  phx(fj_wit_y())  ps(")\n" as u64)
+    /* the measurement really ran (non-zero folded work) and the last law index is
+     * the judge's own read-head -- printed so the loops cannot dead-code away. */
+    ps("last law judged = " as u64)  pu(fj_last_law())
+    ps("   work-sink = 0x" as u64)  phx(fj_sink())  putchar(10i32)
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 {
+        ps("iii-friction check | rot | pdep | judge <lawfuel>\n" as u64)
+        return 1u64
+    }
+    let av  : *u64 = argv as *u64
+    let cmd : u64  = av[1u64]
+    if streq(cmd, "check" as u64) == 1u32 { return cmd_check() }
+    if streq(cmd, "rot" as u64) == 1u32 { return cmd_rot() }
+    if streq(cmd, "pdep" as u64) == 1u32 { return cmd_pdep() }
+    if streq(cmd, "judge" as u64) == 1u32 {
+        if argc < 3i32 { return 1u64 }
+        return cmd_judge(parse_u64(av[2u64]))
+    }
+    ps("iii-friction: unknown command\n" as u64)
+    return 1u64
+}

@@ -107,6 +107,13 @@ fn main() -> i32 {
         i = i + 1i64
     }
     if agree != 9i64 { return 23i32 }
+    /* the REJECT half: valid rows accepted above (== 1); here the verifier REFUSES an
+     * out-of-range index with the -9 OOB sentinel -- the discriminating second outcome
+     * that proves it is a real gate, not an always-accept stub.  (The sentinel is a
+     * NAMED constant so the outcome reads as a simple token, not a paren expression.) */
+    let oob9 : i64 = 0i64 - 9i64
+    let voob : i64 = bj_verify_catrow(99999i64)
+    if voob != oob9 { return 24i32 }
     /* [R] the replay + harvest (the sealed Phi-2 flow: pool 9, escapes 12) */
     if bg_replay(3i64, 2i64) != 9i64 { return 30i32 }
     if bg_evn() != 12i64 { return 31i32 }
@@ -115,6 +122,7 @@ fn main() -> i32 {
     while i < 12i64 {
         if bg_harvest(i) != 1i64 { return 32i32 }
         if bg_recheck(i) != 1i64 { return 33i32 }
+        if bg_recheck(88888i64) != 0i64 { return 34i32 }   /* REJECT: an unset index rechecks to 0 (the gate's 2nd outcome) */
         if bj_verify_harvest(i, 3i64, 2i64) == 1i64 { judged = judged + 1i64 }
         i = i + 1i64
     }

@@ -22,6 +22,8 @@ module corpus_2723_mathesis_census
 
 extern @abi(c-msvc-x64) fn mce_burnside(n: i64, comm: i64) -> i64 from "mathesis_census.iii"
 extern @abi(c-msvc-x64) fn mce_rh() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn mce_rh2() -> i64 from "mathesis_census.iii"
+extern @abi(c-msvc-x64) fn bc_eq(a: i64, b: i64) -> i64 from "mathesis_bigcurve.iii"
 extern @abi(c-msvc-x64) fn mce_fits() -> i64 from "mathesis_census.iii"
 extern @abi(c-msvc-x64) fn mce_i64() -> i64 from "mathesis_census.iii"
 extern @abi(c-msvc-x64) fn bc_render(h: i64, slot: i64) -> i32 from "mathesis_bigcurve.iii"
@@ -64,6 +66,12 @@ fn main() -> i32 {
     if chki(2i64, 1i64, 4i64) != 1i64 { return 16i32 }
     if chki(3i64, 1i64, 129i64) != 1i64 { return 17i32 }
     if chki(4i64, 1i64, 43968i64) != 1i64 { return 18i32 }
+    /* [A2] the two routes' HANDLES agree through the public equality door -- two
+     * DISTINCT bigint slots carrying the same value: the agreement is arithmetic,
+     * never handle aliasing. */
+    if mce_burnside(3i64, 0i64) != 0i64 { return 60i32 }
+    if bc_eq(mce_rh(), mce_rh2()) != 1i64 { return 61i32 }
+    if mce_rh() == mce_rh2() { return 62i32 }
     /* [B] n = 5 (both fit i64) -- the routes AGREE on the new counts */
     if chki(5i64, 0i64, 2483527537094825i64) != 1i64 { return 20i32 }
     if chki(5i64, 1i64, 254429900i64) != 1i64 { return 21i32 }

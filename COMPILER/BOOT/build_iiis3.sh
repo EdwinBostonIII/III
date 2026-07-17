@@ -60,7 +60,7 @@ DO_CLEAN=0
 # TUs ported from C to .iii.  Each entry maps "name.c" -> compile name.iii
 # via iiis-2 ($IIIS0_BIN -- historical variable name) instead of gcc.
 # Keep this list LC_ALL=C sorted.
-PORTED_TUS=( acc affine_audit ast ceiling cg_opt_rules cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha cg_svir cg_typeclass emit emit_sanctum eval hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
+PORTED_TUS=( acc affine_audit ast ceiling cg_opt_rules cg_phys_rules cg_glossa_rules cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha cg_svir cg_typeclass emit emit_sanctum eval hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
 
 usage() {
     cat <<'EOF' >&2
@@ -185,6 +185,21 @@ for tu in "${PORTED_TUS[@]}"; do
     OBJS+=("$obj")
     log "iiis-0 $src -> $obj"
     ( cd "$BOOT_DIR" && "$IIIS0_BIN" "${tu}.iii" --compile-only --out "$obj" ) \
+      || die "$III_EXIT_COMPILE" "iii compile failed: $src"
+done
+
+# ----- compile the katabasis spine TUs (organ law linked INTO the compiler) -----
+# The NOMOS purity+equality tier consults katabasis_nomos_live at compile time:
+# WHICH sealed classes may fire is organ law (STDLIB katabasis), never compiler
+# hardcode.  Explicit paths -- not BOOT-dir TUs; same pipeline, same OBJS.
+SPINE_TUS=( "$BOOT_DIR/../../STDLIB/iii/katabasis/nomos_admit.iii" )
+for src in "${SPINE_TUS[@]}"; do
+    sbase="$(basename "$src" .iii)"
+    obj="$TMP_ROOT/obj/${sbase}.iii.o"
+    [[ -f "$src" ]] || die "$III_EXIT_COMPILE" "missing spine source: $src"
+    OBJS+=("$obj")
+    log "iiis-0 $src -> $obj"
+    "$IIIS0_BIN" "$src" --compile-only --out "$obj" \
       || die "$III_EXIT_COMPILE" "iii compile failed: $src"
 done
 

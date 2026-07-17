@@ -13,17 +13,22 @@
  * runtime-safe: sha256_dispatch always takes the software path, so no crypto
  * behaviour depends on the SHA bit -- only the hw_offload codegen hint.
  *
- * Public surface (unchanged -- each returns 0 or 1, summary returns u32):
- *   cpufeat_has_{sse2,sse41,aesni,avx2,avx512f,bmi2,sha,rdrand,rdseed}()
+ * Public surface (each returns 0 or 1, summary returns u32):
+ *   cpufeat_has_{sse2,sse41,aesni,avx2,avx512f,bmi2,sha,rdrand,rdseed,
+ *                bmi1,popcnt,lzcnt}()
  *   cpufeat_summary() -> u32   bitmask: SSE2=0 SSE41=1 AESNI=2 AVX2=3 SHA=4
- *                              RDRAND=5 RDSEED=6 AVX512F=7 BMI2=8
+ *                              RDRAND=5 RDSEED=6 AVX512F=7 BMI2=8 AVX512DQ=9
+ *                              BMI1=10 POPCNT=11 LZCNT=12
  *
- * CPUID map (Intel SDM): L1.EDX[26]=SSE2; L1.ECX[19]=SSE4.1,[25]=AESNI,
- * [27]=OSXSAVE,[30]=RDRAND; L7.0.EBX[5]=AVX2,[8]=BMI2,[16]=AVX512F,[18]=RDSEED,
- * [29]=SHA.  AVX2/AVX-512 are AND-gated on XCR0 (XGETBV): bits 1,2 (mask 0x6)
+ * CPUID map (Intel SDM): L1.EDX[26]=SSE2; L1.ECX[19]=SSE4.1,[23]=POPCNT,
+ * [25]=AESNI,[27]=OSXSAVE,[30]=RDRAND; L7.0.EBX[3]=BMI1,[5]=AVX2,[8]=BMI2,
+ * [16]=AVX512F,[18]=RDSEED,[29]=SHA; L0x80000001.ECX[5]=LZCNT (ABM).
+ * AVX2/AVX-512 are AND-gated on XCR0 (XGETBV): bits 1,2 (mask 0x6)
  * for AVX2, bits 1,2,5,6,7 (mask 0xE6) for AVX-512 -- the OS-XSAVE half that a
  * raw CPUID would miss (#UD on EVEX otherwise).  bmi2 := avx2 (sound proxy: no
- * shipping x86-64 part has AVX-2 without BMI2).
+ * shipping x86-64 part has AVX-2 without BMI2).  BMI1/POPCNT/LZCNT are the
+ * chip's OWN report, no proxy -- they gate which atoms enter the ISA-born
+ * algebra (aether/isa_ontogenesis: the atom source is CPUID, never a menu).
  *
  * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure runtime query).
  */
@@ -43,6 +48,9 @@ const CPUFEAT_BIT_RDSEED  : u32 = 6u32
 const CPUFEAT_BIT_AVX512F : u32 = 7u32
 const CPUFEAT_BIT_BMI2    : u32 = 8u32
 const CPUFEAT_BIT_AVX512DQ : u32 = 9u32   /* AVX-512DQ (CPUID.7.0:EBX[17]) [RIPPLE-8 / D-BI-1] */
+const CPUFEAT_BIT_BMI1     : u32 = 10u32  /* BMI1: ANDN/BLSI/BLSMSK/BLSR/TZCNT (CPUID.7.0:EBX[3]) */
+const CPUFEAT_BIT_POPCNT   : u32 = 11u32  /* POPCNT (CPUID.1:ECX[23])                              */
+const CPUFEAT_BIT_LZCNT    : u32 = 12u32  /* LZCNT / ABM (CPUID.0x80000001:ECX[5])                 */
 
 /* X17 forced-path enabler: an AND-mask over the summary so a KAT can force a feature
  * OFF and exercise the fallback path on any host (default all-ones = no override). */
@@ -72,6 +80,8 @@ fn cpufeat_summary() -> u32 @export {
     let edx1 : u32 = cf_ld_u32(buf, 12u64)
     iii_cpuid(7u32, 0u32, buf)
     let ebx7 : u32 = cf_ld_u32(buf, 4u64)
+    iii_cpuid(0x80000001u32, 0u32, buf)
+    let ecx8 : u32 = cf_ld_u32(buf, 8u64)
 
     let sse2 : u32 = cf_bit(edx1, 26u32)
     let sse41 : u32 = cf_bit(ecx1, 19u32)
@@ -102,6 +112,9 @@ fn cpufeat_summary() -> u32 @export {
         }
     }
     let bmi2 : u32 = avx2
+    let bmi1 : u32 = cf_bit(ebx7, 3u32)
+    let popcnt : u32 = cf_bit(ecx1, 23u32)
+    let lzcnt : u32 = cf_bit(ecx8, 5u32)
 
     let mut bits : u32 = 0u32
     let one : u32 = 1u32
@@ -115,6 +128,9 @@ fn cpufeat_summary() -> u32 @export {
     if avx512 == 1u32 { bits = bits | (one << CPUFEAT_BIT_AVX512F) }
     if avx512dq == 1u32 { bits = bits | (one << CPUFEAT_BIT_AVX512DQ) }
     if bmi2 == 1u32   { bits = bits | (one << CPUFEAT_BIT_BMI2) }
+    if bmi1 == 1u32   { bits = bits | (one << CPUFEAT_BIT_BMI1) }
+    if popcnt == 1u32 { bits = bits | (one << CPUFEAT_BIT_POPCNT) }
+    if lzcnt == 1u32  { bits = bits | (one << CPUFEAT_BIT_LZCNT) }
     return bits
 }
 
@@ -151,6 +167,9 @@ fn cpufeat_has_bmi2() -> u8 @export    { return cf_has(CPUFEAT_BIT_BMI2) }
 fn cpufeat_has_sha() -> u8 @export     { return cf_has(CPUFEAT_BIT_SHA) }
 fn cpufeat_has_rdrand() -> u8 @export  { return cf_has(CPUFEAT_BIT_RDRAND) }
 fn cpufeat_has_rdseed() -> u8 @export  { return cf_has(CPUFEAT_BIT_RDSEED) }
+fn cpufeat_has_bmi1() -> u8 @export    { return cf_has(CPUFEAT_BIT_BMI1) }
+fn cpufeat_has_popcnt() -> u8 @export  { return cf_has(CPUFEAT_BIT_POPCNT) }
+fn cpufeat_has_lzcnt() -> u8 @export   { return cf_has(CPUFEAT_BIT_LZCNT) }
 
 /* ============================================================================================================
  * CPU SELF-IDENTITY via native CPUID -- the UNIVERSAL, UNPRIVILEGED, side-effect-free, VIRTUALIZATION-TRANSPARENT

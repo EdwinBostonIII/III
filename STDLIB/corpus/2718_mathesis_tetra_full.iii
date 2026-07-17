@@ -48,6 +48,10 @@ extern @abi(c-msvc-x64) fn mt4f_sym_str() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4f_sym_cit() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4f_sym_anchor() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4f_product12_law(cap: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_pl_a() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_pl_b() -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_rawc(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4f_isocc(p: i64) -> i64 from "mathesis_tetra.iii"
 
 fn z4_tid() -> i64 {
     let mut tid : i64 = 0i64
@@ -92,6 +96,9 @@ fn main() -> i32 {
     if b4 != 178981952i64 { return 23i32 }
     /* [C] THE CENSUS: all 4,294,967,296 tables (the priced sweep, paid here) */
     if mt4f_census() != 109i64 { return 30i32 }
+    /* the inhabited-species read-head: the FULL n=4 census inhabits at least as many
+     * species as its commutative sub-slice (25) -- a real structural containment. */
+    if mt4f_inhabited() < 25i64 { return 36i32 }
     if mt4f_lawful_raw() != 20596732i64 { return 31i32 }
     if mt4f_structures_lawful() != 860978i64 { return 32i32 }
     if mt4f_citizens() != 21i64 { return 33i32 }
@@ -121,5 +128,17 @@ fn main() -> i32 {
     if (b4 - mt4f_structures_lawful()) != 178120974i64 { return 56i32 }
     /* [L] THE CROSS-CARRIER PRODUCT LAW: 24 onto citizens x 21 full-token citizens */
     if mt4f_product12_law(21i64) != 504i64 { return 60i32 }
+    /* [M] THE LAW HELD => THE BLAME SLOT IS EMPTY.  product12_law records (pl_a, pl_b)
+     * only on refutation; 504 pairs verified above, so both must hold the -1 sentinel.
+     * Citizen 0 / profile 0 are REAL coordinates -- a BSS-zero slot here would blame a
+     * pair the law never broke on (the unarmed-witness class, 4th instance). */
+    if mt4f_pl_a() != (0i64 - 1i64) { return 61i32 }
+    if mt4f_pl_b() != (0i64 - 1i64) { return 62i32 }
+    /* [N] the per-profile sym-census stores, consumed at the pinned group species:
+     * the counts behind [G]'s raw/isoc figures, read through their own accessors. */
+    if mt4f_rawc(1131i64) != 12i64 { return 63i32 }        /* Z_4: 24/|Aut| = 12 tables */
+    if mt4f_isocc(1131i64) != 1i64 { return 64i32 }        /* ... one structure */
+    if mt4f_rawc(3691i64) != 4i64 { return 65i32 }         /* V_4: 24/|Aut| = 4 tables */
+    if mt4f_isocc(3691i64) != 1i64 { return 66i32 }
     return 99i32
 }

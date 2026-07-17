@@ -40,6 +40,8 @@ extern @abi(c-msvc-x64) fn mt4_structures() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_citizens() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_burnside() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_raw(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_rep(p: i64) -> i64 from "mathesis_tetra.iii"
+extern @abi(c-msvc-x64) fn mt4_inhabited() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_isoc(p: i64) -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_cit_list() -> i64 from "mathesis_tetra.iii"
 extern @abi(c-msvc-x64) fn mt4_cit_p(k: i64) -> i64 from "mathesis_tetra.iii"
@@ -108,5 +110,19 @@ fn main() -> u64 {
     /* ---- L: THE PRODUCT LAW at carrier 16, ALL ordered citizen pairs ---- */
     if mt4_product_law(32i64) != 49i64 { return 70u64 }
 
+    /* ---- W: the representative table REALLY HAS its species' profile (two-path via
+     * the load door), and the inhabited count survives an independent recount. ---- */
+    if mt4_rep(1131i64) != 194896i64 { return 60u64 }      /* Z_4's pinned rep */
+    mt4_load_sym(mt4_rep(1131i64))
+    if mt4_profile() != 1131i64 { return 61u64 }           /* the rep re-derives its species */
+    if mt4_rep(30i64) != 96740i64 { return 62u64 }         /* citizen 0's pinned rep */
+    let mut inh : i64 = 0i64
+    let mut p : i64 = 0i64
+    while p < 4096i64 {
+        if mt4_raw(p) > 0i64 { inh = inh + 1i64 }
+        p = p + 1i64
+    }
+    if inh != mt4_inhabited() { return 63u64 }             /* recount == the organ's counter */
+    if mt4_inhabited() != 25i64 { return 64u64 }           /* == the sealed census figure */
     return 99u64
 }

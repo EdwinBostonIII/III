@@ -24,6 +24,9 @@ extern @abi(c-msvc-x64) fn iscene_fb_addr() -> u64 from "iscene.iii"
 extern @abi(c-msvc-x64) fn iscene_write(path: u64) -> i32 from "iscene.iii"
 extern @abi(c-msvc-x64) fn iscene_read(path: u64) -> i64 from "iscene.iii"
 extern @abi(c-msvc-x64) fn iscene_file_bytes() -> u64 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_px(x: u64, y: u64, w: u64) -> u32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_set_focal(f: i64) -> i32 from "iscene.iii"
+extern @abi(c-msvc-x64) fn iscene_set_light(lx: i64, ly: i64, lz: i64) -> i32 from "iscene.iii"
 
 extern @abi(c-msvc-x64) fn iform_write_bound(fb: u64, w: u32, h: u32, bind: u64, path: u64) -> i32 from "iform.iii"
 extern @abi(c-msvc-x64) fn iform_read(path: u64, fb_out: u64, maxwords: u64) -> i64 from "iform.iii"
@@ -122,10 +125,40 @@ fn main() -> u64 {
     if diff != 0u64 { FBD = FBD + 1u64 }
     lab(66i32,68i32,58i32) e_u64(iform_last_bind()) sp() e_u64(diff) nl()
 
+    /* ── PX + SETTERS: the pixel read-head agrees with the framebuffer bit-for-bit,
+     * and the scene setters are LOAD-BEARING -- focal enters the ray projection
+     * (iscene.iii:110) and light enters the shading (:129), so changing either
+     * MUST change the image.  This is the headless proof that iscene is exact
+     * spatial math (a software framebuffer, no OS window), not a GUI stub. */
+    let mut FPX : u64 = 0u64
+    build_scene()                                        /* default focal 280, light (-5,7,-4) */
+    iscene_render(128u64, 96u64)
+    let base : u64 = iscene_sig(128u64, 96u64)
+    if base != d1 { FPX = FPX + 1u64 }                   /* the default render reproduces the pin */
+    /* iscene_px == the live framebuffer at a centre and a corner probe */
+    let fbp : u64 = iscene_fb_addr()
+    let pc : *u32 = (fbp + (48u64 * 128u64 + 64u64) * 4u64) as *u32
+    if iscene_px(64u64, 48u64, 128u64) != pc[0u64] { FPX = FPX + 1u64 }
+    let po : *u32 = fbp as *u32
+    if iscene_px(0u64, 0u64, 128u64) != po[0u64] { FPX = FPX + 1u64 }
+    /* set_focal is load-bearing: a different focal length is a different projection */
+    iscene_set_focal(140i64)
+    iscene_render(128u64, 96u64)
+    if iscene_sig(128u64, 96u64) == base { FPX = FPX + 1u64 }    /* MUST differ */
+    build_scene()                                        /* restores defaults */
+    iscene_render(128u64, 96u64)
+    if iscene_sig(128u64, 96u64) != base { FPX = FPX + 1u64 }    /* restored to the pin */
+    /* set_light is load-bearing: a different light is a different shading */
+    iscene_set_light(200i64, 0i64 - 200i64, 60i64)
+    iscene_render(128u64, 96u64)
+    if iscene_sig(128u64, 96u64) == base { FPX = FPX + 1u64 }    /* MUST differ */
+    lab(80i32,88i32,58i32) e_u64(FPX) nl()
+
     if FDT != 0u64 { return 10u64 }
     if FRS != 0u64 { return 20u64 }
     if FRT != 0u64 { return 30u64 }
     if FBD != 0u64 { return 40u64 }
     if FSZ != 0u64 { return 50u64 }
+    if FPX != 0u64 { return 60u64 }
     return 99u64
 }

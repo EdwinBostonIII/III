@@ -1,0 +1,502 @@
+/* STDLIB/corpus/2749_nomothesis_gap.iii -- XI-N1: THE OWED-LAW ENUMERATOR (the gate).
+ *
+ * The machine measures the COMPLETENESS of its own legislature.  Over every term of
+ * size <= 4 in the LIVE universe (atoms from this die's CPUID), quotient two ways:
+ *   (a) SEMANTICALLY: die-battery signature (ia_apply1/2 -- the electrons decide);
+ *   (b) SYNTACTICALLY: canonical form under the SEALED nomos rules, TWO strategies
+ *       (leftmost vs rightmost).  A strategy split is a CRITICAL PAIR of the sealed
+ *       system -- COMPLETION DEBT, counted + witnessed, never an error (first found
+ *       live 2026-07-17: BLSR(BLSI(BLSI(x))) -> XOR(BLSI(x),BLSI(x)) vs XOR(x,x)).
+ * gap = canonical classes - semantic classes = the laws the ledger still OWES at
+ * this size (COMPLETENESS DEBT; the witnesses include the count-atom laws the
+ * loop-definiens rung needs, e.g. TZCNT(x)=TZCNT(NEG(x)), and the INERT class the
+ * friction judge can never directionalize, e.g. AND(x,y)=AND(y,x) -- the measured
+ * proof that directional admission alone cannot complete the legislature).
+ *
+ * PINS: exact {terms, sem, can, gap, nconf} bind ONLY under the sealing die's cap
+ * word AND the sealed set id (the boundary-arm law: a future reseal or a different
+ * die degrades to the mechanism arms, never a false red).  Mechanism arms always:
+ * sem <= can <= terms; soundness (same canonical => same die signature); counted
+ * dispositions; two-variable twins skipped by name.
+ *
+ * Exit: 99 green | 10 rules | 11 universe | 12 ser-shape | 13 normalize-sentinel
+ *     | 14 soundness | 15 cap | 20..24 pinned-census arms (sealing die only). */
+module corpus_2749_nomothesis_gap
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ia_init() -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_tcount(m: i64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_term_ser(t_idx: u64, out_addr: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_atom_arity(id: i64) -> i64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply1(atom: i64, a: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn ia_apply2(atom: i64, a: u64, b: u64) -> u64 from "isa_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn cgphys_nrules() -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_set_id() -> u64 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_cap() -> u64 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_dear_len(i: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_cheap_len(i: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_dear_b(i: u32, j: u32) -> u32 from "cg_phys_rules.iii"
+extern @abi(c-msvc-x64) fn cgphys_rule_cheap_b(i: u32, j: u32) -> u32 from "cg_phys_rules.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn pu(v: u64) -> i32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+fn pd(v: i64) -> i32 {
+    if v < 0i64 { putchar(45i32)   return pd(0i64 - v) }
+    if v >= 10i64 { pd(v / 10i64) }
+    putchar((48i64 + (v % 10i64)) as i32)
+    return 0i32
+}
+
+fn atom_name(id: i64) -> i32 {
+    if id == 0i64  { ps("NOT" as u64) }
+    if id == 1i64  { ps("NEG" as u64) }
+    if id == 2i64  { ps("BLSI" as u64) }
+    if id == 3i64  { ps("BLSMSK" as u64) }
+    if id == 4i64  { ps("BLSR" as u64) }
+    if id == 5i64  { ps("POPCNT" as u64) }
+    if id == 6i64  { ps("LZCNT" as u64) }
+    if id == 7i64  { ps("TZCNT" as u64) }
+    if id == 8i64  { ps("AND" as u64) }
+    if id == 9i64  { ps("OR" as u64) }
+    if id == 10i64 { ps("XOR" as u64) }
+    if id == 11i64 { ps("ADD" as u64) }
+    if id == 12i64 { ps("SUB" as u64) }
+    if id == 13i64 { ps("MUL" as u64) }
+    if id == 14i64 { ps("SHL" as u64) }
+    if id == 15i64 { ps("SHR" as u64) }
+    if id == 16i64 { ps("ANDN" as u64) }
+    if id == 17i64 { ps("PDEP" as u64) }
+    if id == 18i64 { ps("PEXT" as u64) }
+    return 0i32
+}
+
+/* ---- the sealed rules, holes = leaf bytes (two-variable rows counted + skipped:
+ * their hole mapping is not a one-hole rewrite; the x/y twin carries the rule) ---- */
+var RD : [u8; 2048]
+var RC : [u8; 2048]
+var RDL : [u64; 32]
+var RCL : [u64; 32]
+var RN : u64 = 0u64
+var RSKIP : u64 = 0u64
+
+fn rules_load() -> i32 {
+    let n : u64 = cgphys_nrules() as u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let dl : u64 = cgphys_rule_dear_len(i as u32) as u64
+        let cl : u64 = cgphys_rule_cheap_len(i as u32) as u64
+        let mut twov : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < dl {
+            let b : u32 = cgphys_rule_dear_b(i as u32, j as u32)
+            if b == 1u32 { twov = 1u64 }
+            RD[(RN * 64u64) + j] = b as u8
+            j = j + 1u64
+        }
+        j = 0u64
+        while j < cl {
+            let b2 : u32 = cgphys_rule_cheap_b(i as u32, j as u32)
+            if b2 == 1u32 { twov = 1u64 }
+            RC[(RN * 64u64) + j] = b2 as u8
+            j = j + 1u64
+        }
+        if twov == 1u64 { RSKIP = RSKIP + 1u64 } else {
+            RDL[RN] = dl
+            RCL[RN] = cl
+            RN = RN + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- the working term (preorder ser) ---- */
+var TS : [u8; 64]
+var TSL : u64 = 0u64
+
+fn ts_sublen(p: u64) -> u64 {
+    let b : u8 = TS[p]
+    if b < 2u8 { return 1u64 }
+    let id : i64 = (b as i64) - 2i64
+    if ia_atom_arity(id) == 1i64 { return 1u64 + ts_sublen(p + 1u64) }
+    let l : u64 = ts_sublen(p + 1u64)
+    return 1u64 + l + ts_sublen(p + 1u64 + l)
+}
+
+/* match rule r's dear at p; the hole slice lands in MH_S/MH_L */
+var MH_S : u64 = 0u64
+var MH_L : u64 = 0u64
+var MH_SEEN : u64 = 0u64
+fn match_at(r: u64, p: u64) -> u64 {
+    MH_SEEN = 0u64
+    let dl : u64 = RDL[r]
+    let mut ri : u64 = 0u64
+    let mut ti : u64 = p
+    while ri < dl {
+        if ti >= TSL { return 0u64 }
+        let rb : u8 = RD[(r * 64u64) + ri]
+        if rb == 0u8 {
+            let sl : u64 = ts_sublen(ti)
+            if MH_SEEN == 0u64 { MH_S = ti   MH_L = sl   MH_SEEN = 1u64 }
+            else {
+                if sl != MH_L { return 0u64 }
+                let mut k : u64 = 0u64
+                while k < sl {
+                    if TS[MH_S + k] != TS[ti + k] { return 0u64 }
+                    k = k + 1u64
+                }
+            }
+            ti = ti + sl
+        } else {
+            if TS[ti] != rb { return 0u64 }
+            ti = ti + 1u64
+        }
+        ri = ri + 1u64
+    }
+    return 1u64
+}
+
+var TB : [u8; 64]
+fn rewrite_at(r: u64, p: u64) -> i32 {
+    let span : u64 = ts_sublen(p)
+    let mut o : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < p { TB[o] = TS[i]   o = o + 1u64   i = i + 1u64 }
+    let cl : u64 = RCL[r]
+    let mut ci : u64 = 0u64
+    while ci < cl {
+        let cb : u8 = RC[(r * 64u64) + ci]
+        if cb == 0u8 {
+            let mut k : u64 = 0u64
+            while k < MH_L { TB[o] = TS[MH_S + k]   o = o + 1u64   k = k + 1u64 }
+        } else { TB[o] = cb   o = o + 1u64 }
+        ci = ci + 1u64
+    }
+    i = p + span
+    while i < TSL { TB[o] = TS[i]   o = o + 1u64   i = i + 1u64 }
+    TSL = o
+    i = 0u64
+    while i < o { TS[i] = TB[i]   i = i + 1u64 }
+    return 0i32
+}
+
+/* strategy 0 = leftmost match; 1 = rightmost match.  Termination is the friction
+ * gradient (every rule strictly shrinks measured cost; sizes here also shrink or
+ * hold), with a paranoia bound anyway. */
+fn normalize(strategy: u64) -> u64 {
+    let mut steps : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        if steps > 64u64 { return 9999u64 }
+        go = 0u64
+        let mut found : u64 = 0u64
+        let mut best : u64 = 0u64
+        let mut bestr : u64 = 0u64
+        let mut p : u64 = 0u64
+        while p < TSL {
+            let mut r : u64 = 0u64
+            while r < RN {
+                if match_at(r, p) == 1u64 {
+                    if strategy == 0u64 {
+                        if found == 0u64 { best = p   bestr = r   found = 1u64 }
+                    } else { best = p   bestr = r   found = 1u64 }
+                }
+                r = r + 1u64
+            }
+            p = p + 1u64
+        }
+        if found == 1u64 {
+            match_at(bestr, best)
+            rewrite_at(bestr, best)
+            steps = steps + 1u64
+            go = 1u64
+        }
+    }
+    return steps
+}
+
+/* ---- the die decides semantics: evaluate TS over the battery via ia_apply ---- */
+var EC : u64 = 0u64
+var EX : u64 = 0u64
+var EY : u64 = 0u64
+fn eeval() -> u64 {
+    let b : u8 = TS[EC]
+    EC = EC + 1u64
+    if b == 0u8 { return EX }
+    if b == 1u8 { return EY }
+    let id : i64 = (b as i64) - 2i64
+    if ia_atom_arity(id) == 1i64 { return ia_apply1(id, eeval()) }
+    let l : u64 = eeval()
+    return ia_apply2(id, l, eeval())
+}
+fn bat(k: u64) -> u64 {
+    if k == 0u64 { return 0u64 }
+    if k == 1u64 { return 1u64 }
+    if k == 2u64 { return 2u64 }
+    if k == 3u64 { return 18446744073709551615u64 }
+    if k == 4u64 { return 9223372036854775808u64 }
+    if k == 5u64 { return 12297829382473034410u64 }
+    if k == 6u64 { return 6148914691236517205u64 }
+    if k == 7u64 { return 4294967295u64 }
+    if k == 8u64 { return 18446744069414584320u64 }
+    if k == 9u64 { return 81985529216486895u64 }
+    if k == 10u64 { return 16045690984833335023u64 }
+    if k == 11u64 { return 9223372036854775809u64 }
+    if k == 12u64 { return 9223372036854775807u64 }
+    if k == 13u64 { return 42u64 }
+    if k == 14u64 { return 1000003u64 }
+    return 32768u64
+}
+fn tsig() -> u64 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut kx : u64 = 0u64
+    while kx < 16u64 {
+        let mut ky : u64 = 0u64
+        while ky < 4u64 {
+            EC = 0u64
+            EX = bat(kx)
+            EY = bat(ky * 5u64)
+            let v : u64 = eeval()
+            h = (h ^ v) * 1099511628211u64
+            h = (h ^ (v >> 32u64)) * 1099511628211u64
+            ky = ky + 1u64
+        }
+        kx = kx + 1u64
+    }
+    return h
+}
+
+/* ---- the census store ---- */
+var CAN : [u8; 32768]     /* canonical sers, 8 bytes per slot */
+var CANL : [u8; 4096]
+var ORIG : [u8; 32768]    /* one original representative per term, 8 bytes per slot */
+var ORIGL : [u8; 4096]
+var SIG : [u64; 4096]
+var NT : u64 = 0u64
+var SA8 : [u8; 8]
+var NCONF : u64 = 0u64
+var NCPRINT : u64 = 0u64
+
+fn ts_print() -> i32 {
+    /* spell TS as nested atom names (recursive via a cursor) */
+    let b : u8 = TS[EC]
+    EC = EC + 1u64
+    if b == 0u8 { putchar(120i32)   return 0i32 }
+    if b == 1u8 { putchar(121i32)   return 0i32 }
+    let id : i64 = (b as i64) - 2i64
+    atom_name(id)
+    putchar(40i32)
+    ts_print()
+    if ia_atom_arity(id) == 2i64 { putchar(44i32)   ts_print() }
+    putchar(41i32)
+    return 0i32
+}
+fn slot_print(base: u64, l: u64) -> i32 {
+    /* load a stored ser into TS and spell it */
+    let mut i : u64 = 0u64
+    while i < l { TS[i] = CAN[base + i]   i = i + 1u64 }
+    TSL = l
+    EC = 0u64
+    ts_print()
+    return 0i32
+}
+fn oslot_print(base: u64, l: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < l { TS[i] = ORIG[base + i]   i = i + 1u64 }
+    TSL = l
+    EC = 0u64
+    ts_print()
+    return 0i32
+}
+
+fn main() -> i32 {
+    ps("== XI-N1: THE OWED-LAW ENUMERATOR -- the machine audits its own legislature ==\n" as u64)
+    ia_init()
+    rules_load()
+    if RN < 10u64 { return 10i32 }
+    ps("rules loaded " as u64)
+    pu(RN)
+    ps(" (skipped two-variable twins " as u64)
+    pu(RSKIP)
+    ps(")   sealed set id " as u64)
+    pu(cgphys_set_id())
+    putchar(10i32)
+    let mut prefix : u64 = 0u64
+    let mut m : i64 = 1i64
+    while m <= 4i64 { prefix = prefix + ia_tcount(m)   m = m + 1i64 }
+    if prefix < 100u64 { return 11i32 }
+    if prefix > 4096u64 { return 15i32 }
+    ps("universe: every term of size <= 4 on this die = " as u64)
+    pu(prefix)
+    ps(" terms\n" as u64)
+    let mut t : u64 = 0u64
+    while t < prefix {
+        TSL = ia_term_ser(t, (&TS) as u64)
+        if TSL < 1u64 { return 12i32 }
+        if TSL > 4u64 { return 12i32 }
+        /* keep the original spelling for the witness print */
+        let mut i : u64 = 0u64
+        while i < TSL { ORIG[(NT * 8u64) + i] = TS[i]   i = i + 1u64 }
+        ORIGL[NT] = TSL as u8
+        /* the die's semantics of the ORIGINAL term */
+        SIG[NT] = tsig()
+        /* canonical form, two strategies -- restore TS between them.  A strategy split
+         * is NOT an internal error: it is a CRITICAL PAIR of the sealed system (a real
+         * discovery -- completion debt), counted and witnessed, with strategy A's form
+         * seated as the canonical for the census. */
+        let na : u64 = normalize(0u64)
+        if na > 4096u64 { return 13i32 }
+        let mut cA : u64 = 0u64
+        while cA < TSL { SA8[cA] = TS[cA]   cA = cA + 1u64 }
+        let lA : u64 = TSL
+        i = 0u64
+        while i < (ORIGL[NT] as u64) { TS[i] = ORIG[(NT * 8u64) + i]   i = i + 1u64 }
+        TSL = ORIGL[NT] as u64
+        let nb : u64 = normalize(1u64)
+        if nb > 4096u64 { return 13i32 }
+        let mut split : u64 = 0u64
+        if TSL != lA { split = 1u64 }
+        if split == 0u64 {
+            i = 0u64
+            while i < lA { if TS[i] != SA8[i] { split = 1u64 }   i = i + 1u64 }
+        }
+        if split == 1u64 {
+            NCONF = NCONF + 1u64
+            if NCPRINT < 3u64 {
+                ps("  CRITICAL PAIR (completion debt): " as u64)
+                EC = 0u64
+                ts_print()
+                ps("  <-B--  " as u64)
+                i = 0u64
+                while i < (ORIGL[NT] as u64) { TS[i] = ORIG[(NT * 8u64) + i]   i = i + 1u64 }
+                TSL = ORIGL[NT] as u64
+                EC = 0u64
+                ts_print()
+                ps("  --A->  " as u64)
+                i = 0u64
+                while i < lA { TS[i] = SA8[i]   i = i + 1u64 }
+                TSL = lA
+                EC = 0u64
+                ts_print()
+                putchar(10i32)
+                NCPRINT = NCPRINT + 1u64
+            }
+        }
+        /* store strategy A's canonical */
+        i = 0u64
+        while i < lA { CAN[(NT * 8u64) + i] = SA8[i]   i = i + 1u64 }
+        CANL[NT] = lA as u8
+        NT = NT + 1u64
+        t = t + 1u64
+    }
+    /* count distinct canonicals, distinct sigs; soundness: same canonical => same sig */
+    let mut canN : u64 = 0u64
+    let mut sigN : u64 = 0u64
+    let mut a : u64 = 0u64
+    while a < NT {
+        let mut firstC : u64 = 1u64
+        let mut firstS : u64 = 1u64
+        let mut b2 : u64 = 0u64
+        while b2 < a {
+            if SIG[b2] == SIG[a] { firstS = 0u64 }
+            if CANL[b2] == CANL[a] {
+                let mut eq : u64 = 1u64
+                let mut k : u64 = 0u64
+                while k < (CANL[a] as u64) {
+                    if CAN[(b2 * 8u64) + k] != CAN[(a * 8u64) + k] { eq = 0u64 }
+                    k = k + 1u64
+                }
+                if eq == 1u64 {
+                    firstC = 0u64
+                    if SIG[b2] != SIG[a] { return 14i32 }
+                }
+            }
+            b2 = b2 + 1u64
+        }
+        canN = canN + firstC
+        sigN = sigN + firstS
+        a = a + 1u64
+    }
+    ps("semantic classes (die signature)      = " as u64)
+    pu(sigN)
+    putchar(10i32)
+    ps("canonical classes (sealed 17 rules)   = " as u64)
+    pu(canN)
+    ps("   (strategy A forms)\n" as u64)
+    ps("NON-CONFLUENT terms (critical pairs)  = " as u64)
+    pu(NCONF)
+    ps("   (0 would mean the system is confluent at size <= 4; each is COMPLETION debt)\n" as u64)
+    ps("THE OWED-LAW COUNT (gap)              = " as u64)
+    pu(canN - sigN)
+    ps("   (0 would mean the legislature is COMPLETE at size <= 4)\n" as u64)
+    ps("witness pairs -- the machine names its own debt (candidates for the judge):\n" as u64)
+    let mut printed : u64 = 0u64
+    a = 0u64
+    while a < NT {
+        if printed < 12u64 {
+            let mut b3 : u64 = 0u64
+            while b3 < a {
+                if printed < 12u64 { if SIG[b3] == SIG[a] {
+                    /* same die semantics: are their canonicals distinct? */
+                    let mut eq : u64 = 1u64
+                    if CANL[b3] != CANL[a] { eq = 0u64 }
+                    if eq == 1u64 {
+                        let mut k2 : u64 = 0u64
+                        while k2 < (CANL[a] as u64) {
+                            if CAN[(b3 * 8u64) + k2] != CAN[(a * 8u64) + k2] { eq = 0u64 }
+                            k2 = k2 + 1u64
+                        }
+                    }
+                    if eq == 0u64 {
+                        /* only print each canonical-pair once: b3 must be the FIRST of its canonical class */
+                        let mut firstrep : u64 = 1u64
+                        let mut c4 : u64 = 0u64
+                        while c4 < b3 {
+                            if SIG[c4] == SIG[b3] { firstrep = 0u64 }
+                            c4 = c4 + 1u64
+                        }
+                        if firstrep == 1u64 {
+                            ps("  OWED: " as u64)
+                            slot_print((b3 * 8u64), CANL[b3] as u64)
+                            ps("  ==  " as u64)
+                            slot_print((a * 8u64), CANL[a] as u64)
+                            ps("   [reps " as u64)
+                            oslot_print((b3 * 8u64), ORIGL[b3] as u64)
+                            ps(" ~ " as u64)
+                            oslot_print((a * 8u64), ORIGL[a] as u64)
+                            ps("]\n" as u64)
+                            printed = printed + 1u64
+                        }
+                    }
+                } }
+                b3 = b3 + 1u64
+            }
+        }
+        a = a + 1u64
+    }
+    ps("(printed " as u64)
+    pu(printed)
+    ps(" of the owed set; battery-equal is the SCREEN -- the judge's truth leg and\n" as u64)
+    ps(" iii-prove dispose each candidate downstream, the same three-gate road as every law)\n" as u64)
+    /* mechanism arms (every die, every seal) */
+    if sigN > canN { return 14i32 }
+    if canN > NT { return 14i32 }
+    /* the pinned census: EXACTLY the sealing die (cap 15) under EXACTLY the sealed set */
+    if cgphys_cap() == 15u64 { if cgphys_set_id() == 15201431207481571813u64 {
+        if NT != 2270u64 { return 20i32 }
+        if sigN != 1325u64 { return 21i32 }
+        if canN != 2014u64 { return 22i32 }
+        if (canN - sigN) != 689u64 { return 23i32 }
+        if NCONF != 4u64 { return 24i32 }
+    } }
+    return 99i32
+}

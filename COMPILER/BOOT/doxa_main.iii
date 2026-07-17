@@ -26,6 +26,7 @@ module doxa_main
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
 
 extern @abi(c-msvc-x64) fn dx_selfprove() -> u64 from "doxa.iii"
@@ -47,6 +48,9 @@ extern @abi(c-msvc-x64) fn dx_rank_build() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_rank_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_write_order(dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_unlearn(seq: u64, dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_offer_build(buf: u64, fa: u64, fb: u64, author: u64) -> u32 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_offer_receive(in_buf: u64, in_len: u32, dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_off_au() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_foreign_conj(author: u64, fa: u64, fb: u64, dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_adjudicate(fa: u64, fb: u64, dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_adju_sweep(dir: u64) -> u64 from "doxa.iii"
@@ -104,7 +108,10 @@ extern @abi(c-msvc-x64) fn dx_rpin() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn doxa_set_id() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
 
-var MCMD : [u8; 256]
+var MCMD : [u8; 512]
+var APIN : [u8; 256]                     /* iii-agon root output (src=.. img=..) */
+var ASRC : [u8; 96]
+var AIMG : [u8; 96]
 
 fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
 fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
@@ -163,6 +170,48 @@ fn cputu(at: u64, v: u64) -> u64 {
     dst[at + 1u64] = 0u8
     return at + 1u64
 }
+/* backslash the program-path part of MCMD (everything before the first space)
+ * -- cmd.exe refuses a forward-slash program word */
+fn cmd_backslash(upto: u64) -> i32 {
+    let mp : *u8 = (&MCMD) as *u8
+    let mut i : u64 = 0u64
+    while i < upto { if mp[i] == 32u8 { i = upto } else { if mp[i] == 47u8 { mp[i] = 92u8 }   i = i + 1u64 } }
+    return 0i32
+}
+/* extract the 64-hex token following marker "src=" / "img=" in APIN into dst;
+ * returns 1 on success */
+fn extract_hex(marker: u64, dst: u64) -> u64 {
+    let ap : *u8 = (&APIN) as *u8
+    let mp : *u8 = marker as *u8
+    let dp : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i + 4u64 < 256u64 {
+        if ap[i] == mp[0u64] { if ap[i+1u64] == mp[1u64] { if ap[i+2u64] == mp[2u64] { if ap[i+3u64] == mp[3u64] {
+            let mut k : u64 = 0u64
+            let s : u64 = i + 4u64
+            let mut ok : u64 = 1u64
+            while k < 64u64 {
+                let c : u8 = ap[s + k]
+                let mut hex : u64 = 0u64
+                if c >= 48u8 { if c <= 57u8 { hex = 1u64 } }
+                if c >= 97u8 { if c <= 102u8 { hex = 1u64 } }
+                if hex == 0u64 { ok = 0u64   k = 64u64 } else { dp[k] = c   k = k + 1u64 }
+            }
+            if ok == 1u64 { dp[64u64] = 0u8   return 1u64 }
+        } } } }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn read_pinfile(path: u64) -> u64 {
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return 0u64 }
+    let n : u64 = fread((&APIN) as u64, 1u64, 255u64, h)
+    fclose(h)
+    let ap : *u8 = (&APIN) as *u8
+    ap[n] = 0u8
+    return n
+}
 fn usage() -> u64 {
     ps("iii-doxa -- THE BELIEF ORGAN: two books, never blurred; the heart audits the mind\n\n" as u64)
     ps("  iii-doxa prove                     the self-proof alone (every law, every falsifier)\n" as u64)
@@ -171,6 +220,8 @@ fn usage() -> u64 {
     ps("  iii-doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
     ps("  iii-doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
     ps("  iii-doxa aim       [dirs]          the agenda: least-known contexts first (writes aim.txt)\n" as u64)
+    ps("  iii-doxa attest    [dirs]          attest the heart instrument (iii-agon two-path): the mind\n" as u64)
+    ps("                                     refuses evidence from a heart whose binary drifted from source\n" as u64)
     ps("  iii-doxa foreign ROOT FA FB [dirs] a peer's conjecture (decimal): quarantined, author-carried;\n" as u64)
     ps("                                     the chamber adjudicates; refuted -> the AUTHOR is billed\n" as u64)
     ps("  iii-doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
@@ -458,8 +509,10 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("fold-subtraction, bit-identical; dangling settlements refused), the QUESTION economy\n" as u64)
         ps("(exhaustive optimality; empty set = certified undecidable), THE MINT (a provably-confused\n" as u64)
         ps("class splits itself by the next record fact; keys frozen at door time; one level; shadow\n" as u64)
-        ps("agrees), the log's teeth -- every arm re-derived THIS invocation, before any verb may\n" as u64)
-        ps("move.  No gate, no KAT: this IS the law.\n" as u64)
+        ps("agrees), THE PHASE (abelian coupling; interior tombstones), THE CHAMBER (enumerated voters;\n" as u64)
+        ps("merge/tabled/refute), FEDERATION (citizen law for peers; author billing), REFINED MERGE\n" as u64)
+        ps("(refine.merge composition), THE OFFER (III-DOX1 wire frame + content-address), the log's\n" as u64)
+        ps("teeth -- every arm re-derived THIS invocation, before any verb may move.  No gate, no KAT.\n" as u64)
         return 0u64
     }
     dx_reset()
@@ -471,6 +524,76 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("/doxa.log were written under a DIFFERENT registry pin -- refused whole (stale).\n" as u64)
         ps("move or remove that file to begin fresh beliefs for this registry.\n" as u64)
         return 2u64
+    }
+    if streq(cmd, "wire" as u64) == 1u32 {
+        if nseen < 2u64 { return usage() }
+        ps("== THE DOXA WIRE: a peer's OFFER frame (III-DOX1) received + quarantined -- transport meets the citizen law ==\n" as u64)
+        /* a same-being peer, distinguished by a node salt (the couple's law: two
+         * instances of III still bill by name); its author = root XOR salt */
+        let salt : u64 = n1
+        let root : u64 = autognosis_root()
+        if root == 0u64 { ps("  our own constitution is incoherent -- we cannot even build an offer (the citizen law)\n" as u64)   return 4u64 }
+        let author : u64 = root ^ salt
+        let fa : u64 = n2
+        let fb : u64 = n3
+        if nseen < 3u64 { ps("  usage: iii-doxa wire SALT CTX_A CTX_B\n" as u64)   return 3u64 }
+        let bl : u32 = dx_offer_build((&MCMD) as u64, fa, fb, author)
+        if bl == 0u32 { ps("  offer build refused (incoherent author)\n" as u64)   return 4u64 }
+        ps("  built OFFER: author " as u64)  phex(author)  ps(" (root^salt), conjecture ctx " as u64)  phex(fa)  ps(" ~ ctx " as u64)  phex(fb)  putchar(10i32)
+        ps("  content-addressed (III-DOX1 seal) -- a flipped byte would be a DIFFERENT, undeliverable message\n" as u64)
+        let rr : i64 = dx_offer_receive((&MCMD) as u64, bl, doxadir)
+        if rr < 0i64 {
+            if rr == -20i64 { ps("  RECEIVED then REFUSED: incoherent author (the citizen law at the receiver)\n" as u64)   return 4u64 }
+            ps("  frame REFUSED at receive (code " as u64)  pi(rr)  ps(")\n" as u64)
+            return 4u64
+        }
+        ps("  RECEIVED + QUARANTINED (seq " as u64)  pu(rr as u64)  ps("): it may stand for the chamber; it touches NO tally\n" as u64)
+        auto_chamber(doxadir)
+        print_federation()
+        return 0u64
+    }
+    if streq(cmd, "attest" as u64) == 1u32 {
+        ps("== INSTRUMENT ATTESTATION: the mind refuses evidence from a heart whose binary drifted from its sealed source ==\n" as u64)
+        print_agenda(doxadir)
+        let probe : u64 = fopen("COMPILED/iii-agon.exe" as u64, "rb" as u64)
+        if probe == 0u64 { ps("  iii-agon absent -- build it to attest the instrument (the aim stands regardless)\n" as u64)   return 2u64 }
+        fclose(probe)
+        /* the heart instrument: its source-closure root + its binary image.
+         * The pin lives beside the heart's ledger (fixed path -- the heart's
+         * home is where its instrument is attested). */
+        let pinpath : u64 = "STDLIB/build/doxa/heart_pin.txt" as u64
+        if read_pinfile(pinpath) == 0u64 {
+            /* FIRST attestation: forge + store the instrument's pins */
+            let mut a : u64 = cput(0u64, "COMPILED/iii-agon.exe root COMPILER/BOOT/kardia_main.iii COMPILED/iii-kardia.exe > STDLIB/build/doxa/heart_pin.txt" as u64)
+            cmd_backslash(a)
+            let rc : i32 = system((&MCMD) as u64)
+            if rc != 0i32 { ps("  iii-agon could not forge the heart instrument pins (rc " as u64)  pi(rc as i64)  ps(")\n" as u64)   return 4u64 }
+            ps("  FIRST ATTESTATION: the heart instrument's source-closure root and binary image are pinned.\n" as u64)
+            ps("  future `attest` runs re-verify the live heart against these pins; drift is refused.\n" as u64)
+            read_pinfile(pinpath)
+            if extract_hex("src=" as u64, (&ASRC) as u64) == 1u64 { ps("  src=" as u64)  ps((&ASRC) as u64)  putchar(10i32) }
+            if extract_hex("img=" as u64, (&AIMG) as u64) == 1u64 { ps("  img=" as u64)  ps((&AIMG) as u64)  putchar(10i32) }
+            return 0u64
+        }
+        if extract_hex("src=" as u64, (&ASRC) as u64) != 1u64 { ps("  stored pin malformed -- delete heart_pin.txt to re-forge\n" as u64)   return 2u64 }
+        if extract_hex("img=" as u64, (&AIMG) as u64) != 1u64 { ps("  stored pin malformed -- delete heart_pin.txt to re-forge\n" as u64)   return 2u64 }
+        /* re-verify the CURRENT heart against the stored pins */
+        let mut v : u64 = cput(0u64, "COMPILED/iii-agon.exe verify " as u64)
+        v = cput(v, (&ASRC) as u64)
+        v = cput(v, " COMPILER/BOOT/kardia_main.iii " as u64)
+        v = cput(v, (&AIMG) as u64)
+        v = cput(v, " COMPILED/iii-kardia.exe > STDLIB/build/doxa/_attest_verify.log 2>&1" as u64)
+        cmd_backslash(v)
+        let vrc : i32 = system((&MCMD) as u64)
+        if vrc == 0i32 {
+            ps("  ATTESTED LIVE: the heart's binary agrees with its sealed source -- its evidence is trustworthy.\n" as u64)
+            ps("  the mind may consume the heart's DERIVED verdicts at the aimed contexts.\n" as u64)
+            return 0u64
+        }
+        if vrc == 2i32 { ps("  SOURCE_DRIFT: the heart's source moved under an unchanged binary -- evidence REFUSED until re-sealed.\n" as u64)   return 1u64 }
+        if vrc == 3i32 { ps("  IMAGE_DRIFT: the heart's binary moved under unchanged source -- evidence REFUSED until re-sealed.\n" as u64)   return 1u64 }
+        ps("  INSTRUMENT DRIFT (both) -- the heart is not itself; evidence REFUSED.\n" as u64)
+        return 1u64
     }
     if streq(cmd, "foreign" as u64) == 1u32 {
         if nseen < 3u64 { return usage() }

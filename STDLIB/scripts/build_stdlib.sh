@@ -305,6 +305,7 @@ fi
 
 # Module list in dependency order: each entry is "subsphere/name".
 MODULES=(
+    "numera/idfold"
     "numera/scalar"
     "numera/sha256"
     "numera/sha256_ni"

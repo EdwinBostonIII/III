@@ -250,6 +250,28 @@ extern @abi(c-msvc-x64) fn an_mid_def(i: u64) -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn an_mid_fiber(i: u64) -> u64 from "reversibility.iii"
 extern @abi(c-msvc-x64) fn an_neg_teeth() -> u64 from "reversibility.iii"
 
+/* THE LAGRANGIAN COUPLING -- the substrate's networking paradigm: two nodes fold
+ * one reversible admix chain, never transmitting state, latency accounted as a
+ * recoverable Landauer deficit (aether/lagrangian). */
+extern @abi(c-msvc-x64) fn lg_entangle_state(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_apply(state: u64, d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_unapply(state_after: u64, d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_least_action(cand_addr: u64, n: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_deficit_bound(gap_cycles: u64, pulse_cycles: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_action(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_noise(seed: u64, i: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_gestalt_selfproof() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_entangle(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_commit(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_state() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_entangle(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_commit(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_provisional(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_reconcile(true_d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_state() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_reversals() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+
 /* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
  * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
  * ripple palindrome (R^2 = id on the real ripple field); ser_pipeline (intent (x) intuition,
@@ -397,6 +419,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate frontier <maxsize 3..6>  (THE FRONTIER: cube permutations under TRUE die semantics incl. the count/deposit atoms; survivors of every explanation III can name = certified UNEXPLAINED, inverses hunted or OWED)\n" as u64)
         ps("iii-substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
         ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
+        ps("iii-substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -689,7 +712,14 @@ fn main(argc: i32, argv: u64) -> u64 {
         if sport > 65535i64 { sport = 47111i64 }
         return cmd_synapse(sport as u64)
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | reversible | symmetry | frontier | redeem)\n" as u64)
+    if streq(cmd, "couple" as u64) == 1u32 {
+        let mut cport : i64 = 47155i64
+        if argc >= 3i32 { cport = parse_i64(av[2u64]) }
+        if cport < 1024i64 { cport = 47155i64 }
+        if cport > 65535i64 { cport = 47155i64 }
+        return cmd_couple(cport as u64)
+    }
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
 }
 
@@ -766,6 +796,15 @@ fn parse_u64(s: u64) -> u64 {
 fn pu(v: u64) -> i32 {
     if v >= 10u64 { pu(v / 10u64) }
     putchar((48u64 + (v % 10u64)) as i32)
+    return 0i32
+}
+fn phex64(v: u64) -> i32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+    }
     return 0i32
 }
 
@@ -3986,3 +4025,126 @@ fn cmd_synapse(port: u64) -> u64 {
     ps("SYNAPSE GREEN: two endpoints proved the same being, obligations served in the minted tongue, truth cross-derived, corruption refused -- over real OS loopback\n" as u64)
     return 0u64
 }
+
+/* =====================================================================
+ * THE LAGRANGIAN COUPLE -- the substrate PULSES.  Not "listen for connections":
+ * two endpoints bind their autognosis_root to a real loopback socket, exchange
+ * roots, and fold ONE continuous reversible admix chain.  State is never on the
+ * wire -- only Action Vectors (bit-flip deltas).  When the wire stutters, latency
+ * is a Landauer deficit reasoned over: the receiver superposes the bounded
+ * candidate window, provisionally collapses onto the least-action guess, and when
+ * the true pulse arrives late it flows BACKWARD (admix_inv, exact -- no bit lost)
+ * and re-applies the true history.  The two silicons become one non-local
+ * processor, proven bit-exact over the real OS wire.
+ *
+ * Two distinct salted identities on one host (loopback): the PROTOCOL is proven
+ * over real ws2_32 bytes; cross-host is a resource wall, not a shape change.
+ * exit 0 converged | 2 socket env | 3 entanglement disagreed | 4 lock broke |
+ * 5 non-convergence after reversal.
+ * ==================================================================== */
+var LGC_SBUF : [u8; 8]
+var LGC_RBUF : [u8; 8]
+var LGC_CAND : [u64; 32]
+fn lgc_send_u64(h: u64, v: u64) -> i32 {
+    let p : *u8 = (&LGC_SBUF) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((v >> (i * 8u64)) & 255u64) as u8   i = i + 1u64 }
+    let mut sent : u64 = 0u64
+    while sent < 8u64 {
+        let r : i32 = net_tcp_send(h, ((&LGC_SBUF) as u64) + sent, 8u64 - sent)
+        if r <= 0i32 { return -1i32 }
+        sent = sent + (r as u64)
+    }
+    return 0i32
+}
+var LGC_ROK : u8 = 0u8
+fn lgc_recv_u64(h: u64) -> u64 {
+    let p : *u8 = (&LGC_RBUF) as *u8
+    let mut got : u64 = 0u64
+    while got < 8u64 {
+        let r : i32 = net_tcp_recv(h, ((&LGC_RBUF) as u64) + got, 8u64 - got)
+        if r <= 0i32 { LGC_ROK = 0u8   return 0u64 }
+        got = got + (r as u64)
+    }
+    LGC_ROK = 1u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((p[i] as u64) << (i * 8u64))   i = i + 1u64 }
+    return v
+}
+fn cmd_couple(port: u64) -> u64 {
+    ps("== THE LAGRANGIAN COUPLE: two nodes fold one reversible admix chain over the real wire ==\n" as u64)
+    /* the whole-coupling physics, re-proven in-process as a condition of pulsing */
+    if lg_gestalt_selfproof() != 0u64 { ps("COUPLE: the Gestalt self-proof REFUSED -- the coupling physics are broken; no pulse\n" as u64)   return 5u64 }
+    ps("gestalt self-proof: entangle -> lock -> exact-reversal battery -> bounded superposition -> collapse -> reverse -> reconverge, all bit-exact\n" as u64)
+    let root_cap : u64 = cap_env_init()
+    let net_cap : u64 = cap_attenuate(root_cap, 96u64, 0u64)
+    if net_cap == 0u64 { ps("COUPLE: capability mint failed\n" as u64)   return 2u64 }
+    net_pack_sockaddr_ipv4((&SN_ADDR) as u64, 2130706433u32, (port & 65535u64) as u32)
+    let lh : u64 = net_tcp_listen_ipv4(net_cap, (&SN_ADDR) as u64, 16u32)
+    if lh == 0u64 { ps("COUPLE: listen failed (port busy?)\n" as u64)   return 2u64 }
+    let ch : u64 = net_tcp_connect_ipv4(net_cap, (&SN_ADDR) as u64, 16u32)
+    if ch == 0u64 { ps("COUPLE: connect failed\n" as u64)   net_close(lh)   return 2u64 }
+    let sh : u64 = net_tcp_accept(lh, net_cap)
+    if sh == 0u64 { ps("COUPLE: accept failed\n" as u64)   net_close(ch)   net_close(lh)   return 2u64 }
+    /* THE ENTANGLEMENT: exchange raw machine-origin roots, fold to the shared state.
+     * Node A drives ch; node B drives sh.  Distinct salted identities (loopback). */
+    let root_a : u64 = autognosis_root() ^ 0xA1A1A1A1A1A1A1A1u64
+    let root_b : u64 = autognosis_root() ^ 0xB2B2B2B2B2B2B2B2u64
+    if lgc_send_u64(ch, root_a) != 0i32 { ps("COUPLE: root send failed\n" as u64)   return 2u64 }
+    let root_a_seen : u64 = lgc_recv_u64(sh)
+    if LGC_ROK == 0u8 { ps("COUPLE: root recv failed\n" as u64)   return 2u64 }
+    if lgc_send_u64(sh, root_b) != 0i32 { ps("COUPLE: root send failed\n" as u64)   return 2u64 }
+    let root_b_seen : u64 = lgc_recv_u64(ch)
+    if LGC_ROK == 0u8 { ps("COUPLE: root recv failed\n" as u64)   return 2u64 }
+    /* both compute admix(self ^ peer) -- transmitted NOWHERE, symmetric by XOR */
+    let shared_a : u64 = lga_entangle(root_a, root_b_seen)
+    let shared_b : u64 = lgb_entangle(root_b, root_a_seen)
+    if shared_a != shared_b { ps("COUPLE: entanglement DISAGREED (roots corrupted on the wire?)\n" as u64)   net_close(ch)   net_close(sh)   net_close(lh)   return 3u64 }
+    ps("ENTANGLED: both endpoints reached the identical shared admix state " as u64)   phex64(shared_a)   ps(" -- transmitted nowhere\n" as u64)
+    /* THE CONTINUOUS FOLD: A streams action vectors; B folds each from the wire.
+     * State is never sent -- only the reversible deltas.  Assert lock every pulse. */
+    let mut i : u64 = 0u64
+    while i < 128u64 {
+        let d : u64 = lg_noise(shared_a, i)
+        if lgc_send_u64(ch, d) != 0i32 { ps("COUPLE: pulse send failed\n" as u64)   return 2u64 }
+        let d_seen : u64 = lgc_recv_u64(sh)
+        if LGC_ROK == 0u8 { ps("COUPLE: pulse recv failed\n" as u64)   return 2u64 }
+        lga_commit(d)
+        lgb_commit(d_seen)
+        if lga_state() != lgb_state() { ps("COUPLE: chain lock BROKE at pulse " as u64)   pu(i)   putchar(10i32)   net_close(ch)   net_close(sh)   net_close(lh)   return 4u64 }
+        i = i + 1u64
+    }
+    ps("LOCKED: 128 action vectors folded over the wire; both chains bit-identical at every pulse\n" as u64)
+    /* THE SEVER: A commits the next true pulse but withholds it (latency).  B measures
+     * the real cycle gap, bounds the deficit, superposes a candidate window, and
+     * provisionally collapses onto the least-action guess -- it does not stall. */
+    let true_d : u64 = lg_noise(shared_a, 200u64)
+    lga_commit(true_d)
+    let t0 : u64 = bench_now()
+    let mut spin : u64 = 0u64
+    let mut warm : u64 = 0u64
+    while spin < 4096u64 { warm = warm + lg_noise(warm, spin)   spin = spin + 1u64 }   /* real elapsed cycles */
+    let gap : u64 = bench_now() - t0
+    let deficit : u64 = lg_deficit_bound(gap, 64u64)
+    let mut c : u64 = 0u64
+    while c < 24u64 { LGC_CAND[c] = lg_noise(shared_b ^ 0xDEC0DEu64, c)   c = c + 1u64 }
+    LGC_CAND[9u64] = true_d ^ 0x40u64        /* a near-miss decoy: 1 bit off the truth */
+    let li : u64 = lg_least_action((&LGC_CAND) as u64, 24u64)
+    let guess : u64 = LGC_CAND[li]
+    lgb_provisional(guess)
+    ps("SEVERED: gap " as u64)   pu(gap)   ps(" cycles -> Landauer deficit bound " as u64)   pu(deficit)   ps(" bits; B provisionally collapsed onto the least-action guess (action " as u64)   pu(lg_action(guess))   ps(")\n" as u64)
+    /* THE REVERSAL: A finally sends the true pulse; B recvs it late and flows
+     * backward onto truth (admix_inv, exact) then forward.  Assert reconvergence. */
+    if lgc_send_u64(ch, true_d) != 0i32 { ps("COUPLE: true pulse send failed\n" as u64)   return 2u64 }
+    let true_seen : u64 = lgc_recv_u64(sh)
+    if LGC_ROK == 0u8 { ps("COUPLE: true pulse recv failed\n" as u64)   return 2u64 }
+    let reversed : u64 = lgb_reconcile(true_seen)
+    if lga_state() != lgb_state() { ps("COUPLE: FAILED to reconverge after the reversal -- a bit was lost to the void\n" as u64)   net_close(ch)   net_close(sh)   net_close(lh)   return 5u64 }
+    if reversed == 1u64 { ps("REVERSED: the guess diverged from the true pulse; B flowed backward (exact, no residue) and re-applied truth\n" as u64) } else { ps("CONFIRMED: the least-action guess WAS the true pulse (no reversal needed)\n" as u64) }
+    ps("RECONVERGED: both nodes at the identical state " as u64)   phex64(lga_state())   ps(" after " as u64)   pu(lg_reversals())   ps(" lifetime reversals -- not one bit lost to the void\n" as u64)
+    net_close(ch)   net_close(sh)   net_close(lh)
+    ps("COUPLE GREEN: two silicons folded one reversible thermodynamic history over the real wire; latency became logic, not error.\n" as u64)
+    return 0u64
+}
+

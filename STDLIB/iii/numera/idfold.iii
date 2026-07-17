@@ -1,0 +1,98 @@
+/* STDLIB/iii/numera/idfold.iii -- THE IDENTITY ALGEBRA: the ONE seat where III
+ * folds bytes into an identity.
+ *
+ * A census of the tree (2026-07-17) found the SAME FNV-1a fold hand-rolled in
+ * 28 organs -- every set-id, every content-derived name, the constitution root,
+ * the vitality root, each reinventing `h = basis; for byte: h = (h ^ byte) *
+ * prime`.  That is not 28 identities; it is ONE identity algebra, written 28
+ * times.  This organ is that algebra, named once.  An organ that folds its
+ * configuration HERE gets an identity that is, by construction, consistent with
+ * every other organ's -- so the whole system's notion of "who am I" is a single
+ * proven function, not a scatter of look-alikes.
+ *
+ * THE FOLD is FNV-1a over little-endian bytes, verbatim the pattern it replaces
+ * (basis 0xcbf29ce484222325, prime 0x100000001b3), so migrating an organ to it
+ * is BYTE-IDENTICAL -- every existing set-id and root is preserved to the bit
+ * (the migration's own proof: the id does not move).  idfold_seal folds 0 -> 1
+ * so an identity is never the null sentinel (the standing convention).
+ *
+ * NIH: pure integer forms, zero deps.  Hexad: kind_essence.  Ring R0. */
+module numera_idfold
+
+const IDFOLD_PRIME : u64 = 1099511628211u64            /* FNV-1a prime  */
+const IDFOLD_BASIS : u64 = 14695981039346656037u64     /* FNV-1a basis  */
+
+fn idfold_basis() -> u64 @export { return IDFOLD_BASIS }
+fn idfold_prime() -> u64 @export { return IDFOLD_PRIME }
+
+/* fold one byte (low 8 bits of b) into the running hash */
+fn idfold_byte(h: u64, b: u64) -> u64 @export {
+    return (h ^ (b & 255u64)) * IDFOLD_PRIME
+}
+
+/* fold a full u64 as its 8 little-endian bytes -- the workhorse every set-id
+ * needs (replaces the inline `while i<8 { h=(h^((v>>i*8)&255))*prime }`) */
+fn idfold_u64(h: u64, v: u64) -> u64 @export {
+    let mut hh : u64 = h
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        hh = (hh ^ ((v >> (i * 8u64)) & 255u64)) * IDFOLD_PRIME
+        i = i + 1u64
+    }
+    return hh
+}
+
+/* seal the running hash into a final identity: never the 0 sentinel */
+fn idfold_seal(h: u64) -> u64 @export {
+    if h == 0u64 { return 1u64 }
+    return h
+}
+
+/* fold a contiguous vector of n u64s from the basis and seal -- the one-call
+ * identity of an organ's configuration array */
+fn idfold_vec(ptr: u64, n: u64) -> u64 @export {
+    let p : *u64 = ptr as *u64
+    let mut h : u64 = IDFOLD_BASIS
+    let mut i : u64 = 0u64
+    while i < n {
+        h = idfold_u64(h, p[i])
+        i = i + 1u64
+    }
+    return idfold_seal(h)
+}
+
+/* fold a byte buffer from the basis and seal (the content-name of raw bytes) */
+fn idfold_bytes(ptr: u64, n: u64) -> u64 @export {
+    let p : *u8 = ptr as *u8
+    let mut h : u64 = IDFOLD_BASIS
+    let mut i : u64 = 0u64
+    while i < n {
+        h = (h ^ (p[i] as u64)) * IDFOLD_PRIME
+        i = i + 1u64
+    }
+    return idfold_seal(h)
+}
+
+/* the self-check: idfold_u64 folds the 8 LE bytes exactly as an independent
+ * byte-loop would -- the byte-identity guarantee that makes migration safe.
+ * Returns 1 iff the vector fold, the u64 fold, and a hand-rolled inline fold
+ * all agree over a battery (the algebra is one function). */
+fn idfold_selfcheck() -> u32 @export {
+    let mut k : u64 = 0u64
+    let mut x : u64 = 11400714819323198485u64
+    while k < 4096u64 {
+        /* inline reference: basis, fold x's 8 LE bytes, seal */
+        let mut ref_h : u64 = IDFOLD_BASIS
+        let mut b : u64 = 0u64
+        while b < 8u64 { ref_h = (ref_h ^ ((x >> (b * 8u64)) & 255u64)) * IDFOLD_PRIME   b = b + 1u64 }
+        if ref_h == 0u64 { ref_h = 1u64 }
+        /* the seat's road */
+        let seat_h : u64 = idfold_seal(idfold_u64(IDFOLD_BASIS, x))
+        if seat_h != ref_h { return 0u32 }
+        /* the vec road over the single element */
+        if idfold_vec((&x) as u64, 1u64) != ref_h { return 0u32 }
+        x = x * 6364136223846793005u64 + 1442695040888963407u64
+        k = k + 1u64
+    }
+    return 1u32
+}

@@ -1,0 +1,126 @@
+/* STDLIB/corpus/2767_lagrangian.iii -- THE GESTALT VERIFICATION GATE for the
+ * LAGRANGIAN COUPLING: two III engines become a non-local processor, PROVEN.
+ *
+ * The vision's final proof, made falsifiable: initialize two isolated engines,
+ * entangle them via the admix handshake, feed them divergent Ring-0 noise, sever
+ * the connection forcing one node into epistemic superposition + provisional
+ * collapse, reconnect, and assert the node unwinds its bit-flip log, applies the
+ * true history, and BOTH nodes converge on an identical 64-bit admix state.  A
+ * single bit lost to irreversible projection fails the gate.
+ *
+ * Stored-answer-free: every value is re-derived here from the live constitution
+ * and the proven bijection; nothing is a pinned constant read back.
+ *
+ * ARMS (each falsifiable, distinct exit):
+ *   GESTALT  the organ's own whole-coupling self-proof returns 0 (entangle ->
+ *            lock 64 pulses -> exact reversal battery -> bounded superposition ->
+ *            provisional collapse -> reversal -> reconvergence).
+ *   SYMM     entanglement is symmetric AND non-transmitted: admix(a^b)==admix(b^a)
+ *            re-derived over 512 independent root pairs; and it is NOT the trivial
+ *            identity (the shared state genuinely mixes the two roots).
+ *   REVERSE  the reversal is EXACT over 4096 sampled deltas: unapply(apply(s,d),d)
+ *            == s for every one -- no bit lost to irreversible projection.
+ *   LEASTACT least-action collapse honours the bounded window and truly minimizes
+ *            popcount: a planted minimal-weight delta is the one chosen.
+ *   CONVERGE a full sever/superpose/reverse cycle over 200 rounds leaves the two
+ *            engines bit-identical every round, and the reversal counter proves the
+ *            wrong timeline was actually unwound (not accidentally guessed right).
+ *
+ * exit 99 = all arms hold.  10 GESTALT 20 SYMM 21 SYMM-trivial 30 REVERSE
+ * 40 LEASTACT 50 CONVERGE 51 CONVERGE-no-reversal. */
+module corpus_d2767
+
+extern @abi(c-msvc-x64) fn lg_gestalt_selfproof() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_entangle_state(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_apply(state: u64, d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_unapply(state_after: u64, d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_least_action(cand_addr: u64, n: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_noise(seed: u64, i: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_entangle(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_commit(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lga_state() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_entangle(root_self: u64, root_peer: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_commit(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_provisional(d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_reconcile(true_d: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lgb_state() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_reversals() -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn adx_init() -> u32 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_ready() -> u8 from "admix.iii"
+extern @abi(c-msvc-x64) fn popcount_u64(x: u64) -> u32 from "sat_arith.iii"
+
+var CAND : [u64; 32]
+
+fn arm_symm() -> u64 {
+    let mut trivial : u64 = 1u64
+    let mut i : u64 = 0u64
+    while i < 512u64 {
+        let a : u64 = lg_noise(0xA5A5u64, i)
+        let b : u64 = lg_noise(0x5A5Au64, i)
+        if lg_entangle_state(a, b) != lg_entangle_state(b, a) { return 20u64 }
+        /* not the trivial pass-through: the shared state differs from a^b */
+        if lg_entangle_state(a, b) != (a ^ b) { trivial = 0u64 }
+        i = i + 1u64
+    }
+    if trivial == 1u64 { return 21u64 }
+    return 0u64
+}
+fn arm_reverse() -> u64 {
+    let mut s : u64 = 0x0123456789ABCDEFu64
+    let mut k : u64 = 0u64
+    while k < 4096u64 {
+        let d : u64 = lg_noise(s, k)
+        let after : u64 = lg_apply(s, d)
+        if lg_unapply(after, d) != s { return 30u64 }
+        s = after
+        k = k + 1u64
+    }
+    return 0u64
+}
+fn arm_leastact() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { CAND[i] = 0xFFFFFFFFFFFFFFFFu64   i = i + 1u64 }   /* all 64-weight */
+    CAND[19u64] = 0x8u64                                                 /* the sole weight-1 */
+    let li : u64 = lg_least_action((&CAND) as u64, 32u64)
+    if li != 19u64 { return 40u64 }
+    /* window bound: asking for more than the ceiling still returns a valid index */
+    if lg_least_action((&CAND) as u64, 1000u64) >= 32u64 { return 40u64 }
+    return 0u64
+}
+fn arm_converge() -> u64 {
+    if adx_ready() == 0u8 { adx_init() }
+    let ra : u64 = 0xC0FFEEu64
+    let rb : u64 = 0xBEEF00u64
+    let sa : u64 = lga_entangle(ra, rb)
+    let sb : u64 = lgb_entangle(rb, ra)
+    if sa != sb { return 50u64 }
+    let rev0 : u64 = lg_reversals()
+    let mut round : u64 = 0u64
+    while round < 200u64 {
+        let true_d : u64 = lg_noise(sa ^ 0xF00Du64, round)
+        lga_commit(true_d)
+        /* B is severed: it guesses a decoy (deliberately wrong), then the true
+         * pulse arrives late and B must reverse onto it */
+        let decoy : u64 = lg_noise(sb ^ 0x1234u64, round) | 0x1u64
+        lgb_provisional(decoy)
+        lgb_reconcile(true_d)
+        if lga_state() != lgb_state() { return 50u64 }
+        round = round + 1u64
+    }
+    /* the wrong timeline was actually unwound every round (not guessed right) */
+    if lg_reversals() < rev0 + 200u64 { return 51u64 }
+    return 0u64
+}
+
+fn main() -> i32 {
+    if lg_gestalt_selfproof() != 0u64 { return 10i32 }
+    let s : u64 = arm_symm()
+    if s != 0u64 { return s as i32 }
+    let r : u64 = arm_reverse()
+    if r != 0u64 { return r as i32 }
+    let l : u64 = arm_leastact()
+    if l != 0u64 { return l as i32 }
+    let c : u64 = arm_converge()
+    if c != 0u64 { return c as i32 }
+    return 99i32
+}

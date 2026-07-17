@@ -455,6 +455,41 @@ if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
     rm -rf "$ANW"
 else say "RED  anastasis: iii-substrate or iiis-2 absent"; FAIL=1; fi
 
+say "[standing] == LAGRANGIAN: the coupling (two nodes fold one reversible admix chain -- gate 2767 in-process + iii-substrate couple over the real loopback wire) =="
+if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iiis-2$BIN_SUFFIX" ]]; then
+    # THE REAL-WIRE ARM: two endpoints entangle by root exchange, fold action vectors
+    # over real ws2_32 loopback, sever, superpose, reverse, reconverge bit-exact.
+    LGO="$("$C/iii-substrate$BIN_SUFFIX" couple 47156 2>&1)"; lgrc=$?
+    if [[ $lgrc -eq 0 ]] \
+        && echo "$LGO" | grep -q "ENTANGLED: both endpoints reached the identical shared admix state" \
+        && echo "$LGO" | grep -q "LOCKED: 128 action vectors folded over the wire" \
+        && echo "$LGO" | grep -q "RECONVERGED: both nodes at the identical state" \
+        && echo "$LGO" | grep -q "COUPLE GREEN"; then
+        say "PASS lagrangian: real loopback couple -- entangled (state transmitted nowhere), 128 pulses locked bit-identical, sever->superpose->exact-reversal->reconverge, not one bit lost"
+    else say "RED  lagrangian: real-wire couple drifted (rc=$lgrc)"; FAIL=1; fi
+    # THE GATE: 2767 built + run in-process (the whole-coupling Gestalt + its arms)
+    LGW="$(mktemp -d "${TMPDIR:-/tmp}/lagrangian-standing.XXXXXX")"
+    lgok=1
+    for lgsrc in aether/lagrangian:lagrangian aether/admix:admix katabasis/autognosis:autognosis aether/autophasis:autophasis aether/xeno_ontogenesis:xeno_ontogenesis aether/substrate_ontogenesis:substrate_ontogenesis aether/glossa:glossa; do
+        s="${lgsrc%%:*}"; o="${lgsrc##*:}"
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/iii/$s.iii" --compile-only --out "$LGW/$o.o" >>"$LGW/build.log" 2>&1 || lgok=0
+    done
+    for lgb in cg_glossa_rules cg_phys_rules; do
+        "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/COMPILER/BOOT/$lgb.iii" --compile-only --out "$LGW/$lgb.o" >>"$LGW/build.log" 2>&1 || lgok=0
+    done
+    "$C/iiis-2$BIN_SUFFIX" "$III_ROOT/STDLIB/corpus/2767_lagrangian.iii" --compile-only --out "$LGW/2767.o" >>"$LGW/build.log" 2>&1 || lgok=0
+    if [[ $lgok -eq 1 ]]; then
+        gcc "$LGW/2767.o" "$LGW/lagrangian.o" "$LGW/admix.o" "$LGW/autognosis.o" "$LGW/autophasis.o" "$LGW/xeno_ontogenesis.o" "$LGW/substrate_ontogenesis.o" "$LGW/cg_glossa_rules.o" "$LGW/cg_phys_rules.o" "$LGW/glossa.o" "$III_ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 -o "$LGW/2767.exe" >>"$LGW/build.log" 2>&1 || lgok=0
+    fi
+    if [[ $lgok -eq 1 && -x "$LGW/2767.exe" ]]; then
+        "$LGW/2767.exe" >/dev/null 2>&1; lg2rc=$?
+        if [[ $lg2rc -eq 99 ]]; then
+            say "PASS lagrangian: gate 2767 -- Gestalt self-proof + entanglement symmetry (512 pairs, non-trivial) + exact reversal (4096 deltas) + bounded least-action + 200-round sever/reverse converge (exit 99)"
+        else say "RED  lagrangian: gate 2767 exit $lg2rc"; FAIL=1; fi
+    else say "RED  lagrangian: gate 2767 failed to build (see $LGW/build.log)"; FAIL=1; fi
+    rm -rf "$LGW"
+else say "RED  lagrangian: iii-substrate or iiis-2 absent"; FAIL=1; fi
+
 say "[standing] == ONEIROS: the dream that must wake (believe each owed law -> collapse to witnesses -> docket the prover) =="
 if [[ -x "$C/iii-substrate$BIN_SUFFIX" && -x "$C/iii-prove$BIN_SUFFIX" ]]; then
     ZW="$(mktemp -d "${TMPDIR:-/tmp}/oneiros-standing.XXXXXX")"

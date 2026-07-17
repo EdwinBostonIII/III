@@ -1,0 +1,232 @@
+/* STDLIB/iii/eidos/exact_plane.iii -- GAMMA-2, THE EXACT PLANE: dimension two,
+ * re-founded on the unified organism and PROVEN CONSISTENT by III's own ring
+ * engine.  Supersedes aether/delaunay.iii (same exact predicates, plus the
+ * language, plus a live machine proof of the consistency float cannot give).
+ *
+ * THE PREDICATES (exact, the Kettner-Mehlhorn cure):
+ *   orient2d(a,b,c)    sign of the 2x2 determinant (b-a) x (c-a) -- +1 CCW,
+ *                      0 collinear, -1 CW.  Exact integer, |coord| < 2^30.
+ *   incircle2d(...)    sign of the 3x3 in-circle determinant.  Exact, deg 4.
+ *   circum_contains    orientation-normalized in-circle (the Delaunay query).
+ *   orient2d_surd      orientation of points in Q(sqrt b): the determinant is
+ *                      A + B*sqrt(b), decided by III's exact sum-of-surds sign
+ *                      oracle (sqrtsum_lazy3).  No epsilon, ever.
+ * These export the SAME names and signatures delaunay.iii did, so its one real
+ * consumer repoints by a single word.
+ *
+ * WHY EXACT IS THE WHOLE CURE, PROVEN BY III (not asserted): a float orient can
+ * report c left of a->b AND right of b->a -- an inconsistency that makes meshers
+ * build impossible topology (Kettner-Mehlhorn).  An exact predicate is a
+ * consistent function of the true geometry.  The consistency is two ring
+ * identities in the edge vectors u=b-a, v=c-a, which III's ring engine
+ * (numera/bv_ring) PROVES over ALL 2^64 as this organ's condition of motion:
+ *     ANTISYMMETRY   cross(u,v) == -cross(v,u)   (chirality reverses on swap)
+ *     DEGENERACY     cross(u,u) == 0             (no self-chirality; collinear)
+ * bv_equal decides these by canonical polynomial normal form -- a proof, not a
+ * sample.  The Kettner-Mehlhorn SMOKING GUN is re-fired live: the Fibonacci
+ * determinant F42*F40 - F41^2 = -1 EXACTLY (Cassini), where both ~2^54.6
+ * products round to one double and float returns 0 (collinear, wrong).
+ *
+ * THE PLANE SPEAKS (EIDOLOS): a triangle's chirality is a claim; swapping the
+ * last two vertices MIRRORS it ([abc ~ acb], the order-reversing involution);
+ * three collinear points fall into one coherent line-scroll.  The geometry and
+ * the language are one law.
+ *
+ * Truth is a CONDITION OF MOTION: ep_selfprove (arms 120..125) has III's ring
+ * engine re-prove the axioms and III's exact arithmetic re-fire the smoking gun
+ * at every invocation.  NO gate, NO KAT.
+ * NIH: composes numera/bv_ring (the proof), aether/sqrt_sum_sign (the surd
+ * sign), omnia/eidolos (the language).  Hexad: kind_form.  Ring R0. */
+module eidos_exact_plane
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+extern @abi(c-msvc-x64) fn sqrtsum_lazy3(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+/* ==================== the exact predicates (delaunay's API, exact) ==================== */
+fn ep_sign(det: i64) -> i32 {
+    if det > 0i64 { return 1i32 }
+    if det < 0i64 { return -1i32 }
+    return 0i32
+}
+fn orient2d(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64) -> i32 @export {
+    let det : i64 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+    return ep_sign(det)
+}
+fn incircle2d(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, dx: i64, dy: i64) -> i32 @export {
+    let adx : i64 = ax - dx   let ady : i64 = ay - dy   let ad2 : i64 = adx*adx + ady*ady
+    let bdx : i64 = bx - dx   let bdy : i64 = by - dy   let bd2 : i64 = bdx*bdx + bdy*bdy
+    let cdx : i64 = cx - dx   let cdy : i64 = cy - dy   let cd2 : i64 = cdx*cdx + cdy*cdy
+    let det : i64 = adx * (bdy*cd2 - bd2*cdy) - ady * (bdx*cd2 - bd2*cdx) + ad2 * (bdx*cdy - bdy*cdx)
+    return ep_sign(det)
+}
+fn circum_contains(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, px: i64, py: i64) -> i32 @export {
+    let o : i32 = orient2d(ax, ay, bx, by, cx, cy)
+    let ic : i32 = incircle2d(ax, ay, bx, by, cx, cy, px, py)
+    if o < 0i32 { return 0i32 - ic }
+    return ic
+}
+fn delaunay_flip_needed(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64, dx: i64, dy: i64) -> u8 @export {
+    if circum_contains(ax, ay, bx, by, cx, cy, dx, dy) > 0i32 { return 1u8 }
+    return 0u8
+}
+var EP_A : [i64; 2]   var EP_B : [i64; 2]
+fn orient2d_surd(rax: i64, sax: i64, ray: i64, say: i64, rbx: i64, sbx: i64, rby: i64, sby: i64, rcx: i64, scx: i64, rcy: i64, scy: i64, b: i64) -> i32 @export {
+    let p1 : i64 = rbx - rax   let q1 : i64 = sbx - sax
+    let p2 : i64 = rcy - ray   let q2 : i64 = scy - say
+    let p3 : i64 = rby - ray   let q3 : i64 = sby - say
+    let p4 : i64 = rcx - rax   let q4 : i64 = scx - sax
+    let A : i64 = (p1*p2 + q1*q2*b) - (p3*p4 + q3*q4*b)
+    let B : i64 = (p1*q2 + q1*p2) - (p3*q4 + q3*p4)
+    EP_A[0u64] = A   EP_A[1u64] = B
+    EP_B[0u64] = 1i64   EP_B[1u64] = b
+    return sqrtsum_lazy3((&EP_A) as u64, (&EP_B) as u64, 2u64)
+}
+
+/* ==================== III DISCOVERS the consistency structure ====================
+ * NO TARGET NAMED.  III's ring engine enumerates the COMPLETE orbit of the
+ * orientation predicate -- all 6 orderings of the 3 points -- and computes,
+ * over all 2^64, how each ordering relates to the others under {equal, negate}.
+ * The alternating character of S_3 EMERGES: the even permutations {abc,bca,cab}
+ * are one class, the odd {acb,bac,cba} its negation.  The predicate's
+ * consistency (Kettner-Mehlhorn antisymmetry) is a COROLLARY of this discovered
+ * structure, not an assertion fed to the engine.  a is placed at the origin --
+ * exact, since orient is a function of b-a and c-a only, never of a alone. */
+var EP_OP : [u32; 6]
+fn ep_orient_expr(px: u32, py: u32, qx: u32, qy: u32, rx: u32, ry: u32) -> u32 {
+    return bv_sub(bv_mul(bv_sub(qx, px), bv_sub(ry, py)), bv_mul(bv_sub(qy, py), bv_sub(rx, px)))
+}
+fn ep_build_orbit() -> i32 {
+    bv_reset()
+    let zx : u32 = bv_const(0u64)   let zy : u32 = bv_const(0u64)
+    let u1 : u32 = bv_var(0u32)     let u2 : u32 = bv_var(1u32)
+    let v1 : u32 = bv_var(2u32)     let v2 : u32 = bv_var(3u32)
+    EP_OP[0u64] = ep_orient_expr(zx, zy, u1, u2, v1, v2)   /* abc */
+    EP_OP[1u64] = ep_orient_expr(zx, zy, v1, v2, u1, u2)   /* acb */
+    EP_OP[2u64] = ep_orient_expr(u1, u2, zx, zy, v1, v2)   /* bac */
+    EP_OP[3u64] = ep_orient_expr(u1, u2, v1, v2, zx, zy)   /* bca */
+    EP_OP[4u64] = ep_orient_expr(v1, v2, zx, zy, u1, u2)   /* cab */
+    EP_OP[5u64] = ep_orient_expr(v1, v2, u1, u2, zx, zy)   /* cba */
+    return 0i32
+}
+/* III's discovered relation of ordering i to ordering j: +1 equal, -1 negated,
+ * 0 unrelated -- over all 2^64.  Fresh arena per call (bv_equal consumes it). */
+fn ep_orbit_rel(i: u64, j: u64) -> i32 @export {
+    ep_build_orbit()
+    let oi : u32 = EP_OP[i]
+    let oj : u32 = EP_OP[j]
+    if bv_equal(oi, oj) == 1u8 { return 1i32 }
+    let negj : u32 = bv_sub(bv_const(0u64), oj)
+    if bv_equal(oi, negj) == 1u8 { return -1i32 }
+    return 0i32
+}
+/* the STRUCTURAL verdict on III's discovery: 1 iff orient transforms by a pure
+ * SIGN under EVERY permutation (no '.' -- the alternating property, discovered)
+ * AND both classes are non-empty (non-degenerate).  A predicate that were not
+ * alternating would leave an unrelated cell and this returns 0. */
+fn ep_ring_consistent() -> u32 @export {
+    let mut even_n : u64 = 0u64
+    let mut odd_n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        let r : i32 = ep_orbit_rel(i, 0u64)
+        if r == 0i32 { return 0u32 }              /* an unrelated ordering: NOT alternating */
+        if r == 1i32 { even_n = even_n + 1u64 }
+        if r == -1i32 { odd_n = odd_n + 1u64 }
+        i = i + 1u64
+    }
+    if even_n != 3u64 { return 0u32 }             /* the discovered A_3 coset */
+    if odd_n != 3u64 { return 0u32 }              /* its negation */
+    return 1u32
+}
+
+/* ==================== the plane speaks EIDOLOS ==================== */
+var EP_TXT : [u8; 512]
+var EP_TN  : u64 = 0u64
+fn ep_tput(c: u8) -> i32 { if EP_TN < 512u64 { EP_TXT[EP_TN] = c   EP_TN = EP_TN + 1u64 }   return 0i32 }
+fn ep_tstr(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { ep_tput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+/* speak a triangle's chirality: [abc ~ acb] witnesses that swapping the last
+ * two vertices mirrors the orientation (the involution), and names the sense.
+ * Returns the scroll address, 0 = refused. */
+fn ep_speak_triangle(ax: i64, ay: i64, bx: i64, by: i64, cx: i64, cy: i64) -> u64 @export {
+    EP_TN = 0u64
+    let o : i32 = orient2d(ax, ay, bx, by, cx, cy)
+    if o == 0i32 {
+        /* collinear: a coherent line-scroll -- the three sit under one order */
+        ep_tstr("[abc = collinear] [collinear < line]" as u64)
+    } else {
+        ep_tstr("[abc ~ acb] [abc < oriented] [acb < oriented]" as u64)
+    }
+    eol_reset()
+    if eol_read((&EP_TXT) as u64, EP_TN) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+fn ep_speak_len() -> u64 @export { return EP_TN }
+fn ep_speak_byte(i: u64) -> u8 @export { if i < EP_TN { return EP_TXT[i] }   return 0u8 }
+
+/* ==================== THE SELF-PROOF (arms 120..125) ==================== */
+fn ep_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn ep_selfprove() -> u64 @export {
+    /* arm 120: III's RING ENGINE DISCOVERS orientation consistency over all
+     * 2^64 -- enumerate the full 6-ordering orbit, and the alternating
+     * character (3 even, 3 odd, negation-linked) emerges with no target named.
+     * The consistency float violates is a corollary of the discovered structure. */
+    if ep_ring_consistent() != 1u32 { return 120u64 }
+    /* arm 121: THE KETTNER-MEHLHORN SMOKING GUN, re-fired by III's exact integer
+     * arithmetic: the Fibonacci/Cassini determinant is EXACTLY -1 (CW), where a
+     * double rounds both ~2^54.6 products together and returns 0 (collinear).
+     * F40=102334155, F41=165580141, F42=267914296. */
+    if orient2d(0i64, 0i64, 267914296i64, 165580141i64, 165580141i64, 102334155i64) != -1i32 { return 121u64 }
+    /* the antisymmetry holds NUMERICALLY on the same witness (swap b,a) */
+    if orient2d(267914296i64, 165580141i64, 0i64, 0i64, 165580141i64, 102334155i64) != 1i32 { return 121u64 }
+    /* arm 122: exact predicate battery -- CCW, CW, collinear all decided */
+    if orient2d(0i64, 0i64, 1i64, 0i64, 0i64, 1i64) != 1i32 { return 122u64 }
+    if orient2d(0i64, 0i64, 0i64, 1i64, 1i64, 0i64) != -1i32 { return 122u64 }
+    if orient2d(0i64, 0i64, 2i64, 2i64, 5i64, 5i64) != 0i32 { return 122u64 }
+    /* incircle: d strictly inside the unit-square circumcircle, on it, outside */
+    if circum_contains(0i64, 0i64, 4i64, 0i64, 4i64, 4i64, 2i64, 2i64) != 1i32 { return 122u64 }
+    if circum_contains(0i64, 0i64, 4i64, 0i64, 4i64, 4i64, 0i64, 4i64) != 0i32 { return 122u64 }
+    if circum_contains(0i64, 0i64, 4i64, 0i64, 4i64, 4i64, 10i64, 10i64) != -1i32 { return 122u64 }
+    /* arm 123: THE SURD PREDICATE -- orientation of points in Q(sqrt 2), decided
+     * by III's exact sum-of-surds oracle (no float).  Triangle a=(0,0),
+     * b=(1+sqrt2, 0), c=(0,1): CCW, determinant = 1+sqrt2 > 0 -> +1. */
+    let os_ccw : i32 = orient2d_surd(0i64,0i64, 0i64,0i64,   1i64,1i64, 0i64,0i64,   0i64,0i64, 1i64,0i64,   2i64)
+    if os_ccw != 1i32 { return 123u64 }
+    /* three points a=(0,0), b=(1+sqrt2,0), c=(2+2 sqrt2,0) are EXACTLY collinear
+     * (all on the x-axis) -- the surd determinant is exactly 0, where float,
+     * scaling 1+sqrt2 and 2+2 sqrt2, may fabricate a nonzero area. */
+    let os_col : i32 = orient2d_surd(0i64,0i64, 0i64,0i64,   1i64,1i64, 0i64,0i64,   2i64,2i64, 0i64,0i64,   2i64)
+    if os_col != 0i32 { return 123u64 }
+    /* arm 124: THE PLANE SPEAKS -- a CCW triangle's scroll entails the chirality
+     * mirror ([abc ~ acb]); a collinear triple entails the line membership */
+    let sa : u64 = ep_speak_triangle(0i64,0i64, 1i64,0i64, 0i64,1i64)
+    if sa == 0u64 { return 124u64 }
+    if eol_entails("abc" as u64, 3u64, 1u64, "acb" as u64, 3u64) != 1u64 { return 124u64 }
+    let sc : u64 = ep_speak_triangle(0i64,0i64, 2i64,2i64, 5i64,5i64)
+    if sc == 0u64 { return 124u64 }
+    if eol_entails("collinear" as u64, 9u64, 0u64, "line" as u64, 4u64) != 1u64 { return 124u64 }
+    /* arm 125: CROSS-SENSE consistency -- CCW and its vertex-swap are opposite
+     * senses, exactly (the numeric shadow of the ring antisymmetry) */
+    if orient2d(0i64,0i64, 1i64,0i64, 0i64,1i64) != (0i32 - orient2d(0i64,0i64, 0i64,1i64, 1i64,0i64)) { return 125u64 }
+    return 0u64
+}

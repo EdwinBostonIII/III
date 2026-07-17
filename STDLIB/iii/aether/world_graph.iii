@@ -45,7 +45,7 @@ if i == 30u64 { return "csg_kernel" as u64 }
 if i == 31u64 { return "csg_tree" as u64 }
 if i == 32u64 { return "cspace" as u64 }
 if i == 33u64 { return "cyclotomic_se3" as u64 }
-if i == 34u64 { return "delaunay" as u64 }
+if i == 34u64 { return "exact_plane" as u64 }
 if i == 35u64 { return "determinism_firewall" as u64 }
 if i == 36u64 { return "develop_up" as u64 }
 if i == 37u64 { return "distress_witness" as u64 }

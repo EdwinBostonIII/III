@@ -13,7 +13,7 @@
  * This is also the KINEMATIC REMESHING primitive (charter II-V): four points with one moving vertex make
  * the incircle determinant a polynomial in t (degree <= 2 for linear motion); its Sturm-isolated roots ARE
  * the exact Delaunay flip instants -- topological events DECIDED at their algebraic time, so a moving mesh
- * flips exactly when four points are exactly co-circular (cross-checked against delaunay.iii's incircle2d
+ * flips exactly when four points are exactly co-circular (cross-checked against exact_plane.iii's incircle2d
  * in gate 2172), never on a float threshold.
  *
  * HONEST SCOPE: univariate (one driven dof).  Multi-dof systems need resultant elimination first --

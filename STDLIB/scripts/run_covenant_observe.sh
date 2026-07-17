@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # STDLIB/scripts/run_covenant_observe.sh -- AUTARKEIA Alpha-3 TAIL (III-ONLY, NIH): core_H by OBSERVATION.
 #
-# run_covenant.sh proves the covenant EQUATION and that core(T) is host-invariant BY CONSTRUCTION.  This
+# `iii-ergon autarkeia` (ex run_covenant.sh, retired 2026-07-17) proves the covenant EQUATION and that
+# core(T) is host-invariant BY CONSTRUCTION.  This
 # gate closes the honest tail it names: turning core_H == core_win64 from by-construction into by-
 # OBSERVATION -- using III and ONLY III.  No foreign hasher, no second OS, no coreutils sha256sum, no perl,
 # no WSL/qemu/node.  The independent observer is built entirely from III's own faculties:

@@ -137,6 +137,7 @@ extern @abi(c-msvc-x64) fn CreateFileA(name: u64, access: u32, share: u32, sec: 
 extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: u64, n: u32, written: u64, ov: u64) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: u64, n: u32, red: u64, ov: u64) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn SetFilePointer(h: u64, dist: i32, phigh: u64, method: u32) -> u32 from "kernel32"
 
 /* ==================== THE FAULT MAP ==================== */
 const ERG_META_ANOMALY : u32 = 1001u32     /* vitality 0 but roster examines green */
@@ -159,14 +160,15 @@ fn erg_mapcode(seat: u64, arm: u64, mode: u64) -> u64 {
     if seat == 7u64 { return 1200u64 + arm }
     if seat == 8u64 { return 1300u64 + arm }
     if seat == 10u64 { return 1400u64 + arm }          /* the DEEP verb's codes  */
+    if seat == 11u64 { return 1500u64 + arm }          /* the AUTARKEIA verb     */
     return 1000u64 + arm
 }
 /* the whole fault space is INJECTIVE: enumerate every code either seat can emit
  * and require no collision (1 injective | 0 collision found) */
-var ERG_SEEN : [u8; 1500]
+var ERG_SEEN : [u8; 1600]
 fn erg_map_injective(mode: u64) -> u64 {
     let mut i : u64 = 0u64
-    while i < 1500u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
+    while i < 1600u64 { ERG_SEEN[i] = 0u8   i = i + 1u64 }
     /* seat 0: 100..599  seat 1: 11..19  seat 2: 41..45  seat 3: 21..36
      * seat 4: 1..6  meta: 1..3 (mapped 1001..1003) */
     let mut c : u64 = 100u64
@@ -238,6 +240,13 @@ fn erg_map_injective(mode: u64) -> u64 {
         if ERG_SEEN[m10] == 1u8 { return 0u64 }
         ERG_SEEN[m10] = 1u8
         dp = dp + 1u64
+    }
+    let mut ak : u64 = 1u64
+    while ak <= 10u64 {
+        let m11 : u64 = erg_mapcode(11u64, ak, mode)
+        if ERG_SEEN[m11] == 1u8 { return 0u64 }
+        ERG_SEEN[m11] = 1u8
+        ak = ak + 1u64
     }
     let mut z : u64 = 1u64
     while z <= 3u64 {
@@ -1074,6 +1083,341 @@ fn erg_deep() -> u32 @export {
 }
 fn erg_nomos_live() -> u64 @export { return ERG_NOMOS_LIVE }
 fn erg_nomos_sealed() -> u64 @export { return ERG_NOMOS_SEALED }
+
+/* ==================== THE AUTARKEIA VERB: the sealed spine + the covenant ====
+ * (ex run_testament + run_covenant) -- the machinery that makes III's testament
+ * a self-verifying fact.  The tool FACES (keygen determinism, malformed refusal)
+ * live in the exec seat; here is the heavy MACHINERY: emit a generation-0
+ * testament over the LIVE committed tree (SLH-DSA-signed), re-derive it against
+ * the tree, the full TAMPER BATTERY (each class its DISTINCT refusal), the
+ * generation CHAIN, and THE COVENANT EQUATION -- the host- and generation-
+ * invariant core is a pure function of committed truth, co-signed by a live
+ * ML-DSA 3-of-3 quorum.  No stored answer anywhere: the frozen RADICAL/FORGE
+ * hex pins of the retired runner are SUBSUMED by the full re-derivation (witness
+ * verify against the tree re-walks every record from committed bytes).  Minutes
+ * of wall (three SLH-DSA signings) -- on demand, never census-weight.
+ * Codes 1500+arm. */
+var ERG_CORE : [u8; 65536]                 /* the host-invariant core lines       */
+var ERG_RA : [u8; 96]                      /* fold root of core(gen0)             */
+var ERG_RB : [u8; 96]                      /* fold root of core(gen0b)            */
+var ERG_R1 : [u8; 96]                      /* fold root of core(gen1)             */
+var ERG_CBUF : [u8; 512]
+/* does the captured stdout line starting at `s` (length to first \n) begin with
+ * one of the host-invariant tags?  TREE/SEED/BEARER/RECORD/CERT, each + space */
+fn erg_a_at(i: u64) -> u8 { return proc_out_at(i) }
+fn erg_line_is_core(s: u64, n: u64) -> u64 {
+    if s + 5u64 > n { return 0u64 }
+    /* "TREE " */
+    if erg_a_at(s) == 84u8 { if erg_a_at(s+1u64) == 82u8 { if erg_a_at(s+2u64) == 69u8 { if erg_a_at(s+3u64) == 69u8 { if erg_a_at(s+4u64) == 32u8 { return 1u64 } } } } }
+    /* "SEED " */
+    if erg_a_at(s) == 83u8 { if erg_a_at(s+1u64) == 69u8 { if erg_a_at(s+2u64) == 69u8 { if erg_a_at(s+3u64) == 68u8 { if erg_a_at(s+4u64) == 32u8 { return 1u64 } } } } }
+    /* "CERT " */
+    if erg_a_at(s) == 67u8 { if erg_a_at(s+1u64) == 69u8 { if erg_a_at(s+2u64) == 82u8 { if erg_a_at(s+3u64) == 84u8 { if erg_a_at(s+4u64) == 32u8 { return 1u64 } } } } }
+    /* "BEARER " */
+    if s + 7u64 <= n { if erg_a_at(s) == 66u8 { if erg_a_at(s+1u64) == 69u8 { if erg_a_at(s+2u64) == 65u8 { if erg_a_at(s+3u64) == 82u8 { if erg_a_at(s+4u64) == 69u8 { if erg_a_at(s+5u64) == 82u8 { if erg_a_at(s+6u64) == 32u8 { return 1u64 } } } } } } } }
+    /* "RECORD " */
+    if s + 7u64 <= n { if erg_a_at(s) == 82u8 { if erg_a_at(s+1u64) == 69u8 { if erg_a_at(s+2u64) == 67u8 { if erg_a_at(s+3u64) == 79u8 { if erg_a_at(s+4u64) == 82u8 { if erg_a_at(s+5u64) == 68u8 { if erg_a_at(s+6u64) == 32u8 { return 1u64 } } } } } } } }
+    return 0u64
+}
+/* run `iii-testament show DAT`, write the host-invariant lines to CORE_PATH,
+ * return the count (0 on failure) */
+fn erg_show_core(dat: u64, core_path: u64) -> u64 {
+    let cp : *u8 = (&ERG_XB) as u64 as *u8
+    let mut a : u64 = erg_x_sput(0u64, "COMPILED\\iii-testament.exe show " as u64)
+    a = erg_x_sput(a, dat)
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 0u64 }
+    let n : u64 = proc_out_len()
+    let dst : *u8 = (&ERG_CORE) as u64 as *u8
+    let mut w : u64 = 0u64
+    let mut cnt : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ls : u64 = i
+        let mut le : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 { if le >= n { go = 0u64 } else { if proc_out_at(le) == 10u8 { go = 0u64 } else { le = le + 1u64 } } }
+        if erg_line_is_core(ls, n) == 1u64 {
+            let mut j : u64 = ls
+            while j < le { if w < 65535u64 { dst[w] = proc_out_at(j)   w = w + 1u64 }   j = j + 1u64 }
+            if w < 65535u64 { dst[w] = 10u8   w = w + 1u64 }
+            cnt = cnt + 1u64
+        }
+        i = le + 1u64
+    }
+    if erg_x_putn(core_path, (&ERG_CORE) as u64, w) != 1u64 { return 0u64 }
+    return cnt
+}
+/* run `iii-judge fold CORE`, copy the hex after "root=" into dst, return len */
+fn erg_fold_root(core_path: u64, dst: u64) -> u64 {
+    let mut a : u64 = erg_x_sput(0u64, "COMPILED\\iii-judge.exe fold " as u64)
+    a = erg_x_sput(a, core_path)
+    if erg_x_run((&ERG_XB) as u64, 60000u32) != 0u64 { return 0u64 }
+    /* find "root=" in captured stdout, copy trailing [0-9a-f] into dst */
+    let n : u64 = proc_out_len()
+    let dp : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i + 5u64 <= n {
+        if proc_out_at(i) == 114u8 { if proc_out_at(i+1u64) == 111u8 { if proc_out_at(i+2u64) == 111u8 { if proc_out_at(i+3u64) == 116u8 { if proc_out_at(i+4u64) == 61u8 {
+            let mut j : u64 = i + 5u64
+            let mut w : u64 = 0u64
+            let mut go : u64 = 1u64
+            while go == 1u64 {
+                if j >= n { go = 0u64 } else {
+                    let c : u8 = proc_out_at(j)
+                    let ishex : u64 = erg_ishex(c)
+                    if ishex == 1u64 { if w < 95u64 { dp[w] = c   w = w + 1u64 }   j = j + 1u64 } else { go = 0u64 }
+                }
+            }
+            return w
+        } } } } }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn erg_ishex(c: u8) -> u64 {
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c >= 97u8 { if c <= 102u8 { return 1u64 } }
+    return 0u64
+}
+fn erg_buf_eq(a: u64, alen: u64, b: u64, blen: u64) -> u64 {
+    if alen != blen { return 0u64 }
+    if alen == 0u64 { return 0u64 }
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < alen { if pa[i] != pb[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn erg_autarkeia() -> u32 @export {
+    /* arm 1: the manifest over the committed tree.  git ls-files output is
+     * byte-identical to `LC_ALL=C sort -u` (git's index is byte-sorted), so no
+     * shell/sort is needed -- git.exe is spawned directly, its stdout redirected
+     * by cmd.  The whole manifest is read into ERG_MAN once (the tamper arms
+     * derive their variants from it in-organ, no sed/grep dependency). */
+    erg_x_run("cmd /c if not exist STDLIB\\build\\ergon_autk mkdir STDLIB\\build\\ergon_autk" as u64, 30000u32)
+    if erg_x_run("cmd /c git ls-files -- COMPILER/BOOT/*.iii COMPILER/BOOT/*.c COMPILER/BOOT/*.h COMPILER/BOOT/*.sh STDLIB/iii/**/*.iii STDLIB/sovir/*.iii STDLIB/sovir/*.sh STDLIB/corpus/*.iii STDLIB/scripts/*.sh DOCS/*.md DOCS/*.log DOCS/*.txt > STDLIB\\build\\ergon_autk\\MANIFEST.txt" as u64, 120000u32) != 0u64 { return 1501u32 }
+    if erg_read_manifest("STDLIB/build/ergon_autk/MANIFEST.txt" as u64) == 0u64 { return 1501u32 }
+    if erg_man_lines() < 100u64 { return 1501u32 }
+    /* arm 2: an SLH-DSA keypair -- deterministic seed, generated to 96 bytes */
+    let mut sdi : u64 = 0u64
+    while sdi < 96u64 { ERG_SEED[sdi] = (65u64 + (sdi * 11u64 + 5u64) % 26u64) as u8   sdi = sdi + 1u64 }
+    if erg_x_putn("STDLIB/build/ergon_autk/seed.bin" as u64, (&ERG_SEED) as u64, 96u64) != 1u64 { return 1502u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe keygen STDLIB/build/ergon_autk/seed.bin STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/sk.bin" as u64, 180000u32) != 0u64 { return 1502u32 }
+    /* arm 3: emit gen0, gen0b (same args -> determinism), gen1 (chained) */
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_autk/MANIFEST.txt STDLIB/build/ergon_autk/sk.bin STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen0.dat none none" as u64, 300000u32) != 0u64 { return 1503u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_autk/MANIFEST.txt STDLIB/build/ergon_autk/sk.bin STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen0b.dat none none" as u64, 300000u32) != 0u64 { return 1503u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_autk/MANIFEST.txt STDLIB/build/ergon_autk/sk.bin STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen1.dat STDLIB/build/ergon_autk/gen0.dat none" as u64, 300000u32) != 0u64 { return 1503u32 }
+    /* arm 4: tier-1 (no tree) + full re-derivation (re-walks every record from
+     * committed bytes -- this SUBSUMES the retired runner's frozen RADICAL/FORGE
+     * hex pins; a drifted record reddens here without any stored hex) */
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/pk.bin" as u64, 120000u32) != 0u64 { return 1504u32 }
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/pk.bin none . STDLIB/build/ergon_autk/MANIFEST.txt" as u64, 180000u32) != 0u64 { return 1504u32 }
+    /* arm 5: THE TAMPER BATTERY -- each class its DISTINCT refusal.
+     * body-byte(11): flip a byte inside gen0 on disk */
+    erg_x_run("cmd /c copy /y STDLIB\\build\\ergon_autk\\gen0.dat STDLIB\\build\\ergon_autk\\tA.dat >nul" as u64, 30000u32)
+    if erg_flip_byte("STDLIB/build/ergon_autk/tA.dat" as u64, 200u64) != 1u64 { return 1505u32 }
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/tA.dat STDLIB/build/ergon_autk/pk.bin" as u64, 120000u32) != 11u64 { return 1505u32 }
+    /* wrong-key(11): a fresh public key */
+    let mut wk : u64 = 0u64
+    while wk < 96u64 { ERG_SEED[wk] = (90u64 - (wk * 13u64 + 1u64) % 26u64) as u8   wk = wk + 1u64 }
+    erg_x_putn("STDLIB/build/ergon_autk/seed3.bin" as u64, (&ERG_SEED) as u64, 96u64)
+    erg_x_run("COMPILED\\iii-testament.exe keygen STDLIB/build/ergon_autk/seed3.bin STDLIB/build/ergon_autk/wpk.bin STDLIB/build/ergon_autk/wsk.bin" as u64, 180000u32)
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/wpk.bin" as u64, 120000u32) != 11u64 { return 1505u32 }
+    /* manifest(14): drop the first line -- derived in-organ from ERG_MAN */
+    if erg_man_write_skip_first("STDLIB/build/ergon_autk/man_tam.txt" as u64) != 1u64 { return 1505u32 }
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/pk.bin none . STDLIB/build/ergon_autk/man_tam.txt" as u64, 180000u32) != 14u64 { return 1505u32 }
+    /* file-content(14): back up a real committed source, append a byte, verify
+     * MUST catch it against the tree, restore, and re-verify green (the restore
+     * self-checks -- a corrupted restore reddens the re-verify) */
+    erg_x_run("cmd /c copy /y STDLIB\\corpus\\2600_mathesis_admit.iii STDLIB\\build\\ergon_autk\\cf.bak >nul" as u64, 30000u32)
+    erg_x_run("cmd /c echo.>> STDLIB\\corpus\\2600_mathesis_admit.iii" as u64, 30000u32)
+    let ft : u64 = erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/pk.bin none . STDLIB/build/ergon_autk/MANIFEST.txt" as u64, 180000u32)
+    erg_x_run("cmd /c copy /y STDLIB\\build\\ergon_autk\\cf.bak STDLIB\\corpus\\2600_mathesis_admit.iii >nul" as u64, 30000u32)
+    if ft != 14u64 { return 1505u32 }
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen0.dat STDLIB/build/ergon_autk/pk.bin none . STDLIB/build/ergon_autk/MANIFEST.txt" as u64, 180000u32) != 0u64 { return 1505u32 }
+    /* arm 6: determinism -- gen0 and gen0b (identical args, unchanged tree) are
+     * BYTE-IDENTICAL, signature included (FIPS-205 deterministic signing) */
+    if erg_x_run("cmd /c fc /b STDLIB\\build\\ergon_autk\\gen0.dat STDLIB\\build\\ergon_autk\\gen0b.dat >nul" as u64, 30000u32) != 0u64 { return 1506u32 }
+    /* arm 7: the generation CHAIN -- gen1 verifies with its parent (0); a
+     * testament may not be its own parent (12); a swapped keypair breaks
+     * continuity at emit (15); dropping one KAT breaks the monotone law (15) */
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen1.dat STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen0.dat" as u64, 120000u32) != 0u64 { return 1507u32 }
+    if erg_x_run("COMPILED\\iii-witness.exe verify STDLIB/build/ergon_autk/gen1.dat STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen1.dat" as u64, 120000u32) != 12u64 { return 1507u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_autk/MANIFEST.txt STDLIB/build/ergon_autk/wsk.bin STDLIB/build/ergon_autk/wpk.bin STDLIB/build/ergon_autk/gen1bad.dat STDLIB/build/ergon_autk/gen0.dat none" as u64, 300000u32) != 15u64 { return 1507u32 }
+    if erg_man_write_skip_line("STDLIB/build/ergon_autk/man_small.txt" as u64, "STDLIB/corpus/2600_mathesis_admit.iii" as u64) != 1u64 { return 1507u32 }
+    if erg_x_run("COMPILED\\iii-testament.exe emit . STDLIB/build/ergon_autk/man_small.txt STDLIB/build/ergon_autk/sk.bin STDLIB/build/ergon_autk/pk.bin STDLIB/build/ergon_autk/gen1small.dat STDLIB/build/ergon_autk/gen0.dat none" as u64, 300000u32) != 15u64 { return 1507u32 }
+    /* arm 8: THE COVENANT EQUATION -- core(T) = the judge-fold of the host- and
+     * generation-invariant show lines.  core(gen0)==core(gen0b) [determinism]
+     * AND core(gen1)==core(gen0) [GENERATION-INVARIANT, the non-trivial law:
+     * gen1 differs in generation/parent yet folds to the same core] AND the
+     * generation actually ADVANCED (else the invariance is vacuous) */
+    if erg_show_core("STDLIB/build/ergon_autk/gen0.dat" as u64, "STDLIB/build/ergon_autk/coreA.txt" as u64) < 5u64 { return 1508u32 }
+    let la : u64 = erg_fold_root("STDLIB/build/ergon_autk/coreA.txt" as u64, (&ERG_RA) as u64)
+    if la == 0u64 { return 1508u32 }
+    if erg_show_core("STDLIB/build/ergon_autk/gen0b.dat" as u64, "STDLIB/build/ergon_autk/coreB.txt" as u64) < 5u64 { return 1508u32 }
+    let lb : u64 = erg_fold_root("STDLIB/build/ergon_autk/coreB.txt" as u64, (&ERG_RB) as u64)
+    if erg_show_core("STDLIB/build/ergon_autk/gen1.dat" as u64, "STDLIB/build/ergon_autk/core1.txt" as u64) < 5u64 { return 1508u32 }
+    let l1 : u64 = erg_fold_root("STDLIB/build/ergon_autk/core1.txt" as u64, (&ERG_R1) as u64)
+    if erg_buf_eq((&ERG_RA) as u64, la, (&ERG_RB) as u64, lb) != 1u64 { return 1508u32 }
+    if erg_buf_eq((&ERG_RA) as u64, la, (&ERG_R1) as u64, l1) != 1u64 { return 1508u32 }
+    /* generation advanced: gen0 and gen1 show DIFFERENT generation lines */
+    erg_x_run("COMPILED\\iii-testament.exe show STDLIB/build/ergon_autk/gen0.dat" as u64, 120000u32)
+    let g0 : u64 = erg_x_parse_after("generation " as u64)
+    erg_x_run("COMPILED\\iii-testament.exe show STDLIB/build/ergon_autk/gen1.dat" as u64, 120000u32)
+    let g1 : u64 = erg_x_parse_after("generation " as u64)
+    if g0 == g1 { return 1508u32 }
+    /* arm 9: FED -- a live ML-DSA (FIPS 204) 3-of-3 quorum co-signs the core;
+     * a tampered core is co-signed by NONE (adversarial) */
+    if erg_x_putn("STDLIB/build/ergon_autk/core.bin" as u64, (&ERG_RA) as u64, la) != 1u64 { return 1509u32 }
+    let dp : *u8 = (&ERG_RA) as u64 as *u8
+    dp[la] = 48u8   dp[la + 1u64] = 48u8
+    erg_x_putn("STDLIB/build/ergon_autk/core_bad.bin" as u64, (&ERG_RA) as u64, la + 2u64)
+    let mut q : u64 = 0u64
+    let mut qb : u64 = 0u64
+    let mut k : u64 = 1u64
+    while k <= 3u64 {
+        let mut sd : u64 = 0u64
+        while sd < 32u64 { ERG_SEED[sd] = (70u64 + (sd * 7u64 + k * 3u64) % 26u64) as u8   sd = sd + 1u64 }
+        let mut sp : u64 = erg_x_sput(0u64, "STDLIB/build/ergon_autk/fed_seed_" as u64)
+        sp = erg_x_sput(sp, erg_k_str(k))
+        let spath : u64 = erg_dup_xb()
+        erg_x_putn(spath, (&ERG_SEED) as u64, 32u64)
+        /* keygen / sign / verify the good core */
+        if erg_fed_cycle(k, "STDLIB/build/ergon_autk/core.bin" as u64) == 0u64 { q = q + 1u64 }
+        if erg_fed_verify(k, "STDLIB/build/ergon_autk/core_bad.bin" as u64) == 0u64 { qb = qb + 1u64 }
+        k = k + 1u64
+    }
+    if q != 3u64 { return 1509u32 }
+    if qb != 0u64 { return 1509u32 }
+    /* arm 10: the MONOTONE ratchet via iii-judge pin -- gen 0->1 up accepted, a
+     * regression to 0 REFUSED (a generation may never go backward) */
+    erg_x_run("cmd /c del /q STDLIB\\build\\ergon_autk\\gen_led.txt" as u64, 30000u32)
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_autk/gen_led.txt generation 0 up" as u64, 60000u32) != 0u64 { return 1510u32 }
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_autk/gen_led.txt generation 1 up" as u64, 60000u32) != 0u64 { return 1510u32 }
+    if erg_x_run("COMPILED\\iii-judge.exe pin STDLIB/build/ergon_autk/gen_led.txt generation 0 up" as u64, 60000u32) != 1u64 { return 1510u32 }
+    return 0u32
+}
+/* the k-th FED seed path suffix (1/2/3) */
+fn erg_k_str(k: u64) -> u64 {
+    if k == 1u64 { return "1.bin" as u64 }
+    if k == 2u64 { return "2.bin" as u64 }
+    return "3.bin" as u64
+}
+var ERG_XB2 : [u8; 512]
+fn erg_dup_xb() -> u64 {
+    let s : *u8 = (&ERG_XB) as u64 as *u8
+    let d : *u8 = (&ERG_XB2) as u64 as *u8
+    let mut i : u64 = 0u64
+    while s[i] != 0u8 { d[i] = s[i]   i = i + 1u64 }
+    d[i] = 0u8
+    return (&ERG_XB2) as u64
+}
+/* ML-DSA keygen+sign+verify of MSG under the k-th quorum key; 0 = verified */
+fn erg_fed_cycle(k: u64, msg: u64) -> u64 {
+    let mut a : u64 = erg_x_sput(0u64, "COMPILED\\iii-crypto.exe keygen 2 STDLIB/build/ergon_autk/fed_seed_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    a = erg_x_sput(a, " STDLIB/build/ergon_autk/fed_pk_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    a = erg_x_sput(a, " STDLIB/build/ergon_autk/fed_sk_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 9u64 }
+    a = erg_x_sput(0u64, "COMPILED\\iii-crypto.exe sign 2 STDLIB/build/ergon_autk/fed_sk_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    a = erg_x_sput(a, " " as u64)
+    a = erg_x_sput(a, msg)
+    a = erg_x_sput(a, " STDLIB/build/ergon_autk/fed_sig_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    if erg_x_run((&ERG_XB) as u64, 120000u32) != 0u64 { return 9u64 }
+    return erg_fed_verify(k, msg)
+}
+fn erg_fed_verify(k: u64, msg: u64) -> u64 {
+    let mut a : u64 = erg_x_sput(0u64, "COMPILED\\iii-crypto.exe verify 2 STDLIB/build/ergon_autk/fed_pk_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    a = erg_x_sput(a, " " as u64)
+    a = erg_x_sput(a, msg)
+    a = erg_x_sput(a, " STDLIB/build/ergon_autk/fed_sig_" as u64)
+    a = erg_x_sput(a, erg_k_str(k))
+    return erg_x_run((&ERG_XB) as u64, 120000u32)
+}
+/* the committed-file manifest, read whole once; the tamper arms derive their
+ * variants from it in-organ (no sed/grep dependency) */
+var ERG_MAN : [u8; 262144]
+var ERG_MAN2 : [u8; 262144]
+var ERG_MAN_LEN : u64 = 0u64
+fn erg_read_manifest(path: u64) -> u64 {
+    ERG_MAN_LEN = 0u64
+    let h : u64 = CreateFileA(path, 2147483648u32, 1u32, 0u64, 3u32, 128u32, 0u64)
+    if h == 18446744073709551615u64 { return 0u64 }
+    if ReadFile(h, (&ERG_MAN) as u64, 262144u32, (&ERG_TC) as u64, 0u64) == 0i32 { CloseHandle(h)   return 0u64 }
+    CloseHandle(h)
+    ERG_MAN_LEN = ERG_TC[0u64] as u64
+    if ERG_MAN_LEN == 0u64 { return 0u64 }
+    return ERG_MAN_LEN
+}
+fn erg_man_lines() -> u64 {
+    let p : *u8 = (&ERG_MAN) as u64 as *u8
+    let mut c : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < ERG_MAN_LEN { if p[i] == 10u8 { c = c + 1u64 }   i = i + 1u64 }
+    return c
+}
+/* write the manifest minus its first line (from just past the first newline) */
+fn erg_man_write_skip_first(dst: u64) -> u64 {
+    let p : *u8 = (&ERG_MAN) as u64 as *u8
+    let mut nl : u64 = ERG_MAN_LEN
+    let mut i : u64 = 0u64
+    while i < ERG_MAN_LEN { if p[i] == 10u8 { nl = i   i = ERG_MAN_LEN } else { i = i + 1u64 } }
+    if nl >= ERG_MAN_LEN { return 0u64 }                 /* no newline -> malformed */
+    let s2 : u64 = nl + 1u64
+    return erg_x_putn(dst, ((&ERG_MAN) as u64) + s2, ERG_MAN_LEN - s2)
+}
+/* write the manifest minus the exact line equal to `needle` (NUL-terminated) */
+fn erg_man_write_skip_line(dst: u64, needle: u64) -> u64 {
+    let np : *u8 = needle as *u8
+    let mut nlen : u64 = 0u64
+    while np[nlen] != 0u8 { nlen = nlen + 1u64 }
+    let p : *u8 = (&ERG_MAN) as u64 as *u8
+    let op : *u8 = (&ERG_MAN2) as u64 as *u8
+    let mut w : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut dropped : u64 = 0u64
+    while i < ERG_MAN_LEN {
+        let ls : u64 = i
+        let mut le : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 { if le >= ERG_MAN_LEN { go = 0u64 } else { if p[le] == 10u8 { go = 0u64 } else { le = le + 1u64 } } }
+        let llen : u64 = le - ls
+        let mut match_line : u64 = 0u64
+        if llen == nlen {
+            match_line = 1u64
+            let mut j : u64 = 0u64
+            while j < nlen { if p[ls + j] != np[j] { match_line = 0u64   j = nlen } else { j = j + 1u64 } }
+        }
+        if match_line == 1u64 { dropped = dropped + 1u64 } else {
+            let mut k : u64 = ls
+            while k <= le { if k < ERG_MAN_LEN { op[w] = p[k]   w = w + 1u64 } else { op[w] = 10u8   w = w + 1u64 }   k = k + 1u64 }
+        }
+        i = le + 1u64
+    }
+    if dropped == 0u64 { return 0u64 }                  /* the line must exist to drop it */
+    return erg_x_putn(dst, (&ERG_MAN2) as u64, w)
+}
+/* flip one byte at `off` in a file on disk IN PLACE (seek-read-1, seek-write-1)
+ * -- never truncates, so a large signed testament stays whole but corrupted */
+var ERG_FB1 : [u8; 4]
+fn erg_flip_byte(path: u64, off: u64) -> u64 {
+    let h : u64 = CreateFileA(path, 3221225472u32, 0u32, 0u64, 3u32, 128u32, 0u64)   /* GENERIC_READ|WRITE, OPEN_EXISTING */
+    if h == 18446744073709551615u64 { return 0u64 }
+    SetFilePointer(h, off as i32, 0u64, 0u32)                                        /* FILE_BEGIN */
+    if ReadFile(h, (&ERG_FB1) as u64, 1u32, (&ERG_TC) as u64, 0u64) == 0i32 { CloseHandle(h)   return 0u64 }
+    if ERG_TC[0u64] == 0u32 { CloseHandle(h)   return 0u64 }
+    let p : *u8 = (&ERG_FB1) as u64 as *u8
+    p[0u64] = p[0u64] ^ 255u8
+    SetFilePointer(h, off as i32, 0u64, 0u32)
+    WriteFile(h, (&ERG_FB1) as u64, 1u32, (&ERG_TC) as u64, 0u64)
+    CloseHandle(h)
+    return 1u64
+}
 
 /* ==================== THE CENSUS: the fleet works, therefore it is ==================== */
 fn erg_census() -> u32 @export {

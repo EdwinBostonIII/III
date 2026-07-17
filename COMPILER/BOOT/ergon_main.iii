@@ -32,6 +32,7 @@ extern @abi(c-msvc-x64) fn erg_seat_hexad() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_intent() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_exec() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_deep() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_autarkeia() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_live() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_sealed() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
@@ -75,7 +76,9 @@ fn usage() -> u64 {
     ps("  iii-ergon census    the whole standing fleet re-derives its laws in one process,\n" as u64)
     ps("                      then the FORM LEDGER (ancestral batch debt, measured)\n" as u64)
     ps("  iii-ergon deep      the die's heavy faculties (nomos/oneiros/reversible/redeem/\n" as u64)
-    ps("                      symmetry/physis/wire/presses) -- minutes of wall, on demand\n\n" as u64)
+    ps("                      symmetry/physis/wire/presses) -- minutes of wall, on demand\n" as u64)
+    ps("  iii-ergon autarkeia the sealed spine + the covenant (testament emit/re-derive,\n" as u64)
+    ps("                      tamper battery, generation chain, covenant equation + quorum)\n\n" as u64)
     ps("no seat compares against a stored expected answer; every law is derived at the\n" as u64)
     ps("moment of motion.  requires CWD = the III root.\n" as u64)
     ps("exit: 0 WHOLE | 1 fault (located) | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
@@ -106,6 +109,24 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("exactly one seat+arm; the checker itself has teeth -- a sabotaged map is caught),\n" as u64)
         ps("and the cross-fold instrument is deterministic and input-sensitive.\n" as u64)
         ps("Re-derived THIS invocation, before any verb moved.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "autarkeia" as u64) == 1u32 {
+        ps("== THE AUTARKEIA VERB: the sealed spine + the covenant, re-derived live ==\n" as u64)
+        ps("  (emit a gen-0 testament over the committed tree, re-derive it, the full tamper\n" as u64)
+        ps("   battery, the generation chain, THE COVENANT EQUATION + ML-DSA 3-of-3 quorum;\n" as u64)
+        ps("   ex run_testament + run_covenant -- three SLH-DSA signings, minutes of wall)\n" as u64)
+        let a : u32 = erg_autarkeia()
+        if a != 0u32 {
+            ps("  AUTARKEIA FAULT " as u64)
+            pu(a as u64)
+            putchar(10i32)
+            return 1u64
+        }
+        ps("  the spine holds: testament emitted + re-derived against the tree; every tamper\n" as u64)
+        ps("  class its DISTINCT refusal; the chain links; THE COVENANT EQUATION -- core(gen1)\n" as u64)
+        ps("  == core(gen0) despite an advanced generation -- co-signed by a live ML-DSA 3-of-3\n" as u64)
+        ps("  quorum, a tampered core signed by NONE.  No stored answer was consulted.\n" as u64)
         return 0u64
     }
     if streq(cmd, "deep" as u64) == 1u32 {

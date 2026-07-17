@@ -1,0 +1,310 @@
+/* COMPILER/BOOT/eidolos_main.iii -- iii-eidolos: THE UNIVERSAL REASONING
+ * LANGUAGE as a standing tool.
+ *
+ *   iii-eidolos teach                     the five rules (the whole language)
+ *   iii-eidolos prove                     the self-proof alone (arms 70..81)
+ *   iii-eidolos read    "[a < b] ..."     normalize: ONE canonical scroll + its address
+ *   iii-eidolos unravel "[a < b] ..."     + everything the scroll KNOWS (stated and derived)
+ *   iii-eidolos ask     "[a < b] ..." -- "thing" VERB "thing"
+ *                                         does the scroll entail it?  VERB in {is,under,mirrors}
+ *
+ * Scroll arguments are joined with spaces, so brackets may arrive split across
+ * argv words; multiple systems' scrolls concatenate freely (the modular law).
+ *
+ * EVERY verb self-proves the language first and refuses to run over a broken
+ * law (exit 9) -- the kardia condition-of-motion pattern: no gate, no KAT.
+ * exit: 0 ok / entailed | 1 not entailed | 3 usage | 4 scroll refused | 9 SELF-REFUSED */
+module eidolos_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn eol_selfprove() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claims() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_a(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_v(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_b(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_things() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_count() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_root(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_of_thing(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_reaches(ci: u64, cj: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_mirror_class(ci: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_rsyn() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_rlaw() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_axiom_text() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_axiom() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_witness() -> u64 from "eidolos.iii"
+
+const EM_SENT : u64 = 18446744073709551615u64
+
+var EM_IN : [u8; 16384]
+var EM_QA : [u8; 1024]
+var EM_QB : [u8; 1024]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 { k = k - 4u64   let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) } }
+    return 1u32
+}
+fn slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut n : u64 = 0u64   while p[n] != 0u8 { n = n + 1u64 }   return n }
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn pthing(t: u64) -> u32 {
+    let n : u64 = eol_thing_len(t)
+    let mut k : u64 = 0u64
+    while k < n { putchar(eol_thing_byte(t, k) as i32)   k = k + 1u64 }
+    return 1u32
+}
+fn pscroll() -> u32 {
+    let n : u64 = eol_out_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(eol_out_byte(i) as i32)   i = i + 1u64 }
+    return 1u32
+}
+/* join argv[from..argc) into EM_IN with single spaces; returns length */
+fn join_args(argc: i32, argv: u64, frm: u64, dst: u64, cap: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let d : *u8 = dst as *u8
+    let mut n : u64 = 0u64
+    let mut i : u64 = frm
+    while (i as i64) < (argc as i64) {
+        if i > frm { if n < cap { d[n] = 32u8   n = n + 1u64 } }
+        let p : *u8 = av[i] as *u8
+        let mut k : u64 = 0u64
+        while p[k] != 0u8 { if n < cap { d[n] = p[k]   n = n + 1u64 }   k = k + 1u64 }
+        i = i + 1u64
+    }
+    if n < cap { d[n] = 0u8 }
+    return n
+}
+fn usage() -> u64 {
+    ps("iii-eidolos -- the universal reasoning language: five rules, three verbs, one canon\n\n" as u64)
+    ps("  iii-eidolos teach                      learn the whole language\n" as u64)
+    ps("  iii-eidolos prove                      the self-proof (arms 70..81)\n" as u64)
+    ps("  iii-eidolos read    \"[a < b] ...\"      one canonical scroll + its address\n" as u64)
+    ps("  iii-eidolos unravel \"[a < b] ...\"      + everything the scroll knows\n" as u64)
+    ps("  iii-eidolos ask     \"scroll\" -- \"thing\" is|under|mirrors \"thing\"\n" as u64)
+    ps("  iii-eidolos axiom                      the Logos Axiom -- the handshake address\n\n" as u64)
+    ps("exit: 0 ok/entailed | 1 not entailed | 3 usage | 4 scroll refused | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn teach() -> u64 {
+    ps("THE FIVE RULES (this is the whole language)\n\n" as u64)
+    ps("  1  A claim is  [ thing verb thing ].\n" as u64)
+    ps("  2  Three verbs:   =  is        <  under        ~  mirrors\n" as u64)
+    ps("  3  A thing is a phrase -- words and exact counts (9, or 124:1766) --\n" as u64)
+    ps("     or a claim in brackets.  A nested claim is mentioned, not stated.\n" as u64)
+    ps("  4  Claims sit side by side in any order.  Every scroll has ONE\n" as u64)
+    ps("     canonical spelling: same knowledge, same bytes, same address.\n" as u64)
+    ps("  5  The unraveling:  = joins;  < chains and never cycles;  ~ pairs\n" as u64)
+    ps("     uniquely and reverses <.  Nothing else is ever assumed.\n\n" as u64)
+    ps("READ A FEW ALOUD\n\n" as u64)
+    ps("  [dream ~ wake]                      dream mirrors wake\n" as u64)
+    ps("  [kardia 124:1766 = derived]         kardia, at 124 of 1766, is derived\n" as u64)
+    ps("  [belief 9:12 < assert]              belief, at 9 of 12, sits under assert\n" as u64)
+    ps("  [[dream ~ wake] < law]              that dream mirrors wake sits under law\n\n" as u64)
+    ps("TWO SPEAKERS, ONE TRUTH\n\n" as u64)
+    ps("  speaker one:  [freeze < vbd]\n" as u64)
+    ps("  speaker two:  [intent 1:6 = freeze]\n" as u64)
+    ps("  the union knows [intent 1:6 < vbd] -- neither speaker said it.\n\n" as u64)
+    ps("THE LOGOS AXIOM (the machine's own soul-sentence, re-derived every run)\n\n" as u64)
+    ps("  [dream < proof] [proof = law] [law ~ metal] [dream ~ wake]\n" as u64)
+    return 0u64
+}
+/* is the class pair (ci,cj) stated directly by some < claim? */
+fn stated_below(ci: u64, cj: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < eol_claims() {
+        if eol_claim_v(i) == 0u64 {
+            if eol_class_of_thing(eol_claim_a(i)) == ci {
+                if eol_class_of_thing(eol_claim_b(i)) == cj { return 1u64 }
+            }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn unravel_print() -> u64 {
+    let cn : u64 = eol_class_count()
+    let mut lines : u64 = 0u64
+    /* the joins: each class beyond its root member */
+    let mut t : u64 = 0u64
+    while t < eol_things() {
+        let ci : u64 = eol_class_of_thing(t)
+        if ci != EM_SENT {
+            let r : u64 = eol_class_root(ci)
+            if r != t { if lines < 64u64 {
+                ps("  [" as u64)   pthing(r)   ps(" = " as u64)   pthing(t)   ps("]\n" as u64)
+                lines = lines + 1u64
+            } }
+        }
+        t = t + 1u64
+    }
+    /* the mirrors, each pair once */
+    let mut ci : u64 = 0u64
+    while ci < cn {
+        let cj : u64 = eol_mirror_class(ci)
+        if cj != EM_SENT { if cj >= ci { if lines < 64u64 {
+            ps("  [" as u64)   pthing(eol_class_root(ci))   ps(" ~ " as u64)   pthing(eol_class_root(cj))   ps("]\n" as u64)
+            lines = lines + 1u64
+        } } }
+        ci = ci + 1u64
+    }
+    /* the order, stated and unraveled */
+    ci = 0u64
+    while ci < cn {
+        let mut cj : u64 = 0u64
+        while cj < cn {
+            if ci != cj { if eol_reaches(ci, cj) == 1u64 { if lines < 64u64 {
+                ps("  [" as u64)   pthing(eol_class_root(ci))   ps(" < " as u64)   pthing(eol_class_root(cj))
+                if stated_below(ci, cj) == 1u64 { ps("]\n" as u64) } else { ps("]   (unraveled)\n" as u64) }
+                lines = lines + 1u64
+            } } }
+            cj = cj + 1u64
+        }
+        ci = ci + 1u64
+    }
+    return lines
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    /* THE CONDITION OF MOTION: the language proves its own laws first */
+    let sp : u64 = eol_selfprove()
+    if sp != 0u64 {
+        ps("THE LANGUAGE REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "teach" as u64) == 1u32 { return teach() }
+    if streq(cmd, "axiom" as u64) == 1u32 {
+        ps("THE LOGOS AXIOM -- III's soul-sentence, the linguistic and logical barometer:\n\n" as u64)
+        ps("  " as u64)   ps(eol_axiom_text())   ps("\n\n" as u64)
+        ps("read aloud: dream sits under proof; proof is law; law mirrors metal;\n" as u64)
+        ps("dream mirrors wake.\n\n" as u64)
+        let ba : u64 = eol_axiom()
+        if ba == 0u64 { ps("AXIOM REFUSED -- the language cannot read its own soul\n" as u64)   return 9u64 }
+        eol_write()
+        ps("canon   : " as u64)   pscroll()   putchar(10i32)
+        ps("address : " as u64)   phex(ba)   ps("   (the named identity)\n" as u64)
+        ps("geometry: " as u64)   phex(eol_witness())   ps("   (the shape on the logos bus, names erased)\n" as u64)
+        ps("\nthe machine unraveled its own soul this invocation:\n" as u64)
+        ps("  [dream < law]    congruence: proof IS law, so what sits under proof sits under law\n" as u64)
+        ps("  [metal ~ law]    a mirror runs both ways\n" as u64)
+        ps("  [metal < wake]   the flip: dream under law, mirrored, is metal under wake --\n" as u64)
+        ps("                   the silicon serves the waking organism\n" as u64)
+        ps("and refused the overreaches: dream < metal (a mirror is not equality),\n" as u64)
+        ps("wake < metal (the flip has a direction), dream = wake (a mirror is not identity).\n\n" as u64)
+        ps("two systems that derive this SAME address speak one language under one law --\n" as u64)
+        ps("compare axioms before merging scrolls (the handshake).\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE LANGUAGE PROVEN (arms 70..81): the grammar and its refusals; the (1,1,1)\n" as u64)
+        ps("law (same knowledge -> same canonical bytes -> same address); scroll merge in\n" as u64)
+        ps("any order; exact measures; = joins; < chains, never cycles, and = substitutes\n" as u64)
+        ps("into it; ~ is symmetric, pairs uniquely (a second mirror IS an equality), and\n" as u64)
+        ps("REVERSES <; incoherence refuses every query, counted; a nested claim is\n" as u64)
+        ps("mentioned, never stated; two speakers unravel to what neither said; the empty\n" as u64)
+        ps("scroll is coherent.  Re-proven at THIS invocation, before any verb moved.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "read" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        eol_reset()
+        let n : u64 = join_args(argc, argv, 2u64, (&EM_IN) as u64, 16383u64)
+        if eol_read((&EM_IN) as u64, n) < 0i64 {
+            ps("scroll refused: syntax (counted " as u64)   pu(eol_rsyn())   ps(")\n" as u64)
+            return 4u64
+        }
+        let a : u64 = eol_addr()
+        if a == 0u64 {
+            ps("scroll refused: the law (a cycle, or a thing under itself)\n" as u64)
+            return 4u64
+        }
+        eol_write()
+        ps("canon   : " as u64)   pscroll()   putchar(10i32)
+        ps("address : " as u64)   phex(a)   putchar(10i32)
+        ps("geometry: " as u64)   phex(eol_witness())   putchar(10i32)
+        ps("claims " as u64)   pu(eol_claims())   ps("  things " as u64)   pu(eol_things())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "unravel" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        eol_reset()
+        let n : u64 = join_args(argc, argv, 2u64, (&EM_IN) as u64, 16383u64)
+        if eol_read((&EM_IN) as u64, n) < 0i64 {
+            ps("scroll refused: syntax (counted " as u64)   pu(eol_rsyn())   ps(")\n" as u64)
+            return 4u64
+        }
+        let a : u64 = eol_addr()
+        if a == 0u64 {
+            ps("scroll refused: the law (a cycle, or a thing under itself)\n" as u64)
+            return 4u64
+        }
+        eol_write()
+        ps("canon   : " as u64)   pscroll()   putchar(10i32)
+        ps("address : " as u64)   phex(a)   putchar(10i32)
+        ps("the scroll knows:\n" as u64)
+        let lines : u64 = unravel_print()
+        if lines == 0u64 { ps("  (nothing beyond the claims themselves)\n" as u64) }
+        return 0u64
+    }
+    if streq(cmd, "ask" as u64) == 1u32 {
+        /* iii-eidolos ask "<scroll...>" -- "<thing>" is|under|mirrors "<thing>" */
+        let mut sep : u64 = 0u64
+        let mut i : u64 = 2u64
+        while (i as i64) < (argc as i64) {
+            if streq(av[i], "--" as u64) == 1u32 { sep = i   i = argc as u64 } else { i = i + 1u64 }
+        }
+        if sep == 0u64 { return usage() }
+        if (sep as i64) + 4i64 != (argc as i64) { return usage() }
+        eol_reset()
+        let n : u64 = join_args(sep as i32, argv, 2u64, (&EM_IN) as u64, 16383u64)
+        if eol_read((&EM_IN) as u64, n) < 0i64 {
+            ps("scroll refused: syntax (counted " as u64)   pu(eol_rsyn())   ps(")\n" as u64)
+            return 4u64
+        }
+        let qa : u64 = av[sep + 1u64]
+        let vs : u64 = av[sep + 2u64]
+        let qb : u64 = av[sep + 3u64]
+        let mut v : u64 = EM_SENT
+        if streq(vs, "is" as u64) == 1u32 { v = 2u64 }
+        if streq(vs, "under" as u64) == 1u32 { v = 0u64 }
+        if streq(vs, "mirrors" as u64) == 1u32 { v = 1u64 }
+        if v == EM_SENT { return usage() }
+        let e : u64 = eol_entails(qa, slen(qa), v, qb, slen(qb))
+        if e == 2u64 {
+            ps("query refused: the scroll is incoherent or the thing is malformed\n" as u64)
+            return 4u64
+        }
+        ps("[" as u64)   ps(qa)
+        if v == 0u64 { ps(" < " as u64) }
+        if v == 1u64 { ps(" ~ " as u64) }
+        if v == 2u64 { ps(" = " as u64) }
+        ps(qb)   ps("] : " as u64)
+        if e == 1u64 { ps("KNOWN\n" as u64)   return 0u64 }
+        ps("not entailed\n" as u64)
+        return 1u64
+    }
+    return usage()
+}

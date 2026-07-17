@@ -115,8 +115,10 @@ fn main(argc: i32, argv: u64) -> u64 {
     }
 
     if streq(av[1u64], "--count" as u64) == 1u32 {
-        ps("admitted hexads = " as u64)  pd(iii_hexad_reachable_count())
+        let cnt : u64 = iii_hexad_reachable_count()
+        ps("admitted hexads = " as u64)  pd(cnt)
         ps(" of 729  (2^4 * 3^2 = 144: P1..P4 in {ZERO,POS}, P5..P6 free)\n" as u64)
+        ps("[hexad " as u64)  pd(cnt)  ps(":729 = admitted]\n" as u64)
         return 0u64
     }
 
@@ -131,8 +133,14 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("A " as u64)  print_hexad(&PILL_A as u64)  putchar(10i32)
         ps("B " as u64)  print_hexad(&PILL_B as u64)  putchar(10i32)
         ps("A o B = " as u64)  print_hexad(&PILL_O as u64)
-        if iii_hexad_reachable(hc) == 1u8 { ps("  [ADMITTED]\n" as u64)  return 0u64 }
-        ps("  [BRICKING]\n" as u64)  return 1u64
+        if iii_hexad_reachable(hc) == 1u8 {
+            ps("  [ADMITTED]\n" as u64)
+            ps("[hexad " as u64)  pd(hc as u64)  ps(":729 < admitted]\n" as u64)
+            return 0u64
+        }
+        ps("  [BRICKING]\n" as u64)
+        ps("[hexad " as u64)  pd(hc as u64)  ps(":729 < bricking]\n" as u64)
+        return 1u64
     }
 
     if argc < 7i32 { ps("iii-hexad: need 6 pillars (got fewer); see iii-hexad with no args\n" as u64)  return 2u64 }
@@ -141,6 +149,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     ps("hexad " as u64)  print_hexad(&PILL_A as u64)  ps("  packed=0x" as u64)  pd(h as u64)  putchar(10i32)
     if iii_hexad_reachable(h) == 1u8 {
         ps("ADMITTED: representable in the 144-manifold (no NEG in a structural pillar).\n" as u64)
+        ps("[hexad " as u64)  pd(h as u64)  ps(":729 < admitted]\n" as u64)
         return 0u64
     }
     /* bricking -- name the first structural pillar (P1..P4) that is NEG */
@@ -149,11 +158,13 @@ fn main(argc: i32, argv: u64) -> u64 {
     while i < 4u64 {
         if d[i] == -1i32 {
             ps("BRICKING-BY-CONSTRUCTION: " as u64)  pillar_name(i)  ps(" is NEG -- structurally unrepresentable.\n" as u64)
+            ps("[hexad " as u64)  pd(h as u64)  ps(":729 < bricking]\n" as u64)
             return 1u64
         }
         i = i + 1u64
     }
     /* no structural NEG but still unreachable = one of the six explicitly-cleared PFS bricking hexads */
     ps("BRICKING: a PFS bricking hexad (explicitly cleared from the manifold).\n" as u64)
+    ps("[hexad " as u64)  pd(h as u64)  ps(":729 < bricking]\n" as u64)
     return 1u64
 }

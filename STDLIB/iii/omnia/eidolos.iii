@@ -1,0 +1,1035 @@
+/* STDLIB/iii/eidos/eidolos.iii -- EIDOLOS: the universal reasoning language.
+ *
+ * A mind is bound by what its language lets it say.  EIDOLOS is III's one
+ * tongue for every non-numerical ontology: five rules, three verbs, plain
+ * bytes.  Any organ can SPEAK it with nothing but its existing string writer;
+ * any organ (or any human, in a few weeks) can READ it; and the language
+ * itself REASONS -- the unraveling derives what juxtaposed claims entail.
+ *
+ * THE FIVE RULES (the whole language):
+ *   1  A claim is  [ thing verb thing ].
+ *   2  The verbs:  =  is (identity)     <  under (order)     ~  mirrors (dual).
+ *   3  A thing is a PHRASE -- words and exact counts (n or n:m) in sequence --
+ *      or a claim in brackets (a nested claim is MENTIONED, not stated).
+ *   4  Claims sit side by side in any order.  The scroll has ONE canonical
+ *      spelling: same knowledge -> same bytes -> same address (1,1,1: the
+ *      shape IS the address IS the value).
+ *   5  The unraveling:  = joins (congruence);  < chains and never cycles;
+ *      ~ pairs uniquely (two mirrors of one thing are the same thing) and
+ *      REVERSES < (the order-reversing involution).  Nothing else is assumed.
+ *
+ * THE VERB CANON is the substrate's own triad with the substrate's own
+ * numbers: BELOW=0 ('<'), REFLECT=1 ('~'), FLAT=2 ('=') -- exactly the
+ * omnia::isub / eidos::ripple law (FLAT is the absence of a ripple; the two
+ * bus verbs are the two moving verbs).  The language and the metal agree.
+ *
+ * LIBERATION / BOUND / INTELLIGENCE:
+ *   - phrases are FREE: any ontology III mints (GLOSSA words, organ names,
+ *     event kinds) is speakable at once -- no lexicon gate, no registration;
+ *   - the LAWS bound reality: a scroll that says [a < b] and [b < a], or
+ *     lets a thing sit under itself through any chain, is INCOHERENT -- every
+ *     query over it is REFUSED (counted, never silent);
+ *   - the closure is native intelligence: two systems drop their brackets
+ *     side by side and eol_entails answers what the union KNOWS, including
+ *     what neither said alone (alien math, unraveled).
+ *
+ * MENTION vs USE: a nested claim is a quoted THING ([[dream ~ wake] < law]
+ * states only the outer claim); stating is top-level only.  This one
+ * distinction lets the language talk ABOUT its own claims lawfully.
+ *
+ * PURITY AND THE ONE EXCEPTION: this organ depends on numera/idfold (the ONE
+ * identity seat) and on the preexisting logos bus itself (omnia/isub) --
+ * because the language IS the logos family's readable face.  A coherent
+ * scroll WITNESSES onto the real bus with the exact verb mapping the
+ * substrate proved:  =  emits NOTHING (identity is node-fusion; FLAT is the
+ * absence of a ripple),  <  emits V_BELOW,  ~  emits V_REFLECT, over
+ * content-ranked equivalence classes.  So every scroll has TWO derived names:
+ *   eol_addr    -- the NAMED identity (fold of the canonical text), and
+ *   eol_witness -- the NAMELESS GEOMETRY (the isub chain root of its shape;
+ *                  the bus's own law: "there is no label in here").
+ * Same text -> same geometry; same geometry -> isomorphic shape (names erased,
+ * exactly what Ring -1 is allowed to see).  No other organ is imported.
+ *
+ * Truth is a CONDITION OF MOTION: eol_selfprove (arms 70..81, positive +
+ * negative controls) re-derives every rule above at every invocation.  NO
+ * gate, NO KAT -- verification lives inside (the kardia/doxa pattern).
+ * Hexad: kind_glyph.  Ring R0. */
+module eidos_eidolos
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_order_selfproof() -> u32 from "isub.iii"
+
+/* the verb canon (the substrate triad, same numbers as isub/ripple) */
+const EOL_V_BELOW   : u64 = 0u64         /* '<'  under    -- the order          */
+const EOL_V_REFLECT : u64 = 1u64         /* '~'  mirrors  -- the involution     */
+const EOL_V_FLAT    : u64 = 2u64         /* '='  is       -- identity, no ripple */
+
+const EOL_TCAP : u64 = 256u64            /* interned things                     */
+const EOL_CCAP : u64 = 256u64            /* stated claims                       */
+const EOL_ACAP : u64 = 24576u64          /* thing-bytes arena                   */
+const EOL_OCAP : u64 = 16384u64          /* canonical scroll                    */
+const EOL_DMAX : u64 = 16u64             /* bracket nesting depth               */
+const EOL_SENT : u64 = 18446744073709551615u64
+
+/* ==================== the scroll state ==================== */
+var EOL_ARE : [u8; 24576]                /* thing bytes, canonical              */
+var EOL_TOF : [u64; 256]
+var EOL_TLN : [u64; 256]
+var EOL_TFO : [u64; 256]                 /* fold of the thing's canonical bytes */
+var EOL_TN  : u64 = 0u64
+
+var EOL_CA : [u64; 256]                  /* claim: thing a                      */
+var EOL_CV : [u64; 256]                  /* claim: verb                         */
+var EOL_CB : [u64; 256]                  /* claim: thing b                      */
+var EOL_CF : [u64; 256]                  /* claim: fold of canonical claim bytes */
+var EOL_CN : u64 = 0u64
+
+/* named refusal counters (every refusal counted, never silent) */
+var EOL_RSYN : u64 = 0u64                /* syntax refused                      */
+var EOL_RCAP : u64 = 0u64                /* capacity refused                    */
+var EOL_RLAW : u64 = 0u64                /* law refused (cycle / self-under)    */
+var EOL_RQ   : u64 = 0u64                /* queries refused over incoherence    */
+
+/* the reader cursor (settable so queries parse through the same grammar) */
+var EOL_SRC : u64 = 0u64
+var EOL_SLN : u64 = 0u64
+var EOL_POS : u64 = 0u64
+var EOL_DEP : u64 = 0u64
+
+/* the build buffer (canonical bytes are assembled here, then interned) */
+var EOL_BLD : [u8; 2048]
+var EOL_BN  : u64 = 0u64
+
+/* the unraveling state (recomputed by eol_lawcheck) */
+var EOL_UF  : [u64; 256]                 /* union-find parent, by thing id      */
+var EOL_MIR : [u64; 256]                 /* mirror partner (root thing id) | SENT */
+var EOL_CLR : [u64; 256]                 /* root thing id -> class index | SENT */
+var EOL_CRT : [u64; 256]                 /* class index -> root thing id        */
+var EOL_CNN : u64 = 0u64                 /* class count                         */
+var EOL_ADJ : [u64; 1024]                /* class x class reachability bitset   */
+var EOL_LAWOK : u64 = 0u64               /* 1 after a clean lawcheck            */
+
+/* the canonical scroll (eol_write) */
+var EOL_OUT : [u8; 16384]
+var EOL_ON  : u64 = 0u64
+
+/* the bus witness scratch */
+var EOL_W32 : [u8; 32]
+var EOL_WV : [u64; 256]
+var EOL_WA : [u64; 256]
+var EOL_WB : [u64; 256]
+var EOL_WN : u64 = 0u64
+var EOL_RWIT : u64 = 0u64                /* witness refused (incoherent scroll) */
+
+fn eol_reset() -> i32 @export {
+    EOL_TN = 0u64
+    EOL_CN = 0u64
+    EOL_RSYN = 0u64
+    EOL_RCAP = 0u64
+    EOL_RLAW = 0u64
+    EOL_RQ = 0u64
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    EOL_BN = 0u64
+    EOL_CNN = 0u64
+    EOL_LAWOK = 0u64
+    EOL_ON = 0u64
+    EOL_WN = 0u64
+    EOL_RWIT = 0u64
+    return 0i32
+}
+fn eol_rwit() -> u64 @export { return EOL_RWIT }
+fn eol_things() -> u64 @export { return EOL_TN }
+fn eol_claims() -> u64 @export { return EOL_CN }
+fn eol_rsyn() -> u64 @export { return EOL_RSYN }
+fn eol_rcap() -> u64 @export { return EOL_RCAP }
+fn eol_rlaw() -> u64 @export { return EOL_RLAW }
+fn eol_rq() -> u64 @export { return EOL_RQ }
+fn eol_claim_a(i: u64) -> u64 @export { if i < EOL_CN { return EOL_CA[i] }   return EOL_SENT }
+fn eol_claim_v(i: u64) -> u64 @export { if i < EOL_CN { return EOL_CV[i] }   return EOL_SENT }
+fn eol_claim_b(i: u64) -> u64 @export { if i < EOL_CN { return EOL_CB[i] }   return EOL_SENT }
+fn eol_thing_len(t: u64) -> u64 @export { if t < EOL_TN { return EOL_TLN[t] }   return 0u64 }
+fn eol_thing_byte(t: u64, k: u64) -> u8 @export {
+    if t < EOL_TN { if k < EOL_TLN[t] { return EOL_ARE[EOL_TOF[t] + k] } }
+    return 0u8
+}
+
+/* ==================== interning (shape = address = value) ==================== */
+fn eol_fold_range(off: u64, n: u64) -> u64 {
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < n { h = idfold_u64(h, EOL_ARE[off + i] as u64)   i = i + 1u64 }
+    return idfold_seal(h)
+}
+fn eol_fold_build() -> u64 {
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < EOL_BN { h = idfold_u64(h, EOL_BLD[i] as u64)   i = i + 1u64 }
+    return idfold_seal(h)
+}
+/* intern the build buffer as a thing; returns id (SENT on capacity) */
+fn eol_intern_build() -> u64 {
+    let f : u64 = eol_fold_build()
+    let mut t : u64 = 0u64
+    while t < EOL_TN {
+        if EOL_TFO[t] == f { if EOL_TLN[t] == EOL_BN {
+            let mut k : u64 = 0u64
+            let mut same : u64 = 1u64
+            while k < EOL_BN {
+                if EOL_ARE[EOL_TOF[t] + k] != EOL_BLD[k] { same = 0u64   k = EOL_BN }
+                k = k + 1u64
+            }
+            if same == 1u64 { return t }
+        } }
+        t = t + 1u64
+    }
+    if EOL_TN >= EOL_TCAP { EOL_RCAP = EOL_RCAP + 1u64   return EOL_SENT }
+    let mut off : u64 = 0u64
+    if EOL_TN > 0u64 { off = EOL_TOF[EOL_TN - 1u64] + EOL_TLN[EOL_TN - 1u64] }
+    if off + EOL_BN > EOL_ACAP { EOL_RCAP = EOL_RCAP + 1u64   return EOL_SENT }
+    let mut k : u64 = 0u64
+    while k < EOL_BN { EOL_ARE[off + k] = EOL_BLD[k]   k = k + 1u64 }
+    EOL_TOF[EOL_TN] = off
+    EOL_TLN[EOL_TN] = EOL_BN
+    EOL_TFO[EOL_TN] = f
+    EOL_TN = EOL_TN + 1u64
+    return EOL_TN - 1u64
+}
+/* content order over things: fold first, then bytes (never intern order) */
+fn eol_thing_gt(a: u64, b: u64) -> u64 {
+    if EOL_TFO[a] > EOL_TFO[b] { return 1u64 }
+    if EOL_TFO[a] < EOL_TFO[b] { return 0u64 }
+    let la : u64 = EOL_TLN[a]
+    let lb : u64 = EOL_TLN[b]
+    let mut n : u64 = la
+    if lb < n { n = lb }
+    let mut k : u64 = 0u64
+    while k < n {
+        let x : u8 = EOL_ARE[EOL_TOF[a] + k]
+        let y : u8 = EOL_ARE[EOL_TOF[b] + k]
+        if x > y { return 1u64 }
+        if x < y { return 0u64 }
+        k = k + 1u64
+    }
+    if la > lb { return 1u64 }
+    return 0u64
+}
+
+/* ==================== the reader (five rules, nothing else) ==================== */
+fn eol_at() -> u8 {
+    if EOL_POS >= EOL_SLN { return 0u8 }
+    let p : *u8 = EOL_SRC as *u8
+    return p[EOL_POS]
+}
+fn eol_ws() -> i32 {
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        let c : u8 = eol_at()
+        if c == 32u8 { EOL_POS = EOL_POS + 1u64 } else {
+        if c == 9u8 { EOL_POS = EOL_POS + 1u64 } else {
+        if c == 10u8 { EOL_POS = EOL_POS + 1u64 } else {
+        if c == 13u8 { EOL_POS = EOL_POS + 1u64 } else { going = 0u64 } } } }
+    }
+    return 0i32
+}
+fn eol_is_lower(c: u8) -> u64 { if c >= 97u8 { if c <= 122u8 { return 1u64 } }   return 0u64 }
+fn eol_is_digit(c: u8) -> u64 { if c >= 48u8 { if c <= 57u8 { return 1u64 } }   return 0u64 }
+fn eol_is_wordch(c: u8) -> u64 {
+    if eol_is_lower(c) == 1u64 { return 1u64 }
+    if eol_is_digit(c) == 1u64 { return 1u64 }
+    if c == 95u8 { return 1u64 }
+    if c == 45u8 { return 1u64 }
+    return 0u64
+}
+fn eol_bput(c: u8) -> i32 {
+    if EOL_BN < 2048u64 { EOL_BLD[EOL_BN] = c   EOL_BN = EOL_BN + 1u64 }
+    return 0i32
+}
+fn eol_bput_thing(t: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < EOL_TLN[t] { eol_bput(EOL_ARE[EOL_TOF[t] + k])   k = k + 1u64 }
+    return 0i32
+}
+fn eol_bput_u64(v: u64) -> i32 {
+    if v >= 10u64 { eol_bput_u64(v / 10u64) }
+    eol_bput((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+/* parse digits into a u64 (18-digit envelope); SENT on none/overflow */
+fn eol_p_num() -> u64 {
+    let mut v : u64 = 0u64
+    let mut nd : u64 = 0u64
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        let c : u8 = eol_at()
+        if eol_is_digit(c) == 1u64 {
+            v = (v * 10u64) + ((c - 48u8) as u64)
+            nd = nd + 1u64
+            EOL_POS = EOL_POS + 1u64
+            if nd > 18u64 { going = 0u64 }
+        } else { going = 0u64 }
+    }
+    if nd == 0u64 { return EOL_SENT }
+    if nd > 18u64 { return EOL_SENT }
+    return v
+}
+/* measure -> canonical bytes into the build buffer: n:1 becomes n */
+fn eol_p_measure_into_build() -> u64 {
+    let n : u64 = eol_p_num()
+    if n == EOL_SENT { return EOL_SENT }
+    let mut m : u64 = 1u64
+    if eol_at() == 58u8 {
+        EOL_POS = EOL_POS + 1u64
+        m = eol_p_num()
+        if m == EOL_SENT { return EOL_SENT }
+    }
+    eol_bput_u64(n)
+    if m != 1u64 {
+        eol_bput(58u8)
+        eol_bput_u64(m)
+    }
+    return 0u64
+}
+/* a PHRASE: words and measures in sequence, canonical single spaces */
+fn eol_p_phrase() -> u64 {
+    let base : u64 = EOL_BN
+    let mut first : u64 = 1u64
+    let mut going : u64 = 1u64
+    let mut bad : u64 = 0u64
+    while going == 1u64 {
+        eol_ws()
+        let c : u8 = eol_at()
+        if eol_is_lower(c) == 1u64 {
+            if first == 0u64 { eol_bput(32u8) }
+            let mut wc : u8 = eol_at()
+            let mut inw : u64 = 1u64
+            while inw == 1u64 {
+                if eol_is_wordch(wc) == 1u64 {
+                    eol_bput(wc)
+                    EOL_POS = EOL_POS + 1u64
+                    wc = eol_at()
+                } else { inw = 0u64 }
+            }
+            first = 0u64
+        } else {
+        if eol_is_digit(c) == 1u64 {
+            if first == 0u64 { eol_bput(32u8) }
+            if eol_p_measure_into_build() == EOL_SENT { bad = 1u64   going = 0u64 }
+            first = 0u64
+        } else { going = 0u64 } }
+    }
+    if bad == 1u64 { EOL_BN = base   EOL_RSYN = EOL_RSYN + 1u64   return EOL_SENT }
+    if EOL_BN == base { EOL_RSYN = EOL_RSYN + 1u64   return EOL_SENT }
+    /* intern just this phrase: move it to the front of the build window */
+    let n : u64 = EOL_BN - base
+    let mut k : u64 = 0u64
+    while k < n { EOL_BLD[k] = EOL_BLD[base + k]   k = k + 1u64 }
+    EOL_BN = n
+    let t : u64 = eol_intern_build()
+    EOL_BN = base
+    return t
+}
+fn eol_verb_char(v: u64) -> u8 {
+    if v == EOL_V_BELOW { return 60u8 }
+    if v == EOL_V_REFLECT { return 126u8 }
+    return 61u8
+}
+/* a THING: a phrase, or a bracketed claim (mentioned) */
+fn eol_p_thing() -> u64 {
+    eol_ws()
+    let c : u8 = eol_at()
+    if c == 91u8 { return eol_p_claim(1u64) }
+    if eol_is_lower(c) == 1u64 { return eol_p_phrase() }
+    if eol_is_digit(c) == 1u64 { return eol_p_phrase() }
+    EOL_RSYN = EOL_RSYN + 1u64
+    return EOL_SENT
+}
+/* a CLAIM: '[' thing verb thing ']'.  as_thing=1 -> intern as a mentioned
+ * thing and return its id; as_thing=0 -> state it (record the row), return 1.
+ * Symmetric verbs (= ~) are oriented by content so spelling order vanishes. */
+fn eol_p_claim(as_thing: u64) -> u64 {
+    if EOL_DEP >= EOL_DMAX { EOL_RCAP = EOL_RCAP + 1u64   return EOL_SENT }
+    EOL_DEP = EOL_DEP + 1u64
+    if eol_at() != 91u8 { EOL_DEP = EOL_DEP - 1u64   EOL_RSYN = EOL_RSYN + 1u64   return EOL_SENT }
+    EOL_POS = EOL_POS + 1u64
+    let ta : u64 = eol_p_thing()
+    if ta == EOL_SENT { EOL_DEP = EOL_DEP - 1u64   return EOL_SENT }
+    eol_ws()
+    let vc : u8 = eol_at()
+    let mut v : u64 = EOL_SENT
+    if vc == 60u8 { v = EOL_V_BELOW }
+    if vc == 126u8 { v = EOL_V_REFLECT }
+    if vc == 61u8 { v = EOL_V_FLAT }
+    if v == EOL_SENT { EOL_DEP = EOL_DEP - 1u64   EOL_RSYN = EOL_RSYN + 1u64   return EOL_SENT }
+    EOL_POS = EOL_POS + 1u64
+    let tb : u64 = eol_p_thing()
+    if tb == EOL_SENT { EOL_DEP = EOL_DEP - 1u64   return EOL_SENT }
+    eol_ws()
+    if eol_at() != 93u8 { EOL_DEP = EOL_DEP - 1u64   EOL_RSYN = EOL_RSYN + 1u64   return EOL_SENT }
+    EOL_POS = EOL_POS + 1u64
+    EOL_DEP = EOL_DEP - 1u64
+    let mut a : u64 = ta
+    let mut b : u64 = tb
+    if v != EOL_V_BELOW { if eol_thing_gt(a, b) == 1u64 { let tmp : u64 = a   a = b   b = tmp } }
+    if as_thing == 1u64 {
+        let base : u64 = EOL_BN
+        eol_bput(91u8)
+        eol_bput_thing(a)
+        eol_bput(32u8)
+        eol_bput(eol_verb_char(v))
+        eol_bput(32u8)
+        eol_bput_thing(b)
+        eol_bput(93u8)
+        let n : u64 = EOL_BN - base
+        let mut k : u64 = 0u64
+        while k < n { EOL_BLD[k] = EOL_BLD[base + k]   k = k + 1u64 }
+        EOL_BN = n
+        let t : u64 = eol_intern_build()
+        EOL_BN = base
+        return t
+    }
+    /* stated: dedup on (a,v,b) after orientation */
+    let mut i : u64 = 0u64
+    while i < EOL_CN {
+        if EOL_CA[i] == a { if EOL_CV[i] == v { if EOL_CB[i] == b { return 1u64 } } }
+        i = i + 1u64
+    }
+    if EOL_CN >= EOL_CCAP { EOL_RCAP = EOL_RCAP + 1u64   return EOL_SENT }
+    let mut h : u64 = idfold_basis()
+    h = idfold_u64(h, 91u64)
+    h = idfold_u64(h, EOL_TFO[a])
+    h = idfold_u64(h, eol_verb_char(v) as u64)
+    h = idfold_u64(h, EOL_TFO[b])
+    h = idfold_u64(h, 93u64)
+    EOL_CA[EOL_CN] = a
+    EOL_CV[EOL_CN] = v
+    EOL_CB[EOL_CN] = b
+    EOL_CF[EOL_CN] = idfold_seal(h)
+    EOL_CN = EOL_CN + 1u64
+    return 1u64
+}
+/* read a scroll (APPENDS to the standing scroll -- side-by-side is the law).
+ * Returns claims now standing, or -1 on refusal (counted). */
+fn eol_read(addr: u64, len: u64) -> i64 @export {
+    EOL_SRC = addr
+    EOL_SLN = len
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    EOL_LAWOK = 0u64
+    let mut going : u64 = 1u64
+    let mut bad : u64 = 0u64
+    while going == 1u64 {
+        eol_ws()
+        if EOL_POS >= EOL_SLN { going = 0u64 } else {
+            if eol_at() == 91u8 {
+                if eol_p_claim(0u64) == EOL_SENT { bad = 1u64   going = 0u64 }
+            } else {
+                EOL_RSYN = EOL_RSYN + 1u64
+                bad = 1u64
+                going = 0u64
+            }
+        }
+    }
+    if bad == 1u64 { return -1i64 }
+    return EOL_CN as i64
+}
+
+/* ==================== the canonical scroll (rule 4) ==================== */
+fn eol_claim_gt(i: u64, j: u64) -> u64 {
+    if EOL_CF[i] > EOL_CF[j] { return 1u64 }
+    if EOL_CF[i] < EOL_CF[j] { return 0u64 }
+    if eol_thing_gt(EOL_CA[i], EOL_CA[j]) == 1u64 { return 1u64 }
+    if eol_thing_gt(EOL_CA[j], EOL_CA[i]) == 1u64 { return 0u64 }
+    if EOL_CV[i] > EOL_CV[j] { return 1u64 }
+    if EOL_CV[i] < EOL_CV[j] { return 0u64 }
+    return eol_thing_gt(EOL_CB[i], EOL_CB[j])
+}
+var EOL_ORD : [u64; 256]
+fn eol_oput(c: u8) -> i32 {
+    if EOL_ON < EOL_OCAP { EOL_OUT[EOL_ON] = c   EOL_ON = EOL_ON + 1u64 }
+    return 0i32
+}
+fn eol_write() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < EOL_CN { EOL_ORD[i] = i   i = i + 1u64 }
+    let mut a : u64 = 0u64
+    while a + 1u64 < EOL_CN {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < EOL_CN {
+            if eol_claim_gt(EOL_ORD[best], EOL_ORD[b]) == 1u64 { best = b }
+            b = b + 1u64
+        }
+        if best != a { let t : u64 = EOL_ORD[a]   EOL_ORD[a] = EOL_ORD[best]   EOL_ORD[best] = t }
+        a = a + 1u64
+    }
+    EOL_ON = 0u64
+    i = 0u64
+    while i < EOL_CN {
+        if i > 0u64 { eol_oput(32u8) }
+        let c : u64 = EOL_ORD[i]
+        eol_oput(91u8)
+        let ta : u64 = EOL_CA[c]
+        let mut k : u64 = 0u64
+        while k < EOL_TLN[ta] { eol_oput(EOL_ARE[EOL_TOF[ta] + k])   k = k + 1u64 }
+        eol_oput(32u8)
+        eol_oput(eol_verb_char(EOL_CV[c]))
+        eol_oput(32u8)
+        let tb : u64 = EOL_CB[c]
+        k = 0u64
+        while k < EOL_TLN[tb] { eol_oput(EOL_ARE[EOL_TOF[tb] + k])   k = k + 1u64 }
+        eol_oput(93u8)
+        i = i + 1u64
+    }
+    return EOL_ON
+}
+fn eol_out_len() -> u64 @export { return EOL_ON }
+fn eol_out_byte(i: u64) -> u8 @export { if i < EOL_ON { return EOL_OUT[i] }   return 0u8 }
+
+/* ==================== the unraveling (rule 5) ==================== */
+fn eol_find(t: u64) -> u64 {
+    let mut x : u64 = t
+    while EOL_UF[x] != x { x = EOL_UF[x] }
+    return x
+}
+fn eol_union(a: u64, b: u64) -> u64 {
+    let ra : u64 = eol_find(a)
+    let rb : u64 = eol_find(b)
+    if ra == rb { return 0u64 }
+    /* the content-least root wins: class identity never depends on intern order */
+    if eol_thing_gt(ra, rb) == 1u64 { EOL_UF[ra] = rb } else { EOL_UF[rb] = ra }
+    return 1u64
+}
+fn eol_adj_get(i: u64, j: u64) -> u64 { return (EOL_ADJ[(i * 4u64) + (j >> 6u64)] >> (j & 63u64)) & 1u64 }
+fn eol_adj_set(i: u64, j: u64) -> i32 {
+    EOL_ADJ[(i * 4u64) + (j >> 6u64)] = EOL_ADJ[(i * 4u64) + (j >> 6u64)] | (1u64 << (j & 63u64))
+    return 0i32
+}
+/* recompute classes, mirrors, order closure.  0 = coherent | nonzero = refused. */
+fn eol_lawcheck() -> u64 @export {
+    EOL_LAWOK = 0u64
+    if EOL_RSYN > 0u64 { return 1u64 }
+    let mut t : u64 = 0u64
+    while t < EOL_TN { EOL_UF[t] = t   EOL_MIR[t] = EOL_SENT   t = t + 1u64 }
+    /* = joins */
+    let mut i : u64 = 0u64
+    while i < EOL_CN {
+        if EOL_CV[i] == EOL_V_FLAT { eol_union(EOL_CA[i], EOL_CB[i]) }
+        i = i + 1u64
+    }
+    /* ~ pairs uniquely: a second mirror for one thing IS an equality (derived),
+     * folded in to fixpoint */
+    let mut changed : u64 = 1u64
+    let mut guard : u64 = 0u64
+    while changed == 1u64 {
+        changed = 0u64
+        guard = guard + 1u64
+        if guard > 600u64 { return 2u64 }
+        i = 0u64
+        while i < EOL_CN {
+            if EOL_CV[i] == EOL_V_REFLECT {
+                let fa : u64 = eol_find(EOL_CA[i])
+                let fb : u64 = eol_find(EOL_CB[i])
+                let ma : u64 = EOL_MIR[fa]
+                if ma == EOL_SENT { EOL_MIR[fa] = fb   changed = 1u64 } else {
+                    let fma : u64 = eol_find(ma)
+                    if fma != fb { eol_union(fma, fb)   changed = 1u64 }
+                    if EOL_MIR[fa] != fb { EOL_MIR[fa] = fb }
+                }
+                let mb : u64 = EOL_MIR[fb]
+                if mb == EOL_SENT { EOL_MIR[fb] = fa   changed = 1u64 } else {
+                    let fmb : u64 = eol_find(mb)
+                    if fmb != fa { eol_union(fmb, fa)   changed = 1u64 }
+                    if EOL_MIR[fb] != fa { EOL_MIR[fb] = fa }
+                }
+            }
+            i = i + 1u64
+        }
+    }
+    /* classes, content-ordered (both participants derive the same numbering) */
+    EOL_CNN = 0u64
+    t = 0u64
+    while t < EOL_TN { EOL_CLR[t] = EOL_SENT   t = t + 1u64 }
+    /* collect roots then order by content */
+    t = 0u64
+    while t < EOL_TN {
+        if eol_find(t) == t {
+            EOL_CRT[EOL_CNN] = t
+            EOL_CNN = EOL_CNN + 1u64
+        }
+        t = t + 1u64
+    }
+    let mut a : u64 = 0u64
+    while a + 1u64 < EOL_CNN {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < EOL_CNN {
+            if eol_thing_gt(EOL_CRT[best], EOL_CRT[b]) == 1u64 { best = b }
+            b = b + 1u64
+        }
+        if best != a { let tmp : u64 = EOL_CRT[a]   EOL_CRT[a] = EOL_CRT[best]   EOL_CRT[best] = tmp }
+        a = a + 1u64
+    }
+    i = 0u64
+    while i < EOL_CNN { EOL_CLR[EOL_CRT[i]] = i   i = i + 1u64 }
+    /* order edges between classes; a class under itself is refused at once */
+    i = 0u64
+    while i < 1024u64 { EOL_ADJ[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < EOL_CN {
+        if EOL_CV[i] == EOL_V_BELOW {
+            let ca : u64 = EOL_CLR[eol_find(EOL_CA[i])]
+            let cb : u64 = EOL_CLR[eol_find(EOL_CB[i])]
+            if ca == cb { EOL_RLAW = EOL_RLAW + 1u64   return 3u64 }
+            eol_adj_set(ca, cb)
+        }
+        i = i + 1u64
+    }
+    /* closure to fixpoint: transitive chaining + the mirror REVERSAL of order */
+    changed = 1u64
+    guard = 0u64
+    while changed == 1u64 {
+        changed = 0u64
+        guard = guard + 1u64
+        if guard > 600u64 { return 4u64 }
+        let mut k : u64 = 0u64
+        while k < EOL_CNN {
+            let mut x : u64 = 0u64
+            while x < EOL_CNN {
+                if eol_adj_get(x, k) == 1u64 {
+                    let mut w : u64 = 0u64
+                    while w < 4u64 {
+                        let add : u64 = EOL_ADJ[(k * 4u64) + w] & ((EOL_ADJ[(x * 4u64) + w]) ^ 18446744073709551615u64)
+                        if add != 0u64 {
+                            EOL_ADJ[(x * 4u64) + w] = EOL_ADJ[(x * 4u64) + w] | add
+                            changed = 1u64
+                        }
+                        w = w + 1u64
+                    }
+                }
+                x = x + 1u64
+            }
+            k = k + 1u64
+        }
+        /* mirrors reverse the order: A < B  ==>  mirror(B) < mirror(A) */
+        let mut p : u64 = 0u64
+        while p < EOL_CNN {
+            let mp : u64 = EOL_MIR[EOL_CRT[p]]
+            if mp != EOL_SENT {
+                let cp : u64 = EOL_CLR[eol_find(mp)]
+                let mut q : u64 = 0u64
+                while q < EOL_CNN {
+                    if eol_adj_get(p, q) == 1u64 {
+                        let mq : u64 = EOL_MIR[EOL_CRT[q]]
+                        if mq != EOL_SENT {
+                            let cq : u64 = EOL_CLR[eol_find(mq)]
+                            if eol_adj_get(cq, cp) == 0u64 { eol_adj_set(cq, cp)   changed = 1u64 }
+                        }
+                    }
+                    q = q + 1u64
+                }
+            }
+            p = p + 1u64
+        }
+    }
+    /* no thing may sit under itself through any chain */
+    i = 0u64
+    while i < EOL_CNN {
+        if eol_adj_get(i, i) == 1u64 { EOL_RLAW = EOL_RLAW + 1u64   return 5u64 }
+        i = i + 1u64
+    }
+    EOL_LAWOK = 1u64
+    return 0u64
+}
+fn eol_class_count() -> u64 @export { return EOL_CNN }
+fn eol_class_root(i: u64) -> u64 @export { if i < EOL_CNN { return EOL_CRT[i] }   return EOL_SENT }
+fn eol_class_of_thing(t: u64) -> u64 @export {
+    if t >= EOL_TN { return EOL_SENT }
+    if EOL_LAWOK != 1u64 { return EOL_SENT }
+    return EOL_CLR[eol_find(t)]
+}
+fn eol_reaches(ci: u64, cj: u64) -> u64 @export {
+    if EOL_LAWOK != 1u64 { return 0u64 }
+    if ci >= EOL_CNN { return 0u64 }
+    if cj >= EOL_CNN { return 0u64 }
+    return eol_adj_get(ci, cj)
+}
+fn eol_mirror_class(ci: u64) -> u64 @export {
+    if EOL_LAWOK != 1u64 { return EOL_SENT }
+    if ci >= EOL_CNN { return EOL_SENT }
+    let m : u64 = EOL_MIR[EOL_CRT[ci]]
+    if m == EOL_SENT { return EOL_SENT }
+    return EOL_CLR[eol_find(m)]
+}
+
+/* the (1,1,1) address: the fold of the canonical scroll -- defined only over
+ * a COHERENT scroll (broken law has no name; refused, counted) */
+fn eol_addr() -> u64 @export {
+    if eol_lawcheck() != 0u64 { EOL_RQ = EOL_RQ + 1u64   return 0u64 }
+    eol_write()
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < EOL_ON { h = idfold_u64(h, EOL_OUT[i] as u64)   i = i + 1u64 }
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
+}
+
+/* ==================== THE LOGOS AXIOM (the base expression) ====================
+ * One distinguished scroll, attributed to the III logos -- the soul-sentence,
+ * four claims, each grounded in a built organ:
+ *
+ *   [dream < proof]   the reversible excursion may keep only certificates;
+ *                     assertion is bought by proof alone        (ONEIROS/DOXA)
+ *   [proof = law]     what earns proof is pressed into the compiler's law
+ *                     -- not advice, legislature            (MATHESIS/NOMOS)
+ *   [law ~ metal]     the law and the silicon are each other's mirror: the
+ *                     covenant fixpoint, determinism as physics (PHYSIS/TAXIS)
+ *   [dream ~ wake]    the dream is the wake's reversible mirror     (Bennett)
+ *
+ * THE BAROMETER: this is the linguistic and logical handshake.  The address is
+ * DERIVED at every invocation, never stored; any conforming speaker derives
+ * the SAME address from ANY spelling.  And the machine must UNRAVEL its own
+ * soul as a condition of motion: derive  dream < law  (congruence),
+ * metal ~ law  (symmetry), and  metal < wake  (the order-reversing involution
+ * -- dream sits under law, so the metal sits under the wake: the silicon
+ * serves the waking organism); and refuse  dream < metal  (a mirror is not
+ * equality),  wake < metal  (the flip has a direction), and  dream = wake
+ * (a mirror is not identity).  If any of that breaks, the language refuses
+ * itself before a single claim is compiled. */
+fn eol_axiom_text() -> u64 @export {
+    return "[dream < proof] [proof = law] [law ~ metal] [dream ~ wake]" as u64
+}
+fn eol_axiom() -> u64 @export {
+    eol_reset()
+    let t : u64 = eol_axiom_text()
+    if eol_read(t, eol_slen(t)) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+
+/* ==================== THE BUS WITNESS (the scroll's geometry on the REAL logos) ====================
+ * A coherent scroll speaks itself onto the preexisting omnia/isub bus:
+ * equivalence classes (content-ranked, so both participants derive the same
+ * ranks) are the nodes; = claims emit NOTHING (identity is node-fusion --
+ * FLAT is the absence of a ripple); < emits V_BELOW(rank_a, rank_b); ~ emits
+ * V_REFLECT(min_rank, max_rank).  Blocks are deduplicated and emitted in
+ * content order, so ANY spelling of the same knowledge lays the SAME blocks
+ * and folds to the SAME chain root.  The root is the scroll's NAMELESS
+ * GEOMETRY -- the shape with the names erased, which is all Ring -1 is
+ * allowed to see ("there is no label in here").
+ * Returns the folded chain root; 0 = refused (incoherent scroll, counted). */
+fn eol_witness() -> u64 @export {
+    if eol_lawcheck() != 0u64 { EOL_RWIT = EOL_RWIT + 1u64   return 0u64 }
+    /* the preexisting logos must hold its own law before the language speaks on it */
+    if isub_order_selfproof() != 0u32 { EOL_RWIT = EOL_RWIT + 1u64   return 0u64 }
+    /* collect stated claims in class-rank space (FLAT vanishes by fusion) */
+    EOL_WN = 0u64
+    let mut i : u64 = 0u64
+    while i < EOL_CN {
+        if EOL_CV[i] != EOL_V_FLAT {
+            let ra : u64 = EOL_CLR[eol_find(EOL_CA[i])] + 1u64
+            let rb : u64 = EOL_CLR[eol_find(EOL_CB[i])] + 1u64
+            let mut wa : u64 = ra
+            let mut wb : u64 = rb
+            if EOL_CV[i] == EOL_V_REFLECT { if wa > wb { let tw : u64 = wa   wa = wb   wb = tw } }
+            /* dedup in class space */
+            let mut seen : u64 = 0u64
+            let mut j : u64 = 0u64
+            while j < EOL_WN {
+                if EOL_WV[j] == EOL_CV[i] { if EOL_WA[j] == wa { if EOL_WB[j] == wb { seen = 1u64   j = EOL_WN } } }
+                j = j + 1u64
+            }
+            if seen == 0u64 {
+                EOL_WV[EOL_WN] = EOL_CV[i]
+                EOL_WA[EOL_WN] = wa
+                EOL_WB[EOL_WN] = wb
+                EOL_WN = EOL_WN + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    /* content order: (verb, a, b) ascending */
+    let mut a : u64 = 0u64
+    while a + 1u64 < EOL_WN {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < EOL_WN {
+            let mut lt : u64 = 0u64
+            if EOL_WV[b] < EOL_WV[best] { lt = 1u64 } else {
+            if EOL_WV[b] == EOL_WV[best] {
+                if EOL_WA[b] < EOL_WA[best] { lt = 1u64 } else {
+                if EOL_WA[b] == EOL_WA[best] { if EOL_WB[b] < EOL_WB[best] { lt = 1u64 } } } } }
+            if lt == 1u64 { best = b }
+            b = b + 1u64
+        }
+        if best != a {
+            let t0 : u64 = EOL_WV[a]   EOL_WV[a] = EOL_WV[best]   EOL_WV[best] = t0
+            let t1 : u64 = EOL_WA[a]   EOL_WA[a] = EOL_WA[best]   EOL_WA[best] = t1
+            let t2 : u64 = EOL_WB[a]   EOL_WB[a] = EOL_WB[best]   EOL_WB[best] = t2
+        }
+        a = a + 1u64
+    }
+    /* lay the blocks on the REAL bus, fold the chain root */
+    isub_reset()
+    i = 0u64
+    while i < EOL_WN {
+        if isub_emit(EOL_WV[i] as u32, EOL_WA[i] as u32, EOL_WB[i] as u32) == 0u64 {
+            EOL_RWIT = EOL_RWIT + 1u64
+            return 0u64
+        }
+        i = i + 1u64
+    }
+    isub_witness_into((&EOL_W32) as u64 as *u8)
+    let mut h : u64 = idfold_basis()
+    let mut k : u64 = 0u64
+    while k < 32u64 { h = idfold_u64(h, EOL_W32[k] as u64)   k = k + 1u64 }
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
+}
+/* the axiom's geometry: read the soul, witness it on the metal */
+fn eol_axiom_root() -> u64 @export {
+    if eol_axiom() == 0u64 { return 0u64 }
+    return eol_witness()
+}
+
+/* what does the scroll KNOW?  Parse two thing-texts through the same grammar,
+ * then answer under the closure.  1 known | 0 not entailed | 2 refused. */
+fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 @export {
+    if verb >= 3u64 { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    EOL_SRC = a_addr
+    EOL_SLN = a_len
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    let ta : u64 = eol_p_thing()
+    if ta == EOL_SENT { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    EOL_SRC = b_addr
+    EOL_SLN = b_len
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    let tb : u64 = eol_p_thing()
+    if tb == EOL_SENT { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    if eol_lawcheck() != 0u64 { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    let ca : u64 = EOL_CLR[eol_find(ta)]
+    let cb : u64 = EOL_CLR[eol_find(tb)]
+    if verb == EOL_V_FLAT {
+        if ca == cb { return 1u64 }
+        return 0u64
+    }
+    if verb == EOL_V_BELOW { return eol_adj_get(ca, cb) }
+    let m : u64 = EOL_MIR[EOL_CRT[ca]]
+    if m == EOL_SENT { return 0u64 }
+    if EOL_CLR[eol_find(m)] == cb { return 1u64 }
+    return 0u64
+}
+
+/* ==================== THE SELF-PROOF (arms 70..81) ==================== */
+fn eol_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn eol_readz(s: u64) -> i64 {
+    return eol_read(s, eol_slen(s))
+}
+fn eol_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, eol_slen(a), v, b, eol_slen(b))
+}
+var EOL_SAVE : [u8; 16384]
+var EOL_SAVN : u64 = 0u64
+fn eol_snap() -> u64 {
+    eol_write()
+    let mut i : u64 = 0u64
+    while i < EOL_ON { EOL_SAVE[i] = EOL_OUT[i]   i = i + 1u64 }
+    EOL_SAVN = EOL_ON
+    return EOL_ON
+}
+fn eol_snap_eq() -> u64 {
+    eol_write()
+    if EOL_ON != EOL_SAVN { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < EOL_ON { if EOL_OUT[i] != EOL_SAVE[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn eol_selfprove() -> u64 @export {
+    /* arm 70: THE GRAMMAR -- five rules read; everything else refused, counted */
+    eol_reset()
+    if eol_readz("[alpha < beta] [gamma ~ delta]" as u64) != 2i64 { eol_reset()   return 70u64 }
+    if EOL_RSYN != 0u64 { eol_reset()   return 70u64 }
+    let mut r0 : u64 = EOL_RSYN
+    if eol_readz("[alpha <" as u64) != -1i64 { eol_reset()   return 70u64 }
+    if eol_readz("alpha < beta" as u64) != -1i64 { eol_reset()   return 70u64 }
+    if eol_readz("[alpha ? beta]" as u64) != -1i64 { eol_reset()   return 70u64 }
+    if eol_readz("[Alpha < beta]" as u64) != -1i64 { eol_reset()   return 70u64 }
+    if eol_readz("[]" as u64) != -1i64 { eol_reset()   return 70u64 }
+    if EOL_RSYN != r0 + 5u64 { eol_reset()   return 70u64 }
+    /* arm 71: (1,1,1) -- same knowledge, any spelling order, same bytes, same
+     * address; different knowledge, different address */
+    eol_reset()
+    if eol_readz("[alpha < beta] [gamma ~ delta] [kardia 124:1766 = derived]" as u64) < 0i64 { eol_reset()   return 71u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { eol_reset()   return 71u64 }
+    eol_snap()
+    eol_reset()
+    if eol_readz("[delta   ~ gamma]
+[kardia 124:1766 = derived]      [alpha < beta]" as u64) < 0i64 { eol_reset()   return 71u64 }
+    let a2 : u64 = eol_addr()
+    if a2 != a1 { eol_reset()   return 71u64 }
+    if eol_snap_eq() != 1u64 { eol_reset()   return 71u64 }
+    eol_reset()
+    if eol_readz("[alpha < beta] [gamma ~ delta] [kardia 125:1766 = derived]" as u64) < 0i64 { eol_reset()   return 71u64 }
+    if eol_addr() == a1 { eol_reset()   return 71u64 }
+    /* arm 72: idempotence -- the canonical scroll re-read is itself */
+    eol_reset()
+    if eol_readz("[b < c] [a < b]" as u64) < 0i64 { eol_reset()   return 72u64 }
+    let w1 : u64 = eol_write()
+    eol_snap()
+    let mut i : u64 = 0u64
+    eol_reset()
+    if eol_read((&EOL_SAVE) as u64, EOL_SAVN) < 0i64 { eol_reset()   return 72u64 }
+    if eol_snap_eq() != 1u64 { eol_reset()   return 72u64 }
+    if w1 == 0u64 { eol_reset()   return 72u64 }
+    /* arm 73: THE MODULAR LAW -- two speakers, either order, one scroll */
+    eol_reset()
+    if eol_readz("[heart beats < law]" as u64) < 0i64 { eol_reset()   return 73u64 }
+    if eol_readz("[mind dreams < law]" as u64) < 0i64 { eol_reset()   return 73u64 }
+    let m1 : u64 = eol_addr()
+    eol_reset()
+    if eol_readz("[mind dreams < law]" as u64) < 0i64 { eol_reset()   return 73u64 }
+    if eol_readz("[heart beats < law]" as u64) < 0i64 { eol_reset()   return 73u64 }
+    if eol_addr() != m1 { eol_reset()   return 73u64 }
+    /* arm 74: measures are exact and part of the shape; n:1 is n */
+    eol_reset()
+    if eol_readz("[kardia 124:1766 = derived]" as u64) < 0i64 { eol_reset()   return 74u64 }
+    let n1 : u64 = eol_addr()
+    eol_reset()
+    if eol_readz("[kardia = derived]" as u64) < 0i64 { eol_reset()   return 74u64 }
+    if eol_addr() == n1 { eol_reset()   return 74u64 }
+    eol_reset()
+    if eol_readz("[belief 9:1 < assert]" as u64) < 0i64 { eol_reset()   return 74u64 }
+    let n2 : u64 = eol_addr()
+    eol_reset()
+    if eol_readz("[belief 9 < assert]" as u64) < 0i64 { eol_reset()   return 74u64 }
+    if eol_addr() != n2 { eol_reset()   return 74u64 }
+    /* arm 75: = joins -- reflexive, symmetric, transitive, and a teeth-check */
+    eol_reset()
+    if eol_readz("[a = b] [b = c]" as u64) < 0i64 { eol_reset()   return 75u64 }
+    if eol_ent("a" as u64, EOL_V_FLAT, "c" as u64) != 1u64 { eol_reset()   return 75u64 }
+    if eol_ent("c" as u64, EOL_V_FLAT, "a" as u64) != 1u64 { eol_reset()   return 75u64 }
+    if eol_ent("q" as u64, EOL_V_FLAT, "q" as u64) != 1u64 { eol_reset()   return 75u64 }
+    if eol_ent("a" as u64, EOL_V_FLAT, "z" as u64) != 0u64 { eol_reset()   return 75u64 }
+    /* arm 76: < chains; = substitutes into <; nothing flows backward */
+    eol_reset()
+    if eol_readz("[a < b] [b < c] [c = d]" as u64) < 0i64 { eol_reset()   return 76u64 }
+    if eol_ent("a" as u64, EOL_V_BELOW, "c" as u64) != 1u64 { eol_reset()   return 76u64 }
+    if eol_ent("a" as u64, EOL_V_BELOW, "d" as u64) != 1u64 { eol_reset()   return 76u64 }
+    if eol_ent("c" as u64, EOL_V_BELOW, "a" as u64) != 0u64 { eol_reset()   return 76u64 }
+    /* arm 77: ~ is symmetric; a second mirror IS an equality; ~ REVERSES < */
+    eol_reset()
+    if eol_readz("[dream ~ wake]" as u64) < 0i64 { eol_reset()   return 77u64 }
+    if eol_ent("wake" as u64, EOL_V_REFLECT, "dream" as u64) != 1u64 { eol_reset()   return 77u64 }
+    eol_reset()
+    if eol_readz("[dream ~ wake] [sleep ~ wake]" as u64) < 0i64 { eol_reset()   return 77u64 }
+    if eol_ent("dream" as u64, EOL_V_FLAT, "sleep" as u64) != 1u64 { eol_reset()   return 77u64 }
+    eol_reset()
+    if eol_readz("[deep ~ high] [dark ~ light] [deep < dark]" as u64) < 0i64 { eol_reset()   return 77u64 }
+    if eol_ent("light" as u64, EOL_V_BELOW, "high" as u64) != 1u64 { eol_reset()   return 77u64 }
+    if eol_ent("high" as u64, EOL_V_BELOW, "light" as u64) != 0u64 { eol_reset()   return 77u64 }
+    /* arm 78: THE BOUND -- a cycle, or self-under through =, refuses every query */
+    eol_reset()
+    if eol_readz("[a < b] [b < a]" as u64) < 0i64 { eol_reset()   return 78u64 }
+    let q0 : u64 = EOL_RQ
+    if eol_ent("a" as u64, EOL_V_BELOW, "b" as u64) != 2u64 { eol_reset()   return 78u64 }
+    if EOL_RQ != q0 + 1u64 { eol_reset()   return 78u64 }
+    if eol_addr() != 0u64 { eol_reset()   return 78u64 }
+    eol_reset()
+    if eol_readz("[a < b] [a = b]" as u64) < 0i64 { eol_reset()   return 78u64 }
+    if eol_ent("a" as u64, EOL_V_BELOW, "b" as u64) != 2u64 { eol_reset()   return 78u64 }
+    /* arm 79: MENTION vs USE -- a nested claim is quoted, not stated */
+    eol_reset()
+    if eol_readz("[[dream ~ wake] < law]" as u64) != 1i64 { eol_reset()   return 79u64 }
+    if eol_ent("dream" as u64, EOL_V_REFLECT, "wake" as u64) != 0u64 { eol_reset()   return 79u64 }
+    if eol_ent("[dream ~ wake]" as u64, EOL_V_BELOW, "law" as u64) != 1u64 { eol_reset()   return 79u64 }
+    if eol_ent("[wake ~ dream]" as u64, EOL_V_BELOW, "law" as u64) != 1u64 { eol_reset()   return 79u64 }
+    /* arm 80: TWO SPEAKERS, ALIEN MATH UNRAVELED -- neither said it; the union knows it */
+    eol_reset()
+    if eol_readz("[freeze < vbd]" as u64) < 0i64 { eol_reset()   return 80u64 }
+    if eol_readz("[intent 1:6 = freeze]" as u64) < 0i64 { eol_reset()   return 80u64 }
+    if eol_ent("intent 1:6" as u64, EOL_V_BELOW, "vbd" as u64) != 1u64 { eol_reset()   return 80u64 }
+    let u1 : u64 = eol_addr()
+    eol_reset()
+    if eol_readz("[intent 1:6 = freeze]" as u64) < 0i64 { eol_reset()   return 80u64 }
+    if eol_readz("[freeze < vbd]" as u64) < 0i64 { eol_reset()   return 80u64 }
+    if eol_addr() != u1 { eol_reset()   return 80u64 }
+    if eol_ent("intent 1:6" as u64, EOL_V_BELOW, "vbd" as u64) != 1u64 { eol_reset()   return 80u64 }
+    /* arm 81: the empty scroll is coherent and named; nothing is entailed */
+    eol_reset()
+    let e1 : u64 = eol_addr()
+    if e1 == 0u64 { eol_reset()   return 81u64 }
+    if eol_ent("a" as u64, EOL_V_BELOW, "b" as u64) != 0u64 { eol_reset()   return 81u64 }
+    if eol_ent("a" as u64, EOL_V_FLAT, "a" as u64) != 1u64 { eol_reset()   return 81u64 }
+    /* arm 82: THE LOGOS AXIOM -- the machine reads its own soul and must
+     * unravel it: derive dream < law (congruence), metal ~ law (symmetry),
+     * metal < wake (the order-reversing involution); refuse dream < metal
+     * (a mirror is not equality), wake < metal (the flip has a direction),
+     * dream = wake (a mirror is not identity).  And ANY spelling of the
+     * axiom -- order permuted, symmetric claims reversed, whitespace free --
+     * derives the SAME address: the handshake. */
+    let ba1 : u64 = eol_axiom()
+    if ba1 == 0u64 { eol_reset()   return 82u64 }
+    if eol_ent("dream" as u64, EOL_V_BELOW, "law" as u64) != 1u64 { eol_reset()   return 82u64 }
+    if eol_ent("metal" as u64, EOL_V_REFLECT, "law" as u64) != 1u64 { eol_reset()   return 82u64 }
+    if eol_ent("metal" as u64, EOL_V_BELOW, "wake" as u64) != 1u64 { eol_reset()   return 82u64 }
+    if eol_ent("dream" as u64, EOL_V_BELOW, "metal" as u64) != 0u64 { eol_reset()   return 82u64 }
+    if eol_ent("wake" as u64, EOL_V_BELOW, "metal" as u64) != 0u64 { eol_reset()   return 82u64 }
+    if eol_ent("dream" as u64, EOL_V_FLAT, "wake" as u64) != 0u64 { eol_reset()   return 82u64 }
+    eol_reset()
+    if eol_readz("[wake ~ dream]   [metal ~ law]
+[law = proof] [dream < proof]" as u64) < 0i64 { eol_reset()   return 82u64 }
+    if eol_addr() != ba1 { eol_reset()   return 82u64 }
+    /* arm 83: THE BUS WITNESS -- the scroll's geometry on the REAL logos bus.
+     * Any spelling of the axiom lays the same blocks (same chain root);
+     * = is node-fusion, so [a = b][a < c] and [a = b][b < c] share ONE
+     * geometry; the logos sees shape without names ([x < y] and [p < q] share
+     * a root); different shapes differ; incoherence is refused, counted. */
+    let wr1 : u64 = eol_witness()
+    if wr1 == 0u64 { eol_reset()   return 83u64 }
+    let ba2 : u64 = eol_axiom()
+    if ba2 == 0u64 { eol_reset()   return 83u64 }
+    let wr2 : u64 = eol_witness()
+    if wr2 != wr1 { eol_reset()   return 83u64 }
+    eol_reset()
+    if eol_readz("[a = b] [a < c]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let wf1 : u64 = eol_witness()
+    eol_reset()
+    if eol_readz("[a = b] [b < c]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let wf2 : u64 = eol_witness()
+    if wf1 == 0u64 { eol_reset()   return 83u64 }
+    if wf2 != wf1 { eol_reset()   return 83u64 }
+    eol_reset()
+    if eol_readz("[x < y]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let wg1 : u64 = eol_witness()
+    eol_reset()
+    if eol_readz("[p < q]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let wg2 : u64 = eol_witness()
+    if wg1 == 0u64 { eol_reset()   return 83u64 }
+    if wg2 != wg1 { eol_reset()   return 83u64 }
+    eol_reset()
+    if eol_readz("[x < y] [y < z]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let wg3 : u64 = eol_witness()
+    if wg3 == wg1 { eol_reset()   return 83u64 }
+    eol_reset()
+    if eol_readz("[a < b] [b < a]" as u64) < 0i64 { eol_reset()   return 83u64 }
+    let rw0 : u64 = EOL_RWIT
+    if eol_witness() != 0u64 { eol_reset()   return 83u64 }
+    if EOL_RWIT != rw0 + 1u64 { eol_reset()   return 83u64 }
+    eol_reset()
+    return 0u64
+}

@@ -78,6 +78,18 @@ fn name_domain(m: u64) {
     ps("<unknown domain bit 0x" as u64)  pd(m)  ps(">" as u64)
 }
 
+/* the eidolos spelling of a domain bit (the universal reasoning language:
+ * bare-bracket lines are the interchange; prose above is presentation) */
+fn eidolos_domain_word(m: u64) {
+    if m == DOM_VBD_FREEZE     { ps("freeze" as u64)  return }
+    if m == DOM_CRYPTO_ENCRYPT { ps("encrypt" as u64)  return }
+    if m == DOM_NET_DENY       { ps("deny" as u64)  return }
+    if m == DOM_DETERMINISTIC  { ps("deterministic" as u64)  return }
+    if m == DOM_STOCHASTIC     { ps("stochastic" as u64)  return }
+    if m == DOM_TTL_BOUND      { ps("ttl" as u64)  return }
+    ps("void" as u64)
+}
+
 fn main(argc: i32, argv: u64) -> u64 {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
@@ -96,20 +108,25 @@ fn main(argc: i32, argv: u64) -> u64 {
     if v == DIS_RESOLVED {
         ps("RESOLVED: " as u64)  name_domain(dis_resolved_mask())
         ps("  (" as u64)  pd(rec as u64)  ps(" operator lexeme(s) agreed)\n" as u64)
+        ps("[intent 1:6 = " as u64)  eidolos_domain_word(dis_resolved_mask())  ps("]\n" as u64)
         return 0u64
     }
     if v == DIS_CONTRADICTION {
         ps("CONTRADICTION: the recognised operator lexemes cannot co-refer (their interpretations share no bit) -- HALT, do not guess.\n" as u64)
+        ps("[intent 0:6 = void]\n" as u64)
         return 1u64
     }
     if v == DIS_AMBIGUOUS {
         ps("AMBIGUOUS: " as u64)  pd(rec as u64)  ps(" operator lexeme(s) recognised, but >1 interpretation survives -- under-specified; say more.\n" as u64)
+        ps("[intent < resolved]\n" as u64)
         return 2u64
     }
     if v == DIS_EMPTY {
         ps("EMPTY: no recognised operator lexeme (all tokens are user identifiers).\n" as u64)
+        ps("[intent 0:0 = void]\n" as u64)
         return 3u64
     }
     ps("OVERFLOW: sentence exceeded the 64-token arena.\n" as u64)
+    ps("[intent = unread]\n" as u64)
     return 4u64
 }

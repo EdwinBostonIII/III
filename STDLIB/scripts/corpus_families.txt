@@ -12,4 +12,4 @@ run_xii_corpus.sh        | XII engine KATs 280-372 (own EXPECTED table; invoked 
 run_xii_antidrift.sh     | curated-payload drift teeth (xii_curated_*; invoked by build_xii.sh)
 run_bench_corpus.sh      | perf benchmarks 237/242/243/244 (correctness hard-gated, timing advisory)
 run_event_waist.sh       | THE EVENT-PRIMARY WAIST route V: svir_event retirement-log executor + route-S==route-V differential (seated at STDLIB/sovir/run_event_waist.sh)
-run_mathesis.sh          | THE MATHESIS ENGINE: 25-gate creator-tier chain (2600-2748 era mathesis stages; scripts/ seat delegates to STDLIB/sovir/run_mathesis.sh)
+run_mathesis.sh          | THE MATHESIS ENGINE: 25-gate creator-tier chain (2600-2748 era mathesis stages; seated at STDLIB/sovir/run_mathesis.sh -- the scripts/ delegation shim was retired 2026-07-17 under the two-seat teeth)

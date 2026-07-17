@@ -20,6 +20,8 @@ extern @abi(c-msvc-x64) fn soma_audit(dirpath: u64) -> i64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_matched() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_phantom() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_dark() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_owned_xii() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_owned_neg() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_registry() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_territory() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_noniii() -> u64 from "soma.iii"
@@ -114,7 +116,9 @@ fn main(argc: i32, argv: u64) -> u64 {
         putchar(10i32)
         ps("  MATCHED (a true nerve -- named AND present): " as u64)  pu(soma_matched())  putchar(10i32)
         ps("  PHANTOM (the map lies -- named, no gate):    " as u64)  pu(soma_phantom())  putchar(10i32)
-        ps("  DARK    (gate exists, central map silent):   " as u64)  pu(soma_dark())  putchar(10i32)
+        ps("  XII-RANGE (owned by the XII registry's own law, seq 280..372): " as u64)  pu(soma_owned_xii())  putchar(10i32)
+        ps("  NEG-PATTERN (owned by the central rc-classifier, *_neg_*|*_neg): " as u64)  pu(soma_owned_neg())  putchar(10i32)
+        ps("  DARK    (owned by NO living registry's law):  " as u64)  pu(soma_dark())  putchar(10i32)
         if soma_truncated() > 0u64 { ps("  (territory truncated at capacity: " as u64)  pu(soma_truncated())  ps(" -- honest envelope)\n" as u64) }
         if soma_phantom() > 0u64 { print_phantoms(soma_phantom()) }
         /* the dark gates are not automatically scrap -- classify by ownership */

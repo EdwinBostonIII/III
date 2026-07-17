@@ -1786,9 +1786,10 @@ declare -A EXPECTED=(
     # Fleet-retirement re-owning (2026-07-17): these five were owned only by runners the
     # ENTELECHEIA retirement removed from the run-line harvest; they are plain falsifiable-arm
     # conformance gates linking straight from the archive, so this table judges them directly.
-    [2199_iform]=99                     # .ixr sovereign image container PROVABLY supersedes .bmp: alpha-lossless round-trip, self-verify, 1-byte tamper=2, self-describing header, generator binding, deterministic payload sig, superiority witness (alpha∉{0,255} preserved) + read-side sig cache coherence + the organ's own legacy verdict
-    # (2200_iscene: ABSORBED 2026-07-17 into the ERGON census (katabasis/ergon.iii seat 4) -- its
-    #  laws re-derive live every `iii-ergon census`, stored pin removed; the gate file is retired.)
+    # (2199_iform + 2200_iscene: ABSORBED 2026-07-17 into the ERGON census (katabasis/ergon.iii
+    #  seats 5 + 4) -- alpha-lossless RT, self-verify, on-disk tamper, header, binding, sig purity
+    #  w/ sensitivity teeth, superiority witness, and the .isc scene laws all re-derive live every
+    #  `iii-ergon census`; stored pins REMOVED; the gate files + 2199's C1 entry are retired.)
     [2753_closure_claim]=99             # Ε3 per-claim closure-pin table: set/find/count/byte/is_set/verify/update/reset; foreign buffer + unknown claim REJECT; set on existing id UPDATES (no append)
     [2754_pulse]=99                     # Ε0 birth-rite: gate-verdict fold + composed silicon/behavior/image checks; all-pass=KGV_OK, each single failure yields its DISTINCT verdict; unreadable image errors + attests seal rejection; byte accessors guard range
     [2755_babel_wire_content]=99        # Ε1 content-address-as-integrity: message id IS the mhash of its payload; flipped byte → different address → undeliverable; restore re-greens; short-frame + null buffers rejected

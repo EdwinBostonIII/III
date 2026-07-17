@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn erg_seat_kardia() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_soma() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_doxa() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_iscene() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_iform() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_ledger_runners() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn intro_organ_count() -> u32 from "introspection.iii"
@@ -110,6 +111,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         let s2 : u32 = seat_line("soma (body arms: address/partition/ownership/ledger) : " as u64, erg_seat_soma())
         let s3 : u32 = seat_line("doxa (belief arms, 16, each with negative control)   : " as u64, erg_seat_doxa())
         let s4 : u32 = seat_line("iscene (ABSORBED family -- laws live, pin removed)   : " as u64, erg_seat_iscene())
+        let s5 : u32 = seat_line("iform (ABSORBED family -- first C1 retirement)       : " as u64, erg_seat_iform())
         /* the ledger: the ancestral form still on the die, measured */
         ps("  -- THE FORM LEDGER (ancestral batch layer, burn-down measured) --\n" as u64)
         let r : i64 = soma_audit("STDLIB/corpus" as u64)
@@ -132,7 +134,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps(", dark " as u64)
         pu(soma_dark())
         ps(")\n" as u64)
-        ps("     absorbed into living seats so far                  : 1 family (iscene)\n" as u64)
+        ps("     absorbed into living seats so far                  : 2 families (iscene, iform)\n" as u64)
         ps("     LAW: debt burns down only by ABSORPTION (a family's laws re-homed as a\n" as u64)
         ps("     seat, then its ancestral form retired) -- never by deletion on assumption.\n" as u64)
         let mut verdict : u64 = 0u64
@@ -141,6 +143,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         if verdict == 0u64 { if s2 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s3 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s4 != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s5 != 0u32 { verdict = 1u64 } }
         if verdict != 0u64 {
             ps("  VERDICT: FAULT -- the fleet did not fully derive itself this invocation.\n" as u64)
             return 1u64

@@ -1,0 +1,155 @@
+/* COMPILER/BOOT/line_main.iii -- iii-line: GAMMA-1, THE EXACT LINE, standing.
+ *
+ *   iii-line prove                         the self-proof alone (arms 110..115)
+ *   iii-line order <pt> <pt> ...           place points on the exact line and SPEAK it
+ *
+ * A point is  c:d  (c sqrt d, c >= 1)  or  c:d+c:d  (a two-term sum).
+ * The output is the line ITSELF, in the language: the covering chain
+ * [surd c:d < surd c:d] ..., its address, and the ranks -- exact where floats
+ * conflate (try:  iii-line order 1:1969+1:1971 2:1970).
+ *
+ * EVERY verb self-proves first (exit 9 on refusal).  exit: 0 ok | 3 usage |
+ * 4 refused (envelope / fewer than two distinct points). */
+module line_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xl_selfprove() -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_reset() -> i32 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_add(c: i64, d: u64) -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_add2(c1: i64, d1: u64, c2: i64, d2: u64) -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_speak() -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_count() -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_text_len() -> u64 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_text_byte(i: u64) -> u8 from "exact_line.iii"
+extern @abi(c-msvc-x64) fn xl_renv() -> u64 from "exact_line.iii"
+
+const LM_SENT : u64 = 18446744073709551615u64
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 { k = k - 4u64   let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) } }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+/* parse "c:d" from p at *cursor-style offset; returns c in high, d in low?  Keep
+ * simple: module out-params. */
+var PM_C : u64 = 0u64
+var PM_D : u64 = 0u64
+fn parse_num(s: u64, at: u64) -> u64 {
+    /* digits at `at` -> PM_C; returns the offset after them, or SENT if none */
+    let p : *u8 = s as *u8
+    let mut i : u64 = at
+    let mut v : u64 = 0u64
+    let mut n : u64 = 0u64
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        let ch : u8 = p[i]
+        if ch >= 48u8 { if ch <= 57u8 {
+            v = (v * 10u64) + ((ch - 48u8) as u64)
+            n = n + 1u64
+            i = i + 1u64
+        } else { going = 0u64 } } else { going = 0u64 }
+    }
+    if n == 0u64 { return LM_SENT }
+    PM_C = v
+    return i
+}
+fn parse_cd(s: u64, at: u64) -> u64 {
+    /* "c:d" at `at` -> PM_C, PM_D; returns the offset after the pair, or SENT */
+    let p : *u8 = s as *u8
+    let a1 : u64 = parse_num(s, at)
+    if a1 == LM_SENT { return LM_SENT }
+    let c : u64 = PM_C
+    if p[a1] != 58u8 { return LM_SENT }
+    let a2 : u64 = parse_num(s, a1 + 1u64)
+    if a2 == LM_SENT { return LM_SENT }
+    PM_D = PM_C
+    PM_C = c
+    return a2
+}
+fn usage() -> u64 {
+    ps("iii-line -- GAMMA-1, the exact line: points are canonical surds, order is the\n" as u64)
+    ps("exact sign oracle, and the line SPEAKS its total order in EIDOLOS.\n\n" as u64)
+    ps("  iii-line prove                the self-proof (identity, exact order, two-path\n" as u64)
+    ps("                                vs eid_plan, the speaking, order-freedom, refusal)\n" as u64)
+    ps("  iii-line order <pt> <pt> ...  a point is c:d (c sqrt d) or c:d+c:d\n\n" as u64)
+    ps("try the float-conflated pair:  iii-line order 1:1969+1:1971 2:1970\n" as u64)
+    ps("exit: 0 ok | 3 usage | 4 refused | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let sp : u64 = xl_selfprove()
+    if sp != 0u64 {
+        ps("THE LINE REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE EXACT LINE PROVEN (arms 110..115): identity (sqrt 8 IS 2 sqrt 2 -- one\n" as u64)
+        ps("point); exact order incl. the olympiad pair sqrt1969 + sqrt1971 < 2 sqrt1970\n" as u64)
+        ps("(strict, where floats conflate); the TWO-PATH cross-proof (the superseded\n" as u64)
+        ps("planner eid_plan derives the identical total order); the line SPEAKS (its\n" as u64)
+        ps("chain's unraveling answers non-adjacent order facts); any insertion order\n" as u64)
+        ps("yields one scroll and one address; a reversed claim makes the scroll\n" as u64)
+        ps("INCOHERENT and every query refuses.  Dimension one is the language's own\n" as u64)
+        ps("order axis: geometry and grammar are the same law here.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "order" as u64) == 1u32 {
+        if argc < 4i32 { return usage() }
+        xl_reset()
+        let mut ai : u64 = 2u64
+        while (ai as i64) < (argc as i64) {
+            let s : u64 = av[ai]
+            let after : u64 = parse_cd(s, 0u64)
+            if after == LM_SENT { return usage() }
+            let c1 : u64 = PM_C
+            let d1 : u64 = PM_D
+            let p : *u8 = s as *u8
+            if p[after] == 43u8 {
+                let after2 : u64 = parse_cd(s, after + 1u64)
+                if after2 == LM_SENT { return usage() }
+                if p[after2] != 0u8 { return usage() }
+                if xl_add2(c1 as i64, d1, PM_C as i64, PM_D) == LM_SENT {
+                    ps("refused: the envelope (64 points, 8 terms, c >= 1)\n" as u64)
+                    return 4u64
+                }
+            } else {
+                if p[after] != 0u8 { return usage() }
+                if xl_add(c1 as i64, d1) == LM_SENT {
+                    ps("refused: the envelope (64 points, 8 terms, c >= 1)\n" as u64)
+                    return 4u64
+                }
+            }
+            ai = ai + 1u64
+        }
+        let a : u64 = xl_speak()
+        if a == 0u64 {
+            ps("refused: fewer than two DISTINCT points (identity dedup is the law)\n" as u64)
+            return 4u64
+        }
+        ps("points  : " as u64)   pu(xl_count())
+        ps("  (identity-deduped; spellings are canonical forms)\n" as u64)
+        ps("the line: " as u64)
+        let n : u64 = xl_text_len()
+        let mut i : u64 = 0u64
+        while i < n { putchar(xl_text_byte(i) as i32)   i = i + 1u64 }
+        putchar(10i32)
+        ps("address : " as u64)   phex(a)   putchar(10i32)
+        return 0u64
+    }
+    return usage()
+}

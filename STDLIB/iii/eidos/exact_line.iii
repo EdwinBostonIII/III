@@ -1,0 +1,290 @@
+/* STDLIB/iii/eidos/exact_line.iii -- GAMMA-1, THE EXACT LINE: geometry
+ * re-founded on the unified organism.  Dimension one, complete.
+ *
+ * THE FOUR ORGANS OF EVERY DIMENSION, here at d=1:
+ *   POINTS     eidolon identities: a point is the canonical surd sum
+ *              sum c_i sqrt(d_i) (c_i >= 1, the positive ray).  Identity is
+ *              decided by the canonical form (sqrt 8 and 2 sqrt 2 are ONE
+ *              point -- eid_same, the linear-independence theorem), never by
+ *              a decimal.
+ *   ORDER      the exact sign oracle: P < Q iff sign(P - Q) = -1 by
+ *              ui_sqrt_sum_sign's separation bound -- EXACT where floats
+ *              conflate (the olympiad pair sqrt1969 + sqrt1971 vs
+ *              2 sqrt1970 is ordered strictly).
+ *   LANGUAGE   the line SPEAKS: its total order is emitted as an EIDOLOS
+ *              covering chain -- [surd c:d < surd c:d] ... -- whose
+ *              unraveling IS the geometry: any pairwise order fact is an
+ *              entailment query, the scroll's address is the line's name,
+ *              and the spelling is content-derived (a point spells as its
+ *              canonical terms), so ANY insertion order yields the same
+ *              scroll and the same address.
+ *   REFUSAL    a violated order is an INCOHERENT scroll: state the chain and
+ *              its reversal together and every query is refused.  The line
+ *              cannot be lied about in its own language.
+ *
+ * DIMENSION ONE IS THE LANGUAGE'S OWN ORDER AXIS: the geometric relation
+ * "left of" and the language's verb `<` are the SAME relation, so the
+ * re-founding at d=1 is definitional, not analogical.
+ *
+ * SUPERSESSION (measured, two-path): eidos/eid_plan built exact total-order
+ * covering chains over eidolon bags (KAT 2134).  This organ re-derives its
+ * exact ranks (the cross-proof runs BOTH engines on one bag and requires
+ * identical order) and then exceeds it: the chain is queryable (entailment),
+ * mergeable (order-free canonical scroll), addressable (one u64 name), and
+ * speakable systemwide -- capabilities the planner's witness root does not
+ * have.  eid_plan retires by absorption when its gate is rewired.
+ *
+ * Envelope (named, counted): <= 64 points, <= 8 terms per point, positive
+ * coefficients (the mirror ray arrives with `~` at the next rung).
+ * Truth is a CONDITION OF MOTION: xl_selfprove (arms 110..115), NO gate.
+ * NIH: composes eidos/eidolon, aether/sqrt_sum_sign, eidos/eid_plan (the
+ * cross-proof), omnia/eidolos.  Hexad: kind_essence.  Ring R0. */
+module eidos_exact_line
+
+extern @abi(c-msvc-x64) fn eid_reset() -> i32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_make(coeff: i64, d: u64, tag: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_add(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_same(a: u32, b: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_nterms(a: u32) -> u32 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_term_c(a: u32, i: u32) -> i64 from "eidolon.iii"
+extern @abi(c-msvc-x64) fn eid_term_d(a: u32, i: u32) -> u64 from "eidolon.iii"
+
+extern @abi(c-msvc-x64) fn ui_sqrt_sum_sign(a_ptr: u64, b_ptr: u64, n: u64) -> i32 from "sqrt_sum_sign.iii"
+
+extern @abi(c-msvc-x64) fn ep_reset() -> i32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_add(eid: u32) -> i32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_build() -> u32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_count() -> u32 from "eid_plan.iii"
+extern @abi(c-msvc-x64) fn ep_node_at(rank: u32) -> u32 from "eid_plan.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+const XL_CAP  : u64 = 64u64
+const XL_SENT : u64 = 18446744073709551615u64
+const XL_TAG  : u32 = 11u32              /* the line's identity context          */
+
+var XL_PTS : [u32; 64]                   /* eidolon handles, insertion order     */
+var XL_N   : u64 = 0u64
+var XL_ORD : [u64; 64]                   /* point indices, ascending by value    */
+var XL_CA  : [i64; 16]                   /* sign-oracle scratch: coefficients    */
+var XL_CB  : [i64; 16]                   /* sign-oracle scratch: radicands       */
+var XL_TXT : [u8; 8192]                  /* the spoken scroll                    */
+var XL_TN  : u64 = 0u64
+var XL_ADDR : u64 = 0u64
+var XL_RENV : u64 = 0u64                 /* envelope refusals (cap/coeff/terms)  */
+
+fn xl_reset() -> i32 @export {
+    eid_reset()
+    XL_N = 0u64
+    XL_TN = 0u64
+    XL_ADDR = 0u64
+    XL_RENV = 0u64
+    return 0i32
+}
+fn xl_count() -> u64 @export { return XL_N }
+fn xl_renv() -> u64 @export { return XL_RENV }
+fn xl_handle(i: u64) -> u32 @export { if i < XL_N { return XL_PTS[i] }   return 0u32 }
+fn xl_rank_point(r: u64) -> u64 @export { if r < XL_N { return XL_ORD[r] }   return XL_SENT }
+
+/* admit a point by handle (dedup by IDENTITY -- the canonical-form law);
+ * returns its point index. */
+fn xl_admit(h: u32) -> u64 {
+    let mut i : u64 = 0u64
+    while i < XL_N {
+        if eid_same(XL_PTS[i], h) == 1u32 { return i }
+        i = i + 1u64
+    }
+    if XL_N >= XL_CAP { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    if (eid_nterms(h) as u64) > 8u64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    XL_PTS[XL_N] = h
+    XL_N = XL_N + 1u64
+    return XL_N - 1u64
+}
+/* a single-term point c sqrt(d), c >= 1 (the positive ray) */
+fn xl_add(c: i64, d: u64) -> u64 @export {
+    if c < 1i64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    if d == 0u64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    return xl_admit(eid_make(c, d, XL_TAG))
+}
+/* a two-term point c1 sqrt(d1) + c2 sqrt(d2) */
+fn xl_add2(c1: i64, d1: u64, c2: i64, d2: u64) -> u64 @export {
+    if c1 < 1i64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    if c2 < 1i64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    if d1 == 0u64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    if d2 == 0u64 { XL_RENV = XL_RENV + 1u64   return XL_SENT }
+    return xl_admit(eid_add(eid_make(c1, d1, XL_TAG), eid_make(c2, d2, XL_TAG)))
+}
+/* the EXACT order: sign(P_i - P_j) by the separation bound */
+fn xl_cmp(i: u64, j: u64) -> i32 @export {
+    let ha : u32 = XL_PTS[i]
+    let hb : u32 = XL_PTS[j]
+    let na : u64 = eid_nterms(ha) as u64
+    let nb : u64 = eid_nterms(hb) as u64
+    let mut k : u64 = 0u64
+    while k < na {
+        XL_CA[k] = eid_term_c(ha, k as u32)
+        XL_CB[k] = eid_term_d(ha, k as u32) as i64
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < nb {
+        XL_CA[na + k] = 0i64 - eid_term_c(hb, k as u32)
+        XL_CB[na + k] = eid_term_d(hb, k as u32) as i64
+        k = k + 1u64
+    }
+    return ui_sqrt_sum_sign((&XL_CA) as u64, (&XL_CB) as u64, na + nb)
+}
+/* sort the points ascending by exact value (deterministic; distinct points
+ * never compare 0 -- identity dedup guarantees it) */
+fn xl_order() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < XL_N { XL_ORD[i] = i   i = i + 1u64 }
+    let mut a : u64 = 0u64
+    while a + 1u64 < XL_N {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < XL_N {
+            if xl_cmp(XL_ORD[b], XL_ORD[best]) == -1i32 { best = b }
+            b = b + 1u64
+        }
+        if best != a { let t : u64 = XL_ORD[a]   XL_ORD[a] = XL_ORD[best]   XL_ORD[best] = t }
+        a = a + 1u64
+    }
+    return XL_N
+}
+/* the content-derived spelling: `surd c1:d1 c2:d2 ...` (canonical term order) */
+fn xl_tput(c: u8) -> i32 { if XL_TN < 8192u64 { XL_TXT[XL_TN] = c   XL_TN = XL_TN + 1u64 }   return 0i32 }
+fn xl_tput_u64(v: u64) -> i32 {
+    if v >= 10u64 { xl_tput_u64(v / 10u64) }
+    xl_tput((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+fn xl_spell(i: u64) -> i32 {
+    xl_tput(115u8)   xl_tput(117u8)   xl_tput(114u8)   xl_tput(100u8)
+    let h : u32 = XL_PTS[i]
+    let n : u64 = eid_nterms(h) as u64
+    let mut k : u64 = 0u64
+    while k < n {
+        xl_tput(32u8)
+        xl_tput_u64(eid_term_c(h, k as u32) as u64)
+        xl_tput(58u8)
+        xl_tput_u64(eid_term_d(h, k as u32))
+        k = k + 1u64
+    }
+    return 0i32
+}
+/* SPEAK the line: the covering chain as an EIDOLOS scroll; returns the
+ * scroll's address (the line's name), 0 = refused. */
+fn xl_speak() -> u64 @export {
+    xl_order()
+    XL_TN = 0u64
+    if XL_N < 2u64 { XL_ADDR = 0u64   return 0u64 }
+    let mut r : u64 = 0u64
+    while r + 1u64 < XL_N {
+        if r > 0u64 { xl_tput(32u8) }
+        xl_tput(91u8)
+        xl_spell(XL_ORD[r])
+        xl_tput(32u8)   xl_tput(60u8)   xl_tput(32u8)
+        xl_spell(XL_ORD[r + 1u64])
+        xl_tput(93u8)
+        r = r + 1u64
+    }
+    eol_reset()
+    if eol_read((&XL_TXT) as u64, XL_TN) < 0i64 { XL_ADDR = 0u64   return 0u64 }
+    XL_ADDR = eol_addr()
+    return XL_ADDR
+}
+fn xl_text_len() -> u64 @export { return XL_TN }
+fn xl_text_byte(i: u64) -> u8 @export { if i < XL_TN { return XL_TXT[i] }   return 0u8 }
+fn xl_addr() -> u64 @export { return XL_ADDR }
+
+/* ==================== THE SELF-PROOF (arms 110..115) ==================== */
+fn xl_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn xl_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, xl_slen(a), v, b, xl_slen(b))
+}
+fn xl_selfprove() -> u64 @export {
+    /* arm 110: THE IDENTITY LAW -- sqrt 8 and 2 sqrt 2 are ONE point */
+    xl_reset()
+    let p8 : u64 = xl_add(1i64, 8u64)
+    let p22 : u64 = xl_add(2i64, 2u64)
+    if p8 == XL_SENT { xl_reset()   return 110u64 }
+    if p22 != p8 { xl_reset()   return 110u64 }
+    let p2 : u64 = xl_add(1i64, 2u64)
+    if p2 == p8 { xl_reset()   return 110u64 }
+    if XL_N != 2u64 { xl_reset()   return 110u64 }
+    let e0 : u64 = XL_RENV
+    if xl_add(0i64, 5u64) != XL_SENT { xl_reset()   return 110u64 }
+    if XL_RENV != e0 + 1u64 { xl_reset()   return 110u64 }
+    /* arm 111: THE EXACT ORDER -- sqrt2 < 2 sqrt2; and the olympiad pair
+     * sqrt1969 + sqrt1971 < 2 sqrt1970, strict, where floats conflate */
+    if xl_cmp(p2, p8) != -1i32 { xl_reset()   return 111u64 }
+    if xl_cmp(p8, p2) != 1i32 { xl_reset()   return 111u64 }
+    xl_reset()
+    let pa : u64 = xl_add2(1i64, 1969u64, 1i64, 1971u64)
+    let pb : u64 = xl_add(2i64, 1970u64)
+    if pa == XL_SENT { xl_reset()   return 111u64 }
+    if pb == XL_SENT { xl_reset()   return 111u64 }
+    if pa == pb { xl_reset()   return 111u64 }
+    if xl_cmp(pa, pb) != -1i32 { xl_reset()   return 111u64 }
+    /* arm 112: THE TWO-PATH -- the superseded planner (eid_plan) derives the
+     * SAME total order on the same bag */
+    xl_reset()
+    let b5 : u64 = xl_add(1i64, 5u64)
+    let b2 : u64 = xl_add(1i64, 2u64)
+    let b8 : u64 = xl_add(1i64, 8u64)
+    let b3 : u64 = xl_add(1i64, 3u64)
+    if xl_add(2i64, 2u64) != b8 { xl_reset()   return 112u64 }
+    xl_order()
+    ep_reset()
+    let mut i : u64 = 0u64
+    while i < XL_N { ep_add(XL_PTS[i])   i = i + 1u64 }
+    let epn : u32 = ep_build()
+    if (epn as u64) != XL_N { xl_reset()   return 112u64 }
+    i = 0u64
+    while i < XL_N {
+        if eid_same(ep_node_at(i as u32), XL_PTS[XL_ORD[i]]) != 1u32 { xl_reset()   return 112u64 }
+        i = i + 1u64
+    }
+    if b5 == b2 { xl_reset()   return 112u64 }
+    if b3 == b2 { xl_reset()   return 112u64 }
+    /* arm 113: THE LINE SPEAKS -- the covering chain's unraveling IS the
+     * geometry: a non-adjacent order fact is an ENTAILMENT */
+    let a1 : u64 = xl_speak()
+    if a1 == 0u64 { xl_reset()   return 113u64 }
+    if xl_ent("surd 1:2" as u64, 0u64, "surd 1:5" as u64) != 1u64 { xl_reset()   return 113u64 }
+    if xl_ent("surd 1:2" as u64, 0u64, "surd 2:2" as u64) != 1u64 { xl_reset()   return 113u64 }
+    if xl_ent("surd 1:5" as u64, 0u64, "surd 1:2" as u64) != 0u64 { xl_reset()   return 113u64 }
+    /* arm 114: ORDER-FREE -- any insertion order, same scroll, same address */
+    xl_reset()
+    if xl_add(1i64, 3u64) == XL_SENT { xl_reset()   return 114u64 }
+    if xl_add(2i64, 2u64) == XL_SENT { xl_reset()   return 114u64 }
+    if xl_add(1i64, 5u64) == XL_SENT { xl_reset()   return 114u64 }
+    if xl_add(1i64, 2u64) == XL_SENT { xl_reset()   return 114u64 }
+    let a2 : u64 = xl_speak()
+    if a2 != a1 { xl_reset()   return 114u64 }
+    /* arm 115: THE REFUSAL -- the line cannot be lied about: its chain plus
+     * one reversed claim is INCOHERENT (every query refused) */
+    let mut save : u64 = XL_TN
+    xl_tput(32u8)
+    xl_tput(91u8)
+    xl_spell(XL_ORD[XL_N - 1u64])
+    xl_tput(32u8)   xl_tput(60u8)   xl_tput(32u8)
+    xl_spell(XL_ORD[0u64])
+    xl_tput(93u8)
+    eol_reset()
+    if eol_read((&XL_TXT) as u64, XL_TN) < 0i64 { xl_reset()   return 115u64 }
+    if eol_addr() != 0u64 { xl_reset()   return 115u64 }
+    if xl_ent("surd 1:2" as u64, 0u64, "surd 1:5" as u64) != 2u64 { xl_reset()   return 115u64 }
+    XL_TN = save
+    xl_reset()
+    return 0u64
+}

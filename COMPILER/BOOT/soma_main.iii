@@ -1,0 +1,153 @@
+/* COMPILER/BOOT/soma_main.iii -- iii-soma: THE SOMA's tool face.
+ *
+ *   iii-soma prove                the self-proof alone (addressing, hash-set, partition)
+ *   iii-soma map   [corpusdir]    THE MAP-vs-TERRITORY AUDIT: does the registry the mind
+ *                                 reads match the gate files that actually exist?
+ *   iii-soma structure            the reach-pin cluster anatomy of the claim-space
+ *
+ * default corpusdir = STDLIB/corpus.  Requires CWD = the III root.  EVERY verb
+ * self-proves first and refuses on a broken arm (exit 9).  The audit is
+ * organ-native (kardia for the map, the FindFirstFile directory primitive for
+ * the territory) -- no bash reads the machine's self.
+ *
+ * exit: 0 coherent (map == territory) | 1 DRIFT (phantom or dark present) |
+ *       2 env | 3 usage | 9 SELF-REFUSED */
+module soma_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn soma_selfprove() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_audit(dirpath: u64) -> i64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_matched() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_phantom() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_dark() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_registry() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_territory() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_noniii() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_truncated() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_phantom_at(which: u64, j: u64) -> u8 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_dark_at(which: u64, j: u64) -> u8 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_classify() -> i64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_family() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_orphan() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_scripts_scanned() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_orphan_at(which: u64, j: u64) -> u8 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_cluster() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_cluster_count() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_cluster_largest() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_cluster_singletons() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_islands() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn soma_address(name: u64, len: u64, kind: u64) -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn kd_tool_pin() -> u64 from "kardia.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 { k = k - 4u64   let nib : u64 = (v >> k) & 15u64   if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }   }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-soma -- THE SOMA: the machine's claim-space as one addressable body\n\n" as u64)
+    ps("  iii-soma prove                the self-proof (addressing, hash-set, partition law)\n" as u64)
+    ps("  iii-soma map   [corpusdir]    map-vs-territory: does the registry the mind reads match\n" as u64)
+    ps("                                the gate files that actually exist?  (phantom + dark = drift)\n" as u64)
+    ps("  iii-soma structure            the reach-pin cluster anatomy of the claim-space\n\n" as u64)
+    ps("every verb self-proves first (exit 9).  the audit is organ-native -- no bash reads the self.\n" as u64)
+    ps("exit: 0 map==territory | 1 DRIFT | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn print_phantoms(n: u64) -> u32 {
+    let mut w : u64 = 0u64
+    while w < n { if w < 8u64 {
+        ps("    PHANTOM (map names it, no gate file): " as u64)
+        let mut j : u64 = 0u64
+        while j < 48u64 { let c : u8 = soma_phantom_at(w, j)   if c == 0u8 { j = 48u64 } else { putchar(c as i32)   j = j + 1u64 } }
+        putchar(10i32)
+        w = w + 1u64
+    } else { w = n } }
+    return 1u32
+}
+fn print_orphans(n: u64) -> u32 {
+    let mut w : u64 = 0u64
+    while w < n { if w < 40u64 {
+        ps("       UNRESOLVED (no name/number ref -- READ before any action): " as u64)
+        let mut j : u64 = 0u64
+        while j < 48u64 { let c : u8 = soma_orphan_at(w, j)   if c == 0u8 { j = 48u64 } else { putchar(c as i32)   j = j + 1u64 } }
+        putchar(10i32)
+        w = w + 1u64
+    } else { w = n } }
+    return 1u32
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let sp : u64 = soma_selfprove()
+    if sp != 0u64 {
+        ps("THE SOMA REFUSES ITSELF: self-proof arm " as u64)  pu(sp)  ps(" failed -- no verb runs over broken law\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("SOMA PROVEN: the ADDRESSING law (stable, unique, kind-separating), the HASH-SET law\n" as u64)
+        ps("(present iff inserted; negative control absent), the PARTITION law (matched + phantom =\n" as u64)
+        ps("the map; matched + dark = the territory) -- re-derived THIS invocation before any verb moves.\n" as u64)
+        return 0u64
+    }
+    let mut dir : u64 = "STDLIB/corpus" as u64
+    if streq(cmd, "map" as u64) == 1u32 {
+        if argc >= 3i32 { dir = av[2u64] }
+        let r : i64 = soma_audit(dir)
+        if r == -1i64 { ps("iii-soma: registry unreadable (run from the III root)\n" as u64)   return 2u64 }
+        if r == -2i64 { ps("iii-soma: could not open the corpus territory at " as u64)  ps(dir)  putchar(10i32)   return 2u64 }
+        ps("== THE MAP vs THE TERRITORY: is the mind's body-map the body that exists? ==\n" as u64)
+        ps("  the MAP (the registry kardia parses from run_corpus.sh): " as u64)  pu(soma_registry())  ps(" claims\n" as u64)
+        ps("  the TERRITORY (gate files present in " as u64)  ps(dir)  ps("):    " as u64)  pu(soma_territory())  ps(" gates" as u64)
+        if soma_noniii() > 0u64 { ps("  (+ " as u64)  pu(soma_noniii())  ps(" non-.iii entries skipped)" as u64) }
+        putchar(10i32)
+        ps("  MATCHED (a true nerve -- named AND present): " as u64)  pu(soma_matched())  putchar(10i32)
+        ps("  PHANTOM (the map lies -- named, no gate):    " as u64)  pu(soma_phantom())  putchar(10i32)
+        ps("  DARK    (gate exists, central map silent):   " as u64)  pu(soma_dark())  putchar(10i32)
+        if soma_truncated() > 0u64 { ps("  (territory truncated at capacity: " as u64)  pu(soma_truncated())  ps(" -- honest envelope)\n" as u64) }
+        if soma_phantom() > 0u64 { print_phantoms(soma_phantom()) }
+        /* the dark gates are not automatically scrap -- classify by ownership */
+        if soma_dark() > 0u64 {
+            soma_classify()
+            ps("  -- of the " as u64)  pu(soma_dark())  ps(" dark gates (" as u64)  pu(soma_scripts_scanned())  ps(" runner scripts scanned, by name AND by number) --\n" as u64)
+            ps("     FAMILY-owned (a runner names it by name or number -- a real nerve, just not central): " as u64)  pu(soma_family())  putchar(10i32)
+            ps("     UNRESOLVED   (no textual reference found -- may be GLOB-owned or a registration gap;\n" as u64)
+            ps("                   NEVER a blind-delete candidate -- each must be READ):                   " as u64)  pu(soma_orphan())  putchar(10i32)
+            if soma_orphan() > 0u64 { print_orphans(soma_orphan()) }
+        }
+        ps("  the SOMA's own address of this audit (idfold-derived): " as u64)
+        phex(soma_address("soma-audit" as u64, 10u64, 1u64) ^ (soma_matched() * 1000003u64) ^ (soma_phantom() << 20u64) ^ (soma_dark() << 40u64))
+        putchar(10i32)
+        if soma_phantom() > 0u64 { return 1u64 }
+        if soma_dark() > 0u64 { return 1u64 }
+        ps("  COHERENT: the mind's body-map is exactly the body that exists.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "structure" as u64) == 1u32 {
+        let r : i64 = soma_audit(dir)
+        if r < 0i64 { ps("iii-soma: env (registry/territory unreadable)\n" as u64)   return 2u64 }
+        soma_cluster()
+        ps("== THE CLAIM-SPACE ANATOMY: how the machine's nerves couple (reach-pin clusters) ==\n" as u64)
+        ps("  registry claims        : " as u64)  pu(soma_registry())  putchar(10i32)
+        ps("  distinct reach-clusters : " as u64)  pu(soma_cluster_count())  putchar(10i32)
+        ps("  largest cluster (co-drift on one byte-change): " as u64)  pu(soma_cluster_largest())  putchar(10i32)
+        ps("  singleton nerves (own dependency alone)      : " as u64)  pu(soma_cluster_singletons())  putchar(10i32)
+        ps("  islands (unresolved leaf->leaf closure -- unanchored edges): " as u64)  pu(soma_islands())  putchar(10i32)
+        ps("  tool pin (the anchor every C1 folds): " as u64)  phex(kd_tool_pin())  putchar(10i32)
+        ps("  NOTE: shared reach = shared DEPENDENCY, never shared ASSERTION -- a cluster is anatomy,\n" as u64)
+        ps("  not a redundancy verdict.  Retiring a claim is belief-nominated (doxa) and PROOF-gated.\n" as u64)
+        return 0u64
+    }
+    return usage()
+}

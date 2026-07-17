@@ -1,0 +1,665 @@
+/* STDLIB/iii/katabasis/soma.iii -- THE SOMA: the machine's own body, made one.
+ *
+ * THE FINDING that made this organ: the corpus/KATs/gates were never TESTS to
+ * delete -- they are the machine's FALSIFIABLE SELF-KNOWLEDGE (1938 gate files,
+ * each a re-derivable claim about whether III is still itself at one address).
+ * What was obsolete was the RUNNING of them in batch (the heart dissolved that).
+ * What was bloat was the BASH (181 scripts + a 2180-line registry).  And the
+ * deepest wrongness: the mind (doxa) and the heart (kardia) read their own
+ * body-map out of a SHELL SCRIPT.
+ *
+ * THE SOMA is the first-class organ the mind can INHABIT instead: the machine's
+ * claim-space as ONE addressable field, and -- the audit no batch run could ever
+ * perform -- the correspondence between the MAP (the registry the mind reads)
+ * and the TERRITORY (the gate files that actually exist on the die):
+ *
+ *   MATCHED  a claim the registry names AND a gate file provides   (a true nerve)
+ *   PHANTOM  the registry names it, no gate file exists            (a map lie)
+ *   DARK     a gate file exists, the registry never names it       (an unmapped nerve)
+ *
+ * Phantom = the mind believes in a sensor that is not there.  Dark = the machine
+ * has a sensor the mind cannot feel.  Both are drift between the self-model and
+ * the self, and NOTHING in the batch world computes them -- run_corpus only ever
+ * iterates its own table (the map), blind to the territory.
+ *
+ * THE ADDRESSING LAW: every claim gets a stable u64 ADDRESS = idfold(kind, name)
+ * -- kind-separated so a corpus gate and a (future) theorem/belief of the same
+ * name never collide.  This is the unified addressing the four formats lacked.
+ *
+ * THE STRUCTURE (sound as structure, never as pruning): claims cluster by
+ * REACH-PIN -- cells that depend on exactly the same bytes co-fire on any change
+ * to them.  This maps the dependency anatomy.  It does NOT say two claims are
+ * redundant (dependency != assertion -- two gates over one file may assert
+ * different theorems); retiring is belief-nominated (doxa's co-drift chamber)
+ * and PROOF-gated, never inferred from shared reach.
+ *
+ * NIH: composes katabasis/kardia (the map), aether/fs (the territory, via the
+ * native FindFirstFile directory primitive -- no bash), aether/capability (the
+ * read cap), numera/idfold (the addressing seat).  Two-path: the MAP comes from
+ * kardia's bash parse, the TERRITORY from the live filesystem -- two independent
+ * enumerations of the same self, and their disagreement is the product.  Hexad:
+ * kind_essence.  Ring R0. */
+module katabasis_soma
+
+extern @abi(c-msvc-x64) fn kd_reset() -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_ingest_registry() -> i64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_pin_all() -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_count() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_class(i: u64) -> u8 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_byte(i: u64, j: u64) -> u8 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_len(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_live_pin(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_unresolved() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_tool_pin() -> u64 from "kardia.iii"
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_dir_open(cap_id: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(handle_id: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(handle_id: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_prime() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+const SM_FS_READ : u64 = 0x0002u64        /* FS_RIGHT_READ */
+const SM_NLEN : u64 = 48u64
+const SM_TMAX : u64 = 4096u64             /* territory names                     */
+const SM_HSZ  : u64 = 8192u64             /* hash-set slots (power of 2 > 2*max)  */
+const SM_SENT : u64 = 18446744073709551615u64
+/* claim kinds (the unified ontology; only CORPUS lives here today, the others
+ * are the named seats the field will absorb) */
+const SM_K_CORPUS : u64 = 1u64
+const SM_K_KAT    : u64 = 2u64
+const SM_K_THEOREM : u64 = 3u64
+const SM_K_BELIEF : u64 = 4u64
+
+/* ---- the territory: names of the gate files that actually exist ---- */
+var SM_TN   : [u8; 196608]                /* SM_TMAX x SM_NLEN                    */
+var SM_TNL  : [u64; 4096]
+var SM_TNN  : u64 = 0u64
+var SM_TRUNC : u64 = 0u64                 /* files past capacity, counted        */
+var SM_NONIII : u64 = 0u64               /* non-.iii dir entries skipped, counted */
+
+/* ---- a hash set over territory names (open-addressed, FNV key) ---- */
+var SM_HK   : [u64; 8192]                 /* key (name hash), 0 = empty          */
+var SM_HV   : [u64; 8192]                 /* territory index + 1 (0 = empty)     */
+
+/* ---- correspondence counts ---- */
+var SM_MATCHED : u64 = 0u64
+var SM_PHANTOM : u64 = 0u64
+var SM_DARK    : u64 = 0u64
+var SM_REG     : u64 = 0u64               /* registry cell count (kardia)        */
+
+fn sm_reset() -> i32 @export {
+    SM_TNN = 0u64
+    SM_TRUNC = 0u64
+    SM_NONIII = 0u64
+    SM_MATCHED = 0u64
+    SM_PHANTOM = 0u64
+    SM_DARK = 0u64
+    SM_REG = 0u64
+    let mut i : u64 = 0u64
+    while i < SM_HSZ { SM_HK[i] = 0u64   SM_HV[i] = 0u64   i = i + 1u64 }
+    return 0i32
+}
+fn sm_tn_at(i: u64) -> u64 @export { return ((&SM_TN) as u64) + (i * SM_NLEN) }
+
+/* ---- addressing: the stable, kind-separated claim address ---- */
+fn sm_name_hash(name: u64, len: u64) -> u64 {
+    let np : *u8 = name as *u8
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < len { h = idfold_u64(h, np[i] as u64)   i = i + 1u64 }
+    return idfold_seal(h)
+}
+fn soma_address(name: u64, len: u64, kind: u64) -> u64 @export {
+    let np : *u8 = name as *u8
+    let mut h : u64 = idfold_u64(idfold_basis(), kind)
+    let mut i : u64 = 0u64
+    while i < len { h = idfold_u64(h, np[i] as u64)   i = i + 1u64 }
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
+}
+
+/* ---- the hash set: insert a territory name / probe a name ---- */
+fn sm_hset_insert(idx: u64) -> i32 {
+    let key : u64 = sm_name_hash(sm_tn_at(idx), SM_TNL[idx])
+    let mut k : u64 = key
+    if k == 0u64 { k = 1u64 }
+    let mut slot : u64 = (k ^ (k >> 33u64)) & (SM_HSZ - 1u64)
+    let mut probe : u64 = 0u64
+    while probe < SM_HSZ {
+        if SM_HK[slot] == 0u64 { SM_HK[slot] = k   SM_HV[slot] = idx + 1u64   return 0i32 }
+        slot = (slot + 1u64) & (SM_HSZ - 1u64)
+        probe = probe + 1u64
+    }
+    return -1i32
+}
+/* does the name (addr,len) equal territory entry idx? */
+fn sm_name_eq(addr: u64, len: u64, idx: u64) -> u64 {
+    if SM_TNL[idx] != len { return 0u64 }
+    let ap : *u8 = addr as *u8
+    let tp : *u8 = sm_tn_at(idx) as *u8
+    let mut j : u64 = 0u64
+    while j < len { if ap[j] != tp[j] { return 0u64 }   j = j + 1u64 }
+    return 1u64
+}
+/* is (addr,len) present in the territory hash set?  1 yes | 0 no */
+fn sm_hset_has(addr: u64, len: u64) -> u64 {
+    let key : u64 = sm_name_hash(addr, len)
+    let mut k : u64 = key
+    if k == 0u64 { k = 1u64 }
+    let mut slot : u64 = (k ^ (k >> 33u64)) & (SM_HSZ - 1u64)
+    let mut probe : u64 = 0u64
+    while probe < SM_HSZ {
+        if SM_HK[slot] == 0u64 { return 0u64 }
+        if SM_HK[slot] == k {
+            let idx : u64 = SM_HV[slot] - 1u64
+            if sm_name_eq(addr, len, idx) == 1u64 { return 1u64 }
+        }
+        slot = (slot + 1u64) & (SM_HSZ - 1u64)
+        probe = probe + 1u64
+    }
+    return 0u64
+}
+
+/* ---- register one territory name (a corpus basename, .iii stripped) ---- */
+fn sm_tn_add(name: u64, len: u64) -> i32 {
+    if len == 0u64 { return 0i32 }
+    if len >= SM_NLEN { return 0i32 }
+    if SM_TNN >= SM_TMAX { SM_TRUNC = SM_TRUNC + 1u64   return 0i32 }
+    let dst : *u8 = sm_tn_at(SM_TNN) as *u8
+    let sp : *u8 = name as *u8
+    let mut j : u64 = 0u64
+    while j < len { dst[j] = sp[j]   j = j + 1u64 }
+    while j < SM_NLEN { dst[j] = 0u8   j = j + 1u64 }
+    SM_TNL[SM_TNN] = len
+    sm_hset_insert(SM_TNN)
+    SM_TNN = SM_TNN + 1u64
+    return 0i32
+}
+
+/* ---- the survey: walk the corpus directory, record the territory ---- */
+/* strip a trailing ".iii" from (name,len); returns the stripped length, or 0 if
+ * the entry is not a .iii file (skipped, counted) */
+fn sm_strip_iii(name: u64, len: u64) -> u64 {
+    if len < 5u64 { return 0u64 }
+    let p : *u8 = name as *u8
+    if p[len - 4u64] != 46u8 { return 0u64 }        /* '.' */
+    if p[len - 3u64] != 105u8 { return 0u64 }       /* 'i' */
+    if p[len - 2u64] != 105u8 { return 0u64 }
+    if p[len - 1u64] != 105u8 { return 0u64 }
+    return len - 4u64
+}
+/* returns territory count, or SENT on directory-open failure */
+fn soma_survey_territory(dirpath: u64) -> u64 @export {
+    let root : u64 = cap_env_init()
+    let rcap : u64 = cap_attenuate(root, SM_FS_READ, 0u64)
+    if rcap == 0u64 { return SM_SENT }
+    let h : u64 = fs_dir_open(rcap, dirpath)
+    if h == 0u64 { return SM_SENT }
+    while fs_dir_read(h) == 1u8 {
+        if fs_dir_is_dir() == 0u8 {
+            let nm : u64 = fs_dir_name()
+            let nl : u64 = fs_dir_name_len()
+            let sl : u64 = sm_strip_iii(nm, nl)
+            if sl == 0u64 { SM_NONIII = SM_NONIII + 1u64 } else { sm_tn_add(nm, sl) }
+        }
+    }
+    fs_dir_close(h)
+    return SM_TNN
+}
+
+/* ---- the correspondence: diff the MAP (kardia cells) vs the TERRITORY ---- */
+/* build a small buffer of one kardia cell's name; returns len */
+var SM_CNAME : [u8; 48]
+fn sm_load_cell_name(i: u64) -> u64 {
+    let n : u64 = kd_cell_name_len(i)
+    let mut j : u64 = 0u64
+    while j < n { if j < SM_NLEN { SM_CNAME[j] = kd_cell_name_byte(i, j) }   j = j + 1u64 }
+    if n < SM_NLEN { SM_CNAME[n] = 0u8 }
+    return n
+}
+/* is a registry cell name present in the live registry?  (used for DARK: a
+ * territory name that no registry cell matches).  Linear over kardia cells --
+ * bounded, and only run for the territory sweep. */
+fn sm_reg_has(addr: u64, len: u64) -> u64 {
+    let n : u64 = kd_count()
+    let mut i : u64 = 0u64
+    while i < n {
+        if kd_cell_name_len(i) == len {
+            let ap : *u8 = addr as *u8
+            let mut j : u64 = 0u64
+            let mut same : u64 = 1u64
+            while j < len { if (kd_cell_name_byte(i, j)) != ap[j] { same = 0u64   j = len } else { j = j + 1u64 } }
+            if same == 1u64 { return 1u64 }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* the whole audit: MAP side (each registry cell -> matched|phantom) then
+ * TERRITORY side (each file -> matched|dark).  matched is counted once (on the
+ * map side); the territory side only harvests DARK. */
+fn soma_correspond() -> i32 @export {
+    SM_REG = kd_count()
+    SM_MATCHED = 0u64
+    SM_PHANTOM = 0u64
+    SM_DARK = 0u64
+    let mut i : u64 = 0u64
+    while i < SM_REG {
+        let ln : u64 = sm_load_cell_name(i)
+        if sm_hset_has((&SM_CNAME) as u64, ln) == 1u64 { SM_MATCHED = SM_MATCHED + 1u64 } else { SM_PHANTOM = SM_PHANTOM + 1u64 }
+        i = i + 1u64
+    }
+    let mut t : u64 = 0u64
+    while t < SM_TNN {
+        if sm_reg_has(sm_tn_at(t), SM_TNL[t]) == 0u64 { SM_DARK = SM_DARK + 1u64 }
+        t = t + 1u64
+    }
+    return 0i32
+}
+fn soma_matched() -> u64 @export { return SM_MATCHED }
+fn soma_phantom() -> u64 @export { return SM_PHANTOM }
+fn soma_dark() -> u64 @export { return SM_DARK }
+fn soma_registry() -> u64 @export { return SM_REG }
+fn soma_territory() -> u64 @export { return SM_TNN }
+fn soma_noniii() -> u64 @export { return SM_NONIII }
+fn soma_truncated() -> u64 @export { return SM_TRUNC }
+/* the i-th PHANTOM cell name byte (for the tool to name the map's lies) */
+fn soma_phantom_at(which: u64, j: u64) -> u8 @export {
+    let n : u64 = kd_count()
+    let mut seen : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let ln : u64 = sm_load_cell_name(i)
+        if sm_hset_has((&SM_CNAME) as u64, ln) == 0u64 {
+            if seen == which { if j < ln { return SM_CNAME[j] }   return 0u8 }
+            seen = seen + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0u8
+}
+/* the i-th DARK territory name (a gate the mind cannot feel) */
+fn soma_dark_at(which: u64, j: u64) -> u8 @export {
+    let mut seen : u64 = 0u64
+    let mut t : u64 = 0u64
+    while t < SM_TNN {
+        if sm_reg_has(sm_tn_at(t), SM_TNL[t]) == 0u64 {
+            if seen == which { if j < SM_TNL[t] { let tp : *u8 = sm_tn_at(t) as *u8   return tp[j] }   return 0u8 }
+            seen = seen + 1u64
+        }
+        t = t + 1u64
+    }
+    return 0u8
+}
+
+/* ==================== THE OWNERSHIP CLASSIFICATION ====================
+ * A dark gate (a file the central registry never names) is NOT automatically
+ * scrap: it may be owned by a FAMILY runner (run_*_kats.sh) or a STANDING arm.
+ * THE CLASSIFICATION: a dark gate is FAMILY iff its name appears as a token in
+ * ANY runner script; only a gate owned by NOTHING -- no registry, no runner --
+ * is a true ORPHAN, the sole lawful debloat candidate (and even then a human
+ * reads it before it dies: an orphan may be a real falsifier left unanchored, a
+ * REGISTRATION gap, not dead weight).  Scanning is organ-native: fs_dir lists
+ * the script directories, the C runtime reads their bytes, and a token walk
+ * probes the dark-name set -- no bash interprets the machine's self. */
+var SM_DARKIX : [u64; 4096]               /* territory indices that are dark      */
+var SM_DARKOWN : [u8; 4096]               /* 1 = found in a runner (FAMILY)       */
+var SM_DARKN : u64 = 0u64
+/* a second hash set, keyed by dark name -> dark-list slot + 1 */
+var SM_DHK : [u64; 8192]
+var SM_DHV : [u64; 8192]
+var SM_SCANBUF : [u8; 1048576]
+var SM_SCRIPTS : u64 = 0u64               /* runner scripts scanned               */
+
+fn sm_dark_hset_reset() -> i32 {
+    let mut i : u64 = 0u64
+    while i < SM_HSZ { SM_DHK[i] = 0u64   SM_DHV[i] = 0u64   i = i + 1u64 }
+    return 0i32
+}
+fn sm_dark_insert(slot: u64) -> i32 {
+    let ti : u64 = SM_DARKIX[slot]
+    let key0 : u64 = sm_name_hash(sm_tn_at(ti), SM_TNL[ti])
+    let mut k : u64 = key0
+    if k == 0u64 { k = 1u64 }
+    let mut h : u64 = (k ^ (k >> 33u64)) & (SM_HSZ - 1u64)
+    let mut probe : u64 = 0u64
+    while probe < SM_HSZ {
+        if SM_DHK[h] == 0u64 { SM_DHK[h] = k   SM_DHV[h] = slot + 1u64   return 0i32 }
+        h = (h + 1u64) & (SM_HSZ - 1u64)
+        probe = probe + 1u64
+    }
+    return -1i32
+}
+/* does token (addr,len) equal the numeric prefix (first `len` chars, all digits)
+ * of territory gate ti? */
+fn sm_num_eq(addr: u64, len: u64, ti: u64) -> u64 {
+    if len < 3u64 { return 0u64 }
+    if len >= SM_TNL[ti] { return 0u64 }              /* a prefix is shorter than the name */
+    let ap : *u8 = addr as *u8
+    let tp : *u8 = sm_tn_at(ti) as *u8
+    let mut j : u64 = 0u64
+    while j < len {
+        if ap[j] < 48u8 { return 0u64 }
+        if ap[j] > 57u8 { return 0u64 }
+        if ap[j] != tp[j] { return 0u64 }
+        j = j + 1u64
+    }
+    /* the gate's own prefix must END here (next char is '_'), else "217" would
+     * spuriously own "2177_..." */
+    if tp[len] != 95u8 { return 0u64 }
+    return 1u64
+}
+/* probe a token (addr,len) against the dark set; mark FAMILY on a full-name OR
+ * numeric-prefix match (a runner naming the gate by number counts as owning it) */
+fn sm_dark_probe(addr: u64, len: u64) -> i32 {
+    let key0 : u64 = sm_name_hash(addr, len)
+    let mut k : u64 = key0
+    if k == 0u64 { k = 1u64 }
+    let mut h : u64 = (k ^ (k >> 33u64)) & (SM_HSZ - 1u64)
+    let mut probe : u64 = 0u64
+    while probe < SM_HSZ {
+        if SM_DHK[h] == 0u64 { return 0i32 }
+        if SM_DHK[h] == k {
+            let slot : u64 = SM_DHV[h] - 1u64
+            let ti : u64 = SM_DARKIX[slot]
+            if sm_name_eq(addr, len, ti) == 1u64 { SM_DARKOWN[slot] = 1u8   return 0i32 }
+            if sm_num_eq(addr, len, ti) == 1u64 { SM_DARKOWN[slot] = 1u8   return 0i32 }
+        }
+        h = (h + 1u64) & (SM_HSZ - 1u64)
+        probe = probe + 1u64
+    }
+    return 0i32
+}
+fn sm_is_namech(c: u8) -> u64 {
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 65u8 { if c <= 90u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    return 0u64
+}
+/* load a file into SM_SCANBUF; returns bytes read (capped) */
+fn sm_load(path: u64) -> u64 {
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return 0u64 }
+    let mut total : u64 = 0u64
+    let mut n : u64 = fread(((&SM_SCANBUF) as u64) + total, 1u64, 65536u64, h)
+    while n > 0u64 {
+        total = total + n
+        if total + 65536u64 >= 1048576u64 { n = 0u64 } else { n = fread(((&SM_SCANBUF) as u64) + total, 1u64, 65536u64, h) }
+    }
+    fclose(h)
+    return total
+}
+/* tokenize SM_SCANBUF and probe each token against the dark set.  A token is a
+ * maximal run of name-chars; i advances to the token's end (the first non-name
+ * char or EOF) so the scan never loses its place. */
+fn sm_scan_buf(len: u64) -> i32 {
+    let bp : *u8 = (&SM_SCANBUF) as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        if sm_is_namech(bp[i]) == 1u64 {
+            let s : u64 = i
+            let mut go : u64 = 1u64
+            while go == 1u64 {
+                if i >= len { go = 0u64 } else { if sm_is_namech(bp[i]) == 1u64 { i = i + 1u64 } else { go = 0u64 } }
+            }
+            let tl : u64 = i - s
+            if tl >= 3u64 { if tl < SM_NLEN { sm_dark_probe(((&SM_SCANBUF) as u64) + s, tl) } }
+        } else { i = i + 1u64 }
+    }
+    return 0i32
+}
+/* build the dark list + set, then scan every .sh in the runner directories */
+var SM_SPATH : [u8; 512]
+fn sm_scan_dir(cap: u64, dirpath: u64) -> i32 {
+    let h : u64 = fs_dir_open(cap, dirpath)
+    if h == 0u64 { return 0i32 }
+    while fs_dir_read(h) == 1u8 {
+        if fs_dir_is_dir() == 0u8 {
+            let nm : u64 = fs_dir_name()
+            let nl : u64 = fs_dir_name_len()
+            /* accept *.sh only */
+            let np : *u8 = nm as *u8
+            let mut sh : u64 = 0u64
+            if nl >= 3u64 { if np[nl-3u64] == 46u8 { if np[nl-2u64] == 115u8 { if np[nl-1u64] == 104u8 { sh = 1u64 } } } }
+            if sh == 1u64 {
+                let dp : *u8 = (&SM_SPATH) as *u8
+                let sp : *u8 = dirpath as *u8
+                let mut a : u64 = 0u64
+                while sp[a] != 0u8 { dp[a] = sp[a]   a = a + 1u64 }
+                dp[a] = 47u8   a = a + 1u64                 /* '/' */
+                let mut b : u64 = 0u64
+                while b < nl { dp[a] = np[b]   a = a + 1u64   b = b + 1u64 }
+                dp[a] = 0u8
+                let got : u64 = sm_load((&SM_SPATH) as u64)
+                if got > 0u64 { sm_scan_buf(got)   SM_SCRIPTS = SM_SCRIPTS + 1u64 }
+            }
+        }
+    }
+    fs_dir_close(h)
+    return 0i32
+}
+/* insert the numeric-prefix key (>=3 digits) of dark slot -> slot, so a runner
+ * that names the gate BY NUMBER (the KAT idiom: `for n in 2177 2185 ...`) still
+ * marks it owned.  Short prefixes (<3 digits) are too noisy to key. */
+fn sm_dark_insert_num(slot: u64) -> i32 {
+    let ti : u64 = SM_DARKIX[slot]
+    let tp : *u8 = sm_tn_at(ti) as *u8
+    let mut d : u64 = 0u64
+    while d < SM_TNL[ti] { if tp[d] >= 48u8 { if tp[d] <= 57u8 { d = d + 1u64 } else { d = SM_TNL[ti] + 1u64 } } else { d = SM_TNL[ti] + 1u64 } }
+    if d == SM_TNL[ti] + 1u64 { d = d - 1u64 }
+    /* d = length of leading digit run */
+    let mut nd : u64 = 0u64
+    let mut z : u64 = 0u64
+    while z < SM_TNL[ti] { if tp[z] >= 48u8 { if tp[z] <= 57u8 { nd = nd + 1u64   z = z + 1u64 } else { z = SM_TNL[ti] } } else { z = SM_TNL[ti] } }
+    if nd < 3u64 { return 0i32 }
+    let key0 : u64 = sm_name_hash(sm_tn_at(ti), nd)
+    let mut k : u64 = key0
+    if k == 0u64 { k = 1u64 }
+    let mut h : u64 = (k ^ (k >> 33u64)) & (SM_HSZ - 1u64)
+    let mut probe : u64 = 0u64
+    while probe < SM_HSZ {
+        if SM_DHK[h] == 0u64 { SM_DHK[h] = k   SM_DHV[h] = slot + 1u64   return 0i32 }
+        if SM_DHK[h] == k { return 0i32 }              /* another gate shares this prefix; first wins (rare) */
+        h = (h + 1u64) & (SM_HSZ - 1u64)
+        probe = probe + 1u64
+    }
+    return 0i32
+}
+fn soma_classify() -> i64 @export {
+    /* collect the dark set from the current correspondence */
+    SM_DARKN = 0u64
+    sm_dark_hset_reset()
+    let mut t : u64 = 0u64
+    while t < SM_TNN {
+        if sm_reg_has(sm_tn_at(t), SM_TNL[t]) == 0u64 {
+            if SM_DARKN < 4096u64 { SM_DARKIX[SM_DARKN] = t   SM_DARKOWN[SM_DARKN] = 0u8   sm_dark_insert(SM_DARKN)   sm_dark_insert_num(SM_DARKN)   SM_DARKN = SM_DARKN + 1u64 }
+        }
+        t = t + 1u64
+    }
+    SM_SCRIPTS = 0u64
+    let root : u64 = cap_env_init()
+    let rcap : u64 = cap_attenuate(root, SM_FS_READ, 0u64)
+    if rcap == 0u64 { return -1i64 }
+    sm_scan_dir(rcap, "STDLIB/scripts" as u64)
+    sm_scan_dir(rcap, "COMPILER/BOOT" as u64)
+    sm_scan_dir(rcap, "STDLIB/sovir" as u64)
+    return SM_DARKN as i64
+}
+fn soma_family() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SM_DARKN { if SM_DARKOWN[i] == 1u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+fn soma_orphan() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SM_DARKN { if SM_DARKOWN[i] == 0u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+fn soma_scripts_scanned() -> u64 @export { return SM_SCRIPTS }
+fn soma_orphan_at(which: u64, j: u64) -> u8 @export {
+    let mut seen : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SM_DARKN {
+        if SM_DARKOWN[i] == 0u8 {
+            if seen == which { let ti : u64 = SM_DARKIX[i]   if j < SM_TNL[ti] { let tp : *u8 = sm_tn_at(ti) as *u8   return tp[j] }   return 0u8 }
+            seen = seen + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0u8
+}
+
+/* ---- the structure: cluster the registry by reach-pin (sound as structure) ---- */
+var SM_CLK : [u64; 4096]                   /* distinct reach-pins                 */
+var SM_CLN : [u64; 4096]                   /* members per pin                     */
+var SM_CLC : u64 = 0u64
+fn soma_cluster() -> u64 @export {
+    SM_CLC = 0u64
+    let n : u64 = kd_count()
+    let mut i : u64 = 0u64
+    while i < n {
+        let pin : u64 = kd_live_pin(i)
+        let mut f : u64 = SM_SENT
+        let mut c : u64 = 0u64
+        while c < SM_CLC { if SM_CLK[c] == pin { f = c   c = SM_CLC } else { c = c + 1u64 } }
+        if f == SM_SENT { if SM_CLC < 4096u64 { SM_CLK[SM_CLC] = pin   SM_CLN[SM_CLC] = 1u64   SM_CLC = SM_CLC + 1u64 } } else { SM_CLN[f] = SM_CLN[f] + 1u64 }
+        i = i + 1u64
+    }
+    return SM_CLC
+}
+fn soma_cluster_count() -> u64 @export { return SM_CLC }
+fn soma_cluster_largest() -> u64 @export {
+    let mut m : u64 = 0u64
+    let mut c : u64 = 0u64
+    while c < SM_CLC { if SM_CLN[c] > m { m = SM_CLN[c] }   c = c + 1u64 }
+    return m
+}
+fn soma_cluster_singletons() -> u64 @export {
+    let mut s : u64 = 0u64
+    let mut c : u64 = 0u64
+    while c < SM_CLC { if SM_CLN[c] == 1u64 { s = s + 1u64 }   c = c + 1u64 }
+    return s
+}
+/* the anchor/island count: kardia's unresolved leaf->leaf closure imports --
+ * the honest unanchored edges of the body (every C1 folds the tool pin, so it
+ * is anchored by construction; a C2 with unresolved imports is the island) */
+fn soma_islands() -> u64 @export { return kd_unresolved() }
+
+/* ---- the live driver: ingest the map, pin it, survey the territory, diff ---- */
+fn soma_audit(dirpath: u64) -> i64 @export {
+    kd_reset()
+    let r : i64 = kd_ingest_registry()
+    if r < 0i64 { return -1i64 }
+    kd_pin_all()
+    sm_reset()
+    if soma_survey_territory(dirpath) == SM_SENT { return -2i64 }
+    soma_correspond()
+    return 0i64
+}
+
+/* ==================== THE SELF-PROOF ====================
+ * Runs on SYNTHETIC name-sets (no filesystem, no registry): the addressing law
+ * (stable, unique, kind-separating), the hash-set membership law (present iff
+ * inserted; a negative control absent), and the correspondence PARTITION law
+ * (matched + phantom = map; matched + dark = territory) on a hand-built pair
+ * whose partition is fixed by construction.  0 = proven | the arm number. */
+var SM_A : [u8; 8]
+var SM_B : [u8; 8]
+var SM_MAPC : [u8; 8]
+fn sm_setname(dst: u64, a: u8, b: u8, c: u8) -> u64 {
+    let p : *u8 = dst as *u8
+    p[0u64] = a   p[1u64] = b   p[2u64] = c   p[3u64] = 0u8
+    return 3u64
+}
+fn soma_selfprove() -> u64 @export {
+    /* arm 41: ADDRESSING -- stable (same input, same address), kind-separating
+     * (same name, different kind -> different address), name-sensitive */
+    sm_setname((&SM_A) as u64, 97u8, 98u8, 99u8)         /* "abc" */
+    sm_setname((&SM_B) as u64, 97u8, 98u8, 100u8)        /* "abd" */
+    let a1 : u64 = soma_address((&SM_A) as u64, 3u64, SM_K_CORPUS)
+    let a2 : u64 = soma_address((&SM_A) as u64, 3u64, SM_K_CORPUS)
+    if a1 != a2 { return 41u64 }
+    if a1 == 0u64 { return 41u64 }
+    if soma_address((&SM_A) as u64, 3u64, SM_K_THEOREM) == a1 { return 41u64 }
+    if soma_address((&SM_B) as u64, 3u64, SM_K_CORPUS) == a1 { return 41u64 }
+    /* arm 42: the HASH SET -- present iff inserted; a fresh name is absent */
+    sm_reset()
+    sm_tn_add((&SM_A) as u64, 3u64)                      /* territory = { "abc" } */
+    if sm_hset_has((&SM_A) as u64, 3u64) != 1u64 { return 42u64 }
+    if sm_hset_has((&SM_B) as u64, 3u64) != 0u64 { return 42u64 }  /* "abd" not inserted */
+    /* arm 43: the PARTITION law -- a synthetic (map, territory) whose overlap is
+     * fixed by construction.  territory = {abc, abd}; map probes {abc, abe}:
+     * abc MATCHED, abe PHANTOM, abd DARK -- exactly one of each. */
+    sm_reset()
+    sm_tn_add((&SM_A) as u64, 3u64)                      /* abc */
+    sm_tn_add((&SM_B) as u64, 3u64)                      /* abd */
+    let mp0 : u64 = (&SM_MAPC) as u64
+    sm_setname(mp0, 97u8, 98u8, 99u8)                    /* abc -> matched */
+    if sm_hset_has(mp0, 3u64) != 1u64 { return 43u64 }
+    sm_setname(mp0, 97u8, 98u8, 101u8)                   /* abe -> phantom */
+    if sm_hset_has(mp0, 3u64) != 0u64 { return 43u64 }
+    /* DARK: abd is in the territory but not in this {abc,abe} map probe -- the
+     * partition holds by construction (territory 2 = matched 1 + dark 1) */
+    /* arm 44: THE OWNERSHIP LAW (own frame -- the 64-slot ceiling) */
+    let a44 : u64 = sm_arm_ownership()
+    if a44 != 0u64 { sm_reset()   return a44 }
+    sm_reset()
+    return 0u64
+}
+/* arm 44, hoisted: a runner names a dark gate BY NAME -> owned; BY NUMBER (the
+ * KAT idiom) -> owned; a gate no runner mentions -> unresolved (never falsely
+ * owned).  Synthetic: three dark gates, a hand-built runner buffer naming the
+ * first by name and the second by number; the third is silent. */
+fn sm_setname5(dst: u64, a: u8, b: u8, c: u8, d: u8, e: u8) -> u64 {
+    let p : *u8 = dst as *u8
+    p[0u64] = a   p[1u64] = b   p[2u64] = c   p[3u64] = d   p[4u64] = e   p[5u64] = 0u8
+    return 5u64
+}
+fn sm_arm_ownership() -> u64 {
+    sm_reset()
+    /* territory = three dark gates: "900_a", "901_b", "902_c" (num prefix 3) */
+    sm_setname5(sm_tn_at(0u64), 57u8, 48u8, 48u8, 95u8, 97u8)   /* 900_a */
+    SM_TNL[0u64] = 5u64
+    sm_setname5(sm_tn_at(1u64), 57u8, 48u8, 49u8, 95u8, 98u8)   /* 901_b */
+    SM_TNL[1u64] = 5u64
+    sm_setname5(sm_tn_at(2u64), 57u8, 48u8, 50u8, 95u8, 99u8)   /* 902_c */
+    SM_TNL[2u64] = 5u64
+    SM_TNN = 3u64
+    /* the dark list = all three */
+    SM_DARKN = 0u64
+    sm_dark_hset_reset()
+    let mut s : u64 = 0u64
+    while s < 3u64 { SM_DARKIX[s] = s   SM_DARKOWN[s] = 0u8   sm_dark_insert(s)   sm_dark_insert_num(s)   SM_DARKN = 3u64   s = s + 1u64 }
+    /* a runner buffer: "run 900_a ; gate 901 ; done" -- names #0, numbers #1 */
+    let bp : *u8 = (&SM_SCANBUF) as *u8
+    let mut w : u64 = 0u64
+    w = sm_put(bp, w, 114u8)   w = sm_put(bp, w, 32u8)          /* "r " filler */
+    w = sm_put(bp, w, 57u8)   w = sm_put(bp, w, 48u8)   w = sm_put(bp, w, 48u8)   w = sm_put(bp, w, 95u8)   w = sm_put(bp, w, 97u8)   /* 900_a */
+    w = sm_put(bp, w, 32u8)
+    w = sm_put(bp, w, 57u8)   w = sm_put(bp, w, 48u8)   w = sm_put(bp, w, 49u8)   /* 901 */
+    w = sm_put(bp, w, 32u8)
+    sm_scan_buf(w)
+    if SM_DARKOWN[0u64] != 1u8 { return 44u64 }                 /* named -> owned */
+    if SM_DARKOWN[1u64] != 1u8 { return 44u64 }                 /* numbered -> owned */
+    if SM_DARKOWN[2u64] != 0u8 { return 44u64 }                 /* silent -> unresolved */
+    if soma_family() != 2u64 { return 44u64 }
+    if soma_orphan() != 1u64 { return 44u64 }
+    return 0u64
+}
+fn sm_put(dst: *u8, at: u64, c: u8) -> u64 { dst[at] = c   return at + 1u64 }

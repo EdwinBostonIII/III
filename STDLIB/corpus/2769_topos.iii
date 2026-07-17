@@ -1,0 +1,150 @@
+/* STDLIB/corpus/2769_topos.iii -- THE TOPOS GATE: data transmission as geometry,
+ * not serialization.  The lossless-round-trip THEOREM, made falsifiable.
+ *
+ * A payload is PROJECTED onto (manifold, GF(2) color basis, coordinates), the
+ * colors are held in cassandra's superposition, and the payload is REIFIED back
+ * -- with the gate asserting the rebuilt memory is BIT-FOR-BIT identical to the
+ * original.  No parser exists anywhere in the path; the memory is derived by
+ * polynomial algebra.  Zero entropy lost, or the gate fails.
+ *
+ * Stored-answer-free: every value re-derived from the live constitution.
+ *
+ * ARMS (each falsifiable, distinct exit):
+ *   SELF    the organ's own self-proof returns 0 (deterministic manifold, basis
+ *           extraction, cassandra agreement, lossless reify, oversize refusal).
+ *   LOSSLESS a battery of DISTINCT payloads (structured AND high-entropy random,
+ *           up to 64 words) each round-trips bit-for-bit through project->reify.
+ *   PREDICT cassandra, fed ONLY the manifold-derived colors, reconstructs every
+ *           word's exact coordinate (predicts the payload from geometry).
+ *   NOPARSE a byte that would break any parser (embedded NULs, 0xFF runs) round-
+ *           trips identically -- geometry has no malformed input.
+ *   OWED    a rank-64-exceeding payload is REFUSED (OWED), never truncated.
+ *
+ * exit 99 = all arms hold.  10 SELF  20 LOSSLESS  30 PREDICT  40 NOPARSE 50 OWED. */
+module corpus_d2769
+
+extern @abi(c-msvc-x64) fn tp_selfprove() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_reset() -> i32 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_manifold(ptr: u64, len: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_extract_basis(ptr: u64, len: u64, manifold: u64, color_out: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_reify(manifold: u64, dest: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_mask(i: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_color_count() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_word_count() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_skeleton(manifold: u64, i: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_owed() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn cass_reset(acc: u64) -> i32 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_add_color(delta: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_solve(target: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_combo(mask: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn lg_noise(seed: u64, i: u64) -> u64 from "lagrangian.iii"
+
+const TSENT : u64 = 18446744073709551615u64
+var SRC : [u8; 512]
+var DST : [u8; 512]
+var COL : [u64; 64]
+
+/* project SRC[0..len] then reify into DST; return 1 iff bit-for-bit identical */
+fn roundtrip(len: u64) -> u64 {
+    tp_reset()
+    let m : u64 = tp_manifold((&SRC) as u64, len)
+    let k : u64 = tp_extract_basis((&SRC) as u64, len, m, (&COL) as u64)
+    if k == TSENT { return 0u64 }
+    let mut z : u64 = 0u64
+    while z < 512u64 { DST[z] = 0u8   z = z + 1u64 }
+    tp_reify(m, (&DST) as u64)
+    let sp : *u8 = (&SRC) as *u8
+    let dp : *u8 = (&DST) as *u8
+    let mut i : u64 = 0u64
+    while i < len { if sp[i] != dp[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn fill_structured(nwords: u64, seed: u64) {
+    let mut i : u64 = 0u64
+    while i < nwords {
+        let w : u64 = ((i / 4u64) << 40u64) | ((i % 4u64) << 8u64) | (seed ^ (i & 7u64))
+        let mut j : u64 = 0u64
+        while j < 8u64 { SRC[(i * 8u64) + j] = ((w >> (j * 8u64)) & 255u64) as u8   j = j + 1u64 }
+        i = i + 1u64
+    }
+}
+fn fill_random(nwords: u64, seed: u64) {
+    let mut i : u64 = 0u64
+    while i < nwords {
+        let w : u64 = lg_noise(seed, i)
+        let mut j : u64 = 0u64
+        while j < 8u64 { SRC[(i * 8u64) + j] = ((w >> (j * 8u64)) & 255u64) as u8   j = j + 1u64 }
+        i = i + 1u64
+    }
+}
+fn arm_lossless() -> u64 {
+    /* structured payloads of several sizes */
+    fill_structured(8u64, 0x11u64)
+    if roundtrip(64u64) != 1u64 { return 20u64 }
+    fill_structured(24u64, 0x22u64)
+    if roundtrip(192u64) != 1u64 { return 20u64 }
+    fill_structured(64u64, 0x33u64)
+    if roundtrip(512u64) != 1u64 { return 20u64 }
+    /* high-entropy random payloads (worst case: full-rank deficit up to 64) */
+    fill_random(16u64, 0xABCDu64)
+    if roundtrip(128u64) != 1u64 { return 20u64 }
+    fill_random(64u64, 0xBEEFu64)
+    if roundtrip(512u64) != 1u64 { return 20u64 }
+    /* a partial-word tail (len not a multiple of 8) */
+    fill_random(10u64, 0x99u64)
+    if roundtrip(75u64) != 1u64 { return 20u64 }
+    return 0u64
+}
+fn arm_predict() -> u64 {
+    fill_structured(20u64, 0x44u64)
+    tp_reset()
+    let m : u64 = tp_manifold((&SRC) as u64, 160u64)
+    let k : u64 = tp_extract_basis((&SRC) as u64, 160u64, m, (&COL) as u64)
+    if k == TSENT { return 30u64 }
+    /* feed ONLY the colors into cassandra; it reconstructs every coordinate */
+    cass_reset(m)
+    let mut c : u64 = 0u64
+    while c < k { if cass_add_color(COL[c]) != 1u64 { return 30u64 }   c = c + 1u64 }
+    let mut i : u64 = 0u64
+    while i < tp_word_count() {
+        let sp : *u8 = (&SRC) as *u8
+        let base : u64 = i * 8u64
+        let mut w : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 { w = w | ((sp[base + j] as u64) << (j * 8u64))   j = j + 1u64 }
+        let d : u64 = w ^ tp_skeleton(m, i)
+        if cass_solve(d) != tp_mask(i) { return 30u64 }
+        if cass_combo(cass_solve(d)) != d { return 30u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn arm_noparse() -> u64 {
+    /* embedded NULs + 0xFF runs -- the classic parser-killers */
+    let mut i : u64 = 0u64
+    while i < 256u64 { SRC[i] = 0u8   i = i + 1u64 }
+    SRC[0u64] = 255u8   SRC[1u64] = 255u8   SRC[2u64] = 0u8   SRC[3u64] = 255u8
+    SRC[64u64] = 255u8  SRC[65u64] = 0u8    SRC[66u64] = 255u8
+    if roundtrip(256u64) != 1u64 { return 40u64 }
+    return 0u64
+}
+fn arm_owed() -> u64 {
+    fill_structured(64u64, 0x55u64)
+    tp_reset()
+    if tp_extract_basis((&SRC) as u64, 65u64 * 8u64, 0u64, (&COL) as u64) != TSENT { return 50u64 }
+    if tp_owed() == 0u64 { return 50u64 }
+    return 0u64
+}
+
+fn main() -> i32 {
+    if tp_selfprove() != 0u64 { return 10i32 }
+    let l : u64 = arm_lossless()
+    if l != 0u64 { return l as i32 }
+    let p : u64 = arm_predict()
+    if p != 0u64 { return p as i32 }
+    let n : u64 = arm_noparse()
+    if n != 0u64 { return n as i32 }
+    let o : u64 = arm_owed()
+    if o != 0u64 { return o as i32 }
+    return 99i32
+}

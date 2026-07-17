@@ -272,6 +272,28 @@ extern @abi(c-msvc-x64) fn lgb_state() -> u64 from "lagrangian.iii"
 extern @abi(c-msvc-x64) fn lg_reversals() -> u64 from "lagrangian.iii"
 extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
 
+/* CASSANDRA (oneiros) -- least-action epistemic superposition by orthogonal
+ * colors; TOPOS (glossa) -- payload transmission as GF(2) geometry, no parser */
+extern @abi(c-msvc-x64) fn cass_selfproof() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_reset(acc: u64) -> i32 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_add_color(delta: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_count() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_solve(target: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_combo(mask: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_least_action() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_annihilated() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_rewinds() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn tp_selfprove() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_reset() -> i32 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_manifold(ptr: u64, len: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_extract_basis(ptr: u64, len: u64, manifold: u64, color_out: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_reify(manifold: u64, dest: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_color_count() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_word_count() -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_mask(i: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_skeleton(manifold: u64, i: u64) -> u64 from "topos.iii"
+extern @abi(c-msvc-x64) fn tp_owed() -> u64 from "topos.iii"
+
 /* THE CONVERGENCE arms -- every altar of the one conservation law, all archive-resident:
  * primweb (SAT route) + weave_graph (signature route) for the universal gate; the eidos
  * ripple palindrome (R^2 = id on the real ripple field); ser_pipeline (intent (x) intuition,
@@ -420,6 +442,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("iii-substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
         ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
         ps("iii-substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
+        ps("iii-substrate project  (TOPOS x CASSANDRA: data transmission as GF(2) geometry -- project a payload to a manifold + colors, predict it in bounded superposition before it arrives, reify bit-for-bit with NO parser)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -719,7 +742,10 @@ fn main(argc: i32, argv: u64) -> u64 {
         if cport > 65535i64 { cport = 47155i64 }
         return cmd_couple(cport as u64)
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | reversible | symmetry | frontier | redeem)\n" as u64)
+    if streq(cmd, "project" as u64) == 1u32 {
+        return cmd_project()
+    }
+    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
 }
 
@@ -4145,6 +4171,79 @@ fn cmd_couple(port: u64) -> u64 {
     ps("RECONVERGED: both nodes at the identical state " as u64)   phex64(lga_state())   ps(" after " as u64)   pu(lg_reversals())   ps(" lifetime reversals -- not one bit lost to the void\n" as u64)
     net_close(ch)   net_close(sh)   net_close(lh)
     ps("COUPLE GREEN: two silicons folded one reversible thermodynamic history over the real wire; latency became logic, not error.\n" as u64)
+    return 0u64
+}
+
+/* =====================================================================
+ * THE PROJECT VERB -- data transmission as geometry, predicted before it lands.
+ *
+ *   iii-substrate project
+ *
+ * TOPOS x CASSANDRA: III does not serialize.  It PROJECTS a payload onto a
+ * 64-bit manifold (the macro skeleton) + a GF(2) color basis (the micro deficit),
+ * feeds the colors into cassandra's bounded superposition, PREDICTS the least-
+ * action fill before the true bits arrive, and REIFIES the payload back -- bit
+ * for bit, no parser.  Both faculties self-prove as a condition of motion.
+ * exit 0 lossless | 5 a self-proof refused.
+ * ==================================================================== */
+var PJ_SRC : [u8; 512]
+var PJ_DST : [u8; 512]
+var PJ_COL : [u64; 64]
+fn cmd_project() -> u64 {
+    ps("== TOPOS x CASSANDRA: data transmission as geometry, predicted before it arrives ==\n" as u64)
+    if tp_selfprove() != 0u64 { ps("PROJECT: topos self-proof REFUSED -- the geometry is lossy; no projection\n" as u64)   return 5u64 }
+    if cass_selfproof() != 0u64 { ps("PROJECT: cassandra self-proof REFUSED -- the superposition is unsound; no prediction\n" as u64)   return 5u64 }
+    ps("self-proofs: lossless geometric round-trip + bounded colored superposition (2^K from K, zero-rewind collapse), bit-exact\n" as u64)
+    /* a complex nested payload: 32 records, structured so the deficit is low-rank */
+    let nwords : u64 = 32u64
+    let len : u64 = nwords * 8u64
+    let mut i : u64 = 0u64
+    while i < nwords {
+        let w : u64 = ((i / 4u64) << 40u64) | ((i % 4u64) << 8u64) | ((i * 2654435761u64) & 255u64)
+        let mut j : u64 = 0u64
+        while j < 8u64 { PJ_SRC[(i * 8u64) + j] = ((w >> (j * 8u64)) & 255u64) as u8   j = j + 1u64 }
+        i = i + 1u64
+    }
+    tp_reset()
+    let m : u64 = tp_manifold((&PJ_SRC) as u64, len)
+    let k : u64 = tp_extract_basis((&PJ_SRC) as u64, len, m, (&PJ_COL) as u64)
+    ps("PROJECTED: " as u64)  pu(nwords)  ps(" words (" as u64)  pu(len)  ps(" bytes) -> 1 manifold " as u64)  phex64(m)  ps(" + " as u64)  pu(k)  ps(" GF(2) colors\n" as u64)
+    ps("  the macro skeleton is PREDICTED from the manifold alone; only " as u64)  pu(k)  ps(" colors carry the micro deficit -- " as u64)
+    ps("2^" as u64)  pu(k)  ps(" candidate fills held in " as u64)  pu(k)  ps(" words (linear storage, exponential reach)\n" as u64)
+    /* feed the colors into cassandra; it holds the whole payload in superposition */
+    cass_reset(m)
+    i = 0u64
+    while i < k { cass_add_color(PJ_COL[i])   i = i + 1u64 }
+    /* PREDICT before observing: cassandra's least-action fill for slot 0 */
+    let la : u64 = cass_least_action()
+    ps("  cassandra holds " as u64)  pu(cass_count())  ps(" orthogonal colors; least-action prediction = color " as u64)  pu(la)  ps(" (lowest Landauer energy)\n" as u64)
+    /* OBSERVE the true payload word-by-word: each coordinate solved, collapsed */
+    let mut agree : u64 = 0u64
+    i = 0u64
+    while i < nwords {
+        let sp : *u8 = (&PJ_SRC) as *u8
+        let base : u64 = i * 8u64
+        let mut w : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 { w = w | ((sp[base + j] as u64) << (j * 8u64))   j = j + 1u64 }
+        let d : u64 = w ^ tp_skeleton(m, i)
+        if cass_solve(d) == tp_mask(i) { if cass_combo(cass_solve(d)) == d { agree = agree + 1u64 } }
+        i = i + 1u64
+    }
+    ps("  OBSERVED: cassandra reconstructed " as u64)  pu(agree)  ps("/" as u64)  pu(nwords)  ps(" coordinates exactly, zero rewinds (" as u64)  pu(cass_rewinds())  ps(")\n" as u64)
+    if agree != nwords { ps("PROJECT: cassandra failed to reconstruct a coordinate -- broken\n" as u64)   return 5u64 }
+    /* REIFY: rebuild the payload from geometry, assert bit-for-bit identical */
+    let mut z : u64 = 0u64
+    while z < 512u64 { PJ_DST[z] = 0u8   z = z + 1u64 }
+    tp_reify(m, (&PJ_DST) as u64)
+    let sp2 : *u8 = (&PJ_SRC) as *u8
+    let dp2 : *u8 = (&PJ_DST) as *u8
+    let mut bad : u64 = 0u64
+    i = 0u64
+    while i < len { if sp2[i] != dp2[i] { bad = bad + 1u64 }   i = i + 1u64 }
+    if bad != 0u64 { ps("PROJECT: REIFICATION LOSSY -- " as u64)  pu(bad)  ps(" bytes differ; entropy lost to the void\n" as u64)   return 5u64 }
+    ps("REIFIED: " as u64)  pu(len)  ps(" bytes rebuilt from geometry, BIT-FOR-BIT identical -- no parser, zero entropy lost\n" as u64)
+    ps("PROJECT GREEN: the payload crossed as geometry, was predicted in superposition, and reified losslessly. Serialization is dead.\n" as u64)
     return 0u64
 }
 

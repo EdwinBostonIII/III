@@ -1,0 +1,475 @@
+/* COMPILER/BOOT/doxa_main.iii -- iii-doxa: THE BELIEF ORGAN's tool face.
+ *
+ *   iii-doxa prove                     the self-proof alone (every law, every falsifier)
+ *   iii-doxa status    [dirs]          the two books, the ledger, the certificates
+ *   iii-doxa drip N    [dirs]          open up to N stakes on the audit's own schedule;
+ *                                      write the ranked recommendation (drip_order.txt)
+ *   iii-doxa reconcile [dirs]          settle stakes against the heart's DERIVED evidence
+ *   iii-doxa dream K SEED [dirs]       a reversible excursion: zero residue PROVEN, only
+ *                                      certificates retained (conjectures unadjudicated)
+ *   iii-doxa loop N    [dirs]          the whole live cycle: predict -> summon the heart
+ *                                      (iii-kardia audit N) -> reconcile -> calibration
+ *
+ *   [dirs] = [--ledger D] (default STDLIB/build/doxa)
+ *            [--heart  H] (default STDLIB/build/kardia)
+ *
+ * EVERY verb self-proves first and REFUSES to run on a failed arm (exit 9) --
+ * verification lives INSIDE (the kardia pattern: no gate, no KAT, no standing
+ * arm).  The evidence that settles stakes is written by iii-kardia into ITS
+ * ledger -- machinery this organ cannot parameterize.  THE HEART AUDITS THE
+ * MIND.  Requires CWD = the III root.
+ *
+ * exit: 0 coherent | 1 books split (conservation) | 2 env | 3 usage |
+ *       4 a law refused live | 9 SELF-REFUSED */
+module doxa_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn dx_selfprove() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_reset() -> i32 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_ingest_registry() -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_ingest_heart(dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_ledger_load(dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_make_dir(path: u64) -> i32 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_k_count() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_k_name_len(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_k_name_byte(i: u64, j: u64) -> u8 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_jur(cell: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_jur_count() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_ctx_key(cell: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_sched_next(after: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_open_pred(cell: u64, dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_reconcile(dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_rank_build() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_rank_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_write_order(dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_unlearn(seq: u64, dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_dream(k: u64, seed: u64, dir: u64, sabotage: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_dream_found(i_back: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_state_fold() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_conserve() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_calib(p: u64, o: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_key_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_grn_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_red_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_ern_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_def_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_bal_key(key: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_width_allowed(key: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_open_at(key: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxp_open_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxg_n() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxg_kind_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxg_a_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxg_b_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_ecount() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_malformed() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_semrefused() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_jref() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_fref() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_sref() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_wref() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_hseq() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_hunk() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_hmalf() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_rpin() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn doxa_set_id() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+
+var MCMD : [u8; 256]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn pi(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)   pu((0i64 - v) as u64) } else { pu(v as u64) }
+    return 1u32
+}
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+    }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if p[i] >= 48u8 { if p[i] <= 57u8 { v = (v * 10u64) + ((p[i] - 48u8) as u64) } }   i = i + 1u64 }
+    return v
+}
+fn pname(i: u64) -> u32 {
+    let n : u64 = dx_k_name_len(i)
+    let mut j : u64 = 0u64
+    while j < n { putchar(dx_k_name_byte(i, j) as i32)   j = j + 1u64 }
+    return 1u32
+}
+fn cput(at: u64, s: u64) -> u64 {
+    let dst : *u8 = (&MCMD) as *u8
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while sp[i] != 0u8 { dst[a] = sp[i]   a = a + 1u64   i = i + 1u64 }
+    dst[a] = 0u8
+    return a
+}
+fn cputu(at: u64, v: u64) -> u64 {
+    let dst : *u8 = (&MCMD) as *u8
+    if v >= 10u64 {
+        let a : u64 = cputu(at, v / 10u64)
+        dst[a] = (48u64 + (v % 10u64)) as u8
+        dst[a + 1u64] = 0u8
+        return a + 1u64
+    }
+    dst[at] = (48u64 + v) as u8
+    dst[at + 1u64] = 0u8
+    return at + 1u64
+}
+fn usage() -> u64 {
+    ps("iii-doxa -- THE BELIEF ORGAN: two books, never blurred; the heart audits the mind\n\n" as u64)
+    ps("  iii-doxa prove                     the self-proof alone (every law, every falsifier)\n" as u64)
+    ps("  iii-doxa status    [dirs]          the two books, the ledger, the certificates\n" as u64)
+    ps("  iii-doxa drip N    [dirs]          open up to N stakes on the audit's own schedule\n" as u64)
+    ps("  iii-doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
+    ps("  iii-doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
+    ps("  iii-doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
+    ps("                                     bit-identity proven; dangling settlements refused\n" as u64)
+    ps("  iii-doxa loop N    [dirs]          predict -> summon the heart -> reconcile\n\n" as u64)
+    ps("  [dirs] = [--ledger D] (default STDLIB/build/doxa) [--heart H] (default STDLIB/build/kardia)\n" as u64)
+    ps("every verb SELF-PROVES first and refuses to run on a failed arm (exit 9).\n" as u64)
+    ps("the MODAL book asserts (stakes, priced in bits); the STATISTICAL book only prefers.\n" as u64)
+    ps("exit: 0 coherent | 1 books split | 2 env | 3 usage | 4 law refused live | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn print_certs() -> u32 {
+    let n : u64 = dxg_n()
+    ps("  certificates (the FRONTIER discipline): " as u64)  pu(n)  putchar(10i32)
+    let mut i : u64 = 0u64
+    let mut shown : u64 = 0u64
+    while i < n {
+        if shown < 8u64 {
+            let k : u64 = dxg_kind_at(i)
+            ps("    #" as u64)  pu(i)  ps(" " as u64)
+            if k == 1u64 { ps("OVERWIDTH (>64 joint worlds refused; held=" as u64)  pu(dxg_a_at(i))  ps(")" as u64) }
+            if k == 2u64 { ps("UNDECIDABLE-HERE (no question exists; live-mask=" as u64)  pu(dxg_a_at(i))  ps(")" as u64) }
+            if k == 3u64 { ps("FOREIGN-EVIDENCE refused (cell " as u64)  pu(dxg_a_at(i))  ps(", mode " as u64)  pu(dxg_b_at(i))  ps(")" as u64) }
+            if k == 4u64 { ps("OUT-OF-JURISDICTION stake refused (cell " as u64)  pu(dxg_a_at(i))  ps(")" as u64) }
+            if k == 5u64 { ps("CONJECTURE ctx " as u64)  phex(dxg_a_at(i))  ps(" ~ ctx " as u64)  phex(dxg_b_at(i))  ps("  [not adjudicated]" as u64) }
+            if k == 6u64 { ps("SOLVENCY hold (ctx " as u64)  phex(dxg_a_at(i))  ps(", cell " as u64)  pu(dxg_b_at(i))  ps(")" as u64) }
+            if k == 7u64 { ps("DANGLING settlement (stake seq " as u64)  pu(dxg_a_at(i))  ps(" blocked by obsv seq " as u64)  pu(dxg_b_at(i))  ps(")" as u64) }
+            putchar(10i32)
+            shown = shown + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn print_books() -> u32 {
+    ps("  contexts (the STATISTICAL book -- prefers, never asserts):\n" as u64)
+    let n : u64 = dxc_n()
+    let mut i : u64 = 0u64
+    while i < n {
+        let key : u64 = dxc_key_at(i)
+        let g : u64 = dxc_grn_at(i)
+        let r : u64 = dxc_red_at(i)
+        if g + r > 0u64 {
+            ps("    ctx " as u64)  phex(key)
+            ps("  green " as u64)  pu(g)
+            ps("  red " as u64)  pu(r)
+            ps("  earned " as u64)  pu(dxc_ern_at(i))
+            ps("  deficit " as u64)  pu(dxc_def_at(i))
+            ps("  balance " as u64)  pi(dxc_bal_key(key))
+            ps("  width " as u64)  pu(dx_width_allowed(key))
+            putchar(10i32)
+        }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn print_calib() -> u32 {
+    let gg : u64 = dx_calib(0u64, 0u64)
+    let gr : u64 = dx_calib(0u64, 1u64)
+    let rg : u64 = dx_calib(1u64, 0u64)
+    let rr : u64 = dx_calib(1u64, 1u64)
+    ps("  calibration (settled stakes, exact):\n" as u64)
+    ps("    predicted green -> observed green " as u64)  pu(gg)  ps(", observed red " as u64)  pu(gr)  putchar(10i32)
+    ps("    predicted red   -> observed green " as u64)  pu(rg)  ps(", observed red " as u64)  pu(rr)  putchar(10i32)
+    ps("    earned " as u64)  pu(gg + rr)  ps(" bits, deficit " as u64)  pu(gr + rg)  ps(" bits\n" as u64)
+    return 1u32
+}
+fn print_counts() -> u32 {
+    ps("  mind root (fold of the live books)  : " as u64)  phex(dx_state_fold())  putchar(10i32)
+    ps("  doxa set id (constitution-pinned)   : " as u64)  phex(doxa_set_id())  putchar(10i32)
+    ps("  registry pin                        : " as u64)  pu(dx_rpin())  putchar(10i32)
+    ps("  cells " as u64)  pu(dx_k_count())
+    ps("  jurisdiction " as u64)  pu(dx_jur_count())
+    ps("  open stakes " as u64)  pu(dxp_open_n())
+    ps("  events " as u64)  pu(dx_ecount())
+    ps("  heart-seq " as u64)  pu(dx_hseq())
+    putchar(10i32)
+    ps("  refusals: jurisdiction " as u64)  pu(dx_jref())
+    ps("  foreign " as u64)  pu(dx_fref())
+    ps("  solvency " as u64)  pu(dx_sref())
+    ps("  overwidth " as u64)  pu(dx_wref())
+    ps("  malformed " as u64)  pu(dx_malformed())
+    ps("  sem-refused " as u64)  pu(dx_semrefused())
+    ps("  heart-malformed " as u64)  pu(dx_hmalf())
+    ps("  heart-unknown " as u64)  pu(dx_hunk())
+    putchar(10i32)
+    let cv : u64 = dx_conserve()
+    if cv == 0u64 { ps("  CONSERVATION HOLDS (events == rows, two-path)\n" as u64) } else {
+        ps("  CONSERVATION SPLIT arm " as u64)  pu(cv)  ps(" -- the books disagree with their own history\n" as u64)
+    }
+    return 1u32
+}
+/* registry -> heart -> persisted beliefs.  0 ok | 1 registry env | 2 stale log */
+fn load_all(doxadir: u64, heartdir: u64) -> u64 {
+    let r : i64 = dx_ingest_registry()
+    if r < 0i64 { return 1u64 }
+    dx_ingest_heart(heartdir)
+    let l : i64 = dx_ledger_load(doxadir)
+    if l == -2i64 { return 2u64 }
+    return 0u64
+}
+fn do_drip(n: u64, doxadir: u64) -> u64 {
+    ps("== THE DRIP: stakes opened on the audit's own schedule (the mind never orders its grader) ==\n" as u64)
+    let mut opened : u64 = 0u64
+    let mut hold : u64 = 0u64
+    let mut cell : u64 = dx_sched_next(18446744073709551615u64)
+    while cell != 18446744073709551615u64 {
+        if opened >= n { cell = 18446744073709551615u64 } else {
+            let key : u64 = dx_ctx_key(cell)
+            /* the question economy applied to the drip itself: a stake whose
+             * solvency refusal is already derivable eliminates nothing -- skip
+             * it silently (counted) instead of asking a doomed question; the
+             * door still certificates any genuine refusal it is asked. */
+            let oc : u64 = dx_open_at(key)
+            let wc : u64 = dx_width_allowed(key)
+            if oc >= wc {
+                hold = hold + 1u64
+                let nxt0 : u64 = dx_sched_next(cell)
+                cell = nxt0
+            } else {
+            let s : i64 = dx_open_pred(cell, doxadir)
+            if s > 0i64 {
+                ps("  stake " as u64)  pname(cell)
+                ps("  ctx " as u64)  phex(key)
+                let r : u64 = dxc_n()
+                ps("  predicted " as u64)
+                /* the prediction just recorded: read it back from the calib-free
+                 * path -- red iff the context's tallies said red>green at open */
+                let mut isred : u64 = 0u64
+                let mut ii : u64 = 0u64
+                while ii < r { if dxc_key_at(ii) == key { if dxc_red_at(ii) > dxc_grn_at(ii) { isred = 1u64 }   ii = r } else { ii = ii + 1u64 } }
+                if isred == 1u64 { ps("RED" as u64) } else { ps("GREEN" as u64) }
+                ps("  stake 1 bit  (seq " as u64)  pu(s as u64)  ps(")\n" as u64)
+                opened = opened + 1u64
+            } else {
+                if s == -3i64 { hold = hold + 1u64 }
+            }
+            let nxt : u64 = dx_sched_next(cell)
+            cell = nxt
+            }
+        }
+    }
+    ps("  opened " as u64)  pu(opened)
+    ps(" stakes; solvency holds " as u64)  pu(hold)
+    ps(" (width is EARNED; insolvent contexts are reflexes)\n" as u64)
+    let rn : u64 = dx_rank_build()
+    let wrote : i64 = dx_write_order(doxadir)
+    ps("  ranked recommendation written: " as u64)  pi(wrote)  ps(" cells -> drip_order.txt (red-preference first)\n" as u64)
+    ps("  top of the lattice (context tuple + exact counts -- the provenance, not just a score):\n" as u64)
+    let mut i : u64 = 0u64
+    while i < rn { if i < 8u64 {
+        let c2 : u64 = dx_rank_at(i)
+        let k2 : u64 = dx_ctx_key(c2)
+        ps("    #" as u64)  pu(i)  ps(" " as u64)  pname(c2)
+        ps("  ctx " as u64)  phex(k2)
+        let mut g2 : u64 = 0u64
+        let mut r2 : u64 = 0u64
+        let mut jj : u64 = 0u64
+        let nn : u64 = dxc_n()
+        while jj < nn { if dxc_key_at(jj) == k2 { g2 = dxc_grn_at(jj)   r2 = dxc_red_at(jj)   jj = nn } else { jj = jj + 1u64 } }
+        ps("  green " as u64)  pu(g2)  ps(" red " as u64)  pu(r2)
+        ps("  balance " as u64)  pi(dxc_bal_key(k2))
+        putchar(10i32)
+        i = i + 1u64
+    } else { i = rn } }
+    return opened
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    /* THE CONDITION OF MOTION: prove the laws before touching any state */
+    let sp : u64 = dx_selfprove()
+    if sp != 0u64 {
+        ps("THE MIND REFUSES ITSELF: self-proof arm " as u64)  pu(sp)  ps(" failed -- no verb runs over broken law\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    let mut doxadir : u64 = "STDLIB/build/doxa" as u64
+    let mut heartdir : u64 = "STDLIB/build/kardia" as u64
+    let mut n1 : u64 = 8u64
+    let mut n2 : u64 = 0u64
+    let mut nseen : u64 = 0u64
+    let mut ai : u64 = 2u64
+    while (ai as i64) < (argc as i64) {
+        if streq(av[ai], "--ledger" as u64) == 1u32 {
+            if (ai as i64) + 1i64 < (argc as i64) { doxadir = av[ai + 1u64]   ai = ai + 2u64 } else { return usage() }
+        } else { if streq(av[ai], "--heart" as u64) == 1u32 {
+            if (ai as i64) + 1i64 < (argc as i64) { heartdir = av[ai + 1u64]   ai = ai + 2u64 } else { return usage() }
+        } else {
+            if nseen == 0u64 { n1 = parse_u64(av[ai])   nseen = 1u64 } else { n2 = parse_u64(av[ai])   nseen = 2u64 }
+            ai = ai + 1u64
+        } }
+    }
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE MIND PROVEN: citizen law (constitution + cassandra), the TYPE LAW (assert only from\n" as u64)
+        ps("the modal book; statistics may only prefer), the FOREIGN law (only DERIVED evidence\n" as u64)
+        ps("settles), the CONSERVATION identity (events == rows, shadow refold == live fold), the\n" as u64)
+        ps("SOLVENCY law (width earned, floor 1), the SPECULATION bound (65th color refused), the\n" as u64)
+        ps("DREAM law (zero residue proven; sabotage detected), the RIGHT TO BE FORGOTTEN (tombstone\n" as u64)
+        ps("fold-subtraction, bit-identical; dangling settlements refused), the QUESTION economy\n" as u64)
+        ps("(exhaustive optimality; empty set = certified undecidable), the log's teeth -- every arm\n" as u64)
+        ps("re-derived THIS invocation, before any verb may move.  No gate, no KAT: this IS the law.\n" as u64)
+        return 0u64
+    }
+    dx_reset()
+    dx_make_dir(doxadir)
+    let lr : u64 = load_all(doxadir, heartdir)
+    if lr == 1u64 { ps("iii-doxa: env -- registry unreadable (run from the III root)\n" as u64)  return 2u64 }
+    if lr == 2u64 {
+        ps("iii-doxa: the persisted beliefs at " as u64)  ps(doxadir)
+        ps("/doxa.log were written under a DIFFERENT registry pin -- refused whole (stale).\n" as u64)
+        ps("move or remove that file to begin fresh beliefs for this registry.\n" as u64)
+        return 2u64
+    }
+    if streq(cmd, "status" as u64) == 1u32 {
+        ps("== THE TWO BOOKS (modal asserts; statistical prefers; never blurred) ==\n" as u64)
+        print_counts()
+        print_books()
+        print_calib()
+        print_certs()
+        let fnd : u64 = dx_dream_found(0u64)
+        if fnd != 0u64 {
+            ps("  latest dream conjecture: ctx " as u64)  phex(fnd >> 32u64)
+            ps(" ~ ctx " as u64)  phex(fnd & 4294967295u64)
+            ps("  [not adjudicated -- a conjecture is never a fact]\n" as u64)
+        }
+        if dx_conserve() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "drip" as u64) == 1u32 {
+        if dx_hseq() == 0u64 {
+            ps("iii-doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii-kardia birth` first\n" as u64)
+            return 2u64
+        }
+        do_drip(n1, doxadir)
+        print_counts()
+        if dx_conserve() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "reconcile" as u64) == 1u32 {
+        ps("== THE RECONCILIATION: stakes settle against DERIVED evidence only (the foreign law) ==\n" as u64)
+        let settled : u64 = dx_reconcile(doxadir)
+        ps("  settled " as u64)  pu(settled)  ps(" stakes\n" as u64)
+        print_calib()
+        print_books()
+        print_counts()
+        if dx_conserve() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    if streq(cmd, "dream" as u64) == 1u32 {
+        let mut k : u64 = n1
+        if nseen < 1u64 { k = 256u64 }
+        let mut seed : u64 = n2
+        if nseen < 2u64 { seed = 12345u64 }
+        ps("== THE DREAM: a reversible excursion (Bennett) -- free by proof, not by promise ==\n" as u64)
+        let dr : u64 = dx_dream(k, seed, doxadir, 0u64)
+        if dr != 0u64 {
+            ps("  DREAM REFUSED (arm " as u64)  pu(dr)  ps(") -- nothing retained\n" as u64)
+            return 4u64
+        }
+        ps("  walked " as u64)  pu(k)
+        ps(" pulses (seed " as u64)  pu(seed)
+        ps("), rewound EXACTLY, books' fold BIT-IDENTICAL: zero residue PROVEN\n" as u64)
+        let fnd : u64 = dx_dream_found(0u64)
+        if fnd != 0u64 {
+            ps("  retained: ONE conjecture certificate -- ctx " as u64)  phex(fnd >> 32u64)
+            ps(" ~ ctx " as u64)  phex(fnd & 4294967295u64)
+            ps("  [not adjudicated]\n" as u64)
+        } else {
+            ps("  retained: nothing (no conjecture met the pre-stated criterion this dream)\n" as u64)
+        }
+        return 0u64
+    }
+    if streq(cmd, "unlearn" as u64) == 1u32 {
+        if nseen < 1u64 { return usage() }
+        ps("== THE RIGHT TO BE FORGOTTEN: tombstone fold-subtraction, proven bit-identical in-door ==\n" as u64)
+        let fbefore : u64 = dx_state_fold()
+        ps("  fold before : " as u64)  phex(fbefore)  putchar(10i32)
+        let ur : u64 = dx_unlearn(n1, doxadir)
+        if ur == 0u64 {
+            ps("  event seq " as u64)  pu(n1)
+            ps(" FORGOTTEN -- live books == independent shadow refold of the log without it\n" as u64)
+            ps("  fold after  : " as u64)  phex(dx_state_fold())  putchar(10i32)
+            print_books()
+            print_counts()
+            if dx_conserve() != 0u64 { return 1u64 }
+            return 0u64
+        }
+        if ur == 14u64 {
+            ps("  REFUSED (dangling settlement): forget the outcome before the bet -- certificated\n" as u64)
+            return 4u64
+        }
+        ps("  REFUSED (arm " as u64)  pu(ur)  ps(": bad seq / already forgotten / a tombstone)\n" as u64)
+        return 4u64
+    }
+    if streq(cmd, "loop" as u64) == 1u32 {
+        if dx_hseq() == 0u64 {
+            ps("iii-doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii-kardia birth` first\n" as u64)
+            return 2u64
+        }
+        let probe : u64 = fopen("COMPILED/iii-kardia.exe" as u64, "rb" as u64)
+        if probe == 0u64 {
+            ps("iii-doxa: COMPILED/iii-kardia.exe absent -- the heart must exist for the loop\n" as u64)
+            return 2u64
+        }
+        fclose(probe)
+        ps("== THE LIVE LOOP: predict -> the heart beats (sovereign) -> reconcile ==\n" as u64)
+        do_drip(n1, doxadir)
+        ps("-- summoning the heart: iii-kardia audit " as u64)  pu(n1)  ps(" --\n" as u64)
+        let mut at : u64 = cput(0u64, "COMPILED/iii-kardia.exe audit " as u64)
+        at = cputu(at, n1)
+        /* cmd.exe refuses a forward-slash PROGRAM word: backslash the path part
+         * (everything before the first space) */
+        let mp : *u8 = (&MCMD) as *u8
+        let mut fx : u64 = 0u64
+        while mp[fx] != 0u8 { if mp[fx] == 32u8 { fx = at } else { if mp[fx] == 47u8 { mp[fx] = 92u8 }   fx = fx + 1u64 } }
+        let hrc : i32 = system((&MCMD) as u64)
+        ps("-- the heart returned " as u64)  pi(hrc as i64)  ps(" (its verdicts are its own) --\n" as u64)
+        dx_ingest_heart(heartdir)
+        let settled : u64 = dx_reconcile(doxadir)
+        ps("  settled " as u64)  pu(settled)  ps(" stakes against the heart's DERIVED evidence\n" as u64)
+        print_calib()
+        print_books()
+        print_counts()
+        if dx_conserve() != 0u64 { return 1u64 }
+        return 0u64
+    }
+    return usage()
+}

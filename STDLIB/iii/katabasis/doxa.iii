@@ -1,0 +1,1478 @@
+/* STDLIB/iii/katabasis/doxa.iii -- THE BELIEF ORGAN: a type system for belief
+ * enforced as law.  The mind keeps TWO BOOKS it is constitutionally forbidden
+ * to blur:
+ *
+ *   THE MODAL BOOK        what is POSSIBLE and askable -- here, the heart's own
+ *                         jurisdiction (adopted, runnable, evidence-reachable
+ *                         cells; joint speculation held as cassandra colors,
+ *                         hard-capped at 64).  Only this book may be ASSERTED
+ *                         from, and every assertion is a STAKE.
+ *   THE STATISTICAL BOOK  what has been OBSERVED -- exact integer tallies per
+ *                         context, folded from the event log.  This book may
+ *                         only PREFER (order, rank, recommend).  A statistical
+ *                         preference promoted to a modal assertion is the
+ *                         definition of a hallucination; here that promotion is
+ *                         a REFUSED, COUNTED, CERTIFICATED door.
+ *
+ * THE LEDGER: every assertion stakes bits on a per-context account.  A correct
+ * collapse EARNS the stake; a wrong collapse pays it as DEFICIT (the ANASTASIS
+ * stance: the bits are exact and real, the joules symbolic).  THE SOLVENCY
+ * LAW: a context's simultaneous open stakes are bounded by its balance (floor
+ * 1, never 0 -- chronic mispredictors become reflexes, never corpses;
+ * imagination is EARNED).
+ *
+ * THE FOREIGN LAW (kardia's monotone law, inherited): only a DERIVED record --
+ * the heart re-ran the claim and saw the exit itself -- may settle a stake.
+ * ADOPTED / foreign claims may seed standing but can never reconcile an
+ * assertion.  Refused, counted, certificated.
+ *
+ * THE DREAM LAW (Bennett, made auditable): a dream is a reversible excursion
+ * over the proven bijection (aether/entangle over aether/admix).  The walk is
+ * exactly rewound and the books' fold is proven BIT-IDENTICAL before anything
+ * is retained; the only bits kept are the certificate (a conjecture, always
+ * printed unadjudicated).  A sabotaged rewind is DETECTED and refused -- the
+ * zero-cost claim has teeth.
+ *
+ * THE RIGHT TO BE FORGOTTEN: unlearning = a TOMBSTONE fold-subtraction, proven
+ * bit-identical inside the door against an independent shadow refold of the
+ * log without the event.  A settlement may be forgotten; a stake with a live
+ * settlement may NOT (the dangling-settlement refusal) -- forget the outcome
+ * first, then the bet.
+ *
+ * THE QUESTION ECONOMY: over an enumerated world-set the worst-case
+ * elimination of every available question is EXACTLY computable; the best
+ * question is a theorem (proven by exhaustion in the self-proof).  An empty
+ * question set is UNDECIDABLE-HERE, certificated -- the Goedel/halting answer:
+ * stranded-in-doxa is a certified first-class state, never a guess.
+ *
+ * THE CITIZEN LAW: the mind exists only under a coherent constitution --
+ * autognosis_root()==0 refuses the organ; cassandra's own self-proof is
+ * re-proven as a condition of THIS organ's motion (the mind proves its
+ * imagination's laws before it may believe anything).
+ *
+ * NO GATE, NO KAT, NO STANDING ARM -- like the heart itself: verification
+ * lives INSIDE (dx_selfprove at every invocation: every law a positive arm AND
+ * a negative control, incl. the two-path shadow refold and the events-vs-rows
+ * conservation identity) and in the LIVE loop (predict -> the heart beats ->
+ * reconcile), where the evidence is written by machinery this organ cannot
+ * parameterize.  THE HEART AUDITS THE MIND.
+ *
+ * NIH: composes oneiros/cassandra (colored superposition), aether/entangle +
+ * aether/admix (the proven bijection), katabasis/autognosis (constitution),
+ * numera/idfold (the identity seat), aether/lagrangian (lg_noise/lg_action),
+ * msvcrt.  Hexad: kind_essence.  Ring R0. */
+module katabasis_doxa
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fputs(s: u64, stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _mkdir(path: u64) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn cass_selfproof() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_reset(acc: u64) -> i32 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_add_color(delta: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_count() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_refused_full() -> u64 from "cassandra.iii"
+
+extern @abi(c-msvc-x64) fn entangle_init() -> u32 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_pulse(state: u64, action: u64) -> u64 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_unpulse(next: u64, action: u64) -> u64 from "entangle.iii"
+
+extern @abi(c-msvc-x64) fn adx_ready() -> u8 from "admix.iii"
+
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_prime() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+extern @abi(c-msvc-x64) fn lg_noise(seed: u64, i: u64) -> u64 from "lagrangian.iii"
+extern @abi(c-msvc-x64) fn lg_action(d: u64) -> u64 from "lagrangian.iii"
+
+const DX_EMAX : u64 = 16384u64
+const DX_CROW : u64 = 256u64             /* context rows per book half           */
+const DX_PROW : u64 = 4096u64            /* stake rows per half                  */
+const DX_GROW : u64 = 256u64             /* certificate rows per half            */
+const DX_KMAX : u64 = 4096u64            /* proprioceptor cells                  */
+const DX_NLEN : u64 = 48u64
+const DX_SENT : u64 = 18446744073709551615u64
+
+/* event kinds */
+const DXK_PRED  : u64 = 1u64
+const DXK_OBSV  : u64 = 2u64
+const DXK_CERT  : u64 = 3u64
+const DXK_DREAM : u64 = 4u64
+const DXK_TOMB  : u64 = 6u64
+/* certificate kinds (the FRONTIER discipline: every refusal named, never silent) */
+const DXC_OVERWIDTH : u64 = 1u64
+const DXC_UNDECIDE  : u64 = 2u64
+const DXC_FOREIGN   : u64 = 3u64
+const DXC_JURIS     : u64 = 4u64
+const DXC_CONJ      : u64 = 5u64
+const DXC_SOLVENCY  : u64 = 6u64
+const DXC_DANGLING  : u64 = 7u64
+
+/* ==================== the event log (the waist) ==================== */
+var DXE_KIND : [u64; 16384]
+var DXE_A : [u64; 16384]
+var DXE_B : [u64; 16384]
+var DXE_C : [u64; 16384]
+var DXE_D : [u64; 16384]
+var DXE_TOMB : [u8; 16384]
+var DXE_N : u64 = 0u64
+var DX_EFULL : u64 = 0u64                /* appends refused at capacity (named envelope) */
+var DX_MALF : u64 = 0u64                 /* malformed ledger lines, counted      */
+var DX_SEMV : u64 = 0u64                 /* semantically refused events (log teeth) */
+var DX_STALE : u64 = 0u64                /* ledger written under another registry pin */
+
+/* ==================== the books (live half s=0, shadow half s=1) ==================== */
+var DXC_KEY : [u64; 512]
+var DXC_GRN : [u64; 512]
+var DXC_RED : [u64; 512]
+var DXC_ERN : [u64; 512]
+var DXC_DEF : [u64; 512]
+var DXC_NN  : [u64; 2]
+var DX_CFULL : u64 = 0u64
+
+var DXP_CELL : [u64; 8192]
+var DXP_CTX  : [u64; 8192]
+var DXP_PRD  : [u64; 8192]
+var DXP_HSQ  : [u64; 8192]
+var DXP_STK  : [u64; 8192]
+var DXP_OPN  : [u8; 8192]
+var DXP_PSEQ : [u64; 8192]
+var DXP_NN   : [u64; 2]
+var DX_PFULL : u64 = 0u64
+
+var DXG_KIND : [u64; 512]
+var DXG_A    : [u64; 512]
+var DXG_B    : [u64; 512]
+var DXG_SEQ  : [u64; 512]
+var DXG_NN   : [u64; 2]
+var DX_GFULL : u64 = 0u64
+
+/* live-law refusal counters (observability; certificated refusals also event) */
+var DX_JREF : u64 = 0u64
+var DX_FREF : u64 = 0u64
+var DX_SREF : u64 = 0u64
+var DX_WREF : u64 = 0u64
+var DX_DUP  : u64 = 0u64
+var DX_NOOPEN : u64 = 0u64
+
+/* ==================== the proprioceptor cell table ==================== */
+var DXN_NAMES : [u8; 196608]             /* DX_KMAX x DX_NLEN                    */
+var DXN_NL   : [u64; 4096]
+var DXN_CLS  : [u8; 4096]
+var DXN_EXP  : [u64; 4096]
+var DXN_NEG  : [u8; 4096]
+var DXN_HASA : [u8; 4096]                /* an ADOPTED record exists             */
+var DXN_DEXIT : [u64; 4096]              /* newest DERIVED exit                  */
+var DXN_DSEQ : [u64; 4096]               /* newest DERIVED heart-seq (0 = none)  */
+var DXN_N    : u64 = 0u64
+var DX_HSEQ  : u64 = 0u64                /* the heart ledger's highest seq seen  */
+var DX_HUNK  : u64 = 0u64                /* heart lines naming unknown cells     */
+var DX_HMALF : u64 = 0u64                /* malformed heart lines, counted       */
+var DX_RPIN  : u64 = 0u64                /* the registry pin (idfold over its bytes) */
+var DX_HDRSEEN : u64 = 0u64              /* the persisted log's header handled   */
+
+/* ==================== scratch (module scope -- the FFI/organ idiom) ==================== */
+var DXF_BUF : [u8; 1048576]
+var DXF_LEN : u64 = 0u64
+var DX_PATH : [u8; 512]
+var DX_LBUF : [u8; 256]
+var DXD_ACT : [u64; 4096]                /* dream action record (the exact rewind) */
+var DXR_ORD : [u64; 4096]                /* rank order scratch                   */
+var DXR_N   : u64 = 0u64
+var DXQ_SET : [u64; 64]                  /* question masks scratch               */
+
+fn dx_reset() -> i32 @export {
+    DXE_N = 0u64
+    DX_EFULL = 0u64
+    DX_MALF = 0u64
+    DX_SEMV = 0u64
+    DX_STALE = 0u64
+    DXC_NN[0u64] = 0u64
+    DXC_NN[1u64] = 0u64
+    DX_CFULL = 0u64
+    DXP_NN[0u64] = 0u64
+    DXP_NN[1u64] = 0u64
+    DX_PFULL = 0u64
+    DXG_NN[0u64] = 0u64
+    DXG_NN[1u64] = 0u64
+    DX_GFULL = 0u64
+    DX_JREF = 0u64
+    DX_FREF = 0u64
+    DX_SREF = 0u64
+    DX_WREF = 0u64
+    DX_DUP = 0u64
+    DX_NOOPEN = 0u64
+    DXN_N = 0u64
+    DX_HSEQ = 0u64
+    DX_HUNK = 0u64
+    DX_HMALF = 0u64
+    DX_RPIN = 0u64
+    DX_HDRSEEN = 0u64
+    return 0i32
+}
+
+/* ---- small string kit (the kd house style) ---- */
+fn dx_sput(dst: *u8, at: u64, s: u64) -> u64 {
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while sp[i] != 0u8 { dst[a] = sp[i]   a = a + 1u64   i = i + 1u64 }
+    dst[a] = 0u8
+    return a
+}
+fn dx_sputn(dst: *u8, at: u64, s: u64, n: u64) -> u64 {
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = at
+    while i < n { dst[a] = sp[i]   a = a + 1u64   i = i + 1u64 }
+    dst[a] = 0u8
+    return a
+}
+fn dx_sputu(dst: *u8, at: u64, v: u64) -> u64 {
+    if v >= 10u64 {
+        let a : u64 = dx_sputu(dst, at, v / 10u64)
+        dst[a] = (48u64 + (v % 10u64)) as u8
+        dst[a + 1u64] = 0u8
+        return a + 1u64
+    }
+    dst[at] = (48u64 + v) as u8
+    dst[at + 1u64] = 0u8
+    return at + 1u64
+}
+
+/* ---- whole-file loader ---- */
+fn dx_load_file(path: u64) -> u64 {
+    DXF_LEN = 0u64
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return 0u64 }
+    let mut n : u64 = fread(((&DXF_BUF) as u64) + DXF_LEN, 1u64, 65536u64, h)
+    while n > 0u64 {
+        DXF_LEN = DXF_LEN + n
+        if DXF_LEN + 65536u64 >= 1048576u64 { n = 0u64 } else {
+            n = fread(((&DXF_BUF) as u64) + DXF_LEN, 1u64, 65536u64, h)
+        }
+    }
+    fclose(h)
+    return DXF_LEN
+}
+
+/* ==================== the cell table ==================== */
+fn dxn_name_at(i: u64) -> u64 @export { return ((&DXN_NAMES) as u64) + (i * DX_NLEN) }
+fn dxn_find(name: u64, len: u64) -> u64 {
+    let np : *u8 = name as *u8
+    let mut i : u64 = 0u64
+    while i < DXN_N {
+        if DXN_NL[i] == len {
+            let cp : *u8 = dxn_name_at(i) as *u8
+            let mut j : u64 = 0u64
+            let mut same : u64 = 1u64
+            while j < len { if cp[j] != np[j] { same = 0u64   j = len } else { j = j + 1u64 } }
+            if same == 1u64 { return i }
+        }
+        i = i + 1u64
+    }
+    return DX_SENT
+}
+fn dxn_is_neg(name: u64, len: u64) -> u64 {
+    let cp : *u8 = name as *u8
+    let mut j : u64 = 0u64
+    while j + 4u64 <= len {
+        if cp[j] == 95u8 { if cp[j+1u64] == 110u8 { if cp[j+2u64] == 101u8 { if cp[j+3u64] == 103u8 { return 1u64 } } } }
+        j = j + 1u64
+    }
+    return 0u64
+}
+fn dx_k_reg(name: u64, len: u64, cls: u8, exp: u64) -> i64 @export {
+    if len == 0u64 { return -1i64 }
+    if len >= DX_NLEN { return -1i64 }
+    let ex : u64 = dxn_find(name, len)
+    if ex != DX_SENT {
+        if cls == 2u8 { DXN_CLS[ex] = 2u8 }
+        DXN_EXP[ex] = exp
+        return ex as i64
+    }
+    if DXN_N >= DX_KMAX { return -2i64 }
+    let dst : *u8 = dxn_name_at(DXN_N) as *u8
+    let sp : *u8 = name as *u8
+    let mut j : u64 = 0u64
+    while j < len { dst[j] = sp[j]   j = j + 1u64 }
+    while j < DX_NLEN { dst[j] = 0u8   j = j + 1u64 }
+    DXN_NL[DXN_N] = len
+    DXN_CLS[DXN_N] = cls
+    DXN_EXP[DXN_N] = exp
+    DXN_NEG[DXN_N] = dxn_is_neg(name, len) as u8
+    DXN_HASA[DXN_N] = 0u8
+    DXN_DEXIT[DXN_N] = 0u64
+    DXN_DSEQ[DXN_N] = 0u64
+    DXN_N = DXN_N + 1u64
+    return DXN_N as i64 - 1i64
+}
+fn dx_k_adopt_mark(i: u64) -> i32 @export { if i < DXN_N { DXN_HASA[i] = 1u8 }   return 0i32 }
+fn dx_k_derive_mark(i: u64, exitc: u64, seq: u64) -> i32 @export {
+    if i >= DXN_N { return -1i32 }
+    if seq >= DXN_DSEQ[i] { DXN_DEXIT[i] = exitc   DXN_DSEQ[i] = seq }
+    if seq > DX_HSEQ { DX_HSEQ = seq }
+    return 0i32
+}
+fn dx_k_count() -> u64 @export { return DXN_N }
+fn dx_k_cls(i: u64) -> u8 @export { if i < DXN_N { return DXN_CLS[i] }   return 0u8 }
+fn dx_k_exp(i: u64) -> u64 @export { if i < DXN_N { return DXN_EXP[i] }   return 0u64 }
+fn dx_k_neg(i: u64) -> u8 @export { if i < DXN_N { return DXN_NEG[i] }   return 0u8 }
+fn dx_k_hasa(i: u64) -> u8 @export { if i < DXN_N { return DXN_HASA[i] }   return 0u8 }
+fn dx_k_dseq(i: u64) -> u64 @export { if i < DXN_N { return DXN_DSEQ[i] }   return 0u64 }
+fn dx_k_dexit(i: u64) -> u64 @export { if i < DXN_N { return DXN_DEXIT[i] }   return 0u64 }
+fn dx_k_name_len(i: u64) -> u64 @export { if i < DXN_N { return DXN_NL[i] }   return 0u64 }
+fn dx_k_name_byte(i: u64, j: u64) -> u8 @export {
+    if i < DXN_N { if j < DXN_NL[i] { let cp : *u8 = dxn_name_at(i) as *u8   return cp[j] } }
+    return 0u8
+}
+fn dx_hseq() -> u64 @export { return DX_HSEQ }
+fn dx_hunk() -> u64 @export { return DX_HUNK }
+fn dx_hmalf() -> u64 @export { return DX_HMALF }
+fn dx_rpin() -> u64 @export { return DX_RPIN }
+fn dx_stale() -> u64 @export { return DX_STALE }
+
+/* THE MODAL JURISDICTION: a cell the mind may stake on -- runnable (C1), not a
+ * negative-compile gate, adopted by the heart, NOT yet retired by a DERIVED
+ * record.  Exactly the audit drip's evidence-reachable domain. */
+fn dx_jur(cell: u64) -> u64 @export {
+    if cell >= DXN_N { return 0u64 }
+    if DXN_CLS[cell] != 1u8 { return 0u64 }
+    if DXN_NEG[cell] == 1u8 { return 0u64 }
+    if DXN_HASA[cell] != 1u8 { return 0u64 }
+    if DXN_DSEQ[cell] != 0u64 { return 0u64 }
+    return 1u64
+}
+/* the context key: MACHINE FACTS of the record only (class; expected-exit
+ * bucket; the registry's own numeric family prefix / 1000).  No authored
+ * feature may enter the key (the atoms-are-the-ceiling law applied to ML);
+ * richer classes arrive only as GLOSSA mints, never as hand-picked features. */
+fn dx_ctx_key(cell: u64) -> u64 @export {
+    if cell >= DXN_N { return 0u64 }
+    let mut expb : u64 = 2u64
+    let ex : u64 = DXN_EXP[cell]
+    if ex == 99u64 { expb = 0u64 }
+    if ex == 0u64 { expb = 1u64 }
+    let cp : *u8 = dxn_name_at(cell) as *u8
+    let nl : u64 = DXN_NL[cell]
+    let mut v : u64 = 0u64
+    let mut anyd : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < nl {
+        let ch : u8 = cp[j]
+        if ch >= 48u8 { if ch <= 57u8 { v = (v * 10u64) + ((ch - 48u8) as u64)   anyd = 1u64   j = j + 1u64 } else { j = nl } } else { j = nl }
+    }
+    let mut kilo : u64 = 7u64
+    if anyd == 1u64 { kilo = v / 1000u64   if kilo > 7u64 { kilo = 7u64 } }
+    return 4096u64 | (DXN_CLS[cell] as u64) | (expb << 3u64) | (kilo << 5u64)
+}
+
+/* ==================== the books' rows ==================== */
+fn dxc_row(s: u64, key: u64, create: u64) -> u64 {
+    let base : u64 = s * DX_CROW
+    let n : u64 = DXC_NN[s]
+    let mut i : u64 = 0u64
+    while i < n { if DXC_KEY[base + i] == key { return base + i }   i = i + 1u64 }
+    if create == 0u64 { return DX_SENT }
+    if n >= DX_CROW { DX_CFULL = DX_CFULL + 1u64   return DX_SENT }
+    DXC_KEY[base + n] = key
+    DXC_GRN[base + n] = 0u64
+    DXC_RED[base + n] = 0u64
+    DXC_ERN[base + n] = 0u64
+    DXC_DEF[base + n] = 0u64
+    DXC_NN[s] = n + 1u64
+    return base + n
+}
+fn dxc_n() -> u64 @export { return DXC_NN[0u64] }
+fn dxc_key_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_KEY[i] }   return 0u64 }
+fn dxc_grn_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_GRN[i] }   return 0u64 }
+fn dxc_red_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_RED[i] }   return 0u64 }
+fn dxc_ern_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_ERN[i] }   return 0u64 }
+fn dxc_def_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_DEF[i] }   return 0u64 }
+fn dxc_bal_key(key: u64) -> i64 @export {
+    let r : u64 = dxc_row(0u64, key, 0u64)
+    if r == DX_SENT { return 0i64 }
+    let e : u64 = DXC_ERN[r]
+    let d : u64 = DXC_DEF[r]
+    return (e as i64) - (d as i64)
+}
+/* THE SOLVENCY LAW: simultaneous open stakes at a context <= its allowed
+ * width: balance <= 0 -> 1 (the reflex floor, never zero); else 2^min(6,bal),
+ * capped at the color ceiling 64.  Imagination is EARNED. */
+fn dx_width_allowed(key: u64) -> u64 @export {
+    let bal : i64 = dxc_bal_key(key)
+    if bal <= 0i64 { return 1u64 }
+    let mut b : u64 = bal as u64
+    if b > 6u64 { b = 6u64 }
+    return 1u64 << b
+}
+fn dx_open_at(key: u64) -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXP_NN[0u64] { if DXP_OPN[i] == 1u8 { if DXP_CTX[i] == key { n = n + 1u64 } }   i = i + 1u64 }
+    return n
+}
+fn dxp_open_n() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXP_NN[0u64] { if DXP_OPN[i] == 1u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+fn dxp_open_for_cell(cell: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < DXP_NN[0u64] { if DXP_OPN[i] == 1u8 { if DXP_CELL[i] == cell { return i } }   i = i + 1u64 }
+    return DX_SENT
+}
+fn dxp_row_by_seq(s: u64, pseq: u64) -> u64 {
+    let base : u64 = s * DX_PROW
+    let mut i : u64 = 0u64
+    while i < DXP_NN[s] { if DXP_PSEQ[base + i] == pseq { return base + i }   i = i + 1u64 }
+    return DX_SENT
+}
+fn dxg_n() -> u64 @export { return DXG_NN[0u64] }
+fn dxg_kind_at(i: u64) -> u64 @export { if i < DXG_NN[0u64] { return DXG_KIND[i] }   return 0u64 }
+fn dxg_a_at(i: u64) -> u64 @export { if i < DXG_NN[0u64] { return DXG_A[i] }   return 0u64 }
+fn dxg_b_at(i: u64) -> u64 @export { if i < DXG_NN[0u64] { return DXG_B[i] }   return 0u64 }
+fn dx_ecount() -> u64 @export { return DXE_N }
+fn dx_malformed() -> u64 @export { return DX_MALF }
+fn dx_semrefused() -> u64 @export { return DX_SEMV }
+fn dx_jref() -> u64 @export { return DX_JREF }
+fn dx_fref() -> u64 @export { return DX_FREF }
+fn dx_sref() -> u64 @export { return DX_SREF }
+fn dx_wref() -> u64 @export { return DX_WREF }
+fn dx_noopen() -> u64 @export { return DX_NOOPEN }
+
+/* ==================== THE STATE FOLD (the mind root) ====================
+ * A pure function of the LIVE BOOKS ONLY (nonempty context rows, open stakes,
+ * certificates) -- never scratch, never raw log length -- so the dream-zero
+ * and unlearn laws are exact fold-identities.  Empty context rows are fold-
+ * invisible: a row whose every count was unlearned equals a row never born. */
+fn dx_fold(s: u64) -> u64 {
+    let mut h : u64 = idfold_basis()
+    let cbase : u64 = s * DX_CROW
+    let mut i : u64 = 0u64
+    while i < DXC_NN[s] {
+        let g : u64 = DXC_GRN[cbase + i]
+        let r : u64 = DXC_RED[cbase + i]
+        let e : u64 = DXC_ERN[cbase + i]
+        let d : u64 = DXC_DEF[cbase + i]
+        let nz : u64 = g + r + e + d
+        if nz != 0u64 {
+            h = idfold_u64(h, DXC_KEY[cbase + i])
+            h = idfold_u64(h, g)
+            h = idfold_u64(h, r)
+            h = idfold_u64(h, e)
+            h = idfold_u64(h, d)
+        }
+        i = i + 1u64
+    }
+    let pbase : u64 = s * DX_PROW
+    i = 0u64
+    while i < DXP_NN[s] {
+        if DXP_OPN[pbase + i] == 1u8 {
+            h = idfold_u64(h, DXP_CELL[pbase + i])
+            h = idfold_u64(h, DXP_CTX[pbase + i])
+            h = idfold_u64(h, DXP_PRD[pbase + i])
+            h = idfold_u64(h, DXP_HSQ[pbase + i])
+            h = idfold_u64(h, DXP_STK[pbase + i])
+        }
+        i = i + 1u64
+    }
+    let gbase : u64 = s * DX_GROW
+    i = 0u64
+    while i < DXG_NN[s] {
+        h = idfold_u64(h, DXG_KIND[gbase + i])
+        h = idfold_u64(h, DXG_A[gbase + i])
+        h = idfold_u64(h, DXG_B[gbase + i])
+        i = i + 1u64
+    }
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
+}
+fn dx_state_fold() -> u64 @export { return dx_fold(0u64) }
+
+/* ==================== the event transitions ==================== */
+fn dx_apply(s: u64, kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 {
+    if kind == DXK_PRED {
+        let cell : u64 = d >> 16u64
+        let base : u64 = s * DX_PROW
+        let mut i : u64 = 0u64
+        while i < DXP_NN[s] { if DXP_OPN[base + i] == 1u8 { if DXP_CELL[base + i] == cell { DX_SEMV = DX_SEMV + 1u64   return 0u64 } }   i = i + 1u64 }
+        if DXP_NN[s] >= DX_PROW { DX_PFULL = DX_PFULL + 1u64   return 0u64 }
+        let r : u64 = dxc_row(s, a, 1u64)
+        if r == DX_SENT { return 0u64 }
+        let p : u64 = base + DXP_NN[s]
+        DXP_CELL[p] = cell
+        DXP_CTX[p] = a
+        DXP_PRD[p] = b & 1u64
+        DXP_HSQ[p] = b >> 1u64
+        DXP_STK[p] = c
+        DXP_OPN[p] = 1u8
+        DXP_PSEQ[p] = seq
+        DXP_NN[s] = DXP_NN[s] + 1u64
+        return 1u64
+    }
+    if kind == DXK_OBSV {
+        let pseq : u64 = d & 65535u64
+        let p : u64 = dxp_row_by_seq(s, pseq)
+        if p == DX_SENT { DX_SEMV = DX_SEMV + 1u64   return 0u64 }
+        if DXP_OPN[p] != 1u8 { DX_SEMV = DX_SEMV + 1u64   return 0u64 }
+        let r : u64 = dxc_row(s, a, 1u64)
+        if r == DX_SENT { return 0u64 }
+        let observed : u64 = (b >> 1u64) & 1u64
+        let correct : u64 = b & 1u64
+        if observed == 1u64 { DXC_RED[r] = DXC_RED[r] + 1u64 } else { DXC_GRN[r] = DXC_GRN[r] + 1u64 }
+        if correct == 1u64 { DXC_ERN[r] = DXC_ERN[r] + c } else { DXC_DEF[r] = DXC_DEF[r] + c }
+        DXP_OPN[p] = 0u8
+        return 1u64
+    }
+    if kind == DXK_CERT {
+        if DXG_NN[s] >= DX_GROW { DX_GFULL = DX_GFULL + 1u64   return 0u64 }
+        let g : u64 = (s * DX_GROW) + DXG_NN[s]
+        DXG_KIND[g] = a
+        DXG_A[g] = b
+        DXG_B[g] = c
+        DXG_SEQ[g] = seq
+        DXG_NN[s] = DXG_NN[s] + 1u64
+        return 1u64
+    }
+    if kind == DXK_DREAM { return 1u64 }
+    DX_SEMV = DX_SEMV + 1u64
+    return 0u64
+}
+/* reverse one event's contribution on the LIVE half (the tombstone motion) */
+fn dx_reverse_live(kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 {
+    if kind == DXK_PRED {
+        let p : u64 = dxp_row_by_seq(0u64, seq)
+        if p == DX_SENT { return 0u64 }
+        DXP_OPN[p] = 0u8
+        return 1u64
+    }
+    if kind == DXK_OBSV {
+        let pseq : u64 = d & 65535u64
+        let p : u64 = dxp_row_by_seq(0u64, pseq)
+        if p == DX_SENT { return 0u64 }
+        let r : u64 = dxc_row(0u64, a, 0u64)
+        if r == DX_SENT { return 0u64 }
+        let observed : u64 = (b >> 1u64) & 1u64
+        let correct : u64 = b & 1u64
+        if observed == 1u64 { DXC_RED[r] = DXC_RED[r] - 1u64 } else { DXC_GRN[r] = DXC_GRN[r] - 1u64 }
+        if correct == 1u64 { DXC_ERN[r] = DXC_ERN[r] - c } else { DXC_DEF[r] = DXC_DEF[r] - c }
+        DXP_OPN[p] = 1u8
+        return 1u64
+    }
+    if kind == DXK_CERT {
+        let mut g : u64 = DX_SENT
+        let mut i : u64 = 0u64
+        while i < DXG_NN[0u64] { if DXG_SEQ[i] == seq { g = i   i = DXG_NN[0u64] } else { i = i + 1u64 } }
+        if g == DX_SENT { return 0u64 }
+        let mut j : u64 = g
+        while j + 1u64 < DXG_NN[0u64] {
+            DXG_KIND[j] = DXG_KIND[j + 1u64]
+            DXG_A[j] = DXG_A[j + 1u64]
+            DXG_B[j] = DXG_B[j + 1u64]
+            DXG_SEQ[j] = DXG_SEQ[j + 1u64]
+            j = j + 1u64
+        }
+        DXG_NN[0u64] = DXG_NN[0u64] - 1u64
+        return 1u64
+    }
+    if kind == DXK_DREAM { return 1u64 }
+    return 0u64
+}
+
+/* ==================== the append door (event-primary, persisted) ====================
+ * The persisted log is pinned to the REGISTRY it was written under: the first
+ * line is `X0|<registry-pin>`; a log carrying a different pin is REFUSED whole
+ * (stale, counted) -- stakes joined to another registry's cell indices must
+ * never be folded as this tree's beliefs. */
+fn dx_persist_line(dir: u64, kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> i32 {
+    if dir == 0u64 { return 0i32 }
+    let dp : *u8 = (&DX_PATH) as *u8
+    let mut at : u64 = dx_sput(dp, 0u64, dir)
+    at = dx_sput(dp, at, "/doxa.log" as u64)
+    if DX_HDRSEEN == 0u64 {
+        let probe : u64 = fopen((&DX_PATH) as u64, "rb" as u64)
+        if probe != 0u64 { fclose(probe) } else {
+            let hn : u64 = fopen((&DX_PATH) as u64, "ab" as u64)
+            if hn != 0u64 {
+                let lp0 : *u8 = (&DX_LBUF) as *u8
+                let mut w0 : u64 = dx_sput(lp0, 0u64, "X0|" as u64)
+                w0 = dx_sputu(lp0, w0, DX_RPIN)
+                w0 = dx_sput(lp0, w0, "\n" as u64)
+                fputs((&DX_LBUF) as u64, hn)
+                fclose(hn)
+            }
+        }
+        DX_HDRSEEN = 1u64
+    }
+    let h : u64 = fopen((&DX_PATH) as u64, "ab" as u64)
+    if h == 0u64 { return -1i32 }
+    let lp : *u8 = (&DX_LBUF) as *u8
+    let mut w : u64 = dx_sput(lp, 0u64, "X1|" as u64)
+    w = dx_sputu(lp, w, kind)
+    w = dx_sput(lp, w, "|" as u64)
+    w = dx_sputu(lp, w, a)
+    w = dx_sput(lp, w, "|" as u64)
+    w = dx_sputu(lp, w, b)
+    w = dx_sput(lp, w, "|" as u64)
+    w = dx_sputu(lp, w, c)
+    w = dx_sput(lp, w, "|" as u64)
+    w = dx_sputu(lp, w, d)
+    w = dx_sput(lp, w, "|" as u64)
+    w = dx_sputu(lp, w, seq)
+    w = dx_sput(lp, w, "\n" as u64)
+    fputs((&DX_LBUF) as u64, h)
+    fclose(h)
+    return 0i32
+}
+fn dxe_append(kind: u64, a: u64, b: u64, c: u64, d: u64, dir: u64) -> u64 {
+    if DXE_N >= DX_EMAX { DX_EFULL = DX_EFULL + 1u64   return 0u64 }
+    let seq : u64 = DXE_N + 1u64
+    DXE_KIND[DXE_N] = kind
+    DXE_A[DXE_N] = a
+    DXE_B[DXE_N] = b
+    DXE_C[DXE_N] = c
+    DXE_D[DXE_N] = d
+    DXE_TOMB[DXE_N] = 0u8
+    DXE_N = DXE_N + 1u64
+    dx_persist_line(dir, kind, a, b, c, d, seq)
+    return seq
+}
+fn dx_cert_emit(kind: u64, a: u64, b: u64, dir: u64) -> u64 {
+    let seq : u64 = dxe_append(DXK_CERT, kind, a, b, 0u64, dir)
+    if seq == 0u64 { return 0u64 }
+    dx_apply(0u64, DXK_CERT, kind, a, b, 0u64, seq)
+    return seq
+}
+
+/* ==================== THE DOORS (where the type law lives) ==================== */
+
+/* open a stake: assert, from the MODAL book only, the next verdict of a cell.
+ * The statistical book chooses WHICH world to assert (prefer); it can never
+ * widen the jurisdiction.  seq > 0 | -1 no jurisdiction (certificated) |
+ * -2 already open | -3 solvency hold (certificated) | -4/-5 capacity. */
+fn dx_open_pred(cell: u64, dir: u64) -> i64 @export {
+    let jur : u64 = dx_jur(cell)
+    if jur != 1u64 {
+        DX_JREF = DX_JREF + 1u64
+        dx_cert_emit(DXC_JURIS, cell, 0u64, dir)
+        return -1i64
+    }
+    let already : u64 = dxp_open_for_cell(cell)
+    if already != DX_SENT { DX_DUP = DX_DUP + 1u64   return -2i64 }
+    let key : u64 = dx_ctx_key(cell)
+    let openn : u64 = dx_open_at(key)
+    let wa : u64 = dx_width_allowed(key)
+    if openn >= wa {
+        DX_SREF = DX_SREF + 1u64
+        dx_cert_emit(DXC_SOLVENCY, key, cell, dir)
+        return -3i64
+    }
+    /* the preference (statistical book): strictly more red than green -> red;
+     * ties side with the adopted lineage (green) -- pre-stated, never tuned */
+    let r : u64 = dxc_row(0u64, key, 0u64)
+    let mut pred : u64 = 0u64
+    if r != DX_SENT { if DXC_RED[r] > DXC_GRN[r] { pred = 1u64 } }
+    let b : u64 = (DX_HSEQ << 1u64) | pred
+    let d : u64 = cell << 16u64
+    let seq : u64 = dxe_append(DXK_PRED, key, b, 1u64, d, dir)
+    if seq == 0u64 { return -4i64 }
+    let ap : u64 = dx_apply(0u64, DXK_PRED, key, b, 1u64, d, seq)
+    if ap != 1u64 { return -5i64 }
+    return seq as i64
+}
+/* settle a stake with evidence.  THE FOREIGN LAW: only mode 2 (DERIVED -- the
+ * heart re-ran the claim itself) may settle; anything else is certificated and
+ * refused.  seq > 0 | -1 foreign | -2 no open stake | -4 capacity. */
+fn dx_settle(cell: u64, mode: u64, exitc: u64, dir: u64) -> i64 @export {
+    if mode != 2u64 {
+        DX_FREF = DX_FREF + 1u64
+        dx_cert_emit(DXC_FOREIGN, cell, mode, dir)
+        return -1i64
+    }
+    let p : u64 = dxp_open_for_cell(cell)
+    if p == DX_SENT { DX_NOOPEN = DX_NOOPEN + 1u64   return -2i64 }
+    let mut observed : u64 = 1u64
+    if cell < DXN_N { if exitc == DXN_EXP[cell] { observed = 0u64 } }
+    let mut correct : u64 = 0u64
+    if observed == DXP_PRD[p] { correct = 1u64 }
+    let a : u64 = DXP_CTX[p]
+    let b : u64 = (observed << 1u64) | correct
+    let c : u64 = DXP_STK[p]
+    let d : u64 = (cell << 16u64) | DXP_PSEQ[p]
+    let seq : u64 = dxe_append(DXK_OBSV, a, b, c, d, dir)
+    if seq == 0u64 { return -4i64 }
+    let ap : u64 = dx_apply(0u64, DXK_OBSV, a, b, c, d, seq)
+    if ap != 1u64 { return -4i64 }
+    return seq as i64
+}
+/* hold a joint speculation color (composes cassandra).  1 held | 0 refused --
+ * a refusal past the 64-color ceiling is the OVERWIDTH certificate: the mind
+ * may not speculate wider than 6 joint bits without evidence. */
+fn dx_hold(delta: u64, dir: u64) -> u64 @export {
+    let before : u64 = cass_refused_full()
+    let ok : u64 = cass_add_color(delta)
+    if ok == 1u64 { return 1u64 }
+    let after : u64 = cass_refused_full()
+    if after > before {
+        DX_WREF = DX_WREF + 1u64
+        dx_cert_emit(DXC_OVERWIDTH, cass_count(), delta, dir)
+    }
+    return 0u64
+}
+
+/* ==================== THE QUESTION ECONOMY ==================== */
+fn dx_q_worst(live: u64, q: u64) -> u64 @export {
+    let a : u64 = lg_action(live & q)
+    let b : u64 = lg_action(live & (q ^ 18446744073709551615u64))
+    if a > b { return a }
+    return b
+}
+fn dx_best_question(live: u64, qaddr: u64, nq: u64, dir: u64) -> u64 @export {
+    if nq == 0u64 {
+        dx_cert_emit(DXC_UNDECIDE, live, 0u64, dir)
+        return DX_SENT
+    }
+    let qp : *u64 = qaddr as *u64
+    let mut best : u64 = 0u64
+    let mut bestw : u64 = dx_q_worst(live, qp[0u64])
+    let mut i : u64 = 1u64
+    while i < nq {
+        let w : u64 = dx_q_worst(live, qp[i])
+        if w < bestw { bestw = w   best = i }
+        i = i + 1u64
+    }
+    return best
+}
+
+/* ==================== THE DREAM (Bennett, audited) ====================
+ * sabotage=1 is the negative control: one rewind step is skipped and the organ
+ * MUST detect it and refuse to retain.  0 ok | 1 walk-not-reversed (the
+ * sabotage detection path) | 2 residue-on-books | 3 envelope. */
+fn dx_dream(k: u64, seed: u64, dir: u64, sabotage: u64) -> u64 @export {
+    if k == 0u64 { return 3u64 }
+    if k > 4096u64 { return 3u64 }
+    if adx_ready() == 0u8 { entangle_init() }
+    let pre : u64 = dx_fold(0u64)
+    let s0 : u64 = pre ^ autognosis_root()
+    let mut s : u64 = s0
+    let mut fa : u64 = 0u64
+    let mut fb : u64 = 0u64
+    let mut have : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < k {
+        let act : u64 = lg_noise(seed, i)
+        DXD_ACT[i] = act
+        s = entangle_pulse(s, act)
+        /* the work: hunt a co-drift conjecture -- two contexts whose tallies
+         * are exactly proportional (cross-mult, no floats), evidence floor 4
+         * on both.  Criterion global + pre-stated; candidates picked by the
+         * walk itself. */
+        if have == 0u64 { if DXC_NN[0u64] >= 2u64 {
+            let nn : u64 = DXC_NN[0u64]
+            let ia : u64 = act % nn
+            let ib : u64 = (act >> 17u64) % nn
+            if ia != ib {
+                let ga : u64 = DXC_GRN[ia]
+                let ra : u64 = DXC_RED[ia]
+                let gb : u64 = DXC_GRN[ib]
+                let rb : u64 = DXC_RED[ib]
+                let ta : u64 = ga + ra
+                let tb : u64 = gb + rb
+                if ta >= 4u64 { if tb >= 4u64 {
+                    if (ra * tb) == (rb * ta) {
+                        fa = DXC_KEY[ia]
+                        fb = DXC_KEY[ib]
+                        have = 1u64
+                    }
+                } }
+            }
+        } }
+        i = i + 1u64
+    }
+    /* the exact rewind (the negative control skips exactly the last step) */
+    let mut j : u64 = k
+    while j > 0u64 {
+        j = j - 1u64
+        let mut skipit : u64 = 0u64
+        if sabotage == 1u64 { if j == 0u64 { skipit = 1u64 } }
+        if skipit == 0u64 { s = entangle_unpulse(s, DXD_ACT[j]) }
+    }
+    if s != s0 { return 1u64 }
+    let post : u64 = dx_fold(0u64)
+    if post != pre { return 2u64 }
+    /* only now may bits be retained: the dream event + its conjecture cert */
+    let mut fpack : u64 = 0u64
+    if have == 1u64 { fpack = (fa << 32u64) | (fb & 4294967295u64) }
+    let seq : u64 = dxe_append(DXK_DREAM, seed, k, fpack, post, dir)
+    if seq == 0u64 { return 0u64 }
+    dx_apply(0u64, DXK_DREAM, seed, k, fpack, post, seq)
+    if have == 1u64 { dx_cert_emit(DXC_CONJ, fa, fb, dir) }
+    return 0u64
+}
+fn dx_dream_found(i_back: u64) -> u64 @export {
+    let mut seen : u64 = 0u64
+    let mut i : u64 = DXE_N
+    while i > 0u64 {
+        i = i - 1u64
+        if DXE_KIND[i] == DXK_DREAM { if DXE_TOMB[i] == 0u8 {
+            if seen == i_back { return DXE_C[i] }
+            seen = seen + 1u64
+        } }
+    }
+    return 0u64
+}
+
+/* ==================== THE SHADOW REFOLD + UNLEARNING ==================== */
+fn dx_refold_shadow(skipseq: u64) -> u64 @export {
+    DXC_NN[1u64] = 0u64
+    DXP_NN[1u64] = 0u64
+    DXG_NN[1u64] = 0u64
+    let mut i : u64 = 0u64
+    while i < DXE_N {
+        let seq : u64 = i + 1u64
+        if DXE_KIND[i] != DXK_TOMB { if DXE_TOMB[i] == 0u8 { if seq != skipseq {
+            dx_apply(1u64, DXE_KIND[i], DXE_A[i], DXE_B[i], DXE_C[i], DXE_D[i], seq)
+        } } }
+        i = i + 1u64
+    }
+    return dx_fold(1u64)
+}
+/* THE RIGHT TO BE FORGOTTEN: tombstone event seq; incremental reverse on the
+ * live books; PROVE bit-identity against the independent shadow refold inside
+ * the door.  0 ok | 11 bad seq | 12 already | 13 is a tombstone | 14 dangling
+ * settlement (refused + certificated) | 15 fold mismatch (must never fire). */
+fn dx_unlearn(seq: u64, dir: u64) -> u64 @export {
+    if seq == 0u64 { return 11u64 }
+    if seq > DXE_N { return 11u64 }
+    let e : u64 = seq - 1u64
+    if DXE_TOMB[e] == 1u8 { return 12u64 }
+    if DXE_KIND[e] == DXK_TOMB { return 13u64 }
+    if DXE_KIND[e] == DXK_PRED {
+        let mut i : u64 = 0u64
+        while i < DXE_N {
+            if DXE_KIND[i] == DXK_OBSV { if DXE_TOMB[i] == 0u8 {
+                let tgt : u64 = DXE_D[i] & 65535u64
+                if tgt == seq {
+                    dx_cert_emit(DXC_DANGLING, seq, i + 1u64, dir)
+                    return 14u64
+                }
+            } }
+            i = i + 1u64
+        }
+    }
+    dx_reverse_live(DXE_KIND[e], DXE_A[e], DXE_B[e], DXE_C[e], DXE_D[e], seq)
+    DXE_TOMB[e] = 1u8
+    dxe_append(DXK_TOMB, seq, 0u64, 0u64, 0u64, dir)
+    let live : u64 = dx_fold(0u64)
+    let shadow : u64 = dx_refold_shadow(0u64)
+    if live != shadow { return 15u64 }
+    return 0u64
+}
+
+/* ==================== the persisted-log fold (load) ==================== */
+fn dx_fold_logline(addr: u64, len: u64) -> u64 @export {
+    let lp : *u8 = addr as *u8
+    if len < 8u64 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    if lp[0u64] != 88u8 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    if lp[1u64] != 49u8 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    if lp[2u64] != 124u8 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    var vals : [u64; 6]
+    let mut f : u64 = 0u64
+    let mut p : u64 = 3u64
+    let mut bad : u64 = 0u64
+    while f < 6u64 {
+        let mut v : u64 = 0u64
+        let mut nfound : u64 = 0u64
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            if p >= len { go = 0u64 } else {
+                let ch : u8 = lp[p]
+                let mut isd : u64 = 0u64
+                if ch >= 48u8 { if ch <= 57u8 { isd = 1u64 } }
+                if isd == 1u64 { v = (v * 10u64) + ((ch - 48u8) as u64)   nfound = 1u64   p = p + 1u64 } else { go = 0u64 }
+            }
+        }
+        if nfound == 0u64 { bad = 1u64   f = 6u64 } else {
+            vals[f] = v
+            f = f + 1u64
+            if f < 6u64 {
+                if p >= len { bad = 1u64   f = 6u64 } else {
+                    if lp[p] != 124u8 { bad = 1u64   f = 6u64 } else { p = p + 1u64 }
+                }
+            }
+        }
+    }
+    if bad == 1u64 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    let kind : u64 = vals[0u64]
+    let mut known : u64 = 0u64
+    if kind == DXK_PRED { known = 1u64 }
+    if kind == DXK_OBSV { known = 1u64 }
+    if kind == DXK_CERT { known = 1u64 }
+    if kind == DXK_DREAM { known = 1u64 }
+    if kind == DXK_TOMB { known = 1u64 }
+    if known == 0u64 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    /* seq must be exactly the next dense sequence -- a gap or replay is refused */
+    let want : u64 = DXE_N + 1u64
+    if vals[5u64] != want { DX_MALF = DX_MALF + 1u64   return 0u64 }
+    let seq : u64 = dxe_append(kind, vals[1u64], vals[2u64], vals[3u64], vals[4u64], 0u64)
+    if seq == 0u64 { return 0u64 }
+    if kind == DXK_TOMB {
+        let tgt : u64 = vals[1u64]
+        if tgt == 0u64 { DX_MALF = DX_MALF + 1u64   return 0u64 }
+        if tgt >= seq { DX_MALF = DX_MALF + 1u64   return 0u64 }
+        let te : u64 = tgt - 1u64
+        if DXE_TOMB[te] == 1u8 { DX_SEMV = DX_SEMV + 1u64   return 0u64 }
+        if DXE_KIND[te] == DXK_TOMB { DX_SEMV = DX_SEMV + 1u64   return 0u64 }
+        dx_reverse_live(DXE_KIND[te], DXE_A[te], DXE_B[te], DXE_C[te], DXE_D[te], tgt)
+        DXE_TOMB[te] = 1u8
+        return 1u64
+    }
+    return dx_apply(0u64, kind, vals[1u64], vals[2u64], vals[3u64], vals[4u64], seq)
+}
+/* load + fold the persisted log.  The X0 header pin must match the live
+ * registry pin; a mismatch refuses the WHOLE log (DX_STALE=1) -- beliefs
+ * joined to another registry's indices are never folded as this tree's. */
+fn dx_ledger_load(dir: u64) -> i64 @export {
+    let dp : *u8 = (&DX_PATH) as *u8
+    let mut at : u64 = dx_sput(dp, 0u64, dir)
+    at = dx_sput(dp, at, "/doxa.log" as u64)
+    if dx_load_file((&DX_PATH) as u64) == 0u64 { return 0i64 }
+    DX_HDRSEEN = 1u64
+    let bp : *u8 = (&DXF_BUF) as *u8
+    let mut n : i64 = 0i64
+    let mut first : u64 = 1u64
+    let mut i : u64 = 0u64
+    while i < DXF_LEN {
+        let ls : u64 = i
+        let mut le : u64 = i
+        while le < DXF_LEN { if bp[le] == 10u8 { i = le   le = DXF_LEN } else { le = le + 1u64   if le >= DXF_LEN { i = le } } }
+        let mut ll : u64 = i - ls
+        if ll > 0u64 { if bp[ls + ll - 1u64] == 13u8 { ll = ll - 1u64 } }
+        if ll > 0u64 {
+            if first == 1u64 {
+                first = 0u64
+                /* header: X0|<pin digits> */
+                let hp : *u8 = (((&DXF_BUF) as u64) + ls) as *u8
+                let mut ok : u64 = 0u64
+                if ll > 3u64 { if hp[0u64] == 88u8 { if hp[1u64] == 48u8 { if hp[2u64] == 124u8 { ok = 1u64 } } } }
+                if ok == 0u64 { DX_STALE = 1u64   i = DXF_LEN } else {
+                    let mut v : u64 = 0u64
+                    let mut q : u64 = 3u64
+                    let mut nfound : u64 = 0u64
+                    while q < ll {
+                        let ch : u8 = hp[q]
+                        let mut isd : u64 = 0u64
+                        if ch >= 48u8 { if ch <= 57u8 { isd = 1u64 } }
+                        if isd == 1u64 { v = (v * 10u64) + ((ch - 48u8) as u64)   nfound = 1u64   q = q + 1u64 } else { q = ll }
+                    }
+                    if nfound == 0u64 { DX_STALE = 1u64   i = DXF_LEN } else {
+                        if v != DX_RPIN { DX_STALE = 1u64   i = DXF_LEN }
+                    }
+                }
+            } else {
+                dx_fold_logline(((&DXF_BUF) as u64) + ls, ll)
+                n = n + 1i64
+            }
+        }
+        i = i + 1u64
+    }
+    if DX_STALE == 1u64 { return -2i64 }
+    return n
+}
+fn dx_make_dir(path: u64) -> i32 @export { return _mkdir(path) }
+
+/* ==================== the registry + heart ingestion (own parsers) ==================== */
+fn dx_is_namech(c: u8) -> u64 {
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 65u8 { if c <= 90u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    return 0u64
+}
+fn dx_ingest_registry() -> i64 @export {
+    if dx_load_file("STDLIB/scripts/run_corpus.sh" as u64) == 0u64 { return -1i64 }
+    /* the registry pin: idfold over every byte (identity through the ONE seat) */
+    let bp0 : *u8 = (&DXF_BUF) as *u8
+    let mut hh : u64 = idfold_basis()
+    let mut z : u64 = 0u64
+    while z < DXF_LEN { hh = idfold_u64(hh, bp0[z] as u64)   z = z + 1u64 }
+    DX_RPIN = idfold_seal(hh)
+    if DX_RPIN == 0u64 { DX_RPIN = 1u64 }
+    let bp : *u8 = (&DXF_BUF) as *u8
+    let mut c1 : u64 = 0u64
+    let mut c2 : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXF_LEN {
+        let ls : u64 = i
+        let mut le : u64 = i
+        while le < DXF_LEN { if bp[le] == 10u8 { i = le   le = DXF_LEN } else { le = le + 1u64   if le >= DXF_LEN { i = le } } }
+        let mut p : u64 = ls
+        while p < i { if bp[p] == 32u8 { p = p + 1u64 } else { if bp[p] == 9u8 { p = p + 1u64 } else { le = p   p = i } } }
+        p = le
+        if p < i { if bp[p] == 91u8 {
+            let ns : u64 = p + 1u64
+            let mut ne : u64 = ns
+            while ne < i { if dx_is_namech(bp[ne]) == 1u64 { ne = ne + 1u64 } else { le = ne   ne = i } }
+            ne = le
+            if ne > ns { if ne + 1u64 < i { if bp[ne] == 93u8 { if bp[ne + 1u64] == 61u8 {
+                let mut v : u64 = 0u64
+                let mut vp : u64 = ne + 2u64
+                let mut nfound : u64 = 0u64
+                while vp < i { if bp[vp] >= 48u8 { if bp[vp] <= 57u8 { v = (v * 10u64) + ((bp[vp] - 48u8) as u64)   nfound = 1u64   vp = vp + 1u64 } else { le = vp   vp = i } } else { le = vp   vp = i } }
+                if nfound == 1u64 { if bp[ns] >= 48u8 { if bp[ns] <= 57u8 {
+                    let rr : i64 = dx_k_reg(((&DXF_BUF) as u64) + ns, ne - ns, 1u8, v)
+                    if rr >= 0i64 { c1 = c1 + 1u64 }
+                } } }
+            } } } }
+        } }
+        if p < i { if bp[i - 1u64] == 41u8 { if bp[p] >= 48u8 { if bp[p] <= 57u8 {
+            let mut ts : u64 = p
+            let mut q : u64 = p
+            while q < i {
+                let brk : u64 = q
+                if bp[q] == 124u8 { le = 1u64 } else { if bp[q] == 41u8 { le = 1u64 } else { le = 0u64 } }
+                if le == 1u64 {
+                    let tl : u64 = brk - ts
+                    if tl > 4u64 { if tl < DX_NLEN { if bp[ts] >= 48u8 { if bp[ts] <= 57u8 {
+                        let mut hasu : u64 = 0u64
+                        let mut ok : u64 = 1u64
+                        let mut t : u64 = ts
+                        while t < brk { if dx_is_namech(bp[t]) == 0u64 { ok = 0u64   t = brk } else { if bp[t] == 95u8 { hasu = 1u64 }   t = t + 1u64 } }
+                        if ok == 1u64 { if hasu == 1u64 {
+                            let rr2 : i64 = dx_k_reg(((&DXF_BUF) as u64) + ts, tl, 2u8, 99u64)
+                            if rr2 >= 0i64 { c2 = c2 + 1u64 }
+                        } }
+                    } } } }
+                    ts = q + 1u64
+                }
+                q = q + 1u64
+            }
+        } } } }
+        i = i + 1u64
+    }
+    return (c1 + (c2 << 32u64)) as i64
+}
+/* fold one heart-ledger line: A marks adoption; D is EVIDENCE.  Unknown names
+ * and malformed lines are counted, never silently skipped. */
+fn dx_heart_line(addr: u64, len: u64) -> u64 {
+    let lp : *u8 = addr as *u8
+    if len < 8u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[0u64] != 75u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[1u64] != 49u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[2u64] != 124u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let ns : u64 = 3u64
+    let mut ne : u64 = ns
+    let mut nk : u64 = 0u64
+    while ne < len { if lp[ne] == 124u8 { nk = ne   ne = len } else { ne = ne + 1u64 } }
+    ne = nk
+    if ne <= ns { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if ne >= len { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let ps : u64 = ne + 1u64
+    if ps + 16u64 >= len { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let mut k : u64 = 0u64
+    let mut bad : u64 = 0u64
+    while k < 16u64 {
+        let ch : u8 = lp[ps + k]
+        let mut nib : u64 = 255u64
+        if ch >= 48u8 { if ch <= 57u8 { nib = (ch - 48u8) as u64 } }
+        if ch >= 97u8 { if ch <= 102u8 { nib = ((ch - 97u8) as u64) + 10u64 } }
+        if nib == 255u64 { bad = 1u64   k = 16u64 } else { k = k + 1u64 }
+    }
+    if bad == 1u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[ps + 16u64] != 124u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let mut vp : u64 = ps + 17u64
+    let mut v : u64 = 0u64
+    let mut nfound : u64 = 0u64
+    let mut stop : u64 = 0u64
+    while vp < len { let c2 : u8 = lp[vp]   if c2 >= 48u8 { if c2 <= 57u8 { v = (v * 10u64) + ((c2 - 48u8) as u64)   nfound = 1u64   vp = vp + 1u64 } else { stop = vp   vp = len } } else { stop = vp   vp = len } }
+    vp = stop
+    if nfound == 0u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if vp == 0u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if vp >= len { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[vp] != 124u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let mp : u64 = vp + 1u64
+    if mp + 1u64 >= len { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let mut mode : u64 = 0u64
+    if lp[mp] == 65u8 { mode = 1u64 }
+    if lp[mp] == 68u8 { mode = 2u64 }
+    if mode == 0u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    if lp[mp + 1u64] != 124u8 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let mut sp2 : u64 = mp + 2u64
+    let mut seq : u64 = 0u64
+    nfound = 0u64
+    while sp2 < len { let c3 : u8 = lp[sp2]   if c3 >= 48u8 { if c3 <= 57u8 { seq = (seq * 10u64) + ((c3 - 48u8) as u64)   nfound = 1u64   sp2 = sp2 + 1u64 } else { sp2 = len } } else { sp2 = len } }
+    if nfound == 0u64 { DX_HMALF = DX_HMALF + 1u64   return 0u64 }
+    let cell : u64 = dxn_find(addr + ns, ne - ns)
+    if cell == DX_SENT { DX_HUNK = DX_HUNK + 1u64   return 0u64 }
+    if seq > DX_HSEQ { DX_HSEQ = seq }
+    if mode == 1u64 { dx_k_adopt_mark(cell)   return 1u64 }
+    dx_k_derive_mark(cell, v, seq)
+    return 1u64
+}
+fn dx_ingest_heart(dir: u64) -> i64 @export {
+    let dp : *u8 = (&DX_PATH) as *u8
+    let mut at : u64 = dx_sput(dp, 0u64, dir)
+    at = dx_sput(dp, at, "/kardia.log" as u64)
+    if dx_load_file((&DX_PATH) as u64) == 0u64 { return 0i64 }
+    let bp : *u8 = (&DXF_BUF) as *u8
+    let mut n : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < DXF_LEN {
+        let ls : u64 = i
+        let mut le : u64 = i
+        while le < DXF_LEN { if bp[le] == 10u8 { i = le   le = DXF_LEN } else { le = le + 1u64   if le >= DXF_LEN { i = le } } }
+        let mut ll : u64 = i - ls
+        if ll > 0u64 { if bp[ls + ll - 1u64] == 13u8 { ll = ll - 1u64 } }
+        if ll > 0u64 {
+            dx_heart_line(((&DXF_BUF) as u64) + ls, ll)
+            n = n + 1i64
+        }
+        i = i + 1u64
+    }
+    return n
+}
+
+/* ==================== the drip (predict) + reconcile (settle) ==================== */
+fn dx_sched_next(after: u64) -> u64 @export {
+    let mut i : u64 = 0u64
+    if after != DX_SENT { i = after + 1u64 }
+    while i < DXN_N {
+        let j : u64 = dx_jur(i)
+        if j == 1u64 { let o : u64 = dxp_open_for_cell(i)   if o == DX_SENT { return i } }
+        i = i + 1u64
+    }
+    return DX_SENT
+}
+fn dx_jur_count() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXN_N { let j : u64 = dx_jur(i)   if j == 1u64 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
+/* the preference ranking (the statistical book speaks -- ORDER only, never
+ * assertion): red-preference by Laplace-smoothed exact cross-multiplication;
+ * ties keep registration order (canonical, deterministic). */
+fn dx_pref_gt(ci: u64, cj: u64) -> u64 {
+    let ki : u64 = dx_ctx_key(ci)
+    let kj : u64 = dx_ctx_key(cj)
+    let ri : u64 = dxc_row(0u64, ki, 0u64)
+    let rj : u64 = dxc_row(0u64, kj, 0u64)
+    let mut redi : u64 = 0u64
+    let mut toti : u64 = 0u64
+    let mut redj : u64 = 0u64
+    let mut totj : u64 = 0u64
+    if ri != DX_SENT { redi = DXC_RED[ri]   toti = DXC_GRN[ri] + DXC_RED[ri] }
+    if rj != DX_SENT { redj = DXC_RED[rj]   totj = DXC_GRN[rj] + DXC_RED[rj] }
+    let lhs : u64 = (redi + 1u64) * (totj + 2u64)
+    let rhs : u64 = (redj + 1u64) * (toti + 2u64)
+    if lhs > rhs { return 1u64 }
+    return 0u64
+}
+fn dx_rank_build() -> u64 @export {
+    DXR_N = 0u64
+    let mut i : u64 = 0u64
+    while i < DXN_N {
+        let j : u64 = dx_jur(i)
+        if j == 1u64 { if DXR_N < 4096u64 { DXR_ORD[DXR_N] = i   DXR_N = DXR_N + 1u64 } }
+        i = i + 1u64
+    }
+    let mut a : u64 = 0u64
+    while a + 1u64 < DXR_N {
+        let mut best : u64 = a
+        let mut b : u64 = a + 1u64
+        while b < DXR_N {
+            let g : u64 = dx_pref_gt(DXR_ORD[b], DXR_ORD[best])
+            if g == 1u64 { best = b }
+            b = b + 1u64
+        }
+        if best != a {
+            let tmp : u64 = DXR_ORD[a]
+            DXR_ORD[a] = DXR_ORD[best]
+            DXR_ORD[best] = tmp
+        }
+        a = a + 1u64
+    }
+    return DXR_N
+}
+fn dx_rank_at(i: u64) -> u64 @export { if i < DXR_N { return DXR_ORD[i] }   return DX_SENT }
+/* write the ranked recommendation.  The auditor's own schedule stays
+ * sovereign -- the mind never orders its own grader; the ranking's consumer is
+ * the calibration teeth and the human. */
+fn dx_write_order(dir: u64) -> i64 @export {
+    let dp : *u8 = (&DX_PATH) as *u8
+    let mut at : u64 = dx_sput(dp, 0u64, dir)
+    at = dx_sput(dp, at, "/drip_order.txt" as u64)
+    let h : u64 = fopen((&DX_PATH) as u64, "wb" as u64)
+    if h == 0u64 { return -1i64 }
+    let lp : *u8 = (&DX_LBUF) as *u8
+    let mut i : u64 = 0u64
+    while i < DXR_N {
+        let cell : u64 = DXR_ORD[i]
+        let mut w : u64 = dx_sputn(lp, 0u64, dxn_name_at(cell), DXN_NL[cell])
+        w = dx_sput(lp, w, "\n" as u64)
+        fputs((&DX_LBUF) as u64, h)
+        i = i + 1u64
+    }
+    fclose(h)
+    return DXR_N as i64
+}
+/* settle every open stake whose cell now carries DERIVED evidence newer than
+ * the stake's heart-watermark.  Returns the settled count. */
+fn dx_reconcile(dir: u64) -> u64 @export {
+    let mut settled : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXP_NN[0u64] {
+        if DXP_OPN[i] == 1u8 {
+            let cell : u64 = DXP_CELL[i]
+            if cell < DXN_N { if DXN_DSEQ[cell] > DXP_HSQ[i] {
+                let s : i64 = dx_settle(cell, 2u64, DXN_DEXIT[cell], dir)
+                if s > 0i64 { settled = settled + 1u64 }
+            } }
+        }
+        i = i + 1u64
+    }
+    return settled
+}
+/* the calibration table (predicted p, observed o) from live OBSV events */
+fn dx_calib(p: u64, o: u64) -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXE_N {
+        if DXE_KIND[i] == DXK_OBSV { if DXE_TOMB[i] == 0u8 {
+            let observed : u64 = (DXE_B[i] >> 1u64) & 1u64
+            let correct : u64 = DXE_B[i] & 1u64
+            let mut predicted : u64 = 1u64 - observed
+            if correct == 1u64 { predicted = observed }
+            if predicted == p { if observed == o { n = n + 1u64 } }
+        } }
+        i = i + 1u64
+    }
+    return n
+}
+/* THE CONSERVATION IDENTITY, two-path: the four global sums recomputed from
+ * the live events must equal the rows.  0 holds | 1..4 names the split. */
+fn dx_conserve() -> u64 @export {
+    let mut eg : u64 = 0u64
+    let mut er : u64 = 0u64
+    let mut ee : u64 = 0u64
+    let mut ed : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXE_N {
+        if DXE_KIND[i] == DXK_OBSV { if DXE_TOMB[i] == 0u8 {
+            let observed : u64 = (DXE_B[i] >> 1u64) & 1u64
+            let correct : u64 = DXE_B[i] & 1u64
+            if observed == 1u64 { er = er + 1u64 } else { eg = eg + 1u64 }
+            if correct == 1u64 { ee = ee + DXE_C[i] } else { ed = ed + DXE_C[i] }
+        } }
+        i = i + 1u64
+    }
+    let mut rg : u64 = 0u64
+    let mut rr : u64 = 0u64
+    let mut re : u64 = 0u64
+    let mut rd : u64 = 0u64
+    i = 0u64
+    while i < DXC_NN[0u64] {
+        rg = rg + DXC_GRN[i]
+        rr = rr + DXC_RED[i]
+        re = re + DXC_ERN[i]
+        rd = rd + DXC_DEF[i]
+        i = i + 1u64
+    }
+    if eg != rg { return 1u64 }
+    if er != rr { return 2u64 }
+    if ee != re { return 3u64 }
+    if ed != rd { return 4u64 }
+    return 0u64
+}
+
+/* the organ's identity: the constitution root folded with the DOXA tag through
+ * the canonical seat -- REFUSED (0) under an incoherent constitution (the
+ * citizen law: an incoherent III cannot hold beliefs). */
+fn doxa_set_id() -> u64 @export {
+    let root : u64 = autognosis_root()
+    if root == 0u64 { return 0u64 }
+    let h : u64 = idfold_u64(idfold_basis(), root)
+    return idfold_seal((h ^ 1146310721u64) * idfold_prime())
+}
+
+/* ==================== THE SELF-PROOF ====================
+ * Run at EVERY invocation before any verb may move (the kardia condition-of-
+ * motion pattern; there is deliberately NO gate and NO standing arm -- this IS
+ * the verification, plus the live loop against the real heart).  Every law
+ * gets a positive arm AND a negative control on a synthetic table; dir=0
+ * (nothing persisted); resets before and after.  0 = proven | the arm number. */
+fn dx_selfprove() -> u64 @export {
+    dx_reset()
+    /* arm 21: THE CITIZEN LAW -- coherent constitution, ready diffuser, and
+     * the imagination's own laws (cassandra) re-proven before belief may exist */
+    if adx_ready() == 0u8 { entangle_init() }
+    if adx_ready() == 0u8 { dx_reset()   return 21u64 }
+    let root : u64 = autognosis_root()
+    if root == 0u64 { dx_reset()   return 21u64 }
+    let cs : u64 = cass_selfproof()
+    if cs != 0u64 { dx_reset()   return 21u64 }
+    /* synthetic cells: g (jurisdiction), neg, owned C2, derived, g2 sibling */
+    let rg : i64 = dx_k_reg("900_cell_g" as u64, 10u64, 1u8, 99u64)
+    if rg != 0i64 { dx_reset()   return 22u64 }
+    let rn : i64 = dx_k_reg("901_cell_neg" as u64, 12u64, 1u8, 11u64)
+    if rn != 1i64 { dx_reset()   return 22u64 }
+    let ro : i64 = dx_k_reg("902_cell_o" as u64, 10u64, 2u8, 99u64)
+    if ro != 2i64 { dx_reset()   return 22u64 }
+    let rd : i64 = dx_k_reg("903_cell_d" as u64, 10u64, 1u8, 99u64)
+    if rd != 3i64 { dx_reset()   return 22u64 }
+    dx_k_adopt_mark(0u64)
+    dx_k_adopt_mark(1u64)
+    dx_k_adopt_mark(2u64)
+    dx_k_adopt_mark(3u64)
+    dx_k_derive_mark(3u64, 99u64, 5u64)
+    /* arm 22: THE TYPE LAW -- assertion only from the modal book: the neg,
+     * owned, retired, and phantom cells are all REFUSED + certificated; the
+     * jurisdiction cell is admitted */
+    let certs0 : u64 = dxg_n()
+    let t1 : i64 = dx_open_pred(1u64, 0u64)
+    if t1 != -1i64 { dx_reset()   return 22u64 }
+    let t2 : i64 = dx_open_pred(2u64, 0u64)
+    if t2 != -1i64 { dx_reset()   return 22u64 }
+    let t3 : i64 = dx_open_pred(3u64, 0u64)
+    if t3 != -1i64 { dx_reset()   return 22u64 }
+    let t4 : i64 = dx_open_pred(4000u64, 0u64)
+    if t4 != -1i64 { dx_reset()   return 22u64 }
+    let certs1 : u64 = dxg_n()
+    if certs1 != certs0 + 4u64 { dx_reset()   return 22u64 }
+    let p1 : i64 = dx_open_pred(0u64, 0u64)
+    if p1 <= 0i64 { dx_reset()   return 22u64 }
+    /* arm 23: THE FOREIGN LAW -- ADOPTED evidence refused (stake survives);
+     * DERIVED evidence settles */
+    let f1 : i64 = dx_settle(0u64, 1u64, 99u64, 0u64)
+    if f1 != -1i64 { dx_reset()   return 23u64 }
+    let still : u64 = dxp_open_for_cell(0u64)
+    if still == DX_SENT { dx_reset()   return 23u64 }
+    let s1 : i64 = dx_settle(0u64, 2u64, 99u64, 0u64)
+    if s1 <= 0i64 { dx_reset()   return 23u64 }
+    let gone : u64 = dxp_open_for_cell(0u64)
+    if gone != DX_SENT { dx_reset()   return 23u64 }
+    /* arm 24: THE CONSERVATION IDENTITY -- one right, one wrong: earned 1,
+     * deficit 1, balance 0; events==rows; shadow refold == live fold */
+    let p2 : i64 = dx_open_pred(0u64, 0u64)
+    if p2 <= 0i64 { dx_reset()   return 24u64 }
+    let s2 : i64 = dx_settle(0u64, 2u64, 7u64, 0u64)
+    if s2 <= 0i64 { dx_reset()   return 24u64 }
+    let key0 : u64 = dx_ctx_key(0u64)
+    let r0 : u64 = dxc_row(0u64, key0, 0u64)
+    if r0 == DX_SENT { dx_reset()   return 24u64 }
+    if DXC_ERN[r0] != 1u64 { dx_reset()   return 24u64 }
+    if DXC_DEF[r0] != 1u64 { dx_reset()   return 24u64 }
+    let bal0 : i64 = dxc_bal_key(key0)
+    if bal0 != 0i64 { dx_reset()   return 24u64 }
+    let cv : u64 = dx_conserve()
+    if cv != 0u64 { dx_reset()   return 24u64 }
+    let sh : u64 = dx_refold_shadow(0u64)
+    let lv : u64 = dx_fold(0u64)
+    if sh != lv { dx_reset()   return 24u64 }
+    /* arm 25: THE SOLVENCY LAW -- insolvency collapses width to the floor (1,
+     * never 0); the second simultaneous stake is refused + certificated;
+     * earning re-opens the width */
+    let p3 : i64 = dx_open_pred(0u64, 0u64)
+    if p3 <= 0i64 { dx_reset()   return 25u64 }
+    let s3 : i64 = dx_settle(0u64, 2u64, 7u64, 0u64)
+    if s3 <= 0i64 { dx_reset()   return 25u64 }
+    let wa : u64 = dx_width_allowed(key0)
+    if wa != 1u64 { dx_reset()   return 25u64 }
+    let p4 : i64 = dx_open_pred(0u64, 0u64)
+    if p4 <= 0i64 { dx_reset()   return 25u64 }
+    let rg2 : i64 = dx_k_reg("904_cell_g2" as u64, 11u64, 1u8, 99u64)
+    if rg2 != 4i64 { dx_reset()   return 25u64 }
+    dx_k_adopt_mark(4u64)
+    let sref0 : u64 = DX_SREF
+    let t5 : i64 = dx_open_pred(4u64, 0u64)
+    if t5 != -3i64 { dx_reset()   return 25u64 }
+    if DX_SREF != sref0 + 1u64 { dx_reset()   return 25u64 }
+    let s4 : i64 = dx_settle(0u64, 2u64, 7u64, 0u64)
+    if s4 <= 0i64 { dx_reset()   return 25u64 }
+    /* arm 26: THE SPECULATION BOUND -- 64 independent colors held, the 65th
+     * REFUSED + certificated (OVERWIDTH) */
+    cass_reset(85u64)
+    let mut kk : u64 = 0u64
+    let mut held : u64 = 0u64
+    while kk < 64u64 { held = held + dx_hold(1u64 << kk, 0u64)   kk = kk + 1u64 }
+    if held != 64u64 { dx_reset()   return 26u64 }
+    let wref0 : u64 = DX_WREF
+    let h65 : u64 = dx_hold(81985529216486895u64, 0u64)
+    if h65 != 0u64 { dx_reset()   return 26u64 }
+    if DX_WREF != wref0 + 1u64 { dx_reset()   return 26u64 }
+    /* arm 27: THE DREAM LAW -- excursion leaves the books bit-identical; the
+     * SABOTAGED rewind is DETECTED, refused, and retains nothing */
+    let d1 : u64 = dx_dream(64u64, 12345u64, 0u64, 0u64)
+    if d1 != 0u64 { dx_reset()   return 27u64 }
+    let f_mid : u64 = dx_fold(0u64)
+    let e_mid : u64 = DXE_N
+    let d2 : u64 = dx_dream(64u64, 54321u64, 0u64, 1u64)
+    if d2 != 1u64 { dx_reset()   return 27u64 }
+    let f_mid2 : u64 = dx_fold(0u64)
+    if f_mid2 != f_mid { dx_reset()   return 27u64 }
+    if DXE_N != e_mid { dx_reset()   return 27u64 }
+    /* arm 28: THE RIGHT TO BE FORGOTTEN -- first the clean fold-identity pair
+     * (unlearn the settlement: fold returns to the post-stake state; unlearn
+     * the stake: fold returns to the pre-stake state; each proven in-door vs
+     * the shadow refold), THEN the DANGLING refusal on a separate pair (the
+     * refusal certificates by design, so it must not sit between snapshots) */
+    let f_pre_stake : u64 = dx_fold(0u64)
+    let p5 : i64 = dx_open_pred(0u64, 0u64)
+    if p5 <= 0i64 { dx_reset()   return 28u64 }
+    let f_post_stake : u64 = dx_fold(0u64)
+    let s5 : i64 = dx_settle(0u64, 2u64, 99u64, 0u64)
+    if s5 <= 0i64 { dx_reset()   return 28u64 }
+    let u2 : u64 = dx_unlearn(s5 as u64, 0u64)
+    if u2 != 0u64 { dx_reset()   return 28u64 }
+    let fb1 : u64 = dx_fold(0u64)
+    if fb1 != f_post_stake { dx_reset()   return 28u64 }
+    let u3 : u64 = dx_unlearn(p5 as u64, 0u64)
+    if u3 != 0u64 { dx_reset()   return 28u64 }
+    let fb2 : u64 = dx_fold(0u64)
+    if fb2 != f_pre_stake { dx_reset()   return 28u64 }
+    /* the dangling refusal, on its own pair */
+    let p6 : i64 = dx_open_pred(0u64, 0u64)
+    if p6 <= 0i64 { dx_reset()   return 28u64 }
+    let s6 : i64 = dx_settle(0u64, 2u64, 99u64, 0u64)
+    if s6 <= 0i64 { dx_reset()   return 28u64 }
+    let u1 : u64 = dx_unlearn(p6 as u64, 0u64)
+    if u1 != 14u64 { dx_reset()   return 28u64 }
+    /* arm 29: THE QUESTION ECONOMY -- exhaustive optimality; the empty set is
+     * UNDECIDABLE, certificated */
+    DXQ_SET[0u64] = 15u64
+    DXQ_SET[1u64] = 63u64
+    DXQ_SET[2u64] = 255u64
+    DXQ_SET[3u64] = 1u64
+    let live12 : u64 = 4095u64
+    let pick : u64 = dx_best_question(live12, (&DXQ_SET) as u64, 4u64, 0u64)
+    let mut bw : u64 = DX_SENT
+    kk = 0u64
+    while kk < 4u64 { let w : u64 = dx_q_worst(live12, DXQ_SET[kk])   if w < bw { bw = w }   kk = kk + 1u64 }
+    let pw : u64 = dx_q_worst(live12, DXQ_SET[pick])
+    if pw != bw { dx_reset()   return 29u64 }
+    if pick != 1u64 { dx_reset()   return 29u64 }
+    let g0 : u64 = dxg_n()
+    let und : u64 = dx_best_question(live12, (&DXQ_SET) as u64, 0u64, 0u64)
+    if und != DX_SENT { dx_reset()   return 29u64 }
+    if dxg_n() != g0 + 1u64 { dx_reset()   return 29u64 }
+    /* arm 30: the log's teeth -- garbage refused + counted; a well-formed line
+     * with a broken sequence refused (the dense-seq law) */
+    let m0 : u64 = DX_MALF
+    let z1 : u64 = dx_fold_logline("garbage line" as u64, 12u64)
+    if z1 != 0u64 { dx_reset()   return 30u64 }
+    if DX_MALF != m0 + 1u64 { dx_reset()   return 30u64 }
+    let z2 : u64 = dx_fold_logline("X1|4|1|1|0|0|999" as u64, 15u64)
+    if z2 != 0u64 { dx_reset()   return 30u64 }
+    if DX_MALF != m0 + 2u64 { dx_reset()   return 30u64 }
+    dx_reset()
+    return 0u64
+}

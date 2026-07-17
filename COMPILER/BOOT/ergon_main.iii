@@ -33,6 +33,10 @@ extern @abi(c-msvc-x64) fn erg_seat_intent() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_exec() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_deep() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_autarkeia() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_zkaudit() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_zk_scanned() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_zk_claimers() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_zk_violations() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_live() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_nomos_sealed() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_vitality() -> u64 from "ergon.iii"
@@ -78,7 +82,8 @@ fn usage() -> u64 {
     ps("  iii-ergon deep      the die's heavy faculties (nomos/oneiros/reversible/redeem/\n" as u64)
     ps("                      symmetry/physis/wire/presses) -- minutes of wall, on demand\n" as u64)
     ps("  iii-ergon autarkeia the sealed spine + the covenant (testament emit/re-derive,\n" as u64)
-    ps("                      tamper battery, generation chain, covenant equation + quorum)\n\n" as u64)
+    ps("                      tamper battery, generation chain, covenant equation + quorum)\n" as u64)
+    ps("  iii-ergon zkaudit   every zk soundness claim matches its query/field knobs (+ teeth)\n\n" as u64)
     ps("no seat compares against a stored expected answer; every law is derived at the\n" as u64)
     ps("moment of motion.  requires CWD = the III root.\n" as u64)
     ps("exit: 0 WHOLE | 1 fault (located) | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
@@ -109,6 +114,28 @@ fn main(argc: i32, argv: u64) -> u64 {
         ps("exactly one seat+arm; the checker itself has teeth -- a sabotaged map is caught),\n" as u64)
         ps("and the cross-fold instrument is deterministic and input-sensitive.\n" as u64)
         ps("Re-derived THIS invocation, before any verb moved.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "zkaudit" as u64) == 1u32 {
+        ps("== THE ZK-AUDIT VERB: every soundness claim must match its knobs ==\n" as u64)
+        ps("  (each ~2^-86 production claim demands a 128-FS-query basis + its field marker;\n" as u64)
+        ps("   an xref claim must NAME another zk module; an unlisted module may claim nothing\n" as u64)
+        ps("   -- with FALSIFIER TEETH on perturbed copies; ex run_zk_audit, organ-native)\n" as u64)
+        let z : u32 = erg_zkaudit()
+        ps("  zk modules scanned: " as u64)  pu(erg_zk_scanned())
+        ps(" ; soundness claimers: " as u64)  pu(erg_zk_claimers())
+        ps(" ; violations: " as u64)  pu(erg_zk_violations())  putchar(10i32)
+        if z != 0u32 {
+            ps("  ZK-AUDIT FAULT " as u64)
+            pu(z as u64)
+            if z == 1603u32 { ps(" -- a live gadget's claim does not match its knobs" as u64) }
+            if z == 1604u32 { ps(" -- TEETH FAILED: a downscaled production NBATCH did NOT redden" as u64) }
+            if z == 1605u32 { ps(" -- TEETH FAILED: a claim in an unlisted module did NOT redden" as u64) }
+            putchar(10i32)
+            return 1u64
+        }
+        ps("  ZK AUDIT PASS: every claimed bit-count matches its NQ/field knobs, and the\n" as u64)
+        ps("  falsifier teeth BITE (a downscaled knob and an unclassified claim both redden).\n" as u64)
         return 0u64
     }
     if streq(cmd, "autarkeia" as u64) == 1u32 {

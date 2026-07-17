@@ -47,6 +47,12 @@ extern @abi(c-msvc-x64) fn dx_rank_build() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_rank_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_write_order(dir: u64) -> i64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_unlearn(seq: u64, dir: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_agenda_build() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_agenda_at(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_agenda_evd(i: u64) -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_aim_write(dir: u64) -> i64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dx_posture() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn dxc_phs_at(i: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_mint_due() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dx_mint(dir: u64) -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn dxm_n() -> u64 from "doxa.iii"
@@ -151,6 +157,7 @@ fn usage() -> u64 {
     ps("  iii-doxa drip N    [dirs]          open up to N stakes on the audit's own schedule\n" as u64)
     ps("  iii-doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
     ps("  iii-doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
+    ps("  iii-doxa aim       [dirs]          the agenda: least-known contexts first (writes aim.txt)\n" as u64)
     ps("  iii-doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
     ps("                                     bit-identity proven; dangling settlements refused\n" as u64)
     ps("  iii-doxa loop N    [dirs]          predict -> summon the heart -> reconcile\n\n" as u64)
@@ -199,6 +206,7 @@ fn print_books() -> u32 {
             ps("  deficit " as u64)  pu(dxc_def_at(i))
             ps("  balance " as u64)  pi(dxc_bal_key(key))
             ps("  width " as u64)  pu(dx_width_allowed(key))
+            ps("  phase " as u64)  phex(dxc_phs_at(i))
             putchar(10i32)
         }
         i = i + 1u64
@@ -240,8 +248,22 @@ fn print_calib() -> u32 {
     ps("    earned " as u64)  pu(gg + rr)  ps(" bits, deficit " as u64)  pu(gr + rg)  ps(" bits\n" as u64)
     return 1u32
 }
+fn print_agenda(doxadir: u64) -> u32 {
+    let n : u64 = dx_aim_write(doxadir)
+    ps("  THE AIM (least-known contexts first -- where the next beat buys the most; aim.txt written):\n" as u64)
+    let mut i : u64 = 0u64
+    while i < n { if i < 4u64 {
+        ps("    aim #" as u64)  pu(i)
+        ps("  ctx " as u64)  phex(dx_agenda_at(i))
+        ps("  evidence " as u64)  pu(dx_agenda_evd(i))
+        putchar(10i32)
+        i = i + 1u64
+    } else { i = n } }
+    return 1u32
+}
 fn print_counts() -> u32 {
     ps("  mind root (fold of the live books)  : " as u64)  phex(dx_state_fold())  putchar(10i32)
+    ps("  posture (XOR-fold of live phases)   : " as u64)  phex(dx_posture())  putchar(10i32)
     ps("  doxa set id (constitution-pinned)   : " as u64)  phex(doxa_set_id())  putchar(10i32)
     ps("  registry pin                        : " as u64)  pu(dx_rpin())  putchar(10i32)
     ps("  cells " as u64)  pu(dx_k_count())
@@ -450,6 +472,12 @@ fn main(argc: i32, argv: u64) -> u64 {
         }
         return 0u64
     }
+    if streq(cmd, "aim" as u64) == 1u32 {
+        ps("== THE AIM: the mind's exact statement of where effort buys the most information ==\n" as u64)
+        print_agenda(doxadir)
+        ps("  (the generative-oracle socket: a harness reads aim.txt; iii-agon's generative verb is the named hook)\n" as u64)
+        return 0u64
+    }
     if streq(cmd, "unlearn" as u64) == 1u32 {
         if nseen < 1u64 { return usage() }
         ps("== THE RIGHT TO BE FORGOTTEN: tombstone fold-subtraction, proven bit-identical in-door ==\n" as u64)
@@ -501,6 +529,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         auto_mint(doxadir)
         print_calib()
         print_books()
+        print_agenda(doxadir)
         print_counts()
         if dx_conserve() != 0u64 { return 1u64 }
         return 0u64

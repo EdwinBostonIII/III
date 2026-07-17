@@ -134,6 +134,15 @@ var DXC_GRN : [u64; 512]
 var DXC_RED : [u64; 512]
 var DXC_ERN : [u64; 512]
 var DXC_DEF : [u64; 512]
+/* THE PHASE (v2, the coupling parameter): a per-context word evolved by every
+ * settlement.  THE ABELIAN LAW: order-free forgetting FORCES the phase group
+ * abelian -- a non-commutative admix chain cannot survive an interior
+ * tombstone (unpulsing an inner link is not removing it) -- so the STORED
+ * phase is the GF(2) XOR-fold of per-event deltas (unlearn-safe under ANY
+ * tombstone order, self-inverse reversal), and nonlinear DIRECTIONS are
+ * DERIVED at read time as admix(phase) -- the derive-don't-store colors law
+ * applied to learned parameters. */
+var DXC_PHS : [u64; 512]
 var DXC_NN  : [u64; 2]
 var DX_CFULL : u64 = 0u64
 
@@ -199,6 +208,9 @@ var DXD_ACT : [u64; 4096]                /* dream action record (the exact rewin
 var DXR_ORD : [u64; 4096]                /* rank order scratch                   */
 var DXR_N   : u64 = 0u64
 var DXQ_SET : [u64; 64]                  /* question masks scratch               */
+var DXAG_KEY : [u64; 64]                 /* the agenda (v3): least-known first   */
+var DXAG_EVD : [u64; 64]
+var DXAG_N   : u64 = 0u64
 
 fn dx_reset() -> i32 @export {
     DXE_N = 0u64
@@ -415,8 +427,18 @@ fn dxc_row(s: u64, key: u64, create: u64) -> u64 {
     DXC_RED[base + n] = 0u64
     DXC_ERN[base + n] = 0u64
     DXC_DEF[base + n] = 0u64
+    DXC_PHS[base + n] = 0u64
     DXC_NN[s] = n + 1u64
     return base + n
+}
+fn dxc_phs_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_PHS[i] }   return 0u64 }
+/* the per-event phase delta: deterministic in the event's own fields, so the
+ * refold re-derives it identically in either half */
+fn dx_phase_delta(b: u64, d: u64) -> u64 {
+    let h : u64 = idfold_u64(idfold_u64(idfold_basis(), d), b)
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
 }
 fn dxc_n() -> u64 @export { return DXC_NN[0u64] }
 fn dxc_key_at(i: u64) -> u64 @export { if i < DXC_NN[0u64] { return DXC_KEY[i] }   return 0u64 }
@@ -498,6 +520,7 @@ fn dx_fold(s: u64) -> u64 {
             h = idfold_u64(h, r)
             h = idfold_u64(h, e)
             h = idfold_u64(h, d)
+            h = idfold_u64(h, DXC_PHS[cbase + i])
         }
         i = i + 1u64
     }
@@ -537,10 +560,14 @@ fn dx_state_fold() -> u64 @export { return dx_fold(0u64) }
 /* ==================== the event transitions ==================== */
 fn dx_apply(s: u64, kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 {
     if kind == DXK_PRED {
+        /* single-open-per-cell is a DOOR law (dx_open_pred pre-checks); the
+         * fold accepts what the doors emitted -- an apply-level dup refusal
+         * would break refold identity under interior tombstones (forgetting a
+         * settlement reopens its stake at a position where a later stake
+         * already applied).  Settles join by exact PSEQ, so multiple rows per
+         * cell are always well-defined. */
         let cell : u64 = d >> 16u64
         let base : u64 = s * DX_PROW
-        let mut i : u64 = 0u64
-        while i < DXP_NN[s] { if DXP_OPN[base + i] == 1u8 { if DXP_CELL[base + i] == cell { DX_SEMV = DX_SEMV + 1u64   return 0u64 } }   i = i + 1u64 }
         if DXP_NN[s] >= DX_PROW { DX_PFULL = DX_PFULL + 1u64   return 0u64 }
         let r : u64 = dxc_row(s, a, 1u64)
         if r == DX_SENT { return 0u64 }
@@ -566,6 +593,7 @@ fn dx_apply(s: u64, kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 
         let correct : u64 = b & 1u64
         if observed == 1u64 { DXC_RED[r] = DXC_RED[r] + 1u64 } else { DXC_GRN[r] = DXC_GRN[r] + 1u64 }
         if correct == 1u64 { DXC_ERN[r] = DXC_ERN[r] + c } else { DXC_DEF[r] = DXC_DEF[r] + c }
+        DXC_PHS[r] = DXC_PHS[r] ^ dx_phase_delta(b, d)
         DXP_OPN[p] = 0u8
         return 1u64
     }
@@ -615,6 +643,7 @@ fn dx_reverse_live(kind: u64, a: u64, b: u64, c: u64, d: u64, seq: u64) -> u64 {
         let correct : u64 = b & 1u64
         if observed == 1u64 { DXC_RED[r] = DXC_RED[r] - 1u64 } else { DXC_GRN[r] = DXC_GRN[r] - 1u64 }
         if correct == 1u64 { DXC_ERN[r] = DXC_ERN[r] - c } else { DXC_DEF[r] = DXC_DEF[r] - c }
+        DXC_PHS[r] = DXC_PHS[r] ^ dx_phase_delta(b, d)
         DXP_OPN[p] = 1u8
         return 1u64
     }
@@ -851,6 +880,90 @@ fn dxm_n() -> u64 @export { return DXM_NN[0u64] }
 fn dxm_par_at(i: u64) -> u64 @export { if i < DXM_NN[0u64] { return DXM_PAR[i] }   return 0u64 }
 fn dxm_fact_at(i: u64) -> u64 @export { if i < DXM_NN[0u64] { return DXM_FACT[i] }   return 0u64 }
 
+/* ==================== THE AGENDA (v3, the aim) ====================
+ * The mind's exact statement of where the next beat buys the most: the
+ * jurisdiction contexts ordered by LEAST EVIDENCE first (max expected bits
+ * per settlement), ties by key (canonical).  Consumed by the aim verb
+ * (aim.txt -- the hook a generative oracle reads; iii-agon's generative verb
+ * is the named socket), the loop's printout, and the dream's direction. */
+fn dx_agenda_build() -> u64 @export {
+    DXAG_N = 0u64
+    let mut i : u64 = 0u64
+    while i < DXN_N {
+        let j : u64 = dx_jur(i)
+        if j == 1u64 {
+            let key : u64 = dx_ctx_key(i)
+            let mut f : u64 = DX_SENT
+            let mut k : u64 = 0u64
+            while k < DXAG_N { if DXAG_KEY[k] == key { f = k   k = DXAG_N } else { k = k + 1u64 } }
+            if f == DX_SENT { if DXAG_N < 64u64 {
+                let r : u64 = dxc_row(0u64, key, 0u64)
+                let mut ev : u64 = 0u64
+                if r != DX_SENT { ev = DXC_GRN[r] + DXC_RED[r] }
+                DXAG_KEY[DXAG_N] = key
+                DXAG_EVD[DXAG_N] = ev
+                DXAG_N = DXAG_N + 1u64
+            } }
+        }
+        i = i + 1u64
+    }
+    let mut a : u64 = 1u64
+    while a < DXAG_N {
+        let kv : u64 = DXAG_KEY[a]
+        let evv : u64 = DXAG_EVD[a]
+        let mut b : u64 = a
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            if b == 0u64 { go = 0u64 } else {
+                let mut gt : u64 = 0u64
+                if DXAG_EVD[b - 1u64] > evv { gt = 1u64 }
+                if DXAG_EVD[b - 1u64] == evv { if DXAG_KEY[b - 1u64] > kv { gt = 1u64 } }
+                if gt == 1u64 { DXAG_KEY[b] = DXAG_KEY[b - 1u64]   DXAG_EVD[b] = DXAG_EVD[b - 1u64]   b = b - 1u64 } else { go = 0u64 }
+            }
+        }
+        DXAG_KEY[b] = kv
+        DXAG_EVD[b] = evv
+        a = a + 1u64
+    }
+    return DXAG_N
+}
+fn dx_agenda_at(i: u64) -> u64 @export { if i < DXAG_N { return DXAG_KEY[i] }   return DX_SENT }
+fn dx_agenda_evd(i: u64) -> u64 @export { if i < DXAG_N { return DXAG_EVD[i] }   return 0u64 }
+fn dx_aim_write(dir: u64) -> i64 @export {
+    dx_agenda_build()
+    let dp : *u8 = (&DX_PATH) as *u8
+    let mut at : u64 = dx_sput(dp, 0u64, dir)
+    at = dx_sput(dp, at, "/aim.txt" as u64)
+    let h : u64 = fopen((&DX_PATH) as u64, "wb" as u64)
+    if h == 0u64 { return -1i64 }
+    let lp : *u8 = (&DX_LBUF) as *u8
+    let mut i : u64 = 0u64
+    while i < DXAG_N { if i < 16u64 {
+        let mut w : u64 = dx_sputu(lp, 0u64, DXAG_KEY[i])
+        w = dx_sput(lp, w, " " as u64)
+        w = dx_sputu(lp, w, DXAG_EVD[i])
+        w = dx_sput(lp, w, "\n" as u64)
+        fputs((&DX_LBUF) as u64, h)
+        i = i + 1u64
+    } else { i = DXAG_N } }
+    fclose(h)
+    return DXAG_N as i64
+}
+/* THE POSTURE: the XOR-fold of every live context phase.  Folded into the
+ * dream's effective seed -- exploration steered by what the mind has EARNED
+ * and LOST, still byte-replayable because posture is itself a fold of the
+ * log.  Nonlinear directions derive as admix(posture) at read time. */
+fn dx_posture() -> u64 @export {
+    let mut p : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < DXC_NN[0u64] {
+        let nz : u64 = DXC_GRN[i] + DXC_RED[i] + DXC_ERN[i] + DXC_DEF[i]
+        if nz != 0u64 { p = p ^ DXC_PHS[i] }
+        i = i + 1u64
+    }
+    return p
+}
+
 /* ==================== THE QUESTION ECONOMY ==================== */
 fn dx_q_worst(live: u64, q: u64) -> u64 @export {
     let a : u64 = lg_action(live & q)
@@ -885,13 +998,17 @@ fn dx_dream(k: u64, seed: u64, dir: u64, sabotage: u64) -> u64 @export {
     if adx_ready() == 0u8 { entangle_init() }
     let pre : u64 = dx_fold(0u64)
     let s0 : u64 = pre ^ autognosis_root()
+    /* the posture steers the dream (v2 consumer): the effective seed folds the
+     * mind's earned phases -- deterministic from state, so replay from the
+     * same log walks the same dream byte-for-byte */
+    let eff : u64 = seed ^ dx_posture()
     let mut s : u64 = s0
     let mut fa : u64 = 0u64
     let mut fb : u64 = 0u64
     let mut have : u64 = 0u64
     let mut i : u64 = 0u64
     while i < k {
-        let act : u64 = lg_noise(seed, i)
+        let act : u64 = lg_noise(eff, i)
         DXD_ACT[i] = act
         s = entangle_pulse(s, act)
         /* the work: hunt a co-drift conjecture -- two contexts whose tallies
@@ -1599,7 +1716,49 @@ fn dx_selfprove() -> u64 @export {
     /* arm 31: THE MINT (own frame -- the 64-slot ceiling law) */
     let a31 : u64 = dx_arm_mint()
     if a31 != 0u64 { dx_reset()   return a31 }
+    /* arm 32: THE PHASE (abelian law -- interior tombstones) */
+    let a32 : u64 = dx_arm_phase()
+    if a32 != 0u64 { dx_reset()   return a32 }
     dx_reset()
+    return 0u64
+}
+/* arm 32, hoisted: THE PHASE LAW -- every settlement moves the context's
+ * phase; the phase group is ABELIAN (GF(2) XOR-fold), so forgetting an
+ * INTERIOR settlement (out of order) still restores state bit-identically
+ * (proven in-door vs the shadow refold), and forgetting both returns the
+ * phase EXACTLY to its origin.  0 proven | 32. */
+fn dx_arm_phase() -> u64 {
+    let key : u64 = dx_ctx_key(0u64)
+    let r0 : u64 = dxc_row(0u64, key, 1u64)
+    if r0 == DX_SENT { return 32u64 }
+    let p0 : u64 = DXC_PHS[r0]
+    let s1 : i64 = dx_open_pred(0u64, 0u64)
+    if s1 <= 0i64 { return 32u64 }
+    let o1 : i64 = dx_settle(0u64, 2u64, 99u64, 0u64)
+    if o1 <= 0i64 { return 32u64 }
+    let p1 : u64 = DXC_PHS[r0]
+    if p1 == p0 { return 32u64 }
+    let s2 : i64 = dx_open_pred(0u64, 0u64)
+    if s2 <= 0i64 { return 32u64 }
+    let o2 : i64 = dx_settle(0u64, 2u64, 7u64, 0u64)
+    if o2 <= 0i64 { return 32u64 }
+    let p2 : u64 = DXC_PHS[r0]
+    if p2 == p1 { return 32u64 }
+    /* forget the FIRST settlement while the second stands: the interior
+     * tombstone -- the door's shadow-refold identity must hold */
+    let u1 : u64 = dx_unlearn(o1 as u64, 0u64)
+    if u1 != 0u64 { return 32u64 }
+    let pi : u64 = DXC_PHS[r0]
+    if pi != (p0 ^ (p1 ^ p2)) { return 32u64 }
+    /* forget the second too: the phase returns EXACTLY to origin */
+    let u2 : u64 = dx_unlearn(o2 as u64, 0u64)
+    if u2 != 0u64 { return 32u64 }
+    if DXC_PHS[r0] != p0 { return 32u64 }
+    /* tidy: forget the two reopened stakes as well (full rewind of the arm) */
+    let u3 : u64 = dx_unlearn(s1 as u64, 0u64)
+    if u3 != 0u64 { return 32u64 }
+    let u4 : u64 = dx_unlearn(s2 as u64, 0u64)
+    if u4 != 0u64 { return 32u64 }
     return 0u64
 }
 /* arm 31, hoisted: a provably-confused class (>=2 green AND >=2 red: the arm

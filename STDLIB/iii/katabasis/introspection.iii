@@ -1,0 +1,572 @@
+/* STDLIB/iii/katabasis/introspection.iii -- THE SELF-EXAMINATION: the faculty
+ * III inherits to know itself WHOLE, and to refuse to name itself when it is not.
+ *
+ * The katabasis descent judges admissions (isa_admit), rewrite-law and
+ * vocabulary consent (nomos_consent I/II), and holds the constitution root
+ * (autognosis).  This organ is the descent's floor: III's ability to EXAMINE
+ * ITSELF -- not a probe run against an organ from outside, but a SYSTEMWIDE
+ * TRAIT the organism carries.  One faculty walks every registered organ,
+ * re-derives its truth from scratch with THIS faculty's own independent logic
+ * (the two-path law: the examiner never trusts the examined's own arithmetic),
+ * and folds the whole into a VITALITY ROOT -- a single u64 that is nonzero iff
+ * III examined itself and found itself coherent.  A sick organ collapses the
+ * vitality to 0, exactly as an incoherent constitution collapses autognosis_root.
+ *
+ * There are no per-organ verification files.  Verification is intrinsic: to be
+ * a registered organ of III is to be examinable HERE.  New organs join by
+ * exposing an identity and their operational surface (they already do); the
+ * systemwide reach grows as the roster grows.
+ *
+ * THE ROSTER (index -> organ; fault codes = base + arm, so a nonzero verdict
+ * LOCATES the organ and the failing invariant):
+ *   0  autognosis  (100+)  the constitution's coherence + root
+ *   1  autophasis  (200+)  the pressed discovery, re-hunted from the universe
+ *   2  synapse     (300+)  the constitution-pinned wire, frames + refusals
+ *   3  admix       (400+)  the self-deriving diffuser, proven + measured
+ *
+ * NIH: composes the sealed organs it examines; pure integer forms otherwise.
+ * Hexad: kind_essence.  Ring R0. */
+module katabasis_introspection
+
+/* ---- autognosis (the constitution) ---- */
+extern @abi(c-msvc-x64) fn autognosis_coherent() -> u32 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_nomos_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_glossa_id() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn autognosis_autophasis_id() -> u64 from "autognosis.iii"
+
+/* ---- autophasis (the pressed discovery) + the fair universe it came from ---- */
+extern @abi(c-msvc-x64) fn omega_n() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_idx() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_op(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_ld(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_rd(x: i64, y: i64) -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wa() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wb() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_wc() -> i64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_tables() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_qg() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_assoc() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn omega_census_nonassoc() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn autophasis_set_id() -> u64 from "autophasis.iii"
+extern @abi(c-msvc-x64) fn xo_load(n: i64, idx: u64) -> i32 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_get(x: i64, y: i64) -> i64 from "xeno_ontogenesis.iii"
+extern @abi(c-msvc-x64) fn xo_quasigroup() -> u8 from "xeno_ontogenesis.iii"
+
+/* ---- synapse (the wire) + its envelope ---- */
+extern @abi(c-msvc-x64) fn synapse_hello_build(buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_hello_verify(in_buf: u64, in_len: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_ask_build(buf: u64, kind: u32, args_ptr: u64, nonce: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_serve(in_buf: u64, in_len: u32, out_buf: u64) -> u32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_verify(in_buf: u64, in_len: u32, nonce: u64, kind: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_result(in_buf: u64) -> u64 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_verdict_ok(in_buf: u64) -> u8 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_frame_gate(in_buf: u64, in_len: u32) -> i32 from "synapse.iii"
+extern @abi(c-msvc-x64) fn synapse_seal_const() -> u64 from "synapse.iii"
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_content_id(in_buf: u64, out_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn cgglossa_nwords() -> u32 from "cg_glossa_rules.iii"
+
+/* ---- admix (the diffuser) ---- */
+extern @abi(c-msvc-x64) fn adx_init() -> u32 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix(x: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix_inv(y: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix_digest(ptr: u64, len: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_xs(x: u64, s: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_unxs(y: u64, s: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_a() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_b() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_c() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_m1() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_m2() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_m1inv() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_m2inv() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_sac_x1000() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_fnv_sac_x1000() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_fam_n() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix_set_id() -> u64 from "admix.iii"
+
+/* ---- entangle (the Lagrangian reversible-coupling primitive) ---- */
+extern @abi(c-msvc-x64) fn entangle_init() -> u32 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_shared(a: u64, b: u64) -> u64 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_pulse(state: u64, action: u64) -> u64 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_rewind(state: u64, next: u64) -> u64 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_unpulse(next: u64, action: u64) -> u64 from "entangle.iii"
+extern @abi(c-msvc-x64) fn entangle_set_id() -> u64 from "entangle.iii"
+
+/* ---- the canonical identity algebra (numera/idfold) ---- */
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+/* ── shared independent engines (the examiner's own arithmetic) ──────────── */
+var IN_G_T   : [i64; 16]
+var IN_SEEN  : [u8; 8]
+var IN_HB    : [u8; 160]
+var IN_AB    : [u8; 160]
+var IN_VB    : [u8; 160]
+var IN_PAY   : [u8; 64]
+var IN_DIG   : [u8; 32]
+var IN_ARGS  : [u64; 3]
+
+fn in_pop(v: u64) -> u64 {
+    let a : u64 = v - ((v >> 1u64) & 6148914691236517205u64)
+    let b : u64 = (a & 3689348814741910323u64) + ((a >> 2u64) & 3689348814741910323u64)
+    let c : u64 = (b + (b >> 4u64)) & 1085102592571150095u64
+    let d : u64 = c + (c >> 8u64)
+    let e : u64 = d + (d >> 16u64)
+    return (e + (e >> 32u64)) & 127u64
+}
+fn in_fold3(a: u64, b: u64, c: u64) -> u64 {
+    /* the constitution fold, through the canonical seat -- byte-identical to
+     * autognosis_root's own fold (both are FNV-1a over the three ids) */
+    let mut h : u64 = idfold_basis()
+    h = idfold_u64(h, a)
+    h = idfold_u64(h, b)
+    h = idfold_u64(h, c)
+    return idfold_seal(h)
+}
+fn in_bat(k: u64) -> u64 {
+    if k == 0u64  { return 0u64 }
+    if k == 1u64  { return 1u64 }
+    if k == 2u64  { return 18446744073709551615u64 }
+    if k == 3u64  { return 9223372036854775808u64 }
+    if k == 4u64  { return 12297829382473034410u64 }
+    if k == 5u64  { return 6148914691236517205u64 }
+    if k == 6u64  { return 4294967295u64 }
+    if k == 7u64  { return 18446744069414584320u64 }
+    if k == 8u64  { return 81985529216486895u64 }
+    if k == 9u64  { return 16045690984833335023u64 }
+    if k == 10u64 { return 1229782938247303441u64 }
+    if k == 11u64 { return 17361641481138401520u64 }
+    if k == 12u64 { return 6172840429334713413u64 }
+    if k == 13u64 { return 11400714819323198485u64 }
+    if k == 14u64 { return 2654435769u64 }
+    return 14695981039346656037u64
+}
+
+/* ═══ organ 0: AUTOGNOSIS ═══════════════════════════════════════════════ */
+fn intro_examine_autognosis() -> u32 {
+    if autognosis_coherent() != 1u32 { return 101u32 }
+    let r : u64 = autognosis_root()
+    if r == 0u64 { return 102u32 }
+    if r != in_fold3(autognosis_nomos_id(), autognosis_glossa_id(), autognosis_autophasis_id()) { return 103u32 }
+    return 0u32
+}
+
+/* ═══ organ 1: AUTOPHASIS -- re-hunt the universe, independent assoc engine ══ */
+fn in_assoc(n: i64) -> u8 {
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            let mut c : i64 = 0i64
+            while c < n {
+                if xo_get(xo_get(a, b), c) != xo_get(a, xo_get(b, c)) { return 0u8 }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    return 1u8
+}
+fn in_table_qg(n: i64) -> u8 {
+    let mut r : i64 = 0i64
+    while r < n {
+        let mut j : u64 = 0u64
+        while j < 8u64 { IN_SEEN[j] = 0u8   j = j + 1u64 }
+        let mut c : i64 = 0i64
+        while c < n {
+            let v : i64 = IN_G_T[((r * n) + c) as u64]
+            if v < 0i64 { return 0u8 }
+            if v >= n { return 0u8 }
+            if IN_SEEN[v as u64] == 1u8 { return 0u8 }
+            IN_SEEN[v as u64] = 1u8
+            c = c + 1i64
+        }
+        r = r + 1i64
+    }
+    let mut cc : i64 = 0i64
+    while cc < n {
+        let mut j2 : u64 = 0u64
+        while j2 < 8u64 { IN_SEEN[j2] = 0u8   j2 = j2 + 1u64 }
+        let mut rr : i64 = 0i64
+        while rr < n {
+            let v2 : i64 = IN_G_T[((rr * n) + cc) as u64]
+            if IN_SEEN[v2 as u64] == 1u8 { return 0u8 }
+            IN_SEEN[v2 as u64] = 1u8
+            rr = rr + 1i64
+        }
+        cc = cc + 1i64
+    }
+    return 1u8
+}
+fn intro_examine_autophasis() -> u32 {
+    if autophasis_set_id() == 0u64 { return 201u32 }
+    let n : i64 = omega_n()
+    if n < 1i64 { return 201u32 }
+    if n > 4i64 { return 201u32 }
+    /* re-hunt: smaller carriers empty of non-assoc quasigroups; pressed carrier
+     * first non-assoc at pressed index; census agrees */
+    let mut m : i64 = 1i64
+    while m <= n {
+        let cells : i64 = m * m
+        let mut total : u64 = 1u64
+        let mut e : i64 = 0i64
+        while e < cells { total = total * (m as u64)   e = e + 1i64 }
+        let mut nq : u64 = 0u64
+        let mut na : u64 = 0u64
+        let mut nn : u64 = 0u64
+        let mut hit : u8 = 0u8
+        let mut hidx : u64 = 0u64
+        let mut idx : u64 = 0u64
+        while idx < total {
+            xo_load(m, idx)
+            if xo_quasigroup() == 1u8 {
+                nq = nq + 1u64
+                if in_assoc(m) == 1u8 { na = na + 1u64 } else {
+                    nn = nn + 1u64
+                    if hit == 0u8 { hidx = idx   hit = 1u8 }
+                }
+            }
+            idx = idx + 1u64
+        }
+        if m < n { if nn != 0u64 { return 202u32 } }
+        if m == n {
+            if hit == 0u8 { return 202u32 }
+            if hidx != omega_idx() { return 202u32 }
+            if total != omega_census_tables() { return 203u32 }
+            if nq != omega_census_qg() { return 203u32 }
+            if na != omega_census_assoc() { return 203u32 }
+            if nn != omega_census_nonassoc() { return 203u32 }
+        }
+        m = m + 1i64
+    }
+    /* table cell-exact vs the universe; pressed quasigroup; divisions; witness; guards */
+    xo_load(n, omega_idx())
+    let mut x : i64 = 0i64
+    while x < n {
+        let mut y : i64 = 0i64
+        while y < n {
+            if omega_op(x, y) != xo_get(x, y) { return 204u32 }
+            IN_G_T[((x * n) + y) as u64] = omega_op(x, y)
+            y = y + 1i64
+        }
+        x = x + 1i64
+    }
+    if in_table_qg(n) != 1u8 { return 205u32 }
+    let mut a : i64 = 0i64
+    while a < n {
+        let mut b : i64 = 0i64
+        while b < n {
+            if omega_op(a, omega_ld(a, b)) != b { return 206u32 }
+            if omega_ld(a, omega_op(a, b)) != b { return 206u32 }
+            if omega_op(omega_rd(a, b), b) != a { return 206u32 }
+            if omega_rd(omega_op(a, b), b) != a { return 206u32 }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    let mut wa : i64 = 0i64 - 1i64
+    let mut wb : i64 = 0i64 - 1i64
+    let mut wc : i64 = 0i64 - 1i64
+    a = 0i64
+    while a < n {
+        let mut b3 : i64 = 0i64
+        while b3 < n {
+            let mut c3 : i64 = 0i64
+            while c3 < n {
+                if wa < 0i64 {
+                    if omega_op(omega_op(a, b3), c3) != omega_op(a, omega_op(b3, c3)) { wa = a   wb = b3   wc = c3 }
+                }
+                c3 = c3 + 1i64
+            }
+            b3 = b3 + 1i64
+        }
+        a = a + 1i64
+    }
+    if wa < 0i64 { return 207u32 }
+    if wa != omega_wa() { return 207u32 }
+    if wb != omega_wb() { return 207u32 }
+    if wc != omega_wc() { return 207u32 }
+    if omega_op(0i64 - 1i64, 0i64) != (0i64 - 1i64) { return 208u32 }
+    if omega_op(0i64, n) != (0i64 - 1i64) { return 208u32 }
+    return 0u32
+}
+
+/* ═══ organ 2: SYNAPSE -- frames, self-concur, foreign refusal, teeth ══════ */
+fn in_g_pc(v: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut s : u64 = 0u64
+    while s < 64u64 { c = c + ((v >> s) & 1u64)   s = s + 1u64 }
+    return c
+}
+fn in_forge_hello(n_id: u64, g_id: u64, a_id: u64, root: u64) -> u32 {
+    babel_wire_init((&IN_HB) as u64)
+    babel_wire_set_seal_id((&IN_HB) as u64, synapse_seal_const())
+    babel_wire_set_facet((&IN_HB) as u64, 1u8)
+    babel_wire_set_intent_id((&IN_HB) as u64, root)
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        IN_PAY[i]       = ((n_id >> (i * 8u64)) & 255u64) as u8
+        IN_PAY[8u64 + i]  = ((g_id >> (i * 8u64)) & 255u64) as u8
+        IN_PAY[16u64 + i] = ((a_id >> (i * 8u64)) & 255u64) as u8
+        i = i + 1u64
+    }
+    babel_wire_set_payload((&IN_HB) as u64, (&IN_PAY) as u64, 24u32)
+    babel_wire_content_id((&IN_HB) as u64, (&IN_DIG) as u64)
+    babel_wire_set_ctx_digest((&IN_HB) as u64, (&IN_DIG) as u64)
+    return babel_wire_finalize((&IN_HB) as u64)
+}
+fn intro_examine_synapse() -> u32 {
+    /* HELLO self-concur */
+    let hl : u32 = synapse_hello_build((&IN_HB) as u64)
+    if hl == 0u32 { return 301u32 }
+    if synapse_hello_verify((&IN_HB) as u64, hl) != 0i32 { return 301u32 }
+    /* foreign constitution refused BY NAME (perturbed nomos id -> code -8) */
+    let ni : u64 = autognosis_nomos_id()
+    let gi : u64 = autognosis_glossa_id()
+    let ai : u64 = autognosis_autophasis_id()
+    let f1 : u32 = in_forge_hello(ni + 1u64, gi, ai, in_fold3(ni + 1u64, gi, ai))
+    if synapse_hello_verify((&IN_HB) as u64, f1) != (0i32 - 8i32) { return 302u32 }
+    /* a lying root refused (-11) */
+    let f2 : u32 = in_forge_hello(ni, gi, ai, autognosis_root() + 1u64)
+    if synapse_hello_verify((&IN_HB) as u64, f2) != (0i32 - 11i32) { return 302u32 }
+    /* content integrity: an honest hello with one payload byte flipped is a
+     * DIFFERENT message (-5) */
+    let h2 : u32 = synapse_hello_build((&IN_HB) as u64)
+    IN_HB[70u64] = IN_HB[70u64] ^ 255u8
+    if synapse_frame_gate((&IN_HB) as u64, h2) != (0i32 - 5i32) { return 303u32 }
+    IN_HB[70u64] = IN_HB[70u64] ^ 255u8
+    if synapse_frame_gate((&IN_HB) as u64, h2) != 0i32 { return 303u32 }
+    /* GLOSSA-wire: popcnt64 (word 5) served over a frame == the examiner's own
+     * bit-loop popcount; the minted tongue travels the wire and is cross-derived */
+    let probe : u64 = 16045690984833335023u64
+    IN_ARGS[0u64] = 5u64   IN_ARGS[1u64] = probe   IN_ARGS[2u64] = 0u64
+    let al : u32 = synapse_ask_build((&IN_AB) as u64, 1u32, (&IN_ARGS) as u64, 424242u64)
+    if al == 0u32 { return 304u32 }
+    let vl : u32 = synapse_serve((&IN_AB) as u64, al, (&IN_VB) as u64)
+    if vl == 0u32 { return 304u32 }
+    if synapse_verdict_verify((&IN_VB) as u64, vl, 424242u64, 1u32) != 0i32 { return 304u32 }
+    if synapse_verdict_ok((&IN_VB) as u64) != 1u8 { return 304u32 }
+    if synapse_verdict_result((&IN_VB) as u64) != in_g_pc(probe) { return 304u32 }
+    /* AUTOPHASIS-wire: omega_op(1,2) served + division laws held remotely */
+    IN_ARGS[0u64] = 1u64   IN_ARGS[1u64] = 2u64   IN_ARGS[2u64] = 0u64
+    let al2 : u32 = synapse_ask_build((&IN_AB) as u64, 2u32, (&IN_ARGS) as u64, 515151u64)
+    let vl2 : u32 = synapse_serve((&IN_AB) as u64, al2, (&IN_VB) as u64)
+    if vl2 == 0u32 { return 305u32 }
+    if synapse_verdict_verify((&IN_VB) as u64, vl2, 515151u64, 2u32) != 0i32 { return 305u32 }
+    if synapse_verdict_ok((&IN_VB) as u64) != 1u8 { return 305u32 }
+    if synapse_verdict_result((&IN_VB) as u64) != (omega_op(1i64, 2i64) as u64) { return 305u32 }
+    /* nonce binding: the verdict does not answer a different nonce (-12) */
+    if synapse_verdict_verify((&IN_VB) as u64, vl2, 515152u64, 2u32) != (0i32 - 12i32) { return 306u32 }
+    return 0u32
+}
+
+/* ═══ organ 3: ADMIX -- self-derive, units, argmin, roundtrip, superiority ══ */
+fn in_adx_fwd(x: u64, a: u64, b: u64, c: u64, m1: u64, m2: u64) -> u64 {
+    let x1 : u64 = x ^ (x >> a)
+    let x2 : u64 = x1 * m1
+    let x3 : u64 = x2 ^ (x2 >> b)
+    let x4 : u64 = x3 * m2
+    return x4 ^ (x4 >> c)
+}
+fn in_adx_famcfg(i: u64, which: u64) -> u64 {
+    /* which: 0=a 1=b 2=c ; mirrors admix's declared family */
+    if which == 0u64 {
+        if i == 0u64 { return 30u64 }  if i == 1u64 { return 33u64 }  if i == 2u64 { return 31u64 }
+        if i == 3u64 { return 29u64 }  if i == 4u64 { return 32u64 }  return 27u64
+    }
+    if which == 1u64 {
+        if i == 0u64 { return 27u64 }  if i == 1u64 { return 29u64 }  if i == 2u64 { return 33u64 }
+        if i == 3u64 { return 32u64 }  if i == 4u64 { return 30u64 }  return 31u64
+    }
+    if i == 0u64 { return 31u64 }  if i == 1u64 { return 32u64 }  if i == 2u64 { return 29u64 }
+    if i == 3u64 { return 30u64 }  if i == 4u64 { return 33u64 }  return 30u64
+}
+fn in_adx_sac(a: u64, b: u64, c: u64, m1: u64, m2: u64) -> u64 {
+    let mut sum : u64 = 0u64
+    let mut n : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 16u64 {
+        let x : u64 = in_bat(k)
+        let fx : u64 = in_adx_fwd(x, a, b, c, m1, m2)
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            sum = sum + in_pop(fx ^ in_adx_fwd(x ^ (1u64 << i), a, b, c, m1, m2))
+            n = n + 1u64
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+    return (sum * 1000u64) / n
+}
+fn in_dist(sac: u64) -> u64 { if sac >= 32000u64 { return sac - 32000u64 }  return 32000u64 - sac }
+fn intro_examine_admix() -> u32 {
+    if adx_init() != 0u32 { return 401u32 }
+    /* multipliers re-derived from the LIVE constitution root */
+    let seed : u64 = autognosis_root()
+    if seed == 0u64 { return 402u32 }
+    let m1 : u64 = seed | 1u64
+    let m2 : u64 = (seed ^ (seed >> 29u64) ^ 8408232312838656597u64) | 1u64
+    if adx_m1() != m1 { return 402u32 }
+    if adx_m2() != m2 { return 402u32 }
+    /* units of Z/2^64, with teeth */
+    if (m1 * adx_m1inv()) != 1u64 { return 403u32 }
+    if (m2 * adx_m2inv()) != 1u64 { return 403u32 }
+    if (m1 * (adx_m1inv() ^ 1u64)) == 1u64 { return 403u32 }
+    /* the organ chose the avalanche-argmin of the declared family */
+    let mut best : u64 = 0u64
+    let mut best_d : u64 = 18446744073709551615u64
+    let mut best_sac : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < adx_fam_n() {
+        let sac : u64 = in_adx_sac(in_adx_famcfg(i, 0u64), in_adx_famcfg(i, 1u64), in_adx_famcfg(i, 2u64), m1, m2)
+        let d : u64 = in_dist(sac)
+        if d < best_d { best_d = d   best = i   best_sac = sac }
+        i = i + 1u64
+    }
+    if adx_a() != in_adx_famcfg(best, 0u64) { return 404u32 }
+    if adx_b() != in_adx_famcfg(best, 1u64) { return 404u32 }
+    if adx_c() != in_adx_famcfg(best, 2u64) { return 404u32 }
+    if adx_sac_x1000() != best_sac { return 404u32 }
+    /* pipeline mirror (independent) + round-trip (property) */
+    let a : u64 = adx_a()
+    let b : u64 = adx_b()
+    let c : u64 = adx_c()
+    let mut kk : u64 = 0u64
+    while kk < 16u64 {
+        let x : u64 = in_bat(kk)
+        if admix(x) != in_adx_fwd(x, a, b, c, m1, m2) { return 405u32 }
+        kk = kk + 1u64
+    }
+    let mut x : u64 = 11400714819323198485u64
+    let mut t : u64 = 0u64
+    while t < 30000u64 {
+        if admix_inv(admix(x)) != x { return 406u32 }
+        x = x * 6364136223846793005u64 + 1442695040888963407u64
+        t = t + 1u64
+    }
+    /* each xorshift stage's doubling-unshift is exact (the GF(2) stages the
+     * standing arm PROVES over all 2^64) */
+    let mut sk : u64 = 0u64
+    while sk < 3u64 {
+        let mut s : u64 = a
+        if sk == 1u64 { s = b }
+        if sk == 2u64 { s = c }
+        let mut q : u64 = 88172645463325252u64
+        let mut r : u64 = 0u64
+        while r < 8000u64 {
+            if adx_unxs(adx_xs(q, s), s) != q { return 407u32 }
+            q = q * 2862933555777941757u64 + 3037000493u64
+            r = r + 1u64
+        }
+        sk = sk + 1u64
+    }
+    /* MEASURED superiority: admix mixer avalanche strictly closer to ideal than FNV */
+    let asac : u64 = adx_sac_x1000()
+    let fsac : u64 = adx_fnv_sac_x1000()
+    if in_dist(asac) >= in_dist(fsac) { return 408u32 }
+    if asac < 31000u64 { return 408u32 }
+    if asac > 32999u64 { return 408u32 }
+    /* digest INTEGRITY: any single-byte flip changes the content address */
+    var buf : [u8; 40]
+    let mut z : u64 = 0u64
+    while z < 40u64 { buf[z] = ((z * 37u64 + 11u64) & 255u64) as u8   z = z + 1u64 }
+    let base : u64 = admix_digest((&buf) as u64, 40u64)
+    let mut p : u64 = 0u64
+    while p < 40u64 {
+        let orig : u8 = buf[p]
+        buf[p] = orig ^ 85u8
+        if admix_digest((&buf) as u64, 40u64) == base { return 409u32 }
+        buf[p] = orig
+        p = p + 1u64
+    }
+    return 0u32
+}
+
+/* ═══ organ 4: ENTANGLE -- the Lagrangian reversible-coupling primitive ════
+ * symmetry of the shared seed, the EXACT rewind (rewind(s,pulse(s,a))==a --
+ * the property that replaces error correction), the unpulse, and teeth (a
+ * corrupted next-state must NOT recover the true action). */
+fn intro_examine_entangle() -> u32 {
+    if entangle_init() != 0u32 { return 501u32 }
+    if entangle_set_id() == 0u64 { return 501u32 }
+    let mut s : u64 = 11400714819323198485u64
+    let mut t : u64 = 0u64
+    while t < 20000u64 {
+        let a : u64 = s * 6364136223846793005u64 + 1442695040888963407u64
+        let b : u64 = a ^ 12345678901234567u64
+        if entangle_shared(a, b) != entangle_shared(b, a) { return 502u32 }
+        let action : u64 = a ^ (a >> 17u64)
+        let nx : u64 = entangle_pulse(s, action)
+        if entangle_rewind(s, nx) != action { return 503u32 }
+        if entangle_unpulse(nx, action) != s { return 504u32 }
+        s = a
+        t = t + 1u64
+    }
+    /* teeth: the rewind is load-bearing -- a one-bit-corrupted next-state must
+     * NOT recover the true action (else reversibility would be vacuous) */
+    let good : u64 = entangle_pulse(99999u64, 55555u64)
+    if entangle_rewind(99999u64, good ^ 1u64) == 55555u64 { return 505u32 }
+    return 0u32
+}
+
+/* ── THE INHERITED FACULTY: the systemwide surface ──────────────────────── */
+fn intro_organ_count() -> u32 @export { return 5u32 }
+
+fn intro_organ_ident(i: u32) -> u64 @export {
+    if i == 0u32 { return autognosis_root() }
+    if i == 1u32 { return autophasis_set_id() }
+    if i == 2u32 { return synapse_seal_const() }
+    if i == 3u32 { return admix_set_id() }
+    if i == 4u32 { return entangle_set_id() }
+    return 0u64
+}
+
+/* examine one organ intrinsically: 0 healthy, else base+arm locating the fault */
+fn intro_examine(i: u32) -> u32 @export {
+    if i == 0u32 { return intro_examine_autognosis() }
+    if i == 1u32 { return intro_examine_autophasis() }
+    if i == 2u32 { return intro_examine_synapse() }
+    if i == 3u32 { return intro_examine_admix() }
+    if i == 4u32 { return intro_examine_entangle() }
+    return 999u32
+}
+
+/* the whole organism examines itself: 0 iff every organ is whole, else the
+ * first located fault */
+fn intro_examine_all() -> u32 @export {
+    /* admix must be configured before it (or the wire that serves it) is asked */
+    adx_init()
+    let mut i : u32 = 0u32
+    while i < intro_organ_count() {
+        let v : u32 = intro_examine(i)
+        if v != 0u32 { return v }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* THE VITALITY ROOT: FNV fold of every organ's identity, in roster order --
+ * but 0 (REFUSED) if the organism is not whole.  A single u64 that is nonzero
+ * iff III examined itself and found itself coherent.  The name of a living III. */
+fn intro_vitality() -> u64 @export {
+    if intro_examine_all() != 0u32 { return 0u64 }
+    /* the vitality root, through the canonical seat -- byte-identical fold of
+     * the roster's identities */
+    let mut h : u64 = idfold_basis()
+    let mut i : u32 = 0u32
+    while i < intro_organ_count() {
+        h = idfold_u64(h, intro_organ_ident(i))
+        i = i + 1u32
+    }
+    return idfold_seal(h)
+}

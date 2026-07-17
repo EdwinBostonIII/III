@@ -1,0 +1,111 @@
+/* STDLIB/iii/aether/entangle.iii -- THE KINETIC ENTANGLEMENT: the reversible
+ * coupling primitive that replaces the TLS-style handshake for the Lagrangian
+ * Tier.  Two III nodes stop being separate cells and share ONE mathematical
+ * state, folded and unfoldable by the proven-bijective admix.
+ *
+ * THE HANDSHAKE (Phase 2 -- kinetic entanglement, not a cipher negotiation):
+ *   node A holds root_A = autognosis_root() (its sealed constitution);
+ *   node B holds root_B.  They exchange the RAW roots and both compute
+ *       shared = admix(root_A ^ root_B).
+ *   Because ^ is commutative and admix is deterministic, BOTH sides reach the
+ *   SAME shared state with no negotiation -- the two physical identities are
+ *   folded into one symmetric seed (entangle_shared is symmetric, PROVEN here).
+ *
+ * THE CONTINUOUS PULSE (Phase 3 -- the wire is a shared engine, not a tunnel):
+ *   every action-vector (a u64 of bit flips) is folded into the running state
+ *       state' = pulse(state, action) = admix(state ^ action).
+ *   The connection IS this ongoing admix chain; there is no "packet", only the
+ *   evolving shared state.
+ *
+ * THE EXACT REWIND (Phase 5 -- error correction replaced by BIJECTIVITY):
+ *       action = rewind(state, state') = state ^ admix_inv(state').
+ *   THE LOAD-BEARING LAW, proven from admix's bijectivity over all 2^64:
+ *       rewind(state, pulse(state, action)) == action    for ALL state, action.
+ *   So a node that assumed an action during an Epistemic Window (latency =
+ *   Landauer deficit) can EXACTLY recover the true action when the delayed
+ *   pulse arrives, unwind its assumption, and re-fold reality -- no information
+ *   is lost to an irreversible projection.  This is the Gestalt rollback, as an
+ *   algebraic identity rather than a retransmission protocol.
+ *
+ * HONESTY (the eidolon / no-overclaim law): admix is a BIJECTION, so it has no
+ * one-wayness -- this primitive provides IDENTITY-ENTANGLEMENT + REVERSIBLE
+ * COUPLING, NOT confidentiality against a passive eavesdropper who sees both
+ * roots (that is aether/sealed_channel's job, x25519+ChaCha).  The Lagrangian
+ * model discards confidentiality by design (III speaks only to another III, and
+ * the goal is coupling, not secrecy), so entanglement SUPERSEDES the sealed
+ * channel's ROLE in that model -- it does not claim its cryptographic property.
+ *
+ * NIH: composes aether/admix + katabasis/autognosis only.  Hexad: kind_mobius
+ * (a reversible directional flow across the wire).  Ring R0. */
+module aether_entangle
+
+extern @abi(c-msvc-x64) fn adx_init() -> u32 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix(x: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix_inv(y: u64) -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix_set_id() -> u64 from "admix.iii"
+extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_prime() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+/* configure the underlying diffuser (idempotent).  0 ok | 1 constitution
+ * incoherent (admix could not self-derive) -- entanglement is then refused. */
+fn entangle_init() -> u32 @export { return adx_init() }
+
+/* this node's identity for the handshake = its sealed constitution root */
+fn entangle_local() -> u64 @export { return autognosis_root() }
+
+/* the symmetric shared seed of two nodes (Phase 2).  entangle_shared(a,b) ==
+ * entangle_shared(b,a) by construction. */
+fn entangle_shared(root_a: u64, root_b: u64) -> u64 @export {
+    return admix(root_a ^ root_b)
+}
+
+/* the full handshake from THIS node's view: fold the peer's root with our own */
+fn entangle_couple(peer_root: u64) -> u64 @export {
+    return admix(autognosis_root() ^ peer_root)
+}
+
+/* the continuous pulse: fold one action-vector into the running shared state */
+fn entangle_pulse(state: u64, action: u64) -> u64 @export {
+    return admix(state ^ action)
+}
+
+/* the exact rewind: recover the action that carried `state` to `next`.
+ * rewind(state, pulse(state, action)) == action for all state, action. */
+fn entangle_rewind(state: u64, next: u64) -> u64 @export {
+    return state ^ admix_inv(next)
+}
+
+/* undo one pulse: given the current state and the action taken, recover the
+ * PRIOR state (the other reversal direction -- roll the shared engine back a
+ * tick).  unpulse(pulse(state, action), action) == state. */
+fn entangle_unpulse(next: u64, action: u64) -> u64 @export {
+    return admix_inv(next) ^ action
+}
+
+/* fold a whole action LOG into the state (the Epistemic-Window catch-up: apply
+ * the true bit-flip history the delayed peer finally sent).  ptr -> n u64 actions. */
+fn entangle_fold_log(state: u64, ptr: u64, n: u64) -> u64 @export {
+    let p : *u64 = ptr as *u64
+    let mut s : u64 = state
+    let mut i : u64 = 0u64
+    while i < n {
+        s = admix(s ^ p[i])
+        i = i + 1u64
+    }
+    return s
+}
+
+/* the primitive's identity: bound to the diffuser it rides (admix_set_id),
+ * folded with a tag so it names THIS coupling primitive */
+fn entangle_set_id() -> u64 @export {
+    let base : u64 = admix_set_id()
+    if base == 0u64 { return 0u64 }
+    /* identity through the canonical seat (numera/idfold), byte-identical to the
+     * former inline fold: fold admix's id, then a whole-word "ENTANGLE" tag so
+     * this coupling primitive's id is distinct from the diffuser's own */
+    let h : u64 = idfold_u64(idfold_basis(), base)
+    return idfold_seal((h ^ 4995407770940708687u64) * idfold_prime())
+}

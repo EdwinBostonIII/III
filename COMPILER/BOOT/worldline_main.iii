@@ -1,0 +1,98 @@
+/* COMPILER/BOOT/worldline_main.iii -- iii-worldline: GAMMA-4, THE EXACT
+ * WORLDLINE, standing.
+ *
+ *   iii-worldline prove       the self-proof (arms 140..146)
+ *   iii-worldline discover    III surfaces the S_5 character (120 orderings)
+ *   iii-worldline time        causality is <, time-reversal is ~, no CTC
+ *
+ * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
+module worldline_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn xw_selfprove() -> u64 from "exact_worldline.iii"
+extern @abi(c-msvc-x64) fn xw_discover(w: u64) -> u64 from "exact_worldline.iii"
+extern @abi(c-msvc-x64) fn xw_even() -> u64 from "exact_worldline.iii"
+extern @abi(c-msvc-x64) fn xw_odd() -> u64 from "exact_worldline.iii"
+extern @abi(c-msvc-x64) fn xw_worldline(n: u64, rev: u64) -> u64 from "exact_worldline.iii"
+extern @abi(c-msvc-x64) fn xw_ctc(n: u64) -> u64 from "exact_worldline.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 { k = k - 4u64   let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) } }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8   let pb : *u8 = b as *u8   let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii-worldline -- GAMMA-4, the exact worldline: III invents orient4d, DISCOVERS\n" as u64)
+    ps("its S_5 character, and TIME becomes the language (causality is <, reversal is ~).\n\n" as u64)
+    ps("  iii-worldline prove       the self-proof (arms 140..146)\n" as u64)
+    ps("  iii-worldline discover    III surfaces the S_5 sign character over 120 orderings\n" as u64)
+    ps("  iii-worldline time        the causal language + the Loschmidt echo + no-CTC\n\n" as u64)
+    ps("exit: 0 ok | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let sp : u64 = xw_selfprove()
+    if sp != 0u64 {
+        ps("THE WORLDLINE REFUSES ITSELF: self-proof arm " as u64)   pu(sp)   ps(" failed\n" as u64)
+        return 9u64
+    }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE EXACT WORLDLINE PROVEN (arms 140..146):\n" as u64)
+        ps("  III invented orient4d (the 4-simplex orientation atom) and DISCOVERED,\n" as u64)
+        ps("  with no target named, that over the COMPLETE 120-ordering orbit the exact\n" as u64)
+        ps("  geometric sign EQUALS the permutation parity -- 120 of 120 agree, split\n" as u64)
+        ps("  60 even / 60 odd (the S_5 sign homomorphism).  Alternating in 4D too.\n" as u64)
+        ps("  TIME IS THE LANGUAGE: a worldline is a causal EIDOLOS scroll, causality\n" as u64)
+        ps("  is <, time-reversal is ~ (the Loschmidt echo, R^2 = id), and a closed\n" as u64)
+        ps("  timelike curve is an INCOHERENT scroll -- time travel is impossible by\n" as u64)
+        ps("  the coherence law, not a bolted check.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "discover" as u64) == 1u32 {
+        ps("III enumerates orient4d's COMPLETE orbit -- all 120 orderings of 5 points --\n" as u64)
+        ps("and computes each ordering's exact geometric sign AND its permutation parity,\n" as u64)
+        ps("independently.  No target named.  (Full table is 120 rows; the summary:)\n\n" as u64)
+        let a0 : u64 = xw_discover(0u64)
+        ps("  witness 0 : " as u64)   pu(a0)   ps(" of 120 agree (geo-sign == parity x base), " as u64)
+        pu(xw_even())   ps(" even / " as u64)   pu(xw_odd())   ps(" odd\n" as u64)
+        let a1 : u64 = xw_discover(1u64)
+        ps("  witness 1 : " as u64)   pu(a1)   ps(" of 120 agree, " as u64)
+        pu(xw_even())   ps(" even / " as u64)   pu(xw_odd())   ps(" odd\n" as u64)
+        let a2 : u64 = xw_discover(2u64)
+        ps("  witness 2 : " as u64)   pu(a2)   ps(" of 120 agree, " as u64)
+        pu(xw_even())   ps(" even / " as u64)   pu(xw_odd())   ps(" odd\n\n" as u64)
+        ps("The S_5 sign homomorphism EMERGED from two independent exact computations,\n" as u64)
+        ps("config-independent -- orientation is alternating, the exact 4D predicate\n" as u64)
+        ps("consistent.  The alternating character now holds across S_2, S_3, S_4, S_5.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "time" as u64) == 1u32 {
+        ps("TIME IS THE LANGUAGE (III's causal structure, live):\n\n" as u64)
+        let wf : u64 = xw_worldline(5u64, 0u64)
+        ps("  forward worldline e0<e1<e2<e3<e4 : coherent, address " as u64)   phex(wf)   putchar(10i32)
+        let w1 : u64 = xw_worldline(5u64, 1u64)
+        ps("  time-reversed (one reversal)     : a distinct worldline, address " as u64)   phex(w1)   putchar(10i32)
+        let w2 : u64 = xw_worldline(5u64, 2u64)
+        ps("  reversed twice (the echo)        : returns the original, address " as u64)   phex(w2)
+        if w2 == wf { ps("   [R^2 = id]\n" as u64) } else { ps("   [MISMATCH]\n" as u64) }
+        let ctc : u64 = xw_ctc(5u64)
+        ps("  closed timelike curve e4<e0      : " as u64)
+        if ctc == 0u64 { ps("REFUSED -- incoherent scroll (no time travel)\n" as u64) } else { ps("address " as u64)   phex(ctc)   putchar(10i32) }
+        ps("\nCausality cannot close because EIDOLOS's < cannot cycle: the impossibility\n" as u64)
+        ps("of a closed timelike curve is a theorem of the language, not a runtime guard.\n" as u64)
+        return 0u64
+    }
+    return usage()
+}

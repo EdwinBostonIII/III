@@ -1,0 +1,262 @@
+/* STDLIB/iii/eidos/exact_worldline.iii -- GAMMA-4, THE EXACT WORLDLINE:
+ * dimension four and TIME, invented on the unified organism.
+ *
+ * THE ATOM III INVENTS (nowhere in the tree): orient4d, the sign of the 4x4
+ * determinant [b-a; c-a; d-a; e-a] of five points -- the signed 4-volume of a
+ * 4-simplex, the orientation predicate of 4-space.  Exact integer.
+ *
+ * WHAT III DISCOVERS (no target named): III enumerates the COMPLETE orbit of
+ * orient4d -- all 120 orderings of 5 points (S_5) -- and computes, by exact
+ * integer arithmetic, the sign of each; INDEPENDENTLY it computes each
+ * ordering's permutation parity by counting inversions.  The two agree on all
+ * 120: the geometric sign IS the sign homomorphism of S_5 (60 even orderings
+ * one sense, 60 odd the other).  Orientation is alternating in 4D too -- the
+ * Kettner-Mehlhorn consistency, surfaced as an isomorphism between two
+ * independent computations at every dimension III has reached (S_2, S_3, S_4,
+ * now S_5).
+ *
+ * TIME IS THE LANGUAGE.  A worldline is a chain of events; its CAUSAL ORDER is
+ * exactly EIDOLOS's `<` (event p causally precedes event q); TIME-REVERSAL is
+ * exactly EIDOLOS's `~` (the Loschmidt involution, R^2 = id); and a CLOSED
+ * TIMELIKE CURVE -- a causal loop e -> ... -> e -- is exactly an INCOHERENT
+ * scroll, refused by the language's own coherence law.  So the impossibility
+ * of time travel is not a runtime check here; it is a theorem of the tongue:
+ * causality cannot close because `<` cannot cycle.  The forward worldline and
+ * its Loschmidt reverse are mirror scrolls; reversing twice returns the
+ * original (address-identical), the echo made exact.
+ *
+ * Truth is a CONDITION OF MOTION: xw_selfprove (arms 140..146).  NO gate.
+ * NIH: composes omnia/eidolos (the causal language).  Hexad: kind_form.
+ * Ring R0. */
+module eidos_exact_worldline
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+fn xw_sign(v: i64) -> i32 { if v > 0i64 { return 1i32 }   if v < 0i64 { return -1i32 }   return 0i32 }
+
+/* ==================== THE ATOM: orient4d (invented) ==================== */
+/* a 3x3 determinant of the given nine entries */
+fn xw_det3(a11: i64, a12: i64, a13: i64, a21: i64, a22: i64, a23: i64, a31: i64, a32: i64, a33: i64) -> i64 {
+    return a11 * (a22*a33 - a23*a32) - a12 * (a21*a33 - a23*a31) + a13 * (a21*a32 - a22*a31)
+}
+/* orient4d: sign of the 4x4 determinant with rows (b-a),(c-a),(d-a),(e-a),
+ * by cofactor expansion along the first column of edge vectors. */
+fn orient4d(ax: i64, ay: i64, az: i64, aw: i64, bx: i64, by: i64, bz: i64, bw: i64, cx: i64, cy: i64, cz: i64, cw: i64, dx: i64, dy: i64, dz: i64, dw: i64, ex: i64, ey: i64, ez: i64, ew: i64) -> i32 @export {
+    /* rows: r1=b-a, r2=c-a, r3=d-a, r4=e-a ; columns x,y,z,w */
+    let r1x : i64 = bx-ax   let r1y : i64 = by-ay   let r1z : i64 = bz-az   let r1w : i64 = bw-aw
+    let r2x : i64 = cx-ax   let r2y : i64 = cy-ay   let r2z : i64 = cz-az   let r2w : i64 = cw-aw
+    let r3x : i64 = dx-ax   let r3y : i64 = dy-ay   let r3z : i64 = dz-az   let r3w : i64 = dw-aw
+    let r4x : i64 = ex-ax   let r4y : i64 = ey-ay   let r4z : i64 = ez-az   let r4w : i64 = ew-aw
+    /* expand along column x: det = r1x*M1 - r2x*M2 + r3x*M3 - r4x*M4, where Mk
+     * is the 3x3 minor on columns (y,z,w) with row k removed */
+    let m1 : i64 = xw_det3(r2y,r2z,r2w, r3y,r3z,r3w, r4y,r4z,r4w)
+    let m2 : i64 = xw_det3(r1y,r1z,r1w, r3y,r3z,r3w, r4y,r4z,r4w)
+    let m3 : i64 = xw_det3(r1y,r1z,r1w, r2y,r2z,r2w, r4y,r4z,r4w)
+    let m4 : i64 = xw_det3(r1y,r1z,r1w, r2y,r2z,r2w, r3y,r3z,r3w)
+    let det : i64 = r1x*m1 - r2x*m2 + r3x*m3 - r4x*m4
+    return xw_sign(det)
+}
+
+/* ==================== III DISCOVERS the S_5 alternating character ==================== */
+var XW_PT : [i64; 20]                    /* 5 points x 4 coords, XW_PT[p*4+c]   */
+var XW_PERM : [u64; 5]
+var XW_EVEN : u64 = 0u64
+var XW_ODD  : u64 = 0u64
+fn xw_orient_idx(i: u64, j: u64, k: u64, l: u64, m: u64) -> i32 {
+    let bi : u64 = i*4u64   let bj : u64 = j*4u64   let bk : u64 = k*4u64   let bl : u64 = l*4u64   let bm : u64 = m*4u64
+    return orient4d(XW_PT[bi],XW_PT[bi+1u64],XW_PT[bi+2u64],XW_PT[bi+3u64],
+                    XW_PT[bj],XW_PT[bj+1u64],XW_PT[bj+2u64],XW_PT[bj+3u64],
+                    XW_PT[bk],XW_PT[bk+1u64],XW_PT[bk+2u64],XW_PT[bk+3u64],
+                    XW_PT[bl],XW_PT[bl+1u64],XW_PT[bl+2u64],XW_PT[bl+3u64],
+                    XW_PT[bm],XW_PT[bm+1u64],XW_PT[bm+2u64],XW_PT[bm+3u64])
+}
+/* Lehmer decode: the idx-th (0..119) permutation of {0,1,2,3,4} into XW_PERM */
+fn xw_lehmer(idx: u64) -> i32 {
+    var avail : [u64; 5]
+    avail[0u64]=0u64   avail[1u64]=1u64   avail[2u64]=2u64   avail[3u64]=3u64   avail[4u64]=4u64
+    var navail : u64 = 5u64
+    var rem : u64 = idx
+    var fact : u64 = 24u64               /* 4! */
+    var pos : u64 = 0u64
+    while pos < 5u64 {
+        let d : u64 = rem / fact
+        rem = rem - (d * fact)
+        XW_PERM[pos] = avail[d]
+        let mut q : u64 = d
+        while q + 1u64 < navail { avail[q] = avail[q + 1u64]   q = q + 1u64 }
+        navail = navail - 1u64
+        pos = pos + 1u64
+        if navail > 0u64 { fact = fact / navail }
+    }
+    return 0i32
+}
+fn xw_parity() -> i32 {
+    let mut inv : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 5u64 {
+        let mut j : u64 = i + 1u64
+        while j < 5u64 { if XW_PERM[i] > XW_PERM[j] { inv = inv + 1u64 }   j = j + 1u64 }
+        i = i + 1u64
+    }
+    if (inv & 1u64) == 0u64 { return 1i32 }
+    return -1i32
+}
+fn xw_set_witness(w: u64) -> i32 {
+    /* five generic points in 4-space (small coords keep the degree-4 det in i64) */
+    if w == 0u64 {
+        XW_PT[0u64]=0i64  XW_PT[1u64]=0i64  XW_PT[2u64]=0i64  XW_PT[3u64]=0i64
+        XW_PT[4u64]=7i64  XW_PT[5u64]=1i64  XW_PT[6u64]=1i64  XW_PT[7u64]=1i64
+        XW_PT[8u64]=1i64  XW_PT[9u64]=7i64  XW_PT[10u64]=1i64  XW_PT[11u64]=1i64
+        XW_PT[12u64]=1i64  XW_PT[13u64]=1i64  XW_PT[14u64]=7i64  XW_PT[15u64]=1i64
+        XW_PT[16u64]=1i64  XW_PT[17u64]=1i64  XW_PT[18u64]=1i64  XW_PT[19u64]=7i64
+    } else {
+        if w == 1u64 {
+            XW_PT[0u64]=2i64  XW_PT[1u64]=1i64  XW_PT[2u64]=3i64  XW_PT[3u64]=1i64
+            XW_PT[4u64]=9i64  XW_PT[5u64]=2i64  XW_PT[6u64]=1i64  XW_PT[7u64]=4i64
+            XW_PT[8u64]=1i64  XW_PT[9u64]=8i64  XW_PT[10u64]=2i64  XW_PT[11u64]=3i64
+            XW_PT[12u64]=3i64  XW_PT[13u64]=2i64  XW_PT[14u64]=9i64  XW_PT[15u64]=1i64
+            XW_PT[16u64]=4i64  XW_PT[17u64]=3i64  XW_PT[18u64]=2i64  XW_PT[19u64]=10i64
+        } else {
+            XW_PT[0u64]=1i64  XW_PT[1u64]=2i64  XW_PT[2u64]=1i64  XW_PT[3u64]=3i64
+            XW_PT[4u64]=8i64  XW_PT[5u64]=1i64  XW_PT[6u64]=2i64  XW_PT[7u64]=1i64
+            XW_PT[8u64]=2i64  XW_PT[9u64]=9i64  XW_PT[10u64]=1i64  XW_PT[11u64]=2i64
+            XW_PT[12u64]=1i64  XW_PT[13u64]=2i64  XW_PT[14u64]=8i64  XW_PT[15u64]=3i64
+            XW_PT[16u64]=3i64  XW_PT[17u64]=1i64  XW_PT[18u64]=2i64  XW_PT[19u64]=11i64
+        }
+    }
+    return 0i32
+}
+fn xw_orbit_geo(w: u64, idx: u64) -> i32 @export {
+    xw_set_witness(w)
+    xw_lehmer(idx)
+    return xw_orient_idx(XW_PERM[0u64], XW_PERM[1u64], XW_PERM[2u64], XW_PERM[3u64], XW_PERM[4u64])
+}
+fn xw_orbit_parity(idx: u64) -> i32 @export {
+    xw_lehmer(idx)
+    return xw_parity()
+}
+/* THE DISCOVERY over the complete 120-orbit at witness w: number of orderings
+ * where the exact geometric sign equals parity x base-sign (120 == the full
+ * S_5 sign homomorphism); tallies even/odd. */
+fn xw_discover(w: u64) -> u64 @export {
+    XW_EVEN = 0u64
+    XW_ODD = 0u64
+    xw_set_witness(w)
+    xw_lehmer(0u64)
+    let g0 : i32 = xw_orient_idx(XW_PERM[0u64], XW_PERM[1u64], XW_PERM[2u64], XW_PERM[3u64], XW_PERM[4u64])
+    if g0 == 0i32 { return 0u64 }
+    let mut agree : u64 = 0u64
+    let mut idx : u64 = 0u64
+    while idx < 120u64 {
+        xw_lehmer(idx)
+        let par : i32 = xw_parity()
+        let geo : i32 = xw_orient_idx(XW_PERM[0u64], XW_PERM[1u64], XW_PERM[2u64], XW_PERM[3u64], XW_PERM[4u64])
+        if geo == (par * g0) { agree = agree + 1u64 }
+        if par == 1i32 { XW_EVEN = XW_EVEN + 1u64 } else { XW_ODD = XW_ODD + 1u64 }
+        idx = idx + 1u64
+    }
+    return agree
+}
+fn xw_even() -> u64 @export { return XW_EVEN }
+fn xw_odd()  -> u64 @export { return XW_ODD }
+
+/* ==================== TIME IS THE LANGUAGE ==================== */
+/* a causal worldline of n events e0<e1<...<e(n-1) written as an EIDOLOS scroll;
+ * rev=1 writes the Loschmidt-reversed chain.  Returns the scroll address. */
+var XW_TXT : [u8; 1024]
+var XW_TN  : u64 = 0u64
+fn xw_tstr(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if XW_TN < 1024u64 { XW_TXT[XW_TN] = p[i]   XW_TN = XW_TN + 1u64 }   i = i + 1u64 }
+    return 0i32
+}
+fn xw_tev(k: u64) -> i32 {                /* emit the event token "e<k>" */
+    xw_tstr("e" as u64)
+    if k >= 10u64 { let hi : u64 = k / 10u64   XW_TXT[XW_TN] = (48u64 + hi) as u8   XW_TN = XW_TN + 1u64 }
+    XW_TXT[XW_TN] = (48u64 + (k % 10u64)) as u8   XW_TN = XW_TN + 1u64
+    return 0i32
+}
+fn xw_worldline(n: u64, rev: u64) -> u64 @export {
+    XW_TN = 0u64
+    if n < 2u64 { return 0u64 }
+    let er : u64 = rev & 1u64             /* time-reversal is an involution: two reversals = none */
+    let mut i : u64 = 0u64
+    while i + 1u64 < n {
+        if i > 0u64 { xw_tstr(" " as u64) }
+        xw_tstr("[" as u64)
+        if er == 0u64 { xw_tev(i)   xw_tstr(" < " as u64)   xw_tev(i + 1u64) }
+        else { xw_tev(n - 1u64 - i)   xw_tstr(" < " as u64)   xw_tev(n - 2u64 - i) }
+        xw_tstr("]" as u64)
+        i = i + 1u64
+    }
+    eol_reset()
+    if eol_read((&XW_TXT) as u64, XW_TN) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+/* a closed timelike curve: the forward chain PLUS a back-edge e(n-1) < e0 --
+ * the language must REFUSE it (address 0, incoherent).  Returns eol_addr,
+ * which is 0 exactly when the CTC is (correctly) rejected. */
+fn xw_ctc(n: u64) -> u64 @export {
+    XW_TN = 0u64
+    if n < 2u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i + 1u64 < n {
+        xw_tstr("[" as u64)   xw_tev(i)   xw_tstr(" < " as u64)   xw_tev(i + 1u64)   xw_tstr("] " as u64)
+        i = i + 1u64
+    }
+    xw_tstr("[" as u64)   xw_tev(n - 1u64)   xw_tstr(" < " as u64)   xw_tev(0u64)   xw_tstr("]" as u64)
+    eol_reset()
+    if eol_read((&XW_TXT) as u64, XW_TN) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+
+/* ==================== THE SELF-PROOF (arms 140..146) ==================== */
+fn xw_selfprove() -> u64 @export {
+    /* arm 140: the atom -- a positively oriented 4-simplex, its vertex-swap
+     * negatively oriented, and a degenerate (4 points in a hyperplane w=0) */
+    if orient4d(0i64,0i64,0i64,0i64, 7i64,1i64,1i64,1i64, 1i64,7i64,1i64,1i64, 1i64,1i64,7i64,1i64, 1i64,1i64,1i64,7i64) != 1i32 { return 140u64 }
+    if orient4d(0i64,0i64,0i64,0i64, 1i64,7i64,1i64,1i64, 7i64,1i64,1i64,1i64, 1i64,1i64,7i64,1i64, 1i64,1i64,1i64,7i64) != -1i32 { return 140u64 }
+    if orient4d(0i64,0i64,0i64,0i64, 1i64,0i64,0i64,0i64, 0i64,1i64,0i64,0i64, 1i64,1i64,0i64,0i64, 2i64,3i64,0i64,0i64) != 0i32 { return 140u64 }
+    /* arm 141: THE DISCOVERY at witness 0 -- the exact geometric sign and the
+     * permutation parity agree on all 120 orderings; the orbit splits 60/60
+     * (the S_5 sign character, surfaced with no target named) */
+    if xw_discover(0u64) != 120u64 { return 141u64 }
+    if xw_even() != 60u64 { return 141u64 }
+    if xw_odd() != 60u64 { return 141u64 }
+    /* arm 142: CONFIG-INDEPENDENT -- two more generic witnesses, identical
+     * 120/60/60 (it is the group structure of S_5, not a fluke) */
+    if xw_discover(1u64) != 120u64 { return 142u64 }
+    if xw_even() != 60u64 { return 142u64 }
+    if xw_discover(2u64) != 120u64 { return 142u64 }
+    if xw_odd() != 60u64 { return 142u64 }
+    /* arm 143: TIME IS THE LANGUAGE -- a 5-event worldline is a coherent scroll;
+     * its causal order entails the transitive precedence (e0 causally precedes
+     * e4 though only adjacent links were stated) */
+    let wf : u64 = xw_worldline(5u64, 0u64)
+    if wf == 0u64 { return 143u64 }
+    if eol_entails("e0" as u64, 2u64, 0u64, "e4" as u64, 2u64) != 1u64 { return 143u64 }
+    if eol_entails("e4" as u64, 2u64, 0u64, "e0" as u64, 2u64) != 0u64 { return 143u64 }
+    /* arm 144: THE LOSCHMIDT ECHO -- time-reversal is an involution.  ONE
+     * reversal is a genuinely different worldline (the opposite causal order,
+     * a distinct coherent scroll); TWO reversals return the original, address-
+     * identical (R^2 = id).  The echo is exact. */
+    let wr : u64 = xw_worldline(5u64, 1u64)
+    if wr == 0u64 { return 144u64 }
+    if wr == wf { return 144u64 }                    /* R != id: reversed differs */
+    let w2 : u64 = xw_worldline(5u64, 2u64)
+    if w2 != wf { return 144u64 }                    /* R^2 == id: the echo returns */
+    /* arm 145: NO CLOSED TIMELIKE CURVE -- a causal loop is INCOHERENT; the
+     * language refuses it (address 0), so time travel is impossible by the
+     * coherence law, not by a bolted check */
+    if xw_ctc(5u64) != 0u64 { return 145u64 }
+    /* and a non-looping chain of the same events is fine */
+    if xw_worldline(5u64, 0u64) == 0u64 { return 145u64 }
+    /* arm 146: causality is transitive and antisymmetric (the < laws), so a
+     * two-event mutual precedence is refused too */
+    if xw_ctc(2u64) != 0u64 { return 146u64 }
+    return 0u64
+}

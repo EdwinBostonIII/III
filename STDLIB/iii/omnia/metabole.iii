@@ -902,6 +902,7 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
     if mb_keyis("blk.0.attn_kv_a_mqa.weight" as u64, nlen) == 1u64 { gsl = 4u64 }
     if mb_keyis("blk.0.attn_kv_a_norm.weight" as u64, nlen) == 1u64 { gsl = 5u64 }
     if mb_keyis("blk.0.attn_kv_b.weight" as u64, nlen) == 1u64 { gsl = 6u64 }
+    if mb_keyis("blk.0.attn_output.weight" as u64, nlen) == 1u64 { gsl = 7u64 }
     if gsl < 8u64 {
         if MB_G_F[gsl] == 0u8 {
             MB_G_TYPE[gsl] = ty
@@ -3775,8 +3776,9 @@ var MB_N1E : [i64; 128]
 var MB_N2S : [i64; 128]
 var MB_N2L : [u64; 768]
 var MB_N2E : [i64; 128]
-/* the row's decoded weights (one row of any gaze tensor) */
-var MB_GW : [i64; 7168]
+/* the row's decoded weights (one row of any gaze tensor; o_proj rows are
+ * 16384 wide -- the buffer holds the widest row it will ever be asked) */
+var MB_GW : [i64; 16384]
 /* the signed 6-limb accumulator */
 var MB_6S : i64 = 0i64
 var MB_6L : [u64; 6]
@@ -4534,6 +4536,20 @@ fn mb_arm375() -> u64 {
             MB_CH1[d2] = MB_RR1
             MB_CH2[d2] = MB_RR2
             MB_CHE[d2] = MB_RRE
+            /* the choir's standing store: every head's rope rows kept
+             * (the row is already decoded here -- store, never restream) */
+            if d2 >= nope {
+                if MB_NROPE == 64u64 {
+                    if MB_NHEAD <= 128u64 {
+                        let qrx : u64 = hh * 64u64 + (d2 - nope)
+                        MB_QRS[qrx] = MB_RRS
+                        MB_QR0[qrx] = MB_RR0
+                        MB_QR1[qrx] = MB_RR1
+                        MB_QR2[qrx] = MB_RR2
+                        MB_QRE[qrx] = MB_RRE
+                    }
+                }
+            }
             d2 = d2 + 1u64
         }
         d2 = 0u64
@@ -5611,6 +5627,1093 @@ fn mb_gz_v_l(d: u64, k: u64) -> u64 @export {
 fn mb_gz_v_e(d: u64) -> i64 @export {
     if d >= 128u64 { return 0i64 }
     return MB_VHE[d]
+}
+
+/* ============ the probole's serves (arms 381-383 consume) ============
+ * The choir needs every head's rope rows (stored in arm 375's own loop),
+ * every head's value rows (streamed once), and the latent rows for r3^2;
+ * the projection needs the o_proj tensor (census slot 7), the deposited
+ * 16384-wide interval thought, and the two-engine row dot below. */
+
+/* every head's q rope rows, canonical (s, 3 limbs, e) -- filled by 375 */
+var MB_QRS : [i64; 8192]
+var MB_QR0 : [u64; 8192]
+var MB_QR1 : [u64; 8192]
+var MB_QR2 : [u64; 8192]
+var MB_QRE : [i64; 8192]
+fn mb_qr_s(h: u64, d: u64) -> i64 @export {
+    if h >= 128u64 { return 0i64 }
+    if d >= 64u64 { return 0i64 }
+    return MB_QRS[h * 64u64 + d]
+}
+fn mb_qr_l(h: u64, d: u64, k: u64) -> u64 @export {
+    if h >= 128u64 { return 0u64 }
+    if d >= 64u64 { return 0u64 }
+    if k == 0u64 { return MB_QR0[h * 64u64 + d] }
+    if k == 1u64 { return MB_QR1[h * 64u64 + d] }
+    return MB_QR2[h * 64u64 + d]
+}
+fn mb_qr_e(h: u64, d: u64) -> i64 @export {
+    if h >= 128u64 { return 0i64 }
+    if d >= 64u64 { return 0i64 }
+    return MB_QRE[h * 64u64 + d]
+}
+
+/* the latent rows of kv_a (r < 512) for the r3^2 sum */
+fn mb_gz_dv_s(r: u64) -> i64 @export {
+    if r >= 512u64 { return 0i64 }
+    return MB_DVS[r]
+}
+fn mb_gz_dv_l(r: u64, k: u64) -> u64 @export {
+    if r >= 512u64 { return 0u64 }
+    if k == 0u64 { return MB_DV0[r] }
+    if k == 1u64 { return MB_DV1[r] }
+    return MB_DV2[r]
+}
+fn mb_gz_dv_e(r: u64) -> i64 @export {
+    if r >= 512u64 { return 0i64 }
+    return MB_DVE[r]
+}
+
+/* THE ALL-HEAD V SERVE: every head's value rows, streamed ONCE */
+var MB_WVS : [i64; 16384]
+var MB_WV0 : [u64; 16384]
+var MB_WV1 : [u64; 16384]
+var MB_WV2 : [u64; 16384]
+var MB_WVE : [i64; 16384]
+var MB_WVOK : u64 = 0u64
+fn mb_pb_vall() -> u64 @export {
+    if MB_WVOK == 1u64 { return 0u64 }
+    if MB_GAZE_OK != 1u64 { return 1u64 }
+    if MB_NHEAD != 128u64 { return 2u64 }
+    let hw : u64 = MB_G_NE[3] / MB_G_NE0[3] / MB_NHEAD
+    let nope : u64 = hw - MB_NROPE
+    let kvw : u64 = MB_G_NE[6] / MB_G_NE0[6] / MB_NHEAD
+    let nv : u64 = kvw - nope
+    if nv != 128u64 { return 2u64 }
+    mb_mkpath(MB_G_SH[1])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 1u64 }
+    let mut hh : u64 = 0u64
+    while hh < 128u64 {
+        let mut d : u64 = 0u64
+        while d < 128u64 {
+            if mb_gz_wrow(6u64, hh * kvw + nope + d) != 0u64 {
+                fclose(MB_LFILE[0])
+                return 1u64
+            }
+            if mb_gz_dotrow(MB_G_NE0[6], 2u64) != 0u64 {
+                fclose(MB_LFILE[0])
+                return 1u64
+            }
+            let ix : u64 = hh * 128u64 + d
+            MB_WVS[ix] = MB_RRS
+            MB_WV0[ix] = MB_RR0
+            MB_WV1[ix] = MB_RR1
+            MB_WV2[ix] = MB_RR2
+            MB_WVE[ix] = MB_RRE
+            d = d + 1u64
+        }
+        hh = hh + 1u64
+    }
+    fclose(MB_LFILE[0])
+    MB_WVOK = 1u64
+    return 0u64
+}
+fn mb_pb_v_s(i: u64) -> i64 @export {
+    if i >= 16384u64 { return 0i64 }
+    return MB_WVS[i]
+}
+fn mb_pb_v_l(i: u64, k: u64) -> u64 @export {
+    if i >= 16384u64 { return 0u64 }
+    if k == 0u64 { return MB_WV0[i] }
+    if k == 1u64 { return MB_WV1[i] }
+    return MB_WV2[i]
+}
+fn mb_pb_v_e(i: u64) -> i64 @export {
+    if i >= 16384u64 { return 0i64 }
+    return MB_WVE[i]
+}
+
+/* THE STANDING THOUGHT: the 16384-wide interval vector (lo/hi bounds and
+ * the exact one-voice point), each (sign, 4 limbs, exp) */
+var MB_TLS : [i64; 16384]
+var MB_TL0 : [u64; 16384]
+var MB_TL1 : [u64; 16384]
+var MB_TL2 : [u64; 16384]
+var MB_TL3 : [u64; 16384]
+var MB_TLE : [i64; 16384]
+var MB_THS : [i64; 16384]
+var MB_TH0 : [u64; 16384]
+var MB_TH1 : [u64; 16384]
+var MB_TH2 : [u64; 16384]
+var MB_TH3 : [u64; 16384]
+var MB_THE : [i64; 16384]
+var MB_TXS : [i64; 16384]
+var MB_TX0 : [u64; 16384]
+var MB_TX1 : [u64; 16384]
+var MB_TX2 : [u64; 16384]
+var MB_TX3 : [u64; 16384]
+var MB_TXE : [i64; 16384]
+var MB_TSETL : u64 = 0u64
+var MB_TSETH : u64 = 0u64
+var MB_TSETX : u64 = 0u64
+fn mb_pb_set_lo(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
+    if i >= 16384u64 { return 1u64 }
+    if MB_TLS[i] == 0i64 {
+        if (l0 | l1 | l2 | l3) != 0u64 { MB_TSETL = MB_TSETL + 1u64 }
+    }
+    MB_TLS[i] = s
+    MB_TL0[i] = l0
+    MB_TL1[i] = l1
+    MB_TL2[i] = l2
+    MB_TL3[i] = l3
+    MB_TLE[i] = e
+    return 0u64
+}
+fn mb_pb_set_hi(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
+    if i >= 16384u64 { return 1u64 }
+    MB_THS[i] = s
+    MB_TH0[i] = l0
+    MB_TH1[i] = l1
+    MB_TH2[i] = l2
+    MB_TH3[i] = l3
+    MB_THE[i] = e
+    return 0u64
+}
+fn mb_pb_set_ex(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
+    if i >= 16384u64 { return 1u64 }
+    MB_TXS[i] = s
+    MB_TX0[i] = l0
+    MB_TX1[i] = l1
+    MB_TX2[i] = l2
+    MB_TX3[i] = l3
+    MB_TXE[i] = e
+    return 0u64
+}
+fn mb_pb_mark(nl: u64, nh: u64, nx: u64) -> u64 @export {
+    MB_TSETL = nl
+    MB_TSETH = nh
+    MB_TSETX = nx
+    return 0u64
+}
+
+/* THE PROJECTION: o_proj rows against the standing thought.
+ * which 0 = lower bound (law of signs picks the crossing endpoint),
+ * 1 = upper bound, 2 = the exact one-voice point.  Every product is an
+ * exact integer shift-and-add; the interval carries ONLY the widths the
+ * softmax ladders created.  Chunked prefixes re-folded = the row teeth. */
+var MB_OLS : [i64; 7168]
+var MB_OLL : [u64; 57344]
+var MB_OLE : [i64; 7168]
+var MB_OHS : [i64; 7168]
+var MB_OHL : [u64; 57344]
+var MB_OHE : [i64; 7168]
+var MB_OXS : [i64; 7168]
+var MB_OXL : [u64; 57344]
+var MB_OXE : [i64; 7168]
+var MB_PBGUARD : u64 = 0u64
+
+/* 8-limb term/acc engine (the deposit mantissas are 4-limb and the
+ * canonical exponents scatter; 512 bits with a multi-word shift) */
+var MB_P8 : [u64; 8]
+var MB_A8S : i64 = 0i64
+var MB_A8 : [u64; 8]
+var MB_C8S : [i64; 64]
+var MB_C8L : [u64; 512]
+
+/* P8 = (l0..l3) * m << sh (sh <= 192; top spill counted as overflow) */
+fn mb_p8_mul4_shl(l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        MB_P8[k] = 0u64
+        k = k + 1u64
+    }
+    mb_mul64(l0, m)
+    MB_P8[0] = MB_MLO
+    MB_P8[1] = MB_MHI
+    mb_mul64(l1, m)
+    let s1 : u64 = MB_P8[1] + MB_MLO
+    let mut c1 : u64 = 0u64
+    if s1 < MB_MLO { c1 = 1u64 }
+    MB_P8[1] = s1
+    MB_P8[2] = MB_MHI + c1
+    mb_mul64(l2, m)
+    let s2 : u64 = MB_P8[2] + MB_MLO
+    let mut c2 : u64 = 0u64
+    if s2 < MB_MLO { c2 = 1u64 }
+    MB_P8[2] = s2
+    MB_P8[3] = MB_MHI + c2
+    mb_mul64(l3, m)
+    let s3 : u64 = MB_P8[3] + MB_MLO
+    let mut c3 : u64 = 0u64
+    if s3 < MB_MLO { c3 = 1u64 }
+    MB_P8[3] = s3
+    MB_P8[4] = MB_MHI + c3
+    if sh != 0u64 {
+        let w : u64 = sh / 64u64
+        let b : u64 = sh % 64u64
+        let mut k2 : u64 = 8u64
+        while k2 != 0u64 {
+            k2 = k2 - 1u64
+            let mut v : u64 = 0u64
+            if k2 >= w {
+                let src : u64 = k2 - w
+                v = MB_P8[src] << b
+                if b != 0u64 {
+                    if src != 0u64 { v = v | (MB_P8[src - 1u64] >> (64u64 - b)) }
+                }
+            }
+            /* spill guard: anything shifted beyond limb 7 is overflow */
+            if k2 == 7u64 {
+                if w != 0u64 {
+                    let hi_src : u64 = 8u64 - w
+                    let mut sp : u64 = 0u64
+                    let mut ks : u64 = hi_src
+                    while ks < 5u64 {
+                        sp = sp | MB_P8[ks]
+                        ks = ks + 1u64
+                    }
+                    if sp != 0u64 { MB_GZOVF = MB_GZOVF + 1u64 }
+                }
+                if b != 0u64 {
+                    let mut top_src : u64 = 7u64
+                    if w <= 7u64 { top_src = 7u64 - w }
+                    if top_src <= 4u64 {
+                        if (MB_P8[top_src] >> (64u64 - b)) != 0u64 { MB_GZOVF = MB_GZOVF + 1u64 }
+                    }
+                }
+            }
+            if k2 >= w {
+                /* write after the guard pass uses old values above it */
+                MB_P8[k2] = v
+            }
+            if k2 < w { MB_P8[k2] = 0u64 }
+        }
+    }
+    return 0i32
+}
+
+/* MB_A8 += ss * P8, sign-magnitude */
+fn mb_a8_add(ss: i64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let mut nz : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        nz = nz | MB_P8[k]
+        k = k + 1u64
+    }
+    if nz == 0u64 { return 0i32 }
+    if MB_A8S == 0i64 {
+        MB_A8S = ss
+        k = 0u64
+        while k < 8u64 {
+            MB_A8[k] = MB_P8[k]
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if MB_A8S == ss {
+        let mut carry : u64 = 0u64
+        k = 0u64
+        while k < 8u64 {
+            let a : u64 = MB_A8[k] + MB_P8[k]
+            let mut c2 : u64 = 0u64
+            if a < MB_P8[k] { c2 = 1u64 }
+            let b : u64 = a + carry
+            if b < carry { c2 = c2 + 1u64 }
+            MB_A8[k] = b
+            carry = c2
+            k = k + 1u64
+        }
+        if carry != 0u64 { MB_GZOVF = MB_GZOVF + 1u64 }
+        return 0i32
+    }
+    let mut cmp : i64 = 0i64
+    k = 8u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            let x : u64 = MB_A8[k]
+            let y : u64 = MB_P8[k]
+            if x > y { cmp = 1i64 }
+            if x < y { cmp = 0i64 - 1i64 }
+        }
+    }
+    if cmp == 0i64 {
+        MB_A8S = 0i64
+        k = 0u64
+        while k < 8u64 {
+            MB_A8[k] = 0u64
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if cmp > 0i64 {
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 8u64 {
+            let d : u64 = MB_A8[k] - MB_P8[k]
+            let mut b2 : u64 = 0u64
+            if MB_A8[k] < MB_P8[k] { b2 = 1u64 }
+            let e : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            MB_A8[k] = e
+            borrow = b2
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    let mut borrow2 : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let d3 : u64 = MB_P8[k] - MB_A8[k]
+        let mut b3 : u64 = 0u64
+        if MB_P8[k] < MB_A8[k] { b3 = 1u64 }
+        let e3 : u64 = d3 - borrow2
+        if d3 < borrow2 { b3 = b3 + 1u64 }
+        MB_A8[k] = e3
+        borrow2 = b3
+        k = k + 1u64
+    }
+    MB_A8S = ss
+    return 0i32
+}
+
+/* one bound's row accumulation over the decoded MB_GW row */
+fn mb_pb_rowdot(n: u64, which: u64) -> u64 {
+    let mut emin : i64 = 1000000i64
+    let mut emax : i64 = 0i64 - 1000000i64
+    let mut c : u64 = 0u64
+    while c < n {
+        let wq : i64 = MB_GW[c]
+        if wq != 0i64 {
+            let mut ts : i64 = 0i64
+            let mut te : i64 = 0i64
+            if which == 0u64 {
+                ts = MB_TLS[c]
+                te = MB_TLE[c]
+                if wq < 0i64 {
+                    ts = MB_THS[c]
+                    te = MB_THE[c]
+                }
+            }
+            if which == 1u64 {
+                ts = MB_THS[c]
+                te = MB_THE[c]
+                if wq < 0i64 {
+                    ts = MB_TLS[c]
+                    te = MB_TLE[c]
+                }
+            }
+            if which == 2u64 {
+                ts = MB_TXS[c]
+                te = MB_TXE[c]
+            }
+            if ts != 0i64 {
+                let ee : i64 = te - 24i64
+                if ee < emin { emin = ee }
+                if ee > emax { emax = ee }
+            }
+        }
+        c = c + 1u64
+    }
+    if emin == 1000000i64 {
+        MB_A8S = 0i64
+        let mut kz : u64 = 0u64
+        while kz < 8u64 {
+            MB_A8[kz] = 0u64
+            kz = kz + 1u64
+        }
+        MB_PDE = 0i64
+        return 0u64
+    }
+    if emax - emin > 160i64 { return 2u64 }
+    MB_A8S = 0i64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        MB_A8[k] = 0u64
+        k = k + 1u64
+    }
+    MB_GZOVF = 0u64
+    let nch : u64 = (n + 255u64) / 256u64
+    let mut ch : u64 = 0u64
+    while ch < nch {
+        let mut ce : u64 = ch * 256u64
+        let mut cend : u64 = ce + 256u64
+        if cend > n { cend = n }
+        while ce < cend {
+            let wq2 : i64 = MB_GW[ce]
+            if wq2 != 0i64 {
+                let mut s2 : i64 = 0i64
+                let mut v0 : u64 = 0u64
+                let mut v1 : u64 = 0u64
+                let mut v2 : u64 = 0u64
+                let mut v3 : u64 = 0u64
+                let mut e2 : i64 = 0i64
+                let mut pick_hi : u64 = 0u64
+                if which == 1u64 { pick_hi = 1u64 }
+                if wq2 < 0i64 { pick_hi = 1u64 - pick_hi }
+                if which == 2u64 {
+                    s2 = MB_TXS[ce]
+                    v0 = MB_TX0[ce]
+                    v1 = MB_TX1[ce]
+                    v2 = MB_TX2[ce]
+                    v3 = MB_TX3[ce]
+                    e2 = MB_TXE[ce]
+                }
+                if which != 2u64 {
+                    if pick_hi == 0u64 {
+                        s2 = MB_TLS[ce]
+                        v0 = MB_TL0[ce]
+                        v1 = MB_TL1[ce]
+                        v2 = MB_TL2[ce]
+                        v3 = MB_TL3[ce]
+                        e2 = MB_TLE[ce]
+                    }
+                    if pick_hi == 1u64 {
+                        s2 = MB_THS[ce]
+                        v0 = MB_TH0[ce]
+                        v1 = MB_TH1[ce]
+                        v2 = MB_TH2[ce]
+                        v3 = MB_TH3[ce]
+                        e2 = MB_THE[ce]
+                    }
+                }
+                if s2 != 0i64 {
+                    let mut wm : u64 = wq2 as u64
+                    if wq2 < 0i64 { wm = (0i64 - wq2) as u64 }
+                    let mut sg : i64 = s2
+                    if wq2 < 0i64 { sg = 0i64 - sg }
+                    let sh : u64 = ((e2 - 24i64) - emin) as u64
+                    mb_p8_mul4_shl(v0, v1, v2, v3, wm, sh)
+                    mb_a8_add(sg)
+                }
+            }
+            ce = ce + 1u64
+        }
+        MB_C8S[ch] = MB_A8S
+        let mut q : u64 = 0u64
+        while q < 8u64 {
+            MB_C8L[ch * 8u64 + q] = MB_A8[q]
+            q = q + 1u64
+        }
+        ch = ch + 1u64
+    }
+    if MB_GZOVF != 0u64 { return 2u64 }
+    /* the prefix law: deltas re-folded backwards must land on the row */
+    let fin_s : i64 = MB_C8S[nch - 1u64]
+    MB_A8S = 0i64
+    k = 0u64
+    while k < 8u64 {
+        MB_A8[k] = 0u64
+        k = k + 1u64
+    }
+    let mut ck : u64 = nch
+    while ck != 0u64 {
+        ck = ck - 1u64
+        let mut q2 : u64 = 0u64
+        while q2 < 8u64 {
+            MB_P8[q2] = MB_C8L[ck * 8u64 + q2]
+            q2 = q2 + 1u64
+        }
+        mb_a8_add(MB_C8S[ck])
+        if ck != 0u64 {
+            q2 = 0u64
+            while q2 < 8u64 {
+                MB_P8[q2] = MB_C8L[(ck - 1u64) * 8u64 + q2]
+                q2 = q2 + 1u64
+            }
+            mb_a8_add(0i64 - MB_C8S[ck - 1u64])
+        }
+    }
+    if MB_A8S != fin_s { return 1u64 }
+    k = 0u64
+    while k < 8u64 {
+        if MB_A8[k] != MB_C8L[(nch - 1u64) * 8u64 + k] { return 1u64 }
+        k = k + 1u64
+    }
+    MB_PDE = emin
+    return 0u64
+}
+
+/* the full projection sweep: 0 ok / 1 red / 2 guard / 3 absent (named) */
+fn mb_pb_project() -> u64 @export {
+    if MB_G_F[7] == 0u8 { return 3u64 }
+    if MB_TSETL != 16384u64 { return 1u64 }
+    if MB_TSETH != 16384u64 { return 1u64 }
+    if MB_TSETX != 16384u64 { return 1u64 }
+    let n : u64 = MB_G_NE0[7]
+    if n != 16384u64 { return 2u64 }
+    let rows : u64 = MB_G_NE[7] / n
+    if rows != MB_G_NE[0] { return 2u64 }
+    if rows != 7168u64 { return 2u64 }
+    let bv : u64 = mb_tbv(MB_G_TYPE[7])
+    if bv != 256u64 { return 2u64 }
+    mb_mkpath(MB_G_SH[7])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 1u64 }
+    let mut r : u64 = 0u64
+    while r < rows {
+        if mb_gz_wrow(7u64, r) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 1u64
+        }
+        let mut w : u64 = 0u64
+        while w < 3u64 {
+            let rc : u64 = mb_pb_rowdot(n, w)
+            if rc != 0u64 {
+                fclose(MB_LFILE[0])
+                if rc == 2u64 { MB_PBGUARD = MB_PBGUARD + 1u64 }
+                return rc
+            }
+            if w == 0u64 {
+                MB_OLS[r] = MB_A8S
+                MB_OLE[r] = MB_PDE
+            }
+            if w == 1u64 {
+                MB_OHS[r] = MB_A8S
+                MB_OHE[r] = MB_PDE
+            }
+            if w == 2u64 {
+                MB_OXS[r] = MB_A8S
+                MB_OXE[r] = MB_PDE
+            }
+            let mut k2 : u64 = 0u64
+            while k2 < 8u64 {
+                if w == 0u64 { MB_OLL[r * 8u64 + k2] = MB_A8[k2] }
+                if w == 1u64 { MB_OHL[r * 8u64 + k2] = MB_A8[k2] }
+                if w == 2u64 { MB_OXL[r * 8u64 + k2] = MB_A8[k2] }
+                k2 = k2 + 1u64
+            }
+            w = w + 1u64
+        }
+        r = r + 1u64
+    }
+    fclose(MB_LFILE[0])
+    return 0u64
+}
+fn mb_pb_o_s(r: u64, which: u64) -> i64 @export {
+    if r >= 7168u64 { return 0i64 }
+    if which == 0u64 { return MB_OLS[r] }
+    if which == 1u64 { return MB_OHS[r] }
+    return MB_OXS[r]
+}
+fn mb_pb_o_l(r: u64, which: u64, k: u64) -> u64 @export {
+    if r >= 7168u64 { return 0u64 }
+    if k >= 8u64 { return 0u64 }
+    if which == 0u64 { return MB_OLL[r * 8u64 + k] }
+    if which == 1u64 { return MB_OHL[r * 8u64 + k] }
+    return MB_OXL[r * 8u64 + k]
+}
+fn mb_pb_o_e(r: u64, which: u64) -> i64 @export {
+    if r >= 7168u64 { return 0i64 }
+    if which == 0u64 { return MB_OLE[r] }
+    if which == 1u64 { return MB_OHE[r] }
+    return MB_OXE[r]
+}
+
+/* ============ THE PROJECTION LOOM: four weavers, one thought ============
+ * The static partition theorem again: rows are never split, every weaver
+ * owns its own file handle, row buffer, term/acc engines and guards; the
+ * deposited thought is READ-ONLY under the launch.  Determinism owes
+ * nothing to timing; the witness rows re-derived on the main thread by
+ * the SEQUENTIAL engine must match the fleet limb for limb. */
+
+var MB_GWW : [i64; 65536]
+var MB_PA8S : [i64; 4]
+var MB_PA8 : [u64; 32]
+var MB_PP8 : [u64; 32]
+var MB_PC8S : [i64; 256]
+var MB_PC8L : [u64; 2048]
+var MB_POVF : [u64; 4]
+var MB_PPDE : [i64; 4]
+
+/* worker row decode into the private row buffer */
+fn mb_pb_wrow(w: u64, row: u64) -> u64 {
+    let ty : u64 = MB_G_TYPE[7]
+    let bb : u64 = mb_tbb(ty)
+    let bv : u64 = mb_tbv(ty)
+    if bv != 256u64 { return 1u64 }
+    let ne0 : u64 = MB_G_NE0[7]
+    let bpr : u64 = ne0 / 256u64
+    let base : u64 = w * 16384u64
+    let vbase : u64 = w * 256u64
+    let mut b : u64 = 0u64
+    while b < bpr {
+        let abs : u64 = MB_G_DB[7] + MB_G_OFF[7] + (row * bpr + b) * bb
+        if mb_wread(w, abs, bb) != 0u64 { return 1u64 }
+        if mb_wdec(w, ty, 0u64) != 0u64 { return 1u64 }
+        let mut e : u64 = 0u64
+        while e < 256u64 {
+            MB_GWW[base + b * 256u64 + e] = MB_LVA[vbase + e]
+            e = e + 1u64
+        }
+        b = b + 1u64
+    }
+    return 0u64
+}
+
+/* worker 8-limb term: P8[w] = (l0..l3) * m << sh (worker-private multiply
+ * scratch ONLY -- the shared MB_MHI/MB_MLO would be a race) */
+fn mb_pw8_mul4_shl(w: u64, l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) -> i32 {
+    let base : u64 = w * 8u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        MB_PP8[base + k] = 0u64
+        k = k + 1u64
+    }
+    mb_wmul64(w, l0, m)
+    MB_PP8[base] = MB_LML[w]
+    MB_PP8[base + 1u64] = MB_LMH[w]
+    mb_wmul64(w, l1, m)
+    let s1 : u64 = MB_PP8[base + 1u64] + MB_LML[w]
+    let mut c1 : u64 = 0u64
+    if s1 < MB_LML[w] { c1 = 1u64 }
+    MB_PP8[base + 1u64] = s1
+    MB_PP8[base + 2u64] = MB_LMH[w] + c1
+    mb_wmul64(w, l2, m)
+    let s2 : u64 = MB_PP8[base + 2u64] + MB_LML[w]
+    let mut c2 : u64 = 0u64
+    if s2 < MB_LML[w] { c2 = 1u64 }
+    MB_PP8[base + 2u64] = s2
+    MB_PP8[base + 3u64] = MB_LMH[w] + c2
+    mb_wmul64(w, l3, m)
+    let s3 : u64 = MB_PP8[base + 3u64] + MB_LML[w]
+    let mut c3 : u64 = 0u64
+    if s3 < MB_LML[w] { c3 = 1u64 }
+    MB_PP8[base + 3u64] = s3
+    MB_PP8[base + 4u64] = MB_LMH[w] + c3
+    if sh != 0u64 {
+        let ww : u64 = sh / 64u64
+        let bb2 : u64 = sh % 64u64
+        if ww == 3u64 {
+            if bb2 != 0u64 {
+                if (MB_PP8[base + 4u64] >> (64u64 - bb2)) != 0u64 { MB_POVF[w] = MB_POVF[w] + 1u64 }
+            }
+        }
+        let mut k2 : u64 = 8u64
+        while k2 != 0u64 {
+            k2 = k2 - 1u64
+            let mut v : u64 = 0u64
+            if k2 >= ww {
+                let src : u64 = k2 - ww
+                v = MB_PP8[base + src] << bb2
+                if bb2 != 0u64 {
+                    if src != 0u64 { v = v | (MB_PP8[base + src - 1u64] >> (64u64 - bb2)) }
+                }
+            }
+            MB_PP8[base + k2] = v
+            if k2 < ww { MB_PP8[base + k2] = 0u64 }
+        }
+    }
+    return 0i32
+}
+
+/* worker acc: A8[w] += ss * P8[w] */
+fn mb_pw8_add(w: u64, ss: i64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let base : u64 = w * 8u64
+    let mut nz : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        nz = nz | MB_PP8[base + k]
+        k = k + 1u64
+    }
+    if nz == 0u64 { return 0i32 }
+    if MB_PA8S[w] == 0i64 {
+        MB_PA8S[w] = ss
+        k = 0u64
+        while k < 8u64 {
+            MB_PA8[base + k] = MB_PP8[base + k]
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if MB_PA8S[w] == ss {
+        let mut carry : u64 = 0u64
+        k = 0u64
+        while k < 8u64 {
+            let a : u64 = MB_PA8[base + k] + MB_PP8[base + k]
+            let mut c2 : u64 = 0u64
+            if a < MB_PP8[base + k] { c2 = 1u64 }
+            let b : u64 = a + carry
+            if b < carry { c2 = c2 + 1u64 }
+            MB_PA8[base + k] = b
+            carry = c2
+            k = k + 1u64
+        }
+        if carry != 0u64 { MB_POVF[w] = MB_POVF[w] + 1u64 }
+        return 0i32
+    }
+    let mut cmp : i64 = 0i64
+    k = 8u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            let x : u64 = MB_PA8[base + k]
+            let y : u64 = MB_PP8[base + k]
+            if x > y { cmp = 1i64 }
+            if x < y { cmp = 0i64 - 1i64 }
+        }
+    }
+    if cmp == 0i64 {
+        MB_PA8S[w] = 0i64
+        k = 0u64
+        while k < 8u64 {
+            MB_PA8[base + k] = 0u64
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if cmp > 0i64 {
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 8u64 {
+            let d : u64 = MB_PA8[base + k] - MB_PP8[base + k]
+            let mut b2 : u64 = 0u64
+            if MB_PA8[base + k] < MB_PP8[base + k] { b2 = 1u64 }
+            let e : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            MB_PA8[base + k] = e
+            borrow = b2
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    let mut borrow2 : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let d3 : u64 = MB_PP8[base + k] - MB_PA8[base + k]
+        let mut b3 : u64 = 0u64
+        if MB_PP8[base + k] < MB_PA8[base + k] { b3 = 1u64 }
+        let e3 : u64 = d3 - borrow2
+        if d3 < borrow2 { b3 = b3 + 1u64 }
+        MB_PA8[base + k] = e3
+        borrow2 = b3
+        k = k + 1u64
+    }
+    MB_PA8S[w] = ss
+    return 0i32
+}
+
+/* worker row dot over the private buffer (same law as the sequential) */
+fn mb_pb_rowdot_w(w: u64, n: u64, which: u64) -> u64 {
+    let gbase : u64 = w * 16384u64
+    let mut emin : i64 = 1000000i64
+    let mut emax : i64 = 0i64 - 1000000i64
+    let mut c : u64 = 0u64
+    while c < n {
+        let wq : i64 = MB_GWW[gbase + c]
+        if wq != 0i64 {
+            let mut ts : i64 = 0i64
+            let mut te : i64 = 0i64
+            if which == 0u64 {
+                ts = MB_TLS[c]
+                te = MB_TLE[c]
+                if wq < 0i64 {
+                    ts = MB_THS[c]
+                    te = MB_THE[c]
+                }
+            }
+            if which == 1u64 {
+                ts = MB_THS[c]
+                te = MB_THE[c]
+                if wq < 0i64 {
+                    ts = MB_TLS[c]
+                    te = MB_TLE[c]
+                }
+            }
+            if which == 2u64 {
+                ts = MB_TXS[c]
+                te = MB_TXE[c]
+            }
+            if ts != 0i64 {
+                let ee : i64 = te - 24i64
+                if ee < emin { emin = ee }
+                if ee > emax { emax = ee }
+            }
+        }
+        c = c + 1u64
+    }
+    if emin == 1000000i64 {
+        MB_PA8S[w] = 0i64
+        let mut kz : u64 = 0u64
+        while kz < 8u64 {
+            MB_PA8[w * 8u64 + kz] = 0u64
+            kz = kz + 1u64
+        }
+        MB_PPDE[w] = 0i64
+        return 0u64
+    }
+    if emax - emin > 160i64 { return 2u64 }
+    MB_PA8S[w] = 0i64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        MB_PA8[w * 8u64 + k] = 0u64
+        k = k + 1u64
+    }
+    MB_POVF[w] = 0u64
+    let nch : u64 = (n + 255u64) / 256u64
+    let mut ch : u64 = 0u64
+    while ch < nch {
+        let mut ce : u64 = ch * 256u64
+        let mut cend : u64 = ce + 256u64
+        if cend > n { cend = n }
+        while ce < cend {
+            let wq2 : i64 = MB_GWW[gbase + ce]
+            if wq2 != 0i64 {
+                let mut s2 : i64 = 0i64
+                let mut v0 : u64 = 0u64
+                let mut v1 : u64 = 0u64
+                let mut v2 : u64 = 0u64
+                let mut v3 : u64 = 0u64
+                let mut e2 : i64 = 0i64
+                let mut pick_hi : u64 = 0u64
+                if which == 1u64 { pick_hi = 1u64 }
+                if wq2 < 0i64 { pick_hi = 1u64 - pick_hi }
+                if which == 2u64 {
+                    s2 = MB_TXS[ce]
+                    v0 = MB_TX0[ce]
+                    v1 = MB_TX1[ce]
+                    v2 = MB_TX2[ce]
+                    v3 = MB_TX3[ce]
+                    e2 = MB_TXE[ce]
+                }
+                if which != 2u64 {
+                    if pick_hi == 0u64 {
+                        s2 = MB_TLS[ce]
+                        v0 = MB_TL0[ce]
+                        v1 = MB_TL1[ce]
+                        v2 = MB_TL2[ce]
+                        v3 = MB_TL3[ce]
+                        e2 = MB_TLE[ce]
+                    }
+                    if pick_hi == 1u64 {
+                        s2 = MB_THS[ce]
+                        v0 = MB_TH0[ce]
+                        v1 = MB_TH1[ce]
+                        v2 = MB_TH2[ce]
+                        v3 = MB_TH3[ce]
+                        e2 = MB_THE[ce]
+                    }
+                }
+                if s2 != 0i64 {
+                    let mut wm : u64 = wq2 as u64
+                    if wq2 < 0i64 { wm = (0i64 - wq2) as u64 }
+                    let mut sg : i64 = s2
+                    if wq2 < 0i64 { sg = 0i64 - sg }
+                    let sh : u64 = ((e2 - 24i64) - emin) as u64
+                    mb_pw8_mul4_shl(w, v0, v1, v2, v3, wm, sh)
+                    mb_pw8_add(w, sg)
+                }
+            }
+            ce = ce + 1u64
+        }
+        MB_PC8S[w * 64u64 + ch] = MB_PA8S[w]
+        let mut q : u64 = 0u64
+        while q < 8u64 {
+            MB_PC8L[(w * 64u64 + ch) * 8u64 + q] = MB_PA8[w * 8u64 + q]
+            q = q + 1u64
+        }
+        ch = ch + 1u64
+    }
+    if MB_POVF[w] != 0u64 { return 2u64 }
+    /* the prefix law, worker-private */
+    let cb : u64 = w * 64u64
+    let fin_s : i64 = MB_PC8S[cb + nch - 1u64]
+    MB_PA8S[w] = 0i64
+    k = 0u64
+    while k < 8u64 {
+        MB_PA8[w * 8u64 + k] = 0u64
+        k = k + 1u64
+    }
+    let mut ck : u64 = nch
+    while ck != 0u64 {
+        ck = ck - 1u64
+        let mut q2 : u64 = 0u64
+        while q2 < 8u64 {
+            MB_PP8[w * 8u64 + q2] = MB_PC8L[(cb + ck) * 8u64 + q2]
+            q2 = q2 + 1u64
+        }
+        mb_pw8_add(w, MB_PC8S[cb + ck])
+        if ck != 0u64 {
+            q2 = 0u64
+            while q2 < 8u64 {
+                MB_PP8[w * 8u64 + q2] = MB_PC8L[(cb + ck - 1u64) * 8u64 + q2]
+                q2 = q2 + 1u64
+            }
+            mb_pw8_add(w, 0i64 - MB_PC8S[cb + ck - 1u64])
+        }
+    }
+    if MB_PA8S[w] != fin_s { return 1u64 }
+    k = 0u64
+    while k < 8u64 {
+        if MB_PA8[w * 8u64 + k] != MB_PC8L[(cb + nch - 1u64) * 8u64 + k] { return 1u64 }
+        k = k + 1u64
+    }
+    MB_PPDE[w] = emin
+    return 0u64
+}
+
+/* the weaver: a static slice of the output rows */
+fn mb_pb_worker(arg: u64) -> u32 {
+    let w : u64 = arg
+    let n : u64 = MB_G_NE0[7]
+    let start : u64 = w * 1792u64
+    let endr : u64 = start + 1792u64
+    let mut r : u64 = start
+    while r < endr {
+        if mb_pb_wrow(w, r) != 0u64 {
+            MB_LRC[w] = 382u64
+            return 0u32
+        }
+        let mut ww : u64 = 0u64
+        while ww < 3u64 {
+            let rc : u64 = mb_pb_rowdot_w(w, n, ww)
+            if rc != 0u64 {
+                MB_LRC[w] = 380u64 + rc
+                return 0u32
+            }
+            if ww == 0u64 {
+                MB_OLS[r] = MB_PA8S[w]
+                MB_OLE[r] = MB_PPDE[w]
+            }
+            if ww == 1u64 {
+                MB_OHS[r] = MB_PA8S[w]
+                MB_OHE[r] = MB_PPDE[w]
+            }
+            if ww == 2u64 {
+                MB_OXS[r] = MB_PA8S[w]
+                MB_OXE[r] = MB_PPDE[w]
+            }
+            let mut k2 : u64 = 0u64
+            while k2 < 8u64 {
+                if ww == 0u64 { MB_OLL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
+                if ww == 1u64 { MB_OHL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
+                if ww == 2u64 { MB_OXL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
+                k2 = k2 + 1u64
+            }
+            ww = ww + 1u64
+        }
+        r = r + 1u64
+    }
+    MB_LRC[w] = 0u64
+    return 0u32
+}
+
+/* the parallel projection: preconditions, private handles, the fleet */
+fn mb_pb_project_par() -> u64 @export {
+    if MB_G_F[7] == 0u8 { return 3u64 }
+    if MB_TSETL != 16384u64 { return 1u64 }
+    if MB_TSETH != 16384u64 { return 1u64 }
+    if MB_TSETX != 16384u64 { return 1u64 }
+    let n : u64 = MB_G_NE0[7]
+    if n != 16384u64 { return 2u64 }
+    let rows : u64 = MB_G_NE[7] / n
+    if rows != MB_G_NE[0] { return 2u64 }
+    if rows != 7168u64 { return 2u64 }
+    let bv : u64 = mb_tbv(MB_G_TYPE[7])
+    if bv != 256u64 { return 2u64 }
+    mb_mkpath(MB_G_SH[7])
+    let mut w : u64 = 0u64
+    while w < 4u64 {
+        MB_LFILE[w] = fopen((&MB_PATH) as u64, "rb" as u64)
+        if MB_LFILE[w] == 0u64 {
+            let mut c : u64 = 0u64
+            while c < w {
+                fclose(MB_LFILE[c])
+                c = c + 1u64
+            }
+            return 1u64
+        }
+        w = w + 1u64
+    }
+    let entry : u64 = mb_pb_worker as u64
+    w = 0u64
+    while w < 4u64 {
+        MB_LRC[w] = 999u64
+        MB_LH[w] = CreateThread(0u64, 0u64, entry, w, 0u64, 0u64)
+        if MB_LH[w] == 0u64 {
+            let mut j : u64 = 0u64
+            while j < w {
+                WaitForSingleObject(MB_LH[j], 0xFFFFFFFFu32)
+                CloseHandle(MB_LH[j])
+                j = j + 1u64
+            }
+            let mut c2 : u64 = 0u64
+            while c2 < 4u64 {
+                fclose(MB_LFILE[c2])
+                c2 = c2 + 1u64
+            }
+            return 1u64
+        }
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < 4u64 {
+        WaitForSingleObject(MB_LH[w], 0xFFFFFFFFu32)
+        CloseHandle(MB_LH[w])
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < 4u64 {
+        fclose(MB_LFILE[w])
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < 4u64 {
+        if MB_LRC[w] == 382u64 { return 1u64 }
+        if MB_LRC[w] == 381u64 { return 1u64 }
+        if MB_LRC[w] == 383u64 { return 2u64 }
+        if MB_LRC[w] != 0u64 { return 1u64 }
+        w = w + 1u64
+    }
+    return 0u64
+}
+
+/* one witness row re-derived by the SEQUENTIAL engine (the fleet must
+ * match it limb for limb); results in the MB_PW* scratch */
+var MB_PWS : [i64; 3]
+var MB_PWL : [u64; 24]
+var MB_PWE : [i64; 3]
+fn mb_pb_row_witness(r: u64) -> u64 @export {
+    if MB_G_F[7] == 0u8 { return 1u64 }
+    let n : u64 = MB_G_NE0[7]
+    mb_mkpath(MB_G_SH[7])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 1u64 }
+    if mb_gz_wrow(7u64, r) != 0u64 {
+        fclose(MB_LFILE[0])
+        return 1u64
+    }
+    fclose(MB_LFILE[0])
+    let mut ww : u64 = 0u64
+    while ww < 3u64 {
+        if mb_pb_rowdot(n, ww) != 0u64 { return 1u64 }
+        MB_PWS[ww] = MB_A8S
+        MB_PWE[ww] = MB_PDE
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            MB_PWL[ww * 8u64 + k] = MB_A8[k]
+            k = k + 1u64
+        }
+        ww = ww + 1u64
+    }
+    return 0u64
+}
+fn mb_pb_w_s(which: u64) -> i64 @export {
+    if which >= 3u64 { return 0i64 }
+    return MB_PWS[which]
+}
+fn mb_pb_w_l(which: u64, k: u64) -> u64 @export {
+    if which >= 3u64 { return 0u64 }
+    if k >= 8u64 { return 0u64 }
+    return MB_PWL[which * 8u64 + k]
+}
+fn mb_pb_w_e(which: u64) -> i64 @export {
+    if which >= 3u64 { return 0i64 }
+    return MB_PWE[which]
 }
 
 /* METABOLE: the organism now has a mouth.  What it eats, it proves. */

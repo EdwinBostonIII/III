@@ -1,0 +1,662 @@
+/* STDLIB/iii/omnia/probole.iii -- PROBOLE (the PROJECTION): the organ of
+ * interval linear algebra.
+ *
+ * The pleroma ended the era of the bare point: a softmax-mixed value is a
+ * CERTIFIED INTERVAL, and every linear map that consumes it must carry
+ * both bounds forward under the LAW OF SIGNS -- a negative weight crosses
+ * the endpoints; an exact zero annihilates them.  PROBOLE is that law
+ * made an organ: the o_proj matrix streamed row by row through the
+ * standing mouth against the 16384-wide deposited thought, every product
+ * an EXACT integer (the interval carries only the widths the softmax
+ * ladders created), the exact one-voice point riding beside the bounds
+ * as a SECOND ENGINE in the same stream, and CONTAINMENT demanded row by
+ * row: the interval must hold the exact.  Then THE NOSTOS: the residual
+ * homecoming X' = X + O/(r1*r3), the original voice promoted to the
+ * infinitely tight interval and added under direction, the machine
+ * carrying the SHADOW of its own transcendental drift as a named width
+ * -- and refusing, by count, any dimension whose sign it cannot swear.
+ *
+ * THE ARMS (driven by the summit rite):
+ *   382 THE PROBOLE: the projection itself -- containment 7168/7168,
+ *       the straddle-zero census, the exact-sign census, the shadow.
+ *   383 THE NOSTOS: the homecoming -- the tight exact-route interval
+ *       inside the fat interval route, dim by dim; the law sealed as an
+ *       EIDOLOS scroll with a deterministic address. */
+
+module omnia_probole
+
+extern @abi(c-msvc-x64) fn mb_feast() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_voice() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_nembd() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_xv(c: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_project_par() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_o_s(r: u64, which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_o_l(r: u64, which: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_o_e(r: u64, which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_row_witness(r: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_w_s(which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_w_l(which: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_w_e(which: u64) -> i64 from "metabole.iii"
+
+extern @abi(c-msvc-x64) fn pr_x_chok() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfm() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfe() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfn2(hi: u64, lo: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfmul(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfadd(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfsub(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfcmp(ma: u64, ea: i64, mb: u64, eb: i64) -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_ri13_md() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_ri13_ed() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_ri13_mu() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_ri13_eu() -> i64 from "peras.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+/* ==================== the report and the scroll ==================== */
+
+var PB_REP : [u8; 2048]
+var PB_REPN : u64 = 0u64
+var PB_SCROLL : u64 = 0u64
+
+fn pb_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+
+fn pb_rb(b: u8) -> i32 {
+    if PB_REPN >= 2047u64 { return 0i32 }
+    PB_REP[PB_REPN] = b
+    PB_REPN = PB_REPN + 1u64
+    return 0i32
+}
+
+fn pb_rs(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        pb_rb(p[i])
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn pb_ru(v: u64) -> i32 {
+    if v >= 10u64 { pb_ru(v / 10u64) }
+    pb_rb((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+
+fn pb_ri(v: i64) -> i32 {
+    if v < 0i64 {
+        pb_rb(45u8)
+        pb_ru((0i64 - v) as u64)
+        return 0i32
+    }
+    pb_ru(v as u64)
+    return 0i32
+}
+
+/* ==================== the aligned multi-limb compares ==================== */
+
+/* 12-limb scratch pair for exponent-aligned bound comparisons */
+var PB_U : [u64; 12]
+var PB_V : [u64; 12]
+
+/* load O bound (r, which) shifted left by (its exp - emin) into U or V.
+ * returns 1 on shift overflow (named guard at the caller) */
+fn pb_ld(r: u64, which: u64, emin: i64, dst: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 12u64 {
+        if dst == 0u64 { PB_U[k] = 0u64 }
+        if dst == 1u64 { PB_V[k] = 0u64 }
+        k = k + 1u64
+    }
+    let d : i64 = mb_pb_o_e(r, which) - emin
+    if d < 0i64 { return 1u64 }
+    if d > 256i64 { return 1u64 }
+    let w : u64 = (d as u64) / 64u64
+    let b : u64 = (d as u64) % 64u64
+    k = 0u64
+    while k < 8u64 {
+        let v : u64 = mb_pb_o_l(r, which, k)
+        if v != 0u64 {
+            let pos : u64 = k + w
+            if pos >= 12u64 { return 1u64 }
+            if dst == 0u64 { PB_U[pos] = PB_U[pos] | (v << b) }
+            if dst == 1u64 { PB_V[pos] = PB_V[pos] | (v << b) }
+            if b != 0u64 {
+                let sp : u64 = v >> (64u64 - b)
+                if sp != 0u64 {
+                    if pos + 1u64 >= 12u64 { return 1u64 }
+                    if dst == 0u64 { PB_U[pos + 1u64] = PB_U[pos + 1u64] | sp }
+                    if dst == 1u64 { PB_V[pos + 1u64] = PB_V[pos + 1u64] | sp }
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* signed compare of bounds (r, wa) vs (r, wb); 9 = guard tripped */
+fn pb_cmp(r: u64, wa: u64, wb: u64) -> i64 {
+    let sa : i64 = mb_pb_o_s(r, wa)
+    let sb : i64 = mb_pb_o_s(r, wb)
+    if sa > sb { return 1i64 }
+    if sa < sb { return 0i64 - 1i64 }
+    if sa == 0i64 { return 0i64 }
+    let mut emin : i64 = mb_pb_o_e(r, wa)
+    let eb : i64 = mb_pb_o_e(r, wb)
+    if eb < emin { emin = eb }
+    if pb_ld(r, wa, emin, 0u64) != 0u64 { return 9i64 }
+    if pb_ld(r, wb, emin, 1u64) != 0u64 { return 9i64 }
+    let mut cmp : i64 = 0i64
+    let mut k : u64 = 12u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            let x : u64 = PB_U[k]
+            let y : u64 = PB_V[k]
+            if x > y { cmp = 1i64 }
+            if x < y { cmp = 0i64 - 1i64 }
+        }
+    }
+    if sa < 0i64 { return 0i64 - cmp }
+    return cmp
+}
+
+/* the width hi - lo of row r as a top-bit exponent (value ~ 2^ret);
+ * returns -100000 for zero width, 100000 on guard */
+fn pb_width_exp(r: u64) -> i64 {
+    let sl : i64 = mb_pb_o_s(r, 0u64)
+    let sh : i64 = mb_pb_o_s(r, 1u64)
+    let mut emin : i64 = mb_pb_o_e(r, 0u64)
+    let eb : i64 = mb_pb_o_e(r, 1u64)
+    if eb < emin { emin = eb }
+    if pb_ld(r, 1u64, emin, 0u64) != 0u64 { return 100000i64 }
+    if pb_ld(r, 0u64, emin, 1u64) != 0u64 { return 100000i64 }
+    /* U := hi, V := lo as SIGNED values; width = hi - lo = U + (-V):
+     * both were loaded as magnitudes; fold signs into a subtraction by
+     * cases.  hi >= lo is already certified by the containment pass, so
+     * width = |hi_val - lo_val| computed by magnitude algebra. */
+    let mut k : u64 = 0u64
+    if sl == 0i64 {
+        if sh == 0i64 { return 0i64 - 100000i64 }
+    }
+    let mut same : u64 = 0u64
+    if sl > 0i64 {
+        if sh > 0i64 { same = 1u64 }
+    }
+    if sl < 0i64 {
+        if sh < 0i64 { same = 1u64 }
+    }
+    if same == 1u64 {
+        /* same sign: width = |U - V| in magnitude */
+        let mut cmp : i64 = 0i64
+        k = 12u64
+        while k != 0u64 {
+            k = k - 1u64
+            if cmp == 0i64 {
+                let x : u64 = PB_U[k]
+                let y : u64 = PB_V[k]
+                if x > y { cmp = 1i64 }
+                if x < y { cmp = 0i64 - 1i64 }
+            }
+        }
+        if cmp == 0i64 { return 0i64 - 100000i64 }
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 12u64 {
+            let mut a : u64 = PB_U[k]
+            let mut b : u64 = PB_V[k]
+            if cmp < 0i64 {
+                a = PB_V[k]
+                b = PB_U[k]
+            }
+            let d : u64 = a - b
+            let mut b2 : u64 = 0u64
+            if a < b { b2 = 1u64 }
+            let e : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            PB_U[k] = e
+            borrow = b2
+            k = k + 1u64
+        }
+    }
+    if same == 0u64 {
+        /* signs differ (or one is zero): width = |hi| + |lo| */
+        let mut carry : u64 = 0u64
+        k = 0u64
+        while k < 12u64 {
+            let a : u64 = PB_U[k] + PB_V[k]
+            let mut c2 : u64 = 0u64
+            if a < PB_V[k] { c2 = 1u64 }
+            let b : u64 = a + carry
+            if b < carry { c2 = c2 + 1u64 }
+            PB_U[k] = b
+            carry = c2
+            k = k + 1u64
+        }
+    }
+    /* top bit of U */
+    let mut top : i64 = 0i64 - 100000i64
+    k = 12u64
+    let mut found : u64 = 0u64
+    while k != 0u64 {
+        k = k - 1u64
+        if found == 0u64 {
+            let v : u64 = PB_U[k]
+            if v != 0u64 {
+                let mut bl : u64 = 0u64
+                let mut t : u64 = v
+                while t != 0u64 {
+                    t = t >> 1u64
+                    bl = bl + 1u64
+                }
+                top = emin + (64u64 * k) as i64 + (bl as i64) - 1i64
+                found = 1u64
+            }
+        }
+    }
+    return top
+}
+
+/* ==================== signed df add (homecoming algebra) ============== */
+
+var PB_SDS : i64 = 0i64
+var PB_SDM : u64 = 0u64
+var PB_SDE : i64 = 0i64
+
+/* (sa, ma*2^ea) + (sb, mb*2^eb), rounded toward -inf (dir 0) / +inf (1).
+ * directions are on the VALUE, so the magnitude rounding flips with the
+ * result sign. */
+fn pb_sadd(sa: i64, ma: u64, ea: i64, sb: i64, mb: u64, eb: i64, dir: u64) -> i32 {
+    if sa == 0i64 {
+        PB_SDS = sb
+        PB_SDM = mb
+        PB_SDE = eb
+        return 0i32
+    }
+    if sb == 0i64 {
+        PB_SDS = sa
+        PB_SDM = ma
+        PB_SDE = ea
+        return 0i32
+    }
+    if sa == sb {
+        let mut magdir : u64 = dir
+        if sa < 0i64 { magdir = 1u64 - dir }
+        pr_x_dfadd(ma, ea, mb, eb, magdir)
+        PB_SDS = sa
+        PB_SDM = pr_x_dfm()
+        PB_SDE = pr_x_dfe()
+        return 0i32
+    }
+    let c : i64 = pr_x_dfcmp(ma, ea, mb, eb)
+    if c == 0i64 {
+        PB_SDS = 0i64
+        PB_SDM = 0u64
+        PB_SDE = 0i64
+        return 0i32
+    }
+    let mut rs : i64 = sa
+    let mut bm : u64 = ma
+    let mut be : i64 = ea
+    let mut sm : u64 = mb
+    let mut se : i64 = eb
+    if c < 0i64 {
+        rs = sb
+        bm = mb
+        be = eb
+        sm = ma
+        se = ea
+    }
+    let mut magdir2 : u64 = dir
+    if rs < 0i64 { magdir2 = 1u64 - dir }
+    pr_x_dfsub(bm, be, sm, se, magdir2)
+    PB_SDS = rs
+    PB_SDM = pr_x_dfm()
+    PB_SDE = pr_x_dfe()
+    if PB_SDM == 0u64 { PB_SDS = 0i64 }
+    return 0i32
+}
+
+/* ==================== arm 382: THE PROBOLE ==================== */
+
+var PB_STRAD : u64 = 0u64
+var PB_SGP : u64 = 0u64
+var PB_SGN : u64 = 0u64
+var PB_SGZ : u64 = 0u64
+var PB_WMAX : i64 = 0i64
+var PB_PROJ_OK : u64 = 0u64
+
+fn pb_arm382() -> u64 {
+    PB_PROJ_OK = 0u64
+    if pr_x_chok() != 1u64 {
+        pb_rs("the probole: fasting (no deposited thought) -- the law stands ready" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    let rc : u64 = mb_pb_project_par()
+    if rc == 3u64 {
+        pb_rs("the probole: o_proj absent from the feast (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if rc == 2u64 {
+        pb_rs("the probole: refused (geometry or guard -- named)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if rc != 0u64 { return 382u64 }
+    /* the loom teeth: witness rows re-derived by the SEQUENTIAL engine on
+     * the main thread must equal the fleet limb for limb */
+    let mut wit : u64 = 0u64
+    let mut wi : u64 = 0u64
+    while wi < 10u64 {
+        let mut wr : u64 = wi * 796u64
+        if wi == 9u64 { wr = 7167u64 }
+        if mb_pb_row_witness(wr) != 0u64 { return 382u64 }
+        let mut wok : u64 = 1u64
+        let mut wv : u64 = 0u64
+        while wv < 3u64 {
+            let ss : i64 = mb_pb_w_s(wv)
+            let ee : i64 = mb_pb_w_e(wv)
+            if ss != mb_pb_o_s(wr, wv) { wok = 0u64 }
+            if ee != mb_pb_o_e(wr, wv) { wok = 0u64 }
+            let mut kk : u64 = 0u64
+            while kk < 8u64 {
+                let la : u64 = mb_pb_w_l(wv, kk)
+                let lb : u64 = mb_pb_o_l(wr, wv, kk)
+                if la != lb { wok = 0u64 }
+                kk = kk + 1u64
+            }
+            wv = wv + 1u64
+        }
+        if wok == 1u64 { wit = wit + 1u64 }
+        wi = wi + 1u64
+    }
+    if wit != 10u64 { return 382u64 }
+    let mut contained : u64 = 0u64
+    PB_STRAD = 0u64
+    PB_SGP = 0u64
+    PB_SGN = 0u64
+    PB_SGZ = 0u64
+    PB_WMAX = 0i64 - 100000i64
+    let mut r : u64 = 0u64
+    while r < 7168u64 {
+        let c1 : i64 = pb_cmp(r, 0u64, 2u64)
+        let c2 : i64 = pb_cmp(r, 2u64, 1u64)
+        if c1 == 9i64 { return 382u64 }
+        if c2 == 9i64 { return 382u64 }
+        if c1 <= 0i64 {
+            if c2 <= 0i64 { contained = contained + 1u64 }
+        }
+        let sl : i64 = mb_pb_o_s(r, 0u64)
+        let sh : i64 = mb_pb_o_s(r, 1u64)
+        let mut str8 : u64 = 0u64
+        if sl < 0i64 {
+            if sh >= 0i64 { str8 = 1u64 }
+        }
+        if sl == 0i64 { str8 = 1u64 }
+        if sh == 0i64 { str8 = 1u64 }
+        if str8 == 1u64 { PB_STRAD = PB_STRAD + 1u64 }
+        let sx : i64 = mb_pb_o_s(r, 2u64)
+        if sx > 0i64 { PB_SGP = PB_SGP + 1u64 }
+        if sx < 0i64 { PB_SGN = PB_SGN + 1u64 }
+        if sx == 0i64 { PB_SGZ = PB_SGZ + 1u64 }
+        let we : i64 = pb_width_exp(r)
+        if we == 100000i64 { return 382u64 }
+        if we > PB_WMAX { PB_WMAX = we }
+        r = r + 1u64
+    }
+    if contained != 7168u64 { return 382u64 }
+    PB_PROJ_OK = 1u64
+    pb_rs("the probole: o_proj woven by 4 weavers (rows never split, timing free) witness-rows=10/10 limb-exact containment(interval holds exact)=7168/7168 law-of-signs=endpoint-selection (every product exact) prefix-law=every-row-x3 straddle-zero=" as u64)
+    pb_ru(PB_STRAD)
+    pb_rs(" exact-signs p/n/z=" as u64)
+    pb_ru(PB_SGP)
+    pb_rs("/" as u64)
+    pb_ru(PB_SGN)
+    pb_rs("/" as u64)
+    pb_ru(PB_SGZ)
+    pb_rs(" shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_WMAX)
+    pb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 383: THE NOSTOS ==================== */
+
+var PB_HSTRAD : u64 = 0u64
+var PB_HWMAX : i64 = 0i64
+var PB_HCONT : u64 = 0u64
+
+/* O bound (r, which) as a signed df, rounded per up (sticky honored) */
+var PB_ODS : i64 = 0i64
+var PB_ODM : u64 = 0u64
+var PB_ODE : i64 = 0i64
+fn pb_odf(r: u64, which: u64, up: u64) -> i32 {
+    let s : i64 = mb_pb_o_s(r, which)
+    if s == 0i64 {
+        PB_ODS = 0i64
+        PB_ODM = 0u64
+        PB_ODE = 0i64
+        return 0i32
+    }
+    /* top two limbs + sticky */
+    let mut t : u64 = 8u64
+    let mut k : u64 = 8u64
+    while k != 0u64 {
+        k = k - 1u64
+        if t == 8u64 {
+            if mb_pb_o_l(r, which, k) != 0u64 { t = k }
+        }
+    }
+    let hv : u64 = mb_pb_o_l(r, which, t)
+    let mut lv : u64 = 0u64
+    if t != 0u64 { lv = mb_pb_o_l(r, which, t - 1u64) }
+    let mut st : u64 = 0u64
+    k = 0u64
+    while k + 1u64 < t {
+        st = st | mb_pb_o_l(r, which, k)
+        k = k + 1u64
+    }
+    /* the magnitude rounding direction flips with the sign */
+    let mut magup : u64 = up
+    if s < 0i64 { magup = 1u64 - up }
+    if magup == 1u64 {
+        if st != 0u64 { lv = lv | 1u64 }
+    }
+    let mut ebase : i64 = mb_pb_o_e(r, which)
+    if t != 0u64 { ebase = ebase + 64i64 * ((t as i64) - 1i64) }
+    if t == 0u64 {
+        pr_x_dfn2(0u64, hv, ebase, magup)
+    }
+    if t != 0u64 {
+        pr_x_dfn2(hv, lv, ebase, magup)
+    }
+    PB_ODS = s
+    PB_ODM = pr_x_dfm()
+    PB_ODE = pr_x_dfe()
+    return 0i32
+}
+
+/* one bound of X + O*ri13: sel 0 = fat-lo, 1 = fat-hi, 2 = tight-lo,
+ * 3 = tight-hi.  tight uses the EXACT O (which 2). */
+fn pb_home(r: u64, sel: u64) -> i32 {
+    let mut which : u64 = 0u64
+    if sel == 1u64 { which = 1u64 }
+    if sel >= 2u64 { which = 2u64 }
+    let mut dir : u64 = 0u64
+    if sel == 1u64 { dir = 1u64 }
+    if sel == 3u64 { dir = 1u64 }
+    pb_odf(r, which, dir)
+    let os : i64 = PB_ODS
+    let om : u64 = PB_ODM
+    let oe : i64 = PB_ODE
+    let mut ps : i64 = 0i64
+    let mut pm : u64 = 0u64
+    let mut pe : i64 = 0i64
+    if os != 0i64 {
+        /* O * ri13 (ri13 > 0): directed by the value direction */
+        let mut want_up_mag : u64 = dir
+        if os < 0i64 { want_up_mag = 1u64 - dir }
+        let mut rm : u64 = pr_x_ri13_md()
+        let mut re : i64 = pr_x_ri13_ed()
+        if want_up_mag == 1u64 {
+            rm = pr_x_ri13_mu()
+            re = pr_x_ri13_eu()
+        }
+        pr_x_dfmul(om, oe, rm, re, want_up_mag)
+        ps = os
+        pm = pr_x_dfm()
+        pe = pr_x_dfe()
+    }
+    /* + X (the exact voice, a tight point) */
+    let xv : i64 = mb_gz_xv(r)
+    let mut xs : i64 = 0i64
+    let mut xm : u64 = 0u64
+    let mut xe : i64 = 0i64
+    if xv != 0i64 {
+        let mut mg : u64 = xv as u64
+        if xv < 0i64 { mg = (0i64 - xv) as u64 }
+        xs = 1i64
+        if xv < 0i64 { xs = 0i64 - 1i64 }
+        pr_x_dfn2(0u64, mg, 0i64 - 24i64, 0u64)
+        xm = pr_x_dfm()
+        xe = pr_x_dfe()
+    }
+    pb_sadd(ps, pm, pe, xs, xm, xe, dir)
+    return 0i32
+}
+
+fn pb_arm383() -> u64 {
+    if PB_PROJ_OK != 1u64 {
+        pb_rs("the nostos: fasting (no projection) -- the door stands open" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    PB_HSTRAD = 0u64
+    PB_HCONT = 0u64
+    PB_HWMAX = 0i64 - 100000i64
+    let mut r : u64 = 0u64
+    while r < 7168u64 {
+        pb_home(r, 0u64)
+        let fl_s : i64 = PB_SDS
+        let fl_m : u64 = PB_SDM
+        let fl_e : i64 = PB_SDE
+        pb_home(r, 1u64)
+        let fh_s : i64 = PB_SDS
+        let fh_m : u64 = PB_SDM
+        let fh_e : i64 = PB_SDE
+        pb_home(r, 2u64)
+        let tl_s : i64 = PB_SDS
+        let tl_m : u64 = PB_SDM
+        let tl_e : i64 = PB_SDE
+        pb_home(r, 3u64)
+        let th_s : i64 = PB_SDS
+        let th_m : u64 = PB_SDM
+        let th_e : i64 = PB_SDE
+        /* the tight exact route must sit inside the fat interval route */
+        let mut okc : u64 = 1u64
+        /* fl <= tl */
+        let mut c1 : i64 = 0i64
+        if fl_s > tl_s { c1 = 1i64 }
+        if fl_s < tl_s { c1 = 0i64 - 1i64 }
+        if fl_s == tl_s {
+            if fl_s != 0i64 {
+                c1 = pr_x_dfcmp(fl_m, fl_e, tl_m, tl_e)
+                if fl_s < 0i64 { c1 = 0i64 - c1 }
+            }
+        }
+        if c1 > 0i64 { okc = 0u64 }
+        /* th <= fh */
+        let mut c2 : i64 = 0i64
+        if th_s > fh_s { c2 = 1i64 }
+        if th_s < fh_s { c2 = 0i64 - 1i64 }
+        if th_s == fh_s {
+            if th_s != 0i64 {
+                c2 = pr_x_dfcmp(th_m, th_e, fh_m, fh_e)
+                if th_s < 0i64 { c2 = 0i64 - c2 }
+            }
+        }
+        if c2 > 0i64 { okc = 0u64 }
+        if okc == 1u64 { PB_HCONT = PB_HCONT + 1u64 }
+        /* the sign shadow: can the machine swear the sign of X'? */
+        let mut str8 : u64 = 0u64
+        if fl_s < 0i64 {
+            if fh_s >= 0i64 { str8 = 1u64 }
+        }
+        if fl_s == 0i64 { str8 = 1u64 }
+        if fh_s == 0i64 { str8 = 1u64 }
+        if str8 == 1u64 { PB_HSTRAD = PB_HSTRAD + 1u64 }
+        /* the width shadow: (fh - fl) top exponent via df subtraction */
+        pb_sadd(fh_s, fh_m, fh_e, 0i64 - fl_s, fl_m, fl_e, 1u64)
+        if PB_SDS != 0i64 {
+            /* top-bit exponent of a normalized df is its e + 63 */
+            let wexp : i64 = PB_SDE + 63i64
+            if wexp > PB_HWMAX { PB_HWMAX = wexp }
+        }
+        r = r + 1u64
+    }
+    if PB_HCONT != 7168u64 { return 383u64 }
+    /* the scroll: the law of the projection sealed */
+    eol_reset()
+    let doc : u64 = "[interval projection = certified containment] [certified containment < exact decision] [interval width = named shadow] [straddled sign = refused decision] [refused decision < certified containment]" as u64
+    let dl : u64 = pb_slen(doc)
+    if eol_read(doc, dl) < 0i64 { return 383u64 }
+    if eol_lawcheck() != 0u64 { return 383u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 383u64 }
+    let ip : u64 = "interval projection" as u64
+    let xd : u64 = "exact decision" as u64
+    if eol_entails(ip, pb_slen(ip), 0u64, xd, pb_slen(xd)) != 1u64 { return 383u64 }
+    if eol_entails(xd, pb_slen(xd), 0u64, ip, pb_slen(ip)) != 0u64 { return 383u64 }
+    let rd : u64 = "refused decision" as u64
+    if eol_entails(rd, pb_slen(rd), 0u64, xd, pb_slen(xd)) != 1u64 { return 383u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 383u64 }
+    if eol_addr() != a1 { return 383u64 }
+    PB_SCROLL = a1
+    pb_rs("the nostos: X' = X + O/(r1*r3) dims=7168 tight-route-inside-fat=" as u64)
+    pb_ru(PB_HCONT)
+    pb_rs("/7168 sign-straddle=" as u64)
+    pb_ru(PB_HSTRAD)
+    pb_rs(" shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_HWMAX)
+    pb_rs(" voice=row" as u64)
+    pb_ru(mb_gz_voice())
+    pb_rs(" premises: theta-base=10000 yarn=named ffn=named o-proj-width=16384 (the ledger corrected the plan)" as u64)
+    pb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== the organ's spine ==================== */
+
+fn pb_selfprove() -> u64 @export {
+    PB_REPN = 0u64
+    PB_SCROLL = 0u64
+    let r0 : u64 = pb_arm382()
+    if r0 != 0u64 { return r0 }
+    let r1 : u64 = pb_arm383()
+    if r1 != 0u64 { return r1 }
+    return 0u64
+}
+
+fn pb_addr() -> u64 @export { return PB_SCROLL }
+fn pb_report_len() -> u64 @export { return PB_REPN }
+fn pb_report_byte(i: u64) -> u8 @export {
+    if i >= PB_REPN { return 0u8 }
+    return PB_REP[i]
+}
+
+/* PROBOLE: the thought is no longer a point, and the organism knows by
+ * exactly how much.  What widens is measured; what straddles is refused. */

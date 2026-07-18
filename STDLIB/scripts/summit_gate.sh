@@ -138,10 +138,11 @@ cc_one "$ROOT/STDLIB/iii/omnia/zetesis.iii"  "$T/zetesis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/metabole.iii" "$T/metabole.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/peras.iii"    "$T/peras.o" || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/probole.iii"  "$T/probole.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" "$T/metabole.o" "$T/peras.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" "$T/metabole.o" "$T/peras.o" "$T/probole.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -193,6 +194,9 @@ grep -q "^the peras: exp0=exact e=cf-bounded feq=overlap monotone=separated" "$T
 grep -q "^scroll peras = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO PERAS SCROLL"; exit 6; }
 if grep -q "^the feast: absent" "$T/run1.txt"; then
     grep -q "^the discharge: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING DISCHARGE"; exit 6; }
+    grep -q "^the choir: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING CHOIR"; exit 6; }
+    grep -q "^the probole: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING PROJECTION"; exit 6; }
+    grep -q "^the nostos: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING HOMECOMING"; exit 6; }
 else
     grep -q "^the feast: shards=.* conserved=" "$T/run1.txt" || { echo "[summit_gate] FEAST NOT CONSERVED"; exit 6; }
     grep -q "^the digestion: .*distributive=ok" "$T/run1.txt" || { echo "[summit_gate] NO EXACT DIGESTION"; exit 6; }
@@ -211,6 +215,15 @@ else
     # and the one-voice value mix through the real v rows.
     grep -q "^the pleroma: scale C=\[.*sum-w=\[.*\]ppb contains 1 =ok mix: one-voice value RETURNED v-contained=128/128" "$T/run1.txt" || { echo "[summit_gate] THE PASS UNASSEMBLED"; exit 6; }
     grep -q "^the pleroma weights(ppb): d0=\[" "$T/run1.txt" || { echo "[summit_gate] NO CERTIFIED WEIGHTS"; exit 6; }
+    # THE CHOIR + THE PROBOLE + THE NOSTOS: all 128 heads certified
+    # (partition contains 1 at every stall), the o_proj woven by four
+    # weavers with the sequential witness teeth, the interval containing
+    # the exact engine in every row, and the residual homecoming with the
+    # tight route inside the fat -- the attention block CLOSED.
+    grep -q "^the choir: heads=128 sumw-contains-1=128/128 .*crowned-overlap=8/8" "$T/run1.txt" || { echo "[summit_gate] THE CHOIR BROKE"; exit 6; }
+    grep -q "^the probole: o_proj woven by 4 weavers .*witness-rows=10/10 limb-exact containment(interval holds exact)=7168/7168" "$T/run1.txt" || { echo "[summit_gate] THE PROJECTION UNPROVEN"; exit 6; }
+    grep -q "^the nostos: .*tight-route-inside-fat=7168/7168" "$T/run1.txt" || { echo "[summit_gate] NO HOMECOMING"; exit 6; }
+    grep -q "^scroll probole = [1-9]" "$T/run1.txt" || { echo "[summit_gate] NO PROBOLE SCROLL"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
 grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }

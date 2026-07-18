@@ -85,6 +85,22 @@ extern @abi(c-msvc-x64) fn mb_gz_v_s(d: u64) -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_gz_v_l(d: u64, k: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_gz_v_e(d: u64) -> i64 from "metabole.iii"
 
+/* the choir's serves */
+extern @abi(c-msvc-x64) fn mb_qr_s(h: u64, d: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_qr_l(h: u64, d: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_qr_e(h: u64, d: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dv_s(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dv_l(r: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dv_e(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_vall() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_v_s(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_v_l(i: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_v_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_lo(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_hi(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_ex(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_mark(nl: u64, nh: u64, nx: u64) -> u64 from "metabole.iii"
+
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
@@ -2260,17 +2276,33 @@ fn pr_a9_add(ss: i64) -> i32 {
     return 0i32
 }
 
-/* one exact product q-rope-row * k-rope-row into the 9-limb accumulator */
-fn pr_har_term(qr: u64, kr: u64, sgnm: i64) -> u64 {
-    let qs : i64 = mb_gz_cr_s(qr)
+/* one exact product q-rope-row * k-rope-row into the 9-limb accumulator.
+ * qsrc 0 = the crowned head's standing rows; 1 = head PR_QH's choir rows */
+var PR_QH : u64 = 0u64
+fn pr_har_term(qr: u64, kr: u64, sgnm: i64, qsrc: u64) -> u64 {
+    let mut qs : i64 = 0i64
+    let mut qe : i64 = 0i64
+    if qsrc == 0u64 {
+        qs = mb_gz_cr_s(qr)
+        qe = mb_gz_cr_e(qr)
+    }
+    if qsrc == 1u64 {
+        qs = mb_qr_s(PR_QH, qr)
+        qe = mb_qr_e(PR_QH, qr)
+    }
     let ks : i64 = mb_gz_dr_s(kr)
     if qs == 0i64 { return 0u64 }
     if ks == 0i64 { return 0u64 }
-    let e : i64 = mb_gz_cr_e(qr) + mb_gz_dr_e(kr)
+    let e : i64 = qe + mb_gz_dr_e(kr)
     let sh : i64 = e - PR_EALN
     if sh < 0i64 { return 1u64 }
     if sh > 180i64 { return 1u64 }
-    pr_m33(mb_gz_cr_l(qr, 0u64), mb_gz_cr_l(qr, 1u64), mb_gz_cr_l(qr, 2u64), mb_gz_dr_l(kr, 0u64), mb_gz_dr_l(kr, 1u64), mb_gz_dr_l(kr, 2u64))
+    if qsrc == 0u64 {
+        pr_m33(mb_gz_cr_l(qr, 0u64), mb_gz_cr_l(qr, 1u64), mb_gz_cr_l(qr, 2u64), mb_gz_dr_l(kr, 0u64), mb_gz_dr_l(kr, 1u64), mb_gz_dr_l(kr, 2u64))
+    }
+    if qsrc == 1u64 {
+        pr_m33(mb_qr_l(PR_QH, qr, 0u64), mb_qr_l(PR_QH, qr, 1u64), mb_qr_l(PR_QH, qr, 2u64), mb_gz_dr_l(kr, 0u64), mb_gz_dr_l(kr, 1u64), mb_gz_dr_l(kr, 2u64))
+    }
     if pr_t9_load_shl(sh as u64) != 0u64 { return 1u64 }
     let mut sg : i64 = qs
     if ks < 0i64 { sg = 0i64 - sg }
@@ -2280,7 +2312,7 @@ fn pr_har_term(qr: u64, kr: u64, sgnm: i64) -> u64 {
 }
 
 /* the exact P/X integers, globally aligned.  0 ok / 1 red / 2 guard */
-fn pr_har_px() -> u64 {
+fn pr_har_px(qsrc: u64) -> u64 {
     let mut emin : i64 = 1000000i64
     let mut emax : i64 = 0i64 - 1000000i64
     let mut j : u64 = 0u64
@@ -2292,11 +2324,20 @@ fn pr_har_px() -> u64 {
             let mut kr : u64 = j
             if t == 1u64 { kr = j + 32u64 }
             if t == 3u64 { kr = j + 32u64 }
-            let qs : i64 = mb_gz_cr_s(qr)
+            let mut qs : i64 = 0i64
+            let mut qe : i64 = 0i64
+            if qsrc == 0u64 {
+                qs = mb_gz_cr_s(qr)
+                qe = mb_gz_cr_e(qr)
+            }
+            if qsrc == 1u64 {
+                qs = mb_qr_s(PR_QH, qr)
+                qe = mb_qr_e(PR_QH, qr)
+            }
             let ks : i64 = mb_gz_dr_s(kr)
             if qs != 0i64 {
                 if ks != 0i64 {
-                    let e : i64 = mb_gz_cr_e(qr) + mb_gz_dr_e(kr)
+                    let e : i64 = qe + mb_gz_dr_e(kr)
                     if e < emin { emin = e }
                     if e > emax { emax = e }
                 }
@@ -2317,8 +2358,8 @@ fn pr_har_px() -> u64 {
             PR_A9L[k] = 0u64
             k = k + 1u64
         }
-        if pr_har_term(j, j, 1i64) != 0u64 { return 1u64 }
-        if pr_har_term(j + 32u64, j + 32u64, 1i64) != 0u64 { return 1u64 }
+        if pr_har_term(j, j, 1i64, qsrc) != 0u64 { return 1u64 }
+        if pr_har_term(j + 32u64, j + 32u64, 1i64, qsrc) != 0u64 { return 1u64 }
         PR_PJS[j] = PR_A9S
         k = 0u64
         while k < 9u64 {
@@ -2331,8 +2372,8 @@ fn pr_har_px() -> u64 {
             PR_A9L[k] = 0u64
             k = k + 1u64
         }
-        if pr_har_term(j, j + 32u64, 1i64) != 0u64 { return 1u64 }
-        if pr_har_term(j + 32u64, j, 0i64 - 1i64) != 0u64 { return 1u64 }
+        if pr_har_term(j, j + 32u64, 1i64, qsrc) != 0u64 { return 1u64 }
+        if pr_har_term(j + 32u64, j, 0i64 - 1i64, qsrc) != 0u64 { return 1u64 }
         PR_XJS[j] = PR_A9S
         k = 0u64
         while k < 9u64 {
@@ -3110,7 +3151,7 @@ fn pr_arm379() -> u64 {
     let mut guard : u64 = 0u64
     if gz == 1u64 {
         if nr == 64u64 {
-            let px : u64 = pr_har_px()
+            let px : u64 = pr_har_px(0u64)
             if px == 1u64 { return 379u64 }
             if px == 2u64 { guard = 1u64 }
             if px == 0u64 {
@@ -3244,6 +3285,7 @@ var PR_SWMU : u64 = 0u64
 var PR_SWEU : i64 = 0i64
 var PR_VCONT : u64 = 0u64
 var PR_VANISH : u64 = 0u64
+var PR_PLEOK : u64 = 0u64
 
 /* normalize (hi:lo) * 2^eb into the df, rounding per dir */
 fn pr_dfn2(hi: u64, lo: u64, eb: i64, up: u64) -> i32 {
@@ -3974,6 +4016,7 @@ fn pr_arm380() -> u64 {
     pr_ru(mb_gz_voice())
     pr_rs(" premises: theta-base=10000 yarn=named o-proj=named" as u64)
     pr_rb(10u8)
+    PR_PLEOK = 1u64
     pr_rs("the pleroma weights(ppb):" as u64)
     let mut dd : u64 = 0u64
     while dd < 8u64 {
@@ -3989,6 +4032,585 @@ fn pr_arm380() -> u64 {
     pr_rb(10u8)
     return 0u64
 }
+
+/* ============ arm 381: THE CHOIR (every head sings, one thought) ====== */
+
+/* The pleroma proved ONE head's certified pass.  The choir proves all
+ * 128: per-head exact P/X (the standing per-head rope rows, stored by
+ * the gaze's own loop -- never restreamed), the same lane ladders (the
+ * circle is head-blind), and the SHIFT-ANCHOR softmax: softmax is
+ * invariant under any common shift, so anchoring at delta=0 needs exp of
+ * SIGNED bounded arguments only -- no argmax, no order, no refusal
+ * unless the ladder cap itself is breached (then the head is refused BY
+ * NAME).  Every head's partition must contain 1.  The crowned head's
+ * weights must OVERLAP arm 380's (two anchors, one truth).  Then the
+ * per-head one-voice mixes are deposited as the STANDING THOUGHT: the
+ * 16384-wide interval vector the projection will consume, with the
+ * exact one-voice point riding beside the bounds as the second engine.
+ * And the homecoming radical r1*r3 = sqrt(r1^2 * r3^2) is certified
+ * here, where the exact sums live. */
+
+var PR_CSWMD : [u64; 128]
+var PR_CSWED : [i64; 128]
+var PR_CSWMU : [u64; 128]
+var PR_CSWEU : [i64; 128]
+var PR_CRWMD : [u64; 8]
+var PR_CRWED : [i64; 8]
+var PR_CRWMU : [u64; 8]
+var PR_CRWEU : [i64; 8]
+var PR_CEMD : [u64; 8]
+var PR_CEED : [i64; 8]
+var PR_CEMU : [u64; 8]
+var PR_CEEU : [i64; 8]
+var PR_R3MD : u64 = 0u64
+var PR_R3ED : i64 = 0i64
+var PR_R3MU : u64 = 0u64
+var PR_R3EU : i64 = 0i64
+var PR_R13MD : u64 = 0u64
+var PR_R13ED : i64 = 0i64
+var PR_R13MU : u64 = 0u64
+var PR_R13EU : i64 = 0i64
+var PR_RI13MD : u64 = 0u64
+var PR_RI13ED : i64 = 0i64
+var PR_RI13MU : u64 = 0u64
+var PR_RI13EU : i64 = 0i64
+var PR_CHREF : u64 = 0u64
+var PR_CHTOP0 : u64 = 0u64
+var PR_CHTOPO : u64 = 0u64
+var PR_CHTOPS : u64 = 0u64
+var PR_CHOK : u64 = 0u64
+
+/* r3^2 = sum(latent^2)*2^(2emin)/(512 * r1^2) + eps, then the homecoming
+ * radical r1*r3 and its reciprocal interval */
+fn pr_cho_r13() -> u64 {
+    let mut emin : i64 = 1000000i64
+    let mut emax : i64 = 0i64 - 1000000i64
+    let mut r : u64 = 0u64
+    while r < 512u64 {
+        let s : i64 = mb_gz_dv_s(r)
+        if s != 0i64 {
+            let e2 : i64 = mb_gz_dv_e(r)
+            if e2 < emin { emin = e2 }
+            if e2 > emax { emax = e2 }
+        }
+        r = r + 1u64
+    }
+    if emin == 1000000i64 { return 1u64 }
+    if emax - emin > 256i64 { return 1u64 }
+    PR_ALS = 0i64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_AL[k] = 0u64
+        k = k + 1u64
+    }
+    r = 0u64
+    while r < 512u64 {
+        let s2 : i64 = mb_gz_dv_s(r)
+        if s2 != 0i64 {
+            let l0 : u64 = mb_gz_dv_l(r, 0u64)
+            let l1 : u64 = mb_gz_dv_l(r, 1u64)
+            let l2 : u64 = mb_gz_dv_l(r, 2u64)
+            pr_m33(l0, l1, l2, l0, l1, l2)
+            let sh2 : u64 = (2i64 * (mb_gz_dv_e(r) - emin)) as u64
+            if pr_t14_p6shl(sh2) != 0u64 { return 1u64 }
+            if pr_s14_add(0u64, 1i64) != 0i32 { return 1u64 }
+        }
+        r = r + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        PR_T14[k] = PR_AL[k]
+        k = k + 1u64
+    }
+    let e2m : i64 = 2i64 * emin
+    let mut side : u64 = 0u64
+    while side < 2u64 {
+        pr_df_from14(side)
+        if PR_DFM == 0u64 { return 1u64 }
+        let s2m : u64 = PR_DFM
+        let s2e : i64 = PR_DFE + e2m
+        let mut r1m : u64 = PR_R1MU
+        let mut r1e : i64 = PR_R1EU
+        if side == 1u64 {
+            r1m = PR_R1MD
+            r1e = PR_R1ED
+        }
+        pr_dfn2(0u64, 512u64, 0i64, 0u64)
+        let opp : u64 = 1u64 - side
+        pr_dfmul(PR_DFM, PR_DFE, r1m, r1e, opp)
+        pr_dfrecip(PR_DFM, PR_DFE, side)
+        pr_dfmul(s2m, s2e, PR_DFM, PR_DFE, side)
+        pr_dfadd(PR_DFM, PR_DFE, PR_EPM, PR_EPE, side)
+        if side == 0u64 {
+            PR_R3MD = PR_DFM
+            PR_R3ED = PR_DFE
+        }
+        if side == 1u64 {
+            PR_R3MU = PR_DFM
+            PR_R3EU = PR_DFE
+        }
+        side = side + 1u64
+    }
+    /* r1*r3 = sqrt(r1^2 * r3^2), then the reciprocal (directions flip) */
+    pr_dfmul(PR_R1MD, PR_R1ED, PR_R3MD, PR_R3ED, 0u64)
+    pr_dfsqrt(PR_DFM, PR_DFE, 0u64)
+    PR_R13MD = PR_DFM
+    PR_R13ED = PR_DFE
+    pr_dfmul(PR_R1MU, PR_R1EU, PR_R3MU, PR_R3EU, 1u64)
+    pr_dfsqrt(PR_DFM, PR_DFE, 1u64)
+    PR_R13MU = PR_DFM
+    PR_R13EU = PR_DFE
+    pr_dfrecip(PR_R13MU, PR_R13EU, 0u64)
+    PR_RI13MD = PR_DFM
+    PR_RI13ED = PR_DFE
+    pr_dfrecip(PR_R13MD, PR_R13ED, 1u64)
+    PR_RI13MU = PR_DFM
+    PR_RI13EU = PR_DFE
+    return 0u64
+}
+
+/* exp(z) for SIGNED z = sg * m * 2^e, rounded per up.  0 ok / 1 cap */
+fn pr_cho_exp(m: u64, e: i64, sg: i64, up: u64) -> u64 {
+    if sg == 0i64 {
+        PR_DFM = 1u64 << 63u64
+        PR_DFE = 0i64 - 63i64
+        return 0u64
+    }
+    if m == 0u64 {
+        PR_DFM = 1u64 << 63u64
+        PR_DFE = 0i64 - 63i64
+        return 0u64
+    }
+    let capm : u64 = 3u64 << 62u64
+    let cape : i64 = 0i64 - 59i64
+    if pr_df_cmp(m, e, capm, cape) >= 0i64 { return 1u64 }
+    if sg > 0i64 {
+        /* growing side: up -> ceil arg + EHI; dn -> floor arg + ELO */
+        let m48 : u64 = pr_df_m48(m, e, up)
+        if m48 == (0u64 - 1u64) { return 1u64 }
+        if pr_exp(m48, 48u64) != 0i32 { return 1u64 }
+        if up == 1u64 {
+            pr_dfn2(PR_EHI1, PR_EHI0, 0i64 - 88i64, 1u64)
+        }
+        if up == 0u64 {
+            pr_dfn2(PR_ELO1, PR_ELO0, 0i64 - 88i64, 0u64)
+        }
+        return 0u64
+    }
+    /* shrinking side: exp(-|z|) = recip(exp(|z|)) */
+    let m48b : u64 = pr_df_m48(m, e, 1u64 - up)
+    if m48b == (0u64 - 1u64) { return 1u64 }
+    if pr_exp(m48b, 48u64) != 0i32 { return 1u64 }
+    if up == 1u64 {
+        /* upper of recip needs LOWER of exp: floor arg + ELO, recip up */
+        pr_dfn2(PR_ELO1, PR_ELO0, 0i64 - 88i64, 0u64)
+        pr_dfrecip(PR_DFM, PR_DFE, 1u64)
+        return 0u64
+    }
+    pr_dfn2(PR_EHI1, PR_EHI0, 0i64 - 88i64, 1u64)
+    pr_dfrecip(PR_DFM, PR_DFE, 0u64)
+    return 0u64
+}
+
+/* the shift-anchor softmax for the standing PR_RD state.  Writes e and w
+ * arrays (CE*, then the weights into CRW when crowned).  0 ok / 1 red /
+ * 2 ladder-cap refusal (the head is refused by name) */
+fn pr_cho_soft(h: u64) -> u64 {
+    let mut dd : u64 = 0u64
+    while dd < 8u64 {
+        if dd == 0u64 {
+            PR_CEMD[0] = 1u64 << 63u64
+            PR_CEED[0] = 0i64 - 63i64
+            PR_CEMU[0] = 1u64 << 63u64
+            PR_CEEU[0] = 0i64 - 63i64
+        }
+        if dd != 0u64 {
+            /* D bounds (signed): lo = R0lo - RdHi, hi = R0hi - RdLo */
+            PR_ALS = PR_RDLS[0]
+            let mut k : u64 = 0u64
+            while k < 14u64 {
+                PR_AL[k] = PR_RDLL[k]
+                PR_T14[k] = PR_RDHL[dd * 14u64 + k]
+                k = k + 1u64
+            }
+            if pr_s14_add(0u64, 0i64 - PR_RDHS[dd]) != 0i32 { return 1u64 }
+            let dls : i64 = PR_ALS
+            k = 0u64
+            while k < 14u64 {
+                PR_T14[k] = PR_AL[k]
+                k = k + 1u64
+            }
+            pr_df_from14(0u64)
+            let dlm0 : u64 = PR_DFM
+            let dle0 : i64 = PR_DFE + (PR_EALN - 88i64)
+            PR_AHS = PR_RDHS[0]
+            k = 0u64
+            while k < 14u64 {
+                PR_AH[k] = PR_RDHL[k]
+                PR_T14[k] = PR_RDLL[dd * 14u64 + k]
+                k = k + 1u64
+            }
+            if pr_s14_add(1u64, 0i64 - PR_RDLS[dd]) != 0i32 { return 1u64 }
+            let dhs : i64 = PR_AHS
+            k = 0u64
+            while k < 14u64 {
+                PR_T14[k] = PR_AH[k]
+                k = k + 1u64
+            }
+            pr_df_from14(1u64)
+            let dhm0 : u64 = PR_DFM
+            let dhe0 : i64 = PR_DFE + (PR_EALN - 88i64)
+            /* x = C * D, directed with C > 0 and D signed */
+            let mut xlm : u64 = 0u64
+            let mut xle : i64 = 0i64
+            let mut xls : i64 = dls
+            if dls != 0i64 {
+                if dls > 0i64 { pr_dfmul(dlm0, dle0, PR_C_MD, PR_C_ED, 0u64) }
+                if dls < 0i64 { pr_dfmul(dlm0, dle0, PR_C_MU, PR_C_EU, 1u64) }
+                xlm = PR_DFM
+                xle = PR_DFE
+            }
+            let mut xhm : u64 = 0u64
+            let mut xhe : i64 = 0i64
+            let mut xhs : i64 = dhs
+            if dhs != 0i64 {
+                if dhs > 0i64 { pr_dfmul(dhm0, dhe0, PR_C_MU, PR_C_EU, 1u64) }
+                if dhs < 0i64 { pr_dfmul(dhm0, dhe0, PR_C_MD, PR_C_ED, 0u64) }
+                xhm = PR_DFM
+                xhe = PR_DFE
+            }
+            /* e = exp(-x): dn side from x_hi, up side from x_lo.  The
+             * vanishing tail: x_lo >= 24 -> e in [0, 2^-34] */
+            let capm2 : u64 = 3u64 << 62u64
+            let cape2 : i64 = 0i64 - 59i64
+            let mut vanished : u64 = 0u64
+            if xls > 0i64 {
+                if pr_df_cmp(xlm, xle, capm2, cape2) >= 0i64 {
+                    /* both bounds sit beyond the cap on the shrinking side */
+                    if xhs > 0i64 {
+                        if pr_df_cmp(xhm, xhe, capm2, cape2) >= 0i64 {
+                            PR_CEMD[dd] = 0u64
+                            PR_CEED[dd] = 0i64
+                            PR_CEMU[dd] = 1u64 << 63u64
+                            PR_CEEU[dd] = 0i64 - 97i64
+                            vanished = 1u64
+                        }
+                    }
+                    if vanished == 0u64 { return 2u64 }
+                }
+            }
+            if vanished == 0u64 {
+                if pr_cho_exp(xhm, xhe, 0i64 - xhs, 0u64) != 0u64 { return 2u64 }
+                PR_CEMD[dd] = PR_DFM
+                PR_CEED[dd] = PR_DFE
+                if pr_cho_exp(xlm, xle, 0i64 - xls, 1u64) != 0u64 { return 2u64 }
+                PR_CEMU[dd] = PR_DFM
+                PR_CEEU[dd] = PR_DFE
+            }
+        }
+        dd = dd + 1u64
+    }
+    /* sums, weights, the partition tooth */
+    let mut sdm : u64 = 0u64
+    let mut sde : i64 = 0i64
+    let mut sum : u64 = 0u64
+    let mut sue : i64 = 0i64
+    dd = 0u64
+    while dd < 8u64 {
+        pr_dfadd(sdm, sde, PR_CEMD[dd], PR_CEED[dd], 0u64)
+        sdm = PR_DFM
+        sde = PR_DFE
+        pr_dfadd(sum, sue, PR_CEMU[dd], PR_CEEU[dd], 1u64)
+        sum = PR_DFM
+        sue = PR_DFE
+        dd = dd + 1u64
+    }
+    if sdm == 0u64 { return 1u64 }
+    pr_dfrecip(sum, sue, 0u64)
+    let rlm : u64 = PR_DFM
+    let rle : i64 = PR_DFE
+    pr_dfrecip(sdm, sde, 1u64)
+    let rum : u64 = PR_DFM
+    let rue : i64 = PR_DFE
+    let mut wdm : u64 = 0u64
+    let mut wde : i64 = 0i64
+    let mut wum : u64 = 0u64
+    let mut wue : i64 = 0i64
+    dd = 0u64
+    while dd < 8u64 {
+        pr_dfmul(PR_CEMD[dd], PR_CEED[dd], rlm, rle, 0u64)
+        let wm0 : u64 = PR_DFM
+        let we0 : i64 = PR_DFE
+        pr_dfmul(PR_CEMU[dd], PR_CEEU[dd], rum, rue, 1u64)
+        let wm1 : u64 = PR_DFM
+        let we1 : i64 = PR_DFE
+        if h == mb_gz_head() {
+            PR_CRWMD[dd] = wm0
+            PR_CRWED[dd] = we0
+            PR_CRWMU[dd] = wm1
+            PR_CRWEU[dd] = we1
+        }
+        pr_dfadd(wdm, wde, wm0, we0, 0u64)
+        wdm = PR_DFM
+        wde = PR_DFE
+        pr_dfadd(wum, wue, wm1, we1, 1u64)
+        wum = PR_DFM
+        wue = PR_DFE
+        dd = dd + 1u64
+    }
+    let onem : u64 = 1u64 << 63u64
+    let onee : i64 = 0i64 - 63i64
+    if pr_df_cmp(wdm, wde, onem, onee) > 0i64 { return 1u64 }
+    if pr_df_cmp(wum, wue, onem, onee) < 0i64 { return 1u64 }
+    PR_CSWMD[h] = wdm
+    PR_CSWED[h] = wde
+    PR_CSWMU[h] = wum
+    PR_CSWEU[h] = wue
+    return 0u64
+}
+
+/* deposit head h's one-voice mix (bounds and exact point) */
+fn pr_cho_dep(h: u64) -> u64 {
+    let mut d : u64 = 0u64
+    while d < 128u64 {
+        let i : u64 = h * 128u64 + d
+        let sv : i64 = mb_pb_v_s(i)
+        if sv == 0i64 {
+            mb_pb_set_lo(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64)
+            mb_pb_set_hi(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64)
+            mb_pb_set_ex(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64)
+        }
+        if sv != 0i64 {
+            let v0 : u64 = mb_pb_v_l(i, 0u64)
+            let v1 : u64 = mb_pb_v_l(i, 1u64)
+            let v2 : u64 = mb_pb_v_l(i, 2u64)
+            let ve : i64 = mb_pb_v_e(i)
+            let mut pass : u64 = 0u64
+            while pass < 2u64 {
+                /* pass 0 writes the lo bound, pass 1 the hi bound */
+                let mut pick_up : u64 = 0u64
+                if sv < 0i64 { pick_up = 1u64 }
+                if pass == 1u64 { pick_up = 1u64 - pick_up }
+                let mut wm : u64 = PR_CSWMD[h]
+                let mut we : i64 = PR_CSWED[h]
+                if pick_up == 1u64 {
+                    wm = PR_CSWMU[h]
+                    we = PR_CSWEU[h]
+                }
+                /* exact 3-limb x 1-limb product */
+                pr_mul64(v0, wm)
+                let p0 : u64 = PR_MLO
+                let mut c1 : u64 = PR_MHI
+                pr_mul64(v1, wm)
+                let s1 : u64 = c1 + PR_MLO
+                let mut c2 : u64 = PR_MHI
+                if s1 < PR_MLO { c2 = c2 + 1u64 }
+                pr_mul64(v2, wm)
+                let s2 : u64 = c2 + PR_MLO
+                let mut c3 : u64 = PR_MHI
+                if s2 < PR_MLO { c3 = c3 + 1u64 }
+                if pass == 0u64 { mb_pb_set_lo(i, sv, p0, s1, s2, c3, ve + we) }
+                if pass == 1u64 { mb_pb_set_hi(i, sv, p0, s1, s2, c3, ve + we) }
+                pass = pass + 1u64
+            }
+            mb_pb_set_ex(i, sv, v0, v1, v2, 0u64, ve)
+        }
+        d = d + 1u64
+    }
+    return 0u64
+}
+
+fn pr_arm381() -> u64 {
+    PR_CHOK = 0u64
+    PR_CHREF = 0u64
+    PR_CHTOP0 = 0u64
+    PR_CHTOPO = 0u64
+    PR_CHTOPS = 0u64
+    if PR_PLEOK != 1u64 {
+        pr_rs("the choir: fasting (no pleroma) -- the stalls stand empty" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    let va : u64 = mb_pb_vall()
+    if va == 2u64 {
+        pr_rs("the choir: value geometry foreign (named, lawful)" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    if va != 0u64 { return 381u64 }
+    if pr_cho_r13() != 0u64 { return 381u64 }
+    let mut sumok : u64 = 0u64
+    let mut hh : u64 = 0u64
+    while hh < 128u64 {
+        PR_QH = hh
+        let px : u64 = pr_har_px(1u64)
+        if px != 0u64 { return 381u64 }
+        let mut dd : u64 = 0u64
+        while dd < 8u64 {
+            if pr_har_asm(dd) != 0u64 { return 381u64 }
+            dd = dd + 1u64
+        }
+        let sf : u64 = pr_cho_soft(hh)
+        if sf == 1u64 { return 381u64 }
+        if sf == 2u64 {
+            PR_CHREF = PR_CHREF + 1u64
+        }
+        if sf == 0u64 {
+            sumok = sumok + 1u64
+            /* the top census: is delta 0 the strict top for this head? */
+            let mut allsep : u64 = 1u64
+            let mut isd0 : u64 = 1u64
+            let mut d2 : u64 = 1u64
+            while d2 < 8u64 {
+                let c : i64 = pr_rd_cmp(0u64, 0u64, 1u64, d2)
+                if c <= 0i64 {
+                    let c2 : i64 = pr_rd_cmp(1u64, 0u64, 0u64, d2)
+                    if c2 < 0i64 { isd0 = 0u64 }
+                    if c2 >= 0i64 { allsep = 0u64 }
+                }
+                d2 = d2 + 1u64
+            }
+            if allsep == 0u64 { PR_CHTOPS = PR_CHTOPS + 1u64 }
+            if allsep == 1u64 {
+                if isd0 == 1u64 { PR_CHTOP0 = PR_CHTOP0 + 1u64 }
+                if isd0 == 0u64 { PR_CHTOPO = PR_CHTOPO + 1u64 }
+            }
+            pr_cho_dep(hh)
+        }
+        hh = hh + 1u64
+    }
+    if PR_CHREF != 0u64 {
+        pr_rs("the choir: refused heads=" as u64)
+        pr_ru(PR_CHREF)
+        pr_rs(" (ladder cap -- named); the thought is not deposited" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    /* the crowned head's weights must OVERLAP the pleroma's (two anchors,
+     * one truth: different shift anchors, the same distribution) */
+    let mut ov : u64 = 0u64
+    let mut d3 : u64 = 0u64
+    while d3 < 8u64 {
+        let a_lo_m : u64 = PR_CRWMD[d3]
+        let a_lo_e : i64 = PR_CRWED[d3]
+        let a_hi_m : u64 = PR_CRWMU[d3]
+        let a_hi_e : i64 = PR_CRWEU[d3]
+        let b_lo_m : u64 = PR_WMD[d3]
+        let b_lo_e : i64 = PR_WED[d3]
+        let b_hi_m : u64 = PR_WMU[d3]
+        let b_hi_e : i64 = PR_WEU[d3]
+        let mut okp : u64 = 1u64
+        if pr_df_cmp(a_lo_m, a_lo_e, b_hi_m, b_hi_e) > 0i64 { okp = 0u64 }
+        if pr_df_cmp(b_lo_m, b_lo_e, a_hi_m, a_hi_e) > 0i64 { okp = 0u64 }
+        if okp == 1u64 { ov = ov + 1u64 }
+        d3 = d3 + 1u64
+    }
+    if ov != 8u64 { return 381u64 }
+    mb_pb_mark(16384u64, 16384u64, 16384u64)
+    PR_CHOK = 1u64
+    pr_rs("the choir: heads=128 sumw-contains-1=" as u64)
+    pr_ru(sumok)
+    pr_rs("/128 refused=0 top-census: d0-first=" as u64)
+    pr_ru(PR_CHTOP0)
+    pr_rs(" other=" as u64)
+    pr_ru(PR_CHTOPO)
+    pr_rs(" straddle=" as u64)
+    pr_ru(PR_CHTOPS)
+    pr_rs(" crowned-overlap=8/8 r1r3=[" as u64)
+    pr_ru(PR_R13MD)
+    pr_rs("e" as u64)
+    pr_ri(PR_R13ED)
+    pr_rs("," as u64)
+    pr_ru(PR_R13MU)
+    pr_rs("e" as u64)
+    pr_ri(PR_R13EU)
+    pr_rs("] -- one thought, 16384 wide, deposited with its exact shadow" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* ============ the served faculties (probole consumes) ============ */
+
+fn pr_x_dfm() -> u64 @export { return PR_DFM }
+fn pr_x_dfe() -> i64 @export { return PR_DFE }
+fn pr_x_df6(l0: u64, l1: u64, l2: u64, l3: u64, l4: u64, l5: u64, eb: i64, up: u64) -> i32 @export {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_T14[k] = 0u64
+        k = k + 1u64
+    }
+    PR_T14[0] = l0
+    PR_T14[1] = l1
+    PR_T14[2] = l2
+    PR_T14[3] = l3
+    PR_T14[4] = l4
+    PR_T14[5] = l5
+    pr_df_from14(up)
+    PR_DFE = PR_DFE + eb
+    return 0i32
+}
+fn pr_x_dfn2(hi: u64, lo: u64, eb: i64, up: u64) -> i32 @export {
+    pr_dfn2(hi, lo, eb, up)
+    return 0i32
+}
+fn pr_x_dfmul(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 @export {
+    pr_dfmul(ma, ea, mb, eb, up)
+    return 0i32
+}
+fn pr_x_dfadd(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 @export {
+    pr_dfadd(ma, ea, mb, eb, up)
+    return 0i32
+}
+/* |a - b| for a >= b (positive dyadic floats), rounded per up */
+fn pr_x_dfsub(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 @export {
+    if mb == 0u64 {
+        PR_DFM = ma
+        PR_DFE = ea
+        return 0i32
+    }
+    let d : i64 = ea - eb
+    if d >= 64i64 {
+        /* b is below one ulp of a */
+        PR_DFM = ma
+        PR_DFE = ea
+        if up == 0u64 {
+            PR_DFM = PR_DFM - 1u64
+            if PR_DFM < (1u64 << 63u64) {
+                PR_DFM = (PR_DFM << 1u64) | 1u64
+                PR_DFE = PR_DFE - 1i64
+            }
+        }
+        return 0i32
+    }
+    let du : u64 = d as u64
+    let mut hi : u64 = 0u64
+    let mut lo : u64 = 0u64
+    if du == 0u64 {
+        lo = ma - mb
+        hi = 0u64
+    }
+    if du != 0u64 {
+        hi = ma >> (64u64 - du)
+        lo = ma << du
+        let mut bw : u64 = 0u64
+        if lo < mb { bw = 1u64 }
+        lo = lo - mb
+        hi = hi - bw
+    }
+    pr_dfn2(hi, lo, eb, up)
+    return 0i32
+}
+fn pr_x_dfcmp(ma: u64, ea: i64, mb: u64, eb: i64) -> i64 @export {
+    return pr_df_cmp(ma, ea, mb, eb)
+}
+fn pr_x_ppb(m: u64, e: i64, up: u64) -> u64 @export {
+    return pr_df_ppb(m, e, up)
+}
+fn pr_x_ri13_md() -> u64 @export { return PR_RI13MD }
+fn pr_x_ri13_ed() -> i64 @export { return PR_RI13ED }
+fn pr_x_ri13_mu() -> u64 @export { return PR_RI13MU }
+fn pr_x_ri13_eu() -> i64 @export { return PR_RI13EU }
+fn pr_x_chok() -> u64 @export { return PR_CHOK }
 
 /* ==================== the organ's spine ==================== */
 
@@ -4009,6 +4631,8 @@ fn pr_selfprove() -> u64 @export {
     if r5 != 0u64 { return r5 }
     let r6 : u64 = pr_arm380()
     if r6 != 0u64 { return r6 }
+    let r7 : u64 = pr_arm381()
+    if r7 != 0u64 { return r7 }
     if mb_feast() == 0u64 {
         pr_rs("the discharge: fasting (no feast) -- the bound stands ready" as u64)
         pr_rb(10u8)

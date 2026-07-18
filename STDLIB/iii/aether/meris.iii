@@ -132,7 +132,7 @@ fn ms_hook(w: u64, i: i64, j: i64) -> i64 @export {
     let l : i64 = ms_colh(w, j) - i
     return a + l + 1i64
 }
-fn ms_fact(n: i64) -> u64 {
+fn ms_fact(n: i64) -> u64 @export {
     let mut f : u64 = 1u64
     let mut k : u64 = 2u64
     while k <= (n as u64) { f = f * k   k = k + 1u64 }

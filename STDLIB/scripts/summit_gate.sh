@@ -7,13 +7,19 @@
 # meris (Nekrasov localization), klisi (the perfectoid tilt), eidolos (the
 # scroll) and summit (the composition) -- links the probe, and demands:
 #   1. every organ battery GREEN (pyrgos 180..195, riza 210..217,
-#      kyma 230..240 [Bell/CHSH emerged + Born selected by basis-invariance],
+#      kyma 230..241 [Bell/CHSH emerged + Born selected by basis-invariance +
+#      Kochen-Specker: the Peres-Mermin square's six operator identities
+#      derived with emergent signs, 512-valuation enumeration ZERO/ceiling-5],
 #      meris 250..254 [+ the Faulhaber/Stirling power-sum mint],
 #      klisi 260..266 [+ the Hensel/Newton inverse faculty],
 #      summit 280..285, gnosis 290..299 [+ the CHRONOMETER: arrival counts
 #      and total work minted O(1) from the orbit oracle's decisions, and the
 #      DIVISION BRIDGE: the live planner + Montgomery kernel on the
-#      substrate identity]);
+#      substrate identity],
+#      noesis 300..304 [THE THERMODYNAMIC METER: deficit = valuation by
+#      complete w=8 saturation; odd multipliers zero-heat (inverse-witnessed);
+#      the chronometer's work RECOVERABLE ACTION; fold-deficit invariance
+#      across every certified SR family; the law sealed as a scroll]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -61,10 +67,11 @@ cc_one "$ROOT/STDLIB/iii/aether/klisi.iii"   "$T/klisi.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/eidolos.iii"  "$T/eidolos.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/summit.iii"   "$T/summit.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/noesis.iii"   "$T/noesis.o"  || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/eidolos.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -87,6 +94,7 @@ fi
 grep -q "^scroll gravity = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO GRAVITY SCROLL"; exit 6; }
 grep -q "^scroll born    = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO BORN SCROLL"; exit 6; }
 grep -q "^scroll gnosis  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO GNOSIS SCROLL"; exit 6; }
+grep -q "^scroll noesis  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO NOESIS SCROLL"; exit 6; }
 echo "[summit_gate] THE SUMMIT IS GREEN -- both scrolls sealed, byte-deterministic:"
 grep "^scroll" "$T/run1.txt"
 exit 0

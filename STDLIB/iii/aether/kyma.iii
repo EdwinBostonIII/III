@@ -15,7 +15,7 @@
  * |v|^2 = v * conj(v) lands in Z[sqrt2] (coords (A, B, 0, -B) = A + B sqrt2;
  * a violated realness shape is a COUNTED refusal, never silence).
  *
- * Truth is a CONDITION OF MOTION: ky_selfprove (arms 230..240) runs the ring
+ * Truth is a CONDITION OF MOTION: ky_selfprove (arms 230..241) runs the ring
  * laws, exact gate algebra, the 7-T Toffoli decomposition, Grover's exactly-1
  * single iteration, Deutsch-Jozsa decided with certainty over enumerated
  * oracle families, the Born cross-oracle against the pyrgos tower (two
@@ -25,7 +25,11 @@
  * bound 2 and the quantum 2*sqrt2 BOTH emerged by complete enumeration, the
  * strict gap decided by the exact sign oracle, separable state as teeth), and
  * the BORN rule SELECTED by basis-invariance (Parseval exact; the non-Born
- * |amp|^4 rule refuted as basis-dependent).  NO gate.
+ * |amp|^4 rule refuted as basis-dependent), and KOCHEN-SPECKER contextuality
+ * (the Peres-Mermin square: six operator identities DERIVED on every basis
+ * state with emergent signs, the complete 512-valuation enumeration finding
+ * ZERO satisfying assignments and ceiling 5/6, the flipped-sign control
+ * proving the teeth).  NO gate.
  * NIH: composes aether/pyrgos for the cross-oracle only.  Ring R-1. */
 module aether_kyma
 
@@ -305,6 +309,19 @@ fn ky_swap(a: u64, b: u64) -> i32 @export {
     ky_cx(a, b)
     ky_cx(b, a)
     ky_cx(a, b)
+    return 0i32
+}
+/* the Pauli Y, exact: Y = zeta^2 X Z (the global i carried on every amplitude
+ * -- kyma holds global phase exactly, so Y is a first-class citizen, not a
+ * convention).  Y|0> = i|1>, Y|1> = -i|0>, Y^2 = I -- witnessed in arm 241. */
+fn ky_y(q: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if q >= KY_N { KY_ERR = 2u64   return -1i32 }
+    ky_p(q, 4u64)
+    ky_x(q)
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n { ky_rot(x, 2u64)   x = x + 1u64 }
     return 0i32
 }
 
@@ -1181,6 +1198,158 @@ fn ky_arm240() -> u64 {
     if py_err() != 0u64 { return 240u64 }
     return 0u64
 }
+/* ============================================================================================
+ * KOCHEN-SPECKER / THE PERES-MERMIN SQUARE -- contextuality derived, not asserted.
+ * Nine two-qubit Pauli observables in a 3x3 grid; each row and column is a commuting triple
+ * whose operator product kyma DERIVES by applying the exact gate words to EVERY basis state:
+ * the composite must be sign * identity, coordinate-exactly, and the sign EMERGES (no target
+ * named).  Then the COMPLETE classical enumeration: all 512 assignments of {+1,-1} to the nine
+ * cells -- ZERO satisfy all six derived line-signs, and the classical maximum EMERGES as 5 of 6.
+ * No noncontextual valuation exists, while the quantum operators satisfy every constraint
+ * exactly: the Kochen-Specker obstruction as a finite, exact, enumerated theorem.  The in-arm
+ * control has TEETH: flip ONE derived sign and the classical model SUCCEEDS -- the enumeration
+ * is not rigged against the valuations.
+ * SCOPE (the eidolon law): this is the state-independent 2-qubit Mermin kernel; the original
+ * KS 3-dim vector construction is the cited continuum ancestor. */
+var KY_PM0 : [u64; 9]                    /* qubit-0 op per cell: 0 I, 1 X, 2 Y, 3 Z */
+var KY_PM1 : [u64; 9]                    /* qubit-1 op per cell                     */
+var KY_PMLN : [u64; 18]                  /* six lines x three cells                 */
+var KY_PMSG : [i64; 6]                   /* the DERIVED line signs                  */
+fn kb_pm_init() -> i32 {
+    /* row 0: X(x)I, I(x)X, X(x)X | row 1: I(x)Y, Y(x)I, Y(x)Y | row 2: X(x)Y, Y(x)X, Z(x)Z */
+    KY_PM0[0u64] = 1u64   KY_PM1[0u64] = 0u64
+    KY_PM0[1u64] = 0u64   KY_PM1[1u64] = 1u64
+    KY_PM0[2u64] = 1u64   KY_PM1[2u64] = 1u64
+    KY_PM0[3u64] = 0u64   KY_PM1[3u64] = 2u64
+    KY_PM0[4u64] = 2u64   KY_PM1[4u64] = 0u64
+    KY_PM0[5u64] = 2u64   KY_PM1[5u64] = 2u64
+    KY_PM0[6u64] = 1u64   KY_PM1[6u64] = 2u64
+    KY_PM0[7u64] = 2u64   KY_PM1[7u64] = 1u64
+    KY_PM0[8u64] = 3u64   KY_PM1[8u64] = 3u64
+    /* rows then columns */
+    KY_PMLN[0u64] = 0u64   KY_PMLN[1u64] = 1u64   KY_PMLN[2u64] = 2u64
+    KY_PMLN[3u64] = 3u64   KY_PMLN[4u64] = 4u64   KY_PMLN[5u64] = 5u64
+    KY_PMLN[6u64] = 6u64   KY_PMLN[7u64] = 7u64   KY_PMLN[8u64] = 8u64
+    KY_PMLN[9u64] = 0u64   KY_PMLN[10u64] = 3u64   KY_PMLN[11u64] = 6u64
+    KY_PMLN[12u64] = 1u64   KY_PMLN[13u64] = 4u64   KY_PMLN[14u64] = 7u64
+    KY_PMLN[15u64] = 2u64   KY_PMLN[16u64] = 5u64   KY_PMLN[17u64] = 8u64
+    return 0i32
+}
+fn kb_pm_op(q: u64, op: u64) -> i32 {
+    if op == 1u64 { ky_x(q) }
+    if op == 2u64 { ky_y(q) }
+    if op == 3u64 { ky_p(q, 4u64) }
+    return 0i32
+}
+/* count the classical assignments satisfying all six line-signs (v ranges the
+ * complete 512-cube; bit c of v = the {+1,-1} value of cell c) */
+fn kb_pm_full() -> u64 {
+    let mut full : u64 = 0u64
+    let mut v : u64 = 0u64
+    while v < 512u64 {
+        let mut sat : u64 = 0u64
+        let mut L : u64 = 0u64
+        while L < 6u64 {
+            let mut pr : i64 = 1i64
+            let mut t : u64 = 0u64
+            while t < 3u64 {
+                if ((v >> KY_PMLN[(L * 3u64) + t]) & 1u64) == 1u64 { pr = 0i64 - pr }
+                t = t + 1u64
+            }
+            if pr == KY_PMSG[L] { sat = sat + 1u64 }
+            L = L + 1u64
+        }
+        if sat == 6u64 { full = full + 1u64 }
+        v = v + 1u64
+    }
+    return full
+}
+fn ky_arm241() -> u64 {
+    kb_pm_init()
+    /* Y is exact: Y^2 = I on both basis states, with the phases closing */
+    let mut s : u64 = 0u64
+    while s < 2u64 {
+        ky_reset(1u64)
+        KY_C0[0u64] = 0i64
+        KY_C0[s] = 1i64
+        ky_y(0u64)
+        ky_y(0u64)
+        if KY_ERR != 0u64 { return 241u64 }
+        if KY_K != 0u64 { return 241u64 }
+        if KY_C0[s] != 1i64 { return 241u64 }
+        let o : u64 = 1u64 - s
+        if KY_C0[o] != 0i64 { return 241u64 }
+        if KY_C1[s] != 0i64 { return 241u64 }
+        if KY_C2[s] != 0i64 { return 241u64 }
+        if KY_C3[s] != 0i64 { return 241u64 }
+        s = s + 1u64
+    }
+    /* the six operator identities: each line's word maps EVERY basis state to
+     * sign * itself, and the sign is consistent across the four states */
+    let mut L : u64 = 0u64
+    while L < 6u64 {
+        let mut sgn : i64 = 0i64
+        let mut bs : u64 = 0u64
+        while bs < 4u64 {
+            ky_reset(2u64)
+            KY_C0[0u64] = 0i64
+            KY_C0[bs] = 1i64
+            let mut t : u64 = 0u64
+            while t < 3u64 {
+                let c : u64 = KY_PMLN[(L * 3u64) + t]
+                kb_pm_op(0u64, KY_PM0[c])
+                kb_pm_op(1u64, KY_PM1[c])
+                t = t + 1u64
+            }
+            if KY_ERR != 0u64 { return 241u64 }
+            if KY_K != 0u64 { return 241u64 }
+            let mut x : u64 = 0u64
+            while x < 4u64 {
+                if KY_C1[x] != 0i64 { return 241u64 }
+                if KY_C2[x] != 0i64 { return 241u64 }
+                if KY_C3[x] != 0i64 { return 241u64 }
+                if x != bs { if KY_C0[x] != 0i64 { return 241u64 } }
+                x = x + 1u64
+            }
+            let v : i64 = KY_C0[bs]
+            if v != 1i64 { if v != (0i64 - 1i64) { return 241u64 } }
+            if sgn == 0i64 { sgn = v } else { if v != sgn { return 241u64 } }
+            bs = bs + 1u64
+        }
+        KY_PMSG[L] = sgn
+        L = L + 1u64
+    }
+    /* THE COMPLETE CLASSICAL ENUMERATION: no valuation satisfies all six
+     * derived signs, and the maximum satisfiable EMERGES as five */
+    if kb_pm_full() != 0u64 { return 241u64 }
+    let mut best : u64 = 0u64
+    let mut v2 : u64 = 0u64
+    while v2 < 512u64 {
+        let mut sat : u64 = 0u64
+        let mut L2 : u64 = 0u64
+        while L2 < 6u64 {
+            let mut pr : i64 = 1i64
+            let mut t2 : u64 = 0u64
+            while t2 < 3u64 {
+                if ((v2 >> KY_PMLN[(L2 * 3u64) + t2]) & 1u64) == 1u64 { pr = 0i64 - pr }
+                t2 = t2 + 1u64
+            }
+            if pr == KY_PMSG[L2] { sat = sat + 1u64 }
+            L2 = L2 + 1u64
+        }
+        if sat > best { best = sat }
+        v2 = v2 + 1u64
+    }
+    if best != 5u64 { return 241u64 }
+    /* THE CONTROL WITH TEETH: flip one derived sign and the classical model
+     * SUCCEEDS -- the impossibility is the physics, not the harness */
+    KY_PMSG[5u64] = 0i64 - KY_PMSG[5u64]
+    let flipped : u64 = kb_pm_full()
+    KY_PMSG[5u64] = 0i64 - KY_PMSG[5u64]
+    if flipped == 0u64 { return 241u64 }
+    if KY_ERR != 0u64 { return 241u64 }
+    return 0u64
+}
 fn ky_selfprove() -> u64 @export {
     let a0 : u64 = ky_arm230()
     if a0 != 0u64 { return a0 }
@@ -1204,6 +1373,8 @@ fn ky_selfprove() -> u64 @export {
     if a9 != 0u64 { return a9 }
     let a10 : u64 = ky_arm240()
     if a10 != 0u64 { return a10 }
+    let a11 : u64 = ky_arm241()
+    if a11 != 0u64 { return a11 }
     return 0u64
 }
 

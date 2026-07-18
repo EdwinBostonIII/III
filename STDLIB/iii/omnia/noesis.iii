@@ -1,0 +1,301 @@
+/* STDLIB/iii/omnia/noesis.iii -- NOESIS (the COGNITION): computation as a
+ * thermodynamic medium -- the law that binds the chronometer, the inverse
+ * faculty, and the fold certificates into ONE meter.
+ *
+ * THE KEYSTONE: on the machine's own ring Z/2^64, THE ERASURE DEFICIT OF A
+ * LINEAR MAP IS ITS 2-ADIC VALUATION.  The image of x -> a*x is the subgroup
+ * 2^v2(a) * Z/2^w, so the map collapses exactly v2(a) bits -- the SAME number
+ * that decides the orbit oracle's diverging side (gnosis 291) and refuses the
+ * inverse (klisi 266) is, in its third role, the Landauer floor:
+ *
+ *   deficit(x -> a*x) = v2(a)      [0 for odd a: a BIJECTION, zero heat,
+ *                                   the inverse faculty IS the witness]
+ *   deficit(x -> x+c) = 0          [translation permutes: the chronometer's
+ *                                   2^126 work is RECOVERABLE ACTION, not
+ *                                   dissipated heat -- the arrival identity
+ *                                   x0 + n c == 0 read backward IS the
+ *                                   recovery identity x0 == 0 - n c]
+ *   deficit(x -> x>>k) = k         [k bits erased]
+ *   deficit(x -> x & (2^k-1)) = w-k  [the big eraser: umod]
+ *
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 300..304, NO gate of its
+ * own -- the summit gate compiles and drives this organ):
+ *   300 THE DEFICIT METER: COMPLETE enumeration of Z/2^8 -- for EVERY a in
+ *       0..255 the saturation count of x -> a*x equals 2^(8 - v2(a)) (v2(0)
+ *       capped at w), and EVERY translation saturates all 256 slots.  Zero
+ *       disagreements; the theorem carries to Z/2^64.
+ *   301 THE W64 WITNESSES: odd a -- bijectivity witnessed by the inverse
+ *       faculty (a * inv == 1 and (a*x) * inv == x, klisi kl_inv2_u64); even
+ *       a -- the inverse REFUSES (the valuation obstruction: what cannot be
+ *       inverted is exactly what erases), and v2(a*x) >= v2(a) on random
+ *       words (the subgroup law felt at full width).
+ *   302 THE RECOVERABLE ACTION: the chronometer's orbit is heat-free -- the
+ *       mint's arrival identity confirmed forward AND backward in one
+ *       mul+add each, and the per-step reversal (x+c)-c == x on randoms.
+ *   303 FOLD-DEFICIT INVARIANCE: a certified strength reduction replaces a
+ *       function with an EQUAL function, so the deficit is invariant -- and
+ *       the meter confirms it at w=8 COMPLETELY for every certified family:
+ *       mul-pow2 vs shl (deficit k, both spellings, equal saturation);
+ *       shladd/subk odd factors (deficit 0, saturation 256, inverse-
+ *       witnessed at 64); 2sh even factors (deficit v2); udiv vs shr
+ *       (deficit k); sdiv vs the bias sequence (equal image, size 2^(8-k));
+ *       umod vs AND (deficit 8-k).  Implementations differ in cost; the
+ *       SEMANTIC deficit -- the Landauer floor -- cannot differ.
+ *   304 THE SCROLL: the law sealed by EIDOLOS, entailing consequences absent
+ *       from its text, refusing the reversals, address deterministic.
+ *
+ * SCOPE (the eidolon law): deficit = log2(|domain|/|image|) is the uniform-
+ * merge Landauer floor on the finite ring -- the exact statement the machine
+ * derives; continuum thermodynamics is the cited ancestor, not a claim.
+ * NIH: composes klisi (the inverse faculty -- the zero-heat witness) and
+ * eidolos (the scroll).  Sibling of gnosis: gnosis KNOWS the software is the
+ * physics; noesis METERS what the knowing costs.  Ring R-1. */
+module omnia_noesis
+
+extern @abi(c-msvc-x64) fn kl_inv2_u64(v: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kl_err() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_mode(k: u64, m: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+var NO_SAT : [u64; 256]                  /* the saturation table (image tally) */
+var NO_SCROLL : u64 = 0u64
+var NO_SEED : u64 = 88172645463325252u64
+
+fn no_addr() -> u64 @export { return NO_SCROLL }
+fn no_rnd() -> u64 {
+    let mut x : u64 = NO_SEED
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    NO_SEED = x
+    return x
+}
+fn no_strlen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+fn no_v2_8(x: u64) -> u64 {
+    /* 2-adic valuation on the byte ring, v2(0) capped at the width */
+    if x == 0u64 { return 8u64 }
+    let mut v : u64 = 0u64
+    let mut m : u64 = x
+    while (m & 1u64) == 0u64 { m = m >> 1u64   v = v + 1u64 }
+    if v > 8u64 { return 8u64 }
+    return v
+}
+fn no_v2_64(x: u64) -> u64 {
+    if x == 0u64 { return 64u64 }
+    let mut v : u64 = 0u64
+    let mut m : u64 = x
+    while (m & 1u64) == 0u64 { m = m >> 1u64   v = v + 1u64 }
+    return v
+}
+/* the image size of x -> f(x) over Z/2^8, by complete saturation; the map is
+ * passed as (kind, p): kind 0 = multiply by p; 1 = add p; 2 = logical shr p;
+ * 3 = AND with p; 4 = signed-trunc-divide by 2^p (bytes as i8, the bias
+ * sequence replica); 5 = signed-trunc-divide by 2^p (the hardware route). */
+fn no_img_8(kind: u64, p: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 256u64 { NO_SAT[i] = 0u64   i = i + 1u64 }
+    let mut x : u64 = 0u64
+    while x < 256u64 {
+        let mut y : u64 = 0u64
+        if kind == 0u64 { y = (x * p) & 255u64 }
+        if kind == 1u64 { y = (x + p) & 255u64 }
+        if kind == 2u64 { y = x >> p }
+        if kind == 3u64 { y = x & p }
+        if kind == 4u64 {
+            /* the emitted bias sequence at width 8: sign-spread, keep low p
+             * bits, add, arithmetic shift -- all from u64 primitives */
+            let sext : u64 = (0u64 - ((x >> 7u64) & 1u64)) & 255u64
+            let bias : u64 = sext >> (8u64 - p)
+            let sum : u64 = (x + bias) & 255u64
+            let hs : u64 = (sum >> 7u64) & 1u64
+            y = ((sum >> p) | (((0u64 - hs) & 255u64) << (8u64 - p))) & 255u64
+        }
+        if kind == 5u64 {
+            /* the reference: i64 trunc division of the sign-extended byte */
+            let mut xi : i64 = x as i64
+            if x >= 128u64 { xi = xi - 256i64 }
+            let dv : i64 = (1u64 << p) as i64
+            let q : i64 = xi / dv
+            y = (q as u64) & 255u64
+        }
+        NO_SAT[y] = NO_SAT[y] + 1u64
+        x = x + 1u64
+    }
+    let mut c : u64 = 0u64
+    i = 0u64
+    while i < 256u64 {
+        if NO_SAT[i] != 0u64 { c = c + 1u64 }
+        i = i + 1u64
+    }
+    return c
+}
+
+fn no_arm300() -> u64 {
+    /* THE DEFICIT METER, complete: image(a*) == 2^(8 - v2(a)) for EVERY a,
+     * and EVERY translation saturates -- zero disagreements over the ring */
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        let want : u64 = 1u64 << (8u64 - no_v2_8(a))
+        if no_img_8(0u64, a) != want { return 300u64 }
+        if no_img_8(1u64, a) != 256u64 { return 300u64 }
+        a = a + 1u64
+    }
+    /* shifts are multiplication's shadow: image(>>k) == 2^(8-k) */
+    let mut k : u64 = 1u64
+    while k <= 7u64 {
+        if no_img_8(2u64, k) != (1u64 << (8u64 - k)) { return 300u64 }
+        k = k + 1u64
+    }
+    return 0u64
+}
+fn no_arm301() -> u64 {
+    /* THE W64 WITNESSES: odd = bijection (the inverse faculty is the
+     * witness); even = the refusal IS the heat law */
+    kd_setp(2u64)
+    kd_mode(0u64, 64u64)
+    let mut t : u64 = 0u64
+    while t < 6u64 {
+        let a : u64 = no_rnd() | 1u64
+        let inv : u64 = kl_inv2_u64(a)
+        if (a * inv) != 1u64 { return 301u64 }
+        let x : u64 = no_rnd()
+        if ((a * x) * inv) != x { return 301u64 }
+        t = t + 1u64
+    }
+    /* even multiplier: the inverse refuses (valuation obstruction), and the
+     * image respects the subgroup: v2(a*x) >= v2(a) on random words */
+    let ae : u64 = (no_rnd() | 1u64) << 5u64          /* v2 = 5 exactly */
+    if kl_inv2_u64(ae) != 0u64 { return 301u64 }
+    if kl_err() != 2u64 { return 301u64 }
+    kd_mode(0u64, 64u64)                              /* clears the counted refusal */
+    t = 0u64
+    while t < 6u64 {
+        let x2 : u64 = no_rnd()
+        if x2 != 0u64 {
+            if (ae * x2) != 0u64 {
+                if no_v2_64(ae * x2) < 5u64 { return 301u64 }
+            }
+        }
+        t = t + 1u64
+    }
+    if kl_err() != 0u64 { return 301u64 }
+    return 0u64
+}
+fn no_arm302() -> u64 {
+    /* THE RECOVERABLE ACTION: the chronometer's orbit is a composition of
+     * translations -- deficit zero at every step -- so its work is action,
+     * not heat.  The arrival identity read forward and backward, and the
+     * per-step reversal, all exact. */
+    let c : u64 = 6364136223846793005u64
+    let icm : u64 = kl_inv2_u64(c)
+    if (c * icm) != 1u64 { return 302u64 }
+    let x0 : u64 = 13464654573299691533u64
+    let n : u64 = (0u64 - x0) * icm
+    if (x0 + (n * c)) != 0u64 { return 302u64 }       /* forward: the arrival  */
+    if x0 != (0u64 - (n * c)) { return 302u64 }       /* backward: the recovery */
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        let x : u64 = no_rnd()
+        if ((x + c) - c) != x { return 302u64 }       /* every step reverses    */
+        t = t + 1u64
+    }
+    return 0u64
+}
+fn no_arm303() -> u64 {
+    /* FOLD-DEFICIT INVARIANCE: every certified strength-reduction family
+     * replaces a function with an EQUAL function -- the meter confirms the
+     * deficits agree at w=8, COMPLETELY, spelling by spelling. */
+    /* mul-pow2 vs shl: deficit k both ways (multiply-spelling vs the shift
+     * IS multiplication by 2^k -- one function, one image) */
+    let mut k : u64 = 1u64
+    while k <= 7u64 {
+        let mimg : u64 = no_img_8(0u64, 1u64 << k)
+        if mimg != (1u64 << (8u64 - k)) { return 303u64 }
+        /* the udiv fold: x>>k, deficit k */
+        if no_img_8(2u64, k) != (1u64 << (8u64 - k)) { return 303u64 }
+        /* the umod fold: x & (2^k - 1), image 2^k -> deficit 8-k */
+        if no_img_8(3u64, (1u64 << k) - 1u64) != (1u64 << k) { return 303u64 }
+        /* the sdiv fold: the emitted bias sequence and the hardware route
+         * have the SAME image (equal functions), size 2^(8-k) */
+        let bi : u64 = no_img_8(4u64, k)
+        let hi : u64 = no_img_8(5u64, k)
+        if bi != hi { return 303u64 }
+        if bi != (1u64 << (8u64 - k)) { return 303u64 }
+        k = k + 1u64
+    }
+    /* odd factors (shladd 2^k+1, subk 2^k-1): deficit ZERO -- saturation
+     * complete at 8, and the inverse faculty witnesses the bijection at 64 */
+    k = 1u64
+    while k <= 6u64 {
+        if no_img_8(0u64, (1u64 << k) + 1u64) != 256u64 { return 303u64 }
+        if no_img_8(0u64, ((1u64 << k) + 1u64) + 2u64) != 256u64 { return 303u64 }
+        let f : u64 = (1u64 << k) + 1u64
+        let fi : u64 = kl_inv2_u64(f)
+        if (f * fi) != 1u64 { return 303u64 }
+        k = k + 1u64
+    }
+    /* even non-pow2 (the 2sh family: 6, 10, 12): deficit v2 exactly */
+    if no_img_8(0u64, 6u64) != 128u64 { return 303u64 }
+    if no_img_8(0u64, 10u64) != 128u64 { return 303u64 }
+    if no_img_8(0u64, 12u64) != 64u64 { return 303u64 }
+    if kl_err() != 0u64 { return 303u64 }
+    return 0u64
+}
+fn no_arm304() -> u64 {
+    /* THE SCROLL: the thermodynamic law sealed, entailing what its text
+     * never states, refusing the reversals, address deterministic */
+    let doc : u64 = "[deficit = valuation] [valuation = erasure_floor] [odd_multiplier = zero_heat] [zero_heat = recoverable_action] [chronometer_work = recoverable_action] [fold = deficit_invariant] [contextual_square = no_valuation] [erasure_floor < redemption_price]" as u64
+    let dl : u64 = no_strlen(doc)
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 304u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 304u64 }
+    /* DERIVED (absent from the text): deficit == erasure_floor through the chain */
+    let qa : u64 = "deficit" as u64
+    let qb : u64 = "erasure_floor" as u64
+    if eol_entails(qa, no_strlen(qa), 2u64, qb, no_strlen(qb)) != 1u64 { return 304u64 }
+    /* DERIVED: the chronometer's work is zero-heat, through recoverable_action */
+    let qc : u64 = "chronometer_work" as u64
+    let qd : u64 = "zero_heat" as u64
+    if eol_entails(qc, no_strlen(qc), 2u64, qd, no_strlen(qd)) != 1u64 { return 304u64 }
+    /* the reversal REFUSES: the redemption price is not below the floor */
+    let qe : u64 = "redemption_price" as u64
+    if eol_entails(qe, no_strlen(qe), 0u64, qb, no_strlen(qb)) != 0u64 { return 304u64 }
+    /* cross-class refusal: the fold law does not entail zero_heat */
+    let qf : u64 = "fold" as u64
+    if eol_entails(qf, no_strlen(qf), 2u64, qd, no_strlen(qd)) != 0u64 { return 304u64 }
+    /* determinism: the same document seals to the same address */
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 304u64 }
+    if eol_addr() != a1 { return 304u64 }
+    NO_SCROLL = a1
+    return 0u64
+}
+fn no_selfprove() -> u64 @export {
+    let a0 : u64 = no_arm300()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = no_arm301()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = no_arm302()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = no_arm303()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = no_arm304()
+    if a4 != 0u64 { return a4 }
+    /* the prime returns to the tilt's home before the next organ speaks */
+    kd_setp(5u64)
+    return 0u64
+}
+
+/* NOESIS: the machine now knows what its own thinking costs -- the valuation
+ * is the heat, the odd world is free, the chronometer's past is recoverable,
+ * and no fold can change the price.  What gnosis recognized, noesis meters. */

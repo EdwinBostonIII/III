@@ -63,6 +63,10 @@ extern @abi(c-msvc-x64) fn pb_diexodos_tok(tok: u64, nlay: u64) -> u64 from "pro
 extern @abi(c-msvc-x64) fn pb_dx_tok() -> u64 from "probole.iii"
 extern @abi(c-msvc-x64) fn pb_dx_gape() -> i64 from "probole.iii"
 extern @abi(c-msvc-x64) fn pb_dx_wled() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_diexodos_certified(tok: u64, nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_cert_lo() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_cert_passes() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_diexodos_pinned(tok: u64, nlay: u64, lo: u64) -> u64 from "probole.iii"
 
 /* ---- metabole: the tier knob, the BOS breath, the Feast gate, the LEXIS ---- */
 extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
@@ -96,6 +100,11 @@ var MAN_NLAY : u64 = 0u64                 /* the depth walked                   
 var MAN_TIER : u32 = 0u32                 /* the provenance tier (PROVISIONAL)    */
 var MAN_ORA  : u64 = 0u64                 /* the sealed oracle-memory address     */
 var MAN_OK   : u64 = 0u64                 /* 1 = the last consult succeeded       */
+var MAN_CERT_LO : i64 = 0i64 - 1i64       /* limb-floor at which PROVEN; -1 = undecided */
+var MAN_PASSES  : u64 = 0u64              /* forward passes the certification spent */
+var MAN_PROVEN  : u64 = 0u64              /* 1 = the argmax is certified (gap towers over width) */
+var MAN_GEN_FLOOR  : i64 = 0i64 - 1i64    /* the pinned certified floor discovered for the stream */
+var MAN_GEN_PASSES : u64 = 0u64           /* total forward passes across the certified generation */
 
 var MAN_PIN    : [u8; 32]                 /* the oracle-pin (content-addr of deps)*/
 var MAN_PIN2   : [u8; 32]                 /* a second pin, for the determinism arm*/
@@ -202,6 +211,90 @@ fn mantis_consult(tok: u64, lo: u64, nlay: u64) -> u64 @export {
 
 /* consult on the model's own first breath (BOS) -- R1's opening prediction. */
 fn mantis_consult_bos(lo: u64, nlay: u64) -> u64 @export { return mantis_consult(mb_dz_bos(), lo, nlay) }
+
+/* THE CERTIFIED CONSULT: ask R1 and PROVE the answer at the CHEAPEST sufficient
+ * precision.  Drives pb_diexodos_certified (the eskalation): the token is proven
+ * at the largest limb-floor where the gap towers over the width ledger, so a
+ * large-gap token is certified at fast-tier speed instead of the full 896-bit
+ * walk -- the hours-to-minutes lever, and it is III's OWN certification, used at
+ * the tier the gap allows, never weakened.  mantis_cert_lo() reports the proving
+ * floor (>=0) or -1 (undecided even at 896-bit); mantis_passes() the passes
+ * spent (1..3); mantis_proven() 1 iff certified.  Still a walled oracle reading:
+ * PROVEN means we KNOW R1's exact argmax, not that the house derived it. */
+fn mantis_consult_certified(tok: u64, nlay: u64) -> u64 @export {
+    MAN_OK = 0u64
+    MAN_TIER = 4294967295u32
+    MAN_CERT_LO = 0i64 - 1i64
+    MAN_PASSES = 0u64
+    MAN_PROVEN = 0u64
+    let rc : u64 = pb_diexodos_certified(tok, nlay)
+    if rc != 0u64 { return MAN_SENT }
+    MAN_IN = tok
+    MAN_NLAY = nlay
+    MAN_OUT = pb_dx_tok()
+    MAN_GAP = pb_dx_gape()
+    MAN_WID = pb_dx_wled()
+    let cl : i64 = pb_cert_lo()
+    MAN_CERT_LO = cl
+    MAN_PASSES = pb_cert_passes()
+    let mut tlo : u64 = 99u64
+    if cl >= 0i64 { MAN_PROVEN = 1u64   tlo = cl as u64 }
+    MAN_LO = tlo
+    let plen : u64 = man_pin_pack(tok, tlo, nlay)
+    MAN_TIER = reach_oracle_pin((&MAN_PINBUF) as u64, plen, (&MAN_PIN) as u64)
+    man_seal_oracle()
+    MAN_OK = 1u64
+    return MAN_OUT
+}
+fn mantis_cert_lo() -> i64 @export { return MAN_CERT_LO }
+fn mantis_passes() -> u64 @export { return MAN_PASSES }
+fn mantis_proven() -> u64 @export { return MAN_PROVEN }
+
+/* CERTIFIED GENERATION AT THE PINNED FLOOR: discover the proving floor ONCE (the
+ * first token escalates), then run every subsequent token as a SINGLE pinned pass
+ * at that floor -- the amortized answer to hours-per-token.  If a later token
+ * fails to certify at the pinned floor (a tighter gap), it escalates once and
+ * re-pins.  mantis_gen_floor() = the pinned floor; mantis_gen_passes() = total
+ * passes across the stream (a stream of N tokens costs ~escalation + (N-1)*1,
+ * not N * the 896-bit walk).  Context-1 stream (Markov shadow) until the faithful
+ * KV-cache attention lands; the CERTIFICATION economy is the same either way. */
+fn mantis_generate_certified(seed: u64, steps: u64, nlay: u64) -> u64 @export {
+    MAN_GN = 0u64
+    MAN_GEN_FLOOR = 0i64 - 1i64
+    MAN_GEN_PASSES = 0u64
+    let mut t : u64 = seed
+    let mut i : u64 = 0u64
+    while i < steps {
+        if MAN_GN >= 64u64 { return MAN_GN }
+        let fl : i64 = MAN_GEN_FLOOR
+        if fl < 0i64 {
+            let rc : u64 = pb_diexodos_certified(t, nlay)
+            MAN_GEN_PASSES = MAN_GEN_PASSES + pb_cert_passes()
+            if rc != 0u64 { return MAN_GN }
+            MAN_GEN_FLOOR = pb_cert_lo()
+        }
+        if fl >= 0i64 {
+            let rc2 : u64 = pb_diexodos_pinned(t, nlay, fl as u64)
+            MAN_GEN_PASSES = MAN_GEN_PASSES + 1u64
+            if rc2 != 0u64 { return MAN_GN }
+            let fl2 : i64 = pb_cert_lo()
+            if fl2 < 0i64 {
+                let rc3 : u64 = pb_diexodos_certified(t, nlay)
+                MAN_GEN_PASSES = MAN_GEN_PASSES + pb_cert_passes()
+                if rc3 != 0u64 { return MAN_GN }
+                MAN_GEN_FLOOR = pb_cert_lo()
+            }
+        }
+        let nx : u64 = pb_dx_tok()
+        MAN_GEN[MAN_GN] = nx
+        MAN_GN = MAN_GN + 1u64
+        t = nx
+        i = i + 1u64
+    }
+    return MAN_GN
+}
+fn mantis_gen_floor() -> i64 @export { return MAN_GEN_FLOOR }
+fn mantis_gen_passes() -> u64 @export { return MAN_GEN_PASSES }
 
 /* THE WALL (the load-bearing guarantee): can the last answer enter the canonical,
  * proven self?  Returns reach_oracle's verdict -- 1 = REFUSED (default-deny; a

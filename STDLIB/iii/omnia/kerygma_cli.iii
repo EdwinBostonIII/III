@@ -1,0 +1,247 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\kerygma_cli.iii
+ *
+ * III STDLIB - omnia::kerygma_cli  --  THE PROCLAMATION SPOKEN: the standing CLI
+ * face of KERYGMA, so the self-portrait is proclaimed by a NAMED verb, not an
+ * ad-hoc build-territory probe.  One entry, the skill-surface contract
+ * (kerygma_enter(argc, argv) with argv shifted one seat) exactly like every
+ * organism skill, and a main so it also stands alone as kerygma.exe.
+ *
+ * THE FIVE FACES (av[1] selects; bare = proclaim):
+ *   kerygma                    PROCLAIM: selfprove, derive the live portrait,
+ *                              census + anti-rot + scroll + shards + silicon +
+ *                              embodied + the oracle self-answers
+ *   kerygma law                THE PURE LAWS only (no filesystem): the anti-
+ *                              amnesia condition of motion, the oracle law, the
+ *                              two-jurisdiction silicon pulse -- all env-free
+ *   kerygma ask <fam> <mod>    THE ORACLE: does the live tree derive
+ *                              [<mod> < <fam>]?  KNOWN or not-derivable
+ *   kerygma reaches <mod> <fam>  THE TRANSITIVE THEOREM: does [<mod> < <fam>] +
+ *                              [<fam> < iii] derive [<mod> < iii]?
+ *   kerygma scroll             just the canonical (1,1,1) portrait text
+ *
+ * THE INTEGRATION SEAM (named + empty, the xring discipline): to lift this to a
+ * first-class `iii kerygma` verb, add exactly four additive lines when the tree
+ * is quiet (no concurrent boundary build in flight, so the full iii.exe
+ * bootstrap does not drag in another session's uncompilable WIP):
+ *   1. holos.iii   -- register skill 32: "kerygma|P|prove|STDLIB/iii/omnia/kerygma_cli.iii"
+ *                     + its dep-path list (kerygma.iii;eidolos.iii;isub.iii;self_cartographer.iii;
+ *                       self_atlas.iii;fs.iii;capability.iii;cpu_census.iii;census.iii;
+ *                       behavioral_fp.iii;reach_oracle.iii)
+ *   2. iii_main.iii -- extern kerygma_enter + `if i == 32u64 { return kerygma_enter(ac, av) }`
+ *   3. build_iii.sh -- cite STDLIB/iii/omnia/kerygma_cli.iii in the CLI module list
+ *                     (the two-source law: the pinned dep must be cited or the face refuses)
+ * The kerygma_enter contract below is already that shape; the wiring is trivial.
+ *
+ * Ring R0.  K 0.98.  NIH: no island -- it only SPEAKS the kerygma organ that
+ * already stands.  ASCII only, libc-free but for putchar.  Hexad: kind_glyph. */
+
+module omnia_kerygma_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+/* ---- the KERYGMA organ (the portrait it speaks) ---- */
+extern @abi(c-msvc-x64) fn kerygma_selfprove() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_build() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_verify() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_reseal() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_subsystems() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_nodes() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_edges() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_shards() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_static() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_dynamic() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_behavior() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_admit_static() -> i32 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_admit_dynamic() -> i32 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_embodied() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_pulse_selfprove() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_oracle_selfprove() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_membership(fp: u64, fl: u64, mp: u64, ml: u64) -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_reaches_iii(mp: u64, ml: u64, fp: u64, fl: u64) -> u64 from "kerygma.iii"
+
+/* ---- the one barometer: render the standing scroll to legible text ---- */
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+
+fn kc_ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn kc_pu(v: u64) -> u32 {
+    if v >= 10u64 { kc_pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn kc_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn kc_streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+
+/* render the canonical portrait scroll (eol_write over the kept house) */
+fn kc_scroll() -> i32 {
+    eol_write()
+    let n : u64 = eol_out_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(eol_out_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+    return 0i32
+}
+
+/* THE PURE LAWS: the anti-amnesia condition of motion, the structural-oracle
+ * law, and the two-jurisdiction silicon pulse -- all filesystem-free, so a
+ * green here is environment-independent.  Returns 0 = all three hold. */
+fn kc_law() -> u64 {
+    let sp : u64 = kerygma_selfprove()
+    kc_ps("kerygma law (anti-amnesia)  = " as u64)   kc_pu(sp)
+    if sp == 0u64 { kc_ps("  (GREEN: drift changes the name; no stale name verifies)" as u64) }
+    putchar(10i32)
+    let osp : u64 = kerygma_oracle_selfprove()
+    kc_ps("oracle law (never invents)  = " as u64)   kc_pu(osp)
+    if osp == 0u64 { kc_ps("  (GREEN: real KNOWN, fabricated refused, transitive reach derived)" as u64) }
+    putchar(10i32)
+    let psp : u64 = kerygma_pulse_selfprove()
+    kc_ps("silicon law (two juris.)    = " as u64)   kc_pu(psp)
+    if psp == 0u64 { kc_ps("  (GREEN: wall admits canonical, refuses provisional; drift named)" as u64) }
+    putchar(10i32)
+    if sp != 0u64 { return 1u64 }
+    if osp != 0u64 { return 1u64 }
+    if psp != 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* THE FULL PROCLAMATION: the pure law, then the live portrait, census, anti-
+ * rot, determinism, scroll, shards, the silicon self, the embodied self, and
+ * the oracle answering about its own body.  Returns 0 = everything stood. */
+fn kc_proclaim() -> u64 {
+    if kc_law() != 0u64 { return 9u64 }
+    putchar(10i32)
+
+    let addr : u64 = kerygma_build()
+    kc_ps("portrait address  = " as u64)   kc_pu(addr)   putchar(10i32)
+    if addr == 0u64 { kc_ps("PORTRAIT UNSEALED\n" as u64)   return 11u64 }
+    kc_ps("subsystems        = " as u64)   kc_pu(kerygma_subsystems())   putchar(10i32)
+    kc_ps("atlas nodes       = " as u64)   kc_pu(kerygma_nodes())        putchar(10i32)
+    kc_ps("atlas edges       = " as u64)   kc_pu(kerygma_edges())        putchar(10i32)
+    kc_ps("merkle shards     = " as u64)   kc_pu(kerygma_shards())       putchar(10i32)
+
+    let vf : u64 = kerygma_verify()
+    kc_ps("anti-rot verify   = " as u64)   kc_pu(vf)
+    if vf == 1u64 { kc_ps("  (the sealed text still re-derives its address)" as u64) }
+    putchar(10i32)
+    if vf != 1u64 { kc_ps("SEAL LIES\n" as u64)   return 12u64 }
+
+    let addr2 : u64 = kerygma_reseal()
+    kc_ps("determinism       = " as u64)
+    if addr2 == addr { kc_ps("STABLE (two live walks, one name)" as u64) }
+    if addr2 != addr { kc_ps("DRIFT\n" as u64)   return 13u64 }
+    putchar(10i32)
+
+    kc_ps("portrait scroll   = " as u64)   kc_scroll()
+
+    /* the silicon self + embodied self */
+    let sil : u64 = kerygma_silicon()
+    kc_ps("silicon static    = " as u64)   kc_pu(sil)
+    kc_ps("  (CANONICAL: CPUID crystal + silicon-fact census)" as u64)   putchar(10i32)
+    kc_ps("silicon dynamic   = " as u64)   kc_pu(kerygma_silicon_dynamic())
+    kc_ps("  (PROVISIONAL: behavioral fp 0x" as u64)   kc_pu(kerygma_behavior())   kc_ps(")" as u64)   putchar(10i32)
+    kc_ps("admit dynamic     = " as u64)   kc_pu(kerygma_silicon_admit_dynamic() as u64)
+    kc_ps("  (1 = REFUSED: the electron variance informs, never determines)" as u64)   putchar(10i32)
+    kc_ps("embodied self     = " as u64)   kc_pu(kerygma_embodied())
+    kc_ps("  (this code, this silicon, this moment -- one name)" as u64)   putchar(10i32)
+
+    /* the oracle answers two live questions about its own body */
+    kc_ps("ask metabole in omnia?   = " as u64)   kc_pu(kerygma_membership("omnia" as u64, 5u64, "metabole" as u64, 8u64))
+    kc_ps("  (1 = KNOWN)" as u64)   putchar(10i32)
+    kc_ps("metabole reaches iii?    = " as u64)   kc_pu(kerygma_reaches_iii("metabole" as u64, 8u64, "omnia" as u64, 5u64))
+    kc_ps("  (1 = transitive theorem)" as u64)   putchar(10i32)
+
+    kc_ps("THE PROCLAMATION STANDS -- the organism knows what it is, at one address,\n" as u64)
+    kc_ps("  self-verifying, queryable, and walled from its own electron variance.\n" as u64)
+    return 0u64
+}
+
+fn kc_silicon() -> u64 {
+    let psp : u64 = kerygma_pulse_selfprove()
+    kc_ps("silicon law       = " as u64)   kc_pu(psp)   putchar(10i32)
+    if psp != 0u64 { return 1u64 }
+    let sil : u64 = kerygma_silicon()
+    kc_ps("silicon static    = " as u64)   kc_pu(sil)                        putchar(10i32)
+    kc_ps("silicon dynamic   = " as u64)   kc_pu(kerygma_silicon_dynamic())  putchar(10i32)
+    kc_ps("behavioral fp     = 0x" as u64) kc_pu(kerygma_behavior())         putchar(10i32)
+    kc_ps("admit static      = " as u64)   kc_pu(kerygma_silicon_admit_static() as u64)
+    kc_ps("  (0 = admitted to the determined self)" as u64)   putchar(10i32)
+    kc_ps("admit dynamic     = " as u64)   kc_pu(kerygma_silicon_admit_dynamic() as u64)
+    kc_ps("  (1 = REFUSED)" as u64)   putchar(10i32)
+    kc_ps("embodied self     = " as u64)   kc_pu(kerygma_embodied())         putchar(10i32)
+    return 0u64
+}
+
+fn kc_usage() -> u64 {
+    kc_ps("kerygma -- THE PROCLAMATION: III's derived, self-verifying self-portrait\n\n" as u64)
+    kc_ps("  kerygma                     proclaim: law, live portrait, scroll, silicon, oracle\n" as u64)
+    kc_ps("  kerygma law                 the pure laws only (no filesystem, env-independent)\n" as u64)
+    kc_ps("  kerygma ask <fam> <mod>     does the tree derive [<mod> < <fam>]?  KNOWN | unknown\n" as u64)
+    kc_ps("  kerygma reaches <mod> <fam> the transitive theorem [<mod> < iii]\n" as u64)
+    kc_ps("  kerygma scroll              just the canonical (1,1,1) portrait text\n" as u64)
+    return 3u64
+}
+
+/* THE SKILL-SURFACE CONTRACT: av[0] = "kerygma", av[1] = the face, args follow.
+ * Identical whether reached by `iii kerygma ...` (argv shifted one seat by the
+ * organism dispatch) or by the standalone kerygma.exe (main forwards argv). */
+fn kerygma_enter(argc: i32, argv: u64) -> u64 @export {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return kc_proclaim() }
+    let sub : u64 = av[1u64]
+
+    if kc_streq(sub, "law" as u64) == 1u32 { return kc_law() }
+    if kc_streq(sub, "scroll" as u64) == 1u32 {
+        if kerygma_build() == 0u64 { kc_ps("PORTRAIT UNSEALED\n" as u64)   return 11u64 }
+        kc_scroll()
+        return 0u64
+    }
+    if kc_streq(sub, "silicon" as u64) == 1u32 { return kc_silicon() }
+    if kc_streq(sub, "whole" as u64) == 1u32 { return kc_proclaim() }
+    if kc_streq(sub, "proclaim" as u64) == 1u32 { return kc_proclaim() }
+
+    if kc_streq(sub, "ask" as u64) == 1u32 {
+        if argc < 4i32 { kc_ps("usage: kerygma ask <family> <module>\n" as u64)   return 3u64 }
+        let fam : u64 = av[2u64]
+        let mod : u64 = av[3u64]
+        let r : u64 = kerygma_membership(fam, kc_slen(fam), mod, kc_slen(mod))
+        kc_ps("[" as u64)   kc_ps(mod)   kc_ps(" < " as u64)   kc_ps(fam)   kc_ps("] = " as u64)
+        if r == 1u64 { kc_ps("KNOWN (the live tree derives it)\n" as u64) }
+        if r != 1u64 { kc_ps("not derivable (the oracle never invents)\n" as u64) }
+        return 0u64
+    }
+    if kc_streq(sub, "reaches" as u64) == 1u32 {
+        if argc < 4i32 { kc_ps("usage: kerygma reaches <module> <family>\n" as u64)   return 3u64 }
+        let mod : u64 = av[2u64]
+        let fam : u64 = av[3u64]
+        let r : u64 = kerygma_reaches_iii(mod, kc_slen(mod), fam, kc_slen(fam))
+        kc_ps("[" as u64)   kc_ps(mod)   kc_ps(" < iii] via " as u64)   kc_ps(fam)   kc_ps(" = " as u64)
+        if r == 1u64 { kc_ps("DERIVED (transitive theorem)\n" as u64) }
+        if r != 1u64 { kc_ps("not derivable\n" as u64) }
+        return 0u64
+    }
+    return kc_usage()
+}
+
+/* STANDALONE: forward argv unchanged -- av[1] is the face here too. */
+fn main(argc: i32, argv: u64) -> u64 {
+    return kerygma_enter(argc, argv)
+}

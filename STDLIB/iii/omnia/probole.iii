@@ -128,6 +128,7 @@ extern @abi(c-msvc-x64) fn mb_dz_krisis(k: u64, n: u64) -> u64 from "metabole.ii
 extern @abi(c-msvc-x64) fn mb_dz_amp() -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_dz_oemax() -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_dz_lo() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_dz_bos() -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_census_only() -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_ld_normw_sp(k: u64, n: u64) -> u64 from "metabole.iii"
@@ -3862,6 +3863,85 @@ fn pb_diexodos_tok(tok: u64, nlay: u64) -> u64 @export {
     }
     PB_DX_GAPE = gape
     PB_DX_OK = 1u64
+    return 0u64
+}
+
+/* ==================== THE ADAPTIVE CERTIFICATION (the eskalation) ============
+ * The 896-bit walk is needed ONLY where the gap is tight.  The width ledger
+ * charges LO*64 bits of fresh truncation per projection, so the SAME rigorous
+ * bracket holds at every limb-floor -- and a token whose gap TOWERS over the
+ * width is already PROVEN at a HIGH floor (few limbs).  Always paying LO=0 is
+ * the waste the code's own comment named ("the fast tier is expected to be
+ * undecided; certify at limb-floor 0").  This driver refutes that for the
+ * common large-gap case: it walks cheap-first and stops at the LARGEST floor
+ * where gape > wled, certifying at fast-tier speed.  The eskalation CLIMB
+ * (rung 48->58) lifted to the whole forward pass: prove what you can at the
+ * price you must; the certified LO0 walk is the guaranteed floor, never the
+ * default.  Same verdict as LO=0 (the width bracket is rigorous at every tier);
+ * only the price falls. */
+var PB_CERT_LO : i64 = 0i64 - 1i64        /* the floor at which PROVEN; -1 = undecided even at 0 */
+var PB_CERT_PASSES : u64 = 0u64           /* forward passes spent (1..3) */
+fn pb_cert_decided() -> u64 {
+    let g : i64 = PB_DX_GAPE
+    let w : i64 = PB_WLED
+    if g == (0i64 - 1000000i64) { return 0u64 }   /* no runner-up separation */
+    if g > w { return 1u64 }
+    return 0u64
+}
+fn pb_diexodos_certified(tok: u64, nlay: u64) -> u64 @export {
+    PB_CERT_LO = 0i64 - 1i64
+    PB_CERT_PASSES = 0u64
+    /* PASS 1: the cheap probe (one live limb) reads the gap. */
+    mb_dz_set_lo(13u64)
+    let rc1 : u64 = pb_diexodos_tok(tok, nlay)
+    PB_CERT_PASSES = PB_CERT_PASSES + 1u64
+    if rc1 != 0u64 { return rc1 }
+    if pb_cert_decided() == 1u64 { PB_CERT_LO = 13i64   return 0u64 }
+    /* PREDICT the floor that proves: need oemax + LO*64 < gap ->
+     * LO < (gap - oemax)/64.  The probe's gap is an estimate; the re-check at
+     * `need` is rigorous, and a wrong guess falls through to the LO=0 floor. */
+    let g1 : i64 = PB_DX_GAPE
+    let oem : i64 = mb_dz_oemax()
+    let mut need : i64 = 0i64 - 1i64
+    if g1 != (0i64 - 1000000i64) {
+        let diff : i64 = g1 - oem
+        need = (diff / 64i64) - 1i64
+    }
+    if need > 12i64 { need = 12i64 }
+    if need >= 0i64 {
+        /* PASS 2: certify at the predicted floor. */
+        mb_dz_set_lo(need as u64)
+        let rc2 : u64 = pb_diexodos_tok(tok, nlay)
+        PB_CERT_PASSES = PB_CERT_PASSES + 1u64
+        if rc2 != 0u64 { return rc2 }
+        if pb_cert_decided() == 1u64 { PB_CERT_LO = need   return 0u64 }
+    }
+    /* PASS 3 (or 2): the guaranteed certified floor (896-bit). */
+    mb_dz_set_lo(0u64)
+    let rc3 : u64 = pb_diexodos_tok(tok, nlay)
+    PB_CERT_PASSES = PB_CERT_PASSES + 1u64
+    if rc3 != 0u64 { return rc3 }
+    if pb_cert_decided() == 1u64 { PB_CERT_LO = 0i64 }
+    return 0u64
+}
+fn pb_cert_lo() -> i64 @export { return PB_CERT_LO }
+fn pb_cert_passes() -> u64 @export { return PB_CERT_PASSES }
+
+/* THE PINNED SINGLE PASS: once the escalation has DISCOVERED the floor a model
+ * proves at, every subsequent token runs ONE pass at that floor -- no probe, no
+ * re-read, no escalation.  This is the steady-state of certified generation: the
+ * discovery is amortized, and each token costs one walk at the pinned floor
+ * ((14-lo)/14 of the 896-bit limb-work) and certifies iff the gap still towers.
+ * PB_CERT_LO = lo iff PROVEN this pass, -1 iff the floor was too high (the caller
+ * drops one rung).  The single-pass answer to hours-per-token. */
+fn pb_diexodos_pinned(tok: u64, nlay: u64, lo: u64) -> u64 @export {
+    PB_CERT_LO = 0i64 - 1i64
+    PB_CERT_PASSES = 0u64
+    mb_dz_set_lo(lo)
+    let rc : u64 = pb_diexodos_tok(tok, nlay)
+    PB_CERT_PASSES = 1u64
+    if rc != 0u64 { return rc }
+    if pb_cert_decided() == 1u64 { PB_CERT_LO = lo as i64 }
     return 0u64
 }
 

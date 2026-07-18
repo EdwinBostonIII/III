@@ -713,6 +713,132 @@ fn kerygma_pulse_selfprove() -> u64 @export {
     return 0u64
 }
 
+/* ==================== THE STRUCTURAL ORACLE (the portrait ANSWERS) ====================
+ * The v2 merkle seals the whole dependency graph as derivable claims -- each
+ * shard [<module> < <family>], the root [<family> < iii].  So the self-portrait
+ * is not only SPOKEN, it can be ASKED: any module, any session, any future self
+ * puts a structural question to the barometer and gets KNOWN or not-derivable --
+ * never invented.  KERYGMA stops being a static mirror and becomes a queryable
+ * dependency oracle about its own body, under the SAME re-derivation law that
+ * keeps every other truth honest.  The query firewall is the logos itself: an
+ * answer is a DERIVATION over the sealed graph or it is a refusal. */
+
+/* the query-text scratch (for the transitive reach construction) */
+var KER_QRY : [u8; 256]
+var KER_QN  : u64 = 0u64
+fn ker_qput(c: u8) -> i32 { if KER_QN < 256u64 { KER_QRY[KER_QN] = c   KER_QN = KER_QN + 1u64 }   return 0i32 }
+fn ker_qputz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { ker_qput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn ker_qputn(s: u64, n: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < n { ker_qput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+
+/* set KER_ROOT to whichever self-tree root makes <root>/<family> openable, so a
+ * query never depends on a prior kerygma_build having primed the root.  Returns
+ * 1 = a root opened the family dir, 0 = neither did (the tree is not here). */
+fn ker_prime_root(cap: u64, fam_ptr: u64, fam_len: u64) -> u64 {
+    ker_set_root(("STDLIB/iii" as u64))
+    ker_fam_path(fam_ptr, fam_len)
+    let dh : u64 = fs_dir_open(cap, (&KER_PATH) as u64)
+    if dh != 0u64 { fs_dir_close(dh)   return 1u64 }
+    ker_set_root(("iii" as u64))
+    ker_fam_path(fam_ptr, fam_len)
+    let dh2 : u64 = fs_dir_open(cap, (&KER_PATH) as u64)
+    if dh2 != 0u64 { fs_dir_close(dh2)   return 1u64 }
+    return 0u64
+}
+
+/* MEMBERSHIP: does the LIVE tree derive [<module> < <family>]?  1 = KNOWN (the
+ * module is a member of that family), 0 = not derivable.  Walks the family's
+ * shard part(s) -- a sub-sharded family (numera) is searched window by window --
+ * and answers by eol_entails over the STANDING shard text (read -> lawcheck ->
+ * entails, the barometer's proven order).  Names/family must be legal EIDOLOS
+ * words (lowercase, matching how the shard filters basenames).  Self-priming:
+ * sets its own root, so it answers regardless of any prior build. */
+fn kerygma_membership(fam_ptr: u64, fam_len: u64, mod_ptr: u64, mod_len: u64) -> u64 @export {
+    let cap : u64 = cap_env_init()
+    ker_prime_root(cap, fam_ptr, fam_len)
+    let mut skip : u64 = 0u64
+    let mut more : u64 = 1u64
+    while more == 1u64 {
+        let a : u64 = ker_shard_build(cap, fam_ptr, fam_len, skip)   /* populates KER_SHARD/KER_SHN */
+        if a == 0u64 { more = 0u64 }
+        if a != 0u64 {
+            eol_reset()
+            if eol_read((&KER_SHARD) as u64, KER_SHN) >= 0i64 {
+                if eol_lawcheck() == 0u64 {
+                    if eol_entails(mod_ptr, mod_len, 0u64, fam_ptr, fam_len) == 1u64 { eol_reset()   return 1u64 }
+                }
+            }
+            if KER_SHMORE == 1u64 { skip = skip + KER_SHARD_CAP }
+            if KER_SHMORE == 0u64 { more = 0u64 }
+        }
+    }
+    eol_reset()
+    return 0u64
+}
+
+/* REACHABILITY: does [<module> < <family>] + [<family> < iii] derive [<module>
+ * < iii]?  1 = the module TRANSITIVELY belongs to the organism -- a theorem the
+ * graph never states literally, derived by the logos's transitivity.  This is
+ * the oracle's real power: reachability the portrait proves but never stored. */
+fn kerygma_reaches_iii(mod_ptr: u64, mod_len: u64, fam_ptr: u64, fam_len: u64) -> u64 @export {
+    KER_QN = 0u64
+    ker_qput(91u8)                                       /* '[' */
+    ker_qputn(mod_ptr, mod_len)   ker_qputz(" < " as u64)   ker_qputn(fam_ptr, fam_len)
+    ker_qputz("] [" as u64)
+    ker_qputn(fam_ptr, fam_len)   ker_qputz(" < iii]" as u64)
+    eol_reset()
+    if eol_read((&KER_QRY) as u64, KER_QN) < 0i64 { eol_reset()   return 0u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 0u64 }
+    let iii : u64 = "iii" as u64
+    let r : u64 = eol_entails(mod_ptr, mod_len, 0u64, iii, 3u64)
+    eol_reset()
+    return r
+}
+
+/* THE ORACLE LAW (pure, no filesystem): the structural oracle answers by
+ * derivation and NEVER invents.  A real membership is KNOWN; a fabricated one is
+ * refused; a transitive reach is derived; a module outside the chain does not
+ * reach the organism.  Green here is environment-independent -- the query
+ * discipline itself, proved on fixed scrolls. */
+fn kerygma_oracle_selfprove() -> u64 @export {
+    let shard : u64 = "[metabole < omnia] [peras < omnia] [probole < omnia]" as u64
+    let meta  : u64 = "metabole" as u64
+    let omnia : u64 = "omnia" as u64
+    let ghost : u64 = "ghostmodule" as u64
+    let iii   : u64 = "iii" as u64
+
+    /* CLAUSE 1: a real membership is KNOWN (derivable over the shard). */
+    eol_reset()
+    if eol_read(shard, ker_slen(shard)) < 0i64 { eol_reset()   return 1u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 2u64 }
+    if eol_entails(meta, ker_slen(meta), 0u64, omnia, ker_slen(omnia)) != 1u64 { return 3u64 }
+
+    /* CLAUSE 2: a FABRICATED membership is NOT derivable -- the oracle never invents. */
+    if eol_entails(ghost, ker_slen(ghost), 0u64, omnia, ker_slen(omnia)) == 1u64 { return 4u64 }
+
+    /* CLAUSE 3: TRANSITIVE reach -- [module < family] + [family < iii] |= [module < iii]. */
+    let chain : u64 = "[metabole < omnia] [omnia < iii]" as u64
+    eol_reset()
+    if eol_read(chain, ker_slen(chain)) < 0i64 { eol_reset()   return 5u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 6u64 }
+    if eol_entails(meta, ker_slen(meta), 0u64, iii, ker_slen(iii)) != 1u64 { return 7u64 }
+
+    /* CLAUSE 4: a module NOT in the chain does NOT reach iii (no false reachability). */
+    if eol_entails(ghost, ker_slen(ghost), 0u64, iii, ker_slen(iii)) == 1u64 { return 8u64 }
+
+    eol_reset()
+    return 0u64
+}
+
 /* ==================== THE CONDITION OF MOTION (pure, no filesystem) ==================== *
  * Every invocation re-derives the whole anti-amnesia law from fixed portraits,
  * so "green" never depends on a runtime tree or a valid capability.  Returns 0

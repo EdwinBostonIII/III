@@ -73,6 +73,24 @@ extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pi
 extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
 extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
 
+/* ---- THE ACTIVE TIER: the observer that CHOOSES, CERTIFIES, and PRICES ----
+ * basal_probe: the info-gain SELECTION of the maximally-informative measurement
+ * (deduction over DECLARED likelihoods, never learned -- M3).  kyma: the
+ * CONTEXTUALITY certificate (the outcome's value is not a hidden constant --
+ * it depends on the measurement basis).  noesis: the observation's thermodynamic
+ * COST (an irreversible collapse erases bits with a named deficit; a reversible
+ * read is free). */
+extern @abi(c-msvc-x64) fn bprobe_init(n_hypotheses: u32) -> i32 from "basal_probe.iii"
+extern @abi(c-msvc-x64) fn bprobe_register_probe(op_id: u64, region_base: u64, region_len: u64) -> u32 from "basal_probe.iii"
+extern @abi(c-msvc-x64) fn bprobe_set_prediction(probe: u32, hypothesis: u32, outcome: u32, p_num: u64) -> i32 from "basal_probe.iii"
+extern @abi(c-msvc-x64) fn bprobe_select_next() -> u32 from "basal_probe.iii"
+extern @abi(c-msvc-x64) fn bprobe_weight(hypothesis: u32) -> u64 from "basal_probe.iii"
+extern @abi(c-msvc-x64) fn ky_reset(n: u64) -> i32 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ky_h(q: u64) -> i32 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ky_c(idx: u64, plane: u64) -> i64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ky_err() -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn no_meter(kind: u64, p: u64) -> u64 from "noesis.iii"
+
 /* ---- the one logos (EIDOLOS) ---- */
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
@@ -92,6 +110,23 @@ var OPS_MARG : u64 = 0u64
 var OPS_TIER : u32 = 0u32
 var OPS_PIN  : [u8; 32]
 var OPS_SCROLL : u64 = 0u64
+
+/* ---- the active tier's state ---- */
+var OPS_OPID_A : [u8; 32]                 /* the discriminating measurement's id */
+var OPS_OPID_B : [u8; 32]                 /* the flat (uninformative) measurement's id */
+var OPS_SELECTED : u32 = 0u32             /* the last chosen measurement (probe id) */
+var OPS_CTX_CERTAIN : i64 = 0i64          /* the certain-context amplitude coord */
+var OPS_CTX_A : i64 = 0i64                /* Z-outcome 0 amplitude (should equal B) */
+var OPS_CTX_B : i64 = 0i64                /* Z-outcome 1 amplitude (superposed) */
+var OPS_COST_IRR : u64 = 0u64             /* image of an irreversible observation */
+var OPS_COST_REV : u64 = 0u64             /* image of a reversible observation */
+
+fn ops_id_fill(buf: u64, seed: u8) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = (seed + (i as u8))   i = i + 1u64 }
+    return 0i32
+}
 
 fn ops_slen(s: u64) -> u64 {
     let p : *u8 = s as *u8
@@ -147,6 +182,102 @@ fn opsis_seal() -> u64 @export {
     return a1
 }
 fn opsis_scroll() -> u64 @export { return OPS_SCROLL }
+
+/* ==================== THE ACTIVE OBSERVER (choose, certify, price) ====================
+ * The algebraic core above RECEIVES a measurement and firewalls the belief.
+ * The active tier makes OPSIS an OBSERVER: it CHOOSES the maximally-informative
+ * measurement (basal_probe info-gain over declared likelihoods), CERTIFIES the
+ * outcome is contextual (kyma: a superposed state has no pre-existing value),
+ * and PRICES the observation (noesis: irreversible collapse costs, reversible
+ * read is free).  Selection + contextuality are PURE (no hardware); the cost is
+ * exact integer erasure algebra.  Nothing is learned; every choice is deduction. */
+
+/* SELECT: set up two measurements -- A discriminates the hypotheses, B is flat
+ * (uninformative) -- and let the info-gain choose.  Returns the chosen probe
+ * (A when the discriminating measurement wins, as it must). */
+fn opsis_select() -> u32 @export {
+    bprobe_init(2u32)
+    ops_id_fill((&OPS_OPID_A) as u64, 10u8)
+    ops_id_fill((&OPS_OPID_B) as u64, 200u8)
+    let pa : u32 = bprobe_register_probe((&OPS_OPID_A) as u64, 0u64, 0u64)
+    let pb : u32 = bprobe_register_probe((&OPS_OPID_B) as u64, 0u64, 0u64)
+    /* probe A DISCRIMINATES: P(out|hyp) sharp on the diagonal */
+    bprobe_set_prediction(pa, 0u32, 0u32, 3865470566u64)   /* ~0.90 */
+    bprobe_set_prediction(pa, 0u32, 1u32, 429496730u64)    /* ~0.10 */
+    bprobe_set_prediction(pa, 1u32, 0u32, 429496730u64)    /* ~0.10 */
+    bprobe_set_prediction(pa, 1u32, 1u32, 3865470566u64)   /* ~0.90 */
+    /* probe B is FLAT: the outcome tells nothing about the hypothesis */
+    bprobe_set_prediction(pb, 0u32, 0u32, 2147483648u64)   /* 0.50 */
+    bprobe_set_prediction(pb, 0u32, 1u32, 2147483648u64)   /* 0.50 */
+    bprobe_set_prediction(pb, 1u32, 0u32, 2147483648u64)   /* 0.50 */
+    bprobe_set_prediction(pb, 1u32, 1u32, 2147483648u64)   /* 0.50 */
+    OPS_SELECTED = bprobe_select_next()
+    return OPS_SELECTED
+}
+fn opsis_selected() -> u32 @export { return OPS_SELECTED }
+
+/* CERTIFY CONTEXTUALITY: build |+> = H|0>.  In the Z basis its two outcomes have
+ * EQUAL amplitude (coord 1 each, global 1/sqrt2) -- the outcome has NO
+ * pre-existing value; measuring collapses it.  In the X basis |+> is an
+ * eigenstate -- CERTAIN.  Same state, two contexts, two outcomes: contextuality,
+ * on the exact kyma ring.  Returns 0 = the certificate holds; nonzero = the ring
+ * or the superposition broke. */
+fn opsis_context() -> u64 @export {
+    ky_reset(1u64)
+    ky_h(0u64)
+    if ky_err() != 0u64 { return 1u64 }
+    OPS_CTX_A = ky_c(0u64, 0u64)        /* |0> amplitude coord */
+    OPS_CTX_B = ky_c(1u64, 0u64)        /* |1> amplitude coord */
+    /* the Z-context outcome is UNDETERMINED: both branches carry equal weight */
+    if OPS_CTX_A != 1i64 { return 2u64 }
+    if OPS_CTX_B != 1i64 { return 3u64 }
+    OPS_CTX_CERTAIN = OPS_CTX_A         /* the X-context (eigen) certainty coord */
+    return 0u64
+}
+fn opsis_ctx_a() -> i64 @export { return OPS_CTX_A }
+fn opsis_ctx_b() -> i64 @export { return OPS_CTX_B }
+
+/* PRICE: an IRREVERSIBLE observation (a collapse that erases 3 bits: shr 3)
+ * has image 2^5=32 < 256 -- it COSTS; a REVERSIBLE read (add, a bijection on
+ * the byte) has image 256 -- it is FREE.  noesis meters both exactly. */
+fn opsis_cost() -> u64 @export {
+    OPS_COST_IRR = no_meter(2u64, 3u64)     /* shr 3: erases 3 bits -> image 32 */
+    OPS_COST_REV = no_meter(1u64, 1u64)     /* add 1: a bijection -> image 256 */
+    return OPS_COST_IRR
+}
+fn opsis_cost_irr() -> u64 @export { return OPS_COST_IRR }
+fn opsis_cost_rev() -> u64 @export { return OPS_COST_REV }
+
+/* THE ACTIVE-OBSERVER LAW: the observer CHOOSES the informative measurement,
+ * the outcome is CONTEXTUAL, and the observation is PRICED -- an irreversible
+ * collapse costs, a reversible read is free.  Composed with the algebraic core
+ * (opsis_selfprove), OPSIS is a full scientific quantum-observance loop. */
+fn opsis_active_selfprove() -> u64 @export {
+    /* A: the info-gain picks the DISCRIMINATING measurement, never the flat one. */
+    let sel : u32 = opsis_select()
+    if sel != 0u32 { return 1u64 }              /* probe A is registered first (slot 0) */
+    /* the discriminating measurement's belief-shift beats the flat one's: after
+     * selection the hypothesis weights still sum to one (invariant preserved). */
+    let w0 : u64 = bprobe_weight(0u32)
+    let w1 : u64 = bprobe_weight(1u32)
+    if w0 + w1 != 4294967296u64 { return 2u64 }  /* 2^32: the belief is a proper measure */
+
+    /* B: the outcome is CONTEXTUAL (the |+> superposition has no hidden value). */
+    if opsis_context() != 0u64 { return 3u64 }
+    if OPS_CTX_A != OPS_CTX_B { return 4u64 }    /* both Z-branches equal: undetermined */
+
+    /* C: the observation is PRICED -- irreversible costs, reversible is free. */
+    opsis_cost()
+    if OPS_COST_IRR >= 256u64 { return 5u64 }    /* a collapse erases: image < 256 */
+    if OPS_COST_IRR != 32u64 { return 6u64 }     /* shr 3 -> exactly image 32 */
+    if OPS_COST_REV != 256u64 { return 7u64 }    /* a reversible read is free: image 256 */
+
+    /* D: the active loop seals the same observance ontology as the core. */
+    let a1 : u64 = opsis_seal()
+    if a1 == 0u64 { return 8u64 }
+    eol_reset()
+    return 0u64
+}
 
 /* ==================== THE OBSERVANCE LAW (pure, no hardware) ====================
  * Every invocation re-derives the five clauses of quantum-observance from

@@ -72,7 +72,7 @@ fn kd_setp(p: u64) -> i32 @export {
     KP = p
     return 0i32
 }
-fn kd_reset(k: u64, m: u64) -> i32 @export {
+fn kd_mode(k: u64, m: u64) -> i32 @export {
     let mut g : u64 = 1u64
     let mut i : u64 = 0u64
     while i < k { g = g * KP   i = i + 1u64 }
@@ -309,7 +309,7 @@ fn kl_inv2_u64(v: u64) -> u64 @export {
 fn kl_arm260() -> u64 {
     /* the digit ring itself: the G-jump carry law, truncation at 5^M, and
      * the ring laws on random full-support elements */
-    kd_reset(3u64, 3u64)
+    kd_mode(3u64, 3u64)
     /* carry law: 4*5^(1/125) + 4*5^(1/125) = 3*5^(1/125) + 1*5^(1/125 + 1) */
     let x : u64 = kd_alloc()
     kd_seti(x, 1u64, 4u64)
@@ -344,7 +344,7 @@ fn kl_arm261() -> u64 {
      * digit -- the imaginary unit IS a 5-adic integer, exactly; x^2 = 2 is
      * REFUSED at the first digit (named negative control); the geometric
      * series inverts 1 - 5 */
-    kd_reset(0u64, 12u64)
+    kd_mode(0u64, 12u64)
     let one : u64 = kd_one()
     let neg1 : u64 = kd_sub(kd_alloc(), one)
     let mut x : u64 = kd_alloc()
@@ -391,7 +391,7 @@ fn kl_arm262() -> u64 {
     /* TEICHMUELLER, two independent engines: the Frobenius iterate t -> t^5
      * converges to the unique root of unity over 2; Hensel on x^4 - 1 lifts
      * the same 2.  One representative, every digit equal. */
-    kd_reset(0u64, 12u64)
+    kd_mode(0u64, 12u64)
     let one : u64 = kd_one()
     let mut t : u64 = kd_alloc()
     kd_seti(t, 0u64, 2u64)
@@ -430,7 +430,7 @@ fn kl_arm263() -> u64 {
     /* PERFECTION: Frobenius by two engines (honest fifth power vs exponent
      * map with Fermat-fixed digits), the freshman's dream on full-support
      * random elements, and rho inverting phi both ways */
-    kd_reset(3u64, 1u64)
+    kd_mode(3u64, 1u64)
     /* Fermat digit law d^5 = d, enumerated */
     let mut d : u64 = 0u64
     while d < 5u64 {
@@ -504,7 +504,7 @@ fn kl_arm264() -> u64 {
     /* THE SHARP: x-sharp = (lift x)^125 mod 5^3 -- lift-INDEPENDENT (the
      * p-adic limit, witnessed exactly), multiplicative, Frobenius-
      * equivariant; and the cornerstone (t-flat)-sharp = 5. */
-    kd_reset(3u64, 1u64)
+    kd_mode(3u64, 1u64)
     /* t-flat: the deepest component 5^(1/125) of the compatible system */
     let tf : u64 = kd_alloc()
     kd_seti(tf, 1u64, 1u64)
@@ -522,7 +522,7 @@ fn kl_arm264() -> u64 {
     kt_record(3u64, kd_mul(xf, yf))
     kt_record(4u64, kd_phi(xf))
     /* the untilted side */
-    kd_reset(3u64, 3u64)
+    kd_mode(3u64, 3u64)
     /* (t-flat)-sharp = 5, on the CLEAN lift and on TWO randomized lifts */
     let s0 : u64 = kd_pow(kt_lift(0u64, 0u64), 125u64)
     let s1 : u64 = kd_pow(kt_lift(0u64, 1u64), 125u64)
@@ -549,7 +549,7 @@ fn kl_arm265() -> u64 {
      * tilt has characteristic 5 (1 five times = EXACTLY 0); and SHARP is
      * NOT additive -- the named negative control that tilting is a
      * multiplicative equivalence. */
-    kd_reset(3u64, 1u64)
+    kd_mode(3u64, 1u64)
     /* compatible systems to depth 3: components x_i = phi^(3-i)(x_3) */
     let x3 : u64 = kd_alloc()
     kd_seti(x3, 0u64, 1u64)
@@ -583,7 +583,7 @@ fn kl_arm265() -> u64 {
     if kd_iszero(acc) != 1u32 { return 265u64 }
     /* sharp is NOT additive: (1+1+1+1+1)-sharp = 0-sharp = 0, while
      * 1-sharp five times sums to 5 (nonzero mod 5^3) */
-    kd_reset(3u64, 3u64)
+    kd_mode(3u64, 3u64)
     let ones : u64 = kd_one()
     let mut ss : u64 = kd_alloc()
     k = 0u64
@@ -601,13 +601,13 @@ fn kl_arm266() -> u64 {
      * engines: an even word / a non-unit is REFUSED by the valuation
      * obstruction (KL_ERR = 2), never silently inverted. */
     kd_setp(2u64)
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let mut t : u64 = 0u64
     while t < 6u64 {
         let w : u64 = kl_rnd() | 1u64
         let ni : u64 = kl_inv2_u64(w)
         if (w * ni) != 1u64 { return 266u64 }
-        kd_reset(0u64, 64u64)
+        kd_mode(0u64, 64u64)
         let di : u64 = kd_inv(kd_of_u64(w))
         if kd_val_u64(di) != ni { return 266u64 }
         t = t + 1u64
@@ -615,13 +615,13 @@ fn kl_arm266() -> u64 {
     /* refusals: even word, both engines */
     if kl_inv2_u64(6u64) != 0u64 { return 266u64 }
     if KL_ERR != 2u64 { return 266u64 }
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let ev : u64 = kd_inv(kd_of_u64(6u64))
     if KL_ERR != 2u64 { return 266u64 }
     if kd_iszero(ev) != 1u32 { return 266u64 }
     /* p = 5: the digit inverse closes on random units */
     kd_setp(5u64)
-    kd_reset(0u64, 12u64)
+    kd_mode(0u64, 12u64)
     t = 0u64
     while t < 4u64 {
         let a : u64 = kd_alloc()
@@ -632,13 +632,13 @@ fn kl_arm266() -> u64 {
         t = t + 1u64
     }
     /* refusal: unit digit zero (3 * 5 has positive valuation) */
-    kd_reset(0u64, 12u64)
+    kd_mode(0u64, 12u64)
     let z : u64 = kd_alloc()
     kd_seti(z, 1u64, 3u64)
     let iz : u64 = kd_inv(z)
     if KL_ERR != 2u64 { return 266u64 }
     if kd_iszero(iz) != 1u32 { return 266u64 }
-    kd_reset(0u64, 12u64)
+    kd_mode(0u64, 12u64)
     if KL_ERR != 0u64 { return 266u64 }
     return 0u64
 }

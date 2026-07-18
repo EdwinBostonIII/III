@@ -152,6 +152,51 @@ else
   say "(C) FAIL negative : x*19 did not emit imul-without-shift -- got: $(printf '%s' "$negasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
 fi
 
+# ---- (D-udiv) emit binding: unsigned x/32 must emit `shr $5`, NO divider ----
+printf 'module p\nfn f(x: u64) -> u64 { return x / 32u64 }\nfn main() -> u64 { return f(64u64) }\n' > "$W/_pcud.iii"
+"$IIIS" "$W/_pcud.iii" --compile-only --out "$W/_pcud.o" >/dev/null 2>&1
+udasm="$(objdump -d "$W/_pcud.o" 2>/dev/null | grep -iE 'shr|div')"
+if printf '%s' "$udasm" | grep -qiE 'shr[[:space:]]+\$0x5,' && ! printf '%s' "$udasm" | grep -qi div; then
+  say "(D-udiv) x/32u64 -> 'shr \$0x5', NO divider  [udiv pow2 bound: cgopt_div == emitted]"
+else
+  say "(D-udiv) FAIL : x/32u64 did not emit shr-without-div -- got: $(printf '%s' "$udasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+fi
+
+# ---- (E-umod) emit binding: unsigned x%32 must emit an AND mask, NO divider ----
+printf 'module p\nfn f(x: u64) -> u64 { return x %% 32u64 }\nfn main() -> u64 { return f(65u64) }\n' > "$W/_pcum.iii"
+"$IIIS" "$W/_pcum.iii" --compile-only --out "$W/_pcum.o" >/dev/null 2>&1
+umasm="$(objdump -d "$W/_pcum.o" 2>/dev/null | grep -iE 'and|div')"
+if printf '%s' "$umasm" | grep -qi 'and' && ! printf '%s' "$umasm" | grep -qi div; then
+  say "(E-umod) x%%32u64 -> AND mask, NO divider  [umod pow2 bound: cgopt_mod == emitted]"
+else
+  say "(E-umod) FAIL : x%%32u64 did not emit and-without-div -- got: $(printf '%s' "$umasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+fi
+
+# ---- (F-sdiv) emit binding: SIGNED x/2^k must emit the bias+sar sequence (sar $63 + sar $k), NO idiv ----
+# k sample {3, 5, 32, 62}; k=1's short-form encoding ambiguity is covered semantically by COR_SD's sweeps.
+for K in 3 5 32 62; do
+  FACTOR=$(( 1 << K ))
+  HEXK=$(printf '%x' "$K")
+  printf 'module p\nfn f(x: i64) -> i64 { return x / %ui64 }\nfn main() -> u64 { let r: i64 = f(0i64 - 100i64)   return 0u64 }\n' "$FACTOR" > "$W/_pcsd.iii"
+  "$IIIS" "$W/_pcsd.iii" --compile-only --out "$W/_pcsd.o" >/dev/null 2>&1
+  sdasm="$(objdump -d "$W/_pcsd.o" 2>/dev/null | grep -iE 'sar|idiv')"
+  if printf '%s' "$sdasm" | grep -qiE 'sar[[:space:]]+\$0x3f,' && printf '%s' "$sdasm" | grep -qiE "sar[[:space:]]+\\\$(0x${HEXK}|${K})," && ! printf '%s' "$sdasm" | grep -qi idiv; then
+    say "(F-sdiv) x/2^$K i64 -> 'sar \$0x3f' + 'sar \$0x$HEXK', NO idiv  [sdiv pow2 bound: cgopt_sdiv == emitted]"
+  else
+    say "(F-sdiv) FAIL : x/2^$K i64 did not emit bias+sar-without-idiv -- got: $(printf '%s' "$sdasm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+  fi
+done
+
+# ---- (G-sdiv) emit negative: SIGNED x/7 (non-pow2) must KEEP idiv -- no false shifting ----
+printf 'module p\nfn f(x: i64) -> i64 { return x / 7i64 }\nfn main() -> u64 { let r: i64 = f(0i64 - 100i64)   return 0u64 }\n' > "$W/_pcsdneg.iii"
+"$IIIS" "$W/_pcsdneg.iii" --compile-only --out "$W/_pcsdneg.o" >/dev/null 2>&1
+sdneg="$(objdump -d "$W/_pcsdneg.o" 2>/dev/null | grep -iE 'sar|idiv')"
+if printf '%s' "$sdneg" | grep -qi idiv; then
+  say "(G-sdiv) negative : x/7i64 keeps 'idiv'  [sdiv binding has teeth]"
+else
+  say "(G-sdiv) FAIL negative : x/7i64 lost its idiv -- got: $(printf '%s' "$sdneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
+fi
+
 echo "============================================================"
 if [ "$FAIL" -eq 0 ]; then
   say "GREEN -- the SR rule table is bound: CIC kernel proof <-> width-invariance guard <-> cg_r3 emission, one source."

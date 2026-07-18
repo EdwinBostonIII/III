@@ -113,7 +113,7 @@ extern @abi(c-msvc-x64) fn rz_gcd_sres(a: u64, b: u64) -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_count(P: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_eval_sign(p: u64, n: i64, d: i64) -> i64 from "riza.iii"
 extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
-extern @abi(c-msvc-x64) fn kd_reset(k: u64, m: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_mode(k: u64, m: u64) -> i32 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_alloc() -> u64 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_seti(h: u64, slot: u64, d: u64) -> i32 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_get(h: u64, slot: u64) -> u64 from "klisi.iii"
@@ -128,6 +128,18 @@ extern @abi(c-msvc-x64) fn ms_powsum_stirling(m: i64, n: i64) -> u64 from "meris
 extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
@@ -200,12 +212,12 @@ fn gn_arm290() -> u64 {
     /* THE SUBSTRATE IDENTITY: the native ALU IS the KP=2 digit ring.
      * add and mul cross-oracled on random words; the wrap witnessed. */
     kd_setp(2u64)
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let mut t : u64 = 0u64
     while t < 8u64 {
         let a : u64 = gn_rnd()
         let b : u64 = gn_rnd()
-        kd_reset(0u64, 64u64)
+        kd_mode(0u64, 64u64)
         let ka : u64 = gn_kd_of(a)
         let kb : u64 = gn_kd_of(b)
         /* two engines, one sum; two engines, one product */
@@ -214,7 +226,7 @@ fn gn_arm290() -> u64 {
         t = t + 1u64
     }
     /* the truncation ideal: 0xFFFF...F + 1 = 0 on BOTH engines */
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let full : u64 = gn_kd_of(18446744073709551615u64)
     let one : u64 = gn_kd_of(1u64)
     let s : u64 = kd_add(full, one)
@@ -680,7 +692,7 @@ fn gn_arm298() -> u64 {
      *   (e) the shifted lane v_2(c) > 0: the arrival lives mod 2^(64-v),
      *       witnessed on the ALU. */
     kd_setp(2u64)
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let d0 : u64 = 6364136223846793005u64
     let iv0 : u64 = kl_inv2_u64(d0)
     if (d0 * iv0) != 1u64 { return 298u64 }
@@ -783,7 +795,7 @@ fn gn_arm299() -> u64 {
      *       inverse faculty and proven on the spot (REDC itself lives with
      *       the bigint Montgomery organs). */
     kd_setp(2u64)
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let mut t : u64 = 0u64
     while t < 6u64 {
         let d : u64 = gn_rnd() | 1u64
@@ -791,7 +803,7 @@ fn gn_arm299() -> u64 {
         if ((d * q) * kl_inv2_u64(d)) != q { return 299u64 }
         t = t + 1u64
     }
-    kd_reset(0u64, 64u64)
+    kd_mode(0u64, 64u64)
     let dd : u64 = 2862933555777941757u64
     let qq : u64 = 88172645463325252u64
     if kd_val_u64(kd_mul(kd_of_u64(dd * qq), kd_inv(kd_of_u64(dd)))) != qq { return 299u64 }
@@ -804,6 +816,8 @@ fn gn_arm299() -> u64 {
     dv[4u64] = 6700417u64
     dv[5u64] = 1000003u64
     var xs2 : [u64; 7]
+    let gar : u64 = arena_new(1048576u64)
+    if gar == 0u64 { return 299u64 }
     let mut i : u64 = 0u64
     let mut magics : u64 = 0u64
     while i < 6u64 {
@@ -819,6 +833,32 @@ fn gn_arm299() -> u64 {
             let lo : u64 = m * d2
             if lo == 0u64 { return 299u64 }
             if lo > ps { return 299u64 }
+            /* THE EXACT ALTITUDE (the pz const-fold certification): the pair (m, s) re-derived
+             * in UNBOUNDED integer arithmetic -- m == ceil(2^(64+s)/d) exactly, and the GM
+             * window  2^(64+s) < m*d <= 2^(64+s) + 2^s  exactly.  The operands live at ~2^128:
+             * no machine word holds them -- the compiler's division table certified ABOVE the
+             * machine, by the same bigint substrate the constructible tower stands on. */
+            let one : u64 = bigint_from_u64(gar, 1u64)
+            let big : u64 = bigint_shl_bits(gar, one, 64u64 + s)
+            let dB : u64 = bigint_from_u64(gar, d2)
+            let q : u64 = bigint_div_qr(gar, big, dB)
+            let r : u64 = bigint_remainder_take()
+            bigint_normalize(r)
+            let mut mp : u64 = q
+            if bigint_is_zero(r) == 0u8 {
+                mp = bigint_add(gar, q, one)
+                bigint_drop(q)
+            }
+            let mB : u64 = bigint_from_u64(gar, m)
+            if bigint_cmp(mp, mB) != 0i32 { return 299u64 }
+            let prod : u64 = bigint_mul(gar, mB, dB)
+            if bigint_cmp(prod, big) <= 0i32 { return 299u64 }
+            let psb : u64 = bigint_shl_bits(gar, one, s)
+            let hi2 : u64 = bigint_add(gar, big, psb)
+            if bigint_cmp(prod, hi2) > 0i32 { return 299u64 }
+            bigint_drop(one)   bigint_drop(big)   bigint_drop(dB)
+            bigint_drop(r)   bigint_drop(mp)   bigint_drop(mB)
+            bigint_drop(prod)   bigint_drop(psb)   bigint_drop(hi2)
             xs2[0u64] = 0u64
             xs2[1u64] = 1u64
             xs2[2u64] = d2 - 1u64

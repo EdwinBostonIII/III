@@ -47,6 +47,36 @@ fn cgopt_div_shift_k(v: u64) -> u32 @export {
     return k
 }
 
+/* sdiv_admit: is SIGNED `x / v` (v the raw u64 word of the constant divisor literal) a width-faithful
+ * pow2 BIAS-SHIFT reduction (idiv -> sar+and+add+sar)?  1 iff v == 2^k for k in 1..62 (v >= 2, exact
+ * power of two, HIGH BIT CLEAR: v = 2^63 as a u64 literal reads as the NEGATIVE divisor -2^63 under
+ * i64 -- excluded, it keeps idivq).  Then for ALL i64 x:
+ *     trunc(x / 2^k) == (x + ((x >>arith 63) & (2^k - 1))) >>arith k
+ * (x >= 0: bias 0, arithmetic shift = floor = trunc; x < 0: trunc = ceil = floor((x + 2^k - 1)/2^k),
+ * and the bias add of a POSITIVE < 2^63 to a NEGATIVE x cannot overflow).  No trap case exists (the
+ * divisor is 2^k >= 2, never -1, so INT_MIN/-1 never routes here).  Certified in
+ * forcefield/cg_opt_rules.iii (complete width-8/16 sweeps against the hardware divider + boot
+ * agreement); the fold fires only on a CONSTANT pow2 divisor, absent from stage1_corpus, so
+ * iiis-0 == iiis-2 on stage1 holds (byte-safe, like magic-div and the umod fold). */
+fn cgopt_sdiv_admit(v: u64) -> u32 @export {
+    if v < 2u64 { return 0u32 }
+    if (v >> 63u64) != 0u64 { return 0u32 }
+    if (v & (v - 1u64)) != 0u64 { return 0u32 }
+    return 1u32
+}
+/* sdiv_k: the shift amount k such that v == 2^k.  Caller guarantees cgopt_sdiv_admit(v)==1, so v is an
+ * exact power of two in 2^1..2^62 and this returns 1..62. */
+fn cgopt_sdiv_k(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}
+/* sdiv_mask: the bias mask 2^k - 1 (>= 1).  Caller guarantees cgopt_sdiv_admit(v)==1. */
+fn cgopt_sdiv_mask(v: u64) -> u64 @export {
+    return v - 1u64
+}
+
 /* mod_admit: is UNSIGNED `x % v` a width-faithful pow2 strength reduction (umod -> AND mask)?  1 iff v is an exact
  * power of two >= 2 (then x % v == x & (v-1) for unsigned: the remainder mod 2^k IS the low k bits).  Signed % is NOT
  * reduced here (signed remainder rounds toward zero, != the low bits) -- cg_r3 gates emission on unsignedness.  The

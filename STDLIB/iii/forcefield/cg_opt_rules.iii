@@ -40,6 +40,11 @@ extern @abi(c-msvc-x64) fn cgopt_mul_shladd_k(v: u64) -> u32 from "cg_opt_rules.
 /* The NEW shl-sub emission law cg_r3 gained THIS SESSION (x*(2^k-1) -> (x<<k)-x), certified below identically. */
 extern @abi(c-msvc-x64) fn cgopt_mul_subk_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.iii"
+/* The NEW signed-div emission law cg_r3 gained (i64 x/2^k -> bias+sar), certified below by COMPLETE
+ * small-width sweeps against the hardware divider -- the two-engine law at the silicon altitude. */
+extern @abi(c-msvc-x64) fn cgopt_sdiv_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_sdiv_k(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_sdiv_mask(v: u64) -> u64 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_j(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_m(v: u64) -> u32 from "cg_opt_rules.iii"
@@ -584,6 +589,186 @@ fn cor_2ss_boot_agrees() -> u8 @export {
     return 1u8
 }
 
+/* ============================================================================================
+ * SIGNED-DIV-BY-POW2 BIAS+SAR -- the rule cg_r3 gained (i64 x/2^k -> movq/sarq63/movabsq/andq/
+ * addq/sarq k: six cheap ops for a cqto+idivq).  Soundness: for ALL i64 x and k in 1..62,
+ *     trunc(x / 2^k) == (x + ((x >>a 63) & (2^k - 1))) >>a k
+ * (x >= 0: bias 0, sar = floor = trunc; x < 0: trunc = ceil = floor((x + 2^k - 1)/2^k); the bias
+ * add cannot overflow; v = 2^63 is EXCLUDED -- as a u64 literal it reads i64-negative).
+ * CERTIFIED BY TWO ENGINES AT THE SILICON ALTITUDE: the exact emitted bias sequence (rebuilt here
+ * from u64 primitives, arithmetic shift emulated explicitly) against the HARDWARE DIVIDER (i64 /
+ * with a VARIABLE divisor -- compiles to cqto+idivq, so the reference cannot route through the very
+ * fold being certified).  COMPLETE at width 8 (all 256 x, every k) and width 16 (all 65536 x, every
+ * k) -- the identity is width-generic (its proof never uses 64) -- plus the 64-bit edge battery
+ * (INT_MIN, INT_MIN+1, -1, 0, 1, INT_MAX, +-(2^k +- 1)) and random words at k in {1,2,31,32,33,62}.
+ * Shape guard + prove-the-negative (a WRONG bias 2^k BITES at x=-2,k=1) + BOOT-emitter agreement. */
+var COR_SD_K      : [u64; 62]
+var COR_SD_FACTOR : [u64; 62]
+var COR_SD_INIT   : u64 = 0u64
+const COR_SD_N : u64 = 62u64
+fn cor_sd_init() -> u64 {
+    if COR_SD_INIT == 1u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < COR_SD_N {
+        COR_SD_K[i] = i + 1u64                          /* k = 1..62 */
+        COR_SD_FACTOR[i] = 1u64 << (i + 1u64)
+        i = i + 1u64
+    }
+    COR_SD_INIT = 1u64
+    return 0u64
+}
+fn cor_sd_rule_count() -> u64 @export { cor_sd_init() return COR_SD_N }
+fn cor_sd_shift_at(i: u64) -> u64 @export { cor_sd_init() if i >= COR_SD_N { return 0u64 } return COR_SD_K[i] }
+/* SHAPE: v == 2^k exactly, k in 1..62 (high bit clear). */
+fn cor_sd_shape_kf(k: u64, factor: u64) -> u8 {
+    if k < 1u64 { return 0u8 }
+    if k > 62u64 { return 0u8 }
+    if (1u64 << k) != factor { return 0u8 }
+    return 1u8
+}
+/* the EXACT emitted sequence, rebuilt from u64 primitives (arithmetic shift emulated explicitly --
+ * .iii's own >> is logical, so nothing here silently relies on the fold under test).  The bias is
+ * built BY SHIFTS ALONE, exactly as emitted: sar63 spreads the sign (0 or all-ones), the logical
+ * shr by (64-k) keeps its low k bits (0 or 2^k - 1). */
+fn cor_sd_bias(xi: i64, k: u64) -> i64 {
+    let xu : u64 = xi as u64
+    let sext : u64 = 0u64 - (xu >> 63u64)              /* sarq $63: 0 or all-ones */
+    let bias : u64 = sext >> (64u64 - k)               /* shrq $(64-k): 0 or 2^k-1 */
+    let sum : u64 = xu + bias                          /* addq */
+    let hs : u64 = sum >> 63u64
+    let res : u64 = (sum >> k) | ((0u64 - hs) << (64u64 - k))   /* sarq $k, emulated */
+    return res as i64
+}
+var COR_SD_SEED : u64 = 88172645463325252u64
+fn cor_sd_rnd() -> u64 {
+    let mut x : u64 = COR_SD_SEED
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    COR_SD_SEED = x
+    return x
+}
+/* one (x, k) check: bias sequence vs the hardware divider (variable divisor -> cqto+idivq). */
+fn cor_sd_one(xi: i64, k: u64) -> u8 {
+    let dv : i64 = (1u64 << k) as i64
+    let want : i64 = xi / dv
+    if cor_sd_bias(xi, k) != want { return 0u8 }
+    return 1u8
+}
+/* 99 = certified; (1200+i) shape fail; 1300 width-8 sweep fail; 1301 width-16 sweep fail;
+ * 1302 edge/random battery fail. */
+fn cor_sd_certify_all() -> u64 @export {
+    cor_sd_init()
+    /* the walk goes THROUGH the exported accessors -- the certifier certifies exactly the
+     * view the bind gate reads (one table, one lens), and the accessor surface is thereby
+     * covered by the certifier itself (ratchet-delta-zero). */
+    let n : u64 = cor_sd_rule_count()
+    if n != COR_SD_N { return 1203u64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        let k : u64 = cor_sd_shift_at(i)
+        if k != COR_SD_K[i] { return 1204u64 }
+        if cor_sd_shape_kf(k, COR_SD_FACTOR[i]) != 1u8 { return 1200u64 + i }
+        i = i + 1u64
+    }
+    /* COMPLETE width-8: all 256 sign-extended bytes, every k 1..7 */
+    let mut xv : u64 = 0u64
+    while xv < 256u64 {
+        let mut xi : i64 = xv as i64
+        if xv >= 128u64 { xi = xi - 256i64 }
+        let mut k : u64 = 1u64
+        while k <= 7u64 {
+            if cor_sd_one(xi, k) != 1u8 { return 1300u64 }
+            k = k + 1u64
+        }
+        xv = xv + 1u64
+    }
+    /* COMPLETE width-16: all 65536 sign-extended words, every k 1..14 */
+    xv = 0u64
+    while xv < 65536u64 {
+        let mut xi : i64 = xv as i64
+        if xv >= 32768u64 { xi = xi - 65536i64 }
+        let mut k : u64 = 1u64
+        while k <= 14u64 {
+            if cor_sd_one(xi, k) != 1u8 { return 1301u64 }
+            k = k + 1u64
+        }
+        xv = xv + 1u64
+    }
+    /* 64-bit edges + randoms at k in {1, 2, 31, 32, 33, 62} */
+    let nmin : i64 = (0i64 - 9223372036854775807i64) - 1i64
+    let nmax : i64 = 9223372036854775807i64
+    var eks : [u64; 6]
+    eks[0u64] = 1u64
+    eks[1u64] = 2u64
+    eks[2u64] = 31u64
+    eks[3u64] = 32u64
+    eks[4u64] = 33u64
+    eks[5u64] = 62u64
+    let mut e : u64 = 0u64
+    while e < 6u64 {
+        let k : u64 = eks[e]
+        let dv : i64 = (1u64 << k) as i64
+        if cor_sd_one(nmin, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(nmin + 1i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(0i64 - 1i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(0i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(1i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(nmax, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(dv - 1i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(dv, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(dv + 1i64, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(0i64 - (dv - 1i64), k) != 1u8 { return 1302u64 }
+        if cor_sd_one(0i64 - dv, k) != 1u8 { return 1302u64 }
+        if cor_sd_one(0i64 - (dv + 1i64), k) != 1u8 { return 1302u64 }
+        let mut t : u64 = 0u64
+        while t < 16u64 {
+            if cor_sd_one(cor_sd_rnd() as i64, k) != 1u8 { return 1302u64 }
+            t = t + 1u64
+        }
+        e = e + 1u64
+    }
+    return 99u64
+}
+/* PROVE-THE-NEGATIVE: the shape guard rejects non-pow2 / k=0 / the sign-bit divisor, and a WRONG
+ * bias mask (2^k instead of 2^k-1) BITES at the concrete witness x=-2, k=1 (trunc(-2/2) = -1, but
+ * the wrong bias lands 0).  1 iff every unsound case is rejected. */
+fn cor_sd_rejects_unsound() -> u8 @export {
+    if cor_sd_shape_kf(1u64, 3u64) != 0u8 { return 0u8 }            /* non-pow2 */
+    if cor_sd_shape_kf(0u64, 1u64) != 0u8 { return 0u8 }            /* k = 0 (x/1 is identity's) */
+    if cor_sd_shape_kf(63u64, 9223372036854775808u64) != 0u8 { return 0u8 }  /* 2^63: i64-negative divisor */
+    if cor_sd_shape_kf(2u64, 8u64) != 0u8 { return 0u8 }            /* mismatched k/factor */
+    /* wrong-bias teeth: an off-by-one bias shift (63-k, giving bias 2^(k+1)-1) at x = -2, k = 1
+     * must DISAGREE with the divider: bias 3, sum 1, sar 0 != trunc(-2/2) = -1 */
+    let xu : u64 = (0i64 - 2i64) as u64
+    let sext : u64 = 0u64 - (xu >> 63u64)
+    let wbias : u64 = sext >> 62u64                    /* WRONG: 63-k with k=1 */
+    let wsum : u64 = xu + wbias
+    let whs : u64 = wsum >> 63u64
+    let wres : u64 = (wsum >> 1u64) | ((0u64 - whs) << 63u64)
+    let want : i64 = (0i64 - 2i64) / 2i64
+    if (wres as i64) == want { return 0u8 }
+    return 1u8
+}
+/* BOOT-emitter agreement: cgopt_sdiv_admit/k/mask agree with this certified table on every rule and
+ * REJECT what the certifier rejects.  1 iff agreement. */
+fn cor_sd_boot_agrees() -> u8 @export {
+    cor_sd_init()
+    let mut i : u64 = 0u64
+    while i < COR_SD_N {
+        if cgopt_sdiv_admit(COR_SD_FACTOR[i]) != 1u32 { return 0u8 }
+        if (cgopt_sdiv_k(COR_SD_FACTOR[i]) as u64) != COR_SD_K[i] { return 0u8 }
+        if cgopt_sdiv_mask(COR_SD_FACTOR[i]) != (COR_SD_FACTOR[i] - 1u64) { return 0u8 }
+        i = i + 1u64
+    }
+    if cgopt_sdiv_admit(0u64) != 0u32 { return 0u8 }
+    if cgopt_sdiv_admit(1u64) != 0u32 { return 0u8 }                /* x/1: identity, not this fold */
+    if cgopt_sdiv_admit(3u64) != 0u32 { return 0u8 }                /* non-pow2 stays idivq */
+    if cgopt_sdiv_admit(6u64) != 0u32 { return 0u8 }
+    if cgopt_sdiv_admit(9223372036854775808u64) != 0u32 { return 0u8 }  /* 2^63 excluded */
+    return 1u8
+}
+
 fn cor_selftest() -> u64 @export {
     if cor_certify_all() != 99u64 { return cor_certify_all() }
     if cor_rejects_unsound() != 1u8 { return 5u64 }
@@ -604,5 +789,9 @@ fn cor_selftest() -> u64 @export {
     if c2ss != 99u64 { return c2ss }
     if cor_2ss_rejects_unsound() != 1u8 { return 13u64 }
     if cor_2ss_boot_agrees() != 1u8 { return 14u64 }
+    let sd : u64 = cor_sd_certify_all()
+    if sd != 99u64 { return sd }
+    if cor_sd_rejects_unsound() != 1u8 { return 15u64 }
+    if cor_sd_boot_agrees() != 1u8 { return 16u64 }
     return 99u64
 }

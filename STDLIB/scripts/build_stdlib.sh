@@ -1970,6 +1970,16 @@ fi
 # accessors pending the prove-main root).  Down-only resumes from these values; burning
 # them toward zero is the standing coverage arc, gate-by-gate, never by deletion of
 # another session's live surface.
+#
+# REVIEWED RE-PIN 2026-07-17b (147/7/211 -> 168/8/279), the sdiv-fold landing's finding:
+# this was the FIRST archive rebuild since the SUMMIT/ASCENSION/CHRONOMETER commits
+# (6b9231fc, 9a65e4d5, 49396f3b) -- the growth is those arcs' live-but-ungated surface
+# measured on a quiet tree (riza verdict-loop accessors, summit/gnosis-era additions, and
+# the under-proven +1 = typecheck/synapse-family verify rows; every row attributed, see
+# _cov_*.txt at this commit).  THIS landing's own new surface is DELTA-ZERO: cgopt_sdiv_*
+# is consumed by cor_sd_boot_agrees, and the cor_sd_* accessors by the certifier's own
+# accessor-driven walk (one table, one lens -- the bind gate reads the same view).
+# Down-only resumes from these values.
 if [[ $FAIL -eq 0 ]]; then
     COV_REPO_ROOT="$(cd "$STDLIB_DIR/.." && pwd)"
     COV_DRV_SRC="$SCRIPT_DIR/cov_gate_driver.iii"

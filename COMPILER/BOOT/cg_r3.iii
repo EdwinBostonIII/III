@@ -471,6 +471,11 @@ const R3_STR_SHLQ_DOLLAR_LEN : u64 = 10u64
 /* "    shrq $" -- immediate logical-right-shift prefix (constant-shift fold; dual-impl in cg_r3.c). */
 var R3_STR_SHRQ_DOLLAR : [u8; 10] = [32u8,32u8,32u8,32u8,115u8,104u8,114u8,113u8,32u8,36u8]
 const R3_STR_SHRQ_DOLLAR_LEN : u64 = 10u64
+/* signed-div-by-pow2: "    sarq $" (the ONLY new string the fold needs -- the bias is built by
+ * shifts alone and reuses MOVQ_RAX_RCX / SHRQ_DOLLAR / ADDQ).  Decl frugality is load-bearing:
+ * cg_r3 sits AT sema's 1024-decl wall in the frozen seed, so this string's length rides as the
+ * literal 10u64 at its two call sites instead of a LEN const (one decl saved = the compile). */
+var R3_STR_SARQ_DOLLAR : [u8; 10] = [32u8,32u8,32u8,32u8,115u8,97u8,114u8,113u8,32u8,36u8]
 var R3_STR_CM_RAX_NL : [u8; 7] = [44u8,32u8,37u8,114u8,97u8,120u8,10u8]
 const R3_STR_CM_RAX_NL_LEN : u64 = 7u64
 /* R3_STR_COMMA_RCX_NL — already defined at line 303 */
@@ -3006,6 +3011,47 @@ fn r3_emit_expr(node: u32) -> u32 {
                 r3_emit_arr(&R3_STR_MOVABSQ_DEC as u64, R3_STR_MOVABSQ_DEC_LEN); r3_emit_dec(mmask); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
                 r3_emit_arr(&R3_STR_ANDQ as u64, R3_STR_ANDQ_LEN)
                 r3_push_rax(); return R3_OK
+            }
+        }
+        /* [EMITTED] SIGNED DIVIDE-BY-POW2 -> BIAS + SAR (single-source law cgopt_sdiv_admit; the
+         * shift k via cgopt_div_shift_k -- sdiv_admit's domain is a subset of div_admit's, so the
+         * shared extractor is sound and costs no decl): i64 x / 2^k (k in 1..62, constant) becomes
+         *     movq %rax, %rcx ; sarq $63, %rcx ; shrq $(64-k), %rcx ; addq %rcx, %rax ; sarq $k, %rax
+         * -- the bias (x<0 ? 2^k-1 : 0) built by SHIFTS ALONE: sar63 spreads the sign to all-ones or
+         * zero, the logical shr keeps its low k bits.  trunc(x/2^k) == (x + bias) >>a k for ALL i64 x
+         * (nonneg: bias 0, sar = floor = trunc; negative: trunc = ceil = floor((x + 2^k - 1)/2^k);
+         * the bias add cannot overflow).  Replaces cqto+idivq with five cheap ops.  GATED full-width
+         * SIGNED only ((ut>>1) >= 8: narrow i8/i16/i32 keep idivq -- under-firing is always sound,
+         * over-firing never is).  Certified: forcefield COR_SD (complete width-8/16 sweeps vs the
+         * hardware divider + edges + boot agreement) + bind gate sdiv stages.  Fires only on a
+         * CONSTANT pow2 divisor, absent from stage1_corpus -> iiis-0 == iiis-2 byte-safe. */
+        if op == 4u32 {
+            if iii_ast_node_kind(R3_G_AST, rhs) == R3_K_EXPR_INT {
+                let sut: u32 = iii_tc_utag_unify(r3_expr_utag(lhs), r3_expr_utag(rhs))
+                if (sut & 1u32) == 1u32 {
+                    if (sut >> 1u32) >= 8u32 {
+                        let sv: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+                        /* admit test dual-implemented IDENTICAL to cgopt_sdiv_admit (the certified
+                         * single source in cg_opt_rules.iii; inline here because cg_r3 sits AT the
+                         * seed's 1024-decl wall -- the forcefield boot-agreement arm and the bind
+                         * gate hold the two implementations to one law): v >= 2, high bit clear
+                         * (2^63 reads i64-negative), exact power of two. */
+                        let mut sadm: u32 = 1u32
+                        if sv < 2u64 { sadm = 0u32 }
+                        if (sv >> 63u64) != 0u64 { sadm = 0u32 }
+                        if (sv & (sv - 1u64)) != 0u64 { sadm = 0u32 }
+                        if sadm == 1u32 {
+                            let sk: u32 = cgopt_div_shift_k(sv)
+                            r3_emit_expr(lhs); r3_pop_rax()
+                            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+                            r3_emit_arr(&R3_STR_SARQ_DOLLAR as u64, 10u64); r3_emit_dec(63u64); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                            r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(64u64 - (sk as u64)); r3_emit_arr(&R3_STR_COMMA_RCX_NL as u64, R3_STR_COMMA_RCX_NL_LEN)
+                            r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
+                            r3_emit_arr(&R3_STR_SARQ_DOLLAR as u64, 10u64); r3_emit_dec(sk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                            r3_push_rax(); return R3_OK
+                        }
+                    }
+                }
             }
         }
         let idn: u32 = r3_arith_identity(op, rhs)

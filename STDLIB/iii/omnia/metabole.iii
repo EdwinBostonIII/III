@@ -194,14 +194,14 @@ var MB_C3_F    : u8 = 0u8
 var MB_C3_HERE : u8 = 0u8             /* found during the CURRENT shard walk */
 /* the gaze's seven organs of blk.0 attention (slot order: attn_norm, q_a,
  * q_a_norm, q_b, kv_a_mqa, kv_a_norm, kv_b) */
-var MB_G_TYPE : [u64; 8]
-var MB_G_OFF  : [u64; 8]
-var MB_G_NE   : [u64; 8]
-var MB_G_NE0  : [u64; 8]
-var MB_G_DB   : [u64; 8]
-var MB_G_SH   : [u64; 8]
-var MB_G_F    : [u8; 8]
-var MB_G_HERE : [u8; 8]
+var MB_G_TYPE : [u64; 12]
+var MB_G_OFF  : [u64; 12]
+var MB_G_NE   : [u64; 12]
+var MB_G_NE0  : [u64; 12]
+var MB_G_DB   : [u64; 12]
+var MB_G_SH   : [u64; 12]
+var MB_G_F    : [u8; 12]
+var MB_G_HERE : [u8; 12]
 var MB_NHEAD  : u64 = 0u64
 var MB_NROPE  : u64 = 0u64
 var MB_EPSB   : u64 = 0u64            /* rms epsilon, raw f32 bits */
@@ -893,8 +893,8 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
             }
         }
     }
-    /* the gaze's captures: blk.0 attention, exact names */
-    let mut gsl : u64 = 8u64
+    /* the gaze's captures: blk.0 attention + the dense FFN, exact names */
+    let mut gsl : u64 = 12u64
     if mb_keyis("blk.0.attn_norm.weight" as u64, nlen) == 1u64 { gsl = 0u64 }
     if mb_keyis("blk.0.attn_q_a.weight" as u64, nlen) == 1u64 { gsl = 1u64 }
     if mb_keyis("blk.0.attn_q_a_norm.weight" as u64, nlen) == 1u64 { gsl = 2u64 }
@@ -903,7 +903,11 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
     if mb_keyis("blk.0.attn_kv_a_norm.weight" as u64, nlen) == 1u64 { gsl = 5u64 }
     if mb_keyis("blk.0.attn_kv_b.weight" as u64, nlen) == 1u64 { gsl = 6u64 }
     if mb_keyis("blk.0.attn_output.weight" as u64, nlen) == 1u64 { gsl = 7u64 }
-    if gsl < 8u64 {
+    if mb_keyis("blk.0.ffn_norm.weight" as u64, nlen) == 1u64 { gsl = 8u64 }
+    if mb_keyis("blk.0.ffn_gate.weight" as u64, nlen) == 1u64 { gsl = 9u64 }
+    if mb_keyis("blk.0.ffn_up.weight" as u64, nlen) == 1u64 { gsl = 10u64 }
+    if mb_keyis("blk.0.ffn_down.weight" as u64, nlen) == 1u64 { gsl = 11u64 }
+    if gsl < 12u64 {
         if MB_G_F[gsl] == 0u8 {
             MB_G_TYPE[gsl] = ty
             MB_G_OFF[gsl] = off
@@ -1035,7 +1039,7 @@ fn mb_shard(i: u64) -> u64 {
         MB_C3_HERE = 0u8
     }
     let mut gdb : u64 = 0u64
-    while gdb < 8u64 {
+    while gdb < 12u64 {
         if MB_G_HERE[gdb] == 1u8 {
             MB_G_DB[gdb] = data_base
             MB_G_HERE[gdb] = 0u8
@@ -3743,6 +3747,8 @@ fn mb_arm374() -> u64 {
 /* preloaded exact f32 norm vectors (mant, exp per element) */
 var MB_ANM : [i64; 7168]
 var MB_ANE : [i64; 7168]
+var MB_FNM : [i64; 7168]
+var MB_FNE : [i64; 7168]
 var MB_QNM : [i64; 1536]
 var MB_QNE : [i64; 1536]
 var MB_KNM : [i64; 512]
@@ -3778,7 +3784,7 @@ var MB_N2L : [u64; 768]
 var MB_N2E : [i64; 128]
 /* the row's decoded weights (one row of any gaze tensor; o_proj rows are
  * 16384 wide -- the buffer holds the widest row it will ever be asked) */
-var MB_GW : [i64; 16384]
+var MB_GW : [i64; 18432]
 /* the signed 6-limb accumulator */
 var MB_6S : i64 = 0i64
 var MB_6L : [u64; 6]
@@ -4409,6 +4415,10 @@ fn mb_gz_loadf32(g: u64, which: u64, n: u64) -> u64 {
         if which == 2u64 {
             MB_KNM[c] = m
             MB_KNE[c] = MB_F32E
+        }
+        if which == 3u64 {
+            MB_FNM[c] = m
+            MB_FNE[c] = MB_F32E
         }
         c = c + 1u64
     }
@@ -5407,7 +5417,7 @@ fn mb_selfprove() -> u64 @export {
     MB_C3_F = 0u8
     MB_C3_HERE = 0u8
     let mut gz0 : u64 = 0u64
-    while gz0 < 8u64 {
+    while gz0 < 12u64 {
         MB_G_F[gz0] = 0u8
         MB_G_HERE[gz0] = 0u8
         gz0 = gz0 + 1u64
@@ -5735,31 +5745,32 @@ fn mb_pb_v_e(i: u64) -> i64 @export {
     return MB_WVE[i]
 }
 
-/* THE STANDING THOUGHT: the 16384-wide interval vector (lo/hi bounds and
- * the exact one-voice point), each (sign, 4 limbs, exp) */
-var MB_TLS : [i64; 16384]
-var MB_TL0 : [u64; 16384]
-var MB_TL1 : [u64; 16384]
-var MB_TL2 : [u64; 16384]
-var MB_TL3 : [u64; 16384]
-var MB_TLE : [i64; 16384]
-var MB_THS : [i64; 16384]
-var MB_TH0 : [u64; 16384]
-var MB_TH1 : [u64; 16384]
-var MB_TH2 : [u64; 16384]
-var MB_TH3 : [u64; 16384]
-var MB_THE : [i64; 16384]
-var MB_TXS : [i64; 16384]
-var MB_TX0 : [u64; 16384]
-var MB_TX1 : [u64; 16384]
-var MB_TX2 : [u64; 16384]
-var MB_TX3 : [u64; 16384]
-var MB_TXE : [i64; 16384]
+/* THE STANDING THOUGHT: the deposited interval vector (lo/hi bounds and
+ * the exact point beside them), each (sign, 4 limbs, exp).  Sized for the
+ * WIDEST consumer: the choir deposits 16384, the threpsis h 18432. */
+var MB_TLS : [i64; 18432]
+var MB_TL0 : [u64; 18432]
+var MB_TL1 : [u64; 18432]
+var MB_TL2 : [u64; 18432]
+var MB_TL3 : [u64; 18432]
+var MB_TLE : [i64; 18432]
+var MB_THS : [i64; 18432]
+var MB_TH0 : [u64; 18432]
+var MB_TH1 : [u64; 18432]
+var MB_TH2 : [u64; 18432]
+var MB_TH3 : [u64; 18432]
+var MB_THE : [i64; 18432]
+var MB_TXS : [i64; 18432]
+var MB_TX0 : [u64; 18432]
+var MB_TX1 : [u64; 18432]
+var MB_TX2 : [u64; 18432]
+var MB_TX3 : [u64; 18432]
+var MB_TXE : [i64; 18432]
 var MB_TSETL : u64 = 0u64
 var MB_TSETH : u64 = 0u64
 var MB_TSETX : u64 = 0u64
 fn mb_pb_set_lo(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
-    if i >= 16384u64 { return 1u64 }
+    if i >= 18432u64 { return 1u64 }
     if MB_TLS[i] == 0i64 {
         if (l0 | l1 | l2 | l3) != 0u64 { MB_TSETL = MB_TSETL + 1u64 }
     }
@@ -5772,7 +5783,7 @@ fn mb_pb_set_lo(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u
     return 0u64
 }
 fn mb_pb_set_hi(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
-    if i >= 16384u64 { return 1u64 }
+    if i >= 18432u64 { return 1u64 }
     MB_THS[i] = s
     MB_TH0[i] = l0
     MB_TH1[i] = l1
@@ -5782,7 +5793,7 @@ fn mb_pb_set_hi(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u
     return 0u64
 }
 fn mb_pb_set_ex(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 @export {
-    if i >= 16384u64 { return 1u64 }
+    if i >= 18432u64 { return 1u64 }
     MB_TXS[i] = s
     MB_TX0[i] = l0
     MB_TX1[i] = l1
@@ -5819,8 +5830,8 @@ var MB_PBGUARD : u64 = 0u64
 var MB_P8 : [u64; 8]
 var MB_A8S : i64 = 0i64
 var MB_A8 : [u64; 8]
-var MB_C8S : [i64; 64]
-var MB_C8L : [u64; 512]
+var MB_C8S : [i64; 96]
+var MB_C8L : [u64; 768]
 
 /* P8 = (l0..l3) * m << sh (sh <= 192; top spill counted as overflow) */
 fn mb_p8_mul4_shl(l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) -> i32 {
@@ -5832,24 +5843,32 @@ fn mb_p8_mul4_shl(l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) -> i32 {
     mb_mul64(l0, m)
     MB_P8[0] = MB_MLO
     MB_P8[1] = MB_MHI
-    mb_mul64(l1, m)
-    let s1 : u64 = MB_P8[1] + MB_MLO
-    let mut c1 : u64 = 0u64
-    if s1 < MB_MLO { c1 = 1u64 }
-    MB_P8[1] = s1
-    MB_P8[2] = MB_MHI + c1
-    mb_mul64(l2, m)
-    let s2 : u64 = MB_P8[2] + MB_MLO
-    let mut c2 : u64 = 0u64
-    if s2 < MB_MLO { c2 = 1u64 }
-    MB_P8[2] = s2
-    MB_P8[3] = MB_MHI + c2
-    mb_mul64(l3, m)
-    let s3 : u64 = MB_P8[3] + MB_MLO
-    let mut c3 : u64 = 0u64
-    if s3 < MB_MLO { c3 = 1u64 }
-    MB_P8[3] = s3
-    MB_P8[4] = MB_MHI + c3
+    /* zero upper limbs contribute exactly zero with zero carry: skip the
+     * multiplies (the df-shaped deposits are one limb wide) */
+    if l1 != 0u64 {
+        mb_mul64(l1, m)
+        let s1 : u64 = MB_P8[1] + MB_MLO
+        let mut c1 : u64 = 0u64
+        if s1 < MB_MLO { c1 = 1u64 }
+        MB_P8[1] = s1
+        MB_P8[2] = MB_MHI + c1
+    }
+    if l2 != 0u64 {
+        mb_mul64(l2, m)
+        let s2 : u64 = MB_P8[2] + MB_MLO
+        let mut c2 : u64 = 0u64
+        if s2 < MB_MLO { c2 = 1u64 }
+        MB_P8[2] = s2
+        MB_P8[3] = MB_MHI + c2
+    }
+    if l3 != 0u64 {
+        mb_mul64(l3, m)
+        let s3 : u64 = MB_P8[3] + MB_MLO
+        let mut c3 : u64 = 0u64
+        if s3 < MB_MLO { c3 = 1u64 }
+        MB_P8[3] = s3
+        MB_P8[4] = MB_MHI + c3
+    }
     if sh != 0u64 {
         let w : u64 = sh / 64u64
         let b : u64 = sh % 64u64
@@ -6220,28 +6239,28 @@ fn mb_pb_o_e(r: u64, which: u64) -> i64 @export {
  * nothing to timing; the witness rows re-derived on the main thread by
  * the SEQUENTIAL engine must match the fleet limb for limb. */
 
-var MB_GWW : [i64; 65536]
+var MB_GWW : [i64; 73728]
 var MB_PA8S : [i64; 4]
 var MB_PA8 : [u64; 32]
 var MB_PP8 : [u64; 32]
-var MB_PC8S : [i64; 256]
-var MB_PC8L : [u64; 2048]
+var MB_PC8S : [i64; 384]
+var MB_PC8L : [u64; 3072]
 var MB_POVF : [u64; 4]
 var MB_PPDE : [i64; 4]
 
-/* worker row decode into the private row buffer */
-fn mb_pb_wrow(w: u64, row: u64) -> u64 {
-    let ty : u64 = MB_G_TYPE[7]
+/* worker row decode of census slot g into the private row buffer */
+fn mb_pb_wrow(w: u64, g: u64, row: u64) -> u64 {
+    let ty : u64 = MB_G_TYPE[g]
     let bb : u64 = mb_tbb(ty)
     let bv : u64 = mb_tbv(ty)
     if bv != 256u64 { return 1u64 }
-    let ne0 : u64 = MB_G_NE0[7]
+    let ne0 : u64 = MB_G_NE0[g]
     let bpr : u64 = ne0 / 256u64
-    let base : u64 = w * 16384u64
+    let base : u64 = w * 18432u64
     let vbase : u64 = w * 256u64
     let mut b : u64 = 0u64
     while b < bpr {
-        let abs : u64 = MB_G_DB[7] + MB_G_OFF[7] + (row * bpr + b) * bb
+        let abs : u64 = MB_G_DB[g] + MB_G_OFF[g] + (row * bpr + b) * bb
         if mb_wread(w, abs, bb) != 0u64 { return 1u64 }
         if mb_wdec(w, ty, 0u64) != 0u64 { return 1u64 }
         let mut e : u64 = 0u64
@@ -6266,24 +6285,31 @@ fn mb_pw8_mul4_shl(w: u64, l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) 
     mb_wmul64(w, l0, m)
     MB_PP8[base] = MB_LML[w]
     MB_PP8[base + 1u64] = MB_LMH[w]
-    mb_wmul64(w, l1, m)
-    let s1 : u64 = MB_PP8[base + 1u64] + MB_LML[w]
-    let mut c1 : u64 = 0u64
-    if s1 < MB_LML[w] { c1 = 1u64 }
-    MB_PP8[base + 1u64] = s1
-    MB_PP8[base + 2u64] = MB_LMH[w] + c1
-    mb_wmul64(w, l2, m)
-    let s2 : u64 = MB_PP8[base + 2u64] + MB_LML[w]
-    let mut c2 : u64 = 0u64
-    if s2 < MB_LML[w] { c2 = 1u64 }
-    MB_PP8[base + 2u64] = s2
-    MB_PP8[base + 3u64] = MB_LMH[w] + c2
-    mb_wmul64(w, l3, m)
-    let s3 : u64 = MB_PP8[base + 3u64] + MB_LML[w]
-    let mut c3 : u64 = 0u64
-    if s3 < MB_LML[w] { c3 = 1u64 }
-    MB_PP8[base + 3u64] = s3
-    MB_PP8[base + 4u64] = MB_LMH[w] + c3
+    /* zero upper limbs contribute exactly zero with zero carry: skip */
+    if l1 != 0u64 {
+        mb_wmul64(w, l1, m)
+        let s1 : u64 = MB_PP8[base + 1u64] + MB_LML[w]
+        let mut c1 : u64 = 0u64
+        if s1 < MB_LML[w] { c1 = 1u64 }
+        MB_PP8[base + 1u64] = s1
+        MB_PP8[base + 2u64] = MB_LMH[w] + c1
+    }
+    if l2 != 0u64 {
+        mb_wmul64(w, l2, m)
+        let s2 : u64 = MB_PP8[base + 2u64] + MB_LML[w]
+        let mut c2 : u64 = 0u64
+        if s2 < MB_LML[w] { c2 = 1u64 }
+        MB_PP8[base + 2u64] = s2
+        MB_PP8[base + 3u64] = MB_LMH[w] + c2
+    }
+    if l3 != 0u64 {
+        mb_wmul64(w, l3, m)
+        let s3 : u64 = MB_PP8[base + 3u64] + MB_LML[w]
+        let mut c3 : u64 = 0u64
+        if s3 < MB_LML[w] { c3 = 1u64 }
+        MB_PP8[base + 3u64] = s3
+        MB_PP8[base + 4u64] = MB_LMH[w] + c3
+    }
     if sh != 0u64 {
         let ww : u64 = sh / 64u64
         let bb2 : u64 = sh % 64u64
@@ -6399,7 +6425,7 @@ fn mb_pw8_add(w: u64, ss: i64) -> i32 {
 
 /* worker row dot over the private buffer (same law as the sequential) */
 fn mb_pb_rowdot_w(w: u64, n: u64, which: u64) -> u64 {
-    let gbase : u64 = w * 16384u64
+    let gbase : u64 = w * 18432u64
     let mut emin : i64 = 1000000i64
     let mut emax : i64 = 0i64 - 1000000i64
     let mut c : u64 = 0u64
@@ -6510,17 +6536,17 @@ fn mb_pb_rowdot_w(w: u64, n: u64, which: u64) -> u64 {
             }
             ce = ce + 1u64
         }
-        MB_PC8S[w * 64u64 + ch] = MB_PA8S[w]
+        MB_PC8S[w * 96u64 + ch] = MB_PA8S[w]
         let mut q : u64 = 0u64
         while q < 8u64 {
-            MB_PC8L[(w * 64u64 + ch) * 8u64 + q] = MB_PA8[w * 8u64 + q]
+            MB_PC8L[(w * 96u64 + ch) * 8u64 + q] = MB_PA8[w * 8u64 + q]
             q = q + 1u64
         }
         ch = ch + 1u64
     }
     if MB_POVF[w] != 0u64 { return 2u64 }
     /* the prefix law, worker-private */
-    let cb : u64 = w * 64u64
+    let cb : u64 = w * 96u64
     let fin_s : i64 = MB_PC8S[cb + nch - 1u64]
     MB_PA8S[w] = 0i64
     k = 0u64
@@ -6556,44 +6582,157 @@ fn mb_pb_rowdot_w(w: u64, n: u64, which: u64) -> u64 {
     return 0u64
 }
 
-/* the weaver: a static slice of the output rows */
+/* ============ THE BANKS: one law, many vessels ============
+ * bank 0 = the attention vessel (O, 7168 rows -- the arrays above),
+ * bank 1 = the gate (18432), bank 2 = the up (18432), bank 3 = the down
+ * (7168).  Each row holds (sign, 8 limbs, exp) x (lo, hi, exact). */
+var MB_BGLS : [i64; 18432]
+var MB_BGLL : [u64; 147456]
+var MB_BGLE : [i64; 18432]
+var MB_BGHS : [i64; 18432]
+var MB_BGHL : [u64; 147456]
+var MB_BGHE : [i64; 18432]
+var MB_BGXS : [i64; 18432]
+var MB_BGXL : [u64; 147456]
+var MB_BGXE : [i64; 18432]
+var MB_BULS : [i64; 18432]
+var MB_BULL : [u64; 147456]
+var MB_BULE : [i64; 18432]
+var MB_BUHS : [i64; 18432]
+var MB_BUHL : [u64; 147456]
+var MB_BUHE : [i64; 18432]
+var MB_BUXS : [i64; 18432]
+var MB_BUXL : [u64; 147456]
+var MB_BUXE : [i64; 18432]
+var MB_BDLS : [i64; 7168]
+var MB_BDLL : [u64; 57344]
+var MB_BDLE : [i64; 7168]
+var MB_BDHS : [i64; 7168]
+var MB_BDHL : [u64; 57344]
+var MB_BDHE : [i64; 7168]
+var MB_BDXS : [i64; 7168]
+var MB_BDXL : [u64; 57344]
+var MB_BDXE : [i64; 7168]
+
+/* store worker w's standing acc into bank (r, which) */
+fn mb_pb_bstore(bank: u64, r: u64, which: u64, w: u64) -> i32 {
+    let ss : i64 = MB_PA8S[w]
+    let ee : i64 = MB_PPDE[w]
+    if bank == 0u64 {
+        if which == 0u64 {
+            MB_OLS[r] = ss
+            MB_OLE[r] = ee
+        }
+        if which == 1u64 {
+            MB_OHS[r] = ss
+            MB_OHE[r] = ee
+        }
+        if which == 2u64 {
+            MB_OXS[r] = ss
+            MB_OXE[r] = ee
+        }
+    }
+    if bank == 1u64 {
+        if which == 0u64 {
+            MB_BGLS[r] = ss
+            MB_BGLE[r] = ee
+        }
+        if which == 1u64 {
+            MB_BGHS[r] = ss
+            MB_BGHE[r] = ee
+        }
+        if which == 2u64 {
+            MB_BGXS[r] = ss
+            MB_BGXE[r] = ee
+        }
+    }
+    if bank == 2u64 {
+        if which == 0u64 {
+            MB_BULS[r] = ss
+            MB_BULE[r] = ee
+        }
+        if which == 1u64 {
+            MB_BUHS[r] = ss
+            MB_BUHE[r] = ee
+        }
+        if which == 2u64 {
+            MB_BUXS[r] = ss
+            MB_BUXE[r] = ee
+        }
+    }
+    if bank == 3u64 {
+        if which == 0u64 {
+            MB_BDLS[r] = ss
+            MB_BDLE[r] = ee
+        }
+        if which == 1u64 {
+            MB_BDHS[r] = ss
+            MB_BDHE[r] = ee
+        }
+        if which == 2u64 {
+            MB_BDXS[r] = ss
+            MB_BDXE[r] = ee
+        }
+    }
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let v : u64 = MB_PA8[w * 8u64 + k]
+        let ix : u64 = r * 8u64 + k
+        if bank == 0u64 {
+            if which == 0u64 { MB_OLL[ix] = v }
+            if which == 1u64 { MB_OHL[ix] = v }
+            if which == 2u64 { MB_OXL[ix] = v }
+        }
+        if bank == 1u64 {
+            if which == 0u64 { MB_BGLL[ix] = v }
+            if which == 1u64 { MB_BGHL[ix] = v }
+            if which == 2u64 { MB_BGXL[ix] = v }
+        }
+        if bank == 2u64 {
+            if which == 0u64 { MB_BULL[ix] = v }
+            if which == 1u64 { MB_BUHL[ix] = v }
+            if which == 2u64 { MB_BUXL[ix] = v }
+        }
+        if bank == 3u64 {
+            if which == 0u64 { MB_BDLL[ix] = v }
+            if which == 1u64 { MB_BDHL[ix] = v }
+            if which == 2u64 { MB_BDXL[ix] = v }
+        }
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* the run premises, set once before the fleet launches (read-only under
+ * the launch -- the same static-partition theorem as the loom) */
+var MB_PBSLOT : u64 = 0u64
+var MB_PBN : u64 = 0u64
+var MB_PBROWS : u64 = 0u64
+var MB_PBBANK : u64 = 0u64
+var MB_PBPASS : u64 = 0u64
+
+/* the weaver: a static slice of the run's output rows */
 fn mb_pb_worker(arg: u64) -> u32 {
     let w : u64 = arg
-    let n : u64 = MB_G_NE0[7]
-    let start : u64 = w * 1792u64
-    let endr : u64 = start + 1792u64
+    let g : u64 = MB_PBSLOT
+    let n : u64 = MB_PBN
+    let slice : u64 = MB_PBROWS / 4u64
+    let start : u64 = w * slice
+    let endr : u64 = start + slice
     let mut r : u64 = start
     while r < endr {
-        if mb_pb_wrow(w, r) != 0u64 {
+        if mb_pb_wrow(w, g, r) != 0u64 {
             MB_LRC[w] = 382u64
             return 0u32
         }
         let mut ww : u64 = 0u64
-        while ww < 3u64 {
+        while ww < MB_PBPASS {
             let rc : u64 = mb_pb_rowdot_w(w, n, ww)
             if rc != 0u64 {
                 MB_LRC[w] = 380u64 + rc
                 return 0u32
             }
-            if ww == 0u64 {
-                MB_OLS[r] = MB_PA8S[w]
-                MB_OLE[r] = MB_PPDE[w]
-            }
-            if ww == 1u64 {
-                MB_OHS[r] = MB_PA8S[w]
-                MB_OHE[r] = MB_PPDE[w]
-            }
-            if ww == 2u64 {
-                MB_OXS[r] = MB_PA8S[w]
-                MB_OXE[r] = MB_PPDE[w]
-            }
-            let mut k2 : u64 = 0u64
-            while k2 < 8u64 {
-                if ww == 0u64 { MB_OLL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
-                if ww == 1u64 { MB_OHL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
-                if ww == 2u64 { MB_OXL[r * 8u64 + k2] = MB_PA8[w * 8u64 + k2] }
-                k2 = k2 + 1u64
-            }
+            mb_pb_bstore(MB_PBBANK, r, ww, w)
             ww = ww + 1u64
         }
         r = r + 1u64
@@ -6602,20 +6741,32 @@ fn mb_pb_worker(arg: u64) -> u32 {
     return 0u32
 }
 
-/* the parallel projection: preconditions, private handles, the fleet */
-fn mb_pb_project_par() -> u64 @export {
-    if MB_G_F[7] == 0u8 { return 3u64 }
-    if MB_TSETL != 16384u64 { return 1u64 }
-    if MB_TSETH != 16384u64 { return 1u64 }
-    if MB_TSETX != 16384u64 { return 1u64 }
-    let n : u64 = MB_G_NE0[7]
-    if n != 16384u64 { return 2u64 }
-    let rows : u64 = MB_G_NE[7] / n
-    if rows != MB_G_NE[0] { return 2u64 }
-    if rows != 7168u64 { return 2u64 }
-    let bv : u64 = mb_tbv(MB_G_TYPE[7])
+/* the parallel run: one law for every projection of the layer.
+ * returns 0 ok / 1 red / 2 guard-or-geometry (named) / 3 absent (named) */
+fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @export {
+    if slot >= 12u64 { return 2u64 }
+    if bank >= 4u64 { return 2u64 }
+    if passes != 3u64 { return 2u64 }
+    if MB_G_F[slot] == 0u8 { return 3u64 }
+    if MB_TSETL != n { return 1u64 }
+    if MB_TSETH != n { return 1u64 }
+    if MB_TSETX != n { return 1u64 }
+    if n > 18432u64 { return 2u64 }
+    if MB_G_NE0[slot] != n { return 2u64 }
+    if MB_G_NE[slot] / n != rows { return 2u64 }
+    if rows % 4u64 != 0u64 { return 2u64 }
+    let mut bcap : u64 = 7168u64
+    if bank == 1u64 { bcap = 18432u64 }
+    if bank == 2u64 { bcap = 18432u64 }
+    if rows > bcap { return 2u64 }
+    let bv : u64 = mb_tbv(MB_G_TYPE[slot])
     if bv != 256u64 { return 2u64 }
-    mb_mkpath(MB_G_SH[7])
+    MB_PBSLOT = slot
+    MB_PBN = n
+    MB_PBROWS = rows
+    MB_PBBANK = bank
+    MB_PBPASS = passes
+    mb_mkpath(MB_G_SH[slot])
     let mut w : u64 = 0u64
     while w < 4u64 {
         MB_LFILE[w] = fopen((&MB_PATH) as u64, "rb" as u64)
@@ -6672,18 +6823,24 @@ fn mb_pb_project_par() -> u64 @export {
     return 0u64
 }
 
-/* one witness row re-derived by the SEQUENTIAL engine (the fleet must
- * match it limb for limb); results in the MB_PW* scratch */
+/* the attention projection, as always: the same law through the vessel */
+fn mb_pb_project_par() -> u64 @export {
+    return mb_pb_run_par(7u64, 16384u64, 7168u64, 0u64, 3u64)
+}
+
+/* one witness row of ANY slot re-derived by the SEQUENTIAL engine (the
+ * fleet must match it limb for limb); results in the MB_PW* scratch */
 var MB_PWS : [i64; 3]
 var MB_PWL : [u64; 24]
 var MB_PWE : [i64; 3]
-fn mb_pb_row_witness(r: u64) -> u64 @export {
-    if MB_G_F[7] == 0u8 { return 1u64 }
-    let n : u64 = MB_G_NE0[7]
-    mb_mkpath(MB_G_SH[7])
+fn mb_pb_rwit(slot: u64, r: u64) -> u64 @export {
+    if slot >= 12u64 { return 1u64 }
+    if MB_G_F[slot] == 0u8 { return 1u64 }
+    let n : u64 = MB_G_NE0[slot]
+    mb_mkpath(MB_G_SH[slot])
     MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
     if MB_LFILE[0] == 0u64 { return 1u64 }
-    if mb_gz_wrow(7u64, r) != 0u64 {
+    if mb_gz_wrow(slot, r) != 0u64 {
         fclose(MB_LFILE[0])
         return 1u64
     }
@@ -6702,6 +6859,9 @@ fn mb_pb_row_witness(r: u64) -> u64 @export {
     }
     return 0u64
 }
+fn mb_pb_row_witness(r: u64) -> u64 @export {
+    return mb_pb_rwit(7u64, r)
+}
 fn mb_pb_w_s(which: u64) -> i64 @export {
     if which >= 3u64 { return 0i64 }
     return MB_PWS[which]
@@ -6714,6 +6874,112 @@ fn mb_pb_w_l(which: u64, k: u64) -> u64 @export {
 fn mb_pb_w_e(which: u64) -> i64 @export {
     if which >= 3u64 { return 0i64 }
     return MB_PWE[which]
+}
+
+/* the banked bounds, served: bank 1 = gate, 2 = up, 3 = down */
+fn mb_pb_b_s(bank: u64, r: u64, which: u64) -> i64 @export {
+    if bank == 1u64 {
+        if r >= 18432u64 { return 0i64 }
+        if which == 0u64 { return MB_BGLS[r] }
+        if which == 1u64 { return MB_BGHS[r] }
+        return MB_BGXS[r]
+    }
+    if bank == 2u64 {
+        if r >= 18432u64 { return 0i64 }
+        if which == 0u64 { return MB_BULS[r] }
+        if which == 1u64 { return MB_BUHS[r] }
+        return MB_BUXS[r]
+    }
+    if bank == 3u64 {
+        if r >= 7168u64 { return 0i64 }
+        if which == 0u64 { return MB_BDLS[r] }
+        if which == 1u64 { return MB_BDHS[r] }
+        return MB_BDXS[r]
+    }
+    return 0i64
+}
+fn mb_pb_b_l(bank: u64, r: u64, which: u64, k: u64) -> u64 @export {
+    if k >= 8u64 { return 0u64 }
+    let ix : u64 = r * 8u64 + k
+    if bank == 1u64 {
+        if r >= 18432u64 { return 0u64 }
+        if which == 0u64 { return MB_BGLL[ix] }
+        if which == 1u64 { return MB_BGHL[ix] }
+        return MB_BGXL[ix]
+    }
+    if bank == 2u64 {
+        if r >= 18432u64 { return 0u64 }
+        if which == 0u64 { return MB_BULL[ix] }
+        if which == 1u64 { return MB_BUHL[ix] }
+        return MB_BUXL[ix]
+    }
+    if bank == 3u64 {
+        if r >= 7168u64 { return 0u64 }
+        if which == 0u64 { return MB_BDLL[ix] }
+        if which == 1u64 { return MB_BDHL[ix] }
+        return MB_BDXL[ix]
+    }
+    return 0u64
+}
+fn mb_pb_b_e(bank: u64, r: u64, which: u64) -> i64 @export {
+    if bank == 1u64 {
+        if r >= 18432u64 { return 0i64 }
+        if which == 0u64 { return MB_BGLE[r] }
+        if which == 1u64 { return MB_BGHE[r] }
+        return MB_BGXE[r]
+    }
+    if bank == 2u64 {
+        if r >= 18432u64 { return 0i64 }
+        if which == 0u64 { return MB_BULE[r] }
+        if which == 1u64 { return MB_BUHE[r] }
+        return MB_BUXE[r]
+    }
+    if bank == 3u64 {
+        if r >= 7168u64 { return 0i64 }
+        if which == 0u64 { return MB_BDLE[r] }
+        if which == 1u64 { return MB_BDHE[r] }
+        return MB_BDXE[r]
+    }
+    return 0i64
+}
+
+/* THE FFN PREMISES: the dense blk.0 feed-forward on the ledger's terms.
+ * Checks the census slots 8..11 (norm f32 7168; gate/up 18432 x 7168;
+ * down 7168 x 18432; 256-value blocks) and loads gamma4 exactly.
+ * 0 ok / 2 foreign geometry (named) / 3 absent (named) */
+var MB_FFNOK : u64 = 0u64
+fn mb_pb_ffn_ok() -> u64 @export {
+    MB_FFNOK = 0u64
+    if MB_G_F[8] == 0u8 { return 3u64 }
+    if MB_G_F[9] == 0u8 { return 3u64 }
+    if MB_G_F[10] == 0u8 { return 3u64 }
+    if MB_G_F[11] == 0u8 { return 3u64 }
+    if MB_G_NE[8] != 7168u64 { return 2u64 }
+    if MB_G_TYPE[8] != 0u64 { return 2u64 }
+    if MB_G_NE0[9] != 7168u64 { return 2u64 }
+    if MB_G_NE[9] != 132120576u64 { return 2u64 }
+    if MB_G_NE0[10] != 7168u64 { return 2u64 }
+    if MB_G_NE[10] != 132120576u64 { return 2u64 }
+    if MB_G_NE0[11] != 18432u64 { return 2u64 }
+    if MB_G_NE[11] != 132120576u64 { return 2u64 }
+    if mb_tbv(MB_G_TYPE[9]) != 256u64 { return 2u64 }
+    if mb_tbv(MB_G_TYPE[10]) != 256u64 { return 2u64 }
+    if mb_tbv(MB_G_TYPE[11]) != 256u64 { return 2u64 }
+    if mb_gz_loadf32(8u64, 3u64, 7168u64) != 0u64 { return 2u64 }
+    MB_FFNOK = 1u64
+    return 0u64
+}
+
+/* gamma4, the ffn_norm weight, exact dyadic: value = m * 2^e */
+fn mb_pb_fn_m(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    if MB_FFNOK != 1u64 { return 0i64 }
+    return MB_FNM[i]
+}
+fn mb_pb_fn_e(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    if MB_FFNOK != 1u64 { return 0i64 }
+    return MB_FNE[i]
 }
 
 /* METABOLE: the organism now has a mouth.  What it eats, it proves. */

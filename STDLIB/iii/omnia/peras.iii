@@ -4611,6 +4611,20 @@ fn pr_x_ri13_ed() -> i64 @export { return PR_RI13ED }
 fn pr_x_ri13_mu() -> u64 @export { return PR_RI13MU }
 fn pr_x_ri13_eu() -> i64 @export { return PR_RI13EU }
 fn pr_x_chok() -> u64 @export { return PR_CHOK }
+/* the directed reciprocal and square root, served to the projection */
+fn pr_x_dfrecip(m: u64, e: i64, up: u64) -> i32 @export {
+    pr_dfrecip(m, e, up)
+    return 0i32
+}
+fn pr_x_dfsqrt(m: u64, e: i64, up: u64) -> i32 @export {
+    pr_dfsqrt(m, e, up)
+    return 0i32
+}
+/* exp(z) for SIGNED z = sg * m * 2^e, rounded per up; result in the df.
+ * 0 ok / 1 ladder cap (|z| >= 24, refused by name at the caller) */
+fn pr_x_exp_s(m: u64, e: i64, sg: i64, up: u64) -> u64 @export {
+    return pr_cho_exp(m, e, sg, up)
+}
 
 /* ==================== the organ's spine ==================== */
 

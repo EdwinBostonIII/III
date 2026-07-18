@@ -197,6 +197,8 @@ if grep -q "^the feast: absent" "$T/run1.txt"; then
     grep -q "^the choir: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING CHOIR"; exit 6; }
     grep -q "^the probole: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING PROJECTION"; exit 6; }
     grep -q "^the nostos: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING HOMECOMING"; exit 6; }
+    grep -q "^the threpsis: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING NOURISHMENT"; exit 6; }
+    grep -q "^the pepsis: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING DIGESTION"; exit 6; }
 else
     grep -q "^the feast: shards=.* conserved=" "$T/run1.txt" || { echo "[summit_gate] FEAST NOT CONSERVED"; exit 6; }
     grep -q "^the digestion: .*distributive=ok" "$T/run1.txt" || { echo "[summit_gate] NO EXACT DIGESTION"; exit 6; }
@@ -224,6 +226,17 @@ else
     grep -q "^the probole: o_proj woven by 4 weavers .*witness-rows=10/10 limb-exact containment(interval holds exact)=7168/7168" "$T/run1.txt" || { echo "[summit_gate] THE PROJECTION UNPROVEN"; exit 6; }
     grep -q "^the nostos: .*tight-route-inside-fat=7168/7168" "$T/run1.txt" || { echo "[summit_gate] NO HOMECOMING"; exit 6; }
     grep -q "^scroll probole = [1-9]" "$T/run1.txt" || { echo "[summit_gate] NO PROBOLE SCROLL"; exit 6; }
+    # THE THREPSIS + THE PEPSIS: the dense blk.0 FFN under the same law --
+    # x-hat through the certified rms interval and the exact gamma4, the
+    # gate/up/down matrices woven into banks with sequential witnesses and
+    # containment in every row, SiLU through the STANDING exp/reciprocal
+    # ladders (saturations counted and named, sigma monotone, the two
+    # sum-of-squares folds overlapping), and the residual digestion
+    # X'' = X' + FFN(X') with the tight route inside the fat: layer 0
+    # of the real R1 CLOSED end to end in certified intervals.
+    grep -q "^the threpsis: ffn woven by 4 weavers rows(gate/up/down)=18432/18432/7168 witness-rows=30/30 limb-exact containment(interval holds exact)=44032/44032 sigma-monotone=18432/18432" "$T/run1.txt" || { echo "[summit_gate] THE NOURISHMENT UNPROVEN"; exit 6; }
+    grep -q "^the pepsis: X'' = X' + FFN(X') dims=7168 tight-route-inside-fat=7168/7168" "$T/run1.txt" || { echo "[summit_gate] NO DIGESTION"; exit 6; }
+    grep -q "^scroll threpsis = [1-9]" "$T/run1.txt" || { echo "[summit_gate] NO THREPSIS SCROLL"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
 grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }

@@ -37,6 +37,20 @@ extern @abi(c-msvc-x64) fn mb_pb_row_witness(r: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_pb_w_s(which: u64) -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_pb_w_l(which: u64, k: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_pb_w_e(which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_rwit(slot: u64, r: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_b_s(bank: u64, r: u64, which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_b_l(bank: u64, r: u64, which: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_b_e(bank: u64, r: u64, which: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_ffn_ok() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_fn_m(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_fn_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_lo(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_hi(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_set_ex(i: u64, s: i64, l0: u64, l1: u64, l2: u64, l3: u64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_mark(nl: u64, nh: u64, nx: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_eps_m() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_eps_e() -> i64 from "metabole.iii"
 
 extern @abi(c-msvc-x64) fn pr_x_chok() -> u64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_dfm() -> u64 from "peras.iii"
@@ -50,6 +64,9 @@ extern @abi(c-msvc-x64) fn pr_x_ri13_md() -> u64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_ri13_ed() -> i64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_ri13_mu() -> u64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_ri13_eu() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfrecip(m: u64, e: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfsqrt(m: u64, e: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_exp_s(m: u64, e: i64, sg: i64, up: u64) -> u64 from "peras.iii"
 
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
@@ -59,9 +76,10 @@ extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_add
 
 /* ==================== the report and the scroll ==================== */
 
-var PB_REP : [u8; 2048]
+var PB_REP : [u8; 4096]
 var PB_REPN : u64 = 0u64
 var PB_SCROLL : u64 = 0u64
+var PB_SCROLL2 : u64 = 0u64
 
 fn pb_slen(s: u64) -> u64 {
     let p : *u8 = s as *u8
@@ -71,7 +89,7 @@ fn pb_slen(s: u64) -> u64 {
 }
 
 fn pb_rb(b: u8) -> i32 {
-    if PB_REPN >= 2047u64 { return 0i32 }
+    if PB_REPN >= 4095u64 { return 0i32 }
     PB_REP[PB_REPN] = b
     PB_REPN = PB_REPN + 1u64
     return 0i32
@@ -109,23 +127,37 @@ fn pb_ri(v: i64) -> i32 {
 var PB_U : [u64; 12]
 var PB_V : [u64; 12]
 
-/* load O bound (r, which) shifted left by (its exp - emin) into U or V.
- * returns 1 on shift overflow (named guard at the caller) */
-fn pb_ld(r: u64, which: u64, emin: i64, dst: u64) -> u64 {
+/* banked bound accessors: bank 0 = the attention vessel, 1..3 = the ffn */
+fn pb_gs(bank: u64, r: u64, which: u64) -> i64 {
+    if bank == 0u64 { return mb_pb_o_s(r, which) }
+    return mb_pb_b_s(bank, r, which)
+}
+fn pb_gl(bank: u64, r: u64, which: u64, k: u64) -> u64 {
+    if bank == 0u64 { return mb_pb_o_l(r, which, k) }
+    return mb_pb_b_l(bank, r, which, k)
+}
+fn pb_ge(bank: u64, r: u64, which: u64) -> i64 {
+    if bank == 0u64 { return mb_pb_o_e(r, which) }
+    return mb_pb_b_e(bank, r, which)
+}
+
+/* load bound (bank, r, which) shifted left by (its exp - emin) into U or
+ * V.  returns 1 on shift overflow (named guard at the caller) */
+fn pb_ld(bank: u64, r: u64, which: u64, emin: i64, dst: u64) -> u64 {
     let mut k : u64 = 0u64
     while k < 12u64 {
         if dst == 0u64 { PB_U[k] = 0u64 }
         if dst == 1u64 { PB_V[k] = 0u64 }
         k = k + 1u64
     }
-    let d : i64 = mb_pb_o_e(r, which) - emin
+    let d : i64 = pb_ge(bank, r, which) - emin
     if d < 0i64 { return 1u64 }
     if d > 256i64 { return 1u64 }
     let w : u64 = (d as u64) / 64u64
     let b : u64 = (d as u64) % 64u64
     k = 0u64
     while k < 8u64 {
-        let v : u64 = mb_pb_o_l(r, which, k)
+        let v : u64 = pb_gl(bank, r, which, k)
         if v != 0u64 {
             let pos : u64 = k + w
             if pos >= 12u64 { return 1u64 }
@@ -145,18 +177,18 @@ fn pb_ld(r: u64, which: u64, emin: i64, dst: u64) -> u64 {
     return 0u64
 }
 
-/* signed compare of bounds (r, wa) vs (r, wb); 9 = guard tripped */
-fn pb_cmp(r: u64, wa: u64, wb: u64) -> i64 {
-    let sa : i64 = mb_pb_o_s(r, wa)
-    let sb : i64 = mb_pb_o_s(r, wb)
+/* signed compare of bounds (bank, r, wa) vs (bank, r, wb); 9 = guard */
+fn pb_cmp(bank: u64, r: u64, wa: u64, wb: u64) -> i64 {
+    let sa : i64 = pb_gs(bank, r, wa)
+    let sb : i64 = pb_gs(bank, r, wb)
     if sa > sb { return 1i64 }
     if sa < sb { return 0i64 - 1i64 }
     if sa == 0i64 { return 0i64 }
-    let mut emin : i64 = mb_pb_o_e(r, wa)
-    let eb : i64 = mb_pb_o_e(r, wb)
+    let mut emin : i64 = pb_ge(bank, r, wa)
+    let eb : i64 = pb_ge(bank, r, wb)
     if eb < emin { emin = eb }
-    if pb_ld(r, wa, emin, 0u64) != 0u64 { return 9i64 }
-    if pb_ld(r, wb, emin, 1u64) != 0u64 { return 9i64 }
+    if pb_ld(bank, r, wa, emin, 0u64) != 0u64 { return 9i64 }
+    if pb_ld(bank, r, wb, emin, 1u64) != 0u64 { return 9i64 }
     let mut cmp : i64 = 0i64
     let mut k : u64 = 12u64
     while k != 0u64 {
@@ -172,16 +204,16 @@ fn pb_cmp(r: u64, wa: u64, wb: u64) -> i64 {
     return cmp
 }
 
-/* the width hi - lo of row r as a top-bit exponent (value ~ 2^ret);
+/* the width hi - lo of row (bank, r) as a top-bit exponent (~ 2^ret);
  * returns -100000 for zero width, 100000 on guard */
-fn pb_width_exp(r: u64) -> i64 {
-    let sl : i64 = mb_pb_o_s(r, 0u64)
-    let sh : i64 = mb_pb_o_s(r, 1u64)
-    let mut emin : i64 = mb_pb_o_e(r, 0u64)
-    let eb : i64 = mb_pb_o_e(r, 1u64)
+fn pb_width_exp(bank: u64, r: u64) -> i64 {
+    let sl : i64 = pb_gs(bank, r, 0u64)
+    let sh : i64 = pb_gs(bank, r, 1u64)
+    let mut emin : i64 = pb_ge(bank, r, 0u64)
+    let eb : i64 = pb_ge(bank, r, 1u64)
     if eb < emin { emin = eb }
-    if pb_ld(r, 1u64, emin, 0u64) != 0u64 { return 100000i64 }
-    if pb_ld(r, 0u64, emin, 1u64) != 0u64 { return 100000i64 }
+    if pb_ld(bank, r, 1u64, emin, 0u64) != 0u64 { return 100000i64 }
+    if pb_ld(bank, r, 0u64, emin, 1u64) != 0u64 { return 100000i64 }
     /* U := hi, V := lo as SIGNED values; width = hi - lo = U + (-V):
      * both were loaded as magnitudes; fold signs into a subtraction by
      * cases.  hi >= lo is already certified by the containment pass, so
@@ -392,8 +424,8 @@ fn pb_arm382() -> u64 {
     PB_WMAX = 0i64 - 100000i64
     let mut r : u64 = 0u64
     while r < 7168u64 {
-        let c1 : i64 = pb_cmp(r, 0u64, 2u64)
-        let c2 : i64 = pb_cmp(r, 2u64, 1u64)
+        let c1 : i64 = pb_cmp(0u64, r, 0u64, 2u64)
+        let c2 : i64 = pb_cmp(0u64, r, 2u64, 1u64)
         if c1 == 9i64 { return 382u64 }
         if c2 == 9i64 { return 382u64 }
         if c1 <= 0i64 {
@@ -412,7 +444,7 @@ fn pb_arm382() -> u64 {
         if sx > 0i64 { PB_SGP = PB_SGP + 1u64 }
         if sx < 0i64 { PB_SGN = PB_SGN + 1u64 }
         if sx == 0i64 { PB_SGZ = PB_SGZ + 1u64 }
-        let we : i64 = pb_width_exp(r)
+        let we : i64 = pb_width_exp(0u64, r)
         if we == 100000i64 { return 382u64 }
         if we > PB_WMAX { PB_WMAX = we }
         r = r + 1u64
@@ -438,13 +470,23 @@ fn pb_arm382() -> u64 {
 var PB_HSTRAD : u64 = 0u64
 var PB_HWMAX : i64 = 0i64
 var PB_HCONT : u64 = 0u64
+var PB_NOST_OK : u64 = 0u64
 
-/* O bound (r, which) as a signed df, rounded per up (sticky honored) */
+/* X' STORED: the homecoming's fat interval, dim by dim (signed dfs) --
+ * the standing input of the threpsis */
+var PB_FLS : [i64; 7168]
+var PB_FLM : [u64; 7168]
+var PB_FLE : [i64; 7168]
+var PB_FHS : [i64; 7168]
+var PB_FHM : [u64; 7168]
+var PB_FHE : [i64; 7168]
+
+/* bound (bank, r, which) as a signed df, rounded per up (sticky honored) */
 var PB_ODS : i64 = 0i64
 var PB_ODM : u64 = 0u64
 var PB_ODE : i64 = 0i64
-fn pb_odf(r: u64, which: u64, up: u64) -> i32 {
-    let s : i64 = mb_pb_o_s(r, which)
+fn pb_odf(bank: u64, r: u64, which: u64, up: u64) -> i32 {
+    let s : i64 = pb_gs(bank, r, which)
     if s == 0i64 {
         PB_ODS = 0i64
         PB_ODM = 0u64
@@ -457,16 +499,16 @@ fn pb_odf(r: u64, which: u64, up: u64) -> i32 {
     while k != 0u64 {
         k = k - 1u64
         if t == 8u64 {
-            if mb_pb_o_l(r, which, k) != 0u64 { t = k }
+            if pb_gl(bank, r, which, k) != 0u64 { t = k }
         }
     }
-    let hv : u64 = mb_pb_o_l(r, which, t)
+    let hv : u64 = pb_gl(bank, r, which, t)
     let mut lv : u64 = 0u64
-    if t != 0u64 { lv = mb_pb_o_l(r, which, t - 1u64) }
+    if t != 0u64 { lv = pb_gl(bank, r, which, t - 1u64) }
     let mut st : u64 = 0u64
     k = 0u64
     while k + 1u64 < t {
-        st = st | mb_pb_o_l(r, which, k)
+        st = st | pb_gl(bank, r, which, k)
         k = k + 1u64
     }
     /* the magnitude rounding direction flips with the sign */
@@ -475,7 +517,7 @@ fn pb_odf(r: u64, which: u64, up: u64) -> i32 {
     if magup == 1u64 {
         if st != 0u64 { lv = lv | 1u64 }
     }
-    let mut ebase : i64 = mb_pb_o_e(r, which)
+    let mut ebase : i64 = pb_ge(bank, r, which)
     if t != 0u64 { ebase = ebase + 64i64 * ((t as i64) - 1i64) }
     if t == 0u64 {
         pr_x_dfn2(0u64, hv, ebase, magup)
@@ -498,7 +540,7 @@ fn pb_home(r: u64, sel: u64) -> i32 {
     let mut dir : u64 = 0u64
     if sel == 1u64 { dir = 1u64 }
     if sel == 3u64 { dir = 1u64 }
-    pb_odf(r, which, dir)
+    pb_odf(0u64, r, which, dir)
     let os : i64 = PB_ODS
     let om : u64 = PB_ODM
     let oe : i64 = PB_ODE
@@ -557,6 +599,12 @@ fn pb_arm383() -> u64 {
         let fh_s : i64 = PB_SDS
         let fh_m : u64 = PB_SDM
         let fh_e : i64 = PB_SDE
+        PB_FLS[r] = fl_s
+        PB_FLM[r] = fl_m
+        PB_FLE[r] = fl_e
+        PB_FHS[r] = fh_s
+        PB_FHM[r] = fh_m
+        PB_FHE[r] = fh_e
         pb_home(r, 2u64)
         let tl_s : i64 = PB_SDS
         let tl_m : u64 = PB_SDM
@@ -626,6 +674,7 @@ fn pb_arm383() -> u64 {
     if eol_read(doc, dl) < 0i64 { return 383u64 }
     if eol_addr() != a1 { return 383u64 }
     PB_SCROLL = a1
+    PB_NOST_OK = 1u64
     pb_rs("the nostos: X' = X + O/(r1*r3) dims=7168 tight-route-inside-fat=" as u64)
     pb_ru(PB_HCONT)
     pb_rs("/7168 sign-straddle=" as u64)
@@ -639,19 +688,729 @@ fn pb_arm383() -> u64 {
     return 0u64
 }
 
+/* ============ arms 384-385: THE THREPSIS + THE PEPSIS ============
+ * The feed-forward of blk.0 under the very same law.  X' (the stored
+ * homecoming) is rms-normed through a certified interval scalar, scaled
+ * by the exact gamma4, and deposited as the standing thought; the gate
+ * and up matrices are woven by the four weavers into their banks; the
+ * gate passes through the STANDING sigma ladders (exp + reciprocal --
+ * SiLU invents no new mathematics), the nourishment h = g*sigma(g)*u is
+ * hulled and deposited; the down matrix returns 7168 wide; and the
+ * digestion X'' = X' + FFN(X') closes the layer.  Every saturation is
+ * COUNTED and NAMED; every fleet row owes a sequential witness; every
+ * interval must hold its exact point. */
+
+/* the rms4 interval and its reciprocal (positive dfs) */
+var PB_R4LM : u64 = 0u64
+var PB_R4LE : i64 = 0i64
+var PB_R4HM : u64 = 0u64
+var PB_R4HE : i64 = 0i64
+var PB_I4LM : u64 = 0u64
+var PB_I4LE : i64 = 0i64
+var PB_I4HM : u64 = 0u64
+var PB_I4HE : i64 = 0i64
+/* sum-of-squares: forward and reversed directed folds */
+var PB_QFLM : u64 = 0u64
+var PB_QFLE : i64 = 0i64
+var PB_QFHM : u64 = 0u64
+var PB_QFHE : i64 = 0i64
+var PB_QRLM : u64 = 0u64
+var PB_QRLE : i64 = 0i64
+var PB_QRHM : u64 = 0u64
+var PB_QRHE : i64 = 0i64
+/* the threpsis censuses */
+var PB_TSAT : u64 = 0u64
+var PB_TWMAX : i64 = 0i64
+var PB_THREP_OK : u64 = 0u64
+/* sigma result channel (sign 0/1, df) */
+var PB_SGS : i64 = 0i64
+var PB_SGM : u64 = 0u64
+var PB_SGE : i64 = 0i64
+
+/* signed df multiply, directed on the VALUE (magnitude dir flips with
+ * the result sign) -- result in the PB_SD* channel */
+fn pb_smul(sa: i64, ma: u64, ea: i64, sb: i64, mb: u64, eb: i64, dir: u64) -> i32 {
+    if sa == 0i64 {
+        PB_SDS = 0i64
+        PB_SDM = 0u64
+        PB_SDE = 0i64
+        return 0i32
+    }
+    if sb == 0i64 {
+        PB_SDS = 0i64
+        PB_SDM = 0u64
+        PB_SDE = 0i64
+        return 0i32
+    }
+    let mut rs : i64 = 1i64
+    if sa != sb { rs = 0i64 - 1i64 }
+    let mut magdir : u64 = dir
+    if rs < 0i64 { magdir = 1u64 - dir }
+    pr_x_dfmul(ma, ea, mb, eb, magdir)
+    PB_SDS = rs
+    PB_SDM = pr_x_dfm()
+    PB_SDE = pr_x_dfe()
+    return 0i32
+}
+
+/* signed df compare */
+fn pb_scmp(sa: i64, ma: u64, ea: i64, sb: i64, mb: u64, eb: i64) -> i64 {
+    if sa > sb { return 1i64 }
+    if sa < sb { return 0i64 - 1i64 }
+    if sa == 0i64 { return 0i64 }
+    let c : i64 = pr_x_dfcmp(ma, ea, mb, eb)
+    if sa < 0i64 { return 0i64 - c }
+    return c
+}
+
+/* the square bound of X'_i: hi 1 = the larger magnitude squared upward,
+ * hi 0 = the lower bound (zero on any straddle or zero endpoint) */
+fn pb_sqb(i: u64, hi: u64) -> i32 {
+    let ls : i64 = PB_FLS[i]
+    let hs : i64 = PB_FHS[i]
+    let mut same : u64 = 0u64
+    if ls > 0i64 {
+        if hs > 0i64 { same = 1u64 }
+    }
+    if ls < 0i64 {
+        if hs < 0i64 { same = 1u64 }
+    }
+    let mut cm : i64 = 0i64
+    if ls == 0i64 {
+        if hs != 0i64 { cm = 0i64 - 1i64 }
+    }
+    if ls != 0i64 {
+        if hs == 0i64 { cm = 1i64 }
+        if hs != 0i64 { cm = pr_x_dfcmp(PB_FLM[i], PB_FLE[i], PB_FHM[i], PB_FHE[i]) }
+    }
+    if hi == 1u64 {
+        if ls == 0i64 {
+            if hs == 0i64 {
+                PB_SDS = 0i64
+                PB_SDM = 0u64
+                PB_SDE = 0i64
+                return 0i32
+            }
+        }
+        let mut mm : u64 = PB_FHM[i]
+        let mut me : i64 = PB_FHE[i]
+        if cm > 0i64 {
+            mm = PB_FLM[i]
+            me = PB_FLE[i]
+        }
+        pr_x_dfmul(mm, me, mm, me, 1u64)
+        PB_SDS = 1i64
+        PB_SDM = pr_x_dfm()
+        PB_SDE = pr_x_dfe()
+        return 0i32
+    }
+    if same == 0u64 {
+        PB_SDS = 0i64
+        PB_SDM = 0u64
+        PB_SDE = 0i64
+        return 0i32
+    }
+    let mut nm : u64 = PB_FLM[i]
+    let mut ne : i64 = PB_FLE[i]
+    if cm > 0i64 {
+        nm = PB_FHM[i]
+        ne = PB_FHE[i]
+    }
+    pr_x_dfmul(nm, ne, nm, ne, 0u64)
+    PB_SDS = 1i64
+    PB_SDM = pr_x_dfm()
+    PB_SDE = pr_x_dfe()
+    return 0i32
+}
+
+/* one directed fold of the 7168 squares; rev 1 folds in reversed order */
+fn pb_sq_fold(rev: u64) -> i32 {
+    let mut slm : u64 = 0u64
+    let mut sle : i64 = 0i64
+    let mut shm : u64 = 0u64
+    let mut she : i64 = 0i64
+    let mut t : u64 = 0u64
+    while t < 7168u64 {
+        let mut i : u64 = t
+        if rev == 1u64 { i = 7167u64 - t }
+        pb_sqb(i, 0u64)
+        if PB_SDS != 0i64 {
+            pr_x_dfadd(slm, sle, PB_SDM, PB_SDE, 0u64)
+            slm = pr_x_dfm()
+            sle = pr_x_dfe()
+        }
+        pb_sqb(i, 1u64)
+        if PB_SDS != 0i64 {
+            pr_x_dfadd(shm, she, PB_SDM, PB_SDE, 1u64)
+            shm = pr_x_dfm()
+            she = pr_x_dfe()
+        }
+        t = t + 1u64
+    }
+    if rev == 0u64 {
+        PB_QFLM = slm
+        PB_QFLE = sle
+        PB_QFHM = shm
+        PB_QFHE = she
+    }
+    if rev == 1u64 {
+        PB_QRLM = slm
+        PB_QRLE = sle
+        PB_QRHM = shm
+        PB_QRHE = she
+    }
+    return 0i32
+}
+
+/* rms4 = sqrt(mean(X'^2) + eps) and its reciprocal, all directed.
+ * The two folds must OVERLAP (both contain the true sum).  0 ok / 1 red */
+fn pb_rms() -> u64 {
+    pb_sq_fold(0u64)
+    pb_sq_fold(1u64)
+    if pr_x_dfcmp(PB_QFLM, PB_QFLE, PB_QRHM, PB_QRHE) > 0i64 { return 1u64 }
+    if pr_x_dfcmp(PB_QRLM, PB_QRLE, PB_QFHM, PB_QFHE) > 0i64 { return 1u64 }
+    if PB_QFHM == 0u64 { return 1u64 }
+    pr_x_dfn2(0u64, 7168u64, 0i64, 0u64)
+    let sm : u64 = pr_x_dfm()
+    let se : i64 = pr_x_dfe()
+    pr_x_dfrecip(sm, se, 0u64)
+    let rdm : u64 = pr_x_dfm()
+    let rde : i64 = pr_x_dfe()
+    pr_x_dfrecip(sm, se, 1u64)
+    let rum : u64 = pr_x_dfm()
+    let rue : i64 = pr_x_dfe()
+    pr_x_dfmul(PB_QFLM, PB_QFLE, rdm, rde, 0u64)
+    let mut mlm : u64 = pr_x_dfm()
+    let mut mle : i64 = pr_x_dfe()
+    pr_x_dfmul(PB_QFHM, PB_QFHE, rum, rue, 1u64)
+    let mut mhm : u64 = pr_x_dfm()
+    let mut mhe : i64 = pr_x_dfe()
+    let em : i64 = mb_gz_eps_m()
+    if em > 0i64 {
+        let ee : i64 = mb_gz_eps_e()
+        pr_x_dfn2(0u64, em as u64, ee, 0u64)
+        let epm : u64 = pr_x_dfm()
+        let epe : i64 = pr_x_dfe()
+        pr_x_dfadd(mlm, mle, epm, epe, 0u64)
+        mlm = pr_x_dfm()
+        mle = pr_x_dfe()
+        pr_x_dfadd(mhm, mhe, epm, epe, 1u64)
+        mhm = pr_x_dfm()
+        mhe = pr_x_dfe()
+    }
+    if mlm == 0u64 { return 1u64 }
+    pr_x_dfsqrt(mlm, mle, 0u64)
+    PB_R4LM = pr_x_dfm()
+    PB_R4LE = pr_x_dfe()
+    pr_x_dfsqrt(mhm, mhe, 1u64)
+    PB_R4HM = pr_x_dfm()
+    PB_R4HE = pr_x_dfe()
+    pr_x_dfrecip(PB_R4HM, PB_R4HE, 0u64)
+    PB_I4LM = pr_x_dfm()
+    PB_I4LE = pr_x_dfe()
+    pr_x_dfrecip(PB_R4LM, PB_R4LE, 1u64)
+    PB_I4HM = pr_x_dfm()
+    PB_I4HE = pr_x_dfe()
+    return 0u64
+}
+
+/* deposit x-hat_i = X'_i * gamma4_i * (1/rms4): the interval endpoints
+ * by selection, and the interior midpoint as the exact rider */
+fn pb_xhat_one(i: u64) -> u64 {
+    let gm : i64 = mb_pb_fn_m(i)
+    let ge : i64 = mb_pb_fn_e(i)
+    let mut dead : u64 = 0u64
+    if gm == 0i64 { dead = 1u64 }
+    if PB_FLS[i] == 0i64 {
+        if PB_FHS[i] == 0i64 { dead = 1u64 }
+    }
+    if dead == 1u64 {
+        if mb_pb_set_lo(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64) != 0u64 { return 1u64 }
+        if mb_pb_set_hi(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64) != 0u64 { return 1u64 }
+        if mb_pb_set_ex(i, 0i64, 0u64, 0u64, 0u64, 0u64, 0i64) != 0u64 { return 1u64 }
+        return 0u64
+    }
+    let mut gs : i64 = 1i64
+    let mut gmm : u64 = gm as u64
+    if gm < 0i64 {
+        gs = 0i64 - 1i64
+        gmm = (0i64 - gm) as u64
+    }
+    pr_x_dfn2(0u64, gmm, ge, 0u64)
+    let gdm : u64 = pr_x_dfm()
+    let gde : i64 = pr_x_dfe()
+    /* t1 = X' * gamma: a negative gamma crosses the endpoints */
+    let mut a : u64 = 0u64
+    if gs < 0i64 { a = 1u64 }
+    let mut es : i64 = PB_FLS[i]
+    let mut em2 : u64 = PB_FLM[i]
+    let mut ee2 : i64 = PB_FLE[i]
+    if a == 1u64 {
+        es = PB_FHS[i]
+        em2 = PB_FHM[i]
+        ee2 = PB_FHE[i]
+    }
+    pb_smul(es, em2, ee2, gs, gdm, gde, 0u64)
+    let t1ls : i64 = PB_SDS
+    let t1lm : u64 = PB_SDM
+    let t1le : i64 = PB_SDE
+    es = PB_FHS[i]
+    em2 = PB_FHM[i]
+    ee2 = PB_FHE[i]
+    if a == 1u64 {
+        es = PB_FLS[i]
+        em2 = PB_FLM[i]
+        ee2 = PB_FLE[i]
+    }
+    pb_smul(es, em2, ee2, gs, gdm, gde, 1u64)
+    let t1hs : i64 = PB_SDS
+    let t1hm : u64 = PB_SDM
+    let t1he : i64 = PB_SDE
+    /* t2 = t1 * (1/rms4), a positive interval scalar */
+    let mut i4m : u64 = PB_I4LM
+    let mut i4e : i64 = PB_I4LE
+    if t1ls < 0i64 {
+        i4m = PB_I4HM
+        i4e = PB_I4HE
+    }
+    pb_smul(t1ls, t1lm, t1le, 1i64, i4m, i4e, 0u64)
+    let xls : i64 = PB_SDS
+    let xlm : u64 = PB_SDM
+    let xle : i64 = PB_SDE
+    i4m = PB_I4HM
+    i4e = PB_I4HE
+    if t1hs < 0i64 {
+        i4m = PB_I4LM
+        i4e = PB_I4LE
+    }
+    pb_smul(t1hs, t1hm, t1he, 1i64, i4m, i4e, 1u64)
+    let xhs : i64 = PB_SDS
+    let xhm : u64 = PB_SDM
+    let xhe : i64 = PB_SDE
+    /* the interior rider: (lo + hi)/2 rounded down cannot leave the pen */
+    pb_sadd(xls, xlm, xle, xhs, xhm, xhe, 0u64)
+    let ms : i64 = PB_SDS
+    let mm : u64 = PB_SDM
+    let mut me : i64 = PB_SDE
+    if ms != 0i64 { me = me - 1i64 }
+    if mb_pb_set_lo(i, xls, xlm, 0u64, 0u64, 0u64, xle) != 0u64 { return 1u64 }
+    if mb_pb_set_hi(i, xhs, xhm, 0u64, 0u64, 0u64, xhe) != 0u64 { return 1u64 }
+    if mb_pb_set_ex(i, ms, mm, 0u64, 0u64, 0u64, me) != 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* sigma(g) at the signed df point, the bound directed per up.  A capped
+ * argument saturates to the NAMED bound (counted, never silent). */
+fn pb_sigma(s: i64, m: u64, e: i64, up: u64) -> i32 {
+    let wex : u64 = 1u64 - up
+    let rc : u64 = pr_x_exp_s(m, e, 0i64 - s, wex)
+    if rc == 0u64 {
+        let em3 : u64 = pr_x_dfm()
+        let ee3 : i64 = pr_x_dfe()
+        pr_x_dfadd(1u64 << 63u64, 0i64 - 63i64, em3, ee3, wex)
+        pr_x_dfrecip(pr_x_dfm(), pr_x_dfe(), up)
+        PB_SGS = 1i64
+        PB_SGM = pr_x_dfm()
+        PB_SGE = pr_x_dfe()
+        return 0i32
+    }
+    PB_TSAT = PB_TSAT + 1u64
+    if s > 0i64 {
+        /* g >= 24: e^{-g} in [0, 2^-34] */
+        if up == 1u64 {
+            PB_SGS = 1i64
+            PB_SGM = 1u64 << 63u64
+            PB_SGE = 0i64 - 63i64
+            return 0i32
+        }
+        pr_x_dfadd(1u64 << 63u64, 0i64 - 63i64, 1u64 << 63u64, 0i64 - 97i64, 1u64)
+        pr_x_dfrecip(pr_x_dfm(), pr_x_dfe(), 0u64)
+        PB_SGS = 1i64
+        PB_SGM = pr_x_dfm()
+        PB_SGE = pr_x_dfe()
+        return 0i32
+    }
+    /* g <= -24: sigma in [0, 2^-34] */
+    if up == 1u64 {
+        PB_SGS = 1i64
+        PB_SGM = 1u64 << 63u64
+        PB_SGE = 0i64 - 97i64
+        return 0i32
+    }
+    PB_SGS = 0i64
+    PB_SGM = 0u64
+    PB_SGE = 0i64
+    return 0i32
+}
+
+/* one dim of the silu weave: g and u from the banks -> h deposited.
+ * h = g*sigma(g)*u by the product form: sigma's monotone image first,
+ * then the four-corner hull against u.  0 ok / 1 red */
+fn pb_sigh_one(j: u64) -> u64 {
+    pb_odf(1u64, j, 0u64, 0u64)
+    let gls : i64 = PB_ODS
+    let glm : u64 = PB_ODM
+    let gle : i64 = PB_ODE
+    pb_odf(1u64, j, 1u64, 1u64)
+    let ghs : i64 = PB_ODS
+    let ghm : u64 = PB_ODM
+    let ghe : i64 = PB_ODE
+    pb_odf(2u64, j, 0u64, 0u64)
+    let uls : i64 = PB_ODS
+    let ulm : u64 = PB_ODM
+    let ule : i64 = PB_ODE
+    pb_odf(2u64, j, 1u64, 1u64)
+    let uhs : i64 = PB_ODS
+    let uhm : u64 = PB_ODM
+    let uhe : i64 = PB_ODE
+    pb_sigma(gls, glm, gle, 0u64)
+    let sls : i64 = PB_SGS
+    let slm : u64 = PB_SGM
+    let sle : i64 = PB_SGE
+    pb_sigma(ghs, ghm, ghe, 1u64)
+    let shs : i64 = PB_SGS
+    let shm : u64 = PB_SGM
+    let she : i64 = PB_SGE
+    /* the sigma-monotone tooth */
+    if pb_scmp(sls, slm, sle, shs, shm, she) > 0i64 { return 1u64 }
+    /* silu bounds: sigma >= 0, so g's endpoints stay the extremes */
+    let mut ps : i64 = sls
+    let mut pm : u64 = slm
+    let mut pe : i64 = sle
+    if gls < 0i64 {
+        ps = shs
+        pm = shm
+        pe = she
+    }
+    pb_smul(gls, glm, gle, ps, pm, pe, 0u64)
+    let als : i64 = PB_SDS
+    let alm : u64 = PB_SDM
+    let ale : i64 = PB_SDE
+    ps = shs
+    pm = shm
+    pe = she
+    if ghs < 0i64 {
+        ps = sls
+        pm = slm
+        pe = sle
+    }
+    pb_smul(ghs, ghm, ghe, ps, pm, pe, 1u64)
+    let ahs : i64 = PB_SDS
+    let ahm : u64 = PB_SDM
+    let ahe : i64 = PB_SDE
+    /* h = silu * u: the four-corner hull, directed per side */
+    pb_smul(als, alm, ale, uls, ulm, ule, 0u64)
+    let mut hls : i64 = PB_SDS
+    let mut hlm : u64 = PB_SDM
+    let mut hle : i64 = PB_SDE
+    pb_smul(als, alm, ale, uhs, uhm, uhe, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hls, hlm, hle) < 0i64 {
+        hls = PB_SDS
+        hlm = PB_SDM
+        hle = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, uls, ulm, ule, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hls, hlm, hle) < 0i64 {
+        hls = PB_SDS
+        hlm = PB_SDM
+        hle = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, uhs, uhm, uhe, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hls, hlm, hle) < 0i64 {
+        hls = PB_SDS
+        hlm = PB_SDM
+        hle = PB_SDE
+    }
+    pb_smul(als, alm, ale, uls, ulm, ule, 1u64)
+    let mut hhs : i64 = PB_SDS
+    let mut hhm : u64 = PB_SDM
+    let mut hhe : i64 = PB_SDE
+    pb_smul(als, alm, ale, uhs, uhm, uhe, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hhs, hhm, hhe) > 0i64 {
+        hhs = PB_SDS
+        hhm = PB_SDM
+        hhe = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, uls, ulm, ule, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hhs, hhm, hhe) > 0i64 {
+        hhs = PB_SDS
+        hhm = PB_SDM
+        hhe = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, uhs, uhm, uhe, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hhs, hhm, hhe) > 0i64 {
+        hhs = PB_SDS
+        hhm = PB_SDM
+        hhe = PB_SDE
+    }
+    /* the bounds-ordered tooth */
+    if pb_scmp(hls, hlm, hle, hhs, hhm, hhe) > 0i64 { return 1u64 }
+    /* the interior rider */
+    pb_sadd(hls, hlm, hle, hhs, hhm, hhe, 0u64)
+    let ms : i64 = PB_SDS
+    let mm2 : u64 = PB_SDM
+    let mut me2 : i64 = PB_SDE
+    if ms != 0i64 { me2 = me2 - 1i64 }
+    if mb_pb_set_lo(j, hls, hlm, 0u64, 0u64, 0u64, hle) != 0u64 { return 1u64 }
+    if mb_pb_set_hi(j, hhs, hhm, 0u64, 0u64, 0u64, hhe) != 0u64 { return 1u64 }
+    if mb_pb_set_ex(j, ms, mm2, 0u64, 0u64, 0u64, me2) != 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* the loom teeth for one run: ten witness rows re-derived sequentially
+ * must equal the bank limb for limb.  Returns the ok-count. */
+fn pb_wit(slot: u64, bank: u64, rows: u64) -> u64 {
+    let step : u64 = rows / 10u64
+    let mut ok : u64 = 0u64
+    let mut wi : u64 = 0u64
+    while wi < 10u64 {
+        let mut wr : u64 = wi * step
+        if wi == 9u64 { wr = rows - 1u64 }
+        if mb_pb_rwit(slot, wr) != 0u64 { return 0u64 }
+        let mut wok : u64 = 1u64
+        let mut wv : u64 = 0u64
+        while wv < 3u64 {
+            if mb_pb_w_s(wv) != pb_gs(bank, wr, wv) { wok = 0u64 }
+            if mb_pb_w_e(wv) != pb_ge(bank, wr, wv) { wok = 0u64 }
+            let mut kk : u64 = 0u64
+            while kk < 8u64 {
+                if mb_pb_w_l(wv, kk) != pb_gl(bank, wr, wv, kk) { wok = 0u64 }
+                kk = kk + 1u64
+            }
+            wv = wv + 1u64
+        }
+        if wok == 1u64 { ok = ok + 1u64 }
+        wi = wi + 1u64
+    }
+    return ok
+}
+
+/* containment (lo <= exact <= hi) census over a bank */
+fn pb_cont(bank: u64, rows: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut r : u64 = 0u64
+    while r < rows {
+        let c1 : i64 = pb_cmp(bank, r, 0u64, 2u64)
+        let c2 : i64 = pb_cmp(bank, r, 2u64, 1u64)
+        if c1 == 9i64 { return 0u64 - 1u64 }
+        if c2 == 9i64 { return 0u64 - 1u64 }
+        if c1 <= 0i64 {
+            if c2 <= 0i64 { c = c + 1u64 }
+        }
+        r = r + 1u64
+    }
+    return c
+}
+
+fn pb_arm384() -> u64 {
+    PB_THREP_OK = 0u64
+    PB_TSAT = 0u64
+    if PB_NOST_OK != 1u64 {
+        pb_rs("the threpsis: fasting (no homecoming) -- the table stands ready" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    let fk : u64 = mb_pb_ffn_ok()
+    if fk == 3u64 {
+        pb_rs("the threpsis: ffn absent from the feast (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if fk == 2u64 {
+        pb_rs("the threpsis: refused (ffn geometry foreign -- named)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if fk != 0u64 { return 384u64 }
+    if pb_rms() != 0u64 { return 384u64 }
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        if pb_xhat_one(i) != 0u64 { return 384u64 }
+        i = i + 1u64
+    }
+    mb_pb_mark(7168u64, 7168u64, 7168u64)
+    let rg : u64 = mb_pb_run_par(9u64, 7168u64, 18432u64, 1u64, 3u64)
+    if rg == 2u64 {
+        pb_rs("the threpsis: refused (gate guard -- named)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if rg != 0u64 { return 384u64 }
+    let ru : u64 = mb_pb_run_par(10u64, 7168u64, 18432u64, 2u64, 3u64)
+    if ru == 2u64 {
+        pb_rs("the threpsis: refused (up guard -- named)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if ru != 0u64 { return 384u64 }
+    /* the witnesses walk while x-hat still stands deposited */
+    let w1 : u64 = pb_wit(9u64, 1u64, 18432u64)
+    let w2 : u64 = pb_wit(10u64, 2u64, 18432u64)
+    let cg : u64 = pb_cont(1u64, 18432u64)
+    let cu : u64 = pb_cont(2u64, 18432u64)
+    if cg != 18432u64 { return 384u64 }
+    if cu != 18432u64 { return 384u64 }
+    let mut j : u64 = 0u64
+    while j < 18432u64 {
+        if pb_sigh_one(j) != 0u64 { return 384u64 }
+        j = j + 1u64
+    }
+    mb_pb_mark(18432u64, 18432u64, 18432u64)
+    let rd : u64 = mb_pb_run_par(11u64, 18432u64, 7168u64, 3u64, 3u64)
+    if rd == 2u64 {
+        pb_rs("the threpsis: refused (down guard -- named)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if rd != 0u64 { return 384u64 }
+    let w3 : u64 = pb_wit(11u64, 3u64, 7168u64)
+    if w1 + w2 + w3 != 30u64 { return 384u64 }
+    let cd : u64 = pb_cont(3u64, 7168u64)
+    if cd != 7168u64 { return 384u64 }
+    PB_TWMAX = 0i64 - 100000i64
+    let mut r2 : u64 = 0u64
+    while r2 < 7168u64 {
+        let we : i64 = pb_width_exp(3u64, r2)
+        if we == 100000i64 { return 384u64 }
+        if we > PB_TWMAX { PB_TWMAX = we }
+        r2 = r2 + 1u64
+    }
+    PB_THREP_OK = 1u64
+    pb_rs("the threpsis: ffn woven by 4 weavers rows(gate/up/down)=18432/18432/7168 witness-rows=30/30 limb-exact containment(interval holds exact)=44032/44032 sigma-monotone=18432/18432 silu=product-form bounds-ordered=18432/18432 sumsq-fold=overlap saturated-endpoints=" as u64)
+    pb_ru(PB_TSAT)
+    pb_rs(" (named) rms4=[" as u64)
+    pb_ru(PB_R4LM)
+    pb_rs("e" as u64)
+    pb_ri(PB_R4LE)
+    pb_rs("," as u64)
+    pb_ru(PB_R4HM)
+    pb_rs("e" as u64)
+    pb_ri(PB_R4HE)
+    pb_rs("] shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_TWMAX)
+    pb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 385: THE PEPSIS ==================== */
+
+var PB_PSTRAD : u64 = 0u64
+var PB_PWMAX : i64 = 0i64
+var PB_PCONT : u64 = 0u64
+var PB_2LS : [i64; 7168]
+var PB_2LM : [u64; 7168]
+var PB_2LE : [i64; 7168]
+var PB_2HS : [i64; 7168]
+var PB_2HM : [u64; 7168]
+var PB_2HE : [i64; 7168]
+
+fn pb_arm385() -> u64 {
+    if PB_THREP_OK != 1u64 {
+        pb_rs("the pepsis: fasting (no nourishment) -- the river stands ready" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    PB_PSTRAD = 0u64
+    PB_PCONT = 0u64
+    PB_PWMAX = 0i64 - 100000i64
+    let mut r : u64 = 0u64
+    while r < 7168u64 {
+        pb_odf(3u64, r, 0u64, 0u64)
+        pb_sadd(PB_FLS[r], PB_FLM[r], PB_FLE[r], PB_ODS, PB_ODM, PB_ODE, 0u64)
+        let fls : i64 = PB_SDS
+        let flm : u64 = PB_SDM
+        let fle : i64 = PB_SDE
+        pb_odf(3u64, r, 1u64, 1u64)
+        pb_sadd(PB_FHS[r], PB_FHM[r], PB_FHE[r], PB_ODS, PB_ODM, PB_ODE, 1u64)
+        let fhs : i64 = PB_SDS
+        let fhm : u64 = PB_SDM
+        let fhe : i64 = PB_SDE
+        /* the tight route rides the exact down point */
+        pb_odf(3u64, r, 2u64, 0u64)
+        pb_sadd(PB_FLS[r], PB_FLM[r], PB_FLE[r], PB_ODS, PB_ODM, PB_ODE, 0u64)
+        let tls : i64 = PB_SDS
+        let tlm : u64 = PB_SDM
+        let tle : i64 = PB_SDE
+        pb_odf(3u64, r, 2u64, 1u64)
+        pb_sadd(PB_FHS[r], PB_FHM[r], PB_FHE[r], PB_ODS, PB_ODM, PB_ODE, 1u64)
+        let ths : i64 = PB_SDS
+        let thm : u64 = PB_SDM
+        let tte : i64 = PB_SDE
+        let mut okc : u64 = 1u64
+        if pb_scmp(fls, flm, fle, tls, tlm, tle) > 0i64 { okc = 0u64 }
+        if pb_scmp(ths, thm, tte, fhs, fhm, fhe) > 0i64 { okc = 0u64 }
+        if okc == 1u64 { PB_PCONT = PB_PCONT + 1u64 }
+        let mut str8 : u64 = 0u64
+        if fls < 0i64 {
+            if fhs >= 0i64 { str8 = 1u64 }
+        }
+        if fls == 0i64 { str8 = 1u64 }
+        if fhs == 0i64 { str8 = 1u64 }
+        if str8 == 1u64 { PB_PSTRAD = PB_PSTRAD + 1u64 }
+        pb_sadd(fhs, fhm, fhe, 0i64 - fls, flm, fle, 1u64)
+        if PB_SDS != 0i64 {
+            let wexp : i64 = PB_SDE + 63i64
+            if wexp > PB_PWMAX { PB_PWMAX = wexp }
+        }
+        PB_2LS[r] = fls
+        PB_2LM[r] = flm
+        PB_2LE[r] = fle
+        PB_2HS[r] = fhs
+        PB_2HM[r] = fhm
+        PB_2HE[r] = fhe
+        r = r + 1u64
+    }
+    if PB_PCONT != 7168u64 { return 385u64 }
+    /* the layer scroll: the law of the nourishment sealed */
+    eol_reset()
+    let doc : u64 = "[ffn nourishment = certified interval] [certified interval < exact decision] [interval width = named shadow] [saturated gate = named bound] [named bound < certified interval]" as u64
+    let dl : u64 = pb_slen(doc)
+    if eol_read(doc, dl) < 0i64 { return 385u64 }
+    if eol_lawcheck() != 0u64 { return 385u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 385u64 }
+    let fn2 : u64 = "ffn nourishment" as u64
+    let xd : u64 = "exact decision" as u64
+    if eol_entails(fn2, pb_slen(fn2), 0u64, xd, pb_slen(xd)) != 1u64 { return 385u64 }
+    if eol_entails(xd, pb_slen(xd), 0u64, fn2, pb_slen(fn2)) != 0u64 { return 385u64 }
+    let nb : u64 = "named bound" as u64
+    if eol_entails(nb, pb_slen(nb), 0u64, xd, pb_slen(xd)) != 1u64 { return 385u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 385u64 }
+    if eol_addr() != a1 { return 385u64 }
+    PB_SCROLL2 = a1
+    pb_rs("the pepsis: X'' = X' + FFN(X') dims=7168 tight-route-inside-fat=" as u64)
+    pb_ru(PB_PCONT)
+    pb_rs("/7168 sign-straddle=" as u64)
+    pb_ru(PB_PSTRAD)
+    pb_rs(" shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_PWMAX)
+    pb_rs(" gamma4=exact-f32 eps=shared-rms sigma=standing-ladders -- the layer CLOSED: the flesh returns to the river" as u64)
+    pb_rb(10u8)
+    return 0u64
+}
+
 /* ==================== the organ's spine ==================== */
 
 fn pb_selfprove() -> u64 @export {
     PB_REPN = 0u64
     PB_SCROLL = 0u64
+    PB_SCROLL2 = 0u64
+    PB_NOST_OK = 0u64
+    PB_THREP_OK = 0u64
     let r0 : u64 = pb_arm382()
     if r0 != 0u64 { return r0 }
     let r1 : u64 = pb_arm383()
     if r1 != 0u64 { return r1 }
+    let r2 : u64 = pb_arm384()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = pb_arm385()
+    if r3 != 0u64 { return r3 }
     return 0u64
 }
 
 fn pb_addr() -> u64 @export { return PB_SCROLL }
+fn pb_addr2() -> u64 @export { return PB_SCROLL2 }
 fn pb_report_len() -> u64 @export { return PB_REPN }
 fn pb_report_byte(i: u64) -> u8 @export {
     if i >= PB_REPN { return 0u8 }

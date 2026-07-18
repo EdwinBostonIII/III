@@ -55,6 +55,14 @@ extern @abi(c-msvc-x64) fn px_novel_count() -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn px_novel_idx(j: u64) -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn px_stat(k: u64) -> u64 from "proxenos.iii"
 
+extern @abi(c-msvc-x64) fn ok_selfprove() -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_dwell(path: u64, base: u64, len: u64) -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_stand(path: u64) -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_addr() -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_reason() -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_claims_len() -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn ok_claims_byte(i: u64) -> u8 from "oikos.iii"
+
 extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_last_epoch() -> u64 from "xenos.iii"
@@ -109,7 +117,11 @@ fn usage() -> u64 {
     ps("  iii anglos propose \"<english>\"  the sponsor: an UNTRUSTED proposer's word,\n" as u64)
     ps("                                  CONFIRMED by re-derivation or converted\n" as u64)
     ps("                                  whole into named questions (never admitted)\n" as u64)
-    ps("  iii anglos say                  the standing scroll spoken back in english\n\n" as u64)
+    ps("  iii anglos say                  the standing scroll spoken back in english\n" as u64)
+    ps("  iii anglos dwell \"<english>\"    the utterance JOINS the persistent household\n" as u64)
+    ps("                                  (union-judged: accumulation can never make\n" as u64)
+    ps("                                  the house contradict itself)\n" as u64)
+    ps("  iii anglos house                the standing household, shown and spoken\n\n" as u64)
     ps("exit: 0 heard/said | 1 refused/unheard/unsayable | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
@@ -144,7 +156,20 @@ fn condition_of_motion() -> u64 {
     if ap != 0u64 { ps("THE TONGUE REFUSES ITSELF: anglos self-proof arm " as u64)   pu(ap)   ps(" failed\n" as u64)   return 9u64 }
     let pp : u64 = px_selfprove()
     if pp != 0u64 { ps("THE SPONSOR REFUSES ITSELF: proxenos self-proof arm " as u64)   pu(pp)   ps(" failed\n" as u64)   return 9u64 }
+    let hp : u64 = ok_selfprove()
+    if hp != 0u64 { ps("THE HEARTH REFUSES ITSELF: oikos self-proof arm " as u64)   pu(hp)   ps(" failed\n" as u64)   return 9u64 }
     return 0u64
+}
+fn ok_house_path() -> u64 { return "STDLIB/data/oikos.eol" as u64 }
+fn ok_reason_word(r: u64) -> u32 {
+    if r == 1u64 { ps("TAMPER (the house file's address does not re-derive)" as u64)   return 1u32 }
+    if r == 2u64 { ps("CLASH (the union would break the law -- the house refused the marriage)" as u64)   return 1u32 }
+    if r == 3u64 { ps("THROAT (the house past its envelope)" as u64)   return 1u32 }
+    if r == 4u64 { ps("SURFACE (the tongue refused it: " as u64)   reason_word(an_reason())   ps(")" as u64)   return 1u32 }
+    if r == 5u64 { ps("DOOR (xenos refused the guest alone)" as u64)   return 1u32 }
+    if r == 6u64 { ps("ROOT (not inside the house -- no write)" as u64)   return 1u32 }
+    ps("(unnamed)" as u64)
+    return 1u32
 }
 /* the anamnesis printed: the organ explains its own hearing, sentence by
  * sentence -- what kind it heard, how many roles, what became of it.  On a
@@ -306,6 +331,58 @@ fn anglos_enter(argc: i32, argv: u64) -> u64 @export {
         ps(")\n" as u64)
         print_trace()
         return 1u64
+    }
+    if streq(cmd, "dwell" as u64) == 1u32 {
+        /* the household: the utterance JOINS the persistent house -- the
+         * guest judged alone at the door, the UNION judged at the hearth,
+         * questions answered from the house's whole memory */
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&AC_IN) as u64, 4095u64)
+        let v : u64 = ok_dwell(ok_house_path(), (&AC_IN) as u64, n)
+        if v == 1u64 {
+            ps("DWELT  the household stands at address " as u64)   pu(ok_addr())   putchar(10i32)
+            ps("  house: " as u64)   pu(ok_claims_len())   ps(" canonical byte(s) of standing knowledge\n" as u64)
+            print_trace()
+            let q : u64 = an_questions()
+            let mut k : u64 = 0u64
+            while k < q {
+                ps("  asked " as u64)
+                let ql : u64 = an_question_len(k)
+                let mut j : u64 = 0u64
+                while j < ql { putchar(an_question_byte(j) as i32)   j = j + 1u64 }
+                ps(" : " as u64)
+                let a : u64 = an_answer(k)
+                if a == 1u64 { ps("KNOWN to the house\n" as u64) }
+                if a == 0u64 { ps("not entailed by the house\n" as u64) }
+                if a == 2u64 { ps("refused\n" as u64) }
+                k = k + 1u64
+            }
+            return 0u64
+        }
+        if v == 3u64 { ps("UNHEARD (no statement, no question)\n" as u64)   return 1u64 }
+        ps("REFUSED  " as u64)   ok_reason_word(ok_reason())   putchar(10i32)
+        print_trace()
+        return 1u64
+    }
+    if streq(cmd, "house" as u64) == 1u32 {
+        /* the standing household, shown and SPOKEN */
+        let sv : u64 = ok_stand(ok_house_path())
+        if sv == 0u64 { ps("the house is newborn: nothing has dwelt here yet\n" as u64)   return 0u64 }
+        if sv == 2u64 { ps("THE HOUSE REFUSES ITSELF: " as u64)   ok_reason_word(ok_reason())   putchar(10i32)   return 1u64 }
+        ps("THE HOUSE stands at address " as u64)   pu(ok_addr())   putchar(10i32)
+        ps("  the standing knowledge:\n    " as u64)
+        let hn : u64 = ok_claims_len()
+        let mut i : u64 = 0u64
+        while i < hn { putchar(ok_claims_byte(i) as i32)   i = i + 1u64 }
+        putchar(10i32)
+        let sn : u64 = an_say()
+        if sn > 0u64 {
+            ps("  spoken in the bounded tongue:\n    " as u64)
+            i = 0u64
+            while i < sn { putchar(an_say_byte(i) as i32)   i = i + 1u64 }
+            putchar(10i32)
+        }
+        return 0u64
     }
     if streq(cmd, "say" as u64) == 1u32 {
         let n : u64 = an_say()

@@ -1,0 +1,346 @@
+/* STDLIB/iii/aether/oikos.iii -- OIKOS: the household scroll.
+ *
+ * Until now the house's standing knowledge died with its process: every
+ * invocation of the tongue began newborn.  OIKOS is the hearth -- the
+ * standing scroll PERSISTED as a self-verifying file, RE-STOOD at every
+ * invocation, and GROWN only through the guarded union:
+ *
+ *   THE HEARTH LAW:
+ *   1  The house file is `<address>\n<canonical scroll>`; standing it
+ *      RE-DERIVES the address from the text (tamper = the WHOLE house
+ *      refuses -- the guest-book discipline, applied to knowledge).
+ *   2  An absent file is BIRTH, not error: the house stands empty.
+ *   3  Growth is UNION-JUDGED: the new claims are read side by side with
+ *      the whole standing house and the LAW checks the union.  A guest
+ *      coherent alone but cycling against the house is REFUSED (CLASH)
+ *      and the file is untouched: ACCUMULATION CAN NEVER MAKE THE HOUSE
+ *      CONTRADICT ITSELF.
+ *   4  The door still judges the stranger ALONE (xn_admit books the
+ *      knock); the hearth judges the UNION.  Two judgments, two named
+ *      jurisdictions -- the door's law is not forked.
+ *   5  Writes happen only inside the house (xn_rooted, the book's gate);
+ *      the canonical envelope is 16384 bytes -- a house grown past its
+ *      throat refuses WHOLE and names it (the capacity law: sized for
+ *      the boundary, stated, never silent).
+ *
+ * Every face is PATH-EXPLICIT (no hidden default file): the CLI dwells in
+ * STDLIB/data/oikos.eol; the self-proof dwells in a build-territory test
+ * hearth and NEVER touches the real house.
+ *
+ * Truth is a CONDITION OF MOTION: ok_selfprove (arms 410..414) re-derives
+ * every law above at every invocation.  NO gate, NO KAT (the kardia
+ * pattern).  NIH: composes omnia/eidolos (the scroll and its law),
+ * aether/anglos (the tongue's transduction and questions), aether/xenos
+ * (the one door and the rooted probe), msvcrt file faces.
+ * Hexad: kind_passage.  Ring R0. */
+module aether_oikos
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+extern @abi(c-msvc-x64) fn an_transduce(base: u64, len: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claims() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_questions() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_ask(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_len() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_byte(i: u64) -> u8 from "anglos.iii"
+
+extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_byte(i: u64) -> u8 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_rooted() -> u64 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+/* stand verdicts */
+const OK_S_STOOD : u64 = 1u64
+const OK_S_BIRTH : u64 = 0u64
+const OK_S_REFUSED : u64 = 2u64
+/* dwell verdicts */
+const OK_D_DWELT : u64 = 1u64
+const OK_D_REFUSED : u64 = 2u64
+const OK_D_UNHEARD : u64 = 3u64
+/* named refusal reasons */
+const OK_R_NONE : u64 = 0u64
+const OK_R_TAMPER : u64 = 1u64           /* the file's address does not re-derive */
+const OK_R_CLASH : u64 = 2u64            /* the union breaks the law            */
+const OK_R_THROAT : u64 = 3u64           /* the house past its envelope         */
+const OK_R_SURFACE : u64 = 4u64          /* the tongue refused the utterance    */
+const OK_R_DOOR : u64 = 5u64             /* the door refused the guest          */
+const OK_R_ROOT : u64 = 6u64             /* not inside the house: no write      */
+
+/* ==================== the hearth's state ==================== */
+var OK_FB : [u8; 16420]                  /* file read/write image               */
+var OK_HOUSE : [u8; 16384]               /* the standing house canon            */
+var OK_HN : u64 = 0u64
+var OK_ADDR : u64 = 0u64
+var OK_VERDICT : u64 = 0u64
+var OK_REASON : u64 = 0u64
+var OK_RC : [u64; 7]                     /* refusals by name                    */
+
+fn ok_refused(r: u64) -> u64 @export { if r < 7u64 { return OK_RC[r] }   return 0u64 }
+fn ok_addr() -> u64 @export { return OK_ADDR }
+fn ok_verdict() -> u64 @export { return OK_VERDICT }
+fn ok_reason() -> u64 @export { return OK_REASON }
+fn ok_claims_len() -> u64 @export { return OK_HN }
+fn ok_claims_byte(i: u64) -> u8 @export { if i < OK_HN { return OK_HOUSE[i] }   return 0u8 }
+
+fn ok_fail(r: u64) -> u64 {
+    OK_REASON = r
+    if r < 7u64 { OK_RC[r] = OK_RC[r] + 1u64 }
+    return r
+}
+
+/* ==================== THE STANDING ====================
+ * Read the house file, verify its address against its own text, and leave
+ * the house STANDING in the eidolos state.  1 stood | 0 birth (absent or
+ * empty: the state is reset empty) | 2 refused (tamper: nothing stands). */
+fn ok_stand(path: u64) -> u64 @export {
+    OK_REASON = OK_R_NONE
+    OK_HN = 0u64
+    OK_ADDR = 0u64
+    eol_reset()
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { return OK_S_BIRTH }
+    let n : u64 = fread((&OK_FB) as u64, 1u64, 16420u64, f)
+    fclose(f)
+    if n == 0u64 { return OK_S_BIRTH }
+    if n > 16406u64 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    /* parse "<addr>\n" */
+    let mut a : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut nd : u64 = 0u64
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        if i >= n { going = 0u64 } else {
+            let c : u8 = OK_FB[i]
+            if c == 10u8 { going = 0u64 } else {
+                if c < 48u8 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+                if c > 57u8 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+                a = (a * 10u64) + ((c - 48u8) as u64)
+                nd = nd + 1u64
+                i = i + 1u64
+            }
+        }
+    }
+    if nd == 0u64 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    if i >= n { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    let cb : u64 = i + 1u64
+    let cn : u64 = n - cb
+    if cn == 0u64 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    if cn > 16384u64 { ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    /* the address must RE-DERIVE from the text (the whole house or none) */
+    if eol_read(((&OK_FB) as u64) + cb, cn) < 0i64 { eol_reset()   ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    if eol_lawcheck() != 0u64 { eol_reset()   ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    if eol_addr() != a { eol_reset()   ok_fail(OK_R_TAMPER)   return OK_S_REFUSED }
+    let mut k : u64 = 0u64
+    while k < cn { OK_HOUSE[k] = OK_FB[cb + k]   k = k + 1u64 }
+    OK_HN = cn
+    OK_ADDR = a
+    return OK_S_STOOD
+}
+
+/* persist the CURRENT eidolos state as the house file (rooted only) */
+fn ok_persist(path: u64) -> u64 {
+    if xn_rooted() != 1u64 { return ok_fail(OK_R_ROOT) }
+    let a : u64 = eol_addr()
+    if a == 0u64 { return ok_fail(OK_R_CLASH) }
+    eol_write()
+    let cn : u64 = eol_out_len()
+    if cn == 0u64 { return ok_fail(OK_R_CLASH) }
+    if cn > 16384u64 { return ok_fail(OK_R_THROAT) }
+    /* image: digits(addr) \n canon */
+    let mut m : u64 = 0u64
+    let mut div : u64 = 1u64
+    let mut t : u64 = a
+    while t >= 10u64 { div = div * 10u64   t = t / 10u64 }
+    t = a
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        OK_FB[m] = (48u64 + (t / div)) as u8
+        m = m + 1u64
+        t = t % div
+        if div == 1u64 { going = 0u64 } else { div = div / 10u64 }
+    }
+    OK_FB[m] = 10u8
+    m = m + 1u64
+    let mut k : u64 = 0u64
+    while k < cn { OK_FB[m + k] = eol_out_byte(k)   k = k + 1u64 }
+    m = m + cn
+    let f : u64 = fopen(path, "wb" as u64)
+    if f == 0u64 { return ok_fail(OK_R_ROOT) }
+    fwrite((&OK_FB) as u64, 1u64, m, f)
+    fclose(f)
+    let mut j : u64 = 0u64
+    while j < cn { OK_HOUSE[j] = eol_out_byte(j)   j = j + 1u64 }
+    OK_HN = cn
+    OK_ADDR = a
+    return 0u64
+}
+
+/* ==================== THE DWELLING ====================
+ * One utterance JOINS the household: transduced by the tongue, the guest
+ * judged ALONE at the one door (booked), the UNION with the whole standing
+ * house judged at the hearth, persisted only if lawful, and every question
+ * answered over the HOUSE.  1 dwelt | 2 refused (ok_reason names it) |
+ * 3 unheard. */
+fn ok_dwell(path: u64, base: u64, len: u64) -> u64 @export {
+    OK_VERDICT = 0u64
+    OK_REASON = OK_R_NONE
+    let sv : u64 = ok_stand(path)
+    if sv == OK_S_REFUSED { OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    let t : u64 = an_transduce(base, len)
+    if t == 3u64 { OK_VERDICT = OK_D_UNHEARD   return OK_D_UNHEARD }
+    if t != 4u64 { ok_fail(OK_R_SURFACE)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    if an_claims() > 0u64 {
+        /* the guest's own scroll must survive the door alone (booked) */
+        let mut i : u64 = 0u64
+        let sn : u64 = an_scroll_len()
+        while i < sn { OK_FB[i] = an_scroll_byte(i)   i = i + 1u64 }
+        if xn_admit((&OK_FB) as u64, sn) != 1u64 { ok_fail(OK_R_DOOR)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+        /* the hearth judges the UNION: guest canon + the whole house */
+        let gn : u64 = xn_canon_len()
+        i = 0u64
+        while i < gn { OK_FB[i] = xn_canon_byte(i)   i = i + 1u64 }
+        eol_reset()
+        if eol_read((&OK_FB) as u64, gn) < 0i64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+        if OK_HN > 0u64 {
+            if eol_read((&OK_HOUSE) as u64, OK_HN) < 0i64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+        }
+        if eol_lawcheck() != 0u64 {
+            /* CLASH: the union breaks the law; the house is untouched and
+             * re-stood whole (the guest was booked at the door -- the knock
+             * happened; the household refused the marriage) */
+            ok_fail(OK_R_CLASH)
+            eol_reset()
+            if OK_HN > 0u64 { eol_read((&OK_HOUSE) as u64, OK_HN) }
+            OK_VERDICT = OK_D_REFUSED
+            return OK_D_REFUSED
+        }
+        let pr : u64 = ok_persist(path)
+        if pr != 0u64 { OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    }
+    /* the questions are the household's to answer (over the union) */
+    let q : u64 = an_questions()
+    let mut k : u64 = 0u64
+    while k < q { an_ask(k)   k = k + 1u64 }
+    OK_VERDICT = OK_D_DWELT
+    return OK_D_DWELT
+}
+fn ok_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn ok_dwell_text(path: u64, s: u64) -> u64 @export { return ok_dwell(path, s, ok_slen(s)) }
+/* erase a hearth (rooted only; the self-proof's test hearth, or a fresh start) */
+fn ok_erase(path: u64) -> u64 @export {
+    if xn_rooted() != 1u64 { return ok_fail(OK_R_ROOT) }
+    let f : u64 = fopen(path, "wb" as u64)
+    if f == 0u64 { return ok_fail(OK_R_ROOT) }
+    fclose(f)
+    return 0u64
+}
+
+/* ==================== THE SELF-PROOF (arms 410..414) ====================
+ * All arms dwell in the TEST hearth (build territory) -- the real house
+ * file is never touched by a proof. */
+fn ok_tpath() -> u64 { return "STDLIB/build/oikos_arm.eol" as u64 }
+fn ok_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, ok_slen(a), v, b, ok_slen(b))
+}
+/* arm 410: BIRTH AND FIRST DWELLING -- an absent hearth stands empty; the
+ * first utterance joins, persists, and re-stands from the file. */
+fn ok_arm410() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 410u64 }
+    if ok_stand(ok_tpath()) != OK_S_BIRTH { return 410u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 410u64 }
+    let a1 : u64 = OK_ADDR
+    if a1 == 0u64 { return 410u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 410u64 }
+    if OK_ADDR != a1 { return 410u64 }
+    if ok_ent("dog" as u64, 0u64, "animal" as u64) != 1u64 { return 410u64 }
+    return 0u64
+}
+/* arm 411: THE ACCUMULATION -- a second dwelling UNIONS with the first
+ * across the file boundary, and the union CHAINS: the house knows what
+ * neither utterance said alone, and answers a question from it. */
+fn ok_arm411() -> u64 {
+    if ok_dwell_text(ok_tpath(), "an animal is a thing" as u64) != 1u64 { return 411u64 }
+    if ok_ent("dog" as u64, 0u64, "thing" as u64) != 1u64 { return 411u64 }
+    if ok_dwell_text(ok_tpath(), "is a dog a thing" as u64) != 1u64 { return 411u64 }
+    if an_questions() != 1u64 { return 411u64 }
+    if an_ask(0u64) != 1u64 { return 411u64 }
+    return 0u64
+}
+/* arm 412: THE GUARDED UNION -- a guest coherent ALONE but cycling against
+ * the house is refused CLASH and the house survives UNCHANGED. */
+fn ok_arm412() -> u64 {
+    let a0 : u64 = OK_ADDR
+    let c0 : u64 = OK_RC[OK_R_CLASH]
+    if ok_dwell_text(ok_tpath(), "a thing is a dog" as u64) != 2u64 { return 412u64 }
+    if OK_REASON != OK_R_CLASH { return 412u64 }
+    if OK_RC[OK_R_CLASH] != (c0 + 1u64) { return 412u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 412u64 }
+    if OK_ADDR != a0 { return 412u64 }
+    if ok_ent("thing" as u64, 0u64, "dog" as u64) != 0u64 { return 412u64 }
+    return 0u64
+}
+/* arm 413: THE TAMPER -- one flipped byte and the WHOLE house refuses. */
+fn ok_arm413() -> u64 {
+    let f : u64 = fopen(ok_tpath(), "rb" as u64)
+    if f == 0u64 { return 413u64 }
+    let n : u64 = fread((&OK_FB) as u64, 1u64, 16420u64, f)
+    fclose(f)
+    if n < 4u64 { return 413u64 }
+    /* flip one canon byte and rewrite */
+    OK_FB[n - 2u64] = OK_FB[n - 2u64] ^ 1u8
+    let g : u64 = fopen(ok_tpath(), "wb" as u64)
+    if g == 0u64 { return 413u64 }
+    fwrite((&OK_FB) as u64, 1u64, n, g)
+    fclose(g)
+    let t0 : u64 = OK_RC[OK_R_TAMPER]
+    if ok_stand(ok_tpath()) != OK_S_REFUSED { return 413u64 }
+    if OK_REASON != OK_R_TAMPER { return 413u64 }
+    if OK_RC[OK_R_TAMPER] != (t0 + 1u64) { return 413u64 }
+    return 0u64
+}
+/* arm 414: REBIRTH AND IDEMPOTENCE -- erased, re-grown identically twice:
+ * the same dwellings derive the same address (the hearth is deterministic). */
+fn ok_arm414() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 414u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 414u64 }
+    if ok_dwell_text(ok_tpath(), "an animal is a thing" as u64) != 1u64 { return 414u64 }
+    let a1 : u64 = OK_ADDR
+    if ok_erase(ok_tpath()) != 0u64 { return 414u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 414u64 }
+    if ok_dwell_text(ok_tpath(), "an animal is a thing" as u64) != 1u64 { return 414u64 }
+    if OK_ADDR != a1 { return 414u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 414u64 }
+    if OK_ADDR != a1 { return 414u64 }
+    eol_reset()
+    return 0u64
+}
+fn ok_selfprove() -> u64 @export {
+    let mut r : u64 = ok_arm410()
+    if r != 0u64 { return r }
+    r = ok_arm411()
+    if r != 0u64 { return r }
+    r = ok_arm412()
+    if r != 0u64 { return r }
+    r = ok_arm413()
+    if r != 0u64 { return r }
+    r = ok_arm414()
+    if r != 0u64 { return r }
+    return 0u64
+}

@@ -652,6 +652,13 @@ fn an_reason() -> u64 @export { return AN_REASON }
 fn an_claims() -> u64 @export { return AN_CLAIMS }
 fn an_questions() -> u64 @export { return AN_QN }
 fn an_answer(i: u64) -> u64 @export { if i < AN_QN { return AN_ANS[i] }   return AN_SENT }
+/* re-ask question i over whatever stands NOW (the hearth's answering face:
+ * the household answers from the union, not from hear-time) */
+fn an_ask(i: u64) -> u64 @export {
+    if i >= AN_QN { return AN_SENT }
+    AN_ANS[i] = eol_entails(((&AN_QT) as u64) + AN_QAO[i], AN_QAL[i], AN_QVV[i], ((&AN_QT) as u64) + AN_QBO[i], AN_QBL[i])
+    return AN_ANS[i]
+}
 fn an_addr() -> u64 @export { return AN_ADDR }
 fn an_refused(r: u64) -> u64 @export { if r < 11u64 { return AN_RC[r] }   return 0u64 }
 fn an_heard() -> u64 @export { return AN_HEARD }
@@ -910,6 +917,7 @@ fn an_arm396() -> u64 {
     if AN_CLAIMS != 1u64 { return 396u64 }
     if AN_QN != 1u64 { return 396u64 }
     if an_answer(0u64) != 1u64 { return 396u64 }
+    if an_ask(0u64) != 1u64 { return 396u64 }
     /* the anamnesis explains the act: statement became claim, question asked */
     if an_trace_n() != 2u64 { return 396u64 }
     if an_trace_kind(0u64) != (ANK_DECL as u64) { return 396u64 }

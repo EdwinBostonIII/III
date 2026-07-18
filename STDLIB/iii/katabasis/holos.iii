@@ -668,7 +668,7 @@ fn ho_mdep(i: u64, k: u64) -> u64 {
     if i == 30u64 { if k == 0u64 { return "STDLIB/iii/aether/xenos.iii;STDLIB/iii/aether/xring.iii;STDLIB/iii/aether/kalodion.iii;STDLIB/iii/verba/json.iii;STDLIB/iii/verba/builder.iii;STDLIB/iii/verba/lexicon.iii;STDLIB/iii/omnia/eidolos.iii" as u64 }
                     if k == 1u64 { return "STDLIB/iii/memoria/arena.iii" as u64 } }
     if i == 31u64 { if k == 0u64 { return "STDLIB/iii/aether/anglos.iii;STDLIB/iii/aether/proxenos.iii;STDLIB/iii/verba/nl_lex.iii;STDLIB/iii/verba/nl_parse.iii;STDLIB/iii/aether/xenos.iii;STDLIB/iii/aether/xring.iii;STDLIB/iii/verba/json.iii" as u64 }
-                    if k == 1u64 { return "STDLIB/iii/verba/builder.iii;STDLIB/iii/verba/lexicon.iii;STDLIB/iii/omnia/eidolos.iii;STDLIB/iii/memoria/arena.iii" as u64 } }
+                    if k == 1u64 { return "STDLIB/iii/aether/oikos.iii;STDLIB/iii/verba/builder.iii;STDLIB/iii/verba/lexicon.iii;STDLIB/iii/omnia/eidolos.iii;STDLIB/iii/memoria/arena.iii" as u64 } }
     return 0u64
 }
 /* parse one manifest row into a registration */

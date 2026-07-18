@@ -15,6 +15,20 @@
  *   - `&ARR[expr]` element-address -> `((&ARR as u64)+off) as *u8`.
  *   - witness_append_resolution(cycle_kind,payload,len) wrapper added for the
  *     hotstuff/aether consumers that publish a resolution fragment.
+ *
+ * THE DIET (2026-07-17, the HOLOS enabler): the eight giant byte-buffers
+ * (frag/prod/op/in/out ids, antecedents, payload, redact commits — 1,288 MiB)
+ * are VirtualAlloc'd LAZILY at wh_init instead of living in .bss.  Capacity is
+ * UNCHANGED (full gospel: 1M fragments, 32 antecedents, 64 MiB payload); what
+ * changed is WHERE the bytes live.  Why: every binary linking this organ used
+ * to carry ~1.3 GiB of SizeOfImage whether or not it ever published a fragment,
+ * and the union body of the one organism (COMPILED/iii) cannot fit the
+ * small-code-model's 2 GiB RIP-relative reach with the fleet's .bss summed.
+ * VirtualAlloc pages are demand-zero exactly like .bss; a process that never
+ * publishes never commits them.  A failed allocation leaves WH_INITED=0 and
+ * wh_publish refuses (-2/-1 family) — never a silent null deref.  The 1M-entry
+ * metadata columns (~30 MiB) stay static: they are the cheap majority of
+ * access sites and the minority of bytes.
  */
 module aether_witness_hook
 
@@ -29,7 +43,10 @@ extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn VirtualAlloc(vaddr: u64, vsize: u64, vtype: u32, vprot: u32) -> *u8 from "kernel32"
 const WH_SUITE_KECCAK : u32 = 1u32   /* cad CAD_SUITE_KECCAK256 */
+const WH_MEM_CR : u32 = 12288u32     /* MEM_COMMIT|MEM_RESERVE */
+const WH_PAGE_RW : u32 = 4u32        /* PAGE_READWRITE */
 
 const WH_OK              : i32 =  0i32
 const WH_E_FULL          : i32 = -1i32
@@ -42,33 +59,54 @@ const WH_MAX_FRAGMENTS   : u64 = 1048576u64
 const WH_PAYLOAD_AREA    : u64 = 67108864u64    /* 64 MiB rolling payload buffer */
 const WH_MAX_ANTECEDENTS : u32 = 32u32
 
-/* Per-fragment fixed fields (FULL gospel capacity: 1M fragments).  The large
- * byte-addressed buffers are declared [u64; bytes/8] rather than [u8; bytes]:
- * iiis allocates 8 bytes per array element (the u64-slot model), so [u8; B]
- * would reserve 8*B; [u64; B/8] reserves EXACTLY B bytes — same capacity,
- * fits the small code model's 2 GiB RIP-relative reach.  All access is via
- * byte-pointer arithmetic ((&ARR as u64)+offset) so the backing type is
- * transparent.  Capacity is identical to the gospel (no down-scaling). */
-var WH_FRAG_ID         : [u64; 4194304]    /* 1M*32 = 33554432 bytes */
-var WH_PROD_ID         : [u64; 4194304]
-var WH_OP_ID           : [u64; 4194304]
-var WH_IN_COMMIT       : [u64; 4194304]
-var WH_OUT_COMMIT      : [u64; 4194304]
+/* Per-fragment fixed fields (FULL gospel capacity: 1M fragments).  The eight
+ * large byte-addressed buffers are LAZY VirtualAlloc regions (see THE DIET in
+ * the header): each WH_* below holds the region BASE address (0 until wh_mem),
+ * and every access site is byte-pointer arithmetic (WH_X + offset), so the
+ * backing store is transparent.  Capacity is identical to the gospel (no
+ * down-scaling).  The 1M-entry metadata columns stay static .bss (~30 MiB). */
+var WH_FRAG_ID         : u64 = 0u64        /* base, 1M*32 = 33554432 bytes */
+var WH_PROD_ID         : u64 = 0u64        /* base, 33554432 bytes */
+var WH_OP_ID           : u64 = 0u64        /* base, 33554432 bytes */
+var WH_IN_COMMIT       : u64 = 0u64        /* base, 33554432 bytes */
+var WH_OUT_COMMIT      : u64 = 0u64        /* base, 33554432 bytes */
 var WH_AT_TIME         : [u64; 1048576]
 var WH_REV_TAG         : [u8;  1048576]
 var WH_PHASE_ID        : [u8;  1048576]
 var WH_PILLAR_ID       : [u16; 1048576]
 var WH_REVOKED         : [u8;  1048576]
 var WH_ANTE_COUNT      : [u32; 1048576]
-var WH_ANTE            : [u64; 134217728]   /* 1M*32*32 = 1073741824 bytes (1 GiB) */
+var WH_ANTE            : u64 = 0u64        /* base, 1M*32*32 = 1073741824 bytes (1 GiB) */
 var WH_PAYLOAD_OFFSET  : [u64; 1048576]
 var WH_PAYLOAD_LEN     : [u32; 1048576]
-var WH_PAYLOAD_BUF     : [u64; 8388608]     /* 67108864 bytes (64 MiB) */
+var WH_PAYLOAD_BUF     : u64 = 0u64        /* base, 67108864 bytes (64 MiB) */
 var WH_PAYLOAD_USED    : u64 = 0u64
-/* M6 provable forgetting: redaction flag + the commitment of the forgotten payload.
- * [u64; 4194304] = 1M*32 = 33554432 bytes (32 MiB) -- well within the 2 GiB reach. */
+/* M6 provable forgetting: redaction flag + the commitment of the forgotten payload. */
 var WH_REDACTED        : [u8;  1048576]
-var WH_REDACT_COMMIT   : [u64; 4194304]
+var WH_REDACT_COMMIT   : u64 = 0u64        /* base, 1M*32 = 33554432 bytes (32 MiB) */
+
+/* Idempotent per-region allocator: each base is claimed at most once; a zero
+ * return from the OS leaves that base 0 and wh_mem reports failure, so a
+ * retried wh_init claims only what is still missing (no leak, no double-alloc). */
+fn wh_mem() -> i32 {
+    if WH_FRAG_ID == 0u64      { WH_FRAG_ID      = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_PROD_ID == 0u64      { WH_PROD_ID      = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_OP_ID == 0u64        { WH_OP_ID        = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_IN_COMMIT == 0u64    { WH_IN_COMMIT    = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_OUT_COMMIT == 0u64   { WH_OUT_COMMIT   = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_ANTE == 0u64         { WH_ANTE         = (VirtualAlloc(0u64, 1073741824u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_PAYLOAD_BUF == 0u64  { WH_PAYLOAD_BUF  = (VirtualAlloc(0u64, 67108864u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_REDACT_COMMIT == 0u64 { WH_REDACT_COMMIT = (VirtualAlloc(0u64, 33554432u64, WH_MEM_CR, WH_PAGE_RW)) as u64 }
+    if WH_FRAG_ID == 0u64 { return WH_E_FULL }
+    if WH_PROD_ID == 0u64 { return WH_E_FULL }
+    if WH_OP_ID == 0u64 { return WH_E_FULL }
+    if WH_IN_COMMIT == 0u64 { return WH_E_FULL }
+    if WH_OUT_COMMIT == 0u64 { return WH_E_FULL }
+    if WH_ANTE == 0u64 { return WH_E_FULL }
+    if WH_PAYLOAD_BUF == 0u64 { return WH_E_FULL }
+    if WH_REDACT_COMMIT == 0u64 { return WH_E_FULL }
+    return WH_OK
+}
 
 var WH_NEXT_IDX        : u64 = 0u64
 var WH_EPOCH_START_IDX : u64 = 0u64
@@ -86,6 +124,7 @@ var WH_RES_ID          : [u8; 32]   /* resolution fragment id sink */
  * witness spine orders fragments by the deterministic monotonic index WH_NEXT_IDX (and epoch
  * WH_EPOCH_INDEX), never by wall-clock -- seeding from a real clock would break III determinism. */
 fn wh_init(initial_time: u64) -> i32 @export {
+    if wh_mem() != WH_OK { WH_INITED = 0u8   return WH_E_FULL }
     WH_NEXT_IDX = 0u64
     WH_EPOCH_START_IDX = 0u64
     WH_EPOCH_INDEX = 0u64
@@ -104,13 +143,13 @@ fn wh_init(initial_time: u64) -> i32 @export {
  *   rev_tag || phase || pillar || ante_count || antecedents || payload_len || payload ) */
 fn wh_compute_frag_id(idx: u64, out_id: *u8) -> i32 {
     cad_begin(WH_SUITE_KECCAK)
-    let prod_p : *u8 = ((&WH_PROD_ID as u64) + idx * 32u64) as *u8
+    let prod_p : *u8 = (WH_PROD_ID + idx * 32u64) as *u8
     cad_payload(prod_p as u64, 32u64)
-    let op_p   : *u8 = ((&WH_OP_ID as u64) + idx * 32u64) as *u8
+    let op_p   : *u8 = (WH_OP_ID + idx * 32u64) as *u8
     cad_payload(op_p as u64, 32u64)
-    let in_p   : *u8 = ((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8
+    let in_p   : *u8 = (WH_IN_COMMIT + idx * 32u64) as *u8
     cad_payload(in_p as u64, 32u64)
-    let out_p  : *u8 = ((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8
+    let out_p  : *u8 = (WH_OUT_COMMIT + idx * 32u64) as *u8
     cad_payload(out_p as u64, 32u64)
     let tmp : *u8 = (&WH_TMP16 as u64) as *u8
     let t : u64 = WH_AT_TIME[idx]
@@ -134,7 +173,7 @@ fn wh_compute_frag_id(idx: u64, out_id: *u8) -> i32 {
     tmp[15u64] = ((ac >> 24u32) & 0xFFu32) as u8
     cad_payload(tmp as u64, 16u64)
     if ac > 0u32 {
-        let ap : *u8 = ((&WH_ANTE as u64) + idx * 32u64 * 32u64) as *u8
+        let ap : *u8 = (WH_ANTE + idx * 32u64 * 32u64) as *u8
         cad_payload(ap as u64, (ac as u64) * 32u64)
     }
     let lp : *u8 = (&WH_LENBUF as u64) as *u8
@@ -145,7 +184,7 @@ fn wh_compute_frag_id(idx: u64, out_id: *u8) -> i32 {
     lp[3u64] = ((pl_len >> 24u32) & 0xFFu32) as u8
     cad_payload(lp as u64, 4u64)
     if pl_len > 0u32 {
-        let pp : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
+        let pp : *u8 = (WH_PAYLOAD_BUF + WH_PAYLOAD_OFFSET[idx]) as *u8
         cad_payload(pp as u64, pl_len as u64)
     }
     cad_final(out_id as u64)
@@ -163,10 +202,10 @@ fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8,
     let pl : u64 = payload_len as u64
     if (WH_PAYLOAD_USED + pl) > WH_PAYLOAD_AREA { return 0xFFFFFFFFFFFFFFFFu64 }
     let idx : u64 = WH_NEXT_IDX
-    ident_copy(producer,   ((&WH_PROD_ID as u64) + idx * 32u64) as *u8)
-    ident_copy(opid,       ((&WH_OP_ID as u64) + idx * 32u64) as *u8)
-    ident_copy(in_commit,  ((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8)
-    ident_copy(out_commit, ((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8)
+    ident_copy(producer,   (WH_PROD_ID + idx * 32u64) as *u8)
+    ident_copy(opid,       (WH_OP_ID + idx * 32u64) as *u8)
+    ident_copy(in_commit,  (WH_IN_COMMIT + idx * 32u64) as *u8)
+    ident_copy(out_commit, (WH_OUT_COMMIT + idx * 32u64) as *u8)
     let new_time : u64 = at_advance()
     WH_AT_TIME[idx]   = new_time
     WH_REV_TAG[idx]   = revtag
@@ -176,7 +215,7 @@ fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8,
     WH_REDACTED[idx]  = 0u8
     WH_ANTE_COUNT[idx] = n_ante
     if n_ante > 0u32 {
-        let dst : *u8 = ((&WH_ANTE as u64) + idx * 32u64 * 32u64) as *u8
+        let dst : *u8 = (WH_ANTE + idx * 32u64 * 32u64) as *u8
         let mut i : u64 = 0u64
         while i < (n_ante as u64) * 32u64 {
             dst[i] = antecedents[i]
@@ -186,7 +225,7 @@ fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8,
     WH_PAYLOAD_OFFSET[idx] = WH_PAYLOAD_USED
     WH_PAYLOAD_LEN[idx]    = payload_len
     if payload_len > 0u32 {
-        let dst2 : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_USED) as *u8
+        let dst2 : *u8 = (WH_PAYLOAD_BUF + WH_PAYLOAD_USED) as *u8
         let mut j : u64 = 0u64
         while j < pl {
             dst2[j] = payload[j]
@@ -194,9 +233,9 @@ fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8,
         }
         WH_PAYLOAD_USED = WH_PAYLOAD_USED + pl
     }
-    wh_compute_frag_id(idx, ((&WH_FRAG_ID as u64) + idx * 32u64) as *u8)
+    wh_compute_frag_id(idx, (WH_FRAG_ID + idx * 32u64) as *u8)
     if (out_frag_id as u64) != 0u64 {
-        ident_copy(((&WH_FRAG_ID as u64) + idx * 32u64) as *u8, out_frag_id)
+        ident_copy((WH_FRAG_ID + idx * 32u64) as *u8, out_frag_id)
     }
     WH_NEXT_IDX = idx + 1u64
     return idx
@@ -215,8 +254,8 @@ fn wh_revoke(idx: u64) -> i32 @export {
 fn wh_redact(idx: u64) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
     let pl : u64 = WH_PAYLOAD_LEN[idx] as u64
-    let src : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
-    let com : *u8 = ((&WH_REDACT_COMMIT as u64) + idx * 32u64) as *u8
+    let src : *u8 = (WH_PAYLOAD_BUF + WH_PAYLOAD_OFFSET[idx]) as *u8
+    let com : *u8 = (WH_REDACT_COMMIT + idx * 32u64) as *u8
     cad_oneshot(WH_SUITE_KECCAK, src as *u8, pl, com as *u8)   /* H2: redaction commitment via cad (byte-identical) */
     let mut i : u64 = 0u64
     while i < pl { src[i] = 0u8  i = i + 1u64 }
@@ -229,19 +268,19 @@ fn wh_is_redacted(idx: u64) -> u8 @export {
 }
 fn wh_redaction_commit(idx: u64, out: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_REDACT_COMMIT as u64) + idx * 32u64) as *u8, out)
+    ident_copy((WH_REDACT_COMMIT + idx * 32u64) as *u8, out)
     return WH_OK
 }
 fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_FRAG_ID as u64) + idx * 32u64) as *u8, out_id)
+    ident_copy((WH_FRAG_ID + idx * 32u64) as *u8, out_id)
     return WH_OK
 }
 fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
     let pl : u64 = WH_PAYLOAD_LEN[idx] as u64
     if pl > max_len { return WH_E_BAD_PAYLOAD }
-    let src : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
+    let src : *u8 = (WH_PAYLOAD_BUF + WH_PAYLOAD_OFFSET[idx]) as *u8
     let mut i : u64 = 0u64
     while i < pl {
         out_buf[i] = src[i]
@@ -255,22 +294,22 @@ fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 @e
  * scalar getters return the value directly (bad idx -> 0), mirroring wh_next_idx. */
 fn wh_get_producer(idx: u64, out_id: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_PROD_ID as u64) + idx * 32u64) as *u8, out_id)
+    ident_copy((WH_PROD_ID + idx * 32u64) as *u8, out_id)
     return WH_OK
 }
 fn wh_get_op_id(idx: u64, out_id: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_OP_ID as u64) + idx * 32u64) as *u8, out_id)
+    ident_copy((WH_OP_ID + idx * 32u64) as *u8, out_id)
     return WH_OK
 }
 fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8, out_id)
+    ident_copy((WH_OUT_COMMIT + idx * 32u64) as *u8, out_id)
     return WH_OK
 }
 fn wh_get_in_commit(idx: u64, out_id: *u8) -> i32 @export {
     if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
-    ident_copy(((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8, out_id)
+    ident_copy((WH_IN_COMMIT + idx * 32u64) as *u8, out_id)
     return WH_OK
 }
 fn wh_get_pillar(idx: u64) -> u16 @export {
@@ -298,7 +337,7 @@ fn wh_get_ante(idx: u64, ante_idx: u32, out_id: *u8) -> i32 @export {
     let ac : u32 = WH_ANTE_COUNT[idx]
     if ante_idx >= ac { return WH_E_BAD_IDX }
     let off : u64 = idx * 32u64 * 32u64 + (ante_idx as u64) * 32u64
-    ident_copy(((&WH_ANTE as u64) + off) as *u8, out_id)
+    ident_copy((WH_ANTE + off) as *u8, out_id)
     return WH_OK
 }
 
@@ -315,7 +354,7 @@ fn wh_epoch_close() -> u64 @export {
     let mut i : u64 = WH_EPOCH_START_IDX
     while i < WH_NEXT_IDX {
         if WH_REVOKED[i] == 0u8 {
-            cad_payload((&WH_FRAG_ID as u64) + i * 32u64, 32u64)
+            cad_payload(WH_FRAG_ID + i * 32u64, 32u64)
         }
         i = i + 1u64
     }

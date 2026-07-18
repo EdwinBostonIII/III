@@ -79,8 +79,19 @@ const SH_VFREE  : u32 = 5u32
 const SH_SLEEP  : u32 = 6u32
 const SH_NOOP0  : u32 = 7u32     /* fputc/fputs/fflush/signal/getenv/fprintf tier: result 0, no effect */
 
-/* ---- the producer's live machine (scaffolding; discarded after the run) ---- */
-var EMEM : [u8; 134217728]       /* 128 MiB flat linear memory (the reference's world size) */
+/* ---- the producer's live machine (scaffolding; discarded after the run) ----
+ * THE DIET (2026-07-17, the HOLOS enabler): EMEM is a LAZY VirtualAlloc region,
+ * not .bss — under the 8-bytes-per-element slot model a [u8; 128 MiB] array
+ * reserved 1 GiB of image, which alone breached the one-body 2 GiB RIP wall.
+ * Capacity UNCHANGED (128 MiB, the reference's world size); pages are
+ * demand-zero exactly like .bss; claimed at world_init / replay entry. */
+var EMEM : u64 = 0u64            /* base of the 128 MiB flat linear memory */
+extern @abi(c-msvc-x64) fn VirtualAlloc(vaddr: u64, vsize: u64, vtype: u32, vprot: u32) -> *u8 from "kernel32"
+fn sve_emem() -> u32 {
+    if EMEM == 0u64 { EMEM = (VirtualAlloc(0u64, 134217728u64, 12288u32, 4u32)) as u64 }
+    if EMEM == 0u64 { return 0u32 }
+    return 1u32
+}
 var EVS  : [u64; 16384]
 var EVSP : u32 = 0u32
 var ELOC : [u64; 131072]         /* frame `depth` owns ELOC[depth*256 .. +256] */
@@ -169,8 +180,8 @@ fn erd8(i: u64) -> u64 { let mut v:u64=0u64  let mut k:u64=0u64  while k<8u64 { 
 fn eu16(i: u64) -> u64 { return (eb(i) as u64) | ((eb(i+1u64) as u64) << 8u64) }
 
 /* ---- producer memory (mirrors the reference mb/msb/mld/mst semantics) ---- */
-fn emb(a: u64) -> u32 { if a < 134217728u64 { return EMEM[a] as u32 }  return 0u32 }
-fn emsb(a: u64, v: u32) { if a < 134217728u64 { EMEM[a] = (v & 255u32) as u8  if a >= EMEM_HI { EMEM_HI = a + 1u64 } } }
+fn emb(a: u64) -> u32 { if a < 134217728u64 { let ep : *u8 = EMEM as *u8   return ep[a] as u32 }  return 0u32 }
+fn emsb(a: u64, v: u32) { if a < 134217728u64 { let ep : *u8 = EMEM as *u8   ep[a] = (v & 255u32) as u8  if a >= EMEM_HI { EMEM_HI = a + 1u64 } } }
 fn emld(a: u64, w: u32, sgn: u32) -> u64 {
     let mut v : u64 = 0u64  let mut k : u64 = 0u64
     while k < (w as u64) { v = v | ((emb(a+k)) as u64 << (k*8u64))  k=k+1u64 }
@@ -250,18 +261,20 @@ fn sve_load(mp: u64, ml: u64) -> i32 @export {
 
 /* ---- shared world init: zero touched memory, stage data image + argv (the reference's exact map) ---- */
 fn world_init() {
+    sve_emem()
+    let ep : *u8 = EMEM as *u8
     let mut z : u64 = 0u64
     let hi : u64 = EMEM_HI
-    while z < hi { EMEM[z] = 0u8  z = z + 1u64 }          /* erase exactly the touched span */
+    while z < hi { ep[z] = 0u8  z = z + 1u64 }            /* erase exactly the touched span */
     let mut z2 : u64 = 134213424u64                        /* argv region: always re-staged fresh */
-    while z2 < 134213760u64 { EMEM[z2] = 0u8  z2 = z2 + 1u64 }
+    while z2 < 134213760u64 { ep[z2] = 0u8  z2 = z2 + 1u64 }
     EMEM_HI = 0u64
-    let mut k : u64 = 0u64  while k < EDLEN { EMEM[k] = eb(EDOFF + k) as u8  k = k + 1u64 }
+    let mut k : u64 = 0u64  while k < EDLEN { ep[k] = eb(EDOFF + k) as u8  k = k + 1u64 }
     if EDLEN > EMEM_HI { EMEM_HI = EDLEN }
     /* argv world: table at 134213424, strings at 134213680, argv0 = "iiis-0", argc = 1 (exact reference map) */
-    EMEM[134213680u64]=105u8 EMEM[134213681u64]=105u8 EMEM[134213682u64]=105u8 EMEM[134213683u64]=115u8
-    EMEM[134213684u64]=45u8  EMEM[134213685u64]=48u8  EMEM[134213686u64]=0u8
-    let mut k8 : u64 = 0u64  while k8 < 8u64 { EMEM[134213424u64+k8] = ((134213680u64 >> (8u64*k8)) & 255u64) as u8  k8=k8+1u64 }
+    ep[134213680u64]=105u8 ep[134213681u64]=105u8 ep[134213682u64]=105u8 ep[134213683u64]=115u8
+    ep[134213684u64]=45u8  ep[134213685u64]=48u8  ep[134213686u64]=0u8
+    let mut k8 : u64 = 0u64  while k8 < 8u64 { ep[134213424u64+k8] = ((134213680u64 >> (8u64*k8)) & 255u64) as u8  k8=k8+1u64 }
     EMEM_HI = 134213760u64
 }
 
@@ -586,7 +599,8 @@ fn sve_replay_upto(nlim: u64) -> i32 {
             if op == 0x8Bu32 {
                 if r != RARENA_TOP { return rdiverge(i, 3u32) }
                 RAB[dep] = RARENA_TOP
-                let mut z:u64=0u64  while z < a { if (RARENA_TOP + z) < 134217728u64 { EMEM[RARENA_TOP + z] = 0u8 }  z=z+1u64 }
+                let ezp : *u8 = EMEM as *u8
+                let mut z:u64=0u64  while z < a { if (RARENA_TOP + z) < 134217728u64 { ezp[RARENA_TOP + z] = 0u8 }  z=z+1u64 }
                 RARENA_TOP = RARENA_TOP + a }
         }
         if kind == K_CALL {

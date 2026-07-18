@@ -53,6 +53,12 @@ extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
 
+/* the live wire: a real TCP connection is one more BYTE SOURCE for the same
+ * framing law.  net's recv is capability-gated (the handle already carries
+ * the DIAL right), so kl_feed_socket holds no capability itself -- the
+ * caller (an application granted the right to dial) owns that. */
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 from "net.iii"
+
 const KL_CHUNK : u64 = 65536u64          /* one capture chunk (the file cap)   */
 
 /* ==================== the cable's state ==================== */
@@ -114,6 +120,23 @@ fn kl_feed(path: u64) -> u64 @export {
     if n == 0u64 { return 0u64 }
     if n > KL_CHUNK { KL_RFILE = KL_RFILE + 1u64   return 0u64 }
     return kl_feed_mem((&KL_FBUF) as u64, n)
+}
+
+/* THE LIVE WIRE: drain one recv from a connected socket handle into the
+ * framing law.  The handle already carries the DIAL right (the caller
+ * minted and holds the capability -- the cable never opens a socket, it
+ * only frames what a granted connection delivers).  Returns frames pushed;
+ * a recv error or a closed peer pushes nothing (the stream simply ends).
+ * This is the ONLY line that differs between a file feed and a live NIC
+ * feed -- everything downstream (the framing, the vein, the door, every
+ * law) is already the hot path. */
+fn kl_feed_socket(handle_id: u64, budget: u64) -> u64 @export {
+    let mut cap : u64 = budget
+    if cap == 0u64 { cap = KL_CHUNK }
+    if cap > KL_CHUNK { cap = KL_CHUNK }
+    let got : i32 = net_tcp_recv(handle_id, (&KL_FBUF) as u64, cap)
+    if got <= 0i32 { return 0u64 }
+    return kl_feed_mem((&KL_FBUF) as u64, got as u64)
 }
 
 /* ==================== the cable's surface ==================== */

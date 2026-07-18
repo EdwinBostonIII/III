@@ -1,0 +1,109 @@
+/* STDLIB/build/kalodion/klwire_main.iii -- THE LIVE WIRE gate probe.
+ *
+ * The membrane's producer, run over a REAL TCP socket.  The census proves
+ * the framing law purely (kl 405..409); THIS proof proves the last line --
+ * that a live connection's bytes reach the framer -- against an actual
+ * localhost peer, using the 387 single-process pattern (a client connects
+ * and sends BEFORE the server accepts, so kernel loopback buffering avoids
+ * the recv deadlock).  Real capabilities are minted (cap_env_init +
+ * attenuate to DIAL|LISTEN), a real socket carries real records, and the
+ * SAME door judges them.  Network I/O lives in a GATE, never in the census
+ * condition-of-motion (which must stay pure and never flake).
+ * exit 0 = the wire ran and the door judged; non-zero = the failed stage. */
+module klwire_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+
+extern @abi(c-msvc-x64) fn kl_feed_socket(handle_id: u64, budget: u64) -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_selfprove() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_reset() -> i32 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_drain(budget: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drained() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drain_admitted() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_runheard() -> u64 from "xenos.iii"
+
+const NET_RIGHT_DIAL   : u64 = 0x0020u64
+const NET_RIGHT_LISTEN : u64 = 0x0040u64
+const WIRE_PORT : u32 = 51733u32
+
+/* the real feed carried over the socket: three depth/trade records plus a
+ * torn reconnect line (the wire carries lies; the door counts them) */
+var KW_FEED : [u8; 256]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn kw_put(off: u64, s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut o : u64 = off
+    while p[i] != 0u8 { KW_FEED[o] = p[i]   o = o + 1u64   i = i + 1u64 }
+    return o
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    /* the pure laws still hold (the wire rides proven framing) */
+    if xr_selfprove() != 0u64 { ps("wire: vein RED\n" as u64)   return 1u64 }
+    if xn_selfprove() != 0u64 { ps("wire: door RED\n" as u64)   return 2u64 }
+    if kl_selfprove() != 0u64 { ps("wire: cable RED (pure framing)\n" as u64)   return 3u64 }
+    ps("wire: vein+door+cable pure laws green\n" as u64)
+
+    /* build the feed: three whole records + a torn line */
+    let mut o : u64 = 0u64
+    o = kw_put(o, "{\"chan\":\"depth\",\"sym\":\"eth\",\"px\":3000}\n" as u64)
+    o = kw_put(o, "{\"chan\":\"trade\",\"sym\":\"eth\",\"qty\":2}\n" as u64)
+    o = kw_put(o, "{\"chan\":\"hb\",\"seq\":9\n" as u64)
+    o = kw_put(o, "{\"chan\":\"trade\",\"sym\":\"eth\",\"qty\":4}\n" as u64)
+
+    /* mint a real capability: root -> DIAL|LISTEN */
+    let root : u64 = cap_env_init()
+    if root == 0u64 { ps("wire: no root cap\n" as u64)   return 4u64 }
+    let nc : u64 = cap_attenuate(root, NET_RIGHT_DIAL | NET_RIGHT_LISTEN, 0u64)
+    if nc == 0u64 { ps("wire: no net cap\n" as u64)   return 4u64 }
+
+    /* listen on 127.0.0.1:PORT */
+    net_pack_sockaddr_ipv4((&KW_FEED) as u64 + 200u64, 0x7F000001u32, WIRE_PORT)
+    let lh : u64 = net_tcp_listen_ipv4(nc, (&KW_FEED) as u64 + 200u64, 16u32)
+    if lh == 0u64 { ps("wire: listen failed (port busy or network denied)\n" as u64)   return 5u64 }
+
+    /* the 387 pattern: connect + send BEFORE accept */
+    let ch : u64 = net_tcp_connect_ipv4(nc, (&KW_FEED) as u64 + 200u64, 16u32)
+    if ch == 0u64 { ps("wire: connect failed\n" as u64)   net_close(lh)   return 6u64 }
+    let sent : i32 = net_tcp_send(ch, (&KW_FEED) as u64, o)
+    if sent <= 0i32 { ps("wire: send failed\n" as u64)   net_close(ch)   net_close(lh)   return 7u64 }
+
+    let ah : u64 = net_tcp_accept(lh, nc)
+    if ah == 0u64 { ps("wire: accept failed\n" as u64)   net_close(ch)   net_close(lh)   return 8u64 }
+
+    /* THE WIRE: the socket's bytes cross into the framing law and the vein */
+    xr_reset()
+    let u0 : u64 = xn_runheard()
+    let framed : u64 = kl_feed_socket(ah, 0u64)
+    net_close(ah)
+    net_close(ch)
+    net_close(lh)
+    if framed != 4u64 { ps("wire: framed " as u64)   pu(framed)   ps(" (expected 4)\n" as u64)   return 9u64 }
+
+    /* THE SAME DOOR judges the socket-carried records */
+    let adm : u64 = xn_drain(0u64)
+    ps("wire: a REAL TCP socket carried " as u64)   pu(framed)
+    ps(" records; the door drained " as u64)   pu(xn_drained())
+    ps(", admitted " as u64)   pu(adm)   putchar(10i32)
+    if xn_drained() != 4u64 { ps("wire: drain count wrong\n" as u64)   return 10u64 }
+    if adm != 3u64 { ps("wire: admit count wrong (expected 3)\n" as u64)   return 10u64 }
+    if xn_runheard() != (u0 + 1u64) { ps("wire: the torn line was not heard as UNHEARD\n" as u64)   return 10u64 }
+    ps("wire: the torn reconnect line UNHEARD and remembered -- the wire is real, the door judged it\n" as u64)
+    ps("THE LIVE WIRE RAN: bytes crossed an actual localhost TCP socket into the vein and out the one door\n" as u64)
+    return 0u64
+}

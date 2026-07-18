@@ -9,7 +9,8 @@ jointly entail.*
 Organ: `STDLIB/iii/omnia/eidolos.iii` (the logos family, beside the bus it
 speaks for).  Tool: `COMPILED/iii-eidolos` (`COMPILER/BOOT/eidolos_main.iii`,
 `build_iii_eidolos.sh` — six translation units total).  No gate, no KAT:
-`eol_selfprove` (arms 70..83) re-derives every law below at every invocation,
+`eol_selfprove` (arms 70..84) re-derives every law below at every invocation
+(and `eol_keep_selfprove`, arms 425..430, the kept-house law),
 before any verb may move.
 
 ## The five rules (this is the whole language)
@@ -76,6 +77,38 @@ identity).  Any spelling of the axiom derives the same address and the same
 geometry.  **The handshake**: two systems compare axiom addresses before
 merging scrolls — equal means one language under one law; unequal means drift,
 caught before a single claim crosses.
+
+## The Kept House (the one barometer's standing truth)
+
+Only one barometer persists.  The axiom is its handshake; the **kept house**
+is its standing truth: the logos seals the coherent standing scroll — the
+canonical text, its address, and its claim *geography* (each claim's span and
+the exact spans of its two things, recorded by `eol_write` as the canon is
+emitted, never re-parsed) — and every judgment against standing knowledge is
+the logos's own act:
+
+- `eol_keep` — seal the coherent standing scroll as THE KEPT HOUSE
+  (an incoherent scroll cannot be kept; the prior house survives the refusal);
+- `eol_restand` — stand the kept house again (the ONE restore);
+- `eol_judge_claim` — one claim judged over the freshly re-stood house, so no
+  question's parse or interning ever colours the next (the mutation trap every
+  caller once dodged with a private copy is healed at the root);
+- `eol_union_with` — a guest read side by side with the kept house, the union
+  lawchecked and left standing (growth's judgment);
+- `eol_reduce` — the kept house refounded on its minimal basis, every drop
+  justified by a live derivation from the remainder (closure preserved
+  exactly, idempotent);
+- `eol_verify` — text against address, the self-verification every journal
+  line and hearth file lives by.
+
+Organs keep FILES and PROTOCOLS; the logos keeps TRUTH.  The hearth (oikos)
+persists the kept house across processes; the sponsor (proxenos) judges
+proposals through `eol_judge_claim`; no organ holds a copy of the canon or
+splits claim text privately.  The census speaks the law as the boundary-synod
+theorem `[house < rederivation]` (the hearth testifies `[house < judgment]`,
+the door testifies `[judgment = rederivation]`; only the union derives it).
+Proven by `eol_keep_selfprove` (arms 425..430) at every bearer's condition of
+motion.
 
 ## The speaker convention (adoption law)
 

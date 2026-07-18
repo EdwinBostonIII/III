@@ -360,7 +360,7 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
             putchar(10i32)
         }
         let s3c : u32 = erg_seat_horos()
-        ps("  boundary-synod (door+vein+cable+tongue+sponsor)      : " as u64)
+        ps("  boundary-synod (door+vein+cable+tongue+sponsor+hearth): " as u64)
         if s3c == 0u32 {
             ps("derived, union " as u64)
             pu(erg_horos_addr())

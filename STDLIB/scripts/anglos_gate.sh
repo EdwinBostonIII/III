@@ -7,6 +7,9 @@
 # (eidolos + isub), the universal lexicon, and the foreign wire the house
 # already owns (verba/json + verba/builder + memoria/arena), links the probe,
 # and demands:
+#   0. THE LOGOS GREEN (eidolos kept-house 425..430): the ONE BAROMETER --
+#      keep/restand/judge/union/reduce/verify -- proven before any organ
+#      that defers to it is allowed to run.
 #   1. THE VEIN GREEN (xring 120..124) and THE DOOR GREEN (xenos 109..118).
 #   2. THE TONGUE GREEN (anglos 390..399): one sentence one claim through the
 #      one door deterministic twice; all three verbs reached and entailed
@@ -88,6 +91,7 @@ if ! cmp -s "$T/run1.txt" "$T/run2.txt"; then
     diff "$T/run1.txt" "$T/run2.txt" | head -10
     exit 5
 fi
+grep -q "^scroll logos  = 425..430 green" "$T/run1.txt"  || { echo "[anglos_gate] NO LOGOS"; exit 6; }
 grep -q "^scroll vein   = 120..124 green" "$T/run1.txt"  || { echo "[anglos_gate] NO VEIN"; exit 6; }
 grep -q "^scroll door   = 109..118 green" "$T/run1.txt"  || { echo "[anglos_gate] NO DOOR"; exit 6; }
 grep -q "^scroll anglos = 390..399 green" "$T/run1.txt"  || { echo "[anglos_gate] NO TONGUE"; exit 6; }

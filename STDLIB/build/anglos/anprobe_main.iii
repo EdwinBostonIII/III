@@ -37,6 +37,7 @@ extern @abi(c-msvc-x64) fn px_novel_idx(j: u64) -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn an_claim_len(i: u64) -> u64 from "anglos.iii"
 extern @abi(c-msvc-x64) fn an_claim_byte(i: u64, k: u64) -> u8 from "anglos.iii"
 extern @abi(c-msvc-x64) fn ok_selfprove() -> u64 from "oikos.iii"
+extern @abi(c-msvc-x64) fn eol_keep_selfprove() -> u64 from "eidolos.iii"
 
 var AP_SAY : [u8; 4096]
 
@@ -44,6 +45,12 @@ fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p
 fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
 
 fn main(argc: i32, argv: u64) -> u64 {
+    /* the ONE BAROMETER first: the logos's kept house underlies every organ
+     * below -- if the logos cannot keep, judge, union, reduce, and verify,
+     * nothing downstream may run */
+    let lp : u64 = eol_keep_selfprove()
+    if lp != 0u64 { ps("scroll logos  = RED arm " as u64)   pu(lp)   putchar(10i32)   return 10u64 }
+    ps("scroll logos  = 425..430 green\n" as u64)
     let vp : u64 = xr_selfprove()
     if vp != 0u64 { ps("scroll vein   = RED arm " as u64)   pu(vp)   putchar(10i32)   return 1u64 }
     ps("scroll vein   = 120..124 green\n" as u64)

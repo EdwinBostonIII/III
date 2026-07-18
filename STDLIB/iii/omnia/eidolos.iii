@@ -50,8 +50,19 @@
  * Same text -> same geometry; same geometry -> isomorphic shape (names erased,
  * exactly what Ring -1 is allowed to see).  No other organ is imported.
  *
- * Truth is a CONDITION OF MOTION: eol_selfprove (arms 70..81, positive +
- * negative controls) re-derives every rule above at every invocation.  NO
+ * THE ONE BAROMETER: the logos is the system's single seat of judgment --
+ * the axiom is the handshake, and the KEPT HOUSE (the standing scroll
+ * sealed with its address and claim geography, at the end of this file) is
+ * the single seat of standing truth.  Organs keep files and protocols;
+ * they hold no copy of the canon, split no claim text, and judge nothing
+ * privately: eol_keep / eol_restand / eol_judge_claim / eol_union_with /
+ * eol_reduce / eol_verify are the faces through which every house is
+ * stood, grown, refounded, and questioned.  The census speaks it as the
+ * boundary-synod theorem [house < rederivation].
+ *
+ * Truth is a CONDITION OF MOTION: eol_selfprove (arms 70..84, positive +
+ * negative controls) re-derives every rule above at every invocation, and
+ * eol_keep_selfprove (arms 425..430) re-derives the kept-house law.  NO
  * gate, NO KAT -- verification lives inside (the kardia/doxa pattern).
  * Hexad: kind_glyph.  Ring R0. */
 module eidos_eidolos
@@ -454,6 +465,16 @@ fn eol_claim_gt(i: u64, j: u64) -> u64 {
     return eol_thing_gt(EOL_CB[i], EOL_CB[j])
 }
 var EOL_ORD : [u64; 256]
+/* the canon's GEOGRAPHY, recorded as it is written (never re-parsed): each
+ * emitted claim's span in EOL_OUT and the exact lengths of its two thing
+ * texts -- the anatomy eol_keep seals so the house faces below can judge
+ * claims without ever scanning text for a verb */
+var EOL_GSO : [u64; 256]                 /* claim i: span offset in EOL_OUT     */
+var EOL_GSL : [u64; 256]                 /* claim i: span length '['..']'       */
+var EOL_GAL : [u64; 256]                 /* claim i: thing-a text length        */
+var EOL_GBL : [u64; 256]                 /* claim i: thing-b text length        */
+var EOL_GVV : [u64; 256]                 /* claim i: verb                       */
+var EOL_GSN : u64 = 0u64
 fn eol_oput(c: u8) -> i32 {
     if EOL_ON < EOL_OCAP { EOL_OUT[EOL_ON] = c   EOL_ON = EOL_ON + 1u64 }
     return 0i32
@@ -477,6 +498,10 @@ fn eol_write() -> u64 @export {
     while i < EOL_CN {
         if i > 0u64 { eol_oput(32u8) }
         let c : u64 = EOL_ORD[i]
+        EOL_GSO[i] = EOL_ON
+        EOL_GAL[i] = EOL_TLN[EOL_CA[c]]
+        EOL_GBL[i] = EOL_TLN[EOL_CB[c]]
+        EOL_GVV[i] = EOL_CV[c]
         eol_oput(91u8)
         let ta : u64 = EOL_CA[c]
         let mut k : u64 = 0u64
@@ -488,8 +513,10 @@ fn eol_write() -> u64 @export {
         k = 0u64
         while k < EOL_TLN[tb] { eol_oput(EOL_ARE[EOL_TOF[tb] + k])   k = k + 1u64 }
         eol_oput(93u8)
+        EOL_GSL[i] = EOL_ON - EOL_GSO[i]
         i = i + 1u64
     }
+    EOL_GSN = EOL_CN
     return EOL_ON
 }
 fn eol_out_len() -> u64 @export { return EOL_ON }
@@ -1136,6 +1163,303 @@ fn eol_selfprove() -> u64 @export {
     let rw84 : u64 = EOL_RWIT
     if eol_swp("a" as u64, "b" as u64) != 2u64 { eol_reset()   return 84u64 }
     if EOL_RWIT != rw84 + 1u64 { eol_reset()   return 84u64 }
+    eol_reset()
+    return 0u64
+}
+
+/* ==================== THE KEPT HOUSE (the logos keeps what it knows) ====================
+ * The scroll state above is TRANSIENT -- one parse away from gone -- and for
+ * as long as that was all there was, every organ that needed to judge
+ * against standing knowledge kept a PRIVATE copy of the canon and its own
+ * restore dance, and carried its own text-splitter to take claims apart.
+ * Each such keeper was definitionally a second logos, and the system split.
+ * THE ONE BAROMETER LAW ends it: the logos itself KEEPS the standing house
+ * -- the canonical text, its address, and its claim GEOGRAPHY (recorded by
+ * eol_write as the canon is emitted, never re-parsed) -- and every judgment
+ * against the house is the logos's own act:
+ *
+ *   eol_keep         seal the coherent standing scroll as THE KEPT HOUSE
+ *   eol_restand      stand the kept house again (the ONE restore)
+ *   eol_judge_claim  one claim judged over the freshly re-stood house; no
+ *                    question ever colours another (the interning trap every
+ *                    caller once dodged by hand is healed at the root)
+ *   eol_union_with   a guest read side by side with the kept house, the
+ *                    union lawchecked and left standing (growth's judgment)
+ *   eol_reduce       the kept house refounded on its minimal basis, every
+ *                    drop justified by a live derivation from the remainder
+ *   eol_verify       text against address -- the self-verification every
+ *                    journal line and hearth file lives by
+ *
+ * Organs keep FILES and PROTOCOLS; the logos keeps TRUTH.  Proven by
+ * eol_keep_selfprove (arms 425..430, continuing the boundary ledger). */
+var EOL_KEPT : [u8; 16384]               /* the kept house's canonical text     */
+var EOL_KN : u64 = 0u64
+var EOL_KADDR : u64 = 0u64               /* its address (0 = nothing kept yet)  */
+var EOL_KSO : [u64; 256]                 /* kept claim i: span offset           */
+var EOL_KSL : [u64; 256]                 /* kept claim i: span length           */
+var EOL_KAL : [u64; 256]                 /* kept claim i: thing-a text length   */
+var EOL_KBL : [u64; 256]                 /* kept claim i: thing-b text length   */
+var EOL_KVV : [u64; 256]                 /* kept claim i: verb                  */
+var EOL_KCN : u64 = 0u64
+var EOL_QA : [u8; 2048]                  /* judge scratch: the question's things */
+var EOL_QB : [u8; 2048]
+var EOL_RKEEP : [u8; 256]                /* reduce: the kept-set                */
+var EOL_RBUF : [u8; 16384]               /* reduce: the remainder basis         */
+
+fn eol_kept_len() -> u64 @export { return EOL_KN }
+fn eol_kept_byte(i: u64) -> u8 @export { if i < EOL_KN { return EOL_KEPT[i] }   return 0u8 }
+fn eol_kept_addr() -> u64 @export { return EOL_KADDR }
+
+/* seal the coherent standing scroll as THE KEPT HOUSE.  Returns its address;
+ * 0 = refused (an incoherent scroll cannot be kept; counted by eol_addr,
+ * and the previously kept house SURVIVES the refusal). */
+fn eol_keep() -> u64 @export {
+    let a : u64 = eol_addr()
+    if a == 0u64 { return 0u64 }
+    /* eol_addr wrote the canon and its geography */
+    let mut i : u64 = 0u64
+    while i < EOL_ON { EOL_KEPT[i] = EOL_OUT[i]   i = i + 1u64 }
+    EOL_KN = EOL_ON
+    let mut c : u64 = 0u64
+    while c < EOL_GSN {
+        EOL_KSO[c] = EOL_GSO[c]
+        EOL_KSL[c] = EOL_GSL[c]
+        EOL_KAL[c] = EOL_GAL[c]
+        EOL_KBL[c] = EOL_GBL[c]
+        EOL_KVV[c] = EOL_GVV[c]
+        c = c + 1u64
+    }
+    EOL_KCN = EOL_GSN
+    EOL_KADDR = a
+    return a
+}
+/* stand the kept house again -- THE ONE restore.  Returns the re-derived
+ * address (nonzero; the kept house was coherent when sealed), 0 on refusal. */
+fn eol_restand() -> u64 @export {
+    eol_reset()
+    if EOL_KN > 0u64 {
+        if eol_read((&EOL_KEPT) as u64, EOL_KN) < 0i64 { eol_reset()   return 0u64 }
+    }
+    return eol_addr()
+}
+/* THE BAROMETER FACE: one whole claim "[a v b]" judged over the KEPT house,
+ * freshly re-stood, so no question's parse or interning ever colours the
+ * next.  1 known | 0 novel | 2 refused (malformed, not exactly one claim,
+ * or no coherent house to stand). */
+fn eol_judge_claim(base: u64, len: u64) -> u64 @export {
+    eol_reset()
+    if eol_read(base, len) != 1i64 { eol_reset()   return 2u64 }
+    let ta : u64 = EOL_CA[0u64]
+    let tb : u64 = EOL_CB[0u64]
+    let vv : u64 = EOL_CV[0u64]
+    let al : u64 = EOL_TLN[ta]
+    let bl : u64 = EOL_TLN[tb]
+    if al > 2048u64 { eol_reset()   return 2u64 }
+    if bl > 2048u64 { eol_reset()   return 2u64 }
+    let mut k : u64 = 0u64
+    while k < al { EOL_QA[k] = EOL_ARE[EOL_TOF[ta] + k]   k = k + 1u64 }
+    k = 0u64
+    while k < bl { EOL_QB[k] = EOL_ARE[EOL_TOF[tb] + k]   k = k + 1u64 }
+    if eol_restand() == 0u64 { return 2u64 }
+    return eol_entails((&EOL_QA) as u64, al, vv, (&EOL_QB) as u64, bl)
+}
+/* THE UNION JUDGMENT: the guest text read side by side with the kept house
+ * (guest first -- the growth order), the union lawchecked and, when lawful,
+ * LEFT STANDING for the caller to question or keep.  0 lawful | 1 unreadable
+ * | 2 lawless (the union breaks the law; the caller restands the house). */
+fn eol_union_with(base: u64, len: u64) -> u64 @export {
+    eol_reset()
+    if len > 0u64 {
+        if eol_read(base, len) < 0i64 { return 1u64 }
+    }
+    if EOL_KN > 0u64 {
+        if eol_read((&EOL_KEPT) as u64, EOL_KN) < 0i64 { return 1u64 }
+    }
+    if eol_lawcheck() != 0u64 { return 2u64 }
+    return 0u64
+}
+/* rebuild the kept claims (skipping `minus`; EOL_SENT = none) into EOL_RBUF,
+ * space-joined in kept (canonical) order; returns the length */
+fn eol_rebuild_kept(minus: u64) -> u64 {
+    let mut m : u64 = 0u64
+    let mut ci : u64 = 0u64
+    while ci < EOL_KCN {
+        let mut take : u64 = 0u64
+        if EOL_RKEEP[ci] == 1u8 { take = 1u64 }
+        if ci == minus { take = 0u64 }
+        if take == 1u64 {
+            if m > 0u64 { EOL_RBUF[m] = 32u8   m = m + 1u64 }
+            let mut k : u64 = 0u64
+            while k < EOL_KSL[ci] { EOL_RBUF[m] = EOL_KEPT[EOL_KSO[ci] + k]   m = m + 1u64   k = k + 1u64 }
+        }
+        ci = ci + 1u64
+    }
+    return m
+}
+/* THE MINIMAL BASIS: refound the kept house on its irreducible claims --
+ * drop every claim the REMAINDER still derives (greedy in canonical order,
+ * judged claim by claim by the live entailment, never by pattern), then
+ * re-keep the reduced house and leave it standing.  The closure is exactly
+ * preserved (each drop is justified by a derivation from what remains).
+ * Returns the number dropped (0 = already minimal, the house untouched and
+ * re-stood); EOL_SENT = refused (the original house re-stood). */
+fn eol_reduce() -> u64 @export {
+    if EOL_KN == 0u64 { eol_restand()   return 0u64 }
+    let mut ci : u64 = 0u64
+    while ci < EOL_KCN { EOL_RKEEP[ci] = 1u8   ci = ci + 1u64 }
+    let mut dropped : u64 = 0u64
+    ci = 0u64
+    while ci < EOL_KCN {
+        let bn : u64 = eol_rebuild_kept(ci)
+        if bn > 0u64 {
+            /* the claim's own things, by the kept geography -- never re-parsed */
+            let al : u64 = EOL_KAL[ci]
+            let bl : u64 = EOL_KBL[ci]
+            let ao : u64 = EOL_KSO[ci] + 1u64
+            let bo : u64 = (EOL_KSO[ci] + 4u64) + al
+            eol_reset()
+            if eol_read((&EOL_RBUF) as u64, bn) >= 0i64 {
+                if eol_lawcheck() == 0u64 {
+                    let e : u64 = eol_entails(((&EOL_KEPT) as u64) + ao, al, EOL_KVV[ci], ((&EOL_KEPT) as u64) + bo, bl)
+                    if e == 1u64 {
+                        EOL_RKEEP[ci] = 0u8
+                        dropped = dropped + 1u64
+                    }
+                }
+            }
+        }
+        ci = ci + 1u64
+    }
+    if dropped == 0u64 { eol_restand()   return 0u64 }
+    let bn2 : u64 = eol_rebuild_kept(EOL_SENT)
+    if bn2 == 0u64 { eol_restand()   return EOL_SENT }
+    eol_reset()
+    if eol_read((&EOL_RBUF) as u64, bn2) < 0i64 { eol_restand()   return EOL_SENT }
+    if eol_lawcheck() != 0u64 { eol_restand()   return EOL_SENT }
+    if eol_keep() == 0u64 { eol_restand()   return EOL_SENT }
+    return dropped
+}
+/* THE VERIFICATION: does this text re-derive exactly this address?  The one
+ * self-verification law every journal line and hearth file lives by.  1 yes
+ * | 0 no.  Leaves the scroll state reset (no residue). */
+fn eol_verify(base: u64, len: u64, expect: u64) -> u64 @export {
+    eol_reset()
+    if eol_read(base, len) < 0i64 { eol_reset()   return 0u64 }
+    if eol_addr() != expect { eol_reset()   return 0u64 }
+    eol_reset()
+    return 1u64
+}
+
+/* ==================== THE KEPT-HOUSE SELF-PROOF (arms 425..430) ==================== */
+fn eol_jz(s: u64) -> u64 { return eol_judge_claim(s, eol_slen(s)) }
+fn eol_uz(s: u64) -> u64 { return eol_union_with(s, eol_slen(s)) }
+fn eol_vz(s: u64, x: u64) -> u64 { return eol_verify(s, eol_slen(s), x) }
+fn eol_keep_selfprove() -> u64 @export {
+    /* arm 425: THE KEEPING -- a coherent scroll kept byte-exact with its
+     * address, re-stood to the same address, idempotently; an incoherent
+     * scroll CANNOT be kept and the kept house survives the refusal. */
+    eol_reset()
+    if eol_readz("[b < c] [a < b]" as u64) < 0i64 { eol_reset()   return 425u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { eol_reset()   return 425u64 }
+    if eol_keep() != a1 { eol_reset()   return 425u64 }
+    if eol_kept_addr() != a1 { eol_reset()   return 425u64 }
+    let kn : u64 = eol_kept_len()
+    if kn == 0u64 { eol_reset()   return 425u64 }
+    eol_write()
+    if eol_out_len() != kn { eol_reset()   return 425u64 }
+    let mut i : u64 = 0u64
+    while i < kn { if eol_kept_byte(i) != eol_out_byte(i) { eol_reset()   return 425u64 }   i = i + 1u64 }
+    eol_reset()
+    if eol_restand() != a1 { eol_reset()   return 425u64 }
+    if eol_addr() != a1 { eol_reset()   return 425u64 }
+    if eol_keep() != a1 { eol_reset()   return 425u64 }
+    eol_reset()
+    if eol_readz("[p < q] [q < p]" as u64) < 0i64 { eol_reset()   return 425u64 }
+    if eol_keep() != 0u64 { eol_reset()   return 425u64 }
+    if eol_kept_addr() != a1 { eol_reset()   return 425u64 }
+    /* arm 426: THE NON-COLOURING JUDGE -- questions over the kept house:
+     * derived is KNOWN, underivable is NOVEL, malformed is REFUSED, and no
+     * question of any kind colours the next; the house stands whole after. */
+    eol_reset()
+    if eol_readz("[a < b] [b < c]" as u64) < 0i64 { eol_reset()   return 426u64 }
+    let h1 : u64 = eol_keep()
+    if h1 == 0u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a < c]" as u64) != 1u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a < zz]" as u64) != 0u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a < c]" as u64) != 1u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a <" as u64) != 2u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a < c] [b < c]" as u64) != 2u64 { eol_reset()   return 426u64 }
+    if eol_jz("[a < c]" as u64) != 1u64 { eol_reset()   return 426u64 }
+    if eol_addr() != h1 { eol_reset()   return 426u64 }
+    /* arm 427: THE UNION JUDGMENT -- a lawful guest unions with the kept
+     * house (the union standing, chaining, addressed exactly as if spoken
+     * side by side; the KEPT house unchanged -- growth is the caller's
+     * choice); an unlawful guest is refused and the house re-stands whole;
+     * unreadable bytes are named apart from lawlessness. */
+    eol_reset()
+    if eol_readz("[a < b]" as u64) < 0i64 { eol_reset()   return 427u64 }
+    let h2 : u64 = eol_keep()
+    if h2 == 0u64 { eol_reset()   return 427u64 }
+    if eol_uz("[b < c]" as u64) != 0u64 { eol_reset()   return 427u64 }
+    if eol_ent("a" as u64, EOL_V_BELOW, "c" as u64) != 1u64 { eol_reset()   return 427u64 }
+    let ua : u64 = eol_addr()
+    if ua == 0u64 { eol_reset()   return 427u64 }
+    eol_reset()
+    if eol_readz("[a < b] [b < c]" as u64) < 0i64 { eol_reset()   return 427u64 }
+    if eol_addr() != ua { eol_reset()   return 427u64 }
+    if eol_kept_addr() != h2 { eol_reset()   return 427u64 }
+    if eol_uz("[b < a]" as u64) != 2u64 { eol_reset()   return 427u64 }
+    if eol_restand() != h2 { eol_reset()   return 427u64 }
+    if eol_addr() != h2 { eol_reset()   return 427u64 }
+    if eol_uz("xx" as u64) != 1u64 { eol_reset()   return 427u64 }
+    if eol_restand() != h2 { eol_reset()   return 427u64 }
+    /* arm 428: THE REDUCTION -- the stated-but-derivable claim is dropped
+     * and the refounded house addresses exactly as the minimal basis spoken
+     * alone; reduction is idempotent; an irreducible house is untouched. */
+    eol_reset()
+    if eol_readz("[a < b] [b < c] [a < c]" as u64) < 0i64 { eol_reset()   return 428u64 }
+    if eol_keep() == 0u64 { eol_reset()   return 428u64 }
+    if eol_reduce() != 1u64 { eol_reset()   return 428u64 }
+    if eol_claims() != 2u64 { eol_reset()   return 428u64 }
+    let ra : u64 = eol_kept_addr()
+    eol_reset()
+    if eol_readz("[a < b] [b < c]" as u64) < 0i64 { eol_reset()   return 428u64 }
+    if eol_addr() != ra { eol_reset()   return 428u64 }
+    if eol_restand() != ra { eol_reset()   return 428u64 }
+    if eol_reduce() != 0u64 { eol_reset()   return 428u64 }
+    if eol_kept_addr() != ra { eol_reset()   return 428u64 }
+    eol_reset()
+    if eol_readz("[a < b] [x ~ y]" as u64) < 0i64 { eol_reset()   return 428u64 }
+    let r2 : u64 = eol_keep()
+    if r2 == 0u64 { eol_reset()   return 428u64 }
+    if eol_reduce() != 0u64 { eol_reset()   return 428u64 }
+    if eol_kept_addr() != r2 { eol_reset()   return 428u64 }
+    /* arm 429: THE VERIFICATION -- any spelling re-derives the canonical
+     * address; a wrong address or broken text refuses; no residue stands. */
+    eol_reset()
+    if eol_readz("[dream ~ wake]" as u64) < 0i64 { eol_reset()   return 429u64 }
+    let v1 : u64 = eol_addr()
+    if v1 == 0u64 { eol_reset()   return 429u64 }
+    if eol_vz("[dream ~ wake]" as u64, v1) != 1u64 { eol_reset()   return 429u64 }
+    if eol_vz("[wake ~ dream]" as u64, v1) != 1u64 { eol_reset()   return 429u64 }
+    if eol_vz("[dream ~ wake]" as u64, v1 + 1u64) != 0u64 { eol_reset()   return 429u64 }
+    if eol_vz("[dream ~" as u64, v1) != 0u64 { eol_reset()   return 429u64 }
+    if eol_claims() != 0u64 { eol_reset()   return 429u64 }
+    /* arm 430: THE GEOGRAPHY -- every stated claim of the kept house,
+     * re-read from its recorded span alone, is entailed by the house itself
+     * (all three verbs and a measured phrase exercise the span arithmetic). */
+    eol_reset()
+    if eol_readz("[a < b] [q ~ r] [m = n] [belief 9 < assert]" as u64) < 0i64 { eol_reset()   return 430u64 }
+    let g1 : u64 = eol_keep()
+    if g1 == 0u64 { eol_reset()   return 430u64 }
+    if EOL_KCN != 4u64 { eol_reset()   return 430u64 }
+    let mut gi : u64 = 0u64
+    while gi < EOL_KCN {
+        if eol_judge_claim(((&EOL_KEPT) as u64) + EOL_KSO[gi], EOL_KSL[gi]) != 1u64 { eol_reset()   return 430u64 }
+        gi = gi + 1u64
+    }
+    if eol_addr() != g1 { eol_reset()   return 430u64 }
     eol_reset()
     return 0u64
 }

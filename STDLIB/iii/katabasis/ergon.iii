@@ -91,6 +91,7 @@ extern @abi(c-msvc-x64) fn xr_testify() -> u64 from "xring.iii"
 extern @abi(c-msvc-x64) fn kl_testify() -> u64 from "kalodion.iii"
 extern @abi(c-msvc-x64) fn an_testify() -> u64 from "anglos.iii"
 extern @abi(c-msvc-x64) fn px_testify() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn ok_testify() -> u64 from "oikos.iii"
 extern @abi(c-msvc-x64) fn soma_testify() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn dx_testify() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
@@ -2669,14 +2670,17 @@ fn erg_seat_synod() -> u32 @export {
 /* ==================== SEAT 10: THE BOUNDARY SYNOD (horos) ====================
  * The membrane organs TESTIFY in EIDOLOS -- the door (xenos), the vein
  * (xring), the cable (kalodion), the tongue (anglos), the sponsor
- * (proxenos): the boundary's knowing-together, convened in the census
- * medium.  The union is coherent with ONE deterministic address; the
- * SURPLUS is derived (boundary theorems NO single organ states: a proposal
- * is a guest; a record reaches the door; confirmation IS the door's
- * judgment; novelty IS derivation's question); the knockout matrix proves
- * each testimony load-bearing.  Codes: 2201 convening/coherence | 2202
+ * (proxenos), the hearth (oikos): the boundary's knowing-together,
+ * convened in the census medium.  The union is coherent with ONE
+ * deterministic address; the SURPLUS is derived (boundary theorems NO
+ * single organ states: a proposal is a guest; a record reaches the door;
+ * confirmation IS the door's judgment; novelty IS derivation's question;
+ * and THE ONE BAROMETER -- the house sits under rederivation, the hearth's
+ * every judgment being the logos's own); the knockout matrix proves each
+ * testimony load-bearing.  Codes: 2201 convening/coherence | 2202
  * determinism | 2203 surplus | 2204 single-derivability leak | 2205
- * knockout.  Bearer bits: xenos=1 xring=2 kalodion=4 anglos=8 proxenos=16. */
+ * knockout.  Bearer bits: xenos=1 xring=2 kalodion=4 anglos=8 proxenos=16
+ * oikos=32. */
 var ERG_HOROSADDR : u64 = 0u64
 fn erg_horos_addr() -> u64 @export { return ERG_HOROSADDR }
 fn erg_hor_conv(mask: u64) -> u64 {
@@ -2701,58 +2705,69 @@ fn erg_hor_conv(mask: u64) -> u64 {
         let t4 : u64 = px_testify()
         if eol_read(t4, erg_syn_len(t4)) < 0i64 { return 1u64 }
     }
+    if (mask & 32u64) == 32u64 {
+        let t5 : u64 = ok_testify()
+        if eol_read(t5, erg_syn_len(t5)) < 0i64 { return 1u64 }
+    }
     if eol_lawcheck() != 0u64 { return 1u64 }
     return 0u64
 }
-/* the four named boundary theorems (union-only) */
+/* the five named boundary theorems (union-only).  The fifth is THE ONE
+ * BAROMETER spoken: [house < rederivation] -- the hearth testifies the
+ * house sits under judgment, the door testifies judgment IS rederivation,
+ * and only the union knows the house therefore sits under rederivation. */
 fn erg_hor_ta(n: u64) -> u64 {
     if n == 0u64 { return "proposal" as u64 }
     if n == 1u64 { return "record" as u64 }
     if n == 2u64 { return "confirmation" as u64 }
-    return "novelty" as u64
+    if n == 3u64 { return "novelty" as u64 }
+    return "house" as u64
 }
 fn erg_hor_tb(n: u64) -> u64 {
     if n == 0u64 { return "guest" as u64 }
     if n == 1u64 { return "door" as u64 }
     if n == 2u64 { return "judgment" as u64 }
-    return "derivation" as u64
+    if n == 3u64 { return "derivation" as u64 }
+    return "rederivation" as u64
 }
 fn erg_hor_tv(n: u64) -> u64 {
     if n < 2u64 { return 0u64 }
+    if n == 4u64 { return 0u64 }
     return 2u64
 }
 fn erg_hor_bearers(n: u64) -> u64 {
     if n == 0u64 { return 24u64 }
     if n == 1u64 { return 6u64 }
     if n == 2u64 { return 17u64 }
-    return 24u64
+    if n == 3u64 { return 24u64 }
+    return 33u64
 }
 fn erg_seat_horos() -> u32 @export {
-    if erg_hor_conv(31u64) != 0u64 { return 2201u32 }
+    if erg_hor_conv(63u64) != 0u64 { return 2201u32 }
     let a1 : u64 = eol_addr()
     if a1 == 0u64 { return 2201u32 }
-    if erg_hor_conv(31u64) != 0u64 { return 2202u32 }
+    if erg_hor_conv(63u64) != 0u64 { return 2202u32 }
     if eol_addr() != a1 { return 2202u32 }
     let mut n : u64 = 0u64
-    while n < 4u64 {
+    while n < 5u64 {
         if erg_syn_q(erg_hor_ta(n), erg_hor_tv(n), erg_hor_tb(n)) != 1u64 { return 2203u32 }
         n = n + 1u64
     }
     let mut k : u64 = 0u64
-    while k < 5u64 {
+    while k < 6u64 {
         if erg_hor_conv(1u64 << k) != 0u64 { return 2204u32 }
         n = 0u64
-        while n < 4u64 {
+        while n < 5u64 {
             if erg_syn_q(erg_hor_ta(n), erg_hor_tv(n), erg_hor_tb(n)) != 0u64 { return 2204u32 }
             n = n + 1u64
         }
         k = k + 1u64
     }
     k = 0u64
-    while k < 5u64 {
-        if erg_hor_conv(31u64 & (31u64 ^ (1u64 << k))) != 0u64 { return 2205u32 }
+    while k < 6u64 {
+        if erg_hor_conv(63u64 & (63u64 ^ (1u64 << k))) != 0u64 { return 2205u32 }
         n = 0u64
-        while n < 4u64 {
+        while n < 5u64 {
             let dead : u64 = (erg_hor_bearers(n) >> k) & 1u64
             let got : u64 = erg_syn_q(erg_hor_ta(n), erg_hor_tv(n), erg_hor_tb(n))
             if dead == 1u64 { if got != 0u64 { return 2205u32 } }

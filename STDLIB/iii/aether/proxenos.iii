@@ -15,13 +15,17 @@
  * THE SPONSOR'S LAW:
  *   1  The proposal arrives in the bounded tongue (English) and is CARRIED
  *      to the threshold by anglos (an_transduce) -- the door NOT knocked.
- *   2  Every claim is tested by eol_entails over the STANDING scroll.
- *      The unraveling counts: a claim never literally stated but DERIVED
- *      (transitivity, congruence, the mirror) is CONFIRMED.
+ *   2  Every claim is judged by THE ONE BAROMETER (eol_judge_claim) over
+ *      the logos's KEPT house -- the house sealed whole at the start, then
+ *      re-stood fresh for every claim, so no claim's parse or interning
+ *      ever colours another.  The unraveling counts: a claim never
+ *      literally stated but DERIVED (transitivity, congruence, the mirror)
+ *      is CONFIRMED.  The sponsor holds no copy of the canon and splits no
+ *      claim text of its own: judgment belongs to the logos.
  *   3  ALL claims derivable -> CONFIRMED: the proposal knocks at the one
  *      door (the confirmation is an EVENT, booked in the guest-book), and
- *      the house's FULL prior knowledge is re-stood afterward -- confirming
- *      a subset never narrows the scroll.
+ *      the house re-stands WHOLE from the kept house -- confirming a
+ *      subset never narrows the scroll.
  *   4  ANY claim underivable -> NOVEL, WHOLE (the mixed proposal admits
  *      nothing -- the whole-utterance law at the trust tier).  The novel
  *      claims are NOT knowledge and NOT admitted; they are READABLE as the
@@ -39,10 +43,10 @@
  * QUESTIONS.  That is the honest shape of "an AI smooths the boundary":
  * the machine consumes the model without ever trusting it.
  *
- * Truth is a CONDITION OF MOTION: px_selfprove (arms 400..404) re-derives
- * every law above at every invocation.  NO gate, NO KAT (the kardia
- * pattern).  NIH: composes aether/anglos (the tongue), aether/xenos (THE
- * ONE DOOR), omnia/eidolos (the standing scroll and its unraveling).
+ * Truth is a CONDITION OF MOTION: px_selfprove (arms 400..404, 421..424)
+ * re-derives every law above at every invocation.  NO gate, NO KAT (the
+ * kardia pattern).  NIH: composes aether/anglos (the tongue), aether/xenos
+ * (THE ONE DOOR), omnia/eidolos (THE ONE BAROMETER and its kept house).
  * Hexad: kind_passage.  Ring R0. */
 module aether_proxenos
 
@@ -69,6 +73,10 @@ extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_restand() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_judge_claim(base: u64, len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
 
 extern @abi(c-msvc-x64) fn xn_rooted() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
@@ -82,16 +90,11 @@ const PX_V_CONFIRMED : u64 = 1u64        /* every claim re-derived; booked     *
 const PX_V_NOVEL     : u64 = 2u64        /* not knowledge -- a question harvest */
 const PX_V_REFUSED   : u64 = 3u64        /* the surface refused it (an_reason) */
 
-/* ==================== the sponsor's state ==================== */
-var PX_STAND : [u8; 16384]               /* the standing canon, held for restore */
-var PX_SN : u64 = 0u64
-var PX_SADDR : u64 = 0u64                /* its address (the house's knowledge) */
+/* ==================== the sponsor's state ====================
+ * No copy of the house canon lives here -- the standing knowledge is the
+ * logos's kept house, sealed at propose and re-stood by the barometer. */
 var PX_SCR : [u8; 8192]                  /* the proposal scroll (for the knock)  */
-var PX_A : [u8; 512]                     /* claim split: thing a                 */
-var PX_B : [u8; 512]                     /* claim split: thing b                 */
-var PX_AL : u64 = 0u64
-var PX_BL : u64 = 0u64
-var PX_VV : u64 = 0u64
+var PX_CT : [u8; 1088]                   /* one claim's text, judged whole       */
 
 var PX_VERDICT : u64 = 0u64
 var PX_ADDR : u64 = 0u64                 /* the confirmation's booked address    */
@@ -102,48 +105,6 @@ var PX_TCONF : u64 = 0u64
 var PX_TNOV : u64 = 0u64
 var PX_TREF : u64 = 0u64
 
-/* split claim ci's text "[a V b]" into PX_A / PX_VV / PX_B.  Phrase bytes
- * are lowercase/digit/space/_/- only, so the FIRST verb char flanked by
- * spaces is THE verb.  Returns 0, or 1 on a malformed claim (cannot arise
- * from anglos's own assembler; refused anyway, never assumed). */
-fn px_split(ci: u64) -> u64 {
-    let n : u64 = an_claim_len(ci)
-    if n < 7u64 { return 1u64 }
-    let mut vpos : u64 = 0u64
-    let mut k : u64 = 2u64
-    while k < (n - 2u64) {
-        if vpos == 0u64 {
-            let c : u8 = an_claim_byte(ci, k)
-            let mut isv : u64 = 0u64
-            if c == 60u8 { isv = 1u64 }
-            if c == 61u8 { isv = 1u64 }
-            if c == 126u8 { isv = 1u64 }
-            if isv == 1u64 {
-                if an_claim_byte(ci, k - 1u64) == 32u8 {
-                    if an_claim_byte(ci, k + 1u64) == 32u8 { vpos = k }
-                }
-            }
-        }
-        k = k + 1u64
-    }
-    if vpos == 0u64 { return 1u64 }
-    let vc : u8 = an_claim_byte(ci, vpos)
-    PX_VV = 2u64
-    if vc == 60u8 { PX_VV = 0u64 }
-    if vc == 126u8 { PX_VV = 1u64 }
-    PX_AL = vpos - 2u64
-    if PX_AL > 512u64 { return 1u64 }
-    let mut i : u64 = 0u64
-    while i < PX_AL { PX_A[i] = an_claim_byte(ci, 1u64 + i)   i = i + 1u64 }
-    PX_BL = (n - 1u64) - (vpos + 2u64)
-    if PX_BL > 512u64 { return 1u64 }
-    i = 0u64
-    while i < PX_BL { PX_B[i] = an_claim_byte(ci, vpos + 2u64 + i)   i = i + 1u64 }
-    if PX_AL == 0u64 { return 1u64 }
-    if PX_BL == 0u64 { return 1u64 }
-    return 0u64
-}
-
 /* ==================== THE SPONSORSHIP ==================== */
 fn px_propose(base: u64, len: u64) -> u64 @export {
     PX_VERDICT = 0u64
@@ -152,25 +113,28 @@ fn px_propose(base: u64, len: u64) -> u64 @export {
     let t : u64 = an_transduce(base, len)
     if t != 4u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
     if an_claims() == 0u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
-    /* hold the house's FULL standing knowledge before any testing (the
-     * entails calls intern the proposal's things; the knock will replace
-     * the scroll; the house must never narrow by confirming) */
-    eol_write()
-    PX_SN = eol_out_len()
-    let mut i : u64 = 0u64
-    while i < PX_SN { PX_STAND[i] = eol_out_byte(i)   i = i + 1u64 }
-    PX_SADDR = eol_addr()
+    /* seal the house's FULL standing knowledge as the logos's kept house
+     * (the barometer re-stands it fresh for every claim; the knock will
+     * replace the transient scroll; the house must never narrow by
+     * confirming).  An incoherent standing scroll cannot vouch: the empty
+     * house is kept instead and every claim judges novel. */
+    if eol_keep() == 0u64 {
+        eol_reset()
+        eol_keep()
+    }
     /* the test: every claim must RE-DERIVE from what stands */
     let nc : u64 = an_claims()
     let mut ci : u64 = 0u64
     while ci < nc {
-        if px_split(ci) != 0u64 {
+        let cl : u64 = an_claim_len(ci)
+        let mut ok : u64 = 0u64
+        if cl > 0u64 { if cl <= 1088u64 {
+            let mut k : u64 = 0u64
+            while k < cl { PX_CT[k] = an_claim_byte(ci, k)   k = k + 1u64 }
+            if eol_judge_claim((&PX_CT) as u64, cl) == 1u64 { ok = 1u64 }
+        } }
+        if ok == 0u64 {
             if PX_NN < 16u64 { PX_NIDX[PX_NN] = ci   PX_NN = PX_NN + 1u64 }
-        } else {
-            let e : u64 = eol_entails((&PX_A) as u64, PX_AL, PX_VV, (&PX_B) as u64, PX_BL)
-            if e != 1u64 {
-                if PX_NN < 16u64 { PX_NIDX[PX_NN] = ci   PX_NN = PX_NN + 1u64 }
-            }
         }
         ci = ci + 1u64
     }
@@ -182,16 +146,13 @@ fn px_propose(base: u64, len: u64) -> u64 @export {
     }
     /* CONFIRMED: the knock is the event (booked at the one door) */
     let sn : u64 = an_scroll_len()
-    i = 0u64
+    let mut i : u64 = 0u64
     while i < sn { PX_SCR[i] = an_scroll_byte(i)   i = i + 1u64 }
     let v : u64 = xn_admit((&PX_SCR) as u64, sn)
     if v != 1u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
     PX_ADDR = xn_last_addr()
     /* the house re-stands WHOLE (confirmation never narrows the scroll) */
-    eol_reset()
-    if PX_SN > 0u64 {
-        if eol_read((&PX_STAND) as u64, PX_SN) < 0i64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
-    }
+    if eol_restand() == 0u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
     PX_VERDICT = PX_V_CONFIRMED
     PX_TCONF = PX_TCONF + 1u64
     return PX_V_CONFIRMED
@@ -231,13 +192,14 @@ fn px_testify() -> u64 @export {
  * persists that harvest with the zetesis/guest-book discipline -- a
  * self-verifying journal (STDLIB/data/erotema.jrnl) whose every line is
  * `<address> <question-claim>`, the address the eol_addr of the claim text
- * so a tampered question is a RED question (the whole ledger refuses).
- * Appends are content-addressed and IDEMPOTENT (the same open question
- * never doubles); an absent ledger is a lawful BIRTH.  This is the honest
- * "zetesis seam": the machine's durable account of the questions untrusted
- * mouths pressed on it -- a future seeking pass (or a human) works it down;
- * a confirmed-later question simply stops re-appearing as the house grows.
- * The ledger is HISTORY, not truth: nothing here is admitted, ever. */
+ * so a tampered question is a RED question (the whole ledger refuses; the
+ * verification is the logos's own eol_verify).  Appends are content-
+ * addressed and IDEMPOTENT (the same open question never doubles); an
+ * absent ledger is a lawful BIRTH.  This is the honest "zetesis seam": the
+ * machine's durable account of the questions untrusted mouths pressed on
+ * it -- a future seeking pass (or a human) works it down; a confirmed-
+ * later question simply stops re-appearing as the house grows.  The
+ * ledger is HISTORY, not truth: nothing here is admitted, ever. */
 var PX_JB : [u8; 16384]                  /* ledger read buffer                  */
 var PX_LINE : [u8; 512]                  /* one line build                      */
 var PX_QC : [u8; 256]                    /* canonical question claim            */
@@ -291,7 +253,8 @@ fn px_claim_start(off: u64, end: u64) -> u64 {
     return end
 }
 /* verify one ledger line [off,end): "<digits> <claim>" whose claim's
- * address re-derives to <digits>.  Sets PX_LADDR.  0 ok | 1 tamper. */
+ * address re-derives to <digits> -- the logos's own verification.  Sets
+ * PX_LADDR.  0 ok | 1 tamper. */
 fn px_vline(off: u64, end: u64) -> u64 {
     if (end - off) < 3u64 { return 1u64 }
     let cb : u64 = px_claim_start(off, end)
@@ -311,10 +274,7 @@ fn px_vline(off: u64, end: u64) -> u64 {
     if nd == 0u64 { return 1u64 }
     let cn : u64 = end - cb
     if cn == 0u64 { return 1u64 }
-    eol_reset()
-    if eol_read(((&PX_JB) as u64) + cb, cn) < 0i64 { eol_reset()   return 1u64 }
-    if eol_addr() != a { eol_reset()   return 1u64 }
-    eol_reset()
+    if eol_verify(((&PX_JB) as u64) + cb, cn, a) != 1u64 { return 1u64 }
     PX_LADDR = a
     return 0u64
 }
@@ -421,67 +381,29 @@ fn px_journaled() -> u64 @export { return PX_TJOURNAL }
  * The erotema accumulates what the house could not derive.  But knowledge
  * grows -- and a question the house can NOW derive is no longer open: it is
  * RECOGNIZED (the machine's word for "I have come to know this").  Sweep
- * the ledger against a standing house: every question the house now entails
- * is RETIRED (dropped from the ledger, its derivation the witness); the
- * rest remain open.  The ledger is rewritten to the survivors, still
- * self-verifying.  This closes the epistemic loop -- propose, question,
- * (the house grows), recognize, retire -- so the erotema is a LIVE agenda
- * that shrinks toward zero as the mind learns, never a dead pile.
+ * the ledger against the logos's KEPT house (the caller seals it -- the
+ * hearth's stand, or any grown scroll kept whole): every question the
+ * house now entails is RETIRED (dropped from the ledger, its derivation
+ * the witness); the rest remain open.  The ledger is rewritten to the
+ * survivors, still self-verifying.  This closes the epistemic loop --
+ * propose, question, (the house grows), recognize, retire -- so the
+ * erotema is a LIVE agenda that shrinks toward zero as the mind learns,
+ * never a dead pile.
  *
- * The house canon is passed in (hc,hlen); it is re-stood before each test
- * so one question's parse never colours the next.  A retired question is
- * NOT admitted anywhere -- recognition is derivation, and the house already
- * holds the knowledge that makes it derivable. */
+ * Each question is judged by THE ONE BAROMETER (eol_judge_claim), which
+ * re-stands the kept house before every test, so one question's parse
+ * never colours the next.  A retired question is NOT admitted anywhere --
+ * recognition is derivation, and the house already holds the knowledge
+ * that makes it derivable. */
 var PX_OUT : [u8; 16384]                 /* the rewritten (survivor) ledger     */
-var PX_TA : [u8; 256]
-var PX_TB : [u8; 256]
 var PX_RECOG : u64 = 0u64                /* recognized this sweep               */
 fn px_recognized() -> u64 @export { return PX_RECOG }
 
-/* split "[a v b]" living in PX_JB[s, s+n) into PX_TA/PX_TB and a verb code;
- * returns the verb (0/1/2) or PX_SENT on malformed. */
-fn px_split_line(s: u64, n: u64) -> u64 {
-    if n < 7u64 { return PX_SENT }
-    if PX_JB[s] != 91u8 { return PX_SENT }
-    if PX_JB[s + n - 1u64] != 93u8 { return PX_SENT }
-    let mut vpos : u64 = 0u64
-    let mut k : u64 = 2u64
-    while k < (n - 2u64) {
-        let c : u8 = PX_JB[s + k]
-        let mut isv : u64 = 0u64
-        if c == 60u8 { isv = 1u64 }
-        if c == 61u8 { isv = 1u64 }
-        if c == 126u8 { isv = 1u64 }
-        if isv == 1u64 {
-            if PX_JB[s + k - 1u64] == 32u8 {
-                if PX_JB[s + k + 1u64] == 32u8 { vpos = k }
-            }
-        }
-        k = k + 1u64
-    }
-    if vpos == 0u64 { return PX_SENT }
-    let al : u64 = vpos - 2u64
-    if al == 0u64 { return PX_SENT }
-    if al > 256u64 { return PX_SENT }
-    let mut i : u64 = 0u64
-    while i < al { PX_TA[i] = PX_JB[s + 1u64 + i]   i = i + 1u64 }
-    PX_AL = al
-    let bl : u64 = (n - 1u64) - (vpos + 2u64)
-    if bl == 0u64 { return PX_SENT }
-    if bl > 256u64 { return PX_SENT }
-    i = 0u64
-    while i < bl { PX_TB[i] = PX_JB[s + vpos + 2u64 + i]   i = i + 1u64 }
-    PX_BL = bl
-    let vc : u8 = PX_JB[s + vpos]
-    if vc == 60u8 { return 0u64 }
-    if vc == 126u8 { return 1u64 }
-    return 2u64
-}
-/* recognize: sweep the ledger against the standing house (hc,hlen).
- * Retires every derivable question; rewrites the ledger to the survivors.
- * Returns the number RECOGNIZED, or PX_SENT on a tampered/absent-rooted
- * ledger (no rewrite). */
-fn px_recognize(hc: u64, hlen: u64, path: u64) -> u64 @export {
+/* recognize: sweep the ledger against the kept house.  Retires every
+ * derivable question; rewrites the ledger to the survivors.  Returns the
+ * number RECOGNIZED, or PX_SENT on a tampered/absent-rooted ledger (no
+ * rewrite). */
+fn px_recognize(path: u64) -> u64 @export {
     PX_RECOG = 0u64
     if xn_rooted() != 1u64 { return PX_SENT }
     let vc : u64 = px_erotema_verify(path)
@@ -498,14 +420,7 @@ fn px_recognize(hc: u64, hlen: u64, path: u64) -> u64 @export {
         let mut keep : u64 = 1u64
         if cb < end {
             let cn : u64 = end - cb
-            let v : u64 = px_split_line(cb, cn)
-            if v != PX_SENT {
-                eol_reset()
-                if eol_read(hc, hlen) >= 0i64 {
-                    let e : u64 = eol_entails((&PX_TA) as u64, PX_AL, v, (&PX_TB) as u64, PX_BL)
-                    if e == 1u64 { keep = 0u64   recog = recog + 1u64 }
-                }
-            }
+            if eol_judge_claim(((&PX_JB) as u64) + cb, cn) == 1u64 { keep = 0u64   recog = recog + 1u64 }
         }
         if keep == 1u64 {
             /* copy the whole line (with its newline) to the survivor buffer */
@@ -527,7 +442,7 @@ fn px_recognize(hc: u64, hlen: u64, path: u64) -> u64 @export {
     return recog
 }
 
-/* ==================== THE SELF-PROOF (arms 400..404) ==================== */
+/* ==================== THE SELF-PROOF (arms 400..404, 421..424) ==================== */
 fn px_ent(a: u64, v: u64, b: u64) -> u64 {
     return eol_entails(a, px_slen(a), v, b, px_slen(b))
 }
@@ -675,18 +590,13 @@ fn px_arm424() -> u64 {
     if px_harvest_journal(px_jpath()) != 2u64 { return 424u64 }
     if px_erotema_verify(px_jpath()) != 2u64 { return 424u64 }
     /* THE HOUSE GROWS: animal < thing.  Now dog<thing is DERIVABLE
-     * (transitive) but dog<mineral is still not.  Build the grown canon. */
+     * (transitive) but dog<mineral is still not.  Seal the grown house as
+     * the logos's KEPT house -- recognition judges over the one barometer. */
     eol_reset()
     if eol_read("[dog < animal] [animal < thing]" as u64, 31u64) < 0i64 { return 424u64 }
-    let ga : u64 = eol_addr()
-    if ga == 0u64 { return 424u64 }
-    eol_write()
-    let gn : u64 = eol_out_len()
-    let mut i : u64 = 0u64
-    while i < gn { PX_OUT[i] = eol_out_byte(i)   i = i + 1u64 }
-    eol_reset()
+    if eol_keep() == 0u64 { return 424u64 }
     /* SWEEP: recognize what the grown house now derives */
-    let rec : u64 = px_recognize((&PX_OUT) as u64, gn, px_jpath())
+    let rec : u64 = px_recognize(px_jpath())
     if rec != 1u64 { return 424u64 }
     if px_recognized() != 1u64 { return 424u64 }
     /* one question retired, one remains -- and the survivor is dog<mineral */
@@ -694,12 +604,8 @@ fn px_arm424() -> u64 {
     /* a second sweep recognizes NOTHING more (the survivor is still open) */
     eol_reset()
     if eol_read("[dog < animal] [animal < thing]" as u64, 31u64) < 0i64 { return 424u64 }
-    eol_write()
-    let gn2 : u64 = eol_out_len()
-    i = 0u64
-    while i < gn2 { PX_OUT[i] = eol_out_byte(i)   i = i + 1u64 }
-    eol_reset()
-    if px_recognize((&PX_OUT) as u64, gn2, px_jpath()) != 0u64 { return 424u64 }
+    if eol_keep() == 0u64 { return 424u64 }
+    if px_recognize(px_jpath()) != 0u64 { return 424u64 }
     if px_erotema_verify(px_jpath()) != 1u64 { return 424u64 }
     if px_jerase() != 0u64 { return 424u64 }
     eol_reset()

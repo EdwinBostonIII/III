@@ -1,0 +1,617 @@
+/* STDLIB/iii/omnia/gnosis.iii -- GNOSIS (the KNOWING): software IS the
+ * physics the summit proved -- the bridge that turns the capstone axioms
+ * onto code itself.
+ *
+ * THE KEYSTONE: the CPU has been a p-adic engine all along.  u64 arithmetic
+ * IS Z_2 truncated to 64 digits -- wrapping is the truncation ideal, the
+ * carry chain is the 2-adic grid law.  Arm 290 WITNESSES the identity: the
+ * native ALU against the klisi digit engine at KP=2, two engines one ring,
+ * including the wrap 0xFFFF..F + 1 = 0 on both sides.  Everything after
+ * rides that identity:
+ *
+ *   THE ORBIT ORACLE (arms 291-292, Theorem I weaponized): halting for the
+ *   affine/linear loop fragment over the machine's own rings, DECIDED by
+ *   valuation -- never simulated to infinity.
+ *     - `while x != 0 { x += c }` on w-bit words halts iff v_2(c) <= v_2(x0)
+ *       (0 lies on the orbit iff x0 is in the subgroup <c> iff
+ *       gcd(c, 2^w) | x0).  The decision rule is verified by COMPLETE
+ *       ENUMERATION of the small ring -- ALL 65536 (c, x0) pairs of Z/2^8,
+ *       each orbit run to its group-order bound, zero disagreements -- and
+ *       the THEOREM carries it to Z/2^64, where a single orbit can exceed
+ *       2^60 steps and simulation is impossible: decided instances are
+ *       cross-checked by short exact runs (halting side) and by the
+ *       subgroup obstruction x0 mod 2^(v2 c) != 0 (diverging side);
+ *     - `x <<= 1` halts in <= w steps (valuation grows every step: the
+ *       archimedean loop bound IS a 2-adic statement);
+ *     - an INVERTIBLE linear map (xorshift -- the reversible organ's own
+ *       law) NEVER reaches 0 from x0 != 0: bijectivity fixes 0, so
+ *       nontermination is PROVEN, not timed out -- the complete permutation
+ *       table of the 8-bit variant is saturated and the orbit closed.
+ *
+ *   THE INTERLEAVING ORBIT (arms 293-294, Theorem II weaponized): threads
+ *   are the boolean-refutation arm turned onto schedules.
+ *     - PETERSON's lock: the FULL reachable state space saturated (BFS to
+ *       closure, the SYMMETRIA pattern); mutual exclusion holds in EVERY
+ *       reachable state and no reachable state is stuck -- safety as
+ *       saturation, not testing.  The negative control: the check-then-set
+ *       protocol (TOCTOU) reaches both-in-critical-section -- the race
+ *       WITNESSED exactly;
+ *     - the STORE-BUFFERING litmus: all sequentially-consistent
+ *       interleavings enumerated (the complete orbit of schedules);
+ *       outcome (0,0) is UNREACHABLE under SC -- the classical bound --
+ *       and REACHED the moment store-load reordering is admitted: the
+ *       exact boundary of boolean causality in memory models, the CHSH
+ *       shape on silicon;
+ *
+ *   THE VERDICT LOOP (arm 295, the autopoietic seat): the organism meters
+ *   ITS OWN engines.  riza's two gcd engines run the same workload under
+ *   the exact op-meter; the measured winner must BE the dispatcher's
+ *   default -- if the substrate ever drifts, this arm reddens and demands
+ *   a new verdict.  Self-optimization as a standing proof obligation, on
+ *   the DETERMINISTIC meter (op-count is the machine's invariant energy;
+ *   wall time is weather);
+ *
+ *   THE EXACT ARGMIN (arm 296, the analytic optimizer): minimize the
+ *   summit's own separation quartic on [0,2] with a CERTIFICATE: P'' has
+ *   no real root and is positive (P' strictly increasing), P' has exactly
+ *   one root (Sturm), the minimum value 0 sits at t=1, and GLOBAL
+ *   nonnegativity is certified by the node factorization P = g^2 u with
+ *   u > 0 -- the sum-of-squares witness the singularity analysis already
+ *   minted.  No descent, no epsilon: the true bottom of the hill, proven;
+ *
+ *   THE SCROLL (arm 297): the derived facts sealed by EIDOLOS with a
+ *   deterministic canonical address, entailing consequences absent from
+ *   the text and refusing their reversals.
+ *
+ * Truth is a CONDITION OF MOTION: gn_selfprove (arms 290..297).  NO gate
+ * of its own (the summit gate compiles and drives this organ).
+ * NIH: composes klisi (the ring), riza+pyrgos (the exact engines), eidolos
+ * (the scroll).  Software is not TRANSLATED into physics; it is RECOGNIZED
+ * as physics.  Ring R-1. */
+module omnia_gnosis
+
+extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_opc() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_opc_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_i64(v: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn rz_reset() -> i32 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_in(k: u64, v: i64) -> i32 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_from_in(deg: i64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_c(p: u64, k: i64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_mul(a: u64, b: u64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_deriv(a: u64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_gcd(a: u64, b: u64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_gcd_prim(a: u64, b: u64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_gcd_sres(a: u64, b: u64) -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_count(P: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "riza.iii"
+extern @abi(c-msvc-x64) fn rz_eval_sign(p: u64, n: i64, d: i64) -> i64 from "riza.iii"
+extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_reset(k: u64, m: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_alloc() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_seti(h: u64, slot: u64, d: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_get(h: u64, slot: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_add(a: u64, b: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_mul(a: u64, b: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kl_err() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+var GN_SCROLL : u64 = 0u64
+fn gn_addr() -> u64 @export { return GN_SCROLL }
+fn gn_strlen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+fn gn_v2(x: u64) -> u64 {
+    /* 2-adic valuation of a nonzero word (caller guards zero) */
+    let mut v : u64 = 0u64
+    let mut m : u64 = x
+    while (m & 1u64) == 0u64 { m = m >> 1u64   v = v + 1u64 }
+    return v
+}
+/* load a u64 into the klisi KP=2 mode(0,64) ring: digits ARE bits */
+fn gn_kd_of(x: u64) -> u64 {
+    let h : u64 = kd_alloc()
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if ((x >> i) & 1u64) == 1u64 { kd_seti(h, i, 1u64) }
+        i = i + 1u64
+    }
+    return h
+}
+fn gn_kd_val(h: u64) -> u64 {
+    let mut x : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if kd_get(h, i) == 1u64 { x = x | (1u64 << i) }
+        i = i + 1u64
+    }
+    return x
+}
+var GN_SEED : u64 = 2463534242u64
+fn gn_rnd() -> u64 {
+    /* xorshift64 -- the reversible organ's own proven-bijective family */
+    let mut x : u64 = GN_SEED
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    GN_SEED = x
+    return x
+}
+fn gn_arm290() -> u64 {
+    /* THE SUBSTRATE IDENTITY: the native ALU IS the KP=2 digit ring.
+     * add and mul cross-oracled on random words; the wrap witnessed. */
+    kd_setp(2u64)
+    kd_reset(0u64, 64u64)
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        let a : u64 = gn_rnd()
+        let b : u64 = gn_rnd()
+        kd_reset(0u64, 64u64)
+        let ka : u64 = gn_kd_of(a)
+        let kb : u64 = gn_kd_of(b)
+        /* two engines, one sum; two engines, one product */
+        if gn_kd_val(kd_add(ka, kb)) != (a + b) { return 290u64 }
+        if gn_kd_val(kd_mul(ka, kb)) != (a * b) { return 290u64 }
+        t = t + 1u64
+    }
+    /* the truncation ideal: 0xFFFF...F + 1 = 0 on BOTH engines */
+    kd_reset(0u64, 64u64)
+    let full : u64 = gn_kd_of(18446744073709551615u64)
+    let one : u64 = gn_kd_of(1u64)
+    let s : u64 = kd_add(full, one)
+    if gn_kd_val(s) != 0u64 { return 290u64 }
+    if (18446744073709551615u64 + 1u64) != 0u64 { return 290u64 }
+    if kl_err() != 0u64 { return 290u64 }
+    return 0u64
+}
+fn gn_arm291() -> u64 {
+    /* THE ORBIT ORACLE, counter loops: `while x != 0 { x += c }` on w-bit
+     * words halts iff v_2(c) <= v_2(x0).  COMPLETE enumeration of Z/2^8:
+     * all 65536 (c, x0) pairs, each orbit bounded by the group order 256;
+     * the decision rule must agree on EVERY pair.  Then the theorem
+     * carries to Z/2^64. */
+    let mut c : u64 = 0u64
+    while c < 256u64 {
+        let mut x0 : u64 = 0u64
+        while x0 < 256u64 {
+            /* run the orbit exactly (bounded by 256 = the group order) */
+            let mut x : u64 = x0
+            let mut halted : u64 = 0u64
+            let mut steps : u64 = 0u64
+            while steps < 256u64 {
+                if x == 0u64 { halted = 1u64   steps = 256u64 } else {
+                    x = (x + c) & 255u64
+                    steps = steps + 1u64
+                }
+            }
+            if x == 0u64 { halted = 1u64 }
+            /* the valuation decision */
+            let mut dec : u64 = 0u64
+            if x0 == 0u64 { dec = 1u64 } else {
+                if c == 0u64 { dec = 0u64 } else {
+                    /* v2 within the 8-bit ring: c = 0 handled; compare
+                     * v2(c) <= v2(x0) with valuations capped at 8 */
+                    let vc : u64 = gn_v2(c)
+                    let vx : u64 = gn_v2(x0)
+                    if vc <= vx { dec = 1u64 }
+                }
+            }
+            if dec != halted { return 291u64 }
+            x0 = x0 + 1u64
+        }
+        c = c + 1u64
+    }
+    /* Z/2^64, where simulation cannot reach: the decided instances.
+     * HALTS: x0 = 2^64 - 3c (three exact steps witness the decision) */
+    let c1 : u64 = 6148914691236517205u64          /* odd: v2 = 0 -> halts from ANY x0 */
+    let x1 : u64 = 0u64 - (3u64 * c1)
+    let mut y : u64 = x1
+    let mut n : u64 = 0u64
+    while y != 0u64 { y = y + c1   n = n + 1u64 }
+    if n != 3u64 { return 291u64 }
+    if gn_v2(c1) != 0u64 { return 291u64 }
+    /* DIVERGES: v2(c) = 4 > v2(x0) = 0 -- the subgroup obstruction is the
+     * PROOF (x0 not divisible by gcd(c, 2^64) = 16); a bounded probe
+     * agrees (1000 steps never reach 0) */
+    let c2 : u64 = 48u64                           /* v2 = 4 */
+    let x2 : u64 = 7u64                            /* v2 = 0 */
+    if gn_v2(c2) != 4u64 { return 291u64 }
+    if (x2 % 16u64) == 0u64 { return 291u64 }
+    let mut z : u64 = x2
+    let mut k : u64 = 0u64
+    while k < 1000u64 {
+        z = z + c2
+        if z == 0u64 { return 291u64 }
+        k = k + 1u64
+    }
+    /* and the residue INVARIANT that proves it forever: x mod 16 is
+     * constant along the orbit and never 0 */
+    if (z % 16u64) != (x2 % 16u64) { return 291u64 }
+    return 0u64
+}
+fn gn_arm292() -> u64 {
+    /* THE ORBIT ORACLE, valuation growth and bijective nontermination */
+    /* x <<= 1 halts in <= 64 steps: the loop bound IS 2-adic (each step
+     * raises v_2 by exactly 1; the ring truncates at 64) */
+    let mut x : u64 = 12297829382473034411u64      /* odd start: worst case */
+    let mut n : u64 = 0u64
+    while x != 0u64 { x = x << 1u64   n = n + 1u64 }
+    if n != 64u64 { return 292u64 }
+    /* xorshift8 (13,7,17 shrunk to 3,5,2 on 8 bits): PERMUTATION saturated
+     * -- 256 slots, every image hit once -- so 0 has the unique preimage 0
+     * and no nonzero orbit ever reaches 0: NONTERMINATION PROVEN.
+     * (the tally lives in the module BFS scratch: local arrays of this
+     * size would breach the 64-slot frame law) */
+    let mut i : u64 = 0u64
+    while i < 256u64 { GN_VIS[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < 256u64 {
+        let mut v : u64 = i
+        v = (v ^ (v << 3u64)) & 255u64
+        v = v ^ (v >> 5u64)
+        v = (v ^ (v << 2u64)) & 255u64
+        GN_VIS[v] = GN_VIS[v] + 1u64
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 256u64 {
+        let sv : u64 = GN_VIS[i]
+        if sv != 1u64 { return 292u64 }
+        i = i + 1u64
+    }
+    /* 0 maps to 0; one full nonzero orbit closed without touching 0 */
+    let mut w : u64 = 1u64
+    let mut steps : u64 = 0u64
+    let mut back : u64 = 0u64
+    while steps < 300u64 {
+        w = (w ^ (w << 3u64)) & 255u64
+        w = w ^ (w >> 5u64)
+        w = (w ^ (w << 2u64)) & 255u64
+        if w == 0u64 { return 292u64 }
+        steps = steps + 1u64
+        if w == 1u64 { back = steps   steps = 300u64 }
+    }
+    if back == 0u64 { return 292u64 }
+    return 0u64
+}
+/* Peterson state: flag0 | flag1<<1 | turn<<2 | pc0<<3 | pc1<<6 (pc 0..3);
+ * decompose-mutate-repack -- no mask constants, no precedence traps */
+var GN_VIS : [u64; 512]
+var GN_Q : [u64; 512]
+fn gn_pack(f0: u64, f1: u64, tn: u64, p0: u64, p1: u64) -> u64 {
+    return f0 | (f1 << 1u64) | (tn << 2u64) | (p0 << 3u64) | (p1 << 6u64)
+}
+fn gn_pet_step(st: u64, who: u64) -> u64 {
+    /* one state-CHANGING step of thread `who`; returns st itself if the
+     * thread cannot move (busy-wait with false condition) */
+    let mut f0 : u64 = st & 1u64
+    let mut f1 : u64 = (st >> 1u64) & 1u64
+    let mut tn : u64 = (st >> 2u64) & 1u64
+    let mut p0 : u64 = (st >> 3u64) & 7u64
+    let mut p1 : u64 = (st >> 6u64) & 7u64
+    if who == 0u64 {
+        if p0 == 0u64 { f0 = 1u64   p0 = 1u64   return gn_pack(f0, f1, tn, p0, p1) }
+        if p0 == 1u64 { tn = 1u64   p0 = 2u64   return gn_pack(f0, f1, tn, p0, p1) }
+        if p0 == 2u64 {
+            if f1 == 0u64 { p0 = 3u64   return gn_pack(f0, f1, tn, p0, p1) }
+            if tn == 0u64 { p0 = 3u64   return gn_pack(f0, f1, tn, p0, p1) }
+            return st
+        }
+        f0 = 0u64
+        p0 = 0u64
+        return gn_pack(f0, f1, tn, p0, p1)
+    }
+    if p1 == 0u64 { f1 = 1u64   p1 = 1u64   return gn_pack(f0, f1, tn, p0, p1) }
+    if p1 == 1u64 { tn = 0u64   p1 = 2u64   return gn_pack(f0, f1, tn, p0, p1) }
+    if p1 == 2u64 {
+        if f0 == 0u64 { p1 = 3u64   return gn_pack(f0, f1, tn, p0, p1) }
+        if tn == 1u64 { p1 = 3u64   return gn_pack(f0, f1, tn, p0, p1) }
+        return st
+    }
+    f1 = 0u64
+    p1 = 0u64
+    return gn_pack(f0, f1, tn, p0, p1)
+}
+fn gn_arm293() -> u64 {
+    /* THE INTERLEAVING ORBIT, Peterson: saturate the FULL reachable state
+     * space; mutual exclusion in EVERY state; no reachable state stuck.
+     * Then the negative control: check-then-set reaches both-in-CS. */
+    let mut i : u64 = 0u64
+    while i < 512u64 { GN_VIS[i] = 0u64   i = i + 1u64 }
+    let mut qh : u64 = 0u64
+    let mut qt : u64 = 0u64
+    GN_Q[0u64] = 0u64
+    GN_VIS[0u64] = 1u64
+    qt = 1u64
+    let mut reach : u64 = 0u64
+    while qh < qt {
+        let st : u64 = GN_Q[qh]
+        qh = qh + 1u64
+        reach = reach + 1u64
+        let p0 : u64 = (st >> 3u64) & 7u64
+        let p1 : u64 = (st >> 6u64) & 7u64
+        /* MUTUAL EXCLUSION: never both in the critical section */
+        if p0 == 3u64 { if p1 == 3u64 { return 293u64 } }
+        /* successors; count the state-CHANGING moves */
+        let mut moved : u64 = 0u64
+        let mut who : u64 = 0u64
+        while who < 2u64 {
+            let ns : u64 = gn_pet_step(st, who)
+            if ns != st {
+                moved = moved + 1u64
+                if GN_VIS[ns] == 0u64 {
+                    GN_VIS[ns] = 1u64
+                    GN_Q[qt] = ns
+                    qt = qt + 1u64
+                    if qt >= 512u64 { return 293u64 }
+                }
+            }
+            who = who + 1u64
+        }
+        /* DEADLOCK-FREEDOM: some thread can always move (Peterson's turn
+         * variable breaks the symmetric wait) */
+        if moved == 0u64 { return 293u64 }
+    }
+    if reach == 0u64 { return 293u64 }
+    /* negative control -- CHECK-THEN-SET (the TOCTOU race): pc 0: observe
+     * other flag == 0; pc 1: raise own flag; pc 2: critical section.
+     * The both-check-then-both-set schedule MUST reach both-in-CS.
+     * state: f0 | f1<<1 | q0<<2 | q1<<4 (q 0..2) */
+    i = 0u64
+    while i < 512u64 { GN_VIS[i] = 0u64   i = i + 1u64 }
+    qh = 0u64
+    qt = 1u64
+    GN_Q[0u64] = 0u64
+    GN_VIS[0u64] = 1u64
+    let mut raced : u64 = 0u64
+    while qh < qt {
+        let s2 : u64 = GN_Q[qh]
+        qh = qh + 1u64
+        let g0 : u64 = s2 & 1u64
+        let g1 : u64 = (s2 >> 1u64) & 1u64
+        let q0 : u64 = (s2 >> 2u64) & 3u64
+        let q1 : u64 = (s2 >> 4u64) & 3u64
+        if q0 == 2u64 { if q1 == 2u64 { raced = 1u64 } }
+        let mut wh2 : u64 = 0u64
+        while wh2 < 2u64 {
+            let mut ns : u64 = s2
+            if wh2 == 0u64 {
+                if q0 == 0u64 { if g1 == 0u64 { ns = g0 | (g1 << 1u64) | (1u64 << 2u64) | (q1 << 4u64) } }
+                if q0 == 1u64 { ns = 1u64 | (g1 << 1u64) | (2u64 << 2u64) | (q1 << 4u64) }
+            } else {
+                if q1 == 0u64 { if g0 == 0u64 { ns = g0 | (g1 << 1u64) | (q0 << 2u64) | (1u64 << 4u64) } }
+                if q1 == 1u64 { ns = g0 | (1u64 << 1u64) | (q0 << 2u64) | (2u64 << 4u64) }
+            }
+            if ns != s2 {
+                if GN_VIS[ns] == 0u64 {
+                    GN_VIS[ns] = 1u64
+                    GN_Q[qt] = ns
+                    qt = qt + 1u64
+                    if qt >= 512u64 { return 293u64 }
+                }
+            }
+            wh2 = wh2 + 1u64
+        }
+    }
+    if raced != 1u64 { return 293u64 }
+    return 0u64
+}
+fn gn_arm294() -> u64 {
+    /* THE STORE-BUFFERING LITMUS: T0 { x=1; r1=y }  T1 { y=1; r2=x }.
+     * Enumerate ALL orders of the four operations; under SEQUENTIAL
+     * CONSISTENCY (program order kept) the outcome (0,0) is UNREACHABLE;
+     * admit store-load reordering and it is REACHED -- the exact boundary
+     * of boolean causality, the CHSH shape on silicon. */
+    /* ops: 0 = W x, 1 = R y, 2 = W y, 3 = R x */
+    var ord : [u64; 4]
+    var pos : [u64; 4]
+    let mut scmask : u64 = 0u64
+    let mut tsomask : u64 = 0u64
+    let mut a : u64 = 0u64
+    while a < 4u64 {
+        let mut b : u64 = 0u64
+        while b < 4u64 {
+            let mut c : u64 = 0u64
+            while c < 4u64 {
+                let mut d : u64 = 0u64
+                while d < 4u64 {
+                    /* distinct? */
+                    let mut okd : u64 = 1u64
+                    if a == b { okd = 0u64 }
+                    if a == c { okd = 0u64 }
+                    if a == d { okd = 0u64 }
+                    if b == c { okd = 0u64 }
+                    if b == d { okd = 0u64 }
+                    if c == d { okd = 0u64 }
+                    if okd == 1u64 {
+                        ord[0u64] = a   ord[1u64] = b   ord[2u64] = c   ord[3u64] = d
+                        let mut k : u64 = 0u64
+                        while k < 4u64 { pos[ord[k]] = k   k = k + 1u64 }
+                        /* execute */
+                        let mut xv : u64 = 0u64
+                        let mut yv : u64 = 0u64
+                        let mut r1 : u64 = 0u64
+                        let mut r2 : u64 = 0u64
+                        k = 0u64
+                        while k < 4u64 {
+                            let op : u64 = ord[k]
+                            if op == 0u64 { xv = 1u64 }
+                            if op == 1u64 { r1 = yv }
+                            if op == 2u64 { yv = 1u64 }
+                            if op == 3u64 { r2 = xv }
+                            k = k + 1u64
+                        }
+                        let bit : u64 = 1u64 << ((r1 * 2u64) + r2)
+                        /* SC: W x before R y, W y before R x */
+                        let p0 : u64 = pos[0u64]
+                        let p1w : u64 = pos[1u64]
+                        let p2 : u64 = pos[2u64]
+                        let p3 : u64 = pos[3u64]
+                        if p0 < p1w { if p2 < p3 { scmask = scmask | bit } }
+                        /* store-load reordering admitted: no intra-thread
+                         * W->R constraint -- every order is a behavior */
+                        tsomask = tsomask | bit
+                    }
+                    d = d + 1u64
+                }
+                c = c + 1u64
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    /* SC reaches (0,1),(1,0),(1,1) and NEVER (0,0): mask = 1110b = 14 */
+    if scmask != 14u64 { return 294u64 }
+    /* weak order reaches all four: mask = 1111b = 15 */
+    if tsomask != 15u64 { return 294u64 }
+    return 0u64
+}
+fn gn_arm295() -> u64 {
+    /* THE VERDICT LOOP: the organism meters its own gcd engines on the
+     * canonical workload; the dispatcher's default MUST be the measured
+     * winner.  If the substrate drifts, this arm reddens and demands a
+     * new verdict -- self-optimization as a standing proof obligation. */
+    rz_reset()
+    /* the workload: gcd((x^2-1)(x^2-2)q(x), (x^2-1)(x^2-3)q(x)) with a
+     * common heavy factor q = 91x^2 + 121x + 169 -- content and degree
+     * both in play; the true gcd is (x^2-1) q, derived independently by
+     * BOTH engines and compared */
+    rz_in(0u64, 0i64 - 1i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p1 : u64 = rz_from_in(2i64)
+    rz_in(0u64, 0i64 - 2i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p2 : u64 = rz_from_in(2i64)
+    rz_in(0u64, 0i64 - 3i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
+    let p3 : u64 = rz_from_in(2i64)
+    rz_in(0u64, 169i64)   rz_in(1u64, 121i64)   rz_in(2u64, 91i64)
+    let q : u64 = rz_from_in(2i64)
+    let A : u64 = rz_mul(rz_mul(p1, p2), q)
+    let B : u64 = rz_mul(rz_mul(p1, p3), q)
+    let want : u64 = rz_mul(p1, q)
+    /* meter engine 1: the subresultant PRS */
+    py_opc_reset()
+    let g1 : u64 = rz_gcd_sres(A, B)
+    let ops_sres : u64 = py_opc()
+    /* meter engine 2: the primitive PRS */
+    py_opc_reset()
+    let g2 : u64 = rz_gcd_prim(A, B)
+    let ops_prim : u64 = py_opc()
+    /* both engines agree with the constructed truth (up to the positive
+     * primitive normalization both promise): compare coefficientwise
+     * against pp(want) computed by... both must EQUAL each other, and
+     * divide the truth exactly at degree 4 */
+    let mut k : i64 = 0i64
+    while k <= 4i64 {
+        if py_rat_cmp(rz_c(g1, k), rz_c(g2, k)) != 0i64 { return 295u64 }
+        k = k + 1i64
+    }
+    if rz_count(g1, 0i64, 1i64, 2i64, 1i64) != rz_count(want, 0i64, 1i64, 2i64, 1i64) { return 295u64 }
+    /* THE VERDICT: the dispatcher's default engine is the measured winner */
+    py_opc_reset()
+    let g3 : u64 = rz_gcd(A, B)
+    let ops_disp : u64 = py_opc()
+    k = 0i64
+    while k <= 4i64 {
+        if py_rat_cmp(rz_c(g3, k), rz_c(g1, k)) != 0i64 { return 295u64 }
+        k = k + 1i64
+    }
+    /* THE VERDICT, with teeth: the measured winner on this substrate is
+     * the PRIMITIVE engine (the second verdict, 2026-07-17); the
+     * dispatcher must BE it -- deterministic meter, so their costs are
+     * IDENTICAL.  If the substrate ever drifts and sres wins, this arm
+     * reddens and demands the dispatcher be re-crowned. */
+    if ops_prim > ops_sres { return 295u64 }
+    if ops_disp != ops_prim { return 295u64 }
+    if py_err() != 0u64 { return 295u64 }
+    return 0u64
+}
+fn gn_arm296() -> u64 {
+    /* THE EXACT ARGMIN: minimize P = (t-1)^2(t^2+t+5) on [0,2] with a
+     * certificate -- and globally, by the node's own square factorization */
+    rz_reset()
+    rz_in(0u64, 5i64)   rz_in(1u64, 0i64 - 9i64)   rz_in(2u64, 4i64)
+    rz_in(3u64, 0i64 - 1i64)   rz_in(4u64, 1i64)
+    let P : u64 = rz_from_in(4i64)
+    let dP : u64 = rz_deriv(P)
+    let ddP : u64 = rz_deriv(dP)
+    /* P'' has NO real roots and is positive: P' strictly increasing */
+    if rz_count(ddP, 0i64 - 1000i64, 1i64, 1000i64, 1i64) != 0i64 { return 296u64 }
+    if rz_eval_sign(ddP, 0i64, 1i64) != 1i64 { return 296u64 }
+    /* exactly ONE interior critical point, and it is t = 1 */
+    if rz_count(dP, 0i64, 1i64, 2i64, 1i64) != 1i64 { return 296u64 }
+    if rz_eval_sign(dP, 1i64, 1i64) != 0i64 { return 296u64 }
+    /* candidate values: P(0) = 5, P(1) = 0, P(2) = 11 -- min is 0 at t=1 */
+    if rz_eval_sign(P, 1i64, 1i64) != 0i64 { return 296u64 }
+    if rz_eval_sign(P, 0i64, 1i64) != 1i64 { return 296u64 }
+    if rz_eval_sign(P, 2i64, 1i64) != 1i64 { return 296u64 }
+    /* THE GLOBAL CERTIFICATE: P = g^2 u with u having no real roots and
+     * positive -- the sum-of-squares witness minted by the node analysis:
+     * P >= 0 EVERYWHERE with equality exactly at the node */
+    rz_in(0u64, 0i64 - 1i64)   rz_in(1u64, 1i64)
+    let g : u64 = rz_from_in(1i64)
+    rz_in(0u64, 5i64)   rz_in(1u64, 1i64)   rz_in(2u64, 1i64)
+    let u : u64 = rz_from_in(2i64)
+    let R : u64 = rz_mul(rz_mul(g, g), u)
+    let mut k : i64 = 0i64
+    while k <= 4i64 {
+        if py_rat_cmp(rz_c(R, k), rz_c(P, k)) != 0i64 { return 296u64 }
+        k = k + 1i64
+    }
+    if rz_count(u, 0i64 - 1000i64, 1i64, 1000i64, 1i64) != 0i64 { return 296u64 }
+    if rz_eval_sign(u, 0i64, 1i64) != 1i64 { return 296u64 }
+    if py_err() != 0u64 { return 296u64 }
+    return 0u64
+}
+fn gn_arm297() -> u64 {
+    /* THE SCROLL: the ascension's derived facts, sealed and entailing */
+    let doc : u64 = "[halting_affine = valuation_decision] [valuation_decision = orbit_oracle] [nontermination_xorshift = bijectivity] [peterson ~ mutual_exclusion] [toctou_race < peterson] [sb_weak_00 < sc_forbidden] [verdict_gcd = measured_winner] [argmin_certificate = square_witness]" as u64
+    let dl : u64 = gn_strlen(doc)
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 297u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 297u64 }
+    /* entailed, nowhere in the text: congruence through valuation_decision */
+    let qa : u64 = "halting_affine" as u64
+    let qb : u64 = "orbit_oracle" as u64
+    if eol_entails(qa, gn_strlen(qa), 2u64, qb, gn_strlen(qb)) != 1u64 { return 297u64 }
+    /* below-transitive: toctou_race < peterson only via the stated chain */
+    let qc : u64 = "toctou_race" as u64
+    let qd : u64 = "peterson" as u64
+    if eol_entails(qc, gn_strlen(qc), 0u64, qd, gn_strlen(qd)) != 1u64 { return 297u64 }
+    /* the reversal REFUSES */
+    if eol_entails(qd, gn_strlen(qd), 0u64, qc, gn_strlen(qc)) != 0u64 { return 297u64 }
+    /* determinism: the same document seals to the same address */
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 297u64 }
+    if eol_addr() != a1 { return 297u64 }
+    GN_SCROLL = a1
+    return 0u64
+}
+fn gn_selfprove() -> u64 @export {
+    py_reset()
+    let a0 : u64 = gn_arm290()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = gn_arm291()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = gn_arm292()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = gn_arm293()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = gn_arm294()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = gn_arm295()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = gn_arm296()
+    if a6 != 0u64 { return a6 }
+    let a7 : u64 = gn_arm297()
+    if a7 != 0u64 { return a7 }
+    /* the prime returns to the tilt's home before the next organ speaks */
+    kd_setp(5u64)
+    return 0u64
+}

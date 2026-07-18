@@ -112,6 +112,7 @@ extern @abi(c-msvc-x64) fn rz_divmod(a: u64, b: u64) -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_quot() -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_count(P: u64, an: i64, ad: i64, bn: i64, bd: i64) -> i64 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_eval_sign(p: u64, n: i64, d: i64) -> i64 from "riza.iii"
+extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_reset(k: u64, m: u64) -> i32 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_alloc() -> u64 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_seti(h: u64, slot: u64, d: u64) -> i32 from "klisi.iii"
@@ -312,6 +313,7 @@ fn su_arm282() -> u64 {
     /* the char-5 shadow: momenta residues 4 and 6=1 (mod 5) distinct;
      * the separation residue 0 -- the collapse killed the SEPARATION,
      * never the participants */
+    kd_setp(5u64)
     kd_reset(3u64, 1u64)
     let ba : u64 = kd_alloc()
     kd_seti(ba, 0u64, 4u64)

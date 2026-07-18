@@ -49,6 +49,9 @@
  * graded); composes nothing and floats nothing.  Ring R-1. */
 module aether_klisi
 
+var KP : u64 = 5u64                      /* THE PRIME (settable: the CPU's own
+                                          * ring is KP=2 -- u64 IS Z_2 to 64
+                                          * digits; the tilt arms live at 5)   */
 var KDG : u64 = 1u64                     /* grid: slots per unit exponent       */
 var KDL : u64 = 12u64                    /* total live slots = M * G            */
 var KD_D : [u64; 131072]                 /* digit pool: 341 regs x 384          */
@@ -59,10 +62,15 @@ var KL_ERR : u64 = 0u64                  /* 1 pool, 2 shape/mode refusal        
 var KL_SEED : u64 = 88172645463325252u64
 
 fn kl_err() -> u64 @export { return KL_ERR }
+fn kd_setp(p: u64) -> i32 @export {
+    if p < 2u64 { KL_ERR = 2u64   return -1i32 }
+    KP = p
+    return 0i32
+}
 fn kd_reset(k: u64, m: u64) -> i32 @export {
     let mut g : u64 = 1u64
     let mut i : u64 = 0u64
-    while i < k { g = g * 5u64   i = i + 1u64 }
+    while i < k { g = g * KP   i = i + 1u64 }
     KDG = g
     KDL = m * g
     if KDL > 384u64 { KL_ERR = 2u64   return -1i32 }
@@ -122,8 +130,8 @@ fn kd_carry_out(h: u64) -> i32 {
     let mut i : u64 = 0u64
     while i < KDL {
         let c : u64 = KACC[i]
-        KD_D[(h * 384u64) + i] = c % 5u64
-        if (i + KDG) < KDL { KACC[i + KDG] = KACC[i + KDG] + (c / 5u64) }
+        KD_D[(h * 384u64) + i] = c % KP
+        if (i + KDG) < KDL { KACC[i + KDG] = KACC[i + KDG] + (c / KP) }
         i = i + 1u64
     }
     return 0i32
@@ -146,7 +154,7 @@ fn kd_sub(a: u64, b: u64) -> u64 @export {
         if da >= db {
             KD_D[(h * 384u64) + i] = da - db
         } else {
-            KD_D[(h * 384u64) + i] = (da + 5u64) - db
+            KD_D[(h * 384u64) + i] = (da + KP) - db
             if (i + KDG) < KDL { KBR[i + KDG] = KBR[i + KDG] + 1u64 }
         }
         i = i + 1u64
@@ -193,7 +201,7 @@ fn kd_phi(a: u64) -> u64 @export {
     while i < KDL {
         let d : u64 = KD_D[(a * 384u64) + i]
         if d != 0u64 {
-            if (5u64 * i) < KDL { KD_D[(h * 384u64) + (5u64 * i)] = d }
+            if (KP * i) < KDL { KD_D[(h * 384u64) + (KP * i)] = d }
         }
         i = i + 1u64
     }
@@ -208,8 +216,8 @@ fn kd_rho(a: u64) -> u64 @export {
     while i < KDL {
         let d : u64 = KD_D[(a * 384u64) + i]
         if d != 0u64 {
-            if (i % 5u64) != 0u64 { KL_ERR = 2u64   return h }
-            KD_D[(h * 384u64) + (i / 5u64)] = d
+            if (i % KP) != 0u64 { KL_ERR = 2u64   return h }
+            KD_D[(h * 384u64) + (i / KP)] = d
         }
         i = i + 1u64
     }
@@ -222,7 +230,7 @@ fn kl_rnd() -> u64 {
 fn kd_fill(h: u64, lo: u64, hi: u64) -> i32 @export {
     let mut i : u64 = lo
     while i < hi {
-        if i < KDL { KD_D[(h * 384u64) + i] = kl_rnd() % 5u64 }
+        if i < KDL { KD_D[(h * 384u64) + i] = kl_rnd() % KP }
         i = i + 1u64
     }
     return 0i32
@@ -517,6 +525,7 @@ fn kl_arm265() -> u64 {
     return 0u64
 }
 fn kl_selfprove() -> u64 @export {
+    kd_setp(5u64)
     let a0 : u64 = kl_arm260()
     if a0 != 0u64 { return a0 }
     let a1 : u64 = kl_arm261()

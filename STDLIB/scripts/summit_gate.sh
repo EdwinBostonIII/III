@@ -206,6 +206,7 @@ else
     grep -q "^the telos: .*win-permutation=ok.*frontier CLOSED" "$T/run1.txt" || { echo "[summit_gate] THE FRONTIER OPEN"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
+grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }
 if grep -q "^the feast: absent" "$T/run1.txt"; then
     : # already checked above
 else

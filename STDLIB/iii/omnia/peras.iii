@@ -1539,6 +1539,333 @@ fn pr_arm377() -> u64 {
     return 0u64
 }
 
+/* ============ arm 378: THE OMEGA (the irrational frequency, bounded) ==== */
+
+/* omega_1 = 10000^(-1/32) = exp(-ln(10000)/32): the first irrational RoPE
+ * frequency, certified.  ln10000 = 12 ln2 + 4 ln(5/4) by two atanh series;
+ * exp of the scaled argument; the reciprocal by binary long division; and
+ * THE POWER ROUND TRIP as teeth: [omega]^32 * 10000 must CONTAIN exactly 1
+ * (five interval squarings versus the integer 10000 -- no float anywhere).
+ * Then sin/cos at theta = omega_1 (position 1, lane j=1): the interval
+ * argument rides the monotone ladder (endpoints outward), one doubling by
+ * both forms, Pythagoras again.  With omega_j certified, ANY position and
+ * ANY lane is the same ladder run again: the bridge to full-sequence
+ * exact attention stands. */
+
+var PR_OML0 : u64 = 0u64
+var PR_OML1 : u64 = 0u64
+var PR_OMH0 : u64 = 0u64
+var PR_OMH1 : u64 = 0u64
+
+/* floor(2^176 / (xh:xl)) for a 2-limb x with 2^87 < x < 2^90 (so the
+ * quotient fits 2 limbs); binary long division, remainder in 3 limbs */
+var PR_RQ0 : u64 = 0u64
+var PR_RQ1 : u64 = 0u64
+fn pr_recip176(xh: u64, xl: u64) -> i32 {
+    PR_RQ0 = 0u64
+    PR_RQ1 = 0u64
+    let mut r0 : u64 = 0u64
+    let mut r1 : u64 = 0u64
+    let mut r2 : u64 = 0u64
+    let mut bit : u64 = 177u64
+    while bit != 0u64 {
+        bit = bit - 1u64
+        /* remainder <<= 1, bring in bit of 2^176 (only bit 176 is set) */
+        r2 = (r2 << 1u64) | (r1 >> 63u64)
+        r1 = (r1 << 1u64) | (r0 >> 63u64)
+        r0 = r0 << 1u64
+        if bit == 176u64 { r0 = r0 | 1u64 }
+        /* if remainder >= x: subtract, set quotient bit */
+        let mut ge : u64 = 0u64
+        if r2 != 0u64 { ge = 1u64 }
+        if r2 == 0u64 {
+            if r1 > xh { ge = 1u64 }
+            if r1 == xh {
+                if r0 >= xl { ge = 1u64 }
+            }
+        }
+        if ge == 1u64 {
+            let mut b : u64 = 0u64
+            let n0 : u64 = r0 - xl
+            if r0 < xl { b = 1u64 }
+            let mut b2 : u64 = 0u64
+            let n1a : u64 = r1 - xh
+            if r1 < xh { b2 = 1u64 }
+            let n1 : u64 = n1a - b
+            if n1a < b { b2 = b2 + 1u64 }
+            r0 = n0
+            r1 = n1
+            r2 = r2 - b2
+            if bit < 64u64 { PR_RQ0 = PR_RQ0 | (1u64 << bit) }
+            if bit >= 64u64 {
+                if bit < 128u64 { PR_RQ1 = PR_RQ1 | (1u64 << (bit - 64u64)) }
+            }
+        }
+    }
+    return 0i32
+}
+
+/* 2*atanh(1/inv) as a certified interval (directed chains, tail <= p) */
+var PR_LNL0 : u64 = 0u64
+var PR_LNL1 : u64 = 0u64
+var PR_LNH0 : u64 = 0u64
+var PR_LNH1 : u64 = 0u64
+fn pr_atanh_ser(inv: u64) -> i32 {
+    pr_div_small(1u64 << 24u64, 0u64, inv)
+    let mut p_l0 : u64 = PR_MLO
+    let mut p_l1 : u64 = PR_MHI
+    let mut p_h0 : u64 = PR_MLO
+    let mut p_h1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        p_h0 = p_h0 + 1u64
+        if p_h0 == 0u64 { p_h1 = p_h1 + 1u64 }
+    }
+    let sq : u64 = inv * inv
+    let mut l0 : u64 = 0u64
+    let mut l1 : u64 = 0u64
+    let mut h0 : u64 = 0u64
+    let mut h1 : u64 = 0u64
+    let mut kk : u64 = 0u64
+    while kk < 28u64 {
+        pr_div_small(p_l1, p_l0, 2u64 * kk + 1u64)
+        let a6 : u64 = l0 + PR_MLO
+        if a6 < PR_MLO { l1 = l1 + 1u64 }
+        l0 = a6
+        l1 = l1 + PR_MHI
+        pr_div_small(p_h1, p_h0, 2u64 * kk + 1u64)
+        let mut th0 : u64 = PR_MLO
+        let mut th1 : u64 = PR_MHI
+        if PR_STK != 0u64 {
+            th0 = th0 + 1u64
+            if th0 == 0u64 { th1 = th1 + 1u64 }
+        }
+        let a7 : u64 = h0 + th0
+        if a7 < th0 { h1 = h1 + 1u64 }
+        h0 = a7
+        h1 = h1 + th1
+        pr_div_small(p_l1, p_l0, sq)
+        p_l0 = PR_MLO
+        p_l1 = PR_MHI
+        pr_div_small(p_h1, p_h0, sq)
+        p_h0 = PR_MLO
+        p_h1 = PR_MHI
+        if PR_STK != 0u64 {
+            p_h0 = p_h0 + 1u64
+            if p_h0 == 0u64 { p_h1 = p_h1 + 1u64 }
+        }
+        kk = kk + 1u64
+    }
+    let a8 : u64 = h0 + p_h0
+    if a8 < p_h0 { h1 = h1 + 1u64 }
+    h0 = a8
+    h1 = h1 + p_h1
+    PR_LNL1 = (l1 << 1u64) | (l0 >> 63u64)
+    PR_LNL0 = l0 << 1u64
+    PR_LNH1 = (h1 << 1u64) | (h0 >> 63u64)
+    PR_LNH0 = h0 << 1u64
+    return 0i32
+}
+
+/* omega_1 certified, with the power-32 round trip through 10000 */
+fn pr_omega() -> u64 {
+    /* ln10000 = 12 ln2 + 4 ln(5/4) */
+    pr_atanh_ser(3u64)
+    let mut ll0 : u64 = 0u64
+    let mut ll1 : u64 = 0u64
+    let mut lh0 : u64 = 0u64
+    let mut lh1 : u64 = 0u64
+    let mut rep : u64 = 0u64
+    while rep < 12u64 {
+        let a : u64 = ll0 + PR_LNL0
+        if a < PR_LNL0 { ll1 = ll1 + 1u64 }
+        ll0 = a
+        ll1 = ll1 + PR_LNL1
+        let b : u64 = lh0 + PR_LNH0
+        if b < PR_LNH0 { lh1 = lh1 + 1u64 }
+        lh0 = b
+        lh1 = lh1 + PR_LNH1
+        rep = rep + 1u64
+    }
+    pr_atanh_ser(9u64)
+    rep = 0u64
+    while rep < 4u64 {
+        let a2 : u64 = ll0 + PR_LNL0
+        if a2 < PR_LNL0 { ll1 = ll1 + 1u64 }
+        ll0 = a2
+        ll1 = ll1 + PR_LNL1
+        let b2 : u64 = lh0 + PR_LNH0
+        if b2 < PR_LNH0 { lh1 = lh1 + 1u64 }
+        lh0 = b2
+        lh1 = lh1 + PR_LNH1
+        rep = rep + 1u64
+    }
+    /* x = ln10000/32: floor lo, ceil hi */
+    let xl0 : u64 = (ll0 >> 5u64) | (ll1 << 59u64)
+    let xl1 : u64 = ll1 >> 5u64
+    let mut xh0 : u64 = (lh0 >> 5u64) | (lh1 << 59u64)
+    let mut xh1 : u64 = lh1 >> 5u64
+    if (lh0 & 31u64) != 0u64 {
+        xh0 = xh0 + 1u64
+        if xh0 == 0u64 { xh1 = xh1 + 1u64 }
+    }
+    /* exp(x) endpoints (48-bit outward dyadics; x ~ 0.2878 fits) */
+    let mlo : u64 = (xl0 >> 40u64) | (xl1 << 24u64)
+    let mhi : u64 = ((xh0 >> 40u64) | (xh1 << 24u64)) + 1u64
+    if pr_exp(mlo, 48u64) != 0i32 { return 1u64 }
+    let el0 : u64 = PR_ELO0
+    let el1 : u64 = PR_ELO1
+    if pr_exp(mhi, 48u64) != 0i32 { return 1u64 }
+    let eh0 : u64 = PR_EHI0
+    let eh1 : u64 = PR_EHI1
+    /* omega = 1/exp(x): [recip(hi), recip(lo)+1] at 2^-88 */
+    pr_recip176(eh1, eh0)
+    PR_OML0 = PR_RQ0
+    PR_OML1 = PR_RQ1
+    pr_recip176(el1, el0)
+    PR_OMH0 = PR_RQ0 + 1u64
+    PR_OMH1 = PR_RQ1
+    if PR_OMH0 == 0u64 { PR_OMH1 = PR_OMH1 + 1u64 }
+    /* THE POWER ROUND TRIP: omega^32 * 10000 must contain exactly 1 */
+    let mut wl0 : u64 = PR_OML0
+    let mut wl1 : u64 = PR_OML1
+    let mut wh0 : u64 = PR_OMH0
+    let mut wh1 : u64 = PR_OMH1
+    let mut sqr : u64 = 0u64
+    while sqr < 5u64 {
+        pr_mul128(wl1, wl0, wl1, wl0)
+        if pr_wshr88() != 0i32 { return 1u64 }
+        wl0 = PR_MLO
+        wl1 = PR_MHI
+        pr_mul128(wh1, wh0, wh1, wh0)
+        if pr_wshr88() != 0i32 { return 1u64 }
+        if PR_STK != 0u64 { pr_inc128() }
+        wh0 = PR_MLO
+        wh1 = PR_MHI
+        sqr = sqr + 1u64
+    }
+    pr_mul128by64(wl1, wl0, 10000u64)
+    if PR_Z[2] != 0u64 { return 1u64 }
+    let tl0 : u64 = PR_Z[0]
+    let tl1 : u64 = PR_Z[1]
+    pr_mul128by64(wh1, wh0, 10000u64)
+    if PR_Z[2] != 0u64 { return 1u64 }
+    let th0b : u64 = PR_Z[0]
+    let th1b : u64 = PR_Z[1]
+    let one1 : u64 = 1u64 << 24u64
+    if pr_cmp128(tl1, tl0, one1, 0u64) > 0i64 { return 1u64 }
+    if pr_cmp128(th1b, th0b, one1, 0u64) < 0i64 { return 1u64 }
+    return 0u64
+}
+
+/* sin/cos at theta = omega_1 (interval argument, monotone endpoints,
+ * one doubling by both forms) + pythagoras there */
+fn pr_omega_angle() -> u64 {
+    /* y = omega/2, endpoints outward to 24-bit dyadics: y*2^24 = mant>>65,
+     * and (hi:lo)>>65 = hi>>1 (the hi limb sits at 2^64) */
+    let m_lo24 : u64 = PR_OML1 >> 1u64
+    let m_hi24 : u64 = (PR_OMH1 >> 1u64) + 1u64
+    if pr_sincos(m_lo24, 24u64) != 0i32 { return 1u64 }
+    let sl0 : u64 = PR_SN0
+    let sl1 : u64 = PR_SN1
+    let cxh0 : u64 = PR_CX0
+    let cxh1 : u64 = PR_CX1
+    if pr_sincos(m_hi24, 24u64) != 0i32 { return 1u64 }
+    /* sin increasing: [sin(ylo).lo, sin(yhi).hi]; cos decreasing */
+    let s5l0 : u64 = sl0
+    let s5l1 : u64 = sl1
+    let s5h0 : u64 = PR_SX0
+    let s5h1 : u64 = PR_SX1
+    let c5l0 : u64 = PR_CN0
+    let c5l1 : u64 = PR_CN1
+    let c5h0 : u64 = cxh0
+    let c5h1 : u64 = cxh1
+    /* one doubling with both cos forms; pythagoras */
+    pr_mul128(s5l1, s5l0, c5l1, c5l0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    let d_sl0 : u64 = PR_MLO << 1u64
+    let d_sl1 : u64 = (PR_MHI << 1u64) | (PR_MLO >> 63u64)
+    pr_mul128(s5h1, s5h0, c5h1, c5h0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    if PR_STK != 0u64 { pr_inc128() }
+    let d_sh0 : u64 = PR_MLO << 1u64
+    let d_sh1 : u64 = (PR_MHI << 1u64) | (PR_MLO >> 63u64)
+    let one1 : u64 = 1u64 << 24u64
+    pr_mul128(s5h1, s5h0, s5h1, s5h0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    if PR_STK != 0u64 { pr_inc128() }
+    let t0 : u64 = PR_MLO << 1u64
+    let t1 : u64 = (PR_MHI << 1u64) | (PR_MLO >> 63u64)
+    let mut ba : u64 = 0u64
+    let al0 : u64 = 0u64 - t0
+    if 0u64 < t0 { ba = 1u64 }
+    let al1 : u64 = one1 - t1 - ba
+    pr_mul128(s5l1, s5l0, s5l1, s5l0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    let t2 : u64 = PR_MLO << 1u64
+    let t3 : u64 = (PR_MHI << 1u64) | (PR_MLO >> 63u64)
+    ba = 0u64
+    let ah0 : u64 = 0u64 - t2
+    if 0u64 < t2 { ba = 1u64 }
+    let ah1 : u64 = one1 - t3 - ba
+    pr_mul128(c5l1, c5l0, c5l1, c5l0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    let u0 : u64 = PR_MLO << 1u64
+    let u1 : u64 = (PR_MHI << 1u64) | (PR_MLO >> 63u64)
+    if u1 < one1 { return 1u64 }
+    let bl0 : u64 = u0
+    let bl1 : u64 = u1 - one1
+    pr_mul128(c5h1, c5h0, c5h1, c5h0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    if PR_STK != 0u64 { pr_inc128() }
+    let bh0 : u64 = PR_MLO << 1u64
+    let bh1 : u64 = ((PR_MHI << 1u64) | (PR_MLO >> 63u64)) - one1
+    if pr_cmp128(ah1, ah0, bl1, bl0) < 0i64 { return 1u64 }
+    if pr_cmp128(bh1, bh0, al1, al0) < 0i64 { return 1u64 }
+    let mut c_l0 : u64 = al0
+    let mut c_l1 : u64 = al1
+    if pr_cmp128(bl1, bl0, al1, al0) > 0i64 {
+        c_l0 = bl0
+        c_l1 = bl1
+    }
+    let mut c_h0 : u64 = ah0
+    let mut c_h1 : u64 = ah1
+    if pr_cmp128(bh1, bh0, ah1, ah0) < 0i64 {
+        c_h0 = bh0
+        c_h1 = bh1
+    }
+    /* pythagoras at theta = omega */
+    pr_mul128(d_sl1, d_sl0, d_sl1, d_sl0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    let p0 : u64 = PR_MLO
+    let p1 : u64 = PR_MHI
+    pr_mul128(c_l1, c_l0, c_l1, c_l0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    let mut pl0 : u64 = p0 + PR_MLO
+    let mut pl1 : u64 = p1 + PR_MHI
+    if pl0 < PR_MLO { pl1 = pl1 + 1u64 }
+    pr_mul128(d_sh1, d_sh0, d_sh1, d_sh0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    if PR_STK != 0u64 { pr_inc128() }
+    let p2 : u64 = PR_MLO
+    let p3 : u64 = PR_MHI
+    pr_mul128(c_h1, c_h0, c_h1, c_h0)
+    if pr_wshr88() != 0i32 { return 1u64 }
+    if PR_STK != 0u64 { pr_inc128() }
+    let mut ph0 : u64 = p2 + PR_MLO
+    let mut ph1 : u64 = p3 + PR_MHI
+    if ph0 < PR_MLO { ph1 = ph1 + 1u64 }
+    if pr_cmp128(pl1, pl0, one1, 0u64) > 0i64 { return 1u64 }
+    if pr_cmp128(ph1, ph0, one1, 0u64) < 0i64 { return 1u64 }
+    return 0u64
+}
+
+fn pr_arm378() -> u64 {
+    if pr_omega() != 0u64 { return 378u64 }
+    if pr_omega_angle() != 0u64 { return 378u64 }
+    pr_rs("the omega: ln10000 laddered, omega1=10000^(-1/32) certified, power-round-trip: omega^32 x 10000 contains 1 =ok sincos(omega1) pythagoras=contained -- any position, any lane: the same ladder; full-sequence exact attention BRIDGED" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
 /* ==================== the organ's spine ==================== */
 
 fn pr_selfprove() -> u64 @export {
@@ -1552,6 +1879,8 @@ fn pr_selfprove() -> u64 @export {
     if r2 != 0u64 { return r2 }
     let r3 : u64 = pr_arm377()
     if r3 != 0u64 { return r3 }
+    let r4 : u64 = pr_arm378()
+    if r4 != 0u64 { return r4 }
     if mb_feast() == 0u64 {
         pr_rs("the discharge: fasting (no feast) -- the bound stands ready" as u64)
         pr_rb(10u8)

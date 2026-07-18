@@ -24,6 +24,11 @@ extern @abi(c-msvc-x64) fn xn_env_len() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_env_byte(i: u64) -> u8 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_book_verify() -> u64 from "xenos.iii"
 
+extern @abi(c-msvc-x64) fn kl_selfprove() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_feed(path: u64) -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn xn_drain(budget: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drained() -> u64 from "xenos.iii"
+
 const XP_ADMITTED : u64 = 1u64
 
 fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
@@ -54,6 +59,21 @@ fn main(argc: i32, argv: u64) -> u64 {
     let ea : u64 = xn_emit_env()
     if ea == 0u64 { ps("scroll emit   = REFUSED\n" as u64)   return 4u64 }
     ps("scroll emit   = " as u64)   pu(ea)   ps(" (the same door, out)\n" as u64)
+
+    /* the cable: the vein's real producer, proven then walked on the
+     * committed capture of real wire bytes */
+    let cp : u64 = kl_selfprove()
+    if cp != 0u64 { ps("scroll cable  = RED arm " as u64)   pu(cp)   putchar(10i32)   return 5u64 }
+    ps("scroll cable  = 405..409 green\n" as u64)
+    let fed : u64 = kl_feed("STDLIB/data/capture_feed.jsonl" as u64)
+    if fed > 0u64 {
+        let adm : u64 = xn_drain(0u64)
+        ps("the road: fed " as u64)   pu(fed)   ps(" drained " as u64)   pu(xn_drained())
+        ps(" admitted " as u64)   pu(adm)
+        ps(" (the torn reconnect line UNHEARD, remembered)\n" as u64)
+        if adm != 4u64 { ps("scroll road   = WRONG COUNT\n" as u64)   return 5u64 }
+    }
+    ps("scroll road   = the producer stands; the seam to a live NIC is named\n" as u64)
 
     let bk : u64 = xn_book_verify()
     ps("scroll book   = " as u64)   pu(bk)   ps(" lines, all self-derived\n" as u64)

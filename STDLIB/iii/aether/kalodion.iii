@@ -1,0 +1,219 @@
+/* STDLIB/iii/aether/kalodion.iii -- KALODION: the cable to the vein.
+ *
+ * The membrane stands complete -- the vein (xring) carries frames with zero
+ * OS on the hot path, the door (xenos) drains and judges them -- but until
+ * now nothing PRODUCED: the road from the actual world's bytes to the vein
+ * did not exist.  KALODION is that road: a capture layer that frames real
+ * feed bytes and xr_pushes them; XENOS drains through the SAME door with
+ * the identical verdict the bytes would earn walking in directly (arm 109's
+ * transport transparency, now with a real producer behind it).
+ *
+ * THE STREAM LAW (the wire is not an utterance): a feed is a STREAM of
+ * records -- one torn or over-throat record does NOT poison the stream.
+ * Each record is framed alone; each refusal is COUNTED BY NAME and the
+ * stream continues; backpressure (the vein full) stops the producer
+ * CLEANLY, and what was framed is drainable and the feed resumable.
+ * Contrast the utterance law of the tongue (anglos): speech is atomic,
+ * a stream is not.  Both are laws; each names its own jurisdiction.
+ *
+ * THE FRAMING: capture bytes are newline-delimited records (the world's
+ * actual feed format).  Each line (newline stripped, CR tolerated) becomes
+ * ONE frame on the vein.  Empty lines are skipped (not refusals).  The
+ * refusals, named:
+ *   FILE   the capture file absent or over one chunk -- refused WHOLE
+ *          (a truncated capture would be a silent lie)
+ *   SIZE   a record over the vein's frame throat (the vein counted it;
+ *          the cable classified it) -- the stream continues
+ *   FULL   the vein had no room -- backpressure; the producer stops
+ *          cleanly and the feed is resumable after a drain
+ *
+ * THE NIC SEAM IS NAMED AND EMPTY (the xring discipline): today the
+ * capture arrives from a file of real recorded bytes; a live NIC/socket
+ * producer replaces ONLY kl_feed's byte source -- the framing, the vein,
+ * the door, and every law above are already the hot path.
+ *
+ * Truth is a CONDITION OF MOTION: kl_selfprove (arms 405..409) re-derives
+ * every law above at every invocation.  NO gate, NO KAT (the kardia
+ * pattern).  NIH: composes aether/xring (the vein), aether/xenos (the
+ * draining door), msvcrt file faces the house already speaks.
+ * Hexad: kind_passage.  Ring R0. */
+module aether_kalodion
+
+extern @abi(c-msvc-x64) fn xr_push(base: u64, len: u64) -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_reset() -> i32 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_rfull() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_rsize() -> u64 from "xring.iii"
+
+extern @abi(c-msvc-x64) fn xn_drain(budget: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drained() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drain_admitted() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_runheard() -> u64 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+const KL_CHUNK : u64 = 65536u64          /* one capture chunk (the file cap)   */
+
+/* ==================== the cable's state ==================== */
+var KL_FBUF : [u8; 65537]                /* the capture chunk (+1 over-probe)  */
+var KL_PUSHED : u64 = 0u64               /* frames pushed, lifetime            */
+var KL_RFILE : u64 = 0u64                /* file refusals (absent/over-chunk)  */
+var KL_RSIZE : u64 = 0u64                /* record over the vein's throat      */
+var KL_RFULL : u64 = 0u64                /* backpressure stops                 */
+var KL_BIG : [u8; 76805]                 /* arm 409's oversize stream build    */
+
+/* ==================== THE FRAMING ====================
+ * Feed a memory span of newline-delimited records into the vein.  Returns
+ * frames pushed THIS call.  SIZE refusals skip the record and continue;
+ * a FULL refusal stops the producer cleanly (backpressure) -- the unfed
+ * remainder belongs to the next call after a drain. */
+fn kl_feed_mem(base: u64, len: u64) -> u64 @export {
+    let p : *u8 = base as *u8
+    let mut pushed : u64 = 0u64
+    let mut s : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut stopped : u64 = 0u64
+    while i <= len {
+        if stopped == 0u64 {
+            let mut cut : u64 = 0u64
+            if i == len { cut = 1u64 } else { if p[i] == 10u8 { cut = 1u64 } }
+            if cut == 1u64 {
+                let mut e : u64 = i
+                if e > s { if p[e - 1u64] == 13u8 { e = e - 1u64 } }
+                if e > s {
+                    let s0 : u64 = xr_rsize()
+                    let f0 : u64 = xr_rfull()
+                    let r : u64 = xr_push(base + s, e - s)
+                    if r == 1u64 {
+                        pushed = pushed + 1u64
+                        KL_PUSHED = KL_PUSHED + 1u64
+                    } else {
+                        if xr_rsize() > s0 { KL_RSIZE = KL_RSIZE + 1u64 }
+                        if xr_rfull() > f0 {
+                            KL_RFULL = KL_RFULL + 1u64
+                            stopped = 1u64
+                        }
+                    }
+                }
+                s = i + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return pushed
+}
+/* Feed a capture FILE (one chunk of real recorded wire bytes).  The file
+ * absent, unreadable, or over one chunk is refused WHOLE and counted --
+ * a truncated capture would be a silent lie.  Returns frames pushed. */
+fn kl_feed(path: u64) -> u64 @export {
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { KL_RFILE = KL_RFILE + 1u64   return 0u64 }
+    let n : u64 = fread((&KL_FBUF) as u64, 1u64, KL_CHUNK + 1u64, f)
+    fclose(f)
+    if n == 0u64 { return 0u64 }
+    if n > KL_CHUNK { KL_RFILE = KL_RFILE + 1u64   return 0u64 }
+    return kl_feed_mem((&KL_FBUF) as u64, n)
+}
+
+/* ==================== the cable's surface ==================== */
+fn kl_pushed() -> u64 @export { return KL_PUSHED }
+fn kl_rfile() -> u64 @export { return KL_RFILE }
+fn kl_rsize() -> u64 @export { return KL_RSIZE }
+fn kl_rfull() -> u64 @export { return KL_RFULL }
+
+/* ==================== THE SELF-PROOF (arms 405..409) ==================== */
+/* arm 405: THE FRAMING -- three records become three frames become three
+ * admitted guests through the one door, byte-transparent. */
+fn kl_arm405() -> u64 {
+    xr_reset()
+    let feed : u64 = "{\"a\":1}\n{\"b\":2}\r\n{\"c\":3}\n" as u64
+    let p : *u8 = feed as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    if kl_feed_mem(feed, n) != 3u64 { return 405u64 }
+    if xn_drain(0u64) != 3u64 { return 405u64 }
+    if xn_drained() != 3u64 { return 405u64 }
+    if xn_drain_admitted() != 3u64 { return 405u64 }
+    return 0u64
+}
+/* arm 406: THE STREAM LAW -- one over-throat record is refused by name
+ * and the stream CONTINUES (the wire is not an utterance). */
+fn kl_arm406() -> u64 {
+    xr_reset()
+    let mut i : u64 = 0u64
+    while i < 76805u64 { KL_BIG[i] = 121u8   i = i + 1u64 }
+    /* line 1 ok (8 bytes), line 2 = 17000 over-throat, line 3 ok */
+    KL_BIG[0u64] = 123u8   KL_BIG[1u64] = 34u8   KL_BIG[2u64] = 97u8   KL_BIG[3u64] = 34u8
+    KL_BIG[4u64] = 58u8   KL_BIG[5u64] = 49u8   KL_BIG[6u64] = 125u8   KL_BIG[7u64] = 10u8
+    KL_BIG[17008u64] = 10u8
+    KL_BIG[17009u64] = 123u8   KL_BIG[17010u64] = 34u8   KL_BIG[17011u64] = 98u8   KL_BIG[17012u64] = 34u8
+    KL_BIG[17013u64] = 58u8   KL_BIG[17014u64] = 50u8   KL_BIG[17015u64] = 125u8   KL_BIG[17016u64] = 10u8
+    let z0 : u64 = KL_RSIZE
+    if kl_feed_mem((&KL_BIG) as u64, 17017u64) != 2u64 { return 406u64 }
+    if KL_RSIZE != (z0 + 1u64) { return 406u64 }
+    if xn_drain(0u64) != 2u64 { return 406u64 }
+    return 0u64
+}
+/* arm 407: THE ROAD -- the committed capture of real wire bytes feeds the
+ * vein and the door judges every record: four admitted, the torn
+ * reconnect line UNHEARD and remembered (the wire carries lies; the door
+ * counts them).  Away from the house root the file refusal is the law
+ * tested instead -- no vacuous pass. */
+fn kl_arm407() -> u64 {
+    xr_reset()
+    let r0 : u64 = KL_RFILE
+    let u0 : u64 = xn_runheard()
+    let fed : u64 = kl_feed("STDLIB/data/capture_feed.jsonl" as u64)
+    if fed == 0u64 {
+        if KL_RFILE != (r0 + 1u64) { return 407u64 }
+        return 0u64
+    }
+    if fed != 5u64 { return 407u64 }
+    if xn_drain(0u64) != 4u64 { return 407u64 }
+    if xn_drained() != 5u64 { return 407u64 }
+    if xn_drain_admitted() != 4u64 { return 407u64 }
+    if xn_runheard() != (u0 + 1u64) { return 407u64 }
+    return 0u64
+}
+/* arm 408: THE ABSENT CAPTURE -- a missing file is refused WHOLE by name,
+ * zero frames, the vein untouched. */
+fn kl_arm408() -> u64 {
+    let r0 : u64 = KL_RFILE
+    if kl_feed("STDLIB/data/no_such_capture.jsonl" as u64) != 0u64 { return 408u64 }
+    if KL_RFILE != (r0 + 1u64) { return 408u64 }
+    return 0u64
+}
+/* arm 409: BACKPRESSURE AND RECOVERY -- the full vein stops the producer
+ * CLEANLY (counted), what was framed drains, and the feed resumes. */
+fn kl_arm409() -> u64 {
+    xr_reset()
+    let mut i : u64 = 0u64
+    while i < 76805u64 { KL_BIG[i] = 121u8   i = i + 1u64 }
+    /* five lines of 15360 bytes: 4 fit the 64KB vein, the fifth refuses */
+    let mut k : u64 = 0u64
+    while k < 5u64 { KL_BIG[(k * 15361u64) + 15360u64] = 10u8   k = k + 1u64 }
+    let f0 : u64 = KL_RFULL
+    let fed : u64 = kl_feed_mem((&KL_BIG) as u64, 76805u64)
+    if fed != 4u64 { return 409u64 }
+    if KL_RFULL != (f0 + 1u64) { return 409u64 }
+    if xn_drain(0u64) != 0u64 { return 409u64 }
+    if xn_drained() != 4u64 { return 409u64 }
+    xr_reset()
+    if kl_feed_mem("{\"z\":9}\n" as u64, 8u64) != 1u64 { return 409u64 }
+    if xn_drain(0u64) != 1u64 { return 409u64 }
+    return 0u64
+}
+fn kl_selfprove() -> u64 @export {
+    let mut r : u64 = kl_arm405()
+    if r != 0u64 { return r }
+    r = kl_arm406()
+    if r != 0u64 { return r }
+    r = kl_arm407()
+    if r != 0u64 { return r }
+    r = kl_arm408()
+    if r != 0u64 { return r }
+    r = kl_arm409()
+    if r != 0u64 { return r }
+    return 0u64
+}

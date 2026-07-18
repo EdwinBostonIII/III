@@ -1,0 +1,5 @@
+{"chan":"depth","sym":"eth_usdc","seq":18446,"bids":[[3000,5],[2999,12]],"asks":[[3001,7],[3002,9]]}
+{"chan":"trade","sym":"eth_usdc","seq":18447,"px":3001,"qty":2,"side":"buy"}
+{"chan":"depth","sym":"eth_usdc","seq":18448,"bids":[[3000,3]],"asks":[[3001,5]]}
+{"chan":"hb","seq":18449
+{"chan":"trade","sym":"eth_usdc","seq":18450,"px":3000,"qty":4,"side":"sell"}

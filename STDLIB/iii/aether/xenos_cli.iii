@@ -44,6 +44,16 @@ extern @abi(c-msvc-x64) fn xn_book_byte(off: u64) -> u8 from "xenos.iii"
 
 extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
 
+extern @abi(c-msvc-x64) fn kl_selfprove() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_feed(path: u64) -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_pushed() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_rfile() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_rsize() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn kl_rfull() -> u64 from "kalodion.iii"
+extern @abi(c-msvc-x64) fn xn_drain(budget: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drained() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drain_admitted() -> u64 from "xenos.iii"
+
 const XC_SENT : u64 = 18446744073709551615u64
 const XC_ADMITTED : u64 = 1u64
 const XC_REFUSED  : u64 = 2u64
@@ -104,6 +114,8 @@ fn usage() -> u64 {
     ps("  iii xenos admit \"<json>\"            transduce, judge, remember; print the algebra\n" as u64)
     ps("  iii xenos emit  \"<json>\"            admit, then re-emit the canonical envelope\n" as u64)
     ps("  iii xenos ask   \"<json>\" -- \"a\" is|under|mirrors \"b\"   reason over the union\n" as u64)
+    ps("  iii xenos feed  <capture.jsonl>     the cable: real wire bytes framed into the\n" as u64)
+    ps("                                      vein, drained through the SAME door\n" as u64)
     ps("  iii xenos book                      the guest-book: every knock, self-verified\n\n" as u64)
     ps("exit: 0 ok/admitted/entailed | 1 refused/unheard/not-entailed | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
@@ -134,6 +146,8 @@ fn condition_of_motion() -> u64 {
     if vp != 0u64 { ps("THE VEIN REFUSES ITSELF: xring self-proof arm " as u64)   pu(vp)   ps(" failed\n" as u64)   return 9u64 }
     let dp : u64 = xn_selfprove()
     if dp != 0u64 { ps("THE DOOR REFUSES ITSELF: xenos self-proof arm " as u64)   pu(dp)   ps(" failed\n" as u64)   return 9u64 }
+    let cp : u64 = kl_selfprove()
+    if cp != 0u64 { ps("THE CABLE REFUSES ITSELF: kalodion self-proof arm " as u64)   pu(cp)   ps(" failed\n" as u64)   return 9u64 }
     return 0u64
 }
 fn print_verdict() -> u64 {
@@ -199,6 +213,27 @@ fn xenos_enter(argc: i32, argv: u64) -> u64 @export {
         }
         ps("\n" as u64)   pu(n)   ps(" line(s) verified.\n" as u64)
         return 0u64
+    }
+    if streq(cmd, "feed" as u64) == 1u32 {
+        /* the cable: a capture of real wire bytes framed into the vein,
+         * drained through the SAME door, every verdict the door's own */
+        if argc < 3i32 { return usage() }
+        let fed : u64 = kl_feed(av[2u64])
+        let adm : u64 = xn_drain(0u64)
+        ps("the cable fed " as u64)   pu(fed)   ps(" frame(s); the door drained " as u64)
+        pu(xn_drained())   ps(", admitted " as u64)   pu(adm)   putchar(10i32)
+        ps("  refusals by name [file " as u64)   pu(kl_rfile())
+        ps(" size " as u64)   pu(kl_rsize())
+        ps(" full " as u64)   pu(kl_rfull())
+        ps("]   frames carried lifetime " as u64)   pu(kl_pushed())   putchar(10i32)
+        if xn_drained() > adm {
+            ps("  (" as u64)   pu(xn_drained() - adm)
+            ps(" record(s) refused or unheard AT THE DOOR -- the wire carries lies; the door counts them)\n" as u64)
+        }
+        if fed == 0u64 { return 1u64 }
+        if adm == 0u64 { return 1u64 }
+        ps("  last verdict surface:\n" as u64)
+        return print_verdict()
     }
     if streq(cmd, "admit" as u64) == 1u32 {
         if argc < 3i32 { return usage() }

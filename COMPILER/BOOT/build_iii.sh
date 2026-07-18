@@ -116,6 +116,7 @@ SRCS=(
     "$III_ROOT/STDLIB/iii/aether/xenos.iii"
     "$III_ROOT/STDLIB/iii/aether/anglos.iii"
     "$III_ROOT/STDLIB/iii/aether/proxenos.iii"
+    "$III_ROOT/STDLIB/iii/aether/kalodion.iii"
     "$III_ROOT/STDLIB/iii/aether/stoma_proc.iii"
     "$III_ROOT/STDLIB/iii/aether/testament.iii"
     "$III_ROOT/STDLIB/iii/aether/pyrgos.iii"

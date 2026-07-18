@@ -51,6 +51,7 @@ cc_one() {
 
 cc_one "$ROOT/STDLIB/iii/aether/xring.iii"    "$T/xring.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/xenos.iii"    "$T/xenos.o"    || exit 2
+cc_one "$ROOT/STDLIB/iii/aether/kalodion.iii" "$T/kalodion.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/eidolos.iii"   "$T/eidolos.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/isub.iii"      "$T/isub.o"     || exit 2
 cc_one "$ROOT/STDLIB/iii/verba/lexicon.iii"   "$T/lexicon.o"  || exit 2
@@ -60,7 +61,7 @@ cc_one "$ROOT/STDLIB/iii/memoria/arena.iii"   "$T/arena.o"    || exit 2
 cc_one "$ROOT/STDLIB/build/xenos/xnprobe_main.iii" "$T/xnprobe_main.o" || exit 2
 
 gcc -o "$T/xnprobe.exe" \
-    "$T/xnprobe_main.o" "$T/xenos.o" "$T/xring.o" "$T/eidolos.o" "$T/isub.o" \
+    "$T/xnprobe_main.o" "$T/xenos.o" "$T/xring.o" "$T/kalodion.o" "$T/eidolos.o" "$T/isub.o" \
     "$T/lexicon.o" "$T/json.o" "$T/builder.o" "$T/arena.o" \
     "$ARC" -lws2_32 -lkernel32 \
     || { echo "[xenos_gate] LINK FAIL"; exit 3; }
@@ -86,6 +87,8 @@ grep -q "^scroll vein   = 120..124 green" "$T/run1.txt" || { echo "[xenos_gate] 
 grep -q "^scroll door   = 109..118 green" "$T/run1.txt" || { echo "[xenos_gate] NO DOOR"; exit 6; }
 grep -q "^the stranger: grade=0 " "$T/run1.txt"         || { echo "[xenos_gate] NO STRANGER"; exit 6; }
 grep -q "^scroll emit   = [0-9]" "$T/run1.txt"          || { echo "[xenos_gate] NO EMIT"; exit 6; }
+grep -q "^scroll cable  = 405..409 green" "$T/run1.txt" || { echo "[xenos_gate] NO CABLE"; exit 6; }
+grep -q "^the road: fed 5 drained 5 admitted 4 " "$T/run1.txt" || { echo "[xenos_gate] NO ROAD"; exit 6; }
 grep -q "^scroll book   = [0-9].* self-derived" "$T/run1.txt" || { echo "[xenos_gate] NO BOOK"; exit 6; }
 [ -s "$ROOT/STDLIB/data/xenos.gbk" ] || { echo "[xenos_gate] NO GUEST-BOOK FILE"; exit 6; }
 echo "[xenos_gate] THE MEMBRANE IS GREEN -- vein + door, byte-deterministic:"

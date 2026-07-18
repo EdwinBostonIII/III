@@ -1014,6 +1014,10 @@ fn nl_lex_init_all() -> i32 @export {
     nl_lex_register_hash(0x3f546529170319f5u64, 1u8, 627u32) /* federate */
     nl_lex_register_hash(0x86c8946e5047dea7u64, 1u8, 628u32) /* capability */
     nl_lex_register_hash(0xeb246e5cabc40ca8u64, 1u8, 629u32) /* mhash */
+    /* word ids 630 ("mirrors") and 631 ("equals") are RESERVED: registered at
+     * runtime by aether/anglos (an_init) through the public registration face
+     * -- the English door's two 3sg relational verbs.  The next free id for
+     * this roster is 632.  [anglos v1] */
 
     NL_LEX_INITED = 1u8
     return NL_LEX_OK

@@ -1,0 +1,962 @@
+/* STDLIB/iii/aether/anglos.iii -- ANGLOS: the English door.
+ *
+ * English is the wild tongue outside; EIDOLOS is the house's one language.
+ * ANGLOS is NOT a second door -- it is a TONGUE standing before the one door
+ * (xenos): a deterministic transducer from a bounded, grammar-parseable
+ * subset of English into EIDOLOS claims, admitted through xn_admit exactly
+ * like any foreign guest (judged by re-derivation, booked in the guest-book,
+ * refused by name).  NO statistics, NO embeddings, NO guessing: what the
+ * surface cannot carry is REFUSED and COUNTED, never hallucinated.  The
+ * reach grows by extending the lexicon and this table, not by hoping a
+ * model generalizes.
+ *
+ * THE SURFACE LAW (the whole auditable table):
+ *   A sentence is heard through verba/nl_lex (the sealed lexicon) and
+ *   verba/nl_parse (the deterministic thematic-role tagger).  Three kinds:
+ *
+ *   DECLARATIVE  AGENT VERB PREDICATE -> one claim, by the verb:
+ *     is|are  + indefinite predicate ("a"/"an" NP)   ->  <   (kind membership)
+ *     is|are  + adjective predicate (no head noun)   ->  <   (property)
+ *     is|are  + definite ("the") or bare predicate   ->  =   (identity)
+ *     equals                                          ->  =   (always)
+ *     mirrors                                         ->  ~   (always)
+ *     "and"-chains compose: each clause one claim, ONE utterance ONE guest.
+ *
+ *   INTERROGATIVE  is|are + SUBJECT + PREDICATE -> a question: the SAME
+ *     table chooses the verb; the answer is eol_entails over the STANDING
+ *     scroll (what the house actually knows) -- KNOWN / not-entailed /
+ *     refused, never invented.  Questions knock on no door.
+ *
+ *   EVERYTHING ELSE REFUSED BY NAME, WHOLE-UTTERANCE (the throat law --
+ *   one bad sentence poisons the utterance; nothing is admitted):
+ *     UNPARSED  not recognizable by the grammar
+ *     KIND      imperative -- commands are intent, not knowledge
+ *     VERB      a declarative verb outside the relational surface
+ *     MODAL     can/should/might/... -- modality is doxa's jurisdiction
+ *     SHAPE     missing subject/predicate, unsupported determiner
+ *     CLAUSE    because/while/if -- conditional worlds are not flat claims
+ *     CONJ      or/but/then -- only "and" composes claims
+ *     CHAR      a byte outside the hearable alphabet [a-z 0-9 space . ? ! , _]
+ *     THROAT    over a capacity -- refused whole, never truncated
+ *     DOOR      xenos itself refused the transduced scroll (xn_reason names it)
+ *
+ * THE SAME TONGUE SPEAKS OUT (an_say): the standing scroll renders back to
+ * bounded English --  [a < b] -> "a is a b."   [a = b] -> "a equals b."
+ * [a ~ b] -> "a mirrors b." -- chosen so the round trip through the REAL
+ * lexer/parser/door re-derives the SAME address.  A scroll the surface
+ * cannot say (mentioned claims, words that collide with the lexicon's
+ * verb/det/prep forms) is refused, never mangled.
+ *
+ * VOCABULARY: an_init seeds nl_lex (nl_lex_init_all) and registers the two
+ * 3sg relational forms through nl_lex's PUBLIC registration face:
+ *   mirrors -> VERB word 630        equals -> VERB word 631
+ * (word ids 630/631 are reserved for ANGLOS; see the nl_lex roster note).
+ *
+ * Truth is a CONDITION OF MOTION: an_selfprove (arms 390..399) re-derives
+ * every law above at every invocation.  NO gate, NO KAT (the kardia
+ * pattern).  NIH: composes verba/nl_lex + verba/nl_parse (the bounded
+ * grammar), aether/xenos (THE ONE DOOR), aether/xring (the vein, for the
+ * transport-transparency arm), omnia/eidolos (the tongue the house reasons
+ * in).  Hexad: kind_passage.  Ring R0. */
+module aether_anglos
+
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_register_hash(hash: u64, type_id: u8, word_id: u32) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_lookup_hash(hash: u64) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_type(tok: u64) -> u8 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_start(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_end(tok: u64) -> u32 from "nl_lex.iii"
+
+extern @abi(c-msvc-x64) fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 from "nl_parse.iii"
+
+extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_verdict() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_addr() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_epoch() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drain(budget: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drained() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_drain_admitted() -> u64 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn xr_reset() -> i32 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_push(base: u64, len: u64) -> u64 from "xring.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claims() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_a(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_v(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_b(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+
+const AN_SENT : u64 = 18446744073709551615u64
+/* nl_parse packs the head token through a 16-bit lane (_np_pack_rhq masks
+ * to 0xFFFF), so a HEADLESS span -- an adjective predicate -- arrives as
+ * 65535, never 0xFFFFFFFF.  Token counts are capped at 512, so no real
+ * head can collide with the sentinel. */
+const AN_HEADLESS : u32 = 65535u32
+
+/* nl_lex token types (the sealed canon) */
+const ANT_VERB : u8 = 1u8
+const ANT_NOUN : u8 = 2u8
+const ANT_ADJ  : u8 = 3u8
+const ANT_ADV  : u8 = 4u8
+const ANT_PREP : u8 = 5u8
+const ANT_DET  : u8 = 6u8
+const ANT_NUM  : u8 = 7u8
+const ANT_STR  : u8 = 8u8
+const ANT_IDENT: u8 = 9u8
+const ANT_ROLE : u8 = 10u8
+const ANT_PUNCT: u8 = 11u8
+const ANT_EOL  : u8 = 12u8
+
+/* nl_parse kinds and roles (the sealed canon) */
+const ANK_UNKNOWN : u32 = 0u32
+const ANK_IMPER   : u32 = 1u32
+const ANK_DECL    : u32 = 2u32
+const ANK_INTER   : u32 = 3u32
+const ANR_VERB  : u32 = 1u32
+const ANR_AGENT : u32 = 2u32
+const ANR_PATIENT : u32 = 3u32
+const ANR_TOPIC : u32 = 10u32
+const ANR_REASON : u32 = 11u32
+const ANR_CONDITION : u32 = 12u32
+const ANR_MODAL : u32 = 13u32
+const ANR_CONJ : u32 = 14u32
+
+/* word ids this table keys on (nl_lex sealed roster + the anglos pair) */
+const ANW_THE : u32 = 103u32
+const ANW_A   : u32 = 104u32
+const ANW_AN  : u32 = 105u32
+const ANW_IS  : u32 = 151u32
+const ANW_ARE : u32 = 152u32
+const ANW_AND : u32 = 178u32
+const ANW_MIRRORS : u32 = 630u32         /* registered by an_init              */
+const ANW_EQUALS  : u32 = 631u32         /* registered by an_init              */
+
+/* the FNV-1a the lexer hashes with (nl_lex's documented constants) */
+const AN_FNV_OFFSET : u64 = 0xcbf29ce484222325u64
+const AN_FNV_PRIME  : u64 = 0x100000001b3u64
+
+/* verdicts (mirror the door's family) */
+const AN_V_ADMITTED : u64 = 1u64
+const AN_V_REFUSED  : u64 = 2u64
+const AN_V_UNHEARD  : u64 = 3u64
+
+/* named refusal reasons */
+const AN_R_NONE     : u64 = 0u64
+const AN_R_UNPARSED : u64 = 1u64
+const AN_R_KIND     : u64 = 2u64
+const AN_R_VERB     : u64 = 3u64
+const AN_R_MODAL    : u64 = 4u64
+const AN_R_SHAPE    : u64 = 5u64
+const AN_R_CLAUSE   : u64 = 6u64
+const AN_R_CONJ     : u64 = 7u64
+const AN_R_CHAR     : u64 = 8u64
+const AN_R_THROAT   : u64 = 9u64
+const AN_R_DOOR     : u64 = 10u64
+
+const AN_INCAP : u64 = 4096u64           /* the throat: one utterance's bytes  */
+const AN_TCAP  : u64 = 512u64            /* token cap                          */
+const AN_QCAP  : u64 = 16u64             /* questions per utterance            */
+
+/* ==================== the tongue's state ==================== */
+var AN_SRC : [u8; 4096]                  /* the utterance, lowercased          */
+var AN_SN  : u64 = 0u64
+var AN_TOK : [u64; 512]
+var AN_TN  : u64 = 0u64
+var AN_FRG : [u32; 256]                  /* 64 fragments x 4 u32               */
+var AN_META : [u32; 2]
+var AN_TCNT : [u32; 1]                   /* tokenize out-count                 */
+
+var AN_SCR : [u8; 8192]                  /* the claim-array JSON (the guest)   */
+var AN_SCN : u64 = 0u64
+var AN_PA : [u8; 512]                    /* clause subject phrase              */
+var AN_PB : [u8; 512]                    /* clause predicate phrase            */
+
+var AN_QT : [u8; 2048]                   /* question phrase arena              */
+var AN_QTN : u64 = 0u64
+var AN_QAO : [u64; 16]
+var AN_QAL : [u64; 16]
+var AN_QVV : [u64; 16]
+var AN_QBO : [u64; 16]
+var AN_QBL : [u64; 16]
+var AN_QN : u64 = 0u64
+var AN_ANS : [u64; 16]
+var AN_QR : [u8; 1152]                   /* question render scratch            */
+var AN_QRN : u64 = 0u64
+
+var AN_SAY : [u8; 4096]                  /* the tongue speaking out            */
+var AN_SAYN : u64 = 0u64
+
+/* the last hearing's verdict surface */
+var AN_VERDICT : u64 = 0u64
+var AN_REASON : u64 = 0u64
+var AN_CLAIMS : u64 = 0u64
+var AN_ADDR : u64 = 0u64                 /* the admitted scroll's address      */
+
+/* named refusal counters (every refusal counted, never silent) */
+var AN_RC : [u64; 11]
+var AN_HEARD : u64 = 0u64                /* utterances heard                   */
+var AN_ADMIT : u64 = 0u64                /* utterances admitted at the door    */
+
+var AN_INITED : u64 = 0u64
+var AN_PR : u64 = 0u64                   /* phrase-builder refusal reason      */
+
+/* THE ANAMNESIS: the hearing remembered, sentence by sentence.  The organ
+ * explains its own act -- what kind each sentence was heard as, how many
+ * role fragments it carried, and what became of it (a claim, a question,
+ * or the named refusal) -- so the transduction is INSPECTABLE from the
+ * organ itself and no outside probe is ever needed to see it. */
+const AN_TMAX : u64 = 16u64              /* sentences per utterance (throat)   */
+const AN_T_CLAIM : u64 = 1u64
+const AN_T_QUESTION : u64 = 2u64
+const AN_T_REFUSED : u64 = 100u64        /* 100 + the named reason             */
+var AN_TRK : [u64; 16]                   /* sentence kind (nl_parse canon)     */
+var AN_TRF : [u64; 16]                   /* fragment count                     */
+var AN_TRO : [u64; 16]                   /* outcome                            */
+var AN_TRN : u64 = 0u64
+
+/* ==================== init: the vocabulary ==================== */
+fn an_fnv(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut h : u64 = AN_FNV_OFFSET
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        let mut c : u8 = p[i]
+        if c >= 65u8 { if c <= 90u8 { c = c + 32u8 } }
+        h = h ^ ((c as u64) & 0xFFu64)
+        h = h * AN_FNV_PRIME
+        i = i + 1u64
+    }
+    return h
+}
+fn an_init() -> u64 {
+    if AN_INITED == 1u64 { return 0u64 }
+    nl_lex_init_all()
+    nl_lex_register_hash(an_fnv("mirrors" as u64), ANT_VERB, ANW_MIRRORS)
+    nl_lex_register_hash(an_fnv("equals" as u64), ANT_VERB, ANW_EQUALS)
+    AN_INITED = 1u64
+    return 0u64
+}
+
+/* ==================== small helpers ==================== */
+fn an_refuse(r: u64) -> u64 {
+    AN_REASON = r
+    AN_VERDICT = AN_V_REFUSED
+    AN_CLAIMS = 0u64
+    AN_QN = 0u64
+    if r < 11u64 { AN_RC[r] = AN_RC[r] + 1u64 }
+    return AN_V_REFUSED
+}
+fn an_hearable(c: u8) -> u64 {
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 65u8 { if c <= 90u8 { return 1u64 } }
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c == 32u8 { return 1u64 }
+    if c == 9u8  { return 1u64 }
+    if c == 13u8 { return 1u64 }
+    if c == 10u8 { return 1u64 }
+    if c == 46u8 { return 1u64 }         /* .                                  */
+    if c == 63u8 { return 1u64 }         /* ?                                  */
+    if c == 33u8 { return 1u64 }         /* !                                  */
+    if c == 44u8 { return 1u64 }         /* ,                                  */
+    if c == 95u8 { return 1u64 }         /* _                                  */
+    return 0u64
+}
+fn an_frag_role(i: u64) -> u32 { return AN_FRG[i * 4u64] }
+fn an_frag_head(i: u64) -> u32 { return AN_FRG[(i * 4u64) + 1u64] }
+fn an_frag_ss(i: u64) -> u32 { return AN_FRG[(i * 4u64) + 2u64] & 0xFFFFu32 }
+fn an_frag_se(i: u64) -> u32 { return (AN_FRG[(i * 4u64) + 2u64] >> 16u32) & 0xFFFFu32 }
+fn an_frag_quant(i: u64) -> u32 { return AN_FRG[(i * 4u64) + 3u64] }
+
+/* ==================== the phrase builder ====================
+ * Renders token range [ts, te) (indexes into AN_TOK, absolute) as an EIDOLOS
+ * phrase into dst: determiners the/a/an skipped, every other DET refused
+ * (SHAPE); words copied from the lowercased source bytes; NUMBER tokens
+ * copied digit-exact from their spans (never from the lexer's 24-bit value);
+ * STRING_LIT cannot arise (the alphabet has no quote).  Returns the length,
+ * or AN_SENT with AN_PR naming the refusal. */
+fn an_phrase(ts: u64, te: u64, dst: u64, cap: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let mut n : u64 = 0u64
+    let mut j : u64 = ts
+    AN_PR = 0u64
+    while j < te {
+        let tok : u64 = AN_TOK[j]
+        let tt : u8 = nl_token_type(tok)
+        let mut take : u64 = 1u64
+        if tt == ANT_DET {
+            let w : u32 = nl_token_word_id(tok)
+            let mut okd : u64 = 0u64
+            if w == ANW_THE { okd = 1u64 }
+            if w == ANW_A   { okd = 1u64 }
+            if w == ANW_AN  { okd = 1u64 }
+            if okd == 0u64 { AN_PR = AN_R_SHAPE   return AN_SENT }
+            take = 0u64
+        }
+        if take == 1u64 {
+            let ss : u64 = nl_token_span_start(tok) as u64
+            let se : u64 = nl_token_span_end(tok) as u64
+            if tt == ANT_NUM { if (se - ss) > 18u64 { AN_PR = AN_R_THROAT   return AN_SENT } }
+            if n > 0u64 { if n < cap { d[n] = 32u8   n = n + 1u64 } else { AN_PR = AN_R_THROAT   return AN_SENT } }
+            let mut k : u64 = ss
+            while k < se {
+                if n < cap { d[n] = AN_SRC[k]   n = n + 1u64 } else { AN_PR = AN_R_THROAT   return AN_SENT }
+                k = k + 1u64
+            }
+        }
+        j = j + 1u64
+    }
+    if n == 0u64 { AN_PR = AN_R_SHAPE   return AN_SENT }
+    return n
+}
+/* the predicate's determiner decides the verb (the surface law):
+ *   a/an leading -> '<'; ADJ-only (headless) -> '<'; the/bare -> '='.
+ * verb char returned; AN_SENT on an unsupported determiner. */
+fn an_pred_verb(ts: u64, te: u64, head: u32) -> u64 {
+    if ts < te {
+        let tok : u64 = AN_TOK[ts]
+        if nl_token_type(tok) == ANT_DET {
+            let w : u32 = nl_token_word_id(tok)
+            if w == ANW_A  { return 60u64 }
+            if w == ANW_AN { return 60u64 }
+            if w == ANW_THE { return 61u64 }
+            return AN_SENT
+        }
+    }
+    if head == AN_HEADLESS { return 60u64 }
+    return 61u64
+}
+
+/* ==================== the claim assembler ==================== */
+fn an_scr_put(c: u8) -> u64 {
+    if AN_SCN >= 8192u64 { return 1u64 }
+    AN_SCR[AN_SCN] = c
+    AN_SCN = AN_SCN + 1u64
+    return 0u64
+}
+fn an_scr_claim(alen: u64, vch: u64, blen: u64) -> u64 {
+    let mut r : u64 = 0u64
+    if AN_CLAIMS == 0u64 { r = r + an_scr_put(91u8) } else { r = r + an_scr_put(44u8) }
+    r = r + an_scr_put(34u8)
+    r = r + an_scr_put(91u8)
+    let mut i : u64 = 0u64
+    while i < alen { r = r + an_scr_put(AN_PA[i])   i = i + 1u64 }
+    r = r + an_scr_put(32u8)
+    r = r + an_scr_put(vch as u8)
+    r = r + an_scr_put(32u8)
+    i = 0u64
+    while i < blen { r = r + an_scr_put(AN_PB[i])   i = i + 1u64 }
+    r = r + an_scr_put(93u8)
+    r = r + an_scr_put(34u8)
+    if r != 0u64 { return AN_R_THROAT }
+    AN_CLAIMS = AN_CLAIMS + 1u64
+    return 0u64
+}
+
+/* ==================== the declarative mapping ====================
+ * Walks the fragment list of one recognized declarative sentence (frag
+ * indexes are into AN_FRG; token indexes inside fragments are RELATIVE to
+ * the sentence's token base ts).  Emits one claim per relational clause.
+ * Returns 0 or a named refusal. */
+fn an_map_decl(ts: u64, nfr: u64) -> u64 {
+    let mut fi : u64 = 0u64
+    let mut have_a : u64 = 0u64
+    let mut aas : u64 = 0u64
+    let mut aae : u64 = 0u64
+    let mut vword : u32 = 0u32
+    let mut have_v : u64 = 0u64
+    while fi < nfr {
+        let role : u32 = an_frag_role(fi)
+        if role == ANR_AGENT {
+            if have_v == 1u64 { return AN_R_SHAPE }
+            aas = ts + (an_frag_ss(fi) as u64)
+            aae = ts + (an_frag_se(fi) as u64)
+            if an_frag_head(fi) == AN_HEADLESS { return AN_R_SHAPE }
+            have_a = 1u64
+        } else { if role == ANR_MODAL {
+            return AN_R_MODAL
+        } else { if role == ANR_VERB {
+            if have_a == 0u64 { return AN_R_SHAPE }
+            let vtok : u64 = AN_TOK[ts + (an_frag_head(fi) as u64)]
+            vword = nl_token_word_id(vtok)
+            let mut known : u64 = 0u64
+            if vword == ANW_IS { known = 1u64 }
+            if vword == ANW_ARE { known = 1u64 }
+            if vword == ANW_EQUALS { known = 1u64 }
+            if vword == ANW_MIRRORS { known = 1u64 }
+            if known == 0u64 { return AN_R_VERB }
+            have_v = 1u64
+        } else { if role == ANR_PATIENT {
+            if have_v == 0u64 { return AN_R_SHAPE }
+            let pps : u64 = ts + (an_frag_ss(fi) as u64)
+            let ppe : u64 = ts + (an_frag_se(fi) as u64)
+            let phead : u32 = an_frag_head(fi)
+            let mut vch : u64 = 0u64
+            if vword == ANW_EQUALS { vch = 61u64 }
+            if vword == ANW_MIRRORS { vch = 126u64 }
+            if vch == 0u64 {
+                vch = an_pred_verb(pps, ppe, phead)
+                if vch == AN_SENT { return AN_R_SHAPE }
+            }
+            let alen : u64 = an_phrase(aas, aae, (&AN_PA) as u64, 512u64)
+            if alen == AN_SENT { return AN_PR }
+            let blen : u64 = an_phrase(pps, ppe, (&AN_PB) as u64, 512u64)
+            if blen == AN_SENT { return AN_PR }
+            let er : u64 = an_scr_claim(alen, vch, blen)
+            if er != 0u64 { return er }
+            have_a = 0u64
+            have_v = 0u64
+            vword = 0u32
+        } else { if role == ANR_CONJ {
+            if an_frag_quant(fi) != ANW_AND { return AN_R_CONJ }
+            if have_v == 1u64 { return AN_R_SHAPE }
+        } else { if role == ANR_REASON {
+            return AN_R_CLAUSE
+        } else { if role == ANR_CONDITION {
+            return AN_R_CLAUSE
+        } else {
+            return AN_R_SHAPE
+        } } } } } } }
+        fi = fi + 1u64
+    }
+    if have_v == 1u64 { return AN_R_SHAPE }
+    if have_a == 1u64 { return AN_R_SHAPE }
+    return 0u64
+}
+
+/* ==================== the interrogative mapping ====================
+ * VERB(aux) + AGENT + TOPIC -> a stored question over the standing scroll.
+ * Only the copular auxiliaries ask flat questions; can/does/... are modality
+ * and refuse by name.  Returns 0 or a named refusal. */
+fn an_qt_put_phrase(len: u64, src: u64) -> u64 {
+    let p : *u8 = src as *u8
+    if (AN_QTN + len) > 2048u64 { return AN_SENT }
+    let off : u64 = AN_QTN
+    let mut i : u64 = 0u64
+    while i < len { AN_QT[AN_QTN] = p[i]   AN_QTN = AN_QTN + 1u64   i = i + 1u64 }
+    return off
+}
+fn an_map_inter(ts: u64, nfr: u64) -> u64 {
+    if AN_QN >= AN_QCAP { return AN_R_THROAT }
+    let mut fi : u64 = 0u64
+    let mut have_v : u64 = 0u64
+    let mut have_a : u64 = 0u64
+    let mut aas : u64 = 0u64
+    let mut aae : u64 = 0u64
+    let mut tts : u64 = 0u64
+    let mut tte : u64 = 0u64
+    let mut thead : u32 = 0u32
+    let mut have_t : u64 = 0u64
+    while fi < nfr {
+        let role : u32 = an_frag_role(fi)
+        if role == ANR_VERB {
+            let vtok : u64 = AN_TOK[ts + (an_frag_head(fi) as u64)]
+            let w : u32 = nl_token_word_id(vtok)
+            let mut okv : u64 = 0u64
+            if w == ANW_IS { okv = 1u64 }
+            if w == ANW_ARE { okv = 1u64 }
+            if okv == 0u64 { return AN_R_MODAL }
+            have_v = 1u64
+        } else { if role == ANR_AGENT {
+            aas = ts + (an_frag_ss(fi) as u64)
+            aae = ts + (an_frag_se(fi) as u64)
+            if an_frag_head(fi) == AN_HEADLESS { return AN_R_SHAPE }
+            have_a = 1u64
+        } else { if role == ANR_TOPIC {
+            tts = ts + (an_frag_ss(fi) as u64)
+            tte = ts + (an_frag_se(fi) as u64)
+            thead = an_frag_head(fi)
+            have_t = 1u64
+        } else {
+            return AN_R_SHAPE
+        } } }
+        fi = fi + 1u64
+    }
+    if have_v == 0u64 { return AN_R_SHAPE }
+    if have_a == 0u64 { return AN_R_SHAPE }
+    if have_t == 0u64 { return AN_R_SHAPE }
+    let vch : u64 = an_pred_verb(tts, tte, thead)
+    if vch == AN_SENT { return AN_R_SHAPE }
+    let alen : u64 = an_phrase(aas, aae, (&AN_PA) as u64, 512u64)
+    if alen == AN_SENT { return AN_PR }
+    let blen : u64 = an_phrase(tts, tte, (&AN_PB) as u64, 512u64)
+    if blen == AN_SENT { return AN_PR }
+    let aoff : u64 = an_qt_put_phrase(alen, (&AN_PA) as u64)
+    if aoff == AN_SENT { return AN_R_THROAT }
+    let boff : u64 = an_qt_put_phrase(blen, (&AN_PB) as u64)
+    if boff == AN_SENT { return AN_R_THROAT }
+    let mut vv : u64 = 2u64
+    if vch == 60u64 { vv = 0u64 }
+    if vch == 126u64 { vv = 1u64 }
+    AN_QAO[AN_QN] = aoff
+    AN_QAL[AN_QN] = alen
+    AN_QVV[AN_QN] = vv
+    AN_QBO[AN_QN] = boff
+    AN_QBL[AN_QN] = blen
+    AN_QN = AN_QN + 1u64
+    return 0u64
+}
+
+/* ==================== one sentence ==================== */
+fn an_trace(kind: u64, nfr: u64, out: u64) -> u64 {
+    if AN_TRN < AN_TMAX {
+        AN_TRK[AN_TRN] = kind
+        AN_TRF[AN_TRN] = nfr
+        AN_TRO[AN_TRN] = out
+        AN_TRN = AN_TRN + 1u64
+    }
+    return out
+}
+fn an_sentence(ts: u64, te: u64) -> u64 {
+    if te <= ts { return 0u64 }
+    if AN_TRN >= AN_TMAX { return AN_R_THROAT }
+    let cnt : u32 = (te - ts) as u32
+    let rc : i32 = nl_parse_recognize(((&AN_TOK) as u64) + (ts * 8u64), cnt, (&AN_FRG) as u64, (&AN_META) as u64)
+    let nfr : u64 = AN_META[0u64] as u64
+    let kind : u64 = AN_META[1u64] as u64
+    if rc == -4i32 { return 0u64 }
+    if rc == -2i32 { an_trace(kind, nfr, AN_T_REFUSED + AN_R_THROAT)   return AN_R_THROAT }
+    if rc != 0i32 { an_trace(kind, nfr, AN_T_REFUSED + AN_R_UNPARSED)   return AN_R_UNPARSED }
+    if kind == (ANK_DECL as u64) {
+        let r : u64 = an_map_decl(ts, nfr)
+        if r == 0u64 { an_trace(kind, nfr, AN_T_CLAIM)   return 0u64 }
+        an_trace(kind, nfr, AN_T_REFUSED + r)
+        return r
+    }
+    if kind == (ANK_INTER as u64) {
+        let r : u64 = an_map_inter(ts, nfr)
+        if r == 0u64 { an_trace(kind, nfr, AN_T_QUESTION)   return 0u64 }
+        an_trace(kind, nfr, AN_T_REFUSED + r)
+        return r
+    }
+    if kind == (ANK_IMPER as u64) { an_trace(kind, nfr, AN_T_REFUSED + AN_R_KIND)   return AN_R_KIND }
+    an_trace(kind, nfr, AN_T_REFUSED + AN_R_UNPARSED)
+    return AN_R_UNPARSED
+}
+
+/* ==================== THE HEARING ==================== */
+fn an_hear(base: u64, len: u64) -> u64 @export {
+    an_init()
+    AN_VERDICT = 0u64
+    AN_REASON = AN_R_NONE
+    AN_CLAIMS = 0u64
+    AN_ADDR = 0u64
+    AN_SCN = 0u64
+    AN_QN = 0u64
+    AN_QTN = 0u64
+    AN_TRN = 0u64
+    AN_HEARD = AN_HEARD + 1u64
+    if len == 0u64 { AN_VERDICT = AN_V_UNHEARD   return AN_V_UNHEARD }
+    if len > AN_INCAP { return an_refuse(AN_R_THROAT) }
+    /* intake: the hearable alphabet, folded to the house's case */
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let mut c : u8 = p[i]
+        if an_hearable(c) == 0u64 { return an_refuse(AN_R_CHAR) }
+        if c >= 65u8 { if c <= 90u8 { c = c + 32u8 } }
+        AN_SRC[i] = c
+        i = i + 1u64
+    }
+    AN_SN = len
+    /* the one lexing */
+    let pk : u64 = nl_lex_pack_lens(AN_SN as u32, 512u32)
+    let lr : i32 = nl_lex_tokenize((&AN_SRC) as u64, pk, (&AN_TOK) as u64, (&AN_TCNT) as u64)
+    if lr != 0i32 { return an_refuse(AN_R_THROAT) }
+    AN_TN = AN_TCNT[0u64] as u64
+    /* sentences split at EOL and at . ? ! -- each recognized alone */
+    let mut s : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < AN_TN {
+        let tok : u64 = AN_TOK[j]
+        let tt : u8 = nl_token_type(tok)
+        let mut cut : u64 = 0u64
+        if tt == ANT_EOL { cut = 1u64 }
+        if tt == ANT_PUNCT {
+            let w : u32 = nl_token_word_id(tok)
+            if w == 46u32 { cut = 1u64 }
+            if w == 63u32 { cut = 1u64 }
+            if w == 33u32 { cut = 1u64 }
+        }
+        if cut == 1u64 {
+            let sr : u64 = an_sentence(s, j)
+            if sr != 0u64 { return an_refuse(sr) }
+            s = j + 1u64
+        }
+        j = j + 1u64
+    }
+    let sr2 : u64 = an_sentence(s, AN_TN)
+    if sr2 != 0u64 { return an_refuse(sr2) }
+    if AN_CLAIMS == 0u64 { if AN_QN == 0u64 { AN_VERDICT = AN_V_UNHEARD   return AN_V_UNHEARD } }
+    /* statements knock at THE ONE DOOR (judged, booked, standing) */
+    if AN_CLAIMS > 0u64 {
+        if an_scr_put(93u8) != 0u64 { return an_refuse(AN_R_THROAT) }
+        let v : u64 = xn_admit((&AN_SCR) as u64, AN_SCN)
+        if v != 1u64 { return an_refuse(AN_R_DOOR) }
+        AN_ADDR = xn_last_addr()
+        AN_ADMIT = AN_ADMIT + 1u64
+    }
+    /* questions interrogate the STANDING scroll (never invented answers) */
+    let mut q : u64 = 0u64
+    while q < AN_QN {
+        AN_ANS[q] = eol_entails(((&AN_QT) as u64) + AN_QAO[q], AN_QAL[q], AN_QVV[q], ((&AN_QT) as u64) + AN_QBO[q], AN_QBL[q])
+        q = q + 1u64
+    }
+    AN_VERDICT = AN_V_ADMITTED
+    return AN_V_ADMITTED
+}
+fn an_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn an_hear_text(s: u64) -> u64 @export { return an_hear(s, an_slen(s)) }
+
+/* ==================== the verdict surface ==================== */
+fn an_verdict() -> u64 @export { return AN_VERDICT }
+fn an_reason() -> u64 @export { return AN_REASON }
+fn an_claims() -> u64 @export { return AN_CLAIMS }
+fn an_questions() -> u64 @export { return AN_QN }
+fn an_answer(i: u64) -> u64 @export { if i < AN_QN { return AN_ANS[i] }   return AN_SENT }
+fn an_addr() -> u64 @export { return AN_ADDR }
+fn an_refused(r: u64) -> u64 @export { if r < 11u64 { return AN_RC[r] }   return 0u64 }
+fn an_heard() -> u64 @export { return AN_HEARD }
+fn an_admitted() -> u64 @export { return AN_ADMIT }
+fn an_scroll_len() -> u64 @export { return AN_SCN }
+fn an_scroll_byte(i: u64) -> u8 @export { if i < AN_SCN { return AN_SCR[i] }   return 0u8 }
+/* the anamnesis surface: the hearing explained, sentence by sentence */
+fn an_trace_n() -> u64 @export { return AN_TRN }
+fn an_trace_kind(i: u64) -> u64 @export { if i < AN_TRN { return AN_TRK[i] }   return AN_SENT }
+fn an_trace_frags(i: u64) -> u64 @export { if i < AN_TRN { return AN_TRF[i] }   return AN_SENT }
+fn an_trace_out(i: u64) -> u64 @export { if i < AN_TRN { return AN_TRO[i] }   return AN_SENT }
+/* render question i as its claim form "[a v b]" (len first, then bytes) */
+fn an_question_len(i: u64) -> u64 @export {
+    if i >= AN_QN { return 0u64 }
+    AN_QRN = 0u64
+    AN_QR[AN_QRN] = 91u8   AN_QRN = AN_QRN + 1u64
+    let mut k : u64 = 0u64
+    while k < AN_QAL[i] { AN_QR[AN_QRN] = AN_QT[AN_QAO[i] + k]   AN_QRN = AN_QRN + 1u64   k = k + 1u64 }
+    AN_QR[AN_QRN] = 32u8   AN_QRN = AN_QRN + 1u64
+    let mut vc : u8 = 61u8
+    if AN_QVV[i] == 0u64 { vc = 60u8 }
+    if AN_QVV[i] == 1u64 { vc = 126u8 }
+    AN_QR[AN_QRN] = vc   AN_QRN = AN_QRN + 1u64
+    AN_QR[AN_QRN] = 32u8   AN_QRN = AN_QRN + 1u64
+    k = 0u64
+    while k < AN_QBL[i] { AN_QR[AN_QRN] = AN_QT[AN_QBO[i] + k]   AN_QRN = AN_QRN + 1u64   k = k + 1u64 }
+    AN_QR[AN_QRN] = 93u8   AN_QRN = AN_QRN + 1u64
+    return AN_QRN
+}
+fn an_question_byte(k: u64) -> u8 @export { if k < AN_QRN { return AN_QR[k] }   return 0u8 }
+
+/* ==================== THE TONGUE SPEAKS OUT ====================
+ * Renders the STANDING scroll as bounded English whose re-hearing derives
+ * the SAME address:  [a < b] -> "a is a b."   [a = b] -> "a equals b."
+ * [a ~ b] -> "a mirrors b."  A scroll the surface cannot carry -- mentioned
+ * claims, or a phrase word that collides with the lexicon's verb/det/prep/
+ * adv/role forms (it would re-lex as structure, not as a name) -- returns 0:
+ * refused, never mangled. */
+fn an_say_word_ok(off: u64, wl: u64) -> u64 {
+    if wl == 0u64 { return 0u64 }
+    let mut alldig : u64 = 1u64
+    let mut k : u64 = 0u64
+    while k < wl {
+        let c : u8 = AN_SAY[off + k]
+        if c == 45u8 { return 0u64 }     /* '-' is an eidolos word char but   */
+        let mut d : u64 = 0u64           /* outside the hearable alphabet --  */
+        if c >= 48u8 { if c <= 57u8 { d = 1u64 } }   /* unsayable, by name    */
+        if d == 0u64 { alldig = 0u64 }
+        k = k + 1u64
+    }
+    if alldig == 1u64 { return 1u64 }
+    /* hash the word bytes exactly as the lexer would */
+    let mut h : u64 = AN_FNV_OFFSET
+    k = 0u64
+    while k < wl {
+        h = h ^ ((AN_SAY[off + k] as u64) & 0xFFu64)
+        h = h * AN_FNV_PRIME
+        k = k + 1u64
+    }
+    let lk : u64 = nl_lex_lookup_hash(h)
+    if lk == 0u64 { return 1u64 }
+    let ty : u8 = ((lk >> 24u64) & 0xFFu64) as u8
+    if ty == ANT_NOUN { return 1u64 }
+    if ty == ANT_ADJ { return 1u64 }
+    return 0u64
+}
+fn an_say_thing(t: u64) -> u64 {
+    let tl : u64 = eol_thing_len(t)
+    if tl == 0u64 { return 1u64 }
+    if eol_thing_byte(t, 0u64) == 91u8 { return 1u64 }   /* mentioned: unsayable */
+    let mut ws : u64 = AN_SAYN
+    let mut k : u64 = 0u64
+    while k < tl {
+        let c : u8 = eol_thing_byte(t, k)
+        if AN_SAYN >= 4096u64 { return 1u64 }
+        if c == 32u8 {
+            if an_say_word_ok(ws, AN_SAYN - ws) == 0u64 { return 1u64 }
+            AN_SAY[AN_SAYN] = 32u8
+            AN_SAYN = AN_SAYN + 1u64
+            ws = AN_SAYN
+        } else {
+            AN_SAY[AN_SAYN] = c
+            AN_SAYN = AN_SAYN + 1u64
+        }
+        k = k + 1u64
+    }
+    if an_say_word_ok(ws, AN_SAYN - ws) == 0u64 { return 1u64 }
+    return 0u64
+}
+fn an_say_puts(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if AN_SAYN >= 4096u64 { return 1u64 }
+        AN_SAY[AN_SAYN] = p[i]
+        AN_SAYN = AN_SAYN + 1u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn an_say() -> u64 @export {
+    an_init()
+    AN_SAYN = 0u64
+    let n : u64 = eol_claims()
+    if n == 0u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        let a : u64 = eol_claim_a(i)
+        let v : u64 = eol_claim_v(i)
+        let b : u64 = eol_claim_b(i)
+        if i > 0u64 { if an_say_puts(" " as u64) != 0u64 { AN_SAYN = 0u64   return 0u64 } }
+        if an_say_thing(a) != 0u64 { AN_SAYN = 0u64   return 0u64 }
+        let mut vr : u64 = 0u64
+        if v == 0u64 { vr = an_say_puts(" is a " as u64) }
+        if v == 1u64 { vr = an_say_puts(" mirrors " as u64) }
+        if v == 2u64 { vr = an_say_puts(" equals " as u64) }
+        if vr != 0u64 { AN_SAYN = 0u64   return 0u64 }
+        if an_say_thing(b) != 0u64 { AN_SAYN = 0u64   return 0u64 }
+        if an_say_puts("." as u64) != 0u64 { AN_SAYN = 0u64   return 0u64 }
+        i = i + 1u64
+    }
+    return AN_SAYN
+}
+fn an_say_len() -> u64 @export { return AN_SAYN }
+fn an_say_byte(i: u64) -> u8 @export { if i < AN_SAYN { return AN_SAY[i] }   return 0u8 }
+
+/* ==================== THE SELF-PROOF (arms 390..399) ==================== */
+fn an_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, an_slen(a), v, b, an_slen(b))
+}
+/* arm 390: THE HEARING -- one sentence becomes one claim through the one
+ * door: admitted UNSIGNED, address nonzero, and hearing it twice derives
+ * the SAME address (the tongue is deterministic). */
+fn an_arm390() -> u64 {
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 390u64 }
+    if AN_CLAIMS != 1u64 { return 390u64 }
+    if AN_QN != 0u64 { return 390u64 }
+    if xn_verdict() != 1u64 { return 390u64 }
+    if xn_grade() != 1u64 { return 390u64 }
+    let a1 : u64 = AN_ADDR
+    if a1 == 0u64 { return 390u64 }
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 390u64 }
+    if AN_ADDR != a1 { return 390u64 }
+    return 0u64
+}
+/* arm 391: THE THREE VERBS -- the surface reaches every verb of the tongue,
+ * and each admitted claim is ENTAILED back from the standing scroll. */
+fn an_arm391() -> u64 {
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 391u64 }
+    if an_ent("dog" as u64, 0u64, "animal" as u64) != 1u64 { return 391u64 }
+    if an_hear_text("the map is the territory" as u64) != 1u64 { return 391u64 }
+    if an_ent("map" as u64, 2u64, "territory" as u64) != 1u64 { return 391u64 }
+    if an_hear_text("the dream mirrors the wake" as u64) != 1u64 { return 391u64 }
+    if an_ent("dream" as u64, 1u64, "wake" as u64) != 1u64 { return 391u64 }
+    if an_hear_text("the pool equals the well" as u64) != 1u64 { return 391u64 }
+    if an_ent("pool" as u64, 2u64, "well" as u64) != 1u64 { return 391u64 }
+    return 0u64
+}
+/* arm 392: THE DETERMINER LAW -- the same words, one article apart, are
+ * DIFFERENT knowledge: identity stated definite, membership indefinite. */
+fn an_arm392() -> u64 {
+    if an_hear_text("the map is the territory" as u64) != 1u64 { return 392u64 }
+    let ad : u64 = AN_ADDR
+    if an_ent("map" as u64, 2u64, "territory" as u64) != 1u64 { return 392u64 }
+    if an_hear_text("the map is a territory" as u64) != 1u64 { return 392u64 }
+    if AN_ADDR == ad { return 392u64 }
+    if an_ent("map" as u64, 0u64, "territory" as u64) != 1u64 { return 392u64 }
+    if an_ent("map" as u64, 2u64, "territory" as u64) != 0u64 { return 392u64 }
+    return 0u64
+}
+/* arm 393: ADJECTIVE PREDICATION -- a property sits ABOVE its bearer:
+ * "the buffer is sealed" is containment, not identity. */
+fn an_arm393() -> u64 {
+    if an_hear_text("the buffer is sealed" as u64) != 1u64 { return 393u64 }
+    if AN_CLAIMS != 1u64 { return 393u64 }
+    if an_ent("buffer" as u64, 0u64, "sealed" as u64) != 1u64 { return 393u64 }
+    if an_ent("buffer" as u64, 2u64, "sealed" as u64) != 0u64 { return 393u64 }
+    return 0u64
+}
+/* arm 394: CONJUNCTION -- "and" composes claims into ONE guest; "or" is
+ * not knowledge and refuses by name, leaving the door untouched. */
+fn an_arm394() -> u64 {
+    if an_hear_text("a dog is an animal and the map is the territory" as u64) != 1u64 { return 394u64 }
+    if AN_CLAIMS != 2u64 { return 394u64 }
+    let au : u64 = AN_ADDR
+    if au == 0u64 { return 394u64 }
+    if an_ent("dog" as u64, 0u64, "animal" as u64) != 1u64 { return 394u64 }
+    if an_ent("map" as u64, 2u64, "territory" as u64) != 1u64 { return 394u64 }
+    let xh : u64 = xn_last_addr()
+    let rc0 : u64 = AN_RC[AN_R_CONJ]
+    if an_hear_text("a dog is an animal or the map is the territory" as u64) != 2u64 { return 394u64 }
+    if AN_REASON != AN_R_CONJ { return 394u64 }
+    if AN_RC[AN_R_CONJ] != (rc0 + 1u64) { return 394u64 }
+    if xn_last_addr() != xh { return 394u64 }
+    return 0u64
+}
+/* arm 395: THE REFUSALS BY NAME -- command, modality, a verb beyond the
+ * surface, an alien character, silence, and the over-throat: each named,
+ * each counted, none admitted. */
+fn an_arm395() -> u64 {
+    let k0 : u64 = AN_RC[AN_R_KIND]
+    if an_hear_text("send the key" as u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_KIND { return 395u64 }
+    if AN_RC[AN_R_KIND] != (k0 + 1u64) { return 395u64 }
+    let m0 : u64 = AN_RC[AN_R_MODAL]
+    if an_hear_text("the buffer should encrypt the key" as u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_MODAL { return 395u64 }
+    if AN_RC[AN_R_MODAL] != (m0 + 1u64) { return 395u64 }
+    let v0 : u64 = AN_RC[AN_R_VERB]
+    if an_hear_text("the buffer parse the message" as u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_VERB { return 395u64 }
+    if AN_RC[AN_R_VERB] != (v0 + 1u64) { return 395u64 }
+    let c0 : u64 = AN_RC[AN_R_CHAR]
+    if an_hear_text("the dog's tail" as u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_CHAR { return 395u64 }
+    if AN_RC[AN_R_CHAR] != (c0 + 1u64) { return 395u64 }
+    let cl0 : u64 = AN_RC[AN_R_CLAUSE]
+    if an_hear_text("a dog is an animal because the map is the territory" as u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_CLAUSE { return 395u64 }
+    if AN_RC[AN_R_CLAUSE] != (cl0 + 1u64) { return 395u64 }
+    if an_hear(("x" as u64), 0u64) != 3u64 { return 395u64 }
+    let t0 : u64 = AN_RC[AN_R_THROAT]
+    if an_hear(("x" as u64), 4097u64) != 2u64 { return 395u64 }
+    if AN_REASON != AN_R_THROAT { return 395u64 }
+    if AN_RC[AN_R_THROAT] != (t0 + 1u64) { return 395u64 }
+    return 0u64
+}
+/* arm 396: THE QUESTION -- asked in English, answered by DERIVATION over
+ * the standing scroll: what was stated is KNOWN, what was not is NOT,
+ * and a modal question refuses by name. */
+fn an_arm396() -> u64 {
+    if an_hear_text("a dog is an animal. is a dog an animal" as u64) != 1u64 { return 396u64 }
+    if AN_CLAIMS != 1u64 { return 396u64 }
+    if AN_QN != 1u64 { return 396u64 }
+    if an_answer(0u64) != 1u64 { return 396u64 }
+    /* the anamnesis explains the act: statement became claim, question asked */
+    if an_trace_n() != 2u64 { return 396u64 }
+    if an_trace_kind(0u64) != (ANK_DECL as u64) { return 396u64 }
+    if an_trace_out(0u64) != AN_T_CLAIM { return 396u64 }
+    if an_trace_kind(1u64) != (ANK_INTER as u64) { return 396u64 }
+    if an_trace_out(1u64) != AN_T_QUESTION { return 396u64 }
+    if an_trace_frags(1u64) != 3u64 { return 396u64 }
+    if an_hear_text("is a dog a machine" as u64) != 1u64 { return 396u64 }
+    if AN_QN != 1u64 { return 396u64 }
+    if an_answer(0u64) != 0u64 { return 396u64 }
+    if an_question_len(0u64) == 0u64 { return 396u64 }
+    if an_question_byte(0u64) != 91u8 { return 396u64 }
+    let m0 : u64 = AN_RC[AN_R_MODAL]
+    if an_hear_text("can a dog parse the key" as u64) != 2u64 { return 396u64 }
+    if AN_REASON != AN_R_MODAL { return 396u64 }
+    if AN_RC[AN_R_MODAL] != (m0 + 1u64) { return 396u64 }
+    return 0u64
+}
+/* arm 397: THE WHOLE-UTTERANCE LAW -- one bad sentence poisons the whole:
+ * nothing is admitted, the door is never knocked, and the previously
+ * standing scroll is UNTOUCHED. */
+fn an_arm397() -> u64 {
+    if an_hear_text("the map is the territory" as u64) != 1u64 { return 397u64 }
+    let stand : u64 = eol_addr()
+    if stand == 0u64 { return 397u64 }
+    let xh : u64 = xn_last_addr()
+    if an_hear_text("a dog is an animal. send the key" as u64) != 2u64 { return 397u64 }
+    if AN_REASON != AN_R_KIND { return 397u64 }
+    if AN_CLAIMS != 0u64 { return 397u64 }
+    if xn_last_addr() != xh { return 397u64 }
+    if eol_addr() != stand { return 397u64 }
+    /* the anamnesis NAMES the poisoning sentence: the first became a claim,
+     * the second is the imperative that killed the whole utterance */
+    if an_trace_n() != 2u64 { return 397u64 }
+    if an_trace_out(0u64) != AN_T_CLAIM { return 397u64 }
+    if an_trace_kind(1u64) != (ANK_IMPER as u64) { return 397u64 }
+    if an_trace_out(1u64) != (AN_T_REFUSED + AN_R_KIND) { return 397u64 }
+    return 0u64
+}
+/* arm 398: THE VEIN CARRIES THE TONGUE -- the transduced scroll pushed
+ * through the bare-metal ring and drained lands with the IDENTICAL
+ * address it has when admitted directly (transport transparent). */
+fn an_arm398() -> u64 {
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 398u64 }
+    let d : u64 = AN_ADDR
+    if d == 0u64 { return 398u64 }
+    xr_reset()
+    if xr_push((&AN_SCR) as u64, AN_SCN) != 1u64 { return 398u64 }
+    if xn_drain(0u64) != 1u64 { return 398u64 }
+    if xn_drained() != 1u64 { return 398u64 }
+    if xn_drain_admitted() != 1u64 { return 398u64 }
+    if xn_last_addr() != d { return 398u64 }
+    return 0u64
+}
+/* arm 399: THE TONGUE SPEAKS BACK -- the standing scroll rendered to
+ * English re-hears to the SAME address (the round trip through the REAL
+ * lexer, parser, and door); a scroll bearing a lexicon-verb as a name is
+ * UNSAYABLE and refuses, never mangles. */
+fn an_arm399() -> u64 {
+    if an_hear_text("a dog is an animal and the map is the territory" as u64) != 1u64 { return 399u64 }
+    let d : u64 = AN_ADDR
+    let n : u64 = an_say()
+    if n == 0u64 { return 399u64 }
+    if an_say_len() != n { return 399u64 }
+    if an_say_byte(0u64) != 100u8 { return 399u64 }
+    if an_hear((&AN_SAY) as u64, n) != 1u64 { return 399u64 }
+    if AN_ADDR != d { return 399u64 }
+    eol_reset()
+    if eol_read("[send < key]" as u64, 12u64) < 0i64 { return 399u64 }
+    if an_say() != 0u64 { return 399u64 }
+    eol_reset()
+    return 0u64
+}
+fn an_selfprove() -> u64 @export {
+    an_init()
+    let mut r : u64 = an_arm390()
+    if r != 0u64 { return r }
+    r = an_arm391()
+    if r != 0u64 { return r }
+    r = an_arm392()
+    if r != 0u64 { return r }
+    r = an_arm393()
+    if r != 0u64 { return r }
+    r = an_arm394()
+    if r != 0u64 { return r }
+    r = an_arm395()
+    if r != 0u64 { return r }
+    r = an_arm396()
+    if r != 0u64 { return r }
+    r = an_arm397()
+    if r != 0u64 { return r }
+    r = an_arm398()
+    if r != 0u64 { return r }
+    r = an_arm399()
+    if r != 0u64 { return r }
+    return 0u64
+}

@@ -1,0 +1,256 @@
+/* STDLIB/iii/aether/anglos_cli.iii -- iii anglos: THE ENGLISH DOOR as a
+ * standing tool -- the world's language, heard through the one membrane.
+ *
+ *   iii anglos teach                     the surface law (the whole table)
+ *   iii anglos prove                     the self-proof (anglos 390..399,
+ *                                        over the proven vein + door)
+ *   iii anglos hear "<english>"          transduce bounded English into
+ *                                        EIDOLOS claims admitted through
+ *                                        the ONE door (xenos), answer any
+ *                                        questions by derivation, print
+ *                                        the verdict and the algebra
+ *   iii anglos say                       speak the standing scroll back in
+ *                                        bounded English (the round trip)
+ *
+ * The utterance arrives on argv (rejoined with single spaces).  EVERY verb
+ * self-proves the vein, the door, and the tongue first and refuses to run
+ * over a broken law (exit 9): the kardia condition-of-motion pattern.
+ * exit: 0 heard/said | 1 refused/unheard/unsayable | 3 usage | 9 SELF-REFUSED */
+module anglos_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn an_selfprove() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_hear(base: u64, len: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_verdict() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_reason() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claims() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_questions() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_answer(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_addr() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_refused(r: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_heard() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_admitted() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_len() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_byte(i: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_question_len(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_question_byte(k: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_say() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_say_len() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_say_byte(i: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_trace_n() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_trace_kind(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_trace_frags(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_trace_out(i: u64) -> u64 from "anglos.iii"
+
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_epoch() -> u64 from "xenos.iii"
+
+var AC_IN : [u8; 4096]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn join_args(argc: i32, argv: u64, frm: u64, dst: u64, cap: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let d : *u8 = dst as *u8
+    let mut n : u64 = 0u64
+    let mut i : u64 = frm
+    while (i as i64) < (argc as i64) {
+        if i > frm { if n < cap { d[n] = 32u8   n = n + 1u64 } }
+        let p : *u8 = av[i] as *u8
+        let mut k : u64 = 0u64
+        while p[k] != 0u8 { if n < cap { d[n] = p[k]   n = n + 1u64 }   k = k + 1u64 }
+        i = i + 1u64
+    }
+    if n < cap { d[n] = 0u8 }
+    return n
+}
+fn reason_word(r: u64) -> u32 {
+    if r == 1u64 { ps("UNPARSED (the grammar cannot read it)" as u64)   return 1u32 }
+    if r == 2u64 { ps("KIND (a command is intent, not knowledge)" as u64)   return 1u32 }
+    if r == 3u64 { ps("VERB (outside the relational surface: is/are/equals/mirrors)" as u64)   return 1u32 }
+    if r == 4u64 { ps("MODAL (can/should/might... -- modality is doxa's jurisdiction)" as u64)   return 1u32 }
+    if r == 5u64 { ps("SHAPE (missing subject/predicate, or an unsupported determiner)" as u64)   return 1u32 }
+    if r == 6u64 { ps("CLAUSE (because/while/if -- conditional worlds, not flat claims)" as u64)   return 1u32 }
+    if r == 7u64 { ps("CONJ (or/but/then -- only \"and\" composes knowledge)" as u64)   return 1u32 }
+    if r == 8u64 { ps("CHAR (a byte outside the hearable alphabet)" as u64)   return 1u32 }
+    if r == 9u64 { ps("THROAT (over a capacity -- refused whole, never truncated)" as u64)   return 1u32 }
+    if r == 10u64 { ps("DOOR (xenos refused the transduced scroll -- reason " as u64)   pu(xn_reason())   ps(")" as u64)   return 1u32 }
+    ps("(unnamed)" as u64)
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii anglos -- the english door: the world's language through the one membrane\n\n" as u64)
+    ps("  iii anglos teach                the surface law (the whole table)\n" as u64)
+    ps("  iii anglos prove                the self-proof (anglos 390..399)\n" as u64)
+    ps("  iii anglos hear \"<english>\"     statements admitted through the door;\n" as u64)
+    ps("                                  questions answered by derivation\n" as u64)
+    ps("  iii anglos say                  the standing scroll spoken back in english\n\n" as u64)
+    ps("exit: 0 heard/said | 1 refused/unheard/unsayable | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn teach() -> u64 {
+    ps("THE ENGLISH DOOR -- transduction by grammar, never comprehension by statistics\n\n" as u64)
+    ps("English reaches III only TRANSDUCED: the deterministic lexer and thematic\n" as u64)
+    ps("parser (verba/nl_lex, verba/nl_parse) carve a sentence into roles, and an\n" as u64)
+    ps("auditable table maps the relational surface onto EIDOLOS's three verbs:\n\n" as u64)
+    ps("  \"a dog is an animal\"        ->  [dog < animal]     (kind membership)\n" as u64)
+    ps("  \"the buffer is sealed\"      ->  [buffer < sealed]  (property)\n" as u64)
+    ps("  \"the map is the territory\"  ->  [map = territory]  (identity)\n" as u64)
+    ps("  \"x equals y\"                ->  [x = y]            (always =)\n" as u64)
+    ps("  \"dream mirrors wake\"        ->  [dream ~ wake]     (always ~)\n\n" as u64)
+    ps("Statements become ONE claim-array guest admitted through THE ONE DOOR\n" as u64)
+    ps("(xenos): judged by re-derivation, remembered in the guest-book.  Questions\n" as u64)
+    ps("(\"is a dog an animal\") are answered by DERIVATION over the standing scroll\n" as u64)
+    ps("-- KNOWN, not entailed, or refused; never invented.  Everything the surface\n" as u64)
+    ps("cannot carry is REFUSED BY NAME, whole-utterance: commands (KIND), modality\n" as u64)
+    ps("(MODAL), verbs beyond the table (VERB), conditionals (CLAUSE), disjunction\n" as u64)
+    ps("(CONJ), alien bytes (CHAR), over-throat (THROAT).  The reach grows by\n" as u64)
+    ps("extending the lexicon and the table -- never by hoping a model generalizes.\n\n" as u64)
+    ps("And the SAME TONGUE SPEAKS OUT: iii anglos say renders the standing scroll\n" as u64)
+    ps("back to bounded English whose re-hearing derives the SAME address.\n" as u64)
+    return 0u64
+}
+fn condition_of_motion() -> u64 {
+    let vp : u64 = xr_selfprove()
+    if vp != 0u64 { ps("THE VEIN REFUSES ITSELF: xring self-proof arm " as u64)   pu(vp)   ps(" failed\n" as u64)   return 9u64 }
+    let dp : u64 = xn_selfprove()
+    if dp != 0u64 { ps("THE DOOR REFUSES ITSELF: xenos self-proof arm " as u64)   pu(dp)   ps(" failed\n" as u64)   return 9u64 }
+    let ap : u64 = an_selfprove()
+    if ap != 0u64 { ps("THE TONGUE REFUSES ITSELF: anglos self-proof arm " as u64)   pu(ap)   ps(" failed\n" as u64)   return 9u64 }
+    return 0u64
+}
+/* the anamnesis printed: the organ explains its own hearing, sentence by
+ * sentence -- what kind it heard, how many roles, what became of it.  On a
+ * refusal this NAMES the sentence that poisoned the utterance. */
+fn kind_word(k: u64) -> u32 {
+    if k == 1u64 { ps("imperative  " as u64)   return 1u32 }
+    if k == 2u64 { ps("declarative " as u64)   return 1u32 }
+    if k == 3u64 { ps("interrogative" as u64)   return 1u32 }
+    ps("unrecognized" as u64)
+    return 1u32
+}
+fn print_trace() -> u64 {
+    let n : u64 = an_trace_n()
+    let mut i : u64 = 0u64
+    while i < n {
+        ps("  sentence " as u64)   pu(i + 1u64)   ps(": " as u64)
+        kind_word(an_trace_kind(i))
+        ps("  " as u64)   pu(an_trace_frags(i))   ps(" role(s) -> " as u64)
+        let o : u64 = an_trace_out(i)
+        if o == 1u64 { ps("claim\n" as u64) }
+        if o == 2u64 { ps("question\n" as u64) }
+        if o >= 100u64 { ps("REFUSED " as u64)   reason_word(o - 100u64)   putchar(10i32) }
+        i = i + 1u64
+    }
+    return n
+}
+fn print_hearing() -> u64 {
+    let v : u64 = an_verdict()
+    if v == 1u64 {
+        if an_claims() > 0u64 {
+            ps("HEARD  " as u64)   pu(an_claims())   ps(" claim(s) admitted through the one door\n" as u64)
+            ps("  address  : " as u64)   pu(an_addr())   putchar(10i32)
+            ps("  grade    : " as u64)
+            if xn_grade() == 1u64 { ps("UNSIGNED (speaks the tongue, no credentials)\n" as u64) } else { pu(xn_grade())   putchar(10i32) }
+            if xn_last_epoch() > 0u64 { ps("  guest-book: line " as u64)   pu(xn_last_epoch())   putchar(10i32) }
+            ps("  the algebra:\n    " as u64)
+            let n : u64 = an_scroll_len()
+            let mut i : u64 = 0u64
+            while i < n { putchar(an_scroll_byte(i) as i32)   i = i + 1u64 }
+            putchar(10i32)
+        } else {
+            ps("HEARD  (questions only -- the standing scroll answers)\n" as u64)
+        }
+        print_trace()
+        let q : u64 = an_questions()
+        let mut k : u64 = 0u64
+        while k < q {
+            ps("  asked " as u64)
+            let ql : u64 = an_question_len(k)
+            let mut j : u64 = 0u64
+            while j < ql { putchar(an_question_byte(j) as i32)   j = j + 1u64 }
+            ps(" : " as u64)
+            let a : u64 = an_answer(k)
+            if a == 1u64 { ps("KNOWN (derived, not guessed)\n" as u64) }
+            if a == 0u64 { ps("not entailed (the house does not know it)\n" as u64) }
+            if a == 2u64 { ps("refused (nothing coherent stands to ask)\n" as u64) }
+            k = k + 1u64
+        }
+        return 0u64
+    }
+    if v == 2u64 {
+        ps("REFUSED  reason: " as u64)   reason_word(an_reason())   putchar(10i32)
+        ps("  (whole-utterance: one unhearable sentence poisons the knock; nothing admitted)\n" as u64)
+        print_trace()
+        return 1u64
+    }
+    ps("UNHEARD  (no statement, no question -- silence on this wire)\n" as u64)
+    return 1u64
+}
+fn anglos_enter(argc: i32, argv: u64) -> u64 @export {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let cm : u64 = condition_of_motion()
+    if cm != 0u64 { return 9u64 }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "teach" as u64) == 1u32 { return teach() }
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE ENGLISH DOOR PROVEN (anglos 390..399, over the proven vein + door):\n" as u64)
+        ps("one sentence one claim through the one door, deterministic twice; all\n" as u64)
+        ps("three verbs reached and entailed back; the determiner law (identity vs\n" as u64)
+        ps("membership one article apart); adjective predication as containment;\n" as u64)
+        ps("\"and\" composing one guest while \"or\" refuses; every refusal named and\n" as u64)
+        ps("counted; questions answered by derivation over the standing scroll; the\n" as u64)
+        ps("whole-utterance law (a poisoned knock admits nothing, the standing\n" as u64)
+        ps("scroll untouched); the vein carrying the tongue transport-transparent;\n" as u64)
+        ps("and the tongue speaking BACK -- English out re-hearing to the same\n" as u64)
+        ps("address, the unsayable refused by name.  Re-proven at THIS invocation.\n" as u64)
+        ps("heard " as u64)   pu(an_heard())   ps(" utterance(s), admitted " as u64)   pu(an_admitted())
+        ps(", refusals by name [unparsed " as u64)   pu(an_refused(1u64))
+        ps(" kind " as u64)   pu(an_refused(2u64))
+        ps(" verb " as u64)   pu(an_refused(3u64))
+        ps(" modal " as u64)   pu(an_refused(4u64))
+        ps(" shape " as u64)   pu(an_refused(5u64))
+        ps(" clause " as u64)   pu(an_refused(6u64))
+        ps(" conj " as u64)   pu(an_refused(7u64))
+        ps(" char " as u64)   pu(an_refused(8u64))
+        ps(" throat " as u64)   pu(an_refused(9u64))
+        ps(" door " as u64)   pu(an_refused(10u64))
+        ps("]\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "hear" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&AC_IN) as u64, 4095u64)
+        an_hear((&AC_IN) as u64, n)
+        return print_hearing()
+    }
+    if streq(cmd, "say" as u64) == 1u32 {
+        let n : u64 = an_say()
+        if n == 0u64 {
+            ps("UNSAYABLE (no standing scroll, or a name the bounded surface cannot\n" as u64)
+            ps("carry -- a mentioned claim, or a word that would re-lex as structure;\n" as u64)
+            ps("refused, never mangled)\n" as u64)
+            return 1u64
+        }
+        ps("the standing scroll, spoken in the bounded tongue:\n  " as u64)
+        let mut i : u64 = 0u64
+        while i < n { putchar(an_say_byte(i) as i32)   i = i + 1u64 }
+        putchar(10i32)
+        ps("  (" as u64)   pu(an_say_len())   ps(" bytes; re-hearing this derives the same address)\n" as u64)
+        return 0u64
+    }
+    return usage()
+}

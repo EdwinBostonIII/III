@@ -1,0 +1,85 @@
+/* STDLIB/build/anglos/anprobe_main.iii -- the ANGLOS gate probe.
+ *
+ * Links the tongue (anglos) over the proven vein (xring) and door (xenos)
+ * against clean objects, proves all three batteries, then exercises the
+ * English door on a real utterance -- statements admitted through the one
+ * door, a question answered by derivation -- and speaks the standing scroll
+ * back (the round trip).  The gate (STDLIB/scripts/anglos_gate.sh) runs this
+ * twice and demands byte-identity.
+ * exit 0 = green; non-zero = the failed stage. */
+module anprobe_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn an_selfprove() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_hear_text(s: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_hear(base: u64, len: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claims() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_questions() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_answer(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_addr() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_question_len(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_question_byte(k: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_len() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_byte(i: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_say() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_say_byte(i: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_book_verify() -> u64 from "xenos.iii"
+
+var AP_SAY : [u8; 4096]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let vp : u64 = xr_selfprove()
+    if vp != 0u64 { ps("scroll vein   = RED arm " as u64)   pu(vp)   putchar(10i32)   return 1u64 }
+    ps("scroll vein   = 120..124 green\n" as u64)
+    let dp : u64 = xn_selfprove()
+    if dp != 0u64 { ps("scroll door   = RED arm " as u64)   pu(dp)   putchar(10i32)   return 2u64 }
+    ps("scroll door   = 109..118 green\n" as u64)
+    let ap : u64 = an_selfprove()
+    if ap != 0u64 { ps("scroll anglos = RED arm " as u64)   pu(ap)   putchar(10i32)   return 3u64 }
+    ps("scroll anglos = 390..399 green\n" as u64)
+
+    /* the real utterance: a market described in the wild tongue, one question */
+    let u : u64 = "the pool is a constant product market and the fee equals the premium. is the pool a constant product market" as u64
+    if an_hear_text(u) != 1u64 { ps("scroll hear   = REFUSED\n" as u64)   return 4u64 }
+    ps("the hearing: claims=" as u64)   pu(an_claims())
+    ps(" grade=" as u64)   pu(xn_grade())
+    ps(" address=" as u64)   pu(an_addr())   putchar(10i32)
+    ps("the algebra: " as u64)
+    let n : u64 = an_scroll_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(an_scroll_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+    if an_questions() != 1u64 { ps("scroll ask    = NO QUESTION\n" as u64)   return 5u64 }
+    ps("asked " as u64)
+    let ql : u64 = an_question_len(0u64)
+    i = 0u64
+    while i < ql { putchar(an_question_byte(i) as i32)   i = i + 1u64 }
+    if an_answer(0u64) != 1u64 { ps(" : NOT KNOWN\n" as u64)   return 5u64 }
+    ps(" : KNOWN\n" as u64)
+    ps("scroll ask    = derived, not guessed\n" as u64)
+
+    /* the tongue speaks back: the round trip through the real door */
+    let d : u64 = an_addr()
+    let sn : u64 = an_say()
+    if sn == 0u64 { ps("scroll say    = UNSAYABLE\n" as u64)   return 6u64 }
+    i = 0u64
+    while i < sn { AP_SAY[i] = an_say_byte(i)   i = i + 1u64 }
+    ps("spoken back : " as u64)
+    i = 0u64
+    while i < sn { putchar(AP_SAY[i] as i32)   i = i + 1u64 }
+    putchar(10i32)
+    if an_hear((&AP_SAY) as u64, sn) != 1u64 { ps("scroll say    = RE-HEAR REFUSED\n" as u64)   return 6u64 }
+    if an_addr() != d { ps("scroll say    = ADDRESS DRIFT\n" as u64)   return 6u64 }
+    ps("scroll say    = " as u64)   pu(sn)   ps(" bytes, re-heard to the same address\n" as u64)
+
+    let bk : u64 = xn_book_verify()
+    ps("scroll book   = " as u64)   pu(bk)   ps(" lines, all self-derived\n" as u64)
+    return 0u64
+}

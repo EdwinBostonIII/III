@@ -306,7 +306,17 @@ fn _np_is_np_internal(tt: u8) -> u8 {
 /* Scan a noun phrase starting at tokens[idx]. Returns packed:
  *   bits 0..15  : start_tok
  *   bits 16..31 : end_tok_exclusive
- *   bits 32..63 : quantifier (NUMBER prefix; 0 if absent) */
+ *   bits 32..63 : quantifier (NUMBER prefix; 0 if absent)
+ *
+ * NP boundary law: an English NP is det - adj* - head (- noun-compound)*
+ * (- trailing NUMBER object-id).  A DETERMINER or an ADJECTIVE arriving
+ * AFTER the head cannot continue THIS phrase -- determiners are NP-initial
+ * and adjectives are pre-head, so either one opens the NEXT constituent.
+ * Without this boundary two adjacent NPs glue into one span and the
+ * copular clauses of nl_parse's own contract are unreachable ("is a dog
+ * an animal" swallowed whole into the subject; a predicate adjective
+ * swallowed into "the buffer sealed").  Noun-noun compounds still glue
+ * ("liquidity pool"), and the trailing object-id NUMBER still closes. */
 fn _np_scan_np(tokens_ptr: u64, count: u32, idx: u32) -> u64 {
     let t_l : u64 = tokens_ptr
     let n_l : u32 = count
@@ -321,7 +331,14 @@ fn _np_scan_np(tokens_ptr: u64, count: u32, idx: u32) -> u64 {
         } else {
             let tok : u64 = _np_token_at(t_l, j)
             let tt  : u8  = nl_token_type(tok)
-            if _np_is_np_internal(tt) == 1u8 {
+            let mut np_end : u8 = 0u8
+            if head_seen == 1u8 {
+                if tt == NLP_TOK_DET { np_end = 1u8 }
+                if tt == NLP_TOK_ADJ { np_end = 1u8 }
+            }
+            if np_end == 1u8 {
+                going = 0u8
+            } else { if _np_is_np_internal(tt) == 1u8 {
                 if tt == NLP_TOK_NUMBER {
                     if head_seen == 0u8 { quant = nl_token_word_id(tok) }
                 }
@@ -342,7 +359,7 @@ fn _np_scan_np(tokens_ptr: u64, count: u32, idx: u32) -> u64 {
                 }
             } else {
                 going = 0u8
-            }
+            } }
         }
     }
     let s_l : u64 = (start as u64) & 0xFFFFu64

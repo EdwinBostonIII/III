@@ -798,3 +798,13 @@ fn ms_selfprove() -> u64 @export {
     if a4 != 0u64 { return a4 }
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): meris's laws in the one tongue --
+ * the power sum has the Faulhaber closed form; Faulhaber and Stirling are
+ * ONE mint (two engines, equal, arm 254); the Nekrasov sum IS equivariant
+ * localization over partitions; tableau counts by hooks and by branching
+ * agree; and Euler's pentagonal theorem sits INSIDE Nekrasov-Okounkov
+ * (the z = 2 specialization, arm 253). */
+fn ms_testify() -> u64 @export {
+    return "[power_sum = faulhaber_mint] [faulhaber_mint = stirling_mint] [nekrasov_sum = partition_localization] [hook_count = branching_count] [pentagonal_theorem < nekrasov_okounkov]" as u64
+}

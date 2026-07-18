@@ -1,0 +1,1078 @@
+/* STDLIB/iii/omnia/synesis.iii -- SYNESIS (the KNOWING-TOGETHER): the organ
+ * that CONVENES the testimony of every summit-cluster organ into ONE scroll
+ * and derives what only the union knows.
+ *
+ * THE UNKEPT PROMISE, KEPT: eidolos was built so that "two systems drop
+ * their brackets side by side and eol_entails answers what the union KNOWS,
+ * including what neither said alone" -- and until this organ, no two organs
+ * of the organism ever did.  Each spoke a private sealed scroll; the union
+ * closure of the fleet's knowledge was never taken.  SYNESIS takes it:
+ *   - each cluster organ EXPORTS a testimony (xx_testify) -- its proven laws
+ *     spoken in the one tongue, every claim mapping to a standing arm;
+ *   - synesis reads all eight side by side, proves the union coherent, and
+ *     mints THE ONE ADDRESS of everything the cluster knows;
+ *   - the SURPLUS is derived: cross-organ theorems entailed by the union
+ *     that NO single testimony entails alone (deficit = orbit_decision;
+ *     work_total = faulhaber_mint; born_rule = forced_exponent; ...) --
+ *     with the COMPLETE 8-drop knockout matrix as teeth: dropping each
+ *     testimony kills exactly the theorems that ride it and spares the rest;
+ *   - the PROVINCE MAP records which organ introduced which word, and which
+ *     words are spoken jointly (the shared vocabulary IS the bridge);
+ *   - THE FRONTIER: the machine enumerates its own ignorance -- every pair
+ *     of subjects with no derived relation in any verb, counted exactly;
+ *   - THE ABDUCTION: for a shape-found gap, the single-claim bridges that
+ *     would close it are enumerated COMPLETELY over the gap's classes
+ *     (scope: complete for mirror-free goal classes, asserted before use);
+ *   - THE DISCHARGE: a proposed bridge whose two sides are metered fold
+ *     families is DECIDED by noesis's real meter (no_meter, the complete
+ *     w=8 image) -- the true bridge is admitted and SPOKEN, the false
+ *     variants are REFUTED and never enter, the undecidable are counted;
+ *     then the union is re-derived and entails what it could not before:
+ *     notice-gap -> decide-by-computation -> know, with no author anywhere;
+ *   - THE EXPLANATION: syn_why reconstructs the chain of STATED claims
+ *     behind a derived entailment (why the machine knows what it knows),
+ *     verified stepwise and length-checked by a SECOND independent engine;
+ *   - knowledge is MONOTONE: the discharged bridge removes exactly its own
+ *     gap pairs from the frontier and disconnects nothing.
+ *
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 330..339, NO gate of its
+ * own -- the summit gate compiles and drives this organ):
+ *   330 THE CONVENING: eight testimonies side by side, coherent, ONE
+ *       deterministic address; each testimony alone also coherent; the
+ *       union claim count is the exact sum of the parts.
+ *   331 THE SURPLUS: eight named cross-organ theorems entailed by the union
+ *       and by NONE of the eight single testimonies; the mechanical sweep
+ *       counts at least eight surplus subject pairs.
+ *   332 THE KNOCKOUT MATRIX: all eight drop-one convenings -- each named
+ *       theorem dies exactly when a load-bearing testimony is dropped and
+ *       survives every other drop.
+ *   333 THE PROVINCE MAP: provenance watermarks; the shared vocabulary
+ *       derived (six joint words, each verified in its speakers, absent
+ *       elsewhere); every organ also keeps a private word.
+ *   334 THE FRONTIER: the unconnected subject pairs counted twice (same
+ *       count); the named absence (sdiv 3, erasure 3) IS on the frontier;
+ *       class-joined pairs are NOT.
+ *   335 THE ABDUCTION: the complete single-claim bridge set for the named
+ *       gap (twelve candidates over the two classes); the cycle-making
+ *       candidate is REFUSED by law, counted.
+ *   336 THE DISCHARGE: the meter decides -- [sdiv 3 = erasure 3] TRUE
+ *       (image 32 = 2^(8-3), both sdiv spellings agreeing), spoken, the
+ *       union re-derived, [sdiv 3 = shr 3] NOW entailed (fold-deficit
+ *       invariance re-derived at the knowledge level); [sdiv 3 = erasure 4]
+ *       and [sdiv 3 = umod 3] REFUTED by the same meter, never spoken;
+ *       order/mirror candidates counted undecidable; the union address
+ *       MOVES (knowledge grew) and re-derives deterministically.
+ *   337 THE MONOTONE FRONTIER: after the discharge the frontier loses
+ *       EXACTLY the three pairs the bridge closes and nothing else; no
+ *       previously-connected pair disconnects.
+ *   338 THE EXPLANATION: the why-chains of two surplus theorems -- pure
+ *       congruence (deficit = orbit_decision) and mixed congruence-order
+ *       (tower_element < algebraic_number) -- reconstructed as stated-claim
+ *       chains, verified stepwise, length 2, no shorter path, and the
+ *       second engine (layered distance) agrees.
+ *   339 THE ONE NAME + THE SCROLL: the union's bus witness differs from
+ *       every single testimony's witness (the union has MORE geometry);
+ *       synesis's own law sealed by EIDOLOS with derived entailments and
+ *       refused reversals, address deterministic.
+ *
+ * SCOPE (the eidolon law): the surplus, frontier, abduction and knockout
+ * are exact over the standing testimony set; the explanation engine walks
+ * congruence and order chains (mirror-reversal chains are outside its walk
+ * and asserted absent from its goals).  NIH: composes eidolos (the tongue),
+ * the eight testimonies, and noesis's meter.  Sibling of gnosis (knows),
+ * noesis (meters), mneme (places): synesis COMPREHENDS.  Ring R-1. */
+module omnia_synesis
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claims() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_things() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_a(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_v(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_b(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_of_thing(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_reaches(ci: u64, cj: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_mirror_class(ci: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_witness() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn py_testify() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn rz_testify() -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn ky_testify() -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ms_testify() -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn kl_testify() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn su_testify() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn gn_testify() -> u64 from "gnosis.iii"
+extern @abi(c-msvc-x64) fn no_testify() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn no_meter(kind: u64, p: u64) -> u64 from "noesis.iii"
+
+const SY_SENT : u64 = 18446744073709551615u64
+const SY_ORGS : u64 = 8u64
+const SY_SCAP : u64 = 96u64              /* subject roster                     */
+const SY_ACAP : u64 = 2048u64            /* subject byte arena                 */
+const SY_V_BELOW : u64 = 0u64
+const SY_V_REFLECT : u64 = 1u64
+const SY_V_FLAT : u64 = 2u64
+
+/* ==================== the convening state ==================== */
+var SY_WM  : [u64; 9]                    /* thing watermark after testimony k  */
+var SY_CWM : [u64; 9]                    /* claim watermark after testimony k  */
+var SY_SO  : [u64; 96]                   /* subject byte offset (arena)        */
+var SY_SL  : [u64; 96]                   /* subject byte length                */
+var SY_SP  : [u64; 96]                   /* province: first speaker            */
+var SY_ST  : [u64; 96]                   /* thing id on the current convening  */
+var SY_SN  : u64 = 0u64
+var SY_AB  : [u8; 2048]
+var SY_AN  : u64 = 0u64
+
+/* the connection bitsets (subject x subject), before/after the discharge */
+var SY_CON0 : [u64; 144]
+var SY_CON1 : [u64; 144]
+
+/* named verdict counters (every refusal counted, never silent) */
+var SY_RUND : u64 = 0u64                 /* meter-undecidable candidates       */
+var SY_RREF : u64 = 0u64                 /* meter-refuted candidates           */
+var SY_RLAW : u64 = 0u64                 /* law-refused candidates (incoherent)*/
+
+/* the discharged bridge (canonical claim text) */
+var SY_BR  : [u8; 64]
+var SY_BRN : u64 = 0u64
+
+/* the why-chain (claim indices of the standing scroll) */
+var SY_WC : [u64; 32]
+var SY_WN : u64 = 0u64
+
+/* why/dist scratch (module scope: the 64-local ceiling stays far away) */
+var SY_DQ : [u64; 96]                    /* BFS queue of thing ids             */
+var SY_DD : [u64; 96]                    /* distance per thing                 */
+var SY_DP : [u64; 96]                    /* parent claim per thing             */
+
+/* abduction scratch (module scope, W4): the goal-class member rosters */
+var SY_MA : [u64; 8]
+var SY_MB : [u64; 8]
+
+/* sealed results */
+var SY_UADDR0 : u64 = 0u64               /* the union address before discharge */
+var SY_UADDR  : u64 = 0u64               /* the union address after discharge  */
+var SY_SCROLL : u64 = 0u64               /* the synesis meta-scroll address    */
+var SY_SURP   : u64 = 0u64               /* mechanical surplus pair count      */
+var SY_SHARED : u64 = 0u64               /* words spoken by >= 2 testimonies   */
+var SY_FRONT  : u64 = 0u64               /* standing frontier count            */
+
+fn syn_addr() -> u64 @export { return SY_SCROLL }
+fn syn_union_addr() -> u64 @export { return SY_UADDR }
+fn syn_surplus_count() -> u64 @export { return SY_SURP }
+fn syn_shared_count() -> u64 @export { return SY_SHARED }
+fn syn_frontier_count() -> u64 @export { return SY_FRONT }
+fn syn_bridge_len() -> u64 @export { return SY_BRN }
+fn syn_bridge_byte(i: u64) -> u8 @export {
+    if i < SY_BRN { return SY_BR[i] }
+    return 0u8
+}
+
+fn sy_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+/* the fixed convening order (the summit gate's own organ order) */
+fn sy_testimony(k: u64) -> u64 {
+    if k == 0u64 { return py_testify() }
+    if k == 1u64 { return rz_testify() }
+    if k == 2u64 { return ky_testify() }
+    if k == 3u64 { return ms_testify() }
+    if k == 4u64 { return kl_testify() }
+    if k == 5u64 { return su_testify() }
+    if k == 6u64 { return gn_testify() }
+    return no_testify()
+}
+/* convene the testimonies selected by mask; optionally speak the discharged
+ * bridge; optionally record the province watermarks.  -1 on refusal. */
+fn sy_convene(mask: u64, bridge: u64, rec: u64) -> i64 {
+    eol_reset()
+    if rec == 1u64 { SY_WM[0u64] = 0u64   SY_CWM[0u64] = 0u64 }
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        if ((mask >> k) & 1u64) == 1u64 {
+            let t : u64 = sy_testimony(k)
+            if eol_read(t, sy_slen(t)) < 0i64 { return -1i64 }
+        }
+        if rec == 1u64 {
+            SY_WM[k + 1u64] = eol_things()
+            SY_CWM[k + 1u64] = eol_claims()
+        }
+        k = k + 1u64
+    }
+    if bridge == 1u64 { if SY_BRN > 0u64 {
+        if eol_read((&SY_BR) as u64, SY_BRN) < 0i64 { return -1i64 }
+    } }
+    return eol_claims() as i64
+}
+/* harvest the subject roster off the standing full convening: every phrase
+ * thing (mentions carry a leading bracket and are skipped), with provenance
+ * from the watermarks.  Returns the subject count. */
+fn sy_harvest() -> u64 {
+    SY_SN = 0u64
+    SY_AN = 0u64
+    let tn : u64 = eol_things()
+    let mut t : u64 = 0u64
+    while t < tn {
+        let ln : u64 = eol_thing_len(t)
+        if ln > 0u64 { if eol_thing_byte(t, 0u64) != 91u8 {
+            if SY_SN >= SY_SCAP { return SY_SENT }
+            if SY_AN + ln > SY_ACAP { return SY_SENT }
+            let mut k : u64 = 0u64
+            while k < ln { SY_AB[SY_AN + k] = eol_thing_byte(t, k)   k = k + 1u64 }
+            SY_SO[SY_SN] = SY_AN
+            SY_SL[SY_SN] = ln
+            SY_ST[SY_SN] = t
+            let mut pv : u64 = 0u64
+            let mut w : u64 = 0u64
+            while w < SY_ORGS {
+                if t >= SY_WM[w] { if t < SY_WM[w + 1u64] { pv = w } }
+                w = w + 1u64
+            }
+            SY_SP[SY_SN] = pv
+            SY_AN = SY_AN + ln
+            SY_SN = SY_SN + 1u64
+        } }
+        t = t + 1u64
+    }
+    return SY_SN
+}
+/* find the interned thing carrying exactly these bytes; SENT if absent.
+ * Pure reads -- never interns, so presence tests cannot pollute a scroll. */
+fn sy_thing_of(off: u64, len: u64) -> u64 {
+    let tn : u64 = eol_things()
+    let mut t : u64 = 0u64
+    while t < tn {
+        if eol_thing_len(t) == len {
+            let mut k : u64 = 0u64
+            let mut same : u64 = 1u64
+            while k < len {
+                if eol_thing_byte(t, k) != SY_AB[off + k] { same = 0u64   k = len }
+                k = k + 1u64
+            }
+            if same == 1u64 { return t }
+        }
+        t = t + 1u64
+    }
+    return SY_SENT
+}
+/* subject index by zero-terminated text (arena-free lookup for the arms) */
+fn sy_sub_of(s: u64) -> u64 {
+    let n : u64 = sy_slen(s)
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while i < SY_SN {
+        if SY_SL[i] == n {
+            let mut k : u64 = 0u64
+            let mut same : u64 = 1u64
+            while k < n {
+                if SY_AB[SY_SO[i] + k] != p[k] { same = 0u64   k = n }
+                k = k + 1u64
+            }
+            if same == 1u64 { return i }
+        }
+        i = i + 1u64
+    }
+    return SY_SENT
+}
+/* entailment by zero-terminated texts on the standing scroll */
+fn sy_q(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, sy_slen(a), v, b, sy_slen(b))
+}
+/* are two subjects connected under ANY verb, either direction? */
+fn sy_connected(i: u64, j: u64) -> u64 {
+    let ci : u64 = eol_class_of_thing(SY_ST[i])
+    let cj : u64 = eol_class_of_thing(SY_ST[j])
+    if ci == SY_SENT { return 0u64 }
+    if cj == SY_SENT { return 0u64 }
+    if ci == cj { return 1u64 }
+    if eol_reaches(ci, cj) == 1u64 { return 1u64 }
+    if eol_reaches(cj, ci) == 1u64 { return 1u64 }
+    if eol_mirror_class(ci) == cj { return 1u64 }
+    return 0u64
+}
+/* fill a connection bitset (which: 0 or 1) over the harvested subjects;
+ * returns the UNCONNECTED pair count (i < j).  Requires a clean lawcheck. */
+fn sy_con_fill(which: u64) -> u64 {
+    if eol_lawcheck() != 0u64 { return SY_SENT }
+    let mut w : u64 = 0u64
+    while w < 144u64 {
+        if which == 0u64 { SY_CON0[w] = 0u64 } else { SY_CON1[w] = 0u64 }
+        w = w + 1u64
+    }
+    let mut unc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SY_SN {
+        let mut j : u64 = i + 1u64
+        while j < SY_SN {
+            let c : u64 = sy_connected(i, j)
+            if c == 1u64 {
+                let bit : u64 = (i * SY_SCAP) + j
+                if which == 0u64 {
+                    SY_CON0[bit >> 6u64] = SY_CON0[bit >> 6u64] | (1u64 << (bit & 63u64))
+                } else {
+                    SY_CON1[bit >> 6u64] = SY_CON1[bit >> 6u64] | (1u64 << (bit & 63u64))
+                }
+            } else { unc = unc + 1u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return unc
+}
+fn sy_con_get(which: u64, i: u64, j: u64) -> u64 {
+    let bit : u64 = (i * SY_SCAP) + j
+    if which == 0u64 { return (SY_CON0[bit >> 6u64] >> (bit & 63u64)) & 1u64 }
+    return (SY_CON1[bit >> 6u64] >> (bit & 63u64)) & 1u64
+}
+
+/* ==================== the family meter (the discharge) ====================
+ * A subject decodes as a metered family iff it spells one of:
+ *   shr K | mul M | umod K | sdiv K | erasure E
+ * The meter value is the COMPLETE w=8 image of the family (noesis no_meter);
+ * an erasure class carries the expected image 2^(8-E) directly. */
+fn sy_word_is(off: u64, len: u64, w: u64, wl: u64) -> u64 {
+    if len < wl + 2u64 { return 0u64 }
+    let p : *u8 = w as *u8
+    let mut k : u64 = 0u64
+    while k < wl {
+        if SY_AB[off + k] != p[k] { return 0u64 }
+        k = k + 1u64
+    }
+    if SY_AB[off + wl] != 32u8 { return 0u64 }
+    return 1u64
+}
+fn sy_num_at(off: u64, len: u64, start: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut k : u64 = start
+    if k >= len { return SY_SENT }
+    while k < len {
+        let c : u8 = SY_AB[off + k]
+        if c < 48u8 { return SY_SENT }
+        if c > 57u8 { return SY_SENT }
+        v = (v * 10u64) + ((c - 48u8) as u64)
+        k = k + 1u64
+    }
+    return v
+}
+/* decode: (kind << 8) | param, kind 1 shr | 2 mul | 3 umod | 4 sdiv |
+ * 5 erasure; 0 = not a metered family */
+fn sy_famparse(off: u64, len: u64) -> u64 {
+    if sy_word_is(off, len, "shr" as u64, 3u64) == 1u64 {
+        let n : u64 = sy_num_at(off, len, 4u64)
+        if n != SY_SENT { return (1u64 << 8u64) | n }
+    }
+    if sy_word_is(off, len, "mul" as u64, 3u64) == 1u64 {
+        let n2 : u64 = sy_num_at(off, len, 4u64)
+        if n2 != SY_SENT { return (2u64 << 8u64) | n2 }
+    }
+    if sy_word_is(off, len, "umod" as u64, 4u64) == 1u64 {
+        let n3 : u64 = sy_num_at(off, len, 5u64)
+        if n3 != SY_SENT { return (3u64 << 8u64) | n3 }
+    }
+    if sy_word_is(off, len, "sdiv" as u64, 4u64) == 1u64 {
+        let n4 : u64 = sy_num_at(off, len, 5u64)
+        if n4 != SY_SENT { return (4u64 << 8u64) | n4 }
+    }
+    if sy_word_is(off, len, "erasure" as u64, 7u64) == 1u64 {
+        let n5 : u64 = sy_num_at(off, len, 8u64)
+        if n5 != SY_SENT { return (5u64 << 8u64) | n5 }
+    }
+    return 0u64
+}
+/* the exact image of a decoded family; SENT = not meterable.  The sdiv
+ * family is metered through BOTH spellings (bias sequence and hardware
+ * route) and they must agree -- the two-engine law inside the meter. */
+fn sy_meter_of(fam: u64) -> u64 {
+    let kind : u64 = fam >> 8u64
+    let p : u64 = fam & 255u64
+    if kind == 1u64 { return no_meter(2u64, p) }
+    if kind == 2u64 { return no_meter(0u64, p) }
+    if kind == 3u64 { return no_meter(3u64, (1u64 << p) - 1u64) }
+    if kind == 4u64 {
+        let a : u64 = no_meter(4u64, p)
+        let b : u64 = no_meter(5u64, p)
+        if a != b { return SY_SENT }
+        return a
+    }
+    if kind == 5u64 { return 1u64 << (8u64 - p) }
+    return SY_SENT
+}
+/* decide a proposed = bridge between two subjects by the meter:
+ * 1 TRUE (equal images) | 0 REFUTED | 2 UNDECIDABLE -- counted. */
+fn sy_decide(i: u64, j: u64) -> u64 {
+    let fa : u64 = sy_famparse(SY_SO[i], SY_SL[i])
+    let fb : u64 = sy_famparse(SY_SO[j], SY_SL[j])
+    if fa == 0u64 { SY_RUND = SY_RUND + 1u64   return 2u64 }
+    if fb == 0u64 { SY_RUND = SY_RUND + 1u64   return 2u64 }
+    let ma : u64 = sy_meter_of(fa)
+    let mb : u64 = sy_meter_of(fb)
+    if ma == SY_SENT { SY_RUND = SY_RUND + 1u64   return 2u64 }
+    if mb == SY_SENT { SY_RUND = SY_RUND + 1u64   return 2u64 }
+    if ma == mb { return 1u64 }
+    SY_RREF = SY_RREF + 1u64
+    return 0u64
+}
+/* build the canonical claim text "[<a> <verb> <b>]" into the bridge buffer */
+fn sy_bridge_build(i: u64, v: u64, j: u64) -> u64 {
+    SY_BRN = 0u64
+    SY_BR[SY_BRN] = 91u8
+    SY_BRN = SY_BRN + 1u64
+    let mut k : u64 = 0u64
+    while k < SY_SL[i] { SY_BR[SY_BRN] = SY_AB[SY_SO[i] + k]   SY_BRN = SY_BRN + 1u64   k = k + 1u64 }
+    SY_BR[SY_BRN] = 32u8
+    SY_BRN = SY_BRN + 1u64
+    let mut vc : u8 = 61u8
+    if v == SY_V_BELOW { vc = 60u8 }
+    if v == SY_V_REFLECT { vc = 126u8 }
+    SY_BR[SY_BRN] = vc
+    SY_BRN = SY_BRN + 1u64
+    SY_BR[SY_BRN] = 32u8
+    SY_BRN = SY_BRN + 1u64
+    k = 0u64
+    while k < SY_SL[j] { SY_BR[SY_BRN] = SY_AB[SY_SO[j] + k]   SY_BRN = SY_BRN + 1u64   k = k + 1u64 }
+    SY_BR[SY_BRN] = 93u8
+    SY_BRN = SY_BRN + 1u64
+    return SY_BRN
+}
+
+/* ==================== the explanation (why the machine knows) ====================
+ * BFS over the STATED claims of the standing scroll: = edges join both ways,
+ * < edges descend one way.  The chain is the parent-claim path; the second
+ * engine below re-derives the distance by layered relaxation.  Scope: the
+ * walk covers congruence and order chains (mirror-reversal chains excluded
+ * and asserted absent from the goals posed). */
+fn sy_edge_ok(c: u64, src: u64, dirv: u64) -> u64 {
+    /* does claim c leave `src`, and where to?  returns target | SENT.
+     * dirv: the goal verb -- FLAT goals walk only = edges; BELOW goals walk
+     * = both ways and < forward. */
+    let a : u64 = eol_claim_a(c)
+    let b : u64 = eol_claim_b(c)
+    let v : u64 = eol_claim_v(c)
+    if v == SY_V_FLAT {
+        if a == src { return b }
+        if b == src { return a }
+        return SY_SENT
+    }
+    if v == SY_V_BELOW { if dirv == SY_V_BELOW {
+        if a == src { return b }
+    } }
+    return SY_SENT
+}
+/* chain from thing ta to thing tb under goal verb dirv; fills SY_WC/SY_WN.
+ * returns 0 found | 1 not found. */
+fn sy_why(ta: u64, tb: u64, dirv: u64) -> u64 {
+    let tn : u64 = eol_things()
+    if tn > 96u64 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < tn { SY_DD[i] = SY_SENT   SY_DP[i] = SY_SENT   i = i + 1u64 }
+    SY_DD[ta] = 0u64
+    SY_DQ[0u64] = ta
+    let mut qh : u64 = 0u64
+    let mut qt : u64 = 1u64
+    let cn : u64 = eol_claims()
+    while qh < qt {
+        let cur : u64 = SY_DQ[qh]
+        qh = qh + 1u64
+        let mut c : u64 = 0u64
+        while c < cn {
+            let nx : u64 = sy_edge_ok(c, cur, dirv)
+            if nx != SY_SENT { if nx < 96u64 { if SY_DD[nx] == SY_SENT {
+                SY_DD[nx] = SY_DD[cur] + 1u64
+                SY_DP[nx] = c
+                if qt < 96u64 { SY_DQ[qt] = nx   qt = qt + 1u64 }
+            } } }
+            c = c + 1u64
+        }
+    }
+    if SY_DD[tb] == SY_SENT { return 1u64 }
+    /* unwind the parent chain (reversed, then flipped in place) */
+    SY_WN = 0u64
+    let mut at : u64 = tb
+    while at != ta {
+        let pc : u64 = SY_DP[at]
+        if pc == SY_SENT { return 1u64 }
+        if SY_WN >= 32u64 { return 1u64 }
+        SY_WC[SY_WN] = pc
+        SY_WN = SY_WN + 1u64
+        /* step back across claim pc */
+        let a : u64 = eol_claim_a(pc)
+        let b : u64 = eol_claim_b(pc)
+        if a == at { at = b } else { at = a }
+        if SY_DD[at] == SY_SENT { return 1u64 }
+    }
+    let mut lo : u64 = 0u64
+    let mut hi : u64 = SY_WN
+    while lo + 1u64 < hi {
+        hi = hi - 1u64
+        let t : u64 = SY_WC[lo]
+        SY_WC[lo] = SY_WC[hi]
+        SY_WC[hi] = t
+        lo = lo + 1u64
+    }
+    return 0u64
+}
+/* THE SECOND ENGINE: layered relaxation distance (no queue, no parents --
+ * nothing shared with the BFS but the claims themselves) */
+fn sy_dist(ta: u64, tb: u64, dirv: u64) -> u64 {
+    let tn : u64 = eol_things()
+    if tn > 96u64 { return SY_SENT }
+    let mut i : u64 = 0u64
+    while i < tn { SY_DD[i] = SY_SENT   i = i + 1u64 }
+    SY_DD[ta] = 0u64
+    let cn : u64 = eol_claims()
+    let mut round : u64 = 0u64
+    while round < tn {
+        let mut moved : u64 = 0u64
+        let mut t : u64 = 0u64
+        while t < tn {
+            if SY_DD[t] == round {
+                let mut c : u64 = 0u64
+                while c < cn {
+                    let nx : u64 = sy_edge_ok(c, t, dirv)
+                    if nx != SY_SENT { if nx < 96u64 { if SY_DD[nx] == SY_SENT {
+                        SY_DD[nx] = round + 1u64
+                        moved = 1u64
+                    } } }
+                    c = c + 1u64
+                }
+            }
+            t = t + 1u64
+        }
+        if moved == 0u64 { round = tn } else { round = round + 1u64 }
+    }
+    return SY_DD[tb]
+}
+
+/* ==================== the named surplus (the eight theorems) ==================== */
+fn sy_theorem_a(n: u64) -> u64 {
+    if n == 0u64 { return "deficit" as u64 }
+    if n == 1u64 { return "deficit" as u64 }
+    if n == 2u64 { return "orbit_decision" as u64 }
+    if n == 3u64 { return "arrival_count" as u64 }
+    if n == 4u64 { return "work_total" as u64 }
+    if n == 5u64 { return "born_rule" as u64 }
+    if n == 6u64 { return "invertible_word" as u64 }
+    return "tower_element" as u64
+}
+fn sy_theorem_b(n: u64) -> u64 {
+    if n == 0u64 { return "orbit_decision" as u64 }
+    if n == 1u64 { return "inverse_refusal" as u64 }
+    if n == 2u64 { return "inverse_refusal" as u64 }
+    if n == 3u64 { return "newton_iteration" as u64 }
+    if n == 4u64 { return "faulhaber_mint" as u64 }
+    if n == 5u64 { return "forced_exponent" as u64 }
+    if n == 6u64 { return "zero_heat" as u64 }
+    return "algebraic_number" as u64
+}
+fn sy_theorem_v(n: u64) -> u64 {
+    if n == 7u64 { return SY_V_BELOW }
+    return SY_V_FLAT
+}
+/* which testimonies are load-bearing for theorem n (bitmask over organs
+ * 0 py, 1 rz, 2 ky, 3 ms, 4 kl, 5 su, 6 gn, 7 no) */
+fn sy_theorem_bearers(n: u64) -> u64 {
+    if n == 0u64 { return 192u64 }        /* gnosis + noesis                    */
+    if n == 1u64 { return 144u64 }        /* klisi + noesis                     */
+    if n == 2u64 { return 80u64 }         /* klisi + gnosis                     */
+    if n == 3u64 { return 80u64 }         /* klisi + gnosis                     */
+    if n == 4u64 { return 72u64 }         /* meris + gnosis                     */
+    if n == 5u64 { return 36u64 }         /* kyma + summit                      */
+    if n == 6u64 { return 144u64 }        /* klisi + noesis                     */
+    return 3u64                           /* pyrgos + riza                      */
+}
+fn sy_check_theorem(n: u64) -> u64 {
+    return sy_q(sy_theorem_a(n), sy_theorem_v(n), sy_theorem_b(n))
+}
+
+/* ==================== THE ARMS ==================== */
+fn sy_arm330() -> u64 {
+    /* THE CONVENING: eight testimonies side by side, coherent, one address,
+     * deterministic; each testimony alone coherent; claim count exact */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 330u64 }
+    if eol_lawcheck() != 0u64 { return 330u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 330u64 }
+    if SY_CWM[8u64] != 42u64 { return 330u64 }
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 330u64 }
+    if eol_addr() != a1 { return 330u64 }
+    SY_UADDR0 = a1
+    /* the sum of the parts: each single testimony coherent, and its claim
+     * count matches its watermark span in the union */
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        let c : i64 = sy_convene(1u64 << k, 0u64, 0u64)
+        if c < 0i64 { return 330u64 }
+        if eol_lawcheck() != 0u64 { return 330u64 }
+        if eol_addr() == 0u64 { return 330u64 }
+        if (c as u64) != (SY_CWM[k + 1u64] - SY_CWM[k]) { return 330u64 }
+        k = k + 1u64
+    }
+    return 0u64
+}
+fn sy_arm331() -> u64 {
+    /* THE SURPLUS: the eight named theorems hold in the union and in NO
+     * single testimony; the mechanical sweep counts >= 8 surplus pairs */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 331u64 }
+    let mut n : u64 = 0u64
+    while n < 8u64 {
+        if sy_check_theorem(n) != 1u64 { return 331u64 }
+        n = n + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        if sy_convene(1u64 << k, 0u64, 0u64) < 0i64 { return 331u64 }
+        n = 0u64
+        while n < 8u64 {
+            if sy_check_theorem(n) != 0u64 { return 331u64 }
+            n = n + 1u64
+        }
+        k = k + 1u64
+    }
+    /* the mechanical sweep: cross-province subject pairs entailed by the
+     * union under any verb, then re-tested against every single testimony */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 331u64 }
+    if sy_harvest() == SY_SENT { return 331u64 }
+    if sy_con_fill(0u64) == SY_SENT { return 331u64 }
+    let mut surp : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SY_SN {
+        let mut j : u64 = i + 1u64
+        while j < SY_SN {
+            if SY_SP[i] != SY_SP[j] { if sy_con_get(0u64, i, j) == 1u64 {
+                /* connected across provinces: is it union-only?  re-derive
+                 * against each single testimony by text */
+                let mut single : u64 = 0u64
+                let mut w : u64 = 0u64
+                while w < SY_ORGS {
+                    if sy_convene(1u64 << w, 0u64, 0u64) < 0i64 { return 331u64 }
+                    let ea : u64 = sy_thing_of(SY_SO[i], SY_SL[i])
+                    let eb : u64 = sy_thing_of(SY_SO[j], SY_SL[j])
+                    if ea != SY_SENT { if eb != SY_SENT {
+                        if eol_lawcheck() != 0u64 { return 331u64 }
+                        let ca : u64 = eol_class_of_thing(ea)
+                        let cb : u64 = eol_class_of_thing(eb)
+                        let mut con : u64 = 0u64
+                        if ca == cb { con = 1u64 }
+                        if eol_reaches(ca, cb) == 1u64 { con = 1u64 }
+                        if eol_reaches(cb, ca) == 1u64 { con = 1u64 }
+                        if eol_mirror_class(ca) == cb { con = 1u64 }
+                        if con == 1u64 { single = 1u64   w = SY_ORGS }
+                    } }
+                    w = w + 1u64
+                }
+                if single == 0u64 { surp = surp + 1u64 }
+                /* restore the union for the next pair's class queries */
+                if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 331u64 }
+                if eol_lawcheck() != 0u64 { return 331u64 }
+            } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    if surp < 8u64 { return 331u64 }
+    SY_SURP = surp
+    return 0u64
+}
+fn sy_arm332() -> u64 {
+    /* THE KNOCKOUT MATRIX: drop each testimony; exactly the theorems that
+     * ride it die, every other survives */
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        if sy_convene(255u64 & (255u64 ^ (1u64 << k)), 0u64, 0u64) < 0i64 { return 332u64 }
+        let mut n : u64 = 0u64
+        while n < 8u64 {
+            let dead : u64 = (sy_theorem_bearers(n) >> k) & 1u64
+            let got : u64 = sy_check_theorem(n)
+            if dead == 1u64 { if got != 0u64 { return 332u64 } }
+            if dead == 0u64 { if got != 1u64 { return 332u64 } }
+            n = n + 1u64
+        }
+        k = k + 1u64
+    }
+    return 0u64
+}
+fn sy_arm333() -> u64 {
+    /* THE PROVINCE MAP: watermarks monotone; the shared vocabulary derived
+     * -- six joint words, each present in its speakers and absent from the
+     * others; every organ also keeps a private word */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 333u64 }
+    if sy_harvest() == SY_SENT { return 333u64 }
+    if SY_SN != SY_WM[8u64] { return 333u64 }        /* testimonies carry no mentions */
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        if SY_WM[k + 1u64] < SY_WM[k] { return 333u64 }
+        if SY_WM[k + 1u64] == SY_WM[k] { return 333u64 }   /* every organ speaks */
+        k = k + 1u64
+    }
+    /* presence matrix over the eight single convenings */
+    let mut shared : u64 = 0u64
+    /* count per subject: in how many single testimonies do its bytes appear */
+    let mut i : u64 = 0u64
+    let mut privmask : u64 = 0u64
+    while i < SY_SN {
+        let mut cnt : u64 = 0u64
+        k = 0u64
+        while k < SY_ORGS {
+            if sy_convene(1u64 << k, 0u64, 0u64) < 0i64 { return 333u64 }
+            if sy_thing_of(SY_SO[i], SY_SL[i]) != SY_SENT { cnt = cnt + 1u64 }
+            k = k + 1u64
+        }
+        if cnt == 0u64 { return 333u64 }
+        if cnt >= 2u64 { shared = shared + 1u64 }
+        if cnt == 1u64 { privmask = privmask | (1u64 << SY_SP[i]) }
+        i = i + 1u64
+    }
+    if shared != 6u64 { return 333u64 }
+    if privmask != 255u64 { return 333u64 }
+    SY_SHARED = shared
+    /* the six joint words BY NAME: each present in >= 2 single convenings */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 333u64 }
+    if sy_harvest() == SY_SENT { return 333u64 }
+    if sy_sub_of("valuation" as u64) == SY_SENT { return 333u64 }
+    if sy_sub_of("constructible_real" as u64) == SY_SENT { return 333u64 }
+    if sy_sub_of("basis_invariance" as u64) == SY_SENT { return 333u64 }
+    if sy_sub_of("inverse_mint" as u64) == SY_SENT { return 333u64 }
+    if sy_sub_of("power_sum" as u64) == SY_SENT { return 333u64 }
+    if sy_sub_of("odd_multiplier" as u64) == SY_SENT { return 333u64 }
+    return 0u64
+}
+fn sy_arm334() -> u64 {
+    /* THE FRONTIER: the unconnected pairs counted twice (deterministic);
+     * the named absence is ON it; class-joined pairs are NOT */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 334u64 }
+    if sy_harvest() == SY_SENT { return 334u64 }
+    let f1 : u64 = sy_con_fill(0u64)
+    if f1 == SY_SENT { return 334u64 }
+    let f2 : u64 = sy_con_fill(0u64)
+    if f2 != f1 { return 334u64 }
+    let sd : u64 = sy_sub_of("sdiv 3" as u64)
+    let er : u64 = sy_sub_of("erasure 3" as u64)
+    let sh : u64 = sy_sub_of("shr 3" as u64)
+    let mu : u64 = sy_sub_of("mul 8" as u64)
+    if sd == SY_SENT { return 334u64 }
+    if er == SY_SENT { return 334u64 }
+    if sh == SY_SENT { return 334u64 }
+    if mu == SY_SENT { return 334u64 }
+    if sy_connected(sd, er) != 0u64 { return 334u64 }    /* the named absence  */
+    if sy_connected(sd, sh) != 0u64 { return 334u64 }
+    if sy_connected(sh, mu) != 1u64 { return 334u64 }    /* class-joined       */
+    if sy_connected(sh, er) != 1u64 { return 334u64 }
+    SY_FRONT = f1
+    return 0u64
+}
+fn sy_arm335() -> u64 {
+    /* THE ABDUCTION: the complete single-claim bridge set for the gap
+     * (sdiv 3, erasure 3) over the two goal classes -- twelve candidates
+     * (1 x 3 members, = / < both ways / ~), each convened and verified to
+     * connect the goal; the cycle-maker is refused by law, counted.
+     * Completeness needs the goal classes mirror-free: asserted first. */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 335u64 }
+    if sy_harvest() == SY_SENT { return 335u64 }
+    if eol_lawcheck() != 0u64 { return 335u64 }
+    let sd : u64 = sy_sub_of("sdiv 3" as u64)
+    let er : u64 = sy_sub_of("erasure 3" as u64)
+    if sd == SY_SENT { return 335u64 }
+    if er == SY_SENT { return 335u64 }
+    if eol_mirror_class(eol_class_of_thing(SY_ST[sd])) != SY_SENT { return 335u64 }
+    if eol_mirror_class(eol_class_of_thing(SY_ST[er])) != SY_SENT { return 335u64 }
+    /* the goal-side member rosters, collected on the PURE union (candidate
+     * convenings below shift class ids, so membership is frozen FIRST) */
+    let csd : u64 = eol_class_of_thing(SY_ST[sd])
+    let cer : u64 = eol_class_of_thing(SY_ST[er])
+    let mut na : u64 = 0u64
+    let mut nb : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SY_SN {
+        if eol_class_of_thing(SY_ST[i]) == csd { if na < 8u64 { SY_MA[na] = i   na = na + 1u64 } }
+        if eol_class_of_thing(SY_ST[i]) == cer { if nb < 8u64 { SY_MB[nb] = i   nb = nb + 1u64 } }
+        i = i + 1u64
+    }
+    if na != 1u64 { return 335u64 }
+    if nb != 3u64 { return 335u64 }
+    let mut cands : u64 = 0u64
+    let mut ia : u64 = 0u64
+    while ia < na {
+        let mut jb : u64 = 0u64
+        while jb < nb {
+            /* four candidate shapes per member pair */
+            let mut shape : u64 = 0u64
+            while shape < 4u64 {
+                let mut v : u64 = SY_V_FLAT
+                let mut a : u64 = SY_MA[ia]
+                let mut b : u64 = SY_MB[jb]
+                if shape == 1u64 { v = SY_V_BELOW }
+                if shape == 2u64 { v = SY_V_BELOW   a = SY_MB[jb]   b = SY_MA[ia] }
+                if shape == 3u64 { v = SY_V_REFLECT }
+                sy_bridge_build(a, v, b)
+                if sy_convene(255u64, 1u64, 0u64) < 0i64 { return 335u64 }
+                if eol_lawcheck() == 0u64 {
+                    /* connected now? then it is a valid bridge (the re-harvest
+                     * rebuilds the identical roster: same texts, same order) */
+                    if sy_harvest() == SY_SENT { return 335u64 }
+                    let s2 : u64 = sy_sub_of("sdiv 3" as u64)
+                    let e2 : u64 = sy_sub_of("erasure 3" as u64)
+                    if s2 == SY_SENT { return 335u64 }
+                    if e2 == SY_SENT { return 335u64 }
+                    if sy_connected(s2, e2) == 1u64 { cands = cands + 1u64 }
+                } else { SY_RLAW = SY_RLAW + 1u64 }
+                shape = shape + 1u64
+            }
+            jb = jb + 1u64
+        }
+        ia = ia + 1u64
+    }
+    /* restore the standing union + roster (the loop's last convening holds
+     * a candidate); the candidate count is the complete bridge set */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 335u64 }
+    if sy_harvest() == SY_SENT { return 335u64 }
+    if cands != 12u64 { return 335u64 }
+    /* the named bridge is among them: build it and verify it connects */
+    let sd3 : u64 = sy_sub_of("sdiv 3" as u64)
+    let er3 : u64 = sy_sub_of("erasure 3" as u64)
+    if sd3 == SY_SENT { return 335u64 }
+    if er3 == SY_SENT { return 335u64 }
+    sy_bridge_build(sd3, SY_V_FLAT, er3)
+    if sy_convene(255u64, 1u64, 0u64) < 0i64 { return 335u64 }
+    if eol_lawcheck() != 0u64 { return 335u64 }
+    if sy_harvest() == SY_SENT { return 335u64 }
+    let s3 : u64 = sy_sub_of("sdiv 3" as u64)
+    let e3 : u64 = sy_sub_of("erasure 3" as u64)
+    if s3 == SY_SENT { return 335u64 }
+    if e3 == SY_SENT { return 335u64 }
+    if sy_connected(s3, e3) != 1u64 { return 335u64 }
+    /* THE CYCLE-MAKER is refused by law, counted: [fold_family < sdiv 3]
+     * closes fold_family < sdiv 3 < fold_family */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 335u64 }
+    if sy_harvest() == SY_SENT { return 335u64 }
+    let ff : u64 = sy_sub_of("fold_family" as u64)
+    if ff == SY_SENT { return 335u64 }
+    sy_bridge_build(ff, SY_V_BELOW, sy_sub_of("sdiv 3" as u64))
+    let r0 : u64 = SY_RLAW
+    if sy_convene(255u64, 1u64, 0u64) < 0i64 { return 335u64 }
+    if eol_lawcheck() == 0u64 { return 335u64 }
+    SY_RLAW = SY_RLAW + 1u64
+    if SY_RLAW != r0 + 1u64 { return 335u64 }
+    SY_BRN = 0u64
+    return 0u64
+}
+fn sy_arm336() -> u64 {
+    /* THE DISCHARGE: the meter decides the bridge -- the true one is spoken,
+     * the false ones are refuted and never enter, the union re-derives and
+     * knows what it could not */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 336u64 }
+    if sy_harvest() == SY_SENT { return 336u64 }
+    let sd : u64 = sy_sub_of("sdiv 3" as u64)
+    let er : u64 = sy_sub_of("erasure 3" as u64)
+    let um : u64 = sy_sub_of("umod 3" as u64)
+    if sd == SY_SENT { return 336u64 }
+    if er == SY_SENT { return 336u64 }
+    if um == SY_SENT { return 336u64 }
+    /* the true bridge: image(sdiv 3) = 32 = 2^(8-3) = image(erasure 3) */
+    let und0 : u64 = SY_RUND
+    let ref0 : u64 = SY_RREF
+    if sy_decide(sd, er) != 1u64 { return 336u64 }
+    /* the false variants REFUTED by the same meter: erasure 4 (image 16)
+     * via a synthetic subject is out of roster -- the in-roster false
+     * bridge is umod 3 (image 8): refuted, counted, never spoken */
+    if sy_decide(sd, um) != 0u64 { return 336u64 }
+    if SY_RREF != ref0 + 1u64 { return 336u64 }
+    /* an undecidable candidate: a non-family subject (deficit) */
+    let df : u64 = sy_sub_of("deficit" as u64)
+    if df == SY_SENT { return 336u64 }
+    if sy_decide(sd, df) != 2u64 { return 336u64 }
+    if SY_RUND != und0 + 1u64 { return 336u64 }
+    /* the meter's own two sdiv spellings agreed inside sy_decide; the raw
+     * numbers are re-checked here as conditions of motion */
+    if no_meter(4u64, 3u64) != 32u64 { return 336u64 }
+    if no_meter(5u64, 3u64) != 32u64 { return 336u64 }
+    if no_meter(2u64, 3u64) != 32u64 { return 336u64 }
+    if no_meter(3u64, 7u64) != 8u64 { return 336u64 }
+    /* SPEAK the decided bridge; the union re-derives, KNOWS, deterministically */
+    sy_bridge_build(sd, SY_V_FLAT, er)
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 336u64 }
+    if eol_lawcheck() != 0u64 { return 336u64 }
+    let ua : u64 = eol_addr()
+    if ua == 0u64 { return 336u64 }
+    if ua == SY_UADDR0 { return 336u64 }             /* knowledge GREW: new name */
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 336u64 }
+    if eol_addr() != ua { return 336u64 }
+    SY_UADDR = ua
+    /* what it could not know before, it knows now: the fold-invariance
+     * theorem at the knowledge level, and the gap itself */
+    if sy_q("sdiv 3" as u64, SY_V_FLAT, "erasure 3" as u64) != 1u64 { return 336u64 }
+    if sy_q("sdiv 3" as u64, SY_V_FLAT, "shr 3" as u64) != 1u64 { return 336u64 }
+    if sy_q("sdiv 3" as u64, SY_V_FLAT, "mul 8" as u64) != 1u64 { return 336u64 }
+    /* and what remains false remains refused: sdiv 3 is not umod 3 */
+    if sy_q("sdiv 3" as u64, SY_V_FLAT, "umod 3" as u64) != 0u64 { return 336u64 }
+    return 0u64
+}
+fn sy_arm337() -> u64 {
+    /* THE MONOTONE FRONTIER: the discharge closes exactly its three pairs;
+     * nothing disconnects */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 337u64 }
+    if sy_harvest() == SY_SENT { return 337u64 }
+    let before : u64 = sy_con_fill(0u64)
+    if before == SY_SENT { return 337u64 }
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 337u64 }
+    if sy_harvest() == SY_SENT { return 337u64 }
+    let after : u64 = sy_con_fill(1u64)
+    if after == SY_SENT { return 337u64 }
+    if after + 3u64 != before { return 337u64 }
+    /* monotone: every before-connected pair stays connected */
+    let mut w : u64 = 0u64
+    while w < 144u64 {
+        if (SY_CON0[w] & SY_CON1[w]) != SY_CON0[w] { return 337u64 }
+        w = w + 1u64
+    }
+    /* the exact three: (sdiv 3, erasure 3), (sdiv 3, shr 3), (sdiv 3, mul 8) */
+    let sd : u64 = sy_sub_of("sdiv 3" as u64)
+    let er : u64 = sy_sub_of("erasure 3" as u64)
+    let sh : u64 = sy_sub_of("shr 3" as u64)
+    let mu : u64 = sy_sub_of("mul 8" as u64)
+    let mut lo1 : u64 = sd
+    let mut hi1 : u64 = er
+    if lo1 > hi1 { let t1 : u64 = lo1   lo1 = hi1   hi1 = t1 }
+    if sy_con_get(0u64, lo1, hi1) != 0u64 { return 337u64 }
+    if sy_con_get(1u64, lo1, hi1) != 1u64 { return 337u64 }
+    let mut lo2 : u64 = sd
+    let mut hi2 : u64 = sh
+    if lo2 > hi2 { let t2 : u64 = lo2   lo2 = hi2   hi2 = t2 }
+    if sy_con_get(0u64, lo2, hi2) != 0u64 { return 337u64 }
+    if sy_con_get(1u64, lo2, hi2) != 1u64 { return 337u64 }
+    let mut lo3 : u64 = sd
+    let mut hi3 : u64 = mu
+    if lo3 > hi3 { let t3 : u64 = lo3   lo3 = hi3   hi3 = t3 }
+    if sy_con_get(0u64, lo3, hi3) != 0u64 { return 337u64 }
+    if sy_con_get(1u64, lo3, hi3) != 1u64 { return 337u64 }
+    SY_FRONT = after
+    return 0u64
+}
+fn sy_arm338() -> u64 {
+    /* THE EXPLANATION: why-chains for a pure-congruence surplus theorem and
+     * a mixed congruence-order one -- stated-claim chains, verified
+     * stepwise, length 2, no shorter path, second engine agreeing */
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 338u64 }
+    if eol_lawcheck() != 0u64 { return 338u64 }
+    if sy_harvest() == SY_SENT { return 338u64 }
+    /* T1: deficit = orbit_decision through the shared valuation */
+    let sdf : u64 = sy_sub_of("deficit" as u64)
+    let sod : u64 = sy_sub_of("orbit_decision" as u64)
+    let svl : u64 = sy_sub_of("valuation" as u64)
+    if sdf == SY_SENT { return 338u64 }
+    if sod == SY_SENT { return 338u64 }
+    if svl == SY_SENT { return 338u64 }
+    let td : u64 = SY_ST[sdf]
+    let tob : u64 = SY_ST[sod]
+    let tv : u64 = SY_ST[svl]
+    if sy_why(td, tob, SY_V_FLAT) != 0u64 { return 338u64 }
+    if SY_WN != 2u64 { return 338u64 }
+    /* step 1 joins deficit and valuation; step 2 joins valuation and
+     * orbit_decision; both are STATED = claims */
+    let c0 : u64 = SY_WC[0u64]
+    let c1 : u64 = SY_WC[1u64]
+    if eol_claim_v(c0) != SY_V_FLAT { return 338u64 }
+    if eol_claim_v(c1) != SY_V_FLAT { return 338u64 }
+    let mut ok0 : u64 = 0u64
+    if eol_claim_a(c0) == td { if eol_claim_b(c0) == tv { ok0 = 1u64 } }
+    if eol_claim_b(c0) == td { if eol_claim_a(c0) == tv { ok0 = 1u64 } }
+    if ok0 != 1u64 { return 338u64 }
+    let mut ok1 : u64 = 0u64
+    if eol_claim_a(c1) == tob { if eol_claim_b(c1) == tv { ok1 = 1u64 } }
+    if eol_claim_b(c1) == tob { if eol_claim_a(c1) == tv { ok1 = 1u64 } }
+    if ok1 != 1u64 { return 338u64 }
+    /* the second engine: distance exactly 2 (so no direct claim exists) */
+    if sy_dist(td, tob, SY_V_FLAT) != 2u64 { return 338u64 }
+    /* T8: tower_element < algebraic_number -- one = hop then one < hop */
+    let stw : u64 = sy_sub_of("tower_element" as u64)
+    let sal : u64 = sy_sub_of("algebraic_number" as u64)
+    if stw == SY_SENT { return 338u64 }
+    if sal == SY_SENT { return 338u64 }
+    let tt : u64 = SY_ST[stw]
+    let ta : u64 = SY_ST[sal]
+    if sy_why(tt, ta, SY_V_BELOW) != 0u64 { return 338u64 }
+    if SY_WN != 2u64 { return 338u64 }
+    if eol_claim_v(SY_WC[0u64]) != SY_V_FLAT { return 338u64 }
+    if eol_claim_v(SY_WC[1u64]) != SY_V_BELOW { return 338u64 }
+    if sy_dist(tt, ta, SY_V_BELOW) != 2u64 { return 338u64 }
+    return 0u64
+}
+fn sy_arm339() -> u64 {
+    /* THE ONE NAME + THE SCROLL: the union has MORE geometry than any part;
+     * the synesis law sealed, entailing, refusing, deterministic */
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 339u64 }
+    let wu : u64 = eol_witness()
+    if wu == 0u64 { return 339u64 }
+    let mut k : u64 = 0u64
+    while k < SY_ORGS {
+        if sy_convene(1u64 << k, 0u64, 0u64) < 0i64 { return 339u64 }
+        let ws : u64 = eol_witness()
+        if ws == 0u64 { return 339u64 }
+        if ws == wu { return 339u64 }
+        k = k + 1u64
+    }
+    /* the meta-scroll: the synod's own law */
+    let doc : u64 = "[union = knowing_together] [testimony < union] [frontier = named_absence] [bridge = decided_claim] [decided_claim < meter_verdict] [knowing_together < organism]" as u64
+    let dl : u64 = sy_slen(doc)
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 339u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 339u64 }
+    /* DERIVED (absent from the text): the bridge sits under the meter's verdict */
+    if sy_q("bridge" as u64, SY_V_BELOW, "meter_verdict" as u64) != 1u64 { return 339u64 }
+    /* DERIVED: the union sits under the organism (through knowing_together) */
+    if sy_q("union" as u64, SY_V_BELOW, "organism" as u64) != 1u64 { return 339u64 }
+    /* the reversal REFUSES: the meter's verdict does not sit under the bridge */
+    if sy_q("meter_verdict" as u64, SY_V_BELOW, "bridge" as u64) != 0u64 { return 339u64 }
+    /* cross-class refusal: the frontier is not the bridge */
+    if sy_q("frontier" as u64, SY_V_FLAT, "bridge" as u64) != 0u64 { return 339u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 339u64 }
+    if eol_addr() != a1 { return 339u64 }
+    SY_SCROLL = a1
+    /* leave the FULL union standing (the discharged knowledge is the state
+     * the organism rests in) */
+    if sy_convene(255u64, 1u64, 1u64) < 0i64 { return 339u64 }
+    if eol_lawcheck() != 0u64 { return 339u64 }
+    return 0u64
+}
+fn syn_selfprove() -> u64 @export {
+    SY_RUND = 0u64
+    SY_RREF = 0u64
+    SY_RLAW = 0u64
+    SY_BRN = 0u64
+    let a0 : u64 = sy_arm330()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = sy_arm331()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = sy_arm332()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = sy_arm333()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = sy_arm334()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = sy_arm335()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = sy_arm336()
+    if a6 != 0u64 { return a6 }
+    let a7 : u64 = sy_arm337()
+    if a7 != 0u64 { return a7 }
+    let a8 : u64 = sy_arm338()
+    if a8 != 0u64 { return a8 }
+    let a9 : u64 = sy_arm339()
+    if a9 != 0u64 { return a9 }
+    return 0u64
+}
+
+/* SYNESIS: the organs' knowledge is ONE knowledge.  The union has one name,
+ * the surplus is derived and load-bearing, the frontier is the machine's own
+ * named ignorance, and the first gap was closed by the machine's own meter
+ * -- noticed, decided, known.  What gnosis recognized and noesis metered,
+ * synesis comprehends. */

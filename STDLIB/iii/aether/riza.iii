@@ -1881,6 +1881,15 @@ fn rz_arms_upto(upto: u64) -> u64 @export {
     if a7 != 0u64 { return a7 }
     return 0u64
 }
+/* THE TESTIMONY (the knowing-together): riza's laws in the one tongue -- the
+ * algebraic number IS its (polynomial, interval) pair; the constructible
+ * reals sit INSIDE the real-closed tier (the rung this organ climbed, the
+ * sqrt2+sqrt3 minimal polynomial minted and cross-checked against pyrgos);
+ * root signs are decided by the Sturm-Tarski query; minimal polynomials are
+ * minted by resultants. */
+fn rz_testify() -> u64 @export {
+    return "[algebraic_number = polynomial_interval] [constructible_real < algebraic_number] [root_sign = sturm_tarski] [minimal_polynomial = resultant_mint]" as u64
+}
 fn rz_selfprove() -> u64 @export {
     rz_reset()
     rz_mark()

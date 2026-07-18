@@ -1967,3 +1967,12 @@ fn py_selfprove() -> u64 @export {
     if a15 != 0u64 { return a15 }
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): pyrgos speaks its proven laws in the
+ * one tongue for the synesis convening -- each claim maps to a standing arm:
+ * the tower IS the field of constructible reals; the total sign IS norm
+ * descent (never abstains); quadratic radicals live inside tower elements;
+ * and a complex point is a PAIR of tower elements (the pz closure). */
+fn py_testify() -> u64 @export {
+    return "[tower_element = constructible_real] [total_sign = norm_descent] [quadratic_radical < tower_element] [complex_point = tower_pair]" as u64
+}

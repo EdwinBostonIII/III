@@ -925,3 +925,13 @@ fn gn_selfprove() -> u64 @export {
     kd_setp(5u64)
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): gnosis's laws in the one tongue --
+ * the orbit oracle's halting decision IS the valuation (arm 291); arrival
+ * counts are minted by the inverse (arm 298); the chronometer's total work
+ * IS a power sum (the meris oracle); the dispatcher's standing default IS
+ * the measured winner (the verdict loop, arm 295); the live division plan
+ * rides the substrate identity (arm 299). */
+fn gn_testify() -> u64 @export {
+    return "[orbit_decision = valuation] [arrival_count = inverse_mint] [work_total = power_sum] [measured_winner = standing_default] [division_plan = substrate_identity]" as u64
+}

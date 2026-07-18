@@ -660,3 +660,13 @@ fn kl_selfprove() -> u64 @export {
     if a6 != 0u64 { return a6 }
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): klisi's laws in the one tongue --
+ * positive valuation IS what refuses the inverse (the obstruction, arm 266);
+ * the inverse mint IS the Hensel lift, and Hensel IS Newton (one iteration,
+ * quadratic digit-doubling); odd multipliers are exactly the invertible
+ * words (kl_inv2_u64, the bijection witness); the perfectoid tilt is the
+ * sharp map, exact ((t-flat)-sharp = t, arm 264). */
+fn kl_testify() -> u64 @export {
+    return "[valuation = inverse_refusal] [inverse_mint = hensel_lift] [hensel_lift = newton_iteration] [odd_multiplier = invertible_word] [perfectoid_tilt = sharp_map]" as u64
+}

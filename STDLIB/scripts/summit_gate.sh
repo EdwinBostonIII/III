@@ -38,7 +38,23 @@
 #      decl-wall / slot-ceiling pre-flight meter proven exact on generated
 #      corpora spanning both boundaries; the mirror economy strictly cheaper
 #      with zero wrongful prunes; the lying mirror caught; the mirror law
-#      sealed as a scroll]);
+#      sealed as a scroll],
+#      synesis 330..339 [THE KNOWING-TOGETHER: eight organ testimonies
+#      convened side by side into ONE coherent scroll with one address;
+#      the cross-organ SURPLUS derived (theorems no single testimony
+#      entails -- deficit = orbit_decision, work_total = faulhaber_mint,
+#      born_rule = forced_exponent, tower_element < algebraic_number, ...)
+#      under the complete 8-drop knockout matrix; the province map and the
+#      six-word shared vocabulary derived; THE FRONTIER: the machine
+#      counts its own unknown pairs; THE ABDUCTION: the complete
+#      single-claim bridge set for the named gap; THE DISCHARGE: the
+#      bridge DECIDED by noesis's meter (true spoken, false refuted,
+#      undecidable counted), the union re-derived knowing more, the
+#      frontier shrinking monotonically by exactly the closed pairs; the
+#      why-chains of two surplus theorems reconstructed and length-checked
+#      by a second engine; the union's witness carrying strictly more
+#      geometry than any single testimony; the synesis law sealed as a
+#      scroll]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -89,10 +105,11 @@ cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/noesis.iii"   "$T/noesis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/mneme.iii"    "$T/mneme.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/katoptron.iii" "$T/katoptron.o" || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/eidolos.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -119,6 +136,9 @@ grep -q "^scroll noesis  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO NOES
 grep -q "^scroll worlds  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO WORLDS SCROLL"; exit 6; }
 grep -q "^scroll mneme   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MNEME SCROLL"; exit 6; }
 grep -q "^scroll mirror  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MIRROR SCROLL"; exit 6; }
+grep -q "^scroll synesis = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO SYNESIS SCROLL"; exit 6; }
+grep -q "^scroll union   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO UNION SCROLL"; exit 6; }
+grep -q "^the union knows: surplus=" "$T/run1.txt" || { echo "[summit_gate] NO UNION REPORT"; exit 6; }
 
 # THE MIRROR ON REAL TISSUE: the pre-flight meter walks two live organ
 # sources; grep is the independent second engine on the greppable dimensions

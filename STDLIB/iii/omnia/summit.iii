@@ -672,3 +672,13 @@ fn su_selfprove() -> u64 @export {
     if a5 != 0u64 { return a5 }
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): the capstones in the one tongue --
+ * the singular node holds finite multiplicity (Theorem I, two engines); the
+ * product formula IS the place ledger (total valuation 1 through the node);
+ * the archimedean and adic places mirror each other (one vanishes as the
+ * other grows); the forced Born exponent IS basis-invariance (Theorem II,
+ * the unique survivor e = 2). */
+fn su_testify() -> u64 @export {
+    return "[singular_node = finite_multiplicity] [product_formula = place_ledger] [archimedean_place ~ adic_place] [forced_exponent = basis_invariance]" as u64
+}

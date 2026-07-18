@@ -1378,6 +1378,17 @@ fn ky_selfprove() -> u64 @export {
     return 0u64
 }
 
+/* THE TESTIMONY (the knowing-together): kyma's laws in the one tongue --
+ * the Born rule was SELECTED by basis-invariance (arm 240, Parseval); the
+ * classical bound 2 sits strictly under the Tsirelson value (arm 239, both
+ * emerged by complete enumeration, gap decided by the exact sign oracle);
+ * the contextual square admits no valuation (arm 241, Kochen-Specker,
+ * 512-enumeration zero); the global phase is carried inside the exact
+ * amplitude (Y = zeta^2 X Z, first-class). */
+fn ky_testify() -> u64 @export {
+    return "[born_rule = basis_invariance] [classical_bound 2 < tsirelson_value] [contextual_square = no_valuation] [global_phase < exact_amplitude]" as u64
+}
+
 /* KYMA: this organ IS the wave.  Its amplitudes are ring integers, its gates
  * are integer motion, its unitarity is an integer equation, its Born rule is
  * cross-sworn to the constructible tower, its time reversal returns the

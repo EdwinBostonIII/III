@@ -672,6 +672,17 @@ fn no_selfprove() -> u64 @export {
  * over Z/2^8 -- kind 0 mul-by-p, 1 add-p, 2 shr-p, 3 and-p, 4 sdiv-bias
  * 2^p, 5 sdiv-hw 2^p.  Consumed by the synesis discharge loop: a proposed
  * bridge between fold families is DECIDED by this meter, never assumed. */
+fn no_meter(kind: u64, p: u64) -> u64 @export { return no_img_8(kind, p) }
+
+/* THE TESTIMONY (the knowing-together): the thermodynamic laws in the one
+ * tongue, with fold families spoken as measured phrases (shr 3 erases
+ * exactly 3 bits; mul 8 erases v2(8) = 3; umod 3 erases 8-3 = 5; all
+ * decided by the arm-303 meter) -- and sdiv 3 introduced as a certified
+ * fold family WITHOUT its erasure class: the named absence the synesis
+ * frontier must FIND and the meter must DISCHARGE. */
+fn no_testify() -> u64 @export {
+    return "[deficit = valuation] [valuation = erasure_floor] [odd_multiplier = zero_heat] [zero_heat = recoverable_action] [chronometer_work = recoverable_action] [erasure_floor < redemption_price] [shr 3 = erasure 3] [mul 8 = erasure 3] [umod 3 = erasure 5] [sdiv 3 < fold_family] [shr 3 < fold_family]" as u64
+}
 
 /* NOESIS: the machine now knows what its own thinking costs -- the valuation
  * is the heat, the odd world is free, the chronometer's past is recoverable,

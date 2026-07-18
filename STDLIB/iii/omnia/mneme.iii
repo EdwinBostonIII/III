@@ -18,7 +18,7 @@
  * idempotent, monotone (a redundant edge changes nothing).  Append is the
  * only mutation; every query is a stateless derivation from the fold.
  *
- * THE ARMS (truth is a CONDITION OF MOTION, arms 310..314, NO gate of its
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 310..315, NO gate of its
  * own -- the summit gate compiles and drives this organ):
  *   310 THE LATTICE: on a synthetic universe the folded closure is reflexive,
  *       transitive, antisymmetric -- COMPLETELY -- and the prebuilt extent
@@ -43,11 +43,27 @@
  *       load-bearing on the log); the 65th concept is REFUSED, counted, the
  *       standing 64 unharmed; the manifold law is sealed by EIDOLOS with
  *       derived entailments and refused reversals, address deterministic.
+ *   315 THE UNION INDEX: the manifold indexes the WHOLE of what the
+ *       organism knows -- the eight testimonies plus synesis's discharged
+ *       bridge are re-convened (the union address re-derived EQUAL to
+ *       syn_union_addr: one knowledge, one name, two organs); the union's
+ *       classes become lanes (32 of 64 -- the class quotient fits the
+ *       machine word), the stated order claims become the log, and the
+ *       order-reversing mirror law is replayed to fixpoint on the
+ *       manifold's own rows; then TWO ENGINES on the complete class
+ *       relation (mn_ent == eol_reaches, every ordered pair), and the
+ *       THIRD ENGINE ON THE FRONTIER: the manifold re-counts the machine's
+ *       own ignorance off its rows and agrees with synesis's standing
+ *       count; dropping the bridge widens the frontier by EXACTLY the
+ *       three pairs the bridge closes (the monotone law, re-derived here)
+ *       and moves the union's name.  Exceeding 64 classes is the SHARD
+ *       BOUNDARY: refused, counted, never silent.
  *
  * SCOPE (the eidolon law): the manifold is exact over its 64 lanes; wider
  * universes shard by scroll composition (a scroll address is itself a
  * concept).  NIH: composes numera/idfold (the ONE identity seat), eidolos
- * (the language it indexes) and the live organs whose scrolls it registers.
+ * (the language it indexes), the live organs whose scrolls it registers,
+ * and synesis (whose union it indexes and whose frontier it re-counts).
  * Sibling of kardia (claims that BEAT) and soma (the claim-space): mneme is
  * where sealed claims become PLACES.  Ring R-1. */
 module omnia_mneme
@@ -61,6 +77,31 @@ extern @abi(c-msvc-x64) fn su_addr_gravity() -> u64 from "summit.iii"
 extern @abi(c-msvc-x64) fn su_addr_born() -> u64 from "summit.iii"
 extern @abi(c-msvc-x64) fn gn_addr() -> u64 from "gnosis.iii"
 extern @abi(c-msvc-x64) fn no_addr() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claims() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_things() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_a(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_v(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_claim_b(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_count() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_root(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_of_thing(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_mirror_class(ci: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_reaches(ci: u64, cj: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn py_testify() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn rz_testify() -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn ky_testify() -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ms_testify() -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn kl_testify() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn su_testify() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn gn_testify() -> u64 from "gnosis.iii"
+extern @abi(c-msvc-x64) fn no_testify() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn syn_union_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_frontier_count() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_bridge_len() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_bridge_byte(i: u64) -> u8 from "synesis.iii"
 
 const MN_CAP : u64 = 64u64
 const MN_EMAX : u64 = 256u64
@@ -452,6 +493,199 @@ fn mn_arm314() -> u64 {
     MN_SCROLL = a1
     return 0u64
 }
+/* ==================== THE UNION INDEX (arm 315) ====================
+ * The manifold turned on the organism's TOTAL knowledge: synesis convenes
+ * the eight testimonies and discharges a bridge; mneme re-convenes the same
+ * texts, re-derives the same ONE address, and re-builds the same closure as
+ * a 64-lane fold -- then re-counts the machine's own frontier from its rows.
+ * Three independent engines now agree on what the organism knows and on
+ * exactly how large its ignorance is. */
+var MN_UBR : [u8; 64]                    /* the discharged bridge bytes        */
+var MN_UTB : [u8; 128]                   /* class-root byte scratch            */
+var MN_UMIR : [u64; 64]                  /* lane -> mirror lane | MN_SENT      */
+var MN_USUB : [u64; 96]                  /* subject -> class lane              */
+var MN_USN : u64 = 0u64
+fn mn_u_testimony(k: u64) -> u64 {
+    if k == 0u64 { return py_testify() }
+    if k == 1u64 { return rz_testify() }
+    if k == 2u64 { return ky_testify() }
+    if k == 3u64 { return ms_testify() }
+    if k == 4u64 { return kl_testify() }
+    if k == 5u64 { return su_testify() }
+    if k == 6u64 { return gn_testify() }
+    return no_testify()
+}
+fn mn_u_convene(withbridge: u64) -> u64 {
+    /* the SAME eight testimonies synesis convenes, side by side; the
+     * discharged bridge rides along when asked (its bytes come from the
+     * LIVE synesis exports).  0 = coherent. */
+    eol_reset()
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let t : u64 = mn_u_testimony(k)
+        if eol_read(t, mn_slen(t)) < 0i64 { return 1u64 }
+        k = k + 1u64
+    }
+    if withbridge == 1u64 {
+        let bn : u64 = syn_bridge_len()
+        if bn == 0u64 { return 2u64 }
+        if bn > 64u64 { return 2u64 }
+        let mut i : u64 = 0u64
+        while i < bn { MN_UBR[i] = syn_bridge_byte(i)   i = i + 1u64 }
+        if eol_read((&MN_UBR) as u64, bn) < 0i64 { return 2u64 }
+    }
+    if eol_lawcheck() != 0u64 { return 3u64 }
+    return 0u64
+}
+fn mn_u_class_id(c: u64) -> u64 {
+    /* the class identity = the content fold of its root thing's bytes
+     * (address = meaning, lifted to the CLASS level) */
+    let rt : u64 = eol_class_root(c)
+    let ln : u64 = eol_thing_len(rt)
+    if ln == 0u64 { return 0u64 }
+    if ln > 128u64 { return 0u64 }
+    let mut k : u64 = 0u64
+    while k < ln { MN_UTB[k] = eol_thing_byte(rt, k)   k = k + 1u64 }
+    return idfold_bytes((&MN_UTB) as u64, ln)
+}
+fn mn_u_index() -> u64 {
+    /* lanes = the union's classes in content order; edges = the stated order
+     * claims at class level; the order-reversing mirror law replayed to
+     * fixpoint on the manifold's own rows.  0 = indexed. */
+    let nc : u64 = eol_class_count()
+    if nc == 0u64 { return 1u64 }
+    if nc > MN_CAP { MN_RCAP = MN_RCAP + 1u64   return 2u64 }   /* the shard boundary */
+    mn_reset()
+    let mut c : u64 = 0u64
+    while c < nc {
+        let id : u64 = mn_u_class_id(c)
+        if id == 0u64 { return 3u64 }
+        if mn_put(id) != c { return 4u64 }                      /* collision = refusal */
+        c = c + 1u64
+    }
+    c = 0u64
+    while c < nc {
+        MN_UMIR[c] = eol_mirror_class(c)
+        c = c + 1u64
+    }
+    let cn : u64 = eol_claims()
+    let mut i : u64 = 0u64
+    while i < cn {
+        if eol_claim_v(i) == 0u64 {
+            let ca : u64 = eol_class_of_thing(eol_claim_a(i))
+            let cb : u64 = eol_class_of_thing(eol_claim_b(i))
+            if ca == MN_SENT { return 5u64 }
+            if cb == MN_SENT { return 5u64 }
+            if mn_link(ca, cb) != 1u64 { return 5u64 }
+        }
+        i = i + 1u64
+    }
+    mn_fold()
+    /* A < B entails mirror(B) < mirror(A): replay to fixpoint */
+    let mut guard : u64 = 0u64
+    let mut changed : u64 = 1u64
+    while changed == 1u64 {
+        changed = 0u64
+        guard = guard + 1u64
+        if guard > 130u64 { return 6u64 }
+        let mut x : u64 = 0u64
+        while x < nc {
+            if MN_UMIR[x] != MN_SENT {
+                let mut y : u64 = 0u64
+                while y < nc {
+                    if x != y { if MN_UMIR[y] != MN_SENT {
+                        if mn_ent(x, y) == 1u64 {
+                            if mn_ent(MN_UMIR[y], MN_UMIR[x]) == 0u64 {
+                                if mn_link(MN_UMIR[y], MN_UMIR[x]) != 1u64 { return 6u64 }
+                                changed = 1u64
+                            }
+                        }
+                    } }
+                    y = y + 1u64
+                }
+            }
+            x = x + 1u64
+        }
+        if changed == 1u64 { mn_fold() }
+    }
+    return 0u64
+}
+fn mn_u_front() -> u64 {
+    /* the frontier re-counted by the manifold: harvest every phrase subject,
+     * map to its class lane, and count the unconnected pairs off the
+     * manifold's own rows (the order aspect is THIS engine; class identity
+     * and the mirror partner are the shared vocabulary).  SENT = overflow. */
+    MN_USN = 0u64
+    let tn : u64 = eol_things()
+    let mut t : u64 = 0u64
+    while t < tn {
+        if eol_thing_len(t) > 0u64 { if eol_thing_byte(t, 0u64) != 91u8 {
+            if MN_USN >= 96u64 { return MN_SENT }
+            let cl : u64 = eol_class_of_thing(t)
+            if cl == MN_SENT { return MN_SENT }
+            MN_USUB[MN_USN] = cl
+            MN_USN = MN_USN + 1u64
+        } }
+        t = t + 1u64
+    }
+    let mut unc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < MN_USN {
+        let mut j : u64 = i + 1u64
+        while j < MN_USN {
+            let ci : u64 = MN_USUB[i]
+            let cj : u64 = MN_USUB[j]
+            let mut con : u64 = 0u64
+            if ci == cj { con = 1u64 }
+            if mn_ent(ci, cj) == 1u64 { con = 1u64 }
+            if mn_ent(cj, ci) == 1u64 { con = 1u64 }
+            if MN_UMIR[ci] == cj { con = 1u64 }
+            if con == 0u64 { unc = unc + 1u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return unc
+}
+fn mn_arm315() -> u64 {
+    /* THE UNION INDEX: one knowledge, one name, three engines */
+    if syn_union_addr() == 0u64 { return 315u64 }
+    if syn_bridge_len() == 0u64 { return 315u64 }
+    /* convene WITH the discharged bridge: the ONE address re-derived by a
+     * second organ from the same testimonies */
+    if mn_u_convene(1u64) != 0u64 { return 315u64 }
+    if eol_addr() != syn_union_addr() { return 315u64 }
+    if mn_u_index() != 0u64 { return 315u64 }
+    /* TWO ENGINES on the complete class relation: the manifold's fold vs
+     * eidolos's closure, every ordered pair */
+    let nc : u64 = eol_class_count()
+    let mut i : u64 = 0u64
+    while i < nc {
+        let mut j : u64 = 0u64
+        while j < nc {
+            if i != j { if mn_ent(i, j) != eol_reaches(i, j) { return 315u64 } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* THE THIRD ENGINE ON THE FRONTIER: the manifold re-counts the machine's
+     * ignorance and agrees with synesis's standing count */
+    let fr : u64 = mn_u_front()
+    if fr == MN_SENT { return 315u64 }
+    if fr != syn_frontier_count() { return 315u64 }
+    /* THE MONOTONE DELTA: without the bridge the frontier is EXACTLY three
+     * pairs wider (synesis's monotone law re-derived by this engine) and
+     * the union's name moves (knowledge grew, the address changed) */
+    if mn_u_convene(0u64) != 0u64 { return 315u64 }
+    let a0 : u64 = eol_addr()
+    if a0 == 0u64 { return 315u64 }
+    if a0 == syn_union_addr() { return 315u64 }
+    if mn_u_index() != 0u64 { return 315u64 }
+    let fr0 : u64 = mn_u_front()
+    if fr0 == MN_SENT { return 315u64 }
+    if fr0 != fr + 3u64 { return 315u64 }
+    return 0u64
+}
 fn mn_selfprove() -> u64 @export {
     let a0 : u64 = mn_arm310()
     if a0 != 0u64 { return a0 }
@@ -463,6 +697,8 @@ fn mn_selfprove() -> u64 @export {
     if a3 != 0u64 { return a3 }
     let a4 : u64 = mn_arm314()
     if a4 != 0u64 { return a4 }
+    let a5 : u64 = mn_arm315()
+    if a5 != 0u64 { return a5 }
     return 0u64
 }
 

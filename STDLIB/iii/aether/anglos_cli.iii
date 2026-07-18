@@ -54,6 +54,11 @@ extern @abi(c-msvc-x64) fn px_addr() -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn px_novel_count() -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn px_novel_idx(j: u64) -> u64 from "proxenos.iii"
 extern @abi(c-msvc-x64) fn px_stat(k: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_harvest_journal(path: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_erotema_verify(path: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_ledger_len() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_ledger_byte(i: u64) -> u8 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_journaled() -> u64 from "proxenos.iii"
 
 extern @abi(c-msvc-x64) fn ok_selfprove() -> u64 from "oikos.iii"
 extern @abi(c-msvc-x64) fn ok_dwell(path: u64, base: u64, len: u64) -> u64 from "oikos.iii"
@@ -131,7 +136,8 @@ fn usage() -> u64 {
     ps("  iii anglos compact              refound the house on its minimal basis\n" as u64)
     ps("                                  (closure preserved exactly)\n" as u64)
     ps("  iii anglos emit                 MY house as the CONFORMING envelope (to send)\n" as u64)
-    ps("  iii anglos receive \"<env>\"      judge a foreign house: CONCORD or DISCORD\n\n" as u64)
+    ps("  iii anglos receive \"<env>\"      judge a foreign house: CONCORD or DISCORD\n" as u64)
+    ps("  iii anglos questions            the erotema: the durable ledger of open questions\n\n" as u64)
     ps("exit: 0 heard/said | 1 refused/unheard/unsayable | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
@@ -332,8 +338,13 @@ fn anglos_enter(argc: i32, argv: u64) -> u64 @export {
                 putchar(10i32)
                 j = j + 1u64
             }
+            /* the honest zetesis seam: the harvest PERSISTS to the durable,
+             * self-verifying question-ledger -- the machine's standing
+             * account of what to seek or refute next */
+            let jnl : u64 = px_harvest_journal("STDLIB/data/erotema.jrnl" as u64)
             ps("  [sponsored " as u64)   pu(px_stat(0u64))   ps(" confirmed, " as u64)
             pu(px_stat(1u64))   ps(" novel, " as u64)   pu(px_stat(2u64))   ps(" refused]\n" as u64)
+            if jnl > 0u64 { ps("  " as u64)   pu(jnl)   ps(" new question(s) journaled to the erotema (durable, self-verifying)\n" as u64) }
             return 1u64
         }
         ps("REFUSED    the surface could not carry it (" as u64)
@@ -373,6 +384,26 @@ fn anglos_enter(argc: i32, argv: u64) -> u64 @export {
         ps("REFUSED  " as u64)   ok_reason_word(ok_reason())   putchar(10i32)
         print_trace()
         return 1u64
+    }
+    if streq(cmd, "questions" as u64) == 1u32 {
+        /* the erotema: the durable question-ledger -- what untrusted mouths
+         * pressed on the house that it could not derive, each self-verified */
+        let n : u64 = px_erotema_verify("STDLIB/data/erotema.jrnl" as u64)
+        if n == 18446744073709551615u64 { ps("THE EROTEMA IS TAMPERED: a question's address does not re-derive\n" as u64)   return 1u64 }
+        if n == 0u64 { ps("the erotema is empty: no unanswered question has been pressed on the house yet\n" as u64)   return 0u64 }
+        ps("THE EROTEMA -- the open questions, each self-verified from its own text:\n\n" as u64)
+        let bn : u64 = px_ledger_len()
+        let mut i : u64 = 0u64
+        ps("  " as u64)
+        while i < bn {
+            let c : u8 = px_ledger_byte(i)
+            if c == 10u8 { if i + 1u64 < bn { ps("\n  " as u64) } } else { putchar(c as i32) }
+            i = i + 1u64
+        }
+        putchar(10i32)
+        ps("\n" as u64)   pu(n)   ps(" open question(s); journaled " as u64)   pu(px_journaled())   ps(" this session.\n" as u64)
+        ps("  (a question stops re-appearing the moment the house grows enough to derive it)\n" as u64)
+        return 0u64
     }
     if streq(cmd, "emit" as u64) == 1u32 {
         /* the embassy, outbound: MY house as the CONFORMING envelope -- the

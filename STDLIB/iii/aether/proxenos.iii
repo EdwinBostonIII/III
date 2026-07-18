@@ -70,6 +70,12 @@ extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
 
+extern @abi(c-msvc-x64) fn xn_rooted() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
 const PX_SENT : u64 = 18446744073709551615u64
 /* verdicts */
 const PX_V_CONFIRMED : u64 = 1u64        /* every claim re-derived; booked     */
@@ -218,6 +224,199 @@ fn px_testify() -> u64 @export {
     return "[proposal < utterance] [novelty = question] [confirmation = rederivation]" as u64
 }
 
+/* ==================== THE EROTEMA: the question-ledger ====================
+ * A proposal's novelty is not knowledge -- but it is not nothing.  It is
+ * exactly what an untrusted mouth would have the house believe and the
+ * house could NOT derive: the next thing to seek or refute.  THE EROTEMA
+ * persists that harvest with the zetesis/guest-book discipline -- a
+ * self-verifying journal (STDLIB/data/erotema.jrnl) whose every line is
+ * `<address> <question-claim>`, the address the eol_addr of the claim text
+ * so a tampered question is a RED question (the whole ledger refuses).
+ * Appends are content-addressed and IDEMPOTENT (the same open question
+ * never doubles); an absent ledger is a lawful BIRTH.  This is the honest
+ * "zetesis seam": the machine's durable account of the questions untrusted
+ * mouths pressed on it -- a future seeking pass (or a human) works it down;
+ * a confirmed-later question simply stops re-appearing as the house grows.
+ * The ledger is HISTORY, not truth: nothing here is admitted, ever. */
+var PX_JB : [u8; 16384]                  /* ledger read buffer                  */
+var PX_LINE : [u8; 512]                  /* one line build                      */
+var PX_QC : [u8; 256]                    /* canonical question claim            */
+var PX_QCN : u64 = 0u64
+var PX_LADDR : u64 = 0u64                /* last verified line address          */
+var PX_TJOURNAL : u64 = 0u64             /* questions journaled, lifetime       */
+var PX_JN : u64 = 0u64                   /* bytes held from the last verify     */
+fn px_ledger_len() -> u64 @export { return PX_JN }
+fn px_ledger_byte(i: u64) -> u8 @export { if i < PX_JN { return PX_JB[i] }   return 0u8 }
+
+/* canonicalize novel claim ci into PX_QC and return its address (0 = bad) */
+fn px_qcanon(ci: u64) -> u64 {
+    PX_QCN = 0u64
+    let n : u64 = an_claim_len(ci)
+    if n == 0u64 { return 0u64 }
+    if n > 256u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < n { PX_QC[i] = an_claim_byte(ci, i)   i = i + 1u64 }
+    eol_reset()
+    if eol_read((&PX_QC) as u64, n) < 0i64 { eol_reset()   return 0u64 }
+    let a : u64 = eol_addr()
+    if a == 0u64 { eol_reset()   return 0u64 }
+    eol_write()
+    let cn : u64 = eol_out_len()
+    if cn == 0u64 { eol_reset()   return 0u64 }
+    if cn > 256u64 { eol_reset()   return 0u64 }
+    i = 0u64
+    while i < cn { PX_QC[i] = eol_out_byte(i)   i = i + 1u64 }
+    PX_QCN = cn
+    eol_reset()
+    return a
+}
+/* the exclusive end of the line starting at `off` in PX_JB[0,jn) -- the
+ * index of its terminating '\n', or jn if the last line is unterminated. */
+fn px_line_end(off: u64, jn: u64) -> u64 {
+    let mut e : u64 = off
+    while e < jn {
+        if PX_JB[e] == 10u8 { return e }
+        e = e + 1u64
+    }
+    return jn
+}
+/* the claim-start offset within a line [off,end): index just past the first
+ * space, or `end` (no space -> malformed, caller rejects on cn==0). */
+fn px_claim_start(off: u64, end: u64) -> u64 {
+    let mut s : u64 = off
+    while s < end {
+        if PX_JB[s] == 32u8 { return s + 1u64 }
+        s = s + 1u64
+    }
+    return end
+}
+/* verify one ledger line [off,end): "<digits> <claim>" whose claim's
+ * address re-derives to <digits>.  Sets PX_LADDR.  0 ok | 1 tamper. */
+fn px_vline(off: u64, end: u64) -> u64 {
+    if (end - off) < 3u64 { return 1u64 }
+    let cb : u64 = px_claim_start(off, end)
+    if cb >= end { return 1u64 }
+    /* the address digits are [off, cb-1) */
+    let mut a : u64 = 0u64
+    let mut nd : u64 = 0u64
+    let mut i : u64 = off
+    while i < (cb - 1u64) {
+        let c : u8 = PX_JB[i]
+        if c < 48u8 { return 1u64 }
+        if c > 57u8 { return 1u64 }
+        a = (a * 10u64) + ((c - 48u8) as u64)
+        nd = nd + 1u64
+        i = i + 1u64
+    }
+    if nd == 0u64 { return 1u64 }
+    let cn : u64 = end - cb
+    if cn == 0u64 { return 1u64 }
+    eol_reset()
+    if eol_read(((&PX_JB) as u64) + cb, cn) < 0i64 { eol_reset()   return 1u64 }
+    if eol_addr() != a { eol_reset()   return 1u64 }
+    eol_reset()
+    PX_LADDR = a
+    return 0u64
+}
+/* verify the whole ledger; returns line count, or PX_SENT on tamper. */
+fn px_erotema_verify(path: u64) -> u64 @export {
+    let f : u64 = fopen(path, "rb" as u64)
+    if f == 0u64 { return 0u64 }
+    let jn : u64 = fread((&PX_JB) as u64, 1u64, 16384u64, f)
+    fclose(f)
+    PX_JN = 0u64
+    if jn >= 16384u64 { return PX_SENT }
+    let mut off : u64 = 0u64
+    let mut kc : u64 = 0u64
+    while off < jn {
+        let end : u64 = px_line_end(off, jn)
+        if end == off { return PX_SENT }
+        if px_vline(off, end) != 0u64 { return PX_SENT }
+        kc = kc + 1u64
+        off = end + 1u64
+    }
+    PX_JN = jn
+    return kc
+}
+/* is canonical claim PX_QC[0,PX_QCN) already a line in PX_JB[0,jn)? */
+fn px_present(jn: u64) -> u64 {
+    let mut off : u64 = 0u64
+    while off < jn {
+        let end : u64 = px_line_end(off, jn)
+        let cb : u64 = px_claim_start(off, end)
+        if cb < end {
+            let cn : u64 = end - cb
+            if cn == PX_QCN {
+                let mut same : u64 = 1u64
+                let mut b : u64 = 0u64
+                while b < PX_QCN {
+                    if PX_JB[cb + b] != PX_QC[b] { same = 0u64   b = PX_QCN }
+                    b = b + 1u64
+                }
+                if same == 1u64 { return 1u64 }
+            }
+        }
+        off = end + 1u64
+    }
+    return 0u64
+}
+/* append every novel claim of the LAST proposal to the ledger, idempotently.
+ * Returns the number of NEW questions written (0 = all already present, or
+ * not rooted, or nothing novel).  A tampered ledger is refused (no write). */
+fn px_harvest_journal(path: u64) -> u64 @export {
+    if PX_NN == 0u64 { return 0u64 }
+    if xn_rooted() != 1u64 { return 0u64 }
+    if px_erotema_verify(path) == PX_SENT { return 0u64 }
+    let mut jn : u64 = 0u64
+    let f : u64 = fopen(path, "rb" as u64)
+    if f != 0u64 {
+        jn = fread((&PX_JB) as u64, 1u64, 16384u64, f)
+        fclose(f)
+        if jn >= 16384u64 { return 0u64 }
+    }
+    let mut written : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < PX_NN {
+        let ci : u64 = PX_NIDX[j]
+        let a : u64 = px_qcanon(ci)
+        if a != 0u64 {
+            if px_present(jn) == 0u64 {
+                /* build "<addr> <claim>\n" and append */
+                let mut m : u64 = 0u64
+                let mut div : u64 = 1u64
+                let mut t : u64 = a
+                while t >= 10u64 { div = div * 10u64   t = t / 10u64 }
+                t = a
+                let mut going : u64 = 1u64
+                while going == 1u64 {
+                    PX_LINE[m] = (48u64 + (t / div)) as u8
+                    m = m + 1u64
+                    t = t % div
+                    if div == 1u64 { going = 0u64 } else { div = div / 10u64 }
+                }
+                PX_LINE[m] = 32u8   m = m + 1u64
+                let mut k : u64 = 0u64
+                while k < PX_QCN { PX_LINE[m] = PX_QC[k]   m = m + 1u64   k = k + 1u64 }
+                PX_LINE[m] = 10u8   m = m + 1u64
+                let g : u64 = fopen(path, "ab" as u64)
+                if g != 0u64 {
+                    fwrite((&PX_LINE) as u64, 1u64, m, g)
+                    fclose(g)
+                    /* mirror into the image so a later dup in THIS harvest
+                     * is seen as present (idempotent within one call too) */
+                    let mut w : u64 = 0u64
+                    while w < m { if jn < 16384u64 { PX_JB[jn] = PX_LINE[w]   jn = jn + 1u64 }   w = w + 1u64 }
+                    written = written + 1u64
+                    PX_TJOURNAL = PX_TJOURNAL + 1u64
+                }
+            }
+        }
+        j = j + 1u64
+    }
+    return written
+}
+fn px_journaled() -> u64 @export { return PX_TJOURNAL }
+
 /* ==================== THE SELF-PROOF (arms 400..404) ==================== */
 fn px_ent(a: u64, v: u64, b: u64) -> u64 {
     return eol_entails(a, px_slen(a), v, b, px_slen(b))
@@ -289,6 +488,67 @@ fn px_arm404() -> u64 {
     eol_reset()
     return 0u64
 }
+/* the erotema self-proof dwells in a build-territory ledger, never the
+ * real one. */
+fn px_jpath() -> u64 { return "STDLIB/build/erotema_arm.jrnl" as u64 }
+fn px_jerase() -> u64 {
+    if xn_rooted() != 1u64 { return 1u64 }
+    let f : u64 = fopen(px_jpath(), "wb" as u64)
+    if f == 0u64 { return 1u64 }
+    fclose(f)
+    return 0u64
+}
+/* arm 421: THE HARVEST JOURNALED -- a novel proposal's questions are
+ * written to the self-verifying ledger, the ledger verifies, and a
+ * SECOND journaling of the same harvest writes NOTHING (idempotent). */
+fn px_arm421() -> u64 {
+    if px_jerase() != 0u64 { return 421u64 }
+    if px_erotema_verify(px_jpath()) != 0u64 { return 421u64 }   /* birth: empty */
+    eol_reset()
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 421u64 }
+    if px_propose_text("a dog is a machine" as u64) != 2u64 { return 421u64 }
+    if px_novel_count() != 1u64 { return 421u64 }
+    if px_harvest_journal(px_jpath()) != 1u64 { return 421u64 }
+    if px_erotema_verify(px_jpath()) != 1u64 { return 421u64 }
+    /* idempotent: the same open question never doubles */
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 421u64 }
+    if px_propose_text("a dog is a machine" as u64) != 2u64 { return 421u64 }
+    if px_harvest_journal(px_jpath()) != 0u64 { return 421u64 }
+    if px_erotema_verify(px_jpath()) != 1u64 { return 421u64 }
+    return 0u64
+}
+/* arm 422: THE ACCUMULATING LEDGER -- a second, different novelty grows
+ * the ledger to two lines; each remains self-verifying. */
+fn px_arm422() -> u64 {
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 422u64 }
+    if px_propose_text("a dog is a mineral" as u64) != 2u64 { return 422u64 }
+    if px_harvest_journal(px_jpath()) != 1u64 { return 422u64 }
+    if px_erotema_verify(px_jpath()) != 2u64 { return 422u64 }
+    return 0u64
+}
+/* arm 423: THE TAMPER -- one flipped byte in a journaled question and the
+ * WHOLE ledger refuses (a red question), and no append proceeds over it. */
+fn px_arm423() -> u64 {
+    let f : u64 = fopen(px_jpath(), "rb" as u64)
+    if f == 0u64 { return 423u64 }
+    let n : u64 = fread((&PX_JB) as u64, 1u64, 16384u64, f)
+    fclose(f)
+    if n < 2u64 { return 423u64 }
+    PX_JB[n - 2u64] = PX_JB[n - 2u64] ^ 1u8
+    let g : u64 = fopen(px_jpath(), "wb" as u64)
+    if g == 0u64 { return 423u64 }
+    fwrite((&PX_JB) as u64, 1u64, n, g)
+    fclose(g)
+    if px_erotema_verify(px_jpath()) != PX_SENT { return 423u64 }
+    /* a harvest over a tampered ledger writes nothing */
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 423u64 }
+    if px_propose_text("a dog is a vapour" as u64) != 2u64 { return 423u64 }
+    if px_harvest_journal(px_jpath()) != 0u64 { return 423u64 }
+    /* restore a clean ledger so the arm leaves no red state behind */
+    if px_jerase() != 0u64 { return 423u64 }
+    eol_reset()
+    return 0u64
+}
 fn px_selfprove() -> u64 @export {
     let mut r : u64 = px_arm400()
     if r != 0u64 { return r }
@@ -299,6 +559,12 @@ fn px_selfprove() -> u64 @export {
     r = px_arm403()
     if r != 0u64 { return r }
     r = px_arm404()
+    if r != 0u64 { return r }
+    r = px_arm421()
+    if r != 0u64 { return r }
+    r = px_arm422()
+    if r != 0u64 { return r }
+    r = px_arm423()
     if r != 0u64 { return r }
     return 0u64
 }

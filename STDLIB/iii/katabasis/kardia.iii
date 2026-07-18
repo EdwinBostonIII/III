@@ -799,3 +799,12 @@ fn kd_selfprove() -> u64 @export {
     kd_reset()
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): the heart's laws in the one tongue,
+ * for the census self-synod -- every claim maps to a standing law: a
+ * verification claim IS a cell; DUE is exactly pin drift; birth adopts;
+ * green sits under the derived record, which IS the re-ran claim; the
+ * heart's jurisdiction IS its cell ledger. */
+fn kd_testify() -> u64 @export {
+    return "[claim = cell] [due = pin_drift] [birth = adoption] [green < derived_record] [derived_record = reran_claim] [heart_jurisdiction = cell_ledger]" as u64
+}

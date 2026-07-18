@@ -2565,3 +2565,12 @@ fn dx_arm_mint() -> u64 {
     if mn2 != 0u64 { return 31u64 }
     return 0u64
 }
+
+/* THE TESTIMONY (the knowing-together): the mind's laws in the one tongue --
+ * the modal book IS the heart's jurisdiction; assertion is allowed only
+ * from it; the statistical book may only prefer; a promoted preference IS
+ * the hallucination (refused, counted, certificated); only the derived
+ * record settles a stake; a dream is a reversible excursion. */
+fn dx_testify() -> u64 @export {
+    return "[modal_book = heart_jurisdiction] [assertion < modal_book] [preference < statistical_book] [hallucination = promoted_preference] [settlement_evidence = derived_record] [dream = reversible_excursion]" as u64
+}

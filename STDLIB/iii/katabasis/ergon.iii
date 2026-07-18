@@ -85,6 +85,14 @@ extern @abi(c-msvc-x64) fn soma_selfprove() -> u64 from "soma.iii"
 extern @abi(c-msvc-x64) fn soma_survey_runners(dirpath: u64) -> u64 from "soma.iii"
 
 extern @abi(c-msvc-x64) fn dx_selfprove() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn kd_testify() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn soma_testify() -> u64 from "soma.iii"
+extern @abi(c-msvc-x64) fn dx_testify() -> u64 from "doxa.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
 
 extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
 extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
@@ -2555,6 +2563,104 @@ fn erg_flip_byte(path: u64, off: u64) -> u64 {
 }
 
 /* ==================== THE CENSUS: the fleet works, therefore it is ==================== */
+/* ==================== SEAT 9: THE SELF-SYNOD (the one tongue) ====================
+ * kardia, soma and doxa TESTIFY in EIDOLOS -- the self-layer's knowing-
+ * together, convened in the census medium (the organism binary carries the
+ * language natively).  The union is coherent with ONE deterministic
+ * address; the SURPLUS is derived (self-theorems NO single organ states:
+ * a matched nerve IS a heart cell; the modal book IS the cell ledger; the
+ * settlement evidence IS the re-ran claim; assertion sits under the cell
+ * ledger); the knockout matrix proves each testimony load-bearing.  Codes:
+ * 2101 convening/coherence | 2102 determinism | 2103 surplus |
+ * 2104 single-derivability leak | 2105 knockout. */
+var ERG_SYNADDR : u64 = 0u64
+fn erg_synod_addr() -> u64 @export { return ERG_SYNADDR }
+fn erg_syn_len(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn erg_syn_conv(mask: u64) -> u64 {
+    eol_reset()
+    if (mask & 1u64) == 1u64 {
+        let t0 : u64 = kd_testify()
+        if eol_read(t0, erg_syn_len(t0)) < 0i64 { return 1u64 }
+    }
+    if (mask & 2u64) == 2u64 {
+        let t1 : u64 = soma_testify()
+        if eol_read(t1, erg_syn_len(t1)) < 0i64 { return 1u64 }
+    }
+    if (mask & 4u64) == 4u64 {
+        let t2 : u64 = dx_testify()
+        if eol_read(t2, erg_syn_len(t2)) < 0i64 { return 1u64 }
+    }
+    if eol_lawcheck() != 0u64 { return 1u64 }
+    return 0u64
+}
+fn erg_syn_q(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, erg_syn_len(a), v, b, erg_syn_len(b))
+}
+/* the four named self-theorems (union-only; bearer bitmask kardia=1 soma=2
+ * doxa=4) */
+fn erg_syn_ta(n: u64) -> u64 {
+    if n == 0u64 { return "matched_nerve" as u64 }
+    if n == 1u64 { return "modal_book" as u64 }
+    if n == 2u64 { return "settlement_evidence" as u64 }
+    return "assertion" as u64
+}
+fn erg_syn_tb(n: u64) -> u64 {
+    if n == 0u64 { return "cell" as u64 }
+    if n == 1u64 { return "cell_ledger" as u64 }
+    if n == 2u64 { return "reran_claim" as u64 }
+    return "cell_ledger" as u64
+}
+fn erg_syn_tv(n: u64) -> u64 {
+    if n == 3u64 { return 0u64 }
+    return 2u64
+}
+fn erg_syn_bearers(n: u64) -> u64 {
+    if n == 0u64 { return 3u64 }
+    return 5u64
+}
+fn erg_seat_synod() -> u32 @export {
+    if erg_syn_conv(7u64) != 0u64 { return 2101u32 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 2101u32 }
+    if erg_syn_conv(7u64) != 0u64 { return 2102u32 }
+    if eol_addr() != a1 { return 2102u32 }
+    let mut n : u64 = 0u64
+    while n < 4u64 {
+        if erg_syn_q(erg_syn_ta(n), erg_syn_tv(n), erg_syn_tb(n)) != 1u64 { return 2103u32 }
+        n = n + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 3u64 {
+        if erg_syn_conv(1u64 << k) != 0u64 { return 2104u32 }
+        n = 0u64
+        while n < 4u64 {
+            if erg_syn_q(erg_syn_ta(n), erg_syn_tv(n), erg_syn_tb(n)) != 0u64 { return 2104u32 }
+            n = n + 1u64
+        }
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 3u64 {
+        if erg_syn_conv(7u64 & (7u64 ^ (1u64 << k))) != 0u64 { return 2105u32 }
+        n = 0u64
+        while n < 4u64 {
+            let dead : u64 = (erg_syn_bearers(n) >> k) & 1u64
+            let got : u64 = erg_syn_q(erg_syn_ta(n), erg_syn_tv(n), erg_syn_tb(n))
+            if dead == 1u64 { if got != 0u64 { return 2105u32 } }
+            if dead == 0u64 { if got != 1u64 { return 2105u32 } }
+            n = n + 1u64
+        }
+        k = k + 1u64
+    }
+    ERG_SYNADDR = a1
+    return 0u32
+}
+
 fn erg_census() -> u32 @export {
     let sp : u64 = erg_selfprove()
     if sp != 0u64 { return (1000u64 + sp) as u32 }     /* 1071/1072: own instrument broken */
@@ -2576,6 +2682,8 @@ fn erg_census() -> u32 @export {
     if s7 != 0u32 { return s7 }
     let s8 : u32 = erg_seat_exec()
     if s8 != 0u32 { return s8 }
+    let s9 : u32 = erg_seat_synod()
+    if s9 != 0u32 { return s9 }
     return 0u32
 }
 

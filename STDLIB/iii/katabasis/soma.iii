@@ -834,3 +834,12 @@ fn sm_arm_ownership() -> u64 {
     return 0u64
 }
 fn sm_put(dst: *u8, at: u64, c: u8) -> u64 { dst[at] = c   return at + 1u64 }
+
+/* THE TESTIMONY (the knowing-together): the body's laws in the one tongue --
+ * a MATCHED nerve IS a claim (the registry names it AND the die provides
+ * it); PHANTOM is the map's lie, DARK the unmapped nerve; the map and the
+ * territory are MIRRORS (two independent enumerations of one self, their
+ * disagreement the product); the claim address is the kind fold. */
+fn soma_testify() -> u64 @export {
+    return "[matched_nerve = claim] [phantom = map_lie] [dark = unmapped_nerve] [map ~ territory] [claim_address = kind_fold]" as u64
+}

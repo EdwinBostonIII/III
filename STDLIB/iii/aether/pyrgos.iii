@@ -56,7 +56,7 @@
  * 3 element pool, 4 tower height, 5 divide-by-zero, 6 bigint alloc,
  * 7 nonpositive radicand.  Arms assert PY_ERR == 0.
  *
- * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..187) -- including
+ * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..189) -- including
  * the nested-radical exact zero  sqrt2 + sqrt3 - sqrt(5 + 2 sqrt6) = 0  that
  * no float and no flat i64 oracle can decide, and a 125-case ENUMERATED
  * cross-oracle agreement with ui_sqrt_sum_sign (two mathematically independent
@@ -152,6 +152,9 @@ var PY_XA : [i64; 4]
 var PY_XB : [i64; 4]
 
 fn py_err() -> u64 @export { return PY_ERR }
+/* clear a SPENT advisory error (the subresultant fallback consumes its 7);
+ * pool poisonings are NOT advisory -- callers clear only what they minted */
+fn py_err_clear() -> i32 @export { PY_ERR = 0u64   return 0i32 }
 fn py_opc() -> u64 @export { return PY_OPC }
 fn py_maxl() -> u64 @export { return PY_MAXL }
 fn py_opc_reset() -> i32 @export { PY_OPC = 0u64   PY_MAXL = 0u64   return 0i32 }
@@ -365,10 +368,35 @@ fn py_bgcd(ar: u64, a0: u64, b0: u64) -> u64 {
     if bigint_is_zero(b0) == 1u8 { return bigint_copy(ar, a0) }
     let la : u64 = bigint_len_limbs(a0)
     let lb : u64 = bigint_len_limbs(b0)
+    /* gcd(x,1) = gcd(1,y) = 1: the integer fast lane -- reducing N/1 needs no
+     * gcd at all, so every integer rational op skips the whole cascade */
+    if lb == 1u64 { if bigint_get_limb(b0, 0u64) == 1u64 { return bigint_from_u64(ar, 1u64) } }
+    if la == 1u64 { if bigint_get_limb(a0, 0u64) == 1u64 { return bigint_from_u64(ar, 1u64) } }
     if la == 1u64 { if lb == 1u64 {
         let g : u64 = py_ugcd64(bigint_get_limb(a0, 0u64), bigint_get_limb(b0, 0u64))
         return bigint_from_u64(ar, g)
     } }
+    /* lopsided operands: one long division first -- gcd(a,b) = gcd(a mod b, b).
+     * Binary gcd on a (huge, small) pair walks the whole bit-length of the
+     * huge side; the mod collapses it to same-size in one stroke. */
+    if la > lb + 1u64 {
+        let qm : u64 = bigint_div_qr(ar, a0, b0)
+        let rm : u64 = bigint_remainder_take()
+        bigint_drop(qm)
+        bigint_normalize(rm)
+        let gm : u64 = py_bgcd(ar, rm, b0)
+        bigint_drop(rm)
+        return gm
+    }
+    if lb > la + 1u64 {
+        let qm2 : u64 = bigint_div_qr(ar, b0, a0)
+        let rm2 : u64 = bigint_remainder_take()
+        bigint_drop(qm2)
+        bigint_normalize(rm2)
+        let gm2 : u64 = py_bgcd(ar, rm2, a0)
+        bigint_drop(rm2)
+        return gm2
+    }
     if la > 512u64 { return py_bgcd_slow(ar, a0, b0) }
     if lb > 512u64 { return py_bgcd_slow(ar, a0, b0) }
     let mut i : u64 = 0u64
@@ -467,28 +495,34 @@ fn py_rmake(ar: u64, sg: i64, N: u64, D: u64) -> u64 {
     if bigint_is_zero(D) == 1u8 { PY_ERR = 5u64   bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
     if sg == 0i64 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
     if bigint_is_zero(N) == 1u8 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
-    let g : u64 = py_bgcd(ar, N, D)
-    if PY_ERR != 0u64 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
     let mut NN : u64 = N
     let mut DD : u64 = D
-    let glen : u64 = bigint_len_limbs(g)
-    let glo : u64 = bigint_get_limb(g, 0u64)
-    let mut gone : u8 = 0u8
-    if glen == 1u64 { if glo == 1u64 { gone = 1u8 } }
-    if gone == 0u8 {
-        let q1 : u64 = bigint_div_qr(ar, N, g)
-        let r1 : u64 = bigint_remainder_take()
-        bigint_drop(r1)   bigint_drop(N)
-        NN = q1
-        let q2 : u64 = bigint_div_qr(ar, D, g)
-        let r2 : u64 = bigint_remainder_take()
-        bigint_drop(r2)   bigint_drop(D)
-        DD = q2
-        if NN == 0u64 { PY_ERR = 6u64 }
-        if DD == 0u64 { PY_ERR = 6u64 }
+    /* D = 1: an integer -- already reduced; gcd and both divisions vanish.
+     * The subresultant engine keeps most traffic integer: this IS the lane. */
+    let mut skipg : u8 = 0u8
+    if bigint_len_limbs(D) == 1u64 { if bigint_get_limb(D, 0u64) == 1u64 { skipg = 1u8 } }
+    if skipg == 0u8 {
+        let g : u64 = py_bgcd(ar, N, D)
+        if PY_ERR != 0u64 { bigint_drop(N)   bigint_drop(D)   return py_ralloc() }
+        let glen : u64 = bigint_len_limbs(g)
+        let glo : u64 = bigint_get_limb(g, 0u64)
+        let mut gone : u8 = 0u8
+        if glen == 1u64 { if glo == 1u64 { gone = 1u8 } }
+        if gone == 0u8 {
+            let q1 : u64 = bigint_div_qr(ar, N, g)
+            let r1 : u64 = bigint_remainder_take()
+            bigint_drop(r1)   bigint_drop(N)
+            NN = q1
+            let q2 : u64 = bigint_div_qr(ar, D, g)
+            let r2 : u64 = bigint_remainder_take()
+            bigint_drop(r2)   bigint_drop(D)
+            DD = q2
+            if NN == 0u64 { PY_ERR = 6u64 }
+            if DD == 0u64 { PY_ERR = 6u64 }
+        }
+        bigint_drop(g)
+        if PY_ERR != 0u64 { return py_ralloc() }
     }
-    bigint_drop(g)
-    if PY_ERR != 0u64 { return py_ralloc() }
     py_bstore(NN)
     let no : u64 = PY_SOFF
     let nl : u64 = PY_SLEN
@@ -732,6 +766,53 @@ fn py_rat_cmp(a: u64, b: u64) -> i64 @export {
     if c < 0i32 { cc = 0i64 - 1i64 }
     if sa < 0i64 { cc = 0i64 - cc }
     return cc
+}
+/* is this rational an integer (denominator exactly 1)? */
+fn py_rat_is_int(r: u64) -> u32 @export {
+    if PY_RSG[r] == 0i64 { return 1u32 }
+    if PY_RDL[r] != 1u64 { return 0u32 }
+    if PY_LIMB[PY_RDO[r]] != 1u64 { return 0u32 }
+    return 1u32
+}
+/* THE SUBRESULTANT PRIMITIVE: exact integer scalar division a / b when b | a,
+ * with NO gcd -- one bigint long-division, remainder asserted zero.  This is
+ * what lets the subresultant PRS strip the predicted divisor beta_k without
+ * ever spinning py_bgcd (the reactive-content cost the tier lived under).
+ * PY_ERR=7 on: non-integer operand, zero divisor, or an inexact quotient
+ * (the subresultant theorem forbids the last -- a fired 7 means the recurrence
+ * is wrong, and the caller falls back to primitive Bezout). */
+fn py_rat_sdiv_int(a: u64, b: u64) -> u64 @export {
+    PY_OPC = PY_OPC + 1u64
+    let sa : i64 = PY_RSG[a]
+    let sb : i64 = PY_RSG[b]
+    if sb == 0i64 { PY_ERR = 7u64   return py_ralloc() }
+    if sa == 0i64 { return py_ralloc() }
+    if py_rat_is_int(a) == 0u32 { PY_ERR = 7u64   return py_ralloc() }
+    if py_rat_is_int(b) == 0u32 { PY_ERR = 7u64   return py_ralloc() }
+    let nal : u64 = PY_RNL[a]
+    let nbl : u64 = PY_RNL[b]
+    let ar : u64 = py_sar()
+    let na : u64 = py_bload(ar, PY_RNO[a], nal)
+    let nb : u64 = py_bload(ar, PY_RNO[b], nbl)
+    let q : u64 = bigint_div_qr(ar, na, nb)
+    let rem : u64 = bigint_remainder_take()
+    bigint_normalize(rem)
+    let bad : u8 = bigint_is_zero(rem)
+    bigint_drop(na)   bigint_drop(nb)   bigint_drop(rem)
+    if bad == 0u8 {
+        bigint_drop(q)   py_sar_done(ar)
+        PY_ERR = 7u64   return py_ralloc()
+    }
+    py_bstore(q)
+    let no : u64 = PY_SOFF
+    let nl : u64 = PY_SLEN
+    bigint_drop(q)   py_sar_done(ar)
+    let r : u64 = py_ralloc()
+    if PY_ERR != 0u64 { return r }
+    PY_RSG[r] = sa * sb
+    PY_RNO[r] = no   PY_RNL[r] = nl
+    PY_RDO[r] = PY_ONE   PY_RDL[r] = 1u64
+    return r
 }
 
 /* ==================== elements ==================== */
@@ -1352,6 +1433,42 @@ fn py_arm188() -> u64 {
     if PY_ERR != 0u64 { return 188u64 }
     return 0u64
 }
+fn py_arm189() -> u64 {
+    /* THE SCALAR-DIVISION ORACLE (py_rat_sdiv_int + py_err_clear): exact
+     * integer division with NO gcd -- the quotient proven on all four sign
+     * quadrants and at 2^80 scale; the three refusals (inexact quotient,
+     * non-integer operand, zero divisor) each fire the ADVISORY 7 and
+     * py_err_clear consumes it -- a 7 is spent, never sticky. */
+    if PY_ERR != 0u64 { return 189u64 }
+    let a : u64 = py_rat_i64(84i64)
+    let b : u64 = py_rat_i64(7i64)
+    if py_rat_cmp(py_rat_sdiv_int(a, b), py_rat_i64(12i64)) != 0i64 { return 189u64 }
+    if py_rat_cmp(py_rat_sdiv_int(py_rat_i64(0i64 - 84i64), b), py_rat_i64(0i64 - 12i64)) != 0i64 { return 189u64 }
+    if py_rat_cmp(py_rat_sdiv_int(a, py_rat_i64(0i64 - 7i64)), py_rat_i64(0i64 - 12i64)) != 0i64 { return 189u64 }
+    if py_rat_cmp(py_rat_sdiv_int(py_rat_i64(0i64 - 84i64), py_rat_i64(0i64 - 7i64)), py_rat_i64(12i64)) != 0i64 { return 189u64 }
+    if py_rat_sign(py_rat_sdiv_int(py_rat_i64(0i64), b)) != 0i64 { return 189u64 }
+    /* 2^80 * 13 / 13 = 2^80: exactness beyond the single-limb lane */
+    let p40 : u64 = py_rat_i64(1099511627776i64)
+    let p80 : u64 = py_rat_mul(p40, p40)
+    let big : u64 = py_rat_mul(p80, py_rat_i64(13i64))
+    if py_rat_cmp(py_rat_sdiv_int(big, py_rat_i64(13i64)), p80) != 0i64 { return 189u64 }
+    if PY_ERR != 0u64 { return 189u64 }
+    let x1 : u64 = py_rat_sdiv_int(py_rat_i64(85i64), b)
+    if PY_ERR != 7u64 { return 189u64 }
+    py_err_clear()
+    if PY_ERR != 0u64 { return 189u64 }
+    let x2 : u64 = py_rat_sdiv_int(py_rat_frac(3i64, 2i64), py_rat_i64(1i64))
+    if PY_ERR != 7u64 { return 189u64 }
+    py_err_clear()
+    let x3 : u64 = py_rat_sdiv_int(a, py_rat_i64(0i64))
+    if PY_ERR != 7u64 { return 189u64 }
+    py_err_clear()
+    if PY_ERR != 0u64 { return 189u64 }
+    if py_rat_sign(x1) != 0i64 { return 189u64 }
+    if py_rat_sign(x2) != 0i64 { return 189u64 }
+    if py_rat_sign(x3) != 0i64 { return 189u64 }
+    return 0u64
+}
 fn py_selfprove() -> u64 @export {
     let a0 : u64 = py_arm180()
     if a0 != 0u64 { return a0 }
@@ -1371,5 +1488,7 @@ fn py_selfprove() -> u64 @export {
     if a7 != 0u64 { return a7 }
     let a8 : u64 = py_arm188()
     if a8 != 0u64 { return a8 }
+    let a9 : u64 = py_arm189()
+    if a9 != 0u64 { return a9 }
     return 0u64
 }

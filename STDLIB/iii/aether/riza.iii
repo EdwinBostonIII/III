@@ -10,7 +10,10 @@
  * pyrgos's exact rational slots -- one rational engine, no island), with
  *   - exact division and gcd by PRIMITIVE remainder sequences (contents
  *     stripped through py_rat_gcdpos, so PRS coefficient explosion never
- *     happens and every scale factor is POSITIVE -- sign sequences survive);
+ *     happens and every scale factor is POSITIVE -- sign sequences survive),
+ *     plus THE SUBRESULTANT ENGINE (rz_prem/rz_sdiv): integer pseudo-
+ *     remainders with Brown's PREDICTED divisor stripped by one exact long
+ *     division each -- no reactive gcd at all on the Bezout r-chain;
  *   - Sturm chains and root counting in rational intervals;
  *   - the STURM-TARSKI QUERY: the signed remainder sequence of (P, P'*E)
  *     evaluated at the ends of an interval isolating ONE root of P returns
@@ -52,6 +55,9 @@ extern @abi(c-msvc-x64) fn py_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_sign(a: u64) -> i64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_opc() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_sdiv_int(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err_clear() -> i32 from "pyrgos.iii"
 
 const RZ_CCAP : u64 = 65536u64           /* coefficient slots (rational idx)    */
 const RZ_PCAP : u64 = 8192u64            /* poly registers                      */
@@ -263,6 +269,99 @@ fn rz_divmod(a: u64, b: u64) -> u64 @export {
     return r
 }
 fn rz_quot() -> u64 @export { return RZ_QH }
+
+/* ==================== the subresultant engine ==================== */
+/* pseudo-divmod: lc(b)^(deg a - deg b + 1) * a  =  Q * b  +  R, deg R < deg b.
+ * NO inversion, NO minted fractions: integer operands stay integer through
+ * the whole O(d^2) elimination (and py_rmake's D=1 lane makes every one of
+ * those rational ops gcd-free).  Q lands in RZ_QH, the EXACT multiplier
+ * lc^e is implied, never materialized.  A round whose subtraction kills more
+ * than one lead skips the vanished degrees without consuming multiplier; the
+ * tail tops R and Q up to exactly lc^e, the normalization Brown's divisor
+ * prediction is stated against. */
+fn rz_ratpow(x: u64, e: i64) -> u64 {
+    let mut r : u64 = py_rat_i64(1i64)
+    let mut t : i64 = 0i64
+    while t < e { r = py_rat_mul(r, x)   t = t + 1i64 }
+    return r
+}
+fn rz_prem(a: u64, b: u64) -> u64 {
+    rz_norm(b)
+    let db : i64 = RZ_PD[b]
+    if db < 0i64 { RZ_ERR = 3u64   RZ_QH = rz_new(0i64 - 1i64)   return rz_copy(a) }
+    let L : u64 = rz_c(b, db)
+    let mut r : u64 = rz_copy(a)
+    rz_norm(r)
+    let da : i64 = RZ_PD[r]
+    let q : u64 = rz_new(da - db)
+    if RZ_ERR != 0u64 { RZ_QH = q   return r }
+    let mut e : i64 = (da - db) + 1i64
+    if e < 0i64 { e = 0i64 }
+    let mut rounds : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let dr : i64 = RZ_PD[r]
+        if dr < db { going = 0u8 } else {
+            let lcr : u64 = rz_c(r, dr)
+            let sh : i64 = dr - db
+            /* q := L*q + lcr*x^sh (slots already set sit at STRICTLY higher
+             * shifts -- degree falls every round -- so the scale walk sees
+             * them all and sh itself is fresh) */
+            let mut kq : i64 = sh + 1i64
+            while kq <= (da - db) {
+                let cq : u64 = rz_c(q, kq)
+                if py_rat_sign(cq) != 0i64 { rz_setc(q, kq, py_rat_mul(cq, L)) }
+                kq = kq + 1i64
+            }
+            rz_setc(q, sh, lcr)
+            /* r := L*r - lcr*x^sh*b; the top coefficient cancels exactly */
+            let mut k : i64 = 0i64
+            while k < dr {
+                let mut nv : u64 = rz_c(r, k)
+                if py_rat_sign(nv) != 0i64 { nv = py_rat_mul(nv, L) }
+                let bi : i64 = k - sh
+                if bi >= 0i64 { if bi < db {
+                    let bc : u64 = rz_c(b, bi)
+                    if py_rat_sign(bc) != 0i64 { nv = py_rat_add(nv, py_rat_neg(py_rat_mul(lcr, bc))) }
+                } }
+                rz_setc(r, k, nv)
+                k = k + 1i64
+            }
+            rz_setc(r, dr, py_rat_i64(0i64))
+            RZ_PD[r] = dr - 1i64
+            rz_norm(r)
+            rounds = rounds + 1i64
+        }
+    }
+    let up : i64 = e - rounds
+    if up > 0i64 {
+        let tf : u64 = rz_ratpow(L, up)
+        r = rz_scale(r, tf)
+        RZ_QH = rz_norm(rz_scale(q, tf))
+    } else {
+        RZ_QH = rz_norm(q)
+    }
+    return r
+}
+/* divide every coefficient by the PREDICTED subresultant divisor bt (an
+ * integer): exact by the theorem; an inexact strip fires PY_ERR=7 inside
+ * py_rat_sdiv_int and the caller falls back to the primitive engine --
+ * correctness never rides on the prediction */
+fn rz_sdiv(a: u64, bt: u64) -> u64 {
+    let d : i64 = RZ_PD[a]
+    let p : u64 = rz_new(d)
+    if RZ_ERR != 0u64 { return p }
+    let mut k : i64 = 0i64
+    while k <= d {
+        let c : u64 = rz_c(a, k)
+        if py_rat_sign(c) != 0i64 {
+            rz_setc(p, k, py_rat_sdiv_int(c, bt))
+            if py_err() != 0u64 { return p }
+        }
+        k = k + 1i64
+    }
+    return rz_norm(p)
+}
 /* rational content (positive; zero only for the zero poly) */
 fn rz_content(a: u64) -> u64 {
     rz_norm(a)
@@ -304,8 +403,18 @@ fn rz_deriv(a: u64) -> u64 @export {
     }
     return rz_norm(p)
 }
-/* gcd by the primitive PRS, positive leading coefficient */
-fn rz_gcd(a: u64, b: u64) -> u64 @export {
+/* gcd, positive leading coefficient.  Default engine: THE SUBRESULTANT PRS
+ * (integer chain through rz_prem, Brown's predicted divisors stripped by
+ * exact long division through rz_sdiv -- no reactive content gcd per step).
+ * There is NO cofactor here, so the multiplier cost that evicted the
+ * subresultant form from rf_inv does not exist.  An inexact strip fires
+ * PY_ERR=7 and the primitive engine takes the call -- counted in RZ_GCDFB,
+ * and arm 210 ASSERTS its battery ran fallback-free (a broken Brown
+ * prediction turns LOUD, never a silent perf drift); correctness never
+ * rides on the prediction. */
+var RZ_GCDFB : u64 = 0u64
+var RZ_GCD_OK : u32 = 0u32
+fn rz_gcd_prim(a: u64, b: u64) -> u64 {
     let mut A : u64 = rz_pp(rz_copy(a))
     let mut B : u64 = rz_pp(rz_copy(b))
     let mut going : u8 = 1u8
@@ -322,6 +431,60 @@ fn rz_gcd(a: u64, b: u64) -> u64 @export {
         if py_rat_sign(rz_c(A, dA)) < 0i64 { A = rz_neg(A) }
     }
     return A
+}
+fn rz_gcd_sres(a: u64, b: u64) -> u64 {
+    RZ_GCD_OK = 1u32
+    let mut A : u64 = rz_pp(rz_copy(a))
+    let mut B : u64 = rz_pp(rz_copy(b))
+    rz_norm(A)   rz_norm(B)
+    if RZ_PD[A] < RZ_PD[B] { let sw : u64 = A   A = B   B = sw }
+    let mut gg : u64 = py_rat_i64(1i64)
+    let mut hh : u64 = py_rat_i64(1i64)
+    let mut first : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        rz_norm(B)
+        if RZ_PD[B] < 0i64 { going = 0u8 } else {
+            let dl : i64 = RZ_PD[A] - RZ_PD[B]
+            let R : u64 = rz_prem(A, B)
+            /* beta: (-1)^(dl+1) on the first step, -(g*h^dl) after (Brown) */
+            let mut bt : u64 = 0u64
+            if first == 1u8 {
+                bt = py_rat_i64(1i64)
+                if (dl % 2i64) == 0i64 { bt = py_rat_i64(0i64 - 1i64) }
+            } else {
+                bt = py_rat_neg(py_rat_mul(gg, rz_ratpow(hh, dl)))
+            }
+            let NR : u64 = rz_sdiv(R, bt)
+            if py_err() != 0u64 { RZ_GCD_OK = 0u32   return rz_new(0i64 - 1i64) }
+            /* g = lc of the divisor; h: dl=0 keeps h, dl=1 takes g, else
+             * g^dl / h^(dl-1) -- exact by the subresultant theorem */
+            gg = rz_c(B, RZ_PD[B])
+            if dl == 1i64 { hh = gg } else { if dl > 1i64 {
+                hh = py_rat_sdiv_int(rz_ratpow(gg, dl), rz_ratpow(hh, dl - 1i64))
+                if py_err() != 0u64 { RZ_GCD_OK = 0u32   return rz_new(0i64 - 1i64) }
+            } }
+            first = 0u8
+            A = B
+            B = NR
+        }
+    }
+    /* subresultant remainders can carry residual integer content: strip to
+     * the TRUE primitive gcd, positive lead */
+    A = rz_pp(A)
+    let dA : i64 = RZ_PD[A]
+    if dA >= 0i64 {
+        if py_rat_sign(rz_c(A, dA)) < 0i64 { A = rz_neg(A) }
+    }
+    return A
+}
+fn rz_gcd(a: u64, b: u64) -> u64 @export {
+    let v : u64 = rz_gcd_sres(a, b)
+    if RZ_GCD_OK == 1u32 { return v }
+    if py_err() != 0u64 { if py_err() != 7u64 { return v } }
+    py_err_clear()
+    RZ_GCDFB = RZ_GCDFB + 1u64
+    return rz_gcd_prim(a, b)
 }
 /* exact rational evaluation sign at n/d */
 fn rz_eval_rat(p: u64, n: i64, d: i64) -> u64 {
@@ -657,20 +820,25 @@ fn rf_split(g: u64) -> i32 {
     return 0i32
 }
 /* Bezout inverse; a zero divisor fires the split and recursion finishes.
- * Division never refuses on a nonzero value. */
+ * Division never refuses on a nonzero value.
+ * ENGINE VERDICT (2026-07-17, measured on the deg-8 join): the primitive
+ * Bezout IS the engine.  Two fraction-free challengers were built and
+ * REFUTED by the op/limb meter on this exact workload:
+ *   - subresultant Bezout: the t-cofactor cannot be predicted-stripped, so
+ *     the lc^(delta+1) multiplier hits it raw (peakLimb 23 -> 179);
+ *   - Bareiss linear solve (columns e*x^j mod P, content-stripped integer
+ *     matrix): clearing denominators inflates entries to their intrinsic
+ *     minor sizes (peakLimb 23 -> 105, recovery ops 7317 -> 9551).
+ * Reduced-rational arithmetic IS the compact representation here: the
+ * per-step content gcds are COMPRESSION, not waste -- and they ride the
+ * pyrgos fast lanes (gcd-by-1, single-limb, lopsided mod-first) minted the
+ * same day.  The subresultant engine lives on where it is RIGHT: rz_gcd's
+ * cofactor-free integer chain. */
 fn rf_inv(e: u64) -> u64 @export {
     RF_INVC = RF_INVC + 1u64
     let er : u64 = rf_red(rz_copy(e))
     rz_norm(er)
     if RZ_PD[er] < 0i64 { RZ_ERR = 5u64   return rz_new(0i64 - 1i64) }
-    /* primitive Bezout: any (r, t) pair may be scaled by a nonzero rational
-     * without disturbing the invariant t*e == r (mod P), so every remainder
-     * is content-stripped WITH its cofactor.  Intermediates stay
-     * subresultant-sized instead of exploding exponentially -- the same law
-     * rz_srs lives by, carried to the Bezout pair.  (The degree-8 join made
-     * the plain chain a twenty-second organ; this is the cure, not a cap.)
-     * The recursion and the final normalization use the UNSCALED er, so the
-     * returned inverse is of the true value. */
     let mut r0 : u64 = rz_copy(RF_P)
     let g0 : u64 = rz_content(r0)
     if py_rat_sign(g0) != 0i64 { r0 = rz_scale(r0, py_rat_inv(g0)) }
@@ -949,6 +1117,7 @@ var RJ_ALPHA : u64 = 0u64                /* old alpha, as a Q(gamma) element    
 var RJ_ETA : u64 = 0u64                  /* the new root, as a Q(gamma) element */
 var RJ_GLN : i64 = 0i64   var RJ_GHN : i64 = 0i64   var RJ_GD : i64 = 1i64
 var RJ_ACC : [u64; 12]
+var RJ_GKP : [u64; 12]                   /* gamma-power cache (recovery build)  */
 var RJ_ELON : i64 = 0i64   var RJ_EHIN : i64 = 0i64   var RJ_EBD : i64 = 1i64
 var RJ_S : u64 = 0u64
 
@@ -1104,10 +1273,13 @@ fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
         RF_P = OP   RF_D = od   RF_LON = olon   RF_HIN = ohin   RF_BD = obd
         if RZ_ERR >= 4u64 { RZ_ERR = 0u64 }
         let m : i64 = RE_D[S]
+        let ph0 : u64 = py_opc()
         rj_bivar(S, c)
         let R : u64 = rz_pp(rz_res_run(od * m))
+        RJ_PH_RES = py_opc() - ph0
         rs_pin(R)
         RJ_EPIN = 0u64                               /* eta chain: pin lazily */
+        let ph1 : u64 = py_opc()
         /* bracket gamma = eta + c*alpha; refine both until it isolates.
          * gd = EBD*BD quadruples per refinement round: past 2^58 the bracket
          * numerators can no longer be formed in i64, so the attempt exhausts
@@ -1140,6 +1312,8 @@ fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
             }
         }
         if ok == 1u8 {
+            RJ_PH_BRK = py_opc() - ph1
+            let ph2 : u64 = py_opc()
             /* switch to Q(gamma) */
             if rf_set_frac(R, RJ_GLN, RJ_GHN, RJ_GD) == 0i32 {
                 /* recover alpha inside Q(gamma):
@@ -1148,16 +1322,22 @@ fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
                 let mm : i64 = m
                 let tmax : i64 = (od - 1i64) + mm
                 let TT : u64 = re_new(tmax)
+                /* gamma^0..gamma^mm ONCE -- the inner loop used to rebuild
+                 * gamma^k from scratch per (i,k): O(m^2) deg-8 field muls of
+                 * pure waste */
+                RJ_GKP[0u64] = rf_from_rat(py_rat_i64(1i64))
+                let mut pw : i64 = 1i64
+                while pw <= mm {
+                    RJ_GKP[pw as u64] = rf_mul(RJ_GKP[(pw - 1i64) as u64], gam)
+                    pw = pw + 1i64
+                }
                 let mut i : i64 = 0i64
                 while i <= mm {
                     let cf : u64 = re_c(S, i)
                     let dj : i64 = RZ_PD[cf]
                     let mut k : i64 = 0i64
                     while k <= i {
-                        /* gamma^k */
-                        let mut gk : u64 = rf_from_rat(py_rat_i64(1i64))
-                        let mut e : i64 = 0i64
-                        while e < k { gk = rf_mul(gk, gam)   e = e + 1i64 }
+                        let gk : u64 = RJ_GKP[k as u64]
                         let fr : u64 = py_rat_i64(rj_bin(i, k) * rj_powneg(c, i - k))
                         let mut j : i64 = 0i64
                         while j <= dj {
@@ -1205,6 +1385,7 @@ fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
                     if rf_eqz(acc) == 1u32 {
                         RJ_ALPHA = alel
                         RJ_ETA = rf_sub(gam, rf_mul(rf_from_rat(py_rat_i64(c)), alel))
+                        RJ_PH_REC = py_opc() - ph2
                         return 0i32
                     }
                 }
@@ -1217,6 +1398,11 @@ fn rj_join(S: u64, elon: i64, ehin: i64, ebd: i64) -> i32 @export {
 }
 fn rj_alpha() -> u64 @export { return RJ_ALPHA }
 fn rj_eta() -> u64 @export { return RJ_ETA }
+/* join sub-phase op-attribution (telemetry, never silent) */
+var RJ_PH_RES : u64 = 0u64   var RJ_PH_BRK : u64 = 0u64   var RJ_PH_REC : u64 = 0u64
+fn rj_ph_res() -> u64 @export { return RJ_PH_RES }
+fn rj_ph_brk() -> u64 @export { return RJ_PH_BRK }
+fn rj_ph_rec() -> u64 @export { return RJ_PH_REC }
 /* lift an OLD-field vector (rational poly in old alpha) into Q(gamma) */
 fn rj_lift(v: u64) -> u64 @export {
     rz_norm(v)
@@ -1246,10 +1432,13 @@ fn rz_arm210() -> u64 {
     if RZ_PD[q] != 2i64 { return 210u64 }
     if py_rat_cmp(rz_c(q, 0i64), py_rat_i64(0i64 - 3i64)) != 0i64 { return 210u64 }
     if py_rat_cmp(rz_c(q, 2i64), py_rat_i64(1i64)) != 0i64 { return 210u64 }
-    /* gcd((x^2-1)(x^2-2), (x^2-1)(x^2-3)) = x^2-1 */
+    /* gcd((x^2-1)(x^2-2), (x^2-1)(x^2-3)) = x^2-1 -- and the SUBRESULTANT
+     * engine must take it WITHOUT falling back to the primitive PRS */
     rz_in(0u64, 0i64 - 1i64)   rz_in(1u64, 0i64)   rz_in(2u64, 1i64)
     let p1 : u64 = rz_from_in(2i64)
+    RZ_GCDFB = 0u64
     let g : u64 = rz_gcd(rz_mul(p1, p2), rz_mul(p1, p3))
+    if RZ_GCDFB != 0u64 { return 210u64 }
     if RZ_PD[g] != 2i64 { return 210u64 }
     if py_rat_cmp(rz_c(g, 0i64), py_rat_i64(0i64 - 1i64)) != 0i64 { return 210u64 }
     if py_rat_cmp(rz_c(g, 2i64), py_rat_i64(1i64)) != 0i64 { return 210u64 }

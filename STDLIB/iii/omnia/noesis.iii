@@ -681,7 +681,7 @@ fn no_meter(kind: u64, p: u64) -> u64 @export { return no_img_8(kind, p) }
  * fold family WITHOUT its erasure class: the named absence the synesis
  * frontier must FIND and the meter must DISCHARGE. */
 fn no_testify() -> u64 @export {
-    return "[deficit = valuation] [valuation = erasure_floor] [odd_multiplier = zero_heat] [zero_heat = recoverable_action] [chronometer_work = recoverable_action] [erasure_floor < redemption_price] [shr 3 = erasure 3] [mul 8 = erasure 3] [umod 3 = erasure 5] [sdiv 3 < fold_family] [shr 3 < fold_family]" as u64
+    return "[deficit = valuation] [valuation = erasure_floor] [odd_multiplier = zero_heat] [zero_heat = recoverable_action] [chronometer_work = recoverable_action] [erasure_floor < redemption_price] [shr 3 = erasure 3] [mul 8 = erasure 3] [umod 3 = erasure 5] [sdiv 3 < fold_family] [shr 3 < fold_family] [mul 48 < fold_family]" as u64
 }
 
 /* NOESIS: the machine now knows what its own thinking costs -- the valuation

@@ -668,5 +668,26 @@ fn kl_selfprove() -> u64 @export {
  * words (kl_inv2_u64, the bijection witness); the perfectoid tilt is the
  * sharp map, exact ((t-flat)-sharp = t, arm 264). */
 fn kl_testify() -> u64 @export {
-    return "[valuation = inverse_refusal] [inverse_mint = hensel_lift] [hensel_lift = newton_iteration] [odd_multiplier = invertible_word] [perfectoid_tilt = sharp_map]" as u64
+    return "[valuation = inverse_refusal] [inverse_mint = hensel_lift] [hensel_lift = newton_iteration] [odd_multiplier = invertible_word] [perfectoid_tilt = sharp_map] [depth 4 < digit_depth] [depth 5 < digit_depth]" as u64
+}
+
+/* THE DEPTH DECIDER (the dialectic): the 2-adic depth of x read by the DIGIT
+ * ENGINE itself -- x loaded into the p = 2, mode(0,64) grid where digits ARE
+ * bits, then walked to the first nonzero digit.  An engine independent of
+ * any ALU shift or image tally: the digits are this organ's own tissue.
+ * x = 0 -> 64 (the whole grid empty).  The tilt's home (p = 5, mode(0,12))
+ * is restored before returning. */
+fn kl_vdepth(x: u64) -> u64 @export {
+    kd_setp(2u64)
+    kd_mode(0u64, 64u64)
+    let h : u64 = kd_of_u64(x)
+    let mut v : u64 = 64u64
+    let mut i : u64 = 64u64
+    while i > 0u64 {
+        i = i - 1u64
+        if kd_get(h, i) != 0u64 { v = i }
+    }
+    kd_setp(5u64)
+    kd_mode(0u64, 12u64)
+    return v
 }

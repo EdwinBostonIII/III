@@ -1974,5 +1974,34 @@ fn py_selfprove() -> u64 @export {
  * descent (never abstains); quadratic radicals live inside tower elements;
  * and a complex point is a PAIR of tower elements (the pz closure). */
 fn py_testify() -> u64 @export {
-    return "[tower_element = constructible_real] [total_sign = norm_descent] [quadratic_radical < tower_element] [complex_point = tower_pair]" as u64
+    return "[tower_element = constructible_real] [total_sign = norm_descent] [quadratic_radical < tower_element] [complex_point = tower_pair] [radical nest56 < quadratic_radical] [radical sum23 < quadratic_radical] [radical sum25 < quadratic_radical]" as u64
+}
+
+/* THE RADICAL DECIDER (the dialectic): equality of named constructible reals
+ * decided by the tower's own total arithmetic -- build both in the standing
+ * Q(sqrt2, sqrt3) tower, subtract, ask the norm-descent sign.  The recipes
+ * ARE the names' meanings: 1 nest56 = sqrt(5 + 2 sqrt6), 2 sum23 =
+ * sqrt2 + sqrt3, 3 sum25 = sqrt2 + sqrt5 (adjoins its own level).
+ * 1 equal | 0 unequal | 2 unknown name or refused arithmetic. */
+fn py_rbuild(id: u64) -> u64 {
+    if id == 1u64 {
+        let p : u64 = py_mul(PY_T2, PY_T3)
+        let d : u64 = py_add(py_el_from_i64(5i64, 2u64), py_mul(py_el_from_i64(2i64, 2u64), p))
+        return py_sqrt(d)
+    }
+    if id == 2u64 { return py_add(PY_T2, PY_T3) }
+    return py_add(PY_T2, py_sqrt(py_el_from_i64(5i64, 2u64)))
+}
+fn py_rdecide(a: u64, b: u64) -> u64 @export {
+    if a < 1u64 { return 2u64 }
+    if a > 3u64 { return 2u64 }
+    if b < 1u64 { return 2u64 }
+    if b > 3u64 { return 2u64 }
+    if py_mk23() != 0u64 { return 2u64 }
+    let ea : u64 = py_rbuild(a)
+    let eb : u64 = py_rbuild(b)
+    let s : i64 = py_el_sign(py_sub(ea, eb))
+    if PY_ERR != 0u64 { py_err_clear()   return 2u64 }
+    if s == 0i64 { return 1u64 }
+    return 0u64
 }

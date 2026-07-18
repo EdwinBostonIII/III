@@ -54,7 +54,16 @@
 #      why-chains of two surplus theorems reconstructed and length-checked
 #      by a second engine; the union's witness carrying strictly more
 #      geometry than any single testimony; the synesis law sealed as a
-#      scroll]);
+#      scroll; and THE DIALECTIC (arms 340..345): a DECIDER FLEET -- kyma
+#      running the circuits (hzh = x, ss = z, xx = i, global phase exact),
+#      meris running both partition engines, pyrgos running the tower sign
+#      (the denesting), klisi walking its digits, noesis metering images,
+#      and the JOINT domain demanding two organs agree ([mul 48 = depth 4]:
+#      image-deficit 4 AND digit-depth 4) -- walking the whole frontier,
+#      speaking a minimal ledger of decided truths, re-deriving the union
+#      to a new deterministic name, monotone, and proving the FIXPOINT:
+#      the fleet exhausted, the residue undecided-only; the dialectic law
+#      sealed as a scroll]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -138,7 +147,9 @@ grep -q "^scroll mneme   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MNEM
 grep -q "^scroll mirror  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MIRROR SCROLL"; exit 6; }
 grep -q "^scroll synesis = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO SYNESIS SCROLL"; exit 6; }
 grep -q "^scroll union   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO UNION SCROLL"; exit 6; }
+grep -q "^scroll dialect = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC SCROLL"; exit 6; }
 grep -q "^the union knows: surplus=" "$T/run1.txt" || { echo "[summit_gate] NO UNION REPORT"; exit 6; }
+grep -q "^the dialectic: spoke=" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC REPORT"; exit 6; }
 
 # THE MIRROR ON REAL TISSUE: the pre-flight meter walks two live organ
 # sources; grep is the independent second engine on the greppable dimensions

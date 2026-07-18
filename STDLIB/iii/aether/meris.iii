@@ -806,5 +806,60 @@ fn ms_selfprove() -> u64 @export {
  * agree; and Euler's pentagonal theorem sits INSIDE Nekrasov-Okounkov
  * (the z = 2 specialization, arm 253). */
 fn ms_testify() -> u64 @export {
-    return "[power_sum = faulhaber_mint] [faulhaber_mint = stirling_mint] [nekrasov_sum = partition_localization] [hook_count = branching_count] [pentagonal_theorem < nekrasov_okounkov]" as u64
+    return "[power_sum = faulhaber_mint] [faulhaber_mint = stirling_mint] [nekrasov_sum = partition_localization] [hook_count = branching_count] [pentagonal_theorem < nekrasov_okounkov] [p 10 < partition_count] [pcount 42 < partition_count] [pcount 41 < partition_count]" as u64
+}
+
+/* THE PARTITION DECIDER (the dialectic): p(n) by TWO independent engines --
+ * the standing generation census (ms_build / ms_cnt) against Euler's
+ * pentagonal recurrence seeded from p(0) = 1 alone, computed here.  Sides:
+ * kind 0 = p n (n <= MS_NMAX), kind 1 = a literal count.  1 equal |
+ * 0 unequal | 2 out of ground | 3 THE ENGINES DISAGREE (an arm-fail at the
+ * caller, never a verdict). */
+var MS_PDA : [i64; 16]
+fn ms_pentagonal(n: i64) -> i64 {
+    if n < 0i64 { return 0i64 - 1i64 }
+    if n > MS_NMAX { return 0i64 - 1i64 }
+    MS_PDA[0u64] = 1i64
+    let mut k : i64 = 1i64
+    while k <= n {
+        let mut s : i64 = 0i64
+        let mut j : i64 = 1i64
+        let mut going : u64 = 1u64
+        while going == 1u64 {
+            let g1 : i64 = (j * ((3i64 * j) - 1i64)) / 2i64
+            if g1 > k { going = 0u64 } else {
+                let mut sgn : i64 = 1i64
+                if (j & 1i64) == 0i64 { sgn = 0i64 - 1i64 }
+                s = s + (sgn * MS_PDA[(k - g1) as u64])
+                let g2 : i64 = (j * ((3i64 * j) + 1i64)) / 2i64
+                if g2 <= k { s = s + (sgn * MS_PDA[(k - g2) as u64]) }
+            }
+            j = j + 1i64
+        }
+        MS_PDA[k as u64] = s
+        k = k + 1i64
+    }
+    return MS_PDA[n as u64]
+}
+fn ms_pvalue(kind: u64, n: u64) -> i64 {
+    /* -2 out of ground | -1 engines disagree | else the value */
+    if kind == 1u64 { return n as i64 }
+    if kind != 0u64 { return 0i64 - 2i64 }
+    if (n as i64) > MS_NMAX { return 0i64 - 2i64 }
+    if ms_build() != 0i32 { return 0i64 - 2i64 }
+    let g : i64 = ms_cnt(n as i64) as i64
+    let pnt : i64 = ms_pentagonal(n as i64)
+    if pnt != g { return 0i64 - 1i64 }
+    return g
+}
+fn ms_pdecide(ka: u64, na: u64, kb: u64, nb: u64) -> u64 @export {
+    let va : i64 = ms_pvalue(ka, na)
+    if va == (0i64 - 2i64) { return 2u64 }
+    if va == (0i64 - 1i64) { return 3u64 }
+    let vb : i64 = ms_pvalue(kb, nb)
+    if vb == (0i64 - 2i64) { return 2u64 }
+    if vb == (0i64 - 1i64) { return 3u64 }
+    if MS_ERR != 0u64 { return 2u64 }
+    if va == vb { return 1u64 }
+    return 0u64
 }

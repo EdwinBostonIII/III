@@ -1386,7 +1386,73 @@ fn ky_selfprove() -> u64 @export {
  * 512-enumeration zero); the global phase is carried inside the exact
  * amplitude (Y = zeta^2 X Z, first-class). */
 fn ky_testify() -> u64 @export {
-    return "[born_rule = basis_invariance] [classical_bound 2 < tsirelson_value] [contextual_square = no_valuation] [global_phase < exact_amplitude]" as u64
+    return "[born_rule = basis_invariance] [classical_bound 2 < tsirelson_value] [contextual_square = no_valuation] [global_phase < exact_amplitude] [word hzh < gate_word] [word x < gate_word] [word ss < gate_word] [word z < gate_word] [word xx < gate_word] [word i < gate_word]" as u64
+}
+
+/* THE OPERATOR DECIDER (the dialectic): word equality decided by RUNNING the
+ * circuits -- both letter-words applied to BOTH 1-qubit basis states, the
+ * organ's own shrink keeping the state canonical (K minimal), the comparison
+ * exact over K and all four coordinate planes INCLUDING global phase.
+ * Letters: h x z s y, and i = the empty step.  1 equal | 0 unequal |
+ * 2 unknown letter or overflow (the caller counts, never silence). */
+var KY_WA : [i64; 8]
+var KY_WAK : u64 = 0u64
+fn ky_wapply(ptr: u64, len: u64) -> u64 {
+    let p : *u8 = ptr as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u8 = p[i]
+        let mut known : u64 = 0u64
+        if c == 104u8 { ky_h(0u64)   known = 1u64 }
+        if c == 120u8 { ky_x(0u64)   known = 1u64 }
+        if c == 122u8 { ky_p(0u64, 4u64)   known = 1u64 }
+        if c == 115u8 { ky_p(0u64, 2u64)   known = 1u64 }
+        if c == 121u8 { ky_y(0u64)   known = 1u64 }
+        if c == 105u8 { known = 1u64 }
+        if known == 0u64 { return 2u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn ky_wbasis(s: u64) -> i32 {
+    ky_reset(1u64)
+    if s == 1u64 {
+        ky_set(0u64, 0i64, 0i64, 0i64, 0i64)
+        ky_set(1u64, 1i64, 0i64, 0i64, 0i64)
+    }
+    return 0i32
+}
+fn ky_wdecide(aptr: u64, alen: u64, bptr: u64, blen: u64) -> u64 @export {
+    let mut s : u64 = 0u64
+    while s < 2u64 {
+        ky_wbasis(s)
+        if ky_wapply(aptr, alen) != 0u64 { ky_reset(1u64)   return 2u64 }
+        if KY_ERR != 0u64 { ky_reset(1u64)   return 2u64 }
+        let mut x : u64 = 0u64
+        while x < 2u64 {
+            KY_WA[(x * 4u64) + 0u64] = KY_C0[x]
+            KY_WA[(x * 4u64) + 1u64] = KY_C1[x]
+            KY_WA[(x * 4u64) + 2u64] = KY_C2[x]
+            KY_WA[(x * 4u64) + 3u64] = KY_C3[x]
+            x = x + 1u64
+        }
+        KY_WAK = KY_K
+        ky_wbasis(s)
+        if ky_wapply(bptr, blen) != 0u64 { ky_reset(1u64)   return 2u64 }
+        if KY_ERR != 0u64 { ky_reset(1u64)   return 2u64 }
+        if KY_K != KY_WAK { ky_reset(1u64)   return 0u64 }
+        x = 0u64
+        while x < 2u64 {
+            if KY_WA[(x * 4u64) + 0u64] != KY_C0[x] { ky_reset(1u64)   return 0u64 }
+            if KY_WA[(x * 4u64) + 1u64] != KY_C1[x] { ky_reset(1u64)   return 0u64 }
+            if KY_WA[(x * 4u64) + 2u64] != KY_C2[x] { ky_reset(1u64)   return 0u64 }
+            if KY_WA[(x * 4u64) + 3u64] != KY_C3[x] { ky_reset(1u64)   return 0u64 }
+            x = x + 1u64
+        }
+        s = s + 1u64
+    }
+    ky_reset(1u64)
+    return 1u64
 }
 
 /* KYMA: this organ IS the wave.  Its amplitudes are ring integers, its gates

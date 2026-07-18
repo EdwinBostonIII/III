@@ -74,6 +74,23 @@
  *       every single testimony's witness (the union has MORE geometry);
  *       synesis's own law sealed by EIDOLOS with derived entailments and
  *       refused reversals, address deterministic.
+ *   340 THE FLEET: every decider proven on its own ground -- kyma runs the
+ *       circuits (hzh = x, ss = z, xx = i; hxh = z NOT x; unknown letters
+ *       refused), meris runs BOTH partition engines (p(10) = 42), pyrgos
+ *       runs the tower sign (the denesting nest56 = sum23), klisi walks its
+ *       digits (depth of 48 is 4, of 0 is 64).
+ *   341 THE ROUTED WALK: the whole frontier walked, every gap the fleet can
+ *       read DECIDED, the truths spoken as a minimal spanning ledger
+ *       (pending joins compose with standing classes), the union re-derived.
+ *   342 THE GROWTH LEDGER: a new deterministic name, nothing disconnected,
+ *       the residue smaller by exactly the closed pairs.
+ *   343 THE FIXPOINT: re-walking the grown state speaks NOTHING -- the
+ *       fleet is exhausted; the residue is undecided, not undecided-silently.
+ *   344 THE KEYSTONE INSTANCE: [mul 48 = depth 4] -- true only because
+ *       noesis's image meter and klisi's digit engine AGREE (deficit =
+ *       valuation, instance-wise, two organs, one number).
+ *   345 THE DIALECTIC SCROLL: the law sealed; the post-dialectic union left
+ *       standing -- the organism rests in everything it has decided.
  *
  * SCOPE (the eidolon law): the surplus, frontier, abduction and knockout
  * are exact over the standing testimony set; the explanation engine walks
@@ -108,6 +125,10 @@ extern @abi(c-msvc-x64) fn su_testify() -> u64 from "summit.iii"
 extern @abi(c-msvc-x64) fn gn_testify() -> u64 from "gnosis.iii"
 extern @abi(c-msvc-x64) fn no_testify() -> u64 from "noesis.iii"
 extern @abi(c-msvc-x64) fn no_meter(kind: u64, p: u64) -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn ky_wdecide(aptr: u64, alen: u64, bptr: u64, blen: u64) -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn ms_pdecide(ka: u64, na: u64, kb: u64, nb: u64) -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn py_rdecide(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn kl_vdepth(x: u64) -> u64 from "klisi.iii"
 
 const SY_SENT : u64 = 18446744073709551615u64
 const SY_ORGS : u64 = 8u64
@@ -153,6 +174,35 @@ var SY_DP : [u64; 96]                    /* parent claim per thing             *
 /* abduction scratch (module scope, W4): the goal-class member rosters */
 var SY_MA : [u64; 8]
 var SY_MB : [u64; 8]
+
+/* ==================== THE DIALECTIC (arms 340..345) ====================
+ * The discharge loop generalized into a standing faculty: a DECIDER FLEET.
+ * Every subject that spells a fleet vocabulary routes to the organ that owns
+ * it; every frontier gap whose two sides the fleet can read is DECIDED by
+ * real computation -- kyma runs the circuits, meris runs both partition
+ * engines, pyrgos runs the tower sign, klisi walks its digits, noesis
+ * meters images -- and the joint domain demands TWO organs agree before a
+ * verdict exists.  Truths are spoken (a minimal spanning set), the union
+ * re-derives, and the fixpoint proves the fleet exhausted: what remains
+ * unknown is exactly what no current decider can decide. */
+var SY_DOMV : [u64; 96]                  /* subject -> (dom<<16)|(kind<<8)|p   */
+var SY_UFD : [u64; 96]                   /* pending-join forest (class-seeded) */
+var SY_LG : [u8; 1024]                   /* the spoken-truth ledger            */
+var SY_LGN : u64 = 0u64
+var SY_DSP : u64 = 0u64                  /* truths spoken                      */
+var SY_DRF : u64 = 0u64                  /* candidates refuted                 */
+var SY_DUN : u64 = 0u64                  /* routable-but-undecided             */
+var SY_RES0 : u64 = 0u64                 /* frontier before the pass           */
+var SY_RES : u64 = 0u64                  /* the residue after                  */
+var SY_DADDR : u64 = 0u64                /* the post-dialectic union address   */
+var SY_DSCROLL : u64 = 0u64              /* the dialectic scroll               */
+
+fn syn_spoke() -> u64 @export { return SY_DSP }
+fn syn_refuted() -> u64 @export { return SY_DRF }
+fn syn_undecided() -> u64 @export { return SY_DUN }
+fn syn_residue() -> u64 @export { return SY_RES }
+fn syn_dialectic_addr() -> u64 @export { return SY_DADDR }
+fn syn_dialectic_scroll() -> u64 @export { return SY_DSCROLL }
 
 /* sealed results */
 var SY_UADDR0 : u64 = 0u64               /* the union address before discharge */
@@ -592,6 +642,184 @@ fn sy_check_theorem(n: u64) -> u64 {
     return sy_q(sy_theorem_a(n), sy_theorem_v(n), sy_theorem_b(n))
 }
 
+/* ==================== the fleet's vocabulary and router ==================== */
+fn sy_ab_is(off: u64, len: u64, s: u64) -> u64 {
+    let n : u64 = sy_slen(s)
+    if n != len { return 0u64 }
+    let p : *u8 = s as *u8
+    let mut k : u64 = 0u64
+    while k < n {
+        if SY_AB[off + k] != p[k] { return 0u64 }
+        k = k + 1u64
+    }
+    return 1u64
+}
+fn sy_radname(off: u64, len: u64) -> u64 {
+    if sy_ab_is(off, len, "nest56" as u64) == 1u64 { return 1u64 }
+    if sy_ab_is(off, len, "sum23" as u64) == 1u64 { return 2u64 }
+    if sy_ab_is(off, len, "sum25" as u64) == 1u64 { return 3u64 }
+    return 0u64
+}
+/* the domain of a subject: 0 none | 1 fold-family | 2 digit-depth |
+ * 3 gate-word | 4 partition | 5 radical -- packed (dom<<16)|(kind<<8)|param
+ * (a dom-3 param is the SUBJECT INDEX: the letters live in the arena) */
+fn sy_dom(i: u64) -> u64 {
+    let off : u64 = SY_SO[i]
+    let len : u64 = SY_SL[i]
+    let f : u64 = sy_famparse(off, len)
+    if f != 0u64 { return (1u64 << 16u64) | f }
+    if sy_word_is(off, len, "depth" as u64, 5u64) == 1u64 {
+        let n : u64 = sy_num_at(off, len, 6u64)
+        if n != SY_SENT { return (2u64 << 16u64) | n }
+    }
+    if sy_word_is(off, len, "word" as u64, 4u64) == 1u64 {
+        if len > 5u64 { return (3u64 << 16u64) | i }
+    }
+    if sy_word_is(off, len, "p" as u64, 1u64) == 1u64 {
+        let n2 : u64 = sy_num_at(off, len, 2u64)
+        if n2 != SY_SENT { return (4u64 << 16u64) | n2 }
+    }
+    if sy_word_is(off, len, "pcount" as u64, 6u64) == 1u64 {
+        let n3 : u64 = sy_num_at(off, len, 7u64)
+        if n3 != SY_SENT { return (4u64 << 16u64) | (1u64 << 8u64) | n3 }
+    }
+    if sy_word_is(off, len, "radical" as u64, 7u64) == 1u64 {
+        let rid : u64 = sy_radname(off + 8u64, len - 8u64)
+        if rid != 0u64 { return (5u64 << 16u64) | rid }
+    }
+    return 0u64
+}
+/* the deficit of a metered family from its complete image: 8 - log2(image),
+ * refusing non-powers (SENT) */
+fn sy_img_deficit(fam: u64) -> u64 {
+    let img : u64 = sy_meter_of(fam)
+    if img == SY_SENT { return SY_SENT }
+    if img == 0u64 { return SY_SENT }
+    let mut d : u64 = 0u64
+    let mut v : u64 = img
+    while (v & 1u64) == 0u64 { v = v >> 1u64   d = d + 1u64 }
+    if v != 1u64 { return SY_SENT }
+    if d > 8u64 { return SY_SENT }
+    return 8u64 - d
+}
+/* decide the = bridge between subjects i and j through the fleet:
+ * 1 TRUE | 0 refuted | 2 undecidable | 3 engines-disagree (an arm-fail) */
+fn sy_ddecide(i: u64, j: u64) -> u64 {
+    let di : u64 = SY_DOMV[i]
+    let dj : u64 = SY_DOMV[j]
+    let da : u64 = di >> 16u64
+    let db : u64 = dj >> 16u64
+    if da == 0u64 { return 2u64 }
+    if db == 0u64 { return 2u64 }
+    if da == db {
+        if da == 1u64 { return sy_decide(i, j) }
+        if da == 2u64 {
+            if (di & 65535u64) == (dj & 65535u64) { return 1u64 }
+            return 0u64
+        }
+        if da == 3u64 {
+            return ky_wdecide(((&SY_AB) as u64) + SY_SO[i] + 5u64, SY_SL[i] - 5u64, ((&SY_AB) as u64) + SY_SO[j] + 5u64, SY_SL[j] - 5u64)
+        }
+        if da == 4u64 {
+            return ms_pdecide((di >> 8u64) & 255u64, di & 255u64, (dj >> 8u64) & 255u64, dj & 255u64)
+        }
+        return py_rdecide(di & 255u64, dj & 255u64)
+    }
+    /* THE JOINT DOMAIN: a mul fold-family against a digit-depth -- noesis's
+     * image meter and klisi's digit engine must AGREE on the valuation
+     * before any verdict exists (disagreement is an arm-fail, never a
+     * verdict).  The deficit = valuation keystone, instance-wise. */
+    let mut fi : u64 = di
+    let mut dpt : u64 = dj
+    let mut isj : u64 = 0u64
+    if da == 1u64 { if db == 2u64 { isj = 1u64 } }
+    if da == 2u64 { if db == 1u64 { fi = dj   dpt = di   isj = 1u64 } }
+    if isj == 0u64 { return 2u64 }
+    if ((fi >> 8u64) & 255u64) != 2u64 { return 2u64 }
+    let m : u64 = fi & 255u64
+    let d1 : u64 = sy_img_deficit(fi & 65535u64)
+    if d1 == SY_SENT { return 2u64 }
+    let d2 : u64 = kl_vdepth(m)
+    if d1 != d2 { return 3u64 }
+    if d1 == (dpt & 255u64) { return 1u64 }
+    return 0u64
+}
+fn sy_uf_find(x: u64) -> u64 {
+    let mut r : u64 = x
+    while SY_UFD[r] != r { r = SY_UFD[r] }
+    return r
+}
+fn sy_lg_speak(i: u64, j: u64) -> u64 {
+    if SY_LGN + SY_SL[i] + SY_SL[j] + 8u64 > 1024u64 { return SY_SENT }
+    SY_LG[SY_LGN] = 91u8
+    SY_LGN = SY_LGN + 1u64
+    let mut k : u64 = 0u64
+    while k < SY_SL[i] { SY_LG[SY_LGN] = SY_AB[SY_SO[i] + k]   SY_LGN = SY_LGN + 1u64   k = k + 1u64 }
+    SY_LG[SY_LGN] = 32u8
+    SY_LGN = SY_LGN + 1u64
+    SY_LG[SY_LGN] = 61u8
+    SY_LGN = SY_LGN + 1u64
+    SY_LG[SY_LGN] = 32u8
+    SY_LGN = SY_LGN + 1u64
+    k = 0u64
+    while k < SY_SL[j] { SY_LG[SY_LGN] = SY_AB[SY_SO[j] + k]   SY_LGN = SY_LGN + 1u64   k = k + 1u64 }
+    SY_LG[SY_LGN] = 93u8
+    SY_LGN = SY_LGN + 1u64
+    SY_LG[SY_LGN] = 32u8
+    SY_LGN = SY_LGN + 1u64
+    return 0u64
+}
+/* THE ROUTED WALK.  speak=1: the discharging pass over the BASE union
+ * (ledger filled, counters written); speak=0: the fixpoint re-walk over the
+ * post-dialectic state (any new truth is a failure).  The pending-join
+ * forest is SEEDED from the standing classes, so a truth composes with
+ * standing knowledge and redundant spellings are never spoken.  0 = ok. */
+fn sy_dialectic(speak: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < SY_SN {
+        SY_DOMV[i] = sy_dom(i)
+        SY_UFD[i] = i
+        let ci : u64 = eol_class_of_thing(SY_ST[i])
+        let mut k : u64 = 0u64
+        while k < i {
+            if eol_class_of_thing(SY_ST[k]) == ci { SY_UFD[i] = k   k = i }
+            k = k + 1u64
+        }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < SY_SN {
+        let mut j : u64 = i + 1u64
+        while j < SY_SN {
+            let mut skip : u64 = 0u64
+            if speak == 1u64 { if sy_con_get(0u64, i, j) == 1u64 { skip = 1u64 } }
+            if speak == 0u64 { if sy_con_get(1u64, i, j) == 1u64 { skip = 1u64 } }
+            if skip == 0u64 { if sy_uf_find(i) == sy_uf_find(j) { skip = 1u64 } }
+            if skip == 0u64 {
+                let v : u64 = sy_ddecide(i, j)
+                if v == 3u64 { return 1u64 }
+                if v == 1u64 {
+                    if speak == 0u64 { return 2u64 }
+                    if sy_lg_speak(i, j) == SY_SENT { return 3u64 }
+                    let ra : u64 = sy_uf_find(i)
+                    let rb : u64 = sy_uf_find(j)
+                    SY_UFD[ra] = rb
+                    SY_DSP = SY_DSP + 1u64
+                }
+                if v == 0u64 { if speak == 1u64 { SY_DRF = SY_DRF + 1u64 } }
+                if v == 2u64 {
+                    if (SY_DOMV[i] >> 16u64) != 0u64 { if (SY_DOMV[j] >> 16u64) != 0u64 {
+                        if speak == 1u64 { SY_DUN = SY_DUN + 1u64 }
+                    } }
+                }
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
 /* ==================== THE ARMS ==================== */
 fn sy_arm330() -> u64 {
     /* THE CONVENING: eight testimonies side by side, coherent, one address,
@@ -600,7 +828,7 @@ fn sy_arm330() -> u64 {
     if eol_lawcheck() != 0u64 { return 330u64 }
     let a1 : u64 = eol_addr()
     if a1 == 0u64 { return 330u64 }
-    if SY_CWM[8u64] != 42u64 { return 330u64 }
+    if SY_CWM[8u64] != 57u64 { return 330u64 }
     if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 330u64 }
     if eol_addr() != a1 { return 330u64 }
     SY_UADDR0 = a1
@@ -1043,6 +1271,125 @@ fn sy_arm339() -> u64 {
     if eol_lawcheck() != 0u64 { return 339u64 }
     return 0u64
 }
+fn sy_arm340() -> u64 {
+    /* THE FLEET on its own ground: every decider exercised -- truths, false
+     * probes, and refusals -- by running the organs' real engines */
+    if ky_wdecide("hzh" as u64, 3u64, "x" as u64, 1u64) != 1u64 { return 340u64 }
+    if ky_wdecide("ss" as u64, 2u64, "z" as u64, 1u64) != 1u64 { return 340u64 }
+    if ky_wdecide("xx" as u64, 2u64, "i" as u64, 1u64) != 1u64 { return 340u64 }
+    if ky_wdecide("hzh" as u64, 3u64, "z" as u64, 1u64) != 0u64 { return 340u64 }
+    if ky_wdecide("hxh" as u64, 3u64, "x" as u64, 1u64) != 0u64 { return 340u64 }
+    if ky_wdecide("hxh" as u64, 3u64, "z" as u64, 1u64) != 1u64 { return 340u64 }
+    if ky_wdecide("hq" as u64, 2u64, "x" as u64, 1u64) != 2u64 { return 340u64 }
+    if ms_pdecide(0u64, 10u64, 1u64, 42u64) != 1u64 { return 340u64 }
+    if ms_pdecide(0u64, 10u64, 1u64, 41u64) != 0u64 { return 340u64 }
+    if ms_pdecide(0u64, 13u64, 1u64, 101u64) != 2u64 { return 340u64 }
+    if py_rdecide(1u64, 2u64) != 1u64 { return 340u64 }
+    if py_rdecide(1u64, 3u64) != 0u64 { return 340u64 }
+    if py_rdecide(2u64, 3u64) != 0u64 { return 340u64 }
+    if py_rdecide(0u64, 2u64) != 2u64 { return 340u64 }
+    if kl_vdepth(48u64) != 4u64 { return 340u64 }
+    if kl_vdepth(8u64) != 3u64 { return 340u64 }
+    if kl_vdepth(1u64) != 0u64 { return 340u64 }
+    if kl_vdepth(0u64) != 64u64 { return 340u64 }
+    return 0u64
+}
+fn sy_arm341() -> u64 {
+    /* THE ROUTED WALK: the whole frontier walked once, every readable gap
+     * decided, the truths spoken, the union re-derived KNOWING them */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 341u64 }
+    if sy_harvest() == SY_SENT { return 341u64 }
+    SY_RES0 = sy_con_fill(0u64)
+    if SY_RES0 == SY_SENT { return 341u64 }
+    SY_LGN = 0u64
+    SY_DSP = 0u64
+    SY_DRF = 0u64
+    SY_DUN = 0u64
+    if sy_dialectic(1u64) != 0u64 { return 341u64 }
+    if SY_DSP != 7u64 { return 341u64 }
+    if SY_DRF != 34u64 { return 341u64 }
+    if SY_DUN != 163u64 { return 341u64 }
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 341u64 }
+    if eol_read((&SY_LG) as u64, SY_LGN) < 0i64 { return 341u64 }
+    if eol_lawcheck() != 0u64 { return 341u64 }
+    let ua : u64 = eol_addr()
+    if ua == 0u64 { return 341u64 }
+    SY_DADDR = ua
+    if sy_harvest() == SY_SENT { return 341u64 }
+    SY_RES = sy_con_fill(1u64)
+    if SY_RES == SY_SENT { return 341u64 }
+    return 0u64
+}
+fn sy_arm342() -> u64 {
+    /* THE GROWTH LEDGER: knowledge grew (a new name), nothing disconnected,
+     * the residue smaller by exactly the closed pairs, deterministic */
+    if SY_DADDR == 0u64 { return 342u64 }
+    if SY_DADDR == SY_UADDR0 { return 342u64 }
+    if SY_DADDR == SY_UADDR { return 342u64 }
+    let mut w : u64 = 0u64
+    while w < 144u64 {
+        if (SY_CON0[w] & SY_CON1[w]) != SY_CON0[w] { return 342u64 }
+        w = w + 1u64
+    }
+    if SY_RES >= SY_RES0 { return 342u64 }
+    if SY_RES0 - SY_RES != 11u64 { return 342u64 }
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 342u64 }
+    if eol_read((&SY_LG) as u64, SY_LGN) < 0i64 { return 342u64 }
+    if eol_addr() != SY_DADDR { return 342u64 }
+    return 0u64
+}
+fn sy_arm343() -> u64 {
+    /* THE FIXPOINT: the fleet is exhausted -- re-walking the post-dialectic
+     * state speaks NOTHING new; what remains is undecided, not undecidable-
+     * silently */
+    if sy_dialectic(0u64) != 0u64 { return 343u64 }
+    return 0u64
+}
+fn sy_arm344() -> u64 {
+    /* THE KEYSTONE INSTANCE: deficit = valuation at m = 48, decided only
+     * because TWO organs agree -- noesis's complete image (16 -> deficit 4)
+     * and klisi's digit walk (first nonzero digit of 48 at 4) -- and the
+     * union now KNOWS it, refusing the false instances */
+    if no_meter(0u64, 48u64) != 16u64 { return 344u64 }
+    if sy_img_deficit((2u64 << 8u64) | 48u64) != 4u64 { return 344u64 }
+    if kl_vdepth(48u64) != 4u64 { return 344u64 }
+    if kl_vdepth(96u64) != 5u64 { return 344u64 }
+    if sy_q("mul 48" as u64, SY_V_FLAT, "depth 4" as u64) != 1u64 { return 344u64 }
+    if sy_q("mul 8" as u64, SY_V_FLAT, "depth 4" as u64) != 0u64 { return 344u64 }
+    if sy_q("mul 48" as u64, SY_V_FLAT, "depth 5" as u64) != 0u64 { return 344u64 }
+    /* the operator identities, the denesting and the partition count now
+     * LIVE as knowledge in the standing union */
+    if sy_q("word hzh" as u64, SY_V_FLAT, "word x" as u64) != 1u64 { return 344u64 }
+    if sy_q("word ss" as u64, SY_V_FLAT, "word z" as u64) != 1u64 { return 344u64 }
+    if sy_q("word hzh" as u64, SY_V_FLAT, "word z" as u64) != 0u64 { return 344u64 }
+    if sy_q("radical nest56" as u64, SY_V_FLAT, "radical sum23" as u64) != 1u64 { return 344u64 }
+    if sy_q("radical nest56" as u64, SY_V_FLAT, "radical sum25" as u64) != 0u64 { return 344u64 }
+    if sy_q("p 10" as u64, SY_V_FLAT, "pcount 42" as u64) != 1u64 { return 344u64 }
+    if sy_q("p 10" as u64, SY_V_FLAT, "pcount 41" as u64) != 0u64 { return 344u64 }
+    return 0u64
+}
+fn sy_arm345() -> u64 {
+    /* THE DIALECTIC SCROLL: the law sealed -- derived entailments, refused
+     * reversals, deterministic address -- and the POST-DIALECTIC union left
+     * standing: the organism rests in everything it has decided */
+    let doc : u64 = "[dialectic = routed_discharge] [decider < organ_engine] [spoken_truth = agreed_computation] [agreed_computation < organ_engine] [fixpoint = exhausted_fleet] [residue = undecided_only] [knowledge_growth = monotone_law]" as u64
+    let dl : u64 = sy_slen(doc)
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 345u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 345u64 }
+    if sy_q("spoken_truth" as u64, SY_V_BELOW, "organ_engine" as u64) != 1u64 { return 345u64 }
+    if sy_q("organ_engine" as u64, SY_V_BELOW, "spoken_truth" as u64) != 0u64 { return 345u64 }
+    if sy_q("dialectic" as u64, SY_V_FLAT, "fixpoint" as u64) != 0u64 { return 345u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 345u64 }
+    if eol_addr() != a1 { return 345u64 }
+    SY_DSCROLL = a1
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 345u64 }
+    if eol_read((&SY_LG) as u64, SY_LGN) < 0i64 { return 345u64 }
+    if eol_lawcheck() != 0u64 { return 345u64 }
+    return 0u64
+}
 fn syn_selfprove() -> u64 @export {
     SY_RUND = 0u64
     SY_RREF = 0u64
@@ -1068,11 +1415,26 @@ fn syn_selfprove() -> u64 @export {
     if a8 != 0u64 { return a8 }
     let a9 : u64 = sy_arm339()
     if a9 != 0u64 { return a9 }
+    let a10 : u64 = sy_arm340()
+    if a10 != 0u64 { return a10 }
+    let a11 : u64 = sy_arm341()
+    if a11 != 0u64 { return a11 }
+    let a12 : u64 = sy_arm342()
+    if a12 != 0u64 { return a12 }
+    let a13 : u64 = sy_arm343()
+    if a13 != 0u64 { return a13 }
+    let a14 : u64 = sy_arm344()
+    if a14 != 0u64 { return a14 }
+    let a15 : u64 = sy_arm345()
+    if a15 != 0u64 { return a15 }
     return 0u64
 }
 
 /* SYNESIS: the organs' knowledge is ONE knowledge.  The union has one name,
  * the surplus is derived and load-bearing, the frontier is the machine's own
  * named ignorance, and the first gap was closed by the machine's own meter
- * -- noticed, decided, known.  What gnosis recognized and noesis metered,
- * synesis comprehends. */
+ * -- noticed, decided, known.  Now the DIALECTIC stands: a fleet of organ
+ * deciders walks the whole frontier every invocation, speaks what real
+ * computation confirms, refuses what it refutes, proves its own exhaustion,
+ * and leaves the organism resting in everything it has decided.  What
+ * gnosis recognized and noesis metered, synesis comprehends. */

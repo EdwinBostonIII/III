@@ -55,7 +55,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     ps("scroll anglos = 390..399 green\n" as u64)
     let pp : u64 = px_selfprove()
     if pp != 0u64 { ps("scroll sponsor = RED arm " as u64)   pu(pp)   putchar(10i32)   return 7u64 }
-    ps("scroll sponsor = 400..404+421..423 green\n" as u64)
+    ps("scroll sponsor = 400..404+421..424 green\n" as u64)
     let hp : u64 = ok_selfprove()
     if hp != 0u64 { ps("scroll house  = RED arm " as u64)   pu(hp)   putchar(10i32)   return 9u64 }
     ps("scroll house  = 410..420 green\n" as u64)

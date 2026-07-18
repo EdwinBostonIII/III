@@ -63,11 +63,32 @@
  *   deterministic canonical address, entailing consequences absent from
  *   the text and refusing their reversals.
  *
- * Truth is a CONDITION OF MOTION: gn_selfprove (arms 290..297).  NO gate
+ *   THE CHRONOMETER (arm 298, the oracle made QUANTITATIVE): the orbit
+ *   oracle decides WHETHER; the inverse faculty (klisi kd_inv/kl_inv2_u64,
+ *   Hensel/Newton) mints WHEN -- the exact first-arrival count
+ *   n = ((0-x0)>>v) inv(c>>v) mod 2^(64-v), verified by COMPLETE
+ *   enumeration of Z/2^8 (every halting pair, simulated arrival == closed
+ *   form, zero disagreements; uniqueness mod 2^(8-v) makes it THE first
+ *   arrival) and carried by the theorem to Z/2^64, where an orbit beyond
+ *   2^60 steps has its arrival computed O(1) and CONFIRMED by the
+ *   substrate identity in one mul+add -- and HOW MUCH: the total work
+ *   n x0 + c n(n-1)/2 in exact Q, cross-sworn to MERIS's independent
+ *   Stirling power-sum engine (cross-organ, two engines one integer);
+ *
+ *   THE DIVISION BRIDGE (arm 299): division rides the substrate identity
+ *   -- exact division IS multiplication by the Hensel inverse (native and
+ *   digit engines, one law); the LIVE planner seg_div_plan (the organ
+ *   cg_r3 consults) driven over a divisor battery with the GM bound
+ *   re-derived and the mulhi route checked against the ALU divider (two
+ *   engines, one quotient); and the Montgomery kernel n' = -inv(n) with
+ *   n n' == -1 minted from the same faculty.
+ *
+ * Truth is a CONDITION OF MOTION: gn_selfprove (arms 290..299).  NO gate
  * of its own (the summit gate compiles and drives this organ).
- * NIH: composes klisi (the ring), riza+pyrgos (the exact engines), eidolos
- * (the scroll).  Software is not TRANSLATED into physics; it is RECOGNIZED
- * as physics.  Ring R-1. */
+ * NIH: composes klisi (the ring + the inverse), meris (the power-sum
+ * engine), riza+pyrgos (the exact engines), ser_egraph (the live division
+ * planner), eidolos (the scroll).  Software is not TRANSLATED into physics;
+ * it is RECOGNIZED as physics.  Ring R-1. */
 module omnia_gnosis
 
 extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
@@ -76,6 +97,10 @@ extern @abi(c-msvc-x64) fn py_opc() -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_opc_reset() -> i32 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_rat_i64(v: i64) -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn py_rat_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_sign(r: u64) -> i64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn rz_reset() -> i32 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_in(k: u64, v: i64) -> i32 from "riza.iii"
 extern @abi(c-msvc-x64) fn rz_from_in(deg: i64) -> u64 from "riza.iii"
@@ -95,6 +120,14 @@ extern @abi(c-msvc-x64) fn kd_get(h: u64, slot: u64) -> u64 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_add(a: u64, b: u64) -> u64 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kd_mul(a: u64, b: u64) -> u64 from "klisi.iii"
 extern @abi(c-msvc-x64) fn kl_err() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_inv(a: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_of_u64(x: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_val_u64(h: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kl_inv2_u64(v: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn ms_powsum_stirling(m: i64, n: i64) -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn seg_div_plan(d: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_magic_m() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_div_shift() -> u64 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
@@ -114,6 +147,25 @@ fn gn_v2(x: u64) -> u64 {
     let mut m : u64 = x
     while (m & 1u64) == 0u64 { m = m >> 1u64   v = v + 1u64 }
     return v
+}
+fn gn_mulhi64(a: u64, b: u64) -> u64 {
+    /* high 64 bits of a*b (32-bit half products; the GM-bound re-derivation) */
+    let alo : u64 = a & 4294967295u64
+    let ahi : u64 = a >> 32u64
+    let blo : u64 = b & 4294967295u64
+    let bhi : u64 = b >> 32u64
+    let p0 : u64 = alo * blo
+    let p1 : u64 = alo * bhi
+    let p2 : u64 = ahi * blo
+    let p3 : u64 = ahi * bhi
+    let mid : u64 = (p0 >> 32u64) + (p1 & 4294967295u64) + (p2 & 4294967295u64)
+    return p3 + (p1 >> 32u64) + (p2 >> 32u64) + (mid >> 32u64)
+}
+fn gn_rat_u64(x: u64) -> u64 {
+    /* a full u64 as an exact pyrgos rational (two 32-bit halves) */
+    let hi : u64 = x >> 32u64
+    let lo : u64 = x & 4294967295u64
+    return py_rat_add(py_rat_mul(py_rat_i64(hi as i64), py_rat_i64(4294967296i64)), py_rat_i64(lo as i64))
 }
 /* load a u64 into the klisi KP=2 mode(0,64) ring: digits ARE bits */
 fn gn_kd_of(x: u64) -> u64 {
@@ -570,7 +622,7 @@ fn gn_arm296() -> u64 {
 }
 fn gn_arm297() -> u64 {
     /* THE SCROLL: the ascension's derived facts, sealed and entailing */
-    let doc : u64 = "[halting_affine = valuation_decision] [valuation_decision = orbit_oracle] [nontermination_xorshift = bijectivity] [peterson ~ mutual_exclusion] [toctou_race < peterson] [sb_weak_00 < sc_forbidden] [verdict_gcd = measured_winner] [argmin_certificate = square_witness]" as u64
+    let doc : u64 = "[halting_affine = valuation_decision] [valuation_decision = orbit_oracle] [nontermination_xorshift = bijectivity] [peterson ~ mutual_exclusion] [toctou_race < peterson] [sb_weak_00 < sc_forbidden] [verdict_gcd = measured_winner] [argmin_certificate = square_witness] [arrival_count = inverse_mint] [inverse_mint = hensel_lift] [work_total = power_sum] [division_magic = substrate_identity]" as u64
     let dl : u64 = gn_strlen(doc)
     eol_reset()
     if eol_read(doc, dl) < 0i64 { return 297u64 }
@@ -586,11 +638,225 @@ fn gn_arm297() -> u64 {
     if eol_entails(qc, gn_strlen(qc), 0u64, qd, gn_strlen(qd)) != 1u64 { return 297u64 }
     /* the reversal REFUSES */
     if eol_entails(qd, gn_strlen(qd), 0u64, qc, gn_strlen(qc)) != 0u64 { return 297u64 }
+    /* THE CHRONOMETER'S RUNGS, entailed through the chain: the arrival count
+     * is congruent to the Hensel lift only THROUGH the inverse mint */
+    let qe : u64 = "arrival_count" as u64
+    let qf : u64 = "hensel_lift" as u64
+    if eol_entails(qe, gn_strlen(qe), 2u64, qf, gn_strlen(qf)) != 1u64 { return 297u64 }
+    let qg : u64 = "work_total" as u64
+    let qh : u64 = "power_sum" as u64
+    if eol_entails(qg, gn_strlen(qg), 2u64, qh, gn_strlen(qh)) != 1u64 { return 297u64 }
+    /* cross-class refusal: the chronometer does not entail the lock */
+    if eol_entails(qe, gn_strlen(qe), 2u64, qd, gn_strlen(qd)) != 0u64 { return 297u64 }
     /* determinism: the same document seals to the same address */
     eol_reset()
     if eol_read(doc, dl) < 0i64 { return 297u64 }
     if eol_addr() != a1 { return 297u64 }
     GN_SCROLL = a1
+    return 0u64
+}
+fn gn_arm298() -> u64 {
+    /* THE CHRONOMETER: the orbit oracle (arm 291) decides WHETHER the affine
+     * loop `while x != 0 { x += c }` halts; THIS arm mints WHEN and HOW MUCH
+     * -- the exact first-arrival count and the exact total work -- with NO
+     * simulation at scale.  The instruments:
+     *   (a) the inverse bridge held taut: one witness that the native Newton
+     *       and the digit-Hensel inverse are THE SAME computation (klisi arm
+     *       266 owns the battery);
+     *   (b) COMPLETE ENUMERATION of Z/2^8: for EVERY halting (c, x0) pair
+     *       the simulated first arrival equals the closed form
+     *       n = ((0 - x0) >> v) * inv(c >> v)  mod 2^(8-v),  v = v_2(c),
+     *       and the total integer displacement equals n x0 + c n(n-1)/2 --
+     *       zero disagreements over all 65536; uniqueness of n mod 2^(8-v)
+     *       (u odd is invertible) makes the formula THE first arrival, so
+     *       the theorem carries to Z/2^64;
+     *   (c) THE MINT: an orbit whose arrival exceeds 2^60 steps has its
+     *       count computed O(1) and CONFIRMED by the substrate identity in
+     *       ONE mul+add: x0 + n c == 0 on the ALU itself (arm 290's ring);
+     *   (d) THE WORK, exact Q, TWO INDEPENDENT ENGINES: the arithmetic-
+     *       series closed form in pyrgos against MERIS's Stirling power-sum
+     *       engine (cross-organ) -- W = n x0 + c F_1(n), a ~2^126 integer,
+     *       equal both ways;
+     *   (e) the shifted lane v_2(c) > 0: the arrival lives mod 2^(64-v),
+     *       witnessed on the ALU. */
+    kd_setp(2u64)
+    kd_reset(0u64, 64u64)
+    let d0 : u64 = 6364136223846793005u64
+    let iv0 : u64 = kl_inv2_u64(d0)
+    if (d0 * iv0) != 1u64 { return 298u64 }
+    if kd_val_u64(kd_inv(kd_of_u64(d0))) != iv0 { return 298u64 }
+    /* (b) the complete small world */
+    let mut c : u64 = 0u64
+    while c < 256u64 {
+        let mut x0 : u64 = 0u64
+        while x0 < 256u64 {
+            let mut dec : u64 = 0u64
+            if x0 == 0u64 { dec = 1u64 } else {
+                if c != 0u64 { if gn_v2(c) <= gn_v2(x0) { dec = 1u64 } }
+            }
+            if dec == 1u64 {
+                let mut x : u64 = x0
+                let mut nsim : u64 = 0u64
+                while x != 0u64 { x = (x + c) & 255u64   nsim = nsim + 1u64 }
+                let mut nfor : u64 = 0u64
+                if x0 != 0u64 {
+                    let v : u64 = gn_v2(c)
+                    let u : u64 = c >> v
+                    let mut w : u64 = u
+                    let mut s2 : u64 = 0u64
+                    while s2 < 3u64 { w = (w * (2u64 - ((u * w) & 255u64))) & 255u64   s2 = s2 + 1u64 }
+                    if ((u * w) & 255u64) != 1u64 { return 298u64 }
+                    nfor = ((((0u64 - x0) & 255u64) >> v) * w) & (255u64 >> v)
+                }
+                if nfor != nsim { return 298u64 }
+                let mut wsim : u64 = 0u64
+                let mut k2 : u64 = 0u64
+                while k2 < nsim { wsim = wsim + x0 + (k2 * c)   k2 = k2 + 1u64 }
+                let mut wfor : u64 = 0u64
+                if nsim > 0u64 { wfor = (nsim * x0) + ((c * (nsim * (nsim - 1u64))) / 2u64) }
+                if wsim != wfor { return 298u64 }
+            }
+            x0 = x0 + 1u64
+        }
+        c = c + 1u64
+    }
+    /* (c) THE MINT at Z/2^64: the machine finds its own witness -- the first
+     * start near the seed whose arrival lies beyond 2^60 (and within i64 for
+     * the meris leg): no target named, the instance EMERGES */
+    let cm : u64 = 6364136223846793005u64
+    let icm : u64 = kl_inv2_u64(cm)
+    if (cm * icm) != 1u64 { return 298u64 }
+    let mut xm : u64 = 16045690984833335998u64
+    let mut nm : u64 = 0u64
+    let mut found : u64 = 0u64
+    let mut tr : u64 = 0u64
+    while tr < 64u64 {
+        let cand : u64 = (0u64 - xm) * icm
+        let mut ok : u64 = 0u64
+        if cand > 1152921504606846976u64 { if (cand >> 63u64) == 0u64 { ok = 1u64 } }
+        if ok == 1u64 {
+            nm = cand
+            found = 1u64
+            tr = 64u64
+        } else {
+            xm = xm + 1u64
+            tr = tr + 1u64
+        }
+    }
+    if found != 1u64 { return 298u64 }
+    /* the substrate identity CONFIRMS the arrival in one mul+add */
+    if (xm + (nm * cm)) != 0u64 { return 298u64 }
+    /* (d) the work at the mint: two independent engines, exact Q */
+    py_reset()
+    let rn : u64 = gn_rat_u64(nm)
+    let rx : u64 = gn_rat_u64(xm)
+    let rc : u64 = gn_rat_u64(cm)
+    let rn1 : u64 = py_rat_add(rn, py_rat_i64(0i64 - 1i64))
+    let wA : u64 = py_rat_add(py_rat_mul(rn, rx), py_rat_mul(rc, py_rat_mul(py_rat_mul(rn, rn1), py_rat_frac(1i64, 2i64))))
+    let f1 : u64 = ms_powsum_stirling(1i64, nm as i64)
+    let wB : u64 = py_rat_add(py_rat_mul(rn, rx), py_rat_mul(rc, f1))
+    if py_rat_cmp(wA, wB) != 0i64 { return 298u64 }
+    if py_rat_sign(wA) != 1i64 { return 298u64 }
+    /* (e) the shifted lane: v_2(c) = 6 -- the arrival lives mod 2^58 */
+    let cs : u64 = 192u64
+    let xs : u64 = 448u64
+    let ivs : u64 = kl_inv2_u64(cs >> 6u64)
+    let ns : u64 = (((0u64 - xs) >> 6u64) * ivs) & ((0u64 - 1u64) >> 6u64)
+    if (xs + (ns * cs)) != 0u64 { return 298u64 }
+    if ns == 0u64 { return 298u64 }
+    if kl_err() != 0u64 { return 298u64 }
+    if py_err() != 0u64 { return 298u64 }
+    return 0u64
+}
+fn gn_arm299() -> u64 {
+    /* THE DIVISION BRIDGE: division rides the substrate identity.
+     *   (a) EXACT DIVISION IS MULTIPLICATION: for odd d the Hensel/Newton
+     *       inverse turns d*q back into q by ONE multiply -- native and
+     *       digit engines agree on the same law;
+     *   (b) the LIVE planner: seg_div_plan (the organ cg_r3 consults) is
+     *       driven over a divisor battery; the pow2 lane is witnessed as a
+     *       shift, and every magic plan has its GM bound RE-DERIVED here
+     *       and its mulhi route checked against the ALU divider on edge and
+     *       random dividends -- two engines, one quotient;
+     *   (c) THE MONTGOMERY KERNEL: n' = -inv(n) satisfies n n' == -1 mod
+     *       2^64 -- the constant every REDC precomputes, minted from the
+     *       inverse faculty and proven on the spot (REDC itself lives with
+     *       the bigint Montgomery organs). */
+    kd_setp(2u64)
+    kd_reset(0u64, 64u64)
+    let mut t : u64 = 0u64
+    while t < 6u64 {
+        let d : u64 = gn_rnd() | 1u64
+        let q : u64 = gn_rnd()
+        if ((d * q) * kl_inv2_u64(d)) != q { return 299u64 }
+        t = t + 1u64
+    }
+    kd_reset(0u64, 64u64)
+    let dd : u64 = 2862933555777941757u64
+    let qq : u64 = 88172645463325252u64
+    if kd_val_u64(kd_mul(kd_of_u64(dd * qq), kd_inv(kd_of_u64(dd)))) != qq { return 299u64 }
+    /* (b) the live planner over the battery */
+    var dv : [u64; 6]
+    dv[0u64] = 3u64
+    dv[1u64] = 7u64
+    dv[2u64] = 10u64
+    dv[3u64] = 641u64
+    dv[4u64] = 6700417u64
+    dv[5u64] = 1000003u64
+    var xs2 : [u64; 7]
+    let mut i : u64 = 0u64
+    let mut magics : u64 = 0u64
+    while i < 6u64 {
+        let d2 : u64 = dv[i]
+        let plan : u64 = seg_div_plan(d2)
+        if (plan & 255u64) == 2u64 {
+            magics = magics + 1u64
+            let m : u64 = seg_div_magic_m()
+            let s : u64 = seg_div_shift()
+            if s >= 64u64 { return 299u64 }
+            let ps : u64 = 1u64 << s
+            if gn_mulhi64(m, d2) != ps { return 299u64 }
+            let lo : u64 = m * d2
+            if lo == 0u64 { return 299u64 }
+            if lo > ps { return 299u64 }
+            xs2[0u64] = 0u64
+            xs2[1u64] = 1u64
+            xs2[2u64] = d2 - 1u64
+            xs2[3u64] = d2
+            xs2[4u64] = d2 + 1u64
+            xs2[5u64] = 0u64 - 1u64
+            xs2[6u64] = 0u64 - d2
+            let mut j : u64 = 0u64
+            while j < 7u64 {
+                let xv : u64 = xs2[j]
+                if (gn_mulhi64(xv, m) >> s) != (xv / d2) { return 299u64 }
+                j = j + 1u64
+            }
+            j = 0u64
+            while j < 8u64 {
+                let xr : u64 = gn_rnd()
+                if (gn_mulhi64(xr, m) >> s) != (xr / d2) { return 299u64 }
+                j = j + 1u64
+            }
+        }
+        if (plan & 255u64) == 1u64 {
+            let k : u64 = (plan >> 8u64) & 255u64
+            let xr2 : u64 = gn_rnd()
+            if (xr2 >> k) != (xr2 / d2) { return 299u64 }
+        }
+        i = i + 1u64
+    }
+    if magics < 2u64 { return 299u64 }
+    /* the pow2 lane through the planner */
+    let p32 : u64 = seg_div_plan(32u64)
+    if (p32 & 255u64) != 1u64 { return 299u64 }
+    if ((p32 >> 8u64) & 255u64) != 5u64 { return 299u64 }
+    /* (c) the Montgomery kernel on the Goldilocks prime and a random odd */
+    let g : u64 = 18446744069414584321u64
+    if (g * (0u64 - kl_inv2_u64(g))) != (0u64 - 1u64) { return 299u64 }
+    let r : u64 = gn_rnd() | 1u64
+    if (r * (0u64 - kl_inv2_u64(r))) != (0u64 - 1u64) { return 299u64 }
+    if kl_err() != 0u64 { return 299u64 }
     return 0u64
 }
 fn gn_selfprove() -> u64 @export {
@@ -611,6 +877,10 @@ fn gn_selfprove() -> u64 @export {
     if a6 != 0u64 { return a6 }
     let a7 : u64 = gn_arm297()
     if a7 != 0u64 { return a7 }
+    let a8 : u64 = gn_arm298()
+    if a8 != 0u64 { return a8 }
+    let a9 : u64 = gn_arm299()
+    if a9 != 0u64 { return a9 }
     /* the prime returns to the tilt's home before the next organ speaks */
     kd_setp(5u64)
     return 0u64

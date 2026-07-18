@@ -44,7 +44,12 @@
  *   to 0 while the sharps sum to 5) -- tilting is a MULTIPLICATIVE
  *   equivalence, which is the whole point of the theory.
  *
- * Truth is a CONDITION OF MOTION: kl_selfprove (arms 260..265).  NO gate.
+ * THE INVERSE FACULTY: kd_inv (Hensel/Newton doubling on the digit engine,
+ * any prime) and kl_inv2_u64 (the native ALU Newton at p = 2) -- the exact
+ * p-adic inverse that turns division into multiplication; non-units REFUSED
+ * by the valuation obstruction.  Arm 266: two engines bit-for-bit.
+ *
+ * Truth is a CONDITION OF MOTION: kl_selfprove (arms 260..266).  NO gate.
  * NIH: self-contained integer digit vectors (the ONE bigint law, base-5
  * graded); composes nothing and floats nothing.  Ring R-1. */
 module aether_klisi
@@ -234,6 +239,70 @@ fn kd_fill(h: u64, lo: u64, hi: u64) -> i32 @export {
         i = i + 1u64
     }
     return 0i32
+}
+
+/* ==================== THE INVERSE (the Hensel/Newton faculty) ====================
+ * kd_inv: the p-adic inverse on the digit engine, ANY prime, by Newton doubling
+ * x <- x(2 - a x): if a x == 1 mod p^t then a x' == 1 mod p^2t, so correct
+ * digits DOUBLE each stroke; the seed is the brute unit digit a0^-1 mod p.
+ * A non-unit (a0 = 0: p | a, positive valuation) is REFUSED loudly (KL_ERR=2)
+ * -- the same subgroup obstruction that decides the orbit oracle's diverging
+ * side, felt here as refusal.  Asks the integer grid (K = 0), where the
+ * doubling reads in whole digits.
+ * kl_inv2_u64: the NATIVE lane at p = 2 -- five Newton strokes on the ALU
+ * itself (odd d: d*d == 1 mod 8 seeds three bits; 3->6->12->24->48->96 covers
+ * 64).  The arm-290 substrate identity (u64 IS Z_2/2^64) makes these THE SAME
+ * computation on THE SAME ring; arm 266 witnesses it bit-for-bit. */
+fn kd_of_u64(x: u64) -> u64 @export {
+    /* load a u64 into the KP=2 mode(0,64) ring: digits ARE bits */
+    let h : u64 = kd_alloc()
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if i < KDL { if ((x >> i) & 1u64) == 1u64 { kd_seti(h, i, 1u64) } }
+        i = i + 1u64
+    }
+    return h
+}
+fn kd_val_u64(h: u64) -> u64 @export {
+    let mut x : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if i < KDL { if kd_get(h, i) == 1u64 { x = x | (1u64 << i) } }
+        i = i + 1u64
+    }
+    return x
+}
+fn kd_inv(a: u64) -> u64 @export {
+    if KDG != 1u64 { KL_ERR = 2u64   return kd_alloc() }
+    let a0 : u64 = kd_get(a, 0u64)
+    if a0 == 0u64 { KL_ERR = 2u64   return kd_alloc() }
+    /* seed digit: a0 * s == 1 mod p, by brute enumeration (p is small) */
+    let mut s : u64 = 0u64
+    let mut d : u64 = 1u64
+    while d < KP {
+        if ((a0 * d) % KP) == 1u64 { s = d }
+        d = d + 1u64
+    }
+    if s == 0u64 { KL_ERR = 2u64   return kd_alloc() }
+    let mut x : u64 = kd_alloc()
+    kd_seti(x, 0u64, s)
+    let two : u64 = kd_add(kd_one(), kd_one())
+    let mut t : u64 = 1u64
+    while t < KDL {
+        x = kd_mul(x, kd_sub(two, kd_mul(a, x)))
+        t = t * 2u64
+    }
+    return x
+}
+fn kl_inv2_u64(v: u64) -> u64 @export {
+    if (v & 1u64) == 0u64 { KL_ERR = 2u64   return 0u64 }
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < 5u64 {
+        x = x * (2u64 - (v * x))
+        i = i + 1u64
+    }
+    return x
 }
 
 /* ==================== THE SELF-PROOF (arms 260..265) ==================== */
@@ -524,6 +593,55 @@ fn kl_arm265() -> u64 {
     if KL_ERR != 0u64 { return 265u64 }
     return 0u64
 }
+fn kl_arm266() -> u64 {
+    /* THE INVERSE, two engines one ring: at p = 2 the digit-Hensel inverse
+     * and the native ALU Newton agree BIT-FOR-BIT on random odd words, and
+     * both invert exactly; at p = 5 the digit inverse closes kd_mul(a,
+     * kd_inv(a)) == 1 on random units.  The negative control on BOTH
+     * engines: an even word / a non-unit is REFUSED by the valuation
+     * obstruction (KL_ERR = 2), never silently inverted. */
+    kd_setp(2u64)
+    kd_reset(0u64, 64u64)
+    let mut t : u64 = 0u64
+    while t < 6u64 {
+        let w : u64 = kl_rnd() | 1u64
+        let ni : u64 = kl_inv2_u64(w)
+        if (w * ni) != 1u64 { return 266u64 }
+        kd_reset(0u64, 64u64)
+        let di : u64 = kd_inv(kd_of_u64(w))
+        if kd_val_u64(di) != ni { return 266u64 }
+        t = t + 1u64
+    }
+    /* refusals: even word, both engines */
+    if kl_inv2_u64(6u64) != 0u64 { return 266u64 }
+    if KL_ERR != 2u64 { return 266u64 }
+    kd_reset(0u64, 64u64)
+    let ev : u64 = kd_inv(kd_of_u64(6u64))
+    if KL_ERR != 2u64 { return 266u64 }
+    if kd_iszero(ev) != 1u32 { return 266u64 }
+    /* p = 5: the digit inverse closes on random units */
+    kd_setp(5u64)
+    kd_reset(0u64, 12u64)
+    t = 0u64
+    while t < 4u64 {
+        let a : u64 = kd_alloc()
+        kd_fill(a, 0u64, 12u64)
+        if kd_get(a, 0u64) != 0u64 {
+            if kd_eq(kd_mul(a, kd_inv(a)), kd_one()) != 1u32 { return 266u64 }
+        }
+        t = t + 1u64
+    }
+    /* refusal: unit digit zero (3 * 5 has positive valuation) */
+    kd_reset(0u64, 12u64)
+    let z : u64 = kd_alloc()
+    kd_seti(z, 1u64, 3u64)
+    let iz : u64 = kd_inv(z)
+    if KL_ERR != 2u64 { return 266u64 }
+    if kd_iszero(iz) != 1u32 { return 266u64 }
+    kd_reset(0u64, 12u64)
+    if KL_ERR != 0u64 { return 266u64 }
+    return 0u64
+}
 fn kl_selfprove() -> u64 @export {
     kd_setp(5u64)
     let a0 : u64 = kl_arm260()
@@ -538,5 +656,7 @@ fn kl_selfprove() -> u64 @export {
     if a4 != 0u64 { return a4 }
     let a5 : u64 = kl_arm265()
     if a5 != 0u64 { return a5 }
+    let a6 : u64 = kl_arm266()
+    if a6 != 0u64 { return a6 }
     return 0u64
 }

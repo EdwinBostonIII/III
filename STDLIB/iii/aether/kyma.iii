@@ -1,0 +1,1214 @@
+/* STDLIB/iii/aether/kyma.iii -- KYMA (the WAVE): exact quantum amplitudes.
+ *
+ * THE RUNG (the Heisenberg ascent): quantum mechanics is linear algebra over
+ * exact complex numbers, and the whole Clifford+T universal gate set lives in
+ * ONE ring -- Z[zeta, 1/sqrt2] with zeta = e^{i pi/4} the 8th root of unity:
+ *   zeta^4 = -1,   i = zeta^2,   sqrt2 = zeta - zeta^3.
+ * An amplitude IS four integer coordinates (a0,a1,a2,a3) = a0 + a1 z + a2 z^2
+ * + a3 z^3, and the whole state shares ONE global exponent K meaning /sqrt2^K.
+ * No float can even be WRITTEN in this organ; every gate is integer motion:
+ *   H      pairwise (u+v, u-v) and K+1  (every amplitude is in some pair)
+ *   X/CX/CCX   index permutations
+ *   P(m)   multiply by zeta^m -- a signed coordinate rotation (S=P2, T=P1,
+ *          Z=P4, dagger by 8-m), single or controlled
+ * Unitarity is an INTEGER equation: sum |amp|^2 = 2^K exactly, where
+ * |v|^2 = v * conj(v) lands in Z[sqrt2] (coords (A, B, 0, -B) = A + B sqrt2;
+ * a violated realness shape is a COUNTED refusal, never silence).
+ *
+ * Truth is a CONDITION OF MOTION: ky_selfprove (arms 230..240) runs the ring
+ * laws, exact gate algebra, the 7-T Toffoli decomposition, Grover's exactly-1
+ * single iteration, Deutsch-Jozsa decided with certainty over enumerated
+ * oracle families, the Born cross-oracle against the pyrgos tower (two
+ * independent engines, one truth), the QFT Loschmidt echo to the integer
+ * genesis, teleportation's identity on ALL FOUR branches with UNNORMALIZED
+ * inputs (the stronger, linear claim), the BELL/CHSH violation (the local
+ * bound 2 and the quantum 2*sqrt2 BOTH emerged by complete enumeration, the
+ * strict gap decided by the exact sign oracle, separable state as teeth), and
+ * the BORN rule SELECTED by basis-invariance (Parseval exact; the non-Born
+ * |amp|^4 rule refuted as basis-dependent).  NO gate.
+ * NIH: composes aether/pyrgos for the cross-oracle only.  Ring R-1. */
+module aether_kyma
+
+extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_rat(r: u64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_el_from_i64(v: i64, hgt: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sqrt(e: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_sign(a: u64) -> i64 from "pyrgos.iii"
+
+const KY_QMAX : u64 = 6u64               /* qubits                              */
+const KY_AMAX : u64 = 64u64              /* amplitudes                          */
+const KY_CMAX : i64 = 1152921504606846976i64      /* 2^60 coordinate wall       */
+const KY_MMAX : i64 = 1073741824i64      /* 2^30 multiplication input wall      */
+
+var KY_N : u64 = 0u64                    /* live qubit count                    */
+var KY_K : u64 = 0u64                    /* global exponent: state / sqrt2^K    */
+var KY_C0 : [i64; 64]                    /* coordinate plane zeta^0             */
+var KY_C1 : [i64; 64]                    /* coordinate plane zeta^1             */
+var KY_C2 : [i64; 64]                    /* coordinate plane zeta^2             */
+var KY_C3 : [i64; 64]                    /* coordinate plane zeta^3             */
+var KY_ERR : u64 = 0u64                  /* 1 overflow, 2 depth, 3 realness     */
+
+/* ring-multiply cells (multi-out through module cells, the house pattern) */
+var KY_MA0 : i64 = 0i64   var KY_MA1 : i64 = 0i64
+var KY_MA2 : i64 = 0i64   var KY_MA3 : i64 = 0i64
+var KY_MB0 : i64 = 0i64   var KY_MB1 : i64 = 0i64
+var KY_MB2 : i64 = 0i64   var KY_MB3 : i64 = 0i64
+var KY_MC0 : i64 = 0i64   var KY_MC1 : i64 = 0i64
+var KY_MC2 : i64 = 0i64   var KY_MC3 : i64 = 0i64
+
+/* Born-rule cells */
+var KY_PA : i64 = 0i64                   /* probability numerator: rational part */
+var KY_PB : i64 = 0i64                   /* probability numerator: sqrt2 part    */
+
+fn ky_err() -> u64 @export { return KY_ERR }
+fn ky_n() -> u64 @export { return KY_N }
+fn ky_k() -> u64 @export { return KY_K }
+fn ky_c(idx: u64, plane: u64) -> i64 @export {
+    if idx >= KY_AMAX { return 0i64 }
+    if plane == 0u64 { let v : i64 = KY_C0[idx]   return v }
+    if plane == 1u64 { let v : i64 = KY_C1[idx]   return v }
+    if plane == 2u64 { let v : i64 = KY_C2[idx]   return v }
+    let v : i64 = KY_C3[idx]
+    return v
+}
+
+/* the coordinate wall: every write passes through the guard */
+fn ky_gd(v: i64) -> i64 {
+    if v > KY_CMAX { KY_ERR = 1u64 }
+    if v < (0i64 - KY_CMAX) { KY_ERR = 1u64 }
+    return v
+}
+
+fn ky_reset(n: u64) -> i32 @export {
+    if n > KY_QMAX { KY_ERR = 2u64   return -1i32 }
+    KY_N = n
+    KY_K = 0u64
+    KY_ERR = 0u64
+    let mut i : u64 = 0u64
+    while i < KY_AMAX {
+        KY_C0[i] = 0i64   KY_C1[i] = 0i64   KY_C2[i] = 0i64   KY_C3[i] = 0i64
+        i = i + 1u64
+    }
+    KY_C0[0u64] = 1i64
+    return 0i32
+}
+/* raw amplitude install (exact ring coordinates; the caller owns meaning) */
+fn ky_set(idx: u64, c0: i64, c1: i64, c2: i64, c3: i64) -> i32 @export {
+    if idx >= (1u64 << KY_N) { KY_ERR = 2u64   return -1i32 }
+    KY_C0[idx] = ky_gd(c0)   KY_C1[idx] = ky_gd(c1)
+    KY_C2[idx] = ky_gd(c2)   KY_C3[idx] = ky_gd(c3)
+    return 0i32
+}
+
+/* ==================== the ring ==================== */
+/* negacyclic multiply: (sum a_i z^i)(sum b_j z^j) mod z^4 = -1 */
+fn ky_mul_cells() -> i32 {
+    let a0 : i64 = KY_MA0   let a1 : i64 = KY_MA1
+    let a2 : i64 = KY_MA2   let a3 : i64 = KY_MA3
+    let b0 : i64 = KY_MB0   let b1 : i64 = KY_MB1
+    let b2 : i64 = KY_MB2   let b3 : i64 = KY_MB3
+    if a0 > KY_MMAX { KY_ERR = 1u64 }   if a0 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if a1 > KY_MMAX { KY_ERR = 1u64 }   if a1 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if a2 > KY_MMAX { KY_ERR = 1u64 }   if a2 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if a3 > KY_MMAX { KY_ERR = 1u64 }   if a3 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if b0 > KY_MMAX { KY_ERR = 1u64 }   if b0 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if b1 > KY_MMAX { KY_ERR = 1u64 }   if b1 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if b2 > KY_MMAX { KY_ERR = 1u64 }   if b2 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    if b3 > KY_MMAX { KY_ERR = 1u64 }   if b3 < (0i64 - KY_MMAX) { KY_ERR = 1u64 }
+    KY_MC0 = ((a0 * b0) - (a1 * b3)) - ((a2 * b2) + (a3 * b1))
+    KY_MC1 = ((a0 * b1) + (a1 * b0)) - ((a2 * b3) + (a3 * b2))
+    KY_MC2 = ((a0 * b2) + (a1 * b1)) + ((a2 * b0) - (a3 * b3))
+    KY_MC3 = ((a0 * b3) + (a1 * b2)) + ((a2 * b1) + (a3 * b0))
+    return 0i32
+}
+
+/* ==================== the gates ==================== */
+/* H(q): every amplitude is in exactly one (x, x|bit) pair; the pair becomes
+ * (u+v, u-v) and the global K rises by one -- the /sqrt2 of Hadamard. */
+fn ky_h(q: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if q >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if KY_K > 120u64 { KY_ERR = 2u64   return -1i32 }
+    let bit : u64 = 1u64 << q
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & bit) == 0u64 {
+            let y : u64 = x | bit
+            let u0 : i64 = KY_C0[x]   let v0 : i64 = KY_C0[y]
+            let u1 : i64 = KY_C1[x]   let v1 : i64 = KY_C1[y]
+            let u2 : i64 = KY_C2[x]   let v2 : i64 = KY_C2[y]
+            let u3 : i64 = KY_C3[x]   let v3 : i64 = KY_C3[y]
+            KY_C0[x] = ky_gd(u0 + v0)   KY_C0[y] = ky_gd(u0 - v0)
+            KY_C1[x] = ky_gd(u1 + v1)   KY_C1[y] = ky_gd(u1 - v1)
+            KY_C2[x] = ky_gd(u2 + v2)   KY_C2[y] = ky_gd(u2 - v2)
+            KY_C3[x] = ky_gd(u3 + v3)   KY_C3[y] = ky_gd(u3 - v3)
+        }
+        x = x + 1u64
+    }
+    KY_K = KY_K + 1u64
+    ky_shrink()
+    return 0i32
+}
+/* strip a common sqrt2: v/sqrt2 = v*(z - z^3)/2, legal when every transformed
+ * coordinate is even.  Keeps K minimal and the coordinates small. */
+fn ky_shrink() -> i32 @export {
+    let n : u64 = 1u64 << KY_N
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if KY_K == 0u64 { going = 0u8 } else {
+            /* v*(z-z^3) = (a1-a3, a0+a2, a1+a3, a2-a0) -- all must be even */
+            let mut ok : u8 = 1u8
+            let mut x : u64 = 0u64
+            while x < n {
+                let a0 : i64 = KY_C0[x]   let a1 : i64 = KY_C1[x]
+                let a2 : i64 = KY_C2[x]   let a3 : i64 = KY_C3[x]
+                if (((a1 - a3) % 2i64) + 2i64) % 2i64 != 0i64 { ok = 0u8 }
+                if (((a0 + a2) % 2i64) + 2i64) % 2i64 != 0i64 { ok = 0u8 }
+                x = x + 1u64
+            }
+            if ok == 0u8 { going = 0u8 } else {
+                x = 0u64
+                while x < n {
+                    let a0 : i64 = KY_C0[x]   let a1 : i64 = KY_C1[x]
+                    let a2 : i64 = KY_C2[x]   let a3 : i64 = KY_C3[x]
+                    KY_C0[x] = (a1 - a3) / 2i64
+                    KY_C1[x] = (a0 + a2) / 2i64
+                    KY_C2[x] = (a1 + a3) / 2i64
+                    KY_C3[x] = (a2 - a0) / 2i64
+                    x = x + 1u64
+                }
+                KY_K = KY_K - 1u64
+            }
+        }
+    }
+    return 0i32
+}
+fn ky_x(q: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if q >= KY_N { KY_ERR = 2u64   return -1i32 }
+    let bit : u64 = 1u64 << q
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & bit) == 0u64 {
+            let y : u64 = x | bit
+            let t0 : i64 = KY_C0[x]   KY_C0[x] = KY_C0[y]   KY_C0[y] = t0
+            let t1 : i64 = KY_C1[x]   KY_C1[x] = KY_C1[y]   KY_C1[y] = t1
+            let t2 : i64 = KY_C2[x]   KY_C2[x] = KY_C2[y]   KY_C2[y] = t2
+            let t3 : i64 = KY_C3[x]   KY_C3[x] = KY_C3[y]   KY_C3[y] = t3
+        }
+        x = x + 1u64
+    }
+    return 0i32
+}
+fn ky_cx(c: u64, t: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if c >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if t >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if c == t { KY_ERR = 2u64   return -1i32 }
+    let cb : u64 = 1u64 << c
+    let tb : u64 = 1u64 << t
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & cb) != 0u64 {
+            if (x & tb) == 0u64 {
+                let y : u64 = x | tb
+                let t0 : i64 = KY_C0[x]   KY_C0[x] = KY_C0[y]   KY_C0[y] = t0
+                let t1 : i64 = KY_C1[x]   KY_C1[x] = KY_C1[y]   KY_C1[y] = t1
+                let t2 : i64 = KY_C2[x]   KY_C2[x] = KY_C2[y]   KY_C2[y] = t2
+                let t3 : i64 = KY_C3[x]   KY_C3[x] = KY_C3[y]   KY_C3[y] = t3
+            }
+        }
+        x = x + 1u64
+    }
+    return 0i32
+}
+fn ky_ccx(c1: u64, c2: u64, t: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if c1 >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if c2 >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if t >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if c1 == c2 { KY_ERR = 2u64   return -1i32 }
+    if c1 == t { KY_ERR = 2u64   return -1i32 }
+    if c2 == t { KY_ERR = 2u64   return -1i32 }
+    let b1 : u64 = 1u64 << c1
+    let b2 : u64 = 1u64 << c2
+    let tb : u64 = 1u64 << t
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & b1) != 0u64 { if (x & b2) != 0u64 {
+            if (x & tb) == 0u64 {
+                let y : u64 = x | tb
+                let t0 : i64 = KY_C0[x]   KY_C0[x] = KY_C0[y]   KY_C0[y] = t0
+                let t1 : i64 = KY_C1[x]   KY_C1[x] = KY_C1[y]   KY_C1[y] = t1
+                let t2 : i64 = KY_C2[x]   KY_C2[x] = KY_C2[y]   KY_C2[y] = t2
+                let t3 : i64 = KY_C3[x]   KY_C3[x] = KY_C3[y]   KY_C3[y] = t3
+            }
+        } }
+        x = x + 1u64
+    }
+    return 0i32
+}
+/* multiply one amplitude by zeta^m in place (m reduced mod 8) */
+fn ky_rot(idx: u64, m: u64) -> i32 {
+    let mm : u64 = m % 8u64
+    let mut r : u64 = 0u64
+    while r < mm {
+        let a0 : i64 = KY_C0[idx]   let a1 : i64 = KY_C1[idx]
+        let a2 : i64 = KY_C2[idx]   let a3 : i64 = KY_C3[idx]
+        KY_C0[idx] = 0i64 - a3
+        KY_C1[idx] = a0
+        KY_C2[idx] = a1
+        KY_C3[idx] = a2
+        r = r + 1u64
+    }
+    return 0i32
+}
+/* P(q, m): phase zeta^m on the q-set amplitudes (S=2, T=1, Z=4, daggers 8-m) */
+fn ky_p(q: u64, m: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if q >= KY_N { KY_ERR = 2u64   return -1i32 }
+    let bit : u64 = 1u64 << q
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & bit) != 0u64 { ky_rot(x, m) }
+        x = x + 1u64
+    }
+    return 0i32
+}
+/* controlled phase: zeta^m where BOTH bits are set (CZ=4, CS=2, CT=1) */
+fn ky_cp(c: u64, t: u64, m: u64) -> i32 @export {
+    if KY_ERR != 0u64 { return -1i32 }
+    if c >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if t >= KY_N { KY_ERR = 2u64   return -1i32 }
+    if c == t { KY_ERR = 2u64   return -1i32 }
+    let cb : u64 = 1u64 << c
+    let tb : u64 = 1u64 << t
+    let n : u64 = 1u64 << KY_N
+    let mut x : u64 = 0u64
+    while x < n {
+        if (x & cb) != 0u64 { if (x & tb) != 0u64 { ky_rot(x, m) } }
+        x = x + 1u64
+    }
+    return 0i32
+}
+fn ky_swap(a: u64, b: u64) -> i32 @export {
+    ky_cx(a, b)
+    ky_cx(b, a)
+    ky_cx(a, b)
+    return 0i32
+}
+
+/* ==================== the Born rule ==================== */
+/* |amp|^2 = amp * conj(amp); conj is (a0,-a3,-a2,-a1).  The product MUST land
+ * in the real subfield Z[sqrt2]: coords (A, B, 0, -B) = A + B sqrt2.  A bent
+ * shape is a COUNTED refusal (KY_ERR=3).  Probability = (A + B sqrt2)/2^K. */
+fn ky_prob(idx: u64) -> i32 @export {
+    let a0 : i64 = KY_C0[idx]   let a1 : i64 = KY_C1[idx]
+    let a2 : i64 = KY_C2[idx]   let a3 : i64 = KY_C3[idx]
+    KY_MA0 = a0   KY_MA1 = a1   KY_MA2 = a2   KY_MA3 = a3
+    KY_MB0 = a0   KY_MB1 = 0i64 - a3   KY_MB2 = 0i64 - a2   KY_MB3 = 0i64 - a1
+    ky_mul_cells()
+    if KY_MC2 != 0i64 { KY_ERR = 3u64 }
+    if KY_MC3 != (0i64 - KY_MC1) { KY_ERR = 3u64 }
+    KY_PA = KY_MC0
+    KY_PB = KY_MC1
+    return 0i32
+}
+fn ky_prob_a() -> i64 @export { return KY_PA }
+fn ky_prob_b() -> i64 @export { return KY_PB }
+/* unitarity, the INTEGER equation: sum A = 2^K and sum B = 0 -- exactly */
+fn ky_unit() -> u64 @export {
+    let n : u64 = 1u64 << KY_N
+    let mut sa : i64 = 0i64
+    let mut sb : i64 = 0i64
+    let mut x : u64 = 0u64
+    while x < n {
+        ky_prob(x)
+        sa = sa + KY_PA
+        sb = sb + KY_PB
+        x = x + 1u64
+    }
+    let mut want : i64 = 1i64
+    let mut k : u64 = 0u64
+    while k < KY_K { want = want * 2i64   k = k + 1u64 }
+    if sa != want { return 1u64 }
+    if sb != 0i64 { return 2u64 }
+    return 0u64
+}
+
+/* ==================== THE SELF-PROOF (arms 230..238) ==================== */
+fn ky_arm230() -> u64 {
+    /* THE RING LAWS, enumerated: zeta^4 = -1 and zeta^8 = 1 as coordinate
+     * rotations; sqrt2 = z - z^3 squares to 2; i = z^2 squares to -1; the
+     * conjugate-square realness shape holds on an enumerated coordinate box;
+     * shrink round-trips one sqrt2 exactly. */
+    ky_reset(1u64)
+    /* zeta^8 = 1 on a generic amplitude */
+    ky_set(0u64, 3i64, 0i64 - 2i64, 5i64, 7i64)
+    ky_rot(0u64, 8u64)
+    if KY_C0[0u64] != 3i64 { return 230u64 }
+    if KY_C1[0u64] != (0i64 - 2i64) { return 230u64 }
+    if KY_C2[0u64] != 5i64 { return 230u64 }
+    if KY_C3[0u64] != 7i64 { return 230u64 }
+    /* zeta^4 = -1 */
+    ky_rot(0u64, 4u64)
+    if KY_C0[0u64] != (0i64 - 3i64) { return 230u64 }
+    if KY_C1[0u64] != 2i64 { return 230u64 }
+    if KY_C2[0u64] != (0i64 - 5i64) { return 230u64 }
+    if KY_C3[0u64] != (0i64 - 7i64) { return 230u64 }
+    /* sqrt2^2 = 2:  (0,1,0,-1)^2 must be (2,0,0,0) */
+    KY_MA0 = 0i64   KY_MA1 = 1i64   KY_MA2 = 0i64   KY_MA3 = 0i64 - 1i64
+    KY_MB0 = 0i64   KY_MB1 = 1i64   KY_MB2 = 0i64   KY_MB3 = 0i64 - 1i64
+    ky_mul_cells()
+    if KY_MC0 != 2i64 { return 230u64 }
+    if KY_MC1 != 0i64 { return 230u64 }
+    if KY_MC2 != 0i64 { return 230u64 }
+    if KY_MC3 != 0i64 { return 230u64 }
+    /* i^2 = -1:  (0,0,1,0)^2 = (-1,0,0,0) */
+    KY_MA0 = 0i64   KY_MA1 = 0i64   KY_MA2 = 1i64   KY_MA3 = 0i64
+    KY_MB0 = 0i64   KY_MB1 = 0i64   KY_MB2 = 1i64   KY_MB3 = 0i64
+    ky_mul_cells()
+    if KY_MC0 != (0i64 - 1i64) { return 230u64 }
+    if KY_MC1 != 0i64 { return 230u64 }
+    if KY_MC2 != 0i64 { return 230u64 }
+    if KY_MC3 != 0i64 { return 230u64 }
+    /* realness of |v|^2 over the enumerated box [-2,2]^4 -- exhaustion in the
+     * loop, the law */
+    let mut a : i64 = 0i64 - 2i64
+    while a <= 2i64 {
+        let mut b : i64 = 0i64 - 2i64
+        while b <= 2i64 {
+            let mut c : i64 = 0i64 - 2i64
+            while c <= 2i64 {
+                let mut d : i64 = 0i64 - 2i64
+                while d <= 2i64 {
+                    ky_set(0u64, a, b, c, d)
+                    ky_prob(0u64)
+                    if KY_ERR != 0u64 { return 230u64 }
+                    /* |v|^2 >= 0: A + B sqrt2 >= 0 exactly: A>=0 and
+                     * A^2 >= 2 B^2 when B<0, or A>=... use the two-case law */
+                    let A : i64 = KY_PA
+                    let B : i64 = KY_PB
+                    if A < 0i64 { return 230u64 }
+                    if B < 0i64 {
+                        if (A * A) < (2i64 * (B * B)) { return 230u64 }
+                    }
+                    d = d + 1i64
+                }
+                c = c + 1i64
+            }
+            b = b + 1i64
+        }
+        a = a + 1i64
+    }
+    /* shrink round-trip: multiply the state by sqrt2 via H H (which is
+     * identity) must leave K at 0 -- covered in arm 231; here: manual x2 then
+     * shrink twice returns the SAME coordinates with K unchanged */
+    ky_reset(1u64)
+    ky_set(0u64, 1i64, 0i64, 0i64, 0i64)
+    ky_set(1u64, 0i64, 0i64, 1i64, 0i64)
+    KY_K = 2u64
+    let mut x : u64 = 0u64
+    while x < 2u64 {
+        KY_C0[x] = KY_C0[x] * 2i64
+        KY_C1[x] = KY_C1[x] * 2i64
+        KY_C2[x] = KY_C2[x] * 2i64
+        KY_C3[x] = KY_C3[x] * 2i64
+        x = x + 1u64
+    }
+    ky_shrink()
+    if KY_K != 0u64 { return 230u64 }
+    if KY_C0[0u64] != 1i64 { return 230u64 }
+    if KY_C2[1u64] != 1i64 { return 230u64 }
+    if KY_ERR != 0u64 { return 230u64 }
+    return 0u64
+}
+fn ky_arm231() -> u64 {
+    /* THE GATES ARE EXACT INVOLUTIONS/CYCLES: H^2 = I, X^2 = I, CX^2 = I,
+     * CCX^2 = I, T^8 = I, S^4 = I -- on EVERY basis state of 3 qubits; and
+     * unitarity holds as the integer equation after every single gate. */
+    let mut s : u64 = 0u64
+    while s < 8u64 {
+        ky_reset(3u64)
+        KY_C0[0u64] = 0i64
+        KY_C0[s] = 1i64
+        /* H^2 on each qubit */
+        let mut q : u64 = 0u64
+        while q < 3u64 {
+            ky_h(q)
+            if ky_unit() != 0u64 { return 231u64 }
+            ky_h(q)
+            if ky_unit() != 0u64 { return 231u64 }
+            if KY_K != 0u64 { return 231u64 }
+            if KY_C0[s] != 1i64 { return 231u64 }
+            q = q + 1u64
+        }
+        /* X^2, T^8, S^4 */
+        q = 0u64
+        while q < 3u64 {
+            ky_x(q)   ky_x(q)
+            if KY_C0[s] != 1i64 { return 231u64 }
+            let mut r : u64 = 0u64
+            while r < 8u64 { ky_p(q, 1u64)   r = r + 1u64 }
+            if KY_C0[s] != 1i64 { return 231u64 }
+            ky_p(q, 2u64)   ky_p(q, 2u64)   ky_p(q, 2u64)   ky_p(q, 2u64)
+            if KY_C0[s] != 1i64 { return 231u64 }
+            q = q + 1u64
+        }
+        /* CX^2 and CCX^2 */
+        ky_cx(0u64, 1u64)   ky_cx(0u64, 1u64)
+        if KY_C0[s] != 1i64 { return 231u64 }
+        ky_ccx(0u64, 1u64, 2u64)   ky_ccx(0u64, 1u64, 2u64)
+        if KY_C0[s] != 1i64 { return 231u64 }
+        if ky_unit() != 0u64 { return 231u64 }
+        s = s + 1u64
+    }
+    if KY_ERR != 0u64 { return 231u64 }
+    return 0u64
+}
+fn ky_arm232() -> u64 {
+    /* THE CLIFFORD ALGEBRA SPEAKS: HZH = X and HXH = Z as exact state maps on
+     * every 1-qubit basis state embedded in 2 qubits; and the phase kickback
+     * identity CX . (I x H)|x,0> lands the Bell coordinates exactly. */
+    let mut s : u64 = 0u64
+    while s < 2u64 {
+        /* HZH = X on qubit 0 */
+        ky_reset(1u64)
+        KY_C0[0u64] = 0i64
+        KY_C0[s] = 1i64
+        ky_h(0u64)   ky_p(0u64, 4u64)   ky_h(0u64)
+        let want : u64 = 1u64 - s
+        if KY_K != 0u64 { return 232u64 }
+        if KY_C0[want] != 1i64 { return 232u64 }
+        if KY_C0[s] != 0i64 { if s != want { return 232u64 } }
+        /* HXH = Z */
+        ky_reset(1u64)
+        KY_C0[0u64] = 0i64
+        KY_C0[s] = 1i64
+        ky_h(0u64)   ky_x(0u64)   ky_h(0u64)
+        if KY_K != 0u64 { return 232u64 }
+        let mut sgn : i64 = 1i64
+        if s == 1u64 { sgn = 0i64 - 1i64 }
+        if KY_C0[s] != sgn { return 232u64 }
+        s = s + 1u64
+    }
+    /* the Bell pair: H(0); CX(0,1) on |00> = (|00> + |11>)/sqrt2 exactly */
+    ky_reset(2u64)
+    ky_h(0u64)
+    ky_cx(0u64, 1u64)
+    if KY_K != 1u64 { return 232u64 }
+    if KY_C0[0u64] != 1i64 { return 232u64 }
+    if KY_C0[3u64] != 1i64 { return 232u64 }
+    if KY_C0[1u64] != 0i64 { return 232u64 }
+    if KY_C0[2u64] != 0i64 { return 232u64 }
+    if ky_unit() != 0u64 { return 232u64 }
+    if KY_ERR != 0u64 { return 232u64 }
+    return 0u64
+}
+/* the 7-T Toffoli word (Nielsen-Chuang): controls c1,c2, target t */
+fn ky_toffoli7(c1: u64, c2: u64, t: u64) -> i32 @export {
+    ky_h(t)
+    ky_cx(c2, t)
+    ky_p(t, 7u64)
+    ky_cx(c1, t)
+    ky_p(t, 1u64)
+    ky_cx(c2, t)
+    ky_p(t, 7u64)
+    ky_cx(c1, t)
+    ky_p(c2, 1u64)
+    ky_p(t, 1u64)
+    ky_h(t)
+    ky_cx(c1, c2)
+    ky_p(c1, 1u64)
+    ky_p(c2, 7u64)
+    ky_cx(c1, c2)
+    return 0i32
+}
+fn ky_arm233() -> u64 {
+    /* THE 7-T TOFFOLI, PROVEN: the decomposition equals CCX on ALL 8 basis
+     * states -- every coordinate of every amplitude, K included, no residual
+     * phase anywhere.  This is the famous T-count-7 identity as an exact
+     * integer theorem. */
+    let mut s : u64 = 0u64
+    while s < 8u64 {
+        ky_reset(3u64)
+        KY_C0[0u64] = 0i64
+        KY_C0[s] = 1i64
+        ky_toffoli7(0u64, 1u64, 2u64)
+        if KY_ERR != 0u64 { return 233u64 }
+        if KY_K != 0u64 { return 233u64 }
+        /* expected: CCX basis permutation */
+        let mut want : u64 = s
+        if (s & 3u64) == 3u64 { want = s ^ 4u64 }
+        let mut x : u64 = 0u64
+        while x < 8u64 {
+            let mut w0 : i64 = 0i64
+            if x == want { w0 = 1i64 }
+            if KY_C0[x] != w0 { return 233u64 }
+            if KY_C1[x] != 0i64 { return 233u64 }
+            if KY_C2[x] != 0i64 { return 233u64 }
+            if KY_C3[x] != 0i64 { return 233u64 }
+            x = x + 1u64
+        }
+        s = s + 1u64
+    }
+    return 0u64
+}
+fn ky_arm234() -> u64 {
+    /* GROVER AT THE EXACT OPTIMUM: N=4, one marked item, ONE iteration lands
+     * the marked basis state with probability EXACTLY 1 -- for EVERY choice
+     * of the marked item.  The oracle and diffusion are exact gate words. */
+    let mut mk : u64 = 0u64
+    while mk < 4u64 {
+        ky_reset(2u64)
+        ky_h(0u64)   ky_h(1u64)
+        /* oracle: flip the sign of |mk> -- CZ conjugated by X on zero bits */
+        if (mk & 1u64) == 0u64 { ky_x(0u64) }
+        if (mk & 2u64) == 0u64 { ky_x(1u64) }
+        ky_cp(0u64, 1u64, 4u64)
+        if (mk & 1u64) == 0u64 { ky_x(0u64) }
+        if (mk & 2u64) == 0u64 { ky_x(1u64) }
+        /* diffusion: H H X X CZ X X H H */
+        ky_h(0u64)   ky_h(1u64)
+        ky_x(0u64)   ky_x(1u64)
+        ky_cp(0u64, 1u64, 4u64)
+        ky_x(0u64)   ky_x(1u64)
+        ky_h(0u64)   ky_h(1u64)
+        if KY_ERR != 0u64 { return 234u64 }
+        /* the marked probability is EXACTLY 1, every other EXACTLY 0 */
+        if ky_unit() != 0u64 { return 234u64 }
+        let mut want : i64 = 1i64
+        let mut k : u64 = 0u64
+        while k < KY_K { want = want * 2i64   k = k + 1u64 }
+        let mut x : u64 = 0u64
+        while x < 4u64 {
+            ky_prob(x)
+            if x == mk {
+                if KY_PA != want { return 234u64 }
+                if KY_PB != 0i64 { return 234u64 }
+            } else {
+                if KY_PA != 0i64 { return 234u64 }
+                if KY_PB != 0i64 { return 234u64 }
+            }
+            x = x + 1u64
+        }
+        mk = mk + 1u64
+    }
+    return 0u64
+}
+fn ky_arm235() -> u64 {
+    /* DEUTSCH-JOZSA, THE PROMISE DECIDED WITH CERTAINTY: n=3 phase oracles.
+     * Both constant oracles land |000> with probability EXACTLY 1; all seven
+     * parity-balanced oracles AND a non-linear balanced oracle land |000>
+     * with probability EXACTLY 0.  No sampling, no confidence -- a theorem
+     * per oracle, enumerated. */
+    let mut f : u64 = 0u64
+    while f < 10u64 {
+        ky_reset(3u64)
+        ky_h(0u64)   ky_h(1u64)   ky_h(2u64)
+        /* the oracle: f<2 constant (0: nothing, 1: global sign); 2..8 parity
+         * s = f-1 (1..7); 9: the non-linear balanced (x0 & x1) ^ x2 */
+        let mut x : u64 = 0u64
+        while x < 8u64 {
+            let mut flip : u64 = 0u64
+            if f == 1u64 { flip = 1u64 }
+            if f >= 2u64 { if f <= 8u64 {
+                let s : u64 = f - 1u64
+                let mut pc : u64 = (x & s)
+                pc = (pc & 1u64) ^ ((pc >> 1u64) & 1u64) ^ ((pc >> 2u64) & 1u64)
+                flip = pc
+            } }
+            if f == 9u64 {
+                flip = ((x & 1u64) & ((x >> 1u64) & 1u64)) ^ ((x >> 2u64) & 1u64)
+            }
+            if flip == 1u64 {
+                KY_C0[x] = 0i64 - KY_C0[x]
+                KY_C1[x] = 0i64 - KY_C1[x]
+                KY_C2[x] = 0i64 - KY_C2[x]
+                KY_C3[x] = 0i64 - KY_C3[x]
+            }
+            x = x + 1u64
+        }
+        ky_h(0u64)   ky_h(1u64)   ky_h(2u64)
+        if KY_ERR != 0u64 { return 235u64 }
+        if ky_unit() != 0u64 { return 235u64 }
+        let mut want : i64 = 1i64
+        let mut k : u64 = 0u64
+        while k < KY_K { want = want * 2i64   k = k + 1u64 }
+        ky_prob(0u64)
+        if f < 2u64 {
+            if KY_PA != want { return 235u64 }
+            if KY_PB != 0i64 { return 235u64 }
+        } else {
+            if KY_PA != 0i64 { return 235u64 }
+            if KY_PB != 0i64 { return 235u64 }
+        }
+        f = f + 1u64
+    }
+    return 0u64
+}
+fn ky_arm236() -> u64 {
+    /* THE BORN CROSS-ORACLE: kyma's integer-pair probabilities against the
+     * pyrgos constructible tower -- two independent exact engines, one truth.
+     * State: T . H |0> on one qubit; P(0) = 1/2 both ways, and the ORDER of
+     * P(0) vs P(1) agrees, and both sum to exactly 1. */
+    py_reset()
+    ky_reset(1u64)
+    ky_h(0u64)
+    ky_p(0u64, 1u64)
+    if ky_unit() != 0u64 { return 236u64 }
+    ky_prob(0u64)
+    let a0 : i64 = KY_PA
+    let b0 : i64 = KY_PB
+    ky_prob(1u64)
+    let a1 : i64 = KY_PA
+    let b1 : i64 = KY_PB
+    let mut den : i64 = 1i64
+    let mut k : u64 = 0u64
+    while k < KY_K { den = den * 2i64   k = k + 1u64 }
+    /* pyrgos: p = (A + B sqrt2)/2^K as a tower element */
+    let s2 : u64 = py_sqrt(py_el_from_i64(2i64, 0u64))
+    let p0 : u64 = py_add(py_el_from_rat(py_rat_frac(a0, den), 1u64), py_mul(py_el_from_rat(py_rat_frac(b0, den), 1u64), s2))
+    let p1 : u64 = py_add(py_el_from_rat(py_rat_frac(a1, den), 1u64), py_mul(py_el_from_rat(py_rat_frac(b1, den), 1u64), s2))
+    let one : u64 = py_el_from_i64(1i64, 1u64)
+    if py_cmp(py_add(p0, p1), one) != 0i64 { return 236u64 }
+    if py_sign(p0) != 1i64 { return 236u64 }
+    if py_sign(p1) != 1i64 { return 236u64 }
+    /* the halves: both engines say P(0) = P(1) = 1/2 exactly */
+    if py_cmp(p0, py_el_from_rat(py_rat_frac(1i64, 2i64), 1u64)) != 0i64 { return 236u64 }
+    if py_cmp(p1, py_el_from_rat(py_rat_frac(1i64, 2i64), 1u64)) != 0i64 { return 236u64 }
+    /* and a biased state: T H then H again -- P(0) = (2+sqrt2)/4 EXACTLY in
+     * both engines (the kyma pair vs the tower element) */
+    ky_reset(1u64)
+    ky_h(0u64)
+    ky_p(0u64, 1u64)
+    ky_h(0u64)
+    if ky_unit() != 0u64 { return 236u64 }
+    ky_prob(0u64)
+    let ba : i64 = KY_PA
+    let bb : i64 = KY_PB
+    let mut bden : i64 = 1i64
+    k = 0u64
+    while k < KY_K { bden = bden * 2i64   k = k + 1u64 }
+    let pb : u64 = py_add(py_el_from_rat(py_rat_frac(ba, bden), 1u64), py_mul(py_el_from_rat(py_rat_frac(bb, bden), 1u64), s2))
+    let tgt : u64 = py_add(py_el_from_rat(py_rat_frac(1i64, 2i64), 1u64), py_mul(py_el_from_rat(py_rat_frac(1i64, 4i64), 1u64), s2))
+    if py_cmp(pb, tgt) != 0i64 { return 236u64 }
+    if py_err() != 0u64 { return 236u64 }
+    return 0u64
+}
+fn ky_arm237() -> u64 {
+    /* THE LOSCHMIDT ECHO IN HILBERT SPACE: a 3-qubit preamble word W, the
+     * exact QFT, its exact inverse, then W^-1 -- the state returns to the
+     * INTEGER GENESIS: coordinates (1,0,0,0) at K=0, every other amplitude
+     * exactly zero.  A float engine returns NEAR |000>; kyma returns |000>.
+     * Mid-flight the state is checked to be genuinely away from the genesis
+     * (no tautology). */
+    ky_reset(3u64)
+    /* W: an irreversible-looking Clifford+T word */
+    ky_h(0u64)
+    ky_p(0u64, 1u64)
+    ky_cx(0u64, 1u64)
+    ky_h(2u64)
+    ky_p(2u64, 7u64)
+    ky_cx(2u64, 0u64)
+    ky_p(1u64, 2u64)
+    ky_h(1u64)
+    /* the QFT on 3 qubits (bit 2 = MSB), swaps included */
+    ky_h(2u64)
+    ky_cp(1u64, 2u64, 2u64)
+    ky_cp(0u64, 2u64, 1u64)
+    ky_h(1u64)
+    ky_cp(0u64, 1u64, 2u64)
+    ky_h(0u64)
+    ky_swap(0u64, 2u64)
+    /* non-triviality: at least one amplitude away from the genesis shape */
+    let mut moved : u64 = 0u64
+    if KY_K != 0u64 { moved = 1u64 }
+    if KY_C0[0u64] != 1i64 { moved = 1u64 }
+    let mut x : u64 = 1u64
+    while x < 8u64 {
+        if KY_C0[x] != 0i64 { moved = 1u64 }
+        if KY_C1[x] != 0i64 { moved = 1u64 }
+        if KY_C2[x] != 0i64 { moved = 1u64 }
+        if KY_C3[x] != 0i64 { moved = 1u64 }
+        x = x + 1u64
+    }
+    if moved == 0u64 { return 237u64 }
+    /* the inverse QFT: reversed word, conjugated phases */
+    ky_swap(0u64, 2u64)
+    ky_h(0u64)
+    ky_cp(0u64, 1u64, 6u64)
+    ky_h(1u64)
+    ky_cp(0u64, 2u64, 7u64)
+    ky_cp(1u64, 2u64, 6u64)
+    ky_h(2u64)
+    /* W^-1: reversed word, inverted gates */
+    ky_h(1u64)
+    ky_p(1u64, 6u64)
+    ky_cx(2u64, 0u64)
+    ky_p(2u64, 1u64)
+    ky_h(2u64)
+    ky_cx(0u64, 1u64)
+    ky_p(0u64, 7u64)
+    ky_h(0u64)
+    if KY_ERR != 0u64 { return 237u64 }
+    /* THE EXACT RETURN */
+    if KY_K != 0u64 { return 237u64 }
+    if KY_C0[0u64] != 1i64 { return 237u64 }
+    if KY_C1[0u64] != 0i64 { return 237u64 }
+    if KY_C2[0u64] != 0i64 { return 237u64 }
+    if KY_C3[0u64] != 0i64 { return 237u64 }
+    x = 1u64
+    while x < 8u64 {
+        if KY_C0[x] != 0i64 { return 237u64 }
+        if KY_C1[x] != 0i64 { return 237u64 }
+        if KY_C2[x] != 0i64 { return 237u64 }
+        if KY_C3[x] != 0i64 { return 237u64 }
+        x = x + 1u64
+    }
+    return 0u64
+}
+fn ky_arm238() -> u64 {
+    /* TELEPORTATION, ALL FOUR BRANCHES, UNNORMALIZED: the message qubit
+     * carries an arbitrary exact ring pair (alpha, beta) -- teleportation is
+     * LINEAR, so the identity must hold coordinate-exactly with NO
+     * normalization.  After Bell prep + entangle + basis change, EVERY
+     * measurement branch (m0,m1), once its correction word X^m1 Z^m0 is
+     * applied, holds EXACTLY (alpha, beta) scaled by the branch weight 1/2.
+     * III holds all branches at once -- the cassandra way. */
+    /* alpha = 1 + 2z - z^3, beta = 3 + z^2 + z^3: generic ring elements */
+    ky_reset(3u64)
+    KY_C0[0u64] = 1i64   KY_C1[0u64] = 2i64   KY_C2[0u64] = 0i64   KY_C3[0u64] = 0i64 - 1i64
+    KY_C0[1u64] = 3i64   KY_C1[1u64] = 0i64   KY_C2[1u64] = 1i64   KY_C3[1u64] = 1i64
+    /* Bell pair on qubits 1,2 */
+    ky_h(1u64)
+    ky_cx(1u64, 2u64)
+    /* entangle the message: CX(0,1); H(0) */
+    ky_cx(0u64, 1u64)
+    ky_h(0u64)
+    if KY_ERR != 0u64 { return 238u64 }
+    if KY_K != 2u64 { return 238u64 }
+    /* branches: bits (b0=m0, b1=m1); target amplitudes at b2 in {0,1} */
+    let mut m0 : u64 = 0u64
+    while m0 < 2u64 {
+        let mut m1 : u64 = 0u64
+        while m1 < 2u64 {
+            let base : u64 = m0 | (m1 << 1u64)
+            let i0 : u64 = base
+            let i1 : u64 = base | 4u64
+            /* extract the branch pair (u = target|0>, v = target|1>) */
+            let mut u0 : i64 = KY_C0[i0]   let mut u1 : i64 = KY_C1[i0]
+            let mut u2 : i64 = KY_C2[i0]   let mut u3 : i64 = KY_C3[i0]
+            let mut v0 : i64 = KY_C0[i1]   let mut v1 : i64 = KY_C1[i1]
+            let mut v2 : i64 = KY_C2[i1]   let mut v3 : i64 = KY_C3[i1]
+            /* correction X^m1: swap u,v */
+            if m1 == 1u64 {
+                let t0 : i64 = u0   u0 = v0   v0 = t0
+                let t1 : i64 = u1   u1 = v1   v1 = t1
+                let t2 : i64 = u2   u2 = v2   v2 = t2
+                let t3 : i64 = u3   u3 = v3   v3 = t3
+            }
+            /* correction Z^m0: negate v */
+            if m0 == 1u64 {
+                v0 = 0i64 - v0   v1 = 0i64 - v1
+                v2 = 0i64 - v2   v3 = 0i64 - v3
+            }
+            /* the branch must be EXACTLY (alpha, beta): at K=2 the branch
+             * weight is 1/2 = 2/sqrt2^2... the raw coordinates carry alpha
+             * and beta UNSCALED because H contributed (u+v) integer sums. */
+            if u0 != 1i64 { return 238u64 }
+            if u1 != 2i64 { return 238u64 }
+            if u2 != 0i64 { return 238u64 }
+            if u3 != (0i64 - 1i64) { return 238u64 }
+            if v0 != 3i64 { return 238u64 }
+            if v1 != 0i64 { return 238u64 }
+            if v2 != 1i64 { return 238u64 }
+            if v3 != 1i64 { return 238u64 }
+            m1 = m1 + 1u64
+        }
+        m0 = m0 + 1u64
+    }
+    if KY_ERR != 0u64 { return 238u64 }
+    return 0u64
+}
+/* ============================================================================================
+ * BELL / CHSH -- III derives the local-realistic bound AND its quantum violation, exactly.
+ * The local-hidden-variable bound EMERGES as the max over the COMPLETE deterministic-strategy
+ * space (16 strategies x 4 CHSH functionals); the quantum value EMERGES from the Pauli
+ * correlators kyma MEASURES on the entangled state, assembled with exact geometry over the
+ * COMPLETE angle grid {0,45,90,135}^4; pyrgos's exact constructible-sign oracle DECIDES the
+ * strict violation.  No value is named as the target -- both maxima are computed.  Two engines
+ * (kyma-ring Born + pyrgos-tower sign), one truth.
+ * SCOPE (the eidolon / no-overclaim law): this proves quantum statistics EXCEED the CHSH
+ * local-realistic bound (no local hidden-variable model reproduces the entangled correlations).
+ * The Tsirelson value 2*sqrt2 is EXHIBITED as achieved, not proven maximal over all quantum
+ * strategies (that upper bound is the cited Tsirelson SOS theorem, not claimed here). */
+var KB_CN   : [i64; 4]                   /* measured Pauli correlators (int): ZZ,ZX,XZ,XX */
+var KB_COSA : [i64; 4]                   /* cos(angle) rational part, /2 (0,45,90,135 deg)  */
+var KB_COSB : [i64; 4]                   /* cos(angle) sqrt2 part, /2                       */
+var KB_SINA : [i64; 4]                   /* sin(angle) rational part, /2                    */
+var KB_SINB : [i64; 4]                   /* sin(angle) sqrt2 part, /2                       */
+var KB_EA   : [i64; 16]                  /* E(i,j) rational part, /4                         */
+var KB_EB   : [i64; 16]                  /* E(i,j) sqrt2 part, /4                            */
+var KB_QA   : i64 = 0i64                 /* quantum max|S| rational part, /4                */
+var KB_QB   : i64 = 0i64                 /* quantum max|S| sqrt2 part, /4                   */
+
+/* exact sign of the constructible value A + B*sqrt2 (A,B integers), no float, no isolation */
+fn kb_z2_sign(A: i64, B: i64) -> i64 {
+    let a : i64 = A
+    let b : i64 = B
+    if a == 0i64 {
+        if b == 0i64 { return 0i64 }
+    }
+    let mut sa : i64 = 0i64
+    if a > 0i64 { sa = 1i64 }
+    if a < 0i64 { sa = 0i64 - 1i64 }
+    let mut sb : i64 = 0i64
+    if b > 0i64 { sb = 1i64 }
+    if b < 0i64 { sb = 0i64 - 1i64 }
+    if sa >= 0i64 {
+        if sb >= 0i64 { return 1i64 }
+    }
+    if sa <= 0i64 {
+        if sb <= 0i64 { return 0i64 - 1i64 }
+    }
+    let a2 : i64 = a * a
+    let tb2 : i64 = 2i64 * (b * b)
+    if a > 0i64 {
+        if a2 > tb2 { return 1i64 }
+        if a2 < tb2 { return 0i64 - 1i64 }
+        return 0i64
+    }
+    if tb2 > a2 { return 1i64 }
+    if tb2 < a2 { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* measure one Pauli correlator of a 2-qubit state via kyma's exact Born rule.  prep 0 = the
+ * entangled Phi+ (H0,CX01); prep 1 = the separable |00> (the negative control).  hmask bit q
+ * rotates qubit q by H (so a Z-basis measurement reads the X observable).  Returns the integer
+ * correlator E = sum_x (-1)^parity(x) P(x); a non-integer / complex value is a counted refusal. */
+fn kb_pauli_corr(prep: u64, hmask: u64) -> i64 {
+    ky_reset(2u64)
+    if prep == 0u64 {
+        ky_h(0u64)
+        ky_cx(0u64, 1u64)
+    }
+    if (hmask & 1u64) != 0u64 { ky_h(0u64) }
+    if (hmask & 2u64) != 0u64 { ky_h(1u64) }
+    if KY_ERR != 0u64 { return 0i64 }
+    let mut den : i64 = 1i64
+    let mut k : u64 = 0u64
+    while k < KY_K {
+        den = den * 2i64
+        k = k + 1u64
+    }
+    let mut num : i64 = 0i64
+    let mut sbsum : i64 = 0i64
+    let mut x : u64 = 0u64
+    while x < 4u64 {
+        ky_prob(x)
+        let par : u64 = (x & 1u64) ^ ((x >> 1u64) & 1u64)
+        let mut sgn : i64 = 1i64
+        if par == 1u64 { sgn = 0i64 - 1i64 }
+        num = num + (sgn * KY_PA)
+        sbsum = sbsum + (sgn * KY_PB)
+        x = x + 1u64
+    }
+    if sbsum != 0i64 { KY_ERR = 3u64   return 0i64 }
+    let q : i64 = num / den
+    if (q * den) != num { KY_ERR = 3u64   return 0i64 }
+    return q
+}
+
+/* the measurement geometry: cos/sin of {0,45,90,135} deg, each as (A + B*sqrt2)/2 */
+fn kb_geom_init() -> i32 {
+    KB_COSA[0u64] = 2i64   KB_COSB[0u64] = 0i64
+    KB_COSA[1u64] = 0i64   KB_COSB[1u64] = 1i64
+    KB_COSA[2u64] = 0i64   KB_COSB[2u64] = 0i64
+    KB_COSA[3u64] = 0i64   KB_COSB[3u64] = 0i64 - 1i64
+    KB_SINA[0u64] = 0i64   KB_SINB[0u64] = 0i64
+    KB_SINA[1u64] = 0i64   KB_SINB[1u64] = 1i64
+    KB_SINA[2u64] = 2i64   KB_SINB[2u64] = 0i64
+    KB_SINA[3u64] = 0i64   KB_SINB[3u64] = 1i64
+    return 0i32
+}
+
+/* E(i,j) = <ZZ>cos_i cos_j + <ZX>cos_i sin_j + <XZ>sin_i cos_j + <XX>sin_i sin_j, assembled
+ * from the MEASURED correlators (KB_CN) and the exact geometry; stored /4 (KB_EA + KB_EB*sqrt2). */
+fn kb_build_E() -> i32 {
+    let czz : i64 = KB_CN[0u64]
+    let czx : i64 = KB_CN[1u64]
+    let cxz : i64 = KB_CN[2u64]
+    let cxx : i64 = KB_CN[3u64]
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let cai : i64 = KB_COSA[i]
+        let cbi : i64 = KB_COSB[i]
+        let sai : i64 = KB_SINA[i]
+        let sbi : i64 = KB_SINB[i]
+        let mut j : u64 = 0u64
+        while j < 4u64 {
+            let caj : i64 = KB_COSA[j]
+            let cbj : i64 = KB_COSB[j]
+            let saj : i64 = KB_SINA[j]
+            let sbj : i64 = KB_SINB[j]
+            let ccA : i64 = (cai * caj) + (2i64 * (cbi * cbj))
+            let ccB : i64 = (cai * cbj) + (cbi * caj)
+            let csA : i64 = (cai * saj) + (2i64 * (cbi * sbj))
+            let csB : i64 = (cai * sbj) + (cbi * saj)
+            let scA : i64 = (sai * caj) + (2i64 * (sbi * cbj))
+            let scB : i64 = (sai * cbj) + (sbi * caj)
+            let ssA : i64 = (sai * saj) + (2i64 * (sbi * sbj))
+            let ssB : i64 = (sai * sbj) + (sbi * saj)
+            let idx : u64 = (i * 4u64) + j
+            KB_EA[idx] = (czz * ccA) + (czx * csA) + (cxz * scA) + (cxx * ssA)
+            KB_EB[idx] = (czz * ccB) + (czx * csB) + (cxz * scB) + (cxx * ssB)
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* the quantum CHSH maximum over the COMPLETE grid of settings x CHSH functionals; the max
+ * |S| EMERGES from the search, stored as (KB_QA + KB_QB*sqrt2)/4. */
+fn kb_chsh_qmax() -> i32 {
+    let mut mA : i64 = 0i64
+    let mut mB : i64 = 0i64
+    let mut ia : u64 = 0u64
+    while ia < 4u64 {
+        let mut iap : u64 = 0u64
+        while iap < 4u64 {
+            let mut ib : u64 = 0u64
+            while ib < 4u64 {
+                let mut ibp : u64 = 0u64
+                while ibp < 4u64 {
+                    let e0A : i64 = KB_EA[(ia * 4u64) + ib]
+                    let e0B : i64 = KB_EB[(ia * 4u64) + ib]
+                    let e1A : i64 = KB_EA[(ia * 4u64) + ibp]
+                    let e1B : i64 = KB_EB[(ia * 4u64) + ibp]
+                    let e2A : i64 = KB_EA[(iap * 4u64) + ib]
+                    let e2B : i64 = KB_EB[(iap * 4u64) + ib]
+                    let e3A : i64 = KB_EA[(iap * 4u64) + ibp]
+                    let e3B : i64 = KB_EB[(iap * 4u64) + ibp]
+                    let mut v : u64 = 0u64
+                    while v < 4u64 {
+                        let mut g0 : i64 = 1i64
+                        if v == 0u64 { g0 = 0i64 - 1i64 }
+                        let mut g1 : i64 = 1i64
+                        if v == 1u64 { g1 = 0i64 - 1i64 }
+                        let mut g2 : i64 = 1i64
+                        if v == 2u64 { g2 = 0i64 - 1i64 }
+                        let mut g3 : i64 = 1i64
+                        if v == 3u64 { g3 = 0i64 - 1i64 }
+                        let sA : i64 = (g0 * e0A) + (g1 * e1A) + (g2 * e2A) + (g3 * e3A)
+                        let sB : i64 = (g0 * e0B) + (g1 * e1B) + (g2 * e2B) + (g3 * e3B)
+                        let sg : i64 = kb_z2_sign(sA, sB)
+                        let mut aA : i64 = sA
+                        let mut aB : i64 = sB
+                        if sg < 0i64 {
+                            aA = 0i64 - sA
+                            aB = 0i64 - sB
+                        }
+                        if kb_z2_sign(aA - mA, aB - mB) > 0i64 {
+                            mA = aA
+                            mB = aB
+                        }
+                        v = v + 1u64
+                    }
+                    ibp = ibp + 1u64
+                }
+                ib = ib + 1u64
+            }
+            iap = iap + 1u64
+        }
+        ia = ia + 1u64
+    }
+    KB_QA = mA
+    KB_QB = mB
+    return 0i32
+}
+
+/* the local-realistic CHSH bound: max |S| over 16 deterministic strategies x 4 CHSH functionals */
+fn kb_classical_max() -> i64 {
+    let mut cmax : i64 = 0i64
+    let mut s : u64 = 0u64
+    while s < 16u64 {
+        let mut a0 : i64 = 1i64
+        if (s & 1u64) != 0u64 { a0 = 0i64 - 1i64 }
+        let mut a1 : i64 = 1i64
+        if (s & 2u64) != 0u64 { a1 = 0i64 - 1i64 }
+        let mut b0 : i64 = 1i64
+        if (s & 4u64) != 0u64 { b0 = 0i64 - 1i64 }
+        let mut b1 : i64 = 1i64
+        if (s & 8u64) != 0u64 { b1 = 0i64 - 1i64 }
+        let mut v : u64 = 0u64
+        while v < 4u64 {
+            let mut g0 : i64 = 1i64
+            if v == 0u64 { g0 = 0i64 - 1i64 }
+            let mut g1 : i64 = 1i64
+            if v == 1u64 { g1 = 0i64 - 1i64 }
+            let mut g2 : i64 = 1i64
+            if v == 2u64 { g2 = 0i64 - 1i64 }
+            let mut g3 : i64 = 1i64
+            if v == 3u64 { g3 = 0i64 - 1i64 }
+            let sc : i64 = (g0 * (a0 * b0)) + (g1 * (a0 * b1)) + (g2 * (a1 * b0)) + (g3 * (a1 * b1))
+            let mut ab : i64 = sc
+            if sc < 0i64 { ab = 0i64 - sc }
+            if ab > cmax { cmax = ab }
+            v = v + 1u64
+        }
+        s = s + 1u64
+    }
+    return cmax
+}
+
+fn ky_arm239() -> u64 {
+    /* BELL / CHSH: local-realistic bound (emerged) vs the entangled state's measured quantum
+     * value (emerged), with the strict violation decided by pyrgos's exact sign oracle, and the
+     * separable state as the teeth (entanglement is necessary). */
+    py_reset()
+    let cmax : i64 = kb_classical_max()
+    if cmax != 2i64 { return 239u64 }                       /* the LHV bound, emerged */
+    /* measure the entangled Phi+ correlators (kyma's exact Born rule) */
+    KB_CN[0u64] = kb_pauli_corr(0u64, 0u64)                 /* <ZZ> */
+    KB_CN[1u64] = kb_pauli_corr(0u64, 2u64)                 /* <ZX> (H on Bob) */
+    KB_CN[2u64] = kb_pauli_corr(0u64, 1u64)                 /* <XZ> (H on Alice) */
+    KB_CN[3u64] = kb_pauli_corr(0u64, 3u64)                 /* <XX> */
+    if KY_ERR != 0u64 { return 239u64 }
+    if KB_CN[0u64] != 1i64 { return 239u64 }
+    if KB_CN[3u64] != 1i64 { return 239u64 }
+    if KB_CN[1u64] != 0i64 { return 239u64 }
+    if KB_CN[2u64] != 0i64 { return 239u64 }
+    kb_geom_init()
+    kb_build_E()
+    kb_chsh_qmax()
+    /* assemble the emerged quantum max in the constructible tower and DECIDE the violation */
+    let s2 : u64 = py_sqrt(py_el_from_i64(2i64, 0u64))
+    let qv : u64 = py_add(py_el_from_rat(py_rat_frac(KB_QA, 4i64), 1u64), py_mul(py_el_from_rat(py_rat_frac(KB_QB, 4i64), 1u64), s2))
+    let diff : u64 = py_add(qv, py_el_from_i64(0i64 - cmax, 1u64))
+    if py_sign(diff) != 1i64 { return 239u64 }              /* quantum_max - cmax > 0: VIOLATION */
+    let two_s2 : u64 = py_mul(py_el_from_i64(2i64, 1u64), s2)
+    if py_cmp(qv, two_s2) != 0i64 { return 239u64 }         /* the emerged value IS 2*sqrt2 */
+    /* TEETH: the SEPARABLE state |00> does NOT violate -- same machinery, product correlators */
+    KB_CN[0u64] = kb_pauli_corr(1u64, 0u64)
+    KB_CN[1u64] = kb_pauli_corr(1u64, 2u64)
+    KB_CN[2u64] = kb_pauli_corr(1u64, 1u64)
+    KB_CN[3u64] = kb_pauli_corr(1u64, 3u64)
+    if KY_ERR != 0u64 { return 239u64 }
+    kb_build_E()
+    kb_chsh_qmax()
+    let qsep : u64 = py_add(py_el_from_rat(py_rat_frac(KB_QA, 4i64), 1u64), py_mul(py_el_from_rat(py_rat_frac(KB_QB, 4i64), 1u64), s2))
+    let dsep : u64 = py_add(qsep, py_el_from_i64(0i64 - cmax, 1u64))
+    if py_sign(dsep) > 0i64 { return 239u64 }               /* separable: must NOT exceed cmax */
+    if py_err() != 0u64 { return 239u64 }
+    return 0u64
+}
+/* ============================================================================================
+ * GLEASON / BORN by BASIS-INVARIANCE -- III selects the Born rule, it is not assumed.
+ * A probability rule w = f(|amplitude|) must give the SAME total (=1) in every orthonormal
+ * basis (non-contextuality / Parseval).  III enumerates a set of exact Clifford bases and shows:
+ *   (i)  the BORN weight |amp|^2 sums to EXACTLY 1 in every (state, basis) pair -- invariant;
+ *   (ii) the non-Born rule |amp|^4 does NOT (it evaluates to 1 in one basis and 1/2 in another)
+ *        -- basis-DEPENDENT, hence not a valid probability, refuted by the exact tower.
+ * So basis-invariance SELECTS |amp|^2.  Every weight is kyma's exact Born pair lifted to the
+ * pyrgos tower and compared by the exact oracle -- no float, no assumed answer.
+ * SCOPE (the eidolon / no-overclaim law): this is the exact finite kernel -- Born invariance
+ * witnessed and enumerated non-Born alternatives refuted.  The full Gleason theorem (Born is the
+ * UNIQUE sigma-additive non-contextual measure in dim >= 3) is the cited continuum result. */
+var KB_GS1 : u64 = 0u64                  /* sum of |amp|^2 (Born) over a basis -- pyrgos handle */
+var KB_GS2 : u64 = 0u64                  /* sum of |amp|^4 (non-Born) over a basis -- pyrgos handle */
+
+/* fill KB_GS1 (sum Born), KB_GS2 (sum |amp|^4) for state in {|0>,|+>} measured in basis {comp,Hadamard} */
+fn kb_born_sums(state: u64, basis: u64) -> i32 {
+    ky_reset(1u64)
+    if state == 1u64 { ky_h(0u64) }                    /* |+> = H|0> */
+    if basis == 1u64 { ky_h(0u64) }                    /* basis change U^dagger = H */
+    if KY_ERR != 0u64 { return 0i32 - 1i32 }
+    let mut den : i64 = 1i64
+    let mut k : u64 = 0u64
+    while k < KY_K {
+        den = den * 2i64
+        k = k + 1u64
+    }
+    let s2r : u64 = py_sqrt(py_el_from_i64(2i64, 0u64))
+    let mut s1 : u64 = py_el_from_i64(0i64, 1u64)
+    let mut s2 : u64 = py_el_from_i64(0i64, 1u64)
+    let mut x : u64 = 0u64
+    while x < 2u64 {
+        ky_prob(x)
+        let p : u64 = py_add(py_el_from_rat(py_rat_frac(KY_PA, den), 1u64), py_mul(py_el_from_rat(py_rat_frac(KY_PB, den), 1u64), s2r))
+        s1 = py_add(s1, p)
+        s2 = py_add(s2, py_mul(p, p))
+        x = x + 1u64
+    }
+    KB_GS1 = s1
+    KB_GS2 = s2
+    return 0i32
+}
+
+fn ky_arm240() -> u64 {
+    py_reset()
+    let one : u64 = py_el_from_i64(1i64, 1u64)
+    /* BORN INVARIANCE: |amp|^2 sums to exactly 1 in EVERY (state, basis) */
+    kb_born_sums(0u64, 0u64)
+    if py_cmp(KB_GS1, one) != 0i64 { return 240u64 }
+    let b0 : u64 = KB_GS2                               /* |amp|^4 sum, |0> in comp basis */
+    kb_born_sums(0u64, 1u64)
+    if py_cmp(KB_GS1, one) != 0i64 { return 240u64 }
+    let b1 : u64 = KB_GS2                               /* |amp|^4 sum, |0> in Hadamard basis */
+    kb_born_sums(1u64, 0u64)
+    if py_cmp(KB_GS1, one) != 0i64 { return 240u64 }
+    kb_born_sums(1u64, 1u64)
+    if py_cmp(KB_GS1, one) != 0i64 { return 240u64 }
+    if KY_ERR != 0u64 { return 240u64 }
+    /* TEETH: the non-Born |amp|^4 rule is basis-DEPENDENT -> Born is selected */
+    if py_cmp(b0, b1) == 0i64 { return 240u64 }         /* must DIFFER across bases */
+    if py_cmp(b0, one) != 0i64 { return 240u64 }        /* = 1 exactly (comp basis) */
+    let half : u64 = py_el_from_rat(py_rat_frac(1i64, 2i64), 1u64)
+    if py_cmp(b1, half) != 0i64 { return 240u64 }       /* = 1/2 exactly (Hadamard basis) */
+    if py_err() != 0u64 { return 240u64 }
+    return 0u64
+}
+fn ky_selfprove() -> u64 @export {
+    let a0 : u64 = ky_arm230()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = ky_arm231()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = ky_arm232()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = ky_arm233()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = ky_arm234()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = ky_arm235()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = ky_arm236()
+    if a6 != 0u64 { return a6 }
+    let a7 : u64 = ky_arm237()
+    if a7 != 0u64 { return a7 }
+    let a8 : u64 = ky_arm238()
+    if a8 != 0u64 { return a8 }
+    let a9 : u64 = ky_arm239()
+    if a9 != 0u64 { return a9 }
+    let a10 : u64 = ky_arm240()
+    if a10 != 0u64 { return a10 }
+    return 0u64
+}
+
+/* KYMA: this organ IS the wave.  Its amplitudes are ring integers, its gates
+ * are integer motion, its unitarity is an integer equation, its Born rule is
+ * cross-sworn to the constructible tower, its time reversal returns the
+ * integer genesis, and its teleportation identity holds on every branch at
+ * once.  No epsilon lives here. */

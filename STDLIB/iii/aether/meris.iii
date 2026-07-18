@@ -31,7 +31,13 @@
  *     z=2 Euler's PENTAGONAL theorem, z=4 JACOBI's cube identity -- four
  *     independent classical theorems, one machine truth.
  *
- * Truth is a CONDITION OF MOTION: ms_selfprove (arms 250..253).  NO gate.
+ * THE POWER-SUM FACULTY: ms_powsum_faulhaber / ms_powsum_stirling -- the
+ * exact closed forms of sum k^m by two independent engines (Bernoulli
+ * recurrence vs Stirling2 + hockey stick), consumed by omnia/gnosis as the
+ * work-total oracle of the chronometer.  Arm 254: complete small grid vs
+ * direct summation, then the 2^60 mint pinned by F(n+1) - F(n) = n^m.
+ *
+ * Truth is a CONDITION OF MOTION: ms_selfprove (arms 250..254).  NO gate.
  * NIH: composes aether/pyrgos exact rationals -- the ONE rational substrate.
  * Ring R-1. */
 module aether_meris
@@ -273,6 +279,96 @@ fn mz_eq(a: u64, b: u64) -> u32 {
         k = k + 1i64
     }
     return 1u32
+}
+
+/* ==================== THE POWER-SUM ENGINES (Faulhaber vs Stirling) ====================
+ * F_m(n) = sum_{k=0}^{n-1} k^m by TWO INDEPENDENT derivations, both exact Q:
+ *   FAULHABER (analytic): F_m(n) = (1/(m+1)) sum_{j=0}^m C(m+1,j) B_j n^(m+1-j),
+ *     the Bernoulli numbers B_j (B_1 = -1/2) minted fresh each call by the
+ *     defining recurrence sum_{j<=r} C(r+1,j) B_j = 0;
+ *   STIRLING (combinatorial): k^m = sum_j S2(m,j) j! C(k,j) and the hockey
+ *     stick sum_{k<n} C(k,j) = C(n,j+1), so F_m(n) = sum_j S2(m,j) j! C(n,j+1).
+ * The engines share NOTHING but the rational substrate; agreement at a single
+ * n is a theorem met twice.  C(n,j+1) as the exact product prod (n-t)/(t+1)
+ * vanishes automatically for n <= j -- no special-casing, the algebra refuses.
+ * m <= 6 (the tables' box); a bigger m is a loud shape refusal. */
+var MS_PC : [u64; 64]                    /* Pascal C(r,c), r,c <= 7, row-major */
+var MS_S2 : [u64; 64]                    /* Stirling2 S2(m,j), row-major 8x8   */
+var MS_BH : [u64; 8]                     /* Bernoulli handles, fresh per call  */
+fn ms_pascal_build() -> i32 {
+    let mut r : i64 = 0i64
+    while r <= 7i64 {
+        MS_PC[((r * 8i64) + 0i64) as u64] = 1u64
+        let mut c2 : i64 = 1i64
+        while c2 <= r {
+            let mut up : u64 = 0u64
+            if c2 <= (r - 1i64) { up = MS_PC[(((r - 1i64) * 8i64) + c2) as u64] }
+            MS_PC[((r * 8i64) + c2) as u64] = MS_PC[(((r - 1i64) * 8i64) + (c2 - 1i64)) as u64] + up
+            c2 = c2 + 1i64
+        }
+        r = r + 1i64
+    }
+    return 0i32
+}
+fn ms_bern_build() -> i32 {
+    ms_pascal_build()
+    MS_BH[0u64] = py_rat_i64(1i64)
+    let mut r : i64 = 1i64
+    while r <= 6i64 {
+        let mut s : u64 = py_rat_i64(0i64)
+        let mut j : i64 = 0i64
+        while j < r {
+            s = py_rat_add(s, py_rat_mul(py_rat_i64(MS_PC[(((r + 1i64) * 8i64) + j) as u64] as i64), MS_BH[j as u64]))
+            j = j + 1i64
+        }
+        MS_BH[r as u64] = py_rat_neg(py_rat_mul(s, py_rat_frac(1i64, r + 1i64)))
+        r = r + 1i64
+    }
+    return 0i32
+}
+fn ms_powsum_faulhaber(m: i64, n: i64) -> u64 @export {
+    if m > 6i64 { MS_ERR = 2u64   return py_rat_i64(0i64) }
+    ms_bern_build()
+    let mut s : u64 = py_rat_i64(0i64)
+    let mut j : i64 = 0i64
+    while j <= m {
+        let mut pw : u64 = py_rat_i64(1i64)
+        let mut e : i64 = 0i64
+        while e < ((m + 1i64) - j) { pw = py_rat_mul(pw, py_rat_i64(n))   e = e + 1i64 }
+        s = py_rat_add(s, py_rat_mul(py_rat_mul(py_rat_i64(MS_PC[(((m + 1i64) * 8i64) + j) as u64] as i64), MS_BH[j as u64]), pw))
+        j = j + 1i64
+    }
+    return py_rat_mul(s, py_rat_frac(1i64, m + 1i64))
+}
+fn ms_powsum_stirling(m: i64, n: i64) -> u64 @export {
+    if m > 6i64 { MS_ERR = 2u64   return py_rat_i64(0i64) }
+    let mut i : u64 = 0u64
+    while i < 64u64 { MS_S2[i] = 0u64   i = i + 1u64 }
+    MS_S2[0u64] = 1u64
+    let mut r : i64 = 1i64
+    while r <= m {
+        let mut j2 : i64 = 1i64
+        while j2 <= r {
+            MS_S2[((r * 8i64) + j2) as u64] = ((j2 as u64) * MS_S2[(((r - 1i64) * 8i64) + j2) as u64]) + MS_S2[(((r - 1i64) * 8i64) + (j2 - 1i64)) as u64]
+            j2 = j2 + 1i64
+        }
+        r = r + 1i64
+    }
+    let mut s : u64 = py_rat_i64(0i64)
+    let mut j : i64 = 0i64
+    while j <= m {
+        if MS_S2[((m * 8i64) + j) as u64] != 0u64 {
+            let mut c : u64 = py_rat_i64(1i64)
+            let mut t2 : i64 = 0i64
+            while t2 <= j {
+                c = py_rat_mul(c, py_rat_frac(n - t2, t2 + 1i64))
+                t2 = t2 + 1i64
+            }
+            s = py_rat_add(s, py_rat_mul(py_rat_i64((MS_S2[((m * 8i64) + j) as u64] * ms_fact(j)) as i64), c))
+        }
+        j = j + 1i64
+    }
+    return s
 }
 
 /* ==================== THE SELF-PROOF (arms 250..253) ==================== */
@@ -638,6 +734,56 @@ fn ms_arm253() -> u64 {
     if MS_ERR != 0u64 { return 253u64 }
     return 0u64
 }
+fn ms_arm254() -> u64 {
+    /* THE POWER-SUM CHRONOMETER: three engines on the COMPLETE small grid
+     * (m <= 6, n <= 40: Faulhaber == Stirling == direct summation), then the
+     * 2^60 MINT -- a sum no loop could run -- where the two independent
+     * engines still agree exactly AND the defining recurrence
+     * F_m(n+1) - F_m(n) == n^m holds AT the mint: the value is not merely
+     * self-consistent, it is pinned by the law that defines it. */
+    let mut m : i64 = 0i64
+    while m <= 6i64 {
+        py_reset()
+        let mut n : i64 = 0i64
+        while n <= 40i64 {
+            let fs : u64 = ms_powsum_stirling(m, n)
+            let ff : u64 = ms_powsum_faulhaber(m, n)
+            if py_rat_cmp(fs, ff) != 0i64 { return 254u64 }
+            let mut acc : u64 = py_rat_i64(0i64)
+            let mut k : i64 = 0i64
+            while k < n {
+                let mut pw : u64 = py_rat_i64(1i64)
+                let mut e : i64 = 0i64
+                while e < m { pw = py_rat_mul(pw, py_rat_i64(k))   e = e + 1i64 }
+                acc = py_rat_add(acc, pw)
+                k = k + 1i64
+            }
+            if py_rat_cmp(fs, acc) != 0i64 { return 254u64 }
+            n = n + 1i64
+        }
+        m = m + 1i64
+    }
+    /* THE MINT: n = 2^60, m in {1, 3, 5} -- two engines, one value, and the
+     * defining recurrence checked at the mint itself */
+    py_reset()
+    let big : i64 = 1152921504606846976i64
+    m = 1i64
+    while m <= 5i64 {
+        let a : u64 = ms_powsum_faulhaber(m, big)
+        let b : u64 = ms_powsum_stirling(m, big)
+        if py_rat_cmp(a, b) != 0i64 { return 254u64 }
+        if py_rat_sign(a) != 1i64 { return 254u64 }
+        let a1 : u64 = ms_powsum_faulhaber(m, big + 1i64)
+        let mut pw : u64 = py_rat_i64(1i64)
+        let mut e : i64 = 0i64
+        while e < m { pw = py_rat_mul(pw, py_rat_i64(big))   e = e + 1i64 }
+        if py_rat_cmp(py_rat_add(a1, py_rat_neg(a)), pw) != 0i64 { return 254u64 }
+        m = m + 2i64
+    }
+    if py_err() != 0u64 { return 254u64 }
+    if MS_ERR != 0u64 { return 254u64 }
+    return 0u64
+}
 fn ms_selfprove() -> u64 @export {
     py_reset()
     let a0 : u64 = ms_arm250()
@@ -648,5 +794,7 @@ fn ms_selfprove() -> u64 @export {
     if a2 != 0u64 { return a2 }
     let a3 : u64 = ms_arm253()
     if a3 != 0u64 { return a3 }
+    let a4 : u64 = ms_arm254()
+    if a4 != 0u64 { return a4 }
     return 0u64
 }

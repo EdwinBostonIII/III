@@ -7,7 +7,13 @@
 # meris (Nekrasov localization), klisi (the perfectoid tilt), eidolos (the
 # scroll) and summit (the composition) -- links the probe, and demands:
 #   1. every organ battery GREEN (pyrgos 180..195, riza 210..217,
-#      meris 250..253, klisi 260..265, summit 280..285);
+#      kyma 230..240 [Bell/CHSH emerged + Born selected by basis-invariance],
+#      meris 250..254 [+ the Faulhaber/Stirling power-sum mint],
+#      klisi 260..266 [+ the Hensel/Newton inverse faculty],
+#      summit 280..285, gnosis 290..299 [+ the CHRONOMETER: arrival counts
+#      and total work minted O(1) from the orbit oracle's decisions, and the
+#      DIVISION BRIDGE: the live planner + Montgomery kernel on the
+#      substrate identity]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -48,6 +54,7 @@ cc_one() {
 }
 
 cc_one "$ROOT/STDLIB/iii/aether/pyrgos.iii"  "$T/pyrgos.o"  || exit 2
+cc_one "$ROOT/STDLIB/iii/aether/kyma.iii"    "$T/kyma.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/riza.iii"    "$T/riza.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/meris.iii"   "$T/meris.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/klisi.iii"   "$T/klisi.o"   || exit 2
@@ -57,7 +64,7 @@ cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/eidolos.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \

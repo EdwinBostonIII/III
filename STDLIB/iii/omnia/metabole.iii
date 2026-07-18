@@ -204,6 +204,9 @@ var MB_G_F    : [u8; 8]
 var MB_G_HERE : [u8; 8]
 var MB_NHEAD  : u64 = 0u64
 var MB_NROPE  : u64 = 0u64
+var MB_EPSB   : u64 = 0u64            /* rms epsilon, raw f32 bits */
+var MB_EPSF   : u8 = 0u8
+var MB_GAZE_OK : u64 = 0u64
 var MB_C2_NAME : [u8; 64]
 var MB_C2_NN   : u64 = 0u64
 var MB_C2_F    : u8 = 0u8
@@ -812,6 +815,11 @@ fn mb_kv_one(shard: u64) -> u64 {
     }
     if mb_keyis("deepseek2.rope.dimension_count" as u64, klen) == 1u64 {
         MB_NROPE = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.attention.layer_norm_rms_epsilon" as u64, klen) == 1u64 {
+        MB_EPSB = mb_scalar_read(vt)
+        MB_EPSF = 1u8
         return 0u64
     }
     mb_skip(ssz)
@@ -4667,6 +4675,7 @@ fn mb_arm375() -> u64 {
         if MB_6L[q5] != MB_SVL[q5] { return 375u64 }
         q5 = q5 + 1u64
     }
+    MB_GAZE_OK = 1u64
     mb_rs("the gaze: layer=0 pos=0 heads=" as u64)
     mb_ru(MB_NHEAD)
     mb_rs(" width=" as u64)
@@ -4688,6 +4697,635 @@ fn mb_arm375() -> u64 {
     mb_rs(" discordant=" as u64)
     mb_ru(disc)
     mb_rs(" (surd frontier named) prefix-law=ok double-stream=ok norm-scalars=shared (order is integer-exact)" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ============ arm 376: THE TELOS (the surd frontier closed) ============ */
+
+/* sign(dN1*sqrtR + dN2*sqrtKS) with R = (RN/7)*2^ra, KS = (KSn/7)*2^kc:
+ * same signs decide at once; opposite signs square-compare with the 7s
+ * cancelling: m1^2*RN*2^(2e1+ra) vs m2^2*KSn*2^(2e2+kc) -- pure integers.
+ * No root is ever taken. */
+
+var MB_TLA : [u64; 24]
+var MB_TLB : [u64; 24]
+var MB_TLT : [u64; 24]
+var MB_S8A : [u64; 8]
+var MB_S8B : [u64; 8]
+var MB_TLOVF : u64 = 0u64
+var MB_RNL : [u64; 4]
+var MB_RA : i64 = 0i64
+var MB_KSN : [u64; 12]
+var MB_KC : i64 = 0i64
+var MB_SD2 : [u64; 12]
+var MB_WINS : [u64; 128]
+var MB_WSEEN : [u8; 128]
+
+fn mb_tl_clear(w: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 24u64 {
+        if w == 0u64 { MB_TLA[k] = 0u64 }
+        if w == 1u64 { MB_TLB[k] = 0u64 }
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+fn mb_tl_addat(w: u64, k0: u64, v: u64) -> i32 {
+    if v == 0u64 { return 0i32 }
+    let mut k : u64 = k0
+    let mut carry : u64 = v
+    while carry != 0u64 {
+        if k >= 24u64 {
+            MB_TLOVF = 1u64
+            return 0i32
+        }
+        let mut cur : u64 = 0u64
+        if w == 0u64 { cur = MB_TLA[k] }
+        if w == 1u64 { cur = MB_TLB[k] }
+        let s : u64 = cur + carry
+        let mut nc : u64 = 0u64
+        if s < carry { nc = 1u64 }
+        if w == 0u64 { MB_TLA[k] = s }
+        if w == 1u64 { MB_TLB[k] = s }
+        carry = nc
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* w := square of the 8-limb S8 source (0 -> S8A, 1 -> S8B) */
+fn mb_tl_sq8(w: u64) -> i32 {
+    mb_tl_clear(w)
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut ai : u64 = 0u64
+        if w == 0u64 { ai = MB_S8A[i] }
+        if w == 1u64 { ai = MB_S8B[i] }
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let mut bj : u64 = 0u64
+            if w == 0u64 { bj = MB_S8A[j] }
+            if w == 1u64 { bj = MB_S8B[j] }
+            if ai != 0u64 {
+                if bj != 0u64 {
+                    mb_mul64(ai, bj)
+                    mb_tl_addat(w, i + j, MB_MLO)
+                    mb_tl_addat(w, i + j + 1u64, MB_MHI)
+                }
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* w *= src (src = RNL(4) when which 0, KSN(12) when which 1) */
+fn mb_tl_mulsrc(w: u64, which: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 24u64 {
+        if w == 0u64 { MB_TLT[k] = MB_TLA[k] }
+        if w == 1u64 { MB_TLT[k] = MB_TLB[k] }
+        k = k + 1u64
+    }
+    mb_tl_clear(w)
+    let mut i : u64 = 0u64
+    while i < 24u64 {
+        if MB_TLT[i] != 0u64 {
+            let mut n : u64 = 4u64
+            if which == 1u64 { n = 12u64 }
+            let mut j : u64 = 0u64
+            while j < n {
+                let mut sj : u64 = 0u64
+                if which == 0u64 { sj = MB_RNL[j] }
+                if which == 1u64 { sj = MB_KSN[j] }
+                if sj != 0u64 {
+                    mb_mul64(MB_TLT[i], sj)
+                    mb_tl_addat(w, i + j, MB_MLO)
+                    mb_tl_addat(w, i + j + 1u64, MB_MHI)
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn mb_tl_shl(w: u64, sh: u64) -> i32 {
+    let ls : u64 = sh / 64u64
+    let bs : u64 = sh % 64u64
+    let mut k : u64 = 24u64
+    while k != 0u64 {
+        k = k - 1u64
+        let mut v : u64 = 0u64
+        if k >= ls {
+            let src : u64 = k - ls
+            let mut lo : u64 = 0u64
+            if w == 0u64 { lo = MB_TLA[src] }
+            if w == 1u64 { lo = MB_TLB[src] }
+            v = lo << bs
+            if bs != 0u64 {
+                if src != 0u64 {
+                    let mut lo2 : u64 = 0u64
+                    if w == 0u64 { lo2 = MB_TLA[src - 1u64] }
+                    if w == 1u64 { lo2 = MB_TLB[src - 1u64] }
+                    v = v | (lo2 >> (64u64 - bs))
+                }
+            }
+            /* dropped high bits would be an overflow */
+            if k == 23u64 {
+                if bs != 0u64 {
+                    let mut hi : u64 = 0u64
+                    if w == 0u64 { hi = MB_TLA[src] }
+                    if w == 1u64 { hi = MB_TLB[src] }
+                    if (hi >> (64u64 - bs)) != 0u64 { MB_TLOVF = 1u64 }
+                }
+            }
+        }
+        if w == 0u64 { MB_TLA[k] = v }
+        if w == 1u64 { MB_TLB[k] = v }
+    }
+    return 0i32
+}
+
+fn mb_tl_cmp() -> i64 {
+    let mut k : u64 = 24u64
+    while k != 0u64 {
+        k = k - 1u64
+        if MB_TLA[k] > MB_TLB[k] { return 1i64 }
+        if MB_TLA[k] < MB_TLB[k] { return 0i64 - 1i64 }
+    }
+    return 0i64
+}
+
+/* delta of head values (arr 0 = N1, 1 = N2): sign/mant8/exp of value(i)-value(j) */
+var MB_TDS : i64 = 0i64
+var MB_TDE : i64 = 0i64
+fn mb_tel_sub(arr: u64, i: u64, j: u64, into_b: u64) -> u64 {
+    let mut si : i64 = 0i64
+    let mut sj : i64 = 0i64
+    let mut ei : i64 = 0i64
+    let mut ej : i64 = 0i64
+    if arr == 0u64 { si = MB_N1S[i]   sj = MB_N1S[j]   ei = MB_N1E[i]   ej = MB_N1E[j] }
+    if arr == 1u64 { si = MB_N2S[i]   sj = MB_N2S[j]   ei = MB_N2E[i]   ej = MB_N2E[j] }
+    /* aligned 8-limb magnitudes */
+    let mut base : i64 = ei
+    if ej < base { base = ej }
+    let shi : u64 = (ei - base) as u64
+    let shj : u64 = (ej - base) as u64
+    if shi > 120u64 { return 1u64 }
+    if shj > 120u64 { return 1u64 }
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        MB_S8A[k] = 0u64
+        MB_S8B[k] = 0u64
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 6u64 {
+        if arr == 0u64 {
+            MB_S8A[k] = MB_N1L[i * 6u64 + k]
+            MB_S8B[k] = MB_N1L[j * 6u64 + k]
+        }
+        if arr == 1u64 {
+            MB_S8A[k] = MB_N2L[i * 6u64 + k]
+            MB_S8B[k] = MB_N2L[j * 6u64 + k]
+        }
+        k = k + 1u64
+    }
+    /* shift each in place (<= 120 bits within 8 limbs) */
+    let mut t : u64 = 0u64
+    while t < 2u64 {
+        let mut sh : u64 = shi
+        if t == 1u64 { sh = shj }
+        if sh != 0u64 {
+            let ls : u64 = sh / 64u64
+            let bs : u64 = sh % 64u64
+            let mut k2 : u64 = 8u64
+            while k2 != 0u64 {
+                k2 = k2 - 1u64
+                let mut v : u64 = 0u64
+                if k2 >= ls {
+                    let src : u64 = k2 - ls
+                    let mut lo : u64 = 0u64
+                    if t == 0u64 { lo = MB_S8A[src] }
+                    if t == 1u64 { lo = MB_S8B[src] }
+                    v = lo << bs
+                    if bs != 0u64 {
+                        if src != 0u64 {
+                            let mut lo2 : u64 = 0u64
+                            if t == 0u64 { lo2 = MB_S8A[src - 1u64] }
+                            if t == 1u64 { lo2 = MB_S8B[src - 1u64] }
+                            v = v | (lo2 >> (64u64 - bs))
+                        }
+                    }
+                }
+                if t == 0u64 { MB_S8A[k2] = v }
+                if t == 1u64 { MB_S8B[k2] = v }
+            }
+        }
+        t = t + 1u64
+    }
+    /* signed combine: si*A - sj*B */
+    let mut cmp : i64 = 0i64
+    k = 8u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            if MB_S8A[k] > MB_S8B[k] { cmp = 1i64 }
+            if MB_S8A[k] < MB_S8B[k] { cmp = 0i64 - 1i64 }
+        }
+    }
+    let mut rs : i64 = 0i64
+    if si == sj {
+        if si == 0i64 {
+            MB_TDS = 0i64
+            MB_TDE = base
+            return 0u64
+        }
+        /* |A - B| with sign si*cmp */
+        if cmp == 0i64 {
+            MB_TDS = 0i64
+            MB_TDE = base
+            return 0u64
+        }
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 8u64 {
+            let mut x : u64 = MB_S8A[k]
+            let mut y : u64 = MB_S8B[k]
+            if cmp < 0i64 {
+                x = MB_S8B[k]
+                y = MB_S8A[k]
+            }
+            let d : u64 = x - y
+            let mut b2 : u64 = 0u64
+            if x < y { b2 = 1u64 }
+            let e2 : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            MB_S8A[k] = e2
+            borrow = b2
+            k = k + 1u64
+        }
+        rs = si * cmp
+    }
+    if si != sj {
+        if si == 0i64 {
+            /* value = -sj*B */
+            k = 0u64
+            while k < 8u64 {
+                MB_S8A[k] = MB_S8B[k]
+                k = k + 1u64
+            }
+            rs = 0i64 - sj
+        }
+        if sj == 0i64 { rs = si }
+        if si != 0i64 {
+            if sj != 0i64 {
+                /* opposite: |A| + |B|, sign si */
+                let mut carry : u64 = 0u64
+                k = 0u64
+                while k < 8u64 {
+                    let s2 : u64 = MB_S8A[k] + MB_S8B[k]
+                    let mut c2 : u64 = 0u64
+                    if s2 < MB_S8B[k] { c2 = 1u64 }
+                    let s3 : u64 = s2 + carry
+                    if s3 < carry { c2 = c2 + 1u64 }
+                    MB_S8A[k] = s3
+                    carry = c2
+                    k = k + 1u64
+                }
+                if carry != 0u64 { return 1u64 }
+                rs = si
+            }
+        }
+    }
+    if into_b == 1u64 {
+        k = 0u64
+        while k < 8u64 {
+            MB_S8B[k] = MB_S8A[k]
+            k = k + 1u64
+        }
+    }
+    MB_TDS = rs
+    MB_TDE = base
+    return 0u64
+}
+
+fn mb_arm376() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    if MB_GAZE_OK == 0u64 {
+        mb_rs("the telos: fasting (no gaze standing)" as u64)
+        mb_rb(10u8)
+        return 0u64
+    }
+    if MB_EPSF == 0u8 {
+        mb_rs("the telos: epsilon absent from the KV forest (named, lawful)" as u64)
+        mb_rb(10u8)
+        return 0u64
+    }
+    /* R = (RN/7)*2^ra from the standing x-norm and the artifact's epsilon */
+    let me : i64 = mb_f32m(MB_EPSB)
+    if me == 4611686018427387904i64 { return 376u64 }
+    if me <= 0i64 { return 376u64 }
+    let ee : i64 = MB_F32E
+    let mut k : u64 = 0u64
+    while k < 4u64 {
+        MB_RNL[k] = 0u64
+        k = k + 1u64
+    }
+    let d : i64 = ee + 58i64
+    MB_RA = 0i64 - 58i64
+    if d >= 0i64 {
+        if d > 100i64 { return 376u64 }
+        /* RN = SV + 7*me << d */
+        MB_RNL[0] = MB_SYN_V0
+        MB_RNL[1] = MB_SYN_V1
+        MB_RNL[2] = MB_SYN_V2
+        let sev : u64 = (7i64 * me) as u64
+        let ls : u64 = (d as u64) / 64u64
+        let bs : u64 = (d as u64) % 64u64
+        let lo : u64 = sev << bs
+        let mut hi : u64 = 0u64
+        if bs != 0u64 { hi = sev >> (64u64 - bs) }
+        let s0 : u64 = MB_RNL[ls] + lo
+        let mut c0 : u64 = 0u64
+        if s0 < lo { c0 = 1u64 }
+        MB_RNL[ls] = s0
+        MB_RNL[ls + 1u64] = MB_RNL[ls + 1u64] + hi + c0
+    }
+    if d < 0i64 {
+        let nd : u64 = (0i64 - d) as u64
+        if nd > 100u64 { return 376u64 }
+        /* RN = (SV << nd) + 7*me ; ra = -58 - nd */
+        MB_RNL[0] = MB_SYN_V0
+        MB_RNL[1] = MB_SYN_V1
+        MB_RNL[2] = MB_SYN_V2
+        let ls2 : u64 = nd / 64u64
+        let bs2 : u64 = nd % 64u64
+        let mut k3 : u64 = 4u64
+        while k3 != 0u64 {
+            k3 = k3 - 1u64
+            let mut v : u64 = 0u64
+            if k3 >= ls2 {
+                let src : u64 = k3 - ls2
+                v = MB_RNL[src] << bs2
+                if bs2 != 0u64 {
+                    if src != 0u64 { v = v | (MB_RNL[src - 1u64] >> (64u64 - bs2)) }
+                }
+            }
+            MB_RNL[k3] = v
+        }
+        let sev2 : u64 = (7i64 * me) as u64
+        let s4 : u64 = MB_RNL[0] + sev2
+        let mut c4 : u64 = 0u64
+        if s4 < sev2 { c4 = 1u64 }
+        MB_RNL[0] = s4
+        MB_RNL[1] = MB_RNL[1] + c4
+        MB_RA = 0i64 - 58i64 - (nd as i64)
+    }
+    /* SD2 = sum of D[0..512)^2, aligned to twice the minimal exponent */
+    let mut e2min : i64 = 100000i64
+    let mut c : u64 = 0u64
+    while c < 512u64 {
+        if MB_DVS[c] != 0i64 {
+            let te : i64 = 2i64 * MB_DVE[c]
+            if te < e2min { e2min = te }
+        }
+        c = c + 1u64
+    }
+    if e2min == 100000i64 { return 376u64 }
+    mb_tl_clear(0u64)
+    MB_TLOVF = 0u64
+    c = 0u64
+    while c < 512u64 {
+        if MB_DVS[c] != 0i64 {
+            mb_mul192(MB_DV0[c], MB_DV1[c], MB_DV2[c], MB_DV0[c], MB_DV1[c], MB_DV2[c])
+            let sh : i64 = 2i64 * MB_DVE[c] - e2min
+            if sh > 120i64 { return 376u64 }
+            /* add R6 << sh into TLA */
+            let ls3 : u64 = (sh as u64) / 64u64
+            let bs3 : u64 = (sh as u64) % 64u64
+            let mut q : u64 = 0u64
+            let mut prev : u64 = 0u64
+            while q < 6u64 {
+                let cur : u64 = MB_R6[q]
+                let mut v2 : u64 = cur << bs3
+                if bs3 != 0u64 { v2 = v2 | (prev >> (64u64 - bs3)) }
+                mb_tl_addat(0u64, ls3 + q, v2)
+                prev = cur
+                q = q + 1u64
+            }
+            if bs3 != 0u64 { mb_tl_addat(0u64, ls3 + 6u64, prev >> (64u64 - bs3)) }
+        }
+        c = c + 1u64
+    }
+    if MB_TLOVF != 0u64 { return 376u64 }
+    k = 0u64
+    while k < 12u64 {
+        MB_SD2[k] = MB_TLA[k]
+        k = k + 1u64
+    }
+    k = 12u64
+    let mut over : u64 = 0u64
+    while k < 24u64 {
+        over = over | MB_TLA[k]
+        k = k + 1u64
+    }
+    if over != 0u64 { return 376u64 }
+    /* KS = (KSn/7)*2^kc with KSn = 7*SD2<<(se'-kc) + me*RN<<(ee+ra-kc) */
+    let sep : i64 = e2min - 9i64
+    let er : i64 = ee + MB_RA
+    MB_KC = sep
+    if er < MB_KC { MB_KC = er }
+    let sh_a : i64 = sep - MB_KC
+    let sh_b : i64 = er - MB_KC
+    if sh_a > 160i64 { return 376u64 }
+    if sh_b > 160i64 { return 376u64 }
+    mb_tl_clear(0u64)
+    /* 7*SD2 << sh_a */
+    c = 0u64
+    while c < 12u64 {
+        if MB_SD2[c] != 0u64 {
+            mb_mul64(MB_SD2[c], 7u64)
+            let base2 : u64 = (sh_a as u64) / 64u64
+            let bb2 : u64 = (sh_a as u64) % 64u64
+            let mut lo3 : u64 = MB_MLO << bb2
+            let mut mid3 : u64 = (MB_MHI << bb2)
+            if bb2 != 0u64 { mid3 = mid3 | (MB_MLO >> (64u64 - bb2)) }
+            let mut hi3 : u64 = 0u64
+            if bb2 != 0u64 { hi3 = MB_MHI >> (64u64 - bb2) }
+            mb_tl_addat(0u64, c + base2, lo3)
+            mb_tl_addat(0u64, c + base2 + 1u64, mid3)
+            mb_tl_addat(0u64, c + base2 + 2u64, hi3)
+        }
+        c = c + 1u64
+    }
+    /* + me*RN << sh_b */
+    c = 0u64
+    while c < 4u64 {
+        if MB_RNL[c] != 0u64 {
+            mb_mul64(MB_RNL[c], me as u64)
+            let base3 : u64 = (sh_b as u64) / 64u64
+            let bb3 : u64 = (sh_b as u64) % 64u64
+            let mut lo4 : u64 = MB_MLO << bb3
+            let mut mid4 : u64 = (MB_MHI << bb3)
+            if bb3 != 0u64 { mid4 = mid4 | (MB_MLO >> (64u64 - bb3)) }
+            let mut hi4 : u64 = 0u64
+            if bb3 != 0u64 { hi4 = MB_MHI >> (64u64 - bb3) }
+            mb_tl_addat(0u64, c + base3, lo4)
+            mb_tl_addat(0u64, c + base3 + 1u64, mid4)
+            mb_tl_addat(0u64, c + base3 + 2u64, hi4)
+        }
+        c = c + 1u64
+    }
+    if MB_TLOVF != 0u64 { return 376u64 }
+    k = 0u64
+    while k < 12u64 {
+        MB_KSN[k] = MB_TLA[k]
+        k = k + 1u64
+    }
+    k = 12u64
+    over = 0u64
+    while k < 24u64 {
+        over = over | MB_TLA[k]
+        k = k + 1u64
+    }
+    if over != 0u64 { return 376u64 }
+    /* the complete pairwise verdict */
+    let mut i : u64 = 0u64
+    while i < MB_NHEAD {
+        MB_WINS[i] = 0u64
+        MB_WSEEN[i] = 0u8
+        i = i + 1u64
+    }
+    let mut ties : u64 = 0u64
+    let mut dom : u64 = 0u64
+    let mut surd : u64 = 0u64
+    i = 0u64
+    while i < MB_NHEAD {
+        let mut j : u64 = i + 1u64
+        while j < MB_NHEAD {
+            let c1 : i64 = mb_gz_hcmp(0u64, i, j)
+            let c2 : i64 = mb_gz_hcmp(1u64, i, j)
+            let mut v : i64 = 0i64
+            let mut decided : u64 = 0u64
+            if c1 >= 0i64 {
+                if c2 >= 0i64 {
+                    if c1 + c2 > 0i64 { v = 1i64 }
+                    decided = 1u64
+                    dom = dom + 1u64
+                }
+            }
+            if decided == 0u64 {
+                if c1 <= 0i64 {
+                    if c2 <= 0i64 {
+                        v = 0i64 - 1i64
+                        decided = 1u64
+                        dom = dom + 1u64
+                    }
+                }
+            }
+            if decided == 0u64 {
+                /* the surd: sign(dN1*sqrtR + dN2*sqrtKS) with opposite parts */
+                surd = surd + 1u64
+                if mb_tel_sub(0u64, i, j, 0u64) != 0u64 { return 376u64 }
+                let s1 : i64 = MB_TDS
+                let e1 : i64 = MB_TDE
+                /* keep dN1 in S8A; compute dN2 into S8B */
+                let mut q2 : u64 = 0u64
+                while q2 < 8u64 {
+                    MB_TLT[q2] = MB_S8A[q2]
+                    q2 = q2 + 1u64
+                }
+                if mb_tel_sub(1u64, i, j, 1u64) != 0u64 { return 376u64 }
+                let s2 : i64 = MB_TDS
+                let e2 : i64 = MB_TDE
+                q2 = 0u64
+                while q2 < 8u64 {
+                    MB_S8A[q2] = MB_TLT[q2]
+                    q2 = q2 + 1u64
+                }
+                if s1 == 0i64 { v = s2 }
+                if s2 == 0i64 { v = s1 }
+                if s1 != 0i64 {
+                    if s2 != 0i64 {
+                        if s1 == s2 { v = s1 }
+                        if s1 != s2 {
+                            MB_TLOVF = 0u64
+                            mb_tl_sq8(0u64)
+                            mb_tl_mulsrc(0u64, 0u64)
+                            mb_tl_sq8(1u64)
+                            mb_tl_mulsrc(1u64, 1u64)
+                            let ea : i64 = 2i64 * e1 + MB_RA
+                            let eb : i64 = 2i64 * e2 + MB_KC
+                            let mut baseE : i64 = ea
+                            if eb < baseE { baseE = eb }
+                            if ea - baseE > 256i64 { return 376u64 }
+                            if eb - baseE > 256i64 { return 376u64 }
+                            if ea > baseE { mb_tl_shl(0u64, (ea - baseE) as u64) }
+                            if eb > baseE { mb_tl_shl(1u64, (eb - baseE) as u64) }
+                            if MB_TLOVF != 0u64 { return 376u64 }
+                            let cq : i64 = mb_tl_cmp()
+                            if cq > 0i64 { v = s1 }
+                            if cq < 0i64 { v = s2 }
+                            if cq == 0i64 { v = 0i64 }
+                        }
+                    }
+                }
+            }
+            if v > 0i64 { MB_WINS[i] = MB_WINS[i] + 1u64 }
+            if v < 0i64 { MB_WINS[j] = MB_WINS[j] + 1u64 }
+            if v == 0i64 { ties = ties + 1u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* THE WIN-PERMUTATION THEOREM: with zero ties, the win counts must be
+     * exactly the permutation 0..H-1 -- any comparator cycle breaks it */
+    let mut perm_ok : u64 = 1u64
+    if ties == 0u64 {
+        i = 0u64
+        while i < MB_NHEAD {
+            let wv : u64 = MB_WINS[i]
+            if wv >= MB_NHEAD { perm_ok = 0u64 }
+            if wv < MB_NHEAD {
+                if MB_WSEEN[wv] == 1u8 { perm_ok = 0u64 }
+                MB_WSEEN[wv] = 1u8
+            }
+            i = i + 1u64
+        }
+    }
+    if perm_ok == 0u64 { return 376u64 }
+    /* the crown and the court */
+    let mut top1 : u64 = 0u64
+    let mut top2 : u64 = 0u64
+    let mut top3 : u64 = 0u64
+    i = 0u64
+    while i < MB_NHEAD {
+        if MB_WINS[i] == MB_NHEAD - 1u64 { top1 = i }
+        if MB_WINS[i] == MB_NHEAD - 2u64 { top2 = i }
+        if MB_WINS[i] == MB_NHEAD - 3u64 { top3 = i }
+        i = i + 1u64
+    }
+    mb_rs("the telos: pairs=" as u64)
+    mb_ru((MB_NHEAD * (MB_NHEAD - 1u64)) / 2u64)
+    mb_rs(" dominance=" as u64)
+    mb_ru(dom)
+    mb_rs(" surd-decided=" as u64)
+    mb_ru(surd)
+    mb_rs(" ties=" as u64)
+    mb_ru(ties)
+    mb_rs(" win-permutation=ok total-order=[" as u64)
+    mb_ru(top1)
+    mb_rs("," as u64)
+    mb_ru(top2)
+    mb_rs("," as u64)
+    mb_ru(top3)
+    mb_rs(",...] -- the frontier CLOSED, no root taken" as u64)
     mb_rb(10u8)
     return 0u64
 }
@@ -4790,6 +5428,8 @@ fn mb_selfprove() -> u64 @export {
     if r5f != 0u64 { return r5f }
     let r5g : u64 = mb_arm375()
     if r5g != 0u64 { return r5g }
+    let r5h : u64 = mb_arm376()
+    if r5h != 0u64 { return r5h }
     let r5c : u64 = mb_arm371()
     if r5c != 0u64 { return r5c }
     let r6 : u64 = mb_arm366()

@@ -203,6 +203,13 @@ else
     grep -q "^the fleet: vocab=.* anchor=synapse-exact samples=8/8 winner-cs=strict fold=order-invariant" "$T/run1.txt" || { echo "[summit_gate] THE FLEET SANK"; exit 6; }
     grep -q "^the walk: " "$T/run1.txt" || { echo "[summit_gate] NO EXPERT WALK"; exit 6; }
     grep -q "^the gaze: .*rope-at-0=identity.*prefix-law=ok double-stream=ok norm-scalars=shared" "$T/run1.txt" || { echo "[summit_gate] THE GAZE AVERTED"; exit 6; }
+    grep -q "^the telos: .*win-permutation=ok.*frontier CLOSED" "$T/run1.txt" || { echo "[summit_gate] THE FRONTIER OPEN"; exit 6; }
+fi
+grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
+if grep -q "^the feast: absent" "$T/run1.txt"; then
+    : # already checked above
+else
+    :
     grep -q "^the stomach: streamed=.* resident=.* -- the feast passes through a fixed stomach" "$T/run1.txt" || { echo "[summit_gate] NO STOMACH LAW"; exit 6; }
     grep -q "^the discharge: softmax mixing DECIDED on real flesh.*agree=ok control-refused=ok" "$T/run1.txt" || { echo "[summit_gate] DEFICIT NOT DISCHARGED"; exit 6; }
 fi

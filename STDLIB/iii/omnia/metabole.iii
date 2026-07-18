@@ -192,6 +192,18 @@ var MB_C3_NAME : [u8; 48]
 var MB_C3_NN   : u64 = 0u64
 var MB_C3_F    : u8 = 0u8
 var MB_C3_HERE : u8 = 0u8             /* found during the CURRENT shard walk */
+/* the gaze's seven organs of blk.0 attention (slot order: attn_norm, q_a,
+ * q_a_norm, q_b, kv_a_mqa, kv_a_norm, kv_b) */
+var MB_G_TYPE : [u64; 8]
+var MB_G_OFF  : [u64; 8]
+var MB_G_NE   : [u64; 8]
+var MB_G_NE0  : [u64; 8]
+var MB_G_DB   : [u64; 8]
+var MB_G_SH   : [u64; 8]
+var MB_G_F    : [u8; 8]
+var MB_G_HERE : [u8; 8]
+var MB_NHEAD  : u64 = 0u64
+var MB_NROPE  : u64 = 0u64
 var MB_C2_NAME : [u8; 64]
 var MB_C2_NN   : u64 = 0u64
 var MB_C2_F    : u8 = 0u8
@@ -794,6 +806,14 @@ fn mb_kv_one(shard: u64) -> u64 {
         MB_LAYERS = mb_scalar_read(vt)
         return 0u64
     }
+    if mb_keyis("deepseek2.attention.head_count" as u64, klen) == 1u64 {
+        MB_NHEAD = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.rope.dimension_count" as u64, klen) == 1u64 {
+        MB_NROPE = mb_scalar_read(vt)
+        return 0u64
+    }
     mb_skip(ssz)
     return 0u64
 }
@@ -862,6 +882,26 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
                 MB_C3_F = 1u8
                 MB_C3_HERE = 1u8
             }
+        }
+    }
+    /* the gaze's captures: blk.0 attention, exact names */
+    let mut gsl : u64 = 8u64
+    if mb_keyis("blk.0.attn_norm.weight" as u64, nlen) == 1u64 { gsl = 0u64 }
+    if mb_keyis("blk.0.attn_q_a.weight" as u64, nlen) == 1u64 { gsl = 1u64 }
+    if mb_keyis("blk.0.attn_q_a_norm.weight" as u64, nlen) == 1u64 { gsl = 2u64 }
+    if mb_keyis("blk.0.attn_q_b.weight" as u64, nlen) == 1u64 { gsl = 3u64 }
+    if mb_keyis("blk.0.attn_kv_a_mqa.weight" as u64, nlen) == 1u64 { gsl = 4u64 }
+    if mb_keyis("blk.0.attn_kv_a_norm.weight" as u64, nlen) == 1u64 { gsl = 5u64 }
+    if mb_keyis("blk.0.attn_kv_b.weight" as u64, nlen) == 1u64 { gsl = 6u64 }
+    if gsl < 8u64 {
+        if MB_G_F[gsl] == 0u8 {
+            MB_G_TYPE[gsl] = ty
+            MB_G_OFF[gsl] = off
+            MB_G_NE[gsl] = ne
+            MB_G_NE0[gsl] = ne0
+            MB_G_SH[gsl] = shard
+            MB_G_F[gsl] = 1u8
+            MB_G_HERE[gsl] = 1u8
         }
     }
     let bv : u64 = mb_tbv(ty)
@@ -983,6 +1023,14 @@ fn mb_shard(i: u64) -> u64 {
     if MB_C3_HERE == 1u8 {
         MB_C3_DBASE = data_base
         MB_C3_HERE = 0u8
+    }
+    let mut gdb : u64 = 0u64
+    while gdb < 8u64 {
+        if MB_G_HERE[gdb] == 1u8 {
+            MB_G_DB[gdb] = data_base
+            MB_G_HERE[gdb] = 0u8
+        }
+        gdb = gdb + 1u64
     }
     if i == 1u64 {
         MB_DBASE1 = data_base
@@ -3671,6 +3719,979 @@ fn mb_arm374() -> u64 {
     return 0u64
 }
 
+/* ============ arm 375: THE GAZE (exact attention QK, per head) ============ */
+
+/* THE GAZE LAW: every RMSNorm in the MLA chain divides by ONE shared
+ * positive scalar (a square root of a rational).  Per head, the score is
+ * (C_i.E_i)/(sqrtQS sqrtKS) + (Crope_i.Drope)/(sqrtQS sqrtR): the surds are
+ * COMMON POSITIVE FACTORS across all heads -- so per-head ORDER, SIGNS and
+ * DOMINANCE of the true normalized scores are EXACT INTEGER facts.  The
+ * roots never need taking.  At position 0 RoPE is rotation by zero -- the
+ * identity, exactly -- so the first-position scores are whole.  Positions
+ * beyond zero need certified sin/cos ladders: named, not faked. */
+
+/* preloaded exact f32 norm vectors (mant, exp per element) */
+var MB_ANM : [i64; 7168]
+var MB_ANE : [i64; 7168]
+var MB_QNM : [i64; 1536]
+var MB_QNE : [i64; 1536]
+var MB_KNM : [i64; 512]
+var MB_KNE : [i64; 512]
+/* stage vectors: sign, 3 limbs, exponent (canonical, bitlen <= 160) */
+var MB_BVS : [i64; 1536]
+var MB_BV0 : [u64; 1536]
+var MB_BV1 : [u64; 1536]
+var MB_BV2 : [u64; 1536]
+var MB_BVE : [i64; 1536]
+var MB_DVS : [i64; 576]
+var MB_DV0 : [u64; 576]
+var MB_DV1 : [u64; 576]
+var MB_DV2 : [u64; 576]
+var MB_DVE : [i64; 576]
+/* per-head transients */
+var MB_CHS : [i64; 192]
+var MB_CH0 : [u64; 192]
+var MB_CH1 : [u64; 192]
+var MB_CH2 : [u64; 192]
+var MB_CHE : [i64; 192]
+var MB_EHS : [i64; 128]
+var MB_EH0 : [u64; 128]
+var MB_EH1 : [u64; 128]
+var MB_EH2 : [u64; 128]
+var MB_EHE : [i64; 128]
+/* per-head verdicts: N1 (nope) and N2 (rope), 6-limb + exp */
+var MB_N1S : [i64; 128]
+var MB_N1L : [u64; 768]
+var MB_N1E : [i64; 128]
+var MB_N2S : [i64; 128]
+var MB_N2L : [u64; 768]
+var MB_N2E : [i64; 128]
+/* the row's decoded weights (one row of any gaze tensor) */
+var MB_GW : [i64; 7168]
+/* the signed 6-limb accumulator */
+var MB_6S : i64 = 0i64
+var MB_6L : [u64; 6]
+/* 6-limb source/term scratch */
+var MB_T6 : [u64; 6]
+/* 6-limb chunk prefixes (the per-row teeth) */
+var MB_6CS : [i64; 112]
+var MB_6CL : [u64; 672]
+var MB_SVL : [u64; 6]
+var MB_GZOVF : u64 = 0u64             /* the named guard ledger */
+
+fn mb_t6_clear() -> i32 {
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MB_T6[k] = 0u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* magnitude compare acc vs T6 */
+fn mb_6magcmp() -> i64 {
+    let mut k : u64 = 6u64
+    while k != 0u64 {
+        k = k - 1u64
+        if MB_6L[k] > MB_T6[k] { return 1i64 }
+        if MB_6L[k] < MB_T6[k] { return 0i64 - 1i64 }
+    }
+    return 0i64
+}
+
+/* acc += sign*T6 (sign-magnitude, 6-limb) */
+fn mb_acc6_add(ss: i64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let mut nz : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        nz = nz | MB_T6[k]
+        k = k + 1u64
+    }
+    if nz == 0u64 { return 0i32 }
+    if MB_6S == 0i64 {
+        MB_6S = ss
+        k = 0u64
+        while k < 6u64 {
+            MB_6L[k] = MB_T6[k]
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if MB_6S == ss {
+        let mut carry : u64 = 0u64
+        k = 0u64
+        while k < 6u64 {
+            let a : u64 = MB_6L[k] + MB_T6[k]
+            let mut c2 : u64 = 0u64
+            if a < MB_T6[k] { c2 = 1u64 }
+            let b : u64 = a + carry
+            if b < carry { c2 = c2 + 1u64 }
+            MB_6L[k] = b
+            carry = c2
+            k = k + 1u64
+        }
+        if carry != 0u64 { MB_GZOVF = MB_GZOVF + 1u64 }
+        return 0i32
+    }
+    let cmp : i64 = mb_6magcmp()
+    if cmp == 0i64 {
+        MB_6S = 0i64
+        k = 0u64
+        while k < 6u64 {
+            MB_6L[k] = 0u64
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if cmp > 0i64 {
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 6u64 {
+            let d : u64 = MB_6L[k] - MB_T6[k]
+            let mut b2 : u64 = 0u64
+            if MB_6L[k] < MB_T6[k] { b2 = 1u64 }
+            let e2 : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            MB_6L[k] = e2
+            borrow = b2
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    let mut borrow2 : u64 = 0u64
+    k = 0u64
+    while k < 6u64 {
+        let d3 : u64 = MB_T6[k] - MB_6L[k]
+        let mut b3 : u64 = 0u64
+        if MB_T6[k] < MB_6L[k] { b3 = 1u64 }
+        let e3 : u64 = d3 - borrow2
+        if d3 < borrow2 { b3 = b3 + 1u64 }
+        MB_6L[k] = e3
+        borrow2 = b3
+        k = k + 1u64
+    }
+    MB_6S = ss
+    return 0i32
+}
+
+/* T6 = (l0..l3) * m  (4 limbs by 1), then T6 <<= sh (sh <= 48) */
+fn mb_t6_mul4_shl(l0: u64, l1: u64, l2: u64, l3: u64, m: u64, sh: u64) -> i32 {
+    mb_t6_clear()
+    mb_mul64(l0, m)
+    MB_T6[0] = MB_MLO
+    MB_T6[1] = MB_MHI
+    mb_mul64(l1, m)
+    let s1 : u64 = MB_T6[1] + MB_MLO
+    let mut c1 : u64 = 0u64
+    if s1 < MB_MLO { c1 = 1u64 }
+    MB_T6[1] = s1
+    MB_T6[2] = MB_MHI + c1
+    mb_mul64(l2, m)
+    let s2 : u64 = MB_T6[2] + MB_MLO
+    let mut c2 : u64 = 0u64
+    if s2 < MB_MLO { c2 = 1u64 }
+    MB_T6[2] = s2
+    MB_T6[3] = MB_MHI + c2
+    mb_mul64(l3, m)
+    let s3 : u64 = MB_T6[3] + MB_MLO
+    let mut c3 : u64 = 0u64
+    if s3 < MB_MLO { c3 = 1u64 }
+    MB_T6[3] = s3
+    MB_T6[4] = MB_MHI + c3
+    if sh != 0u64 {
+        let mut k : u64 = 6u64
+        while k != 0u64 {
+            k = k - 1u64
+            let mut v : u64 = MB_T6[k] << sh
+            if k != 0u64 { v = v | (MB_T6[k - 1u64] >> (64u64 - sh)) }
+            MB_T6[k] = v
+        }
+    }
+    return 0i32
+}
+
+/* fetch source element `c` for kind (0 hw, 1 B*w_qan, 2 D*w_kvn):
+ * writes sign MB_SFS, limbs MB_SF0..3, exp MB_SFE */
+var MB_SFS : i64 = 0i64
+var MB_SF0 : u64 = 0u64
+var MB_SF1 : u64 = 0u64
+var MB_SF2 : u64 = 0u64
+var MB_SF3 : u64 = 0u64
+var MB_SFE : i64 = 0i64
+fn mb_gz_src(kind: u64, c: u64) -> i32 {
+    if kind == 0u64 {
+        let h : i64 = MB_XV[c]
+        let wm : i64 = MB_ANM[c]
+        MB_SFS = 0i64
+        if h > 0i64 {
+            if wm > 0i64 { MB_SFS = 1i64 }
+            if wm < 0i64 { MB_SFS = 0i64 - 1i64 }
+        }
+        if h < 0i64 {
+            if wm > 0i64 { MB_SFS = 0i64 - 1i64 }
+            if wm < 0i64 { MB_SFS = 1i64 }
+        }
+        let mut hm : u64 = h as u64
+        if h < 0i64 { hm = (0i64 - h) as u64 }
+        let mut wmm : u64 = wm as u64
+        if wm < 0i64 { wmm = (0i64 - wm) as u64 }
+        mb_mul64(hm, wmm)
+        MB_SF0 = MB_MLO
+        MB_SF1 = MB_MHI
+        MB_SF2 = 0u64
+        MB_SF3 = 0u64
+        MB_SFE = MB_ANE[c] - 24i64
+        return 0i32
+    }
+    let mut vs : i64 = 0i64
+    let mut v0 : u64 = 0u64
+    let mut v1 : u64 = 0u64
+    let mut v2 : u64 = 0u64
+    let mut ve : i64 = 0i64
+    let mut wm2 : i64 = 0i64
+    let mut we2 : i64 = 0i64
+    if kind == 1u64 {
+        vs = MB_BVS[c]
+        v0 = MB_BV0[c]
+        v1 = MB_BV1[c]
+        v2 = MB_BV2[c]
+        ve = MB_BVE[c]
+        wm2 = MB_QNM[c]
+        we2 = MB_QNE[c]
+    }
+    if kind == 2u64 {
+        vs = MB_DVS[c]
+        v0 = MB_DV0[c]
+        v1 = MB_DV1[c]
+        v2 = MB_DV2[c]
+        ve = MB_DVE[c]
+        wm2 = MB_KNM[c]
+        we2 = MB_KNE[c]
+    }
+    MB_SFS = 0i64
+    if vs != 0i64 {
+        if wm2 > 0i64 { MB_SFS = vs }
+        if wm2 < 0i64 { MB_SFS = 0i64 - vs }
+    }
+    let mut wmm2 : u64 = wm2 as u64
+    if wm2 < 0i64 { wmm2 = (0i64 - wm2) as u64 }
+    /* (v0..v2) * wmm2 -> 4 limbs */
+    mb_mul64(v0, wmm2)
+    MB_SF0 = MB_MLO
+    let mut t1 : u64 = MB_MHI
+    mb_mul64(v1, wmm2)
+    let s1 : u64 = t1 + MB_MLO
+    let mut c1 : u64 = 0u64
+    if s1 < MB_MLO { c1 = 1u64 }
+    MB_SF1 = s1
+    let mut t2 : u64 = MB_MHI + c1
+    mb_mul64(v2, wmm2)
+    let s2 : u64 = t2 + MB_MLO
+    let mut c2 : u64 = 0u64
+    if s2 < MB_MLO { c2 = 1u64 }
+    MB_SF2 = s2
+    MB_SF3 = MB_MHI + c2
+    MB_SFE = ve + we2
+    return 0i32
+}
+
+/* decode one full row of gaze tensor slot g into MB_GW (dyadic mants) */
+fn mb_gz_wrow(g: u64, row: u64) -> u64 {
+    let ty : u64 = MB_G_TYPE[g]
+    let bb : u64 = mb_tbb(ty)
+    let bv : u64 = mb_tbv(ty)
+    if bv != 256u64 { return 1u64 }
+    let ne0 : u64 = MB_G_NE0[g]
+    let bpr : u64 = ne0 / 256u64
+    let mut b : u64 = 0u64
+    while b < bpr {
+        let abs : u64 = MB_G_DB[g] + MB_G_OFF[g] + (row * bpr + b) * bb
+        if mb_wread(0u64, abs, bb) != 0u64 { return 1u64 }
+        if mb_wdec(0u64, ty, 0u64) != 0u64 { return 1u64 }
+        let mut e : u64 = 0u64
+        while e < 256u64 {
+            MB_GW[b * 256u64 + e] = MB_LVA[e]
+            e = e + 1u64
+        }
+        b = b + 1u64
+    }
+    return 0u64
+}
+
+/* one exact matvec row: weights (MB_GW, already decoded) . source(kind).
+ * Two passes (exponent window, then aligned 6-limb accumulation with
+ * per-64-chunk prefixes), then the PREFIX LAW re-fold, then canonical
+ * store into (s, 3 limbs, exp).  returns 0 ok / 1 red / 2 guard */
+var MB_RRS : i64 = 0i64
+var MB_RR0 : u64 = 0u64
+var MB_RR1 : u64 = 0u64
+var MB_RR2 : u64 = 0u64
+var MB_RRE : i64 = 0i64
+fn mb_gz_dotrow(n: u64, kind: u64) -> u64 {
+    let mut emin : i64 = 100000i64
+    let mut emax : i64 = 0i64 - 100000i64
+    let mut c : u64 = 0u64
+    while c < n {
+        if MB_GW[c] != 0i64 {
+            mb_gz_src(kind, c)
+            if MB_SFS != 0i64 {
+                if MB_SFE < emin { emin = MB_SFE }
+                if MB_SFE > emax { emax = MB_SFE }
+            }
+        }
+        c = c + 1u64
+    }
+    if emin == 100000i64 {
+        MB_RRS = 0i64
+        MB_RR0 = 0u64
+        MB_RR1 = 0u64
+        MB_RR2 = 0u64
+        MB_RRE = 0i64
+        return 0u64
+    }
+    if emax - emin > 48i64 { return 2u64 }
+    MB_6S = 0i64
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MB_6L[k] = 0u64
+        k = k + 1u64
+    }
+    MB_GZOVF = 0u64
+    let nch : u64 = (n + 63u64) / 64u64
+    let mut ch : u64 = 0u64
+    while ch < nch {
+        let mut ce : u64 = ch * 64u64
+        let mut cend : u64 = ce + 64u64
+        if cend > n { cend = n }
+        while ce < cend {
+            let wq : i64 = MB_GW[ce]
+            if wq != 0i64 {
+                mb_gz_src(kind, ce)
+                if MB_SFS != 0i64 {
+                    let mut wqm : u64 = wq as u64
+                    if wq < 0i64 { wqm = (0i64 - wq) as u64 }
+                    let mut sgn : i64 = MB_SFS
+                    if wq < 0i64 { sgn = 0i64 - MB_SFS }
+                    let sh : u64 = (MB_SFE - emin) as u64
+                    mb_t6_mul4_shl(MB_SF0, MB_SF1, MB_SF2, MB_SF3, wqm, sh)
+                    mb_acc6_add(sgn)
+                }
+            }
+            ce = ce + 1u64
+        }
+        MB_6CS[ch] = MB_6S
+        let mut q : u64 = 0u64
+        while q < 6u64 {
+            MB_6CL[ch * 6u64 + q] = MB_6L[q]
+            q = q + 1u64
+        }
+        ch = ch + 1u64
+    }
+    if MB_GZOVF != 0u64 { return 2u64 }
+    /* THE PREFIX LAW: deltas re-folded backwards must land on the row */
+    let fin_s : i64 = MB_6CS[nch - 1u64]
+    MB_6S = 0i64
+    k = 0u64
+    while k < 6u64 {
+        MB_6L[k] = 0u64
+        k = k + 1u64
+    }
+    let mut ck : u64 = nch
+    while ck != 0u64 {
+        ck = ck - 1u64
+        /* delta_ck = prefix_ck - prefix_{ck-1}: fold via two adds */
+        let mut q2 : u64 = 0u64
+        while q2 < 6u64 {
+            MB_T6[q2] = MB_6CL[ck * 6u64 + q2]
+            q2 = q2 + 1u64
+        }
+        mb_acc6_add(MB_6CS[ck])
+        if ck != 0u64 {
+            q2 = 0u64
+            while q2 < 6u64 {
+                MB_T6[q2] = MB_6CL[(ck - 1u64) * 6u64 + q2]
+                q2 = q2 + 1u64
+            }
+            mb_acc6_add(0i64 - MB_6CS[ck - 1u64])
+        }
+    }
+    if MB_6S != fin_s { return 1u64 }
+    k = 0u64
+    while k < 6u64 {
+        if MB_6L[k] != MB_6CL[(nch - 1u64) * 6u64 + k] { return 1u64 }
+        k = k + 1u64
+    }
+    /* canonical store: strip twos, demand bitlen <= 160 */
+    let mut tz : u64 = 0u64
+    let mut nzk : u64 = 0u64
+    k = 0u64
+    while k < 6u64 {
+        nzk = nzk | MB_6L[k]
+        k = k + 1u64
+    }
+    if nzk == 0u64 {
+        MB_RRS = 0i64
+        MB_RR0 = 0u64
+        MB_RR1 = 0u64
+        MB_RR2 = 0u64
+        MB_RRE = 0i64
+        return 0u64
+    }
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        go = 0u8
+        if (MB_6L[0] & 1u64) == 0u64 {
+            k = 0u64
+            while k < 5u64 {
+                MB_6L[k] = (MB_6L[k] >> 1u64) | (MB_6L[k + 1u64] << 63u64)
+                k = k + 1u64
+            }
+            MB_6L[5] = MB_6L[5] >> 1u64
+            tz = tz + 1u64
+            go = 1u8
+        }
+    }
+    if MB_6L[3] != 0u64 { return 2u64 }
+    if MB_6L[4] != 0u64 { return 2u64 }
+    if MB_6L[5] != 0u64 { return 2u64 }
+    if mb_bitlen(MB_6L[2]) > 32u64 { return 2u64 }
+    MB_RRS = fin_s
+    MB_RR0 = MB_6L[0]
+    MB_RR1 = MB_6L[1]
+    MB_RR2 = MB_6L[2]
+    MB_RRE = emin - 24i64 + (tz as i64)
+    return 0u64
+}
+
+/* pair-dot: sum over d of A[d]*B[d] where both sides are (s,3limb,exp)
+ * arrays; which 0 = C(nope 0..127) x E, 1 = C(rope 128..) x D(512+).
+ * result -> MB_6S/MB_6L + exp MB_PDE.  returns 0/1/2 as above */
+var MB_PDE : i64 = 0i64
+fn mb_gz_pairdot(which: u64, n: u64) -> u64 {
+    let mut emin : i64 = 100000i64
+    let mut emax : i64 = 0i64 - 100000i64
+    let mut d : u64 = 0u64
+    while d < n {
+        let mut sa : i64 = 0i64
+        let mut sb : i64 = 0i64
+        let mut ea : i64 = 0i64
+        let mut eb : i64 = 0i64
+        if which == 0u64 {
+            sa = MB_CHS[d]
+            ea = MB_CHE[d]
+            sb = MB_EHS[d]
+            eb = MB_EHE[d]
+        }
+        if which == 1u64 {
+            sa = MB_CHS[128u64 + d]
+            ea = MB_CHE[128u64 + d]
+            sb = MB_DVS[512u64 + d]
+            eb = MB_DVE[512u64 + d]
+        }
+        if sa != 0i64 {
+            if sb != 0i64 {
+                let te : i64 = ea + eb
+                if te < emin { emin = te }
+                if te > emax { emax = te }
+            }
+        }
+        d = d + 1u64
+    }
+    if emin == 100000i64 {
+        MB_6S = 0i64
+        let mut kq : u64 = 0u64
+        while kq < 6u64 {
+            MB_6L[kq] = 0u64
+            kq = kq + 1u64
+        }
+        MB_PDE = 0i64
+        return 0u64
+    }
+    if emax - emin > 48i64 { return 2u64 }
+    MB_6S = 0i64
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MB_6L[k] = 0u64
+        k = k + 1u64
+    }
+    MB_GZOVF = 0u64
+    d = 0u64
+    while d < n {
+        let mut sa2 : i64 = 0i64
+        let mut a0 : u64 = 0u64
+        let mut a1 : u64 = 0u64
+        let mut a2 : u64 = 0u64
+        let mut ea2 : i64 = 0i64
+        let mut sb2 : i64 = 0i64
+        let mut b0 : u64 = 0u64
+        let mut b1 : u64 = 0u64
+        let mut b2 : u64 = 0u64
+        let mut eb2 : i64 = 0i64
+        if which == 0u64 {
+            sa2 = MB_CHS[d]
+            a0 = MB_CH0[d]
+            a1 = MB_CH1[d]
+            a2 = MB_CH2[d]
+            ea2 = MB_CHE[d]
+            sb2 = MB_EHS[d]
+            b0 = MB_EH0[d]
+            b1 = MB_EH1[d]
+            b2 = MB_EH2[d]
+            eb2 = MB_EHE[d]
+        }
+        if which == 1u64 {
+            sa2 = MB_CHS[128u64 + d]
+            a0 = MB_CH0[128u64 + d]
+            a1 = MB_CH1[128u64 + d]
+            a2 = MB_CH2[128u64 + d]
+            ea2 = MB_CHE[128u64 + d]
+            sb2 = MB_DVS[512u64 + d]
+            b0 = MB_DV0[512u64 + d]
+            b1 = MB_DV1[512u64 + d]
+            b2 = MB_DV2[512u64 + d]
+            eb2 = MB_DVE[512u64 + d]
+        }
+        if sa2 != 0i64 {
+            if sb2 != 0i64 {
+                mb_mul192(a0, a1, a2, b0, b1, b2)
+                let sh : u64 = ((ea2 + eb2) - emin) as u64
+                let mut q3 : u64 = 0u64
+                while q3 < 6u64 {
+                    MB_T6[q3] = MB_R6[q3]
+                    q3 = q3 + 1u64
+                }
+                if sh != 0u64 {
+                    let mut kk : u64 = 6u64
+                    while kk != 0u64 {
+                        kk = kk - 1u64
+                        let mut v2 : u64 = MB_T6[kk] << sh
+                        if kk != 0u64 { v2 = v2 | (MB_T6[kk - 1u64] >> (64u64 - sh)) }
+                        MB_T6[kk] = v2
+                    }
+                }
+                let mut sg : i64 = sa2
+                if sb2 < 0i64 { sg = 0i64 - sg }
+                mb_acc6_add(sg)
+            }
+        }
+        d = d + 1u64
+    }
+    if MB_GZOVF != 0u64 { return 2u64 }
+    MB_PDE = emin
+    return 0u64
+}
+
+/* head comparison of stored (s, 6-limb, exp): decisive by sign, then by
+ * (bitlen + exp), then by aligned limbs */
+fn mb_gz_hbits(arr_l: u64, i: u64) -> u64 {
+    /* bitlen of head i's 6 limbs in N1L (arr_l 0) or N2L (arr_l 1) */
+    let mut k : u64 = 6u64
+    while k != 0u64 {
+        k = k - 1u64
+        let mut v : u64 = 0u64
+        if arr_l == 0u64 { v = MB_N1L[i * 6u64 + k] }
+        if arr_l == 1u64 { v = MB_N2L[i * 6u64 + k] }
+        if v != 0u64 { return k * 64u64 + mb_bitlen(v) }
+    }
+    return 0u64
+}
+
+fn mb_gz_hcmp(arr: u64, i: u64, j: u64) -> i64 {
+    let mut si : i64 = 0i64
+    let mut sj : i64 = 0i64
+    let mut ei : i64 = 0i64
+    let mut ej : i64 = 0i64
+    if arr == 0u64 {
+        si = MB_N1S[i]
+        sj = MB_N1S[j]
+        ei = MB_N1E[i]
+        ej = MB_N1E[j]
+    }
+    if arr == 1u64 {
+        si = MB_N2S[i]
+        sj = MB_N2S[j]
+        ei = MB_N2E[i]
+        ej = MB_N2E[j]
+    }
+    if si > sj { return 1i64 }
+    if si < sj { return 0i64 - 1i64 }
+    if si == 0i64 { return 0i64 }
+    let bi : i64 = (mb_gz_hbits(arr, i) as i64) + ei
+    let bj : i64 = (mb_gz_hbits(arr, j) as i64) + ej
+    let mut mag : i64 = 0i64
+    if bi > bj { mag = 1i64 }
+    if bi < bj { mag = 0i64 - 1i64 }
+    if mag == 0i64 {
+        /* same magnitude class: align to the smaller exponent and compare */
+        let mut sh_i : u64 = 0u64
+        let mut sh_j : u64 = 0u64
+        if ei > ej { sh_i = (ei - ej) as u64 }
+        if ej > ei { sh_j = (ej - ei) as u64 }
+        let mut k : u64 = 6u64
+        let mut cmp : i64 = 0i64
+        while k != 0u64 {
+            k = k - 1u64
+            /* aligned limb extraction with shift-left by sh (guarded small) */
+            let mut vi : u64 = 0u64
+            let mut vj : u64 = 0u64
+            if arr == 0u64 {
+                vi = MB_N1L[i * 6u64 + k] << sh_i
+                if k != 0u64 {
+                    if sh_i != 0u64 { vi = vi | (MB_N1L[i * 6u64 + k - 1u64] >> (64u64 - sh_i)) }
+                }
+                vj = MB_N1L[j * 6u64 + k] << sh_j
+                if k != 0u64 {
+                    if sh_j != 0u64 { vj = vj | (MB_N1L[j * 6u64 + k - 1u64] >> (64u64 - sh_j)) }
+                }
+            }
+            if arr == 1u64 {
+                vi = MB_N2L[i * 6u64 + k] << sh_i
+                if k != 0u64 {
+                    if sh_i != 0u64 { vi = vi | (MB_N2L[i * 6u64 + k - 1u64] >> (64u64 - sh_i)) }
+                }
+                vj = MB_N2L[j * 6u64 + k] << sh_j
+                if k != 0u64 {
+                    if sh_j != 0u64 { vj = vj | (MB_N2L[j * 6u64 + k - 1u64] >> (64u64 - sh_j)) }
+                }
+            }
+            if cmp == 0i64 {
+                if vi > vj { cmp = 1i64 }
+                if vi < vj { cmp = 0i64 - 1i64 }
+            }
+        }
+        mag = cmp
+    }
+    if si < 0i64 { return 0i64 - mag }
+    return mag
+}
+
+/* load an f32 norm vector (slot g) into the chosen preload arrays */
+fn mb_gz_loadf32(g: u64, which: u64, n: u64) -> u64 {
+    if MB_G_TYPE[g] != 0u64 { return 1u64 }
+    if MB_G_NE[g] != n { return 1u64 }
+    mb_mkpath(MB_G_SH[g])
+    let f : u64 = fopen((&MB_PATH) as u64, "rb" as u64)
+    if f == 0u64 { return 1u64 }
+    MB_F = f
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    mb_seek_abs(MB_G_DB[g] + MB_G_OFF[g])
+    let mut c : u64 = 0u64
+    while c < n {
+        let bits : u64 = mb_u32()
+        let m : i64 = mb_f32m(bits)
+        if m == 4611686018427387904i64 {
+            fclose(f)
+            return 1u64
+        }
+        if which == 0u64 {
+            MB_ANM[c] = m
+            MB_ANE[c] = MB_F32E
+        }
+        if which == 1u64 {
+            MB_QNM[c] = m
+            MB_QNE[c] = MB_F32E
+        }
+        if which == 2u64 {
+            MB_KNM[c] = m
+            MB_KNE[c] = MB_F32E
+        }
+        c = c + 1u64
+    }
+    let mut rr : u64 = 0u64
+    if MB_IOERR != 0u8 { rr = 1u64 }
+    fclose(f)
+    return rr
+}
+
+fn mb_arm375() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    /* the seven organs must all be on the table; foreignness is named */
+    let mut g : u64 = 0u64
+    while g < 7u64 {
+        if MB_G_F[g] == 0u8 {
+            mb_rs("the gaze: blk.0 attention absent from the feast (named, lawful)" as u64)
+            mb_rb(10u8)
+            return 0u64
+        }
+        g = g + 1u64
+    }
+    if MB_NHEAD == 0u64 { return 375u64 }
+    if MB_NHEAD > 128u64 {
+        mb_rs("the gaze: heads exceed the ledger (named, lawful)" as u64)
+        mb_rb(10u8)
+        return 0u64
+    }
+    let hw : u64 = MB_G_NE[3] / MB_G_NE0[3] / MB_NHEAD    /* per-head q width */
+    if hw <= MB_NROPE { return 375u64 }
+    let nope : u64 = hw - MB_NROPE
+    let kvw : u64 = MB_G_NE[6] / MB_G_NE0[6] / MB_NHEAD   /* per-head kv width */
+    if kvw < nope { return 375u64 }
+    if MB_G_NE0[1] != MB_G_NE[0] { return 375u64 }        /* q_a input = embed */
+    if MB_G_NE0[3] != MB_G_NE[2] { return 375u64 }        /* q_b input = q_a_norm width */
+    if MB_G_NE0[6] != MB_G_NE[5] { return 375u64 }        /* kv_b input = kv_a_norm width */
+    let qa_rank : u64 = MB_G_NE[2]
+    let kv_rank : u64 = MB_G_NE[5]
+    if MB_G_NE0[4] != MB_G_NE[0] { return 375u64 }
+    if MB_G_NE[4] / MB_G_NE0[4] < kv_rank + MB_NROPE { return 375u64 }
+    /* the one-shard premise for the weight streams (true of this feast;
+     * a scattered layout would be a lawful named refusal) */
+    g = 1u64
+    while g < 7u64 {
+        if MB_G_SH[g] != MB_G_SH[1] {
+            mb_rs("the gaze: attention scattered across shards (named, lawful)" as u64)
+            mb_rb(10u8)
+            return 0u64
+        }
+        g = g + 1u64
+    }
+    /* preload the three f32 norm vectors */
+    if mb_gz_loadf32(0u64, 0u64, MB_G_NE[0]) != 0u64 { return 375u64 }
+    if mb_gz_loadf32(2u64, 1u64, qa_rank) != 0u64 { return 375u64 }
+    if mb_gz_loadf32(5u64, 2u64, kv_rank) != 0u64 { return 375u64 }
+    /* the weight streams live on shard(s): open worker-0 handle per tensor
+     * as needed (all gaze tensors sit in shard 1 for this feast; the path
+     * is rebuilt per tensor from its OWN shard index) */
+    mb_mkpath(MB_G_SH[1])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 375u64 }
+    /* stage B: q_a rows (into BV), then D: kv_a rows (into DV) */
+    let mut r : u64 = 0u64
+    while r < qa_rank {
+        if mb_gz_wrow(1u64, r) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        let rc : u64 = mb_gz_dotrow(MB_G_NE0[1], 0u64)
+        if rc != 0u64 {
+            fclose(MB_LFILE[0])
+            if rc == 2u64 {
+                mb_rs("the gaze: refused (guard tripped in stage B -- named)" as u64)
+                mb_rb(10u8)
+                return 0u64
+            }
+            return 375u64
+        }
+        MB_BVS[r] = MB_RRS
+        MB_BV0[r] = MB_RR0
+        MB_BV1[r] = MB_RR1
+        MB_BV2[r] = MB_RR2
+        MB_BVE[r] = MB_RRE
+        r = r + 1u64
+    }
+    let d_rows : u64 = kv_rank + MB_NROPE
+    r = 0u64
+    while r < d_rows {
+        if mb_gz_wrow(4u64, r) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        let rc2 : u64 = mb_gz_dotrow(MB_G_NE0[4], 0u64)
+        if rc2 != 0u64 {
+            fclose(MB_LFILE[0])
+            if rc2 == 2u64 {
+                mb_rs("the gaze: refused (guard tripped in stage D -- named)" as u64)
+                mb_rb(10u8)
+                return 0u64
+            }
+            return 375u64
+        }
+        MB_DVS[r] = MB_RRS
+        MB_DV0[r] = MB_RR0
+        MB_DV1[r] = MB_RR1
+        MB_DV2[r] = MB_RR2
+        MB_DVE[r] = MB_RRE
+        r = r + 1u64
+    }
+    /* the heads */
+    let mut hh : u64 = 0u64
+    while hh < MB_NHEAD {
+        let mut d2 : u64 = 0u64
+        while d2 < hw {
+            if mb_gz_wrow(3u64, hh * hw + d2) != 0u64 {
+                fclose(MB_LFILE[0])
+                return 375u64
+            }
+            let rc3 : u64 = mb_gz_dotrow(MB_G_NE0[3], 1u64)
+            if rc3 != 0u64 {
+                fclose(MB_LFILE[0])
+                return 375u64
+            }
+            MB_CHS[d2] = MB_RRS
+            MB_CH0[d2] = MB_RR0
+            MB_CH1[d2] = MB_RR1
+            MB_CH2[d2] = MB_RR2
+            MB_CHE[d2] = MB_RRE
+            d2 = d2 + 1u64
+        }
+        d2 = 0u64
+        while d2 < nope {
+            if mb_gz_wrow(6u64, hh * kvw + d2) != 0u64 {
+                fclose(MB_LFILE[0])
+                return 375u64
+            }
+            let rc4 : u64 = mb_gz_dotrow(MB_G_NE0[6], 2u64)
+            if rc4 != 0u64 {
+                fclose(MB_LFILE[0])
+                return 375u64
+            }
+            MB_EHS[d2] = MB_RRS
+            MB_EH0[d2] = MB_RR0
+            MB_EH1[d2] = MB_RR1
+            MB_EH2[d2] = MB_RR2
+            MB_EHE[d2] = MB_RRE
+            d2 = d2 + 1u64
+        }
+        if mb_gz_pairdot(0u64, nope) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        MB_N1S[hh] = MB_6S
+        MB_N1E[hh] = MB_PDE
+        let mut q4 : u64 = 0u64
+        while q4 < 6u64 {
+            MB_N1L[hh * 6u64 + q4] = MB_6L[q4]
+            q4 = q4 + 1u64
+        }
+        if mb_gz_pairdot(1u64, MB_NROPE) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        MB_N2S[hh] = MB_6S
+        MB_N2E[hh] = MB_PDE
+        q4 = 0u64
+        while q4 < 6u64 {
+            MB_N2L[hh * 6u64 + q4] = MB_6L[q4]
+            q4 = q4 + 1u64
+        }
+        hh = hh + 1u64
+    }
+    fclose(MB_LFILE[0])
+    /* the verdicts: per-part argmax (lowest index on ties), sign census,
+     * and the DOMINANCE fold over all pairs */
+    let mut a1 : u64 = 0u64
+    let mut a2 : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < MB_NHEAD {
+        if mb_gz_hcmp(0u64, i, a1) > 0i64 { a1 = i }
+        if mb_gz_hcmp(1u64, i, a2) > 0i64 { a2 = i }
+        i = i + 1u64
+    }
+    let mut sp : u64 = 0u64
+    let mut sn : u64 = 0u64
+    let mut sz : u64 = 0u64
+    i = 0u64
+    while i < MB_NHEAD {
+        if MB_N1S[i] > 0i64 { sp = sp + 1u64 }
+        if MB_N1S[i] < 0i64 { sn = sn + 1u64 }
+        if MB_N1S[i] == 0i64 { sz = sz + 1u64 }
+        i = i + 1u64
+    }
+    if sp + sn + sz != MB_NHEAD { return 375u64 }
+    let mut conc : u64 = 0u64
+    let mut disc : u64 = 0u64
+    i = 0u64
+    while i < MB_NHEAD {
+        let mut j : u64 = i + 1u64
+        while j < MB_NHEAD {
+            let c1 : i64 = mb_gz_hcmp(0u64, i, j)
+            let c2 : i64 = mb_gz_hcmp(1u64, i, j)
+            let mut isdisc : u64 = 0u64
+            if c1 > 0i64 {
+                if c2 < 0i64 { isdisc = 1u64 }
+            }
+            if c1 < 0i64 {
+                if c2 > 0i64 { isdisc = 1u64 }
+            }
+            if isdisc == 1u64 { disc = disc + 1u64 }
+            if isdisc == 0u64 { conc = conc + 1u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    if conc + disc != (MB_NHEAD * (MB_NHEAD - 1u64)) / 2u64 { return 375u64 }
+    /* THE DOUBLE STREAM: the nope-argmax head recomputed from fresh reads */
+    let sv_s : i64 = MB_N1S[a1]
+    let sv_e : i64 = MB_N1E[a1]
+    let mut q5 : u64 = 0u64
+    while q5 < 6u64 {
+        MB_SVL[q5] = MB_N1L[a1 * 6u64 + q5]
+        q5 = q5 + 1u64
+    }
+    mb_mkpath(MB_G_SH[1])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 375u64 }
+    let mut d3 : u64 = 0u64
+    while d3 < hw {
+        if mb_gz_wrow(3u64, a1 * hw + d3) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        if mb_gz_dotrow(MB_G_NE0[3], 1u64) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        MB_CHS[d3] = MB_RRS
+        MB_CH0[d3] = MB_RR0
+        MB_CH1[d3] = MB_RR1
+        MB_CH2[d3] = MB_RR2
+        MB_CHE[d3] = MB_RRE
+        d3 = d3 + 1u64
+    }
+    d3 = 0u64
+    while d3 < nope {
+        if mb_gz_wrow(6u64, a1 * kvw + d3) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        if mb_gz_dotrow(MB_G_NE0[6], 2u64) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 375u64
+        }
+        MB_EHS[d3] = MB_RRS
+        MB_EH0[d3] = MB_RR0
+        MB_EH1[d3] = MB_RR1
+        MB_EH2[d3] = MB_RR2
+        MB_EHE[d3] = MB_RRE
+        d3 = d3 + 1u64
+    }
+    fclose(MB_LFILE[0])
+    if mb_gz_pairdot(0u64, nope) != 0u64 { return 375u64 }
+    if MB_6S != sv_s { return 375u64 }
+    if MB_PDE != sv_e { return 375u64 }
+    q5 = 0u64
+    while q5 < 6u64 {
+        if MB_6L[q5] != MB_SVL[q5] { return 375u64 }
+        q5 = q5 + 1u64
+    }
+    mb_rs("the gaze: layer=0 pos=0 heads=" as u64)
+    mb_ru(MB_NHEAD)
+    mb_rs(" width=" as u64)
+    mb_ru(nope)
+    mb_rs("+" as u64)
+    mb_ru(MB_NROPE)
+    mb_rs(" rope-at-0=identity nope-argmax=" as u64)
+    mb_ru(a1)
+    mb_rs(" rope-argmax=" as u64)
+    mb_ru(a2)
+    mb_rs(" sign p/n/z=" as u64)
+    mb_ru(sp)
+    mb_rs("/" as u64)
+    mb_ru(sn)
+    mb_rs("/" as u64)
+    mb_ru(sz)
+    mb_rs(" dominance concordant=" as u64)
+    mb_ru(conc)
+    mb_rs(" discordant=" as u64)
+    mb_ru(disc)
+    mb_rs(" (surd frontier named) prefix-law=ok double-stream=ok norm-scalars=shared (order is integer-exact)" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
 fn mb_arm371() -> u64 {
     if MB_FEAST == 0u8 { return 0u64 }
     /* the resident stomach: the sum of every buffer this organ owns.
@@ -3680,7 +4701,7 @@ fn mb_arm371() -> u64 {
      * + loom slices (blk 1024 + values 2x8192 + ledgers ~576)
      * + the fleet (x 57344 + xbmax 256 + ledgers/samples ~1000)
      * + the walk (logits 256x40 + chunks 112x32 + top 64) */
-    let resident : u64 = 65536u64 + 4096u64 + 4096u64 + 256u64 + 512u64 + 256u64 + 2048u64 + 2048u64 + 4096u64 + 512u64 + 1536u64 + 176u64 + 128u64 + 32u64 + 64u64 + 144u64 + 1024u64 + 16384u64 + 576u64 + 57344u64 + 256u64 + 1000u64 + 10240u64 + 3584u64 + 64u64
+    let resident : u64 = 65536u64 + 4096u64 + 4096u64 + 256u64 + 512u64 + 256u64 + 2048u64 + 2048u64 + 4096u64 + 512u64 + 1536u64 + 176u64 + 128u64 + 32u64 + 64u64 + 144u64 + 1024u64 + 16384u64 + 576u64 + 57344u64 + 256u64 + 1000u64 + 10240u64 + 3584u64 + 64u64 + 324936u64
     if MB_STREAMED == 0u64 { return 371u64 }
     if MB_STREAMED <= resident { return 371u64 }
     mb_rs("the stomach: streamed=" as u64)
@@ -3729,6 +4750,14 @@ fn mb_selfprove() -> u64 @export {
     MB_C2_F = 0u8
     MB_C3_F = 0u8
     MB_C3_HERE = 0u8
+    let mut gz0 : u64 = 0u64
+    while gz0 < 8u64 {
+        MB_G_F[gz0] = 0u8
+        MB_G_HERE[gz0] = 0u8
+        gz0 = gz0 + 1u64
+    }
+    MB_NHEAD = 0u64
+    MB_NROPE = 0u64
     MB_ARCHN = 0u64
     MB_EMBED = 0u64
     MB_LAYERS = 0u64
@@ -3759,6 +4788,8 @@ fn mb_selfprove() -> u64 @export {
     if r5e != 0u64 { return r5e }
     let r5f : u64 = mb_arm374()
     if r5f != 0u64 { return r5f }
+    let r5g : u64 = mb_arm375()
+    if r5g != 0u64 { return r5g }
     let r5c : u64 = mb_arm371()
     if r5c != 0u64 { return r5c }
     let r6 : u64 = mb_arm366()

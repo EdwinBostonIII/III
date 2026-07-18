@@ -1,0 +1,260 @@
+/* STDLIB/iii/aether/xenos_cli.iii -- iii xenos: THE MEMBRANE OF XENIA as a
+ * standing tool -- the one door between III and the foreign world.
+ *
+ *   iii xenos teach                        the law of xenia (the whole door)
+ *   iii xenos prove                        the self-proof (vein 120..124, door 109..118)
+ *   iii xenos admit  "<json>"              transduce a foreign value into EIDOLOS,
+ *                                          judge it, remember the knock; print the
+ *                                          verdict and the crushed algebra
+ *   iii xenos emit   "<json>"              admit, then re-emit the canonical
+ *                                          envelope through the SAME door
+ *   iii xenos ask    "<json>" -- "a" is|under|mirrors "b"
+ *                                          admit a stranger, then REASON over what
+ *                                          it now KNOWS (the union with III)
+ *   iii xenos book                         the guest-book: every knock, self-verified
+ *
+ * The foreign arrives on argv (JSON; brackets/braces may split across words --
+ * they are rejoined with single spaces).  EVERY verb self-proves the vein and
+ * the door first and refuses to run over a broken law (exit 9): the kardia
+ * condition-of-motion pattern -- no gate, no KAT.
+ * exit: 0 ok/admitted/entailed | 1 refused/unheard/not-entailed | 3 usage | 9 SELF-REFUSED */
+module xenos_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_verdict() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_addr() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_geom() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_name() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_alien() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_epoch() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_byte(i: u64) -> u8 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_emit_env() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_byte(i: u64) -> u8 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_book_verify() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_book_line_off(idx: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_book_byte(off: u64) -> u8 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+const XC_SENT : u64 = 18446744073709551615u64
+const XC_ADMITTED : u64 = 1u64
+const XC_REFUSED  : u64 = 2u64
+const XC_UNHEARD  : u64 = 3u64
+
+var XC_IN : [u8; 16384]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut n : u64 = 0u64   while p[n] != 0u8 { n = n + 1u64 }   return n }
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn join_args(argc: i32, argv: u64, frm: u64, dst: u64, cap: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let d : *u8 = dst as *u8
+    let mut n : u64 = 0u64
+    let mut i : u64 = frm
+    while (i as i64) < (argc as i64) {
+        if i > frm { if n < cap { d[n] = 32u8   n = n + 1u64 } }
+        let p : *u8 = av[i] as *u8
+        let mut k : u64 = 0u64
+        while p[k] != 0u8 { if n < cap { d[n] = p[k]   n = n + 1u64 }   k = k + 1u64 }
+        i = i + 1u64
+    }
+    if n < cap { d[n] = 0u8 }
+    return n
+}
+fn pcanon() -> u32 {
+    let n : u64 = xn_canon_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(xn_canon_byte(i) as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn grade_word(g: u64) -> u32 {
+    if g == 2u64 { ps("CONFORMING (speaks the tongue, soul matched)" as u64)   return 1u32 }
+    if g == 1u64 { ps("UNSIGNED (speaks the tongue, no credentials)" as u64)   return 1u32 }
+    ps("STRANGER (transduced structurally into containment)" as u64)
+    return 1u32
+}
+fn reason_word(r: u64) -> u32 {
+    if r == 1u64 { ps("BROKEN (unreadable as claims)" as u64)   return 1u32 }
+    if r == 2u64 { ps("CYCLE (a thing under itself -- the law refuses)" as u64)   return 1u32 }
+    if r == 3u64 { ps("LYING (stated address/geometry does not re-derive)" as u64)   return 1u32 }
+    if r == 4u64 { ps("SOUL (a foreign axiom -- a different law; quarantined)" as u64)   return 1u32 }
+    ps("THROAT (over the envelope, or too deep -- refused whole)" as u64)
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii xenos -- the membrane of xenia: the one door to the foreign world\n\n" as u64)
+    ps("  iii xenos teach                     the law of xenia (the whole door)\n" as u64)
+    ps("  iii xenos prove                     the self-proof (vein 120..124, door 109..118)\n" as u64)
+    ps("  iii xenos admit \"<json>\"            transduce, judge, remember; print the algebra\n" as u64)
+    ps("  iii xenos emit  \"<json>\"            admit, then re-emit the canonical envelope\n" as u64)
+    ps("  iii xenos ask   \"<json>\" -- \"a\" is|under|mirrors \"b\"   reason over the union\n" as u64)
+    ps("  iii xenos book                      the guest-book: every knock, self-verified\n\n" as u64)
+    ps("exit: 0 ok/admitted/entailed | 1 refused/unheard/not-entailed | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn teach() -> u64 {
+    ps("THE LAW OF XENIA -- safe hospitality to the stranger\n\n" as u64)
+    ps("The foreign world (JSON, the world's lingua franca) enters III through ONE\n" as u64)
+    ps("door, and only TRANSDUCED into EIDOLOS -- III's own reasoning language.  The\n" as u64)
+    ps("guest is judged by III's own RE-DERIVATION, never by trust in its shape.\n\n" as u64)
+    ps("THREE GRADES OF GUEST, ONE DOOR\n\n" as u64)
+    ps("  CONFORMING  an envelope whose axiom equals III's own soul (the handshake)\n" as u64)
+    ps("              and whose stated address re-derives -- a lying address refuses.\n" as u64)
+    ps("  UNSIGNED    a bare claim-array: speaks the tongue, admitted on coherence.\n" as u64)
+    ps("  STRANGER    any other JSON: crushed into pure containment (<) -- a nested\n" as u64)
+    ps("              object becomes [child < parent], a leaf rides in its phrase,\n" as u64)
+    ps("              so {\"a\":1,\"b\":1} never mints a = b.  The world conforms to\n" as u64)
+    ps("              the math, never the reverse.\n\n" as u64)
+    ps("THE JUDGMENT IS RE-DERIVATION: transduce -> read -> lawcheck -> address, then\n" as u64)
+    ps("the canonical text is re-read and must derive the SAME address.  A cycle, a\n" as u64)
+    ps("lie, a foreign soul, an over-throat: each REFUSED by name and remembered.\n\n" as u64)
+    ps("THE SAME DOOR EMITS: III's knowledge leaves as the identical envelope form it\n" as u64)
+    ps("admits, so two doors can speak and verify every word.  And the LIVE WIRE\n" as u64)
+    ps("arrives through a bare-metal vein (xring) -- zero OS on the hot path.\n" as u64)
+    return 0u64
+}
+fn condition_of_motion() -> u64 {
+    let vp : u64 = xr_selfprove()
+    if vp != 0u64 { ps("THE VEIN REFUSES ITSELF: xring self-proof arm " as u64)   pu(vp)   ps(" failed\n" as u64)   return 9u64 }
+    let dp : u64 = xn_selfprove()
+    if dp != 0u64 { ps("THE DOOR REFUSES ITSELF: xenos self-proof arm " as u64)   pu(dp)   ps(" failed\n" as u64)   return 9u64 }
+    return 0u64
+}
+fn print_verdict() -> u64 {
+    let v : u64 = xn_verdict()
+    if v == XC_ADMITTED {
+        ps("ADMITTED  grade: " as u64)   grade_word(xn_grade())   putchar(10i32)
+        ps("  address  : " as u64)   pu(xn_last_addr())   putchar(10i32)
+        ps("  geometry : " as u64)   pu(xn_last_geom())   ps("   (the shape on the logos bus, names erased)\n" as u64)
+        ps("  name     : " as u64)   pu(xn_last_name())   putchar(10i32)
+        if xn_last_alien() > 0u64 {
+            ps("  alien    : " as u64)   pu(xn_last_alien())   ps(" word(s) outside III's lexicon (admitted, flagged)\n" as u64)
+        }
+        if xn_last_epoch() > 0u64 { ps("  guest-book: line " as u64)   pu(xn_last_epoch())   putchar(10i32) }
+        ps("  crushed to eidolos algebra:\n    " as u64)   pcanon()   putchar(10i32)
+        return 0u64
+    }
+    if v == XC_REFUSED {
+        ps("REFUSED   reason: " as u64)   reason_word(xn_reason())   putchar(10i32)
+        if xn_last_epoch() > 0u64 { ps("  guest-book: line " as u64)   pu(xn_last_epoch())   ps(" (the refusal is remembered)\n" as u64) }
+        return 1u64
+    }
+    ps("UNHEARD   (not speech on this wire -- no JSON value; counted, remembered)\n" as u64)
+    if xn_last_epoch() > 0u64 { ps("  guest-book: line " as u64)   pu(xn_last_epoch())   putchar(10i32) }
+    return 1u64
+}
+fn xenos_enter(argc: i32, argv: u64) -> u64 @export {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    let cm : u64 = condition_of_motion()
+    if cm != 0u64 { return 9u64 }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "teach" as u64) == 1u32 { return teach() }
+    if streq(cmd, "prove" as u64) == 1u32 {
+        ps("THE MEMBRANE PROVEN: the vein (xring 120..124) carries frames byte-exact\n" as u64)
+        ps("across the seam, refuses whole, severs on a torn frame; the door\n" as u64)
+        ps("(xenos 109..118) transduces total, judges by re-derivation, discerns the\n" as u64)
+        ps("three grades, refuses the cycle/lie/soul/throat by name, remembers every\n" as u64)
+        ps("knock in a self-verifying guest-book, and emits through the same door.\n" as u64)
+        ps("Re-proven at THIS invocation, before any guest entered.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "book" as u64) == 1u32 {
+        let n : u64 = xn_book_verify()
+        if n == XC_SENT { ps("THE GUEST-BOOK IS TAMPERED: a line's address does not re-derive\n" as u64)   return 1u64 }
+        if n == 0u64 { ps("the guest-book is empty (no knock has been remembered here yet)\n" as u64)   return 0u64 }
+        ps("THE GUEST-BOOK -- every knock, its address re-derived from its own text:\n\n" as u64)
+        let mut i : u64 = 0u64
+        while i < n {
+            let off : u64 = xn_book_line_off(i)
+            if off != XC_SENT {
+                ps("  " as u64)
+                let mut k : u64 = off
+                let mut going : u64 = 1u64
+                while going == 1u64 {
+                    let c : u8 = xn_book_byte(k)
+                    if c == 0u8 { going = 0u64 } else {
+                        if c == 10u8 { going = 0u64 } else { putchar(c as i32)   k = k + 1u64 }
+                    }
+                }
+                putchar(10i32)
+            }
+            i = i + 1u64
+        }
+        ps("\n" as u64)   pu(n)   ps(" line(s) verified.\n" as u64)
+        return 0u64
+    }
+    if streq(cmd, "admit" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&XC_IN) as u64, 16383u64)
+        xn_admit((&XC_IN) as u64, n)
+        return print_verdict()
+    }
+    if streq(cmd, "emit" as u64) == 1u32 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = join_args(argc, argv, 2u64, (&XC_IN) as u64, 16383u64)
+        let v : u64 = xn_admit((&XC_IN) as u64, n)
+        let rc : u64 = print_verdict()
+        if v != XC_ADMITTED { return rc }
+        let ea : u64 = xn_emit_env()
+        if ea == 0u64 { ps("  (emission refused: the scroll would not round-trip)\n" as u64)   return 1u64 }
+        ps("  emitted through the same door:\n    " as u64)
+        let en : u64 = xn_env_len()
+        let mut i : u64 = 0u64
+        while i < en { putchar(xn_env_byte(i) as i32)   i = i + 1u64 }
+        putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "ask" as u64) == 1u32 {
+        /* iii xenos ask "<json...>" -- "<thing>" is|under|mirrors "<thing>" */
+        let mut sep : u64 = 0u64
+        let mut i : u64 = 2u64
+        while (i as i64) < (argc as i64) {
+            if streq(av[i], "--" as u64) == 1u32 { sep = i   i = argc as u64 } else { i = i + 1u64 }
+        }
+        if sep == 0u64 { return usage() }
+        if (sep as i64) + 4i64 != (argc as i64) { return usage() }
+        let n : u64 = join_args(sep as i32, argv, 2u64, (&XC_IN) as u64, 16383u64)
+        let v : u64 = xn_admit((&XC_IN) as u64, n)
+        if v != XC_ADMITTED {
+            ps("the guest was not admitted, so the union cannot be questioned:\n" as u64)
+            return print_verdict()
+        }
+        print_verdict()
+        let qa : u64 = av[sep + 1u64]
+        let vs : u64 = av[sep + 2u64]
+        let qb : u64 = av[sep + 3u64]
+        let mut vv : u64 = XC_SENT
+        if streq(vs, "is" as u64) == 1u32 { vv = 2u64 }
+        if streq(vs, "under" as u64) == 1u32 { vv = 0u64 }
+        if streq(vs, "mirrors" as u64) == 1u32 { vv = 1u64 }
+        if vv == XC_SENT { return usage() }
+        let e : u64 = eol_entails(qa, slen(qa), vv, qb, slen(qb))
+        ps("\nthe union knows [" as u64)   ps(qa)
+        if vv == 0u64 { ps(" < " as u64) }
+        if vv == 1u64 { ps(" ~ " as u64) }
+        if vv == 2u64 { ps(" = " as u64) }
+        ps(qb)   ps("] : " as u64)
+        if e == 2u64 { ps("refused (incoherent or malformed thing)\n" as u64)   return 1u64 }
+        if e == 1u64 { ps("KNOWN\n" as u64)   return 0u64 }
+        ps("not entailed\n" as u64)
+        return 1u64
+    }
+    return usage()
+}

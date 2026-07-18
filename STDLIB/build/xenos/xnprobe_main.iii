@@ -1,0 +1,61 @@
+/* STDLIB/build/xenos/xnprobe_main.iii -- the XENOS gate probe.
+ *
+ * Links the vein (xring) and the door (xenos) against clean objects and
+ * proves both batteries, then exercises the door on a real foreign value
+ * (a two-pool DeFi arbitrage config) and shows the same door emit.  The gate
+ * (STDLIB/scripts/xenos_gate.sh) runs this twice and demands byte-identity.
+ * exit 0 = green; non-zero = the failed stage. */
+module xnprobe_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_admit_text(s: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_addr() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_geom() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_name() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_alien() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_byte(i: u64) -> u8 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_emit_env() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_byte(i: u64) -> u8 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_book_verify() -> u64 from "xenos.iii"
+
+const XP_ADMITTED : u64 = 1u64
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let vp : u64 = xr_selfprove()
+    if vp != 0u64 { ps("scroll vein   = RED arm " as u64)   pu(vp)   putchar(10i32)   return 1u64 }
+    ps("scroll vein   = 120..124 green\n" as u64)
+    let dp : u64 = xn_selfprove()
+    if dp != 0u64 { ps("scroll door   = RED arm " as u64)   pu(dp)   putchar(10i32)   return 2u64 }
+    ps("scroll door   = 109..118 green\n" as u64)
+
+    /* the real stranger: the exact two-pool arbitrage configuration */
+    let s : u64 = "{\"poolA\":{\"usdc\":100,\"token\":1000},\"poolB\":{\"token\":1000,\"usdc\":200},\"feeBps\":0}" as u64
+    if xn_admit_text(s) != XP_ADMITTED { ps("scroll stranger = REFUSED\n" as u64)   return 3u64 }
+    ps("the stranger: grade=" as u64)   pu(xn_grade())
+    ps(" address=" as u64)   pu(xn_last_addr())
+    ps(" name=" as u64)   pu(xn_last_name())
+    ps(" alien=" as u64)   pu(xn_last_alien())   putchar(10i32)
+    ps("crushed to algebra: " as u64)
+    let n : u64 = xn_canon_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(xn_canon_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+
+    /* the same door emits (round-trips through the real json parser in the arm) */
+    let ea : u64 = xn_emit_env()
+    if ea == 0u64 { ps("scroll emit   = REFUSED\n" as u64)   return 4u64 }
+    ps("scroll emit   = " as u64)   pu(ea)   ps(" (the same door, out)\n" as u64)
+
+    let bk : u64 = xn_book_verify()
+    ps("scroll book   = " as u64)   pu(bk)   ps(" lines, all self-derived\n" as u64)
+    return 0u64
+}

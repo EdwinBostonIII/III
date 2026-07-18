@@ -1,0 +1,337 @@
+/* STDLIB/iii/aether/xring.iii -- XRING: the bare-metal vein.
+ *
+ * The live wire cannot come through the bloated OS stack: when bytes arrive
+ * at speed, the handoff between the producer (a NIC driver, a capture layer,
+ * a feed process -- whoever holds the wire) and the consumer (XENOS, the
+ * door) must cost NOTHING but memory.  XRING is that handoff: a single-
+ * producer / single-consumer byte ring with the wrap-marker discipline --
+ * pure memory and monotone integers, ZERO operating-system imports on the
+ * hot path (push/pull/advance touch no file, no socket, no allocator, no
+ * runtime; the only extern in this file is numera/idfold, used by the
+ * self-proof's stream checksum -- the ONE identity seat, never a second
+ * fold minted).
+ *
+ * THE LAYOUT LAW (why this lifts to shared memory unchanged):
+ *   head : u64   monotone producer cursor (bytes ever admitted to the ring)
+ *   tail : u64   monotone consumer cursor (bytes ever drained)
+ *   data : u8[65536]   power-of-two storage, indexed by cursor & mask
+ * Cursors NEVER wrap or regress; the index is the cursor masked.  Occupancy
+ * is head - tail, free is cap - occupancy: the full/empty ambiguity of
+ * wrapped-index rings does not exist.  The identical law runs when head,
+ * tail and data live in a file-mapped section shared by two processes; the
+ * ONE seam that changes is the cursor publication (the producer's head store
+ * becomes a release-store, the consumer's head load an acquire-load).  That
+ * seam is NAMED here and empty today: in-process, program order is the
+ * memory order.
+ *
+ * THE FRAME LAW (the aeron/io_uring wrap-marker discipline):
+ *   A frame is [u32 len (little-endian)] [len bytes] padded to 4 bytes.
+ *   Frame starts are 4-aligned, so a header always fits contiguously.
+ *   A frame is NEVER split across the seam: when the tail of the storage
+ *   cannot hold the whole frame, the producer writes the SKIP marker
+ *   (len = 0xFFFFFFFF) and the frame begins at index 0.  The consumer
+ *   therefore ALWAYS sees a contiguous frame -- a zero-copy view.
+ *
+ * THE REFUSAL LAW (the door's throat, at the vein):
+ *   A frame is pushed WHOLE or refused WHOLE -- never truncated, never
+ *   partial (the ring is not touched on refusal).  Zero-length and
+ *   over-throat (> 16384, the door's guest cap) frames are refused at the
+ *   vein: what the door can never admit is never carried.  Every refusal
+ *   is counted by name (full / size).  A corrupted header (torn frame)
+ *   SEVERS the vein: every pull refuses until xr_reset heals it -- a lying
+ *   wire is declared, never skipped over.
+ *
+ * Truth is a CONDITION OF MOTION: xr_selfprove (arms 120..124) re-derives
+ * the byte-exact FIFO law, the seam contiguity, the throat, the torn-frame
+ * severance and the cursor algebra at every invocation.  NO gate, NO KAT.
+ * Hexad: kind_motion.  Ring R0. */
+module aether_xring
+
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+
+const XR_CAP  : u64 = 65536u64           /* power of two                       */
+const XR_MASK : u64 = 65535u64
+const XR_FMAX : u64 = 16384u64           /* the door's guest cap, at the vein  */
+const XR_SKIP : u64 = 4294967295u64      /* the wrap marker header             */
+
+var XR_BUF : [u8; 65536]
+var XR_HEAD : u64 = 0u64                 /* producer cursor (monotone)         */
+var XR_TAIL : u64 = 0u64                 /* consumer cursor (monotone)         */
+var XR_SEV : u64 = 0u64                  /* 1 = the vein is severed (torn)     */
+
+/* named refusal counters (every refusal counted, never silent) */
+var XR_RFULL : u64 = 0u64                /* push refused: no room              */
+var XR_RSIZE : u64 = 0u64                /* push refused: zero or over-throat  */
+var XR_REMPTY : u64 = 0u64               /* pull on an empty vein              */
+var XR_RTORN : u64 = 0u64                /* torn frame: the vein severed       */
+
+/* the consumer's current frame view (valid after xr_pull returns 1) */
+var XR_FRB : u64 = 0u64                  /* frame base (contiguous, in BUF)    */
+var XR_FRL : u64 = 0u64                  /* frame length                       */
+var XR_FRN : u64 = 0u64                  /* cursor advance for this frame      */
+
+fn xr_reset() -> i32 @export {
+    XR_HEAD = 0u64
+    XR_TAIL = 0u64
+    XR_SEV = 0u64
+    XR_FRB = 0u64
+    XR_FRL = 0u64
+    XR_FRN = 0u64
+    return 0i32
+}
+fn xr_head() -> u64 @export { return XR_HEAD }
+fn xr_tail() -> u64 @export { return XR_TAIL }
+fn xr_used() -> u64 @export { return XR_HEAD - XR_TAIL }
+fn xr_free() -> u64 @export { return XR_CAP - (XR_HEAD - XR_TAIL) }
+fn xr_severed() -> u64 @export { return XR_SEV }
+fn xr_rfull() -> u64 @export { return XR_RFULL }
+fn xr_rsize() -> u64 @export { return XR_RSIZE }
+fn xr_rempty() -> u64 @export { return XR_REMPTY }
+fn xr_rtorn() -> u64 @export { return XR_RTORN }
+fn xr_frame_base() -> u64 @export { return XR_FRB }
+fn xr_frame_len() -> u64 @export { return XR_FRL }
+
+fn xr_hdr_write(pos: u64, v: u64) -> i32 {
+    XR_BUF[pos] = (v & 255u64) as u8
+    XR_BUF[pos + 1u64] = ((v >> 8u64) & 255u64) as u8
+    XR_BUF[pos + 2u64] = ((v >> 16u64) & 255u64) as u8
+    XR_BUF[pos + 3u64] = ((v >> 24u64) & 255u64) as u8
+    return 0i32
+}
+fn xr_hdr_read(pos: u64) -> u64 {
+    let b0 : u64 = XR_BUF[pos] as u64
+    let b1 : u64 = XR_BUF[pos + 1u64] as u64
+    let b2 : u64 = XR_BUF[pos + 2u64] as u64
+    let b3 : u64 = XR_BUF[pos + 3u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+}
+
+/* PUSH: admit one whole frame to the vein, or refuse it whole.
+ * 1 = carried | 0 = refused (counted by name).  The hot path: memory only. */
+fn xr_push(base: u64, len: u64) -> u64 @export {
+    if len == 0u64 { XR_RSIZE = XR_RSIZE + 1u64   return 0u64 }
+    if len > XR_FMAX { XR_RSIZE = XR_RSIZE + 1u64   return 0u64 }
+    let need : u64 = 4u64 + ((len + 3u64) & 18446744073709551612u64)
+    let pos : u64 = XR_HEAD & XR_MASK
+    let mut skip : u64 = 0u64
+    if pos + need > XR_CAP { skip = XR_CAP - pos }
+    let free : u64 = XR_CAP - (XR_HEAD - XR_TAIL)
+    if free < skip + need { XR_RFULL = XR_RFULL + 1u64   return 0u64 }
+    let mut at : u64 = pos
+    if skip > 0u64 {
+        /* the wrap marker: the frame begins at the origin, contiguous */
+        xr_hdr_write(pos, XR_SKIP)
+        XR_HEAD = XR_HEAD + skip
+        at = 0u64
+    }
+    xr_hdr_write(at, len)
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len { XR_BUF[at + 4u64 + i] = p[i]   i = i + 1u64 }
+    /* THE SEAM: in shared memory this store is the release-publication */
+    XR_HEAD = XR_HEAD + need
+    return 1u64
+}
+/* PULL: expose the next frame as a contiguous zero-copy view.
+ * 1 = frame ready (xr_frame_base/len valid; consume with xr_advance)
+ * 0 = empty (counted) | 2 = TORN -- the vein is severed until reset. */
+fn xr_pull() -> u64 @export {
+    if XR_SEV == 1u64 { XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        /* THE SEAM: in shared memory this load is the acquire-observation */
+        if XR_TAIL == XR_HEAD { XR_REMPTY = XR_REMPTY + 1u64   return 0u64 }
+        let avail : u64 = XR_HEAD - XR_TAIL
+        if avail < 4u64 { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+        let pos : u64 = XR_TAIL & XR_MASK
+        let h : u64 = xr_hdr_read(pos)
+        if h == XR_SKIP {
+            let skip : u64 = XR_CAP - pos
+            if skip > avail { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+            XR_TAIL = XR_TAIL + skip
+        } else {
+            if h == 0u64 { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+            if h > XR_FMAX { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+            let need : u64 = 4u64 + ((h + 3u64) & 18446744073709551612u64)
+            if pos + need > XR_CAP { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+            if need > avail { XR_SEV = 1u64   XR_RTORN = XR_RTORN + 1u64   return 2u64 }
+            XR_FRB = ((&XR_BUF) as u64) + pos + 4u64
+            XR_FRL = h
+            XR_FRN = need
+            going = 0u64
+        }
+    }
+    return 1u64
+}
+/* consume the frame exposed by the last successful pull */
+fn xr_advance() -> i32 @export {
+    if XR_FRN > 0u64 { XR_TAIL = XR_TAIL + XR_FRN   XR_FRN = 0u64   XR_FRB = 0u64   XR_FRL = 0u64 }
+    return 0i32
+}
+
+/* ==================== THE SELF-PROOF (arms 120..124) ==================== */
+var XR_TF : [u8; 1024]                   /* test frame scratch                 */
+fn xr_selfprove() -> u64 @export {
+    /* arm 120: THE VEIN'S LAW -- byte-exact FIFO delivery; empty refuses,
+     * counted; occupancy algebra exact */
+    xr_reset()
+    let e0 : u64 = XR_REMPTY
+    if xr_pull() != 0u64 { xr_reset()   return 120u64 }
+    if XR_REMPTY != e0 + 1u64 { xr_reset()   return 120u64 }
+    let mut i : u64 = 0u64
+    while i < 11u64 { XR_TF[i] = (65u64 + i) as u8   i = i + 1u64 }
+    if xr_push((&XR_TF) as u64, 11u64) != 1u64 { xr_reset()   return 120u64 }
+    if xr_used() != 16u64 { xr_reset()   return 120u64 }
+    i = 0u64
+    while i < 7u64 { XR_TF[100u64 + i] = (97u64 + i) as u8   i = i + 1u64 }
+    if xr_push(((&XR_TF) as u64) + 100u64, 7u64) != 1u64 { xr_reset()   return 120u64 }
+    if xr_pull() != 1u64 { xr_reset()   return 120u64 }
+    if XR_FRL != 11u64 { xr_reset()   return 120u64 }
+    let fp : *u8 = XR_FRB as *u8
+    i = 0u64
+    while i < 11u64 { if fp[i] != ((65u64 + i) as u8) { xr_reset()   return 120u64 }   i = i + 1u64 }
+    xr_advance()
+    if xr_pull() != 1u64 { xr_reset()   return 120u64 }
+    if XR_FRL != 7u64 { xr_reset()   return 120u64 }
+    let fq : *u8 = XR_FRB as *u8
+    if fq[0u64] != 97u8 { xr_reset()   return 120u64 }
+    xr_advance()
+    if xr_used() != 0u64 { xr_reset()   return 120u64 }
+    /* arm 121: THE SEAM -- a frame that cannot fit contiguously wraps whole
+     * via the skip marker and is delivered contiguous and byte-exact; a
+     * long deterministic storm of varied frames crosses the seam many times
+     * with the pulled stream folding to the pushed stream's fold */
+    xr_reset()
+    i = 0u64
+    while i < 900u64 { XR_TF[i] = ((i * 7u64 + 13u64) & 255u64) as u8   i = i + 1u64 }
+    /* push/pull/advance whole 904-byte frames (used returns to 0 each time,
+     * cursors advance monotonically) until the next frame cannot fit
+     * contiguously at the tail -- the exact state the wrap marker exists for */
+    let mut k : u64 = 0u64
+    let mut going121 : u64 = 1u64
+    while going121 == 1u64 {
+        let posn : u64 = XR_HEAD & XR_MASK
+        if posn + 904u64 > XR_CAP { going121 = 0u64 } else {
+            if xr_push((&XR_TF) as u64, 900u64) != 1u64 { xr_reset()   return 121u64 }
+            if xr_pull() != 1u64 { xr_reset()   return 121u64 }
+            xr_advance()
+            k = k + 1u64
+            if k > 200u64 { xr_reset()   return 121u64 }
+        }
+    }
+    /* the cursor now sits where a 900-byte frame cannot fit contiguously */
+    let posb : u64 = XR_HEAD & XR_MASK
+    if posb + 904u64 <= XR_CAP { xr_reset()   return 121u64 }
+    if k == 0u64 { xr_reset()   return 121u64 }
+    if xr_push((&XR_TF) as u64, 900u64) != 1u64 { xr_reset()   return 121u64 }
+    if xr_pull() != 1u64 { xr_reset()   return 121u64 }
+    if XR_FRL != 900u64 { xr_reset()   return 121u64 }
+    if XR_FRB != ((&XR_BUF) as u64) + 4u64 { xr_reset()   return 121u64 }
+    let fw : *u8 = XR_FRB as *u8
+    i = 0u64
+    while i < 900u64 { if fw[i] != (((i * 7u64 + 13u64) & 255u64) as u8) { xr_reset()   return 121u64 }   i = i + 1u64 }
+    xr_advance()
+    /* the storm: 500 frames, sizes cycling 1..317, LCG bytes; fold equality */
+    xr_reset()
+    let mut lcg : u64 = 88172645463325252u64
+    let mut hpush : u64 = idfold_basis()
+    let mut hpull : u64 = idfold_basis()
+    k = 0u64
+    while k < 500u64 {
+        let fl : u64 = 1u64 + (k % 317u64)
+        i = 0u64
+        while i < fl {
+            lcg = (lcg * 6364136223846793005u64) + 1442695040888963407u64
+            let b : u64 = (lcg >> 33u64) & 255u64
+            XR_TF[i] = b as u8
+            hpush = idfold_u64(hpush, b)
+            i = i + 1u64
+        }
+        if xr_push((&XR_TF) as u64, fl) != 1u64 { xr_reset()   return 121u64 }
+        if xr_pull() != 1u64 { xr_reset()   return 121u64 }
+        if XR_FRL != fl { xr_reset()   return 121u64 }
+        let fs : *u8 = XR_FRB as *u8
+        i = 0u64
+        while i < fl { hpull = idfold_u64(hpull, fs[i] as u64)   i = i + 1u64 }
+        xr_advance()
+        k = k + 1u64
+    }
+    if idfold_seal(hpush) != idfold_seal(hpull) { xr_reset()   return 121u64 }
+    /* arm 122: THE THROAT AT THE VEIN -- zero and over-throat refused by
+     * name; a full vein refuses WHOLE and carries what it already holds */
+    xr_reset()
+    let s0 : u64 = XR_RSIZE
+    if xr_push((&XR_TF) as u64, 0u64) != 0u64 { xr_reset()   return 122u64 }
+    if xr_push((&XR_TF) as u64, 16385u64) != 0u64 { xr_reset()   return 122u64 }
+    if XR_RSIZE != s0 + 2u64 { xr_reset()   return 122u64 }
+    let f0 : u64 = XR_RFULL
+    k = 0u64
+    let mut carried : u64 = 0u64
+    while k < 80u64 {
+        if xr_push((&XR_TF) as u64, 900u64) == 1u64 { carried = carried + 1u64 }
+        k = k + 1u64
+    }
+    if carried >= 80u64 { xr_reset()   return 122u64 }
+    if XR_RFULL == f0 { xr_reset()   return 122u64 }
+    let used0 : u64 = xr_used()
+    k = 0u64
+    while k < carried {
+        if xr_pull() != 1u64 { xr_reset()   return 122u64 }
+        if XR_FRL != 900u64 { xr_reset()   return 122u64 }
+        xr_advance()
+        k = k + 1u64
+    }
+    if xr_pull() != 0u64 { xr_reset()   return 122u64 }
+    if used0 == 0u64 { xr_reset()   return 122u64 }
+    /* arm 123: THE TORN FRAME -- a corrupted header severs the vein; every
+     * later pull refuses; reset heals to the birth state */
+    xr_reset()
+    if xr_push((&XR_TF) as u64, 32u64) != 1u64 { xr_reset()   return 123u64 }
+    let tpos : u64 = XR_TAIL & XR_MASK
+    xr_hdr_write(tpos, 60000u64)
+    let t0 : u64 = XR_RTORN
+    if xr_pull() != 2u64 { xr_reset()   return 123u64 }
+    if XR_RTORN != t0 + 1u64 { xr_reset()   return 123u64 }
+    if xr_severed() != 1u64 { xr_reset()   return 123u64 }
+    if xr_pull() != 2u64 { xr_reset()   return 123u64 }
+    xr_reset()
+    if xr_severed() != 0u64 { return 123u64 }
+    if xr_used() != 0u64 { return 123u64 }
+    if xr_push((&XR_TF) as u64, 32u64) != 1u64 { xr_reset()   return 123u64 }
+    if xr_pull() != 1u64 { xr_reset()   return 123u64 }
+    xr_advance()
+    /* arm 124: THE MONOTONE CURSORS -- across a deterministic push/pull
+     * storm the cursors never regress and used + free == cap always */
+    xr_reset()
+    let mut hprev : u64 = XR_HEAD
+    let mut tprev : u64 = XR_TAIL
+    lcg = 2463534242u64
+    k = 0u64
+    let mut pending : u64 = 0u64
+    while k < 400u64 {
+        lcg = (lcg * 6364136223846793005u64) + 1442695040888963407u64
+        let act : u64 = (lcg >> 33u64) & 1u64
+        let fl : u64 = 1u64 + ((lcg >> 40u64) % 700u64)
+        if act == 0u64 {
+            if xr_push((&XR_TF) as u64, fl) == 1u64 { pending = pending + 1u64 }
+        } else {
+            if pending > 0u64 {
+                if xr_pull() != 1u64 { xr_reset()   return 124u64 }
+                xr_advance()
+                pending = pending - 1u64
+            }
+        }
+        if XR_HEAD < hprev { xr_reset()   return 124u64 }
+        if XR_TAIL < tprev { xr_reset()   return 124u64 }
+        if XR_HEAD < XR_TAIL { xr_reset()   return 124u64 }
+        if xr_used() + xr_free() != XR_CAP { xr_reset()   return 124u64 }
+        if xr_used() > XR_CAP { xr_reset()   return 124u64 }
+        hprev = XR_HEAD
+        tprev = XR_TAIL
+        k = k + 1u64
+    }
+    xr_reset()
+    return 0u64
+}

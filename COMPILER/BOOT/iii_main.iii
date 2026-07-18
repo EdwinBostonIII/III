@@ -91,6 +91,7 @@ extern @abi(c-msvc-x64) fn typecheck_enter(argc: i32, argv: u64) -> u64 from "ty
 extern @abi(c-msvc-x64) fn witness_enter(argc: i32, argv: u64) -> u64 from "witness_cli.iii"
 extern @abi(c-msvc-x64) fn worldline_enter(argc: i32, argv: u64) -> u64 from "worldline_main.iii"
 extern @abi(c-msvc-x64) fn xeno_enter(argc: i32, argv: u64) -> u64 from "xeno_cli.iii"
+extern @abi(c-msvc-x64) fn xenos_enter(argc: i32, argv: u64) -> u64 from "xenos_cli.iii"
 
 fn ps(s: u64) -> u32 {
     let p : *u8 = s as *u8
@@ -192,6 +193,7 @@ fn dispatch(i: u64, argc: i32, argv: u64) -> u64 {
     if i == 27u64 { return witness_enter(ac, av) }
     if i == 28u64 { return worldline_enter(ac, av) }
     if i == 29u64 { return xeno_enter(ac, av) }
+    if i == 30u64 { return xenos_enter(ac, av) }
     return 3u64
 }
 fn standing_word(s: u64) -> u32 {

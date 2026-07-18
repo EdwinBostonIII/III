@@ -52,7 +52,7 @@ const LX_SENT : u64 = 18446744073709551615u64
  * the standing verdicts with their dualities; the evidence modes (kardia's
  * adopted/derived split); the standing speakers. */
 fn lx_defs_text() -> u64 @export {
-    return "[below < logos] [reflect < logos] [flat < logos] [below ~ reflect] [dream < proof] [proof = law] [law ~ metal] [dream ~ wake] [freeze < domain] [encrypt < domain] [deny < domain] [deterministic < domain] [stochastic < domain] [ttl < domain] [deterministic ~ stochastic] [resolved < verdict] [void < verdict] [unread < verdict] [admitted < verdict] [bricking < verdict] [admitted ~ bricking] [proven < verdict] [refuted < verdict] [undecided < verdict] [proven ~ refuted] [derived < evidence] [adopted < evidence] [derived ~ adopted] [intent < speaker] [hexad < speaker] [kardia < speaker] [doxa < speaker] [prove < speaker] [negative < sign] [zero < sign] [positive < sign] [negative ~ positive] [valid < verdict] [invalid < verdict] [valid ~ invalid] [checked < verdict] [exact < speaker] [crypto < speaker] [typecheck < speaker] [eval < speaker] [events < speaker] [identical < verdict] [divergent < verdict] [identical ~ divergent] [surd < point] [point < line] [line < speaker]" as u64
+    return "[below < logos] [reflect < logos] [flat < logos] [below ~ reflect] [dream < proof] [proof = law] [law ~ metal] [dream ~ wake] [freeze < domain] [encrypt < domain] [deny < domain] [deterministic < domain] [stochastic < domain] [ttl < domain] [deterministic ~ stochastic] [resolved < verdict] [void < verdict] [unread < verdict] [admitted < verdict] [bricking < verdict] [admitted ~ bricking] [proven < verdict] [refuted < verdict] [undecided < verdict] [proven ~ refuted] [derived < evidence] [adopted < evidence] [derived ~ adopted] [intent < speaker] [hexad < speaker] [kardia < speaker] [doxa < speaker] [prove < speaker] [negative < sign] [zero < sign] [positive < sign] [negative ~ positive] [valid < verdict] [invalid < verdict] [valid ~ invalid] [checked < verdict] [exact < speaker] [crypto < speaker] [typecheck < speaker] [eval < speaker] [events < speaker] [identical < verdict] [divergent < verdict] [identical ~ divergent] [surd < point] [point < line] [line < speaker] [guest < membrane] [reason < membrane] [scroll < membrane] [stranger < guest] [speaks < guest] [alien < scroll] [broken < reason] [cycle < reason] [lying < reason] [soul < reason] [throat < reason] [refused < verdict] [unheard < verdict]" as u64
 }
 
 /* ==================== the derived pool ==================== */
@@ -68,6 +68,7 @@ var LX_RUNK : u64 = 0u64                 /* unknown-word refusals (lx_check)    
 var LX_UNKA : u64 = 0u64                 /* first unknown word: arena offset    */
 var LX_UNKL : u64 = 0u64                 /* first unknown word: length          */
 var LX_SCAN : [u8; 4096]                 /* lx_check word scratch               */
+var LX_UNKW : [u8; 32]                   /* first unknown word: PRESERVED bytes  */
 
 fn lx_slen(s: u64) -> u64 {
     let p : *u8 = s as *u8
@@ -183,7 +184,9 @@ fn lx_word_byte(i: u64, k: u64) -> u8 @export {
 fn lx_runk() -> u64 @export { return LX_RUNK }
 fn lx_rcap() -> u64 @export { return LX_RCAP }
 fn lx_unknown_len() -> u64 @export { return LX_UNKL }
-fn lx_unknown_byte(k: u64) -> u8 @export { if k < LX_UNKL { return LX_SCAN[LX_UNKA + k] }   return 0u8 }
+/* the FIRST unknown word's bytes, PRESERVED (LX_SCAN is overwritten by every
+ * scanned word, so it cannot be read for a first-unknown that is not last). */
+fn lx_unknown_byte(k: u64) -> u8 @export { if k < LX_UNKL { return LX_UNKW[k] }   return 0u8 }
 /* is a word (bytes) in the pool?  Fold-compared: integer topology. */
 fn lx_known(addr: u64, len: u64) -> u64 @export {
     if LX_READY != 1u64 { return 0u64 }
@@ -228,7 +231,14 @@ fn lx_check(addr: u64, len: u64) -> u64 @export {
             if lx_known((&LX_SCAN) as u64, n) == 0u64 {
                 unknown = unknown + 1u64
                 LX_RUNK = LX_RUNK + 1u64
-                if LX_UNKL == 0u64 { LX_UNKA = 0u64   LX_UNKL = n }
+                if LX_UNKL == 0u64 {
+                    LX_UNKA = 0u64
+                    LX_UNKL = n
+                    /* PRESERVE the first unknown's bytes NOW -- LX_SCAN is
+                     * clobbered by every later word scanned */
+                    let mut cp : u64 = 0u64
+                    while cp < n { if cp < 32u64 { LX_UNKW[cp] = LX_SCAN[cp] }   cp = cp + 1u64 }
+                }
             }
             i = i + n
         } else { i = i + 1u64 }

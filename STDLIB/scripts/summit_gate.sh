@@ -127,6 +127,7 @@ cc_one "$ROOT/STDLIB/iii/aether/kyma.iii"    "$T/kyma.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/riza.iii"    "$T/riza.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/meris.iii"   "$T/meris.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/klisi.iii"   "$T/klisi.o"   || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/isub.iii"     "$T/isub.o"    || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/eidolos.iii"  "$T/eidolos.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/summit.iii"   "$T/summit.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
@@ -138,7 +139,7 @@ cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -177,6 +178,7 @@ grep -q "^the question: \[" "$T/run1.txt" || { echo "[summit_gate] NO CHOSEN QUE
 grep -q "^the answer: \[" "$T/run1.txt" || { echo "[summit_gate] NO VERDICT"; exit 6; }
 grep -q "^the spoken: \[" "$T/run1.txt" || { echo "[summit_gate] NO SPOKEN TRUTH"; exit 6; }
 grep -q "^the discernment: \[" "$T/run1.txt" || { echo "[summit_gate] NO DISCERNMENT"; exit 6; }
+grep -q "^the nameless union = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO NAMELESS NAME"; exit 6; }
 [ -s "$ROOT/STDLIB/data/zetesis.jrnl" ] || { echo "[summit_gate] NO JOURNAL"; exit 6; }
 grep -q "^the cayley chart: words=85 classes=32 " "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY CHART"; exit 6; }
 

@@ -35,7 +35,7 @@
  * line-union merge of two journals is correct (the fold is order- and
  * duplicate-invariant: the event-primary law applied to knowing itself).
  *
- * THE ARMS (truth is a CONDITION OF MOTION, arms 350..353, NO gate of its
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 350..358, NO gate of its
  * own -- the summit gate compiles and drives this organ):
  *   350 THE MIRROR OF THOUGHT: the union re-convened (address == the live
  *       syn_union_addr: one knowledge, one name, now THREE organs); the
@@ -112,6 +112,8 @@ extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.ii
 extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_swap_invariant(a_addr: u64, a_len: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_witness_canon() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn py_testify() -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn rz_testify() -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn ky_testify() -> u64 from "kyma.iii"
@@ -1346,6 +1348,50 @@ fn zt_arm357() -> u64 {
     if ZT_EP3 == 0u64 { return 357u64 }
     return 0u64
 }
+var ZT_SEP : u64 = 0u64                  /* geometric-blind, nominally seen    */
+var ZT_WCANON : u64 = 0u64               /* the union's true nameless name     */
+fn zt_canon() -> u64 @export { return ZT_WCANON }
+fn zt_arm358() -> u64 {
+    /* THE THIRD ENGINE (the enhanced original): the logos bus's geometric
+     * discernment run against the nominal engines over the COMPLETE pair
+     * space.  Nominal indiscernibility must IMPLY geometric (a full name
+     * swap induces the class transposition), the chosen question is
+     * discerned at the geometric level too, and the union receives its
+     * TRUE NAMELESS NAME -- the renaming-invariant canon of its laid
+     * geometry, stable across convenings. */
+    ZT_SEP = 0u64
+    let mut p : u64 = 0u64
+    while p < ZT_NC {
+        let mut q : u64 = p + 1u64
+        while q < ZT_NC {
+            let vd : u64 = zt_discern_pair(p, q)
+            if vd == ZT_ERR { return 358u64 }
+            /* ZT_TA / ZT_TBB still hold the pair's phrases */
+            if zt_convene() != 0u64 { return 358u64 }
+            let e3 : u64 = eol_swap_invariant((&ZT_TA) as u64, ZT_TAN, (&ZT_TBB) as u64, ZT_TBN)
+            if e3 == 2u64 { return 358u64 }
+            if vd == 0u64 { if e3 != 1u64 { return 358u64 } }
+            if vd == 1u64 { if e3 == 1u64 { ZT_SEP = ZT_SEP + 1u64 } }
+            q = q + 1u64
+        }
+        p = p + 1u64
+    }
+    /* the chosen question is discerned by the bus as well */
+    if zt_decode(ZT_PICK) != 0u64 { return 358u64 }
+    let cv : u64 = zt_discern_pair(ZT_DP, ZT_DQ)
+    if cv != 1u64 { return 358u64 }
+    if zt_convene() != 0u64 { return 358u64 }
+    let ce3 : u64 = eol_swap_invariant((&ZT_TA) as u64, ZT_TAN, (&ZT_TBB) as u64, ZT_TBN)
+    if ce3 != 0u64 { return 358u64 }
+    /* the union's one nameless name, stable */
+    if zt_convene() != 0u64 { return 358u64 }
+    let w1 : u64 = eol_witness_canon()
+    if w1 == 0u64 { return 358u64 }
+    if zt_convene() != 0u64 { return 358u64 }
+    if eol_witness_canon() != w1 { return 358u64 }
+    ZT_WCANON = w1
+    return 0u64
+}
 fn zt_selfprove() -> u64 @export {
     let a0 : u64 = zt_arm350()
     if a0 != 0u64 { return a0 }
@@ -1363,6 +1409,8 @@ fn zt_selfprove() -> u64 @export {
     if a6 != 0u64 { return a6 }
     let a7 : u64 = zt_arm357()
     if a7 != 0u64 { return a7 }
+    let a8 : u64 = zt_arm358()
+    if a8 != 0u64 { return a8 }
     /* the prime returns to the tilt's home before the next organ speaks */
     kd_setp(5u64)
     return 0u64

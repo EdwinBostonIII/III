@@ -64,6 +64,9 @@ extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
 extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
 extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
 extern @abi(c-msvc-x64) fn isub_order_selfproof() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_canon_selfproof() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_canon_into(out32: *u8) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_swap_invariant(a: u32, b: u32) -> u32 from "isub.iii"
 
 /* the verb canon (the substrate triad, same numbers as isub/ripple) */
 const EOL_V_BELOW   : u64 = 0u64         /* '<'  under    -- the order          */
@@ -724,10 +727,12 @@ fn eol_axiom() -> u64 @export {
  * GEOMETRY -- the shape with the names erased, which is all Ring -1 is
  * allowed to see ("there is no label in here").
  * Returns the folded chain root; 0 = refused (incoherent scroll, counted). */
-fn eol_witness() -> u64 @export {
-    if eol_lawcheck() != 0u64 { EOL_RWIT = EOL_RWIT + 1u64   return 0u64 }
+fn eol_lay_bus() -> u64 {
+    /* the shared laying: coherent scroll -> content-ranked blocks on the
+     * REAL bus.  0 = laid | 1 = refused (counted). */
+    if eol_lawcheck() != 0u64 { EOL_RWIT = EOL_RWIT + 1u64   return 1u64 }
     /* the preexisting logos must hold its own law before the language speaks on it */
-    if isub_order_selfproof() != 0u32 { EOL_RWIT = EOL_RWIT + 1u64   return 0u64 }
+    if isub_order_selfproof() != 0u32 { EOL_RWIT = EOL_RWIT + 1u64   return 1u64 }
     /* collect stated claims in class-rank space (FLAT vanishes by fusion) */
     EOL_WN = 0u64
     let mut i : u64 = 0u64
@@ -775,23 +780,62 @@ fn eol_witness() -> u64 @export {
         }
         a = a + 1u64
     }
-    /* lay the blocks on the REAL bus, fold the chain root */
+    /* lay the blocks on the REAL bus */
     isub_reset()
     i = 0u64
     while i < EOL_WN {
         if isub_emit(EOL_WV[i] as u32, EOL_WA[i] as u32, EOL_WB[i] as u32) == 0u64 {
             EOL_RWIT = EOL_RWIT + 1u64
-            return 0u64
+            return 1u64
         }
         i = i + 1u64
     }
-    isub_witness_into((&EOL_W32) as u64 as *u8)
+    return 0u64
+}
+fn eol_w32_fold() -> u64 {
     let mut h : u64 = idfold_basis()
     let mut k : u64 = 0u64
     while k < 32u64 { h = idfold_u64(h, EOL_W32[k] as u64)   k = k + 1u64 }
     let v : u64 = idfold_seal(h)
     if v == 0u64 { return 1u64 }
     return v
+}
+fn eol_witness() -> u64 @export {
+    if eol_lay_bus() != 0u64 { return 0u64 }
+    isub_witness_into((&EOL_W32) as u64 as *u8)
+    return eol_w32_fold()
+}
+/* THE TRUE NAMELESS GEOMETRY: the canonical form of the laid shape --
+ * invariant under EVERY renaming of the scroll's things, not only the
+ * content-order-preserving renamings the chain root tolerates (arm 84
+ * derives that leak as a theorem).  Supplied by the canon layer of the
+ * preexisting logos bus; 0 = refused, counted. */
+fn eol_witness_canon() -> u64 @export {
+    if eol_lay_bus() != 0u64 { return 0u64 }
+    if isub_canon_into((&EOL_W32) as u64 as *u8) != 1u32 { EOL_RWIT = EOL_RWIT + 1u64   return 0u64 }
+    return eol_w32_fold()
+}
+/* THE GEOMETRIC DISCERNMENT: is exchanging the two things' CLASSES an
+ * automorphism of the scroll's laid geometry?  1 yes | 0 no | 2 refused
+ * (counted).  Coarser than nominal discernment -- the flat-fused shape
+ * hears classes, not names; arm 84 forces the separation. */
+fn eol_swap_invariant(a_addr: u64, a_len: u64, b_addr: u64, b_len: u64) -> u64 @export {
+    EOL_SRC = a_addr
+    EOL_SLN = a_len
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    let ta : u64 = eol_p_thing()
+    if ta == EOL_SENT { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    EOL_SRC = b_addr
+    EOL_SLN = b_len
+    EOL_POS = 0u64
+    EOL_DEP = 0u64
+    let tb : u64 = eol_p_thing()
+    if tb == EOL_SENT { EOL_RQ = EOL_RQ + 1u64   return 2u64 }
+    if eol_lay_bus() != 0u64 { return 2u64 }
+    let ra : u64 = EOL_CLR[eol_find(ta)] + 1u64
+    let rb : u64 = EOL_CLR[eol_find(tb)] + 1u64
+    return isub_swap_invariant(ra as u32, rb as u32) as u64
 }
 /* the axiom's geometry: read the soul, witness it on the metal */
 fn eol_axiom_root() -> u64 @export {
@@ -841,6 +885,9 @@ fn eol_readz(s: u64) -> i64 {
 }
 fn eol_ent(a: u64, v: u64, b: u64) -> u64 {
     return eol_entails(a, eol_slen(a), v, b, eol_slen(b))
+}
+fn eol_swp(a: u64, b: u64) -> u64 {
+    return eol_swap_invariant(a, eol_slen(a), b, eol_slen(b))
 }
 var EOL_SAVE : [u8; 16384]
 var EOL_SAVN : u64 = 0u64
@@ -1030,6 +1077,65 @@ fn eol_selfprove() -> u64 @export {
     let rw0 : u64 = EOL_RWIT
     if eol_witness() != 0u64 { eol_reset()   return 83u64 }
     if EOL_RWIT != rw0 + 1u64 { eol_reset()   return 83u64 }
+    /* arm 84: THE CANON LAYER of the preexisting bus.  The bedrock proves
+     * its new eyes (the brute 120-permutation engine inside); then the TRUE
+     * nameless witness ignores a renaming the chain root HEARS -- one
+     * below-edge shape, both content orientations, canon equal, chain root
+     * different (the leak, derived live off the class order); geometric
+     * discernment separates chain from co-leaves; and the coarseness of
+     * geometry against names is FORCED ([a = b] discerns b from d
+     * nominally while the class shape cannot). */
+    if isub_canon_selfproof() != 0u32 { eol_reset()   return 84u64 }
+    let mut wc1 : u64 = 0u64
+    let mut wo1 : u64 = 0u64
+    let mut wc0 : u64 = 0u64
+    let mut wo0 : u64 = 0u64
+    let mut f1 : u64 = 0u64
+    let mut f0 : u64 = 0u64
+    let mut kk : u64 = 0u64
+    while kk < 4u64 {
+        eol_reset()
+        let mut sp : u64 = "[alpha < beta]" as u64
+        if kk == 1u64 { sp = "[beta < alpha]" as u64 }
+        if kk == 2u64 { sp = "[mu < nu]" as u64 }
+        if kk == 3u64 { sp = "[nu < mu]" as u64 }
+        if eol_readz(sp) < 0i64 { eol_reset()   return 84u64 }
+        let wc : u64 = eol_witness_canon()
+        if wc == 0u64 { eol_reset()   return 84u64 }
+        let wo : u64 = eol_witness()
+        if wo == 0u64 { eol_reset()   return 84u64 }
+        let mut orient : u64 = 0u64
+        if eol_class_of_thing(0u64) == 0u64 { orient = 1u64 }
+        if orient == 1u64 {
+            if f1 == 0u64 { f1 = 1u64   wc1 = wc   wo1 = wo }
+        } else {
+            if f0 == 0u64 { f0 = 1u64   wc0 = wc   wo0 = wo }
+        }
+        kk = kk + 1u64
+    }
+    if f1 != 1u64 { eol_reset()   return 84u64 }
+    if f0 != 1u64 { eol_reset()   return 84u64 }
+    if wc1 != wc0 { eol_reset()   return 84u64 }           /* canon: renaming-blind */
+    if wo1 == wo0 { eol_reset()   return 84u64 }           /* the chain root leaks  */
+    /* geometric discernment: co-leaves swap, a chain does not */
+    eol_reset()
+    if eol_readz("[a < c] [b < c]" as u64) < 0i64 { eol_reset()   return 84u64 }
+    if eol_swp("a" as u64, "b" as u64) != 1u64 { eol_reset()   return 84u64 }
+    eol_reset()
+    if eol_readz("[a < c] [c < b]" as u64) < 0i64 { eol_reset()   return 84u64 }
+    if eol_swp("a" as u64, "b" as u64) != 0u64 { eol_reset()   return 84u64 }
+    /* the coarseness, FORCED: names discern what the class shape cannot */
+    eol_reset()
+    if eol_readz("[a = b] [b < c] [d < c]" as u64) < 0i64 { eol_reset()   return 84u64 }
+    if eol_ent("a" as u64, EOL_V_FLAT, "b" as u64) != 1u64 { eol_reset()   return 84u64 }
+    if eol_ent("a" as u64, EOL_V_FLAT, "d" as u64) != 0u64 { eol_reset()   return 84u64 }
+    if eol_swp("b" as u64, "d" as u64) != 1u64 { eol_reset()   return 84u64 }
+    /* refusal on incoherent ground is counted */
+    eol_reset()
+    if eol_readz("[a < b] [b < a]" as u64) < 0i64 { eol_reset()   return 84u64 }
+    let rw84 : u64 = EOL_RWIT
+    if eol_swp("a" as u64, "b" as u64) != 2u64 { eol_reset()   return 84u64 }
+    if EOL_RWIT != rw84 + 1u64 { eol_reset()   return 84u64 }
     eol_reset()
     return 0u64
 }

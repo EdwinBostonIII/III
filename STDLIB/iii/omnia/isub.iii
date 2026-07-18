@@ -239,6 +239,584 @@ fn isub_agree(root_a: *u8, root_b: *u8) -> u32 @export {
     return 1u32
 }
 
+/* ==================== THE CANON LAYER (the bedrock learns to SEE, 2026-07-18) ====================
+ * The witness ROOT above is a hash-CHAIN over emission order, and its CAVs eat
+ * the bare addresses raw -- so the root hears both the ORDER the blocks arrived
+ * in and the ARRANGEMENT of the labels.  "There is no label in here" was true of
+ * names-as-strings, not of the labels' arrangement: two isomorphic geometries
+ * with permuted addresses witness DIFFERENTLY.  The canon layer completes the
+ * promise: an EXACT canonical form of the laid geometry, invariant under every
+ * relabeling and every emission order -- computed by color refinement with
+ * individualization (minimal-encoding selection over all tie branches, so no
+ * choice order can leak), sealed through the SAME exec_cert sha256.  With it the
+ * bus becomes a DECISION organ for identity questions:
+ *   isub_swap_invariant -- is exchanging two addresses an automorphism of the
+ *                          laid geometry?  (the transposition test: Leibniz's
+ *                          discernment at the metal)
+ *   isub_canon_into     -- the TRUE nameless witness (the isomorphism class's
+ *                          one name)
+ *   isub_same_orbit     -- may ANY automorphism carry a to b?  (structural
+ *                          interchangeability, by marked canonization)
+ * JURISDICTION: geometries of up to 64 distinct addresses (the machine word --
+ * the mneme law); beyond it the canon REFUSES, counted, never silent.  The
+ * canon layer is ADDITIVE: every prior export, byte layout and consumer is
+ * untouched; the chain ROOT keeps its role (the temporal witness) and the canon
+ * stands beside it (the timeless one).  NIH intact: pure integer partitioning
+ * plus the sealed sha256 -- no new crypto, no imports. */
+const ISC_NCAP : u64 = 64u64
+const ISC_LEAFCAP : u64 = 4096u64
+var ISC_ID   : [u32; 64]                 /* compact node id -> address           */
+var ISC_N    : u64 = 0u64
+var ISC_OUT  : [u64; 64]                 /* BELOW adjacency, node bitmasks       */
+var ISC_IN   : [u64; 64]
+var ISC_RFL  : [u64; 64]                 /* REFLECT adjacency (symmetric)        */
+var ISC_MARK : u64 = 0u64                /* marked node | SENT (orbit queries)   */
+var ISC_COL  : [u64; 4160]               /* colors, 65 levels x 64 nodes         */
+var ISC_SIG  : [u64; 64]                 /* refinement signatures                */
+var ISC_SRT  : [u64; 64]                 /* sort scratch                         */
+var ISC_ENC  : [u8; 1088]                /* candidate canonical encoding         */
+var ISC_BEST : [u8; 1088]                /* minimal encoding so far              */
+var ISC_BESTSET : u64 = 0u64
+var ISC_PERM : [u64; 64]                 /* canonical position -> node           */
+var ISC_LEAVES : u64 = 0u64
+var ISC_REFUSED : u64 = 0u64             /* canon refusals, counted              */
+var ISC_SENT64 : u64 = 18446744073709551615u64
+
+fn isc_mix(h: u64, v: u64) -> u64 {
+    /* pure-integer combine for PARTITIONING only (the witness itself is
+     * sealed by sha256 below) */
+    let mut x : u64 = h ^ (v * 1099511628211u64)
+    x = x ^ (x >> 33u64)
+    x = x * 14029467366897019727u64
+    x = x ^ (x >> 29u64)
+    return x
+}
+fn isc_node_of(a: u32) -> u64 {
+    let mut i : u64 = 0u64
+    while i < ISC_N { if ISC_ID[i] == a { return i }   i = i + 1u64 }
+    return ISC_SENT64
+}
+/* build the compact node graph off the laid blocks; 0 ok | 1 refused (cap) */
+fn isc_build() -> u64 {
+    ISC_N = 0u64
+    let mut i : u64 = 0u64
+    while i < (IS_COUNT as u64) {
+        let mut s : u64 = 0u64
+        while s < 2u64 {
+            let mut ad : u32 = IS_A[i]
+            if s == 1u64 { ad = IS_B[i] }
+            if isc_node_of(ad) == ISC_SENT64 {
+                if ISC_N >= ISC_NCAP { ISC_REFUSED = ISC_REFUSED + 1u64   return 1u64 }
+                ISC_ID[ISC_N] = ad
+                ISC_N = ISC_N + 1u64
+            }
+            s = s + 1u64
+        }
+        i = i + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < ISC_N { ISC_OUT[k] = 0u64   ISC_IN[k] = 0u64   ISC_RFL[k] = 0u64   k = k + 1u64 }
+    i = 0u64
+    while i < (IS_COUNT as u64) {
+        let na : u64 = isc_node_of(IS_A[i])
+        let nb : u64 = isc_node_of(IS_B[i])
+        if IS_VERB[i] == V_BELOW {
+            ISC_OUT[na] = ISC_OUT[na] | (1u64 << nb)
+            ISC_IN[nb] = ISC_IN[nb] | (1u64 << na)
+        } else {
+            ISC_RFL[na] = ISC_RFL[na] | (1u64 << nb)
+            ISC_RFL[nb] = ISC_RFL[nb] | (1u64 << na)
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn isc_pc(m: u64) -> u64 {
+    let mut c : u64 = 0u64
+    let mut x : u64 = m
+    while x != 0u64 { c = c + (x & 1u64)   x = x >> 1u64 }
+    return c
+}
+/* one refinement round at color level lv: signature = mix of own color and the
+ * SORTED colors of below-successors, below-predecessors and mirror partners */
+fn isc_refine(lv: u64) -> u64 {
+    let base : u64 = lv * 64u64
+    let mut i : u64 = 0u64
+    while i < ISC_N {
+        let mut h : u64 = isc_mix(1469598103934665603u64, ISC_COL[base + i])
+        let mut e : u64 = 0u64
+        while e < 3u64 {
+            let mut msk : u64 = ISC_OUT[i]
+            if e == 1u64 { msk = ISC_IN[i] }
+            if e == 2u64 { msk = ISC_RFL[i] }
+            let mut ns : u64 = 0u64
+            let mut j : u64 = 0u64
+            while j < ISC_N {
+                if ((msk >> j) & 1u64) == 1u64 { ISC_SRT[ns] = ISC_COL[base + j]   ns = ns + 1u64 }
+                j = j + 1u64
+            }
+            let mut a : u64 = 0u64
+            while a + 1u64 < ns {
+                let mut b2 : u64 = a + 1u64
+                let mut mn : u64 = a
+                while b2 < ns { if ISC_SRT[b2] < ISC_SRT[mn] { mn = b2 }   b2 = b2 + 1u64 }
+                if mn != a { let t : u64 = ISC_SRT[a]   ISC_SRT[a] = ISC_SRT[mn]   ISC_SRT[mn] = t }
+                a = a + 1u64
+            }
+            h = isc_mix(h, 767865653u64 + e)
+            j = 0u64
+            while j < ns { h = isc_mix(h, ISC_SRT[j])   j = j + 1u64 }
+            e = e + 1u64
+        }
+        ISC_SIG[i] = h
+        i = i + 1u64
+    }
+    let mut changed : u64 = 0u64
+    i = 0u64
+    while i < ISC_N {
+        if ISC_COL[base + i] != ISC_SIG[i] { changed = 1u64 }
+        ISC_COL[base + i] = ISC_SIG[i]
+        i = i + 1u64
+    }
+    return changed
+}
+fn isc_refine_fix(lv: u64) -> i32 {
+    let mut r : u64 = 0u64
+    while r < 66u64 {
+        if isc_refine(lv) == 0u64 { return 0i32 }
+        r = r + 1u64
+    }
+    return 0i32
+}
+/* all colors distinct at level lv? if so, fill ISC_PERM with nodes in color order */
+fn isc_discrete(lv: u64) -> u64 {
+    let base : u64 = lv * 64u64
+    let mut i : u64 = 0u64
+    while i < ISC_N {
+        let mut j : u64 = 0u64
+        while j < ISC_N {
+            if i != j { if ISC_COL[base + i] == ISC_COL[base + j] { return 0u64 } }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    let mut used : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < ISC_N {
+        let mut bi : u64 = ISC_SENT64
+        i = 0u64
+        while i < ISC_N {
+            if ((used >> i) & 1u64) == 0u64 {
+                if bi == ISC_SENT64 { bi = i } else {
+                    if ISC_COL[base + i] < ISC_COL[base + bi] { bi = i }
+                }
+            }
+            i = i + 1u64
+        }
+        ISC_PERM[p] = bi
+        used = used | (1u64 << bi)
+        p = p + 1u64
+    }
+    return 1u64
+}
+/* encode the graph under ISC_PERM: n, then BELOW rows, then REFLECT rows */
+fn isc_encode() -> i32 {
+    let mut w : u64 = 0u64
+    ISC_ENC[w] = ISC_N as u8
+    w = w + 1u64
+    let mut e : u64 = 0u64
+    while e < 2u64 {
+        let mut i : u64 = 0u64
+        while i < ISC_N {
+            let ni : u64 = ISC_PERM[i]
+            let mut msk : u64 = ISC_OUT[ni]
+            if e == 1u64 { msk = ISC_RFL[ni] }
+            let mut acc : u64 = 0u64
+            let mut nb : u64 = 0u64
+            let mut j : u64 = 0u64
+            while j < ISC_N {
+                let nj : u64 = ISC_PERM[j]
+                acc = (acc << 1u64) | ((msk >> nj) & 1u64)
+                nb = nb + 1u64
+                if nb == 8u64 { ISC_ENC[w] = acc as u8   w = w + 1u64   acc = 0u64   nb = 0u64 }
+                j = j + 1u64
+            }
+            if nb != 0u64 { ISC_ENC[w] = (acc << (8u64 - nb)) as u8   w = w + 1u64 }
+            i = i + 1u64
+        }
+        e = e + 1u64
+    }
+    /* the mark rides the encoding so marked canonization is well-defined */
+    if ISC_MARK == ISC_SENT64 { ISC_ENC[w] = 255u8 } else {
+        let mut mp : u64 = 0u64
+        let mut q : u64 = 0u64
+        while q < ISC_N { if ISC_PERM[q] == ISC_MARK { mp = q }   q = q + 1u64 }
+        ISC_ENC[w] = mp as u8
+    }
+    w = w + 1u64
+    return 0i32
+}
+fn isc_enc_len() -> u64 {
+    let rowb : u64 = (ISC_N + 7u64) / 8u64
+    return 1u64 + (2u64 * ISC_N * rowb) + 1u64
+}
+fn isc_take_if_min() -> i32 {
+    let n : u64 = isc_enc_len()
+    if ISC_BESTSET == 0u64 {
+        let mut k : u64 = 0u64
+        while k < n { ISC_BEST[k] = ISC_ENC[k]   k = k + 1u64 }
+        ISC_BESTSET = 1u64
+        return 0i32
+    }
+    let mut k : u64 = 0u64
+    while k < n {
+        if ISC_ENC[k] < ISC_BEST[k] {
+            let mut j : u64 = k
+            while j < n { ISC_BEST[j] = ISC_ENC[j]   j = j + 1u64 }
+            return 0i32
+        }
+        if ISC_ENC[k] > ISC_BEST[k] { return 0i32 }
+        k = k + 1u64
+    }
+    return 0i32
+}
+/* the individualization search: refine; if discrete take the encoding; else
+ * split the first ambiguous cell on every member, minimal encoding wins */
+fn isc_search(lv: u64) -> u64 {
+    if lv >= 63u64 { return 1u64 }
+    isc_refine_fix(lv)
+    if isc_discrete(lv) == 1u64 {
+        ISC_LEAVES = ISC_LEAVES + 1u64
+        if ISC_LEAVES > ISC_LEAFCAP { return 1u64 }
+        isc_encode()
+        isc_take_if_min()
+        return 0u64
+    }
+    let base : u64 = lv * 64u64
+    /* the first ambiguous cell = the smallest color value owned by >1 node */
+    let mut cell : u64 = ISC_SENT64
+    let mut i : u64 = 0u64
+    while i < ISC_N {
+        let mut cnt : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < ISC_N {
+            if ISC_COL[base + j] == ISC_COL[base + i] { cnt = cnt + 1u64 }
+            j = j + 1u64
+        }
+        if cnt > 1u64 {
+            if cell == ISC_SENT64 { cell = i } else {
+                if ISC_COL[base + i] < ISC_COL[base + cell] { cell = i }
+            }
+        }
+        i = i + 1u64
+    }
+    if cell == ISC_SENT64 { return 1u64 }
+    let cc : u64 = ISC_COL[base + cell]
+    /* TWIN COLLAPSE (sound): if every member of the cell has IDENTICAL
+     * adjacency masks and no self-loop, the members are interchangeable --
+     * any transposition of two of them is an automorphism, so every branch
+     * yields the same minimal encoding and ONE branch suffices.  (The brute
+     * permutation engine in the self-proof revalidates this on symmetric
+     * graphs.)  Non-twin ambiguity still branches in full: exactness kept. */
+    let mut alltwin : u64 = 1u64
+    let mut m0 : u64 = ISC_SENT64
+    i = 0u64
+    while i < ISC_N {
+        if ISC_COL[base + i] == cc {
+            if m0 == ISC_SENT64 { m0 = i } else {
+                if ISC_OUT[i] != ISC_OUT[m0] { alltwin = 0u64 }
+                if ISC_IN[i] != ISC_IN[m0] { alltwin = 0u64 }
+                if ISC_RFL[i] != ISC_RFL[m0] { alltwin = 0u64 }
+            }
+            if ((ISC_OUT[i] >> i) & 1u64) == 1u64 { alltwin = 0u64 }
+            if ((ISC_RFL[i] >> i) & 1u64) == 1u64 { alltwin = 0u64 }
+        }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < ISC_N {
+        if ISC_COL[base + i] == cc {
+            let nb : u64 = (lv + 1u64) * 64u64
+            let mut j : u64 = 0u64
+            while j < ISC_N { ISC_COL[nb + j] = ISC_COL[base + j]   j = j + 1u64 }
+            ISC_COL[nb + i] = isc_mix(ISC_COL[base + i], 88172645463325252u64)
+            if isc_search(lv + 1u64) != 0u64 { return 1u64 }
+            if alltwin == 1u64 { return 0u64 }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* canonize the laid geometry (mark = a node address to distinguish, or pass
+ * mark_on=0 for none); the canonical encoding is sealed by sha256 into out32.
+ * 1 ok | 0 REFUSED (cap or budget), counted. */
+fn isc_canon(mark_on: u32, mark_addr: u32, out32: *u8) -> u32 {
+    if isc_build() != 0u64 { return 0u32 }
+    ISC_MARK = ISC_SENT64
+    if mark_on == 1u32 {
+        let mn : u64 = isc_node_of(mark_addr)
+        if mn == ISC_SENT64 { ISC_REFUSED = ISC_REFUSED + 1u64   return 0u32 }
+        ISC_MARK = mn
+    }
+    let mut i : u64 = 0u64
+    while i < ISC_N {
+        let mut c0 : u64 = isc_mix(isc_mix(isc_mix(2166136261u64, isc_pc(ISC_OUT[i])), isc_pc(ISC_IN[i])), isc_pc(ISC_RFL[i]))
+        if ISC_MARK == i { c0 = isc_mix(c0, 555555555555u64) }
+        ISC_COL[i] = c0
+        i = i + 1u64
+    }
+    ISC_BESTSET = 0u64
+    ISC_LEAVES = 0u64
+    if isc_search(0u64) != 0u64 { ISC_REFUSED = ISC_REFUSED + 1u64   return 0u32 }
+    if ISC_BESTSET == 0u64 { ISC_REFUSED = ISC_REFUSED + 1u64   return 0u32 }
+    let n : u64 = isc_enc_len()
+    xc_begin()
+    let mut k : u64 = 0u64
+    while k < n { xc_event_byte(ISC_BEST[k] as u32)   k = k + 1u64 }
+    xc_seal(out32)
+    return 1u32
+}
+/* THE TRUE NAMELESS WITNESS: the canonical form of the laid geometry, sealed.
+ * Invariant under every relabeling and every emission order.  1 ok | 0 refused. */
+fn isub_canon_into(out32: *u8) -> u32 @export {
+    return isc_canon(0u32, 0u32, out32)
+}
+fn isub_canon_refusals() -> u64 @export { return ISC_REFUSED }
+/* THE TRANSPOSITION TEST: is exchanging addresses a and b an automorphism of
+ * the laid block multiset?  1 yes | 0 no.  Pure block arithmetic. */
+fn isub_swap_invariant(a: u32, b: u32) -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < (IS_COUNT as u64) {
+        let mut sa : u32 = IS_A[i]
+        if sa == a { sa = b } else { if sa == b { sa = a } }
+        let mut sb : u32 = IS_B[i]
+        if sb == a { sb = b } else { if sb == b { sb = a } }
+        /* count occurrences of the image among the blocks (multiset) */
+        let mut want : u64 = 0u64
+        let mut have : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < (IS_COUNT as u64) {
+            if IS_VERB[j] == IS_VERB[i] {
+                let mut ja : u32 = IS_A[j]
+                let mut jb : u32 = IS_B[j]
+                if IS_VERB[j] == V_REFLECT {
+                    /* reflect blocks are unordered pairs */
+                    if ja == sa { if jb == sb { have = have + 1u64 } } else {
+                        if ja == sb { if jb == sa { have = have + 1u64 } } }
+                    if ja == IS_A[i] { if jb == IS_B[i] { want = want + 1u64 } } else {
+                        if ja == IS_B[i] { if jb == IS_A[i] { want = want + 1u64 } } }
+                } else {
+                    if ja == sa { if jb == sb { have = have + 1u64 } }
+                    if ja == IS_A[i] { if jb == IS_B[i] { want = want + 1u64 } }
+                }
+            }
+            j = j + 1u64
+        }
+        if have != want { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+/* THE ORBIT TEST: may ANY automorphism of the laid geometry carry a to b?
+ * Decided by marked canonization: canon(mark a) == canon(mark b).
+ * 1 yes | 0 no | 2 refused (cap/budget, counted). */
+var ISC_OA : [u8; 32]
+var ISC_OB : [u8; 32]
+fn isub_same_orbit(a: u32, b: u32) -> u32 @export {
+    if a == b { return 1u32 }
+    if isc_canon(1u32, a, (&ISC_OA) as u64 as *u8) == 0u32 { return 2u32 }
+    if isc_canon(1u32, b, (&ISC_OB) as u64 as *u8) == 0u32 { return 2u32 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { if ISC_OA[k] != ISC_OB[k] { return 0u32 }   k = k + 1u64 }
+    return 1u32
+}
+/* ==================== the canon self-proof (arms 20..26) ====================
+ * The brute second engine: on small graphs EVERY permutation is walked and the
+ * canonizer must agree with brute force on isomorphism, orbits and swaps. */
+var ISC_CA : [u8; 32]
+var ISC_CB : [u8; 32]
+var ISC_BP : [u64; 8]
+fn isc_perm_of(idx: u64, n: u64) -> i32 {
+    /* the idx-th permutation of 0..n-1 (factorial number system) */
+    let mut avail : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n { avail = avail | (1u64 << i)   i = i + 1u64 }
+    let mut f : u64 = 1u64
+    i = 1u64
+    while i < n { f = f * i   i = i + 1u64 }
+    let mut r : u64 = idx
+    let mut p : u64 = 0u64
+    while p < n {
+        let mut pick : u64 = r / f
+        r = r % f
+        let mut j : u64 = 0u64
+        let mut cnt : u64 = 0u64
+        while j < 64u64 {
+            if ((avail >> j) & 1u64) == 1u64 {
+                if cnt == pick { ISC_BP[p] = j   avail = avail ^ (1u64 << j)   j = 64u64 } else { cnt = cnt + 1u64 }
+            }
+            j = j + 1u64
+        }
+        if p + 2u64 <= n { f = f / ((n - 1u64) - p) }
+        p = p + 1u64
+    }
+    return 0i32
+}
+/* brute: is the permutation ISC_BP an isomorphism from the CURRENT laid blocks
+ * onto themselves?  (checked as multiset equality of mapped blocks) */
+fn isc_brute_auto(n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < (IS_COUNT as u64) {
+        let na : u64 = isc_node_of(IS_A[i])
+        let nb : u64 = isc_node_of(IS_B[i])
+        let ma : u32 = ISC_ID[ISC_BP[na]]
+        let mb : u32 = ISC_ID[ISC_BP[nb]]
+        let mut have : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < (IS_COUNT as u64) {
+            if IS_VERB[j] == IS_VERB[i] {
+                if IS_VERB[j] == V_REFLECT {
+                    if IS_A[j] == ma { if IS_B[j] == mb { have = 1u64 } }
+                    if IS_A[j] == mb { if IS_B[j] == ma { have = 1u64 } }
+                } else {
+                    if IS_A[j] == ma { if IS_B[j] == mb { have = 1u64 } }
+                }
+            }
+            j = j + 1u64
+        }
+        if have == 0u64 { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn isub_canon_selfproof() -> u32 @export {
+    /* arm 20: canon ignores emission ORDER; the chain root does not (the
+     * temporal leak, witnessed) */
+    isub_reset()
+    isub_emit(V_BELOW, 1u32, 2u32)
+    isub_emit(V_BELOW, 2u32, 3u32)
+    if isub_canon_into((&ISC_CA) as u64 as *u8) != 1u32 { return 20u32 }
+    isub_witness_into((&ISC_OA) as u64 as *u8)
+    isub_reset()
+    isub_emit(V_BELOW, 2u32, 3u32)
+    isub_emit(V_BELOW, 1u32, 2u32)
+    if isub_canon_into((&ISC_CB) as u64 as *u8) != 1u32 { return 20u32 }
+    isub_witness_into((&ISC_OB) as u64 as *u8)
+    if isub_agree((&ISC_CA) as u64 as *u8, (&ISC_CB) as u64 as *u8) != 1u32 { return 20u32 }
+    if isub_agree((&ISC_OA) as u64 as *u8, (&ISC_OB) as u64 as *u8) != 0u32 { return 20u32 }
+    /* arm 21: canon ignores RELABELING -- complete over all 24 permutations
+     * of a rigid 4-chain; the chain root hears the labels (the label leak) */
+    let mut pi : u64 = 0u64
+    let mut rootleak : u64 = 0u64
+    while pi < 24u64 {
+        isc_perm_of(pi, 4u64)
+        isub_reset()
+        /* the chain p(1) < p(2) < p(3) < p(4) over addresses 10+p */
+        let mut e : u64 = 0u64
+        while e < 3u64 {
+            isub_emit(V_BELOW, (10u64 + ISC_BP[e]) as u32, (10u64 + ISC_BP[e + 1u64]) as u32)
+            e = e + 1u64
+        }
+        if isub_canon_into((&ISC_CB) as u64 as *u8) != 1u32 { return 21u32 }
+        if pi == 0u64 {
+            let mut k : u64 = 0u64
+            while k < 32u64 { ISC_CA[k] = ISC_CB[k]   k = k + 1u64 }
+            isub_witness_into((&ISC_OA) as u64 as *u8)
+        } else {
+            if isub_agree((&ISC_CA) as u64 as *u8, (&ISC_CB) as u64 as *u8) != 1u32 { return 21u32 }
+            isub_witness_into((&ISC_OB) as u64 as *u8)
+            if isub_agree((&ISC_OA) as u64 as *u8, (&ISC_OB) as u64 as *u8) == 0u32 { rootleak = 1u64 }
+        }
+        pi = pi + 1u64
+    }
+    if rootleak != 1u64 { return 21u32 }
+    /* arm 22: canon SEPARATES non-isomorphic shapes (chain vs star vs cycle) */
+    isub_reset()
+    isub_emit(V_BELOW, 1u32, 2u32)
+    isub_emit(V_BELOW, 2u32, 3u32)
+    isub_emit(V_BELOW, 3u32, 4u32)
+    if isub_canon_into((&ISC_CA) as u64 as *u8) != 1u32 { return 22u32 }
+    isub_reset()
+    isub_emit(V_BELOW, 1u32, 4u32)
+    isub_emit(V_BELOW, 2u32, 4u32)
+    isub_emit(V_BELOW, 3u32, 4u32)
+    if isub_canon_into((&ISC_CB) as u64 as *u8) != 1u32 { return 22u32 }
+    if isub_agree((&ISC_CA) as u64 as *u8, (&ISC_CB) as u64 as *u8) != 0u32 { return 22u32 }
+    /* arm 23: THE BRUTE ENGINE -- on a 5-node shape with real symmetry
+     * (two leaves under one root, plus a mirrored pair), every one of the
+     * 120 permutations is walked; brute automorphism must equal the
+     * canonizer's orbit and swap verdicts on EVERY node pair */
+    isub_reset()
+    isub_emit(V_BELOW, 20u32, 22u32)
+    isub_emit(V_BELOW, 21u32, 22u32)
+    isub_emit(V_REFLECT, 23u32, 24u32)
+    if isc_build() != 0u64 { return 23u32 }
+    let n5 : u64 = ISC_N
+    if n5 != 5u64 { return 23u32 }
+    let mut x : u64 = 0u64
+    while x < n5 {
+        let mut y : u64 = 0u64
+        while y < n5 {
+            /* brute: does ANY permutation fix the shape and carry x to y?
+             * and is the specific transposition (x y) an automorphism? */
+            let mut orb : u64 = 0u64
+            let mut swp : u64 = 0u64
+            let mut q : u64 = 0u64
+            while q < 120u64 {
+                isc_perm_of(q, n5)
+                if isc_brute_auto(n5) == 1u32 {
+                    if ISC_BP[x] == y { orb = 1u64 }
+                    /* the transposition: p[x]=y, p[y]=x, all else fixed */
+                    let mut istr : u64 = 1u64
+                    let mut z : u64 = 0u64
+                    while z < n5 {
+                        let mut wantz : u64 = z
+                        if z == x { wantz = y }
+                        if z == y { wantz = x }
+                        if ISC_BP[z] != wantz { istr = 0u64 }
+                        z = z + 1u64
+                    }
+                    if istr == 1u64 { swp = 1u64 }
+                }
+                q = q + 1u64
+            }
+            let co : u32 = isub_same_orbit(ISC_ID[x], ISC_ID[y])
+            if co == 2u32 { return 23u32 }
+            let cs : u32 = isub_swap_invariant(ISC_ID[x], ISC_ID[y])
+            if (co as u64) != orb { return 23u32 }
+            if x != y {
+                if (cs as u64) != swp { return 23u32 }
+                /* the lattice: a swap automorphism implies same orbit */
+                if swp == 1u64 { if orb != 1u64 { return 23u32 } }
+            }
+            y = y + 1u64
+        }
+        x = x + 1u64
+    }
+    /* arm 24: the separation -- on a 3-cycle, rotation carries a to b (same
+     * orbit) while the bare transposition is NOT an automorphism */
+    isub_reset()
+    isub_emit(V_BELOW, 31u32, 32u32)
+    isub_emit(V_BELOW, 32u32, 33u32)
+    isub_emit(V_BELOW, 33u32, 31u32)
+    if isub_same_orbit(31u32, 32u32) != 1u32 { return 24u32 }
+    if isub_swap_invariant(31u32, 32u32) != 0u32 { return 24u32 }
+    /* arm 25: the refusal boundary -- a 65-address geometry refuses, counted */
+    isub_reset()
+    let mut w : u64 = 0u64
+    while w < 65u64 {
+        isub_emit(V_BELOW, (100u64 + w) as u32, 200u32)
+        w = w + 1u64
+    }
+    let r0 : u64 = ISC_REFUSED
+    if isub_canon_into((&ISC_CA) as u64 as *u8) != 0u32 { return 25u32 }
+    if ISC_REFUSED != r0 + 1u64 { return 25u32 }
+    /* arm 26: the prior surface is untouched -- the order oracle still proves */
+    if isub_order_selfproof() != 0u32 { return 26u32 }
+    isub_reset()
+    return 0u32
+}
+
 /* the order oracle's self-proof (condition of motion for the new verbs): the
  * closure is transitive + reflexive + acyclic; the reflection is symmetric; two
  * identical orders agree and two distinct orders do not; the name-gate still

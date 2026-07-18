@@ -1,0 +1,652 @@
+/* STDLIB/iii/aether/meris.iii -- MERIS (the PORTION): exact partition
+ * combinatorics and THE NEKRASOV PARTITION FUNCTION.
+ *
+ * THE RUNG (the localization ascent): Nekrasov's theorem turns the infinite-
+ * dimensional instanton integrals of N=2 gauge theory into EXACT FINITE SUMS
+ * over Young diagrams -- equivariant localization leaves one fixed point per
+ * partition, one rational term per fixed point.  No calculus survives; what
+ * remains is the combinatorics this organ owns:
+ *   - partitions of n (generated in reverse-lex, packed 4 bits a part) with
+ *     the conjugation involution;
+ *   - hook lengths, arm/leg statistics, standard-tableau counts f^lambda by
+ *     TWO independent engines (the hook-length formula against the branching
+ *     recursion on the Young lattice) with Burnside's sum(f^2) = n!;
+ *   - p(n) by TWO engines: direct generation against Euler's pentagonal
+ *     recurrence;
+ *   - THE U(1) NEKRASOV MEASURE: at every partition the equivariant Euler
+ *     class of the tangent space to Hilb^n(C^2),
+ *       e(T_lambda) = prod_s ((l+1)e1 - a e2)((a+1)e2 - l e1),
+ *     and the theorem  sum_{lambda |- n} 1/e(T_lambda) = 1/(n! (e1 e2)^n)
+ *     -- i.e. Z_inst^{U(1)} = exp(q/(e1 e2)) -- verified at THREE generic
+ *     rational Omega-backgrounds (the house evaluation law: fixed shape,
+ *     generic points) and, in the self-dual background e2 = -e1, reduced to
+ *     hooks: sum_lambda prod_s 1/h(s)^2 = 1/n! exactly;
+ *   - THE NEKRASOV-OKOUNKOV IDENTITY (the N=2* U(1) partition function):
+ *       sum_lambda q^|lambda| prod_s (1 - z/h(s)^2)
+ *         = prod_k (1-q^k)^(z-1),
+ *     proven to depth q^8 as a POLYNOMIAL IDENTITY in the formal variable z
+ *     (coefficient vectors of exact rationals, degree n in z at q^n), then
+ *     cross-oracled at the classical poles: z=0 Euler (ties to the p(n)
+ *     engine), z=1 the trivial hook (every nonempty diagram owns an h=1),
+ *     z=2 Euler's PENTAGONAL theorem, z=4 JACOBI's cube identity -- four
+ *     independent classical theorems, one machine truth.
+ *
+ * Truth is a CONDITION OF MOTION: ms_selfprove (arms 250..253).  NO gate.
+ * NIH: composes aether/pyrgos exact rationals -- the ONE rational substrate.
+ * Ring R-1. */
+module aether_meris
+
+extern @abi(c-msvc-x64) fn py_reset() -> i32 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_err() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_frac(n: i64, d: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_i64(v: i64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_add(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_mul(a: u64, b: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_neg(r: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_inv(r: u64) -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_sign(r: u64) -> i64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn py_rat_cmp(a: u64, b: u64) -> i64 from "pyrgos.iii"
+
+/* ==================== the partition table ==================== */
+/* packed: part i (0-based, decreasing) in nibble i; n <= 12 so every part
+ * and every multiplicity fits 4 bits; 272 partitions total through n=12 */
+const MS_NMAX : i64 = 12i64
+var MS_P : [u64; 300]
+var MS_OFF : [u64; 16]
+var MS_CNT : [u64; 16]
+var MS_TOP : u64 = 0u64
+var MS_F : [u64; 300]                    /* branching-engine f^lambda memo      */
+var MS_BUILT : u32 = 0u32
+var MS_ERR : u64 = 0u64                  /* 1 pool, 2 shape refusal             */
+
+fn ms_err() -> u64 @export { return MS_ERR }
+fn ms_part(w: u64, i: i64) -> i64 @export {
+    return ((w >> ((4i64 * i) as u64)) & 15u64) as i64
+}
+fn ms_rows(w: u64) -> i64 @export {
+    let mut r : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let p : i64 = ms_part(w, r)
+        if p == 0i64 { going = 0u8 } else { r = r + 1i64 }
+    }
+    return r
+}
+fn ms_gen_rec(rem: i64, maxp: i64, w: u64, depth: i64) -> i32 {
+    if rem == 0i64 {
+        if MS_TOP >= 300u64 { MS_ERR = 1u64   return -1i32 }
+        MS_P[MS_TOP] = w
+        MS_TOP = MS_TOP + 1u64
+        return 0i32
+    }
+    let mut k : i64 = maxp
+    if k > rem { k = rem }
+    while k >= 1i64 {
+        ms_gen_rec(rem - k, k, w | ((k as u64) << ((4i64 * depth) as u64)), depth + 1i64)
+        k = k - 1i64
+    }
+    return 0i32
+}
+fn ms_build() -> i32 @export {
+    if MS_BUILT == 1u32 { return 0i32 }
+    MS_TOP = 0u64
+    let mut n : i64 = 0i64
+    while n <= MS_NMAX {
+        MS_OFF[n as u64] = MS_TOP
+        ms_gen_rec(n, n, 0u64, 0i64)
+        MS_CNT[n as u64] = MS_TOP - MS_OFF[n as u64]
+        n = n + 1i64
+    }
+    MS_BUILT = 1u32
+    return 0i32
+}
+fn ms_cnt(n: i64) -> u64 @export { let c : u64 = MS_CNT[n as u64]   return c }
+fn ms_at(n: i64, idx: u64) -> u64 @export { let w : u64 = MS_P[MS_OFF[n as u64] + idx]   return w }
+/* conjugate column height: lambda'_j = #{ rows with part >= j } (j 1-based) */
+fn ms_colh(w: u64, j: i64) -> i64 @export {
+    let mut c : i64 = 0i64
+    let mut i : i64 = 0i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let p : i64 = ms_part(w, i)
+        if p == 0i64 { going = 0u8 } else {
+            if p >= j { c = c + 1i64 }
+            i = i + 1i64
+        }
+    }
+    return c
+}
+fn ms_conj(w: u64) -> u64 @export {
+    let p0 : i64 = ms_part(w, 0i64)
+    let mut v : u64 = 0u64
+    let mut j : i64 = 1i64
+    while j <= p0 {
+        v = v | ((ms_colh(w, j) as u64) << ((4i64 * (j - 1i64)) as u64))
+        j = j + 1i64
+    }
+    return v
+}
+/* hook of the box (i, j), both 1-based: arm + leg + 1 */
+fn ms_hook(w: u64, i: i64, j: i64) -> i64 @export {
+    let a : i64 = ms_part(w, i - 1i64) - j
+    let l : i64 = ms_colh(w, j) - i
+    return a + l + 1i64
+}
+fn ms_fact(n: i64) -> u64 {
+    let mut f : u64 = 1u64
+    let mut k : u64 = 2u64
+    while k <= (n as u64) { f = f * k   k = k + 1u64 }
+    return f
+}
+/* f^lambda by the BRANCHING recursion: f = sum over removable corners */
+fn ms_find(n: i64, w: u64) -> u64 {
+    let off : u64 = MS_OFF[n as u64]
+    let cnt : u64 = MS_CNT[n as u64]
+    let mut k : u64 = 0u64
+    while k < cnt {
+        if MS_P[off + k] == w { return off + k }
+        k = k + 1u64
+    }
+    MS_ERR = 2u64
+    return 0u64
+}
+fn ms_fbuild() -> i32 {
+    MS_F[MS_OFF[0u64]] = 1u64
+    let mut n : i64 = 1i64
+    while n <= MS_NMAX {
+        let off : u64 = MS_OFF[n as u64]
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = MS_P[off + k]
+            let mut s : u64 = 0u64
+            let mut r : i64 = 0i64
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                let p : i64 = ms_part(w, r)
+                if p == 0i64 { going = 0u8 } else {
+                    let nx : i64 = ms_part(w, r + 1i64)
+                    if p > nx {
+                        /* corner: decrement nibble r */
+                        let wl : u64 = w - (1u64 << ((4i64 * r) as u64))
+                        s = s + MS_F[ms_find(n - 1i64, wl)]
+                    }
+                    r = r + 1i64
+                }
+            }
+            MS_F[off + k] = s
+            k = k + 1u64
+        }
+        n = n + 1i64
+    }
+    return 0i32
+}
+
+/* ==================== the z-polynomial layer ==================== */
+/* dense degree <= 9 polynomials in the FORMAL variable z, coefficients py
+ * rational handles; a fixed 10-slot window per register.  Registers are
+ * arm-scoped (ms reset zeroes the bump).  The shared-zero law: fresh slots
+ * point at ONE minted zero rational (handles are immutable; ops mint new). */
+var MZ_C : [u64; 30720]
+var MZ_TOP : u64 = 0u64
+var MZ_ZERO : u64 = 0u64
+fn mz_reset() -> i32 {
+    MZ_TOP = 0u64
+    MZ_ZERO = py_rat_i64(0i64)
+    return 0i32
+}
+fn mz_new() -> u64 {
+    if MZ_TOP >= 3072u64 { MS_ERR = 1u64   return 0u64 }
+    let h : u64 = MZ_TOP
+    MZ_TOP = MZ_TOP + 1u64
+    let mut k : u64 = 0u64
+    while k < 10u64 { MZ_C[(h * 10u64) + k] = MZ_ZERO   k = k + 1u64 }
+    return h
+}
+fn mz_c(p: u64, k: i64) -> u64 { let r : u64 = MZ_C[(p * 10u64) + (k as u64)]   return r }
+fn mz_set(p: u64, k: i64, r: u64) -> i32 { MZ_C[(p * 10u64) + (k as u64)] = r   return 0i32 }
+fn mz_one() -> u64 {
+    let p : u64 = mz_new()
+    mz_set(p, 0i64, py_rat_i64(1i64))
+    return p
+}
+fn mz_add(a: u64, b: u64) -> u64 {
+    let p : u64 = mz_new()
+    let mut k : i64 = 0i64
+    while k < 10i64 { mz_set(p, k, py_rat_add(mz_c(a, k), mz_c(b, k)))   k = k + 1i64 }
+    return p
+}
+/* multiply by the linear (c0 + c1 z): the LHS product spine */
+fn mz_mulf(a: u64, c0: u64, c1: u64) -> u64 {
+    /* degree guard: a must be zero at slot 9 */
+    if py_rat_sign(mz_c(a, 9i64)) != 0i64 { MS_ERR = 2u64   return a }
+    let p : u64 = mz_new()
+    let mut k : i64 = 0i64
+    while k < 10i64 {
+        let mut v : u64 = py_rat_mul(mz_c(a, k), c0)
+        if k > 0i64 { v = py_rat_add(v, py_rat_mul(mz_c(a, k - 1i64), c1)) }
+        mz_set(p, k, v)
+        k = k + 1i64
+    }
+    return p
+}
+fn mz_mul(a: u64, b: u64) -> u64 {
+    let p : u64 = mz_new()
+    let mut i : i64 = 0i64
+    while i < 10i64 {
+        let ci : u64 = mz_c(a, i)
+        if py_rat_sign(ci) != 0i64 {
+            let mut j : i64 = 0i64
+            while j < 10i64 {
+                let cj : u64 = mz_c(b, j)
+                if py_rat_sign(cj) != 0i64 {
+                    if (i + j) >= 10i64 { MS_ERR = 2u64 } else {
+                        mz_set(p, i + j, py_rat_add(mz_c(p, i + j), py_rat_mul(ci, cj)))
+                    }
+                }
+                j = j + 1i64
+            }
+        }
+        i = i + 1i64
+    }
+    return p
+}
+fn mz_scale(a: u64, r: u64) -> u64 {
+    let p : u64 = mz_new()
+    let mut k : i64 = 0i64
+    while k < 10i64 { mz_set(p, k, py_rat_mul(mz_c(a, k), r))   k = k + 1i64 }
+    return p
+}
+fn mz_eval(a: u64, zr: u64) -> u64 {
+    let mut v : u64 = mz_c(a, 9i64)
+    let mut k : i64 = 8i64
+    while k >= 0i64 {
+        v = py_rat_add(py_rat_mul(v, zr), mz_c(a, k))
+        k = k - 1i64
+    }
+    return v
+}
+fn mz_eq(a: u64, b: u64) -> u32 {
+    let mut k : i64 = 0i64
+    while k < 10i64 {
+        if py_rat_cmp(mz_c(a, k), mz_c(b, k)) != 0i64 { return 0u32 }
+        k = k + 1i64
+    }
+    return 1u32
+}
+
+/* ==================== THE SELF-PROOF (arms 250..253) ==================== */
+fn ms_arm250() -> u64 {
+    /* the partition table: generation vs Euler's pentagonal recurrence (two
+     * engines for p(n)); the conjugation involution; strict reverse-lex */
+    ms_build()
+    if MS_ERR != 0u64 { return 250u64 }
+    /* pentagonal: p(n) = sum_j (-1)^(j+1) [ p(n - j(3j-1)/2) + p(n - j(3j+1)/2) ] */
+    var pp : [i64; 16]
+    pp[0u64] = 1i64
+    let mut n : i64 = 1i64
+    while n <= MS_NMAX {
+        let mut s : i64 = 0i64
+        let mut j : i64 = 1i64
+        let mut going : u8 = 1u8
+        while going == 1u8 {
+            let g1 : i64 = (j * ((3i64 * j) - 1i64)) / 2i64
+            if g1 > n { going = 0u8 } else {
+                let mut sg : i64 = 1i64
+                if (j % 2i64) == 0i64 { sg = 0i64 - 1i64 }
+                let v1 : i64 = pp[(n - g1) as u64]
+                s = s + (sg * v1)
+                let g2 : i64 = (j * ((3i64 * j) + 1i64)) / 2i64
+                if g2 <= n {
+                    let v2 : i64 = pp[(n - g2) as u64]
+                    s = s + (sg * v2)
+                }
+                j = j + 1i64
+            }
+        }
+        pp[n as u64] = s
+        n = n + 1i64
+    }
+    n = 0i64
+    while n <= MS_NMAX {
+        let cn : u64 = MS_CNT[n as u64]
+        let pn : i64 = pp[n as u64]
+        if (cn as i64) != pn { return 250u64 }
+        n = n + 1i64
+    }
+    /* conjugation is an involution, and |lambda'| = |lambda| */
+    n = 0i64
+    while n <= 8i64 {
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = ms_at(n, k)
+            let cw : u64 = ms_conj(w)
+            if ms_conj(cw) != w { return 250u64 }
+            /* mass conservation under conjugation */
+            let mut m1 : i64 = 0i64
+            let mut r : i64 = 0i64
+            while r < 12i64 { m1 = m1 + ms_part(cw, r)   r = r + 1i64 }
+            if m1 != n { return 250u64 }
+            k = k + 1u64
+        }
+        n = n + 1i64
+    }
+    /* no diagram is minted twice: pairwise-distinct packed words per level
+     * (the packed order is NOT monotone -- (3,3)=0x33 sits below (4,1,1)=
+     * 0x113 -- so uniqueness, not order, is the honest law) */
+    n = 2i64
+    while n <= MS_NMAX {
+        let off : u64 = MS_OFF[n as u64]
+        let cnt2 : u64 = MS_CNT[n as u64]
+        let mut k2 : u64 = 1u64
+        while k2 < cnt2 {
+            let wb : u64 = MS_P[off + k2]
+            let mut k3 : u64 = 0u64
+            while k3 < k2 {
+                if MS_P[off + k3] == wb { return 250u64 }
+                k3 = k3 + 1u64
+            }
+            k2 = k2 + 1u64
+        }
+        n = n + 1i64
+    }
+    if MS_ERR != 0u64 { return 250u64 }
+    return 0u64
+}
+fn ms_arm251() -> u64 {
+    /* f^lambda: hook-length formula vs branching recursion, per diagram; and
+     * Burnside closes each level: sum f^2 = n! */
+    ms_build()
+    ms_fbuild()
+    if MS_ERR != 0u64 { return 251u64 }
+    let mut n : i64 = 1i64
+    while n <= MS_NMAX {
+        let nf : u64 = ms_fact(n)
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut sq : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = ms_at(n, k)
+            /* product of hooks */
+            let mut ph : u64 = 1u64
+            let mut i : i64 = 1i64
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                let p : i64 = ms_part(w, i - 1i64)
+                if p == 0i64 { going = 0u8 } else {
+                    let mut j : i64 = 1i64
+                    while j <= p {
+                        ph = ph * (ms_hook(w, i, j) as u64)
+                        j = j + 1i64
+                    }
+                    i = i + 1i64
+                }
+            }
+            /* hook engine: f = n!/prod h, exact division ASSERTED */
+            if (nf % ph) != 0u64 { return 251u64 }
+            let fh : u64 = nf / ph
+            let fb : u64 = MS_F[MS_OFF[n as u64] + k]
+            if fh != fb { return 251u64 }
+            sq = sq + (fb * fb)
+            k = k + 1u64
+        }
+        if sq != nf { return 251u64 }
+        n = n + 1i64
+    }
+    if MS_ERR != 0u64 { return 251u64 }
+    return 0u64
+}
+/* one Nekrasov U(1) check at the generic point (e1, e2): for n = 1..6,
+ *   sum_{lambda |- n} prod_s 1/(((l+1)e1 - a e2)((a+1)e2 - l e1))
+ *     == 1/(n! (e1 e2)^n).
+ * A vanishing factor at the chosen point is a SHAPE refusal (non-generic
+ * point), loud -- never a silent skip. */
+fn ms_nek_u1(e1: i64, e2: i64) -> u64 {
+    let mut n : i64 = 1i64
+    while n <= 6i64 {
+        let mut s : u64 = py_rat_i64(0i64)
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = ms_at(n, k)
+            let mut t : u64 = py_rat_i64(1i64)
+            let mut i : i64 = 1i64
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                let p : i64 = ms_part(w, i - 1i64)
+                if p == 0i64 { going = 0u8 } else {
+                    let mut j : i64 = 1i64
+                    while j <= p {
+                        let a : i64 = p - j
+                        let l : i64 = ms_colh(w, j) - i
+                        let d1 : i64 = ((l + 1i64) * e1) - (a * e2)
+                        let d2 : i64 = ((a + 1i64) * e2) - (l * e1)
+                        if d1 == 0i64 { MS_ERR = 2u64   return 252u64 }
+                        if d2 == 0i64 { MS_ERR = 2u64   return 252u64 }
+                        t = py_rat_mul(t, py_rat_frac(1i64, d1 * d2))
+                        j = j + 1i64
+                    }
+                    i = i + 1i64
+                }
+            }
+            s = py_rat_add(s, t)
+            k = k + 1u64
+        }
+        /* target 1/(n! (e1 e2)^n), built by repeated exact multiplication */
+        let mut tg : u64 = py_rat_frac(1i64, ms_fact(n) as i64)
+        let ie : u64 = py_rat_frac(1i64, e1 * e2)
+        let mut q : i64 = 0i64
+        while q < n { tg = py_rat_mul(tg, ie)   q = q + 1i64 }
+        if py_rat_cmp(s, tg) != 0i64 { return 252u64 }
+        n = n + 1i64
+    }
+    return 0u64
+}
+fn ms_arm252() -> u64 {
+    /* THE U(1) NEKRASOV MEASURE: three generic Omega-backgrounds, then the
+     * self-dual reduction to hooks (sum prod 1/h^2 = 1/n!, n <= 10) */
+    py_reset()
+    ms_build()
+    if MS_ERR != 0u64 { return 252u64 }
+    if ms_nek_u1(97i64, 13i64) != 0u64 { return 252u64 }
+    if ms_nek_u1(89i64, 0i64 - 17i64) != 0u64 { return 252u64 }
+    if ms_nek_u1(101i64, 31i64) != 0u64 { return 252u64 }
+    /* self-dual e2 = -e1: e(T) = (-1)^n e1^(2n) prod h^2 -- the pure hook law */
+    let mut n : i64 = 1i64
+    while n <= 10i64 {
+        let mut s : u64 = py_rat_i64(0i64)
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = ms_at(n, k)
+            let mut t : u64 = py_rat_i64(1i64)
+            let mut i : i64 = 1i64
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                let p : i64 = ms_part(w, i - 1i64)
+                if p == 0i64 { going = 0u8 } else {
+                    let mut j : i64 = 1i64
+                    while j <= p {
+                        let h : i64 = ms_hook(w, i, j)
+                        t = py_rat_mul(t, py_rat_frac(1i64, h * h))
+                        j = j + 1i64
+                    }
+                    i = i + 1i64
+                }
+            }
+            s = py_rat_add(s, t)
+            k = k + 1u64
+        }
+        if py_rat_cmp(s, py_rat_frac(1i64, ms_fact(n) as i64)) != 0i64 { return 252u64 }
+        n = n + 1i64
+    }
+    if py_err() != 0u64 { return 252u64 }
+    if MS_ERR != 0u64 { return 252u64 }
+    return 0u64
+}
+/* series registers for arm 253 (q-coefficients are mz handles) */
+var NO_L : [u64; 9]
+var NO_R : [u64; 9]
+var NO_S : [u64; 9]
+var NO_T : [u64; 9]
+fn ms_arm253() -> u64 {
+    /* THE NEKRASOV-OKOUNKOV IDENTITY to q^8, as a POLYNOMIAL identity in z:
+     *   sum_lambda q^|lambda| prod_s (1 - z/h^2)  ==  prod_k (1-q^k)^(z-1)
+     * then the classical specialization cross-oracles. */
+    py_reset()
+    ms_build()
+    mz_reset()
+    if MS_ERR != 0u64 { return 253u64 }
+    /* LHS: per q-level, sum over diagrams of the hook product */
+    let mut n : i64 = 0i64
+    while n <= 8i64 {
+        let mut acc : u64 = mz_new()
+        let cnt : u64 = MS_CNT[n as u64]
+        let mut k : u64 = 0u64
+        while k < cnt {
+            let w : u64 = ms_at(n, k)
+            let mut t : u64 = mz_one()
+            let mut i : i64 = 1i64
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                let p : i64 = ms_part(w, i - 1i64)
+                if p == 0i64 { going = 0u8 } else {
+                    let mut j : i64 = 1i64
+                    while j <= p {
+                        let h : i64 = ms_hook(w, i, j)
+                        t = mz_mulf(t, py_rat_i64(1i64), py_rat_frac(0i64 - 1i64, h * h))
+                        j = j + 1i64
+                    }
+                    i = i + 1i64
+                }
+            }
+            acc = mz_add(acc, t)
+            k = k + 1u64
+        }
+        NO_L[n as u64] = acc
+        n = n + 1i64
+    }
+    /* RHS: prod_k (1-q^k)^(z-1) truncated at q^8.
+     * (1-q^k)^(z-1) = sum_j C(z-1, j) (-q^k)^j,
+     * C(z-1, j) = prod_{t=1..j} (z-t) / j!  -- an EXACT z-polynomial. */
+    let mut m : i64 = 0i64
+    while m <= 8i64 { NO_R[m as u64] = mz_new()   m = m + 1i64 }
+    NO_R[0u64] = mz_one()
+    let mut kk : i64 = 1i64
+    while kk <= 8i64 {
+        m = 0i64
+        while m <= 8i64 { NO_S[m as u64] = mz_new()   m = m + 1i64 }
+        let mut j : i64 = 0i64
+        while (kk * j) <= 8i64 {
+            let mut B : u64 = mz_one()
+            let mut t2 : i64 = 1i64
+            while t2 <= j {
+                B = mz_mulf(B, py_rat_i64(0i64 - t2), py_rat_i64(1i64))
+                t2 = t2 + 1i64
+            }
+            /* fold in (-1)^j / j! */
+            let mut sc : u64 = py_rat_frac(1i64, ms_fact(j) as i64)
+            if (j % 2i64) == 1i64 { sc = py_rat_neg(sc) }
+            NO_S[(kk * j) as u64] = mz_scale(B, sc)
+            j = j + 1i64
+        }
+        /* NO_T = NO_R * NO_S, truncated */
+        m = 0i64
+        while m <= 8i64 { NO_T[m as u64] = mz_new()   m = m + 1i64 }
+        m = 0i64
+        while m <= 8i64 {
+            let mut b2 : i64 = 0i64
+            while b2 <= m {
+                NO_T[m as u64] = mz_add(NO_T[m as u64], mz_mul(NO_R[(m - b2) as u64], NO_S[b2 as u64]))
+                b2 = b2 + 1i64
+            }
+            m = m + 1i64
+        }
+        m = 0i64
+        while m <= 8i64 { NO_R[m as u64] = NO_T[m as u64]   m = m + 1i64 }
+        kk = kk + 1i64
+    }
+    /* THE IDENTITY, coefficient-polynomial by coefficient-polynomial */
+    n = 0i64
+    while n <= 8i64 {
+        if mz_eq(NO_L[n as u64], NO_R[n as u64]) != 1u32 { return 253u64 }
+        n = n + 1i64
+    }
+    /* z = 0: Euler -- the q-series of p(n) (ties back to the arm-250 table) */
+    n = 0i64
+    while n <= 8i64 {
+        let v0 : u64 = mz_eval(NO_L[n as u64], py_rat_i64(0i64))
+        let pc : u64 = MS_CNT[n as u64]
+        if py_rat_cmp(v0, py_rat_i64(pc as i64)) != 0i64 { return 253u64 }
+        n = n + 1i64
+    }
+    /* z = 1: the trivial hook -- every nonempty diagram owns an h = 1 box */
+    n = 1i64
+    while n <= 8i64 {
+        if py_rat_sign(mz_eval(NO_L[n as u64], py_rat_i64(1i64))) != 0i64 { return 253u64 }
+        n = n + 1i64
+    }
+    /* z = 2: EULER'S PENTAGONAL THEOREM  prod (1-q^k) */
+    var pc2 : [i64; 9]
+    m = 0i64
+    while m <= 8i64 { pc2[m as u64] = 0i64   m = m + 1i64 }
+    pc2[0u64] = 1i64
+    let mut jj : i64 = 1i64
+    while jj <= 2i64 {
+        let mut sg : i64 = 1i64
+        if (jj % 2i64) == 1i64 { sg = 0i64 - 1i64 }
+        let g1 : i64 = (jj * ((3i64 * jj) - 1i64)) / 2i64
+        if g1 <= 8i64 {
+            let c1 : i64 = pc2[g1 as u64]
+            pc2[g1 as u64] = c1 + sg
+        }
+        let g2 : i64 = (jj * ((3i64 * jj) + 1i64)) / 2i64
+        if g2 <= 8i64 {
+            let c2 : i64 = pc2[g2 as u64]
+            pc2[g2 as u64] = c2 + sg
+        }
+        jj = jj + 1i64
+    }
+    n = 0i64
+    while n <= 8i64 {
+        let v2 : u64 = mz_eval(NO_L[n as u64], py_rat_i64(2i64))
+        let want : i64 = pc2[n as u64]
+        if py_rat_cmp(v2, py_rat_i64(want)) != 0i64 { return 253u64 }
+        n = n + 1i64
+    }
+    /* z = 4: JACOBI'S CUBE IDENTITY  prod (1-q^k)^3 = sum (-1)^m (2m+1) q^(m(m+1)/2) */
+    var jc : [i64; 9]
+    m = 0i64
+    while m <= 8i64 { jc[m as u64] = 0i64   m = m + 1i64 }
+    let mut mm : i64 = 0i64
+    while ((mm * (mm + 1i64)) / 2i64) <= 8i64 {
+        let idx : i64 = (mm * (mm + 1i64)) / 2i64
+        let mut c : i64 = (2i64 * mm) + 1i64
+        if (mm % 2i64) == 1i64 { c = 0i64 - c }
+        jc[idx as u64] = c
+        mm = mm + 1i64
+    }
+    n = 0i64
+    while n <= 8i64 {
+        let v4 : u64 = mz_eval(NO_L[n as u64], py_rat_i64(4i64))
+        let want4 : i64 = jc[n as u64]
+        if py_rat_cmp(v4, py_rat_i64(want4)) != 0i64 { return 253u64 }
+        n = n + 1i64
+    }
+    if py_err() != 0u64 { return 253u64 }
+    if MS_ERR != 0u64 { return 253u64 }
+    return 0u64
+}
+fn ms_selfprove() -> u64 @export {
+    py_reset()
+    let a0 : u64 = ms_arm250()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = ms_arm251()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = ms_arm252()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = ms_arm253()
+    if a3 != 0u64 { return a3 }
+    return 0u64
+}

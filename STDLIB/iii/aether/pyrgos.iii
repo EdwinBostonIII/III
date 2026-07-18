@@ -69,7 +69,7 @@
  * (non-commutativity as ALGEBRA), and the uncertainty principle proven as an
  * exact IDENTITY (Schrodinger's strengthening; Robertson as its corollary).
  *
- * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..193) -- including
+ * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..195) -- including
  * the nested-radical exact zero  sqrt2 + sqrt3 - sqrt(5 + 2 sqrt6) = 0  that
  * no float and no flat i64 oracle can decide, and a 125-case ENUMERATED
  * cross-oracle agreement with ui_sqrt_sum_sign (two mathematically independent
@@ -1654,6 +1654,103 @@ fn py_arm191() -> u64 {
     if PY_ERR != 0u64 { return 191u64 }
     return 0u64
 }
+fn py_arm195() -> u64 {
+    /* THE BRANCH CUT, all four quadrants + both boundary rays: the principal
+     * root law is re > 0, OR re = 0 with im >= 0 (negative reals take the +i
+     * side) -- checked structurally on every root AND against the defining
+     * square.  The half-angle engine must agree with the sign convention of
+     * the total-sign oracle (py_el_sign drives sign(im) inside pz_sqrt), so
+     * each quadrant exercises a different (sign(re), sign(im)) pair. */
+    py_reset()
+    /* Q1 5+12i -> 3+2i; Q2 -5+12i -> 2+3i; Q3 -5-12i -> 2-3i; Q4 5-12i -> 3-2i */
+    let r1 : u64 = pz_sqrt(pz_from_i64(5i64, 12i64))
+    if pz_eq(r1, pz_from_i64(3i64, 2i64)) != 1u32 { return 195u64 }
+    let r2 : u64 = pz_sqrt(pz_from_i64(0i64 - 5i64, 12i64))
+    if pz_eq(r2, pz_from_i64(2i64, 3i64)) != 1u32 { return 195u64 }
+    let r3 : u64 = pz_sqrt(pz_from_i64(0i64 - 5i64, 0i64 - 12i64))
+    if pz_eq(r3, pz_from_i64(2i64, 0i64 - 3i64)) != 1u32 { return 195u64 }
+    let r4 : u64 = pz_sqrt(pz_from_i64(5i64, 0i64 - 12i64))
+    if pz_eq(r4, pz_from_i64(3i64, 0i64 - 2i64)) != 1u32 { return 195u64 }
+    /* boundary rays: positive real, negative real (the cut itself) */
+    let r5 : u64 = pz_sqrt(pz_from_i64(9i64, 0i64))
+    if pz_eq(r5, pz_from_i64(3i64, 0i64)) != 1u32 { return 195u64 }
+    let r6 : u64 = pz_sqrt(pz_from_i64(0i64 - 9i64, 0i64))
+    if pz_eq(r6, pz_from_i64(0i64, 3i64)) != 1u32 { return 195u64 }
+    /* the principal law on every root above, structurally */
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        let mut r : u64 = r1
+        if k == 1u64 { r = r2 }
+        if k == 2u64 { r = r3 }
+        if k == 3u64 { r = r4 }
+        if k == 4u64 { r = r5 }
+        if k == 5u64 { r = r6 }
+        let sre : i64 = py_el_sign(pz_re(r))
+        if sre < 0i64 { return 195u64 }
+        if sre == 0i64 { if py_el_sign(pz_im(r)) < 0i64 { return 195u64 } }
+        k = k + 1u64
+    }
+    /* an irrational-quadrant witness: sqrt(2i) = 1+i scaled -- sqrt(8i) =
+     * 2+2i exactly (surd modulus, rational half-angle output) */
+    let r7 : u64 = pz_sqrt(pz_from_i64(0i64, 8i64))
+    if pz_eq(r7, pz_from_i64(2i64, 2i64)) != 1u32 { return 195u64 }
+    if PY_ERR != 0u64 { return 195u64 }
+    return 0u64
+}
+/* THE BORN CROSS-ORACLE (the kyma seam, from the pz side).  kyma holds an
+ * amplitude as four integer coordinates in Z[zeta], zeta = e^{i pi/4}, over
+ * a global 1/sqrt2^K.  pz_from_zeta4 VALUES that encoding in the tower:
+ * zeta = (1+i)/sqrt2, zeta^2 = i, zeta^3 = (-1+i)/sqrt2.  Two independent
+ * engines then meet: |z|^2 by the TOWER (re^2+im^2 through the pair field)
+ * versus |z|^2 by the RING (z zbar = A + B sqrt2 with A = sum a_i^2,
+ * B = a0a1+a1a2+a2a3-a0a3 -- pure integer combinatorics).  One truth. */
+fn pz_from_zeta4(a0: i64, a1: i64, a2: i64, a3: i64, kk: u64) -> u64 @export {
+    let s2 : u64 = py_sqrt(py_el_from_i64(2i64, 0u64))
+    let i2 : u64 = py_div(py_el_from_i64(1i64, 0u64), s2)
+    let re : u64 = py_add(py_el_from_i64(a0, 0u64), py_mul(py_el_from_i64(a1 - a3, 0u64), i2))
+    let im : u64 = py_add(py_el_from_i64(a2, 0u64), py_mul(py_el_from_i64(a1 + a3, 0u64), i2))
+    let mut sc : u64 = py_el_from_i64(1i64, 0u64)
+    let mut t : u64 = 0u64
+    while t < kk { sc = py_mul(sc, i2)   t = t + 1u64 }
+    return pz_mk(py_mul(re, sc), py_mul(im, sc))
+}
+fn py_arm194() -> u64 {
+    py_reset()
+    /* the 8th root of unity, valued: zeta^2 = i, zeta^4 = -1, zeta^8 = 1 */
+    let z1 : u64 = pz_from_zeta4(0i64, 1i64, 0i64, 0i64, 0u64)
+    let z2 : u64 = pz_mul(z1, z1)
+    if pz_eq(z2, pz_i()) != 1u32 { return 194u64 }
+    let z4 : u64 = pz_mul(z2, z2)
+    if pz_eq(z4, pz_from_i64(0i64 - 1i64, 0i64)) != 1u32 { return 194u64 }
+    if pz_eq(pz_mul(z4, z4), pz_one()) != 1u32 { return 194u64 }
+    if py_cmp(pz_norm2(z1), py_el_from_i64(1i64, 0u64)) != 0i64 { return 194u64 }
+    /* the ring conjugation law conj(a0,a1,a2,a3) = (a0,-a3,-a2,-a1) */
+    let w : u64 = pz_from_zeta4(1i64, 2i64, 0i64, 0i64 - 1i64, 0u64)
+    let wc : u64 = pz_from_zeta4(1i64, 1i64, 0i64, 0i64 - 2i64, 0u64)
+    if pz_eq(pz_conj(w), wc) != 1u32 { return 194u64 }
+    /* TWO ENGINES, ONE NORM: tower norm2 vs ring A + B sqrt2 */
+    let s2 : u64 = py_sqrt(py_el_from_i64(2i64, 0u64))
+    /* (1,2,0,-1): A = 1+4+0+1 = 6, B = 2+0+0-(-1) = 3 */
+    let n1 : u64 = py_add(py_el_from_i64(6i64, 0u64), py_mul(py_el_from_i64(3i64, 0u64), s2))
+    if py_cmp(pz_norm2(w), n1) != 0i64 { return 194u64 }
+    /* (2,-1,3,1): A = 4+1+9+1 = 15, B = -2-3+3-2 = -4 */
+    let v : u64 = pz_from_zeta4(2i64, 0i64 - 1i64, 3i64, 1i64, 0u64)
+    let n2 : u64 = py_sub(py_el_from_i64(15i64, 0u64), py_mul(py_el_from_i64(4i64, 0u64), s2))
+    if py_cmp(pz_norm2(v), n2) != 0i64 { return 194u64 }
+    /* Brahmagupta over the ring elements too: |wv|^2 = |w|^2 |v|^2 */
+    if py_cmp(pz_norm2(pz_mul(w, v)), py_mul(n1, n2)) != 0i64 { return 194u64 }
+    /* THE BORN CHECK: H|0> amplitudes (1,0,0,0)/sqrt2^1 -- each weight is
+     * EXACTLY 1/2 and the state resolves to certainty (sum 1); a T-phased
+     * amplitude zeta/sqrt2 keeps weight 1/2 (unitary phase invariance) */
+    let ha : u64 = pz_from_zeta4(1i64, 0i64, 0i64, 0i64, 1u64)
+    let half : u64 = py_el_from_rat(py_rat_frac(1i64, 2i64), 0u64)
+    if py_cmp(pz_norm2(ha), half) != 0i64 { return 194u64 }
+    if py_cmp(py_add(pz_norm2(ha), pz_norm2(ha)), py_el_from_i64(1i64, 0u64)) != 0i64 { return 194u64 }
+    let ta : u64 = pz_from_zeta4(0i64, 1i64, 0i64, 0i64, 1u64)
+    if py_cmp(pz_norm2(ta), half) != 0i64 { return 194u64 }
+    if PY_ERR != 0u64 { return 194u64 }
+    return 0u64
+}
 /* 2x2 complex-matrix cells (multi-out through module cells, the house
  * pattern): R = A*B, and the quadratic form psi-dagger B psi for the state
  * (S0, S1).  Index order 0=00 1=01 2=10 3=11. */
@@ -1864,5 +1961,9 @@ fn py_selfprove() -> u64 @export {
     if a12 != 0u64 { return a12 }
     let a13 : u64 = py_arm193()
     if a13 != 0u64 { return a13 }
+    let a14 : u64 = py_arm194()
+    if a14 != 0u64 { return a14 }
+    let a15 : u64 = py_arm195()
+    if a15 != 0u64 { return a15 }
     return 0u64
 }

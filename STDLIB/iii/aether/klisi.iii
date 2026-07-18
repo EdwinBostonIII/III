@@ -1,0 +1,533 @@
+/* STDLIB/iii/aether/klisi.iii -- KLISI (the TILT): exact p-adic arithmetic
+ * and the PERFECTOID TILTING CORRESPONDENCE, at finite level.
+ *
+ * THE RUNG (the Scholze ascent): a perfectoid field trades characteristic-0
+ * geometry for characteristic-p geometry through an infinite tower of p-th
+ * roots and the TILTING equivalence.  The infinite objects are pro-limits of
+ * FINITE rings, and every finite level is exact integer arithmetic -- so the
+ * machine holds the correct finite shadow of every claim, with nothing
+ * floating and nothing approximated:
+ *
+ *   ONE DIGIT ENGINE, THREE RINGS (p = 5 throughout):
+ *     mode (K, M) = base-5 digit vectors on the exponent grid (1/5^K)Z
+ *     truncated at 5^M -- value sum d_i 5^(i/G), G = 5^K.  The carry law is
+ *     the grid law: 5 * 5^(i/G) = 5^(i/G + 1), a G-SLOT jump.
+ *     (0, 12): Z/5^12 -- the p-adic integers to 12 digits;
+ *     (3, 1):  O/p of the perfectoid ring O = Z_5[5^(1/125)] -- also THE
+ *              TILT'S ring of definition, char 5, u^(>=1) = 0;
+ *     (3, 3):  O/5^3 -- the untilted side, where sharps land.
+ *
+ *   THE p-ADIC ARMS: Hensel's lemma digit-by-digit (sqrt(-1) exists in Z_5:
+ *   x = 2 lifts through all 12 digits, x^2 + 1 = 0 EXACTLY mod 5^12 -- the
+ *   imaginary unit as a p-adic INTEGER, the arithmetic mirror of the PZ
+ *   closure); the named negative control (x^2 = 2 REFUSED mod 5: {0,1,4}
+ *   only); the geometric-series inverse (1-5) sum 5^k = 1; TEICHMUELLER by
+ *   TWO independent engines: the Frobenius iterate t -> t^5 against Hensel
+ *   on x^4 - 1, one representative, bit-for-bit.
+ *
+ *   THE PERFECTION ARMS: Frobenius phi(x) = x^5 by TWO engines (the honest
+ *   fifth power with every cross term and carry, against the exponent map
+ *   slot -> 5*slot with Fermat-fixed digits d^5 = d) -- the freshman's dream
+ *   (x+y)^5 = x^5 + y^5 PROVEN on full-support elements, and phi's inverse
+ *   rho exact both ways: the ring is PERFECT.
+ *
+ *   THE TILT ARMS: elements of O-flat are Frobenius-compatible systems in
+ *   O/5; the SHARP map x -> lim (lift x_i)^(5^i) computed at depth 125 with
+ *   RANDOMIZED lifts -- the limit is lift-INDEPENDENT (p-adic convergence,
+ *   witnessed exactly), MULTIPLICATIVE, Frobenius-equivariant, and lands the
+ *   cornerstone of the correspondence:  (t-flat)-SHARP = 5 EXACTLY -- the
+ *   pseudouniformizer of the tilt names p itself.  The tilt's addition is
+ *   the LIMIT FORMULA lim (x_(i+j) + y_(i+j))^(5^j), proven stable in j and
+ *   equal to componentwise addition; adding 1 to itself FIVE TIMES in the
+ *   tilt of a characteristic-0 ring lands EXACTLY 0 (the tilt has char p);
+ *   and the named negative control: SHARP is NOT additive (1+1+1+1+1 sharps
+ *   to 0 while the sharps sum to 5) -- tilting is a MULTIPLICATIVE
+ *   equivalence, which is the whole point of the theory.
+ *
+ * Truth is a CONDITION OF MOTION: kl_selfprove (arms 260..265).  NO gate.
+ * NIH: self-contained integer digit vectors (the ONE bigint law, base-5
+ * graded); composes nothing and floats nothing.  Ring R-1. */
+module aether_klisi
+
+var KDG : u64 = 1u64                     /* grid: slots per unit exponent       */
+var KDL : u64 = 12u64                    /* total live slots = M * G            */
+var KD_D : [u64; 131072]                 /* digit pool: 341 regs x 384          */
+var KD_TOP : u64 = 0u64
+var KACC : [u64; 768]                    /* mul/add accumulator (double width)  */
+var KBR : [u64; 768]                     /* subtraction borrow lane             */
+var KL_ERR : u64 = 0u64                  /* 1 pool, 2 shape/mode refusal        */
+var KL_SEED : u64 = 88172645463325252u64
+
+fn kl_err() -> u64 @export { return KL_ERR }
+fn kd_reset(k: u64, m: u64) -> i32 @export {
+    let mut g : u64 = 1u64
+    let mut i : u64 = 0u64
+    while i < k { g = g * 5u64   i = i + 1u64 }
+    KDG = g
+    KDL = m * g
+    if KDL > 384u64 { KL_ERR = 2u64   return -1i32 }
+    KD_TOP = 0u64
+    KL_ERR = 0u64
+    return 0i32
+}
+fn kd_alloc() -> u64 @export {
+    if KD_TOP >= 341u64 { KL_ERR = 1u64   return 0u64 }
+    let h : u64 = KD_TOP
+    KD_TOP = KD_TOP + 1u64
+    let b : u64 = h * 384u64
+    let mut i : u64 = 0u64
+    while i < 384u64 { KD_D[b + i] = 0u64   i = i + 1u64 }
+    return h
+}
+fn kd_seti(h: u64, slot: u64, d: u64) -> i32 @export {
+    if slot >= KDL { KL_ERR = 2u64   return -1i32 }
+    KD_D[(h * 384u64) + slot] = d
+    return 0i32
+}
+fn kd_get(h: u64, slot: u64) -> u64 @export {
+    if slot >= KDL { return 0u64 }
+    let v : u64 = KD_D[(h * 384u64) + slot]
+    return v
+}
+fn kd_one() -> u64 @export {
+    let h : u64 = kd_alloc()
+    kd_seti(h, 0u64, 1u64)
+    return h
+}
+fn kd_copy(a: u64) -> u64 @export {
+    let h : u64 = kd_alloc()
+    let mut i : u64 = 0u64
+    while i < KDL { KD_D[(h * 384u64) + i] = KD_D[(a * 384u64) + i]   i = i + 1u64 }
+    return h
+}
+fn kd_eq(a: u64, b: u64) -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < KDL {
+        if KD_D[(a * 384u64) + i] != KD_D[(b * 384u64) + i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+fn kd_iszero(a: u64) -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < KDL {
+        if KD_D[(a * 384u64) + i] != 0u64 { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+/* the carry pass: ascending, each overflow jumps G slots (5*5^(i/G) =
+ * 5^(i/G+1)); carries past the top truncate (mod 5^M) */
+fn kd_carry_out(h: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < KDL {
+        let c : u64 = KACC[i]
+        KD_D[(h * 384u64) + i] = c % 5u64
+        if (i + KDG) < KDL { KACC[i + KDG] = KACC[i + KDG] + (c / 5u64) }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn kd_add(a: u64, b: u64) -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < KDL { KACC[i] = KD_D[(a * 384u64) + i] + KD_D[(b * 384u64) + i]   i = i + 1u64 }
+    let h : u64 = kd_alloc()
+    kd_carry_out(h)
+    return h
+}
+fn kd_sub(a: u64, b: u64) -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < KDL { KBR[i] = 0u64   i = i + 1u64 }
+    let h : u64 = kd_alloc()
+    i = 0u64
+    while i < KDL {
+        let da : u64 = KD_D[(a * 384u64) + i]
+        let db : u64 = KD_D[(b * 384u64) + i] + KBR[i]
+        if da >= db {
+            KD_D[(h * 384u64) + i] = da - db
+        } else {
+            KD_D[(h * 384u64) + i] = (da + 5u64) - db
+            if (i + KDG) < KDL { KBR[i + KDG] = KBR[i + KDG] + 1u64 }
+        }
+        i = i + 1u64
+    }
+    return h
+}
+fn kd_mul(a: u64, b: u64) -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < KDL { KACC[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < KDL {
+        let da : u64 = KD_D[(a * 384u64) + i]
+        if da != 0u64 {
+            let mut j : u64 = 0u64
+            while (i + j) < KDL {
+                KACC[i + j] = KACC[i + j] + (da * KD_D[(b * 384u64) + j])
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    let h : u64 = kd_alloc()
+    kd_carry_out(h)
+    return h
+}
+fn kd_pow(a: u64, e: u64) -> u64 @export {
+    let mut r : u64 = kd_one()
+    let mut b : u64 = kd_copy(a)
+    let mut k : u64 = e
+    while k > 0u64 {
+        if (k & 1u64) == 1u64 { r = kd_mul(r, b) }
+        k = k >> 1u64
+        if k > 0u64 { b = kd_mul(b, b) }
+    }
+    return r
+}
+/* Frobenius by the EXPONENT MAP: slot i -> slot 5i, digits Fermat-fixed
+ * (d^5 = d in F_5).  Sound ONLY in the char-p ring (M = 1): refuse loudly
+ * elsewhere.  The honest x^5 through kd_pow is the second engine. */
+fn kd_phi(a: u64) -> u64 @export {
+    if (KDL != KDG) { KL_ERR = 2u64   return kd_alloc() }
+    let h : u64 = kd_alloc()
+    let mut i : u64 = 0u64
+    while i < KDL {
+        let d : u64 = KD_D[(a * 384u64) + i]
+        if d != 0u64 {
+            if (5u64 * i) < KDL { KD_D[(h * 384u64) + (5u64 * i)] = d }
+        }
+        i = i + 1u64
+    }
+    return h
+}
+/* the inverse exponent map: every nonzero slot must be a multiple of 5 --
+ * a non-multiple is a shape refusal (the element is outside phi's image) */
+fn kd_rho(a: u64) -> u64 @export {
+    if (KDL != KDG) { KL_ERR = 2u64   return kd_alloc() }
+    let h : u64 = kd_alloc()
+    let mut i : u64 = 0u64
+    while i < KDL {
+        let d : u64 = KD_D[(a * 384u64) + i]
+        if d != 0u64 {
+            if (i % 5u64) != 0u64 { KL_ERR = 2u64   return h }
+            KD_D[(h * 384u64) + (i / 5u64)] = d
+        }
+        i = i + 1u64
+    }
+    return h
+}
+fn kl_rnd() -> u64 {
+    KL_SEED = (KL_SEED * 6364136223846793005u64) + 1442695040888963407u64
+    return KL_SEED >> 33u64
+}
+fn kd_fill(h: u64, lo: u64, hi: u64) -> i32 @export {
+    let mut i : u64 = lo
+    while i < hi {
+        if i < KDL { KD_D[(h * 384u64) + i] = kl_rnd() % 5u64 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ==================== THE SELF-PROOF (arms 260..265) ==================== */
+fn kl_arm260() -> u64 {
+    /* the digit ring itself: the G-jump carry law, truncation at 5^M, and
+     * the ring laws on random full-support elements */
+    kd_reset(3u64, 3u64)
+    /* carry law: 4*5^(1/125) + 4*5^(1/125) = 3*5^(1/125) + 1*5^(1/125 + 1) */
+    let x : u64 = kd_alloc()
+    kd_seti(x, 1u64, 4u64)
+    let s : u64 = kd_add(x, x)
+    if kd_get(s, 1u64) != 3u64 { return 260u64 }
+    if kd_get(s, 1u64 + 125u64) != 1u64 { return 260u64 }
+    /* truncation: 5^(M-1) * 5 = 5^M = 0 */
+    let t : u64 = kd_alloc()
+    kd_seti(t, 250u64, 1u64)
+    let five : u64 = kd_alloc()
+    kd_seti(five, 125u64, 1u64)
+    if kd_iszero(kd_mul(t, five)) != 1u32 { return 260u64 }
+    /* ring laws on random elements */
+    let a : u64 = kd_alloc()
+    kd_fill(a, 0u64, 375u64)
+    let b : u64 = kd_alloc()
+    kd_fill(b, 0u64, 375u64)
+    let c : u64 = kd_alloc()
+    kd_fill(c, 0u64, 375u64)
+    if kd_eq(kd_add(a, b), kd_add(b, a)) != 1u32 { return 260u64 }
+    if kd_eq(kd_mul(a, b), kd_mul(b, a)) != 1u32 { return 260u64 }
+    if kd_eq(kd_mul(kd_mul(a, b), c), kd_mul(a, kd_mul(b, c))) != 1u32 { return 260u64 }
+    if kd_eq(kd_mul(a, kd_add(b, c)), kd_add(kd_mul(a, b), kd_mul(a, c))) != 1u32 { return 260u64 }
+    /* subtraction inverts addition */
+    if kd_eq(kd_sub(kd_add(a, b), b), a) != 1u32 { return 260u64 }
+    if kd_iszero(kd_sub(a, a)) != 1u32 { return 260u64 }
+    if KL_ERR != 0u64 { return 260u64 }
+    return 0u64
+}
+fn kl_arm261() -> u64 {
+    /* Z_5 to 12 digits: HENSEL'S LEMMA lifts sqrt(-1) from x = 2 digit by
+     * digit -- the imaginary unit IS a 5-adic integer, exactly; x^2 = 2 is
+     * REFUSED at the first digit (named negative control); the geometric
+     * series inverts 1 - 5 */
+    kd_reset(0u64, 12u64)
+    let one : u64 = kd_one()
+    let neg1 : u64 = kd_sub(kd_alloc(), one)
+    let mut x : u64 = kd_alloc()
+    kd_seti(x, 0u64, 2u64)
+    /* digit lift: F = x^2 + 1 vanishes mod 5^m; the next digit c solves
+     * 2*x*c = -(F/5^m) mod 5; inv5(4) = 4 */
+    let mut m : u64 = 1u64
+    while m < 12u64 {
+        let F : u64 = kd_add(kd_mul(x, x), one)
+        /* F must already vanish below 5^m */
+        let mut i : u64 = 0u64
+        while i < m {
+            if kd_get(F, i) != 0u64 { return 261u64 }
+            i = i + 1u64
+        }
+        let dm : u64 = kd_get(F, m)
+        let c : u64 = ((5u64 - dm) * 4u64) % 5u64
+        if c != 0u64 {
+            let step : u64 = kd_alloc()
+            kd_seti(step, m, c)
+            x = kd_add(x, step)
+        }
+        m = m + 1u64
+    }
+    if kd_eq(kd_mul(x, x), neg1) != 1u32 { return 261u64 }
+    if kd_get(x, 0u64) != 2u64 { return 261u64 }
+    /* named refusal: 2 is not a square mod 5 (squares are 0, 1, 4) */
+    let mut d : u64 = 0u64
+    while d < 5u64 {
+        if ((d * d) % 5u64) == 2u64 { return 261u64 }
+        d = d + 1u64
+    }
+    /* geometric series: (1 - 5) * (1 + 5 + ... + 5^11) = 1 - 5^12 = 1 */
+    let g : u64 = kd_alloc()
+    let mut k : u64 = 0u64
+    while k < 12u64 { kd_seti(g, k, 1u64)   k = k + 1u64 }
+    let five : u64 = kd_alloc()
+    kd_seti(five, 1u64, 1u64)
+    if kd_eq(kd_mul(kd_sub(one, five), g), one) != 1u32 { return 261u64 }
+    if KL_ERR != 0u64 { return 261u64 }
+    return 0u64
+}
+fn kl_arm262() -> u64 {
+    /* TEICHMUELLER, two independent engines: the Frobenius iterate t -> t^5
+     * converges to the unique root of unity over 2; Hensel on x^4 - 1 lifts
+     * the same 2.  One representative, every digit equal. */
+    kd_reset(0u64, 12u64)
+    let one : u64 = kd_one()
+    let mut t : u64 = kd_alloc()
+    kd_seti(t, 0u64, 2u64)
+    /* 12 iterations suffice: 2^(5^12) is already Teichmueller mod 5^12 */
+    let mut it : u64 = 0u64
+    while it < 12u64 { t = kd_pow(t, 5u64)   it = it + 1u64 }
+    if kd_eq(kd_pow(t, 5u64), t) != 1u32 { return 262u64 }
+    if kd_eq(kd_pow(t, 4u64), one) != 1u32 { return 262u64 }
+    if kd_get(t, 0u64) != 2u64 { return 262u64 }
+    /* Hensel on x^4 - 1 from 2: digit c solves 4 x^3 c = -(F/5^m) mod 5;
+     * x = 2 mod 5: 4*8 = 32 = 2 mod 5, inv5(2) = 3 */
+    let mut x : u64 = kd_alloc()
+    kd_seti(x, 0u64, 2u64)
+    let mut m : u64 = 1u64
+    while m < 12u64 {
+        let F : u64 = kd_sub(kd_pow(x, 4u64), one)
+        let mut i : u64 = 0u64
+        while i < m {
+            if kd_get(F, i) != 0u64 { return 262u64 }
+            i = i + 1u64
+        }
+        let dm : u64 = kd_get(F, m)
+        let c : u64 = ((5u64 - dm) * 3u64) % 5u64
+        if c != 0u64 {
+            let step : u64 = kd_alloc()
+            kd_seti(step, m, c)
+            x = kd_add(x, step)
+        }
+        m = m + 1u64
+    }
+    if kd_eq(x, t) != 1u32 { return 262u64 }
+    if KL_ERR != 0u64 { return 262u64 }
+    return 0u64
+}
+fn kl_arm263() -> u64 {
+    /* PERFECTION: Frobenius by two engines (honest fifth power vs exponent
+     * map with Fermat-fixed digits), the freshman's dream on full-support
+     * random elements, and rho inverting phi both ways */
+    kd_reset(3u64, 1u64)
+    /* Fermat digit law d^5 = d, enumerated */
+    let mut d : u64 = 0u64
+    while d < 5u64 {
+        if ((d * d * d * d * d) % 5u64) != d { return 263u64 }
+        d = d + 1u64
+    }
+    let x : u64 = kd_alloc()
+    kd_fill(x, 0u64, 125u64)
+    let y : u64 = kd_alloc()
+    kd_fill(y, 0u64, 125u64)
+    /* two engines, one Frobenius: the honest fifth power (every cross term,
+     * every carry-drop) equals the exponent map -- on FULL support, where
+     * both truncate the top band identically */
+    let x5 : u64 = kd_pow(x, 5u64)
+    if kd_eq(x5, kd_phi(x)) != 1u32 { return 263u64 }
+    let y5 : u64 = kd_pow(y, 5u64)
+    if kd_eq(y5, kd_phi(y)) != 1u32 { return 263u64 }
+    /* the freshman's dream IS the ring law in char p */
+    if kd_eq(kd_pow(kd_add(x, y), 5u64), kd_add(x5, y5)) != 1u32 { return 263u64 }
+    /* perfectness at finite level: phi is the level-drop isomorphism, so
+     * rho . phi = id holds on the R_(K-1) window (slots < 25) -- the top
+     * band is EXACTLY what a level costs -- and phi . rho = id on the image */
+    let w : u64 = kd_alloc()
+    kd_fill(w, 0u64, 25u64)
+    if kd_eq(kd_rho(kd_phi(w)), w) != 1u32 { return 263u64 }
+    if kd_eq(kd_phi(kd_rho(x5)), x5) != 1u32 { return 263u64 }
+    /* and the negative control: a full-support element LOSES its top band
+     * through phi -- the finite level is a quotient, never a lie */
+    if kd_eq(kd_rho(kd_phi(x)), x) == 1u32 { return 263u64 }
+    if KL_ERR != 0u64 { return 263u64 }
+    return 0u64
+}
+/* the shape bank: five recorded char-p elements (slot, digit) runs, held in
+ * MODULE cells across the mode switch (the 64-local-slot law forbids local
+ * banks of this size).  kt_record(shape, a) stores; kt_lift(shape, junk)
+ * rebuilds in the CURRENT mode, junk != 0 adds a random 5*O tail. */
+var KT_S : [u64; 40]
+var KT_G : [u64; 40]
+var KT_C : [u64; 5]
+fn kt_record(shape: u64, a: u64) -> i32 {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 125u64 {
+        let d : u64 = kd_get(a, i)
+        if d != 0u64 {
+            if n >= 8u64 { KL_ERR = 2u64   return -1i32 }
+            KT_S[(shape * 8u64) + n] = i
+            KT_G[(shape * 8u64) + n] = d
+            n = n + 1u64
+        }
+        i = i + 1u64
+    }
+    KT_C[shape] = n
+    return 0i32
+}
+fn kt_lift(shape: u64, junk: u64) -> u64 {
+    let h : u64 = kd_alloc()
+    let cnt : u64 = KT_C[shape]
+    let mut k : u64 = 0u64
+    while k < cnt {
+        kd_seti(h, KT_S[(shape * 8u64) + k], KT_G[(shape * 8u64) + k])
+        k = k + 1u64
+    }
+    if junk != 0u64 {
+        let mut i : u64 = 125u64
+        while i < 375u64 { KD_D[(h * 384u64) + i] = kl_rnd() % 5u64   i = i + 1u64 }
+    }
+    return h
+}
+fn kl_arm264() -> u64 {
+    /* THE SHARP: x-sharp = (lift x)^125 mod 5^3 -- lift-INDEPENDENT (the
+     * p-adic limit, witnessed exactly), multiplicative, Frobenius-
+     * equivariant; and the cornerstone (t-flat)-sharp = 5. */
+    kd_reset(3u64, 1u64)
+    /* t-flat: the deepest component 5^(1/125) of the compatible system */
+    let tf : u64 = kd_alloc()
+    kd_seti(tf, 1u64, 1u64)
+    /* x-flat = 1 + t-flat, y-flat = 2 + 3 t-flat^2: units with mixed slots */
+    let xf : u64 = kd_alloc()
+    kd_seti(xf, 0u64, 1u64)
+    kd_seti(xf, 1u64, 1u64)
+    let yf : u64 = kd_alloc()
+    kd_seti(yf, 0u64, 2u64)
+    kd_seti(yf, 2u64, 3u64)
+    /* shapes 0..4: t-flat, x-flat, y-flat, x*y, phi(x) */
+    kt_record(0u64, tf)
+    kt_record(1u64, xf)
+    kt_record(2u64, yf)
+    kt_record(3u64, kd_mul(xf, yf))
+    kt_record(4u64, kd_phi(xf))
+    /* the untilted side */
+    kd_reset(3u64, 3u64)
+    /* (t-flat)-sharp = 5, on the CLEAN lift and on TWO randomized lifts */
+    let s0 : u64 = kd_pow(kt_lift(0u64, 0u64), 125u64)
+    let s1 : u64 = kd_pow(kt_lift(0u64, 1u64), 125u64)
+    let s2 : u64 = kd_pow(kt_lift(0u64, 1u64), 125u64)
+    let five : u64 = kd_alloc()
+    kd_seti(five, 125u64, 1u64)
+    if kd_eq(s0, five) != 1u32 { return 264u64 }
+    if kd_eq(s1, five) != 1u32 { return 264u64 }
+    if kd_eq(s2, five) != 1u32 { return 264u64 }
+    /* multiplicativity: (xy)-sharp = x-sharp * y-sharp (randomized lifts) */
+    let xs : u64 = kd_pow(kt_lift(1u64, 1u64), 125u64)
+    let ys : u64 = kd_pow(kt_lift(2u64, 1u64), 125u64)
+    let ps : u64 = kd_pow(kt_lift(3u64, 1u64), 125u64)
+    if kd_eq(kd_mul(xs, ys), ps) != 1u32 { return 264u64 }
+    /* Frobenius equivariance: (phi x)-sharp = (x-sharp)^5 */
+    let fs : u64 = kd_pow(kt_lift(4u64, 1u64), 125u64)
+    if kd_eq(fs, kd_pow(xs, 5u64)) != 1u32 { return 264u64 }
+    if KL_ERR != 0u64 { return 264u64 }
+    return 0u64
+}
+fn kl_arm265() -> u64 {
+    /* THE TILT'S ADDITION is the limit formula lim (x_(i+j) + y_(i+j))^(5^j)
+     * -- stable in j (well-defined), equal to componentwise addition; the
+     * tilt has characteristic 5 (1 five times = EXACTLY 0); and SHARP is
+     * NOT additive -- the named negative control that tilting is a
+     * multiplicative equivalence. */
+    kd_reset(3u64, 1u64)
+    /* compatible systems to depth 3: components x_i = phi^(3-i)(x_3) */
+    let x3 : u64 = kd_alloc()
+    kd_seti(x3, 0u64, 1u64)
+    kd_seti(x3, 1u64, 1u64)
+    kd_seti(x3, 3u64, 2u64)
+    let x2 : u64 = kd_phi(x3)
+    let x1 : u64 = kd_phi(x2)
+    let y3 : u64 = kd_alloc()
+    kd_seti(y3, 0u64, 3u64)
+    kd_seti(y3, 2u64, 4u64)
+    let y2 : u64 = kd_phi(y3)
+    let y1 : u64 = kd_phi(y2)
+    /* compatibility of the SUM system, depth by depth: the limit formula at
+     * (i, j) and (i, j+1) agree -- (s_(i+j+1))^(5^(j+1)) = (s_(i+j))^(5^j) */
+    let s1 : u64 = kd_add(x1, y1)
+    let s2 : u64 = kd_add(x2, y2)
+    let s3 : u64 = kd_add(x3, y3)
+    /* depth 1 via j = 0, 1, 2 -- all three routes, one value */
+    let r0 : u64 = s1
+    let r1 : u64 = kd_pow(s2, 5u64)
+    let r2 : u64 = kd_pow(s3, 25u64)
+    if kd_eq(r0, r1) != 1u32 { return 265u64 }
+    if kd_eq(r1, r2) != 1u32 { return 265u64 }
+    /* depth 2 via j = 0, 1 */
+    if kd_eq(s2, kd_pow(s3, 5u64)) != 1u32 { return 265u64 }
+    /* characteristic 5: one added to itself five times IS zero */
+    let one : u64 = kd_one()
+    let mut acc : u64 = kd_alloc()
+    let mut k : u64 = 0u64
+    while k < 5u64 { acc = kd_add(acc, one)   k = k + 1u64 }
+    if kd_iszero(acc) != 1u32 { return 265u64 }
+    /* sharp is NOT additive: (1+1+1+1+1)-sharp = 0-sharp = 0, while
+     * 1-sharp five times sums to 5 (nonzero mod 5^3) */
+    kd_reset(3u64, 3u64)
+    let ones : u64 = kd_one()
+    let mut ss : u64 = kd_alloc()
+    k = 0u64
+    while k < 5u64 { ss = kd_add(ss, kd_pow(ones, 125u64))   k = k + 1u64 }
+    if kd_iszero(ss) == 1u32 { return 265u64 }
+    if kd_get(ss, 125u64) != 1u64 { return 265u64 }
+    if KL_ERR != 0u64 { return 265u64 }
+    return 0u64
+}
+fn kl_selfprove() -> u64 @export {
+    let a0 : u64 = kl_arm260()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = kl_arm261()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = kl_arm262()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = kl_arm263()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = kl_arm264()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = kl_arm265()
+    if a5 != 0u64 { return a5 }
+    return 0u64
+}

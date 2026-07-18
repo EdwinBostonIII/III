@@ -66,6 +66,20 @@
  *       predicted yield (the prophecy realized) -- and the whole episode
  *       (asked, undecided, refuted, spoken, bought) is remembered as the
  *       ANSWER event under the same journal laws.
+ *   356 THE DISCERNMENT (the deficit discharged): the concept-identity
+ *       decider built from eidolos's own 1,1,1 ontology -- the SWAP TEST
+ *       (Leibniz's indiscernibility, computable) by TWO engines: the claim
+ *       set mapped through the name exchange must be itself, and the
+ *       canonical scroll with the phrases textually exchanged must re-read
+ *       to the SAME address; agreement proven over the COMPLETE class-pair
+ *       space, coherence proven name-blind, both verdicts witnessed in the
+ *       real union; then the chosen question DECIDED: the union DISCERNS
+ *       valuation from polynomial_interval -- identification without
+ *       ground is REFUSED, the discerning claim CITED.  Scope: identity
+ *       relative to the standing knowledge (the eidolon law).
+ *   357 THE RE-ANSWER REMEMBERED: epoch three -- the named deficit
+ *       discharged by a decider the machine built, the verdict and its
+ *       witness journaled under the same self-verifying laws.
  *
  * SCOPE (the eidolon law): the candidate space is complete over the
  * convened union's class pairs and the three claim shapes; richer bridges
@@ -95,6 +109,9 @@ extern @abi(c-msvc-x64) fn eol_mirror_class(ci: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_reaches(ci: u64, cj: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn py_testify() -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn rz_testify() -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn ky_testify() -> u64 from "kyma.iii"
@@ -1062,6 +1079,273 @@ fn zt_arm355() -> u64 {
     if ZT_EP2 == 0u64 { return 355u64 }
     return 0u64
 }
+/* ==================== THE DIAKRISIS (arms 356..357) ====================
+ * The concept-identity decider the deficit NAMED -- built from eidolos's
+ * own ontology.  The 1,1,1 law says a thing IS its place in the knowledge:
+ * so "are these two names one thing?" is decided by the SWAP TEST -- is the
+ * union invariant under exchanging the two names?  Leibniz's identity of
+ * indiscernibles, made computable, by TWO independent engines:
+ *   engine 1 (the structure): every stated claim, mapped through the swap,
+ *     must again be a stated claim (symmetric verbs re-oriented);
+ *   engine 2 (the name): the canonical scroll with the two phrases
+ *     textually exchanged re-reads to the SAME address iff invariant --
+ *     the 1,1,1 law itself as the decision procedure.
+ * The verdict lattice is honest: DISCERNED (the union separates the names;
+ * the discerning claim is CITED; identification without ground is REFUSED
+ * -- Leibniz inverted as a conservativity guard) or INDISCERNIBLE (symmetry
+ * alone never licenses speaking "="; the pair stays open).  SCOPE (the
+ * eidolon law): this is identity RELATIVE TO the organism's total standing
+ * knowledge, not metaphysics; and coherence is proven name-blind along the
+ * way (every swapped scroll still lawchecks -- renaming cannot break law). */
+var ZT_TA : [u8; 64]
+var ZT_TAN : u64 = 0u64
+var ZT_TBB : [u8; 64]
+var ZT_TBN : u64 = 0u64
+var ZT_SW : [u8; 20480]                  /* the swapped canonical scroll       */
+var ZT_SWN : u64 = 0u64
+var ZT_DISC : u64 = 0u64                 /* 1 = the chosen question discerned  */
+var ZT_WIT : [u8; 192]                   /* the cited discerning witness       */
+var ZT_WITN : u64 = 0u64
+var ZT_WIDX : u64 = 0u64                 /* witness claim index (last discern) */
+var ZT_EP3 : u64 = 0u64
+var ZT_NDISC : u64 = 0u64
+var ZT_NIND : u64 = 0u64
+fn zt_discerned() -> u64 @export { return ZT_DISC }
+fn zt_witness_len() -> u64 @export { return ZT_WITN }
+fn zt_witness_byte(i: u64) -> u8 @export {
+    if i < ZT_WITN { return ZT_WIT[i] }
+    return 0u8
+}
+fn zt_epoch3() -> u64 @export { return ZT_EP3 }
+fn zt_map_tid(t: u64, a: u64, b: u64) -> u64 {
+    if t == a { return b }
+    if t == b { return a }
+    return t
+}
+fn zt_claim_find(sa: u64, v: u64, sb: u64) -> u64 {
+    /* is (sa v sb) a stated claim?  symmetric verbs accept either order */
+    let cn : u64 = eol_claims()
+    let mut j : u64 = 0u64
+    while j < cn {
+        if eol_claim_v(j) == v {
+            if eol_claim_a(j) == sa { if eol_claim_b(j) == sb { return 1u64 } }
+            if v != 0u64 {
+                if eol_claim_a(j) == sb { if eol_claim_b(j) == sa { return 1u64 } }
+            }
+        }
+        j = j + 1u64
+    }
+    return 0u64
+}
+fn zt_e1_discern(a: u64, b: u64) -> u64 {
+    /* engine 1: the first stated claim whose swap is NOT stated -- the
+     * discerning witness index; SENT = the claim set is swap-invariant */
+    let cn : u64 = eol_claims()
+    let mut i : u64 = 0u64
+    while i < cn {
+        let ta : u64 = eol_claim_a(i)
+        let v : u64 = eol_claim_v(i)
+        let tb : u64 = eol_claim_b(i)
+        let sa : u64 = zt_map_tid(ta, a, b)
+        let sb : u64 = zt_map_tid(tb, a, b)
+        let mut moved : u64 = 0u64
+        if sa != ta { moved = 1u64 }
+        if sb != tb { moved = 1u64 }
+        if moved == 1u64 {
+            if zt_claim_find(sa, v, sb) == 0u64 { return i }
+        }
+        i = i + 1u64
+    }
+    return ZT_SENT
+}
+fn zt_load_phrase(t: u64, which: u64) -> u64 {
+    let ln : u64 = eol_thing_len(t)
+    if ln == 0u64 { return 1u64 }
+    if ln > 64u64 { return 1u64 }
+    let mut k : u64 = 0u64
+    if which == 0u64 {
+        while k < ln { ZT_TA[k] = eol_thing_byte(t, k)   k = k + 1u64 }
+        ZT_TAN = ln
+    } else {
+        while k < ln { ZT_TBB[k] = eol_thing_byte(t, k)   k = k + 1u64 }
+        ZT_TBN = ln
+    }
+    return 0u64
+}
+fn zt_swput(c: u8) -> i32 {
+    if ZT_SWN < 20480u64 { ZT_SW[ZT_SWN] = c   ZT_SWN = ZT_SWN + 1u64 }
+    return 0i32
+}
+fn zt_swmatch(i: u64, n: u64, which: u64) -> u64 {
+    /* does phrase A (which=0) or B (which=1) sit at scroll byte i with a
+     * closing boundary (space or bracket) right after? */
+    let mut pl : u64 = ZT_TAN
+    if which == 1u64 { pl = ZT_TBN }
+    if i + pl > n { return 0u64 }
+    let mut k : u64 = 0u64
+    while k < pl {
+        let mut pc : u8 = ZT_TA[k]
+        if which == 1u64 { pc = ZT_TBB[k] }
+        if eol_out_byte(i + k) != pc { return 0u64 }
+        k = k + 1u64
+    }
+    if i + pl == n { return 0u64 }
+    let nx : u8 = eol_out_byte(i + pl)
+    if nx == 32u8 { return 1u64 }
+    if nx == 93u8 { return 1u64 }
+    return 0u64
+}
+fn zt_e2_swap_addr(a: u64, b: u64) -> u64 {
+    /* engine 2: the 1,1,1 route -- exchange the two phrases in the
+     * canonical scroll bytes, re-read, re-derive the address */
+    if zt_load_phrase(a, 0u64) != 0u64 { return ZT_ERR }
+    if zt_load_phrase(b, 1u64) != 0u64 { return ZT_ERR }
+    eol_write()
+    let n : u64 = eol_out_len()
+    if n + 128u64 > 20480u64 { return ZT_ERR }
+    ZT_SWN = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut prevok : u64 = 0u64
+        if i == 0u64 { prevok = 1u64 } else {
+            let pv : u8 = eol_out_byte(i - 1u64)
+            if pv == 91u8 { prevok = 1u64 }
+            if pv == 32u8 { prevok = 1u64 }
+        }
+        let mut used : u64 = 0u64
+        if prevok == 1u64 {
+            if zt_swmatch(i, n, 0u64) == 1u64 {
+                let mut k : u64 = 0u64
+                while k < ZT_TBN { zt_swput(ZT_TBB[k])   k = k + 1u64 }
+                i = i + ZT_TAN
+                used = 1u64
+            } else {
+                if zt_swmatch(i, n, 1u64) == 1u64 {
+                    let mut k2 : u64 = 0u64
+                    while k2 < ZT_TAN { zt_swput(ZT_TA[k2])   k2 = k2 + 1u64 }
+                    i = i + ZT_TBN
+                    used = 1u64
+                }
+            }
+        }
+        if used == 0u64 {
+            zt_swput(eol_out_byte(i))
+            i = i + 1u64
+        }
+    }
+    eol_reset()
+    if eol_read((&ZT_SW) as u64, ZT_SWN) < 0i64 { return ZT_ERR }
+    return eol_addr()
+}
+fn zt_wit_build(i: u64) -> i32 {
+    /* the discerning witness, spoken as a claim text */
+    let ta : u64 = eol_claim_a(i)
+    let v : u64 = eol_claim_v(i)
+    let tb : u64 = eol_claim_b(i)
+    ZT_CTN = 0u64
+    zt_cput(91u8)
+    let mut k : u64 = 0u64
+    while k < eol_thing_len(ta) { zt_cput(eol_thing_byte(ta, k))   k = k + 1u64 }
+    zt_cput(32u8)
+    if v == 0u64 { zt_cput(60u8) }
+    if v == 1u64 { zt_cput(126u8) }
+    if v == 2u64 { zt_cput(61u8) }
+    zt_cput(32u8)
+    k = 0u64
+    while k < eol_thing_len(tb) { zt_cput(eol_thing_byte(tb, k))   k = k + 1u64 }
+    zt_cput(93u8)
+    ZT_WITN = ZT_CTN
+    k = 0u64
+    while k < ZT_CTN { ZT_WIT[k] = ZT_CT[k]   k = k + 1u64 }
+    return 0i32
+}
+fn zt_discern_pair(cp: u64, cq: u64) -> u64 {
+    /* the full two-engine discernment of one class-root pair on a fresh
+     * convening: 1 discerned | 0 indiscernible | ZT_ERR broken machinery
+     * or engine disagreement */
+    if zt_convene() != 0u64 { return ZT_ERR }
+    let ra : u64 = eol_class_root(cp)
+    let rb : u64 = eol_class_root(cq)
+    let w : u64 = zt_e1_discern(ra, rb)
+    if w != ZT_SENT { ZT_WIDX = w   zt_wit_build(w) }
+    let base : u64 = eol_addr()
+    if base == 0u64 { return ZT_ERR }
+    let sw : u64 = zt_e2_swap_addr(ra, rb)
+    if sw == ZT_ERR { return ZT_ERR }
+    /* coherence is name-blind: the renamed scroll still holds the law */
+    if sw == 0u64 { return ZT_ERR }
+    let mut e1 : u64 = 0u64
+    if w != ZT_SENT { e1 = 1u64 }
+    let mut e2 : u64 = 0u64
+    if sw != base { e2 = 1u64 }
+    if e1 != e2 { return ZT_ERR }
+    return e1
+}
+fn zt_arm356() -> u64 {
+    /* THE DISCERNMENT: the decider the deficit named, proven by two-engine
+     * agreement over the COMPLETE class-pair space, then turned on the
+     * chosen question */
+    ZT_NDISC = 0u64
+    ZT_NIND = 0u64
+    let mut p : u64 = 0u64
+    while p < ZT_NC {
+        let mut q : u64 = p + 1u64
+        while q < ZT_NC {
+            let vd : u64 = zt_discern_pair(p, q)
+            if vd == ZT_ERR { return 356u64 }
+            if vd == 1u64 { ZT_NDISC = ZT_NDISC + 1u64 }
+            if vd == 0u64 { ZT_NIND = ZT_NIND + 1u64 }
+            q = q + 1u64
+        }
+        p = p + 1u64
+    }
+    /* the decider discriminates: both verdicts occur in the real union */
+    if ZT_NDISC == 0u64 { return 356u64 }
+    if ZT_NIND == 0u64 { return 356u64 }
+    /* the chosen question, DECIDED: the union discerns its two names --
+     * identification without ground is refused, the witness cited */
+    if zt_decode(ZT_PICK) != 0u64 { return 356u64 }
+    let cv : u64 = zt_discern_pair(ZT_DP, ZT_DQ)
+    if cv == ZT_ERR { return 356u64 }
+    if cv != 1u64 { return 356u64 }
+    if ZT_WITN == 0u64 { return 356u64 }
+    ZT_DISC = 1u64
+    return 0u64
+}
+fn zt_event3_build() -> i32 {
+    /* the RE-ANSWER event: the named deficit discharged -- the question
+     * decided by discernment, the witness cited */
+    let u : u64 = syn_union_addr()
+    let hi : u64 = u / 1000000000u64
+    let lo : u64 = u % 1000000000u64
+    ZT_UNN = 0u64
+    zt_nputs("[reanswered union " as u64)
+    zt_nput_u64(hi)
+    zt_nput(58u8)
+    zt_nput_u64(lo)
+    zt_nput(32u8)
+    ZT_EVN = 0u64
+    zt_lputs("[reanswered union " as u64)
+    zt_lput_u64(hi)
+    zt_lput(58u8)
+    zt_lput_u64(lo)
+    zt_lputs(" = discernment scene] [" as u64)
+    let mut k : u64 = 0u64
+    while k < ZT_QN { zt_lput(ZT_Q[k])   k = k + 1u64 }
+    zt_lputs(" = discerned question] [" as u64)
+    k = 0u64
+    while k < ZT_WITN { zt_lput(ZT_WIT[k])   k = k + 1u64 }
+    zt_lputs(" = discerning witness] [discerned question = refused identification] [named deficit = discharged decider]" as u64)
+    return 0i32
+}
+fn zt_arm357() -> u64 {
+    /* THE RE-ANSWER REMEMBERED: epoch three -- asked, undecidable by the
+     * operational lanes, then DECIDED by the discernment the machine built */
+    zt_event3_build()
+    ZT_EP3 = zt_journal()
+    if ZT_EP3 == 0u64 { return 357u64 }
+    return 0u64
+}
 fn zt_selfprove() -> u64 @export {
     let a0 : u64 = zt_arm350()
     if a0 != 0u64 { return a0 }
@@ -1075,6 +1359,10 @@ fn zt_selfprove() -> u64 @export {
     if a4 != 0u64 { return a4 }
     let a5 : u64 = zt_arm355()
     if a5 != 0u64 { return a5 }
+    let a6 : u64 = zt_arm356()
+    if a6 != 0u64 { return a6 }
+    let a7 : u64 = zt_arm357()
+    if a7 != 0u64 { return a7 }
     /* the prime returns to the tilt's home before the next organ speaks */
     kd_setp(5u64)
     return 0u64

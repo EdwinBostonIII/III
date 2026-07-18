@@ -71,6 +71,16 @@
 #      the KEYSTONE SWEEP (deficit = valuation for EVERY multiplier byte
 #      by two-organ agreement, the dyadic histogram 127/64/32/16/8/4/2/1
 #      derived -- the halving law of Z_2 at byte scale, sealed)]);
+#      zetesis 350..353 [THE SEEKING: the mirror of thought -- every
+#      candidate bridge over the union (all class pairs x all three verb
+#      shapes) priced by manifold simulation and confirmed by actually
+#      learning it, refusals and counts agreeing with ZERO disagreements,
+#      knowledge-monotonicity free at every candidate; the CHOSEN QUESTION
+#      emerging as the deterministic argmax; the AUTOBIOGRAPHY: the epoch
+#      event appended content-addressed to the machine's own journal, every
+#      remembered event re-verified, same-union epochs forced to agree with
+#      the present (determinism across time), tampered memories refused;
+#      the seeking law sealed as a scroll];
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -92,6 +102,8 @@ IIIS="${1:-$ROOT/COMPILED/iiis-2.exe}"
 T="$ROOT/STDLIB/build/summit"
 K="$ROOT/STDLIB/build/kinesis"
 mkdir -p "$T"
+mkdir -p "$ROOT/STDLIB/data"
+cd "$ROOT"
 
 cc_one() {
     # settle-retry: OneDrive/AV race is counted, never silent
@@ -121,11 +133,12 @@ cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/noesis.iii"   "$T/noesis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/mneme.iii"    "$T/mneme.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/katoptron.iii" "$T/katoptron.o" || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/zetesis.iii"  "$T/zetesis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -159,6 +172,9 @@ grep -q "^scroll cayley  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO CAYL
 grep -q "^scroll sweep   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO SWEEP SCROLL"; exit 6; }
 grep -q "^the union knows: surplus=" "$T/run1.txt" || { echo "[summit_gate] NO UNION REPORT"; exit 6; }
 grep -q "^the dialectic: spoke=" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC REPORT"; exit 6; }
+grep -q "^scroll zetesis = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO ZETESIS SCROLL"; exit 6; }
+grep -q "^the question: \[" "$T/run1.txt" || { echo "[summit_gate] NO CHOSEN QUESTION"; exit 6; }
+[ -s "$ROOT/STDLIB/data/zetesis.jrnl" ] || { echo "[summit_gate] NO JOURNAL"; exit 6; }
 grep -q "^the cayley chart: words=85 classes=32 " "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY CHART"; exit 6; }
 
 # THE MIRROR ON REAL TISSUE: the pre-flight meter walks two live organ

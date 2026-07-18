@@ -65,7 +65,11 @@
  * (the language it indexes), the live organs whose scrolls it registers,
  * and synesis (whose union it indexes and whose frontier it re-counts).
  * Sibling of kardia (claims that BEAT) and soma (the claim-space): mneme is
- * where sealed claims become PLACES.  Ring R-1. */
+ * where sealed claims become PLACES.  Ring R-1.
+ * THE COUPLING (first bite): the five manifold verbs -- mn_reset, mn_put,
+ * mn_link, mn_fold, mn_ent -- are EXPORTED and FROZEN as of zetesis's first
+ * bite: zetesis drives them to simulate candidate knowledge-worlds.  The
+ * engine stays mneme's; the driver is the consumer's. */
 module omnia_mneme
 
 extern @abi(c-msvc-x64) fn idfold_bytes(ptr: u64, n: u64) -> u64 from "idfold.iii"
@@ -133,14 +137,14 @@ fn mn_slen(s: u64) -> u64 {
     return n
 }
 fn mn_word(s: u64) -> u64 { return idfold_bytes(s, mn_slen(s)) }
-fn mn_reset() -> i32 {
+fn mn_reset() -> i32 @export {
     MN_N = 0u64
     MN_EN = 0u64
     MN_SEALEDF = 0u64
     return 0i32
 }
 /* register a concept by identity; dedup by content; the 65th is REFUSED */
-fn mn_put(id: u64) -> u64 {
+fn mn_put(id: u64) -> u64 @export {
     let mut i : u64 = 0u64
     while i < MN_N { if MN_ID[i] == id { return i }   i = i + 1u64 }
     if MN_N >= MN_CAP { MN_RCAP = MN_RCAP + 1u64   return MN_SENT }
@@ -150,7 +154,7 @@ fn mn_put(id: u64) -> u64 {
     return MN_N - 1u64
 }
 /* append "i entails j" to the log (the ONLY mutation verb) */
-fn mn_link(i: u64, j: u64) -> u64 {
+fn mn_link(i: u64, j: u64) -> u64 @export {
     if i >= MN_N { MN_RUNK = MN_RUNK + 1u64   return 0u64 }
     if j >= MN_N { MN_RUNK = MN_RUNK + 1u64   return 0u64 }
     if MN_EN >= MN_EMAX { MN_RCAP = MN_RCAP + 1u64   return 0u64 }
@@ -162,7 +166,7 @@ fn mn_link(i: u64, j: u64) -> u64 {
 }
 /* THE FOLD: closure derived from scratch off the log (order-free), then the
  * extent columns prebuilt -- after this every conjunctive fetch is one AND */
-fn mn_fold() -> i32 {
+fn mn_fold() -> i32 @export {
     let mut i : u64 = 0u64
     while i < MN_N { MN_ROW[i] = 1u64 << i   i = i + 1u64 }
     let mut e : u64 = 0u64
@@ -194,7 +198,7 @@ fn mn_fold() -> i32 {
     return 0i32
 }
 /* does i entail j?  0 no | 1 yes | 2 refused (unsealed or unknown, counted) */
-fn mn_ent(i: u64, j: u64) -> u64 {
+fn mn_ent(i: u64, j: u64) -> u64 @export {
     if MN_SEALEDF != 1u64 { MN_RQ = MN_RQ + 1u64   return 2u64 }
     if i >= MN_N { MN_RQ = MN_RQ + 1u64   return 2u64 }
     if j >= MN_N { MN_RQ = MN_RQ + 1u64   return 2u64 }

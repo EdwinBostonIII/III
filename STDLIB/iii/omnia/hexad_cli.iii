@@ -1,8 +1,8 @@
-/* STDLIB/iii/omnia/hexad_cli.iii -- iii-hexad: THE ASYMMETRIC TERNARY SAFETY GROUND, made runnable.
+/* STDLIB/iii/omnia/hexad_cli.iii -- iii hexad: THE ASYMMETRIC TERNARY SAFETY GROUND, made runnable.
  *
- *     iii-hexad <P1> <P2> <P3> <P4> <P5> <P6>   is this hexad ADMITTED, or bricking-by-construction?
- *     iii-hexad --count                          how many of the 729 hexads are admitted (the manifold)
- *     iii-hexad --compose <6 trits> <6 trits>    compose two hexads (AND on P1..4, OR on P5..6)
+ *     iii hexad <P1> <P2> <P3> <P4> <P5> <P6>   is this hexad ADMITTED, or bricking-by-construction?
+ *     iii hexad --count                          how many of the 729 hexads are admitted (the manifold)
+ *     iii hexad --compose <6 trits> <6 trits>    compose two hexads (AND on P1..4, OR on P5..6)
  *
  * Each pillar is a TRIT -- NEG | ZERO | POS (also accepted: N/Z/P, -1/0/1) -- and the six pillars are
  * NOT interchangeable (III-HEXAD.md §2.1):
@@ -18,7 +18,7 @@
  *   1 BRICKING    (a structural pillar is NEG -- the offending pillar is NAMED)
  *   2 usage / parse error
  *
- * A LEAF tool build (build_iii_hexad.sh): pinned iiis-2 + the committed archive; bootstrap untouched.
+ * A LEAF tool build (build_iii.sh): pinned iiis-2 + the committed archive; bootstrap untouched.
  * NIH: composes omnia/hexad_reach + hexad_algebra (the standing safety algebra) + msvcrt putchar.
  */
 module hexad_cli
@@ -103,10 +103,10 @@ fn print_hexad(dst: u64) {
 fn hexad_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
-        ps("iii-hexad -- the asymmetric ternary safety ground: is a hexad admitted, or bricking?\n\n" as u64)
-        ps("  iii-hexad <P1> <P2> <P3> <P4> <P5> <P6>   each pillar NEG|ZERO|POS (or N/Z/P, -1/0/1)\n" as u64)
-        ps("  iii-hexad --count                          admitted hexads of the 729 (the 144-manifold)\n" as u64)
-        ps("  iii-hexad --compose <6 trits> <6 trits>    AND on P1..4, OR on P5..6\n\n" as u64)
+        ps("iii hexad -- the asymmetric ternary safety ground: is a hexad admitted, or bricking?\n\n" as u64)
+        ps("  iii hexad <P1> <P2> <P3> <P4> <P5> <P6>   each pillar NEG|ZERO|POS (or N/Z/P, -1/0/1)\n" as u64)
+        ps("  iii hexad --count                          admitted hexads of the 729 (the 144-manifold)\n" as u64)
+        ps("  iii hexad --compose <6 trits> <6 trits>    AND on P1..4, OR on P5..6\n\n" as u64)
         ps("pillars: P1 Inverse-Derivability  P2 Causality-Depth  P3 Consent-Recency\n" as u64)
         ps("         P4 Replication-Tier  P5 Adversariality-Class  P6 Coherence-Impact\n" as u64)
         ps("a NEG in ANY of P1..P4 (structural) makes the hexad bricking-by-construction.\n\n" as u64)
@@ -123,9 +123,9 @@ fn hexad_enter(argc: i32, argv: u64) -> u64 @export {
     }
 
     if streq(av[1u64], "--compose" as u64) == 1u32 {
-        if argc < 14i32 { ps("iii-hexad --compose needs 12 trits (two hexads)\n" as u64)  return 2u64 }
-        if parse6(av, 2u64, &PILL_A as u64) != 0u32 { ps("iii-hexad: bad trit in hexad A\n" as u64)  return 2u64 }
-        if parse6(av, 8u64, &PILL_B as u64) != 0u32 { ps("iii-hexad: bad trit in hexad B\n" as u64)  return 2u64 }
+        if argc < 14i32 { ps("iii hexad --compose needs 12 trits (two hexads)\n" as u64)  return 2u64 }
+        if parse6(av, 2u64, &PILL_A as u64) != 0u32 { ps("iii hexad: bad trit in hexad A\n" as u64)  return 2u64 }
+        if parse6(av, 8u64, &PILL_B as u64) != 0u32 { ps("iii hexad: bad trit in hexad B\n" as u64)  return 2u64 }
         let ha : u16 = iii_hexad_pack6(&PILL_A as u64)
         let hb : u16 = iii_hexad_pack6(&PILL_B as u64)
         let hc : u16 = iii_hexad_compose6(ha, hb)
@@ -143,8 +143,8 @@ fn hexad_enter(argc: i32, argv: u64) -> u64 @export {
         return 1u64
     }
 
-    if argc < 7i32 { ps("iii-hexad: need 6 pillars (got fewer); see iii-hexad with no args\n" as u64)  return 2u64 }
-    if parse6(av, 1u64, &PILL_A as u64) != 0u32 { ps("iii-hexad: a pillar was not NEG|ZERO|POS\n" as u64)  return 2u64 }
+    if argc < 7i32 { ps("iii hexad: need 6 pillars (got fewer); see iii hexad with no args\n" as u64)  return 2u64 }
+    if parse6(av, 1u64, &PILL_A as u64) != 0u32 { ps("iii hexad: a pillar was not NEG|ZERO|POS\n" as u64)  return 2u64 }
     let h : u16 = iii_hexad_pack6(&PILL_A as u64)
     ps("hexad " as u64)  print_hexad(&PILL_A as u64)  ps("  packed=0x" as u64)  pd(h as u64)  putchar(10i32)
     if iii_hexad_reachable(h) == 1u8 {

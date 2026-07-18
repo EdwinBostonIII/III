@@ -1,21 +1,21 @@
-/* COMPILER/BOOT/doxa_main.iii -- iii-doxa: THE BELIEF ORGAN's tool face.
+/* COMPILER/BOOT/doxa_main.iii -- iii doxa: THE BELIEF ORGAN's tool face.
  *
- *   iii-doxa prove                     the self-proof alone (every law, every falsifier)
- *   iii-doxa status    [dirs]          the two books, the ledger, the certificates
- *   iii-doxa drip N    [dirs]          open up to N stakes on the audit's own schedule;
+ *   iii doxa prove                     the self-proof alone (every law, every falsifier)
+ *   iii doxa status    [dirs]          the two books, the ledger, the certificates
+ *   iii doxa drip N    [dirs]          open up to N stakes on the audit's own schedule;
  *                                      write the ranked recommendation (drip_order.txt)
- *   iii-doxa reconcile [dirs]          settle stakes against the heart's DERIVED evidence
- *   iii-doxa dream K SEED [dirs]       a reversible excursion: zero residue PROVEN, only
+ *   iii doxa reconcile [dirs]          settle stakes against the heart's DERIVED evidence
+ *   iii doxa dream K SEED [dirs]       a reversible excursion: zero residue PROVEN, only
  *                                      certificates retained (conjectures unadjudicated)
- *   iii-doxa loop N    [dirs]          the whole live cycle: predict -> summon the heart
- *                                      (iii-kardia audit N) -> reconcile -> calibration
+ *   iii doxa loop N    [dirs]          the whole live cycle: predict -> summon the heart
+ *                                      (iii kardia audit N) -> reconcile -> calibration
  *
  *   [dirs] = [--ledger D] (default STDLIB/build/doxa)
  *            [--heart  H] (default STDLIB/build/kardia)
  *
  * EVERY verb self-proves first and REFUSES to run on a failed arm (exit 9) --
  * verification lives INSIDE (the kardia pattern: no gate, no KAT, no standing
- * arm).  The evidence that settles stakes is written by iii-kardia into ITS
+ * arm).  The evidence that settles stakes is written by iii kardia into ITS
  * ledger -- machinery this organ cannot parameterize.  THE HEART AUDITS THE
  * MIND.  Requires CWD = the III root.
  *
@@ -109,7 +109,7 @@ extern @abi(c-msvc-x64) fn doxa_set_id() -> u64 from "doxa.iii"
 extern @abi(c-msvc-x64) fn autognosis_root() -> u64 from "autognosis.iii"
 
 var MCMD : [u8; 512]
-var APIN : [u8; 256]                     /* iii-agon root output (src=.. img=..) */
+var APIN : [u8; 256]                     /* iii agon root output (src=.. img=..) */
 var ASRC : [u8; 96]
 var AIMG : [u8; 96]
 
@@ -213,20 +213,20 @@ fn read_pinfile(path: u64) -> u64 {
     return n
 }
 fn usage() -> u64 {
-    ps("iii-doxa -- THE BELIEF ORGAN: two books, never blurred; the heart audits the mind\n\n" as u64)
-    ps("  iii-doxa prove                     the self-proof alone (every law, every falsifier)\n" as u64)
-    ps("  iii-doxa status    [dirs]          the two books, the ledger, the certificates\n" as u64)
-    ps("  iii-doxa drip N    [dirs]          open up to N stakes on the audit's own schedule\n" as u64)
-    ps("  iii-doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
-    ps("  iii-doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
-    ps("  iii-doxa aim       [dirs]          the agenda: least-known contexts first (writes aim.txt)\n" as u64)
-    ps("  iii-doxa attest    [dirs]          attest the heart instrument (iii-agon two-path): the mind\n" as u64)
+    ps("iii doxa -- THE BELIEF ORGAN: two books, never blurred; the heart audits the mind\n\n" as u64)
+    ps("  iii doxa prove                     the self-proof alone (every law, every falsifier)\n" as u64)
+    ps("  iii doxa status    [dirs]          the two books, the ledger, the certificates\n" as u64)
+    ps("  iii doxa drip N    [dirs]          open up to N stakes on the audit's own schedule\n" as u64)
+    ps("  iii doxa reconcile [dirs]          settle stakes against DERIVED evidence only\n" as u64)
+    ps("  iii doxa dream K SEED [dirs]       reversible excursion, zero residue PROVEN\n" as u64)
+    ps("  iii doxa aim       [dirs]          the agenda: least-known contexts first (writes aim.txt)\n" as u64)
+    ps("  iii doxa attest    [dirs]          attest the heart instrument (iii agon two-path): the mind\n" as u64)
     ps("                                     refuses evidence from a heart whose binary drifted from source\n" as u64)
-    ps("  iii-doxa foreign ROOT FA FB [dirs] a peer's conjecture (decimal): quarantined, author-carried;\n" as u64)
+    ps("  iii doxa foreign ROOT FA FB [dirs] a peer's conjecture (decimal): quarantined, author-carried;\n" as u64)
     ps("                                     the chamber adjudicates; refuted -> the AUTHOR is billed\n" as u64)
-    ps("  iii-doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
+    ps("  iii doxa unlearn SEQ [dirs]        forget one event -- tombstone fold-subtraction,\n" as u64)
     ps("                                     bit-identity proven; dangling settlements refused\n" as u64)
-    ps("  iii-doxa loop N    [dirs]          predict -> summon the heart -> reconcile\n\n" as u64)
+    ps("  iii doxa loop N    [dirs]          predict -> summon the heart -> reconcile\n\n" as u64)
     ps("  [dirs] = [--ledger D] (default STDLIB/build/doxa) [--heart H] (default STDLIB/build/kardia)\n" as u64)
     ps("every verb SELF-PROVES first and refuses to run on a failed arm (exit 9).\n" as u64)
     ps("the MODAL book asserts (stakes, priced in bits); the STATISTICAL book only prefers.\n" as u64)
@@ -518,9 +518,9 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     dx_reset()
     dx_make_dir(doxadir)
     let lr : u64 = load_all(doxadir, heartdir)
-    if lr == 1u64 { ps("iii-doxa: env -- registry unreadable (run from the III root)\n" as u64)  return 2u64 }
+    if lr == 1u64 { ps("iii doxa: env -- registry unreadable (run from the III root)\n" as u64)  return 2u64 }
     if lr == 2u64 {
-        ps("iii-doxa: the persisted beliefs at " as u64)  ps(doxadir)
+        ps("iii doxa: the persisted beliefs at " as u64)  ps(doxadir)
         ps("/doxa.log were written under a DIFFERENT registry pin -- refused whole (stale).\n" as u64)
         ps("move or remove that file to begin fresh beliefs for this registry.\n" as u64)
         return 2u64
@@ -536,7 +536,7 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
         let author : u64 = root ^ salt
         let fa : u64 = n2
         let fb : u64 = n3
-        if nseen < 3u64 { ps("  usage: iii-doxa wire SALT CTX_A CTX_B\n" as u64)   return 3u64 }
+        if nseen < 3u64 { ps("  usage: iii doxa wire SALT CTX_A CTX_B\n" as u64)   return 3u64 }
         let bl : u32 = dx_offer_build((&MCMD) as u64, fa, fb, author)
         if bl == 0u32 { ps("  offer build refused (incoherent author)\n" as u64)   return 4u64 }
         ps("  built OFFER: author " as u64)  phex(author)  ps(" (root^salt), conjecture ctx " as u64)  phex(fa)  ps(" ~ ctx " as u64)  phex(fb)  putchar(10i32)
@@ -555,8 +555,8 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "attest" as u64) == 1u32 {
         ps("== INSTRUMENT ATTESTATION: the mind refuses evidence from a heart whose binary drifted from its sealed source ==\n" as u64)
         print_agenda(doxadir)
-        let probe : u64 = fopen("COMPILED/iii-agon.exe" as u64, "rb" as u64)
-        if probe == 0u64 { ps("  iii-agon absent -- build it to attest the instrument (the aim stands regardless)\n" as u64)   return 2u64 }
+        let probe : u64 = fopen("COMPILED/iii agon.exe" as u64, "rb" as u64)
+        if probe == 0u64 { ps("  iii agon absent -- build it to attest the instrument (the aim stands regardless)\n" as u64)   return 2u64 }
         fclose(probe)
         /* the heart instrument: its source-closure root + its binary image.
          * The pin lives beside the heart's ledger (fixed path -- the heart's
@@ -564,10 +564,10 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
         let pinpath : u64 = "STDLIB/build/doxa/heart_pin.txt" as u64
         if read_pinfile(pinpath) == 0u64 {
             /* FIRST attestation: forge + store the instrument's pins */
-            let mut a : u64 = cput(0u64, "COMPILED/iii-agon.exe root COMPILER/BOOT/kardia_main.iii COMPILED/iii-kardia.exe > STDLIB/build/doxa/heart_pin.txt" as u64)
+            let mut a : u64 = cput(0u64, "COMPILED/iii agon.exe root COMPILER/BOOT/kardia_main.iii COMPILED/iii kardia.exe > STDLIB/build/doxa/heart_pin.txt" as u64)
             cmd_backslash(a)
             let rc : i32 = system((&MCMD) as u64)
-            if rc != 0i32 { ps("  iii-agon could not forge the heart instrument pins (rc " as u64)  pi(rc as i64)  ps(")\n" as u64)   return 4u64 }
+            if rc != 0i32 { ps("  iii agon could not forge the heart instrument pins (rc " as u64)  pi(rc as i64)  ps(")\n" as u64)   return 4u64 }
             ps("  FIRST ATTESTATION: the heart instrument's source-closure root and binary image are pinned.\n" as u64)
             ps("  future `attest` runs re-verify the live heart against these pins; drift is refused.\n" as u64)
             read_pinfile(pinpath)
@@ -578,11 +578,11 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
         if extract_hex("src=" as u64, (&ASRC) as u64) != 1u64 { ps("  stored pin malformed -- delete heart_pin.txt to re-forge\n" as u64)   return 2u64 }
         if extract_hex("img=" as u64, (&AIMG) as u64) != 1u64 { ps("  stored pin malformed -- delete heart_pin.txt to re-forge\n" as u64)   return 2u64 }
         /* re-verify the CURRENT heart against the stored pins */
-        let mut v : u64 = cput(0u64, "COMPILED/iii-agon.exe verify " as u64)
+        let mut v : u64 = cput(0u64, "COMPILED/iii agon.exe verify " as u64)
         v = cput(v, (&ASRC) as u64)
         v = cput(v, " COMPILER/BOOT/kardia_main.iii " as u64)
         v = cput(v, (&AIMG) as u64)
-        v = cput(v, " COMPILED/iii-kardia.exe > STDLIB/build/doxa/_attest_verify.log 2>&1" as u64)
+        v = cput(v, " COMPILED/iii kardia.exe > STDLIB/build/doxa/_attest_verify.log 2>&1" as u64)
         cmd_backslash(v)
         let vrc : i32 = system((&MCMD) as u64)
         if vrc == 0i32 {
@@ -629,7 +629,7 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "drip" as u64) == 1u32 {
         if dx_hseq() == 0u64 {
-            ps("iii-doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii-kardia birth` first\n" as u64)
+            ps("iii doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii kardia birth` first\n" as u64)
             return 2u64
         }
         do_drip(n1, doxadir)
@@ -676,7 +676,7 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "aim" as u64) == 1u32 {
         ps("== THE AIM: the mind's exact statement of where effort buys the most information ==\n" as u64)
         print_agenda(doxadir)
-        ps("  (the generative-oracle socket: a harness reads aim.txt; iii-agon's generative verb is the named hook)\n" as u64)
+        ps("  (the generative-oracle socket: a harness reads aim.txt; iii agon's generative verb is the named hook)\n" as u64)
         return 0u64
     }
     if streq(cmd, "unlearn" as u64) == 1u32 {
@@ -703,19 +703,19 @@ fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "loop" as u64) == 1u32 {
         if dx_hseq() == 0u64 {
-            ps("iii-doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii-kardia birth` first\n" as u64)
+            ps("iii doxa: the heart has no ledger at " as u64)  ps(heartdir)  ps(" -- run `iii kardia birth` first\n" as u64)
             return 2u64
         }
-        let probe : u64 = fopen("COMPILED/iii-kardia.exe" as u64, "rb" as u64)
+        let probe : u64 = fopen("COMPILED/iii kardia.exe" as u64, "rb" as u64)
         if probe == 0u64 {
-            ps("iii-doxa: COMPILED/iii-kardia.exe absent -- the heart must exist for the loop\n" as u64)
+            ps("iii doxa: COMPILED/iii kardia.exe absent -- the heart must exist for the loop\n" as u64)
             return 2u64
         }
         fclose(probe)
         ps("== THE LIVE LOOP: predict -> the heart beats (sovereign) -> reconcile ==\n" as u64)
         do_drip(n1, doxadir)
-        ps("-- summoning the heart: iii-kardia audit " as u64)  pu(n1)  ps(" --\n" as u64)
-        let mut at : u64 = cput(0u64, "COMPILED/iii-kardia.exe audit " as u64)
+        ps("-- summoning the heart: iii kardia audit " as u64)  pu(n1)  ps(" --\n" as u64)
+        let mut at : u64 = cput(0u64, "COMPILED/iii kardia.exe audit " as u64)
         at = cputu(at, n1)
         /* cmd.exe refuses a forward-slash PROGRAM word: backslash the path part
          * (everything before the first space) */

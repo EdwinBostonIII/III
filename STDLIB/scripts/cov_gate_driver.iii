@@ -135,6 +135,8 @@ fn main() -> u64 {
     at = appseg(ca, at, ("STDLIB/iii/aether/synapse.iii" as u64))
     /* the tool mains the fleet grew (built by COMPILER/BOOT/build_iii_*.sh) */
     at = appseg(ca, at, ("COMPILER/BOOT/ergon_main.iii" as u64))
+    at = appseg(ca, at, ("COMPILER/BOOT/iii_main.iii" as u64))
+    at = appseg(ca, at, ("STDLIB/iii/katabasis/holos.iii" as u64))
     at = appseg(ca, at, ("COMPILER/BOOT/kardia_main.iii" as u64))
     at = appseg(ca, at, ("COMPILER/BOOT/soma_main.iii" as u64))
     at = appseg(ca, at, ("COMPILER/BOOT/doxa_main.iii" as u64))

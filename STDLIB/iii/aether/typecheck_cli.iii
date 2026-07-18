@@ -1,15 +1,15 @@
-/* STDLIB/iii/aether/typecheck_cli.iii -- iii-typecheck: THE CIC KERNEL AS A STANDING TOOL.
+/* STDLIB/iii/aether/typecheck_cli.iii -- iii typecheck: THE CIC KERNEL AS A STANDING TOOL.
  *
- *   iii-typecheck <term-file>                    INFER the term's type; print it, or refuse
- *   iii-typecheck --check <term-file> <type-file>  CHECK term : type (bidirectional)
- *   iii-typecheck --qtt <term-file>              judge QTT USAGE: every binder within its declared
+ *   iii typecheck <term-file>                    INFER the term's type; print it, or refuse
+ *   iii typecheck --check <term-file> <type-file>  CHECK term : type (bidirectional)
+ *   iii typecheck --qtt <term-file>              judge QTT USAGE: every binder within its declared
  *                                                multiplicity (erased ^0 / linear ^1 / unrestricted ^w).
  *                                                A layer over typing: ill-typed terms are refused first.
- *   iii-typecheck --lek "<c1..c6>" "<b1..b6>"    SOVEREIGNTY AS TYPES: register the cost and budget
+ *   iii typecheck --lek "<c1..c6>" "<b1..b6>"    SOVEREIGNTY AS TYPES: register the cost and budget
  *                                                6-vectors in-process and let the kernel decide
  *                                                cost <= budget (product order) BY IOTA -- over-budget
  *                                                is a TYPE error (the LeK proof does not check).
- *   iii-typecheck --reach <hexad>                the kernel PROVES (or refuses) hexad reachability by
+ *   iii typecheck --reach <hexad>                the kernel PROVES (or refuses) hexad reachability by
  *                                                reduction through its own oracle -- never baked.
  *
  * The kernel (numera/typecheck: lambda-Pi + predicative universes U0:U1:..., Sigma, Bool, Id/J,
@@ -688,18 +688,18 @@ fn tk_load_parse(path: u64) -> u32 {
     return t
 }
 fn tk_report(path: u64) -> u64 {
-    if PERR == 2u64 { ps("iii-typecheck: cannot read (or > 1 MiB): " as u64)  ps(path)  nl()  return 2u64 }
-    ps("iii-typecheck: parse error at byte " as u64)  pd(PPOS)  ps(": " as u64)  ps(PMSG)  nl()
+    if PERR == 2u64 { ps("iii typecheck: cannot read (or > 1 MiB): " as u64)  ps(path)  nl()  return 2u64 }
+    ps("iii typecheck: parse error at byte " as u64)  pd(PPOS)  ps(": " as u64)  ps(PMSG)  nl()
     return 3u64
 }
 
 fn usage() -> u64 {
-    ps("iii-typecheck -- the dependent-type kernel (lambda-Pi + universes), on your terms\n\n" as u64)
-    ps("  iii-typecheck <term-file>                    infer the type, or refuse\n" as u64)
-    ps("  iii-typecheck --check <term-file> <type-file>  check term : type\n" as u64)
-    ps("  iii-typecheck --qtt <term-file>              judge QTT usage (a layer over typing)\n" as u64)
-    ps("  iii-typecheck --lek \"<c1..c6>\" \"<b1..b6>\"    PROVE cost <= budget as a TYPE (LEK iota)\n" as u64)
-    ps("  iii-typecheck --reach <hexad>                PROVE hexad reachability as a TYPE (REACH iota)\n\n" as u64)
+    ps("iii typecheck -- the dependent-type kernel (lambda-Pi + universes), on your terms\n\n" as u64)
+    ps("  iii typecheck <term-file>                    infer the type, or refuse\n" as u64)
+    ps("  iii typecheck --check <term-file> <type-file>  check term : type\n" as u64)
+    ps("  iii typecheck --qtt <term-file>              judge QTT usage (a layer over typing)\n" as u64)
+    ps("  iii typecheck --lek \"<c1..c6>\" \"<b1..b6>\"    PROVE cost <= budget as a TYPE (LEK iota)\n" as u64)
+    ps("  iii typecheck --reach <hexad>                PROVE hexad reachability as a TYPE (REACH iota)\n\n" as u64)
     ps("  grammar (de Bruijn indices; (var 0) is the innermost binder):\n" as u64)
     ps("    (sort N) (var N) (pi A B) (lam A b) (app f a) (sig A B) (pair a b) (fst p) (snd p)\n" as u64)
     ps("    (ann t T) bool true false (if s t e) (id T a b) (refl a) (j M base proof)\n" as u64)
@@ -745,11 +745,11 @@ fn typecheck_enter(argc: i32, argv: u64) -> u64 @export {
         if a1[2u64] == 108u8 {                              /* "--lek" "<c1..c6>" "<b1..b6>" */
             if argc < 4i32 { return usage() }
             if parse_vec6(av[2u64], (&LEKC) as u64) != 1u32 {
-                ps("iii-typecheck: --lek cost must be exactly six unsigned integers\n" as u64)
+                ps("iii typecheck: --lek cost must be exactly six unsigned integers\n" as u64)
                 return 3u64
             }
             if parse_vec6(av[3u64], (&LEKB) as u64) != 1u32 {
-                ps("iii-typecheck: --lek budget must be exactly six unsigned integers\n" as u64)
+                ps("iii typecheck: --lek budget must be exactly six unsigned integers\n" as u64)
                 return 3u64
             }
             let cs : u32 = clek_register((&LEKC) as u64)
@@ -783,7 +783,7 @@ fn typecheck_enter(argc: i32, argv: u64) -> u64 @export {
                 } }
             }
             if hok != 1u32 {
-                ps("iii-typecheck: --reach needs a hexad id 0..65535\n" as u64)
+                ps("iii typecheck: --reach needs a hexad id 0..65535\n" as u64)
                 return 3u64
             }
             let rty : u32 = tc_sov_reach(hv as u32)

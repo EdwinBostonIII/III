@@ -44,7 +44,7 @@ case "${OS:-}${OSTYPE:-}" in
 esac
 
 IIIS="${IIIS:-$III_ROOT/COMPILED/iiis-2${BIN_SUFFIX}}"
-EVAL_BIN="${EVAL_BIN:-$III_ROOT/COMPILED/iii_eval${BIN_SUFFIX}}"
+EVAL_BIN="${EVAL_BIN:-$III_ROOT/COMPILED/iii${BIN_SUFFIX}}"
 BUILD_DIR="$III_ROOT/STDLIB/build/iii"
 LIB_ARCHIVE="$BUILD_DIR/libiii_native.a"
 RATCHET_FILE="$BOOT_DIR/meaning_ratchet.txt"
@@ -53,8 +53,8 @@ EVAL_TIMEOUT="${EVAL_TIMEOUT:-60}"
 [[ -x "$IIIS" ]]        || { echo "[meaning] FATAL: no pinned iiis-2 at $IIIS"; exit 2; }
 [[ -f "$LIB_ARCHIVE" ]] || { echo "[meaning] FATAL: no stdlib archive"; exit 2; }
 if [[ ! -x "$EVAL_BIN" ]]; then
-    echo "[meaning] iii_eval missing -- building"
-    bash "$BOOT_DIR/build_iii_eval.sh" || exit 2
+    echo "[meaning] the organism (iii) missing -- building"
+    bash "$BOOT_DIR/build_iii.sh" || exit 2
 fi
 
 # cache key: sealed identities, never timestamps
@@ -171,7 +171,7 @@ run_pair() {
         RCE="$(cat "$ek.rce")"
         cp "$ek.out" "$EVRAW" 2>/dev/null || : > "$EVRAW"
     else
-        timeout "$EVAL_TIMEOUT" "$EVAL_BIN" "$src" >"$EVRAW" 2>>"$LOG"
+        timeout "$EVAL_TIMEOUT" "$EVAL_BIN" eval "$src" >"$EVRAW" 2>>"$LOG"
         RCE=$?
         if [[ $RCE -eq 124 ]]; then CLASS="EVAL_TIMEOUT"; : > "$ek.etime"; return; fi
         cp "$EVRAW" "$ek.out"

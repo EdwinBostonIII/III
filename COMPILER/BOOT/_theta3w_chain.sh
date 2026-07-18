@@ -36,7 +36,7 @@ echo "=== PHASE emit-svir-smoke START (--emit-svir through the rebuilt iiis-2) =
 printf 'module g1s\nfn main() -> i64 { return 5 * 257 + 7 }\n' > STDLIB/build/meaning/g1smoke.iii
 COMPILED/iiis-2.exe STDLIB/build/meaning/g1smoke.iii --emit-svir --out STDLIB/build/meaning/g1smoke_gen.iii >/dev/null 2>&1
 if grep -q "svir_ptr" STDLIB/build/meaning/g1smoke_gen.iii 2>/dev/null; then echo "=== PHASE emit-svir-smoke rc=0 ==="; else echo "=== PHASE emit-svir-smoke rc=1 (no gen_svir) ==="; echo "=== CHAIN ABORT at emit-svir-smoke rc=1 ==="; exit 1; fi
-run_phase evalb   bash COMPILER/BOOT/build_iii_eval.sh
+run_phase evalb   bash COMPILER/BOOT/build_iii.sh
 run_phase svir-gate bash COMPILER/BOOT/run_svir_backend_gate.sh
 run_phase square  bash COMPILER/BOOT/run_meaning_square.sh
 run_phase warm    bash COMPILER/BOOT/_meaning_warm.sh

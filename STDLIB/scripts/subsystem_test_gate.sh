@@ -68,9 +68,9 @@ fi
 #     introspection roster + kardia + soma + doxa + absorbed families (iii-ergon census; no
 #     stored expectation consulted).  Soft dependency like 3b: skipped on a checkout without
 #     the built tool, so the SHA-gated levels above still judge.
-if [ -x "$ROOT/COMPILED/iii-ergon.exe" ]; then
-    echo "[gate] iii-ergon census (standing-fleet work-proof) ..."
-    if ! "$ROOT/COMPILED/iii-ergon.exe" census >/dev/null 2>&1; then
+if [ -x "$ROOT/COMPILED/iii.exe" ]; then
+    echo "[gate] iii ergon census (standing-fleet work-proof, through the organism) ..."
+    if ! "$ROOT/COMPILED/iii.exe" ergon census >/dev/null 2>&1; then
         echo "[gate] FAIL: ERGON census -- a standing organ did not derive its law"
         FAILED="$FAILED ergon-census"
     fi

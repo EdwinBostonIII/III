@@ -1,15 +1,15 @@
-/* COMPILER/BOOT/motion_main.iii -- iii-motion: GAMMA-MOTION standing, and THE
+/* COMPILER/BOOT/motion_main.iii -- iii motion: GAMMA-MOTION standing, and THE
  * KINETIC SCROLL speaking.  The exact time-of-impact (exact_motion), the
  * constructible tower (pyrgos), the event fold that chains THROUGH irrational
  * impacts (kinesis), and the EIDOLOS voice that states the fold as causal
  * claims and lets the language DERIVE what physics implied.
  *
- *   iii-motion prove       the full self-proof (arms 170..179 + 180..187 + 190..196)
- *   iii-motion toi     <14 ints>   one pair: HIT/GRAZE/MISS + the exact TOI
- *   iii-motion respond <14 ints>   one pair: exact elastic response
- *   iii-motion scroll      the irrational chain folded PAST its surds (nested tower)
- *   iii-motion echo        the Loschmidt echo: exact return to the integer genesis
- *   iii-motion speak       the scroll as EIDOLOS claims; the mirror law DERIVES
+ *   iii motion prove       the full self-proof (arms 170..179 + 180..187 + 190..196)
+ *   iii motion toi     <14 ints>   one pair: HIT/GRAZE/MISS + the exact TOI
+ *   iii motion respond <14 ints>   one pair: exact elastic response
+ *   iii motion scroll      the irrational chain folded PAST its surds (nested tower)
+ *   iii motion echo        the Loschmidt echo: exact return to the integer genesis
+ *   iii motion speak       the scroll as EIDOLOS claims; the mirror law DERIVES
  *                          the echo causality the fold never stated
  *
  * Every verb self-proves all three organs first (exit 9).
@@ -213,16 +213,16 @@ fn print_out() -> u32 {
 }
 
 fn usage() -> u64 {
-    ps("iii-motion -- GAMMA-MOTION + THE KINETIC SCROLL: exact impacts, the\n" as u64)
+    ps("iii motion -- GAMMA-MOTION + THE KINETIC SCROLL: exact impacts, the\n" as u64)
     ps("constructible tower, the event fold past irrational impacts, the EIDOLOS voice.\n\n" as u64)
-    ps("  iii-motion prove       full self-proof (arms 170..179, 180..187, 190..196)\n" as u64)
-    ps("  iii-motion toi     <ax ay az avx avy avz ar>  <bx by bz bvx bvy bvz br>\n" as u64)
-    ps("  iii-motion respond <14 ints>   exact elastic response (equal mass)\n" as u64)
-    ps("  iii-motion scroll      fold the surd chain PAST its radicals (nested tower)\n" as u64)
-    ps("  iii-motion echo        the Loschmidt echo: exact return to the genesis\n" as u64)
-    ps("  iii-motion speak       the fold as EIDOLOS; the mirror law derives the echo\n" as u64)
-    ps("  iii-motion ballistic   uniform gravity: parabolic worldlines, exact echo\n" as u64)
-    ps("  iii-motion quartic     per-body acceleration: exact Sturm trichotomy + bracket\n\n" as u64)
+    ps("  iii motion prove       full self-proof (arms 170..179, 180..187, 190..196)\n" as u64)
+    ps("  iii motion toi     <ax ay az avx avy avz ar>  <bx by bz bvx bvy bvz br>\n" as u64)
+    ps("  iii motion respond <14 ints>   exact elastic response (equal mass)\n" as u64)
+    ps("  iii motion scroll      fold the surd chain PAST its radicals (nested tower)\n" as u64)
+    ps("  iii motion echo        the Loschmidt echo: exact return to the genesis\n" as u64)
+    ps("  iii motion speak       the fold as EIDOLOS; the mirror law derives the echo\n" as u64)
+    ps("  iii motion ballistic   uniform gravity: parabolic worldlines, exact echo\n" as u64)
+    ps("  iii motion quartic     per-body acceleration: exact Sturm trichotomy + bracket\n\n" as u64)
     ps("exit: 0 ok | 1 miss | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }

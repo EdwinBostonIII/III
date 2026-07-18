@@ -69,7 +69,13 @@ const SKB  : u64 = 128u64
 const SEEDB: u64 = 96u64
 const FMAGIC : u64 = 0x4D583037u64      /* the forge/MX07 descriptor tag */
 const NREC : u64 = 12u64
-const NTOOL: u64 = 8u64
+/* THE HOLOS (2026-07-17): the eight standing-tool binaries dissolved into ONE
+ * organism (COMPILED/iii, DOCS/III-HOLOS.md) -- the TOOLS section now digests
+ * that one body.  The next COMMITTED-chain generation advance must carry this
+ * count change through the ceremony (the parent-count monotone check at the
+ * chain arm sees 8 -> 1); within the autarkeia verb gen-0 and gen-1 both use
+ * this roster, so the law holds live. */
+const NTOOL: u64 = 1u64
 const NSPORE : u64 = 3u64
 const OUTCAP : u64 = 131072u64
 
@@ -292,14 +298,7 @@ fn rec_headed(i: u64) -> u32 {
     return 0u32
 }
 fn tool_path(i: u64) -> u64 {
-    if i == 0u64 { return "COMPILED/iii-prove.exe" as u64 }
-    if i == 1u64 { return "COMPILED/iii-crypto.exe" as u64 }
-    if i == 2u64 { return "COMPILED/iii-exact.exe" as u64 }
-    if i == 3u64 { return "COMPILED/iii-typecheck.exe" as u64 }
-    if i == 4u64 { return "COMPILED/iii_eval.exe" as u64 }
-    if i == 5u64 { return "COMPILED/iii-events.exe" as u64 }
-    if i == 6u64 { return "COMPILED/iii-intent.exe" as u64 }
-    return "COMPILED/iii-hexad.exe" as u64
+    return "COMPILED/iii.exe" as u64
 }
 fn spore_path(i: u64) -> u64 {
     if i == 0u64 { return "STDLIB/sovir/run_germinate.sh" as u64 }

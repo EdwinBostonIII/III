@@ -1,11 +1,11 @@
-/* COMPILER/BOOT/eidolos_main.iii -- iii-eidolos: THE UNIVERSAL REASONING
+/* COMPILER/BOOT/eidolos_main.iii -- iii eidolos: THE UNIVERSAL REASONING
  * LANGUAGE as a standing tool.
  *
- *   iii-eidolos teach                     the five rules (the whole language)
- *   iii-eidolos prove                     the self-proof alone (arms 70..81)
- *   iii-eidolos read    "[a < b] ..."     normalize: ONE canonical scroll + its address
- *   iii-eidolos unravel "[a < b] ..."     + everything the scroll KNOWS (stated and derived)
- *   iii-eidolos ask     "[a < b] ..." -- "thing" VERB "thing"
+ *   iii eidolos teach                     the five rules (the whole language)
+ *   iii eidolos prove                     the self-proof alone (arms 70..81)
+ *   iii eidolos read    "[a < b] ..."     normalize: ONE canonical scroll + its address
+ *   iii eidolos unravel "[a < b] ..."     + everything the scroll KNOWS (stated and derived)
+ *   iii eidolos ask     "[a < b] ..." -- "thing" VERB "thing"
  *                                         does the scroll entail it?  VERB in {is,under,mirrors}
  *
  * Scroll arguments are joined with spaces, so brackets may arrive split across
@@ -113,16 +113,16 @@ fn join_args(argc: i32, argv: u64, frm: u64, dst: u64, cap: u64) -> u64 {
     return n
 }
 fn usage() -> u64 {
-    ps("iii-eidolos -- the universal reasoning language: five rules, three verbs, one canon\n\n" as u64)
-    ps("  iii-eidolos teach                      learn the whole language\n" as u64)
-    ps("  iii-eidolos prove                      the self-proof (arms 70..81)\n" as u64)
-    ps("  iii-eidolos read    \"[a < b] ...\"      one canonical scroll + its address\n" as u64)
-    ps("  iii-eidolos unravel \"[a < b] ...\"      + everything the scroll knows\n" as u64)
-    ps("  iii-eidolos ask     \"scroll\" -- \"thing\" is|under|mirrors \"thing\"\n" as u64)
-    ps("  iii-eidolos axiom                      the Logos Axiom -- the grammar handshake\n" as u64)
-    ps("  iii-eidolos words                      the universal lexicon -- the vocabulary handshake\n" as u64)
-    ps("  iii-eidolos check   \"[a < b] ...\"      production discipline: every word pooled?\n" as u64)
-    ps("  iii-eidolos wire    \"[a < b] ...\"      ride the aether: project to geometry, reify,\n" as u64)
+    ps("iii eidolos -- the universal reasoning language: five rules, three verbs, one canon\n\n" as u64)
+    ps("  iii eidolos teach                      learn the whole language\n" as u64)
+    ps("  iii eidolos prove                      the self-proof (arms 70..81)\n" as u64)
+    ps("  iii eidolos read    \"[a < b] ...\"      one canonical scroll + its address\n" as u64)
+    ps("  iii eidolos unravel \"[a < b] ...\"      + everything the scroll knows\n" as u64)
+    ps("  iii eidolos ask     \"scroll\" -- \"thing\" is|under|mirrors \"thing\"\n" as u64)
+    ps("  iii eidolos axiom                      the Logos Axiom -- the grammar handshake\n" as u64)
+    ps("  iii eidolos words                      the universal lexicon -- the vocabulary handshake\n" as u64)
+    ps("  iii eidolos check   \"[a < b] ...\"      production discipline: every word pooled?\n" as u64)
+    ps("  iii eidolos wire    \"[a < b] ...\"      ride the aether: project to geometry, reify,\n" as u64)
     ps("                                         verify the address end to end\n\n" as u64)
     ps("exit: 0 ok/entailed | 1 not entailed/unpooled | 3 usage | 4 refused | 9 SELF-REFUSED\n" as u64)
     return 3u64
@@ -356,7 +356,7 @@ fn eidolos_enter(argc: i32, argv: u64) -> u64 @export {
         return 0u64
     }
     if streq(cmd, "ask" as u64) == 1u32 {
-        /* iii-eidolos ask "<scroll...>" -- "<thing>" is|under|mirrors "<thing>" */
+        /* iii eidolos ask "<scroll...>" -- "<thing>" is|under|mirrors "<thing>" */
         let mut sep : u64 = 0u64
         let mut i : u64 = 2u64
         while (i as i64) < (argc as i64) {

@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-SUB="$ROOT/COMPILED/iii-substrate.exe"
+SUB="$ROOT/COMPILED/iii.exe"
 PROVE="$ROOT/COMPILED/iii-prove.exe"
 SEALED="$ROOT/COMPILER/BOOT/cg_phys_rules.iii"
 # The work dir must live OUTSIDE the walked tree: probe .iii files carry @export fns,
@@ -74,18 +74,18 @@ log "work dir: $W (kept for audit; outside the repo by law)"
 [[ -x "$PROVE" ]] || die 2 "iii-prove not found: $PROVE"
 
 # [0] the generator is rebuilt from source -- no stale-tool seals
-bash "$SCRIPT_DIR/build_iii_substrate.sh" >"$W/build.log" 2>&1
+bash "$SCRIPT_DIR/build_iii.sh" >"$W/build.log" 2>&1
 rc=$?
 [[ $rc -eq 0 ]] || die 2 "iii-substrate rebuild failed (see $W/build.log)"
 
 # [1] LEGALITY: the discovery loop itself must be admitted by katabasis
-"$SUB" isa 4 >"$W/isa.log" 2>&1
+"$SUB" substrate isa 4 >"$W/isa.log" 2>&1
 rc=$?
 [[ $rc -eq 0 ]] || die 3 "katabasis admission is not ADMIT (rc=$rc, see $W/isa.log)"
 log "legality: isa admission ADMIT"
 
 # [2] GENERATION: global criteria, counted dispositions
-"$SUB" nomos "$FUEL" "$W" >"$W/nomos.log" 2>&1
+"$SUB" substrate nomos "$FUEL" "$W" >"$W/nomos.log" 2>&1
 rc=$?
 [[ $rc -eq 0 ]] || die 4 "nomos generation red (rc=$rc, see $W/nomos.log)"
 ROWS="$(grep -o 'rows=[0-9]*' "$W/nomos.log" | head -1 | cut -d= -f2)"
@@ -139,7 +139,7 @@ if [[ $NOMOS_CHANGED -eq 1 ]]; then
 # VOTER [1] SELF-AGREEMENT: a SECOND independent generation must reproduce the set-id.
 # The machine must agree with ITSELF that this is the legislature -- not one run's noise.
 W2="$(mktemp -d "${TMPDIR:-/tmp}/nomos-selfcheck.XXXXXX")"
-"$SUB" nomos "$FUEL" "$W2" >"$W2/nomos.log" 2>&1
+"$SUB" substrate nomos "$FUEL" "$W2" >"$W2/nomos.log" 2>&1
 SID2="$(grep -o 'NOMOS-SET id=[0-9]*' "$W2/nomos.log" | head -1 | cut -d= -f2)"
 SELF_AGREE=0
 if [[ -n "$SID2" && "$SID2" == "$SID" ]]; then SELF_AGREE=1; fi
@@ -203,7 +203,7 @@ IIIS2="$ROOT/COMPILED/iiis-2.exe"
 LIB="$ROOT/STDLIB/build/iii/libiii_native.a"
 GW="$W/glossa"
 mkdir -p "$GW"
-"$SUB" glossa "$GW" >"$GW/press.log" 2>&1
+"$SUB" substrate glossa "$GW" >"$GW/press.log" 2>&1
 rc=$?
 [[ $rc -eq 0 ]] || die 8 "glossa press red (rc=$rc, see $GW/press.log)"
 GSID="$(grep -o 'GLOSSA-SET id=[0-9]*' "$GW/press.log" | head -1 | grep -o '[0-9]*$')"
@@ -258,7 +258,7 @@ log "voter[collision]: $([[ $GCOLLIDE -eq 1 ]] && echo CONCUR || echo REFUSE)"
 
 # VOTER: SELF-AGREEMENT -- a second independent press must reproduce the id
 GW2="$(mktemp -d "${TMPDIR:-/tmp}/glossa-selfcheck.XXXXXX")"
-"$SUB" glossa "$GW2" >"$GW2/press.log" 2>&1
+"$SUB" substrate glossa "$GW2" >"$GW2/press.log" 2>&1
 GSID2="$(grep -o 'GLOSSA-SET id=[0-9]*' "$GW2/press.log" | head -1 | grep -o '[0-9]*$')"
 GSELF=0
 [[ -n "$GSID2" && "$GSID2" == "$GSID" ]] && GSELF=1

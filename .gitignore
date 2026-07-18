@@ -80,3 +80,11 @@ STDLIB/build/**/seed*.bin
 STDLIB/build/mathesis/*.bin
 **/*.sk
 **/*.seed
+
+# THE HOLOS -- organism runtime state (ledger = per-tree standing, never committed)
+STDLIB/build/holos/
+
+# Conscience rite forensics -- per-run gate logs + receipt rows (runtime, regenerated)
+COMPILED/_conscience_*.log
+COMPILED/_conscience_rows.txt
+COMPILED/_sovhash/

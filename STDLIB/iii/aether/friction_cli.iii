@@ -1,6 +1,6 @@
-/* STDLIB/iii/aether/friction_cli.iii -- iii-friction: THE FRICTION LOGOS, driven.
+/* STDLIB/iii/aether/friction_cli.iii -- iii friction: THE FRICTION LOGOS, driven.
  *
- *   iii-friction check         THE FALSIFIER BATTERY (wired before any claim):
+ *   iii friction check         THE FALSIFIER BATTERY (wired before any claim):
  *                              [N] null: a route raced against ITSELF must be
  *                                  INDISTINGUISHABLE -- a ledger that finds a
  *                                  winner between f and f is measuring weather;
@@ -12,13 +12,13 @@
  *                                  inside the band; the LAW may not);
  *                              [S] starvation: laps below the minimum REFUSE
  *                                  (0) and the refusal is COUNTED.
- *   iii-friction rot           the first sealed race: the three PROVEN-invariant
+ *   iii friction rot           the first sealed race: the three PROVEN-invariant
  *                              spellings of rot_1 at width 64 (OR / ADD / XOR of
  *                              the two shifts -- bit-identical by the sealed 2724
  *                              theorem) raced on THIS die.  Lexicographic order
  *                              embodied: invariance was proven BEFORE friction is
  *                              consulted; the verdict is a fact about the die.
- *   iii-friction pdep          THE ALIEN-ATOM RACE: scatter the low 8 bits of x
+ *   iii friction pdep          THE ALIEN-ATOM RACE: scatter the low 8 bits of x
  *                              into even positions -- the PDEP route (one BMI2
  *                              instruction) vs the human shift-and-mask route.
  *                              INVARIANCE FIRST: both routes proven equal by
@@ -449,7 +449,7 @@ fn cmd_judge(lawfuel: u64) -> u64 {
 
 fn friction_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
-        ps("iii-friction check | rot | pdep | judge <lawfuel>\n" as u64)
+        ps("iii friction check | rot | pdep | judge <lawfuel>\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -461,6 +461,6 @@ fn friction_enter(argc: i32, argv: u64) -> u64 @export {
         if argc < 3i32 { return 1u64 }
         return cmd_judge(parse_u64(av[2u64]))
     }
-    ps("iii-friction: unknown command\n" as u64)
+    ps("iii friction: unknown command\n" as u64)
     return 1u64
 }

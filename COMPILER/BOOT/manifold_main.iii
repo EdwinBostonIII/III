@@ -1,7 +1,7 @@
-/* COMPILER/BOOT/manifold_main.iii -- iii-manifold: GAMMA-5, THE UNIFICATION.
+/* COMPILER/BOOT/manifold_main.iii -- iii manifold: GAMMA-5, THE UNIFICATION.
  *
- *   iii-manifold prove       the self-proof (arms 150..154)
- *   iii-manifold census      III censuses the dimensional ladder, live
+ *   iii manifold prove       the self-proof (arms 150..154)
+ *   iii manifold census      III censuses the dimensional ladder, live
  *
  * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
 module manifold_main
@@ -30,10 +30,10 @@ fn dname(d: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-manifold -- GAMMA-5, the unification: the dimensional ladder censused,\n" as u64)
+    ps("iii manifold -- GAMMA-5, the unification: the dimensional ladder censused,\n" as u64)
     ps("and geometry's robustness revealed as ONE law (the sign homomorphism S_{D+1}).\n\n" as u64)
-    ps("  iii-manifold prove    the self-proof (arms 150..154)\n" as u64)
-    ps("  iii-manifold census   III censuses dimensions 1..4, live, by composing the rungs\n\n" as u64)
+    ps("  iii manifold prove    the self-proof (arms 150..154)\n" as u64)
+    ps("  iii manifold census   III censuses dimensions 1..4, live, by composing the rungs\n\n" as u64)
     ps("exit: 0 ok | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
@@ -50,7 +50,7 @@ fn manifold_enter(argc: i32, argv: u64) -> u64 @export {
         ps("THE UNIFICATION PROVEN (arms 150..154): across four rungs -- line, plane,\n" as u64)
         ps("space, spacetime -- III discovered the SAME law with no target named: exact\n" as u64)
         ps("orientation is the sign homomorphism S_{D+1} -> {+1,-1}.  The four discoveries\n" as u64)
-        ps("are ONE law (run 'iii-manifold census').  Geometry's robustness -- the\n" as u64)
+        ps("are ONE law (run 'iii manifold census').  Geometry's robustness -- the\n" as u64)
         ps("consistency float cannot give -- IS group representation theory, the same in\n" as u64)
         ps("every dimension, resting on the one plane base-case the ring engine proved\n" as u64)
         ps("over all 2^64 and lifted to every dimension by the census.\n" as u64)

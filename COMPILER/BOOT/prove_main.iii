@@ -1,7 +1,7 @@
-/* COMPILER/BOOT/prove_main.iii -- iii-prove: THE EQUIVALENCE PROVER AS A STANDING TOOL.
+/* COMPILER/BOOT/prove_main.iii -- iii prove: THE EQUIVALENCE PROVER AS A STANDING TOOL.
  *
- *     iii-prove <a.iii> <fnA> <b.iii> <fnB>     prove fnA == fnB over ALL 2^64 inputs
- *     iii-prove --list <a.iii>                  list the provable functions in a file
+ *     iii prove <a.iii> <fnA> <b.iii> <fnB>     prove fnA == fnB over ALL 2^64 inputs
+ *     iii prove --list <a.iii>                  list the provable functions in a file
  *
  * This is the disposer (numera/ser_kinduct_sym's seq_equiv) made INDEPENDENTLY USEFUL: it decides,
  * for two functions written by ANYONE in ANY .iii file, whether they compute the same thing for
@@ -164,21 +164,21 @@ fn compile_to_svir(path: u64, src: u64, con: u64, lenout: u64) -> u32 {
 fn prove_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
-        ps("iii-prove -- prove two functions equal over ALL 2^64 inputs (III's own disposer)\n\n" as u64)
-        ps("  iii-prove <a.iii> <fnA> <b.iii> <fnB>   prove fnA == fnB for EVERY input\n" as u64)
-        ps("  iii-prove --list <file.iii>             list the provable functions in a file\n\n" as u64)
+        ps("iii prove -- prove two functions equal over ALL 2^64 inputs (III's own disposer)\n\n" as u64)
+        ps("  iii prove <a.iii> <fnA> <b.iii> <fnB>   prove fnA == fnB for EVERY input\n" as u64)
+        ps("  iii prove --list <file.iii>             list the provable functions in a file\n\n" as u64)
         ps("exit: 0 PROVEN | 1 REFUTED (counterexample printed) | 2 UNDECIDED (reason printed)\n" as u64)
         return 3u64
     }
 
     /* ---- --list: name the functions this file offers, with their indices ---- */
     if streq(av[1u64], "--list" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-prove: --list needs a file\n" as u64)  return 3u64 }
+        if argc < 3i32 { ps("iii prove: --list needs a file\n" as u64)  return 3u64 }
         let rc : u32 = compile_to_svir(av[2u64], &SRCA as u64, &CONA as u64, &LENA as u64)
-        if rc == 4u32 { ps("iii-prove: cannot read: " as u64)  ps(av[2u64])  putchar(10i32)  return 4u64 }
-        if rc == 5u32 { ps("iii-prove: parse error in: " as u64)  ps(av[2u64])  putchar(10i32)  return 5u64 }
+        if rc == 4u32 { ps("iii prove: cannot read: " as u64)  ps(av[2u64])  putchar(10i32)  return 4u64 }
+        if rc == 5u32 { ps("iii prove: parse error in: " as u64)  ps(av[2u64])  putchar(10i32)  return 5u64 }
         if rc == 6u32 {
-            ps("iii-prove: SVIR emission refused (unsupported construct class " as u64)
+            ps("iii prove: SVIR emission refused (unsupported construct class " as u64)
             pd(iii_cg_svir_unsup() as u64)  ps(")\n" as u64)
             return 6u64
         }
@@ -187,52 +187,52 @@ fn prove_enter(argc: i32, argv: u64) -> u64 @export {
     }
 
     if argc < 5i32 {
-        ps("iii-prove: need <a.iii> <fnA> <b.iii> <fnB>\n" as u64)
+        ps("iii prove: need <a.iii> <fnA> <b.iii> <fnB>\n" as u64)
         return 3u64
     }
 
     /* ---- compile A, take its container; then compile B (the emitter is reused) ---- */
     let ra : u32 = compile_to_svir(av[1u64], &SRCA as u64, &CONA as u64, &LENA as u64)
-    if ra == 4u32 { ps("iii-prove: cannot read: " as u64)  ps(av[1u64])  putchar(10i32)  return 4u64 }
-    if ra == 5u32 { ps("iii-prove: parse error in: " as u64)  ps(av[1u64])  putchar(10i32)  return 5u64 }
+    if ra == 4u32 { ps("iii prove: cannot read: " as u64)  ps(av[1u64])  putchar(10i32)  return 4u64 }
+    if ra == 5u32 { ps("iii prove: parse error in: " as u64)  ps(av[1u64])  putchar(10i32)  return 5u64 }
     if ra == 6u32 {
-        ps("iii-prove: SVIR emission refused for " as u64)  ps(av[1u64])
+        ps("iii prove: SVIR emission refused for " as u64)  ps(av[1u64])
         ps(" (class " as u64)  pd(iii_cg_svir_unsup() as u64)  ps(")\n" as u64)
         return 6u64
     }
     let ia : u32 = iii_cg_svir_fn_index(av[2u64], slen(av[2u64]))
     if ia == 0xFFFFFFFFu32 {
-        ps("iii-prove: no such function '" as u64)  ps(av[2u64])
+        ps("iii prove: no such function '" as u64)  ps(av[2u64])
         ps("' in " as u64)  ps(av[1u64])  putchar(10i32)
-        ps("  (run: iii-prove --list " as u64)  ps(av[1u64])  ps(")\n" as u64)
+        ps("  (run: iii prove --list " as u64)  ps(av[1u64])  ps(")\n" as u64)
         return 7u64
     }
 
     let rb : u32 = compile_to_svir(av[3u64], &SRCB as u64, &CONB as u64, &LENB as u64)
-    if rb == 4u32 { ps("iii-prove: cannot read: " as u64)  ps(av[3u64])  putchar(10i32)  return 4u64 }
-    if rb == 5u32 { ps("iii-prove: parse error in: " as u64)  ps(av[3u64])  putchar(10i32)  return 5u64 }
+    if rb == 4u32 { ps("iii prove: cannot read: " as u64)  ps(av[3u64])  putchar(10i32)  return 4u64 }
+    if rb == 5u32 { ps("iii prove: parse error in: " as u64)  ps(av[3u64])  putchar(10i32)  return 5u64 }
     if rb == 6u32 {
-        ps("iii-prove: SVIR emission refused for " as u64)  ps(av[3u64])
+        ps("iii prove: SVIR emission refused for " as u64)  ps(av[3u64])
         ps(" (class " as u64)  pd(iii_cg_svir_unsup() as u64)  ps(")\n" as u64)
         return 6u64
     }
     let ib : u32 = iii_cg_svir_fn_index(av[4u64], slen(av[4u64]))
     if ib == 0xFFFFFFFFu32 {
-        ps("iii-prove: no such function '" as u64)  ps(av[4u64])
+        ps("iii prove: no such function '" as u64)  ps(av[4u64])
         ps("' in " as u64)  ps(av[3u64])  putchar(10i32)
-        ps("  (run: iii-prove --list " as u64)  ps(av[3u64])  ps(")\n" as u64)
+        ps("  (run: iii prove --list " as u64)  ps(av[3u64])  ps(")\n" as u64)
         return 7u64
     }
 
     /* ---- locate both bodies inside their containers ---- */
     let pa : u64 = sd_locate(&CONA as u64, LENA[0u64], ia)
-    if pa == SD_LOCFAIL { ps("iii-prove: cannot locate function body (A)\n" as u64)  return 7u64 }
+    if pa == SD_LOCFAIL { ps("iii prove: cannot locate function body (A)\n" as u64)  return 7u64 }
     let pb : u64 = sd_locate(&CONB as u64, LENB[0u64], ib)
-    if pb == SD_LOCFAIL { ps("iii-prove: cannot locate function body (B)\n" as u64)  return 7u64 }
+    if pb == SD_LOCFAIL { ps("iii prove: cannot locate function body (B)\n" as u64)  return 7u64 }
     let npa : u32 = (pa & 255u64) as u32
     let npb : u32 = (pb & 255u64) as u32
     if npa != npb {
-        ps("iii-prove: ARITY MISMATCH -- " as u64)  ps(av[2u64])  ps(" takes " as u64)  pd(npa as u64)
+        ps("iii prove: ARITY MISMATCH -- " as u64)  ps(av[2u64])  ps(" takes " as u64)  pd(npa as u64)
         ps(" param(s), " as u64)  ps(av[4u64])  ps(" takes " as u64)  pd(npb as u64)  putchar(10i32)
         ps("  distinct signatures are not comparable; the miter is undefined.\n" as u64)
         return 8u64

@@ -1,23 +1,23 @@
-/* STDLIB/iii/aether/xeno_cli.iii -- iii-xeno: THE OPEN SPACE, driven.
+/* STDLIB/iii/aether/xeno_cli.iii -- iii xeno: THE OPEN SPACE, driven.
  *
- *   iii-xeno fair <N>              THE FAIRNESS ARM: roundtrip the first N steps of
+ *   iii xeno fair <N>              THE FAIRNESS ARM: roundtrip the first N steps of
  *                                  the universal enumeration + spot-encode every
  *                                  carrier; exit 3 on any break.  This is the
  *                                  anti-rigging theorem, machine-checked live.
- *   iii-xeno census <n>            the exact iso-class census of carrier n by TWO
+ *   iii xeno census <n>            the exact iso-class census of carrier n by TWO
  *                                  INDEPENDENT ROUTES: explicit canonical dedup
  *                                  (organ) vs Burnside fixed-point counting (CLI,
  *                                  separate code).  Exit 7 iff they disagree.
- *   iii-xeno anchor <lawfuel>      the machine's own algebra (the silicon point,
+ *   iii xeno anchor <lawfuel>      the machine's own algebra (the silicon point,
  *                                  via substrate_ontogenesis), its exact seat in
  *                                  the universal enumeration (n<=5 exact; else
  *                                  class-only, named), and its open-law theory.
- *   iii-xeno sweep <fuel> <lawfuel>  the dovetail: visit structures fairly, canon-
+ *   iii xeno sweep <fuel> <lawfuel>  the dovetail: visit structures fairly, canon-
  *                                  dedup, decide the first lawfuel open laws on
  *                                  every NEW class by total exhaustion, search
  *                                  anchor homomorphisms, print the law demography
  *                                  + drain + XENO_CERT (deterministic fold).
- *   iii-xeno check <fuel>          the whole arm battery (fair, census x2, judge
+ *   iii xeno check <fuel>          the whole arm battery (fair, census x2, judge
  *                                  two-path, canon<->profile consistency, replay
  *                                  determinism, vacuity refusal).
  *
@@ -741,7 +741,7 @@ fn cmd_isa() -> u64 {
 
 fn xeno_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
-        ps("iii-xeno fair <N> | census <n> | anchor <lawfuel> | sweep <fuel> <lawfuel> | check <fuel> | isa\n" as u64)
+        ps("iii xeno fair <N> | census <n> | anchor <lawfuel> | sweep <fuel> <lawfuel> | check <fuel> | isa\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -767,6 +767,6 @@ fn xeno_enter(argc: i32, argv: u64) -> u64 @export {
         return cmd_check(parse_u64(av[2u64]))
     }
     if streq(cmd, "isa" as u64) == 1u32 { return cmd_isa() }
-    ps("iii-xeno: unknown command\n" as u64)
+    ps("iii xeno: unknown command\n" as u64)
     return 1u64
 }

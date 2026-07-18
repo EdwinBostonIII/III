@@ -1,9 +1,9 @@
-/* COMPILER/BOOT/proofcarry_main.iii -- iii-proofcarry: Z2, THE PROOF-CARRYING
+/* COMPILER/BOOT/proofcarry_main.iii -- iii proofcarry: Z2, THE PROOF-CARRYING
  * SCROLL, standing -- III's exact successor to the zk-STARK.
  *
- *   iii-proofcarry prove      the self-proof (arms 160..165)
- *   iii-proofcarry demo       seal a proof, verify it, run the tamper scan
- *   iii-proofcarry stark      the measured comparison vs a probabilistic STARK
+ *   iii proofcarry prove      the self-proof (arms 160..165)
+ *   iii proofcarry demo       seal a proof, verify it, run the tamper scan
+ *   iii proofcarry stark      the measured comparison vs a probabilistic STARK
  *
  * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
 module proofcarry_main
@@ -48,11 +48,11 @@ fn build_demo() -> i32 {
     return 0i32
 }
 fn usage() -> u64 {
-    ps("iii-proofcarry -- Z2, the proof-carrying scroll: III's EXACT successor to the\n" as u64)
+    ps("iii proofcarry -- Z2, the proof-carrying scroll: III's EXACT successor to the\n" as u64)
     ps("probabilistic zk-STARK.  A claim + its cone + the EIDOLOS seal; verify by refold.\n\n" as u64)
-    ps("  iii-proofcarry prove   the self-proof (arms 160..165)\n" as u64)
-    ps("  iii-proofcarry demo    seal a proof, verify, run III's tamper scan\n" as u64)
-    ps("  iii-proofcarry stark   the measured comparison vs a probabilistic STARK\n\n" as u64)
+    ps("  iii proofcarry prove   the self-proof (arms 160..165)\n" as u64)
+    ps("  iii proofcarry demo    seal a proof, verify, run III's tamper scan\n" as u64)
+    ps("  iii proofcarry stark   the measured comparison vs a probabilistic STARK\n\n" as u64)
     ps("exit: 0 ok | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }

@@ -1,15 +1,15 @@
-/* STDLIB/iii/aether/witness_cli.iii -- iii-witness: THE STRANGER'S TESTAMENT VERIFIER (AUTARKEIA Alpha-1).
+/* STDLIB/iii/aether/witness_cli.iii -- iii witness: THE STRANGER'S TESTAMENT VERIFIER (AUTARKEIA Alpha-1).
  *
- *   iii-witness verify <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]
+ *   iii witness verify <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]
  *
  * TWO HONEST TIERS:
  *   TIER-1 (minutes, NO toolchain): format + SLH-DSA signature + (optional) key pin + (optional)
  *          generation link to a parent + monotone law.  A stranger runs this on a bare host.
- *          `iii-witness verify testament.dat pk.bin`                    -- signature + key pin
- *          `iii-witness verify testament.dat pk.bin parent.dat`         -- + generation chain
+ *          `iii witness verify testament.dat pk.bin`                    -- signature + key pin
+ *          `iii witness verify testament.dat pk.bin parent.dat`         -- + generation chain
  *   TIER-1+ (still no build, re-derives the record chains from committed bytes) and the FULL
  *          re-derivation against the tree when <root> + <manifest> are supplied:
- *          `iii-witness verify testament.dat pk.bin parent.dat . STDLIB/testament/MANIFEST.txt`
+ *          `iii witness verify testament.dat pk.bin parent.dat . STDLIB/testament/MANIFEST.txt`
  *          recomputes the TREE Merkle root, every SEED/TOOL/SPORE/EXEC digest, the MATHESIS
  *          record digests + pinned heads, the FORGE chain re-walk, and the RADICAL certificate.
  *
@@ -53,12 +53,12 @@ fn argopt(av: *u64, argc: i32, idx: i32) -> u64 {
 
 fn witness_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 3i32 {
-        ps("iii-witness verify <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]\n" as u64)
+        ps("iii witness verify <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]\n" as u64)
         return 1u64
     }
     let av : *u64 = argv as *u64
     if streq(av[1u64], "verify" as u64) == 0u32 {
-        ps("iii-witness: unknown command (only `verify`)\n" as u64)
+        ps("iii witness: unknown command (only `verify`)\n" as u64)
         return 1u64
     }
     let datp   : u64 = av[2u64]
@@ -67,14 +67,14 @@ fn witness_enter(argc: i32, argv: u64) -> u64 @export {
     let root   : u64 = argopt(av, argc, 5i32)
     let manp   : u64 = argopt(av, argc, 6i32)
     if root != 0u64 { if manp == 0u64 {
-        ps("iii-witness: <root> given without <manifest> -- both required for full re-derivation\n" as u64)
+        ps("iii witness: <root> given without <manifest> -- both required for full re-derivation\n" as u64)
         return 1u64
     } }
     /* bind the verdict, name it, return it: exit 0 = VALID, nonzero = a tamper class.
      * The two outcomes (== 0 valid / != 0 refused) make the verifier's discrimination
      * visible in-source, not only in the process exit code. */
     let tv : u64 = tw_verify(datp, pkpin, parentp, root, manp)
-    if tv == 0u64 { ps("iii-witness: VALID -- the testament verified against its pins\n" as u64) }
-    if tv != 0u64 { ps("iii-witness: REFUSED -- the exit code names the tamper class\n" as u64) }
+    if tv == 0u64 { ps("iii witness: VALID -- the testament verified against its pins\n" as u64) }
+    if tv != 0u64 { ps("iii witness: REFUSED -- the exit code names the tamper class\n" as u64) }
     return tv
 }

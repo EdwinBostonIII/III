@@ -1,16 +1,16 @@
-/* STDLIB/iii/aether/testament_cli.iii -- iii-testament: THE TESTAMENT EMITTER (AUTARKEIA Alpha-0).
+/* STDLIB/iii/aether/testament_cli.iii -- iii testament: THE TESTAMENT EMITTER (AUTARKEIA Alpha-0).
  *
- *   iii-testament keygen <seed96> <pk-out> <sk-out>
+ *   iii testament keygen <seed96> <pk-out> <sk-out>
  *       SLH-DSA-SHA2-256s keypair, deterministic in the 96-byte seed FILE (no hidden RNG).
- *   iii-testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts-list|none]
+ *   iii testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts-list|none]
  *       Fuse the tree's sealed truth into a signed, chained testament.dat.  <root> is the tree
  *       root directory; <manifest> lists the committed files (one repo-relative path per line).
  *       With a <parent> testament, the new one chains to it and the MONOTONE LAW is enforced.
- *   iii-testament show   <testament.dat>
+ *   iii testament show   <testament.dat>
  *       Print the sealed pins (generation, tree root, record heads, certificate values) --
  *       bash-consumable, the pin-migration source.
  *
- * A LEAF tool (the build_iii_crypto mold): the pinned in-tree compiler + the committed archive;
+ * A LEAF tool (the build_iii.sh union): the pinned in-tree compiler + the committed archive;
  * the testament organ (aether/testament.iii) links as a standalone object.  exit 0 = success.
  *
  * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/testament (-> numera/cad + numera/slhdsa).
@@ -40,10 +40,10 @@ fn streq(a: u64, b: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-testament -- the AUTARKEIA testament emitter (DOCS/III-AUTARKEIA-MAP.md)\n" as u64)
-    ps("  iii-testament keygen <seed96> <pk-out> <sk-out>\n" as u64)
-    ps("  iii-testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts|none]\n" as u64)
-    ps("  iii-testament show   <testament.dat>\n" as u64)
+    ps("iii testament -- the AUTARKEIA testament emitter (DOCS/III-AUTARKEIA-MAP.md)\n" as u64)
+    ps("  iii testament keygen <seed96> <pk-out> <sk-out>\n" as u64)
+    ps("  iii testament emit   <root> <manifest> <sk> <pk> <out> [parent|none] [receipts|none]\n" as u64)
+    ps("  iii testament show   <testament.dat>\n" as u64)
     return 1u64
 }
 

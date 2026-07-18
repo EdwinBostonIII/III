@@ -1,9 +1,9 @@
-/* COMPILER/BOOT/soma_main.iii -- iii-soma: THE SOMA's tool face.
+/* COMPILER/BOOT/soma_main.iii -- iii soma: THE SOMA's tool face.
  *
- *   iii-soma prove                the self-proof alone (addressing, hash-set, partition)
- *   iii-soma map   [corpusdir]    THE MAP-vs-TERRITORY AUDIT: does the registry the mind
+ *   iii soma prove                the self-proof alone (addressing, hash-set, partition)
+ *   iii soma map   [corpusdir]    THE MAP-vs-TERRITORY AUDIT: does the registry the mind
  *                                 reads match the gate files that actually exist?
- *   iii-soma structure            the reach-pin cluster anatomy of the claim-space
+ *   iii soma structure            the reach-pin cluster anatomy of the claim-space
  *
  * default corpusdir = STDLIB/corpus.  Requires CWD = the III root.  EVERY verb
  * self-proves first and refuses on a broken arm (exit 9).  The audit is
@@ -57,11 +57,11 @@ fn streq(a: u64, b: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-soma -- THE SOMA: the machine's claim-space as one addressable body\n\n" as u64)
-    ps("  iii-soma prove                the self-proof (addressing, hash-set, partition law)\n" as u64)
-    ps("  iii-soma map   [corpusdir]    map-vs-territory: does the registry the mind reads match\n" as u64)
+    ps("iii soma -- THE SOMA: the machine's claim-space as one addressable body\n\n" as u64)
+    ps("  iii soma prove                the self-proof (addressing, hash-set, partition law)\n" as u64)
+    ps("  iii soma map   [corpusdir]    map-vs-territory: does the registry the mind reads match\n" as u64)
     ps("                                the gate files that actually exist?  (phantom + dark = drift)\n" as u64)
-    ps("  iii-soma structure            the reach-pin cluster anatomy of the claim-space\n\n" as u64)
+    ps("  iii soma structure            the reach-pin cluster anatomy of the claim-space\n\n" as u64)
     ps("every verb self-proves first (exit 9).  the audit is organ-native -- no bash reads the self.\n" as u64)
     ps("exit: 0 map==territory | 1 DRIFT | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
@@ -107,8 +107,8 @@ fn soma_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "map" as u64) == 1u32 {
         if argc >= 3i32 { dir = av[2u64] }
         let r : i64 = soma_audit(dir)
-        if r == -1i64 { ps("iii-soma: registry unreadable (run from the III root)\n" as u64)   return 2u64 }
-        if r == -2i64 { ps("iii-soma: could not open the corpus territory at " as u64)  ps(dir)  putchar(10i32)   return 2u64 }
+        if r == -1i64 { ps("iii soma: registry unreadable (run from the III root)\n" as u64)   return 2u64 }
+        if r == -2i64 { ps("iii soma: could not open the corpus territory at " as u64)  ps(dir)  putchar(10i32)   return 2u64 }
         ps("== THE MAP vs THE TERRITORY: is the mind's body-map the body that exists? ==\n" as u64)
         ps("  the MAP (the registry kardia parses from run_corpus.sh): " as u64)  pu(soma_registry())  ps(" claims\n" as u64)
         ps("  the TERRITORY (gate files present in " as u64)  ps(dir)  ps("):    " as u64)  pu(soma_territory())  ps(" gates" as u64)
@@ -140,7 +140,7 @@ fn soma_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "structure" as u64) == 1u32 {
         let r : i64 = soma_audit(dir)
-        if r < 0i64 { ps("iii-soma: env (registry/territory unreadable)\n" as u64)   return 2u64 }
+        if r < 0i64 { ps("iii soma: env (registry/territory unreadable)\n" as u64)   return 2u64 }
         soma_cluster()
         ps("== THE CLAIM-SPACE ANATOMY: how the machine's nerves couple (reach-pin clusters) ==\n" as u64)
         ps("  registry claims        : " as u64)  pu(soma_registry())  putchar(10i32)

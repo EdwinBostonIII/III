@@ -1,10 +1,10 @@
-/* COMPILER/BOOT/kardia_main.iii -- iii-kardia: THE HEART's tool face.
+/* COMPILER/BOOT/kardia_main.iii -- iii kardia: THE HEART's tool face.
  *
- *   iii-kardia prove                 run the self-proof alone (the falsifier surface)
- *   iii-kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt
- *   iii-kardia status [--ledger D]   the standing question: is the being green?
- *   iii-kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells
- *   iii-kardia audit N [--ledger D]  re-derive up to N ADOPTED cells regardless of
+ *   iii kardia prove                 run the self-proof alone (the falsifier surface)
+ *   iii kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt
+ *   iii kardia status [--ledger D]   the standing question: is the being green?
+ *   iii kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells
+ *   iii kardia audit N [--ledger D]  re-derive up to N ADOPTED cells regardless of
  *                                    pins -- the drip that retires inherited trust
  *
  * EVERY verb self-proves first and REFUSES to run on a failed arm (exit 9) --
@@ -75,12 +75,12 @@ fn pname(i: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-kardia -- THE HEART: validation dissolved from batch runs into being\n\n" as u64)
-    ps("  iii-kardia prove                 the self-proof alone (every law arm, every falsifier)\n" as u64)
-    ps("  iii-kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt the lineage\n" as u64)
-    ps("  iii-kardia status [--ledger D]   is the being green?  answered from the ledger, O(changed)\n" as u64)
-    ps("  iii-kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells (pin-invalidated only)\n" as u64)
-    ps("  iii-kardia audit N [--ledger D]  re-derive up to N ADOPTED cells -- retire inherited trust\n\n" as u64)
+    ps("iii kardia -- THE HEART: validation dissolved from batch runs into being\n\n" as u64)
+    ps("  iii kardia prove                 the self-proof alone (every law arm, every falsifier)\n" as u64)
+    ps("  iii kardia birth  [--ledger D]   ingest the claim registry, pin the tree, adopt the lineage\n" as u64)
+    ps("  iii kardia status [--ledger D]   is the being green?  answered from the ledger, O(changed)\n" as u64)
+    ps("  iii kardia beat  N [--ledger D]  re-derive up to N DUE runnable cells (pin-invalidated only)\n" as u64)
+    ps("  iii kardia audit N [--ledger D]  re-derive up to N ADOPTED cells -- retire inherited trust\n\n" as u64)
     ps("every verb SELF-PROVES first and refuses to run on a failed arm (exit 9).\n" as u64)
     ps("cells: ADOPTED = inherited from the sealed lineage, NEVER counted green; DERIVED = re-run here.\n" as u64)
     ps("exit: 0 coherent | 1 derived-red | 2 env | 3 usage | 9 SELF-REFUSED\n" as u64)
@@ -141,13 +141,13 @@ fn kardia_enter(argc: i32, argv: u64) -> u64 @export {
         return 0u64
     }
     if env_guard() == 1u64 {
-        ps("iii-kardia: env -- run from the III root (COMPILED/iiis-2.exe + the archive must resolve)\n" as u64)
+        ps("iii kardia: env -- run from the III root (COMPILED/iiis-2.exe + the archive must resolve)\n" as u64)
         return 2u64
     }
     if streq(cmd, "birth" as u64) == 1u32 {
         kd_make_dir(dir)
         let packed : u64 = heart_load(dir)
-        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable (STDLIB/scripts/run_corpus.sh)\n" as u64)  return 2u64 }
+        if packed == 18446744073709551615u64 { ps("iii kardia: registry unreadable (STDLIB/scripts/run_corpus.sh)\n" as u64)  return 2u64 }
         ps("== THE BIRTH: the claim registry becomes cells; the sealed lineage becomes inherited standing ==\n" as u64)
         ps("  registry: " as u64)  pu(packed & 4294967295u64)  ps(" runnable claims (C1) + " as u64)  pu(packed >> 32u64)  ps(" owned organ gates (C2)\n" as u64)
         let mut adopted : u64 = 0u64
@@ -163,7 +163,7 @@ fn kardia_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "status" as u64) == 1u32 {
         let packed : u64 = heart_load(dir)
-        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        if packed == 18446744073709551615u64 { ps("iii kardia: registry unreadable\n" as u64)  return 2u64 }
         ps("== THE STANDING QUESTION: is the being green?  (answered from the ledger; only DUE cells owe work) ==\n" as u64)
         print_counts()
         if kd_derived_red_n() > 0u64 { return 1u64 }
@@ -171,7 +171,7 @@ fn kardia_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "beat" as u64) == 1u32 {
         let packed : u64 = heart_load(dir)
-        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        if packed == 18446744073709551615u64 { ps("iii kardia: registry unreadable\n" as u64)  return 2u64 }
         ps("== THE BEAT: re-derive what drifted; everything else keeps its standing ==\n" as u64)
         let mut done : u64 = 0u64
         let mut green : u64 = 0u64
@@ -208,7 +208,7 @@ fn kardia_enter(argc: i32, argv: u64) -> u64 @export {
     }
     if streq(cmd, "audit" as u64) == 1u32 {
         let packed : u64 = heart_load(dir)
-        if packed == 18446744073709551615u64 { ps("iii-kardia: registry unreadable\n" as u64)  return 2u64 }
+        if packed == 18446744073709551615u64 { ps("iii kardia: registry unreadable\n" as u64)  return 2u64 }
         ps("== THE AUDIT DRIP: re-derive ADOPTED cells regardless of pins -- inherited trust retires into proof ==\n" as u64)
         let mut done : u64 = 0u64
         let mut green : u64 = 0u64

@@ -1,24 +1,24 @@
-/* STDLIB/iii/aether/substrate_cli.iii -- iii-substrate: the machine's own
+/* STDLIB/iii/aether/substrate_cli.iii -- iii substrate: the machine's own
  * algebra, derived from its silicon (ENTELECHEIA, the real crossing).
  *
- *   iii-substrate real            derive THIS machine's algebra from the live
+ *   iii substrate real            derive THIS machine's algebra from the live
  *                                 cpu_census + behavioral_fp signature; print
  *                                 the carrier, the operation table, and the
  *                                 laws that HOLD (observed by exhaustion).
- *   iii-substrate variance <N>    THE FALSIFIER: sweep N distinct signatures
+ *   iii substrate variance <N>    THE FALSIFIER: sweep N distinct signatures
  *                                 and count distinct profiles.  Exit 0 iff the
  *                                 discovered algebra VARIES with the substrate
  *                                 (>= 2 distinct profiles) -- the evidence it is
  *                                 derived, not authored.  Exit 2 = REFUTED
  *                                 (invariant -> authored); exit 3 = degenerate
  *                                 (no non-trivial law anywhere in the sweep).
- *   iii-substrate atoms           THE ATOM SOURCE: the chip's own capability
+ *   iii substrate atoms           THE ATOM SOURCE: the chip's own capability
  *                                 report (live CPUID) and the term universe it
  *                                 grants -- which instructions exist HERE.
- *   iii-substrate bridge          per gated atom: the LIVE INSTRUCTION agrees
+ *   iii substrate bridge          per gated atom: the LIVE INSTRUCTION agrees
  *                                 with its independent pure-.iii definiens over
  *                                 the whole published battery (two engines).
- *   iii-substrate isa <lawfuel>   THE ISA-BORN LOOP: fairness arm, law sweep on
+ *   iii substrate isa <lawfuel>   THE ISA-BORN LOOP: fairness arm, law sweep on
  *                                 the real silicon (REFUTED-with-witness or
  *                                 SURVIVED-whole-battery), survivors classed
  *                                 (baseline = human-charted, held out; gated =
@@ -442,29 +442,29 @@ fn print_table() -> i32 {
 
 fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
-        ps("iii-substrate real           (this machine's derived algebra)\n" as u64)
-        ps("iii-substrate variance <N>   (falsifier: does it vary with the substrate?)\n" as u64)
-        ps("iii-substrate atoms          (the chip's own capability report + its term universe)\n" as u64)
-        ps("iii-substrate bridge         (live instruction == independent definiens, whole battery)\n" as u64)
-        ps("iii-substrate isa <maxsize>  (the ISA-born loop: sweep, control, falsifier, admission)\n" as u64)
-        ps("iii-substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>  (III lowers discovered identity k to pure .iii for iii-prove)\n" as u64)
-        ps("iii-substrate nomos <lawfuel> <outdir>  (THE NOMOS TIER: friction-held laws -> compiler rules module + probe pairs)\n" as u64)
-        ps("iii-substrate oneiros <dreamfuel> <outdir> [seed]  (THE ONEIROS TIER: believe each owed law, collapse to witnesses, docket the survivors)\n" as u64)
-        ps("iii-substrate judge <law> [reps trials]  (one law through the friction judge: truth leg, then the race, registers printed)\n" as u64)
-        ps("iii-substrate glossa <outdir>  (THE GLOSSA TIER: the machine mints its vocabulary -> lexicon + tongue + ladder probes)\n" as u64)
-        ps("iii-substrate physis         (the substrate-determinism theorem: which observables are value-invariants)\n" as u64)
-        ps("iii-substrate taxis <maxsize 2..3>  (THE TAXIS TIER: the friction ORDER as a first-class ontology)\n" as u64)
-        ps("iii-substrate moment         (the contingency register: necessary vs contingent, fenced non-determinism)\n" as u64)
-        ps("iii-substrate reversible [maxsize 5..6]  (THE REVERSIBILITY HUNT: III finds + proves zero-loss bijections; the xorshift computational diode; THE CONVERGENCE: one law at six altars)\n" as u64)
-        ps("iii-substrate symmetry <dreamfuel> [seed]  (THE SYMMETRIA TIER: conservation worlds -- reversible-closed algebras saturated to PROOF, friction-graded; the dream arm draws by contingency)\n" as u64)
-        ps("iii-substrate redeem [maxsize 3..4]  (THE ANASTASIS TIER: every fallen op lifted into a proven bijection whose ancilla pays EXACTLY the measured deficit; Bennett involutions; the redeemed form a proven abelian group)\n" as u64)
-        ps("iii-substrate frontier <maxsize 3..6>  (THE FRONTIER: cube permutations under TRUE die semantics incl. the count/deposit atoms; survivors of every explanation III can name = certified UNEXPLAINED, inverses hunted or OWED)\n" as u64)
-        ps("iii-substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
-        ps("iii-substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
-        ps("iii-substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
-        ps("iii-substrate project  (TOPOS x CASSANDRA: data transmission as GF(2) geometry -- project a payload to a manifold + colors, predict it in bounded superposition before it arrives, reify bit-for-bit with NO parser)\n" as u64)
-        ps("iii-substrate evolve  (THE CRUCIBLE: morphogenetic evolution with a cryptographic floor -- mutate the physics under stress, BEAM-SEARCH worthy mutations, adopt only a survivor proven flawless; evolution that costs LESS than blind)\n" as u64)
-        ps("iii-substrate introspect  (SYSTEMWIDE INTROSPECTION: III examines itself through one inherited faculty -- per-organ verdicts + the vitality root)\n" as u64)
+        ps("iii substrate real           (this machine's derived algebra)\n" as u64)
+        ps("iii substrate variance <N>   (falsifier: does it vary with the substrate?)\n" as u64)
+        ps("iii substrate atoms          (the chip's own capability report + its term universe)\n" as u64)
+        ps("iii substrate bridge         (live instruction == independent definiens, whole battery)\n" as u64)
+        ps("iii substrate isa <maxsize>  (the ISA-born loop: sweep, control, falsifier, admission)\n" as u64)
+        ps("iii substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>  (III lowers discovered identity k to pure .iii for iii prove)\n" as u64)
+        ps("iii substrate nomos <lawfuel> <outdir>  (THE NOMOS TIER: friction-held laws -> compiler rules module + probe pairs)\n" as u64)
+        ps("iii substrate oneiros <dreamfuel> <outdir> [seed]  (THE ONEIROS TIER: believe each owed law, collapse to witnesses, docket the survivors)\n" as u64)
+        ps("iii substrate judge <law> [reps trials]  (one law through the friction judge: truth leg, then the race, registers printed)\n" as u64)
+        ps("iii substrate glossa <outdir>  (THE GLOSSA TIER: the machine mints its vocabulary -> lexicon + tongue + ladder probes)\n" as u64)
+        ps("iii substrate physis         (the substrate-determinism theorem: which observables are value-invariants)\n" as u64)
+        ps("iii substrate taxis <maxsize 2..3>  (THE TAXIS TIER: the friction ORDER as a first-class ontology)\n" as u64)
+        ps("iii substrate moment         (the contingency register: necessary vs contingent, fenced non-determinism)\n" as u64)
+        ps("iii substrate reversible [maxsize 5..6]  (THE REVERSIBILITY HUNT: III finds + proves zero-loss bijections; the xorshift computational diode; THE CONVERGENCE: one law at six altars)\n" as u64)
+        ps("iii substrate symmetry <dreamfuel> [seed]  (THE SYMMETRIA TIER: conservation worlds -- reversible-closed algebras saturated to PROOF, friction-graded; the dream arm draws by contingency)\n" as u64)
+        ps("iii substrate redeem [maxsize 3..4]  (THE ANASTASIS TIER: every fallen op lifted into a proven bijection whose ancilla pays EXACTLY the measured deficit; Bennett involutions; the redeemed form a proven abelian group)\n" as u64)
+        ps("iii substrate frontier <maxsize 3..6>  (THE FRONTIER: cube permutations under TRUE die semantics incl. the count/deposit atoms; survivors of every explanation III can name = certified UNEXPLAINED, inverses hunted or OWED)\n" as u64)
+        ps("iii substrate autophasis <outdir>  (THE AUTOPHASIS TIER: the machine presses its own discovery into a native organ -- op + synthesized divisions + witness + census, no human reformat)\n" as u64)
+        ps("iii substrate synapse [port]  (THE SYNAPSE: constitution-pinned wire over real loopback sockets -- mutual hello, obligations served in the minted tongue, corruption refused)\n" as u64)
+        ps("iii substrate couple [port]  (THE LAGRANGIAN COUPLE: two nodes fold ONE reversible admix chain over the real wire -- entangle by root exchange, action vectors not state, latency as recoverable Landauer deficit, provisional collapse + exact reversal)\n" as u64)
+        ps("iii substrate project  (TOPOS x CASSANDRA: data transmission as GF(2) geometry -- project a payload to a manifold + colors, predict it in bounded superposition before it arrives, reify bit-for-bit with NO parser)\n" as u64)
+        ps("iii substrate evolve  (THE CRUCIBLE: morphogenetic evolution with a cryptographic floor -- mutate the physics under stress, BEAM-SEARCH worthy mutations, adopt only a survivor proven flawless; evolution that costs LESS than blind)\n" as u64)
+        ps("iii substrate introspect  (SYSTEMWIDE INTROSPECTION: III examines itself through one inherited faculty -- per-organ verdicts + the vitality root)\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -487,11 +487,11 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
 
     if streq(cmd, "variance" as u64) == 1u32 {
         if argc < 3i32 {
-            ps("iii-substrate variance <N>\n" as u64)
+            ps("iii substrate variance <N>\n" as u64)
             return 1u64
         }
         let n : i64 = parse_i64(av[2u64])
-        if n < 2i64 { ps("iii-substrate: N must be >= 2\n" as u64)  return 1u64 }
+        if n < 2i64 { ps("iii substrate: N must be >= 2\n" as u64)  return 1u64 }
         let distinct : i64 = so_variance(n)
         let nontriv  : i64 = so_variance_nontriv()
         ps("swept " as u64)  pd(n)  ps(" distinct silicon signatures\n" as u64)
@@ -530,12 +530,12 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
     }
 
     if streq(cmd, "probes" as u64) == 1u32 {
-        if argc < 4i32 { ps("iii-substrate probes <M> <N> [degen]\n" as u64)  return 1u64 }
+        if argc < 4i32 { ps("iii substrate probes <M> <N> [degen]\n" as u64)  return 1u64 }
         let m : i64 = parse_i64(av[2u64])
         let n : i64 = parse_i64(av[3u64])
-        if m < 2i64 { ps("iii-substrate: M must be >= 2\n" as u64)  return 1u64 }
-        if n < 2i64 { ps("iii-substrate: N must be >= 2\n" as u64)  return 1u64 }
-        if m > 256i64 { ps("iii-substrate: M <= 256\n" as u64)  return 1u64 }
+        if m < 2i64 { ps("iii substrate: M must be >= 2\n" as u64)  return 1u64 }
+        if n < 2i64 { ps("iii substrate: N must be >= 2\n" as u64)  return 1u64 }
+        if m > 256i64 { ps("iii substrate: M <= 256\n" as u64)  return 1u64 }
         let mut mode : i64 = 0i64
         if argc >= 5i32 { if streq(av[4u64], "degen" as u64) == 1u32 { mode = 1i64 } }
         let distinct : i64 = so_probe_census(m, n, mode)
@@ -597,13 +597,13 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
     }
 
     if streq(cmd, "rank" as u64) == 1u32 {
-        if argc < 4i32 { ps("iii-substrate rank <M> <POP>\n" as u64)  return 1u64 }
+        if argc < 4i32 { ps("iii substrate rank <M> <POP>\n" as u64)  return 1u64 }
         let m : i64 = parse_i64(av[2u64])
         let n : i64 = parse_i64(av[3u64])
-        if m < 2i64 { ps("iii-substrate: M must be >= 2\n" as u64)  return 1u64 }
-        if n < 4i64 { ps("iii-substrate: POP must be >= 4\n" as u64)  return 1u64 }
-        if m > 256i64 { ps("iii-substrate: M <= 256\n" as u64)  return 1u64 }
-        if n > 256i64 { ps("iii-substrate: POP <= 256\n" as u64)  return 1u64 }
+        if m < 2i64 { ps("iii substrate: M must be >= 2\n" as u64)  return 1u64 }
+        if n < 4i64 { ps("iii substrate: POP must be >= 4\n" as u64)  return 1u64 }
+        if m > 256i64 { ps("iii substrate: M <= 256\n" as u64)  return 1u64 }
+        if n > 256i64 { ps("iii substrate: POP <= 256\n" as u64)  return 1u64 }
         so_rank_variance(m, n)
         let conc : i64 = so_rank_conc()
         let disc : i64 = so_rank_disc()
@@ -663,23 +663,23 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
         return cmd_moment()
     }
     if streq(cmd, "taxis" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate taxis <maxsize 2..3>\n" as u64)  return 6u64 }
+        if argc < 3i32 { ps("iii substrate taxis <maxsize 2..3>\n" as u64)  return 6u64 }
         let tz : i64 = parse_i64(av[2u64])
-        if tz < 2i64 { ps("iii-substrate: taxis maxsize must be 2..3\n" as u64)  return 6u64 }
-        if tz > 3i64 { ps("iii-substrate: taxis maxsize must be 2..3 (the race budget envelope)\n" as u64)  return 6u64 }
+        if tz < 2i64 { ps("iii substrate: taxis maxsize must be 2..3\n" as u64)  return 6u64 }
+        if tz > 3i64 { ps("iii substrate: taxis maxsize must be 2..3 (the race budget envelope)\n" as u64)  return 6u64 }
         return cmd_taxis(tz)
     }
     if streq(cmd, "reversible" as u64) == 1u32 {
         let mut rz : i64 = 5i64
         if argc >= 3i32 { rz = parse_i64(av[2u64]) }
-        if rz < 5i64 { ps("iii-substrate: reversible maxsize must be 5..6 (the reconvergent diode envelope)\n" as u64)  return 6u64 }
-        if rz > 6i64 { ps("iii-substrate: reversible maxsize must be 5..6 (size 7+ over the enumeration budget)\n" as u64)  return 6u64 }
+        if rz < 5i64 { ps("iii substrate: reversible maxsize must be 5..6 (the reconvergent diode envelope)\n" as u64)  return 6u64 }
+        if rz > 6i64 { ps("iii substrate: reversible maxsize must be 5..6 (size 7+ over the enumeration budget)\n" as u64)  return 6u64 }
         return cmd_reversible(rz)
     }
     if streq(cmd, "symmetry" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate symmetry <dreamfuel> [seed]\n" as u64)  return 6u64 }
+        if argc < 3i32 { ps("iii substrate symmetry <dreamfuel> [seed]\n" as u64)  return 6u64 }
         let df : i64 = parse_i64(av[2u64])
-        if df < 0i64 { ps("iii-substrate: dreamfuel must be >= 0\n" as u64)  return 6u64 }
+        if df < 0i64 { ps("iii substrate: dreamfuel must be >= 0\n" as u64)  return 6u64 }
         let mut sd : u64 = 0u64
         if argc >= 4i32 { sd = parse_u64(av[3u64]) }
         /* no seed pinned -> the die's own contingency names the dream: the moment register
@@ -689,51 +689,51 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
         return cmd_symmetry(df as u64, sd)
     }
     if streq(cmd, "frontier" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate frontier <maxsize 3..6>\n" as u64)  return 6u64 }
+        if argc < 3i32 { ps("iii substrate frontier <maxsize 3..6>\n" as u64)  return 6u64 }
         let fz : i64 = parse_i64(av[2u64])
-        if fz < 3i64 { ps("iii-substrate: frontier maxsize must be 3..6\n" as u64)  return 6u64 }
-        if fz > 6i64 { ps("iii-substrate: frontier maxsize must be 3..6 (the enumeration budget)\n" as u64)  return 6u64 }
+        if fz < 3i64 { ps("iii substrate: frontier maxsize must be 3..6\n" as u64)  return 6u64 }
+        if fz > 6i64 { ps("iii substrate: frontier maxsize must be 3..6 (the enumeration budget)\n" as u64)  return 6u64 }
         return cmd_frontier(fz)
     }
     if streq(cmd, "redeem" as u64) == 1u32 {
         let mut az : i64 = 4i64
         if argc >= 3i32 { az = parse_i64(av[2u64]) }
-        if az < 3i64 { ps("iii-substrate: redeem maxsize must be 3..4 (the exhaustive-census envelope)\n" as u64)  return 6u64 }
-        if az > 4i64 { ps("iii-substrate: redeem maxsize must be 3..4 (size 5+ over the per-op proof budget)\n" as u64)  return 6u64 }
+        if az < 3i64 { ps("iii substrate: redeem maxsize must be 3..4 (the exhaustive-census envelope)\n" as u64)  return 6u64 }
+        if az > 4i64 { ps("iii substrate: redeem maxsize must be 3..4 (size 5+ over the per-op proof budget)\n" as u64)  return 6u64 }
         return cmd_redeem(az)
     }
     if streq(cmd, "isa" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate isa <maxsize 2..6>\n" as u64)  return 1u64 }
+        if argc < 3i32 { ps("iii substrate isa <maxsize 2..6>\n" as u64)  return 1u64 }
         let f : i64 = parse_i64(av[2u64])
-        if f < 2i64 { ps("iii-substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
+        if f < 2i64 { ps("iii substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
         return cmd_isa(f)
     }
     if streq(cmd, "emit" as u64) == 1u32 {
-        if argc < 6i32 { ps("iii-substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>\n" as u64)  return 1u64 }
+        if argc < 6i32 { ps("iii substrate emit <maxsize> <k> <lhs.iii> <rhs.iii>\n" as u64)  return 1u64 }
         let sz : i64 = parse_i64(av[2u64])
         let kk : i64 = parse_i64(av[3u64])
-        if sz < 2i64 { ps("iii-substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
-        if kk < 0i64 { ps("iii-substrate: k must be >= 0\n" as u64)  return 1u64 }
+        if sz < 2i64 { ps("iii substrate: maxsize must be >= 2\n" as u64)  return 1u64 }
+        if kk < 0i64 { ps("iii substrate: k must be >= 0\n" as u64)  return 1u64 }
         return cmd_emit(sz, kk, av[4u64], av[5u64])
     }
     if streq(cmd, "nomos" as u64) == 1u32 {
-        if argc < 4i32 { ps("iii-substrate nomos <lawfuel> <outdir>\n" as u64)  return 1u64 }
+        if argc < 4i32 { ps("iii substrate nomos <lawfuel> <outdir>\n" as u64)  return 1u64 }
         let nfu : i64 = parse_i64(av[2u64])
-        if nfu < 1i64 { ps("iii-substrate: lawfuel must be >= 1\n" as u64)  return 1u64 }
+        if nfu < 1i64 { ps("iii substrate: lawfuel must be >= 1\n" as u64)  return 1u64 }
         return cmd_nomos(nfu as u64, av[3u64])
     }
     if streq(cmd, "oneiros" as u64) == 1u32 {
-        if argc < 4i32 { ps("iii-substrate oneiros <dreamfuel> <outdir> [seed]\n" as u64)  return 6u64 }
+        if argc < 4i32 { ps("iii substrate oneiros <dreamfuel> <outdir> [seed]\n" as u64)  return 6u64 }
         let df : i64 = parse_i64(av[2u64])
-        if df < 1i64 { ps("iii-substrate: dreamfuel must be >= 1\n" as u64)  return 6u64 }
+        if df < 1i64 { ps("iii substrate: dreamfuel must be >= 1\n" as u64)  return 6u64 }
         let mut sd : u64 = 0u64
         if argc >= 5i32 { sd = parse_u64(av[4u64]) }
         return cmd_oneiros(df as u64, av[3u64], sd)
     }
     if streq(cmd, "judge" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate judge <law> [reps trials]\n" as u64)  return 1u64 }
+        if argc < 3i32 { ps("iii substrate judge <law> [reps trials]\n" as u64)  return 1u64 }
         let jp : i64 = parse_i64(av[2u64])
-        if jp < 0i64 { ps("iii-substrate: law must be >= 0\n" as u64)  return 1u64 }
+        if jp < 0i64 { ps("iii substrate: law must be >= 0\n" as u64)  return 1u64 }
         let mut jr : i64 = 4i64
         let mut jt : i64 = 9i64
         if argc >= 4i32 { jr = parse_i64(av[3u64]) }
@@ -743,11 +743,11 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
         return cmd_judge(jp as u64, jr as u64, jt)
     }
     if streq(cmd, "glossa" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate glossa <outdir>\n" as u64)  return 6u64 }
+        if argc < 3i32 { ps("iii substrate glossa <outdir>\n" as u64)  return 6u64 }
         return cmd_glossa(av[2u64])
     }
     if streq(cmd, "autophasis" as u64) == 1u32 {
-        if argc < 3i32 { ps("iii-substrate autophasis <outdir>\n" as u64)  return 6u64 }
+        if argc < 3i32 { ps("iii substrate autophasis <outdir>\n" as u64)  return 6u64 }
         return cmd_autophasis(av[2u64])
     }
     if streq(cmd, "synapse" as u64) == 1u32 {
@@ -773,7 +773,7 @@ fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "introspect" as u64) == 1u32 {
         return cmd_introspect()
     }
-    ps("iii-substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | evolve | reversible | symmetry | frontier | redeem)\n" as u64)
+    ps("iii substrate: unknown command (real | variance | probes | rank | atoms | bridge | isa | emit | nomos | oneiros | judge | glossa | autophasis | synapse | couple | project | evolve | reversible | symmetry | frontier | redeem)\n" as u64)
     return 1u64
 }
 
@@ -1560,7 +1560,7 @@ fn cmd_isa(sizecap: i64) -> u64 {
 
 /* ---- THE AUTHOR TIER: III lowers a discovered chip identity through the
  * definiens to a pure base-op .iii function of (x,y), so III's OWN prover
- * (iii-prove) can dispose it over ALL 2^64.
+ * (iii prove) can dispose it over ALL 2^64.
  * COUNT atoms (POPCNT/LZCNT/TZCNT) LOWER (2026-07-17, the loop rung paid):
  * each count node becomes straight-line let-SSA in the emitted fn preamble --
  * POPCNT = the mul-free SWAR byte fold; TZCNT = POPCNT((a & (0-a)) - 1), total
@@ -1797,7 +1797,7 @@ fn cmd_emit(size: i64, k: i64, patha: u64, pathb: u64) -> u64 {
     if write_fn(pathb, "isa_rhs" as u64) != 0i64 { ps("  emit: cannot open RHS path\n" as u64)  return 2u64 }
     ps("  emitted LHS -> " as u64)  ps(patha)  putchar(10i32)
     ps("  emitted RHS -> " as u64)  ps(pathb)  putchar(10i32)
-    ps("  dispose over ALL 2^64 with:  iii-prove <LHS> f <RHS> f\n" as u64)
+    ps("  dispose over ALL 2^64 with:  iii prove <LHS> f <RHS> f\n" as u64)
     return 0u64
 }
 
@@ -1807,7 +1807,7 @@ fn cmd_emit(size: i64, k: i64, patha: u64, pathb: u64) -> u64 {
  * tree: the friction meter (which SEES the jitter and discarded it) and the
  * event substrate (whose "events" were deterministic records).
  *
- *   iii-substrate moment
+ *   iii substrate moment
  *
  * The physis theorem: every DETERMINISTIC observable is a value-invariant,
  * so III's whole reasoning register was the NECESSARY (what-must-be).  The
@@ -1902,7 +1902,7 @@ fn cmd_moment() -> u64 {
  * THE PHYSIS PROBE -- the die measures its own cost geometry, and thereby
  * the CEILING on what structure is derivable from its electrons.
  *
- *   iii-substrate physis
+ *   iii substrate physis
  *
  * The question the taxis tier's honesty rests on: is any atom's cost a
  * function of its INPUT VALUE (extra-algebraic, physical, potentially
@@ -2070,7 +2070,7 @@ fn cmd_physis() -> u64 {
 /* ===================================================================
  * THE TAXIS TIER -- the die's self-derived CANONICALIZATION PREORDER.
  *
- *   iii-substrate taxis <maxsize 2..3>
+ *   iii substrate taxis <maxsize 2..3>
  *
  * HONEST NAMING (2026-07-17, measured): this is NOT a new ontology.  It is
  * a friction-weighted quotient PREORDER -- order theory + an equivalence
@@ -2078,7 +2078,7 @@ fn cmd_physis() -> u64 {
  * CONTENT (which spelling dominates on THIS die) is self-derived and
  * unpublished.  Grade: SOVEREIGN/FIRST-MEASURED, never NOVEL-schema.
  * WHY only a preorder is derivable here, not a richer structure, is a
- * MEASURED fact of the silicon: `iii-substrate physis` shows every atom's
+ * MEASURED fact of the silicon: `iii substrate physis` shows every atom's
  * cost is INPUT-INDEPENDENT (PDEP/PEXT constant-time, flat across popcount
  * 0..64), so the friction landscape collapses to a SCALAR per operation --
  * and a scalar over a finite op-set yields exactly value-equivalence
@@ -2343,13 +2343,13 @@ fn cmd_taxis(maxsize: i64) -> u64 {
 /* ===================================================================
  * THE NOMOS TIER -- the machine legislates its own compilation.
  *
- *   iii-substrate nomos <lawfuel> <outdir>
+ *   iii substrate nomos <lawfuel> <outdir>
  *
  * Sweep the friction judge over laws 0..lawfuel of the ISA ontogenesis
  * stream; turn the HELD verdicts into a compiler rules module
  * (cg_phys_rules.iii, written to <outdir>) plus one probe pair per seated
- * rule for iii-prove.  The module reaches COMPILER/BOOT ONLY through
- * nomos_seal.sh, which REQUIRES iii-prove PROVEN over all 2^64 for every
+ * rule for iii prove.  The module reaches COMPILER/BOOT ONLY through
+ * nomos_seal.sh, which REQUIRES iii prove PROVEN over all 2^64 for every
  * row -- truth is never decided here: the judge's battery leg screens,
  * the sovereign prover disposes.
  *
@@ -2398,7 +2398,7 @@ var NMS_SBL : u64 = 0u64
 fn nms_unlow(which: u64) -> u64 {
     /* COUNT atoms (ser bytes 7/8/9 = POPCNT/LZCNT/TZCNT) are LOWERABLE since the
      * loop rung was paid (2026-07-17): lower_term emits straight-line let-SSA
-     * (mul-free SWAR / smear / blsi-1), inside iii-prove's decided fragment and
+     * (mul-free SWAR / smear / blsi-1), inside iii prove's decided fragment and
      * anchored on the die by lower_bridge().  Only the DEPOSIT atoms (19/20 =
      * PDEP/PEXT, bit-serial) remain the named refusal. */
     let mut n : u64 = NMS_SAL
@@ -2834,12 +2834,12 @@ fn nms_live_kind(k: u64) -> u64 {
 
 fn nms_write_module(h: u64, fuel: u64, cap: u64, sid: u64) -> i32 {
     fputs("/* COMPILER/BOOT/cg_phys_rules.iii -- NOMOS: machine-legislated physical rewrite law. [EMITTED]\n" as u64, h)
-    fputs(" * Generated by `iii-substrate nomos " as u64, h)
+    fputs(" * Generated by `iii substrate nomos " as u64, h)
     fpd(h, fuel)
     fputs("` on the live die (cap word " as u64, h)
     fpd(h, cap)
     fputs("); sealed by COMPILER/BOOT/nomos_seal.sh --\n" as u64, h)
-    fputs(" * a row enters COMPILER/BOOT ONLY behind iii-prove PROVEN over all 2^64 (bit-blast, never sampled).\n" as u64, h)
+    fputs(" * a row enters COMPILER/BOOT ONLY behind iii prove PROVEN over all 2^64 (bit-blast, never sampled).\n" as u64, h)
     fputs(" * Laws are DISCOVERED on this die by the ISA ontogenesis (atoms READ from CPUID, EXECUTED as real\n" as u64, h)
     fputs(" * instructions), held by the friction judge: truth leg (whole battery) FIRST, then measured cycle\n" as u64, h)
     fputs(" * floors with a 20% strict margin -- the dearer side demotes BY PHYSICS, not by human rule.\n" as u64, h)
@@ -3017,7 +3017,7 @@ fn cmd_nomos(lawfuel: u64, odir: u64) -> u64 {
     pu(lawfuel)
     putchar(10i32)
     ps("criteria (global, pre-candidate): held AND directional AND margin >= 20% AND expression-lowerable;\n" as u64)
-    ps("dedup by dear side (the cheaper cheap wins); truth gate = iii-prove over ALL 2^64 in nomos_seal.sh\n" as u64)
+    ps("dedup by dear side (the cheaper cheap wins); truth gate = iii prove over ALL 2^64 in nomos_seal.sh\n" as u64)
     NMS_N = 0u64
     NMS_OVF = 0u64
     NMS_EXI = 0u64
@@ -3113,10 +3113,10 @@ fn cmd_nomos(lawfuel: u64, odir: u64) -> u64 {
 /* ===================================================================
  * THE ONEIROS DRIVER -- the organ (aether/oneiros.iii) dreams and
  * verdicts; this verb only drives process: run, then lower the TOP of
- * the docket to probe pairs for iii-prove (the sovereign disposition),
+ * the docket to probe pairs for iii prove (the sovereign disposition),
  * then render the heat strip (the comprehension artifact).
  *
- *   iii-substrate oneiros <dreamfuel> <outdir> [seed]
+ *   iii substrate oneiros <dreamfuel> <outdir> [seed]
  *
  * Exit: 0 admitted | 2 sentinel | 3 control-silent | 4 emission io
  *     | 5 envelope | 6 usage  (0/2/3/5 are the organ's own verdicts). */
@@ -3147,7 +3147,7 @@ fn cmd_oneiros(dreamfuel: u64, odir: u64, seed: u64) -> u64 {
         return 2u64
     }
     /* the docket handoff: the hottest believed laws, lowered to pure base-op
-     * probe pairs -- truth is never decided here, iii-prove disposes */
+     * probe pairs -- truth is never decided here, iii prove disposes */
     let dn : u64 = oz_docket_n()
     let mut emitted : u64 = 0u64
     let mut unlow : u64 = 0u64
@@ -3179,7 +3179,7 @@ fn cmd_oneiros(dreamfuel: u64, odir: u64, seed: u64) -> u64 {
     }
     ps("docket emission: " as u64)
     pu(emitted)
-    ps(" probe pairs (oneiros_d<k>{a,b}.iii; dispose each with iii-prove <a> f <b> f), " as u64)
+    ps(" probe pairs (oneiros_d<k>{a,b}.iii; dispose each with iii prove <a> f <b> f), " as u64)
     pu(unlow)
     ps(" deposit-atom refusals (named)\n" as u64)
     /* the heat strip: one column per belief, eight rows tall (P3 -- plain
@@ -3227,7 +3227,7 @@ fn cmd_oneiros(dreamfuel: u64, odir: u64, seed: u64) -> u64 {
 /* =====================================================================
  * THE GLOSSA TIER -- the machine mints its own VOCABULARY.
  *
- *   iii-substrate glossa <outdir>
+ *   iii substrate glossa <outdir>
  *
  * NOMOS legislates the compiler's REWRITE LAW; GLOSSA legislates the
  * language's WORDS.  A word is a named, arity-checked, language-level
@@ -3431,7 +3431,7 @@ fn gl_body(a: i64, s: u64) -> i32 {
 /* the organ's foldable portion + every probe, through ONE emitter -- the
  * fold pass and the write pass see the SAME bytes (set-id = the artifact) */
 fn gl_emit_organ_foldable(nlive: u64) -> i32 {
-    gl_put("/* STDLIB/iii/aether/glossa.iii -- THE TONGUE (GENERATED by `iii-substrate glossa`;\n" as u64)
+    gl_put("/* STDLIB/iii/aether/glossa.iii -- THE TONGUE (GENERATED by `iii substrate glossa`;\n" as u64)
     gl_put(" * edit NOTHING by hand -- regeneration + the parliament's chamber II are the only\n" as u64)
     gl_put(" * lawful amendment road).  Each fn below IS a sealed word of the language: sema\n" as u64)
     gl_put(" * binds the bare name at every call site (no extern needed), cg_r3 emits the call\n" as u64)
@@ -3462,7 +3462,7 @@ fn gl_emit_probe(a: i64, s: u64, c: u64) -> i32 {
     gl_put(gl_atom_name(a))
     gl_put(" spelling " as u64)
     gl_pd(s)
-    gl_put(" (adjacent pairs proven over ALL 2^64 by iii-prove) */\n" as u64)
+    gl_put(" (adjacent pairs proven over ALL 2^64 by iii prove) */\n" as u64)
     gl_put("module glossa_w" as u64)
     gl_pd(c)
     gl_put("s" as u64)
@@ -3558,7 +3558,7 @@ fn cmd_glossa(odir: u64) -> u64 {
     let h : u64 = fopen(gl_path(odir, "cg_glossa_rules.iii" as u64), ("wb" as u64))
     if h == 0u64 { ps("GLOSSA: cannot open cg_glossa_rules.iii\n" as u64)   return 2u64 }
     fputs("/* COMPILER/BOOT/cg_glossa_rules.iii -- THE GLOSSA LEXICON (GENERATED by\n" as u64, h)
-    fputs(" * `iii-substrate glossa`; sealed ONLY through nomos_seal.sh chamber II on III's\n" as u64, h)
+    fputs(" * `iii substrate glossa`; sealed ONLY through nomos_seal.sh chamber II on III's\n" as u64, h)
     fputs(" * autonomous unanimous consent -- katabasis_glossa_consent is the law, the script\n" as u64, h)
     fputs(" * is its driver).  One row per word the die's own admitted ledger mints (LIVE,\n" as u64, h)
     fputs(" * arity <= 2, closed-lowerable, not an operator; PDEP/PEXT = named bit-serial\n" as u64, h)
@@ -3657,7 +3657,7 @@ fn cmd_glossa(odir: u64) -> u64 {
 /* =====================================================================
  * THE AUTOPHASIS TIER -- the machine's first SELF-UTTERANCE.
  *
- *   iii-substrate autophasis <outdir>
+ *   iii substrate autophasis <outdir>
  *
  * NOMOS legislates the compiler's REWRITE LAW; GLOSSA legislates the
  * language's WORDS; AUTOPHASIS closes the last autonomy gap of the arc:
@@ -3892,7 +3892,7 @@ fn ap_emit_i64_fn(name: u64, v: i64) -> i32 {
  * the same bytes (the glossa discipline; set id = the artifact) */
 fn ap_emit_foldable() -> i32 {
     gl_put("/* STDLIB/iii/aether/autophasis.iii -- THE SELF-UTTERANCE (GENERATED by\n" as u64)
-    gl_put(" * `iii-substrate autophasis`; edit NOTHING by hand -- regeneration is the only\n" as u64)
+    gl_put(" * `iii substrate autophasis`; edit NOTHING by hand -- regeneration is the only\n" as u64)
     gl_put(" * lawful amendment road, and the standing arm pins the sealed id to the live\n" as u64)
     gl_put(" * press).  The organ IS a discovery the machine made in the fair magma universe\n" as u64)
     gl_put(" * (aether/xeno_ontogenesis) and pressed into its own language: the FIRST\n" as u64)
@@ -3966,7 +3966,7 @@ fn cmd_autophasis(odir: u64) -> u64 {
 /* =====================================================================
  * THE SYNAPSE DEMO -- the constitution-pinned wire over REAL sockets.
  *
- *   iii-substrate synapse [port]
+ *   iii substrate synapse [port]
  *
  * The protocol organ (aether/synapse) is R0-pure; THIS command is its
  * transport composition: capability-minted loopback TCP (aether/net,
@@ -4205,7 +4205,7 @@ fn cmd_couple(port: u64) -> u64 {
 /* =====================================================================
  * THE PROJECT VERB -- data transmission as geometry, predicted before it lands.
  *
- *   iii-substrate project
+ *   iii substrate project
  *
  * TOPOS x CASSANDRA: III does not serialize.  It PROJECTS a payload onto a
  * 64-bit manifold (the macro skeleton) + a GF(2) color basis (the micro deficit),
@@ -4278,7 +4278,7 @@ fn cmd_project() -> u64 {
 /* =====================================================================
  * THE EVOLVE VERB -- morphogenetic evolution with a cryptographic floor.
  *
- *   iii-substrate evolve
+ *   iii substrate evolve
  *
  * Under a stress signal, III mutates its own physics, BEAM-SEARCHES the worthy
  * mutations (a cheap proxy ranks a generation; only the top-k pay the expensive
@@ -4313,7 +4313,7 @@ fn cmd_evolve() -> u64 {
 /* =====================================================================
  * THE INTROSPECT VERB -- III examines itself, systemwide, on command.
  *
- *   iii-substrate introspect
+ *   iii substrate introspect
  *
  * The tool face of katabasis/introspection: walk every registered organ,
  * re-derive each one's truth through the inherited faculty, print the

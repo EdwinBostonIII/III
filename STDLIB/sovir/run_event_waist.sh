@@ -122,8 +122,8 @@ else
 fi
 
 say "[event-waist] == [6] THE STANDING TOOL: iii-events (route V on arbitrary user programs) =="
-TOOL="$W/iii-events$BIN_SUFFIX"
-if bash "$BOOT/build_iii_events.sh" --out "$TOOL" >"$W/_tool_build.log" 2>&1 && [[ -x "$TOOL" ]]; then
+TOOL="$W/iii$BIN_SUFFIX"
+if bash "$BOOT/build_iii.sh" --out "$TOOL" >"$W/_tool_build.log" 2>&1 && [[ -x "$TOOL" ]]; then
     # a FRESH program authored by this gate run -- the expectation comes from the NATIVE route,
     # never from a constant: two meaning-bearers, one gate-authored input.
     cat > "$W/gate_probe.iii" << 'IIIEOF'
@@ -144,7 +144,7 @@ IIIEOF
         && gcc "$W/gate_probe.o" -o "$W/gate_probe$BIN_SUFFIX" >/dev/null 2>&1
     "$W/gate_probe$BIN_SUFFIX" >/dev/null 2>&1
     RCN=$?
-    "$TOOL" --quiet "$W/gate_probe.iii" >/dev/null 2>&1
+    "$TOOL" events --quiet "$W/gate_probe.iii" >/dev/null 2>&1
     RCT=$?
     if [[ "$RCN" == "$RCT" ]]; then say "TOOL parity gate-authored probe: native=$RCN tool=$RCT"; else say "RED tool parity: native=$RCN tool=$RCT"; FAIL=1; fi
     TPN=0; TPOK=0
@@ -154,7 +154,7 @@ IIIEOF
         [[ -x "$NEXE" ]] || { say "RED tool parity $tsrc: no route_s"; FAIL=1; continue; }
         timeout 120 "$NEXE" > "$W/_tp_s.txt" 2>&1
         RS=$?
-        timeout 120 "$TOOL" --quiet "$SQ_DIR/$tsrc.iii" > "$W/_tp_v.txt" 2>&1
+        timeout 120 "$TOOL" events --quiet "$SQ_DIR/$tsrc.iii" > "$W/_tp_v.txt" 2>&1
         RV=$?
         if [[ "$RS" == "$RV" ]] && cmp -s "$W/_tp_s.txt" "$W/_tp_v.txt"; then
             say "TOOL parity $tsrc rc=$RS (output bytes equal)"; TPOK=$((TPOK+1))
@@ -162,21 +162,21 @@ IIIEOF
             say "RED tool parity $tsrc: S=$RS V=$RV cmp=$(cmp -s "$W/_tp_s.txt" "$W/_tp_v.txt" && echo same || echo DIFF)"; FAIL=1
         fi
     done
-    timeout 120 "$TOOL" --tamper "$W/gate_probe.iii" >/dev/null 2>&1
+    timeout 120 "$TOOL" events --tamper "$W/gate_probe.iii" >/dev/null 2>&1
     rc=$?
     if [[ $rc -eq 193 ]]; then say "TOOL tamper tooth 193"; else say "RED tool tamper: rc=$rc"; FAIL=1; fi
-    timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv1.txt" 2>&1
-    timeout 120 "$TOOL" "$W/gate_probe.iii" > "$W/_tv2.txt" 2>&1
+    timeout 120 "$TOOL" events "$W/gate_probe.iii" > "$W/_tv1.txt" 2>&1
+    timeout 120 "$TOOL" events "$W/gate_probe.iii" > "$W/_tv2.txt" 2>&1
     if cmp -s "$W/_tv1.txt" "$W/_tv2.txt"; then say "TOOL determinism: verdict lines byte-identical"; else say "RED tool determinism"; FAIL=1; fi
     # THE CRYPTOGRAPHIC EXECUTION CERTIFICATE (composes omnia::exec_cert -- real sha256): reproducible
     # (same program => same receipt) AND sensitive (a different program => a different receipt).
-    C1="$(timeout 120 "$TOOL" --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
-    C1B="$(timeout 120 "$TOOL" --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    C1="$(timeout 120 "$TOOL" events --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    C1B="$(timeout 120 "$TOOL" events --cert --quiet "$W/gate_probe.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
     cat > "$W/cert_variant.iii" << 'IIIEOF'
 module cert_variant
 fn main() -> i32 { let mut s : u64 = 0u64  let mut i : u64 = 1u64  while i <= 12u64 { s = s + (i + 1u64)  i = i + 1u64 }  return (s % 100u64) as i32 }
 IIIEOF
-    C2="$(timeout 120 "$TOOL" --cert --quiet "$W/cert_variant.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
+    C2="$(timeout 120 "$TOOL" events --cert --quiet "$W/cert_variant.iii" 2>/dev/null | grep -o 'sha256=[0-9a-f]*')"
     if [[ -n "$C1" && "$C1" == "$C1B" ]]; then say "CERT determinism: $C1"; else say "RED cert determinism: $C1 vs $C1B"; FAIL=1; fi
     if [[ -n "$C2" && "$C1" != "$C2" ]]; then say "CERT sensitivity: distinct programs -> distinct receipts"; else say "RED cert sensitivity: $C1 == $C2"; FAIL=1; fi
     # THE EXECUTION-DIVERGENCE LOCATOR (--diff): trace-identical self == exit 0; a trace-divergent
@@ -187,9 +187,9 @@ module diff_variant
 fn tri(n: u64) -> u64 { let mut s : u64 = 0u64  let mut i : u64 = 1u64  while i <= n { s = s + i  i = i + 1u64 }  return s }
 fn main() -> i32 { if tri(12u64) != 78u64 { return 1i32 }  if tri(0u64) != 0u64 { return 2i32 }  return ((tri(13u64) % 100u64) as i32) }
 IIIEOF
-    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self.txt" 2>&1; DSELF=$?
-    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/diff_variant.iii" > "$W/_diff_var.txt" 2>&1; DVAR=$?
-    timeout 120 "$TOOL" --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self2.txt" 2>&1
+    timeout 120 "$TOOL" events --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self.txt" 2>&1; DSELF=$?
+    timeout 120 "$TOOL" events --diff "$W/gate_probe.iii" "$W/diff_variant.iii" > "$W/_diff_var.txt" 2>&1; DVAR=$?
+    timeout 120 "$TOOL" events --diff "$W/gate_probe.iii" "$W/gate_probe.iii" > "$W/_diff_self2.txt" 2>&1
     if [[ $DSELF -eq 0 ]] && grep -q "identical" "$W/_diff_self.txt"; then say "DIFF self-identical (exit 0): $(cat "$W/_diff_self.txt")"; else say "RED diff self: exit=$DSELF"; FAIL=1; fi
     if [[ $DVAR -eq 1 ]] && grep -q "diverge at event" "$W/_diff_var.txt"; then say "DIFF locates a real divergence (exit 1): $(cat "$W/_diff_var.txt")"; else say "RED diff variant: exit=$DVAR"; FAIL=1; fi
     if cmp -s "$W/_diff_self.txt" "$W/_diff_self2.txt"; then say "DIFF determinism: identical output on re-run"; else say "RED diff determinism"; FAIL=1; fi

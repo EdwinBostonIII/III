@@ -1,11 +1,11 @@
-/* STDLIB/iii/aether/agon_cli.iii -- iii-agon: THE AGON, made observable (ENTELECHEIA Ε2).
+/* STDLIB/iii/aether/agon_cli.iii -- iii agon: THE AGON, made observable (ENTELECHEIA Ε2).
  *
- *   iii-agon root   <src_root.iii> <binary>                     -- FORGE: derive the two
+ *   iii agon root   <src_root.iii> <binary>                     -- FORGE: derive the two
  *                                                                  bearer pins (source
  *                                                                  closure root + binary
  *                                                                  image hash) and print
  *                                                                  them; exit 0.
- *   iii-agon verify <src-64hex> <src_root.iii> <img-64hex> <bin>-- run BOTH bearers against
+ *   iii agon verify <src-64hex> <src_root.iii> <img-64hex> <bin>-- run BOTH bearers against
  *                                                                  their pins; the verdict
  *                                                                  is the divergence class.
  *
@@ -111,8 +111,8 @@ fn pu_dec(v: u64) -> i32 {
 }
 
 fn usage() -> u64 {
-    ps("iii-agon root   <src_root.iii> <binary>                      (FORGE: print both pins)\n" as u64)
-    ps("iii-agon verify <src-64hex> <src_root.iii> <img-64hex> <bin> (LIVE=0 SRC=2 IMG=3 BOTH=4)\n" as u64)
+    ps("iii agon root   <src_root.iii> <binary>                      (FORGE: print both pins)\n" as u64)
+    ps("iii agon verify <src-64hex> <src_root.iii> <img-64hex> <bin> (LIVE=0 SRC=2 IMG=3 BOTH=4)\n" as u64)
     return 1u64
 }
 
@@ -125,11 +125,11 @@ fn agon_enter(argc: i32, argv: u64) -> u64 @export {
         if argc < 4i32 { return usage() }
         agon_run(av[2u64], 0u64, av[3u64], 0u64)
         if agon_source_ok() == 0u8 {
-            ps("iii-agon: source bearer could not derive (unreadable source / unresolved import)\n" as u64)
+            ps("iii agon: source bearer could not derive (unreadable source / unresolved import)\n" as u64)
             return 2u64
         }
         if agon_image_ok() == 0u8 {
-            ps("iii-agon: image bearer could not attest (unreadable binary)\n" as u64)
+            ps("iii agon: image bearer could not attest (unreadable binary)\n" as u64)
             return 3u64
         }
         ps("src=" as u64)  print_ca()   putchar(10i32)
@@ -140,18 +140,18 @@ fn agon_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "verify" as u64) == 1u32 {
         if argc < 6i32 { return usage() }
         if parse_hex32(av[2u64], (&CLI_SRCPIN) as u64) != 0i32 {
-            ps("iii-agon: source pin must be 64 hex chars\n" as u64)
+            ps("iii agon: source pin must be 64 hex chars\n" as u64)
             return 1u64
         }
         if parse_hex32(av[4u64], (&CLI_IMGPIN) as u64) != 0i32 {
-            ps("iii-agon: image pin must be 64 hex chars\n" as u64)
+            ps("iii agon: image pin must be 64 hex chars\n" as u64)
             return 1u64
         }
         let v : u32 = agon_run(av[3u64], (&CLI_SRCPIN) as u64, av[5u64], (&CLI_IMGPIN) as u64)
         /* self-consistency: the returned verdict must equal the organ's stored
          * verdict -- a disagreement is an internal defect, refused loudly. */
         if agon_verdict() != v {
-            ps("iii-agon: INTERNAL: stored verdict diverges from returned verdict\n" as u64)
+            ps("iii agon: INTERNAL: stored verdict diverges from returned verdict\n" as u64)
             return 6u64
         }
         ps("src="     as u64)  print_ca()   putchar(10i32)

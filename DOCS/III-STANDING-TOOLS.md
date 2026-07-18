@@ -1,5 +1,12 @@
 # III — THE STANDING TOOLS: capabilities you can actually run
 
+> **SUPERSEDED BY THE HOLOS (2026-07-17, `DOCS/III-HOLOS.md`).** The standalone
+> binaries this charter describes were dissolved into ONE organism, `COMPILED/iii`;
+> every capability below survives verbatim ONE SEAT DOWN (`iii-prove a.iii f b.iii g`
+> → `iii prove a.iii f b.iii g`), proven by a 46/46 byte-identical two-path
+> differential before the fleet retired. The per-tool text below is kept as the
+> capability record — read every `iii-<name>` as `iii <name>`.
+
 > A capability that can only be exercised by hand-writing a driver, a gate, and a build script for each
 > input is not a capability — it is a demo with good manners. This document lists the tools III ships as
 > **committed binaries that take real input and do the real thing**: no glue to write, no curated vectors,

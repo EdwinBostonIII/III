@@ -1,9 +1,9 @@
-/* COMPILER/BOOT/worldline_main.iii -- iii-worldline: GAMMA-4, THE EXACT
+/* COMPILER/BOOT/worldline_main.iii -- iii worldline: GAMMA-4, THE EXACT
  * WORLDLINE, standing.
  *
- *   iii-worldline prove       the self-proof (arms 140..146)
- *   iii-worldline discover    III surfaces the S_5 character (120 orderings)
- *   iii-worldline time        causality is <, time-reversal is ~, no CTC
+ *   iii worldline prove       the self-proof (arms 140..146)
+ *   iii worldline discover    III surfaces the S_5 character (120 orderings)
+ *   iii worldline time        causality is <, time-reversal is ~, no CTC
  *
  * Every verb self-proves first (exit 9).  exit: 0 ok | 3 usage | 9 SELF-REFUSED */
 module worldline_main
@@ -31,11 +31,11 @@ fn streq(a: u64, b: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-worldline -- GAMMA-4, the exact worldline: III invents orient4d, DISCOVERS\n" as u64)
+    ps("iii worldline -- GAMMA-4, the exact worldline: III invents orient4d, DISCOVERS\n" as u64)
     ps("its S_5 character, and TIME becomes the language (causality is <, reversal is ~).\n\n" as u64)
-    ps("  iii-worldline prove       the self-proof (arms 140..146)\n" as u64)
-    ps("  iii-worldline discover    III surfaces the S_5 sign character over 120 orderings\n" as u64)
-    ps("  iii-worldline time        the causal language + the Loschmidt echo + no-CTC\n\n" as u64)
+    ps("  iii worldline prove       the self-proof (arms 140..146)\n" as u64)
+    ps("  iii worldline discover    III surfaces the S_5 sign character over 120 orderings\n" as u64)
+    ps("  iii worldline time        the causal language + the Loschmidt echo + no-CTC\n\n" as u64)
     ps("exit: 0 ok | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }

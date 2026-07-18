@@ -1709,9 +1709,10 @@ MODULES=(
     # First consumer of cpu_census / behavioral_fp / gate_verdict.  Backs iii-pulse.
     "katabasis/pulse"
     # --- ENTELECHEIA Ε2/Ε3 organs are LEAF-TOOL-LINKED, not archive members (2026-07-16):
-    # sanctus/closure_graph (Ε3; backs iii-closure), katabasis/agon (Ε2; backs iii-agon),
-    # aether/substrate_ontogenesis (the machine's own silicon-derived algebra; backs
-    # iii-substrate) compile per-tool via COMPILER/BOOT/build_iii_*.sh.  Archive
+    # sanctus/closure_graph (Ε3; backs the closure skill), katabasis/agon (Ε2; backs the
+    # agon skill), aether/substrate_ontogenesis (the machine's own silicon-derived algebra;
+    # backs the substrate skill) compile into THE ORGANISM via COMPILER/BOOT/build_iii.sh
+    # (the HOLOS union -- ex per-tool build_iii_*.sh x30, retired 2026-07-17).  Archive
     # membership without corpus coverage reddens the down-only coverage/dark-surface
     # ratchets (measured: uncovered 0->56, dark 1->94); pins are never raised.  They
     # enter this list in Wave 1/Ε2, when corpus_coverage's reference source repoints

@@ -1,6 +1,6 @@
-/* STDLIB/iii/intent/intent_cli.iii -- iii-intent: THE ORACLE OF REJECTION AS A STANDING TOOL.
+/* STDLIB/iii/intent/intent_cli.iii -- iii intent: THE ORACLE OF REJECTION AS A STANDING TOOL.
  *
- *     iii-intent "<sentence>"     resolve a human intent to ONE interpretation, or REJECT with the reason
+ *     iii intent "<sentence>"     resolve a human intent to ONE interpretation, or REJECT with the reason
  *
  * This makes III's intent disambiguator (intent/disambiguate::dis_resolve, over intent_lex +
  * lex_ontology + the sat_arith popcount) INDEPENDENTLY USEFUL: hand it a sentence, and it collapses the
@@ -20,7 +20,7 @@
  *   4 OVERFLOW     (sentence exceeded the 64-token arena)
  *   5 usage
  *
- * A LEAF tool build (build_iii_intent.sh): pinned in-tree iiis-2 + the committed archive; the bootstrap
+ * A LEAF tool build (build_iii.sh): pinned in-tree iiis-2 + the committed archive; the bootstrap
  * chain is never touched.  NIH: composes the standing intent faculty + msvcrt putchar only.
  */
 module intent_cli
@@ -93,8 +93,8 @@ fn eidolos_domain_word(m: u64) {
 fn intent_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
-        ps("iii-intent -- resolve a human intent to ONE interpretation, or REJECT with the reason\n\n" as u64)
-        ps("  iii-intent \"<sentence>\"\n\n" as u64)
+        ps("iii intent -- resolve a human intent to ONE interpretation, or REJECT with the reason\n\n" as u64)
+        ps("  iii intent \"<sentence>\"\n\n" as u64)
         ps("vocabulary (16 lexemes): lock freeze database disk encrypt key deny network port\n" as u64)
         ps("                         hash deterministic generate random nondeterministic expire ttl\n\n" as u64)
         ps("exit: 0 RESOLVED (interpretation named) | 1 CONTRADICTION | 2 AMBIGUOUS | 3 EMPTY | 4 OVERFLOW\n" as u64)

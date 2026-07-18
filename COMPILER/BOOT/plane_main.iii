@@ -1,8 +1,8 @@
-/* COMPILER/BOOT/plane_main.iii -- iii-plane: GAMMA-2, THE EXACT PLANE, standing.
+/* COMPILER/BOOT/plane_main.iii -- iii plane: GAMMA-2, THE EXACT PLANE, standing.
  *
- *   iii-plane prove                              the self-proof (arms 120..125)
- *   iii-plane orient <ax ay bx by cx cy>         exact orientation + the language
- *   iii-plane cassini                            re-fire the Kettner-Mehlhorn gun
+ *   iii plane prove                              the self-proof (arms 120..125)
+ *   iii plane orient <ax ay bx by cx cy>         exact orientation + the language
+ *   iii plane cassini                            re-fire the Kettner-Mehlhorn gun
  *
  * Every verb self-proves first (exit 9): III's ring engine re-proves the
  * consistency axioms and III's exact arithmetic re-fires the smoking gun.
@@ -50,11 +50,11 @@ fn sense_name(o: i32) -> u32 {
     return ps("0  COLLINEAR (exact -- where float fabricates a triangle)" as u64)
 }
 fn usage() -> u64 {
-    ps("iii-plane -- GAMMA-2, the exact plane: predicates PROVEN consistent by III's\n" as u64)
+    ps("iii plane -- GAMMA-2, the exact plane: predicates PROVEN consistent by III's\n" as u64)
     ps("ring engine over all 2^64, and the plane speaks its chirality in EIDOLOS.\n\n" as u64)
-    ps("  iii-plane prove                        the self-proof (arms 120..125)\n" as u64)
-    ps("  iii-plane orient <ax ay bx by cx cy>   exact orientation + its scroll\n" as u64)
-    ps("  iii-plane cassini                      re-fire the Kettner-Mehlhorn gun\n\n" as u64)
+    ps("  iii plane prove                        the self-proof (arms 120..125)\n" as u64)
+    ps("  iii plane orient <ax ay bx by cx cy>   exact orientation + its scroll\n" as u64)
+    ps("  iii plane cassini                      re-fire the Kettner-Mehlhorn gun\n\n" as u64)
     ps("exit: 0 ok | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
@@ -72,7 +72,7 @@ fn plane_enter(argc: i32, argv: u64) -> u64 @export {
         ps("  III's RING ENGINE, told only to enumerate the orientation predicate's full\n" as u64)
         ps("  orbit and compare, DISCOVERED over ALL 2^64 that orientation is an\n" as u64)
         ps("  alternating function of its 3 points (3 even orderings, 3 odd, negation-\n" as u64)
-        ps("  linked -- run 'iii-plane discover' to see the table).  ring_consistent = " as u64)
+        ps("  linked -- run 'iii plane discover' to see the table).  ring_consistent = " as u64)
         pu(ep_ring_consistent() as u64)   putchar(10i32)
         ps("  That discovered structure IS the Kettner-Mehlhorn consistency float lacks.\n" as u64)
         ps("  III's EXACT ARITHMETIC re-fired the smoking gun: the Fibonacci/Cassini\n" as u64)

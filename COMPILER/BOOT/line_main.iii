@@ -1,12 +1,12 @@
-/* COMPILER/BOOT/line_main.iii -- iii-line: GAMMA-1, THE EXACT LINE, standing.
+/* COMPILER/BOOT/line_main.iii -- iii line: GAMMA-1, THE EXACT LINE, standing.
  *
- *   iii-line prove                         the self-proof alone (arms 110..115)
- *   iii-line order <pt> <pt> ...           place points on the exact line and SPEAK it
+ *   iii line prove                         the self-proof alone (arms 110..115)
+ *   iii line order <pt> <pt> ...           place points on the exact line and SPEAK it
  *
  * A point is  c:d  (c sqrt d, c >= 1)  or  c:d+c:d  (a two-term sum).
  * The output is the line ITSELF, in the language: the covering chain
  * [surd c:d < surd c:d] ..., its address, and the ranks -- exact where floats
- * conflate (try:  iii-line order 1:1969+1:1971 2:1970).
+ * conflate (try:  iii line order 1:1969+1:1971 2:1970).
  *
  * EVERY verb self-proves first (exit 9 on refusal).  exit: 0 ok | 3 usage |
  * 4 refused (envelope / fewer than two distinct points). */
@@ -79,12 +79,12 @@ fn parse_cd(s: u64, at: u64) -> u64 {
     return a2
 }
 fn usage() -> u64 {
-    ps("iii-line -- GAMMA-1, the exact line: points are canonical surds, order is the\n" as u64)
+    ps("iii line -- GAMMA-1, the exact line: points are canonical surds, order is the\n" as u64)
     ps("exact sign oracle, and the line SPEAKS its total order in EIDOLOS.\n\n" as u64)
-    ps("  iii-line prove                the self-proof (identity, exact order, two-path\n" as u64)
+    ps("  iii line prove                the self-proof (identity, exact order, two-path\n" as u64)
     ps("                                vs eid_plan, the speaking, order-freedom, refusal)\n" as u64)
-    ps("  iii-line order <pt> <pt> ...  a point is c:d (c sqrt d) or c:d+c:d\n\n" as u64)
-    ps("try the float-conflated pair:  iii-line order 1:1969+1:1971 2:1970\n" as u64)
+    ps("  iii line order <pt> <pt> ...  a point is c:d (c sqrt d) or c:d+c:d\n\n" as u64)
+    ps("try the float-conflated pair:  iii line order 1:1969+1:1971 2:1970\n" as u64)
     ps("exit: 0 ok | 3 usage | 4 refused | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }

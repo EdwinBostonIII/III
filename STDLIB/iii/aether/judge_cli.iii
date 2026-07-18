@@ -1,29 +1,29 @@
-/* STDLIB/iii/aether/judge_cli.iii -- iii-judge: THE JUDGE (AUTARKEIA Alpha-2).
+/* STDLIB/iii/aether/judge_cli.iii -- iii judge: THE JUDGE (AUTARKEIA Alpha-2).
  *
  * The verdict made sovereign.  Until now every "PASS" in this tree was declared by bash
  * (grep -q / cut / [ $rc = $want ]) -- the software that certifies III correct was not III.
- * iii-judge repatriates the four faculties of judgement into III itself:
+ * iii judge repatriates the four faculties of judgement into III itself:
  *
- *   iii-judge run  <want_rc> <cmdline>            RC-SOVEREIGNTY
+ *   iii judge run  <want_rc> <cmdline>            RC-SOVEREIGNTY
  *       Spawn <cmdline> through the STOMA process broker (aether/stoma_proc), capture the
  *       FULL-WIDTH exit code straight from the OS (GetExitCodeProcess), and bind the receipt
  *       to the SHA-256 of the invoked executable.  bash never touches the code -- a complicit
  *       launcher that echoes "PASS" or doctors $? cannot move the verdict.  exit 0 iff the
  *       child truly exited want_rc and did not time out.
  *
- *   iii-judge hash <file> [expected_hex]          ARTIFACT-SOVEREIGNTY
+ *   iii judge hash <file> [expected_hex]          ARTIFACT-SOVEREIGNTY
  *       SHA-256 (cad suite 0) of <file>.  With expected_hex, exit 0 iff they match -- the
  *       artifact is bound to its digest, not to a filename a launcher could swap.
  *
- *   iii-judge pin  <ledger> <key> <value> up|down MONOTONE RATCHET
+ *   iii judge pin  <ledger> <key> <value> up|down MONOTONE RATCHET
  *       A one-way ledger: 'up' refuses any value below the pinned one, 'down' refuses any
  *       above.  A regression cannot be pinned as progress.  exit 0 = pinned, 1 = ratchet break.
  *
- *   iii-judge fold <receipts>                     MERKLE FOLD (coverage-sovereignty)
+ *   iii judge fold <receipts>                     MERKLE FOLD (coverage-sovereignty)
  *       Chain every receipt row into a single root  h_k = SHA256(h_{k-1} || row_k), h_0 = 0^32.
  *       One dropped or altered row changes the root -- coverage becomes a single sealed pin.
  *
- * A LEAF tool (the build_iii_testament mold): pinned iiis-2 + committed archive; the stoma_proc
+ * A LEAF tool (the build_iii.sh union): pinned iiis-2 + committed archive; the stoma_proc
  * organ links as a standalone object; cad_* resolve from libiii_native.a.
  *
  * Hexad: kind_essence.  Ring: R0.  NIH: composes aether/stoma_proc (-> kernel32 spawn) + numera/cad.
@@ -195,11 +195,11 @@ fn first_token(src: u64) -> u32 {
 }
 
 fn usage() -> u64 {
-    ps("iii-judge -- THE JUDGE, sovereign verdicts (DOCS/III-AUTARKEIA-MAP.md Alpha-2)\n" as u64)
-    ps("  iii-judge run  <want_rc> <cmdline>       spawn, capture full-width OS exit code\n" as u64)
-    ps("  iii-judge hash <file> [expected_hex]     SHA-256 of a file (artifact binding)\n" as u64)
-    ps("  iii-judge pin  <ledger> <key> <value> up|down   monotone ratchet\n" as u64)
-    ps("  iii-judge fold <receipts>                Merkle fold of receipt rows\n" as u64)
+    ps("iii judge -- THE JUDGE, sovereign verdicts (DOCS/III-AUTARKEIA-MAP.md Alpha-2)\n" as u64)
+    ps("  iii judge run  <want_rc> <cmdline>       spawn, capture full-width OS exit code\n" as u64)
+    ps("  iii judge hash <file> [expected_hex]     SHA-256 of a file (artifact binding)\n" as u64)
+    ps("  iii judge pin  <ledger> <key> <value> up|down   monotone ratchet\n" as u64)
+    ps("  iii judge fold <receipts>                Merkle fold of receipt rows\n" as u64)
     return 2u64
 }
 
@@ -230,7 +230,7 @@ fn verb_run(want: u64, cmd: u64) -> u64 {
 /* ---- hash: ARTIFACT-SOVEREIGNTY ---------------------------------------------------------- */
 fn verb_hash(path: u64, want_hex: u64) -> u64 {
     let n : u64 = rdfile(path, (&MSG) as u64, BUFCAP)
-    if n == INVALID_H { ps("iii-judge: cannot read: " as u64)  ps(path)  nl()  return 2u64 }
+    if n == INVALID_H { ps("iii judge: cannot read: " as u64)  ps(path)  nl()  return 2u64 }
     if digest((&MSG) as u64, n) != 0u32 { return 3u64 }
     hexof((&DIG) as u64)
     ps("JUDGE hash " as u64)  ps(path)  ps(" = " as u64)  ps((&HEX) as u64)
@@ -315,7 +315,7 @@ fn verb_pin(ledger: u64, key: u64, value: u64, up: u32) -> u64 {
         while dk > 0u64 { dk = dk - 1u64  LOUT[lo] = DEC[dk]  lo = lo + 1u64 }
     }
     LOUT[lo] = 10u8  lo = lo + 1u64
-    if wrfile(ledger, (&LOUT) as u64, lo) != 0u32 { ps("iii-judge: cannot write ledger\n" as u64)  return 3u64 }
+    if wrfile(ledger, (&LOUT) as u64, lo) != 0u32 { ps("iii judge: cannot write ledger\n" as u64)  return 3u64 }
     ps("JUDGE pin " as u64)  ps(key)  ps(" old=" as u64)  pd(oldval)  ps(" new=" as u64)  pd(value)
     if up == 1u32 { ps(" up" as u64) } else { ps(" down" as u64) }
     ps(" verdict=PASS\n" as u64)
@@ -325,7 +325,7 @@ fn verb_pin(ledger: u64, key: u64, value: u64, up: u32) -> u64 {
 /* ---- fold: MERKLE FOLD ------------------------------------------------------------------- */
 fn verb_fold(receipts: u64) -> u64 {
     let n : u64 = rdfile(receipts, (&MSG) as u64, BUFCAP)
-    if n == INVALID_H { ps("iii-judge: cannot read: " as u64)  ps(receipts)  nl()  return 2u64 }
+    if n == INVALID_H { ps("iii judge: cannot read: " as u64)  ps(receipts)  nl()  return 2u64 }
     let mut i : u64 = 0u64
     while i < 32u64 { ROOT[i] = 0u8  i = i + 1u64 }
     let mut rows : u64 = 0u64
@@ -357,7 +357,7 @@ fn judge_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "run" as u64) == 1u32 {
         if argc < 4i32 { return usage() }
         let want : u64 = atou(av[2u64])
-        if want == INVALID_H { ps("iii-judge: bad want_rc\n" as u64)  return 2u64 }
+        if want == INVALID_H { ps("iii judge: bad want_rc\n" as u64)  return 2u64 }
         return verb_run(want, av[3u64])
     }
     if streq(cmd, "hash" as u64) == 1u32 {
@@ -369,11 +369,11 @@ fn judge_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "pin" as u64) == 1u32 {
         if argc < 6i32 { return usage() }
         let value : u64 = atou(av[4u64])
-        if value == INVALID_H { ps("iii-judge: bad value\n" as u64)  return 2u64 }
+        if value == INVALID_H { ps("iii judge: bad value\n" as u64)  return 2u64 }
         let mut up : u32 = 2u32
         if streq(av[5u64], "up" as u64) == 1u32 { up = 1u32 }
         if streq(av[5u64], "down" as u64) == 1u32 { up = 0u32 }
-        if up == 2u32 { ps("iii-judge: dir must be up|down\n" as u64)  return 2u64 }
+        if up == 2u32 { ps("iii judge: dir must be up|down\n" as u64)  return 2u64 }
         return verb_pin(av[2u64], av[3u64], value, up)
     }
     if streq(cmd, "fold" as u64) == 1u32 {

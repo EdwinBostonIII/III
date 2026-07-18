@@ -1,8 +1,8 @@
-/* COMPILER/BOOT/ergon_main.iii -- iii-ergon: THE ERGON's tool face.
+/* COMPILER/BOOT/ergon_main.iii -- iii ergon: THE ERGON's tool face.
  *
- *   iii-ergon prove     the organ's own instruments (fault-map injectivity with
+ *   iii ergon prove     the organ's own instruments (fault-map injectivity with
  *                       teeth, fold determinism/sensitivity)
- *   iii-ergon census    THE WORK-PROOF: the whole standing fleet re-derives its
+ *   iii ergon census    THE WORK-PROOF: the whole standing fleet re-derives its
  *                       laws in ONE process -- introspection's 5-organ roster,
  *                       kardia, soma, doxa, and the absorbed iscene family --
  *                       then the FORM LEDGER (the ancestral batch layer still on
@@ -92,19 +92,19 @@ fn streq(a: u64, b: u64) -> u32 {
     return 1u32
 }
 fn usage() -> u64 {
-    ps("iii-ergon -- THE ERGON: the machine proven by its WORK\n\n" as u64)
-    ps("  iii-ergon prove     the organ's own instruments (fault map, fold), with teeth\n" as u64)
-    ps("  iii-ergon census    the whole standing fleet re-derives its laws in one process,\n" as u64)
+    ps("iii ergon -- THE ERGON: the machine proven by its WORK\n\n" as u64)
+    ps("  iii ergon prove     the organ's own instruments (fault map, fold), with teeth\n" as u64)
+    ps("  iii ergon census    the whole standing fleet re-derives its laws in one process,\n" as u64)
     ps("                      then the FORM LEDGER (ancestral batch debt, measured)\n" as u64)
-    ps("  iii-ergon deep      the die's heavy faculties (nomos/oneiros/reversible/redeem/\n" as u64)
+    ps("  iii ergon deep      the die's heavy faculties (nomos/oneiros/reversible/redeem/\n" as u64)
     ps("                      symmetry/physis/wire/presses) -- minutes of wall, on demand\n" as u64)
-    ps("  iii-ergon autarkeia the sealed spine + the covenant (testament emit/re-derive,\n" as u64)
+    ps("  iii ergon autarkeia the sealed spine + the covenant (testament emit/re-derive,\n" as u64)
     ps("                      tamper battery, generation chain, covenant equation + quorum)\n" as u64)
-    ps("  iii-ergon zkaudit   every zk soundness claim matches its query/field knobs (+ teeth)\n" as u64)
-    ps("  iii-ergon author    THE NAMED-DEFICIT LAW (admit/verify/fold + 8 adversarial teeth; nobody steers)\n" as u64)
-    ps("  iii-ergon evergreen every program self-builds sovereignly (witness=0) + runs; no stubs; Γ invariant\n" as u64)
-    ps("  iii-ergon observe   core_H by OBSERVATION (independent SHA-256, native AND interp substrates)\n" as u64)
-    ps("  iii-ergon conscience [filter]  PHI-3, THE EXIT GATE: every discovered gate (run_*.sh +\n" as u64)
+    ps("  iii ergon zkaudit   every zk soundness claim matches its query/field knobs (+ teeth)\n" as u64)
+    ps("  iii ergon author    THE NAMED-DEFICIT LAW (admit/verify/fold + 8 adversarial teeth; nobody steers)\n" as u64)
+    ps("  iii ergon evergreen every program self-builds sovereignly (witness=0) + runs; no stubs; Γ invariant\n" as u64)
+    ps("  iii ergon observe   core_H by OBSERVATION (independent SHA-256, native AND interp substrates)\n" as u64)
+    ps("  iii ergon conscience [filter]  PHI-3, THE EXIT GATE: every discovered gate (run_*.sh +\n" as u64)
     ps("                      *_gate.sh + build-spines + the sibling verbs) runs to its OS-true\n" as u64)
     ps("                      exit code; logs at COMPILED/_conscience_*.log; rows folded to ONE\n" as u64)
     ps("                      receipt.  HOURS of wall; the PHI-3 claim is only the unfiltered rite.\n\n" as u64)
@@ -143,7 +143,7 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
     if streq(cmd, "observe" as u64) == 1u32 {
         ps("== THE OBSERVE VERB: core_H by OBSERVATION, algorithm- and substrate-independent ==\n" as u64)
         ps("  (an independent SHA-256 sharing zero code with cad, run on native gcc AND the\n" as u64)
-        ps("   iiisv->SVIR->svir_interp reference path, recomputes iii-judge's fold and reproduces\n" as u64)
+        ps("   iiisv->SVIR->svir_interp reference path, recomputes iii judge's fold and reproduces\n" as u64)
         ps("   the covenant core bit-exact -- twice over; a tampered core refused on both)\n" as u64)
         let o : u32 = erg_observe()
         if o != 0u32 {
@@ -295,7 +295,7 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
         ps("  (the gate set DISCOVERED from the living tree: run_*.sh + *_gate.sh across the four\n" as u64)
         ps("   gate dirs + the two build-spines + the ERGON's own sibling verbs; each spawned\n" as u64)
         ps("   SEQUENTIALLY to its OS-true exit code under a 2h cap; logs at COMPILED/_conscience_*.log;\n" as u64)
-        ps("   the rows folded by iii-judge into ONE receipt root)\n" as u64)
+        ps("   the rows folded by iii judge into ONE receipt root)\n" as u64)
         let mut filt : u64 = 0u64
         if argc >= 3i32 { filt = av[2u64] }
         if filt != 0u64 { ps("  FILTER (substring): a subset run -- the PHI-3 claim is ONLY the unfiltered rite\n" as u64) }
@@ -311,7 +311,7 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
         pu(erg_con_excl_n())
         putchar(10i32)
         if erg_con_receipt_len() == 64u64 {
-            ps("  receipt (iii-judge fold of the rite rows): " as u64)
+            ps("  receipt (iii judge fold of the rite rows): " as u64)
             let mut ri : u64 = 0u64
             while ri < 64u64 { putchar(erg_con_receipt_at(ri) as i32)   ri = ri + 1u64 }
             putchar(10i32)

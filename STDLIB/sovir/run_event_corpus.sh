@@ -27,15 +27,15 @@ case "${OS:-}${OSTYPE:-}" in
 esac
 IIIS="${IIIS:-$III_ROOT/COMPILED/iiis-2${BIN_SUFFIX}}"
 LIB="$III_ROOT/STDLIB/build/iii/libiii_native.a"
-TOOL="$III_ROOT/COMPILED/iii-events${BIN_SUFFIX}"
-EVAL_BIN="$III_ROOT/COMPILED/iii_eval${BIN_SUFFIX}"   # the Theta meaning-bearer -- a THIRD oracle,
+TOOL="$III_ROOT/COMPILED/iii${BIN_SUFFIX}"            # THE ORGANISM (events = route V skill)
+EVAL_BIN="$III_ROOT/COMPILED/iii${BIN_SUFFIX}"        # the Theta meaning-bearer -- a THIRD oracle,
                                                        # independent of cg_r3/x86 exactly as route V is
 [[ -x "$IIIS" && -f "$LIB" ]] || { echo "[event-corpus] FATAL: missing toolchain"; exit 2; }
 say() { printf '%s\n' "$*"; }
 
 # stage [1]: the standing tool must exist and be current (rebuild via its leaf script -- no cascade).
 if [[ ! -x "$TOOL" ]]; then
-    bash "$BOOT/build_iii_events.sh" >/dev/null 2>&1 || { echo "[event-corpus] FATAL: cannot build iii-events"; exit 2; }
+    bash "$BOOT/build_iii.sh" >/dev/null 2>&1 || { echo "[event-corpus] FATAL: cannot build the organism (iii)"; exit 2; }
 fi
 say "[event-corpus] iii-events = $TOOL"
 
@@ -57,14 +57,14 @@ for f in "$CORPUS"/[0-9]*.iii "$III_ROOT"/COMPILER/BOOT/stage1_corpus/[0-9]*.iii
     gcc "$W/n.o" "$LIB" -lws2_32 -lkernel32 -o "$W/n$BIN_SUFFIX" >/dev/null 2>&1 || { echo "$base native-nolink" >> "$W/_frontier.list"; FR_OTHER=$((FR_OTHER+1)); continue; }
     cp "$W/n$BIN_SUFFIX" "/tmp/ec_n_$$$BIN_SUFFIX"; timeout 60 "/tmp/ec_n_$$$BIN_SUFFIX" >/dev/null 2>&1; RN=$?; rm -f "/tmp/ec_n_$$$BIN_SUFFIX"
     # ROUTE V challenger (the standing tool, in-process front-end + event executor)
-    timeout 60 "$TOOL" --quiet "$f" >/dev/null 2>&1; RV=$?
+    timeout 60 "$TOOL" events --quiet "$f" >/dev/null 2>&1; RV=$?
     if [[ "$RN" == "$RV" ]]; then
         AGREE=$((AGREE+1)); echo "$base rc=$RN" >> "$W/_agree.list"
         # THIRD ORACLE: eval.iii (the Theta bearer).  213/214 = eval-abstain (out of its fragment) -- not
         # a disagreement.  A real eval verdict that differs from route V is an XMODE break: two bearers
         # BOTH independent of cg_r3/x86 must never split (that would be the common-mode blindness Theta names).
         if [[ -x "$EVAL_BIN" ]]; then
-            timeout 60 "$EVAL_BIN" "$f" >/dev/null 2>&1; RE=$?
+            timeout 60 "$EVAL_BIN" eval "$f" >/dev/null 2>&1; RE=$?
             if [[ "$RE" == 213 || "$RE" == 214 ]]; then :   # eval abstains -- fine, native==routeV stands
             elif [[ "$RE" == "$RV" ]]; then THREEWAY=$((THREEWAY+1))
             else XMODE=$((XMODE+1)); say "XMODE-SPLIT $base: eval=$RE route-V=$RV (two cg_r3-independent bearers disagree)"; fi

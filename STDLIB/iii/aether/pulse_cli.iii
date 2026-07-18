@@ -1,7 +1,7 @@
-/* STDLIB/iii/aether/pulse_cli.iii -- iii-pulse: THE BIRTH-RITE ATTESTOR (ENTELECHEIA Ε0).
+/* STDLIB/iii/aether/pulse_cli.iii -- iii pulse: THE BIRTH-RITE ATTESTOR (ENTELECHEIA Ε0).
  *
- *   iii-pulse hash   <image>                     -- print the streaming mhash of a binary image
- *   iii-pulse attest <image> [expect-hex|none]   -- run the birth-rite; exit = the gate verdict
+ *   iii pulse hash   <image>                     -- print the streaming mhash of a binary image
+ *   iii pulse attest <image> [expect-hex|none]   -- run the birth-rite; exit = the gate verdict
  *
  * EXIT (the gate verdict, distinct per failure class):
  *   0 OK (green) | 1 seal (image unreadable) | 2 cap (identity pin mismatch) |
@@ -98,8 +98,8 @@ fn print_sil() -> i32 {
 
 fn pulse_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 3i32 {
-        ps("iii-pulse hash <image>\n" as u64)
-        ps("iii-pulse attest <image> [expect-hex|none]\n" as u64)
+        ps("iii pulse hash <image>\n" as u64)
+        ps("iii pulse attest <image> [expect-hex|none]\n" as u64)
         return 1u64
     }
     let av  : *u64 = argv as *u64
@@ -108,7 +108,7 @@ fn pulse_enter(argc: i32, argv: u64) -> u64 @export {
 
     if streq(cmd, "hash" as u64) == 1u32 {
         let rd : i64 = pulse_image_hash(path, (&CLI_MH) as u64)
-        if rd <= 0i64 { ps("iii-pulse: cannot read image\n" as u64)  return 2u64 }
+        if rd <= 0i64 { ps("iii pulse: cannot read image\n" as u64)  return 2u64 }
         let p : *u8 = (&CLI_MH as u64) as *u8
         let mut i : u64 = 0u64
         while i < 32u64 { ph_byte(p[i] as u32)  i = i + 1u64 }
@@ -121,7 +121,7 @@ fn pulse_enter(argc: i32, argv: u64) -> u64 @export {
         let mut expp : u64 = 0u64
         if expraw != 0u64 {
             if parse_expect(expraw, (&EXPECT) as u64) != 0i32 {
-                ps("iii-pulse: expect must be 64 hex chars\n" as u64)
+                ps("iii pulse: expect must be 64 hex chars\n" as u64)
                 return 1u64
             }
             expp = (&EXPECT) as u64
@@ -136,6 +136,6 @@ fn pulse_enter(argc: i32, argv: u64) -> u64 @export {
         return v as u64
     }
 
-    ps("iii-pulse: unknown command (hash | attest)\n" as u64)
+    ps("iii pulse: unknown command (hash | attest)\n" as u64)
     return 1u64
 }

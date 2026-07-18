@@ -1,40 +1,40 @@
-/* STDLIB/iii/aether/exact_cli.iii -- iii-exact: EXACT SIGN OF A SUM OF SQUARE ROOTS, on your own terms.
+/* STDLIB/iii/aether/exact_cli.iii -- iii exact: EXACT SIGN OF A SUM OF SQUARE ROOTS, on your own terms.
  *
- *   iii-exact "<a1> <b1> <a2> <b2> ...">     decide the sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...  EXACTLY
- *   iii-exact --cmp "<terms A>" "<terms B>"  decide whether (sum A) <, =, or > (sum B), EXACTLY
- *   iii-exact --denest <a> <b> <d>           is a + b*sqrt(d) a PERFECT SQUARE in Q(sqrt(d))?  If so print
+ *   iii exact "<a1> <b1> <a2> <b2> ...">     decide the sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...  EXACTLY
+ *   iii exact --cmp "<terms A>" "<terms B>"  decide whether (sum A) <, =, or > (sum B), EXACTLY
+ *   iii exact --denest <a> <b> <d>           is a + b*sqrt(d) a PERFECT SQUARE in Q(sqrt(d))?  If so print
  *                                            the principal root x + y*sqrt(d), re-verified by exact
  *                                            re-squaring IN THIS PROCESS; if not, certify the extension.
- *   iii-exact --roots "<c0 c1 ... cd>" [lo hi]    isolate ALL real roots of c0 + c1*x + ... + cd*x^d into
+ *   iii exact --roots "<c0 c1 ... cd>" [lo hi]    isolate ALL real roots of c0 + c1*x + ... + cd*x^d into
  *                                            disjoint rational intervals, each with its exact MULTIPLICITY
  *                                            (even = TOUCHES the axis, structurally invisible to every
  *                                            sign-sampler; odd = crosses).  The i64 Sturm chain PROPOSES;
  *                                            the INDEPENDENT bigint Sturm chain re-certifies every printed
  *                                            claim in this process, or the tool refuses.
- *   iii-exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE algebraic number "the unique root of
+ *   iii exact --alg-sign "<c0 ... cd>" <lo> <hi>  exact sign of THE algebraic number "the unique root of
  *                                            this polynomial in (lo, hi]" -- AT THE ENGINE'S FULL CLASS
  *                                            (degree <= 3840, ~4930-digit coefficients), decided by two
  *                                            exact faculties (one-count vs dyadic refinement, the DEEP
  *                                            TIER descending to any depth memory affords) which must
  *                                            agree; the deg<=3 algnum register file rides as a third.
- *   iii-exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER WITH DECIDABLE EQUALITY of two real
+ *   iii exact --alg-cmp "<A>" <lo> <hi> "<B>" <lo> <hi>   TOTAL ORDER WITH DECIDABLE EQUALITY of two real
  *                                            algebraic numbers, AT THE SAME FULL CLASS.  Equality (the
  *                                            zero problem) is decided by the sturm_big PAIR-GCD door --
  *                                            a shared root in the window overlap -- NEVER by refining to
  *                                            an epsilon; order by shared-depth refinement, distinctness
  *                                            already proven, DESCENDING WITHOUT A DEPTH CAP through the
  *                                            bigint-numerator deep tier (memory is the only boundary).
- *   iii-exact --alg-add "<A>" <lo> <hi> "<B>" <lo> <hi>   THE ARITHMETIC CLOSURE: construct the integer
- *   iii-exact --alg-mul "<A>" <lo> <hi> "<B>" <lo> <hi>   defining polynomial of alpha+beta / alpha*beta
+ *   iii exact --alg-add "<A>" <lo> <hi> "<B>" <lo> <hi>   THE ARITHMETIC CLOSURE: construct the integer
+ *   iii exact --alg-mul "<A>" <lo> <hi> "<B>" <lo> <hi>   defining polynomial of alpha+beta / alpha*beta
  *                                            (certified-CRT resultant, coefficients beyond i64 delivered
  *                                            as limb rows) AND the exact isolating window that pins WHICH
  *                                            root -- roots are now closed under + and * on this surface.
  *                                            Degree <= 1536 each, degA*degB <= 3072, EITHER sign (a
  *                                            sign-definite refinement phase separates operands from 0).
- *   iii-exact --alg-inv "<A>" <lo> <hi>      THE FIELD COMPLETION: 1/alpha's defining polynomial (the
+ *   iii exact --alg-inv "<A>" <lo> <hi>      THE FIELD COMPLETION: 1/alpha's defining polynomial (the
  *                                            exact reversal) + certified window, either sign; with
  *                                            add/mul this closes +, *, and inverse (hence division).
- *   iii-exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 3840,
+ *   iii exact --roots-big "<c0 ... cd>" <lo> <hi>   isolation PAST the i64 chain wall: degree <= 3840,
  *                                            coefficients to ~4930 digits (256 limbs -- the engine's
  *                                            true row capacity), counted and isolated through the
  *                                            bigint Sturm chain (gate 2185's tier).
@@ -53,10 +53,10 @@
  * a double gets wrong for the near-degenerate case:  2*sqrt(1000001) - 2*sqrt(1000000) - ... balanced pairs.
  *
  * EXAMPLES
- *   iii-exact "1 2 -1 2"          -> 0    (sqrt 2 - sqrt 2 = exactly zero)
- *   iii-exact "3 2 -2 3"          -> +1   (3 sqrt2 = 4.2426.. > 2 sqrt3 = 3.4641..)
- *   iii-exact "1 2 1 3 -1 5"      -> -1   (sqrt2 + sqrt3 < sqrt5?  the tool decides EXACTLY)
- *   iii-exact --cmp "5 3" "1 75"  -> 0    (5 sqrt3 == sqrt75, since 75 = 25*3)
+ *   iii exact "1 2 -1 2"          -> 0    (sqrt 2 - sqrt 2 = exactly zero)
+ *   iii exact "3 2 -2 3"          -> +1   (3 sqrt2 = 4.2426.. > 2 sqrt3 = 3.4641..)
+ *   iii exact "1 2 1 3 -1 5"      -> -1   (sqrt2 + sqrt3 < sqrt5?  the tool decides EXACTLY)
+ *   iii exact --cmp "5 3" "1 75"  -> 0    (5 sqrt3 == sqrt75, since 75 = 25*3)
  *
  * exit (sign modes): 1 = NEGATIVE | 0 = EXACTLY ZERO | 2 = POSITIVE | 3 = usage/parse error.
  * (sign in {-1,0,+1} maps to exit {1,0,2}: a shell can branch `case $? in 0) zero;; 1) neg;; 2) pos;; esac`.)
@@ -556,7 +556,7 @@ fn rt_print(n1: i64, deg: i64, lo: i64, hi: i64, wset: u32) -> u64 {
  * wset = 0 -> derive the window from the Cauchy bound (covers ALL real roots, strictly). */
 fn emit_roots(coeffs: u64, nc: u64, wlo: i64, whi: i64, wset: u32) -> u64 {
     let deg : i64 = poly_deg(coeffs, nc)
-    if deg < 0i64 { ps("iii-exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
+    if deg < 0i64 { ps("iii exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
     if deg == 0i64 { ps("DISTINCT REAL ROOTS: 0   (nonzero constant)\n" as u64)  return 0u64 }
     if deg > 7i64 { ps("ABSTAIN: degree > 7 is outside this surface's envelope -- refused, not guessed\n" as u64)  return 5u64 }
     let mx : i64 = poly_maxabs(coeffs, deg)
@@ -571,7 +571,7 @@ fn emit_roots(coeffs: u64, nc: u64, wlo: i64, whi: i64, wset: u32) -> u64 {
         lo = 0i64 - b
         hi = b
     }
-    if lo >= hi { ps("iii-exact: --roots window needs lo < hi\n" as u64)  return 3u64 }
+    if lo >= hi { ps("iii exact: --roots window needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 1048576i64) { ps("ABSTAIN: window endpoint outside the envelope\n" as u64)  return 5u64 }
     if hi > 1048576i64 { ps("ABSTAIN: window endpoint outside the envelope\n" as u64)  return 5u64 }
     sturm_build(coeffs, deg)
@@ -1023,13 +1023,13 @@ fn rb_deepsplit(l0: i64, h0: i64, k0: i64, dmaxr: i64) -> u64 {
 
 fn emit_alg_sign2(str: u64, lo: i64, hi: i64) -> u64 {
     let pn : u64 = rb_parse(str)
-    if pn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
+    if pn == PARSEFAIL { ps("iii exact: parse error in the coefficient list (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
     if pn == LIMBFAIL { ps("ABSTAIN: a coefficient exceeds 256 limbs -- outside the engine's row envelope\n" as u64)  return 5u64 }
-    if pn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+    if pn == 0u64 { ps("iii exact: empty coefficient list\n" as u64)  return 3u64 }
     let deg : i64 = gb_deg(pn)
-    if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
+    if deg < 1i64 { ps("iii exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
     if deg > 3840i64 { ps("ABSTAIN: degree > 3840 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
-    if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
+    if lo >= hi { ps("iii exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if hi > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if gb_build(deg) < 0i64 { ps("ABSTAIN: the bigint chain refused the input polynomial\n" as u64)  return 5u64 }
@@ -1242,22 +1242,22 @@ fn cmp_core(dga: i64, dgb: i64, la: i64, ha: i64, lb: i64, hb: i64) -> u64 {
 fn emit_alg_cmp2(stra: u64, la: i64, ha: i64, strb: u64, lb: i64, hb: i64) -> u64 {
     /* parse A into the GB rows, stash to GB2; then parse B into GB */
     let pa : u64 = rb_parse(stra)
-    if pa == PARSEFAIL { ps("iii-exact: parse error in polynomial A (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
+    if pa == PARSEFAIL { ps("iii exact: parse error in polynomial A (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
     if pa == LIMBFAIL { ps("ABSTAIN: a coefficient of A exceeds 256 limbs -- outside the row envelope\n" as u64)  return 5u64 }
-    if pa == 0u64 { ps("iii-exact: empty polynomial A\n" as u64)  return 3u64 }
+    if pa == 0u64 { ps("iii exact: empty polynomial A\n" as u64)  return 3u64 }
     let dga : i64 = gb_deg(pa)
-    if dga < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (A)\n" as u64)  return 3u64 }
+    if dga < 1i64 { ps("iii exact: --alg needs a nonconstant polynomial (A)\n" as u64)  return 3u64 }
     if dga > 3840i64 { ps("ABSTAIN: degree(A) > 3840 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
     gb_stash2(dga)
     let pb : u64 = rb_parse(strb)
-    if pb == PARSEFAIL { ps("iii-exact: parse error in polynomial B (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
+    if pb == PARSEFAIL { ps("iii exact: parse error in polynomial B (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
     if pb == LIMBFAIL { ps("ABSTAIN: a coefficient of B exceeds 256 limbs -- outside the row envelope\n" as u64)  return 5u64 }
-    if pb == 0u64 { ps("iii-exact: empty polynomial B\n" as u64)  return 3u64 }
+    if pb == 0u64 { ps("iii exact: empty polynomial B\n" as u64)  return 3u64 }
     let dgb : i64 = gb_deg(pb)
-    if dgb < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial (B)\n" as u64)  return 3u64 }
+    if dgb < 1i64 { ps("iii exact: --alg needs a nonconstant polynomial (B)\n" as u64)  return 3u64 }
     if dgb > 3840i64 { ps("ABSTAIN: degree(B) > 3840 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
-    if la >= ha { ps("iii-exact: --alg interval needs lo < hi (A)\n" as u64)  return 3u64 }
-    if lb >= hb { ps("iii-exact: --alg interval needs lo < hi (B)\n" as u64)  return 3u64 }
+    if la >= ha { ps("iii exact: --alg interval needs lo < hi (A)\n" as u64)  return 3u64 }
+    if lb >= hb { ps("iii exact: --alg interval needs lo < hi (B)\n" as u64)  return 3u64 }
     if la < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if ha > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if lb < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
@@ -1534,11 +1534,11 @@ fn aa_sqrtchk(op: i64, ba: i64, bb: i64) -> u64 {
  * isolating interval contains 0 -- pure arithmetic, since the interval holds only ONE root). */
 fn alg2_load(which: i64, coeffs: u64, nc: u64, lo: i64, hi: i64) -> u64 {
     let deg : i64 = poly_deg(coeffs, nc)
-    if deg < 1i64 { ps("iii-exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
+    if deg < 1i64 { ps("iii exact: --alg needs a nonconstant polynomial\n" as u64)  return 3u64 }
     if deg > 1536i64 { ps("ABSTAIN: degree > 1536 is outside the arithmetic-verb envelope -- refused, not guessed\n" as u64)  return 5u64 }
     let mx : i64 = poly_maxabs(coeffs, deg)
     if mx >= 1152921504606846976i64 { ps("ABSTAIN: a |coefficient| >= 2^60 is outside the envelope\n" as u64)  return 5u64 }
-    if lo >= hi { ps("iii-exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
+    if lo >= hi { ps("iii exact: --alg interval needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 1024i64) { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     if hi > 1024i64 { ps("ABSTAIN: interval endpoint outside the envelope (|.| <= 1024)\n" as u64)  return 5u64 }
     let bc : i64 = sturm2_build(coeffs, deg)
@@ -2114,14 +2114,14 @@ fn rb_mults(deg: i64, n: i64) -> u64 {
  * i64 chain wall (gate 2185).  The window is required and explicit: all claims are about (lo, hi]. */
 fn emit_roots_big(str: u64, lo: i64, hi: i64) -> u64 {
     let pn : u64 = rb_parse(str)
-    if pn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
+    if pn == PARSEFAIL { ps("iii exact: parse error in the coefficient list (decimal integers, <= 4930 digits each)\n" as u64)  return 3u64 }
     if pn == LIMBFAIL { ps("ABSTAIN: a coefficient exceeds 256 limbs -- outside the engine's row envelope\n" as u64)  return 5u64 }
-    if pn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+    if pn == 0u64 { ps("iii exact: empty coefficient list\n" as u64)  return 3u64 }
     let deg : i64 = gb_deg(pn)
-    if deg < 0i64 { ps("iii-exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
+    if deg < 0i64 { ps("iii exact: the zero polynomial (every real is a root) -- refused\n" as u64)  return 3u64 }
     if deg == 0i64 { ps("DISTINCT REAL ROOTS: 0   (nonzero constant)\n" as u64)  return 0u64 }
     if deg > 3840i64 { ps("ABSTAIN: degree > 3840 is outside the bigint-chain envelope -- refused, not guessed\n" as u64)  return 5u64 }
-    if lo >= hi { ps("iii-exact: --roots-big window needs lo < hi\n" as u64)  return 3u64 }
+    if lo >= hi { ps("iii exact: --roots-big window needs lo < hi\n" as u64)  return 3u64 }
     if lo < (0i64 - 17592186044416i64) { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
     if hi > 17592186044416i64 { ps("ABSTAIN: window endpoint outside the envelope (|.| <= 2^44)\n" as u64)  return 5u64 }
     let bc : i64 = gb_build(deg)
@@ -2349,19 +2349,19 @@ fn emit_roots_big(str: u64, lo: i64, hi: i64) -> u64 {
 var AP6 : [i64; 4]   var APN : [u64; 2]
 fn parse_alg6(a2: u64, a3: u64, a4: u64, a5: u64, a6: u64, a7: u64) -> u64 {
     let ca : u64 = parse_list(a2, (&RC) as u64)
-    if ca == PARSEFAIL { ps("iii-exact: parse error in polynomial A\n" as u64)  return 3u64 }
-    if ca == 0u64 { ps("iii-exact: empty polynomial A\n" as u64)  return 3u64 }
+    if ca == PARSEFAIL { ps("iii exact: parse error in polynomial A\n" as u64)  return 3u64 }
+    if ca == 0u64 { ps("iii exact: empty polynomial A\n" as u64)  return 3u64 }
     let la : i64 = parse_one(a3)
-    if P1_OK != 1u32 { ps("iii-exact: parse error in A's lo\n" as u64)  return 3u64 }
+    if P1_OK != 1u32 { ps("iii exact: parse error in A's lo\n" as u64)  return 3u64 }
     let ha : i64 = parse_one(a4)
-    if P1_OK != 1u32 { ps("iii-exact: parse error in A's hi\n" as u64)  return 3u64 }
+    if P1_OK != 1u32 { ps("iii exact: parse error in A's hi\n" as u64)  return 3u64 }
     let cb : u64 = parse_list(a5, (&RC2) as u64)
-    if cb == PARSEFAIL { ps("iii-exact: parse error in polynomial B\n" as u64)  return 3u64 }
-    if cb == 0u64 { ps("iii-exact: empty polynomial B\n" as u64)  return 3u64 }
+    if cb == PARSEFAIL { ps("iii exact: parse error in polynomial B\n" as u64)  return 3u64 }
+    if cb == 0u64 { ps("iii exact: empty polynomial B\n" as u64)  return 3u64 }
     let lb : i64 = parse_one(a6)
-    if P1_OK != 1u32 { ps("iii-exact: parse error in B's lo\n" as u64)  return 3u64 }
+    if P1_OK != 1u32 { ps("iii exact: parse error in B's lo\n" as u64)  return 3u64 }
     let hb : i64 = parse_one(a7)
-    if P1_OK != 1u32 { ps("iii-exact: parse error in B's hi\n" as u64)  return 3u64 }
+    if P1_OK != 1u32 { ps("iii exact: parse error in B's hi\n" as u64)  return 3u64 }
     APN[0u64] = ca   APN[1u64] = cb
     AP6[0u64] = la   AP6[1u64] = ha   AP6[2u64] = lb   AP6[3u64] = hb
     return 9u64
@@ -2370,21 +2370,21 @@ fn parse_alg6(a2: u64, a3: u64, a4: u64, a5: u64, a6: u64, a7: u64) -> u64 {
 fn exact_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
-        ps("iii-exact -- EXACT sign of a sum of square roots (no floating point anywhere)\n\n" as u64)
-        ps("  iii-exact \"<a1> <b1> <a2> <b2> ...\"      sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...\n" as u64)
-        ps("  iii-exact --cmp \"<A terms>\" \"<B terms>\"   sign of (sum A) - (sum B)\n" as u64)
-        ps("  iii-exact --denest <a> <b> <d>            is a + b*sqrt(d) a perfect square in Q(sqrt(d))?\n" as u64)
-        ps("  iii-exact --roots \"<c0 c1 ... cd>\" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d\n" as u64)
+        ps("iii exact -- EXACT sign of a sum of square roots (no floating point anywhere)\n\n" as u64)
+        ps("  iii exact \"<a1> <b1> <a2> <b2> ...\"      sign of  a1*sqrt(b1) + a2*sqrt(b2) + ...\n" as u64)
+        ps("  iii exact --cmp \"<A terms>\" \"<B terms>\"   sign of (sum A) - (sum B)\n" as u64)
+        ps("  iii exact --denest <a> <b> <d>            is a + b*sqrt(d) a perfect square in Q(sqrt(d))?\n" as u64)
+        ps("  iii exact --roots \"<c0 c1 ... cd>\" [lo hi]   isolate ALL real roots of c0+c1*x+...+cd*x^d\n" as u64)
         ps("                                            (+ exact multiplicity), bigint-certified\n" as u64)
-        ps("  iii-exact --alg-sign \"<c0 ... cd>\" <lo> <hi>  sign of THE root isolated in (lo, hi]\n" as u64)
+        ps("  iii exact --alg-sign \"<c0 ... cd>\" <lo> <hi>  sign of THE root isolated in (lo, hi]\n" as u64)
         ps("                                            (deg <= 3840, coefficients to ~4930 digits)\n" as u64)
-        ps("  iii-exact --alg-cmp \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   order / EQUALITY of two algebraic numbers\n" as u64)
+        ps("  iii exact --alg-cmp \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   order / EQUALITY of two algebraic numbers\n" as u64)
         ps("                                            (same class; equality by the pair-gcd door)\n" as u64)
-        ps("  iii-exact --alg-add | --alg-mul \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   the defining polynomial +\n" as u64)
+        ps("  iii exact --alg-add | --alg-mul \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>   the defining polynomial +\n" as u64)
         ps("                                            certified window of alpha+beta / alpha*beta (closure;\n" as u64)
         ps("                                            deg <= 1536 each, degA*degB <= 3072, either sign)\n" as u64)
-        ps("  iii-exact --alg-inv \"<A>\" <lo> <hi>       the defining polynomial + certified window of 1/alpha\n" as u64)
-        ps("  iii-exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 3840, coefficients\n" as u64)
+        ps("  iii exact --alg-inv \"<A>\" <lo> <hi>       the defining polynomial + certified window of 1/alpha\n" as u64)
+        ps("  iii exact --roots-big \"<c0 .. cd>\" <lo> <hi>  isolation past the i64 wall: deg <= 3840, coefficients\n" as u64)
         ps("                                            to ~4930 digits (256 limbs)\n\n" as u64)
         ps("  a_i signed integer coefficient, b_i non-negative integer radicand.\n" as u64)
         ps("  exit (sign modes, --alg-sign): 1 NEGATIVE | 0 EXACTLY ZERO | 2 POSITIVE | 3 parse error.\n" as u64)
@@ -2397,22 +2397,22 @@ fn exact_enter(argc: i32, argv: u64) -> u64 @export {
     let a0 : *u8 = av[1u64] as *u8
     if a0[0u64] == 45u8 { if a0[1u64] == 45u8 {
         if a0[2u64] == 100u8 {                          /* "--denest" <a> <b> <d> */
-            if argc < 5i32 { ps("iii-exact: --denest needs three integers: a b d\n" as u64)  return 3u64 }
+            if argc < 5i32 { ps("iii exact: --denest needs three integers: a b d\n" as u64)  return 3u64 }
             let da : i64 = parse_one(av[2u64])
-            if P1_OK != 1u32 { ps("iii-exact: parse error in a\n" as u64)  return 3u64 }
+            if P1_OK != 1u32 { ps("iii exact: parse error in a\n" as u64)  return 3u64 }
             let db : i64 = parse_one(av[3u64])
-            if P1_OK != 1u32 { ps("iii-exact: parse error in b\n" as u64)  return 3u64 }
+            if P1_OK != 1u32 { ps("iii exact: parse error in b\n" as u64)  return 3u64 }
             let dd : i64 = parse_one(av[4u64])
-            if P1_OK != 1u32 { ps("iii-exact: parse error in d\n" as u64)  return 3u64 }
+            if P1_OK != 1u32 { ps("iii exact: parse error in d\n" as u64)  return 3u64 }
             return emit_denest(da, db, dd)
         }
         if a0[2u64] == 99u8 {                           /* "--cmp" <A> <B> */
-            if argc < 4i32 { ps("iii-exact: --cmp needs two term lists\n" as u64)  return 3u64 }
+            if argc < 4i32 { ps("iii exact: --cmp needs two term lists\n" as u64)  return 3u64 }
             /* A into [0,nA), then B with coefficients NEGATED appended -> sign(A - B) in one call */
             let nA : u64 = parse_terms(av[2u64], 0u64)
-            if nA == PARSEFAIL { ps("iii-exact: parse error in A\n" as u64)  return 3u64 }
+            if nA == PARSEFAIL { ps("iii exact: parse error in A\n" as u64)  return 3u64 }
             let nAB : u64 = parse_terms(av[3u64], nA)
-            if nAB == PARSEFAIL { ps("iii-exact: parse error in B\n" as u64)  return 3u64 }
+            if nAB == PARSEFAIL { ps("iii exact: parse error in B\n" as u64)  return 3u64 }
             /* negate the B coefficients (indices nA..nAB) */
             let mut j : u64 = nA
             while j < nAB { AV[j] = 0i64 - AV[j]  j = j + 1u64 }
@@ -2421,23 +2421,23 @@ fn exact_enter(argc: i32, argv: u64) -> u64 @export {
         }
         if a0[2u64] == 114u8 {                          /* "--roots" "<coeffs>" [lo hi]  |  "--roots-big" */
             if a0[7u64] == 45u8 {                       /* "--roots-big" "<coeffs>" <lo> <hi> */
-                if argc < 5i32 { ps("iii-exact: --roots-big needs \"<c0 c1 ... cd>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 5i32 { ps("iii exact: --roots-big needs \"<c0 c1 ... cd>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let bl : i64 = parse_one(av[3u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in lo\n" as u64)  return 3u64 }
                 let bh : i64 = parse_one(av[4u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in hi\n" as u64)  return 3u64 }
                 return emit_roots_big(av[2u64], bl, bh)
             }
-            if argc < 3i32 { ps("iii-exact: --roots needs a coefficient list \"c0 c1 ... cd\" (low -> high)\n" as u64)  return 3u64 }
+            if argc < 3i32 { ps("iii exact: --roots needs a coefficient list \"c0 c1 ... cd\" (low -> high)\n" as u64)  return 3u64 }
             let rn : u64 = parse_list(av[2u64], (&RC) as u64)
-            if rn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list (up to 64 integers, <= 18 digits each)\n" as u64)  return 3u64 }
-            if rn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+            if rn == PARSEFAIL { ps("iii exact: parse error in the coefficient list (up to 64 integers, <= 18 digits each)\n" as u64)  return 3u64 }
+            if rn == 0u64 { ps("iii exact: empty coefficient list\n" as u64)  return 3u64 }
             if argc == 3i32 { return emit_roots((&RC) as u64, rn, 0i64, 0i64, 0u32) }
-            if argc < 5i32 { ps("iii-exact: --roots window needs BOTH lo and hi\n" as u64)  return 3u64 }
+            if argc < 5i32 { ps("iii exact: --roots window needs BOTH lo and hi\n" as u64)  return 3u64 }
             let wl : i64 = parse_one(av[3u64])
-            if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+            if P1_OK != 1u32 { ps("iii exact: parse error in lo\n" as u64)  return 3u64 }
             let wh : i64 = parse_one(av[4u64])
-            if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+            if P1_OK != 1u32 { ps("iii exact: parse error in hi\n" as u64)  return 3u64 }
             return emit_roots((&RC) as u64, rn, wl, wh, 1u32)
         }
         if a0[2u64] == 97u8 {                           /* "--alg-sign" / "--alg-cmp" */
@@ -2446,15 +2446,15 @@ fn exact_enter(argc: i32, argv: u64) -> u64 @export {
             if algok == 1u32 { if a0[4u64] != 103u8 { algok = 0u32 } }
             if algok == 1u32 { if a0[5u64] != 45u8 { algok = 0u32 } }
             if algok == 1u32 { if a0[6u64] == 115u8 {   /* "--alg-sign" "<coeffs>" <lo> <hi> */
-                if argc < 5i32 { ps("iii-exact: --alg-sign needs \"<c0 ... cd>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 5i32 { ps("iii exact: --alg-sign needs \"<c0 ... cd>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let sl : i64 = parse_one(av[3u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in lo\n" as u64)  return 3u64 }
                 let sh : i64 = parse_one(av[4u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in hi\n" as u64)  return 3u64 }
                 return emit_alg_sign2(av[2u64], sl, sh)
             } }
             if algok == 1u32 { if a0[6u64] == 97u8 {    /* "--alg-add" "<A>" <lo> <hi> "<B>" <lo> <hi> */
-                if argc < 8i32 { ps("iii-exact: --alg-add needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 8i32 { ps("iii exact: --alg-add needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let pr : u64 = parse_alg6(av[2u64], av[3u64], av[4u64], av[5u64], av[6u64], av[7u64])
                 if pr != 9u64 { return pr }
                 let ala : i64 = AP6[0u64]
@@ -2464,18 +2464,18 @@ fn exact_enter(argc: i32, argv: u64) -> u64 @export {
                 return emit_alg_arith(0i64, APN[0u64], ala, aha, APN[1u64], alb, ahb)
             } }
             if algok == 1u32 { if a0[6u64] == 105u8 {   /* "--alg-inv" "<A>" <lo> <hi> */
-                if argc < 5i32 { ps("iii-exact: --alg-inv needs \"<A>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 5i32 { ps("iii exact: --alg-inv needs \"<A>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let vn : u64 = parse_list(av[2u64], (&RC) as u64)
-                if vn == PARSEFAIL { ps("iii-exact: parse error in the coefficient list\n" as u64)  return 3u64 }
-                if vn == 0u64 { ps("iii-exact: empty coefficient list\n" as u64)  return 3u64 }
+                if vn == PARSEFAIL { ps("iii exact: parse error in the coefficient list\n" as u64)  return 3u64 }
+                if vn == 0u64 { ps("iii exact: empty coefficient list\n" as u64)  return 3u64 }
                 let vl : i64 = parse_one(av[3u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in lo\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in lo\n" as u64)  return 3u64 }
                 let vh : i64 = parse_one(av[4u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in hi\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in hi\n" as u64)  return 3u64 }
                 return emit_alg_arith(2i64, vn, vl, vh, 0u64, 0i64, 0i64)
             } }
             if algok == 1u32 { if a0[6u64] == 109u8 {   /* "--alg-mul" "<A>" <lo> <hi> "<B>" <lo> <hi> */
-                if argc < 8i32 { ps("iii-exact: --alg-mul needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 8i32 { ps("iii exact: --alg-mul needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let pm : u64 = parse_alg6(av[2u64], av[3u64], av[4u64], av[5u64], av[6u64], av[7u64])
                 if pm != 9u64 { return pm }
                 let mla : i64 = AP6[0u64]
@@ -2485,25 +2485,25 @@ fn exact_enter(argc: i32, argv: u64) -> u64 @export {
                 return emit_alg_arith(1i64, APN[0u64], mla, mha, APN[1u64], mlb, mhb)
             } }
             if algok == 1u32 { if a0[6u64] == 99u8 {    /* "--alg-cmp" "<A>" <lo> <hi> "<B>" <lo> <hi> */
-                if argc < 8i32 { ps("iii-exact: --alg-cmp needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
+                if argc < 8i32 { ps("iii exact: --alg-cmp needs \"<A>\" <lo> <hi> \"<B>\" <lo> <hi>\n" as u64)  return 3u64 }
                 let la : i64 = parse_one(av[3u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in A's lo\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in A's lo\n" as u64)  return 3u64 }
                 let ha : i64 = parse_one(av[4u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in A's hi\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in A's hi\n" as u64)  return 3u64 }
                 let lb : i64 = parse_one(av[6u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in B's lo\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in B's lo\n" as u64)  return 3u64 }
                 let hb : i64 = parse_one(av[7u64])
-                if P1_OK != 1u32 { ps("iii-exact: parse error in B's hi\n" as u64)  return 3u64 }
+                if P1_OK != 1u32 { ps("iii exact: parse error in B's hi\n" as u64)  return 3u64 }
                 return emit_alg_cmp2(av[2u64], la, ha, av[5u64], lb, hb)
             } }
         }
-        ps("iii-exact: unknown option (know --cmp, --denest, --roots, --roots-big, --alg-sign, --alg-cmp, --alg-add, --alg-mul, --alg-inv)\n" as u64)
+        ps("iii exact: unknown option (know --cmp, --denest, --roots, --roots-big, --alg-sign, --alg-cmp, --alg-add, --alg-mul, --alg-inv)\n" as u64)
         return 3u64
     } }
 
     /* single-expression form */
     let n : u64 = parse_terms(av[1u64], 0u64)
-    if n == PARSEFAIL { ps("iii-exact: parse error (need pairs: coefficient radicand, radicand >= 0)\n" as u64)  return 3u64 }
+    if n == PARSEFAIL { ps("iii exact: parse error (need pairs: coefficient radicand, radicand >= 0)\n" as u64)  return 3u64 }
     if n == 0u64 { ps("0  (empty sum)" as u64)  nl()  return 0u64 }
     let sgn : i32 = ui_sqrt_sum_sign(&AV as u64, &BV as u64, n)
     return emit_sign(sgn)

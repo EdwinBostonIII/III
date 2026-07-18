@@ -78,16 +78,78 @@ L_str_35:
 L_str_36:
     .ascii "STDLIB/iii/aether/symmetria.iii\0"
 L_str_37:
-    .ascii "./_cov_report.txt\0"
+    .ascii "STDLIB/iii/katabasis/ergon.iii\0"
 L_str_38:
-    .ascii "./_cov_gate_report.txt\0"
+    .ascii "STDLIB/iii/katabasis/kardia.iii\0"
 L_str_39:
+    .ascii "STDLIB/iii/katabasis/soma.iii\0"
+L_str_40:
+    .ascii "STDLIB/iii/katabasis/doxa.iii\0"
+L_str_41:
+    .ascii "STDLIB/iii/katabasis/introspection.iii\0"
+L_str_42:
+    .ascii "STDLIB/iii/katabasis/autognosis.iii\0"
+L_str_43:
+    .ascii "STDLIB/iii/oneiros/cassandra.iii\0"
+L_str_44:
+    .ascii "STDLIB/iii/glossa/topos.iii\0"
+L_str_45:
+    .ascii "STDLIB/iii/katabasis/crucible.iii\0"
+L_str_46:
+    .ascii "STDLIB/iii/aether/entangle.iii\0"
+L_str_47:
+    .ascii "STDLIB/iii/aether/lagrangian.iii\0"
+L_str_48:
+    .ascii "STDLIB/iii/aether/admix.iii\0"
+L_str_49:
+    .ascii "STDLIB/iii/aether/autophasis.iii\0"
+L_str_50:
+    .ascii "STDLIB/iii/aether/glossa.iii\0"
+L_str_51:
+    .ascii "STDLIB/iii/aether/synapse.iii\0"
+L_str_52:
+    .ascii "COMPILER/BOOT/ergon_main.iii\0"
+L_str_53:
+    .ascii "COMPILER/BOOT/iii_main.iii\0"
+L_str_54:
+    .ascii "STDLIB/iii/katabasis/holos.iii\0"
+L_str_55:
+    .ascii "COMPILER/BOOT/kardia_main.iii\0"
+L_str_56:
+    .ascii "COMPILER/BOOT/soma_main.iii\0"
+L_str_57:
+    .ascii "COMPILER/BOOT/doxa_main.iii\0"
+L_str_58:
+    .ascii "COMPILER/BOOT/eidolos_main.iii\0"
+L_str_59:
+    .ascii "COMPILER/BOOT/proofcarry_main.iii\0"
+L_str_60:
+    .ascii "COMPILER/BOOT/line_main.iii\0"
+L_str_61:
+    .ascii "COMPILER/BOOT/plane_main.iii\0"
+L_str_62:
+    .ascii "COMPILER/BOOT/space_main.iii\0"
+L_str_63:
+    .ascii "COMPILER/BOOT/motion_main.iii\0"
+L_str_64:
+    .ascii "COMPILER/BOOT/manifold_main.iii\0"
+L_str_65:
+    .ascii "COMPILER/BOOT/worldline_main.iii\0"
+L_str_66:
+    .ascii "STDLIB/sovir/svir_event.iii\0"
+L_str_67:
+    .ascii "STDLIB/iii/omnia/eidolos.iii\0"
+L_str_68:
+    .ascii "./_cov_report.txt\0"
+L_str_69:
+    .ascii "./_cov_gate_report.txt\0"
+L_str_70:
     .ascii "./_cov_reach_report.txt\0"
     .section .bss
 L_MODS:
     .zero 256
 L_CORP:
-    .zero 8192
+    .zero 32768
 L_REPT:
     .zero 256
 L_GREP:
@@ -311,7 +373,7 @@ L_loop_top_4:
 L_if_else_6:
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x3ff, %rax
+    movabsq $0xfff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -816,9 +878,536 @@ main:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    leaq L_str_37(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_38(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_39(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_40(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_41(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_42(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_43(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_44(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_45(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_46(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_47(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_48(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_49(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_50(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_51(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_52(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_53(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_54(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_55(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_56(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_57(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_58(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_59(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_60(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_61(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_62(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_63(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_64(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_65(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_66(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_str_67(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_appseg
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movabsq $0x11, %rax
     pushq %rax
-    leaq L_str_37(%rip), %rax
+    leaq L_str_68(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -836,7 +1425,7 @@ main:
     popq %rax
     movabsq $0x16, %rax
     pushq %rax
-    leaq L_str_38(%rip), %rax
+    leaq L_str_69(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -854,7 +1443,7 @@ main:
     popq %rax
     movabsq $0x17, %rax
     pushq %rax
-    leaq L_str_39(%rip), %rax
+    leaq L_str_70(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax

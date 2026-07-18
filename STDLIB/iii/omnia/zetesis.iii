@@ -53,6 +53,19 @@
  *       tampered lines are REFUSED in-arm (wrong address, wrong text).
  *   353 THE SCROLL: the seeking law sealed by EIDOLOS -- derived
  *       entailments, refused reversals, deterministic address.
+ *   354 THE VERDICT: the chosen question submitted to the organism's WHOLE
+ *       standing decision capability -- the metered lane (noesis images,
+ *       the discharge's vocabulary, third driver of the one meter) and the
+ *       JOINT lane (two organs, one invariant: noesis's image vs klisi's
+ *       refusal boundary, the fleet's law).  The chosen question is
+ *       UNDECIDED (machine-checked: no lane claims it) -- the deficit is
+ *       NAMED; the refutable tier is answered NO with image witnesses; the
+ *       best decidable truth is found by yield.
+ *   355 THE SPOKEN ANSWER: the decided truth is spoken into the union --
+ *       the name moves, the frontier drops by EXACTLY the mirror's
+ *       predicted yield (the prophecy realized) -- and the whole episode
+ *       (asked, undecided, refuted, spoken, bought) is remembered as the
+ *       ANSWER event under the same journal laws.
  *
  * SCOPE (the eidolon law): the candidate space is complete over the
  * convened union's class pairs and the three claim shapes; richer bridges
@@ -99,6 +112,11 @@ extern @abi(c-msvc-x64) fn mn_put(id: u64) -> u64 from "mneme.iii"
 extern @abi(c-msvc-x64) fn mn_link(i: u64, j: u64) -> u64 from "mneme.iii"
 extern @abi(c-msvc-x64) fn mn_fold() -> i32 from "mneme.iii"
 extern @abi(c-msvc-x64) fn mn_ent(i: u64, j: u64) -> u64 from "mneme.iii"
+extern @abi(c-msvc-x64) fn no_meter(kind: u64, p: u64) -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn kl_inv2_u64(v: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kl_err() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_mode(k: u64, m: u64) -> i32 from "klisi.iii"
 extern @abi(c-msvc-x64) fn idfold_bytes(ptr: u64, n: u64) -> u64 from "idfold.iii"
 extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
@@ -594,8 +612,11 @@ fn zt_event_build() -> i32 {
     let u : u64 = syn_union_addr()
     let hi : u64 = u / 1000000000u64
     let lo : u64 = u % 1000000000u64
-    /* the needle for the same-union law, anchored on both sides */
+    /* the needle for the same-union law, anchored on both sides (the
+     * leading bracket keeps the QUESTION event and the ANSWER event from
+     * ever cross-matching: "[union" vs "[answered union") */
     ZT_UNN = 0u64
+    zt_nput(91u8)
     zt_nput(117u8)
     zt_nput(110u8)
     zt_nput(105u8)
@@ -646,103 +667,7 @@ fn zt_arm352() -> u64 {
     zt_event_build()
     if ZT_EVN == 0u64 { return 352u64 }
     if ZT_EVN >= 380u64 { return 352u64 }
-    /* the present event must be coherent and its name deterministic */
-    eol_reset()
-    if eol_read((&ZT_EV) as u64, ZT_EVN) < 0i64 { return 352u64 }
-    let ea : u64 = eol_addr()
-    if ea == 0u64 { return 352u64 }
-    eol_reset()
-    if eol_read((&ZT_EV) as u64, ZT_EVN) < 0i64 { return 352u64 }
-    if eol_addr() != ea { return 352u64 }
-    /* in-arm TEETH: a tampered memory is refused -- wrong address, and
-     * wrong text under the right address */
-    let mut ln : u64 = 0u64
-    let ex : u64 = ea + 1u64
-    let mut tv : u64 = ex
-    var digs : [u8; 24]
-    let mut nd : u64 = 0u64
-    while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
-    let mut di : u64 = nd
-    while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
-    ZT_LINE[ln] = 32u8
-    ln = ln + 1u64
-    let mut k : u64 = 0u64
-    while k < ZT_EVN { ZT_LINE[ln + k] = ZT_EV[k]   k = k + 1u64 }
-    if zt_vline((&ZT_LINE) as u64, 0u64, ln + ZT_EVN) != 0u64 { return 352u64 }
-    /* right address, mutated text */
-    tv = ea
-    nd = 0u64
-    while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
-    ln = 0u64
-    di = nd
-    while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
-    ZT_LINE[ln] = 32u8
-    ln = ln + 1u64
-    k = 0u64
-    while k < ZT_EVN { ZT_LINE[ln + k] = ZT_EV[k]   k = k + 1u64 }
-    ZT_LINE[ln] = 120u8                                   /* one byte of rot */
-    if zt_vline((&ZT_LINE) as u64, 0u64, ln + ZT_EVN) != 0u64 { return 352u64 }
-    /* the journal itself */
-    let jp : u64 = "STDLIB/data/zetesis.jrnl" as u64
-    let mut jn : u64 = 0u64
-    let fh : u64 = fopen(jp, "rb" as u64)
-    if fh != 0u64 {
-        jn = fread((&ZT_JB) as u64, 1u64, 16384u64, fh)
-        fclose(fh)
-        if jn >= 16384u64 { return 352u64 }               /* the journal shard boundary */
-    }
-    let mut kcount : u64 = 0u64
-    let mut present : u64 = 0u64
-    let mut presi : u64 = 0u64
-    let mut off : u64 = 0u64
-    while off < jn {
-        let mut e : u64 = off
-        while e < jn { if ZT_JB[e] == 10u8 { e = jn + 1u64 } else { e = e + 1u64 } }
-        let mut stop : u64 = jn
-        if e == jn + 1u64 {
-            /* re-find the newline (the scan above only proved existence) */
-            stop = off
-            while ZT_JB[stop] != 10u8 { stop = stop + 1u64 }
-        }
-        let llen : u64 = stop - off
-        if llen == 0u64 { return 352u64 }
-        if zt_vline((&ZT_JB) as u64, off, llen) == 0u64 { return 352u64 }
-        kcount = kcount + 1u64
-        /* the same-union law: a remembered epoch that saw this union must
-         * agree with the present, byte for byte */
-        if zt_has_needle((&ZT_JB) as u64, ZT_LTO, ZT_LTN) == 1u64 {
-            if ZT_LTN != ZT_EVN { return 352u64 }
-            let mut b : u64 = 0u64
-            while b < ZT_LTN {
-                if ZT_JB[ZT_LTO + b] != ZT_EV[b] { return 352u64 }
-                b = b + 1u64
-            }
-            present = 1u64
-            presi = kcount
-        }
-        off = stop + 1u64
-    }
-    if present == 1u64 { ZT_EPOCH = presi } else {
-        ZT_EPOCH = kcount + 1u64
-        /* append: "<ea> <event>\n" -- content-addressed, idempotent */
-        tv = ea
-        nd = 0u64
-        while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
-        ln = 0u64
-        di = nd
-        while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
-        ZT_LINE[ln] = 32u8
-        ln = ln + 1u64
-        k = 0u64
-        while k < ZT_EVN { ZT_LINE[ln] = ZT_EV[k]   ln = ln + 1u64   k = k + 1u64 }
-        ZT_LINE[ln] = 10u8
-        ln = ln + 1u64
-        ZT_LINE[ln] = 0u8
-        let fa : u64 = fopen(jp, "ab" as u64)
-        if fa == 0u64 { return 352u64 }
-        fputs((&ZT_LINE) as u64, fa)
-        fclose(fa)
-    }
+    ZT_EPOCH = zt_journal()
     if ZT_EPOCH == 0u64 { return 352u64 }
     return 0u64
 }
@@ -769,6 +694,374 @@ fn zt_arm353() -> u64 {
     ZT_SCROLL = a1
     return 0u64
 }
+/* ==================== THE JOURNAL ENGINE (shared) ==================== */
+fn zt_journal() -> u64 {
+    /* the current event (ZT_EV, needle ZT_UN) is named twice, teeth-checked,
+     * verified against every remembered line, found-or-appended.  Returns
+     * the epoch (1-based line position); 0 = a broken or lying memory. */
+    if ZT_EVN == 0u64 { return 0u64 }
+    if ZT_EVN >= 380u64 { return 0u64 }
+    eol_reset()
+    if eol_read((&ZT_EV) as u64, ZT_EVN) < 0i64 { return 0u64 }
+    let ea : u64 = eol_addr()
+    if ea == 0u64 { return 0u64 }
+    eol_reset()
+    if eol_read((&ZT_EV) as u64, ZT_EVN) < 0i64 { return 0u64 }
+    if eol_addr() != ea { return 0u64 }
+    /* teeth: wrong address refused; right address with rotted text refused */
+    let mut ln : u64 = 0u64
+    let mut tv : u64 = ea + 1u64
+    var digs : [u8; 24]
+    let mut nd : u64 = 0u64
+    while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
+    let mut di : u64 = nd
+    while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
+    ZT_LINE[ln] = 32u8
+    ln = ln + 1u64
+    let mut k : u64 = 0u64
+    while k < ZT_EVN { ZT_LINE[ln + k] = ZT_EV[k]   k = k + 1u64 }
+    if zt_vline((&ZT_LINE) as u64, 0u64, ln + ZT_EVN) != 0u64 { return 0u64 }
+    tv = ea
+    nd = 0u64
+    while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
+    ln = 0u64
+    di = nd
+    while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
+    ZT_LINE[ln] = 32u8
+    ln = ln + 1u64
+    k = 0u64
+    while k < ZT_EVN { ZT_LINE[ln + k] = ZT_EV[k]   k = k + 1u64 }
+    ZT_LINE[ln] = 120u8
+    if zt_vline((&ZT_LINE) as u64, 0u64, ln + ZT_EVN) != 0u64 { return 0u64 }
+    /* the journal file */
+    let jp : u64 = "STDLIB/data/zetesis.jrnl" as u64
+    let mut jn : u64 = 0u64
+    let fh : u64 = fopen(jp, "rb" as u64)
+    if fh != 0u64 {
+        jn = fread((&ZT_JB) as u64, 1u64, 16384u64, fh)
+        fclose(fh)
+        if jn >= 16384u64 { return 0u64 }
+    }
+    let mut kc : u64 = 0u64
+    let mut present : u64 = 0u64
+    let mut presi : u64 = 0u64
+    let mut off : u64 = 0u64
+    while off < jn {
+        let mut stop : u64 = off
+        let mut going : u64 = 1u64
+        while going == 1u64 {
+            if stop >= jn { going = 0u64 } else {
+                if ZT_JB[stop] == 10u8 { going = 0u64 } else { stop = stop + 1u64 }
+            }
+        }
+        let llen : u64 = stop - off
+        if llen == 0u64 { return 0u64 }
+        if zt_vline((&ZT_JB) as u64, off, llen) == 0u64 { return 0u64 }
+        kc = kc + 1u64
+        if zt_has_needle((&ZT_JB) as u64, ZT_LTO, ZT_LTN) == 1u64 {
+            if ZT_LTN != ZT_EVN { return 0u64 }
+            let mut b : u64 = 0u64
+            while b < ZT_LTN {
+                if ZT_JB[ZT_LTO + b] != ZT_EV[b] { return 0u64 }
+                b = b + 1u64
+            }
+            present = 1u64
+            presi = kc
+        }
+        off = stop + 1u64
+    }
+    if present == 1u64 { return presi }
+    tv = ea
+    nd = 0u64
+    while tv > 0u64 { digs[nd] = (48u64 + (tv % 10u64)) as u8   tv = tv / 10u64   nd = nd + 1u64 }
+    ln = 0u64
+    di = nd
+    while di > 0u64 { ZT_LINE[ln] = digs[di - 1u64]   ln = ln + 1u64   di = di - 1u64 }
+    ZT_LINE[ln] = 32u8
+    ln = ln + 1u64
+    k = 0u64
+    while k < ZT_EVN { ZT_LINE[ln] = ZT_EV[k]   ln = ln + 1u64   k = k + 1u64 }
+    ZT_LINE[ln] = 10u8
+    ln = ln + 1u64
+    ZT_LINE[ln] = 0u8
+    let fa : u64 = fopen(jp, "ab" as u64)
+    if fa == 0u64 { return 0u64 }
+    fputs((&ZT_LINE) as u64, fa)
+    fclose(fa)
+    return kc + 1u64
+}
+
+/* ==================== THE VERDICT AND THE SPOKEN ANSWER (arms 354..355) ====
+ * The chosen question is submitted to the organism's WHOLE standing decision
+ * capability.  The metered lane (the discharge's shared vocabulary, synesis
+ * arm 336 -- one meter, now three drivers) decides joins of fold families by
+ * noesis's complete w=8 images; the JOINT lane (the fleet's law, synesis
+ * 344..345) decides [mul M = depth D] only when TWO organs derive the same
+ * invariant -- noesis's image against klisi's own refusal boundary.  What no
+ * lane can decide is UNDECIDED: the named deficit.  The best decidable truth
+ * is SPOKEN, the union grows, the mirror's predicted yield is REALIZED, and
+ * the whole episode -- asked, undecided, refuted tier, spoken truth -- is
+ * remembered in the journal as the ANSWER event. */
+var ZT_FPV : u64 = 0u64
+var ZT_DP : u64 = 0u64
+var ZT_DQ : u64 = 0u64
+var ZT_DS : u64 = 0u64
+var ZT_ANS : u64 = 0u64                  /* the answered candidate | SENT      */
+var ZT_AQ : [u8; 192]                    /* the answered claim text            */
+var ZT_AQN : u64 = 0u64
+var ZT_REF : u64 = 0u64                  /* refuted-with-witness count         */
+var ZT_DECN : u64 = 0u64                 /* decidable candidate count          */
+var ZT_UNDEC : u64 = 0u64                /* 1 = the chosen question undecided  */
+var ZT_REALV : u64 = 0u64                /* realized frontier drop             */
+var ZT_F2 : u64 = 0u64                   /* the grown frontier                 */
+var ZT_EP2 : u64 = 0u64                  /* the answer epoch                   */
+fn zt_ans_len() -> u64 @export { return ZT_AQN }
+fn zt_ans_byte(i: u64) -> u8 @export {
+    if i < ZT_AQN { return ZT_AQ[i] }
+    return 0u8
+}
+fn zt_realized() -> u64 @export { return ZT_REALV }
+fn zt_epoch2() -> u64 @export { return ZT_EP2 }
+fn zt_undecided() -> u64 @export { return ZT_UNDEC }
+fn zt_nputs(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { zt_nput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn zt_famparse(c: u64) -> u64 {
+    /* is class c's root a metered word?  "shr K | mul M | umod K | sdiv K |
+     * erasure E" (the discharge's vocabulary) or "depth D" (the joint lane).
+     * kinds 1..6 in that order; 0 = not metered.  Value left in ZT_FPV. */
+    let rt : u64 = eol_class_root(c)
+    let lnr : u64 = eol_thing_len(rt)
+    if lnr == 0u64 { return 0u64 }
+    if lnr > 64u64 { return 0u64 }
+    let mut k : u64 = 0u64
+    while k < lnr { ZT_TB[k] = eol_thing_byte(rt, k)   k = k + 1u64 }
+    let mut sp : u64 = ZT_SENT
+    k = 0u64
+    while k < lnr {
+        if ZT_TB[k] == 32u8 { if sp == ZT_SENT { sp = k } }
+        k = k + 1u64
+    }
+    if sp == ZT_SENT { return 0u64 }
+    let mut v : u64 = 0u64
+    let mut ndg : u64 = 0u64
+    k = sp + 1u64
+    while k < lnr {
+        let c2 : u8 = ZT_TB[k]
+        if c2 < 48u8 { return 0u64 }
+        if c2 > 57u8 { return 0u64 }
+        v = (v * 10u64) + ((c2 - 48u8) as u64)
+        ndg = ndg + 1u64
+        if ndg > 6u64 { return 0u64 }
+        k = k + 1u64
+    }
+    if ndg == 0u64 { return 0u64 }
+    ZT_FPV = v
+    if sp == 3u64 {
+        if ZT_TB[0u64] == 115u8 { if ZT_TB[1u64] == 104u8 { if ZT_TB[2u64] == 114u8 { return 1u64 } } }
+        if ZT_TB[0u64] == 109u8 { if ZT_TB[1u64] == 117u8 { if ZT_TB[2u64] == 108u8 { return 2u64 } } }
+    }
+    if sp == 4u64 {
+        if ZT_TB[0u64] == 117u8 { if ZT_TB[1u64] == 109u8 { if ZT_TB[2u64] == 111u8 { if ZT_TB[3u64] == 100u8 { return 3u64 } } } }
+        if ZT_TB[0u64] == 115u8 { if ZT_TB[1u64] == 100u8 { if ZT_TB[2u64] == 105u8 { if ZT_TB[3u64] == 118u8 { return 4u64 } } } }
+    }
+    if sp == 7u64 {
+        if ZT_TB[0u64] == 101u8 { if ZT_TB[1u64] == 114u8 { if ZT_TB[2u64] == 97u8 { if ZT_TB[3u64] == 115u8 {
+        if ZT_TB[4u64] == 117u8 { if ZT_TB[5u64] == 114u8 { if ZT_TB[6u64] == 101u8 { return 5u64 } } } } } } }
+    }
+    if sp == 5u64 {
+        if ZT_TB[0u64] == 100u8 { if ZT_TB[1u64] == 101u8 { if ZT_TB[2u64] == 112u8 { if ZT_TB[3u64] == 116u8 {
+        if ZT_TB[4u64] == 104u8 { return 6u64 } } } } }
+    }
+    return 0u64
+}
+fn zt_fam_img(kind: u64, v: u64) -> u64 {
+    /* the COMPLETE w=8 image of the family, by noesis's meter */
+    if kind == 1u64 { if v >= 8u64 { return ZT_SENT }   return no_meter(2u64, v) }
+    if kind == 2u64 { return no_meter(0u64, v) }
+    if kind == 3u64 { if v >= 8u64 { return ZT_SENT }   return no_meter(3u64, (1u64 << v) - 1u64) }
+    if kind == 4u64 { if v == 0u64 { return ZT_SENT }   if v >= 8u64 { return ZT_SENT }   return no_meter(4u64, v) }
+    if kind == 5u64 { if v > 8u64 { return ZT_SENT }   return 1u64 << (8u64 - v) }
+    return ZT_SENT
+}
+fn zt_kl_bound(m: u64) -> u64 {
+    /* klisi's OWN valuation of m: shift right until the inverse faculty
+     * stops refusing -- the refusal boundary IS the organ's verdict */
+    if m == 0u64 { return ZT_SENT }
+    let mut x : u64 = m
+    let mut k : u64 = 0u64
+    let mut going : u64 = 1u64
+    let mut r : u64 = ZT_SENT
+    while going == 1u64 {
+        if kl_inv2_u64(x) != 0u64 { r = k   going = 0u64 } else {
+            if kl_err() != 2u64 { return ZT_SENT }
+            kd_mode(0u64, 64u64)
+            x = x >> 1u64
+            k = k + 1u64
+            if k > 63u64 { return ZT_SENT }
+        }
+    }
+    return r
+}
+fn zt_log2(v: u64) -> u64 {
+    if v == 0u64 { return ZT_SENT }
+    let mut k : u64 = 0u64
+    let mut x : u64 = v
+    while (x & 1u64) == 0u64 { x = x >> 1u64   k = k + 1u64 }
+    if x != 1u64 { return ZT_SENT }
+    return k
+}
+fn zt_joint(m: u64, d: u64) -> u64 {
+    /* TWO organs, one invariant: noesis's image and klisi's refusal boundary
+     * must agree with EACH OTHER before either may speak about d */
+    let img : u64 = no_meter(0u64, m)
+    let lv : u64 = zt_log2(img)
+    if lv == ZT_SENT { return ZT_ERR }
+    let mv : u64 = 8u64 - lv
+    let kv : u64 = zt_kl_bound(m)
+    if kv == ZT_SENT { return ZT_ERR }
+    if mv != kv { return ZT_ERR }
+    if mv == d { return 1u64 }
+    return 2u64
+}
+fn zt_decide(shape: u64, p: u64, q: u64) -> u64 {
+    /* verdicts: 0 undecided | 1 true | 2 refuted | ZT_ERR broken machinery.
+     * Order candidates are outside the meter (synesis 336: counted
+     * undecidable); the joint lane covers (mul M, depth D) only. */
+    if shape != 0u64 { return 0u64 }
+    let fa : u64 = zt_famparse(p)
+    let va : u64 = ZT_FPV
+    let fb : u64 = zt_famparse(q)
+    let vb : u64 = ZT_FPV
+    if fa == 0u64 { return 0u64 }
+    if fb == 0u64 { return 0u64 }
+    if fa == 2u64 { if fb == 6u64 { return zt_joint(va, vb) } }
+    if fb == 2u64 { if fa == 6u64 { return zt_joint(vb, va) } }
+    if fa == 6u64 { return 0u64 }
+    if fb == 6u64 { return 0u64 }
+    let ia : u64 = zt_fam_img(fa, va)
+    let ib : u64 = zt_fam_img(fb, vb)
+    if ia == ZT_SENT { return 0u64 }
+    if ib == ZT_SENT { return 0u64 }
+    if ia == ib { return 1u64 }
+    return 2u64
+}
+fn zt_decode(cid: u64) -> u64 {
+    let mut left : u64 = cid / 3u64
+    ZT_DS = cid % 3u64
+    let mut p : u64 = 0u64
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        let row : u64 = (ZT_NC - 1u64) - p
+        if left < row { ZT_DP = p   ZT_DQ = (p + 1u64) + left   going = 0u64 } else {
+            left = left - row
+            p = p + 1u64
+            if p >= ZT_NC { return 1u64 }
+        }
+    }
+    return 0u64
+}
+fn zt_arm354() -> u64 {
+    /* THE VERDICT: the chosen question through every standing decider; the
+     * refutable tier answered NO with image witnesses; the best decidable
+     * truth found */
+    kd_setp(2u64)
+    kd_mode(0u64, 64u64)
+    if zt_convene() != 0u64 { return 354u64 }
+    /* the chosen question is UNDECIDED -- machine-checked, not assumed:
+     * neither side parses as a metered word, no lane claims it */
+    if zt_decode(ZT_PICK) != 0u64 { return 354u64 }
+    if zt_decide(ZT_DS, ZT_DP, ZT_DQ) != 0u64 { return 354u64 }
+    ZT_UNDEC = 1u64
+    ZT_DECN = 0u64
+    ZT_REF = 0u64
+    ZT_ANS = ZT_SENT
+    let mut best : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < ZT_NCAND {
+        if ZT_YLD[i] != ZT_SENT {
+            if zt_decode(i) != 0u64 { return 354u64 }
+            let vd : u64 = zt_decide(ZT_DS, ZT_DP, ZT_DQ)
+            if vd == ZT_ERR { return 354u64 }
+            if vd != 0u64 {
+                ZT_DECN = ZT_DECN + 1u64
+                if vd == 2u64 { ZT_REF = ZT_REF + 1u64 }
+                if vd == 1u64 {
+                    if ZT_ANS == ZT_SENT { ZT_ANS = i   best = ZT_YLD[i] } else {
+                        if ZT_YLD[i] > best { ZT_ANS = i   best = ZT_YLD[i] }
+                    }
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    /* the tier is REAL: refutations with witnesses exist, and a truth
+     * exists for the machine to speak */
+    if ZT_REF < 2u64 { return 354u64 }
+    if ZT_ANS == ZT_SENT { return 354u64 }
+    if zt_decode(ZT_ANS) != 0u64 { return 354u64 }
+    zt_cand_text(ZT_DS, ZT_DP, ZT_DQ)
+    if ZT_CTN == 0u64 { return 354u64 }
+    if ZT_CTN > 160u64 { return 354u64 }
+    ZT_AQN = ZT_CTN
+    let mut k : u64 = 0u64
+    while k < ZT_CTN { ZT_AQ[k] = ZT_CT[k]   k = k + 1u64 }
+    return 0u64
+}
+fn zt_event2_build() -> i32 {
+    /* the ANSWER event: the episode remembered -- what was asked and could
+     * not be decided, what was refuted, what was spoken, what it bought */
+    let u : u64 = syn_union_addr()
+    let hi : u64 = u / 1000000000u64
+    let lo : u64 = u % 1000000000u64
+    ZT_UNN = 0u64
+    zt_nputs("[answered union " as u64)
+    zt_nput_u64(hi)
+    zt_nput(58u8)
+    zt_nput_u64(lo)
+    zt_nput(32u8)
+    ZT_EVN = 0u64
+    zt_lputs("[answered union " as u64)
+    zt_lput_u64(hi)
+    zt_lput(58u8)
+    zt_lput_u64(lo)
+    zt_lputs(" = answer scene] [" as u64)
+    let mut k : u64 = 0u64
+    while k < ZT_QN { zt_lput(ZT_Q[k])   k = k + 1u64 }
+    zt_lputs(" = undecided question] [undecided question = missing decider] [" as u64)
+    k = 0u64
+    while k < ZT_AQN { zt_lput(ZT_AQ[k])   k = k + 1u64 }
+    zt_lputs(" = spoken truth] [spoken truth = realized " as u64)
+    zt_lput_u64(ZT_REALV)
+    zt_lputs("] [refuted tier = witness count " as u64)
+    zt_lput_u64(ZT_REF)
+    zt_lputs("] [answer scene = grown frontier " as u64)
+    zt_lput_u64(ZT_F2)
+    zt_lputs("]" as u64)
+    return 0i32
+}
+fn zt_arm355() -> u64 {
+    /* THE SPOKEN ANSWER: the union grows by the decided truth, the mirror's
+     * prophecy is REALIZED, and the episode is remembered */
+    if zt_convene() != 0u64 { return 355u64 }
+    if eol_read((&ZT_AQ) as u64, ZT_AQN) < 0i64 { return 355u64 }
+    if eol_lawcheck() != 0u64 { return 355u64 }
+    let ga : u64 = eol_addr()
+    if ga == 0u64 { return 355u64 }
+    if ga == syn_union_addr() { return 355u64 }
+    ZT_F2 = zt_front_eol()
+    if ZT_F2 > ZT_F0 { return 355u64 }
+    ZT_REALV = ZT_F0 - ZT_F2
+    if ZT_REALV != ZT_YLD[ZT_ANS] { return 355u64 }
+    if ZT_REALV < 1u64 { return 355u64 }
+    zt_event2_build()
+    ZT_EP2 = zt_journal()
+    if ZT_EP2 == 0u64 { return 355u64 }
+    return 0u64
+}
 fn zt_selfprove() -> u64 @export {
     let a0 : u64 = zt_arm350()
     if a0 != 0u64 { return a0 }
@@ -778,6 +1071,12 @@ fn zt_selfprove() -> u64 @export {
     if a2 != 0u64 { return a2 }
     let a3 : u64 = zt_arm353()
     if a3 != 0u64 { return a3 }
+    let a4 : u64 = zt_arm354()
+    if a4 != 0u64 { return a4 }
+    let a5 : u64 = zt_arm355()
+    if a5 != 0u64 { return a5 }
+    /* the prime returns to the tilt's home before the next organ speaks */
+    kd_setp(5u64)
     return 0u64
 }
 

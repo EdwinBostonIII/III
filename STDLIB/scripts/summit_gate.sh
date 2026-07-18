@@ -174,6 +174,8 @@ grep -q "^the union knows: surplus=" "$T/run1.txt" || { echo "[summit_gate] NO U
 grep -q "^the dialectic: spoke=" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC REPORT"; exit 6; }
 grep -q "^scroll zetesis = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO ZETESIS SCROLL"; exit 6; }
 grep -q "^the question: \[" "$T/run1.txt" || { echo "[summit_gate] NO CHOSEN QUESTION"; exit 6; }
+grep -q "^the answer: \[" "$T/run1.txt" || { echo "[summit_gate] NO VERDICT"; exit 6; }
+grep -q "^the spoken: \[" "$T/run1.txt" || { echo "[summit_gate] NO SPOKEN TRUTH"; exit 6; }
 [ -s "$ROOT/STDLIB/data/zetesis.jrnl" ] || { echo "[summit_gate] NO JOURNAL"; exit 6; }
 grep -q "^the cayley chart: words=85 classes=32 " "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY CHART"; exit 6; }
 

@@ -17,7 +17,7 @@
  * needs no exp at all (any strictly monotone map preserves the argmax -- the
  * order theorem is machine-checked, exp's monotonicity is the named premise).
  *
- * THE ARMS (360..366, driven by the summit rite -- no gate of their own):
+ * THE ARMS (360..371, driven by the summit rite -- no gate of their own):
  *   360 THE FLESH: fp16 <-> dyadic is a finite law, proven COMPLETE -- all
  *       65536 bit patterns classified (finite=63488, nonfinite=2048, both
  *       counts re-derived from the walk), every finite pattern decoded to
@@ -68,6 +68,36 @@
  *   366 THE SCROLL: the metabolic law sealed in EIDOLOS -- the derived
  *       entailment (weight sits under exact number) present nowhere in the
  *       text, the reversal refused, the address deterministic.
+ *   370 THE SYNAPSE: a full embedding-width exact dot product between a
+ *       real output.weight row and a real token_embd.weight row -- both
+ *       STREAMED block by block (rows are contiguous: the byte-tiling
+ *       theorem's layout law), every streamed block still passing the
+ *       two-engine distributive check, products accumulated in signed
+ *       192-bit integers.  Three teeth no shared slip survives: the
+ *       REVERSED REGROUP (per-block partials summed backwards must equal
+ *       the forward stream), the DOUBLE STREAM (the whole synapse
+ *       recomputed from a fresh file stream must match limb for limb),
+ *       and CAUCHY-SCHWARZ EXACT: (u.v)^2 <= (u.u)(v.v) verified in
+ *       384-bit integer arithmetic on the real rows -- strictness derived,
+ *       never assumed.
+ *   371 THE STOMACH: the streaming law made a number -- total bytes
+ *       streamed vs the fixed resident stomach (the sum of this organ's
+ *       buffers).  The whole feast passes through a stomach that never
+ *       grows: blocks in, proofs out.
+ *   372 THE LOOM: thread-level parallel pipelining WITHOUT compromise.
+ *       The theorem that makes it free: exact integer accumulation is
+ *       associative and commutative, so a reduction schedule need only fix
+ *       the PARTITION (static, block-aligned, canonical) -- the TIMING
+ *       stays entirely free, and every interleaving must land on the same
+ *       limbs.  Four workers (CreateThread, each with its OWN file handle,
+ *       block buffer, decoder scratch and 192-bit accumulators -- zero
+ *       shared mutable state) weave the same real synapse in parallel;
+ *       then the loom is put on trial: the canonical fold must equal the
+ *       REVERSED fold (associativity witnessed at the fold), the parallel
+ *       result must equal the sequential stream of arm 370 LIMB FOR LIMB,
+ *       and a second full launch must reproduce the first exactly.  Where
+ *       float runtimes must serialize or force reduction trees to stay
+ *       reproducible, the dyadic lattice makes parallelism a THEOREM.
  *
  * THE NAMED DEFICIT (the autarkeia law): a certified-exp interval organ
  * (rational Taylor bounds with proven remainders) does not yet exist in the
@@ -82,6 +112,10 @@ extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 
 extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _fseeki64(stream: u64, off: i64, origin: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _ftelli64(stream: u64) -> i64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn CreateThread(attr: u64, stack: u64, start: u64, param: u64, flags: u64, tid: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WaitForSingleObject(h: u64, ms: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "sqrt_sum_sign.iii"
 
@@ -139,12 +173,14 @@ var MB_FEAST    : u8  = 0u8           /* 1 = feast present */
 var MB_C1_TYPE : u64 = 0u64
 var MB_C1_OFF  : u64 = 0u64           /* relative; absolute fixed after walk */
 var MB_C1_NE   : u64 = 0u64
+var MB_C1_NE0  : u64 = 0u64
 var MB_C1_NAME : [u8; 64]
 var MB_C1_NN   : u64 = 0u64
 var MB_C1_F    : u8 = 0u8
 var MB_C2_TYPE : u64 = 0u64
 var MB_C2_OFF  : u64 = 0u64
 var MB_C2_NE   : u64 = 0u64
+var MB_C2_NE0  : u64 = 0u64
 var MB_C2_NAME : [u8; 64]
 var MB_C2_NN   : u64 = 0u64
 var MB_C2_F    : u8 = 0u8
@@ -178,6 +214,9 @@ var MB_Z : [u64; 3]
 var MB_REP  : [u8; 4096]
 var MB_REPN : u64 = 0u64
 var MB_SCROLL : u64 = 0u64
+
+/* the stomach meter: actual bytes pulled through the window this census */
+var MB_STREAMED : u64 = 0u64
 
 /* ==================== tiny utils ==================== */
 
@@ -557,6 +596,7 @@ fn mb_refill() -> i32 {
         return 1i32
     }
     let got : u64 = fread((&MB_WIN) as u64, 1u64, 65536u64, MB_F)
+    MB_STREAMED = MB_STREAMED + got
     MB_WBASE = base
     MB_WLEN = got
     MB_WPOS = 0u64
@@ -794,6 +834,7 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
                 MB_C1_TYPE = ty
                 MB_C1_OFF = off
                 MB_C1_NE = ne
+                MB_C1_NE0 = ne0
                 let mut c : u64 = nlen
                 if c > 63u64 { c = 63u64 }
                 let mut k : u64 = 0u64
@@ -809,6 +850,7 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
                 MB_C2_TYPE = ty
                 MB_C2_OFF = off
                 MB_C2_NE = ne
+                MB_C2_NE0 = ne0
                 let mut c2 : u64 = nlen
                 if c2 > 63u64 { c2 = 63u64 }
                 let mut k2 : u64 = 0u64
@@ -1655,6 +1697,1005 @@ fn mb_arm365() -> u64 {
     return 0u64
 }
 
+/* ============ arms 370/371: THE SYNAPSE + THE STOMACH ============ */
+
+/* signed 192-bit accumulators: which 0 = the running total, 1 = the block
+ * partial, 2 = the regroup checker */
+var MB_TS : i64 = 0i64
+var MB_T0 : u64 = 0u64
+var MB_T1 : u64 = 0u64
+var MB_T2 : u64 = 0u64
+var MB_BS : i64 = 0i64
+var MB_B0 : u64 = 0u64
+var MB_B1 : u64 = 0u64
+var MB_B2 : u64 = 0u64
+var MB_GS : i64 = 0i64
+var MB_G0 : u64 = 0u64
+var MB_G1 : u64 = 0u64
+var MB_G2 : u64 = 0u64
+
+fn mb_sacc_clear(which: u64) -> i32 {
+    if which == 0u64 { MB_TS = 0i64   MB_T0 = 0u64   MB_T1 = 0u64   MB_T2 = 0u64 }
+    if which == 1u64 { MB_BS = 0i64   MB_B0 = 0u64   MB_B1 = 0u64   MB_B2 = 0u64 }
+    if which == 2u64 { MB_GS = 0i64   MB_G0 = 0u64   MB_G1 = 0u64   MB_G2 = 0u64 }
+    return 0i32
+}
+
+fn mb_sacc_add(which: u64, ss: i64, s0: u64, s1: u64, s2: u64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let mut ds : i64 = 0i64
+    let mut d0 : u64 = 0u64
+    let mut d1 : u64 = 0u64
+    let mut d2 : u64 = 0u64
+    if which == 0u64 { ds = MB_TS   d0 = MB_T0   d1 = MB_T1   d2 = MB_T2 }
+    if which == 1u64 { ds = MB_BS   d0 = MB_B0   d1 = MB_B1   d2 = MB_B2 }
+    if which == 2u64 { ds = MB_GS   d0 = MB_G0   d1 = MB_G1   d2 = MB_G2 }
+    let mut r_s : i64 = ds
+    let mut r0 : u64 = d0
+    let mut r1 : u64 = d1
+    let mut r2 : u64 = d2
+    if ds == 0i64 {
+        r_s = ss
+        r0 = s0
+        r1 = s1
+        r2 = s2
+    }
+    if ds == ss {
+        let a0 : u64 = d0 + s0
+        let mut c0 : u64 = 0u64
+        if a0 < s0 { c0 = 1u64 }
+        let a1a : u64 = d1 + s1
+        let mut c1 : u64 = 0u64
+        if a1a < s1 { c1 = 1u64 }
+        let a1 : u64 = a1a + c0
+        if a1 < c0 { c1 = c1 + 1u64 }
+        r0 = a0
+        r1 = a1
+        r2 = d2 + s2 + c1
+        r_s = ds
+    }
+    if ds != 0i64 {
+        if ds != ss {
+            let mut cmp : i64 = 0i64
+            if d2 > s2 { cmp = 1i64 }
+            if d2 < s2 { cmp = 0i64 - 1i64 }
+            if cmp == 0i64 {
+                if d1 > s1 { cmp = 1i64 }
+                if d1 < s1 { cmp = 0i64 - 1i64 }
+            }
+            if cmp == 0i64 {
+                if d0 > s0 { cmp = 1i64 }
+                if d0 < s0 { cmp = 0i64 - 1i64 }
+            }
+            if cmp == 0i64 {
+                r_s = 0i64
+                r0 = 0u64
+                r1 = 0u64
+                r2 = 0u64
+            }
+            if cmp > 0i64 {
+                let mut b : u64 = 0u64
+                let x0 : u64 = d0 - s0
+                if d0 < s0 { b = 1u64 }
+                let mut b1 : u64 = 0u64
+                let x1a : u64 = d1 - s1
+                if d1 < s1 { b1 = 1u64 }
+                let x1 : u64 = x1a - b
+                if x1a < b { b1 = b1 + 1u64 }
+                r0 = x0
+                r1 = x1
+                r2 = d2 - s2 - b1
+                r_s = ds
+            }
+            if cmp < 0i64 {
+                let mut b2 : u64 = 0u64
+                let y0 : u64 = s0 - d0
+                if s0 < d0 { b2 = 1u64 }
+                let mut b3 : u64 = 0u64
+                let y1a : u64 = s1 - d1
+                if s1 < d1 { b3 = 1u64 }
+                let y1 : u64 = y1a - b2
+                if y1a < b2 { b3 = b3 + 1u64 }
+                r0 = y0
+                r1 = y1
+                r2 = s2 - d2 - b3
+                r_s = ss
+            }
+        }
+    }
+    if which == 0u64 { MB_TS = r_s   MB_T0 = r0   MB_T1 = r1   MB_T2 = r2 }
+    if which == 1u64 { MB_BS = r_s   MB_B0 = r0   MB_B1 = r1   MB_B2 = r2 }
+    if which == 2u64 { MB_GS = r_s   MB_G0 = r0   MB_G1 = r1   MB_G2 = r2 }
+    return 0i32
+}
+
+/* unsigned 192-bit norms: u.u and v.v */
+var MB_UU0 : u64 = 0u64
+var MB_UU1 : u64 = 0u64
+var MB_UU2 : u64 = 0u64
+var MB_VV0 : u64 = 0u64
+var MB_VV1 : u64 = 0u64
+var MB_VV2 : u64 = 0u64
+
+fn mb_uu_add(hi: u64, lo: u64) -> i32 {
+    let a0 : u64 = MB_UU0 + lo
+    let mut c0 : u64 = 0u64
+    if a0 < lo { c0 = 1u64 }
+    let a1a : u64 = MB_UU1 + hi
+    let mut c1 : u64 = 0u64
+    if a1a < hi { c1 = 1u64 }
+    let a1 : u64 = a1a + c0
+    if a1 < c0 { c1 = c1 + 1u64 }
+    MB_UU0 = a0
+    MB_UU1 = a1
+    MB_UU2 = MB_UU2 + c1
+    return 0i32
+}
+
+fn mb_vv_add(hi: u64, lo: u64) -> i32 {
+    let a0 : u64 = MB_VV0 + lo
+    let mut c0 : u64 = 0u64
+    if a0 < lo { c0 = 1u64 }
+    let a1a : u64 = MB_VV1 + hi
+    let mut c1 : u64 = 0u64
+    if a1a < hi { c1 = 1u64 }
+    let a1 : u64 = a1a + c0
+    if a1 < c0 { c1 = c1 + 1u64 }
+    MB_VV0 = a0
+    MB_VV1 = a1
+    MB_VV2 = MB_VV2 + c1
+    return 0i32
+}
+
+/* per-block synapse partials (the regroup engine's evidence) */
+var MB_PS : [i64; 64]
+var MB_PP0 : [u64; 64]
+var MB_PP1 : [u64; 64]
+var MB_PP2 : [u64; 64]
+var MB_NP : u64 = 0u64
+
+/* 384-bit product for the exact Cauchy-Schwarz: MB_R6 = a * b (3x3 limbs) */
+var MB_R6 : [u64; 6]
+var MB_R6A : [u64; 6]
+
+fn mb_r6_addat(k: u64, v: u64) -> i32 {
+    if v == 0u64 { return 0i32 }
+    let s : u64 = MB_R6[k] + v
+    let mut carry : u64 = 0u64
+    if s < v { carry = 1u64 }
+    MB_R6[k] = s
+    let mut kk : u64 = k + 1u64
+    while carry == 1u64 {
+        let s2 : u64 = MB_R6[kk] + 1u64
+        carry = 0u64
+        if s2 == 0u64 { carry = 1u64 }
+        MB_R6[kk] = s2
+        kk = kk + 1u64
+    }
+    return 0i32
+}
+
+fn mb_mul192(a0: u64, a1: u64, a2: u64, b0: u64, b1: u64, b2: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MB_R6[k] = 0u64
+        k = k + 1u64
+    }
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        let mut ai : u64 = a0
+        if i == 1u64 { ai = a1 }
+        if i == 2u64 { ai = a2 }
+        let mut j : u64 = 0u64
+        while j < 3u64 {
+            let mut bj : u64 = b0
+            if j == 1u64 { bj = b1 }
+            if j == 2u64 { bj = b2 }
+            mb_mul64(ai, bj)
+            mb_r6_addat(i + j, MB_MLO)
+            mb_r6_addat(i + j + 1u64, MB_MHI)
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* compare MB_R6A vs MB_R6: -1/0/+1 */
+fn mb_cmp6() -> i64 {
+    let mut k : u64 = 6u64
+    while k != 0u64 {
+        k = k - 1u64
+        if MB_R6A[k] > MB_R6[k] { return 1i64 }
+        if MB_R6A[k] < MB_R6[k] { return 0i64 - 1i64 }
+    }
+    return 0i64
+}
+
+/* stream one full row pair: candidate 0 row ru dotted with candidate 1 row
+ * rv, bpr blocks per row.  Every block passes the two-engine digest; the
+ * dot, both norms and per-block partials accumulate.  returns 0 ok */
+fn mb_synapse_stream(ru: u64, rv: u64, bpr: u64) -> u64 {
+    mb_sacc_clear(0u64)
+    MB_UU0 = 0u64
+    MB_UU1 = 0u64
+    MB_UU2 = 0u64
+    MB_VV0 = 0u64
+    MB_VV1 = 0u64
+    MB_VV2 = 0u64
+    MB_NP = 0u64
+    let mut b : u64 = 0u64
+    while b < bpr {
+        if mb_digest(0u64, ru * bpr + b) != 0u64 { return 1u64 }
+        if mb_digest(1u64, rv * bpr + b) != 0u64 { return 1u64 }
+        mb_sacc_clear(1u64)
+        let mut e : u64 = 0u64
+        while e < 256u64 {
+            let va : i64 = MB_VA[e]
+            let vb : i64 = MB_VB[e]
+            let mut ma : u64 = va as u64
+            if va < 0i64 { ma = (0i64 - va) as u64 }
+            let mut mbv : u64 = vb as u64
+            if vb < 0i64 { mbv = (0i64 - vb) as u64 }
+            if va != 0i64 {
+                if vb != 0i64 {
+                    let mut sgn : i64 = 1i64
+                    if va < 0i64 {
+                        if vb > 0i64 { sgn = 0i64 - 1i64 }
+                    }
+                    if va > 0i64 {
+                        if vb < 0i64 { sgn = 0i64 - 1i64 }
+                    }
+                    mb_mul64(ma, mbv)
+                    mb_sacc_add(1u64, sgn, MB_MLO, MB_MHI, 0u64)
+                }
+                mb_mul64(ma, ma)
+                mb_uu_add(MB_MHI, MB_MLO)
+            }
+            if va == 0i64 {
+                if vb != 0i64 {
+                    mb_mul64(mbv, mbv)
+                    mb_vv_add(MB_MHI, MB_MLO)
+                }
+            }
+            if va != 0i64 {
+                if vb != 0i64 {
+                    mb_mul64(mbv, mbv)
+                    mb_vv_add(MB_MHI, MB_MLO)
+                }
+            }
+            e = e + 1u64
+        }
+        MB_PS[b] = MB_BS
+        MB_PP0[b] = MB_B0
+        MB_PP1[b] = MB_B1
+        MB_PP2[b] = MB_B2
+        mb_sacc_add(0u64, MB_BS, MB_B0, MB_B1, MB_B2)
+        b = b + 1u64
+    }
+    MB_NP = bpr
+    return 0u64
+}
+
+/* does row r of candidate c carry any nonzero value?  2 = io/decode red */
+fn mb_row_alive(c: u64, r: u64, bpr: u64) -> u64 {
+    let mut b : u64 = 0u64
+    while b < bpr {
+        if mb_digest(c, r * bpr + b) != 0u64 { return 2u64 }
+        let mut e : u64 = 0u64
+        while e < 256u64 {
+            let mut v : i64 = 0i64
+            if c == 0u64 { v = MB_VA[e] }
+            if c == 1u64 { v = MB_VB[e] }
+            if v != 0i64 { return 1u64 }
+            e = e + 1u64
+        }
+        b = b + 1u64
+    }
+    return 0u64
+}
+
+var MB_SYN_RU : u64 = 0u64
+var MB_SYN_RV : u64 = 0u64
+var MB_SYN_CS : u64 = 0u64            /* 1 = strict, 2 = proportional */
+var MB_SYN_S : i64 = 0i64
+var MB_SYN_0 : u64 = 0u64
+var MB_SYN_1 : u64 = 0u64
+var MB_SYN_2 : u64 = 0u64
+var MB_SYN_U0 : u64 = 0u64
+var MB_SYN_U1 : u64 = 0u64
+var MB_SYN_U2 : u64 = 0u64
+var MB_SYN_V0 : u64 = 0u64
+var MB_SYN_V1 : u64 = 0u64
+var MB_SYN_V2 : u64 = 0u64
+
+fn mb_arm370() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    if MB_C1_F == 0u8 { return 370u64 }
+    if MB_C2_F == 0u8 { return 370u64 }
+    /* the synapse law: one shared embedding axis, k-quant lattice both sides */
+    if MB_C1_NE0 != MB_C2_NE0 { return 370u64 }
+    if mb_tbv(MB_C1_TYPE) != 256u64 { return 370u64 }
+    if mb_tbv(MB_C2_TYPE) != 256u64 { return 370u64 }
+    let bpr : u64 = MB_C1_NE0 / 256u64
+    if bpr == 0u64 { return 370u64 }
+    if bpr > 64u64 { return 370u64 }
+    let rows_u : u64 = MB_C1_NE / MB_C1_NE0
+    let rows_v : u64 = MB_C2_NE / MB_C2_NE0
+    let f : u64 = fopen((&MB_PATH1) as u64, "rb" as u64)
+    if f == 0u64 { return 370u64 }
+    MB_F = f
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    /* deterministic row choice: the first living row of each side */
+    let mut ru : u64 = 0u64
+    let mut found : u64 = 0u64
+    while found == 0u64 {
+        if ru >= 8u64 {
+            fclose(f)
+            return 370u64
+        }
+        if ru >= rows_u {
+            fclose(f)
+            return 370u64
+        }
+        let al : u64 = mb_row_alive(0u64, ru, bpr)
+        if al == 2u64 {
+            fclose(f)
+            return 370u64
+        }
+        if al == 1u64 { found = 1u64 }
+        if found == 0u64 { ru = ru + 1u64 }
+    }
+    let mut rv : u64 = 0u64
+    found = 0u64
+    while found == 0u64 {
+        if rv >= 8u64 {
+            fclose(f)
+            return 370u64
+        }
+        if rv >= rows_v {
+            fclose(f)
+            return 370u64
+        }
+        let al2 : u64 = mb_row_alive(1u64, rv, bpr)
+        if al2 == 2u64 {
+            fclose(f)
+            return 370u64
+        }
+        if al2 == 1u64 { found = 1u64 }
+        if found == 0u64 { rv = rv + 1u64 }
+    }
+    MB_SYN_RU = ru
+    MB_SYN_RV = rv
+    /* PASS ONE */
+    if mb_synapse_stream(ru, rv, bpr) != 0u64 {
+        fclose(f)
+        return 370u64
+    }
+    let p1s : i64 = MB_TS
+    let p10 : u64 = MB_T0
+    let p11 : u64 = MB_T1
+    let p12 : u64 = MB_T2
+    let u10 : u64 = MB_UU0
+    let u11 : u64 = MB_UU1
+    let u12 : u64 = MB_UU2
+    let v10 : u64 = MB_VV0
+    let v11 : u64 = MB_VV1
+    let v12 : u64 = MB_VV2
+    /* THE REVERSED REGROUP: partials summed backwards must equal the stream */
+    mb_sacc_clear(2u64)
+    let mut b2 : u64 = MB_NP
+    while b2 != 0u64 {
+        b2 = b2 - 1u64
+        mb_sacc_add(2u64, MB_PS[b2], MB_PP0[b2], MB_PP1[b2], MB_PP2[b2])
+    }
+    if MB_GS != p1s {
+        fclose(f)
+        return 370u64
+    }
+    if MB_G0 != p10 {
+        fclose(f)
+        return 370u64
+    }
+    if MB_G1 != p11 {
+        fclose(f)
+        return 370u64
+    }
+    if MB_G2 != p12 {
+        fclose(f)
+        return 370u64
+    }
+    fclose(f)
+    /* PASS TWO: a fresh stream must reproduce every limb */
+    let f2 : u64 = fopen((&MB_PATH1) as u64, "rb" as u64)
+    if f2 == 0u64 { return 370u64 }
+    MB_F = f2
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    if mb_synapse_stream(ru, rv, bpr) != 0u64 {
+        fclose(f2)
+        return 370u64
+    }
+    fclose(f2)
+    if MB_TS != p1s { return 370u64 }
+    if MB_T0 != p10 { return 370u64 }
+    if MB_T1 != p11 { return 370u64 }
+    if MB_T2 != p12 { return 370u64 }
+    if MB_UU0 != u10 { return 370u64 }
+    if MB_UU1 != u11 { return 370u64 }
+    if MB_UU2 != u12 { return 370u64 }
+    if MB_VV0 != v10 { return 370u64 }
+    if MB_VV1 != v11 { return 370u64 }
+    if MB_VV2 != v12 { return 370u64 }
+    /* THE EXACT CAUCHY-SCHWARZ: (u.v)^2 <= (u.u)(v.v) in 384-bit integers */
+    if (MB_UU0 | MB_UU1 | MB_UU2) == 0u64 { return 370u64 }
+    if (MB_VV0 | MB_VV1 | MB_VV2) == 0u64 { return 370u64 }
+    mb_mul192(p10, p11, p12, p10, p11, p12)
+    let mut k6 : u64 = 0u64
+    while k6 < 6u64 {
+        MB_R6A[k6] = MB_R6[k6]
+        k6 = k6 + 1u64
+    }
+    mb_mul192(u10, u11, u12, v10, v11, v12)
+    /* R6A = (u.v)^2 must be <= R6 = (u.u)(v.v) */
+    let cs : i64 = mb_cmp6()
+    if cs > 0i64 { return 370u64 }
+    MB_SYN_CS = 1u64
+    if cs == 0i64 { MB_SYN_CS = 2u64 }
+    MB_SYN_S = p1s
+    MB_SYN_0 = p10
+    MB_SYN_1 = p11
+    MB_SYN_2 = p12
+    MB_SYN_U0 = u10
+    MB_SYN_U1 = u11
+    MB_SYN_U2 = u12
+    MB_SYN_V0 = v10
+    MB_SYN_V1 = v11
+    MB_SYN_V2 = v12
+    mb_rs("the synapse: output[" as u64)
+    mb_ru(MB_SYN_RU)
+    mb_rs("] x token_embd[" as u64)
+    mb_ru(MB_SYN_RV)
+    mb_rs("] dot=" as u64)
+    if MB_SYN_S < 0i64 { mb_rb(45u8) }
+    MB_X[0] = MB_SYN_0
+    MB_X[1] = MB_SYN_1
+    MB_X[2] = MB_SYN_2
+    mb_rx3()
+    mb_rs("*2^-48 blocks=" as u64)
+    mb_ru(bpr)
+    mb_rs("+" as u64)
+    mb_ru(bpr)
+    mb_rs(" regroup=ok stream=identical cauchy-schwarz=" as u64)
+    if MB_SYN_CS == 1u64 { mb_rs("strict" as u64) }
+    if MB_SYN_CS == 2u64 { mb_rs("proportional" as u64) }
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 372: THE LOOM ==================== */
+
+const MB_NW : u64 = 4u64              /* the weavers */
+
+/* worker-private state: slice `w` of every array belongs to worker w alone */
+var MB_LFILE : [u64; 4]
+var MB_LBLK : [u8; 1024]              /* 256 bytes per worker */
+var MB_LVA : [i64; 1024]              /* 256 values per worker */
+var MB_LVB : [i64; 1024]
+var MB_LMH : [u64; 4]                 /* per-worker multiply scratch */
+var MB_LML : [u64; 4]
+var MB_LDS : [i64; 4]                 /* per-worker signed 192-bit dot */
+var MB_LD0 : [u64; 4]
+var MB_LD1 : [u64; 4]
+var MB_LD2 : [u64; 4]
+var MB_LU0 : [u64; 4]                 /* per-worker norms */
+var MB_LU1 : [u64; 4]
+var MB_LU2 : [u64; 4]
+var MB_LV0 : [u64; 4]
+var MB_LV1 : [u64; 4]
+var MB_LV2 : [u64; 4]
+var MB_LRC : [u64; 4]                 /* per-worker verdict */
+/* the loom's read-only warp (set by the main thread before launch) */
+var MB_L_RU : u64 = 0u64
+var MB_L_RV : u64 = 0u64
+var MB_L_BPR : u64 = 0u64
+var MB_L_CHUNK : u64 = 0u64
+
+/* pure fp16 mantissa: value = result * 2^-24; the sentinel marks nonfinite */
+fn mb_f16m(p: u64) -> i64 {
+    let e : u64 = (p >> 10u64) & 31u64
+    let m : u64 = p & 1023u64
+    if e == 31u64 { return 4611686018427387904i64 }
+    let mut a : u64 = m
+    if e != 0u64 { a = (1024u64 + m) << (e - 1u64) }
+    let s : u64 = (p >> 15u64) & 1u64
+    let av : i64 = a as i64
+    if s == 1u64 { return 0i64 - av }
+    return av
+}
+
+fn mb_wmul64(w: u64, a: u64, b: u64) -> i32 {
+    let a0 : u64 = a & 0xFFFFFFFFu64
+    let a1 : u64 = a >> 32u64
+    let b0 : u64 = b & 0xFFFFFFFFu64
+    let b1 : u64 = b >> 32u64
+    let p00 : u64 = a0 * b0
+    let p01 : u64 = a0 * b1
+    let p10 : u64 = a1 * b0
+    let p11 : u64 = a1 * b1
+    let mid1 : u64 = p01 + (p00 >> 32u64)
+    let mid2 : u64 = p10 + (mid1 & 0xFFFFFFFFu64)
+    MB_LMH[w] = p11 + (mid1 >> 32u64) + (mid2 >> 32u64)
+    MB_LML[w] = (mid2 << 32u64) | (p00 & 0xFFFFFFFFu64)
+    return 0i32
+}
+
+/* worker signed 192-bit accumulate of (ss, magnitude (lo, hi, 0)) */
+fn mb_wsacc(w: u64, ss: i64, lo: u64, hi: u64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let ds : i64 = MB_LDS[w]
+    let d0 : u64 = MB_LD0[w]
+    let d1 : u64 = MB_LD1[w]
+    let d2 : u64 = MB_LD2[w]
+    if ds == 0i64 {
+        MB_LDS[w] = ss
+        MB_LD0[w] = lo
+        MB_LD1[w] = hi
+        MB_LD2[w] = 0u64
+        return 0i32
+    }
+    if ds == ss {
+        let a0 : u64 = d0 + lo
+        let mut c0 : u64 = 0u64
+        if a0 < lo { c0 = 1u64 }
+        let a1a : u64 = d1 + hi
+        let mut c1 : u64 = 0u64
+        if a1a < hi { c1 = 1u64 }
+        let a1 : u64 = a1a + c0
+        if a1 < c0 { c1 = c1 + 1u64 }
+        MB_LD0[w] = a0
+        MB_LD1[w] = a1
+        MB_LD2[w] = d2 + c1
+        return 0i32
+    }
+    /* different signs: compare magnitudes (src has limb2 = 0) */
+    let mut cmp : i64 = 0i64
+    if d2 != 0u64 { cmp = 1i64 }
+    if cmp == 0i64 {
+        if d1 > hi { cmp = 1i64 }
+        if d1 < hi { cmp = 0i64 - 1i64 }
+    }
+    if cmp == 0i64 {
+        if d0 > lo { cmp = 1i64 }
+        if d0 < lo { cmp = 0i64 - 1i64 }
+    }
+    if cmp == 0i64 {
+        MB_LDS[w] = 0i64
+        MB_LD0[w] = 0u64
+        MB_LD1[w] = 0u64
+        MB_LD2[w] = 0u64
+        return 0i32
+    }
+    if cmp > 0i64 {
+        let mut b : u64 = 0u64
+        let x0 : u64 = d0 - lo
+        if d0 < lo { b = 1u64 }
+        let mut b1 : u64 = 0u64
+        let x1a : u64 = d1 - hi
+        if d1 < hi { b1 = 1u64 }
+        let x1 : u64 = x1a - b
+        if x1a < b { b1 = b1 + 1u64 }
+        MB_LD0[w] = x0
+        MB_LD1[w] = x1
+        MB_LD2[w] = d2 - b1
+        return 0i32
+    }
+    let mut b2 : u64 = 0u64
+    let y0 : u64 = lo - d0
+    if lo < d0 { b2 = 1u64 }
+    let y1 : u64 = hi - d1 - b2
+    MB_LD0[w] = y0
+    MB_LD1[w] = y1
+    MB_LD2[w] = 0u64
+    MB_LDS[w] = ss
+    return 0i32
+}
+
+fn mb_wuadd(w: u64, hi: u64, lo: u64) -> i32 {
+    let a0 : u64 = MB_LU0[w] + lo
+    let mut c0 : u64 = 0u64
+    if a0 < lo { c0 = 1u64 }
+    let a1a : u64 = MB_LU1[w] + hi
+    let mut c1 : u64 = 0u64
+    if a1a < hi { c1 = 1u64 }
+    let a1 : u64 = a1a + c0
+    if a1 < c0 { c1 = c1 + 1u64 }
+    MB_LU0[w] = a0
+    MB_LU1[w] = a1
+    MB_LU2[w] = MB_LU2[w] + c1
+    return 0i32
+}
+
+fn mb_wvadd(w: u64, hi: u64, lo: u64) -> i32 {
+    let a0 : u64 = MB_LV0[w] + lo
+    let mut c0 : u64 = 0u64
+    if a0 < lo { c0 = 1u64 }
+    let a1a : u64 = MB_LV1[w] + hi
+    let mut c1 : u64 = 0u64
+    if a1a < hi { c1 = 1u64 }
+    let a1 : u64 = a1a + c0
+    if a1 < c0 { c1 = c1 + 1u64 }
+    MB_LV0[w] = a0
+    MB_LV1[w] = a1
+    MB_LV2[w] = MB_LV2[w] + c1
+    return 0i32
+}
+
+/* read n bytes at abs into worker w's private block buffer */
+fn mb_wread(w: u64, abs: u64, n: u64) -> u64 {
+    let f : u64 = MB_LFILE[w]
+    if _fseeki64(f, abs as i64, 0i32) != 0i32 { return 1u64 }
+    let dst : u64 = ((&MB_LBLK) as u64) + w * 256u64
+    let got : u64 = fread(dst, 1u64, n, f)
+    if got != n { return 1u64 }
+    return 0u64
+}
+
+/* worker q4_K sub-block scales, packed (sc << 8) | mn */
+fn mb_wq4ks(w: u64, j: u64) -> u64 {
+    let base : u64 = w * 256u64
+    if j < 4u64 {
+        let sc : u64 = (MB_LBLK[base + 4u64 + j] as u64) & 63u64
+        let mn : u64 = (MB_LBLK[base + 8u64 + j] as u64) & 63u64
+        return (sc << 8u64) | mn
+    }
+    let sj4 : u64 = MB_LBLK[base + 8u64 + j] as u64
+    let sjm4 : u64 = MB_LBLK[base + j] as u64
+    let sj : u64 = MB_LBLK[base + 4u64 + j] as u64
+    let sc2 : u64 = (sj4 & 0xFu64) | ((sjm4 >> 6u64) << 4u64)
+    let mn2 : u64 = (sj4 >> 4u64) | ((sj >> 6u64) << 4u64)
+    return (sc2 << 8u64) | mn2
+}
+
+/* worker decoders: private buffer in, private values out.  1 = refuse */
+fn mb_wdec_q4k(w: u64, into_b: u64) -> u64 {
+    let base : u64 = w * 256u64
+    let dbits : u64 = (MB_LBLK[base] as u64) | ((MB_LBLK[base + 1u64] as u64) << 8u64)
+    let mbits : u64 = (MB_LBLK[base + 2u64] as u64) | ((MB_LBLK[base + 3u64] as u64) << 8u64)
+    let md : i64 = mb_f16m(dbits)
+    let mdm : i64 = mb_f16m(mbits)
+    if md == 4611686018427387904i64 { return 1u64 }
+    if mdm == 4611686018427387904i64 { return 1u64 }
+    let mut t : u64 = 0u64
+    while t < 4u64 {
+        let mut half : u64 = 0u64
+        while half < 2u64 {
+            let pk : u64 = mb_wq4ks(w, t * 2u64 + half)
+            let sc : i64 = (pk >> 8u64) as i64
+            let mn : i64 = (pk & 0xFFu64) as i64
+            let mut l : u64 = 0u64
+            while l < 32u64 {
+                let raw : u64 = MB_LBLK[base + 16u64 + t * 32u64 + l] as u64
+                let mut q : u64 = raw & 0xFu64
+                if half == 1u64 { q = raw >> 4u64 }
+                let vm : i64 = md * sc * (q as i64) - mdm * mn
+                let idx : u64 = base + t * 64u64 + half * 32u64 + l
+                if into_b == 0u64 { MB_LVA[idx] = vm }
+                if into_b == 1u64 { MB_LVB[idx] = vm }
+                l = l + 1u64
+            }
+            half = half + 1u64
+        }
+        t = t + 1u64
+    }
+    return 0u64
+}
+
+fn mb_wdec_q6k(w: u64, into_b: u64) -> u64 {
+    let base : u64 = w * 256u64
+    let dbits : u64 = (MB_LBLK[base + 208u64] as u64) | ((MB_LBLK[base + 209u64] as u64) << 8u64)
+    let md : i64 = mb_f16m(dbits)
+    if md == 4611686018427387904i64 { return 1u64 }
+    let mut n2 : u64 = 0u64
+    while n2 < 2u64 {
+        let vbase : u64 = base + n2 * 128u64
+        let qlb : u64 = base + n2 * 64u64
+        let qhb : u64 = base + 128u64 + n2 * 32u64
+        let scb : u64 = base + 192u64 + n2 * 8u64
+        let mut l : u64 = 0u64
+        while l < 32u64 {
+            let isx : u64 = l / 16u64
+            let ql0 : u64 = MB_LBLK[qlb + l] as u64
+            let ql32 : u64 = MB_LBLK[qlb + l + 32u64] as u64
+            let qh : u64 = MB_LBLK[qhb + l] as u64
+            let q1 : i64 = (((ql0 & 0xFu64) | (((qh >> 0u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q2 : i64 = (((ql32 & 0xFu64) | (((qh >> 2u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q3 : i64 = (((ql0 >> 4u64) | (((qh >> 4u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q4 : i64 = (((ql32 >> 4u64) | (((qh >> 6u64) & 3u64) << 4u64)) as i64) - 32i64
+            let mut wv : u64 = 0u64
+            while wv < 4u64 {
+                let mut qv : i64 = q1
+                if wv == 1u64 { qv = q2 }
+                if wv == 2u64 { qv = q3 }
+                if wv == 3u64 { qv = q4 }
+                let scraw : u64 = MB_LBLK[scb + isx + wv * 2u64] as u64
+                let mut sc : i64 = scraw as i64
+                if scraw >= 128u64 { sc = (scraw as i64) - 256i64 }
+                let vm : i64 = md * sc * qv
+                let idx : u64 = vbase + wv * 32u64 + l
+                if into_b == 0u64 { MB_LVA[idx] = vm }
+                if into_b == 1u64 { MB_LVB[idx] = vm }
+                wv = wv + 1u64
+            }
+            l = l + 1u64
+        }
+        n2 = n2 + 1u64
+    }
+    return 0u64
+}
+
+fn mb_wdec_q80(w: u64, into_b: u64) -> u64 {
+    let base : u64 = w * 256u64
+    let dbits : u64 = (MB_LBLK[base] as u64) | ((MB_LBLK[base + 1u64] as u64) << 8u64)
+    let md : i64 = mb_f16m(dbits)
+    if md == 4611686018427387904i64 { return 1u64 }
+    let mut l : u64 = 0u64
+    while l < 32u64 {
+        let raw : u64 = MB_LBLK[base + 2u64 + l] as u64
+        let mut q : i64 = raw as i64
+        if raw >= 128u64 { q = (raw as i64) - 256i64 }
+        let vm : i64 = md * q
+        let idx : u64 = base + l
+        if into_b == 0u64 { MB_LVA[idx] = vm }
+        if into_b == 1u64 { MB_LVB[idx] = vm }
+        l = l + 1u64
+    }
+    return 0u64
+}
+
+fn mb_wdec(w: u64, ty: u64, into_b: u64) -> u64 {
+    if ty == 12u64 { return mb_wdec_q4k(w, into_b) }
+    if ty == 14u64 { return mb_wdec_q6k(w, into_b) }
+    if ty == 8u64 { return mb_wdec_q80(w, into_b) }
+    return 1u64
+}
+
+/* the weaver: OS thread entry (win64: arg arrives in rcx).  Processes the
+ * static block range [w*chunk, min((w+1)*chunk, bpr)) with PRIVATE state
+ * only -- the timing of the weavers is entirely free. */
+fn mb_loom_worker(arg: u64) -> u32 {
+    let w : u64 = arg
+    MB_LDS[w] = 0i64
+    MB_LD0[w] = 0u64
+    MB_LD1[w] = 0u64
+    MB_LD2[w] = 0u64
+    MB_LU0[w] = 0u64
+    MB_LU1[w] = 0u64
+    MB_LU2[w] = 0u64
+    MB_LV0[w] = 0u64
+    MB_LV1[w] = 0u64
+    MB_LV2[w] = 0u64
+    let bbu : u64 = mb_tbb(MB_C1_TYPE)
+    let bbv : u64 = mb_tbb(MB_C2_TYPE)
+    let start : u64 = w * MB_L_CHUNK
+    let mut endb : u64 = start + MB_L_CHUNK
+    if endb > MB_L_BPR { endb = MB_L_BPR }
+    let mut b : u64 = start
+    while b < endb {
+        let ub : u64 = MB_DBASE1 + MB_C1_OFF + (MB_L_RU * MB_L_BPR + b) * bbu
+        if mb_wread(w, ub, bbu) != 0u64 {
+            MB_LRC[w] = 372u64
+            return 0u32
+        }
+        if mb_wdec(w, MB_C1_TYPE, 0u64) != 0u64 {
+            MB_LRC[w] = 372u64
+            return 0u32
+        }
+        let vb2 : u64 = MB_DBASE1 + MB_C2_OFF + (MB_L_RV * MB_L_BPR + b) * bbv
+        if mb_wread(w, vb2, bbv) != 0u64 {
+            MB_LRC[w] = 372u64
+            return 0u32
+        }
+        if mb_wdec(w, MB_C2_TYPE, 1u64) != 0u64 {
+            MB_LRC[w] = 372u64
+            return 0u32
+        }
+        let base : u64 = w * 256u64
+        let mut e : u64 = 0u64
+        while e < 256u64 {
+            let va : i64 = MB_LVA[base + e]
+            let vbv : i64 = MB_LVB[base + e]
+            let mut ma : u64 = va as u64
+            if va < 0i64 { ma = (0i64 - va) as u64 }
+            let mut mbv : u64 = vbv as u64
+            if vbv < 0i64 { mbv = (0i64 - vbv) as u64 }
+            if va != 0i64 {
+                if vbv != 0i64 {
+                    let mut sgn : i64 = 1i64
+                    if va < 0i64 {
+                        if vbv > 0i64 { sgn = 0i64 - 1i64 }
+                    }
+                    if va > 0i64 {
+                        if vbv < 0i64 { sgn = 0i64 - 1i64 }
+                    }
+                    mb_wmul64(w, ma, mbv)
+                    mb_wsacc(w, sgn, MB_LML[w], MB_LMH[w])
+                }
+                mb_wmul64(w, ma, ma)
+                mb_wuadd(w, MB_LMH[w], MB_LML[w])
+            }
+            if vbv != 0i64 {
+                mb_wmul64(w, mbv, mbv)
+                mb_wvadd(w, MB_LMH[w], MB_LML[w])
+            }
+            e = e + 1u64
+        }
+        b = b + 1u64
+    }
+    MB_LRC[w] = 0u64
+    return 0u32
+}
+
+/* one full launch: open private files, weave, join, verdict.  0 = ok */
+var MB_LH : [u64; 4]
+fn mb_loom_launch() -> u64 {
+    let mut w : u64 = 0u64
+    while w < MB_NW {
+        MB_LFILE[w] = fopen((&MB_PATH1) as u64, "rb" as u64)
+        if MB_LFILE[w] == 0u64 {
+            let mut c : u64 = 0u64
+            while c < w {
+                fclose(MB_LFILE[c])
+                c = c + 1u64
+            }
+            return 1u64
+        }
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < MB_NW {
+        MB_LRC[w] = 999u64
+        MB_LH[w] = CreateThread(0u64, 0u64, mb_loom_worker as u64, w, 0u64, 0u64)
+        if MB_LH[w] == 0u64 {
+            /* join what launched, close everything, refuse */
+            let mut j : u64 = 0u64
+            while j < w {
+                WaitForSingleObject(MB_LH[j], 0xFFFFFFFFu32)
+                CloseHandle(MB_LH[j])
+                j = j + 1u64
+            }
+            let mut c2 : u64 = 0u64
+            while c2 < MB_NW {
+                fclose(MB_LFILE[c2])
+                c2 = c2 + 1u64
+            }
+            return 1u64
+        }
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < MB_NW {
+        WaitForSingleObject(MB_LH[w], 0xFFFFFFFFu32)
+        CloseHandle(MB_LH[w])
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < MB_NW {
+        fclose(MB_LFILE[w])
+        w = w + 1u64
+    }
+    w = 0u64
+    while w < MB_NW {
+        if MB_LRC[w] != 0u64 { return 1u64 }
+        w = w + 1u64
+    }
+    return 0u64
+}
+
+fn mb_arm372() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    if MB_SYN_CS == 0u64 { return 372u64 }
+    let bpr : u64 = MB_C1_NE0 / 256u64
+    MB_L_RU = MB_SYN_RU
+    MB_L_RV = MB_SYN_RV
+    MB_L_BPR = bpr
+    MB_L_CHUNK = (bpr + MB_NW - 1u64) / MB_NW
+    /* FIRST LAUNCH */
+    if mb_loom_launch() != 0u64 { return 372u64 }
+    /* the canonical fold, w = 0..NW-1 */
+    mb_sacc_clear(0u64)
+    let mut w : u64 = 0u64
+    while w < MB_NW {
+        mb_sacc_add(0u64, MB_LDS[w], MB_LD0[w], MB_LD1[w], MB_LD2[w])
+        w = w + 1u64
+    }
+    let f1s : i64 = MB_TS
+    let f10 : u64 = MB_T0
+    let f11 : u64 = MB_T1
+    let f12 : u64 = MB_T2
+    /* the REVERSED fold: associativity witnessed at the fold itself */
+    mb_sacc_clear(0u64)
+    w = MB_NW
+    while w != 0u64 {
+        w = w - 1u64
+        mb_sacc_add(0u64, MB_LDS[w], MB_LD0[w], MB_LD1[w], MB_LD2[w])
+    }
+    if MB_TS != f1s { return 372u64 }
+    if MB_T0 != f10 { return 372u64 }
+    if MB_T1 != f11 { return 372u64 }
+    if MB_T2 != f12 { return 372u64 }
+    /* THE THEOREM: the parallel weave equals the sequential stream */
+    if f1s != MB_SYN_S { return 372u64 }
+    if f10 != MB_SYN_0 { return 372u64 }
+    if f11 != MB_SYN_1 { return 372u64 }
+    if f12 != MB_SYN_2 { return 372u64 }
+    /* the norms agree too (positive folds) */
+    mb_sacc_clear(0u64)
+    w = 0u64
+    while w < MB_NW {
+        let mut us : i64 = 0i64
+        if (MB_LU0[w] | MB_LU1[w] | MB_LU2[w]) != 0u64 { us = 1i64 }
+        mb_sacc_add(0u64, us, MB_LU0[w], MB_LU1[w], MB_LU2[w])
+        w = w + 1u64
+    }
+    if MB_T0 != MB_SYN_U0 { return 372u64 }
+    if MB_T1 != MB_SYN_U1 { return 372u64 }
+    if MB_T2 != MB_SYN_U2 { return 372u64 }
+    mb_sacc_clear(0u64)
+    w = 0u64
+    while w < MB_NW {
+        let mut vs : i64 = 0i64
+        if (MB_LV0[w] | MB_LV1[w] | MB_LV2[w]) != 0u64 { vs = 1i64 }
+        mb_sacc_add(0u64, vs, MB_LV0[w], MB_LV1[w], MB_LV2[w])
+        w = w + 1u64
+    }
+    if MB_T0 != MB_SYN_V0 { return 372u64 }
+    if MB_T1 != MB_SYN_V1 { return 372u64 }
+    if MB_T2 != MB_SYN_V2 { return 372u64 }
+    /* SECOND LAUNCH: a fresh weave under fresh timing must land identically */
+    if mb_loom_launch() != 0u64 { return 372u64 }
+    mb_sacc_clear(0u64)
+    w = 0u64
+    while w < MB_NW {
+        mb_sacc_add(0u64, MB_LDS[w], MB_LD0[w], MB_LD1[w], MB_LD2[w])
+        w = w + 1u64
+    }
+    if MB_TS != f1s { return 372u64 }
+    if MB_T0 != f10 { return 372u64 }
+    if MB_T1 != f11 { return 372u64 }
+    if MB_T2 != f12 { return 372u64 }
+    mb_rs("the loom: workers=" as u64)
+    mb_ru(MB_NW)
+    mb_rs(" chunk=" as u64)
+    mb_ru(MB_L_CHUNK)
+    mb_rs(" partition=static timing=free result=sequential-identical fold=order-invariant relaunch=identical" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+fn mb_arm371() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    /* the resident stomach: the sum of every buffer this organ owns.
+     * window 65536 + spans 2x4096 + key 256 + hist 512 + blk 256
+     * + values 2x2048 + report 4096 + partials 512 + 3x512 + names 2x64
+     * + paths 2x64 + arch 32 + digits 64 + splits 128+16 */
+    let resident : u64 = 65536u64 + 4096u64 + 4096u64 + 256u64 + 512u64 + 256u64 + 2048u64 + 2048u64 + 4096u64 + 512u64 + 1536u64 + 128u64 + 128u64 + 32u64 + 64u64 + 144u64
+    if MB_STREAMED == 0u64 { return 371u64 }
+    if MB_STREAMED <= resident { return 371u64 }
+    mb_rs("the stomach: streamed=" as u64)
+    mb_ru(MB_STREAMED)
+    mb_rs(" resident=" as u64)
+    mb_ru(resident)
+    mb_rs(" -- the feast passes through a fixed stomach: blocks in, proofs out" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
 /* ==================== arm 366: THE SCROLL ==================== */
 
 fn mb_arm366() -> u64 {
@@ -1687,6 +2728,7 @@ fn mb_arm366() -> u64 {
 fn mb_selfprove() -> u64 @export {
     MB_REPN = 0u64
     MB_SCROLL = 0u64
+    MB_STREAMED = 0u64
     MB_C1_F = 0u8
     MB_C2_F = 0u8
     MB_ARCHN = 0u64
@@ -1711,6 +2753,12 @@ fn mb_selfprove() -> u64 @export {
     if r4 != 0u64 { return r4 }
     let r5 : u64 = mb_arm365()
     if r5 != 0u64 { return r5 }
+    let r5b : u64 = mb_arm370()
+    if r5b != 0u64 { return r5b }
+    let r5d : u64 = mb_arm372()
+    if r5d != 0u64 { return r5d }
+    let r5c : u64 = mb_arm371()
+    if r5c != 0u64 { return r5c }
     let r6 : u64 = mb_arm366()
     if r6 != 0u64 { return r6 }
     mb_rs("the boundary: softmax mixing is transcendental -- beyond metabole's arms, referred to the interval organ" as u64)

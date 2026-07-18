@@ -198,6 +198,9 @@ else
     grep -q "^the digestion: .*distributive=ok" "$T/run1.txt" || { echo "[summit_gate] NO EXACT DIGESTION"; exit 6; }
     grep -q "^the witness: .*fp32 must round" "$T/run1.txt" || { echo "[summit_gate] NO FLOAT WITNESS"; exit 6; }
     grep -q "^the krisis: .*agree=ok" "$T/run1.txt" || { echo "[summit_gate] NO KRISIS AGREEMENT"; exit 6; }
+    grep -q "^the synapse: .*regroup=ok stream=identical cauchy-schwarz=strict" "$T/run1.txt" || { echo "[summit_gate] NO EXACT SYNAPSE"; exit 6; }
+    grep -q "^the loom: workers=.*partition=static timing=free result=sequential-identical fold=order-invariant relaunch=identical" "$T/run1.txt" || { echo "[summit_gate] THE LOOM UNRAVELED"; exit 6; }
+    grep -q "^the stomach: streamed=.* resident=.* -- the feast passes through a fixed stomach" "$T/run1.txt" || { echo "[summit_gate] NO STOMACH LAW"; exit 6; }
     grep -q "^the discharge: softmax mixing DECIDED on real flesh.*agree=ok control-refused=ok" "$T/run1.txt" || { echo "[summit_gate] DEFICIT NOT DISCHARGED"; exit 6; }
 fi
 [ -s "$ROOT/STDLIB/data/zetesis.jrnl" ] || { echo "[summit_gate] NO JOURNAL"; exit 6; }

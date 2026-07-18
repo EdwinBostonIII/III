@@ -80,6 +80,14 @@ extern @abi(c-msvc-x64) fn eol_axiom() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_witness() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_rcap() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_verify(base: u64, len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_text_off() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_text_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_restand() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_kept_claims() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_kept_claim_base(i: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_kept_claim_len(i: u64) -> u64 from "eidolos.iii"
 
 extern @abi(c-msvc-x64) fn lx_check(addr: u64, len: u64) -> u64 from "lexicon.iii"
 extern @abi(c-msvc-x64) fn lx_unknown_len() -> u64 from "lexicon.iii"
@@ -595,47 +603,12 @@ fn xn_render(id: u64, depth: u64) -> u64 {
 var XN_LTO : u64 = 0u64
 var XN_LTN : u64 = 0u64
 fn xn_vline(base: u64, off: u64, len: u64) -> u64 {
-    let p : *u8 = base as *u8
-    let mut i : u64 = off
-    let stop : u64 = off + len
-    let mut a : u64 = 0u64
-    let mut nd : u64 = 0u64
-    while i < stop {
-        let c : u8 = p[i]
-        if c >= 48u8 { if c <= 57u8 {
-            a = (a * 10u64) + ((c - 48u8) as u64)
-            nd = nd + 1u64
-            i = i + 1u64
-        } else { i = stop + 1u64 } } else { i = stop + 1u64 }
-        if i == stop + 1u64 { i = i - 1u64   stop = stop + 0u64 }
-        if i == stop { }
-        if nd > 20u64 { return 1u64 }
-        if i < stop { if p[i] == 32u8 { stop = stop + 0u64   i = i + 0u64
-            /* end of digits */
-            nd = nd + 0u64
-            i = i + 0u64
-            /* break via forcing */
-            let brk : u64 = 1u64
-            if brk == 1u64 {
-                /* text begins after this space */
-                XN_LTO = i + 1u64 - off + off
-                i = stop + 2u64
-            }
-        } }
-    }
-    if nd == 0u64 { return 1u64 }
-    let to : u64 = XN_LTO
-    if to >= off + len { return 1u64 }
-    let tn : u64 = off + len - to
-    if tn == 0u64 { return 1u64 }
-    eol_reset()
-    if eol_read(base + to, tn) < 0i64 { eol_reset()   return 1u64 }
-    let ra : u64 = eol_addr()
-    eol_reset()
-    if ra == 0u64 { return 1u64 }
-    if ra != a { return 1u64 }
-    XN_LTO = to
-    XN_LTN = tn
+    /* one remembered line, verified by THE EVENT-LINE LAW (the logos's own
+     * discipline): the address must re-derive from the text or the line is
+     * a lying memory.  0 ok | 1 refused. */
+    if eol_line_verify(base + off, len) == 0u64 { return 1u64 }
+    XN_LTO = off + eol_line_text_off()
+    XN_LTN = eol_line_text_len()
     return 0u64
 }
 /* find-or-append the current event (XN_EV/XN_EVN).  Every remembered line is
@@ -1166,25 +1139,21 @@ fn xn_eputu(v: u64) -> u64 {
  * text IS the truth); the house's axiom rides as the offered handshake.
  * Returns the scroll's address; 0 = refused (incoherent or over-cap). */
 fn xn_emit_env() -> u64 @export {
-    let a : u64 = eol_addr()
+    /* seal the standing scroll as the logos's KEPT HOUSE -- the emission
+     * source (an incoherent scroll cannot be kept, so it cannot leave) */
+    let a : u64 = eol_keep()
     if a == 0u64 { return 0u64 }
     let g : u64 = eol_witness()
-    /* hold the canonical bytes (the emission source) */
-    eol_write()
-    let cn : u64 = eol_out_len()
-    if cn >= 16384u64 { return 0u64 }
-    let mut i : u64 = 0u64
-    while i < cn { XN_CAN[i] = eol_out_byte(i)   i = i + 1u64 }
-    XN_CNN = cn
-    /* the house's axiom (STATE-DESTROYING: re-read the scroll after) */
+    /* the house's axiom (STATE-DESTROYING) -- then the ONE restore, which
+     * must re-derive the same address (the round trip is the tooth) */
     let ax : u64 = eol_axiom()
-    eol_reset()
-    if ax == 0u64 { return 0u64 }
-    if eol_read((&XN_CAN) as u64, XN_CNN) < 0i64 { eol_reset()   return 0u64 }
-    if eol_addr() != a { eol_reset()   return 0u64 }
-    /* assemble the envelope; claims split at depth-0 bracket boundaries.
-     * Claim bytes are lawful eidolos text ([a-z0-9_- :<~=[]]) -- no JSON
-     * escaping can ever be needed; any other byte refuses the emission. */
+    if ax == 0u64 { eol_restand()   return 0u64 }
+    if eol_restand() != a { eol_reset()   return 0u64 }
+    /* assemble the envelope: the claims come one by one from the logos's
+     * kept GEOGRAPHY -- the door never splits canonical text again.  Claim
+     * bytes are lawful eidolos text ([a-z0-9_- :<~=[]]) -- no JSON
+     * escaping can ever be needed; any other byte refuses the emission
+     * (the charset is the door's own wire law, kept at the door). */
     XN_EN = 0u64
     xn_eputs("{\"speak\":\"eidolos\",\"axiom\":\"" as u64)
     xn_eputu(ax)
@@ -1193,46 +1162,39 @@ fn xn_emit_env() -> u64 @export {
     xn_eputs("\",\"geometry\":\"" as u64)
     xn_eputu(g)
     xn_eputs("\",\"claims\":[" as u64)
-    let mut depth : u64 = 0u64
-    let mut first : u64 = 1u64
-    i = 0u64
+    let nc : u64 = eol_kept_claims()
+    let mut ci : u64 = 0u64
     let mut r : u64 = 0u64
-    while i < XN_CNN {
-        let c : u8 = XN_CAN[i]
-        let mut lawful : u64 = 0u64
-        if c >= 97u8 { if c <= 122u8 { lawful = 1u64 } }
-        if c >= 48u8 { if c <= 57u8 { lawful = 1u64 } }
-        if c == 95u8 { lawful = 1u64 }
-        if c == 45u8 { lawful = 1u64 }
-        if c == 32u8 { lawful = 1u64 }
-        if c == 58u8 { lawful = 1u64 }
-        if c == 60u8 { lawful = 1u64 }
-        if c == 126u8 { lawful = 1u64 }
-        if c == 61u8 { lawful = 1u64 }
-        if c == 91u8 { lawful = 1u64 }
-        if c == 93u8 { lawful = 1u64 }
-        if lawful == 0u64 { return 0u64 }
-        if c == 91u8 {
-            if depth == 0u64 {
-                if first == 0u64 { if xn_eput(44u8) != 0u64 { r = 1u64 } }
-                if xn_eput(34u8) != 0u64 { r = 1u64 }
-                first = 0u64
-            }
-            depth = depth + 1u64
-            if xn_eput(91u8) != 0u64 { r = 1u64 }
-        } else {
-            if c == 93u8 {
-                if depth == 0u64 { return 0u64 }
-                depth = depth - 1u64
-                if xn_eput(93u8) != 0u64 { r = 1u64 }
-                if depth == 0u64 { if xn_eput(34u8) != 0u64 { r = 1u64 } }
-            } else {
-                if depth > 0u64 { if xn_eput(c) != 0u64 { r = 1u64 } }
-            }
+    while ci < nc {
+        let cb : u64 = eol_kept_claim_base(ci)
+        let cl : u64 = eol_kept_claim_len(ci)
+        if cb == 0u64 { return 0u64 }
+        if cl == 0u64 { return 0u64 }
+        if ci > 0u64 { if xn_eput(44u8) != 0u64 { r = 1u64 } }
+        if xn_eput(34u8) != 0u64 { r = 1u64 }
+        let cp : *u8 = cb as *u8
+        let mut k : u64 = 0u64
+        while k < cl {
+            let c : u8 = cp[k]
+            let mut lawful : u64 = 0u64
+            if c >= 97u8 { if c <= 122u8 { lawful = 1u64 } }
+            if c >= 48u8 { if c <= 57u8 { lawful = 1u64 } }
+            if c == 95u8 { lawful = 1u64 }
+            if c == 45u8 { lawful = 1u64 }
+            if c == 32u8 { lawful = 1u64 }
+            if c == 58u8 { lawful = 1u64 }
+            if c == 60u8 { lawful = 1u64 }
+            if c == 126u8 { lawful = 1u64 }
+            if c == 61u8 { lawful = 1u64 }
+            if c == 91u8 { lawful = 1u64 }
+            if c == 93u8 { lawful = 1u64 }
+            if lawful == 0u64 { return 0u64 }
+            if xn_eput(c) != 0u64 { r = 1u64 }
+            k = k + 1u64
         }
-        i = i + 1u64
+        if xn_eput(34u8) != 0u64 { r = 1u64 }
+        ci = ci + 1u64
     }
-    if depth != 0u64 { return 0u64 }
     xn_eputs("]}" as u64)
     if r != 0u64 { return 0u64 }
     return a

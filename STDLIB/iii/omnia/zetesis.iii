@@ -114,6 +114,9 @@ extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_swap_invariant(a_addr: u64, a_len: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_witness_canon() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_verify(base: u64, len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_text_off() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_text_len() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn py_testify() -> u64 from "pyrgos.iii"
 extern @abi(c-msvc-x64) fn rz_testify() -> u64 from "riza.iii"
 extern @abi(c-msvc-x64) fn ky_testify() -> u64 from "kyma.iii"
@@ -570,34 +573,13 @@ fn zt_arm351() -> u64 {
 var ZT_LTO : u64 = 0u64                  /* verified line: text offset in ZT_JB */
 var ZT_LTN : u64 = 0u64                  /* verified line: text length          */
 fn zt_vline(buf: u64, off: u64, len: u64) -> u64 {
-    /* verify one journal line "addr text": the address must RE-DERIVE from
-     * the text.  Returns the address (nonzero) or 0 = a lying memory. */
-    let pb : *u8 = buf as *u8
-    let mut i : u64 = off
-    let stop : u64 = off + len
-    let mut ad : u64 = 0u64
-    let mut nd : u64 = 0u64
-    let mut going : u64 = 1u64
-    while going == 1u64 {
-        if i >= stop { return 0u64 }
-        let c : u8 = pb[i]
-        if c == 32u8 { going = 0u64 } else {
-            if c < 48u8 { return 0u64 }
-            if c > 57u8 { return 0u64 }
-            ad = (ad * 10u64) + ((c - 48u8) as u64)
-            nd = nd + 1u64
-            i = i + 1u64
-        }
-    }
-    if nd == 0u64 { return 0u64 }
+    /* verify one journal line "addr text" by THE EVENT-LINE LAW (the
+     * logos's own journal discipline): the address must RE-DERIVE from the
+     * text.  Returns the address (nonzero) or 0 = a lying memory. */
+    let ad : u64 = eol_line_verify(buf + off, len)
     if ad == 0u64 { return 0u64 }
-    i = i + 1u64
-    if i >= stop { return 0u64 }
-    ZT_LTO = i
-    ZT_LTN = stop - i
-    eol_reset()
-    if eol_read(buf + i, ZT_LTN) < 0i64 { return 0u64 }
-    if eol_addr() != ad { return 0u64 }
+    ZT_LTO = off + eol_line_text_off()
+    ZT_LTN = eol_line_text_len()
     return ad
 }
 fn zt_lput(c: u8) -> i32 {

@@ -1205,10 +1205,21 @@ var EOL_QA : [u8; 2048]                  /* judge scratch: the question's things
 var EOL_QB : [u8; 2048]
 var EOL_RKEEP : [u8; 256]                /* reduce: the kept-set                */
 var EOL_RBUF : [u8; 16384]               /* reduce: the remainder basis         */
+var EOL_LB : [u8; 320]                   /* self-proof: one event line          */
 
 fn eol_kept_len() -> u64 @export { return EOL_KN }
 fn eol_kept_byte(i: u64) -> u8 @export { if i < EOL_KN { return EOL_KEPT[i] }   return 0u8 }
 fn eol_kept_addr() -> u64 @export { return EOL_KADDR }
+/* the kept GEOGRAPHY, readable: claim i of the kept house as its exact
+ * span in the kept canon (base address + length) -- so no organ ever
+ * splits canonical text again.  Out of range: base 0, len 0 (benign and
+ * obvious; the caller refuses by name). */
+fn eol_kept_claims() -> u64 @export { return EOL_KCN }
+fn eol_kept_claim_base(i: u64) -> u64 @export {
+    if i < EOL_KCN { return ((&EOL_KEPT) as u64) + EOL_KSO[i] }
+    return 0u64
+}
+fn eol_kept_claim_len(i: u64) -> u64 @export { if i < EOL_KCN { return EOL_KSL[i] }   return 0u64 }
 
 /* seal the coherent standing scroll as THE KEPT HOUSE.  Returns its address;
  * 0 = refused (an incoherent scroll cannot be kept; counted by eol_addr,
@@ -1341,13 +1352,56 @@ fn eol_reduce() -> u64 @export {
 }
 /* THE VERIFICATION: does this text re-derive exactly this address?  The one
  * self-verification law every journal line and hearth file lives by.  1 yes
- * | 0 no.  Leaves the scroll state reset (no residue). */
+ * | 0 no.  Leaves the scroll state reset (no residue).  Address 0 is NOT an
+ * address (0 is the law's refusal) -- a zero expectation can never verify,
+ * so an incoherent text can never hide behind a zero-address line. */
 fn eol_verify(base: u64, len: u64, expect: u64) -> u64 @export {
+    if expect == 0u64 { eol_reset()   return 0u64 }
     eol_reset()
     if eol_read(base, len) < 0i64 { eol_reset()   return 0u64 }
     if eol_addr() != expect { eol_reset()   return 0u64 }
     eol_reset()
     return 1u64
+}
+/* THE EVENT-LINE LAW: one journal discipline for every self-verifying
+ * memory in the tree.  A remembered event is the line `<address> <text>`
+ * where the address must RE-DERIVE from the text (an EIDOLOS scroll) or
+ * the line is a LYING MEMORY.  Returns the re-derived address (nonzero) or
+ * 0 = refused; the verified text's span (offset from base, length) is
+ * readable until the next verification.  No residue.  This is the kardia
+ * shape of memory: perfect function is a remembered truth, brokenness is
+ * benign (nothing stands, nothing admits) and obvious (0, counted by the
+ * keeper that called). */
+var EOL_LVO : u64 = 0u64
+var EOL_LVN : u64 = 0u64
+fn eol_line_text_off() -> u64 @export { return EOL_LVO }
+fn eol_line_text_len() -> u64 @export { return EOL_LVN }
+fn eol_line_verify(base: u64, len: u64) -> u64 @export {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    let mut a : u64 = 0u64
+    let mut nd : u64 = 0u64
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        if i >= len { return 0u64 }
+        let c : u8 = p[i]
+        if c == 32u8 { going = 0u64 } else {
+            if c < 48u8 { return 0u64 }
+            if c > 57u8 { return 0u64 }
+            if nd >= 20u64 { return 0u64 }
+            a = (a * 10u64) + ((c - 48u8) as u64)
+            nd = nd + 1u64
+            i = i + 1u64
+        }
+    }
+    if nd == 0u64 { return 0u64 }
+    if a == 0u64 { return 0u64 }
+    let to : u64 = i + 1u64
+    if to >= len { return 0u64 }
+    if eol_verify(base + to, len - to, a) != 1u64 { return 0u64 }
+    EOL_LVO = to
+    EOL_LVN = len - to
+    return a
 }
 
 /* ==================== THE KEPT-HOUSE SELF-PROOF (arms 425..430) ==================== */
@@ -1446,19 +1500,54 @@ fn eol_keep_selfprove() -> u64 @export {
     if eol_vz("[dream ~ wake]" as u64, v1 + 1u64) != 0u64 { eol_reset()   return 429u64 }
     if eol_vz("[dream ~" as u64, v1) != 0u64 { eol_reset()   return 429u64 }
     if eol_claims() != 0u64 { eol_reset()   return 429u64 }
+    /* ...and THE EVENT-LINE LAW: "<addr> <text>" re-derives whole; a
+     * truncated text, a lying zero address (over an incoherent scroll --
+     * the hiding place the guard closes), and bare digits all refuse. */
+    let mut lm : u64 = 0u64
+    let mut ldiv : u64 = 1u64
+    let mut lt : u64 = v1
+    while lt >= 10u64 { ldiv = ldiv * 10u64   lt = lt / 10u64 }
+    lt = v1
+    let mut lgo : u64 = 1u64
+    while lgo == 1u64 {
+        EOL_LB[lm] = (48u64 + (lt / ldiv)) as u8
+        lm = lm + 1u64
+        lt = lt % ldiv
+        if ldiv == 1u64 { lgo = 0u64 } else { ldiv = ldiv / 10u64 }
+    }
+    let lnd : u64 = lm
+    EOL_LB[lm] = 32u8
+    lm = lm + 1u64
+    let ltx : u64 = "[dream ~ wake]" as u64
+    let lp : *u8 = ltx as *u8
+    let mut lk : u64 = 0u64
+    while lk < 14u64 { EOL_LB[lm + lk] = lp[lk]   lk = lk + 1u64 }
+    lm = lm + 14u64
+    if eol_line_verify((&EOL_LB) as u64, lm) != v1 { eol_reset()   return 429u64 }
+    if eol_line_text_off() != lnd + 1u64 { eol_reset()   return 429u64 }
+    if eol_line_text_len() != 14u64 { eol_reset()   return 429u64 }
+    if eol_line_verify((&EOL_LB) as u64, lm - 1u64) != 0u64 { eol_reset()   return 429u64 }
+    if eol_line_verify((&EOL_LB) as u64, lnd) != 0u64 { eol_reset()   return 429u64 }
+    let lz : u64 = "0 [a < b] [b < a]" as u64
+    if eol_line_verify(lz, eol_slen(lz)) != 0u64 { eol_reset()   return 429u64 }
+    if eol_claims() != 0u64 { eol_reset()   return 429u64 }
     /* arm 430: THE GEOGRAPHY -- every stated claim of the kept house,
-     * re-read from its recorded span alone, is entailed by the house itself
-     * (all three verbs and a measured phrase exercise the span arithmetic). */
+     * re-read from its PUBLIC span faces alone, is entailed by the house
+     * itself (all three verbs and a measured phrase exercise the span
+     * arithmetic); out of range is benign and obvious (base 0, len 0). */
     eol_reset()
     if eol_readz("[a < b] [q ~ r] [m = n] [belief 9 < assert]" as u64) < 0i64 { eol_reset()   return 430u64 }
     let g1 : u64 = eol_keep()
     if g1 == 0u64 { eol_reset()   return 430u64 }
-    if EOL_KCN != 4u64 { eol_reset()   return 430u64 }
+    let gnc : u64 = eol_kept_claims()
+    if gnc != 4u64 { eol_reset()   return 430u64 }
     let mut gi : u64 = 0u64
-    while gi < EOL_KCN {
-        if eol_judge_claim(((&EOL_KEPT) as u64) + EOL_KSO[gi], EOL_KSL[gi]) != 1u64 { eol_reset()   return 430u64 }
+    while gi < gnc {
+        if eol_judge_claim(eol_kept_claim_base(gi), eol_kept_claim_len(gi)) != 1u64 { eol_reset()   return 430u64 }
         gi = gi + 1u64
     }
+    if eol_kept_claim_base(gnc) != 0u64 { eol_reset()   return 430u64 }
+    if eol_kept_claim_len(gnc) != 0u64 { eol_reset()   return 430u64 }
     if eol_addr() != g1 { eol_reset()   return 430u64 }
     eol_reset()
     return 0u64

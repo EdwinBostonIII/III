@@ -77,6 +77,7 @@ extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_restand() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_judge_claim(base: u64, len: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_line_verify(base: u64, len: u64) -> u64 from "eidolos.iii"
 
 extern @abi(c-msvc-x64) fn xn_rooted() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
@@ -253,28 +254,11 @@ fn px_claim_start(off: u64, end: u64) -> u64 {
     return end
 }
 /* verify one ledger line [off,end): "<digits> <claim>" whose claim's
- * address re-derives to <digits> -- the logos's own verification.  Sets
- * PX_LADDR.  0 ok | 1 tamper. */
+ * address re-derives to <digits> -- THE EVENT-LINE LAW, the logos's own
+ * journal discipline.  Sets PX_LADDR.  0 ok | 1 tamper. */
 fn px_vline(off: u64, end: u64) -> u64 {
-    if (end - off) < 3u64 { return 1u64 }
-    let cb : u64 = px_claim_start(off, end)
-    if cb >= end { return 1u64 }
-    /* the address digits are [off, cb-1) */
-    let mut a : u64 = 0u64
-    let mut nd : u64 = 0u64
-    let mut i : u64 = off
-    while i < (cb - 1u64) {
-        let c : u8 = PX_JB[i]
-        if c < 48u8 { return 1u64 }
-        if c > 57u8 { return 1u64 }
-        a = (a * 10u64) + ((c - 48u8) as u64)
-        nd = nd + 1u64
-        i = i + 1u64
-    }
-    if nd == 0u64 { return 1u64 }
-    let cn : u64 = end - cb
-    if cn == 0u64 { return 1u64 }
-    if eol_verify(((&PX_JB) as u64) + cb, cn, a) != 1u64 { return 1u64 }
+    let a : u64 = eol_line_verify(((&PX_JB) as u64) + off, end - off)
+    if a == 0u64 { return 1u64 }
     PX_LADDR = a
     return 0u64
 }

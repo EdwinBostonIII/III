@@ -1,0 +1,556 @@
+/* STDLIB/iii/omnia/katoptron.iii -- KATOPTRON (the MIRROR GATE): the shadow
+ * reasoner -- III thinks in a small exact mirror before it pays full width,
+ * and the mirror is PROVEN to tell the substrate's truth.
+ *
+ * THE MIRROR LAW: reduction mod 2^k is a ring homomorphism, so a ring
+ * identity decided in the shadow ring is the reduction of the full identity;
+ * and the noesis deficit (the 2-adic valuation) TRUNCATES exactly across the
+ * reduction: v2(red_k a) = min(v2 a, k).  Therefore the shadow DECIDES and
+ * the substrate CONFIRMS only the survivors -- pre-event gating.  The mirror
+ * never final-seals alone: the confirm pass is also the comparator that
+ * catches a lying mirror.  This organ NAMES the law the whole organism has
+ * been living (the w=8 saturation proofs of noesis, the crucible's beam):
+ * intuition is a cheap exact shadow, and its cheapness is priced in the
+ * noesis currency -- the width of the ring walked.
+ *
+ * THE PRE-FLIGHT: the same reflex turned on the machine's own food.  Before
+ * a source is fed to the compiler, kt_meter walks its bytes -- brace depth,
+ * comments, strings, escapes -- and derives (top-level decls, fn count, max
+ * declaration slots in any one fn: params + let + local var).  kt_preflight
+ * prices the two documented walls (the seed's 1024-decl wall, the 64-slot
+ * local ceiling) BEFORE any compile energy is spent.  JURISDICTION (the
+ * eidolon law): this is a structural meter of the declaration grammar as the
+ * organ corpus writes it (top-level keywords at line start, single-line or
+ * multi-line signatures, block comments, double-quoted strings with
+ * backslash escapes); it is not a second front end, and it is proven exact
+ * on generated corpora spanning both walls and both boundaries.
+ *
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 320..324, NO gate of its
+ * own -- the summit gate compiles and drives this organ):
+ *   320 THE HOM: reduction is a ring homomorphism -- COMPLETE at the byte
+ *       ring for two shadow widths (add and mul, 65536 pairs each), and the
+ *       valuation truncation law v2(red_k a) = min(v2 a, k) over every byte.
+ *   321 SHADOW DECIDES, SUBSTRATE CONFIRMS: for EVERY byte-class the shadow
+ *       derives its own verdict (complete inverse search; saturation image
+ *       2^(8-v2) re-derived) and the substrate confirms every lift at width
+ *       64 -- odd classes by the klisi inverse witness, even classes by the
+ *       counted refusal AND the image-collapse witness -- with the truncated
+ *       valuation agreeing on every lift.  Zero disagreements.
+ *   322 THE PRE-FLIGHT METER: exact on generated corpora -- comments hiding
+ *       keywords, strings hiding braces, extern decls, param slots, mid-line
+ *       lets; the ceiling boundary EXACT (64 breathes, 65 refuses) and the
+ *       wall boundary EXACT (1023 breathes, 1024th refuses).
+ *   323 THE ECONOMY: the price is the width walked -- blind confirmation
+ *       pays 64 for all; the mirror pays 8 for all plus 64 for survivors
+ *       only, and every pruned candidate is PROVEN truly refused (zero
+ *       wrongful prunes).  The mirror total is strictly below the blind
+ *       total -- the crucible's beam, priced.
+ *   324 THE LYING MIRROR + THE SCROLL: flip one shadow verdict and the
+ *       confirm pass catches exactly that one lie (either direction); the
+ *       mirror law is sealed by EIDOLOS with derived entailments and refused
+ *       reversals, address deterministic.
+ *
+ * NIH: composes klisi (the inverse faculty: the substrate's witness) and
+ * eidolos (the scroll).  Sibling of noesis: noesis meters what thinking
+ * costs; katoptron is WHERE the organism thinks cheaply without ever letting
+ * the cheap thought seal.  Ring R-1. */
+module omnia_katoptron
+
+extern @abi(c-msvc-x64) fn kl_inv2_u64(v: u64) -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kl_err() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_setp(p: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn kd_mode(k: u64, m: u64) -> i32 from "klisi.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+var KT_SAT : [u64; 256]                  /* saturation tally (the shadow meter) */
+var KT_SHV : [u64; 256]                  /* shadow verdict per byte-class       */
+var KT_SEED : u64 = 1181783497276652981u64
+var KT_SCROLL : u64 = 0u64
+var KT_MDECLS : u64 = 0u64               /* last meter: top-level decls         */
+var KT_MFNS : u64 = 0u64                 /* last meter: fn definitions          */
+var KT_MSLOTS : u64 = 0u64               /* last meter: max decl slots in a fn  */
+var KT_SIGP : u64 = 0u64                 /* signature-scan resume position      */
+var KT_CBLIND : u64 = 0u64               /* economy: blind width total          */
+var KT_CMIRROR : u64 = 0u64              /* economy: mirror-first width total   */
+var KT_SRC : [u8; 32768]                 /* generated corpus                    */
+var KT_SN : u64 = 0u64
+
+fn kt_addr() -> u64 @export { return KT_SCROLL }
+fn kt_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn kt_rnd() -> u64 {
+    let mut x : u64 = KT_SEED
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    KT_SEED = x
+    return x
+}
+fn kt_v2w(x: u64, w: u64) -> u64 {
+    /* 2-adic valuation at width w; v2(0) capped at the width */
+    if x == 0u64 { return w }
+    let mut v : u64 = 0u64
+    let mut m : u64 = x
+    while (m & 1u64) == 0u64 { m = m >> 1u64   v = v + 1u64 }
+    if v > w { return w }
+    return v
+}
+fn kt_img8(a: u64) -> u64 {
+    /* image size of x -> a*x over Z/2^8 by complete saturation (the shadow
+     * re-derives the noesis meter with its own hands) */
+    let mut i : u64 = 0u64
+    while i < 256u64 { KT_SAT[i] = 0u64   i = i + 1u64 }
+    let mut x : u64 = 0u64
+    while x < 256u64 { KT_SAT[(x * a) & 255u64] = 1u64   x = x + 1u64 }
+    let mut c : u64 = 0u64
+    i = 0u64
+    while i < 256u64 { c = c + KT_SAT[i]   i = i + 1u64 }
+    return c
+}
+fn kt_lift(a: u64) -> u64 {
+    /* a full-width inhabitant of a's byte class: low byte preserved for
+     * a != 0, the pure carry word for a == 0 */
+    if a == 0u64 { return 256u64 }
+    return a + (kt_rnd() << 8u64)
+}
+
+fn kt_arm320() -> u64 {
+    /* THE HOM: reduction mod 2^k is a ring homomorphism -- complete on the
+     * byte ring at shadow widths 4 and 6, and the valuation truncates */
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        let mut b : u64 = 0u64
+        while b < 256u64 {
+            if ((a + b) & 15u64) != (((a & 15u64) + (b & 15u64)) & 15u64) { return 320u64 }
+            if ((a * b) & 15u64) != (((a & 15u64) * (b & 15u64)) & 15u64) { return 320u64 }
+            if ((a + b) & 63u64) != (((a & 63u64) + (b & 63u64)) & 63u64) { return 320u64 }
+            if ((a * b) & 63u64) != (((a & 63u64) * (b & 63u64)) & 63u64) { return 320u64 }
+            b = b + 1u64
+        }
+        let mut m4 : u64 = kt_v2w(a, 8u64)
+        if m4 > 4u64 { m4 = 4u64 }
+        if kt_v2w(a & 15u64, 4u64) != m4 { return 320u64 }
+        let mut m6 : u64 = kt_v2w(a, 8u64)
+        if m6 > 6u64 { m6 = 6u64 }
+        if kt_v2w(a & 63u64, 6u64) != m6 { return 320u64 }
+        a = a + 1u64
+    }
+    return 0u64
+}
+fn kt_arm321() -> u64 {
+    /* SHADOW DECIDES, SUBSTRATE CONFIRMS: complete over every byte-class,
+     * confirmed on independent lifts at width 64 -- zero disagreements */
+    kd_setp(2u64)
+    kd_mode(0u64, 64u64)
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        let mut inv8 : u64 = 0u64
+        let mut found : u64 = 0u64
+        let mut b : u64 = 0u64
+        while b < 256u64 {
+            if ((a * b) & 255u64) == 1u64 { inv8 = b   found = 1u64 }
+            b = b + 1u64
+        }
+        if (a & 1u64) == 1u64 { if found != 1u64 { return 321u64 } }
+        if (a & 1u64) == 0u64 { if found != 0u64 { return 321u64 } }
+        if found == 1u64 { if ((a * inv8) & 255u64) != 1u64 { return 321u64 } }
+        if kt_img8(a) != (1u64 << (8u64 - kt_v2w(a, 8u64))) { return 321u64 }
+        KT_SHV[a] = found
+        let mut t : u64 = 0u64
+        while t < 2u64 {
+            let L : u64 = kt_lift(a)
+            /* the truncated valuation agrees on every lift */
+            let mut vm : u64 = kt_v2w(L, 64u64)
+            if vm > 8u64 { vm = 8u64 }
+            if vm != kt_v2w(a, 8u64) { return 321u64 }
+            let iv : u64 = kl_inv2_u64(L)
+            if found == 1u64 {
+                if iv == 0u64 { return 321u64 }
+                if (L * iv) != 1u64 { return 321u64 }
+                let x : u64 = kt_rnd()
+                if ((L * x) * iv) != x { return 321u64 }
+            } else {
+                if iv != 0u64 { return 321u64 }
+                if kl_err() != 2u64 { return 321u64 }
+                kd_mode(0u64, 64u64)
+                if L != 0u64 { if (L << (64u64 - kt_v2w(L, 64u64))) != 0u64 { return 321u64 } }
+            }
+            t = t + 1u64
+        }
+        a = a + 1u64
+    }
+    if kl_err() != 0u64 { return 321u64 }
+    return 0u64
+}
+
+/* ==================== the pre-flight meter ==================== */
+fn kt_is_word(c: u8) -> u64 {
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 65u8 { if c <= 90u8 { return 1u64 } }
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    return 0u64
+}
+fn kt_kw(buf: u64, len: u64, pos: u64, kw: u64) -> u64 {
+    let p : *u8 = buf as *u8
+    let k : *u8 = kw as *u8
+    let mut i : u64 = 0u64
+    while k[i] != 0u8 {
+        if pos + i >= len { return 0u64 }
+        if p[pos + i] != k[i] { return 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+fn kt_sig(buf: u64, len: u64, pos0: u64) -> u64 {
+    /* scan a fn signature: find the opening paren, count top-level commas to
+     * the matching close; param count returned, resume byte in KT_SIGP */
+    let p : *u8 = buf as *u8
+    let mut pos : u64 = pos0
+    let mut going : u64 = 1u64
+    while going == 1u64 {
+        if pos >= len { going = 0u64 } else {
+            if p[pos] == 40u8 { going = 0u64 } else { pos = pos + 1u64 }
+        }
+    }
+    if pos >= len { KT_SIGP = pos   return 0u64 }
+    pos = pos + 1u64
+    let mut pd : u64 = 1u64
+    let mut commas : u64 = 0u64
+    let mut seen : u64 = 0u64
+    while pd > 0u64 {
+        if pos >= len { pd = 0u64 } else {
+            let c : u8 = p[pos]
+            if c == 40u8 { pd = pd + 1u64 }
+            if c == 41u8 { pd = pd - 1u64 }
+            if pd >= 1u64 { if c == 44u8 { if pd == 1u64 { commas = commas + 1u64 } } }
+            if pd >= 1u64 {
+                if c != 40u8 { if c != 41u8 { if c != 44u8 { if c != 32u8 {
+                if c != 13u8 { if c != 10u8 { if c != 9u8 { seen = 1u64 } } } } } } }
+            }
+            pos = pos + 1u64
+        }
+    }
+    KT_SIGP = pos
+    if seen == 0u64 { return 0u64 }
+    return commas + 1u64
+}
+fn kt_meter(buf: u64, len: u64) -> i32 @export {
+    /* the structural walk: brace depth, block comments (nested), strings
+     * (backslash escapes), line starts; decls and fn slots derived */
+    let p : *u8 = buf as *u8
+    let mut pos : u64 = 0u64
+    let mut depth : u64 = 0u64
+    let mut com : u64 = 0u64
+    let mut instr : u64 = 0u64
+    let mut bol : u64 = 1u64
+    let mut decls : u64 = 0u64
+    let mut fns : u64 = 0u64
+    let mut maxs : u64 = 0u64
+    let mut cur : u64 = 0u64
+    let mut infn : u64 = 0u64
+    while pos < len {
+        let c : u8 = p[pos]
+        if instr == 1u64 {
+            if c == 92u8 { pos = pos + 2u64 } else {
+                if c == 34u8 { instr = 0u64 }
+                pos = pos + 1u64
+            }
+        } else { if com > 0u64 {
+            if kt_kw(buf, len, pos, "/*" as u64) == 1u64 { com = com + 1u64   pos = pos + 2u64 } else {
+            if kt_kw(buf, len, pos, "*" as u64) == 1u64 { if kt_kw(buf, len, pos + 1u64, "/" as u64) == 1u64 { com = com - 1u64   bol = 0u64   pos = pos + 2u64 } else { pos = pos + 1u64 } } else {
+                if c == 10u8 { bol = 1u64 }
+                pos = pos + 1u64
+            } }
+        } else {
+            if kt_kw(buf, len, pos, "/*" as u64) == 1u64 { com = 1u64   bol = 0u64   pos = pos + 2u64 } else {
+            if c == 34u8 { instr = 1u64   bol = 0u64   pos = pos + 1u64 } else {
+            if c == 10u8 { bol = 1u64   pos = pos + 1u64 } else {
+            if c == 13u8 { pos = pos + 1u64 } else {
+            if c == 123u8 { depth = depth + 1u64   bol = 0u64   pos = pos + 1u64 } else {
+            if c == 125u8 {
+                if depth > 0u64 { depth = depth - 1u64 }
+                if depth == 0u64 { if infn == 1u64 {
+                    if cur > maxs { maxs = cur }
+                    infn = 0u64
+                } }
+                bol = 0u64
+                pos = pos + 1u64
+            } else {
+                let mut used : u64 = 0u64
+                if bol == 1u64 { if depth == 0u64 {
+                    if kt_kw(buf, len, pos, "fn " as u64) == 1u64 {
+                        decls = decls + 1u64
+                        fns = fns + 1u64
+                        infn = 1u64
+                        cur = kt_sig(buf, len, pos + 3u64)
+                        pos = KT_SIGP
+                        bol = 0u64
+                        used = 1u64
+                    } else {
+                    if kt_kw(buf, len, pos, "var " as u64) == 1u64 { decls = decls + 1u64   pos = pos + 4u64   bol = 0u64   used = 1u64 } else {
+                    if kt_kw(buf, len, pos, "const " as u64) == 1u64 { decls = decls + 1u64   pos = pos + 6u64   bol = 0u64   used = 1u64 } else {
+                    if kt_kw(buf, len, pos, "extern " as u64) == 1u64 { decls = decls + 1u64   pos = pos + 7u64   bol = 0u64   used = 1u64 } } } }
+                } }
+                if used == 0u64 { if depth >= 1u64 {
+                    let mut pv : u64 = 0u64
+                    if pos == 0u64 { pv = 1u64 } else { if kt_is_word(p[pos - 1u64]) == 0u64 { pv = 1u64 } }
+                    if pv == 1u64 {
+                        if kt_kw(buf, len, pos, "let " as u64) == 1u64 { cur = cur + 1u64   pos = pos + 4u64   bol = 0u64   used = 1u64 } else {
+                        if kt_kw(buf, len, pos, "var " as u64) == 1u64 { cur = cur + 1u64   pos = pos + 4u64   bol = 0u64   used = 1u64 } }
+                    }
+                } }
+                if used == 0u64 {
+                    if c != 32u8 { if c != 9u8 { bol = 0u64 } }
+                    pos = pos + 1u64
+                }
+            } } } } } }
+        } }
+    }
+    if infn == 1u64 { if cur > maxs { maxs = cur } }
+    KT_MDECLS = decls
+    KT_MFNS = fns
+    KT_MSLOTS = maxs
+    return 0i32
+}
+fn kt_m_decls() -> u64 @export { return KT_MDECLS }
+fn kt_m_fns() -> u64 @export { return KT_MFNS }
+fn kt_m_slots() -> u64 @export { return KT_MSLOTS }
+fn kt_preflight(wall: u64, ceiling: u64) -> u64 @export {
+    /* the verdict on the LAST metered source: bit0 = the decl wall (the
+     * wall-th decl refuses), bit1 = the slot ceiling (ceiling breathes,
+     * ceiling+1 refuses).  0 = the compile energy is worth spending. */
+    let mut v : u64 = 0u64
+    if KT_MDECLS >= wall { v = v | 1u64 }
+    if KT_MSLOTS > ceiling { v = v | 2u64 }
+    return v
+}
+
+/* ==================== the generated corpora ==================== */
+fn kt_sclr() -> i32 { KT_SN = 0u64   return 0i32 }
+fn kt_sput(c: u8) -> i32 {
+    if KT_SN < 32768u64 { KT_SRC[KT_SN] = c   KT_SN = KT_SN + 1u64 }
+    return 0i32
+}
+fn kt_sputs(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { kt_sput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn kt_sputn(v: u64) -> i32 {
+    if v >= 10u64 { kt_sputn(v / 10u64) }
+    kt_sput((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+fn kt_run_meter() -> i32 { return kt_meter((&KT_SRC) as u64, KT_SN) }
+fn kt_arm322() -> u64 {
+    /* corpus A: comments hide fn and let (even at line start); strings hide
+     * braces and keywords; externs are decls; params are slots; a mid-line
+     * let counts */
+    kt_sclr()
+    kt_sputs("/* comment opens\nfn ghost() { let a }\ncomment closes */\n" as u64)
+    kt_sputs("extern @abi(c-msvc-x64) fn puts(s: u64) -> i32 from " as u64)
+    kt_sput(34u8)
+    kt_sputs("msvcrt" as u64)
+    kt_sput(34u8)
+    kt_sput(10u8)
+    kt_sputs("var g : u64 = 0u64\n" as u64)
+    kt_sputs("fn one(a: u64, b: u64) -> u64 {\n    let x : u64 = a\n    let mut y : u64 = b\n    if x > y { let z : u64 = x   y = z }\n    return y\n}\n" as u64)
+    kt_sputs("fn two() -> u64 {\n    let s : u64 = " as u64)
+    kt_sput(34u8)
+    kt_sputs("fn bogus { let ghost" as u64)
+    kt_sput(34u8)
+    kt_sputs(" as u64\n    return s\n}\n" as u64)
+    kt_run_meter()
+    if KT_MDECLS != 4u64 { return 322u64 }
+    if KT_MFNS != 2u64 { return 322u64 }
+    if KT_MSLOTS != 5u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }
+    /* corpus B: seventy locals in one body -- the ceiling verdict bites */
+    kt_sclr()
+    kt_sputs("fn big() -> u64 {\n" as u64)
+    let mut v : u64 = 0u64
+    while v < 70u64 {
+        kt_sputs("    let a" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_sputs("    return 0u64\n}\n" as u64)
+    kt_run_meter()
+    if KT_MDECLS != 1u64 { return 322u64 }
+    if KT_MFNS != 1u64 { return 322u64 }
+    if KT_MSLOTS != 70u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 2u64 { return 322u64 }
+    /* corpus C: the ceiling boundary EXACT -- 64 breathes, 65 refuses */
+    kt_sclr()
+    kt_sputs("fn edge(p: u64, q: u64) -> u64 {\n" as u64)
+    v = 0u64
+    while v < 62u64 {
+        kt_sputs("    let b" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_sputs("    return 0u64\n}\n" as u64)
+    kt_run_meter()
+    if KT_MSLOTS != 64u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }
+    kt_sclr()
+    kt_sputs("fn edge(p: u64, q: u64) -> u64 {\n" as u64)
+    v = 0u64
+    while v < 63u64 {
+        kt_sputs("    let b" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_sputs("    return 0u64\n}\n" as u64)
+    kt_run_meter()
+    if KT_MSLOTS != 65u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 2u64 { return 322u64 }
+    /* corpus D: the decl wall EXACT -- 1023 breathes, the 1024th refuses */
+    kt_sclr()
+    v = 0u64
+    while v < 1023u64 {
+        kt_sputs("var v" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_run_meter()
+    if KT_MDECLS != 1023u64 { return 322u64 }
+    if KT_MFNS != 0u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }
+    v = 0u64
+    while v < 7u64 {
+        kt_sputs("var w" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_run_meter()
+    if KT_MDECLS != 1030u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 1u64 { return 322u64 }
+    return 0u64
+}
+fn kt_arm323() -> u64 {
+    /* THE ECONOMY: the price is the ring width walked.  Blind confirmation
+     * pays 64 for every candidate; the mirror pays 8 for every candidate and
+     * 64 only for the survivors -- and every pruned candidate is PROVEN
+     * truly refused at the substrate.  Zero wrongful prunes, strict saving. */
+    KT_CBLIND = 0u64
+    KT_CMIRROR = 0u64
+    let mut surv : u64 = 0u64
+    let mut pruned : u64 = 0u64
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        KT_CBLIND = KT_CBLIND + 64u64
+        KT_CMIRROR = KT_CMIRROR + 8u64
+        if KT_SHV[a] == 1u64 {
+            surv = surv + 1u64
+            KT_CMIRROR = KT_CMIRROR + 64u64
+            let L : u64 = kt_lift(a)
+            let iv : u64 = kl_inv2_u64(L)
+            if iv == 0u64 { return 323u64 }
+            if (L * iv) != 1u64 { return 323u64 }
+        } else {
+            pruned = pruned + 1u64
+            let L2 : u64 = kt_lift(a)
+            if kl_inv2_u64(L2) != 0u64 { return 323u64 }
+            if kl_err() != 2u64 { return 323u64 }
+            kd_mode(0u64, 64u64)
+        }
+        a = a + 1u64
+    }
+    if surv + pruned != 256u64 { return 323u64 }
+    if surv * 2u64 != 256u64 { return 323u64 }
+    if KT_CMIRROR >= KT_CBLIND { return 323u64 }
+    if kl_err() != 0u64 { return 323u64 }
+    return 0u64
+}
+fn kt_mismatch(flip: u64) -> u64 {
+    /* the confirm pass as COMPARATOR: how many byte-classes disagree between
+     * the (possibly lying) mirror table and the substrate? */
+    let mut mm : u64 = 0u64
+    let mut a : u64 = 0u64
+    while a < 256u64 {
+        let mut s : u64 = KT_SHV[a]
+        if a == flip { s = 1u64 - s }
+        let L : u64 = kt_lift(a)
+        let iv : u64 = kl_inv2_u64(L)
+        let mut v : u64 = 0u64
+        if iv != 0u64 { if (L * iv) == 1u64 { v = 1u64 } }
+        if iv == 0u64 {
+            if kl_err() != 2u64 { return 3000u64 }
+            kd_mode(0u64, 64u64)
+        }
+        if s != v { mm = mm + 1u64 }
+        a = a + 1u64
+    }
+    return mm
+}
+fn kt_arm324() -> u64 {
+    /* THE LYING MIRROR: flip one shadow verdict, either direction, and the
+     * confirm pass catches exactly that one lie -- the mirror cannot
+     * final-seal alone, and the comparator has teeth */
+    if kt_mismatch(18446744073709551615u64) != 0u64 { return 324u64 }
+    if kt_mismatch(3u64) != 1u64 { return 324u64 }
+    if kt_mismatch(4u64) != 1u64 { return 324u64 }
+    /* THE SCROLL: the mirror law sealed -- derived entailments, refused
+     * reversals, deterministic address */
+    eol_reset()
+    let doc : u64 = "[shadow ~ substrate] [mirror verdict = shadow verdict] [shadow verdict = substrate verdict] [preflight < compile] [shadow price < substrate price]" as u64
+    let dl : u64 = kt_slen(doc)
+    if eol_read(doc, dl) < 0i64 { return 324u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 324u64 }
+    /* DERIVED (absent from the text): the mirror verdict IS the substrate
+     * verdict -- the arm 321 theorem, spoken and unraveled */
+    let qa : u64 = "mirror verdict" as u64
+    let qb : u64 = "substrate verdict" as u64
+    if eol_entails(qa, kt_slen(qa), 2u64, qb, kt_slen(qb)) != 1u64 { return 324u64 }
+    /* the preflight sits under the compile; the reversal REFUSES */
+    let qc : u64 = "compile" as u64
+    let qd : u64 = "preflight" as u64
+    if eol_entails(qd, kt_slen(qd), 0u64, qc, kt_slen(qc)) != 1u64 { return 324u64 }
+    if eol_entails(qc, kt_slen(qc), 0u64, qd, kt_slen(qd)) != 0u64 { return 324u64 }
+    /* the shadow is cheaper; the reversal REFUSES */
+    let qe : u64 = "substrate price" as u64
+    let qf : u64 = "shadow price" as u64
+    if eol_entails(qf, kt_slen(qf), 0u64, qe, kt_slen(qe)) != 1u64 { return 324u64 }
+    if eol_entails(qe, kt_slen(qe), 0u64, qf, kt_slen(qf)) != 0u64 { return 324u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 324u64 }
+    if eol_addr() != a1 { return 324u64 }
+    KT_SCROLL = a1
+    return 0u64
+}
+fn kt_selfprove() -> u64 @export {
+    let a0 : u64 = kt_arm320()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = kt_arm321()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = kt_arm322()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = kt_arm323()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = kt_arm324()
+    if a4 != 0u64 { return a4 }
+    /* the prime returns to the tilt's home before the next organ speaks */
+    kd_setp(5u64)
+    return 0u64
+}
+
+/* KATOPTRON: the organism now owns its intuition as a law -- the shadow is
+ * exact, its verdicts transfer, its price is the width walked, its lies are
+ * caught by the confirmation it can never skip, and the pre-flight spends a
+ * scan to save a compile.  The mirror prunes; the substrate seals. */

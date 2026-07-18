@@ -16,10 +16,29 @@
 #      and total work minted O(1) from the orbit oracle's decisions, and the
 #      DIVISION BRIDGE: the live planner + Montgomery kernel on the
 #      substrate identity],
-#      noesis 300..304 [THE THERMODYNAMIC METER: deficit = valuation by
+#      noesis 300..306 [THE THERMODYNAMIC METER: deficit = valuation by
 #      complete w=8 saturation; odd multipliers zero-heat (inverse-witnessed);
 #      the chronometer's work RECOVERABLE ACTION; fold-deficit invariance
-#      across every certified SR family; the law sealed as a scroll]);
+#      across every certified SR family; the law sealed as a scroll; and
+#      THE WORLDS: all 19683 binary operations on the 3-carrier classified
+#      -- reversibility = zero deficit = eternal return at every world,
+#      latin purchases recurrence, the two group definitions coincide with
+#      the three labeled groups forced, absorption purchases collapse,
+#      association purchases fold freedom; censuses by two engines; the
+#      purchase theorems sealed as the worlds scroll],
+#      mneme 310..314 [THE ASSOCIATIVE MANIFOLD: 64-lane closure folded
+#      from an append-only edge log, extent columns making the conjunctive
+#      concept-fetch ONE AND; Warshall vs BFS two-engine equality; log-order
+#      invariance; the four sealed laws registered LIVE and cross-checked
+#      pair-by-pair against eidolos; dropped-edge teeth; the manifold law
+#      sealed as a scroll],
+#      katoptron 320..324 [THE MIRROR GATE: reduction-hom + valuation
+#      truncation complete at the byte ring; shadow decides / substrate
+#      confirms over every byte-class with klisi witnesses at w=64; the
+#      decl-wall / slot-ceiling pre-flight meter proven exact on generated
+#      corpora spanning both boundaries; the mirror economy strictly cheaper
+#      with zero wrongful prunes; the lying mirror caught; the mirror law
+#      sealed as a scroll]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -68,10 +87,12 @@ cc_one "$ROOT/STDLIB/iii/omnia/eidolos.iii"  "$T/eidolos.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/summit.iii"   "$T/summit.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/gnosis.iii"   "$T/gnosis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/noesis.iii"   "$T/noesis.o"  || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/mneme.iii"    "$T/mneme.o"   || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/katoptron.iii" "$T/katoptron.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/eidolos.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/eidolos.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -95,6 +116,27 @@ grep -q "^scroll gravity = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO GRAV
 grep -q "^scroll born    = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO BORN SCROLL"; exit 6; }
 grep -q "^scroll gnosis  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO GNOSIS SCROLL"; exit 6; }
 grep -q "^scroll noesis  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO NOESIS SCROLL"; exit 6; }
-echo "[summit_gate] THE SUMMIT IS GREEN -- both scrolls sealed, byte-deterministic:"
+grep -q "^scroll worlds  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO WORLDS SCROLL"; exit 6; }
+grep -q "^scroll mneme   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MNEME SCROLL"; exit 6; }
+grep -q "^scroll mirror  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MIRROR SCROLL"; exit 6; }
+
+# THE MIRROR ON REAL TISSUE: the pre-flight meter walks two live organ
+# sources; grep is the independent second engine on the greppable dimensions
+# (top-level decls and fn definitions -- both count line-anchored keywords).
+for nm in noesis katoptron; do
+    SRC="$ROOT/STDLIB/iii/omnia/$nm.iii"
+    "$T/hzprobe.exe" preflight "$SRC" > "$T/pf_$nm.txt" 2>&1 \
+        || { echo "[summit_gate] PREFLIGHT RED $nm"; cat "$T/pf_$nm.txt"; exit 7; }
+    PD=$(grep -oE 'decls=[0-9]+' "$T/pf_$nm.txt" | head -1 | cut -d= -f2)
+    PF=$(grep -oE 'fns=[0-9]+' "$T/pf_$nm.txt" | head -1 | cut -d= -f2)
+    GD=$(grep -cE '^(fn|var|const|extern) ' "$SRC")
+    GF=$(grep -cE '^fn ' "$SRC")
+    if [ "$PD" != "$GD" ] || [ "$PF" != "$GF" ]; then
+        echo "[summit_gate] MIRROR-GREP DISAGREE $nm: meter d=$PD f=$PF grep d=$GD f=$GF"
+        exit 7
+    fi
+    echo "[summit_gate] preflight $nm: $(cat "$T/pf_$nm.txt")"
+done
+echo "[summit_gate] THE SUMMIT IS GREEN -- all scrolls sealed, byte-deterministic:"
 grep "^scroll" "$T/run1.txt"
 exit 0

@@ -1,0 +1,471 @@
+/* STDLIB/iii/omnia/mneme.iii -- MNEME (the ASSOCIATIVE MANIFOLD): memory whose
+ * address IS its relation -- the organ that makes the organism's sealed
+ * knowledge addressable by MEANING instead of by pointer.
+ *
+ * THE MANIFOLD LAW: a concept's place is its extent.  MNEME holds up to 64
+ * concepts -- each identified by a content-derived u64 (an EIDOLOS scroll
+ * address, or the idfold of a word: address = meaning, the 1,1,1 law) -- and
+ * derives the complete entailment closure as a 64x64 bit-matrix folded from
+ * an append-only edge log.  After the fold:
+ *   row(i) = everything concept i entails            (one u64)
+ *   col(j) = everything that entails concept j       (one u64: the EXTENT)
+ *   "all concepts under BOTH p and q" = col(p) & col(q)
+ * -- the conjunctive concept-fetch is ONE AND INSTRUCTION on sealed state.
+ * No pointer is chased; the manifold's lane width IS the machine word, which
+ * is exactly why the fetch is one instruction.
+ *
+ * EVENT-PRIMARY: the closure is a FOLD of the log -- order-invariant,
+ * idempotent, monotone (a redundant edge changes nothing).  Append is the
+ * only mutation; every query is a stateless derivation from the fold.
+ *
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 310..314, NO gate of its
+ * own -- the summit gate compiles and drives this organ):
+ *   310 THE LATTICE: on a synthetic universe the folded closure is reflexive,
+ *       transitive, antisymmetric -- COMPLETELY -- and the prebuilt extent
+ *       columns agree bit-for-bit with the rows, so the one-AND fetch answers
+ *       exactly the conjunctive query for EVERY pair; meet laws (commutative,
+ *       associative, idempotent) verified over every pair and triple; unknown
+ *       indices and the like are REFUSED, counted, never silent.
+ *   311 TWO ENGINES: the Warshall fold vs an independent per-source BFS over
+ *       the raw log -- the complete 64x64 relation, equal.
+ *   312 THE EVENT LAW: reversed logs, interleaved logs, double folds and
+ *       redundant edges all derive the SAME closure -- the fold is the law,
+ *       the log order is not, knowledge is monotone.
+ *   313 THE LIVE WIRE: the four sealed laws of the organism (gravity, born,
+ *       gnosis, noesis -- addresses read from the LIVE organs, asked twice,
+ *       one answer) take places beside word-concepts in one manifold; every
+ *       non-reflexive pair is cross-checked against EIDOLOS speaking the same
+ *       ontology -- two closure engines in two organs, one relation,
+ *       including the chains NEITHER was told; and the one-AND fetch finds
+ *       the noesis law from two semantic features.
+ *   314 TEETH + THE SCROLL: dropping one live edge erases exactly the derived
+ *       entailments that rode it and restoring revives them (the answers are
+ *       load-bearing on the log); the 65th concept is REFUSED, counted, the
+ *       standing 64 unharmed; the manifold law is sealed by EIDOLOS with
+ *       derived entailments and refused reversals, address deterministic.
+ *
+ * SCOPE (the eidolon law): the manifold is exact over its 64 lanes; wider
+ * universes shard by scroll composition (a scroll address is itself a
+ * concept).  NIH: composes numera/idfold (the ONE identity seat), eidolos
+ * (the language it indexes) and the live organs whose scrolls it registers.
+ * Sibling of kardia (claims that BEAT) and soma (the claim-space): mneme is
+ * where sealed claims become PLACES.  Ring R-1. */
+module omnia_mneme
+
+extern @abi(c-msvc-x64) fn idfold_bytes(ptr: u64, n: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn su_addr_gravity() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn su_addr_born() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn gn_addr() -> u64 from "gnosis.iii"
+extern @abi(c-msvc-x64) fn no_addr() -> u64 from "noesis.iii"
+
+const MN_CAP : u64 = 64u64
+const MN_EMAX : u64 = 256u64
+const MN_SENT : u64 = 18446744073709551615u64
+
+var MN_ID : [u64; 64]                    /* concept identity (address = meaning) */
+var MN_ROW : [u64; 64]                   /* bit j of row i: i entails j          */
+var MN_COL : [u64; 64]                   /* bit i of col j: i entails j (extent) */
+var MN_N : u64 = 0u64
+var MN_EA : [u64; 256]                   /* the append-only edge log             */
+var MN_EB : [u64; 256]
+var MN_EN : u64 = 0u64
+var MN_SEALEDF : u64 = 0u64              /* 1 after mn_fold                      */
+var MN_RCAP : u64 = 0u64                 /* capacity refused (65th concept, log) */
+var MN_RUNK : u64 = 0u64                 /* unknown index refused                */
+var MN_RQ : u64 = 0u64                   /* query on unsealed state refused      */
+var MN_SCROLL : u64 = 0u64
+
+/* teeth / event-law scratch */
+var MN_SEA : [u64; 256]
+var MN_SEB : [u64; 256]
+var MN_SRW : [u64; 64]
+
+fn mn_addr() -> u64 @export { return MN_SCROLL }
+fn mn_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn mn_word(s: u64) -> u64 { return idfold_bytes(s, mn_slen(s)) }
+fn mn_reset() -> i32 {
+    MN_N = 0u64
+    MN_EN = 0u64
+    MN_SEALEDF = 0u64
+    return 0i32
+}
+/* register a concept by identity; dedup by content; the 65th is REFUSED */
+fn mn_put(id: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < MN_N { if MN_ID[i] == id { return i }   i = i + 1u64 }
+    if MN_N >= MN_CAP { MN_RCAP = MN_RCAP + 1u64   return MN_SENT }
+    MN_ID[MN_N] = id
+    MN_N = MN_N + 1u64
+    MN_SEALEDF = 0u64
+    return MN_N - 1u64
+}
+/* append "i entails j" to the log (the ONLY mutation verb) */
+fn mn_link(i: u64, j: u64) -> u64 {
+    if i >= MN_N { MN_RUNK = MN_RUNK + 1u64   return 0u64 }
+    if j >= MN_N { MN_RUNK = MN_RUNK + 1u64   return 0u64 }
+    if MN_EN >= MN_EMAX { MN_RCAP = MN_RCAP + 1u64   return 0u64 }
+    MN_EA[MN_EN] = i
+    MN_EB[MN_EN] = j
+    MN_EN = MN_EN + 1u64
+    MN_SEALEDF = 0u64
+    return 1u64
+}
+/* THE FOLD: closure derived from scratch off the log (order-free), then the
+ * extent columns prebuilt -- after this every conjunctive fetch is one AND */
+fn mn_fold() -> i32 {
+    let mut i : u64 = 0u64
+    while i < MN_N { MN_ROW[i] = 1u64 << i   i = i + 1u64 }
+    let mut e : u64 = 0u64
+    while e < MN_EN {
+        MN_ROW[MN_EA[e]] = MN_ROW[MN_EA[e]] | (1u64 << MN_EB[e])
+        e = e + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < MN_N {
+        i = 0u64
+        while i < MN_N {
+            if ((MN_ROW[i] >> k) & 1u64) == 1u64 { MN_ROW[i] = MN_ROW[i] | MN_ROW[k] }
+            i = i + 1u64
+        }
+        k = k + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < MN_N {
+        let mut c : u64 = 0u64
+        i = 0u64
+        while i < MN_N {
+            c = c | (((MN_ROW[i] >> j) & 1u64) << i)
+            i = i + 1u64
+        }
+        MN_COL[j] = c
+        j = j + 1u64
+    }
+    MN_SEALEDF = 1u64
+    return 0i32
+}
+/* does i entail j?  0 no | 1 yes | 2 refused (unsealed or unknown, counted) */
+fn mn_ent(i: u64, j: u64) -> u64 {
+    if MN_SEALEDF != 1u64 { MN_RQ = MN_RQ + 1u64   return 2u64 }
+    if i >= MN_N { MN_RQ = MN_RQ + 1u64   return 2u64 }
+    if j >= MN_N { MN_RQ = MN_RQ + 1u64   return 2u64 }
+    return (MN_ROW[i] >> j) & 1u64
+}
+/* the EXTENT of j: the complete set of concepts that entail j, as one word */
+fn mn_extent(j: u64) -> u64 {
+    if MN_SEALEDF != 1u64 { MN_RQ = MN_RQ + 1u64   return 0u64 }
+    if j >= MN_N { MN_RQ = MN_RQ + 1u64   return 0u64 }
+    return MN_COL[j]
+}
+/* THE ONE-AND FETCH: the complete answer set of "under p AND under q" */
+fn mn_meet(p: u64, q: u64) -> u64 { return mn_extent(p) & mn_extent(q) }
+/* the independent engine: per-source reachability straight off the raw log
+ * (no bit-matrix, no columns -- nothing shared with the fold but the log) */
+fn mn_bfs_row(s: u64) -> u64 {
+    let mut r : u64 = 1u64 << s
+    let mut pass : u64 = 0u64
+    while pass < MN_N {
+        let mut e : u64 = 0u64
+        while e < MN_EN {
+            if ((r >> MN_EA[e]) & 1u64) == 1u64 { r = r | (1u64 << MN_EB[e]) }
+            e = e + 1u64
+        }
+        pass = pass + 1u64
+    }
+    return r
+}
+
+fn mn_arm310() -> u64 {
+    /* THE LATTICE, complete over a synthetic universe: a chain 0->1->2->3
+     * joined by 6->5->4->2 and one hermit concept 7 */
+    mn_reset()
+    let mut v : u64 = 0u64
+    while v < 8u64 { if mn_put(41216u64 + v) == MN_SENT { return 310u64 }   v = v + 1u64 }
+    if mn_link(0u64, 1u64) != 1u64 { return 310u64 }
+    if mn_link(1u64, 2u64) != 1u64 { return 310u64 }
+    if mn_link(2u64, 3u64) != 1u64 { return 310u64 }
+    if mn_link(4u64, 2u64) != 1u64 { return 310u64 }
+    if mn_link(5u64, 4u64) != 1u64 { return 310u64 }
+    if mn_link(6u64, 5u64) != 1u64 { return 310u64 }
+    mn_fold()
+    /* reflexive, transitive, antisymmetric -- the COMPLETE relation */
+    let mut i : u64 = 0u64
+    while i < MN_N {
+        if mn_ent(i, i) != 1u64 { return 310u64 }
+        let mut j : u64 = 0u64
+        while j < MN_N {
+            if i != j { if mn_ent(i, j) == 1u64 { if mn_ent(j, i) == 1u64 { return 310u64 } } }
+            let mut k : u64 = 0u64
+            while k < MN_N {
+                if mn_ent(i, j) == 1u64 { if mn_ent(j, k) == 1u64 {
+                    if mn_ent(i, k) != 1u64 { return 310u64 } } }
+                k = k + 1u64
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* derived places: the chain, the four-step chain, reversals absent */
+    if mn_ent(0u64, 3u64) != 1u64 { return 310u64 }
+    if mn_ent(6u64, 3u64) != 1u64 { return 310u64 }
+    if mn_ent(6u64, 2u64) != 1u64 { return 310u64 }
+    if mn_ent(3u64, 0u64) != 0u64 { return 310u64 }
+    if mn_ent(7u64, 3u64) != 0u64 { return 310u64 }
+    /* the columns ARE the rows transposed: the one-AND fetch answers exactly
+     * the conjunctive query, for EVERY pair; meet commutes and is idempotent */
+    let mut p : u64 = 0u64
+    while p < MN_N {
+        let mut q : u64 = 0u64
+        while q < MN_N {
+            let m : u64 = mn_meet(p, q)
+            i = 0u64
+            while i < MN_N {
+                if ((m >> i) & 1u64) != (mn_ent(i, p) & mn_ent(i, q)) { return 310u64 }
+                i = i + 1u64
+            }
+            if m != (mn_extent(q) & mn_extent(p)) { return 310u64 }
+            if p == q { if m != mn_extent(p) { return 310u64 } }
+            q = q + 1u64
+        }
+        p = p + 1u64
+    }
+    /* associativity of the meet over every triple */
+    p = 0u64
+    while p < MN_N {
+        let mut q2 : u64 = 0u64
+        while q2 < MN_N {
+            let mut r2 : u64 = 0u64
+            while r2 < MN_N {
+                if ((mn_extent(p) & mn_extent(q2)) & mn_extent(r2)) != (mn_extent(p) & (mn_extent(q2) & mn_extent(r2))) { return 310u64 }
+                r2 = r2 + 1u64
+            }
+            q2 = q2 + 1u64
+        }
+        p = p + 1u64
+    }
+    /* refusals are COUNTED, never silent */
+    let r0 : u64 = MN_RUNK
+    if mn_link(99u64, 0u64) != 0u64 { return 310u64 }
+    if MN_RUNK != r0 + 1u64 { return 310u64 }
+    let q0 : u64 = MN_RQ
+    if mn_ent(99u64, 0u64) != 2u64 { return 310u64 }
+    if MN_RQ != q0 + 1u64 { return 310u64 }
+    return 0u64
+}
+fn mn_arm311() -> u64 {
+    /* TWO ENGINES: the Warshall fold vs the raw-log BFS -- one relation */
+    let mut i : u64 = 0u64
+    while i < MN_N {
+        if mn_bfs_row(i) != MN_ROW[i] { return 311u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn mn_arm312() -> u64 {
+    /* THE EVENT LAW: the closure is a fold of the log -- order cannot
+     * matter, folding twice cannot matter, redundant truth cannot matter */
+    let n : u64 = MN_EN
+    let mut e : u64 = 0u64
+    while e < n { MN_SEA[e] = MN_EA[e]   MN_SEB[e] = MN_EB[e]   e = e + 1u64 }
+    let mut i : u64 = 0u64
+    while i < MN_N { MN_SRW[i] = MN_ROW[i]   i = i + 1u64 }
+    /* the reversed log */
+    e = 0u64
+    while e < n { MN_EA[e] = MN_SEA[(n - 1u64) - e]   MN_EB[e] = MN_SEB[(n - 1u64) - e]   e = e + 1u64 }
+    mn_fold()
+    i = 0u64
+    while i < MN_N { if MN_ROW[i] != MN_SRW[i] { return 312u64 }   i = i + 1u64 }
+    /* an interleave: even positions then odd positions */
+    let mut w : u64 = 0u64
+    e = 0u64
+    while e < n { if (e & 1u64) == 0u64 { MN_EA[w] = MN_SEA[e]   MN_EB[w] = MN_SEB[e]   w = w + 1u64 }   e = e + 1u64 }
+    e = 0u64
+    while e < n { if (e & 1u64) == 1u64 { MN_EA[w] = MN_SEA[e]   MN_EB[w] = MN_SEB[e]   w = w + 1u64 }   e = e + 1u64 }
+    mn_fold()
+    i = 0u64
+    while i < MN_N { if MN_ROW[i] != MN_SRW[i] { return 312u64 }   i = i + 1u64 }
+    /* the fold of the fold */
+    mn_fold()
+    i = 0u64
+    while i < MN_N { if MN_ROW[i] != MN_SRW[i] { return 312u64 }   i = i + 1u64 }
+    /* the canonical log restored, one REDUNDANT (already-derived) edge added:
+     * knowledge is monotone -- the closure cannot move */
+    e = 0u64
+    while e < n { MN_EA[e] = MN_SEA[e]   MN_EB[e] = MN_SEB[e]   e = e + 1u64 }
+    MN_EN = n
+    if mn_link(0u64, 3u64) != 1u64 { return 312u64 }
+    mn_fold()
+    i = 0u64
+    while i < MN_N { if MN_ROW[i] != MN_SRW[i] { return 312u64 }   i = i + 1u64 }
+    return 0u64
+}
+/* the shared ontology of the live wire, one phrase per concept */
+fn mn_lw_phrase(i: u64) -> u64 {
+    if i == 0u64 { return "gravity law" as u64 }
+    if i == 1u64 { return "born law" as u64 }
+    if i == 2u64 { return "gnosis law" as u64 }
+    if i == 3u64 { return "noesis law" as u64 }
+    if i == 4u64 { return "machine physics" as u64 }
+    if i == 5u64 { return "thermodynamic meter" as u64 }
+    if i == 6u64 { return "exact theorem" as u64 }
+    return "sealed scroll" as u64
+}
+fn mn_arm313() -> u64 {
+    /* THE LIVE WIRE: the organism's sealed laws take their places.  The
+     * addresses come from the LIVE organs, asked twice -- one answer. */
+    let g1 : u64 = su_addr_gravity()
+    let b1 : u64 = su_addr_born()
+    let n1 : u64 = gn_addr()
+    let o1 : u64 = no_addr()
+    if g1 == 0u64 { return 313u64 }
+    if b1 == 0u64 { return 313u64 }
+    if n1 == 0u64 { return 313u64 }
+    if o1 == 0u64 { return 313u64 }
+    if g1 == b1 { return 313u64 }
+    if g1 == n1 { return 313u64 }
+    if g1 == o1 { return 313u64 }
+    if b1 == n1 { return 313u64 }
+    if b1 == o1 { return 313u64 }
+    if n1 == o1 { return 313u64 }
+    if su_addr_gravity() != g1 { return 313u64 }
+    if no_addr() != o1 { return 313u64 }
+    mn_reset()
+    if mn_put(g1) != 0u64 { return 313u64 }
+    if mn_put(b1) != 1u64 { return 313u64 }
+    if mn_put(n1) != 2u64 { return 313u64 }
+    if mn_put(o1) != 3u64 { return 313u64 }
+    if mn_put(mn_word("machine physics" as u64)) != 4u64 { return 313u64 }
+    if mn_put(mn_word("thermodynamic meter" as u64)) != 5u64 { return 313u64 }
+    if mn_put(mn_word("exact theorem" as u64)) != 6u64 { return 313u64 }
+    if mn_put(mn_word("sealed scroll" as u64)) != 7u64 { return 313u64 }
+    if mn_link(0u64, 6u64) != 1u64 { return 313u64 }
+    if mn_link(1u64, 6u64) != 1u64 { return 313u64 }
+    if mn_link(2u64, 4u64) != 1u64 { return 313u64 }
+    if mn_link(3u64, 5u64) != 1u64 { return 313u64 }
+    if mn_link(5u64, 4u64) != 1u64 { return 313u64 }
+    if mn_link(4u64, 6u64) != 1u64 { return 313u64 }
+    if mn_link(6u64, 7u64) != 1u64 { return 313u64 }
+    mn_fold()
+    /* EIDOLOS speaks the SAME ontology: two organs, two closure engines, one
+     * relation -- compared over EVERY non-reflexive pair, including the
+     * chains neither engine was told */
+    eol_reset()
+    let doc : u64 = "[gravity law < exact theorem] [born law < exact theorem] [gnosis law < machine physics] [noesis law < thermodynamic meter] [thermodynamic meter < machine physics] [machine physics < exact theorem] [exact theorem < sealed scroll]" as u64
+    if eol_read(doc, mn_slen(doc)) < 0i64 { return 313u64 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            if i != j {
+                let pa : u64 = mn_lw_phrase(i)
+                let pb : u64 = mn_lw_phrase(j)
+                let ev : u64 = eol_entails(pa, mn_slen(pa), 0u64, pb, mn_slen(pb))
+                if ev == 2u64 { return 313u64 }
+                if mn_ent(i, j) != ev { return 313u64 }
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* the chain NEITHER engine was told: the noesis law is an exact theorem */
+    if mn_ent(3u64, 6u64) != 1u64 { return 313u64 }
+    /* THE ONE-AND FETCH: who sits under machine physics AND the meter?  The
+     * complete answer set arrives in one instruction -- and it FINDS the
+     * noesis law from the two features, while gravity stays outside. */
+    let m : u64 = mn_meet(4u64, 5u64)
+    i = 0u64
+    while i < 8u64 {
+        if ((m >> i) & 1u64) != (mn_ent(i, 4u64) & mn_ent(i, 5u64)) { return 313u64 }
+        i = i + 1u64
+    }
+    if ((m >> 3u64) & 1u64) != 1u64 { return 313u64 }
+    if (m & 1u64) != 0u64 { return 313u64 }
+    return 0u64
+}
+fn mn_arm314() -> u64 {
+    /* TEETH: drop ONE live edge -- exactly the entailments that rode it die;
+     * restore it -- they live again.  The answers are load-bearing on the log. */
+    let n : u64 = MN_EN
+    let mut e : u64 = 0u64
+    while e < n { MN_SEA[e] = MN_EA[e]   MN_SEB[e] = MN_EB[e]   e = e + 1u64 }
+    MN_EN = 0u64
+    e = 0u64
+    while e < n {
+        let mut keep : u64 = 1u64
+        if MN_SEA[e] == 4u64 { if MN_SEB[e] == 6u64 { keep = 0u64 } }
+        if keep == 1u64 {
+            MN_EA[MN_EN] = MN_SEA[e]
+            MN_EB[MN_EN] = MN_SEB[e]
+            MN_EN = MN_EN + 1u64
+        }
+        e = e + 1u64
+    }
+    mn_fold()
+    if mn_ent(3u64, 6u64) != 0u64 { return 314u64 }      /* noesis loses theoremhood   */
+    if mn_ent(2u64, 7u64) != 0u64 { return 314u64 }      /* gnosis loses the scroll    */
+    if mn_ent(0u64, 6u64) != 1u64 { return 314u64 }      /* gravity's direct route lives */
+    e = 0u64
+    while e < n { MN_EA[e] = MN_SEA[e]   MN_EB[e] = MN_SEB[e]   e = e + 1u64 }
+    MN_EN = n
+    mn_fold()
+    if mn_ent(3u64, 6u64) != 1u64 { return 314u64 }
+    if mn_ent(2u64, 7u64) != 1u64 { return 314u64 }
+    /* the 65th concept is REFUSED, counted, and the standing 64 are unharmed */
+    let mut v : u64 = 0u64
+    while v < 56u64 { if mn_put(45312u64 + v) == MN_SENT { return 314u64 }   v = v + 1u64 }
+    if MN_N != 64u64 { return 314u64 }
+    let rc : u64 = MN_RCAP
+    if mn_put(51966u64) != MN_SENT { return 314u64 }
+    if MN_RCAP != rc + 1u64 { return 314u64 }
+    if MN_N != 64u64 { return 314u64 }
+    /* THE SCROLL: the manifold law sealed -- derived entailments, refused
+     * reversals, deterministic address */
+    eol_reset()
+    let doc : u64 = "[address = meaning] [meaning = manifold place] [fetch = one and] [one and < machine word] [closure = fold of log] [knowledge = monotone]" as u64
+    let dl : u64 = mn_slen(doc)
+    if eol_read(doc, dl) < 0i64 { return 314u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 314u64 }
+    /* DERIVED (absent from the text): the address IS the manifold place */
+    let qa : u64 = "address" as u64
+    let qb : u64 = "manifold place" as u64
+    if eol_entails(qa, mn_slen(qa), 2u64, qb, mn_slen(qb)) != 1u64 { return 314u64 }
+    /* DERIVED: the fetch sits under the machine word (through the join) */
+    let qc : u64 = "fetch" as u64
+    let qd : u64 = "machine word" as u64
+    if eol_entails(qc, mn_slen(qc), 0u64, qd, mn_slen(qd)) != 1u64 { return 314u64 }
+    /* the reversal REFUSES: the word does not sit under the fetch */
+    if eol_entails(qd, mn_slen(qd), 0u64, qc, mn_slen(qc)) != 0u64 { return 314u64 }
+    /* cross-class refusal: the address is not the fetch */
+    if eol_entails(qa, mn_slen(qa), 2u64, qc, mn_slen(qc)) != 0u64 { return 314u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 314u64 }
+    if eol_addr() != a1 { return 314u64 }
+    MN_SCROLL = a1
+    return 0u64
+}
+fn mn_selfprove() -> u64 @export {
+    let a0 : u64 = mn_arm310()
+    if a0 != 0u64 { return a0 }
+    let a1 : u64 = mn_arm311()
+    if a1 != 0u64 { return a1 }
+    let a2 : u64 = mn_arm312()
+    if a2 != 0u64 { return a2 }
+    let a3 : u64 = mn_arm313()
+    if a3 != 0u64 { return a3 }
+    let a4 : u64 = mn_arm314()
+    if a4 != 0u64 { return a4 }
+    return 0u64
+}
+
+/* MNEME: the organism's sealed knowledge now has PLACES instead of pointers
+ * -- the extent is the address, the fetch is one AND, the closure is a fold
+ * of an append-only log, and eidolos co-signs every derived relation. */

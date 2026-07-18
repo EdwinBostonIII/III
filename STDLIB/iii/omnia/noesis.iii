@@ -18,7 +18,7 @@
  *   deficit(x -> x>>k) = k         [k bits erased]
  *   deficit(x -> x & (2^k-1)) = w-k  [the big eraser: umod]
  *
- * THE ARMS (truth is a CONDITION OF MOTION, arms 300..304, NO gate of its
+ * THE ARMS (truth is a CONDITION OF MOTION, arms 300..306, NO gate of its
  * own -- the summit gate compiles and drives this organ):
  *   300 THE DEFICIT METER: COMPLETE enumeration of Z/2^8 -- for EVERY a in
  *       0..255 the saturation count of x -> a*x equals 2^(8 - v2(a)) (v2(0)
@@ -43,6 +43,20 @@
  *       SEMANTIC deficit -- the Landauer floor -- cannot differ.
  *   304 THE SCROLL: the law sealed by EIDOLOS, entailing consequences absent
  *       from its text, refusing the reversals, address deterministic.
+ *   305 THE WORLDS: meta-axiomatic classification by COMPLETE enumeration of
+ *       all 3^9 = 19683 binary operations on the 3-carrier -- reversibility
+ *       IS zero deficit IS eternal return, at every world and every
+ *       translation; the latin axiom purchases recurrence for the whole
+ *       world (the halting question dissolves BY DESIGN); the two group
+ *       definitions coincide (inverses are bought by association + latin +
+ *       identity) and the three labeled groups are FORCED by identity
+ *       choice; absorption purchases guaranteed collapse; association
+ *       purchases fold freedom, with the lawless separation witnessed.
+ *       Censuses re-derived by forced construction (the second engine),
+ *       never stored; teeth = one flipped cell of a group world.
+ *   306 THE WORLDS SCROLL: the purchase theorems sealed by EIDOLOS --
+ *       derived chains (the group world buys eternity through latin),
+ *       refused reversals, deterministic address.
  *
  * SCOPE (the eidolon law): deficit = log2(|domain|/|image|) is the uniform-
  * merge Landauer floor on the finite ring -- the exact statement the machine
@@ -280,6 +294,360 @@ fn no_arm304() -> u64 {
     NO_SCROLL = a1
     return 0u64
 }
+/* ==================== THE WORLDS (arms 305..306) ====================
+ * Meta-axiomatic exploration made exact: instead of ASSUMING the machine's
+ * ring, III walks EVERY possible binary operation on the 3-element carrier
+ * -- all 3^9 = 19683 worlds -- and derives which AXIOM purchases which
+ * COMPUTATIONAL GUARANTEE.  The deficit law of arms 300..303 turns out not
+ * to be an accident of Z/2^64: in every world, at every translation,
+ * bijectivity IS zero deficit IS eternal return; and the axioms that force
+ * bijectivity (latin, group) are exactly the axioms that dissolve the
+ * halting question by design, while absorption forces collapse and
+ * association alone buys only fold freedom.  Counts are never stored: the
+ * scan and a forced construction must derive them independently. */
+var NW_P3 : [u64; 10]
+var NW_GT : [u64; 4]
+var NW_NASSOC : u64 = 0u64
+var NW_NLATIN : u64 = 0u64
+var NW_NGRP : u64 = 0u64
+var NW_NLOOP : u64 = 0u64
+var NW_NABS : u64 = 0u64
+var NW_PIFAIL : u64 = 0u64
+var NO_WORLDS : u64 = 0u64
+fn no_worlds() -> u64 @export { return NO_WORLDS }
+fn nw_init() -> i32 {
+    let mut i : u64 = 0u64
+    let mut p : u64 = 1u64
+    while i < 10u64 { NW_P3[i] = p   p = p * 3u64   i = i + 1u64 }
+    NW_NASSOC = 0u64
+    NW_NLATIN = 0u64
+    NW_NGRP = 0u64
+    NW_NLOOP = 0u64
+    NW_NABS = 0u64
+    NW_PIFAIL = 0u64
+    return 0i32
+}
+fn nw_cell(t: u64, x: u64, y: u64) -> u64 { return (t / NW_P3[(x * 3u64) + y]) % 3u64 }
+fn nw_pc3(m: u64) -> u64 { return (m & 1u64) + ((m >> 1u64) & 1u64) + ((m >> 2u64) & 1u64) }
+fn nw_lmask(t: u64, a: u64) -> u64 {
+    let mut m : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < 3u64 { m = m | (1u64 << nw_cell(t, a, x))   x = x + 1u64 }
+    return m
+}
+fn nw_rmask(t: u64, a: u64) -> u64 {
+    let mut m : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < 3u64 { m = m | (1u64 << nw_cell(t, x, a))   x = x + 1u64 }
+    return m
+}
+fn nw_assoc(t: u64) -> u64 {
+    let mut x : u64 = 0u64
+    while x < 3u64 {
+        let mut y : u64 = 0u64
+        while y < 3u64 {
+            let mut z : u64 = 0u64
+            while z < 3u64 {
+                if nw_cell(t, nw_cell(t, x, y), z) != nw_cell(t, x, nw_cell(t, y, z)) { return 0u64 }
+                z = z + 1u64
+            }
+            y = y + 1u64
+        }
+        x = x + 1u64
+    }
+    return 1u64
+}
+fn nw_ident(t: u64) -> u64 {
+    /* two-sided identity, returned as e+1 (0 = none) */
+    let mut e : u64 = 0u64
+    while e < 3u64 {
+        let mut ok : u64 = 1u64
+        let mut x : u64 = 0u64
+        while x < 3u64 {
+            if nw_cell(t, e, x) != x { ok = 0u64 }
+            if nw_cell(t, x, e) != x { ok = 0u64 }
+            x = x + 1u64
+        }
+        if ok == 1u64 { return e + 1u64 }
+        e = e + 1u64
+    }
+    return 0u64
+}
+fn nw_absorb(t: u64) -> u64 {
+    /* two-sided absorbing element, returned as z+1 (0 = none) */
+    let mut z : u64 = 0u64
+    while z < 3u64 {
+        let mut ok : u64 = 1u64
+        let mut x : u64 = 0u64
+        while x < 3u64 {
+            if nw_cell(t, z, x) != z { ok = 0u64 }
+            if nw_cell(t, x, z) != z { ok = 0u64 }
+            x = x + 1u64
+        }
+        if ok == 1u64 { return z + 1u64 }
+        z = z + 1u64
+    }
+    return 0u64
+}
+fn nw_orbret(t: u64, a: u64) -> u64 {
+    /* eternal return under x -> a*x: does EVERY start revisit itself? */
+    let mut x0 : u64 = 0u64
+    while x0 < 3u64 {
+        let x1 : u64 = nw_cell(t, a, x0)
+        let x2 : u64 = nw_cell(t, a, x1)
+        let x3 : u64 = nw_cell(t, a, x2)
+        let mut ret : u64 = 0u64
+        if x1 == x0 { ret = 1u64 }
+        if x2 == x0 { ret = 1u64 }
+        if x3 == x0 { ret = 1u64 }
+        if ret == 0u64 { return 0u64 }
+        x0 = x0 + 1u64
+    }
+    return 1u64
+}
+fn nw_latin(t: u64) -> u64 {
+    let mut a : u64 = 0u64
+    while a < 3u64 {
+        if nw_pc3(nw_lmask(t, a)) != 3u64 { return 0u64 }
+        if nw_pc3(nw_rmask(t, a)) != 3u64 { return 0u64 }
+        a = a + 1u64
+    }
+    return 1u64
+}
+fn nw_group(t: u64) -> u64 {
+    /* definition ONE: association + two-sided identity + two-sided inverses */
+    if nw_assoc(t) != 1u64 { return 0u64 }
+    let ei : u64 = nw_ident(t)
+    if ei == 0u64 { return 0u64 }
+    let e : u64 = ei - 1u64
+    let mut x : u64 = 0u64
+    while x < 3u64 {
+        let mut found : u64 = 0u64
+        let mut y : u64 = 0u64
+        while y < 3u64 {
+            if nw_cell(t, x, y) == e { if nw_cell(t, y, x) == e { found = 1u64 } }
+            y = y + 1u64
+        }
+        if found == 0u64 { return 0u64 }
+        x = x + 1u64
+    }
+    return 1u64
+}
+fn nw_enc_group(e: u64) -> u64 {
+    /* the FORCED group table with identity e: at order 3 Lagrange leaves no
+     * freedom -- u*u=v, u*v=e, v*u=e, v*v=u for non-identity u < v */
+    let mut u : u64 = 0u64
+    if e == 0u64 { u = 1u64 }
+    let mut v : u64 = 2u64
+    if e == 2u64 { v = 1u64 }
+    let mut t : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < 3u64 {
+        let mut y : u64 = 0u64
+        while y < 3u64 {
+            let mut c : u64 = 0u64
+            if x == e { c = y }
+            if y == e { c = x }
+            if x == u { if y == u { c = v } }
+            if x == u { if y == v { c = e } }
+            if x == v { if y == u { c = e } }
+            if x == v { if y == v { c = u } }
+            t = t + (c * NW_P3[(x * 3u64) + y])
+            y = y + 1u64
+        }
+        x = x + 1u64
+    }
+    return t
+}
+fn nw_perm(i: u64, p: u64) -> u64 {
+    /* the six permutations of (0,1,2), element at position p */
+    if i == 0u64 { return p }
+    if i == 1u64 { if p == 0u64 { return 0u64 }   if p == 1u64 { return 2u64 }   return 1u64 }
+    if i == 2u64 { if p == 0u64 { return 1u64 }   if p == 1u64 { return 0u64 }   return 2u64 }
+    if i == 3u64 { if p == 0u64 { return 1u64 }   if p == 1u64 { return 2u64 }   return 0u64 }
+    if i == 4u64 { if p == 0u64 { return 2u64 }   if p == 1u64 { return 0u64 }   return 1u64 }
+    if p == 0u64 { return 2u64 }
+    if p == 1u64 { return 1u64 }
+    return 0u64
+}
+fn nw_scan() -> u64 {
+    /* one pass over ALL 19683 worlds; every universal law checked in-flight,
+     * every census tallied for the second engines */
+    let mut t : u64 = 0u64
+    while t < 19683u64 {
+        let asc : u64 = nw_assoc(t)
+        let idn : u64 = nw_ident(t)
+        let lat : u64 = nw_latin(t)
+        let grp : u64 = nw_group(t)
+        /* W3: the two group definitions agree -- inverses are PURCHASED by
+         * association + latin + identity, nothing less, nothing more */
+        let mut grp2 : u64 = 0u64
+        if asc == 1u64 { if lat == 1u64 { if idn != 0u64 { grp2 = 1u64 } } }
+        if grp != grp2 { return 1u64 }
+        if grp == 1u64 {
+            if NW_NGRP < 4u64 { NW_GT[NW_NGRP] = t }
+            NW_NGRP = NW_NGRP + 1u64
+        }
+        NW_NASSOC = NW_NASSOC + asc
+        NW_NLATIN = NW_NLATIN + lat
+        if lat == 1u64 { if idn != 0u64 { NW_NLOOP = NW_NLOOP + 1u64 } }
+        /* W1 at every translation: bijective == zero deficit == eternal
+         * return (deficit = 3 - image; zero exactly when the mask saturates) */
+        let mut a : u64 = 0u64
+        while a < 3u64 {
+            let mut bij : u64 = 0u64
+            if nw_pc3(nw_lmask(t, a)) == 3u64 { bij = 1u64 }
+            if nw_orbret(t, a) != bij { return 2u64 }
+            a = a + 1u64
+        }
+        /* W4: absorption purchases collapse -- the absorbing element's
+         * translation is CONSTANT (maximum deficit) and z sits fixed under
+         * every translation */
+        let ab : u64 = nw_absorb(t)
+        if ab != 0u64 {
+            NW_NABS = NW_NABS + 1u64
+            let z : u64 = ab - 1u64
+            if nw_pc3(nw_lmask(t, z)) != 1u64 { return 3u64 }
+            a = 0u64
+            while a < 3u64 {
+                if nw_cell(t, a, z) != z { return 3u64 }
+                a = a + 1u64
+            }
+        }
+        /* W5: association purchases fold freedom -- the fourth power agrees
+         * along both bracketings; the lawless separation is tallied */
+        if asc == 1u64 {
+            a = 0u64
+            while a < 3u64 {
+                let aa : u64 = nw_cell(t, a, a)
+                if nw_cell(t, aa, aa) != nw_cell(t, nw_cell(t, aa, a), a) { return 4u64 }
+                a = a + 1u64
+            }
+        } else {
+            let mut fl : u64 = 0u64
+            a = 0u64
+            while a < 3u64 {
+                let aa2 : u64 = nw_cell(t, a, a)
+                if nw_cell(t, aa2, aa2) != nw_cell(t, nw_cell(t, aa2, a), a) { fl = 1u64 }
+                a = a + 1u64
+            }
+            NW_PIFAIL = NW_PIFAIL + fl
+        }
+        t = t + 1u64
+    }
+    return 0u64
+}
+fn nw_engines() -> u64 {
+    /* SECOND ENGINES: the scan's censuses re-derived by forced construction */
+    if NW_NGRP != 3u64 { return 1u64 }
+    let mut e : u64 = 0u64
+    while e < 3u64 {
+        let g : u64 = nw_enc_group(e)
+        if nw_group(g) != 1u64 { return 2u64 }
+        let mut found : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < 3u64 { if NW_GT[i] == g { found = 1u64 }   i = i + 1u64 }
+        if found == 0u64 { return 3u64 }
+        e = e + 1u64
+    }
+    /* latin: for EVERY first row exactly TWO second rows complete, and the
+     * forced third row closes a latin square the scan also certified */
+    let mut cnt : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < 6u64 {
+        let mut perp : u64 = 0u64
+        let mut q : u64 = 0u64
+        while q < 6u64 {
+            let mut okc : u64 = 1u64
+            let mut c : u64 = 0u64
+            while c < 3u64 {
+                if nw_perm(p, c) == nw_perm(q, c) { okc = 0u64 }
+                c = c + 1u64
+            }
+            if okc == 1u64 {
+                let mut enc : u64 = 0u64
+                c = 0u64
+                while c < 3u64 {
+                    let r0 : u64 = nw_perm(p, c)
+                    let r1 : u64 = nw_perm(q, c)
+                    enc = enc + (r0 * NW_P3[c])
+                    enc = enc + (r1 * NW_P3[3u64 + c])
+                    enc = enc + (((3u64 - r0) - r1) * NW_P3[6u64 + c])
+                    c = c + 1u64
+                }
+                if nw_latin(enc) != 1u64 { return 4u64 }
+                perp = perp + 1u64
+                cnt = cnt + 1u64
+            }
+            q = q + 1u64
+        }
+        if perp != 2u64 { return 5u64 }
+        p = p + 1u64
+    }
+    if cnt != NW_NLATIN { return 6u64 }
+    /* the order-3 accident, derived: every loop here is a group (latin +
+     * identity forces association at THIS order -- not at every order) */
+    if NW_NLOOP != NW_NGRP { return 7u64 }
+    /* strict separations, witnessed by count */
+    if NW_NASSOC <= NW_NGRP { return 8u64 }
+    if NW_NLATIN <= NW_NGRP { return 9u64 }
+    if NW_PIFAIL == 0u64 { return 10u64 }
+    if NW_NABS == 0u64 { return 11u64 }
+    return 0u64
+}
+fn nw_teeth() -> u64 {
+    /* flip ONE cell of the canonical group world and the meter feels it:
+     * latin breaks, a deficit appears, eternity ends, grouphood dies --
+     * while the unperturbed world keeps all four */
+    let g0 : u64 = nw_enc_group(0u64)
+    if nw_group(g0) != 1u64 { return 1u64 }
+    if nw_latin(g0) != 1u64 { return 2u64 }
+    if nw_cell(g0, 1u64, 2u64) != 0u64 { return 3u64 }
+    let gm : u64 = g0 + NW_P3[5u64]
+    if nw_latin(gm) != 0u64 { return 4u64 }
+    if nw_group(gm) != 0u64 { return 5u64 }
+    if nw_pc3(nw_lmask(gm, 1u64)) != 2u64 { return 6u64 }
+    if nw_orbret(gm, 1u64) != 0u64 { return 7u64 }
+    if nw_orbret(g0, 1u64) != 1u64 { return 8u64 }
+    return 0u64
+}
+fn no_arm305() -> u64 {
+    nw_init()
+    if nw_scan() != 0u64 { return 305u64 }
+    if nw_engines() != 0u64 { return 305u64 }
+    if nw_teeth() != 0u64 { return 305u64 }
+    return 0u64
+}
+fn no_arm306() -> u64 {
+    /* THE WORLDS SCROLL: only what arm 305 derived may be spoken */
+    if NW_NGRP != 3u64 { return 306u64 }
+    if NW_NLATIN != 12u64 { return 306u64 }
+    if NW_NLATIN <= NW_NGRP { return 306u64 }
+    eol_reset()
+    let doc : u64 = "[reversibility = zero deficit] [zero deficit = eternal return] [group world < latin world] [latin world < eternal return] [association = fold freedom] [absorption = guaranteed collapse]" as u64
+    let dl : u64 = no_strlen(doc)
+    if eol_read(doc, dl) < 0i64 { return 306u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 306u64 }
+    /* DERIVED (absent from the text): the group axioms PURCHASE eternal
+     * return -- and reversibility itself -- through the latin chain */
+    let qa : u64 = "group world" as u64
+    let qb : u64 = "eternal return" as u64
+    if eol_entails(qa, no_strlen(qa), 0u64, qb, no_strlen(qb)) != 1u64 { return 306u64 }
+    let qc : u64 = "reversibility" as u64
+    if eol_entails(qa, no_strlen(qa), 0u64, qc, no_strlen(qc)) != 1u64 { return 306u64 }
+    /* the reversal REFUSES: eternity does not buy the group laws */
+    if eol_entails(qb, no_strlen(qb), 0u64, qa, no_strlen(qa)) != 0u64 { return 306u64 }
+    /* cross-class refusal: association does not buy zero heat */
+    let qd : u64 = "association" as u64
+    let qe : u64 = "zero deficit" as u64
+    if eol_entails(qd, no_strlen(qd), 2u64, qe, no_strlen(qe)) != 0u64 { return 306u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 306u64 }
+    if eol_addr() != a1 { return 306u64 }
+    NO_WORLDS = a1
+    return 0u64
+}
 fn no_selfprove() -> u64 @export {
     let a0 : u64 = no_arm300()
     if a0 != 0u64 { return a0 }
@@ -291,10 +659,19 @@ fn no_selfprove() -> u64 @export {
     if a3 != 0u64 { return a3 }
     let a4 : u64 = no_arm304()
     if a4 != 0u64 { return a4 }
+    let a5 : u64 = no_arm305()
+    if a5 != 0u64 { return a5 }
+    let a6 : u64 = no_arm306()
+    if a6 != 0u64 { return a6 }
     /* the prime returns to the tilt's home before the next organ speaks */
     kd_setp(5u64)
     return 0u64
 }
+
+/* the meter's public face: the exact image tally of the family (kind, p)
+ * over Z/2^8 -- kind 0 mul-by-p, 1 add-p, 2 shr-p, 3 and-p, 4 sdiv-bias
+ * 2^p, 5 sdiv-hw 2^p.  Consumed by the synesis discharge loop: a proposed
+ * bridge between fold families is DECIDED by this meter, never assumed. */
 
 /* NOESIS: the machine now knows what its own thinking costs -- the valuation
  * is the heat, the odd world is free, the chronometer's past is recoverable,

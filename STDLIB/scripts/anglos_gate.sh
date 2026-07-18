@@ -92,7 +92,7 @@ grep -q "^scroll vein   = 120..124 green" "$T/run1.txt"  || { echo "[anglos_gate
 grep -q "^scroll door   = 109..118 green" "$T/run1.txt"  || { echo "[anglos_gate] NO DOOR"; exit 6; }
 grep -q "^scroll anglos = 390..399 green" "$T/run1.txt"  || { echo "[anglos_gate] NO TONGUE"; exit 6; }
 grep -q "^scroll sponsor = 400..404 green" "$T/run1.txt" || { echo "[anglos_gate] NO SPONSOR"; exit 6; }
-grep -q "^scroll house  = 410..414 green" "$T/run1.txt"  || { echo "[anglos_gate] NO HOUSE"; exit 6; }
+grep -q "^scroll house  = 410..420 green" "$T/run1.txt"  || { echo "[anglos_gate] NO HOUSE"; exit 6; }
 grep -q "^scroll sponsor= confirmed without narrowing" "$T/run1.txt" || { echo "[anglos_gate] NO SPONSORSHIP"; exit 6; }
 grep -q "^the hearing: claims=2 grade=1 " "$T/run1.txt"  || { echo "[anglos_gate] NO HEARING"; exit 6; }
 grep -q " : KNOWN$" "$T/run1.txt"                        || { echo "[anglos_gate] NO ANSWER"; exit 6; }

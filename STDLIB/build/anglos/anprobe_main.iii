@@ -58,7 +58,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     ps("scroll sponsor = 400..404 green\n" as u64)
     let hp : u64 = ok_selfprove()
     if hp != 0u64 { ps("scroll house  = RED arm " as u64)   pu(hp)   putchar(10i32)   return 9u64 }
-    ps("scroll house  = 410..414 green\n" as u64)
+    ps("scroll house  = 410..420 green\n" as u64)
 
     /* the real utterance: a market described in the wild tongue, one question */
     let u : u64 = "the pool is a constant product market and the fee equals the premium. is the pool a constant product market" as u64

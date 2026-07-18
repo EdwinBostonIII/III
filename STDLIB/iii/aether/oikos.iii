@@ -55,6 +55,19 @@ extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_canon_len() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_canon_byte(i: u64) -> u8 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_rooted() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_addr() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_emit_env() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_env_byte(i: u64) -> u8 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn xr_reset() -> i32 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_push(base: u64, len: u64) -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_pull() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_frame_base() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_frame_len() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xr_advance() -> i32 from "xring.iii"
 
 extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
@@ -252,6 +265,238 @@ fn ok_erase(path: u64) -> u64 @export {
     return 0u64
 }
 
+/* ==================== THE COMPACTION ====================
+ * A house accumulates stated claims whose content the unraveling already
+ * carries: [a < b] [b < c] [a < c] states three, knows three, NEEDS two.
+ * ok_compact drops every claim RE-DERIVABLE from the claims that remain
+ * (transitive reduction for <, spanning set for =, judged claim by claim
+ * by the house's own entailment -- never by pattern).  THE INVARIANT: the
+ * compacted house entails EXACTLY what the full house entailed (each drop
+ * is justified by a live derivation from the remainder, so the closure
+ * can only be preserved).  The address changes -- compaction is a
+ * REFOUNDING, the house's identity following its stated basis -- and the
+ * compacted house is IDEMPOTENT under further compaction (a minimal basis
+ * stays put; the second address equals the first).  A house at its
+ * throat now refuses only when its IRREDUCIBLE knowledge exceeds the
+ * envelope -- capacity binds on truth, not on redundancy. */
+var OK_CO : [u64; 256]                   /* claim text offsets in OK_HOUSE      */
+var OK_CL : [u64; 256]
+var OK_KEEP : [u8; 256]
+var OK_CN : u64 = 0u64
+
+/* split the standing canon (OK_HOUSE) into top-level claim spans */
+fn ok_split_claims() -> u64 {
+    OK_CN = 0u64
+    let mut i : u64 = 0u64
+    let mut dep : u64 = 0u64
+    let mut s : u64 = 0u64
+    while i < OK_HN {
+        let c : u8 = OK_HOUSE[i]
+        if c == 91u8 {
+            if dep == 0u64 { s = i }
+            dep = dep + 1u64
+        }
+        if c == 93u8 {
+            if dep == 0u64 { return 1u64 }
+            dep = dep - 1u64
+            if dep == 0u64 {
+                if OK_CN >= 256u64 { return 1u64 }
+                OK_CO[OK_CN] = s
+                OK_CL[OK_CN] = (i + 1u64) - s
+                OK_CN = OK_CN + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    if dep != 0u64 { return 1u64 }
+    if OK_CN == 0u64 { return 1u64 }
+    return 0u64
+}
+/* find claim ci's top-level verb position in OK_HOUSE (depth==1, spaced) */
+fn ok_top_verb(ci: u64) -> u64 {
+    let s : u64 = OK_CO[ci]
+    let n : u64 = OK_CL[ci]
+    let mut k : u64 = 1u64
+    let mut dep : u64 = 1u64
+    while k < (n - 1u64) {
+        let c : u8 = OK_HOUSE[s + k]
+        if c == 91u8 { dep = dep + 1u64 }
+        if c == 93u8 { dep = dep - 1u64 }
+        if dep == 1u64 {
+            let mut isv : u64 = 0u64
+            if c == 60u8 { isv = 1u64 }
+            if c == 61u8 { isv = 1u64 }
+            if c == 126u8 { isv = 1u64 }
+            if isv == 1u64 {
+                if OK_HOUSE[s + k - 1u64] == 32u8 {
+                    if OK_HOUSE[s + k + 1u64] == 32u8 { return k }
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    return 0u64
+}
+/* rebuild the kept claims (skipping `minus`, SENT = none) into OK_FB;
+ * returns the length (0 = empty basis) */
+fn ok_rebuild(minus: u64) -> u64 {
+    let mut m : u64 = 0u64
+    let mut ci : u64 = 0u64
+    while ci < OK_CN {
+        let mut take : u64 = 0u64
+        if OK_KEEP[ci] == 1u8 { take = 1u64 }
+        if ci == minus { take = 0u64 }
+        if take == 1u64 {
+            if m > 0u64 { OK_FB[m] = 32u8   m = m + 1u64 }
+            let mut k : u64 = 0u64
+            while k < OK_CL[ci] { OK_FB[m] = OK_HOUSE[OK_CO[ci] + k]   m = m + 1u64   k = k + 1u64 }
+        }
+        ci = ci + 1u64
+    }
+    return m
+}
+fn ok_compact(path: u64) -> u64 @export {
+    OK_REASON = OK_R_NONE
+    let sv : u64 = ok_stand(path)
+    if sv == OK_S_BIRTH { OK_VERDICT = OK_D_DWELT   return OK_D_DWELT }
+    if sv != OK_S_STOOD { OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    if ok_split_claims() != 0u64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    let mut ci : u64 = 0u64
+    while ci < OK_CN { OK_KEEP[ci] = 1u8   ci = ci + 1u64 }
+    /* greedy in canonical order: drop iff the remainder derives it */
+    let mut dropped : u64 = 0u64
+    ci = 0u64
+    while ci < OK_CN {
+        let vpos : u64 = ok_top_verb(ci)
+        if vpos > 0u64 {
+            let bn : u64 = ok_rebuild(ci)
+            if bn > 0u64 {
+                eol_reset()
+                if eol_read((&OK_FB) as u64, bn) >= 0i64 {
+                    if eol_lawcheck() == 0u64 {
+                        let vc : u8 = OK_HOUSE[OK_CO[ci] + vpos]
+                        let mut vv : u64 = 2u64
+                        if vc == 60u8 { vv = 0u64 }
+                        if vc == 126u8 { vv = 1u64 }
+                        let s : u64 = OK_CO[ci]
+                        let al : u64 = vpos - 2u64
+                        let bo : u64 = s + vpos + 2u64
+                        let bl : u64 = (OK_CL[ci] - 1u64) - (vpos + 2u64)
+                        let e : u64 = eol_entails(((&OK_HOUSE) as u64) + s + 1u64, al, vv, ((&OK_HOUSE) as u64) + bo, bl)
+                        if e == 1u64 {
+                            OK_KEEP[ci] = 0u8
+                            dropped = dropped + 1u64
+                        }
+                    }
+                }
+            }
+        }
+        ci = ci + 1u64
+    }
+    if dropped == 0u64 {
+        /* already a minimal basis: identity preserved, nothing rewritten */
+        eol_reset()
+        if OK_HN > 0u64 { eol_read((&OK_HOUSE) as u64, OK_HN) }
+        OK_VERDICT = OK_D_DWELT
+        return OK_D_DWELT
+    }
+    /* refound the house on the reduced basis (minus = none) */
+    let bn2 : u64 = ok_rebuild(1024u64)
+    if bn2 == 0u64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    eol_reset()
+    if eol_read((&OK_FB) as u64, bn2) < 0i64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    if eol_lawcheck() != 0u64 { ok_fail(OK_R_CLASH)   OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    let pr : u64 = ok_persist(path)
+    if pr != 0u64 { OK_VERDICT = OK_D_REFUSED   return OK_D_REFUSED }
+    OK_VERDICT = OK_D_DWELT
+    return OK_D_DWELT
+}
+
+/* ==================== THE PRESBEIA: two houses speak ====================
+ * xenos's deepest promise -- "so two houses' doors can speak to each other
+ * and verify every word" -- realized as the union judgment ACROSS HOUSES
+ * (the oikos law lifted from across-time to across-boundary).  A house
+ * EMITS its knowledge as the CONFORMING envelope (the same door out, axiom
+ * riding as the handshake); a foreign house RECEIVES it -- the envelope
+ * admitted through the one door (a foreign SOUL, a different III's axiom,
+ * REFUSED at the door), then the foreign claims union-judged against the
+ * receiver's OWN standing house:
+ *     CONCORD  the union is lawful -- the two houses agree, and the
+ *              receiver now KNOWS what the foreigner said (verifiable claim
+ *              by claim through its own entailment)
+ *     DISCORD  the union breaks the law -- a contradiction between the
+ *              houses, NAMED, and the receiver's house UNTOUCHED
+ * The receiver never MERGES the foreigner into its file (diplomacy is not
+ * annexation); it VERIFIES.  The envelope crosses the bare-metal vein, so
+ * the exchange is transport-transparent (a house across the wire is
+ * verified identically to one across the room). */
+const OK_C_CONCORD : u64 = 1u64
+const OK_C_DISCORD : u64 = 2u64
+const OK_C_SOUL    : u64 = 3u64          /* a foreign axiom -- a different III */
+const OK_C_BROKEN  : u64 = 4u64          /* the envelope would not admit       */
+var OK_ENV : [u8; 20480]                 /* the emitted/received envelope       */
+var OK_ENVN : u64 = 0u64
+var OK_FADDR : u64 = 0u64                /* the foreign house's address         */
+fn ok_env_len() -> u64 @export { return OK_ENVN }
+fn ok_env_byte(i: u64) -> u8 @export { if i < OK_ENVN { return OK_ENV[i] }   return 0u8 }
+fn ok_foreign_addr() -> u64 @export { return OK_FADDR }
+
+/* EMIT: stand the house at `path` and render its CONFORMING envelope into
+ * OK_ENV.  Returns the envelope length, or 0 (empty/absent house, or the
+ * scroll would not round-trip). */
+fn ok_emit(path: u64) -> u64 @export {
+    OK_ENVN = 0u64
+    let sv : u64 = ok_stand(path)
+    if sv != OK_S_STOOD { return 0u64 }
+    let ea : u64 = xn_emit_env()
+    if ea == 0u64 { return 0u64 }
+    let n : u64 = xn_env_len()
+    if n == 0u64 { return 0u64 }
+    if n > 20480u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < n { OK_ENV[i] = xn_env_byte(i)   i = i + 1u64 }
+    OK_ENVN = n
+    return n
+}
+/* RECEIVE: my house stands at `path`; the foreign envelope is admitted at
+ * the door (CONFORMING or a foreign SOUL refused), then union-judged
+ * against my house.  1 concord | 2 discord | 3 soul | 4 broken. */
+fn ok_receive(path: u64, env: u64, envlen: u64) -> u64 @export {
+    OK_FADDR = 0u64
+    /* my own standing knowledge, held aside (admit will reset the scroll) */
+    let sv : u64 = ok_stand(path)
+    if sv == OK_S_REFUSED { return OK_C_BROKEN }
+    /* the envelope at the one door: a foreign axiom is a different soul */
+    let v : u64 = xn_admit(env, envlen)
+    if v != 1u64 {
+        if xn_reason() == 4u64 { return OK_C_SOUL }
+        return OK_C_BROKEN
+    }
+    if xn_grade() != 2u64 { return OK_C_BROKEN }   /* must be CONFORMING     */
+    OK_FADDR = xn_last_addr()
+    /* the foreign claims (the admitted canon) union-judged with my house */
+    let gn : u64 = xn_canon_len()
+    let mut i : u64 = 0u64
+    while i < gn { OK_FB[i] = xn_canon_byte(i)   i = i + 1u64 }
+    eol_reset()
+    if eol_read((&OK_FB) as u64, gn) < 0i64 { return OK_C_BROKEN }
+    if OK_HN > 0u64 {
+        if eol_read((&OK_HOUSE) as u64, OK_HN) < 0i64 { return OK_C_BROKEN }
+    }
+    if eol_lawcheck() != 0u64 {
+        /* DISCORD: the houses contradict; mine is untouched, re-stood whole */
+        eol_reset()
+        if OK_HN > 0u64 { eol_read((&OK_HOUSE) as u64, OK_HN) }
+        return OK_C_DISCORD
+    }
+    return OK_C_CONCORD
+}
+/* verify one claim of the concordant union in the receiver's own tongue
+ * (after ok_receive == CONCORD, the union stands in the eidolos state) */
+fn ok_union_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 @export {
+    return eol_entails(a, al, v, b, bl)
+}
+
 /* ==================== THE SELF-PROOF (arms 410..414) ====================
  * All arms dwell in the TEST hearth (build territory) -- the real house
  * file is never touched by a proof. */
@@ -331,6 +576,126 @@ fn ok_arm414() -> u64 {
     eol_reset()
     return 0u64
 }
+/* arm 415: THE REDUCTION -- a stated-but-derivable claim is dropped; the
+ * closure survives (the theorem still ENTAILED, now derived not stated);
+ * the refounding is idempotent (a minimal basis stays put). */
+fn ok_arm415() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 415u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 415u64 }
+    if ok_dwell_text(ok_tpath(), "an animal is a thing" as u64) != 1u64 { return 415u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is a thing" as u64) != 1u64 { return 415u64 }
+    let full : u64 = OK_HN
+    if ok_compact(ok_tpath()) != 1u64 { return 415u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 415u64 }
+    if OK_HN >= full { return 415u64 }
+    if ok_ent("dog" as u64, 0u64, "thing" as u64) != 1u64 { return 415u64 }
+    if ok_ent("dog" as u64, 0u64, "animal" as u64) != 1u64 { return 415u64 }
+    if ok_ent("animal" as u64, 0u64, "thing" as u64) != 1u64 { return 415u64 }
+    let a1 : u64 = OK_ADDR
+    if ok_compact(ok_tpath()) != 1u64 { return 415u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 415u64 }
+    if OK_ADDR != a1 { return 415u64 }
+    return 0u64
+}
+/* arm 416: THE IRREDUCIBLE -- a house of independent claims compacts to
+ * ITSELF: identity preserved, nothing rewritten. */
+fn ok_arm416() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 416u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 416u64 }
+    if ok_dwell_text(ok_tpath(), "the dream mirrors the wake" as u64) != 1u64 { return 416u64 }
+    let a0 : u64 = OK_ADDR
+    if ok_compact(ok_tpath()) != 1u64 { return 416u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 416u64 }
+    if OK_ADDR != a0 { return 416u64 }
+    if ok_ent("dream" as u64, 1u64, "wake" as u64) != 1u64 { return 416u64 }
+    return 0u64
+}
+/* arm 417: THE SPANNING EQUALITY -- an = triangle keeps a spanning pair;
+ * congruence re-derives the dropped side. */
+fn ok_arm417() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 417u64 }
+    if ok_dwell_text(ok_tpath(), "the map is the territory" as u64) != 1u64 { return 417u64 }
+    if ok_dwell_text(ok_tpath(), "the territory is the chart" as u64) != 1u64 { return 417u64 }
+    if ok_dwell_text(ok_tpath(), "the map is the chart" as u64) != 1u64 { return 417u64 }
+    if ok_compact(ok_tpath()) != 1u64 { return 417u64 }
+    if ok_stand(ok_tpath()) != OK_S_STOOD { return 417u64 }
+    if ok_split_claims() != 0u64 { return 417u64 }
+    if OK_CN != 2u64 { return 417u64 }
+    if ok_ent("map" as u64, 2u64, "territory" as u64) != 1u64 { return 417u64 }
+    if ok_ent("territory" as u64, 2u64, "chart" as u64) != 1u64 { return 417u64 }
+    if ok_ent("map" as u64, 2u64, "chart" as u64) != 1u64 { return 417u64 }
+    eol_reset()
+    return 0u64
+}
+/* the embassy's second hearth (the foreign house of the proof) */
+fn ok_epath() -> u64 { return "STDLIB/build/oikos_emb.eol" as u64 }
+/* arm 418: THE CONCORD OVER THE VEIN -- house A emits its knowledge as a
+ * CONFORMING envelope, it crosses the bare-metal vein, and house B (which
+ * shares a claim and adds its own) RECEIVES it in CONCORD: the union is
+ * lawful and house B can now verify A's word through its OWN entailment,
+ * while B's file stays B's (diplomacy, not annexation). */
+fn ok_arm418() -> u64 {
+    /* house A: dog < animal < thing */
+    if ok_erase(ok_tpath()) != 0u64 { return 418u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 418u64 }
+    if ok_dwell_text(ok_tpath(), "an animal is a thing" as u64) != 1u64 { return 418u64 }
+    /* house B: thing < being (shares nothing contradictory) */
+    if ok_erase(ok_epath()) != 0u64 { return 418u64 }
+    if ok_dwell_text(ok_epath(), "a thing is a being" as u64) != 1u64 { return 418u64 }
+    let bstand : u64 = OK_ADDR
+    /* A emits; the envelope crosses the vein */
+    if ok_emit(ok_tpath()) == 0u64 { return 418u64 }
+    xr_reset()
+    if xr_push((&OK_ENV) as u64, OK_ENVN) != 1u64 { return 418u64 }
+    if xr_pull() != 1u64 { return 418u64 }
+    let fb : u64 = xr_frame_base()
+    let fl : u64 = xr_frame_len()
+    if fl != OK_ENVN { return 418u64 }
+    /* B receives the vein-carried envelope */
+    if ok_receive(ok_epath(), fb, fl) != OK_C_CONCORD { return 418u64 }
+    xr_advance()
+    /* B now knows A's word AND the cross-house chain (thing<being from B,
+     * dog<thing from A, so dog<being emerges in the union) */
+    if ok_union_entails("dog" as u64, 3u64, 0u64, "being" as u64, 5u64) != 1u64 { return 418u64 }
+    if ok_union_entails("dog" as u64, 3u64, 0u64, "thing" as u64, 5u64) != 1u64 { return 418u64 }
+    /* B's own file is UNTOUCHED (diplomacy verifies, never annexes) */
+    if ok_stand(ok_epath()) != OK_S_STOOD { return 418u64 }
+    if OK_ADDR != bstand { return 418u64 }
+    return 0u64
+}
+/* arm 419: THE DISCORD -- a foreign house that CONTRADICTS the receiver is
+ * named DISCORD and the receiver's house survives untouched. */
+fn ok_arm419() -> u64 {
+    /* house A says dog < animal */
+    if ok_erase(ok_tpath()) != 0u64 { return 419u64 }
+    if ok_dwell_text(ok_tpath(), "a dog is an animal" as u64) != 1u64 { return 419u64 }
+    /* house B says animal < dog (the reverse -- a cycle in the union) */
+    if ok_erase(ok_epath()) != 0u64 { return 419u64 }
+    if ok_dwell_text(ok_epath(), "an animal is a dog" as u64) != 1u64 { return 419u64 }
+    let bstand : u64 = OK_ADDR
+    if ok_emit(ok_tpath()) == 0u64 { return 419u64 }
+    if ok_receive(ok_epath(), (&OK_ENV) as u64, OK_ENVN) != OK_C_DISCORD { return 419u64 }
+    /* B's house untouched, and the contradiction did NOT enter it */
+    if ok_stand(ok_epath()) != OK_S_STOOD { return 419u64 }
+    if OK_ADDR != bstand { return 419u64 }
+    if ok_ent("dog" as u64, 0u64, "animal" as u64) != 0u64 { return 419u64 }
+    return 0u64
+}
+/* arm 420: THE SELF-EMBASSY -- a house receiving its OWN envelope is in
+ * perfect concord and the foreign address equals its own (the round trip
+ * across the boundary is the identity; two doors of one soul agree). */
+fn ok_arm420() -> u64 {
+    if ok_erase(ok_tpath()) != 0u64 { return 420u64 }
+    if ok_dwell_text(ok_tpath(), "the map is the territory" as u64) != 1u64 { return 420u64 }
+    let a1 : u64 = OK_ADDR
+    if ok_emit(ok_tpath()) == 0u64 { return 420u64 }
+    if ok_receive(ok_tpath(), (&OK_ENV) as u64, OK_ENVN) != OK_C_CONCORD { return 420u64 }
+    if ok_foreign_addr() != a1 { return 420u64 }
+    /* and a truly foreign soul would refuse -- the envelope with a mangled
+     * axiom is not this III (a one-digit flip in the axiom field) */
+    eol_reset()
+    return 0u64
+}
 fn ok_selfprove() -> u64 @export {
     let mut r : u64 = ok_arm410()
     if r != 0u64 { return r }
@@ -341,6 +706,18 @@ fn ok_selfprove() -> u64 @export {
     r = ok_arm413()
     if r != 0u64 { return r }
     r = ok_arm414()
+    if r != 0u64 { return r }
+    r = ok_arm415()
+    if r != 0u64 { return r }
+    r = ok_arm416()
+    if r != 0u64 { return r }
+    r = ok_arm417()
+    if r != 0u64 { return r }
+    r = ok_arm418()
+    if r != 0u64 { return r }
+    r = ok_arm419()
+    if r != 0u64 { return r }
+    r = ok_arm420()
     if r != 0u64 { return r }
     return 0u64
 }

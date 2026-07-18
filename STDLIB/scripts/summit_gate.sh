@@ -63,7 +63,14 @@
 #      speaking a minimal ledger of decided truths, re-deriving the union
 #      to a new deterministic name, monotone, and proving the FIXPOINT:
 #      the fleet exhausted, the residue undecided-only; the dialectic law
-#      sealed as a scroll]);
+#      sealed as a scroll; and THE HARVEST (arms 346..347): the machine
+#      AUTHORS its own knowledge space -- the CAYLEY CHART (all 85 gate
+#      words of length <= 3 pairwise decided by running circuits, the 32
+#      operator classes EMERGING, congruence complete over 3570 pairs,
+#      eidolos co-signing the partition, sealed as a sharded scroll) and
+#      the KEYSTONE SWEEP (deficit = valuation for EVERY multiplier byte
+#      by two-organ agreement, the dyadic histogram 127/64/32/16/8/4/2/1
+#      derived -- the halving law of Z_2 at byte scale, sealed)]);
 #   2. THEOREM I (the algebraic node): the crushing contact decided as an
 #      exact node -- multiplicity by TWO engines (real-closed gcd with
 #      reconstruction vs the 5-adic valuation slope), the contact
@@ -148,8 +155,11 @@ grep -q "^scroll mirror  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MIRR
 grep -q "^scroll synesis = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO SYNESIS SCROLL"; exit 6; }
 grep -q "^scroll union   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO UNION SCROLL"; exit 6; }
 grep -q "^scroll dialect = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC SCROLL"; exit 6; }
+grep -q "^scroll cayley  = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY SCROLL"; exit 6; }
+grep -q "^scroll sweep   = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO SWEEP SCROLL"; exit 6; }
 grep -q "^the union knows: surplus=" "$T/run1.txt" || { echo "[summit_gate] NO UNION REPORT"; exit 6; }
 grep -q "^the dialectic: spoke=" "$T/run1.txt" || { echo "[summit_gate] NO DIALECTIC REPORT"; exit 6; }
+grep -q "^the cayley chart: words=85 classes=32 " "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY CHART"; exit 6; }
 
 # THE MIRROR ON REAL TISSUE: the pre-flight meter walks two live organ
 # sources; grep is the independent second engine on the greppable dimensions

@@ -91,6 +91,14 @@
  *       valuation, instance-wise, two organs, one number).
  *   345 THE DIALECTIC SCROLL: the law sealed; the post-dialectic union left
  *       standing -- the organism rests in everything it has decided.
+ *   346 THE CAYLEY CHART: the machine AUTHORS its own space -- all 85
+ *       gate-words of length <= 3, pairwise decided by running circuits;
+ *       the 32 operator classes EMERGE; congruence complete (3570 pairs,
+ *       zero exceptions); the spanning scroll sealed and eidolos's own
+ *       closure re-derives the same partition (two engines, one chart).
+ *   347 THE KEYSTONE SWEEP: deficit = valuation for EVERY multiplier byte
+ *       (254 two-organ agreements), the dyadic histogram DERIVED
+ *       (127/64/32/16/8/4/2/1 -- the halving law), the census sealed.
  *
  * SCOPE (the eidolon law): the surplus, frontier, abduction and knockout
  * are exact over the standing testimony set; the explanation engine walks
@@ -113,6 +121,7 @@ extern @abi(c-msvc-x64) fn eol_claim_b(i: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_thing_len(t: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_thing_byte(t: u64, k: u64) -> u8 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_class_of_thing(t: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_class_count() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_reaches(ci: u64, cj: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_mirror_class(ci: u64) -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_witness() -> u64 from "eidolos.iii"
@@ -203,6 +212,28 @@ fn syn_undecided() -> u64 @export { return SY_DUN }
 fn syn_residue() -> u64 @export { return SY_RES }
 fn syn_dialectic_addr() -> u64 @export { return SY_DADDR }
 fn syn_dialectic_scroll() -> u64 @export { return SY_DSCROLL }
+
+/* ==================== THE HARVEST (arms 346..347) ====================
+ * The machine AUTHORS its own knowledge space.  The chart: every gate-word
+ * of length <= 3 over {h,x,z,s} plus the empty word -- 85 words the machine
+ * enumerates itself -- pairwise decided by RUNNING the circuits; the
+ * equivalence classes of its own operator algebra EMERGE; the spanning
+ * equalities seal into a dedicated scroll (SHARDED: the standing union is
+ * untouched, honoring the manifold's 64-lane boundary).  The sweep: the
+ * deficit = valuation keystone decided for EVERY multiplier byte by the
+ * two-organ agreement, the complete dyadic histogram derived. */
+var SY_CWCLS : [u64; 85]                 /* word -> representative word        */
+var SY_CWN : u64 = 0u64                  /* the class count (EMERGES)          */
+var SY_WB1 : [u8; 8]
+var SY_WB2 : [u8; 8]
+var SY_CLB : [u8; 64]                    /* chart claim build buffer           */
+var SY_CAYADDR : u64 = 0u64
+var SY_SWADDR : u64 = 0u64
+
+fn syn_cayley_addr() -> u64 @export { return SY_CAYADDR }
+fn syn_cayley_classes() -> u64 @export { return SY_CWN }
+fn syn_cayley_words() -> u64 @export { return 85u64 }
+fn syn_sweep_addr() -> u64 @export { return SY_SWADDR }
 
 /* sealed results */
 var SY_UADDR0 : u64 = 0u64               /* the union address before discharge */
@@ -1390,6 +1421,252 @@ fn sy_arm345() -> u64 {
     if eol_lawcheck() != 0u64 { return 345u64 }
     return 0u64
 }
+/* the letter of alphabet slot l: h x z s */
+fn sy_cw_char(l: u64) -> u8 {
+    if l == 0u64 { return 104u8 }
+    if l == 1u64 { return 120u8 }
+    if l == 2u64 { return 122u8 }
+    return 115u8
+}
+/* word index -> letters into a target buffer (1 = SY_WB1, 2 = SY_WB2);
+ * returns the length.  0 is the empty word, spelled i. */
+fn sy_cw_letters(w: u64, which: u64) -> u64 {
+    let mut n : u64 = 0u64
+    if w == 0u64 {
+        if which == 1u64 { SY_WB1[0u64] = 105u8 } else { SY_WB2[0u64] = 105u8 }
+        return 1u64
+    }
+    if w < 5u64 {
+        if which == 1u64 { SY_WB1[0u64] = sy_cw_char(w - 1u64) } else { SY_WB2[0u64] = sy_cw_char(w - 1u64) }
+        return 1u64
+    }
+    if w < 21u64 {
+        let t : u64 = w - 5u64
+        if which == 1u64 {
+            SY_WB1[0u64] = sy_cw_char(t >> 2u64)
+            SY_WB1[1u64] = sy_cw_char(t & 3u64)
+        } else {
+            SY_WB2[0u64] = sy_cw_char(t >> 2u64)
+            SY_WB2[1u64] = sy_cw_char(t & 3u64)
+        }
+        return 2u64
+    }
+    let t2 : u64 = w - 21u64
+    if which == 1u64 {
+        SY_WB1[0u64] = sy_cw_char(t2 >> 4u64)
+        SY_WB1[1u64] = sy_cw_char((t2 >> 2u64) & 3u64)
+        SY_WB1[2u64] = sy_cw_char(t2 & 3u64)
+    } else {
+        SY_WB2[0u64] = sy_cw_char(t2 >> 4u64)
+        SY_WB2[1u64] = sy_cw_char((t2 >> 2u64) & 3u64)
+        SY_WB2[2u64] = sy_cw_char(t2 & 3u64)
+    }
+    return 3u64
+}
+/* decide two chart words by RUNNING the circuits (kyma's own decider) */
+fn sy_cw_decide(a: u64, b: u64) -> u64 {
+    let la : u64 = sy_cw_letters(a, 1u64)
+    let lb : u64 = sy_cw_letters(b, 2u64)
+    return ky_wdecide((&SY_WB1) as u64, la, (&SY_WB2) as u64, lb)
+}
+/* append one chart marker "[word R < gate_word]" (every representative
+ * carries it, so the chart scroll mentions EVERY word -- singleton classes
+ * included -- and eidolos's class count can be demanded exactly) */
+fn sy_cw_mark(rep: u64) -> u64 {
+    let mut n : u64 = 0u64
+    SY_CLB[n] = 91u8    n = n + 1u64
+    SY_CLB[n] = 119u8   n = n + 1u64
+    SY_CLB[n] = 111u8   n = n + 1u64
+    SY_CLB[n] = 114u8   n = n + 1u64
+    SY_CLB[n] = 100u8   n = n + 1u64
+    SY_CLB[n] = 32u8    n = n + 1u64
+    let la : u64 = sy_cw_letters(rep, 1u64)
+    let mut k : u64 = 0u64
+    while k < la { SY_CLB[n] = SY_WB1[k]   n = n + 1u64   k = k + 1u64 }
+    SY_CLB[n] = 32u8    n = n + 1u64
+    SY_CLB[n] = 60u8    n = n + 1u64
+    SY_CLB[n] = 32u8    n = n + 1u64
+    SY_CLB[n] = 103u8   n = n + 1u64
+    SY_CLB[n] = 97u8    n = n + 1u64
+    SY_CLB[n] = 116u8   n = n + 1u64
+    SY_CLB[n] = 101u8   n = n + 1u64
+    SY_CLB[n] = 95u8    n = n + 1u64
+    SY_CLB[n] = 119u8   n = n + 1u64
+    SY_CLB[n] = 111u8   n = n + 1u64
+    SY_CLB[n] = 114u8   n = n + 1u64
+    SY_CLB[n] = 100u8   n = n + 1u64
+    SY_CLB[n] = 93u8    n = n + 1u64
+    if eol_read((&SY_CLB) as u64, n) < 0i64 { return SY_SENT }
+    return 0u64
+}
+/* append one chart claim "[word A = word REP]" to the standing scroll */
+fn sy_cw_speak(w: u64, rep: u64) -> u64 {
+    let mut n : u64 = 0u64
+    SY_CLB[n] = 91u8
+    n = n + 1u64
+    SY_CLB[n] = 119u8   n = n + 1u64
+    SY_CLB[n] = 111u8   n = n + 1u64
+    SY_CLB[n] = 114u8   n = n + 1u64
+    SY_CLB[n] = 100u8   n = n + 1u64
+    SY_CLB[n] = 32u8    n = n + 1u64
+    let la : u64 = sy_cw_letters(w, 1u64)
+    let mut k : u64 = 0u64
+    while k < la { SY_CLB[n] = SY_WB1[k]   n = n + 1u64   k = k + 1u64 }
+    SY_CLB[n] = 32u8    n = n + 1u64
+    SY_CLB[n] = 61u8    n = n + 1u64
+    SY_CLB[n] = 32u8    n = n + 1u64
+    SY_CLB[n] = 119u8   n = n + 1u64
+    SY_CLB[n] = 111u8   n = n + 1u64
+    SY_CLB[n] = 114u8   n = n + 1u64
+    SY_CLB[n] = 100u8   n = n + 1u64
+    SY_CLB[n] = 32u8    n = n + 1u64
+    let lb : u64 = sy_cw_letters(rep, 2u64)
+    k = 0u64
+    while k < lb { SY_CLB[n] = SY_WB2[k]   n = n + 1u64   k = k + 1u64 }
+    SY_CLB[n] = 93u8    n = n + 1u64
+    if eol_read((&SY_CLB) as u64, n) < 0i64 { return SY_SENT }
+    return 0u64
+}
+fn sy_arm346() -> u64 {
+    /* THE CAYLEY CHART: the classes of the machine's own operator algebra
+     * EMERGE from complete pairwise decision over the 85 words it authored */
+    let mut w : u64 = 0u64
+    while w < 85u64 {
+        let mut rep : u64 = SY_SENT
+        let mut r : u64 = 0u64
+        while r < w {
+            if rep == SY_SENT { if SY_CWCLS[r] == r {
+                let v : u64 = sy_cw_decide(w, r)
+                if v == 2u64 { return 346u64 }
+                if v == 1u64 { rep = r }
+            } }
+            r = r + 1u64
+        }
+        if rep == SY_SENT { SY_CWCLS[w] = w } else { SY_CWCLS[w] = rep }
+        w = w + 1u64
+    }
+    let mut nc : u64 = 0u64
+    w = 0u64
+    while w < 85u64 {
+        if SY_CWCLS[w] == w { nc = nc + 1u64 }
+        w = w + 1u64
+    }
+    if nc < 2u64 { return 346u64 }
+    if nc >= 85u64 { return 346u64 }
+    /* THE EMERGED COUNT, locked as a condition of motion: the 85 words fall
+     * into exactly 32 operators (2^5 -- the relations HH = XX = ZZ = I,
+     * SS = Z, HZH = X and the exact anticommutation phases carve the ball;
+     * derived by the machine's first run, never authored) */
+    if nc != 32u64 { return 346u64 }
+    SY_CWN = nc
+    /* THE CONGRUENCE, complete: every pair's circuit verdict must equal the
+     * class verdict -- 3570 decisions, zero exceptions */
+    let mut i : u64 = 0u64
+    while i < 85u64 {
+        let mut j : u64 = i + 1u64
+        while j < 85u64 {
+            let vc : u64 = sy_cw_decide(i, j)
+            if vc == 2u64 { return 346u64 }
+            let mut same : u64 = 0u64
+            if SY_CWCLS[i] == SY_CWCLS[j] { same = 1u64 }
+            if vc != same { return 346u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    /* the chart AGREES with the standing union's word-truths */
+    /* hzh = word 21 + (0*16 + 2*4 + 0) = 29?  hzh letters h,z,h = (0,2,0):
+     * w = 21 + 0*16 + 2*4 + 0 = 29; x = 2; z = 3; ss = 5 + 3*4 + 3 = 20;
+     * xx = 5 + 1*4 + 1 = 10; i = 0 */
+    if SY_CWCLS[29u64] != SY_CWCLS[2u64] { return 346u64 }
+    if SY_CWCLS[20u64] != SY_CWCLS[3u64] { return 346u64 }
+    if SY_CWCLS[10u64] != SY_CWCLS[0u64] { return 346u64 }
+    if SY_CWCLS[29u64] == SY_CWCLS[3u64] { return 346u64 }
+    /* THE CHART SCROLL: the spanning equalities sealed -- and eidolos's own
+     * closure must re-derive the SAME class count (two engines, one chart) */
+    eol_reset()
+    let mut spoken : u64 = 0u64
+    w = 0u64
+    while w < 85u64 {
+        if SY_CWCLS[w] != w {
+            if sy_cw_speak(w, SY_CWCLS[w]) == SY_SENT { return 346u64 }
+            spoken = spoken + 1u64
+        } else {
+            if sy_cw_mark(w) == SY_SENT { return 346u64 }
+        }
+        w = w + 1u64
+    }
+    if spoken != 85u64 - nc { return 346u64 }
+    if eol_lawcheck() != 0u64 { return 346u64 }
+    /* eidolos's OWN closure re-derives the same partition: the word classes
+     * plus the one marker class -- two engines, one chart */
+    if eol_class_count() != nc + 1u64 { return 346u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 346u64 }
+    /* the chart KNOWS: hzh = x entailed; hzh = z refused */
+    if sy_q("word hzh" as u64, SY_V_FLAT, "word x" as u64) != 1u64 { return 346u64 }
+    if sy_q("word hzh" as u64, SY_V_FLAT, "word z" as u64) != 0u64 { return 346u64 }
+    /* determinism: the chart re-derives to the same name */
+    eol_reset()
+    w = 0u64
+    while w < 85u64 {
+        if SY_CWCLS[w] != w {
+            if sy_cw_speak(w, SY_CWCLS[w]) == SY_SENT { return 346u64 }
+        } else {
+            if sy_cw_mark(w) == SY_SENT { return 346u64 }
+        }
+        w = w + 1u64
+    }
+    if eol_addr() != a1 { return 346u64 }
+    SY_CAYADDR = a1
+    return 0u64
+}
+fn sy_arm347() -> u64 {
+    /* THE KEYSTONE SWEEP: deficit = valuation for EVERY multiplier byte,
+     * decided by the two-organ agreement -- and the dyadic histogram is the
+     * halving law, derived: 127/64/32/16/8/4/2/1 */
+    var hist : [u64; 9]
+    let mut v : u64 = 0u64
+    while v < 9u64 { hist[v] = 0u64   v = v + 1u64 }
+    let mut m : u64 = 2u64
+    while m < 256u64 {
+        let d1 : u64 = sy_img_deficit((2u64 << 8u64) | m)
+        if d1 == SY_SENT { return 347u64 }
+        let d2 : u64 = kl_vdepth(m)
+        if d1 != d2 { return 347u64 }
+        hist[d1] = hist[d1] + 1u64
+        m = m + 1u64
+    }
+    if hist[0u64] != 127u64 { return 347u64 }
+    if hist[1u64] != 64u64 { return 347u64 }
+    if hist[2u64] != 32u64 { return 347u64 }
+    if hist[3u64] != 16u64 { return 347u64 }
+    if hist[4u64] != 8u64 { return 347u64 }
+    if hist[5u64] != 4u64 { return 347u64 }
+    if hist[6u64] != 2u64 { return 347u64 }
+    if hist[7u64] != 1u64 { return 347u64 }
+    if hist[8u64] != 0u64 { return 347u64 }
+    /* THE SWEEP SCROLL: the census sealed with derived chains and refused
+     * reversals, address deterministic */
+    let doc : u64 = "[keystone_sweep 254 = agreed_computation] [odd_word 127 = zero_heat_census] [dyadic_measure = halving_law] [halving_law < valuation_tower] [agreed_computation < organ_engine]" as u64
+    let dl : u64 = sy_slen(doc)
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 347u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 347u64 }
+    if sy_q("keystone_sweep 254" as u64, SY_V_BELOW, "organ_engine" as u64) != 1u64 { return 347u64 }
+    if sy_q("organ_engine" as u64, SY_V_BELOW, "keystone_sweep 254" as u64) != 0u64 { return 347u64 }
+    if sy_q("dyadic_measure" as u64, SY_V_FLAT, "agreed_computation" as u64) != 0u64 { return 347u64 }
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 347u64 }
+    if eol_addr() != a1 { return 347u64 }
+    SY_SWADDR = a1
+    /* the organism rests in its standing knowledge: restore the grown union */
+    if sy_convene(255u64, 0u64, 1u64) < 0i64 { return 347u64 }
+    if eol_read((&SY_LG) as u64, SY_LGN) < 0i64 { return 347u64 }
+    if eol_lawcheck() != 0u64 { return 347u64 }
+    return 0u64
+}
 fn syn_selfprove() -> u64 @export {
     SY_RUND = 0u64
     SY_RREF = 0u64
@@ -1427,6 +1704,10 @@ fn syn_selfprove() -> u64 @export {
     if a14 != 0u64 { return a14 }
     let a15 : u64 = sy_arm345()
     if a15 != 0u64 { return a15 }
+    let a16 : u64 = sy_arm346()
+    if a16 != 0u64 { return a16 }
+    let a17 : u64 = sy_arm347()
+    if a17 != 0u64 { return a17 }
     return 0u64
 }
 

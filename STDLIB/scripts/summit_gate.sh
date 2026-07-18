@@ -136,10 +136,12 @@ cc_one "$ROOT/STDLIB/iii/omnia/mneme.iii"    "$T/mneme.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/katoptron.iii" "$T/katoptron.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/zetesis.iii"  "$T/zetesis.o"  || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/metabole.iii" "$T/metabole.o" || exit 2
+cc_one "$ROOT/STDLIB/iii/omnia/peras.iii"    "$T/peras.o" || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" "$T/metabole.o" "$T/peras.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \
@@ -179,6 +181,25 @@ grep -q "^the answer: \[" "$T/run1.txt" || { echo "[summit_gate] NO VERDICT"; ex
 grep -q "^the spoken: \[" "$T/run1.txt" || { echo "[summit_gate] NO SPOKEN TRUTH"; exit 6; }
 grep -q "^the discernment: \[" "$T/run1.txt" || { echo "[summit_gate] NO DISCERNMENT"; exit 6; }
 grep -q "^the nameless union = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO NAMELESS NAME"; exit 6; }
+# THE METABOLISM: the organ that eats foreign minds.  The flesh (fp16=dyadic,
+# complete 65536), the named deficit and the sealed scroll stand on every
+# machine; the feast laws (conservation over the real shards, two-engine
+# digestion, the fp32 witness, the two-engine krisis) stand whenever the
+# Feast is on the table -- an absent Feast is a LAWFUL fast, never a skip.
+grep -q "^the flesh: fp16 finite=63488 nonfinite=2048 bijection=ok monotone=ok" "$T/run1.txt" || { echo "[summit_gate] NO FLESH LAW"; exit 6; }
+grep -q "^the boundary: softmax mixing is transcendental" "$T/run1.txt" || { echo "[summit_gate] NO NAMED BOUNDARY"; exit 6; }
+grep -q "^scroll metabole = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO METABOLE SCROLL"; exit 6; }
+grep -q "^the peras: exp0=exact e=cf-bounded feq=overlap monotone=separated" "$T/run1.txt" || { echo "[summit_gate] NO PERAS BOUND"; exit 6; }
+grep -q "^scroll peras = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO PERAS SCROLL"; exit 6; }
+if grep -q "^the feast: absent" "$T/run1.txt"; then
+    grep -q "^the discharge: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING DISCHARGE"; exit 6; }
+else
+    grep -q "^the feast: shards=.* conserved=" "$T/run1.txt" || { echo "[summit_gate] FEAST NOT CONSERVED"; exit 6; }
+    grep -q "^the digestion: .*distributive=ok" "$T/run1.txt" || { echo "[summit_gate] NO EXACT DIGESTION"; exit 6; }
+    grep -q "^the witness: .*fp32 must round" "$T/run1.txt" || { echo "[summit_gate] NO FLOAT WITNESS"; exit 6; }
+    grep -q "^the krisis: .*agree=ok" "$T/run1.txt" || { echo "[summit_gate] NO KRISIS AGREEMENT"; exit 6; }
+    grep -q "^the discharge: softmax mixing DECIDED on real flesh.*agree=ok control-refused=ok" "$T/run1.txt" || { echo "[summit_gate] DEFICIT NOT DISCHARGED"; exit 6; }
+fi
 [ -s "$ROOT/STDLIB/data/zetesis.jrnl" ] || { echo "[summit_gate] NO JOURNAL"; exit 6; }
 grep -q "^the cayley chart: words=85 classes=32 " "$T/run1.txt" || { echo "[summit_gate] NO CAYLEY CHART"; exit 6; }
 

@@ -1,0 +1,1741 @@
+/* STDLIB/iii/omnia/metabole.iii -- METABOLE (the METABOLISM): the organ that
+ * EATS foreign minds.
+ *
+ * THE VECTOR COLLAPSE, stated honestly: a quantized GGUF network is NOT a
+ * cloud of floating-point approximations.  Every stored weight is an integer
+ * times an IEEE fp16 scale, and every finite fp16 is EXACTLY a dyadic
+ * rational M * 2^-24.  The shipped artifact is therefore ALREADY a point in
+ * a finite dyadic lattice -- a finite exact object.  The float appears only
+ * when OTHER runtimes choose lossy evaluation.  METABOLE ingests the
+ * artifact losslessly into the exact tower: linear algebra on real weights
+ * becomes machine-integer arithmetic with tracked exponents (no bignum below
+ * row scale, no rounding anywhere), and decisions (sign, comparison, argmax)
+ * become CERTIFIED facts.  What is NOT claimed: no end-to-end cheapness, no
+ * magic compression of 400GB of entropy -- the collapse is representational,
+ * not compressive.  The transcendental boundary (exp inside softmax/SiLU
+ * mixing) is a NAMED deficit, not a faked capability; the final-layer argmax
+ * needs no exp at all (any strictly monotone map preserves the argmax -- the
+ * order theorem is machine-checked, exp's monotonicity is the named premise).
+ *
+ * THE ARMS (360..366, driven by the summit rite -- no gate of their own):
+ *   360 THE FLESH: fp16 <-> dyadic is a finite law, proven COMPLETE -- all
+ *       65536 bit patterns classified (finite=63488, nonfinite=2048, both
+ *       counts re-derived from the walk), every finite pattern decoded to
+ *       its exact mantissa M (value = M * 2^-24) and re-encoded to the
+ *       IDENTICAL bits (bijection), and the decoded magnitudes STRICTLY
+ *       increase over consecutive positive finite patterns (an independent
+ *       global order engine that any decode slip would break).
+ *   361 THE TYPES: the ggml quantization type table (values-per-block,
+ *       bytes-per-block) for every type this organ certifies; internal
+ *       consistency checked.  A type outside the table is a NAMED refusal,
+ *       never a guess -- the conservation theorem (362) is what puts the
+ *       table on trial against 400GB of reality.
+ *   362 THE ANATOMY + CONSERVATION: every shard of the Feast is walked --
+ *       magic, version, the complete KV forest (token arrays skipped by a
+ *       windowed 64-bit reader, never loaded), every tensor's name, shape,
+ *       type and offset -- and then the EXACT BYTE-TILING THEOREM: sorted
+ *       tensor spans, each padded to the artifact's own alignment, must
+ *       tile the data segment to the byte, ending flush with the file (tail
+ *       pad < alignment).  A single wrong size in the type table, one
+ *       misparsed field, and the tiling REDS.  Cross-shard: the split
+ *       indices must be coherent and the declared total tensor count must
+ *       equal the sum the walk derives.  An absent Feast is a LAWFUL fast
+ *       (the door is verified, the table is empty) -- the flesh, type and
+ *       scroll laws stand regardless.
+ *   363 THE DIGESTION: real blocks of real tensors (the first two quantized
+ *       tensors of shard 1) are read at their exact 64-bit offsets and
+ *       dequantized into exact dyadic mantissas by TWO INDEPENDENT ENGINES:
+ *       value-by-value affine decode vs the DISTRIBUTIVE factorization
+ *       (sum v = d*sum(sc*q) - dmin*sum(m*32); sum v^2 expanded through the
+ *       cross terms in 192-bit integer arithmetic).  Different association
+ *       orders, different intermediate widths, one exact answer -- or red.
+ *   364 THE WITNESS: the digested block's exact sum of squares, put in
+ *       canonical form (odd mantissa * 2^-k).  Its odd mantissa carries MORE
+ *       than 24 significant bits -- so IEEE fp32 (the runtime lingua franca)
+ *       CANNOT hold the number; the round-to-nearest-even neighbor is
+ *       computed in integers and its nonzero gap EXHIBITED.  The float must
+ *       round; the organ holds the number exactly.  Machine-checked on the
+ *       actual R1 weights, not rhetoric.
+ *   365 THE KRISIS: certified decisions on real flesh.  (a) the exact
+ *       argmax over the digested block by two paths (linear scan vs full
+ *       insertion order), ties counted, NO exp evaluated -- the monotone
+ *       premise is named, the order fact is checked.  (b) the RMSNorm-shaped
+ *       comparison a/sqrt(S1) vs b/sqrt(S2) on real sub-rows, decided by TWO
+ *       ENGINES: the elementary square-compare in 192-bit integer arithmetic
+ *       vs the standing surd kernel (ui_sign_bi_big, the exact-geometry
+ *       organ already in this probe).  The engines must agree; the reflexive
+ *       control (a*sqrt(S) - a*sqrt(S) = 0) must vanish by both.
+ *   366 THE SCROLL: the metabolic law sealed in EIDOLOS -- the derived
+ *       entailment (weight sits under exact number) present nowhere in the
+ *       text, the reversal refused, the address deterministic.
+ *
+ * THE NAMED DEFICIT (the autarkeia law): a certified-exp interval organ
+ * (rational Taylor bounds with proven remainders) does not yet exist in the
+ * organism, so softmax MIXING (not argmax) stays undecided.  Named in every
+ * census, never papered.
+ */
+
+module omnia_metabole
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(stream: u64, off: i64, origin: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _ftelli64(stream: u64) -> i64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn ui_sign_bi_big(an: i64, bn: i64, dD1: i64, cn: i64, dD2: i64) -> i32 from "sqrt_sum_sign.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+/* ==================== module state ==================== */
+
+const MB_ALIGN_DEF : u64 = 32u64
+const MB_MAXT      : u64 = 512u64     /* per-shard tensor ceiling (R1: 152 max) */
+
+/* windowed 64-bit reader */
+var MB_F     : u64 = 0u64             /* FILE* */
+var MB_WIN   : [u8; 65536]
+var MB_WBASE : u64 = 0u64             /* file offset of window start */
+var MB_WLEN  : u64 = 0u64             /* valid bytes in window */
+var MB_WPOS  : u64 = 0u64             /* cursor within window */
+var MB_IOERR : u8  = 0u8              /* sticky */
+
+/* per-shard walk results */
+var MB_OFF  : [u64; 512]
+var MB_NB   : [u64; 512]
+var MB_KEY  : [u8; 256]
+var MB_HIST : [u64; 64]               /* feast-wide ggml type histogram */
+
+/* KV extraction slots (per shard; arch/dims sticky across shards) */
+var MB_ALIGN   : u64 = 32u64
+var MB_SPLITNO : u64 = 0u64
+var MB_SPLITNO_F : u8 = 0u8
+var MB_SPLITCT : u64 = 0u64
+var MB_SPLITCT_F : u8 = 0u8
+var MB_SPLITTN : u64 = 0u64
+var MB_SPLITTN_F : u8 = 0u8
+var MB_ARCH    : [u8; 32]
+var MB_ARCHN   : u64 = 0u64
+var MB_EMBED   : u64 = 0u64
+var MB_LAYERS  : u64 = 0u64
+
+/* split coherence across shards */
+var MB_SPNOS  : [u64; 16]
+var MB_SPNOSF : [u8; 16]
+
+/* feast aggregates */
+var MB_SHARDS   : u64 = 0u64
+var MB_TOT_TENS : u64 = 0u64
+var MB_TOT_BYTES: u64 = 0u64
+var MB_CONSERVED: u64 = 0u64
+var MB_REFUSED  : u64 = 0u64
+var MB_FEAST    : u8  = 0u8           /* 1 = feast present */
+
+/* digestion candidates (shard 1): first two quantized tensors */
+var MB_C1_TYPE : u64 = 0u64
+var MB_C1_OFF  : u64 = 0u64           /* relative; absolute fixed after walk */
+var MB_C1_NE   : u64 = 0u64
+var MB_C1_NAME : [u8; 64]
+var MB_C1_NN   : u64 = 0u64
+var MB_C1_F    : u8 = 0u8
+var MB_C2_TYPE : u64 = 0u64
+var MB_C2_OFF  : u64 = 0u64
+var MB_C2_NE   : u64 = 0u64
+var MB_C2_NAME : [u8; 64]
+var MB_C2_NN   : u64 = 0u64
+var MB_C2_F    : u8 = 0u8
+var MB_DBASE1  : u64 = 0u64           /* shard 1 data_base (absolute) */
+var MB_PATH1   : [u8; 64]             /* shard 1 path (kept for reopen) */
+
+/* decoded blocks: exact mantissas, value = mant * 2^-24 */
+var MB_BLK  : [u8; 256]               /* raw block bytes */
+var MB_VA   : [i64; 256]              /* candidate 1 block values */
+var MB_VB   : [i64; 256]              /* candidate 2 block values */
+var MB_NVA  : u64 = 0u64
+var MB_NVB  : u64 = 0u64
+var MB_SUMA : i64 = 0i64              /* exact sums (mant * 2^-24) */
+var MB_SUMB : i64 = 0i64
+/* exact sums of squares (mant * 2^-48), 2-limb little-endian */
+var MB_SSA0 : u64 = 0u64
+var MB_SSA1 : u64 = 0u64
+var MB_SSB0 : u64 = 0u64
+var MB_SSB1 : u64 = 0u64
+
+/* 128-bit multiply result */
+var MB_MHI : u64 = 0u64
+var MB_MLO : u64 = 0u64
+
+/* 3-limb accumulators (little-endian limbs) */
+var MB_X : [u64; 3]
+var MB_Y : [u64; 3]
+var MB_Z : [u64; 3]
+
+/* the report the driver prints, and the sealed scroll */
+var MB_REP  : [u8; 4096]
+var MB_REPN : u64 = 0u64
+var MB_SCROLL : u64 = 0u64
+
+/* ==================== tiny utils ==================== */
+
+fn mb_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { i = i + 1u64 }
+    return i
+}
+
+fn mb_rb(b: u8) -> i32 {
+    if MB_REPN >= 4095u64 { return 0i32 }
+    MB_REP[MB_REPN] = b
+    MB_REPN = MB_REPN + 1u64
+    return 0i32
+}
+
+fn mb_rs(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        mb_rb(p[i])
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn mb_ru(v: u64) -> i32 {
+    if v >= 10u64 { mb_ru(v / 10u64) }
+    mb_rb((48u64 + (v % 10u64)) as u8)
+    return 0i32
+}
+
+fn mb_ri(v: i64) -> i32 {
+    if v < 0i64 {
+        mb_rb(45u8)
+        let m : u64 = (0i64 - v) as u64
+        mb_ru(m)
+        return 0i32
+    }
+    mb_ru(v as u64)
+    return 0i32
+}
+
+fn mb_bitlen(v: u64) -> u64 {
+    let mut n : u64 = 0u64
+    let mut x : u64 = v
+    while x != 0u64 {
+        x = x >> 1u64
+        n = n + 1u64
+    }
+    return n
+}
+
+/* 64x64 -> 128 (classic 32-bit split; no intermediate overflow) */
+fn mb_mul64(a: u64, b: u64) -> i32 {
+    let a0 : u64 = a & 0xFFFFFFFFu64
+    let a1 : u64 = a >> 32u64
+    let b0 : u64 = b & 0xFFFFFFFFu64
+    let b1 : u64 = b >> 32u64
+    let p00 : u64 = a0 * b0
+    let p01 : u64 = a0 * b1
+    let p10 : u64 = a1 * b0
+    let p11 : u64 = a1 * b1
+    let mid1 : u64 = p01 + (p00 >> 32u64)
+    let mid2 : u64 = p10 + (mid1 & 0xFFFFFFFFu64)
+    MB_MHI = p11 + (mid1 >> 32u64) + (mid2 >> 32u64)
+    MB_MLO = (mid2 << 32u64) | (p00 & 0xFFFFFFFFu64)
+    return 0i32
+}
+
+/* MB_Z = |a| * b as 3 limbs, where (ahi,alo) is a 128-bit value, b 64-bit */
+fn mb_mul128by64(ahi: u64, alo: u64, b: u64) -> i32 {
+    mb_mul64(alo, b)
+    let l0 : u64 = MB_MLO
+    let l1a : u64 = MB_MHI
+    mb_mul64(ahi, b)
+    let l1b : u64 = MB_MLO
+    let l2a : u64 = MB_MHI
+    let s : u64 = l1a + l1b
+    let mut c : u64 = 0u64
+    if s < l1a { c = 1u64 }
+    MB_Z[0] = l0
+    MB_Z[1] = s
+    MB_Z[2] = l2a + c
+    return 0i32
+}
+
+/* MB_X += MB_Z (3-limb, carries) */
+fn mb_x_add_z() -> i32 {
+    let s0 : u64 = MB_X[0] + MB_Z[0]
+    let mut c0 : u64 = 0u64
+    if s0 < MB_Z[0] { c0 = 1u64 }
+    let s1a : u64 = MB_X[1] + MB_Z[1]
+    let mut c1 : u64 = 0u64
+    if s1a < MB_Z[1] { c1 = 1u64 }
+    let s1 : u64 = s1a + c0
+    if s1 < c0 { c1 = c1 + 1u64 }
+    MB_X[0] = s0
+    MB_X[1] = s1
+    MB_X[2] = MB_X[2] + MB_Z[2] + c1
+    return 0i32
+}
+
+/* MB_X -= MB_Z (3-limb, borrows); caller guarantees X >= Z */
+fn mb_x_sub_z() -> i32 {
+    let mut b : u64 = 0u64
+    let d0 : u64 = MB_X[0] - MB_Z[0]
+    if MB_X[0] < MB_Z[0] { b = 1u64 }
+    let mut b1 : u64 = 0u64
+    let d1a : u64 = MB_X[1] - MB_Z[1]
+    if MB_X[1] < MB_Z[1] { b1 = 1u64 }
+    let d1 : u64 = d1a - b
+    if d1a < b { b1 = b1 + 1u64 }
+    MB_X[0] = d0
+    MB_X[1] = d1
+    MB_X[2] = MB_X[2] - MB_Z[2] - b1
+    return 0i32
+}
+
+/* compare MB_X vs MB_Y: -1 / 0 / +1 */
+fn mb_x_cmp_y() -> i64 {
+    if MB_X[2] > MB_Y[2] { return 1i64 }
+    if MB_X[2] < MB_Y[2] { return 0i64 - 1i64 }
+    if MB_X[1] > MB_Y[1] { return 1i64 }
+    if MB_X[1] < MB_Y[1] { return 0i64 - 1i64 }
+    if MB_X[0] > MB_Y[0] { return 1i64 }
+    if MB_X[0] < MB_Y[0] { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* append 3-limb MB_X as decimal to the report (binary long division by 10) */
+var MB_DDIG : [u8; 64]
+fn mb_rx3() -> i32 {
+    let mut h : u64 = MB_X[2]
+    let mut m : u64 = MB_X[1]
+    let mut l : u64 = MB_X[0]
+    let mut nd : u64 = 0u64
+    if h == 0u64 {
+        if m == 0u64 {
+            if l == 0u64 {
+                mb_rb(48u8)
+                return 0i32
+            }
+        }
+    }
+    while (h | m | l) != 0u64 {
+        /* divide (h,m,l) by 10 via binary long division over 192 bits */
+        let mut rem : u64 = 0u64
+        let mut qh : u64 = 0u64
+        let mut qm : u64 = 0u64
+        let mut ql : u64 = 0u64
+        let mut bit : u64 = 192u64
+        while bit != 0u64 {
+            bit = bit - 1u64
+            let mut src : u64 = 0u64
+            if bit >= 128u64 { src = (h >> (bit - 128u64)) & 1u64 }
+            if bit < 128u64 {
+                if bit >= 64u64 { src = (m >> (bit - 64u64)) & 1u64 }
+            }
+            if bit < 64u64 { src = (l >> bit) & 1u64 }
+            rem = (rem << 1u64) | src
+            if rem >= 10u64 {
+                rem = rem - 10u64
+                if bit >= 128u64 { qh = qh | (1u64 << (bit - 128u64)) }
+                if bit < 128u64 {
+                    if bit >= 64u64 { qm = qm | (1u64 << (bit - 64u64)) }
+                }
+                if bit < 64u64 { ql = ql | (1u64 << bit) }
+            }
+        }
+        MB_DDIG[nd] = (48u64 + rem) as u8
+        nd = nd + 1u64
+        h = qh
+        m = qm
+        l = ql
+    }
+    while nd != 0u64 {
+        nd = nd - 1u64
+        mb_rb(MB_DDIG[nd])
+    }
+    return 0i32
+}
+
+/* ==================== arm 360: THE FLESH (fp16 complete) ==================== */
+
+var MB_F16S : u64 = 0u64              /* sign of last decode */
+var MB_F16A : u64 = 0u64              /* magnitude mantissa (value = A * 2^-24) */
+
+/* classify pattern: 0 finite (sets MB_F16S / MB_F16A), 1 inf, 2 nan */
+fn mb_f16_dec(p: u64) -> u64 {
+    let s : u64 = (p >> 15u64) & 1u64
+    let e : u64 = (p >> 10u64) & 31u64
+    let m : u64 = p & 1023u64
+    if e == 31u64 {
+        if m == 0u64 { return 1u64 }
+        return 2u64
+    }
+    MB_F16S = s
+    if e == 0u64 {
+        MB_F16A = m
+        return 0u64
+    }
+    MB_F16A = (1024u64 + m) << (e - 1u64)
+    return 0u64
+}
+
+/* signed mantissa of a finite fp16 (value = result * 2^-24); nonfinite -> sets MB_IOERR */
+fn mb_f16_mant(p: u64) -> i64 {
+    let c : u64 = mb_f16_dec(p)
+    if c != 0u64 {
+        MB_IOERR = 1u8
+        return 0i64
+    }
+    let a : i64 = MB_F16A as i64
+    if MB_F16S == 1u64 { return 0i64 - a }
+    return a
+}
+
+/* re-encode (s, A) -> pattern; 0xFFFFFFFFFFFFFFFF = not a valid fp16 mantissa */
+fn mb_f16_enc(s: u64, a: u64) -> u64 {
+    if a == 0u64 { return s << 15u64 }
+    let bl : u64 = mb_bitlen(a)
+    if bl <= 10u64 { return (s << 15u64) | a }
+    let e : u64 = bl - 10u64
+    if e > 30u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let low : u64 = e - 1u64
+    if ((a >> low) << low) != a { return 0xFFFFFFFFFFFFFFFFu64 }
+    let mm : u64 = (a >> low) - 1024u64
+    if mm > 1023u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return (s << 15u64) | (e << 10u64) | mm
+}
+
+fn mb_arm360() -> u64 {
+    let mut fin : u64 = 0u64
+    let mut nonfin : u64 = 0u64
+    let mut p : u64 = 0u64
+    while p < 65536u64 {
+        let c : u64 = mb_f16_dec(p)
+        if c == 0u64 {
+            fin = fin + 1u64
+            /* bijection: re-encode must reproduce the exact bits */
+            if mb_f16_enc(MB_F16S, MB_F16A) != p { return 360u64 }
+        }
+        if c != 0u64 { nonfin = nonfin + 1u64 }
+        p = p + 1u64
+    }
+    /* the closed forms the walk must re-derive: 2*31*1024 finite, 2*1024 not */
+    if fin != 63488u64 { return 360u64 }
+    if nonfin != 2048u64 { return 360u64 }
+    /* the independent order engine: positive finite magnitudes strictly rise */
+    let mut prev : u64 = 0u64
+    p = 1u64
+    while p < 31744u64 {
+        if mb_f16_dec(p) != 0u64 { return 360u64 }
+        if MB_F16A <= prev { return 360u64 }
+        prev = MB_F16A
+        p = p + 1u64
+    }
+    mb_rs("the flesh: fp16 finite=" as u64)
+    mb_ru(fin)
+    mb_rs(" nonfinite=" as u64)
+    mb_ru(nonfin)
+    mb_rs(" bijection=ok monotone=ok lattice=2^-24" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 361: THE TYPES ==================== */
+
+/* values per block; 0 = outside this organ's certified table */
+fn mb_tbv(t: u64) -> u64 {
+    if t == 0u64 { return 1u64 }      /* F32 */
+    if t == 1u64 { return 1u64 }      /* F16 */
+    if t == 2u64 { return 32u64 }     /* Q4_0 */
+    if t == 3u64 { return 32u64 }     /* Q4_1 */
+    if t == 6u64 { return 32u64 }     /* Q5_0 */
+    if t == 7u64 { return 32u64 }     /* Q5_1 */
+    if t == 8u64 { return 32u64 }     /* Q8_0 */
+    if t == 9u64 { return 32u64 }     /* Q8_1 */
+    if t == 10u64 { return 256u64 }   /* Q2_K */
+    if t == 11u64 { return 256u64 }   /* Q3_K */
+    if t == 12u64 { return 256u64 }   /* Q4_K */
+    if t == 13u64 { return 256u64 }   /* Q5_K */
+    if t == 14u64 { return 256u64 }   /* Q6_K */
+    if t == 15u64 { return 256u64 }   /* Q8_K */
+    if t == 24u64 { return 1u64 }     /* I8 */
+    if t == 25u64 { return 1u64 }     /* I16 */
+    if t == 26u64 { return 1u64 }     /* I32 */
+    if t == 27u64 { return 1u64 }     /* I64 */
+    if t == 28u64 { return 1u64 }     /* F64 */
+    if t == 30u64 { return 1u64 }     /* BF16 */
+    return 0u64
+}
+
+fn mb_tbb(t: u64) -> u64 {
+    if t == 0u64 { return 4u64 }
+    if t == 1u64 { return 2u64 }
+    if t == 2u64 { return 18u64 }
+    if t == 3u64 { return 20u64 }
+    if t == 6u64 { return 22u64 }
+    if t == 7u64 { return 24u64 }
+    if t == 8u64 { return 34u64 }
+    if t == 9u64 { return 36u64 }
+    if t == 10u64 { return 84u64 }
+    if t == 11u64 { return 110u64 }
+    if t == 12u64 { return 144u64 }
+    if t == 13u64 { return 176u64 }
+    if t == 14u64 { return 210u64 }
+    if t == 15u64 { return 292u64 }
+    if t == 24u64 { return 1u64 }
+    if t == 25u64 { return 2u64 }
+    if t == 26u64 { return 4u64 }
+    if t == 27u64 { return 8u64 }
+    if t == 28u64 { return 8u64 }
+    if t == 30u64 { return 2u64 }
+    return 0u64
+}
+
+fn mb_arm361() -> u64 {
+    /* internal consistency: bv and bb tables agree on membership; k-quants
+     * are exactly the 256-value blocks; unit types carry unit-value sizes */
+    let mut known : u64 = 0u64
+    let mut kq : u64 = 0u64
+    let mut t : u64 = 0u64
+    while t < 64u64 {
+        let bv : u64 = mb_tbv(t)
+        let bb : u64 = mb_tbb(t)
+        if bv == 0u64 {
+            if bb != 0u64 { return 361u64 }
+        }
+        if bv != 0u64 {
+            if bb == 0u64 { return 361u64 }
+            known = known + 1u64
+            if bv == 256u64 { kq = kq + 1u64 }
+            /* a block never holds fewer bytes than one value of its lattice:
+             * every certified type packs at most 16 values per byte-pair */
+            if bb * 16u64 < bv { return 361u64 }
+        }
+        t = t + 1u64
+    }
+    if known != 20u64 { return 361u64 }
+    if kq != 6u64 { return 361u64 }
+    mb_rs("the types: known=" as u64)
+    mb_ru(known)
+    mb_rs(" kquant=" as u64)
+    mb_ru(kq)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== the windowed 64-bit reader ==================== */
+
+fn mb_pos() -> u64 { return MB_WBASE + MB_WPOS }
+
+fn mb_seek_abs(off: u64) -> i32 {
+    if off >= MB_WBASE {
+        if off < MB_WBASE + MB_WLEN {
+            MB_WPOS = off - MB_WBASE
+            return 0i32
+        }
+    }
+    let rc : i32 = _fseeki64(MB_F, off as i64, 0i32)
+    if rc != 0i32 { MB_IOERR = 1u8 }
+    MB_WBASE = off
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    return rc
+}
+
+fn mb_refill() -> i32 {
+    if MB_WPOS < MB_WLEN { return 0i32 }
+    let base : u64 = MB_WBASE + MB_WLEN
+    let rc : i32 = _fseeki64(MB_F, base as i64, 0i32)
+    if rc != 0i32 {
+        MB_IOERR = 1u8
+        return 1i32
+    }
+    let got : u64 = fread((&MB_WIN) as u64, 1u64, 65536u64, MB_F)
+    MB_WBASE = base
+    MB_WLEN = got
+    MB_WPOS = 0u64
+    if got == 0u64 {
+        MB_IOERR = 1u8
+        return 1i32
+    }
+    return 0i32
+}
+
+fn mb_u8() -> u64 {
+    if mb_refill() != 0i32 { return 0u64 }
+    let b : u64 = MB_WIN[MB_WPOS] as u64
+    MB_WPOS = MB_WPOS + 1u64
+    return b
+}
+
+fn mb_u16() -> u64 {
+    let b0 : u64 = mb_u8()
+    let b1 : u64 = mb_u8()
+    return b0 | (b1 << 8u64)
+}
+
+fn mb_u32() -> u64 {
+    let b0 : u64 = mb_u16()
+    let b1 : u64 = mb_u16()
+    return b0 | (b1 << 16u64)
+}
+
+fn mb_u64() -> u64 {
+    let b0 : u64 = mb_u32()
+    let b1 : u64 = mb_u32()
+    return b0 | (b1 << 32u64)
+}
+
+fn mb_skip(n: u64) -> i32 {
+    let target : u64 = mb_pos() + n
+    return mb_seek_abs(target)
+}
+
+/* ==================== the GGUF walk (one shard) ==================== */
+
+var MB_PATH : [u8; 64]
+
+fn mb_mkpath(i: u64) -> i32 {
+    /* "Feast/r1_shardNN.gguf" + NUL */
+    let s : u64 = "Feast/r1_shard" as u64
+    let p : *u8 = s as *u8
+    let mut k : u64 = 0u64
+    while p[k] != 0u8 {
+        MB_PATH[k] = p[k]
+        k = k + 1u64
+    }
+    MB_PATH[k] = (48u64 + (i / 10u64)) as u8
+    MB_PATH[k + 1u64] = (48u64 + (i % 10u64)) as u8
+    let t : u64 = ".gguf" as u64
+    let q : *u8 = t as *u8
+    let mut j : u64 = 0u64
+    while q[j] != 0u8 {
+        MB_PATH[k + 2u64 + j] = q[j]
+        j = j + 1u64
+    }
+    MB_PATH[k + 2u64 + j] = 0u8
+    return 0i32
+}
+
+fn mb_keyis(lit: u64, klen: u64) -> u64 {
+    let p : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if i >= klen { return 0u64 }
+        if p[i] != MB_KEY[i] { return 0u64 }
+        i = i + 1u64
+    }
+    if i != klen { return 0u64 }
+    return 1u64
+}
+
+fn mb_scalar_size(vt: u64) -> u64 {
+    if vt == 0u64 { return 1u64 }
+    if vt == 1u64 { return 1u64 }
+    if vt == 2u64 { return 2u64 }
+    if vt == 3u64 { return 2u64 }
+    if vt == 4u64 { return 4u64 }
+    if vt == 5u64 { return 4u64 }
+    if vt == 6u64 { return 4u64 }
+    if vt == 7u64 { return 1u64 }
+    if vt == 10u64 { return 8u64 }
+    if vt == 11u64 { return 8u64 }
+    if vt == 12u64 { return 8u64 }
+    return 0u64
+}
+
+/* read a scalar KV value as u64 (unsigned reading of the stored bytes) */
+fn mb_scalar_read(vt: u64) -> u64 {
+    let sz : u64 = mb_scalar_size(vt)
+    if sz == 1u64 { return mb_u8() }
+    if sz == 2u64 { return mb_u16() }
+    if sz == 4u64 { return mb_u32() }
+    return mb_u64()
+}
+
+/* walk one KV entry: extract the named facts, skip everything else.
+ * returns 0 ok, 1 refuse (nested array / unknown vtype) */
+fn mb_kv_one(shard: u64) -> u64 {
+    let klen : u64 = mb_u64()
+    if klen > 255u64 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < klen {
+        MB_KEY[i] = mb_u8() as u8
+        i = i + 1u64
+    }
+    let vt : u64 = mb_u32()
+    if MB_IOERR != 0u8 { return 1u64 }
+    if vt == 8u64 {
+        /* string */
+        let slen : u64 = mb_u64()
+        if mb_keyis("general.architecture" as u64, klen) == 1u64 {
+            let mut cap : u64 = slen
+            if cap > 31u64 { cap = 31u64 }
+            let mut a : u64 = 0u64
+            while a < cap {
+                MB_ARCH[a] = mb_u8() as u8
+                a = a + 1u64
+            }
+            MB_ARCHN = cap
+            mb_skip(slen - cap)
+            return 0u64
+        }
+        mb_skip(slen)
+        return 0u64
+    }
+    if vt == 9u64 {
+        /* array: elem type + count */
+        let et : u64 = mb_u32()
+        let cnt : u64 = mb_u64()
+        if et == 8u64 {
+            let mut a : u64 = 0u64
+            while a < cnt {
+                let sl : u64 = mb_u64()
+                mb_skip(sl)
+                if MB_IOERR != 0u8 { return 1u64 }
+                a = a + 1u64
+            }
+            return 0u64
+        }
+        if et == 9u64 { return 1u64 }
+        let esz : u64 = mb_scalar_size(et)
+        if esz == 0u64 { return 1u64 }
+        mb_skip(esz * cnt)
+        return 0u64
+    }
+    let ssz : u64 = mb_scalar_size(vt)
+    if ssz == 0u64 { return 1u64 }
+    /* scalar: extract the named facts */
+    if mb_keyis("general.alignment" as u64, klen) == 1u64 {
+        MB_ALIGN = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("split.no" as u64, klen) == 1u64 {
+        MB_SPLITNO = mb_scalar_read(vt)
+        MB_SPLITNO_F = 1u8
+        return 0u64
+    }
+    if mb_keyis("split.count" as u64, klen) == 1u64 {
+        let v : u64 = mb_scalar_read(vt)
+        if MB_SPLITCT_F == 1u8 {
+            if v != MB_SPLITCT { return 1u64 }
+        }
+        MB_SPLITCT = v
+        MB_SPLITCT_F = 1u8
+        return 0u64
+    }
+    if mb_keyis("split.tensors.count" as u64, klen) == 1u64 {
+        MB_SPLITTN = mb_scalar_read(vt)
+        MB_SPLITTN_F = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.embedding_length" as u64, klen) == 1u64 {
+        MB_EMBED = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.block_count" as u64, klen) == 1u64 {
+        MB_LAYERS = mb_scalar_read(vt)
+        return 0u64
+    }
+    mb_skip(ssz)
+    return 0u64
+}
+
+fn mb_align_up(x: u64, a: u64) -> u64 {
+    return (x + a - 1u64) & (0u64 - a)
+}
+
+/* walk one tensor info; index t < MB_MAXT.  returns 0 ok, 1 refuse */
+fn mb_tensor_one(shard: u64, t: u64) -> u64 {
+    let nlen : u64 = mb_u64()
+    if nlen > 255u64 { return 1u64 }
+    /* keep the name only if this becomes a digestion candidate */
+    let mut i : u64 = 0u64
+    while i < nlen {
+        if i < 255u64 { MB_KEY[i] = mb_u8() as u8 }
+        if i >= 255u64 { mb_u8() }
+        i = i + 1u64
+    }
+    let nd : u64 = mb_u32()
+    if nd > 8u64 { return 1u64 }
+    let mut ne : u64 = 1u64
+    let mut ne0 : u64 = 0u64
+    let mut d : u64 = 0u64
+    while d < nd {
+        let dim : u64 = mb_u64()
+        if d == 0u64 { ne0 = dim }
+        ne = ne * dim
+        d = d + 1u64
+    }
+    let ty : u64 = mb_u32()
+    let off : u64 = mb_u64()
+    if MB_IOERR != 0u8 { return 1u64 }
+    if ty < 64u64 { MB_HIST[ty] = MB_HIST[ty] + 1u64 }
+    let bv : u64 = mb_tbv(ty)
+    if bv == 0u64 { return 1u64 }
+    if ne0 % bv != 0u64 { return 1u64 }
+    let nb : u64 = (ne / bv) * mb_tbb(ty)
+    MB_OFF[t] = off
+    MB_NB[t] = nb
+    /* digestion candidates: the first two quantized tensors of shard 1 */
+    if shard == 1u64 {
+        let mut isq : u64 = 0u64
+        if ty == 8u64 { isq = 1u64 }
+        if ty == 12u64 { isq = 1u64 }
+        if ty == 14u64 { isq = 1u64 }
+        if isq == 1u64 {
+            if MB_C1_F == 0u8 {
+                MB_C1_TYPE = ty
+                MB_C1_OFF = off
+                MB_C1_NE = ne
+                let mut c : u64 = nlen
+                if c > 63u64 { c = 63u64 }
+                let mut k : u64 = 0u64
+                while k < c {
+                    MB_C1_NAME[k] = MB_KEY[k]
+                    k = k + 1u64
+                }
+                MB_C1_NN = c
+                MB_C1_F = 1u8
+                return 0u64
+            }
+            if MB_C2_F == 0u8 {
+                MB_C2_TYPE = ty
+                MB_C2_OFF = off
+                MB_C2_NE = ne
+                let mut c2 : u64 = nlen
+                if c2 > 63u64 { c2 = 63u64 }
+                let mut k2 : u64 = 0u64
+                while k2 < c2 {
+                    MB_C2_NAME[k2] = MB_KEY[k2]
+                    k2 = k2 + 1u64
+                }
+                MB_C2_NN = c2
+                MB_C2_F = 1u8
+            }
+        }
+    }
+    return 0u64
+}
+
+/* full walk + conservation of one shard.  returns:
+ * 0 conserved / 1 refused (named) / 2 io-broken / 3 not found */
+fn mb_shard(i: u64) -> u64 {
+    mb_mkpath(i)
+    let f : u64 = fopen((&MB_PATH) as u64, "rb" as u64)
+    if f == 0u64 { return 3u64 }
+    MB_F = f
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    /* file size */
+    _fseeki64(f, 0i64, 2i32)
+    let fsz : u64 = _ftelli64(f) as u64
+    mb_seek_abs(0u64)
+    /* header */
+    let magic : u64 = mb_u32()
+    if magic != 0x46554747u64 {
+        fclose(f)
+        return 1u64
+    }
+    let ver : u64 = mb_u32()
+    if ver != 3u64 {
+        fclose(f)
+        return 1u64
+    }
+    let ntens : u64 = mb_u64()
+    let nkv : u64 = mb_u64()
+    if ntens > MB_MAXT {
+        fclose(f)
+        return 1u64
+    }
+    /* per-shard extraction state */
+    MB_ALIGN = MB_ALIGN_DEF
+    MB_SPLITNO_F = 0u8
+    /* the KV forest */
+    let mut k : u64 = 0u64
+    while k < nkv {
+        if mb_kv_one(i) != 0u64 {
+            fclose(f)
+            return 1u64
+        }
+        k = k + 1u64
+    }
+    /* alignment must be a power of two */
+    if MB_ALIGN == 0u64 {
+        fclose(f)
+        return 1u64
+    }
+    if (MB_ALIGN & (MB_ALIGN - 1u64)) != 0u64 {
+        fclose(f)
+        return 1u64
+    }
+    /* the tensor infos */
+    let mut t : u64 = 0u64
+    while t < ntens {
+        if mb_tensor_one(i, t) != 0u64 {
+            fclose(f)
+            return 1u64
+        }
+        t = t + 1u64
+    }
+    if MB_IOERR != 0u8 {
+        fclose(f)
+        return 2u64
+    }
+    let data_base : u64 = mb_align_up(mb_pos(), MB_ALIGN)
+    if i == 1u64 {
+        MB_DBASE1 = data_base
+        let mut pc : u64 = 0u64
+        while pc < 64u64 {
+            MB_PATH1[pc] = MB_PATH[pc]
+            pc = pc + 1u64
+        }
+    }
+    /* sort spans by offset (insertion; ntens <= 512) */
+    let mut a : u64 = 1u64
+    while a < ntens {
+        let ko : u64 = MB_OFF[a]
+        let kn : u64 = MB_NB[a]
+        let mut b : u64 = a
+        let mut go : u8 = 1u8
+        while go == 1u8 {
+            go = 0u8
+            if b > 0u64 {
+                if MB_OFF[b - 1u64] > ko {
+                    MB_OFF[b] = MB_OFF[b - 1u64]
+                    MB_NB[b] = MB_NB[b - 1u64]
+                    b = b - 1u64
+                    go = 1u8
+                }
+            }
+        }
+        MB_OFF[b] = ko
+        MB_NB[b] = kn
+        a = a + 1u64
+    }
+    /* THE TILING: spans, each padded to the artifact's alignment, must fit
+     * flush -- first at zero, each next exactly at the padded end of the
+     * previous, the last ending within one pad of the file end */
+    let mut expect : u64 = 0u64
+    let mut last_end : u64 = 0u64
+    t = 0u64
+    while t < ntens {
+        if MB_OFF[t] != expect {
+            fclose(f)
+            return 1u64
+        }
+        last_end = MB_OFF[t] + MB_NB[t]
+        expect = mb_align_up(last_end, MB_ALIGN)
+        t = t + 1u64
+    }
+    let end_abs : u64 = data_base + last_end
+    if end_abs > fsz {
+        fclose(f)
+        return 1u64
+    }
+    let tail : u64 = fsz - end_abs
+    if tail >= MB_ALIGN {
+        fclose(f)
+        return 1u64
+    }
+    /* split coherence bookkeeping */
+    if i <= 16u64 {
+        MB_SPNOSF[i - 1u64] = MB_SPLITNO_F
+        MB_SPNOS[i - 1u64] = MB_SPLITNO
+    }
+    MB_TOT_TENS = MB_TOT_TENS + ntens
+    MB_TOT_BYTES = MB_TOT_BYTES + fsz
+    fclose(f)
+    return 0u64
+}
+
+fn mb_arm362() -> u64 {
+    MB_SHARDS = 0u64
+    MB_TOT_TENS = 0u64
+    MB_TOT_BYTES = 0u64
+    MB_CONSERVED = 0u64
+    MB_REFUSED = 0u64
+    MB_FEAST = 0u8
+    let mut i : u64 = 1u64
+    let mut stop : u8 = 0u8
+    while stop == 0u8 {
+        let rc : u64 = mb_shard(i)
+        if rc == 3u64 { stop = 1u8 }
+        if rc == 0u64 { MB_CONSERVED = MB_CONSERVED + 1u64 }
+        if rc == 1u64 { MB_REFUSED = MB_REFUSED + 1u64 }
+        if rc == 2u64 {
+            /* an unreadable shard is a broken door, not a lawful fast */
+            return 362u64
+        }
+        if stop == 0u8 {
+            MB_SHARDS = i
+            i = i + 1u64
+            if i > 99u64 { stop = 1u8 }
+        }
+    }
+    if MB_SHARDS == 0u64 {
+        mb_rs("the feast: absent (lawful) -- the door stands, the table waits" as u64)
+        mb_rb(10u8)
+        return 0u64
+    }
+    MB_FEAST = 1u8
+    /* every found shard must have conserved (a refused shard is a red door) */
+    if MB_CONSERVED != MB_SHARDS { return 362u64 }
+    /* split coherence: if split KVs exist they must name this very feast --
+     * indices all present and distinct, spanning 0..N-1 or 1..N; the declared
+     * count equal to the number of files on the table */
+    let mut split_ok : u64 = 0u64
+    if MB_SPLITCT_F == 1u8 {
+        if MB_SPLITCT != MB_SHARDS { return 362u64 }
+        let mut allf : u64 = 1u64
+        let mut mn : u64 = 0xFFFFFFFFFFFFFFFFu64
+        let mut mx : u64 = 0u64
+        let mut s : u64 = 0u64
+        while s < MB_SHARDS {
+            if MB_SPNOSF[s] == 0u8 { allf = 0u64 }
+            if MB_SPNOSF[s] == 1u8 {
+                if MB_SPNOS[s] < mn { mn = MB_SPNOS[s] }
+                if MB_SPNOS[s] > mx { mx = MB_SPNOS[s] }
+                let mut s2 : u64 = 0u64
+                while s2 < s {
+                    if MB_SPNOS[s2] == MB_SPNOS[s] { allf = 0u64 }
+                    s2 = s2 + 1u64
+                }
+            }
+            s = s + 1u64
+        }
+        if allf == 1u64 {
+            /* distinct + contiguous: zero-based or one-based, both lawful */
+            if mn == 0u64 {
+                if mx == MB_SHARDS - 1u64 { split_ok = 1u64 }
+            }
+            if mn == 1u64 {
+                if mx == MB_SHARDS { split_ok = 1u64 }
+            }
+        }
+        if split_ok == 0u64 { return 362u64 }
+    }
+    /* the declared whole vs the derived whole */
+    if MB_SPLITTN_F == 1u8 {
+        if MB_SPLITTN != MB_TOT_TENS { return 362u64 }
+    }
+    mb_rs("the feast: shards=" as u64)
+    mb_ru(MB_SHARDS)
+    mb_rs(" split=" as u64)
+    if MB_SPLITCT_F == 1u8 { mb_ru(MB_SPLITCT) }
+    if MB_SPLITCT_F == 0u8 { mb_rs("none" as u64) }
+    mb_rs(" arch=" as u64)
+    let mut ai : u64 = 0u64
+    while ai < MB_ARCHN {
+        mb_rb(MB_ARCH[ai])
+        ai = ai + 1u64
+    }
+    mb_rs(" tensors=" as u64)
+    mb_ru(MB_TOT_TENS)
+    mb_rs("/" as u64)
+    if MB_SPLITTN_F == 1u8 { mb_ru(MB_SPLITTN) }
+    if MB_SPLITTN_F == 0u8 { mb_ru(MB_TOT_TENS) }
+    mb_rs(" bytes=" as u64)
+    mb_ru(MB_TOT_BYTES)
+    mb_rs(" conserved=" as u64)
+    mb_ru(MB_CONSERVED)
+    mb_rs("/" as u64)
+    mb_ru(MB_SHARDS)
+    mb_rs(" refused=" as u64)
+    mb_ru(MB_REFUSED)
+    mb_rb(10u8)
+    if MB_EMBED != 0u64 {
+        mb_rs("the anatomy: embed=" as u64)
+        mb_ru(MB_EMBED)
+        mb_rs(" layers=" as u64)
+        mb_ru(MB_LAYERS)
+        mb_rs(" align=" as u64)
+        mb_ru(MB_ALIGN)
+        mb_rb(10u8)
+    }
+    return 0u64
+}
+
+/* ==================== arm 363: THE DIGESTION ==================== */
+
+/* read `n` raw bytes at absolute offset into MB_BLK (shard 1 must be open) */
+fn mb_read_block(abs: u64, n: u64) -> u64 {
+    mb_seek_abs(abs)
+    let mut i : u64 = 0u64
+    while i < n {
+        MB_BLK[i] = mb_u8() as u8
+        i = i + 1u64
+    }
+    if MB_IOERR != 0u8 { return 1u64 }
+    return 0u64
+}
+
+/* q4_K sub-block scale/min unpack (the 6-bit law) */
+var MB_SC : u64 = 0u64
+var MB_SM : u64 = 0u64
+fn mb_q4k_scale(j: u64) -> i32 {
+    if j < 4u64 {
+        MB_SC = (MB_BLK[4u64 + j] as u64) & 63u64
+        MB_SM = (MB_BLK[8u64 + j] as u64) & 63u64
+        return 0i32
+    }
+    /* llama.cpp: sc = (s[j+4] & 0xF) | ((s[j-4] >> 6) << 4)
+     *            m  = (s[j+4] >> 4)  | ((s[j]   >> 6) << 4)
+     * our BLK holds scales at bytes 4..15: s[k] = BLK[4+k] */
+    let sj4 : u64 = MB_BLK[4u64 + j + 4u64] as u64
+    let sjm4 : u64 = MB_BLK[4u64 + j - 4u64] as u64
+    let sj : u64 = MB_BLK[4u64 + j] as u64
+    MB_SC = (sj4 & 0xFu64) | ((sjm4 >> 6u64) << 4u64)
+    MB_SM = (sj4 >> 4u64) | ((sj >> 6u64) << 4u64)
+    return 0i32
+}
+
+/* decode one q4_K block from MB_BLK into out (256 mants, value = mant*2^-24).
+ * two-engine: fills the factored accumulators for the distributive check.
+ * returns 0 ok / arm code on nonfinite scale */
+var MB_E2_SUM : i64 = 0i64            /* factored engine: sum */
+var MB_D2P : u64 = 0u64               /* factored engine sumsq pieces */
+var MB_D2R : u64 = 0u64
+var MB_D2S : u64 = 0u64
+var MB_MD : i64 = 0i64
+var MB_MDM : i64 = 0i64
+
+fn mb_dec_q4k(into_b: u64) -> u64 {
+    let dbits : u64 = (MB_BLK[0] as u64) | ((MB_BLK[1] as u64) << 8u64)
+    let mbits : u64 = (MB_BLK[2] as u64) | ((MB_BLK[3] as u64) << 8u64)
+    MB_IOERR = 0u8
+    let md : i64 = mb_f16_mant(dbits)
+    let mdm : i64 = mb_f16_mant(mbits)
+    if MB_IOERR != 0u8 { return 1u64 }
+    MB_MD = md
+    MB_MDM = mdm
+    let mut sumsc : i64 = 0i64        /* sum over sub-blocks of sc*Q */
+    let mut summ : i64 = 0i64         /* sum over sub-blocks of m*32 */
+    MB_D2P = 0u64
+    MB_D2R = 0u64
+    MB_D2S = 0u64
+    let mut t : u64 = 0u64
+    while t < 4u64 {
+        let mut half : u64 = 0u64
+        while half < 2u64 {
+            let j : u64 = t * 2u64 + half
+            mb_q4k_scale(j)
+            let sc : i64 = MB_SC as i64
+            let mn : i64 = MB_SM as i64
+            let mut q_acc : i64 = 0i64
+            let mut l : u64 = 0u64
+            while l < 32u64 {
+                let raw : u64 = MB_BLK[16u64 + t * 32u64 + l] as u64
+                let mut q : u64 = raw & 0xFu64
+                if half == 1u64 { q = raw >> 4u64 }
+                let x : i64 = sc * (q as i64)
+                let vm : i64 = md * x - mdm * mn
+                let idx : u64 = t * 64u64 + half * 32u64 + l
+                if into_b == 0u64 { MB_VA[idx] = vm }
+                if into_b == 1u64 { MB_VB[idx] = vm }
+                q_acc = q_acc + (q as i64)
+                /* factored sumsq pieces: P += x^2, R += x*m, S += m^2 */
+                MB_D2P = MB_D2P + ((x * x) as u64)
+                MB_D2R = MB_D2R + ((x * mn) as u64)
+                MB_D2S = MB_D2S + ((mn * mn) as u64)
+                l = l + 1u64
+            }
+            sumsc = sumsc + sc * q_acc
+            summ = summ + mn * 32i64
+            half = half + 1u64
+        }
+        t = t + 1u64
+    }
+    MB_E2_SUM = md * sumsc - mdm * summ
+    return 0u64
+}
+
+/* decode one q6_K block; same contract as q4 */
+fn mb_dec_q6k(into_b: u64) -> u64 {
+    let dbits : u64 = (MB_BLK[208] as u64) | ((MB_BLK[209] as u64) << 8u64)
+    MB_IOERR = 0u8
+    let md : i64 = mb_f16_mant(dbits)
+    if MB_IOERR != 0u8 { return 1u64 }
+    MB_MD = md
+    MB_MDM = 0i64
+    let mut sumsc : i64 = 0i64
+    MB_D2P = 0u64
+    MB_D2R = 0u64
+    MB_D2S = 0u64
+    let mut n2 : u64 = 0u64
+    while n2 < 2u64 {
+        let vbase : u64 = n2 * 128u64
+        let qlb : u64 = n2 * 64u64
+        let qhb : u64 = 128u64 + n2 * 32u64
+        let scb : u64 = 192u64 + n2 * 8u64
+        let mut l : u64 = 0u64
+        while l < 32u64 {
+            let isx : u64 = l / 16u64
+            let ql0 : u64 = MB_BLK[qlb + l] as u64
+            let ql32 : u64 = MB_BLK[qlb + l + 32u64] as u64
+            let qh : u64 = MB_BLK[qhb + l] as u64
+            let q1 : i64 = (((ql0 & 0xFu64) | (((qh >> 0u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q2 : i64 = (((ql32 & 0xFu64) | (((qh >> 2u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q3 : i64 = (((ql0 >> 4u64) | (((qh >> 4u64) & 3u64) << 4u64)) as i64) - 32i64
+            let q4 : i64 = (((ql32 >> 4u64) | (((qh >> 6u64) & 3u64) << 4u64)) as i64) - 32i64
+            let mut w : u64 = 0u64
+            while w < 4u64 {
+                let mut qv : i64 = q1
+                if w == 1u64 { qv = q2 }
+                if w == 2u64 { qv = q3 }
+                if w == 3u64 { qv = q4 }
+                let sidx : u64 = scb + isx + w * 2u64
+                let scraw : u64 = MB_BLK[sidx] as u64
+                let mut sc : i64 = scraw as i64
+                if scraw >= 128u64 { sc = (scraw as i64) - 256i64 }
+                let x : i64 = sc * qv
+                let vm : i64 = md * x
+                let idx : u64 = vbase + w * 32u64 + l
+                if into_b == 0u64 { MB_VA[idx] = vm }
+                if into_b == 1u64 { MB_VB[idx] = vm }
+                /* factored: P += x^2 (R,S stay zero: no min term) */
+                MB_D2P = MB_D2P + ((x * x) as u64)
+                sumsc = sumsc + x
+                w = w + 1u64
+            }
+            l = l + 1u64
+        }
+        n2 = n2 + 1u64
+    }
+    MB_E2_SUM = md * sumsc
+    return 0u64
+}
+
+/* decode one q8_0 block (32 values) */
+fn mb_dec_q80(into_b: u64) -> u64 {
+    let dbits : u64 = (MB_BLK[0] as u64) | ((MB_BLK[1] as u64) << 8u64)
+    MB_IOERR = 0u8
+    let md : i64 = mb_f16_mant(dbits)
+    if MB_IOERR != 0u8 { return 1u64 }
+    MB_MD = md
+    MB_MDM = 0i64
+    let mut sq : i64 = 0i64
+    MB_D2P = 0u64
+    MB_D2R = 0u64
+    MB_D2S = 0u64
+    let mut l : u64 = 0u64
+    while l < 32u64 {
+        let raw : u64 = MB_BLK[2u64 + l] as u64
+        let mut q : i64 = raw as i64
+        if raw >= 128u64 { q = (raw as i64) - 256i64 }
+        let vm : i64 = md * q
+        if into_b == 0u64 { MB_VA[l] = vm }
+        if into_b == 1u64 { MB_VB[l] = vm }
+        sq = sq + q
+        MB_D2P = MB_D2P + ((q * q) as u64)
+        l = l + 1u64
+    }
+    MB_E2_SUM = md * sq
+    return 0u64
+}
+
+fn mb_type_bytes(ty: u64) -> u64 { return mb_tbb(ty) }
+fn mb_type_vals(ty: u64) -> u64 { return mb_tbv(ty) }
+
+fn mb_type_name_rep(ty: u64) -> i32 {
+    if ty == 8u64 { mb_rs("q8_0" as u64)   return 0i32 }
+    if ty == 12u64 { mb_rs("q4_K" as u64)   return 0i32 }
+    if ty == 14u64 { mb_rs("q6_K" as u64)   return 0i32 }
+    mb_rs("t" as u64)
+    mb_ru(ty)
+    return 0i32
+}
+
+/* digest block `blk` of candidate `c` (0/1) into VA/VB.  E1 per-value sums
+ * vs E2 factored sums must agree EXACTLY (the distributive theorem).
+ * On success stores sum/sumsq into the candidate slots.  returns 0 ok */
+fn mb_digest(c: u64, blk: u64) -> u64 {
+    let mut ty : u64 = MB_C1_TYPE
+    let mut off : u64 = MB_C1_OFF
+    if c == 1u64 {
+        ty = MB_C2_TYPE
+        off = MB_C2_OFF
+    }
+    let bb : u64 = mb_type_bytes(ty)
+    let bv : u64 = mb_type_vals(ty)
+    let abs : u64 = MB_DBASE1 + off + blk * bb
+    if mb_read_block(abs, bb) != 0u64 { return 1u64 }
+    let mut rc : u64 = 1u64
+    if ty == 12u64 { rc = mb_dec_q4k(c) }
+    if ty == 14u64 { rc = mb_dec_q6k(c) }
+    if ty == 8u64 { rc = mb_dec_q80(c) }
+    if rc != 0u64 { return 1u64 }
+    /* E1: per-value walk (association order 1) */
+    let mut s1 : i64 = 0i64
+    MB_X[0] = 0u64
+    MB_X[1] = 0u64
+    MB_X[2] = 0u64
+    let mut i : u64 = 0u64
+    while i < bv {
+        let mut vm : i64 = 0i64
+        if c == 0u64 { vm = MB_VA[i] }
+        if c == 1u64 { vm = MB_VB[i] }
+        s1 = s1 + vm
+        let mut mag : u64 = vm as u64
+        if vm < 0i64 { mag = (0i64 - vm) as u64 }
+        mb_mul64(mag, mag)
+        MB_Z[0] = MB_MLO
+        MB_Z[1] = MB_MHI
+        MB_Z[2] = 0u64
+        mb_x_add_z()
+        i = i + 1u64
+    }
+    /* E2 sum: the factored form (association order 2) */
+    if s1 != MB_E2_SUM { return 1u64 }
+    /* E2 sumsq: Md^2*P - 2*Md*Mdm*R + Mdm^2*S in 3-limb arithmetic */
+    let mut mdm_mag : u64 = MB_MD as u64
+    if MB_MD < 0i64 { mdm_mag = (0i64 - MB_MD) as u64 }
+    let mut mmm_mag : u64 = MB_MDM as u64
+    if MB_MDM < 0i64 { mmm_mag = (0i64 - MB_MDM) as u64 }
+    /* Y := Md^2 * P */
+    mb_mul64(mdm_mag, mdm_mag)
+    mb_mul128by64(MB_MHI, MB_MLO, MB_D2P)
+    MB_Y[0] = MB_Z[0]
+    MB_Y[1] = MB_Z[1]
+    MB_Y[2] = MB_Z[2]
+    /* Y += Mdm^2 * S */
+    mb_mul64(mmm_mag, mmm_mag)
+    mb_mul128by64(MB_MHI, MB_MLO, MB_D2S)
+    let t0 : u64 = MB_Y[0] + MB_Z[0]
+    let mut tc : u64 = 0u64
+    if t0 < MB_Z[0] { tc = 1u64 }
+    let t1a : u64 = MB_Y[1] + MB_Z[1]
+    let mut tc1 : u64 = 0u64
+    if t1a < MB_Z[1] { tc1 = 1u64 }
+    let t1 : u64 = t1a + tc
+    if t1 < tc { tc1 = tc1 + 1u64 }
+    MB_Y[0] = t0
+    MB_Y[1] = t1
+    MB_Y[2] = MB_Y[2] + MB_Z[2] + tc1
+    /* Y -= 2*Md*Mdm*R when Md*Mdm > 0; += when < 0 (the cross term) */
+    mb_mul64(mdm_mag, mmm_mag)
+    mb_mul128by64(MB_MHI, MB_MLO, 2u64 * MB_D2R)
+    let mut same_sign : u64 = 0u64
+    if MB_MD > 0i64 {
+        if MB_MDM > 0i64 { same_sign = 1u64 }
+    }
+    if MB_MD < 0i64 {
+        if MB_MDM < 0i64 { same_sign = 1u64 }
+    }
+    /* swap X into Y-slot temporarily: do the cross op on Y via X machinery */
+    let sx0 : u64 = MB_X[0]
+    let sx1 : u64 = MB_X[1]
+    let sx2 : u64 = MB_X[2]
+    MB_X[0] = MB_Y[0]
+    MB_X[1] = MB_Y[1]
+    MB_X[2] = MB_Y[2]
+    if same_sign == 1u64 { mb_x_sub_z() }
+    if same_sign == 0u64 {
+        if MB_D2R != 0u64 { mb_x_add_z() }
+    }
+    MB_Y[0] = MB_X[0]
+    MB_Y[1] = MB_X[1]
+    MB_Y[2] = MB_X[2]
+    MB_X[0] = sx0
+    MB_X[1] = sx1
+    MB_X[2] = sx2
+    /* THE DISTRIBUTIVE THEOREM: the two engines must agree exactly */
+    if mb_x_cmp_y() != 0i64 { return 1u64 }
+    if c == 0u64 {
+        MB_SUMA = s1
+        MB_SSA0 = MB_X[0]
+        MB_SSA1 = MB_X[1]
+        MB_NVA = bv
+    }
+    if c == 1u64 {
+        MB_SUMB = s1
+        MB_SSB0 = MB_X[0]
+        MB_SSB1 = MB_X[1]
+        MB_NVB = bv
+    }
+    if MB_X[2] != 0u64 { return 1u64 }
+    return 0u64
+}
+
+fn mb_arm363() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    if MB_C1_F == 0u8 { return 363u64 }
+    if MB_C2_F == 0u8 { return 363u64 }
+    /* reopen shard 1 for ranged reads */
+    let f : u64 = fopen((&MB_PATH1) as u64, "rb" as u64)
+    if f == 0u64 { return 363u64 }
+    MB_F = f
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    if mb_digest(0u64, 0u64) != 0u64 {
+        fclose(f)
+        return 363u64
+    }
+    if mb_digest(1u64, 0u64) != 0u64 {
+        fclose(f)
+        return 363u64
+    }
+    fclose(f)
+    mb_rs("the digestion: " as u64)
+    mb_type_name_rep(MB_C1_TYPE)
+    mb_rs(" " as u64)
+    let mut i : u64 = 0u64
+    while i < MB_C1_NN {
+        mb_rb(MB_C1_NAME[i])
+        i = i + 1u64
+    }
+    mb_rs(" + " as u64)
+    mb_type_name_rep(MB_C2_TYPE)
+    mb_rs(" " as u64)
+    i = 0u64
+    while i < MB_C2_NN {
+        mb_rb(MB_C2_NAME[i])
+        i = i + 1u64
+    }
+    mb_rs(" block0 sum1=" as u64)
+    mb_ri(MB_SUMA)
+    mb_rs("*2^-24 sum2=" as u64)
+    mb_ri(MB_SUMB)
+    mb_rs("*2^-24 distributive=ok" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 364: THE WITNESS ==================== */
+
+var MB_W_BITS : u64 = 0u64
+var MB_W_K : u64 = 0u64
+var MB_W_G0 : u64 = 0u64
+var MB_W_G1 : u64 = 0u64
+
+/* try the standing sumsq (SSA1,SSA0): canonical odd mantissa must exceed
+ * 24 bits; compute the round-to-nearest-even fp32 gap.  returns 1 = witness
+ * found, 0 = representable (walk on) */
+fn mb_witness_try() -> u64 {
+    let mut h : u64 = MB_SSA1
+    let mut l : u64 = MB_SSA0
+    if (h | l) == 0u64 { return 0u64 }
+    /* strip twos: the canonical exponent k = 48 - tz */
+    let mut tz : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        go = 0u8
+        if (l & 1u64) == 0u64 {
+            l = (l >> 1u64) | (h << 63u64)
+            h = h >> 1u64
+            tz = tz + 1u64
+            go = 1u8
+        }
+    }
+    let mut bl : u64 = mb_bitlen(h)
+    if bl != 0u64 { bl = bl + 64u64 }
+    if bl == 0u64 { bl = mb_bitlen(l) }
+    MB_W_BITS = bl
+    MB_W_K = 48u64 - tz
+    if bl <= 24u64 { return 0u64 }
+    /* the low (bl-24) bits are the part fp32 must throw away; the mantissa
+     * is ODD, so the lowest bit is set and the gap can never be zero */
+    let sh : u64 = bl - 24u64
+    let mut lo_h : u64 = 0u64
+    let mut lo_l : u64 = 0u64
+    if sh >= 64u64 {
+        lo_l = l
+        lo_h = h & ((1u64 << (sh - 64u64)) - 1u64)
+    }
+    if sh < 64u64 {
+        lo_l = l & ((1u64 << sh) - 1u64)
+        lo_h = 0u64
+    }
+    /* round to nearest even: gap = min(low, 2^sh - low) in exact integers */
+    let mut g_h : u64 = lo_h
+    let mut g_l : u64 = lo_l
+    /* compute 2^sh - low into (c_h, c_l) */
+    let mut c_h : u64 = 0u64
+    let mut c_l : u64 = 0u64
+    if sh < 64u64 {
+        c_l = (1u64 << sh) - lo_l
+        c_h = 0u64
+    }
+    if sh >= 64u64 {
+        /* 2^sh = (1 << (sh-64)) : 0 ; subtract (lo_h, lo_l) */
+        let top : u64 = 1u64 << (sh - 64u64)
+        c_l = 0u64 - lo_l
+        c_h = top - lo_h
+        if lo_l != 0u64 { c_h = c_h - 1u64 }
+    }
+    /* choose the smaller distance (round-to-nearest; the tie cannot happen
+     * with an odd mantissa when sh >= 1 and low has its lsb set unless low
+     * is exactly half -- half has lsb 0 for sh >= 2, and sh > 24 here) */
+    let mut use_c : u64 = 0u64
+    if c_h < g_h { use_c = 1u64 }
+    if c_h == g_h {
+        if c_l < g_l { use_c = 1u64 }
+    }
+    if use_c == 1u64 {
+        g_h = c_h
+        g_l = c_l
+    }
+    MB_W_G0 = g_l
+    MB_W_G1 = g_h
+    return 1u64
+}
+
+fn mb_arm364() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    /* the standing block's sumsq; walk later blocks only if fp32 could
+     * hold the first (bounded, deterministic first-hit) */
+    let mut found : u64 = mb_witness_try()
+    let mut blk : u64 = 1u64
+    let nblocks : u64 = MB_C1_NE / mb_type_vals(MB_C1_TYPE)
+    let mut bound : u64 = nblocks
+    if bound > 64u64 { bound = 64u64 }
+    let mut f : u64 = 0u64
+    if found == 0u64 {
+        f = fopen((&MB_PATH1) as u64, "rb" as u64)
+        if f == 0u64 { return 364u64 }
+        MB_F = f
+        MB_IOERR = 0u8
+        MB_WBASE = 0u64
+        MB_WLEN = 0u64
+        MB_WPOS = 0u64
+    }
+    while found == 0u64 {
+        if blk >= bound {
+            fclose(f)
+            return 364u64
+        }
+        if mb_digest(0u64, blk) != 0u64 {
+            fclose(f)
+            return 364u64
+        }
+        found = mb_witness_try()
+        blk = blk + 1u64
+    }
+    if f != 0u64 { fclose(f) }
+    mb_rs("the witness: sumsq odd-mantissa bits=" as u64)
+    mb_ru(MB_W_BITS)
+    mb_rs(" > 24 at 2^-" as u64)
+    mb_ru(MB_W_K)
+    mb_rs(" gap=" as u64)
+    MB_X[0] = MB_W_G0
+    MB_X[1] = MB_W_G1
+    MB_X[2] = 0u64
+    mb_rx3()
+    mb_rs(" -- fp32 must round, the organ holds it exact" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 365: THE KRISIS ==================== */
+
+fn mb_arm365() -> u64 {
+    if MB_FEAST == 0u8 { return 0u64 }
+    /* (a) certified argmax over the digested block by two paths.
+     * NOTE: the standing MB_VA may hold a later block (the witness walk);
+     * that block is real flesh all the same -- the decision is certified
+     * on whatever exact values stand. */
+    let n : u64 = MB_NVA
+    if n == 0u64 { return 365u64 }
+    let mut best : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < n {
+        if MB_VA[i] > MB_VA[best] { best = i }
+        i = i + 1u64
+    }
+    /* path 2: count how many values strictly exceed each candidate; the
+     * argmax is the value nothing exceeds, found without comparing to the
+     * path-1 winner's index */
+    let mut best2 : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut ties : u64 = 0u64
+    i = 0u64
+    while i < n {
+        let mut above : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < n {
+            if MB_VA[j] > MB_VA[i] { above = above + 1u64 }
+            j = j + 1u64
+        }
+        if above == 0u64 {
+            ties = ties + 1u64
+            if best2 == 0xFFFFFFFFFFFFFFFFu64 { best2 = i }
+        }
+        i = i + 1u64
+    }
+    if best2 != best { return 365u64 }
+    if ties == 0u64 { return 365u64 }
+    /* (b) the RMSNorm-shaped comparison on real sub-rows: a/sqrt(S1) vs
+     * b/sqrt(S2) decided as sign(a*sqrt(S2) - b*sqrt(S1)) by two engines.
+     * Sub-rows: the first 16 values of each digested block, with a mantissa
+     * guard so every intermediate stays in-lane. */
+    let mut a : i64 = 0i64
+    let mut s1 : u64 = 0u64
+    let mut b : i64 = 0i64
+    let mut s2 : u64 = 0u64
+    let mut guard : u64 = 0u64
+    i = 0u64
+    while i < 16u64 {
+        let va : i64 = MB_VA[i]
+        let vb : i64 = MB_VB[i]
+        let mut ma : u64 = va as u64
+        if va < 0i64 { ma = (0i64 - va) as u64 }
+        let mut mbv : u64 = vb as u64
+        if vb < 0i64 { mbv = (0i64 - vb) as u64 }
+        if ma >= 536870912u64 { guard = 1u64 }
+        if mbv >= 536870912u64 { guard = 1u64 }
+        a = a + va
+        b = b + vb
+        s1 = s1 + ((va * va) as u64)
+        s2 = s2 + ((vb * vb) as u64)
+        i = i + 1u64
+    }
+    if guard == 1u64 { return 365u64 }
+    if s1 == 0u64 { return 365u64 }
+    if s2 == 0u64 { return 365u64 }
+    /* engine 1: elementary square-compare with sign analysis (192-bit) */
+    let mut e1 : i64 = 0i64
+    let mut sa : i64 = 0i64
+    if a > 0i64 { sa = 1i64 }
+    if a < 0i64 { sa = 0i64 - 1i64 }
+    let mut sb : i64 = 0i64
+    if b > 0i64 { sb = 1i64 }
+    if b < 0i64 { sb = 0i64 - 1i64 }
+    if sa > sb { e1 = 1i64 }
+    if sa < sb { e1 = 0i64 - 1i64 }
+    if sa == sb {
+        if sa == 0i64 { e1 = 0i64 }
+        if sa != 0i64 {
+            let mut ma2 : u64 = a as u64
+            if a < 0i64 { ma2 = (0i64 - a) as u64 }
+            let mut mb2 : u64 = b as u64
+            if b < 0i64 { mb2 = (0i64 - b) as u64 }
+            /* X := a^2 * S2 ; Y := b^2 * S1 */
+            mb_mul64(ma2, ma2)
+            mb_mul128by64(MB_MHI, MB_MLO, s2)
+            MB_X[0] = MB_Z[0]
+            MB_X[1] = MB_Z[1]
+            MB_X[2] = MB_Z[2]
+            mb_mul64(mb2, mb2)
+            mb_mul128by64(MB_MHI, MB_MLO, s1)
+            MB_Y[0] = MB_Z[0]
+            MB_Y[1] = MB_Z[1]
+            MB_Y[2] = MB_Z[2]
+            let cmp : i64 = mb_x_cmp_y()
+            e1 = cmp
+            if sa < 0i64 { e1 = 0i64 - cmp }
+        }
+    }
+    /* engine 2: the standing surd kernel -- sign(0 + a*sqrt(S2) - b*sqrt(S1)) */
+    let e2 : i32 = ui_sign_bi_big(0i64, a, s2 as i64, 0i64 - b, s1 as i64)
+    if (e2 as i64) != e1 { return 365u64 }
+    /* the reflexive control: a*sqrt(S1) - a*sqrt(S1) must vanish by the kernel */
+    let ez : i32 = ui_sign_bi_big(0i64, a, s1 as i64, 0i64 - a, s1 as i64)
+    if ez != 0i32 { return 365u64 }
+    mb_rs("the krisis: argmax=" as u64)
+    mb_ru(best)
+    mb_rs("/" as u64)
+    mb_ru(n)
+    mb_rs(" ties=" as u64)
+    mb_ru(ties)
+    mb_rs(" no-exp (monotone premise named) sign1=" as u64)
+    mb_ri(e1)
+    mb_rs(" sign2=" as u64)
+    mb_ri(e2 as i64)
+    mb_rs(" agree=ok" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 366: THE SCROLL ==================== */
+
+fn mb_arm366() -> u64 {
+    eol_reset()
+    let doc : u64 = "[weight = dyadic rational] [fp16 value = dyadic rational] [dyadic rational < exact number] [block sum = dyadic rational] [conservation = byte tiling] [argmax = order fact] [order fact < exact decision]" as u64
+    let dl : u64 = mb_slen(doc)
+    if eol_read(doc, dl) < 0i64 { return 366u64 }
+    if eol_lawcheck() != 0u64 { return 366u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 366u64 }
+    /* DERIVED (absent from the text): the weight sits under exact number */
+    let wa : u64 = "weight" as u64
+    let xb : u64 = "exact number" as u64
+    if eol_entails(wa, mb_slen(wa), 0u64, xb, mb_slen(xb)) != 1u64 { return 366u64 }
+    /* the reversal REFUSES: exact number does not sit under the weight */
+    if eol_entails(xb, mb_slen(xb), 0u64, wa, mb_slen(wa)) != 0u64 { return 366u64 }
+    /* cross-class refusal: conservation is not the weight */
+    let ca : u64 = "conservation" as u64
+    if eol_entails(ca, mb_slen(ca), 2u64, wa, mb_slen(wa)) != 0u64 { return 366u64 }
+    /* determinism: re-reading the law lands on the same address */
+    eol_reset()
+    if eol_read(doc, dl) < 0i64 { return 366u64 }
+    if eol_addr() != a1 { return 366u64 }
+    MB_SCROLL = a1
+    return 0u64
+}
+
+/* ==================== the organ's spine ==================== */
+
+fn mb_selfprove() -> u64 @export {
+    MB_REPN = 0u64
+    MB_SCROLL = 0u64
+    MB_C1_F = 0u8
+    MB_C2_F = 0u8
+    MB_ARCHN = 0u64
+    MB_EMBED = 0u64
+    MB_LAYERS = 0u64
+    MB_SPLITCT_F = 0u8
+    MB_SPLITTN_F = 0u8
+    let mut h : u64 = 0u64
+    while h < 64u64 {
+        MB_HIST[h] = 0u64
+        h = h + 1u64
+    }
+    let r0 : u64 = mb_arm360()
+    if r0 != 0u64 { return r0 }
+    let r1 : u64 = mb_arm361()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = mb_arm362()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = mb_arm363()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = mb_arm364()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = mb_arm365()
+    if r5 != 0u64 { return r5 }
+    let r6 : u64 = mb_arm366()
+    if r6 != 0u64 { return r6 }
+    mb_rs("the boundary: softmax mixing is transcendental -- beyond metabole's arms, referred to the interval organ" as u64)
+    mb_rb(10u8)
+    return 0u64
+}
+
+fn mb_addr() -> u64 @export { return MB_SCROLL }
+fn mb_report_len() -> u64 @export { return MB_REPN }
+fn mb_report_byte(i: u64) -> u8 @export {
+    if i >= MB_REPN { return 0u8 }
+    return MB_REP[i]
+}
+
+/* the digested flesh, served onward (PERAS eats from this table) */
+fn mb_nva() -> u64 @export { return MB_NVA }
+fn mb_nvb() -> u64 @export { return MB_NVB }
+fn mb_val_a(i: u64) -> i64 @export {
+    if i >= MB_NVA { return 0i64 }
+    return MB_VA[i]
+}
+fn mb_val_b(i: u64) -> i64 @export {
+    if i >= MB_NVB { return 0i64 }
+    return MB_VB[i]
+}
+fn mb_feast() -> u64 @export { return MB_FEAST as u64 }
+
+/* METABOLE: the organism now has a mouth.  What it eats, it proves. */

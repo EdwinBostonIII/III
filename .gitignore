@@ -88,3 +88,6 @@ STDLIB/build/holos/
 COMPILED/_conscience_*.log
 COMPILED/_conscience_rows.txt
 COMPILED/_sovhash/
+
+# The Feast -- foreign model weights on the table (hundreds of GB, NEVER committed)
+Feast/

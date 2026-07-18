@@ -171,6 +171,13 @@ fn xr_advance() -> i32 @export {
     return 0i32
 }
 
+/* THE TESTIMONY (the boundary synod, census seat 10): the vein's own
+ * proven laws -- frames ride the vein, a torn frame IS a severed vein,
+ * and the vein serves the door (xn_drain). */
+fn xr_testify() -> u64 @export {
+    return "[frame < vein] [torn_frame = severed_vein] [vein < door]" as u64
+}
+
 /* ==================== THE SELF-PROOF (arms 120..124) ==================== */
 var XR_TF : [u8; 1024]                   /* test frame scratch                 */
 fn xr_selfprove() -> u64 @export {

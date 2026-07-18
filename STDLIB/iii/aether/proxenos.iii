@@ -211,6 +211,13 @@ fn px_stat(k: u64) -> u64 @export {
     return 0u64
 }
 
+/* THE TESTIMONY (the boundary synod, census seat 10): the sponsor's own
+ * proven laws -- a proposal is an utterance at the threshold, novelty
+ * converts to questions, confirmation IS re-derivation. */
+fn px_testify() -> u64 @export {
+    return "[proposal < utterance] [novelty = question] [confirmation = rederivation]" as u64
+}
+
 /* ==================== THE SELF-PROOF (arms 400..404) ==================== */
 fn px_ent(a: u64, v: u64, b: u64) -> u64 {
     return eol_entails(a, px_slen(a), v, b, px_slen(b))

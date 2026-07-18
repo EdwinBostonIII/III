@@ -1248,6 +1248,13 @@ fn xn_ent_root(a: u64, v: u64) -> u64 {
 }
 var XN_E1 : [u8; 20480]
 var XN_E1N : u64 = 0u64
+/* THE TESTIMONY (the boundary synod, census seat 10): the door's own
+ * proven laws in the one tongue -- every guest sits under a verdict, a
+ * refusal is a named memory, the judgment IS re-derivation, and there is
+ * one passage in and out. */
+fn xn_testify() -> u64 @export {
+    return "[guest < verdict] [refusal = named_memory] [judgment = rederivation] [door = one_passage]" as u64
+}
 fn xn_selfprove() -> u64 @export {
     /* arm 109: THE VEIN CARRIES -- the bare-metal ring proves its own law
      * first (the condition of motion, extended to the wire), then a guest

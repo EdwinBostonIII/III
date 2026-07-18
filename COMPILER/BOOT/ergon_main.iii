@@ -33,6 +33,8 @@ extern @abi(c-msvc-x64) fn erg_seat_intent() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_exec() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_seat_synod() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_synod_addr() -> u64 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_seat_horos() -> u32 from "ergon.iii"
+extern @abi(c-msvc-x64) fn erg_horos_addr() -> u64 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_deep() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_autarkeia() -> u32 from "ergon.iii"
 extern @abi(c-msvc-x64) fn erg_zkaudit() -> u32 from "ergon.iii"
@@ -357,6 +359,17 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
             pu(s3b as u64)
             putchar(10i32)
         }
+        let s3c : u32 = erg_seat_horos()
+        ps("  boundary-synod (door+vein+cable+tongue+sponsor)      : " as u64)
+        if s3c == 0u32 {
+            ps("derived, union " as u64)
+            pu(erg_horos_addr())
+            putchar(10i32)
+        } else {
+            ps("FAULT " as u64)
+            pu(s3c as u64)
+            putchar(10i32)
+        }
         let s4 : u32 = seat_line("iscene (ABSORBED family -- laws live, pin removed)   : " as u64, erg_seat_iscene())
         let s5 : u32 = seat_line("iform (ABSORBED family -- first C1 retirement)       : " as u64, erg_seat_iform())
         let s6 : u32 = seat_line("hexad (ABSORBED -- whole 729-space, ex run-hexad-cli): " as u64, erg_seat_hexad())
@@ -393,6 +406,7 @@ fn ergon_enter(argc: i32, argv: u64) -> u64 @export {
         if verdict == 0u64 { if s2 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s3 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s3b != 0u32 { verdict = 1u64 } }
+        if verdict == 0u64 { if s3c != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s4 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s5 != 0u32 { verdict = 1u64 } }
         if verdict == 0u64 { if s6 != 0u32 { verdict = 1u64 } }

@@ -784,6 +784,14 @@ fn an_say() -> u64 @export {
 fn an_say_len() -> u64 @export { return AN_SAYN }
 fn an_say_byte(i: u64) -> u8 @export { if i < AN_SAYN { return AN_SAY[i] }   return 0u8 }
 
+/* THE TESTIMONY (the boundary synod, census seat 10): the tongue's own
+ * proven laws -- an utterance becomes a guest, a question is answered by
+ * derivation, modality sits under the named refusals, and saying mirrors
+ * hearing (the proven round trip, the involution). */
+fn an_testify() -> u64 @export {
+    return "[utterance < guest] [question = derivation] [modality < named_memory] [saying ~ hearing]" as u64
+}
+
 /* ==================== THE SELF-PROOF (arms 390..399) ==================== */
 fn an_ent(a: u64, v: u64, b: u64) -> u64 {
     return eol_entails(a, an_slen(a), v, b, an_slen(b))

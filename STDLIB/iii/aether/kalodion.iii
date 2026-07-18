@@ -122,6 +122,13 @@ fn kl_rfile() -> u64 @export { return KL_RFILE }
 fn kl_rsize() -> u64 @export { return KL_RSIZE }
 fn kl_rfull() -> u64 @export { return KL_RFULL }
 
+/* THE TESTIMONY (the boundary synod, census seat 10): the cable's own
+ * proven laws -- records compose a stream, the stream feeds the vein,
+ * and backpressure is a clean stop. */
+fn kl_testify() -> u64 @export {
+    return "[record < stream] [stream < vein] [backpressure = clean_stop]" as u64
+}
+
 /* ==================== THE SELF-PROOF (arms 405..409) ==================== */
 /* arm 405: THE FRAMING -- three records become three frames become three
  * admitted guests through the one door, byte-transparent. */

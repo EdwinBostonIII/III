@@ -56,7 +56,20 @@
  * 3 element pool, 4 tower height, 5 divide-by-zero, 6 bigint alloc,
  * 7 nonpositive radicand.  Arms assert PY_ERR == 0.
  *
- * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..189) -- including
+ * PZ, THE COMPLEX CLOSURE (the Heisenberg substrate): C = R_tower + i*R_tower
+ * -- a complex number is a PAIR of tower elements.  The imaginary unit is not
+ * a tower level (i commutes with every real surd, so [C:R]=2 always -- the
+ * pair IS the canonical form); equality needs no ordering (coordinate-wise
+ * zero test), ordering on a non-real value is never offered.  The field is
+ * closed under all four ops AND under sqrt: the half-angle law reduces every
+ * complex root to two real tower roots (r = sqrt(re^2+im^2), u = sqrt((r+re)/2),
+ * v = sign(im)*sqrt((r-re)/2)), so THE DENESTING ORACLE heals C exactly as it
+ * heals R -- sqrt(-(3+2sqrt2)) = i(1+sqrt2) with NO spurious level.  On this
+ * sits the exact Pauli algebra: sigma_x sigma_y = i sigma_z, [sx,sy] = 2i sz
+ * (non-commutativity as ALGEBRA), and the uncertainty principle proven as an
+ * exact IDENTITY (Schrodinger's strengthening; Robertson as its corollary).
+ *
+ * Truth is a CONDITION OF MOTION: py_selfprove (arms 180..193) -- including
  * the nested-radical exact zero  sqrt2 + sqrt3 - sqrt(5 + 2 sqrt6) = 0  that
  * no float and no flat i64 oracle can decide, and a 125-case ENUMERATED
  * cross-oracle agreement with ui_sqrt_sum_sign (two mathematically independent
@@ -167,6 +180,7 @@ fn py_spine_set(lvl: u64, e: u64) -> i32 @export { if lvl < PY_H { PY_SPINE[lvl]
 
 fn py_reset() -> i32 @export {
     PY_LTOP = 0u64   PY_RTOP = 0u64   PY_ETOP = 0u64
+    PZ_TOP = 0u64
     PY_H = 0u64   PY_ERR = 0u64
     PY_LIMB[0u64] = 1u64   PY_ONE = 0u64   PY_LTOP = 1u64
     if PY_SAR != 0u64 { bigint_drop_arena(PY_SAR)   arena_reset(PY_SAR) }
@@ -1235,7 +1249,108 @@ fn py_sqrt(e: u64) -> u64 @export {
     return py_el_root(lvl)
 }
 
-/* ==================== THE SELF-PROOF (arms 180..187) ==================== */
+/* ==================== PZ: THE COMPLEX CLOSURE ==================== */
+/* A complex number is a PAIR of real tower elements (re, im) -- handle into
+ * the PZ pool.  Components may live at ANY heights (the public py_* ops
+ * height-promote).  Lifetime law: a pz slot holds ELEMENT handles, so it obeys
+ * the element release law (do not use a pz minted before a py_release you
+ * performed); the PZ pool itself is reset-scoped (py_reset reclaims), not
+ * mark-tracked -- the packed mark has no spare bits, and pz slots are two
+ * words.  Refusals: pool exhaustion = PY_ERR 6, inverse of zero = PY_ERR 5.
+ * pz_sqrt is TOTAL: sqrt(negative real) delivers the IMAGINARY SURD i*sqrt|x|
+ * (where raw py_sqrt refuses with 7), and the general half-angle case grows
+ * the REAL tower only as its two real roots demand. */
+const PZ_CAP : u64 = 8192u64
+var PZ_RE : [u64; 8192]
+var PZ_IM : [u64; 8192]
+var PZ_TOP : u64 = 0u64
+fn pz_alloc() -> u64 {
+    if PZ_TOP >= PZ_CAP { PY_ERR = 6u64   return 0u64 }
+    let h : u64 = PZ_TOP
+    PZ_TOP = PZ_TOP + 1u64
+    return h
+}
+fn pz_mk(re: u64, im: u64) -> u64 @export {
+    let h : u64 = pz_alloc()
+    if PY_ERR != 0u64 { return h }
+    PZ_RE[h] = re   PZ_IM[h] = im
+    return h
+}
+fn pz_re(z: u64) -> u64 @export { return PZ_RE[z] }
+fn pz_im(z: u64) -> u64 @export { return PZ_IM[z] }
+fn pz_zero() -> u64 @export { return pz_mk(py_el_new(0u64), py_el_new(0u64)) }
+fn pz_one() -> u64 @export { return pz_mk(py_el_from_i64(1i64, 0u64), py_el_new(0u64)) }
+fn pz_i() -> u64 @export { return pz_mk(py_el_new(0u64), py_el_from_i64(1i64, 0u64)) }
+fn pz_from_el(re: u64) -> u64 @export { return pz_mk(re, py_el_new(0u64)) }
+fn pz_from_i64(a: i64, b: i64) -> u64 @export {
+    return pz_mk(py_el_from_i64(a, 0u64), py_el_from_i64(b, 0u64))
+}
+fn pz_add(x: u64, y: u64) -> u64 @export {
+    return pz_mk(py_add(PZ_RE[x], PZ_RE[y]), py_add(PZ_IM[x], PZ_IM[y]))
+}
+fn pz_sub(x: u64, y: u64) -> u64 @export {
+    return pz_mk(py_sub(PZ_RE[x], PZ_RE[y]), py_sub(PZ_IM[x], PZ_IM[y]))
+}
+fn pz_neg(z: u64) -> u64 @export { return pz_mk(py_neg(PZ_RE[z]), py_neg(PZ_IM[z])) }
+fn pz_conj(z: u64) -> u64 @export { return pz_mk(PZ_RE[z], py_neg(PZ_IM[z])) }
+fn pz_mul(x: u64, y: u64) -> u64 @export {
+    let a : u64 = PZ_RE[x]
+    let b : u64 = PZ_IM[x]
+    let c : u64 = PZ_RE[y]
+    let d : u64 = PZ_IM[y]
+    return pz_mk(py_sub(py_mul(a, c), py_mul(b, d)), py_add(py_mul(a, d), py_mul(b, c)))
+}
+fn pz_muli(z: u64) -> u64 @export { return pz_mk(py_neg(PZ_IM[z]), PZ_RE[z]) }
+fn pz_norm2(z: u64) -> u64 @export {
+    return py_add(py_mul(PZ_RE[z], PZ_RE[z]), py_mul(PZ_IM[z], PZ_IM[z]))
+}
+fn pz_is_real(z: u64) -> u32 @export {
+    if py_el_sign(PZ_IM[z]) != 0i64 { return 0u32 }
+    return 1u32
+}
+fn pz_eqz(z: u64) -> u32 @export {
+    if py_el_sign(PZ_RE[z]) != 0i64 { return 0u32 }
+    if py_el_sign(PZ_IM[z]) != 0i64 { return 0u32 }
+    return 1u32
+}
+fn pz_eq(x: u64, y: u64) -> u32 @export {
+    if py_cmp(PZ_RE[x], PZ_RE[y]) != 0i64 { return 0u32 }
+    if py_cmp(PZ_IM[x], PZ_IM[y]) != 0i64 { return 0u32 }
+    return 1u32
+}
+fn pz_inv(z: u64) -> u64 @export {
+    let n : u64 = pz_norm2(z)
+    if py_el_sign(n) == 0i64 {
+        /* mint the zero BEFORE poisoning the err, or the slot is stale */
+        let zz : u64 = pz_mk(py_el_new(0u64), py_el_new(0u64))
+        PY_ERR = 5u64
+        return zz
+    }
+    let ni : u64 = py_el_inv(n)
+    return pz_mk(py_mul(PZ_RE[z], ni), py_neg(py_mul(PZ_IM[z], ni)))
+}
+fn pz_div(x: u64, y: u64) -> u64 @export { return pz_mul(x, pz_inv(y)) }
+/* the TOTAL square root: half-angle over the real tower, principal branch
+ * (Re >= 0; for negative reals the +i side).  sqrt(-1) = i lives here. */
+fn pz_sqrt(z: u64) -> u64 @export {
+    let a : u64 = PZ_RE[z]
+    let b : u64 = PZ_IM[z]
+    let sb : i64 = py_el_sign(b)
+    if sb == 0i64 {
+        let sa : i64 = py_el_sign(a)
+        if sa == 0i64 { return pz_mk(py_el_new(0u64), py_el_new(0u64)) }
+        if sa > 0i64 { return pz_mk(py_sqrt(a), py_el_new(0u64)) }
+        return pz_mk(py_el_new(0u64), py_sqrt(py_neg(a)))
+    }
+    let r : u64 = py_sqrt(pz_norm2(z))
+    let half : u64 = py_el_from_rat(py_rat_frac(1i64, 2i64), 0u64)
+    let u : u64 = py_sqrt(py_mul(py_add(r, a), half))
+    let mut v : u64 = py_sqrt(py_mul(py_sub(r, a), half))
+    if sb < 0i64 { v = py_neg(v) }
+    return pz_mk(u, v)
+}
+
+/* ==================== THE SELF-PROOF (arms 180..193) ==================== */
 fn py_arm180() -> u64 {
     py_reset()
     let r13 : u64 = py_rat_frac(1i64, 3i64)
@@ -1469,6 +1584,257 @@ fn py_arm189() -> u64 {
     if py_rat_sign(x3) != 0i64 { return 189u64 }
     return 0u64
 }
+fn py_arm190() -> u64 {
+    /* C IS A FIELD: i^2 = -1, conj-mul = norm (real), inverse roundtrip,
+     * Brahmagupta multiplicativity |zw|^2 = |z|^2 |w|^2, exact division,
+     * associativity/distributivity spots, and the zero-inverse refusal. */
+    py_reset()
+    let i : u64 = pz_i()
+    if pz_eq(pz_mul(i, i), pz_from_i64(0i64 - 1i64, 0i64)) != 1u32 { return 190u64 }
+    let z34 : u64 = pz_from_i64(3i64, 4i64)
+    let p : u64 = pz_mul(z34, pz_conj(z34))
+    if pz_is_real(p) != 1u32 { return 190u64 }
+    let e25 : u64 = py_el_from_i64(25i64, 0u64)
+    if py_cmp(pz_re(p), e25) != 0i64 { return 190u64 }
+    if py_cmp(pz_norm2(z34), e25) != 0i64 { return 190u64 }
+    if pz_eq(pz_mul(z34, pz_inv(z34)), pz_one()) != 1u32 { return 190u64 }
+    let z11 : u64 = pz_from_i64(1i64, 1i64)
+    if pz_eq(pz_mul(z11, z11), pz_from_i64(0i64, 2i64)) != 1u32 { return 190u64 }
+    let z : u64 = pz_from_i64(1i64, 2i64)
+    let w : u64 = pz_from_i64(2i64, 3i64)
+    let zw : u64 = pz_mul(z, w)
+    if pz_eq(zw, pz_from_i64(0i64 - 4i64, 7i64)) != 1u32 { return 190u64 }
+    if py_cmp(pz_norm2(zw), py_mul(pz_norm2(z), pz_norm2(w))) != 0i64 { return 190u64 }
+    /* (3+4i)/(1+2i) = (11-2i)/5 */
+    let q : u64 = pz_div(z34, z)
+    let qe : u64 = pz_mk(py_el_from_rat(py_rat_frac(11i64, 5i64), 0u64), py_el_from_rat(py_rat_frac(0i64 - 2i64, 5i64), 0u64))
+    if pz_eq(q, qe) != 1u32 { return 190u64 }
+    let v : u64 = pz_from_i64(2i64, 0i64 - 1i64)
+    if pz_eq(pz_muli(v), pz_mul(i, v)) != 1u32 { return 190u64 }
+    if pz_eq(pz_mul(pz_add(z, w), v), pz_add(pz_mul(z, v), pz_mul(w, v))) != 1u32 { return 190u64 }
+    if pz_eq(pz_mul(pz_mul(z, w), v), pz_mul(z, pz_mul(w, v))) != 1u32 { return 190u64 }
+    if PY_ERR != 0u64 { return 190u64 }
+    let bad : u64 = pz_inv(pz_zero())
+    if PY_ERR != 5u64 { return 190u64 }
+    py_err_clear()
+    if pz_eqz(bad) != 1u32 { return 190u64 }
+    if PY_ERR != 0u64 { return 190u64 }
+    return 0u64
+}
+fn py_arm191() -> u64 {
+    /* THE IMAGINARY SURD + TOTAL SQRT: sqrt(-1)=i and friends stay RATIONAL
+     * (tower height 0 -- the perfect-square oracle sees through C); sqrt(i)
+     * grows the tower EXACTLY once (its second real root denests into the
+     * first); the nested surd sqrt(-(3+2sqrt2)) = i(1+sqrt2) rides THE
+     * DENESTING ORACLE with no spurious level. */
+    py_reset()
+    if pz_eq(pz_sqrt(pz_from_i64(0i64 - 1i64, 0i64)), pz_i()) != 1u32 { return 191u64 }
+    if pz_eq(pz_sqrt(pz_from_i64(0i64 - 4i64, 0i64)), pz_from_i64(0i64, 2i64)) != 1u32 { return 191u64 }
+    if pz_eq(pz_sqrt(pz_from_i64(0i64, 2i64)), pz_from_i64(1i64, 1i64)) != 1u32 { return 191u64 }
+    if pz_eq(pz_sqrt(pz_from_i64(3i64, 4i64)), pz_from_i64(2i64, 1i64)) != 1u32 { return 191u64 }
+    if pz_eq(pz_sqrt(pz_from_i64(0i64 - 5i64, 12i64)), pz_from_i64(2i64, 3i64)) != 1u32 { return 191u64 }
+    if py_h() != 0u64 { return 191u64 }
+    /* sqrt(i): components live at height 1, square returns i exactly */
+    let si : u64 = pz_sqrt(pz_i())
+    if pz_eq(pz_mul(si, si), pz_i()) != 1u32 { return 191u64 }
+    if py_h() != 1u64 { return 191u64 }
+    /* sqrt2 DENESTS into the height the sqrt(i) roots opened */
+    let two : u64 = py_el_from_i64(2i64, 0u64)
+    let t2 : u64 = py_sqrt(two)
+    if py_cmp(py_mul(t2, t2), two) != 0i64 { return 191u64 }
+    if py_h() != 1u64 { return 191u64 }
+    /* the nested imaginary surd: sqrt(-(3+2sqrt2)) = i(1+sqrt2) */
+    let one : u64 = py_el_from_i64(1i64, 0u64)
+    let rad : u64 = py_neg(py_add(py_el_from_i64(3i64, 0u64), py_mul(two, t2)))
+    let zr : u64 = pz_sqrt(pz_from_el(rad))
+    if py_el_sign(pz_re(zr)) != 0i64 { return 191u64 }
+    if py_cmp(pz_im(zr), py_add(one, t2)) != 0i64 { return 191u64 }
+    if py_h() != 1u64 { return 191u64 }
+    if pz_eq(pz_mul(zr, zr), pz_from_el(rad)) != 1u32 { return 191u64 }
+    if PY_ERR != 0u64 { return 191u64 }
+    return 0u64
+}
+/* 2x2 complex-matrix cells (multi-out through module cells, the house
+ * pattern): R = A*B, and the quadratic form psi-dagger B psi for the state
+ * (S0, S1).  Index order 0=00 1=01 2=10 3=11. */
+var PM_A0 : u64 = 0u64   var PM_A1 : u64 = 0u64
+var PM_A2 : u64 = 0u64   var PM_A3 : u64 = 0u64
+var PM_B0 : u64 = 0u64   var PM_B1 : u64 = 0u64
+var PM_B2 : u64 = 0u64   var PM_B3 : u64 = 0u64
+var PM_R0 : u64 = 0u64   var PM_R1 : u64 = 0u64
+var PM_R2 : u64 = 0u64   var PM_R3 : u64 = 0u64
+var PM_S0 : u64 = 0u64   var PM_S1 : u64 = 0u64
+fn pm_mul2() -> i32 {
+    PM_R0 = pz_add(pz_mul(PM_A0, PM_B0), pz_mul(PM_A1, PM_B2))
+    PM_R1 = pz_add(pz_mul(PM_A0, PM_B1), pz_mul(PM_A1, PM_B3))
+    PM_R2 = pz_add(pz_mul(PM_A2, PM_B0), pz_mul(PM_A3, PM_B2))
+    PM_R3 = pz_add(pz_mul(PM_A2, PM_B1), pz_mul(PM_A3, PM_B3))
+    return 0i32
+}
+fn pm_qform2() -> u64 {
+    let w0 : u64 = pz_add(pz_mul(PM_B0, PM_S0), pz_mul(PM_B1, PM_S1))
+    let w1 : u64 = pz_add(pz_mul(PM_B2, PM_S0), pz_mul(PM_B3, PM_S1))
+    return pz_add(pz_mul(pz_conj(PM_S0), w0), pz_mul(pz_conj(PM_S1), w1))
+}
+fn py_arm192() -> u64 {
+    /* THE PAULI ALGEBRA, exact: sx^2 = sy^2 = sz^2 = I; sx sy = i sz and
+     * sy sx = -i sz (NON-COMMUTATIVITY as algebra -- the matrices are held
+     * apart exactly, no epsilon); [sx,sy] = 2i sz; {sx,sy} = 0; and the
+     * Hadamard conjugation H sx H = sz with H = (1/sqrt2)(1 1; 1 -1) -- the
+     * 1/sqrt2 is a TOWER element, not a float. */
+    py_reset()
+    let z00 : u64 = pz_zero()
+    let one : u64 = pz_one()
+    let mone : u64 = pz_from_i64(0i64 - 1i64, 0i64)
+    let sx1 : u64 = pz_from_i64(1i64, 0i64)
+    let syl : u64 = pz_from_i64(0i64, 0i64 - 1i64)
+    let syh : u64 = pz_from_i64(0i64, 1i64)
+    /* sx = (0,1;1,0)  sy = (0,-i;i,0)  sz = (1,0;0,-1) */
+    PM_A0 = z00   PM_A1 = sx1   PM_A2 = sx1   PM_A3 = z00
+    PM_B0 = z00   PM_B1 = sx1   PM_B2 = sx1   PM_B3 = z00
+    pm_mul2()
+    if pz_eq(PM_R0, one) != 1u32 { return 192u64 }
+    if pz_eq(PM_R1, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R2, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R3, one) != 1u32 { return 192u64 }
+    PM_A0 = z00   PM_A1 = syl   PM_A2 = syh   PM_A3 = z00
+    PM_B0 = z00   PM_B1 = syl   PM_B2 = syh   PM_B3 = z00
+    pm_mul2()
+    if pz_eq(PM_R0, one) != 1u32 { return 192u64 }
+    if pz_eq(PM_R3, one) != 1u32 { return 192u64 }
+    PM_A0 = one   PM_A1 = z00   PM_A2 = z00   PM_A3 = mone
+    PM_B0 = one   PM_B1 = z00   PM_B2 = z00   PM_B3 = mone
+    pm_mul2()
+    if pz_eq(PM_R0, one) != 1u32 { return 192u64 }
+    if pz_eq(PM_R3, one) != 1u32 { return 192u64 }
+    /* sx sy = i sz = (i,0;0,-i) */
+    PM_A0 = z00   PM_A1 = sx1   PM_A2 = sx1   PM_A3 = z00
+    PM_B0 = z00   PM_B1 = syl   PM_B2 = syh   PM_B3 = z00
+    pm_mul2()
+    let xy0 : u64 = PM_R0
+    let xy1 : u64 = PM_R1
+    let xy2 : u64 = PM_R2
+    let xy3 : u64 = PM_R3
+    if pz_eq(xy0, syh) != 1u32 { return 192u64 }
+    if pz_eq(xy1, z00) != 1u32 { return 192u64 }
+    if pz_eq(xy2, z00) != 1u32 { return 192u64 }
+    if pz_eq(xy3, syl) != 1u32 { return 192u64 }
+    /* sy sx = -i sz -- and it DIFFERS from sx sy: non-commutativity */
+    PM_A0 = z00   PM_A1 = syl   PM_A2 = syh   PM_A3 = z00
+    PM_B0 = z00   PM_B1 = sx1   PM_B2 = sx1   PM_B3 = z00
+    pm_mul2()
+    let yx0 : u64 = PM_R0
+    let yx3 : u64 = PM_R3
+    if pz_eq(yx0, syl) != 1u32 { return 192u64 }
+    if pz_eq(yx3, syh) != 1u32 { return 192u64 }
+    if pz_eq(xy0, yx0) != 0u32 { return 192u64 }
+    /* [sx,sy] = 2i sz;  {sx,sy} = 0 */
+    if pz_eq(pz_sub(xy0, yx0), pz_from_i64(0i64, 2i64)) != 1u32 { return 192u64 }
+    if pz_eq(pz_sub(xy3, yx3), pz_from_i64(0i64, 0i64 - 2i64)) != 1u32 { return 192u64 }
+    if pz_eqz(pz_add(xy0, yx0)) != 1u32 { return 192u64 }
+    if pz_eqz(pz_add(xy3, yx3)) != 1u32 { return 192u64 }
+    /* Hadamard: exact 1/sqrt2 entries; H^2 = I; H sx H = sz */
+    let hs : u64 = py_div(py_el_from_i64(1i64, 0u64), py_sqrt(py_el_from_i64(2i64, 0u64)))
+    if py_h() != 1u64 { return 192u64 }
+    let hz : u64 = pz_from_el(hs)
+    let hn : u64 = pz_neg(hz)
+    PM_A0 = hz   PM_A1 = hz   PM_A2 = hz   PM_A3 = hn
+    PM_B0 = hz   PM_B1 = hz   PM_B2 = hz   PM_B3 = hn
+    pm_mul2()
+    if pz_eq(PM_R0, one) != 1u32 { return 192u64 }
+    if pz_eq(PM_R1, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R2, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R3, one) != 1u32 { return 192u64 }
+    PM_A0 = hz   PM_A1 = hz   PM_A2 = hz   PM_A3 = hn
+    PM_B0 = z00   PM_B1 = sx1   PM_B2 = sx1   PM_B3 = z00
+    pm_mul2()
+    PM_A0 = PM_R0   PM_A1 = PM_R1   PM_A2 = PM_R2   PM_A3 = PM_R3
+    PM_B0 = hz   PM_B1 = hz   PM_B2 = hz   PM_B3 = hn
+    pm_mul2()
+    if pz_eq(PM_R0, one) != 1u32 { return 192u64 }
+    if pz_eq(PM_R1, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R2, z00) != 1u32 { return 192u64 }
+    if pz_eq(PM_R3, mone) != 1u32 { return 192u64 }
+    if PY_ERR != 0u64 { return 192u64 }
+    return 0u64
+}
+fn py_arm193() -> u64 {
+    /* THE UNCERTAINTY PRINCIPLE AS AN EXACT IDENTITY.  On the unnormalized
+     * complex state psi = (3, 1+i):  <sx> = <sy> = 6/11, <sz> = 7/11,
+     * Var(sx) = Var(sy) = 85/121, and
+     *   Robertson  Var(sx)Var(sy) - (1/4)|<[sx,sy]>|^2 = 1296/14641 > 0
+     *     (STRICT -- the machine holds the gap exactly), while
+     *   Schrodinger Var(sx)Var(sy) = (1/4)|<[sx,sy]>|^2
+     *                              + ((1/2)<{sx,sy}> - <sx><sy>)^2
+     *     holds as an EQUALITY (pure qubit states saturate it).
+     * On the eigenstate-adjacent psi2 = (1,0) Robertson itself is TIGHT.
+     * Every expectation is asserted REAL (im exactly 0) before use. */
+    py_reset()
+    let z00 : u64 = pz_zero()
+    let sx1 : u64 = pz_from_i64(1i64, 0i64)
+    let syl : u64 = pz_from_i64(0i64, 0i64 - 1i64)
+    let syh : u64 = pz_from_i64(0i64, 1i64)
+    let one : u64 = py_el_from_i64(1i64, 0u64)
+    let s0 : u64 = pz_from_i64(3i64, 0i64)
+    let s1 : u64 = pz_from_i64(1i64, 1i64)
+    let nel : u64 = py_add(pz_norm2(s0), pz_norm2(s1))
+    if py_cmp(nel, py_el_from_i64(11i64, 0u64)) != 0i64 { return 193u64 }
+    PM_S0 = s0   PM_S1 = s1
+    /* <sx> */
+    PM_B0 = z00   PM_B1 = sx1   PM_B2 = sx1   PM_B3 = z00
+    let vx : u64 = pm_qform2()
+    if pz_is_real(vx) != 1u32 { return 193u64 }
+    let ex : u64 = py_div(pz_re(vx), nel)
+    if py_cmp(ex, py_el_from_rat(py_rat_frac(6i64, 11i64), 0u64)) != 0i64 { return 193u64 }
+    /* <sy> */
+    PM_B0 = z00   PM_B1 = syl   PM_B2 = syh   PM_B3 = z00
+    let vy : u64 = pm_qform2()
+    if pz_is_real(vy) != 1u32 { return 193u64 }
+    let ey : u64 = py_div(pz_re(vy), nel)
+    if py_cmp(ey, py_el_from_rat(py_rat_frac(6i64, 11i64), 0u64)) != 0i64 { return 193u64 }
+    /* <sz> via the commutator matrix [sx,sy] = 2i sz: anti-Hermitian, so the
+     * expectation is PURELY IMAGINARY -- asserted, then read off */
+    PM_B0 = pz_from_i64(0i64, 2i64)   PM_B1 = z00
+    PM_B2 = z00   PM_B3 = pz_from_i64(0i64, 0i64 - 2i64)
+    let vc : u64 = pm_qform2()
+    if py_el_sign(pz_re(vc)) != 0i64 { return 193u64 }
+    let cim : u64 = py_div(pz_im(vc), nel)
+    if py_cmp(cim, py_el_from_rat(py_rat_frac(14i64, 11i64), 0u64)) != 0i64 { return 193u64 }
+    /* the anticommutator {sx,sy} = 0: its expectation must be EXACTLY zero */
+    PM_B0 = z00   PM_B1 = z00   PM_B2 = z00   PM_B3 = z00
+    let va : u64 = pm_qform2()
+    if pz_eqz(va) != 1u32 { return 193u64 }
+    /* variances (sx^2 = sy^2 = I, proven in arm 192): V = 1 - <A>^2 */
+    let varx : u64 = py_sub(one, py_mul(ex, ex))
+    let vary : u64 = py_sub(one, py_mul(ey, ey))
+    if py_cmp(varx, py_el_from_rat(py_rat_frac(85i64, 121i64), 0u64)) != 0i64 { return 193u64 }
+    let lhs : u64 = py_mul(varx, vary)
+    let quarter : u64 = py_el_from_rat(py_rat_frac(1i64, 4i64), 0u64)
+    let rhsr : u64 = py_mul(quarter, py_mul(cim, cim))
+    /* ROBERTSON, strict: the gap is EXACTLY 1296/14641 */
+    let gap : u64 = py_sub(lhs, rhsr)
+    if py_sign(gap) != 1i64 { return 193u64 }
+    if py_cmp(gap, py_el_from_rat(py_rat_frac(1296i64, 14641i64), 0u64)) != 0i64 { return 193u64 }
+    /* SCHRODINGER, equality: lhs == rhsr + (0 - <sx><sy>)^2 */
+    let cov : u64 = py_sub(py_el_new(0u64), py_mul(ex, ey))
+    if py_cmp(lhs, py_add(rhsr, py_mul(cov, cov))) != 0i64 { return 193u64 }
+    /* the tight pole: psi2 = (1,0) -- Robertson saturates */
+    PM_S0 = pz_one()   PM_S1 = z00
+    PM_B0 = z00   PM_B1 = sx1   PM_B2 = sx1   PM_B3 = z00
+    let vx2 : u64 = pm_qform2()
+    if pz_eqz(vx2) != 1u32 { return 193u64 }
+    PM_B0 = pz_from_i64(0i64, 2i64)   PM_B1 = z00
+    PM_B2 = z00   PM_B3 = pz_from_i64(0i64, 0i64 - 2i64)
+    let vc2 : u64 = pm_qform2()
+    if py_el_sign(pz_re(vc2)) != 0i64 { return 193u64 }
+    let ci2 : u64 = pz_im(vc2)
+    if py_cmp(ci2, py_el_from_i64(2i64, 0u64)) != 0i64 { return 193u64 }
+    /* Var(sx) = Var(sy) = 1; (1/4)|<[..]>|^2 = 1: the bound is met with 0 gap */
+    let gap2 : u64 = py_sub(one, py_mul(quarter, py_mul(ci2, ci2)))
+    if py_sign(gap2) != 0i64 { return 193u64 }
+    if PY_ERR != 0u64 { return 193u64 }
+    return 0u64
+}
 fn py_selfprove() -> u64 @export {
     let a0 : u64 = py_arm180()
     if a0 != 0u64 { return a0 }
@@ -1490,5 +1856,13 @@ fn py_selfprove() -> u64 @export {
     if a8 != 0u64 { return a8 }
     let a9 : u64 = py_arm189()
     if a9 != 0u64 { return a9 }
+    let a10 : u64 = py_arm190()
+    if a10 != 0u64 { return a10 }
+    let a11 : u64 = py_arm191()
+    if a11 != 0u64 { return a11 }
+    let a12 : u64 = py_arm192()
+    if a12 != 0u64 { return a12 }
+    let a13 : u64 = py_arm193()
+    if a13 != 0u64 { return a13 }
     return 0u64
 }
